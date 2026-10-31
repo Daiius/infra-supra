@@ -37,7 +37,7 @@
 | [`packages/estimator`](./packages/estimator) | 見積エンジン（workload / architecture / resource / pricing / performance）と zod スキーマ。**環境非依存**（`lib: esnext` / `types: []`）。他パッケージに依存しない |
 | [`packages/catalog`](./packages/catalog) | サービスカタログと料金データ（プロバイダー別・版付き）・テンプレート・構成スタック。estimator の型だけに依存 |
 
-| [`packages/game`](./packages/game) | ゲームエンジン（最初の形。spikes/game-2026-10-31 から移した）。純粋関数・シード付き乱数。ゲームのバランスの値は `GAME`（ゲーム上の仮定） |
+| [`packages/game`](./packages/game) | ゲームエンジン（最初の形。spikes/game-2026-10-31 から移した）。純粋関数・シード付き乱数。ゲームのバランスの値と出来事はシナリオのデータ `src/scenarios/`（ゲーム上の仮定。prd/07 §10） |
 | [`packages/web`](./packages/web) | 画面（Vite + React + Tailwind v4 + daisyUI）。今はゲームモードの試作だけ |
 
 依存の向きは [prd/02](./prd/02-architecture.md) §1（web → game → estimator ← catalog）。

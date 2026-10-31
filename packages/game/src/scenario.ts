@@ -79,8 +79,8 @@ export type EventDef = {
     | { type: 'window'; from: number; to: number }
     /** まれな出来事の候補（1 ゲームに高々 1 回。Scenario.rare で引く）。 */
     | { type: 'rare'; weight: number }
-    /** 前提の使用率が境目を越えた（状態）。premiseId は前提の id の前方一致。 */
-    | { type: 'premise'; premiseId: string; atLeast: number };
+    /** 前提の使用率が境目を越えた月（前の月は下だった。状態）。premiseIds は前提の id の前方一致。 */
+    | { type: 'premise'; premiseIds: string[]; atLeast: number };
   /** 予告（何か月前に出すか）。pvFactor は前兆（その月の PV の倍率）。 */
   notice?: { monthsAhead: number; text: string; pvFactor?: number };
   /** 当たりうる前提の id の前方一致。通知に catalog の前提の文をそのまま出す（D-12）。 */

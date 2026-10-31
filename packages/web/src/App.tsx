@@ -1,17 +1,19 @@
 // ゲームモードの画面（Phase 2〜4 の前倒しの試作）。ロジックは game パッケージ、ここは表示と操作だけ。
 import { useMemo, useState } from 'react';
 import {
+  actionEffort,
   applyAction,
   applyActions,
+  ARTICLE_COMMUNITY,
   axesOf,
-  BASELINES,
+  BOT_BLOCK,
   comparisonRows,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
   ELEMENTS,
   END_LABEL,
-  GAME,
+  eventDef,
   goalChecks,
   growthFromReputation,
   isPlanChange,
@@ -20,7 +22,9 @@ import {
   nextSsrCpuMs,
   playMonth,
   premiseTrends,
+  projectionNote,
   reflectionOf,
+  scenarioOf,
   selectTrends,
   SETTINGS,
   STACKS,
@@ -28,7 +32,9 @@ import {
   type Action,
   type Axes,
   type GameState,
+  type MonthEvent,
   type MonthReport,
+  type Surprise,
   type SettingKey,
   type Stage,
 } from 'game';
@@ -39,6 +45,10 @@ const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(0)}%`;
 const scrollTop = () => window.scrollTo({ top: 0 });
+/** 始めるシナリオ（今は記事コミュニティだけ。GD-5 で 2 本目）。 */
+const SCENARIO = ARTICLE_COMMUNITY;
+/** 画面に出す為替の仮定（game の共通の仮定）。 */
+const USD_JPY = 150;
 
 export function App() {
   const [state, setState] = useState<GameState | null>(null);
@@ -77,31 +87,40 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
       <div className="card bg-base-100 shadow">
         <div className="card-body">
           <h2 className="card-title">
-            シナリオ: 記事コミュニティを {GAME.months} か月運営する
+            シナリオ: {SCENARIO.name}を {SCENARIO.months} か月運営する
           </h2>
           <p>
             Next.js（App Router）で作った記事 +
             コメントのサイト。広告収入で運営する（商用）。今は月{' '}
-            {GAME.startPV.toLocaleString()}{' '}
+            {SCENARIO.scale.startPV.toLocaleString()}{' '}
             PV。利用者の満足度が高ければ口コミで伸び （満足度 0.9 で毎月約{' '}
-            {(growthFromReputation(0.9, false).net * 100).toFixed(0)}%）、
-            低ければ解約が増える。どこかで SNS で話題になるかもしれない。
+            {(
+              growthFromReputation(0.9, false, SCENARIO.growth).net * 100
+            ).toFixed(0)}
+            %）、 低ければ解約が増える。
+          </p>
+          <p>
+            運営中に出来事が起きる: SNS で話題になる（前の月に前兆が出る）・Bot
+            が大量に来る・チームが増える・機能追加の提案が来る（受けるか断るかを選ぶ）・投稿や画像がたまって前提の境目に近づく。
+            まれに、構成の乗り換えを迫るほどの大きな出来事が来る（1
+            か月前に予告が出る）。時期は乱数のシードで変わる。
           </p>
           <p>
             満足度は可用性・速さ・機能・鮮度・画質の 5
-            つの要素で決まる。開発の手間は毎月 {EFFORT.perMonth}{' '}
-            ポイントで、設定の変更・最適化・乗り換え・自前運用の維持（
-            {EFFORT.selfHostedUpkeep} / 月）に使った残りが機能開発に回る。
+            つの要素で決まる。開発の手間は毎月 {SCENARIO.effort.perMonth}{' '}
+            ポイントで、設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
+            {SCENARIO.effort.selfHostedUpkeep} /
+            月）に使った残りが機能開発に回る。
           </p>
-          <p>所持金 {usd(GAME.startCash)}。</p>
+          <p>所持金 {usd(SCENARIO.startCash)}。</p>
           <div className="alert alert-info flex-col items-start gap-1">
             <span>
-              目標: {GAME.months} か月後に所持金 {usd(GAME.goal.cash)}{' '}
-              以上・満足度の平均 {GAME.goal.satisfaction} 以上・止まった月が{' '}
-              {GAME.goal.maxOutageMonths} 回以内
+              目標: {SCENARIO.months} か月後に所持金 {usd(SCENARIO.goal.cash)}{' '}
+              以上・満足度の平均 {SCENARIO.goal.satisfaction} 以上・止まった月が{' '}
+              {SCENARIO.goal.maxOutageMonths} 回以内
             </span>
             <span className="text-sm">
-              止まった月が {GAME.goal.maxOutageMonths}{' '}
+              止まった月が {SCENARIO.goal.maxOutageMonths}{' '}
               回を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わる。
             </span>
           </div>
@@ -111,17 +130,21 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
           <ul className="list-disc space-y-1 pl-6">
             <li>
               記事ページは ISR（再検証 5 分・2,000 ページ）、マイページなどは
-              SSR。SSR 1 回の CPU は約 {GAME.baseSsrCpuMs}{' '}
+              SSR。SSR 1 回の CPU は約{' '}
+              {SCENARIO.template(1).routes[0]!.processing.cpuMs}{' '}
               ms（機能が増えると重くなる）
             </li>
             <li>
               1 PV あたり画像 5 枚（150 KB）。画像は 5,000 種類 × サイズ違い 3
             </li>
-            <li>1 PV あたり API 1 回。DB は小さい（0.3 GB）</li>
+            <li>
+              1 PV あたり API 1 回。DB は小さい（0.3
+              GB）が、投稿とコメントで少しずつ大きくなる。投稿された画像もたまっていく
+            </li>
           </ul>
           <p className="text-sm opacity-60">
             料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては
-            1 USD = {GAME.usdJpy} 円の仮定で換算。
+            1 USD = {USD_JPY} 円の仮定で換算。
             収益・成長・満足度・開発の手間・障害の影響はゲーム上の仮定。
           </p>
         </div>
@@ -158,7 +181,7 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
             <button
               className="btn btn-primary"
               onClick={() => {
-                onStart(playMonth(newGame(stack, seed)));
+                onStart(playMonth(newGame(stack, seed, SCENARIO)));
                 scrollTop();
               }}
             >
@@ -223,10 +246,13 @@ function MonthCard({ report: r }: { report: MonthReport }) {
             {STATUS[r.status].label}
           </span>
         </h2>
+        {r.events.map((e) => (
+          <EventCard key={`${e.id}:${e.phase}`} event={e} />
+        ))}
         {r.notes.map((n) => (
           <div
             key={n}
-            className={`alert ${r.buzz && n.includes('SNS') ? 'alert-info' : r.policyWarning && n.includes('規約') ? 'alert-error' : 'alert-warning'} py-2`}
+            className={`alert ${r.policyWarning && n.includes('規約') ? 'alert-error' : 'alert-warning'} py-2`}
           >
             {n}
           </div>
@@ -252,6 +278,12 @@ function MonthCard({ report: r }: { report: MonthReport }) {
                 </li>
               ))}
             </ul>
+            {r.botPV > 0 && (
+              <div className="mt-2 text-sm opacity-80">
+                PV {compact(Math.round(r.pv))} のうち Bot{' '}
+                {compact(Math.round(r.botPV))}（収益にならない）
+              </div>
+            )}
             <div className="mt-2 text-sm opacity-80">
               {r.buzz
                 ? `話題の後に残る伸び ${pct(s.growth)}`
@@ -358,6 +390,91 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
   );
 }
 
+const PHASE_LABEL: Record<MonthEvent['phase'], string> = {
+  notice: '▲ 予告: ',
+  occurred: '● ',
+  proposal: '◆ 提案: ',
+};
+const PHASE_BADGE: Record<MonthEvent['phase'], { label: string; cls: string }> =
+  {
+    notice: { label: '▲ 予告', cls: 'badge-warning' },
+    occurred: { label: '● 起きた', cls: 'badge-info' },
+    proposal: { label: '◆ 提案', cls: 'badge-primary' },
+  };
+const TIER_LABEL: Record<MonthEvent['tier'], string> = {
+  common: 'ふだん',
+  occasional: 'ときどき',
+  rare: 'まれ',
+};
+
+/** 出来事の通知（prd/07 §10.2）。当たりうる前提は catalog の文のまま出す（D-12）。 */
+function EventCard({ event: e }: { event: MonthEvent }) {
+  const badge = PHASE_BADGE[e.phase];
+  return (
+    <div
+      className={`rounded-box border p-3 ${e.tier === 'rare' ? 'border-error' : 'border-base-300'}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
+        <span className="badge badge-sm badge-outline">
+          {TIER_LABEL[e.tier]}
+        </span>
+        <span className="font-semibold">{e.title}</span>
+      </div>
+      <div className="mt-1 text-sm">{e.text}</div>
+      {e.effects.length > 0 && (
+        <div className="mt-1 text-xs opacity-70">
+          効果: {e.effects.join('・')}
+        </div>
+      )}
+      {e.accept && (
+        <div className="mt-1 text-xs opacity-70">
+          受けると: {e.accept.effects.join('・')}
+          。月の終わりの行動で受けるか断るかを選ぶ（断っても罰はない）
+        </div>
+      )}
+      {e.members && e.members.length > 0 && (
+        <ul className="mt-1 list-disc pl-5 text-xs opacity-80">
+          {e.members.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
+      )}
+      {e.premises.length > 0 && (
+        <ul className="mt-1 space-y-0.5 text-xs">
+          {e.premises.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-1">
+              <span
+                className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
+              >
+                {p.hit ? '✗ 当たった' : '○ 当たりうる前提'}
+              </span>
+              {p.text}
+              {p.ratio !== undefined && (
+                <span className="tabular-nums opacity-70">
+                  （今 {(p.ratio * 100).toFixed(0)}%）
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** 見込みが外れた理由の文（prd/07 §10.7）。 */
+function surpriseReason(x: Surprise): string {
+  switch (x.cause.kind) {
+    case 'event':
+      return `理由: 出来事「${x.cause.title}」。これが無ければ今月は ${(x.cause.ratioWithout * 100).toFixed(0)}% で、超えなかった`;
+    case 'action':
+      return `理由: 前の月の選択（${x.cause.action}）`;
+    case 'growth':
+      return '理由: 伸びが直近の推移より速かった';
+  }
+}
+
 function PremiseRow({ p }: { p: PlatformPremise }) {
   const blocked = p.hit && p.effect !== 'cost';
   const badge =
@@ -412,10 +529,15 @@ function Actions({
   );
   const [optimize, setOptimize] = useState(false);
   const [stackChange, setStackChange] = useState<number | null>(null);
+  /** 提案への返事（選ばなければ断る）。 */
+  const [answers, setAnswers] = useState<Record<string, boolean>>({});
+  const [blockBots, setBlockBots] = useState(false);
   const reset = () => {
     setSettings({});
     setOptimize(false);
     setStackChange(null);
+    setAnswers({});
+    setBlockBots(false);
   };
 
   const build = (
@@ -423,12 +545,19 @@ function Actions({
       settings?: Partial<Record<SettingKey, number>>;
       optimize?: boolean;
       stack?: number | null;
+      answers?: Record<string, boolean>;
+      blockBots?: boolean;
     } = {},
   ): Action[] => {
     const st = o.settings ?? settings;
     const opt = o.optimize ?? optimize;
     const stack = o.stack === undefined ? stackChange : o.stack;
+    const ans = o.answers ?? answers;
     const out: Action[] = [];
+    // 提案を受ける手間（割り込み）を先に取る
+    for (const eventId of state.pendingProposals)
+      out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
+    if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
     if (stack !== null)
       out.push({
         type: isPlanChange(state.stackIndex, stack) ? 'plan' : 'migrate',
@@ -459,12 +588,60 @@ function Actions({
         <h2 className="card-title flex-wrap">
           今月の行動（来月に効く）
           <span className="badge badge-lg">
-            来月の手間の残り {left} / {EFFORT.perMonth}
+            来月の手間の残り {left} / {state.effortPerMonth}
           </span>
         </h2>
         <p className="text-sm opacity-70">
           残りは機能開発（満足度の「機能」と成長）に回る。設定はいつでも戻せる。
         </p>
+        {state.pendingProposals.length > 0 && (
+          <div className="space-y-2">
+            <div className="divider my-1 text-xs">
+              届いた提案（選ばなければ断る）
+            </div>
+            {state.pendingProposals.map((id) => {
+              const def = eventDef(scenarioOf(state), id)!;
+              const acceptOk = valid(
+                build({ answers: { ...answers, [id]: true } }),
+              );
+              return (
+                <div
+                  key={id}
+                  className="rounded-box border border-base-300 p-3"
+                >
+                  <div className="font-semibold">{def.title}</div>
+                  <div className="mb-1 text-sm opacity-80">{def.text}</div>
+                  <div className="flex flex-wrap gap-4">
+                    <label
+                      className={`flex items-center gap-2 ${acceptOk || answers[id] ? 'cursor-pointer' : 'opacity-50'}`}
+                    >
+                      <input
+                        type="radio"
+                        className="radio radio-sm"
+                        checked={answers[id] === true}
+                        disabled={!acceptOk && !answers[id]}
+                        onChange={() => setAnswers({ ...answers, [id]: true })}
+                      />
+                      {def.accept!.label}
+                      {!acceptOk && !answers[id] && (
+                        <span className="text-xs">（手間が足りない）</span>
+                      )}
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        className="radio radio-sm"
+                        checked={answers[id] !== true}
+                        onChange={() => setAnswers({ ...answers, [id]: false })}
+                      />
+                      断る（何も変わらない）
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-3">
           {(Object.keys(SETTINGS) as SettingKey[]).map((key) => {
             const def = SETTINGS[key];
@@ -528,6 +705,27 @@ function Actions({
             </span>
           </span>
         </label>
+        {!state.botBlocked && (
+          <label className="flex cursor-pointer items-start gap-3 py-1">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm mt-1"
+              checked={blockBots}
+              disabled={
+                !blockBots &&
+                (actionEffort(state, { type: 'block-bots' }) === null ||
+                  !valid(build({ blockBots: true })))
+              }
+              onChange={(e) => setBlockBots(e.target.checked)}
+            />
+            <span>
+              Bot を遮断するルールを入れる {BOT_BLOCK.effort} ポイント
+              <span className="block text-xs opacity-60">
+                Bot・クローラーのアクセスが来月から半分になる（一度入れれば続く。対策の製品の料金は未取得なので、手間だけの行動）
+              </span>
+            </span>
+          </label>
+        )}
         <div className="divider my-1 text-xs">構成を変える</div>
         {state.migration ? (
           <div className="text-sm">
@@ -606,12 +804,10 @@ function Result({ state }: { state: GameState }) {
   const table = useMemo(() => comparisonRows(state), [state]);
   const cfPaid = table.find((r) => r.id === 'cf-paid')!;
   /** 短い名前と説明が違う基準プレイだけを注記に出す。 */
-  const abbreviated = BASELINES.filter((b) => b.short && b.short !== b.label);
+  const abbreviated = scenarioOf(state).baselines.filter(
+    (b) => b.short && b.short !== b.label,
+  );
   const reflection = reflectionOf(state);
-  const earlier = premiseTrends(
-    state.history.map((m) => m.snapshots),
-    GAME.months,
-  ).filter((t) => t.earlierThanProjected);
   const rows: { label: string; get: (a: Axes) => string }[] = [
     { label: '累積の利益', get: (a) => usd(a.profit) },
     { label: '満足度の平均', get: (a) => a.satisfaction.toFixed(2) },
@@ -760,14 +956,22 @@ function Result({ state }: { state: GameState }) {
                 ) : (
                   <p className="text-sm opacity-70">なし</p>
                 )}
-                {earlier.length > 0 && (
+                {reflection.surprises.length > 0 && (
                   <>
                     <h3 className="mt-3 mb-1 font-bold">
-                      見込みより早く超えた前提
+                      見込みより早く超えた前提と、その理由
                     </h3>
-                    <ul className="list-disc pl-5 text-sm">
-                      {earlier.map((t) => (
-                        <li key={t.id}>{t.text}</li>
+                    <ul className="space-y-1 text-sm">
+                      {reflection.surprises.map((x) => (
+                        <li key={`${x.premiseId}:${x.month}`}>
+                          <span className="badge badge-sm badge-outline mr-1">
+                            {x.month} か月目
+                          </span>
+                          {x.text}
+                          <span className="block text-xs opacity-70">
+                            {surpriseReason(x)}
+                          </span>
+                        </li>
                       ))}
                     </ul>
                   </>
@@ -833,7 +1037,7 @@ function resultMeters(
     good
       ? { status: 'good' as const, statusText: '✓ 達成' }
       : { status: 'critical' as const, statusText: '✗ 未達' };
-  const goal = GAME.goal;
+  const goal = scenarioOf(state).goal;
   const avg = axes.satisfaction;
   const limit = goal.maxOutageMonths;
   const ref = reference.axes;
@@ -911,6 +1115,7 @@ function History({ history }: { history: MonthReport[] }) {
               <th className="text-right">満足度</th>
               <th className="text-right">機能開発</th>
               <th>状態</th>
+              <th>出来事</th>
               <th>行動</th>
             </tr>
           </thead>
@@ -939,6 +1144,11 @@ function History({ history }: { history: MonthReport[] }) {
                     </span>
                   )}
                 </td>
+                <td className="text-xs">
+                  {r.events
+                    .map((e) => `${PHASE_LABEL[e.phase]}${e.title}`)
+                    .join('・')}
+                </td>
                 <td className="text-xs">{r.action ?? ''}</td>
               </tr>
             ))}
@@ -957,13 +1167,8 @@ function Trends({ history }: { history: MonthReport[] }) {
   const trends = selectTrends(
     premiseTrends(
       history.map((m) => m.snapshots),
-      GAME.months,
-      last.buzz
-        ? {
-            skipProjection:
-              '話題になった月の伸びは続かないかもしれないので、今月は見込みを出さない',
-          }
-        : {},
+      SCENARIO.months,
+      projectionNote(last) ? { skipProjection: projectionNote(last)! } : {},
     ),
   );
   const tiles = [
@@ -1013,7 +1218,7 @@ function Trends({ history }: { history: MonthReport[] }) {
                     ? ''
                     : `前月比 ${pct(t.delta)}`}
                 </span>
-                <Sparkline values={t.series} months={GAME.months} />
+                <Sparkline values={t.series} months={SCENARIO.months} />
               </div>
             </div>
           ))}
@@ -1021,7 +1226,7 @@ function Trends({ history }: { history: MonthReport[] }) {
         <div className="grid gap-4 md:grid-cols-2">
           <LineChart
             title="収益と費用（月）"
-            months={GAME.months}
+            months={SCENARIO.months}
             format={(v) => `$${compact(Math.round(v))}`}
             series={[
               {
@@ -1039,11 +1244,11 @@ function Trends({ history }: { history: MonthReport[] }) {
             ]}
           />
           <LineChart
-            title={`満足度と評判（目標の平均 ${GAME.goal.satisfaction}）`}
-            months={GAME.months}
+            title={`満足度と評判（目標の平均 ${SCENARIO.goal.satisfaction}）`}
+            months={SCENARIO.months}
             format={(v) => v.toFixed(2)}
             yMax={1}
-            reference={{ value: GAME.goal.satisfaction, label: '目標' }}
+            reference={{ value: SCENARIO.goal.satisfaction, label: '目標' }}
             series={[
               {
                 id: 'score',
@@ -1113,7 +1318,7 @@ function TrendCard({ t }: { t: ReturnType<typeof premiseTrends>[number] }) {
         <div className="mb-1 text-xs opacity-70">{t.projectionNote}</div>
       )}
       <LineChart
-        months={GAME.months}
+        months={SCENARIO.months}
         height={120}
         format={(v) => `${Math.round(v * 100)}%`}
         yMax={Math.min(Math.max(1.2, peak), 3)}

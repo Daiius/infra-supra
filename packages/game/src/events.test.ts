@@ -80,7 +80,7 @@ describe('台本の表', () => {
       const p = s.find((x) => x.id === proposal.id)!;
       expect(p.month).toBeGreaterThanOrEqual(3);
       expect(p.month).toBeLessThanOrEqual(5);
-      const r = s.filter((x) => x.id === rare.id);
+      const r = s.filter((x) => x.id === rare.id || x.id === 'p-archive');
       expect(r.length).toBeLessThanOrEqual(1);
       if (r[0]) {
         rareCount++;
@@ -109,7 +109,7 @@ describe('提案', () => {
   it('届いた月に返事を待ち、断ると何も変わらない（罰はない）', () => {
     const m = arrival(42);
     const s = until(newGame(1, 42, TEST), m);
-    expect(s.pendingProposal).toBe(proposal.id);
+    expect(s.pendingProposals).toEqual([proposal.id]);
     expect(s.history[m - 1]!.events.some((e) => e.phase === 'proposal')).toBe(
       true,
     );

@@ -43,7 +43,7 @@ import {
   type WorkloadMods,
 } from './scenario.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
-import type { PremiseSnapshot } from './trends.ts';
+import { premiseTrends, type PremiseSnapshot } from './trends.ts';
 
 export const SCENARIOS: Record<string, Scenario> = {
   [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
@@ -256,7 +256,7 @@ export type GameState = {
   stock: Stock;
   botBlocked: boolean;
   /** 返事を待っている提案。 */
-  pendingProposal: string | null;
+  pendingProposals: string[];
   responses: Record<string, 'accepted' | 'declined'>;
   /** 一度起きた状態の出来事。 */
   fired: string[];
@@ -467,7 +467,8 @@ export function actionEffort(state: GameState, action: Action): number | null {
         : null;
     case 'respond': {
       const def = eventDef(scenarioOf(state), action.eventId);
-      if (state.pendingProposal !== action.eventId || !def?.accept) return null;
+      if (!state.pendingProposals.includes(action.eventId) || !def?.accept)
+        return null;
       return action.accept ? acceptEffort(def) : 0;
     }
     case 'block-bots':
@@ -507,7 +508,7 @@ export function newGame(
     mods: {},
     stock: initialStock(scenario),
     botBlocked: false,
-    pendingProposal: null,
+    pendingProposals: [],
     responses: {},
     fired: [],
     interrupts: [],
@@ -648,11 +649,16 @@ export function playMonth(input: GameState): GameState {
   const prev = input.history[input.history.length - 1];
 
   // 返事のない提案は断ったことにする（罰はない。D-20 V-11）
-  let state: GameState = input.pendingProposal
+  let state: GameState = input.pendingProposals.length
     ? {
         ...input,
-        responses: { ...input.responses, [input.pendingProposal]: 'declined' },
-        pendingProposal: null,
+        responses: {
+          ...input.responses,
+          ...Object.fromEntries(
+            input.pendingProposals.map((id) => [id, 'declined' as const]),
+          ),
+        },
+        pendingProposals: [],
       }
     : input;
 
@@ -793,8 +799,13 @@ export function playMonth(input: GameState): GameState {
   for (const def of sc.events) {
     if (def.when.type !== 'premise' || fired.includes(def.id)) continue;
     const w = def.when;
+    // 前の月は境目より下で、今月越えた前提（1 か月目から越えているものは「近づいた」と呼ばない）
     const p = r.premises.find(
-      (q) => q.id.startsWith(w.premiseId) && (q.ratio ?? 0) >= w.atLeast,
+      (q) =>
+        w.premiseIds.some((id) => q.id.startsWith(id)) &&
+        (q.ratio ?? 0) >= w.atLeast &&
+        (prev?.snapshots.find((x) => x.id === q.id)?.ratio ?? Infinity) <
+          w.atLeast,
     );
     if (!p) continue;
     fired = [...fired, def.id];
@@ -806,7 +817,10 @@ export function playMonth(input: GameState): GameState {
       title: def.title,
       text: def.text,
       effects: [],
-      premises: premiseRefsOf(def, r.premises),
+      premises: premiseRefsOf(
+        { premiseRefs: w.premiseIds },
+        r.premises.filter((q) => (q.ratio ?? 0) >= w.atLeast),
+      ),
     });
   }
   // 料金データの施行日つきの予告（通知だけ。D-20 V-2）
@@ -1038,7 +1052,7 @@ export function playMonth(input: GameState): GameState {
   };
 
   // 今月届いた提案は、月の終わりに返事を待つ
-  const proposal = due.find((x) => eventDef(sc, x.id)!.kind === 'proposal');
+  const proposals = due.filter((x) => eventDef(sc, x.id)!.kind === 'proposal');
 
   const history = [...state.history, report];
   const finished = month >= sc.months;
@@ -1067,7 +1081,7 @@ export function playMonth(input: GameState): GameState {
     policyWarnedMonth,
     stock,
     fired,
-    pendingProposal: proposal && !end ? proposal.id : null,
+    pendingProposals: end ? [] : proposals.map((x) => x.id),
     interrupts: state.interrupts
       .map((i) => ({ ...i, months: i.months - 1 }))
       .filter((i) => i.months > 0),
@@ -1123,7 +1137,8 @@ function crossingsOf(
       p.kind === 'threshold' &&
       p.hit &&
       Number.isFinite(p.ratio ?? NaN) &&
-      (c.prev?.snapshots.find((q) => q.id === p.id)?.ratio ?? 0) <= 1,
+      // 前の月にも同じ前提があり、境目より下だった（1 か月目・乗り換えの直後は数えない）
+      (c.prev?.snapshots.find((q) => q.id === p.id)?.ratio ?? Infinity) <= 1,
   );
   if (!crossed.length) return [];
   // 外してみる候補: 流量の出来事・受けた提案（Workload の変化・在庫の一括の増加）
@@ -1306,7 +1321,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       const def = eventDef(scenarioOf(state), action.eventId)!;
       const responded: GameState = {
         ...state,
-        pendingProposal: null,
+        pendingProposals: state.pendingProposals.filter((id) => id !== def.id),
         responses: {
           ...state.responses,
           [def.id]: action.accept ? 'accepted' : 'declined',
@@ -1444,18 +1459,25 @@ export type Reflection = {
 };
 
 /**
- * 見込みが外れた理由（prd/07 §10.7）。境目を初めて越えた月の記録（crossings）から、
+ * 見込みが外れた理由（prd/07 §10.7）。前提が境目を初めて越えた月のうち、その月までの推移で
+ * 「前の月の見込みより早く超えた」（GD-1 の earlierThanProjected）ものについて、
  * ① 外すと越えなかった出来事 → ② 前の月のプレイヤーの行動 → ③ 伸びが直近より速かった、の順に理由を決める。
- * earlierIds を渡すと、その前提（推移の見込みより早く超えたもの）だけに絞る。
  */
-export function surprisesOf(
-  state: GameState,
-  earlierIds?: readonly string[],
-): Surprise[] {
+export function surprisesOf(state: GameState): Surprise[] {
+  const months = scenarioOf(state).months;
   const out: Surprise[] = [];
-  for (const r of state.history)
+  for (const r of state.history) {
+    if (!r.crossings.length) continue;
+    const earlier = new Set(
+      premiseTrends(
+        state.history.slice(0, r.month).map((m) => m.snapshots),
+        months,
+      )
+        .filter((t) => t.earlierThanProjected)
+        .map((t) => t.id),
+    );
     for (const c of r.crossings) {
-      if (earlierIds && !earlierIds.includes(c.premiseId)) continue;
+      if (!earlier.has(c.premiseId)) continue;
       const before = state.history[r.month - 2];
       const top = [...c.causes].sort(
         (a, b) => a.ratioWithout - b.ratioWithout,
@@ -1471,6 +1493,7 @@ export function surprisesOf(
             : { kind: 'growth' },
       });
     }
+  }
   return out;
 }
 

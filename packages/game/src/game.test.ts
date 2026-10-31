@@ -51,35 +51,39 @@ describe('game', () => {
     expect(play(CF_PAID, []).history).toHaveLength(12);
   });
 
-  it('GD-2 の基準プレイ（golden。シード 42）', () => {
-    // 旧（スパイクと同じルール）→ 新: CF Paid $8,870.72 → $8,867.76 / Vercel Pro $6,043.49 → $6,037.35 /
-    // Vercel Pro・1 か月目に強く圧縮 $7,026.81 → $4,595.30 / VPS $8,259.75 → $4,992.60（prd/07 §9.6・PR 本文）
-    const r = Object.fromEntries(
-      BASELINES.map((b) => {
-        const s = playStrategy(b);
-        return [b.id, [s.cash.toFixed(2), s.end?.reason, s.end?.month]];
-      }),
-    );
-    expect(r).toEqual({
-      'cf-paid': ['8867.76', 'won', 12],
-      vps: ['4992.60', 'goal', 12],
-      'vercel-pro': ['6037.35', 'goal', 12],
-      'vercel-compress-late': ['6302.59', 'won', 12],
-      'cf-free': ['94.24', 'outages', 3],
+  it('GD-3 の基準プレイ（golden。シード 42 と、まれな出来事が起きるシード 3）', () => {
+    // GD-2 → GD-3 の差は規模の見直し（30 万 PV・月 12%・話題 × 3）と出来事（prd/07 §10.6・§10.8・PR 本文）
+    const r = (seed: number) =>
+      Object.fromEntries(
+        BASELINES.map((b) => {
+          const s = playStrategy(b, seed);
+          return [b.id, [s.cash.toFixed(2), s.end?.reason, s.end?.month]];
+        }),
+      );
+    expect(r(42)).toEqual({
+      'cf-paid': ['2168.01', 'won', 12],
+      'cf-paid-accept': ['2205.83', 'won', 12],
+      'vps-images': ['1920.87', 'won', 12],
+      'vercel-pro': ['1710.23', 'goal', 12],
+      'vercel-to-cf': ['1749.57', 'won', 12],
+      'cf-free': ['142.89', 'outages', 3],
     });
-    expect(
-      play(VERCEL_PRO, [
-        [{ type: 'set', key: 'compress', value: 70 }],
-      ]).cash.toFixed(2),
-    ).toBe('4595.30');
+    expect(r(3)).toEqual({
+      'cf-paid': ['2179.02', 'won', 12],
+      'cf-paid-accept': ['1670.18', 'goal', 12],
+      'vps-images': ['1800.60', 'won', 12],
+      'vercel-pro': ['1628.24', 'goal', 12],
+      'vercel-to-cf': ['1795.39', 'won', 12],
+      'cf-free': ['142.89', 'outages', 3],
+    });
   });
 
-  it('既定の構成・何もしないなら満足度は 0.9（評判も 0.9・成長 40%）', () => {
+  it('既定の構成・何もしないなら満足度は 0.9（評判も 0.9・成長 12%）', () => {
     const s = playUntil(CF_PAID, 3);
     const m = s.history[2]!.satisfaction;
     expect(m.score).toBeCloseTo(0.9);
     expect(m.reputation).toBeCloseTo(0.9);
-    expect(m.growth).toBeCloseTo(0.4);
+    expect(m.growth).toBeCloseTo(0.12);
   });
 });
 
@@ -226,11 +230,12 @@ describe('結果の比較の表', () => {
     expect(rows.map((r) => r.name)).toEqual([
       'あなた',
       'CF Paid・何もしない',
-      'VPS・何もしない',
+      'CF Paid・提案を受ける',
+      'VPS・画像の提案を受ける',
       'Vercel Pro・何もしない',
-      'Vercel Pro・話題前に圧縮',
+      'Vercel Pro → CF Paid',
       'CF Free・何もしない',
     ]);
-    expect(rows[4]!.description).toBe(BASELINES[3]!.label);
+    expect(rows[5]!.description).toBe(BASELINES[4]!.label);
   });
 });

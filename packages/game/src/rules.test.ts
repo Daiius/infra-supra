@@ -111,15 +111,16 @@ describe('評判と成長', () => {
     expect(reputation(0.5, 0.9)).toBeCloseTo(0.7);
   });
 
-  it('S = 0.9 で 40%（試作の成長率と一致）。止まった月は負', () => {
-    expect(growthFromReputation(0.9, false).net).toBeCloseTo(0.4);
-    expect(growthFromReputation(0.5, true).net).toBeCloseTo(-0.25);
+  it('S = 0.9 で 12%（GD-3 の規模の見直し。prd/07 §10.6）。止まった月は負', () => {
+    expect(growthFromReputation(0.9, false).net).toBeCloseTo(0.12);
+    expect(growthFromReputation(0.8, false).net).toBeCloseTo(0.09);
+    expect(growthFromReputation(0.5, true).net).toBeCloseTo(-0.075);
     expect(growthFromReputation(0.7, true).net).toBeLessThan(0);
   });
 
-  it('話題の月の後の倍率は、評判 0.9 で試作の 1.8', () => {
-    expect(buzzLasting(0.9)).toBeCloseTo(1.8);
-    expect(buzzLasting(0.5)).toBeLessThan(1.5);
+  it('話題の月の後の倍率は、評判 0.9 で 1.3（GD-3）', () => {
+    expect(buzzLasting(0.9)).toBeCloseTo(1.3);
+    expect(buzzLasting(0.5)).toBeLessThan(1.2);
   });
 });
 
