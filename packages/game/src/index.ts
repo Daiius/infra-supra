@@ -11,7 +11,9 @@ import {
   MVP_STACKS,
   SLOT_LABELS,
   STACK_DEFS,
+  toSpa,
   type Choices,
+  type FrameworkId,
   type Platform,
   type SlotId,
 } from 'catalog';
@@ -292,6 +294,8 @@ export type GameState = {
   /** 実際に予告されている改定の出来事（始めた日が施行日より前のものだけ）と、起きる月。 */
   revisions: { id: string; month: number }[];
   stackIndex: number;
+  /** アプリのフレームワーク（始める画面で選ぶ。乗り換えでも変わらない。prd/10 F-04）。 */
+  framework: FrameworkId;
   /** 部品の選択（今の構成の事業者のスロット。D-24）。 */
   components: Choices;
   /** 進行中の DB の差し替え。 */
@@ -348,6 +352,26 @@ export function scenarioOf(state: Pick<GameState, 'scenarioId'>): Scenario {
   return SCENARIOS[state.scenarioId] ?? ARTICLE_COMMUNITY;
 }
 
+/** シナリオで選べるフレームワーク（省略は Next.js だけ）と既定。 */
+export function frameworksOf(sc: Scenario): {
+  allowed: FrameworkId[];
+  default: FrameworkId;
+} {
+  return sc.frameworks ?? { allowed: ['nextjs'], default: 'nextjs' };
+}
+
+/** フレームワークの既定の部品（SPA は OGP の前処理なし。prd/10 F-07）。 */
+function frameworkDefaults(framework: FrameworkId): Choices {
+  return framework === 'vite-spa' ? { ogp: 'none' } : {};
+}
+
+/** 記事ごとの SNS のカードが出ないか（SPA で OGP の前処理なし。prd/10 F-05）。 */
+function noSocialCards(
+  state: Pick<GameState, 'framework' | 'components'>,
+): boolean {
+  return state.framework === 'vite-spa' && state.components.ogp !== 'prerender';
+}
+
 export function eventDef(sc: Scenario, id: string): EventDef | undefined {
   return sc.events.find((e) => e.id === id);
 }
@@ -366,6 +390,17 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
     0,
   ),
 }));
+
+/** 構成の名前（SPA では vinext を使わないので外し、フレームワークを添える。prd/10）。 */
+export function stackName(
+  stackIndex: number,
+  framework: FrameworkId = 'nextjs',
+): string {
+  const name = STACKS[stackIndex]!.name;
+  return framework === 'vite-spa'
+    ? `${name.replace(' + vinext', '')}（Vite の SPA）`
+    : name;
+}
 
 const books = loadPriceBooks();
 
@@ -444,6 +479,7 @@ type WorkloadParts = {
   stock: Stock | null;
   platform: Platform;
   components: Choices;
+  framework: FrameworkId;
   /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
   peakFactor?: number;
 };
@@ -488,8 +524,11 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ...w.traffic,
       peakHourFactor: w.traffic.peakHourFactor * p.peakFactor,
     };
+  // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）
+  const shape = sc.frameworks?.spa?.shape;
+  const app = p.framework === 'vite-spa' && shape ? toSpa(w, shape) : w;
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
-  return applyComponentsToWorkload(w, p.platform, p.components, {
+  return applyComponentsToWorkload(app, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
   });
 }
@@ -509,6 +548,7 @@ export function initialStock(sc: Scenario): Stock {
 function architectureFor(
   stackIndex: number,
   seats: number,
+  framework: FrameworkId,
   components: Choices = {},
   standby: Choices = {},
   storageOption = false,
@@ -516,6 +556,7 @@ function architectureFor(
   const stack = composeStack(STACK_DEFS[stackIndex]!, components, {
     standby,
     storageOption,
+    framework,
   });
   if (seats <= 0) return stack;
   const ids = [
@@ -554,10 +595,11 @@ export function meetsRequirement(
   stackIndex: number,
   requirement: Requirement,
   components: Choices = {},
+  framework: FrameworkId = 'nextjs',
 ): boolean {
   switch (requirement) {
     case 'on-demand-isr':
-      return onDemandBlocker(stackIndex, components) === undefined;
+      return onDemandBlocker(stackIndex, components, framework) === undefined;
     case 'uptime-sla': {
       const plans = composeStack(STACK_DEFS[stackIndex]!, components)
         .nodes.flatMap((n) => (n.billing ? [n.billing] : []))
@@ -578,11 +620,12 @@ export function meetsRequirement(
 export function requirementReachable(
   stackIndex: number,
   requirement: Requirement,
+  framework: FrameworkId = 'nextjs',
 ): boolean {
   return STACKS.some(
     (s) =>
       s.provider === STACKS[stackIndex]!.provider &&
-      meetsRequirement(s.index, requirement),
+      meetsRequirement(s.index, requirement, {}, framework),
   );
 }
 
@@ -604,7 +647,10 @@ function factByRef(ref: string) {
 function onDemandBlocker(
   stackIndex: number,
   components: Choices = {},
+  framework: FrameworkId = 'nextjs',
 ): { slot: SlotId; label: string; reason: string } | undefined {
+  // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
+  if (framework === 'vite-spa') return undefined;
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
@@ -627,8 +673,18 @@ export function requirementStatus(
   stackIndex: number,
   components: Choices,
   requirement: Requirement,
+  framework: FrameworkId = 'nextjs',
 ): { label: string; ok: boolean; reason: string; current: boolean }[] {
   if (requirement !== 'on-demand-isr') return [];
+  if (framework === 'vite-spa')
+    return [
+      {
+        label: 'Vite の SPA',
+        ok: true,
+        reason: 'ISR を持たず、ページの中身を毎回 API で読む',
+        current: true,
+      },
+    ];
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   const out: {
@@ -664,9 +720,16 @@ export function slaOf(stackIndex: number): string[] {
 }
 
 /** 乗り換えた先の部品の選択（既定。チャットを持っていれば Durable Objects を付ける。D-24 X-9）。 */
-function componentsAfterMigration(to: number, mods: WorkloadMods): Choices {
+function componentsAfterMigration(
+  to: number,
+  mods: WorkloadMods,
+  framework: FrameworkId,
+): Choices {
   const platform = STACKS[to]!.provider;
-  const base = { ...DEFAULT_CHOICES[platform] };
+  const base = {
+    ...DEFAULT_CHOICES[platform],
+    ...frameworkDefaults(framework),
+  };
   if (mods.realtime && platform === 'cloudflare')
     base.realtime = 'durable-objects';
   return base;
@@ -798,8 +861,9 @@ export function migrationEffort(from: number, to: number): number {
 export function stackChangeText(
   from: number,
   to: number,
+  framework: FrameworkId = 'nextjs',
 ): { name: string; meta: string[]; detail: string } {
-  const target = STACKS[to]!.name;
+  const target = stackName(to, framework);
   const months = migrationEffort(from, to) / EFFORT.migrationPerMonth;
   const per = EFFORT.migrationPerMonth;
   const both = '期間中は新旧両方の費用';
@@ -1023,7 +1087,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (busy) return busy;
       const sc = scenarioOf(state);
       const platform = STACKS[state.stackIndex]!.provider;
-      const opt = componentsOf(platform, action.slot).find(
+      const opt = componentsOf(platform, action.slot, state.framework).find(
         (c) => c.id === action.option,
       );
       if (!opt) return ng('invalid', 'この事業者の部品に無い');
@@ -1120,13 +1184,17 @@ export function componentSlots(state: GameState): {
   options: ReturnType<typeof componentsOf>;
 }[] {
   const platform = STACKS[state.stackIndex]!.provider;
-  const current = { ...DEFAULT_CHOICES[platform], ...state.components };
+  const current = {
+    ...DEFAULT_CHOICES[platform],
+    ...frameworkDefaults(state.framework),
+    ...state.components,
+  };
   return (Object.keys(SLOT_LABELS) as SlotId[])
     .map((slot) => ({
       slot,
       label: SLOT_LABELS[slot],
       current: current[slot] ?? '',
-      options: componentsOf(platform, slot),
+      options: componentsOf(platform, slot, state.framework),
     }))
     .filter(
       (x) =>
@@ -1157,7 +1225,9 @@ export function componentPreview(
 ): MonthEvent['premises'] {
   const sc = scenarioOf(state);
   const platform = STACKS[state.stackIndex]!.provider;
-  const def = componentsOf(platform, slot).find((c) => c.id === option);
+  const def = componentsOf(platform, slot, state.framework).find(
+    (c) => c.id === option,
+  );
   if (!def || def.premiseRefs.length === 0) return [];
   const components = { ...state.components, [slot]: option };
   const r = estimate({
@@ -1169,10 +1239,12 @@ export function componentPreview(
       stock: sc.stock ? state.stock : null,
       platform,
       components,
+      framework: state.framework,
     }),
     architecture: architectureFor(
       state.stackIndex,
       state.seats,
+      state.framework,
       components,
       {},
       state.storageOption,
@@ -1184,10 +1256,13 @@ export function componentPreview(
 
 /** 提案を受けられない理由（要件を満たせる構成がプラン変更でも無い）。 */
 export function unavailableReason(
-  state: Pick<GameState, 'stackIndex'>,
+  state: Pick<GameState, 'stackIndex' | 'framework'>,
   def: EventDef,
 ): string | undefined {
-  if (!def.requires || requirementReachable(state.stackIndex, def.requires))
+  if (
+    !def.requires ||
+    requirementReachable(state.stackIndex, def.requires, state.framework)
+  )
     return undefined;
   return `今の事業者では「${REQUIREMENT_LABEL[def.requires]}」を選べない（セルフサービスのプランに無く、Enterprise などの契約の料金は取得していない）`;
 }
@@ -1197,9 +1272,16 @@ export function newGame(
   seed = 42,
   scenario: Scenario = ARTICLE_COMMUNITY,
   startDate: string = DEFAULT_START_DATE,
+  /** アプリのフレームワーク（省略はシナリオの既定。シナリオで選べないものは既定にする。prd/10 F-04）。 */
+  framework?: FrameworkId,
 ): GameState {
   // 状態にはシナリオの id だけを持つ（保存のため）。渡されたシナリオを id で引けるようにしておく
   SCENARIOS[scenario.id] ??= scenario;
+  const fw = frameworksOf(scenario);
+  const app =
+    framework !== undefined && fw.allowed.includes(framework)
+      ? framework
+      : fw.default;
   return {
     startDate,
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
@@ -1208,7 +1290,11 @@ export function newGame(
     startSeed: seed,
     schedule: rollSchedule(scenario, seed),
     stackIndex,
-    components: { ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider] },
+    framework: app,
+    components: {
+      ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider],
+      ...frameworkDefaults(app),
+    },
     storageOption: false,
     storageOptionFeeDue: false,
     componentSwap: null,
@@ -1445,6 +1531,11 @@ export function playMonth(input: GameState): GameState {
   let botExtra = 0;
   let peakFactor = 1;
   let lasting = false;
+  // 記事ごとの SNS のカードが出ないと、話題の伸びが小さい（SPA で OGP の前処理なし。ゲーム上の仮定・prd/10 F-05）
+  const cardFactor = noSocialCards(state)
+    ? (sc.frameworks?.spa?.socialCardFactor ?? 1)
+    : 1;
+  let socialLasting = false;
   const trafficEvents: {
     id: string;
     title: string;
@@ -1498,14 +1589,20 @@ export function playMonth(input: GameState): GameState {
         });
         trafficNotes.push(`${def.title}（Bot は収益にならない）`);
       } else {
-        humanFactor *= e.factor;
+        const factor = e.social ? 1 + (e.factor - 1) * cardFactor : e.factor;
+        humanFactor *= factor;
         if (e.peakFactor) peakFactor *= e.peakFactor;
         if (e.lasting) lasting = true;
+        if (e.lasting && e.social) socialLasting = true;
+        if (e.social && cardFactor !== 1)
+          trafficNotes.push(
+            `記事ごとの SNS のカードが出ないので、話題の伸びが小さい（${fmtFactor(e.factor)} → ${fmtFactor(factor)}・ゲーム上の仮定）`,
+          );
         trafficEvents.push({
           id: def.id,
           title: def.title,
           bot: false,
-          factor: e.factor,
+          factor,
           ...(e.peakFactor ? { peak: e.peakFactor } : {}),
         });
         if (!e.lasting) trafficNotes.push(def.title);
@@ -1519,6 +1616,11 @@ export function playMonth(input: GameState): GameState {
     state = applyEffects(state, def.effects ?? [], def.id);
   }
   const buzz = lasting;
+  // 話題の後に残る伸びも、カードが出ないと小さい（同じ仮定）
+  const buzzRule =
+    socialLasting && cardFactor !== 1
+      ? { ...sc.buzz, extra: sc.buzz.extra * cardFactor }
+      : sc.buzz;
   const basePV = state.basePV;
   const humanPV = basePV * humanFactor;
   const botPV = humanPV * botExtra;
@@ -1535,6 +1637,7 @@ export function playMonth(input: GameState): GameState {
     stock: sc.stock ? state.stock : null,
     platform: platformNow,
     components: state.components,
+    framework: state.framework,
     ...(peakFactor !== 1 ? { peakFactor } : {}),
   };
   const workload = workloadFor(sc, parts);
@@ -1542,6 +1645,7 @@ export function playMonth(input: GameState): GameState {
   const architecture = architectureFor(
     stackIndexNow,
     state.seats,
+    state.framework,
     state.components,
     swap ? { [swap.slot]: swap.option } : {},
     state.storageOption,
@@ -1552,14 +1656,23 @@ export function playMonth(input: GameState): GameState {
   const target = state.migration
     ? (() => {
         const to = state.migration.to;
-        const components = componentsAfterMigration(to, state.mods);
+        const components = componentsAfterMigration(
+          to,
+          state.mods,
+          state.framework,
+        );
         return estimate({
           workload: workloadFor(sc, {
             ...parts,
             platform: STACKS[to]!.provider,
             components,
           }),
-          architecture: architectureFor(to, state.seats, components),
+          architecture: architectureFor(
+            to,
+            state.seats,
+            state.framework,
+            components,
+          ),
           books: monthBooks,
         });
       })()
@@ -1601,6 +1714,7 @@ export function playMonth(input: GameState): GameState {
               stackIndexNow,
               state.components,
               def.previewRequirement,
+              state.framework,
             ),
           }
         : {}),
@@ -1739,7 +1853,14 @@ export function playMonth(input: GameState): GameState {
   // 契約の収益（要件を満たす構成の月だけ。SLA の出来事・D-24）
   let contractRevenue = 0;
   for (const c of state.contracts) {
-    if (meetsRequirement(stackIndexNow, c.requires, state.components))
+    if (
+      meetsRequirement(
+        stackIndexNow,
+        c.requires,
+        state.components,
+        state.framework,
+      )
+    )
       contractRevenue += c.usdPerMonth;
     else
       notes.push(
@@ -1776,18 +1897,27 @@ export function playMonth(input: GameState): GameState {
     ...state.settings,
     ...(comps.images === 'none' ? { imageKB: sc.unoptimizedImageKB } : {}),
   };
-  const uncached = comps.isrCache === 'none';
+  // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）
+  const spa = state.framework === 'vite-spa';
+  const uncached = spa || comps.isrCache === 'none';
+  // SPA の API の CPU（速さの「SSR の重さ」の代わりに使う。SSR の CPU × dataCpuFactor）
+  const firstLoad = spa && (sc.frameworks?.spa?.firstLoadHeavy ?? false);
+  const serverCpuMs = spa
+    ? ssrCpuMs * (sc.frameworks?.spa?.shape.dataCpuFactor ?? 1)
+    : ssrCpuMs;
   // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
-  const eventuallyConsistent = comps.db === 'kv' || comps.frontCdn === 'html';
+  const eventuallyConsistent =
+    comps.db === 'kv' || (!spa && comps.frontCdn === 'html');
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）
   const onDemand = state.requirements.includes('on-demand-isr')
-    ? onDemandBlocker(stackIndexNow, state.components)
+    ? onDemandBlocker(stackIndexNow, state.components, state.framework)
     : undefined;
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
       degraded: incident || state.switching,
-      ssrCpuMs,
+      ssrCpuMs: serverCpuMs,
+      firstLoadHeavy: firstLoad,
       imageKB: viewed.imageKB,
       variants: viewed.variants,
       revalidateSec: viewed.revalidateSec,
@@ -1805,10 +1935,16 @@ export function playMonth(input: GameState): GameState {
     throttling,
     incident,
     switching: state.switching,
-    ssrCpuMs,
+    ssrCpuMs: serverCpuMs,
+    spa,
     settings: viewed,
     heaviness: speedHeaviness(
-      { ...viewed, ssrCpuMs, premises: r.premises },
+      {
+        ...viewed,
+        ssrCpuMs: serverCpuMs,
+        premises: r.premises,
+        firstLoadHeavy: firstLoad,
+      },
       sat,
     ),
     featurePoints,
@@ -1853,11 +1989,15 @@ export function playMonth(input: GameState): GameState {
   if (migration && migration.done >= migration.required) {
     stackIndex = migration.to;
     switching = true;
-    components = componentsAfterMigration(migration.to, state.mods);
+    components = componentsAfterMigration(
+      migration.to,
+      state.mods,
+      state.framework,
+    );
     // 乗り換え・契約し直しは新しいサーバーなので、ストレージ変更オプションは付いていない
     storageOption = false;
     notes.push(
-      `乗り換えの作業が済んだ。来月から ${MVP_STACKS[migration.to]!.name} に切り替える（部品は既定の選択から始まる）`,
+      `乗り換えの作業が済んだ。来月から ${stackName(migration.to, state.framework)} に切り替える（部品は既定の選択から始まる）`,
     );
     if (mods.realtime && !realtimeSupported(STACKS[migration.to]!.provider)) {
       mods = withoutRealtime(mods);
@@ -1881,7 +2021,7 @@ export function playMonth(input: GameState): GameState {
 
   const report: MonthReport = {
     month,
-    stackName: stack.name,
+    stackName: stackName(stackIndexNow, state.framework),
     buzz,
     ...(trafficNotes.length ? { trafficNote: trafficNotes.join('・') } : {}),
     pv,
@@ -1945,13 +2085,15 @@ export function playMonth(input: GameState): GameState {
       reputation: rep,
       acquisition: g.acquisition,
       churn: g.churn,
-      growth: buzz ? buzzLasting(rep, sc.buzz) - 1 : net,
+      growth: buzz ? buzzLasting(rep, buzzRule) - 1 : net,
     },
     effort,
     featurePoints,
     components: comps,
     componentSummary: (Object.keys(SLOT_LABELS) as SlotId[])
-      .filter((slot) => componentsOf(platformNow, slot).length > 1)
+      .filter(
+        (slot) => componentsOf(platformNow, slot, state.framework).length > 1,
+      )
       .map(
         (slot) =>
           `${SLOT_LABELS[slot]}: ${componentLabel(platformNow, slot, comps[slot])}`,
@@ -1970,7 +2112,7 @@ export function playMonth(input: GameState): GameState {
     ...(state.migration
       ? {
           migration: {
-            toName: MVP_STACKS[state.migration.to]!.name,
+            toName: stackName(state.migration.to, state.framework),
             done: state.migration.done + effort.migration,
             required: state.migration.required,
           },
@@ -2020,7 +2162,7 @@ export function playMonth(input: GameState): GameState {
     growthBonus: state.growthBonus
       .map((b) => ({ ...b, months: b.months - 1 }))
       .filter((b) => b.months > 0),
-    basePV: buzz ? basePV * buzzLasting(rep, sc.buzz) : basePV * (1 + net),
+    basePV: buzz ? basePV * buzzLasting(rep, buzzRule) : basePV * (1 + net),
     history,
     phase: end ? (end.reason === 'won' ? 'won' : 'lost') : 'playing',
     ...(end ? { end } : {}),
@@ -2147,6 +2289,8 @@ function stageReasons(
     incident: boolean;
     switching: boolean;
     ssrCpuMs: number;
+    /** SPA（速さの理由を「API の CPU・初回表示」で書く）。 */
+    spa: boolean;
     settings: Settings;
     heaviness: number;
     featurePoints: number;
@@ -2167,7 +2311,9 @@ function stageReasons(
   if (stages.speed !== 'good')
     out.speed = c.throttling.length
       ? `前提に当たった: ${c.throttling[0]!.text}`
-      : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種）`;
+      : c.spa
+        ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種）`
+        : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種）`;
   if (stages.quality !== 'good')
     out.quality = `画像の圧縮 ${optionLabel('compress', c.settings.imageKB)}`;
   if (stages.freshness !== 'good')
@@ -2262,11 +2408,14 @@ export function applyAction(state: GameState, action: Action): GameState {
         },
       });
     case 'plan':
-      return withNote(`${STACKS[action.stackIndex]!.name} にプラン変更`, {
-        ...state,
-        ...planned,
-        stackIndex: action.stackIndex,
-      });
+      return withNote(
+        `${stackName(action.stackIndex, state.framework)} にプラン変更`,
+        {
+          ...state,
+          ...planned,
+          stackIndex: action.stackIndex,
+        },
+      );
     case 'migrate': {
       const migration: Migration = {
         from: state.stackIndex,
@@ -2276,10 +2425,13 @@ export function applyAction(state: GameState, action: Action): GameState {
       };
       // 乗り換えの月ごとの手間と行動を合わせて、来月の手間に収まるか
       if (effortAvailable({ ...state, migration }) < 0) return state;
-      return withNote(`${STACKS[action.stackIndex]!.name} へ乗り換えを始めた`, {
-        ...state,
-        migration,
-      });
+      return withNote(
+        `${stackName(action.stackIndex, state.framework)} へ乗り換えを始めた`,
+        {
+          ...state,
+          migration,
+        },
+      );
     }
     case 'respond': {
       const def = eventDef(scenarioOf(state), action.eventId)!;
@@ -2552,8 +2704,11 @@ export function playStrategy(
   seed = 42,
   scenario: Scenario = ARTICLE_COMMUNITY,
   startDate: string = DEFAULT_START_DATE,
+  framework?: FrameworkId,
 ): GameState {
-  let st = playMonth(newGame(s.stackIndex, seed, scenario, startDate));
+  let st = playMonth(
+    newGame(s.stackIndex, seed, scenario, startDate, framework),
+  );
   for (let i = 0; st.phase === 'playing'; i++)
     st = playMonth(
       applyActions(st, s.decide ? s.decide(st) : (s.actions?.[i] ?? [])),
@@ -2586,7 +2741,10 @@ export function comparisonRows(state: GameState): ComparisonRow[] {
       id: b.id,
       name: b.short ?? b.label,
       description: b.label,
-      axes: axesOf(playStrategy(b, state.startSeed, sc, state.startDate)),
+      // 基準プレイも同じフレームワークで回す（同じアプリの形で比べる。prd/10）
+      axes: axesOf(
+        playStrategy(b, state.startSeed, sc, state.startDate, state.framework),
+      ),
       you: false,
     })),
   ];
@@ -2597,3 +2755,4 @@ export * from './trends.ts';
 export * from './scenario.ts';
 export * from './save.ts';
 export { ARTICLE_COMMUNITY };
+export { FRAMEWORKS, type FrameworkId } from 'catalog';

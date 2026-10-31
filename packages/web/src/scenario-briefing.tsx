@@ -1,5 +1,11 @@
 // 始める画面のシナリオの選択と説明（D-33・prd/09 E-5・E-6）。文言はシナリオのデータ（Scenario.text）から読む。
-import { growthFromReputation, SCENARIOS, type Scenario } from 'game';
+import {
+  FRAMEWORKS,
+  growthFromReputation,
+  SCENARIOS,
+  type FrameworkId,
+  type Scenario,
+} from 'game';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -42,15 +48,69 @@ export function ScenarioPicker({
   );
 }
 
+/** アプリのフレームワークを選ぶ（シナリオで選べるものが 2 つ以上のときだけ。prd/10 F-04）。 */
+export function FrameworkPicker({
+  allowed,
+  value,
+  onChange,
+}: {
+  allowed: FrameworkId[];
+  value: FrameworkId;
+  onChange: (id: FrameworkId) => void;
+}) {
+  if (allowed.length < 2) return null;
+  return (
+    <div className="card bg-base-100 shadow">
+      <div className="card-body">
+        <h2 className="card-title">アプリを何で作りましたか？</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {allowed.map((id) => {
+            const f = FRAMEWORKS[id];
+            return (
+              <label
+                key={id}
+                className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${value === id ? 'border-primary bg-primary/5' : 'border-base-300'}`}
+              >
+                <input
+                  type="radio"
+                  name="framework"
+                  className="radio radio-primary mt-1"
+                  checked={value === id}
+                  onChange={() => onChange(id)}
+                />
+                <span>
+                  <span className="font-semibold">{f.label}</span>
+                  <span className="block text-sm opacity-70">{f.note}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <p className="text-sm opacity-60">
+          途中で作り直すことはできない（乗り換えても同じアプリのまま）。SNS
+          のカード・初回表示への効き方はゲーム上の仮定。
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /** シナリオの説明・目標・アプリの形。 */
 export function ScenarioDescription({
   scenario: sc,
+  framework = 'nextjs',
   usdJpy,
 }: {
   scenario: Scenario;
+  framework?: FrameworkId;
   usdJpy: number;
 }) {
   const t = sc.text;
+  const byFw = t?.byFramework?.[framework];
+  const intro = byFw?.intro ?? t?.intro;
+  const app = byFw?.app ?? t?.app ?? [];
+  const spa = framework === 'vite-spa' ? sc.frameworks?.spa : undefined;
+  const ssrCpuMs = sc.template(1).routes[0]!.processing.cpuMs;
   const growth = (
     growthFromReputation(0.9, false, sc.growth).net * 100
   ).toFixed(0);
@@ -61,7 +121,7 @@ export function ScenarioDescription({
           シナリオ: {sc.name}を {sc.months} か月運営する
         </h2>
         <p>
-          {t?.intro}
+          {intro}
           {t?.scale}今は月 {sc.scale.startPV.toLocaleString()} PV。
           {t?.growth.up ?? '満足度が高ければ伸び'}（満足度 0.9 で毎月約 {growth}
           %）、{t?.growth.down ?? '低ければ減る'}。
@@ -116,13 +176,20 @@ export function ScenarioDescription({
           アプリの形（コストに効く判断ポイント）
         </h3>
         <ul className="list-disc space-y-1 pl-6">
-          {(t?.app ?? []).map((line) => (
+          {app.map((line) => (
             <li key={line}>{line}</li>
           ))}
-          <li>
-            SSR 1 回の CPU は約 {sc.template(1).routes[0]!.processing.cpuMs}{' '}
-            ms（機能が増えると重くなる）
-          </li>
+          {spa ? (
+            <li>
+              中身を返す API 1 回の CPU は約{' '}
+              {ssrCpuMs * spa.shape.dataCpuFactor} ms（HTML を描かない分 SSR の{' '}
+              {spa.shape.dataCpuFactor}{' '}
+              倍と仮定。機能が増えると重くなる）。この仮定で Cloudflare Free の
+              1 リクエスト CPU 10 ms に当たるかが決まる
+            </li>
+          ) : (
+            <li>SSR 1 回の CPU は約 {ssrCpuMs} ms（機能が増えると重くなる）</li>
+          )}
         </ul>
         <p className="text-sm opacity-60">
           料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては 1

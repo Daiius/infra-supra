@@ -8,6 +8,9 @@ import {
   type Action,
   type GameState,
 } from './index.ts';
+import type { FrameworkId } from 'catalog';
+
+const FRAMEWORK_IDS: readonly FrameworkId[] = ['nextjs', 'vite-spa'];
 
 export const SAVE_VERSION = 1;
 
@@ -15,6 +18,11 @@ export type SaveData = {
   version: typeof SAVE_VERSION;
   scenarioId: string;
   stackIndex: number;
+  /**
+   * アプリのフレームワーク（prd/10 F-04）。フレームワークを選べるようになる前の保存には無く、
+   * そのときは Next.js として読む（版は上げない。prd/10 B-9）。
+   */
+  framework: FrameworkId;
   seed: number;
   /** 始めた日（YYYY-MM-DD）。改定の出来事の条件（D-21）。 */
   startDate: string;
@@ -23,8 +31,17 @@ export type SaveData = {
 };
 
 /** 始めたときの保存（まだ行動なし）。 */
-export function newSave(input: Omit<SaveData, 'version' | 'turns'>): SaveData {
-  return { version: SAVE_VERSION, ...input, turns: [] };
+export function newSave(
+  input: Omit<SaveData, 'version' | 'turns' | 'framework'> & {
+    framework?: FrameworkId;
+  },
+): SaveData {
+  return {
+    version: SAVE_VERSION,
+    ...input,
+    framework: input.framework ?? 'nextjs',
+    turns: [],
+  };
 }
 
 /** 月の終わりの行動を足した保存。 */
@@ -42,7 +59,9 @@ const isObject = (x: unknown): x is Record<string, unknown> =>
 export function parseSave(raw: unknown): SaveData | null {
   if (!isObject(raw) || raw.version !== SAVE_VERSION) return null;
   const { scenarioId, stackIndex, seed, startDate, turns } = raw;
+  const framework = raw.framework ?? 'nextjs';
   if (
+    !FRAMEWORK_IDS.includes(framework as FrameworkId) ||
     typeof scenarioId !== 'string' ||
     !(scenarioId in SCENARIOS) ||
     !Number.isInteger(stackIndex) ||
@@ -62,6 +81,7 @@ export function parseSave(raw: unknown): SaveData | null {
     version: SAVE_VERSION,
     scenarioId,
     stackIndex: stackIndex as number,
+    framework: framework as FrameworkId,
     seed,
     startDate,
     turns: turns as Action[][],
@@ -76,7 +96,13 @@ export function replaySave(save: SaveData): GameState {
   const scenario = SCENARIOS[save.scenarioId];
   if (!scenario) throw new Error(`シナリオが無い: ${save.scenarioId}`);
   let s = playMonth(
-    newGame(save.stackIndex, save.seed, scenario, save.startDate),
+    newGame(
+      save.stackIndex,
+      save.seed,
+      scenario,
+      save.startDate,
+      save.framework,
+    ),
   );
   for (const actions of save.turns) {
     if (s.phase !== 'playing')

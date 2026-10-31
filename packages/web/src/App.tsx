@@ -21,6 +21,9 @@ import {
   goalChecks,
   isPlanChange,
   stackChangeText,
+  stackName,
+  frameworksOf,
+  type FrameworkId,
   storageOptionText,
   migrationEffort,
   newSave,
@@ -53,6 +56,7 @@ import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
 import {
+  FrameworkPicker,
   ScenarioDescription,
   ScenarioPicker,
   SCENARIO_LIST,
@@ -135,7 +139,7 @@ export function App() {
         {state ? (
           <Game
             // 新しく始めたとき・再開したときは作り直す（ダイアログの状態を引き継がない）
-            key={`${session!.save.seed}:${session!.save.stackIndex}:${session!.save.startDate}:${session!.restored}`}
+            key={`${session!.save.seed}:${session!.save.stackIndex}:${session!.save.framework}:${session!.save.startDate}:${session!.restored}`}
             state={state}
             restored={session!.restored}
             onAdvance={(actions) => {
@@ -163,13 +167,30 @@ export function App() {
 function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [scenarioId, setScenarioId] = useState(SCENARIO_LIST[0]!.id);
   const scenario = SCENARIOS[scenarioId]!;
+  const frameworks = frameworksOf(scenario);
+  const [frameworkChoice, setFramework] = useState<FrameworkId>(
+    frameworks.default,
+  );
+  // シナリオを替えたときに選べないフレームワークなら既定にする
+  const framework = frameworks.allowed.includes(frameworkChoice)
+    ? frameworkChoice
+    : frameworks.default;
   const [stack, setStack] = useState(1);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
   return (
     <>
       <ScenarioPicker value={scenarioId} onChange={setScenarioId} />
-      <ScenarioDescription scenario={scenario} usdJpy={USD_JPY} />
+      <FrameworkPicker
+        allowed={frameworks.allowed}
+        value={framework}
+        onChange={setFramework}
+      />
+      <ScenarioDescription
+        scenario={scenario}
+        framework={framework}
+        usdJpy={USD_JPY}
+      />
       <div className="card bg-base-100 shadow">
         <div className="card-body">
           <h2 className="card-title">どの構成で始めますか？</h2>
@@ -185,7 +206,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   checked={stack === s.index}
                   onChange={() => setStack(s.index)}
                 />
-                <span>{s.name}</span>
+                <span>{stackName(s.index, framework)}</span>
               </label>
             ))}
           </div>
@@ -218,6 +239,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   newSave({
                     scenarioId: scenario.id,
                     stackIndex: stack,
+                    framework,
                     seed,
                     startDate,
                   }),
@@ -1164,7 +1186,7 @@ function Actions({
         <div className="divider my-1 text-xs">構成を変える</div>
         {state.migration ? (
           <div className="text-sm">
-            {STACKS[state.migration.to]!.name} へ乗り換え中（
+            {stackName(state.migration.to, state.framework)} へ乗り換え中（
             {state.migration.done} / {state.migration.required}{' '}
             ポイント）。済むまで別の変更はできない。
           </div>
@@ -1179,7 +1201,9 @@ function Actions({
               const why = idx === null ? null : blocked(build({ stack: idx }));
               const ok = why === null;
               const text =
-                idx === null ? null : stackChangeText(state.stackIndex, idx);
+                idx === null
+                  ? null
+                  : stackChangeText(state.stackIndex, idx, state.framework);
               return (
                 <label
                   key={idx ?? 'keep'}

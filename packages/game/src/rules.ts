@@ -69,7 +69,7 @@ export const EFFORT = {
    * 部品の差し替え（D-24・prd/07 §11.3）。ISR のキャッシュ・画像は翌月から。DB はデータの移行があるので
    * 乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える（期間中は新旧の両方の DB の費用）。
    */
-  component: { isrCache: 2, images: 2, realtime: 4, frontCdn: 2 },
+  component: { isrCache: 2, images: 2, realtime: 4, frontCdn: 2, ogp: 2 },
   dbSwap: { perMonth: 6, months: 1 },
   /** 乗り換え: 月あたりの手間と、必要な月数（VPS が絡むと長い）。 */
   migrationPerMonth: 6,
@@ -84,6 +84,8 @@ export function speedHeaviness(
     imageKB: number;
     variants: number;
     premises: readonly PlatformPremise[];
+    /** SPA の初回表示（シェル → JS → API の順に待つ）。重さを 1 つ数える（ゲーム上の仮定・prd/10 F-05）。 */
+    firstLoadHeavy?: boolean;
   },
   sat: SatisfactionRules = SATISFACTION,
 ): number {
@@ -94,7 +96,8 @@ export function speedHeaviness(
   return (
     (input.ssrCpuMs >= s.heavySsrCpuMs ? 1 : 0) +
     (input.imageKB >= s.heavyImageKB || input.variants <= 1 ? 1 : 0) +
-    (near ? 1 : 0)
+    (near ? 1 : 0) +
+    (input.firstLoadHeavy ? 1 : 0)
   );
 }
 
@@ -117,6 +120,8 @@ export type JudgeInput = {
   eventuallyConsistent?: boolean;
   /** 即時反映（オンデマンド ISR）の要件を満たさない。さらに 1 段下げる（仮定・D-32）。 */
   onDemandUnmet?: boolean;
+  /** SPA の初回表示（速さの重さを 1 つ数える。仮定・prd/10 F-05）。 */
+  firstLoadHeavy?: boolean;
 };
 
 const STAGE_DOWN: Record<Stage, Stage> = {

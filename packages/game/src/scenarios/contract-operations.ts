@@ -1,7 +1,7 @@
 // シナリオ: 受託先の業務アプリを運用する（prd/09・D-33）。受託は設定（フレーバー）だけで、お金の流れは記事コミュニティと同じ
 // （収益 − インフラの費用 = 所持金。人件費は入れない）。値はすべてゲーム上の仮定で、実在の値でも相場でもない。
 // 料金・制限は catalog のデータをそのまま使い（ここで料金を作らない）、前提の文も catalog のもの（premiseRefs で参照する）。
-import { businessApp } from 'catalog';
+import { BUSINESS_APP_SPA, businessApp } from 'catalog';
 import type { Action, GameState } from '../index.ts';
 import type { EventDef, Scenario } from '../scenario.ts';
 
@@ -340,9 +340,22 @@ export const CONTRACT_OPERATIONS: Scenario = {
   revisions: { from: 3, to: 10 },
   goal: { cash: 1700, satisfaction: 0.75, maxOutageMonths: 2 },
   startCash: 60,
+  // フレームワーク（prd/10 F-04）。既定は Next.js。業務アプリは SPA で作ることも多いので選べる
+  frameworks: {
+    allowed: ['nextjs', 'vite-spa'],
+    default: 'nextjs',
+    spa: {
+      shape: BUSINESS_APP_SPA,
+      // SNS の話題は無い（使わない）
+      socialCardFactor: 1,
+      // 平日に毎日使い、JS はブラウザに残るので、初回表示は効かせない（仮定）
+      firstLoadHeavy: false,
+    },
+  },
   hidden: {
     settings: ['compress', 'variants', 'isr'],
-    slots: ['isrCache', 'images', 'realtime'],
+    // SNS のカード（OGP）はログインして使う業務アプリでは効かない
+    slots: ['isrCache', 'images', 'realtime', 'ogp'],
     blockBots: true,
   },
   text: {
@@ -362,6 +375,17 @@ export const CONTRACT_OPERATIONS: Scenario = {
       '1 PV あたり API 3 回（書き込みが多い）。DB は 1 GB から、業務の記録で大きくなる',
       '添付ファイルは利用者 1 人あたり月 1 件（2 MB）。配信の量は数えず、保存量だけがたまる',
     ],
+    byFramework: {
+      'vite-spa': {
+        intro:
+          '自社が受託で作った、顧客の業務アプリ（申請・一覧・検索・登録。ログインして使う）の運用を受け持っている。画面は Vite の SPA、API は同じ事業者に置いている。インフラは自社のアカウントで持ち、費用は自社が払う（運用費に込み）。',
+        app: [
+          '画面は 1 つのシェルとブラウザの JS で描き、中身は API で取る（HTML の生成は無い）。平日と休日の比 8・ピークの時間帯は平均の 4 倍',
+          '1 PV あたり API 3 回 + 画面の中身の API 1 回（書き込みが多い）。DB は 1 GB から、業務の記録で大きくなる',
+          '添付ファイルは利用者 1 人あたり月 1 件（2 MB）。配信の量は数えず、保存量だけがたまる',
+        ],
+      },
+    },
     revenue:
       '収益は顧客から受け取る運用費: 固定 $120 / 月 + 1,000 PV あたり $0.1（ゲーム上の仮定。相場ではない）。止まった月は減額される。人件費は入れない。',
   },
