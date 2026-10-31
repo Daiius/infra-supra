@@ -1273,6 +1273,44 @@ function ComponentsSection({
   );
 }
 
+/** 花火のアイコン（中心から放射する線と点。currentColor で描く）。 */
+function FireworkIcon() {
+  const rays = Array.from({ length: 8 }, (_, i) => (i * Math.PI) / 4);
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      {rays.map((a) => (
+        <line
+          key={a}
+          x1={12 + Math.cos(a) * 3.5}
+          y1={12 + Math.sin(a) * 3.5}
+          x2={12 + Math.cos(a) * 8}
+          y2={12 + Math.sin(a) * 8}
+        />
+      ))}
+      {rays.map((a) => (
+        <circle
+          key={`d${a}`}
+          cx={12 + Math.cos(a + Math.PI / 8) * 10.5}
+          cy={12 + Math.sin(a + Math.PI / 8) * 10.5}
+          r="0.9"
+          fill="currentColor"
+          stroke="none"
+        />
+      ))}
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** 結果（prd/07 §9.6）: 合否・軸ごとの成績（基準プレイの目盛りつき）・振り返り。 */
 function Result({
   state,
@@ -1321,14 +1359,18 @@ function Result({
             {end.month} か月目で終了・所持金 {usd(state.cash)}・止まった月{' '}
             {state.outages} 回
           </span>
-        </div>
-        {won && (
-          <div>
-            <button className="btn btn-sm btn-outline" onClick={onCelebrate}>
-              <span aria-hidden>🎆</span> もう一度祝う（達成のダイアログを開く）
+          {won && (
+            // 帯の中の花火のアイコンのボタン（SVG。端末のフォントに依存しない）。帯の文字の色で描く
+            <button
+              className="btn btn-circle btn-sm ml-auto border-current bg-transparent text-current shadow-none hover:bg-black/10"
+              onClick={onCelebrate}
+              aria-label="もう一度祝う（達成のダイアログを開く）"
+              title="もう一度祝う（達成のダイアログを開く）"
+            >
+              <FireworkIcon />
             </button>
-          </div>
-        )}
+          )}
+        </div>
         <div className="space-y-3">
           {meters.map((m) => (
             <Meter key={m.label} {...m} />

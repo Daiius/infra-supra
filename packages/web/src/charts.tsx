@@ -1,7 +1,42 @@
 // 推移のグラフ（prd/07 §5）。dataviz の指針に沿う: 2px の線・r4 の端点と 2px の地の色の輪・細い目盛線（実線）・
 // 2 系列以上は凡例 + 線の端の直接ラベル・縦線とツールチップのホバー（値は表でも読める。ホバーだけに閉じ込めない）。
 // 色は CSS 変数（styles.css の .viz-root）で役割として参照する。テキストに系列の色は使わない。
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+
+/** 線の古い側の不透明度（最新の点で 1。古い月ほど薄くして、伸びている向きを見せる。D-25）。 */
+const OLDEST_OPACITY = 0.3;
+
+/**
+ * 古い月ほど薄く、最新の点で系列の色そのものになる横向きのグラデーション（線の stroke に使う）。
+ * x1・x2 は SVG の座標（最古の点・最新の点）。
+ */
+function FadeGradient({
+  id,
+  color,
+  x1,
+  x2,
+}: {
+  id: string;
+  color: string;
+  x1: number;
+  x2: number;
+}) {
+  return (
+    <linearGradient id={id} gradientUnits="userSpaceOnUse" x1={x1} x2={x2}>
+      <stop
+        offset="0"
+        style={{ stopColor: color, stopOpacity: OLDEST_OPACITY }}
+      />
+      <stop offset="1" style={{ stopColor: color, stopOpacity: 1 }} />
+    </linearGradient>
+  );
+}
 
 export type Series = {
   id: string;
@@ -100,6 +135,7 @@ export function LineChart({
   title?: ReactNode;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
+  const uid = useId().replace(/:/g, '');
   const [hover, setHover] = useState<number | null>(null);
   const pad = {
     top: 12,
@@ -275,8 +311,22 @@ export function LineChart({
               current.push({ m: i + 1, v });
             });
             const li = lastIndex(s);
+            const fi = s.values.findIndex((v) => v !== null);
+            // 最新の点に近いほど濃い線（見込みの破線・凡例は系列の色のまま）
+            const gid = `${uid}-fade-${s.id}`;
+            const stroke = li > fi ? `url(#${gid})` : s.color;
             return (
               <g key={s.id}>
+                {li > fi && (
+                  <defs>
+                    <FadeGradient
+                      id={gid}
+                      color={s.color}
+                      x1={x(fi + 1)}
+                      x2={x(li + 1)}
+                    />
+                  </defs>
+                )}
                 {s.projection && s.projection.length > 1 && (
                   <path
                     d={path(
@@ -300,7 +350,7 @@ export function LineChart({
                         <path
                           d={path(head)}
                           fill="none"
-                          stroke={s.color}
+                          stroke={stroke}
                           strokeWidth="2"
                           strokeLinejoin="round"
                           strokeLinecap="round"
@@ -313,7 +363,7 @@ export function LineChart({
                           pathLength={1}
                           d={path(r.slice(-2))}
                           fill="none"
-                          stroke={s.color}
+                          stroke={stroke}
                           strokeWidth="2"
                           strokeLinejoin="round"
                           strokeLinecap="round"
@@ -425,6 +475,9 @@ export function Sparkline({
       .map((v, i) => `${i ? 'L' : 'M'}${x(from + i)},${y(v)}`)
       .join('');
   const li = values.length - 1;
+  const gid = `${useId().replace(/:/g, '')}-fade`;
+  // 最新の点に近いほど濃い線（D-25）
+  const stroke = li >= 1 ? `url(#${gid})` : 'var(--deemphasis)';
   return (
     <svg
       width={width}
@@ -434,6 +487,16 @@ export function Sparkline({
       // 最新の点の輪が小さな枠で切れないように
       overflow="visible"
     >
+      {li >= 1 && (
+        <defs>
+          <FadeGradient
+            id={gid}
+            color="var(--deemphasis)"
+            x1={x(0)}
+            x2={x(li)}
+          />
+        </defs>
+      )}
       {min < 0 && (
         <line
           x1="4"
@@ -448,7 +511,7 @@ export function Sparkline({
         <path
           d={d(0, li)}
           fill="none"
-          stroke="var(--deemphasis)"
+          stroke={stroke}
           strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -462,7 +525,7 @@ export function Sparkline({
           pathLength={1}
           d={d(li - 1, li + 1)}
           fill="none"
-          stroke="var(--deemphasis)"
+          stroke={stroke}
           strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
