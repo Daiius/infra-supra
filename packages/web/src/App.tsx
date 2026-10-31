@@ -5,6 +5,7 @@ import {
   applyActions,
   axesOf,
   BASELINES,
+  comparisonRows,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
@@ -18,7 +19,6 @@ import {
   newGame,
   nextSsrCpuMs,
   playMonth,
-  playStrategy,
   premiseTrends,
   reflectionOf,
   selectTrends,
@@ -602,15 +602,9 @@ function Result({ state }: { state: GameState }) {
   const end = state.end!;
   const checks = goalChecks(state);
   const axes = axesOf(state);
-  const baselines = useMemo(
-    () =>
-      BASELINES.map((b) => ({
-        label: b.short ?? b.label,
-        title: b.label,
-        axes: axesOf(playStrategy(b, state.startSeed)),
-      })),
-    [state.startSeed],
-  );
+  // 行の名前（基準プレイは短い名前）は game の comparisonRows で決める（単体テストあり）
+  const table = useMemo(() => comparisonRows(state), [state]);
+  const cfPaid = table.find((r) => r.id === 'cf-paid')!;
   /** 短い名前と説明が違う基準プレイだけを注記に出す。 */
   const abbreviated = BASELINES.filter((b) => b.short && b.short !== b.label);
   const reflection = reflectionOf(state);
@@ -631,7 +625,10 @@ function Result({ state }: { state: GameState }) {
     },
   ];
   const e = reflection.effort;
-  const meters = resultMeters(state, checks, axes, baselines[0]!);
+  const meters = resultMeters(state, checks, axes, {
+    label: cfPaid.name,
+    axes: cfPaid.axes,
+  });
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body gap-4">
@@ -671,18 +668,10 @@ function Result({ state }: { state: GameState }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    {
-                      label: 'あなた',
-                      title: 'あなたのプレイ',
-                      axes,
-                      you: true,
-                    },
-                    ...baselines.map((b) => ({ ...b, you: false })),
-                  ].map((p) => (
-                    <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
-                      <td className="whitespace-nowrap" title={p.title}>
-                        {p.label}
+                  {table.map((p) => (
+                    <tr key={p.id} className={p.you ? 'font-semibold' : ''}>
+                      <td className="whitespace-nowrap" title={p.description}>
+                        {p.name}
                       </td>
                       {rows.map((r) => (
                         <td
@@ -713,18 +702,10 @@ function Result({ state }: { state: GameState }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    {
-                      label: 'あなた',
-                      title: 'あなたのプレイ',
-                      axes,
-                      you: true,
-                    },
-                    ...baselines.map((b) => ({ ...b, you: false })),
-                  ].map((p) => (
-                    <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
-                      <td className="whitespace-nowrap" title={p.title}>
-                        {p.label}
+                  {table.map((p) => (
+                    <tr key={p.id} className={p.you ? 'font-semibold' : ''}>
+                      <td className="whitespace-nowrap" title={p.description}>
+                        {p.name}
                       </td>
                       {ELEMENTS.map((el) => (
                         <td

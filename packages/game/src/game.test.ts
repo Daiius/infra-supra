@@ -6,6 +6,7 @@ import {
   applyActions,
   averageSatisfaction,
   BASELINES,
+  comparisonRows,
   EFFORT,
   effortAvailable,
   GAME,
@@ -216,5 +217,20 @@ describe('開発の手間と行動', () => {
       expect(r.satisfaction.score).toBeLessThanOrEqual(1);
     }
     expect(averageSatisfaction(s.history)).toBeLessThan(0.9);
+  });
+});
+
+describe('結果の比較の表', () => {
+  it('行の名前は「あなた」と基準プレイの短い名前', () => {
+    const rows = comparisonRows(play(CF_PAID, []));
+    expect(rows.map((r) => r.name)).toEqual([
+      'あなた',
+      'CF Paid・何もしない',
+      'VPS・何もしない',
+      'Vercel Pro・何もしない',
+      'Vercel Pro・話題前に圧縮',
+      'CF Free・何もしない',
+    ]);
+    expect(rows[4]!.description).toBe(BASELINES[3]!.label);
   });
 });

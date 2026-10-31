@@ -877,5 +877,35 @@ export function playStrategy(s: Strategy, seed = 42): GameState {
   return st;
 }
 
+export type ComparisonRow = {
+  id: string;
+  /** 表の 1 列目に出す名前（基準プレイは短い名前）。 */
+  name: string;
+  /** 長い説明（ツールチップ用）。 */
+  description: string;
+  axes: Axes;
+  you: boolean;
+};
+
+/** 結果の比較の表の行（あなた + 同じシードの基準プレイ）。表示用の名前はここで決める。 */
+export function comparisonRows(state: GameState): ComparisonRow[] {
+  return [
+    {
+      id: 'you',
+      name: 'あなた',
+      description: 'あなたのプレイ',
+      axes: axesOf(state),
+      you: true,
+    },
+    ...BASELINES.map((b) => ({
+      id: b.id,
+      name: b.short ?? b.label,
+      description: b.label,
+      axes: axesOf(playStrategy(b, state.startSeed)),
+      you: false,
+    })),
+  ];
+}
+
 export * from './rules.ts';
 export * from './trends.ts';
