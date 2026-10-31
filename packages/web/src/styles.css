@@ -74,7 +74,25 @@
 .motion-fade-in {
   animation: motion-fade-in 500ms ease-out both;
 }
+/* 最新の点の輪（Tailwind の animate-ping と同じ動き。SVG の円を中心から広げる） */
+@keyframes motion-ping {
+  75%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+.motion-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0.6;
+  animation: motion-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
 @media (prefers-reduced-motion: reduce) {
+  .motion-ping {
+    display: none;
+  }
   .motion-grow-x,
   .motion-width,
   .motion-draw,

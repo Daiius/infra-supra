@@ -4,6 +4,7 @@ import {
   actionEffort,
   applyActions,
   ARTICLE_COMMUNITY,
+  averageSatisfaction,
   axesOf,
   BOT_BLOCK,
   comparisonRows,
@@ -44,7 +45,12 @@ import {
 } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
-import { CountUp, Fireworks } from './motion.tsx';
+import {
+  CountUp,
+  FireworksCanvas,
+  FireworksEngine,
+  useReducedMotion,
+} from './motion.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -235,7 +241,7 @@ function Game({
   );
   return (
     <>
-      {state.phase === 'won' && <Fireworks />}
+      {state.phase === 'won' && <VictoryCelebration state={state} />}
       {!playing && <Result state={state} />}
       <Trends history={state.history} />
       <MonthCard
@@ -266,6 +272,93 @@ function Game({
         />
       )}
       <History history={state.history} />
+    </>
+  );
+}
+
+/**
+ * 目標達成のダイアログと花火（D-25）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
+ * 閉じると背景が消え、新しい花火は出さない。空中に残った粒は少し薄くして、寿命で消えるまで描いてから片付ける。
+ * 動きを減らす設定では、ダイアログだけ出して花火は出さない。作法は出来事のダイアログ（D-23）と同じ。
+ */
+function VictoryCelebration({ state }: { state: GameState }) {
+  const reduced = useReducedMotion();
+  const engine = useMemo(() => new FireworksEngine(), []);
+  const [open, setOpen] = useState(true);
+  const [afterglow, setAfterglow] = useState(false);
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d || d.open) return;
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
+    d.showModal();
+  }, []);
+  const goal = scenarioOf(state).goal;
+  return (
+    <>
+      {open && (
+        <dialog
+          ref={ref}
+          className="modal"
+          // 花火が映える暗い背景
+          style={{ backgroundColor: 'rgba(6, 8, 22, 0.86)' }}
+          aria-labelledby="victory-title"
+          onClose={() => {
+            setOpen(false);
+            setAfterglow(!reduced && engine.particles.length > 0);
+          }}
+        >
+          {!reduced && (
+            <FireworksCanvas
+              engine={engine}
+              spawn
+              className="pointer-events-none absolute inset-0 h-full w-full"
+            />
+          )}
+          <div className="modal-box relative z-10 max-w-md">
+            <h2 id="victory-title" className="text-2xl font-bold">
+              ✓ 目標達成
+            </h2>
+            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <dt className="opacity-70">所持金</dt>
+              <dd className="tabular-nums">
+                {usd(state.cash)}（目標 {usd(goal.cash)} 以上）
+              </dd>
+              <dt className="opacity-70">満足度の平均</dt>
+              <dd className="tabular-nums">
+                {averageSatisfaction(state.history).toFixed(2)}（目標{' '}
+                {goal.satisfaction} 以上）
+              </dd>
+              <dt className="opacity-70">止まった月</dt>
+              <dd className="tabular-nums">
+                {state.outages} 回（上限 {goal.maxOutageMonths} 回）
+              </dd>
+            </dl>
+            <div className="modal-action">
+              <form method="dialog">
+                <button className="btn btn-primary" autoFocus>
+                  閉じて結果を見る
+                </button>
+              </form>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button aria-label="閉じる" tabIndex={-1}>
+              閉じる
+            </button>
+          </form>
+        </dialog>
+      )}
+      {afterglow && (
+        <FireworksCanvas
+          engine={engine}
+          spawn={false}
+          alpha={0.45}
+          className="pointer-events-none fixed inset-0 z-40 h-full w-full"
+          onEmpty={() => setAfterglow(false)}
+        />
+      )}
     </>
   );
 }

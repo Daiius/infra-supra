@@ -283,6 +283,17 @@ export function LineChart({
                     </g>
                   );
                 })}
+                {li >= 0 && li === s.values.length - 1 && (
+                  // 最新の月の点だけ、広がって消える輪で強調する（D-25。輪の色は系列の色）
+                  <circle
+                    className="motion-ping"
+                    cx={x(li + 1)}
+                    cy={y(s.values[li]!)}
+                    r="4"
+                    fill={s.color}
+                    aria-hidden
+                  />
+                )}
                 {li >= 0 && (
                   <circle
                     key={`end-${li}`}
@@ -412,6 +423,16 @@ export function Sparkline({
           strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
+        />
+      )}
+      {li >= 0 && (
+        // 最新の月の点だけ、広がって消える輪で強調する（D-25）
+        <circle
+          className="motion-ping"
+          cx={x(li)}
+          cy={y(values[li]!)}
+          r="4"
+          fill="var(--series-1)"
         />
       )}
       {li >= 0 && (
