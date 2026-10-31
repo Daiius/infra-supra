@@ -601,10 +601,8 @@ function MonthCard({
                       key={`${e.id}:${e.phase}`}
                       className="flex flex-wrap items-center gap-2 text-sm"
                     >
-                      <span
-                        className={`badge badge-sm ${PHASE_BADGE[e.phase].cls}`}
-                      >
-                        {PHASE_BADGE[e.phase].label}
+                      <span className={`badge badge-sm ${eventBadge(e).cls}`}>
+                        {eventBadge(e).label}
                       </span>
                       {e.tier === 'rare' && (
                         <span className="badge badge-sm badge-outline badge-error">
@@ -782,17 +780,32 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
   );
 }
 
-const PHASE_LABEL: Record<MonthEvent['phase'], string> = {
-  notice: '▲ 予告: ',
-  occurred: '● ',
-  proposal: '◆ 提案: ',
-};
-const PHASE_BADGE: Record<MonthEvent['phase'], { label: string; cls: string }> =
-  {
-    notice: { label: '▲ 予告', cls: 'badge-warning' },
-    occurred: { label: '● 起きた', cls: 'badge-info' },
-    proposal: { label: '◆ 提案', cls: 'badge-primary' },
-  };
+/**
+ * 出来事の印（D-28）。予告・予告なしで今月発生・予告どおり起きた・提案を、印・色・文言の 3 つで区別する（色だけにしない）。
+ */
+function eventBadge(e: MonthEvent): {
+  label: string;
+  cls: string;
+  /** 印の横に添える短い説明。 */
+  note?: string;
+} {
+  switch (e.phase) {
+    case 'notice':
+      return { label: '⏳ 予告: 来月起きそう', cls: 'badge-warning' };
+    case 'proposal':
+      return { label: '◆ 提案', cls: 'badge-primary' };
+    case 'occurred':
+      return e.announced === false
+        ? {
+            label: '⚡ 今月発生',
+            cls: 'badge-error',
+            note: '今月の費用・満足度に効いている。対処は来月から',
+          }
+        : e.announced === true
+          ? { label: '● 起きた（先月の予告どおり）', cls: 'badge-info' }
+          : { label: '● 起きた', cls: 'badge-info' };
+  }
+}
 const TIER_LABEL: Record<MonthEvent['tier'], string> = {
   common: 'ふだん',
   occasional: 'ときどき',
@@ -801,13 +814,14 @@ const TIER_LABEL: Record<MonthEvent['tier'], string> = {
 
 /** 出来事の通知（prd/07 §10.2）。当たりうる前提は catalog の文のまま出す（D-12）。 */
 function EventCard({ event: e }: { event: MonthEvent }) {
-  const badge = PHASE_BADGE[e.phase];
+  const badge = eventBadge(e);
   return (
     <div
       className={`rounded-box border p-3 ${e.tier === 'rare' ? 'border-error' : 'border-base-300'}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
+        {badge.note && <span className="text-xs">{badge.note}</span>}
         <span className="badge badge-sm badge-outline">
           {TIER_LABEL[e.tier]}
         </span>
@@ -1143,7 +1157,8 @@ function Actions({
               onChange={(e) => setBlockBots(e.target.checked)}
             />
             <span>
-              Bot を遮断するルールを入れる（手間 {BOT_BLOCK.effort}）
+              Bot を遮断するルールを入れる（手間 {BOT_BLOCK.effort}
+              ・来月から効く）
               {!blockBots && !valid(build({ blockBots: true })) && (
                 <span className="ml-1 text-xs">
                   （{blocked(build({ blockBots: true }))}）
@@ -1818,7 +1833,7 @@ function History({ history }: { history: MonthReport[] }) {
                 </td>
                 <td className="text-xs">
                   {r.events
-                    .map((e) => `${PHASE_LABEL[e.phase]}${e.title}`)
+                    .map((e) => `${eventBadge(e).label}: ${e.title}`)
                     .join('・')}
                 </td>
                 <td className="text-xs">{r.action ?? ''}</td>

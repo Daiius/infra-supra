@@ -100,7 +100,18 @@ export type EventDef = {
     title: string;
     text: string;
     pvFactor?: number;
+    /** 前兆の流量が Bot か（収益にならない。Bot の遮断が効く）。 */
+    bot?: boolean;
+    /**
+     * 予告が出る確率（D-28）。省略は必ず出る。出なければ予告なしで起き、対処は翌月から。
+     * 乱数は出来事の列から月の次に引く（月は変わらない）。
+     */
+    chance?: number;
+    /** この月より前には予告を出さない（序盤の 1〜2 か月は台本を出さない。D-20 V-12）。 */
+    notBefore?: number;
   };
+  /** 予告なしで起きたときの文（D-28）。 */
+  surpriseText?: string;
   /** 当たりうる前提の id の前方一致。通知に catalog の前提の文をそのまま出す（D-12）。 */
   premiseRefs: string[];
   /** 提案の「受ける」の効果（断ると何も起きない。D-20 V-11）。 */
@@ -177,16 +188,25 @@ export type Scheduled = { id: string; month: number; noticeMonth?: number };
  */
 export function rollSchedule(sc: Scenario, startSeed: number): Scheduled[] {
   const out: Scheduled[] = [];
-  const at = (def: EventDef, month: number): Scheduled => ({
-    id: def.id,
-    month,
-    ...(def.notice ? { noticeMonth: month - def.notice.monthsAhead } : {}),
-  });
+  const at = (def: EventDef, month: number, noticeDraw?: number): Scheduled => {
+    const n = def.notice;
+    const noticeMonth = n ? month - n.monthsAhead : undefined;
+    const noticed =
+      n !== undefined &&
+      noticeMonth! >= (n.notBefore ?? -Infinity) &&
+      (n.chance === undefined || (noticeDraw ?? 0) < n.chance);
+    return {
+      id: def.id,
+      month,
+      ...(noticed ? { noticeMonth: noticeMonth! } : {}),
+    };
+  };
   for (const def of sc.events) {
     if (def.when.type !== 'window') continue;
-    const [r] = draws(startSeed, def.id, 1);
+    // 1 つ目で月、2 つ目で予告の有無（同じ列の続きなので、月は予告の有無を足す前と変わらない）
+    const [r, rn] = draws(startSeed, def.id, 2);
     const span = def.when.to - def.when.from + 1;
-    out.push(at(def, def.when.from + Math.floor(r! * span)));
+    out.push(at(def, def.when.from + Math.floor(r! * span), rn));
   }
   const rare = sc.events.filter(
     (d): d is EventDef & { when: { type: 'rare'; weight: number } } =>

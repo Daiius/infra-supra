@@ -81,10 +81,12 @@ describe('シナリオのデータ', () => {
   });
 });
 
-describe('出来事（シード 42）', () => {
+describe('出来事（シード 42。話題の予告はシード 4）', () => {
   it('話題の前の月に前兆（PV × 1.2）が出て、話題の月は PV × 3', () => {
-    const buzz = at(42, 'buzz')!;
-    const s = until(CF_PAID, buzz.month, 42);
+    // シード 4 は話題に予告がある（D-28: 予告は 50%）
+    const buzz = at(4, 'buzz')!;
+    expect(buzz.noticeMonth).toBe(buzz.month - 1);
+    const s = until(CF_PAID, buzz.month, 4);
     const notice = month(s, buzz.noticeMonth!);
     const n = notice.events.find(
       (e) => e.id === 'buzz' && e.phase === 'notice',

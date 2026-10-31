@@ -272,7 +272,11 @@ const EVENTS: EventDef[] = [
       title: 'SNS で話題になりそう',
       text: '記事が SNS で伸び始めた（来月、話題になるかもしれない）',
       pvFactor: 1.2,
+      // 半分は予告なしで起きる（対処は来月から。D-28）
+      chance: 0.5,
     },
+    surpriseText:
+      '記事が突然 SNS で広まり、今月だけ PV が大きく増えた（前兆はなかった）。今月の費用と満足度に効いている。満足度が高ければ、その後も伸びが残る',
     premiseRefs: [
       'pool:vercel:pro:',
       'pool:cloudflare:workers-paid:',
@@ -296,6 +300,18 @@ const EVENTS: EventDef[] = [
     title: 'Bot・クローラーの大量アクセス',
     text: 'クローラーが大量に来ている（2 か月続く）。Bot は広告の収益にならない。Bot を遮断するルールを入れると、来月から半分になる',
     when: { type: 'window', from: 3, to: 11 },
+    notice: {
+      monthsAhead: 1,
+      title: 'Bot・クローラーが大量に来そう',
+      text: 'クローラーの訪問が増え始めた（来月、大量に来るかもしれない）。今月のうちに Bot を遮断するルールを入れれば、来月から半分になる',
+      pvFactor: 1.2,
+      bot: true,
+      // 半分は予告なしで起きる。序盤（1〜2 か月目）には予告を出さない（D-28・D-20 V-12）
+      chance: 0.5,
+      notBefore: 3,
+    },
+    surpriseText:
+      'クローラーが予告なしに大量に来た（2 か月続く）。Bot は広告の収益にならない。今月の費用に効いている。Bot を遮断するルールは来月から効く',
     premiseRefs: [
       'pool:cloudflare:workers-free:free-requests',
       'pool:cloudflare:workers-paid:paid-requests',

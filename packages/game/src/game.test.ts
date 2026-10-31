@@ -54,6 +54,7 @@ describe('game', () => {
   it('GD-4 の基準プレイ（golden。シード 42・SLA の打診が来るシード 3・記事の引き取りが来るシード 31）', () => {
     // GD-2 → GD-3 の差は規模の見直し（30 万 PV・月 12%・話題 × 3）と出来事（prd/07 §10.6・§10.8・PR 本文）。
     // GD-3 → GD-4 の差はチャットの提案（全部受ける ② が受ける）と、まれな出来事の候補に SLA の打診を足したこと（prd/07 §11.7）
+    // D-28: 話題と Bot は 50% で予告なし（話題の前兆 PV × 1.2 が無いシード・Bot の前兆が増えたシードで値が変わる。月は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -62,37 +63,37 @@ describe('game', () => {
         }),
       );
     expect(r(42)).toEqual({
-      'cf-paid': ['2168.01', 'won', 12],
-      'cf-paid-accept': ['2237.69', 'won', 12],
-      'vps-images': ['1920.87', 'won', 12],
-      'vercel-pro': ['1710.23', 'goal', 12],
-      'vercel-to-cf': ['1749.57', 'won', 12],
+      'cf-paid': ['2145.46', 'won', 12],
+      'cf-paid-accept': ['2215.14', 'won', 12],
+      'vps-images': ['1899.69', 'won', 12],
+      'vercel-pro': ['1686.66', 'goal', 12],
+      'vercel-to-cf': ['1729.08', 'goal', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1987.91', 'won', 12],
-      'cf-paid-chat': ['2198.42', 'won', 12],
-      'vps-sla': ['1866.49', 'won', 12],
+      'cf-paid-kvdb': ['1966.39', 'won', 12],
+      'cf-paid-chat': ['2175.88', 'won', 12],
+      'vps-sla': ['1845.32', 'won', 12],
     });
     expect(r(3)).toEqual({
-      'cf-paid': ['2179.02', 'won', 12],
-      'cf-paid-accept': ['2238.86', 'won', 12],
-      'vps-images': ['1800.60', 'won', 12],
-      'vercel-pro': ['1628.24', 'goal', 12],
-      'vercel-to-cf': ['1795.39', 'won', 12],
+      'cf-paid': ['2153.58', 'won', 12],
+      'cf-paid-accept': ['2213.43', 'won', 12],
+      'vps-images': ['1779.66', 'won', 12],
+      'vercel-pro': ['1601.93', 'goal', 12],
+      'vercel-to-cf': ['1773.16', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1990.21', 'won', 12],
-      'cf-paid-chat': ['2209.32', 'won', 12],
-      'vps-sla': ['1910.64', 'won', 12],
+      'cf-paid-kvdb': ['1966.26', 'won', 12],
+      'cf-paid-chat': ['2183.89', 'won', 12],
+      'vps-sla': ['1889.70', 'won', 12],
     });
     expect(r(31)).toEqual({
-      'cf-paid': ['2192.10', 'won', 12],
-      'cf-paid-accept': ['1617.03', 'goal', 12],
-      'vps-images': ['1798.06', 'won', 12],
-      'vercel-pro': ['1637.82', 'goal', 12],
-      'vercel-to-cf': ['1766.01', 'won', 12],
+      'cf-paid': ['2163.40', 'won', 12],
+      'cf-paid-accept': ['1573.28', 'goal', 12],
+      'vps-images': ['1776.35', 'won', 12],
+      'vercel-pro': ['1608.35', 'goal', 12],
+      'vercel-to-cf': ['1741.69', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1998.04', 'won', 12],
-      'cf-paid-chat': ['2216.83', 'won', 12],
-      'vps-sla': ['1769.03', 'won', 12],
+      'cf-paid-kvdb': ['1971.41', 'won', 12],
+      'cf-paid-chat': ['2188.13', 'won', 12],
+      'vps-sla': ['1747.32', 'won', 12],
     });
   });
 

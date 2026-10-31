@@ -188,6 +188,10 @@ export type MonthEvent = {
   premises: { id: string; text: string; ratio?: number; hit: boolean }[];
   /** 席（メンバー）の料金（catalog の members）。 */
   members?: string[];
+  /**
+   * 予告を持ちうる台本が起きた月: true は予告どおり、false は予告なしで今月起きた（対処は来月から。D-28）。
+   */
+  announced?: boolean;
   /** 提案の「受ける」の説明。unavailable は受けられない理由（要件を満たせる構成が無い）。 */
   accept?: {
     label: string;
@@ -1234,7 +1238,19 @@ export function playMonth(input: GameState): GameState {
   for (const x of noticed) {
     const def = eventDef(sc, x.id)!;
     const n = def.notice!;
-    if (n.pvFactor) {
+    if (n.pvFactor && n.bot) {
+      // Bot の前兆（収益にならない。遮断していれば半分）
+      const extra =
+        (n.pvFactor - 1) * (state.botBlocked ? BOT_BLOCK.remaining : 1);
+      botExtra += extra;
+      trafficEvents.push({
+        id: `${def.id}:notice`,
+        title: n.title,
+        bot: true,
+        factor: 1 + extra,
+      });
+      trafficNotes.push(n.title);
+    } else if (n.pvFactor) {
       humanFactor *= n.pvFactor;
       trafficEvents.push({
         id: `${def.id}:notice`,
@@ -1332,13 +1348,22 @@ export function playMonth(input: GameState): GameState {
   // 出来事の通知（起きた・予告・提案）
   for (const x of due) {
     const def = eventDef(sc, x.id)!;
+    // 予告を持ちうる台本は、予告どおり起きたか、予告なしで起きたか（D-28）
+    const announced =
+      def.notice && def.kind !== 'proposal'
+        ? { announced: x.noticeMonth !== undefined }
+        : {};
     events.push({
       id: def.id,
       kind: def.kind,
       tier: def.tier,
       phase: def.kind === 'proposal' ? 'proposal' : 'occurred',
+      ...announced,
       title: def.title,
-      text: def.text,
+      text:
+        def.notice && x.noticeMonth === undefined && def.surpriseText
+          ? def.surpriseText
+          : def.text,
       effects: (def.effects ?? []).map(describeEffect),
       premises: premiseRefsOf(def, r.premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
