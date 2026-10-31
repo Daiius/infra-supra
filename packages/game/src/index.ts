@@ -372,6 +372,18 @@ function frameworkDefaults(framework: FrameworkId): Choices {
   return framework === 'vite-spa' ? { ogp: 'none' } : {};
 }
 
+/**
+ * 画面に出さず、選べない設定（シナリオで効かないもの + SPA の ISR の間隔。prd/10・OCL-8DFFDBEC）。
+ */
+export function hiddenSettings(
+  state: Pick<GameState, 'framework' | 'scenario'>,
+): SettingKey[] {
+  const fromScenario = state.scenario.hidden?.settings ?? [];
+  return state.framework === 'vite-spa' && !fromScenario.includes('isr')
+    ? [...fromScenario, 'isr']
+    : [...fromScenario];
+}
+
 /** 記事ごとの SNS のカードが出ないか（SPA で OGP の前処理なし。prd/10 F-05）。 */
 function noSocialCards(
   state: Pick<GameState, 'framework' | 'components'>,
@@ -1042,6 +1054,13 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       const def = SETTINGS[action.key];
       if (!def || !def.options.some((o) => o.value === action.value))
         return ng('invalid', '選択肢に無い');
+      if (hiddenSettings(state).includes(action.key))
+        return ng(
+          'unavailable',
+          state.framework === 'vite-spa' && action.key === 'isr'
+            ? 'Vite の SPA には ISR が無い（ページの中身を毎回 API で読む）'
+            : 'このシナリオでは効かない',
+        );
       if (state.settings[def.field] === action.value)
         return ng('same', '今と同じ（または選択済み）');
       return ok(def.effort);

@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyActions,
+  checkAction,
+  hiddenSettings,
   componentSlots,
   DEFAULT_START_DATE,
   newGame,
@@ -52,6 +54,26 @@ describe('フレームワークの選択', () => {
     const c = newGame(1, 42, contract, DEFAULT_START_DATE, 'vite-spa');
     expect(componentSlots(c).map((x) => x.slot)).not.toContain('ogp');
     expect(stackName(1, 'vite-spa')).not.toContain('vinext');
+  });
+
+  it('SPA では ISR の間隔の設定を選べない（画面にも出さない。OCL-8DFFDBEC）', () => {
+    const spa = playMonth(
+      newGame(1, 42, article, DEFAULT_START_DATE, 'vite-spa'),
+    );
+    const r = checkAction(spa, { type: 'set', key: 'isr', value: 3600 });
+    expect(r.ok).toBe(false);
+    expect(hiddenSettings(spa)).toContain('isr');
+    const next = playMonth(newGame(1, 42, article));
+    expect(checkAction(next, { type: 'set', key: 'isr', value: 3600 }).ok).toBe(
+      true,
+    );
+    expect(hiddenSettings(next)).not.toContain('isr');
+  });
+
+  it('受託の SPA の説明の添付件数は計算と同じ（月 2 件。OCL-A1AC2862）', () => {
+    const app = contract.text?.byFramework?.['vite-spa']?.app ?? [];
+    const perUser = contract.template(300_000).images.uploadsPerMau;
+    expect(app.some((l) => l.includes(`月 ${perUser} 件`))).toBe(true);
   });
 
   it('SPA は記事が常に新しく（鮮度は良い）、記事コミュニティでは初回表示が速さに効く', () => {

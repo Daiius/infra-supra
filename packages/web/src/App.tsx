@@ -23,6 +23,7 @@ import {
   stackChangeText,
   stackName,
   frameworksOf,
+  hiddenSettings,
   type FrameworkId,
   storageOptionText,
   migrationEffort,
@@ -986,8 +987,10 @@ function Actions({
   const left = effortAvailable(draft);
   // このシナリオで効かない行動は出さない（D-33・prd/09 E-6）
   const hidden = scenarioOf(state).hidden;
+  // シナリオで効かない設定と、SPA の ISR の間隔は出さない（OCL-8DFFDBEC）
+  const hiddenKeys = hiddenSettings(state);
   const settingKeys = (Object.keys(SETTINGS) as SettingKey[]).filter(
-    (k) => !hidden?.settings?.includes(k),
+    (k) => !hiddenKeys.includes(k),
   );
 
   return (
