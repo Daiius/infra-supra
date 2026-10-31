@@ -36,7 +36,11 @@ const rare: EventDef = {
   title: 'まれな出来事',
   text: 'まれ',
   when: { type: 'rare', weight: 1 },
-  notice: { monthsAhead: 1, text: '来月まれな出来事' },
+  notice: {
+    monthsAhead: 1,
+    title: 'まれな出来事が来そう',
+    text: '来月まれな出来事',
+  },
   premiseRefs: [],
   effects: [],
 };

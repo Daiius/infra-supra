@@ -178,6 +178,7 @@ const EVENTS: EventDef[] = [
     when: { type: 'rare', weight: 1 },
     notice: {
       monthsAhead: 1,
+      title: '記事の引き取りの打診が来そう',
       text: '閉鎖するコミュニティから、記事の引き取りの打診が来月来る見込み',
     },
     premiseRefs: [
@@ -206,6 +207,7 @@ const EVENTS: EventDef[] = [
     when: { type: 'window', from: 6, to: 9 },
     notice: {
       monthsAhead: 1,
+      title: 'SNS で話題になりそう',
       text: '記事が SNS で伸び始めた（来月、話題になるかもしれない）',
       pvFactor: 1.2,
     },

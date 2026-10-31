@@ -368,7 +368,7 @@ type EventDef = {
     | { type: 'chance'; perGame: number; from: number; to: number } // まれ（§10.5）
     | { type: 'calendar'; source: 'scheduledChanges' };             // 料金データの施行日（SC-4）
   /** 予告（何か月前に出すか・文）。まれな出来事は必須。 */
-  notice?: { monthsAhead: number; text: string };
+  notice?: { monthsAhead: number; title: string; text: string }; // title は予告の言い方（「〜しそう」）
   /** 当たりうる前提の id。通知に catalog の前提の文をそのまま使う（D-12）。 */
   premiseRefs: string[];
   title: string; text: string;

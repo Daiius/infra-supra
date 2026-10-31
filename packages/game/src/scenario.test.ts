@@ -45,6 +45,14 @@ const at = (seed: number, id: string) =>
   rollSchedule(sc, seed).find((x) => x.id === id);
 
 describe('シナリオのデータ', () => {
+  it('予告の見出しは、起きた出来事の見出しと違う（予告が起きたように読めない）', () => {
+    for (const def of sc.events)
+      if (def.notice) {
+        expect(def.notice.title).not.toBe(def.title);
+        expect(def.notice.title).toMatch(/そう$/);
+      }
+  });
+
   it('満足度の重みの合計は 1', () => {
     const sum = Object.values(sc.satisfaction.weights).reduce(
       (a, b) => a + b,
@@ -75,9 +83,13 @@ describe('出来事（シード 42）', () => {
     const buzz = at(42, 'buzz')!;
     const s = until(CF_PAID, buzz.month, 42);
     const notice = month(s, buzz.noticeMonth!);
+    const n = notice.events.find(
+      (e) => e.id === 'buzz' && e.phase === 'notice',
+    )!;
+    expect(n.title).toBe('SNS で話題になりそう');
     expect(
-      notice.events.some((e) => e.id === 'buzz' && e.phase === 'notice'),
-    ).toBe(true);
+      month(s, buzz.month).events.find((e) => e.id === 'buzz')!.title,
+    ).toBe('SNS で話題になった！');
     expect(notice.humanPV / notice.basePV).toBeCloseTo(1.2);
     const b = month(s, buzz.month);
     expect(b.buzz).toBe(true);
@@ -170,11 +182,10 @@ describe('まれな出来事（シード 3: 記事の引き取り → D1 の 10 
 
   it('予告が 1 か月前に出て、提案として来る', () => {
     const s = until(CF_PAID, archive.month, 3);
-    expect(
-      month(s, archive.month - 1).events.some(
-        (e) => e.id === 'p-archive' && e.phase === 'notice',
-      ),
-    ).toBe(true);
+    const n = month(s, archive.month - 1).events.find(
+      (e) => e.id === 'p-archive' && e.phase === 'notice',
+    )!;
+    expect(n.title).toBe('記事の引き取りの打診が来そう');
     expect(s.pendingProposals).toContain('p-archive');
   });
 

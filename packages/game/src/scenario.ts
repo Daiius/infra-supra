@@ -82,7 +82,13 @@ export type EventDef = {
     /** 前提の使用率が境目を越えた月（前の月は下だった。状態）。premiseIds は前提の id の前方一致。 */
     | { type: 'premise'; premiseIds: string[]; atLeast: number };
   /** 予告（何か月前に出すか）。pvFactor は前兆（その月の PV の倍率）。 */
-  notice?: { monthsAhead: number; text: string; pvFactor?: number };
+  notice?: {
+    monthsAhead: number;
+    /** 予告の見出し（起きたように読めない言い方にする。例: 「SNS で話題になりそう」）。 */
+    title: string;
+    text: string;
+    pvFactor?: number;
+  };
   /** 当たりうる前提の id の前方一致。通知に catalog の前提の文をそのまま出す（D-12）。 */
   premiseRefs: string[];
   /** 提案の「受ける」の効果（断ると何も起きない。D-20 V-11）。 */

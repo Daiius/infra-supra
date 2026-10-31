@@ -683,7 +683,7 @@ export function playMonth(input: GameState): GameState {
       humanFactor *= n.pvFactor;
       trafficEvents.push({
         id: `${def.id}:notice`,
-        title: def.title,
+        title: n.title,
         bot: false,
         factor: n.pvFactor,
       });
@@ -788,7 +788,7 @@ export function playMonth(input: GameState): GameState {
       kind: def.kind,
       tier: def.tier,
       phase: 'notice',
-      title: def.title,
+      title: def.notice!.title,
       text: def.notice!.text,
       effects: [],
       premises: premiseRefsOf(def, r.premises),
