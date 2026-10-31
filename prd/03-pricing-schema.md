@@ -1,0 +1,166 @@
+# 03. 料金データのスキーマ
+
+> 状態: **設計中**。実在の料金はまだ 1 件も収集していない。🔒 **出典を確認していない数値を、実在の料金のように書かない**
+> （企画書 §12）。例示には `fictional` のデータだけを使う。
+
+## 1. 置き場所と単位
+
+- `packages/catalog/src/providers/<provider>/` に、プロバイダーごとの PriceBook を**版ごとのファイル**で置く
+  （例: `cloudflare/2026-11-01.ts`）。古い版は消さない（保存済みの見積を当時の料金で再計算するため）。
+- 架空の料金は `packages/catalog/src/fictional/` に置き、provider の ID を `fictional-` で始める。
+- 1 つの PriceBook = 1 プロバイダー × 1 版。中に複数のサービス・プランを持つ。
+
+## 2. 全体の形
+
+```ts
+type PriceBook = {
+  schemaVersion: 1;
+  provider: ProviderId;              // 'cloudflare' | 'vercel' | 'supabase' | … | 'fictional-*'
+  version: string;                   // 版 ID（取得日を基本にする: '2026-11-01'）
+  status: 'official' | 'fictional';
+  currency: 'USD' | 'JPY';
+  retrievedAt: string;               // 取得日
+  effectiveFrom?: string;            // 適用開始日（公式に明記されている場合）
+  sources: Record<SourceId, SourceRef>;
+  allowancePools: AllowancePool[];   // §4
+  plans: Plan[];
+  notes?: string[];                  // 税・為替・契約割引を含まない等の注記
+};
+
+type Plan = {
+  id: PlanId;                        // 'workers-paid'
+  service: ServiceId;                // 'workers'
+  name: string;                      // 表示名
+  baseFee?: BaseFee;                 // §3
+  meters: Meter[];                   // §5
+  credits?: Credit[];                // §7
+  limits: Limit[];                   // §6
+  requires?: PlanRef[];              // 前提のプラン（例: あるアドオンはアカウントの有料プランが前提）
+  regions?: RegionPricing[];         // リージョン差があるメーターの上書き
+  sourceIds: SourceId[];             // 必須（status: official のとき）
+};
+```
+
+## 3. 固定費
+
+```ts
+type BaseFee = {
+  amount: string;                    // 10 進の文字列
+  per: 'month' | 'hour';
+  monthlyCap?: string;               // 時間課金に月額上限がある場合（VPS に多い）
+  scope: 'account' | 'node';         // アカウントに 1 回（チームプラン）か、ノードごと（インスタンス）か
+  perSeat?: boolean;                 // 席課金（Vercel Pro など）。席数は Architecture の BillingAccount に持つ
+};
+```
+
+## 4. 無料枠のプール
+
+無料枠は「メーターに付属する数量」ではなく**プール**として独立させ、メーターがプールを参照する。
+同じ無料枠を複数のサービス・ノードが食い合う場合（アカウント全体で共有されるリクエスト枠など）を表すため。
+
+```ts
+type AllowancePool = {
+  id: PoolId;
+  quantity: string;
+  unit: Unit;
+  period: 'month' | 'day';           // 日次の無料枠は日ごとに評価する（01 §3.3）
+  scope: 'account' | 'project' | 'node'; // 共有の単位
+  grantedBy: PlanRef[];              // どのプランを契約していると付与されるか
+};
+```
+
+- 同じプールを複数ノードが使うとき、無料枠の**消費は合算してから引く**（ノードごとに引くと枠を二重に使ってしまう）。
+- 明細の表示用に、プールの消費をノードへ**按分**する（使用量に比例）。按分は表示だけで、金額の計算には使わない。
+- `period: 'day'` のプールは、平日・休日の 1 日分の使用量で評価し、超過分を日数倍する。
+  無料プランでは日次の超過が `block` になることが多く、月間合計では収まっていても**特定の日に止まる**ことがある。
+
+## 5. メーター
+
+```ts
+type Meter = {
+  id: MeterId;                       // 'requests' | 'cpu-ms' | 'rows-read' | 'storage-gb-month' | …（プロバイダーの呼び方）
+  resource: ResourceKey;             // 01 §5.1 の汎用リソースとの対応
+  unit: Unit;
+  allowancePool?: PoolId;
+  rounding?: {                       // 最低課金単位
+    granularity: string;             // 例: '1'（1 ms 単位）、'1000000'（100 万リクエスト単位）
+    scope: 'event' | 'period';       // 1 回ごとに切り上げるか、期間の合計を切り上げるか
+    mode: 'ceil' | 'none';
+  };
+  pricing: Tiered | Volume | Flat;
+  onExceed?: OverageBehavior;        // 無料枠を超えたときの挙動（§6）。既定は 'bill'
+};
+type Flat   = { model: 'flat'; unitPrice: string; per: string /* '1000000' = 100 万単位あたり */ };
+type Tiered = { model: 'tiered'; per: string; tiers: { upTo: string | null; unitPrice: string }[] }; // 段ごとに別単価
+type Volume = { model: 'volume'; per: string; tiers: { upTo: string | null; unitPrice: string }[] }; // 到達した段の単価を全量に
+```
+
+- `rounding.scope: 'event'` は 1 リクエストごとの切り上げ。エンジンは分布を持たないので、
+  **「全リクエストが平均値をとる」と仮定**して `ceil(平均 / 単位) × 単位 × 件数` で計算する（仮定として明示する）。
+- `tiered` と `volume` の違いはテストで必ず押さえる（[05](./05-test-strategy.md) §2）。
+
+## 6. 制限と超過時の挙動
+
+```ts
+type OverageBehavior = 'bill' | 'block' | 'throttle' | 'upgrade-required';
+type Limit = {
+  id: string;                        // 'cpu-ms-per-request' | 'db-size-gb' | 'connections' | 'requests-per-day' …
+  value: string;
+  unit: Unit;
+  scope: 'request' | 'node' | 'account' | 'day' | 'month';
+  onExceed: OverageBehavior;
+  sourceIds: SourceId[];
+};
+```
+
+性能に関わる制限（同時接続数・1 リクエストあたりの CPU 上限など）も**公式の数値なら**ここに置く。
+公式でない性能値（1 vCPU が捌ける RPS など）は PriceBook に置かず、性能プロファイル（`assumption`）に分ける。
+
+## 7. クレジット
+
+```ts
+type Credit = {
+  id: string;
+  amount: string;                    // 金額で付与されるクレジット（プランに含まれる利用分など）
+  appliesTo: MeterRef[] | 'all-usage';
+  period: 'month';
+  carryOver: false;
+};
+```
+
+クレジットは**メーター単位の無料枠を引いた後の金額**に当てる。順序: 無料枠 → 段階料金 → クレジット → 固定費の加算 → 最低請求額。
+この順序はプロバイダーによって異なる可能性がある。異なる場合は PriceBook 側で指定できるようにする（要確認・実データで判断）。
+
+## 8. 為替
+
+```ts
+type ExchangeRate = { base: Currency; quote: Currency; rate: string; asOf: string; basis: 'assumption' };
+```
+
+為替は料金データではなく**見積の仮定**として Estimate に保存する。明細は原通貨の金額を残し、合計だけを表示通貨に換算する。
+
+## 9. スパイクで見つかった追加要件（2026-10-31・設計に反映する）
+
+[`spikes/concept-2026-10-31`](../spikes/concept-2026-10-31/README.md) の所見から、次をスキーマに足す。
+
+| 追加 | 内容 | 所見 |
+|---|---|---|
+| `interpretation` | 公式の文書が食い違う箇所で**採用した解釈**と、退けた解釈（それぞれ根拠の引用つき）。計算は採用した解釈だけで行い、幅は出さない。実請求で確かめたら `verifiedAt` を付ける | 2 |
+| `status: 'unpriced'` | メーター・製品の料金が未取得。LineItem は金額なしで残り、合計は「下限」になる | 3 |
+| `eligibility` | 数量でない利用資格（商用利用の可否など）。Workload / シナリオの属性と照合する | 7 |
+| 将来の施行日 | 同じ版の中に `effectiveFrom` が未来の改定を持てる。見積の対象月で切り替える | 11 |
+| メーターの別名 | 名称変更（Edge Requests → CDN Requests）を `aliases` で持つ | 11 |
+| `rounding: 'not-stated'` | 丸めが書かれていない。エンジンは仮定（既定は丸めなし）で計算し、仮定を使ったことを根拠に残す | 12 |
+| 利用者の設定による超過時の挙動 | 予算による一時停止（遅れつき）のように、`onExceed` を構成側で選べるメーター | 10 |
+| 地域料金 | 関数の地域（構成）と閲覧者の地域分布（Workload）で単価を引く | 8 |
+| 税込かどうか | `taxIncluded`。さくらの VPS は税込の円、他は税抜のドル。見積は方針（税抜で揃えるなど）に合わせて換算する | 18 |
+| 備考（`notes`） | 前払い・最低利用期間・課金の時間単位など、月額に効かない支払いの条件は**備考として文で残す**だけにする（構造化しない。D-14） | 19 |
+| `premise` | Limit・Meter・DeployTarget の対応に付ける「プラットフォームの前提」の印と、人が読める 1 文。見積の「重要な前提」とゲームの説明が同じ文を使う（01 §8.1） | 1・4・6・7 |
+
+## 10. 検証規則（スキーマで落とす）
+
+- `status: 'official'` の PriceBook は、すべての Plan が `sourceIds` を持ち、参照先が `sources` にある。
+- `fictional-` で始まる provider は `status: 'fictional'`、それ以外は `official`。
+- メーターが参照するプール・プラン・リージョンが存在する。
+- 段階料金の `upTo` は単調増加で、最後の段だけ `null`。
+- 単価・数量の文字列は 10 進として読める。
