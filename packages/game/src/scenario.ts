@@ -138,8 +138,11 @@ export type Scenario = {
   /** まれな出来事: 1 ゲームに高々 1 回。起きる確率と時期の幅。 */
   rare: { perGame: number; from: number; to: number };
   events: EventDef[];
-  /** 料金データの施行日つきの予告（scheduledChanges）を月に写す起点（YYYY-MM）。null なら出さない。 */
-  calendarStart: string | null;
+  /**
+   * 実際に予告されている改定（catalog の scheduledChanges）の出来事が起きる月の幅（D-21）。null なら出さない。
+   * 始めた日が施行日より前の予告だけが起きる。
+   */
+  revisions: { from: number; to: number } | null;
   goal: { cash: number; satisfaction: number; maxOutageMonths: number };
   startCash: number;
   baselines: Strategy[];
@@ -180,9 +183,22 @@ export function rollSchedule(sc: Scenario, startSeed: number): Scheduled[] {
   return out.sort((a, b) => a.month - b.month || a.id.localeCompare(b.id));
 }
 
-/** 施行日（YYYY-MM-DD）をシナリオの月に写す（calendarStart の月が 1 か月目）。 */
-export function calendarMonth(start: string, date: string): number {
-  const [sy, sm] = start.split('-').map(Number) as [number, number];
-  const [y, m] = date.split('-').map(Number) as [number, number];
-  return (y - sy) * 12 + (m - sm) + 1;
+/**
+ * 実際に予告されている改定の出来事の月を決める（D-21）。始めた日が施行日より前の予告だけが候補で、
+ * 月は現実の日付に写さず、ほかの台本と同じくシードで決める（予告ごとに独立した列）。
+ */
+export function rollRevisions(
+  sc: Scenario,
+  startSeed: number,
+  startDate: string,
+  changes: readonly { id: string; effectiveFrom: string }[],
+): { id: string; month: number }[] {
+  if (!sc.revisions) return [];
+  const { from, to } = sc.revisions;
+  return changes
+    .filter((c) => startDate < c.effectiveFrom)
+    .map((c) => {
+      const [r] = draws(startSeed, c.id, 1);
+      return { id: c.id, month: from + Math.floor(r! * (to - from + 1)) };
+    });
 }

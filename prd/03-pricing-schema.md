@@ -150,7 +150,7 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 | `interpretation` | 公式の文書が食い違う箇所で**採用した解釈**と、退けた解釈（それぞれ根拠の引用つき）。計算は採用した解釈だけで行い、幅は出さない。実請求で確かめたら `verifiedAt` を付ける | 2 |
 | `status: 'unpriced'` | メーター・製品の料金が未取得。LineItem は金額なしで残り、合計は「下限」になる | 3 |
 | `eligibility` | 数量でない利用資格（商用利用の可否など）。Workload / シナリオの属性と照合する | 7 |
-| 将来の施行日 | 同じ版の中に `effectiveFrom` が未来の改定を持てる。見積の対象月で切り替える | 11 |
+| 将来の施行日 | 同じ版の中に `effectiveFrom` が未来の改定を持てる（`scheduledChanges`）。`kind`（料金 / 制限 / その他）と、改定後の料金を取得したときだけ `revisedMeters`（プラン・メーター・料金）を持つ。無ければ計算に反映しない理由 `notModeledReason` が必須（D-21）。見積の対象月で切り替える | 11 |
 | メーターの別名 | 名称変更（Edge Requests → CDN Requests）を `aliases` で持つ | 11 |
 | `rounding: 'not-stated'` | 丸めが書かれていない。エンジンは仮定（既定は丸めなし）で計算し、仮定を使ったことを根拠に残す | 12 |
 | 利用者の設定による超過時の挙動 | 予算による一時停止（遅れつき）のように、`onExceed` を構成側で選べるメーター | 10 |

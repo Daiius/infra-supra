@@ -434,11 +434,17 @@ export const cloudflare: PriceBookInput = {
     {
       effectiveFrom: '2026-11-04',
       description: 'D1 のクエリ結果の上限 50 MB が施行',
+      kind: 'limit',
+      notModeledReason:
+        '制限の変更で、料金は変わらない。クエリ結果の大きさはこのモデルの計算に入っていない',
       sourceIds: ['d1Limits'],
     },
     {
       effectiveFrom: '2026-12-01',
       description: 'Workers Logs が Cloudflare Observability の料金体系へ移行',
+      kind: 'pricing',
+      notModeledReason:
+        '改定後の料金は未取得のため、このゲームの計算には反映していない（Workers Logs はこのモデルの構成にも入っていない）',
       sourceIds: ['workersPricing'],
     },
   ],

@@ -176,6 +176,23 @@ export const MembersSchema = z.object({
   sourceIds: SourceIds,
 });
 
+/**
+ * 施行日つきの予告（D-09・D-21）。改定後の料金を公式の出典つきで取得したときだけ revisedMeters に持ち、
+ * ゲームは施行の月からそれで計算する。持っていなければ計算に反映せず、その理由を notModeledReason に書く（架空の料金を作らない）。
+ */
+export const ScheduledChangeSchema = z.object({
+  effectiveFrom: IsoDateSchema,
+  description: z.string(),
+  /** 料金の改定か、制限の改定か。 */
+  kind: z.enum(['pricing', 'limit', 'other']),
+  revisedMeters: z
+    .array(z.object({ planId: Id, meterId: Id, pricing: PricingSchema }))
+    .default([]),
+  notModeledReason: z.string().min(1).optional(),
+  sourceIds: SourceIds,
+});
+export type ScheduledChange = z.infer<typeof ScheduledChangeSchema>;
+
 export const PlanSchema = z.object({
   id: Id,
   service: Id,
@@ -204,15 +221,7 @@ export const PriceBookSchema = z
     allowancePools: z.array(AllowancePoolSchema).default([]),
     plans: z.array(PlanSchema).min(1),
     /** 施行日つきの予告（D-09）。MVP は記録だけで、計算には使わない（gap）。 */
-    scheduledChanges: z
-      .array(
-        z.object({
-          effectiveFrom: IsoDateSchema,
-          description: z.string(),
-          sourceIds: SourceIds,
-        }),
-      )
-      .default([]),
+    scheduledChanges: z.array(ScheduledChangeSchema).default([]),
     notes: z.array(z.string()).default([]),
   })
   .superRefine((book, ctx) => {
@@ -245,6 +254,28 @@ export const PriceBookSchema = z
         }
       }
     };
+    book.scheduledChanges.forEach((c, ci) => {
+      const path = ['scheduledChanges', ci];
+      requireSources(c.sourceIds, [...path, 'sourceIds']);
+      if (c.revisedMeters.length === 0 && !c.notModeledReason)
+        ctx.addIssue({
+          code: 'custom',
+          path,
+          message:
+            '改定後の料金（revisedMeters）が無い予告は、計算に反映しない理由（notModeledReason）が必要',
+        });
+      for (const r of c.revisedMeters) {
+        const ok = book.plans
+          .find((p) => p.id === r.planId)
+          ?.meters.some((m) => m.id === r.meterId);
+        if (!ok)
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: `改定の対象のメーターが無い: ${r.planId}/${r.meterId}`,
+          });
+      }
+    });
     const seenPlans = new Set<string>();
     book.plans.forEach((plan, pi) => {
       if (seenPlans.has(plan.id)) {

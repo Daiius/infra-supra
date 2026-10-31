@@ -8,6 +8,8 @@ import {
   type ArchitectureInput,
   type LineItem,
   type PlatformPremise,
+  type PriceBook,
+  type ScheduledChange,
   type WorkloadInput,
 } from 'estimator';
 import { nextRandom } from './random.ts';
@@ -30,7 +32,7 @@ import {
   type Stages,
 } from './rules.ts';
 import {
-  calendarMonth,
+  rollRevisions,
   rollSchedule,
   type Effect,
   type EventDef,
@@ -234,6 +236,10 @@ export type GameState = {
   startSeed: number;
   /** 台本の表（newGame で一度に作る。プレイヤーの選択に依存しない）。 */
   schedule: Scheduled[];
+  /** 始めた日（YYYY-MM-DD・画面が渡す。エンジンは時刻に触れない）。改定の出来事の条件に使う（D-21）。 */
+  startDate: string;
+  /** 実際に予告されている改定の出来事（始めた日が施行日より前のものだけ）と、起きる月。 */
+  revisions: { id: string; month: number }[];
   stackIndex: number;
   settings: Settings;
   cash: number;
@@ -286,6 +292,70 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
 }));
 
 const books = loadPriceBooks();
+
+/** 既定の始めた日（料金データの取得日）。テストと基準プレイの golden はこの日で固定する。 */
+export const DEFAULT_START_DATE = '2026-10-31';
+
+/** catalog の施行日つきの予告（id は事業者と施行日）。 */
+export const SCHEDULED_CHANGES: (ScheduledChange & {
+  id: string;
+  provider: string;
+})[] = books.flatMap((b) =>
+  b.scheduledChanges.map((c) => ({
+    ...c,
+    id: `revision:${b.provider}:${c.effectiveFrom}`,
+    provider: b.provider,
+  })),
+);
+
+/**
+ * その月の料金データ（D-21）。起きた改定のうち、改定後の料金を持つものだけメーターの料金を差し替える。
+ * 改定後の料金が無い予告は計算を変えない。
+ */
+export function applyRevisions(
+  base: readonly PriceBook[],
+  changes: readonly (ScheduledChange & { id: string; provider: string })[],
+  revisions: readonly { id: string; month: number }[],
+  month: number,
+): PriceBook[] {
+  const due = changes.filter(
+    (c) =>
+      c.revisedMeters.length > 0 &&
+      revisions.some((r) => r.id === c.id && r.month <= month),
+  );
+  if (!due.length) return [...base];
+  return base.map((b) => {
+    const mine = due.filter((c) => c.provider === b.provider);
+    if (!mine.length) return b;
+    return {
+      ...b,
+      plans: b.plans.map((p) => ({
+        ...p,
+        meters: p.meters.map((m) => {
+          const rv = mine
+            .flatMap((c) => c.revisedMeters)
+            .find((x) => x.planId === p.id && x.meterId === m.id);
+          return rv ? { ...m, pricing: rv.pricing } : m;
+        }),
+      })),
+    };
+  });
+}
+
+const booksAt = (state: Pick<GameState, 'revisions'>, month: number) =>
+  applyRevisions(books, SCHEDULED_CHANGES, state.revisions, month);
+
+/** 改定の出来事の文（D-21）。計算への影響を正確に書く。 */
+export function revisionText(
+  c: (typeof SCHEDULED_CHANGES)[number],
+  usedByStack: boolean,
+): string {
+  const effect =
+    c.revisedMeters.length > 0
+      ? 'あり（改定後の料金を公式の出典つきで持っているので、今月から改定後の料金で計算する）'
+      : `なし（${c.notModeledReason}）`;
+  return `実際に予告されている改定（${c.provider}・施行日 ${c.effectiveFrom}）: ${c.description}。${usedByStack ? '' : '今の構成では使っていない事業者。'}このモデルの計算への影響: ${effect}`;
+}
 
 export { nextRandom };
 
@@ -480,10 +550,13 @@ export function newGame(
   stackIndex: number,
   seed = 42,
   scenario: Scenario = ARTICLE_COMMUNITY,
+  startDate: string = DEFAULT_START_DATE,
 ): GameState {
   // 状態にはシナリオの id だけを持つ（保存のため）。渡されたシナリオを id で引けるようにしておく
   SCENARIOS[scenario.id] ??= scenario;
   return {
+    startDate,
+    revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
     scenarioId: scenario.id,
     seed,
     startSeed: seed,
@@ -745,13 +818,14 @@ export function playMonth(input: GameState): GameState {
   };
   const workload = workloadFor(sc, parts);
   const architecture = architectureFor(stackIndexNow, state.seats);
-  const r = estimate({ workload, architecture, books });
+  const monthBooks = booksAt(state, month);
+  const r = estimate({ workload, architecture, books: monthBooks });
   // 乗り換え中は新しい構成も動かしているので、その費用も払う（D-18 U-5）
   const target = state.migration
     ? estimate({
         workload,
         architecture: architectureFor(state.migration.to, state.seats),
-        books,
+        books: monthBooks,
       })
     : null;
   const parallelInfraCost = target ? toUsd(target.bill.totals) : 0;
@@ -823,26 +897,23 @@ export function playMonth(input: GameState): GameState {
       ),
     });
   }
-  // 料金データの施行日つきの予告（通知だけ。D-20 V-2）
-  if (sc.calendarStart) {
-    const used = new Set(
-      stack.nodes.flatMap((n) => (n.billing ? [n.billing.provider] : [])),
-    );
-    for (const b of books)
-      for (const c of b.scheduledChanges) {
-        if (calendarMonth(sc.calendarStart, c.effectiveFrom) !== month)
-          continue;
-        events.push({
-          id: `calendar:${b.provider}:${c.effectiveFrom}`,
-          kind: 'script',
-          tier: 'common',
-          phase: 'occurred',
-          title: `料金・制限の改定の施行（${b.provider}・${c.effectiveFrom}）`,
-          text: `${c.description}${used.has(b.provider) ? '' : '（今の構成では使っていない事業者）'}。料金と制限は変わる（料金データの施行日つきの予告）`,
-          effects: [],
-          premises: [],
-        });
-      }
+  // 実際に予告されている改定（始めた日が施行日より前のものだけ。D-21）
+  const used = new Set(
+    stack.nodes.flatMap((n) => (n.billing ? [n.billing.provider] : [])),
+  );
+  for (const rv of state.revisions) {
+    if (rv.month !== month) continue;
+    const c = SCHEDULED_CHANGES.find((x) => x.id === rv.id)!;
+    events.push({
+      id: c.id,
+      kind: 'script',
+      tier: 'common',
+      phase: 'occurred',
+      title: `${c.kind === 'pricing' ? '料金' : c.kind === 'limit' ? '制限' : '提供条件'}の改定が予告された（${c.provider}・施行日 ${c.effectiveFrom}）`,
+      text: revisionText(c, used.has(c.provider)),
+      effects: [],
+      premises: [],
+    });
   }
 
   // 手間（維持 → 割り込み → 乗り換え → 行動。余りが機能開発）
@@ -960,6 +1031,7 @@ export function playMonth(input: GameState): GameState {
     premises: r.premises,
     parts,
     architecture,
+    books: monthBooks,
     humanPV,
     basePV,
     trafficEvents,
@@ -1121,6 +1193,7 @@ function crossingsOf(
     premises: readonly PlatformPremise[];
     parts: WorkloadParts;
     architecture: ArchitectureInput;
+    books: PriceBook[];
     humanPV: number;
     basePV: number;
     trafficEvents: {
@@ -1182,7 +1255,7 @@ function crossingsOf(
     const r = estimate({
       workload: workloadFor(sc, v.parts),
       architecture: c.architecture,
-      books,
+      books: c.books,
     });
     return new Map(r.premises.map((p) => [p.id, p.ratio ?? 0]));
   });
@@ -1547,8 +1620,9 @@ export function playStrategy(
   s: Strategy,
   seed = 42,
   scenario: Scenario = ARTICLE_COMMUNITY,
+  startDate: string = DEFAULT_START_DATE,
 ): GameState {
-  let st = playMonth(newGame(s.stackIndex, seed, scenario));
+  let st = playMonth(newGame(s.stackIndex, seed, scenario, startDate));
   for (let i = 0; st.phase === 'playing'; i++)
     st = playMonth(
       applyActions(st, s.decide ? s.decide(st) : (s.actions?.[i] ?? [])),
@@ -1581,7 +1655,7 @@ export function comparisonRows(state: GameState): ComparisonRow[] {
       id: b.id,
       name: b.short ?? b.label,
       description: b.label,
-      axes: axesOf(playStrategy(b, state.startSeed, sc)),
+      axes: axesOf(playStrategy(b, state.startSeed, sc, state.startDate)),
       you: false,
     })),
   ];

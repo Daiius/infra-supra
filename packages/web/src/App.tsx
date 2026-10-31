@@ -45,6 +45,12 @@ const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(0)}%`;
 const scrollTop = () => window.scrollTo({ top: 0 });
+/** 今日の日付（YYYY-MM-DD・端末の現地時刻）。改定の出来事の条件に使う（D-21）。 */
+const today = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 /** 始めるシナリオ（今は記事コミュニティだけ。GD-5 で 2 本目）。 */
 const SCENARIO = ARTICLE_COMMUNITY;
 /** 画面に出す為替の仮定（game の共通の仮定）。 */
@@ -82,6 +88,7 @@ export function App() {
 function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
   const [stack, setStack] = useState(1);
   const [seed, setSeed] = useState(42);
+  const [startDate, setStartDate] = useState(today);
   return (
     <>
       <div className="card bg-base-100 shadow">
@@ -103,7 +110,7 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
             運営中に出来事が起きる: SNS で話題になる（前の月に前兆が出る）・Bot
             が大量に来る・チームが増える・機能追加の提案が来る（受けるか断るかを選ぶ）・投稿や画像がたまって前提の境目に近づく。
             まれに、構成の乗り換えを迫るほどの大きな出来事が来る（1
-            か月前に予告が出る）。時期は乱数のシードで変わる。
+            か月前に予告が出る）。時期は乱数のシードで変わる。始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出る（改定後の料金を取得していないものは、計算に反映しない）。
           </p>
           <p>
             満足度は可用性・速さ・機能・鮮度・画質の 5
@@ -169,6 +176,18 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
             ))}
           </div>
           <div className="card-actions items-center justify-end">
+            <label
+              className="flex items-center gap-2 text-sm"
+              title="この日より後に施行される、実際に予告されている料金・制限の改定だけが出来事として出る"
+            >
+              始めた日
+              <input
+                type="date"
+                className="input input-sm input-bordered"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value || today())}
+              />
+            </label>
             <label className="flex items-center gap-2 text-sm">
               乱数のシード
               <input
@@ -181,7 +200,7 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
             <button
               className="btn btn-primary"
               onClick={() => {
-                onStart(playMonth(newGame(stack, seed, SCENARIO)));
+                onStart(playMonth(newGame(stack, seed, SCENARIO, startDate)));
                 scrollTop();
               }}
             >

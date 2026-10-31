@@ -1,6 +1,8 @@
 // 記事コミュニティのシナリオと出来事の性質（prd/07 §10.3〜10.8・D-20）。
 import { describe, expect, it } from 'vitest';
+import { parsePriceBook, type PriceBook } from 'estimator';
 import {
+  applyRevisions,
   ARTICLE_COMMUNITY,
   applyAction,
   BASELINES,
@@ -9,6 +11,7 @@ import {
   playMonth,
   playStrategy,
   rollSchedule,
+  SCHEDULED_CHANGES,
   surprisesOf,
   type Action,
   type GameState,
@@ -128,16 +131,6 @@ describe('出来事（シード 42）', () => {
     expect(fees(team.month) - fees(team.month - 1)).toBeCloseTo(20);
   });
 
-  it('料金データの施行日つきの予告が通知だけで出る（3・4 か月目）', () => {
-    const s = until(VPS, 4, 42);
-    expect(month(s, 3).events.some((e) => e.id.startsWith('calendar:'))).toBe(
-      true,
-    );
-    expect(month(s, 4).events.some((e) => e.id.startsWith('calendar:'))).toBe(
-      true,
-    );
-  });
-
   it('画像の提案を受けると、VPS のディスクがたまっていき、70% を超えた月に通知が出る', () => {
     const s = until(VPS, 12, 42, (st) =>
       st.pendingProposals.map((eventId) => ({
@@ -174,6 +167,100 @@ describe('出来事（シード 42）', () => {
       kind: 'event',
       title: 'SNS で話題になった！',
     });
+  });
+});
+
+describe('実際に予告されている改定の出来事（D-21）', () => {
+  const ids = SCHEDULED_CHANGES.map((c) => c.id);
+
+  it('始めた日が施行日より前なら、3 か月目以降のシードで決まる月に出る', () => {
+    const g = newGame(CF_PAID, 42, sc, '2026-10-31');
+    expect(g.revisions.map((r) => r.id).sort()).toEqual([...ids].sort());
+    const s = until(CF_PAID, 12, 42);
+    for (const rv of g.revisions) {
+      expect(rv.month).toBeGreaterThanOrEqual(3);
+      const ev = month(s, rv.month).events.find((e) => e.id === rv.id)!;
+      expect(ev.text).toContain('実際に予告されている改定');
+      expect(ev.text).toContain('このモデルの計算への影響: なし');
+      expect(ev.text).not.toContain('料金と制限は変わる');
+    }
+  });
+
+  it('施行日を過ぎた日に始めると出ない。その間の日なら、まだ先の予告だけが出る', () => {
+    expect(newGame(CF_PAID, 42, sc, '2026-12-01').revisions).toEqual([]);
+    expect(
+      newGame(CF_PAID, 42, sc, '2026-11-10').revisions.map((r) => r.id),
+    ).toEqual(['revision:cloudflare:2026-12-01']);
+  });
+
+  it('改定後の料金が無い予告は計算を変えない（施行日の後に始めたゲームと同じ結果）', () => {
+    for (const b of BASELINES) {
+      const before = playStrategy(b, 42, sc, '2026-10-31');
+      const after = playStrategy(b, 42, sc, '2027-01-01');
+      expect(before.cash).toBe(after.cash);
+      expect(before.history.map((r) => r.infraCost)).toEqual(
+        after.history.map((r) => r.infraCost),
+      );
+    }
+  });
+
+  it('同じシード・同じ開始日なら同じ結果', () => {
+    const a = playStrategy(BASELINES[0]!, 7, sc, '2026-10-31');
+    const b = playStrategy(BASELINES[0]!, 7, sc, '2026-10-31');
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('改定後の料金を持つ予告は、起きた月からそのメーターの料金を差し替える（架空のデータで確かめる）', () => {
+    const book = parsePriceBook(
+      {
+        schemaVersion: 1,
+        provider: 'fictional-host',
+        version: '2000-01-01',
+        status: 'fictional',
+        currency: 'USD',
+        taxIncluded: false,
+        retrievedAt: '2000-01-01',
+        plans: [
+          {
+            id: 'plan',
+            service: 'svc',
+            name: 'Plan',
+            meters: [
+              {
+                id: 'requests',
+                resource: 'requests',
+                unit: 'request',
+                pricing: { model: 'flat', per: 1, unitPrice: 1 },
+              },
+            ],
+          },
+        ],
+      },
+      { allowFictional: true },
+    );
+    const change = {
+      id: 'revision:fictional-host:2000-02-01',
+      provider: 'fictional-host',
+      effectiveFrom: '2000-02-01',
+      description: '架空の値上げ',
+      kind: 'pricing' as const,
+      revisedMeters: [
+        {
+          planId: 'plan',
+          meterId: 'requests',
+          pricing: { model: 'flat' as const, per: 1, unitPrice: 2 },
+        },
+      ],
+      sourceIds: [],
+    };
+    const price = (bs: PriceBook[]) => {
+      const p = bs[0]!.plans[0]!.meters[0]!.pricing;
+      return p.model === 'flat' ? p.unitPrice : NaN;
+    };
+    const rv = [{ id: change.id, month: 5 }];
+    expect(price(applyRevisions([book], [change], rv, 4))).toBe(1);
+    expect(price(applyRevisions([book], [change], rv, 5))).toBe(2);
+    expect(price(applyRevisions([book], [change], [], 12))).toBe(1);
   });
 });
 

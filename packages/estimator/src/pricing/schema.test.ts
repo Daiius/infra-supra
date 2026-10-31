@@ -63,6 +63,31 @@ describe('PriceBookSchema', () => {
     expect(issues(c).join()).toContain('missing');
   });
 
+  it('施行日つきの予告: 改定後の料金が無ければ理由が必要で、改定の対象のメーターは実在する', () => {
+    const b = officialMinimal();
+    b.scheduledChanges = [
+      {
+        effectiveFrom: '2000-02-01',
+        description: '改定',
+        kind: 'pricing',
+        sourceIds: ['pricing'],
+      },
+    ];
+    expect(issues(b).join()).toContain('notModeledReason');
+    b.scheduledChanges[0]!.notModeledReason = '改定後の料金は未取得';
+    expect(issues(b)).toEqual([]);
+    b.scheduledChanges[0]!.revisedMeters = [
+      {
+        planId: 'plan',
+        meterId: 'missing',
+        pricing: { model: 'flat', per: 1, unitPrice: 2 },
+      },
+    ];
+    expect(issues(b).join()).toContain('missing');
+    b.scheduledChanges[0]!.revisedMeters[0]!.meterId = 'requests';
+    expect(issues(b)).toEqual([]);
+  });
+
   it('メンバーの料金: per-seat は席課金の基本料と組で、出典が必要', () => {
     const b = officialMinimal();
     b.plans[0]!.members = {

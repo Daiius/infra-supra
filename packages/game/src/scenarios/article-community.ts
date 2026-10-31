@@ -299,8 +299,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
   effort: { perMonth: 10, selfHostedUpkeep: 3 },
   rare: { perGame: 0.25, from: 5, to: 9 },
   events: EVENTS,
-  // 施行日つきの予告（D1 2026-11-04・Workers Logs 2026-12-01）が 3〜4 か月目に来るように置いた（1〜2 か月目は出来事を出さない。V-12）
-  calendarStart: '2026-09',
+  // 実際に予告されている改定の出来事（D-21）。1〜2 か月目は出さない（V-12）
+  revisions: { from: 3, to: 10 },
   /**
    * 所持金の目標は基準プレイをシード 1〜50 で回して決めた（prd/07 §10.8）: CF Paid・何もしない（最小 $2,164）と
    * Vercel Pro → CF Paid（最小 $1,746）は全シードで届き、Vercel Pro・何もしない（最大 $1,716）は届かない。
