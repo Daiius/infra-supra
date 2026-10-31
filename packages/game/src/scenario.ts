@@ -1,5 +1,6 @@
 // シナリオと出来事のデータの形（prd/07 §10.1・§10.2・D-20）。ここは型と、台本の表を作る純粋関数だけ。
 // シナリオの値（規模・収益・満足度の重み・手間・確率・時期・効果）はすべてゲーム上の仮定。
+import type { Platform, SlotId } from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import { draws } from './random.ts';
 import type { Element } from './rules.ts';
@@ -41,6 +42,8 @@ export type WorkloadMods = {
   writesPerCall?: number;
   /** DB の増え方の倍率。 */
   dbRateFactor?: number;
+  /** リアルタイム（チャット）。Workload の realtime にそのまま入る（D-24・W-1）。 */
+  realtime?: NonNullable<WorkloadInput['realtime']>;
 };
 
 export type Effect =
@@ -63,7 +66,16 @@ export type Effect =
   | { type: 'interrupt'; points: number; months: number }
   | { type: 'feature'; points: number }
   /** 成長率に足す（翌月から months か月）。 */
-  | { type: 'growth'; add: number; months: number };
+  | { type: 'growth'; add: number; months: number }
+  /** 部品を付ける（受けた提案に要る部品。D-24）。 */
+  | { type: 'component'; slot: SlotId; option: string }
+  /**
+   * 契約の収益（毎月）。requires を満たす構成のときだけ入る（SLA の出来事。D-24・SC-5）。
+   */
+  | { type: 'contract'; usdPerMonth: number; requires: Requirement };
+
+/** 構成に求める要件。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
+export type Requirement = 'uptime-sla';
 
 export type EventKind = 'state' | 'proposal' | 'script';
 export type EventTier = 'common' | 'occasional' | 'rare';
@@ -97,6 +109,12 @@ export type EventDef = {
   effects?: Effect[];
   /** 席の料金を通知に出す（チームが増える）。 */
   showMembers?: boolean;
+  /** 今の構成の SLA の扱い（catalog の uptimeSla の文）を通知に出す。 */
+  showSla?: boolean;
+  /** この事業者の構成のときだけ出す（データが無い事業者の罰にしないため。D-24 X-5）。 */
+  platforms?: Platform[];
+  /** 受けるのに要る要件（満たせる構成でなければ受けられない。理由を出す）。 */
+  requires?: Requirement;
 };
 
 export type Strategy = {
@@ -133,6 +151,8 @@ export type Scenario = {
     };
   };
   incidents: { selfHostedChancePerMonth: number };
+  /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ。ゲーム上の仮定・D-24）。 */
+  unoptimizedImageKB: number;
   satisfaction: SatisfactionRules;
   effort: { perMonth: number; selfHostedUpkeep: number };
   /** まれな出来事: 1 ゲームに高々 1 回。起きる確率と時期の幅。 */

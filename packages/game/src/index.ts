@@ -2,7 +2,19 @@
 // 純粋関数: 状態を受け取り、新しい状態を返す。
 // 料金・前提は estimator と catalog（実データ）をそのまま使い、ゲームのために料金を作らない（企画書 §11.1）。
 // シナリオの値（収益・成長・手間・満足度・障害の影響・出来事・目標）はゲーム上の仮定で、実在の値ではない（prd/07 §10）。
-import { loadPriceBooks, MVP_STACKS, STACK_DEFS } from 'catalog';
+import {
+  applyComponentsToWorkload,
+  componentsOf,
+  composeStack,
+  DEFAULT_CHOICES,
+  loadPriceBooks,
+  MVP_STACKS,
+  SLOT_LABELS,
+  STACK_DEFS,
+  type Choices,
+  type Platform,
+  type SlotId,
+} from 'catalog';
 import {
   estimate,
   type ArchitectureInput,
@@ -36,6 +48,7 @@ import {
   rollSchedule,
   type Effect,
   type EventDef,
+  type Requirement,
   type EventKind,
   type EventTier,
   type Scenario,
@@ -139,7 +152,17 @@ export type Action =
   /** 提案への返事（受ける / 断る）。返事をしなければ断ったことになる。 */
   | { type: 'respond'; eventId: string; accept: boolean }
   /** Bot を遮断するルールを入れる（一度入れれば続く）。 */
-  | { type: 'block-bots' };
+  | { type: 'block-bots' }
+  /** スロットの部品を差し替える（同じ事業者の中。D-24・prd/07 §11.3）。 */
+  | { type: 'component'; slot: SlotId; option: string };
+
+/** DB の差し替えの進行（データの移行。期間中は新旧の両方の DB の費用）。 */
+export type ComponentSwap = {
+  slot: SlotId;
+  option: string;
+  required: number;
+  done: number;
+};
 
 export type Migration = {
   from: number;
@@ -165,8 +188,15 @@ export type MonthEvent = {
   premises: { id: string; text: string; ratio?: number; hit: boolean }[];
   /** 席（メンバー）の料金（catalog の members）。 */
   members?: string[];
-  /** 提案の「受ける」の説明。 */
-  accept?: { label: string; effects: string[]; effort: number };
+  /** 提案の「受ける」の説明。unavailable は受けられない理由（要件を満たせる構成が無い）。 */
+  accept?: {
+    label: string;
+    effects: string[];
+    effort: number;
+    unavailable?: string;
+  };
+  /** 今の構成の SLA の扱い（catalog の uptimeSla）。 */
+  sla?: string[];
 };
 
 /** 前提が境目を初めて越えた月の記録（見込みが外れた理由の材料。prd/07 §10.7）。 */
@@ -226,6 +256,12 @@ export type MonthReport = {
   /** 今月までの累積の機能ポイント。 */
   featurePoints: number;
   migration?: { toName: string; done: number; required: number };
+  /** その月の部品の選択（D-24）と、画面に出す要約（選べるスロットだけ）。 */
+  components: Choices;
+  componentSummary: string;
+  componentSwap?: { label: string; done: number; required: number };
+  /** 契約の収益（SLA の出来事。収益 revenue に含む）。 */
+  contractRevenue: number;
   action?: string;
 };
 
@@ -241,6 +277,12 @@ export type GameState = {
   /** 実際に予告されている改定の出来事（始めた日が施行日より前のものだけ）と、起きる月。 */
   revisions: { id: string; month: number }[];
   stackIndex: number;
+  /** 部品の選択（今の構成の事業者のスロット。D-24）。 */
+  components: Choices;
+  /** 進行中の DB の差し替え。 */
+  componentSwap: ComponentSwap | null;
+  /** 受けた契約（毎月の収益。要件を満たす月だけ入る）。 */
+  contracts: { eventId: string; usdPerMonth: number; requires: Requirement }[];
   settings: Settings;
   cash: number;
   basePV: number;
@@ -288,7 +330,7 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   id: s.id,
   name: s.name,
   /** 事業者（同じ事業者のあいだはプラン変更。さくらの VPS 2GB ↔ 4GB も含む。D-24）。 */
-  provider: STACK_DEFS[i]!.platform,
+  provider: STACK_DEFS[i]!.platform as Platform,
   plan: STACK_DEFS[i]!.plan,
   selfHosted: s.nodes.some((n) => n.config.kind === 'host'),
 }));
@@ -368,6 +410,8 @@ type WorkloadParts = {
   ssrCpuMs: number;
   mods: WorkloadMods;
   stock: Stock | null;
+  platform: Platform;
+  components: Choices;
 };
 
 function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
@@ -400,7 +444,11 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   if (p.mods.writesPerCall !== undefined)
     w.api = { ...w.api, writesPerCall: p.mods.writesPerCall };
   if (p.stock) w.db = { ...w.db, sizeGB: p.stock.dbGB };
-  return w;
+  if (p.mods.realtime) w.realtime = p.mods.realtime;
+  // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
+  return applyComponentsToWorkload(w, p.platform, p.components, {
+    originalImageKB: sc.unoptimizedImageKB,
+  });
 }
 
 /** テンプレートの値から在庫の初期値を作る。 */
@@ -414,9 +462,14 @@ export function initialStock(sc: Scenario): Stock {
   };
 }
 
-/** 席を足した構成（席課金のプランだけ費用が変わる）。 */
-function architectureFor(stackIndex: number, seats: number): ArchitectureInput {
-  const stack = MVP_STACKS[stackIndex]!;
+/** 部品の選択と席を足した構成（席課金のプランだけ費用が変わる）。standby は差し替えの途中の新しい部品。 */
+function architectureFor(
+  stackIndex: number,
+  seats: number,
+  components: Choices = {},
+  standby: Choices = {},
+): ArchitectureInput {
+  const stack = composeStack(STACK_DEFS[stackIndex]!, components, { standby });
   if (seats <= 0) return stack;
   const ids = [
     ...new Set(
@@ -447,6 +500,90 @@ export function membersOf(stackIndex: number): string[] {
     if (plan?.members) out.add(plan.members.premise);
   }
   return [...out];
+}
+
+/** 構成が要件を満たすか。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
+export function meetsRequirement(
+  stackIndex: number,
+  requirement: Requirement,
+  components: Choices = {},
+): boolean {
+  switch (requirement) {
+    case 'uptime-sla': {
+      const plans = composeStack(STACK_DEFS[stackIndex]!, components)
+        .nodes.flatMap((n) => (n.billing ? [n.billing] : []))
+        .map((b) =>
+          books
+            .find((x) => x.provider === b.provider)
+            ?.plans.find((p) => p.id === b.planId),
+        );
+      return (
+        plans.length > 0 &&
+        plans.every((p) => p?.uptimeSla?.status === 'offered')
+      );
+    }
+  }
+}
+
+/** 今の構成のプラン変更で要件を満たせるか（受けられない提案の判定）。 */
+export function requirementReachable(
+  stackIndex: number,
+  requirement: Requirement,
+): boolean {
+  return STACKS.some(
+    (s) =>
+      s.provider === STACKS[stackIndex]!.provider &&
+      meetsRequirement(s.index, requirement),
+  );
+}
+
+const REQUIREMENT_LABEL: Record<Requirement, string> = {
+  'uptime-sla': '稼働率の SLA があるプラン',
+};
+
+/** 構成が使うプランの SLA の扱いの文（catalog の uptimeSla）。 */
+export function slaOf(stackIndex: number): string[] {
+  const out = new Set<string>();
+  for (const n of MVP_STACKS[stackIndex]!.nodes) {
+    if (!n.billing) continue;
+    const plan = books
+      .find((b) => b.provider === n.billing!.provider)
+      ?.plans.find((p) => p.id === n.billing!.planId);
+    if (plan?.uptimeSla) out.add(plan.uptimeSla.premise);
+  }
+  return [...out];
+}
+
+/** 乗り換えた先の部品の選択（既定。チャットを持っていれば Durable Objects を付ける。D-24 X-9）。 */
+function componentsAfterMigration(to: number, mods: WorkloadMods): Choices {
+  const platform = STACKS[to]!.provider;
+  const base = { ...DEFAULT_CHOICES[platform] };
+  if (mods.realtime && platform === 'cloudflare')
+    base.realtime = 'durable-objects';
+  return base;
+}
+
+function withoutRealtime(mods: WorkloadMods): WorkloadMods {
+  const out = { ...mods };
+  delete out.realtime;
+  return out;
+}
+
+/** その事業者で、今の部品の選択がリアルタイムを持てるか（チャットを受けたあと）。 */
+function realtimeSupported(platform: Platform): boolean {
+  return componentsOf(platform, 'realtime').length > 0;
+}
+
+export function componentLabel(
+  platform: Platform,
+  slot: SlotId,
+  option: string | undefined,
+): string {
+  return (
+    componentsOf(platform, slot).find((c) => c.id === option)?.label ??
+    option ??
+    '—'
+  );
 }
 
 /** 同じ事業者のプランの変更か（Cloudflare Free ↔ Paid・Vercel Hobby ↔ Pro）。 */
@@ -480,6 +617,10 @@ function migrationWanted(m: Migration | null): number {
   return m ? Math.min(EFFORT.migrationPerMonth, m.required - m.done) : 0;
 }
 
+function swapWanted(s: ComponentSwap | null): number {
+  return s ? Math.min(EFFORT.dbSwap.perMonth, s.required - s.done) : 0;
+}
+
 const interruptOf = (state: Pick<GameState, 'interrupts'>) =>
   state.interrupts.reduce((a, i) => a + (i.months > 0 ? i.points : 0), 0);
 
@@ -490,6 +631,7 @@ export function effortAvailable(state: GameState): number {
     upkeepFor(state) -
     interruptOf(state) -
     migrationWanted(state.migration) -
+    swapWanted(state.componentSwap) -
     state.plannedEffort
   );
 }
@@ -526,12 +668,14 @@ export function actionEffort(state: GameState, action: Action): number | null {
       return nextSsrCpuMs(state) > EFFORT.minSsrCpuMs ? EFFORT.optimize : null;
     case 'plan':
       return !state.migration &&
+        !state.componentSwap &&
         STACKS[action.stackIndex] &&
         isPlanChange(state.stackIndex, action.stackIndex)
         ? EFFORT.plan
         : null;
     case 'migrate':
       return !state.migration &&
+        !state.componentSwap &&
         STACKS[action.stackIndex] &&
         action.stackIndex !== state.stackIndex &&
         !isPlanChange(state.stackIndex, action.stackIndex)
@@ -541,11 +685,96 @@ export function actionEffort(state: GameState, action: Action): number | null {
       const def = eventDef(scenarioOf(state), action.eventId);
       if (!state.pendingProposals.includes(action.eventId) || !def?.accept)
         return null;
+      if (action.accept && unavailableReason(state, def)) return null;
       return action.accept ? acceptEffort(def) : 0;
     }
     case 'block-bots':
       return state.botBlocked ? null : BOT_BLOCK.effort;
+    case 'component': {
+      if (state.migration || state.componentSwap) return null;
+      const platform = STACKS[state.stackIndex]!.provider;
+      const opt = componentsOf(platform, action.slot).find(
+        (c) => c.id === action.option,
+      );
+      const current = { ...DEFAULT_CHOICES[platform], ...state.components };
+      if (!opt || current[action.slot] === action.option) return null;
+      // チャットを受けたあとはリアルタイムを外せない
+      if (
+        action.slot === 'realtime' &&
+        state.mods.realtime &&
+        action.option === 'none'
+      )
+        return null;
+      if (action.slot === 'db') return 0; // 進行中の月ごとに取る（effortAvailable が減る）
+      return EFFORT.component[action.slot];
+    }
   }
+}
+
+/** 部品の選択肢（今の事業者のスロットごと）と、今の部品。画面の「部品」の欄に使う。 */
+export function componentSlots(state: GameState): {
+  slot: SlotId;
+  label: string;
+  current: string;
+  options: ReturnType<typeof componentsOf>;
+}[] {
+  const platform = STACKS[state.stackIndex]!.provider;
+  const current = { ...DEFAULT_CHOICES[platform], ...state.components };
+  return (Object.keys(SLOT_LABELS) as SlotId[])
+    .map((slot) => ({
+      slot,
+      label: SLOT_LABELS[slot],
+      current: current[slot] ?? '',
+      options: componentsOf(platform, slot),
+    }))
+    .filter((x) => x.options.length > 1);
+}
+
+/** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
+export function componentEffortLabel(slot: SlotId): string {
+  return slot === 'db'
+    ? `${EFFORT.dbSwap.perMonth} ポイント × ${EFFORT.dbSwap.months} か月（期間中は新旧両方の DB の費用・済んだ翌月に切り替え）`
+    : `${EFFORT.component[slot]} ポイント（来月から）`;
+}
+
+/**
+ * 部品を選ぶ前に出す、当たりうる前提（D-24・選ぶ前に前提の文を出す）。今月の基準の PV で、その部品に替えた見積を引き、
+ * 部品の premiseRefs に当たる前提を返す。表示のためだけで、ゲームの状態には入れない。
+ */
+export function componentPreview(
+  state: GameState,
+  slot: SlotId,
+  option: string,
+): MonthEvent['premises'] {
+  const sc = scenarioOf(state);
+  const platform = STACKS[state.stackIndex]!.provider;
+  const def = componentsOf(platform, slot).find((c) => c.id === option);
+  if (!def || def.premiseRefs.length === 0) return [];
+  const components = { ...state.components, [slot]: option };
+  const r = estimate({
+    workload: workloadFor(sc, {
+      pv: state.basePV,
+      settings: state.settings,
+      ssrCpuMs: nextSsrCpuMs(state),
+      mods: state.mods,
+      stock: sc.stock ? state.stock : null,
+      platform,
+      components,
+    }),
+    architecture: architectureFor(state.stackIndex, state.seats, components),
+    books: booksAt(state, state.history.length + 1),
+  });
+  return premiseRefsOf(def, r.premises);
+}
+
+/** 提案を受けられない理由（要件を満たせる構成がプラン変更でも無い）。 */
+export function unavailableReason(
+  state: Pick<GameState, 'stackIndex'>,
+  def: EventDef,
+): string | undefined {
+  if (!def.requires || requirementReachable(state.stackIndex, def.requires))
+    return undefined;
+  return `今の事業者では「${REQUIREMENT_LABEL[def.requires]}」を選べない（セルフサービスのプランに無く、Enterprise などの契約の料金は取得していない）`;
 }
 
 export function newGame(
@@ -564,6 +793,9 @@ export function newGame(
     startSeed: seed,
     schedule: rollSchedule(scenario, seed),
     stackIndex,
+    components: { ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider] },
+    componentSwap: null,
+    contracts: [],
     settings: {
       imageKB: 150,
       variants: 3,
@@ -640,6 +872,10 @@ export function describeEffect(e: Effect): string {
       return `機能開発 +${e.points}`;
     case 'growth':
       return `成長 +${Math.round(e.add * 100)} ポイント × ${e.months} か月`;
+    case 'component':
+      return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel('cloudflare', e.slot, e.option)}）`;
+    case 'contract':
+      return `契約の収益 $${e.usdPerMonth} / 月（${REQUIREMENT_LABEL[e.requires]}のときだけ）`;
   }
 }
 
@@ -693,6 +929,18 @@ function applyEffects(
           growthBonus: [...s.growthBonus, { add: e.add, months: e.months }],
         };
         break;
+      case 'component':
+        s = { ...s, components: { ...s.components, [e.slot]: e.option } };
+        break;
+      case 'contract':
+        s = {
+          ...s,
+          contracts: [
+            ...s.contracts,
+            { eventId, usdPerMonth: e.usdPerMonth, requires: e.requires },
+          ],
+        };
+        break;
       case 'traffic':
         break;
     }
@@ -737,10 +985,17 @@ export function playMonth(input: GameState): GameState {
       }
     : input;
 
-  // 台本: 今月起きる出来事と予告
+  // 台本: 今月起きる出来事と予告（事業者を限った出来事は、その事業者の構成のときだけ。D-24 X-5）
   const events: MonthEvent[] = [];
-  const due = state.schedule.filter((x) => x.month === month);
-  const noticed = state.schedule.filter((x) => x.noticeMonth === month);
+  const platformNow = STACKS[state.stackIndex]!.provider;
+  const forPlatform = (x: Scheduled) => {
+    const ps = eventDef(sc, x.id)!.platforms;
+    return !ps || ps.includes(platformNow);
+  };
+  const due = state.schedule.filter((x) => x.month === month && forPlatform(x));
+  const noticed = state.schedule.filter(
+    (x) => x.noticeMonth === month && forPlatform(x),
+  );
   let humanFactor = 1;
   let botExtra = 0;
   let lasting = false;
@@ -817,18 +1072,34 @@ export function playMonth(input: GameState): GameState {
     ssrCpuMs,
     mods: state.mods,
     stock: sc.stock ? state.stock : null,
+    platform: platformNow,
+    components: state.components,
   };
   const workload = workloadFor(sc, parts);
-  const architecture = architectureFor(stackIndexNow, state.seats);
+  const swap = state.componentSwap;
+  const architecture = architectureFor(
+    stackIndexNow,
+    state.seats,
+    state.components,
+    swap ? { [swap.slot]: swap.option } : {},
+  );
   const monthBooks = booksAt(state, month);
   const r = estimate({ workload, architecture, books: monthBooks });
-  // 乗り換え中は新しい構成も動かしているので、その費用も払う（D-18 U-5）
+  // 乗り換え中は新しい構成も動かしているので、その費用も払う（D-18 U-5）。乗り換え先は既定の部品（D-24 X-9）
   const target = state.migration
-    ? estimate({
-        workload,
-        architecture: architectureFor(state.migration.to, state.seats),
-        books: monthBooks,
-      })
+    ? (() => {
+        const to = state.migration.to;
+        const components = componentsAfterMigration(to, state.mods);
+        return estimate({
+          workload: workloadFor(sc, {
+            ...parts,
+            platform: STACKS[to]!.provider,
+            components,
+          }),
+          architecture: architectureFor(to, state.seats, components),
+          books: monthBooks,
+        });
+      })()
     : null;
   const parallelInfraCost = target ? toUsd(target.bill.totals) : 0;
   const infraCost = toUsd(r.bill.totals) + parallelInfraCost;
@@ -846,12 +1117,16 @@ export function playMonth(input: GameState): GameState {
       effects: (def.effects ?? []).map(describeEffect),
       premises: premiseRefsOf(def, r.premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
+      ...(def.showSla ? { sla: slaOf(stackIndexNow) } : {}),
       ...(def.accept
         ? {
             accept: {
               label: def.accept.label,
               effects: def.accept.effects.map(describeEffect),
               effort: acceptEffort(def),
+              ...(unavailableReason(state, def)
+                ? { unavailable: unavailableReason(state, def)! }
+                : {}),
             },
           }
         : {}),
@@ -922,13 +1197,18 @@ export function playMonth(input: GameState): GameState {
   const effort = allocateEffort({
     upkeep: upkeepFor(state),
     interrupt: interruptOf(state),
-    migrationWanted: migrationWanted(state.migration),
+    // 乗り換えと DB の差し替えは同時に進めない（どちらかだけ）
+    migrationWanted:
+      migrationWanted(state.migration) + swapWanted(state.componentSwap),
     actions: state.plannedEffort,
     perMonth: state.effortPerMonth,
   });
   const featurePoints = state.featurePoints + effort.feature;
   let migration = state.migration
     ? { ...state.migration, done: state.migration.done + effort.migration }
+    : null;
+  let componentSwap = swap
+    ? { ...swap, done: swap.done + effort.migration }
     : null;
 
   const [rand, seed] = nextRandom(state.seed);
@@ -966,6 +1246,17 @@ export function playMonth(input: GameState): GameState {
     revenue *= 1 - loss.migration;
     notes.push('乗り換えの切り替えで収益が減った');
   }
+  // 契約の収益（要件を満たす構成の月だけ。SLA の出来事・D-24）
+  let contractRevenue = 0;
+  for (const c of state.contracts) {
+    if (meetsRequirement(stackIndexNow, c.requires, state.components))
+      contractRevenue += c.usdPerMonth;
+    else
+      notes.push(
+        `契約の収益が入らなかった（${REQUIREMENT_LABEL[c.requires]}でない）`,
+      );
+  }
+  revenue += contractRevenue;
 
   // 規約違反: 最初の月は指摘（警告）、翌月も違反したままならアカウント停止（D-19）
   const ps = policyStep({
@@ -988,17 +1279,28 @@ export function playMonth(input: GameState): GameState {
 
   // 満足度と評判（prd/07 §9.1〜9.3）
   const sat = sc.satisfaction;
+  // 部品で変わる判定の入力（D-24）: 最適化しない画像は原本の大きさ・キャッシュしないと記事は常に新しい・
+  // KV を DB の代わりにすると書き込みがすぐ見えない
+  const comps = { ...DEFAULT_CHOICES[platformNow], ...state.components };
+  const viewed: Settings = {
+    ...state.settings,
+    ...(comps.images === 'none' ? { imageKB: sc.unoptimizedImageKB } : {}),
+  };
+  const uncached = comps.isrCache === 'none';
+  const eventuallyConsistent = comps.db === 'kv';
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
       degraded: incident || state.switching,
       ssrCpuMs,
-      imageKB: state.settings.imageKB,
-      variants: state.settings.variants,
-      revalidateSec: state.settings.revalidateSec,
+      imageKB: viewed.imageKB,
+      variants: viewed.variants,
+      revalidateSec: viewed.revalidateSec,
       featurePoints,
       month,
       premises: r.premises,
+      uncached,
+      eventuallyConsistent,
     },
     sat,
   );
@@ -1008,13 +1310,16 @@ export function playMonth(input: GameState): GameState {
     incident,
     switching: state.switching,
     ssrCpuMs,
-    settings: state.settings,
+    settings: viewed,
     heaviness: speedHeaviness(
-      { ...state.settings, ssrCpuMs, premises: r.premises },
+      { ...viewed, ssrCpuMs, premises: r.premises },
       sat,
     ),
     featurePoints,
     month,
+    imagesUnoptimized: comps.images === 'none',
+    eventuallyConsistent,
+    uncached,
   });
   const score = satisfactionScore(stages, sat.weights);
   const rep = reputation(score, prev?.satisfaction.score);
@@ -1043,13 +1348,30 @@ export function playMonth(input: GameState): GameState {
   // 乗り換えが済んだら、次の月から新しい構成に切り替える
   let stackIndex = stackIndexNow;
   let switching = false;
+  let components = state.components;
+  let mods = state.mods;
   if (migration && migration.done >= migration.required) {
     stackIndex = migration.to;
     switching = true;
+    components = componentsAfterMigration(migration.to, state.mods);
     notes.push(
-      `乗り換えの作業が済んだ。来月から ${MVP_STACKS[migration.to]!.name} に切り替える`,
+      `乗り換えの作業が済んだ。来月から ${MVP_STACKS[migration.to]!.name} に切り替える（部品は既定の選択から始まる）`,
     );
+    if (mods.realtime && !realtimeSupported(STACKS[migration.to]!.provider)) {
+      mods = withoutRealtime(mods);
+      notes.push(
+        'チャットは乗り換え先のリアルタイムのデータを取得していないため、乗り換えとともに止めた',
+      );
+    }
     migration = null;
+  }
+  // DB の差し替えが済んだら、次の月から新しい DB に切り替える
+  if (componentSwap && componentSwap.done >= componentSwap.required) {
+    components = { ...components, [componentSwap.slot]: componentSwap.option };
+    notes.push(
+      `DB の差し替え（データの移行）が済んだ。来月から ${componentLabel(platformNow, componentSwap.slot, componentSwap.option)} を使う`,
+    );
+    componentSwap = null;
   }
 
   // ためていく量（月ごとに増える。prd/07 §10.4）
@@ -1114,6 +1436,24 @@ export function playMonth(input: GameState): GameState {
     },
     effort,
     featurePoints,
+    components: comps,
+    componentSummary: (Object.keys(SLOT_LABELS) as SlotId[])
+      .filter((slot) => componentsOf(platformNow, slot).length > 1)
+      .map(
+        (slot) =>
+          `${SLOT_LABELS[slot]}: ${componentLabel(platformNow, slot, comps[slot])}`,
+      )
+      .join('・'),
+    contractRevenue,
+    ...(swap
+      ? {
+          componentSwap: {
+            label: `${SLOT_LABELS[swap.slot]}を ${componentLabel(platformNow, swap.slot, swap.option)} へ`,
+            done: swap.done + effort.migration,
+            required: swap.required,
+          },
+        }
+      : {}),
     ...(state.migration
       ? {
           migration: {
@@ -1146,6 +1486,9 @@ export function playMonth(input: GameState): GameState {
     ...state,
     seed,
     stackIndex,
+    components,
+    componentSwap,
+    mods,
     cash,
     outages,
     featurePoints,
@@ -1286,6 +1629,9 @@ function stageReasons(
     heaviness: number;
     featurePoints: number;
     month: number;
+    imagesUnoptimized: boolean;
+    eventuallyConsistent: boolean;
+    uncached: boolean;
   },
 ): Partial<Record<Element, string>> {
   const out: Partial<Record<Element, string>> = {};
@@ -1302,7 +1648,16 @@ function stageReasons(
   if (stages.quality !== 'good')
     out.quality = `画像の圧縮 ${optionLabel('compress', c.settings.imageKB)}`;
   if (stages.freshness !== 'good')
-    out.freshness = `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`;
+    out.freshness = [
+      !c.uncached &&
+        `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`,
+      c.eventuallyConsistent &&
+        'KV を DB の代わりにしていて、書き込みがすぐ見えない',
+    ]
+      .filter(Boolean)
+      .join('・');
+  if (c.imagesUnoptimized && out.speed && !c.throttling.length)
+    out.speed += '（画像を最適化していない）';
   if (stages.feature !== 'good') {
     const expected = sc.satisfaction.feature.expectedPerMonth * c.month;
     out.feature = `機能開発 ${c.featurePoints} / 期待 ${expected}`;
@@ -1415,6 +1770,28 @@ export function applyAction(state: GameState, action: Action): GameState {
         ...planned,
         botBlocked: true,
       });
+    case 'component': {
+      const platform = STACKS[state.stackIndex]!.provider;
+      const label = `${SLOT_LABELS[action.slot]}: ${componentLabel(platform, action.slot, action.option)}`;
+      if (action.slot === 'db') {
+        const componentSwap: ComponentSwap = {
+          slot: 'db',
+          option: action.option,
+          required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
+          done: 0,
+        };
+        if (effortAvailable({ ...state, componentSwap }) < 0) return state;
+        return withNote(`${label} へ差し替えを始めた`, {
+          ...state,
+          componentSwap,
+        });
+      }
+      return withNote(`${label} に差し替えた`, {
+        ...state,
+        ...planned,
+        components: { ...state.components, [action.slot]: action.option },
+      });
+    }
   }
 }
 

@@ -58,6 +58,12 @@ export const EFFORT = {
   featurePointsPerSsrMs: 10,
   maxSsrDriftMs: 5,
   plan: 0,
+  /**
+   * 部品の差し替え（D-24・prd/07 §11.3）。ISR のキャッシュ・画像は翌月から。DB はデータの移行があるので
+   * 乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える（期間中は新旧の両方の DB の費用）。
+   */
+  component: { isrCache: 2, images: 2, realtime: 4 },
+  dbSwap: { perMonth: 6, months: 1 },
   /** 乗り換え: 月あたりの手間と、必要な月数（VPS が絡むと長い）。 */
   migrationPerMonth: 6,
   migrationMonths: { serverless: 2, selfHosted: 3 },
@@ -97,6 +103,16 @@ export type JudgeInput = {
   featurePoints: number;
   month: number;
   premises: readonly PlatformPremise[];
+  /** ISR のキャッシュを使わない（毎回 SSR なので記事は常に新しい。D-24）。 */
+  uncached?: boolean;
+  /** 書き込みが他の拠点にすぐ反映されない DB（KV を DB の代わり）。鮮度を 1 段下げる（仮定・D-24）。 */
+  eventuallyConsistent?: boolean;
+};
+
+const STAGE_DOWN: Record<Stage, Stage> = {
+  good: 'fair',
+  fair: 'bad',
+  bad: 'bad',
 };
 
 export function judgeStages(
@@ -118,12 +134,16 @@ export function judgeStages(
         : featureRatio >= ft.fair
           ? 'fair'
           : 'bad',
-    freshness:
-      i.revalidateSec <= f.good
+    freshness: ((): Stage => {
+      const base: Stage = i.uncached
         ? 'good'
-        : i.revalidateSec <= f.fair
-          ? 'fair'
-          : 'bad',
+        : i.revalidateSec <= f.good
+          ? 'good'
+          : i.revalidateSec <= f.fair
+            ? 'fair'
+            : 'bad';
+      return i.eventuallyConsistent ? STAGE_DOWN[base] : base;
+    })(),
     quality:
       i.imageKB >= q.good ? 'good' : i.imageKB >= q.fair ? 'fair' : 'bad',
   };

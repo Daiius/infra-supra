@@ -51,8 +51,9 @@ describe('game', () => {
     expect(play(CF_PAID, []).history).toHaveLength(12);
   });
 
-  it('GD-3 の基準プレイ（golden。シード 42 と、まれな出来事が起きるシード 3）', () => {
-    // GD-2 → GD-3 の差は規模の見直し（30 万 PV・月 12%・話題 × 3）と出来事（prd/07 §10.6・§10.8・PR 本文）
+  it('GD-4 の基準プレイ（golden。シード 42・SLA の打診が来るシード 3・記事の引き取りが来るシード 31）', () => {
+    // GD-2 → GD-3 の差は規模の見直し（30 万 PV・月 12%・話題 × 3）と出来事（prd/07 §10.6・§10.8・PR 本文）。
+    // GD-3 → GD-4 の差はチャットの提案（全部受ける ② が受ける）と、まれな出来事の候補に SLA の打診を足したこと（prd/07 §11.7）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -62,19 +63,36 @@ describe('game', () => {
       );
     expect(r(42)).toEqual({
       'cf-paid': ['2168.01', 'won', 12],
-      'cf-paid-accept': ['2205.83', 'won', 12],
+      'cf-paid-accept': ['2237.69', 'won', 12],
       'vps-images': ['1920.87', 'won', 12],
       'vercel-pro': ['1710.23', 'goal', 12],
       'vercel-to-cf': ['1749.57', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
+      'cf-paid-kvdb': ['1987.91', 'won', 12],
+      'cf-paid-chat': ['2198.42', 'won', 12],
+      'vps-sla': ['1866.49', 'won', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2179.02', 'won', 12],
-      'cf-paid-accept': ['1670.18', 'goal', 12],
+      'cf-paid-accept': ['2238.86', 'won', 12],
       'vps-images': ['1800.60', 'won', 12],
       'vercel-pro': ['1628.24', 'goal', 12],
       'vercel-to-cf': ['1795.39', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
+      'cf-paid-kvdb': ['1990.21', 'won', 12],
+      'cf-paid-chat': ['2209.32', 'won', 12],
+      'vps-sla': ['1910.64', 'won', 12],
+    });
+    expect(r(31)).toEqual({
+      'cf-paid': ['2192.10', 'won', 12],
+      'cf-paid-accept': ['1617.03', 'goal', 12],
+      'vps-images': ['1798.06', 'won', 12],
+      'vercel-pro': ['1637.82', 'goal', 12],
+      'vercel-to-cf': ['1766.01', 'won', 12],
+      'cf-free': ['142.89', 'outages', 3],
+      'cf-paid-kvdb': ['1998.04', 'won', 12],
+      'cf-paid-chat': ['2216.83', 'won', 12],
+      'vps-sla': ['1769.03', 'won', 12],
     });
   });
 
@@ -235,6 +253,9 @@ describe('結果の比較の表', () => {
       'Vercel Pro・何もしない',
       'Vercel Pro → CF Paid',
       'CF Free・何もしない',
+      'CF Paid・KV を DB 代わり',
+      'CF Paid・チャットを受ける',
+      'VPS・SLA に応える',
     ]);
     expect(rows[5]!.description).toBe(BASELINES[4]!.label);
   });

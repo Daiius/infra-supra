@@ -8,6 +8,9 @@ import {
   axesOf,
   BOT_BLOCK,
   comparisonRows,
+  componentEffortLabel,
+  componentPreview,
+  componentSlots,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
@@ -29,6 +32,7 @@ import {
   SETTINGS,
   STACKS,
   STAGE_LABEL,
+  unavailableReason,
   type Action,
   type Axes,
   type GameState,
@@ -55,6 +59,7 @@ const today = () => {
 const SCENARIO = ARTICLE_COMMUNITY;
 /** 画面に出す為替の仮定（game の共通の仮定）。 */
 const USD_JPY = 150;
+type SlotId = Extract<Action, { type: 'component' }>['slot'];
 
 export function App() {
   const [state, setState] = useState<GameState | null>(null);
@@ -357,6 +362,14 @@ function MonthCard({
             {STATUS[r.status].label}
           </span>
         </h2>
+        {r.componentSummary && (
+          <div className="text-xs opacity-70">部品 {r.componentSummary}</div>
+        )}
+        {r.contractRevenue > 0 && (
+          <div className="text-xs opacity-70">
+            契約の収益 {usd(r.contractRevenue)}（収益に含む）
+          </div>
+        )}
         {onShowEvents
           ? r.events.length > 0 && (
               <div className="rounded-box border border-base-300 p-3">
@@ -481,8 +494,12 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
   const parts = [
     { label: '自前運用の維持', value: e.upkeep, cls: 'bg-warning' },
     { label: '出来事への対応', value: e.interrupt, cls: 'bg-error' },
-    { label: '乗り換え', value: e.migration, cls: 'bg-secondary' },
-    { label: '行動（設定・最適化）', value: e.actions, cls: 'bg-info' },
+    {
+      label: '乗り換え・DB の差し替え',
+      value: e.migration,
+      cls: 'bg-secondary',
+    },
+    { label: '行動（設定・最適化・部品）', value: e.actions, cls: 'bg-info' },
     { label: '機能開発', value: e.feature, cls: 'bg-success' },
   ];
   return (
@@ -514,6 +531,17 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
           </li>
         ))}
       </ul>
+      {r.componentSwap && (
+        <div className="mt-2 text-sm">
+          {r.componentSwap.label}差し替え中（データの移行）:{' '}
+          {r.componentSwap.done} / {r.componentSwap.required}
+          <progress
+            className="progress progress-secondary ml-2 w-24"
+            value={r.componentSwap.done}
+            max={r.componentSwap.required}
+          />
+        </div>
+      )}
       {r.migration && (
         <div className="mt-2 text-sm">
           {r.migration.toName} へ乗り換え中: {r.migration.done} /{' '}
@@ -574,6 +602,18 @@ function EventCard({ event: e }: { event: MonthEvent }) {
           受けると: {e.accept.effects.join('・')}
           。月の終わりの行動で受けるか断るかを選ぶ（断っても罰はない）
         </div>
+      )}
+      {e.accept?.unavailable && (
+        <div className="mt-1 text-xs text-error">
+          ✗ 受けられない: {e.accept.unavailable}
+        </div>
+      )}
+      {e.sla && e.sla.length > 0 && (
+        <ul className="mt-1 list-disc pl-5 text-xs opacity-80">
+          {e.sla.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
       )}
       {e.members && e.members.length > 0 && (
         <ul className="mt-1 list-disc pl-5 text-xs opacity-80">
@@ -674,12 +714,15 @@ function Actions({
   /** 提案への返事（選ばなければ断る）。 */
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [blockBots, setBlockBots] = useState(false);
+  /** 部品の差し替え（スロットごと。D-24）。 */
+  const [parts, setParts] = useState<Partial<Record<SlotId, string>>>({});
   const reset = () => {
     setSettings({});
     setOptimize(false);
     setStackChange(null);
     setAnswers({});
     setBlockBots(false);
+    setParts({});
   };
 
   const build = (
@@ -689,17 +732,21 @@ function Actions({
       stack?: number | null;
       answers?: Record<string, boolean>;
       blockBots?: boolean;
+      parts?: Partial<Record<SlotId, string>>;
     } = {},
   ): Action[] => {
     const st = o.settings ?? settings;
     const opt = o.optimize ?? optimize;
     const stack = o.stack === undefined ? stackChange : o.stack;
     const ans = o.answers ?? answers;
+    const ps = o.parts ?? parts;
     const out: Action[] = [];
     // 提案を受ける手間（割り込み）を先に取る
     for (const eventId of state.pendingProposals)
       out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
     if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
+    for (const [slot, option] of Object.entries(ps))
+      out.push({ type: 'component', slot: slot as SlotId, option: option! });
     if (stack !== null)
       out.push({
         type: isPlanChange(state.stackIndex, stack) ? 'plan' : 'migrate',
@@ -743,6 +790,7 @@ function Actions({
             </div>
             {state.pendingProposals.map((id) => {
               const def = eventDef(scenarioOf(state), id)!;
+              const unavailable = unavailableReason(state, def);
               const acceptOk = valid(
                 build({ answers: { ...answers, [id]: true } }),
               );
@@ -766,7 +814,11 @@ function Actions({
                       />
                       {def.accept!.label}
                       {!acceptOk && !answers[id] && (
-                        <span className="text-xs">（手間が足りない）</span>
+                        <span className="text-xs">
+                          {unavailable
+                            ? `（受けられない: ${unavailable}）`
+                            : '（手間が足りない）'}
+                        </span>
                       )}
                     </label>
                     <label className="flex cursor-pointer items-center gap-2">
@@ -868,6 +920,12 @@ function Actions({
             </span>
           </label>
         )}
+        <ComponentsSection
+          state={state}
+          parts={parts}
+          setParts={setParts}
+          valid={(p) => valid(build({ parts: p }))}
+        />
         <div className="divider my-1 text-xs">構成を変える</div>
         {state.migration ? (
           <div className="text-sm">
@@ -933,6 +991,113 @@ function Actions({
         </div>
       </div>
     </div>
+  );
+}
+
+/** 部品の差し替え（同じ事業者の中・D-24・prd/07 §11.3）。今の行動の欄に収める（D-22）。 */
+function ComponentsSection({
+  state,
+  parts,
+  setParts,
+  valid,
+}: {
+  state: GameState;
+  parts: Partial<Record<SlotId, string>>;
+  setParts: (p: Partial<Record<SlotId, string>>) => void;
+  valid: (p: Partial<Record<SlotId, string>>) => boolean;
+}) {
+  const slots = componentSlots(state);
+  if (slots.length === 0) return null;
+  const busy = state.migration !== null || state.componentSwap !== null;
+  return (
+    <>
+      <div className="divider my-1 text-xs">
+        部品（同じ事業者の中で差し替える）
+      </div>
+      {busy ? (
+        <div className="text-sm">
+          {state.componentSwap
+            ? `DB の差し替え（データの移行）の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）。`
+            : '乗り換えの最中。'}
+          済むまで部品は差し替えられない。
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {slots.map((x) => {
+            const chosen = parts[x.slot] ?? x.current;
+            const opt = x.options.find((o) => o.id === chosen)!;
+            const preview =
+              chosen === x.current
+                ? []
+                : componentPreview(state, x.slot, chosen);
+            return (
+              <label key={x.slot} className="form-control">
+                <span className="label-text font-semibold">
+                  {x.label}
+                  <span className="ml-1 text-xs font-normal opacity-60">
+                    変更 {componentEffortLabel(x.slot)}
+                  </span>
+                </span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={chosen}
+                  onChange={(e) => {
+                    const next = { ...parts };
+                    if (e.target.value === x.current) delete next[x.slot];
+                    else next[x.slot] = e.target.value;
+                    setParts(next);
+                  }}
+                >
+                  {x.options.map((o) => {
+                    const trial = { ...parts, [x.slot]: o.id };
+                    if (o.id === x.current) delete trial[x.slot];
+                    const ok = o.id === x.current || valid(trial);
+                    return (
+                      <option key={o.id} value={o.id} disabled={!ok}>
+                        {o.label}
+                        {o.inappropriate ? '（不適切・学びのため）' : ''}
+                        {o.id === x.current ? '（今）' : ''}
+                        {ok ? '' : '（選べない・手間が足りない）'}
+                      </option>
+                    );
+                  })}
+                </select>
+                <span className="mt-1 text-xs opacity-60">
+                  {opt.inappropriate && (
+                    <span className="badge badge-xs badge-warning mr-1">
+                      ⚠ 不適切
+                    </span>
+                  )}
+                  {opt.note}
+                </span>
+                {preview.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-xs">
+                    {preview.map((p) => (
+                      <li
+                        key={p.id}
+                        className="flex flex-wrap items-center gap-1"
+                      >
+                        <span
+                          className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
+                        >
+                          {p.hit ? '✗ 当たる' : '○ 当たりうる前提'}
+                        </span>
+                        {p.text}
+                        {p.ratio !== undefined && (
+                          <span className="tabular-nums opacity-70">
+                            （今の規模で {(p.ratio * 100).toFixed(0)}%）
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }
 

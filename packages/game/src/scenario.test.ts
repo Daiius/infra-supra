@@ -264,11 +264,14 @@ describe('実際に予告されている改定の出来事（D-21）', () => {
   });
 });
 
-describe('まれな出来事（シード 3: 記事の引き取り → D1 の 10 GB）', () => {
-  const archive = at(3, 'p-archive')!;
+// まれな出来事の候補に SLA の打診（p-sla）を足したので、記事の引き取りが起きるシードは 3 から 11 に変わった（D-24）
+const ARCHIVE_SEED = 31;
+
+describe('まれな出来事（シード 31: 記事の引き取り → D1 の 10 GB）', () => {
+  const archive = at(ARCHIVE_SEED, 'p-archive')!;
 
   it('予告が 1 か月前に出て、提案として来る', () => {
-    const s = until(CF_PAID, archive.month, 3);
+    const s = until(CF_PAID, archive.month, ARCHIVE_SEED);
     const n = month(s, archive.month - 1).events.find(
       (e) => e.id === 'p-archive' && e.phase === 'notice',
     )!;
@@ -277,7 +280,7 @@ describe('まれな出来事（シード 3: 記事の引き取り → D1 の 10 
   });
 
   it('断れば何も変わらない', () => {
-    const declined = until(CF_PAID, 12, 3);
+    const declined = until(CF_PAID, 12, ARCHIVE_SEED);
     expect(declined.phase).toBe('won');
     expect(
       declined.history.some((r) => r.events.some((e) => e.id === 's-d1-limit')),
@@ -285,7 +288,7 @@ describe('まれな出来事（シード 3: 記事の引き取り → D1 の 10 
   });
 
   it('受けると D1 が 10 GB に近づいた通知が出て、乗り換えなければ止まる', () => {
-    const s = until(CF_PAID, 12, 3, acceptAll);
+    const s = until(CF_PAID, 12, ARCHIVE_SEED, acceptAll);
     const notice = s.history.find((r) =>
       r.events.some((e) => e.id === 's-d1-limit'),
     )!;

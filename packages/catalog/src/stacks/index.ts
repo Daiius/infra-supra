@@ -98,7 +98,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
     slot: 'isrCache',
     platform: 'cloudflare',
     label: 'キャッシュしない（毎回 SSR）',
-    note: '記事も毎回 SSR する。リクエスト数は変わらず、CPU と D1 の読み取りが増える。記事は常に新しい',
+    note: '記事も毎回 SSR する。Worker のリクエスト数は変わらない。CPU と D1 の読み取りは、再検証の間隔とページあたりの閲覧しだいで増える（閲覧が薄いと ISR の効きは小さい）。記事は常に新しい',
     premiseRefs: [
       'limit:cloudflare:workers-free:cpu-ms-per-request',
       'pool:cloudflare:workers-paid:paid-cpu-ms',
