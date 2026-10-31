@@ -4,6 +4,7 @@ import {
   actionEffort,
   applyAction,
   applyActions,
+  checkAction,
   componentPreview,
   EFFORT,
   effortAvailable,
@@ -162,6 +163,73 @@ describe('チャットの提案（W-1）', () => {
     ).toBe(true);
     // チャットを受けたあとはリアルタイムを外せない
     expect(actionEffort(accepted, comp('realtime', 'none'))).toBeNull();
+  });
+
+  it('部品の欄で Durable Objects を選ぶのは提案を受けるのと同じ（どちらの順でも同じ状態・同じ手間）', () => {
+    const cf = until(CF_PAID, chatMonth(42));
+    const viaProposal = applyAction(cf, {
+      type: 'respond',
+      eventId: 'p-chat',
+      accept: true,
+    });
+    const viaComponent = applyAction(cf, comp('realtime', 'durable-objects'));
+    expect(viaComponent.mods).toEqual(viaProposal.mods);
+    expect(viaComponent.components).toEqual(viaProposal.components);
+    expect(viaComponent.responses).toEqual(viaProposal.responses);
+    expect(viaComponent.featurePoints).toBe(viaProposal.featurePoints);
+    expect(effortAvailable(viaComponent)).toBe(effortAvailable(viaProposal));
+    expect(effortAvailable(viaComponent)).toBe(effortAvailable(cf) - 4);
+    // 片方を選んだあとにもう片方を選んでも、二重には付かない（理由は「すでに」）
+    expect(
+      checkAction(viaComponent, {
+        type: 'respond',
+        eventId: 'p-chat',
+        accept: true,
+      }),
+    ).toMatchObject({ ok: false, reason: 'same' });
+    expect(
+      checkAction(viaProposal, comp('realtime', 'durable-objects')),
+    ).toMatchObject({ ok: false, reason: 'same' });
+    expect(playMonth(viaComponent).mods).toEqual(playMonth(viaProposal).mods);
+  });
+
+  it('提案が届いていない月は、部品の欄では選べず「提案を受けると付く」と理由が出る', () => {
+    const s = playMonth(newGame(CF_PAID));
+    expect(checkAction(s, comp('realtime', 'durable-objects'))).toMatchObject({
+      ok: false,
+      reason: 'via-proposal',
+    });
+  });
+});
+
+describe('選べない理由の区別', () => {
+  it('手間が足りない・同じ・最中・要件を区別する', () => {
+    const s = playMonth(newGame(CF_PAID));
+    expect(checkAction(s, comp('isrCache', 'kv'))).toMatchObject({
+      ok: false,
+      reason: 'same',
+    });
+    const swapping = applyAction(s, comp('db', 'hyperdrive'));
+    expect(checkAction(swapping, comp('images', 'none'))).toMatchObject({
+      ok: false,
+      reason: 'busy',
+    });
+    expect(
+      checkAction(swapping, { type: 'migrate', stackIndex: VERCEL_PRO }),
+    ).toMatchObject({ ok: false, reason: 'busy' });
+    // 手間を使い切ると、手間の理由になる
+    const tired = applyActions(s, [
+      { type: 'optimize' },
+      { type: 'set', key: 'compress', value: 100 },
+      { type: 'set', key: 'variants', value: 2 },
+      comp('isrCache', 'r2'),
+      { type: 'block-bots' },
+    ]);
+    expect(effortAvailable(tired)).toBeLessThan(EFFORT.component.images);
+    expect(checkAction(tired, comp('images', 'none'))).toMatchObject({
+      ok: false,
+      reason: 'effort',
+    });
   });
 });
 

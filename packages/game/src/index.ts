@@ -651,64 +651,208 @@ const acceptEffort = (def: EventDef) =>
     0,
   );
 
-/** 行動の手間（選べない行動は null）。 */
-export function actionEffort(state: GameState, action: Action): number | null {
-  if (state.phase !== 'playing') return null;
+/** 行動を選べない理由（画面はこの文をそのまま出す）。 */
+export type ActionBlockReason =
+  | 'not-playing' // ゲームが終わっている
+  | 'invalid' // 存在しない選択肢
+  | 'same' // 今と同じ・すでに選んでいる（予定済み）
+  | 'irreversible' // 戻せない（チャットを受けたあとのリアルタイムなど）
+  | 'busy' // 乗り換え・DB の差し替えの最中
+  | 'unavailable' // 要件を満たせる構成が無い（SLA など）
+  | 'via-proposal' // 提案を受けると付く部品
+  | 'limit' // これ以上できない（SSR の最適化の下限など）
+  | 'effort'; // 手間が足りない
+
+export type ActionCheck =
+  | { ok: true; cost: number }
+  | { ok: false; reason: ActionBlockReason; message: string };
+
+const ok = (cost: number): ActionCheck => ({ ok: true, cost });
+const ng = (reason: ActionBlockReason, message: string): ActionCheck => ({
+  ok: false,
+  reason,
+  message,
+});
+
+/**
+ * その部品を付ける提案が届いているか（部品の欄で選ぶのは、その提案を受けるのと同じ。D-24 の画面確認）。
+ * 届いている提案の「受ける」の効果に、同じスロット・同じ部品を付ける効果があればその id。
+ */
+export function componentProposal(
+  state: Pick<GameState, 'pendingProposals' | 'scenarioId'>,
+  slot: SlotId,
+  option: string,
+): string | undefined {
+  const sc = scenarioOf(state);
+  return state.pendingProposals.find((id) =>
+    eventDef(sc, id)?.accept?.effects.some(
+      (e) => e.type === 'component' && e.slot === slot && e.option === option,
+    ),
+  );
+}
+
+/** 提案で付く部品か（どの提案の「受ける」にも、この部品を付ける効果がある）。 */
+function proposalOnlyComponent(
+  sc: Scenario,
+  slot: SlotId,
+  option: string,
+): EventDef | undefined {
+  return sc.events.find((d) =>
+    d.accept?.effects.some(
+      (e) => e.type === 'component' && e.slot === slot && e.option === option,
+    ),
+  );
+}
+
+/** 行動の規則（手間の残りは見ない）。選べない理由を区別して返す。 */
+function actionRule(state: GameState, action: Action): ActionCheck {
+  if (state.phase !== 'playing')
+    return ng('not-playing', 'ゲームは終わっている');
+  const busy = state.migration
+    ? ng('busy', '乗り換えの最中は選べない')
+    : state.componentSwap
+      ? ng('busy', 'DB の差し替え（データの移行）の最中は選べない')
+      : null;
   switch (action.type) {
     case 'none':
-      return 0;
+      return ok(0);
     case 'set': {
       const def = SETTINGS[action.key];
       if (!def || !def.options.some((o) => o.value === action.value))
-        return null;
-      if (state.settings[def.field] === action.value) return null;
-      return def.effort;
+        return ng('invalid', '選択肢に無い');
+      if (state.settings[def.field] === action.value)
+        return ng('same', '今と同じ（または選択済み）');
+      return ok(def.effort);
     }
     case 'optimize':
-      return nextSsrCpuMs(state) > EFFORT.minSsrCpuMs ? EFFORT.optimize : null;
+      return nextSsrCpuMs(state) > EFFORT.minSsrCpuMs
+        ? ok(EFFORT.optimize)
+        : ng(
+            'limit',
+            `SSR の CPU は ${EFFORT.minSsrCpuMs} ms より下げられない`,
+          );
     case 'plan':
-      return !state.migration &&
-        !state.componentSwap &&
-        STACKS[action.stackIndex] &&
-        isPlanChange(state.stackIndex, action.stackIndex)
-        ? EFFORT.plan
-        : null;
-    case 'migrate':
-      return !state.migration &&
-        !state.componentSwap &&
-        STACKS[action.stackIndex] &&
-        action.stackIndex !== state.stackIndex &&
-        !isPlanChange(state.stackIndex, action.stackIndex)
-        ? 0 // 乗り換えの手間は進行中の月ごとに取る（effortAvailable が減る）
-        : null;
+    case 'migrate': {
+      if (busy) return busy;
+      if (!STACKS[action.stackIndex]) return ng('invalid', '構成が無い');
+      if (action.stackIndex === state.stackIndex)
+        return ng('same', '今の構成と同じ');
+      const plan = isPlanChange(state.stackIndex, action.stackIndex);
+      if ((action.type === 'plan') !== plan)
+        return ng(
+          'invalid',
+          plan ? '同じ事業者なのでプラン変更' : '別の事業者なので乗り換え',
+        );
+      // 乗り換えの手間は進行中の月ごとに取る（effortAvailable が減る）
+      return ok(plan ? EFFORT.plan : 0);
+    }
     case 'respond': {
       const def = eventDef(scenarioOf(state), action.eventId);
-      if (!state.pendingProposals.includes(action.eventId) || !def?.accept)
-        return null;
-      if (action.accept && unavailableReason(state, def)) return null;
-      return action.accept ? acceptEffort(def) : 0;
+      if (!def?.accept) return ng('invalid', '提案が無い');
+      if (!state.pendingProposals.includes(action.eventId))
+        return ng('same', 'すでに返事をした');
+      if (action.accept) {
+        const why = unavailableReason(state, def);
+        if (why) return ng('unavailable', why);
+      }
+      return ok(action.accept ? acceptEffort(def) : 0);
     }
     case 'block-bots':
-      return state.botBlocked ? null : BOT_BLOCK.effort;
+      return state.botBlocked
+        ? ng('same', 'すでに入れている')
+        : ok(BOT_BLOCK.effort);
     case 'component': {
-      if (state.migration || state.componentSwap) return null;
+      if (busy) return busy;
+      const sc = scenarioOf(state);
       const platform = STACKS[state.stackIndex]!.provider;
       const opt = componentsOf(platform, action.slot).find(
         (c) => c.id === action.option,
       );
+      if (!opt) return ng('invalid', 'この事業者の部品に無い');
       const current = { ...DEFAULT_CHOICES[platform], ...state.components };
-      if (!opt || current[action.slot] === action.option) return null;
+      if (current[action.slot] === action.option)
+        return ng('same', '今の部品（または選択済み）');
       // チャットを受けたあとはリアルタイムを外せない
-      if (
-        action.slot === 'realtime' &&
-        state.mods.realtime &&
-        action.option === 'none'
-      )
-        return null;
-      if (action.slot === 'db') return 0; // 進行中の月ごとに取る（effortAvailable が減る）
-      return EFFORT.component[action.slot];
+      if (action.slot === 'realtime' && state.mods.realtime)
+        return ng('irreversible', 'チャットを受けたので外せない');
+      // 提案で付く部品は、提案が届いている月だけ選べる（選ぶと提案を受けたのと同じ）
+      const via = proposalOnlyComponent(sc, action.slot, action.option);
+      if (via) {
+        const pending = componentProposal(state, action.slot, action.option);
+        if (!pending)
+          return ng('via-proposal', `提案「${via.title}」を受けると付く`);
+        return actionRule(state, {
+          type: 'respond',
+          eventId: pending,
+          accept: true,
+        });
+      }
+      if (action.slot === 'db') return ok(0); // 進行中の月ごとに取る（effortAvailable が減る）
+      return ok(EFFORT.component[action.slot]);
     }
   }
+}
+
+/** 行動の手間（選べない行動は null。手間の残りは見ない）。 */
+export function actionEffort(state: GameState, action: Action): number | null {
+  const r = actionRule(state, action);
+  return r.ok ? r.cost : null;
+}
+
+/** 行動を今選べるか（規則と手間の残り）。選べなければ理由を区別して返す。 */
+export function checkAction(state: GameState, action: Action): ActionCheck {
+  const r = actionRule(state, action);
+  if (!r.ok) return r;
+  const left = effortAvailable(state);
+  const short = (need: number) =>
+    ng('effort', `手間が足りない（あと ${need} ポイント要る）`);
+  if (r.cost > left) return short(r.cost - left);
+  if (action.type === 'migrate') {
+    const m: Migration = {
+      from: state.stackIndex,
+      to: action.stackIndex,
+      required: migrationEffort(state.stackIndex, action.stackIndex),
+      done: 0,
+    };
+    const after = effortAvailable({ ...state, migration: m });
+    if (after < 0) return short(-after);
+  }
+  if (
+    action.type === 'component' &&
+    action.slot === 'db' &&
+    !proposalOnlyComponent(scenarioOf(state), action.slot, action.option)
+  ) {
+    const after = effortAvailable({
+      ...state,
+      componentSwap: {
+        slot: 'db',
+        option: action.option,
+        required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
+        done: 0,
+      },
+    });
+    if (after < 0) return short(-after);
+  }
+  return r;
+}
+
+/**
+ * 行動を順に当て、最初に選べなかった行動の理由を返す（画面の選択肢の表示に使う）。すべて選べれば ok。
+ */
+export function checkActions(
+  state: GameState,
+  actions: readonly Action[],
+):
+  | { ok: true; state: GameState }
+  | { ok: false; index: number; reason: ActionBlockReason; message: string } {
+  let s = state;
+  for (const [index, a] of actions.entries()) {
+    const c = checkAction(s, a);
+    if (!c.ok)
+      return { ok: false, index, reason: c.reason, message: c.message };
+    s = applyAction(s, a);
+  }
+  return { ok: true, state: s };
 }
 
 /** 部品の選択肢（今の事業者のスロットごと）と、今の部品。画面の「部品」の欄に使う。 */
@@ -1688,9 +1832,19 @@ function passes(
 
 /** 月の終わりの行動（次の月に効く）。1 か月に複数選べる。選べない行動は状態を変えずに返す。 */
 export function applyAction(state: GameState, action: Action): GameState {
-  const cost = actionEffort(state, action);
-  if (cost === null || action.type === 'none') return state;
-  if (cost > effortAvailable(state)) return state;
+  const check = checkAction(state, action);
+  if (!check.ok || action.type === 'none') return state;
+  const cost = check.cost;
+  // 提案で付く部品を部品の欄で選ぶのは、その提案を受けるのと同じ（どちらから選んでも同じ結果）
+  if (action.type === 'component') {
+    const pending = componentProposal(state, action.slot, action.option);
+    if (pending)
+      return applyAction(state, {
+        type: 'respond',
+        eventId: pending,
+        accept: true,
+      });
+  }
   const last = state.history[state.history.length - 1];
   const withNote = (label: string, s: GameState): GameState =>
     last

@@ -854,6 +854,7 @@ SC-5 を入れるために要る catalog の変更（§10.10 の T-8 の解消�
 - **データ**（catalog）: Durable Objects（SQLite）と Hyperdrive のプラン・KV の同じキーの 1 秒 1 回（`Limit.measure: 'writes-per-second-per-key'`）・事実（`Plan.facts`: KV の反映の遅れ・D1 の 1 行 2 MB・Workers のメモリ 128 MB）・SLA（`Plan.uptimeSla`）・さくらの VPS 4GB。原文で確かめ直した値だけを入れた（メモの冒頭）。Durable Objects の保存量（Free の値が食い違う）は使わないので入れていない。
 - **組み立て**（1 段目・golden 不変）: `packages/catalog/src/stacks/index.ts` の `composeStack`・`COMPONENTS`・`DEFAULT_CHOICES`・`applyComponentsToWorkload`。既定の選択の構成は GD-3 までの完成品と同じ（`__fixtures__/gd3-stacks.ts` と深い比較）。estimator に `db-proxy`・`durable-object`・`kv` の `mode`・`storesImages`・`realtime-*` のクラス・`transformAt`・ノードの `facts` を足した（prd/01 §4.1）。
 - **ゲーム**（2 段目）: 行動 `component`・DB の差し替えの進行（`componentSwap`）・チャットの提案 `p-chat`（Cloudflare のときだけ）・SLA の打診 `p-sla`（まれ。`requires: 'uptime-sla'`・契約の収益 $40 / 月は仮定）・最適化しない画像の大きさ 400 KB（仮定）。画面は今の行動の欄に「部品」を足し、選ぶ前に当たりうる前提を出す（`componentPreview`）。
+- **提案で付く部品**（画面の確認で直した・2026-10-31）: チャットの Durable Objects は、部品の欄で選ぶのと提案の「受ける」を同じ行動にまとめた（どちらから選んでも同じ状態・同じ手間 4）。提案が届いている月だけ部品の欄で選べ、それ以外は「提案を受けると付く」と出す。選べない理由はエンジンが区別して返し（`checkAction`: 手間が足りない・今と同じ・最中・要件・提案を受けると付く・戻せない など）、画面はその文をそのまま出す。
 - **手間（X-8）**: 案の値（ISR のキャッシュ・画像 2・リアルタイム 4・DB 6 × 1 か月）のままにした。プラン変更 0 < 部品 2〜6 < 乗り換え 12〜18 の順が保たれ、下の自動プレイで部品の選択だけで詰む・楽勝になる戦略は出なかった。
 
 基準プレイのシード 1〜50 の結果（所持金。目標 $1,730 は変えていない）:

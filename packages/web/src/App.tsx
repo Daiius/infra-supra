@@ -2,14 +2,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   actionEffort,
-  applyAction,
   applyActions,
   ARTICLE_COMMUNITY,
   axesOf,
   BOT_BLOCK,
   comparisonRows,
+  checkActions,
   componentEffortLabel,
   componentPreview,
+  componentProposal,
   componentSlots,
   EFFORT,
   effortAvailable,
@@ -32,7 +33,6 @@ import {
   SETTINGS,
   STACKS,
   STAGE_LABEL,
-  unavailableReason,
   type Action,
   type Axes,
   type GameState,
@@ -757,16 +757,15 @@ function Actions({
     if (opt) out.push({ type: 'optimize' });
     return out;
   };
-  /** すべての行動が受け付けられるか（手間が足りない・選べない行動があれば false）。 */
-  const valid = (actions: Action[]) => {
-    let s = state;
-    for (const a of actions) {
-      const next = applyAction(s, a);
-      if (next === s) return false;
-      s = next;
-    }
-    return true;
+  /**
+   * 選べない理由（すべて選べれば null）。理由はエンジンが区別して返す文をそのまま出す
+   * （手間が足りない・今と同じ・最中・要件・提案を受けると付く など）。
+   */
+  const blocked = (actions: Action[]): string | null => {
+    const r = checkActions(state, actions);
+    return r.ok ? null : r.message;
   };
+  const valid = (actions: Action[]) => blocked(actions) === null;
   const actions = build();
   const draft = applyActions(state, actions);
   const left = effortAvailable(draft);
@@ -790,10 +789,10 @@ function Actions({
             </div>
             {state.pendingProposals.map((id) => {
               const def = eventDef(scenarioOf(state), id)!;
-              const unavailable = unavailableReason(state, def);
-              const acceptOk = valid(
+              const acceptWhy = blocked(
                 build({ answers: { ...answers, [id]: true } }),
               );
+              const acceptOk = acceptWhy === null;
               return (
                 <div
                   key={id}
@@ -814,11 +813,7 @@ function Actions({
                       />
                       {def.accept!.label}
                       {!acceptOk && !answers[id] && (
-                        <span className="text-xs">
-                          {unavailable
-                            ? `（受けられない: ${unavailable}）`
-                            : '（手間が足りない）'}
-                        </span>
+                        <span className="text-xs">（{acceptWhy}）</span>
                       )}
                     </label>
                     <label className="flex cursor-pointer items-center gap-2">
@@ -863,13 +858,19 @@ function Actions({
                   {def.options.map((o) => {
                     const trial = { ...settings, [key]: o.value };
                     if (o.value === current) delete trial[key];
-                    const ok =
-                      o.value === current || valid(build({ settings: trial }));
+                    const why =
+                      o.value === current
+                        ? null
+                        : blocked(build({ settings: trial }));
                     return (
-                      <option key={o.value} value={o.value} disabled={!ok}>
+                      <option
+                        key={o.value}
+                        value={o.value}
+                        disabled={why !== null}
+                      >
                         {o.label}
                         {o.value === current ? '（今）' : ''}
-                        {ok ? '' : '（手間が足りない）'}
+                        {why ? `（${why}）` : ''}
                       </option>
                     );
                   })}
@@ -894,6 +895,11 @@ function Actions({
               nextSsrCpuMs(state) - EFFORT.optimizeStepMs,
             )}{' '}
             ms）{EFFORT.optimize} ポイント
+            {!optimize && !valid(build({ optimize: true })) && (
+              <span className="ml-1 text-xs">
+                （{blocked(build({ optimize: true }))}）
+              </span>
+            )}
             <span className="block text-xs opacity-60">
               CPU 時間と速さに効く。機能開発が進むとまた重くなる
             </span>
@@ -914,6 +920,11 @@ function Actions({
             />
             <span>
               Bot を遮断するルールを入れる {BOT_BLOCK.effort} ポイント
+              {!blockBots && !valid(build({ blockBots: true })) && (
+                <span className="ml-1 text-xs">
+                  （{blocked(build({ blockBots: true }))}）
+                </span>
+              )}
               <span className="block text-xs opacity-60">
                 Bot・クローラーのアクセスが来月から半分になる（一度入れれば続く。対策の製品の料金は未取得なので、手間だけの行動）
               </span>
@@ -924,7 +935,9 @@ function Actions({
           state={state}
           parts={parts}
           setParts={setParts}
-          valid={(p) => valid(build({ parts: p }))}
+          answers={answers}
+          setAnswers={setAnswers}
+          blocked={(o) => blocked(build(o))}
         />
         <div className="divider my-1 text-xs">構成を変える</div>
         {state.migration ? (
@@ -942,7 +955,8 @@ function Actions({
               ),
             ].map((idx) => {
               const plan = idx !== null && isPlanChange(state.stackIndex, idx);
-              const ok = idx === null || valid(build({ stack: idx }));
+              const why = idx === null ? null : blocked(build({ stack: idx }));
+              const ok = why === null;
               const label =
                 idx === null
                   ? '構成はこのまま'
@@ -963,9 +977,7 @@ function Actions({
                   />
                   <span>
                     {label}
-                    {!ok && (
-                      <span className="block text-xs">手間が足りない</span>
-                    )}
+                    {!ok && <span className="block text-xs">{why}</span>}
                   </span>
                 </label>
               );
@@ -999,12 +1011,20 @@ function ComponentsSection({
   state,
   parts,
   setParts,
-  valid,
+  answers,
+  setAnswers,
+  blocked,
 }: {
   state: GameState;
   parts: Partial<Record<SlotId, string>>;
   setParts: (p: Partial<Record<SlotId, string>>) => void;
-  valid: (p: Partial<Record<SlotId, string>>) => boolean;
+  /** 提案への返事（提案で付く部品は、部品の欄で選ぶと提案を受けたことになる）。 */
+  answers: Record<string, boolean>;
+  setAnswers: (a: Record<string, boolean>) => void;
+  blocked: (o: {
+    parts?: Partial<Record<SlotId, string>>;
+    answers?: Record<string, boolean>;
+  }) => string | null;
 }) {
   const slots = componentSlots(state);
   if (slots.length === 0) return null;
@@ -1024,7 +1044,13 @@ function ComponentsSection({
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {slots.map((x) => {
-            const chosen = parts[x.slot] ?? x.current;
+            // 届いている提案で付く部品（チャットの Durable Objects など）。選ぶのは提案を受けるのと同じ
+            const viaProposal = x.options.flatMap((o) => {
+              const id = componentProposal(state, x.slot, o.id);
+              return id ? [{ option: o.id, id }] : [];
+            });
+            const accepted = viaProposal.find((v) => answers[v.id]);
+            const chosen = accepted?.option ?? parts[x.slot] ?? x.current;
             const opt = x.options.find((o) => o.id === chosen)!;
             const preview =
               chosen === x.current
@@ -1042,22 +1068,43 @@ function ComponentsSection({
                   className="select select-bordered select-sm"
                   value={chosen}
                   onChange={(e) => {
+                    const v = e.target.value;
                     const next = { ...parts };
-                    if (e.target.value === x.current) delete next[x.slot];
-                    else next[x.slot] = e.target.value;
+                    delete next[x.slot];
+                    const nextAnswers = { ...answers };
+                    for (const p of viaProposal)
+                      nextAnswers[p.id] = p.option === v;
+                    if (
+                      v !== x.current &&
+                      !viaProposal.some((p) => p.option === v)
+                    )
+                      next[x.slot] = v;
                     setParts(next);
+                    if (viaProposal.length) setAnswers(nextAnswers);
                   }}
                 >
                   {x.options.map((o) => {
-                    const trial = { ...parts, [x.slot]: o.id };
-                    if (o.id === x.current) delete trial[x.slot];
-                    const ok = o.id === x.current || valid(trial);
+                    const p = viaProposal.find((q) => q.option === o.id);
+                    const restParts = { ...parts };
+                    delete restParts[x.slot];
+                    const why =
+                      o.id === x.current
+                        ? null
+                        : p
+                          ? blocked({
+                              parts: restParts,
+                              answers: { ...answers, [p.id]: true },
+                            })
+                          : blocked({
+                              parts: { ...restParts, [x.slot]: o.id },
+                            });
                     return (
-                      <option key={o.id} value={o.id} disabled={!ok}>
+                      <option key={o.id} value={o.id} disabled={why !== null}>
                         {o.label}
                         {o.inappropriate ? '（不適切・学びのため）' : ''}
                         {o.id === x.current ? '（今）' : ''}
-                        {ok ? '' : '（選べない・手間が足りない）'}
+                        {p ? '（届いた提案を受ける）' : ''}
+                        {why ? `（${why}）` : ''}
                       </option>
                     );
                   })}
