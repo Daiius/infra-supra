@@ -151,6 +151,32 @@ describe('resolveWorkload', () => {
     );
   });
 
+  it('同じ描画のルートをまとめても、1 リクエストあたりの CPU の最大は残る（課金は平均）', () => {
+    const w = workload(10_000);
+    w.routes = [
+      w.routes[2]!,
+      { ...w.routes[1]!, id: 'light', share: 0.4, processing },
+      {
+        ...w.routes[1]!,
+        id: 'heavy',
+        share: 0.4,
+        processing: { ...processing, cpuMs: 30 },
+      },
+      // 件数 0 のルートは最大に数えない
+      {
+        ...w.routes[1]!,
+        id: 'unused',
+        share: 0,
+        processing: { ...processing, cpuMs: 99 },
+      },
+    ];
+    const r = resolveWorkload(w);
+    const ssr = r.classes['document-ssr'].perRequest;
+    expect(nearlyEqual(ssr.cpuMs, 20)).toBe(true);
+    expect(ssr.maxCpuMs).toBe(30);
+    expect(simulateResources(r, arch).nodes.fn!.maxCpuMsPerRequest).toBe(30);
+  });
+
   it('share の合計が 1 でなければ入力の誤り', () => {
     const bad = workload(1);
     bad.routes[0]!.share = 0.9;

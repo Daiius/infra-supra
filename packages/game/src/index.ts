@@ -47,9 +47,10 @@ import {
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 import { premiseTrends, type PremiseSnapshot } from './trends.ts';
 
-export const SCENARIOS: Record<string, Scenario> = {
+/** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
+export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
   [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
-};
+});
 
 /** ⚠ 為替は取得していない（仮定）。シナリオによらない共通の仮定。 */
 export const USD_JPY = 150;
@@ -231,6 +232,11 @@ export type MonthReport = {
 
 export type GameState = {
   scenarioId: string;
+  /**
+   * 遊んでいるシナリオ（newGame に渡した不変の入力）。月の計算はこれだけを読む。
+   * 保存するときは scenarioId だけを書き、読み込みで SCENARIOS から引き直す（prd/07 §10.1）。
+   */
+  scenario: Scenario;
   seed: number; // 偶発的な障害の乱数の内部状態（保存すれば同じ続きになる）
   /** 始めたときのシード（台本の表・基準プレイを同じシードで回すため）。 */
   startSeed: number;
@@ -275,8 +281,8 @@ export type GameState = {
   end?: { reason: EndReason; month: number };
 };
 
-export function scenarioOf(state: Pick<GameState, 'scenarioId'>): Scenario {
-  return SCENARIOS[state.scenarioId] ?? ARTICLE_COMMUNITY;
+export function scenarioOf(state: Pick<GameState, 'scenario'>): Scenario {
+  return state.scenario;
 }
 
 export function eventDef(sc: Scenario, id: string): EventDef | undefined {
@@ -310,7 +316,7 @@ export const SCHEDULED_CHANGES: (ScheduledChange & {
 
 /**
  * その月の料金データ（D-21）。起きた改定のうち、改定後の料金を持つものだけメーターの料金を差し替える。
- * 改定後の料金が無い予告は計算を変えない。
+ * 改定後の料金が無い予告は計算を変えない。同じメーターの改定が複数起きていれば、後に起きたほうを使う。
  */
 export function applyRevisions(
   base: readonly PriceBook[],
@@ -318,11 +324,16 @@ export function applyRevisions(
   revisions: readonly { id: string; month: number }[],
   month: number,
 ): PriceBook[] {
-  const due = changes.filter(
-    (c) =>
-      c.revisedMeters.length > 0 &&
-      revisions.some((r) => r.id === c.id && r.month <= month),
-  );
+  const occurred = (c: { id: string }) =>
+    revisions.find((r) => r.id === c.id && r.month <= month)?.month;
+  // 起きた月の順（同じ月なら施行日の順）。後ろの改定が前の改定を上書きする
+  const due = changes
+    .filter((c) => c.revisedMeters.length > 0 && occurred(c) !== undefined)
+    .sort(
+      (a, b) =>
+        occurred(a)! - occurred(b)! ||
+        a.effectiveFrom.localeCompare(b.effectiveFrom),
+    );
   if (!due.length) return [...base];
   return base.map((b) => {
     const mine = due.filter((c) => c.provider === b.provider);
@@ -334,7 +345,7 @@ export function applyRevisions(
         meters: p.meters.map((m) => {
           const rv = mine
             .flatMap((c) => c.revisedMeters)
-            .find((x) => x.planId === p.id && x.meterId === m.id);
+            .findLast((x) => x.planId === p.id && x.meterId === m.id);
           return rv ? { ...m, pricing: rv.pricing } : m;
         }),
       })),
@@ -463,7 +474,7 @@ export function migrationEffort(from: number, to: number): number {
 }
 
 function upkeepFor(
-  state: Pick<GameState, 'stackIndex' | 'migration' | 'scenarioId'>,
+  state: Pick<GameState, 'stackIndex' | 'migration' | 'scenario'>,
 ) {
   const running = [
     state.stackIndex,
@@ -552,12 +563,11 @@ export function newGame(
   scenario: Scenario = ARTICLE_COMMUNITY,
   startDate: string = DEFAULT_START_DATE,
 ): GameState {
-  // 状態にはシナリオの id だけを持つ（保存のため）。渡されたシナリオを id で引けるようにしておく
-  SCENARIOS[scenario.id] ??= scenario;
   return {
     startDate,
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
     scenarioId: scenario.id,
+    scenario,
     seed,
     startSeed: seed,
     schedule: rollSchedule(scenario, seed),

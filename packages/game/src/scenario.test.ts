@@ -261,6 +261,32 @@ describe('実際に予告されている改定の出来事（D-21）', () => {
     expect(price(applyRevisions([book], [change], rv, 4))).toBe(1);
     expect(price(applyRevisions([book], [change], rv, 5))).toBe(2);
     expect(price(applyRevisions([book], [change], [], 12))).toBe(1);
+
+    // 同じメーターの改定が 2 つあれば、後に起きたほうで上書きする（並び順によらない）
+    const later = {
+      ...change,
+      id: 'revision:fictional-host:2000-06-01',
+      effectiveFrom: '2000-06-01',
+      revisedMeters: [
+        {
+          planId: 'plan',
+          meterId: 'requests',
+          pricing: { model: 'flat' as const, per: 1, unitPrice: 3 },
+        },
+      ],
+    };
+    const both = [
+      { id: change.id, month: 3 },
+      { id: later.id, month: 6 },
+    ];
+    for (const changes of [
+      [change, later],
+      [later, change],
+    ]) {
+      expect(price(applyRevisions([book], changes, both, 5))).toBe(2);
+      expect(price(applyRevisions([book], changes, both, 6))).toBe(3);
+      expect(price(applyRevisions([book], changes, both, 12))).toBe(3);
+    }
   });
 });
 

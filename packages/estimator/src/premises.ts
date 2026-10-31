@@ -55,12 +55,20 @@ export function assessPremises(input: {
   const out: PlatformPremise[] = [];
   const peak = sim.workload.peakHourFactor / SECONDS_PER_MONTH;
 
-  // 1. 無料枠・込み分のプール（料金データの premise の文を使う）
+  // 1. 無料枠・込み分のプール（料金データの premise の文を使う）。
+  //    集計の単位は料金計算と同じ（prd/03 §4・§11）: node 単位はノードごと、account 単位はプランをまたいで合算する。
+  //    日次のプールは平日・休日の 1 日分のうち多いほうで判定する（料金計算も両方で超過を数える）。
   type PoolAgg = {
+    accountId: string;
+    provider: string;
+    poolId: string;
+    nodeId?: string;
     quantity: number;
     weekday: number;
+    weekend: number;
     nodeIds: Set<string>;
-    meterIds: Set<string>;
+    /** 使ったプランとメーター（出てきた順）。 */
+    meters: { planId: string; meterId: string }[];
   };
   const pools = new Map<string, PoolAgg>();
   const factMeters = new Map<
@@ -87,41 +95,58 @@ export function assessPremises(input: {
       }
       continue;
     }
-    const key = `${u.accountId}|${u.provider}|${u.planId}|${meter.allowancePool}`;
+    const pool = book.allowancePools.find((p) => p.id === meter.allowancePool)!;
+    const nodeId = pool.scope === 'node' ? u.nodeId : undefined;
+    const key = `${u.accountId}|${nodeId ?? ''}|${u.provider}|${pool.id}`;
     const agg = pools.get(key) ?? {
+      accountId: u.accountId,
+      provider: u.provider,
+      poolId: pool.id,
+      ...(nodeId !== undefined ? { nodeId } : {}),
       quantity: 0,
       weekday: 0,
+      weekend: 0,
       nodeIds: new Set(),
-      meterIds: new Set(),
+      meters: [],
     };
+    const uniform = u.quantity / (HOURS_PER_MONTH / 24);
     agg.quantity += u.quantity;
-    agg.weekday += u.daily?.weekday ?? u.quantity / (HOURS_PER_MONTH / 24);
+    agg.weekday += u.daily?.weekday ?? uniform;
+    agg.weekend += u.daily?.weekend ?? uniform;
     agg.nodeIds.add(u.nodeId);
-    agg.meterIds.add(meter.id);
+    if (
+      !agg.meters.some((m) => m.planId === u.planId && m.meterId === meter.id)
+    ) {
+      agg.meters.push({ planId: u.planId, meterId: meter.id });
+    }
     pools.set(key, agg);
   }
-  for (const [key, agg] of pools) {
-    const [, provider, planId, poolId] = key.split('|') as [
-      string,
-      string,
-      string,
-      string,
-    ];
-    const book = books.get(provider)!;
-    const pool = book.allowancePools.find((p) => p.id === poolId)!;
-    const plan = book.plans.find((p) => p.id === planId)!;
-    const meter = plan.meters.find((m) => agg.meterIds.has(m.id))!;
+  for (const agg of pools.values()) {
+    const book = books.get(agg.provider)!;
+    const pool = book.allowancePools.find((p) => p.id === agg.poolId)!;
+    // 文と挙動は、最初に出てきたプランのうち料金データで先に並ぶメーターのもの
+    const planId = agg.meters[0]!.planId;
+    const meter = book.plans
+      .find((p) => p.id === planId)!
+      .meters.find((m) =>
+        agg.meters.some((x) => x.planId === planId && x.meterId === m.id),
+      )!;
     const text = meter.premise ?? pool.premise;
     if (!text) continue;
+    // id: 1 プランなら従来どおり。プランをまたぐときは + でつなぎ、ノード単位ならノードを足す（前方一致の参照は保つ）
+    const planIds = [...new Set(agg.meters.map((m) => m.planId))].join('+');
     out.push(
       threshold({
-        id: `pool:${provider}:${planId}:${poolId}`,
+        id: `pool:${agg.provider}:${planIds}:${pool.id}${agg.nodeId !== undefined ? `:${agg.nodeId}` : ''}`,
         text,
         effect: meter.onExceed === 'bill' ? 'cost' : meter.onExceed,
         nodeIds: [...agg.nodeIds],
-        provider,
+        provider: agg.provider,
         planId,
-        used: pool.period === 'day' ? agg.weekday : agg.quantity,
+        used:
+          pool.period === 'day'
+            ? Math.max(agg.weekday, agg.weekend)
+            : agg.quantity,
         limit: pool.quantity,
         unit: pool.unit,
         accumulates: pool.unit === 'gb-month',

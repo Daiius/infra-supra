@@ -7,6 +7,8 @@ import {
   newGame,
   playMonth,
   rollSchedule,
+  scenarioOf,
+  SCENARIOS,
   type EventDef,
   type GameState,
   type Scenario,
@@ -103,6 +105,24 @@ describe('台本の表', () => {
     expect(b.history.map((r) => r.status === 'incident')).toEqual(
       a.history.map((r) => r.status === 'incident'),
     );
+  });
+});
+
+describe('シナリオは渡した定義だけで決まる（共有の表を書き換えない）', () => {
+  it('同じ id の別の定義で始めても、それぞれ自分の定義で進む', () => {
+    const early: EventDef = {
+      ...proposal,
+      id: 'test-proposal-early',
+      when: { type: 'window', from: 1, to: 1 },
+    };
+    const other: Scenario = { ...TEST, events: [...TEST.events, early] };
+    const a = until(newGame(1, 42, TEST), 1);
+    const b = until(newGame(1, 42, other), 1);
+    expect(scenarioOf(a)).toBe(TEST);
+    expect(scenarioOf(b)).toBe(other);
+    expect(a.pendingProposals).not.toContain(early.id);
+    expect(b.pendingProposals).toContain(early.id);
+    expect(SCENARIOS).not.toHaveProperty(TEST.id);
   });
 });
 

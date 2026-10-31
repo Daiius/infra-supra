@@ -206,6 +206,40 @@ describe('P-09 クレジット', () => {
     const b = bill([use('usage', 30, { planId: 'team' })], [sub('team')]);
     expect(b.lines.find((l) => l.kind === 'credit')!.amount).toBe(-20);
   });
+
+  it('対象が重なる複数のクレジットは、先に当てた分を差し引いた残りに当てる（従量を超えて引かない）', () => {
+    const twoCredits = parsePriceBook(
+      {
+        ...FICTIONAL_CLOUD,
+        plans: FICTIONAL_CLOUD.plans.map((p) =>
+          p.id === 'team'
+            ? {
+                ...p,
+                credits: [
+                  ...(p.credits ?? []),
+                  { id: 'extra-credit', amount: 20, appliesTo: 'all-usage' },
+                ],
+              }
+            : p,
+        ),
+      },
+      { allowFictional: true },
+    );
+    const run = (q: number) =>
+      priceUsage({
+        books: [twoCredits],
+        subscriptions: [sub('team')],
+        usage: [use('usage', q, { planId: 'team' })],
+      });
+    const b = run(30); // 従量 30 = 20 + 10
+    expect(
+      b.lines.filter((l) => l.kind === 'credit').map((l) => l.amount),
+    ).toEqual([-20, -10]);
+    expect(b.totals.USD).toBe(20); // 固定費 20 だけ残る
+    const small = run(10); // 1 つ目で使い切る
+    expect(small.lines.filter((l) => l.kind === 'credit')).toHaveLength(1);
+    expect(small.totals.USD).toBe(20);
+  });
 });
 
 describe('P-10 固定費', () => {
