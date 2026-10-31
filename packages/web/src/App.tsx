@@ -236,13 +236,30 @@ function Game({
   const playing = state.phase === 'playing';
   // 月が進んだ直後に、その月の出来事をダイアログで出す（D-23）。結果の画面では出さない。
   // auto: 月が進んだ直後に開いた / manual: 月のカードのボタンで開き直した。
+  /** 目標達成のダイアログを開いた回数（結果の画面のボタンで開き直す。D-25）。 */
+  const [celebration, setCelebration] = useState(0);
+  useEffect(() => {
+    if (state.phase !== 'won') setCelebration(0);
+  }, [state.phase]);
   const [eventsOpen, setEventsOpen] = useState<'auto' | 'manual' | null>(() =>
     playing && report.events.length > 0 ? 'auto' : null,
   );
   return (
     <>
-      {state.phase === 'won' && <VictoryCelebration state={state} />}
-      {!playing && <Result state={state} />}
+      {state.phase === 'won' && (
+        // key を変えると最初と同じように開き直す（暗い背景と花火も再開）
+        <VictoryCelebration
+          key={celebration}
+          state={state}
+          auto={celebration === 0}
+        />
+      )}
+      {!playing && (
+        <Result
+          state={state}
+          onCelebrate={() => setCelebration((n) => n + 1)}
+        />
+      )}
       <Trends history={state.history} />
       <MonthCard
         report={report}
@@ -281,7 +298,14 @@ function Game({
  * 閉じると背景が消え、新しい花火は出さない。空中に残った粒は少し薄くして、寿命で消えるまで描いてから片付ける。
  * 動きを減らす設定では、ダイアログだけ出して花火は出さない。作法は出来事のダイアログ（D-23）と同じ。
  */
-function VictoryCelebration({ state }: { state: GameState }) {
+function VictoryCelebration({
+  state,
+  auto,
+}: {
+  state: GameState;
+  /** 達成した直後に開いた（true）か、結果の画面のボタンで開き直した（false）か。 */
+  auto: boolean;
+}) {
   const reduced = useReducedMotion();
   const engine = useMemo(() => new FireworksEngine(), []);
   const [open, setOpen] = useState(true);
@@ -290,10 +314,11 @@ function VictoryCelebration({ state }: { state: GameState }) {
   useEffect(() => {
     const d = ref.current;
     if (!d || d.open) return;
-    if (document.activeElement instanceof HTMLElement)
+    // 達成した直後はフォーカスを外して開く（閉じた後もページの先頭のまま）。開き直したときはボタンへ戻す（D-23 と同じ）
+    if (auto && document.activeElement instanceof HTMLElement)
       document.activeElement.blur();
     d.showModal();
-  }, []);
+  }, [auto]);
   // 合否の 3 つ（所持金・満足度の平均・止まった月）だけを、結果の画面と同じメーターで出す
   const meters = useMemo(() => {
     const cfPaid = comparisonRows(state).find((r) => r.id === 'cf-paid')!;
@@ -1249,7 +1274,14 @@ function ComponentsSection({
 }
 
 /** 結果（prd/07 §9.6）: 合否・軸ごとの成績（基準プレイの目盛りつき）・振り返り。 */
-function Result({ state }: { state: GameState }) {
+function Result({
+  state,
+  onCelebrate,
+}: {
+  state: GameState;
+  /** 目標達成のダイアログを開き直す（達成のときだけ使う）。 */
+  onCelebrate: () => void;
+}) {
   const won = state.phase === 'won';
   const end = state.end!;
   const checks = goalChecks(state);
@@ -1290,6 +1322,13 @@ function Result({ state }: { state: GameState }) {
             {state.outages} 回
           </span>
         </div>
+        {won && (
+          <div>
+            <button className="btn btn-sm btn-outline" onClick={onCelebrate}>
+              <span aria-hidden>🎆</span> もう一度祝う（達成のダイアログを開く）
+            </button>
+          </div>
+        )}
         <div className="space-y-3">
           {meters.map((m) => (
             <Meter key={m.label} {...m} />
