@@ -333,6 +333,11 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   provider: STACK_DEFS[i]!.platform as Platform,
   plan: STACK_DEFS[i]!.plan,
   selfHosted: s.nodes.some((n) => n.config.kind === 'host'),
+  /** ホストのディスク（VPS だけ。下位のプランへ変更できるかの判定に使う）。 */
+  diskGB: s.nodes.reduce(
+    (a, n) => (n.config.kind === 'host' ? n.config.diskGB : a),
+    0,
+  ),
 }));
 
 const books = loadPriceBooks();
@@ -588,17 +593,69 @@ export function componentLabel(
 
 /** 同じ事業者のプランの変更か（Cloudflare Free ↔ Paid・Vercel Hobby ↔ Pro）。 */
 export function isPlanChange(from: number, to: number): boolean {
-  return from !== to && STACKS[from]!.provider === STACKS[to]!.provider;
+  return (
+    from !== to &&
+    STACKS[from]!.provider === STACKS[to]!.provider &&
+    !isRecontract(from, to)
+  );
 }
 
-/** 乗り換えに必要な手間の合計（VPS が絡むと長い）。 */
+/** 構成のプランが持つ事実（catalog の Plan の facts）。 */
+function stackFact(stackIndex: number, factId: string) {
+  for (const n of MVP_STACKS[stackIndex]!.nodes) {
+    if (!n.billing) continue;
+    const f = books
+      .find((b) => b.provider === n.billing!.provider)
+      ?.plans.find((p) => p.id === n.billing!.planId)
+      ?.facts.find((x) => x.id === factId);
+    if (f) return f;
+  }
+  return undefined;
+}
+
+/**
+ * 同じ事業者でも、下位のプランへは変更できず契約し直す（さくらの VPS は今よりディスクが少ないプランへ変更できない。D-27）。
+ * 乗り換えと同じ仕組み（手間・期間・新旧両方の費用）で扱う。
+ */
+export function isRecontract(from: number, to: number): boolean {
+  return (
+    from !== to &&
+    STACKS[from]!.provider === STACKS[to]!.provider &&
+    STACKS[to]!.diskGB < STACKS[from]!.diskGB &&
+    stackFact(from, 'no-smaller-disk') !== undefined
+  );
+}
+
+/** プラン変更の手間（さくらの VPS の上位への変更は停止とディスクの拡張の作業がある。D-27）。 */
+export function planChangeEffort(from: number): number {
+  return stackFact(from, 'scale-up') ? EFFORT.scaleUp : EFFORT.plan;
+}
+
+/** 乗り換えに必要な手間の合計（VPS が絡むと長い。下位のプランへの契約し直しは別の値）。 */
 export function migrationEffort(from: number, to: number): number {
   const m = EFFORT.migrationMonths;
-  const months =
-    STACKS[from]!.selfHosted || STACKS[to]!.selfHosted
+  const months = isRecontract(from, to)
+    ? m.recontract
+    : STACKS[from]!.selfHosted || STACKS[to]!.selfHosted
       ? m.selfHosted
       : m.serverless;
   return months * EFFORT.migrationPerMonth;
+}
+
+/** 構成を変える選択肢の説明（プラン変更・契約し直し・乗り換え）。前提の文は catalog の facts。 */
+export function stackChangeLabel(from: number, to: number): string {
+  const name = STACKS[to]!.name;
+  const months = migrationEffort(from, to) / EFFORT.migrationPerMonth;
+  if (isPlanChange(from, to)) {
+    const effort = planChangeEffort(from);
+    const fact = stackFact(from, 'scale-up');
+    return effort === 0
+      ? `${name} にプラン変更（手間なし・来月から）`
+      : `${name} にプラン変更（来月から・手間 ${effort} ポイント。${fact?.premise ?? ''}。計画的な短い停止で、止まった月には数えない）`;
+  }
+  if (isRecontract(from, to))
+    return `${name} へ契約し直す（${stackFact(from, 'no-smaller-disk')!.premise}。${EFFORT.migrationPerMonth} ポイント × ${months} か月。期間中は新旧両方の費用）`;
+  return `${name} へ乗り換える（${EFFORT.migrationPerMonth} ポイント × ${months} か月。期間中は新旧両方の費用）`;
 }
 
 function upkeepFor(
@@ -744,7 +801,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
           plan ? '同じ事業者なのでプラン変更' : '別の事業者なので乗り換え',
         );
       // 乗り換えの手間は進行中の月ごとに取る（effortAvailable が減る）
-      return ok(plan ? EFFORT.plan : 0);
+      return ok(plan ? planChangeEffort(state.stackIndex) : 0);
     }
     case 'respond': {
       const def = eventDef(scenarioOf(state), action.eventId);

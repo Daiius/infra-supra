@@ -34,6 +34,15 @@ export const sakuraVps: PriceBookInput = {
     spec: src('https://vps.sakura.ad.jp/specification/'),
     flow: src('https://vps.sakura.ad.jp/flow/'),
     sla: src('https://vps.sakura.ad.jp/sla/'),
+    // プランの変更（2026-11-01 に原文で確認。D-27）
+    scaleup: {
+      url: 'https://manual.sakura.ad.jp/vps/server/scaleup.html',
+      retrievedAt: '2026-11-01',
+    },
+    diskExpansion: {
+      url: 'https://manual.sakura.ad.jp/vps/server/disk-expansion/index.html',
+      retrievedAt: '2026-11-01',
+    },
   },
   plans: [
     {
@@ -50,6 +59,14 @@ export const sakuraVps: PriceBookInput = {
         sourceIds: ['spec', 'sla'],
       },
       meters: [TRANSFER],
+      facts: [
+        {
+          id: 'scale-up',
+          premise:
+            'さくらの VPS の上位プランへの変更（スケールアップ）はサーバーを停止して行い、増えたディスクを OS に認識させる作業は利用者が行う（growpart・resize2fs など）',
+          sourceIds: ['scaleup', 'diskExpansion'],
+        },
+      ],
       notes: [
         '3 vCPU・メモリ 2 GB・SSD 100 GB・回線 100 Mbps 共有',
         '最低利用期間 3 か月。月払いは前払いで、初回に 2 か月分を請求',
@@ -70,6 +87,14 @@ export const sakuraVps: PriceBookInput = {
         sourceIds: ['spec', 'sla'],
       },
       meters: [TRANSFER],
+      facts: [
+        {
+          id: 'no-smaller-disk',
+          premise:
+            'さくらの VPS は、今よりディスク容量が少ないプランへは変更できない（下位のプランにするには契約し直してデータを移す）',
+          sourceIds: ['scaleup'],
+        },
+      ],
       notes: [
         '4 vCPU・メモリ 4 GB・SSD 200 GB（400 GB に変更可）・回線 100 Mbps 共有',
         '最低利用期間 3 か月（さくらの VPS 全体）',

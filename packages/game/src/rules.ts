@@ -59,6 +59,11 @@ export const EFFORT = {
   maxSsrDriftMs: 5,
   plan: 0,
   /**
+   * さくらの VPS の上位プランへの変更（スケールアップ）: 停止して変更し、ディスクの拡張は利用者の作業（D-27）。
+   * 一度きりの手間。停止は計画的で短いので「止まった月」には数えない。
+   */
+  scaleUp: 2,
+  /**
    * 部品の差し替え（D-24・prd/07 §11.3）。ISR のキャッシュ・画像は翌月から。DB はデータの移行があるので
    * 乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える（期間中は新旧の両方の DB の費用）。
    */
@@ -66,7 +71,8 @@ export const EFFORT = {
   dbSwap: { perMonth: 6, months: 1 },
   /** 乗り換え: 月あたりの手間と、必要な月数（VPS が絡むと長い）。 */
   migrationPerMonth: 6,
-  migrationMonths: { serverless: 2, selfHosted: 3 },
+  /** recontract: 同じ事業者の下位プランへ契約し直してデータを移す（さくらの VPS 4GB → 2GB。D-27）。 */
+  migrationMonths: { serverless: 2, selfHosted: 3, recontract: 2 },
 } as const;
 
 /** 速さの「重さ」の数（0〜3）。 */

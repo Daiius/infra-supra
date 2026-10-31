@@ -22,6 +22,7 @@ import {
   goalChecks,
   growthFromReputation,
   isPlanChange,
+  stackChangeLabel,
   migrationEffort,
   newSave,
   nextSsrCpuMs,
@@ -1174,15 +1175,12 @@ function Actions({
                 (s) => s.index,
               ),
             ].map((idx) => {
-              const plan = idx !== null && isPlanChange(state.stackIndex, idx);
               const why = idx === null ? null : blocked(build({ stack: idx }));
               const ok = why === null;
               const label =
                 idx === null
                   ? '構成はこのまま'
-                  : plan
-                    ? `${STACKS[idx]!.name} にプラン変更（手間なし・来月から）`
-                    : `${STACKS[idx]!.name} へ乗り換える（${EFFORT.migrationPerMonth} ポイント × ${migrationEffort(state.stackIndex, idx) / EFFORT.migrationPerMonth} か月。期間中は新旧両方の費用）`;
+                  : stackChangeLabel(state.stackIndex, idx);
               return (
                 <label
                   key={idx ?? 'keep'}

@@ -252,7 +252,10 @@ describe('SLA の打診（SC-5・W-2）', () => {
   it('VPS 2GB は受けられ、4GB にプラン変更した月から契約の収益が入る', () => {
     const s = until(VPS, slaMonth, 3);
     expect(isPlanChange(VPS, VPS_4GB)).toBe(true);
-    expect(actionEffort(s, { type: 'plan', stackIndex: VPS_4GB })).toBe(0);
+    // 上位への変更はプラン変更（来月から）だが、停止とディスクの拡張の手間がある（D-27）
+    expect(actionEffort(s, { type: 'plan', stackIndex: VPS_4GB })).toBe(
+      EFFORT.scaleUp,
+    );
     const accepted = applyAction(s, {
       type: 'respond',
       eventId: 'p-sla',
@@ -265,5 +268,26 @@ describe('SLA の打診（SC-5・W-2）', () => {
       applyAction(on2gb, { type: 'plan', stackIndex: VPS_4GB }),
     );
     expect(last(on4gb).contractRevenue).toBeGreaterThan(0);
+    // 計画的な停止は止まった月に数えない
+    expect(last(on4gb).status).not.toBe('down');
+  });
+
+  it('4GB → 2GB はプラン変更ではなく契約し直し（6 ポイント × 2 か月・期間中は新旧両方の費用）', () => {
+    const s = playMonth(newGame(VPS_4GB));
+    expect(isPlanChange(VPS_4GB, VPS)).toBe(false);
+    expect(checkAction(s, { type: 'plan', stackIndex: VPS })).toMatchObject({
+      ok: false,
+      reason: 'invalid',
+    });
+    const m = applyAction(s, { type: 'migrate', stackIndex: VPS });
+    expect(m.migration?.required).toBe(
+      EFFORT.migrationPerMonth * EFFORT.migrationMonths.recontract,
+    );
+    const next = playMonth(m);
+    expect(last(next).parallelInfraCost).toBeGreaterThan(0);
+    // 他の VPS が絡む乗り換え（6 × 3）とは別の値
+    expect(EFFORT.migrationMonths.recontract).not.toBe(
+      EFFORT.migrationMonths.selfHosted,
+    );
   });
 });
