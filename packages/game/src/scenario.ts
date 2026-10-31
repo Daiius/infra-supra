@@ -212,16 +212,18 @@ export type Scenario = {
 export type ScenarioText = {
   /** 何のアプリで、どう収益を得るか。 */
   intro: string;
-  /** 規模の言い方（「PV」以外の補足。例: 「利用者 約 1,500 人」）。 */
+  /** 規模の補足（誰が使うか）。 */
   scale?: string;
+  /** 成長の言い方（満足度が高い / 低いとき）。画面が「満足度 0.9 で毎月約 N%」を挟む。 */
+  growth: { up: string; down: string };
   /** 運営中に起きる出来事の説明。 */
   events: string;
   /** 満足度の要素の説明。 */
   satisfaction: string;
-  /** アプリの形（コストに効く判断ポイント）。 */
+  /** アプリの形（コストに効く判断ポイント）。SSR の CPU の行は画面がテンプレートから足す。 */
   app: string[];
   /** 収益の文（ゲーム上の仮定であることを含める）。 */
-  revenue: string;
+  revenue?: string;
 };
 
 /** 台本の表の 1 行（newGame で一度に作る。プレイヤーの選択に依存しない）。 */

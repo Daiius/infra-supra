@@ -3,6 +3,7 @@
 import { articleCommunity } from 'catalog';
 import type { Action, GameState } from '../index.ts';
 import type { EventDef, Scenario } from '../scenario.ts';
+import { ARTICLE_COMMUNITY_TEXT } from './article-community-text.ts';
 
 // 構成の番号（catalog の MVP_STACKS の順）
 const CF_FREE = 0;
@@ -411,6 +412,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
    */
   goal: { cash: 1730, satisfaction: 0.75, maxOutageMonths: 2 },
   startCash: 60,
+  text: ARTICLE_COMMUNITY_TEXT,
   baselines: [
     {
       id: 'cf-paid',
