@@ -50,6 +50,7 @@
 | [04-resource-simulation.md](./04-resource-simulation.md) | Workload からリソース消費量への変換仕様（MVP のコンポーネント種別ごと） |
 | [05-test-strategy.md](./05-test-strategy.md) | 料金計算のテストケース設計（架空料金データの扱いを含む） |
 | [06-frameworks.md](./06-frameworks.md) | フレームワークとビルド出力（FrameworkProfile・BuildOutput・DeployTarget。ISR・ミドルウェア・画像最適化の写し方） |
+| [07-game-design.md](./07-game-design.md) | ゲームデザイン（満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 |
 | [08-roadmap.md](./08-roadmap.md) | フェーズ分けと Phase 1 のタスク分解 |
 | [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログと未決の論点 |
 

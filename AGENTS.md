@@ -20,6 +20,7 @@
 | [prd/04-resource-simulation.md](./prd/04-resource-simulation.md) | Workload → リソース消費量の変換仕様 |
 | [prd/05-test-strategy.md](./prd/05-test-strategy.md) | テスト設計（架空料金の扱い・料金計算・性質ベースのテスト・golden） |
 | [prd/06-frameworks.md](./prd/06-frameworks.md) | 見積対象のフレームワーク（Vite・Next.js・vinext、次に Astro）とビルド出力の中間表現・ホストへの写し方 |
+| [prd/07-game-design.md](./prd/07-game-design.md) | ゲームデザイン（試作への指摘から決めた満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 GD-1〜5 |
 | [prd/08-roadmap.md](./prd/08-roadmap.md) | フェーズと Phase 1 のタスク分解 |
 
 > 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)
