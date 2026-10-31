@@ -62,6 +62,7 @@ type NodeAcc = {
  * 裏で走るクラスを起こす閲覧のクラス（prd/06 §5: ISR の再生成は閲覧のリクエストの中で裏で走る）。
  * waitUntil は同じ呼び出しの寿命を延ばす（"ctx.waitUntil() extends the lifetime of your Worker"）ので、
  * 裏の処理の CPU は起こした呼び出しの CPU 時間に数えると解釈する（公式に明記はない。D-10）。
+ * 合算はルートごと（ResolvedWorkload.backgroundCpuMs）。
  */
 const BACKGROUND_TRIGGER: Partial<Record<RequestClass, RequestClass>> = {
   'isr-revalidate': 'document-isr',
@@ -257,12 +258,17 @@ export function simulateResources(
     for (const [cls, v] of byClass) {
       if (!bg.has(cls)) continue;
       const trigger = BACKGROUND_TRIGGER[cls];
-      // 起こすクラスが分からなければ、前景のどれかの中で走ると見て最大に足す
-      const base =
-        trigger !== undefined
-          ? (hostAcc.get(n.id)!.maxCpuByClass[trigger] ?? 0)
-          : fgMax;
-      max = Math.max(max, base + v);
+      const triggered =
+        trigger !== undefined &&
+        hostAcc.get(n.id)!.maxCpuByClass[trigger] !== undefined;
+      // 起こす閲覧がこの関数を通るなら、ルートごとに足した値。起こすクラスが分からなければ前景の最大に足す。
+      // 起こす閲覧が通らなければ、裏の処理だけで 1 回の実行とみる
+      const combined = triggered
+        ? (workload.backgroundCpuMs[cls] ?? fgMax + v)
+        : trigger === undefined
+          ? fgMax + v
+          : v;
+      max = Math.max(max, combined);
     }
     nodes[n.id]!.maxCpuMsPerRequest = max;
   }

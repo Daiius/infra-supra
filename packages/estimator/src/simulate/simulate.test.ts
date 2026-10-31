@@ -198,6 +198,25 @@ describe('resolveWorkload', () => {
     // 前景は SSR・API の 10 ms、ISR の閲覧 1 ms + 裏の再生成 10 ms = 11 ms
     expect(simulateResources(r, arch).nodes.fn!.maxCpuMsPerRequest).toBe(10);
     expect(simulateResources(r, bg).nodes.fn!.maxCpuMsPerRequest).toBe(11);
+
+    // ISR のルートが 2 つ: 閲覧の最大（5 ms）と再生成の最大（10 ms）が別のルートなら 15 ms にしない。
+    // ルートごとに 1 + 10 = 11・5 + 5 = 10 を出して最大を取る
+    const two = workload(10_000);
+    const article = two.routes[0]!;
+    two.routes = [
+      { ...article, share: 0.25 },
+      {
+        ...article,
+        id: 'news',
+        share: 0.25,
+        cachedServeCpuMs: 5,
+        processing: { ...processing, cpuMs: 5 },
+      },
+      ...two.routes.slice(1),
+    ];
+    const r2 = resolveWorkload(two);
+    expect(r2.backgroundCpuMs['isr-revalidate']).toBe(11);
+    expect(simulateResources(r2, bg).nodes.fn!.maxCpuMsPerRequest).toBe(11);
   });
 
   it('ISR・画像キャッシュの読み書きの単位は ceilUnits で数える（2.1 / 0.3 を 8 単位にしない）', () => {
