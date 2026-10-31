@@ -66,19 +66,23 @@ function consume(
       add(u, 'requests', n);
       add(u, 'egress-gb', kbToGb(n * p.kb));
       const miss = n * (1 - hit);
-      add(u, 'origin-transfer-gb', kbToGb(miss * p.kb));
+      if (!c.originClasses || c.originClasses.includes(cls)) {
+        add(u, 'origin-transfer-gb', kbToGb(miss * p.kb));
+      }
       return { count: miss, perRequest: p };
     }
     case 'function': {
-      add(u, 'requests', n);
-      add(u, 'invocations', n);
       add(u, 'cpu-ms', n * p.cpuMs);
       add(
         u,
         'memory-gb-hours',
         ((n * p.wallMs) / 3_600_000) * (c.memoryGB / c.concurrency),
       );
-      u.events += n;
+      if (!c.backgroundClasses?.includes(cls)) {
+        add(u, 'requests', n);
+        add(u, 'invocations', n);
+        u.events += n;
+      }
       return f;
     }
     case 'kv': {

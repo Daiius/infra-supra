@@ -14,6 +14,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('cdn'),
     hitRate: z.partialRecord(z.enum(REQUEST_CLASSES), Ratio).default({}),
+    /**
+     * オリジン転送（origin-transfer-gb）に数えるクラス。省略時は miss したクラスすべて。
+     * 例: Vercel の Fast Origin Transfer は Functions・Middleware・Blob・Data Cache（ISR）で発生し、画像最適化は挙がっていない。
+     */
+    originClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({
@@ -21,6 +26,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     memoryGB: NonNeg.default(0),
     /** 1 インスタンスが同時にさばく件数（Vercel の Fluid など。導出できない仮定）。 */
     concurrency: Pos.default(1),
+    /**
+     * 同じ実行の中で裏で走るクラス（stale-while-revalidate の再生成など）。CPU・メモリは数えるが、
+     * リクエスト・実行の件数には数えない。省略時はすべて別の実行として数える。
+     */
+    backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
   }),
   /** KV（ISR のキャッシュとして使う場合: 閲覧で読み、再生成で書く）。 */
   z.object({ kind: z.literal('kv') }),

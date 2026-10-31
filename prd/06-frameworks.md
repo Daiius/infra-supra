@@ -121,4 +121,8 @@ MVP の比較対象は「フレームワーク × ホスト」の組み合わせ
 - 画像: Cloudflare Images のバインディングでリクエスト時に最適化する（README）。Images の料金は別途。
 - デプロイ先: Workers が最も深く統合されている。Node や他のプラットフォーム（Vercel など）は Nitro 経由で、対応の度合いは異なる（README）。
 
+⚠ **未確認の仮定**（P1-10 で catalog の構成に入れたもの。原文・実装で確かめる）:
+- ISR の再生成は閲覧のリクエストの中で裏で走る（stale-while-revalidate）。Worker のリクエスト数には数えない（`backgroundClasses`）。
+- 再生成のたびに KV に書く（内容が変わらなくても）。1000 万 PV では Cloudflare 側で最大の明細になる（spike 所見 16）。
+
 ⚠ キャッシュのアダプター名など、README の後半はこの調査では要約でしか読めていない。DeployTarget のデータにする前に原文で確かめる。

@@ -33,7 +33,7 @@
 
 ## スコープ
 
-- **実装済み**: pnpm monorepo の雛形、estimator の数値の基盤（P1-2）、料金スキーマと料金計算（P1-4・P1-5。無料枠のプール・丸め・段階料金・クレジット・超過時の挙動・料金未取得・利用資格）。
+- **実装済み**: pnpm monorepo の雛形、estimator の数値の基盤（P1-2）、料金スキーマと料金計算（P1-4・P1-5）、Workload・構成・資源シミュレーションの最初の形（P1-3・P1-6・P1-7）、MVP の料金データ 4 社と 3 構成（P1-10。catalog）。
 - **計画中（Phase 1）**: 計算エンジン（workload → 使用量 → 請求）と MVP の 3 構成の料金データ。[08](./08-roadmap.md)。
 - **MVP の対象構成**: ① Cloudflare Workers + D1 + R2、② Vercel + Supabase、③ VPS + Docker Compose + MySQL + Nginx（さくらの VPS 2GB に固定。D-13）。
 - **MVP の対象フレームワーク**: Vite（SPA）・Next.js・vinext。Astro は MVP 直後に足す（[06](./06-frameworks.md) §3）。

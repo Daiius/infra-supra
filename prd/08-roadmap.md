@@ -31,7 +31,7 @@ Phase 1 が終わった時点で「CLI で見積を出して内訳を読める�
 | P1-8 | 容量の判定 | Limit の判定・VPS の使用率・LimitBreach の合流 | P1-5, P1-7 |
 | P1-S | ゲームのターンのスパイク | P1-5・P1-7 の最初の形を使い、月ごとの成長・スパイク・行動（画像圧縮・プラン変更）で「前提に当たる瞬間」がイベントとして面白いかを確かめる（使い捨て・`spikes/`） | P1-5, P1-7 |
 | P1-9 | Estimate | 全体の組み立て・スナップショット・直列化・05 §5〜6 の golden テスト | P1-5, P1-7, P1-8 |
-| P1-10 | 実在の料金データ | Cloudflare（Workers・D1・R2・Pages）・Vercel（Hobby・Pro）・Supabase（Free・Pro）・さくらの VPS 2GB（D-13）・KV・Images（スパイクで一次取得済み。catalog の形式へ移して出典を付け直す）。出典 URL と取得日つき | P1-4 |
+| P1-10 | 実在の料金データ | Cloudflare（Workers・D1・R2・Pages）・Vercel（Hobby・Pro）・Supabase（Free・Pro）・さくらの VPS 2GB（D-13）・KV・Images（スパイクで一次取得済み。catalog の形式へ移して出典を付け直す）。出典 URL と取得日つき | P1-4 （済: Cloudflare・Vercel・Supabase・さくらの VPS。catalog/src/providers） |
 | P1-10b | 実在のフレームワークの対応データ | Vite・Next.js・vinext の FrameworkProfile と、MVP の 3 ホストへの DeployTarget（出典・取得日つき） | P1-6b |
 | P1-11 | 規模の掃引と CLI | PV を振った費用曲線のデータと、見積を表で出す開発用 CLI（node 専用・別パッケージ） | P1-9, P1-10 |
 

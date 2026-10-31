@@ -103,6 +103,8 @@ const arch: ArchitectureInput = {
   },
 };
 
+const structuredLike = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
 describe('resolveWorkload', () => {
   it('月間 PV は MAU から導出し、上書きがあれば優先して根拠に残す', () => {
     const w = resolveWorkload(workload(1000));
@@ -195,6 +197,46 @@ describe('simulateResources', () => {
       c['image-write'].count +
       c['image-transform'].count;
     expect(nearlyEqual(s.nodes.fn!.resources.requests!, fnReq)).toBe(true);
+  });
+
+  it('裏で走るクラスは CPU だけ数え、リクエスト・実行の件数に数えない', () => {
+    const w = resolveWorkload(workload(10_000));
+    const fg = simulateResources(w, arch);
+    const bgArch = structuredLike(arch);
+    bgArch.nodes[1]!.config = {
+      kind: 'function',
+      memoryGB: 1,
+      concurrency: 1,
+      backgroundClasses: ['isr-revalidate'],
+    };
+    const bg = simulateResources(w, bgArch);
+    const rev = w.classes['isr-revalidate'];
+    expect(
+      nearlyEqual(
+        fg.nodes.fn!.resources.requests! - bg.nodes.fn!.resources.requests!,
+        rev.count,
+      ),
+    ).toBe(true);
+    expect(bg.nodes.fn!.resources['cpu-ms']).toBe(
+      fg.nodes.fn!.resources['cpu-ms'],
+    );
+  });
+
+  it('オリジン転送は originClasses に挙げたクラスの miss だけ数える', () => {
+    const w = resolveWorkload(workload(10_000));
+    const a = structuredLike(arch);
+    a.nodes[0]!.config = {
+      kind: 'cdn',
+      hitRate: { 'image-read': 0.8 },
+      originClasses: ['api'],
+    };
+    const s = simulateResources(w, a);
+    expect(
+      nearlyEqual(
+        s.nodes.cdn!.resources['origin-transfer-gb']!,
+        (w.classes.api.count * 50 * 1000) / 1e9,
+      ),
+    ).toBe(true);
   });
 
   it('MAU = 0 なら経路を通る使用量はすべて 0（保存量だけ残る）', () => {
