@@ -295,3 +295,305 @@
 | T-3 | 止まった月は収益の減り（お金）と可用性（成長）の両方に効く。意味が違う（失った時間 / 失った評判）ので残す案だが、二重の罰と見られるかもしれない |
 | T-4 | §6 の「乗り換える」は数か月の手間としている。試作は翌月に切り替わり、収益が 15% 減るだけ（`index.ts:222-225`）。§9.4 で 2〜3 か月に延ばすと、12 か月のうちに乗り換えられる回数が実質 1〜2 回になる |
 | T-5 | （解消・U-8）§8 の表で「プラン変更と乗り換えの区別」を GD-2 に移した |
+
+## 10. GD-3 の詳細設計（案）
+
+> 状態: **案（ユーザー確認待ち）**。§3・§7（D-17）の大枠と §9（D-18・D-19）の上で、シナリオのデータ化と出来事の細部を決める。
+> ここに出てくる値（確率・時期の幅・倍率・増分・手間・収益）はすべて**ゲーム上の仮定**で、実在の値ではない。
+> 実在の料金・制限は catalog のデータにあるものだけを使い、無いものは「未取得」と書いた。
+> 金額の概算は、今の catalog と estimator で `articleCommunity` を回した値（2026-10-31・シナリオの外で計算）。実装時に自動プレイで確かめ直す。
+
+### 10.1 シナリオのデータの形
+
+今のゲームのバランスの値は `GAME`（`packages/game/src/index.ts:34-56`）・`SATISFACTION`（`rules.ts:35-62`）・`EFFORT`（`rules.ts:65-82`）に分かれ、
+テンプレートは `workloadFor`（`index.ts:213-222`）が `articleCommunity`（`packages/catalog/src/templates/index.ts:10-69`）を直接呼ぶ。これを 1 つの `Scenario` にまとめる。
+
+```ts
+type Scenario = {
+  id: string; name: string; months: number;
+  /** テンプレート（PV → Workload）と、ためていく量の初期値・増え方（§10.4）。 */
+  workload: { template: (pv: number) => WorkloadInput; stock: StockRule };
+  scale: {
+    startPV: number;
+    growth: { acquisition: number; churn: number };   // SATISFACTION.growth から
+  };
+  revenue: {
+    adsUsdPer1000PV: number;                          // 人の PV だけに付く（Bot は付かない。§10.3 SC-2）
+    loss: { block: number; throttle: number; incident: number; migration: number };
+  };
+  incidents: { selfHostedChancePerMonth: number };    // GAME.noSlaOutageChance から
+  satisfaction: Omit<typeof SATISFACTION, 'growth' | 'buzz'>;
+  effort: { perMonth: number; selfHostedUpkeep: number }; // 人数で増える（SC-3）
+  events: EventDef[];                                 // §10.2
+  goal: { cash: number; satisfaction: number; maxOutageMonths: number };
+  baselines: Strategy[];                              // §10.8。目標の根拠と成績の目盛り
+  startCash: number;
+};
+```
+
+| 今の値 | 移す先 | 備考 |
+|---|---|---|
+| `GAME.months`・`startPV`・`startCash` | `months`・`scale.startPV`・`startCash` | 規模は §10.6 で見直す |
+| `GAME.buzzMonth`・`buzzFactor`（`index.ts:37-38`）と `SATISFACTION.buzz`（`rules.ts:61`） | 出来事 SC-1（§10.3） | 決まった月から、シードで幅を持つ台本へ |
+| `GAME.adUsdPer1000PV` | `revenue.adsUsdPer1000PV` | |
+| `GAME.*RevenueLoss`（`index.ts:45-49`） | `revenue.loss` | |
+| `GAME.noSlaOutageChance` | `incidents.selfHostedChancePerMonth` | 乱数の使い方は変えない（§10.5） |
+| `GAME.baseSsrCpuMs` | 消す（テンプレートの `routes[].processing.cpuMs` から読む） | 今は catalog と二重に持っている（`index.ts:42` の注記） |
+| `GAME.usdJpy` | シナリオに入れず、共通の仮定に残す | 為替はシナリオの性格ではない |
+| `GAME.goal` | `goal` | 値は §10.8 で決め直す |
+| `SATISFACTION`（重み・段階の境目・機能の期待） | `satisfaction` | 画像投稿サービス（GD-5）は重みが違う（§9.2 の表） |
+| `SATISFACTION.growth` | `scale.growth` | |
+| `EFFORT.perMonth`・`selfHostedUpkeep` | `effort` | 人数の出来事（SC-3）で変わる |
+| `EFFORT` の残り（設定・最適化・乗り換えの手間） | 共通のルールに残す | 行動の重さはシナリオでなく部品・行動の性質 |
+| `BASELINES`（`index.ts:828-871`） | `baselines` | 台本の時期が揺れるので、固定の月の行動から「状態を見て決める」形へ（§10.8） |
+
+- `Scenario` は catalog と同じく**コードの中のデータ**（関数 `template` を含むので JSON にはしない）。保存（ローカル）はシナリオの id だけを持つ。
+- 置き場所は `packages/game/src/scenarios/article-community.ts`。テンプレートは catalog のまま（見積モードと共有する）。
+
+### 10.2 出来事のデータの形
+
+```ts
+type EventKind = 'state' | 'proposal' | 'script';   // §3 の 3 種類
+type EventTier = 'common' | 'occasional' | 'rare';  // ふだん / ときどき / まれ
+
+type EventDef = {
+  id: string; kind: EventKind; tier: EventTier;
+  trigger:
+    | { type: 'premise'; premiseId: string; atLeast: number }       // 前提の使用率が境目を越えた（状態）
+    | { type: 'stock'; field: keyof Stock; atLeast: number }        // ためていく量（状態）
+    | { type: 'window'; from: number; to: number }                  // 時期をシードで決める（台本・提案）
+    | { type: 'chance'; perGame: number; from: number; to: number } // まれ（§10.5）
+    | { type: 'calendar'; source: 'scheduledChanges' };             // 料金データの施行日（SC-4）
+  /** 予告（何か月前に出すか・文）。まれな出来事は必須。 */
+  notice?: { monthsAhead: number; text: string };
+  /** 当たりうる前提の id。通知に catalog の前提の文をそのまま使う（D-12）。 */
+  premiseRefs: string[];
+  title: string; text: string;
+  /** 提案は選択肢を持つ（受ける / 断る）。台本・状態は選択肢なしでもよい。 */
+  choices?: { id: string; label: string; effects: Effect[] }[];
+  effects: Effect[];
+  /** 効いている月数（'permanent' は以降ずっと）。 */
+  duration: number | 'permanent';
+};
+
+type Effect =
+  | { type: 'traffic'; pvFactor: number; earnsRevenue: boolean }    // 話題（収益あり）・Bot（収益なし）
+  | { type: 'workload'; patch: WorkloadPatch }                      // perPage.images・routes の share・api.writesPerCall など
+  | { type: 'stock'; add: Partial<Stock>; rate?: Partial<StockRule> } // ためていく量の一括の増加・増え方の変化
+  | { type: 'seats'; accountId: string; add: number }               // 構成の accounts[].seats
+  | { type: 'effort'; perMonthAdd?: number; interrupt?: { points: number; months: number } }
+  | { type: 'feature'; points: number }                             // 機能開発の累計に足す（提案を受けた見返り）
+  | { type: 'growth'; add: number; months: number }
+  | { type: 'revenue'; usdPerMonth: number; requires?: Requirement }
+  | { type: 'requirement'; requirement: Requirement };              // 新しい要件（SLA・リアルタイムなど）
+```
+
+効果を写す先:
+
+| 効果 | エンジンの入力 | 判定・費用への効き方 |
+|---|---|---|
+| `traffic` | `WorkloadInput.traffic.monthlyPageViewsOverride`（`templates/index.ts:28`） | 収益は人の PV だけで計算する（今は `index.ts:383` が PV 全体に掛けている） |
+| `workload` | `WorkloadInput` の各値（`workloadFor` の後で上書き） | 料金の明細と前提がそのまま変わる |
+| `stock` | `db.sizeGB`・`images.storedGB`・`images.distinct`・`routes[].pages` | 制限 `storage-gb`（`premises.ts:162-186`）・ホストのディスク（`premises.ts:234-243`）・保存量のプール |
+| `seats` | `ArchitectureInput.accounts[].seats`（`packages/estimator/src/architecture/schema.ts:101`） | 席課金の基本料（`perSeat`・`packages/estimator/src/pricing/price.ts:443`） |
+| `effort` | `allocateEffort` の `interrupt`（`rules.ts:205`。GD-2 で口だけ作った）と月の総量 | 機能開発の余りが減る |
+| `requirement` | ゲーム側で前提の形（`PlatformPremise`）を作り、`judgeStages` と停止の判定に足す | 文は catalog の事実から取る（作らない）。事実が無いものはデータ待ち（§10.3 の待ち） |
+| `growth`・`revenue`・`feature` | ゲームの状態だけ | エンジンは通らない |
+
+画面での見せ方:
+
+| 場面 | 出すもの |
+|---|---|
+| 予告の月 | 「来月〜の予定」と、当たりうる前提の文（`premiseRefs`） |
+| 起きた月 | `title`・`text`、効果の要約（PV × 倍率・手間 −N・席 +1 など）、当たった前提 |
+| 提案 | 受ける / 断るの選択と、それぞれの見込み（手間・新しい要件・当たりうる前提）。選んだ結果は月の終わりの行動と同じく翌月から効く |
+
+### 10.3 記事コミュニティの出来事の一覧（案）
+
+記号: S = 状態で起きる・P = 提案として来る・SC = シナリオの台本・W = データ待ち（§9.9 と §10.10 の緊張 T- とは別）。
+
+| # | 種類 | 段階 | 出来事 | 起き方 | 効果 | 当たりうる前提（catalog） | 主な対応 |
+|---|---|---|---|---|---|---|---|
+| S-1 | 状態 | ふだん | 込み分の 70% を超えた | 量の前提の使用率 ≥ 0.7（「もう少し」と同じ境目） | 通知だけ | Workers Paid 1,000 万リクエスト（`cloudflare.ts:77`）・KV の書き込み 100 万回（`cloudflare.ts:127`）・Vercel Pro CDN Requests 1,000 万（`vercel.ts:136`）・Fast Data Transfer 1 TB（`vercel.ts:146`）・Supabase Pro egress 250 GB（`supabase.ts:41`） | 設定（ISR・圧縮）・プラン変更 |
+| S-2 | 状態 | ときどき | DB が大きくなった | `stock.dbGB` が境目の 70% | 通知 | D1 Free 500 MB（`cloudflare.ts:255`・止まる）・Supabase Free 500 MB（`supabase.ts:83`・止まる）・D1 Paid 5 GB 込み（`cloudflare.ts:106`・費用。前提の文なし）・Supabase Pro ディスク 8 GB 込み（`supabase.ts:46`・費用。前提の文なし） | プラン変更 |
+| S-3 | 状態 | ときどき | 画像の保存量が増えた | `stock.imagesGB` が境目の 70% | 通知 | VPS のディスク 100 GB に DB と画像を置く（`premises.ts:234-243`・止まる）・R2 10 GB 込み（`cloudflare.ts:132`・費用。前提の文なし）・Vercel の原本の置き場所は**未取得**（`stacks/index.ts:155-160`） | 画像の置き場所を分ける（部品・GD-4）・乗り換え |
+| S-4 | 状態 | ときどき | 同時接続が増えた | ピーク（話題・Bot の月）で前提の使用率 ≥ 0.7。§10.6 の規模では起きにくい（概算では 450 万 PV でも 70% 未満） | 通知 | Supabase Micro の pooler 200 接続（`supabase.ts:143`・止まる）・VPS の CPU と共有回線（`premises.ts:203-223`・遅くなる） | SSR の最適化・乗り換え |
+| S-5 | 状態 | **まれ** | D1 が 10 GB に近づく | `limit:…:d1-db-size` の使用率 ≥ 0.7 で予告、> 1 で止まる | 予告 → 停止 | D1 はデータベースあたり 10 GB まで（引き上げ不可）（`cloudflare.ts:333`） | 乗り換え（Supabase・VPS）。外部の Postgres（Hyperdrive）は**未取得**（§4・GD-4） |
+| P-1 | 提案 | ふだん | コメントへの返信の通知 | 時期をシードで | 受ける: `api.writesPerCall` 0.1 → 0.2・機能 +4・手間 2 | D1 Free 1 日 10 万行の書き込み（`cloudflare.ts:210`・止まる）・D1 Paid の書き込み 5,000 万行込み（`cloudflare.ts:98`・費用。前提の文なし） | 受ける / 断る |
+| P-2 | 提案 | ときどき | 記事に画像を多く載せる機能 | 時期をシードで | 受ける: `perPage.images` 5 → 10・`uploadsPerMau` 0.01 → 0.05・機能 +8・成長 +3 ポイント × 3 か月・手間 3 × 2 か月 | Images 月 5,000 の一意な変換（`cloudflare.ts:162`）・Vercel の FDT と画像変換（`vercel.ts:146`）・VPS のディスクと共有回線（`premises.ts:207`・`sakura-vps.ts:31`） | 受ける / 断る。受けたら圧縮・サイズ違い |
+| P-3 | 提案 | ときどき | 会員向けの個人化（マイページ・おすすめ） | 時期をシードで | 受ける: SSR の share 0.4 → 0.6・機能 +6・手間 4 | Workers Free CPU 10 ms（`cloudflare.ts:244`）・Workers Paid の CPU 3,000 万 ms 込み（`cloudflare.ts:82`・費用。前提の文なし）・Vercel の Active CPU（`vercel.ts:321`・事実）・VPS の CPU | SSR の最適化 |
+| P-4 | 提案 | **まれ** | 閉鎖する別のコミュニティから記事とコメントを引き取る | `chance`（§10.5） | 受ける: `stock.dbGB` +9・DB の増え方 × 4・記事ページ 2,000 → 6,000・PV × 1.5（以降ずっと）・手間 4。D1 は受けた月に 9 割を超え、2〜3 か月で 10 GB に届く（乗り換えの期間とほぼ同じ） | D1 10 GB（`cloudflare.ts:333`。S-5 に続く）・Supabase Pro のディスク（費用）・VPS のディスク 100 GB | 受ける（乗り換えを覚悟）/ 断る |
+| SC-1 | 台本 | ふだん | SNS で話題になる | 6〜9 か月目。前の月に前兆（PV +20%・「記事が伸び始めた」） | PV × 3（その月だけ・収益あり）。残る倍率は満足度で決める（§9.3 の式。§10.6） | S-1 の込み分すべて・VPS の共有回線・Supabase の pooler | 前兆の月に圧縮・最適化 |
+| SC-2 | 台本 | ふだん | Bot・クローラーの大量アクセス | 3〜11 か月目に 1 回（1 か月） | PV × 2（**収益なし**） | Workers Free 1 日 10 万リクエスト（`cloudflare.ts:180`）・Vercel Pro CDN Requests（`vercel.ts:136`）・VPS の CPU・回線 | 行動「Bot を遮断するルールを入れる」（手間 2・倍率を半分に。ゲーム上の仮定）。Bot 対策の製品（WAF など）の料金は**未取得** |
+| SC-3 | 台本 | ときどき | チームが増える（2 人目） | 4〜8 か月目 | 手間 +10 / 月（以降ずっと）・`seats` +1 | Vercel Pro の基本料は席ごと $20（`vercel.ts:258`・`perSeat`）・Hobby は個人・非商用のみ（`vercel.ts:161`）。Cloudflare・Supabase・さくらの席の扱いは**未取得** | なし（費用として受け止める） |
+| SC-4 | 台本 | ふだん | 料金・制限の施行日つきの予告 | catalog の `scheduledChanges` の施行日を、シナリオの開始日から月に写す | 通知だけ | D1 のクエリ結果の上限 50 MB（2026-11-04）・Workers Logs の料金体系の移行（2026-12-01）（`cloudflare.ts:416-427`） | なし（「料金と制限は変わる」を見せる） |
+| SC-5 | 台本 | **まれ** | 法人顧客が SLA を求める | `chance` | 受ける: 契約の収益 + 要件「SLA」 | さくらの VPS 2GB は SLA 非対応（4GB 以上が対応）（`sakura-vps.ts:39`・notes の文）。Cloudflare・Vercel・Supabase の SLA の条件と、さくら 4GB の料金は**未取得** | **データ待ち（下の表）** |
+
+- S-1〜S-4 は、今の「もう少し」（`index.ts:484`）を出来事の通知として出し直すもので、新しい判定は足さない。
+- 前提の文が無いプール（D1 Paid の 5 GB・R2 の 10 GB・Supabase Pro の 8 GB）は、プールの量と単価が catalog にある（出典つき）ので、
+  **プールに `premise` の文を足す**（catalog のデータの追加。値は作らない）。足せば `premises.ts:114-129` が `accumulates: true` で推移に乗せる。
+- SC-5 の SLA を VPS にだけ効かせると、データが無いことが VPS だけの罰になる。他の事業者の条件を取るまで入れない案（→ §10.9 の V-3）。
+
+データ待ち（GD-4 のデータ収集と一緒に入れる）:
+
+| # | 出来事 | 種類・段階 | 要るデータ（未取得） |
+|---|---|---|---|
+| W-1 | チャット（WebSocket）を足す提案 | 提案・ときどき〜まれ | Durable Objects の料金と制限（§4）・Vercel・VPS でのリアルタイムの扱い |
+| W-2 | 法人顧客の SLA（SC-5） | 台本・まれ | 各事業者の SLA の条件・さくらの 4GB プラン |
+| W-3 | ISR のキャッシュを KV に置いたときの書き込みの集中 | 状態・ときどき | KV の同じキーへの書き込みの頻度の制限（§4。catalog には未収録） |
+| W-4 | 大きな料金改定 | 台本・まれ | 実在の値上げの告知（今の `scheduledChanges` に金額の改定は無い）。→ §10.9 の V-2 |
+| W-5 | 動画のアップロードの提案 | 提案・まれ | 動画の配信・保存の料金 |
+
+### 10.4 ためていく量
+
+今は `db.sizeGB` 0.3・`images.storedGB` 20・`images.distinct` 5,000 が固定（`templates/index.ts:59-67`）。ゲームの状態に**在庫**を持たせ、毎月の PV から増やす。
+
+```ts
+type Stock = { dbGB: number; imagesGB: number; images: number; articlePages: number };
+type StockRule = {
+  initial: Stock;                 // テンプレートの値から作る
+  dbGBPerMillionPV: number;       // コメント・ログ（ゲーム上の仮定）
+  gbPerImage: number;             // 原本 + サイズ違い。テンプレートの storedGB / distinct = 4 MB から導く
+  // 画像の投稿数 = MAU × uploadsPerMau（テンプレートの値。MAU = 人の PV / 10）
+};
+```
+
+| 項目 | 案 | 根拠 |
+|---|---|---|
+| 画像 | 毎月 `images += MAU × uploadsPerMau`・`imagesGB += 投稿数 × 0.004 × (imageKB / 150)`（圧縮で保存量も減る。ゲーム上の仮定） | 投稿数の式はテンプレート（`templates/index.ts:21-22`・`:65`）と同じ。1 枚 4 MB は 20 GB / 5,000 枚 |
+| DB | 毎月 `dbGB += 0.05 × PV / 100 万`（ゲーム上の仮定） | 12 か月では D1 の 10 GB に届かない程度。届くのは P-4 を受けたときだけ（まれ） |
+| 記事ページ | P-4 だけで増やす | ISR の再生成の量（spike concept 所見 17）が変わる |
+| Workload への写し方 | `db.sizeGB = dbGB`・`images.storedGB = imagesGB`・`images.distinct = images`・`routes[article].pages = articlePages` | `simulate.ts:159-166`・`:233` がそのまま保存量と VPS のディスクにする |
+| 推移と見込み | 制限 `storage-gb`・ホストのディスク・`gb-month` のプールは既に `accumulates: true`（`premises.ts:127`・`:186`・`:242`）。月ごとの増分で外挿する（`trends.ts:44-49`） | 新しい仕組みは要らない |
+
+- 概算（今の catalog）: 100 万 PV で投稿は月 1,000 枚・4 GB。VPS のディスクは 30 GB から始まり、P-2 を受けない限り 12 か月で 100 GB に届かない。P-2 を受けると投稿が 5 倍になり、受けてから 4〜6 か月で届く。圧縮とサイズ違いで 1 枚あたりの保存量が減る（下の表）ので、VPS では「画質と保存量」の判断になる。
+- 画像の種類（`distinct`）が増えると、Cloudflare Images の一意な変換（種類 × サイズ違い）が増える。今も 1 か月目から込み分の 3 倍（15,000 / 5,000）で、Paid では費用だけ。
+
+### 10.5 確率と再現性
+
+| 項目 | 案 |
+|---|---|
+| 乱数の列 | **2 本に分ける**。偶発的な障害は今の `GameState.seed`（`index.ts:373`。毎月 1 回、構成によらず必ず消費）をそのまま使う。台本の列は `startSeed` から別の初期値を作り（`startSeed ^ 定数` を mulberry32 に通す）、`newGame` で**台本の表（`schedule`）を一度に作る** |
+| 台本の表 | 出来事の定義の順に、1 件あたり決まった数の乱数を引く（起きない場合も引く）。出来事を後ろに足しても、前の出来事の時期が変わらない |
+| プレイヤーの選択との関係 | 台本はプレイヤーの構成・行動に依存しない。同じシードなら、基準プレイ（`comparisonRows`・`index.ts:891-908`）も同じ出来事に出会う |
+| 時期の幅 | `window` の範囲で一様（SC-1: 6〜9 か月目・SC-2: 3〜11・SC-3: 4〜8・提案: 2〜10） |
+| まれな出来事 | 1 ゲームに**高々 1 回**。起きる確率は 1 ゲームで **25%**（候補 P-4・（データが揃えば）SC-5 から重みで 1 つ）。5〜9 か月目。**予告を 1 か月前に出す** |
+| S-5（D1 10 GB） | 確率でなく状態で起きる。予告は使用率 0.7 の月（量が月ごとの増分で伸びるので、§5 の見込みと同じ月に出る） |
+
+「運で詰まない」ための保証（テストで確かめる）:
+
+1. 1〜2 か月目は台本・提案を出さない（状態の出来事だけ）。
+2. まれな出来事は高々 1 回・予告あり。P-4 は提案なので断れる（断れば何も変わらない）。
+3. 止まる効果を持つ要件（SC-5 の SLA など）は、予告の月から「乗り換えの手間（2〜3 か月）」より長い猶予を持つ。乗り換えを始めれば猶予を満たしたとみなす（D-19 の規約違反と同じ扱い）。
+4. 偶発的な障害（VPS）は今のまま 8% / 月・止まった月に数える。台本の出来事は直接「止まった月」を増やさない（増えるのは、前提に当たったまま放置したときだけ）。
+5. どのシード（1〜50）でも、基準プレイの少なくとも 1 本が合格する。
+
+golden の更新方針: 列を分けるので、**台本を空にした `Scenario` では今の golden（`game.test.ts:54-75`）がそのまま通る**。SC-1 を固定の 7 か月目から幅に変えた時点で値が変わるので、そこで更新する（§10.8）。
+
+### 10.6 規模と成長の見直し
+
+今は 15 万 PV から月 40% で 12 か月（53 倍・800 万 PV）、話題の月は 10 倍（§7）。spike game 所見 1 は「利幅を薄くし、規模を伸ばして、ようやく構成の差が効いた」。
+規模を小さくすると、構成の差は**料金の絶対額では効きにくくなる**ので、効かせる場所を変える。
+
+| 項目 | 今 | 案（ゲーム上の仮定） | 考え方 |
+|---|---|---|---|
+| スタートの PV | 15 万 | **30 万**（MAU 3 万） | 小さな技術記事のコミュニティ |
+| 成長（S = 0.9） | 40% / 月 | **12% / 月**（獲得 0.15・解約 0.15） | 12 か月で約 3.5 倍・約 100 万 PV |
+| 満足度 1 段の差（S 0.9 と 0.8） | 40% と 30%（12 か月で約 2 倍の差） | 12% と 9%（約 1.35 倍の差） | VPS の「機能 普通」が複利で開きすぎない |
+| 話題の月 | × 10・残る倍率 1.8 | **× 3**・残る倍率 1.3（`buzz.extra` 0.3） | 前兆を出す（SC-1） |
+| 収益の単価 | $0.25 / 1,000 PV | 据え置き | 利幅の薄さは残す（所見 1） |
+| 12 か月の収益（概算） | — | 約 $2,200 | 延べ約 900 万 PV × $0.25 |
+
+構成の差が効く場所（概算は今の catalog・`articleCommunity`）:
+
+| 構成 | 30 万 PV | 140 万 PV | 450 万 PV（話題の月） | 12 か月の費用（概算） |
+|---|---|---|---|---|
+| Cloudflare Paid | $10.15 | $10.15 | $18.05 | 約 $130 |
+| Vercel Pro + Supabase Pro | $45.00 | $45.00（CDN Requests 105%） | $341 | 約 $850 |
+| さくらの VPS 2GB | $13.05 | $13.05 | $13.05 | 約 $160 + 手間 3 / 月 |
+
+- 収益 $2,200 に対して Vercel Pro の費用は 4 割近くになり、所見 1 の「構成の差が勝敗に効く」は利幅の薄さで残る。話題の月の転送量（FDT）と Bot（SC-2・140 万 PV を × 2 にすると $45 → $159）が、Vercel の判断の時期になる。
+- **VPS の勝ち筋**（今は届く戦略が無い。§9.7 の所見）:
+  1. 成長の感度を下げる（上の表）。満足度の 1 段の差で規模が半分にならない。
+  2. チームが増える（SC-3）と、維持の 3 ポイントの比率が 30% → 15% に下がる。席課金は Vercel にだけ乗る。
+  3. 画像を多く載せる提案（P-2）は、Cloudflare（Images の変換）と Vercel（FDT・画像変換。140 万 PV で $45 → $100）で費用が増え、VPS は固定費のまま（概算は画像 10 枚 / ページ・種類 15,000）。代わりにディスク 100 GB と共有回線に近づく。
+  4. 維持の手間 3 と機能の期待 8 / 月は変えない（変えると「安いが自分の時間が減る」が消える）。
+- VPS の弱点も出来事で出す: SLA 非対応（SC-5・データ待ち）・ディスク 100 GB（S-3）・上位プランが未取得なのでプラン変更で逃げられない。
+- 目標は「Cloudflare Paid・何もしない」が届き、「VPS で P-2 を受けて圧縮で回す」「Vercel で話題の前兆に圧縮」が工夫して届く間に置く（§10.8）。
+
+### 10.7 見込みが外れた理由の振り返り
+
+GD-1 の印 `earlierThanProjected`（`trends.ts:145-149`）は「前の月の見込みより早く超えた」だけを持つ。理由を、**その月の出来事を外して見積を引き直す**（反実仮想）ことで決める。
+
+| 手順 | 内容 |
+|---|---|
+| 1 | 印が付いた前提 P と月 m について、m に効いていた出来事（予告・前兆は除く）を集める |
+| 2 | 出来事ごとに、その効果を除いた Workload・構成で m の `estimate` を引き直し、P の使用率を求める（純粋関数・1 回の見積は軽い） |
+| 3 | 除くと見込みの線（`projection`）以下に戻る出来事を理由にする。複数なら差の大きい順 |
+| 4 | 出来事で説明できなければ、プレイヤーの行動（設定の変更・提案を受けた・乗り換え）で同じことをする。それでも無ければ「伸びが直近より速かった」 |
+
+- 文の形: 「Bot のアクセス（PV × 2）で、Vercel Pro は CDN Requests 月 1,000 万まで込み（…）を、見込みより 2 か月早く超えた」。前提の文は catalog のもの（D-12）。
+- 月の報告に `surprises: { premiseId; month; cause: { kind: 'event' | 'action' | 'growth'; id?: string; ratioWithout?: number } }[]` を足し、振り返りの ④（§9.6）に並べる。
+- 見込みを出さない月（`skipProjection`・`trends.ts:96`）を、話題の月だけから「一時的な `traffic` の効果がある月」（SC-1・SC-2）に広げる。どちらもプレイヤーに見えている出来事なので、ゲームの内部を覗くことにはならない（§5）。
+- 反実仮想は表示のためだけで、ゲームの状態に入れない（`trends.ts:3` と同じ扱い）。
+
+### 10.8 基準プレイと目標・テスト
+
+| 項目 | 案 |
+|---|---|
+| 戦略の形 | 今の `Strategy.actions`（月ごとの固定の列・`index.ts:818-825`）に、**状態を見て行動を返す関数** `decide(state) => Action[]` を足す。台本の時期がシードで揺れるので、「話題の前兆が出たら圧縮」「提案は全部受ける / 全部断る」と書けるようにする |
+| 基準プレイ | ① Cloudflare Paid・何もしない（提案は断る）② Cloudflare Paid・提案を全部受ける（D1 に近づいたら Supabase へ乗り換え）③ VPS・P-2 を受けて圧縮で回す ④ Vercel Pro・何もしない ⑤ Vercel Pro・前兆で圧縮・Bot を遮断 ⑥ Cloudflare Free・何もしない |
+| 所持金の目標 | シード 1〜50 で基準プレイを回し、「① の 10 パーセンタイル」と「④ の中央値」の間に置く。③ と ⑤ がほぼ全シードで届くことを確かめる |
+| 満足度・停止の目標 | 0.75・2 回以内のまま（§9.6）。成長の式を変えても段階と重みは変えないので、根拠（S 0.9 で止まった月 4 か月まで）はそのまま |
+| まれな出来事 | 目標は「まれな出来事が無いシード」で決め、起きたシードでは ② の対応（乗り換え）で届くことを確かめる |
+
+テストの移行（§9.7 と同じ 2 段階）:
+
+1. **データ化**: `Scenario` 型と記事コミュニティのデータを足し、`GAME`・`SATISFACTION`・`EFFORT` の値をそのまま移す。台本の列と出来事の仕組みを足すが、台本は SC-1（7 か月目に固定・× 10）だけ。**今の golden（`game.test.ts:54-75`）が 1 セントも変わらない**ことを確かめる。出来事の仕組みは単体テスト（純粋関数）で確かめる。
+2. **接続**: 出来事の一覧・在庫・規模の見直しを入れるコミットで golden を更新する。PR 本文に旧 → 新の表（基準プレイ）と差の理由を 1 行ずつ載せる。
+
+足す性質のテスト（値に依存しない）:
+
+| テスト | 内容 |
+|---|---|
+| 決定論 | 同じシード・同じ行動なら同じ結果（今の `game.test.ts:44-48` を残す） |
+| 台本は選択に依存しない | 同じシードで構成・行動を変えても `schedule` が同じ |
+| 列の分離 | 台本を空にすると、偶発的な障害の月が今と同じ |
+| まれな出来事 | 1 ゲームに高々 1 回・予告が 1 か月前・5〜9 か月目。シード 1〜1,000 での発生の割合が 25% ± 数ポイント |
+| 序盤 | 1〜2 か月目に台本・提案が無い |
+| 提案 | 断ると Workload・構成・手間が変わらない |
+| 在庫 | 単調に増える・`accumulates` の前提に乗る |
+| 詰まない | シード 1〜50 のどれでも、基準プレイの少なくとも 1 本が合格 |
+| 振り返り | 出来事を外すと使用率が見込みの線以下に戻るときだけ、その出来事を理由に挙げる |
+
+- 画面（`packages/web/src/App.tsx:80-124` のブリーフィング・`:613`・`:960` の `GAME.months`）は `Scenario` から読むように同じ PR で直す。`axesOf` の `featureShare`（`index.ts:722`）は月の総量が変わる（SC-3）ので、累積の総量で割る。
+
+### 10.9 未決（ユーザーに確認したい点）
+
+| # | 論点 | 推奨案 |
+|---|---|---|
+| V-1 | まれな出来事の確率と回数 | 1 ゲームに高々 1 回・発生 25%・予告 1 か月前 |
+| V-2 | 大きな料金改定（§3 のまれの例）の扱い。catalog に実在の値上げの告知は無い | 実データの `scheduledChanges` だけを予告として出し（SC-4）、値上げは入れない。入れるなら「架空の改定」と画面に明示し、`fictional-` の料金データ（prd/03 §10）で持つ |
+| V-3 | SLA の出来事（SC-5）を、他の事業者の SLA の条件を取るまで待つか | 待つ（GD-4 のデータ収集で取る）。VPS 2GB にだけ効かせると、データの欠けが VPS だけの罰になる |
+| V-4 | 規模の数値（30 万 PV・12% / 月・話題 × 3・単価据え置き） | 案のとおり。自動プレイで所見 1（構成の差が効く）が残ることを確かめてから確定 |
+| V-5 | チームが増えたときの人件費を所持金に入れるか | 入れない（入れると構成の差が誤差になる）。手間の増加と席課金だけで表す |
+| V-6 | Cloudflare・Supabase・さくらのメンバーの料金（未取得）の扱い | 取るまでは課金しない扱いにし、出来事の文で「未取得」と出す |
+| V-7 | 話題に前兆を出すか | 出す（1 か月前に PV +20%）。出さないと「話題の前に圧縮」が運になる |
+| V-8 | 所持金の目標を固定値にするか、同じシードの基準プレイとの比にするか | 固定値（§7 の合否のまま）。シード 1〜50 で公平さを確かめる |
+| V-9 | Bot を遮断する行動を入れるか（製品の料金は未取得） | 入れる（手間だけの行動・ゲーム上の仮定）。製品（WAF など）は GD-4 以降 |
+| V-10 | プールに前提の文を足す catalog の変更を GD-3 に含めるか | 含める（D1 Paid 5 GB・R2 10 GB・Supabase Pro 8 GB。値と出典は既にある） |
+| V-11 | 提案を断ったときの「機会を逃す」の効き方 | 見返り（機能・成長）が得られないだけにする。罰は足さない |
+| V-12 | 1〜2 か月目に台本・提案を出さない | 出さない（序盤は構成の選択の結果を見る期間） |
+
+### 10.10 既存の設計との緊張
+
+| # | 内容 |
+|---|---|
+| T-6 | §3 の「まれ」の例のうち、大きな料金改定は実データが無く、SLA の要求は条件の多くが未取得。GD-3 で入れられる「まれ」は P-4 → S-5（D1 10 GB）の連鎖だけになる（V-2・V-3） |
+| T-7 | §3 の状態の例「DB が 8 GB を超えた」（Supabase Pro の込み分）は、今は前提の文が無く、前提として出ない（`premises.ts:114-115` で飛ばされる）。V-10 で解消する |
+| T-8 | SLA の有無は、さくらの VPS では notes の文（`sakura-vps.ts:39`）にしかない。D-14 は notes を「計算に使わない備考」としている。SLA を判定に使うなら、プランの構造化した事実（例: `facts: { sla: boolean }`）を料金データのスキーマに足す必要がある（prd/03 の変更） |
+| T-9 | §5・G-05「見込みはゲームの内部（台本）を覗かない」と、まれな出来事の予告・話題の前兆。予告はプレイヤーに見える出来事として出すので覗くことにはならないが、見込みの線には予告を混ぜない（見込みは推移だけ、予告は通知だけ）と分けておく |
+| T-10 | §9.6 の目標 $6,200 と基準プレイの golden（§9.7 の表）は、規模の見直しで全部変わる。U-7 で GD-3 に送った宿題どおりだが、GD-2 の数値の根拠（Vercel の「話題の前に圧縮」が届く）は時期が揺れるので、「前兆で圧縮」に書き換わる |
+| T-11 | §9.4 の手間は月 10（1 人）固定の前提で書かれている（`effortAvailable`・`axesOf` の `featureShare`）。SC-3 で月の総量が変わるので、機能の期待 E = 8 × 月数（§9.4）を人数で増やすかが残る（案: 増やさない。人が増えた分は機能の「良い」に回りやすくなる） |
+| T-12 | 収益を PV 全体に掛けている（`index.ts:383`）。Bot（SC-2）を入れると、人の PV と Bot を含む PV を分けて持つ必要がある |
+| T-13 | 規模を小さくすると、同時接続・VPS の CPU と回線の前提（S-4）にはほぼ届かなくなる。§1 の F-3（移行を迫る理由は流量以外から来る）には沿うが、「流量で VPS の回線が詰まる」（spike concept の結果の表）は 12 か月の中では見えなくなる |
