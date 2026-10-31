@@ -4,9 +4,29 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+/**
+ * root（packages/web）の外にあるワークスペースのパッケージの src を、開発サーバーの監視に足す。
+ * 理由: 監視していないと、estimator・catalog・game の変更（ブランチの切り替えを含む）が反映されず、
+ * 古いモジュールが配信され続けた（App.tsx だけ新しく「does not provide an export named …」で画面が白くなった）。
+ * `server.watcher` は chokidar の FSWatcher で、`add` に足したパスを監視する（vite 8 の型定義 ViteDevServer.watcher・FSWatcher.add）。
+ * src だけを足すので node_modules は監視しない。
+ */
+function watchWorkspacePackages(): Plugin {
+  return {
+    name: 'watch-workspace-packages',
+    configureServer(server) {
+      server.watcher.add(
+        ['estimator', 'catalog', 'game'].map((p) =>
+          fileURLToPath(new URL(`../${p}/src`, import.meta.url)),
+        ),
+      );
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
@@ -16,7 +36,7 @@ export default defineConfig(({ mode }) => {
   const publicHost = env.DEV_ALLOWED_HOST;
   return {
     envDir: repoRoot,
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), watchWorkspacePackages()],
     server: {
       host: bindHost,
       port: Number(bindPort),

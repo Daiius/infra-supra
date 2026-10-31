@@ -70,6 +70,7 @@ pnpm play         # ゲームのスパイクをターミナルで遊ぶ
 - `WEB_BIND`: web(Vite) の待ち受け。`127.0.0.1` の 1 ポートだけにし、cloudflared をここへ向ける。
 - `DEV_ALLOWED_HOST`: 公開ホスト名。Vite の `allowedHosts` と、HMR の `wss://<host>:443` に使う（ローカルから開くと HMR だけ失敗するのは想定どおり）。
 - トンネル側（公開ホスト名 → `http://localhost:<WEB_BIND のポート>`、Access の制限）は Cloudflare のダッシュボードで設定する。実ドメインは公開文書に書かない。
+- パッケージをまたぐ変更（estimator・catalog・game）が画面に反映されないときは、`packages/web/vite.config.ts` の `watchWorkspacePackages` を確かめるか、開発サーバーを再起動する。
 - API・DB がないので compose は使わない（必要になったら seseraki と同じく compose を env で切り替える形にする）。
 
 ## Git / PR 運用
