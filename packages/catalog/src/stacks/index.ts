@@ -421,6 +421,8 @@ function composeCloudflare(
     config: {
       kind: 'sql-db',
       ...(storesImages ? { storesImages: true } : {}),
+      // DB が別の部品のときは、画像だけを置く D1（アプリの DB の保存量を載せない。OCL-65B45666）
+      ...(storesImages && choices.db !== 'd1' ? { storesDb: false } : {}),
     },
     ...(storesImages ? { facts: ['d1-row-size'] } : {}),
     billing: bill(workers, {
@@ -576,7 +578,12 @@ function composeCloudflare(
     api: ['worker', ...db],
     'image-read': imagesInD1 ? ['worker', 'd1'] : ['r2-cache', 'r2'],
     'image-write': imagesInD1 ? ['worker', 'd1'] : ['worker', 'r2'],
-    ...(choices.images !== 'none' ? { 'image-transform': ['images'] } : {}),
+    // 投稿のときに作るサイズ違いは R2 に書き込む（変換 1 件 = 書き込み 1 件。OCL-F3098083）
+    ...(choices.images === 'r2-variants'
+      ? { 'image-transform': ['images', 'r2'] }
+      : choices.images !== 'none'
+        ? { 'image-transform': ['images'] }
+        : {}),
     ...(choices.realtime === 'durable-objects'
       ? { 'realtime-connect': ['worker', 'do'], 'realtime-message': ['do'] }
       : {}),

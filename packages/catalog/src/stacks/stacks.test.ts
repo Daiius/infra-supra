@@ -131,6 +131,29 @@ describe('部品の組み合わせ', () => {
     expect(t('r2-variants')).toBeLessThan(t('images'));
   });
 
+  it('投稿のときに作ったサイズ違いは R2 に書き込む（変換 1 件 = 書き込み 1 件）', () => {
+    const sim = (images: string) =>
+      premisesOf('cloudflare-vinext-paid', { images }).simulation;
+    const pre = sim('r2-variants');
+    const base = sim('images');
+    const writes = (s: typeof pre) => s.nodes.r2!.resources['object-writes']!;
+    expect(writes(pre) - writes(base)).toBeCloseTo(
+      pre.nodes.images!.resources['image-transformations']!,
+      6,
+    );
+  });
+
+  it('画像だけを D1 に置き、DB は別の部品のとき、D1 の保存量は画像の分だけ', () => {
+    const r = premisesOf('cloudflare-vinext-paid', {
+      images: 'd1',
+      db: 'hyperdrive',
+    });
+    expect(r.simulation.nodes.d1!.resources['storage-gb-month']).toBeCloseTo(
+      r.simulation.workload.storage.imagesGB,
+      9,
+    );
+  });
+
   it('差し替えの途中は、新しい DB のノードが経路に載らずに足される', () => {
     const a = ArchitectureSchema.parse(
       composeStack(

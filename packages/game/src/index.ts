@@ -326,7 +326,8 @@ export type GameState = {
   botBlocked: boolean;
   /** さくらの VPS のストレージ変更オプション（付けたら戻せない）と、手数料をまだ払っていないか（D-30）。 */
   storageOption: boolean;
-  storageOptionFeeDue: boolean;
+  /** 申し込んだときのプランの手数料（まだ払っていない。払ったら null。OCL-91E46AC4）。 */
+  storageOptionFeeDue: { name: string; amount: number } | null;
   /** 返事を待っている提案。 */
   pendingProposals: string[];
   responses: Record<string, 'accepted' | 'declined'>;
@@ -1202,7 +1203,7 @@ export function newGame(
     stackIndex,
     components: { ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider] },
     storageOption: false,
-    storageOptionFeeDue: false,
+    storageOptionFeeDue: null,
     componentSwap: null,
     contracts: [],
     requirements: [],
@@ -1551,10 +1552,9 @@ export function playMonth(input: GameState): GameState {
     : null;
   const parallelInfraCost = target ? toUsd(target.bill.totals) : 0;
   // ストレージ変更オプションの手数料（付けた次の月に一度だけ。D-30）
-  const fee = state.storageOptionFeeDue
-    ? storageOptionAddon(stackIndexNow)
-    : undefined;
-  const feeUsd = fee ? fee.oneTimeFee / USD_JPY : 0;
+  // 申し込んだときのプランの金額を一度だけ払う（同じ月に上位へ変更しても変わらない）
+  const fee = state.storageOptionFeeDue;
+  const feeUsd = fee ? fee.amount / USD_JPY : 0;
   const infraCost = toUsd(r.bill.totals) + parallelInfraCost + feeUsd;
 
   // 出来事の通知（起きた・予告・提案）
@@ -1910,7 +1910,7 @@ export function playMonth(input: GameState): GameState {
         ? [
             {
               label: `sakura-vps ${fee.name}（手数料・一度だけ）`,
-              amount: fee.oneTimeFee,
+              amount: fee.amount,
               currency: 'JPY',
             },
           ]
@@ -1986,7 +1986,7 @@ export function playMonth(input: GameState): GameState {
     componentSwap,
     mods,
     storageOption,
-    storageOptionFeeDue: false,
+    storageOptionFeeDue: null,
     cash,
     outages,
     featurePoints,
@@ -2279,7 +2279,10 @@ export function applyAction(state: GameState, action: Action): GameState {
         ...state,
         ...planned,
         storageOption: true,
-        storageOptionFeeDue: true,
+        storageOptionFeeDue: {
+          name: storageOptionAddon(state.stackIndex)!.name,
+          amount: storageOptionAddon(state.stackIndex)!.oneTimeFee,
+        },
       });
     case 'block-bots':
       return withNote('Bot を遮断するルールを入れた', {

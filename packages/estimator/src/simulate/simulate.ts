@@ -162,7 +162,12 @@ function consume(
       return f;
     }
     case 'object-storage': {
-      if (cls === 'image-write' || cls === 'isr-revalidate')
+      // 投稿のときに作ったサイズ違いの書き込み（image-transform）も書き込み
+      if (
+        cls === 'image-write' ||
+        cls === 'isr-revalidate' ||
+        cls === 'image-transform'
+      )
         add(u, 'object-writes', n);
       else {
         add(u, 'object-reads', n);
@@ -211,7 +216,8 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
       add(
         u,
         'storage-gb-month',
-        w.storage.dbGB + (node.config.storesImages ? w.storage.imagesGB : 0),
+        (node.config.storesDb ? w.storage.dbGB : 0) +
+          (node.config.storesImages ? w.storage.imagesGB : 0),
       );
       break;
     case 'managed-db':

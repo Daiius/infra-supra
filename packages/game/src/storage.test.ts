@@ -44,6 +44,20 @@ describe('ストレージ変更オプション', () => {
     });
   });
 
+  it('同じ月に 4GB へ上位変更しても、手数料は申し込んだときのプラン（2GB）の金額', () => {
+    const s = playMonth(newGame(VPS));
+    const both = playMonth(
+      applyAction(applyAction(s, { type: 'storage-option' }), {
+        type: 'plan',
+        stackIndex: VPS_4GB,
+      }),
+    );
+    const fee = last(both).lines.find((l) =>
+      l.label.includes('ストレージ変更オプション'),
+    )!;
+    expect(fee.amount).toBe(2_200);
+  });
+
   it('VPS でなければ選べない', () => {
     const s = playMonth(newGame(CF_PAID));
     expect(checkAction(s, { type: 'storage-option' })).toMatchObject({
