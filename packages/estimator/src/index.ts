@@ -7,3 +7,8 @@ export * from './provenance.ts';
 export * from './pricing/resources.ts';
 export * from './pricing/schema.ts';
 export * from './pricing/price.ts';
+export * from './workload/schema.ts';
+export * from './workload/resolve.ts';
+export * from './architecture/schema.ts';
+export * from './simulate/simulate.ts';
+export * from './estimate.ts';

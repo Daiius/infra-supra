@@ -58,3 +58,40 @@ export const SECONDS_PER_HOUR = 3_600;
 
 /** 課金の基本単位の 1 か月 = 730 時間（prd/01 §3.3。月による日数の差は捨てる仮定）。 */
 export const HOURS_PER_MONTH = 730;
+
+export class UnitConversionError extends Error {
+  constructor(from: Unit, to: Unit) {
+    super(`単位を換算できない: ${from} → ${to}`);
+    this.name = 'UnitConversionError';
+  }
+}
+
+/** 時間の単位を時間に直す係数（cpu-hour と hour は同じ「時間」として扱う）。 */
+const TO_HOURS: Partial<Record<Unit, number>> = {
+  ms: 1 / MS_PER_HOUR,
+  second: 1 / SECONDS_PER_HOUR,
+  hour: 1,
+  'cpu-hour': 1,
+};
+
+/** 件数の単位は互いに同じ数として扱う（1 リクエスト = 1 回 = 1 操作）。 */
+const COUNT_LIKE: ReadonlySet<Unit> = new Set([
+  'count',
+  'request',
+  'operation',
+  'row',
+]);
+
+/**
+ * 汎用リソースの基準の単位からメーターの単位へ換算する（例: CPU 時間 ms → cpu-hour）。
+ * 換算できない組み合わせは例外（料金データの誤りを早く見つけるため）。
+ */
+export function convertUnit(value: number, from: Unit, to: Unit): number {
+  if (from === to) return value;
+  const fh = TO_HOURS[from];
+  const th = TO_HOURS[to];
+  if (fh !== undefined && th !== undefined) return (value * fh) / th;
+  if (COUNT_LIKE.has(from) && COUNT_LIKE.has(to)) return value;
+  if (from === 'byte' && to === 'gb') return bytesToGb(value);
+  throw new UnitConversionError(from, to);
+}

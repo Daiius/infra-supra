@@ -22,12 +22,12 @@ Phase 1 が終わった時点で「CLI で見積を出して内訳を読める�
 |---|---|---|---|
 | P1-1 | 雛形 | pnpm workspace・estimator / catalog の空パッケージ・PRD・コンセプト確認のスパイク | — （済） |
 | P1-2 | 数値の基盤 | 数値の規律（`ceilUnits`。D-16）・Unit・Quantity・Money・`Sourced<T>`・Derivation | P1-1 （済） |
-| P1-3 | Workload | zod スキーマ（入力と正規形）・`resolveWorkload`（導出と上書き）・代表週の時間分布 | P1-2 |
+| P1-3 | Workload | zod スキーマ（入力と正規形）・`resolveWorkload`（導出と上書き）・代表週の時間分布 | P1-2 （最初の形・済） |
 | P1-4 | 料金スキーマ | PriceBook の zod スキーマと検証規則（03 §9〜10）・架空の PriceBook 一式 | P1-2 （済） |
 | P1-5 | 料金計算 | `priceUsage`（プール・丸め・段階・クレジット・固定費・超過時の挙動）と 05 §2 のテスト | P1-4 （済） |
-| P1-6 | Architecture | グラフの型・構成の検証・BillingAccount・3 つの架空スタック | P1-2 |
+| P1-6 | Architecture | グラフの型・構成の検証・BillingAccount・3 つの架空スタック | P1-2 （最初の形・済。クラスごとの経路） |
 | P1-6b | フレームワーク | FrameworkProfile・BuildOutput・DeployTarget の型と `compileBuildOutput`。架空のフレームワークで ISR・ミドルウェアの件数を確かめるテスト | P1-3, P1-6 |
-| P1-7 | 資源シミュレーション | ComponentKind（cdn・serverless-function・serverless-sql・managed-postgres・object-storage・vps・process）と 05 §3 のテスト | P1-3, P1-6 |
+| P1-7 | 資源シミュレーション | ComponentKind（cdn・serverless-function・serverless-sql・managed-postgres・object-storage・vps・process）と 05 §3 のテスト | P1-3, P1-6 （最初の形・済） |
 | P1-8 | 容量の判定 | Limit の判定・VPS の使用率・LimitBreach の合流 | P1-5, P1-7 |
 | P1-S | ゲームのターンのスパイク | P1-5・P1-7 の最初の形を使い、月ごとの成長・スパイク・行動（画像圧縮・プラン変更）で「前提に当たる瞬間」がイベントとして面白いかを確かめる（使い捨て・`spikes/`） | P1-5, P1-7 |
 | P1-9 | Estimate | 全体の組み立て・スナップショット・直列化・05 §5〜6 の golden テスト | P1-5, P1-7, P1-8 |

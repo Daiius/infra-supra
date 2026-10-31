@@ -1,3 +1,5 @@
+import type { Unit } from '../num/unit.ts';
+
 // 汎用リソース（prd/01-domain-model.md §5.1）。資源シミュレーションが生み、メーターが参照するキー。
 // 振る舞いはコード側の語彙なので列挙で持つ（新しいリソースの追加はエンジンの変更。prd/01 §4.1）。
 export const RESOURCES = [
@@ -24,3 +26,28 @@ export const RESOURCES = [
   'monthly-active-users',
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
+
+/** 資源シミュレーションが出す量の基準の単位。メーターの単位が違えば convertUnit で換算する。 */
+export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
+  requests: 'request',
+  invocations: 'count',
+  'cpu-ms': 'ms',
+  'cpu-hours': 'cpu-hour',
+  'memory-gb-hours': 'gb-hour',
+  'rows-read': 'row',
+  'rows-written': 'row',
+  'storage-gb-month': 'gb-month',
+  'object-writes': 'operation',
+  'object-reads': 'operation',
+  'egress-gb': 'gb',
+  'origin-transfer-gb': 'gb',
+  'kv-reads': 'operation',
+  'kv-writes': 'operation',
+  'image-transformations': 'count',
+  'image-cache-reads': 'operation',
+  'image-cache-writes': 'operation',
+  'isr-reads': 'operation',
+  'isr-writes': 'operation',
+  'instance-hours': 'hour',
+  'monthly-active-users': 'count',
+};
