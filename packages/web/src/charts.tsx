@@ -1,7 +1,42 @@
 // 推移のグラフ（prd/07 §5）。dataviz の指針に沿う: 2px の線・r4 の端点と 2px の地の色の輪・細い目盛線（実線）・
 // 2 系列以上は凡例 + 線の端の直接ラベル・縦線とツールチップのホバー（値は表でも読める。ホバーだけに閉じ込めない）。
 // 色は CSS 変数（styles.css の .viz-root）で役割として参照する。テキストに系列の色は使わない。
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+
+/** 線の古い側の不透明度（最新の点で 1。古い月ほど薄くして、伸びている向きを見せる。D-25）。 */
+const OLDEST_OPACITY = 0.3;
+
+/**
+ * 古い月ほど薄く、最新の点で系列の色そのものになる横向きのグラデーション（線の stroke に使う）。
+ * x1・x2 は SVG の座標（最古の点・最新の点）。
+ */
+function FadeGradient({
+  id,
+  color,
+  x1,
+  x2,
+}: {
+  id: string;
+  color: string;
+  x1: number;
+  x2: number;
+}) {
+  return (
+    <linearGradient id={id} gradientUnits="userSpaceOnUse" x1={x1} x2={x2}>
+      <stop
+        offset="0"
+        style={{ stopColor: color, stopOpacity: OLDEST_OPACITY }}
+      />
+      <stop offset="1" style={{ stopColor: color, stopOpacity: 1 }} />
+    </linearGradient>
+  );
+}
 
 export type Series = {
   id: string;
@@ -13,6 +48,51 @@ export type Series = {
   /** 見込みの線（月・値）。破線で描く。 */
   projection?: { month: number; value: number }[];
 };
+
+/**
+ * ping（輪と点の脈打ち）の位相を全グラフで揃える（D-25）。CSS のアニメーションは要素が現れた時刻から始まるので、
+ * Web Animations API で開始時刻を文書の時計の原点（0）にそろえる。周期と遅れは CSS（styles.css）の 1 か所だけに持つ。
+ * 月送りで点が作り直されても、新しいグラフが出ても、同じ時計に乗る。動きを減らす設定ではアニメーションが無いので何もしない。
+ */
+const PING_ANIMATIONS = new Set(['motion-ping', 'motion-pulse']);
+export function syncPing(el: Element | null) {
+  if (!el || typeof el.getAnimations !== 'function') return;
+  for (const a of el.getAnimations({ subtree: true }))
+    if (a instanceof CSSAnimation && PING_ANIMATIONS.has(a.animationName))
+      a.startTime = 0;
+}
+
+/**
+ * 最新の月の点の強調（D-25）。2 重の輪（塗り + 縁）が時間差で点の 4 倍ほどまで広がって消える。色は系列の色。
+ * 輪は SVG の外へはみ出してよい（SVG は overflow: visible）。動きを減らす設定では出さない（styles.css）。
+ */
+function PingRings({
+  cx,
+  cy,
+  color,
+}: {
+  cx: number;
+  cy: number;
+  color: string;
+}) {
+  return (
+    <g aria-hidden pointerEvents="none" ref={syncPing}>
+      {[0, 1].map((i) => (
+        <circle
+          key={i}
+          className={`motion-ping ${i ? 'motion-ping-late' : ''}`}
+          cx={cx}
+          cy={cy}
+          r="4"
+          fill={color}
+          fillOpacity="0.3"
+          stroke={color}
+          strokeWidth="1.5"
+        />
+      ))}
+    </g>
+  );
+}
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -68,6 +148,7 @@ export function LineChart({
   title?: ReactNode;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
+  const uid = useId().replace(/:/g, '');
   const [hover, setHover] = useState<number | null>(null);
   const pad = {
     top: 12,
@@ -83,8 +164,10 @@ export function LineChart({
   ]);
   const ticks = niceTicks(yMax ?? Math.max(reference?.value ?? 0, ...all, 0));
   const top = ticks[ticks.length - 1]!;
+  // 1 か月目の左に 0.6 か月分の内側の余白を取る（点が 1 つだけの区間の延長線の余地。月の目盛り・ツールチップは月に揃う）
+  const lead = 0.6;
   const x = (month: number) =>
-    pad.left + (months <= 1 ? 0 : ((month - 1) / (months - 1)) * w);
+    pad.left + ((month - 1 + lead) / Math.max(months - 1 + lead, 1)) * w;
   const y = (v: number) => pad.top + h - (Math.min(v, top) / top) * h;
   const path = (pts: { m: number; v: number }[]) =>
     pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.m)},${y(p.v)}`).join('');
@@ -103,7 +186,11 @@ export function LineChart({
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
-    const m = Math.round(((px - pad.left) / Math.max(w, 1)) * (months - 1)) + 1;
+    const m =
+      Math.round(
+        ((px - pad.left) / Math.max(w, 1)) * Math.max(months - 1 + lead, 1) -
+          lead,
+      ) + 1;
     setHover(m >= 1 && m <= months ? m : null);
   };
 
@@ -125,7 +212,12 @@ export function LineChart({
           .filter((r) => r !== null);
 
   return (
-    <figure className="viz-root relative block w-full" ref={ref}>
+    // daisyUI の .card figure は overflow: hidden（最新の点の輪が切れるので見えるようにする）
+    <figure
+      className="viz-root relative block w-full"
+      style={{ overflow: 'visible' }}
+      ref={ref}
+    >
       {title && (
         <figcaption className="mb-1 text-sm font-semibold">{title}</figcaption>
       )}
@@ -153,11 +245,44 @@ export function LineChart({
         <svg
           width={width}
           height={height}
+          // 最新の点の輪が端で切れないように
+          overflow="visible"
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}
           role="img"
           aria-label={typeof title === 'string' ? title : '推移のグラフ'}
         >
+          {/*
+            点が 1 つだけの区間（1 か月目・乗り換えの後など）は、点だけで光ると不自然なので、左へ 1 か月分の水平線を
+            最も薄い色で描く（表示だけ。データ・軸・ツールチップ・見込みには入れない）。1 か月目は内側の余白（lead）の分まで描き、
+            目盛りの数字の手前で止める
+          */}
+          {series.flatMap((s) =>
+            s.values.flatMap((v, i) => {
+              const single =
+                v !== null &&
+                (s.values[i - 1] ?? null) === null &&
+                (s.values[i + 1] ?? null) === null;
+              if (!single) return [];
+              const step = x(2) - x(1);
+              const x2 = x(i + 1);
+              return [
+                <line
+                  key={`stub-${s.id}-${i}`}
+                  // 目盛りの数字（右端は pad.left - 6）の手前 4px で止める（数字に取り消し線のように重ならない）
+                  x1={Math.max(x2 - step, pad.left - 2)}
+                  x2={x2}
+                  y1={y(v)}
+                  y2={y(v)}
+                  stroke={s.color}
+                  strokeOpacity={OLDEST_OPACITY}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  pointerEvents="none"
+                />,
+              ];
+            }),
+          )}
           {ticks.map((t) => (
             <g key={t}>
               <line
@@ -236,8 +361,22 @@ export function LineChart({
               current.push({ m: i + 1, v });
             });
             const li = lastIndex(s);
+            const fi = s.values.findIndex((v) => v !== null);
+            // 最新の点に近いほど濃い線（見込みの破線・凡例は系列の色のまま）
+            const gid = `${uid}-fade-${s.id}`;
+            const stroke = li > fi ? `url(#${gid})` : s.color;
             return (
               <g key={s.id}>
+                {li > fi && (
+                  <defs>
+                    <FadeGradient
+                      id={gid}
+                      color={s.color}
+                      x1={x(fi + 1)}
+                      x2={x(li + 1)}
+                    />
+                  </defs>
+                )}
                 {s.projection && s.projection.length > 1 && (
                   <path
                     d={path(
@@ -251,19 +390,51 @@ export function LineChart({
                     opacity="0.6"
                   />
                 )}
-                {runs.map((r, i) => (
-                  <path
-                    key={i}
-                    d={path(r)}
-                    fill="none"
-                    stroke={s.color}
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
+                {runs.map((r, i) => {
+                  // 最後の区間だけ、月が進んだときに端から描く（D-25。key が変わると描き直す）
+                  const grow = i === runs.length - 1 && r.length >= 2;
+                  const head = grow ? r.slice(0, -1) : r;
+                  return (
+                    <g key={i}>
+                      {head.length >= 2 && (
+                        <path
+                          d={path(head)}
+                          fill="none"
+                          stroke={stroke}
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      )}
+                      {grow && (
+                        <path
+                          key={`seg-${s.values.length}`}
+                          className="motion-draw"
+                          pathLength={1}
+                          d={path(r.slice(-2))}
+                          fill="none"
+                          stroke={stroke}
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      )}
+                    </g>
+                  );
+                })}
+                {li >= 0 && li === s.values.length - 1 && (
+                  // 最新の月の点だけ、広がって消える輪で強調する（D-25。輪の色は系列の色）
+                  <PingRings
+                    cx={x(li + 1)}
+                    cy={y(s.values[li]!)}
+                    color={s.color}
                   />
-                ))}
+                )}
                 {li >= 0 && (
                   <circle
+                    key={`end-${li}`}
+                    className={`motion-pop ${li === s.values.length - 1 ? 'motion-pulse' : ''}`}
+                    ref={syncPing}
                     cx={x(li + 1)}
                     cy={y(s.values[li]!)}
                     r="4"
@@ -334,7 +505,7 @@ export function LineChart({
   );
 }
 
-/** 数値タイルの小さな推移（12 点・目立たない色。今月だけ強調色の点）。 */
+/** 数値タイルの小さな推移（12 点・強調の青。古い月ほど薄く、今月の点で濃い）。 */
 export function Sparkline({
   values,
   months,
@@ -349,10 +520,42 @@ export function Sparkline({
   const span = max - min || 1;
   const x = (i: number) => 4 + (i / Math.max(months - 1, 1)) * (width - 8);
   const y = (v: number) => 4 + (height - 8) * (1 - (v - min) / span);
-  const d = values.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join('');
+  const d = (from: number, to: number) =>
+    values
+      .slice(from, to)
+      .map((v, i) => `${i ? 'L' : 'M'}${x(from + i)},${y(v)}`)
+      .join('');
   const li = values.length - 1;
+  const gid = `${useId().replace(/:/g, '')}-fade`;
+  // 最新の点に近いほど濃い線（D-25）
+  const stroke = li >= 1 ? `url(#${gid})` : 'var(--series-1)';
   return (
-    <svg width={width} height={height} aria-hidden className="viz-root">
+    <svg
+      width={width}
+      height={height}
+      aria-hidden
+      className="viz-root"
+      // 最新の点の輪が小さな枠で切れないように
+      overflow="visible"
+    >
+      {li >= 1 && (
+        <defs>
+          <FadeGradient id={gid} color="var(--series-1)" x1={x(0)} x2={x(li)} />
+        </defs>
+      )}
+      {li === 0 && (
+        // 点が 1 つだけのときは、左へ 1 か月分の水平線を最も薄い色で描く（表示だけ。タイルの余白に収まる）
+        <line
+          x1={x(0) - (width - 8) / Math.max(months - 1, 1)}
+          x2={x(0)}
+          y1={y(values[0]!)}
+          y2={y(values[0]!)}
+          stroke="var(--series-1)"
+          strokeOpacity={OLDEST_OPACITY}
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      )}
       {min < 0 && (
         <line
           x1="4"
@@ -363,16 +566,39 @@ export function Sparkline({
           strokeWidth="1"
         />
       )}
-      <path
-        d={d}
-        fill="none"
-        stroke="var(--deemphasis)"
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      {li >= 2 && (
+        <path
+          d={d(0, li)}
+          fill="none"
+          stroke={stroke}
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      )}
+      {li >= 1 && (
+        // 最後の区間だけ、月が進んだときに端から描く（D-25）
+        <path
+          key={`seg-${li}`}
+          className="motion-draw"
+          pathLength={1}
+          d={d(li - 1, li + 1)}
+          fill="none"
+          stroke={stroke}
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      )}
+      {li >= 0 && (
+        // 最新の月の点だけ、広がって消える輪で強調する（D-25）
+        <PingRings cx={x(li)} cy={y(values[li]!)} color="var(--series-1)" />
+      )}
       {li >= 0 && (
         <circle
+          key={`end-${li}`}
+          className="motion-pop motion-pulse"
+          ref={syncPing}
           cx={x(li)}
           cy={y(values[li]!)}
           r="4"
@@ -411,6 +637,7 @@ export function Meter({
   status,
   statusText,
   note,
+  size = 'md',
 }: {
   label: string;
   valueText: string;
@@ -423,6 +650,8 @@ export function Meter({
   statusText: string;
   /** 目標までの差・向きの説明など。 */
   note?: string;
+  /** lg: 値を大きく出す（目標達成のダイアログ）。 */
+  size?: 'md' | 'lg';
 }) {
   const pos = (v: number) => `${(Math.max(0, Math.min(v, max)) / max) * 100}%`;
   const c = METER_FILL[status];
@@ -440,7 +669,12 @@ export function Meter({
         >
           {label}
         </span>
-        <span style={{ color: 'var(--text-primary)' }}>{valueText}</span>
+        <span
+          style={{ color: 'var(--text-primary)' }}
+          className={size === 'lg' ? 'text-2xl font-bold tabular-nums' : ''}
+        >
+          {valueText}
+        </span>
         <span
           className="flex items-center gap-1 text-xs"
           style={{ color: 'var(--text-secondary)' }}
@@ -464,7 +698,7 @@ export function Meter({
           style={{ background: c.track, borderRadius: 4 }}
         >
           <div
-            className="absolute inset-y-0 left-0"
+            className="motion-grow-x absolute inset-y-0 left-0"
             style={{
               width: pos(value),
               background: c.fill,

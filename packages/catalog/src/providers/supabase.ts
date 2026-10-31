@@ -18,6 +18,7 @@ export const supabase: PriceBookInput = {
       'https://supabase.com/docs/guides/platform/billing-on-supabase',
     ),
     compute: src('https://supabase.com/docs/guides/platform/compute-and-disk'),
+    sla: src('https://supabase.com/sla'),
     egress: src(
       'https://supabase.com/docs/guides/platform/manage-your-usage/egress',
     ),
@@ -58,6 +59,12 @@ export const supabase: PriceBookInput = {
       service: 'database',
       name: 'Free',
       sourceIds: ['pricing', 'billing'],
+      uptimeSla: {
+        status: 'none',
+        premise:
+          'Supabase の稼働率の SLA は Free・Pro・Team には含まれない（Enterprise だけ 99.9%）',
+        sourceIds: ['pricing', 'sla'],
+      },
       members: {
         pricing: 'included',
         premise:
@@ -99,6 +106,12 @@ export const supabase: PriceBookInput = {
       name: 'Pro（Micro）',
       baseFee: { amount: 25, per: 'month', scope: 'account' },
       sourceIds: ['pricing', 'compute'],
+      uptimeSla: {
+        status: 'none',
+        premise:
+          'Supabase の稼働率の SLA は Free・Pro・Team には含まれない（Enterprise だけ 99.9%）',
+        sourceIds: ['pricing', 'sla'],
+      },
       members: {
         pricing: 'included',
         premise:

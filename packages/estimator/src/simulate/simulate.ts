@@ -54,6 +54,8 @@ type NodeAcc = {
   cpuMs: number;
   queries: number;
   transforms: number;
+  /** ホストが受けたリクエストの数（前段の Web サーバーの CPU に使う。D-31）。 */
+  requests: number;
   /** クラスごとの 1 件あたり CPU の最大（件数が正のものだけ）。 */
   maxCpuByClass: Partial<Record<RequestClass, number>>;
 };
@@ -117,12 +119,35 @@ function consume(
       return f;
     }
     case 'kv': {
-      if (cls === 'isr-revalidate') add(u, 'kv-writes', n);
+      if (c.mode === 'db') {
+        // DB の代わり: 問い合わせ 1 回を読み取り 1 回、書く行 1 行を書き込み 1 回（仮定）
+        add(u, 'kv-reads', n * p.queries);
+        add(u, 'kv-writes', n * p.rowsWritten);
+      } else if (cls === 'isr-revalidate') add(u, 'kv-writes', n);
       else add(u, 'kv-reads', n);
       return f;
     }
     case 'sql-db': {
       u.busyMs += n * p.wallMs;
+      if (cls === 'image-read')
+        add(u, 'rows-read', n); // 画像 1 枚 1 行（仮定）
+      else if (cls === 'image-write') add(u, 'rows-written', n);
+      else {
+        add(u, 'rows-read', n * p.rowsRead);
+        add(u, 'rows-written', n * p.rowsWritten);
+      }
+      return f;
+    }
+    case 'db-proxy': {
+      u.busyMs += n * p.wallMs;
+      add(u, 'queries', n * p.queries);
+      return f;
+    }
+    case 'durable-object': {
+      if (cls === 'realtime-message') {
+        add(u, 'requests', n / c.messagesPerRequest);
+        add(u, 'gb-seconds', ((n * p.cpuMs) / 1000) * c.memoryGB);
+      } else add(u, 'requests', n);
       add(u, 'rows-read', n * p.rowsRead);
       add(u, 'rows-written', n * p.rowsWritten);
       return f;
@@ -137,7 +162,13 @@ function consume(
       return f;
     }
     case 'object-storage': {
-      if (cls === 'image-write') add(u, 'object-writes', n);
+      // 投稿のときに作ったサイズ違いの書き込み（image-transform）も書き込み
+      if (
+        cls === 'image-write' ||
+        cls === 'isr-revalidate' ||
+        cls === 'image-transform'
+      )
+        add(u, 'object-writes', n);
       else {
         add(u, 'object-reads', n);
         add(u, 'egress-gb', kbToGb(n * p.kb));
@@ -167,6 +198,7 @@ function consume(
     }
     case 'host': {
       hostAcc.kb += n * p.kb;
+      hostAcc.requests += n;
       hostAcc.cpuMs += n * p.cpuMs;
       hostAcc.queries += n * p.queries;
       if (cls === 'image-transform') hostAcc.transforms += n;
@@ -181,14 +213,20 @@ function consume(
 function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
   switch (node.config.kind) {
     case 'sql-db':
-      add(u, 'storage-gb-month', w.storage.dbGB);
+      add(
+        u,
+        'storage-gb-month',
+        (node.config.storesDb ? w.storage.dbGB : 0) +
+          (node.config.storesImages ? w.storage.imagesGB : 0),
+      );
       break;
     case 'managed-db':
       add(u, 'storage-gb-month', w.storage.dbGB);
       add(u, 'instance-hours', HOURS_PER_MONTH);
       break;
     case 'object-storage':
-      add(u, 'storage-gb-month', w.storage.imagesGB);
+      if (node.config.storesImages)
+        add(u, 'storage-gb-month', w.storage.imagesGB + w.storage.variantsGB);
       break;
     default:
       break;
@@ -216,6 +254,7 @@ export function simulateResources(
       cpuMs: 0,
       queries: 0,
       transforms: 0,
+      requests: 0,
       maxCpuByClass: {},
     });
     staticUsage(n, nodes[n.id]!, workload);
@@ -283,11 +322,16 @@ export function simulateResources(
       peakCores:
         ((acc.cpuMs +
           acc.queries * c.dbCpuMsPerQuery +
-          acc.transforms * c.imageTransformCpuMs) /
+          acc.transforms * c.imageTransformCpuMs +
+          acc.requests * c.proxyCpuMsPerRequest) /
           1000) *
         peak,
       memoryGB: c.residentMemoryGB,
-      diskGB: workload.storage.dbGB + workload.storage.imagesGB + c.otherDiskGB,
+      diskGB:
+        workload.storage.dbGB +
+        workload.storage.imagesGB +
+        workload.storage.variantsGB +
+        c.otherDiskGB,
     };
   }
   return { architecture, workload, nodes, unroutedClasses };

@@ -2,12 +2,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   actionEffort,
-  applyAction,
   applyActions,
   ARTICLE_COMMUNITY,
+  averageSatisfaction,
   axesOf,
   BOT_BLOCK,
   comparisonRows,
+  checkActions,
+  componentEffortLabel,
+  componentPreview,
+  componentProposal,
+  componentSlots,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
@@ -17,9 +22,14 @@ import {
   goalChecks,
   growthFromReputation,
   isPlanChange,
+  stackChangeText,
+  storageOptionText,
   migrationEffort,
-  newGame,
+  newSave,
   nextSsrCpuMs,
+  parseSave,
+  replaySave,
+  withTurn,
   playMonth,
   premiseTrends,
   projectionNote,
@@ -34,12 +44,21 @@ import {
   type GameState,
   type MonthEvent,
   type MonthReport,
+  type SaveData,
   type Surprise,
   type SettingKey,
   type Stage,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
+import { Info } from './info.tsx';
+import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
+import {
+  CountUp,
+  FireworksCanvas,
+  FireworksEngine,
+  useReducedMotion,
+} from './motion.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -55,9 +74,44 @@ const today = () => {
 const SCENARIO = ARTICLE_COMMUNITY;
 /** 画面に出す為替の仮定（game の共通の仮定）。 */
 const USD_JPY = 150;
+type SlotId = Extract<Action, { type: 'component' }>['slot'];
+
+/** 遊んでいる途中の保存（D-26）。行動の履歴だけを持ち、読み込みは再生で復元する。 */
+const SAVE_KEY = 'infra-supra:game-save';
+
+type Session = { save: SaveData; state: GameState; restored: boolean };
+
+/** 保存から再開する。読めない・版が違う・再生で例外が出たら、黙って捨てて初期画面にする。 */
+function loadSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const save = parseSave(JSON.parse(raw));
+    if (!save) throw new Error('読めない保存');
+    return { save, state: replaySave(save), restored: true };
+  } catch {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+      // 保存領域が使えない環境では何もしない
+    }
+    return null;
+  }
+}
+
+function storeSave(save: SaveData | null) {
+  try {
+    if (save) localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    else localStorage.removeItem(SAVE_KEY);
+  } catch {
+    // 保存できなくても遊べる（再読み込みで最初からになるだけ）
+  }
+}
 
 export function App() {
-  const [state, setState] = useState<GameState | null>(null);
+  const [session, setSession] = useState<Session | null>(loadSession);
+  useEffect(() => storeSave(session?.save ?? null), [session?.save]);
+  const state = session?.state ?? null;
   return (
     <div className="min-h-screen bg-base-200">
       <div className="navbar bg-base-100 shadow-sm">
@@ -68,7 +122,7 @@ export function App() {
         {state && (
           <button
             className="btn btn-ghost btn-sm ml-auto"
-            onClick={() => setState(null)}
+            onClick={() => setSession(null)}
           >
             最初から
           </button>
@@ -76,16 +130,34 @@ export function App() {
       </div>
       <main className="mx-auto max-w-5xl space-y-4 p-4">
         {state ? (
-          <Game state={state} setState={setState} />
+          <Game
+            // 新しく始めたとき・再開したときは作り直す（ダイアログの状態を引き継がない）
+            key={`${session!.save.seed}:${session!.save.stackIndex}:${session!.save.startDate}:${session!.restored}`}
+            state={state}
+            restored={session!.restored}
+            onAdvance={(actions) => {
+              const next = playMonth(applyActions(state, actions));
+              setSession({
+                save: withTurn(session!.save, actions),
+                state: next,
+                restored: session!.restored,
+              });
+              return next;
+            }}
+          />
         ) : (
-          <Briefing onStart={setState} />
+          <Briefing
+            onStart={(save) =>
+              setSession({ save, state: replaySave(save), restored: false })
+            }
+          />
         )}
       </main>
     </div>
   );
 }
 
-function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
+function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [stack, setStack] = useState(1);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
@@ -120,16 +192,40 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
             月）に使った残りが機能開発に回る。
           </p>
           <p>所持金 {usd(SCENARIO.startCash)}。</p>
-          <div className="alert alert-info flex-col items-start gap-1">
-            <span>
-              目標: {SCENARIO.months} か月後に所持金 {usd(SCENARIO.goal.cash)}{' '}
-              以上・満足度の平均 {SCENARIO.goal.satisfaction} 以上・止まった月が{' '}
-              {SCENARIO.goal.maxOutageMonths} 回以内
-            </span>
-            <span className="text-sm">
-              止まった月が {SCENARIO.goal.maxOutageMonths}{' '}
-              回を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わる。
-            </span>
+          {/* daisyUI の alert は子を横の grid に並べるので、中身を 1 つのブロックにして縦に積む */}
+          <div className="alert alert-info">
+            <div className="space-y-1">
+              <div className="font-semibold">
+                目標（{SCENARIO.months} か月後に、すべて満たす）
+              </div>
+              <ul className="list-disc space-y-0.5 pl-5">
+                <li>
+                  所持金{' '}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {usd(SCENARIO.goal.cash)} 以上
+                  </span>
+                </li>
+                <li>
+                  満足度の平均{' '}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {SCENARIO.goal.satisfaction} 以上
+                  </span>
+                </li>
+                <li>
+                  止まった月が{' '}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {SCENARIO.goal.maxOutageMonths} 回以内
+                  </span>
+                </li>
+              </ul>
+              <p className="text-sm">
+                止まった月が{' '}
+                <span className="whitespace-nowrap">
+                  {SCENARIO.goal.maxOutageMonths} 回
+                </span>
+                を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わる。
+              </p>
+            </div>
           </div>
           <h3 className="mt-2 font-bold">
             アプリの形（コストに効く判断ポイント）
@@ -200,7 +296,14 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
             <button
               className="btn btn-primary"
               onClick={() => {
-                onStart(playMonth(newGame(stack, seed, SCENARIO, startDate)));
+                onStart(
+                  newSave({
+                    scenarioId: SCENARIO.id,
+                    stackIndex: stack,
+                    seed,
+                    startDate,
+                  }),
+                );
                 scrollTop();
               }}
             >
@@ -215,21 +318,48 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
 
 function Game({
   state,
-  setState,
+  restored,
+  onAdvance,
 }: {
   state: GameState;
-  setState: (s: GameState) => void;
+  /** 保存から再開した（出来事・達成のダイアログを自動では開かない。D-26）。 */
+  restored: boolean;
+  /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
+  onAdvance: (actions: Action[]) => GameState;
 }) {
   const report = state.history[state.history.length - 1]!;
   const playing = state.phase === 'playing';
   // 月が進んだ直後に、その月の出来事をダイアログで出す（D-23）。結果の画面では出さない。
   // auto: 月が進んだ直後に開いた / manual: 月のカードのボタンで開き直した。
+  /**
+   * 目標達成のダイアログを開いた回数（結果の画面のボタンで開き直す。D-25）。null は開いていない
+   * （保存から再開したときは自動で開かない。D-26）。
+   */
+  const [celebration, setCelebration] = useState<number | null>(
+    restored ? null : 0,
+  );
+  useEffect(() => {
+    if (state.phase !== 'won') setCelebration(0);
+  }, [state.phase]);
   const [eventsOpen, setEventsOpen] = useState<'auto' | 'manual' | null>(() =>
-    playing && report.events.length > 0 ? 'auto' : null,
+    playing && !restored && report.events.length > 0 ? 'auto' : null,
   );
   return (
     <>
-      {!playing && <Result state={state} />}
+      {state.phase === 'won' && celebration !== null && (
+        // key を変えると最初と同じように開き直す（暗い背景と花火も再開）
+        <VictoryCelebration
+          key={celebration}
+          state={state}
+          auto={celebration === 0}
+        />
+      )}
+      {!playing && (
+        <Result
+          state={state}
+          onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
+        />
+      )}
       <Trends history={state.history} />
       <MonthCard
         report={report}
@@ -239,8 +369,7 @@ function Game({
         <Actions
           state={state}
           onDecide={(actions) => {
-            const next = playMonth(applyActions(state, actions));
-            setState(next);
+            const next = onAdvance(actions);
             const last = next.history[next.history.length - 1]!;
             setEventsOpen(
               next.phase === 'playing' && last.events.length > 0
@@ -259,6 +388,106 @@ function Game({
         />
       )}
       <History history={state.history} />
+    </>
+  );
+}
+
+/**
+ * 目標達成のダイアログと花火（D-25）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
+ * 閉じると背景が消え、新しい花火は出さない。空中に残った粒は少し薄くして、寿命で消えるまで描いてから片付ける。
+ * 動きを減らす設定では、ダイアログだけ出して花火は出さない。作法は出来事のダイアログ（D-23）と同じ。
+ */
+function VictoryCelebration({
+  state,
+  auto,
+}: {
+  state: GameState;
+  /** 達成した直後に開いた（true）か、結果の画面のボタンで開き直した（false）か。 */
+  auto: boolean;
+}) {
+  const reduced = useReducedMotion();
+  const engine = useMemo(() => new FireworksEngine(), []);
+  const [open, setOpen] = useState(true);
+  const [afterglow, setAfterglow] = useState(false);
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d || d.open) return;
+    // 達成した直後はフォーカスを外して開く（閉じた後もページの先頭のまま）。開き直したときはボタンへ戻す（D-23 と同じ）
+    if (auto && document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
+    d.showModal();
+  }, [auto]);
+  // 合否の 3 つ（所持金・満足度の平均・止まった月）だけを、結果の画面と同じメーターで出す
+  const meters = useMemo(() => {
+    const cfPaid = comparisonRows(state).find((r) => r.id === 'cf-paid')!;
+    return resultMeters(state, goalChecks(state), axesOf(state), {
+      label: cfPaid.name,
+      axes: cfPaid.axes,
+    }).filter((m) => m.status !== 'reference');
+  }, [state]);
+  return (
+    <>
+      {open && (
+        <dialog
+          ref={ref}
+          className="modal"
+          // 花火が映える暗い背景
+          style={{ backgroundColor: 'rgba(6, 8, 22, 0.86)' }}
+          aria-labelledby="victory-title"
+          onClose={() => {
+            setOpen(false);
+            setAfterglow(!reduced && engine.particles.length > 0);
+          }}
+        >
+          <div className="modal-box relative z-10 max-w-lg overflow-hidden p-0">
+            {/* 成功の色の帯で見出しを強調する（色だけにせず ✓ とラベルを添える） */}
+            <div className="bg-success px-6 py-5 text-success-content">
+              <h2 id="victory-title" className="text-3xl font-bold">
+                ✓ 目標達成
+              </h2>
+              <p className="mt-1 text-sm">
+                {state.end!.month} か月の運営で、3 つの条件をすべて満たした
+              </p>
+            </div>
+            <div className="space-y-4 px-6 pt-5">
+              {/* 結果の画面と同じメーター（目標・上限の目盛りつき）。開いたときに伸びる（動きを減らす設定では即時） */}
+              {meters.map((m) => (
+                <Meter key={m.label} {...m} size="lg" />
+              ))}
+            </div>
+            <div className="modal-action px-6 pb-6">
+              <form method="dialog">
+                <button className="btn btn-success" autoFocus>
+                  閉じて結果を見る
+                </button>
+              </form>
+            </div>
+          </div>
+          {/* 花火はダイアログより前面に描く（操作は妨げない） */}
+          {!reduced && (
+            <FireworksCanvas
+              engine={engine}
+              spawn
+              className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+            />
+          )}
+          <form method="dialog" className="modal-backdrop">
+            <button aria-label="閉じる" tabIndex={-1}>
+              閉じる
+            </button>
+          </form>
+        </dialog>
+      )}
+      {afterglow && (
+        <FireworksCanvas
+          engine={engine}
+          spawn={false}
+          alpha={0.45}
+          className="pointer-events-none fixed inset-0 z-40 h-full w-full"
+          onEmpty={() => setAfterglow(false)}
+        />
+      )}
     </>
   );
 }
@@ -357,6 +586,14 @@ function MonthCard({
             {STATUS[r.status].label}
           </span>
         </h2>
+        {r.componentSummary && (
+          <div className="text-xs opacity-70">部品 {r.componentSummary}</div>
+        )}
+        {r.contractRevenue > 0 && (
+          <div className="text-xs opacity-70">
+            契約の収益 {usd(r.contractRevenue)}（収益に含む）
+          </div>
+        )}
         {onShowEvents
           ? r.events.length > 0 && (
               <div className="rounded-box border border-base-300 p-3">
@@ -366,10 +603,8 @@ function MonthCard({
                       key={`${e.id}:${e.phase}`}
                       className="flex flex-wrap items-center gap-2 text-sm"
                     >
-                      <span
-                        className={`badge badge-sm ${PHASE_BADGE[e.phase].cls}`}
-                      >
-                        {PHASE_BADGE[e.phase].label}
+                      <span className={`badge badge-sm ${eventBadge(e).cls}`}>
+                        {eventBadge(e).label}
                       </span>
                       {e.tier === 'rare' && (
                         <span className="badge badge-sm badge-outline badge-error">
@@ -481,16 +716,33 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
   const parts = [
     { label: '自前運用の維持', value: e.upkeep, cls: 'bg-warning' },
     { label: '出来事への対応', value: e.interrupt, cls: 'bg-error' },
-    { label: '乗り換え', value: e.migration, cls: 'bg-secondary' },
-    { label: '行動（設定・最適化）', value: e.actions, cls: 'bg-info' },
-    { label: '機能開発', value: e.feature, cls: 'bg-success' },
+    {
+      label: '乗り換え・DB の差し替え',
+      value: e.migration,
+      cls: 'bg-secondary',
+    },
+    { label: '行動（設定・最適化・部品）', value: e.actions, cls: 'bg-info' },
+    // 機能追加の提案への対応は機能開発に数える（D-29）。棒は手間の総量の内訳なので、加点は棒に入れず下に添える
+    {
+      label: '機能の追加（提案）',
+      value: e.featureWork,
+      cls: 'bg-accent',
+    },
+    {
+      label: '機能開発（残り）',
+      value: e.feature - e.featureWork - e.featureBonus,
+      cls: 'bg-success',
+    },
   ];
   return (
     <div>
       <h3 className="mb-1 font-bold">
         開発の手間 {e.total} ポイント
         <span className="ml-2 text-sm font-normal opacity-70">
-          機能開発の累計 {r.featurePoints}
+          機能開発 {Math.round(e.feature)}
+          {e.featureBonus > 0 &&
+            `（うち提案の加点 +${Number(e.featureBonus.toFixed(1))}）`}
+          ・累計 {Math.round(r.featurePoints)}
         </span>
       </h3>
       <div className="flex h-3 w-full overflow-hidden rounded-full bg-base-200">
@@ -499,7 +751,7 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
           .map((p) => (
             <div
               key={p.label}
-              className={p.cls}
+              className={`${p.cls} motion-width`}
               style={{ width: `${(p.value / e.total) * 100}%` }}
               title={`${p.label} ${p.value}`}
             />
@@ -514,6 +766,17 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
           </li>
         ))}
       </ul>
+      {r.componentSwap && (
+        <div className="mt-2 text-sm">
+          {r.componentSwap.label}差し替え中（データの移行）:{' '}
+          {r.componentSwap.done} / {r.componentSwap.required}
+          <progress
+            className="progress progress-secondary ml-2 w-24"
+            value={r.componentSwap.done}
+            max={r.componentSwap.required}
+          />
+        </div>
+      )}
       {r.migration && (
         <div className="mt-2 text-sm">
           {r.migration.toName} へ乗り換え中: {r.migration.done} /{' '}
@@ -532,17 +795,32 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
   );
 }
 
-const PHASE_LABEL: Record<MonthEvent['phase'], string> = {
-  notice: '▲ 予告: ',
-  occurred: '● ',
-  proposal: '◆ 提案: ',
-};
-const PHASE_BADGE: Record<MonthEvent['phase'], { label: string; cls: string }> =
-  {
-    notice: { label: '▲ 予告', cls: 'badge-warning' },
-    occurred: { label: '● 起きた', cls: 'badge-info' },
-    proposal: { label: '◆ 提案', cls: 'badge-primary' },
-  };
+/**
+ * 出来事の印（D-28）。予告・予告なしで今月発生・予告どおり起きた・提案を、印・色・文言の 3 つで区別する（色だけにしない）。
+ */
+function eventBadge(e: MonthEvent): {
+  label: string;
+  cls: string;
+  /** 印の横に添える短い説明。 */
+  note?: string;
+} {
+  switch (e.phase) {
+    case 'notice':
+      return { label: '⏳ 予告: 来月起きそう', cls: 'badge-warning' };
+    case 'proposal':
+      return { label: '◆ 提案', cls: 'badge-primary' };
+    case 'occurred':
+      return e.announced === false
+        ? {
+            label: '⚡ 今月発生',
+            cls: 'badge-error',
+            note: '今月の費用・満足度に効いている。対処は来月から',
+          }
+        : e.announced === true
+          ? { label: '● 起きた（先月の予告どおり）', cls: 'badge-info' }
+          : { label: '● 起きた', cls: 'badge-info' };
+  }
+}
 const TIER_LABEL: Record<MonthEvent['tier'], string> = {
   common: 'ふだん',
   occasional: 'ときどき',
@@ -551,13 +829,14 @@ const TIER_LABEL: Record<MonthEvent['tier'], string> = {
 
 /** 出来事の通知（prd/07 §10.2）。当たりうる前提は catalog の文のまま出す（D-12）。 */
 function EventCard({ event: e }: { event: MonthEvent }) {
-  const badge = PHASE_BADGE[e.phase];
+  const badge = eventBadge(e);
   return (
     <div
       className={`rounded-box border p-3 ${e.tier === 'rare' ? 'border-error' : 'border-base-300'}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
+        {badge.note && <span className="text-xs">{badge.note}</span>}
         <span className="badge badge-sm badge-outline">
           {TIER_LABEL[e.tier]}
         </span>
@@ -574,6 +853,37 @@ function EventCard({ event: e }: { event: MonthEvent }) {
           受けると: {e.accept.effects.join('・')}
           。月の終わりの行動で受けるか断るかを選ぶ（断っても罰はない）
         </div>
+      )}
+      {e.accept?.unavailable && (
+        <div className="mt-1 text-xs text-error">
+          ✗ 受けられない: {e.accept.unavailable}
+        </div>
+      )}
+      {e.requirementStatus && e.requirementStatus.length > 0 && (
+        // 受ける前に、部品ごとに要件を満たせるかを出す（D-32。印とラベルで、色だけにしない）
+        <ul className="mt-1 space-y-0.5 text-xs">
+          {e.requirementStatus.map((r) => (
+            <li key={r.label} className="flex flex-wrap items-center gap-1">
+              <span
+                className={`badge badge-xs ${r.ok ? 'badge-success' : 'badge-error'}`}
+              >
+                {r.ok ? '✓ 満たせる' : '✗ 満たせない'}
+              </span>
+              <span className="font-semibold">
+                {r.label}
+                {r.current ? '（今）' : ''}
+              </span>
+              <span className="opacity-80">{r.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {e.sla && e.sla.length > 0 && (
+        <ul className="mt-1 list-disc pl-5 text-xs opacity-80">
+          {e.sla.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
       )}
       {e.members && e.members.length > 0 && (
         <ul className="mt-1 list-disc pl-5 text-xs opacity-80">
@@ -674,12 +984,18 @@ function Actions({
   /** 提案への返事（選ばなければ断る）。 */
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [blockBots, setBlockBots] = useState(false);
+  /** さくらの VPS のストレージ変更オプション（D-30）。 */
+  const [storage, setStorage] = useState(false);
+  /** 部品の差し替え（スロットごと。D-24）。 */
+  const [parts, setParts] = useState<Partial<Record<SlotId, string>>>({});
   const reset = () => {
     setSettings({});
     setOptimize(false);
     setStackChange(null);
     setAnswers({});
     setBlockBots(false);
+    setStorage(false);
+    setParts({});
   };
 
   const build = (
@@ -689,17 +1005,23 @@ function Actions({
       stack?: number | null;
       answers?: Record<string, boolean>;
       blockBots?: boolean;
+      storage?: boolean;
+      parts?: Partial<Record<SlotId, string>>;
     } = {},
   ): Action[] => {
     const st = o.settings ?? settings;
     const opt = o.optimize ?? optimize;
     const stack = o.stack === undefined ? stackChange : o.stack;
     const ans = o.answers ?? answers;
+    const ps = o.parts ?? parts;
     const out: Action[] = [];
     // 提案を受ける手間（割り込み）を先に取る
     for (const eventId of state.pendingProposals)
       out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
     if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
+    if (o.storage ?? storage) out.push({ type: 'storage-option' });
+    for (const [slot, option] of Object.entries(ps))
+      out.push({ type: 'component', slot: slot as SlotId, option: option! });
     if (stack !== null)
       out.push({
         type: isPlanChange(state.stackIndex, stack) ? 'plan' : 'migrate',
@@ -710,16 +1032,15 @@ function Actions({
     if (opt) out.push({ type: 'optimize' });
     return out;
   };
-  /** すべての行動が受け付けられるか（手間が足りない・選べない行動があれば false）。 */
-  const valid = (actions: Action[]) => {
-    let s = state;
-    for (const a of actions) {
-      const next = applyAction(s, a);
-      if (next === s) return false;
-      s = next;
-    }
-    return true;
+  /**
+   * 選べない理由（すべて選べれば null）。理由はエンジンが区別して返す文をそのまま出す
+   * （手間が足りない・今と同じ・最中・要件・提案を受けると付く など）。
+   */
+  const blocked = (actions: Action[]): string | null => {
+    const r = checkActions(state, actions);
+    return r.ok ? null : r.message;
   };
+  const valid = (actions: Action[]) => blocked(actions) === null;
   const actions = build();
   const draft = applyActions(state, actions);
   const left = effortAvailable(draft);
@@ -743,16 +1064,18 @@ function Actions({
             </div>
             {state.pendingProposals.map((id) => {
               const def = eventDef(scenarioOf(state), id)!;
-              const acceptOk = valid(
+              const acceptWhy = blocked(
                 build({ answers: { ...answers, [id]: true } }),
               );
+              const acceptOk = acceptWhy === null;
               return (
                 <div
                   key={id}
                   className="rounded-box border border-base-300 p-3"
                 >
-                  <div className="font-semibold">{def.title}</div>
-                  <div className="mb-1 text-sm opacity-80">{def.text}</div>
+                  <div className="mb-1 font-semibold">
+                    {def.title} <Info>{def.text}</Info>
+                  </div>
                   <div className="flex flex-wrap gap-4">
                     <label
                       className={`flex items-center gap-2 ${acceptOk || answers[id] ? 'cursor-pointer' : 'opacity-50'}`}
@@ -766,7 +1089,7 @@ function Actions({
                       />
                       {def.accept!.label}
                       {!acceptOk && !answers[id] && (
-                        <span className="text-xs">（手間が足りない）</span>
+                        <span className="text-xs">（{acceptWhy}）</span>
                       )}
                     </label>
                     <label className="flex cursor-pointer items-center gap-2">
@@ -791,14 +1114,17 @@ function Actions({
             const chosen = settings[key] ?? current;
             return (
               <label key={key} className="form-control">
-                <span className="label-text font-semibold">
-                  {def.label}
-                  <span className="ml-1 text-xs font-normal opacity-60">
-                    変更 {def.effort} ポイント
+                <span className="label-text mb-1 block">
+                  <span className="block font-semibold">
+                    <NameWithInfo
+                      name={def.label}
+                      info={<Info>{def.note}</Info>}
+                    />
                   </span>
+                  <Meta items={[`手間 ${def.effort}`, '来月から']} />
                 </span>
                 <select
-                  className="select select-bordered select-sm"
+                  className="select select-bordered select-sm w-full"
                   value={chosen}
                   onChange={(e) => {
                     const v = Number(e.target.value);
@@ -811,18 +1137,23 @@ function Actions({
                   {def.options.map((o) => {
                     const trial = { ...settings, [key]: o.value };
                     if (o.value === current) delete trial[key];
-                    const ok =
-                      o.value === current || valid(build({ settings: trial }));
+                    const why =
+                      o.value === current
+                        ? null
+                        : blocked(build({ settings: trial }));
                     return (
-                      <option key={o.value} value={o.value} disabled={!ok}>
+                      <option
+                        key={o.value}
+                        value={o.value}
+                        disabled={why !== null}
+                      >
                         {o.label}
                         {o.value === current ? '（今）' : ''}
-                        {ok ? '' : '（手間が足りない）'}
+                        {why ? `（${why}）` : ''}
                       </option>
                     );
                   })}
                 </select>
-                <span className="mt-1 text-xs opacity-60">{def.note}</span>
               </label>
             );
           })}
@@ -835,17 +1166,21 @@ function Actions({
             disabled={!optimize && !valid(build({ optimize: true }))}
             onChange={(e) => setOptimize(e.target.checked)}
           />
-          <span>
-            SSR を最適化する（CPU {nextSsrCpuMs(state)} ms →{' '}
-            {Math.max(
-              EFFORT.minSsrCpuMs,
-              nextSsrCpuMs(state) - EFFORT.optimizeStepMs,
-            )}{' '}
-            ms）{EFFORT.optimize} ポイント
-            <span className="block text-xs opacity-60">
-              CPU 時間と速さに効く。機能開発が進むとまた重くなる
-            </span>
-          </span>
+          <OptionText
+            name="SSR を最適化する"
+            meta={[
+              `CPU ${nextSsrCpuMs(state)} → ${Math.max(EFFORT.minSsrCpuMs, nextSsrCpuMs(state) - EFFORT.optimizeStepMs)} ms`,
+              `手間 ${EFFORT.optimize}`,
+              '来月から',
+            ]}
+            info={
+              <Info>
+                CPU 時間と速さに効く。機能開発が進むと SSR
+                はまた重くなるので、繰り返し判断が要る。
+              </Info>
+            }
+            why={optimize ? null : blocked(build({ optimize: true }))}
+          />
         </label>
         {!state.botBlocked && (
           <label className="flex cursor-pointer items-start gap-3 py-1">
@@ -860,14 +1195,49 @@ function Actions({
               }
               onChange={(e) => setBlockBots(e.target.checked)}
             />
-            <span>
-              Bot を遮断するルールを入れる {BOT_BLOCK.effort} ポイント
-              <span className="block text-xs opacity-60">
-                Bot・クローラーのアクセスが来月から半分になる（一度入れれば続く。対策の製品の料金は未取得なので、手間だけの行動）
-              </span>
-            </span>
+            <OptionText
+              name="Bot を遮断するルールを入れる"
+              meta={[`手間 ${BOT_BLOCK.effort}`, '来月から効く']}
+              info={
+                <Info>
+                  Bot・クローラーのアクセスが来月から半分になる。一度入れれば続く。対策の製品（WAF
+                  など）の料金は取得していないので、手間だけの行動。
+                </Info>
+              }
+              why={blockBots ? null : blocked(build({ blockBots: true }))}
+            />
           </label>
         )}
+        {(() => {
+          const t = storageOptionText(state.stackIndex);
+          if (!t || state.storageOption) return null;
+          const why = storage ? null : blocked(build({ storage: true }));
+          return (
+            <label className="flex cursor-pointer items-start gap-3 py-1">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm mt-1"
+                checked={storage}
+                disabled={!storage && why !== null}
+                onChange={(e) => setStorage(e.target.checked)}
+              />
+              <OptionText
+                name={t.name}
+                meta={t.meta}
+                info={<Info>{t.detail}</Info>}
+                why={why}
+              />
+            </label>
+          );
+        })()}
+        <ComponentsSection
+          state={state}
+          parts={parts}
+          setParts={setParts}
+          answers={answers}
+          setAnswers={setAnswers}
+          blocked={(o) => blocked(build(o))}
+        />
         <div className="divider my-1 text-xs">構成を変える</div>
         {state.migration ? (
           <div className="text-sm">
@@ -883,14 +1253,10 @@ function Actions({
                 (s) => s.index,
               ),
             ].map((idx) => {
-              const plan = idx !== null && isPlanChange(state.stackIndex, idx);
-              const ok = idx === null || valid(build({ stack: idx }));
-              const label =
-                idx === null
-                  ? '構成はこのまま'
-                  : plan
-                    ? `${STACKS[idx]!.name} にプラン変更（手間なし・来月から）`
-                    : `${STACKS[idx]!.name} へ乗り換える（${EFFORT.migrationPerMonth} ポイント × ${migrationEffort(state.stackIndex, idx) / EFFORT.migrationPerMonth} か月。期間中は新旧両方の費用）`;
+              const why = idx === null ? null : blocked(build({ stack: idx }));
+              const ok = why === null;
+              const text =
+                idx === null ? null : stackChangeText(state.stackIndex, idx);
               return (
                 <label
                   key={idx ?? 'keep'}
@@ -903,12 +1269,16 @@ function Actions({
                     disabled={!ok}
                     onChange={() => setStackChange(idx)}
                   />
-                  <span>
-                    {label}
-                    {!ok && (
-                      <span className="block text-xs">手間が足りない</span>
-                    )}
-                  </span>
+                  {text ? (
+                    <OptionText
+                      name={text.name}
+                      meta={text.meta}
+                      info={<Info>{text.detail}</Info>}
+                      why={why}
+                    />
+                  ) : (
+                    <span>構成はこのまま</span>
+                  )}
                 </label>
               );
             })}
@@ -936,8 +1306,222 @@ function Actions({
   );
 }
 
+/** 部品の差し替え（同じ事業者の中・D-24・prd/07 §11.3）。今の行動の欄に収める（D-22）。 */
+function ComponentsSection({
+  state,
+  parts,
+  setParts,
+  answers,
+  setAnswers,
+  blocked,
+}: {
+  state: GameState;
+  parts: Partial<Record<SlotId, string>>;
+  setParts: (p: Partial<Record<SlotId, string>>) => void;
+  /** 提案への返事（提案で付く部品は、部品の欄で選ぶと提案を受けたことになる）。 */
+  answers: Record<string, boolean>;
+  setAnswers: (a: Record<string, boolean>) => void;
+  blocked: (o: {
+    parts?: Partial<Record<SlotId, string>>;
+    answers?: Record<string, boolean>;
+  }) => string | null;
+}) {
+  const slots = componentSlots(state);
+  if (slots.length === 0) return null;
+  const busy = state.migration !== null || state.componentSwap !== null;
+  return (
+    <>
+      <div className="divider my-1 text-xs">
+        部品（同じ事業者の中で差し替える）
+      </div>
+      {busy ? (
+        <div className="text-sm">
+          {state.componentSwap
+            ? `DB の差し替え（データの移行）の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）。`
+            : '乗り換えの最中。'}
+          済むまで部品は差し替えられない。
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-3">
+          {slots.map((x) => {
+            // 届いている提案で付く部品（チャットの Durable Objects など）。選ぶのは提案を受けるのと同じ
+            const viaProposal = x.options.flatMap((o) => {
+              const id = componentProposal(state, x.slot, o.id);
+              return id ? [{ option: o.id, id }] : [];
+            });
+            const accepted = viaProposal.find((v) => answers[v.id]);
+            const chosen = accepted?.option ?? parts[x.slot] ?? x.current;
+            const opt = x.options.find((o) => o.id === chosen)!;
+            const preview =
+              chosen === x.current
+                ? []
+                : componentPreview(state, x.slot, chosen);
+            return (
+              <label key={x.slot} className="form-control">
+                <span className="label-text mb-1 block">
+                  <span className="block font-semibold">
+                    {/* select の選択肢の中には置けないので、選択肢ごとの説明をまとめて出す */}
+                    <NameWithInfo
+                      name={x.label}
+                      info={
+                        <Info>
+                          <ul className="space-y-1">
+                            {x.options.map((o) => (
+                              <li key={o.id}>
+                                <span className="font-semibold">{o.label}</span>
+                                {o.inappropriate && (
+                                  <span className="badge badge-xs badge-warning ml-1">
+                                    ⚠ 不適切
+                                  </span>
+                                )}
+                                : {o.note}
+                              </li>
+                            ))}
+                          </ul>
+                          {x.slot === 'db' && (
+                            <p className="mt-2 opacity-80">
+                              DB
+                              の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
+                              DB の費用を払う。
+                            </p>
+                          )}
+                        </Info>
+                      }
+                    />
+                  </span>
+                  <Meta items={componentEffortLabel(x.slot)} />
+                </span>
+                <select
+                  className="select select-bordered select-sm w-full"
+                  value={chosen}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const next = { ...parts };
+                    delete next[x.slot];
+                    const nextAnswers = { ...answers };
+                    for (const p of viaProposal)
+                      nextAnswers[p.id] = p.option === v;
+                    if (
+                      v !== x.current &&
+                      !viaProposal.some((p) => p.option === v)
+                    )
+                      next[x.slot] = v;
+                    setParts(next);
+                    if (viaProposal.length) setAnswers(nextAnswers);
+                  }}
+                >
+                  {x.options.map((o) => {
+                    const p = viaProposal.find((q) => q.option === o.id);
+                    const restParts = { ...parts };
+                    delete restParts[x.slot];
+                    const why =
+                      o.id === x.current
+                        ? null
+                        : p
+                          ? blocked({
+                              parts: restParts,
+                              answers: { ...answers, [p.id]: true },
+                            })
+                          : blocked({
+                              parts: { ...restParts, [x.slot]: o.id },
+                            });
+                    return (
+                      <option key={o.id} value={o.id} disabled={why !== null}>
+                        {o.label}
+                        {o.inappropriate ? '（不適切）' : ''}
+                        {o.id === x.current ? '（今）' : ''}
+                        {p ? '（届いた提案を受ける）' : ''}
+                        {why ? `（${why}）` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                {opt.inappropriate && (
+                  <span className="mt-1 text-xs opacity-80">
+                    <span className="badge badge-xs badge-warning mr-1">
+                      ⚠ 不適切
+                    </span>
+                    学びのための選択肢
+                  </span>
+                )}
+                {preview.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-xs">
+                    {preview.map((p) => (
+                      <li
+                        key={p.id}
+                        className="flex flex-wrap items-center gap-1"
+                      >
+                        <span
+                          className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
+                        >
+                          {p.hit ? '✗ 当たる' : '○ 当たりうる前提'}
+                        </span>
+                        {p.text}
+                        {p.ratio !== undefined && (
+                          <span className="tabular-nums opacity-70">
+                            （今の規模で {(p.ratio * 100).toFixed(0)}%）
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** 花火のアイコン（中心から放射する線と点。currentColor で描く）。 */
+function FireworkIcon() {
+  const rays = Array.from({ length: 8 }, (_, i) => (i * Math.PI) / 4);
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      {rays.map((a) => (
+        <line
+          key={a}
+          x1={12 + Math.cos(a) * 3.5}
+          y1={12 + Math.sin(a) * 3.5}
+          x2={12 + Math.cos(a) * 8}
+          y2={12 + Math.sin(a) * 8}
+        />
+      ))}
+      {rays.map((a) => (
+        <circle
+          key={`d${a}`}
+          cx={12 + Math.cos(a + Math.PI / 8) * 10.5}
+          cy={12 + Math.sin(a + Math.PI / 8) * 10.5}
+          r="0.9"
+          fill="currentColor"
+          stroke="none"
+        />
+      ))}
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** 結果（prd/07 §9.6）: 合否・軸ごとの成績（基準プレイの目盛りつき）・振り返り。 */
-function Result({ state }: { state: GameState }) {
+function Result({
+  state,
+  onCelebrate,
+}: {
+  state: GameState;
+  /** 目標達成のダイアログを開き直す（達成のときだけ使う）。 */
+  onCelebrate: () => void;
+}) {
   const won = state.phase === 'won';
   const end = state.end!;
   const checks = goalChecks(state);
@@ -968,14 +1552,38 @@ function Result({ state }: { state: GameState }) {
     axes: cfPaid.axes,
   });
   return (
-    <div className="card bg-base-100 shadow">
+    // 達成は花火、未達成・ゲームオーバーは控えめにフェードインだけ（D-25。動きを減らす設定では出さない）
+    <div className="card motion-fade-in bg-base-100 shadow">
       <div className="card-body gap-4">
         <div className={`alert ${won ? 'alert-success' : 'alert-error'}`}>
-          <span className="text-lg font-bold">{END_LABEL[end.reason]}</span>
-          <span>
-            {end.month} か月目で終了・所持金 {usd(state.cash)}・止まった月{' '}
-            {state.outages} 回
-          </span>
+          {/* 中身を 1 つのブロックにする（alert の grid で横に割られて途中で折り返さないように） */}
+          <div className="min-w-0">
+            <div className="text-lg font-bold">{END_LABEL[end.reason]}</div>
+            <div>
+              <span className="whitespace-nowrap">
+                {end.month} か月目で終了
+              </span>
+              ・
+              <span className="whitespace-nowrap">
+                所持金 {usd(state.cash)}
+              </span>
+              ・
+              <span className="whitespace-nowrap">
+                止まった月 {state.outages} 回
+              </span>
+            </div>
+          </div>
+          {won && (
+            // 帯の中の花火のアイコンのボタン（SVG。端末のフォントに依存しない）。帯の文字の色で描く
+            <button
+              className="btn btn-circle btn-sm ml-auto border-current bg-transparent text-current shadow-none hover:bg-black/10"
+              onClick={onCelebrate}
+              aria-label="もう一度祝う（達成のダイアログを開く）"
+              title="もう一度祝う（達成のダイアログを開く）"
+            >
+              <FireworkIcon />
+            </button>
+          )}
         </div>
         <div className="space-y-3">
           {meters.map((m) => (
@@ -1144,7 +1752,11 @@ function Result({ state }: { state: GameState }) {
                     ['出来事への対応', e.interrupt],
                     ['乗り換え', e.migration],
                     ['行動（設定・最適化）', e.actions],
-                    ['機能開発', e.feature],
+                    ['機能の追加（提案）', e.featureWork],
+                    [
+                      '機能開発（残り）',
+                      e.feature - e.featureWork - e.featureBonus,
+                    ],
                   ].map(([label, v]) => (
                     <li key={label as string} className="flex">
                       {label}
@@ -1288,7 +1900,7 @@ function History({ history }: { history: MonthReport[] }) {
                 </td>
                 <td className="text-xs">
                   {r.events
-                    .map((e) => `${PHASE_LABEL[e.phase]}${e.title}`)
+                    .map((e) => `${eventBadge(e).label}: ${e.title}`)
                     .join('・')}
                 </td>
                 <td className="text-xs">{r.action ?? ''}</td>
@@ -1316,31 +1928,42 @@ function Trends({ history }: { history: MonthReport[] }) {
   const tiles = [
     {
       label: 'PV',
-      value: compact(Math.round(last.pv)),
+      value: last.pv,
+      format: (n: number) => compact(Math.round(n)),
       series: history.map((r) => r.pv),
       delta: prev ? last.pv / prev.pv - 1 : null,
     },
     {
       label: '収益（月）',
-      value: usd(last.revenue),
+      value: last.revenue,
+      format: usd,
       series: history.map((r) => r.revenue),
       delta: prev ? last.revenue / prev.revenue - 1 : null,
     },
     {
       label: '費用（月）',
-      value: usd(cost(last)),
+      value: cost(last),
+      format: usd,
       series: history.map(cost),
       delta: prev ? cost(last) / cost(prev) - 1 : null,
     },
     {
       label: '所持金',
-      value: usd(last.cash),
+      value: last.cash,
+      format: usd,
       series: history.map((r) => r.cash),
       delta: null,
     },
     {
       label: '機能開発（月）',
-      value: `${last.effort.feature} / ${last.effort.total}`,
+      value: last.effort.feature,
+      // 提案の作業と加点を含む（D-29）。総量を超えうるので「/ 総量」でなく内訳を添える
+      format: (n: number) => {
+        const p = last.effort.featureWork + last.effort.featureBonus;
+        return p > 0
+          ? `${Math.round(n)}（うち提案 ${Math.round(p)}）`
+          : `${Math.round(n)} / ${last.effort.total}`;
+      },
       series: history.map((r) => r.effort.feature),
       delta: null,
     },
@@ -1353,7 +1976,10 @@ function Trends({ history }: { history: MonthReport[] }) {
           {tiles.map((t) => (
             <div key={t.label} className="rounded-box bg-base-200 p-3">
               <div className="text-xs opacity-70">{t.label}</div>
-              <div className="text-xl font-semibold">{t.value}</div>
+              <div className="text-xl font-semibold tabular-nums">
+                {/* 月が進むと前の月の値から数え上げる（D-25） */}
+                <CountUp value={t.value} format={t.format} />
+              </div>
               <div className="flex flex-wrap items-end justify-between">
                 <span className="text-xs opacity-70">
                   {t.delta === null || !Number.isFinite(t.delta)

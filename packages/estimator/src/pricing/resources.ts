@@ -24,6 +24,8 @@ export const RESOURCES = [
   'isr-writes',
   'instance-hours', // 時間課金のインスタンス（DB のコンピュートなど）
   'monthly-active-users',
+  'queries', // DB への問い合わせ（Hyperdrive のクエリ数など）
+  'gb-seconds', // メモリ × 実行時間（秒。Durable Objects の Duration）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -50,4 +52,6 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'isr-writes': 'operation',
   'instance-hours': 'hour',
   'monthly-active-users': 'count',
+  queries: 'count',
+  'gb-seconds': 'gb-second',
 };

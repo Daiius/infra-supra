@@ -17,6 +17,8 @@ export const REQUEST_CLASSES = [
   'image-read',
   'image-write',
   'image-transform', // 画像の最適化（一意な変換）
+  'realtime-connect', // リアルタイムの接続（WebSocket の確立）
+  'realtime-message', // リアルタイムのメッセージ（サーバーが受け取る数）
 ] as const;
 export type RequestClass = (typeof REQUEST_CLASSES)[number];
 
@@ -49,7 +51,11 @@ export type ResolvedWorkload = {
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
-  storage: { dbGB: number; imagesGB: number };
+  /**
+   * 保存量。imagesGB は原本（images.storedGB）。variantsGB は投稿のときに作って保存するサイズ違い
+   * （transformAt: upload のときだけ。閲覧のときに変換する構成では保存しないので 0。OCL-F3098083）。
+   */
+  storage: { dbGB: number; imagesGB: number; variantsGB: number };
   derivations: Derivation[];
 };
 
@@ -176,6 +182,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   }
 
   const a = w.api;
+  const rt = w.realtime;
   const images = pv * w.perPage.images * (1 - w.images.browserReuse);
   const classes: Record<RequestClass, ClassFlow> = {
     'document-static': merge(byRendering.static),
@@ -197,12 +204,25 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     'image-write': flow(t.mau * w.images.uploadsPerMau, {
       kb: w.images.sizeKB,
     }),
-    // 一意な変換は「画像の種類 × サイズ違い」で頭打ち（閲覧がそれより少なければ閲覧数）
+    // 一意な変換は「画像の種類 × サイズ違い」で頭打ち（閲覧がそれより少なければ閲覧数）。
+    // 投稿のときに作るなら投稿数 × サイズ違い、作らないなら 0（D-24）
     'image-transform': flow(
-      Math.min(w.images.distinct * w.images.variants, images),
+      w.images.transformAt === 'none'
+        ? 0
+        : w.images.transformAt === 'upload'
+          ? t.mau * w.images.uploadsPerMau * w.images.variants
+          : Math.min(w.images.distinct * w.images.variants, images),
       {
         kb: w.images.sizeKB,
       },
+    ),
+    'realtime-connect': flow(
+      rt ? t.mau * rt.usersPerMau * rt.connectionsPerUser : 0,
+      { rowsRead: rt?.historyRowsPerConnect ?? 0 },
+    ),
+    'realtime-message': flow(
+      rt ? t.mau * rt.usersPerMau * rt.messagesPerUser : 0,
+      { cpuMs: rt?.processingMs ?? 0, rowsWritten: 1 },
     ),
   };
 
@@ -214,7 +234,16 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     backgroundCpuMs: { 'isr-revalidate': isrWithRevalidate },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
-    storage: { dbGB: w.db.sizeGB, imagesGB: w.images.storedGB },
+    storage: {
+      dbGB: w.db.sizeGB,
+      imagesGB: w.images.storedGB,
+      // サイズ違い 1 枚は配る大きさ（sizeKB）とする（仮定）
+      variantsGB:
+        w.images.transformAt === 'upload'
+          ? (w.images.distinct * w.images.variants * w.images.sizeKB) /
+            1_000_000
+          : 0,
+    },
     derivations,
   };
 }

@@ -32,14 +32,40 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      */
     backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
   }),
-  /** KV（ISR のキャッシュとして使う場合: 閲覧で読み、再生成で書く）。 */
-  z.object({ kind: z.literal('kv') }),
-  /** 行で課金される SQL（D1 型）。 */
-  z.object({ kind: z.literal('sql-db') }),
+  /**
+   * KV。cache: ISR のキャッシュ（閲覧で読み、再生成で書く）。db: DB の代わり（問い合わせ 1 回を読み取り 1 回、
+   * 書く行 1 行を書き込み 1 回と数える。仮定・D-24）。hotKeyShare は同じキーに集中する書き込みの割合（仮定）。
+   */
+  z.object({
+    kind: z.literal('kv'),
+    mode: z.enum(['cache', 'db']).default('cache'),
+    hotKeyShare: Ratio.default(0),
+  }),
+  /** 行で課金される SQL（D1 型）。storesImages: 画像を BLOB で置く（1 枚 1 行と仮定。D-24 の不適切な選択）。 */
+  z.object({
+    kind: z.literal('sql-db'),
+    storesImages: z.boolean().default(false),
+    /** アプリの DB を置くか（false は画像だけを置く D1。DB は別の部品）。 */
+    storesDb: z.boolean().default(true),
+  }),
+  /** DB への接続のプール（Hyperdrive 型）。問い合わせの件数を数え、経路の次の DB へ流す。 */
+  z.object({ kind: z.literal('db-proxy') }),
+  /**
+   * Durable Objects 型（休止する WebSocket）。受信メッセージは messagesPerRequest 件で 1 リクエスト、
+   * 実行時間は処理している間だけ memoryGB で数える（料金データの数え方。catalog の構成が値を持つ）。
+   */
+  z.object({
+    kind: z.literal('durable-object'),
+    messagesPerRequest: Pos,
+    memoryGB: Pos,
+  }),
   /** コンピュートを時間で買うマネージド DB（Supabase 型）。 */
   z.object({ kind: z.literal('managed-db') }),
-  /** オブジェクトストレージ（R2・S3 型）。 */
-  z.object({ kind: z.literal('object-storage') }),
+  /** オブジェクトストレージ（R2・S3 型）。storesImages: false なら画像の保存量を載せない（ISR のキャッシュだけに使う場合）。 */
+  z.object({
+    kind: z.literal('object-storage'),
+    storesImages: z.boolean().default(true),
+  }),
   /** 画像の最適化。cacheMissRate はキャッシュの読み取りが共有キャッシュまで届く割合。 */
   z.object({
     kind: z.literal('image-optimizer'),
@@ -69,6 +95,8 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     lineUsable: Ratio.default(0.5),
     /** 劣化させずに使える CPU 使用率の上限（仮定）。 */
     cpuUtilMax: Ratio.default(0.7),
+    /** 前段の Web サーバー（nginx・TLS）の 1 リクエストあたりの CPU（ms・仮定。D-31）。 */
+    proxyCpuMsPerRequest: NonNeg.default(0),
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;
@@ -77,6 +105,8 @@ export const ArchNodeSchema = z.object({
   id: z.string(),
   label: z.string(),
   config: NodeKindSchema,
+  /** このノードで効く料金データの事実（Plan の facts の id）。挙げたものだけ前提に出す（D-24）。 */
+  facts: z.array(z.string()).default([]),
   /** 課金先。無いノード（VPS 上のプロセスなど）は課金されない。 */
   billing: z
     .object({

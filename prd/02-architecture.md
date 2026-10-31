@@ -61,6 +61,7 @@ Vite を選んだ判断は [_grilling/decisions.md](./_grilling/decisions.md) D-
 - MVP は**ローカル保存**（localStorage / IndexedDB）と **JSON の書き出し・読み込み**。
 - 保存形式は zod スキーマに `schemaVersion` を持たせ、読み込み時に移行関数を通す。
 - 見積は §1 の流れの入力と PriceBook の版を保存し、結果は再計算で復元する（結果のキャッシュも持つが正は入力）。
+- **ゲームの途中の保存（D-26・実装済み）**: localStorage のキー `infra-supra:game-save` に、始めたときの選択（シナリオ・構成・シード・始めた日）と月ごとの行動の列だけを `version` つきで保存する（`packages/game/src/save.ts` の `SaveData`）。GameState そのものは保存しない。読み込みは `replaySave`（純粋関数）で同じ順に再生して復元する（ゲームは決定論）。読めない・版が違う・再生で例外が出たら、黙って捨てて初期画面にする。「最初から」で消す。保存から再開したときは、出来事・目標達成のダイアログを自動では開かない（ボタンで開ける）。I/O は web の中だけ。
 
 ## 6. 自分自身のデプロイ（計画中）
 

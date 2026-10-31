@@ -9,6 +9,7 @@ const CF_FREE = 0;
 const CF_PAID = 1;
 const VERCEL_PRO = 3;
 const VPS = 4;
+const VPS_4GB = 5;
 
 /** 前の月の終わりに出ていた出来事（基準プレイが状態を見て行動を決めるため）。 */
 const sawEvent = (s: GameState, id: string, phase?: string) =>
@@ -118,7 +119,7 @@ const EVENTS: EventDef[] = [
       effects: [
         { type: 'workload', mods: { writesPerCall: 0.2 } },
         { type: 'feature', points: 4 },
-        { type: 'interrupt', points: 2, months: 1 },
+        { type: 'interrupt', featureWork: true, points: 2, months: 1 },
       ],
     },
   },
@@ -143,7 +144,7 @@ const EVENTS: EventDef[] = [
         { type: 'workload', mods: { imagesPerPage: 10, uploadsFactor: 3 } },
         { type: 'feature', points: 8 },
         { type: 'growth', add: 0.03, months: 3 },
-        { type: 'interrupt', points: 3, months: 2 },
+        { type: 'interrupt', featureWork: true, points: 3, months: 2 },
       ],
     },
   },
@@ -165,7 +166,7 @@ const EVENTS: EventDef[] = [
       effects: [
         { type: 'workload', mods: { ssrShare: 0.6 } },
         { type: 'feature', points: 6 },
-        { type: 'interrupt', points: 4, months: 1 },
+        { type: 'interrupt', featureWork: true, points: 4, months: 1 },
       ],
     },
   },
@@ -197,6 +198,90 @@ const EVENTS: EventDef[] = [
       ],
     },
   },
+  {
+    // W-1（D-24）: Vercel・VPS のリアルタイムは未取得なので、Cloudflare の構成のときだけ出す（X-5）
+    id: 'p-chat',
+    kind: 'proposal',
+    tier: 'occasional',
+    title: '記事ごとのチャット（リアルタイム）',
+    text: '記事を読みながら話せるチャットがほしいという要望。WebSocket の接続を保つ部品が要る',
+    when: { type: 'window', from: 4, to: 9 },
+    platforms: ['cloudflare'],
+    premiseRefs: [
+      'pool:cloudflare:durable-objects-',
+      'pool:cloudflare:workers-free:free-requests',
+    ],
+    accept: {
+      label: '受ける（Durable Objects を付ける。手間 4）',
+      effects: [
+        {
+          type: 'workload',
+          // 会員の 5% が使い、1 人が月 8 回つなぎ 100 件送る。1 件 2 ms で処理し、つなぐと履歴 50 行を読む（仮定）
+          mods: {
+            realtime: {
+              usersPerMau: 0.05,
+              connectionsPerUser: 8,
+              messagesPerUser: 100,
+              processingMs: 2,
+              historyRowsPerConnect: 50,
+            },
+          },
+        },
+        { type: 'component', slot: 'realtime', option: 'durable-objects' },
+        { type: 'feature', points: 6 },
+        { type: 'growth', add: 0.02, months: 3 },
+        { type: 'interrupt', featureWork: true, points: 4, months: 1 },
+      ],
+    },
+  },
+  {
+    // D-32: 編集部が記事の即時反映を求める。受けると以後ずっと「即時反映」の要件（満たさない構成では鮮度が下がる）
+    id: 'p-ondemand',
+    kind: 'proposal',
+    tier: 'occasional',
+    title: '編集部が記事の即時反映を求める（オンデマンド ISR）',
+    text: '記事を直したらすぐ読者に見えるようにしてほしいという要望。公開・修正のたびに revalidatePath・revalidateTag で再検証する。古い版を一度も出さないなら revalidateTag の { expire: 0 }（次のアクセスは再生成を待つ）。ISR のキャッシュの置き場所しだいで、すぐには反映されない構成がある',
+    when: { type: 'window', from: 4, to: 9 },
+    previewRequirement: 'on-demand-isr',
+    premiseRefs: [
+      'fact:cloudflare:workers-paid:',
+      'fact:cloudflare:cdn-free:next-on-demand',
+    ],
+    accept: {
+      label: '受ける（手間 3）',
+      effects: [
+        { type: 'feature', points: 5 },
+        { type: 'growth', add: 0.02, months: 3 },
+        { type: 'interrupt', featureWork: true, points: 3, months: 1 },
+        { type: 'requirement', requirement: 'on-demand-isr' },
+      ],
+    },
+  },
+  {
+    // SC-5・W-2（D-24）: セルフサービスのプランで稼働率の SLA があるのはさくらの VPS 4GB だけ（catalog の uptimeSla）
+    id: 'p-sla',
+    kind: 'proposal',
+    tier: 'rare',
+    title: '法人顧客が SLA つきの契約を求める',
+    text: '社内の勉強会で記事を使いたい法人から、稼働率の SLA を条件にした有料の契約の打診が来た。契約の収益は SLA のあるプランで運営している月だけ入る',
+    when: { type: 'rare', weight: 1 },
+    notice: {
+      monthsAhead: 1,
+      title: '法人から SLA つきの契約の打診が来そう',
+      text: '稼働率の SLA を条件にした契約の打診が来月来る見込み',
+    },
+    premiseRefs: [],
+    showSla: true,
+    requires: 'uptime-sla',
+    accept: {
+      label: '受ける（契約の対応に手間 2）',
+      effects: [
+        // 契約の金額は仮定
+        { type: 'contract', usdPerMonth: 40, requires: 'uptime-sla' },
+        { type: 'interrupt', points: 2, months: 1 },
+      ],
+    },
+  },
   // ---- シナリオの台本（SC）----
   {
     id: 'buzz',
@@ -210,7 +295,11 @@ const EVENTS: EventDef[] = [
       title: 'SNS で話題になりそう',
       text: '記事が SNS で伸び始めた（来月、話題になるかもしれない）',
       pvFactor: 1.2,
+      // 半分は予告なしで起きる（対処は来月から。D-28）
+      chance: 0.5,
     },
+    surpriseText:
+      '記事が突然 SNS で広まり、今月だけ PV が大きく増えた（前兆はなかった）。今月の費用と満足度に効いている。満足度が高ければ、その後も伸びが残る',
     premiseRefs: [
       'pool:vercel:pro:',
       'pool:cloudflare:workers-paid:',
@@ -234,6 +323,18 @@ const EVENTS: EventDef[] = [
     title: 'Bot・クローラーの大量アクセス',
     text: 'クローラーが大量に来ている（2 か月続く）。Bot は広告の収益にならない。Bot を遮断するルールを入れると、来月から半分になる',
     when: { type: 'window', from: 3, to: 11 },
+    notice: {
+      monthsAhead: 1,
+      title: 'Bot・クローラーが大量に来そう',
+      text: 'クローラーの訪問が増え始めた（来月、大量に来るかもしれない）。今月のうちに Bot を遮断するルールを入れれば、来月から半分になる',
+      pvFactor: 1.2,
+      bot: true,
+      // 半分は予告なしで起きる。序盤（1〜2 か月目）には予告を出さない（D-28・D-20 V-12）
+      chance: 0.5,
+      notBefore: 3,
+    },
+    surpriseText:
+      'クローラーが予告なしに大量に来た（2 か月続く）。Bot は広告の収益にならない。今月の費用に効いている。Bot を遮断するルールは来月から効く',
     premiseRefs: [
       'pool:cloudflare:workers-free:free-requests',
       'pool:cloudflare:workers-paid:paid-requests',
@@ -283,6 +384,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
     loss: { block: 0.6, throttle: 0.1, incident: 0.1, migration: 0.15 },
   },
   incidents: { selfHostedChancePerMonth: 0.08 },
+  // 最適化しない画像の大きさ（原本。仮定）
+  unoptimizedImageKB: 400,
   satisfaction: {
     weights: {
       availability: 0.4,
@@ -364,6 +467,44 @@ export const ARTICLE_COMMUNITY: Scenario = {
       label: 'Cloudflare Free・何もしない',
       short: 'CF Free・何もしない',
       stackIndex: CF_FREE,
+    },
+    // GD-4（D-24）の目盛り。不適切な選択と、部品の追加・SLA の対応
+    {
+      id: 'cf-paid-kvdb',
+      label:
+        'Cloudflare Paid・1 か月目の終わりに DB を KV に差し替える（不適切な選択）',
+      short: 'CF Paid・KV を DB 代わり',
+      stackIndex: CF_PAID,
+      actions: [[{ type: 'component', slot: 'db', option: 'kv' }]],
+    },
+    {
+      id: 'cf-paid-chat',
+      label: 'Cloudflare Paid・チャットの提案だけ受ける',
+      short: 'CF Paid・チャットを受ける',
+      stackIndex: CF_PAID,
+      decide: (s) =>
+        s.pendingProposals.map((eventId): Action => ({
+          type: 'respond',
+          eventId,
+          accept: eventId === 'p-chat',
+        })),
+    },
+    {
+      id: 'vps-sla',
+      label:
+        'さくらの VPS 2GB・SLA の契約の打診が予告されたら 4GB にプラン変更し、打診を受ける',
+      short: 'VPS・SLA に応える',
+      stackIndex: VPS,
+      decide: (s) => [
+        ...(sawEvent(s, 'p-sla', 'notice') && s.stackIndex === VPS
+          ? [{ type: 'plan', stackIndex: VPS_4GB } as const]
+          : []),
+        ...s.pendingProposals.map((eventId): Action => ({
+          type: 'respond',
+          eventId,
+          accept: eventId === 'p-sla',
+        })),
+      ],
     },
   ],
 };

@@ -58,9 +58,23 @@ export const EFFORT = {
   featurePointsPerSsrMs: 10,
   maxSsrDriftMs: 5,
   plan: 0,
+  /**
+   * さくらの VPS の上位プランへの変更（スケールアップ）: 停止して変更し、ディスクの拡張は利用者の作業（D-27）。
+   * 一度きりの手間。停止は計画的で短いので「止まった月」には数えない。
+   */
+  scaleUp: 2,
+  /** さくらの VPS のストレージ変更オプション（スケールアップから申し込む。停止とディスクの拡張。D-30）。 */
+  storageOption: 2,
+  /**
+   * 部品の差し替え（D-24・prd/07 §11.3）。ISR のキャッシュ・画像は翌月から。DB はデータの移行があるので
+   * 乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える（期間中は新旧の両方の DB の費用）。
+   */
+  component: { isrCache: 2, images: 2, realtime: 4, frontCdn: 2 },
+  dbSwap: { perMonth: 6, months: 1 },
   /** 乗り換え: 月あたりの手間と、必要な月数（VPS が絡むと長い）。 */
   migrationPerMonth: 6,
-  migrationMonths: { serverless: 2, selfHosted: 3 },
+  /** recontract: 同じ事業者の下位プランへ契約し直してデータを移す（さくらの VPS 4GB → 2GB。D-27）。 */
+  migrationMonths: { serverless: 2, selfHosted: 3, recontract: 2 },
 } as const;
 
 /** 速さの「重さ」の数（0〜3）。 */
@@ -97,6 +111,18 @@ export type JudgeInput = {
   featurePoints: number;
   month: number;
   premises: readonly PlatformPremise[];
+  /** ISR のキャッシュを使わない（毎回 SSR なので記事は常に新しい。D-24）。 */
+  uncached?: boolean;
+  /** 書き込みが他の拠点にすぐ反映されない DB（KV を DB の代わり）。鮮度を 1 段下げる（仮定・D-24）。 */
+  eventuallyConsistent?: boolean;
+  /** 即時反映（オンデマンド ISR）の要件を満たさない。さらに 1 段下げる（仮定・D-32）。 */
+  onDemandUnmet?: boolean;
+};
+
+const STAGE_DOWN: Record<Stage, Stage> = {
+  good: 'fair',
+  fair: 'bad',
+  bad: 'bad',
 };
 
 export function judgeStages(
@@ -118,12 +144,17 @@ export function judgeStages(
         : featureRatio >= ft.fair
           ? 'fair'
           : 'bad',
-    freshness:
-      i.revalidateSec <= f.good
+    freshness: ((): Stage => {
+      const base: Stage = i.uncached
         ? 'good'
-        : i.revalidateSec <= f.fair
-          ? 'fair'
-          : 'bad',
+        : i.revalidateSec <= f.good
+          ? 'good'
+          : i.revalidateSec <= f.fair
+            ? 'fair'
+            : 'bad';
+      const a = i.eventuallyConsistent ? STAGE_DOWN[base] : base;
+      return i.onDemandUnmet ? STAGE_DOWN[a] : a;
+    })(),
     quality:
       i.imageKB >= q.good ? 'good' : i.imageKB >= q.fair ? 'fair' : 'bad',
   };
@@ -184,8 +215,13 @@ export type EffortBreakdown = {
   total: number;
   upkeep: number;
   interrupt: number;
+  /** 機能の追加の作業（提案への対応。機能開発に数える。D-29）。 */
+  featureWork: number;
+  /** 提案の機能の加点（作業の月に足す。総量の外）。 */
+  featureBonus: number;
   migration: number;
   actions: number;
+  /** その月の機能開発 = 余り + 機能の追加の作業 + 加点。 */
   feature: number;
 };
 
@@ -196,6 +232,9 @@ export type EffortBreakdown = {
 export function allocateEffort(input: {
   upkeep: number;
   interrupt?: number;
+  /** 機能の追加の作業（提案への対応）と、その加点（作業が削られたら同じ割合で減る）。 */
+  featureWork?: number;
+  featureBonus?: number;
   /** 乗り換えに今月入れたい量（0 なら乗り換え中でない）。 */
   migrationWanted: number;
   actions: number;
@@ -211,15 +250,21 @@ export function allocateEffort(input: {
   };
   const upkeep = take(input.upkeep);
   const interrupt = take(input.interrupt ?? 0);
+  const wanted = input.featureWork ?? 0;
+  const featureWork = take(wanted);
+  const featureBonus =
+    wanted > 0 ? ((input.featureBonus ?? 0) * featureWork) / wanted : 0;
   const migration = take(input.migrationWanted);
   const actions = take(input.actions);
   return {
     total,
     upkeep,
     interrupt,
+    featureWork,
+    featureBonus,
     migration,
     actions,
-    feature: left,
+    feature: left + featureWork + featureBonus,
   };
 }
 

@@ -86,7 +86,9 @@ describe('台本の表', () => {
       const p = s.find((x) => x.id === proposal.id)!;
       expect(p.month).toBeGreaterThanOrEqual(3);
       expect(p.month).toBeLessThanOrEqual(5);
-      const r = s.filter((x) => x.id === rare.id || x.id === 'p-archive');
+      const r = s.filter((x) =>
+        TEST.events.some((e) => e.id === x.id && e.when.type === 'rare'),
+      );
       expect(r.length).toBeLessThanOrEqual(1);
       if (r[0]) {
         rareCount++;

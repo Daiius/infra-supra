@@ -114,6 +114,9 @@ WebSocket・WebRTC・動画・バッチは Phase 6 でクラスを足して扱�
 - **ServiceOffering**（データ・catalog）: 実在サービスの 1 プラン。ComponentKind を指定し、そのパラメータ
   （制限・メーターの対応・リージョン）を与える。料金そのものは PriceBook に分ける（[03](./03-pricing-schema.md)）。
 - 規則: **既存の ComponentKind で表せるサービスの追加は、データの追加だけで済む。** 新しい種類が要るときだけコードを足す。
+- GD-4（D-24）で足したもの: `db-proxy`（Hyperdrive 型。問い合わせを数える）・`durable-object`（休止する WebSocket）・`kv` の `mode: 'db'`（DB の代わり）・`sql-db` / `object-storage` の `storesImages`・リクエストクラス `realtime-connect` / `realtime-message`。
+  ノードの `facts` に料金データの事実（Plan の `facts`）の id を挙げると、その事実を前提に出す（部品の選び方しだいで効く事実。prd/03 §9）。
+  構成は catalog の `composeStack`（事業者 × プラン × スロットの選択）で組み立て、完成品は既定の選択（prd/07 §11.2）。
 
 ### 4.2 グラフ
 

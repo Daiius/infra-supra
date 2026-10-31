@@ -145,6 +145,7 @@ export const LIMIT_MEASURES = [
   'cpu-ms-per-request', // 1 リクエストあたりの CPU 時間の最大
   'storage-gb', // ノードの保存量
   'peak-concurrency', // ピーク時間帯の同時接続・同時実行
+  'writes-per-second-per-key', // 同じキーへの書き込みの頻度（ピーク時間帯・1 秒あたり。KV など）
 ] as const;
 
 export const LimitSchema = z.object({
@@ -157,6 +158,47 @@ export const LimitSchema = z.object({
   premise: Premise.optional(),
   sourceIds: SourceIds,
 });
+
+/**
+ * 量の境目を持たない事実（KV の反映の遅れ・D1 の 1 行の上限など）。常に効くわけではないので、
+ * 構成のノードが `facts` で id を挙げたときだけ前提として出す（D-24。部品の選び方しだいで効く事実）。
+ */
+export const PlanFactSchema = z.object({
+  id: Id,
+  premise: Premise,
+  interpretation: InterpretationSchema.optional(),
+  sourceIds: SourceIds,
+});
+
+/**
+ * 稼働率の SLA（D-24・07 §11.5）。offered は稼働率の値と組。書かれていなければ not-stated（無いと断定しない）、
+ * 「含まれない」と書かれていれば none。補償（減額・クレジット）は計算に使わない。
+ */
+export const UptimeSlaSchema = z
+  .object({
+    status: z.enum(['offered', 'none', 'not-stated']),
+    percent: z.number().finite().min(0).max(100).optional(),
+    premise: Premise,
+    sourceIds: SourceIds,
+  })
+  .refine((s) => (s.status === 'offered') === (s.percent !== undefined), {
+    message: 'percent は status: offered のときだけ持つ',
+  });
+
+/**
+ * 一度きりの費用がかかる追加のオプション（D-30。さくらの VPS のストレージ変更オプションなど）。
+ * 月額は変わらず、申し込んだときに oneTimeFee を一度だけ払う（通貨・税込かは PriceBook に合わせる）。
+ * 何が変わるか（ディスクの大きさなど）は構成のデータ（catalog の stacks）が持つ。
+ */
+export const AddonSchema = z.object({
+  id: Id,
+  name: z.string(),
+  oneTimeFee: NonNegative,
+  premise: Premise,
+  interpretation: InterpretationSchema.optional(),
+  sourceIds: SourceIds,
+});
+export type Addon = z.infer<typeof AddonSchema>;
 
 /** 数量でない利用資格（D-09。Vercel Hobby の商用利用不可など）。 */
 export const EligibilitySchema = z.object({
@@ -203,6 +245,9 @@ export const PlanSchema = z.object({
   limits: z.array(LimitSchema).default([]),
   eligibility: z.array(EligibilitySchema).default([]),
   members: MembersSchema.optional(),
+  facts: z.array(PlanFactSchema).default([]),
+  addons: z.array(AddonSchema).default([]),
+  uptimeSla: UptimeSlaSchema.optional(),
   notes: z.array(z.string()).default([]), // 支払いの条件など（D-14）
   sourceIds: SourceIds,
 });
@@ -348,6 +393,14 @@ export const PriceBookSchema = z
       plan.limits.forEach((l, li) =>
         requireSources(l.sourceIds, ['plans', pi, 'limits', li, 'sourceIds']),
       );
+      plan.facts.forEach((f, fi) =>
+        requireSources(f.sourceIds, ['plans', pi, 'facts', fi, 'sourceIds']),
+      );
+      plan.addons.forEach((a, ai) =>
+        requireSources(a.sourceIds, ['plans', pi, 'addons', ai, 'sourceIds']),
+      );
+      if (plan.uptimeSla)
+        requireSources(plan.uptimeSla.sourceIds, ['plans', pi, 'uptimeSla']);
     });
     book.allowancePools.forEach((p, i) =>
       requireSources(p.sourceIds, ['allowancePools', i, 'sourceIds']),

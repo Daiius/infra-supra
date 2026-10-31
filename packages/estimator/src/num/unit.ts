@@ -13,6 +13,7 @@ export const UNITS = [
   'gb',
   'gb-month',
   'gb-hour',
+  'gb-second', // メモリ × 実行時間（Durable Objects の Duration）
   'cpu-hour',
 ] as const;
 export type Unit = (typeof UNITS)[number];

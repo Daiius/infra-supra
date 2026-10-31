@@ -1,5 +1,6 @@
 // シナリオと出来事のデータの形（prd/07 §10.1・§10.2・D-20）。ここは型と、台本の表を作る純粋関数だけ。
 // シナリオの値（規模・収益・満足度の重み・手間・確率・時期・効果）はすべてゲーム上の仮定。
+import type { Platform, SlotId } from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import { draws } from './random.ts';
 import type { Element } from './rules.ts';
@@ -17,7 +18,10 @@ export type Stock = {
 export type StockRule = {
   /** DB の増え方（PV 100 万あたり・月）。 */
   dbGBPerMillionPV: number;
-  /** 画像 1 枚の保存量（原本 + サイズ違い）。圧縮なし（150 KB）のときの値で、圧縮の度合いに比例して減る。 */
+  /**
+   * 画像 1 枚の原本の保存量。圧縮なし（150 KB）のときの値で、圧縮の度合いに比例して減る。
+   * サイズ違いは含まない（投稿のときに作って保存する構成だけ、estimator が別に数える。OCL-F3098083）。
+   */
   gbPerImage: number;
 };
 
@@ -41,6 +45,8 @@ export type WorkloadMods = {
   writesPerCall?: number;
   /** DB の増え方の倍率。 */
   dbRateFactor?: number;
+  /** リアルタイム（チャット）。Workload の realtime にそのまま入る（D-24・W-1）。 */
+  realtime?: NonNullable<WorkloadInput['realtime']>;
 };
 
 export type Effect =
@@ -60,10 +66,30 @@ export type Effect =
   | { type: 'seats'; add: number }
   | { type: 'effortPerMonth'; add: number }
   /** 出来事への対応の手間（翌月から months か月）。 */
-  | { type: 'interrupt'; points: number; months: number }
+  | {
+      type: 'interrupt';
+      points: number;
+      months: number;
+      /**
+       * 機能の追加の作業（機能追加の提案への対応。D-29）。この手間はその月の機能開発に数え、
+       * 同じ提案の feature の加点は受けた瞬間でなく、この作業の月に按分して足す。
+       */
+      featureWork?: boolean;
+    }
   | { type: 'feature'; points: number }
   /** 成長率に足す（翌月から months か月）。 */
-  | { type: 'growth'; add: number; months: number };
+  | { type: 'growth'; add: number; months: number }
+  /** 部品を付ける（受けた提案に要る部品。D-24）。 */
+  | { type: 'component'; slot: SlotId; option: string }
+  /**
+   * 契約の収益（毎月）。requires を満たす構成のときだけ入る（SLA の出来事。D-24・SC-5）。
+   */
+  | { type: 'contract'; usdPerMonth: number; requires: Requirement }
+  /** 以後ずっと構成に求める要件（満たさない月は満足度に効く。D-32）。 */
+  | { type: 'requirement'; requirement: Requirement };
+
+/** 構成に求める要件。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
+export type Requirement = 'uptime-sla' | 'on-demand-isr';
 
 export type EventKind = 'state' | 'proposal' | 'script';
 export type EventTier = 'common' | 'occasional' | 'rare';
@@ -88,7 +114,18 @@ export type EventDef = {
     title: string;
     text: string;
     pvFactor?: number;
+    /** 前兆の流量が Bot か（収益にならない。Bot の遮断が効く）。 */
+    bot?: boolean;
+    /**
+     * 予告が出る確率（D-28）。省略は必ず出る。出なければ予告なしで起き、対処は翌月から。
+     * 乱数は出来事の列から月の次に引く（月は変わらない）。
+     */
+    chance?: number;
+    /** この月より前には予告を出さない（序盤の 1〜2 か月は台本を出さない。D-20 V-12）。 */
+    notBefore?: number;
   };
+  /** 予告なしで起きたときの文（D-28）。 */
+  surpriseText?: string;
   /** 当たりうる前提の id の前方一致。通知に catalog の前提の文をそのまま出す（D-12）。 */
   premiseRefs: string[];
   /** 提案の「受ける」の効果（断ると何も起きない。D-20 V-11）。 */
@@ -97,6 +134,14 @@ export type EventDef = {
   effects?: Effect[];
   /** 席の料金を通知に出す（チームが増える）。 */
   showMembers?: boolean;
+  /** 今の構成の SLA の扱い（catalog の uptimeSla の文）を通知に出す。 */
+  showSla?: boolean;
+  /** この事業者の構成のときだけ出す（データが無い事業者の罰にしないため。D-24 X-5）。 */
+  platforms?: Platform[];
+  /** 受けるのに要る要件（満たせる構成でなければ受けられない。理由を出す）。 */
+  requires?: Requirement;
+  /** 受ける前に、構成・部品ごとにこの要件を満たせるかを出す（D-32）。 */
+  previewRequirement?: Requirement;
 };
 
 export type Strategy = {
@@ -133,6 +178,8 @@ export type Scenario = {
     };
   };
   incidents: { selfHostedChancePerMonth: number };
+  /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ。ゲーム上の仮定・D-24）。 */
+  unoptimizedImageKB: number;
   satisfaction: SatisfactionRules;
   effort: { perMonth: number; selfHostedUpkeep: number };
   /** まれな出来事: 1 ゲームに高々 1 回。起きる確率と時期の幅。 */
@@ -157,16 +204,25 @@ export type Scheduled = { id: string; month: number; noticeMonth?: number };
  */
 export function rollSchedule(sc: Scenario, startSeed: number): Scheduled[] {
   const out: Scheduled[] = [];
-  const at = (def: EventDef, month: number): Scheduled => ({
-    id: def.id,
-    month,
-    ...(def.notice ? { noticeMonth: month - def.notice.monthsAhead } : {}),
-  });
+  const at = (def: EventDef, month: number, noticeDraw?: number): Scheduled => {
+    const n = def.notice;
+    const noticeMonth = n ? month - n.monthsAhead : undefined;
+    const noticed =
+      n !== undefined &&
+      noticeMonth! >= (n.notBefore ?? -Infinity) &&
+      (n.chance === undefined || (noticeDraw ?? 0) < n.chance);
+    return {
+      id: def.id,
+      month,
+      ...(noticed ? { noticeMonth: noticeMonth! } : {}),
+    };
+  };
   for (const def of sc.events) {
     if (def.when.type !== 'window') continue;
-    const [r] = draws(startSeed, def.id, 1);
+    // 1 つ目で月、2 つ目で予告の有無（同じ列の続きなので、月は予告の有無を足す前と変わらない）
+    const [r, rn] = draws(startSeed, def.id, 2);
     const span = def.when.to - def.when.from + 1;
-    out.push(at(def, def.when.from + Math.floor(r! * span)));
+    out.push(at(def, def.when.from + Math.floor(r! * span), rn));
   }
   const rare = sc.events.filter(
     (d): d is EventDef & { when: { type: 'rare'; weight: number } } =>
