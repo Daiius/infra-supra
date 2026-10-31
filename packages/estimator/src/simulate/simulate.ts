@@ -1,5 +1,6 @@
 // 資源シミュレーション（prd/04-resource-simulation.md）。Workload × Architecture → ノードごとの汎用リソースの使用量。
 // ComponentKind の振る舞いはここ（コード）、値は Architecture のデータ。純粋関数。
+import { ceilUnits } from '../num/arith.ts';
 import { HOURS_PER_MONTH, bytesToGb } from '../num/unit.ts';
 import type { ResourceKey } from '../pricing/resources.ts';
 import {
@@ -47,6 +48,28 @@ export type Simulation = {
 
 const kbToGb = (kb: number) => bytesToGb(kb * KB);
 
+/** ノードごとの集計（ホストの容量と、関数の 1 回の実行の CPU の最大に使う）。 */
+type NodeAcc = {
+  kb: number;
+  cpuMs: number;
+  queries: number;
+  transforms: number;
+  /** ホストが受けたリクエストの数（前段の Web サーバーの CPU に使う。D-31）。 */
+  requests: number;
+  /** クラスごとの 1 件あたり CPU の最大（件数が正のものだけ）。 */
+  maxCpuByClass: Partial<Record<RequestClass, number>>;
+};
+
+/**
+ * 裏で走るクラスを起こす閲覧のクラス（prd/06 §5: ISR の再生成は閲覧のリクエストの中で裏で走る）。
+ * waitUntil は同じ呼び出しの寿命を延ばす（"ctx.waitUntil() extends the lifetime of your Worker"）ので、
+ * 裏の処理の CPU は起こした呼び出しの CPU 時間に数えると解釈する（公式に明記はない。D-10）。
+ * 合算はルートごと（ResolvedWorkload.backgroundCpuMs）。
+ */
+const BACKGROUND_TRIGGER: Partial<Record<RequestClass, RequestClass>> = {
+  'isr-revalidate': 'document-isr',
+};
+
 function add(u: NodeUsage, r: ResourceKey, v: number) {
   if (v === 0) return;
   u.resources[r] = (u.resources[r] ?? 0) + v;
@@ -59,13 +82,7 @@ function consume(
   f: ClassFlow,
   u: NodeUsage,
   w: ResolvedWorkload,
-  hostAcc: {
-    kb: number;
-    cpuMs: number;
-    queries: number;
-    transforms: number;
-    requests: number;
-  },
+  hostAcc: NodeAcc,
 ): ClassFlow {
   const c = node.config;
   const n = f.count;
@@ -83,7 +100,10 @@ function consume(
     }
     case 'function': {
       if (n > 0)
-        u.maxCpuMsPerRequest = Math.max(u.maxCpuMsPerRequest, p.maxCpuMs);
+        hostAcc.maxCpuByClass[cls] = Math.max(
+          hostAcc.maxCpuByClass[cls] ?? 0,
+          p.maxCpuMs,
+        );
       u.busyMs += n * p.wallMs;
       add(u, 'cpu-ms', n * p.cpuMs);
       add(
@@ -154,18 +174,18 @@ function consume(
       if (cls === 'image-transform') {
         add(u, 'image-transformations', n);
         if (c.unitKB)
-          add(u, 'image-cache-writes', n * Math.ceil(p.kb / c.unitKB));
+          add(u, 'image-cache-writes', n * ceilUnits(p.kb, c.unitKB));
       } else if (cls === 'image-read' && c.unitKB) {
         add(
           u,
           'image-cache-reads',
-          n * c.cacheMissRate * Math.ceil(p.kb / c.unitKB),
+          n * c.cacheMissRate * ceilUnits(p.kb, c.unitKB),
         );
       }
       return f;
     }
     case 'isr-store': {
-      const units = Math.ceil(p.kb / c.unitKB);
+      const units = ceilUnits(p.kb, c.unitKB);
       if (cls === 'isr-revalidate')
         add(u, 'isr-writes', n * c.changedRate * units);
       else add(u, 'isr-reads', n * units);
@@ -214,16 +234,7 @@ export function simulateResources(
   const architecture = ArchitectureSchema.parse(architectureInput);
   const byId = new Map(architecture.nodes.map((n) => [n.id, n]));
   const nodes: Record<string, NodeUsage> = {};
-  const hostAcc = new Map<
-    string,
-    {
-      kb: number;
-      cpuMs: number;
-      queries: number;
-      transforms: number;
-      requests: number;
-    }
-  >();
+  const hostAcc = new Map<string, NodeAcc>();
   for (const n of architecture.nodes) {
     nodes[n.id] = {
       nodeId: n.id,
@@ -238,6 +249,7 @@ export function simulateResources(
       queries: 0,
       transforms: 0,
       requests: 0,
+      maxCpuByClass: {},
     });
     staticUsage(n, nodes[n.id]!, workload);
   }
@@ -263,6 +275,35 @@ export function simulateResources(
         hostAcc.get(id)!,
       );
     }
+  }
+
+  // 関数の 1 回の実行の CPU の最大: 前景のクラスはそのまま、裏のクラスは起こした閲覧の CPU に足す
+  for (const n of architecture.nodes) {
+    if (n.config.kind !== 'function') continue;
+    const bg = new Set(n.config.backgroundClasses ?? []);
+    const byClass = Object.entries(hostAcc.get(n.id)!.maxCpuByClass) as [
+      RequestClass,
+      number,
+    ][];
+    const fg = byClass.filter(([cls]) => !bg.has(cls));
+    const fgMax = Math.max(0, ...fg.map(([, v]) => v));
+    let max = fgMax;
+    for (const [cls, v] of byClass) {
+      if (!bg.has(cls)) continue;
+      const trigger = BACKGROUND_TRIGGER[cls];
+      const triggered =
+        trigger !== undefined &&
+        hostAcc.get(n.id)!.maxCpuByClass[trigger] !== undefined;
+      // 起こす閲覧がこの関数を通るなら、ルートごとに足した値。起こすクラスが分からなければ前景の最大に足す。
+      // 起こす閲覧が通らなければ、裏の処理だけで 1 回の実行とみる
+      const combined = triggered
+        ? (workload.backgroundCpuMs[cls] ?? fgMax + v)
+        : trigger === undefined
+          ? fgMax + v
+          : v;
+      max = Math.max(max, combined);
+    }
+    nodes[n.id]!.maxCpuMsPerRequest = max;
   }
 
   for (const n of architecture.nodes) {

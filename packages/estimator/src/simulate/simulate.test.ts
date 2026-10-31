@@ -177,6 +177,94 @@ describe('resolveWorkload', () => {
     expect(simulateResources(r, arch).nodes.fn!.maxCpuMsPerRequest).toBe(30);
   });
 
+  it('裏で走る再生成の CPU は、それを起こす閲覧の CPU に足して 1 回の実行の最大に数える', () => {
+    const bg: ArchitectureInput = {
+      ...arch,
+      nodes: arch.nodes.map((n) =>
+        n.id === 'fn'
+          ? {
+              ...n,
+              config: {
+                kind: 'function',
+                memoryGB: 1,
+                concurrency: 1,
+                backgroundClasses: ['isr-revalidate'],
+              },
+            }
+          : n,
+      ),
+    };
+    const r = resolveWorkload(workload(10_000));
+    // 前景は SSR・API の 10 ms、ISR の閲覧 1 ms + 裏の再生成 10 ms = 11 ms
+    expect(simulateResources(r, arch).nodes.fn!.maxCpuMsPerRequest).toBe(10);
+    expect(simulateResources(r, bg).nodes.fn!.maxCpuMsPerRequest).toBe(11);
+
+    // ISR のルートが 2 つ: 閲覧の最大（5 ms）と再生成の最大（10 ms）が別のルートなら 15 ms にしない。
+    // ルートごとに 1 + 10 = 11・5 + 5 = 10 を出して最大を取る
+    const two = workload(10_000);
+    const article = two.routes[0]!;
+    two.routes = [
+      { ...article, share: 0.25 },
+      {
+        ...article,
+        id: 'news',
+        share: 0.25,
+        cachedServeCpuMs: 5,
+        processing: { ...processing, cpuMs: 5 },
+      },
+      ...two.routes.slice(1),
+    ];
+    const r2 = resolveWorkload(two);
+    expect(r2.backgroundCpuMs['isr-revalidate']).toBe(11);
+    expect(simulateResources(r2, bg).nodes.fn!.maxCpuMsPerRequest).toBe(11);
+  });
+
+  it('ISR・画像キャッシュの読み書きの単位は ceilUnits で数える（2.1 / 0.3 を 8 単位にしない）', () => {
+    expect(Math.ceil(2.1 / 0.3)).toBe(8); // 浮動小数点の誤差で 1 単位多くなる
+    const w = workload(10_000);
+    w.routes = w.routes.map((r) => ({
+      ...r,
+      processing: { ...processing, responseKB: 2.1 },
+    }));
+    w.images = { ...w.images, sizeKB: 2.1 };
+    const r = resolveWorkload(w);
+    const s = simulateResources(r, {
+      id: 'units',
+      name: '単位の切り上げ',
+      nodes: [
+        {
+          id: 'isr',
+          label: 'ISR',
+          config: { kind: 'isr-store', unitKB: 0.3, changedRate: 1 },
+        },
+        {
+          id: 'img',
+          label: '画像',
+          config: { kind: 'image-optimizer', unitKB: 0.3, cacheMissRate: 1 },
+        },
+      ],
+      routes: {
+        'document-isr': ['isr'],
+        'isr-revalidate': ['isr'],
+        'image-read': ['img'],
+        'image-transform': ['img'],
+      },
+    });
+    const c = r.classes;
+    const near = (a: number | undefined, b: number) =>
+      expect(nearlyEqual(a!, b)).toBe(true);
+    near(s.nodes.isr!.resources['isr-reads'], c['document-isr'].count * 7);
+    near(s.nodes.isr!.resources['isr-writes'], c['isr-revalidate'].count * 7);
+    near(
+      s.nodes.img!.resources['image-cache-reads'],
+      c['image-read'].count * 7,
+    );
+    near(
+      s.nodes.img!.resources['image-cache-writes'],
+      c['image-transform'].count * 7,
+    );
+  });
+
   it('share の合計が 1 でなければ入力の誤り', () => {
     const bad = workload(1);
     bad.routes[0]!.share = 0.9;

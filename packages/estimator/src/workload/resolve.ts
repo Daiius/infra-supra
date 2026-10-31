@@ -42,6 +42,12 @@ export type ResolvedWorkload = {
   input: ParsedWorkload;
   monthlyPageViews: number;
   classes: Record<RequestClass, ClassFlow>;
+  /**
+   * 裏で走るクラスを、それを起こした閲覧と 1 回の実行にまとめたときの CPU の最大（ms）。
+   * ルートごとに「閲覧 + 再生成」を足してから最大を取る（別のルートの閲覧と再生成を足さない）。
+   * 構成がそのクラスを裏で走らせるとき（function の backgroundClasses）だけ使う。
+   */
+  backgroundCpuMs: Partial<Record<RequestClass, number>>;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
@@ -121,6 +127,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     isr: [] as ClassFlow[],
   };
   const revalidations: ClassFlow[] = [];
+  let isrWithRevalidate = 0;
   for (const r of w.routes) {
     const views = pv * r.share;
     const p = r.processing;
@@ -144,6 +151,12 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH);
       const count = views / (1 + lambdaT);
       revalidations.push(flow(count, work));
+      if (count > 0) {
+        isrWithRevalidate = Math.max(
+          isrWithRevalidate,
+          r.cachedServeCpuMs + p.cpuMs,
+        );
+      }
       derivations.push({
         id: `isr-revalidations:${r.id}`,
         label: `ISR の再生成（${r.id}）`,
@@ -214,6 +227,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     input: w,
     monthlyPageViews: pv,
     classes,
+    backgroundCpuMs: { 'isr-revalidate': isrWithRevalidate },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
     storage: { dbGB: w.db.sizeGB, imagesGB: w.images.storedGB },
