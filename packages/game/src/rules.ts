@@ -100,7 +100,7 @@ export function speedHeaviness(input: {
 }
 
 export type JudgeInput = {
-  /** 止まる前提に当たった（block・policy・upgrade-required）。 */
+  /** 止まる前提に当たった（block・upgrade-required。規約違反は別に扱う）。 */
   blocked: boolean;
   /** 偶発的な障害・乗り換えの切り替えの月。 */
   degraded: boolean;
@@ -224,5 +224,27 @@ export function allocateEffort(input: {
     migration,
     actions,
     feature: left,
+  };
+}
+
+export type PolicyOutcome = 'ok' | 'warned' | 'grace' | 'suspended';
+
+/**
+ * 規約違反（利用資格の前提）の扱い（D-19）。最初の月は指摘、翌月も違反したままならアカウント停止。
+ * 指摘を受けてから乗り換えを始めていれば、乗り換えの期間中は猶予を満たしたとみなす（新旧を両方動かしている期間）。
+ * プラン変更は翌月から効くので、指摘の月に変えれば翌月は違反しない。
+ */
+export function policyStep(input: {
+  warnedMonth: number | null;
+  violating: boolean;
+  migrating: boolean;
+  month: number;
+}): { warnedMonth: number | null; outcome: PolicyOutcome } {
+  if (!input.violating) return { warnedMonth: null, outcome: 'ok' };
+  if (input.warnedMonth === null)
+    return { warnedMonth: input.month, outcome: 'warned' };
+  return {
+    warnedMonth: input.warnedMonth,
+    outcome: input.migrating ? 'grace' : 'suspended',
   };
 }
