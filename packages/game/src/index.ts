@@ -1662,7 +1662,8 @@ export function playMonth(input: GameState): GameState {
     ...(comps.images === 'none' ? { imageKB: sc.unoptimizedImageKB } : {}),
   };
   const uncached = comps.isrCache === 'none';
-  const eventuallyConsistent = comps.db === 'kv';
+  // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
+  const eventuallyConsistent = comps.db === 'kv' || comps.frontCdn === 'html';
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
@@ -2043,7 +2044,7 @@ function stageReasons(
       !c.uncached &&
         `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`,
       c.eventuallyConsistent &&
-        'KV を DB の代わりにしていて、書き込みがすぐ見えない',
+        'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて、更新がすぐ見えない',
     ]
       .filter(Boolean)
       .join('・');

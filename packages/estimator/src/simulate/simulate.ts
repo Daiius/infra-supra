@@ -59,7 +59,13 @@ function consume(
   f: ClassFlow,
   u: NodeUsage,
   w: ResolvedWorkload,
-  hostAcc: { kb: number; cpuMs: number; queries: number; transforms: number },
+  hostAcc: {
+    kb: number;
+    cpuMs: number;
+    queries: number;
+    transforms: number;
+    requests: number;
+  },
 ): ClassFlow {
   const c = node.config;
   const n = f.count;
@@ -166,6 +172,7 @@ function consume(
     }
     case 'host': {
       hostAcc.kb += n * p.kb;
+      hostAcc.requests += n;
       hostAcc.cpuMs += n * p.cpuMs;
       hostAcc.queries += n * p.queries;
       if (cls === 'image-transform') hostAcc.transforms += n;
@@ -208,7 +215,13 @@ export function simulateResources(
   const nodes: Record<string, NodeUsage> = {};
   const hostAcc = new Map<
     string,
-    { kb: number; cpuMs: number; queries: number; transforms: number }
+    {
+      kb: number;
+      cpuMs: number;
+      queries: number;
+      transforms: number;
+      requests: number;
+    }
   >();
   for (const n of architecture.nodes) {
     nodes[n.id] = {
@@ -218,7 +231,13 @@ export function simulateResources(
       maxCpuMsPerRequest: 0,
       busyMs: 0,
     };
-    hostAcc.set(n.id, { kb: 0, cpuMs: 0, queries: 0, transforms: 0 });
+    hostAcc.set(n.id, {
+      kb: 0,
+      cpuMs: 0,
+      queries: 0,
+      transforms: 0,
+      requests: 0,
+    });
     staticUsage(n, nodes[n.id]!, workload);
   }
 
@@ -255,7 +274,8 @@ export function simulateResources(
       peakCores:
         ((acc.cpuMs +
           acc.queries * c.dbCpuMsPerQuery +
-          acc.transforms * c.imageTransformCpuMs) /
+          acc.transforms * c.imageTransformCpuMs +
+          acc.requests * c.proxyCpuMsPerRequest) /
           1000) *
         peak,
       memoryGB: c.residentMemoryGB,

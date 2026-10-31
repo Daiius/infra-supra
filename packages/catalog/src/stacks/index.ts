@@ -4,7 +4,7 @@
 import type { ArchitectureInput, RequestClass, WorkloadInput } from 'estimator';
 
 export type Platform = 'cloudflare' | 'vercel' | 'sakura';
-export type SlotId = 'isrCache' | 'images' | 'db' | 'realtime';
+export type SlotId = 'isrCache' | 'images' | 'db' | 'realtime' | 'frontCdn';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -73,9 +73,10 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   images: '画像',
   db: 'DB',
   realtime: 'リアルタイム',
+  frontCdn: '前段の CDN',
 };
 
-export const COMPONENTS: readonly ComponentOption[] = [
+const BASE_COMPONENTS: readonly ComponentOption[] = [
   // Cloudflare
   {
     id: 'kv',
@@ -263,10 +264,52 @@ export const COMPONENTS: readonly ComponentOption[] = [
   },
 ];
 
+// さくらの VPS の前段の CDN（D-31）。Cloudflare の CDN（Free）を前に置く（事業者をまたぐ構成の最初の事例・D-20）
+const SAKURA_FRONT_CDN: ComponentOption[] = [
+  {
+    id: 'none',
+    slot: 'frontCdn',
+    platform: 'sakura',
+    label: 'なし',
+    note: 'すべてのリクエストを VPS（nginx）が受ける',
+    premiseRefs: [],
+  },
+  {
+    id: 'static',
+    slot: 'frontCdn',
+    platform: 'sakura',
+    label: 'Cloudflare（静的と画像だけ）',
+    note: '静的なファイルと変換済みの画像の大部分を CDN が返し、VPS の回線と CPU が減る。HTML は既定でキャッシュされないので VPS のまま。/_next/image（拡張子を持たない URL）は Cache Rules で対象にする前提（推測）',
+    premiseRefs: [
+      'fact:cloudflare:cdn-free:html-not-cached',
+      'fact:cloudflare:cdn-free:pictures-terms',
+      'host:',
+    ],
+  },
+  {
+    id: 'html',
+    slot: 'frontCdn',
+    platform: 'sakura',
+    label: 'Cloudflare（HTML もキャッシュ）',
+    note: 'ISR のページも CDN が返す。オンデマンドの再検証は CDN に届かず、s-maxage が切れるまで古いページが出る（パージの連携が要る）',
+    inappropriate: true,
+    premiseRefs: [
+      'fact:cloudflare:cdn-free:next-on-demand',
+      'fact:cloudflare:cdn-free:pictures-terms',
+      'host:',
+    ],
+  },
+];
+
+export const COMPONENTS: readonly ComponentOption[] = [
+  ...BASE_COMPONENTS,
+  ...SAKURA_FRONT_CDN,
+];
+
 export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   cloudflare: { isrCache: 'kv', images: 'images', db: 'd1', realtime: 'none' },
   vercel: { isrCache: 'default', images: 'default' },
-  sakura: { isrCache: 'default', images: 'default' },
+  sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
 };
 
 /** 事業者のスロットの部品（スロットの順）。 */
@@ -643,6 +686,7 @@ const SAKURA_HOST = {
 function composeSakura(
   plan: '2gb' | '4gb',
   storageOption: boolean,
+  frontCdn: string | undefined,
 ): ArchitectureInput {
   const { storageOptionDiskGB, ...spec } = SAKURA_HOST[plan];
   const h = {
@@ -653,6 +697,34 @@ function composeSakura(
     id: `sakura-vps-${plan}`,
     name: `さくらの VPS ${plan === '2gb' ? '2GB' : '4GB'}（東京）`,
     nodes: [
+      ...(frontCdn === 'static' || frontCdn === 'html'
+        ? [
+            {
+              id: 'cf-cdn',
+              label: 'Cloudflare CDN（Free）',
+              config: {
+                kind: 'cdn' as const,
+                // ヒット率は仮定（Vercel の CDN と同じ値を使う）。HTML もキャッシュするときだけ ISR のページを返す
+                hitRate: {
+                  asset: 1,
+                  'document-static': frontCdn === 'html' ? 1 : 0,
+                  'image-read': 0.9,
+                  ...(frontCdn === 'html' ? { 'document-isr': 0.8 } : {}),
+                },
+              },
+              facts:
+                frontCdn === 'html'
+                  ? ['next-on-demand', 'pictures-terms']
+                  : ['html-not-cached', 'pictures-terms'],
+              billing: {
+                accountId: 'cloudflare',
+                provider: 'cloudflare',
+                planId: 'cdn-free',
+                meters: {},
+              },
+            } as ArchNodeIn,
+          ]
+        : []),
       {
         id: 'vps',
         label: 'VPS（nginx + next start + MySQL）',
@@ -664,6 +736,8 @@ function composeSakura(
           dbCpuMsPerQuery: 0.3,
           imageTransformCpuMs: 150,
           otherDiskGB: 10,
+          // nginx の TLS・転送の 1 リクエストあたりの CPU（仮定。D-31）
+          proxyCpuMsPerRequest: 0.3,
         },
         billing: {
           accountId: 'sakura',
@@ -674,17 +748,31 @@ function composeSakura(
       },
     ],
     // キャッシュしない・最適化しないは Workload の側で変わる（経路は同じ VPS）
-    routes: {
-      'document-static': ['vps'],
-      asset: ['vps'],
-      'document-ssr': ['vps'],
-      'document-isr': ['vps'],
-      'isr-revalidate': ['vps'],
-      api: ['vps'],
-      'image-read': ['vps'],
-      'image-write': ['vps'],
-      'image-transform': ['vps'],
-    },
+    routes:
+      frontCdn === 'static' || frontCdn === 'html'
+        ? {
+            // 前段の CDN を通り、miss だけが VPS に届く（再生成と画像の変換は VPS の中）
+            'document-static': ['cf-cdn', 'vps'],
+            asset: ['cf-cdn', 'vps'],
+            'document-ssr': ['cf-cdn', 'vps'],
+            'document-isr': ['cf-cdn', 'vps'],
+            'isr-revalidate': ['vps'],
+            api: ['cf-cdn', 'vps'],
+            'image-read': ['cf-cdn', 'vps'],
+            'image-write': ['cf-cdn', 'vps'],
+            'image-transform': ['vps'],
+          }
+        : {
+            'document-static': ['vps'],
+            asset: ['vps'],
+            'document-ssr': ['vps'],
+            'document-isr': ['vps'],
+            'isr-revalidate': ['vps'],
+            api: ['vps'],
+            'image-read': ['vps'],
+            'image-write': ['vps'],
+            'image-transform': ['vps'],
+          },
   };
 }
 
@@ -716,6 +804,7 @@ export function composeStack(
       return composeSakura(
         def.plan as '2gb' | '4gb',
         options.storageOption ?? false,
+        c.frontCdn,
       );
   }
 }

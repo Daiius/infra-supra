@@ -93,6 +93,8 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     lineUsable: Ratio.default(0.5),
     /** 劣化させずに使える CPU 使用率の上限（仮定）。 */
     cpuUtilMax: Ratio.default(0.7),
+    /** 前段の Web サーバー（nginx・TLS）の 1 リクエストあたりの CPU（ms・仮定。D-31）。 */
+    proxyCpuMsPerRequest: NonNeg.default(0),
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;

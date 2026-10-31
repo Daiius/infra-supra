@@ -498,6 +498,8 @@ export const GD3_STACKS: unknown[] = [
           dbCpuMsPerQuery: 0.3,
           imageTransformCpuMs: 150,
           otherDiskGB: 10,
+          // D-31 で足した仮定（nginx の 1 リクエストあたりの CPU）。GD-3 からの意図した差
+          proxyCpuMsPerRequest: 0.3,
         },
         billing: {
           accountId: 'sakura',

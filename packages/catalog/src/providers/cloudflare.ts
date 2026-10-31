@@ -95,6 +95,20 @@ export const cloudflare: PriceBookInput = {
     workersSla: src(
       'https://www.cloudflare.com/workers-service-level-agreement/',
     ),
+    // 前段の CDN（さくらの VPS の前に置く。2026-11-01 に原文で確認。D-31）
+    defaultCache: {
+      url: 'https://developers.cloudflare.com/cache/concepts/default-cache-behavior/',
+      retrievedAt: '2026-11-01',
+    },
+    cdnTerms: {
+      url: 'https://www.cloudflare.com/service-specific-terms-application-services/',
+      retrievedAt: '2026-11-01',
+    },
+    // Next.js の CDN の扱い（Cloudflare の文書ではないが、前段の CDN の前提として一緒に持つ）
+    nextjsCdn: {
+      url: 'https://nextjs.org/docs/app/guides/cdn-caching',
+      retrievedAt: '2026-11-01',
+    },
   },
   allowancePools: [
     // Workers Free（日次・UTC 0 時にリセット。超過は止まる）
@@ -581,6 +595,40 @@ export const cloudflare: PriceBookInput = {
           allowancePool: 'images-transformations',
           pricing: { model: 'flat', per: 1_000, unitPrice: 0.5 },
           sourceIds: ['imagesPricing'],
+        },
+      ],
+    },
+    {
+      // 前段の CDN（Free プラン）。従量のメーターは持たない（このモデルでは課金なし）
+      id: 'cdn-free',
+      service: 'cdn',
+      name: 'CDN（Free）',
+      sourceIds: ['plans', 'defaultCache'],
+      uptimeSla: {
+        status: 'none',
+        premise:
+          'Cloudflare の Free プランに稼働率の SLA は無い（100% の SLA は Business・Contract）',
+        sourceIds: ['plans'],
+      },
+      meters: [],
+      facts: [
+        {
+          id: 'html-not-cached',
+          premise:
+            'Cloudflare の CDN は既定では HTML と JSON をキャッシュしない（拡張子で判定する）',
+          sourceIds: ['defaultCache'],
+        },
+        {
+          id: 'pictures-terms',
+          premise:
+            'Cloudflare の CDN（Free・Pro・Business）はウェブページとサイトのためのもので、動画や、不釣り合いな割合の画像などの大きなファイルを配るには Images などの有料サービスを使う（規約）',
+          sourceIds: ['cdnTerms'],
+        },
+        {
+          id: 'next-on-demand',
+          premise:
+            'Next.js のオンデマンドの再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返す（CDN のパージを一緒に呼ぶ必要がある）',
+          sourceIds: ['nextjsCdn'],
         },
       ],
     },

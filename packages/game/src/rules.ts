@@ -69,7 +69,7 @@ export const EFFORT = {
    * 部品の差し替え（D-24・prd/07 §11.3）。ISR のキャッシュ・画像は翌月から。DB はデータの移行があるので
    * 乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える（期間中は新旧の両方の DB の費用）。
    */
-  component: { isrCache: 2, images: 2, realtime: 4 },
+  component: { isrCache: 2, images: 2, realtime: 4, frontCdn: 2 },
   dbSwap: { perMonth: 6, months: 1 },
   /** 乗り換え: 月あたりの手間と、必要な月数（VPS が絡むと長い）。 */
   migrationPerMonth: 6,
