@@ -2,9 +2,11 @@
 // 振る舞いは estimator の ComponentKind、ここはノードの値と課金先のメーターの対応だけを持つ。
 // GD-4（D-24・prd/07 §11）: 構成は役割ごとのスロットの選択（部品）から組み立てる。完成品は「既定の選択」。
 import type { ArchitectureInput, RequestClass, WorkloadInput } from 'estimator';
+import type { FrameworkId } from '../frameworks/index.ts';
 
 export type Platform = 'cloudflare' | 'vercel' | 'sakura';
-export type SlotId = 'isrCache' | 'images' | 'db' | 'realtime' | 'frontCdn';
+export type SlotId =
+  'isrCache' | 'images' | 'db' | 'realtime' | 'frontCdn' | 'ogp';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -71,6 +73,8 @@ export type ComponentOption = {
    * 省略は要件に関係しない。
    */
   onDemandIsr?: { ok: boolean; fact: string };
+  /** この部品を選べるフレームワーク（省略はすべて。ISR のキャッシュは Next.js だけ・OGP の前処理は SPA だけ。prd/10）。 */
+  frameworks?: FrameworkId[];
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
@@ -79,6 +83,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   db: 'DB',
   realtime: 'リアルタイム',
   frontCdn: '前段の CDN',
+  ogp: 'SNS のカード（OGP）',
 };
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [
@@ -86,6 +91,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'kv',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'KV',
     note: '閲覧のたびに Worker が KV を読み、再生成で書く。KV の書き込みは他の拠点で見えるまで 60 秒以上かかることがある',
@@ -95,6 +101,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'r2',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'R2（自作のアダプター）',
     note: '閲覧で R2 を読み（Class B）、再生成で書く（Class A）。vinext に R2 を ISR の置き場にする公式のアダプターは見当たらない（README）ので、キャッシュの処理は自作になる。R2 は強い整合なので、書けばすぐ全世界で見える',
@@ -110,6 +117,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'workers-cache',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'Workers Cache（タグでパージ）',
     note: 'vinext の workersCacheCdnAdapter。ISR のページを拠点ごとの Workers Cache から返し、再検証はタグでパージする。Cache API の料金は記載なし（このモデルでは費用なし）。拠点ごとのキャッシュなので、ヒット率が下がって再生成が増える分は計算に入れていない',
@@ -119,6 +127,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'none',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'キャッシュしない（毎回 SSR）',
     note: '記事も毎回 SSR する。Worker のリクエスト数は変わらない。CPU と D1 の読み取りは、再検証の間隔とページあたりの閲覧しだいで増える（閲覧が薄いと ISR の効きは小さい）。記事は常に新しい',
@@ -220,6 +229,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'default',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'vercel',
     label: 'ISR の永続ストレージ',
     note: 'ISR のページは CDN が返す。再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
@@ -229,6 +239,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'none',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'vercel',
     label: 'キャッシュしない（毎回 SSR）',
     note: '記事の閲覧が毎回関数まで届く。記事は常に新しい',
@@ -256,6 +267,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'default',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'sakura',
     label: 'ディスク',
     note: 'next start のキャッシュをディスクに置く（1 台・永続ディスクなら自動で動く）',
@@ -265,6 +277,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   {
     id: 'none',
     slot: 'isrCache',
+    frameworks: ['nextjs'],
     platform: 'sakura',
     label: 'キャッシュしない（毎回 SSR）',
     note: '記事も毎回 SSR する。CPU を使う。記事は常に新しい',
@@ -313,6 +326,7 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
   {
     id: 'html',
     slot: 'frontCdn',
+    frameworks: ['nextjs'],
     platform: 'sakura',
     label: 'Cloudflare（HTML もキャッシュ）',
     note: 'ISR のページも CDN が返す。オンデマンドの再検証は CDN に届かず、s-maxage が切れるまで古いページが出る（パージの連携が要る）',
@@ -326,9 +340,63 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
   },
 ];
 
+/**
+ * SPA の SNS のカード（OGP）の前処理（prd/10 F-07）。記事の URL のページ遷移だけサーバーで HTML にメタタグを差し込む。
+ * カードが出るかどうかの効き方（話題の倍率）はゲーム上の仮定。課金と Free の 429 は Cloudflare の公式の文書。
+ */
+const SPA_OGP: ComponentOption[] = (
+  [
+    [
+      'cloudflare',
+      'シェルを返す前に Worker（run_worker_first）が記事のメタタグを差し込む。シェルの読み込みが Worker の起動として課金され、Free の上限を超えると 429',
+      [
+        'fact:cloudflare:workers-free:run-worker-first',
+        'fact:cloudflare:workers-paid:run-worker-first',
+        'pool:cloudflare:workers-free:free-requests',
+      ],
+    ],
+    [
+      'vercel',
+      'シェルを CDN から返さず、関数が記事のメタタグを差し込んで返す。シェルの読み込みが関数の起動になる',
+      ['pool:vercel:pro:pro-cdn-requests', 'fact:vercel:pro:active-cpu'],
+    ],
+    [
+      'sakura',
+      'nginx でなく Node がシェルに記事のメタタグを差し込んで返す（この CPU は数えていない・仮定）',
+      ['host:cpu'],
+    ],
+  ] as const
+).flatMap(([platform, note, refs]): ComponentOption[] => [
+  {
+    id: 'none',
+    slot: 'ogp',
+    platform,
+    frameworks: ['vite-spa'],
+    label: '前処理しない（全ページ同じカード）',
+    note: 'シェルのメタタグは全ページ同じ。記事ごとのカードは出ない（ゲーム上の仮定: SNS の話題が伸びにくい）',
+    premiseRefs:
+      platform === 'cloudflare'
+        ? [
+            'fact:cloudflare:workers-free:static-assets',
+            'fact:cloudflare:workers-paid:static-assets',
+          ]
+        : [],
+  },
+  {
+    id: 'prerender',
+    slot: 'ogp',
+    platform,
+    frameworks: ['vite-spa'],
+    label: 'OGP の前処理',
+    note,
+    premiseRefs: [...refs],
+  },
+]);
+
 export const COMPONENTS: readonly ComponentOption[] = [
   ...BASE_COMPONENTS,
   ...SAKURA_FRONT_CDN,
+  ...SPA_OGP,
 ];
 
 export const DEFAULT_CHOICES: Record<Platform, Choices> = {
@@ -337,12 +405,23 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
 };
 
-/** 事業者のスロットの部品（スロットの順）。 */
+/**
+ * 事業者のスロットの部品（スロットの順）。framework を渡すと、そのフレームワークで選べる部品だけ
+ * （省略はすべて。名前を引くだけのときなど）。
+ */
 export function componentsOf(
   platform: Platform,
   slot: SlotId,
+  framework?: FrameworkId,
 ): ComponentOption[] {
-  return COMPONENTS.filter((c) => c.platform === platform && c.slot === slot);
+  return COMPONENTS.filter(
+    (c) =>
+      c.platform === platform &&
+      c.slot === slot &&
+      (framework === undefined ||
+        c.frameworks === undefined ||
+        c.frameworks.includes(framework)),
+  );
 }
 
 export function stackDef(id: string): StackDef {
@@ -832,26 +911,103 @@ export function composeStack(
     standby?: Choices;
     /** さくらの VPS のストレージ変更オプション（ディスクが 2 倍。D-30）。 */
     storageOption?: boolean;
+    /** アプリのフレームワーク（省略は Next.js。prd/10）。 */
+    framework?: FrameworkId;
   } = {},
 ): ArchitectureInput {
   const def = typeof stack === 'string' ? stackDef(stack) : stack;
-  const c = withDefaults(def.platform, choices);
-  switch (def.platform) {
-    case 'cloudflare':
-      return composeCloudflare(
-        def.plan as 'free' | 'paid',
-        c,
-        options.standby ?? {},
-      );
-    case 'vercel':
-      return composeVercel(def.plan as 'hobby' | 'pro', c);
-    case 'sakura':
-      return composeSakura(
-        def.plan as '2gb' | '4gb',
-        options.storageOption ?? false,
-        c.frontCdn,
-      );
-  }
+  const spa = options.framework === 'vite-spa';
+  // SPA には ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品も Next.js だけ
+  const c = spa
+    ? {
+        ...withDefaults(def.platform, choices),
+        isrCache: 'none',
+        ...(choices.frontCdn === 'html' ? { frontCdn: 'static' } : {}),
+      }
+    : withDefaults(def.platform, choices);
+  const standby = options.standby ?? {};
+  const arch = (() => {
+    switch (def.platform) {
+      case 'cloudflare':
+        return composeCloudflare(def.plan as 'free' | 'paid', c, standby);
+      case 'vercel':
+        return composeVercel(def.plan as 'hobby' | 'pro', c);
+      case 'sakura':
+        return composeSakura(
+          def.plan as '2gb' | '4gb',
+          options.storageOption ?? false,
+          c.frontCdn,
+        );
+    }
+  })();
+  return spa ? asSpa(arch, def.platform, c.ogp === 'prerender') : arch;
+}
+
+/**
+ * Next.js の構成を Vite の SPA の形に直す（prd/10 §2.3）。シェル・JS・CSS は静的な配信のまま、
+ * API は同じ事業者に同居（Cloudflare は同じ Worker・Vercel は同じプロジェクトの関数・VPS は同じホストの Node）。
+ * OGP の前処理を付けると、シェルの読み込み（document-static）がサーバーを通る（prd/10 F-07）。
+ */
+function asSpa(
+  arch: ArchitectureInput,
+  platform: Platform,
+  prerender: boolean,
+): ArchitectureInput {
+  const routes = { ...arch.routes };
+  delete routes['document-ssr'];
+  delete routes['document-isr'];
+  delete routes['isr-revalidate'];
+  const nodes = arch.nodes.map((n): ArchNodeIn => {
+    if (platform === 'cloudflare' && n.id === 'worker') {
+      const facts = [
+        ...(n.facts ?? []),
+        'static-assets',
+        'spa-navigation',
+        ...(prerender ? ['run-worker-first'] : []),
+      ];
+      return {
+        ...n,
+        label: prerender ? 'Worker（API・OGP の前処理）' : 'Worker（API）',
+        config: { kind: 'function' },
+        facts,
+      };
+    }
+    if (platform === 'vercel' && n.id === 'cdn' && n.config.kind === 'cdn') {
+      return prerender
+        ? {
+            ...n,
+            config: {
+              ...n.config,
+              hitRate: { ...n.config.hitRate, 'document-static': 0 },
+              originClasses: [
+                ...(n.config.originClasses ?? []),
+                'document-static',
+              ],
+            },
+          }
+        : n;
+    }
+    if (platform === 'vercel' && n.id === 'fn')
+      return {
+        ...n,
+        label: prerender
+          ? 'Vercel Functions（API・OGP の前処理）'
+          : 'Vercel Functions（API）',
+      };
+    if (platform === 'sakura' && n.id === 'vps')
+      return { ...n, label: 'VPS（nginx + Node の API + MySQL）' };
+    return n;
+  });
+  if (prerender && platform === 'cloudflare')
+    routes['document-static'] = ['worker'];
+  if (prerender && platform === 'vercel')
+    routes['document-static'] = ['cdn', 'fn'];
+  return {
+    ...arch,
+    name: arch.name.replace(' + vinext', '') + '（Vite の SPA）',
+    nodes,
+    routes,
+  };
 }
 
 /**

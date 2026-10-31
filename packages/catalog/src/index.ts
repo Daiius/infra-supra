@@ -20,5 +20,6 @@ export function loadPriceBooks(): PriceBook[] {
   );
 }
 
+export * from './frameworks/index.ts';
 export * from './stacks/index.ts';
 export * from './templates/index.ts';

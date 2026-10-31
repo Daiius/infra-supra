@@ -44,6 +44,31 @@ const WORKERS_FACTS = [
     },
     sourceIds: ['vinextReadme', 'cacheApi'],
   },
+  // 静的アセット（Vite の SPA を載せる形。2026-11-01 に原文で確認。prd/10・prd/research/2026-11-01-framework-branch.md §1）
+  {
+    id: 'static-assets',
+    premise:
+      'Workers の静的アセットへのリクエストは無料・無制限で、保存にも追加の費用はない（Worker のスクリプトを起動したリクエストだけが Workers の料金で課金される）',
+    sourceIds: ['staticAssetsBilling'],
+  },
+  {
+    id: 'static-assets-files',
+    premise:
+      'Workers の静的アセットは版あたり Free 20,000・Paid 100,000 ファイルまで、1 ファイル 25 MiB まで',
+    sourceIds: ['workersLimits'],
+  },
+  {
+    id: 'spa-navigation',
+    premise:
+      'SPA のフォールバック（not_found_handling = "single-page-application"）では、ブラウザのページ遷移のリクエストは Worker のスクリプトを起動しない（互換日 2025-04-01 以降）',
+    sourceIds: ['staticAssetsSpa'],
+  },
+  {
+    id: 'run-worker-first',
+    premise:
+      'run_worker_first に一致するリクエストは常に Worker のスクリプトを起動して課金され、Free の上限を超えると静的アセットに戻らず 429 を返す',
+    sourceIds: ['staticAssetsBilling', 'staticAssetsSpa'],
+  },
 ];
 
 /** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
@@ -131,6 +156,15 @@ export const cloudflare: PriceBookInput = {
     },
     vinextReadme: {
       url: 'https://github.com/cloudflare/vinext',
+      retrievedAt: '2026-11-01',
+    },
+    // 静的アセット（2026-11-01 に原文で確認。prd/10）
+    staticAssetsBilling: {
+      url: 'https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/',
+      retrievedAt: '2026-11-01',
+    },
+    staticAssetsSpa: {
+      url: 'https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/',
       retrievedAt: '2026-11-01',
     },
     // Next.js の CDN の扱い（Cloudflare の文書ではないが、前段の CDN の前提として一緒に持つ）
@@ -827,7 +861,6 @@ export const cloudflare: PriceBookInput = {
     },
   ],
   notes: [
-    'Workers の静的アセットへのリクエストは無料・無制限（Workers を起動しないリクエスト）',
     'D1 の読み取り行は返した行ではなく走査した行で数える（インデックスで桁が変わる）',
   ],
 };

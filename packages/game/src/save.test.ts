@@ -65,6 +65,42 @@ describe('保存と再生', () => {
     ).toBeNull();
   });
 
+  it('フレームワークの無い古い保存は Next.js として読む（版は上げない。prd/10 B-9）', () => {
+    const old = {
+      version: 1,
+      scenarioId: 'article-community',
+      stackIndex: 1,
+      seed: 7,
+      startDate: '2026-10-31',
+      turns: TURNS,
+    };
+    const parsed = parseSave(old);
+    expect(parsed?.framework).toBe('nextjs');
+    const s = replaySave(parsed!);
+    expect(s.framework).toBe('nextjs');
+    expect(s).toEqual(replaySave({ ...parsed!, framework: 'nextjs' }));
+  });
+
+  it('SPA の保存は SPA のまま再生し、知らないフレームワークは読めない', () => {
+    const save = withTurn(
+      newSave({
+        scenarioId: 'article-community',
+        stackIndex: 1,
+        framework: 'vite-spa',
+        seed: 5,
+        startDate: '2026-10-31',
+      }),
+      [{ type: 'component', slot: 'ogp', option: 'prerender' }],
+    );
+    const parsed = parseSave(JSON.parse(JSON.stringify(save)));
+    const s = replaySave(parsed!);
+    expect(s.framework).toBe('vite-spa');
+    expect(s.components.ogp).toBe('prerender');
+    expect(
+      parseSave({ ...JSON.parse(JSON.stringify(save)), framework: 'remix' }),
+    ).toBeNull();
+  });
+
   it('行動が多すぎる（途中で終わった後の行動がある）保存は再生で例外', () => {
     // CF Free は 3 か月目に終わる
     const save = Array.from({ length: 6 }, () => [] as Action[]).reduce(

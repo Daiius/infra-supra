@@ -1,6 +1,6 @@
 // シナリオ: 記事コミュニティ（prd/07 §7・§10・D-20）。値はすべてゲーム上の仮定で、実在の値ではない。
 // 料金・制限は catalog のデータをそのまま使う（ここで料金を作らない）。前提の文も catalog のもの（premiseRefs で参照する）。
-import { articleCommunity } from 'catalog';
+import { ARTICLE_COMMUNITY_SPA, articleCommunity } from 'catalog';
 import type { Action, GameState } from '../index.ts';
 import type { EventDef, Scenario } from '../scenario.ts';
 import { ARTICLE_COMMUNITY_TEXT } from './article-community-text.ts';
@@ -314,6 +314,7 @@ const EVENTS: EventDef[] = [
         earnsRevenue: true,
         months: 1,
         lasting: true,
+        social: true,
       },
     ],
   },
@@ -413,6 +414,18 @@ export const ARTICLE_COMMUNITY: Scenario = {
   goal: { cash: 1730, satisfaction: 0.75, maxOutageMonths: 2 },
   startCash: 60,
   text: ARTICLE_COMMUNITY_TEXT,
+  // フレームワーク（prd/10 F-04・F-05）。既定は Next.js。SPA の効き方の値はゲーム上の仮定
+  frameworks: {
+    allowed: ['nextjs', 'vite-spa'],
+    default: 'nextjs',
+    spa: {
+      shape: ARTICLE_COMMUNITY_SPA,
+      // 記事ごとのカードが出ないと、話題の伸び（× 3 の 2 倍分と後に残る分）が半分（仮定）
+      socialCardFactor: 0.5,
+      // 記事は検索・SNS から初めて来る読者が多く、初回表示が効く（仮定）
+      firstLoadHeavy: true,
+    },
+  },
   baselines: [
     {
       id: 'cf-paid',

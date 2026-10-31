@@ -18,7 +18,11 @@ export const ProcessingSchema = z.object({
 
 export const RouteGroupSchema = z.object({
   id: z.string(),
-  rendering: z.enum(['static', 'ssr', 'isr']),
+  /**
+   * spa: 1 つの静的なシェルとブラウザの JS で描く（prd/10 F-01）。シェルは訪問の入口だけ（PV ÷ ページ/セッション）、
+   * ページごとの中身はデータの API（processing）で取る。
+   */
+  rendering: z.enum(['static', 'ssr', 'isr', 'spa']),
   /** PV に占める割合。全ルートの合計は 1。 */
   share: Ratio,
   /** コンテンツの在庫: このルートのページ数（ISR の再生成の見積に使う）。 */
@@ -27,6 +31,8 @@ export const RouteGroupSchema = z.object({
   processing: ProcessingSchema,
   /** ISR のページをキャッシュから返すときの CPU（ホストによっては関数・Worker を通る）。 */
   cachedServeCpuMs: NonNeg.default(0),
+  /** spa のみ: シェル（index.html）の大きさ。 */
+  shellKB: NonNeg.optional(),
 });
 
 export const WorkloadInputSchema = z
@@ -107,6 +113,13 @@ export const WorkloadInputSchema = z
           code: 'custom',
           path: ['routes', i, 'revalidateSeconds'],
           message: 'ISR のルートには revalidateSeconds が必要',
+        });
+      }
+      if (r.rendering === 'spa' && r.shellKB === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['routes', i, 'shellKB'],
+          message: 'SPA のルートには shellKB が必要',
         });
       }
     });
