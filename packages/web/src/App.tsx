@@ -611,6 +611,8 @@ function Result({ state }: { state: GameState }) {
       })),
     [state.startSeed],
   );
+  /** 短い名前と説明が違う基準プレイだけを注記に出す。 */
+  const abbreviated = BASELINES.filter((b) => b.short && b.short !== b.label);
   const reflection = reflectionOf(state);
   const earlier = premiseTrends(
     state.history.map((m) => m.snapshots),
@@ -737,13 +739,15 @@ function Result({ state }: { state: GameState }) {
                 </tbody>
               </table>
             </div>
-            <ul className="mt-2 list-disc pl-5 text-xs opacity-70">
-              {BASELINES.map((b) => (
-                <li key={b.id}>
-                  {b.short ?? b.label}: {b.label}
-                </li>
-              ))}
-            </ul>
+            {abbreviated.length > 0 && (
+              <ul className="mt-2 list-disc pl-5 text-xs opacity-70">
+                {abbreviated.map((b) => (
+                  <li key={b.id}>
+                    {b.short}: {b.label}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </details>
         <details className="collapse collapse-arrow bg-base-200">
