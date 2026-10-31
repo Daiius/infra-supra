@@ -393,7 +393,11 @@ export function priceUsage(input: {
     });
   }
 
-  // 7. クレジット: 同じアカウント × プランの従量の明細に当てる。余りは繰り越さない
+  // 7. クレジット: 同じアカウント × プランの従量の明細に当てる。余りは繰り越さない。
+  //    対象が重なるクレジットが複数あれば、先に当てた分を明細の残りから差し引く（従量を超えて引かない）
+  const uncredited = new Map<LineItem, number>(
+    lines.map((l) => [l, l.amount ?? 0]),
+  );
   for (const sub of input.subscriptions) {
     const book = books.get(sub.provider)!;
     const plan = book.plans.find((p) => p.id === sub.planId)!;
@@ -408,9 +412,15 @@ export function priceUsage(input: {
           (c.appliesTo === 'all-usage' ||
             c.appliesTo.meterIds.includes(l.priceRef.meterId!)),
       );
-      const eligible = sum(targets.map((l) => l.amount ?? 0));
+      const eligible = sum(targets.map((l) => uncredited.get(l)!));
       const applied = Math.min(c.amount, eligible);
       if (applied <= 0) continue;
+      let rest = applied;
+      for (const l of targets) {
+        const take = Math.min(rest, uncredited.get(l)!);
+        uncredited.set(l, uncredited.get(l)! - take);
+        rest -= take;
+      }
       lines.push({
         kind: 'credit',
         accountId: sub.accountId,

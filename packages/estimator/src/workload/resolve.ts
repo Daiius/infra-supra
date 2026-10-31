@@ -27,7 +27,10 @@ export type ClassFlow = {
   count: number;
   perRequest: {
     kb: number;
+    /** 件数で重み付けした平均（課金・使用量に使う）。 */
     cpuMs: number;
+    /** まとめたルートのうち、件数が正のものの CPU の最大（1 リクエストあたりの上限の判定に使う）。 */
+    maxCpuMs: number;
     wallMs: number;
     queries: number;
     rowsRead: number;
@@ -57,6 +60,7 @@ const flow = (
   perRequest: {
     kb: p.kb ?? 0,
     cpuMs: p.cpuMs ?? 0,
+    maxCpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
     wallMs: p.wallMs ?? p.cpuMs ?? 0,
     queries: p.queries ?? 0,
     rowsRead: p.rowsRead ?? 0,
@@ -64,7 +68,7 @@ const flow = (
   },
 });
 
-/** 複数ルートの流れを件数で重み付けして 1 つのクラスにまとめる。 */
+/** 複数ルートの流れを件数で重み付けして 1 つのクラスにまとめる。CPU の最大は平均とは別に残す。 */
 function merge(flows: ClassFlow[]): ClassFlow {
   const count = flows.reduce((s, f) => s + f.count, 0);
   if (count === 0) return flow(0);
@@ -73,6 +77,9 @@ function merge(flows: ClassFlow[]): ClassFlow {
   return flow(count, {
     kb: avg('kb'),
     cpuMs: avg('cpuMs'),
+    maxCpuMs: Math.max(
+      ...flows.filter((f) => f.count > 0).map((f) => f.perRequest.maxCpuMs),
+    ),
     wallMs: avg('wallMs'),
     queries: avg('queries'),
     rowsRead: avg('rowsRead'),

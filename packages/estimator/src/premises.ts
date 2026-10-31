@@ -1,11 +1,19 @@
 // プラットフォームの前提の判定（prd/01-domain-model.md §8.1・D-12）。純粋関数。
 // 「この構成で当たっている前提」と「あと少しで当たる前提」を、見積の説明とゲームのイベントで同じ文のまま使えるように出す。
 import { HOURS_PER_MONTH, type Unit } from './num/unit.ts';
-import type { Bill, MeterUsage } from './pricing/price.ts';
+import type { Bill, MeterUsage, OverageBehavior } from './pricing/price.ts';
 import type { PriceBook } from './pricing/schema.ts';
 import type { Simulation } from './simulate/simulate.ts';
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
+
+/** 超過時の挙動の重い順（前提の挙動を 1 つに選ぶとき）。 */
+const OVERAGE_SEVERITY: readonly OverageBehavior[] = [
+  'block',
+  'upgrade-required',
+  'throttle',
+  'bill',
+];
 
 export type PremiseEffect =
   'block' | 'throttle' | 'upgrade-required' | 'cost' | 'policy' | 'info';
@@ -55,12 +63,19 @@ export function assessPremises(input: {
   const out: PlatformPremise[] = [];
   const peak = sim.workload.peakHourFactor / SECONDS_PER_MONTH;
 
-  // 1. 無料枠・込み分のプール（料金データの premise の文を使う）
+  // 1. 無料枠・込み分のプール（料金データの premise の文を使う）。
+  //    集計の単位は料金計算と同じ（prd/03 §4・§11）: node 単位はノードごと、account 単位はプランをまたいで合算する。
+  //    日次のプールは平日・休日の 1 日分のうち多いほうで判定する（料金計算も両方で超過を数える）。
   type PoolAgg = {
+    accountId: string;
+    provider: string;
+    poolId: string;
+    nodeId?: string;
     quantity: number;
     weekday: number;
-    nodeIds: Set<string>;
-    meterIds: Set<string>;
+    weekend: number;
+    /** プールを使ったプランごとのメーターとノード（出てきた順）。前提の文と挙動はプランごとに出す。 */
+    plans: Map<string, { meterIds: Set<string>; nodeIds: Set<string> }>;
   };
   const pools = new Map<string, PoolAgg>();
   const factMeters = new Map<
@@ -87,46 +102,67 @@ export function assessPremises(input: {
       }
       continue;
     }
-    const key = `${u.accountId}|${u.provider}|${u.planId}|${meter.allowancePool}`;
+    const pool = book.allowancePools.find((p) => p.id === meter.allowancePool)!;
+    const nodeId = pool.scope === 'node' ? u.nodeId : undefined;
+    const key = `${u.accountId}|${nodeId ?? ''}|${u.provider}|${pool.id}`;
     const agg = pools.get(key) ?? {
+      accountId: u.accountId,
+      provider: u.provider,
+      poolId: pool.id,
+      ...(nodeId !== undefined ? { nodeId } : {}),
       quantity: 0,
       weekday: 0,
-      nodeIds: new Set(),
-      meterIds: new Set(),
+      weekend: 0,
+      plans: new Map(),
     };
+    const uniform = u.quantity / (HOURS_PER_MONTH / 24);
     agg.quantity += u.quantity;
-    agg.weekday += u.daily?.weekday ?? u.quantity / (HOURS_PER_MONTH / 24);
-    agg.nodeIds.add(u.nodeId);
-    agg.meterIds.add(meter.id);
+    agg.weekday += u.daily?.weekday ?? uniform;
+    agg.weekend += u.daily?.weekend ?? uniform;
+    const pu = agg.plans.get(u.planId) ?? {
+      meterIds: new Set<string>(),
+      nodeIds: new Set<string>(),
+    };
+    pu.meterIds.add(meter.id);
+    pu.nodeIds.add(u.nodeId);
+    agg.plans.set(u.planId, pu);
     pools.set(key, agg);
   }
-  for (const [key, agg] of pools) {
-    const [, provider, planId, poolId] = key.split('|') as [
-      string,
-      string,
-      string,
-      string,
-    ];
-    const book = books.get(provider)!;
-    const pool = book.allowancePools.find((p) => p.id === poolId)!;
-    const plan = book.plans.find((p) => p.id === planId)!;
-    const meter = plan.meters.find((m) => agg.meterIds.has(m.id))!;
-    const text = meter.premise ?? pool.premise;
-    if (!text) continue;
-    out.push(
-      threshold({
-        id: `pool:${provider}:${planId}:${poolId}`,
-        text,
-        effect: meter.onExceed === 'bill' ? 'cost' : meter.onExceed,
-        nodeIds: [...agg.nodeIds],
-        provider,
-        planId,
-        used: pool.period === 'day' ? agg.weekday : agg.quantity,
-        limit: pool.quantity,
-        unit: pool.unit,
-        accumulates: pool.unit === 'gb-month',
-      }),
-    );
+  for (const agg of pools.values()) {
+    const book = books.get(agg.provider)!;
+    const pool = book.allowancePools.find((p) => p.id === agg.poolId)!;
+    const used =
+      pool.period === 'day' ? Math.max(agg.weekday, agg.weekend) : agg.quantity;
+    // 量はプールの単位で合算し、文と超過時の挙動はプランごとに出す（課金と停止のプランが同じ枠を使うことがある）。
+    // プランの中で挙動が分かれるときは重いほう（止まる → 有料プランが要る → 遅くなる → 費用）を出す
+    for (const [planId, pu] of agg.plans) {
+      const meters = book.plans
+        .find((p) => p.id === planId)!
+        .meters.filter((m) => pu.meterIds.has(m.id));
+      const meter = meters.reduce((a, m) =>
+        OVERAGE_SEVERITY.indexOf(m.onExceed) <
+        OVERAGE_SEVERITY.indexOf(a.onExceed)
+          ? m
+          : a,
+      );
+      const text = meter.premise ?? pool.premise;
+      if (!text) continue;
+      out.push(
+        threshold({
+          // ノード単位ならノードを足す（前方一致の参照は保つ）
+          id: `pool:${agg.provider}:${planId}:${pool.id}${agg.nodeId !== undefined ? `:${agg.nodeId}` : ''}`,
+          text,
+          effect: meter.onExceed === 'bill' ? 'cost' : meter.onExceed,
+          nodeIds: [...pu.nodeIds],
+          provider: agg.provider,
+          planId,
+          used,
+          limit: pool.quantity,
+          unit: pool.unit,
+          accumulates: pool.unit === 'gb-month',
+        }),
+      );
+    }
   }
   for (const f of factMeters.values()) {
     const meter = books
