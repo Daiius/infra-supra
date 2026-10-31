@@ -226,7 +226,7 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
       break;
     case 'object-storage':
       if (node.config.storesImages)
-        add(u, 'storage-gb-month', w.storage.imagesGB);
+        add(u, 'storage-gb-month', w.storage.imagesGB + w.storage.variantsGB);
       break;
     default:
       break;
@@ -327,7 +327,11 @@ export function simulateResources(
           1000) *
         peak,
       memoryGB: c.residentMemoryGB,
-      diskGB: workload.storage.dbGB + workload.storage.imagesGB + c.otherDiskGB,
+      diskGB:
+        workload.storage.dbGB +
+        workload.storage.imagesGB +
+        workload.storage.variantsGB +
+        c.otherDiskGB,
     };
   }
   return { architecture, workload, nodes, unroutedClasses };

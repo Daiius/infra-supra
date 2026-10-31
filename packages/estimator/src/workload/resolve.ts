@@ -51,7 +51,11 @@ export type ResolvedWorkload = {
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
-  storage: { dbGB: number; imagesGB: number };
+  /**
+   * 保存量。imagesGB は原本（images.storedGB）。variantsGB は投稿のときに作って保存するサイズ違い
+   * （transformAt: upload のときだけ。閲覧のときに変換する構成では保存しないので 0。OCL-F3098083）。
+   */
+  storage: { dbGB: number; imagesGB: number; variantsGB: number };
   derivations: Derivation[];
 };
 
@@ -230,7 +234,16 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     backgroundCpuMs: { 'isr-revalidate': isrWithRevalidate },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
-    storage: { dbGB: w.db.sizeGB, imagesGB: w.images.storedGB },
+    storage: {
+      dbGB: w.db.sizeGB,
+      imagesGB: w.images.storedGB,
+      // サイズ違い 1 枚は配る大きさ（sizeKB）とする（仮定）
+      variantsGB:
+        w.images.transformAt === 'upload'
+          ? (w.images.distinct * w.images.variants * w.images.sizeKB) /
+            1_000_000
+          : 0,
+    },
     derivations,
   };
 }

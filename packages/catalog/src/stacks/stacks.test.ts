@@ -143,6 +143,47 @@ describe('部品の組み合わせ', () => {
     );
   });
 
+  it('画像を D1 に置いたまま DB を D1 へ差し替える途中は、D1 にアプリの DB の保存量も載る', () => {
+    const w = applyComponentsToWorkload(
+      articleCommunity(1_000_000),
+      'cloudflare',
+      { images: 'd1', db: 'hyperdrive' },
+    );
+    const r = estimate({
+      workload: w,
+      architecture: composeStack(
+        'cloudflare-vinext-paid',
+        { images: 'd1', db: 'hyperdrive' },
+        { standby: { db: 'd1' } },
+      ),
+      books,
+    });
+    const s = r.simulation.workload.storage;
+    expect(r.simulation.nodes.d1!.resources['storage-gb-month']).toBeCloseTo(
+      s.dbGB + s.imagesGB,
+      9,
+    );
+  });
+
+  it('投稿のときにサイズ違いを作ると、R2 にはサイズ違いの保存量も載る（閲覧時に変換するなら原本だけ）', () => {
+    const sim = (images: string) =>
+      premisesOf('cloudflare-vinext-paid', { images }).simulation;
+    const pre = sim('r2-variants');
+    const base = sim('images');
+    const storage = (s: typeof pre) =>
+      s.nodes.r2!.resources['storage-gb-month']!;
+    const wi = pre.workload.input.images;
+    expect(base.workload.storage.variantsGB).toBe(0);
+    expect(pre.workload.storage.variantsGB).toBeCloseTo(
+      (wi.distinct * wi.variants * wi.sizeKB) / 1_000_000,
+      9,
+    );
+    expect(storage(pre) - storage(base)).toBeCloseTo(
+      pre.workload.storage.variantsGB,
+      9,
+    );
+  });
+
   it('画像だけを D1 に置き、DB は別の部品のとき、D1 の保存量は画像の分だけ', () => {
     const r = premisesOf('cloudflare-vinext-paid', {
       images: 'd1',

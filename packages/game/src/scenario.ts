@@ -18,7 +18,10 @@ export type Stock = {
 export type StockRule = {
   /** DB の増え方（PV 100 万あたり・月）。 */
   dbGBPerMillionPV: number;
-  /** 画像 1 枚の保存量（原本 + サイズ違い）。圧縮なし（150 KB）のときの値で、圧縮の度合いに比例して減る。 */
+  /**
+   * 画像 1 枚の原本の保存量。圧縮なし（150 KB）のときの値で、圧縮の度合いに比例して減る。
+   * サイズ違いは含まない（投稿のときに作って保存する構成だけ、estimator が別に数える。OCL-F3098083）。
+   */
   gbPerImage: number;
 };
 

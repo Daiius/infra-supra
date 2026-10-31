@@ -422,7 +422,10 @@ function composeCloudflare(
       kind: 'sql-db',
       ...(storesImages ? { storesImages: true } : {}),
       // DB が別の部品のときは、画像だけを置く D1（アプリの DB の保存量を載せない。OCL-65B45666）
-      ...(storesImages && choices.db !== 'd1' ? { storesDb: false } : {}),
+      // 差し替えの途中で D1 へ移す（standby）ときは、移行先としてアプリの DB も載せる（OCL-D3907993）
+      ...(storesImages && choices.db !== 'd1' && standby.db !== 'd1'
+        ? { storesDb: false }
+        : {}),
     },
     ...(storesImages ? { facts: ['d1-row-size'] } : {}),
     billing: bill(workers, {
