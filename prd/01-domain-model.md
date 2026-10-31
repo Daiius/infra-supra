@@ -159,7 +159,7 @@ type UsageRecord = {
   nodeId: NodeId;
   resource: ResourceKey;  // 汎用リソース: 'requests' | 'cpu-ms' | 'wall-ms' | 'gb-seconds' | 'rows-read' | 'rows-written'
                           // | 'storage-gb-month' | 'object-writes' | 'object-reads' | 'egress-bytes' | 'instance-hours' …
-  quantity: Decimal;
+  quantity: number;
   period: 'month' | { day: 'weekday' | 'weekend' } | { hour: number /* 0..167 */ };
   derivation: Derivation; // 式と入力値（説明表示用）
 };
@@ -175,7 +175,7 @@ Lambda の「実行時間」は `gb-seconds`）。**「Workers は CPU 時間、
 type Bill = {
   currency: Currency;           // 表示通貨。換算は ExchangeRate（仮定・日付付き）で行い、原通貨も残す
   lines: LineItem[];
-  totals: { fixed: Decimal; usage: Decimal; credits: Decimal; total: Decimal };
+  totals: { fixed: number; usage: number; credits: number; total: number };
   priceBookVersions: Record<ProviderId, string>;
   breaches: LimitBreach[];
 };
@@ -184,11 +184,11 @@ type LineItem = {
   nodeIds: NodeId[];            // 共有プールの明細は複数ノードにまたがる
   kind: 'base-fee' | 'usage' | 'credit' | 'minimum-charge';
   meter?: MeterId;
-  quantity?: Decimal;
-  allowanceApplied?: Decimal;   // この明細で消費した無料枠
-  billableQuantity?: Decimal;
-  tiers?: { from: Decimal; to: Decimal | null; quantity: Decimal; unitPrice: Decimal; amount: Decimal }[];
-  amount: Decimal;              // 原通貨
+  quantity?: number;
+  allowanceApplied?: number;   // この明細で消費した無料枠
+  billableQuantity?: number;
+  tiers?: { from: number; to: number | null; quantity: number; unitPrice: number; amount: number }[];
+  amount: number;              // 原通貨
   priceRef: PriceRef;           // どの PriceBook の版・どのプラン・どのメーターか
 };
 ```

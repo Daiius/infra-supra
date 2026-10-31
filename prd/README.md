@@ -26,14 +26,14 @@
 | 計算過程を説明できる | すべての金額は「どの使用量 × どの単価 − どの無料枠」の根拠をたどれる | [01](./01-domain-model.md) §6 |
 | 振る舞いはコード、具体値はデータ | コンポーネントの種類（CDN・サーバーレス関数・VPS…）の振る舞いはエンジンのコード。個々のサービスとプランはデータ。料金改定はデータの更新だけで済ませる | [01](./01-domain-model.md) §4 / [03](./03-pricing-schema.md) |
 | 見積とゲームを分ける | 依存は「ゲーム → 見積」の一方向のみ | [02](./02-architecture.md) §1 |
-| 決定論 | 同じ入力と同じ料金データの版なら、同じ結果になる。金額は 10 進で計算する | [02](./02-architecture.md) §3 |
+| 決定論 | 同じ入力と同じ料金データの版なら、同じ結果になる。課金の切り上げは許容誤差つきの 1 関数に閉じ込める | [02](./02-architecture.md) §3 |
 | 特定のスタックに寄せない | 見積対象のアプリのフレームワークとレンダリング方式は入力の軸。フレームワーク非依存の中間表現（BuildOutput）を経て構成に写す | [06](./06-frameworks.md) |
 | コストに効く仮定は選択肢にする | 結論を左右する仮定は幅にせず、シナリオ・利用者の選択肢、見積の「重要な前提」（境目の値つき）として出す | [01](./01-domain-model.md) §8 |
 | 過度な精密化を避ける | 物理シミュレーションより、規模によって最適な構成が入れ替わる様子の再現を優先する | [04](./04-resource-simulation.md) |
 
 ## スコープ
 
-- **実装済み**: pnpm monorepo の雛形（`packages/estimator`・`packages/catalog` の空パッケージ）。
+- **実装済み**: pnpm monorepo の雛形、estimator の数値の基盤（P1-2）、料金スキーマと料金計算（P1-4・P1-5）、Workload・構成・資源シミュレーションの最初の形（P1-3・P1-6・P1-7）、MVP の料金データ 4 社と 3 構成（P1-10。catalog）。
 - **計画中（Phase 1）**: 計算エンジン（workload → 使用量 → 請求）と MVP の 3 構成の料金データ。[08](./08-roadmap.md)。
 - **MVP の対象構成**: ① Cloudflare Workers + D1 + R2、② Vercel + Supabase、③ VPS + Docker Compose + MySQL + Nginx（さくらの VPS 2GB に固定。D-13）。
 - **MVP の対象フレームワーク**: Vite（SPA）・Next.js・vinext。Astro は MVP 直後に足す（[06](./06-frameworks.md) §3）。
@@ -50,6 +50,7 @@
 | [04-resource-simulation.md](./04-resource-simulation.md) | Workload からリソース消費量への変換仕様（MVP のコンポーネント種別ごと） |
 | [05-test-strategy.md](./05-test-strategy.md) | 料金計算のテストケース設計（架空料金データの扱いを含む） |
 | [06-frameworks.md](./06-frameworks.md) | フレームワークとビルド出力（FrameworkProfile・BuildOutput・DeployTarget。ISR・ミドルウェア・画像最適化の写し方） |
+| [07-game-design.md](./07-game-design.md) | ゲームデザイン（満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 |
 | [08-roadmap.md](./08-roadmap.md) | フェーズ分けと Phase 1 のタスク分解 |
 | [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログと未決の論点 |
 

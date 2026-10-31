@@ -3,10 +3,13 @@
   "private": true,
   "packageManager": "pnpm@11.24.0",
   "scripts": {
+    "dev": "pnpm --filter web dev",
+    "dev:remote": "pnpm --filter web dev:remote",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "play": "node --experimental-strip-types --no-warnings spikes/game-2026-10-31/play.ts",
     "hooks:install": "sh .githooks/install.sh"
   },
   "devDependencies": {

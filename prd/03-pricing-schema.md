@@ -1,6 +1,6 @@
 # 03. 料金データのスキーマ
 
-> 状態: **設計中**。実在の料金はまだ 1 件も収集していない。🔒 **出典を確認していない数値を、実在の料金のように書かない**
+> 状態: **スキーマと料金計算は実装済み**（P1-4・P1-5。`packages/estimator/src/pricing/`）。実在の料金はスパイクで一次取得しただけで、catalog にはまだ入れていない（P1-10）。🔒 **出典を確認していない数値を、実在の料金のように書かない**
 > （企画書 §12）。例示には `fictional` のデータだけを使う。
 
 ## 1. 置き場所と単位
@@ -45,13 +45,16 @@ type Plan = {
 
 ```ts
 type BaseFee = {
-  amount: string;                    // 10 進の文字列
+  amount: number;
   per: 'month' | 'hour';
-  monthlyCap?: string;               // 時間課金に月額上限がある場合（VPS に多い）
+  monthlyCap?: number;               // 時間課金に月額上限がある場合（VPS に多い）
   scope: 'account' | 'node';         // アカウントに 1 回（チームプラン）か、ノードごと（インスタンス）か
   perSeat?: boolean;                 // 席課金（Vercel Pro など）。席数は Architecture の BillingAccount に持つ
 };
 ```
+
+メンバー（席）の料金の扱いは Plan の `members` に持つ（D-20 V-6）。`per-seat`（`perSeat` の基本料と組）・`included`（料金が無いと書かれている）・
+`not-stated`（書かれていない。無料と断定しない）のどれかと、前提の 1 文・出典。
 
 ## 4. 無料枠のプール
 
@@ -61,11 +64,10 @@ type BaseFee = {
 ```ts
 type AllowancePool = {
   id: PoolId;
-  quantity: string;
+  quantity: number;
   unit: Unit;
   period: 'month' | 'day';           // 日次の無料枠は日ごとに評価する（01 §3.3）
   scope: 'account' | 'project' | 'node'; // 共有の単位
-  grantedBy: PlanRef[];              // どのプランを契約していると付与されるか
 };
 ```
 
@@ -83,16 +85,16 @@ type Meter = {
   unit: Unit;
   allowancePool?: PoolId;
   rounding?: {                       // 最低課金単位
-    granularity: string;             // 例: '1'（1 ms 単位）、'1000000'（100 万リクエスト単位）
+    granularity: number;             // 例: 1（1 ms 単位）、1_000_000（100 万リクエスト単位）
     scope: 'event' | 'period';       // 1 回ごとに切り上げるか、期間の合計を切り上げるか
     mode: 'ceil' | 'none';
   };
   pricing: Tiered | Volume | Flat;
   onExceed?: OverageBehavior;        // 無料枠を超えたときの挙動（§6）。既定は 'bill'
 };
-type Flat   = { model: 'flat'; unitPrice: string; per: string /* '1000000' = 100 万単位あたり */ };
-type Tiered = { model: 'tiered'; per: string; tiers: { upTo: string | null; unitPrice: string }[] }; // 段ごとに別単価
-type Volume = { model: 'volume'; per: string; tiers: { upTo: string | null; unitPrice: string }[] }; // 到達した段の単価を全量に
+type Flat   = { model: 'flat'; unitPrice: number; per: number /* 1_000_000 = 100 万単位あたり */ };
+type Tiered = { model: 'tiered'; per: number; tiers: { upTo: number | null; unitPrice: number }[] }; // 段ごとに別単価
+type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unitPrice: number }[] }; // 到達した段の単価を全量に
 ```
 
 - `rounding.scope: 'event'` は 1 リクエストごとの切り上げ。エンジンは分布を持たないので、
@@ -105,7 +107,7 @@ type Volume = { model: 'volume'; per: string; tiers: { upTo: string | null; unit
 type OverageBehavior = 'bill' | 'block' | 'throttle' | 'upgrade-required';
 type Limit = {
   id: string;                        // 'cpu-ms-per-request' | 'db-size-gb' | 'connections' | 'requests-per-day' …
-  value: string;
+  value: number;
   unit: Unit;
   scope: 'request' | 'node' | 'account' | 'day' | 'month';
   onExceed: OverageBehavior;
@@ -121,7 +123,7 @@ type Limit = {
 ```ts
 type Credit = {
   id: string;
-  amount: string;                    // 金額で付与されるクレジット（プランに含まれる利用分など）
+  amount: number;                    // 金額で付与されるクレジット（プランに含まれる利用分など）
   appliesTo: MeterRef[] | 'all-usage';
   period: 'month';
   carryOver: false;
@@ -134,7 +136,7 @@ type Credit = {
 ## 8. 為替
 
 ```ts
-type ExchangeRate = { base: Currency; quote: Currency; rate: string; asOf: string; basis: 'assumption' };
+type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: string; basis: 'assumption' };
 ```
 
 為替は料金データではなく**見積の仮定**として Estimate に保存する。明細は原通貨の金額を残し、合計だけを表示通貨に換算する。
@@ -148,7 +150,7 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: string; asOf: strin
 | `interpretation` | 公式の文書が食い違う箇所で**採用した解釈**と、退けた解釈（それぞれ根拠の引用つき）。計算は採用した解釈だけで行い、幅は出さない。実請求で確かめたら `verifiedAt` を付ける | 2 |
 | `status: 'unpriced'` | メーター・製品の料金が未取得。LineItem は金額なしで残り、合計は「下限」になる | 3 |
 | `eligibility` | 数量でない利用資格（商用利用の可否など）。Workload / シナリオの属性と照合する | 7 |
-| 将来の施行日 | 同じ版の中に `effectiveFrom` が未来の改定を持てる。見積の対象月で切り替える | 11 |
+| 将来の施行日 | 同じ版の中に `effectiveFrom` が未来の改定を持てる（`scheduledChanges`）。`kind`（料金 / 制限 / その他）と、改定後の料金を取得したときだけ `revisedMeters`（プラン・メーター・料金）を持つ。無ければ計算に反映しない理由 `notModeledReason` が必須（D-21）。見積の対象月で切り替える | 11 |
 | メーターの別名 | 名称変更（Edge Requests → CDN Requests）を `aliases` で持つ | 11 |
 | `rounding: 'not-stated'` | 丸めが書かれていない。エンジンは仮定（既定は丸めなし）で計算し、仮定を使ったことを根拠に残す | 12 |
 | 利用者の設定による超過時の挙動 | 予算による一時停止（遅れつき）のように、`onExceed` を構成側で選べるメーター | 10 |
@@ -161,6 +163,24 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: string; asOf: strin
 
 - `status: 'official'` の PriceBook は、すべての Plan が `sourceIds` を持ち、参照先が `sources` にある。
 - `fictional-` で始まる provider は `status: 'fictional'`、それ以外は `official`。
+- `members.pricing` が `per-seat` なのは `baseFee.perSeat` のときだけ。`members` も出典が必要。
 - メーターが参照するプール・プラン・リージョンが存在する。
 - 段階料金の `upTo` は単調増加で、最後の段だけ `null`。
-- 単価・数量の文字列は 10 進として読める。
+- 単価・数量は有限の数で、負にならない（クレジット以外）。
+
+## 11. 計算の細部（P1-5 の実装で決めたこと）
+
+| 論点 | 決めたこと | 理由 |
+|---|---|---|
+| プールの付与 | メーターがプールを参照していれば使える（`grantedBy` は持たない） | 無料プランと有料プランで枠が違う場合は、別のプールとして定義すれば足りる |
+| 共有の単位 | `account` と `node` を計算する。`project` はスキーマにあるが計算は gap | MVP の 3 構成で project 単位の共有が必要な箇所がまだない |
+| 日次プール | 平日・休日の 1 日分の使用量で判定し、超過 × 日数（平日 21.7 日・休日 8.7 日）。1 日分が無ければ均等割りを仮定し、仮定を明細に残す | prd/01 §3.3 |
+| 期間の丸め | **無料枠を引いた後**の課金対象に当てる | 使用量 0 の月に 1 単位を課金しないため。プロバイダーが「使用量全体を切り上げてから枠を引く」と明記していたら見直す |
+| 1 回ごとの丸め | 平均値で切り上げ、`件数 × 切り上げた平均` | 分布を持たないため（仮定として明細に残す） |
+| 超過時の挙動 | `bill` 以外は金額 0 の明細（status: blocked）と `LimitBreach`。利用者は `configurableOnExceed` の範囲だけ選べる | prd/01 §5.3 |
+| 料金未取得 | 金額 null の明細（status: unpriced）。合計は下限で、件数を `unpricedLines` に出す | D-09 |
+| クレジット | 同じアカウント × プランの従量の明細に当て、上限を超えた分は捨てる（繰り越さない）。固定費には当てない | Vercel・Supabase とも従量（Supabase は Compute だけ）に当たるため |
+| 段階料金 | アカウント × プラン × メーターの合計（ノードをまたいで合算）に当てる | 段は請求単位で決まるため |
+| 利用資格 | `context.commercial` が true のとき、非商用のみのプランを `eligibilityViolations` に出す | D-09 |
+| 施行日つきの予告 | `scheduledChanges` に記録するだけで、計算には使わない | gap。見積の対象月で切り替える機能は必要になってから |
+| 制限（Limit） | 料金計算では評価しない | 容量の判定（P1-8）で、資源シミュレーションの結果と合わせて評価する |
