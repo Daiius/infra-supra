@@ -45,16 +45,22 @@ export function Info({
       if (!panel.current?.contains(t) && !button.current?.contains(t))
         setPos(null);
     };
-    // スクロール・大きさの変更では位置がずれるので閉じる
+    // スクロールでは、ボタンに付いて動かす。ボタンが画面の外へ大きく出たときだけ閉じる
+    // （開いた直後の慣性スクロールや、数 px のスクロールで閉じないように）
+    const follow = () => {
+      const r = button.current?.getBoundingClientRect();
+      if (!r || r.bottom < 0 || r.top > window.innerHeight) setPos(null);
+      else show();
+    };
     const close = () => setPos(null);
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onDown);
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('scroll', follow, true);
     window.addEventListener('resize', close);
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onDown);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', follow, true);
       window.removeEventListener('resize', close);
     };
   }, [open]);

@@ -51,6 +51,7 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
+import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -1075,15 +1076,17 @@ function Actions({
             const chosen = settings[key] ?? current;
             return (
               <label key={key} className="form-control">
-                <span className="label-text font-semibold">
-                  {def.label}
-                  <span className="ml-1 text-xs font-normal opacity-60">
-                    手間 {def.effort}・来月から
-                  </span>{' '}
-                  <Info>{def.note}</Info>
+                <span className="label-text mb-1 block">
+                  <span className="block font-semibold">
+                    <NameWithInfo
+                      name={def.label}
+                      info={<Info>{def.note}</Info>}
+                    />
+                  </span>
+                  <Meta items={[`手間 ${def.effort}`, '来月から']} />
                 </span>
                 <select
-                  className="select select-bordered select-sm"
+                  className="select select-bordered select-sm w-full"
                   value={chosen}
                   onChange={(e) => {
                     const v = Number(e.target.value);
@@ -1125,23 +1128,21 @@ function Actions({
             disabled={!optimize && !valid(build({ optimize: true }))}
             onChange={(e) => setOptimize(e.target.checked)}
           />
-          <span>
-            SSR を最適化する（CPU {nextSsrCpuMs(state)} →{' '}
-            {Math.max(
-              EFFORT.minSsrCpuMs,
-              nextSsrCpuMs(state) - EFFORT.optimizeStepMs,
-            )}{' '}
-            ms・手間 {EFFORT.optimize}）
-            {!optimize && !valid(build({ optimize: true })) && (
-              <span className="ml-1 text-xs">
-                （{blocked(build({ optimize: true }))}）
-              </span>
-            )}{' '}
-            <Info>
-              CPU 時間と速さに効く。機能開発が進むと SSR
-              はまた重くなるので、繰り返し判断が要る。
-            </Info>
-          </span>
+          <OptionText
+            name="SSR を最適化する"
+            meta={[
+              `CPU ${nextSsrCpuMs(state)} → ${Math.max(EFFORT.minSsrCpuMs, nextSsrCpuMs(state) - EFFORT.optimizeStepMs)} ms`,
+              `手間 ${EFFORT.optimize}`,
+              '来月から',
+            ]}
+            info={
+              <Info>
+                CPU 時間と速さに効く。機能開発が進むと SSR
+                はまた重くなるので、繰り返し判断が要る。
+              </Info>
+            }
+            why={optimize ? null : blocked(build({ optimize: true }))}
+          />
         </label>
         {!state.botBlocked && (
           <label className="flex cursor-pointer items-start gap-3 py-1">
@@ -1156,19 +1157,17 @@ function Actions({
               }
               onChange={(e) => setBlockBots(e.target.checked)}
             />
-            <span>
-              Bot を遮断するルールを入れる（手間 {BOT_BLOCK.effort}
-              ・来月から効く）
-              {!blockBots && !valid(build({ blockBots: true })) && (
-                <span className="ml-1 text-xs">
-                  （{blocked(build({ blockBots: true }))}）
-                </span>
-              )}{' '}
-              <Info>
-                Bot・クローラーのアクセスが来月から半分になる。一度入れれば続く。対策の製品（WAF
-                など）の料金は取得していないので、手間だけの行動。
-              </Info>
-            </span>
+            <OptionText
+              name="Bot を遮断するルールを入れる"
+              meta={[`手間 ${BOT_BLOCK.effort}`, '来月から効く']}
+              info={
+                <Info>
+                  Bot・クローラーのアクセスが来月から半分になる。一度入れれば続く。対策の製品（WAF
+                  など）の料金は取得していないので、手間だけの行動。
+                </Info>
+              }
+              why={blockBots ? null : blocked(build({ blockBots: true }))}
+            />
           </label>
         )}
         <ComponentsSection
@@ -1210,16 +1209,16 @@ function Actions({
                     disabled={!ok}
                     onChange={() => setStackChange(idx)}
                   />
-                  <span>
-                    {text ? text.label : '構成はこのまま'}
-                    {text && (
-                      <>
-                        {' '}
-                        <Info>{text.detail}</Info>
-                      </>
-                    )}
-                    {!ok && <span className="block text-xs">{why}</span>}
-                  </span>
+                  {text ? (
+                    <OptionText
+                      name={text.name}
+                      meta={text.meta}
+                      info={<Info>{text.detail}</Info>}
+                      why={why}
+                    />
+                  ) : (
+                    <span>構成はこのまま</span>
+                  )}
                 </label>
               );
             })}
@@ -1283,7 +1282,7 @@ function ComponentsSection({
           済むまで部品は差し替えられない。
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           {slots.map((x) => {
             // 届いている提案で付く部品（チャットの Durable Objects など）。選ぶのは提案を受けるのと同じ
             const viaProposal = x.options.flatMap((o) => {
@@ -1299,37 +1298,41 @@ function ComponentsSection({
                 : componentPreview(state, x.slot, chosen);
             return (
               <label key={x.slot} className="form-control">
-                <span className="label-text font-semibold">
-                  {x.label}
-                  <span className="ml-1 text-xs font-normal opacity-60">
-                    {componentEffortLabel(x.slot)}
-                  </span>{' '}
-                  {/* select の選択肢の中には置けないので、選択肢ごとの説明をまとめて出す */}
-                  <Info>
-                    <ul className="space-y-1">
-                      {x.options.map((o) => (
-                        <li key={o.id}>
-                          <span className="font-semibold">{o.label}</span>
-                          {o.inappropriate && (
-                            <span className="badge badge-xs badge-warning ml-1">
-                              ⚠ 不適切
-                            </span>
+                <span className="label-text mb-1 block">
+                  <span className="block font-semibold">
+                    {/* select の選択肢の中には置けないので、選択肢ごとの説明をまとめて出す */}
+                    <NameWithInfo
+                      name={x.label}
+                      info={
+                        <Info>
+                          <ul className="space-y-1">
+                            {x.options.map((o) => (
+                              <li key={o.id}>
+                                <span className="font-semibold">{o.label}</span>
+                                {o.inappropriate && (
+                                  <span className="badge badge-xs badge-warning ml-1">
+                                    ⚠ 不適切
+                                  </span>
+                                )}
+                                : {o.note}
+                              </li>
+                            ))}
+                          </ul>
+                          {x.slot === 'db' && (
+                            <p className="mt-2 opacity-80">
+                              DB
+                              の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
+                              DB の費用を払う。
+                            </p>
                           )}
-                          : {o.note}
-                        </li>
-                      ))}
-                    </ul>
-                    {x.slot === 'db' && (
-                      <p className="mt-2 opacity-80">
-                        DB
-                        の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
-                        DB の費用を払う。
-                      </p>
-                    )}
-                  </Info>
+                        </Info>
+                      }
+                    />
+                  </span>
+                  <Meta items={componentEffortLabel(x.slot)} />
                 </span>
                 <select
-                  className="select select-bordered select-sm"
+                  className="select select-bordered select-sm w-full"
                   value={chosen}
                   onChange={(e) => {
                     const v = e.target.value;

@@ -653,31 +653,36 @@ export function migrationEffort(from: number, to: number): number {
 export function stackChangeText(
   from: number,
   to: number,
-): { label: string; detail: string } {
-  const name = STACKS[to]!.name;
+): { name: string; meta: string[]; detail: string } {
+  const target = STACKS[to]!.name;
   const months = migrationEffort(from, to) / EFFORT.migrationPerMonth;
   const per = EFFORT.migrationPerMonth;
+  const both = '期間中は新旧両方の費用';
   if (isPlanChange(from, to)) {
     const effort = planChangeEffort(from);
     const fact = stackFact(from, 'scale-up');
     return effort === 0
       ? {
-          label: `${name} にプラン変更（手間なし・来月から）`,
+          name: `${target} にプラン変更`,
+          meta: ['手間なし', '来月から'],
           detail:
             '同じ事業者のプランの変更。上限と込み分が変わり、来月から効く。',
         }
       : {
-          label: `${name} にプラン変更（手間 ${effort}・来月から）`,
+          name: `${target} にプラン変更`,
+          meta: [`手間 ${effort}`, '来月から'],
           detail: `${fact?.premise ?? ''}。計画的な短い停止なので、止まった月には数えない。`,
         };
   }
   if (isRecontract(from, to))
     return {
-      label: `${name} へ契約し直す（${per} × ${months} か月・期間中は新旧両方の費用）`,
+      name: `${target} へ契約し直す`,
+      meta: [`${per} × ${months} か月`, both],
       detail: `${stackFact(from, 'no-smaller-disk')!.premise}。新しく契約してデータを移す間は、新旧両方を動かして両方の費用を払う。`,
     };
   return {
-    label: `${name} へ乗り換える（${per} × ${months} か月・期間中は新旧両方の費用）`,
+    name: `${target} へ乗り換える`,
+    meta: [`${per} × ${months} か月`, both],
     detail:
       '別の事業者へ移す。作業の間は新旧両方の構成を動かして両方の費用を払い、済んだ翌月に切り替わる（その月は収益が少し減る）。部品は乗り換え先の既定の選択から始まる。',
   };
@@ -960,10 +965,13 @@ export function componentSlots(state: GameState): {
 }
 
 /** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
-export function componentEffortLabel(slot: SlotId): string {
+export function componentEffortLabel(slot: SlotId): string[] {
   return slot === 'db'
-    ? `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月・期間中は新旧両方の費用`
-    : `手間 ${EFFORT.component[slot]}・来月から`;
+    ? [
+        `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月`,
+        '期間中は新旧両方の費用',
+      ]
+    : [`手間 ${EFFORT.component[slot]}`, '来月から'];
 }
 
 /**
