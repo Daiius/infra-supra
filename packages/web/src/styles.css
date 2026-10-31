@@ -1,6 +1,20 @@
 @import 'tailwindcss';
 @plugin 'daisyui';
 
+/* 日本語の折り返し: 文節で折り返す（Chrome 119+。非対応のブラウザでは無視される）・行末の 1 文字の取り残しを避ける。
+   見出しは行の長さを揃える。数値と単位は個別に whitespace-nowrap で切らない */
+body {
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}
+h1,
+h2,
+h3,
+h4,
+.card-title {
+  text-wrap: balance;
+}
+
 /* グラフの色の役割（dataviz の参照パレット・明るいテーマ。検証済み: series-1/2 の組は全検査に通過）。
    画面は今のところ明るいテーマに固定（index.html の data-theme="light"）。暗いテーマは画面全体の切り替えと一緒に検証する。 */
 .viz-root {

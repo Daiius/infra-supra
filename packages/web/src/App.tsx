@@ -188,16 +188,40 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             月）に使った残りが機能開発に回る。
           </p>
           <p>所持金 {usd(SCENARIO.startCash)}。</p>
-          <div className="alert alert-info flex-col items-start gap-1">
-            <span>
-              目標: {SCENARIO.months} か月後に所持金 {usd(SCENARIO.goal.cash)}{' '}
-              以上・満足度の平均 {SCENARIO.goal.satisfaction} 以上・止まった月が{' '}
-              {SCENARIO.goal.maxOutageMonths} 回以内
-            </span>
-            <span className="text-sm">
-              止まった月が {SCENARIO.goal.maxOutageMonths}{' '}
-              回を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わる。
-            </span>
+          {/* daisyUI の alert は子を横の grid に並べるので、中身を 1 つのブロックにして縦に積む */}
+          <div className="alert alert-info">
+            <div className="space-y-1">
+              <div className="font-semibold">
+                目標（{SCENARIO.months} か月後に、すべて満たす）
+              </div>
+              <ul className="list-disc space-y-0.5 pl-5">
+                <li>
+                  所持金{' '}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {usd(SCENARIO.goal.cash)} 以上
+                  </span>
+                </li>
+                <li>
+                  満足度の平均{' '}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {SCENARIO.goal.satisfaction} 以上
+                  </span>
+                </li>
+                <li>
+                  止まった月が{' '}
+                  <span className="whitespace-nowrap tabular-nums">
+                    {SCENARIO.goal.maxOutageMonths} 回以内
+                  </span>
+                </li>
+              </ul>
+              <p className="text-sm">
+                止まった月が{' '}
+                <span className="whitespace-nowrap">
+                  {SCENARIO.goal.maxOutageMonths} 回
+                </span>
+                を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わる。
+              </p>
+            </div>
           </div>
           <h3 className="mt-2 font-bold">
             アプリの形（コストに効く判断ポイント）
@@ -1425,11 +1449,23 @@ function Result({
     <div className="card motion-fade-in bg-base-100 shadow">
       <div className="card-body gap-4">
         <div className={`alert ${won ? 'alert-success' : 'alert-error'}`}>
-          <span className="text-lg font-bold">{END_LABEL[end.reason]}</span>
-          <span>
-            {end.month} か月目で終了・所持金 {usd(state.cash)}・止まった月{' '}
-            {state.outages} 回
-          </span>
+          {/* 中身を 1 つのブロックにする（alert の grid で横に割られて途中で折り返さないように） */}
+          <div className="min-w-0">
+            <div className="text-lg font-bold">{END_LABEL[end.reason]}</div>
+            <div>
+              <span className="whitespace-nowrap">
+                {end.month} か月目で終了
+              </span>
+              ・
+              <span className="whitespace-nowrap">
+                所持金 {usd(state.cash)}
+              </span>
+              ・
+              <span className="whitespace-nowrap">
+                止まった月 {state.outages} 回
+              </span>
+            </div>
+          </div>
           {won && (
             // 帯の中の花火のアイコンのボタン（SVG。端末のフォントに依存しない）。帯の文字の色で描く
             <button
