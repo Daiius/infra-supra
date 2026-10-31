@@ -26,6 +26,10 @@ export type PlatformPremise = {
   ratio?: number;
   /** 当たっている（境目を超えた・資格を満たさない）。 */
   hit: boolean;
+  /**
+   * ためていく量（保存量・容量）か。true なら月ごとの増分で、false（流量）なら伸び率で先を見込む（prd/07 §5）。
+   */
+  accumulates?: boolean;
   /** 仮定に基づく判定か（ホストの容量など）。 */
   assumption?: string;
 };
@@ -120,6 +124,7 @@ export function assessPremises(input: {
         used: pool.period === 'day' ? agg.weekday : agg.quantity,
         limit: pool.quantity,
         unit: pool.unit,
+        accumulates: pool.unit === 'gb-month',
       }),
     );
   }
@@ -178,6 +183,7 @@ export function assessPremises(input: {
           used,
           limit: limit.value,
           unit: limit.unit,
+          accumulates: limit.measure === 'storage-gb',
         }),
       );
     }
@@ -233,6 +239,7 @@ export function assessPremises(input: {
         used: h.diskGB,
         limit: c.diskGB,
         unit: 'gb',
+        accumulates: true,
       }),
     );
   }

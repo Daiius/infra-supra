@@ -8,6 +8,7 @@ import {
   type PlatformPremise,
   type WorkloadInput,
 } from 'estimator';
+import type { PremiseSnapshot } from './trends.ts';
 
 export const GAME = {
   months: 12,
@@ -92,6 +93,8 @@ export type MonthReport = {
   notes: string[];
   /** 当たった前提と、境目の 70% を超えた前提。 */
   premises: PlatformPremise[];
+  /** 量の境目がある前提すべての記録（推移と見込みに使う。prd/07 §5）。 */
+  snapshots: PremiseSnapshot[];
   lines: { label: string; amount: number; currency: string }[];
   unpricedLines: number;
   action?: string;
@@ -235,6 +238,21 @@ export function playMonth(state: GameState): GameState {
     status,
     notes,
     premises: r.premises.filter((p) => p.hit || (p.ratio ?? 0) >= 0.7),
+    snapshots: r.premises
+      .filter(
+        (p) =>
+          p.kind === 'threshold' &&
+          p.ratio !== undefined &&
+          Number.isFinite(p.ratio),
+      )
+      .map((p) => ({
+        id: p.id,
+        text: p.text,
+        effect: p.effect,
+        ratio: p.ratio!,
+        hit: p.hit,
+        accumulates: p.accumulates ?? false,
+      })),
     lines: r.bill.lines
       .filter((l) => l.amount)
       .map((l) => ({
@@ -298,3 +316,5 @@ export function applyAction(state: GameState, action: Action): GameState {
   }
   return state;
 }
+
+export * from './trends.ts';

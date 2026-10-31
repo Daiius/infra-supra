@@ -6,12 +6,15 @@ import {
   IMPROVEMENTS,
   newGame,
   playMonth,
+  premiseTrends,
+  selectTrends,
   STACKS,
   type Action,
   type GameState,
   type MonthReport,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
+import { compact, LineChart, Sparkline } from './charts.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -143,6 +146,7 @@ function Game({
   const report = state.history[state.history.length - 1]!;
   return (
     <>
+      <Trends history={state.history} />
       <MonthCard report={report} />
       {state.phase === 'playing' ? (
         <Actions
@@ -183,16 +187,6 @@ function MonthCard({ report: r }: { report: MonthReport }) {
             {n}
           </div>
         ))}
-        <div className="stats stats-vertical bg-base-200 sm:stats-horizontal">
-          <Stat title="PV" value={Math.round(r.pv).toLocaleString()} />
-          <Stat title="収益" value={usd(r.revenue)} />
-          <Stat
-            title="費用"
-            value={usd(r.infraCost + r.opsCost)}
-            desc={`${yen(r.infraCost + r.opsCost)}${r.opsCost ? `・うち運用の作業 ${usd(r.opsCost)}` : ''}`}
-          />
-          <Stat title="所持金" value={usd(r.cash)} />
-        </div>
         {r.premises.length > 0 && (
           <div>
             <h3 className="mb-1 font-bold">プラットフォームの前提</h3>
@@ -228,24 +222,6 @@ function MonthCard({ report: r }: { report: MonthReport }) {
           </div>
         </details>
       </div>
-    </div>
-  );
-}
-
-function Stat({
-  title,
-  value,
-  desc,
-}: {
-  title: string;
-  value: string;
-  desc?: string;
-}) {
-  return (
-    <div className="stat">
-      <div className="stat-title">{title}</div>
-      <div className="stat-value text-2xl">{value}</div>
-      {desc && <div className="stat-desc">{desc}</div>}
     </div>
   );
 }
@@ -405,6 +381,168 @@ function History({ history }: { history: MonthReport[] }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/** 推移と見込み（prd/07 §5・GD-1）。毎月の画面の上に常に出し、続いている感じを見せる。 */
+function Trends({ history }: { history: MonthReport[] }) {
+  const last = history[history.length - 1]!;
+  const prev = history[history.length - 2];
+  const cost = (r: MonthReport) => r.infraCost + r.opsCost;
+  const trends = selectTrends(
+    premiseTrends(
+      history.map((m) => m.snapshots),
+      GAME.months,
+      last.buzz
+        ? {
+            skipProjection:
+              '話題になった月の伸びは続かないかもしれないので、今月は見込みを出さない',
+          }
+        : {},
+    ),
+  );
+  const tiles = [
+    {
+      label: 'PV',
+      value: compact(Math.round(last.pv)),
+      series: history.map((r) => r.pv),
+      delta: prev ? last.pv / prev.pv - 1 : null,
+    },
+    {
+      label: '収益（月）',
+      value: usd(last.revenue),
+      series: history.map((r) => r.revenue),
+      delta: prev ? last.revenue / prev.revenue - 1 : null,
+    },
+    {
+      label: '費用（月）',
+      value: usd(cost(last)),
+      series: history.map(cost),
+      delta: prev ? cost(last) / cost(prev) - 1 : null,
+    },
+    {
+      label: '所持金',
+      value: usd(last.cash),
+      series: history.map((r) => r.cash),
+      delta: null,
+    },
+  ];
+  return (
+    <div className="card bg-base-100 shadow">
+      <div className="card-body gap-4">
+        <h2 className="card-title">これまでの推移</h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {tiles.map((t) => (
+            <div key={t.label} className="rounded-box bg-base-200 p-3">
+              <div className="text-xs opacity-70">{t.label}</div>
+              <div className="text-xl font-semibold">{t.value}</div>
+              <div className="flex items-end justify-between">
+                <span className="text-xs opacity-70">
+                  {t.delta === null || !Number.isFinite(t.delta)
+                    ? ''
+                    : `前月比 ${t.delta >= 0 ? '+' : ''}${(t.delta * 100).toFixed(0)}%`}
+                </span>
+                <Sparkline values={t.series} months={GAME.months} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <LineChart
+          title="収益と費用（月）"
+          months={GAME.months}
+          format={(v) => `$${compact(Math.round(v))}`}
+          series={[
+            {
+              id: 'revenue',
+              label: '収益',
+              color: 'var(--series-1)',
+              values: history.map((r) => r.revenue),
+            },
+            {
+              id: 'cost',
+              label: '費用',
+              color: 'var(--series-2)',
+              values: history.map(cost),
+            },
+          ]}
+        />
+        {trends.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">
+              前提の使用率（境目 = 100%）
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              {trends.map((t) => (
+                <TrendCard key={t.id} t={t} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TrendCard({ t }: { t: ReturnType<typeof premiseTrends>[number] }) {
+  const blocked = t.hitNow && t.effect !== 'cost';
+  const status = blocked
+    ? { cls: 'badge-error', label: '✗ 当たった' }
+    : t.hitNow
+      ? { cls: 'badge-warning', label: '● 超過（課金）' }
+      : t.monthsUntil !== null
+        ? {
+            cls: 'badge-warning',
+            label: `▲ ${t.monthsUntil} か月後に超える見込み`,
+          }
+        : t.latest >= 0.5
+          ? { cls: 'badge-info', label: '◐ あと少し' }
+          : { cls: 'badge-ghost', label: '○ まだ遠い' };
+  const peak = Math.max(
+    ...t.ratios.map((r) => r ?? 0),
+    ...t.projection.map((p) => p.ratio),
+  );
+  return (
+    <div className="rounded-box border border-base-300 p-3">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <span className={`badge badge-sm ${status.cls}`}>{status.label}</span>
+        <span className="text-sm font-semibold tabular-nums">
+          {(t.latest * 100).toFixed(0)}%
+        </span>
+        {t.earlierThanProjected && (
+          <span className="badge badge-sm badge-outline">
+            見込みより早く超えた
+          </span>
+        )}
+      </div>
+      <div className="mb-1 text-sm">{t.text}</div>
+      {t.projectionNote && (
+        <div className="mb-1 text-xs opacity-70">{t.projectionNote}</div>
+      )}
+      <LineChart
+        months={GAME.months}
+        height={120}
+        format={(v) => `${Math.round(v * 100)}%`}
+        yMax={Math.min(Math.max(1.2, peak), 3)}
+        reference={{ value: 1, label: '境目' }}
+        series={[
+          {
+            id: t.id,
+            label: '使用率',
+            color: 'var(--series-1)',
+            values: t.ratios,
+            projection: t.projection.map((p) => ({
+              month: p.month,
+              value: p.ratio,
+            })),
+          },
+        ]}
+      />
+      {Math.max(...t.ratios.map((r) => r ?? 0)) > 3 && (
+        <div className="text-xs opacity-60">
+          300% を超えた部分はグラフの上端で切っている（値は上の %）
+        </div>
+      )}
     </div>
   );
 }
