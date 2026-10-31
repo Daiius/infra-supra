@@ -44,6 +44,7 @@ import {
 } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
+import { CountUp, Fireworks } from './motion.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -234,6 +235,7 @@ function Game({
   );
   return (
     <>
+      {state.phase === 'won' && <Fireworks />}
       {!playing && <Result state={state} />}
       <Trends history={state.history} />
       <MonthCard
@@ -516,7 +518,7 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
           .map((p) => (
             <div
               key={p.label}
-              className={p.cls}
+              className={`${p.cls} motion-width`}
               style={{ width: `${(p.value / e.total) * 100}%` }}
               title={`${p.label} ${p.value}`}
             />
@@ -1180,7 +1182,8 @@ function Result({ state }: { state: GameState }) {
     axes: cfPaid.axes,
   });
   return (
-    <div className="card bg-base-100 shadow">
+    // 達成は花火、未達成・ゲームオーバーは控えめにフェードインだけ（D-25。動きを減らす設定では出さない）
+    <div className="card motion-fade-in bg-base-100 shadow">
       <div className="card-body gap-4">
         <div className={`alert ${won ? 'alert-success' : 'alert-error'}`}>
           <span className="text-lg font-bold">{END_LABEL[end.reason]}</span>
@@ -1528,31 +1531,36 @@ function Trends({ history }: { history: MonthReport[] }) {
   const tiles = [
     {
       label: 'PV',
-      value: compact(Math.round(last.pv)),
+      value: last.pv,
+      format: (n: number) => compact(Math.round(n)),
       series: history.map((r) => r.pv),
       delta: prev ? last.pv / prev.pv - 1 : null,
     },
     {
       label: '収益（月）',
-      value: usd(last.revenue),
+      value: last.revenue,
+      format: usd,
       series: history.map((r) => r.revenue),
       delta: prev ? last.revenue / prev.revenue - 1 : null,
     },
     {
       label: '費用（月）',
-      value: usd(cost(last)),
+      value: cost(last),
+      format: usd,
       series: history.map(cost),
       delta: prev ? cost(last) / cost(prev) - 1 : null,
     },
     {
       label: '所持金',
-      value: usd(last.cash),
+      value: last.cash,
+      format: usd,
       series: history.map((r) => r.cash),
       delta: null,
     },
     {
       label: '機能開発（月）',
-      value: `${last.effort.feature} / ${last.effort.total}`,
+      value: last.effort.feature,
+      format: (n: number) => `${Math.round(n)} / ${last.effort.total}`,
       series: history.map((r) => r.effort.feature),
       delta: null,
     },
@@ -1565,7 +1573,10 @@ function Trends({ history }: { history: MonthReport[] }) {
           {tiles.map((t) => (
             <div key={t.label} className="rounded-box bg-base-200 p-3">
               <div className="text-xs opacity-70">{t.label}</div>
-              <div className="text-xl font-semibold">{t.value}</div>
+              <div className="text-xl font-semibold tabular-nums">
+                {/* 月が進むと前の月の値から数え上げる（D-25） */}
+                <CountUp value={t.value} format={t.format} />
+              </div>
               <div className="flex flex-wrap items-end justify-between">
                 <span className="text-xs opacity-70">
                   {t.delta === null || !Number.isFinite(t.delta)

@@ -251,19 +251,42 @@ export function LineChart({
                     opacity="0.6"
                   />
                 )}
-                {runs.map((r, i) => (
-                  <path
-                    key={i}
-                    d={path(r)}
-                    fill="none"
-                    stroke={s.color}
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                ))}
+                {runs.map((r, i) => {
+                  // 最後の区間だけ、月が進んだときに端から描く（D-25。key が変わると描き直す）
+                  const grow = i === runs.length - 1 && r.length >= 2;
+                  const head = grow ? r.slice(0, -1) : r;
+                  return (
+                    <g key={i}>
+                      {head.length >= 2 && (
+                        <path
+                          d={path(head)}
+                          fill="none"
+                          stroke={s.color}
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      )}
+                      {grow && (
+                        <path
+                          key={`seg-${s.values.length}`}
+                          className="motion-draw"
+                          pathLength={1}
+                          d={path(r.slice(-2))}
+                          fill="none"
+                          stroke={s.color}
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      )}
+                    </g>
+                  );
+                })}
                 {li >= 0 && (
                   <circle
+                    key={`end-${li}`}
+                    className="motion-pop"
                     cx={x(li + 1)}
                     cy={y(s.values[li]!)}
                     r="4"
@@ -349,7 +372,11 @@ export function Sparkline({
   const span = max - min || 1;
   const x = (i: number) => 4 + (i / Math.max(months - 1, 1)) * (width - 8);
   const y = (v: number) => 4 + (height - 8) * (1 - (v - min) / span);
-  const d = values.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join('');
+  const d = (from: number, to: number) =>
+    values
+      .slice(from, to)
+      .map((v, i) => `${i ? 'L' : 'M'}${x(from + i)},${y(v)}`)
+      .join('');
   const li = values.length - 1;
   return (
     <svg width={width} height={height} aria-hidden className="viz-root">
@@ -363,16 +390,34 @@ export function Sparkline({
           strokeWidth="1"
         />
       )}
-      <path
-        d={d}
-        fill="none"
-        stroke="var(--deemphasis)"
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      {li >= 2 && (
+        <path
+          d={d(0, li)}
+          fill="none"
+          stroke="var(--deemphasis)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      )}
+      {li >= 1 && (
+        // 最後の区間だけ、月が進んだときに端から描く（D-25）
+        <path
+          key={`seg-${li}`}
+          className="motion-draw"
+          pathLength={1}
+          d={d(li - 1, li + 1)}
+          fill="none"
+          stroke="var(--deemphasis)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      )}
       {li >= 0 && (
         <circle
+          key={`end-${li}`}
+          className="motion-pop"
           cx={x(li)}
           cy={y(values[li]!)}
           r="4"
@@ -464,7 +509,7 @@ export function Meter({
           style={{ background: c.track, borderRadius: 4 }}
         >
           <div
-            className="absolute inset-y-0 left-0"
+            className="motion-grow-x absolute inset-y-0 left-0"
             style={{
               width: pos(value),
               background: c.fill,
