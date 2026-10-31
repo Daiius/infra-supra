@@ -58,11 +58,13 @@ import {
   type WorkloadMods,
 } from './scenario.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
+import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 import { premiseTrends, type PremiseSnapshot } from './trends.ts';
 
 /** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
 export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
   [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
+  [CONTRACT_OPERATIONS.id]: CONTRACT_OPERATIONS,
 });
 
 /** ⚠ 為替は取得していない（仮定）。シナリオによらない共通の仮定。 */
@@ -454,6 +456,8 @@ type WorkloadParts = {
   stock: Stock | null;
   platform: Platform;
   components: Choices;
+  /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
+  peakFactor?: number;
 };
 
 function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
@@ -487,6 +491,15 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.api = { ...w.api, writesPerCall: p.mods.writesPerCall };
   if (p.stock) w.db = { ...w.db, sizeGB: p.stock.dbGB };
   if (p.mods.realtime) w.realtime = p.mods.realtime;
+  if (p.mods.apiCpuMs !== undefined)
+    w.api = { ...w.api, cpuMs: p.mods.apiCpuMs };
+  if (p.mods.apiResponseKB !== undefined)
+    w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
+  if (p.peakFactor !== undefined && p.peakFactor !== 1)
+    w.traffic = {
+      ...w.traffic,
+      peakHourFactor: w.traffic.peakHourFactor * p.peakFactor,
+    };
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
   return applyComponentsToWorkload(w, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
@@ -1127,7 +1140,12 @@ export function componentSlots(state: GameState): {
       current: current[slot] ?? '',
       options: componentsOf(platform, slot),
     }))
-    .filter((x) => x.options.length > 1);
+    .filter(
+      (x) =>
+        x.options.length > 1 &&
+        // このシナリオで効かないスロットは出さない（D-33・prd/09 E-6）
+        !scenarioOf(state).hidden?.slots?.includes(x.slot),
+    );
 }
 
 /** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
@@ -1245,7 +1263,7 @@ const fmtFactor = (f: number) => `× ${Number(f.toFixed(2))}`;
 export function describeEffect(e: Effect): string {
   switch (e.type) {
     case 'traffic':
-      return `${e.bot ? 'Bot の' : ''}PV ${fmtFactor(e.factor)}（${e.months} か月${e.earnsRevenue ? '' : '・収益なし'}）`;
+      return `${e.bot ? 'Bot の' : ''}PV ${fmtFactor(e.factor)}${e.peakFactor ? `・ピーク ${fmtFactor(e.peakFactor)}` : ''}（${e.months} か月${e.earnsRevenue ? '' : '・収益なし'}）`;
     case 'workload': {
       const m = e.mods;
       return [
@@ -1258,6 +1276,8 @@ export function describeEffect(e: Effect): string {
           `API 1 回の書き込み ${m.writesPerCall}`,
         m.dbRateFactor !== undefined &&
           `DB の増え方 ${fmtFactor(m.dbRateFactor)}`,
+        m.apiCpuMs !== undefined && `API 1 回の CPU ${m.apiCpuMs} ms`,
+        m.apiResponseKB !== undefined && `API 1 回の応答 ${m.apiResponseKB} KB`,
       ]
         .filter(Boolean)
         .join('・');
@@ -1434,12 +1454,14 @@ export function playMonth(input: GameState): GameState {
   );
   let humanFactor = 1;
   let botExtra = 0;
+  let peakFactor = 1;
   let lasting = false;
   const trafficEvents: {
     id: string;
     title: string;
     bot: boolean;
     factor: number;
+    peak?: number;
   }[] = [];
   const trafficNotes: string[] = [];
   for (const x of noticed) {
@@ -1488,12 +1510,14 @@ export function playMonth(input: GameState): GameState {
         trafficNotes.push(`${def.title}（Bot は収益にならない）`);
       } else {
         humanFactor *= e.factor;
+        if (e.peakFactor) peakFactor *= e.peakFactor;
         if (e.lasting) lasting = true;
         trafficEvents.push({
           id: def.id,
           title: def.title,
           bot: false,
           factor: e.factor,
+          ...(e.peakFactor ? { peak: e.peakFactor } : {}),
         });
         if (!e.lasting) trafficNotes.push(def.title);
       }
@@ -1522,6 +1546,7 @@ export function playMonth(input: GameState): GameState {
     stock: sc.stock ? state.stock : null,
     platform: platformNow,
     components: state.components,
+    ...(peakFactor !== 1 ? { peakFactor } : {}),
   };
   const workload = workloadFor(sc, parts);
   const swap = state.componentSwap;
@@ -1696,7 +1721,9 @@ export function playMonth(input: GameState): GameState {
   const policy = r.premises.filter((p) => p.hit && p.effect === 'policy');
   const throttling = r.premises.filter((p) => p.hit && p.effect === 'throttle');
   const loss = sc.revenue.loss;
-  let revenue = (humanPV / 1000) * sc.revenue.adsUsdPer1000PV;
+  let revenue =
+    (sc.revenue.fixedUsdPerMonth ?? 0) +
+    (humanPV / 1000) * sc.revenue.adsUsdPer1000PV;
   let outages = state.outages;
   let status: MonthReport['status'] = 'ok';
   const notes: string[] = [];
@@ -2013,7 +2040,8 @@ export function playMonth(input: GameState): GameState {
 function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
   const rule = sc.stock!;
   const w = sc.template(1);
-  const mau = humanPV / 10;
+  // 1 MAU あたりの PV はテンプレートから読む（記事コミュニティは 10・業務アプリは 200。D-33）
+  const mau = humanPV / Math.round(1 / w.traffic.mau);
   const uploads =
     mau * w.images.uploadsPerMau * (state.mods.uploadsFactor ?? 1);
   const s = state.stock;
@@ -2044,6 +2072,7 @@ function crossingsOf(
       title: string;
       bot: boolean;
       factor: number;
+      peak?: number;
     }[];
     state: GameState;
   },
@@ -2064,7 +2093,12 @@ function crossingsOf(
     const pv = t.bot
       ? c.parts.pv - c.humanPV * (t.factor - 1)
       : c.parts.pv / t.factor;
-    variants.push({ eventId: t.id, title: t.title, parts: { ...c.parts, pv } });
+    const peakFactor = (c.parts.peakFactor ?? 1) / (t.peak ?? 1);
+    variants.push({
+      eventId: t.id,
+      title: t.title,
+      parts: { ...c.parts, pv, peakFactor },
+    });
   }
   for (const [id, res] of Object.entries(c.state.responses)) {
     if (res !== 'accepted') continue;

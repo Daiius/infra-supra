@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   actionEffort,
   applyActions,
-  ARTICLE_COMMUNITY,
   averageSatisfaction,
   axesOf,
   BOT_BLOCK,
@@ -20,7 +19,6 @@ import {
   END_LABEL,
   eventDef,
   goalChecks,
-  growthFromReputation,
   isPlanChange,
   stackChangeText,
   storageOptionText,
@@ -35,6 +33,7 @@ import {
   projectionNote,
   reflectionOf,
   scenarioOf,
+  SCENARIOS,
   selectTrends,
   SETTINGS,
   STACKS,
@@ -45,6 +44,7 @@ import {
   type MonthEvent,
   type MonthReport,
   type SaveData,
+  type Scenario,
   type Surprise,
   type SettingKey,
   type Stage,
@@ -52,6 +52,11 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
+import {
+  ScenarioDescription,
+  ScenarioPicker,
+  SCENARIO_LIST,
+} from './scenario-briefing.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import {
   CountUp,
@@ -70,8 +75,6 @@ const today = () => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
-/** 始めるシナリオ（今は記事コミュニティだけ。GD-5 で 2 本目）。 */
-const SCENARIO = ARTICLE_COMMUNITY;
 /** 画面に出す為替の仮定（game の共通の仮定）。 */
 const USD_JPY = 150;
 type SlotId = Extract<Action, { type: 'component' }>['slot'];
@@ -158,100 +161,15 @@ export function App() {
 }
 
 function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
+  const [scenarioId, setScenarioId] = useState(SCENARIO_LIST[0]!.id);
+  const scenario = SCENARIOS[scenarioId]!;
   const [stack, setStack] = useState(1);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
   return (
     <>
-      <div className="card bg-base-100 shadow">
-        <div className="card-body">
-          <h2 className="card-title">
-            シナリオ: {SCENARIO.name}を {SCENARIO.months} か月運営する
-          </h2>
-          <p>
-            Next.js（App Router）で作った記事 +
-            コメントのサイト。広告収入で運営する（商用）。今は月{' '}
-            {SCENARIO.scale.startPV.toLocaleString()}{' '}
-            PV。利用者の満足度が高ければ口コミで伸び （満足度 0.9 で毎月約{' '}
-            {(
-              growthFromReputation(0.9, false, SCENARIO.growth).net * 100
-            ).toFixed(0)}
-            %）、 低ければ解約が増える。
-          </p>
-          <p>
-            運営中に出来事が起きる: SNS で話題になる（前の月に前兆が出る）・Bot
-            が大量に来る・チームが増える・機能追加の提案が来る（受けるか断るかを選ぶ）・投稿や画像がたまって前提の境目に近づく。
-            まれに、構成の乗り換えを迫るほどの大きな出来事が来る（1
-            か月前に予告が出る）。時期は乱数のシードで変わる。始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出る（改定後の料金を取得していないものは、計算に反映しない）。
-          </p>
-          <p>
-            満足度は可用性・速さ・機能・鮮度・画質の 5
-            つの要素で決まる。開発の手間は毎月 {SCENARIO.effort.perMonth}{' '}
-            ポイントで、設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
-            {SCENARIO.effort.selfHostedUpkeep} /
-            月）に使った残りが機能開発に回る。
-          </p>
-          <p>所持金 {usd(SCENARIO.startCash)}。</p>
-          {/* daisyUI の alert は子を横の grid に並べるので、中身を 1 つのブロックにして縦に積む */}
-          <div className="alert alert-info">
-            <div className="space-y-1">
-              <div className="font-semibold">
-                目標（{SCENARIO.months} か月後に、すべて満たす）
-              </div>
-              <ul className="list-disc space-y-0.5 pl-5">
-                <li>
-                  所持金{' '}
-                  <span className="whitespace-nowrap tabular-nums">
-                    {usd(SCENARIO.goal.cash)} 以上
-                  </span>
-                </li>
-                <li>
-                  満足度の平均{' '}
-                  <span className="whitespace-nowrap tabular-nums">
-                    {SCENARIO.goal.satisfaction} 以上
-                  </span>
-                </li>
-                <li>
-                  止まった月が{' '}
-                  <span className="whitespace-nowrap tabular-nums">
-                    {SCENARIO.goal.maxOutageMonths} 回以内
-                  </span>
-                </li>
-              </ul>
-              <p className="text-sm">
-                止まった月が{' '}
-                <span className="whitespace-nowrap">
-                  {SCENARIO.goal.maxOutageMonths} 回
-                </span>
-                を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わる。
-              </p>
-            </div>
-          </div>
-          <h3 className="mt-2 font-bold">
-            アプリの形（コストに効く判断ポイント）
-          </h3>
-          <ul className="list-disc space-y-1 pl-6">
-            <li>
-              記事ページは ISR（再検証 5 分・2,000 ページ）、マイページなどは
-              SSR。SSR 1 回の CPU は約{' '}
-              {SCENARIO.template(1).routes[0]!.processing.cpuMs}{' '}
-              ms（機能が増えると重くなる）
-            </li>
-            <li>
-              1 PV あたり画像 5 枚（150 KB）。画像は 5,000 種類 × サイズ違い 3
-            </li>
-            <li>
-              1 PV あたり API 1 回。DB は小さい（0.3
-              GB）が、投稿とコメントで少しずつ大きくなる。投稿された画像もたまっていく
-            </li>
-          </ul>
-          <p className="text-sm opacity-60">
-            料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては
-            1 USD = {USD_JPY} 円の仮定で換算。
-            収益・成長・満足度・開発の手間・障害の影響はゲーム上の仮定。
-          </p>
-        </div>
-      </div>
+      <ScenarioPicker value={scenarioId} onChange={setScenarioId} />
+      <ScenarioDescription scenario={scenario} usdJpy={USD_JPY} />
       <div className="card bg-base-100 shadow">
         <div className="card-body">
           <h2 className="card-title">どの構成で始めますか？</h2>
@@ -298,7 +216,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               onClick={() => {
                 onStart(
                   newSave({
-                    scenarioId: SCENARIO.id,
+                    scenarioId: scenario.id,
                     stackIndex: stack,
                     seed,
                     startDate,
@@ -360,7 +278,7 @@ function Game({
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         />
       )}
-      <Trends history={state.history} />
+      <Trends history={state.history} scenario={scenarioOf(state)} />
       <MonthCard
         report={report}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
@@ -1044,6 +962,11 @@ function Actions({
   const actions = build();
   const draft = applyActions(state, actions);
   const left = effortAvailable(draft);
+  // このシナリオで効かない行動は出さない（D-33・prd/09 E-6）
+  const hidden = scenarioOf(state).hidden;
+  const settingKeys = (Object.keys(SETTINGS) as SettingKey[]).filter(
+    (k) => !hidden?.settings?.includes(k),
+  );
 
   return (
     <div className="card bg-base-100 shadow">
@@ -1108,7 +1031,7 @@ function Actions({
           </div>
         )}
         <div className="grid gap-3 md:grid-cols-3">
-          {(Object.keys(SETTINGS) as SettingKey[]).map((key) => {
+          {settingKeys.map((key) => {
             const def = SETTINGS[key];
             const current = state.settings[def.field];
             const chosen = settings[key] ?? current;
@@ -1182,7 +1105,7 @@ function Actions({
             why={optimize ? null : blocked(build({ optimize: true }))}
           />
         </label>
-        {!state.botBlocked && (
+        {!state.botBlocked && !hidden?.blockBots && (
           <label className="flex cursor-pointer items-start gap-3 py-1">
             <input
               type="checkbox"
@@ -1914,14 +1837,20 @@ function History({ history }: { history: MonthReport[] }) {
 }
 
 /** 推移と見込み（prd/07 §5・GD-1）。毎月の画面の上に常に出し、続いている感じを見せる。 */
-function Trends({ history }: { history: MonthReport[] }) {
+function Trends({
+  history,
+  scenario,
+}: {
+  history: MonthReport[];
+  scenario: Scenario;
+}) {
   const last = history[history.length - 1]!;
   const prev = history[history.length - 2];
   const cost = (r: MonthReport) => r.infraCost;
   const trends = selectTrends(
     premiseTrends(
       history.map((m) => m.snapshots),
-      SCENARIO.months,
+      scenario.months,
       projectionNote(last) ? { skipProjection: projectionNote(last)! } : {},
     ),
   );
@@ -1986,7 +1915,7 @@ function Trends({ history }: { history: MonthReport[] }) {
                     ? ''
                     : `前月比 ${pct(t.delta)}`}
                 </span>
-                <Sparkline values={t.series} months={SCENARIO.months} />
+                <Sparkline values={t.series} months={scenario.months} />
               </div>
             </div>
           ))}
@@ -1994,7 +1923,7 @@ function Trends({ history }: { history: MonthReport[] }) {
         <div className="grid gap-4 md:grid-cols-2">
           <LineChart
             title="収益と費用（月）"
-            months={SCENARIO.months}
+            months={scenario.months}
             format={(v) => `$${compact(Math.round(v))}`}
             series={[
               {
@@ -2012,11 +1941,11 @@ function Trends({ history }: { history: MonthReport[] }) {
             ]}
           />
           <LineChart
-            title={`満足度と評判（目標の平均 ${SCENARIO.goal.satisfaction}）`}
-            months={SCENARIO.months}
+            title={`満足度と評判（目標の平均 ${scenario.goal.satisfaction}）`}
+            months={scenario.months}
             format={(v) => v.toFixed(2)}
             yMax={1}
-            reference={{ value: SCENARIO.goal.satisfaction, label: '目標' }}
+            reference={{ value: scenario.goal.satisfaction, label: '目標' }}
             series={[
               {
                 id: 'score',
@@ -2040,7 +1969,7 @@ function Trends({ history }: { history: MonthReport[] }) {
             </h3>
             <div className="grid gap-3 md:grid-cols-2">
               {trends.map((t) => (
-                <TrendCard key={t.id} t={t} />
+                <TrendCard key={t.id} t={t} months={scenario.months} />
               ))}
             </div>
           </div>
@@ -2050,7 +1979,13 @@ function Trends({ history }: { history: MonthReport[] }) {
   );
 }
 
-function TrendCard({ t }: { t: ReturnType<typeof premiseTrends>[number] }) {
+function TrendCard({
+  t,
+  months,
+}: {
+  t: ReturnType<typeof premiseTrends>[number];
+  months: number;
+}) {
   const blocked = t.hitNow && t.effect !== 'cost';
   const status = blocked
     ? { cls: 'badge-error', label: '✗ 当たった' }
@@ -2086,7 +2021,7 @@ function TrendCard({ t }: { t: ReturnType<typeof premiseTrends>[number] }) {
         <div className="mb-1 text-xs opacity-70">{t.projectionNote}</div>
       )}
       <LineChart
-        months={SCENARIO.months}
+        months={months}
         height={120}
         format={(v) => `${Math.round(v * 100)}%`}
         yMax={Math.min(Math.max(1.2, peak), 3)}

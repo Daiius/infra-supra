@@ -67,3 +67,5 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
     db: { sizeGB: 0.3, responseKBPerQuery: 2 },
   };
 }
+
+export { businessApp } from './business-app.ts';

@@ -52,6 +52,7 @@
 | [06-frameworks.md](./06-frameworks.md) | フレームワークとビルド出力（FrameworkProfile・BuildOutput・DeployTarget。ISR・ミドルウェア・画像最適化の写し方） |
 | [07-game-design.md](./07-game-design.md) | ゲームデザイン（満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 |
 | [08-roadmap.md](./08-roadmap.md) | フェーズ分けと Phase 1 のタスク分解 |
+| [09-scenario-contract.md](./09-scenario-contract.md) | 2 本目のシナリオ: 受託先の業務アプリの運用（テンプレート・出来事・確定した値と基準プレイ） |
 | [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログと未決の論点 |
 
 ## 用語
