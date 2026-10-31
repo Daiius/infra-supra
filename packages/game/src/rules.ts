@@ -210,8 +210,13 @@ export type EffortBreakdown = {
   total: number;
   upkeep: number;
   interrupt: number;
+  /** 機能の追加の作業（提案への対応。機能開発に数える。D-29）。 */
+  featureWork: number;
+  /** 提案の機能の加点（作業の月に足す。総量の外）。 */
+  featureBonus: number;
   migration: number;
   actions: number;
+  /** その月の機能開発 = 余り + 機能の追加の作業 + 加点。 */
   feature: number;
 };
 
@@ -222,6 +227,9 @@ export type EffortBreakdown = {
 export function allocateEffort(input: {
   upkeep: number;
   interrupt?: number;
+  /** 機能の追加の作業（提案への対応）と、その加点（作業が削られたら同じ割合で減る）。 */
+  featureWork?: number;
+  featureBonus?: number;
   /** 乗り換えに今月入れたい量（0 なら乗り換え中でない）。 */
   migrationWanted: number;
   actions: number;
@@ -237,15 +245,21 @@ export function allocateEffort(input: {
   };
   const upkeep = take(input.upkeep);
   const interrupt = take(input.interrupt ?? 0);
+  const wanted = input.featureWork ?? 0;
+  const featureWork = take(wanted);
+  const featureBonus =
+    wanted > 0 ? ((input.featureBonus ?? 0) * featureWork) / wanted : 0;
   const migration = take(input.migrationWanted);
   const actions = take(input.actions);
   return {
     total,
     upkeep,
     interrupt,
+    featureWork,
+    featureBonus,
     migration,
     actions,
-    feature: left,
+    feature: left + featureWork + featureBonus,
   };
 }
 

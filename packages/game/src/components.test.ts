@@ -193,6 +193,28 @@ describe('チャットの提案（W-1）', () => {
     expect(playMonth(viaComponent).mods).toEqual(playMonth(viaProposal).mods);
   });
 
+  it('機能追加の提案を受けると、翌月の機能開発に作業の手間と加点が数えられる（D-29）', () => {
+    const cf = until(CF_PAID, chatMonth(42));
+    const accepted = applyAction(cf, {
+      type: 'respond',
+      eventId: 'p-chat',
+      accept: true,
+    });
+    // 加点は受けた瞬間には足さない
+    expect(accepted.featurePoints).toBe(cf.featurePoints);
+    const a = last(playMonth(accepted)).effort;
+    const d = last(
+      playMonth(
+        applyAction(cf, { type: 'respond', eventId: 'p-chat', accept: false }),
+      ),
+    ).effort;
+    expect(a.featureWork).toBe(4);
+    expect(a.featureBonus).toBe(6);
+    expect(a.interrupt).toBe(d.interrupt);
+    // 断った月と比べ、作業の手間は機能開発のままで、加点の分だけ多い
+    expect(a.feature).toBe(d.feature + 6);
+  });
+
   it('提案が届いていない月は、部品の欄では選べず「提案を受けると付く」と理由が出る', () => {
     const s = playMonth(newGame(CF_PAID));
     expect(checkAction(s, comp('realtime', 'durable-objects'))).toMatchObject({

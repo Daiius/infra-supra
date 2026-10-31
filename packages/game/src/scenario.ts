@@ -63,7 +63,16 @@ export type Effect =
   | { type: 'seats'; add: number }
   | { type: 'effortPerMonth'; add: number }
   /** 出来事への対応の手間（翌月から months か月）。 */
-  | { type: 'interrupt'; points: number; months: number }
+  | {
+      type: 'interrupt';
+      points: number;
+      months: number;
+      /**
+       * 機能の追加の作業（機能追加の提案への対応。D-29）。この手間はその月の機能開発に数え、
+       * 同じ提案の feature の加点は受けた瞬間でなく、この作業の月に按分して足す。
+       */
+      featureWork?: boolean;
+    }
   | { type: 'feature'; points: number }
   /** 成長率に足す（翌月から months か月）。 */
   | { type: 'growth'; add: number; months: number }

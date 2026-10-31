@@ -132,6 +132,8 @@ describe('開発の手間', () => {
       total: 10,
       upkeep: 3,
       interrupt: 0,
+      featureWork: 0,
+      featureBonus: 0,
       migration: 6,
       actions: 1,
       feature: 0,
@@ -139,6 +141,29 @@ describe('開発の手間', () => {
     expect(
       allocateEffort({ upkeep: 0, migrationWanted: 0, actions: 0 }).feature,
     ).toBe(EFFORT.perMonth);
+  });
+
+  it('機能の追加の作業は機能開発に数え、加点も足す（D-29）', () => {
+    const e = allocateEffort({
+      upkeep: 0,
+      migrationWanted: 0,
+      actions: 0,
+      featureWork: 4,
+      featureBonus: 6,
+    });
+    expect(e.featureWork).toBe(4);
+    expect(e.feature).toBe(6 + 4 + 6);
+    // 作業が削られたら、加点も同じ割合で減る
+    const short = allocateEffort({
+      upkeep: 3,
+      interrupt: 5,
+      migrationWanted: 0,
+      actions: 0,
+      featureWork: 4,
+      featureBonus: 6,
+    });
+    expect(short.featureWork).toBe(2);
+    expect(short.featureBonus).toBe(3);
   });
 
   it('必須分が足りなければ乗り換えの進みが減る', () => {

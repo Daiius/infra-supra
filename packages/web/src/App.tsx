@@ -721,14 +721,27 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
       cls: 'bg-secondary',
     },
     { label: '行動（設定・最適化・部品）', value: e.actions, cls: 'bg-info' },
-    { label: '機能開発', value: e.feature, cls: 'bg-success' },
+    // 機能追加の提案への対応は機能開発に数える（D-29）。棒は手間の総量の内訳なので、加点は棒に入れず下に添える
+    {
+      label: '機能の追加（提案）',
+      value: e.featureWork,
+      cls: 'bg-accent',
+    },
+    {
+      label: '機能開発（残り）',
+      value: e.feature - e.featureWork - e.featureBonus,
+      cls: 'bg-success',
+    },
   ];
   return (
     <div>
       <h3 className="mb-1 font-bold">
         開発の手間 {e.total} ポイント
         <span className="ml-2 text-sm font-normal opacity-70">
-          機能開発の累計 {r.featurePoints}
+          機能開発 {Math.round(e.feature)}
+          {e.featureBonus > 0 &&
+            `（うち提案の加点 +${Number(e.featureBonus.toFixed(1))}）`}
+          ・累計 {Math.round(r.featurePoints)}
         </span>
       </h3>
       <div className="flex h-3 w-full overflow-hidden rounded-full bg-base-200">
@@ -1692,7 +1705,11 @@ function Result({
                     ['出来事への対応', e.interrupt],
                     ['乗り換え', e.migration],
                     ['行動（設定・最適化）', e.actions],
-                    ['機能開発', e.feature],
+                    ['機能の追加（提案）', e.featureWork],
+                    [
+                      '機能開発（残り）',
+                      e.feature - e.featureWork - e.featureBonus,
+                    ],
                   ].map(([label, v]) => (
                     <li key={label as string} className="flex">
                       {label}
@@ -1893,7 +1910,13 @@ function Trends({ history }: { history: MonthReport[] }) {
     {
       label: '機能開発（月）',
       value: last.effort.feature,
-      format: (n: number) => `${Math.round(n)} / ${last.effort.total}`,
+      // 提案の作業と加点を含む（D-29）。総量を超えうるので「/ 総量」でなく内訳を添える
+      format: (n: number) => {
+        const p = last.effort.featureWork + last.effort.featureBonus;
+        return p > 0
+          ? `${Math.round(n)}（うち提案 ${Math.round(p)}）`
+          : `${Math.round(n)} / ${last.effort.total}`;
+      },
       series: history.map((r) => r.effort.feature),
       delta: null,
     },

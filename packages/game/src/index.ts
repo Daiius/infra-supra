@@ -313,7 +313,14 @@ export type GameState = {
   /** 一度起きた状態の出来事。 */
   fired: string[];
   /** 出来事への対応の手間（毎月 points を months か月）。 */
-  interrupts: { points: number; months: number; eventId: string }[];
+  interrupts: {
+    points: number;
+    months: number;
+    eventId: string;
+    /** 機能の追加の作業（機能開発に数える）と、毎月の加点（D-29）。 */
+    featureWork?: boolean;
+    bonus?: number;
+  }[];
   /** 成長率への上乗せ（毎月 add を months か月）。 */
   growthBonus: { add: number; months: number }[];
   history: MonthReport[];
@@ -709,7 +716,20 @@ function swapWanted(s: ComponentSwap | null): number {
 }
 
 const interruptOf = (state: Pick<GameState, 'interrupts'>) =>
-  state.interrupts.reduce((a, i) => a + (i.months > 0 ? i.points : 0), 0);
+  state.interrupts.reduce(
+    (a, i) => a + (i.months > 0 && !i.featureWork ? i.points : 0),
+    0,
+  );
+const featureWorkOf = (state: Pick<GameState, 'interrupts'>) =>
+  state.interrupts.reduce(
+    (a, i) => a + (i.months > 0 && i.featureWork ? i.points : 0),
+    0,
+  );
+const featureBonusOf = (state: Pick<GameState, 'interrupts'>) =>
+  state.interrupts.reduce(
+    (a, i) => a + (i.months > 0 && i.featureWork ? (i.bonus ?? 0) : 0),
+    0,
+  );
 
 /** 次の月に、まだ行動に使える手間。 */
 export function effortAvailable(state: GameState): number {
@@ -717,6 +737,7 @@ export function effortAvailable(state: GameState): number {
     state.effortPerMonth -
     upkeepFor(state) -
     interruptOf(state) -
+    featureWorkOf(state) -
     migrationWanted(state.migration) -
     swapWanted(state.componentSwap) -
     state.plannedEffort
@@ -1104,6 +1125,8 @@ export function describeEffect(e: Effect): string {
     case 'effortPerMonth':
       return `開発の手間 +${e.add} / 月`;
     case 'interrupt':
+      if (e.featureWork)
+        return `機能の追加の作業 ${e.points} × ${e.months} か月（翌月から。その月の機能開発に数える）`;
       return `対応の手間 ${e.points} × ${e.months} か月（翌月から）`;
     case 'feature':
       return `機能開発 +${e.points}`;
@@ -1123,6 +1146,13 @@ function applyEffects(
   eventId: string,
 ): GameState {
   let s = state;
+  const deferFeature = effects.some(
+    (e) => e.type === 'interrupt' && e.featureWork,
+  );
+  const featurePointsOf = effects.reduce(
+    (a, e) => a + (e.type === 'feature' ? e.points : 0),
+    0,
+  );
   for (const e of effects) {
     switch (e.type) {
       case 'workload':
@@ -1153,12 +1183,21 @@ function applyEffects(
           ...s,
           interrupts: [
             ...s.interrupts,
-            { points: e.points, months: e.months, eventId },
+            {
+              points: e.points,
+              months: e.months,
+              eventId,
+              ...(e.featureWork
+                ? { featureWork: true, bonus: featurePointsOf / e.months }
+                : {}),
+            },
           ],
         };
         break;
       case 'feature':
-        s = { ...s, featurePoints: s.featurePoints + e.points };
+        // 機能の追加の作業がある提案は、加点を作業の月に按分して足す（D-29）
+        if (!deferFeature)
+          s = { ...s, featurePoints: s.featurePoints + e.points };
         break;
       case 'growth':
         s = {
@@ -1455,6 +1494,8 @@ export function playMonth(input: GameState): GameState {
   const effort = allocateEffort({
     upkeep: upkeepFor(state),
     interrupt: interruptOf(state),
+    featureWork: featureWorkOf(state),
+    featureBonus: featureBonusOf(state),
     // 乗り換えと DB の差し替えは同時に進めない（どちらかだけ）
     migrationWanted:
       migrationWanted(state.migration) + swapWanted(state.componentSwap),
@@ -2244,11 +2285,22 @@ export function reflectionOf(state: GameState): Reflection {
       total: a.total + r.effort.total,
       upkeep: a.upkeep + r.effort.upkeep,
       interrupt: a.interrupt + r.effort.interrupt,
+      featureWork: a.featureWork + r.effort.featureWork,
+      featureBonus: a.featureBonus + r.effort.featureBonus,
       migration: a.migration + r.effort.migration,
       actions: a.actions + r.effort.actions,
       feature: a.feature + r.effort.feature,
     }),
-    { total: 0, upkeep: 0, interrupt: 0, migration: 0, actions: 0, feature: 0 },
+    {
+      total: 0,
+      upkeep: 0,
+      interrupt: 0,
+      featureWork: 0,
+      featureBonus: 0,
+      migration: 0,
+      actions: 0,
+      feature: 0,
+    },
   );
   return {
     premises: [...seen.values()].sort((a, b) => a.month - b.month),
