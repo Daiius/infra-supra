@@ -233,6 +233,36 @@ export function LineChart({
           role="img"
           aria-label={typeof title === 'string' ? title : '推移のグラフ'}
         >
+          {/*
+            点が 1 つだけの区間（1 か月目・乗り換えの後など）は、点だけで光ると不自然なので、左へ 1 か月分の水平線を
+            最も薄い色で描く（表示だけ。データ・軸・ツールチップ・見込みには入れない）。1 か月目は左の余白に入るので、
+            余白の中に収める（目盛りの数字より先に描き、数字が上に重なる）
+          */}
+          {series.flatMap((s) =>
+            s.values.flatMap((v, i) => {
+              const single =
+                v !== null &&
+                (s.values[i - 1] ?? null) === null &&
+                (s.values[i + 1] ?? null) === null;
+              if (!single) return [];
+              const step = months > 1 ? w / (months - 1) : w;
+              const x2 = x(i + 1);
+              return [
+                <line
+                  key={`stub-${s.id}-${i}`}
+                  x1={Math.max(x2 - step, 8)}
+                  x2={x2}
+                  y1={y(v)}
+                  y2={y(v)}
+                  stroke={s.color}
+                  strokeOpacity={OLDEST_OPACITY}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  pointerEvents="none"
+                />,
+              ];
+            }),
+          )}
           {ticks.map((t) => (
             <g key={t}>
               <line
@@ -496,6 +526,19 @@ export function Sparkline({
             x2={x(li)}
           />
         </defs>
+      )}
+      {li === 0 && (
+        // 点が 1 つだけのときは、左へ 1 か月分の水平線を最も薄い色で描く（表示だけ。タイルの余白に収まる）
+        <line
+          x1={x(0) - (width - 8) / Math.max(months - 1, 1)}
+          x2={x(0)}
+          y1={y(values[0]!)}
+          y2={y(values[0]!)}
+          stroke="var(--deemphasis)"
+          strokeOpacity={OLDEST_OPACITY}
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
       )}
       {min < 0 && (
         <line
