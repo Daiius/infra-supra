@@ -1,6 +1,9 @@
 // 満足度と開発の手間（prd/07 §9・D-18）。純粋関数だけを置く。
+// 段階の境目・重み・成長の係数はシナリオのデータ（prd/07 §10.1）。関数はシナリオの値を引数で受け、既定は記事コミュニティ。
 // ここの値（段階の境目・重み・ポイント・率）はすべてゲーム上の仮定で、実在の値ではない。
 import type { PlatformPremise } from 'estimator';
+import type { SatisfactionRules } from './scenario.ts';
+import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 
 export type Stage = 'good' | 'fair' | 'bad';
 export const STAGE_VALUE: Record<Stage, number> = {
@@ -31,41 +34,20 @@ export const ELEMENT_LABEL: Record<Element, string> = {
   quality: '画質',
 };
 
-/** 満足度のルール（ゲーム上の仮定。記事コミュニティのシナリオ。prd/07 §9.1〜9.3）。 */
+/** 満足度のルール（記事コミュニティのシナリオの値。prd/07 §9.1〜9.3）。 */
 export const SATISFACTION = {
-  /** 重み（合計 1）。 */
-  weights: {
-    availability: 0.4,
-    speed: 0.2,
-    feature: 0.2,
-    freshness: 0.1,
-    quality: 0.1,
-  } satisfies Record<Element, number>,
-  speed: {
-    /** これ以上の SSR の CPU は「重い」。 */
-    heavySsrCpuMs: 12,
-    /** これ以上の画像は「重い」。 */
-    heavyImageKB: 120,
-    /** throttle の前提の使用率がこれ以上なら「前提に近い」。 */
-    nearRatio: 0.7,
-  },
-  /** 画質: imageKB がこれ以上なら良い・普通。 */
-  quality: { good: 150, fair: 100 },
-  /** 鮮度: 再検証の間隔（秒）がこれ以下なら良い・普通。 */
-  freshness: { good: 300, fair: 3600 },
-  /** 機能: 累積の機能ポイント / (期待 × 経過月数) がこれ以上なら良い・普通。 */
-  feature: { expectedPerMonth: 8, good: 1, fair: 0.6 },
+  ...ARTICLE_COMMUNITY.satisfaction,
   /** 純成長率 = 獲得 × 評判 − 解約 × (1 − 評判)。可用性が悪い月は獲得 0。 */
-  growth: { acquisition: 0.5, churn: 0.5 },
+  growth: ARTICLE_COMMUNITY.growth,
   /** 話題の月の後に残る倍率 = 1 + extra × 評判 / reference。 */
-  buzz: { extra: 0.8, reference: 0.9 },
-} as const;
+  buzz: ARTICLE_COMMUNITY.buzz,
+};
 
-/** 開発の手間のルール（ゲーム上の仮定。prd/07 §9.4）。 */
+/** 開発の手間のルール（ゲーム上の仮定。prd/07 §9.4）。行動の手間はシナリオによらない共通のルール。 */
 export const EFFORT = {
-  perMonth: 10,
-  /** 自前運用（VPS）の維持。試作の作業費 $30/月 の置き換え。 */
-  selfHostedUpkeep: 3,
+  /** 月の総量と自前運用（VPS）の維持はシナリオの値（ここは記事コミュニティの既定）。 */
+  perMonth: ARTICLE_COMMUNITY.effort.perMonth,
+  selfHostedUpkeep: ARTICLE_COMMUNITY.effort.selfHostedUpkeep,
   /** 設定の変更の手間。 */
   setting: { compress: 1, variants: 1, isr: 0 },
   optimize: 4,
@@ -82,13 +64,16 @@ export const EFFORT = {
 } as const;
 
 /** 速さの「重さ」の数（0〜3）。 */
-export function speedHeaviness(input: {
-  ssrCpuMs: number;
-  imageKB: number;
-  variants: number;
-  premises: readonly PlatformPremise[];
-}): number {
-  const s = SATISFACTION.speed;
+export function speedHeaviness(
+  input: {
+    ssrCpuMs: number;
+    imageKB: number;
+    variants: number;
+    premises: readonly PlatformPremise[];
+  },
+  sat: SatisfactionRules = SATISFACTION,
+): number {
+  const s = sat.speed;
   const near = input.premises.some(
     (p) => p.effect === 'throttle' && !p.hit && (p.ratio ?? 0) >= s.nearRatio,
   );
@@ -114,12 +99,15 @@ export type JudgeInput = {
   premises: readonly PlatformPremise[];
 };
 
-export function judgeStages(i: JudgeInput): Stages {
+export function judgeStages(
+  i: JudgeInput,
+  sat: SatisfactionRules = SATISFACTION,
+): Stages {
   const throttled = i.premises.some((p) => p.hit && p.effect === 'throttle');
-  const heavy = speedHeaviness(i);
-  const q = SATISFACTION.quality;
-  const f = SATISFACTION.freshness;
-  const ft = SATISFACTION.feature;
+  const heavy = speedHeaviness(i, sat);
+  const q = sat.quality;
+  const f = sat.freshness;
+  const ft = sat.feature;
   const featureRatio = i.featurePoints / (ft.expectedPerMonth * i.month);
   return {
     availability: i.blocked ? 'bad' : i.degraded ? 'fair' : 'good',
@@ -142,9 +130,12 @@ export function judgeStages(i: JudgeInput): Stages {
 }
 
 /** 満足度 S（0〜1）= Σ 重み × 段階の数値。 */
-export function satisfactionScore(stages: Stages): number {
+export function satisfactionScore(
+  stages: Stages,
+  weights: Record<Element, number> = SATISFACTION.weights,
+): number {
   return ELEMENTS.reduce(
-    (sum, e) => sum + SATISFACTION.weights[e] * STAGE_VALUE[stages[e]],
+    (sum, e) => sum + weights[e] * STAGE_VALUE[stages[e]],
     0,
   );
 }
@@ -158,16 +149,18 @@ export function reputation(current: number, previous?: number): number {
 export function growthFromReputation(
   rep: number,
   availabilityBad: boolean,
+  g: { acquisition: number; churn: number } = SATISFACTION.growth,
 ): { acquisition: number; churn: number; net: number } {
-  const g = SATISFACTION.growth;
   const acquisition = availabilityBad ? 0 : g.acquisition * rep;
   const churn = g.churn * (1 - rep);
   return { acquisition, churn, net: acquisition - churn };
 }
 
 /** 話題の月の後に基準の PV に掛かる倍率。 */
-export function buzzLasting(rep: number): number {
-  const b = SATISFACTION.buzz;
+export function buzzLasting(
+  rep: number,
+  b: { extra: number; reference: number } = SATISFACTION.buzz,
+): number {
   return 1 + (b.extra * rep) / b.reference;
 }
 
@@ -206,8 +199,11 @@ export function allocateEffort(input: {
   /** 乗り換えに今月入れたい量（0 なら乗り換え中でない）。 */
   migrationWanted: number;
   actions: number;
+  /** 月の総量（チームが増えると増える）。 */
+  perMonth?: number;
 }): EffortBreakdown {
-  let left = EFFORT.perMonth;
+  const total = input.perMonth ?? EFFORT.perMonth;
+  let left = total;
   const take = (want: number) => {
     const got = Math.max(0, Math.min(want, left));
     left -= got;
@@ -218,7 +214,7 @@ export function allocateEffort(input: {
   const migration = take(input.migrationWanted);
   const actions = take(input.actions);
   return {
-    total: EFFORT.perMonth,
+    total,
     upkeep,
     interrupt,
     migration,
