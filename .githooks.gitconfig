@@ -1,0 +1,6 @@
+# git 2.55+ の config ベース hooks 定義（リポジトリで管理する）。
+# .git/config から include.path で読み込ませる（.githooks/install.sh が冪等に設定）。
+# pre-commit の秘密の検査はホストのグローバル hook（hook.betterleaks）に任せ、ここでは足さない。
+[hook "secret-scan"]
+	event = pre-push
+	command = ./.githooks/pre-push

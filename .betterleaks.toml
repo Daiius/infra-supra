@@ -1,0 +1,20 @@
+# 秘密の検査の規則（.githooks/pre-push と .github/workflows/secret-scan.yml が --config で渡す）。
+# 組み込みの規則に、形式では判別できない秘密をファイル名で止める規則を足す。
+# docker-compose を持たないので、手本にある環境変数参照向けの filter は入れていない
+# （必要になったら足す）。
+
+title = "infra-supra"
+
+[extend]
+useDefault = true
+
+# .env / .env.local / .env.bak.20260101 などを、中身によらずコミットさせない。
+# 中身が ID・接続先・socket パスのように既知の token 形式でないと、組み込みの規則では引っかからないため。
+# .envrc は対象外。
+[[rules]]
+id = "dotenv-file"
+description = "環境変数ファイル（.env*）はコミットしない"
+path = '''(^|/)\.env($|[._-])'''
+confidence = "high"
+# 雛形（.env.remote.example など）は通す
+filter = '''matchesAny(attributes["path"], [`(?i)\.(example|sample|template|dist)$`])'''
