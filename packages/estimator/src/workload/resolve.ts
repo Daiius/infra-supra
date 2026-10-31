@@ -32,6 +32,8 @@ export type ClassFlow = {
     queries: number;
     rowsRead: number;
     rowsWritten: number;
+    /** まとめたクラスの中の 1 件あたり CPU の最大（制限 cpu-ms-per-request の判定用。まとめていなければ cpuMs）。 */
+    maxCpuMs: number;
   };
 };
 
@@ -61,6 +63,7 @@ const flow = (
     queries: p.queries ?? 0,
     rowsRead: p.rowsRead ?? 0,
     rowsWritten: p.rowsWritten ?? 0,
+    maxCpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
   },
 });
 
@@ -77,6 +80,9 @@ function merge(flows: ClassFlow[]): ClassFlow {
     queries: avg('queries'),
     rowsRead: avg('rowsRead'),
     rowsWritten: avg('rowsWritten'),
+    maxCpuMs: Math.max(
+      ...flows.filter((f) => f.count > 0).map((f) => f.perRequest.maxCpuMs),
+    ),
   });
 }
 
@@ -114,6 +120,13 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     isr: [] as ClassFlow[],
   };
   const revalidations: ClassFlow[] = [];
+  /** SPA のページの中身を取るデータの API（ページごとに 1 回）。 */
+  const spaData: ClassFlow[] = [];
+  /** SPA のルートの閲覧と入口（シェルと JS・CSS を読むのは入口だけ）。 */
+  let spaViews = 0;
+  let spaEntries = 0;
+  // 1 訪問あたりのページ数（入口の割合 = 1 / これ）。0 なら毎回入口とみなす
+  const pagesPerVisit = t.pagesPerSession > 0 ? t.pagesPerSession : 1;
   for (const r of w.routes) {
     const views = pv * r.share;
     const p = r.processing;
@@ -124,7 +137,29 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       queries: p.queries,
       rowsRead: p.queries * p.rowsReadPerQuery,
     };
-    if (r.rendering === 'static') {
+    if (r.rendering === 'spa') {
+      // シェルは入口だけ（遷移はブラウザの中）。中身はページごとにデータの API で取る（prd/04 §2・prd/10 F-01）
+      const entries = views / pagesPerVisit;
+      spaViews += views;
+      spaEntries += entries;
+      byRendering.static.push(flow(entries, { kb: r.shellKB! }));
+      spaData.push(flow(views, work));
+      derivations.push({
+        id: `spa-entries:${r.id}`,
+        label: `SPA のシェルの読み込み（${r.id}）`,
+        expression:
+          '閲覧 / 1 セッションあたりのページ数（遷移はブラウザの中で、中身はデータの API）',
+        inputs: [
+          { name: '閲覧', value: views, basis: 'derived' },
+          {
+            name: 'ページ/セッション',
+            value: t.pagesPerSession,
+            basis: 'user-input',
+          },
+        ],
+        result: entries,
+      });
+    } else if (r.rendering === 'static') {
       byRendering.static.push(flow(views, { kb: p.responseKB }));
     } else if (r.rendering === 'ssr') {
       byRendering.ssr.push(flow(views, work));
@@ -159,23 +194,26 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
 
   const a = w.api;
   const rt = w.realtime;
+  // JS・CSS は SPA のルートでは入口だけ読む（遷移では読み直さない）
+  const assetViews = pv - spaViews + spaEntries;
+  const apiFlow = flow(pv * w.perPage.apiCalls, {
+    kb: a.responseKB,
+    cpuMs: a.cpuMs,
+    wallMs: a.cpuMs + a.ioWaitMs,
+    queries: a.queries,
+    rowsRead: a.queries * a.rowsReadPerQuery,
+    rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
+  });
   const images = pv * w.perPage.images * (1 - w.images.browserReuse);
   const classes: Record<RequestClass, ClassFlow> = {
     'document-static': merge(byRendering.static),
     'document-ssr': merge(byRendering.ssr),
     'document-isr': merge(byRendering.isr),
     'isr-revalidate': merge(revalidations),
-    asset: flow(pv * w.perPage.assets * (1 - w.assets.browserReuse), {
+    asset: flow(assetViews * w.perPage.assets * (1 - w.assets.browserReuse), {
       kb: w.assets.sizeKB,
     }),
-    api: flow(pv * w.perPage.apiCalls, {
-      kb: a.responseKB,
-      cpuMs: a.cpuMs,
-      wallMs: a.cpuMs + a.ioWaitMs,
-      queries: a.queries,
-      rowsRead: a.queries * a.rowsReadPerQuery,
-      rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
-    }),
+    api: spaData.length ? merge([apiFlow, ...spaData]) : apiFlow,
     'image-read': flow(images, { kb: w.images.sizeKB }),
     'image-write': flow(t.mau * w.images.uploadsPerMau, {
       kb: w.images.sizeKB,

@@ -1,6 +1,7 @@
 // アプリのテンプレート: 業務の Web アプリ（prd/09 §4・D-33）。値はすべてテンプレートの既定値（template-default）で、
 // 実測ではない。フレームワークは決めない（prd/06・AGENTS.md: 見積対象を特定のスタックに寄せない）。
 import type { WorkloadInput } from 'estimator';
+import type { SpaShape } from '../frameworks/index.ts';
 
 /**
  * 社内・取引先の利用者がログインして使う業務アプリ（申請・一覧・検索・登録）。
@@ -62,3 +63,14 @@ export function businessApp(monthlyPageViews: number): WorkloadInput {
     db: { sizeGB: 1, responseKBPerQuery: 2 },
   };
 }
+
+/**
+ * 業務アプリを Vite の SPA で作ったときの形（prd/10。template-default・実測ではない）。
+ * 画面の中身を返す API は HTML を描かない分 SSR の半分の CPU・応答 10 KB と仮定（SSR 20 ms × 0.5 = 10 ms。
+ * ⚠ Cloudflare Free の 1 リクエスト CPU 10 ms の境目にちょうど乗る。prd/10 B-5）。
+ */
+export const BUSINESS_APP_SPA: SpaShape = {
+  shellKB: 5,
+  dataCpuFactor: 0.5,
+  dataResponseKB: 10,
+};

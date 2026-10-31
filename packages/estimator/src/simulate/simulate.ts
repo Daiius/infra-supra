@@ -82,7 +82,8 @@ function consume(
       return { count: miss, perRequest: p };
     }
     case 'function': {
-      if (n > 0) u.maxCpuMsPerRequest = Math.max(u.maxCpuMsPerRequest, p.cpuMs);
+      if (n > 0)
+        u.maxCpuMsPerRequest = Math.max(u.maxCpuMsPerRequest, p.maxCpuMs);
       u.busyMs += n * p.wallMs;
       add(u, 'cpu-ms', n * p.cpuMs);
       add(

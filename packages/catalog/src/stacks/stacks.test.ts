@@ -146,7 +146,7 @@ describe('部品の組み合わせ', () => {
   it('スロットの名前は事業者に依存しない（将来の事業者をまたぐ構成のため・§11.6）', () => {
     const slots = new Set<SlotId>(COMPONENTS.map((c) => c.slot));
     expect([...slots].sort()).toEqual(
-      ['db', 'frontCdn', 'images', 'isrCache', 'realtime'].sort(),
+      ['db', 'frontCdn', 'images', 'isrCache', 'ogp', 'realtime'].sort(),
     );
   });
 });

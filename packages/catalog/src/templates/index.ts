@@ -1,6 +1,7 @@
 // アプリのテンプレート（prd/README のスコープ・企画書 §4.2）。値はすべてテンプレートの既定値（template-default）で、
 // 実測ではない。コストに効く値は判断ポイント（prd/01 §8）として選択肢にする（D-11）。
 import type { WorkloadInput } from 'estimator';
+import type { SpaShape } from '../frameworks/index.ts';
 
 /**
  * 記事 + コメントのコミュニティ（Next.js 製を想定）。スパイク（spikes/concept-2026-10-31）と同じ仮定。
@@ -68,4 +69,15 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
   };
 }
 
-export { businessApp } from './business-app.ts';
+export { businessApp, BUSINESS_APP_SPA } from './business-app.ts';
+
+/**
+ * 記事コミュニティを Vite の SPA で作ったときの形（prd/10。template-default・実測ではない）。
+ * シェル 5 KB、記事・個人化の中身を返す API は HTML を描かない分 SSR の半分の CPU・応答 10 KB と仮定。
+ * ⚠ dataCpuFactor で Cloudflare Free の 1 リクエスト CPU 10 ms に当たるかが決まる（SSR 15 ms × 0.5 = 7.5 ms。prd/10 B-5）。
+ */
+export const ARTICLE_COMMUNITY_SPA: SpaShape = {
+  shellKB: 5,
+  dataCpuFactor: 0.5,
+  dataResponseKB: 10,
+};
