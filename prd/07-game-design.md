@@ -459,7 +459,7 @@ type Stock = { dbGB: number; imagesGB: number; images: number; articlePages: num
 type StockRule = {
   initial: Stock;                 // テンプレートの値から作る
   dbGBPerMillionPV: number;       // コメント・ログ（ゲーム上の仮定）
-  gbPerImage: number;             // 原本 + サイズ違い。テンプレートの storedGB / distinct = 4 MB から導く
+  gbPerImage: number;             // 原本（テンプレートの storedGB / distinct = 4 MB から導く）。サイズ違いは含まない（D-24 の画面確認で改めた。投稿のときに作って R2 に置く構成だけ、estimator が「種類 × サイズ違い × 配る大きさ」を別に数える）
   // 画像の投稿数 = MAU × uploadsPerMau（テンプレートの値。MAU = 人の PV / 10）
 };
 ```

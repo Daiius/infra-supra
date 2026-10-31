@@ -74,10 +74,28 @@ pnpm play         # ゲームのスパイクをターミナルで遊ぶ
 - パッケージをまたぐ変更（estimator・catalog・game）が画面に反映されないときは、`packages/web/vite.config.ts` の `watchWorkspacePackages` を確かめるか、開発サーバーを再起動する。
 - API・DB がないので compose は使わない（必要になったら seseraki と同じく compose を env で切り替える形にする）。
 
+## 秘密の検査（Betterleaks）
+
+public リポジトリなので、秘密（トークン・`.env*` など）のコミットを push の前と CI で止める。規則は [`.betterleaks.toml`](./.betterleaks.toml)
+（組み込みの規則 + `.env*` をファイル名で止める規則。`.example` などの雛形は通す）。**設定は自動では読まれないので、`betterleaks` を直接叩くときは `--config .betterleaks.toml` を渡す。**
+
+- push 前: [`.githooks/pre-push`](./.githooks/pre-push) が、送るコミットだけを検査して止める（betterleaks が無いホストでは警告してスキップ）。
+  範囲は新しいブランチなら origin の他のブランチに無いコミットだけで、手元の 2 段目の網。CI が毎回全履歴を見るので取りこぼしはそちらで拾う。
+  merge commit にだけ足した内容と内容を変えない改名も見るよう、`--diff-merges=separate --no-renames` を渡している（CI も同じ）。
+- CI: [`.github/workflows/secret-scan.yml`](./.github/workflows/secret-scan.yml)（全ブランチの push と PR。範囲を計算せず毎回全履歴・全 ref を検査する）。バイナリは checksums.txt と照合して取得する。最終の砦。
+- pre-commit の検査は、ホストのグローバル hook（`hook.betterleaks`）に任せ、リポジトリ側では持たない。
+
+### git hooks（git 2.55+ の config ベース hooks）
+
+**clone 後に `pnpm hooks:install` を一度だけ実行する。** [`.githooks/install.sh`](./.githooks/install.sh) が
+[`.githooks.gitconfig`](./.githooks.gitconfig) を `include.path` で冪等に登録する。
+`pnpm install` の `prepare` には相乗りさせない（install は CI など git と無関係な環境でも走るため。叩き忘れても壊れるのはローカルの hooks だけで、CI が砦）。
+
 ## Git / PR 運用
 
 - **レビュー中の PR は追加コミットを積む**。`git commit --amend` + `git push --force` はしない。
-- マージ手法は未決（初回の PR までに決める）。
+- マージは **merge commit**（2026-11-01 に推奨案で決定）。作業ブランチを積み重ねるため、squash だと上の段の rebase で衝突が増える。D-番号ごとのコミットを履歴に残す。
+- PR は oculibis のレビューの指摘がゼロになってからマージする。
 
 ## ローカル専用メモ（存在すれば読む）
 
