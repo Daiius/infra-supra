@@ -1,5 +1,5 @@
 // ゲームモードの画面（Phase 2〜4 の前倒しの試作）。ロジックは game パッケージ、ここは表示と操作だけ。
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   actionEffort,
   applyAction,
@@ -221,22 +221,107 @@ function Game({
   setState: (s: GameState) => void;
 }) {
   const report = state.history[state.history.length - 1]!;
+  const playing = state.phase === 'playing';
+  // 月が進んだ直後に、その月の出来事をダイアログで出す（D-23）。結果の画面では出さない。
+  // auto: 月が進んだ直後に開いた / manual: 月のカードのボタンで開き直した。
+  const [eventsOpen, setEventsOpen] = useState<'auto' | 'manual' | null>(() =>
+    playing && report.events.length > 0 ? 'auto' : null,
+  );
   return (
     <>
-      {state.phase !== 'playing' && <Result state={state} />}
+      {!playing && <Result state={state} />}
       <Trends history={state.history} />
-      <MonthCard report={report} />
-      {state.phase === 'playing' && (
+      <MonthCard
+        report={report}
+        onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
+      />
+      {playing && (
         <Actions
           state={state}
           onDecide={(actions) => {
-            setState(playMonth(applyActions(state, actions)));
+            const next = playMonth(applyActions(state, actions));
+            setState(next);
+            const last = next.history[next.history.length - 1]!;
+            setEventsOpen(
+              next.phase === 'playing' && last.events.length > 0
+                ? 'auto'
+                : null,
+            );
             scrollTop();
           }}
         />
       )}
+      {playing && eventsOpen && (
+        <EventsDialog
+          report={report}
+          auto={eventsOpen === 'auto'}
+          onClose={() => setEventsOpen(null)}
+        />
+      )}
       <History history={state.history} />
     </>
+  );
+}
+
+/**
+ * その月の出来事のダイアログ（D-23）。`<dialog>` の showModal でフォーカスを閉じ込め、Esc で閉じる。
+ * 選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
+ */
+function EventsDialog({
+  report: r,
+  auto,
+  onClose,
+}: {
+  report: MonthReport;
+  auto: boolean;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d || d.open) return;
+    // 月が進んだ直後は、閉じたときにフォーカスが「次の月へ」へ戻ってページがそこまでスクロールする。
+    // 開く前にフォーカスを外し、閉じた後もページの先頭のままにする（開き直したときはボタンへ戻す）。
+    if (auto && document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
+    d.showModal();
+  }, [auto]);
+  const hasProposal = r.events.some((e) => e.phase === 'proposal');
+  return (
+    <dialog
+      ref={ref}
+      className="modal"
+      aria-labelledby="events-dialog-title"
+      onClose={onClose}
+    >
+      <div className="modal-box max-w-2xl">
+        <h2 id="events-dialog-title" className="text-lg font-bold">
+          {r.month} か月目の出来事（{r.events.length} 件）
+        </h2>
+        <div className="mt-3 space-y-2">
+          {r.events.map((e) => (
+            <EventCard key={`${e.id}:${e.phase}`} event={e} />
+          ))}
+        </div>
+        {hasProposal && (
+          <div className="mt-3 text-sm opacity-80">
+            ◆ 提案は、月の終わりの行動の欄で受けるか断るかを選ぶ。
+          </div>
+        )}
+        <div className="modal-action">
+          <form method="dialog">
+            <button className="btn btn-primary" autoFocus>
+              閉じて今月の行動へ
+            </button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button aria-label="閉じる" tabIndex={-1}>
+          閉じる
+        </button>
+      </form>
+    </dialog>
   );
 }
 
@@ -253,7 +338,14 @@ const STAGE_CLS: Record<Stage, string> = {
   bad: 'badge-error',
 };
 
-function MonthCard({ report: r }: { report: MonthReport }) {
+function MonthCard({
+  report: r,
+  onShowEvents,
+}: {
+  report: MonthReport;
+  /** 遊んでいる間だけ渡す。出来事は見出しの一覧に詰め、ダイアログで再表示する（D-23）。 */
+  onShowEvents?: (() => void) | undefined;
+}) {
   const s = r.satisfaction;
   return (
     <div className="card bg-base-100 shadow">
@@ -265,9 +357,40 @@ function MonthCard({ report: r }: { report: MonthReport }) {
             {STATUS[r.status].label}
           </span>
         </h2>
-        {r.events.map((e) => (
-          <EventCard key={`${e.id}:${e.phase}`} event={e} />
-        ))}
+        {onShowEvents
+          ? r.events.length > 0 && (
+              <div className="rounded-box border border-base-300 p-3">
+                <ul className="space-y-1">
+                  {r.events.map((e) => (
+                    <li
+                      key={`${e.id}:${e.phase}`}
+                      className="flex flex-wrap items-center gap-2 text-sm"
+                    >
+                      <span
+                        className={`badge badge-sm ${PHASE_BADGE[e.phase].cls}`}
+                      >
+                        {PHASE_BADGE[e.phase].label}
+                      </span>
+                      {e.tier === 'rare' && (
+                        <span className="badge badge-sm badge-outline badge-error">
+                          {TIER_LABEL[e.tier]}
+                        </span>
+                      )}
+                      <span>{e.title}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  className="btn btn-sm btn-outline mt-2"
+                  onClick={onShowEvents}
+                >
+                  今月の出来事を見る（{r.events.length} 件）
+                </button>
+              </div>
+            )
+          : r.events.map((e) => (
+              <EventCard key={`${e.id}:${e.phase}`} event={e} />
+            ))}
         {r.notes.map((n) => (
           <div
             key={n}
