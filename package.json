@@ -6,7 +6,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "play": "node --experimental-strip-types --no-warnings spikes/game-2026-10-31/play.ts"
   },
   "devDependencies": {
     "prettier": "^3.8.3",
