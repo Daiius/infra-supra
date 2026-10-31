@@ -68,6 +68,7 @@ export const WorkloadInputSchema = z
       /** コンテンツの在庫: 画像の種類数とサイズ違いの数（画像変換の件数は PV でなくこれで頭打ちになる）。 */
       distinct: NonNeg,
       variants: NonNeg,
+      /** 画像の原本の保存量（サイズ違いは含まない。投稿のときに作るサイズ違いは resolve で足す）。 */
       storedGB: NonNeg,
       uploadsPerMau: NonNeg,
       /**

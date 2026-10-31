@@ -610,6 +610,8 @@ export const cloudflare: PriceBookInput = {
           resource: 'object-writes',
           unit: 'operation',
           allowancePool: 'r2-class-a',
+          // "Cloudflare rounds up your usage to the next billing unit."（r2/pricing。100 万件単位）
+          rounding: { granularity: 1_000_000, scope: 'period' },
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 4.5 },
           sourceIds: ['r2Pricing'],
         },
@@ -618,6 +620,8 @@ export const cloudflare: PriceBookInput = {
           resource: 'object-reads',
           unit: 'operation',
           allowancePool: 'r2-class-b',
+          // "Cloudflare rounds up your usage to the next billing unit."（r2/pricing。100 万件単位）
+          rounding: { granularity: 1_000_000, scope: 'period' },
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.36 },
           sourceIds: ['r2Pricing'],
         },

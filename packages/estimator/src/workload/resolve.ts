@@ -27,13 +27,14 @@ export type ClassFlow = {
   count: number;
   perRequest: {
     kb: number;
+    /** 件数で重み付けした平均（課金・使用量に使う）。 */
     cpuMs: number;
+    /** まとめたルートのうち、件数が正のものの CPU の最大（1 リクエストあたりの上限の判定に使う）。 */
+    maxCpuMs: number;
     wallMs: number;
     queries: number;
     rowsRead: number;
     rowsWritten: number;
-    /** まとめたクラスの中の 1 件あたり CPU の最大（制限 cpu-ms-per-request の判定用。まとめていなければ cpuMs）。 */
-    maxCpuMs: number;
   };
 };
 
@@ -41,10 +42,20 @@ export type ResolvedWorkload = {
   input: ParsedWorkload;
   monthlyPageViews: number;
   classes: Record<RequestClass, ClassFlow>;
+  /**
+   * 裏で走るクラスを、それを起こした閲覧と 1 回の実行にまとめたときの CPU の最大（ms）。
+   * ルートごとに「閲覧 + 再生成」を足してから最大を取る（別のルートの閲覧と再生成を足さない）。
+   * 構成がそのクラスを裏で走らせるとき（function の backgroundClasses）だけ使う。
+   */
+  backgroundCpuMs: Partial<Record<RequestClass, number>>;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
-  storage: { dbGB: number; imagesGB: number };
+  /**
+   * 保存量。imagesGB は原本（images.storedGB）。variantsGB は投稿のときに作って保存するサイズ違い
+   * （transformAt: upload のときだけ。閲覧のときに変換する構成では保存しないので 0。OCL-F3098083）。
+   */
+  storage: { dbGB: number; imagesGB: number; variantsGB: number };
   derivations: Derivation[];
 };
 
@@ -59,15 +70,15 @@ const flow = (
   perRequest: {
     kb: p.kb ?? 0,
     cpuMs: p.cpuMs ?? 0,
+    maxCpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
     wallMs: p.wallMs ?? p.cpuMs ?? 0,
     queries: p.queries ?? 0,
     rowsRead: p.rowsRead ?? 0,
     rowsWritten: p.rowsWritten ?? 0,
-    maxCpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
   },
 });
 
-/** 複数ルートの流れを件数で重み付けして 1 つのクラスにまとめる。 */
+/** 複数ルートの流れを件数で重み付けして 1 つのクラスにまとめる。CPU の最大は平均とは別に残す。 */
 function merge(flows: ClassFlow[]): ClassFlow {
   const count = flows.reduce((s, f) => s + f.count, 0);
   if (count === 0) return flow(0);
@@ -76,13 +87,13 @@ function merge(flows: ClassFlow[]): ClassFlow {
   return flow(count, {
     kb: avg('kb'),
     cpuMs: avg('cpuMs'),
+    maxCpuMs: Math.max(
+      ...flows.filter((f) => f.count > 0).map((f) => f.perRequest.maxCpuMs),
+    ),
     wallMs: avg('wallMs'),
     queries: avg('queries'),
     rowsRead: avg('rowsRead'),
     rowsWritten: avg('rowsWritten'),
-    maxCpuMs: Math.max(
-      ...flows.filter((f) => f.count > 0).map((f) => f.perRequest.maxCpuMs),
-    ),
   });
 }
 
@@ -127,6 +138,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   let spaEntries = 0;
   // 1 訪問あたりのページ数（入口の割合 = 1 / これ）。0 なら毎回入口とみなす
   const pagesPerVisit = t.pagesPerSession > 0 ? t.pagesPerSession : 1;
+  let isrWithRevalidate = 0;
   for (const r of w.routes) {
     const views = pv * r.share;
     const p = r.processing;
@@ -172,6 +184,12 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH);
       const count = views / (1 + lambdaT);
       revalidations.push(flow(count, work));
+      if (count > 0) {
+        isrWithRevalidate = Math.max(
+          isrWithRevalidate,
+          r.cachedServeCpuMs + p.cpuMs,
+        );
+      }
       derivations.push({
         id: `isr-revalidations:${r.id}`,
         label: `ISR の再生成（${r.id}）`,
@@ -245,9 +263,19 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     input: w,
     monthlyPageViews: pv,
     classes,
+    backgroundCpuMs: { 'isr-revalidate': isrWithRevalidate },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
-    storage: { dbGB: w.db.sizeGB, imagesGB: w.images.storedGB },
+    storage: {
+      dbGB: w.db.sizeGB,
+      imagesGB: w.images.storedGB,
+      // サイズ違い 1 枚は配る大きさ（sizeKB）とする（仮定）
+      variantsGB:
+        w.images.transformAt === 'upload'
+          ? (w.images.distinct * w.images.variants * w.images.sizeKB) /
+            1_000_000
+          : 0,
+    },
     derivations,
   };
 }

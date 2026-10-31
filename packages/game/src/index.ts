@@ -63,10 +63,11 @@ import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 import { premiseTrends, type PremiseSnapshot } from './trends.ts';
 
-export const SCENARIOS: Record<string, Scenario> = {
+/** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
+export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
   [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
   [CONTRACT_OPERATIONS.id]: CONTRACT_OPERATIONS,
-};
+});
 
 /** ⚠ 為替は取得していない（仮定）。シナリオによらない共通の仮定。 */
 export const USD_JPY = 150;
@@ -284,6 +285,11 @@ export type MonthReport = {
 
 export type GameState = {
   scenarioId: string;
+  /**
+   * 遊んでいるシナリオ（newGame に渡した不変の入力）。月の計算はこれだけを読む。
+   * 保存するときは scenarioId だけを書き、読み込みで SCENARIOS から引き直す（prd/07 §10.1）。
+   */
+  scenario: Scenario;
   seed: number; // 偶発的な障害の乱数の内部状態（保存すれば同じ続きになる）
   /** 始めたときのシード（台本の表・基準プレイを同じシードで回すため）。 */
   startSeed: number;
@@ -326,7 +332,8 @@ export type GameState = {
   botBlocked: boolean;
   /** さくらの VPS のストレージ変更オプション（付けたら戻せない）と、手数料をまだ払っていないか（D-30）。 */
   storageOption: boolean;
-  storageOptionFeeDue: boolean;
+  /** 申し込んだときのプランの手数料（まだ払っていない。払ったら null。OCL-91E46AC4）。 */
+  storageOptionFeeDue: { name: string; amount: number } | null;
   /** 返事を待っている提案。 */
   pendingProposals: string[];
   responses: Record<string, 'accepted' | 'declined'>;
@@ -348,8 +355,8 @@ export type GameState = {
   end?: { reason: EndReason; month: number };
 };
 
-export function scenarioOf(state: Pick<GameState, 'scenarioId'>): Scenario {
-  return SCENARIOS[state.scenarioId] ?? ARTICLE_COMMUNITY;
+export function scenarioOf(state: Pick<GameState, 'scenario'>): Scenario {
+  return state.scenario;
 }
 
 /** シナリオで選べるフレームワーク（省略は Next.js だけ）と既定。 */
@@ -421,7 +428,7 @@ export const SCHEDULED_CHANGES: (ScheduledChange & {
 
 /**
  * その月の料金データ（D-21）。起きた改定のうち、改定後の料金を持つものだけメーターの料金を差し替える。
- * 改定後の料金が無い予告は計算を変えない。
+ * 改定後の料金が無い予告は計算を変えない。同じメーターの改定が複数起きていれば、後に起きたほうを使う。
  */
 export function applyRevisions(
   base: readonly PriceBook[],
@@ -429,11 +436,16 @@ export function applyRevisions(
   revisions: readonly { id: string; month: number }[],
   month: number,
 ): PriceBook[] {
-  const due = changes.filter(
-    (c) =>
-      c.revisedMeters.length > 0 &&
-      revisions.some((r) => r.id === c.id && r.month <= month),
-  );
+  const occurred = (c: { id: string }) =>
+    revisions.find((r) => r.id === c.id && r.month <= month)?.month;
+  // 起きた月の順（同じ月なら施行日の順）。後ろの改定が前の改定を上書きする
+  const due = changes
+    .filter((c) => c.revisedMeters.length > 0 && occurred(c) !== undefined)
+    .sort(
+      (a, b) =>
+        occurred(a)! - occurred(b)! ||
+        a.effectiveFrom.localeCompare(b.effectiveFrom),
+    );
   if (!due.length) return [...base];
   return base.map((b) => {
     const mine = due.filter((c) => c.provider === b.provider);
@@ -445,7 +457,7 @@ export function applyRevisions(
         meters: p.meters.map((m) => {
           const rv = mine
             .flatMap((c) => c.revisedMeters)
-            .find((x) => x.planId === p.id && x.meterId === m.id);
+            .findLast((x) => x.planId === p.id && x.meterId === m.id);
           return rv ? { ...m, pricing: rv.pricing } : m;
         }),
       })),
@@ -898,7 +910,7 @@ export function stackChangeText(
 }
 
 function upkeepFor(
-  state: Pick<GameState, 'stackIndex' | 'migration' | 'scenarioId'>,
+  state: Pick<GameState, 'stackIndex' | 'migration' | 'scenario'>,
 ) {
   const running = [
     state.stackIndex,
@@ -989,7 +1001,7 @@ const ng = (reason: ActionBlockReason, message: string): ActionCheck => ({
  * 届いている提案の「受ける」の効果に、同じスロット・同じ部品を付ける効果があればその id。
  */
 export function componentProposal(
-  state: Pick<GameState, 'pendingProposals' | 'scenarioId'>,
+  state: Pick<GameState, 'pendingProposals' | 'scenario'>,
   slot: SlotId,
   option: string,
 ): string | undefined {
@@ -1275,8 +1287,6 @@ export function newGame(
   /** アプリのフレームワーク（省略はシナリオの既定。シナリオで選べないものは既定にする。prd/10 F-04）。 */
   framework?: FrameworkId,
 ): GameState {
-  // 状態にはシナリオの id だけを持つ（保存のため）。渡されたシナリオを id で引けるようにしておく
-  SCENARIOS[scenario.id] ??= scenario;
   const fw = frameworksOf(scenario);
   const app =
     framework !== undefined && fw.allowed.includes(framework)
@@ -1286,6 +1296,7 @@ export function newGame(
     startDate,
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
     scenarioId: scenario.id,
+    scenario,
     seed,
     startSeed: seed,
     schedule: rollSchedule(scenario, seed),
@@ -1296,7 +1307,7 @@ export function newGame(
       ...frameworkDefaults(app),
     },
     storageOption: false,
-    storageOptionFeeDue: false,
+    storageOptionFeeDue: null,
     componentSwap: null,
     contracts: [],
     requirements: [],
@@ -1679,10 +1690,9 @@ export function playMonth(input: GameState): GameState {
     : null;
   const parallelInfraCost = target ? toUsd(target.bill.totals) : 0;
   // ストレージ変更オプションの手数料（付けた次の月に一度だけ。D-30）
-  const fee = state.storageOptionFeeDue
-    ? storageOptionAddon(stackIndexNow)
-    : undefined;
-  const feeUsd = fee ? fee.oneTimeFee / USD_JPY : 0;
+  // 申し込んだときのプランの金額を一度だけ払う（同じ月に上位へ変更しても変わらない）
+  const fee = state.storageOptionFeeDue;
+  const feeUsd = fee ? fee.amount / USD_JPY : 0;
   const infraCost = toUsd(r.bill.totals) + parallelInfraCost + feeUsd;
 
   // 出来事の通知（起きた・予告・提案）
@@ -2067,7 +2077,7 @@ export function playMonth(input: GameState): GameState {
         ? [
             {
               label: `sakura-vps ${fee.name}（手数料・一度だけ）`,
-              amount: fee.oneTimeFee,
+              amount: fee.amount,
               currency: 'JPY',
             },
           ]
@@ -2145,7 +2155,7 @@ export function playMonth(input: GameState): GameState {
     componentSwap,
     mods,
     storageOption,
-    storageOptionFeeDue: false,
+    storageOptionFeeDue: null,
     cash,
     outages,
     featurePoints,
@@ -2455,7 +2465,10 @@ export function applyAction(state: GameState, action: Action): GameState {
         ...state,
         ...planned,
         storageOption: true,
-        storageOptionFeeDue: true,
+        storageOptionFeeDue: {
+          name: storageOptionAddon(state.stackIndex)!.name,
+          amount: storageOptionAddon(state.stackIndex)!.oneTimeFee,
+        },
       });
     case 'block-bots':
       return withNote('Bot を遮断するルールを入れた', {

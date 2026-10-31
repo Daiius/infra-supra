@@ -45,6 +45,8 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('sql-db'),
     storesImages: z.boolean().default(false),
+    /** アプリの DB を置くか（false は画像だけを置く D1。DB は別の部品）。 */
+    storesDb: z.boolean().default(true),
   }),
   /** DB への接続のプール（Hyperdrive 型）。問い合わせの件数を数え、経路の次の DB へ流す。 */
   z.object({ kind: z.literal('db-proxy') }),
