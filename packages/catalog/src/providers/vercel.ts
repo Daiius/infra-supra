@@ -38,6 +38,10 @@ export const vercel: PriceBookInput = {
       'https://vercel.com/docs/incremental-static-regeneration/limits-and-pricing',
     ),
     sla: src('https://vercel.com/legal/sla'),
+    isrDocs: {
+      url: 'https://vercel.com/docs/incremental-static-regeneration',
+      retrievedAt: '2026-11-01',
+    },
   },
   allowancePools: [
     {
@@ -155,6 +159,14 @@ export const vercel: PriceBookInput = {
       service: 'platform',
       name: 'Hobby',
       sourceIds: ['hobby', 'pricing'],
+      facts: [
+        {
+          id: 'isr-purge',
+          premise:
+            'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
+          sourceIds: ['isrDocs'],
+        },
+      ],
       uptimeSla: {
         status: 'not-stated',
         premise:
@@ -264,6 +276,14 @@ export const vercel: PriceBookInput = {
       name: 'Pro',
       baseFee: { amount: 20, per: 'month', scope: 'account', perSeat: true },
       sourceIds: ['pro', 'pricing'],
+      facts: [
+        {
+          id: 'isr-purge',
+          premise:
+            'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
+          sourceIds: ['isrDocs'],
+        },
+      ],
       uptimeSla: {
         status: 'not-stated',
         premise:

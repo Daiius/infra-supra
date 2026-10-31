@@ -115,6 +115,8 @@ export type JudgeInput = {
   uncached?: boolean;
   /** 書き込みが他の拠点にすぐ反映されない DB（KV を DB の代わり）。鮮度を 1 段下げる（仮定・D-24）。 */
   eventuallyConsistent?: boolean;
+  /** 即時反映（オンデマンド ISR）の要件を満たさない。さらに 1 段下げる（仮定・D-32）。 */
+  onDemandUnmet?: boolean;
 };
 
 const STAGE_DOWN: Record<Stage, Stage> = {
@@ -150,7 +152,8 @@ export function judgeStages(
           : i.revalidateSec <= f.fair
             ? 'fair'
             : 'bad';
-      return i.eventuallyConsistent ? STAGE_DOWN[base] : base;
+      const a = i.eventuallyConsistent ? STAGE_DOWN[base] : base;
+      return i.onDemandUnmet ? STAGE_DOWN[a] : a;
     })(),
     quality:
       i.imageKB >= q.good ? 'good' : i.imageKB >= q.fair ? 'fair' : 'bad',

@@ -66,6 +66,11 @@ export type ComponentOption = {
   /** 学びのための不適切な選択（D-17 G-04）。 */
   inappropriate?: boolean;
   premiseRefs: string[];
+  /**
+   * オンデマンド ISR（即時反映）の要件を満たせるか（D-32）。fact は理由の前提（provider:planId:factId）。
+   * 省略は要件に関係しない。
+   */
+  onDemandIsr?: { ok: boolean; fact: string };
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
@@ -83,16 +88,33 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'isrCache',
     platform: 'cloudflare',
     label: 'KV',
-    note: '閲覧のたびに Worker が KV を読み、再生成で書く',
+    note: '閲覧のたびに Worker が KV を読み、再生成で書く。KV の書き込みは他の拠点で見えるまで 60 秒以上かかることがある',
     premiseRefs: ['pool:cloudflare:workers-paid:paid-kv-writes'],
+    onDemandIsr: { ok: false, fact: 'cloudflare:workers-paid:kv-propagation' },
   },
   {
     id: 'r2',
     slot: 'isrCache',
     platform: 'cloudflare',
-    label: 'R2',
-    note: '閲覧で R2 を読み（Class B）、再生成で書く（Class A）',
-    premiseRefs: ['pool:cloudflare:r2-standard'],
+    label: 'R2（自作のアダプター）',
+    note: '閲覧で R2 を読み（Class B）、再生成で書く（Class A）。vinext に R2 を ISR の置き場にする公式のアダプターは見当たらない（README）ので、キャッシュの処理は自作になる。R2 は強い整合なので、書けばすぐ全世界で見える',
+    premiseRefs: [
+      'pool:cloudflare:r2-standard',
+      'fact:cloudflare:r2-standard:',
+    ],
+    onDemandIsr: {
+      ok: true,
+      fact: 'cloudflare:r2-standard:strong-consistency',
+    },
+  },
+  {
+    id: 'workers-cache',
+    slot: 'isrCache',
+    platform: 'cloudflare',
+    label: 'Workers Cache（タグでパージ）',
+    note: 'vinext の workersCacheCdnAdapter。ISR のページを拠点ごとの Workers Cache から返し、再検証はタグでパージする。Cache API の料金は記載なし（このモデルでは費用なし）。拠点ごとのキャッシュなので、ヒット率が下がって再生成が増える分は計算に入れていない',
+    premiseRefs: ['fact:cloudflare:workers-paid:workers-cache'],
+    onDemandIsr: { ok: true, fact: 'cloudflare:workers-paid:workers-cache' },
   },
   {
     id: 'none',
@@ -200,8 +222,9 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'isrCache',
     platform: 'vercel',
     label: 'ISR の永続ストレージ',
-    note: 'ISR のページは CDN が返す',
+    note: 'ISR のページは CDN が返す。再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
     premiseRefs: [],
+    onDemandIsr: { ok: true, fact: 'vercel:pro:isr-purge' },
   },
   {
     id: 'none',
@@ -235,8 +258,9 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'isrCache',
     platform: 'sakura',
     label: 'ディスク',
-    note: 'next start のキャッシュをディスクに置く',
+    note: 'next start のキャッシュをディスクに置く（1 台・永続ディスクなら自動で動く）',
     premiseRefs: [],
+    onDemandIsr: { ok: true, fact: 'sakura-vps:2gb-tokyo:next-fs-cache' },
   },
   {
     id: 'none',
@@ -293,6 +317,7 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
     label: 'Cloudflare（HTML もキャッシュ）',
     note: 'ISR のページも CDN が返す。オンデマンドの再検証は CDN に届かず、s-maxage が切れるまで古いページが出る（パージの連携が要る）',
     inappropriate: true,
+    onDemandIsr: { ok: false, fact: 'cloudflare:cdn-free:next-on-demand' },
     premiseRefs: [
       'fact:cloudflare:cdn-free:next-on-demand',
       'fact:cloudflare:cdn-free:pictures-terms',
@@ -370,6 +395,9 @@ function composeCloudflare(
         // ⚠ 未確認: vinext の ISR の再生成は閲覧のリクエストの中で裏で走る（stale-while-revalidate）と仮定
         backgroundClasses: ['isr-revalidate'],
       },
+      ...(choices.isrCache === 'workers-cache'
+        ? { facts: ['workers-cache'] }
+        : {}),
       billing: bill(workers, { requests: 'requests', 'cpu-ms': 'cpu-ms' }),
     },
   );
@@ -526,6 +554,8 @@ function composeCloudflare(
       : choices.isrCache === 'r2'
         ? ['r2']
         : [];
+  // Workers Cache: 課金されるノードを持たない（Cache API の料金は記載なし）。閲覧は Worker が拠点のキャッシュから返す
+  const workersCache = choices.isrCache === 'workers-cache';
   const db = dbPath(choices.db);
   const routes: Partial<Record<RequestClass, string[]>> = {
     'document-static': ['assets'],
@@ -537,7 +567,12 @@ function composeCloudflare(
           'document-isr': ['worker', ...cache],
           'isr-revalidate': ['worker', ...cache, ...db],
         }
-      : {}),
+      : workersCache
+        ? {
+            'document-isr': ['worker'],
+            'isr-revalidate': ['worker', ...db],
+          }
+        : {}),
     api: ['worker', ...db],
     'image-read': imagesInD1 ? ['worker', 'd1'] : ['r2-cache', 'r2'],
     'image-write': imagesInD1 ? ['worker', 'd1'] : ['worker', 'r2'],

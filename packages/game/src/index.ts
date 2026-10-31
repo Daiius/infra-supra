@@ -203,6 +203,13 @@ export type MonthEvent = {
   };
   /** 今の構成の SLA の扱い（catalog の uptimeSla）。 */
   sla?: string[];
+  /** 要件を満たせるか（部品ごと。受ける前に出す。D-32）。 */
+  requirementStatus?: {
+    label: string;
+    ok: boolean;
+    reason: string;
+    current: boolean;
+  }[];
 };
 
 /** 前提が境目を初めて越えた月の記録（見込みが外れた理由の材料。prd/07 §10.7）。 */
@@ -289,6 +296,8 @@ export type GameState = {
   componentSwap: ComponentSwap | null;
   /** 受けた契約（毎月の収益。要件を満たす月だけ入る）。 */
   contracts: { eventId: string; usdPerMonth: number; requires: Requirement }[];
+  /** 受けた提案で以後ずっと求められる要件（D-32）。 */
+  requirements: Requirement[];
   settings: Settings;
   cash: number;
   basePV: number;
@@ -534,6 +543,8 @@ export function meetsRequirement(
   components: Choices = {},
 ): boolean {
   switch (requirement) {
+    case 'on-demand-isr':
+      return onDemandBlocker(stackIndex, components) === undefined;
     case 'uptime-sla': {
       const plans = composeStack(STACK_DEFS[stackIndex]!, components)
         .nodes.flatMap((n) => (n.billing ? [n.billing] : []))
@@ -564,7 +575,67 @@ export function requirementReachable(
 
 const REQUIREMENT_LABEL: Record<Requirement, string> = {
   'uptime-sla': '稼働率の SLA があるプラン',
+  'on-demand-isr': '即時反映（オンデマンド ISR）',
 };
+
+/** catalog の事実を「provider:planId:factId」で引く。 */
+function factByRef(ref: string) {
+  const [provider, planId, factId] = ref.split(':');
+  return books
+    .find((b) => b.provider === provider)
+    ?.plans.find((p) => p.id === planId)
+    ?.facts.find((f) => f.id === factId);
+}
+
+/** 即時反映を妨げている部品（無ければ undefined）。理由は catalog の事実の文（D-32）。 */
+function onDemandBlocker(
+  stackIndex: number,
+  components: Choices = {},
+): { slot: SlotId; label: string; reason: string } | undefined {
+  const platform = STACKS[stackIndex]!.provider;
+  const c = { ...DEFAULT_CHOICES[platform], ...components };
+  for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
+    const opt = componentsOf(platform, slot).find((o) => o.id === c[slot]);
+    if (opt?.onDemandIsr && !opt.onDemandIsr.ok)
+      return {
+        slot,
+        label: `${SLOT_LABELS[slot]}: ${opt.label}`,
+        reason: factByRef(opt.onDemandIsr.fact)?.premise ?? '',
+      };
+  }
+  return undefined;
+}
+
+/**
+ * 要件を満たせるかを、今の事業者の部品ごとに並べる（受ける前のカードに出す。D-32）。
+ * 今の部品の組み合わせと、要件にかかわるスロットの選択肢それぞれ。
+ */
+export function requirementStatus(
+  stackIndex: number,
+  components: Choices,
+  requirement: Requirement,
+): { label: string; ok: boolean; reason: string; current: boolean }[] {
+  if (requirement !== 'on-demand-isr') return [];
+  const platform = STACKS[stackIndex]!.provider;
+  const c = { ...DEFAULT_CHOICES[platform], ...components };
+  const out: {
+    label: string;
+    ok: boolean;
+    reason: string;
+    current: boolean;
+  }[] = [];
+  for (const slot of Object.keys(SLOT_LABELS) as SlotId[])
+    for (const opt of componentsOf(platform, slot)) {
+      if (!opt.onDemandIsr) continue;
+      out.push({
+        label: `${SLOT_LABELS[slot]}: ${opt.label}`,
+        ok: opt.onDemandIsr.ok,
+        reason: factByRef(opt.onDemandIsr.fact)?.premise ?? '',
+        current: c[slot] === opt.id,
+      });
+    }
+  return out;
+}
 
 /** 構成が使うプランの SLA の扱いの文（catalog の uptimeSla）。 */
 export function slaOf(stackIndex: number): string[] {
@@ -1124,6 +1195,7 @@ export function newGame(
     storageOptionFeeDue: false,
     componentSwap: null,
     contracts: [],
+    requirements: [],
     settings: {
       imageKB: 150,
       variants: 3,
@@ -1204,6 +1276,8 @@ export function describeEffect(e: Effect): string {
       return `成長 +${Math.round(e.add * 100)} ポイント × ${e.months} か月`;
     case 'component':
       return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel('cloudflare', e.slot, e.option)}）`;
+    case 'requirement':
+      return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がる）`;
     case 'contract':
       return `契約の収益 $${e.usdPerMonth} / 月（${REQUIREMENT_LABEL[e.requires]}のときだけ）`;
   }
@@ -1277,6 +1351,11 @@ function applyEffects(
         break;
       case 'component':
         s = { ...s, components: { ...s.components, [e.slot]: e.option } };
+        break;
+      case 'requirement':
+        s = s.requirements.includes(e.requirement)
+          ? s
+          : { ...s, requirements: [...s.requirements, e.requirement] };
         break;
       case 'contract':
         s = {
@@ -1491,6 +1570,15 @@ export function playMonth(input: GameState): GameState {
       premises: premiseRefsOf(def, r.premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
       ...(def.showSla ? { sla: slaOf(stackIndexNow) } : {}),
+      ...(def.previewRequirement
+        ? {
+            requirementStatus: requirementStatus(
+              stackIndexNow,
+              state.components,
+              def.previewRequirement,
+            ),
+          }
+        : {}),
       ...(def.accept
         ? {
             accept: {
@@ -1664,6 +1752,10 @@ export function playMonth(input: GameState): GameState {
   const uncached = comps.isrCache === 'none';
   // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
   const eventuallyConsistent = comps.db === 'kv' || comps.frontCdn === 'html';
+  // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）
+  const onDemand = state.requirements.includes('on-demand-isr')
+    ? onDemandBlocker(stackIndexNow, state.components)
+    : undefined;
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
@@ -1677,6 +1769,7 @@ export function playMonth(input: GameState): GameState {
       premises: r.premises,
       uncached,
       eventuallyConsistent,
+      onDemandUnmet: onDemand !== undefined,
     },
     sat,
   );
@@ -1696,6 +1789,9 @@ export function playMonth(input: GameState): GameState {
     imagesUnoptimized: comps.images === 'none',
     eventuallyConsistent,
     uncached,
+    onDemandReason: onDemand
+      ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
+      : undefined,
   });
   const score = satisfactionScore(stages, sat.weights);
   const rep = reputation(score, prev?.satisfaction.score);
@@ -2024,6 +2120,7 @@ function stageReasons(
     imagesUnoptimized: boolean;
     eventuallyConsistent: boolean;
     uncached: boolean;
+    onDemandReason?: string | undefined;
   },
 ): Partial<Record<Element, string>> {
   const out: Partial<Record<Element, string>> = {};
@@ -2045,6 +2142,7 @@ function stageReasons(
         `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`,
       c.eventuallyConsistent &&
         'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて、更新がすぐ見えない',
+      c.onDemandReason,
     ]
       .filter(Boolean)
       .join('・');

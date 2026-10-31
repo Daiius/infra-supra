@@ -235,6 +235,29 @@ const EVENTS: EventDef[] = [
     },
   },
   {
+    // D-32: 編集部が記事の即時反映を求める。受けると以後ずっと「即時反映」の要件（満たさない構成では鮮度が下がる）
+    id: 'p-ondemand',
+    kind: 'proposal',
+    tier: 'occasional',
+    title: '編集部が記事の即時反映を求める（オンデマンド ISR）',
+    text: '記事を直したらすぐ読者に見えるようにしてほしいという要望。公開・修正のたびに revalidatePath・revalidateTag で再検証する。古い版を一度も出さないなら revalidateTag の { expire: 0 }（次のアクセスは再生成を待つ）。ISR のキャッシュの置き場所しだいで、すぐには反映されない構成がある',
+    when: { type: 'window', from: 4, to: 9 },
+    previewRequirement: 'on-demand-isr',
+    premiseRefs: [
+      'fact:cloudflare:workers-paid:',
+      'fact:cloudflare:cdn-free:next-on-demand',
+    ],
+    accept: {
+      label: '受ける（手間 3）',
+      effects: [
+        { type: 'feature', points: 5 },
+        { type: 'growth', add: 0.02, months: 3 },
+        { type: 'interrupt', featureWork: true, points: 3, months: 1 },
+        { type: 'requirement', requirement: 'on-demand-isr' },
+      ],
+    },
+  },
+  {
     // SC-5・W-2（D-24）: セルフサービスのプランで稼働率の SLA があるのはさくらの VPS 4GB だけ（catalog の uptimeSla）
     id: 'p-sla',
     kind: 'proposal',

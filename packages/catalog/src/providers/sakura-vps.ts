@@ -48,6 +48,11 @@ export const sakuraVps: PriceBookInput = {
       url: 'https://vps.sakura.ad.jp/functions/storage-change-option/',
       retrievedAt: '2026-11-01',
     },
+    // Next.js のセルフホストのキャッシュ（さくらの文書ではないが、VPS の前提として一緒に持つ。D-32）
+    nextSelfHosting: {
+      url: 'https://nextjs.org/docs/app/guides/self-hosting',
+      retrievedAt: '2026-11-01',
+    },
     storageOptionManual: {
       url: 'https://manual.sakura.ad.jp/vps/server/storage-change-option.html',
       retrievedAt: '2026-11-01',
@@ -69,6 +74,12 @@ export const sakuraVps: PriceBookInput = {
       },
       meters: [TRANSFER],
       facts: [
+        {
+          id: 'next-fs-cache',
+          premise:
+            'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動く（CDN を前に置くときや複数台では設定が要る）',
+          sourceIds: ['nextSelfHosting'],
+        },
         {
           id: 'scale-up',
           premise:
@@ -117,6 +128,12 @@ export const sakuraVps: PriceBookInput = {
       },
       meters: [TRANSFER],
       facts: [
+        {
+          id: 'next-fs-cache',
+          premise:
+            'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動く（CDN を前に置くときや複数台では設定が要る）',
+          sourceIds: ['nextSelfHosting'],
+        },
         {
           id: 'no-smaller-disk',
           premise:

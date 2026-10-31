@@ -28,6 +28,22 @@ const WORKERS_FACTS = [
     premise: 'Workers のメモリは 1 isolate あたり 128 MB まで',
     sourceIds: ['workersLimits'],
   },
+  {
+    id: 'workers-cache',
+    premise:
+      'vinext の workersCacheCdnAdapter は ISR のページを Workers Cache（ctx.cache）から返し、revalidateTag・revalidatePath でタグをパージする。Cache API の中身はキャッシュした拠点の外へは複製されない',
+    interpretation: {
+      adopted:
+        'パージで即時反映の要件を満たせるとみなす（パージが全拠点へ伝わる時間は、読んだページに記載なし）',
+      rejected: [
+        {
+          reading: '拠点ごとに古い版が残る',
+          reason: 'README はタグでエッジをパージすると書いている',
+        },
+      ],
+    },
+    sourceIds: ['vinextReadme', 'cacheApi'],
+  },
 ];
 
 /** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
@@ -102,6 +118,19 @@ export const cloudflare: PriceBookInput = {
     },
     cdnTerms: {
       url: 'https://www.cloudflare.com/service-specific-terms-application-services/',
+      retrievedAt: '2026-11-01',
+    },
+    // オンデマンド ISR（2026-11-01 に原文で確認。D-32）
+    cacheApi: {
+      url: 'https://developers.cloudflare.com/workers/runtime-apis/cache/',
+      retrievedAt: '2026-11-01',
+    },
+    r2Consistency: {
+      url: 'https://developers.cloudflare.com/r2/reference/consistency/',
+      retrievedAt: '2026-11-01',
+    },
+    vinextReadme: {
+      url: 'https://github.com/cloudflare/vinext',
       retrievedAt: '2026-11-01',
     },
     // Next.js の CDN の扱い（Cloudflare の文書ではないが、前段の CDN の前提として一緒に持つ）
@@ -524,6 +553,14 @@ export const cloudflare: PriceBookInput = {
       name: 'R2 Standard',
       sourceIds: ['r2Pricing'],
       uptimeSla: NO_SELF_SERVE_SLA,
+      facts: [
+        {
+          id: 'strong-consistency',
+          premise:
+            'R2 は読み書き・削除・一覧が全世界で強い整合（書いた直後から全世界で見える）',
+          sourceIds: ['r2Consistency'],
+        },
+      ],
       meters: [
         {
           id: 'storage',

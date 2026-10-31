@@ -54,6 +54,7 @@ describe('game', () => {
   it('GD-4 の基準プレイ（golden。シード 42・SLA の打診が来るシード 3・記事の引き取りが来るシード 31）', () => {
     // GD-2 → GD-3 の差は規模の見直し（30 万 PV・月 12%・話題 × 3）と出来事（prd/07 §10.6・§10.8・PR 本文）。
     // GD-3 → GD-4 の差はチャットの提案（全部受ける ② が受ける）と、まれな出来事の候補に SLA の打診を足したこと（prd/07 §11.7）
+    // D-32: 即時反映の提案（全部受ける ② が受け、KV の ISR では満たせず鮮度が下がる）
     // D-28: 話題と Bot は 50% で予告なし（話題の前兆 PV × 1.2 が無いシード・Bot の前兆が増えたシードで値が変わる。月は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
@@ -64,7 +65,7 @@ describe('game', () => {
       );
     expect(r(42)).toEqual({
       'cf-paid': ['2145.46', 'won', 12],
-      'cf-paid-accept': ['2215.14', 'won', 12],
+      'cf-paid-accept': ['2223.52', 'won', 12],
       'vps-images': ['1899.69', 'won', 12],
       'vercel-pro': ['1686.66', 'goal', 12],
       'vercel-to-cf': ['1729.08', 'goal', 12],
@@ -75,7 +76,7 @@ describe('game', () => {
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2153.58', 'won', 12],
-      'cf-paid-accept': ['2213.43', 'won', 12],
+      'cf-paid-accept': ['2197.12', 'won', 12],
       'vps-images': ['1779.66', 'won', 12],
       'vercel-pro': ['1601.93', 'goal', 12],
       'vercel-to-cf': ['1773.16', 'won', 12],
@@ -86,7 +87,7 @@ describe('game', () => {
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2163.40', 'won', 12],
-      'cf-paid-accept': ['1573.28', 'goal', 12],
+      'cf-paid-accept': ['1583.47', 'goal', 12],
       'vps-images': ['1776.35', 'won', 12],
       'vercel-pro': ['1608.35', 'goal', 12],
       'vercel-to-cf': ['1741.69', 'won', 12],

@@ -859,6 +859,25 @@ function EventCard({ event: e }: { event: MonthEvent }) {
           ✗ 受けられない: {e.accept.unavailable}
         </div>
       )}
+      {e.requirementStatus && e.requirementStatus.length > 0 && (
+        // 受ける前に、部品ごとに要件を満たせるかを出す（D-32。印とラベルで、色だけにしない）
+        <ul className="mt-1 space-y-0.5 text-xs">
+          {e.requirementStatus.map((r) => (
+            <li key={r.label} className="flex flex-wrap items-center gap-1">
+              <span
+                className={`badge badge-xs ${r.ok ? 'badge-success' : 'badge-error'}`}
+              >
+                {r.ok ? '✓ 満たせる' : '✗ 満たせない'}
+              </span>
+              <span className="font-semibold">
+                {r.label}
+                {r.current ? '（今）' : ''}
+              </span>
+              <span className="opacity-80">{r.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {e.sla && e.sla.length > 0 && (
         <ul className="mt-1 list-disc pl-5 text-xs opacity-80">
           {e.sla.map((m) => (

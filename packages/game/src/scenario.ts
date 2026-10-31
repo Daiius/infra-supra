@@ -81,10 +81,12 @@ export type Effect =
   /**
    * 契約の収益（毎月）。requires を満たす構成のときだけ入る（SLA の出来事。D-24・SC-5）。
    */
-  | { type: 'contract'; usdPerMonth: number; requires: Requirement };
+  | { type: 'contract'; usdPerMonth: number; requires: Requirement }
+  /** 以後ずっと構成に求める要件（満たさない月は満足度に効く。D-32）。 */
+  | { type: 'requirement'; requirement: Requirement };
 
 /** 構成に求める要件。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
-export type Requirement = 'uptime-sla';
+export type Requirement = 'uptime-sla' | 'on-demand-isr';
 
 export type EventKind = 'state' | 'proposal' | 'script';
 export type EventTier = 'common' | 'occasional' | 'rare';
@@ -135,6 +137,8 @@ export type EventDef = {
   platforms?: Platform[];
   /** 受けるのに要る要件（満たせる構成でなければ受けられない。理由を出す）。 */
   requires?: Requirement;
+  /** 受ける前に、構成・部品ごとにこの要件を満たせるかを出す（D-32）。 */
+  previewRequirement?: Requirement;
 };
 
 export type Strategy = {
