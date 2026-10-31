@@ -1,6 +1,11 @@
 // catalog のデータの検証（prd/05 §4）。実在の料金の金額はテストに書かない（料金改定で壊れるため。prd/05 §1）。
 import { describe, expect, it } from 'vitest';
-import { ArchitectureSchema, estimate, PriceBookSchema } from 'estimator';
+import {
+  ArchitectureSchema,
+  estimate,
+  priceUsage,
+  PriceBookSchema,
+} from 'estimator';
 import {
   loadPriceBooks,
   MVP_STACKS,
@@ -23,6 +28,41 @@ describe('料金データ', () => {
       expect(b.provider.startsWith('fictional-')).toBe(false);
       expect(b.retrievedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
+  });
+});
+
+describe('R2 の操作は 100 万件単位で切り上げる（r2/pricing: "Cloudflare rounds up your usage to the next billing unit."）', () => {
+  // 金額は書かず、課金対象の量（billableQuantity）だけを見る
+  const billable = (meterId: string, quantity: number) =>
+    priceUsage({
+      books: loadPriceBooks(),
+      subscriptions: [
+        {
+          accountId: 'a',
+          provider: 'cloudflare',
+          planId: 'r2-standard',
+          nodeIds: ['r2'],
+        },
+      ],
+      usage: [
+        {
+          accountId: 'a',
+          nodeId: 'r2',
+          provider: 'cloudflare',
+          planId: 'r2-standard',
+          meterId,
+          quantity,
+        },
+      ],
+    }).lines.find((l) => l.priceRef.meterId === meterId)!.billableQuantity;
+
+  it.each([
+    ['class-a', 1_000_000],
+    ['class-b', 10_000_000],
+  ])('%s: 無料枠を 1 件超えると 100 万件分', (meterId, free) => {
+    expect(billable(meterId, free)).toBe(0);
+    expect(billable(meterId, free + 1)).toBe(1_000_000);
+    expect(billable(meterId, free + 1_000_001)).toBe(2_000_000);
   });
 });
 
