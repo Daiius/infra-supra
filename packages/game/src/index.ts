@@ -923,7 +923,7 @@ const ng = (reason: ActionBlockReason, message: string): ActionCheck => ({
  * 届いている提案の「受ける」の効果に、同じスロット・同じ部品を付ける効果があればその id。
  */
 export function componentProposal(
-  state: Pick<GameState, 'pendingProposals' | 'scenarioId'>,
+  state: Pick<GameState, 'pendingProposals' | 'scenario'>,
   slot: SlotId,
   option: string,
 ): string | undefined {
