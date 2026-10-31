@@ -13,8 +13,8 @@
 |---|---|---|
 | `packages/estimator` | Workload・Architecture・ComponentKind・資源シミュレーション・料金計算・容量評価と、それらの zod スキーマ。**環境非依存** | 空の雛形 |
 | `packages/catalog` | ServiceOffering と PriceBook（プロバイダー別・版付き）、アプリのテンプレート、構成スタック。架空データは `src/fictional/` に分ける | 空の雛形 |
-| `packages/game` | 経営シミュレーション（ターン・ユーザー成長・イベント・収益・評価）。シード付き乱数 | 計画中（Phase 3） |
-| `packages/web` | 見積モード・ゲームモードの UI | 計画中（Phase 2） |
+| `packages/game` | 経営シミュレーション（ターン・ユーザー成長・イベント・収益・評価）。シード付き乱数 | 最初の形（スパイクから移した。1 シナリオ） |
+| `packages/web` | 見積モード・ゲームモードの UI | ゲームモードの試作だけ（見積モードは未着手） |
 
 依存の規則:
 

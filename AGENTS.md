@@ -36,7 +36,10 @@
 | [`packages/estimator`](./packages/estimator) | 見積エンジン（workload / architecture / resource / pricing / performance）と zod スキーマ。**環境非依存**（`lib: esnext` / `types: []`）。他パッケージに依存しない |
 | [`packages/catalog`](./packages/catalog) | サービスカタログと料金データ（プロバイダー別・版付き）・テンプレート・構成スタック。estimator の型だけに依存 |
 
-計画中: `packages/game`（Phase 3）・`packages/web`（Phase 2）。依存の向きは [prd/02](./prd/02-architecture.md) §1。
+| [`packages/game`](./packages/game) | ゲームエンジン（最初の形。spikes/game-2026-10-31 から移した）。純粋関数・シード付き乱数。ゲームのバランスの値は `GAME`（ゲーム上の仮定） |
+| [`packages/web`](./packages/web) | 画面（Vite + React + Tailwind v4 + daisyUI）。今はゲームモードの試作だけ |
+
+依存の向きは [prd/02](./prd/02-architecture.md) §1（web → game → estimator ← catalog）。
 
 ## 守ること
 
@@ -54,7 +57,19 @@ pnpm install
 pnpm typecheck    # 全パッケージ tsc --noEmit
 pnpm test         # 全パッケージ vitest run
 pnpm format       # prettier（*.md は対象外）
+pnpm dev          # web を 127.0.0.1:5173 で起動
+pnpm dev:remote   # web を .env.remote の設定で起動（Cloudflare Tunnel 越しの確認用）
+pnpm play         # ゲームのスパイクをターミナルで遊ぶ
 ```
+
+### リモート dev（Cloudflare Tunnel 越し）
+
+ローカルと設定を分けず、差分は `.env.remote`（gitignore 対象）だけに集約する。`cp .env.remote.example .env.remote` で値を埋める。
+
+- `WEB_BIND`: web(Vite) の待ち受け。`127.0.0.1` の 1 ポートだけにし、cloudflared をここへ向ける。
+- `DEV_ALLOWED_HOST`: 公開ホスト名。Vite の `allowedHosts` と、HMR の `wss://<host>:443` に使う（ローカルから開くと HMR だけ失敗するのは想定どおり）。
+- トンネル側（公開ホスト名 → `http://localhost:<WEB_BIND のポート>`、Access の制限）は Cloudflare のダッシュボードで設定する。実ドメインは公開文書に書かない。
+- API・DB がないので compose は使わない（必要になったら seseraki と同じく compose を env で切り替える形にする）。
 
 ## Git / PR 運用
 
