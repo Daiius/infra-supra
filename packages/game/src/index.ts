@@ -154,7 +154,9 @@ export type Action =
   /** Bot を遮断するルールを入れる（一度入れれば続く）。 */
   | { type: 'block-bots' }
   /** スロットの部品を差し替える（同じ事業者の中。D-24・prd/07 §11.3）。 */
-  | { type: 'component'; slot: SlotId; option: string };
+  | { type: 'component'; slot: SlotId; option: string }
+  /** さくらの VPS のストレージ変更オプションを付ける（ディスク 2 倍・手数料一度だけ・戻せない。D-30）。 */
+  | { type: 'storage-option' };
 
 /** DB の差し替えの進行（データの移行。期間中は新旧の両方の DB の費用）。 */
 export type ComponentSwap = {
@@ -307,6 +309,9 @@ export type GameState = {
   mods: WorkloadMods;
   stock: Stock;
   botBlocked: boolean;
+  /** さくらの VPS のストレージ変更オプション（付けたら戻せない）と、手数料をまだ払っていないか（D-30）。 */
+  storageOption: boolean;
+  storageOptionFeeDue: boolean;
   /** 返事を待っている提案。 */
   pendingProposals: string[];
   responses: Record<string, 'accepted' | 'declined'>;
@@ -484,8 +489,12 @@ function architectureFor(
   seats: number,
   components: Choices = {},
   standby: Choices = {},
+  storageOption = false,
 ): ArchitectureInput {
-  const stack = composeStack(STACK_DEFS[stackIndex]!, components, { standby });
+  const stack = composeStack(STACK_DEFS[stackIndex]!, components, {
+    standby,
+    storageOption,
+  });
   if (seats <= 0) return stack;
   const ids = [
     ...new Set(
@@ -600,6 +609,51 @@ export function componentLabel(
     option ??
     '—'
   );
+}
+
+/** 今の構成のプランのストレージ変更オプション（さくらの VPS だけ。catalog の addons。D-30）。 */
+export function storageOptionAddon(stackIndex: number) {
+  for (const n of MVP_STACKS[stackIndex]!.nodes) {
+    if (!n.billing) continue;
+    const a = books
+      .find((b) => b.provider === n.billing!.provider)
+      ?.plans.find((p) => p.id === n.billing!.planId)
+      ?.addons.find((x) => x.id === 'storage-change');
+    if (a) return a;
+  }
+  return undefined;
+}
+
+/** ストレージ変更オプションの選択肢の文（名前・メタ情報・説明）。VPS でなければ undefined。 */
+export function storageOptionText(
+  stackIndex: number,
+): { name: string; meta: string[]; detail: string } | undefined {
+  const addon = storageOptionAddon(stackIndex);
+  if (!addon) return undefined;
+  const disk = (option: boolean) =>
+    composeStack(
+      STACK_DEFS[stackIndex]!,
+      {},
+      { storageOption: option },
+    ).nodes.reduce(
+      (a, n) => (n.config.kind === 'host' ? n.config.diskGB : a),
+      0,
+    );
+  const scaleUp = STACKS.filter(
+    (x) => x.provider === STACKS[stackIndex]!.provider,
+  )
+    .map((x) => stackFact(x.index, 'scale-up'))
+    .find((f) => f !== undefined);
+  return {
+    name: 'ストレージ変更オプションを付ける',
+    meta: [
+      `ディスク ${disk(false)} → ${disk(true)} GB`,
+      `手数料 ${addon.oneTimeFee.toLocaleString('ja-JP')} 円（一度だけ）`,
+      `手間 ${EFFORT.storageOption}`,
+      '来月から',
+    ],
+    detail: `${addon.premise}。申し込みはスケールアップと同じ手順で、${scaleUp?.premise ?? 'サーバーを停止して行う'}。計画的な短い停止なので、止まった月には数えない。戻せない（${addon.interpretation?.adopted ?? ''}）。性能差はこの計算に入れていない。上位のプランへ変更してもオプションは残るとみなす（公式に記載なし）。乗り換え・契約し直しでは外れる。`,
+  };
 }
 
 /** 同じ事業者のプランの変更か（Cloudflare Free ↔ Paid・Vercel Hobby ↔ Pro）。 */
@@ -869,6 +923,14 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       }
       return ok(action.accept ? acceptEffort(def) : 0);
     }
+    case 'storage-option': {
+      if (busy) return busy;
+      if (!storageOptionAddon(state.stackIndex))
+        return ng('invalid', 'さくらの VPS のときだけ');
+      if (state.storageOption)
+        return ng('same', 'すでに付けている（戻せない）');
+      return ok(EFFORT.storageOption);
+    }
     case 'block-bots':
       return state.botBlocked
         ? ng('same', 'すでに入れている')
@@ -1019,7 +1081,13 @@ export function componentPreview(
       platform,
       components,
     }),
-    architecture: architectureFor(state.stackIndex, state.seats, components),
+    architecture: architectureFor(
+      state.stackIndex,
+      state.seats,
+      components,
+      {},
+      state.storageOption,
+    ),
     books: booksAt(state, state.history.length + 1),
   });
   return premiseRefsOf(def, r.premises);
@@ -1052,6 +1120,8 @@ export function newGame(
     schedule: rollSchedule(scenario, seed),
     stackIndex,
     components: { ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider] },
+    storageOption: false,
+    storageOptionFeeDue: false,
     componentSwap: null,
     contracts: [],
     settings: {
@@ -1370,6 +1440,7 @@ export function playMonth(input: GameState): GameState {
     state.seats,
     state.components,
     swap ? { [swap.slot]: swap.option } : {},
+    state.storageOption,
   );
   const monthBooks = booksAt(state, month);
   const r = estimate({ workload, architecture, books: monthBooks });
@@ -1390,7 +1461,12 @@ export function playMonth(input: GameState): GameState {
       })()
     : null;
   const parallelInfraCost = target ? toUsd(target.bill.totals) : 0;
-  const infraCost = toUsd(r.bill.totals) + parallelInfraCost;
+  // ストレージ変更オプションの手数料（付けた次の月に一度だけ。D-30）
+  const fee = state.storageOptionFeeDue
+    ? storageOptionAddon(stackIndexNow)
+    : undefined;
+  const feeUsd = fee ? fee.oneTimeFee / USD_JPY : 0;
+  const infraCost = toUsd(r.bill.totals) + parallelInfraCost + feeUsd;
 
   // 出来事の通知（起きた・予告・提案）
   for (const x of due) {
@@ -1649,10 +1725,13 @@ export function playMonth(input: GameState): GameState {
   let switching = false;
   let components = state.components;
   let mods = state.mods;
+  let storageOption = state.storageOption;
   if (migration && migration.done >= migration.required) {
     stackIndex = migration.to;
     switching = true;
     components = componentsAfterMigration(migration.to, state.mods);
+    // 乗り換え・契約し直しは新しいサーバーなので、ストレージ変更オプションは付いていない
+    storageOption = false;
     notes.push(
       `乗り換えの作業が済んだ。来月から ${MVP_STACKS[migration.to]!.name} に切り替える（部品は既定の選択から始まる）`,
     );
@@ -1710,15 +1789,26 @@ export function playMonth(input: GameState): GameState {
         hit: p.hit,
         accumulates: p.accumulates ?? false,
       })),
-    lines: [r, ...(target ? [target] : [])].flatMap((x) =>
-      x.bill.lines
-        .filter((l) => l.amount)
-        .map((l) => ({
-          label: lineLabel(l),
-          amount: l.amount!,
-          currency: l.currency,
-        })),
-    ),
+    lines: [
+      ...[r, ...(target ? [target] : [])].flatMap((x) =>
+        x.bill.lines
+          .filter((l) => l.amount)
+          .map((l) => ({
+            label: lineLabel(l),
+            amount: l.amount!,
+            currency: l.currency,
+          })),
+      ),
+      ...(fee
+        ? [
+            {
+              label: `sakura-vps ${fee.name}（手数料・一度だけ）`,
+              amount: fee.oneTimeFee,
+              currency: 'JPY',
+            },
+          ]
+        : []),
+    ],
     unpricedLines: r.bill.unpricedLines + (target?.bill.unpricedLines ?? 0),
     settings: state.settings,
     ssrCpuMs,
@@ -1788,6 +1878,8 @@ export function playMonth(input: GameState): GameState {
     components,
     componentSwap,
     mods,
+    storageOption,
+    storageOptionFeeDue: false,
     cash,
     outages,
     featurePoints,
@@ -2073,6 +2165,13 @@ export function applyAction(state: GameState, action: Action): GameState {
           : responded,
       );
     }
+    case 'storage-option':
+      return withNote('ストレージ変更オプションを付けた', {
+        ...state,
+        ...planned,
+        storageOption: true,
+        storageOptionFeeDue: true,
+      });
     case 'block-bots':
       return withNote('Bot を遮断するルールを入れた', {
         ...state,

@@ -43,6 +43,15 @@ export const sakuraVps: PriceBookInput = {
       url: 'https://manual.sakura.ad.jp/vps/server/disk-expansion/index.html',
       retrievedAt: '2026-11-01',
     },
+    // ストレージ変更オプション（2026-11-01 に原文で確認。D-30）
+    storageOption: {
+      url: 'https://vps.sakura.ad.jp/functions/storage-change-option/',
+      retrievedAt: '2026-11-01',
+    },
+    storageOptionManual: {
+      url: 'https://manual.sakura.ad.jp/vps/server/storage-change-option.html',
+      retrievedAt: '2026-11-01',
+    },
   },
   plans: [
     {
@@ -65,6 +74,26 @@ export const sakuraVps: PriceBookInput = {
           premise:
             'さくらの VPS の上位プランへの変更（スケールアップ）はサーバーを停止して行い、増えたディスクを OS に認識させる作業は利用者が行う（growpart・resize2fs など）',
           sourceIds: ['scaleup', 'diskExpansion'],
+        },
+      ],
+      addons: [
+        {
+          id: 'storage-change',
+          name: 'ストレージ変更オプション',
+          oneTimeFee: 2_200,
+          premise:
+            'さくらの VPS のストレージ変更オプションは、変更手数料 2,200 円（税込）を一度だけ払い、月額はそのままでストレージを 100 GB から 200 GB に永続的に増やす（利用中のサーバーはスケールアップから申し込む。性能差が出る場合があると記載）',
+          interpretation: {
+            adopted:
+              '戻せない（「永続的に増加させる」とあり、解約・戻す手順の記載なし）',
+            rejected: [
+              {
+                reading: '後から外せる',
+                reason: '外す・戻す方法の記載が無い',
+              },
+            ],
+          },
+          sourceIds: ['storageOption', 'storageOptionManual'],
         },
       ],
       notes: [
@@ -93,6 +122,26 @@ export const sakuraVps: PriceBookInput = {
           premise:
             'さくらの VPS は、今よりディスク容量が少ないプランへは変更できない（下位のプランにするには契約し直してデータを移す）',
           sourceIds: ['scaleup'],
+        },
+      ],
+      addons: [
+        {
+          id: 'storage-change',
+          name: 'ストレージ変更オプション',
+          oneTimeFee: 4_400,
+          premise:
+            'さくらの VPS のストレージ変更オプションは、変更手数料 4,400 円（税込）を一度だけ払い、月額はそのままでストレージを 200 GB から 400 GB に永続的に増やす（利用中のサーバーはスケールアップから申し込む。性能差が出る場合があると記載）',
+          interpretation: {
+            adopted:
+              '戻せない（「永続的に増加させる」とあり、解約・戻す手順の記載なし）',
+            rejected: [
+              {
+                reading: '後から外せる',
+                reason: '外す・戻す方法の記載が無い',
+              },
+            ],
+          },
+          sourceIds: ['storageOption', 'storageOptionManual'],
         },
       ],
       notes: [

@@ -633,14 +633,22 @@ function composeVercel(
   };
 }
 
+/** さくらの VPS の仕様。storageOptionDiskGB はストレージ変更オプションを付けたときのディスク（D-30・機能ページの表）。 */
 const SAKURA_HOST = {
-  '2gb': { vcpu: 3, memoryGB: 2, diskGB: 100 },
-  '4gb': { vcpu: 4, memoryGB: 4, diskGB: 200 },
+  '2gb': { vcpu: 3, memoryGB: 2, diskGB: 100, storageOptionDiskGB: 200 },
+  '4gb': { vcpu: 4, memoryGB: 4, diskGB: 200, storageOptionDiskGB: 400 },
 } as const;
 
 /** さくらの VPS に nginx・next start・MySQL を同居させる（D-13・D-24）。 */
-function composeSakura(plan: '2gb' | '4gb'): ArchitectureInput {
-  const h = SAKURA_HOST[plan];
+function composeSakura(
+  plan: '2gb' | '4gb',
+  storageOption: boolean,
+): ArchitectureInput {
+  const { storageOptionDiskGB, ...spec } = SAKURA_HOST[plan];
+  const h = {
+    ...spec,
+    ...(storageOption ? { diskGB: storageOptionDiskGB } : {}),
+  };
   return {
     id: `sakura-vps-${plan}`,
     name: `さくらの VPS ${plan === '2gb' ? '2GB' : '4GB'}（東京）`,
@@ -687,7 +695,11 @@ function composeSakura(plan: '2gb' | '4gb'): ArchitectureInput {
 export function composeStack(
   stack: StackDef | string,
   choices: Choices = {},
-  options: { standby?: Choices } = {},
+  options: {
+    standby?: Choices;
+    /** さくらの VPS のストレージ変更オプション（ディスクが 2 倍。D-30）。 */
+    storageOption?: boolean;
+  } = {},
 ): ArchitectureInput {
   const def = typeof stack === 'string' ? stackDef(stack) : stack;
   const c = withDefaults(def.platform, choices);
@@ -701,7 +713,10 @@ export function composeStack(
     case 'vercel':
       return composeVercel(def.plan as 'hobby' | 'pro', c);
     case 'sakura':
-      return composeSakura(def.plan as '2gb' | '4gb');
+      return composeSakura(
+        def.plan as '2gb' | '4gb',
+        options.storageOption ?? false,
+      );
   }
 }
 

@@ -23,6 +23,7 @@ import {
   growthFromReputation,
   isPlanChange,
   stackChangeText,
+  storageOptionText,
   migrationEffort,
   newSave,
   nextSsrCpuMs,
@@ -964,6 +965,8 @@ function Actions({
   /** 提案への返事（選ばなければ断る）。 */
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [blockBots, setBlockBots] = useState(false);
+  /** さくらの VPS のストレージ変更オプション（D-30）。 */
+  const [storage, setStorage] = useState(false);
   /** 部品の差し替え（スロットごと。D-24）。 */
   const [parts, setParts] = useState<Partial<Record<SlotId, string>>>({});
   const reset = () => {
@@ -972,6 +975,7 @@ function Actions({
     setStackChange(null);
     setAnswers({});
     setBlockBots(false);
+    setStorage(false);
     setParts({});
   };
 
@@ -982,6 +986,7 @@ function Actions({
       stack?: number | null;
       answers?: Record<string, boolean>;
       blockBots?: boolean;
+      storage?: boolean;
       parts?: Partial<Record<SlotId, string>>;
     } = {},
   ): Action[] => {
@@ -995,6 +1000,7 @@ function Actions({
     for (const eventId of state.pendingProposals)
       out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
     if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
+    if (o.storage ?? storage) out.push({ type: 'storage-option' });
     for (const [slot, option] of Object.entries(ps))
       out.push({ type: 'component', slot: slot as SlotId, option: option! });
     if (stack !== null)
@@ -1183,6 +1189,28 @@ function Actions({
             />
           </label>
         )}
+        {(() => {
+          const t = storageOptionText(state.stackIndex);
+          if (!t || state.storageOption) return null;
+          const why = storage ? null : blocked(build({ storage: true }));
+          return (
+            <label className="flex cursor-pointer items-start gap-3 py-1">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm mt-1"
+                checked={storage}
+                disabled={!storage && why !== null}
+                onChange={(e) => setStorage(e.target.checked)}
+              />
+              <OptionText
+                name={t.name}
+                meta={t.meta}
+                info={<Info>{t.detail}</Info>}
+                why={why}
+              />
+            </label>
+          );
+        })()}
         <ComponentsSection
           state={state}
           parts={parts}

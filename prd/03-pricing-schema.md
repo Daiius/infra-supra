@@ -161,6 +161,7 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 | 備考（`notes`） | 前払い・最低利用期間・課金の時間単位など、月額に効かない支払いの条件は**備考として文で残す**だけにする（構造化しない。D-14） | 19 |
 | `premise` | Limit・Meter・DeployTarget の対応に付ける「プラットフォームの前提」の印と、人が読める 1 文。見積の「重要な前提」とゲームの説明が同じ文を使う（01 §8.1） | 1・4・6・7 |
 | `facts`（D-24） | 量の境目を持たない事実（KV の反映の遅れ・D1 の 1 行 2 MB・Workers のメモリ 128 MB）を Plan に `id`・`premise`・出典で持つ。常に効くわけではないので、構成のノードが `facts: [id]` で挙げたときだけ前提（`fact:…`）として出す（部品の選び方しだいで効く事実） | GD-4 |
+| `addons`（D-30） | 一度きりの費用がかかるオプションを Plan に `oneTimeFee`（PriceBook の通貨・税込かに従う）・前提の 1 文・`interpretation`・出典で持つ（例: さくらの VPS のストレージ変更オプション）。何が変わるか（ディスクの大きさ）は構成のデータ（catalog の stacks）が持つ。月額の計算には入れず、ゲームは申し込んだ次の月の費用に一度だけ足す | GD-4 |
 | `uptimeSla`（D-24） | 稼働率の SLA を Plan に `offered`（`percent` と組）/ `none`（含まれないと書かれている）/ `not-stated`（書かれていない。無いと断定しない）で持つ。補償は計算に使わない。notes の文（D-14）だった「2GB は SLA 非対応」をここへ移した（07 §10.10 T-8 の解消） | GD-4 |
 
 ## 10. 検証規則（スキーマで落とす）

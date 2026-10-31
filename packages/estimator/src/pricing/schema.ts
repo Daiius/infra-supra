@@ -185,6 +185,21 @@ export const UptimeSlaSchema = z
     message: 'percent は status: offered のときだけ持つ',
   });
 
+/**
+ * 一度きりの費用がかかる追加のオプション（D-30。さくらの VPS のストレージ変更オプションなど）。
+ * 月額は変わらず、申し込んだときに oneTimeFee を一度だけ払う（通貨・税込かは PriceBook に合わせる）。
+ * 何が変わるか（ディスクの大きさなど）は構成のデータ（catalog の stacks）が持つ。
+ */
+export const AddonSchema = z.object({
+  id: Id,
+  name: z.string(),
+  oneTimeFee: NonNegative,
+  premise: Premise,
+  interpretation: InterpretationSchema.optional(),
+  sourceIds: SourceIds,
+});
+export type Addon = z.infer<typeof AddonSchema>;
+
 /** 数量でない利用資格（D-09。Vercel Hobby の商用利用不可など）。 */
 export const EligibilitySchema = z.object({
   id: Id,
@@ -231,6 +246,7 @@ export const PlanSchema = z.object({
   eligibility: z.array(EligibilitySchema).default([]),
   members: MembersSchema.optional(),
   facts: z.array(PlanFactSchema).default([]),
+  addons: z.array(AddonSchema).default([]),
   uptimeSla: UptimeSlaSchema.optional(),
   notes: z.array(z.string()).default([]), // 支払いの条件など（D-14）
   sourceIds: SourceIds,
@@ -379,6 +395,9 @@ export const PriceBookSchema = z
       );
       plan.facts.forEach((f, fi) =>
         requireSources(f.sourceIds, ['plans', pi, 'facts', fi, 'sourceIds']),
+      );
+      plan.addons.forEach((a, ai) =>
+        requireSources(a.sourceIds, ['plans', pi, 'addons', ai, 'sourceIds']),
       );
       if (plan.uptimeSla)
         requireSources(plan.uptimeSla.sourceIds, ['plans', pi, 'uptimeSla']);
