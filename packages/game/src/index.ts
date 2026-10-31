@@ -2,7 +2,7 @@
 // 純粋関数: 状態を受け取り、新しい状態を返す。
 // 料金・前提は estimator と catalog（実データ）をそのまま使い、ゲームのために料金を作らない（企画書 §11.1）。
 // シナリオの値（収益・成長・手間・満足度・障害の影響・出来事・目標）はゲーム上の仮定で、実在の値ではない（prd/07 §10）。
-import { loadPriceBooks, MVP_STACKS } from 'catalog';
+import { loadPriceBooks, MVP_STACKS, STACK_DEFS } from 'catalog';
 import {
   estimate,
   type ArchitectureInput,
@@ -287,7 +287,9 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   index: i,
   id: s.id,
   name: s.name,
-  provider: s.id.replace(/-(free|paid|hobby|pro)$/, ''),
+  /** 事業者（同じ事業者のあいだはプラン変更。さくらの VPS 2GB ↔ 4GB も含む。D-24）。 */
+  provider: STACK_DEFS[i]!.platform,
+  plan: STACK_DEFS[i]!.plan,
   selfHosted: s.nodes.some((n) => n.config.kind === 'host'),
 }));
 

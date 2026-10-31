@@ -168,15 +168,34 @@ export function assessPremises(input: {
         node.config.kind === 'managed-db'
       ) {
         used = (nu.busyMs / 1000) * peak;
+      } else if (
+        limit.measure === 'writes-per-second-per-key' &&
+        node.config.kind === 'kv' &&
+        node.config.hotKeyShare > 0
+      ) {
+        used =
+          (nu.resources['kv-writes'] ?? 0) * node.config.hotKeyShare * peak;
       }
       if (used === undefined) continue;
+      // 同じキーへの書き込みは、超えた書き込みが失敗する（料金データの onExceed）が、サイト全体は止まらない。
+      // 止める（block）のでなく遅くなる（throttle）として返すのは仮定（D-24 X-3）
+      const perKey = limit.measure === 'writes-per-second-per-key';
       out.push(
         threshold({
           id: `limit:${b.provider}:${b.planId}:${limit.id}:${node.id}`,
           text:
             limit.premise ??
             `${plan!.name} の ${limit.id} は ${limit.value} ${limit.unit} まで`,
-          effect: limit.onExceed === 'bill' ? 'cost' : limit.onExceed,
+          ...(perKey
+            ? {
+                assumption: `集中するキーへの書き込みの割合 ${node.config.kind === 'kv' ? node.config.hotKeyShare : 0}（仮定）。超えた書き込みは失敗するが、サイト全体は止まらないので遅くなるとして扱う（仮定）`,
+              }
+            : {}),
+          effect: perKey
+            ? 'throttle'
+            : limit.onExceed === 'bill'
+              ? 'cost'
+              : limit.onExceed,
           nodeIds: [node.id],
           provider: b.provider,
           planId: b.planId,
@@ -186,6 +205,27 @@ export function assessPremises(input: {
           accumulates: limit.measure === 'storage-gb',
         }),
       );
+    }
+  }
+
+  // 2b. ノードが挙げた事実（部品の選び方しだいで効く。D-24）
+  for (const node of sim.architecture.nodes) {
+    const b = node.billing;
+    if (!b || node.facts.length === 0) continue;
+    const plan = books.get(b.provider)?.plans.find((p) => p.id === b.planId);
+    for (const id of node.facts) {
+      const fact = plan?.facts.find((f) => f.id === id);
+      if (!fact) continue;
+      out.push({
+        id: `fact:${b.provider}:${b.planId}:${fact.id}`,
+        text: fact.premise,
+        kind: 'fact',
+        effect: 'info',
+        nodeIds: [node.id],
+        provider: b.provider,
+        planId: b.planId,
+        hit: false,
+      });
     }
   }
 

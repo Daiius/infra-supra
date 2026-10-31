@@ -64,12 +64,32 @@ export const WorkloadInputSchema = z
       variants: NonNeg,
       storedGB: NonNeg,
       uploadsPerMau: NonNeg,
+      /**
+       * サイズ違いを作る時（D-24）。request: 閲覧のときに変換（一意な変換 = 種類 × サイズ違い）・
+       * upload: 投稿のときに 1 回（= 投稿数 × サイズ違い）・none: 変換しない。
+       */
+      transformAt: z.enum(['request', 'upload', 'none']).default('request'),
     }),
     db: z.object({
       sizeGB: NonNeg,
       /** DB → アプリの応答サイズ（マネージド DB の egress）。 */
       responseKBPerQuery: NonNeg,
     }),
+    /** リアルタイム（チャットなどの WebSocket）。値はテンプレート・シナリオの仮定（D-24）。 */
+    realtime: z
+      .object({
+        /** 使う人の割合（MAU あたり）。 */
+        usersPerMau: Ratio,
+        /** 1 人の月の接続数。 */
+        connectionsPerUser: NonNeg,
+        /** 1 人の月の送信メッセージ（サーバーが受け取る数）。 */
+        messagesPerUser: NonNeg,
+        /** 1 メッセージの処理時間（ms）。 */
+        processingMs: NonNeg,
+        /** 接続のときに読む履歴の行数。 */
+        historyRowsPerConnect: NonNeg,
+      })
+      .optional(),
   })
   .superRefine((w, ctx) => {
     const total = w.routes.reduce((s, r) => s + r.share, 0);

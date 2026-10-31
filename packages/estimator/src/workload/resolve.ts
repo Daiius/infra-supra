@@ -17,6 +17,8 @@ export const REQUEST_CLASSES = [
   'image-read',
   'image-write',
   'image-transform', // 画像の最適化（一意な変換）
+  'realtime-connect', // リアルタイムの接続（WebSocket の確立）
+  'realtime-message', // リアルタイムのメッセージ（サーバーが受け取る数）
 ] as const;
 export type RequestClass = (typeof REQUEST_CLASSES)[number];
 
@@ -156,6 +158,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   }
 
   const a = w.api;
+  const rt = w.realtime;
   const images = pv * w.perPage.images * (1 - w.images.browserReuse);
   const classes: Record<RequestClass, ClassFlow> = {
     'document-static': merge(byRendering.static),
@@ -177,12 +180,25 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     'image-write': flow(t.mau * w.images.uploadsPerMau, {
       kb: w.images.sizeKB,
     }),
-    // 一意な変換は「画像の種類 × サイズ違い」で頭打ち（閲覧がそれより少なければ閲覧数）
+    // 一意な変換は「画像の種類 × サイズ違い」で頭打ち（閲覧がそれより少なければ閲覧数）。
+    // 投稿のときに作るなら投稿数 × サイズ違い、作らないなら 0（D-24）
     'image-transform': flow(
-      Math.min(w.images.distinct * w.images.variants, images),
+      w.images.transformAt === 'none'
+        ? 0
+        : w.images.transformAt === 'upload'
+          ? t.mau * w.images.uploadsPerMau * w.images.variants
+          : Math.min(w.images.distinct * w.images.variants, images),
       {
         kb: w.images.sizeKB,
       },
+    ),
+    'realtime-connect': flow(
+      rt ? t.mau * rt.usersPerMau * rt.connectionsPerUser : 0,
+      { rowsRead: rt?.historyRowsPerConnect ?? 0 },
+    ),
+    'realtime-message': flow(
+      rt ? t.mau * rt.usersPerMau * rt.messagesPerUser : 0,
+      { cpuMs: rt?.processingMs ?? 0, rowsWritten: 1 },
     ),
   };
 
