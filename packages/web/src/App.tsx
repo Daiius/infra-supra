@@ -605,7 +605,8 @@ function Result({ state }: { state: GameState }) {
   const baselines = useMemo(
     () =>
       BASELINES.map((b) => ({
-        label: b.label,
+        label: b.short ?? b.label,
+        title: b.label,
         axes: axesOf(playStrategy(b, state.startSeed)),
       })),
     [state.startSeed],
@@ -653,51 +654,91 @@ function Result({ state }: { state: GameState }) {
             ))}
           </ul>
         </div>
-        <div className="overflow-x-auto">
+        <div>
           <h3 className="mb-1 font-bold">
             軸ごとの成績
             <span className="ml-2 text-sm font-normal opacity-70">
-              1 つの点数にはしない。右は同じシードの基準プレイ（目盛り）
+              1 つの点数にはしない。下の行は同じシードの基準プレイ（目盛り）
             </span>
           </h3>
-          <table className="table table-sm">
-            <thead>
-              <tr>
-                <th>軸</th>
-                <th className="text-right">あなた</th>
-                {baselines.map((b) => (
-                  <th key={b.label} className="text-right text-xs font-normal">
-                    {b.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.label}>
-                  <td>{r.label}</td>
-                  <td className="text-right font-semibold">{r.get(axes)}</td>
-                  {baselines.map((b) => (
-                    <td key={b.label} className="text-right opacity-70">
-                      {r.get(b.axes)}
-                    </td>
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th className="whitespace-nowrap">戦略</th>
+                  {rows.map((r) => (
+                    <th key={r.label} className="whitespace-nowrap text-right">
+                      {r.label}
+                    </th>
                   ))}
                 </tr>
-              ))}
-              <tr>
-                <td>満足度の要素（平均）</td>
-                <td
-                  className="text-right text-xs"
-                  colSpan={1 + baselines.length}
-                >
-                  {ELEMENTS.map(
-                    (el) =>
-                      `${ELEMENT_LABEL[el]} ${axes.elements[el].toFixed(2)}`,
-                  ).join('・')}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {[
+                  { label: 'あなた', title: 'あなたのプレイ', axes, you: true },
+                  ...baselines.map((b) => ({ ...b, you: false })),
+                ].map((p) => (
+                  <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
+                    <td className="whitespace-nowrap" title={p.title}>
+                      {p.label}
+                    </td>
+                    {rows.map((r) => (
+                      <td
+                        key={r.label}
+                        className={`whitespace-nowrap text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
+                      >
+                        {r.get(p.axes)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <h4 className="mt-3 mb-1 text-sm font-semibold">
+            満足度の要素の平均（良い 1・普通 0.5・悪い 0）
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="table table-xs">
+              <thead>
+                <tr>
+                  <th className="whitespace-nowrap">戦略</th>
+                  {ELEMENTS.map((el) => (
+                    <th key={el} className="whitespace-nowrap text-right">
+                      {ELEMENT_LABEL[el]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: 'あなた', title: 'あなたのプレイ', axes, you: true },
+                  ...baselines.map((b) => ({ ...b, you: false })),
+                ].map((p) => (
+                  <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
+                    <td className="whitespace-nowrap" title={p.title}>
+                      {p.label}
+                    </td>
+                    {ELEMENTS.map((el) => (
+                      <td
+                        key={el}
+                        className={`text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
+                      >
+                        {p.axes.elements[el].toFixed(2)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="mt-2 list-disc pl-5 text-xs opacity-70">
+            {BASELINES.map((b) => (
+              <li key={b.id}>
+                {b.short ?? b.label}: {b.label}
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div>

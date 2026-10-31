@@ -818,6 +818,8 @@ export function reflectionOf(state: GameState): Reflection {
 export type Strategy = {
   id: string;
   label: string;
+  /** 表の見出しに使う短い名前。 */
+  short?: string;
   stackIndex: number;
   actions: Action[][];
 };
@@ -827,19 +829,28 @@ export const BASELINES: Strategy[] = [
   {
     id: 'cf-paid',
     label: 'Cloudflare Paid・何もしない',
+    short: 'CF Paid・何もしない',
     stackIndex: 1,
     actions: [],
   },
-  { id: 'vps', label: 'さくらの VPS・何もしない', stackIndex: 4, actions: [] },
+  {
+    id: 'vps',
+    label: 'さくらの VPS・何もしない',
+    short: 'VPS・何もしない',
+    stackIndex: 4,
+    actions: [],
+  },
   {
     id: 'vercel-pro',
     label: 'Vercel Pro・何もしない',
+    short: 'Vercel Pro・何もしない',
     stackIndex: 3,
     actions: [],
   },
   {
     id: 'vercel-compress-late',
     label: 'Vercel Pro・話題の前（6 か月目）に画像を中程度に圧縮',
+    short: 'Vercel Pro・話題前に圧縮',
     stackIndex: 3,
     actions: [
       [],
@@ -853,6 +864,7 @@ export const BASELINES: Strategy[] = [
   {
     id: 'cf-free',
     label: 'Cloudflare Free・何もしない',
+    short: 'CF Free・何もしない',
     stackIndex: 0,
     actions: [],
   },
