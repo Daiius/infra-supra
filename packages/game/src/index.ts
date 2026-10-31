@@ -2197,4 +2197,5 @@ export function comparisonRows(state: GameState): ComparisonRow[] {
 export * from './rules.ts';
 export * from './trends.ts';
 export * from './scenario.ts';
+export * from './save.ts';
 export { ARTICLE_COMMUNITY };

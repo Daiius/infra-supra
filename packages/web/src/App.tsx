@@ -23,8 +23,11 @@ import {
   growthFromReputation,
   isPlanChange,
   migrationEffort,
-  newGame,
+  newSave,
   nextSsrCpuMs,
+  parseSave,
+  replaySave,
+  withTurn,
   playMonth,
   premiseTrends,
   projectionNote,
@@ -39,6 +42,7 @@ import {
   type GameState,
   type MonthEvent,
   type MonthReport,
+  type SaveData,
   type Surprise,
   type SettingKey,
   type Stage,
@@ -68,8 +72,42 @@ const SCENARIO = ARTICLE_COMMUNITY;
 const USD_JPY = 150;
 type SlotId = Extract<Action, { type: 'component' }>['slot'];
 
+/** 遊んでいる途中の保存（D-26）。行動の履歴だけを持ち、読み込みは再生で復元する。 */
+const SAVE_KEY = 'infra-supra:game-save';
+
+type Session = { save: SaveData; state: GameState; restored: boolean };
+
+/** 保存から再開する。読めない・版が違う・再生で例外が出たら、黙って捨てて初期画面にする。 */
+function loadSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const save = parseSave(JSON.parse(raw));
+    if (!save) throw new Error('読めない保存');
+    return { save, state: replaySave(save), restored: true };
+  } catch {
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+      // 保存領域が使えない環境では何もしない
+    }
+    return null;
+  }
+}
+
+function storeSave(save: SaveData | null) {
+  try {
+    if (save) localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    else localStorage.removeItem(SAVE_KEY);
+  } catch {
+    // 保存できなくても遊べる（再読み込みで最初からになるだけ）
+  }
+}
+
 export function App() {
-  const [state, setState] = useState<GameState | null>(null);
+  const [session, setSession] = useState<Session | null>(loadSession);
+  useEffect(() => storeSave(session?.save ?? null), [session?.save]);
+  const state = session?.state ?? null;
   return (
     <div className="min-h-screen bg-base-200">
       <div className="navbar bg-base-100 shadow-sm">
@@ -80,7 +118,7 @@ export function App() {
         {state && (
           <button
             className="btn btn-ghost btn-sm ml-auto"
-            onClick={() => setState(null)}
+            onClick={() => setSession(null)}
           >
             最初から
           </button>
@@ -88,16 +126,34 @@ export function App() {
       </div>
       <main className="mx-auto max-w-5xl space-y-4 p-4">
         {state ? (
-          <Game state={state} setState={setState} />
+          <Game
+            // 新しく始めたとき・再開したときは作り直す（ダイアログの状態を引き継がない）
+            key={`${session!.save.seed}:${session!.save.stackIndex}:${session!.save.startDate}:${session!.restored}`}
+            state={state}
+            restored={session!.restored}
+            onAdvance={(actions) => {
+              const next = playMonth(applyActions(state, actions));
+              setSession({
+                save: withTurn(session!.save, actions),
+                state: next,
+                restored: session!.restored,
+              });
+              return next;
+            }}
+          />
         ) : (
-          <Briefing onStart={setState} />
+          <Briefing
+            onStart={(save) =>
+              setSession({ save, state: replaySave(save), restored: false })
+            }
+          />
         )}
       </main>
     </div>
   );
 }
 
-function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
+function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [stack, setStack] = useState(1);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
@@ -212,7 +268,14 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
             <button
               className="btn btn-primary"
               onClick={() => {
-                onStart(playMonth(newGame(stack, seed, SCENARIO, startDate)));
+                onStart(
+                  newSave({
+                    scenarioId: SCENARIO.id,
+                    stackIndex: stack,
+                    seed,
+                    startDate,
+                  }),
+                );
                 scrollTop();
               }}
             >
@@ -227,26 +290,35 @@ function Briefing({ onStart }: { onStart: (s: GameState) => void }) {
 
 function Game({
   state,
-  setState,
+  restored,
+  onAdvance,
 }: {
   state: GameState;
-  setState: (s: GameState) => void;
+  /** 保存から再開した（出来事・達成のダイアログを自動では開かない。D-26）。 */
+  restored: boolean;
+  /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
+  onAdvance: (actions: Action[]) => GameState;
 }) {
   const report = state.history[state.history.length - 1]!;
   const playing = state.phase === 'playing';
   // 月が進んだ直後に、その月の出来事をダイアログで出す（D-23）。結果の画面では出さない。
   // auto: 月が進んだ直後に開いた / manual: 月のカードのボタンで開き直した。
-  /** 目標達成のダイアログを開いた回数（結果の画面のボタンで開き直す。D-25）。 */
-  const [celebration, setCelebration] = useState(0);
+  /**
+   * 目標達成のダイアログを開いた回数（結果の画面のボタンで開き直す。D-25）。null は開いていない
+   * （保存から再開したときは自動で開かない。D-26）。
+   */
+  const [celebration, setCelebration] = useState<number | null>(
+    restored ? null : 0,
+  );
   useEffect(() => {
     if (state.phase !== 'won') setCelebration(0);
   }, [state.phase]);
   const [eventsOpen, setEventsOpen] = useState<'auto' | 'manual' | null>(() =>
-    playing && report.events.length > 0 ? 'auto' : null,
+    playing && !restored && report.events.length > 0 ? 'auto' : null,
   );
   return (
     <>
-      {state.phase === 'won' && (
+      {state.phase === 'won' && celebration !== null && (
         // key を変えると最初と同じように開き直す（暗い背景と花火も再開）
         <VictoryCelebration
           key={celebration}
@@ -257,7 +329,7 @@ function Game({
       {!playing && (
         <Result
           state={state}
-          onCelebrate={() => setCelebration((n) => n + 1)}
+          onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         />
       )}
       <Trends history={state.history} />
@@ -269,8 +341,7 @@ function Game({
         <Actions
           state={state}
           onDecide={(actions) => {
-            const next = playMonth(applyActions(state, actions));
-            setState(next);
+            const next = onAdvance(actions);
             const last = next.history[next.history.length - 1]!;
             setEventsOpen(
               next.phase === 'playing' && last.events.length > 0
