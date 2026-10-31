@@ -44,7 +44,7 @@
   出典 URL と取得日を付ける。テスト用の架空料金は `packages/catalog/src/fictional/` に置き、provider ID を `fictional-` で始める
   （[prd/03](./prd/03-pricing-schema.md) §1・§10）。
 - 見積対象のフレームワーク・構成を特定のスタックに寄せない。フレームワーク固有の扱いは FrameworkProfile / DeployTarget のデータに閉じ込める（[prd/06](./prd/06-frameworks.md)）。
-- 金額は 10 進数で計算する。浮動小数点で金額を扱わない（[prd/02](./prd/02-architecture.md) §3）。
+- 金額・使用量は number で計算し、課金の切り上げは `ceilUnits` だけを使う（`Math.ceil` を直接使わない）。丸めは表示のときだけ（[prd/02](./prd/02-architecture.md) §3）。
 - estimator・catalog・game の計算は純粋関数にする（時刻・乱数・I/O に触れない。乱数はシードを引数で受ける）。
 
 ## 開発コマンド

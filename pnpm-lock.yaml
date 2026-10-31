@@ -26,6 +26,10 @@ importers:
         version: 4.1.12(vite@8.3.5)
 
   packages/estimator:
+    dependencies:
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       vitest:
         specifier: ^4.1.12
@@ -450,6 +454,9 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
@@ -730,3 +737,5 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  zod@4.6.7: {}

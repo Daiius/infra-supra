@@ -32,15 +32,15 @@ Architecture のノードとリクエストクラス（01 §4）
 
 ```ts
 type BuildOutput = {
-  staticAssets: { totalBytes: Decimal; fileCount: number };   // ビルド時に確定するファイル
+  staticAssets: { totalBytes: number; fileCount: number };   // ビルド時に確定するファイル
   routes: RouteGroup[];
-  middleware?: { runsOn: 'all' | 'dynamic-only'; cpuMs: Sourced<Decimal> };
+  middleware?: { runsOn: 'all' | 'dynamic-only'; cpuMs: Sourced<number> };
   imageOptimization?: { mode: 'build-time' | 'on-demand'; variantsPerImage: Sourced<number> };
 };
 type RouteGroup = {
   id: string;
   rendering: 'static' | 'spa' | 'ssr' | 'isr' | 'streaming-ssr';
-  share: Sourced<Decimal>;                 // PV に占める割合
+  share: Sourced<number>;                 // PV に占める割合
   revalidateSeconds?: number;              // isr のみ
   runtime?: 'node' | 'edge';               // 動的なルートが要求する実行環境
 };

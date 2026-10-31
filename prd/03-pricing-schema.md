@@ -45,9 +45,9 @@ type Plan = {
 
 ```ts
 type BaseFee = {
-  amount: string;                    // 10 進の文字列
+  amount: number;
   per: 'month' | 'hour';
-  monthlyCap?: string;               // 時間課金に月額上限がある場合（VPS に多い）
+  monthlyCap?: number;               // 時間課金に月額上限がある場合（VPS に多い）
   scope: 'account' | 'node';         // アカウントに 1 回（チームプラン）か、ノードごと（インスタンス）か
   perSeat?: boolean;                 // 席課金（Vercel Pro など）。席数は Architecture の BillingAccount に持つ
 };
@@ -61,7 +61,7 @@ type BaseFee = {
 ```ts
 type AllowancePool = {
   id: PoolId;
-  quantity: string;
+  quantity: number;
   unit: Unit;
   period: 'month' | 'day';           // 日次の無料枠は日ごとに評価する（01 §3.3）
   scope: 'account' | 'project' | 'node'; // 共有の単位
@@ -83,16 +83,16 @@ type Meter = {
   unit: Unit;
   allowancePool?: PoolId;
   rounding?: {                       // 最低課金単位
-    granularity: string;             // 例: '1'（1 ms 単位）、'1000000'（100 万リクエスト単位）
+    granularity: number;             // 例: 1（1 ms 単位）、1_000_000（100 万リクエスト単位）
     scope: 'event' | 'period';       // 1 回ごとに切り上げるか、期間の合計を切り上げるか
     mode: 'ceil' | 'none';
   };
   pricing: Tiered | Volume | Flat;
   onExceed?: OverageBehavior;        // 無料枠を超えたときの挙動（§6）。既定は 'bill'
 };
-type Flat   = { model: 'flat'; unitPrice: string; per: string /* '1000000' = 100 万単位あたり */ };
-type Tiered = { model: 'tiered'; per: string; tiers: { upTo: string | null; unitPrice: string }[] }; // 段ごとに別単価
-type Volume = { model: 'volume'; per: string; tiers: { upTo: string | null; unitPrice: string }[] }; // 到達した段の単価を全量に
+type Flat   = { model: 'flat'; unitPrice: number; per: number /* 1_000_000 = 100 万単位あたり */ };
+type Tiered = { model: 'tiered'; per: number; tiers: { upTo: number | null; unitPrice: number }[] }; // 段ごとに別単価
+type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unitPrice: number }[] }; // 到達した段の単価を全量に
 ```
 
 - `rounding.scope: 'event'` は 1 リクエストごとの切り上げ。エンジンは分布を持たないので、
@@ -105,7 +105,7 @@ type Volume = { model: 'volume'; per: string; tiers: { upTo: string | null; unit
 type OverageBehavior = 'bill' | 'block' | 'throttle' | 'upgrade-required';
 type Limit = {
   id: string;                        // 'cpu-ms-per-request' | 'db-size-gb' | 'connections' | 'requests-per-day' …
-  value: string;
+  value: number;
   unit: Unit;
   scope: 'request' | 'node' | 'account' | 'day' | 'month';
   onExceed: OverageBehavior;
@@ -121,7 +121,7 @@ type Limit = {
 ```ts
 type Credit = {
   id: string;
-  amount: string;                    // 金額で付与されるクレジット（プランに含まれる利用分など）
+  amount: number;                    // 金額で付与されるクレジット（プランに含まれる利用分など）
   appliesTo: MeterRef[] | 'all-usage';
   period: 'month';
   carryOver: false;
@@ -134,7 +134,7 @@ type Credit = {
 ## 8. 為替
 
 ```ts
-type ExchangeRate = { base: Currency; quote: Currency; rate: string; asOf: string; basis: 'assumption' };
+type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: string; basis: 'assumption' };
 ```
 
 為替は料金データではなく**見積の仮定**として Estimate に保存する。明細は原通貨の金額を残し、合計だけを表示通貨に換算する。
@@ -163,4 +163,4 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: string; asOf: strin
 - `fictional-` で始まる provider は `status: 'fictional'`、それ以外は `official`。
 - メーターが参照するプール・プラン・リージョンが存在する。
 - 段階料金の `upTo` は単調増加で、最後の段だけ `null`。
-- 単価・数量の文字列は 10 進として読める。
+- 単価・数量は有限の数で、負にならない（クレジット以外）。

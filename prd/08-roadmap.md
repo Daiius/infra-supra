@@ -21,7 +21,7 @@ Phase 1 が終わった時点で「CLI で見積を出して内訳を読める�
 | # | タスク | 成果物 | 依存 |
 |---|---|---|---|
 | P1-1 | 雛形 | pnpm workspace・estimator / catalog の空パッケージ・PRD・コンセプト確認のスパイク | — （済） |
-| P1-2 | 数値の基盤 | Decimal（ライブラリ選定）・Unit・Quantity・Money・`Sourced<T>`・Derivation | P1-1 |
+| P1-2 | 数値の基盤 | 数値の規律（`ceilUnits`。D-16）・Unit・Quantity・Money・`Sourced<T>`・Derivation | P1-1 （済） |
 | P1-3 | Workload | zod スキーマ（入力と正規形）・`resolveWorkload`（導出と上書き）・代表週の時間分布 | P1-2 |
 | P1-4 | 料金スキーマ | PriceBook の zod スキーマと検証規則（03 §9〜10）・架空の PriceBook 一式 | P1-2 |
 | P1-5 | 料金計算 | `priceUsage`（プール・丸め・段階・クレジット・固定費・超過時の挙動）と 05 §2 のテスト | P1-4 |
