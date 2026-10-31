@@ -84,6 +84,22 @@ const book = parsePriceBook(
         ],
       },
       {
+        id: 'fn-capped',
+        service: 'compute',
+        name: 'Capped',
+        meters: [
+          {
+            id: 'requests',
+            resource: 'requests',
+            unit: 'request',
+            allowancePool: 'shared-requests',
+            onExceed: 'block',
+            premise: 'Capped は共有の 1000 件を超えると止まる',
+            pricing: { model: 'flat', per: 1000, unitPrice: 0 },
+          },
+        ],
+      },
+      {
         id: 'free',
         service: 'compute',
         name: 'Free',
@@ -171,8 +187,37 @@ describe('無料枠のプールの前提は、料金計算と同じ単位で集�
     ]);
     expect(bill.totals.USD).toBeCloseTo(0.2);
     const pools = premises.filter((p) => p.id.startsWith('pool:'));
-    expect(pools).toHaveLength(1);
-    expect(pools[0]).toMatchObject({ used: 1200, limit: 1000, hit: true });
+    // 量は合算し、前提はプランごとに出す
+    expect(pools.map((p) => [p.id, p.nodeIds, p.used, p.hit])).toEqual([
+      ['pool:fictional-premise:fn-a:shared-requests', ['n1'], 1200, true],
+      ['pool:fictional-premise:fn-b:shared-requests', ['n1'], 1200, true],
+    ]);
+  });
+
+  it('課金と停止のプランが同じプールを使うと、入力の順によらず両方の挙動が前提に残る', () => {
+    for (const usage of [
+      [use('fn-a', 'requests', 600), use('fn-capped', 'requests', 600)],
+      [use('fn-capped', 'requests', 600), use('fn-a', 'requests', 600)],
+    ]) {
+      const { bill, premises } = assess(usage);
+      expect(bill.breaches.map((b) => [b.priceRef.planId, b.behavior])).toEqual(
+        [['fn-capped', 'block']],
+      );
+      const byPlan = Object.fromEntries(
+        premises
+          .filter((p) => p.id.startsWith('pool:'))
+          .map((p) => [p.planId, p]),
+      );
+      expect(byPlan['fn-capped']).toMatchObject({
+        effect: 'block',
+        text: 'Capped は共有の 1000 件を超えると止まる',
+        used: 1200,
+        hit: true,
+      });
+      expect(byPlan['fn-a']).toMatchObject({ effect: 'cost', hit: true });
+      // 当たっている止まる前提が先頭に来る
+      expect(premises[0]!.planId).toBe('fn-capped');
+    }
   });
 
   it('1 プランだけなら前提の id は従来どおり', () => {
