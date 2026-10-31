@@ -1,8 +1,55 @@
 // Cloudflare（Workers・D1・KV・R2・Images）。2026-10-31 に公式ページから取得（spikes/concept-2026-10-31）。USD・税抜。
+// Durable Objects・Hyperdrive・KV の書き込みの制限と整合性・D1 の 1 行・Workers のメモリ・SLA は GD-4 で足した（2026-10-31 に原文で確認。
+// prd/research/2026-10-31-gd4-data.md）。
 import type { PriceBookInput } from 'estimator';
 
 const R = '2026-10-31';
 const src = (url: string) => ({ url, retrievedAt: R });
+
+type PlanInput = PriceBookInput['plans'][number];
+type LimitInput = NonNullable<PlanInput['limits']>[number];
+type SlaInput = NonNullable<PlanInput['uptimeSla']>;
+
+/** Workers のアカウントのプラン（Free・Paid）で共通の事実。ノードが facts で挙げたときだけ前提に出る。 */
+const WORKERS_FACTS = [
+  {
+    id: 'kv-propagation',
+    premise:
+      'KV の書き込みは、他の拠点で見えるまで 60 秒以上かかることがある（同じ拠点でもすぐ見える保証はない）',
+    sourceIds: ['kvHowItWorks'],
+  },
+  {
+    id: 'd1-row-size',
+    premise: 'D1 の 1 行（文字列・BLOB）は 2 MB まで',
+    sourceIds: ['d1Limits'],
+  },
+  {
+    id: 'workers-memory',
+    premise: 'Workers のメモリは 1 isolate あたり 128 MB まで',
+    sourceIds: ['workersLimits'],
+  },
+];
+
+/** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
+const KV_SAME_KEY: LimitInput = {
+  id: 'kv-same-key-writes',
+  measure: 'writes-per-second-per-key',
+  value: 1,
+  unit: 'count',
+  scope: 'node',
+  onExceed: 'block',
+  premise:
+    'KV の同じキーへの書き込みは 1 秒 1 回まで（超えた書き込みは 429 のエラー）',
+  sourceIds: ['kvLimits', 'kvWrite'],
+};
+
+/** Workers・R2・Images などセルフサービスのプランの SLA（Cloudflare の稼働率の SLA は Business・Enterprise の契約）。 */
+const NO_SELF_SERVE_SLA: SlaInput = {
+  status: 'not-stated',
+  premise:
+    'Cloudflare の開発者向けプラン（Workers など）の料金・制限のページに稼働率の SLA の記載なし（100% の SLA は Business・Enterprise のプラン、Workers の 99.99% は Enterprise の契約）',
+  sourceIds: ['workersPricing', 'plans', 'businessSla', 'workersSla'],
+};
 
 export const cloudflare: PriceBookInput = {
   schemaVersion: 1,
@@ -27,6 +74,27 @@ export const cloudflare: PriceBookInput = {
     kvPricing: src('https://developers.cloudflare.com/kv/platform/pricing/'),
     r2Pricing: src('https://developers.cloudflare.com/r2/pricing/'),
     imagesPricing: src('https://developers.cloudflare.com/images/pricing/'),
+    kvLimits: src('https://developers.cloudflare.com/kv/platform/limits/'),
+    kvWrite: src(
+      'https://developers.cloudflare.com/kv/api/write-key-value-pairs/',
+    ),
+    kvHowItWorks: src(
+      'https://developers.cloudflare.com/kv/concepts/how-kv-works/',
+    ),
+    doPricing: src(
+      'https://developers.cloudflare.com/durable-objects/platform/pricing/',
+    ),
+    hyperdrivePricing: src(
+      'https://developers.cloudflare.com/hyperdrive/platform/pricing/',
+    ),
+    hyperdriveLimits: src(
+      'https://developers.cloudflare.com/hyperdrive/platform/limits/',
+    ),
+    plans: src('https://www.cloudflare.com/plans/'),
+    businessSla: src('https://www.cloudflare.com/business-sla/'),
+    workersSla: src(
+      'https://www.cloudflare.com/workers-service-level-agreement/',
+    ),
   },
   allowancePools: [
     // Workers Free（日次・UTC 0 時にリセット。超過は止まる）
@@ -157,6 +225,84 @@ export const cloudflare: PriceBookInput = {
       scope: 'account',
       sourceIds: ['r2Pricing'],
     },
+    // Durable Objects（SQLite のストレージ。Free は日次・UTC 0 時にリセットで、超えるとその種類の操作が失敗する）
+    {
+      id: 'do-free-requests',
+      quantity: 100_000,
+      unit: 'request',
+      period: 'day',
+      scope: 'account',
+      sourceIds: ['doPricing'],
+    },
+    {
+      id: 'do-free-duration',
+      quantity: 13_000,
+      unit: 'gb-second',
+      period: 'day',
+      scope: 'account',
+      sourceIds: ['doPricing'],
+    },
+    {
+      id: 'do-free-rows-read',
+      quantity: 5_000_000,
+      unit: 'row',
+      period: 'day',
+      scope: 'account',
+      sourceIds: ['doPricing'],
+    },
+    {
+      id: 'do-free-rows-written',
+      quantity: 100_000,
+      unit: 'row',
+      period: 'day',
+      scope: 'account',
+      sourceIds: ['doPricing'],
+    },
+    {
+      id: 'do-paid-requests',
+      quantity: 1_000_000,
+      unit: 'request',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'Durable Objects（Workers Paid）は月 100 万リクエストまで込み、以降 $0.15/100 万（WebSocket の受信メッセージは 20 件で 1 リクエスト）',
+      sourceIds: ['doPricing'],
+    },
+    {
+      id: 'do-paid-duration',
+      quantity: 400_000,
+      unit: 'gb-second',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'Durable Objects（Workers Paid）の実行時間は月 40 万 GB-s まで込み、以降 $12.50/100 万 GB-s（休止中は課金しない）',
+      sourceIds: ['doPricing'],
+    },
+    {
+      id: 'do-paid-rows-read',
+      quantity: 25_000_000_000,
+      unit: 'row',
+      period: 'month',
+      scope: 'account',
+      sourceIds: ['doPricing'],
+    },
+    {
+      id: 'do-paid-rows-written',
+      quantity: 50_000_000,
+      unit: 'row',
+      period: 'month',
+      scope: 'account',
+      sourceIds: ['doPricing'],
+    },
+    // Hyperdrive（Free は日次・UTC 0 時にリセット。Paid は無制限）
+    {
+      id: 'hyperdrive-free-queries',
+      quantity: 100_000,
+      unit: 'count',
+      period: 'day',
+      scope: 'account',
+      sourceIds: ['hyperdrivePricing'],
+    },
     // Images（一意な変換を暦月で数える）
     {
       id: 'images-transformations',
@@ -266,7 +412,10 @@ export const cloudflare: PriceBookInput = {
           premise: 'D1 Free はデータベースあたり 500 MB まで',
           sourceIds: ['d1Limits'],
         },
+        KV_SAME_KEY,
       ],
+      facts: WORKERS_FACTS,
+      uptimeSla: NO_SELF_SERVE_SLA,
     },
     {
       id: 'workers-paid',
@@ -350,13 +499,17 @@ export const cloudflare: PriceBookInput = {
           premise: 'D1 はデータベースあたり 10 GB まで（引き上げ不可）',
           sourceIds: ['d1Limits'],
         },
+        KV_SAME_KEY,
       ],
+      facts: WORKERS_FACTS,
+      uptimeSla: NO_SELF_SERVE_SLA,
     },
     {
       id: 'r2-standard',
       service: 'r2',
       name: 'R2 Standard',
       sourceIds: ['r2Pricing'],
+      uptimeSla: NO_SELF_SERVE_SLA,
       meters: [
         {
           id: 'storage',
@@ -398,6 +551,7 @@ export const cloudflare: PriceBookInput = {
       service: 'images',
       name: 'Images Free',
       sourceIds: ['imagesPricing'],
+      uptimeSla: NO_SELF_SERVE_SLA,
       meters: [
         {
           id: 'transformations',
@@ -417,6 +571,7 @@ export const cloudflare: PriceBookInput = {
       service: 'images',
       name: 'Images Paid',
       sourceIds: ['imagesPricing'],
+      uptimeSla: NO_SELF_SERVE_SLA,
       notes: ['Images Paid の基本料は取得したページに記載がなかった'],
       meters: [
         {
@@ -427,6 +582,140 @@ export const cloudflare: PriceBookInput = {
           pricing: { model: 'flat', per: 1_000, unitPrice: 0.5 },
           sourceIds: ['imagesPricing'],
         },
+      ],
+    },
+    {
+      id: 'durable-objects-free',
+      service: 'durable-objects',
+      name: 'Durable Objects（Workers Free・SQLite）',
+      sourceIds: ['doPricing'],
+      uptimeSla: NO_SELF_SERVE_SLA,
+      meters: [
+        {
+          id: 'requests',
+          resource: 'requests',
+          unit: 'request',
+          allowancePool: 'do-free-requests',
+          onExceed: 'block',
+          premise:
+            'Durable Objects（Workers Free）は 1 日 10 万リクエストまで（WebSocket の受信メッセージは 20 件で 1 リクエスト。超えると失敗）',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['doPricing'],
+        },
+        {
+          id: 'duration',
+          resource: 'gb-seconds',
+          unit: 'gb-second',
+          allowancePool: 'do-free-duration',
+          onExceed: 'block',
+          premise:
+            'Durable Objects（Workers Free）の実行時間は 1 日 13,000 GB-s まで（休止中は数えない）',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['doPricing'],
+        },
+        {
+          id: 'rows-read',
+          resource: 'rows-read',
+          unit: 'row',
+          allowancePool: 'do-free-rows-read',
+          onExceed: 'block',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['doPricing'],
+        },
+        {
+          id: 'rows-written',
+          resource: 'rows-written',
+          unit: 'row',
+          allowancePool: 'do-free-rows-written',
+          onExceed: 'block',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['doPricing'],
+        },
+      ],
+    },
+    {
+      id: 'durable-objects-paid',
+      service: 'durable-objects',
+      name: 'Durable Objects（Workers Paid・SQLite）',
+      sourceIds: ['doPricing'],
+      uptimeSla: NO_SELF_SERVE_SLA,
+      notes: [
+        'Workers Paid の最低料金 $5/月の中で使う（Durable Objects 単独の基本料はない）',
+      ],
+      meters: [
+        {
+          id: 'requests',
+          resource: 'requests',
+          unit: 'request',
+          allowancePool: 'do-paid-requests',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.15 },
+          sourceIds: ['doPricing'],
+        },
+        {
+          id: 'duration',
+          resource: 'gb-seconds',
+          unit: 'gb-second',
+          allowancePool: 'do-paid-duration',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 12.5 },
+          sourceIds: ['doPricing'],
+        },
+        {
+          id: 'rows-read',
+          resource: 'rows-read',
+          unit: 'row',
+          allowancePool: 'do-paid-rows-read',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.001 },
+          sourceIds: ['doPricing'],
+        },
+        {
+          id: 'rows-written',
+          resource: 'rows-written',
+          unit: 'row',
+          allowancePool: 'do-paid-rows-written',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 1 },
+          sourceIds: ['doPricing'],
+        },
+      ],
+    },
+    {
+      id: 'hyperdrive-free',
+      service: 'hyperdrive',
+      name: 'Hyperdrive（Workers Free）',
+      sourceIds: ['hyperdrivePricing'],
+      uptimeSla: NO_SELF_SERVE_SLA,
+      meters: [
+        {
+          id: 'queries',
+          resource: 'queries',
+          unit: 'count',
+          allowancePool: 'hyperdrive-free-queries',
+          onExceed: 'block',
+          premise:
+            'Hyperdrive（Workers Free）は 1 日 10 万クエリまで（キャッシュから返したものも数える。超えるとエラー）',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['hyperdrivePricing'],
+        },
+      ],
+    },
+    {
+      id: 'hyperdrive-paid',
+      service: 'hyperdrive',
+      name: 'Hyperdrive（Workers Paid）',
+      sourceIds: ['hyperdrivePricing', 'hyperdriveLimits'],
+      uptimeSla: NO_SELF_SERVE_SLA,
+      meters: [
+        {
+          id: 'queries',
+          resource: 'queries',
+          unit: 'count',
+          premise:
+            'Hyperdrive は Workers Paid ではクエリ無制限・追加料金なし（接続先の DB の料金は別）',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['hyperdrivePricing'],
+        },
+      ],
+      notes: [
+        '接続先の DB への接続は 1 設定あたり約 100（Free は約 20）。クエリは 60 秒まで（hyperdriveLimits）',
       ],
     },
   ],

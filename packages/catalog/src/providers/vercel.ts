@@ -37,6 +37,7 @@ export const vercel: PriceBookInput = {
     isr: src(
       'https://vercel.com/docs/incremental-static-regeneration/limits-and-pricing',
     ),
+    sla: src('https://vercel.com/legal/sla'),
   },
   allowancePools: [
     {
@@ -154,6 +155,12 @@ export const vercel: PriceBookInput = {
       service: 'platform',
       name: 'Hobby',
       sourceIds: ['hobby', 'pricing'],
+      uptimeSla: {
+        status: 'not-stated',
+        premise:
+          'Vercel Hobby・Pro は料金のページに稼働率の SLA の記載なし（99.99% の SLA は Enterprise）',
+        sourceIds: ['pricing', 'sla'],
+      },
       eligibility: [
         {
           id: 'personal-non-commercial',
@@ -257,6 +264,12 @@ export const vercel: PriceBookInput = {
       name: 'Pro',
       baseFee: { amount: 20, per: 'month', scope: 'account', perSeat: true },
       sourceIds: ['pro', 'pricing'],
+      uptimeSla: {
+        status: 'not-stated',
+        premise:
+          'Vercel Hobby・Pro は料金のページに稼働率の SLA の記載なし（99.99% の SLA は Enterprise）',
+        sourceIds: ['pricing', 'sla'],
+      },
       members: {
         pricing: 'per-seat',
         premise: 'Vercel Pro は基本料 $20 が席（メンバー）ごとにかかる',

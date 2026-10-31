@@ -133,3 +133,30 @@ describe('プラットフォームの前提（金額ではなく、当たった�
     expect(ps.slice(0, firstNotHit).every((x) => x.hit)).toBe(true);
   });
 });
+
+describe('稼働率の SLA（D-24）', () => {
+  it('MVP の構成が使う課金先のプランは、SLA の扱いを持つ', () => {
+    const books = loadPriceBooks();
+    for (const stack of MVP_STACKS) {
+      for (const n of stack.nodes) {
+        if (!n.billing) continue;
+        const plan = books
+          .find((b) => b.provider === n.billing!.provider)!
+          .plans.find((p) => p.id === n.billing!.planId)!;
+        expect(
+          plan.uptimeSla,
+          `${n.billing.provider} ${plan.id}`,
+        ).toBeDefined();
+      }
+    }
+  });
+
+  it('セルフサービスのプランで SLA があるのはさくらの VPS 4GB だけ', () => {
+    const offered = loadPriceBooks().flatMap((b) =>
+      b.plans
+        .filter((p) => p.uptimeSla?.status === 'offered')
+        .map((p) => `${b.provider}/${p.id}`),
+    );
+    expect(offered).toEqual(['sakura-vps/4gb-tokyo']);
+  });
+});

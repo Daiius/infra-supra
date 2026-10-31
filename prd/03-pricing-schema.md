@@ -115,6 +115,8 @@ type Limit = {
 };
 ```
 
+`measure`（何と比べるか）: `cpu-ms-per-request`・`storage-gb`・`peak-concurrency`・`writes-per-second-per-key`（同じキーへの書き込みの頻度。KV の 1 秒 1 回。D-24）。
+
 性能に関わる制限（同時接続数・1 リクエストあたりの CPU 上限など）も**公式の数値なら**ここに置く。
 公式でない性能値（1 vCPU が捌ける RPS など）は PriceBook に置かず、性能プロファイル（`assumption`）に分ける。
 
@@ -158,6 +160,8 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 | 税込かどうか | `taxIncluded`。さくらの VPS は税込の円、他は税抜のドル。見積は方針（税抜で揃えるなど）に合わせて換算する | 18 |
 | 備考（`notes`） | 前払い・最低利用期間・課金の時間単位など、月額に効かない支払いの条件は**備考として文で残す**だけにする（構造化しない。D-14） | 19 |
 | `premise` | Limit・Meter・DeployTarget の対応に付ける「プラットフォームの前提」の印と、人が読める 1 文。見積の「重要な前提」とゲームの説明が同じ文を使う（01 §8.1） | 1・4・6・7 |
+| `facts`（D-24） | 量の境目を持たない事実（KV の反映の遅れ・D1 の 1 行 2 MB・Workers のメモリ 128 MB）を Plan に `id`・`premise`・出典で持つ。常に効くわけではないので、構成のノードが `facts: [id]` で挙げたときだけ前提（`fact:…`）として出す（部品の選び方しだいで効く事実） | GD-4 |
+| `uptimeSla`（D-24） | 稼働率の SLA を Plan に `offered`（`percent` と組）/ `none`（含まれないと書かれている）/ `not-stated`（書かれていない。無いと断定しない）で持つ。補償は計算に使わない。notes の文（D-14）だった「2GB は SLA 非対応」をここへ移した（07 §10.10 T-8 の解消） | GD-4 |
 
 ## 10. 検証規則（スキーマで落とす）
 
