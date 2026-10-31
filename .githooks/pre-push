@@ -5,6 +5,7 @@
 # stdin は `<local ref> <local sha> <remote ref> <remote sha>` の行。
 # - 削除の push（local sha が全 0）は飛ばす。
 # - 新しいブランチ（remote sha が全 0）は、origin の他のブランチに無いコミットだけを見る。
+# - merge commit にだけ足した内容（--diff-merges=separate）と、内容を変えない改名（--no-renames）も検査する。
 # - betterleaks が無ければ警告してスキップする（CI の secret-scan が最終の砦）。
 # - 規則は .betterleaks.toml。カレントディレクトリの設定は自動では読まれないため --config で渡す。
 set -eu
@@ -29,7 +30,7 @@ while read -r _lref lsha _rref rsha; do
 		range="$rsha..$lsha"
 	fi
 	echo "[pre-push] 秘密の検査: $range" >&2
-	if ! betterleaks git . --log-opts="$range" --config .betterleaks.toml --redact --no-banner --log-level=warn; then
+	if ! betterleaks git . --log-opts="$range --diff-merges=separate --no-renames" --config .betterleaks.toml --redact --no-banner --log-level=warn; then
 		status=1
 	fi
 done

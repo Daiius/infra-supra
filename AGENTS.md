@@ -62,7 +62,9 @@ public リポジトリなので、秘密（トークン・`.env*` など）の�
 （組み込みの規則 + `.env*` をファイル名で止める規則。`.example` などの雛形は通す）。**設定は自動では読まれないので、`betterleaks` を直接叩くときは `--config .betterleaks.toml` を渡す。**
 
 - push 前: [`.githooks/pre-push`](./.githooks/pre-push) が、送るコミットだけを検査して止める（betterleaks が無いホストでは警告してスキップ）。
-- CI: [`.github/workflows/secret-scan.yml`](./.github/workflows/secret-scan.yml)（全ブランチの push と PR）。バイナリは checksums.txt と照合して取得する。最終の砦。
+  範囲は新しいブランチなら origin の他のブランチに無いコミットだけで、手元の 2 段目の網。CI が毎回全履歴を見るので取りこぼしはそちらで拾う。
+  merge commit にだけ足した内容と内容を変えない改名も見るよう、`--diff-merges=separate --no-renames` を渡している（CI も同じ）。
+- CI: [`.github/workflows/secret-scan.yml`](./.github/workflows/secret-scan.yml)（全ブランチの push と PR。範囲を計算せず毎回全履歴・全 ref を検査する）。バイナリは checksums.txt と照合して取得する。最終の砦。
 - pre-commit の検査は、ホストのグローバル hook（`hook.betterleaks`）に任せ、リポジトリ側では持たない。
 
 ### git hooks（git 2.55+ の config ベース hooks）
