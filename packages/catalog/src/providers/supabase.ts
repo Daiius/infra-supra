@@ -48,6 +48,7 @@ export const supabase: PriceBookInput = {
       unit: 'gb-month',
       period: 'month',
       scope: 'node',
+      premise: 'Supabase Pro はディスク 8 GB まで込み、以降 $0.125/GB 月',
       sourceIds: ['pricing'],
     },
   ],
@@ -57,6 +58,12 @@ export const supabase: PriceBookInput = {
       service: 'database',
       name: 'Free',
       sourceIds: ['pricing', 'billing'],
+      members: {
+        pricing: 'included',
+        premise:
+          'Supabase はチームのメンバーが Free・Pro とも無制限（メンバーごとの料金なし）',
+        sourceIds: ['pricing'],
+      },
       notes: [
         '1 週間使われないとプロジェクトが一時停止する',
         '有効な無料プロジェクトは 2 つまで',
@@ -92,6 +99,12 @@ export const supabase: PriceBookInput = {
       name: 'Pro（Micro）',
       baseFee: { amount: 25, per: 'month', scope: 'account' },
       sourceIds: ['pricing', 'compute'],
+      members: {
+        pricing: 'included',
+        premise:
+          'Supabase はチームのメンバーが Free・Pro とも無制限（メンバーごとの料金なし）',
+        sourceIds: ['pricing'],
+      },
       credits: [
         {
           id: 'compute-credit',

@@ -166,6 +166,16 @@ export const EligibilitySchema = z.object({
   sourceIds: SourceIds,
 });
 
+/**
+ * メンバー（席）の料金（D-20 V-6）。per-seat は baseFee.perSeat と組で使う。
+ * 料金が無いと書かれていれば included、書かれていなければ not-stated（無料と断定しない）。
+ */
+export const MembersSchema = z.object({
+  pricing: z.enum(['per-seat', 'included', 'not-stated']),
+  premise: Premise,
+  sourceIds: SourceIds,
+});
+
 export const PlanSchema = z.object({
   id: Id,
   service: Id,
@@ -175,6 +185,7 @@ export const PlanSchema = z.object({
   credits: z.array(CreditSchema).default([]),
   limits: z.array(LimitSchema).default([]),
   eligibility: z.array(EligibilitySchema).default([]),
+  members: MembersSchema.optional(),
   notes: z.array(z.string()).default([]), // 支払いの条件など（D-14）
   sourceIds: SourceIds,
 });
@@ -245,6 +256,20 @@ export const PriceBookSchema = z
       }
       seenPlans.add(plan.id);
       requireSources(plan.sourceIds, ['plans', pi, 'sourceIds']);
+      if (plan.members) {
+        requireSources(plan.members.sourceIds, ['plans', pi, 'members']);
+        if (
+          (plan.members.pricing === 'per-seat') !==
+          (plan.baseFee?.perSeat ?? false)
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['plans', pi, 'members', 'pricing'],
+            message:
+              'members.pricing が per-seat なのは baseFee.perSeat のときだけ',
+          });
+        }
+      }
       const seenMeters = new Set<string>();
       plan.meters.forEach((m, mi) => {
         const path = ['plans', pi, 'meters', mi];

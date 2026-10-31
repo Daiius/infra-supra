@@ -26,6 +26,26 @@ describe('料金データ', () => {
   });
 });
 
+describe('メンバー（席）の料金（D-20 V-6）', () => {
+  it('MVP の構成が使う課金先のプランは、メンバーの料金の扱いを持つ（Vercel Hobby は個人のみなので除く）', () => {
+    const books = loadPriceBooks();
+    for (const stack of MVP_STACKS) {
+      for (const n of stack.nodes) {
+        if (
+          !n.billing ||
+          (n.billing.provider === 'vercel' && n.billing.planId === 'hobby')
+        )
+          continue;
+        const book = books.find((b) => b.provider === n.billing!.provider)!;
+        const plan = book.plans.find((p) => p.id === n.billing!.planId)!;
+        // R2・Images は Workers のアカウントのプランに含める（メンバーはアカウント単位）
+        if (plan.service === 'r2' || plan.service === 'images') continue;
+        expect(plan.members, `${book.provider} ${plan.id}`).toBeDefined();
+      }
+    }
+  });
+});
+
 describe('構成', () => {
   const books = loadPriceBooks();
 

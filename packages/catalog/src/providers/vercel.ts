@@ -257,6 +257,11 @@ export const vercel: PriceBookInput = {
       name: 'Pro',
       baseFee: { amount: 20, per: 'month', scope: 'account', perSeat: true },
       sourceIds: ['pro', 'pricing'],
+      members: {
+        pricing: 'per-seat',
+        premise: 'Vercel Pro は基本料 $20 が席（メンバー）ごとにかかる',
+        sourceIds: ['pro', 'pricing'],
+      },
       credits: [
         {
           id: 'usage-credit',

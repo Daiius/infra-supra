@@ -21,6 +21,9 @@ export const cloudflare: PriceBookInput = {
     ),
     d1Pricing: src('https://developers.cloudflare.com/d1/platform/pricing/'),
     d1Limits: src('https://developers.cloudflare.com/d1/platform/limits/'),
+    members: src(
+      'https://developers.cloudflare.com/fundamentals/setup/manage-members/',
+    ),
     kvPricing: src('https://developers.cloudflare.com/kv/platform/pricing/'),
     r2Pricing: src('https://developers.cloudflare.com/r2/pricing/'),
     imagesPricing: src('https://developers.cloudflare.com/images/pricing/'),
@@ -108,6 +111,7 @@ export const cloudflare: PriceBookInput = {
       unit: 'gb-month',
       period: 'month',
       scope: 'account',
+      premise: 'D1（Workers Paid）は保存量 5 GB まで込み、以降 $0.75/GB 月',
       sourceIds: ['d1Pricing'],
     },
     {
@@ -134,6 +138,7 @@ export const cloudflare: PriceBookInput = {
       unit: 'gb-month',
       period: 'month',
       scope: 'account',
+      premise: 'R2 は保存量 10 GB まで込み、以降 $0.015/GB 月',
       sourceIds: ['r2Pricing'],
     },
     {
@@ -170,6 +175,12 @@ export const cloudflare: PriceBookInput = {
       service: 'workers',
       name: 'Workers Free',
       sourceIds: ['workersPricing'],
+      members: {
+        pricing: 'not-stated',
+        premise:
+          'Cloudflare のアカウントのメンバーの料金は、メンバーの管理と Workers の料金のページに記載なし（Workers Paid の最低料金はアカウントあたり）',
+        sourceIds: ['members', 'workersPricing'],
+      },
       meters: [
         {
           id: 'requests',
@@ -263,6 +274,12 @@ export const cloudflare: PriceBookInput = {
       name: 'Workers Paid',
       baseFee: { amount: 5, per: 'month', scope: 'account' },
       sourceIds: ['workersPricing'],
+      members: {
+        pricing: 'not-stated',
+        premise:
+          'Cloudflare のアカウントのメンバーの料金は、メンバーの管理と Workers の料金のページに記載なし（Workers Paid の最低料金はアカウントあたり）',
+        sourceIds: ['members', 'workersPricing'],
+      },
       meters: [
         {
           id: 'requests',

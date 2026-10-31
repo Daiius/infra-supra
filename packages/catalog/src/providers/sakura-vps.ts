@@ -23,6 +23,12 @@ export const sakuraVps: PriceBookInput = {
       name: '2GB（東京）',
       baseFee: { amount: 1_958, per: 'month', scope: 'node' },
       sourceIds: ['spec'],
+      members: {
+        pricing: 'not-stated',
+        premise:
+          'さくらの VPS の仕様のページに、メンバー（複数ユーザー）の料金の記載なし',
+        sourceIds: ['spec'],
+      },
       meters: [
         {
           id: 'transfer',

@@ -53,6 +53,9 @@ type BaseFee = {
 };
 ```
 
+メンバー（席）の料金の扱いは Plan の `members` に持つ（D-20 V-6）。`per-seat`（`perSeat` の基本料と組）・`included`（料金が無いと書かれている）・
+`not-stated`（書かれていない。無料と断定しない）のどれかと、前提の 1 文・出典。
+
 ## 4. 無料枠のプール
 
 無料枠は「メーターに付属する数量」ではなく**プール**として独立させ、メーターがプールを参照する。
@@ -160,6 +163,7 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 
 - `status: 'official'` の PriceBook は、すべての Plan が `sourceIds` を持ち、参照先が `sources` にある。
 - `fictional-` で始まる provider は `status: 'fictional'`、それ以外は `official`。
+- `members.pricing` が `per-seat` なのは `baseFee.perSeat` のときだけ。`members` も出典が必要。
 - メーターが参照するプール・プラン・リージョンが存在する。
 - 段階料金の `upTo` は単調増加で、最後の段だけ `null`。
 - 単価・数量は有限の数で、負にならない（クレジット以外）。

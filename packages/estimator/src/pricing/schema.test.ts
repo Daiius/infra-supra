@@ -63,6 +63,30 @@ describe('PriceBookSchema', () => {
     expect(issues(c).join()).toContain('missing');
   });
 
+  it('メンバーの料金: per-seat は席課金の基本料と組で、出典が必要', () => {
+    const b = officialMinimal();
+    b.plans[0]!.members = {
+      pricing: 'per-seat',
+      premise: '席ごとにかかる',
+      sourceIds: ['pricing'],
+    };
+    expect(issues(b).join()).toContain('per-seat');
+    b.plans[0]!.baseFee = {
+      amount: 1,
+      per: 'month',
+      scope: 'account',
+      perSeat: true,
+    };
+    expect(issues(b)).toEqual([]);
+    const c = officialMinimal();
+    c.plans[0]!.members = {
+      pricing: 'not-stated',
+      premise: '記載なし',
+      sourceIds: [],
+    };
+    expect(issues(c).join()).toContain('出典が必要');
+  });
+
   it('料金未取得（unpriced）のメーターは出典なしでよい', () => {
     const b = officialMinimal();
     b.plans[0]!.meters.push({
