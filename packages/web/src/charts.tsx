@@ -50,6 +50,19 @@ export type Series = {
 };
 
 /**
+ * ping（輪と点の脈打ち）の位相を全グラフで揃える（D-25）。CSS のアニメーションは要素が現れた時刻から始まるので、
+ * Web Animations API で開始時刻を文書の時計の原点（0）にそろえる。周期と遅れは CSS（styles.css）の 1 か所だけに持つ。
+ * 月送りで点が作り直されても、新しいグラフが出ても、同じ時計に乗る。動きを減らす設定ではアニメーションが無いので何もしない。
+ */
+const PING_ANIMATIONS = new Set(['motion-ping', 'motion-pulse']);
+export function syncPing(el: Element | null) {
+  if (!el || typeof el.getAnimations !== 'function') return;
+  for (const a of el.getAnimations({ subtree: true }))
+    if (a instanceof CSSAnimation && PING_ANIMATIONS.has(a.animationName))
+      a.startTime = 0;
+}
+
+/**
  * 最新の月の点の強調（D-25）。2 重の輪（塗り + 縁）が時間差で点の 4 倍ほどまで広がって消える。色は系列の色。
  * 輪は SVG の外へはみ出してよい（SVG は overflow: visible）。動きを減らす設定では出さない（styles.css）。
  */
@@ -63,7 +76,7 @@ function PingRings({
   color: string;
 }) {
   return (
-    <g aria-hidden pointerEvents="none">
+    <g aria-hidden pointerEvents="none" ref={syncPing}>
       {[0, 1].map((i) => (
         <circle
           key={i}
@@ -421,6 +434,7 @@ export function LineChart({
                   <circle
                     key={`end-${li}`}
                     className={`motion-pop ${li === s.values.length - 1 ? 'motion-pulse' : ''}`}
+                    ref={syncPing}
                     cx={x(li + 1)}
                     cy={y(s.values[li]!)}
                     r="4"
@@ -584,6 +598,7 @@ export function Sparkline({
         <circle
           key={`end-${li}`}
           className="motion-pop motion-pulse"
+          ref={syncPing}
           cx={x(li)}
           cy={y(values[li]!)}
           r="4"
