@@ -151,8 +151,10 @@ export function LineChart({
   ]);
   const ticks = niceTicks(yMax ?? Math.max(reference?.value ?? 0, ...all, 0));
   const top = ticks[ticks.length - 1]!;
+  // 1 か月目の左に 0.6 か月分の内側の余白を取る（点が 1 つだけの区間の延長線の余地。月の目盛り・ツールチップは月に揃う）
+  const lead = 0.6;
   const x = (month: number) =>
-    pad.left + (months <= 1 ? 0 : ((month - 1) / (months - 1)) * w);
+    pad.left + ((month - 1 + lead) / Math.max(months - 1 + lead, 1)) * w;
   const y = (v: number) => pad.top + h - (Math.min(v, top) / top) * h;
   const path = (pts: { m: number; v: number }[]) =>
     pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.m)},${y(p.v)}`).join('');
@@ -171,7 +173,11 @@ export function LineChart({
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
-    const m = Math.round(((px - pad.left) / Math.max(w, 1)) * (months - 1)) + 1;
+    const m =
+      Math.round(
+        ((px - pad.left) / Math.max(w, 1)) * Math.max(months - 1 + lead, 1) -
+          lead,
+      ) + 1;
     setHover(m >= 1 && m <= months ? m : null);
   };
 
@@ -235,7 +241,7 @@ export function LineChart({
         >
           {/*
             点が 1 つだけの区間（1 か月目・乗り換えの後など）は、点だけで光ると不自然なので、左へ 1 か月分の水平線を
-            最も薄い色で描く（表示だけ。データ・軸・ツールチップ・見込みには入れない）。左の余白では、
+            最も薄い色で描く（表示だけ。データ・軸・ツールチップ・見込みには入れない）。1 か月目は内側の余白（lead）の分まで描き、
             目盛りの数字の手前で止める
           */}
           {series.flatMap((s) =>
@@ -245,7 +251,7 @@ export function LineChart({
                 (s.values[i - 1] ?? null) === null &&
                 (s.values[i + 1] ?? null) === null;
               if (!single) return [];
-              const step = months > 1 ? w / (months - 1) : w;
+              const step = x(2) - x(1);
               const x2 = x(i + 1);
               return [
                 <line
@@ -485,7 +491,7 @@ export function LineChart({
   );
 }
 
-/** 数値タイルの小さな推移（12 点・目立たない色。今月だけ強調色の点）。 */
+/** 数値タイルの小さな推移（12 点・強調の青。古い月ほど薄く、今月の点で濃い）。 */
 export function Sparkline({
   values,
   months,
@@ -508,7 +514,7 @@ export function Sparkline({
   const li = values.length - 1;
   const gid = `${useId().replace(/:/g, '')}-fade`;
   // 最新の点に近いほど濃い線（D-25）
-  const stroke = li >= 1 ? `url(#${gid})` : 'var(--deemphasis)';
+  const stroke = li >= 1 ? `url(#${gid})` : 'var(--series-1)';
   return (
     <svg
       width={width}
@@ -520,12 +526,7 @@ export function Sparkline({
     >
       {li >= 1 && (
         <defs>
-          <FadeGradient
-            id={gid}
-            color="var(--deemphasis)"
-            x1={x(0)}
-            x2={x(li)}
-          />
+          <FadeGradient id={gid} color="var(--series-1)" x1={x(0)} x2={x(li)} />
         </defs>
       )}
       {li === 0 && (
@@ -535,7 +536,7 @@ export function Sparkline({
           x2={x(0)}
           y1={y(values[0]!)}
           y2={y(values[0]!)}
-          stroke="var(--deemphasis)"
+          stroke="var(--series-1)"
           strokeOpacity={OLDEST_OPACITY}
           strokeWidth="2"
           strokeLinecap="round"
