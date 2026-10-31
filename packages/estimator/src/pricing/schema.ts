@@ -1,0 +1,315 @@
+// 料金データのスキーマ（prd/03-pricing-schema.md）。データ（catalog）はこのスキーマで検証してから使う。
+import { z } from 'zod';
+import { CURRENCIES } from '../num/money.ts';
+import { UNITS } from '../num/unit.ts';
+import { IsoDateSchema, SourceRefSchema } from '../provenance.ts';
+import { RESOURCES } from './resources.ts';
+
+const Id = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'kebab-case の ID');
+const NonNegative = z.number().finite().nonnegative();
+const Positive = z.number().finite().positive();
+const SourceIds = z.array(z.string()).default([]);
+
+/** プラットフォームの前提として人が読める 1 文（prd/01 §8.1）。見積の説明とゲームのイベントで同じ文を使う。 */
+const Premise = z.string().min(1);
+
+export const OVERAGE_BEHAVIORS = [
+  'bill', // 超過料金
+  'block', // リクエスト・操作が失敗する
+  'throttle', // 遅くなる
+  'upgrade-required', // 上位プランが必須
+] as const;
+export const OverageBehaviorSchema = z.enum(OVERAGE_BEHAVIORS);
+
+/** 公式の文書が食い違う箇所で採用した解釈（D-10）。計算は採用した解釈だけで行う。 */
+export const InterpretationSchema = z.object({
+  adopted: z.string(),
+  rejected: z.array(z.object({ reading: z.string(), reason: z.string() })),
+  verifiedAt: IsoDateSchema.optional(),
+});
+
+const TierSchema = z.object({
+  upTo: Positive.nullable(),
+  unitPrice: NonNegative,
+});
+
+function tiersAreOrdered(
+  tiers: { upTo: number | null }[],
+  ctx: z.RefinementCtx,
+) {
+  tiers.forEach((t, i) => {
+    const last = i === tiers.length - 1;
+    if (last && t.upTo !== null) {
+      ctx.addIssue({ code: 'custom', message: '最後の段の upTo は null' });
+    }
+    if (!last && t.upTo === null) {
+      ctx.addIssue({ code: 'custom', message: '最後以外の段の upTo は数値' });
+    }
+    const prev = tiers[i - 1]?.upTo;
+    if (i > 0 && t.upTo !== null && prev != null && t.upTo <= prev) {
+      ctx.addIssue({ code: 'custom', message: '段の upTo は単調増加' });
+    }
+  });
+}
+
+export const PricingSchema = z.discriminatedUnion('model', [
+  /** `per` 単位あたり `unitPrice`（例: per 1_000_000・unitPrice 0.3 は 100 万件あたり 0.3）。 */
+  z.object({ model: z.literal('flat'), per: Positive, unitPrice: NonNegative }),
+  /** 段ごとに別の単価（graduated）。 */
+  z
+    .object({
+      model: z.literal('tiered'),
+      per: Positive,
+      tiers: z.array(TierSchema).min(1),
+    })
+    .superRefine((v, ctx) => tiersAreOrdered(v.tiers, ctx)),
+  /** 到達した段の単価を全量にかける。 */
+  z
+    .object({
+      model: z.literal('volume'),
+      per: Positive,
+      tiers: z.array(TierSchema).min(1),
+    })
+    .superRefine((v, ctx) => tiersAreOrdered(v.tiers, ctx)),
+  /** 料金を取得していない（D-09）。明細は金額なしで残り、合計は下限になる。 */
+  z.object({ model: z.literal('unpriced'), note: z.string() }),
+]);
+export type Pricing = z.infer<typeof PricingSchema>;
+
+export const RoundingSchema = z.union([
+  z.object({
+    granularity: Positive,
+    /** event: 1 回ごとに切り上げ（全件が平均値をとると仮定）/ period: 期間の課金対象の合計を切り上げ */
+    scope: z.enum(['event', 'period']),
+  }),
+  /** 丸めが料金表に書かれていない。エンジンは丸めなしで計算し、仮定を使ったことを残す。 */
+  z.literal('not-stated'),
+]);
+
+export const MeterSchema = z.object({
+  id: Id,
+  aliases: z.array(z.string()).optional(), // 名称変更（Edge Requests → CDN Requests など）
+  resource: z.enum(RESOURCES),
+  unit: z.enum(UNITS),
+  allowancePool: Id.optional(),
+  rounding: RoundingSchema.optional(),
+  pricing: PricingSchema,
+  /** 無料枠・込み分を超えたときの挙動。既定は bill。 */
+  onExceed: OverageBehaviorSchema.default('bill'),
+  /** 利用者が構成で超過時の挙動を選べる（予算での一時停止など）。 */
+  configurableOnExceed: z.array(OverageBehaviorSchema).optional(),
+  regional: z
+    .array(z.object({ region: z.string(), pricing: PricingSchema }))
+    .optional(),
+  interpretation: InterpretationSchema.optional(),
+  premise: Premise.optional(),
+  sourceIds: SourceIds,
+});
+export type Meter = z.infer<typeof MeterSchema>;
+
+export const AllowancePoolSchema = z.object({
+  id: Id,
+  quantity: NonNegative,
+  unit: z.enum(UNITS),
+  period: z.enum(['month', 'day']),
+  /** 共有の単位。MVP の計算は account と node を扱う（project は gap）。 */
+  scope: z.enum(['account', 'project', 'node']),
+  premise: Premise.optional(),
+  sourceIds: SourceIds,
+});
+export type AllowancePool = z.infer<typeof AllowancePoolSchema>;
+
+export const BaseFeeSchema = z.object({
+  amount: NonNegative,
+  per: z.enum(['month', 'hour']),
+  monthlyCap: NonNegative.optional(),
+  scope: z.enum(['account', 'node']),
+  perSeat: z.boolean().default(false),
+});
+
+export const CreditSchema = z.object({
+  id: Id,
+  amount: NonNegative,
+  /** 当てる先。'all-usage' は同じプランの従量の明細すべて。 */
+  appliesTo: z.union([
+    z.literal('all-usage'),
+    z.object({ meterIds: z.array(Id).min(1) }),
+  ]),
+  period: z.literal('month').default('month'),
+  interpretation: InterpretationSchema.optional(),
+  sourceIds: SourceIds,
+});
+
+export const LimitSchema = z.object({
+  id: Id,
+  value: NonNegative,
+  unit: z.enum(UNITS),
+  scope: z.enum(['request', 'node', 'account', 'day', 'month']),
+  onExceed: OverageBehaviorSchema,
+  premise: Premise.optional(),
+  sourceIds: SourceIds,
+});
+
+/** 数量でない利用資格（D-09。Vercel Hobby の商用利用不可など）。 */
+export const EligibilitySchema = z.object({
+  id: Id,
+  requirement: z.enum(['non-commercial']),
+  premise: Premise,
+  sourceIds: SourceIds,
+});
+
+export const PlanSchema = z.object({
+  id: Id,
+  service: Id,
+  name: z.string(),
+  baseFee: BaseFeeSchema.optional(),
+  meters: z.array(MeterSchema),
+  credits: z.array(CreditSchema).default([]),
+  limits: z.array(LimitSchema).default([]),
+  eligibility: z.array(EligibilitySchema).default([]),
+  notes: z.array(z.string()).default([]), // 支払いの条件など（D-14）
+  sourceIds: SourceIds,
+});
+export type Plan = z.infer<typeof PlanSchema>;
+
+export const PriceBookSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    provider: Id,
+    version: z.string().min(1),
+    status: z.enum(['official', 'fictional']),
+    currency: z.enum(CURRENCIES),
+    taxIncluded: z.boolean(),
+    retrievedAt: IsoDateSchema,
+    sources: z.record(z.string(), SourceRefSchema).default({}),
+    allowancePools: z.array(AllowancePoolSchema).default([]),
+    plans: z.array(PlanSchema).min(1),
+    /** 施行日つきの予告（D-09）。MVP は記録だけで、計算には使わない（gap）。 */
+    scheduledChanges: z
+      .array(
+        z.object({
+          effectiveFrom: IsoDateSchema,
+          description: z.string(),
+          sourceIds: SourceIds,
+        }),
+      )
+      .default([]),
+    notes: z.array(z.string()).default([]),
+  })
+  .superRefine((book, ctx) => {
+    const fictionalId = book.provider.startsWith('fictional-');
+    if (fictionalId !== (book.status === 'fictional')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['status'],
+        message:
+          'provider が fictional- で始まるときだけ status: fictional（それ以外は official）',
+      });
+    }
+    const pools = new Map(book.allowancePools.map((p) => [p.id, p]));
+    const requireSources = (ids: string[], path: (string | number)[]) => {
+      if (book.status !== 'official') return;
+      if (ids.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path,
+          message: 'official のデータには出典が必要',
+        });
+      }
+      for (const id of ids) {
+        if (!(id in book.sources)) {
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: `出典 ${id} が sources にない`,
+          });
+        }
+      }
+    };
+    const seenPlans = new Set<string>();
+    book.plans.forEach((plan, pi) => {
+      if (seenPlans.has(plan.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['plans', pi, 'id'],
+          message: `プランの ID が重複: ${plan.id}`,
+        });
+      }
+      seenPlans.add(plan.id);
+      requireSources(plan.sourceIds, ['plans', pi, 'sourceIds']);
+      const seenMeters = new Set<string>();
+      plan.meters.forEach((m, mi) => {
+        const path = ['plans', pi, 'meters', mi];
+        if (seenMeters.has(m.id)) {
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: `メーターの ID が重複: ${m.id}`,
+          });
+        }
+        seenMeters.add(m.id);
+        if (m.pricing.model !== 'unpriced') {
+          requireSources(m.sourceIds, [...path, 'sourceIds']);
+        }
+        if (m.allowancePool) {
+          const pool = pools.get(m.allowancePool);
+          if (!pool) {
+            ctx.addIssue({
+              code: 'custom',
+              path,
+              message: `無料枠のプール ${m.allowancePool} がない`,
+            });
+          } else if (pool.unit !== m.unit) {
+            ctx.addIssue({
+              code: 'custom',
+              path,
+              message: `プール ${pool.id} の単位（${pool.unit}）とメーターの単位（${m.unit}）が違う`,
+            });
+          }
+        }
+      });
+      plan.credits.forEach((c, ci) => {
+        if (c.appliesTo !== 'all-usage') {
+          for (const id of c.appliesTo.meterIds) {
+            if (!seenMeters.has(id)) {
+              ctx.addIssue({
+                code: 'custom',
+                path: ['plans', pi, 'credits', ci],
+                message: `クレジットの対象メーター ${id} がない`,
+              });
+            }
+          }
+        }
+      });
+      plan.limits.forEach((l, li) =>
+        requireSources(l.sourceIds, ['plans', pi, 'limits', li, 'sourceIds']),
+      );
+    });
+    book.allowancePools.forEach((p, i) =>
+      requireSources(p.sourceIds, ['allowancePools', i, 'sourceIds']),
+    );
+  });
+
+export type PriceBookInput = z.input<typeof PriceBookSchema>;
+export type PriceBook = z.output<typeof PriceBookSchema>;
+
+export class FictionalPriceBookError extends Error {
+  constructor(provider: string) {
+    super(`架空の料金データ（${provider}）は本番では読み込めない`);
+    this.name = 'FictionalPriceBookError';
+  }
+}
+
+/**
+ * 料金データを検証して読み込む。本番の UI は allowFictional: false で呼び、架空の料金を拒否する（prd/05 §4）。
+ */
+export function parsePriceBook(
+  raw: unknown,
+  options: { allowFictional: boolean },
+): PriceBook {
+  const book = PriceBookSchema.parse(raw);
+  if (book.status === 'fictional' && !options.allowFictional) {
+    throw new FictionalPriceBookError(book.provider);
+  }
+  return book;
+}

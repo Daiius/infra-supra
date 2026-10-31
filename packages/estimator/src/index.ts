@@ -4,3 +4,6 @@ export * from './num/arith.ts';
 export * from './num/unit.ts';
 export * from './num/money.ts';
 export * from './provenance.ts';
+export * from './pricing/resources.ts';
+export * from './pricing/schema.ts';
+export * from './pricing/price.ts';
