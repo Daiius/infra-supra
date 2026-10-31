@@ -294,7 +294,14 @@ function VictoryCelebration({ state }: { state: GameState }) {
       document.activeElement.blur();
     d.showModal();
   }, []);
-  const goal = scenarioOf(state).goal;
+  // 合否の 3 つ（所持金・満足度の平均・止まった月）だけを、結果の画面と同じメーターで出す
+  const meters = useMemo(() => {
+    const cfPaid = comparisonRows(state).find((r) => r.id === 'cf-paid')!;
+    return resultMeters(state, goalChecks(state), axesOf(state), {
+      label: cfPaid.name,
+      axes: cfPaid.axes,
+    }).filter((m) => m.status !== 'reference');
+  }, [state]);
   return (
     <>
       {open && (
@@ -309,40 +316,38 @@ function VictoryCelebration({ state }: { state: GameState }) {
             setAfterglow(!reduced && engine.particles.length > 0);
           }}
         >
-          {!reduced && (
-            <FireworksCanvas
-              engine={engine}
-              spawn
-              className="pointer-events-none absolute inset-0 h-full w-full"
-            />
-          )}
-          <div className="modal-box relative z-10 max-w-md">
-            <h2 id="victory-title" className="text-2xl font-bold">
-              ✓ 目標達成
-            </h2>
-            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-              <dt className="opacity-70">所持金</dt>
-              <dd className="tabular-nums">
-                {usd(state.cash)}（目標 {usd(goal.cash)} 以上）
-              </dd>
-              <dt className="opacity-70">満足度の平均</dt>
-              <dd className="tabular-nums">
-                {averageSatisfaction(state.history).toFixed(2)}（目標{' '}
-                {goal.satisfaction} 以上）
-              </dd>
-              <dt className="opacity-70">止まった月</dt>
-              <dd className="tabular-nums">
-                {state.outages} 回（上限 {goal.maxOutageMonths} 回）
-              </dd>
-            </dl>
-            <div className="modal-action">
+          <div className="modal-box relative z-10 max-w-lg overflow-hidden p-0">
+            {/* 成功の色の帯で見出しを強調する（色だけにせず ✓ とラベルを添える） */}
+            <div className="bg-success px-6 py-5 text-success-content">
+              <h2 id="victory-title" className="text-3xl font-bold">
+                ✓ 目標達成
+              </h2>
+              <p className="mt-1 text-sm">
+                {state.end!.month} か月の運営で、3 つの条件をすべて満たした
+              </p>
+            </div>
+            <div className="space-y-4 px-6 pt-5">
+              {/* 結果の画面と同じメーター（目標・上限の目盛りつき）。開いたときに伸びる（動きを減らす設定では即時） */}
+              {meters.map((m) => (
+                <Meter key={m.label} {...m} size="lg" />
+              ))}
+            </div>
+            <div className="modal-action px-6 pb-6">
               <form method="dialog">
-                <button className="btn btn-primary" autoFocus>
+                <button className="btn btn-success" autoFocus>
                   閉じて結果を見る
                 </button>
               </form>
             </div>
           </div>
+          {/* 花火はダイアログより前面に描く（操作は妨げない） */}
+          {!reduced && (
+            <FireworksCanvas
+              engine={engine}
+              spawn
+              className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+            />
+          )}
           <form method="dialog" className="modal-backdrop">
             <button aria-label="閉じる" tabIndex={-1}>
               閉じる

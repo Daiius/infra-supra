@@ -477,6 +477,7 @@ export function Meter({
   status,
   statusText,
   note,
+  size = 'md',
 }: {
   label: string;
   valueText: string;
@@ -489,6 +490,8 @@ export function Meter({
   statusText: string;
   /** 目標までの差・向きの説明など。 */
   note?: string;
+  /** lg: 値を大きく出す（目標達成のダイアログ）。 */
+  size?: 'md' | 'lg';
 }) {
   const pos = (v: number) => `${(Math.max(0, Math.min(v, max)) / max) * 100}%`;
   const c = METER_FILL[status];
@@ -506,7 +509,12 @@ export function Meter({
         >
           {label}
         </span>
-        <span style={{ color: 'var(--text-primary)' }}>{valueText}</span>
+        <span
+          style={{ color: 'var(--text-primary)' }}
+          className={size === 'lg' ? 'text-2xl font-bold tabular-nums' : ''}
+        >
+          {valueText}
+        </span>
         <span
           className="flex items-center gap-1 text-xs"
           style={{ color: 'var(--text-secondary)' }}
