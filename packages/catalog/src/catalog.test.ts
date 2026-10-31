@@ -63,3 +63,53 @@ describe('構成', () => {
     },
   );
 });
+
+describe('プラットフォームの前提（金額ではなく、当たったかどうかだけを見る）', () => {
+  const books = loadPriceBooks();
+  const premises = (stack: (typeof MVP_STACKS)[number], pv: number) =>
+    estimate({ workload: articleCommunity(pv), architecture: stack, books })
+      .premises;
+  const [cfFree, cfPaid, hobby, , vps] = MVP_STACKS as [
+    (typeof MVP_STACKS)[number],
+    (typeof MVP_STACKS)[number],
+    (typeof MVP_STACKS)[number],
+    (typeof MVP_STACKS)[number],
+    (typeof MVP_STACKS)[number],
+  ];
+
+  it('Cloudflare Free は量によらず CPU の上限に当たる（SSR が 15 ms）', () => {
+    const p = premises(cfFree, 10_000).find((x) =>
+      x.id.includes('cpu-ms-per-request'),
+    )!;
+    expect(p.hit).toBe(true);
+    expect(p.effect).toBe('block');
+  });
+
+  it('Cloudflare Paid では CPU の上限の前提は出ない（Paid の上限は別）', () => {
+    expect(
+      premises(cfPaid, 10_000).some((x) => x.id.includes('cpu-ms-per-request')),
+    ).toBe(false);
+  });
+
+  it('Vercel Hobby は商用のシナリオで利用資格に当たる', () => {
+    expect(
+      premises(hobby, 10_000).some((x) => x.effect === 'policy' && x.hit),
+    ).toBe(true);
+  });
+
+  it('VPS は 100 万 PV では何にも当たらず、固定費だけ', () => {
+    const r = estimate({
+      workload: articleCommunity(1_000_000),
+      architecture: vps,
+      books,
+    });
+    expect(r.premises.filter((x) => x.hit)).toEqual([]);
+    expect(r.bill.lines.filter((l) => l.amount)).toHaveLength(1);
+  });
+
+  it('止まる前提が先、次に近い順に並ぶ', () => {
+    const ps = premises(cfFree, 1_000_000);
+    const firstNotHit = ps.findIndex((x) => !x.hit);
+    expect(ps.slice(0, firstNotHit).every((x) => x.hit)).toBe(true);
+  });
+});

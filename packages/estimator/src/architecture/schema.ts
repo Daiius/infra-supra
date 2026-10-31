@@ -65,6 +65,10 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     dbCpuMsPerQuery: NonNeg,
     imageTransformCpuMs: NonNeg,
     otherDiskGB: NonNeg.default(0),
+    /** 共有回線のうち実際に使える割合（仮定）。 */
+    lineUsable: Ratio.default(0.5),
+    /** 劣化させずに使える CPU 使用率の上限（仮定）。 */
+    cpuUtilMax: Ratio.default(0.7),
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;

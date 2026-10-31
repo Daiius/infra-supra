@@ -236,6 +236,7 @@ export const cloudflare: PriceBookInput = {
       limits: [
         {
           id: 'cpu-ms-per-request',
+          measure: 'cpu-ms-per-request',
           value: 10,
           unit: 'ms',
           scope: 'request',
@@ -246,6 +247,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'd1-db-size',
+          measure: 'storage-gb',
           value: 0.5,
           unit: 'gb',
           scope: 'node',
@@ -323,6 +325,7 @@ export const cloudflare: PriceBookInput = {
       limits: [
         {
           id: 'd1-db-size',
+          measure: 'storage-gb',
           value: 10,
           unit: 'gb',
           scope: 'node',

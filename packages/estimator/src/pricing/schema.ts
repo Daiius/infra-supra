@@ -140,8 +140,16 @@ export const CreditSchema = z.object({
   sourceIds: SourceIds,
 });
 
+/** 制限が何を測るか（容量の判定で、資源シミュレーションのどの値と比べるか。prd/01 §5.4）。 */
+export const LIMIT_MEASURES = [
+  'cpu-ms-per-request', // 1 リクエストあたりの CPU 時間の最大
+  'storage-gb', // ノードの保存量
+  'peak-concurrency', // ピーク時間帯の同時接続・同時実行
+] as const;
+
 export const LimitSchema = z.object({
   id: Id,
+  measure: z.enum(LIMIT_MEASURES),
   value: NonNegative,
   unit: z.enum(UNITS),
   scope: z.enum(['request', 'node', 'account', 'day', 'month']),

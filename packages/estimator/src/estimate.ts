@@ -11,6 +11,7 @@ import {
 } from './pricing/price.ts';
 import type { PriceBook } from './pricing/schema.ts';
 import type { ArchitectureInput } from './architecture/schema.ts';
+import { assessPremises, type PlatformPremise } from './premises.ts';
 import { simulateResources, type Simulation } from './simulate/simulate.ts';
 import { resolveWorkload } from './workload/resolve.ts';
 import type { WorkloadInput } from './workload/schema.ts';
@@ -29,6 +30,7 @@ export type EstimateResult = {
   usage: MeterUsage[];
   unmetered: UnmeteredResource[];
   bill: Bill;
+  premises: PlatformPremise[];
 };
 
 export function toMeterUsage(
@@ -127,5 +129,11 @@ export function estimate(input: {
     usage,
     context: { commercial: workload.input.commercial },
   });
-  return { simulation, usage, unmetered, bill };
+  const premises = assessPremises({
+    simulation,
+    usage,
+    bill,
+    books: input.books,
+  });
+  return { simulation, usage, unmetered, bill, premises };
 }

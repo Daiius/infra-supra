@@ -12,3 +12,4 @@ export * from './workload/resolve.ts';
 export * from './architecture/schema.ts';
 export * from './simulate/simulate.ts';
 export * from './estimate.ts';
+export * from './premises.ts';

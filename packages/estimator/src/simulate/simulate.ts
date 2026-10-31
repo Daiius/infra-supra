@@ -30,6 +30,10 @@ export type NodeUsage = {
   resources: Partial<Record<ResourceKey, number>>;
   /** 1 回ごとの丸め（cpu-ms など）に使う件数。 */
   events: number;
+  /** 通ったリクエストの 1 件あたり CPU の最大（ms。制限 cpu-ms-per-request の判定用）。 */
+  maxCpuMsPerRequest: number;
+  /** 接続・実行を保持している時間の合計（ms・月。ピークの同時数の判定用）。 */
+  busyMs: number;
   host?: HostLoad;
 };
 
@@ -72,6 +76,8 @@ function consume(
       return { count: miss, perRequest: p };
     }
     case 'function': {
+      if (n > 0) u.maxCpuMsPerRequest = Math.max(u.maxCpuMsPerRequest, p.cpuMs);
+      u.busyMs += n * p.wallMs;
       add(u, 'cpu-ms', n * p.cpuMs);
       add(
         u,
@@ -91,11 +97,13 @@ function consume(
       return f;
     }
     case 'sql-db': {
+      u.busyMs += n * p.wallMs;
       add(u, 'rows-read', n * p.rowsRead);
       add(u, 'rows-written', n * p.rowsWritten);
       return f;
     }
     case 'managed-db': {
+      u.busyMs += n * p.wallMs; // 関数が接続を持っている間（壁時計時間）
       add(
         u,
         'egress-gb',
@@ -174,7 +182,13 @@ export function simulateResources(
     { kb: number; cpuMs: number; queries: number; transforms: number }
   >();
   for (const n of architecture.nodes) {
-    nodes[n.id] = { nodeId: n.id, resources: {}, events: 0 };
+    nodes[n.id] = {
+      nodeId: n.id,
+      resources: {},
+      events: 0,
+      maxCpuMsPerRequest: 0,
+      busyMs: 0,
+    };
     hostAcc.set(n.id, { kb: 0, cpuMs: 0, queries: 0, transforms: 0 });
     staticUsage(n, nodes[n.id]!, workload);
   }

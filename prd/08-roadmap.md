@@ -28,7 +28,7 @@ Phase 1 が終わった時点で「CLI で見積を出して内訳を読める�
 | P1-6 | Architecture | グラフの型・構成の検証・BillingAccount・3 つの架空スタック | P1-2 （最初の形・済。クラスごとの経路） |
 | P1-6b | フレームワーク | FrameworkProfile・BuildOutput・DeployTarget の型と `compileBuildOutput`。架空のフレームワークで ISR・ミドルウェアの件数を確かめるテスト | P1-3, P1-6 |
 | P1-7 | 資源シミュレーション | ComponentKind（cdn・serverless-function・serverless-sql・managed-postgres・object-storage・vps・process）と 05 §3 のテスト | P1-3, P1-6 （最初の形・済） |
-| P1-8 | 容量の判定 | Limit の判定・VPS の使用率・LimitBreach の合流 | P1-5, P1-7 |
+| P1-8 | 容量の判定 | Limit の判定・VPS の使用率・LimitBreach の合流 | P1-5, P1-7 （最初の形・済。`assessPremises`：プール・制限・ホストの容量・利用資格を前提の 1 文で出す） |
 | P1-S | ゲームのターンのスパイク | P1-5・P1-7 の最初の形を使い、月ごとの成長・スパイク・行動（画像圧縮・プラン変更）で「前提に当たる瞬間」がイベントとして面白いかを確かめる（使い捨て・`spikes/`） | P1-5, P1-7 |
 | P1-9 | Estimate | 全体の組み立て・スナップショット・直列化・05 §5〜6 の golden テスト | P1-5, P1-7, P1-8 |
 | P1-10 | 実在の料金データ | Cloudflare（Workers・D1・R2・Pages）・Vercel（Hobby・Pro）・Supabase（Free・Pro）・さくらの VPS 2GB（D-13）・KV・Images（スパイクで一次取得済み。catalog の形式へ移して出典を付け直す）。出典 URL と取得日つき | P1-4 （済: Cloudflare・Vercel・Supabase・さくらの VPS。catalog/src/providers） |

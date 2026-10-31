@@ -75,6 +75,7 @@ export const supabase: PriceBookInput = {
       limits: [
         {
           id: 'db-size',
+          measure: 'storage-gb',
           value: 0.5,
           unit: 'gb',
           scope: 'node',
@@ -134,6 +135,7 @@ export const supabase: PriceBookInput = {
       limits: [
         {
           id: 'pooler-connections',
+          measure: 'peak-concurrency',
           value: 200,
           unit: 'count',
           scope: 'node',
