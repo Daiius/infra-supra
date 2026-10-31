@@ -14,5 +14,15 @@
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --deemphasis: #c3c2b7;
+  /* 状態の色（palette.md の status。系列の色と混ぜない。必ず印とラベルを添える） */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
   --status-critical: #d03b3b;
+  /* メーターの下地（同じ系統の薄い段） */
+  --status-good-track: #d3eed3;
+  --status-warning-track: #feefd0;
+  --status-critical-track: #f5d7d7;
+  --series-1-track: #d6e5f7;
+  /* 目盛り（目標・上限・基準の位置） */
+  --marker: #52514e;
 }

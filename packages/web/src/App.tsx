@@ -33,7 +33,7 @@ import {
   type Stage,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
-import { compact, LineChart, Sparkline } from './charts.tsx';
+import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -629,6 +629,7 @@ function Result({ state }: { state: GameState }) {
     },
   ];
   const e = reflection.effort;
+  const meters = resultMeters(state, checks, axes, baselines[0]!);
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body gap-4">
@@ -639,184 +640,273 @@ function Result({ state }: { state: GameState }) {
             {state.outages} 回
           </span>
         </div>
-        <div>
-          <h3 className="mb-1 font-bold">合否の条件</h3>
-          <ul className="space-y-1 text-sm">
-            {checks.map((c) => (
-              <li key={c.label} className="flex items-center gap-2">
-                <span
-                  className={`badge badge-sm ${c.ok ? 'badge-success' : 'badge-error'}`}
-                >
-                  {c.ok ? '達成' : '未達'}
-                </span>
-                {c.label} {c.value}（目標 {c.target}）
-              </li>
-            ))}
-          </ul>
+        <div className="space-y-3">
+          {meters.map((m) => (
+            <Meter key={m.label} {...m} />
+          ))}
         </div>
-        <div>
-          <h3 className="mb-1 font-bold">
-            軸ごとの成績
-            <span className="ml-2 text-sm font-normal opacity-70">
+        <details className="collapse collapse-arrow bg-base-200">
+          <summary className="collapse-title font-bold">
+            基準プレイとの比較の表（軸ごとの成績・満足度の要素）
+          </summary>
+          <div className="collapse-content">
+            <p className="mb-1 text-sm opacity-70">
               1 つの点数にはしない。下の行は同じシードの基準プレイ（目盛り）
-            </span>
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="table table-sm">
-              <thead>
-                <tr>
-                  <th className="whitespace-nowrap">戦略</th>
-                  {rows.map((r) => (
-                    <th key={r.label} className="whitespace-nowrap text-right">
-                      {r.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { label: 'あなた', title: 'あなたのプレイ', axes, you: true },
-                  ...baselines.map((b) => ({ ...b, you: false })),
-                ].map((p) => (
-                  <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
-                    <td className="whitespace-nowrap" title={p.title}>
-                      {p.label}
-                    </td>
+            </p>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th className="whitespace-nowrap">戦略</th>
                     {rows.map((r) => (
-                      <td
+                      <th
                         key={r.label}
-                        className={`whitespace-nowrap text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
+                        className="whitespace-nowrap text-right"
                       >
-                        {r.get(p.axes)}
-                      </td>
+                        {r.label}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <h4 className="mt-3 mb-1 text-sm font-semibold">
-            満足度の要素の平均（良い 1・普通 0.5・悪い 0）
-          </h4>
-          <div className="overflow-x-auto">
-            <table className="table table-xs">
-              <thead>
-                <tr>
-                  <th className="whitespace-nowrap">戦略</th>
-                  {ELEMENTS.map((el) => (
-                    <th key={el} className="whitespace-nowrap text-right">
-                      {ELEMENT_LABEL[el]}
-                    </th>
+                </thead>
+                <tbody>
+                  {[
+                    {
+                      label: 'あなた',
+                      title: 'あなたのプレイ',
+                      axes,
+                      you: true,
+                    },
+                    ...baselines.map((b) => ({ ...b, you: false })),
+                  ].map((p) => (
+                    <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
+                      <td className="whitespace-nowrap" title={p.title}>
+                        {p.label}
+                      </td>
+                      {rows.map((r) => (
+                        <td
+                          key={r.label}
+                          className={`whitespace-nowrap text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
+                        >
+                          {r.get(p.axes)}
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { label: 'あなた', title: 'あなたのプレイ', axes, you: true },
-                  ...baselines.map((b) => ({ ...b, you: false })),
-                ].map((p) => (
-                  <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
-                    <td className="whitespace-nowrap" title={p.title}>
-                      {p.label}
-                    </td>
+                </tbody>
+              </table>
+            </div>
+            <h4 className="mt-3 mb-1 text-sm font-semibold">
+              満足度の要素の平均（良い 1・普通 0.5・悪い 0）
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="table table-xs">
+                <thead>
+                  <tr>
+                    <th className="whitespace-nowrap">戦略</th>
                     {ELEMENTS.map((el) => (
-                      <td
-                        key={el}
-                        className={`text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
-                      >
-                        {p.axes.elements[el].toFixed(2)}
-                      </td>
+                      <th key={el} className="whitespace-nowrap text-right">
+                        {ELEMENT_LABEL[el]}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <ul className="mt-2 list-disc pl-5 text-xs opacity-70">
-            {BASELINES.map((b) => (
-              <li key={b.id}>
-                {b.short ?? b.label}: {b.label}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <h3 className="mb-1 font-bold">当たった前提・近づいた前提</h3>
-            {reflection.premises.length ? (
-              <ul className="space-y-1 text-sm">
-                {reflection.premises.map((p) => (
-                  <li key={p.text}>
-                    <span
-                      className={`badge badge-sm mr-1 ${p.hit ? 'badge-error' : 'badge-info'}`}
-                    >
-                      {p.month} か月目・{p.hit ? '当たった' : '近づいた'}
-                    </span>
-                    {p.text}
-                    {p.action && (
-                      <span className="block text-xs opacity-60">
-                        その月の選択: {p.action}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm opacity-70">なし</p>
-            )}
-            {earlier.length > 0 && (
-              <>
-                <h3 className="mt-3 mb-1 font-bold">
-                  見込みより早く超えた前提
-                </h3>
-                <ul className="list-disc pl-5 text-sm">
-                  {earlier.map((t) => (
-                    <li key={t.id}>{t.text}</li>
+                </thead>
+                <tbody>
+                  {[
+                    {
+                      label: 'あなた',
+                      title: 'あなたのプレイ',
+                      axes,
+                      you: true,
+                    },
+                    ...baselines.map((b) => ({ ...b, you: false })),
+                  ].map((p) => (
+                    <tr key={p.label} className={p.you ? 'font-semibold' : ''}>
+                      <td className="whitespace-nowrap" title={p.title}>
+                        {p.label}
+                      </td>
+                      {ELEMENTS.map((el) => (
+                        <td
+                          key={el}
+                          className={`text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
+                        >
+                          {p.axes.elements[el].toFixed(2)}
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </ul>
-              </>
-            )}
-          </div>
-          <div>
-            <h3 className="mb-1 font-bold">満足度が「悪い」になった月</h3>
-            {reflection.badMonths.length ? (
-              <ul className="space-y-1 text-sm">
-                {reflection.badMonths.map((b, i) => (
-                  <li key={i}>
-                    {b.month} か月目・{b.label}
-                    <span className="ml-1 text-xs opacity-70">{b.reason}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm opacity-70">なし</p>
-            )}
-            <h3 className="mt-3 mb-1 font-bold">
-              手間の使い道（合計 {e.total}）
-            </h3>
-            <ul className="text-sm">
-              {[
-                ['自前運用の維持', e.upkeep],
-                ['出来事への対応', e.interrupt],
-                ['乗り換え', e.migration],
-                ['行動（設定・最適化）', e.actions],
-                ['機能開発', e.feature],
-              ].map(([label, v]) => (
-                <li key={label as string} className="flex">
-                  {label}
-                  <span className="ml-auto tabular-nums">
-                    {v}（
-                    {e.total ? (((v as number) / e.total) * 100).toFixed(0) : 0}
-                    %）
-                  </span>
+                </tbody>
+              </table>
+            </div>
+            <ul className="mt-2 list-disc pl-5 text-xs opacity-70">
+              {BASELINES.map((b) => (
+                <li key={b.id}>
+                  {b.short ?? b.label}: {b.label}
                 </li>
               ))}
             </ul>
           </div>
-        </div>
+        </details>
+        <details className="collapse collapse-arrow bg-base-200">
+          <summary className="collapse-title font-bold">
+            振り返り: 当たった前提・満足度が悪かった月・手間の内訳
+          </summary>
+          <div className="collapse-content">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <h3 className="mb-1 font-bold">当たった前提・近づいた前提</h3>
+                {reflection.premises.length ? (
+                  <ul className="space-y-1 text-sm">
+                    {reflection.premises.map((p) => (
+                      <li key={p.text}>
+                        <span
+                          className={`badge badge-sm mr-1 ${p.hit ? 'badge-error' : 'badge-info'}`}
+                        >
+                          {p.month} か月目・{p.hit ? '当たった' : '近づいた'}
+                        </span>
+                        {p.text}
+                        {p.action && (
+                          <span className="block text-xs opacity-60">
+                            その月の選択: {p.action}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm opacity-70">なし</p>
+                )}
+                {earlier.length > 0 && (
+                  <>
+                    <h3 className="mt-3 mb-1 font-bold">
+                      見込みより早く超えた前提
+                    </h3>
+                    <ul className="list-disc pl-5 text-sm">
+                      {earlier.map((t) => (
+                        <li key={t.id}>{t.text}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+              <div>
+                <h3 className="mb-1 font-bold">満足度が「悪い」になった月</h3>
+                {reflection.badMonths.length ? (
+                  <ul className="space-y-1 text-sm">
+                    {reflection.badMonths.map((b, i) => (
+                      <li key={i}>
+                        {b.month} か月目・{b.label}
+                        <span className="ml-1 text-xs opacity-70">
+                          {b.reason}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm opacity-70">なし</p>
+                )}
+                <h3 className="mt-3 mb-1 font-bold">
+                  手間の使い道（合計 {e.total}）
+                </h3>
+                <ul className="text-sm">
+                  {[
+                    ['自前運用の維持', e.upkeep],
+                    ['出来事への対応', e.interrupt],
+                    ['乗り換え', e.migration],
+                    ['行動（設定・最適化）', e.actions],
+                    ['機能開発', e.feature],
+                  ].map(([label, v]) => (
+                    <li key={label as string} className="flex">
+                      {label}
+                      <span className="ml-auto tabular-nums">
+                        {v}（
+                        {e.total
+                          ? (((v as number) / e.total) * 100).toFixed(0)
+                          : 0}
+                        %）
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   );
+}
+
+/** 結果の上部のメーター（合否の条件 3 つ + 基準プレイと比べる 2 つ）。 */
+function resultMeters(
+  state: GameState,
+  checks: ReturnType<typeof goalChecks>,
+  axes: Axes,
+  reference: { label: string; axes: Axes },
+): Parameters<typeof Meter>[0][] {
+  const ok = (label: string) => checks.find((c) => c.label === label)!.ok;
+  const pass = (good: boolean) =>
+    good
+      ? { status: 'good' as const, statusText: '✓ 達成' }
+      : { status: 'critical' as const, statusText: '✗ 未達' };
+  const goal = GAME.goal;
+  const avg = axes.satisfaction;
+  const limit = goal.maxOutageMonths;
+  const ref = reference.axes;
+  const vsRef = (mine: number, theirs: number) =>
+    theirs > 0 ? `基準の ${Math.round((mine / theirs) * 100)}%` : '';
+  return [
+    {
+      label: '所持金',
+      valueText: usd(state.cash),
+      value: state.cash,
+      max: Math.max(state.cash, goal.cash) * 1.15,
+      marker: { value: goal.cash, label: `目標 ${usd(goal.cash)}` },
+      ...pass(ok('所持金')),
+      ...(ok('所持金') ? {} : { note: `あと ${usd(goal.cash - state.cash)}` }),
+    },
+    {
+      label: '満足度の平均',
+      valueText: avg.toFixed(2),
+      value: avg,
+      max: 1,
+      marker: { value: goal.satisfaction, label: `目標 ${goal.satisfaction}` },
+      ...pass(ok('満足度の平均')),
+      ...(ok('満足度の平均')
+        ? {}
+        : { note: `あと ${(goal.satisfaction - avg).toFixed(2)}` }),
+    },
+    {
+      label: '止まった月',
+      valueText: `${state.outages} 回`,
+      value: state.outages,
+      max: Math.max(state.outages, limit + 1) + 1,
+      marker: { value: limit, label: `上限 ${limit} 回` },
+      ...pass(ok('止まった月')),
+      note: ok('止まった月')
+        ? '少ないほど良い（棒が上限の線より左なら達成）'
+        : `少ないほど良い。上限を ${state.outages - limit} 回超えた`,
+    },
+    {
+      label: '最終的な規模（月 PV）',
+      valueText: compact(Math.round(axes.finalPV)),
+      value: axes.finalPV,
+      max: Math.max(axes.finalPV, ref.finalPV) * 1.15,
+      marker: { value: ref.finalPV, label: `基準: ${reference.label}` },
+      status: 'reference',
+      statusText: '○ 参考（合否には入らない）',
+      note: vsRef(axes.finalPV, ref.finalPV),
+    },
+    {
+      label: '機能開発に回せた手間',
+      valueText: `${axes.featurePoints}（${(axes.featureShare * 100).toFixed(0)}%）`,
+      value: axes.featurePoints,
+      max: Math.max(axes.featurePoints, ref.featurePoints) * 1.15,
+      marker: { value: ref.featurePoints, label: `基準: ${reference.label}` },
+      status: 'reference',
+      statusText: '○ 参考（合否には入らない）',
+      note: vsRef(axes.featurePoints, ref.featurePoints),
+    },
+  ];
 }
 
 function History({ history }: { history: MonthReport[] }) {

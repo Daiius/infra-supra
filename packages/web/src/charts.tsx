@@ -384,3 +384,117 @@ export function Sparkline({
     </svg>
   );
 }
+
+export type MeterStatus = 'good' | 'critical' | 'reference';
+
+const METER_FILL: Record<MeterStatus, { fill: string; track: string }> = {
+  good: { fill: 'var(--status-good)', track: 'var(--status-good-track)' },
+  critical: {
+    fill: 'var(--status-critical)',
+    track: 'var(--status-critical-track)',
+  },
+  // 合否の条件でない項目（基準プレイとの比較）。状態の色は使わない
+  reference: { fill: 'var(--series-1)', track: 'var(--series-1-track)' },
+};
+
+/**
+ * 1 つの値を目標（または上限・基準）と比べるメーター（dataviz の Meter）。
+ * 塗りの棒 + 同じ系統の薄い下地。棒は 12px・データ側の端だけ 4px の角丸。目盛りは細い実線とラベル。
+ * 状態は色だけでなく、印とラベル（status）で示す。文字は文字の色の役割で書く。
+ */
+export function Meter({
+  label,
+  valueText,
+  value,
+  max,
+  marker,
+  status,
+  statusText,
+  note,
+}: {
+  label: string;
+  valueText: string;
+  value: number;
+  /** 棒の右端の値（0 から max まで）。 */
+  max: number;
+  marker: { value: number; label: string };
+  status: MeterStatus;
+  /** 印 + ラベル（例: ✓ 達成）。 */
+  statusText: string;
+  /** 目標までの差・向きの説明など。 */
+  note?: string;
+}) {
+  const pos = (v: number) => `${(Math.max(0, Math.min(v, max)) / max) * 100}%`;
+  const c = METER_FILL[status];
+  const markerRatio = Math.max(0, Math.min(marker.value, max)) / max;
+  return (
+    <div
+      className="viz-root"
+      role="img"
+      aria-label={`${label} ${valueText}・${marker.label} ${statusText}${note ? `・${note}` : ''}`}
+    >
+      <div className="mb-1 flex flex-wrap items-baseline gap-x-3 text-sm">
+        <span
+          style={{ color: 'var(--text-primary)' }}
+          className="font-semibold"
+        >
+          {label}
+        </span>
+        <span style={{ color: 'var(--text-primary)' }}>{valueText}</span>
+        <span
+          className="flex items-center gap-1 text-xs"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          <span
+            aria-hidden
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ background: c.fill }}
+          />
+          {statusText}
+        </span>
+        {note && (
+          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            {note}
+          </span>
+        )}
+      </div>
+      <div className="relative pb-4">
+        <div
+          className="relative h-3 w-full overflow-hidden"
+          style={{ background: c.track, borderRadius: 4 }}
+        >
+          <div
+            className="absolute inset-y-0 left-0"
+            style={{
+              width: pos(value),
+              background: c.fill,
+              borderRadius: '0 4px 4px 0',
+            }}
+          />
+        </div>
+        <div
+          aria-hidden
+          className="absolute -top-1 h-5"
+          style={{
+            left: pos(marker.value),
+            width: 2,
+            marginLeft: -1,
+            background: 'var(--marker)',
+          }}
+        />
+        <div
+          aria-hidden
+          className="absolute top-4 text-xs whitespace-nowrap"
+          style={{
+            left: pos(marker.value),
+            // 端に近い目盛りのラベルは、はみ出さないように内側へ寄せる
+            transform: `translateX(${markerRatio > 0.8 ? '-100%' : markerRatio < 0.2 ? '0' : '-50%'})`,
+            color: 'var(--text-muted)',
+          }}
+        >
+          {marker.label}
+        </div>
+      </div>
+    </div>
+  );
+}
