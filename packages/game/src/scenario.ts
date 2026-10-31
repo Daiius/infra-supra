@@ -44,6 +44,9 @@ export type WorkloadMods = {
   dbRateFactor?: number;
   /** リアルタイム（チャット）。Workload の realtime にそのまま入る（D-24・W-1）。 */
   realtime?: NonNullable<WorkloadInput['realtime']>;
+  /** API 1 回の CPU（ms）と応答の大きさ（KB）。帳票の出力など（D-33・prd/09 E-3）。 */
+  apiCpuMs?: number;
+  apiResponseKB?: number;
 };
 
 export type Effect =
@@ -55,6 +58,8 @@ export type Effect =
       months: number;
       lasting?: boolean;
       bot?: boolean;
+      /** その月のピークの係数の倍率（繁忙期。D-33・prd/09 E-2）。 */
+      peakFactor?: number;
     }
   | { type: 'workload'; mods: WorkloadMods }
   | { type: 'stock'; add: Partial<Stock> }
@@ -166,6 +171,9 @@ export type Scenario = {
   /** 話題の月の後に残る倍率 = 1 + extra × 評判 / reference。 */
   buzz: { extra: number; reference: number };
   revenue: {
+    /** 固定の月額（運用・保守の費用など。D-33・prd/09 E-1）。省略は 0。止まった月などの減りは固定分にも掛かる。 */
+    fixedUsdPerMonth?: number;
+    /** 人の PV 1,000 あたりの収益（広告・利用に応じた従量）。 */
     adsUsdPer1000PV: number;
     loss: {
       block: number;
@@ -190,6 +198,30 @@ export type Scenario = {
   goal: { cash: number; satisfaction: number; maxOutageMonths: number };
   startCash: number;
   baselines: Strategy[];
+  /** 画面の文言（始める画面の説明。D-33・prd/09 E-6）。省略時は画面の既定。 */
+  text?: ScenarioText;
+  /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
+  hidden?: {
+    settings?: ('compress' | 'variants' | 'isr')[];
+    slots?: SlotId[];
+    blockBots?: boolean;
+  };
+};
+
+/** 始める画面の説明（シナリオごとの文言）。数値は画面がシナリオの値から足す。 */
+export type ScenarioText = {
+  /** 何のアプリで、どう収益を得るか。 */
+  intro: string;
+  /** 規模の言い方（「PV」以外の補足。例: 「利用者 約 1,500 人」）。 */
+  scale?: string;
+  /** 運営中に起きる出来事の説明。 */
+  events: string;
+  /** 満足度の要素の説明。 */
+  satisfaction: string;
+  /** アプリの形（コストに効く判断ポイント）。 */
+  app: string[];
+  /** 収益の文（ゲーム上の仮定であることを含める）。 */
+  revenue: string;
 };
 
 /** 台本の表の 1 行（newGame で一度に作る。プレイヤーの選択に依存しない）。 */
