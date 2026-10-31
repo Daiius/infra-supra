@@ -14,6 +14,38 @@ export type Series = {
   projection?: { month: number; value: number }[];
 };
 
+/**
+ * 最新の月の点の強調（D-25）。2 重の輪（塗り + 縁）が時間差で点の 4 倍ほどまで広がって消える。色は系列の色。
+ * 輪は SVG の外へはみ出してよい（SVG は overflow: visible）。動きを減らす設定では出さない（styles.css）。
+ */
+function PingRings({
+  cx,
+  cy,
+  color,
+}: {
+  cx: number;
+  cy: number;
+  color: string;
+}) {
+  return (
+    <g aria-hidden pointerEvents="none">
+      {[0, 1].map((i) => (
+        <circle
+          key={i}
+          className={`motion-ping ${i ? 'motion-ping-late' : ''}`}
+          cx={cx}
+          cy={cy}
+          r="4"
+          fill={color}
+          fillOpacity="0.3"
+          stroke={color}
+          strokeWidth="1.5"
+        />
+      ))}
+    </g>
+  );
+}
+
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
@@ -125,7 +157,12 @@ export function LineChart({
           .filter((r) => r !== null);
 
   return (
-    <figure className="viz-root relative block w-full" ref={ref}>
+    // daisyUI の .card figure は overflow: hidden（最新の点の輪が切れるので見えるようにする）
+    <figure
+      className="viz-root relative block w-full"
+      style={{ overflow: 'visible' }}
+      ref={ref}
+    >
       {title && (
         <figcaption className="mb-1 text-sm font-semibold">{title}</figcaption>
       )}
@@ -153,6 +190,8 @@ export function LineChart({
         <svg
           width={width}
           height={height}
+          // 最新の点の輪が端で切れないように
+          overflow="visible"
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}
           role="img"
@@ -285,19 +324,16 @@ export function LineChart({
                 })}
                 {li >= 0 && li === s.values.length - 1 && (
                   // 最新の月の点だけ、広がって消える輪で強調する（D-25。輪の色は系列の色）
-                  <circle
-                    className="motion-ping"
+                  <PingRings
                     cx={x(li + 1)}
                     cy={y(s.values[li]!)}
-                    r="4"
-                    fill={s.color}
-                    aria-hidden
+                    color={s.color}
                   />
                 )}
                 {li >= 0 && (
                   <circle
                     key={`end-${li}`}
-                    className="motion-pop"
+                    className={`motion-pop ${li === s.values.length - 1 ? 'motion-pulse' : ''}`}
                     cx={x(li + 1)}
                     cy={y(s.values[li]!)}
                     r="4"
@@ -390,7 +426,14 @@ export function Sparkline({
       .join('');
   const li = values.length - 1;
   return (
-    <svg width={width} height={height} aria-hidden className="viz-root">
+    <svg
+      width={width}
+      height={height}
+      aria-hidden
+      className="viz-root"
+      // 最新の点の輪が小さな枠で切れないように
+      overflow="visible"
+    >
       {min < 0 && (
         <line
           x1="4"
@@ -427,18 +470,12 @@ export function Sparkline({
       )}
       {li >= 0 && (
         // 最新の月の点だけ、広がって消える輪で強調する（D-25）
-        <circle
-          className="motion-ping"
-          cx={x(li)}
-          cy={y(values[li]!)}
-          r="4"
-          fill="var(--series-1)"
-        />
+        <PingRings cx={x(li)} cy={y(values[li]!)} color="var(--series-1)" />
       )}
       {li >= 0 && (
         <circle
           key={`end-${li}`}
-          className="motion-pop"
+          className="motion-pop motion-pulse"
           cx={x(li)}
           cy={y(values[li]!)}
           r="4"
