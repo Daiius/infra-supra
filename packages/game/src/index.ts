@@ -317,4 +317,5 @@ export function applyAction(state: GameState, action: Action): GameState {
   return state;
 }
 
+export * from './rules.ts';
 export * from './trends.ts';
