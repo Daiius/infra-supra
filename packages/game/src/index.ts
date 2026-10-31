@@ -642,20 +642,41 @@ export function migrationEffort(from: number, to: number): number {
   return months * EFFORT.migrationPerMonth;
 }
 
-/** 構成を変える選択肢の説明（プラン変更・契約し直し・乗り換え）。前提の文は catalog の facts。 */
-export function stackChangeLabel(from: number, to: number): string {
+/**
+ * 構成を変える選択肢（プラン変更・契約し直し・乗り換え）。label は判断に直接効く数だけの短い文、
+ * detail は理由・事実の説明（画面の ⓘ に出す。前提の文は catalog の facts）。
+ */
+export function stackChangeText(
+  from: number,
+  to: number,
+): { label: string; detail: string } {
   const name = STACKS[to]!.name;
   const months = migrationEffort(from, to) / EFFORT.migrationPerMonth;
+  const per = EFFORT.migrationPerMonth;
   if (isPlanChange(from, to)) {
     const effort = planChangeEffort(from);
     const fact = stackFact(from, 'scale-up');
     return effort === 0
-      ? `${name} にプラン変更（手間なし・来月から）`
-      : `${name} にプラン変更（来月から・手間 ${effort} ポイント。${fact?.premise ?? ''}。計画的な短い停止で、止まった月には数えない）`;
+      ? {
+          label: `${name} にプラン変更（手間なし・来月から）`,
+          detail:
+            '同じ事業者のプランの変更。上限と込み分が変わり、来月から効く。',
+        }
+      : {
+          label: `${name} にプラン変更（手間 ${effort}・来月から）`,
+          detail: `${fact?.premise ?? ''}。計画的な短い停止なので、止まった月には数えない。`,
+        };
   }
   if (isRecontract(from, to))
-    return `${name} へ契約し直す（${stackFact(from, 'no-smaller-disk')!.premise}。${EFFORT.migrationPerMonth} ポイント × ${months} か月。期間中は新旧両方の費用）`;
-  return `${name} へ乗り換える（${EFFORT.migrationPerMonth} ポイント × ${months} か月。期間中は新旧両方の費用）`;
+    return {
+      label: `${name} へ契約し直す（${per} × ${months} か月・期間中は新旧両方の費用）`,
+      detail: `${stackFact(from, 'no-smaller-disk')!.premise}。新しく契約してデータを移す間は、新旧両方を動かして両方の費用を払う。`,
+    };
+  return {
+    label: `${name} へ乗り換える（${per} × ${months} か月・期間中は新旧両方の費用）`,
+    detail:
+      '別の事業者へ移す。作業の間は新旧両方の構成を動かして両方の費用を払い、済んだ翌月に切り替わる（その月は収益が少し減る）。部品は乗り換え先の既定の選択から始まる。',
+  };
 }
 
 function upkeepFor(
@@ -798,7 +819,11 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if ((action.type === 'plan') !== plan)
         return ng(
           'invalid',
-          plan ? '同じ事業者なのでプラン変更' : '別の事業者なので乗り換え',
+          plan
+            ? '同じ事業者なのでプラン変更'
+            : isRecontract(state.stackIndex, action.stackIndex)
+              ? '今よりディスク容量が少ないプランへは変更できないので契約し直し'
+              : '別の事業者なので乗り換え',
         );
       // 乗り換えの手間は進行中の月ごとに取る（effortAvailable が減る）
       return ok(plan ? planChangeEffort(state.stackIndex) : 0);
@@ -861,8 +886,7 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
   const r = actionRule(state, action);
   if (!r.ok) return r;
   const left = effortAvailable(state);
-  const short = (need: number) =>
-    ng('effort', `手間が足りない（あと ${need} ポイント要る）`);
+  const short = (need: number) => ng('effort', `手間が足りない: あと ${need}`);
   if (r.cost > left) return short(r.cost - left);
   if (action.type === 'migrate') {
     const m: Migration = {
@@ -934,8 +958,8 @@ export function componentSlots(state: GameState): {
 /** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
 export function componentEffortLabel(slot: SlotId): string {
   return slot === 'db'
-    ? `${EFFORT.dbSwap.perMonth} ポイント × ${EFFORT.dbSwap.months} か月（期間中は新旧両方の DB の費用・済んだ翌月に切り替え）`
-    : `${EFFORT.component[slot]} ポイント（来月から）`;
+    ? `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月・期間中は新旧両方の費用`
+    : `手間 ${EFFORT.component[slot]}・来月から`;
 }
 
 /**

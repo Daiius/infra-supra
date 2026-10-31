@@ -22,7 +22,7 @@ import {
   goalChecks,
   growthFromReputation,
   isPlanChange,
-  stackChangeLabel,
+  stackChangeText,
   migrationEffort,
   newSave,
   nextSsrCpuMs,
@@ -50,6 +50,7 @@ import {
 } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
+import { Info } from './info.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -1019,8 +1020,9 @@ function Actions({
                   key={id}
                   className="rounded-box border border-base-300 p-3"
                 >
-                  <div className="font-semibold">{def.title}</div>
-                  <div className="mb-1 text-sm opacity-80">{def.text}</div>
+                  <div className="mb-1 font-semibold">
+                    {def.title} <Info>{def.text}</Info>
+                  </div>
                   <div className="flex flex-wrap gap-4">
                     <label
                       className={`flex items-center gap-2 ${acceptOk || answers[id] ? 'cursor-pointer' : 'opacity-50'}`}
@@ -1062,8 +1064,9 @@ function Actions({
                 <span className="label-text font-semibold">
                   {def.label}
                   <span className="ml-1 text-xs font-normal opacity-60">
-                    変更 {def.effort} ポイント
-                  </span>
+                    手間 {def.effort}・来月から
+                  </span>{' '}
+                  <Info>{def.note}</Info>
                 </span>
                 <select
                   className="select select-bordered select-sm"
@@ -1096,7 +1099,6 @@ function Actions({
                     );
                   })}
                 </select>
-                <span className="mt-1 text-xs opacity-60">{def.note}</span>
               </label>
             );
           })}
@@ -1110,20 +1112,21 @@ function Actions({
             onChange={(e) => setOptimize(e.target.checked)}
           />
           <span>
-            SSR を最適化する（CPU {nextSsrCpuMs(state)} ms →{' '}
+            SSR を最適化する（CPU {nextSsrCpuMs(state)} →{' '}
             {Math.max(
               EFFORT.minSsrCpuMs,
               nextSsrCpuMs(state) - EFFORT.optimizeStepMs,
             )}{' '}
-            ms）{EFFORT.optimize} ポイント
+            ms・手間 {EFFORT.optimize}）
             {!optimize && !valid(build({ optimize: true })) && (
               <span className="ml-1 text-xs">
                 （{blocked(build({ optimize: true }))}）
               </span>
-            )}
-            <span className="block text-xs opacity-60">
-              CPU 時間と速さに効く。機能開発が進むとまた重くなる
-            </span>
+            )}{' '}
+            <Info>
+              CPU 時間と速さに効く。機能開発が進むと SSR
+              はまた重くなるので、繰り返し判断が要る。
+            </Info>
           </span>
         </label>
         {!state.botBlocked && (
@@ -1140,15 +1143,16 @@ function Actions({
               onChange={(e) => setBlockBots(e.target.checked)}
             />
             <span>
-              Bot を遮断するルールを入れる {BOT_BLOCK.effort} ポイント
+              Bot を遮断するルールを入れる（手間 {BOT_BLOCK.effort}）
               {!blockBots && !valid(build({ blockBots: true })) && (
                 <span className="ml-1 text-xs">
                   （{blocked(build({ blockBots: true }))}）
                 </span>
-              )}
-              <span className="block text-xs opacity-60">
-                Bot・クローラーのアクセスが来月から半分になる（一度入れれば続く。対策の製品の料金は未取得なので、手間だけの行動）
-              </span>
+              )}{' '}
+              <Info>
+                Bot・クローラーのアクセスが来月から半分になる。一度入れれば続く。対策の製品（WAF
+                など）の料金は取得していないので、手間だけの行動。
+              </Info>
             </span>
           </label>
         )}
@@ -1177,10 +1181,8 @@ function Actions({
             ].map((idx) => {
               const why = idx === null ? null : blocked(build({ stack: idx }));
               const ok = why === null;
-              const label =
-                idx === null
-                  ? '構成はこのまま'
-                  : stackChangeLabel(state.stackIndex, idx);
+              const text =
+                idx === null ? null : stackChangeText(state.stackIndex, idx);
               return (
                 <label
                   key={idx ?? 'keep'}
@@ -1194,7 +1196,13 @@ function Actions({
                     onChange={() => setStackChange(idx)}
                   />
                   <span>
-                    {label}
+                    {text ? text.label : '構成はこのまま'}
+                    {text && (
+                      <>
+                        {' '}
+                        <Info>{text.detail}</Info>
+                      </>
+                    )}
                     {!ok && <span className="block text-xs">{why}</span>}
                   </span>
                 </label>
@@ -1279,8 +1287,31 @@ function ComponentsSection({
                 <span className="label-text font-semibold">
                   {x.label}
                   <span className="ml-1 text-xs font-normal opacity-60">
-                    変更 {componentEffortLabel(x.slot)}
-                  </span>
+                    {componentEffortLabel(x.slot)}
+                  </span>{' '}
+                  {/* select の選択肢の中には置けないので、選択肢ごとの説明をまとめて出す */}
+                  <Info>
+                    <ul className="space-y-1">
+                      {x.options.map((o) => (
+                        <li key={o.id}>
+                          <span className="font-semibold">{o.label}</span>
+                          {o.inappropriate && (
+                            <span className="badge badge-xs badge-warning ml-1">
+                              ⚠ 不適切
+                            </span>
+                          )}
+                          : {o.note}
+                        </li>
+                      ))}
+                    </ul>
+                    {x.slot === 'db' && (
+                      <p className="mt-2 opacity-80">
+                        DB
+                        の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
+                        DB の費用を払う。
+                      </p>
+                    )}
+                  </Info>
                 </span>
                 <select
                   className="select select-bordered select-sm"
@@ -1319,7 +1350,7 @@ function ComponentsSection({
                     return (
                       <option key={o.id} value={o.id} disabled={why !== null}>
                         {o.label}
-                        {o.inappropriate ? '（不適切・学びのため）' : ''}
+                        {o.inappropriate ? '（不適切）' : ''}
                         {o.id === x.current ? '（今）' : ''}
                         {p ? '（届いた提案を受ける）' : ''}
                         {why ? `（${why}）` : ''}
@@ -1327,14 +1358,14 @@ function ComponentsSection({
                     );
                   })}
                 </select>
-                <span className="mt-1 text-xs opacity-60">
-                  {opt.inappropriate && (
+                {opt.inappropriate && (
+                  <span className="mt-1 text-xs opacity-80">
                     <span className="badge badge-xs badge-warning mr-1">
                       ⚠ 不適切
                     </span>
-                  )}
-                  {opt.note}
-                </span>
+                    学びのための選択肢
+                  </span>
+                )}
                 {preview.length > 0 && (
                   <ul className="mt-1 space-y-0.5 text-xs">
                     {preview.map((p) => (
