@@ -46,6 +46,51 @@ const base = (routes: WorkloadInput['routes']): WorkloadInput => ({
   db: { sizeGB: 1, responseKBPerQuery: 1 },
 });
 
+describe('オンデマンドの再検証（D-49・prd/04 §2）', () => {
+  const isr = (extra: Partial<WorkloadInput['routes'][number]>) =>
+    base([
+      {
+        id: 'article',
+        rendering: 'isr',
+        share: 1,
+        pages: 1_000,
+        processing,
+        cachedServeCpuMs: 1,
+        ...extra,
+      },
+    ]);
+
+  it('再生成は 更新 × 閲覧 / (更新 + 閲覧)。更新が閲覧よりずっと少なければ更新の回数に近い', () => {
+    const w = resolveWorkload(isr({ onDemandUpdatesPerMonth: 1_000 }));
+    expect(w.classes['isr-revalidate'].count).toBeCloseTo(
+      (1_000 * 100_000) / (1_000 + 100_000),
+      9,
+    );
+    // 時間の再検証（5 分）より少ない
+    const timed = resolveWorkload(isr({ revalidateSeconds: 300 }));
+    expect(w.classes['isr-revalidate'].count).toBeLessThan(
+      timed.classes['isr-revalidate'].count,
+    );
+    expect(
+      w.derivations.find((d) => d.id === 'isr-revalidations:article')!.label,
+    ).toContain('オンデマンド');
+  });
+
+  it('更新が 0 なら再生成も 0', () => {
+    const w = resolveWorkload(isr({ onDemandUpdatesPerMonth: 0 }));
+    expect(w.classes['isr-revalidate'].count).toBe(0);
+  });
+
+  it('時間とオンデマンドはどちらか一方（両方も、どちらも無いのも不可）', () => {
+    expect(() =>
+      resolveWorkload(
+        isr({ revalidateSeconds: 300, onDemandUpdatesPerMonth: 10 }),
+      ),
+    ).toThrow();
+    expect(() => resolveWorkload(isr({}))).toThrow();
+  });
+});
+
 describe('SPA のルート', () => {
   const spa = resolveWorkload(
     base([

@@ -63,6 +63,7 @@ describe('game', () => {
     // D-46: Vercel の画像の原本を Vercel Blob に（保存量・アップロード・転送の課金。Vercel の構成と乗り換え先が Vercel の基準プレイの所持金が数ドル減る。結果は変わらない）
     // D-48: Vercel Pro の込み分（CDN Requests 1,000 万・Fast Data Transfer 1 TB）をやめ、$20 のクレジットがすべての従量に当たる形に。
     //       Vercel Pro・何もしないは Fast Data Transfer の課金で所持金が約 $900 減る。Vercel で始めて乗り換える基準プレイは、乗り換えまでの 3 か月分が減り、シード 3・31 で合格 → 不合格
+    // D-49: 即時反映の提案（全部受ける ② が受ける）で再検証がオンデマンドになり再生成が減る・作業の手間 3 → 2（所持金が増える。結果は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -72,7 +73,7 @@ describe('game', () => {
       );
     expect(r(42)).toEqual({
       'cf-paid': ['2124.10', 'won', 12],
-      'cf-paid-accept': ['2223.52', 'won', 12],
+      'cf-paid-accept': ['2223.66', 'won', 12],
       'vps-images': ['1782.41', 'won', 12],
       'vercel-pro': ['771.88', 'goal', 12],
       'vercel-to-cf': ['1610.20', 'goal', 12],
@@ -83,7 +84,7 @@ describe('game', () => {
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2151.55', 'won', 12],
-      'cf-paid-accept': ['2197.12', 'won', 12],
+      'cf-paid-accept': ['2197.87', 'won', 12],
       'vps-images': ['1689.33', 'goal', 12],
       'vercel-pro': ['613.60', 'goal', 12],
       'vercel-to-cf': ['1711.88', 'goal', 12],
@@ -94,7 +95,7 @@ describe('game', () => {
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2163.40', 'won', 12],
-      'cf-paid-accept': ['609.30', 'goal', 12],
+      'cf-paid-accept': ['650.55', 'goal', 12],
       'vps-images': ['1693.43', 'goal', 12],
       'vercel-pro': ['640.26', 'goal', 12],
       'vercel-to-cf': ['1682.18', 'goal', 12],

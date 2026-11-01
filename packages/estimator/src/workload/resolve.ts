@@ -241,39 +241,69 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     } else {
       const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };
       byRendering.isr.push(flow(views, served));
-      // 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → 閲覧 / (1 + λT)（人気が一様と仮定。prd/04 §2）
+      const updates = r.onDemandUpdatesPerMonth;
+      // 時間: 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → 閲覧 / (1 + λT)（人気が一様と仮定。prd/04 §2）
+      // オンデマンド: 更新のあとの最初の閲覧で 1 回 → 更新 × 閲覧 / (更新 + 閲覧)（更新と閲覧がページに一様に散ると仮定。
+      // 更新が閲覧よりずっと少なければ更新の回数、閲覧が少なければ閲覧の回数に近づく）。ピークでも外れる割合は同じとみなす
       const lambdaT =
-        (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH);
-      const count = views / (1 + lambdaT);
+        updates === undefined
+          ? (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH)
+          : 0;
+      const count =
+        updates === undefined
+          ? views / (1 + lambdaT)
+          : updates + views > 0
+            ? (updates * views) / (updates + views)
+            : 0;
+      const peakMisses =
+        updates === undefined ? views / (1 + lambdaT * peakRate) : count;
       revalidations.push(flow(count, work));
       isrMiss.push(flow(count, served));
       isrViews += views;
       isrMisses += count;
-      isrPeakMisses += views / (1 + lambdaT * peakRate);
-      isrPeakMiss.push(flow(views / (1 + lambdaT * peakRate), served));
+      isrPeakMisses += peakMisses;
+      isrPeakMiss.push(flow(peakMisses, served));
       if (count > 0) {
         isrWithRevalidate = Math.max(
           isrWithRevalidate,
           r.cachedServeCpuMs + p.cpuMs,
         );
       }
-      derivations.push({
-        id: `isr-revalidations:${r.id}`,
-        label: `ISR の再生成（${r.id}）`,
-        expression:
-          '閲覧 / (1 + ページあたりの閲覧 × 再検証の間隔 / 1 か月)（人気が一様と仮定）',
-        inputs: [
-          { name: '閲覧', value: views, basis: 'derived' },
-          { name: 'ページ数', value: r.pages, basis: 'user-input' },
-          {
-            name: '再検証の間隔',
-            value: r.revalidateSeconds!,
-            unit: 'second',
-            basis: 'user-input',
-          },
-        ],
-        result: count,
-      });
+      derivations.push(
+        updates === undefined
+          ? {
+              id: `isr-revalidations:${r.id}`,
+              label: `ISR の再生成（${r.id}）`,
+              expression:
+                '閲覧 / (1 + ページあたりの閲覧 × 再検証の間隔 / 1 か月)（人気が一様と仮定）',
+              inputs: [
+                { name: '閲覧', value: views, basis: 'derived' },
+                { name: 'ページ数', value: r.pages, basis: 'user-input' },
+                {
+                  name: '再検証の間隔',
+                  value: r.revalidateSeconds!,
+                  unit: 'second',
+                  basis: 'user-input',
+                },
+              ],
+              result: count,
+            }
+          : {
+              id: `isr-revalidations:${r.id}`,
+              label: `ISR の再生成（${r.id}・オンデマンド）`,
+              expression:
+                '更新 × 閲覧 / (更新 + 閲覧)（更新のあとの最初の閲覧で 1 回。更新と閲覧がページに一様に散ると仮定）',
+              inputs: [
+                { name: '閲覧', value: views, basis: 'derived' },
+                {
+                  name: '内容の更新',
+                  value: updates,
+                  basis: 'user-input',
+                },
+              ],
+              result: count,
+            },
+      );
     }
   }
 
