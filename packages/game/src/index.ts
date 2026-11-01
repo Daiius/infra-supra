@@ -781,6 +781,11 @@ function factByRef(ref: string) {
 }
 
 /** 即時反映を妨げている部品（無ければ undefined）。理由は catalog の事実の文（D-32）。 */
+/** 前段の CDN が ISR のページ（HTML）を実際にキャッシュするか（HTML もキャッシュ × ISR のキャッシュが有効）。 */
+function htmlCachedAtFront(c: Choices): boolean {
+  return c.frontCdn === 'html' && c.isrCache !== 'none';
+}
+
 function onDemandBlocker(
   stackIndex: number,
   components: Choices = {},
@@ -791,6 +796,8 @@ function onDemandBlocker(
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
+    // ISR をキャッシュしない（毎回 SSR）なら、前段の CDN に HTML のキャッシュは載らない（OCL-490F1874）
+    if (slot === 'frontCdn' && !htmlCachedAtFront(c)) continue;
     const opt = componentsOf(platform, slot).find((o) => o.id === c[slot]);
     if (opt?.onDemandIsr && !opt.onDemandIsr.ok)
       return {
@@ -2445,7 +2452,7 @@ export function playMonth(input: GameState): GameState {
     : ssrCpuMs;
   // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
   const eventuallyConsistent =
-    comps.db === 'kv' || (!spa && comps.frontCdn === 'html');
+    comps.db === 'kv' || (!spa && htmlCachedAtFront(comps));
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
   // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
   const onDemandSetting = !spa && isOnDemand(state.settings);

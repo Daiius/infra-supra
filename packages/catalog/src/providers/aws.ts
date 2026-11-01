@@ -57,6 +57,7 @@ export const aws: PriceBookInput = {
     lambdaPrices: priceList('AWSLambda'),
     lambdaPricing: src('https://aws.amazon.com/lambda/pricing/'),
     apiGatewayPrices: priceList('AmazonApiGateway'),
+    apiGatewayPricing: src('https://aws.amazon.com/api-gateway/pricing/'),
     cloudfrontPrices: src(
       'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/current/index.json',
     ),
@@ -277,7 +278,10 @@ export const aws: PriceBookInput = {
       service: 'api-gateway',
       ...common,
       name: 'API Gateway（HTTP API）',
-      sourceIds: ['apiGatewayPrices'],
+      sourceIds: ['apiGatewayPrices', 'apiGatewayPricing'],
+      notes: [
+        'HTTP API は 512 KB ごとに 1 リクエストとして数える（料金ページの例 2 が 4.5 MB のペイロードを 512 KB で割っている）',
+      ],
       meters: [
         {
           id: 'requests',

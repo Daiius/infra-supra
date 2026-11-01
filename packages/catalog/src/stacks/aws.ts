@@ -454,7 +454,8 @@ function composeSpa(
       // 振る舞いは「リクエストを数えて次へ渡す」ので cdn の種類で表す（ヒットは無い）。課金はリクエストだけ
       id: 'apigw',
       label: 'API Gateway（HTTP API）',
-      config: { kind: 'cdn', hitRate: {} },
+      // HTTP API は 512 KB ごとに 1 リクエストとして数える（料金ページの例 2: 4.5 MB / 512 KB）
+      config: { kind: 'cdn', hitRate: {}, requestUnitKB: 512 },
       billing: bill('api-gateway-http', { requests: 'requests' }),
     },
     {

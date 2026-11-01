@@ -112,7 +112,13 @@ function consume(
   switch (c.kind) {
     case 'cdn': {
       const ttl = c.ttlClasses?.includes(cls) ? ttlMiss(w, cls, f) : undefined;
-      add(u, 'requests', n);
+      add(
+        u,
+        'requests',
+        c.requestUnitKB === undefined
+          ? n
+          : n * Math.max(1, ceilUnits(p.kb, c.requestUnitKB)),
+      );
       add(u, 'egress-gb', kbToGb(n * p.kb));
       const out = ttl ?? {
         count:
@@ -209,8 +215,9 @@ function consume(
     }
     case 'request-db': {
       u.busyMs += n * p.wallMs;
+      // 該当のアイテムが無い（応答 0 KB）読み取りも 1 単位を消費する（DynamoDB の文書。OCL-0E5E2CF2）
       const readUnits =
-        ceilUnits(w.input.db.responseKBPerQuery, c.readUnitKB) *
+        Math.max(1, ceilUnits(w.input.db.responseKBPerQuery, c.readUnitKB)) *
         (c.eventuallyConsistent ? 0.5 : 1);
       add(u, 'read-request-units', n * p.queries * readUnits);
       add(

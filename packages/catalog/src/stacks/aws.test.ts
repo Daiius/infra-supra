@@ -171,6 +171,24 @@ describe('AWS の構成（Vite の SPA・S3 + CloudFront + Lambda）', () => {
     expect(r.simulation.unroutedClasses).toEqual([]);
   });
 
+  it('HTTP API は 512 KB ごとに 1 リクエスト: 原本（4 MB）のアップロードは 1 件 8 リクエスト、Lambda の起動は 1 回', () => {
+    const r = run(1_000_000, { images: 'none' }, 'vite-spa');
+    const writes = r.simulation.workload.classes['image-write'];
+    const api = r.simulation.workload.classes.api;
+    const apiContent = r.simulation.workload.classes['api-content'];
+    const perApi = (kb: number) => Math.max(1, Math.ceil(kb / 512));
+    expect(r.simulation.nodes.apigw!.resources.requests).toBeCloseTo(
+      writes.count * 8 +
+        api.count * perApi(api.perRequest.kb) +
+        apiContent.count * perApi(apiContent.perRequest.kb),
+      3,
+    );
+    expect(r.simulation.nodes.lambda!.resources.invocations).toBeCloseTo(
+      writes.count + api.count + apiContent.count,
+      3,
+    );
+  });
+
   it('API の応答を CloudFront でキャッシュすると、Lambda に届く件数が減る', () => {
     const at = (apiCache: string) =>
       run(1_000_000, { apiCache }, 'vite-spa').simulation.nodes.lambda!

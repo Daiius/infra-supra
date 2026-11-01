@@ -294,6 +294,54 @@ describe('部品の選択で足した振る舞い', () => {
     expect(eventual.resources['instance-hours']).toBeUndefined();
   });
 
+  it('要求の単位で課金する DB: 応答が 0 KB でも問い合わせ 1 回に 1 単位（OCL-0E5E2CF2）', () => {
+    const w0 = resolveWorkload(
+      workload({ db: { sizeGB: 1, responseKBPerQuery: 0 } }),
+    );
+    const u = simulateResources(w0, {
+      id: 'x',
+      name: 'x',
+      nodes: [
+        {
+          id: 'd',
+          label: 'd',
+          config: {
+            kind: 'request-db',
+            readUnitKB: 4,
+            writeUnitKB: 1,
+            eventuallyConsistent: false,
+            itemKB: 1,
+          },
+        },
+      ],
+      routes: { api: ['d'] },
+    }).nodes.d!;
+    expect(u.resources['read-request-units']).toBeCloseTo(
+      w0.classes.api.count * 2,
+      9,
+    );
+  });
+
+  it('リクエストを大きさの単位で数える CDN: 1 件は最低 1、超えた分は単位で切り上げ。次へ渡す件数は変わらない（OCL-70ABEDB7）', () => {
+    const u = sim(
+      [
+        {
+          id: 'g',
+          label: 'g',
+          config: { kind: 'cdn', hitRate: {}, requestUnitKB: 30 },
+        },
+        { id: 'p', label: 'p', config: { kind: 'db-proxy' } },
+      ],
+      { api: ['g', 'p'] },
+    );
+    const api = w.classes.api;
+    expect(u.g!.resources.requests).toBeCloseTo(
+      api.count * Math.max(1, Math.ceil(api.perRequest.kb / 30)),
+      9,
+    );
+    expect(u.p!.resources.queries).toBeCloseTo(api.count * 2, 9);
+  });
+
   it('止まる DB: 動いている割合は λT / (1 + λT)、時間課金は容量の単位の数を掛ける。止まらない DB は 730 時間', () => {
     const node = (pauseAfterIdleSeconds?: number) => ({
       id: 'a',
