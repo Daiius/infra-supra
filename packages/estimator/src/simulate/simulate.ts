@@ -117,8 +117,9 @@ function consume(
         u,
         'requests',
         c.requestUnitKB === undefined
-          ? n
+          ? n * c.requestsPerItem
           : n *
+              c.requestsPerItem *
               kbMixOf(p).reduce(
                 (s, part) =>
                   s +
@@ -144,7 +145,12 @@ function consume(
         ? ttlMiss(w, cls, f)
         : undefined;
       const miss = missFlow?.count ?? n;
-      const mp = missFlow?.perRequest ?? p;
+      const fixedCpu = c.classCpuMs?.[cls];
+      const base = missFlow?.perRequest ?? p;
+      const mp =
+        fixedCpu === undefined
+          ? base
+          : { ...base, cpuMs: fixedCpu, maxCpuMs: fixedCpu, wallMs: fixedCpu };
       const hits = n - miss;
       const hitCpu = missFlow ? c.cache!.hitCpuMs : 0;
       // 1 リクエストの CPU の最大は、件数が正の経路（miss の処理・ヒットの返却）それぞれの最大（OCL-8B3B0CB7）

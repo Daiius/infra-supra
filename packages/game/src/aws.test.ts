@@ -5,6 +5,7 @@ import {
   ARTICLE_COMMUNITY,
   DEFAULT_START_DATE,
   goalChecks,
+  isPlanChange,
   meetsRequirement,
   newGame,
   playMonth,
@@ -145,5 +146,19 @@ describe('AWS の構成', () => {
       doNothing(i + 1, 'vite-spa'),
     ).filter((s) => goalChecks(s).every((c) => c.ok)).length;
     expect(passed).toBeGreaterThanOrEqual(15);
+  });
+
+  it('OpenNext（D-63）: 別の事業者として足し、維持の手間 1・オンデマンドの即時反映を満たす・Amplify との行き来は乗り換え', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    expect(ON).toBe(7);
+    expect(STACKS[ON]!.provider).toBe('aws-opennext');
+    for (const sc of Object.values(SCENARIOS)) expect(upkeepOf(sc, ON)).toBe(1);
+    expect(meetsRequirement(ON, 'on-demand-isr')).toBe(true);
+    expect(meetsRequirement(AWS, 'on-demand-isr')).toBe(false);
+    expect(isPlanChange(AWS, ON)).toBe(false);
+    const slots = setupSlots(ARTICLE_COMMUNITY, ON, 'nextjs').map(
+      (x) => x.slot,
+    );
+    expect(slots).toEqual(['isrCache', 'images', 'db', 'cdnPlan', 'files']);
   });
 });

@@ -9,8 +9,15 @@ import {
   AWS_STACK_DEFS,
   composeAws,
 } from './aws.ts';
+import {
+  composeOpenNext,
+  OPENNEXT_COMPONENTS,
+  OPENNEXT_DEFAULT_CHOICES,
+  OPENNEXT_STACK_DEFS,
+} from './opennext.ts';
 
-export type Platform = 'cloudflare' | 'vercel' | 'sakura' | 'aws';
+export type Platform =
+  'cloudflare' | 'vercel' | 'sakura' | 'aws' | 'aws-opennext';
 export type SlotId =
   | 'isrCache'
   | 'images'
@@ -28,6 +35,8 @@ export type StackDef = {
   platform: Platform;
   plan: string;
   name: string;
+  /** 自分で組む構成（OpenNext など。ゲームでは維持の手間がかかる。D-63）。 */
+  assembled?: boolean;
 };
 
 export const STACK_DEFS: readonly StackDef[] = [
@@ -70,6 +79,8 @@ export const STACK_DEFS: readonly StackDef[] = [
   },
   // AWS（prd/11 段 1・D-50）。構成は stacks/aws.ts
   ...AWS_STACK_DEFS,
+  // AWS の 2 つ目（OpenNext・D-63）。構成は stacks/opennext.ts
+  ...OPENNEXT_STACK_DEFS,
 ];
 
 /** スロットの部品（catalog のデータ）。当たりうる前提は前提の id の前方一致で挙げる（選ぶ前に出す）。 */
@@ -508,6 +519,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...SPA_OGP,
   ...SPA_API_CACHE,
   ...AWS_COMPONENTS,
+  ...OPENNEXT_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
@@ -516,6 +528,7 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   vercel: { isrCache: 'default', images: 'default' },
   sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
   aws: AWS_DEFAULT_CHOICES,
+  'aws-opennext': OPENNEXT_DEFAULT_CHOICES,
 };
 
 /**
@@ -1093,6 +1106,13 @@ export function composeStack(
             ? c.apiCache!
             : 'none',
         });
+      case 'aws-opennext':
+        return composeOpenNext(c, standby, {
+          spa,
+          apiCache: apiCacheActive('aws-opennext', c, options.framework)
+            ? c.apiCache!
+            : 'none',
+        });
       case 'sakura':
         return composeSakura(
           def.plan as '2gb' | '4gb',
@@ -1102,7 +1122,7 @@ export function composeStack(
     }
   })();
   // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で直接組む
-  return spa && def.platform !== 'aws'
+  return spa && def.platform !== 'aws' && def.platform !== 'aws-opennext'
     ? asSpa(arch, def.platform, {
         prerender: c.ogp === 'prerender',
         apiCache: apiCacheActive(def.platform, c, 'vite-spa')

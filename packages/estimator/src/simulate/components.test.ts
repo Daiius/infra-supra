@@ -381,6 +381,36 @@ describe('部品の選択で足した振る舞い', () => {
     expect(u.resources.requests).toBeCloseTo(ssr.count * 1.5, 6);
   });
 
+  it('1 件を N リクエストと数える CDN（SQS の送信・受信・削除）と、クラスの処理の時間を関数で決める（D-63）', () => {
+    const u = sim(
+      [
+        {
+          id: 'q',
+          label: 'q',
+          config: { kind: 'cdn', hitRate: {}, requestsPerItem: 3 },
+        },
+        {
+          id: 'f',
+          label: 'f',
+          config: {
+            kind: 'function',
+            memoryGB: 1,
+            classCpuMs: { api: 150 },
+          },
+        },
+      ],
+      { api: ['q', 'f'] },
+    );
+    const n = w.classes.api.count;
+    expect(u.q!.resources.requests).toBeCloseTo(n * 3, 9);
+    expect(u.f!.resources.invocations).toBeCloseTo(n, 9);
+    expect(u.f!.resources['cpu-ms']).toBeCloseTo(n * 150, 6);
+    expect(u.f!.resources['memory-gb-hours']).toBeCloseTo(
+      (n * 150) / 3_600_000,
+      9,
+    );
+  });
+
   it('止まる DB: 動いている割合は λT / (1 + λT)、時間課金は容量の単位の数を掛ける。止まらない DB は 730 時間', () => {
     const node = (pauseAfterIdleSeconds?: number) => ({
       id: 'a',

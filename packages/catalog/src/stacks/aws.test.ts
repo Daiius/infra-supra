@@ -232,3 +232,47 @@ describe('AWS の構成（Vite の SPA・S3 + CloudFront + Lambda）', () => {
     expect(at('cdn')).toBeLessThan(at('none'));
   });
 });
+
+describe('AWS の OpenNext の構成（D-63）', () => {
+  const runOn = (pv: number, choices: Choices = {}) =>
+    estimate({
+      workload: applyComponentsToWorkload(
+        articleCommunity(pv),
+        'aws-opennext',
+        choices,
+        { originalImageKB: 4000, resizedImageKB: 400 },
+      ),
+      architecture: composeStack('aws-opennext', choices),
+      books,
+    });
+
+  it('1 つの CloudFront → サーバーの Lambda。ISR は S3 のキャッシュ・DynamoDB のタグ・SQS の再検証（1 件 3 リクエスト）', () => {
+    const a = composeStack('aws-opennext');
+    expect(a.routes['document-isr']).toEqual([
+      'cf',
+      'server',
+      's3-cache',
+      'tags',
+    ]);
+    expect(a.routes['isr-revalidate']![0]).toBe('queue');
+    const r = runOn(1_000_000);
+    expect(r.simulation.unroutedClasses).toEqual([]);
+    const regen = r.simulation.workload.classes['isr-revalidate'].count;
+    expect(r.simulation.nodes.queue!.resources.requests).toBeCloseTo(
+      regen * 3,
+      3,
+    );
+    const isr = componentsOf('aws-opennext', 'isrCache').find(
+      (c) => c.id === 'default',
+    )!;
+    expect(isr.onDemandIsr?.ok).toBe(true);
+  });
+
+  it('OpenNext の画像の最適化は Lambda で課金される（料金未取得にならない）', () => {
+    const r = runOn(1_000_000, { images: 'default' });
+    expect(r.bill.unpricedLines).toBe(0);
+    expect(
+      r.simulation.nodes['image-fn']!.resources['memory-gb-hours'],
+    ).toBeGreaterThan(0);
+  });
+});
