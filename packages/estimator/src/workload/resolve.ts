@@ -76,6 +76,8 @@ export type ResolvedWorkload = {
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
+  /** 月のうち最も多い日 / 平均の日（話題・Bot の集中。日次の無料枠の判定だけ。D-60）。 */
+  peakDayFactor: number;
   /**
    * 保存量。imagesGB は原本（images.storedGB）。variantsGB は投稿のときに作って保存するサイズ違い
    * （transformAt: upload のときだけ。閲覧のときに変換する構成では保存しないので 0。OCL-F3098083）。
@@ -421,6 +423,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
+    peakDayFactor: t.peakDayFactor ?? 1,
     storage: {
       dbGB: w.db.sizeGB,
       imagesGB: w.images.storedGB,

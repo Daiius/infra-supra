@@ -77,6 +77,8 @@ export function assessPremises(input: {
     quantity: number;
     weekday: number;
     weekend: number;
+    /** 最も多い日（話題・Bot の集中。D-60）。 */
+    peakDay: number;
     /** プールを使ったプランごとのメーターとノード（出てきた順）。前提の文と挙動はプランごとに出す。 */
     plans: Map<string, { meterIds: Set<string>; nodeIds: Set<string> }>;
   };
@@ -116,12 +118,16 @@ export function assessPremises(input: {
       quantity: 0,
       weekday: 0,
       weekend: 0,
+      peakDay: 0,
       plans: new Map(),
     };
     const uniform = u.quantity / (HOURS_PER_MONTH / 24);
     agg.quantity += u.quantity;
     agg.weekday += u.daily?.weekday ?? uniform;
     agg.weekend += u.daily?.weekend ?? uniform;
+    agg.peakDay +=
+      u.daily?.peakDay ??
+      Math.max(u.daily?.weekday ?? uniform, u.daily?.weekend ?? uniform);
     const pu = agg.plans.get(u.planId) ?? {
       meterIds: new Set<string>(),
       nodeIds: new Set<string>(),
@@ -134,8 +140,11 @@ export function assessPremises(input: {
   for (const agg of pools.values()) {
     const book = books.get(agg.provider)!;
     const pool = book.allowancePools.find((p) => p.id === agg.poolId)!;
+    // 日次のプールは平日・休日の 1 日と、話題・Bot が集中する日（あれば）のうち最も多い日で判定する（D-60）
+    const usual = Math.max(agg.weekday, agg.weekend);
+    const spikeDay = pool.period === 'day' && agg.peakDay > usual;
     const used =
-      pool.period === 'day' ? Math.max(agg.weekday, agg.weekend) : agg.quantity;
+      pool.period === 'day' ? Math.max(usual, agg.peakDay) : agg.quantity;
     // 量はプールの単位で合算し、文と超過時の挙動はプランごとに出す（課金と停止のプランが同じ枠を使うことがある）。
     // プランの中で挙動が分かれるときは重いほう（止まる → 有料プランが要る → 遅くなる → 費用）を出す
     for (const [planId, pu] of agg.plans) {
@@ -163,6 +172,12 @@ export function assessPremises(input: {
           limit: pool.quantity,
           unit: pool.unit,
           accumulates: pool.unit === 'gb-month',
+          ...(spikeDay
+            ? {
+                assumption:
+                  '話題・Bot の日は、上乗せの量が短い期間に集中すると仮定（月のうち最も多い日で判定）',
+              }
+            : {}),
         }),
       );
     }

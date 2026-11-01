@@ -97,3 +97,35 @@ describe('話題・Bot の集中（D-44）', () => {
     );
   });
 });
+
+describe('日次の無料枠の判定にも集中が効く（D-60）', () => {
+  const CF_FREE = 0;
+  const daily = (h: MonthReport) =>
+    h.premises.find((p) => p.text.startsWith('KV Free は 1 日 1,000 回'))!;
+
+  it('Bot の月（7 日に集中）だけ、日次の前提の使用率が上がって仮定が付く。費用は変わらない', () => {
+    // シード 42 の Bot は 3 か月目
+    const s = play(article, CF_FREE);
+    const f = play(flat, CF_FREE);
+    const bot = s.history.findIndex((h) => h.botPV > 0);
+    expect(bot).toBe(2);
+    for (let m = 0; m < bot; m++) {
+      expect(daily(s.history[m]!).ratio).toBeCloseTo(
+        daily(f.history[m]!).ratio!,
+        9,
+      );
+      expect(daily(s.history[m]!).assumption).toBeUndefined();
+    }
+    const h = s.history[bot]!;
+    // 最も多い日 = 平均の日 × (人 + Bot × 日数 / 7) / 月の量。集中しない場合（平日の 1 日）より大きい
+    const factor = spikePeakFactor(h.pv, [
+      { id: 'bot', extraPV: h.botPV, days: 7 },
+    ]);
+    expect(factor).toBeGreaterThan(2);
+    expect(daily(h).ratio!).toBeGreaterThan(daily(f.history[bot]!).ratio! * 2);
+    expect(daily(h).assumption).toContain('短い期間に集中');
+    // 課金（月の総量）は変えない
+    expect(h.infraCost).toBeCloseTo(f.history[bot]!.infraCost, 9);
+    expect(h.lines).toEqual(f.history[bot]!.lines);
+  });
+});
