@@ -149,6 +149,17 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
   };
 }
 
+/**
+ * 構成を選ぶ（構成の一覧・比較の表）。別の構成に替えるときだけ部品の選択を空にして既定にする。
+ * 今の構成を選び直しても部品は保つ（OCL-83383F50）。
+ */
+export function withStack(
+  input: EstimateInput,
+  stack: string,
+): Partial<EstimateInput> {
+  return stack === input.stack ? {} : { stack, parts: {} };
+}
+
 // ---- URL のクエリ（共有のため。mode=estimate と一緒に置く）----
 
 const PART_PREFIX = 'c.';

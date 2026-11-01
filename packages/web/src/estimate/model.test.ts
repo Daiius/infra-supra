@@ -7,6 +7,7 @@ import {
   runEstimate,
   sortRows,
   toQuery,
+  withStack,
 } from './model.ts';
 
 describe('normalizeInput', () => {
@@ -111,5 +112,32 @@ describe('compareStacks', () => {
     expect(sortRows(rows, 'cost', true).map((r) => r.totalUsd)).toEqual(
       [...asc].reverse(),
     );
+  });
+});
+
+describe('withStack', () => {
+  it('今の構成を選び直しても部品を保ち、別の構成に替えるときだけ既定に戻す（OCL-83383F50）', () => {
+    const i = normalizeInput({
+      stack: 'cloudflare-vinext-paid',
+      parts: { isrCache: 'workers-cache' },
+    });
+    expect(i.parts.isrCache).toBe('workers-cache');
+    const same = normalizeInput({ ...i, ...withStack(i, i.stack) });
+    expect(same).toEqual(i);
+    const other = normalizeInput({
+      ...i,
+      ...withStack(i, 'cloudflare-vinext-free'),
+    });
+    expect(other.stack).toBe('cloudflare-vinext-free');
+    expect(other.parts.isrCache).toBe('kv');
+  });
+});
+
+describe('MAU の換算（OCL-D4F7AE54）', () => {
+  it('テンプレートごとに 1 人あたりの月の PV が違う（記事 10・業務アプリ 200）', () => {
+    const a = normalizeInput({ template: 'article', pv: 300_000 });
+    const b = normalizeInput({ template: 'business', pv: 300_000 });
+    expect(a.pv / runEstimate(a).mau).toBeCloseTo(10, 6);
+    expect(b.pv / runEstimate(b).mau).toBeCloseTo(200, 6);
   });
 });

@@ -26,6 +26,7 @@ import {
   toQuery,
   USD_JPY,
   VARIANTS,
+  withStack,
   type EstimateInput,
   type LineView,
   type SortKey,
@@ -124,7 +125,7 @@ export function EstimateMode() {
       </Card>
       <Comparison
         rows={rows}
-        onPick={(stack) => setInput({ stack, parts: {} })}
+        onPick={(stack) => setInput(withStack(input, stack))}
       />
       <Card title="料金データの出典">
         <ul className="space-y-2 text-sm">
@@ -235,7 +236,7 @@ function Conditions({
         </Field>
         <Field
           label="月の PV"
-          info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたり月 10 PV）から出す。月の中の伸びは扱わない"
+          info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたりの月の PV。下に出す）から出す。月の中の伸びは扱わない"
         >
           <input
             className="input input-bordered input-sm w-full"
@@ -270,6 +271,8 @@ function Conditions({
           </span>
           <span className="mt-1 block text-xs opacity-70">
             MAU 約 {Math.round(mau).toLocaleString('ja-JP')}
+            {mau > 0 &&
+              `（テンプレートの仮定: 1 人あたり月 ${Math.round(input.pv / mau).toLocaleString('ja-JP')} PV）`}
           </span>
         </Field>
         <Field label="フレームワーク">
@@ -291,7 +294,7 @@ function Conditions({
           <select
             className={select}
             value={input.stack}
-            onChange={(e) => setInput({ stack: e.target.value, parts: {} })}
+            onChange={(e) => setInput(withStack(input, e.target.value))}
           >
             {STACKS.filter((s) => stackSupports(s.index, input.framework)).map(
               (s) => (
