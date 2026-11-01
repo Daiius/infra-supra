@@ -285,6 +285,14 @@ export function simulateResources(
   const architecture = ArchitectureSchema.parse(architectureInput);
   const byId = new Map(architecture.nodes.map((n) => [n.id, n]));
   const unroutedClasses: RequestClass[] = [];
+  // ISR のページを期間つきでキャッシュする CDN（ttlClasses に document-isr）が前にあるか（さくらの VPS の前段の CDN で
+  // HTML もキャッシュ。D-31）。あれば、再生成を起こすのは CDN を miss して ISR を返すノードに届いた閲覧だけ（D-55）
+  const isrBehindTtlCache = (architecture.routes['document-isr'] ?? []).some(
+    (id) => {
+      const c = byId.get(id)?.config;
+      return c?.kind === 'cdn' && !!c.ttlClasses?.includes('document-isr');
+    },
+  );
 
   /** クラスの流れを経路に流す。w の cacheHitRate で期間つきのキャッシュのヒットを決める。 */
   const run = (w: ResolvedWorkload, collectUnrouted: boolean) => {
@@ -318,7 +326,16 @@ export function simulateResources(
         if (collectUnrouted && f.count > 0) unroutedClasses.push(cls);
         continue;
       }
-      let current = f;
+      // CDN の期間と ISR の期間は同じ（Next.js は s-maxage に再検証の間隔を付ける）ので、CDN を miss して届いた閲覧は
+      // そのつど ISR の期間も切れていて、1 件が再生成を 1 回起こす（届いた閲覧 = 再生成。月は従来の数と同じで、
+      // ピークの時間帯はピークの miss の数になる。D-55）
+      const behind =
+        cls === 'isr-revalidate' && isrBehindTtlCache
+          ? w.cacheMissFlow['document-isr']
+          : undefined;
+      let current = behind
+        ? { count: behind.count, perRequest: f.perRequest }
+        : f;
       for (const id of path) {
         current = consume(
           byId.get(id)!,
