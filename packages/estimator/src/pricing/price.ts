@@ -1,7 +1,7 @@
 // 料金計算（prd/03-pricing-schema.md・prd/05-test-strategy.md §2）。純粋関数。
 // 使用量（メーター単位）に料金データを当てて Bill を作る。容量・制限の判定（Limit）は P1-8 で別に行う。
 //
-// 順序: 1 回ごとの丸め → 無料枠のプール（合算してから引く）→ 超過時の挙動 → 期間の丸め → 単価（flat / tiered / volume）
+// 順序: 1 回ごとの丸め → 最小の課金量 → 無料枠のプール（合算してから引く）→ 超過時の挙動 → 期間の丸め → 単価（flat / tiered / volume）
 //       → クレジット → 固定費
 import { ceilUnits, overage, sum } from '../num/arith.ts';
 import type { Currency } from '../num/money.ts';
@@ -255,6 +255,14 @@ export function priceUsage(input: {
           `1 回ごとに ${r.granularity} ${meter.unit} 単位で切り上げ（全 ${events} 件が平均値をとると仮定）`,
         );
       }
+    }
+    // 最小の課金量（D-85）: 明細（ノード）ごとに、使っている（0 より多い）なら最小の量まで引き上げる
+    const min = meter.minimumQuantity;
+    if (min !== undefined && quantity > 0 && quantity < min) {
+      quantity = min;
+      assumptions.push(
+        `最小の課金量 ${min} ${meter.unit} に満たないので ${min} ${meter.unit} で課金`,
+      );
     }
     return {
       usage,

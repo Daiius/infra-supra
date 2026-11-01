@@ -701,7 +701,7 @@ export const aws: PriceBookInput = {
       name: 'RDS for PostgreSQL（db.t4g.micro・Single-AZ）',
       sourceIds: ['rdsPrices', 'rdsStorage'],
       notes: [
-        'ストレージ（gp3）は割り当てた容量で課金され、PostgreSQL の gp3 は 20 GiB から（RDS の利用者ガイド）。このモデルは DB の大きさで近似し、最小の 20 GiB は数えていない（20 GB 未満の DB では保存が月 最大 $2.76 低め）',
+        'ストレージ（gp3）は割り当てた容量で課金され、PostgreSQL の gp3 は 20 GiB から（RDS の利用者ガイド）。このモデルは DB の大きさで近似し、20 GiB に満たない DB は 20 GiB で数える（最小の課金量。D-85）。20 GiB を超えた分は割り当てを DB の大きさに合わせて増やすとみなす',
         'アプリ（Amplify・Lambda）と RDS の間の転送の料金は未確認なので数えない',
       ],
       meters: [
@@ -720,8 +720,12 @@ export const aws: PriceBookInput = {
           label: 'DB のディスク（RDS: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
+          // PostgreSQL の gp3 の割り当ては 20 GiB から（CHAP_Storage・2026-11-02 取得。D-84・D-85）
+          minimumQuantity: 20,
+          premise:
+            'RDS for PostgreSQL の gp3 は 20 GiB から割り当てるので、DB が小さくても 20 GiB 分の保存が課金される',
           pricing: { model: 'flat', per: 1, unitPrice: 0.138 },
-          sourceIds: ['rdsPrices'],
+          sourceIds: ['rdsPrices', 'rdsStorage'],
         },
       ],
     },

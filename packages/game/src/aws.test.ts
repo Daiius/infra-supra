@@ -24,7 +24,7 @@ import {
   type FrameworkId,
 } from './index.ts';
 import { EFFORT } from './rules.ts';
-import type { Choices } from 'catalog';
+import { loadPriceBooks, type Choices } from 'catalog';
 
 const AWS = STACKS.findIndex((s) => s.id === 'aws-amplify');
 
@@ -148,6 +148,25 @@ describe('AWS の構成', () => {
     const cost = (c: Choices) =>
       doNothing(1, 'vite-spa', c).history.reduce((a, h) => a + h.infraCost, 0);
     expect(cost({ db: 'rds' })).toBeGreaterThan(cost({ db: 'dynamodb' }));
+  });
+
+  it('RDS の保存は 20 GiB に満たない DB でも 20 GiB で課金する（gp3 の最小の割り当て。最小の課金量・D-85）', () => {
+    const s = doNothing(1, 'vite-spa', { db: 'rds' });
+    const first = s.history[0]!;
+    expect(first.stock.dbGB).toBeLessThan(20);
+    const meter = loadPriceBooks()
+      .find((b) => b.provider === 'aws')!
+      .plans.find((p) => p.id === 'rds-postgres-t4g-micro')!
+      .meters.find((m) => m.id === 'storage')!;
+    expect(meter.minimumQuantity).toBe(20);
+    const unit = meter.pricing.model === 'flat' ? meter.pricing.unitPrice : NaN;
+    const storage = first.lines.find(
+      (l) =>
+        l.provider === 'aws' &&
+        l.meterId === 'storage' &&
+        l.label.includes('RDS'),
+    )!;
+    expect(storage.amount).toBeCloseTo(20 * unit, 10);
   });
 
   it('記事コミュニティの SPA・既定の部品は、シード 1〜20 の多くで目標に届く（目盛り。目標の値は決め直す・D-50）', () => {

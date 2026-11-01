@@ -157,6 +157,11 @@ export type JudgeInput = {
   eventuallyConsistent?: boolean;
   /** 即時反映（オンデマンド ISR）の要件を満たさない。さらに 1 段下げる（仮定・D-32）。 */
   onDemandUnmet?: boolean;
+  /**
+   * コメントが遅れて見える時間と、コメントの鮮度の段階の境目（D-85）。コメントを記事のページに含め、時間で再検証・ビルドするときだけ
+   * （遅れ = 間隔）。省略はコメントがすぐ見える（ブラウザで読み込む・オンデマンド・キャッシュしない）。鮮度は記事とコメントの悪い方。
+   */
+  commentFreshness?: { delaySec: number; good: number; fair: number };
   /** SPA の初回表示（速さの重さを 1 つ数える。仮定・prd/10 F-05）。 */
   firstLoadHeavy?: boolean;
   /** Astro の初回表示（速さの重さを 1 つ減らす。仮定・D-68）。 */
@@ -218,7 +223,12 @@ export function judgeStages(
             ? 'fair'
             : 'bad';
       const a = i.eventuallyConsistent ? STAGE_DOWN[base] : base;
-      return i.onDemandUnmet ? STAGE_DOWN[a] : a;
+      const article = i.onDemandUnmet ? STAGE_DOWN[a] : a;
+      const c = i.commentFreshness;
+      if (!c) return article;
+      const comment: Stage =
+        c.delaySec <= c.good ? 'good' : c.delaySec <= c.fair ? 'fair' : 'bad';
+      return STAGE_VALUE[comment] < STAGE_VALUE[article] ? comment : article;
     })(),
     quality: ((): Stage => {
       const kb = i.qualityImageKB ?? i.imageKB;

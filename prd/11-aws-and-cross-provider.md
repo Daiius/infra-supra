@@ -438,7 +438,7 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
   - SPA: CloudFront → API Gateway（HTTP API）→ Lambda → DB。シェルと静的なファイルは CloudFront が返す。
   - 部品: ISR（Amplify の ISR / キャッシュしない）・画像（Amplify の最適化（Next.js だけ）/ 最適化しない / 投稿のときに縮める。後の 2 つは S3 + CloudFront で配る）・DB（DynamoDB / RDS）・API の応答のキャッシュ（SPA・CloudFront）・ファイル（S3・固定）。既定は ISR・縮める・DynamoDB。
 - estimator: ノードの種類 `request-db`（読み取りは応答を 4 KB 単位で切り上げ・結果整合は半分、書き込みは 1 行を 1 KB 単位。1 行の大きさ 1 KB は仮定）と、リソース `read-request-units`・`write-request-units`。単位の換算に GB 時間 ↔ GB 秒を足した。
-- 仮定: Amplify の SSR と Lambda のメモリ 1 GB（Amplify は公式の記載が見当たらない）・画像の CDN のヒット率 0.9（Vercel と同じ）・DynamoDB の 1 行 1 KB。RDS のストレージは DB の大きさで近似（PostgreSQL の gp3 は 20 GiB からと確かめたが、最小は数えていない。D-84）、アプリと RDS の間の転送は数えない（未確認）。
+- 仮定: Amplify の SSR と Lambda のメモリ 1 GB（Amplify は公式の記載が見当たらない）・画像の CDN のヒット率 0.9（Vercel と同じ）・DynamoDB の 1 行 1 KB。RDS のストレージは DB の大きさで近似（PostgreSQL の gp3 は 20 GiB からで、20 GiB に満たない DB は 20 GiB で数える。最小の課金量・D-84・D-85）、アプリと RDS の間の転送は数えない（未確認）。
 
 ### 9.1 基準プレイ（何もしない・シード 1〜20・目標は今の値）
 

@@ -47,6 +47,8 @@ type Options = {
   /** 無料枠のプール・丸め・超過時の挙動・クレジット・基本料を出すか。 */
   pools?: boolean;
   rounding?: boolean;
+  /** 最小の課金量（D-85）を出すか。 */
+  minimum?: boolean;
   blockMeters?: boolean;
   credits?: 'none' | 'bill' | 'any';
   baseFee?: boolean;
@@ -105,6 +107,9 @@ export function genBook(r: Rng, o: Options = {}): PriceBookInput {
               scope: r.pick(['event', 'period'] as const),
             },
           }
+        : {}),
+      ...(o.minimum && r.chance(0.4)
+        ? { minimumQuantity: r.pick([0.5, 1, 20, 1_000, 100_000]) }
         : {}),
       ...(o.blockMeters && r.chance(0.3)
         ? { onExceed: r.pick(['block', 'throttle', 'adjust'] as const) }

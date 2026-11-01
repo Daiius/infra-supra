@@ -200,4 +200,38 @@ describe('コメントの描き方（D-82）', () => {
     const cost = retryHintsOf(s).find((x) => x.kind === 'cost')!;
     expect(cost.next).toContain('ブラウザで読み込む形に戻す');
   });
+
+  it('鮮度（D-85）: 含めて時間で再検証すると、コメントは間隔の分だけ遅れて見え、記事とコメントの悪い方になる', () => {
+    const fresh = (rev: number, cm: number, fw: FrameworkId = 'nextjs') =>
+      playMonth(start(CF_PAID, rev, cm, fw)).history[0]!.satisfaction;
+    // ブラウザで読み込む: コメントは常に新しい（記事の 5 分は「良い」のまま）
+    expect(fresh(300, COMMENTS_IN_BROWSER).stages.freshness).toBe('good');
+    // 含める × 1 分: コメントも「良い」の内
+    expect(fresh(60, COMMENTS_IN_PAGE).stages.freshness).toBe('good');
+    // 含める × 5 分: 記事は「良い」・コメントは「普通」→「普通」。理由にコメントの遅れを出す
+    const five = fresh(300, COMMENTS_IN_PAGE);
+    expect(five.stages.freshness).toBe('fair');
+    expect(five.reasons.freshness).toContain(
+      'コメントも間隔の分だけ遅れて見える',
+    );
+    // 含める × 1 時間: 記事は「普通」・コメントは「悪い」→「悪い」
+    expect(fresh(3600, COMMENTS_IN_PAGE).stages.freshness).toBe('bad');
+    expect(fresh(3600, COMMENTS_IN_BROWSER).stages.freshness).toBe('fair');
+    // オンデマンド（コメントのたびに作り直す）は遅れない: 含めても含めなくても同じ
+    expect(fresh(0, COMMENTS_IN_PAGE).stages.freshness).toBe(
+      fresh(0, COMMENTS_IN_BROWSER).stages.freshness,
+    );
+    // Astro のビルドの間隔も同じ
+    expect(fresh(300, COMMENTS_IN_PAGE, 'astro').stages.freshness).toBe('fair');
+    expect(fresh(300, COMMENTS_IN_BROWSER, 'astro').stages.freshness).toBe(
+      'good',
+    );
+  });
+
+  it('鮮度（D-85）: ISR のキャッシュを使わない（毎回描く）なら、含めてもコメントは遅れない', () => {
+    const st = playMonth(
+      start(CF_PAID, 300, COMMENTS_IN_PAGE, 'nextjs', { isrCache: 'none' }),
+    );
+    expect(st.history[0]!.satisfaction.stages.freshness).toBe('good');
+  });
 });

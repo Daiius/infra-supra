@@ -233,6 +233,32 @@ describe('fictional-db（USD・税抜）', () => {
       '丸めが料金表に記載なし。丸めなしで計算',
     ]);
   });
+
+  it('最小の課金量（D-85）: ノードごとに 10 GB に満たなければ 10 GB で課金し、0 は 0・超えた分は期間の切り上げのあと使用量どおり', () => {
+    const at = (...gbs: number[]) =>
+      bill(
+        [sub(P, 'instance', { nodeIds: gbs.map((_, i) => `n${i + 1}`) })],
+        gbs.map((gb, i) =>
+          use(P, 'instance', 'backup', gb, { nodeId: `n${i + 1}` }),
+        ),
+      );
+    expect(line(at(0), 'backup').amount).toBe(0);
+    expect(line(at(0.5), 'backup').amount).toBe(10);
+    expect(line(at(3), 'backup').assumptions).toContain(
+      '最小の課金量 10 gb-month に満たないので 10 gb-month で課金',
+    );
+    expect(line(at(10), 'backup').amount).toBe(10); // ちょうど最小
+    expect(line(at(10.2), 'backup').amount).toBe(11); // 超えたら 1 GB 単位で切り上げ
+    // ノードごと: 3 GB と 4 GB の 2 ノードは 10 + 10（合計 7 GB を 1 つの最小にまとめない）
+    expect(line(at(3, 4), 'backup').amount).toBe(20);
+    // 単調: 使用量を増やしても減らない
+    let prev = -Infinity;
+    for (const gb of [0, 0.1, 5, 9.99, 10, 10.01, 20, 100]) {
+      const a = line(at(gb), 'backup').amount!;
+      expect(a).toBeGreaterThanOrEqual(prev);
+      prev = a;
+    }
+  });
 });
 
 describe('架空の料金データの上の性質', () => {
