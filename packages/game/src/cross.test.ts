@@ -238,3 +238,24 @@ describe('画像の形式（D-58）との整合', () => {
     );
   });
 });
+
+describe('DB の差し替えでアカウントが増えるとき（OCL-B6A107A3）', () => {
+  it('Hyperdrive（Supabase）へ差し替えると、設定の一度きりの手間を今月の行動に使い、移行の手間と合わせて余力を確かめる', () => {
+    const s = playMonth(newGame(CF_PAID));
+    const hd = { type: 'component', slot: 'db', option: 'hyperdrive' } as const;
+    expect(checkAction(s, hd)).toEqual({ ok: true, cost: EFFORT.accountSetup });
+    const after = applyAction(s, hd);
+    expect(after.componentSwap?.option).toBe('hyperdrive');
+    expect(after.plannedEffort).toBe(s.plannedEffort + EFFORT.accountSetup);
+    // 移行の手間 + 設定の手間を超える余力が無ければ選べない
+    const busy = {
+      ...s,
+      plannedEffort: s.effortPerMonth - EFFORT.dbSwap.perMonth,
+    };
+    expect(checkAction(busy, hd)).toMatchObject({
+      ok: false,
+      reason: 'effort',
+    });
+    expect(applyAction(busy, hd)).toBe(busy);
+  });
+});

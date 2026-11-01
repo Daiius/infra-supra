@@ -1675,6 +1675,8 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
         required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
         done: 0,
       },
+      // 新しいアカウントの設定の一度きりの手間（r.cost）も同じ月に使う（D-52・OCL-B6A107A3）
+      plannedEffort: state.plannedEffort + r.cost,
     });
     if (after < 0) return short(-after);
   }
@@ -3305,11 +3307,10 @@ export function applyAction(state: GameState, action: Action): GameState {
           required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
           done: 0,
         };
-        if (effortAvailable({ ...state, componentSwap }) < 0) return state;
-        return withNote(`${label} へ差し替えを始めた`, {
-          ...state,
-          componentSwap,
-        });
+        // 新しい事業者のアカウントを足す DB（Hyperdrive の Supabase など）は、設定の一度きりの手間も今月使う（D-52・OCL-B6A107A3）
+        const next = { ...state, ...planned, componentSwap };
+        if (effortAvailable(next) < 0) return state;
+        return withNote(`${label} へ差し替えを始めた`, next);
       }
       return withNote(`${label} に差し替えた`, {
         ...state,
