@@ -52,7 +52,7 @@ export function ScenarioPicker({
 }
 
 /**
- * 構成の毎月の手間（D-36）。シナリオの毎月の手間をマスで並べ、自前運用の維持の分を塗る（残りが機能開発）。
+ * 構成の毎月の手間（D-36）。シナリオの毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・機能開発 success）。
  * 色だけに頼らず、数を文字でも出す。自前運用の構成には、自前の障害の確率を添える。
  */
 export function EffortBar({
@@ -82,7 +82,7 @@ export function EffortBar({
         {Array.from({ length: Math.max(0, total) }, (_, k) => (
           <span
             key={k}
-            className={`h-2.5 w-2.5 rounded-sm ${k < upkeep ? 'bg-warning' : 'bg-base-300'}`}
+            className={`h-2.5 w-2.5 rounded-sm ${k < upkeep ? 'bg-warning' : 'bg-success'}`}
           />
         ))}
       </span>
