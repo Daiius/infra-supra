@@ -157,6 +157,65 @@ describe('retryHintsOf', () => {
     );
   });
 
+  describe('SPA で OGP の前処理なしに話題を迎えた（D-43）', () => {
+    const withOgp = (seed: number) =>
+      playStrategy(
+        {
+          id: 'ogp',
+          label: 'OGP の前処理を付ける',
+          stackIndex: VPS_2GB,
+          actions: [[{ type: 'component', slot: 'ogp', option: 'prerender' }]],
+        },
+        seed,
+        ARTICLE_COMMUNITY,
+        undefined,
+        'vite-spa',
+      );
+    const revenue = (st: { history: { revenue: number }[] }) =>
+      st.history.reduce((a, r) => a + r.revenue, 0);
+
+    it.each([1, 2, 3, 42])(
+      'VPS 2GB・何もしない（シード %i）: 所持金で落ち、最初に OGP のヒント。見積もりは前処理ありのプレイの収益の差と合う',
+      (seed) => {
+        const st = playStrategy(
+          { id: 'idle', label: '何もしない', stackIndex: VPS_2GB },
+          seed,
+          ARTICLE_COMMUNITY,
+          undefined,
+          'vite-spa',
+        );
+        expect(st.end?.reason).toBe('goal');
+        expect(st.cash).toBeLessThan(ARTICLE_COMMUNITY.goal.cash);
+        const hint = retryHintsOf(st)[0]!;
+        expect(hint.kind).toBe('ogp');
+        expect(hint.what).toMatch(
+          /^\d+ か月目の話題で、記事ごとの SNS のカードが出ないため/,
+        );
+        expect(hint.what).toContain('× 3 → × 2');
+        expect(hint.next).toContain('OGP の前処理');
+        // 前処理を付けたプレイとの収益の差（VPS は固定費なので所持金の差も同じ）
+        const diff = revenue(withOgp(seed)) - revenue(st);
+        const est = Number(
+          hint.what.match(/約 \+\$([\d,]+)/)![1]!.replace(',', ''),
+        );
+        expect(Math.abs(est - diff)).toBeLessThanOrEqual(2);
+      },
+    );
+
+    it('前処理を付けたプレイ・Next.js では出さない', () => {
+      expect(retryHintsOf(withOgp(42)).some((x) => x.kind === 'ogp')).toBe(
+        false,
+      );
+      for (const s of [VPS_2GB, VPS_4GB, PRO]) {
+        const st = idle(s, ARTICLE_COMMUNITY, 'nextjs');
+        expect(retryHintsOf(st).some((x) => x.kind === 'ogp')).toBe(false);
+      }
+      // 受託はカードが効かない（socialCardFactor 1）
+      const contract = idle(VPS_2GB, CONTRACT_OPERATIONS, 'vite-spa');
+      expect(retryHintsOf(contract).some((x) => x.kind === 'ogp')).toBe(false);
+    });
+  });
+
   it('負けたすべての何もしない方針で 1〜3 個。対策の方向に構成の名前を出さない', () => {
     const names = STACKS.map((s) => s.name.replace(/（.*）/, ''));
     for (const sc of Object.values(SCENARIOS))

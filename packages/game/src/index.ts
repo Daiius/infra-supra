@@ -2736,7 +2736,8 @@ export function reflectionOf(state: GameState): Reflection {
 
 export type RetryHint = {
   /** 原因の種類（画面のキー・テスト用）。 */
-  kind: 'limit' | 'incident' | 'policy' | 'cost' | 'overage' | 'element';
+  kind:
+    'limit' | 'incident' | 'policy' | 'cost' | 'overage' | 'element' | 'ogp';
   /** 何が起きたか（何か月目に・数値）。 */
   what: string;
   /** 次に試せる方向。正解の構成名は出さない（事業者の制限・プラン名など事実の名前は出してよい。D-40）。 */
@@ -2768,6 +2769,53 @@ const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
   feature:
     '機能開発に回せる手間が期待に届かない。維持・出来事への対応・行動の手間を減らして、機能開発に回す',
 };
+
+/**
+ * SPA で OGP の前処理なしに話題の月を迎えたときの、取り逃がした収益の見積もり（D-43）。
+ * 行動の列は状態に残らないのでプレイを引き直せない。代わりに、カードが出ないことの効き方（socialCardFactor）だけを
+ * 戻して記録から見積もる: 話題の月の広告の収益は 話題の伸び（× f）/ 小さくなった伸び（× (1 + (f − 1) × c)）倍、
+ * それ以後の月は、話題の後に残る伸び（buzzLasting。その月の評判で）の比の倍になる。成長率・費用・上限への当たり方の
+ * 変化は織り込まない（大きくなった流量で上限に当たる構成なら、この見積もりより少なくなる）。最初の該当の月だけを見る。
+ */
+function socialCardLoss(
+  state: GameState,
+):
+  | { month: number; factor: number; reduced: number; extraRevenue: number }
+  | undefined {
+  const sc = scenarioOf(state);
+  const c = sc.frameworks?.spa?.socialCardFactor ?? 1;
+  if (state.framework !== 'vite-spa' || c === 1) return undefined;
+  const h = state.history;
+  const ads = (r: MonthReport) => {
+    const raw = (r.humanPV / 1000) * sc.revenue.adsUsdPer1000PV;
+    const fixed = sc.revenue.fixedUsdPerMonth ?? 0;
+    // 収益から契約の分を除き、止まった月などの減り方は広告と固定の分で同じとみなす
+    return raw > 0
+      ? ((r.revenue - r.contractRevenue) * raw) / (raw + fixed)
+      : 0;
+  };
+  for (const r of h) {
+    if (!r.buzz || r.components.ogp === 'prerender') continue;
+    const effect = state.schedule
+      .filter((x) => x.month === r.month)
+      .flatMap((x) => eventDef(sc, x.id)?.effects ?? [])
+      .find((e) => e.type === 'traffic' && e.social && e.lasting);
+    if (!effect || effect.type !== 'traffic') continue;
+    const factor = effect.factor;
+    const reduced = 1 + (factor - 1) * c;
+    const rep = r.satisfaction.reputation;
+    const lastingRatio =
+      buzzLasting(rep, sc.buzz) /
+      buzzLasting(rep, { ...sc.buzz, extra: sc.buzz.extra * c });
+    const extraRevenue =
+      ads(r) * (factor / reduced - 1) +
+      h
+        .filter((x) => x.month > r.month)
+        .reduce((a, x) => a + ads(x) * (lastingRatio - 1), 0);
+    return { month: r.month, factor, reduced, extraRevenue };
+  }
+  return undefined;
+}
 
 /**
  * 次のプレイへのヒント（目標に届かなかったとき・途中で終わったとき。達成なら空）。
@@ -2963,6 +3011,26 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         },
         score: tier(false, 20 + o.months.length),
       });
+  }
+
+  // ⑥ SPA で OGP の前処理なしに話題の月を迎えた（記事ごとの SNS のカードが出ず、伸びが小さい。D-43）
+  if (cashShort) {
+    const ogp = socialCardLoss(state);
+    if (ogp) {
+      const shortfall = Math.max(1, sc.goal.cash - state.cash);
+      out.push({
+        hint: {
+          kind: 'ogp',
+          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み`,
+          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(STACKS[state.stackIndex]!.provider, 'ogp', 'prerender')}）を、話題の前に付ける`,
+        },
+        // 影響額で比べる: 足りない額に対する、取り戻せた収益の割合（半分以上なら最上位）
+        score: tier(
+          reason === 'cash',
+          50 + Math.min(49, (100 * ogp.extraRevenue) / shortfall),
+        ),
+      });
+    }
   }
 
   // ⑤ 満足度の要素（満足度の目標・伸び＝収益にも効く。可用性は ①② で扱う）
