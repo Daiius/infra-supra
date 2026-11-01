@@ -11,9 +11,21 @@ import {
   STACKS,
   type FrameworkId,
 } from 'game';
+import {
+  LogCurveChart,
+  SeriesSwatch,
+  type CurveChartSeries,
+  type MarkShape,
+} from '../charts.tsx';
 import { Info } from '../info.tsx';
 import {
   compareStacks,
+  costCurves,
+  CURVE_MAX,
+  CURVE_PVS,
+  curveColorSlot,
+  defaultCurveStacks,
+  pickedCurveStacks,
   fromQuery,
   IMAGE_FORMATS,
   normalizeInput,
@@ -127,6 +139,7 @@ export function EstimateMode() {
         rows={rows}
         onPick={(stack) => setInput(withStack(input, stack))}
       />
+      <CostCurve input={input} rows={rows} />
       <Card title="料金データの出典">
         <ul className="space-y-2 text-sm">
           {view.sources.map((s) => (
@@ -646,6 +659,158 @@ function Comparison({
           </tbody>
         </table>
       </div>
+    </Card>
+  );
+}
+
+const SHAPES: readonly MarkShape[] = ['circle', 'square', 'diamond'];
+const pvLabel = (v: number) => (v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}K`);
+const usdTick = (v: number) => (v >= 1e3 ? `$${v / 1e3}K` : `$${v}`);
+const usdShort = (n: number) =>
+  `$${n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 2 })}`;
+
+/** 費用の曲線（D-74）。今の条件のまま PV だけを振った月額。系列の色は事業者、点の形は事業者の中のプランで固定。 */
+function CostCurve({
+  input,
+  rows,
+}: {
+  input: EstimateInput;
+  rows: ReturnType<typeof compareStacks>;
+}) {
+  // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const stacks = useMemo(
+    () =>
+      picked === null
+        ? defaultCurveStacks(rows)
+        : pickedCurveStacks(picked, rows),
+    [picked, rows],
+  );
+  const curves = useMemo(() => costCurves(input, stacks), [input, stacks]);
+  const series: CurveChartSeries[] = curves.map((c) => ({
+    id: c.stack,
+    label: c.current ? `${c.name}（今の構成）` : c.name,
+    color: `var(--series-${curveColorSlot(c.provider) + 1})`,
+    shape: SHAPES[c.variant] ?? 'circle',
+    points: c.points.map((p) => ({ y: p.totalUsd, flags: p.blocking })),
+  }));
+  // 選んだ順を保つ（上限を超えるときは先に選んだものから残す。pickedCurveStacks）
+  const toggle = (id: string) =>
+    setPicked(
+      stacks.includes(id)
+        ? stacks.filter((s) => s !== id)
+        : [...(picked ?? stacks).filter((s) => stacks.includes(s)), id],
+    );
+  const full = stacks.length >= CURVE_MAX;
+  const anyStop = curves.some((c) => c.points.some((p) => p.blocking.length));
+  const unpriced = curves.some((c) =>
+    c.points.some((p) => p.unpricedLines > 0),
+  );
+  return (
+    <Card title="費用の曲線（月の PV を振る）">
+      <p className="text-xs opacity-70">
+        今のテンプレート・フレームワーク・設定のまま、月の PV
+        だけを変えたときの月額（USD）。横軸・縦軸とも対数。部品は今の構成だけ今の選択、他は既定。
+        {anyStop &&
+          '× は止まる前提（無料プランの上限など）に当たる点で、× どうしを結ぶ線は薄くする。'}
+        {unpriced && '料金未取得の明細がある点は合計が下限。'}
+      </p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] viz-root">
+        {series.map((s) => (
+          <li key={s.id} className="flex min-w-0 items-center gap-1">
+            <SeriesSwatch color={s.color} shape={s.shape} />
+            <span className="break-words">{s.label}</span>
+          </li>
+        ))}
+      </ul>
+      <LogCurveChart
+        series={series}
+        xs={CURVE_PVS}
+        formatX={pvLabel}
+        formatY={usdTick}
+        formatValue={usdShort}
+        marker={{ x: input.pv, label: '今の PV' }}
+        label="月の PV ごとの月額（構成ごと）"
+      />
+      <details>
+        <summary className="cursor-pointer text-sm">
+          比べる構成を足す・外す（{stacks.length} / 最大 {CURVE_MAX}）
+        </summary>
+        <div className="mt-2 grid gap-1 sm:grid-cols-2">
+          {rows.map((r) => {
+            const on = stacks.includes(r.stack);
+            return (
+              <label
+                key={r.stack}
+                className="flex min-w-0 cursor-pointer items-center gap-2 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm"
+                  checked={on}
+                  disabled={r.current || (!on && full)}
+                  onChange={() => toggle(r.stack)}
+                />
+                <span className="min-w-0 break-words">
+                  {r.name}
+                  {r.current && (
+                    <span className="opacity-70">（今の構成）</span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {picked !== null && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs mt-2"
+            onClick={() => setPicked(null)}
+          >
+            既定に戻す（今の PV で安い順）
+          </button>
+        )}
+      </details>
+      <details>
+        <summary className="cursor-pointer text-sm">表で見る</summary>
+        <div className="overflow-x-auto">
+          <table className="table table-xs">
+            <thead>
+              <tr>
+                <th>構成</th>
+                {CURVE_PVS.map((v) => (
+                  <th key={v} className="text-right">
+                    {pvLabel(v)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {curves.map((c) => (
+                <tr key={c.stack}>
+                  <td className="min-w-40">{c.name}</td>
+                  {c.points.map((p) => (
+                    <td
+                      key={p.pv}
+                      className="text-right tabular-nums whitespace-nowrap"
+                      title={
+                        p.blocking.length
+                          ? `止まる: ${p.blocking.join(' / ')}`
+                          : undefined
+                      }
+                    >
+                      {usdShort(p.totalUsd)}
+                      {p.blocking.length > 0 && (
+                        <span className="text-error"> ×</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </Card>
   );
 }
