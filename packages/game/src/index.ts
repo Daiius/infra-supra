@@ -3440,7 +3440,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         hint: {
           kind: 'overage',
           what: `${o.months[0]} か月目から「${o.text}」を超え、超えた分が請求された`,
-          next: '込みの量を超えた分は使った分だけ請求される。設定・部品で量を下げるか、超えたときの単価をプランごとに比べる',
+          next: '込みの量・クレジットを超えた分は使った分だけ請求される。設定・部品で量を下げるか、超えたときの単価をプランごとに比べる',
         },
         score: tier(false, 20 + o.months.length),
       });

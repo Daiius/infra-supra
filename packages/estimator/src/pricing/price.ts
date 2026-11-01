@@ -81,6 +81,8 @@ export type LineItem = {
   /** 計算に使った仮定（丸めが記載なし・日次の均等割りなど）。 */
   assumptions: string[];
   note?: string;
+  /** kind: 'credit' のとき: どのクレジットを、当てられる従量のいくらに当てたか（使用率の前提に使う。D-48）。 */
+  credit?: { id: string; limit: number; eligible: number };
 };
 
 export type LimitBreach = {
@@ -435,6 +437,7 @@ export function priceUsage(input: {
         },
         assumptions: [],
         note: `${c.id}（上限 ${c.amount}）`,
+        credit: { id: c.id, limit: c.amount, eligible },
       });
     }
   }

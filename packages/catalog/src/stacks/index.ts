@@ -253,7 +253,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     label: 'キャッシュしない（毎回 SSR）',
     note: '記事の閲覧が毎回関数まで届く。記事は常に新しい',
     premiseRefs: [
-      'pool:vercel:pro:pro-cdn-requests',
+      'credit:vercel:pro:usage-credit',
       'fact:vercel:pro:active-cpu',
     ],
   },
@@ -271,7 +271,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     platform: 'vercel',
     label: '最適化しない',
     note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。転送量（Fast Data Transfer）が大きく増え、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
-    premiseRefs: ['pool:vercel:pro:pro-fdt'],
+    premiseRefs: ['credit:vercel:pro:usage-credit'],
   },
   {
     id: 'resize',
@@ -383,7 +383,7 @@ const SPA_OGP: ComponentOption[] = (
     [
       'vercel',
       'シェルを CDN から返さず、関数が記事のメタタグを差し込んで返す。シェルの読み込みが関数の起動になる',
-      ['pool:vercel:pro:pro-cdn-requests', 'fact:vercel:pro:active-cpu'],
+      ['credit:vercel:pro:usage-credit', 'fact:vercel:pro:active-cpu'],
     ],
     [
       'sakura',
@@ -472,7 +472,7 @@ const SPA_API_CACHE: ComponentOption[] = [
     premiseRefs: [
       'fact:vercel:hobby:cdn-cache-functions',
       'fact:vercel:pro:cdn-cache-functions',
-      'pool:vercel:pro:pro-cdn-requests',
+      'credit:vercel:pro:usage-credit',
     ],
   },
   {

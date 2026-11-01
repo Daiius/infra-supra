@@ -42,14 +42,13 @@ const EVENTS: EventDef[] = [
     id: 'c-s-allowance',
     kind: 'state',
     tier: 'common',
-    title: '込み分の 70% を超えた',
-    text: '利用の増加で、込み分に近づいた。運用費は固定が主なので、超えた分の従量課金はそのまま利幅を削る',
+    title: '込み分・クレジットの 70% を超えた',
+    text: '利用の増加で、込み分（Vercel Pro は月のクレジット）に近づいた。運用費は固定が主なので、超えた分の従量課金はそのまま利幅を削る',
     when: {
       type: 'premise',
       premiseIds: [
         'pool:cloudflare:workers-paid:paid-requests',
-        'pool:vercel:pro:pro-cdn-requests',
-        'pool:vercel:pro:pro-fdt',
+        'credit:vercel:pro:usage-credit',
         'pool:supabase:pro-micro:pro-egress',
       ],
       atLeast: 0.7,
@@ -271,7 +270,7 @@ const EVENTS: EventDef[] = [
     premiseRefs: [
       'pool:cloudflare:workers-free:',
       'pool:cloudflare:workers-paid:paid-requests',
-      'pool:vercel:pro:pro-cdn-requests',
+      'credit:vercel:pro:usage-credit',
       'limit:supabase:pro-micro:pooler-connections',
       'host:cpu:',
     ],

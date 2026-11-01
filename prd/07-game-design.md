@@ -426,7 +426,7 @@ type Effect =
 
 | # | 種類 | 段階 | 出来事 | 起き方 | 効果 | 当たりうる前提（catalog） | 主な対応 |
 |---|---|---|---|---|---|---|---|
-| S-1 | 状態 | ふだん | 込み分の 70% を超えた | 量の前提の使用率 ≥ 0.7（「もう少し」と同じ境目） | 通知だけ | Workers Paid 1,000 万リクエスト（`cloudflare.ts:77`）・KV の書き込み 100 万回（`cloudflare.ts:127`）・Vercel Pro CDN Requests 1,000 万（`vercel.ts:136`）・Fast Data Transfer 1 TB（`vercel.ts:146`）・Supabase Pro egress 250 GB（`supabase.ts:41`） | 設定（ISR・圧縮）・プラン変更 |
+| S-1 | 状態 | ふだん | 込み分・クレジットの 70% を超えた | 量の前提の使用率 ≥ 0.7（「もう少し」と同じ境目） | 通知だけ | Workers Paid 1,000 万リクエスト（`cloudflare.ts:77`）・KV の書き込み 100 万回（`cloudflare.ts:127`）・Vercel Pro の月のクレジット（込み分の代わり。D-48）・Supabase Pro egress 250 GB（`supabase.ts:41`） | 設定（ISR・圧縮）・プラン変更 |
 | S-2 | 状態 | ときどき | DB が大きくなった | `stock.dbGB` が境目の 70% | 通知 | D1 Free 500 MB（`cloudflare.ts:255`・止まる）・Supabase Free 500 MB（`supabase.ts:83`・止まる）・D1 Paid 5 GB 込み（`cloudflare.ts:106`・費用。前提の文なし）・Supabase Pro ディスク 8 GB 込み（`supabase.ts:46`・費用。前提の文なし） | プラン変更 |
 | S-3 | 状態 | ときどき | 画像の保存量が増えた | `stock.imagesGB` が境目の 70% | 通知 | VPS のディスク 100 GB に DB と画像を置く（`premises.ts:234-243`・止まる）・R2 10 GB 込み（`cloudflare.ts:132`・費用。前提の文なし）・Vercel の原本の置き場所は**未取得**（`stacks/index.ts:155-160`） | 画像の置き場所を分ける（部品・GD-4）・乗り換え |
 | S-4 | 状態 | ときどき | 同時接続が増えた | ピーク（話題・Bot の月）で前提の使用率 ≥ 0.7。§10.6 の規模では起きにくい（概算では 450 万 PV でも 70% 未満） | 通知 | Supabase Micro の pooler 200 接続（`supabase.ts:143`・止まる）・VPS の CPU と共有回線（`premises.ts:203-223`・遅くなる） | SSR の最適化・乗り換え |
@@ -570,7 +570,7 @@ GD-1 の印 `earlierThanProjected`（`trends.ts:145-149`）は「前の月の見
 | 3 | 除くと見込みの線（`projection`）以下に戻る出来事を理由にする。複数なら差の大きい順 |
 | 4 | 出来事で説明できなければ、プレイヤーの行動（設定の変更・提案を受けた・乗り換え）で同じことをする。それでも無ければ「伸びが直近より速かった」 |
 
-- 文の形: 「Bot のアクセス（PV × 2）で、Vercel Pro は CDN Requests 月 1,000 万まで込み（…）を、見込みより 2 か月早く超えた」。前提の文は catalog のもの（D-12）。
+- 文の形: 「Bot のアクセス（PV × 2）で、Vercel Pro は月 $20 のクレジットが…（…）を、見込みより 2 か月早く超えた」。前提の文は catalog のもの（D-12）。
 - 月の報告に `surprises: { premiseId; month; cause: { kind: 'event' | 'action' | 'growth'; id?: string; ratioWithout?: number } }[]` を足し、振り返りの ④（§9.6）に並べる。
 - 見込みを出さない月（`skipProjection`・`trends.ts:96`）を、話題の月だけから「一時的な `traffic` の効果がある月」（SC-1・SC-2）に広げる。どちらもプレイヤーに見えている出来事なので、ゲームの内部を覗くことにはならない（§5）。
 - 反実仮想は表示のためだけで、ゲームの状態に入れない（`trends.ts:3` と同じ扱い）。

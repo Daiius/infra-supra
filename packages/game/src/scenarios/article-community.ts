@@ -26,15 +26,14 @@ const EVENTS: EventDef[] = [
     id: 's-allowance',
     kind: 'state',
     tier: 'common',
-    title: '込み分の 70% を超えた',
-    text: '流量で決まる込み分に近づいた。設定（ISR・圧縮）やプランで対応できる',
+    title: '込み分・クレジットの 70% を超えた',
+    text: '流量で決まる込み分（Vercel Pro は月のクレジット）に近づいた。設定（ISR・圧縮）やプランで対応できる',
     when: {
       type: 'premise',
       premiseIds: [
         'pool:cloudflare:workers-paid:paid-requests',
         'pool:cloudflare:workers-paid:paid-kv-writes',
-        'pool:vercel:pro:pro-cdn-requests',
-        'pool:vercel:pro:pro-fdt',
+        'credit:vercel:pro:usage-credit',
         'pool:supabase:pro-micro:pro-egress',
       ],
       atLeast: 0.7,
@@ -133,8 +132,7 @@ const EVENTS: EventDef[] = [
     when: { type: 'window', from: 3, to: 8 },
     premiseRefs: [
       'pool:cloudflare:images-',
-      'pool:vercel:pro:pro-fdt',
-      'pool:vercel:pro:pro-cdn-requests',
+      'credit:vercel:pro:usage-credit',
       'host:disk:',
       'host:line:',
       'pool:cloudflare:r2-standard:r2-storage',
@@ -358,8 +356,7 @@ const EVENTS: EventDef[] = [
     premiseRefs: [
       'pool:cloudflare:workers-free:free-requests',
       'pool:cloudflare:workers-paid:paid-requests',
-      'pool:vercel:pro:pro-cdn-requests',
-      'pool:vercel:pro:pro-fdt',
+      'credit:vercel:pro:usage-credit',
       'host:cpu:',
       'host:line:',
     ],
