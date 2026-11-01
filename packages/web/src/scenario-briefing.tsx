@@ -7,7 +7,7 @@ import {
   FRAMEWORKS,
   growthFromReputation,
   SCENARIOS,
-  STACKS,
+  selfHostedOf,
   type FrameworkId,
   type Scenario,
   upkeepOf,
@@ -74,7 +74,9 @@ export function EffortBar({
   framework?: FrameworkId;
 }) {
   const total = sc.effort.perMonth;
-  const upkeep = upkeepOf(sc, stackIndex);
+  // 部品で VPS を使う（VPS の API。D-67）ときも自前運用の維持と障害がかかる
+  const upkeep = upkeepOf(sc, stackIndex, components, framework);
+  const selfHosted = selfHostedOf(stackIndex, components, framework);
   const accounts = accountUpkeepOf(stackIndex, components, framework);
   const added = addedAccounts(stackIndex, components, framework);
   const free = total - upkeep - accounts;
@@ -87,7 +89,7 @@ export function EffortBar({
       : []),
     `機能開発に ${free}`,
     // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の手間だけ（D-63）
-    ...(STACKS[stackIndex]!.selfHosted
+    ...(selfHosted
       ? [
           `自前の障害 月 ${Math.round(sc.incidents.selfHostedChancePerMonth * 100)}%`,
         ]

@@ -575,3 +575,51 @@ describe('OpenNext の CloudFront の無効化と S3 の ISR のキャッシュ�
     );
   });
 });
+
+describe('サーバーから外の API への問い合わせ・API だけを置くホスト（D-67）', () => {
+  it('egressKBPerRequest: 転送は応答の大きさでなく 1 件の固定の KB で数え、流れはそのまま次へ渡す', () => {
+    const n = sim(
+      [
+        {
+          id: 'out',
+          label: 'out',
+          config: { kind: 'cdn', hitRate: {}, egressKBPerRequest: 1 },
+        },
+        { id: 'fn', label: 'fn', config: { kind: 'function' } },
+      ],
+      { 'document-ssr': ['out', 'fn'] },
+    );
+    const count = w.classes['document-ssr'].count;
+    expect(n.out!.resources['egress-gb']).toBeCloseTo((count * 1000) / 1e9);
+    expect(n.fn!.resources.requests).toBeCloseTo(count);
+  });
+
+  it('storesImages: false のホストはディスクに画像を数えない（DB と他だけ）', () => {
+    const host = (storesImages: boolean) =>
+      sim(
+        [
+          {
+            id: 'vps',
+            label: 'vps',
+            config: {
+              kind: 'host',
+              vcpu: 1,
+              memoryGB: 1,
+              diskGB: 100,
+              lineMbps: 100,
+              residentMemoryGB: 0,
+              dbCpuMsPerQuery: 0,
+              imageTransformCpuMs: 0,
+              otherDiskGB: 5,
+              storesImages,
+            },
+          },
+        ],
+        { api: ['vps'] },
+      ).vps!.host!.diskGB;
+    expect(host(false)).toBeCloseTo(w.storage.dbGB + 5);
+    expect(host(true)).toBeCloseTo(
+      w.storage.dbGB + w.storage.imagesGB + w.storage.variantsGB + 5,
+    );
+  });
+});

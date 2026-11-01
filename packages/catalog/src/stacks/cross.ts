@@ -1,7 +1,8 @@
 // 事業者をまたぐ構成（prd/11 §2・D-52）。部品は自分の事業者（platform）を持ち、差せる土台の事業者（hosts）と
 // 接続の形（link）を持つ。差せる組は CROSS_PAIRS の表で許したものだけ（AX-08。公式の文書で現実にできると確かめた組）。
 // 表に無い組は部品の選択肢に出さない。今の組は「Vercel・AWS の画像だけ Cloudflare（R2 + 変換）」と、
-// SPA の API の置き場（Vercel・AWS の静的 + Cloudflare Workers の API + D1／Cloudflare の静的 + AWS の API Gateway + Lambda + DynamoDB。D-65）。
+// SPA の API の置き場（Vercel・AWS の静的 + Cloudflare Workers の API + D1／Cloudflare の静的 + AWS の API Gateway + Lambda + DynamoDB。D-65）、
+// Next.js のサーバーから呼ぶ Cloudflare Workers の API + D1（Vercel・Amplify・OpenNext）と、Cloudflare の静的 + さくらの VPS の API（D-67）。
 // 既存の Cloudflare + Hyperdrive（Supabase）・さくらの VPS + 前段の CDN（Cloudflare）は、土台の事業者の部品として
 // 先に入っていたもの（D-24 X-6・D-31）で、この表の外にある（アカウントの数は accountsOf で同じく数える）。
 import type { ArchitectureInput, RequestClass } from 'estimator';
@@ -10,6 +11,7 @@ import {
   COMPUTE_MEMORY_GB,
   dbNode as awsDbNode,
 } from './aws.ts';
+import { vpsNode } from './sakura.ts';
 import type { FrameworkId } from '../frameworks/index.ts';
 import type { Choices, ComponentOption, Platform, SlotId } from './index.ts';
 
@@ -101,13 +103,17 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'Worker はカスタムドメイン（Cloudflare のゾーンのサブドメイン）に置け、そのホスト名では Worker がオリジンになる。' +
       '別のホスト名のサイトから呼ぶ API は Worker が CORS のヘッダーを返す（公式の例）。D1 は Worker の binding から使う' +
       '（D1 の REST API は管理用の面で、Vercel から直接つなぐ形は出さない。AX-10）。' +
-      'Vercel の外部への rewrite で同じドメインに見せる形は課金の記載が無い（prd/10 B-3）ので使わない',
+      'Vercel の外部への rewrite で同じドメインに見せる形は課金の記載が無い（prd/10 B-3）ので使わない。' +
+      'Next.js（D-67）: Server Components は fetch で外の API を呼べ、キャッシュしない fetch は応答まで描画を止める。' +
+      'Vercel の料金の文書の課金の項目に、関数から外への通信の転送は無い（数えない）',
     sources: [
       'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
       'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
       'https://developers.cloudflare.com/d1/worker-api/',
       'https://developers.cloudflare.com/d1/best-practices/query-d1/',
       'https://developers.cloudflare.com/workers/platform/pricing/',
+      'https://nextjs.org/docs/app/getting-started/fetching-data',
+      'https://vercel.com/docs/pricing',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
   {
@@ -116,12 +122,15 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
     provider: 'cloudflare',
     basis:
       'Vercel と同じ（Worker をカスタムドメインに置き、CORS のヘッダーを返し、D1 を binding で使う）。' +
-      'シェル・JS・CSS・画像は S3 + CloudFront に残る。投稿の画像は Worker が S3 に書く（S3 はインターネットからの受信に課金しない）',
+      'シェル・JS・CSS・画像は S3 + CloudFront に残る。投稿の画像は Worker が S3 に書く（S3 はインターネットからの受信に課金しない）。' +
+      'Next.js（Amplify・D-67）: SSR が fetch で Worker の API を呼ぶ。Amplify の料金ページに SSR から外への通信の記載が無い（未確認・数えない）',
     sources: [
       'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
       'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
       'https://developers.cloudflare.com/d1/worker-api/',
       'https://aws.amazon.com/s3/pricing/',
+      'https://nextjs.org/docs/app/getting-started/fetching-data',
+      'https://aws.amazon.com/amplify/pricing/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
   {
@@ -137,6 +146,42 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://aws.amazon.com/lambda/pricing/',
       'https://aws.amazon.com/ec2/pricing/on-demand/',
       'https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
+  // Next.js の API を別の事業者に（F-14・D-67。2026-11-02 に原文で確かめた）。Next.js のサーバー（SSR・ISR の作り直し・
+  // Route Handler）が DB を直接読まず、Worker の API を fetch で呼ぶ。Vercel・AWS（Amplify）の組は上の SPA と同じ行
+  // （host × slot × provider）で、Next.js の根拠もここに書く
+  {
+    host: 'aws-opennext',
+    slot: 'api',
+    provider: 'cloudflare',
+    basis:
+      'Next.js の Server Components は fetch で外の API を呼べ、キャッシュしない fetch は応答まで描画を止める（公式の文書）。' +
+      'Worker はカスタムドメイン（Cloudflare のゾーンのサブドメイン）に置け、D1 は Worker の binding で使う。' +
+      'OpenNext のサーバーの関数（Lambda）から外へ送るデータは EC2 のデータ転送の料金（東京 → インターネット $0.114/GB・月 100 GB は無料）。' +
+      'Vercel の料金の文書の課金の項目に、関数から外への通信の転送は無い（数えない）。Amplify の料金ページにも SSR から外への通信の記載が無い（未確認・数えない）',
+    sources: [
+      'https://nextjs.org/docs/app/getting-started/fetching-data',
+      'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
+      'https://developers.cloudflare.com/d1/worker-api/',
+      'https://aws.amazon.com/lambda/pricing/',
+      'https://vercel.com/docs/pricing',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
+  // VPS の API + Cloudflare の静的（SPA・D-67）。api のサブドメインを Cloudflare の DNS で VPS に向ける（プロキシしない）
+  {
+    host: 'cloudflare',
+    slot: 'api',
+    provider: 'sakura',
+    basis:
+      'シェル・JS・CSS は Workers の静的アセット（Worker を起動しないので無料）。API は さくらの VPS の Node と MySQL。' +
+      'api のサブドメインは DNS だけのレコード（「does not route HTTP/HTTPS traffic through its network」）で VPS に直接向け、CDN を通さない。' +
+      'さくらの VPS は転送量が無制限（回線は 100 Mbps の共有）。投稿の画像は VPS が R2 に書く（R2 は書き込みの受信に課金しない）',
+    sources: [
+      'https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/',
+      'https://developers.cloudflare.com/dns/proxy-status/',
+      'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
+      'https://vps.sakura.ad.jp/specification/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
 ];
@@ -219,6 +264,53 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'fact:cloudflare:workers-paid:static-assets',
     ],
   },
+  // Next.js の API を別の事業者に（F-14・D-67）。ブラウザは今の事業者の Next.js だけを呼び、Next.js のサーバーが Worker を呼ぶ
+  {
+    id: 'cf-workers-server',
+    slot: 'api',
+    platform: 'cloudflare',
+    hosts: ['vercel', 'aws', 'aws-opennext'],
+    frameworks: ['nextjs'],
+    link: { via: 'http', as: 'same' },
+    label:
+      'Cloudflare: Workers に API を置き、DB は D1（Next.js のサーバーから呼ぶ）',
+    note:
+      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、' +
+      'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。ブラウザは今の事業者の Next.js だけを呼ぶので CORS の設定は要らない（サーバーどうしの認証は要る）。' +
+      'API を呼ぶたびに Worker のリクエストとして数える。今の事業者の DB は使わなくなる。' +
+      'OpenNext の Lambda から送る問い合わせは AWS のデータ転送の料金で数え、Vercel・Amplify は料金の文書に項目が無いので数えない。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
+    premiseRefs: [
+      'fact:cloudflare:workers-paid:custom-domain-origin',
+      'fact:cloudflare:workers-paid:server-fetch',
+      'fact:cloudflare:workers-free:server-fetch',
+      'fact:cloudflare:workers-paid:d1-binding',
+      // サーバーから外への通信を数えない（Vercel・Amplify）／数える（OpenNext の Lambda）根拠
+      'fact:vercel:hobby:function-outbound',
+      'fact:vercel:pro:function-outbound',
+      'fact:aws:amplify-hosting:ssr-outbound',
+      'fact:aws:data-transfer-out:lambda-out',
+      'pool:cloudflare:workers-paid:paid-requests',
+      'limit:cloudflare:workers-free:cpu-ms-per-request',
+    ],
+  },
+  // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の手間・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
+  // プランは 2GB と 4GB（ディスクが 2 倍）。プランの間の移し替えも API と DB のデータの移行として扱う（仮定）
+  ...(['2gb', '4gb'] as const).map((plan): ComponentOption => ({
+    id: `sakura-vps-${plan}`,
+    slot: 'api',
+    platform: 'sakura',
+    hosts: ['cloudflare'],
+    frameworks: ['vite-spa'],
+    link: { via: 'http', as: 'same' },
+    label: `さくらの VPS: ${plan.toUpperCase()} に API と MySQL を置く（自前運用）`,
+    note:
+      `API を さくらの VPS ${plan.toUpperCase()}（東京）の Node に置き、DB は同じ VPS の MySQL。api のサブドメインは Cloudflare の DNS で VPS に直接向ける（プロキシしない DNS だけのレコードで、CDN を通らない）。` +
+      'シェル・JS・CSS と画像は Cloudflare から配る。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
+      '自前運用の維持の手間と偶発的な障害（1 台構成）が加わる。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要る。' +
+      'さくらのアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+    premiseRefs: ['host:', 'fact:cloudflare:workers-paid:static-assets'],
+  })),
 ];
 
 /** API を他の事業者に置いているか（SPA の API の置き場・D-65。既定・省略は同じ事業者）。 */
@@ -377,26 +469,43 @@ export function applyCross(
   return { ...arch, nodes, routes };
 }
 
-// ---- SPA の API の置き場（D-65・prd/10 §3）----
+// ---- API の置き場（SPA は D-65・prd/10 §3。Next.js と VPS は D-67）----
 
 /** API と一緒に他の事業者に移す（使わなくなれば外す）土台のノード。DB は API と同じ事業者に置く。 */
+const AWS_API_NODES = [
+  'apigw',
+  'lambda',
+  'aws-out',
+  'dynamodb',
+  'rds',
+  'aurora',
+  'aurora-pause',
+  'dsql',
+] as const;
 const HOST_API_NODES: Partial<Record<Platform, readonly string[]>> = {
   vercel: ['fn', 'db'],
-  aws: [
-    'apigw',
-    'lambda',
-    'aws-out',
-    'dynamodb',
-    'rds',
-    'aurora',
-    'aurora-pause',
-    'dsql',
-  ],
+  aws: AWS_API_NODES,
+  'aws-opennext': AWS_API_NODES,
   cloudflare: ['worker', 'd1', 'kv-db', 'hyperdrive', 'supabase'],
 };
 
+/** Next.js の構成で、サーバーが読む DB のノード（ここを他の事業者の API に差し替える）。 */
+const HOST_DB_NODES: Partial<Record<Platform, readonly string[]>> = {
+  vercel: ['db'],
+  aws: ['dynamodb', 'rds', 'aurora', 'aurora-pause', 'dsql'],
+  'aws-opennext': ['dynamodb', 'rds', 'aurora', 'aurora-pause', 'dsql'],
+};
+
+/**
+ * Next.js のサーバーに呼ばれた Worker が D1 を読んで JSON を返す 1 回の CPU（ms。ゲーム上の仮定。記事コミュニティの API の CPU と同じ値）。
+ * SSR・ISR の作り直しの CPU（HTML の描画）は Next.js のサーバーの側に残る。
+ */
+export const SERVER_API_WORKER_CPU_MS = 5;
+/** Next.js のサーバーから外の API への 1 回の問い合わせで送るデータ（KB。ゲーム上の仮定）。応答の受信は課金されない。 */
+export const SERVER_API_REQUEST_KB = 1;
+
 /** Cloudflare の Worker（API）と D1。土台が Vercel Hobby なら Workers Free、それ以外は Workers Paid（仮定）。 */
-function cfApiNodes(plan: string): ArchNodeIn[] {
+function cfApiNodes(plan: string, server: boolean): ArchNodeIn[] {
   const workers = plan === 'hobby' ? 'workers-free' : 'workers-paid';
   const bill = (meters: Record<string, string>) => ({
     accountId: 'cloudflare',
@@ -407,9 +516,21 @@ function cfApiNodes(plan: string): ArchNodeIn[] {
   return [
     {
       id: 'cf-worker',
-      label: 'Cloudflare Worker（API）',
-      config: { kind: 'function' },
-      facts: ['custom-domain-origin', 'cors-headers', 'd1-binding'],
+      label: server
+        ? 'Cloudflare Worker（API・Next.js のサーバーから呼ぶ）'
+        : 'Cloudflare Worker（API）',
+      config: server
+        ? {
+            kind: 'function',
+            classCpuMs: {
+              'document-ssr': SERVER_API_WORKER_CPU_MS,
+              'isr-revalidate': SERVER_API_WORKER_CPU_MS,
+            },
+          }
+        : { kind: 'function' },
+      facts: server
+        ? ['custom-domain-origin', 'server-fetch', 'd1-binding']
+        : ['custom-domain-origin', 'cors-headers', 'd1-binding'],
       billing: bill({ requests: 'requests', 'cpu-ms': 'cpu-ms' }),
     },
     {
@@ -425,6 +546,21 @@ function cfApiNodes(plan: string): ArchNodeIn[] {
       }),
     },
   ];
+}
+
+/** OpenNext のサーバーの関数（Lambda）から外の API へ送る問い合わせ（応答の大きさでなく、1 回 SERVER_API_REQUEST_KB で数える）。 */
+function awsOutToApi(): ArchNodeIn {
+  return {
+    id: 'aws-out-api',
+    label: 'AWS → インターネット（外の API への問い合わせ）',
+    config: {
+      kind: 'cdn',
+      hitRate: {},
+      egressKBPerRequest: SERVER_API_REQUEST_KB,
+    },
+    facts: ['lambda-out'],
+    billing: awsBill('data-transfer-out', { 'egress-gb': 'internet-out' }),
+  };
 }
 
 /** AWS の API Gateway（HTTP API）+ Lambda + DynamoDB と、AWS から外へ送る転送（API の応答・R2 への書き込み）。 */
@@ -457,14 +593,18 @@ function awsApiNodes(): ArchNodeIn[] {
   ];
 }
 
-/** 置き場ごとの、足すノードと経路。write は投稿の画像を書く手前まで（書き先は土台の経路の最後のノード）。 */
+/**
+ * 置き場ごとの、足すノードと API の経路。write は投稿の画像を書く手前まで（書き先は土台の経路の最後のノード。SPA だけ）。
+ * Next.js（cf-workers-server）の api は、土台の経路の DB のノードと差し替える列。
+ */
 function placement(
   id: string,
   plan: string,
+  host: Platform,
 ): { nodes: ArchNodeIn[]; api: string[]; write: string[] } | undefined {
   if (id === 'cf-workers')
     return {
-      nodes: cfApiNodes(plan),
+      nodes: cfApiNodes(plan, false),
       api: ['cf-worker', 'cf-d1'],
       // Worker は R2 に binding で書き、S3 には HTTPS で書く（S3 はインターネットからの受信に課金しない）
       write: ['cf-worker'],
@@ -476,14 +616,42 @@ function placement(
       api: ['aws-out', 'apigw', 'lambda', 'dynamodb'],
       write: ['apigw', 'lambda', 'aws-out'],
     };
+  if (id === 'cf-workers-server') {
+    // OpenNext の Lambda から外へ送る問い合わせだけ数える（Vercel・Amplify は料金の文書に項目が無い。数えない）
+    const out = host === 'aws-opennext' ? [awsOutToApi()] : [];
+    return {
+      nodes: [...out, ...cfApiNodes(plan, true)],
+      api: [...out.map((n) => n.id), 'cf-worker', 'cf-d1'],
+      write: [],
+    };
+  }
+  if (id === 'sakura-vps-2gb' || id === 'sakura-vps-4gb') {
+    const vps = id === 'sakura-vps-2gb' ? '2gb' : '4gb';
+    return {
+      // api のサブドメインは DNS だけのレコードで VPS に直接向ける（Cloudflare の CDN を通らない）。
+      // VPS から R2 への書き込みは、さくらの転送量無制限・R2 は受信に課金しない。ストレージ変更オプションは付けない（仮定）
+      nodes: [
+        vpsNode(
+          vps,
+          false,
+          `さくらの VPS ${vps.toUpperCase()}（Node の API + MySQL）`,
+          false,
+        ),
+      ],
+      api: ['vps'],
+      write: ['vps'],
+    };
+  }
   return undefined;
 }
 
 /**
- * SPA の API を他の事業者に置く（composeStack から、SPA の形にした後で呼ぶ。D-65）。
- * 記事の中身の API（api-content）ともともとの API（api）を、他の事業者の API と DB へ向ける。投稿の画像は API が受けて、
- * 今の置き場（R2・S3）に書く。Vercel Blob だけはアップロードを Vercel の関数に残す（Blob の書き込みの手順が
- * Vercel の関数を前提にしているため。仮定）。
+ * API を他の事業者に置く（composeStack から、SPA の形にした後で呼ぶ。SPA は D-65・Next.js と VPS は D-67）。
+ * - SPA: 記事の中身の API（api-content）ともともとの API（api）を、他の事業者の API と DB へ向ける。投稿の画像は API が受けて、
+ *   今の置き場（R2・S3）に書く。Vercel Blob だけはアップロードを Vercel の関数に残す（Blob の書き込みの手順が
+ *   Vercel の関数を前提にしているため。仮定）。
+ * - Next.js: サーバー（SSR・ISR の作り直し・Route Handler）の経路の DB を、他の事業者の API（Worker → D1）に差し替える。
+ *   ブラウザから見える経路（CDN → サーバー）は変わらない。
  * 土台の関数・DB は、ほかの経路（OGP の前処理・リアルタイム・Blob のアップロード）が使っていなければ外す。
  * standby.api（差し替えの途中）が別の置き場なら、その置き場のノードを経路に載せずに足す（常時かかる分だけ課金される）。
  */
@@ -493,27 +661,58 @@ export function applyCrossApi(
   plan: string,
   choices: Choices,
   standby: Choices,
+  framework: FrameworkId,
 ): ArchitectureInput {
+  const allowed = (id: string | undefined) =>
+    id !== undefined &&
+    CROSS_COMPONENTS.some(
+      (c) =>
+        c.slot === 'api' &&
+        c.id === id &&
+        hostsOf(c).includes(host) &&
+        (c.frameworks ?? []).includes(framework),
+    );
   const current = choices.api ?? 'same';
   const next = standby.api;
-  const cur = placement(current, plan);
+  const cur = allowed(current) ? placement(current, plan, host) : undefined;
   const nxt =
-    next !== undefined && next !== current ? placement(next, plan) : undefined;
+    next !== undefined && next !== current && allowed(next)
+      ? placement(next, plan, host)
+      : undefined;
   if (!cur && !nxt) return arch;
-  const routes: Partial<Record<RequestClass, string[]>> = { ...arch.routes };
+  const spa = framework === 'vite-spa';
+  let routes: Partial<Record<RequestClass, string[]>> = { ...arch.routes };
   let nodes = [...arch.nodes];
   const addAll = (ns: ArchNodeIn[]) =>
     nodes.push(...ns.filter((n) => !nodes.some((x) => x.id === n.id)));
-  if (cur) {
+  if (cur && spa) {
     routes.api = [...cur.api];
     routes['api-content'] = [...cur.api];
     const write = routes['image-write'];
     const target = write?.[write.length - 1];
     if (target && target !== 'blob')
       routes['image-write'] = [...cur.write, target];
-    addAll(cur.nodes);
+  } else if (cur) {
+    const db = HOST_DB_NODES[host] ?? [];
+    routes = Object.fromEntries(
+      Object.entries(routes).map(([cls, path]) => [
+        cls,
+        path!.flatMap((id) => (db.includes(id) ? cur.api : [id])),
+      ]),
+    );
   }
-  if (nxt) addAll(nxt.nodes);
+  if (cur) addAll(cur.nodes);
+  // 同じ id で別の契約のノード（VPS 2GB ↔ 4GB の移し替え）は、新しい側を別の id で足す（新旧の両方の月額を払う）
+  if (nxt)
+    addAll(
+      nxt.nodes.map((n) =>
+        nodes.some(
+          (x) => x.id === n.id && x.billing?.planId !== n.billing?.planId,
+        )
+          ? { ...n, id: `${n.id}-next` }
+          : n,
+      ),
+    );
   // 同じ事業者へ戻す途中は、土台の関数・DB を残す（新旧の両方を動かす）
   const keepHost = next === 'same' && current !== 'same';
   if (cur && !keepHost) {
@@ -526,6 +725,15 @@ export function applyCrossApi(
     );
     nodes = nodes.filter((n) => !drop.includes(n.id));
   }
+  if (cur && !spa)
+    nodes = nodes.map((n): ArchNodeIn => {
+      // サーバーから外の API への通信: Vercel の関数・Amplify の SSR は料金の文書に項目が無いので数えない（事実の文で出す）
+      if (host === 'vercel' && n.id === 'fn')
+        return { ...n, facts: [...(n.facts ?? []), 'function-outbound'] };
+      if (host === 'aws' && n.id === 'ssr')
+        return { ...n, facts: [...(n.facts ?? []), 'ssr-outbound'] };
+      return n;
+    });
   if (cur && host === 'cloudflare')
     nodes = nodes.map((n): ArchNodeIn => {
       // Worker が OGP の前処理・リアルタイムだけに残るときの名前

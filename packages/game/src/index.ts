@@ -477,9 +477,10 @@ export function frameworksOf(sc: Scenario): {
 
 /** フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。 */
 function frameworkDefaults(framework: FrameworkId): Choices {
+  // API の置き場の既定は同じ事業者（SPA は D-65・Next.js は D-67）
   return framework === 'vite-spa'
     ? { ogp: 'none', apiCache: 'none', api: 'same' }
-    : {};
+    : { api: 'same' };
 }
 
 /**
@@ -546,11 +547,43 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   ),
 }));
 
-/** API を他の事業者に置いたときの、API と DB の名前（D-65）。 */
+/** API を他の事業者に置いたときの、API と DB の名前（D-65・D-67）。 */
 const API_PLACEMENT_NAME: Readonly<Record<string, string>> = {
   'cf-workers': 'Cloudflare Workers・D1',
   'aws-lambda': 'AWS Lambda・DynamoDB',
+  'cf-workers-server': 'Cloudflare Workers・D1',
+  'sakura-vps-2gb': 'さくらの VPS 2GB（API・MySQL）',
+  'sakura-vps-4gb': 'さくらの VPS 4GB（API・MySQL）',
 };
+
+/** Next.js の構成で API を他の事業者に置いたときの、Next.js を載せている側の名前（D-67）。 */
+const NEXT_HOST_NAME: Readonly<Record<string, string>> = {
+  'aws-amplify': 'AWS Amplify の Next.js',
+  'aws-opennext': 'AWS の OpenNext',
+};
+
+/**
+ * 構成に自前運用のサーバー（VPS のホスト）があるか。構成そのもの（さくらの VPS）に加えて、部品で VPS を使うとき
+ * （Cloudflare の静的 + VPS の API。D-67）も含む。standby（差し替えの途中で新旧の両方を動かしている部品）も数える。
+ * serving が true なら、経路に載っている（リクエストを受けている）ホストだけ。
+ */
+export function selfHostedOf(
+  stackIndex: number,
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+  standby: Choices = {},
+  serving = false,
+): boolean {
+  if (STACKS[stackIndex]!.selfHosted) return true;
+  const arch = composeStack(STACK_DEFS[stackIndex]!, components, {
+    framework,
+    standby,
+  });
+  const routed = new Set(Object.values(arch.routes).flat());
+  return arch.nodes.some(
+    (n) => n.config.kind === 'host' && (!serving || routed.has(n.id)),
+  );
+}
 
 /**
  * 構成の名前（SPA では vinext を使わないので外し、フレームワークを添える。prd/10）。
@@ -565,10 +598,14 @@ export function stackName(
   components: Choices = {},
 ): string {
   const s = STACKS[stackIndex]!;
-  if (framework !== 'vite-spa') return s.name;
   const api = apiPlacedElsewhere(components)
     ? API_PLACEMENT_NAME[components.api!]
     : undefined;
+  // Next.js のサーバーから別の事業者の API を呼ぶ（D-67）: Next.js を載せている側 + API と DB
+  if (framework !== 'vite-spa')
+    return api
+      ? `${NEXT_HOST_NAME[s.id] ?? s.name.split(' + ')[0]} + ${api}`
+      : s.name;
   const base = api
     ? `${s.provider === 'aws' ? 'AWS の S3 + CloudFront' : s.name.split(' + ')[0]} の静的 + ${api}`
     : s.name.replace(' + vinext', '');
@@ -1208,9 +1245,16 @@ export function stackChangeText(
  * 構成ごとの維持の手間（毎月）。自前運用（VPS）はシナリオの値、自分で組む構成（OpenNext）は EFFORT.assembledUpkeep、
  * マネージドなら 0。始める画面の手間のバーにも使う（D-36・D-63）。
  */
-export function upkeepOf(sc: Scenario, stackIndex: number): number {
+export function upkeepOf(
+  sc: Scenario,
+  stackIndex: number,
+  /** 部品（VPS を部品として使うときも自前運用の維持がかかる。D-67）。省略は構成の既定。 */
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+  standby: Choices = {},
+): number {
   const s = STACKS[stackIndex]!;
-  return s.selfHosted
+  return selfHostedOf(stackIndex, components, framework, standby)
     ? sc.effort.selfHostedUpkeep
     : s.assembled
       ? EFFORT.assembledUpkeep
@@ -1295,15 +1339,42 @@ function imagesOf(
   );
 }
 
-/** 動いている構成（乗り換え中は新旧両方）の維持の手間。両方が自前運用でも 1 回分。 */
+/**
+ * 動いている構成（乗り換え中は新旧両方）の維持の手間。両方が自前運用でも 1 回分。今の構成は部品（差し替えの途中の新しい部品を含む）
+ * で VPS を使うときも自前運用（D-67）。乗り換え先は既定の部品から始まる。
+ */
 function upkeepFor(
-  state: Pick<GameState, 'stackIndex' | 'migration' | 'scenario'>,
+  state: Pick<
+    GameState,
+    | 'stackIndex'
+    | 'migration'
+    | 'scenario'
+    | 'components'
+    | 'framework'
+    | 'componentSwap'
+  >,
 ) {
-  const running = [
-    state.stackIndex,
-    ...(state.migration ? [state.migration.to] : []),
-  ];
-  return Math.max(...running.map((i) => upkeepOf(scenarioOf(state), i)));
+  const sc = scenarioOf(state);
+  const swap = state.componentSwap;
+  return Math.max(
+    upkeepOf(
+      sc,
+      state.stackIndex,
+      state.components,
+      state.framework,
+      swap ? { [swap.slot]: swap.option } : {},
+    ),
+    ...(state.migration
+      ? [
+          upkeepOf(
+            sc,
+            state.migration.to,
+            frameworkDefaults(state.framework),
+            state.framework,
+          ),
+        ]
+      : []),
+  );
 }
 
 function migrationWanted(m: Migration | null): number {
@@ -2081,18 +2152,36 @@ export function componentFlavor(o: {
  */
 export function componentEffortLabel(
   slot: SlotId,
-  state?: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
+  state?: Pick<GameState, 'stackIndex' | 'components' | 'framework'> & {
+    scenario?: Scenario;
+  },
   option?: string,
 ): string[] {
   const added =
     state && option !== undefined ? newAccountsBy(state, slot, option) : [];
   const setup = added.length > 0 ? EFFORT.accountSetup : 0;
-  const cross =
-    added.length > 0
+  // 部品で VPS を使い始める（VPS の API。D-67）と、自前運用の維持と偶発的な障害が加わる
+  const selfHosting =
+    state?.scenario &&
+    option !== undefined &&
+    !selfHostedOf(state.stackIndex, state.components, state.framework) &&
+    selfHostedOf(
+      state.stackIndex,
+      { ...state.components, [slot]: option },
+      state.framework,
+    )
+      ? [
+          `自前運用になる（毎月の維持 ${state.scenario.effort.selfHostedUpkeep}・自前の障害 月 ${Math.round(state.scenario.incidents.selfHostedChancePerMonth * 100)}%）`,
+        ]
+      : [];
+  const cross = [
+    ...(added.length > 0
       ? [
           `${added.map(accountLabel).join('・')} のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep * added.length}）`,
         ]
-      : [];
+      : []),
+    ...selfHosting,
+  ];
   return isDataSwap(slot)
     ? [
         `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月${setup ? ` + 手間 ${setup}` : ''}`,
@@ -2860,8 +2949,10 @@ export function playMonth(input: GameState): GameState {
     : null;
 
   const [rand, seed] = nextRandom(state.seed);
+  // 自前運用のサーバーの偶発的な障害。部品で VPS を使うとき（VPS の API。D-67）も、そのホストがリクエストを受けていれば当たる
+  const apiOnlyHost = !STACKS[stackIndexNow]!.selfHosted;
   const incident =
-    STACKS[stackIndexNow]!.selfHosted &&
+    selfHostedOf(stackIndexNow, state.components, state.framework, {}, true) &&
     rand < sc.incidents.selfHostedChancePerMonth;
 
   // 規約違反（policy）はすぐには止めず、指摘 → 翌月にアカウント停止の流れで扱う（D-19）
@@ -2900,7 +2991,11 @@ export function playMonth(input: GameState): GameState {
     revenue *= 1 - loss.incident;
     outages++;
     status = 'incident';
-    notes.push('VPS の障害で数時間止まった（SLA なし・1 台構成）');
+    notes.push(
+      apiOnlyHost
+        ? 'API の VPS の障害で数時間止まった（SLA なし・1 台構成。シェルは出るが中身が読めない）'
+        : 'VPS の障害で数時間止まった（SLA なし・1 台構成）',
+    );
   } else if (throttling.length) {
     revenue *= 1 - loss.throttle;
     status = 'slow';

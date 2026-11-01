@@ -42,7 +42,7 @@ describe('選べる範囲', () => {
       .find((x) => x.slot === 'api')
       ?.options.map((o) => `${o.platform}:${o.id}`);
 
-  it('SPA だけ・許した組だけ（VPS は同居だけなのでスロットを出さない）', () => {
+  it('許した組だけ（VPS の構成は同居だけなのでスロットを出さない。Next.js・VPS の API は D-67）', () => {
     expect(options(VERCEL_PRO, 'vite-spa')).toEqual([
       'vercel:same',
       'cloudflare:cf-workers',
@@ -50,14 +50,20 @@ describe('選べる範囲', () => {
     expect(options(CF_PAID, 'vite-spa')).toEqual([
       'cloudflare:same',
       'aws:aws-lambda',
+      'sakura:sakura-vps-2gb',
+      'sakura:sakura-vps-4gb',
     ]);
     expect(options(AWS, 'vite-spa')).toEqual([
       'aws:same',
       'cloudflare:cf-workers',
     ]);
     expect(options(VPS, 'vite-spa')).toBeUndefined();
-    for (const s of [VERCEL_PRO, CF_PAID, AWS])
-      expect(options(s, 'nextjs')).toBeUndefined();
+    expect(options(CF_PAID, 'nextjs')).toBeUndefined();
+    for (const s of [VERCEL_PRO, AWS])
+      expect(options(s, 'nextjs')).toEqual([
+        `${STACKS[s]!.provider}:same`,
+        'cloudflare:cf-workers-server',
+      ]);
   });
 
   it('既定は同じ事業者（今までのゲームは変わらない）', () => {

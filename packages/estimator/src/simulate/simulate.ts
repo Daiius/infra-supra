@@ -128,7 +128,7 @@ function consume(
                 0,
               ),
       );
-      add(u, 'egress-gb', kbToGb(n * p.kb));
+      add(u, 'egress-gb', kbToGb(n * (c.egressKBPerRequest ?? p.kb)));
       const out = ttl ?? {
         count:
           n * (1 - (c.ttlClasses?.includes(cls) ? 0 : (c.hitRate[cls] ?? 0))),
@@ -499,8 +499,9 @@ export function simulateResources(
       memoryGB: c.residentMemoryGB,
       diskGB:
         workload.storage.dbGB +
-        workload.storage.imagesGB +
-        workload.storage.variantsGB +
+        (c.storesImages
+          ? workload.storage.imagesGB + workload.storage.variantsGB
+          : 0) +
         c.otherDiskGB,
     };
   }

@@ -1,7 +1,7 @@
 # 10. フレームワークの分岐（Vite の SPA か Next.js か）と API の置き場
 
-> 状態: **確定（2026-11-01・D-34）・段 1 は実装済み（§7）・API の応答のキャッシュを部品として追加（§8・D-37）・段 2（API の置き場）を実装（§9・D-65・2026-11-02）**。F-01〜F-14 はユーザーが**推奨どおり一括で**決めた（§5）。
-> 段 1 で入れたのは F-01・F-02・F-04・F-05・F-07（F-09 は記録だけ）。段 2 で F-10〜F-13 を入れた（§9）。F-14（Next.js でも API を別に置く）・F-03・F-06・F-08 は**後の段**（§3.5・§5・§9.4）。
+> 状態: **確定（2026-11-01・D-34）・段 1 は実装済み（§7）・API の応答のキャッシュを部品として追加（§8・D-37）・段 2（API の置き場）を実装（§9・D-65・2026-11-02）・段 3（Next.js の API・VPS の API）を実装（§9.5〜・D-67）**。F-01〜F-14 はユーザーが**推奨どおり一括で**決めた（§5）。
+> 段 1 で入れたのは F-01・F-02・F-04・F-05・F-07（F-09 は記録だけ）。段 2 で F-10〜F-13 を入れた（§9）。段 3 で F-14（Next.js でも API を別に置く）を入れた（§9.5・D-67）。F-03・F-06・F-08 は**後の段**（§3.5・§5・§9.4）。
 > 調査の根拠は [調査メモ](./research/2026-11-01-framework-branch.md)（公式の文書・2026-11-01 取得）。
 > ここに出てくる効き方の大きさ（倍率・手間・段階）は**ゲーム上の仮定**で、実在の値ではない。
 
@@ -374,7 +374,7 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
 | AWS（S3 + CloudFront） | **Cloudflare: Workers + D1**（`cf-workers`） | シェル・JS・CSS・画像は CloudFront に残る。API Gateway・Lambda・DynamoDB は外れる。投稿の画像は Worker が S3 に書く（S3 はインターネットからの受信に課金しない）。Workers Paid（仮定） | 上と同じ + [S3 の料金](https://aws.amazon.com/s3/pricing/)（課金の例外に「Data transferred in from the internet」） |
 | Cloudflare（Free・Paid） | **AWS: API Gateway（HTTP API）+ Lambda + DynamoDB**（`aws-lambda`） | シェル・JS・CSS は Workers の静的アセット（Worker を起動しないので無料）。Worker と D1 は外れる（OGP の前処理・リアルタイムを使うときは Worker だけ残る）。API の応答は CloudFront を通らず API Gateway から外へ送るので、**東京 → インターネットの転送**（月 100 GB 無料の後 $0.114/GB）で数える。投稿の画像は Lambda が R2 に書く（同じ転送）。画像の変換は Worker の binding でなくゾーンの URL で頼む | [API Gateway の料金](https://aws.amazon.com/api-gateway/pricing/)（HTTP API は「Pay only for the API calls you receive and the amount of data transferred out」・「charged at the EC2 data transfer rate」）・[Lambda の料金](https://aws.amazon.com/lambda/pricing/)・[EC2 の料金](https://aws.amazon.com/ec2/pricing/on-demand/)（月 100 GB の無料） |
 
-- **入れなかった組**: VPS（API）+ 静的は Cloudflare。API だけを自前運用にすると、§3.4 の「偶発的な障害を API にだけ効かせる（可用性は普通）」と「自前運用の維持の手間を部品で足す」が要り、今の障害・維持のルールは構成（`STACKS[].selfHosted`）で決まっていて部品では変わらない。ルールを広げる段で入れる。
+- **入れなかった組**（→ D-67 で入れた。§9.5）: VPS（API）+ 静的は Cloudflare。API だけを自前運用にすると、§3.4 の「偶発的な障害を API にだけ効かせる（可用性は普通）」と「自前運用の維持の手間を部品で足す」が要り、今の障害・維持のルールは構成（`STACKS[].selfHosted`）で決まっていて部品では変わらない。ルールを広げる段で入れる。
   Vercel の外部への rewrite で同じドメインに見せる形も入れていない（課金が未確認・B-3）。
 - 事業者の間の転送: 送り出す側の egress で数える（prd/11 §2.3）。Cloudflare（Worker・R2）から外への転送は課金されない。Vercel の関数から外への通信は未確認なので数えない（この組では Vercel の関数は Blob のアップロードにしか残らない）。
 
@@ -421,8 +421,62 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
 
 ### 9.4 残した点
 
-- F-14（Next.js でも API を別に置く）: 入れていない。Next.js の Route Handler を外へ出すと HTML の生成（SSR・ISR）と API で DB が別になりうるため、DB の置き場の規則（API と同じ事業者）と一緒に決め直す。
-- VPS（API）の組（§9.1）・Vercel の外部への rewrite（B-3）・往復の遅延（F-12・段 3）。
+- F-14（Next.js でも API を別に置く）・VPS（API）の組: D-67 で入れた（§9.5）。
+- Vercel の外部への rewrite（B-3）・往復の遅延（F-12）。
 - 構成の名前: ゲーム中（月の表・結果・プラン変更の文面）は、API を他の事業者に置くと実際の組で出す（例「Vercel Pro の静的 + Cloudflare Workers・D1（Vite の SPA）」「Cloudflare Paid の静的 + AWS Lambda・DynamoDB（Vite の SPA）」。`stackName` に部品を渡す）。始める画面の構成の一覧と乗り換え先（既定の部品に戻る）は構成の名前のまま。
 - Cloudflare Paid の構成で API を AWS に出すと、Workers Paid の基本料は数えない（Worker を使わないので契約しない前提）。構成の名前は Paid のまま。
 
+### 9.5 段 3: Next.js の API を別の事業者に・VPS の API（2026-11-02・D-67）
+
+ユーザーの方針「より現実的なコスト感・費用を抑える複雑な構成も可能にしたい」を受け、§9.1 で入れなかった 2 つを推奨案で入れた。仕組みは同じ（`CROSS_PAIRS`・アカウントの手間・データの移行 6 × 1 か月）。
+
+| 土台 | API と DB（部品） | 経路と課金 | 根拠（公式・2026-11-02 取得） |
+|---|---|---|---|
+| Vercel（Hobby・Pro）・AWS（Amplify）・AWS（OpenNext）の **Next.js** | **Cloudflare: Workers + D1（Next.js のサーバーから呼ぶ）**（`cf-workers-server`） | ブラウザは今の事業者の Next.js だけを呼ぶ（CORS は要らない）。SSR・ISR の作り直し・Route Handler の経路の DB を Worker → D1 に差し替える（CDN・サーバーの関数は残る）。API を呼ぶたびに Worker のリクエスト。サーバーから外への通信は、OpenNext の Lambda だけ EC2 のデータ転送（月 100 GB 無料の後 $0.114/GB）で数え、Vercel・Amplify は料金の文書に項目が無いので数えない（前提の文 `function-outbound`・`ssr-outbound`） | [Next.js のデータの取得](https://nextjs.org/docs/app/getting-started/fetching-data)（「`fetch` requests are not cached by default and will block the page from rendering until the request is complete」）・[Vercel の料金の文書](https://vercel.com/docs/pricing)・[Amplify の料金](https://aws.amazon.com/amplify/pricing/)（課金はビルド・保存・配信の転送・SSR のリクエストと時間だけ）・[Lambda の料金](https://aws.amazon.com/lambda/pricing/)・§9.1 の Workers・D1 |
+| Cloudflare（Free・Paid）の **SPA** | **さくらの VPS 2GB / 4GB: API と MySQL**（`sakura-vps-2gb`・`sakura-vps-4gb`） | シェル・JS・CSS は Workers の静的アセット、画像は R2。api のサブドメインは DNS だけのレコードで VPS に直接向ける（CDN を通らない）。VPS の経路は API と投稿だけなので、回線（100 Mbps 共有の半分）・CPU の判定と話題の集中（D-44）も API の分だけ。ディスクに画像を数えない（`storesImages: false`） | [DNS のプロキシの状態](https://developers.cloudflare.com/dns/proxy-status/)（DNS だけのレコードは「does not route HTTP/HTTPS traffic through its network」）・[静的アセットの課金](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)・[さくらの VPS の仕様](https://vps.sakura.ad.jp/specification/) |
+
+- **自前運用のルールを部品にも効かせた**: 維持の手間（シナリオの値・3 / 月）と偶発的な障害（月 8%）は、構成が VPS のときに加えて、構成のノードに VPS のホストがあるとき（`selfHostedOf`）にもかかる。
+  維持は差し替えの途中の新しい VPS も数える（新旧の両方を動かす）。障害は VPS が経路に載っている（リクエストを受けている）月だけで、文は「API の VPS の障害」（シェルは出るが中身が読めない）。売上の減り方は VPS の構成と同じ（§3.4 の「可用性は普通」は入れていない）。
+  始める画面の手間のバー・部品の手間の見込み（「自前運用になる（毎月の維持 3・自前の障害 月 8%）」）にも出す。
+- 構成の名前（ゲーム中）: 「Vercel Pro + Cloudflare Workers・D1」「AWS Amplify の Next.js + Cloudflare Workers・D1」「AWS の OpenNext + Cloudflare Workers・D1」「Cloudflare Paid の静的 + さくらの VPS 2GB（API・MySQL）（Vite の SPA）」。
+- Next.js の既定の部品にも `api: 'same'` を足した（SPA と同じ）。既存の基準プレイ・golden は変わらない。
+
+**置いた仮定**（ゲーム上の仮定）:
+- Next.js のサーバーは 1 回の描画（SSR・ISR の作り直し）・1 回の API で Worker を 1 回呼ぶ。Worker の CPU は 1 回 5 ms（`SERVER_API_WORKER_CPU_MS`。記事コミュニティの API の CPU と同じ値。HTML の描画の CPU はサーバーの側に残る）。
+  OpenNext の Lambda から送る問い合わせは 1 回 1 KB（`SERVER_API_REQUEST_KB`。応答の受信は課金されない）。Workers のプランは Vercel Hobby なら Free、それ以外は Paid（§9.1 と同じ）。
+- API の VPS はストレージ変更オプションなし。常駐メモリ・CPU の仮定は VPS の構成と同じ（nginx + Node + MySQL）。2GB ↔ 4GB の移し替えもデータの移行（6 × 1 か月・新旧両方の月額）として扱う。
+
+### 9.6 段 3 の基準プレイ（何もしない・シード 1〜20・始める画面で部品を選ぶ）
+
+12 か月の費用は事業者別の中央値、所持金は中央値（§9.3 と同じ取り方）。
+
+| シナリオ | 構成 | API の置き場（他の部品） | 達成 | 12 か月の費用（事業者別） | 所持金 |
+|---|---|---|---|---|---|
+| 記事 | CF Paid（SPA） | 同じ（既定・目標の根拠） | **20 / 20** | $175（CF $175） | $1,870 |
+| 記事 | CF Paid（SPA） | VPS 2GB | 0 / 20（目標 17・障害 3） | $265（さくら $157・CF $108） | $1,468 |
+| 記事 | CF Free・Paid（SPA） | VPS 2GB（画像は投稿のときに縮める） | 0 / 20（目標 17・障害 3） | $159（さくら $157・CF $2） | $1,575 |
+| 記事 | CF Free（SPA） | VPS 2GB（既定の Images） | 0 / 20（Images Free の上限で停止） | $40 | $102 |
+| 記事 | CF Paid（SPA） | VPS 4GB | 0 / 20 | $425（さくら $317・CF $108） | $1,308 |
+| 記事 | VPS 2GB（SPA・比較） | — | 0 / 20 | $157 | $1,566 |
+| 記事 | Vercel Pro（Next.js） | 同じ | 0 / 20 | $1,491（Vercel $1,191・Supabase $300） | $851 |
+| 記事 | Vercel Pro（Next.js） | Workers + D1 | 0 / 20 | $1,251（Vercel $1,191・CF $60） | $1,091 |
+| 記事 | Vercel Pro（Next.js） | Workers + D1（画像: Cloudflare に縮める） | 0 / 20 | $718（Vercel $656・CF $62） | $1,619 |
+| 記事 | Vercel Hobby（Next.js） | Workers + D1 | 0 / 20（規約で停止） | — | $118 |
+| 記事 | Amplify（Next.js） | 同じ / Workers + D1 | 10 / 20 → 9 / 20 | $623 → $678（AWS $618・CF $60） | $1,702 → $1,648 |
+| 記事 | OpenNext（Next.js・既定） | 同じ / Workers + D1 | 17 / 20 → 14 / 20 | $444 → $499（AWS $439・CF $60） | $1,877 → $1,822 |
+| 記事 | OpenNext・画像の最適化 | 同じ / Workers + D1 | 20 / 20 → 20 / 20 | $72 → $127（AWS $67・CF $60） | $2,264 → $2,209 |
+| 受託 | CF Paid（SPA） | 同じ（既定） | **20 / 20** | $68 | $2,100 |
+| 受託 | CF Free・Paid（SPA） | VPS 2GB | **17 / 20**（障害 3） | $164（さくら $157・CF $7） | $1,862 |
+| 受託 | CF Free・Paid（SPA） | VPS 4GB | 11 / 20 | $324（さくら $317・CF $7） | $1,702 |
+| 受託 | VPS 2GB / 4GB（SPA・比較） | — | 1 / 20・12 / 20 | $157 / $317 | $1,636 / $1,710 |
+| 受託 | Vercel Pro（Next.js） | 同じ → Workers + D1 | 0 / 20 → **20 / 20** | $559 → $323（Vercel $263・CF $60） | $1,545 → $1,794 |
+| 受託 | Vercel Hobby（Next.js） | Workers + D1 | 0 / 20（規約） | — | $179 |
+| 受託 | Amplify（Next.js） | 同じ / Workers + D1 | 20 / 20 | $180 → $225（AWS $165・CF $60） | $1,872 → $1,827 |
+| 受託 | OpenNext（Next.js） | 同じ / Workers + D1 | 20 / 20 | $22 → $67（AWS $7・CF $60） | $2,031 → $1,985 |
+
+- **CF Paid・既定（目標の根拠）は変わらない**（SPA・Next.js とも。既存の golden・基準プレイもすべて同じ）。
+- **Next.js の API を Workers に出して得をするのは、DB の固定費がある構成**（Vercel Pro + Supabase Pro）。受託では Supabase Pro の $300 が消えて届く（SPA の §9.3 と同じ形）。記事コミュニティでは Vercel の転送と席が残り届かない。
+  DB が従量で安い AWS（DynamoDB）では、Workers Paid の基本料（$5 / 月）の分だけ高くなる。
+- **Cloudflare の静的 + VPS の API は、受託では VPS だけの構成より届く**（1 → 17 / 20）。VPS の構成は画像でディスクが埋まって止まるが、画像を R2 に置くとディスクに余裕が出る。届かなかった 3 件は偶発的な障害。
+  記事コミュニティでは VPS の構成と同じく届かない（維持の手間 3 とアカウントの 0.5 で機能開発が減る）。VPS の回線の使用率は、VPS だけの構成の 0.66 から 0.02 に下がる（シード 1 の最大）。
+- 満足度は替えても同じ（往復の遅延は計算しない・AX-13）。SSR が外の API を待つことは前提の文（`server-fetch`）で出す。

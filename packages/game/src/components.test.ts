@@ -46,6 +46,7 @@ describe('部品の差し替え', () => {
       images: 'images',
       db: 'd1',
       realtime: 'none',
+      api: 'same',
     });
     expect(actionEffort(s, comp('db', 'd1'))).toBeNull();
     expect(actionEffort(s, comp('isrCache', 'r2'))).toBe(
@@ -138,7 +139,11 @@ describe('部品の差し替え', () => {
           : [],
     );
     expect(m.stackIndex).toBe(VERCEL_PRO);
-    expect(m.components).toEqual({ isrCache: 'default', images: 'default' });
+    expect(m.components).toEqual({
+      isrCache: 'default',
+      images: 'default',
+      api: 'same',
+    });
   });
 });
 
