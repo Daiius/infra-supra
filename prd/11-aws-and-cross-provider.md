@@ -337,6 +337,10 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
   Cloudflare の変換の URL（`format=auto`）も next/image と同じくブラウザに合わせて WebP・AVIF を返すが、Cloudflare の構成の Images と同じく設定の形式で配る扱いにしている（D-58 の Cloudflare と揃えた。既定の JPEG では Vercel の next/image より大きく配る）。
 - AWS の Next.js は既定で半分のシードが所持金で落ちる（Amplify の転送 $0.15/GB）。画像を R2 に出すと AWS の請求が $238 減り、**全シードで合格**する。**AWS では「画像だけ Cloudflare」が勝ち筋を作る**（Vercel Pro では作らない。席の基本料と Supabase Pro の固定費の差）。
 - SPA は既定でも CloudFront の常時無料 1 TB にほぼ収まっている。画像を出すと残りの 1 シードも合格する。Lambda から R2 への転送は月 100 GB の無料の内（費用 0）。
+- **CloudFront の定額のプラン（D-61）との組み合わせ**（記事コミュニティ・シード 1〜20・始める画面で選んで 12 か月）: 画像を R2 に出すと CloudFront に残るのは HTML・JS・API だけになり、壊れる組は無い。
+  - Next.js・前段の CloudFront なし: Amplify には画像だけの CloudFront しか無いので、R2 に出すと CloudFront が無くなり、定額のプランは何にも当たらない（従量と同じ結果: 20 / 20）。プランの選択肢は残る（基本料も数えない）。
+  - Next.js・前段の CloudFront（静的と画像だけ）: 定額 Pro は R2 + Images 20 / 20（所持金 $1,849）・R2 に一律で縮める 20 / 20（$1,968）。定額 Free は 12 か月目に転送が込みの 1.3 倍で、速さが落ちて 0 / 20。
+  - SPA: 定額 Pro は R2 に一律で縮める 20 / 20（$1,833）、R2 + Images は 8 / 20（$1,720。定額 $15 と変換の費用が重なり目標にわずかに届かない）。定額 Free はリクエストの込みを超えて 0 / 20。
 
 ## 4. 既存の仕組みで足りないもの
 

@@ -193,3 +193,39 @@ describe('AWS + 画像だけ Cloudflare', () => {
     ]);
   });
 });
+
+describe('AWS + 画像だけ Cloudflare × CloudFront の定額のプラン（D-61）', () => {
+  it('前段の CloudFront は残り、定額のプランで課金し、画像は通らない', () => {
+    const a = composeStack('aws-amplify', {
+      images: 'cf-images',
+      frontCdn: 'static',
+      cdnPlan: 'flat-pro',
+    });
+    const front = a.nodes.find((n) => n.id === 'front')!;
+    expect(front.billing!.planId).toBe('cloudfront-flat-pro');
+    expect(a.routes['image-read']).toEqual(['cf-cache', 'cf-r2']);
+    expect(a.nodes.some((n) => n.id === 'cf')).toBe(false);
+  });
+
+  it('前段が無い Amplify では CloudFront が無くなる（定額のプランは何にも当たらない）', () => {
+    const a = composeStack('aws-amplify', {
+      images: 'cf-resize',
+      cdnPlan: 'flat-pro',
+    });
+    expect(
+      a.nodes.some((n) => n.billing?.planId.startsWith('cloudfront')),
+    ).toBe(false);
+  });
+
+  it('SPA の CloudFront はシェルと API に残り、定額のプランで課金する', () => {
+    const a = composeStack(
+      'aws-amplify',
+      { images: 'cf-images', cdnPlan: 'flat-pro' },
+      { framework: 'vite-spa' },
+    );
+    expect(a.nodes.find((n) => n.id === 'cf')!.billing!.planId).toBe(
+      'cloudfront-flat-pro',
+    );
+    expect(a.routes.asset).toEqual(['cf']);
+  });
+});
