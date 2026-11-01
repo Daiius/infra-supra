@@ -30,7 +30,7 @@ export function SetupComponents({
   value: SetupChoices;
   onChange: (v: SetupChoices) => void;
 }) {
-  const slots = setupSlots(scenario, stackIndex, framework);
+  const slots = setupSlots(scenario, stackIndex, framework, value);
   if (slots.length === 0) return null;
   return (
     <div className="space-y-2">

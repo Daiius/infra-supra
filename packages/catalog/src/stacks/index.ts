@@ -16,7 +16,9 @@ import {
   OPENNEXT_STACK_DEFS,
 } from './opennext.ts';
 import {
+  apiPlacedElsewhere,
   applyCross,
+  applyCrossApi,
   behaviorOf,
   CROSS_COMPONENTS,
   hostsOf,
@@ -28,6 +30,7 @@ export type Platform =
 export type SlotId =
   | 'isrCache'
   | 'images'
+  | 'api'
   | 'db'
   | 'realtime'
   | 'frontCdn'
@@ -117,6 +120,7 @@ export type ComponentOption = {
 export const SLOT_LABELS: Record<SlotId, string> = {
   isrCache: 'ISR のキャッシュ',
   images: '画像',
+  api: 'API の置き場',
   db: 'DB',
   realtime: 'リアルタイム',
   frontCdn: '前段の CDN',
@@ -524,11 +528,42 @@ const SPA_API_CACHE: ComponentOption[] = [
   },
 ];
 
+/**
+ * SPA の API の置き場（prd/10 §3・F-10〜F-13・D-65）。既定は同じ事業者に同居（段 1 の形）。他の事業者に置く部品は
+ * cross.ts の CROSS_COMPONENTS（CROSS_PAIRS で許した組だけ）。DB は API と同じ事業者に置く（またぐ往復を API と DB の間に作らない）。
+ * さくらの VPS は API を他の事業者に置く組を入れていないので、スロットを出さない（同居だけ）。
+ */
+const SPA_API_SAME: ComponentOption[] = (
+  [
+    [
+      'cloudflare',
+      'シェルを配るのと同じ Worker に API を置き、DB はこの構成の DB の部品（D1 など）を binding で使う。同じドメインなので CORS の設定は要らない',
+    ],
+    [
+      'vercel',
+      '同じプロジェクトの関数（Vercel Functions）に API を置き、DB は Supabase。同じドメインなので CORS の設定は要らない',
+    ],
+    [
+      'aws',
+      'CloudFront の後ろの API Gateway（HTTP API）+ Lambda に API を置き、DB はこの構成の DB の部品。同じ CloudFront のドメインなので CORS の設定は要らない',
+    ],
+  ] as const
+).map(([platform, note]): ComponentOption => ({
+  id: 'same',
+  slot: 'api',
+  platform,
+  frameworks: ['vite-spa'],
+  label: '同じ事業者（同居）',
+  note,
+  premiseRefs: [],
+}));
+
 export const COMPONENTS: readonly ComponentOption[] = [
   ...BASE_COMPONENTS,
   ...SAKURA_FRONT_CDN,
   ...SPA_OGP,
   ...SPA_API_CACHE,
+  ...SPA_API_SAME,
   ...AWS_COMPONENTS,
   ...OPENNEXT_COMPONENTS,
   ...CROSS_COMPONENTS,
@@ -558,6 +593,8 @@ export function apiCacheActive(
   if (framework !== 'vite-spa') return false;
   const c = { ...DEFAULT_CHOICES[platform], ...choices };
   if (!c.apiCache || c.apiCache === 'none') return false;
+  // API を他の事業者に置くと、この事業者の API の応答のキャッシュは効かない（選べない。D-65）
+  if (apiPlacedElsewhere(c)) return false;
   return platform !== 'sakura' || (c.frontCdn ?? 'none') !== 'none';
 }
 
@@ -1142,14 +1179,19 @@ export function composeStack(
     options.framework,
   );
   // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で直接組む
-  return spa && def.platform !== 'aws' && def.platform !== 'aws-opennext'
-    ? asSpa(crossed, def.platform, {
-        prerender: c.ogp === 'prerender',
-        apiCache: apiCacheActive(def.platform, c, 'vite-spa')
-          ? c.apiCache!
-          : 'none',
-      })
-    : crossed;
+  const shaped =
+    spa && def.platform !== 'aws' && def.platform !== 'aws-opennext'
+      ? asSpa(crossed, def.platform, {
+          prerender: c.ogp === 'prerender',
+          apiCache: apiCacheActive(def.platform, c, 'vite-spa')
+            ? c.apiCache!
+            : 'none',
+        })
+      : crossed;
+  // SPA の API を他の事業者に置く（D-65）
+  return spa
+    ? applyCrossApi(shaped, def.platform, def.plan, c, standby)
+    : shaped;
 }
 
 /**

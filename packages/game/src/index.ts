@@ -5,6 +5,7 @@
 import {
   accountsOf,
   apiCacheActive,
+  apiPlacedElsewhere,
   applyComponentsToWorkload,
   componentsOf,
   composeStack,
@@ -470,7 +471,30 @@ export function frameworksOf(sc: Scenario): {
 
 /** フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。 */
 function frameworkDefaults(framework: FrameworkId): Choices {
-  return framework === 'vite-spa' ? { ogp: 'none', apiCache: 'none' } : {};
+  return framework === 'vite-spa'
+    ? { ogp: 'none', apiCache: 'none', api: 'same' }
+    : {};
+}
+
+/**
+ * データの移行を伴う差し替え（DB・API の置き場）。乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える
+ * （期間中は新旧の両方の費用）。API の置き場は DB も一緒に移す（API と DB は同じ事業者。D-65）。
+ */
+export const isDataSwap = (slot: SlotId): slot is 'db' | 'api' =>
+  slot === 'db' || slot === 'api';
+
+/** 差し替えの進行の名前（画面・通知）。 */
+export const swapLabel = (slot: SlotId): string =>
+  slot === 'api'
+    ? 'API の置き場の移し替え（API と DB のデータの移行）'
+    : 'DB の差し替え（データの移行）';
+
+/**
+ * 今の選択で効かないスロット（出さない）。API を他の事業者に置くと、DB はその事業者の部品になるので、
+ * 構成の DB のスロットは出さない（D-65）。
+ */
+export function slotIneffective(slot: SlotId, choices: Choices): boolean {
+  return slot === 'db' && apiPlacedElsewhere(choices);
 }
 
 /**
@@ -1161,6 +1185,7 @@ export function upkeepOf(sc: Scenario, stackIndex: number): number {
 const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
   cloudflare: 'Cloudflare',
   vercel: 'Vercel',
+  aws: 'AWS',
   supabase: 'Supabase',
   sakura: 'さくらのクラウド',
 };
@@ -1538,6 +1563,8 @@ export function componentConflict(
   /** フレームワーク（AWS の CDN の料金のプランの判定に使う。省略は Next.js）。 */
   framework: FrameworkId = 'nextjs',
 ): string | null {
+  const api = apiConflict(platform, slot, option, choices);
+  if (api) return api;
   // OpenNext は 1 つの CloudFront がページを返すので、画像を R2 に出しても CloudFront は残る（同じ規則で衝突しない。D-63）
   if (platform === 'aws' || platform === 'aws-opennext')
     return cdnPlanConflict(platform, slot, option, choices, framework);
@@ -1554,6 +1581,32 @@ export function componentConflict(
     (choices.apiCache ?? 'none') !== 'none'
   )
     return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';
+  return null;
+}
+
+/**
+ * SPA の API の置き場の依存（D-65）。他の事業者に置くと、DB はその事業者の部品になり（構成の DB は選べない）、
+ * この事業者の API の応答のキャッシュは効かず、D1 に置いた画像を読む Worker の API も無くなる。頼る側を先に戻す（D-37 と同じ向き）。
+ */
+function apiConflict(
+  platform: Platform,
+  slot: SlotId,
+  option: string,
+  choices: Choices,
+): string | null {
+  const elsewhere = apiPlacedElsewhere(choices);
+  if (slot === 'db' && elsewhere)
+    return 'API を他の事業者に置いているので、DB はその事業者の部品になる（構成の DB は選べない）';
+  if (slot === 'apiCache' && option !== 'none' && elsewhere)
+    return 'API を他の事業者に置いているので、この事業者の API の応答のキャッシュは効かない';
+  if (slot === 'images' && option === 'd1' && elsewhere)
+    return 'API を他の事業者に置いているので、画像を読み出す Worker の API が無い';
+  if (slot === 'api' && option !== 'same') {
+    if ((choices.apiCache ?? 'none') !== 'none')
+      return 'API の応答のキャッシュを使っている（先にキャッシュを外す）';
+    if (platform === 'cloudflare' && choices.images === 'd1')
+      return '画像を D1 に置いている（読み出す Worker の API が無くなる。先に画像の置き場を替える）';
+  }
   return null;
 }
 
@@ -1602,7 +1655,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
   const busy = state.migration
     ? ng('busy', '乗り換えの最中は選べない')
     : state.componentSwap
-      ? ng('busy', 'DB の差し替え（データの移行）の最中は選べない')
+      ? ng('busy', `${swapLabel(state.componentSwap.slot)}の最中は選べない`)
       : null;
   switch (action.type) {
     case 'none':
@@ -1718,7 +1771,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         newAccountsBy(state, action.slot, action.option).length > 0
           ? EFFORT.accountSetup
           : 0;
-      if (action.slot === 'db') return ok(setup); // 移行の手間は進行中の月ごとに取る（effortAvailable が減る）
+      if (isDataSwap(action.slot)) return ok(setup); // 移行の手間は進行中の月ごとに取る（effortAvailable が減る）
       return ok(EFFORT.component[action.slot] + setup);
     }
   }
@@ -1749,13 +1802,13 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
   }
   if (
     action.type === 'component' &&
-    action.slot === 'db' &&
+    isDataSwap(action.slot) &&
     !proposalOnlyComponent(scenarioOf(state), action.slot, action.option)
   ) {
     const after = effortAvailable({
       ...state,
       componentSwap: {
-        slot: 'db',
+        slot: action.slot,
         option: action.option,
         required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
         done: 0,
@@ -1768,7 +1821,7 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
   // DB 以外の部品は今月から差し替わるので、増えるアカウントの維持（D-52）も今月の余力に含めて確かめる（OCL-73780314）
   if (
     action.type === 'component' &&
-    action.slot !== 'db' &&
+    !isDataSwap(action.slot) &&
     !proposalOnlyComponent(scenarioOf(state), action.slot, action.option)
   ) {
     const after = effortAvailable({
@@ -1824,7 +1877,9 @@ export function componentSlots(state: GameState): {
       (x) =>
         x.options.length > 1 &&
         // このシナリオで効かないスロットは出さない（D-33・prd/09 E-6）
-        !scenarioOf(state).hidden?.slots?.includes(x.slot),
+        !scenarioOf(state).hidden?.slots?.includes(x.slot) &&
+        // 今の選択で効かないスロット（API を他の事業者に置いたときの DB。D-65）
+        !slotIneffective(x.slot, current),
     );
 }
 
@@ -1857,8 +1912,14 @@ export function setupSlots(
   scenario: Scenario,
   stackIndex: number,
   framework: FrameworkId,
+  /** 選んだ部品（今の選択で効かないスロットを出さないために使う。API を他の事業者に置いたときの DB。D-65）。 */
+  choices: Choices = {},
 ): SetupSlot[] {
-  const draft = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
+  const fresh = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
+  const draft = {
+    ...fresh,
+    components: { ...fresh.components, ...choices },
+  };
   const slots: SetupSlot[] = componentSlots(draft).map(
     ({ slot, label, options }) => {
       const usable = options.filter(
@@ -1961,9 +2022,9 @@ export function setupProblem(
   framework: FrameworkId,
   choices: Choices,
 ): string | null {
-  const missing = choosable(setupSlots(scenario, stackIndex, framework)).filter(
-    (x) => !x.options.some((o) => o.id === choices[x.slot]),
-  );
+  const missing = choosable(
+    setupSlots(scenario, stackIndex, framework, choices),
+  ).filter((x) => !x.options.some((o) => o.id === choices[x.slot]));
   return missing.length
     ? `部品をまだ選んでいない: ${missing.map((x) => x.label).join('・')}`
     : null;
@@ -1996,7 +2057,7 @@ export function componentEffortLabel(
           `${added.map(accountLabel).join('・')} のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep * added.length}）`,
         ]
       : [];
-  return slot === 'db'
+  return isDataSwap(slot)
     ? [
         `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月${setup ? ` + 手間 ${setup}` : ''}`,
         '期間中は新旧両方の費用',
@@ -2923,7 +2984,7 @@ export function playMonth(input: GameState): GameState {
   if (componentSwap && componentSwap.done >= componentSwap.required) {
     components = { ...components, [componentSwap.slot]: componentSwap.option };
     notes.push(
-      `DB の差し替え（データの移行）が済んだ。来月から ${componentLabel(platformNow, componentSwap.slot, componentSwap.option)} を使う`,
+      `${swapLabel(componentSwap.slot)}が済んだ。来月から ${componentLabel(platformNow, componentSwap.slot, componentSwap.option)} を使う`,
     );
     componentSwap = null;
   }
@@ -3011,7 +3072,9 @@ export function playMonth(input: GameState): GameState {
     components: comps,
     componentSummary: (Object.keys(SLOT_LABELS) as SlotId[])
       .filter(
-        (slot) => componentsOf(platformNow, slot, state.framework).length > 1,
+        (slot) =>
+          componentsOf(platformNow, slot, state.framework).length > 1 &&
+          !slotIneffective(slot, comps),
       )
       .map(
         (slot) =>
@@ -3425,9 +3488,9 @@ export function applyAction(state: GameState, action: Action): GameState {
     case 'component': {
       const platform = STACKS[state.stackIndex]!.provider;
       const label = `${SLOT_LABELS[action.slot]}: ${componentLabel(platform, action.slot, action.option)}`;
-      if (action.slot === 'db') {
+      if (isDataSwap(action.slot)) {
         const componentSwap: ComponentSwap = {
-          slot: 'db',
+          slot: action.slot,
           option: action.option,
           required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
           done: 0,

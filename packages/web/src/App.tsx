@@ -14,6 +14,7 @@ import {
   componentPreview,
   componentProposal,
   componentSlots,
+  swapLabel,
   pageWeightOf,
   settingInactiveReason,
   settingNote,
@@ -751,7 +752,7 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
       : []),
     { label: '出来事への対応', value: e.interrupt, cls: 'bg-error' },
     {
-      label: '乗り換え・DB の差し替え',
+      label: '乗り換え・DB や API の移し替え',
       value: e.migration,
       cls: 'bg-secondary',
     },
@@ -1416,7 +1417,7 @@ function ComponentsSection({
       {busy ? (
         <div className="text-sm">
           {state.componentSwap
-            ? `DB の差し替え（データの移行）の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）。`
+            ? `${swapLabel(state.componentSwap.slot)}の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）。`
             : '乗り換えの最中。'}
           済むまで部品は差し替えられない。
         </div>
@@ -1459,6 +1460,12 @@ function ComponentsSection({
                               DB
                               の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
                               DB の費用を払う。
+                            </p>
+                          )}
+                          {x.slot === 'api' && (
+                            <p className="mt-2 opacity-80">
+                              API の置き場を移すと DB も一緒に移す（API と DB
+                              は同じ事業者に置く）。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払う。事業者をまたぐ往復の遅延は計算していない。
                             </p>
                           )}
                         </Info>
