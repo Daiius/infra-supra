@@ -256,6 +256,24 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
+  // Google Cloud（D-88・2026-11-02 に原文で確かめた）。画像だけ Cloudflare（R2 + 変換）。Cloud Run から外へ送るデータは
+  // Premium Tier のインターネットへの転送で数える
+  {
+    host: 'gcp',
+    slot: 'images',
+    provider: 'cloudflare',
+    basis:
+      'Vercel と同じ（R2 の公開バケットを Cloudflare のゾーンのカスタムドメインで配り、URL で変換する。next/image はローダーを替えられる）。' +
+      '投稿は Cloud Run が受けて R2 に書き、送るデータは Cloud Run のインターネットへの転送（Premium Tier の料金。東京 → アジアは 1 TiB まで $0.12 / GiB）で数える。受け取るデータは無料',
+    sources: [
+      'https://developers.cloudflare.com/r2/buckets/public-buckets/',
+      'https://developers.cloudflare.com/r2/pricing/',
+      'https://developers.cloudflare.com/images/transform-images/transform-via-url/',
+      'https://nextjs.org/docs/app/api-reference/config/next-config-js/images',
+      'https://cloud.google.com/run/pricing',
+      'https://cloud.google.com/vpc/network-pricing',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
   // DB だけ Neon（従量の Postgres。D-77・2026-11-02 に原文で確かめた）。Supabase の代わりに、関数から serverless driver で問い合わせる
   {
     host: 'vercel',
@@ -301,11 +319,11 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-images',
     slot: 'images',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws', 'aws-opennext', 'netlify'],
+    hosts: ['vercel', 'aws', 'aws-opennext', 'netlify', 'gcp'],
     link: { via: 'http', as: 'images' },
     label: 'Cloudflare: R2 に置き、閲覧のときに Images で変換',
     note:
-      '画像の原本を Cloudflare の R2 に置き、画像のドメイン（Cloudflare のゾーン）の URL で変換して配る。土台（Vercel・AWS・Netlify）の CDN を通らないので、' +
+      '画像の原本を Cloudflare の R2 に置き、画像のドメイン（Cloudflare のゾーン）の URL で変換して配る。土台（Vercel・AWS・Netlify・Google Cloud）の CDN を通らないので、' +
       '画像の転送は土台の転送の料金にならない（R2 の転送は無料）。一意な変換（種類 × サイズ違い）を月ごとに数える。' +
       'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
     premiseRefs: [
@@ -319,12 +337,12 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-resize',
     slot: 'images',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws', 'aws-opennext', 'netlify'],
+    hosts: ['vercel', 'aws', 'aws-opennext', 'netlify', 'gcp'],
     link: { via: 'http', as: 'resize' },
     label: 'Cloudflare: 投稿のときに一律で縮めて R2 に置く',
     note:
       '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて Cloudflare の R2 に置き、原本は残さない。' +
-      '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS・Netlify）の転送の料金にならない（R2 の転送は無料）。' +
+      '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS・Netlify・Google Cloud）の転送の料金にならない（R2 の転送は無料）。' +
       '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: [...VERCEL_TO_CF_IMAGES_REFS],
   },
@@ -531,6 +549,10 @@ function hostImageShape(
       ? { remove: ['image', 'blob'], write: ['upload', 'fn', out.id], out }
       : undefined;
   }
+  // Google Cloud（D-88）: Cloud Storage（gcs）を外す。投稿は Cloud Run が受けて R2 に書き、送るデータを
+  // Premium Tier のインターネットへの転送で数える
+  if (host === 'gcp')
+    return { remove: ['gcs'], write: ['run', 'gcp-out'], out: gcpOut() };
   if (host !== 'aws' && host !== 'aws-opennext') return undefined;
   if (arch.id === 'aws-amplify')
     return { remove: ['image', 'cf', 's3'], write: ['ssr'] };
@@ -570,6 +592,22 @@ function netlifyOut(
       provider: 'netlify',
       planId,
       meters: { 'egress-gb': 'bandwidth' },
+    },
+  };
+}
+
+/** Cloud Run から外（R2）へ送る転送を数えるだけのノード（D-88。cdn の種類でヒットなし。課金は転送だけ）。 */
+function gcpOut(): ArchNodeIn {
+  return {
+    id: 'gcp-out',
+    label: 'Google Cloud → インターネット（R2 への書き込み）',
+    config: { kind: 'cdn', hitRate: {} },
+    facts: ['run-outbound'],
+    billing: {
+      accountId: 'gcp',
+      provider: 'gcp',
+      planId: 'internet-egress',
+      meters: { 'egress-gb': 'transfer' },
     },
   };
 }

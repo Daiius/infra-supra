@@ -1,7 +1,7 @@
-# 11. AWS の追加と、事業者をまたぐ構成（Netlify・Neon を含む）
+# 11. AWS の追加と、事業者をまたぐ構成（Netlify・Neon・Google Cloud を含む）
 
 > 状態: **論点は決定済み（2026-11-01・D-50）・段 1（AWS・D-51）と段 2 の最初の組（Vercel・AWS + 画像だけ Cloudflare・D-52・§2.5・§3.6）を実装した**。
-> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）も実装した。§0〜§8 は草案のときの文で、今の形は §9 以降。
+> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）・Google Cloud（§16・D-88）も実装した。§0〜§8 は草案のときの文で、今の形は §9 以降。
 > 未取得・未決の残りは [decisions](./_grilling/decisions.md) 末尾の「未決」に集めた。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
 > （DB だけ Cloudflare だが Vercel + Next.js など）も入れてみたい」に対し、今までの積み重ね（prd/06・07 §11・10 §3、D-20・D-24・D-31・D-37・D-44〜D-48）の上に載せるならどうするかの案。
 > 料金・制限の数値は §1.5・§2.1 に**公式で確かめたものだけ**を出典 URL と取得日（2026-11-01）つきで書く。確かめていないことは「未確認」「推測」と書く。
@@ -864,3 +864,77 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 | Netlify Database（Netlify 自身の Postgres・クレジットで課金） | 扱わない |
 | Scale のプラン | 組まない |
 
+
+## 16. Google Cloud（Cloud Run + Firebase Hosting。2026-11-02・D-88）
+
+ユーザーの方針「より現実的なコスト感・費用を抑えるより複雑な構成も可能にしたい」「作者のスタックに寄せない」に沿って、
+コンテナを従量で動かす代表として Google Cloud を 6 つ目の事業者（`platform: 'gcp'`）に足した。料金は `providers/gcp.ts`、構成は `stacks/gcp.ts`
+（SPA・Next.js の静的書き出し・Astro の形もここで組む）。リージョンは東京（asia-northeast1）。
+
+### 16.1 確かめた公式の事実（2026-11-02 取得）
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| Cloud Run の課金（リクエストで課金・既定） | 起動・終了の間と 1 件以上を処理している間だけ CPU・メモリを課金。CPU $0.000024 / vCPU 秒・メモリ $0.0000025 / GiB 秒・リクエスト $0.40 / 100 万。最小インスタンスの待機（idle）は CPU $0.0000025・メモリ $0.0000025。インスタンスの時間は 100 ms で切り上げ。インスタンスで課金する設定は CPU $0.000018・メモリ $0.000002（リクエストの料金なし・起動から終了まで） | [Cloud Run pricing](https://cloud.google.com/run/pricing) |
+| 東京の Tier | asia-northeast1 は Tier 1（料金ページの「Regional price tiers」）。表の既定（us-central1）と同じ単価 | 同上 |
+| 無料の分（リクエストで課金） | 月 18 万 vCPU 秒・36 万 GiB 秒・200 万リクエスト。請求先アカウントごと・毎月リセット、「Tier 1 の単価での金額の割引」 | 同上 |
+| 同時実行 | 1 インスタンスの同時のリクエストの上限は既定 80（gcloud は vCPU × 80）・最大 1,000。CPU が混むと上限まで送らない | [about-concurrency](https://cloud.google.com/run/docs/about-concurrency) |
+| 最小インスタンス | 1 以上にすると温めておき、処理していない間も安い待機の単価で課金。0 なら待機は課金されない。最小インスタンスも再起動はありうる（best-effort） | [min-instances](https://cloud.google.com/run/docs/configuring/min-instances) |
+| 待機の時間 | 使われていないインスタンスの一部は「15-minute idle timeout」まで残す。応答の後に CPU を使う処理があるなら最小インスタンスを 1 以上に、と勧める | [about-instance-autoscaling](https://cloud.google.com/run/docs/about-instance-autoscaling) |
+| Cloud Run の転送 | インターネットへの転送は Premium Tier のネットワークの料金。同じリージョンの Google Cloud・Cloud CDN・Media CDN・Cloud Load Balancing への転送は無料（Firebase Hosting は挙げていない） | Cloud Run pricing・[network-pricing](https://cloud.google.com/vpc/network-pricing)（東京 → アジア $0.12 / GiB まで 1 TiB） |
+| Firebase Hosting | 保存 10 GB・転送 10 GB / 月まで無料、Blaze は以降 $0.026 / GB・$0.15 / GB。転送は CDN のヒットも外れも数える。Spark で超えると猶予の後にサイトが止まる | [usage-quotas-pricing](https://firebase.google.com/docs/hosting/usage-quotas-pricing)（2026-10-21 更新）・[pricing](https://firebase.google.com/pricing) |
+| Hosting → Cloud Run | rewrites で Cloud Run に渡せ、asia-northeast1 に対応。請求先アカウントが要り、Spark のプロジェクトは Blaze になる。60 秒で打ち切り | [hosting/cloud-run](https://firebase.google.com/docs/hosting/cloud-run) |
+| Hosting の CDN のキャッシュ | 動的な応答は既定で private。`public, s-maxage` でキャッシュする。デプロイすると全体が消える（パス・タグの指定の削除は文書に無い）。Cookie は `__session` だけが通る | [manage-cache](https://firebase.google.com/docs/hosting/manage-cache)（2026-10-21 更新） |
+| Next.js の自前のホスティング | Docker ですべての機能が動く。ISR のキャッシュは既定で各インスタンスのローカル（ディスク）で、複数のインスタンス・使い捨ての計算・前段の CDN では共有の cacheHandler（Redis・S3 など）を自分で書く。next/image は next start でそのまま動く。ISR は `s-maxage` を付ける | [self-hosting](https://nextjs.org/docs/app/guides/self-hosting)・[deploying](https://nextjs.org/docs/app/getting-started/deploying) |
+| Cloud Storage（東京） | Standard $0.023 / GiB 月・Class A $0.005 / 1,000・Class B $0.0004 / 1,000。常に無料の分は米国のリージョンだけ。同じリージョンのサービスへの転送は無料 | [storage/pricing](https://cloud.google.com/storage/pricing) |
+| Firestore（Standard・東京） | 読み取り $0.038・書き込み $0.115・削除 $0.013（各 10 万）・保存 $0.115 / GiB 月。無料は 1 日 5 万読み取り・2 万書き込み・保存 1 GiB（1 プロジェクトに 1 つ）。同じリージョンからは転送無料 | [firestore/pricing](https://cloud.google.com/firestore/pricing) |
+| Cloud SQL（東京） | db-f1-micro（共有の vCPU・0.6 GiB）$0.0122 / 時間（同じページの月額の表示は $10.22 で、730 時間と合わない）・SSD $0.221 / GiB 月。共有の vCPU は SLA の対象外。秒ごとに課金 | [sql/pricing](https://cloud.google.com/sql/pricing) |
+| 日本の消費税 | 「Google Cloud usage by customers in Japan is subject to 10% JCT」 | [VAT overview](https://docs.cloud.google.com/billing/docs/resources/vat-overview) |
+
+### 16.2 入れた形
+
+- **構成**: 「Google Cloud（Cloud Run + Firebase Hosting）」1 つ（STACK_DEFS の 12 番目。添字は既存の後ろ）。Firebase の Blaze（Cloud Run に請求先アカウントが要る）。
+  - Next.js: `output: 'standalone'` のコンテナを Cloud Run（1 vCPU・512 MiB・同時 80。大きさは仮定）。ISR は Hosting の CDN（`s-maxage`）とインスタンスごとのローカルのキャッシュ（**共有しない**。部品の文と前提に出す）。
+    オンデマンドの再検証は CDN に届かない（デプロイでしか消えない）ので `onDemandIsr: false`。共有のキャッシュ（自作の cacheHandler + Memorystore・Cloud Storage）は料金・接続を確かめていないので部品にしていない。
+  - SPA・静的書き出し・Astro: Hosting から静的に配り、API（Astro はマイページも。@astrojs/node）を Cloud Run。ビルドし直しは CI でビルドして deploy する前提で数えない（AWS と同じ仮定）。
+- **estimator**: 新しいノードの種類 `container`（Cloud Run 型。prd/04 §3.3.1）と資源 `idle-cpu-hours`・`idle-memory-gb-hours`。アクティブな時間は
+  `S × max(1 − e^(−x), x / 同時実行, CPU 秒 / (S × vCPU))`（x = 同時に処理している件数の平均）。閲覧が薄いと重ならず 1 件ずつインスタンスの時間が数えられ、濃いと同時実行でまとまる。
+  最小インスタンス m は `max(0, m × 730 − アクティブな時間)` を待機で課金する。冷えた起動の割合は `m = 0` のとき `e^(−λ × 900 秒)`（月の平均の到着率）。
+- **部品**: ISR（Hosting の CDN + ローカル / キャッシュしない）、画像（Cloud Run で変換 = next/image・SPA と Astro は自作 / 最適化しない / 投稿のときに縮める / 画像だけ Cloudflare 2 つ）、
+  DB（**Firestore**: 従量・既定 / **Cloud SQL** db-f1-micro: 固定）、**最小インスタンス数**（新しいスロット `minInstances`: 0 / 1）、SPA の OGP の前処理・API の応答のキャッシュ（Hosting の `s-maxage`）、API は同居だけ。ファイルの置き場は Cloud Storage（固定）。
+- **Firestore の数え方**: 要求の単位の DB（`request-db`）で、1 回の問い合わせの読み取り = 応答の大きさ ÷ 1 ドキュメント（1 KB と仮定）の切り上げ、書く行 1 行 = 書き込み 1。
+- **無料の分**: Cloud Run の無料の分はアクティブの分にだけ当てる（待機には当てない。料金ページは「アクティブの単価に基づく」と書くだけ）。Hosting・Firestore のプロジェクトごとの無料はアカウントで数える（1 プロジェクト）。
+- **転送**: Cloud Run → Hosting の応答は数えない（解釈。料金ページの無料の行に Hosting は無いが、インターネットへの転送とも書かれていない）。利用者への転送は Hosting の $0.15 / GB で数える。画像の投稿は Hosting を通さない。
+- **事業者をまたぐ部品**（CROSS_PAIRS に 1 行）: 画像だけ Cloudflare（`cf-images`・`cf-resize`）。Cloud Run から R2 へ送るデータは Premium Tier のインターネットへの転送（ノード `gcp-out`）。API を Workers に置く組は入れていない。
+- **ゲーム**: 維持の手間 0.5 / 月（`EFFORT.containerUpkeep`。コンテナのイメージのビルド・ベースイメージの更新・デプロイの設定。OpenNext の 1 より小さい）。最小インスタンス数の切り替えは手間 1。
+  冷えた起動を待つ閲覧が 5% 以上の月は速さの重さを 1 つ数える（`COLD_START.heavyShare`。ゲーム上の仮定）。消費税は `added`。見積モードの曲線は AWS の 2 つの構成を同じ色にした（6 色の枠）。
+
+### 16.3 未取得・扱わないもの
+
+| 項目 | 扱い |
+|---|---|
+| Cloud Run の SLA・Hosting の SLA | 取得していない（`not-stated`。SLA の要件は満たせない扱い） |
+| インスタンスの時間の 100 ms の切り上げ・起動と終了の時間 | 数えない（月の時間を連続の値で出す） |
+| Cloud Run → Firebase Hosting の転送の課金 | 書かれていない。数えない側を採った |
+| 冷えた起動の秒数 | 公式の値が無い。割合だけをゲーム上の仮定で速さに効かせる |
+| 共有の ISR のキャッシュ（Memorystore・自作の cacheHandler） | 部品にしていない |
+| Cloud SQL の最小の割り当ての量・バックアップ・HA | 確かめていない（使用量で数える）・数えない |
+| Hosting の保存（10 GB の後 $0.026） | 静的なファイルの量を数えていない |
+| インスタンスで課金する設定・確約の割引（CUD） | 扱わない |
+| API を Cloudflare Workers に置く組・DB だけ Neon | 入れていない |
+
+### 16.4 基準プレイ（何もしない・シード 1〜20・達成数・12 か月の費用の平均 / 月）
+
+| シナリオ × フレームワーク | 既定（Firestore・最小 0） | 最小インスタンス 1 | Cloud SQL | 画像だけ Cloudflare（`cf-resize`） |
+|---|---|---|---|---|
+| 記事 × Next.js | 0/20・$62.1 | 0/20・$71.4 | 0/20・$69.0 | **20/20**・$26.0 |
+| 記事 × SPA | 0/20・$54.2 | — | — | **20/20**・$9.7 |
+| 受託 × Next.js | 20/20・$12.2 | 20/20・$21.6 | 20/20・$16.7 | （画像のスロットなし） |
+| 受託 × SPA | 20/20・$8.7 | — | 20/20・$12.7 | — |
+| （参考）CF Paid × Next.js（目標の根拠） | 記事 20/20・$15.2・受託 20/20・$5.7（不変） | | | |
+
+- 記事コミュニティの費用の大半は Hosting の転送（$0.15 / GB。1 か月目 $18.6・12 か月目 $161）。Cloud Run は 1 か月目は無料の分に収まり、12 か月目でも CPU $4.3・リクエスト $1.3。**計算より転送が効く**構成で、画像を Cloudflare に出すと届く。
+- 最小インスタンス 1 は月 約 $9.7 の待機の費用だけが増える。どちらのシナリオも閲覧が途切れない（月の平均の到着率 × 15 分が大きい）ので冷えた起動はほぼ 0 で、速さは変わらない（夜間に減る分は入れていない）。
+- Cloud SQL は月 約 $8.9 + 保存の固定で、Firestore（従量）より受託でも記事でも高い。
+- （参考）記事 × Astro は既定で 20/20・$59.5（記事が静的で速さが「良い」）、記事 × 静的書き出しは画像が「縮めて置く」の既定で 0/20・$152.5。
+- 既存の golden・基準プレイ（CF Paid × Next.js を含む）はすべて不変。シナリオの `baselines` には足していない。

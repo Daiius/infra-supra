@@ -31,6 +31,7 @@ import {
 } from 'catalog';
 import {
   estimate,
+  type EstimateResult,
   type ArchitectureInput,
   type LineItem,
   type PlatformPremise,
@@ -42,6 +43,7 @@ import { nextRandom } from './random.ts';
 import {
   allocateEffort,
   buzzLasting,
+  COLD_START,
   EFFORT,
   FLAT_PLAN_ADJUST,
   effectiveSsrCpuMs,
@@ -594,7 +596,7 @@ export function frameworksOf(sc: Scenario): {
 /**
  * フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。
  * Next.js の静的書き出し（D-80）は next/image の既定のローダーが使えないので、閲覧のときに変換する事業者の画像の部品
- * （Vercel の画像の最適化・VPS のホストで変換）が無い。platform を渡すと、その事業者では投稿のときに縮める部品を既定にする。
+ * （Vercel の画像の最適化・VPS のホスト・Cloud Run で変換）が無い。platform を渡すと、その事業者では投稿のときに縮める部品を既定にする。
  * シナリオが画像のスロットを隠しているとき（受託の添付ファイル）は、画像の部品は効かせないので替えない。
  */
 export function frameworkDefaults(
@@ -607,7 +609,7 @@ export function frameworkDefaults(
     return { ogp: 'none', apiCache: 'none', api: 'same' };
   if (
     framework === 'nextjs-export' &&
-    (platform === 'vercel' || platform === 'sakura') &&
+    (platform === 'vercel' || platform === 'sakura' || platform === 'gcp') &&
     !scenario?.hidden?.slots?.includes('images')
   )
     return { api: 'same', images: 'resize' };
@@ -692,6 +694,8 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   selfHosted: s.nodes.some((n) => n.config.kind === 'host'),
   /** 自分で組む構成（OpenNext など。維持の手間がかかる。D-63）。 */
   assembled: STACK_DEFS[i]!.assembled ?? false,
+  /** コンテナで動かすマネージドの構成（Cloud Run。維持の手間が少しかかる。D-88）。 */
+  containerized: STACK_DEFS[i]!.containerized ?? false,
   /** ホストのディスク（VPS だけ。下位のプランへ変更できるかの判定に使う）。 */
   diskGB: s.nodes.reduce(
     (a, n) => (n.config.kind === 'host' ? n.config.diskGB : a),
@@ -1093,10 +1097,11 @@ function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
   const format = imageFormatOf(p.settings.imageKB);
   if (format === 'jpeg') return w;
   const images = { ...DEFAULT_CHOICES[p.platform], ...p.components }.images;
-  // OpenNext の画像の最適化（Lambda）: CloudFront の外れた分ごとに変換するので、変換 1 回の時間を 1.5 倍にする（OCL-ECDEF8A1・D-63）
+  // OpenNext の画像の最適化（Lambda）・Cloud Run の next/image: CDN の外れた分ごとに変換するので、変換 1 回の時間を 1.5 倍にする
+  // （OCL-ECDEF8A1・D-63・OCL-CDDD26AB）
   if (
     format === 'avif' &&
-    p.platform === 'aws-opennext' &&
+    (p.platform === 'aws-opennext' || p.platform === 'gcp') &&
     usesNextImage(p.platform, p.framework, images)
   )
     return { ...w, images: { ...w.images, transformWorkFactor: 1.5 } };
@@ -1113,6 +1118,29 @@ function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
   return factor === 1
     ? w
     : { ...w, images: { ...w.images, variants: w.images.variants * factor } };
+}
+
+/**
+ * 冷えた起動を待つ閲覧の割合（D-88・OCL-554477DF・OCL-151B35E0）。コンテナに届いた要求のうち起動を待つ割合（coldStartShare）に、
+ * 閲覧 1 件あたりコンテナに届く要求の数（1 を超えうる）を掛けて閲覧全体の割合に直し、掛けた後に 1 を上限にする。画像の投稿（image-write）は閲覧に
+ * 関係しないので数えない。コンテナが複数あれば最大。
+ */
+export function coldStartViewShare(r: EstimateResult): number {
+  const sim = r.simulation;
+  const pv = sim.workload.monthlyPageViews;
+  if (pv <= 0) return 0;
+  return Math.max(
+    0,
+    ...sim.architecture.nodes.map((n) => {
+      const u = sim.nodes[n.id]!;
+      if (!u.coldStartShare) return 0;
+      const nonView = sim.architecture.routes['image-write']?.includes(n.id)
+        ? sim.workload.classes['image-write'].count
+        : 0;
+      const viewRequests = Math.max(0, (u.resources.requests ?? 0) - nonView);
+      return Math.min(1, (u.coldStartShare * viewRequests) / pv);
+    }),
+  );
 }
 
 /** テンプレートの値から在庫の初期値を作る。 */
@@ -1638,7 +1666,7 @@ export function rewriteText(
 
 /**
  * 構成ごとの維持の手間（毎月）。自前運用（VPS）はシナリオの値、自分で組む構成（OpenNext）は EFFORT.assembledUpkeep、
- * マネージドなら 0。始める画面の手間のバーにも使う（D-36・D-63）。
+ * コンテナで動かすマネージド（Cloud Run）は EFFORT.containerUpkeep、それ以外のマネージドなら 0。始める画面の手間のバーにも使う（D-36・D-63）。
  */
 export function upkeepOf(
   sc: Scenario,
@@ -1653,7 +1681,9 @@ export function upkeepOf(
     ? sc.effort.selfHostedUpkeep
     : s.assembled
       ? EFFORT.assembledUpkeep
-      : 0;
+      : s.containerized
+        ? EFFORT.containerUpkeep
+        : 0;
 }
 
 /** 課金のアカウントの画面の名前（D-52）。 */
@@ -1665,6 +1695,7 @@ const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
   netlify: 'Netlify',
   neon: 'Neon',
   sakura: 'さくらのクラウド',
+  gcp: 'Google Cloud',
 };
 export const accountLabel = (id: string) => ACCOUNT_LABEL[id] ?? id;
 
@@ -3779,6 +3810,9 @@ export function playMonth(input: GameState): GameState {
   // Astro の初回表示の軽さ（JS はアイランドの分だけ。速さの重さを 1 つ減らす。ゲーム上の仮定・D-68）
   const firstLoadLight =
     astro && (sc.frameworks?.astro?.firstLoadLight ?? false);
+  // コンテナの冷えた起動（Cloud Run の最小インスタンス 0。D-88）
+  const coldShare = coldStartViewShare(r);
+  const coldStart = coldShare >= COLD_START.heavyShare;
   // 静的書き出しのマイページは、サーバーの描画が無い代わりにブラウザが HTML → JS → API の順に待つ。速さ・初回表示は
   // Next.js と同じ扱い（SSR の CPU の値をそのまま重さに使う。ゲーム上の仮定・D-80）
   const serverCpuMs = spa
@@ -3810,6 +3844,7 @@ export function playMonth(input: GameState): GameState {
       ssrCpuMs: serverCpuMs,
       firstLoadHeavy: firstLoad,
       firstLoadLight,
+      coldStart,
       imageKB: viewed.imageKB,
       variants: viewed.variants,
       revalidateSec: viewed.revalidateSec,
@@ -3855,9 +3890,11 @@ export function playMonth(input: GameState): GameState {
         premises: r.premises,
         firstLoadHeavy: firstLoad,
         firstLoadLight,
+        coldStart,
       },
       sat,
     ),
+    coldShare: coldStart ? coldShare : undefined,
     featurePoints,
     month,
     imagesUnoptimized: imgs === 'none',
@@ -4324,6 +4361,8 @@ function stageReasons(
     /** コメントを記事のページに含め、時間で再検証・ビルドしている（コメントが間隔の分だけ遅れて見える。D-85）。 */
     commentsDelayed?: boolean;
     onDemandReason?: string | undefined;
+    /** コンテナの冷えた起動を待つ閲覧の割合（速さの重さに数えたときだけ。D-88）。 */
+    coldShare?: number | undefined;
   },
 ): Partial<Record<Element, string>> {
   const out: Partial<Record<Element, string>> = {};
@@ -4341,6 +4380,12 @@ function stageReasons(
         : c.apiOnly
           ? `重さ ${c.heaviness}（API を待つブラウザの描画 ${c.ssrCpuMs} ms 相当・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
           : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`;
+  if (
+    stages.speed !== 'good' &&
+    c.coldShare !== undefined &&
+    !c.throttling.length
+  )
+    out.speed = `${out.speed}・閲覧の ${Math.round(c.coldShare * 100)}% がコンテナの冷えた起動を待つ（最小インスタンス 0）`;
   if (stages.quality !== 'good')
     out.quality = c.qualityReason ?? `画像 ${c.settings.imageKB} KB`;
   if (stages.freshness !== 'good')

@@ -2,7 +2,7 @@
 
 > 状態: **設計中（最小の形は実装済み。下の ⚠）**。各フレームワーク・ホストの対応状況（どの機能がどのホストで動くか）は、
 > 料金データと同じく公式ドキュメントを出典にして catalog に入れる（[03](./03-pricing-schema.md) §1 と同じ規律）。
-> 今は Next.js・Vite の SPA・Astro × Cloudflare・Vercel・さくらの VPS・AWS（Amplify・S3 + CloudFront・OpenNext）・Netlify を、出典つきで `packages/catalog/src/frameworks` の DeployTarget の表に入れた（Astro × AWS は unsupported）。
+> 今は Next.js・Vite の SPA・Astro × Cloudflare・Vercel・さくらの VPS・AWS（Amplify・S3 + CloudFront・OpenNext）・Netlify・Google Cloud（Cloud Run + Firebase Hosting。D-88）を、出典つきで `packages/catalog/src/frameworks` の DeployTarget の表に入れた（Astro × AWS は unsupported）。
 > ⚠ **一部実装済み**（Next.js と Vite の SPA の 2 つだけの最小の形。BuildOutput は Workload の routes で代用）→ [10](./10-framework-branch.md) §7・「D-34」（2026-11-01）
 > ⚠ **Next.js の静的書き出し（`output: 'export'`）を 4 つ目の選択肢として実装**（§7・D-80・2026-11-02）。Astro と SPA の仕組みの組み合わせで足せた（新しい型・エンジンの拡張なし）。
 > ⚠ **Astro を実装**（§6・D-68・2026-11-02）。BuildOutput の型は作らず、SPA と同じく「テンプレートの書き換え（`toAstro`）+ DeployTarget の表 + `composeStack` の分岐」で足せた（§3 の「データ追加だけで足せるか」の検証の答えは §6.6）
@@ -159,6 +159,7 @@ MVP の比較対象は「フレームワーク × ホスト」の組み合わせ
 - **画像**: 事業者の画像の部品はそのまま。Vercel・VPS の既定の画像（閲覧のときに変換）は `<Image />` の既定に合わせて WebP で配る（`autoImageFormat`）。投稿された画像は静的なページのビルドで変換しない（ビルドの時間に入れない）。
 
 - **Netlify（D-71・prd/11 §14）**: Next.js（OpenNext のアダプター・ISR はオンデマンドも対応）・Vite の SPA（静的 + Netlify Functions）・Astro（`@astrojs/netlify`）をすべて `native` で足した。Astro のビルドし直しは、ビルドの時間でなく本番のデプロイ 1 回ごとのクレジット（資源 `deploys`）で数える。
+- **Google Cloud（D-88・prd/11 §16）**: Next.js（`output: 'standalone'` のコンテナを Cloud Run。ISR のキャッシュはインスタンスごとで共有しない・オンデマンドの再検証は Hosting の CDN に届かない）・Vite の SPA と Next.js の静的書き出し（Firebase Hosting + Cloud Run の API）・Astro（Hosting + `@astrojs/node` のコンテナ）をすべて `native` で足した。ビルドし直しは CI で行う前提で数えない（AWS と同じ）。
 
 ### 6.3 置いた仮定（template-default・ゲーム上の仮定）
 

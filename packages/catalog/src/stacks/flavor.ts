@@ -24,6 +24,8 @@ export const STACK_FLAVOR: Readonly<Record<string, string>> = {
     '個人向けの手ごろな月額のプラン。クレジットが増え、足りなければ少額ずつ買い足せる',
   'netlify-supabase-pro':
     'チーム向けのプラン。メンバーを何人足しても月額は同じで、クレジットも多い',
+  'gcp-cloud-run':
+    '大手のクラウドでコンテナを動かす。使った分だけの支払いで、無料で使える量もあり、同時のリクエストはまとめてさばける',
 };
 
 /**
@@ -225,6 +227,33 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '認証やストレージまで揃う人気の Postgres。決まった月額で、サーバーが常に動いている',
   'neon:db:neon':
     '使われていない間は止まる従量の Postgres。基本料が無く、小さく始めるのに向く',
+  // Google Cloud（D-88）
+  'gcp:isrCache:default':
+    'ページは CDN から返り、外れてもサーバーの手元のキャッシュから返せる',
+  'gcp:isrCache:none':
+    '毎回コンテナで描くので、ページはいつも最新。キャッシュの仕組みを気にしなくてよい',
+  'gcp:images:default':
+    'Next.js の画像の部品がそのまま使え、変換は自分のコンテナで行う',
+  'gcp:images:none':
+    '原本をそのまま配るので、画質が落ちず、変換の手間もかからない',
+  'gcp:images:resize':
+    '投稿のときに一度だけ縮めて置くので、変換の費用がかからず、仕組みも単純',
+  'gcp:db:firestore':
+    '使った分だけ払うドキュメントの DB。無料で使える量があり、小さく始めるのに向く',
+  'gcp:db:cloud-sql':
+    '定番の Postgres を小さいインスタンスから始められる。いつもの SQL がそのまま使える',
+  'gcp:minInstances:0':
+    '使われていない間はコンテナを止め、その間の費用がかからない',
+  'gcp:minInstances:1': 'いつでもすぐ応答できるよう、コンテナを温めておく',
+  'gcp:api:same': '同じドメインの中で API を返すので、設定が少なく済む',
+  'gcp:ogp:none':
+    '全ページで同じカードを出す。シェルは CDN から静的なまま配れる',
+  'gcp:ogp:prerender': '記事ごとのカードを出せる。シェルをコンテナで返す',
+  'gcp:apiCache:none': 'API を毎回処理するので、ページの中身はいつも最新',
+  'gcp:apiCache:cdn':
+    '応答にキャッシュの指定を足すだけで、ヒットは CDN が返しコンテナが動かない',
+  'gcp:files:gcs':
+    'クラウドの定番のストレージ。同じリージョンのコンテナからの読み出しは転送の料金がかからない',
   'aws:files:s3':
     'クラウドの定番のストレージ。保存も読み書きも安く、CDN からそのまま配れる',
 };

@@ -284,7 +284,7 @@ describe('Astro（D-68）', () => {
     expect(b.build).toBeUndefined();
   });
 
-  it('構成: ISR の経路とキャッシュを持たず、Cloudflare・Vercel はビルドのノードを持つ（VPS は同じホストでビルド）', () => {
+  it('構成: ISR の経路とキャッシュを持たず、Cloudflare・Vercel・Netlify はビルドのノードを持つ（VPS は同じホストでビルド・Google Cloud は CI でビルドして数えない）', () => {
     for (const d of STACK_DEFS) {
       if (!frameworkSupported('astro', d.platform)) continue;
       const a = composeStack(d, {}, { framework: 'astro' });
@@ -293,7 +293,7 @@ describe('Astro（D-68）', () => {
       expect(a.routes['document-ssr']).toBeDefined();
       expect(a.nodes.some((n) => n.id === 'kv' || n.id === 'isr')).toBe(false);
       expect(a.nodes.some((n) => n.id === 'build')).toBe(
-        d.platform !== 'sakura',
+        d.platform !== 'sakura' && d.platform !== 'gcp',
       );
       expect(a.name).toContain('（Astro）');
       expect(a.name).not.toContain('vinext');

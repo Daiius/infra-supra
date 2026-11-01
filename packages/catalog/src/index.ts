@@ -3,6 +3,7 @@
 import { parsePriceBook, type PriceBook, type PriceBookInput } from 'estimator';
 import { aws } from './providers/aws.ts';
 import { cloudflare } from './providers/cloudflare.ts';
+import { gcp } from './providers/gcp.ts';
 import { neon } from './providers/neon.ts';
 import { netlify } from './providers/netlify.ts';
 import { sakuraVps } from './providers/sakura-vps.ts';
@@ -17,6 +18,7 @@ export const RAW_PRICE_BOOKS: readonly PriceBookInput[] = [
   aws,
   netlify,
   neon,
+  gcp,
 ];
 
 /** 検証済みの料金データ。本番の読み込みなので架空の料金は拒否される。 */

@@ -348,6 +348,53 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
       ),
     ],
   },
+  // Google Cloud（D-88・prd/11 §16。2026-11-02 に公式の文書で確かめた）
+  {
+    framework: 'nextjs',
+    platform: 'gcp',
+    adapter: "output: 'standalone' のコンテナ（Cloud Run）+ Firebase Hosting",
+    support: 'native',
+    note: "Next.js は Docker のコンテナですべての機能が動く（公式）。output: 'standalone' のサーバーを Cloud Run で動かし、Firebase Hosting の書き換えで渡す。ISR のキャッシュはインスタンスごとのローカルで、複数のインスタンスで共有されない（共有するには cacheHandler を自分で書く）。next/image の最適化もコンテナの中で動く",
+    sources: [
+      src2('https://nextjs.org/docs/app/getting-started/deploying'),
+      src2('https://nextjs.org/docs/app/guides/self-hosting'),
+      src2('https://firebase.google.com/docs/hosting/cloud-run'),
+    ],
+  },
+  {
+    framework: 'vite-spa',
+    platform: 'gcp',
+    adapter: 'Firebase Hosting + Cloud Run の API',
+    support: 'native',
+    note: 'dist を Firebase Hosting から配り（SPA は書き換えで index.html を返す）、/api を書き換えで Cloud Run のコンテナに渡す',
+    sources: [
+      src2('https://firebase.google.com/docs/hosting/full-config'),
+      src2('https://firebase.google.com/docs/hosting/cloud-run'),
+    ],
+  },
+  {
+    framework: 'nextjs-export',
+    platform: 'gcp',
+    adapter: 'Firebase Hosting + Cloud Run の API',
+    support: 'native',
+    note: 'out/ を Firebase Hosting から配り、API は書き換えで Cloud Run のコンテナに渡す。next start が無いので next/image の既定のローダーは使えない。ビルドは手元か CI で行い firebase deploy する前提で、ビルドの費用は数えない（仮定）。デプロイのたびに Hosting の CDN のキャッシュは全体が消える',
+    sources: [
+      src2(NEXT_EXPORT_DOC),
+      src2('https://firebase.google.com/docs/hosting/manage-cache'),
+    ],
+  },
+  {
+    framework: 'astro',
+    platform: 'gcp',
+    adapter:
+      '@astrojs/node（standalone のコンテナを Cloud Run）+ Firebase Hosting',
+    support: 'native',
+    note: '静的なページは Firebase Hosting から配り、リクエストのたびに描くページは @astrojs/node のサーバーを Cloud Run で動かして書き換えで渡す。ビルドし直しは CI で行い firebase deploy する前提で、ビルドの費用は数えない（仮定）',
+    sources: [
+      src2('https://docs.astro.build/en/guides/integrations-guide/node/'),
+      src2('https://firebase.google.com/docs/hosting/cloud-run'),
+    ],
+  },
 ];
 
 /** フレームワークをその事業者に載せられるか（DeployTarget が unsupported・無いなら載せられない。D-68）。 */

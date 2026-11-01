@@ -219,6 +219,7 @@ describe('部品の組み合わせ', () => {
         'frontCdn',
         'images',
         'isrCache',
+        'minInstances',
         'ogp',
         'realtime',
       ].sort(),

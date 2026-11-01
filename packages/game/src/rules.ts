@@ -54,6 +54,11 @@ export const EFFORT = {
    */
   assembledUpkeep: 1,
   /**
+   * コンテナで動かすマネージドの構成（Cloud Run など）の毎月の維持の手間（コンテナのイメージのビルド・ベースイメージと依存の更新・
+   * デプロイの設定の管理。仮定・D-88）。インフラの定義を自分で持つ構成（OpenNext の 1）より小さい。
+   */
+  containerUpkeep: 0.5,
+  /**
    * 設定の変更の手間。コメントの描き方は、コメント欄をサーバーで描く形とブラウザで読み込む形の書き換え
    * （記事のページに含めるなら、コメントの投稿のたびに再検証・ビルドを起こす実装も）で、どちらの向きも 2（仮定・D-82）。
    */
@@ -91,6 +96,8 @@ export const EFFORT = {
     cdnPlan: 1,
     // CDN の無効化のまとめ方（D-79）。自作の無効化の処理（OpenNext の override）を書く・戻すので 1（仮定）
     cdnInvalidation: 1,
+    // Cloud Run の最小インスタンス数（D-88）。設定の 1 行を変えて再デプロイするだけなので 1（仮定）
+    minInstances: 1,
   },
   // DB の差し替えと API の置き場の移し替え（API と DB を一緒に移す。D-65）で共通の大きさ（仮定）
   dbSwap: { perMonth: 6, months: 1 },
@@ -112,6 +119,12 @@ export const EFFORT = {
   rewrite: { perMonth: 8, months: 3 },
 } as const;
 
+/**
+ * コンテナの冷えた起動（Cloud Run の最小インスタンス 0。D-88）。届いた閲覧のうち、動いているインスタンスが無く起動を待つ割合が
+ * heavyShare 以上の月は、速さの重さを 1 つ数える（ゲーム上の仮定。起動の秒数の出典は無い）。
+ */
+export const COLD_START = { heavyShare: 0.05 } as const;
+
 /** 速さの「重さ」の数（0〜3）。 */
 export function speedHeaviness(
   input: {
@@ -123,6 +136,8 @@ export function speedHeaviness(
     firstLoadHeavy?: boolean;
     /** Astro の初回表示（JS はアイランドの分だけ）。重さを 1 つ減らす（0 より下げない。ゲーム上の仮定・D-68）。 */
     firstLoadLight?: boolean;
+    /** コンテナの冷えた起動を待つ閲覧が多い（COLD_START.heavyShare 以上）。重さを 1 つ数える（ゲーム上の仮定・D-88）。 */
+    coldStart?: boolean;
   },
   sat: SatisfactionRules = SATISFACTION,
 ): number {
@@ -134,7 +149,8 @@ export function speedHeaviness(
     (input.ssrCpuMs >= s.heavySsrCpuMs ? 1 : 0) +
     (input.imageKB >= s.heavyImageKB || input.variants <= 1 ? 1 : 0) +
     (near ? 1 : 0) +
-    (input.firstLoadHeavy ? 1 : 0);
+    (input.firstLoadHeavy ? 1 : 0) +
+    (input.coldStart ? 1 : 0);
   return input.firstLoadLight ? Math.max(0, heavy - 1) : heavy;
 }
 
@@ -166,6 +182,8 @@ export type JudgeInput = {
   firstLoadHeavy?: boolean;
   /** Astro の初回表示（速さの重さを 1 つ減らす。仮定・D-68）。 */
   firstLoadLight?: boolean;
+  /** コンテナの冷えた起動を待つ閲覧が多い（速さの重さを 1 つ数える。仮定・D-88）。 */
+  coldStart?: boolean;
   /** 画質の判定に使う大きさ（省略は imageKB。画像の形式では画質を下げない。D-47・D-58）。 */
   qualityImageKB?: number;
   /** 画質を 1 段下げる（記事のデザインの刷新を断った・粗い画像が多い。仮定・D-47）。 */

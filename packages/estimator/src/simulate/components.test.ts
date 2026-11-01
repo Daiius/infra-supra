@@ -460,6 +460,64 @@ describe('部品の選択で足した振る舞い', () => {
     );
   });
 
+  it('コンテナのサービス（Cloud Run 型・D-88）: アクティブな時間は 1 − e^(−x)・同時実行・CPU の大きい方、最小インスタンスは待機を課金し冷えた起動を 0 に', () => {
+    const S = 730 * 3600;
+    const node = (extra: Record<string, unknown> = {}) => ({
+      id: 'r',
+      label: 'r',
+      config: {
+        kind: 'container' as const,
+        vcpu: 1,
+        memoryGB: 0.5,
+        concurrency: 80,
+        ...extra,
+      },
+    });
+    const n = w.classes.api.count;
+    const p = w.classes.api.perRequest;
+    const x = (n * p.wallMs) / 1000 / S;
+    const u = sim([node()], { api: ['r'] }).r!;
+    const active = Math.max(-Math.expm1(-x), x / 80, (n * p.cpuMs) / 1000 / S);
+    expect(u.activeInstanceShare).toBeCloseTo(active, 12);
+    expect(u.resources['cpu-hours']).toBeCloseTo((active * S) / 3600, 9);
+    expect(u.resources['memory-gb-hours']).toBeCloseTo(
+      ((active * S) / 3600) * 0.5,
+      9,
+    );
+    expect(u.resources.requests).toBeCloseTo(n, 9);
+    expect(u.resources['idle-cpu-hours']).toBeUndefined();
+    // 薄い到着: 同時に重ならないので、アクティブな時間 ≒ 壁時計時間の合計（同時実行で割らない）
+    expect(u.resources['cpu-hours']!).toBeLessThanOrEqual(
+      (n * p.wallMs) / 3_600_000 + 1e-9,
+    );
+    expect(u.resources['cpu-hours']!).toBeGreaterThan(
+      (n * p.wallMs) / 3_600_000 / 80,
+    );
+    expect(u.coldStartShare).toBeCloseTo(Math.exp(-(n / S) * 900), 12);
+    // 最小インスタンス 1: 月の残りを待機で課金し、冷えた起動は 0
+    const warm = sim([node({ minInstances: 1 })], { api: ['r'] }).r!;
+    expect(warm.resources['cpu-hours']).toBeCloseTo(
+      u.resources['cpu-hours']!,
+      9,
+    );
+    expect(warm.resources['idle-cpu-hours']).toBeCloseTo(
+      730 - u.resources['cpu-hours']!,
+      9,
+    );
+    expect(warm.resources['idle-memory-gb-hours']).toBeCloseTo(
+      (730 - u.resources['cpu-hours']!) * 0.5,
+      9,
+    );
+    expect(warm.coldStartShare).toBe(0);
+    // CPU を使い切る重い処理: CPU 秒 / vCPU が下限になる
+    const heavy = sim([node({ vcpu: 0.25, classCpuMs: { api: 5_000 } })], {
+      api: ['r'],
+    }).r!;
+    expect(heavy.activeInstanceShare).toBeGreaterThanOrEqual(
+      (n * 5) / S / 0.25 - 1e-12,
+    );
+  });
+
   it('処理の量で課金する DB: 届いた 1 件を決まった単位で数える', () => {
     const u = sim(
       [
