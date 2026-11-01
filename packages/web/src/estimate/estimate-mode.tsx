@@ -32,6 +32,7 @@ import {
   PV_PRESETS,
   runEstimate,
   scenarioOfTemplate,
+  SEATS_MAX,
   settingsOf,
   sortRows,
   TEMPLATES,
@@ -41,7 +42,9 @@ import {
   withStack,
   type EstimateInput,
   type LineView,
+  type MemberView,
   type SortKey,
+  type TaxView,
   type TemplateId,
 } from './model.ts';
 
@@ -102,6 +105,17 @@ export function EstimateMode() {
             約 {jpy(view.totalJpy)}（1 USD = {USD_JPY} 円の仮定）
           </span>
         </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-sm"
+            checked={input.showTax}
+            onChange={(e) => setInput({ showTax: e.target.checked })}
+          />
+          日本から契約するときの税込の目安（円）を出す
+        </label>
+        {input.showTax && <Tax tax={view.tax} />}
+        <Members members={view.members} seats={view.seats} />
         {view.totals.JPY !== undefined && (
           <p className="text-xs opacity-70">
             内訳の通貨: {usd(view.totals.USD ?? 0)} + {jpy(view.totals.JPY)}
@@ -137,6 +151,7 @@ export function EstimateMode() {
       </Card>
       <Comparison
         rows={rows}
+        showTax={input.showTax}
         onPick={(stack) => setInput(withStack(input, stack))}
       />
       <CostCurve input={input} rows={rows} />
@@ -318,6 +333,7 @@ function Conditions({
             )}
           </select>
         </Field>
+        <Seats seats={input.seats} setInput={setInput} />
       </div>
       <h3 className="font-semibold">部品</h3>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -430,6 +446,135 @@ function Conditions({
         </>
       )}
     </Card>
+  );
+}
+
+/** チームの人数（席。D-76）。入力中は文字列で持ち、確定（blur・Enter）で直す。 */
+function Seats({
+  seats,
+  setInput,
+}: {
+  seats: number;
+  setInput: (p: Partial<EstimateInput>) => void;
+}) {
+  const [text, setText] = useState(String(seats));
+  useEffect(() => setText(String(seats)), [seats]);
+  return (
+    <Field
+      label="チームの人数（管理画面を使う人）"
+      info="事業者の管理画面にメンバーとして入る人の数（席）。席ごとに料金がかかるプランだけ月額が変わる。席の料金が料金データに無い事業者は、前提の文で「未取得」と出す"
+    >
+      <input
+        className="input input-bordered input-sm w-full"
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={SEATS_MAX}
+        step={1}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => setInput({ seats: Number(text) })}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') setInput({ seats: Number(text) });
+        }}
+      />
+    </Field>
+  );
+}
+
+const MEMBER_BADGE: Record<MemberView['pricing'], string> = {
+  'per-seat': '席ごとに課金',
+  included: '席の料金なし',
+  'not-stated': '記載なし',
+  unknown: '未取得',
+};
+
+/** 構成が使うプランの席の料金（料金データの members）。 */
+function Members({ members, seats }: { members: MemberView[]; seats: number }) {
+  const unknown = members.filter(
+    (m) => m.pricing === 'not-stated' || m.pricing === 'unknown',
+  );
+  return (
+    <div className="space-y-1 text-sm">
+      <h3 className="font-semibold">
+        チーム {seats} 人の席の料金
+        {seats > 1 && unknown.length > 0 && (
+          <span className="ml-2 text-xs font-normal text-warning">
+            席の料金が書かれていない事業者 {unknown.length}{' '}
+            件（月額に含めていない）
+          </span>
+        )}
+      </h3>
+      <ul className="space-y-1">
+        {members.map((m) => (
+          <li key={`${m.provider}|${m.plan}`} className="min-w-0">
+            <span
+              className={`badge badge-sm mr-1 ${m.pricing === 'per-seat' ? 'badge-info' : m.pricing === 'included' ? 'badge-ghost' : 'badge-warning'}`}
+            >
+              {MEMBER_BADGE[m.pricing]}
+            </span>
+            <span className="break-words">
+              {m.provider} {m.plan}: {m.premise}
+              {m.seatFee &&
+                `（${m.seatFee.seats} 席で ${money(m.seatFee.amount, m.seatFee.currency)}）`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const TAX_BADGE: Record<TaxView['lines'][number]['status'], string> = {
+  added: '消費税 10% を足す',
+  included: '税込の価格',
+  unconfirmed: '未確認（税抜のまま）',
+};
+
+/** 日本から契約するときの税込の目安（D-76）。 */
+function Tax({ tax }: { tax: TaxView }) {
+  return (
+    <div className="space-y-1 text-sm">
+      <p>
+        <span className="font-semibold">税込の目安 約 {jpy(tax.totalJpy)}</span>
+        <span className="opacity-70">
+          （うち消費税 約 {jpy(tax.taxJpy)}
+          {tax.unconfirmed.length > 0 &&
+            `・${tax.unconfirmed.join('・')} は消費税の扱いが未確認のため税抜のまま`}
+          ）
+        </span>
+      </p>
+      <details>
+        <summary className="cursor-pointer text-xs">
+          事業者ごとの消費税の扱い（出典つき）
+        </summary>
+        <ul className="mt-1 space-y-1 text-xs">
+          {tax.lines.map((l) => (
+            <li key={l.provider} className="break-words">
+              <span
+                className={`badge badge-xs mr-1 ${l.status === 'unconfirmed' ? 'badge-warning' : 'badge-ghost'}`}
+              >
+                {TAX_BADGE[l.status]}
+              </span>
+              {l.provider}: {l.premise}
+              {l.status === 'added' && `（+${jpy(l.taxJpy)}）`}{' '}
+              {l.sources.map((x) => (
+                <a
+                  key={x.url}
+                  className="link mr-1 break-all opacity-70"
+                  href={x.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  出典（{x.retrievedAt}）
+                </a>
+              ))}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-1 text-xs opacity-70">{tax.assumption}</p>
+      </details>
+    </div>
   );
 }
 
@@ -555,9 +700,11 @@ function Lines({ lines }: { lines: LineView[] }) {
 
 function Comparison({
   rows,
+  showTax,
   onPick,
 }: {
   rows: ReturnType<typeof compareStacks>;
+  showTax: boolean;
   onPick: (stack: string) => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({
@@ -596,6 +743,7 @@ function Comparison({
             <tr>
               {header('name', '構成')}
               {header('cost', '月額', 'text-right')}
+              {showTax && <th className="text-right">税込の目安</th>}
               {header('blocking', '止まる前提', 'text-right')}
               <th>使用率の最も高い前提</th>
             </tr>
@@ -628,6 +776,11 @@ function Comparison({
                     </span>
                   )}
                 </td>
+                {showTax && (
+                  <td className="text-right tabular-nums whitespace-nowrap">
+                    {jpy(r.taxInclJpy)}
+                  </td>
+                )}
                 <td className="text-right tabular-nums">
                   {r.blocking > 0 ? (
                     <span className="badge badge-error badge-sm">
