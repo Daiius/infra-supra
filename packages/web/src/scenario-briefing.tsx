@@ -180,7 +180,8 @@ export function FrameworkField({
               <span className="block">
                 <NameWithInfo name={FRAMEWORKS[id].label} info={info(id)} />
               </span>
-              {value === id && note(id) && (
+              {/* 選んでいない方にも同じ注記を出す（見比べられるように。カードの高さは grid で揃う。D-45） */}
+              {note(id) && (
                 <span className="block text-xs opacity-70">{note(id)}</span>
               )}
             </span>

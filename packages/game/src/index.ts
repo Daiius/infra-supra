@@ -1199,6 +1199,33 @@ function proposalOnlyComponent(
   );
 }
 
+/**
+ * 部品どうしの依存で選べない理由（ゲーム中の差し替えと始める画面で共有。D-37・D-45）。
+ * さくらの VPS の API の応答のキャッシュは前段の CDN の上で効くので、前段の CDN なしでは選べず、
+ * キャッシュしている間は前段の CDN を外せない。choices はスロットごとの今の選択（始める画面では未選択もある）。
+ */
+export function componentConflict(
+  platform: Platform,
+  slot: SlotId,
+  option: string,
+  choices: Choices,
+): string | null {
+  if (platform !== 'sakura') return null;
+  if (
+    slot === 'apiCache' &&
+    option !== 'none' &&
+    (choices.frontCdn ?? 'none') === 'none'
+  )
+    return '前段の CDN が要る（先に前段の CDN を選ぶ）';
+  if (
+    slot === 'frontCdn' &&
+    option === 'none' &&
+    (choices.apiCache ?? 'none') !== 'none'
+  )
+    return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';
+  return null;
+}
+
 /** 行動の規則（手間の残りは見ない）。選べない理由を区別して返す。 */
 function actionRule(state: GameState, action: Action): ActionCheck {
   if (state.phase !== 'playing')
@@ -1292,23 +1319,13 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (action.slot === 'realtime' && state.mods.realtime)
         return ng('irreversible', 'チャットを受けたので外せない');
       // さくらの VPS の API の応答のキャッシュは前段の CDN の上で効く（D-37）
-      if (
-        platform === 'sakura' &&
-        action.slot === 'apiCache' &&
-        action.option !== 'none' &&
-        (current.frontCdn ?? 'none') === 'none'
-      )
-        return ng('unavailable', '前段の CDN が要る（先に前段の CDN を選ぶ）');
-      if (
-        platform === 'sakura' &&
-        action.slot === 'frontCdn' &&
-        action.option === 'none' &&
-        (current.apiCache ?? 'none') !== 'none'
-      )
-        return ng(
-          'unavailable',
-          'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）',
-        );
+      const conflict = componentConflict(
+        platform,
+        action.slot,
+        action.option,
+        current,
+      );
+      if (conflict) return ng('unavailable', conflict);
       // 提案で付く部品は、提案が届いている月だけ選べる（選ぶと提案を受けたのと同じ）
       const via = proposalOnlyComponent(sc, action.slot, action.option);
       if (via) {
@@ -1416,6 +1433,110 @@ export function componentSlots(state: GameState): {
     );
 }
 
+// ---- 始める画面の部品の選択（D-45）----
+
+/** 始める画面の部品の選択肢（files は構成が暗黙に持つファイルの置き場。catalog の fileStorageOf）。 */
+export type SetupOption = {
+  id: string;
+  platform: Platform;
+  slot: SlotId | 'files';
+  label: string;
+  note: string;
+};
+
+export type SetupSlot = {
+  slot: SlotId | 'files';
+  label: string;
+  options: SetupOption[];
+  /** この構成では 1 択（変更できない。未選択の判定に含めない）。 */
+  fixed: boolean;
+};
+
+/**
+ * 始める画面の部品のスロット（構成・フレームワークの組み合わせで）。ゲーム中の部品の欄（componentSlots）と同じ
+ * スロットから、提案で付く部品（チャットの Durable Objects など）を除く。選択肢が 1 つしか残らないスロットは「固定」として出す。
+ * 最後に、構成が暗黙に持つファイルの置き場（R2・VPS のディスクなど。構成のノードから引く）を固定のスロットとして足す。
+ * スロットの一覧は持たず、catalog の部品の定義から引く（スロットが増えても追従する）。
+ */
+export function setupSlots(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+): SetupSlot[] {
+  const draft = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
+  const slots: SetupSlot[] = componentSlots(draft).map(
+    ({ slot, label, options }) => {
+      const usable = options.filter(
+        (o) => !proposalOnlyComponent(scenario, slot, o.id),
+      );
+      return { slot, label, options: usable, fixed: usable.length < 2 };
+    },
+  );
+  const files = fileStorageOf(STACKS[stackIndex]!.id);
+  if (files)
+    slots.push({
+      slot: 'files',
+      label: FILE_STORAGE_LABEL,
+      options: [{ ...files, slot: 'files' }],
+      fixed: true,
+    });
+  return slots.filter((x) => x.options.length > 0);
+}
+
+/** 選ぶスロット（固定でないもの）。 */
+const choosable = (slots: SetupSlot[]) =>
+  slots.filter(
+    (x): x is SetupSlot & { slot: SlotId } => !x.fixed && x.slot !== 'files',
+  );
+
+/** 選んだ部品のうち、その組み合わせで選べるものだけを残す（構成・フレームワークを替えたとき）。 */
+export function validSetupChoices(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): Choices {
+  const out: Choices = {};
+  const slots = choosable(setupSlots(scenario, stackIndex, framework));
+  for (const x of slots) {
+    const v = choices[x.slot];
+    if (v !== undefined && x.options.some((o) => o.id === v)) out[x.slot] = v;
+  }
+  // 依存の崩れた選択（前段の CDN を外したのに残っている API のキャッシュなど）は外す。
+  // 頼る側（後ろのスロット）から見るので、頼られる側（前段の CDN）の選択は残る
+  const platform = STACKS[stackIndex]!.provider;
+  for (const x of [...slots].reverse()) {
+    const v = out[x.slot];
+    if (v !== undefined && componentConflict(platform, x.slot, v, out))
+      delete out[x.slot];
+  }
+  return out;
+}
+
+/** 始められない理由（まだ選んでいないスロット）。選び終えていれば null。 */
+export function setupProblem(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): string | null {
+  const missing = choosable(setupSlots(scenario, stackIndex, framework)).filter(
+    (x) => !x.options.some((o) => o.id === choices[x.slot]),
+  );
+  return missing.length
+    ? `部品をまだ選んでいない: ${missing.map((x) => x.label).join('・')}`
+    : null;
+}
+
+/** 部品の選択肢の短い説明（フレーバー。catalog の COMPONENT_FLAVOR。D-45）。 */
+export function componentFlavor(o: {
+  platform: Platform;
+  slot: SlotId | 'files';
+  id: string;
+}): string | undefined {
+  return COMPONENT_FLAVOR[`${o.platform}:${o.slot}:${o.id}`];
+}
+
 /** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
 export function componentEffortLabel(slot: SlotId): string[] {
   return slot === 'db'
@@ -1486,12 +1607,17 @@ export function newGame(
   startDate: string = DEFAULT_START_DATE,
   /** アプリのフレームワーク（省略はシナリオの既定。シナリオで選べないものは既定にする。prd/10 F-04）。 */
   framework?: FrameworkId,
+  /** 始める画面で選んだ部品（D-45）。選べないものは捨て、省略したスロットは既定の部品。 */
+  components?: Choices,
 ): GameState {
   const fw = frameworksOf(scenario);
   const app =
     framework !== undefined && fw.allowed.includes(framework)
       ? framework
       : fw.default;
+  const chosen = components
+    ? validSetupChoices(scenario, stackIndex, app, components)
+    : {};
   return {
     startDate,
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
@@ -1505,6 +1631,7 @@ export function newGame(
     components: {
       ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider],
       ...frameworkDefaults(app),
+      ...chosen,
     },
     storageOption: false,
     storageOptionFeeDue: null,
@@ -3434,7 +3561,12 @@ export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
 
 // フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
-import { STACK_FLAVOR } from 'catalog';
+import {
+  COMPONENT_FLAVOR,
+  FILE_STORAGE_LABEL,
+  fileStorageOf,
+  STACK_FLAVOR,
+} from 'catalog';
 
 /** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
 export function stackFlavor(stackIndex: number): string | undefined {

@@ -12,6 +12,8 @@ import {
   playStrategy,
   retryHintsOf,
   SCENARIOS,
+  componentFlavor,
+  setupSlots,
   type Action,
   type GameState,
 } from './index.ts';
@@ -77,6 +79,17 @@ describe('画像の大きさ（D-47）', () => {
       variants: 1,
       transformAt: 'none',
     });
+  });
+
+  it('始める画面でも 3 事業者で選べ、短い説明がある', () => {
+    for (const stack of [CF_PAID, VERCEL_PRO, VPS]) {
+      const slot = setupSlots(article, stack, 'nextjs').find(
+        (x) => x.slot === 'images',
+      )!;
+      const opt = slot.options.find((o) => o.id === 'resize')!;
+      expect(opt).toBeDefined();
+      expect(componentFlavor(opt)).toContain('投稿のときに一度だけ縮めて置く');
+    }
   });
 
   it('1 ページの通信量: 既定 約 1.2 MB・最適化しない 約 20.5 MB・一律で縮める 約 2.5 MB', () => {
