@@ -1,6 +1,7 @@
 // 推移と見込み（prd/07 §5・GD-1）。毎月記録した前提の使用率から、表示用の推移と「このペースだと N か月後に超える」を出す。
 // 見込みはプレイヤーが見ている推移だけで計算し、ゲームの内部（成長率・台本）は覗かない（G-05）。
 // 表示用でゲームの状態には入らないが、計算は四則演算だけにしておく（prd/02 §3）。
+import type { GameState } from './index.ts';
 
 /** 1 か月分の前提の記録（量の境目があるものだけ）。 */
 export type PremiseSnapshot = {
@@ -184,4 +185,58 @@ export function selectTrends(
         b.latest - a.latest,
     )
     .slice(0, limit);
+}
+
+// ---- 所持金の見込み（目標に対する目安。D-42）----
+
+/** 見込みに使う直近の月数（それより短ければある分だけ）。 */
+export const CASH_PROJECTION_WINDOW = 3;
+
+export type CashProjection = {
+  /** 直近の月の利益（所持金の差分）の平均。見込みの傾き。 */
+  perMonth: number;
+  /** 平均に使った月数（1〜CASH_PROJECTION_WINDOW）。 */
+  window: number;
+  /** 最終月の見込みの所持金（最終月まで済んでいれば実際の値）。 */
+  final: number;
+  goal: number;
+  /** 目標に対する割合（final / goal）。 */
+  ratio: number;
+  onTrack: boolean;
+  /** 見込みの線（今の月から最終月まで。済んでいれば空）。 */
+  projection: { month: number; value: number }[];
+};
+
+/**
+ * 所持金の見込み（ゲーム上の目安）: 直近 3 か月（足りなければある分）の月の利益の平均で、残りの月を線形に伸ばす。
+ * 月の利益は所持金の実際の差分（乗り換え中の並行費・一度だけの手数料も含む）。予告済みの出来事・改定・成長は織り込まない。
+ * まだ 1 か月も進んでいなければ undefined。
+ */
+export function cashProjectionOf(
+  state: Pick<GameState, 'history' | 'scenario'>,
+): CashProjection | undefined {
+  const h = state.history;
+  if (!h.length) return undefined;
+  const { months, goal, startCash } = state.scenario;
+  const cash = [startCash, ...h.map((r) => r.cash)];
+  const now = h.length;
+  const window = Math.min(CASH_PROJECTION_WINDOW, now);
+  const perMonth = (cash[now]! - cash[now - window]!) / window;
+  const rest = Math.max(0, months - now);
+  const projection = rest
+    ? Array.from({ length: rest + 1 }, (_, i) => ({
+        month: now + i,
+        value: cash[now]! + perMonth * i,
+      }))
+    : [];
+  const final = cash[now]! + perMonth * rest;
+  return {
+    perMonth,
+    window,
+    final,
+    goal: goal.cash,
+    ratio: goal.cash > 0 ? final / goal.cash : 1,
+    onTrack: final >= goal.cash,
+    projection,
+  };
 }

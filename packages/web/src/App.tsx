@@ -6,6 +6,7 @@ import {
   averageSatisfaction,
   axesOf,
   BOT_BLOCK,
+  cashProjectionOf,
   comparisonRows,
   checkActions,
   componentEffortLabel,
@@ -313,7 +314,11 @@ function Game({
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         />
       )}
-      <Trends history={state.history} scenario={scenarioOf(state)} />
+      <Trends
+        history={state.history}
+        scenario={scenarioOf(state)}
+        ended={state.phase !== 'playing'}
+      />
       <MonthCard
         report={report}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
@@ -1910,11 +1915,16 @@ function History({ history }: { history: MonthReport[] }) {
 function Trends({
   history,
   scenario,
+  ended,
 }: {
   history: MonthReport[];
   scenario: Scenario;
+  /** 終わったら見込みを出さない（途中のゲームオーバーで残りの月を伸ばさない）。 */
+  ended: boolean;
 }) {
   const last = history[history.length - 1]!;
+  // 所持金の見込み（目安。直近 3 か月の月の利益の平均で線形に伸ばす。D-42）
+  const cashProj = ended ? undefined : cashProjectionOf({ history, scenario });
   const prev = history[history.length - 2];
   const cost = (r: MonthReport) => r.infraCost;
   const trends = selectTrends(
@@ -1990,7 +2000,55 @@ function Trends({
             </div>
           ))}
         </div>
+        {cashProj && cashProj.projection.length > 0 && (
+          <p className="text-sm">
+            <span
+              className={`badge badge-sm mr-1 ${cashProj.onTrack ? 'badge-success' : 'badge-warning'}`}
+            >
+              {cashProj.onTrack ? '● 届きそう' : '▲ 届かなそう'}
+            </span>
+            <span className="whitespace-nowrap">このペースだと</span>
+            <wbr />
+            <span className="whitespace-nowrap">
+              {scenario.months} か月目に約 {usd(Math.round(cashProj.final))}
+            </span>
+            <wbr />
+            <span className="whitespace-nowrap">
+              （目標 {usd(cashProj.goal)} の {Math.round(cashProj.ratio * 100)}
+              %）
+            </span>{' '}
+            <Info label="所持金の見込みの出し方">
+              直近 {cashProj.window} か月の月の利益（収益 −
+              費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）の平均
+              {usd(Math.round(cashProj.perMonth))}
+              で、残りの月を線形に伸ばしたゲーム上の目安。予告済みの出来事・料金の改定・これからの成長は織り込まない
+            </Info>
+          </p>
+        )}
         <div className="grid gap-4 md:grid-cols-2">
+          <LineChart
+            title={`所持金（目標 ${usd(scenario.goal.cash)}）`}
+            months={scenario.months}
+            format={(v) => `$${compact(Math.round(v))}`}
+            reference={{ value: scenario.goal.cash, label: '目標' }}
+            series={[
+              {
+                id: 'cash',
+                label: '所持金',
+                color: 'var(--series-1)',
+                // 負の値は軸の下に出ないよう 0 で切る（表示だけ。負になった月にゲームは終わる）
+                values: history.map((r) => Math.max(0, r.cash)),
+                ...(cashProj && cashProj.projection.length > 1
+                  ? {
+                      projection: cashProj.projection.map((p) => ({
+                        month: p.month,
+                        value: Math.max(0, p.value),
+                      })),
+                    }
+                  : {}),
+              },
+            ]}
+          />
           <LineChart
             title="収益と費用（月）"
             months={scenario.months}
