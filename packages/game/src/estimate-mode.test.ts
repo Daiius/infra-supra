@@ -35,6 +35,25 @@ describe('estimateComponents', () => {
         }
   });
 
+  it('既定の部品は、ゲームの何もしない基準プレイ（部品を選ばずに始めた newGame）と同じ。指定した部品はそれを優先する', () => {
+    for (const sc of Object.values(SCENARIOS))
+      for (const fw of frameworksOf(sc).allowed)
+        for (const s of STACKS) {
+          if (!stackSupports(s.index, fw)) continue;
+          expect(
+            estimateComponents(sc, s.index, fw).components,
+            `${sc.id} ${fw} ${s.id}`,
+          ).toEqual(newGame(s.index, 1, sc, DEFAULT_START_DATE, fw).components);
+        }
+    const sc = SCENARIOS['article-community']!;
+    const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
+    expect(estimateComponents(sc, cf, 'nextjs').components.isrCache).toBe('kv');
+    expect(
+      estimateComponents(sc, cf, 'nextjs', { isrCache: 'workers-cache' })
+        .components.isrCache,
+    ).toBe('workers-cache');
+  });
+
   it('選べない部品は捨て、選べる部品は残す', () => {
     const sc = SCENARIOS['article-community']!;
     const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
