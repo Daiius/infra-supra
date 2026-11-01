@@ -158,7 +158,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'cloudflare',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。R2 は転送量に課金しないので費用は増えないが、とても遅くなる',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。R2 は転送量に課金しないので費用は増えないが、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['fact:cloudflare:r2-standard:egress'],
   },
   {
@@ -270,7 +270,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'vercel',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。転送量（Fast Data Transfer）が大きく増え、とても遅くなる',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。転送量（Fast Data Transfer）が大きく増え、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['pool:vercel:pro:pro-fdt'],
   },
   {
@@ -313,7 +313,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'sakura',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。共有回線を大きく使い、とても遅くなる',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。共有回線を大きく使い、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['host:line'],
   },
   {

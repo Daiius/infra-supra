@@ -286,6 +286,8 @@ export type MonthReport = {
     acquisition: number;
     churn: number;
     growth: number;
+    /** 速さが「悪い」で PV の伸びから引いた分（D-47）。 */
+    slowPenalty?: number;
   };
   effort: EffortBreakdown;
   /** 今月までの累積の機能ポイント。 */
@@ -2221,7 +2223,11 @@ export function playMonth(input: GameState): GameState {
     (a, b) => a + (b.months > 0 ? b.add : 0),
     0,
   );
-  const net = g.net + bonus;
+  // 速さが「悪い」月は、離脱と検索からの流入の減りで PV の伸びが下がる（ゲーム上の仮定・D-47）
+  const slowPenalty = stages.speed === 'bad' ? (sc.growth.slowPenalty ?? 0) : 0;
+  if (slowPenalty > 0 && reasons.speed)
+    reasons.speed += `。速さが悪く PV の伸びが約 ${Math.round(slowPenalty * 100)}% 下がった`;
+  const net = g.net + bonus - slowPenalty;
 
   const cash = state.cash + revenue - infraCost;
 
@@ -2349,7 +2355,8 @@ export function playMonth(input: GameState): GameState {
       reputation: rep,
       acquisition: g.acquisition,
       churn: g.churn,
-      growth: buzz ? buzzLasting(rep, buzzRule) - 1 : net,
+      growth: buzz ? buzzLasting(rep, buzzRule) * (1 - slowPenalty) - 1 : net,
+      ...(slowPenalty > 0 ? { slowPenalty } : {}),
     },
     effort,
     featurePoints,
@@ -2427,7 +2434,9 @@ export function playMonth(input: GameState): GameState {
     growthBonus: state.growthBonus
       .map((b) => ({ ...b, months: b.months - 1 }))
       .filter((b) => b.months > 0),
-    basePV: buzz ? basePV * buzzLasting(rep, buzzRule) : basePV * (1 + net),
+    basePV: buzz
+      ? basePV * buzzLasting(rep, buzzRule) * (1 - slowPenalty)
+      : basePV * (1 + net),
     history,
     phase: end ? (end.reason === 'won' ? 'won' : 'lost') : 'playing',
     ...(end ? { end } : {}),
@@ -2994,7 +3003,14 @@ export function reflectionOf(state: GameState): Reflection {
 export type RetryHint = {
   /** 原因の種類（画面のキー・テスト用）。 */
   kind:
-    'limit' | 'incident' | 'policy' | 'cost' | 'overage' | 'element' | 'ogp';
+    | 'limit'
+    | 'incident'
+    | 'policy'
+    | 'cost'
+    | 'overage'
+    | 'element'
+    | 'ogp'
+    | 'slow';
   /** 何が起きたか（何か月目に・数値）。 */
   what: string;
   /** 次に試せる方向。正解の構成名は出さない（事業者の制限・プラン名など事実の名前は出してよい。D-40）。 */
@@ -3268,6 +3284,28 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         },
         score: tier(false, 20 + o.months.length),
       });
+  }
+
+  // ⑦ 速さが「悪い」で PV の伸びが下がった月（離脱・検索からの流入。ゲーム上の仮定・D-47）
+  if (cashShort) {
+    const slow = h.filter((r) => (r.satisfaction.slowPenalty ?? 0) > 0);
+    if (slow.length) {
+      const pen = slow[0]!.satisfaction.slowPenalty!;
+      const cut =
+        1 - slow.reduce((a, r) => a * (1 - r.satisfaction.slowPenalty!), 1);
+      out.push({
+        hint: {
+          kind: 'slow',
+          what: `${monthsText(slow.map((r) => r.month))}、速さが悪く PV の伸びが下がった（1 か月あたり約 ${Math.round(pen * 100)}%・合わせて約 ${Math.round(cut * 100)}%。${(slow[0]!.satisfaction.reasons.speed ?? '').replace(/。速さが悪く PV の伸び.*$/, '')}）`,
+          next: '速さを「悪い」から戻す: 画像を原本のまま配っていないか（1 ページの通信量）、SSR の重さ、ピークに詰まる前提を見直す',
+        },
+        // 合わせて 1 割未満なら補足（100 台）。大きいときは未達の原因として並べる
+        score:
+          cut >= 0.1
+            ? tier(reason === 'cash', Math.min(99, 100 * cut))
+            : 100 + Math.min(99, 100 * cut),
+      });
+    }
   }
 
   // ⑥ SPA で OGP の前処理なしに話題の月を迎えた（記事ごとの SNS のカードが出ず、伸びが小さい。D-43）

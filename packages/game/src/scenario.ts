@@ -197,7 +197,15 @@ export type Scenario = {
   /** ためていく量の増え方。null なら増えない（テンプレートの値のまま）。 */
   stock: StockRule | null;
   scale: { startPV: number };
-  growth: { acquisition: number; churn: number };
+  growth: {
+    acquisition: number;
+    churn: number;
+    /**
+     * 速さが「悪い」月に、PV の伸び（純成長率）から引くポイント（離脱・検索からの流入の減り。ゲーム上の仮定・D-47）。
+     * 省略は 0。
+     */
+    slowPenalty?: number;
+  };
   /** 話題の月の後に残る倍率 = 1 + extra × 評判 / reference。 */
   buzz: { extra: number; reference: number };
   revenue: {

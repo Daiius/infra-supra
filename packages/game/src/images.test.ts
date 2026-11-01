@@ -9,6 +9,8 @@ import {
   newGame,
   pageWeightOf,
   playMonth,
+  playStrategy,
+  retryHintsOf,
   SCENARIOS,
   type Action,
   type GameState,
@@ -165,5 +167,46 @@ describe('記事のデザインの刷新の提案（D-47）', () => {
     expect(r.satisfaction.reasons.quality).toContain('原本の無い粗い画像');
     const original = play(sc, CF_PAID, [], true, 10);
     expect(original.history[8]!.satisfaction.stages.quality).toBe('good');
+  });
+});
+
+describe('速さが「悪い」月は PV の伸びが下がる（D-47）', () => {
+  const noPenalty: Scenario = {
+    ...withRedesign(0),
+    growth: { ...article.growth, slowPenalty: 0 },
+  };
+
+  it('原本を配る月は伸びが 3 ポイント下がり、理由に出る。一律で縮める（普通）は下がらない', () => {
+    const s = play(withRedesign(0), CF_PAID, images('none'), undefined, 4);
+    const f = play(noPenalty, CF_PAID, images('none'), undefined, 4);
+    const r = s.history[2]!;
+    expect(r.satisfaction.slowPenalty).toBeCloseTo(0.03, 12);
+    expect(r.satisfaction.growth).toBeCloseTo(
+      f.history[2]!.satisfaction.growth - 0.03,
+      9,
+    );
+    expect(r.satisfaction.reasons.speed).toContain(
+      '速さが悪く PV の伸びが約 3% 下がった',
+    );
+    const resize = play(
+      withRedesign(0),
+      CF_PAID,
+      images('resize'),
+      undefined,
+      4,
+    );
+    expect(resize.history.some((h) => h.satisfaction.slowPenalty)).toBe(false);
+  });
+
+  it('CF Paid でも原本を配り続けると目標に届かず、ヒントに出る', () => {
+    const st = playStrategy(
+      { id: 'x', label: 'x', stackIndex: CF_PAID, actions: [images('none')] },
+      42,
+      article,
+    );
+    expect(st.end?.reason).toBe('goal');
+    const hint = retryHintsOf(st).find((x) => x.kind === 'slow');
+    expect(hint?.what).toContain('速さが悪く PV の伸びが下がった');
+    expect(hint?.what).toContain('1 ページ約 20.5 MB');
   });
 });

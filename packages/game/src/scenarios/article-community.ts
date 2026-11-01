@@ -399,7 +399,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
   // 1 枚 4 MB は テンプレートの 20 GB / 5,000 枚。DB の増え方は仮定
   stock: { dbGBPerMillionPV: 0.05, gbPerImage: 0.004 },
   scale: { startPV: 300_000 },
-  growth: { acquisition: 0.15, churn: 0.15 },
+  // slowPenalty: 速さが「悪い」月は PV の伸びを 3 ポイント下げる（離脱・検索からの流入。割合は出典なしの仮定・D-47）
+  growth: { acquisition: 0.15, churn: 0.15, slowPenalty: 0.03 },
   buzz: { extra: 0.3, reference: 0.9 },
   revenue: {
     adsUsdPer1000PV: 0.25,

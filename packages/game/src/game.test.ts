@@ -56,6 +56,7 @@ describe('game', () => {
     // GD-3 → GD-4 の差はチャットの提案（全部受ける ② が受ける）と、まれな出来事の候補に SLA の打診を足したこと（prd/07 §11.7）
     // D-32: 即時反映の提案（全部受ける ② が受け、KV の ISR では満たせず鮮度が下がる）
     // D-28: 話題と Bot は 50% で予告なし（話題の前兆 PV × 1.2 が無いシード・Bot の前兆が増えたシードで値が変わる。月は変わらない）
+    // D-47 追記: 速さが「悪い」月は PV の伸びが 3% 下がる（VPS は話題の月の回線の詰まり・KV を DB に はキーの書き込みで遅い月）
     // D-47: 記事のデザインの刷新の提案（シード 42 は 7 か月目・3 は 10 か月目・31 は無し）を断り、2 か月画質が下がる（所持金だけ下がる）
     // D-44: 話題（2 日）・Bot（7 日）の上乗せが短い期間に集中し、VPS の回線・KV の同じキーへの書き込みが話題の月に詰まる（課金は同じ）
     // D-37: Vercel の CDN の ISR のページのヒット率を固定の 0.8 から再生成の数と同じ式に（ISR の読み取りと FOT が増え、Vercel の構成の所持金が減る。結果は変わらない）
@@ -69,35 +70,35 @@ describe('game', () => {
     expect(r(42)).toEqual({
       'cf-paid': ['2124.10', 'won', 12],
       'cf-paid-accept': ['2223.52', 'won', 12],
-      'vps-images': ['1817.00', 'won', 12],
+      'vps-images': ['1782.41', 'won', 12],
       'vercel-pro': ['1660.32', 'goal', 12],
       'vercel-to-cf': ['1710.94', 'goal', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1917.45', 'won', 12],
+      'cf-paid-kvdb': ['1882.01', 'won', 12],
       'cf-paid-chat': ['2154.01', 'won', 12],
-      'vps-sla': ['1764.85', 'won', 12],
+      'vps-sla': ['1731.82', 'won', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2151.55', 'won', 12],
       'cf-paid-accept': ['2197.12', 'won', 12],
-      'vps-images': ['1718.70', 'goal', 12],
+      'vps-images': ['1689.33', 'goal', 12],
       'vercel-pro': ['1583.46', 'goal', 12],
       'vercel-to-cf': ['1771.39', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1938.86', 'won', 12],
+      'cf-paid-kvdb': ['1907.89', 'won', 12],
       'cf-paid-chat': ['2181.80', 'won', 12],
-      'vps-sla': ['1829.77', 'won', 12],
+      'vps-sla': ['1801.47', 'won', 12],
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2163.40', 'won', 12],
       'cf-paid-accept': ['1551.68', 'goal', 12],
-      'vps-images': ['1717.60', 'goal', 12],
+      'vps-images': ['1693.43', 'goal', 12],
       'vercel-pro': ['1591.32', 'goal', 12],
       'vercel-to-cf': ['1741.69', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1904.87', 'won', 12],
+      'cf-paid-kvdb': ['1878.88', 'won', 12],
       'cf-paid-chat': ['2188.13', 'won', 12],
-      'vps-sla': ['1689.10', 'goal', 12],
+      'vps-sla': ['1665.79', 'goal', 12],
     });
   });
 
