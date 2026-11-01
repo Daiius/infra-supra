@@ -243,7 +243,10 @@ export function LineChart({
       )}
       {width > 0 && (
         <svg
-          width={width}
+          // 幅は固定の px で付けない（付けると SVG の幅が figure の最小幅になり、グリッドの列が縮まず ResizeObserver も
+          // 発火しないので、画面を狭めても元の幅のまま残る）。100% なら figure と一緒に縮み、測った幅で描き直す。
+          // viewBox は付けない（座標は CSS px のまま。文字・輪の大きさが拡縮しない）
+          width="100%"
           height={height}
           // 最新の点の輪が端で切れないように
           overflow="visible"
