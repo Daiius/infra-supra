@@ -244,6 +244,24 @@ describe('AWS の構成', () => {
     });
     expect(st.settings.revalidateSec).toBe(300);
     expect(onDemandInvalidationEstimate(st)!.paths).toBeCloseTo(60_000, 6);
+    // 同じ月に選んだ部品の変更（行動を当てた draft）にも合わせる（OCL-7EDA42D6）
+    const flatSt = playMonth(
+      newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
+        cdnPlan: 'flat-pro',
+      }),
+    );
+    expect(onDemandInvalidationEstimate(flatSt)!.included).toBe(true);
+    const draft = applyActions(flatSt, [
+      { type: 'component', slot: 'cdnPlan', option: 'payg' },
+    ]);
+    expect(onDemandInvalidationEstimate(draft)!.included).toBe(false);
+    expect(
+      onDemandInvalidationEstimate(
+        applyActions(flatSt, [
+          { type: 'component', slot: 'isrCache', option: 'none' },
+        ]),
+      ),
+    ).toBeUndefined();
   });
 
   it('無効化の費用が主因で負けたら、次のプレイへのヒントが定額・時間の再検証・まとめる方向を出す（D-66）', () => {
