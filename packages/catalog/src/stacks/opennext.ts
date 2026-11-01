@@ -210,7 +210,8 @@ export function composeOpenNext(
         }
       : {}),
     api: ['cf', 'server', db.id],
-    'image-read': optimize ? ['cf', 'image-fn'] : ['cf', 's3'],
+    // 画像の最適化の関数は外れた分ごとに S3 から原本を読む（GET。OCL-A575F009）
+    'image-read': optimize ? ['cf', 'image-fn', 's3'] : ['cf', 's3'],
     'image-write': ['server', 's3'],
     ...(optimize ? { 'image-transform': ['image-fn'] } : {}),
   };

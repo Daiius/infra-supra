@@ -88,6 +88,12 @@ export const EFFORT = {
     cdnPlan: 1,
   },
   dbSwap: { perMonth: 6, months: 1 },
+  /**
+   * 事業者のアカウントが構成の既定より 1 つ増えるごとの、毎月の維持の手間（請求の確認・権限・障害の窓口。AX-11・D-52）。
+   */
+  accountUpkeep: 0.5,
+  /** 新しい事業者のアカウントを足す部品を差すときの、一度きりの手間（接続の設定・ドメイン・秘密の受け渡し。AX-11・D-52）。 */
+  accountSetup: 1,
   /** 乗り換え: 月あたりの手間と、必要な月数（VPS が絡むと長い）。 */
   migrationPerMonth: 6,
   /** recontract: 同じ事業者の下位プランへ契約し直してデータを移す（さくらの VPS 4GB → 2GB。D-27）。 */
@@ -260,6 +266,8 @@ export function effectiveSsrCpuMs(
 export type EffortBreakdown = {
   total: number;
   upkeep: number;
+  /** 他の事業者の管理（構成の既定より増えたアカウントの維持。D-52）。古い保存の報告には無い。 */
+  accounts?: number;
   interrupt: number;
   /** 機能の追加の作業（提案への対応。機能開発に数える。D-29）。 */
   featureWork: number;
@@ -277,6 +285,8 @@ export type EffortBreakdown = {
  */
 export function allocateEffort(input: {
   upkeep: number;
+  /** 他の事業者の管理（D-52）。維持の次に取る。 */
+  accounts?: number;
   interrupt?: number;
   /** 機能の追加の作業（提案への対応）と、その加点（作業が削られたら同じ割合で減る）。 */
   featureWork?: number;
@@ -295,6 +305,7 @@ export function allocateEffort(input: {
     return got;
   };
   const upkeep = take(input.upkeep);
+  const accounts = take(input.accounts ?? 0);
   const interrupt = take(input.interrupt ?? 0);
   const wanted = input.featureWork ?? 0;
   const featureWork = take(wanted);
@@ -305,6 +316,7 @@ export function allocateEffort(input: {
   return {
     total,
     upkeep,
+    accounts,
     interrupt,
     featureWork,
     featureBonus,

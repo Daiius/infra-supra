@@ -1,6 +1,6 @@
 # 11. AWS の追加と、事業者をまたぐ構成（草案）
 
-> 状態: **論点は決定済み（2026-11-01・D-50）・段 1（AWS）と段 2 の最初の組（Vercel + 画像だけ Cloudflare）を並行で実装中**。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
+> 状態: **論点は決定済み（2026-11-01・D-50）・段 1（AWS・D-51）と段 2 の最初の組（Vercel・AWS + 画像だけ Cloudflare・D-52・§2.5・§3.6）を実装した**。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
 > （DB だけ Cloudflare だが Vercel + Next.js など）も入れてみたい」に対し、今までの積み重ね（prd/06・07 §11・10 §3、D-20・D-24・D-31・D-37・D-44〜D-48）の上に載せるならどうするかの案。
 > 料金・制限の数値は §1.5・§2.1 に**公式で確かめたものだけ**を出典 URL と取得日（2026-11-01）つきで書く。確かめていないことは「未確認」「推測」と書く。
 > 手間・倍率・遅延の値は**ゲーム上の仮定**で、実在の値ではない。
@@ -147,7 +147,7 @@ Price List API の版の日付（publicationDate）も残す。料金ページ�
 | Cloudflare Workers + 外部の Postgres（Supabase・Neon・AWS） | **可**。Hyperdrive は「supports any Postgres or MySQL database」、ホストの例に AWS・Supabase・Neon を挙げる。Worker の binding から使う（「You must create a binding in your Wrangler configuration file for your Worker」） | [Hyperdrive](https://developers.cloudflare.com/hyperdrive/)・[private database](https://developers.cloudflare.com/hyperdrive/configuration/connect-to-private-database/) | 既にある（D-24 X-6。接続先は Supabase の 1 組）。接続先に RDS を足すのは表に 1 行足すだけ |
 | Vercel + Supabase の代わりに **Neon** | **可**（Vercel の Marketplace にもある）。ただし Neon の AWS のリージョンに**東京が無い**（近いのはシンガポール） | [Neon のリージョン](https://neon.com/docs/introduction/regions)・[Neon の料金](https://neon.com/pricing) | Vercel の関数を東京（hnd1）に置くと DB との往復がシンガポールまで延びる。遅延を計算しない間（§2.3）は**前提の文**で出す |
 | Vercel + **AWS RDS / Aurora / DynamoDB** | **可**。Vercel の Marketplace に Aurora PostgreSQL・Aurora DSQL・DynamoDB・S3 があり、「All billing is handled directly through AWS」 | [Vercel Marketplace の AWS](https://vercel.com/marketplace/aws) | 課金先は AWS のアカウント（`accountId: 'aws'`）。Vercel の関数 → AWS の DB の応答は AWS からインターネットへの転送（$0.114/GB・全体で 100 GB 無料） |
-| Vercel + **画像だけ Cloudflare（R2 + Images）** | 可と見込む。R2 の転送は「free」（[R2 の料金](https://developers.cloudflare.com/r2/pricing/)）。Next.js の画像のローダーを外部の変換に向ける形が一般的だが、**Cloudflare Images の URL の変換をそのドメインで使う条件は未確認** | R2 の料金（保存 $0.015/GB 月・Class A $4.50 / 100 万・Class B $0.36 / 100 万・無料 10 GB・100 万・1,000 万） | 画像のスロットに Cloudflare の部品（今の `images`・`r2-variants`）を差す。経路 `image-read` が Vercel の CDN を通らなくなり、**Fast Data Transfer が減る**（§3.4 でいちばん効く見込み） |
+| Vercel + **画像だけ Cloudflare（R2 + Images）** | **可（D-52 で確かめた）**。R2 の転送は「There are no charges for egress bandwidth for any storage class」（[R2 の料金](https://developers.cloudflare.com/r2/pricing/)）。公開バケットの本番の配信はカスタムドメインで、「The domain being used must have been added as a zone in the same account as the R2 bucket」（r2.dev は「rate-limited and should only be used for development purposes」。[公開バケット](https://developers.cloudflare.com/r2/buckets/public-buckets/)）。URL の変換は「`https://<ZONE>/cdn-cgi/image/<OPTIONS>/<SOURCE-IMAGE>`」で「Transformations can be requested on every Cloudflare zone that has transformations enabled」（[URL で変換](https://developers.cloudflare.com/images/transform-images/transform-via-url/)）、元の画像は「Cloudflare will always allow source images from the same zone where your transformations are served」（[元の画像](https://developers.cloudflare.com/images/transform-images/sources/)）。Free のプランでも「optimize images stored outside of Images」（[Images の料金](https://developers.cloudflare.com/images/pricing/)）。Next.js の `loaderFile` に Cloudflare の例がある（[next.config.js の images](https://nextjs.org/docs/app/api-reference/config/next-config-js/images)）。→ **画像のドメイン（R2 のカスタムドメイン）を Cloudflare のゾーンに置けば、Vercel のサイトから URL の変換を使える** | R2 の料金（保存 $0.015/GB 月・Class A $4.50 / 100 万・Class B $0.36 / 100 万・無料 10 GB・100 万・1,000 万） | 画像のスロットに Cloudflare の部品（今の `images`・`r2-variants`）を差す。経路 `image-read` が Vercel の CDN を通らなくなり、**Fast Data Transfer が減る**（§3.4 でいちばん効く見込み） |
 | VPS の前段に Cloudflare | 既にある（D-31・`frontCdn`） | — | 1 例目。データの形はこれに揃える |
 | Vercel の関数の置き場 | 新規のプロジェクトは `iad1`（米国東部）が既定。「ideally close to your data source」。Hobby は 1 リージョン | [Vercel の関数のリージョン](https://vercel.com/docs/functions/configuring-functions/region) | 既に prd/10 §3.3 にある事実。DB を別の事業者の東京に置くなら、関数も hnd1 に置く前提の文を出す |
 
@@ -204,6 +204,29 @@ type CrossLink = {
 - 案: **課金のアカウントが 2 つ目以降になるごとに、毎月の維持の手間を 0.5（仮定）足す**（請求の確認・権限・障害の窓口が増える分）。手間のバー（D-36）の「維持」の色に入る。
   一度きりの手間（接続の設定・CORS・秘密の受け渡し）は、他の事業者の部品を差すときの手間（2）に 1 を足す（prd/10 F-13 の一度きりの手間と同じ考え）。
 - 可用性: どちらかの事業者の障害で止まりうる。今の偶発的な障害は VPS だけなので、段 2 では効かせない（前提の文だけ）。
+
+### 2.5 実装した形（D-52・2026-11-01）
+
+- **catalog の `stacks/cross.ts`**: `CROSS_PAIRS`（土台の事業者 × スロット × 部品の事業者 + 根拠の要約と出典）・`CROSS_COMPONENTS`（他の事業者の部品）・`applyCross`（構成に差す）・`accountsOf`（課金のアカウント）。
+  `ComponentOption` に `hosts`（差せる土台の事業者。省略は自分の事業者だけ）と `link`（`via: 'http'`・`as`: 振る舞いが同じ部品の id）を足した。`componentsOf(土台, スロット)` は `hosts` で引く。表に無い組の部品はテストで弾く。
+- 今の組は 1 つ: **Vercel（Hobby・Pro、Next.js・SPA）の画像 × Cloudflare**。部品は 2 つ。
+  - `cf-images`「Cloudflare: R2 に置き、閲覧のときに Images で変換」（`as: 'images'`）: Vercel の `image`・`blob` のノードを外し、`cf-cache`（画像のドメインのキャッシュ・ヒット率 0.9 は仮定で Cloudflare の構成と同じ値）→ `cf-r2`（R2 Standard）と、`cf-images`（Hobby は Images Free・Pro は Images Paid。**どちらを使うかは仮定**）。前提の文に R2 のカスタムドメイン・URL の変換の条件・Next.js のローダー（Next.js だけ）を出す。
+  - `cf-resize`「Cloudflare: 投稿のときに一律で縮めて R2 に置く」（`as: 'resize'`）: 変換のサービスなし。画像の大きさ・サイズ違い・保存量・デザインの刷新の提案は Vercel の「一律で縮める」と同じ扱い（`imagesBehavior` で振る舞いの id を引く）。
+  - 『R2 にサイズ違いを置く（投稿のときに変換）』は入れていない。Vercel の関数で変換すると Vercel の CPU、Cloudflare Images で変換すると URL の変換を投稿のときに呼ぶ形になり、どちらも今のモデルにない経路になる（段 3 の候補）。
+- 経路: `image-read` は `cf-cache → cf-r2`（Vercel の CDN を通らない＝Fast Data Transfer・CDN Requests にならない）。投稿 `image-write` は今と同じく Vercel の関数が受けて R2 に書く（Class A）。
+  **関数から外への通信の Vercel の課金**は [CDN の料金と使用量](https://vercel.com/docs/manage-cdn-usage)（2026-09-14 更新）に記載が無い（Fast Origin Transfer は「Data sent between the CDN and Vercel Functions」）ので**未確認として数えない**。R2 の受信（書き込みの転送）は料金表に項目が無い。
+- アカウントの手間（AX-11）: **構成の既定より増えた課金のアカウント 1 つにつき毎月 0.5**、増える部品を差すときに一度きり **1**（ゲーム上の仮定・`EFFORT.accountUpkeep`・`accountSetup`）。
+  既定の Vercel + Supabase の Supabase は数えない。**既存の Cloudflare + Hyperdrive（Supabase）・VPS + 前段の CDN（Cloudflare）にも同じ規則が効く**（基準プレイ・golden はどれも変わらなかった）。
+  月の手間の内訳に「他の事業者の管理」を出し（増えていなければ出さない）、始める画面の手間のバー（D-36）では**マスの左半分を薄い維持の色で塗る**（0.5 の表示の形）。選んでいる構成のカードだけ、選んだ部品で増えるアカウントの名前を添える。
+- **AWS への拡張（D-52 の追記・2026-11-01）**: `CROSS_PAIRS` に AWS × 画像 × Cloudflare を足し、2 つの部品の `hosts` を `['vercel', 'aws']` にした。土台ごとの差は `cross.ts` の `hostImageShape` に閉じる（aws.ts は変えない）。
+  - Amplify（Next.js）: 画像の最適化（`image`）・画像だけの CloudFront（`cf`）・S3 を外す。投稿は Amplify の SSR から R2 へ。**Amplify の SSR から外への通信の課金は [Amplify の料金](https://aws.amazon.com/amplify/pricing/) に記載が無い**（転送は「per GB served」だけ）ので未確認として数えない。
+  - S3 + CloudFront + Lambda（SPA）: S3 を外す（CloudFront はシェルと API に残る）。投稿は Lambda から R2 へ書き、その転送を**東京 → インターネットの転送**で数える。
+    [Lambda の料金](https://aws.amazon.com/lambda/pricing/): 関数とリージョンの外とのデータの出入りは「charged at the Amazon EC2 data transfer rates」。
+    AWSDataTransfer（東京・版 2026-09-16）の「AWS Outbound」: $0.114/GB（「first 10 TB / month data transfer out beyond the global free tier」）・$0.089・$0.086・$0.084。
+    [EC2 の料金](https://aws.amazon.com/ec2/pricing/on-demand/): 「100 GB of free data transfer out to the internet free each month」（全サービス・リージョンの合計）。providers/aws.ts にプラン `data-transfer-out` とプール `internet-free-transfer` を足した。記事コミュニティの投稿は月 1 GB 未満で、無料の内に収まる。
+  - 変換は Images Paid（仮定）。
+- 未確認: R2 を使うのに支払い方法の登録・別の申し込みが要るか（料金表は「applies regardless of your Workers plan」だけ）。Images Paid の基本料（取得したページに記載なし・既存の notes）。
+  R2 のカスタムドメインを部分的な（CNAME の）設定で置くときのプランの条件。Cloudflare の CDN の規約（画像の割合）が R2 のカスタムドメインの配信にどう当たるか（Cloudflare の構成と同じく前提に出していない）。
 
 ## 3. ゲームへの載せ方
 
@@ -274,6 +297,51 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 | またぐ構成が負けるケース | Vercel + D1（Workers の API を挟む） | 手間（一度きり + 維持）と Workers Paid の $5 で、Vercel + Supabase と同程度か悪い |
 | 詰まない | シード 1〜50 のどれでも、基準プレイの少なくとも 1 本が合格（今の性質） | 構成が増えても保たれる |
 
+### 3.6 基準プレイの結果（D-52・2026-11-01）
+
+記事コミュニティ × Vercel Pro。D-58（画像の形式）を取り込んだ後の値（画像の形式は既定の JPEG）。シード 1〜20・何もしない（提案に返事をしない）+ 1 か月目の終わりに画像の部品を替える（替えないものは既定）。12 か月の費用は事業者別の中央値（請求の明細を事業者で足した。クレジットを引いた後）。
+
+| フレームワーク | 画像の部品 | 達成 | 12 か月の費用 | うち Vercel / Supabase / Cloudflare | 所持金 |
+|---|---|---|---|---|---|
+| Next.js | （比較）CF Paid・既定 | **20 / 20** | $182 | — / — / $182 | $2,152 |
+| Next.js | 既定（Vercel の画像の最適化） | 0 / 20 | $1,491 | $1,191 / $300 / — | $851 |
+| Next.js | Vercel で一律で縮める | 0 / 20 | $1,624 | $1,324 / $300 / — | $714 |
+| Next.js | **Cloudflare: R2 + Images** | 0 / 20 | $1,082 | $666 / $300 / $116 | $1,255 |
+| Next.js | **Cloudflare: R2 に一律で縮める** | 0 / 20 | $968 | $666 / $300 / $2 | $1,369 |
+| SPA | （比較）CF Paid・既定 | **20 / 20** | $175 | — / — / $175 | $1,870 |
+| SPA | 既定 | 0 / 20 | $1,274 | $974 / $300 / — | $774 |
+| SPA | Vercel で一律で縮める | 0 / 20 | $1,220 | $920 / $300 / — | $830 |
+| SPA | **Cloudflare: R2 + Images** | 0 / 20 | $825 | $416 / $300 / $109 | $1,222 |
+| SPA | **Cloudflare: R2 に一律で縮める** | 0 / 20 | $718 | $416 / $300 / $2 | $1,328 |
+
+- **仮説の前半（Vercel Pro の負けの主因は画像の Fast Data Transfer）は当たった。** 画像を Cloudflare に出すと Vercel の請求が約半分になる（Next.js $1,191 → $666。D-58 の前はシード 1 の Fast Data Transfer が $980 → $341）。
+  同じ「一律で縮める」でも、Vercel に置くと 12 か月の費用がかえって $133 増える（D-58 で既定の next/image が WebP で配るようになり、一律で縮めた JPEG より小さい。転送は Vercel の CDN を通る）のに、R2 に置くと $523 減る。**効いているのは画像の大きさでなく配信の事業者**で、「転送量の単価が支配的」という D-12 の前提が生むポイントが見える。
+- **仮説の後半（画像だけ Cloudflare で勝ち筋ができる）は外れた: 0 / 20。** 所持金は約 $400〜$520 増えるが、目標 $1,730 に $360〜$480 届かない（SPA は $400〜$510）。
+  残る費用は Vercel の席の基本料（$360）・HTML と JS の Fast Data Transfer（$340）・CDN Requests（$118）と、Supabase Pro の基本料（$300）。
+  Supabase を従量の DB に替えて $300 が消えても約 $1,560〜$1,670 で、まだ届かない見込み（推測・回していない）。**記事コミュニティの Vercel Pro は、画像と DB の両方を替えてもぎりぎり届かない側**にある。
+- CF Paid・既定（目標の根拠）は変わらない（20 / 20・既存の golden もすべて同じ）。D-58 を取り込んで変わったのは Vercel Pro の Next.js の行だけ（既定の所持金 $647 → $851・Cloudflare に出した行は $5〜$6 増）。SPA と AWS の表は変わらない。満足度は替えても同じ（速さは「普通」のまま。またぐ往復の遅延は計算しない・AX-13）。
+- 目標の値は動かさない（§3.4 のユーザーの方針）。道筋を増やすなら、次は「従量の DB」（AX-09 の ②）と組んだ基準プレイで確かめる。
+
+**AWS（D-51 の構成・常時無料だけ）× 画像だけ Cloudflare**（同じ条件。AWS の既定の画像は「投稿のときに縮める」）:
+
+| フレームワーク | 画像の部品 | 達成 | 12 か月の費用 | うち AWS / Cloudflare | 所持金 |
+|---|---|---|---|---|---|
+| Next.js（Amplify） | 既定 | 10 / 20 | $623 | $623 / — | $1,702 |
+| Next.js（Amplify） | **Cloudflare: R2 + Images** | **20 / 20** | $501 | $385 / $116 | $1,835 |
+| Next.js（Amplify） | **Cloudflare: R2 に一律で縮める** | **20 / 20** | $387 | $385 / $2 | $1,948 |
+| SPA（S3 + CloudFront + Lambda） | 既定 | 19 / 20 | $179 | $179 / — | $1,860 |
+| SPA | **Cloudflare: R2 + Images** | **20 / 20** | $140 | $31 / $109 | $1,905 |
+| SPA | **Cloudflare: R2 に一律で縮める** | **20 / 20** | $33 | $31 / $2 | $2,012 |
+
+- D-58 との整合（形式を WebP・AVIF に替えて 3 か月回して確かめた）: Cloudflare: R2 + Images は形式で変換の数が増えない（変換の請求は同じ）。Cloudflare: R2 に一律で縮めるは JPEG のフォールバックも R2 に置く（Vercel・VPS の一律で縮めると同じ扱い・保存量が増える）。
+  Cloudflare の変換の URL（`format=auto`）も next/image と同じくブラウザに合わせて WebP・AVIF を返すが、Cloudflare の構成の Images と同じく設定の形式で配る扱いにしている（D-58 の Cloudflare と揃えた。既定の JPEG では Vercel の next/image より大きく配る）。
+- AWS の Next.js は既定で半分のシードが所持金で落ちる（Amplify の転送 $0.15/GB）。画像を R2 に出すと AWS の請求が $238 減り、**全シードで合格**する。**AWS では「画像だけ Cloudflare」が勝ち筋を作る**（Vercel Pro では作らない。席の基本料と Supabase Pro の固定費の差）。
+- SPA は既定でも CloudFront の常時無料 1 TB にほぼ収まっている。画像を出すと残りの 1 シードも合格する。Lambda から R2 への転送は月 100 GB の無料の内（費用 0）。
+- **CloudFront の定額のプラン（D-61）との組み合わせ**（記事コミュニティ・シード 1〜20・始める画面で選んで 12 か月）: 画像を R2 に出すと CloudFront に残るのは HTML・JS・API だけになり、壊れる組は無い。
+  - Next.js・前段の CloudFront なし: Amplify には画像だけの CloudFront しか無いので、R2 に出すと CloudFront が無くなり、定額のプランは何にも当たらない（従量と同じ結果: 20 / 20）。プランの選択肢は残る（基本料も数えない）。
+  - Next.js・前段の CloudFront（静的と画像だけ）: 定額 Pro は R2 + Images 20 / 20（所持金 $1,849）・R2 に一律で縮める 20 / 20（$1,968）。定額 Free は 12 か月目に転送が込みの 1.3 倍で、速さが落ちて 0 / 20。
+  - SPA: 定額 Pro は R2 に一律で縮める 20 / 20（$1,833）、R2 + Images は 8 / 20（$1,720。定額 $15 と変換の費用が重なり目標にわずかに届かない）。定額 Free はリクエストの込みを超えて 0 / 20。
+
 ## 4. 既存の仕組みで足りないもの
 
 ### 4.1 estimator
@@ -325,6 +393,7 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 
 > 番号の接頭辞は AX（AWS と cross-provider）。G-xx は D-17 で使っているので避けた。
 > **決定**: AX-01 は「両方を並行で」（推奨の ② ではなく ③ に近い形。AWS の段 1 と、Vercel + 画像だけ Cloudflare を別々のブランチで同時に進める）、AX-06 は「常時無料だけ」（推奨の ① から改めた）。ほかはすべて推奨のとおり。
+> **決まったもの（ユーザーの決定・2026-11-01・D-52）**: AX-01 は ③（AWS の段 1 と並行で、まず「Vercel + 画像だけ Cloudflare」）・AX-08 ①・AX-10 ①・AX-11 ①（0.5 はマスの半分で出す）・AX-13 ①。
 
 | # | 論点 | 選択肢 | 推奨 |
 |---|---|---|---|
@@ -557,6 +626,8 @@ AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ
 - 部品: ISR（S3 + タグ + SQS / キャッシュしない）・画像（OpenNext の画像の最適化 = Lambda / 最適化しない / 投稿のときに縮める）・DB（Amplify と同じ 5 つ）・CDN の料金のプラン（従量 / 定額。D-61）・ファイル S3。SPA では OpenNext を使わず、AWS の SPA と同じ形。
 - 仮定: 関数のメモリ 1 GB・画像の変換 1 回 150 ms（VPS の `imageTransformCpuMs` と同じ）・CloudFront の外れた分ごとに変換・タグの読み書きは 1 回 1 単位・関数 URL と Lambda → CloudFront の転送に追加の料金なし（AWS のオリジンからの取得は無料の扱い）。
 - 数えていないもの: CloudFront の無効化（オンデマンドの更新が月 1,000 パスを超えると費用が増える）・再検証の関数・ウォーマーの Lambda・S3 のキャッシュの保存量。
+- レビューの指摘で直したもの: 画像の最適化の関数は外れた分ごとに S3 の原本を読む（GET を数える。OCL-A575F009）。AVIF は変換 1 回の時間を 1.5 倍にする（Workload の `images.transformWorkFactor`。OCL-ECDEF8A1）。
+- 「画像だけ Cloudflare」（D-52 の `cf-images`・`cf-resize`）を OpenNext にも許した（`CROSS_PAIRS`）。画像の関数と S3 を外し、投稿はサーバーの関数が受けて R2 に書く（Lambda → インターネットの転送で数える）。CloudFront はページと静的に残る。
 - **維持の手間 1 / 月**（ゲーム上の仮定。デプロイの仕組み・依存の更新・インフラの定義の管理。VPS の 3 より小さい）。手間のバーに「維持 1」と出る（自前の障害の確率は出さない）。
 
 基準プレイ（何もしない・シード 1〜20・合格数・12 か月の費用の中央値）:
@@ -566,7 +637,8 @@ AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ
 | 記事コミュニティ | Amplify・既定 | 10/20・$671 | 17/20・$579 |
 | 〃 | Amplify・前段 CF（静的と画像） | 10/20・$623 | 20/20・$381 |
 | 〃 | OpenNext・既定（画像を縮める） | 18/20・$475 | 20/20・$237 |
-| 〃 | OpenNext・画像の最適化（Lambda） | **20/20・$73** | 20/20・$240 |
+| 〃 | OpenNext・画像の最適化（Lambda） | **20/20・$74** | 20/20・$241 |
+| 〃 | OpenNext・画像だけ Cloudflare（R2 + Images。D-52） | 20/20・$170 | 20/20・$350 |
 | 受託 | Amplify・既定 | 20/20・$180 | 8/20・$360 |
 | 〃 | Amplify・前段 CF（静的と画像） | 20/20・$154 | 16/20・$334 |
 | 〃 | OpenNext・既定 / 画像の最適化 | 20/20・$22 | 20/20・$202 |

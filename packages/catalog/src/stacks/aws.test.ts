@@ -271,8 +271,20 @@ describe('AWS の OpenNext の構成（D-63）', () => {
   it('OpenNext の画像の最適化は Lambda で課金される（料金未取得にならない）', () => {
     const r = runOn(1_000_000, { images: 'default' });
     expect(r.bill.unpricedLines).toBe(0);
+    // 外れた分ごとに S3 から原本を読む（OCL-A575F009）
+    expect(r.simulation.nodes.s3!.resources['object-reads']).toBeGreaterThan(0);
     expect(
       r.simulation.nodes['image-fn']!.resources['memory-gb-hours'],
     ).toBeGreaterThan(0);
+  });
+
+  it('画像だけ Cloudflare（D-52）を OpenNext にも差せる: 画像の関数と S3 を外し、投稿は Lambda → R2 の転送を数える', () => {
+    const a = composeStack('aws-opennext', { images: 'cf-images' });
+    const ids = a.nodes.map((n) => n.id);
+    expect(ids).not.toContain('image-fn');
+    expect(ids).not.toContain('s3');
+    expect(ids).toContain('cf');
+    expect(a.routes['image-read']).toEqual(['cf-cache', 'cf-r2']);
+    expect(a.routes['image-write']).toEqual(['server', 'aws-out', 'cf-r2']);
   });
 });

@@ -23,7 +23,8 @@ describe('前段の CDN', () => {
     const s = playMonth(newGame(VPS));
     expect(checkAction(s, cdn('static'))).toEqual({
       ok: true,
-      cost: EFFORT.component.frontCdn,
+      // Cloudflare のアカウントが増えるので、差すときの一度きりの手間が付く（D-52）
+      cost: EFFORT.component.frontCdn + EFFORT.accountSetup,
     });
     const withCdn = playMonth(applyAction(s, cdn('static')));
     const plain = playMonth(s);

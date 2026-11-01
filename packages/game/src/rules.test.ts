@@ -131,6 +131,7 @@ describe('開発の手間', () => {
     ).toEqual({
       total: 10,
       upkeep: 3,
+      accounts: 0,
       interrupt: 0,
       featureWork: 0,
       featureBonus: 0,

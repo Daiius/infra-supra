@@ -135,6 +135,8 @@ export const aws: PriceBookInput = {
     ),
     rdsFree: src('https://aws.amazon.com/rds/free/'),
     freeTier: src('https://aws.amazon.com/free/'),
+    // データ転送の常時無料（2026-11-01 に原文で確認。D-52）
+    ec2DataTransfer: src('https://aws.amazon.com/ec2/pricing/on-demand/'),
   },
   allowancePools: [
     {
@@ -271,6 +273,18 @@ export const aws: PriceBookInput = {
       premise:
         'CloudFront の定額 Business（月 $200）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
+    },
+    // インターネットへの転送の常時無料（全サービス・全リージョンの合計。CloudFront の 1 TB とは別）。
+    // 他の事業者（Cloudflare R2）へ書き込む転送に使う（D-52）
+    {
+      id: 'internet-free-transfer',
+      quantity: 100,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'AWS からインターネットへの転送は月 100 GB まで無料（全サービス・全リージョンの合計）',
+      sourceIds: ['ec2DataTransfer'],
     },
   ],
   plans: [
@@ -842,6 +856,42 @@ export const aws: PriceBookInput = {
             ],
           },
           sourceIds: ['sqsPrices'],
+        },
+      ],
+    },
+    {
+      // 東京からインターネットへの転送（D-52）。Lambda の関数から外（他の事業者の R2）へ送るデータ。
+      // Lambda の料金ページ: 関数の外のリージョンとのデータの出入りは EC2 のデータ転送の料金
+      id: 'data-transfer-out',
+      service: 'data-transfer',
+      ...common,
+      name: 'データ転送（東京 → インターネット）',
+      sourceIds: ['dataTransferPrices', 'lambdaPricing', 'ec2DataTransfer'],
+      facts: [
+        {
+          id: 'lambda-out',
+          premise:
+            'Lambda の関数がリージョンの外（他の事業者など）とやり取りするデータは、EC2 のデータ転送の料金で課金される（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
+          sourceIds: ['lambdaPricing', 'dataTransferPrices'],
+        },
+      ],
+      meters: [
+        {
+          id: 'internet-out',
+          resource: 'egress-gb',
+          unit: 'gb',
+          allowancePool: 'internet-free-transfer',
+          pricing: {
+            model: 'tiered',
+            per: 1,
+            tiers: [
+              { upTo: 10_240, unitPrice: 0.114 },
+              { upTo: 51_200, unitPrice: 0.089 },
+              { upTo: 153_600, unitPrice: 0.086 },
+              { upTo: null, unitPrice: 0.084 },
+            ],
+          },
+          sourceIds: ['dataTransferPrices'],
         },
       ],
     },

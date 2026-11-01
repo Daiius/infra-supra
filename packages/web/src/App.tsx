@@ -257,7 +257,14 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   <span className="mt-0.5 block text-xs opacity-70">
                     {stackFlavor(s.index)}
                   </span>
-                  <EffortBar scenario={scenario} stackIndex={s.index} />
+                  <EffortBar
+                    scenario={scenario}
+                    stackIndex={s.index}
+                    // 選んでいる構成は、選んだ部品で増える他の事業者の管理も出す（D-52）
+                    {...(stack === s.index
+                      ? { components: parts, framework }
+                      : {})}
+                  />
                 </span>
               </label>
             ))}
@@ -738,6 +745,10 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
   const e = r.effort;
   const parts = [
     { label: '自前運用の維持', value: e.upkeep, cls: 'bg-warning' },
+    // 構成の既定より増えた事業者のアカウントの維持（D-52）。増えていなければ出さない
+    ...(e.accounts
+      ? [{ label: '他の事業者の管理', value: e.accounts, cls: 'bg-warning/50' }]
+      : []),
     { label: '出来事への対応', value: e.interrupt, cls: 'bg-error' },
     {
       label: '乗り換え・DB の差し替え',
@@ -1454,7 +1465,7 @@ function ComponentsSection({
                       }
                     />
                   </span>
-                  <Meta items={componentEffortLabel(x.slot)} />
+                  <Meta items={componentEffortLabel(x.slot, state, chosen)} />
                 </span>
                 <select
                   className="select select-bordered select-sm w-full"
@@ -1840,6 +1851,7 @@ function Result({
                 <ul className="text-sm">
                   {[
                     ['自前運用の維持', e.upkeep],
+                    ...(e.accounts ? [['他の事業者の管理', e.accounts]] : []),
                     ['出来事への対応', e.interrupt],
                     ['乗り換え', e.migration],
                     ['行動（設定・最適化）', e.actions],

@@ -58,7 +58,7 @@ describe('AWS の構成', () => {
     ]);
     expect(
       slots.find((x) => x.slot === 'images')!.options.map((o) => o.id),
-    ).toEqual(['default', 'none', 'resize']);
+    ).toEqual(['default', 'none', 'resize', 'cf-images', 'cf-resize']);
   });
 
   it('始める画面: SPA は Amplify の画像の最適化を選べない', () => {
@@ -67,7 +67,7 @@ describe('AWS の構成', () => {
     expect(slots.map((x) => x.slot)).not.toContain('frontCdn');
     expect(
       slots.find((x) => x.slot === 'images')!.options.map((o) => o.id),
-    ).toEqual(['none', 'resize']);
+    ).toEqual(['none', 'resize', 'cf-images', 'cf-resize']);
   });
 
   it('マネージドなので維持の手間は 0。即時反映は ISR を持つ間は満たせない', () => {

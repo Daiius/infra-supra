@@ -145,7 +145,14 @@ function consume(
         ? ttlMiss(w, cls, f)
         : undefined;
       const miss = missFlow?.count ?? n;
-      const fixedCpu = c.classCpuMs?.[cls];
+      // 画像のクラスの変換の時間は、画像の形式による重さの倍率を掛ける（OCL-ECDEF8A1）
+      const fixedCpu =
+        c.classCpuMs?.[cls] === undefined
+          ? undefined
+          : c.classCpuMs[cls]! *
+            (cls === 'image-read' || cls === 'image-transform'
+              ? w.input.images.transformWorkFactor
+              : 1);
       const base = missFlow?.perRequest ?? p;
       const mp =
         fixedCpu === undefined
