@@ -503,3 +503,75 @@ describe('部品の選択で足した振る舞い', () => {
     expect(u.resources['rows-read']).toBeCloseTo(users * 4 * 20, 9);
   });
 });
+
+describe('OpenNext の CloudFront の無効化と S3 の ISR のキャッシュ（D-66）', () => {
+  const onDemand = resolveWorkload(
+    workload({
+      routes: [
+        {
+          id: 'article',
+          rendering: 'isr',
+          share: 0.5,
+          pages: 100,
+          onDemandUpdatesPerMonth: 300,
+          onDemandPagesPerUpdate: 2,
+          processing,
+          cachedServeCpuMs: 1,
+        },
+        { id: 'mypage', rendering: 'ssr', share: 0.5, pages: 1, processing },
+      ],
+    }),
+  );
+  const cdn = (ttl: boolean) => ({
+    id: 'cf',
+    label: 'cf',
+    config: {
+      kind: 'cdn' as const,
+      invalidationPathsPerPage: 2,
+      ...(ttl ? { ttlClasses: ['document-isr' as const] } : {}),
+    },
+  });
+  const run = (wl: typeof w, ttl: boolean) =>
+    simulateResources(wl, {
+      id: 'x',
+      name: 'x',
+      nodes: [cdn(ttl)],
+      routes: { 'document-isr': ['cf'] },
+    }).nodes.cf!;
+
+  it('オンデマンドの更新 × 1 回で再検証するページ × 1 ページのパスを数える', () => {
+    expect(run(onDemand, true).resources['invalidation-paths']).toBe(
+      300 * 2 * 2,
+    );
+  });
+
+  it('ISR のページをキャッシュしない CDN・時間の再検証では数えない', () => {
+    expect(
+      run(onDemand, false).resources['invalidation-paths'],
+    ).toBeUndefined();
+    expect(run(w, true).resources['invalidation-paths']).toBeUndefined();
+  });
+
+  it('ISR のキャッシュを置くストレージは ISR のページの大きさ × 倍率を保存する（画像は載せない）', () => {
+    const u = simulateResources(w, {
+      id: 'x',
+      name: 'x',
+      nodes: [
+        {
+          id: 's3',
+          label: 's3',
+          config: {
+            kind: 'object-storage',
+            storesImages: false,
+            isrCacheSizeFactor: 2,
+          },
+        },
+      ],
+      routes: { 'isr-revalidate': ['s3'] },
+    }).nodes.s3!;
+    expect(u.resources['storage-gb-month']).toBeCloseTo(
+      ((100 * 50) / 1_000_000) * 2,
+      12,
+    );
+  });
+});

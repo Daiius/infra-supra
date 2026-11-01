@@ -51,6 +51,8 @@ import {
   setupProblem,
   setupRevalidateOptions,
   DEFAULT_REVALIDATE_SEC,
+  invalidationNote,
+  onDemandInvalidationEstimate,
   settingFlavor,
   SETTINGS,
   STACKS,
@@ -282,7 +284,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           />
           <SetupRevalidate
             scenario={scenario}
+            stackIndex={stack}
             framework={framework}
+            components={parts}
             value={revalidateSec}
             onChange={setRevalidateSec}
           />
@@ -1095,6 +1099,12 @@ function Actions({
   const settingKeys = (Object.keys(SETTINGS) as SettingKey[]).filter(
     (k) => !hiddenKeys.includes(k),
   );
+  // オンデマンドにしたときの CloudFront の無効化の見込み（今月の規模・OpenNext。D-66）。
+  // 選んでいる行動を当てた draft から毎回引く（部品・提案への返事など、見積が読む行動の値をすべて反映する。OCL-7EDA42D6・OCL-8B602E76）
+  const invalidationEst = settingKeys.includes('isr')
+    ? onDemandInvalidationEstimate(draft)
+    : undefined;
+  const invalidation = invalidationEst && invalidationNote(invalidationEst);
 
   return (
     <div className="card bg-base-100 shadow">
@@ -1230,6 +1240,11 @@ function Actions({
                 {settingFlavor(key, chosen) && (
                   <span className="mt-1 block text-xs opacity-70">
                     {settingFlavor(key, chosen)}
+                  </span>
+                )}
+                {key === 'isr' && invalidation && (
+                  <span className="mt-1 block text-xs text-warning">
+                    オンデマンドでは {invalidation}
                   </span>
                 )}
               </label>

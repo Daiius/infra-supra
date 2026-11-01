@@ -38,6 +38,11 @@ export const RouteGroupSchema = z.object({
    * 与えると再生成の回数に時間の式の分を足す（prd/04 §2・D-56）。
    */
   onDemandMaxAgeSeconds: Pos.optional(),
+  /**
+   * isr・オンデマンドのみ: 1 回の内容の更新で再検証を呼ぶページの数（記事のページと一覧など）。CDN のキャッシュの無効化の数に使い、
+   * 再生成の回数には使わない（prd/04 §2・D-66）。省略は 1。
+   */
+  onDemandPagesPerUpdate: Pos.optional(),
   processing: ProcessingSchema,
   /** ISR のページをキャッシュから返すときの CPU（ホストによっては関数・Worker を通る）。 */
   cachedServeCpuMs: NonNeg.default(0),

@@ -617,7 +617,7 @@ AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ
 | 画像の最適化 | `/_next/image` で受け、既定では S3 の API で原本を読む | [image optimization](https://opennext.js.org/aws/inner_workings/components/image_optimization) |
 | 入口 | 既定のラッパーは AWS Lambda、既定の変換は API Gateway v2 の形式。どの入口（関数 URL・API Gateway）を作るかは組む道具しだい（文書では確定しない） | [components overview](https://opennext.js.org/aws/inner_workings/components/overview) |
 | SQS（東京） | FIFO $0.50 / 100 万リクエスト（標準 $0.40）。毎月 100 万リクエストは無料（全リージョンの合計）。64 KB ごとに 1 リクエスト | Price List API（AWSQueueService・2026-09-11）・[SQS の料金](https://aws.amazon.com/sqs/pricing/) |
-| CloudFront の無効化 | 月 1,000 パスまで $0・以降 1 パス $0.005 | Price List API（AmazonCloudFront） |
+| CloudFront の無効化 | 月 1,000 パスまで $0・以降 1 パス $0.005。上限はアカウントのすべての distribution の合計。ワイルドカード（`/images/*`）・タグ 1 つは 1 パス。1 回の要求にまとめても 1 パスずつ数える（D-66） | Price List API（AmazonCloudFront）・[無効化の料金](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PayingForInvalidation.html) |
 | 関数 URL | 料金表に専用の行が無い（追加の料金が無いとは明記されていない） | Price List API（AWSLambda）・[関数 URL](https://docs.aws.amazon.com/lambda/latest/dg/urls-configuration.html) |
 
 入れた形:
@@ -626,7 +626,8 @@ AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ
 - 経路（Next.js）: 1 つの CloudFront → サーバーの Lambda（関数 URL を入口とみなす）→ DB。ISR のページは CloudFront が期間でキャッシュし、外れると関数が S3 のキャッシュと DynamoDB のタグを読む。再生成は SQS（1 件 = 送信・受信・削除の 3 リクエスト。仮定）→ サーバーの関数（別の実行）→ DB・S3 に書く・タグを書く。**オンデマンドの再検証に対応**（`onDemandIsr: ok`。即時反映の提案を受けられる）。
 - 部品: ISR（S3 + タグ + SQS / キャッシュしない）・画像（OpenNext の画像の最適化 = Lambda / 最適化しない / 投稿のときに縮める）・DB（Amplify と同じ 5 つ）・CDN の料金のプラン（従量 / 定額。D-61）・ファイル S3。SPA では OpenNext を使わず、AWS の SPA と同じ形。
 - 仮定: 関数のメモリ 1 GB・画像の変換 1 回 150 ms（VPS の `imageTransformCpuMs` と同じ）・CloudFront の外れた分ごとに変換・タグの読み書きは 1 回 1 単位・関数 URL と Lambda → CloudFront の転送に追加の料金なし（AWS のオリジンからの取得は無料の扱い）。
-- 数えていないもの: CloudFront の無効化（オンデマンドの更新が月 1,000 パスを超えると費用が増える）・再検証の関数・ウォーマーの Lambda・S3 のキャッシュの保存量。
+- 数えていないもの（D-66 で更新。§13.1）: ウォーマー（既定で無効）・デプロイのときの無効化（SST は既定で全体 `/*` を 1 パス）・SQS を Lambda が待つ空の受信・S3 の fetch のキャッシュ。
+  D-63 で残した CloudFront の無効化・再検証の関数・S3 のキャッシュの保存量は §13.1 で数えた。
 - レビューの指摘で直したもの: 画像の最適化の関数は外れた分ごとに S3 の原本を読む（GET を数える。OCL-A575F009）。AVIF は変換 1 回の時間を 1.5 倍にする（Workload の `images.transformWorkFactor`。OCL-ECDEF8A1）。
 - 「画像だけ Cloudflare」（D-52 の `cf-images`・`cf-resize`）を OpenNext にも許した（`CROSS_PAIRS`）。画像の関数と S3 を外し、投稿はサーバーの関数が受けて R2 に書く（Lambda → インターネットの転送で数える）。CloudFront はページと静的に残る。
 - **維持の手間 1 / 月**（ゲーム上の仮定。デプロイの仕組み・依存の更新・インフラの定義の管理。VPS の 3 より小さい）。手間のバーに「維持 1」と出る（自前の障害の確率は出さない）。
@@ -648,3 +649,46 @@ AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ
 - OpenNext で画像を Lambda で最適化すると、縮めて置く（1 枚 400 KB）より配信が小さく、記事コミュニティでも CloudFront の常時無料（1 TB）にほぼ収まる。
 - 受託のような小さな規模では、定額 Pro の $15 × 12 が従量の無料枠より高い。
 - 即時反映の提案: OpenNext は満たせる（Amplify は満たせない）。
+
+### 13.1 OpenNext の運用の費用を足す（2026-11-01・D-66）
+
+ユーザーの方針「より現実的な Web アプリケーション運用のコスト感」に沿って、§13 で数えていなかったものを公式で確かめて足した。
+
+確かめた事実（2026-11-01 取得）:
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| 自動の CDN の無効化 | 「Not enabled by default」（既定は何もしない）。「used by OpenNext when routes have been On-Demand revalidated」（`revalidatePath`・`revalidateTag`・`res.revalidate()`）。時間の ISR では呼ばない。CloudFront の実装はルートごとに「the route itself and its data route」の 2 パスを送る。タグの再検証は多くの要求を起こしうる | [automatic_cdn_invalidation](https://opennext.js.org/aws/config/overrides/automatic_cdn_invalidation) |
+| 定額のプランの無効化 | 機能の表に「Fast cache invalidations」が全段（Free〜Premium）で挙がる。プランが覆う費用は「Your CloudFront distribution」など。無効化を別に請求するとは書かれていない → **込みと読む（解釈）**。タグでの無効化は Pro 以上 | [定額のプランの文書](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html) |
+| 再検証の関数 | 「polls the queue for messages and sends a HEAD request to the specified route」。SST は FIFO の SQS を作り、関数を購読させる（タイムアウト 30 秒・1 回に最大 5 件） | [architecture](https://opennext.js.org/aws/inner_workings/architecture)・[SST の Nextjs](https://sst.dev/docs/component/aws/nextjs/) |
+| ウォーマー | 「Warming is optional」。5 分ごとに起動。SST の `warm` は既定 0（温めない） | [warming（V2）](https://opennext.js.org/aws/v2/inner_workings/warming)・[SST の Nextjs](https://sst.dev/docs/component/aws/nextjs/) |
+| S3 のキャッシュ | ページごとに、ビルドのときの `html` と `json` または `rsc` を「merged into a single `.cache` file」 | [architecture](https://opennext.js.org/aws/inner_workings/architecture) |
+
+入れた形:
+
+- **CloudFront の無効化**: オンデマンドの再検証で ISR のページを CloudFront にキャッシュする形（ISR の部品が既定）では、自動の無効化を有効にしたものとみなす（即時反映には要る）。
+  月のパス = 内容の更新 × 1 回の更新で再検証するページ **2**（記事と一覧。ゲーム上の仮定 `ON_DEMAND_PAGES_PER_UPDATE`）× 1 ページ **2 パス**（公式）。
+  従量は月 1,000 パスまで無料・以降 $0.005。定額のプランは込み（$0。解釈）。時間の再検証・ISR をキャッシュしない部品では 0。
+- **再検証の関数**: 再生成ごとに 1 回起動し、サーバーの関数の再生成が終わるまで待つ（壁時計時間は再生成と同じ・メモリ 1 GB。仮定）。経路は SQS → 再検証の関数 → サーバーの関数。
+- **S3 のキャッシュの保存量**: ISR のページ数 × ページの応答の大きさ × 2（HTML と RSC。倍率は仮定）。記事コミュニティで約 0.24 GB（月 $0.006）。
+- **ウォーマー**: 既定で無効なので数えない（0）。参考に 1 インスタンスを温めると、5 分ごと × 730 時間 = 月 8,760 回のウォーマーと 8,760 回のサーバーの関数の起動（公式の試算の 100 ms・1 GB で 876 GB 秒）。Lambda の常時無料（100 万リクエスト・40 万 GB 秒）に収まる。
+
+規模の目安: 記事コミュニティの 1 か月目（30 万 PV）で更新 1.5 万回 → 6 万パス → **$295 / 月**（従量）。12 か月目（約 240 万 PV）は約 48 万パス・約 $2,400 / 月。
+
+基準プレイ（何もしない・シード 1〜20・合格数・12 か月の費用の中央値。前 → 後）:
+
+| シナリオ | 画像 | 再検証 | 従量 | 定額 Pro |
+|---|---|---|---|---|
+| 記事コミュニティ | 縮める | 5 分 | 18/20・$442 → 17/20・$444 | 20/20・$236 → $237 |
+| 〃 | 最適化（Lambda） | 5 分 | 20/20・$70 → $72 | 20/20・$240 → $241 |
+| 〃 | 縮める | オンデマンド | 19/20・$405 → **0/20**（$296） | 20/20・$200 → $200 |
+| 〃 | 最適化（Lambda） | オンデマンド | 20/20・$34 → **0/20**（$296） | 20/20・$203 → $204 |
+| 受託 | 縮める / 最適化 | 5 分 | 20/20・$22 → $22 | 20/20・$202 → $202 |
+
+（受託はオンデマンドを選べない。0/20 は 1 か月目の無効化 $295 で所持金が尽きて終わる。12 か月の費用はそこまでの額）
+
+- **オンデマンドの再検証 × 従量は、記事コミュニティでは 1 か月目で破綻する。** 1 回の更新（コメントも含む）ごとに 4 パス・$0.02 かかるため。公式の文書も「Use it only if you understand the costs」と注意している。
+  避け方はゲームの中にある: 定額のプラン（無効化が込み）・ISR をキャッシュしない部品（毎回 SSR。オンデマンドでも 20/20・$29）・時間の再検証。即時反映の提案を受けると、OpenNext でも費用の判断が要る。
+  選ぶ前に分かるように、再検証の設定の「オンデマンド」に今月の規模での無効化の見込み（パスと金額。定額は込み）を出す。負けたときの次のプレイへのヒントも、無効化が主因なら定額・時間の再検証・まとめる方向を出す。
+- 5 分の再検証は再検証の関数の GB 秒の分だけ増える（数ドル）。縮める・従量の 18 → 17/20 は、ぎりぎりのシード 1 つが所持金の目標に届かなくなったもの。
+- 数えていないもの: ウォーマー（既定で無効）・デプロイのときの全体の無効化（1 回 1 パス）・SQS を Lambda が待つ空の受信（未確認）・fetch のキャッシュ・タグの表の保存量。

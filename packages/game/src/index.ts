@@ -350,7 +350,13 @@ export type MonthReport = {
   premises: PlatformPremise[];
   /** 量の境目がある前提すべての記録（推移と見込みに使う。prd/07 §5）。 */
   snapshots: PremiseSnapshot[];
-  lines: { label: string; amount: number; currency: string }[];
+  lines: {
+    label: string;
+    amount: number;
+    currency: string;
+    /** 使用量（CloudFront の無効化のパスだけ。次のプレイへのヒントに使う。D-66）。 */
+    quantity?: number;
+  }[];
   unpricedLines: number;
   settings: Settings;
   ssrCpuMs: number;
@@ -693,6 +699,12 @@ export const ON_DEMAND_PAGE_UPDATE_SHARE = 0.5;
  */
 export const ON_DEMAND_MAX_AGE_SEC = 86_400;
 
+/**
+ * オンデマンドの再検証で、1 回の内容の更新ごとに再検証を呼ぶページの数（その記事のページと、記事が並ぶ一覧）。
+ * CDN のキャッシュの無効化の数に効く（OpenNext の CloudFront。再生成の回数には効かない）。ゲーム上の仮定（D-66）。
+ */
+export const ON_DEMAND_PAGES_PER_UPDATE = 2;
+
 /** オンデマンドの再検証の、月の内容の更新の回数（API の書き込み × ページを変える割合）。 */
 function onDemandUpdates(pv: number, w: WorkloadInput): number {
   return (
@@ -750,6 +762,7 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
         ...rest,
         onDemandUpdatesPerMonth: updates,
         onDemandMaxAgeSeconds: ON_DEMAND_MAX_AGE_SEC,
+        onDemandPagesPerUpdate: ON_DEMAND_PAGES_PER_UPDATE,
       };
     });
   }
@@ -2133,6 +2146,102 @@ export function componentPreview(
   return premiseRefsOf(def, r.premises);
 }
 
+/**
+ * オンデマンドの再検証にしたときの CloudFront の無効化の見込み（D-66）。今月の基準の PV と今の部品で見積を引き、
+ * 無効化のメーターの明細を読む。無効化が起きない構成（OpenNext 以外・ISR を CloudFront にキャッシュしない部品）は undefined。
+ * included: 定額のプランで込み（解釈）。freePaths・unitUsd は従量の料金データ（無料のパス・1 パスの単価）。表示のためだけ。
+ */
+export type InvalidationEstimate = {
+  paths: number;
+  usd: number;
+  included: boolean;
+  freePaths: number;
+  unitUsd: number;
+};
+
+export function onDemandInvalidationEstimate(
+  state: GameState,
+): InvalidationEstimate | undefined {
+  const sc = scenarioOf(state);
+  const platform = STACKS[state.stackIndex]!.provider;
+  const settings = { ...state.settings, revalidateSec: ON_DEMAND_REVALIDATE };
+  const bk = booksAt(state, state.history.length + 1);
+  const r = estimate({
+    workload: workloadFor(sc, {
+      pv: state.basePV,
+      settings,
+      ssrCpuMs: nextSsrCpuMs(state),
+      mods: state.mods,
+      stock: sc.stock ? state.stock : null,
+      platform,
+      components: state.components,
+      framework: state.framework,
+    }),
+    architecture: architectureFor(
+      state.stackIndex,
+      state.seats,
+      state.framework,
+      state.components,
+      {},
+      state.storageOption,
+    ),
+    books: bk,
+  });
+  const lines = r.bill.lines.filter(
+    (l) => l.priceRef.meterId === INVALIDATION_METER && (l.quantity ?? 0) > 0,
+  );
+  if (lines.length === 0) return undefined;
+  // 従量の料金データ（CloudFront の無効化の無料のパスと単価）
+  const payg = bk
+    .find((b) => b.provider === 'aws')
+    ?.plans.find((p) => p.id === 'cloudfront');
+  const meter = payg?.meters.find((m) => m.id === INVALIDATION_METER);
+  const pool = bk
+    .find((b) => b.provider === 'aws')
+    ?.allowancePools.find((p) => p.id === meter?.allowancePool);
+  const unitUsd =
+    meter?.pricing.model === 'flat'
+      ? meter.pricing.unitPrice / meter.pricing.per
+      : 0;
+  return {
+    paths: lines.reduce((a, l) => a + (l.quantity ?? 0), 0),
+    usd: lines.reduce((a, l) => a + (l.amount ?? 0), 0),
+    included: lines.every((l) => l.priceRef.planId !== 'cloudfront'),
+    freePaths: pool?.quantity ?? 0,
+    unitUsd,
+  };
+}
+
+const INVALIDATION_METER = 'invalidation-paths';
+
+/** 始める画面で、オンデマンドを選んだときの無効化の見込み（1 か月目の規模。D-66）。 */
+export function setupInvalidationEstimate(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  components: Choices,
+): InvalidationEstimate | undefined {
+  return onDemandInvalidationEstimate(
+    newGame(
+      stackIndex,
+      1,
+      scenario,
+      DEFAULT_START_DATE,
+      framework,
+      components,
+      ON_DEMAND_REVALIDATE,
+    ),
+  );
+}
+
+/** 無効化の見込みの文（再検証の設定の「オンデマンド」の選択肢に添える。D-66）。 */
+export function invalidationNote(e: InvalidationEstimate): string {
+  const paths = `無効化 月約 ${commas(e.paths)} パス`;
+  return e.included
+    ? `${paths}（定額のプランでは込み。解釈）`
+    : `${paths}・約 ${usd(e.usd)}（月 ${commas(e.freePaths)} パスまで無料、以降 1 パス $${e.unitUsd}）`;
+}
+
 /** 提案を受けられない理由（要件を満たせる構成がプラン変更でも無い）。 */
 export function unavailableReason(
   state: Pick<GameState, 'stackIndex' | 'framework'>,
@@ -3076,6 +3185,9 @@ export function playMonth(input: GameState): GameState {
             label: lineLabel(l),
             amount: l.amount!,
             currency: l.currency,
+            ...(l.priceRef.meterId === INVALIDATION_METER
+              ? { quantity: l.quantity ?? 0 }
+              : {}),
           })),
       ),
       ...(fee
@@ -3772,10 +3884,13 @@ export type RetryHint = {
   next: string;
 };
 
-const usd = (x: number) =>
-  `$${Math.round(x)
+/** 整数に丸めて 3 桁ごとにカンマを入れる。 */
+const commas = (x: number) =>
+  Math.round(x)
     .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+const usd = (x: number) => `$${commas(x)}`;
 
 /** 月の並び（1 つなら「3 か月目」、続くなら「3〜5 か月目」、飛ぶなら「3・7 か月目」）。 */
 function monthsText(ms: readonly number[]): string {
@@ -4004,6 +4119,17 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       .reduce((a, [, v]) => a + v, 0);
     const base = baseSum > positive / 2;
     const share = infra / Math.max(1, revenue);
+    // オンデマンドの再検証の CloudFront の無効化が最も大きい費用（D-66）
+    const inv = h.flatMap((r) =>
+      r.lines.filter((l) => l.label.endsWith(` ${INVALIDATION_METER}`)),
+    );
+    const invalidation =
+      top[0] && top[0][0].endsWith(` ${INVALIDATION_METER}`)
+        ? {
+            paths: inv.reduce((a, l) => a + (l.quantity ?? 0), 0),
+            usd: top[0][1],
+          }
+        : undefined;
     const shortText =
       reason === 'cash'
         ? `${state.end.month} か月目に所持金が尽きた`
@@ -4013,8 +4139,9 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         hint: {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
-          next:
-            share < 0.2
+          next: invalidation
+            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、コメントの多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または無効化をワイルドカード・タグでまとめる`
+            : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
               : base
                 ? '基本料（固定費）が費用の大半。今の規模に見合う基本料か、込みの量や席がそこまで要るかを見直す'

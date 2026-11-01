@@ -31,6 +31,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     requestUnitKB: Pos.optional(),
     /** 1 件を何リクエストと数えるか（SQS のメッセージの送信・受信・削除など。仮定。既定 1）。次へ渡す件数は変わらない。 */
     requestsPerItem: Pos.default(1),
+    /**
+     * オンデマンドの再検証のたびに、この CDN のキャッシュを無効化する（OpenNext の自動の CDN の無効化。D-66）。
+     * 値は 1 ページあたりのパスの数（ページとそのデータのルート）。ttlClasses に document-isr を持つときだけ数える。
+     */
+    invalidationPathsPerPage: Pos.optional(),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({
@@ -124,6 +129,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     kind: z.literal('object-storage'),
     storesImages: z.boolean().default(true),
     cdnHitRate: Ratio.optional(),
+    /**
+     * ISR のキャッシュを置く: ISR のページの大きさ（ResolvedWorkload.storage.isrPagesGB）の何倍を保存するか
+     * （OpenNext は HTML と RSC をまとめた .cache を 1 ページ 1 つ置く。倍率は仮定。0 は置かない。D-66）。
+     */
+    isrCacheSizeFactor: NonNeg.default(0),
   }),
   /** 画像の最適化。cacheMissRate はキャッシュの読み取りが共有キャッシュまで届く割合。 */
   z.object({

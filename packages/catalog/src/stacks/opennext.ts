@@ -38,6 +38,16 @@ export const OPENNEXT_DEFAULT_CHOICES: Choices = {
 const IMAGE_TRANSFORM_MS = 150;
 /** SQS のメッセージ 1 件を何リクエストと数えるか（送信・受信・削除。仮定）。 */
 const SQS_REQUESTS_PER_MESSAGE = 3;
+/**
+ * オンデマンドの再検証で無効化する 1 ページあたりの CloudFront のパスの数。OpenNext の自動の CDN の無効化（CloudFront の実装）は
+ * 「ページとそのデータのルート」の 2 パスを送る（公式の文書・2026-11-01。D-66）。
+ */
+const INVALIDATION_PATHS_PER_PAGE = 2;
+/**
+ * S3 の ISR のキャッシュの 1 ページの大きさを、ページの応答の何倍とみるか。OpenNext は HTML と RSC（または JSON）を
+ * 1 つの .cache にまとめて置く（公式の文書）。RSC は HTML と同じくらいとみて 2 倍（仮定。D-66）。
+ */
+const ISR_CACHE_SIZE_FACTOR = 2;
 
 /** Amplify の構成と同じ部品（DB・CDN の料金のプラン・最適化しない / 縮める画像・SPA の部品）を、この事業者の部品として使う。 */
 const SHARED = AWS_COMPONENTS.filter(
@@ -61,10 +71,11 @@ export const OPENNEXT_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws-opennext',
     label: 'S3 + DynamoDB のタグ + SQS の再検証',
-    note: 'ISR のページは CloudFront が返し、外れると関数が S3 のキャッシュと DynamoDB のタグを読む。期限が来たページは SQS の待ち行列から関数が作り直す。オンデマンドの再検証にも対応する（CloudFront の無効化は別に要る）',
+    note: 'ISR のページは CloudFront が返し、外れると関数が S3 のキャッシュと DynamoDB のタグを読む。期限が来たページは SQS の待ち行列から再検証の関数がサーバーの関数を呼んで作り直す。オンデマンドの再検証にも対応する（CloudFront の無効化が別に要る。従量では月 1,000 パスを超えると 1 パス $0.005）',
     premiseRefs: [
       'fact:aws:lambda:opennext-isr',
       'pool:aws:sqs-fifo:sqs-free-requests',
+      'pool:aws:cloudfront:cloudfront-free-invalidations',
     ],
     onDemandIsr: { ok: true, fact: 'aws:lambda:opennext-isr' },
   },
@@ -117,14 +128,16 @@ export function composeOpenNext(
   };
   const nodes: ArchNodeIn[] = [
     // 1 つの CloudFront がすべてを受ける（静的は S3・動的は関数 URL の Lambda へ）。ISR のページは s-maxage の期間でキャッシュ
-    cloudfront(
-      choices,
-      {
-        asset: 1,
-        'document-static': 1,
-        'image-read': IMAGE_CDN_HIT_RATE,
-      },
-      isr ? ['document-isr'] : [],
+    withInvalidation(
+      cloudfront(
+        choices,
+        {
+          asset: 1,
+          'document-static': 1,
+          'image-read': IMAGE_CDN_HIT_RATE,
+        },
+        isr ? ['document-isr'] : [],
+      ),
     ),
     {
       id: 'server',
@@ -165,10 +178,26 @@ export function composeOpenNext(
     ...(isr
       ? [
           {
+            // SQS から起動し、HEAD でサーバーの関数を呼んで作り直す。応答を待つ間も課金される（壁時計時間はサーバーの再生成と同じ）
+            id: 'revalidator',
+            label: 'Lambda（OpenNext の再検証の関数）',
+            config: {
+              kind: 'function',
+              memoryGB: COMPUTE_MEMORY_GB,
+              concurrency: 1,
+            },
+            billing: lambda(lambdaMeters),
+          } as ArchNodeIn,
+          {
             id: 's3-cache',
             label: 'S3（ISR のキャッシュ）',
-            config: { kind: 'object-storage', storesImages: false },
+            config: {
+              kind: 'object-storage',
+              storesImages: false,
+              isrCacheSizeFactor: ISR_CACHE_SIZE_FACTOR,
+            },
             billing: bill('s3-standard', {
+              'storage-gb-month': 'storage',
               'object-writes': 'put-requests',
               'object-reads': 'get-requests',
             }),
@@ -206,7 +235,14 @@ export function composeOpenNext(
       ? {
           'document-isr': ['cf', 'server', 's3-cache', 'tags'],
           // 期限の来たページは SQS に積まれ、再検証の関数が HEAD でサーバーの関数を呼んで作り直す（別の実行）
-          'isr-revalidate': ['queue', 'server', db.id, 's3-cache', 'tags'],
+          'isr-revalidate': [
+            'queue',
+            'revalidator',
+            'server',
+            db.id,
+            's3-cache',
+            'tags',
+          ],
         }
       : {}),
     api: ['cf', 'server', db.id],
@@ -216,4 +252,16 @@ export function composeOpenNext(
     ...(optimize ? { 'image-transform': ['image-fn'] } : {}),
   };
   return { id: 'aws-opennext', name: 'AWS（OpenNext）', nodes, routes };
+}
+
+/** オンデマンドの再検証のたびに CloudFront の ISR のページを無効化する（OpenNext の自動の CDN の無効化を有効にした形。D-66）。 */
+function withInvalidation(node: ArchNodeIn): ArchNodeIn {
+  if (node.config.kind !== 'cdn') return node;
+  return {
+    ...node,
+    config: {
+      ...node.config,
+      invalidationPathsPerPage: INVALIDATION_PATHS_PER_PAGE,
+    },
+  };
 }

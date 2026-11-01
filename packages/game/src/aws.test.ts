@@ -16,6 +16,10 @@ import {
   stackFlavor,
   STACKS,
   upkeepOf,
+  invalidationNote,
+  onDemandInvalidationEstimate,
+  retryHintsOf,
+  setupInvalidationEstimate,
   type FrameworkId,
 } from './index.ts';
 import type { Choices } from 'catalog';
@@ -180,5 +184,113 @@ describe('AWS の構成', () => {
     expect(
       componentConflict('aws', 'cdnPlan', 'flat-pro', { images: 'cf-images' }),
     ).not.toBeNull();
+  });
+
+  it('OpenNext のオンデマンドの再検証は CloudFront を無効化する: 従量は月 1,000 パスを超えると 1 パス $0.005、定額は込み（D-66）', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    const first = (cdnPlan: string, revalidateSec: number) =>
+      playMonth(
+        newGame(
+          ON,
+          1,
+          ARTICLE_COMMUNITY,
+          DEFAULT_START_DATE,
+          'nextjs',
+          { cdnPlan, images: 'default' },
+          revalidateSec,
+        ),
+      ).history[0]!;
+    const line = (h: ReturnType<typeof first>) =>
+      h.lines.find((l) => l.label.includes('invalidation-paths'));
+    // 1 か月目: PV 30 万 × 書き込み 0.1 × ページを変える 0.5 = 更新 1.5 万 × 2 ページ × 2 パス = 6 万パス
+    const payg = first('payg', 0);
+    expect(line(payg)!.amount).toBeCloseTo((60_000 - 1_000) * 0.005, 6);
+    // 定額 Pro は込み・時間の再検証は無効化しない
+    expect(line(first('flat-pro', 0))?.amount ?? 0).toBe(0);
+    expect(line(first('payg', 300))?.amount ?? 0).toBe(0);
+  });
+
+  it('オンデマンドを選ぶ前に無効化の見込みが分かる: 従量はパスと金額、定額は込み、無効化しない構成は出さない（D-66）', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    const payg = setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
+      cdnPlan: 'payg',
+    })!;
+    // 1 か月目（30 万 PV）: 更新 1.5 万 × 2 ページ × 2 パス
+    expect(payg.paths).toBeCloseTo(60_000, 6);
+    expect(payg.usd).toBeCloseTo(59_000 * 0.005, 6);
+    expect(payg.included).toBe(false);
+    expect(invalidationNote(payg)).toBe(
+      '無効化 月約 60,000 パス・約 $295（月 1,000 パスまで無料、以降 1 パス $0.005）',
+    );
+    const flat = setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
+      cdnPlan: 'flat-pro',
+    })!;
+    expect(flat.included).toBe(true);
+    expect(invalidationNote(flat)).toBe(
+      '無効化 月約 60,000 パス（定額のプランでは込み。解釈）',
+    );
+    // ISR をキャッシュしない部品・Amplify は無効化しない
+    expect(
+      setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
+        isrCache: 'none',
+      }),
+    ).toBeUndefined();
+    expect(
+      setupInvalidationEstimate(ARTICLE_COMMUNITY, AWS, 'nextjs', {}),
+    ).toBeUndefined();
+    // ゲーム中は今月の規模で引く（今の設定が時間の再検証でも、オンデマンドにしたときの見込み）
+    const st = newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
+      cdnPlan: 'payg',
+    });
+    expect(st.settings.revalidateSec).toBe(300);
+    expect(onDemandInvalidationEstimate(st)!.paths).toBeCloseTo(60_000, 6);
+    // 同じ月に選んだ部品の変更（行動を当てた draft）にも合わせる（OCL-7EDA42D6）
+    const flatSt = playMonth(
+      newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
+        cdnPlan: 'flat-pro',
+      }),
+    );
+    expect(onDemandInvalidationEstimate(flatSt)!.included).toBe(true);
+    const draft = applyActions(flatSt, [
+      { type: 'component', slot: 'cdnPlan', option: 'payg' },
+    ]);
+    expect(onDemandInvalidationEstimate(draft)!.included).toBe(false);
+    // 提案への返事で変わる書き込み量（mods）も読む（OCL-8B602E76）: 書き込み 0.1 → 0.2 で更新もパスも倍
+    expect(
+      onDemandInvalidationEstimate({
+        ...draft,
+        mods: { ...draft.mods, writesPerCall: 0.2 },
+      })!.paths,
+    ).toBeCloseTo(2 * onDemandInvalidationEstimate(draft)!.paths, 6);
+    expect(
+      onDemandInvalidationEstimate(
+        applyActions(flatSt, [
+          { type: 'component', slot: 'isrCache', option: 'none' },
+        ]),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('無効化の費用が主因で負けたら、次のプレイへのヒントが定額・時間の再検証・まとめる方向を出す（D-66）', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    let s = playMonth(
+      newGame(
+        ON,
+        1,
+        ARTICLE_COMMUNITY,
+        DEFAULT_START_DATE,
+        'nextjs',
+        { cdnPlan: 'payg', images: 'default' },
+        0,
+      ),
+    );
+    while (s.phase === 'playing') s = playMonth(applyActions(s, []));
+    expect(s.end?.reason).toBe('cash');
+    const cost = retryHintsOf(s).find((x) => x.kind === 'cost')!;
+    expect(cost.what).toContain('aws invalidation-paths');
+    expect(cost.next).toContain('60,000 パス・$295');
+    expect(cost.next).toContain('定額のプラン');
+    expect(cost.next).toContain('時間の再検証');
+    expect(cost.next).toContain('タグ');
   });
 });
