@@ -2446,6 +2446,86 @@ export function invalidationNote(e: InvalidationEstimate): string {
     : `${paths}・約 ${usd(e.usd)}（月 ${commas(e.freePaths)} パスまで無料、以降 1 パス $${e.unitUsd}）`;
 }
 
+/**
+ * 始める画面の 1 か月目の費用と収益の見込み（D-72）。ゲーム上の目安で、出来事・乱数（話題・Bot・自前運用の障害）は含めない。
+ * 1 か月目の基準の PV と選んだ部品・設定で、playMonth と同じ Workload・見積を引く。収益は広告・固定の収益に、前提に当たって
+ * 止まる・遅くなる月の減りだけを掛ける。short: 費用が「開始の所持金 + 収益」を超える（1 か月目に所持金が尽きる見込み）。
+ * topLines: 金額の大きい明細（$1 以上の上位 3 件。同じラベルはまとめる・USD に直す・クレジット前）。
+ */
+export type MonthOneEstimate = {
+  costUsd: number;
+  revenueUsd: number;
+  startCash: number;
+  short: boolean;
+  topLines: { label: string; usd: number }[];
+};
+
+export function setupMonthOneEstimate(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  components: Choices,
+  revalidateSec?: number,
+): MonthOneEstimate {
+  const state = newGame(
+    stackIndex,
+    1,
+    scenario,
+    DEFAULT_START_DATE,
+    framework,
+    components,
+    revalidateSec,
+  );
+  const r = estimate({
+    workload: workloadFor(scenario, {
+      pv: state.basePV,
+      settings: state.settings,
+      ssrCpuMs: nextSsrCpuMs(state),
+      mods: state.mods,
+      stock: scenario.stock ? state.stock : null,
+      platform: STACKS[state.stackIndex]!.provider,
+      components: state.components,
+      framework: state.framework,
+    }),
+    architecture: architectureFor(
+      state.stackIndex,
+      state.seats,
+      state.framework,
+      state.components,
+      {},
+      state.storageOption,
+    ),
+    books: booksAt(state, 1),
+  });
+  const costUsd = toUsd(r.bill.totals);
+  const loss = scenario.revenue.loss;
+  const hit = (e: string[]) =>
+    r.premises.some((p) => p.hit && e.includes(p.effect));
+  let revenueUsd =
+    (scenario.revenue.fixedUsdPerMonth ?? 0) +
+    (state.basePV / 1000) * scenario.revenue.adsUsdPer1000PV;
+  if (hit(['block', 'upgrade-required'])) revenueUsd *= 1 - loss.block;
+  else if (hit(['throttle'])) revenueUsd *= 1 - loss.throttle;
+  const byLabel = new Map<string, number>();
+  for (const l of r.bill.lines) {
+    if (!l.amount) continue;
+    const v = l.currency === 'JPY' ? l.amount / USD_JPY : l.amount;
+    byLabel.set(lineLabel(l), (byLabel.get(lineLabel(l)) ?? 0) + v);
+  }
+  const topLines = [...byLabel]
+    .filter(([, v]) => v >= 1) // $1 未満の明細は主な費用に出さない
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([label, v]) => ({ label, usd: v }));
+  return {
+    costUsd,
+    revenueUsd,
+    startCash: scenario.startCash,
+    short: costUsd > scenario.startCash + revenueUsd,
+    topLines,
+  };
+}
+
 /** 提案を受けられない理由（要件を満たせる構成がプラン変更でも無い）。 */
 export function unavailableReason(
   state: Pick<GameState, 'stackIndex' | 'framework'>,

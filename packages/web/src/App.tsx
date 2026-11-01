@@ -82,6 +82,7 @@ import {
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import {
   SetupComponents,
+  SetupCostPreview,
   SetupRevalidate,
   type SetupChoices,
 } from './setup-components.tsx';
@@ -297,10 +298,23 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             value={revalidateSec}
             onChange={setRevalidateSec}
           />
-          {problem && (
+          {problem ? (
             <p className="text-right text-sm" role="status">
               {problem}
             </p>
+          ) : (
+            // すべて選んだら 1 か月目の費用の見込み（D-72）
+            <SetupCostPreview
+              scenario={scenario}
+              stackIndex={stack}
+              framework={framework}
+              components={parts}
+              revalidateSec={
+                setupRevalidateOptions(scenario, framework).length
+                  ? revalidateSec
+                  : undefined
+              }
+            />
           )}
           <div className="card-actions flex-wrap items-center justify-end">
             <label

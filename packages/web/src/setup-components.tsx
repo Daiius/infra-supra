@@ -8,6 +8,7 @@ import {
   ON_DEMAND_REVALIDATE,
   SETTINGS,
   setupInvalidationEstimate,
+  setupMonthOneEstimate,
   revalidateSettingOf,
   setupRevalidateOptions,
   setupSlots,
@@ -193,6 +194,72 @@ export function SetupRevalidate({
           ))}
         </div>
       </fieldset>
+    </div>
+  );
+}
+
+/** 「約 $X」（見込みは目安なので整数のドル。丸めは表示のときだけ）。 */
+const aboutUsd = (n: number) => `約 $${Math.round(n).toLocaleString('en-US')}`;
+
+/**
+ * 始める画面の 1 か月目の費用の見込み（D-72）。部品と設定がすべて選ばれたときだけ出す。費用が「開始の所持金 + 1 か月目の
+ * 収益の見込み」を超えるときは警告色にし、主な費用の行を添える（正解の構成名は出さない。D-40）。始めることは止めない。
+ */
+export function SetupCostPreview({
+  scenario,
+  stackIndex,
+  framework,
+  components,
+  revalidateSec,
+}: {
+  scenario: Scenario;
+  stackIndex: number;
+  framework: FrameworkId;
+  components: SetupChoices;
+  /** 再検証・ビルドの間隔（選べないフレームワークでは undefined）。 */
+  revalidateSec: number | undefined;
+}) {
+  const e = useMemo(() => {
+    const chosen = Object.fromEntries(
+      Object.entries(components).filter(
+        (x): x is [string, string] => x[1] !== undefined,
+      ),
+    );
+    return setupMonthOneEstimate(
+      scenario,
+      stackIndex,
+      framework,
+      chosen,
+      revalidateSec,
+    );
+  }, [scenario, stackIndex, framework, components, revalidateSec]);
+  return (
+    <div
+      role="status"
+      className={`min-w-0 rounded-box border p-3 text-sm ${e.short ? 'border-warning bg-warning/15' : 'border-base-300'}`}
+    >
+      <p className="break-words">
+        1 か月目の費用の見込み <strong>{aboutUsd(e.costUsd)}</strong>
+        （開始の所持金 ${Math.round(e.startCash).toLocaleString('en-US')}・1
+        か月目の収益の見込み {aboutUsd(e.revenueUsd)}）
+      </p>
+      {e.short && (
+        <>
+          <p className="mt-1 font-bold">
+            この組み合わせだと 1 か月目に所持金が尽きる見込み
+          </p>
+          <ul className="mt-1 list-disc pl-5 text-xs">
+            {e.topLines.map((l) => (
+              <li key={l.label} className="break-all">
+                {l.label} {aboutUsd(l.usd)}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="mt-1 text-xs opacity-70">
+        ゲーム上の目安（1 か月目の基準の規模。出来事・障害は含めない）
+      </p>
     </div>
   );
 }
