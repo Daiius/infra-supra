@@ -24,6 +24,7 @@ export function loadPriceBooks(): PriceBook[] {
 
 export * from './frameworks/index.ts';
 export * from './stacks/index.ts';
+export * from './stacks/cross.ts';
 export * from './stacks/flavor.ts';
 export * from './stacks/files.ts';
 export * from './templates/index.ts';

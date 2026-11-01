@@ -69,8 +69,9 @@ describe('部品の差し替え', () => {
     const s = playMonth(newGame(CF_PAID));
     const a = applyAction(s, comp('db', 'hyperdrive'));
     expect(a.componentSwap?.option).toBe('hyperdrive');
+    // Supabase のアカウントが増えるので、設定の一度きりの手間も今月使う（D-52・OCL-B6A107A3）
     expect(effortAvailable(a)).toBe(
-      effortAvailable(s) - EFFORT.dbSwap.perMonth,
+      effortAvailable(s) - EFFORT.dbSwap.perMonth - EFFORT.accountSetup,
     );
     // 進行中は部品の差し替え・乗り換え・プラン変更を選べない
     expect(actionEffort(a, comp('images', 'none'))).toBeNull();

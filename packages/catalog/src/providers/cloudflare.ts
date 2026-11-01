@@ -115,6 +115,28 @@ const NO_SELF_SERVE_SLA: SlaInput = {
   sourceIds: ['workersPricing', 'plans', 'businessSla', 'workersSla'],
 };
 
+/** Images の URL の変換を他の事業者のサイトから使う条件（D-52）。ノードが facts で挙げたときだけ前提に出る。 */
+const IMAGES_FACTS = [
+  {
+    id: 'transform-url',
+    premise:
+      'URL での変換（/cdn-cgi/image/…）は、変換を有効にした Cloudflare のゾーンの上で頼む。元の画像は既定では同じゾーンのものだけ受け付ける（R2 のカスタムドメインを同じゾーンに置けば足りる）',
+    sourceIds: ['imagesTransformUrl', 'imagesSources'],
+  },
+  {
+    id: 'outside-images',
+    premise:
+      'Images の変換は Images の外（R2 など）に置いた画像にも使え、Free のプランにも含まれる',
+    sourceIds: ['imagesPricingOutside'],
+  },
+  {
+    id: 'next-loader',
+    premise:
+      'Next.js の画像の部品（next/image）は loaderFile で、Cloudflare の変換の URL を返すローダーに替えられる（公式の例がある）。替えると Vercel の画像の最適化は使わない',
+    sourceIds: ['nextImageLoader'],
+  },
+];
+
 export const cloudflare: PriceBookInput = {
   schemaVersion: 1,
   provider: 'cloudflare',
@@ -202,6 +224,27 @@ export const cloudflare: PriceBookInput = {
     // Next.js の CDN の扱い（Cloudflare の文書ではないが、前段の CDN の前提として一緒に持つ）
     nextjsCdn: {
       url: 'https://nextjs.org/docs/app/guides/cdn-caching',
+      retrievedAt: '2026-11-01',
+    },
+    // 他の事業者（Vercel）のサイトの画像だけを R2 + Images で配る（2026-11-01 に原文で確認。D-52・prd/11 §2）
+    r2PublicBuckets: {
+      url: 'https://developers.cloudflare.com/r2/buckets/public-buckets/',
+      retrievedAt: '2026-11-01',
+    },
+    imagesTransformUrl: {
+      url: 'https://developers.cloudflare.com/images/transform-images/transform-via-url/',
+      retrievedAt: '2026-11-01',
+    },
+    imagesSources: {
+      url: 'https://developers.cloudflare.com/images/transform-images/sources/',
+      retrievedAt: '2026-11-01',
+    },
+    imagesPricingOutside: {
+      url: 'https://developers.cloudflare.com/images/pricing/',
+      retrievedAt: '2026-11-01',
+    },
+    nextImageLoader: {
+      url: 'https://nextjs.org/docs/app/api-reference/config/next-config-js/images',
       retrievedAt: '2026-11-01',
     },
   },
@@ -626,6 +669,18 @@ export const cloudflare: PriceBookInput = {
             'R2 は読み書き・削除・一覧が全世界で強い整合（書いた直後から全世界で見える）',
           sourceIds: ['r2Consistency'],
         },
+        {
+          id: 'custom-domain',
+          premise:
+            'R2 の公開バケットを本番で配るにはカスタムドメインを使い、そのドメインは R2 と同じアカウントの Cloudflare のゾーンとして足す（r2.dev の URL はレート制限がある開発用）。カスタムドメインなら Cloudflare のキャッシュが効く',
+          sourceIds: ['r2PublicBuckets'],
+        },
+        {
+          id: 'egress-other-services',
+          premise:
+            'R2 から直接（Workers の API・S3 の API・r2.dev）出す転送は無料。バケットにつないだ他の従量のサービスは別に課金されうる',
+          sourceIds: ['r2Pricing'],
+        },
       ],
       meters: [
         {
@@ -673,6 +728,7 @@ export const cloudflare: PriceBookInput = {
       name: 'Images Free',
       sourceIds: ['imagesPricing'],
       uptimeSla: NO_SELF_SERVE_SLA,
+      facts: IMAGES_FACTS,
       meters: [
         {
           id: 'transformations',
@@ -694,6 +750,7 @@ export const cloudflare: PriceBookInput = {
       sourceIds: ['imagesPricing'],
       uptimeSla: NO_SELF_SERVE_SLA,
       notes: ['Images Paid の基本料は取得したページに記載がなかった'],
+      facts: IMAGES_FACTS,
       meters: [
         {
           id: 'transformations',

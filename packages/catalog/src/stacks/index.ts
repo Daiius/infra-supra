@@ -9,6 +9,13 @@ import {
   AWS_STACK_DEFS,
   composeAws,
 } from './aws.ts';
+import {
+  applyCross,
+  behaviorOf,
+  CROSS_COMPONENTS,
+  hostsOf,
+  type CrossLink,
+} from './cross.ts';
 
 export type Platform = 'cloudflare' | 'vercel' | 'sakura' | 'aws';
 export type SlotId =
@@ -90,6 +97,10 @@ export type ComponentOption = {
   onDemandIsr?: { ok: boolean; fact: string };
   /** この部品を選べるフレームワーク（省略はすべて。ISR のキャッシュは Next.js だけ・OGP の前処理は SPA だけ。prd/10）。 */
   frameworks?: FrameworkId[];
+  /** この部品を差せる土台の事業者（省略は platform だけ）。他の事業者の部品は cross.ts の CROSS_PAIRS で許した組だけ（D-52）。 */
+  hosts?: Platform[];
+  /** 土台と別の事業者のときの接続の形（D-52・prd/11 §2.2）。 */
+  link?: CrossLink;
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
@@ -508,6 +519,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...SPA_OGP,
   ...SPA_API_CACHE,
   ...AWS_COMPONENTS,
+  ...CROSS_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
@@ -547,7 +559,7 @@ export function componentsOf(
 ): ComponentOption[] {
   return COMPONENTS.filter(
     (c) =>
-      c.platform === platform &&
+      hostsOf(c).includes(platform) &&
       c.slot === slot &&
       (framework === undefined ||
         c.frameworks === undefined ||
@@ -1101,15 +1113,23 @@ export function composeStack(
         );
     }
   })();
+  // 他の事業者の部品（D-52）
+  const crossed = applyCross(
+    arch,
+    def.platform,
+    def.plan,
+    c,
+    options.framework,
+  );
   // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で直接組む
   return spa && def.platform !== 'aws'
-    ? asSpa(arch, def.platform, {
+    ? asSpa(crossed, def.platform, {
         prerender: c.ogp === 'prerender',
         apiCache: apiCacheActive(def.platform, c, 'vite-spa')
           ? c.apiCache!
           : 'none',
       })
-    : arch;
+    : crossed;
 }
 
 /**
@@ -1241,7 +1261,12 @@ export function applyComponentsToWorkload(
   choices: Choices = {},
   options: { originalImageKB?: number; resizedImageKB?: number } = {},
 ): WorkloadInput {
-  const c = withDefaults(platform, choices);
+  const given = withDefaults(platform, choices);
+  // 他の事業者の部品は、同じ振る舞いの部品として Workload を変える（D-52）
+  const c = {
+    ...given,
+    images: imagesBehavior(platform, given.images),
+  };
   const out: WorkloadInput = { ...w };
   if (c.isrCache === 'none')
     out.routes = w.routes.map((r) =>
@@ -1268,6 +1293,17 @@ export function applyComponentsToWorkload(
   else if (c.images === 'r2-variants')
     out.images = { ...w.images, transformAt: 'upload' };
   return out;
+}
+
+/**
+ * 画像の部品の振る舞いの id（他の事業者の部品は同じ振る舞いの部品の id。例: 'cf-resize' → 'resize'。D-52）。
+ * 画像の大きさ・サイズ違い・保存量の判定は、部品の id でなくこれで見る。
+ */
+export function imagesBehavior(
+  platform: Platform,
+  id: string | undefined,
+): string | undefined {
+  return behaviorOf(COMPONENTS, platform, 'images', id);
 }
 
 /** Cloudflare Workers + D1 + R2 + KV + Images に vinext で載せる（D-08）。既定の選択。 */

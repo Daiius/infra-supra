@@ -3,11 +3,13 @@
 // 料金・前提は estimator と catalog（実データ）をそのまま使い、ゲームのために料金を作らない（企画書 §11.1）。
 // シナリオの値（収益・成長・手間・満足度・障害の影響・出来事・目標）はゲーム上の仮定で、実在の値ではない（prd/07 §10）。
 import {
+  accountsOf,
   apiCacheActive,
   applyComponentsToWorkload,
   componentsOf,
   composeStack,
   DEFAULT_CHOICES,
+  imagesBehavior,
   loadPriceBooks,
   MVP_STACKS,
   SLOT_LABELS,
@@ -1120,6 +1122,83 @@ export function upkeepOf(sc: Scenario, stackIndex: number): number {
   return STACKS[stackIndex]!.selfHosted ? sc.effort.selfHostedUpkeep : 0;
 }
 
+/** 課金のアカウントの画面の名前（D-52）。 */
+const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
+  cloudflare: 'Cloudflare',
+  vercel: 'Vercel',
+  supabase: 'Supabase',
+  sakura: 'さくらのクラウド',
+};
+export const accountLabel = (id: string) => ACCOUNT_LABEL[id] ?? id;
+
+/** 構成の課金のアカウント（部品の選択で増える。D-52）。 */
+export function accountsFor(
+  stackIndex: number,
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+): string[] {
+  return accountsOf(
+    composeStack(STACK_DEFS[stackIndex]!, components, { framework }),
+  );
+}
+
+/**
+ * 部品の選択で、構成の既定より増えた事業者のアカウント（D-52・AX-11）。Vercel Pro + Supabase Pro の Supabase のように
+ * 構成の既定に含まれるアカウントは数えない。Cloudflare + Hyperdrive の Supabase・VPS の前段の CDN の Cloudflare・
+ * Vercel の画像の Cloudflare は数える。
+ */
+export function addedAccounts(
+  stackIndex: number,
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+): string[] {
+  const base = accountsFor(stackIndex, {}, framework);
+  return accountsFor(stackIndex, components, framework).filter(
+    (a) => !base.includes(a),
+  );
+}
+
+/** 他の事業者の管理の毎月の手間（増えたアカウント 1 つにつき EFFORT.accountUpkeep。ゲーム上の仮定・D-52）。 */
+export function accountUpkeepOf(
+  stackIndex: number,
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+): number {
+  return (
+    addedAccounts(stackIndex, components, framework).length *
+    EFFORT.accountUpkeep
+  );
+}
+
+const accountUpkeepFor = (
+  state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
+) => accountUpkeepOf(state.stackIndex, state.components, state.framework);
+
+/** その部品に替えると新しく増えるアカウント（差すときの一度きりの手間が付く。D-52）。 */
+export function newAccountsBy(
+  state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
+  slot: SlotId,
+  option: string,
+): string[] {
+  const now = accountsFor(state.stackIndex, state.components, state.framework);
+  return accountsFor(
+    state.stackIndex,
+    { ...state.components, [slot]: option },
+    state.framework,
+  ).filter((a) => !now.includes(a));
+}
+
+/** 画像の部品の振る舞い（他の事業者の部品は同じ振る舞いの部品の id。D-52）。 */
+function imagesOf(
+  state: Pick<GameState, 'stackIndex' | 'components'>,
+): string | undefined {
+  const platform = STACKS[state.stackIndex]!.provider;
+  return imagesBehavior(
+    platform,
+    { ...DEFAULT_CHOICES[platform], ...state.components }.images,
+  );
+}
+
 /** 動いている構成（乗り換え中は新旧両方）の維持の手間。両方が自前運用でも 1 回分。 */
 function upkeepFor(
   state: Pick<GameState, 'stackIndex' | 'migration' | 'scenario'>,
@@ -1160,6 +1239,7 @@ export function effortAvailable(state: GameState): number {
   return (
     state.effortPerMonth -
     upkeepFor(state) -
+    accountUpkeepFor(state) -
     interruptOf(state) -
     featureWorkOf(state) -
     migrationWanted(state.migration) -
@@ -1205,8 +1285,7 @@ const acceptEffort = (def: EventDef, state: GameState) =>
  * 一律で縮めて原本が無いなら 2（これからの投稿だけ大きくする作業）、原本があるなら 1。
  */
 function imageRedesignEffort(state: GameState): number {
-  const platform = STACKS[state.stackIndex]!.provider;
-  const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  const images = imagesOf(state);
   // 今の部品が原本を配っていても、一律で縮めて置いた原本の無い画像が多く残っていれば、一律で縮めた構成と同じ（OCL-0A3AC32F）
   if (images === 'none') return hasManyCoarseImages(state) ? 2 : 0;
   return images === 'resize' ? 2 : 1;
@@ -1266,15 +1345,16 @@ export function settingInactiveReason(
   key: SettingKey,
 ): string | undefined {
   const platform = STACKS[state.stackIndex]!.provider;
-  const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  const images = imagesOf(state);
+  const raw = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
   // 原本をそのまま配るので、形式は変わらない（D-58）
   if (key === 'format')
     return images === 'none'
-      ? `画像の部品が「${componentLabel(platform, 'images', images)}」なので原本の形式のまま配る`
+      ? `画像の部品が「${componentLabel(platform, 'images', raw)}」なので原本の形式のまま配る`
       : undefined;
   if (key !== 'variants') return undefined;
   return images === 'none' || images === 'resize'
-    ? `画像の部品が「${componentLabel(platform, 'images', images)}」なのでサイズ違いは作らない（1 種）`
+    ? `画像の部品が「${componentLabel(platform, 'images', raw)}」なのでサイズ違いは作らない（1 種）`
     : undefined;
 }
 
@@ -1343,7 +1423,7 @@ export function pageWeightLabel(kb: number): string {
 export function pageWeightOf(state: GameState, images?: string): string {
   const platform = STACKS[state.stackIndex]!.provider;
   const opt =
-    images ?? { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+    images !== undefined ? imagesBehavior(platform, images) : imagesOf(state);
   return pageWeightLabel(
     pageWeightKB(
       scenarioOf(state),
@@ -1552,8 +1632,13 @@ function actionRule(state: GameState, action: Action): ActionCheck {
           accept: true,
         });
       }
-      if (action.slot === 'db') return ok(0); // 進行中の月ごとに取る（effortAvailable が減る）
-      return ok(EFFORT.component[action.slot]);
+      // 新しい事業者のアカウントを足す部品は、差すときに一度きりの手間が付く（D-52）
+      const setup =
+        newAccountsBy(state, action.slot, action.option).length > 0
+          ? EFFORT.accountSetup
+          : 0;
+      if (action.slot === 'db') return ok(setup); // 移行の手間は進行中の月ごとに取る（effortAvailable が減る）
+      return ok(EFFORT.component[action.slot] + setup);
     }
   }
 }
@@ -1594,6 +1679,21 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
         required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
         done: 0,
       },
+      // 新しいアカウントの設定の一度きりの手間（r.cost）も同じ月に使う（D-52・OCL-B6A107A3）
+      plannedEffort: state.plannedEffort + r.cost,
+    });
+    if (after < 0) return short(-after);
+  }
+  // DB 以外の部品は今月から差し替わるので、増えるアカウントの維持（D-52）も今月の余力に含めて確かめる（OCL-73780314）
+  if (
+    action.type === 'component' &&
+    action.slot !== 'db' &&
+    !proposalOnlyComponent(scenarioOf(state), action.slot, action.option)
+  ) {
+    const after = effortAvailable({
+      ...state,
+      components: { ...state.components, [action.slot]: action.option },
+      plannedEffort: state.plannedEffort + r.cost,
     });
     if (after < 0) return short(-after);
   }
@@ -1794,14 +1894,35 @@ export function componentFlavor(o: {
   return COMPONENT_FLAVOR[`${o.platform}:${o.slot}:${o.id}`];
 }
 
-/** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
-export function componentEffortLabel(slot: SlotId): string[] {
+/**
+ * 部品の差し替えの手間の説明（DB は進行中の月ごと）。state と option を渡すと、新しい事業者のアカウントが増える部品の
+ * 一度きりの手間と毎月の維持を添える（D-52）。
+ */
+export function componentEffortLabel(
+  slot: SlotId,
+  state?: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
+  option?: string,
+): string[] {
+  const added =
+    state && option !== undefined ? newAccountsBy(state, slot, option) : [];
+  const setup = added.length > 0 ? EFFORT.accountSetup : 0;
+  const cross =
+    added.length > 0
+      ? [
+          `${added.map(accountLabel).join('・')} のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep * added.length}）`,
+        ]
+      : [];
   return slot === 'db'
     ? [
-        `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月`,
+        `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月${setup ? ` + 手間 ${setup}` : ''}`,
         '期間中は新旧両方の費用',
+        ...cross,
       ]
-    : [`手間 ${EFFORT.component[slot]}`, '来月から'];
+    : [
+        `手間 ${EFFORT.component[slot] + setup}${setup ? `（他の事業者の設定 ${setup} を含む）` : ''}`,
+        '来月から',
+        ...cross,
+      ];
 }
 
 /**
@@ -2443,6 +2564,7 @@ export function playMonth(input: GameState): GameState {
   // 手間（維持 → 割り込み → 乗り換え → 行動。余りが機能開発）
   const effort = allocateEffort({
     upkeep: upkeepFor(state),
+    accounts: accountUpkeepFor(state),
     interrupt: interruptOf(state),
     featureWork: featureWorkOf(state),
     featureBonus: featureBonusOf(state),
@@ -2554,25 +2676,25 @@ export function playMonth(input: GameState): GameState {
   // 部品で変わる判定の入力（D-24）: 最適化しない画像は原本の大きさ・キャッシュしないと記事は常に新しい・
   // KV を DB の代わりにすると書き込みがすぐ見えない
   const comps = { ...DEFAULT_CHOICES[platformNow], ...state.components };
+  // 画像の部品の振る舞い（他の事業者の部品は同じ振る舞いの部品として見る。D-52）
+  const imgs = imagesBehavior(platformNow, comps.images);
   const viewed: Settings = {
     ...state.settings,
     imageKB: deliveredImageKB(
       sc,
       state.settings,
-      comps.images,
+      imgs,
       usesNextImage(platformNow, state.framework, comps.images),
     ),
     // 最適化しない・一律で縮めて置くは、サイズ違いを作らず 1 種を配る（D-47）
-    ...(comps.images === 'resize' || comps.images === 'none'
-      ? { variants: 1 }
-      : {}),
+    ...(imgs === 'resize' || imgs === 'none' ? { variants: 1 } : {}),
   };
   // 画質: 最適化しないは原本、それ以外は JPEG と同じ見た目（形式では下げない。D-58）。記事のデザインの刷新を断った月・
   // 受けたあと粗い画像（一律で縮めた原本の無い画像）が多い月は 1 段下げる（D-47）
   // 画像の形式は同じ見た目の画質で小さくするので、画質は下げない（D-58）。JPEG の大きさで判定する
   const qualityImageKB =
-    comps.images === 'none' ? viewed.imageKB : IMAGE_FORMAT_KB.jpeg;
-  const redesign = imageRedesignQuality(state, sc, month, comps.images);
+    imgs === 'none' ? viewed.imageKB : IMAGE_FORMAT_KB.jpeg;
+  const redesign = imageRedesignQuality(state, sc, month, imgs);
   // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）。
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
   const spa = state.framework === 'vite-spa';
@@ -2639,13 +2761,13 @@ export function playMonth(input: GameState): GameState {
     ),
     featurePoints,
     month,
-    imagesUnoptimized: comps.images === 'none',
+    imagesUnoptimized: imgs === 'none',
     pageWeight: pageWeightLabel(
       pageWeightKB(
         sc,
         state.settings,
         state.mods,
-        comps.images,
+        imgs,
         usesNextImage(platformNow, state.framework, comps.images),
       ),
     ),
@@ -2727,7 +2849,7 @@ export function playMonth(input: GameState): GameState {
   // 一律で縮めて置いた画像（原本が無い）は、記事のデザインの刷新を受ける前の分だけ粗い画像として数える（D-47）
   const coarseImages =
     (state.coarseImages ?? 0) +
-    (comps.images === 'resize' && !state.imageRedesign
+    (imgs === 'resize' && !state.imageRedesign
       ? stock.images - state.stock.images
       : 0);
 
@@ -2894,9 +3016,7 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
     mau * w.images.uploadsPerMau * (state.mods.uploadsFactor ?? 1);
   const s = state.stock;
   // 一律で縮めて置く部品なら、保存するのは縮めた大きさ（原本は残さない。D-47）
-  const platform = STACKS[state.stackIndex]!.provider;
-  const resize =
-    { ...DEFAULT_CHOICES[platform], ...state.components }.images === 'resize';
+  const resize = imagesOf(state) === 'resize';
   const gbPerUpload = resize
     ? // 一律で縮めて置く: 形式が JPEG でなければ、古いブラウザ向けの JPEG も置く（MDN の推奨。D-58）
       (deliveredImageKB(sc, state.settings, 'resize') +
@@ -3228,11 +3348,10 @@ export function applyAction(state: GameState, action: Action): GameState {
           required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
           done: 0,
         };
-        if (effortAvailable({ ...state, componentSwap }) < 0) return state;
-        return withNote(`${label} へ差し替えを始めた`, {
-          ...state,
-          componentSwap,
-        });
+        // 新しい事業者のアカウントを足す DB（Hyperdrive の Supabase など）は、設定の一度きりの手間も今月使う（D-52・OCL-B6A107A3）
+        const next = { ...state, ...planned, componentSwap };
+        if (effortAvailable(next) < 0) return state;
+        return withNote(`${label} へ差し替えを始めた`, next);
       }
       return withNote(`${label} に差し替えた`, {
         ...state,
@@ -3423,6 +3542,7 @@ export function reflectionOf(state: GameState): Reflection {
     (a, r) => ({
       total: a.total + r.effort.total,
       upkeep: a.upkeep + r.effort.upkeep,
+      accounts: (a.accounts ?? 0) + (r.effort.accounts ?? 0),
       interrupt: a.interrupt + r.effort.interrupt,
       featureWork: a.featureWork + r.effort.featureWork,
       featureBonus: a.featureBonus + r.effort.featureBonus,
@@ -3433,6 +3553,7 @@ export function reflectionOf(state: GameState): Reflection {
     {
       total: 0,
       upkeep: 0,
+      accounts: 0,
       interrupt: 0,
       featureWork: 0,
       featureBonus: 0,
@@ -3798,9 +3919,11 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           0,
         ) / n;
       const last = months[months.length - 1]!;
+      // 維持には他の事業者の管理（D-52）を含める
+      const upkeepSum = eff.upkeep + (eff.accounts ?? 0);
       const effortText =
-        e === 'feature' && eff.upkeep + eff.interrupt > 0
-          ? `。維持の手間 計 ${eff.upkeep}・出来事への対応 計 ${eff.interrupt}（手間の合計 ${eff.total} の ${Math.round((100 * (eff.upkeep + eff.interrupt)) / Math.max(1, eff.total))}%）`
+        e === 'feature' && upkeepSum + eff.interrupt > 0
+          ? `。維持の手間 計 ${upkeepSum}・出来事への対応 計 ${eff.interrupt}（手間の合計 ${eff.total} の ${Math.round((100 * (upkeepSum + eff.interrupt)) / Math.max(1, eff.total))}%）`
           : '';
       const growth = satShort ? '' : '満足度は伸び（PV と収益）にも効く。';
       out.push({

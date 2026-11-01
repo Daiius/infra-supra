@@ -1,5 +1,9 @@
 // 始める画面のシナリオの選択と説明（D-33・prd/09 E-5・E-6）と、構成のカードのフレームワーク欄（D-35）。文言はシナリオのデータ（Scenario.text）から読む。
 import {
+  accountLabel,
+  accountUpkeepOf,
+  addedAccounts,
+  EFFORT,
   FRAMEWORKS,
   growthFromReputation,
   SCENARIOS,
@@ -52,38 +56,68 @@ export function ScenarioPicker({
 }
 
 /**
- * 構成の毎月の手間（D-36）。シナリオの毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・機能開発 success）。
- * 色だけに頼らず、数を文字でも出す。自前運用の構成には、自前の障害の確率を添える。
+ * 構成の毎月の手間（D-36）。シナリオの毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・
+ * 他の事業者の管理 warning の薄い色・機能開発 success）。色だけに頼らず、数を文字でも出す。自前運用の構成には、自前の障害の確率を添える。
+ * 他の事業者の管理（D-52）は 1 アカウント 0.5 なので、マスの左半分だけを塗る（0.5 の表示の形）。
  */
 export function EffortBar({
   scenario: sc,
   stackIndex,
+  components,
+  framework,
 }: {
   scenario: Scenario;
   stackIndex: number;
+  /** 選んでいる部品（他の事業者のアカウントが増える分を出す。省略は構成の既定）。 */
+  components?: Partial<Record<string, string>>;
+  framework?: FrameworkId;
 }) {
   const total = sc.effort.perMonth;
   const upkeep = upkeepOf(sc, stackIndex);
-  const items =
-    upkeep > 0
+  const accounts = accountUpkeepOf(stackIndex, components, framework);
+  const added = addedAccounts(stackIndex, components, framework);
+  const free = total - upkeep - accounts;
+  const items = [
+    ...(upkeep > 0 ? [`維持 ${upkeep}`] : []),
+    ...(accounts > 0
       ? [
-          `維持 ${upkeep}`,
-          `機能開発に ${total - upkeep}`,
+          `他の事業者の管理 ${accounts}（${added.map(accountLabel).join('・')}）`,
+        ]
+      : []),
+    `機能開発に ${free}`,
+    ...(upkeep > 0
+      ? [
           `自前の障害 月 ${Math.round(sc.incidents.selfHostedChancePerMonth * 100)}%`,
         ]
-      : [`機能開発に ${total}`];
+      : []),
+  ];
+  // マスごとに、維持・他の事業者の管理・機能開発の割合（0〜1）を左から塗る
+  const cell = (k: number) => {
+    const part = (from: number, to: number) =>
+      Math.max(0, Math.min(1, to - k) - Math.max(0, from - k));
+    return [
+      { cls: 'bg-warning', w: part(0, upkeep) },
+      { cls: 'bg-warning/50', w: part(upkeep, upkeep + accounts) },
+      { cls: 'bg-success', w: part(upkeep + accounts, total) },
+    ].filter((x) => x.w > 0);
+  };
   return (
     <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span
         role="img"
-        aria-label={`毎月の手間 ${total} のうち、維持 ${upkeep}`}
+        aria-label={`毎月の手間 ${total} のうち、維持 ${upkeep}${accounts > 0 ? `・他の事業者の管理 ${accounts}` : ''}`}
         className="flex shrink-0 gap-0.5"
       >
         {Array.from({ length: Math.max(0, total) }, (_, k) => (
-          <span
-            key={k}
-            className={`h-2.5 w-2.5 rounded-sm ${k < upkeep ? 'bg-warning' : 'bg-success'}`}
-          />
+          <span key={k} className="flex h-2.5 w-2.5 overflow-hidden rounded-sm">
+            {cell(k).map((x, i) => (
+              <span
+                key={i}
+                className={`h-full ${x.cls}`}
+                style={{ width: `${x.w * 100}%` }}
+              />
+            ))}
+          </span>
         ))}
       </span>
       <Meta items={items} className="text-xs opacity-80" />
@@ -230,7 +264,9 @@ export function ScenarioDescription({
         <p>
           {t?.satisfaction}開発の手間は毎月 {sc.effort.perMonth}{' '}
           ポイントで、設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
-          {sc.effort.selfHostedUpkeep} / 月）に使った残りが機能開発に回る。
+          {sc.effort.selfHostedUpkeep} /
+          月）・他の事業者の管理（構成の既定より増えたアカウント 1 つにつき{' '}
+          {EFFORT.accountUpkeep} / 月）に使った残りが機能開発に回る。
         </p>
         <p>所持金 {usd(sc.startCash)}。</p>
         {/* daisyUI の alert は子を横の grid に並べるので、中身を 1 つのブロックにして縦に積む */}
