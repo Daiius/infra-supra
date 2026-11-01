@@ -643,7 +643,7 @@
   - `packages/catalog/src/fictional/` に架空の PriceBook を 3 つ（`fictional-edge`・`fictional-yen-host`・`fictional-db`）。仕組みを一通り使う形と値は prd/05 §1。出典は `example.invalid`（RFC 2606 の予約名）で、備考に「架空」と書く。catalog の本体の index からは export せず、サブパス `catalog/fictional` で読む（本番の `loadPriceBooks` に入らない）。
   - estimator の単体テストは依存の向き（estimator は catalog を読まない）のため、従来の `fixtures.test-helpers.ts` を残し、性質ベースのテストは生成器で架空の PriceBook を作る（prd/05 §2b の PP-01〜15）。
   - fast-check は入れない。決まったシードの mulberry32（game の random.ts と同じ式を estimator のテストに写した）で十分で、失敗はシードの番号で再現できる。
-- 見つかった不具合（直した）: 同じプールを使う使用量を足した誤差（0.1 + 0.2 > 0.3）で、ちょうど使い切ったのに超過と判定し、`block` のメーターが止まる breach を出していた。使い切ると止まるクレジットも同じ。`overage` が込み分の相対 1e-9（`ROUNDING_TOLERANCE`）以下の超過を 0 にし、クレジットの使い切りの判定も `overage` を通す。ゲームの基準プレイ・golden は不変。
+- 見つかった不具合（直した）: 同じプールを使う使用量を足した誤差（0.1 + 0.2 > 0.3）で、ちょうど使い切ったのに超過と判定し、`block` のメーターが止まる breach を出していた。使い切ると止まるクレジットも同じ。`overage` が、小数の量では量の相対 1e-12（`SUM_TOLERANCE`。足し算の誤差の幅）以下の超過を 0 にし、両方が整数なら差をそのまま返す（大きな整数の枠を 1 だけ超えた超過を消さない。OCL-CD13AA33。最初は込み分の相対 1e-9 にしていて、D1 の 250 億行の枠では 25 行までの超過が消えていた）。クレジットの使い切りの判定も `overage` を通す。ゲームの基準プレイ・golden は不変。
 - 残した点: 架空の 3 構成の golden（prd/05 §5）・資源シミュレーションの性質（§3）。
 
 ## 未決（grill で詰める）

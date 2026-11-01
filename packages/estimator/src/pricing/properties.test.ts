@@ -171,10 +171,10 @@ describe('無料枠', () => {
     // 例: 0.1 + 0.2 = 0.30000000000000004 > 0.3
     forSeeds(RUNS, (r) => {
       const parts = Array.from({ length: r.int(2, 4) }, () =>
-        r.pick([0.1, 0.2, 0.3, 0.7, 1.1, 1 / 3]),
+        r.pick([0.1, 0.2, 0.3, 0.7, 1.1, 2.9]),
       );
       const quantity = parts.reduce((s, p) => s + p, 0);
-      // 枠は「人が書いた値」としてきれいな 10 進に丸め直す（使用量の和とは誤差の分だけずれうる）
+      // 枠は 10 進の正確な和（人が書いた値）。使用量の浮動小数点の和とは足し算の誤差の分だけずれうる
       const pool = Number(quantity.toFixed(9));
       const book = parse(
         singleMeter(
@@ -215,6 +215,39 @@ describe('無料枠', () => {
       );
       expect(c.breaches).toEqual([]);
     });
+  });
+
+  it('大きな整数の枠を 1 だけ超えたら、1 の超過として課金・breach する（誤差の許容で消さない）', () => {
+    const book = (onExceed: 'bill' | 'block') =>
+      parse(
+        singleMeter(
+          { model: 'flat', per: 1, unitPrice: 1 },
+          {
+            allowancePools: [
+              {
+                id: 'pool',
+                quantity: 25_000_000_000,
+                unit: 'request',
+                period: 'month',
+                scope: 'account',
+              },
+            ],
+          },
+          { allowancePool: 'pool', onExceed },
+        ),
+      );
+    const usage = [
+      usageOf('m0', 20_000_000_000, { nodeId: 'n1' }),
+      usageOf('m0', 5_000_000_001, { nodeId: 'n2' }),
+    ];
+    const billed = run(book('bill'), usage);
+    expect(billed.lines.find((l) => l.kind === 'usage')).toMatchObject({
+      billableQuantity: 1,
+      amount: 1,
+    });
+    expect(run(book('block'), usage).breaches).toEqual([
+      expect.objectContaining({ behavior: 'block', excess: 1 }),
+    ]);
   });
 });
 
