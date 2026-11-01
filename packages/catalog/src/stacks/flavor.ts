@@ -74,6 +74,21 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '静的なファイルと画像を CDN から返す。HTML はサーバーが返すまま',
   'sakura:frontCdn:html':
     'ページまで CDN から返すので、サーバーの負荷がいちばん下がる',
+  // SPA の API の応答のキャッシュ（D-37）
+  'cloudflare:apiCache:none':
+    'API を毎回処理するので、ページの中身はいつも最新。キャッシュの消し忘れも起きない',
+  'cloudflare:apiCache:cdn':
+    'ヒットは Worker を動かさずに返すので、CPU とデータベースの読み取りが減る',
+  'cloudflare:apiCache:cache-api':
+    'コードの中で拠点のキャッシュを読む。何をどうキャッシュするかを細かく決められる',
+  'vercel:apiCache:none':
+    'API を毎回関数で処理するので、ページの中身はいつも最新',
+  'vercel:apiCache:cdn':
+    '応答にキャッシュの指定を足すだけで、ヒットは CDN が返し関数が起動しない',
+  'sakura:apiCache:none':
+    'API はいつもサーバーが処理する。前段の CDN が無くても使える',
+  'sakura:apiCache:cdn':
+    '前段の CDN が API の応答も返し、サーバーの CPU と回線が減る',
   // ファイルの保存（構成が暗黙に持つ置き場。1 択。files.ts の fileStorageOf）
   'cloudflare:files:r2':
     '転送量に課金されない S3 互換のストレージ。ファイルなら何でも置ける',

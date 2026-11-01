@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ARTICLE_COMMUNITY,
+  componentConflict,
   componentFlavor,
   newGame,
   newSave,
@@ -112,6 +113,72 @@ describe('setupProblem・validSetupChoices', () => {
     expect(
       validSetupChoices(ARTICLE_COMMUNITY, CF_PAID, 'vite-spa', cf),
     ).toEqual({ images: 'd1', db: 'kv' });
+  });
+});
+
+describe('SPA の API の応答のキャッシュ（D-37）', () => {
+  it('SPA では全構成で apiCache を選び、Next.js では出ない', () => {
+    for (const s of STACKS) {
+      const spa = setupSlots(ARTICLE_COMMUNITY, s.index, 'vite-spa');
+      const api = spa.find((x) => x.slot === 'apiCache')!;
+      expect(api.fixed).toBe(false);
+      expect(api.options.map((o) => o.id)).toContain('none');
+      expect(
+        setupSlots(ARTICLE_COMMUNITY, s.index, 'nextjs').some(
+          (x) => x.slot === 'apiCache',
+        ),
+      ).toBe(false);
+    }
+    expect(
+      setupSlots(ARTICLE_COMMUNITY, CF_PAID, 'vite-spa')
+        .find((x) => x.slot === 'apiCache')!
+        .options.map((o) => o.id),
+    ).toEqual(['none', 'cdn', 'cache-api']);
+  });
+
+  it('VPS: 前段の CDN なしでは API のキャッシュを選べず、キャッシュ中は前段の CDN を外せない', () => {
+    expect(componentConflict('sakura', 'apiCache', 'cdn', {})).toMatch(
+      /前段の CDN が要る/,
+    );
+    expect(
+      componentConflict('sakura', 'apiCache', 'cdn', { frontCdn: 'none' }),
+    ).not.toBeNull();
+    expect(
+      componentConflict('sakura', 'apiCache', 'cdn', { frontCdn: 'static' }),
+    ).toBeNull();
+    expect(
+      componentConflict('sakura', 'frontCdn', 'none', { apiCache: 'cdn' }),
+    ).not.toBeNull();
+    expect(componentConflict('cloudflare', 'apiCache', 'cdn', {})).toBeNull();
+  });
+
+  it('VPS: 依存の崩れた選択は API のキャッシュの方を外し、選び直すまで始められない', () => {
+    const broken = {
+      frontCdn: 'none',
+      apiCache: 'cdn',
+      images: 'default',
+      ogp: 'none',
+    };
+    const fixed = validSetupChoices(
+      ARTICLE_COMMUNITY,
+      VPS_2GB,
+      'vite-spa',
+      broken,
+    );
+    expect(fixed).toEqual({ frontCdn: 'none', images: 'default', ogp: 'none' });
+    expect(setupProblem(ARTICLE_COMMUNITY, VPS_2GB, 'vite-spa', fixed)).toMatch(
+      /API の応答のキャッシュ/,
+    );
+    const ok = { ...fixed, frontCdn: 'static', apiCache: 'cdn' };
+    expect(
+      validSetupChoices(ARTICLE_COMMUNITY, VPS_2GB, 'vite-spa', ok),
+    ).toEqual(ok);
+    expect(setupProblem(ARTICLE_COMMUNITY, VPS_2GB, 'vite-spa', ok)).toBeNull();
+    // 始めるとキャッシュが効く構成で始まる
+    expect(
+      newGame(VPS_2GB, 42, ARTICLE_COMMUNITY, undefined, 'vite-spa', ok)
+        .components,
+    ).toMatchObject({ frontCdn: 'static', apiCache: 'cdn' });
   });
 });
 

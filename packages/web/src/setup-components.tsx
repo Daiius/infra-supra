@@ -2,6 +2,7 @@
 // スロットごとにラジオで選ぶ（既定は未選択）。選択肢には短い説明（フレーバー）を添え、事実の説明（note）は ⓘ に置く。
 // 「不適切」の印は出さない（説明だけで正解が分からないようにする）。
 import {
+  componentConflict,
   componentFlavor,
   setupSlots,
   type FrameworkId,
@@ -56,34 +57,42 @@ export function SetupComponents({
                 )}
               </legend>
               <div className="space-y-2">
-                {x.options.map((o) => (
-                  <label
-                    key={o.id}
-                    className={`flex items-start gap-2 ${x.fixed ? '' : 'cursor-pointer'}`}
-                  >
-                    <input
-                      type="radio"
-                      name={`setup-${x.slot}`}
-                      className="radio radio-primary radio-sm mt-0.5 shrink-0"
-                      checked={picked === o.id}
-                      disabled={x.fixed}
-                      onChange={() => onChange({ ...value, [x.slot]: o.id })}
-                    />
-                    <span className="block min-w-0">
-                      <span className="block text-sm">
-                        <NameWithInfo
-                          name={o.label}
-                          info={
-                            <Info label={`${o.label} の説明`}>{o.note}</Info>
-                          }
-                        />
+                {x.options.map((o) => {
+                  // 部品どうしの依存で今は選べない（VPS の API のキャッシュは前段の CDN が要る。D-37）
+                  const why =
+                    x.fixed || x.slot === 'files'
+                      ? null
+                      : componentConflict(o.platform, x.slot, o.id, value);
+                  return (
+                    <label
+                      key={o.id}
+                      className={`flex items-start gap-2 ${x.fixed || why ? '' : 'cursor-pointer'}`}
+                    >
+                      <input
+                        type="radio"
+                        name={`setup-${x.slot}`}
+                        className="radio radio-primary radio-sm mt-0.5 shrink-0"
+                        checked={picked === o.id}
+                        disabled={x.fixed || why !== null}
+                        onChange={() => onChange({ ...value, [x.slot]: o.id })}
+                      />
+                      <span className="block min-w-0">
+                        <span className="block text-sm">
+                          <NameWithInfo
+                            name={o.label}
+                            info={
+                              <Info label={`${o.label} の説明`}>{o.note}</Info>
+                            }
+                          />
+                        </span>
+                        <span className="block text-xs opacity-70">
+                          {componentFlavor(o)}
+                        </span>
+                        {why && <span className="block text-xs">{why}</span>}
                       </span>
-                      <span className="block text-xs opacity-70">
-                        {componentFlavor(o)}
-                      </span>
-                    </span>
-                  </label>
-                ))}
+                    </label>
+                  );
+                })}
               </div>
             </fieldset>
           );

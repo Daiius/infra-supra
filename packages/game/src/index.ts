@@ -1069,6 +1069,33 @@ function proposalOnlyComponent(
   );
 }
 
+/**
+ * 部品どうしの依存で選べない理由（ゲーム中の差し替えと始める画面で共有。D-37・D-45）。
+ * さくらの VPS の API の応答のキャッシュは前段の CDN の上で効くので、前段の CDN なしでは選べず、
+ * キャッシュしている間は前段の CDN を外せない。choices はスロットごとの今の選択（始める画面では未選択もある）。
+ */
+export function componentConflict(
+  platform: Platform,
+  slot: SlotId,
+  option: string,
+  choices: Choices,
+): string | null {
+  if (platform !== 'sakura') return null;
+  if (
+    slot === 'apiCache' &&
+    option !== 'none' &&
+    (choices.frontCdn ?? 'none') === 'none'
+  )
+    return '前段の CDN が要る（先に前段の CDN を選ぶ）';
+  if (
+    slot === 'frontCdn' &&
+    option === 'none' &&
+    (choices.apiCache ?? 'none') !== 'none'
+  )
+    return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';
+  return null;
+}
+
 /** 行動の規則（手間の残りは見ない）。選べない理由を区別して返す。 */
 function actionRule(state: GameState, action: Action): ActionCheck {
   if (state.phase !== 'playing')
@@ -1162,23 +1189,13 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (action.slot === 'realtime' && state.mods.realtime)
         return ng('irreversible', 'チャットを受けたので外せない');
       // さくらの VPS の API の応答のキャッシュは前段の CDN の上で効く（D-37）
-      if (
-        platform === 'sakura' &&
-        action.slot === 'apiCache' &&
-        action.option !== 'none' &&
-        (current.frontCdn ?? 'none') === 'none'
-      )
-        return ng('unavailable', '前段の CDN が要る（先に前段の CDN を選ぶ）');
-      if (
-        platform === 'sakura' &&
-        action.slot === 'frontCdn' &&
-        action.option === 'none' &&
-        (current.apiCache ?? 'none') !== 'none'
-      )
-        return ng(
-          'unavailable',
-          'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）',
-        );
+      const conflict = componentConflict(
+        platform,
+        action.slot,
+        action.option,
+        current,
+      );
+      if (conflict) return ng('unavailable', conflict);
       // 提案で付く部品は、提案が届いている月だけ選べる（選ぶと提案を受けたのと同じ）
       const via = proposalOnlyComponent(sc, action.slot, action.option);
       if (via) {
@@ -1350,9 +1367,18 @@ export function validSetupChoices(
   choices: Choices,
 ): Choices {
   const out: Choices = {};
-  for (const x of choosable(setupSlots(scenario, stackIndex, framework))) {
+  const slots = choosable(setupSlots(scenario, stackIndex, framework));
+  for (const x of slots) {
     const v = choices[x.slot];
     if (v !== undefined && x.options.some((o) => o.id === v)) out[x.slot] = v;
+  }
+  // 依存の崩れた選択（前段の CDN を外したのに残っている API のキャッシュなど）は外す。
+  // 頼る側（後ろのスロット）から見るので、頼られる側（前段の CDN）の選択は残る
+  const platform = STACKS[stackIndex]!.provider;
+  for (const x of [...slots].reverse()) {
+    const v = out[x.slot];
+    if (v !== undefined && componentConflict(platform, x.slot, v, out))
+      delete out[x.slot];
   }
   return out;
 }
