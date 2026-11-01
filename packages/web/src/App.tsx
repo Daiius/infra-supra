@@ -86,6 +86,7 @@ import {
   SetupRevalidate,
   type SetupChoices,
 } from './setup-components.tsx';
+import { EstimateMode } from './estimate/estimate-mode.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -139,18 +140,50 @@ function storeSave(save: SaveData | null) {
   }
 }
 
+/** 見積モードとゲームモードの切り替え（D-73）。見積モードは URL の mode=estimate で開く（入力もクエリに残る）。 */
+type Mode = 'game' | 'estimate';
+const initialMode = (): Mode =>
+  new URLSearchParams(window.location.search).get('mode') === 'estimate'
+    ? 'estimate'
+    : 'game';
+
 export function App() {
   const [session, setSession] = useState<Session | null>(loadSession);
   useEffect(() => storeSave(session?.save ?? null), [session?.save]);
   const state = session?.state ?? null;
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const switchMode = (m: Mode) => {
+    // ゲームに戻るときは見積の入力を URL から外す（見積の入力は見積の画面が書く）
+    if (m === 'game')
+      window.history.replaceState(null, '', window.location.pathname);
+    setMode(m);
+  };
   return (
     <div className="min-h-screen bg-base-200">
-      <div className="navbar bg-base-100 shadow-sm">
+      <div className="navbar flex-wrap gap-y-1 bg-base-100 shadow-sm">
         <span className="px-4 text-lg font-bold">infra-supra（仮称）</span>
         <span className="text-sm opacity-60">
           Web アプリのインフラ運営シミュレーション（試作）
         </span>
-        {state && (
+        <div role="tablist" className="tabs tabs-box tabs-sm mx-2">
+          {(
+            [
+              ['game', 'ゲーム'],
+              ['estimate', '見積'],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              role="tab"
+              aria-selected={mode === m}
+              className={`tab ${mode === m ? 'tab-active' : ''}`}
+              onClick={() => switchMode(m)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode === 'game' && state && (
           <button
             className="btn btn-ghost btn-sm ml-auto"
             onClick={() => setSession(null)}
@@ -160,7 +193,9 @@ export function App() {
         )}
       </div>
       <main className="mx-auto max-w-5xl space-y-4 p-4">
-        {state ? (
+        {mode === 'estimate' ? (
+          <EstimateMode />
+        ) : state ? (
           <Game
             // 新しく始めたとき・再開したときは作り直す（ダイアログの状態を引き継がない）
             key={`${session!.save.seed}:${session!.save.stackIndex}:${session!.save.framework}:${session!.save.startDate}:${session!.restored}`}

@@ -516,7 +516,7 @@ export function frameworksOf(sc: Scenario): {
 }
 
 /** フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。 */
-function frameworkDefaults(framework: FrameworkId): Choices {
+export function frameworkDefaults(framework: FrameworkId): Choices {
   // API の置き場の既定は同じ事業者（SPA は D-65・Next.js は D-67）
   return framework === 'vite-spa'
     ? { ogp: 'none', apiCache: 'none', api: 'same' }
@@ -762,7 +762,7 @@ export function revisionText(
 export { nextRandom };
 
 /** Workload を組み立てる入力（反実仮想の見積でも同じ関数を使う）。 */
-type WorkloadParts = {
+export type WorkloadParts = {
   pv: number;
   settings: Settings;
   ssrCpuMs: number;
@@ -778,7 +778,7 @@ type WorkloadParts = {
 };
 
 /** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。 */
-type Spike = { id: string; extraPV: number; days: number };
+export type Spike = { id: string; extraPV: number; days: number };
 
 const DAYS_PER_MONTH = 730 / 24;
 
@@ -820,7 +820,7 @@ function onDemandUpdates(sc: Scenario, pv: number, w: WorkloadInput): number {
   return pv * w.perPage.apiCalls * w.api.writesPerCall * sc.pageUpdateShare;
 }
 
-function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
+export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   const w = sc.template(Math.round(p.pv));
   const ssr = p.mods.ssrShare;
   w.routes = w.routes.map((r) => ({
@@ -4620,6 +4620,7 @@ export * from './rules.ts';
 export * from './trends.ts';
 export * from './scenario.ts';
 export * from './save.ts';
+export * from './estimate-mode.ts';
 export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
 
