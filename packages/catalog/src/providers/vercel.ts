@@ -42,6 +42,11 @@ export const vercel: PriceBookInput = {
       url: 'https://vercel.com/docs/incremental-static-regeneration',
       retrievedAt: '2026-11-01',
     },
+    // API の応答のキャッシュ（Vite の SPA の部品。2026-09-14 更新・2026-11-01 取得。D-37）
+    cdnCache: {
+      url: 'https://vercel.com/docs/caching/cdn-cache',
+      retrievedAt: '2026-11-01',
+    },
   },
   allowancePools: [
     {
@@ -166,6 +171,23 @@ export const vercel: PriceBookInput = {
             'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
           sourceIds: ['isrDocs'],
         },
+        {
+          id: 'cdn-cache-functions',
+          premise:
+            'Vercel Functions の応答は Cache-Control の s-maxage で CDN にキャッシュされる（全プラン）。条件は GET・HEAD・Authorization なし・Set-Cookie なしなど。キャッシュはリージョンごとに分かれ、めったに読まれない応答は期間の前に追い出されることがある',
+          interpretation: {
+            adopted:
+              'ヒットは CDN が返し、関数を起動しない（CDN Requests と Fast Data Transfer は数え、Invocations・Active CPU・Fast Origin Transfer は miss だけ）',
+            rejected: [
+              {
+                reading: 'ヒットでも関数が起動する',
+                reason:
+                  '文書は CDN のキャッシュを「オリジンの負荷を減らす」ものとして説明している',
+              },
+            ],
+          },
+          sourceIds: ['cdnCache'],
+        },
       ],
       uptimeSla: {
         status: 'not-stated',
@@ -282,6 +304,23 @@ export const vercel: PriceBookInput = {
           premise:
             'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
           sourceIds: ['isrDocs'],
+        },
+        {
+          id: 'cdn-cache-functions',
+          premise:
+            'Vercel Functions の応答は Cache-Control の s-maxage で CDN にキャッシュされる（全プラン）。条件は GET・HEAD・Authorization なし・Set-Cookie なしなど。キャッシュはリージョンごとに分かれ、めったに読まれない応答は期間の前に追い出されることがある',
+          interpretation: {
+            adopted:
+              'ヒットは CDN が返し、関数を起動しない（CDN Requests と Fast Data Transfer は数え、Invocations・Active CPU・Fast Origin Transfer は miss だけ）',
+            rejected: [
+              {
+                reading: 'ヒットでも関数が起動する',
+                reason:
+                  '文書は CDN のキャッシュを「オリジンの負荷を減らす」ものとして説明している',
+              },
+            ],
+          },
+          sourceIds: ['cdnCache'],
         },
       ],
       uptimeSla: {

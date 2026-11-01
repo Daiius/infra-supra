@@ -353,9 +353,10 @@ export const CONTRACT_OPERATIONS: Scenario = {
     },
   },
   hidden: {
-    settings: ['compress', 'variants', 'isr'],
-    // SNS のカード（OGP）はログインして使う業務アプリでは効かない
-    slots: ['isrCache', 'images', 'realtime', 'ogp'],
+    settings: ['compress', 'variants', 'isr', 'apiCacheTtl'],
+    // SNS のカード（OGP）はログインして使う業務アプリでは効かない。
+    // API の応答のキャッシュも、中身がすべてログインの要る個人化された API なので効かない（D-37）
+    slots: ['isrCache', 'images', 'realtime', 'ogp', 'apiCache'],
     blockBots: true,
   },
   text: {

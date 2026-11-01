@@ -69,6 +69,29 @@ const WORKERS_FACTS = [
       'run_worker_first に一致するリクエストは常に Worker のスクリプトを起動して課金され、Free の上限を超えると静的アセットに戻らず 429 を返す',
     sourceIds: ['staticAssetsBilling', 'staticAssetsSpa'],
   },
+  // API の応答のキャッシュ（Vite の SPA。2026-11-01 に原文で確認。D-37・prd/10 §8）
+  {
+    id: 'workers-cache-front',
+    premise:
+      'Workers Cache（Worker の前のキャッシュ。wrangler の cache.enabled）は、Cache-Control に従ってキャッシュし、ヒットは Worker を動かさずに返す（CPU 時間は課金されない）。ただし有効にすると、キャッシュから返したものも含め Worker へのリクエストはすべて通常の料金で課金され、ふだん無料の静的アセットへのリクエストも課金される。GET・HEAD だけで、Set-Cookie・Authorization は自動でバイパスする。既定で階層化（tiered）される',
+    sourceIds: ['workersCacheFront'],
+  },
+  {
+    id: 'cache-api-local',
+    premise:
+      'Workers の Cache API は Worker のコードの中から読み書きする（Worker は毎回動く）。中身はキャッシュした拠点（データセンター）の外へは複製されず、cache.delete も拠点の中だけ。Cache API の料金の記載はない',
+    interpretation: {
+      adopted:
+        'Cache API そのものの費用はないとみなす（Workers Cache が「別の料金はない」と書くのと同じ扱い）',
+      rejected: [
+        {
+          reading: '読み書きに別の料金がかかる',
+          reason: 'Cache API のページにも料金のページにも記載が見当たらない',
+        },
+      ],
+    },
+    sourceIds: ['cacheApi', 'howTheCacheWorks'],
+  },
 ];
 
 /** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
@@ -148,6 +171,15 @@ export const cloudflare: PriceBookInput = {
     // オンデマンド ISR（2026-11-01 に原文で確認。D-32）
     cacheApi: {
       url: 'https://developers.cloudflare.com/workers/runtime-apis/cache/',
+      retrievedAt: '2026-11-01',
+    },
+    // API の応答のキャッシュ（Vite の SPA の部品。2026-11-01 に原文で確認。D-37）
+    workersCacheFront: {
+      url: 'https://developers.cloudflare.com/workers/cache/',
+      retrievedAt: '2026-11-01',
+    },
+    howTheCacheWorks: {
+      url: 'https://developers.cloudflare.com/workers/reference/how-the-cache-works/',
       retrievedAt: '2026-11-01',
     },
     r2Consistency: {

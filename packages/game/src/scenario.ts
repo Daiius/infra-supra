@@ -225,7 +225,7 @@ export type Scenario = {
   text?: ScenarioText;
   /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
   hidden?: {
-    settings?: ('compress' | 'variants' | 'isr')[];
+    settings?: ('compress' | 'variants' | 'isr' | 'apiCacheTtl')[];
     slots?: SlotId[];
     blockBots?: boolean;
   };
