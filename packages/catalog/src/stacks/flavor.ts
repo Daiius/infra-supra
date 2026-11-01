@@ -14,6 +14,8 @@ export const STACK_FLAVOR: Readonly<Record<string, string>> = {
     '月額が固定で、使った分の請求に驚かされない。サーバーの中を自由に設定できる',
   'sakura-vps-4gb':
     'メモリに余裕のある上のプラン。稼働率の SLA の対象にもなり、アクセスが増えても安心',
+  'aws-amplify':
+    '大手のクラウドのマネージドなホスティング。基本料が無く使った分だけの支払いで、常に無料で使える量もある',
 };
 
 /**
@@ -115,4 +117,38 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '全ページで同じカードを出す。シェルは nginx が静的なまま配れる',
   'sakura:ogp:prerender':
     'ページごとのカードを出せる。シェルは nginx でなく Node が返すようになる',
+  // AWS（prd/11 段 1・D-50）
+  'aws:isrCache:default':
+    'ページは CDN から返し、期限が来たら自動で作り直す。追加のサービスは要らない',
+  'aws:isrCache:none':
+    '毎回サーバーで描くので、ページはいつも最新。キャッシュの仕組みを気にしなくてよい',
+  'aws:images:default':
+    'Next.js の画像の部品がそのまま使え、自動で最適化される。変換の料金は未取得で、費用は下限',
+  'aws:images:none':
+    '原本をそのまま配るので、画質が落ちない。CDN の無料で使える量も大きい',
+  'aws:images:resize':
+    '投稿のときに一度だけ縮めて置き、CDN から配る。変換の費用がかからず、仕組みも単純',
+  'aws:frontCdn:none':
+    '間に何も挟まないので構成が単純。Amplify が管理する CDN がそのまま配る',
+  'aws:frontCdn:static':
+    '自前の CDN を前に置き、静的なファイルと画像を CDN の料金と無料の量で配る',
+  'aws:frontCdn:html':
+    'ページまで自前の CDN から返すので、Amplify から配る量がいちばん減る',
+  'aws:db:dynamodb':
+    '使った分だけの支払いで、保存も一定量まで無料。アクセスが増えても自動で追従する',
+  'aws:db:aurora':
+    '大手のクラウドの看板の Postgres。負荷に応じて自動で容量が伸び縮みする',
+  'aws:db:aurora-pause':
+    '使われていない間は止まり、その間の費用がかからない。小さく始めるのに向く',
+  'aws:db:dsql':
+    'サーバーの管理が要らない分散の SQL。使った分だけの支払いで、無料で使える量もある',
+  'aws:db:rds':
+    '定番の Postgres を小さいインスタンスから始められる。いつもの SQL がそのまま使える',
+  'aws:apiCache:none': 'API を毎回処理するので、ページの中身はいつも最新',
+  'aws:apiCache:cdn':
+    '応答にキャッシュの指定を足すだけで、ヒットは CDN が返し関数が起動しない',
+  'aws:ogp:none':
+    '全ページで同じカードを出す。シェルは CDN から静的なまま配れる',
+  'aws:files:s3':
+    'クラウドの定番のストレージ。保存も読み書きも安く、CDN からそのまま配れる',
 };

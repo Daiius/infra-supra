@@ -24,6 +24,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * Workload の閲覧の密度と期間から出す（ResolvedWorkload.cacheHitRate。prd/04 §2）。
      */
     ttlClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * リクエストを大きさの単位で数える（API Gateway の HTTP API は 512 KB ごとに 1 リクエスト。OCL-70ABEDB7）。
+     * 1 件は最低 1 リクエスト。次のノードへ渡す件数は変わらない。
+     */
+    requestUnitKB: Pos.optional(),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({
@@ -75,8 +80,35 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     messagesPerRequest: Pos,
     memoryGB: Pos,
   }),
-  /** コンピュートを時間で買うマネージド DB（Supabase 型）。 */
-  z.object({ kind: z.literal('managed-db') }),
+  /**
+   * コンピュートを時間で買うマネージド DB（Supabase 型）。capacityUnits は時間課金の単位の数（Aurora の ACU。既定 1）。
+   * pauseAfterIdleSeconds: 接続がこの秒数ないと止まり、止まっている間は課金されない（Aurora Serverless v2 の 0 ACU）。
+   * 動いている時間の割合は、DB に届く件数の到着率 λ と待ちの秒数 T から λT / (1 + λT)（キャッシュのヒット率と同じ近似。prd/04 §2）。
+   */
+  z.object({
+    kind: z.literal('managed-db'),
+    capacityUnits: Pos.default(1),
+    pauseAfterIdleSeconds: Pos.optional(),
+  }),
+  /**
+   * 処理の量の単位で課金する DB（Aurora DSQL 型）。DB に届く 1 件を unitsPerRequest 単位と数える（仮定。catalog の構成が値を持つ）。
+   */
+  z.object({
+    kind: z.literal('processing-db'),
+    unitsPerRequest: Pos,
+  }),
+  /**
+   * 要求の単位で課金する DB（DynamoDB のオンデマンド型。prd/11 AX-05）。読み取りは問い合わせ 1 回の応答の大きさを
+   * readUnitKB 単位で切り上げた数（結果整合なら半分）、書き込みは 1 行（itemKB）を writeUnitKB 単位で切り上げた数。
+   * 単位の大きさは公式の文書、1 行の大きさ itemKB は仮定（catalog の構成が値を持つ）。
+   */
+  z.object({
+    kind: z.literal('request-db'),
+    readUnitKB: Pos,
+    writeUnitKB: Pos,
+    eventuallyConsistent: z.boolean().default(true),
+    itemKB: Pos,
+  }),
   /**
    * オブジェクトストレージ（R2・S3 型）。storesImages: false なら画像の保存量を載せない（ISR のキャッシュだけに使う場合）。
    * cdnHitRate: 事業者の CDN が自分で配信する型（Vercel Blob の公開のストア）。読み取りは全件を CDN のリクエストと
