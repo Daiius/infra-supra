@@ -614,6 +614,337 @@ export function Sparkline({
   );
 }
 
+// ---- 対数の軸の折れ線（見積の費用の曲線。D-74）----
+
+export type MarkShape = 'circle' | 'square' | 'diamond';
+
+export type CurveChartSeries = {
+  id: string;
+  label: string;
+  /** CSS の色（var(--series-1) など）。 */
+  color: string;
+  /** 点の形（同じ色の系列を見分ける 2 つ目の手がかり）。 */
+  shape: MarkShape;
+  /** 添字は xs と同じ。flags が空でない点は × で描き、ツールチップに出す。 */
+  points: { y: number; flags: string[] }[];
+};
+
+/** 系列の点の印（r4 相当・2px の地の色の輪）。 */
+function MarkGlyph({
+  shape,
+  x,
+  y,
+  color,
+}: {
+  shape: MarkShape;
+  x: number;
+  y: number;
+  color: string;
+}) {
+  const ring = { stroke: 'var(--surface-1)', strokeWidth: 2, fill: color };
+  if (shape === 'square')
+    return <rect x={x - 4} y={y - 4} width="8" height="8" rx="1" {...ring} />;
+  if (shape === 'diamond')
+    return (
+      <path
+        d={`M${x},${y - 5.5}L${x + 5.5},${y}L${x},${y + 5.5}L${x - 5.5},${y}Z`}
+        {...ring}
+      />
+    );
+  return <circle cx={x} cy={y} r="4" {...ring} />;
+}
+
+/** 止まる点の印（×）。地の色の縁取りで線の上でも読めるようにする。 */
+function Cross({ x, y, color }: { x: number; y: number; color: string }) {
+  const d = `M${x - 4.5},${y - 4.5}L${x + 4.5},${y + 4.5}M${x + 4.5},${y - 4.5}L${x - 4.5},${y + 4.5}`;
+  return (
+    <g>
+      <path d={d} stroke="var(--surface-1)" strokeWidth="5" />
+      <path d={d} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/** 凡例の見本（線 + 点の形。× は止まる点の印）。 */
+export function SeriesSwatch({
+  color,
+  shape,
+}: {
+  color: string;
+  shape: MarkShape | 'cross';
+}) {
+  return (
+    <svg width="22" height="12" aria-hidden className="shrink-0">
+      <line
+        x1="1"
+        y1="6"
+        x2="21"
+        y2="6"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      {shape === 'cross' ? (
+        <Cross x={11} y={6} color={color} />
+      ) : (
+        <MarkGlyph shape={shape} x={11} y={6} color={color} />
+      )}
+    </svg>
+  );
+}
+
+/**
+ * x・y とも対数の軸の折れ線（2 軸にしない）。y は floor 未満を floor の位置に描く（値はツールチップで読む）。
+ * ホバーで最も近い x の縦線とツールチップ。凡例は呼び出し側（系列の選び方と一緒に出す）。直接のラベルは幅があって
+ * 描画域に収まるときだけ線の右端に出す（近いものは上下に押し広げる）。
+ */
+export function LogCurveChart({
+  series,
+  xs,
+  formatX,
+  formatY,
+  formatValue,
+  marker,
+  height = 240,
+  floor = 1,
+  label,
+}: {
+  series: CurveChartSeries[];
+  xs: readonly number[];
+  formatX: (v: number) => string;
+  /** 目盛りの書式。 */
+  formatY: (v: number) => string;
+  /** ツールチップの値の書式。 */
+  formatValue: (v: number) => string;
+  /** x の目印（今の値など）。 */
+  marker?: { x: number; label: string };
+  height?: number;
+  floor?: number;
+  label: string;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  const directLabels = width >= 600 && series.length > 0;
+  const pad = {
+    top: 14,
+    right: directLabels ? 150 : 14,
+    bottom: 24,
+    left: 44,
+  };
+  const w = Math.max(0, width - pad.left - pad.right);
+  const h = height - pad.top - pad.bottom;
+  const lx0 = Math.log10(xs[0]!);
+  const lx1 = Math.log10(xs[xs.length - 1]!);
+  const x = (v: number) =>
+    pad.left + ((Math.log10(v) - lx0) / Math.max(lx1 - lx0, 1e-9)) * w;
+  const maxY = Math.max(
+    floor * 10,
+    ...series.flatMap((s) => s.points.map((p) => p.y)),
+  );
+  const ly0 = Math.log10(floor);
+  const ly1 = Math.ceil(Math.log10(maxY) - 1e-9);
+  const yTicks = Array.from(
+    { length: ly1 - ly0 + 1 },
+    (_, i) => 10 ** (ly0 + i),
+  );
+  const y = (v: number) =>
+    pad.top +
+    h -
+    ((Math.log10(Math.max(v, floor)) - ly0) / Math.max(ly1 - ly0, 1e-9)) * h;
+  // 狭いときは x の目盛りを 1 つおきにする（文字が重ならないように）
+  const xLabelEvery = w / xs.length < 34 ? 2 : 1;
+
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
+    if (px < pad.left - 12 || px > pad.left + w + 12) return setHover(null);
+    let best = 0;
+    xs.forEach((v, i) => {
+      if (Math.abs(x(v) - px) < Math.abs(x(xs[best]!) - px)) best = i;
+    });
+    setHover(best);
+  };
+
+  // 線の右端のラベル: 近いものを下へ押し広げ、それでも描画域を外れるなら出さない（凡例とツールチップに任せる）
+  const ends = directLabels
+    ? series
+        .map((s) => ({ s, y: y(s.points[s.points.length - 1]!.y) }))
+        .sort((a, b) => a.y - b.y)
+    : [];
+  for (let i = 1; i < ends.length; i++)
+    ends[i]!.y = Math.max(ends[i]!.y, ends[i - 1]!.y + 13);
+  const labelsFit = ends.every((e) => e.y <= height - 4);
+
+  return (
+    <figure className="viz-root relative block w-full" ref={ref}>
+      {width > 0 && (
+        <svg
+          // 幅は 100%（LineChart と同じ理由。固定の px にすると狭めても縮まない）
+          width="100%"
+          height={height}
+          onPointerMove={onMove}
+          onPointerLeave={() => setHover(null)}
+          role="img"
+          aria-label={label}
+        >
+          {yTicks.map((t, i) => (
+            <g key={t}>
+              <line
+                x1={pad.left}
+                x2={pad.left + w}
+                y1={y(t)}
+                y2={y(t)}
+                stroke={i === 0 ? 'var(--axis)' : 'var(--grid)'}
+                strokeWidth="1"
+              />
+              <text
+                x={pad.left - 6}
+                y={y(t)}
+                dy="0.32em"
+                textAnchor="end"
+                className="fill-[var(--text-muted)] text-[10px] tabular-nums"
+              >
+                {i === 0 ? `≤${formatY(t)}` : formatY(t)}
+              </text>
+            </g>
+          ))}
+          {xs.map((v, i) => (
+            <text
+              key={v}
+              x={x(v)}
+              y={height - 6}
+              textAnchor="middle"
+              className="fill-[var(--text-muted)] text-[10px] tabular-nums"
+            >
+              {i % xLabelEvery === 0 ? formatX(v) : ''}
+            </text>
+          ))}
+          {marker && marker.x >= xs[0]! && marker.x <= xs[xs.length - 1]! && (
+            // 目印は線の系列と区別するため細い点線（推移のグラフの破線 = 見込みとは太さと間隔で分ける）
+            <g>
+              <line
+                x1={x(marker.x)}
+                x2={x(marker.x)}
+                y1={pad.top}
+                y2={pad.top + h}
+                stroke="var(--marker)"
+                strokeWidth="1"
+                strokeDasharray="2 3"
+              />
+              <text
+                x={x(marker.x)}
+                y={pad.top - 4}
+                textAnchor={x(marker.x) > pad.left + w * 0.8 ? 'end' : 'middle'}
+                className="fill-[var(--text-secondary)] text-[10px]"
+              >
+                {marker.label}
+              </text>
+            </g>
+          )}
+          {hover !== null && (
+            <line
+              x1={x(xs[hover]!)}
+              x2={x(xs[hover]!)}
+              y1={pad.top}
+              y2={pad.top + h}
+              stroke="var(--axis)"
+              strokeWidth="1"
+            />
+          )}
+          {series.map((s) => (
+            <g key={s.id}>
+              {s.points.slice(1).map((p, i) => {
+                const a = s.points[i]!;
+                // 両端とも止まる区間は薄く（その月額では実際には運用できない）
+                const stopped = a.flags.length > 0 && p.flags.length > 0;
+                return (
+                  <line
+                    key={i}
+                    x1={x(xs[i]!)}
+                    y1={y(a.y)}
+                    x2={x(xs[i + 1]!)}
+                    y2={y(p.y)}
+                    stroke={s.color}
+                    strokeOpacity={stopped ? 0.35 : 1}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                );
+              })}
+              {s.points.map((p, i) =>
+                p.flags.length > 0 ? (
+                  <Cross key={i} x={x(xs[i]!)} y={y(p.y)} color={s.color} />
+                ) : (
+                  <MarkGlyph
+                    key={i}
+                    shape={s.shape}
+                    x={x(xs[i]!)}
+                    y={y(p.y)}
+                    color={s.color}
+                  />
+                ),
+              )}
+            </g>
+          ))}
+          {labelsFit &&
+            ends.map((e) => (
+              <text
+                key={e.s.id}
+                x={pad.left + w + 10}
+                y={e.y}
+                dy="0.32em"
+                className="fill-[var(--text-secondary)] text-[11px]"
+              >
+                {e.s.label.length > 22
+                  ? `${e.s.label.slice(0, 21)}…`
+                  : e.s.label}
+              </text>
+            ))}
+        </svg>
+      )}
+      {hover !== null && series.length > 0 && (
+        <div
+          className="pointer-events-none absolute z-10 w-72 max-w-full rounded-box border border-[var(--border)] bg-[var(--surface-1)] px-2 py-1 text-xs shadow"
+          style={{
+            left: Math.max(0, Math.min(x(xs[hover]!) + 8, width - 288)),
+            top: 8,
+          }}
+        >
+          <div className="text-[var(--text-secondary)]">
+            月 {formatX(xs[hover]!)} PV
+          </div>
+          {series.map((s) => {
+            const p = s.points[hover]!;
+            return (
+              <div key={s.id} className="py-0.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <SeriesSwatch
+                    color={s.color}
+                    shape={p.flags.length > 0 ? 'cross' : s.shape}
+                  />
+                  <span className="font-semibold text-[var(--text-primary)] tabular-nums">
+                    {formatValue(p.y)}
+                  </span>
+                  <span className="truncate text-[var(--text-secondary)]">
+                    {s.label}
+                  </span>
+                </div>
+                {p.flags.length > 0 && (
+                  <div className="pl-7 text-[var(--text-secondary)]">
+                    止まる: {p.flags[0]}
+                    {p.flags.length > 1
+                      ? `（ほか ${p.flags.length - 1} 件）`
+                      : ''}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </figure>
+  );
+}
+
 export type MeterStatus = 'good' | 'critical' | 'reference';
 
 const METER_FILL: Record<MeterStatus, { fill: string; track: string }> = {
