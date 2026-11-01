@@ -23,16 +23,17 @@ describe('Vercel Blob（D-46）', () => {
   });
 
   it('最適化しない画像は Blob の URL から配信: 転送はヒットも含む全件、Simple Operations は miss だけ（OCL-2AE853BD）', () => {
-    const month1 = (stack: number) =>
+    const month1 = (stack: number, images: 'default' | 'none' = 'none') =>
       playMonth(
         newGame(stack, 42, ARTICLE_COMMUNITY, undefined, 'nextjs', {
           isrCache: 'default',
-          images: 'none',
+          images,
         }),
       ).history[0]!;
     const r = month1(PRO);
-    const amount = (label: string) =>
-      r.lines.find((l) => l.label === label)?.amount ?? 0;
+    const lineOf = (rep: typeof r) => (label: string) =>
+      rep.lines.find((l) => l.label === label)?.amount ?? 0;
+    const amount = lineOf(r);
     const transferGB = amount('vercel blob-data-transfer') / 0.05;
     const simpleOps = (amount('vercel blob-simple-operations') / 0.4) * 1e6;
     // 全件の転送 = miss（ヒット率 0.9 の残り）× 10 × 原本の大きさ
@@ -40,8 +41,10 @@ describe('Vercel Blob（D-46）', () => {
       ((simpleOps / 0.1) * ARTICLE_COMMUNITY.unoptimizedImageKB) / 1e6,
       6,
     );
-    // 画像の配信は Fast Data Transfer にならない（他の転送は込み分の内）
-    expect(amount('vercel fast-data-transfer')).toBe(0);
+    // 画像の配信は Fast Data Transfer にならない（最適化する構成より Fast Data Transfer が減る。Pro は込み分がない。D-48）
+    expect(amount('vercel fast-data-transfer')).toBeLessThan(
+      lineOf(month1(PRO, 'default'))('vercel fast-data-transfer'),
+    );
     // Hobby は画像の配信だけで Blob Data Transfer の込み分 10 GB を超える
     const p = month1(HOBBY).premises.find((x) =>
       x.text.includes('Blob Data Transfer'),

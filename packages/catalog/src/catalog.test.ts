@@ -129,7 +129,7 @@ describe('プラットフォームの前提（金額ではなく、当たった�
   const premises = (stack: (typeof MVP_STACKS)[number], pv: number) =>
     estimate({ workload: articleCommunity(pv), architecture: stack, books })
       .premises;
-  const [cfFree, cfPaid, hobby, , vps] = MVP_STACKS as [
+  const [cfFree, cfPaid, hobby, pro, vps] = MVP_STACKS as [
     (typeof MVP_STACKS)[number],
     (typeof MVP_STACKS)[number],
     (typeof MVP_STACKS)[number],
@@ -155,6 +155,28 @@ describe('プラットフォームの前提（金額ではなく、当たった�
     expect(
       premises(hobby, 10_000).some((x) => x.effect === 'policy' && x.hit),
     ).toBe(true);
+  });
+
+  it('Vercel Pro は込み分を持たず、月のクレジットの使用率を前提に出す（D-48）', () => {
+    const r = estimate({
+      workload: articleCommunity(10_000),
+      architecture: pro,
+      books,
+    });
+    // CDN Requests・Fast Data Transfer も最初の 1 単位から課金し、クレジットが当たる
+    const cdn = r.bill.lines.find(
+      (l) => l.kind === 'usage' && l.priceRef.meterId === 'cdn-requests',
+    )!;
+    expect(cdn.allowanceApplied ?? 0).toBe(0);
+    expect(cdn.amount).toBeGreaterThan(0);
+    expect(r.premises.some((x) => x.id.startsWith('pool:vercel:pro:'))).toBe(
+      false,
+    );
+    const p = r.premises.find(
+      (x) => x.id === 'credit:vercel:pro:usage-credit',
+    )!;
+    expect(p).toMatchObject({ kind: 'threshold', effect: 'cost' });
+    expect(p.ratio).toBeGreaterThan(0);
   });
 
   it('VPS は 100 万 PV では何にも当たらず、固定費だけ', () => {
