@@ -63,6 +63,120 @@ const sim = (
   routes: ArchitectureInput['routes'],
 ) => simulateResources(w, { id: 'x', name: 'x', nodes, routes }).nodes;
 
+describe('ISR のページを期間つきでキャッシュする CDN の後ろのホスト（D-55）', () => {
+  const host = {
+    id: 'vps',
+    label: 'vps',
+    config: {
+      kind: 'host' as const,
+      vcpu: 1,
+      memoryGB: 1,
+      diskGB: 100,
+      lineMbps: 100,
+      residentMemoryGB: 0,
+      dbCpuMsPerQuery: 0,
+      imageTransformCpuMs: 0,
+    },
+  };
+  const cdn = {
+    id: 'cdn',
+    label: 'cdn',
+    config: {
+      kind: 'cdn' as const,
+      hitRate: {},
+      ttlClasses: ['document-isr' as const],
+    },
+  };
+  const run = (behindCdn: boolean, rw = w) =>
+    simulateResources(rw, {
+      id: 'x',
+      name: 'x',
+      nodes: behindCdn ? [cdn, host] : [host],
+      routes: {
+        'document-isr': behindCdn ? ['cdn', 'vps'] : ['vps'],
+        'isr-revalidate': ['vps'],
+      },
+    }).nodes.vps!;
+  const SECONDS_PER_MONTH = 730 * 3600;
+  const reval = w.classes['isr-revalidate'];
+
+  it('月: 再生成は CDN を miss して届いた閲覧と同じ数（従来と同じ）', () => {
+    const miss = w.cacheMissFlow['document-isr']!;
+    expect(miss.count).toBeCloseTo(reval.count, 9);
+    expect(run(true).resources.requests).toBeCloseTo(miss.count * 2, 6);
+  });
+
+  it('ピーク: 再生成はピークの miss の数になり、ホストの CPU が下がる（CDN が無ければ従来どおり）', () => {
+    const pm = w.peakCacheMissFlow['document-isr']!;
+    const peak = w.peakHourFactor / SECONDS_PER_MONTH;
+    expect(pm.count).toBeLessThan(reval.count);
+    expect(run(true).host!.peakCores).toBeCloseTo(
+      ((pm.count * pm.perRequest.cpuMs + pm.count * reval.perRequest.cpuMs) /
+        1000) *
+        peak,
+      12,
+    );
+    // CDN が無いホスト: 閲覧は全部届き、再生成は月の数のまま（既定の構成は変えない）
+    const doc = w.classes['document-isr'];
+    expect(run(false).host!.peakCores).toBeCloseTo(
+      ((doc.count * doc.perRequest.cpuMs +
+        reval.count * reval.perRequest.cpuMs) /
+        1000) *
+        peak,
+      12,
+    );
+  });
+
+  it('ピーク: 密度と処理の重さが違う ISR のルートが複数あると、再生成の処理もルートごとのピークの miss で重み付けする（OCL-55732091）', () => {
+    const route = (
+      id: string,
+      share: number,
+      pages: number,
+      cpuMs: number,
+    ) => ({
+      id,
+      rendering: 'isr' as const,
+      share,
+      pages,
+      revalidateSeconds: 600,
+      processing: { ...processing, cpuMs },
+      cachedServeCpuMs: 1,
+    });
+    const multi = resolveWorkload(
+      workload({
+        routes: [
+          route('hot', 0.4, 5, 40),
+          route('cold', 0.4, 2_000, 4),
+          { id: 'mypage', rendering: 'ssr', share: 0.2, pages: 1, processing },
+        ],
+      }),
+    );
+    const pv = multi.monthlyPageViews;
+    const T = 600 / SECONDS_PER_MONTH;
+    const p = multi.peakHourFactor;
+    const peakMiss = (share: number, pages: number) =>
+      (pv * share) / (1 + ((pv * share) / pages) * T * p);
+    const hot = peakMiss(0.4, 5);
+    const cold = peakMiss(0.4, 2_000);
+    expect(multi.peakRevalidateFlow.count).toBeCloseTo(hot + cold, 6);
+    expect(multi.peakRevalidateFlow.perRequest.cpuMs).toBeCloseTo(
+      (hot * 40 + cold * 4) / (hot + cold),
+      9,
+    );
+    // 月の平均で重み付けした処理とは違う（ピークは閲覧の濃い hot がよく当たって、軽い cold の比が上がる）
+    expect(multi.peakRevalidateFlow.perRequest.cpuMs).not.toBeCloseTo(
+      multi.classes['isr-revalidate'].perRequest.cpuMs,
+      3,
+    );
+    const pm = multi.peakCacheMissFlow['document-isr']!;
+    expect(run(true, multi).host!.peakCores).toBeCloseTo(
+      ((pm.count * pm.perRequest.cpuMs + hot * 40 + cold * 4) / 1000) *
+        (p / SECONDS_PER_MONTH),
+      12,
+    );
+  });
+});
+
 describe('部品の選択で足した振る舞い', () => {
   it('サイズ違いを投稿のときに作ると、変換 = 投稿数 × サイズ違い。作らないなら 0', () => {
     const at = (transformAt: 'upload' | 'none') =>
