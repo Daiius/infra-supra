@@ -7,9 +7,11 @@ import {
   PriceBookSchema,
 } from 'estimator';
 import {
+  applyComponentsToWorkload,
   loadPriceBooks,
   MVP_STACKS,
   RAW_PRICE_BOOKS,
+  STACK_DEFS,
   articleCommunity,
 } from './index.ts';
 
@@ -109,11 +111,17 @@ describe('構成', () => {
     },
   );
 
-  it.each(MVP_STACKS.map((s) => [s.id, s]))(
+  it.each(
+    MVP_STACKS.map((s, i) => [s.id, s, STACK_DEFS[i]!.platform] as const),
+  )(
     '%s: テンプレートで見積が完走し、全クラスに経路がある',
-    (_, stack) => {
+    (_, stack, platform) => {
+      // 既定の部品が Workload を変えるもの（AWS の既定の画像は投稿のときに縮める）を当ててから
       const r = estimate({
-        workload: articleCommunity(1_000_000),
+        workload: applyComponentsToWorkload(
+          articleCommunity(1_000_000),
+          platform,
+        ),
         architecture: stack,
         books,
       });

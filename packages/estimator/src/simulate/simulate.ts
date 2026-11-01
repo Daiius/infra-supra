@@ -9,10 +9,11 @@ import {
   type Architecture,
   type ArchitectureInput,
 } from '../architecture/schema.ts';
-import type {
-  ClassFlow,
-  RequestClass,
-  ResolvedWorkload,
+import {
+  kbMixOf,
+  type ClassFlow,
+  type RequestClass,
+  type ResolvedWorkload,
 } from '../workload/resolve.ts';
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
@@ -40,6 +41,8 @@ export type NodeUsage = {
    * ピークの同時数の判定はこちらを使う（D-44）。
    */
   peakBusyMs: number;
+  /** 止まる DB の動いている時間の割合（0〜1。止まらない DB では持たない）。 */
+  awakeShare?: number;
   host?: HostLoad;
 };
 
@@ -110,7 +113,20 @@ function consume(
   switch (c.kind) {
     case 'cdn': {
       const ttl = c.ttlClasses?.includes(cls) ? ttlMiss(w, cls, f) : undefined;
-      add(u, 'requests', n);
+      add(
+        u,
+        'requests',
+        c.requestUnitKB === undefined
+          ? n
+          : n *
+              kbMixOf(p).reduce(
+                (s, part) =>
+                  s +
+                  part.share *
+                    Math.max(1, ceilUnits(part.kb, c.requestUnitKB!)),
+                0,
+              ),
+      );
       add(u, 'egress-gb', kbToGb(n * p.kb));
       const out = ttl ?? {
         count:
@@ -191,11 +207,31 @@ function consume(
       return f;
     }
     case 'managed-db': {
+      hostAcc.requests += n; // 止まる DB の動いている時間の割合に使う
       u.busyMs += n * p.wallMs; // 関数が接続を持っている間（壁時計時間）
       add(
         u,
         'egress-gb',
         kbToGb(n * p.queries * w.input.db.responseKBPerQuery),
+      );
+      return f;
+    }
+    case 'processing-db': {
+      u.busyMs += n * p.wallMs;
+      add(u, 'processing-units', n * c.unitsPerRequest);
+      return f;
+    }
+    case 'request-db': {
+      u.busyMs += n * p.wallMs;
+      // 該当のアイテムが無い（応答 0 KB）読み取りも 1 単位を消費する（DynamoDB の文書。OCL-0E5E2CF2）
+      const readUnits =
+        Math.max(1, ceilUnits(w.input.db.responseKBPerQuery, c.readUnitKB)) *
+        (c.eventuallyConsistent ? 0.5 : 1);
+      add(u, 'read-request-units', n * p.queries * readUnits);
+      add(
+        u,
+        'write-request-units',
+        n * p.rowsWritten * ceilUnits(c.itemKB, c.writeUnitKB),
       );
       return f;
     }
@@ -267,7 +303,13 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
       break;
     case 'managed-db':
       add(u, 'storage-gb-month', w.storage.dbGB);
-      add(u, 'instance-hours', HOURS_PER_MONTH);
+      add(u, 'instance-hours', HOURS_PER_MONTH * node.config.capacityUnits);
+      break;
+    case 'processing-db':
+      add(u, 'storage-gb-month', w.storage.dbGB);
+      break;
+    case 'request-db':
+      add(u, 'storage-gb-month', w.storage.dbGB);
       break;
     case 'object-storage':
       if (node.config.storesImages)
@@ -364,6 +406,21 @@ export function simulateResources(
     : { nodes, hostAcc };
   for (const n of architecture.nodes)
     nodes[n.id]!.peakBusyMs = peakAcc.nodes[n.id]!.busyMs;
+
+  // 止まる DB（Aurora Serverless v2 の 0 ACU）: 待ちの秒数 T の間に 1 件も届かない時間だけ止まる。
+  // 動いている割合は λT / (1 + λT)（月の平均の到着率。夜間に減る分は入れない）
+  for (const n of architecture.nodes) {
+    const c = n.config;
+    if (c.kind !== 'managed-db' || c.pauseAfterIdleSeconds === undefined)
+      continue;
+    const lt =
+      (hostAcc.get(n.id)!.requests / SECONDS_PER_MONTH) *
+      c.pauseAfterIdleSeconds;
+    const awake = lt / (1 + lt);
+    nodes[n.id]!.awakeShare = awake;
+    nodes[n.id]!.resources['instance-hours'] =
+      HOURS_PER_MONTH * c.capacityUnits * awake;
+  }
 
   // 関数の 1 回の実行の CPU の最大: 前景のクラスはそのまま、裏のクラスは起こした閲覧の CPU に足す
   for (const n of architecture.nodes) {

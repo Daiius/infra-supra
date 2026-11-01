@@ -77,6 +77,9 @@ export function assessPremises(input: {
     quantity: number;
     weekday: number;
     weekend: number;
+    /** 最も多い日（話題・Bot の集中。D-60）。peakDay を持つ使用量が 1 つも無ければ使わない。 */
+    peakDay: number;
+    hasPeakDay: boolean;
     /** プールを使ったプランごとのメーターとノード（出てきた順）。前提の文と挙動はプランごとに出す。 */
     plans: Map<string, { meterIds: Set<string>; nodeIds: Set<string> }>;
   };
@@ -116,12 +119,18 @@ export function assessPremises(input: {
       quantity: 0,
       weekday: 0,
       weekend: 0,
+      peakDay: 0,
+      hasPeakDay: false,
       plans: new Map(),
     };
     const uniform = u.quantity / (HOURS_PER_MONTH / 24);
     agg.quantity += u.quantity;
     agg.weekday += u.daily?.weekday ?? uniform;
     agg.weekend += u.daily?.weekend ?? uniform;
+    // 集中の日の値: 指定のある使用量はその値、無い使用量は平均の日（月の均等割り）。曜日ごとの最大を混ぜて足さない
+    // （平日・休日の多寡が使用量で違うと、存在しない 1 日を作ってしまう。OCL-EE85F3D0）
+    agg.peakDay += u.daily?.peakDay ?? uniform;
+    if (u.daily?.peakDay !== undefined) agg.hasPeakDay = true;
     const pu = agg.plans.get(u.planId) ?? {
       meterIds: new Set<string>(),
       nodeIds: new Set<string>(),
@@ -134,8 +143,12 @@ export function assessPremises(input: {
   for (const agg of pools.values()) {
     const book = books.get(agg.provider)!;
     const pool = book.allowancePools.find((p) => p.id === agg.poolId)!;
+    // 日次のプールは平日・休日の 1 日と、話題・Bot が集中する日（あれば）のうち最も多い日で判定する（D-60）
+    const usual = Math.max(agg.weekday, agg.weekend);
+    const spikeDay =
+      pool.period === 'day' && agg.hasPeakDay && agg.peakDay > usual;
     const used =
-      pool.period === 'day' ? Math.max(agg.weekday, agg.weekend) : agg.quantity;
+      pool.period === 'day' ? (spikeDay ? agg.peakDay : usual) : agg.quantity;
     // 量はプールの単位で合算し、文と超過時の挙動はプランごとに出す（課金と停止のプランが同じ枠を使うことがある）。
     // プランの中で挙動が分かれるときは重いほう（止まる → 有料プランが要る → 遅くなる → 費用）を出す
     for (const [planId, pu] of agg.plans) {
@@ -163,6 +176,12 @@ export function assessPremises(input: {
           limit: pool.quantity,
           unit: pool.unit,
           accumulates: pool.unit === 'gb-month',
+          ...(spikeDay
+            ? {
+                assumption:
+                  '話題・Bot の日は、上乗せの量が短い期間に集中すると仮定（月のうち最も多い日で判定）',
+              }
+            : {}),
         }),
       );
     }
@@ -225,7 +244,10 @@ export function assessPremises(input: {
         used = nu.maxCpuMsPerRequest;
       } else if (
         limit.measure === 'storage-gb' &&
-        (node.config.kind === 'sql-db' || node.config.kind === 'managed-db')
+        (node.config.kind === 'sql-db' ||
+          node.config.kind === 'managed-db' ||
+          node.config.kind === 'request-db' ||
+          node.config.kind === 'processing-db')
       ) {
         used = nu.resources['storage-gb-month'] ?? 0;
       } else if (

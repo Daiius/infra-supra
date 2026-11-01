@@ -690,12 +690,15 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       };
     });
   }
-  const peak = (p.peakFactor ?? 1) * spikePeakFactor(p.pv, p.spikes ?? []);
+  // 話題・Bot の上乗せが短い期間に集中する月: その日の量はピークの時間帯（容量。D-44）と、日次の無料枠の判定（D-60）に効く
+  const spikeDay = spikePeakFactor(p.pv, p.spikes ?? []);
+  const peak = (p.peakFactor ?? 1) * spikeDay;
   if (peak !== 1)
     w.traffic = {
       ...w.traffic,
       peakHourFactor: w.traffic.peakHourFactor * peak,
     };
+  if (spikeDay > 1) w.traffic = { ...w.traffic, peakDayFactor: spikeDay };
   // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
   const shape = sc.frameworks?.spa?.shape;
@@ -851,6 +854,11 @@ function factByRef(ref: string) {
 }
 
 /** 即時反映を妨げている部品（無ければ undefined）。理由は catalog の事実の文（D-32）。 */
+/** 前段の CDN が ISR のページ（HTML）を実際にキャッシュするか（HTML もキャッシュ × ISR のキャッシュが有効）。 */
+function htmlCachedAtFront(c: Choices): boolean {
+  return c.frontCdn === 'html' && c.isrCache !== 'none';
+}
+
 function onDemandBlocker(
   stackIndex: number,
   components: Choices = {},
@@ -861,6 +869,8 @@ function onDemandBlocker(
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
+    // ISR をキャッシュしない（毎回 SSR）なら、前段の CDN に HTML のキャッシュは載らない（OCL-490F1874）
+    if (slot === 'frontCdn' && !htmlCachedAtFront(c)) continue;
     const opt = componentsOf(platform, slot).find((o) => o.id === c[slot]);
     if (opt?.onDemandIsr && !opt.onDemandIsr.ok)
       return {
@@ -2561,7 +2571,7 @@ export function playMonth(input: GameState): GameState {
     : ssrCpuMs;
   // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
   const eventuallyConsistent =
-    comps.db === 'kv' || (!spa && comps.frontCdn === 'html');
+    comps.db === 'kv' || (!spa && htmlCachedAtFront(comps));
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
   // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
   const onDemandSetting = !spa && isOnDemand(state.settings);

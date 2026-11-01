@@ -115,6 +115,27 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     note: 'nginx が dist を配り（try_files でシェルへ）、API は同じ VPS の Node',
     sources: [src('https://vite.dev/guide/static-deploy')],
   },
+  // AWS（prd/11 段 1・D-50）
+  {
+    framework: 'nextjs',
+    platform: 'aws',
+    adapter: 'Amplify Hosting（SSR の計算）',
+    support: 'native',
+    note: 'Amplify Hosting が Next.js 12〜15 の SSR・ISR・画像の最適化を扱う。オンデマンド ISR・ストリーミング・Edge のミドルウェアは非対応（16 の機能は使わない前提。prd/11 AX-03）',
+    sources: [
+      src(
+        'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
+      ),
+    ],
+  },
+  {
+    framework: 'vite-spa',
+    platform: 'aws',
+    adapter: 'S3 + CloudFront + Lambda（API Gateway の HTTP API）',
+    support: 'native',
+    note: 'シェルと静的なファイルを S3 に置いて CloudFront で配り、API は HTTP API の後ろの Lambda。ディープリンクをシェルへ寄せる設定（CloudFront のエラー応答など）の手順は未確認（prd/11 §1.2）',
+    sources: [src('https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/')],
+  },
 ];
 
 export function deployTarget(

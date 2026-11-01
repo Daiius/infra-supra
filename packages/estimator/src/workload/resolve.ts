@@ -36,6 +36,11 @@ export type ClassFlow = {
     queries: number;
     rowsRead: number;
     rowsWritten: number;
+    /**
+     * 1 件の大きさの内訳（件数の割合と大きさ）。kb は件数で重み付けした平均なので、大きさの単位で切り上げて数える課金
+     * （HTTP API の 512 KB など）は、平均でなくこの内訳ごとに切り上げてから足す（OCL-663E589C）。省略は kb だけの 1 種類。
+     */
+    kbMix?: { share: number; kb: number }[];
   };
 };
 
@@ -76,6 +81,8 @@ export type ResolvedWorkload = {
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
+  /** 月のうち最も多い日 / 平均の日（話題・Bot の集中。日次の無料枠の判定だけ。D-60）。 */
+  peakDayFactor: number;
   /**
    * 保存量。imagesGB は原本（images.storedGB）。variantsGB は投稿のときに作って保存するサイズ違い
    * （transformAt: upload のときだけ。閲覧のときに変換する構成では保存しないので 0。OCL-F3098083）。
@@ -100,17 +107,36 @@ const flow = (
     queries: p.queries ?? 0,
     rowsRead: p.rowsRead ?? 0,
     rowsWritten: p.rowsWritten ?? 0,
+    ...(p.kbMix ? { kbMix: p.kbMix } : {}),
   },
 });
+
+/** 1 件の大きさの内訳（省略なら平均の大きさ 1 種類）。 */
+export function kbMixOf(
+  p: ClassFlow['perRequest'],
+): { share: number; kb: number }[] {
+  return p.kbMix ?? [{ share: 1, kb: p.kb }];
+}
 
 /** 複数ルートの流れを件数で重み付けして 1 つのクラスにまとめる。CPU の最大は平均とは別に残す。 */
 function merge(flows: ClassFlow[]): ClassFlow {
   const count = flows.reduce((s, f) => s + f.count, 0);
   if (count === 0) return flow(0);
-  const avg = (k: keyof ClassFlow['perRequest']) =>
+  const avg = (k: Exclude<keyof ClassFlow['perRequest'], 'kbMix'>): number =>
     flows.reduce((s, f) => s + f.count * f.perRequest[k], 0) / count;
+  // 大きさの内訳は、各ルートの内訳を件数の割合で重み付けして並べ、同じ大きさをまとめる
+  const mix = new Map<number, number>();
+  for (const f of flows) {
+    if (f.count <= 0) continue;
+    for (const part of kbMixOf(f.perRequest))
+      mix.set(
+        part.kb,
+        (mix.get(part.kb) ?? 0) + (part.share * f.count) / count,
+      );
+  }
   return flow(count, {
     kb: avg('kb'),
+    kbMix: [...mix].map(([kb, share]) => ({ share, kb })),
     cpuMs: avg('cpuMs'),
     maxCpuMs: Math.max(
       ...flows.filter((f) => f.count > 0).map((f) => f.perRequest.maxCpuMs),
@@ -421,6 +447,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
+    peakDayFactor: t.peakDayFactor ?? 1,
     storage: {
       dbGB: w.db.sizeGB,
       imagesGB: w.images.storedGB,
