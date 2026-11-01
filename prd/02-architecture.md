@@ -13,7 +13,7 @@
 | パッケージ | 役割 | 状態（2026-11-02） |
 |---|---|---|
 | `packages/estimator` | Workload・Architecture・ComponentKind・資源シミュレーション・料金計算・容量評価（前提）と、それらの zod スキーマ。**環境非依存** | 実装済み（P1-2〜P1-8。[08](./08-roadmap.md)） |
-| `packages/catalog` | ServiceOffering と PriceBook（プロバイダー別・版付き）、フレームワーク、アプリのテンプレート、構成スタックと部品（事業者をまたぐ部品を含む）、日本の消費税。架空データは `src/fictional/` に分ける（**gap**: 今はテストの中にある） | 実装済み（7 事業者。[README](./README.md)「スコープ」） |
+| `packages/catalog` | ServiceOffering と PriceBook（プロバイダー別・版付き）、フレームワーク、アプリのテンプレート、構成スタックと部品（事業者をまたぐ部品を含む）、日本の消費税。架空データは `src/fictional/` に分ける（`catalog/fictional`。本体の index からは export しない。D-78） | 実装済み（7 事業者。[README](./README.md)「スコープ」） |
 | `packages/game` | 経営シミュレーション（ターン・ユーザー成長・イベント・収益・評価）。シード付き乱数 | 実装済み（GD-1〜GD-5・2 シナリオ。[07](./07-game-design.md) §8） |
 | `packages/web` | 見積モード・ゲームモードの UI | ゲームモードと、見積モードの最初の形（ルーターなし・タブで切り替え。[08](./08-roadmap.md)・D-73〜D-76） |
 

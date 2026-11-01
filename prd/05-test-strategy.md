@@ -4,8 +4,14 @@
 
 ## 1. 架空の料金データ（fictional）
 
-- テストに使う料金は `packages/catalog/src/fictional/` の **`fictional-` で始まる provider** だけ。
-  （**gap**: 今は `packages/estimator/src/pricing/fixtures.test-helpers.ts` と各テストの中に置いている。golden は今はゲームの基準プレイの側（`packages/game` のテスト）にある）
+- テストに使う料金は **`fictional-` で始まる provider** だけ。置き場は 2 つ（D-78。実装済み）。
+  - `packages/catalog/src/fictional/`（`catalog/fictional` で読む。本体の index からは export せず、本番の `loadPriceBooks` に入らない）。
+    料金計算の仕組みを一通り使う 3 つ: `fictional-edge`（USD・税抜。月・日・ノード単位の無料枠・1 回ごとと期間の切り上げ・tiered・料金未取得・席・all-usage のクレジット（bill））、
+    `fictional-yen-host`（JPY・税込。使い切ると止まるクレジット（block）・定額で超えると adjust・ノード単位の基本料・一度だけの手数料）、
+    `fictional-db`（USD。時間課金の月額上限・volume・丸めの記載なし）。出典は `example.invalid`（実在しない予約名）で、備考に「架空」と書く。
+  - estimator の単体テストは依存の向き（[02](./02-architecture.md) §1。estimator は catalog を読まない）のため、
+    `packages/estimator/src/pricing/fixtures.test-helpers.ts`（例の P-01〜P-14）と生成器 `random.test-helpers.ts`（§2b の性質）の架空データを使う。
+  - golden は今はゲームの基準プレイの側（`packages/game` のテスト）にある（§5 は未着手）。
   数値は手計算しやすい**わざと丸い値**（単価 1・10・100、無料枠 1,000 など）にし、実在の料金と取り違えないようにする。
 - 実在の PriceBook を使うテストは「スキーマを通る」「既知の構成で計算が完走する」までにとどめ、
   **金額をテストの期待値に書かない**（料金改定のたびにテストが壊れる・実在の値を二重管理することになるため）。
@@ -28,6 +34,37 @@
 | P-12 | 超過時の挙動 | `block` / `throttle` は金額 0 で `LimitBreach` を出す。`upgrade-required` は見積を不成立にする |
 | P-13 | 通貨 | 原通貨が混在する Bill。明細は原通貨のまま、合計だけ換算される |
 | P-14 | 明細の根拠 | すべての LineItem が priceRef と（usage なら）quantity・allowanceApplied を持ち、合計と一致する |
+
+### 架空の料金データの例（catalog）
+
+`packages/catalog/src/fictional/fictional.test.ts`。3 つの架空データがスキーマを通り架空と分かること・本番の読み込みで拒否されること、
+各プランの手計算の例（上の P-xx の仕組みを、1 つの PriceBook の上でまとめて通す）、volume を持たないプランで使用量を倍々にしても合計が減らないこと。
+
+## 2b. 料金計算の性質（性質ベースのテスト）
+
+`packages/estimator/src/pricing/properties.test.ts`。生成器 `random.test-helpers.ts` で架空の PriceBook（`fictional-gen`）と使用量を
+決まったシード（1〜300）で作り、どの入力でも成り立つことを確かめる。失敗はシードの番号つきで出る。
+**fast-check は入れていない**: 縮小（失敗した入力を小さくすること）は無いが、シードで再現でき、依存を増やさずに済む。縮小が要るほど複雑な性質が増えたら入れる。
+
+| # | 性質 | 生成する範囲 |
+|---|---|---|
+| PP-01 | flat・tiered だけなら、使用量を増やしても合計は減らない | 月・日・ノードのプール、1 回ごと・期間の丸め、block・throttle・adjust、bill・block のクレジット、基本料 |
+| PP-02 | volume は単調でない例がある（PP-01 を flat・tiered に限る理由。§3） | 例 1 つ |
+| PP-03 | 月のプールの内なら従量の金額・課金対象は 0 で、breach も無い | 丸め（期間）・段・volume を含む |
+| PP-04 | 日のプール: 超えた量 × 平日・休日の日数だけ課金され、両方が枠内なら 0 | 平日・休日の 1 日の量 |
+| PP-05 | プールをちょうど使い切る量を小数で分けても、足し算の誤差で超過・使い切りにしない | 0.1・0.2・1/3 などの和（D-78 で直した不具合） |
+| PP-06 | tiered は境目で連続（前後の差は δ × 最大単価 / per 以内）。段の量の和は使用量、段の金額の和は明細の金額 | 1〜4 段 |
+| PP-07 | volume は境目で仕様どおり不連続（ちょうどはその段、超えると次の段の単価が全量） | 1〜4 段 |
+| PP-08 | クレジットは従量を超えて引かない（従量 + クレジット ≥ 0、合計 ≥ 基本料） | 重なる複数のクレジット・bill と block |
+| PP-09 | bill のクレジットは min(上限, 対象) だけ引き、使い切りの breach を出さない | |
+| PP-10 | block のクレジットは従量を打ち消し、上限を超えたときだけ超えた額で `credit-exhausted` | |
+| PP-11 | `ceilUnits` は値を覆う最小の単位の個数 | 単位 0.001〜1,000、単位の整数倍ちょうどを含む |
+| PP-12 | 期間・1 回ごとの切り上げ: 課金対象（1 件あたり）は単位の整数倍で、切り上げ前から 1 単位未満だけ増える | |
+| PP-13 | JPY ↔ USD: 換算は足し算と入れ替えられ、往復で戻り、為替を逆向きに書いても同じ。円建ての Bill の合計の換算 = 明細ごとの換算の和 | |
+| PP-14 | 料金未取得の使用量を足しても合計は変わらず、`unpricedLines` が 1 増える | |
+| PP-15 | アカウントは互いに独立（まとめて計算した合計 = 別々の合計の和） | |
+
+比較の許容誤差は相対 1e-9。大きな従量とクレジットが打ち消し合うと合計が小さくても誤差は明細の大きさに比例するので、明細の絶対値の和を尺度にする。
 
 ## 3. 資源シミュレーションのテスト（simulateResources）
 

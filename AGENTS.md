@@ -50,7 +50,8 @@
 
 - 🔒 **出典を確認していない数値を、実在の料金・制限のように書かない。** 実在の料金は公式の料金表を一次情報にし、
   出典 URL と取得日を付ける。テスト用の架空料金は provider ID を `fictional-` で始める（`status: 'fictional'`。スキーマが ID と status の一致を検査する）
-  （[prd/03](./prd/03-pricing-schema.md) §1・§10）。置き場は設計では `packages/catalog/src/fictional/` だが、今はテストの中（例: `packages/estimator/src/pricing/fixtures.test-helpers.ts`）にある（gap）。
+  （[prd/03](./prd/03-pricing-schema.md) §1・§10）。置き場は `packages/catalog/src/fictional/`（`catalog/fictional` で読む。本番の `loadPriceBooks` には入れない）。
+  estimator の単体テストは依存の向き上 catalog を読めないので、`packages/estimator/src/pricing/fixtures.test-helpers.ts` と生成器（`random.test-helpers.ts`）の架空データを使う（D-78）。
 - 見積対象のフレームワーク・構成を特定のスタックに寄せない。フレームワーク固有の扱いは FrameworkProfile / DeployTarget のデータに閉じ込める（[prd/06](./prd/06-frameworks.md)）。
 - 金額・使用量は number で計算し、課金の切り上げは `ceilUnits` だけを使う（`Math.ceil` を直接使わない）。丸めは表示のときだけ（[prd/02](./prd/02-architecture.md) §3）。
 - estimator・catalog・game の計算は純粋関数にする（時刻・乱数・I/O に触れない。乱数はシードを引数で受ける）。

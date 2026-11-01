@@ -50,6 +50,9 @@ describe('overage・sum・nearlyEqual', () => {
   it('込み分を引いた残りは負にならない', () => {
     expect(overage(5, 10)).toBe(0);
     expect(overage(15, 10)).toBe(5);
+    // 足し算の誤差だけの超過は 0（D-78）。意味のある端数は残す
+    expect(overage(0.1 + 0.2, 0.3)).toBe(0);
+    expect(overage(0.31, 0.3)).toBeCloseTo(0.01);
   });
 
   it('730 時間の積み上げは表示の桁で一致する', () => {

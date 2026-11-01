@@ -46,9 +46,15 @@ export function ceilUnits(value: number, granularity: number): number {
   return Math.ceil(q);
 }
 
-/** `max(0, used - included)`。無料枠・込み分を引いた残り。 */
+/**
+ * `max(0, used - included)`。無料枠・込み分を引いた残り。
+ * 残りが浮動小数点の誤差の大きさ（込み分の ROUNDING_TOLERANCE 倍以下）なら 0 にする。
+ * 使用量を足し合わせた誤差（0.1 + 0.2 > 0.3）で「超えた」と判定し、止まる挙動の breach を出さないため（D-78）。
+ */
 export function overage(used: number, included: number): number {
-  return Math.max(0, used - included);
+  const rest = used - included;
+  if (rest <= ROUNDING_TOLERANCE * Math.max(1, Math.abs(included))) return 0;
+  return rest;
 }
 
 export function sum(values: readonly number[]): number {
