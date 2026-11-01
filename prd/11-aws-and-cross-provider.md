@@ -698,6 +698,50 @@ AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ
 - 5 分の再検証は再検証の関数の GB 秒の分だけ増える（数ドル）。縮める・従量の 18 → 17/20 は、ぎりぎりのシード 1 つが所持金の目標に届かなくなったもの。
 - 数えていないもの: ウォーマー（既定で無効）・デプロイのときの全体の無効化（1 回 1 パス）・SQS を Lambda が待つ空の受信（未確認）・fetch のキャッシュ・タグの表の保存量。
 
+#### 無効化のまとめ方（2026-11-02・D-79）
+
+ユーザーの方針「費用を抑えるより複雑な構成も可能にしたい」で、D-66 の未決（ワイルドカード・タグの無効化を部品にするか）を決めた。
+
+確かめた事実（2026-11-02 取得）:
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| ワイルドカードの課金 | 「A path that includes the `*` wildcard counts as one path even if it causes CloudFront to invalidate thousands of files」。`/*` も 1 パス。1 回の要求にまとめても 1 パスずつ数える | [無効化の料金](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PayingForInvalidation.html) |
+| ワイルドカードの書き方 | `*` はパスの最後だけ。`/directory-path*` はそのディレクトリ自身と配下のすべて。クエリ文字列の違いも `*` で消せる | [無効化のパス](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/invalidation-specifying-objects.html) |
+| タグの無効化（CloudFront） | 対応している。distribution に `CacheTagConfig`（タグを返す応答ヘッダーの名前）を設定し、オリジンが応答にタグを付け、`#タグ` で無効化する。1 オブジェクトのタグは 50 まで・タグにワイルドカードは使えない。課金はパスと同じ（タグ 1 つ = 1 パス・同じ月 1,000 の無料枠） | [タグの無効化](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/invalidation-by-tags.html)・[注意点](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/invalidation-specifying-tags.html)・[無効化の料金](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PayingForInvalidation.html) |
+| タグの無効化（定額のプラン） | 機能の表で「Invalidations by cache tag」は Pro・Business・Premium（Free には無い） | [定額のプランの文書](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html) |
+| 無効化の上限 | パスとタグで毎秒 150・ワイルドカードは毎秒 1。1 回のワイルドカード・タグが消すファイルの数に上限は無い | [クォータ](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html) |
+| OpenNext の自動の無効化 | 選べるのは Dummy（既定・何もしない）と CloudFront だけで、パスの指定・まとめ方の設定は無い。CloudFront の実装は、App Router のルートごとに `/<path>` と `/<path>?_rsc=*` の 2 パスを 1 回の要求で送る（ソース）。自作の実装を書くときの参考としてソースを示している | [automatic_cdn_invalidation](https://opennext.js.org/aws/config/overrides/automatic_cdn_invalidation)・[cloudfront.ts](https://github.com/opennextjs/opennextjs-aws/blob/main/packages/open-next/src/overrides/cdnInvalidation/cloudfront.ts) |
+| OpenNext とワイルドカード | caching の文書が「if multiple paths require invalidation, it is more economical to invalidate a wildcard path」と書き、`/page/*` が関係ない `page/d` も消す例を挙げる | [caching](https://opennext.js.org/aws/inner_workings/caching) |
+| OpenNext とタグ | 2026-10-30 に CDN の無効化の handler へ任意の `invalidateTags` が足された（PR #1308。目的は Cloudflare のアダプター）。CloudFront の実装はパスだけで、応答に CloudFront のタグのヘッダーを付ける仕組みも文書に無い | [PR #1308](https://github.com/opennextjs/opennextjs-aws/pull/1308)・[issue #986](https://github.com/opennextjs/opennextjs-aws/issues/986) |
+
+入れた形:
+
+- 部品のスロット「CDN の無効化のまとめ方」（`cdnInvalidation`。OpenNext × Next.js だけ）: **ページごと**（既定・OpenNext の CloudFront の実装。D-66 のまま）/ **ワイルドカードでまとめる**（自作の無効化の処理）。差し替えの手間 1（override を書く・戻す。仮定）。
+  ISR をキャッシュしない部品では効かないので出さない。受託（オンデマンドを選べない）では出さない。
+- ワイルドカード: 1 回の内容の更新で **1 パス**（`/articles*` で記事・一覧・RSC のデータをまとめて消す。記事を `/articles/<slug>`、一覧を `/articles` に置く URL の構成は**ゲーム上の仮定**）。
+  代わりに、更新のたびに記事のページ全部が CloudFront から消える。エンジンは、ページあたり 更新 U × 閲覧 / (U + ページあたりの閲覧) を CDN の外れとみなす（`cdnFlushMissFlow`。D-56 の最大寿命の分も足す）。
+  外れた閲覧はサーバーの関数が S3 の ISR のキャッシュから返す（関数・S3 の GET・タグの読み取りが増える）。**S3 の ISR のキャッシュは消えないので再生成は増えない**（OpenNext は CloudFront と ISR のキャッシュが別。D-66）。
+  記事コミュニティの記事のページの CDN のヒット率は、1 か月目（30 万 PV・更新 300）で 75% → 0%、240 万 PV・更新 2,400 で 96% → 19%。
+- **タグの無効化は入れない**。CloudFront は対応しているが、OpenNext の CloudFront の実装はパスだけで、応答にタグのヘッダーを付ける方法も公式に無い（自作の範囲が広く、確かめられない）。OpenNext が CloudFront のタグに対応したら部品に足す。
+- 選ぶ前の見込み: 再検証の設定の「オンデマンド」の見込み（D-66）に、ページごとの従量なら「ワイルドカードでまとめると 約 N パス・約 $X（代わりに更新していないページの CDN のキャッシュも消える）」を添える。まとめているときは「ワイルドカードでまとめた分」と出す。
+  負けたときのヒントは「部品『CDN の無効化のまとめ方』でワイルドカードにまとめる」を出す（タグは消した）。
+- 説明文（COMPONENT_FLAVOR）: ページごと「更新したページだけを消すので、ほかのページは CDN から返り続ける。設定は要らない」、ワイルドカード「まとめて消すので、無効化の数が更新するページの数に比例しない。処理は自分で書く」。
+
+基準プレイ（記事コミュニティ・OpenNext・オンデマンド・CDN 従量・何もしない・シード 1〜20。合格数・12 か月の費用の平均 / 中央値・1 プレイの無効化の平均）:
+
+| 更新の回数 | 画像 | ページごと（既定） | ワイルドカード |
+|---|---|---|---|
+| D-70（記事の投稿・編集だけ。0.01） | 縮める | 10/20・$553 / $558・4.3 万パス $154 | **18/20**・$412 / $416・6,000 パス $11 |
+| 〃 | 最適化（Lambda） | 20/20・$203 / $184・4.3 万パス $154 | 20/20・**$63 / $45**・6,000 パス $11 |
+| コメントも作り直す（0.5） | 縮める | 0/20・$296（1 か月目に尽きる） | 0/20・$871 / $634（途中で尽きる）・16 万パス $781 |
+| 〃 | 最適化（Lambda） | 0/20・$296（1 か月目に尽きる） | 0/20・$949 / $611・19 万パス $929 |
+
+- 関数・S3・タグの読み取りの増えは 1 プレイで $4〜5 → $8 程度（Lambda の常時無料の中が多い）。CDN のヒット率の低下は費用ではほぼ効かない（速さ・満足度には効かせていない）。
+- ワイルドカードはオンデマンドを時間の再検証（5 分: 縮める 17/20・$440、最適化 20/20・$92 / $72）より安くする。
+- コメントも作り直す作りでは、パスは 4 分の 1 になるが更新（1 か月目 1.5 万回）ごとに 1 パスなので、1 か月目は越えても PV とともに増えて途中で尽きる。時間で間引く（数分ごとに `/*` を 1 回）などの作りは入れていない。
+- CF Paid × Next.js（5 分・目標の根拠）は 20/20・$183 で不変。ページごとの値も D-70 と同じ（既定は変えていない）。
+
 ## 14. Netlify（2026-11-02・D-71）
 
 ユーザーの方針「より現実的なコスト感・費用を抑える複雑な構成も可能にしたい」「見積対象を作者のスタックに寄せない」に沿って、

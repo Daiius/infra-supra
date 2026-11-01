@@ -32,6 +32,7 @@ export const OPENNEXT_DEFAULT_CHOICES: Choices = {
   images: 'resize',
   db: 'dynamodb',
   cdnPlan: 'payg',
+  cdnInvalidation: 'default',
 };
 
 /** 画像の最適化の関数の 1 回の変換の時間（ms。仮定。VPS のホストで変換する時間 imageTransformCpuMs と同じ値）。 */
@@ -43,6 +44,12 @@ const SQS_REQUESTS_PER_MESSAGE = 3;
  * 「ページとそのデータのルート」の 2 パスを送る（公式の文書・2026-11-01。D-66）。
  */
 const INVALIDATION_PATHS_PER_PAGE = 2;
+/**
+ * 無効化をワイルドカードでまとめたときの、1 回の内容の更新あたりのパスの数（D-79）。CloudFront の `/directory-path*` は
+ * そのディレクトリ自身と配下のすべて（クエリ文字列の違いも含む）を 1 パスで消す（公式）。記事を `/articles/<slug>`・
+ * 一覧を `/articles` に置く URL の構成なら `/articles*` の 1 パスで記事・一覧・RSC のデータがまとめて消える（URL の構成はゲーム上の仮定）。
+ */
+const INVALIDATION_WILDCARD_PATHS_PER_UPDATE = 1;
 /**
  * S3 の ISR のキャッシュの 1 ページの大きさを、ページの応答の何倍とみるか。OpenNext は HTML と RSC（または JSON）を
  * 1 つの .cache にまとめて置く（公式の文書）。RSC は HTML と同じくらいとみて 2 倍（仮定。D-66）。
@@ -91,6 +98,27 @@ export const OPENNEXT_COMPONENTS: readonly ComponentOption[] = [
   },
   {
     id: 'default',
+    slot: 'cdnInvalidation',
+    frameworks: ['nextjs'],
+    platform: 'aws-opennext',
+    label: 'ページごと（OpenNext の CloudFront の実装）',
+    note: 'オンデマンドの再検証のたびに、再検証したページごとに「ページとそのデータのルート」の 2 パスを無効化する（OpenNext の自動の CDN の無効化）。関係ないページの CDN のキャッシュは残る。従量では月 1,000 パスを超えると 1 パス $0.005。時間の再検証では無効化しない',
+    premiseRefs: ['pool:aws:cloudfront:cloudfront-free-invalidations'],
+  },
+  {
+    id: 'wildcard',
+    slot: 'cdnInvalidation',
+    frameworks: ['nextjs'],
+    platform: 'aws-opennext',
+    label: 'ワイルドカードでまとめる（自作の無効化）',
+    note: '更新のたびに /articles* のようなワイルドカード 1 パスで記事と一覧をまとめて無効化する（ワイルドカードも 1 パスと数える。公式）。OpenNext の CloudFront の実装はページごとなので、無効化の処理は自作（override）。代わりに更新していないページの CDN のキャッシュも消え、次の閲覧は関数が S3 のキャッシュから返す（関数・S3・タグの読み取りが増える。ISR のキャッシュは消えないので再生成は増えない）。URL の構成は仮定。時間の再検証では無効化しない',
+    premiseRefs: [
+      'pool:aws:cloudfront:cloudfront-free-invalidations',
+      'pool:aws:lambda:lambda-free-compute',
+    ],
+  },
+  {
+    id: 'default',
     slot: 'images',
     frameworks: ['nextjs'],
     platform: 'aws-opennext',
@@ -129,6 +157,7 @@ export function composeOpenNext(
   const nodes: ArchNodeIn[] = [
     // 1 つの CloudFront がすべてを受ける（静的は S3・動的は関数 URL の Lambda へ）。ISR のページは s-maxage の期間でキャッシュ
     withInvalidation(
+      choices.cdnInvalidation,
       cloudfront(
         choices,
         {
@@ -255,13 +284,22 @@ export function composeOpenNext(
 }
 
 /** オンデマンドの再検証のたびに CloudFront の ISR のページを無効化する（OpenNext の自動の CDN の無効化を有効にした形。D-66）。 */
-function withInvalidation(node: ArchNodeIn): ArchNodeIn {
+function withInvalidation(
+  mode: string | undefined,
+  node: ArchNodeIn,
+): ArchNodeIn {
   if (node.config.kind !== 'cdn') return node;
   return {
     ...node,
     config: {
       ...node.config,
-      invalidationPathsPerPage: INVALIDATION_PATHS_PER_PAGE,
+      // ワイルドカードでまとめる（D-79）: 更新ごとのパスで数え、更新のたびにルートの全ページがこの CDN から消える
+      ...(mode === 'wildcard'
+        ? {
+            invalidationWildcardPathsPerUpdate:
+              INVALIDATION_WILDCARD_PATHS_PER_UPDATE,
+          }
+        : { invalidationPathsPerPage: INVALIDATION_PATHS_PER_PAGE }),
     },
   };
 }

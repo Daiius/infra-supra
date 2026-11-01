@@ -46,7 +46,8 @@ export type SlotId =
   | 'frontCdn'
   | 'ogp'
   | 'apiCache'
-  | 'cdnPlan';
+  | 'cdnPlan'
+  | 'cdnInvalidation';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -139,6 +140,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   ogp: 'SNS のカード（OGP）',
   apiCache: 'API の応答のキャッシュ',
   cdnPlan: 'CDN の料金のプラン',
+  cdnInvalidation: 'CDN の無効化のまとめ方',
 };
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [

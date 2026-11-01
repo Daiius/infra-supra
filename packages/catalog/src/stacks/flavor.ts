@@ -244,6 +244,11 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'ページは CDN から返し、更新したページだけをすぐ作り直せる。仕組みは自分で組む',
   'aws-opennext:isrCache:none':
     '毎回サーバーで描くので、ページはいつも最新。キャッシュの仕組みを気にしなくてよい',
+  // CDN の無効化のまとめ方（D-79）
+  'aws-opennext:cdnInvalidation:default':
+    '更新したページだけを消すので、ほかのページは CDN から返り続ける。設定は要らない',
+  'aws-opennext:cdnInvalidation:wildcard':
+    'まとめて消すので、無効化の数が更新するページの数に比例しない。処理は自分で書く',
   'aws-opennext:images:default':
     'Next.js の画像の部品がそのまま使え、変換は自分の関数で行う。使った分だけの支払い',
 };

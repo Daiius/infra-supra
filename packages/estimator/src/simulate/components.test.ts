@@ -552,6 +552,101 @@ describe('OpenNext の CloudFront の無効化と S3 の ISR のキャッシュ�
     expect(run(w, true).resources['invalidation-paths']).toBeUndefined();
   });
 
+  it('ワイルドカードでまとめる（D-79）: パスは更新 × 更新あたりのパス、CDN の外れは全ページが更新のたびに消える分に増え、再生成は変わらない', () => {
+    const wildcard = simulateResources(onDemand, {
+      id: 'x',
+      name: 'x',
+      nodes: [
+        {
+          id: 'cf',
+          label: 'cf',
+          config: {
+            kind: 'cdn',
+            invalidationWildcardPathsPerUpdate: 1,
+            ttlClasses: ['document-isr'],
+          },
+        },
+        {
+          id: 'fn',
+          label: 'fn',
+          config: { kind: 'function', memoryGB: 1, concurrency: 1 },
+        },
+      ],
+      routes: { 'document-isr': ['cf', 'fn'], 'isr-revalidate': ['fn'] },
+    });
+    expect(wildcard.nodes.cf!.resources['invalidation-paths']).toBe(300);
+    const views = onDemand.classes['document-isr'].count;
+    const perPage = views / 100;
+    // ページあたり 更新 300 × 閲覧 / (300 + 閲覧)。最大寿命は無い
+    const flush = Math.min(views, (100 * 300 * perPage) / (300 + perPage));
+    expect(onDemand.cdnFlushMissFlow['document-isr']!.count).toBeCloseTo(
+      flush,
+      6,
+    );
+    expect(flush).toBeGreaterThan(
+      onDemand.cacheMissFlow['document-isr']!.count,
+    );
+    // 関数に届く件数 = CDN の外れ（ワイルドカード）+ 再生成（ページごとと同じ）
+    expect(wildcard.nodes.fn!.resources.requests).toBeCloseTo(
+      flush + onDemand.classes['isr-revalidate'].count,
+      6,
+    );
+  });
+
+  it('ワイルドカードで消えるのは ISR のページだけで、同じ CDN の API の応答のキャッシュは従来の miss のまま（OCL-62E7477C）', () => {
+    const mixed = resolveWorkload(
+      workload({
+        routes: [
+          {
+            id: 'article',
+            rendering: 'isr',
+            share: 0.5,
+            pages: 100,
+            onDemandUpdatesPerMonth: 300,
+            processing,
+            cachedServeCpuMs: 1,
+          },
+          {
+            id: 'feed',
+            rendering: 'spa',
+            share: 0.5,
+            pages: 100,
+            processing,
+            shellKB: 3,
+            cacheSeconds: 300,
+          },
+        ],
+      }),
+    );
+    const out = (wildcard: boolean) =>
+      simulateResources(mixed, {
+        id: 'x',
+        name: 'x',
+        nodes: [
+          {
+            id: 'cf',
+            label: 'cf',
+            config: {
+              kind: 'cdn',
+              ...(wildcard
+                ? { invalidationWildcardPathsPerUpdate: 1 }
+                : { invalidationPathsPerPage: 2 }),
+              ttlClasses: ['document-isr', 'api-content'],
+            },
+          },
+          {
+            id: 'api',
+            label: 'api',
+            config: { kind: 'function', memoryGB: 1, concurrency: 1 },
+          },
+        ],
+        routes: { 'api-content': ['cf', 'api'] },
+      }).nodes.api!.resources.requests;
+    expect(mixed.cacheMissFlow['api-content']!.count).toBeGreaterThan(0);
+    expect(out(true)).toBeCloseTo(mixed.cacheMissFlow['api-content']!.count, 6);
+    expect(out(true)).toBeCloseTo(out(false)!, 6);
+  });
+
   it('ISR のキャッシュを置くストレージは ISR のページの大きさ × 倍率を保存する（画像は載せない）', () => {
     const u = simulateResources(w, {
       id: 'x',

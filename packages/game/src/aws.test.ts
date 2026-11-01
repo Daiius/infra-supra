@@ -7,6 +7,7 @@ import {
   goalChecks,
   autoImageFormat,
   componentConflict,
+  componentSlots,
   isPlanChange,
   meetsRequirement,
   newGame,
@@ -22,6 +23,7 @@ import {
   setupInvalidationEstimate,
   type FrameworkId,
 } from './index.ts';
+import { EFFORT } from './rules.ts';
 import type { Choices } from 'catalog';
 
 const AWS = STACKS.findIndex((s) => s.id === 'aws-amplify');
@@ -172,6 +174,7 @@ describe('AWS の構成', () => {
       'api',
       'db',
       'cdnPlan',
+      'cdnInvalidation',
       'files',
     ]);
   });
@@ -227,8 +230,11 @@ describe('AWS の構成', () => {
     expect(payg.paths).toBeCloseTo(1_200, 6);
     expect(payg.usd).toBeCloseTo(200 * 0.005, 6);
     expect(payg.included).toBe(false);
+    // ワイルドカードでまとめたときの見込みも添える（D-79）: 更新 300 × 1 パス
+    expect(payg.ifWildcard!.paths).toBeCloseTo(300, 6);
+    expect(payg.ifWildcard!.usd).toBe(0);
     expect(invalidationNote(payg)).toBe(
-      '無効化 月約 1,200 パス・約 $1（月 1,000 パスまで無料、以降 1 パス $0.005）',
+      '無効化 月約 1,200 パス・約 $1（月 1,000 パスまで無料、以降 1 パス $0.005）。ワイルドカードでまとめると 約 300 パス・約 $0（代わりに更新していないページの CDN のキャッシュも消える）',
     );
     const flat = setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
       cdnPlan: 'flat-pro',
@@ -303,6 +309,37 @@ describe('AWS の構成', () => {
     expect(cost.next).toContain('60,000 パス・$295');
     expect(cost.next).toContain('定額のプラン');
     expect(cost.next).toContain('時間の再検証');
-    expect(cost.next).toContain('タグ');
+    expect(cost.next).toContain('ワイルドカードにまとめる');
+  });
+
+  it('無効化をワイルドカードでまとめる（D-79）: パスは更新ごとに 1、CDN の外れと関数の呼び出しが増え、再生成は変わらない', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    const commentsRegenerate = { ...ARTICLE_COMMUNITY, pageUpdateShare: 0.5 };
+    const est = (sc: typeof ARTICLE_COMMUNITY, c: Choices) =>
+      setupInvalidationEstimate(sc, ON, 'nextjs', { cdnPlan: 'payg', ...c })!;
+    const wild = est(ARTICLE_COMMUNITY, { cdnInvalidation: 'wildcard' });
+    expect(wild.wildcard).toBe(true);
+    expect(wild.paths).toBeCloseTo(300, 6);
+    expect(wild.ifWildcard).toBeUndefined();
+    expect(invalidationNote(wild)).toContain('ワイルドカードでまとめた分');
+    // コメントも作り直す作り（更新 1.5 万回）: ページごと 6 万パス・$295 → 1.5 万パス・$70
+    const perPage = est(commentsRegenerate, {});
+    expect(perPage.paths).toBeCloseTo(60_000, 6);
+    expect(perPage.ifWildcard!.paths).toBeCloseTo(15_000, 6);
+    expect(perPage.ifWildcard!.usd).toBeCloseTo(14_000 * 0.005, 6);
+    // 定額のプランは込みなので、まとめたときの見込みは出さない
+    expect(est(ARTICLE_COMMUNITY, { cdnPlan: 'flat-pro' }).ifWildcard).toBe(
+      undefined,
+    );
+    // 部品の欄に出る（ISR をキャッシュしない部品では効かないので出さない）・差し替えは手間 1
+    const st = newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs');
+    expect(componentSlots(st).map((x) => x.slot)).toContain('cdnInvalidation');
+    expect(
+      componentSlots({
+        ...st,
+        components: { ...st.components, isrCache: 'none' },
+      }).map((x) => x.slot),
+    ).not.toContain('cdnInvalidation');
+    expect(EFFORT.component.cdnInvalidation).toBe(1);
   });
 });

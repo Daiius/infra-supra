@@ -37,6 +37,12 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      */
     invalidationPathsPerPage: Pos.optional(),
     /**
+     * 無効化をワイルドカードでまとめる（D-79）。値は 1 回の内容の更新あたりのパスの数（例: `/articles*` で記事と一覧を 1 パス）。
+     * 与えると invalidationPathsPerPage の代わりにこれで数え、更新のたびにルートの全ページがこの CDN から消える
+     * （ISR のページの miss は ResolvedWorkload.cdnFlushMissFlow。後ろの ISR のキャッシュは消えないので再生成は増えない）。
+     */
+    invalidationWildcardPathsPerUpdate: Pos.optional(),
+    /**
      * 1 件あたりの転送（egress-gb）を応答の大きさでなく固定の KB で数える（サーバーから外の API への問い合わせの送信など。
      * 応答の受信は課金されない向き。仮定の値はデータの側が持つ）。次へ渡す流れは変わらない。
      */

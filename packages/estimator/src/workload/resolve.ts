@@ -75,6 +75,15 @@ export type ResolvedWorkload = {
   /** ピークの時間帯の miss の流れ（peakCacheHitRate と整合する。容量の判定だけに使う。D-44）。 */
   peakCacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
   /**
+   * 内容の更新のたびに、そのルートの全ページの CDN のキャッシュを消す（ワイルドカードでまとめた無効化。D-79）ときの、
+   * CDN を miss する流れ（document-isr だけ）。1 ページは更新のたびに消えるので、ページあたり 更新 × 閲覧 / (更新 + ページあたりの閲覧)。
+   * CDN の後ろの ISR のキャッシュ（OpenNext の S3）は消えないので、再生成の回数（classes の isr-revalidate）は変わらない。
+   * 時間の再検証のルートは cacheMissFlow と同じ。
+   */
+  cdnFlushMissFlow: Partial<Record<RequestClass, ClassFlow>>;
+  /** ピークの時間帯の同じ流れ（容量の判定だけ）。 */
+  peakCdnFlushMissFlow: Partial<Record<RequestClass, ClassFlow>>;
+  /**
    * ピークの時間帯の ISR の再生成の流れ（ルートごとのピークの miss の件数で、ルートごとの再生成の処理を重み付けしてまとめる）。
    * ISR のページを期間つきでキャッシュする CDN の後ろでは、届いた閲覧がそのつど再生成を起こすので、ピークの再生成はこの流れ（D-55・OCL-55732091）。
    */
@@ -100,6 +109,8 @@ export type ResolvedWorkload = {
    * 再生成の回数ではない（再生成は更新のあとの最初の閲覧で起きる）。CDN のキャッシュの無効化に使う（D-66）。
    */
   onDemandPageRevalidations: number;
+  /** オンデマンドの再検証の月の内容の更新の回数（ルートの合計）。ワイルドカードでまとめた無効化のパスに使う（D-79）。 */
+  onDemandUpdates: number;
   /**
    * 静的なページのビルドし直し（Workload の build。D-68）。count は月のビルドの回数、minutes はビルドの時間の合計
    * （1 回ごとに分へ切り上げる）。build が無ければ 0。
@@ -208,6 +219,8 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   const isrMiss: ClassFlow[] = [];
   const spaContentPeakMiss: ClassFlow[] = [];
   const isrPeakMiss: ClassFlow[] = [];
+  const isrFlushMiss: ClassFlow[] = [];
+  const isrPeakFlushMiss: ClassFlow[] = [];
   const peakRevalidations: ClassFlow[] = [];
   let spaContentHits = 0;
   let spaContentViews = 0;
@@ -224,6 +237,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   const pagesPerVisit = t.pagesPerSession > 0 ? t.pagesPerSession : 1;
   let isrWithRevalidate = 0;
   let onDemandPageRevalidations = 0;
+  let onDemandUpdates = 0;
   let isrPagesKB = 0;
   for (const r of w.routes) {
     const views = pv * r.share;
@@ -297,6 +311,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       if (updates !== undefined) {
         const pagesPerUpdate = r.onDemandPagesPerUpdate ?? 1;
         onDemandPageRevalidations += updates * pagesPerUpdate;
+        onDemandUpdates += updates;
         derivations.push({
           id: `on-demand-pages:${r.id}`,
           label: `オンデマンドの再検証を呼ぶページ（${r.id}）`,
@@ -341,6 +356,24 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         updates === undefined
           ? timedPart(lambdaT * peakRate)
           : Math.min(views, onDemandPart + timedPart(lambdaT * peakRate));
+      // ワイルドカードでまとめた無効化（D-79）: 1 回の更新でルートの全ページの CDN のキャッシュが消える。
+      // ページあたりの更新は U（ページごとの U / ページ数でなく）なので、合計は U × 閲覧 / (U + 閲覧 / ページ数)
+      const flushPart =
+        updates === undefined
+          ? 0
+          : updates + views / r.pages > 0
+            ? (updates * views) / (updates + views / r.pages)
+            : 0;
+      const flushCount =
+        updates === undefined
+          ? count
+          : Math.min(views, flushPart + timedPart(lambdaT));
+      const peakFlushCount =
+        updates === undefined
+          ? peakMisses
+          : Math.min(views, flushPart + timedPart(lambdaT * peakRate));
+      isrFlushMiss.push(flow(flushCount, served));
+      isrPeakFlushMiss.push(flow(peakFlushCount, served));
       revalidations.push(flow(count, work));
       isrMiss.push(flow(count, served));
       isrViews += views;
@@ -488,6 +521,10 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         ? { 'api-content': merge(spaContentPeakMiss) }
         : {}),
     },
+    cdnFlushMissFlow:
+      isrViews > 0 ? { 'document-isr': merge(isrFlushMiss) } : {},
+    peakCdnFlushMissFlow:
+      isrViews > 0 ? { 'document-isr': merge(isrPeakFlushMiss) } : {},
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
     peakDayFactor: t.peakDayFactor ?? 1,
@@ -503,6 +540,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       isrPagesGB: isrPagesKB / 1_000_000,
     },
     onDemandPageRevalidations,
+    onDemandUpdates,
     builds,
     derivations,
   };
