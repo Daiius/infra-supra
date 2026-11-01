@@ -68,6 +68,11 @@ export type ResolvedWorkload = {
   cacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
   /** ピークの時間帯の miss の流れ（peakCacheHitRate と整合する。容量の判定だけに使う。D-44）。 */
   peakCacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
+  /**
+   * ピークの時間帯の ISR の再生成の流れ（ルートごとのピークの miss の件数で、ルートごとの再生成の処理を重み付けしてまとめる）。
+   * ISR のページを期間つきでキャッシュする CDN の後ろでは、届いた閲覧がそのつど再生成を起こすので、ピークの再生成はこの流れ（D-55・OCL-55732091）。
+   */
+  peakRevalidateFlow: ClassFlow;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
@@ -160,6 +165,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   const isrMiss: ClassFlow[] = [];
   const spaContentPeakMiss: ClassFlow[] = [];
   const isrPeakMiss: ClassFlow[] = [];
+  const peakRevalidations: ClassFlow[] = [];
   let spaContentHits = 0;
   let spaContentViews = 0;
   let isrViews = 0;
@@ -263,6 +269,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       isrMisses += count;
       isrPeakMisses += peakMisses;
       isrPeakMiss.push(flow(peakMisses, served));
+      peakRevalidations.push(flow(peakMisses, work));
       if (count > 0) {
         isrWithRevalidate = Math.max(
           isrWithRevalidate,
@@ -378,6 +385,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       ...(isrViews > 0 ? { 'document-isr': merge(isrMiss) } : {}),
       ...(spaContentViews > 0 ? { 'api-content': merge(spaContentMiss) } : {}),
     },
+    peakRevalidateFlow: merge(peakRevalidations),
     peakCacheMissFlow: {
       ...(isrViews > 0 ? { 'document-isr': merge(isrPeakMiss) } : {}),
       ...(spaContentViews > 0

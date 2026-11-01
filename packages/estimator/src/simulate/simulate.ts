@@ -295,7 +295,7 @@ export function simulateResources(
   );
 
   /** クラスの流れを経路に流す。w の cacheHitRate で期間つきのキャッシュのヒットを決める。 */
-  const run = (w: ResolvedWorkload, collectUnrouted: boolean) => {
+  const run = (w: ResolvedWorkload, collectUnrouted: boolean, peak = false) => {
     const nodes: Record<string, NodeUsage> = {};
     const hostAcc = new Map<string, NodeAcc>();
     for (const n of architecture.nodes) {
@@ -327,15 +327,12 @@ export function simulateResources(
         continue;
       }
       // CDN の期間と ISR の期間は同じ（Next.js は s-maxage に再検証の間隔を付ける）ので、CDN を miss して届いた閲覧は
-      // そのつど ISR の期間も切れていて、1 件が再生成を 1 回起こす（届いた閲覧 = 再生成。月は従来の数と同じで、
-      // ピークの時間帯はピークの miss の数になる。D-55）
-      const behind =
-        cls === 'isr-revalidate' && isrBehindTtlCache
-          ? w.cacheMissFlow['document-isr']
-          : undefined;
-      let current = behind
-        ? { count: behind.count, perRequest: f.perRequest }
-        : f;
+      // そのつど ISR の期間も切れていて、1 件が再生成を 1 回起こす（届いた閲覧 = 再生成）。月は従来の流れと同じで、
+      // ピークの時間帯はルートごとのピークの miss で重み付けした再生成の流れ（件数と処理の両方。D-55・OCL-55732091）
+      let current =
+        cls === 'isr-revalidate' && isrBehindTtlCache && peak
+          ? w.peakRevalidateFlow
+          : f;
       for (const id of path) {
         current = consume(
           byId.get(id)!,
@@ -362,6 +359,7 @@ export function simulateResources(
           cacheMissFlow: workload.peakCacheMissFlow,
         },
         false,
+        true,
       )
     : { nodes, hostAcc };
   for (const n of architecture.nodes)

@@ -87,8 +87,8 @@ describe('ISR のページを期間つきでキャッシュする CDN の後ろ�
       ttlClasses: ['document-isr' as const],
     },
   };
-  const run = (behindCdn: boolean) =>
-    simulateResources(w, {
+  const run = (behindCdn: boolean, rw = w) =>
+    simulateResources(rw, {
       id: 'x',
       name: 'x',
       nodes: behindCdn ? [cdn, host] : [host],
@@ -123,6 +123,55 @@ describe('ISR のページを期間つきでキャッシュする CDN の後ろ�
         reval.count * reval.perRequest.cpuMs) /
         1000) *
         peak,
+      12,
+    );
+  });
+
+  it('ピーク: 密度と処理の重さが違う ISR のルートが複数あると、再生成の処理もルートごとのピークの miss で重み付けする（OCL-55732091）', () => {
+    const route = (
+      id: string,
+      share: number,
+      pages: number,
+      cpuMs: number,
+    ) => ({
+      id,
+      rendering: 'isr' as const,
+      share,
+      pages,
+      revalidateSeconds: 600,
+      processing: { ...processing, cpuMs },
+      cachedServeCpuMs: 1,
+    });
+    const multi = resolveWorkload(
+      workload({
+        routes: [
+          route('hot', 0.4, 5, 40),
+          route('cold', 0.4, 2_000, 4),
+          { id: 'mypage', rendering: 'ssr', share: 0.2, pages: 1, processing },
+        ],
+      }),
+    );
+    const pv = multi.monthlyPageViews;
+    const T = 600 / SECONDS_PER_MONTH;
+    const p = multi.peakHourFactor;
+    const peakMiss = (share: number, pages: number) =>
+      (pv * share) / (1 + ((pv * share) / pages) * T * p);
+    const hot = peakMiss(0.4, 5);
+    const cold = peakMiss(0.4, 2_000);
+    expect(multi.peakRevalidateFlow.count).toBeCloseTo(hot + cold, 6);
+    expect(multi.peakRevalidateFlow.perRequest.cpuMs).toBeCloseTo(
+      (hot * 40 + cold * 4) / (hot + cold),
+      9,
+    );
+    // 月の平均で重み付けした処理とは違う（ピークは閲覧の濃い hot がよく当たって、軽い cold の比が上がる）
+    expect(multi.peakRevalidateFlow.perRequest.cpuMs).not.toBeCloseTo(
+      multi.classes['isr-revalidate'].perRequest.cpuMs,
+      3,
+    );
+    const pm = multi.peakCacheMissFlow['document-isr']!;
+    expect(run(true, multi).host!.peakCores).toBeCloseTo(
+      ((pm.count * pm.perRequest.cpuMs + hot * 40 + cold * 4) / 1000) *
+        (p / SECONDS_PER_MONTH),
       12,
     );
   });
