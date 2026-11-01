@@ -52,6 +52,7 @@ describe('AWS の構成', () => {
       ['images', false],
       ['db', false],
       ['frontCdn', false],
+      ['cdnPlan', false],
       ['files', true],
     ]);
     expect(
@@ -100,6 +101,32 @@ describe('AWS の構成', () => {
         h.premises.some((p) => p.id === 'pool:aws:lambda:lambda-free-requests'),
       ),
     ).toBe(true);
+  });
+
+  it('CDN の定額のプラン: 込みを超えても請求は増えず、続けて超えると速さが 1 段下がる（D-61）', () => {
+    const free = doNothing(1, 'vite-spa', { cdnPlan: 'flat-free' });
+    const over = free.history.map((h) =>
+      h.premises.some(
+        (p) =>
+          p.hit &&
+          p.effect === 'adjust' &&
+          p.id.startsWith('pool:aws:cloudfront-flat-free:'),
+      ),
+    );
+    // 記事コミュニティは最初から込み（100 GB）を超える
+    expect(over[0]).toBe(true);
+    // 1 か月目は 3 倍までなら調整されない・2 か月目は続けて超えたので調整される
+    const notes = (i: number) => free.history[i]!.notes.join('・');
+    expect(notes(1)).toContain('配信の性能が調整された');
+    expect(free.history[1]!.satisfaction.reasons.speed).toContain(
+      '配信の性能が調整された',
+    );
+    // CloudFront の料金は定額（Free は 0 円）で、従量の転送の明細が無い
+    expect(
+      free.history[0]!.lines.some((l) =>
+        l.label.includes('cloudfront-transfer-out'),
+      ),
+    ).toBe(false);
   });
 
   it('料金未取得の明細（Amplify の画像の最適化）は件数として月の報告に残る', () => {

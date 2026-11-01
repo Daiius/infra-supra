@@ -160,6 +160,42 @@ describe('AWS の構成（Next.js・Amplify Hosting）', () => {
   });
 });
 
+describe('CloudFront の料金のプラン（D-61）', () => {
+  it('定額 Pro は月 $15 だけで、転送とリクエストは込み（超えても請求は増えず、前提は adjust）', () => {
+    const r = run(3_000_000, { cdnPlan: 'flat-pro' }, 'vite-spa');
+    const pro = r.bill.lines.filter(
+      (l) =>
+        l.priceRef.provider === 'aws' &&
+        l.priceRef.planId === 'cloudfront-flat-pro',
+    );
+    expect(pro.reduce((a, l) => a + (l.amount ?? 0), 0)).toBeCloseTo(15, 6);
+    const free = run(3_000_000, { cdnPlan: 'flat-free' }, 'vite-spa');
+    const over = free.premises.filter(
+      (p) => p.hit && p.id.startsWith('pool:aws:cloudfront-flat-free:'),
+    );
+    expect(over.length).toBeGreaterThan(0);
+    expect(over.every((p) => p.effect === 'adjust')).toBe(true);
+    expect(
+      free.bill.lines
+        .filter((l) => l.priceRef.planId === 'cloudfront-flat-free')
+        .reduce((a, l) => a + (l.amount ?? 0), 0),
+    ).toBe(0);
+  });
+
+  it('Amplify の前段に定額を使うと、Amplify をオリジンにする構成が未確認という事実を出す', () => {
+    const a = composeStack('aws-amplify', {
+      frontCdn: 'static',
+      cdnPlan: 'flat-pro',
+    });
+    expect(a.nodes.find((n) => n.id === 'front')!.facts).toContain(
+      'flat-amplify-origin',
+    );
+    expect(a.nodes.find((n) => n.id === 'cf')!.facts).not.toContain(
+      'flat-amplify-origin',
+    );
+  });
+});
+
 describe('AWS の構成（Vite の SPA・S3 + CloudFront + Lambda）', () => {
   it('HTML の生成が無く、API は CloudFront → API Gateway → Lambda → DB', () => {
     const a = composeStack('aws-amplify', {}, { framework: 'vite-spa' });

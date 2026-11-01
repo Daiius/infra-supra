@@ -19,7 +19,14 @@ import {
 
 export type Platform = 'cloudflare' | 'vercel' | 'sakura' | 'aws';
 export type SlotId =
-  'isrCache' | 'images' | 'db' | 'realtime' | 'frontCdn' | 'ogp' | 'apiCache';
+  | 'isrCache'
+  | 'images'
+  | 'db'
+  | 'realtime'
+  | 'frontCdn'
+  | 'ogp'
+  | 'apiCache'
+  | 'cdnPlan';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -104,6 +111,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   frontCdn: '前段の CDN',
   ogp: 'SNS のカード（OGP）',
   apiCache: 'API の応答のキャッシュ',
+  cdnPlan: 'CDN の料金のプラン',
 };
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [

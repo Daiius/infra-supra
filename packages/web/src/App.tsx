@@ -998,6 +998,10 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
           {(p.ratio! * 100).toFixed(0)}%
         </span>
       )}
+      {/* 判定に置いた仮定（話題・Bot の日の集中など。D-60）は ⓘ に畳む */}
+      {p.assumption && (
+        <Info label="この判定の仮定">{`仮定: ${p.assumption}`}</Info>
+      )}
     </li>
   );
 }

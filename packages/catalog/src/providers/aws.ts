@@ -28,6 +28,34 @@ const common = {
   },
 };
 
+/** CloudFront の定額のプランの共通の注記と事実（D-61・2026-11-01 取得）。 */
+const FLAT_NOTES = [
+  'WAF・DDoS の保護・Route 53・TLS 証明書・CloudFront Functions・ログの取り込みが込み。Lambda@Edge は従量',
+  'S3 Standard の保存のクレジット（Free 5 GB・Pro 50 GB・Business 1 TB）は数えていない（費用は高めの側）',
+  '1 プランは 1 distribution。Free は 1 アカウントで 3 つまで。このモデルは CloudFront を 1 つの distribution にまとめる',
+  '東京での違いの記述は見当たらない（未確認）',
+];
+const FLAT_FACTS = [
+  {
+    id: 'flat-overage',
+    premise:
+      'CloudFront の定額のプランは込みの量を超えても追加の請求はない。ただし超えた状態が 2〜3 か月以上続くと、より少ない・遠い拠点から配るなど性能が調整されうる（最初の月の 3 倍までの急増は影響しない）',
+    sourceIds: ['cloudfrontFlatDocs'],
+  },
+  {
+    id: 'flat-no-discount',
+    premise:
+      'CloudFront の定額のプランは他の割引・オファー（従量の常時無料など）と併用できない',
+    sourceIds: ['cloudfrontFlat'],
+  },
+  {
+    id: 'flat-amplify-origin',
+    premise:
+      '定額のプランの CloudFront のオリジンとして公式に挙がっているのは S3・ALB・API Gateway など。Amplify をオリジンにする構成は公式に未確認',
+    sourceIds: ['cloudfrontFlatDocs'],
+  },
+];
+
 export const aws: PriceBookInput = {
   schemaVersion: 1,
   provider: 'aws',
@@ -60,6 +88,13 @@ export const aws: PriceBookInput = {
     apiGatewayPricing: src('https://aws.amazon.com/api-gateway/pricing/'),
     cloudfrontPrices: src(
       'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/current/index.json',
+    ),
+    cloudfrontFlat: src('https://aws.amazon.com/cloudfront/pricing/'),
+    cloudfrontFlatDocs: src(
+      'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html',
+    ),
+    cloudfrontFlatBlog: src(
+      'https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-flat-rate-pricing-plans-with-no-overages',
     ),
     cloudfrontFree: src(
       'https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/',
@@ -151,6 +186,67 @@ export const aws: PriceBookInput = {
       scope: 'account',
       premise: 'Aurora DSQL は保存 1 GB 月まで無料（常時無料）',
       sourceIds: ['dsqlPrices', 'dsqlPricing', 'rdsFree'],
+    },
+    // CloudFront の定額のプラン（D-61）。1 プラン = 1 distribution。このモデルは AWS の構成の CloudFront を 1 つの distribution にまとめる
+    {
+      id: 'flat-free-requests',
+      quantity: 1_000_000,
+      unit: 'request',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Free（月 $0）はリクエストが月 100 万 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
+    },
+    {
+      id: 'flat-free-transfer',
+      quantity: 100,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Free（月 $0）は転送が月 100 GB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
+    },
+    {
+      id: 'flat-pro-requests',
+      quantity: 10_000_000,
+      unit: 'request',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Pro（月 $15）はリクエストが月 1,000 万 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
+    },
+    {
+      id: 'flat-pro-transfer',
+      quantity: 51_200,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Pro（月 $15）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
+    },
+    {
+      id: 'flat-business-requests',
+      quantity: 125_000_000,
+      unit: 'request',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Business（月 $200）はリクエストが月 1 億 2,500 万 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
+    },
+    {
+      id: 'flat-business-transfer',
+      quantity: 51_200,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Business（月 $200）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
     // インターネットへの転送の常時無料（全サービス・全リージョンの合計。CloudFront の 1 TB とは別）。
     // 他の事業者（Cloudflare R2）へ書き込む転送に使う（D-52）
@@ -575,6 +671,117 @@ export const aws: PriceBookInput = {
           allowancePool: 'dsql-free-storage',
           pricing: { model: 'flat', per: 1, unitPrice: 0.4 },
           sourceIds: ['dsqlPrices'],
+        },
+      ],
+    },
+    {
+      ...common,
+      id: 'cloudfront-flat-free',
+      service: 'cloudfront',
+      name: 'CloudFront 定額 Free',
+      baseFee: { amount: 0, per: 'month', scope: 'account' },
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs', 'cloudfrontFlatBlog'],
+      notes: FLAT_NOTES,
+      facts: FLAT_FACTS,
+      meters: [
+        {
+          id: 'https-requests',
+          resource: 'requests',
+          unit: 'request',
+          allowancePool: 'flat-free-requests',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+        {
+          id: 'cloudfront-transfer-out',
+          resource: 'egress-gb',
+          unit: 'gb',
+          allowancePool: 'flat-free-transfer',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+        {
+          id: 'origin-fetch',
+          resource: 'origin-transfer-gb',
+          unit: 'gb',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+      ],
+    },
+    {
+      ...common,
+      id: 'cloudfront-flat-pro',
+      service: 'cloudfront',
+      name: 'CloudFront 定額 Pro',
+      baseFee: { amount: 15, per: 'month', scope: 'account' },
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs', 'cloudfrontFlatBlog'],
+      notes: FLAT_NOTES,
+      facts: FLAT_FACTS,
+      meters: [
+        {
+          id: 'https-requests',
+          resource: 'requests',
+          unit: 'request',
+          allowancePool: 'flat-pro-requests',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+        {
+          id: 'cloudfront-transfer-out',
+          resource: 'egress-gb',
+          unit: 'gb',
+          allowancePool: 'flat-pro-transfer',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+        {
+          id: 'origin-fetch',
+          resource: 'origin-transfer-gb',
+          unit: 'gb',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+      ],
+    },
+    {
+      ...common,
+      id: 'cloudfront-flat-business',
+      service: 'cloudfront',
+      name: 'CloudFront 定額 Business',
+      baseFee: { amount: 200, per: 'month', scope: 'account' },
+      sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs', 'cloudfrontFlatBlog'],
+      notes: FLAT_NOTES,
+      facts: FLAT_FACTS,
+      meters: [
+        {
+          id: 'https-requests',
+          resource: 'requests',
+          unit: 'request',
+          allowancePool: 'flat-business-requests',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+        {
+          id: 'cloudfront-transfer-out',
+          resource: 'egress-gb',
+          unit: 'gb',
+          allowancePool: 'flat-business-transfer',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
+        },
+        {
+          id: 'origin-fetch',
+          resource: 'origin-transfer-gb',
+          unit: 'gb',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatDocs'],
         },
       ],
     },

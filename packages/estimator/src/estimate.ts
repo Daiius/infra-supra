@@ -45,7 +45,7 @@ export function toMeterUsage(
   const usage: MeterUsage[] = [];
   const unmetered: UnmeteredResource[] = [];
   const subs = new Map<string, Subscription>();
-  const { dayFactors } = sim.workload;
+  const { dayFactors, peakDayFactor } = sim.workload;
 
   for (const node of sim.architecture.nodes) {
     const nu = sim.nodes[node.id]!;
@@ -105,6 +105,8 @@ export function toMeterUsage(
         daily: {
           weekday: perDay * dayFactors.weekday,
           weekend: perDay * dayFactors.weekend,
+          // 最も多い日 = 平均の日 × (N + Σ E × 日数 / D) / 月の量（D-60）
+          ...(peakDayFactor > 1 ? { peakDay: perDay * peakDayFactor } : {}),
         },
       });
     }

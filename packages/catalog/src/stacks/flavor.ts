@@ -139,6 +139,14 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '自前の CDN を前に置き、静的なファイルと画像を CDN の料金と無料の量で配る',
   'aws:frontCdn:html':
     'ページまで自前の CDN から返すので、Amplify から配る量がいちばん減る',
+  'aws:cdnPlan:payg':
+    '使った分だけの支払い。毎月の無料で使える量も大きく、小さいうちはほぼかからない',
+  'aws:cdnPlan:flat-free':
+    '月額なしで使え、超えても請求は増えない。防御や証明書も込み',
+  'aws:cdnPlan:flat-pro':
+    '手ごろな月額で込みの量が大きく、超えても請求は増えない。防御や証明書も込み',
+  'aws:cdnPlan:flat-business':
+    '大きな込みの量と高度な機能。超えても請求は増えず、急な伸びにも備えられる',
   'aws:db:dynamodb':
     '使った分だけの支払いで、保存も一定量まで無料。アクセスが増えても自動で追従する',
   'aws:db:aurora':

@@ -212,6 +212,7 @@ describe('部品の組み合わせ', () => {
     expect([...slots].sort()).toEqual(
       [
         'apiCache',
+        'cdnPlan',
         'db',
         'frontCdn',
         'images',
