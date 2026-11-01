@@ -20,12 +20,32 @@ const CF_PAID = 1;
 const VPS_2GB = 4;
 
 describe('setupSlots', () => {
-  it('Cloudflare × Next.js: ISR のキャッシュ・画像・DB を選ぶ。提案で付くリアルタイムは選ばせない', () => {
+  it('Cloudflare × Next.js: ISR のキャッシュ・画像・DB を選ぶ。リアルタイム（提案で付く部品を除くと 1 択）とファイルの置き場（R2）は固定で出す', () => {
     const slots = setupSlots(ARTICLE_COMMUNITY, CF_PAID, 'nextjs');
-    expect(slots.map((x) => x.slot)).toEqual(['isrCache', 'images', 'db']);
+    expect(slots.map((x) => [x.slot, x.fixed])).toEqual([
+      ['isrCache', false],
+      ['images', false],
+      ['db', false],
+      ['realtime', true],
+      ['files', true],
+    ]);
     expect(
       slots.find((x) => x.slot === 'db')!.options.map((o) => o.id),
     ).toEqual(['d1', 'kv', 'hyperdrive']);
+    expect(slots.find((x) => x.slot === 'realtime')!.options).toHaveLength(1);
+    expect(slots.find((x) => x.slot === 'files')!.options[0]).toMatchObject({
+      id: 'r2',
+      label: 'R2',
+    });
+  });
+
+  it('ファイルの置き場は構成ごと（Vercel は未定の置き場・VPS はディスク）', () => {
+    const files = (i: number) =>
+      setupSlots(ARTICLE_COMMUNITY, i, 'nextjs').find(
+        (x) => x.slot === 'files',
+      )!.options[0]!.id;
+    expect(files(3)).toBe('blob');
+    expect(files(VPS_2GB)).toBe('host-disk');
   });
 
   it('フレームワークで変わる: SPA は ISR のキャッシュが無く、OGP を選ぶ', () => {

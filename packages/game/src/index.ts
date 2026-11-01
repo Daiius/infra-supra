@@ -1243,27 +1243,59 @@ export function componentSlots(state: GameState): {
 
 // ---- 始める画面の部品の選択（D-45）----
 
+/** 始める画面の部品の選択肢（files は構成が暗黙に持つファイルの置き場。catalog の fileStorageOf）。 */
+export type SetupOption = {
+  id: string;
+  platform: Platform;
+  slot: SlotId | 'files';
+  label: string;
+  note: string;
+};
+
+export type SetupSlot = {
+  slot: SlotId | 'files';
+  label: string;
+  options: SetupOption[];
+  /** この構成では 1 択（変更できない。未選択の判定に含めない）。 */
+  fixed: boolean;
+};
+
 /**
- * 始める画面で選ぶ部品のスロット（構成・フレームワークの組み合わせで）。ゲーム中の部品の欄（componentSlots）と同じ
- * スロットから、提案で付く部品（チャットの Durable Objects など）を除く。選択肢が 1 つしか残らないスロットは選ばせない。
+ * 始める画面の部品のスロット（構成・フレームワークの組み合わせで）。ゲーム中の部品の欄（componentSlots）と同じ
+ * スロットから、提案で付く部品（チャットの Durable Objects など）を除く。選択肢が 1 つしか残らないスロットは「固定」として出す。
+ * 最後に、構成が暗黙に持つファイルの置き場（R2・VPS のディスクなど。構成のノードから引く）を固定のスロットとして足す。
  * スロットの一覧は持たず、catalog の部品の定義から引く（スロットが増えても追従する）。
  */
 export function setupSlots(
   scenario: Scenario,
   stackIndex: number,
   framework: FrameworkId,
-): { slot: SlotId; label: string; options: ReturnType<typeof componentsOf> }[] {
+): SetupSlot[] {
   const draft = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
-  return componentSlots(draft)
-    .map(({ slot, label, options }) => ({
-      slot,
-      label,
-      options: options.filter(
+  const slots: SetupSlot[] = componentSlots(draft).map(
+    ({ slot, label, options }) => {
+      const usable = options.filter(
         (o) => !proposalOnlyComponent(scenario, slot, o.id),
-      ),
-    }))
-    .filter((x) => x.options.length > 1);
+      );
+      return { slot, label, options: usable, fixed: usable.length < 2 };
+    },
+  );
+  const files = fileStorageOf(STACKS[stackIndex]!.id);
+  if (files)
+    slots.push({
+      slot: 'files',
+      label: FILE_STORAGE_LABEL,
+      options: [{ ...files, slot: 'files' }],
+      fixed: true,
+    });
+  return slots.filter((x) => x.options.length > 0);
 }
+
+/** 選ぶスロット（固定でないもの）。 */
+const choosable = (slots: SetupSlot[]) =>
+  slots.filter(
+    (x): x is SetupSlot & { slot: SlotId } => !x.fixed && x.slot !== 'files',
+  );
 
 /** 選んだ部品のうち、その組み合わせで選べるものだけを残す（構成・フレームワークを替えたとき）。 */
 export function validSetupChoices(
@@ -1273,7 +1305,7 @@ export function validSetupChoices(
   choices: Choices,
 ): Choices {
   const out: Choices = {};
-  for (const x of setupSlots(scenario, stackIndex, framework)) {
+  for (const x of choosable(setupSlots(scenario, stackIndex, framework))) {
     const v = choices[x.slot];
     if (v !== undefined && x.options.some((o) => o.id === v)) out[x.slot] = v;
   }
@@ -1287,7 +1319,7 @@ export function setupProblem(
   framework: FrameworkId,
   choices: Choices,
 ): string | null {
-  const missing = setupSlots(scenario, stackIndex, framework).filter(
+  const missing = choosable(setupSlots(scenario, stackIndex, framework)).filter(
     (x) => !x.options.some((o) => o.id === choices[x.slot]),
   );
   return missing.length
@@ -1298,7 +1330,7 @@ export function setupProblem(
 /** 部品の選択肢の短い説明（フレーバー。catalog の COMPONENT_FLAVOR。D-45）。 */
 export function componentFlavor(o: {
   platform: Platform;
-  slot: SlotId;
+  slot: SlotId | 'files';
   id: string;
 }): string | undefined {
   return COMPONENT_FLAVOR[`${o.platform}:${o.slot}:${o.id}`];
@@ -3203,7 +3235,12 @@ export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
 
 // フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
-import { COMPONENT_FLAVOR, STACK_FLAVOR } from 'catalog';
+import {
+  COMPONENT_FLAVOR,
+  FILE_STORAGE_LABEL,
+  fileStorageOf,
+  STACK_FLAVOR,
+} from 'catalog';
 
 /** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
 export function stackFlavor(stackIndex: number): string | undefined {

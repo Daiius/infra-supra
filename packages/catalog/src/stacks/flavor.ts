@@ -74,6 +74,13 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '静的なファイルと画像を CDN から返す。HTML はサーバーが返すまま',
   'sakura:frontCdn:html':
     'ページまで CDN から返すので、サーバーの負荷がいちばん下がる',
+  // ファイルの保存（構成が暗黙に持つ置き場。1 択。files.ts の fileStorageOf）
+  'cloudflare:files:r2':
+    '転送量に課金されない S3 互換のストレージ。ファイルなら何でも置ける',
+  'vercel:files:blob':
+    '画像の原本の置き場はまだ決めていない。料金の計算に入らないので、費用はかからないように見える',
+  'sakura:files:host-disk':
+    'サーバーのディスクにそのまま置く。追加の契約も費用も要らない',
   // SPA の SNS のカード（OGP）
   'cloudflare:ogp:none':
     '全ページで同じカードを出す。シェルは静的なファイルのまま配れる',

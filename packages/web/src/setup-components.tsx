@@ -35,46 +35,59 @@ export function SetupComponents({
         構成の中の役割ごとに選ぶ（始める前なので手間はかからない）
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {slots.map((x) => (
-          <fieldset
-            key={x.slot}
-            className={`min-w-0 rounded-box border p-3 ${value[x.slot] ? 'border-base-300' : 'border-warning'}`}
-          >
-            <legend className="px-1 font-semibold">
-              {x.label}
-              {!value[x.slot] && (
-                <span className="ml-1 text-xs font-normal">（未選択）</span>
-              )}
-            </legend>
-            <div className="space-y-2">
-              {x.options.map((o) => (
-                <label
-                  key={o.id}
-                  className="flex cursor-pointer items-start gap-2"
-                >
-                  <input
-                    type="radio"
-                    name={`setup-${x.slot}`}
-                    className="radio radio-primary radio-sm mt-0.5 shrink-0"
-                    checked={value[x.slot] === o.id}
-                    onChange={() => onChange({ ...value, [x.slot]: o.id })}
-                  />
-                  <span className="block min-w-0">
-                    <span className="block text-sm">
-                      <NameWithInfo
-                        name={o.label}
-                        info={<Info label={`${o.label} の説明`}>{o.note}</Info>}
-                      />
-                    </span>
-                    <span className="block text-xs opacity-70">
-                      {componentFlavor(o)}
-                    </span>
+        {slots.map((x) => {
+          // 1 択のスロット（固定）は選択済み・変更不可で出す（未選択の判定に含めない。D-45）
+          const picked = x.fixed ? x.options[0]!.id : value[x.slot];
+          return (
+            <fieldset
+              key={x.slot}
+              className={`min-w-0 rounded-box border p-3 ${picked ? 'border-base-300' : 'border-warning'}`}
+            >
+              <legend className="px-1 font-semibold">
+                {x.label}
+                {x.fixed ? (
+                  <span className="ml-1 text-xs font-normal opacity-70">
+                    （この構成では 1 択）
                   </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ))}
+                ) : (
+                  !picked && (
+                    <span className="ml-1 text-xs font-normal">（未選択）</span>
+                  )
+                )}
+              </legend>
+              <div className="space-y-2">
+                {x.options.map((o) => (
+                  <label
+                    key={o.id}
+                    className={`flex items-start gap-2 ${x.fixed ? '' : 'cursor-pointer'}`}
+                  >
+                    <input
+                      type="radio"
+                      name={`setup-${x.slot}`}
+                      className="radio radio-primary radio-sm mt-0.5 shrink-0"
+                      checked={picked === o.id}
+                      disabled={x.fixed}
+                      onChange={() => onChange({ ...value, [x.slot]: o.id })}
+                    />
+                    <span className="block min-w-0">
+                      <span className="block text-sm">
+                        <NameWithInfo
+                          name={o.label}
+                          info={
+                            <Info label={`${o.label} の説明`}>{o.note}</Info>
+                          }
+                        />
+                      </span>
+                      <span className="block text-xs opacity-70">
+                        {componentFlavor(o)}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          );
+        })}
       </div>
     </div>
   );
