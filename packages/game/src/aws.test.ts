@@ -5,6 +5,8 @@ import {
   ARTICLE_COMMUNITY,
   DEFAULT_START_DATE,
   goalChecks,
+  autoImageFormat,
+  componentConflict,
   isPlanChange,
   meetsRequirement,
   newGame,
@@ -160,5 +162,23 @@ describe('AWS の構成', () => {
       (x) => x.slot,
     );
     expect(slots).toEqual(['isrCache', 'images', 'db', 'cdnPlan', 'files']);
+  });
+
+  it('OpenNext の画像の最適化は next/image（Lambda）なのでブラウザに合わせた形式の対象。画像を R2 に出しても CloudFront が残り、定額のプランを選べる（D-62・D-63）', () => {
+    expect(autoImageFormat('aws-opennext', 'nextjs', 'default')).toBe(true);
+    expect(
+      componentConflict('aws-opennext', 'cdnPlan', 'flat-pro', {
+        images: 'cf-images',
+      }),
+    ).toBeNull();
+    expect(
+      componentConflict('aws-opennext', 'images', 'cf-images', {
+        cdnPlan: 'flat-pro',
+      }),
+    ).toBeNull();
+    // Amplify（前段なし）は CloudFront が無くなるので選べない
+    expect(
+      componentConflict('aws', 'cdnPlan', 'flat-pro', { images: 'cf-images' }),
+    ).not.toBeNull();
   });
 });

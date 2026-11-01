@@ -66,6 +66,8 @@ describe('game', () => {
     // D-49: 即時反映の提案（全部受ける ② が受ける）で再検証がオンデマンドになり再生成が減る・作業の手間 3 → 2（所持金が増える。結果は変わらない）
     // D-56: オンデマンドに最大寿命 1 日の時間の再検証を足し、再生成が増える（提案を受けたあとの全部受ける ② の所持金が少し減る。結果は変わらない）
     // D-58: Next.js の画像の部品（Vercel）は既定で WebP を配る（JPEG より小さく、Fast Data Transfer が減って Vercel の構成の所持金が増える。CF・VPS の値は変わらない）
+    // D-62: Cloudflare Images の閲覧のときの変換も WebP で配る。CF Paid・既定の所持金・結果は変わらない（R2 の転送は無料で、変換の数も形式で増えない）。
+    //       KV を DB の代わりにする基準プレイは、ページが軽くなり速さが「悪い」月が減って所持金が増える（シード 42・3。31 は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -80,7 +82,7 @@ describe('game', () => {
       'vercel-pro': ['947.73', 'goal', 12],
       'vercel-to-cf': ['1635.10', 'goal', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1882.01', 'won', 12],
+      'cf-paid-kvdb': ['1947.35', 'won', 12],
       'cf-paid-chat': ['2154.01', 'won', 12],
       'vps-sla': ['1731.82', 'won', 12],
     });
@@ -91,7 +93,7 @@ describe('game', () => {
       'vercel-pro': ['809.20', 'goal', 12],
       'vercel-to-cf': ['1730.33', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1907.89', 'won', 12],
+      'cf-paid-kvdb': ['1964.47', 'won', 12],
       'cf-paid-chat': ['2181.80', 'won', 12],
       'vps-sla': ['1801.47', 'won', 12],
     });

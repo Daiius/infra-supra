@@ -150,6 +150,24 @@ export function usesNextImage(
   );
 }
 
+/**
+ * 閲覧のときに、ブラウザに合わせた形式（WebP）で配る構成か（D-62）。next/image（usesNextImage）に加えて、
+ * Cloudflare Images の閲覧のときの変換（Cloudflare の構成の Images・他の事業者の部品 cf-images）。
+ * Cloudflare Images の format=auto は「Automatically serves the most efficient format that the requesting browser supports」
+ * （URL の変換。Workers・バインディングでは Accept を見て形式を選ぶ公式の例がある）。AVIF も選びうるが、next/image と揃えて
+ * WebP とみなす（AVIF の設定を選べばそちら。推奨案）。images は部品の id（他の事業者の部品は振る舞いで見る）。
+ */
+export function autoImageFormat(
+  platform: Platform,
+  framework: FrameworkId,
+  images: string | undefined,
+): boolean {
+  return (
+    usesNextImage(platform, framework, images) ||
+    imagesBehavior(platform, images) === 'images'
+  );
+}
+
 /** 戻せる設定（prd/07 §9.5）。値はゲーム上の仮定。 */
 export const SETTINGS = {
   format: {
@@ -658,7 +676,7 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? { pages: p.stock.articlePages }
       : {}),
   }));
-  const nextImage = usesNextImage(
+  const nextImage = autoImageFormat(
     p.platform,
     p.framework,
     { ...DEFAULT_CHOICES[p.platform], ...p.components }.images,
@@ -1386,8 +1404,10 @@ export function settingNote(
   if (key !== 'format') return undefined;
   const platform = STACKS[state.stackIndex]!.provider;
   const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
-  return usesNextImage(platform, state.framework, images)
-    ? 'Next.js の画像の部品は、ブラウザに合わせて既定で WebP を配る（JPEG を選んでも WebP）'
+  if (usesNextImage(platform, state.framework, images))
+    return 'Next.js の画像の部品は、ブラウザに合わせて既定で WebP を配る（JPEG を選んでも WebP）';
+  return autoImageFormat(platform, state.framework, images)
+    ? 'Cloudflare Images の閲覧のときの変換は、ブラウザに合わせた形式（format=auto）で配る（JPEG を選んでも WebP とみなす）'
     : undefined;
 }
 
@@ -1396,7 +1416,7 @@ export function deliveredImageKB(
   sc: Scenario,
   settings: Settings,
   images: string | undefined,
-  /** Next.js の画像の部品で変換する（JPEG を選んでも WebP で配る。usesNextImage）。 */
+  /** 閲覧のときにブラウザに合わせた形式で配る（JPEG を選んでも WebP。autoImageFormat。D-58・D-62）。 */
   nextImage = false,
 ): number {
   if (images === 'none') return sc.unoptimizedImageKB;
@@ -1447,7 +1467,7 @@ export function pageWeightOf(state: GameState, images?: string): string {
       state.settings,
       state.mods,
       opt,
-      usesNextImage(platform, state.framework, opt),
+      autoImageFormat(platform, state.framework, opt),
     ),
   );
 }
@@ -1515,7 +1535,12 @@ export function componentConflict(
   slot: SlotId,
   option: string,
   choices: Choices,
+  /** フレームワーク（AWS の CDN の料金のプランの判定に使う。省略は Next.js）。 */
+  framework: FrameworkId = 'nextjs',
 ): string | null {
+  // OpenNext は 1 つの CloudFront がページを返すので、画像を R2 に出しても CloudFront は残る（同じ規則で衝突しない。D-63）
+  if (platform === 'aws' || platform === 'aws-opennext')
+    return cdnPlanConflict(platform, slot, option, choices, framework);
   if (platform !== 'sakura') return null;
   if (
     slot === 'apiCache' &&
@@ -1530,6 +1555,44 @@ export function componentConflict(
   )
     return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';
   return null;
+}
+
+/** AWS の構成に CloudFront（課金されるノード）があるか。 */
+function hasCloudFront(
+  platform: Platform,
+  choices: Choices,
+  framework: FrameworkId,
+): boolean {
+  const def = STACK_DEFS.find((d) => d.platform === platform);
+  if (!def) return false;
+  return composeStack(def, choices, { framework }).nodes.some((n) =>
+    n.billing?.planId.startsWith('cloudfront'),
+  );
+}
+
+/**
+ * CDN の料金のプラン（D-61）は CloudFront があるときだけ効く。前段の CloudFront が無い Amplify で画像を他の事業者（R2）に出すと
+ * CloudFront が無くなるので、定額のプランは選べない（B-11・D-62。効かない設定の扱い D-47 と同じ形で理由を出す）。
+ * 定額のプランを選んでいる間は、CloudFront が無くなる選択（画像を R2 に出す・前段を外す）も選べない（頼る側を先に戻す。D-37 と同じ）。
+ */
+function cdnPlanConflict(
+  platform: Platform,
+  slot: SlotId,
+  option: string,
+  choices: Choices,
+  framework: FrameworkId,
+): string | null {
+  const flat = (v: string | undefined) => v !== undefined && v !== 'payg';
+  if (slot === 'cdnPlan')
+    return flat(option) && !hasCloudFront(platform, choices, framework)
+      ? 'この構成には CloudFront が無い（前段の CloudFront が無く、画像も他の事業者から配る）ので、CDN の料金のプランは効かない'
+      : null;
+  if (!flat(choices.cdnPlan)) return null;
+  const next = { ...choices, [slot]: option };
+  return hasCloudFront(platform, choices, framework) &&
+    !hasCloudFront(platform, next, framework)
+    ? 'CloudFront が無くなり、定額のプランが効かなくなる（先に CDN の料金のプランを従量に戻す）'
+    : null;
 }
 
 /** 行動の規則（手間の残りは見ない）。選べない理由を区別して返す。 */
@@ -1635,6 +1698,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         action.slot,
         action.option,
         current,
+        state.framework,
       );
       if (conflict) return ng('unavailable', conflict);
       // 提案で付く部品は、提案が届いている月だけ選べる（選ぶと提案を受けたのと同じ）
@@ -1838,7 +1902,10 @@ export function validSetupChoices(
   const platform = STACKS[stackIndex]!.provider;
   for (const x of [...slots].reverse()) {
     const v = out[x.slot];
-    if (v !== undefined && componentConflict(platform, x.slot, v, out))
+    if (
+      v !== undefined &&
+      componentConflict(platform, x.slot, v, out, framework)
+    )
       delete out[x.slot];
   }
   return out;
@@ -2701,7 +2768,7 @@ export function playMonth(input: GameState): GameState {
       sc,
       state.settings,
       imgs,
-      usesNextImage(platformNow, state.framework, comps.images),
+      autoImageFormat(platformNow, state.framework, comps.images),
     ),
     // 最適化しない・一律で縮めて置くは、サイズ違いを作らず 1 種を配る（D-47）
     ...(imgs === 'resize' || imgs === 'none' ? { variants: 1 } : {}),
@@ -2785,7 +2852,7 @@ export function playMonth(input: GameState): GameState {
         state.settings,
         state.mods,
         imgs,
-        usesNextImage(platformNow, state.framework, comps.images),
+        autoImageFormat(platformNow, state.framework, comps.images),
       ),
     ),
     qualityReason: redesign,

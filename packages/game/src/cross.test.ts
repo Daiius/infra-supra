@@ -4,7 +4,12 @@ import {
   accountUpkeepOf,
   addedAccounts,
   applyAction,
+  autoImageFormat,
   checkAction,
+  componentConflict,
+  deliveredImageKB,
+  settingNote,
+  validSetupChoices,
   effortAvailable,
   componentEffortLabel,
   EFFORT,
@@ -282,5 +287,89 @@ describe('差し替えで増える維持の手間の余力（OCL-73780314）', (
     const ok = { ...tight, plannedEffort: tight.plannedEffort - 0.5 };
     expect(checkAction(ok, swap('cf-images')).ok).toBe(true);
     expect(effortAvailable(applyAction(ok, swap('cf-images')))).toBe(0);
+  });
+});
+
+describe('閲覧のときに変換するサービスの形式（D-62）', () => {
+  it('Cloudflare Images（Cloudflare の構成・cf-images）も next/image と同じくブラウザに合わせて WebP で配る', () => {
+    expect(autoImageFormat('cloudflare', 'nextjs', 'images')).toBe(true);
+    expect(autoImageFormat('cloudflare', 'vite-spa', 'images')).toBe(true);
+    expect(autoImageFormat('vercel', 'vite-spa', 'cf-images')).toBe(true);
+    expect(autoImageFormat('aws', 'nextjs', 'cf-images')).toBe(true);
+    expect(autoImageFormat('vercel', 'nextjs', 'default')).toBe(true);
+    // 投稿のときに作る・縮める・原本は設定の形式のまま
+    for (const id of ['r2-variants', 'resize', 'none'])
+      expect(autoImageFormat('cloudflare', 'nextjs', id)).toBe(false);
+    expect(autoImageFormat('vercel', 'nextjs', 'cf-resize')).toBe(false);
+    expect(
+      deliveredImageKB(
+        ARTICLE_COMMUNITY,
+        newGame(CF_PAID).settings,
+        'images',
+        autoImageFormat('cloudflare', 'nextjs', 'images'),
+      ),
+    ).toBe(IMAGE_FORMAT_KB.webp);
+  });
+
+  it('設定の注記: Cloudflare Images は format=auto で配る', () => {
+    const s = playMonth(newGame(CF_PAID));
+    expect(settingNote(s, 'format')).toContain('format=auto');
+  });
+});
+
+describe('前段の無い Amplify で画像を R2 に出すと CDN の料金のプランは効かない（B-11・D-62）', () => {
+  it('定額のプランは選べず理由を出す。前段の CloudFront があれば選べる。SPA は CloudFront が残る', () => {
+    const why = componentConflict('aws', 'cdnPlan', 'flat-pro', {
+      images: 'cf-images',
+    });
+    expect(why).toContain('CloudFront が無い');
+    expect(
+      componentConflict('aws', 'cdnPlan', 'payg', { images: 'cf-images' }),
+    ).toBeNull();
+    expect(
+      componentConflict('aws', 'cdnPlan', 'flat-pro', {
+        images: 'cf-images',
+        frontCdn: 'static',
+      }),
+    ).toBeNull();
+    expect(
+      componentConflict(
+        'aws',
+        'cdnPlan',
+        'flat-pro',
+        { images: 'cf-images' },
+        'vite-spa',
+      ),
+    ).toBeNull();
+  });
+
+  it('定額のプランの間は、CloudFront が無くなる選択（画像を R2 に出す）も選べない', () => {
+    expect(
+      componentConflict('aws', 'images', 'cf-resize', { cdnPlan: 'flat-pro' }),
+    ).toContain('従量に戻す');
+    expect(
+      componentConflict('aws', 'images', 'cf-resize', { cdnPlan: 'payg' }),
+    ).toBeNull();
+  });
+
+  it('始める画面・ゲーム中で同じ規則', () => {
+    expect(
+      validSetupChoices(ARTICLE_COMMUNITY, AWS, 'nextjs', {
+        images: 'cf-images',
+        cdnPlan: 'flat-pro',
+      }),
+    ).not.toHaveProperty('cdnPlan');
+    const s = playMonth(
+      newGame(AWS, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
+        images: 'cf-images',
+      }),
+    );
+    expect(
+      checkAction(s, {
+        type: 'component',
+        slot: 'cdnPlan',
+        option: 'flat-pro',
+      }),
+    ).toMatchObject({ ok: false, reason: 'unavailable' });
   });
 });

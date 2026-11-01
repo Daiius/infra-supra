@@ -7,6 +7,7 @@ import {
   SETTINGS,
   setupRevalidateOptions,
   setupSlots,
+  STACKS,
   type FrameworkId,
   type Scenario,
 } from 'game';
@@ -64,7 +65,14 @@ export function SetupComponents({
                   const why =
                     x.fixed || x.slot === 'files'
                       ? null
-                      : componentConflict(o.platform, x.slot, o.id, value);
+                      : // 部品の事業者でなく構成の事業者で見る（他の事業者の部品も、構成の規則で判定する。D-52）
+                        componentConflict(
+                          STACKS[stackIndex]!.provider,
+                          x.slot,
+                          o.id,
+                          value,
+                          framework,
+                        );
                   return (
                     <label
                       key={o.id}
