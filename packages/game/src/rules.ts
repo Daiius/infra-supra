@@ -50,6 +50,8 @@ export const EFFORT = {
   selfHostedUpkeep: ARTICLE_COMMUNITY.effort.selfHostedUpkeep,
   /** 設定の変更の手間。 */
   setting: { compress: 1, variants: 1, isr: 0 },
+  /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */
+  onDemandSwitch: 2,
   optimize: 4,
   /** SSR の最適化 1 段で減る CPU と下限。 */
   optimizeStepMs: 5,

@@ -49,6 +49,18 @@ N(isr-revalidate) = Σ miss_r                           （ISR の再生成 = CD
 N(api-content)    = Σ 閲覧_r（SPA で cacheSeconds を持つルートだけ。持たない中身は api にまとめる）
 ```
 
+**オンデマンドの再検証**（D-49）: ISR のルートに `onDemandUpdatesPerMonth`（月の内容の更新の回数 U）を与えると、`revalidateSeconds` の代わりに
+更新のあとの最初の閲覧で 1 回作り直すとして数える。
+
+```
+miss_r = U_r × 閲覧_r / (U_r + 閲覧_r)      （更新と閲覧がページに一様に散ると仮定。U ≪ 閲覧なら U、閲覧 ≪ U なら閲覧に近づく）
+ピークの miss の割合は月の平均と同じとみなす（更新も閲覧と同じ時間帯の形と仮定）
+```
+
+ゲームでは U = 月の PV × 1 PV あたりの API の呼び出し × 書き込みの割合（`writesPerCall`）× **ページを変える割合 0.5**
+（記事の投稿・編集・ページに出るコメント。いいね・既読などはページを変えない。ゲーム上の仮定 `ON_DEMAND_PAGE_UPDATE_SHARE`）。
+記事コミュニティの 1 か月目（30 万 PV）で U = 1.5 万回、5 分の間隔の再生成（約 18 万回）の 1 割未満になる。
+
 構成の `cdn` は `ttlClasses` に挙げたクラス、`function` は `cache.classes` に挙げたクラス（Workers の Cache API などコードの中のキャッシュ。
 リクエスト・実行の件数は変わらず、ヒットは `hitCpuMs` だけ・次のノードへは miss だけ）でこのヒット率を使う。
 キャッシュの後ろへ渡す流れは、ルートごとの miss の件数で重み付けした処理（`ResolvedWorkload.cacheMissFlow`）にする。閲覧の密度と処理の重さがルートで違うと、クラス全体の平均の処理に miss 率を掛けた値とずれるため（OCL-48C8B649）。

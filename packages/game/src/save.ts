@@ -30,6 +30,8 @@ export type SaveData = {
    * 始める画面で選んだ部品（D-45）。部品を選べるようになる前の保存には無く、そのときは今の既定の部品で読む（版は上げない）。
    */
   components?: Choices;
+  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。無い保存は今の既定（5 分）で読む。 */
+  revalidateSec?: number;
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
 };
@@ -65,6 +67,12 @@ export function parseSave(raw: unknown): SaveData | null {
   const { scenarioId, stackIndex, seed, startDate, turns } = raw;
   const framework = raw.framework ?? 'nextjs';
   const components = raw.components;
+  const revalidateSec = raw.revalidateSec;
+  if (
+    revalidateSec !== undefined &&
+    !(typeof revalidateSec === 'number' && Number.isFinite(revalidateSec))
+  )
+    return null;
   if (
     components !== undefined &&
     !(
@@ -98,6 +106,7 @@ export function parseSave(raw: unknown): SaveData | null {
     seed,
     startDate,
     ...(components ? { components: components as Choices } : {}),
+    ...(revalidateSec !== undefined ? { revalidateSec } : {}),
     turns: turns as Action[][],
   };
 }
@@ -117,6 +126,7 @@ export function replaySave(save: SaveData): GameState {
       save.startDate,
       save.framework,
       save.components,
+      save.revalidateSec,
     ),
   );
   for (const actions of save.turns) {
