@@ -4,6 +4,8 @@
 import type { Choices, SlotId } from 'catalog';
 import { describe, expect, it } from 'vitest';
 import {
+  applyAction,
+  checkAction,
   componentConflict,
   frameworksOf,
   newGame,
@@ -195,6 +197,95 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
       }
     });
     expect(problems).toEqual([]);
+  });
+});
+
+// アプリの作り直し（D-81）: 各組み合わせ（3 つに 1 つ）で 1 か月目の終わりに作り直しを始め、終わるまで回す。
+// 作り直した後の部品は、新しいフレームワークの始める画面で選べる組み合わせになっている（死んだ選択・依存の崩れが無い）
+describe('作り直しの総当たり（2 シナリオ × 構成 × 元と先のフレームワーク × 部品）', () => {
+  const PAIRS = GROUPS.flatMap((g) =>
+    frameworksOf(g.sc)
+      .allowed.filter((to) => to !== g.fw)
+      .map((to) => ({ ...g, to })),
+  );
+  let switchedAll = 0;
+  it.each(
+    PAIRS.map((p) => [
+      `${p.sc.id} × ${STACKS[p.stackIndex]!.id} × ${p.fw} → ${p.to}`,
+      p,
+    ]),
+  )('%s', (_, { sc, fw, to, stackIndex }) => {
+    const platform = STACKS[stackIndex]!.provider;
+    const supported = stackSupports(stackIndex, to);
+    const problems: string[] = [];
+    let switched = 0;
+    selectableCombos(sc, stackIndex, fw).forEach((c, i) => {
+      if (i % 3 !== 0) return;
+      const seed = 2000 + i;
+      const id = `${JSON.stringify(c)} seed=${seed}`;
+      try {
+        const m1 = playMonth(newGame(stackIndex, seed, sc, undefined, fw, c));
+        if (m1.phase !== 'playing') return;
+        const action = { type: 'rewrite', framework: to } as const;
+        const check = checkAction(m1, action);
+        // 載せられない組（Astro・静的書き出し × AWS など）は理由を付けて選べない
+        if (!supported) {
+          if (check.ok || check.reason !== 'unavailable')
+            problems.push(`${id}: 載せられない組が選べる`);
+          return;
+        }
+        if (!check.ok) {
+          problems.push(`${id}: ${check.message}`);
+          return;
+        }
+        let st = playMonth(applyAction(m1, action));
+        while (st.phase === 'playing' && st.rewrite) st = playMonth(st);
+        if (st.rewrite === null && st.framework !== to)
+          problems.push(
+            `${id}: 作り直しが済んだのにフレームワークが ${st.framework}`,
+          );
+        if (st.rewrite === null && st.framework === to) {
+          switched++;
+          // 作り直した後の部品は、新しいフレームワークの始める画面で選べる（提案で付く部品・既定の部品は除いて同じ）
+          const valid = validSetupChoices(sc, stackIndex, to, st.components);
+          for (const x of choosable(sc, stackIndex, to, st.components)) {
+            const v = st.components[x.slot];
+            if (v === undefined || valid[x.slot] !== v)
+              problems.push(`${id}: 作り直した後の ${x.slot}=${v} が選べない`);
+            else if (componentConflict(platform, x.slot, v, st.components, to))
+              problems.push(
+                `${id}: 作り直した後の ${x.slot}=${v} が依存に当たる`,
+              );
+          }
+        }
+        while (st.phase === 'playing') st = playMonth(st);
+        for (const v of violations(st)) problems.push(`${id}: ${v}`);
+        // 保存 → 再生で同じ最終状態（いくつかの組で。D-26）
+        if (i % 30 === 0) {
+          let save = withTurn(
+            newSave({
+              scenarioId: sc.id,
+              stackIndex,
+              framework: fw,
+              seed,
+              startDate: st.startDate,
+              components: c,
+            }),
+            [action],
+          );
+          for (let t = 2; t < st.history.length; t++) save = withTurn(save, []);
+          expect(replaySave(save)).toEqual(st);
+        }
+      } catch (e) {
+        problems.push(`${id}: ${(e as Error).message}`);
+      }
+    });
+    expect(problems).toEqual([]);
+    switchedAll += switched;
+  });
+  // 無料のプランなどは作り直しが済む前に終わる組もあるので、全体で十分な数が済むことを確かめる
+  it('作り直しが済んだ組が十分にある', () => {
+    expect(switchedAll).toBeGreaterThan(300);
   });
 });
 

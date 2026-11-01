@@ -27,9 +27,12 @@ import {
   goalChecks,
   isPlanChange,
   stackChangeText,
+  rewriteTargets,
+  rewriteText,
   stackFlavor,
   stackName,
   frameworksOf,
+  FRAMEWORKS,
   hiddenSettings,
   type FrameworkId,
   storageOptionText,
@@ -812,7 +815,7 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
       : []),
     { label: '出来事への対応', value: e.interrupt, cls: 'bg-error' },
     {
-      label: '乗り換え・DB や API の移し替え',
+      label: '乗り換え・作り直し・DB や API の移し替え',
       value: e.migration,
       cls: 'bg-secondary',
     },
@@ -880,6 +883,17 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
             className="progress progress-secondary ml-2 w-24"
             value={r.migration.done}
             max={r.migration.required}
+          />
+        </div>
+      )}
+      {r.rewrite && (
+        <div className="mt-2 text-sm">
+          {r.rewrite.toLabel} へ作り直し中（今月は旧アプリのまま）:{' '}
+          {r.rewrite.done} / {r.rewrite.required}
+          <progress
+            className="progress progress-secondary ml-2 w-24"
+            value={r.rewrite.done}
+            max={r.rewrite.required}
           />
         </div>
       )}
@@ -1080,6 +1094,8 @@ function Actions({
   );
   const [optimize, setOptimize] = useState(false);
   const [stackChange, setStackChange] = useState<number | null>(null);
+  /** アプリの作り直し（フレームワークを替える。D-81）。 */
+  const [rewriteTo, setRewriteTo] = useState<FrameworkId | null>(null);
   /** 提案への返事（選ばなければ断る）。 */
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [blockBots, setBlockBots] = useState(false);
@@ -1091,6 +1107,7 @@ function Actions({
     setSettings({});
     setOptimize(false);
     setStackChange(null);
+    setRewriteTo(null);
     setAnswers({});
     setBlockBots(false);
     setStorage(false);
@@ -1102,6 +1119,7 @@ function Actions({
       settings?: Partial<Record<SettingKey, number>>;
       optimize?: boolean;
       stack?: number | null;
+      rewrite?: FrameworkId | null;
       answers?: Record<string, boolean>;
       blockBots?: boolean;
       storage?: boolean;
@@ -1111,6 +1129,7 @@ function Actions({
     const st = o.settings ?? settings;
     const opt = o.optimize ?? optimize;
     const stack = o.stack === undefined ? stackChange : o.stack;
+    const rw = o.rewrite === undefined ? rewriteTo : o.rewrite;
     const ans = o.answers ?? answers;
     const ps = o.parts ?? parts;
     const out: Action[] = [];
@@ -1134,6 +1153,8 @@ function Actions({
     for (const [key, value] of Object.entries(st))
       out.push({ type: 'set', key: key as SettingKey, value: value! });
     if (opt) out.push({ type: 'optimize' });
+    // 作り直しは残りの手間をすべて取れるので、ほかの行動の後に当てる（D-81）
+    if (rw !== null) out.push({ type: 'rewrite', framework: rw });
     return out;
   };
   /**
@@ -1440,6 +1461,48 @@ function Actions({
             })}
           </div>
         )}
+        <div className="divider my-1 text-xs">
+          アプリを作り直す（フレームワークを替える）
+        </div>
+        {state.rewrite ? (
+          <div className="text-sm">
+            {FRAMEWORKS[state.rewrite.to].label} へ作り直し中（
+            {state.rewrite.done} / {state.rewrite.required}{' '}
+            ポイント）。済むまで今のアプリのまま動き、乗り換え・部品の差し替えはできない。
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {[null, ...rewriteTargets(state)].map((fw) => {
+              const why = fw === null ? null : blocked(build({ rewrite: fw }));
+              const ok = why === null;
+              const text = fw === null ? null : rewriteText(state, fw);
+              return (
+                <label
+                  key={fw ?? 'keep'}
+                  className={`flex items-start gap-3 py-1 ${ok ? 'cursor-pointer' : 'opacity-50'}`}
+                >
+                  <input
+                    type="radio"
+                    className="radio radio-sm mt-1"
+                    checked={rewriteTo === fw}
+                    disabled={!ok}
+                    onChange={() => setRewriteTo(fw)}
+                  />
+                  {text ? (
+                    <OptionText
+                      name={text.name}
+                      meta={text.meta}
+                      info={<Info>{text.detail}</Info>}
+                      why={why}
+                    />
+                  ) : (
+                    <span>{FRAMEWORKS[state.framework].label} のまま</span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        )}
         <div className="card-actions items-center justify-end">
           {actions.length > 0 && (
             <button className="btn btn-ghost btn-sm" onClick={reset}>
@@ -1484,7 +1547,10 @@ function ComponentsSection({
 }) {
   const slots = componentSlots(state);
   if (slots.length === 0) return null;
-  const busy = state.migration !== null || state.componentSwap !== null;
+  const busy =
+    state.migration !== null ||
+    state.componentSwap !== null ||
+    state.rewrite !== null;
   return (
     <>
       <div className="divider my-1 text-xs">
@@ -1494,7 +1560,9 @@ function ComponentsSection({
         <div className="text-sm">
           {state.componentSwap
             ? `${swapLabel(state.componentSwap.slot)}の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）。`
-            : '乗り換えの最中。'}
+            : state.rewrite
+              ? 'アプリの作り直しの最中。'
+              : '乗り換えの最中。'}
           済むまで部品は差し替えられない。
         </div>
       ) : (
