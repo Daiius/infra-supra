@@ -60,6 +60,14 @@ export type ResolvedWorkload = {
    * λT を peakHourFactor 倍して出す（容量の判定だけに使う。課金は cacheHitRate。D-44・prd/04 §2）。
    */
   peakCacheHitRate: Partial<Record<RequestClass, number>>;
+  /**
+   * 期間つきのキャッシュを miss した流れ（ルートごとの miss の件数で重み付けしてまとめる。OCL-48C8B649）。
+   * 閲覧の密度・期間・処理の重さがルートで違うと、miss の 1 件あたりの処理はクラス全体の平均と違うので、
+   * キャッシュの後ろへはこの流れを渡す（件数は cacheHitRate と整合する）。
+   */
+  cacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
+  /** ピークの時間帯の miss の流れ（peakCacheHitRate と整合する。容量の判定だけに使う。D-44）。 */
+  peakCacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
@@ -147,6 +155,11 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   const spaData: ClassFlow[] = [];
   /** SPA の共有の中身のうち、応答をキャッシュするもの（cacheSeconds）。hits はキャッシュから返る件数。 */
   const spaContent: ClassFlow[] = [];
+  /** ルートごとの miss の流れ（キャッシュの後ろへ渡す）。 */
+  const spaContentMiss: ClassFlow[] = [];
+  const isrMiss: ClassFlow[] = [];
+  const spaContentPeakMiss: ClassFlow[] = [];
+  const isrPeakMiss: ClassFlow[] = [];
   let spaContentHits = 0;
   let spaContentViews = 0;
   let isrViews = 0;
@@ -183,9 +196,11 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           (views / r.pages) * (r.cacheSeconds / SECONDS_PER_MONTH);
         const misses = views / (1 + lambdaT);
         spaContent.push(flow(views, work));
+        spaContentMiss.push(flow(misses, work));
         spaContentHits += views - misses;
         spaContentViews += views;
         spaContentPeakMisses += views / (1 + lambdaT * peakRate);
+        spaContentPeakMiss.push(flow(views / (1 + lambdaT * peakRate), work));
         derivations.push({
           id: `api-cache-misses:${r.id}`,
           label: `API の応答のキャッシュの取り直し（${r.id}）`,
@@ -224,17 +239,18 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     } else if (r.rendering === 'ssr') {
       byRendering.ssr.push(flow(views, work));
     } else {
-      byRendering.isr.push(
-        flow(views, { kb: p.responseKB, cpuMs: r.cachedServeCpuMs }),
-      );
+      const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };
+      byRendering.isr.push(flow(views, served));
       // 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → 閲覧 / (1 + λT)（人気が一様と仮定。prd/04 §2）
       const lambdaT =
         (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH);
       const count = views / (1 + lambdaT);
       revalidations.push(flow(count, work));
+      isrMiss.push(flow(count, served));
       isrViews += views;
       isrMisses += count;
       isrPeakMisses += views / (1 + lambdaT * peakRate);
+      isrPeakMiss.push(flow(views / (1 + lambdaT * peakRate), served));
       if (count > 0) {
         isrWithRevalidate = Math.max(
           isrWithRevalidate,
@@ -326,6 +342,16 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       ...(isrViews > 0 ? { 'document-isr': 1 - isrPeakMisses / isrViews } : {}),
       ...(spaContentViews > 0
         ? { 'api-content': 1 - spaContentPeakMisses / spaContentViews }
+        : {}),
+    },
+    cacheMissFlow: {
+      ...(isrViews > 0 ? { 'document-isr': merge(isrMiss) } : {}),
+      ...(spaContentViews > 0 ? { 'api-content': merge(spaContentMiss) } : {}),
+    },
+    peakCacheMissFlow: {
+      ...(isrViews > 0 ? { 'document-isr': merge(isrPeakMiss) } : {}),
+      ...(spaContentViews > 0
+        ? { 'api-content': merge(spaContentPeakMiss) }
         : {}),
     },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
