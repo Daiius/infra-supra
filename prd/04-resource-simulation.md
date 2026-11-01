@@ -14,9 +14,14 @@
 | `hit(k)` | CDN のクラス k のヒット率 | assumption |
 | `size(k)` | クラス k の平均応答サイズ | template-default |
 | `cpu(k), io(k)` | クラス k の 1 リクエストあたり CPU ms・I/O 待ち ms | assumption |
-| `burst` | 時間内のピーク / 平均の比 | assumption |
+| `peakHourFactor` | 多い時間帯 / 平均の時間の比（時間より短い山も含めた容量の判定用の係数。D-83） | template-default（ゲーム上の仮定） |
 
 月は 730 時間（01 §3.3）。週の時間 h の月間件数は `月間件数 × w(h)`、h の平均 RPS は `月間件数 × w(h) / (730 / 168) / 3600`。
+
+> 実装（D-83）: 代表週の重み `w(h)` と時間内の山の比 `burst` は入れていない。容量の判定のピークは
+> `月の総量 / 月の秒数 × peakHourFactor`（× 話題・Bot の集中の倍率。§3.8）の 1 つの係数で表し、時間より短い山もこの係数に含める
+> （記事コミュニティ 2.5・受託の業務アプリ 4。どちらもテンプレートの仮定で、出典のある値ではない）。下の式の `max_h(… × burst)` は
+> `… × peakHourFactor` と読む。
 
 ## 2. リクエストクラスの件数
 
@@ -34,7 +39,8 @@ N(image-write)     = MAU × アップロード数/MAU/月
 ```
 N(document-isr-revalidate) = Σ_ISR ルート min(そのルートの閲覧数, 730h × 3600 / revalidateSeconds) × キャッシュの地域数
 N(middleware)              = runsOn が all なら全リクエスト、dynamic-only なら動的なクラスの件数
-N(image-transform)         = on-demand なら 画像の種類 × variantsPerImage（変換結果がキャッシュされる前提。再変換率は assumption）
+N(image-transform)         = on-demand なら min(画像の種類 × variantsPerImage, N(image-read))（変換結果がキャッシュされる前提。再変換率は assumption）
+                             投稿のときに作るなら N(image-write) × variantsPerImage、作らないなら 0（D-24 の transformAt）
 ```
 
 ISR のルートの閲覧（`document-isr`）自体は CDN・ホストのキャッシュで返るクラスとして数え、再生成だけが関数に届く。
@@ -157,7 +163,7 @@ storage      = 初期容量 + 増加量 × 経過月      （見積モードは�
 
 ```
 storage-gb-month = 保存量（保持期間を考慮した平均）
-object-writes    = N(image-write) × (1 + 派生画像の数)
+object-writes    = N(image-write) × (1 + 派生画像の数)   （派生 = サイズ違い variants。投稿のときに作る構成だけ。D-83）
 object-reads     = N_in(image-read)            （CDN の miss だけが届く）
 egress           = object-reads × size(image)  （edge の boundary で無料／有料が分かれる）
 ```
@@ -214,5 +220,14 @@ peakHourFactor(その月) = ピーク係数 × 倍率
 ## 5. 未決（要確認）
 
 - 月内の成長を扱うか（ゲームで月末にユーザー数が倍になる場合など）。MVP は月初の値で代表させる案。→ D-09（暫定）で月初の値に決めた。話題・Bot の月内の集中だけは §3.8 で扱う（D-44・D-60）。
-- `burst` の既定値。（話題・Bot のスパイクは §3.8 で入れた。D-44）
-- 画像の派生（サムネイル生成）を `image-write` の処理として数えるか、別のバッチとして数えるか。
+- ~~`burst` の既定値~~ → **D-83（決定済み）**: `burst` は入れない（コードにも無い）。時間より短い山は `peakHourFactor` に含め、
+  話題・Bot の集中は §3.8（D-44・D-60）の倍率で表す。§1 の注記のとおり、式の `burst` は `peakHourFactor` と読む。
+- ~~画像の派生（サムネイル生成）を `image-write` の処理として数えるか、別のバッチとして数えるか~~ → **D-83（決定済み）**:
+  - 記事の一覧などのサムネイルは**サイズ違い（`images.variants`）の 1 つ**として数え、別には数えない。テンプレートの `variants: 3` は
+    「サムネイル・本文の幅・大きい表示」の 3 つと読む。1 ページで配る画像の数（`perPage.images`: 記事コミュニティは 5 枚）は
+    一覧のサムネイルも含めたページの平均で、一覧のページを別のルートにはしない。配る 1 枚の大きさ（`images.sizeKB`）もサイズ違いを
+    混ぜた平均と読む（サムネイルは小さいが、平均で代表させる近似）。
+  - 派生を作る処理は `image-write` の処理にも別のバッチにもせず、`image-transform` のクラスで数える。いつ作るかは部品の
+    `transformAt`（D-24）で決まる: 閲覧のとき = min(種類 × サイズ違い, 画像の閲覧)・投稿のとき = 投稿数 × サイズ違い（書き込みにも足す）・
+    作らない = 0。形式のフォールバック（D-58: 投稿のときに作る構成で WebP・AVIF なら JPEG も作る）はサイズ違いの数を 2 倍にして表す。
+  - 投稿のときに作るサイズ違いの保存量は、1 枚を `sizeKB` とみなす（サムネイルの分は多めに数える近似）。値は変えていない。
