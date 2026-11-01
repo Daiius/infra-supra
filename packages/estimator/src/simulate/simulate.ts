@@ -290,6 +290,9 @@ function consume(
       else add(u, 'isr-reads', n * units);
       return f;
     }
+    case 'ci-build':
+      // 経路を持たない（ビルドの時間は staticUsage で数える。D-68）
+      return f;
     case 'host': {
       hostAcc.kb += n * p.kb;
       hostAcc.requests += n;
@@ -333,6 +336,10 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
           : 0) +
           w.storage.isrPagesGB * node.config.isrCacheSizeFactor,
       );
+      break;
+    case 'ci-build':
+      // 静的なページのビルドし直し（D-68）。経路を持たない
+      add(u, 'build-minutes', w.builds.minutes * node.config.cpusPerBuild);
       break;
     case 'cdn':
       // オンデマンドの再検証のたびに、ISR のページ（とそのデータのルート）を無効化する（D-66）

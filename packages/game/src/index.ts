@@ -10,11 +10,14 @@ import {
   componentsOf,
   composeStack,
   DEFAULT_CHOICES,
+  FRAMEWORKS,
   imagesBehavior,
   loadPriceBooks,
   MVP_STACKS,
   SLOT_LABELS,
+  frameworkSupported,
   STACK_DEFS,
+  toAstro,
   toSpa,
   type Choices,
   type FrameworkId,
@@ -165,7 +168,24 @@ export function autoImageFormat(
 ): boolean {
   return (
     usesNextImage(platform, framework, images) ||
+    astroImage(platform, framework, images) ||
     imagesBehavior(platform, images) === 'images'
+  );
+}
+
+/**
+ * Astro の画像の部品（astro:assets の <Image />）で閲覧のときに変換する構成か（Vercel の画像の最適化・VPS の Node）。
+ * <Image /> は既定で WebP を作る（「By default, the <Image /> component will produce a .webp file」。D-68）。
+ */
+function astroImage(
+  platform: Platform,
+  framework: FrameworkId,
+  images: string | undefined,
+): boolean {
+  return (
+    framework === 'astro' &&
+    platform !== 'cloudflare' &&
+    (images ?? 'default') === 'default'
   );
 }
 
@@ -221,6 +241,26 @@ export const SETTINGS = {
     effort: EFFORT.setting.isr,
     note: 'API の応答のキャッシュを使うときだけ効く。延ばすとヒットが増えて取り直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる',
     options: [
+      { value: 60, label: '1 分' },
+      { value: 300, label: '5 分' },
+      { value: 3600, label: '1 時間' },
+      { value: 21600, label: '6 時間' },
+    ],
+  },
+  /**
+   * Astro の静的なページ（記事）をビルドし直す間隔（D-68）。ISR の間隔と同じ値（revalidateSec）を使う
+   * （Astro には ISR が無いので、同じ値をこちらの意味で選ぶ）。オンデマンドは記事を更新するたびにビルドする。
+   */
+  buildInterval: {
+    label: 'ビルドの間隔',
+    field: 'revalidateSec',
+    effort: EFFORT.setting.isr,
+    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
+    options: [
+      {
+        value: ON_DEMAND_REVALIDATE,
+        label: 'オンデマンド（記事の更新のたび）',
+      },
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
       { value: 3600, label: '1 時間' },
@@ -512,11 +552,27 @@ export function hiddenSettings(
   state: Pick<GameState, 'framework' | 'scenario'>,
 ): SettingKey[] {
   const fromScenario = state.scenario.hidden?.settings ?? [];
-  const byFramework: SettingKey =
-    state.framework === 'vite-spa' ? 'isr' : 'apiCacheTtl';
-  return fromScenario.includes(byFramework)
-    ? [...fromScenario]
-    : [...fromScenario, byFramework];
+  const byFramework = FRAMEWORK_HIDDEN_SETTINGS[state.framework];
+  return [
+    ...fromScenario,
+    ...byFramework.filter((k) => !fromScenario.includes(k)),
+  ];
+}
+
+/** フレームワークで意味の無い設定（revalidateSec をフレームワークごとの意味で 1 つだけ出す。D-37・D-68）。 */
+const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
+  nextjs: ['apiCacheTtl', 'buildInterval'],
+  'vite-spa': ['isr', 'buildInterval'],
+  astro: ['isr', 'apiCacheTtl'],
+};
+
+/** revalidateSec をこのフレームワークで何の設定として出すか（ISR の間隔・API のキャッシュの期間・ビルドの間隔）。 */
+export function revalidateSettingOf(framework: FrameworkId): SettingKey {
+  return framework === 'vite-spa'
+    ? 'apiCacheTtl'
+    : framework === 'astro'
+      ? 'buildInterval'
+      : 'isr';
 }
 
 /** 記事ごとの SNS のカードが出ないか（SPA で OGP の前処理なし。prd/10 F-05）。 */
@@ -546,6 +602,18 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
     0,
   ),
 }));
+
+/**
+ * その構成にフレームワークを載せられるか（catalog の DeployTarget が unsupported でない。Astro は AWS に公式のアダプターが無い。D-68）。
+ * 始める画面の構成の一覧と乗り換え先に使う。
+ */
+export function stackSupports(
+  stackIndex: number,
+  framework: FrameworkId,
+): boolean {
+  const s = STACKS[stackIndex];
+  return s !== undefined && frameworkSupported(framework, s.provider);
+}
 
 /** API を他の事業者に置いたときの、API と DB の名前（D-65・D-67）。 */
 const API_PLACEMENT_NAME: Readonly<Record<string, string>> = {
@@ -598,6 +666,11 @@ export function stackName(
   components: Choices = {},
 ): string {
   const s = STACKS[stackIndex]!;
+  // Astro は vinext を使わないので外し、フレームワークを添える（D-68）
+  if (framework === 'astro') {
+    const base = s.name.replace(' + vinext', '');
+    return withFramework ? `${base}（Astro）` : base;
+  }
   const api = apiPlacedElsewhere(components)
     ? API_PLACEMENT_NAME[components.api!]
     : undefined;
@@ -816,10 +889,20 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
   const shape = sc.frameworks?.spa?.shape;
   const cache = apiCacheActive(p.platform, p.components, p.framework);
+  // Astro は記事（ISR だったルート）を静的なページにし、更新をビルドし直しで反映する（D-68）。ビルドを起こす更新は
+  // オンデマンドの再検証と同じ数え方の内容の更新、間隔は revalidateSec（オンデマンドは更新のたび）
+  const astro = sc.frameworks?.astro?.shape;
   const app =
     p.framework === 'vite-spa' && shape
       ? toSpa(w, shape, cache ? { cacheContent: true } : {})
-      : w;
+      : p.framework === 'astro' && astro
+        ? toAstro(w, astro, {
+            updatesPerMonth: onDemandUpdates(p.pv, w),
+            ...(isOnDemand(p.settings)
+              ? {}
+              : { intervalSeconds: p.settings.revalidateSec }),
+          })
+        : w;
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
   const out = applyComponentsToWorkload(app, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
@@ -986,6 +1069,8 @@ function onDemandBlocker(
 ): { slot: SlotId; label: string; reason: string } | undefined {
   // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
   if (framework === 'vite-spa') return undefined;
+  // Astro は記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-68）
+  if (framework === 'astro') return undefined;
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
@@ -1019,6 +1104,16 @@ export function requirementStatus(
         label: 'Vite の SPA',
         ok: true,
         reason: 'ISR を持たず、ページの中身を毎回 API で読む',
+        current: true,
+      },
+    ];
+  if (framework === 'astro')
+    return [
+      {
+        label: 'Astro',
+        ok: true,
+        reason:
+          '記事を更新するたびにビルドし直す（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増える',
         current: true,
       },
     ];
@@ -1538,6 +1633,8 @@ export function settingNote(
   const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
   if (usesNextImage(platform, state.framework, images))
     return 'Next.js の画像の部品は、ブラウザに合わせて既定で WebP を配る（JPEG を選んでも WebP）';
+  if (astroImage(platform, state.framework, images))
+    return 'Astro の画像の部品（<Image />）は既定で WebP を作る（JPEG を選んでも WebP）';
   return autoImageFormat(platform, state.framework, images)
     ? 'Cloudflare Images の閲覧のときの変換は、ブラウザに合わせた形式（format=auto）で配る（JPEG を選んでも WebP とみなす）'
     : undefined;
@@ -1774,18 +1871,22 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (hiddenSettings(state).includes(action.key))
         return ng(
           'unavailable',
-          state.framework === 'vite-spa' && action.key === 'isr'
-            ? 'Vite の SPA には ISR が無い（期間は「API のキャッシュの期間」で選ぶ）'
-            : state.framework !== 'vite-spa' && action.key === 'apiCacheTtl'
-              ? 'Next.js では ISR の間隔で選ぶ'
-              : 'このシナリオでは効かない',
+          action.key === 'isr' ||
+            action.key === 'apiCacheTtl' ||
+            action.key === 'buildInterval'
+            ? `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework)].label}」で選ぶ`
+            : 'このシナリオでは効かない',
         );
       if (state.settings[def.field] === action.value)
         return ng('same', '今と同じ（または選択済み）');
       const inactive = settingInactiveReason(state, action.key);
       if (inactive) return ng('unavailable', inactive);
       // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の手間がかかる（D-49）
-      if (action.key === 'isr' && action.value === ON_DEMAND_REVALIDATE)
+      // Astro の更新のたびのビルドも、更新からビルドを起こす仕組み（デプロイの hook）の実装が要る（同じ手間・仮定。D-68）
+      if (
+        (action.key === 'isr' || action.key === 'buildInterval') &&
+        action.value === ON_DEMAND_REVALIDATE
+      )
         return ok(EFFORT.onDemandSwitch);
       return ok(def.effort);
     }
@@ -1802,6 +1903,11 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (!STACKS[action.stackIndex]) return ng('invalid', '構成が無い');
       if (action.stackIndex === state.stackIndex)
         return ng('same', '今の構成と同じ');
+      if (!stackSupports(action.stackIndex, state.framework))
+        return ng(
+          'unavailable',
+          `${FRAMEWORKS[state.framework].label} を載せる公式のアダプターが無い`,
+        );
       const plan = isPlanChange(state.stackIndex, action.stackIndex);
       if ((action.type === 'plan') !== plan)
         return ng(
@@ -2090,10 +2196,12 @@ export function setupRevalidateOptions(
   scenario: Scenario,
   framework: FrameworkId,
 ): { value: number; label: string; flavor: string }[] {
-  if (hiddenSettings({ scenario, framework }).includes('isr')) return [];
-  return SETTINGS.isr.options.map((o) => ({
+  const key = revalidateSettingOf(framework);
+  if (key === 'apiCacheTtl') return [];
+  if (hiddenSettings({ scenario, framework }).includes(key)) return [];
+  return SETTINGS[key].options.map((o) => ({
     ...o,
-    flavor: settingFlavor('isr', o.value) ?? '',
+    flavor: settingFlavor(key, o.value) ?? '',
   }));
 }
 
@@ -2113,6 +2221,14 @@ export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
   'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔',
   'isr:3600': '間隔が長いほど、同じページを作り直すまでの間があく',
   'isr:21600': '更新はゆっくり見えるが、同じページを作り直すのは一日に数回まで',
+  'buildInterval:0':
+    '記事を更新するたびにビルドするので、待つのはビルドの間だけ。仕組みもいちばん素直',
+  'buildInterval:60':
+    '少し待てば更新が見える。間隔の間の更新はまとめて 1 回でビルドする',
+  'buildInterval:300':
+    '更新の反映とビルドの回数の釣り合いを取った、ほどほどの間隔',
+  'buildInterval:3600': '間隔が長いほど、ビルドの回数はまとまって減る',
+  'buildInterval:21600': '更新はゆっくり見えるが、ビルドは一日に数回まで',
 };
 
 export function settingFlavor(
@@ -2357,8 +2473,11 @@ export function newGame(
   revalidateSec?: number,
 ): GameState {
   const fw = frameworksOf(scenario);
+  // 載せられない構成（Astro × AWS など）では既定のフレームワークにする（画面では選べない。D-68）
   const app =
-    framework !== undefined && fw.allowed.includes(framework)
+    framework !== undefined &&
+    fw.allowed.includes(framework) &&
+    stackSupports(stackIndex, framework)
       ? framework
       : fw.default;
   const chosen = components
@@ -3070,11 +3189,16 @@ export function playMonth(input: GameState): GameState {
   // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）。
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
   const spa = state.framework === 'vite-spa';
+  const astro = state.framework === 'astro';
+  // Astro の記事は静的なページで、鮮度はビルドの間隔で決まる（ISR のキャッシュの部品は無い。D-68）
   const uncached = spa
     ? !apiCacheActive(platformNow, state.components, state.framework)
-    : comps.isrCache === 'none';
+    : !astro && comps.isrCache === 'none';
   // SPA の API の CPU（速さの「SSR の重さ」の代わりに使う。SSR の CPU × dataCpuFactor）
   const firstLoad = spa && (sc.frameworks?.spa?.firstLoadHeavy ?? false);
+  // Astro の初回表示の軽さ（JS はアイランドの分だけ。速さの重さを 1 つ減らす。ゲーム上の仮定・D-68）
+  const firstLoadLight =
+    astro && (sc.frameworks?.astro?.firstLoadLight ?? false);
   const serverCpuMs = spa
     ? ssrCpuMs * (sc.frameworks?.spa?.shape.dataCpuFactor ?? 1)
     : ssrCpuMs;
@@ -3096,6 +3220,7 @@ export function playMonth(input: GameState): GameState {
       degraded: incident || state.switching,
       ssrCpuMs: serverCpuMs,
       firstLoadHeavy: firstLoad,
+      firstLoadLight,
       imageKB: viewed.imageKB,
       variants: viewed.variants,
       revalidateSec: viewed.revalidateSec,
@@ -3123,6 +3248,7 @@ export function playMonth(input: GameState): GameState {
     switching: state.switching,
     ssrCpuMs: serverCpuMs,
     spa,
+    astro,
     settings: viewed,
     heaviness: speedHeaviness(
       {
@@ -3130,6 +3256,7 @@ export function playMonth(input: GameState): GameState {
         ssrCpuMs: serverCpuMs,
         premises: r.premises,
         firstLoadHeavy: firstLoad,
+        firstLoadLight,
       },
       sat,
     ),
@@ -3544,6 +3671,8 @@ function stageReasons(
     ssrCpuMs: number;
     /** SPA（速さの理由を「API の CPU・初回表示」で書く）。 */
     spa: boolean;
+    /** Astro（鮮度の理由を「ビルドの間隔」で書く。D-68）。 */
+    astro?: boolean;
     settings: Settings;
     heaviness: number;
     featurePoints: number;
@@ -3579,7 +3708,9 @@ function stageReasons(
         (c.spa || !isOnDemand(c.settings)) &&
         (c.spa
           ? `API のキャッシュの期間 ${optionLabel('apiCacheTtl', c.settings.revalidateSec)}`
-          : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
+          : c.astro
+            ? `ビルドの間隔 ${optionLabel('buildInterval', c.settings.revalidateSec)}`
+            : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
       c.eventuallyConsistent &&
         'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて、更新がすぐ見えない',
       c.onDemandReason,

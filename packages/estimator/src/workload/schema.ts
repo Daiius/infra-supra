@@ -112,6 +112,21 @@ export const WorkloadInputSchema = z
       /** DB → アプリの応答サイズ（マネージド DB の egress）。 */
       responseKBPerQuery: NonNeg,
     }),
+    /**
+     * 静的なページをビルドし直す（Astro の静的出力で、記事の更新をビルドで反映する。D-68・prd/06 §6）。
+     * 月のビルドの回数は、間隔 T（省略は更新のたび。1 回のビルドの時間より短くはできない）ごとに「その間に更新が 1 回でもあれば 1 回」と数える
+     * （更新は一様に到着すると仮定: 枠の数 N × (1 − e^(−更新 / N))。prd/04 §2）。値はテンプレート・シナリオの仮定。
+     */
+    build: z
+      .object({
+        /** ビルドを起こす内容の更新の回数（月）。 */
+        updatesPerMonth: NonNeg,
+        /** まとめてビルドする間隔（秒）。省略は更新のたび。 */
+        intervalSeconds: Pos.optional(),
+        /** 1 回のビルドの時間（分。事業者は 1 回ごとに分へ切り上げて数える）。 */
+        minutesPerBuild: Pos,
+      })
+      .optional(),
     /** リアルタイム（チャットなどの WebSocket）。値はテンプレート・シナリオの仮定（D-24）。 */
     realtime: z
       .object({

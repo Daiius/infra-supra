@@ -450,7 +450,9 @@ export function applyCross(
             facts: [
               'transform-url',
               'outside-images',
-              ...(framework === 'vite-spa' ? [] : ['next-loader']),
+              ...(framework === undefined || framework === 'nextjs'
+                ? ['next-loader']
+                : []),
             ],
             billing: bill(imagesPlan, {
               'image-transformations': 'transformations',

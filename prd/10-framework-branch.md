@@ -440,6 +440,7 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
   始める画面の手間のバー・部品の手間の見込み（「自前運用になる（毎月の維持 3・自前の障害 月 8%）」）にも出す。
 - 構成の名前（ゲーム中）: 「Vercel Pro + Cloudflare Workers・D1」「AWS Amplify の Next.js + Cloudflare Workers・D1」「AWS の OpenNext + Cloudflare Workers・D1」「Cloudflare Paid の静的 + さくらの VPS 2GB（API・MySQL）（Vite の SPA）」。
 - Next.js の既定の部品にも `api: 'same'` を足した（SPA と同じ）。既存の基準プレイ・golden は変わらない。
+- **Astro（§10・D-68）では API の置き場は同じ事業者のみ**（推奨案）。Astro の SSR から Workers を呼ぶ組・Astro の静的 + VPS の API は許さず、選択肢に出さない（渡されても既定に戻る）。
 
 **置いた仮定**（ゲーム上の仮定）:
 - Next.js のサーバーは 1 回の描画（SSR・ISR の作り直し）・1 回の API で Worker を 1 回呼ぶ。Worker の CPU は 1 回 5 ms（`SERVER_API_WORKER_CPU_MS`。記事コミュニティの API の CPU と同じ値。HTML の描画の CPU はサーバーの側に残る）。
@@ -480,3 +481,13 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
 - **Cloudflare の静的 + VPS の API は、受託では VPS だけの構成より届く**（1 → 17 / 20）。VPS の構成は画像でディスクが埋まって止まるが、画像を R2 に置くとディスクに余裕が出る。届かなかった 3 件は偶発的な障害。
   記事コミュニティでは VPS の構成と同じく届かない（維持の手間 3 とアカウントの 0.5 で機能開発が減る）。VPS の回線の使用率は、VPS だけの構成の 0.66 から 0.02 に下がる（シード 1 の最大）。
 - 満足度は替えても同じ（往復の遅延は計算しない・AX-13）。SSR が外の API を待つことは前提の文（`server-fetch`）で出す。
+
+
+## 10. 3 つ目のフレームワーク: Astro（2026-11-02・D-68）
+
+仕様・出典・仮定・基準プレイは [06](./06-frameworks.md) §6。この文書の分岐（Next.js か SPA か）との関係だけ書く。
+
+- Astro は「記事は静的にビルド（ISR の代わりにビルドし直し）+ マイページは SSR（アダプター）+ JS はアイランドだけ」。SNS のカードは Next.js と同じく HTML に入る（`noSocialCards` は SPA だけ）。
+- 始める画面のフレームワーク欄（F-04・D-35）に 3 つ目として出る。§7 の `framework` の保存は id だけで、古い保存は今のまま読める（`astro` を許す id に足しただけ）。
+- 載せられない組（§2.2 の E-3）を初めて入れた: Astro × AWS（公式のアダプターが無い）は始める画面の一覧に出さず、乗り換えもできない（`stackSupports`）。
+- revalidateSec の意味はフレームワークごと: Next.js は ISR の間隔・SPA は API のキャッシュの期間（§8）・Astro はビルドの間隔（`revalidateSettingOf`・`hiddenSettings`）。

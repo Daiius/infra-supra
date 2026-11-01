@@ -5,11 +5,13 @@
 import type { WorkloadInput } from 'estimator';
 import type { Platform } from '../stacks/index.ts';
 
-export type FrameworkId = 'nextjs' | 'vite-spa';
+export type FrameworkId = 'nextjs' | 'vite-spa' | 'astro';
 
 type Source = { url: string; retrievedAt: string };
 const R = '2026-11-01';
 const src = (url: string): Source => ({ url, retrievedAt: R });
+/** Astro の調査の取得日（D-68）。 */
+const src2 = (url: string): Source => ({ url, retrievedAt: '2026-11-02' });
 
 export type FrameworkProfile = {
   id: FrameworkId;
@@ -39,6 +41,16 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
     sources: [
       src('https://vite.dev/guide/static-deploy'),
       src('https://nextjs.org/docs/app/guides/single-page-applications'),
+    ],
+  },
+  astro: {
+    id: 'astro',
+    label: 'Astro',
+    renderingModes: ['static', 'ssr'],
+    note: '既定ではページをビルドのときに HTML にしておき（静的）、ログインの要るページだけをアダプターでリクエストのたびに描く。ブラウザの JS は動きのある部品（アイランド）の分だけ。記事ごとの SNS のカード（OGP）は HTML に入る。静的なページの更新はビルドし直しで反映する（ISR は使わない）',
+    sources: [
+      src2('https://docs.astro.build/en/guides/on-demand-rendering/'),
+      src2('https://docs.astro.build/en/concepts/islands/'),
     ],
   },
 };
@@ -115,6 +127,57 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     note: 'nginx が dist を配り（try_files でシェルへ）、API は同じ VPS の Node',
     sources: [src('https://vite.dev/guide/static-deploy')],
   },
+  // Astro（D-68・prd/06 §6）。静的なページは事業者の静的な配信、ログインの要るページはアダプター
+  {
+    framework: 'astro',
+    platform: 'cloudflare',
+    adapter: '@astrojs/cloudflare（Workers）',
+    support: 'native',
+    note: '静的なページ・JS・CSS は Workers の静的アセット（Worker を起動しない）、それ以外は Worker が描く。Pages はアダプターの対象外になった。ISR に当たる機能は無い。画像は Images の binding（imageService: cloudflare-binding）。ビルドは Workers Builds',
+    sources: [
+      src2('https://docs.astro.build/en/guides/integrations-guide/cloudflare/'),
+      src2(
+        'https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/',
+      ),
+    ],
+  },
+  {
+    framework: 'astro',
+    platform: 'vercel',
+    adapter: '@astrojs/vercel',
+    support: 'native',
+    note: '静的なページは CDN、それ以外は Vercel Functions。アダプターの isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後にキャッシュする（期限・bypassToken での無効化。このモデルでは使わず、記事は静的にビルドする）。画像は imageService で Vercel の画像の最適化',
+    sources: [
+      src2('https://docs.astro.build/en/guides/integrations-guide/vercel/'),
+      src2('https://vercel.com/docs/pricing'),
+    ],
+  },
+  {
+    framework: 'astro',
+    platform: 'sakura',
+    adapter: '@astrojs/node（standalone）',
+    support: 'native',
+    note: 'nginx が静的なページを配り、それ以外は同じ VPS の Node（standalone は静的なファイルも配れる）。ビルドも VPS の上（ビルドの CPU は数えていない・仮定）',
+    sources: [
+      src2('https://docs.astro.build/en/guides/integrations-guide/node/'),
+    ],
+  },
+  {
+    framework: 'astro',
+    platform: 'aws',
+    adapter: 'なし（公式のアダプターが無い）',
+    support: 'unsupported',
+    note: 'Astro の AWS の手順は、静的なら Amplify・S3 + CloudFront、リクエストのたびに描くページは Amplify のコミュニティのアダプター（astro-aws-amplify）か SST。公式のアダプターが無いので、このモデルでは扱わない',
+    sources: [src2('https://docs.astro.build/en/guides/deploy/aws/')],
+  },
+  {
+    framework: 'astro',
+    platform: 'aws-opennext',
+    adapter: 'なし（OpenNext は Next.js 用）',
+    support: 'unsupported',
+    note: 'OpenNext は Next.js のビルド出力を直す道具で、Astro には使えない',
+    sources: [src2('https://docs.astro.build/en/guides/deploy/aws/')],
+  },
   // AWS（prd/11 段 1・D-50）
   {
     framework: 'nextjs',
@@ -158,6 +221,15 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     sources: [src('https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/')],
   },
 ];
+
+/** フレームワークをその事業者に載せられるか（DeployTarget が unsupported・無いなら載せられない。D-68）。 */
+export function frameworkSupported(
+  framework: FrameworkId,
+  platform: Platform,
+): boolean {
+  const d = deployTarget(framework, platform);
+  return d !== undefined && d.support !== 'unsupported';
+}
 
 export function deployTarget(
   framework: FrameworkId,
@@ -212,5 +284,60 @@ export function toSpa(
         },
       };
     }),
+  };
+}
+
+/**
+ * Astro にしたときのアプリの形（テンプレートの既定値。template-default・実測ではない。D-68）。
+ * assetsFactor: ページあたりの JS・CSS のファイル数を Next.js の何倍とみなすか（アイランドの分だけ）。
+ * rebuildShare: 内容の更新（ページの中身を変える書き込み）のうち、静的なページを変えてビルドし直すものの割合
+ *   （記事の投稿・編集。コメントはアイランドが API で読むのでビルドしない）。
+ * minutesPerBuild: 1 回のビルドの時間（分）= base + 静的なページ 1,000 あたり perThousandPages。
+ */
+export type AstroShape = {
+  assetsFactor: number;
+  rebuildShare: number;
+  minutesPerBuild: { base: number; perThousandPages: number };
+};
+
+/**
+ * テンプレートの Workload を Astro の形に書き換える（D-68）。ISR だったルート（全員に同じ中身の記事）は静的にビルドし、
+ * SSR のルート（個人化）はアダプターでリクエストのたびに描く。JS・CSS はアイランドの分だけ（assetsFactor）。
+ * 静的なページの更新はビルドし直し: 内容の更新（updatesPerMonth）× rebuildShare を、間隔（省略は更新のたび）でまとめてビルドする。
+ */
+export function toAstro(
+  w: WorkloadInput,
+  shape: AstroShape,
+  build: { updatesPerMonth: number; intervalSeconds?: number },
+): WorkloadInput {
+  let staticPages = 0;
+  const routes = w.routes.map((r) => {
+    if (r.rendering !== 'isr') return r;
+    staticPages += r.pages;
+    return {
+      id: r.id,
+      rendering: 'static' as const,
+      share: r.share,
+      pages: r.pages,
+      processing: r.processing,
+    };
+  });
+  return {
+    ...w,
+    routes,
+    perPage: { ...w.perPage, assets: w.perPage.assets * shape.assetsFactor },
+    ...(staticPages > 0
+      ? {
+          build: {
+            updatesPerMonth: build.updatesPerMonth * shape.rebuildShare,
+            ...(build.intervalSeconds !== undefined
+              ? { intervalSeconds: build.intervalSeconds }
+              : {}),
+            minutesPerBuild:
+              shape.minutesPerBuild.base +
+              (staticPages / 1000) * shape.minutesPerBuild.perThousandPages,
+          },
+        }
+      : {}),
   };
 }

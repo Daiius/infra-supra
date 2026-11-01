@@ -11,10 +11,15 @@ import {
   newGame,
   playMonth,
   playStrategy,
+  requirementStatus,
   SCENARIOS,
+  setupRevalidateOptions,
   stackName,
+  stackSupports,
+  STACKS,
   type GameState,
 } from './index.ts';
+import { speedHeaviness } from './rules.ts';
 
 const article = SCENARIOS['article-community']!;
 const contract = SCENARIOS['contract-operations']!;
@@ -199,5 +204,103 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       'aws-amplify-cdn': ['1815.39', 'won', 12],
       'aws-opennext-images': ['1955.85', 'won', 12],
     });
+  });
+});
+
+describe('Astro（D-68）', () => {
+  const CF_PAID = 1;
+  const VERCEL_PRO = 3;
+  const AWS = STACKS.findIndex((x) => x.id === 'aws-amplify');
+  const astro = (stack = CF_PAID, sc = article, seed = 42) =>
+    playMonth(newGame(stack, seed, sc, DEFAULT_START_DATE, 'astro'));
+
+  it('両方のシナリオで選べる。AWS には公式のアダプターが無いので載せず、乗り換えもできない', () => {
+    expect(astro().framework).toBe('astro');
+    expect(astro(CF_PAID, contract).framework).toBe('astro');
+    expect(stackSupports(AWS, 'astro')).toBe(false);
+    expect(stackSupports(AWS, 'nextjs')).toBe(true);
+    // 載せられない構成で始めようとしたら既定（Next.js）
+    expect(
+      newGame(AWS, 42, article, DEFAULT_START_DATE, 'astro').framework,
+    ).toBe('nextjs');
+    const r = checkAction(astro(), { type: 'migrate', stackIndex: AWS });
+    expect(r.ok).toBe(false);
+    expect(
+      checkAction(astro(), { type: 'migrate', stackIndex: VERCEL_PRO }).ok,
+    ).toBe(true);
+  });
+
+  it('ISR のキャッシュ・OGP の前処理・API の部品は出さない。構成の名前は vinext を外して（Astro）を添える', () => {
+    const slots = componentSlots(astro()).map((x) => x.slot);
+    for (const x of ['isrCache', 'ogp', 'apiCache', 'api'])
+      expect(slots).not.toContain(x);
+    expect(slots).toContain('images');
+    expect(stackName(CF_PAID, 'astro')).toBe('Cloudflare Paid（Astro）');
+    expect(stackName(CF_PAID, 'astro', false)).toBe('Cloudflare Paid');
+  });
+
+  it('revalidateSec は「ビルドの間隔」として出し、ISR の間隔・API のキャッシュの期間は出さない（受託では出さない）', () => {
+    const s = astro();
+    expect(hiddenSettings(s)).toEqual(
+      expect.arrayContaining(['isr', 'apiCacheTtl']),
+    );
+    expect(hiddenSettings(s)).not.toContain('buildInterval');
+    expect(checkAction(s, { type: 'set', key: 'isr', value: 3600 }).ok).toBe(
+      false,
+    );
+    expect(
+      checkAction(s, { type: 'set', key: 'buildInterval', value: 3600 }).ok,
+    ).toBe(true);
+    expect(hiddenSettings(playMonth(newGame(1, 42, article)))).toContain(
+      'buildInterval',
+    );
+    expect(hiddenSettings(astro(CF_PAID, contract))).toContain('buildInterval');
+    expect(setupRevalidateOptions(article, 'astro').length).toBe(5);
+    expect(setupRevalidateOptions(contract, 'astro')).toEqual([]);
+  });
+
+  it('ビルドの間隔を延ばすと鮮度が下がる（理由は「ビルドの間隔」）', () => {
+    let s = applyActions(astro(), [
+      { type: 'set', key: 'buildInterval', value: 21600 },
+    ]);
+    s = playMonth(s);
+    const r = s.history[s.history.length - 1]!;
+    expect(r.satisfaction.stages.freshness).toBe('bad');
+    expect(r.satisfaction.reasons.freshness).toContain('ビルドの間隔');
+  });
+
+  it('Vercel Pro ではビルドの時間が請求に出る。即時反映の要件は記事の更新ごとのビルドで満たす（仮定）', () => {
+    const s = astro(VERCEL_PRO);
+    const ids = s.history[0]!.lines.map((l) => l.label);
+    expect(ids.some((l) => l.includes('build-cpu-minutes'))).toBe(true);
+    expect(requirementStatus(1, {}, 'on-demand-isr', 'astro')[0]?.ok).toBe(
+      true,
+    );
+  });
+
+  it('初回表示の軽さ（ゲーム上の仮定）は速さの重さを 1 つ減らす（0 より下げない）', () => {
+    const base = { ssrCpuMs: 20, imageKB: 200, variants: 3, premises: [] };
+    const sat = article.satisfaction;
+    expect(speedHeaviness({ ...base, firstLoadLight: true }, sat)).toBe(
+      speedHeaviness(base, sat) - 1,
+    );
+    expect(
+      speedHeaviness(
+        { ...base, ssrCpuMs: 1, imageKB: 1, firstLoadLight: true },
+        sat,
+      ),
+    ).toBe(0);
+  });
+
+  it('CF Paid（目標の根拠）は何もしないでシード 1〜20 のすべてで合格する（記事・受託）', () => {
+    for (const sc of [article, contract]) {
+      const failing: number[] = [];
+      for (let seed = 1; seed <= 20; seed++) {
+        let s = astro(CF_PAID, sc, seed);
+        while (s.phase === 'playing') s = playMonth(applyActions(s, []));
+        if (s.end?.reason !== 'won') failing.push(seed);
+      }
+      expect(failing).toEqual([]);
+    }
   });
 });

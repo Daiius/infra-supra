@@ -50,6 +50,7 @@ import {
   selectTrends,
   setupProblem,
   setupRevalidateOptions,
+  stackSupports,
   DEFAULT_REVALIDATE_SEC,
   invalidationNote,
   onDemandInvalidationEstimate,
@@ -213,10 +214,14 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     const fws = frameworksOf(sc);
     const fwChoice = next.framework ?? frameworkChoice;
     const fw = fws.allowed.includes(fwChoice) ? fwChoice : fws.default;
-    const st = next.stack ?? stack;
+    // 載せられない構成（Astro × AWS など。D-68）を選んでいたら、一覧の最初の載せられる構成にする
+    const want = next.stack ?? stack;
+    const st = stackSupports(want, fw)
+      ? want
+      : (STACKS.find((s) => stackSupports(s.index, fw))?.index ?? 0);
     if (next.scenarioId !== undefined) setScenarioId(next.scenarioId);
     if (next.framework !== undefined) setFramework(next.framework);
-    if (next.stack !== undefined) setStack(next.stack);
+    if (st !== stack) setStack(st);
     setParts(validSetupChoices(sc, st, fw, parts));
   };
   const problem = setupProblem(scenario, stack, framework, parts);
@@ -241,36 +246,38 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           />
           <h3 className="mt-2 font-bold">インフラの構成</h3>
           <div className="grid gap-2 sm:grid-cols-2">
-            {STACKS.map((s) => (
-              <label
-                key={s.id}
-                className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${stack === s.index ? 'border-primary bg-primary/5' : 'border-base-300'}`}
-              >
-                <input
-                  type="radio"
-                  className="radio radio-primary mt-0.5 shrink-0"
-                  checked={stack === s.index}
-                  onChange={() => change({ stack: s.index })}
-                />
-                <span className="block min-w-0">
-                  <span className="block">
-                    {stackName(s.index, framework, false)}
-                  </span>
-                  {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
-                  <span className="mt-0.5 block text-xs opacity-70">
-                    {stackFlavor(s.index)}
-                  </span>
-                  <EffortBar
-                    scenario={scenario}
-                    stackIndex={s.index}
-                    // 選んでいる構成は、選んだ部品で増える他の事業者の管理も出す（D-52）
-                    {...(stack === s.index
-                      ? { components: parts, framework }
-                      : {})}
+            {STACKS.filter((s) => stackSupports(s.index, framework)).map(
+              (s) => (
+                <label
+                  key={s.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${stack === s.index ? 'border-primary bg-primary/5' : 'border-base-300'}`}
+                >
+                  <input
+                    type="radio"
+                    className="radio radio-primary mt-0.5 shrink-0"
+                    checked={stack === s.index}
+                    onChange={() => change({ stack: s.index })}
                   />
-                </span>
-              </label>
-            ))}
+                  <span className="block min-w-0">
+                    <span className="block">
+                      {stackName(s.index, framework, false)}
+                    </span>
+                    {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
+                    <span className="mt-0.5 block text-xs opacity-70">
+                      {stackFlavor(s.index)}
+                    </span>
+                    <EffortBar
+                      scenario={scenario}
+                      stackIndex={s.index}
+                      // 選んでいる構成は、選んだ部品で増える他の事業者の管理も出す（D-52）
+                      {...(stack === s.index
+                        ? { components: parts, framework }
+                        : {})}
+                    />
+                  </span>
+                </label>
+              ),
+            )}
           </div>
           <SetupComponents
             scenario={scenario}
@@ -1185,7 +1192,7 @@ function Actions({
                   <Meta
                     items={[
                       // 時間 → オンデマンドだけ実装の手間がかかる（D-49）
-                      key === 'isr'
+                      key === 'isr' || key === 'buildInterval'
                         ? `手間 ${def.effort}（オンデマンドへは ${EFFORT.onDemandSwitch}）`
                         : `手間 ${def.effort}`,
                       '来月から',

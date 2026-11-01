@@ -1,7 +1,7 @@
 // シナリオ: 受託先の業務アプリを運用する（prd/09・D-33）。受託は設定（フレーバー）だけで、お金の流れは記事コミュニティと同じ
 // （収益 − インフラの費用 = 所持金。人件費は入れない）。値はすべてゲーム上の仮定で、実在の値でも相場でもない。
 // 料金・制限は catalog のデータをそのまま使い（ここで料金を作らない）、前提の文も catalog のもの（premiseRefs で参照する）。
-import { BUSINESS_APP_SPA, businessApp } from 'catalog';
+import { BUSINESS_APP_ASTRO, BUSINESS_APP_SPA, businessApp } from 'catalog';
 import type { Action, GameState } from '../index.ts';
 import type { EventDef, Scenario } from '../scenario.ts';
 
@@ -347,8 +347,11 @@ export const CONTRACT_OPERATIONS: Scenario = {
   startCash: 60,
   // フレームワーク（prd/10 F-04）。既定は Next.js。業務アプリは SPA で作ることも多いので選べる
   frameworks: {
-    allowed: ['nextjs', 'vite-spa'],
+    allowed: ['nextjs', 'vite-spa', 'astro'],
     default: 'nextjs',
+    // Astro（D-68）: 画面はすべてログインの要る SSR で、静的にビルドするページが無い。表・フォームが画面の大半なので、
+    // 初回表示は軽くならないとみなす（仮定）
+    astro: { shape: BUSINESS_APP_ASTRO, firstLoadLight: false },
     spa: {
       shape: BUSINESS_APP_SPA,
       // SNS の話題は無い（使わない）
@@ -358,7 +361,7 @@ export const CONTRACT_OPERATIONS: Scenario = {
     },
   },
   hidden: {
-    settings: ['format', 'variants', 'isr', 'apiCacheTtl'],
+    settings: ['format', 'variants', 'isr', 'apiCacheTtl', 'buildInterval'],
     // SNS のカード（OGP）はログインして使う業務アプリでは効かない。
     // API の応答のキャッシュも、中身がすべてログインの要る個人化された API なので効かない（D-37）
     slots: ['isrCache', 'images', 'realtime', 'ogp', 'apiCache'],
@@ -385,6 +388,13 @@ export const CONTRACT_OPERATIONS: Scenario = {
       nextjs: {
         note: 'ページはすべて SSR（ログインが要る）',
         app: ['ページはすべて SSR（ログインが要る）'],
+      },
+      astro: {
+        note: 'ページはすべてアダプターで SSR（ログインが要る）。静的にビルドするページは無い',
+        app: [
+          'ページはすべてアダプターで SSR（ログインが要る）。静的にビルドするページは無く、ビルドし直しは起きない',
+          '表・フォームなど動きのある部品が画面の大半で、ブラウザの JS は Next.js と同じくらいとみなす（ゲーム上の仮定）',
+        ],
       },
       'vite-spa': {
         note: '画面はシェルと JS で描き、中身は API で取る（HTML の生成は無い）',
