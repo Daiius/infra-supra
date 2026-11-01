@@ -593,6 +593,60 @@ describe('OpenNext の CloudFront の無効化と S3 の ISR のキャッシュ�
     );
   });
 
+  it('ワイルドカードで消えるのは ISR のページだけで、同じ CDN の API の応答のキャッシュは従来の miss のまま（OCL-62E7477C）', () => {
+    const mixed = resolveWorkload(
+      workload({
+        routes: [
+          {
+            id: 'article',
+            rendering: 'isr',
+            share: 0.5,
+            pages: 100,
+            onDemandUpdatesPerMonth: 300,
+            processing,
+            cachedServeCpuMs: 1,
+          },
+          {
+            id: 'feed',
+            rendering: 'spa',
+            share: 0.5,
+            pages: 100,
+            processing,
+            shellKB: 3,
+            cacheSeconds: 300,
+          },
+        ],
+      }),
+    );
+    const out = (wildcard: boolean) =>
+      simulateResources(mixed, {
+        id: 'x',
+        name: 'x',
+        nodes: [
+          {
+            id: 'cf',
+            label: 'cf',
+            config: {
+              kind: 'cdn',
+              ...(wildcard
+                ? { invalidationWildcardPathsPerUpdate: 1 }
+                : { invalidationPathsPerPage: 2 }),
+              ttlClasses: ['document-isr', 'api-content'],
+            },
+          },
+          {
+            id: 'api',
+            label: 'api',
+            config: { kind: 'function', memoryGB: 1, concurrency: 1 },
+          },
+        ],
+        routes: { 'api-content': ['cf', 'api'] },
+      }).nodes.api!.resources.requests;
+    expect(mixed.cacheMissFlow['api-content']!.count).toBeGreaterThan(0);
+    expect(out(true)).toBeCloseTo(mixed.cacheMissFlow['api-content']!.count, 6);
+    expect(out(true)).toBeCloseTo(out(false)!, 6);
+  });
+
   it('ISR のキャッシュを置くストレージは ISR のページの大きさ × 倍率を保存する（画像は載せない）', () => {
     const u = simulateResources(w, {
       id: 'x',

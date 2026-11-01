@@ -115,7 +115,14 @@ function consume(
   switch (c.kind) {
     case 'cdn': {
       const ttl = c.ttlClasses?.includes(cls)
-        ? ttlMiss(w, cls, f, c.invalidationWildcardPathsPerUpdate !== undefined)
+        ? ttlMiss(
+            w,
+            cls,
+            f,
+            // 更新のたびに消えるのは ISR のページだけ（API の応答のキャッシュは消さない。OCL-62E7477C）
+            cls === 'document-isr' &&
+              c.invalidationWildcardPathsPerUpdate !== undefined,
+          )
         : undefined;
       add(
         u,
