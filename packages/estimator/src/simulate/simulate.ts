@@ -325,8 +325,26 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
       add(u, 'storage-gb-month', w.storage.dbGB);
       break;
     case 'object-storage':
-      if (node.config.storesImages)
-        add(u, 'storage-gb-month', w.storage.imagesGB + w.storage.variantsGB);
+      add(
+        u,
+        'storage-gb-month',
+        (node.config.storesImages
+          ? w.storage.imagesGB + w.storage.variantsGB
+          : 0) +
+          w.storage.isrPagesGB * node.config.isrCacheSizeFactor,
+      );
+      break;
+    case 'cdn':
+      // オンデマンドの再検証のたびに、ISR のページ（とそのデータのルート）を無効化する（D-66）
+      if (
+        node.config.invalidationPathsPerPage !== undefined &&
+        node.config.ttlClasses?.includes('document-isr')
+      )
+        add(
+          u,
+          'invalidation-paths',
+          w.onDemandPageRevalidations * node.config.invalidationPathsPerPage,
+        );
       break;
     default:
       break;

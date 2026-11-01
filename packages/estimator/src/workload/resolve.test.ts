@@ -103,6 +103,26 @@ describe('オンデマンドの再検証（D-49・prd/04 §2）', () => {
     );
   });
 
+  it('再検証を呼ぶページの数は 更新 × 1 回の更新で再検証するページ（再生成の回数とは別。既定は 1。時間の再検証は 0。D-66）', () => {
+    const w = resolveWorkload(
+      isr({ onDemandUpdatesPerMonth: 1_000, onDemandPagesPerUpdate: 2 }),
+    );
+    expect(w.onDemandPageRevalidations).toBe(2_000);
+    expect(
+      w.derivations.find((d) => d.id === 'on-demand-pages:article')!.result,
+    ).toBe(2_000);
+    expect(
+      resolveWorkload(isr({ onDemandUpdatesPerMonth: 1_000 }))
+        .onDemandPageRevalidations,
+    ).toBe(1_000);
+    expect(
+      resolveWorkload(isr({ revalidateSeconds: 300 }))
+        .onDemandPageRevalidations,
+    ).toBe(0);
+    // ISR のページの大きさ: ページ数 × 応答の大きさ
+    expect(w.storage.isrPagesGB).toBeCloseTo((1_000 * 50) / 1_000_000, 12);
+  });
+
   it('更新が 0 なら再生成も 0', () => {
     const w = resolveWorkload(isr({ onDemandUpdatesPerMonth: 0 }));
     expect(w.classes['isr-revalidate'].count).toBe(0);

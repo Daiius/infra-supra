@@ -73,6 +73,13 @@ miss_r = min(閲覧_r, U_r × 閲覧_r / (U_r + 閲覧_r) + 閲覧_r / (1 + λ_r
 （1 日に数回しか読まれない記事は、読まれるたびに 1 日が過ぎていて作り直す）。記事コミュニティの 1 か月目（2,000 記事・1 記事 1 日 3 回ほど）では
 最大寿命の分が約 4.5 万回で、オンデマンドの再生成は約 1.4 万 → 5.9 万回になる（5 分の約 18 万回よりは少ない）。
 
+**オンデマンドの再検証と CDN の無効化**（D-66）: 再検証を呼ぶページの数 = U_r × 1 回の更新で再検証するページ（`onDemandPagesPerUpdate`・既定 1）。
+再生成の回数（miss_r）とは別で、閲覧が無くても更新のたびに呼ぶ。`cdn` が `invalidationPathsPerPage` を持ち、ISR のページを期間つきでキャッシュする（`ttlClasses` に document-isr）ときだけ、
+`invalidation-paths = 再検証を呼ぶページ × invalidationPathsPerPage` を数える（OpenNext の CloudFront。prd/11 §13.1）。
+ゲームでは 1 回の更新で記事のページと一覧の 2 ページ（`ON_DEMAND_PAGES_PER_UPDATE`・仮定）。記事コミュニティの 1 か月目で 1.5 万 × 2 = 3 万ページ。
+
+**ISR のキャッシュの保存量**（D-66）: `object-storage` の `isrCacheSizeFactor` が正なら、ISR のページの大きさ（ページ数 × 応答の大きさ。`storage.isrPagesGB`）× その倍率を保存する。
+
 **期間つきの CDN の後ろの再生成**（D-55）: ISR のページを期間つきでキャッシュする `cdn`（`ttlClasses` に document-isr）が経路の前にあると、
 再生成を起こすのは CDN を miss して ISR を返すノードに届いた閲覧だけ。CDN と ISR の期間は同じ（Next.js は s-maxage に再検証の間隔を付ける）なので、
 届いた閲覧はそのつど ISR の期間も切れていて再生成を 1 回起こす: `N(isr-revalidate) = 届いた閲覧 = miss_r の合計`（月は上の式と同じ値・ピークはピークの miss。ピークの再生成の処理も、ルートごとのピークの miss で重み付けしてまとめる `peakRevalidateFlow`。OCL-55732091）。

@@ -69,6 +69,7 @@ describe('game', () => {
     // D-62: Cloudflare Images の閲覧のときの変換も WebP で配る。CF Paid・既定の所持金・結果は変わらない（R2 の転送は無料で、変換の数も形式で増えない）。
     //       KV を DB の代わりにする基準プレイは、ページが軽くなり速さが「悪い」月が減って所持金が増える（シード 42・3。31 は変わらない）
     // D-64: 構成に合った対策の基準プレイを 4 本足した（既存の行は変わらない）
+    // D-66: OpenNext の再検証の関数（Lambda）と S3 の ISR のキャッシュの保存量を数えた（OpenNext・画像の最適化の所持金が $1.2〜1.6 減る。結果は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -89,7 +90,7 @@ describe('game', () => {
       'vps-cdn': ['1807.73', 'won', 12],
       'vercel-cf-images': ['1414.19', 'goal', 12],
       'aws-amplify-cdn': ['1953.36', 'won', 12],
-      'aws-opennext-images': ['2248.45', 'won', 12],
+      'aws-opennext-images': ['2247.28', 'won', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2151.55', 'won', 12],
@@ -104,7 +105,7 @@ describe('game', () => {
       'vps-cdn': ['1741.52', 'won', 12],
       'vercel-cf-images': ['1325.48', 'goal', 12],
       'aws-amplify-cdn': ['1935.45', 'won', 12],
-      'aws-opennext-images': ['2259.29', 'won', 12],
+      'aws-opennext-images': ['2257.97', 'won', 12],
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2163.40', 'won', 12],
@@ -119,7 +120,7 @@ describe('game', () => {
       'vps-cdn': ['1713.54', 'goal', 12],
       'vercel-cf-images': ['1354.43', 'goal', 12],
       'aws-amplify-cdn': ['1910.10', 'won', 12],
-      'aws-opennext-images': ['2268.23', 'won', 12],
+      'aws-opennext-images': ['2266.67', 'won', 12],
     });
   });
 

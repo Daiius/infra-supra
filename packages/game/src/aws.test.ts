@@ -181,4 +181,28 @@ describe('AWS の構成', () => {
       componentConflict('aws', 'cdnPlan', 'flat-pro', { images: 'cf-images' }),
     ).not.toBeNull();
   });
+
+  it('OpenNext のオンデマンドの再検証は CloudFront を無効化する: 従量は月 1,000 パスを超えると 1 パス $0.005、定額は込み（D-66）', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    const first = (cdnPlan: string, revalidateSec: number) =>
+      playMonth(
+        newGame(
+          ON,
+          1,
+          ARTICLE_COMMUNITY,
+          DEFAULT_START_DATE,
+          'nextjs',
+          { cdnPlan, images: 'default' },
+          revalidateSec,
+        ),
+      ).history[0]!;
+    const line = (h: ReturnType<typeof first>) =>
+      h.lines.find((l) => l.label.includes('invalidation-paths'));
+    // 1 か月目: PV 30 万 × 書き込み 0.1 × ページを変える 0.5 = 更新 1.5 万 × 2 ページ × 2 パス = 6 万パス
+    const payg = first('payg', 0);
+    expect(line(payg)!.amount).toBeCloseTo((60_000 - 1_000) * 0.005, 6);
+    // 定額 Pro は込み・時間の再検証は無効化しない
+    expect(line(first('flat-pro', 0))?.amount ?? 0).toBe(0);
+    expect(line(first('payg', 300))?.amount ?? 0).toBe(0);
+  });
 });

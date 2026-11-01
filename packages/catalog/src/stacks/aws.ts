@@ -361,6 +361,8 @@ function cdnBilling(
       requests: 'https-requests',
       'egress-gb': 'cloudfront-transfer-out',
       'origin-transfer-gb': 'origin-fetch',
+      // 無効化はオンデマンドの再検証で無効化する CDN（OpenNext。D-66）だけが数える
+      'invalidation-paths': 'invalidation-paths',
     }),
   };
 }

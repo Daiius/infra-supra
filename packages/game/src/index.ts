@@ -653,6 +653,12 @@ export const ON_DEMAND_PAGE_UPDATE_SHARE = 0.5;
  */
 export const ON_DEMAND_MAX_AGE_SEC = 86_400;
 
+/**
+ * オンデマンドの再検証で、1 回の内容の更新ごとに再検証を呼ぶページの数（その記事のページと、記事が並ぶ一覧）。
+ * CDN のキャッシュの無効化の数に効く（OpenNext の CloudFront。再生成の回数には効かない）。ゲーム上の仮定（D-66）。
+ */
+export const ON_DEMAND_PAGES_PER_UPDATE = 2;
+
 /** オンデマンドの再検証の、月の内容の更新の回数（API の書き込み × ページを変える割合）。 */
 function onDemandUpdates(pv: number, w: WorkloadInput): number {
   return (
@@ -710,6 +716,7 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
         ...rest,
         onDemandUpdatesPerMonth: updates,
         onDemandMaxAgeSeconds: ON_DEMAND_MAX_AGE_SEC,
+        onDemandPagesPerUpdate: ON_DEMAND_PAGES_PER_UPDATE,
       };
     });
   }

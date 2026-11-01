@@ -87,7 +87,18 @@ export type ResolvedWorkload = {
    * 保存量。imagesGB は原本（images.storedGB）。variantsGB は投稿のときに作って保存するサイズ違い
    * （transformAt: upload のときだけ。閲覧のときに変換する構成では保存しないので 0。OCL-F3098083）。
    */
-  storage: { dbGB: number; imagesGB: number; variantsGB: number };
+  storage: {
+    dbGB: number;
+    imagesGB: number;
+    variantsGB: number;
+    /** ISR のページを 1 つずつ置いたときの大きさ（ページ数 × 応答の大きさ）。ISR のキャッシュを置くストレージが使う（D-66）。 */
+    isrPagesGB: number;
+  };
+  /**
+   * オンデマンドの再検証で、月に再検証を呼ぶページの数（内容の更新 × 1 回の更新で再検証するページの数）。
+   * 再生成の回数ではない（再生成は更新のあとの最初の閲覧で起きる）。CDN のキャッシュの無効化に使う（D-66）。
+   */
+  onDemandPageRevalidations: number;
   derivations: Derivation[];
 };
 
@@ -206,6 +217,8 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   // 1 訪問あたりのページ数（入口の割合 = 1 / これ）。0 なら毎回入口とみなす
   const pagesPerVisit = t.pagesPerSession > 0 ? t.pagesPerSession : 1;
   let isrWithRevalidate = 0;
+  let onDemandPageRevalidations = 0;
+  let isrPagesKB = 0;
   for (const r of w.routes) {
     const views = pv * r.share;
     const p = r.processing;
@@ -273,7 +286,30 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     } else {
       const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };
       byRendering.isr.push(flow(views, served));
+      isrPagesKB += r.pages * p.responseKB;
       const updates = r.onDemandUpdatesPerMonth;
+      if (updates !== undefined) {
+        const pagesPerUpdate = r.onDemandPagesPerUpdate ?? 1;
+        onDemandPageRevalidations += updates * pagesPerUpdate;
+        derivations.push({
+          id: `on-demand-pages:${r.id}`,
+          label: `オンデマンドの再検証を呼ぶページ（${r.id}）`,
+          expression:
+            '内容の更新 × 1 回の更新で再検証するページの数（CDN のキャッシュの無効化に使う）',
+          inputs: [
+            { name: '内容の更新', value: updates, basis: 'user-input' },
+            {
+              name: '1 回の更新で再検証するページ',
+              value: pagesPerUpdate,
+              basis:
+                r.onDemandPagesPerUpdate === undefined
+                  ? 'assumption'
+                  : 'user-input',
+            },
+          ],
+          result: updates * pagesPerUpdate,
+        });
+      }
       // 時間: 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → 閲覧 / (1 + λT)（人気が一様と仮定。prd/04 §2）
       // オンデマンド: 更新のあとの最初の閲覧で 1 回 → 更新 × 閲覧 / (更新 + 閲覧)（更新と閲覧がページに一様に散ると仮定。
       // 更新が閲覧よりずっと少なければ更新の回数、閲覧が少なければ閲覧の回数に近づく）。ピークでも外れる割合は同じとみなす。
@@ -457,7 +493,9 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           ? (w.images.distinct * w.images.variants * w.images.sizeKB) /
             1_000_000
           : 0,
+      isrPagesGB: isrPagesKB / 1_000_000,
     },
+    onDemandPageRevalidations,
     derivations,
   };
 }

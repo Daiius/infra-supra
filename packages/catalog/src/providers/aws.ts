@@ -56,6 +56,29 @@ const FLAT_FACTS = [
   },
 ];
 
+/**
+ * 定額のプランのキャッシュの無効化（D-66）。機能の表に「Fast cache invalidations」が全段で挙がり、プランが覆う費用に
+ * 「Your CloudFront distribution」とある。無効化を別に請求するとは書かれていないので込み（$0）と読む。
+ */
+const FLAT_INVALIDATION: PriceBookInput['plans'][number]['meters'][number] = {
+  id: 'invalidation-paths',
+  resource: 'invalidation-paths',
+  unit: 'count',
+  interpretation: {
+    adopted:
+      '定額のプランでは無効化も込み（$0）とみなす。機能の表に全段で「Fast cache invalidations」があり、プランが覆う費用に「Your CloudFront distribution」とある',
+    rejected: [
+      {
+        reading: '従量と同じく月 1,000 パスを超えた分は 1 パス $0.005',
+        reason:
+          '定額のプランの文書・料金ページに無効化の料金の記述が無く、超過の請求は無いと書かれている',
+      },
+    ],
+  },
+  pricing: { model: 'flat', per: 1, unitPrice: 0 },
+  sourceIds: ['cloudfrontFlatDocs'],
+};
+
 export const aws: PriceBookInput = {
   schemaVersion: 1,
   provider: 'aws',
@@ -95,6 +118,13 @@ export const aws: PriceBookInput = {
       'https://opennext.js.org/aws/inner_workings/components/server/node',
     ),
     opennextCaching: src('https://opennext.js.org/aws/inner_workings/caching'),
+    opennextCdnInvalidation: src(
+      'https://opennext.js.org/aws/config/overrides/automatic_cdn_invalidation',
+    ),
+    opennextWarming: src(
+      'https://opennext.js.org/aws/v2/inner_workings/warming',
+    ),
+    sstNextjs: src('https://sst.dev/docs/component/aws/nextjs/'),
     opennextImage: src(
       'https://opennext.js.org/aws/inner_workings/components/image_optimization',
     ),
@@ -112,6 +142,9 @@ export const aws: PriceBookInput = {
     ),
     cloudfrontFree: src(
       'https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/',
+    ),
+    cloudfrontInvalidation: src(
+      'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/PayingForInvalidation.html',
     ),
     s3Prices: priceList('AmazonS3'),
     dataTransferPrices: priceList('AWSDataTransfer'),
@@ -176,6 +209,16 @@ export const aws: PriceBookInput = {
       premise:
         'CloudFront（従量の料金）は HTTP・HTTPS のリクエストが月 1,000 万まで常時無料',
       sourceIds: ['cloudfrontFree'],
+    },
+    {
+      id: 'cloudfront-free-invalidations',
+      quantity: 1_000,
+      unit: 'count',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront（従量の料金）のキャッシュの無効化は月 1,000 パスまで無料（アカウントのすべての distribution の合計）。以降 1 パス $0.005。ワイルドカード（/images/*）は 1 パスと数える',
+      sourceIds: ['cloudfrontInvalidation', 'cloudfrontPrices'],
     },
     {
       id: 'sqs-free-requests',
@@ -386,8 +429,13 @@ export const aws: PriceBookInput = {
         {
           id: 'opennext-isr',
           premise:
-            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から再生成する。オンデマンドの再検証（revalidatePath・revalidateTag）にも対応するが、CloudFront のキャッシュは別に無効化が要る（無効化は月 1,000 パスまで無料・以降 1 パス $0.005。このモデルでは数えていない）',
-          sourceIds: ['opennextServer', 'opennextCaching', 'cloudfrontPrices'],
+            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から再生成する。オンデマンドの再検証（revalidatePath・revalidateTag）にも対応するが、CloudFront のキャッシュは別に無効化が要る（自動の無効化は既定で無効。有効にすると再検証したページごとにページとそのデータのルートの 2 パスを無効化する。無効化は月 1,000 パスまで無料・以降 1 パス $0.005）',
+          sourceIds: [
+            'opennextServer',
+            'opennextCaching',
+            'opennextCdnInvalidation',
+            'cloudfrontInvalidation',
+          ],
         },
         {
           id: 'opennext-versions',
@@ -518,6 +566,14 @@ export const aws: PriceBookInput = {
           unit: 'gb',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['cloudfrontFree'],
+        },
+        {
+          id: 'invalidation-paths',
+          resource: 'invalidation-paths',
+          unit: 'count',
+          allowancePool: 'cloudfront-free-invalidations',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.005 },
+          sourceIds: ['cloudfrontInvalidation', 'cloudfrontPrices'],
         },
       ],
     },
@@ -755,6 +811,7 @@ export const aws: PriceBookInput = {
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['cloudfrontFlatDocs'],
         },
+        FLAT_INVALIDATION,
       ],
     },
     {
@@ -792,6 +849,7 @@ export const aws: PriceBookInput = {
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['cloudfrontFlatDocs'],
         },
+        FLAT_INVALIDATION,
       ],
     },
     {
@@ -829,6 +887,7 @@ export const aws: PriceBookInput = {
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['cloudfrontFlatDocs'],
         },
+        FLAT_INVALIDATION,
       ],
     },
     {
