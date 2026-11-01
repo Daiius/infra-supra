@@ -507,6 +507,7 @@
 - 構成の名前は D-65 の実際の組の名前 +「（Astro）」。SSR が外の API を待つことは前提の文（`astro-server-fetch`）、遅延は計算しない（AX-13）。
 - 基準プレイ（何もしない・シード 1〜20）: **CF Paid × Next.js（目標の根拠）と Astro の既定は不変**（golden も不変）。受託の Vercel Pro の Astro + Workers は 0 → 20 / 20（Supabase Pro の固定費が消える）。Cloudflare の Astro + VPS の API は記事 17 / 20・受託 12 / 20（Cloudflare の Astro だけより損）。VPS の Astro + Workers は Workers Paid の基本料の分だけ損。
 - 文言: 「同じ事業者」の説明文（Cloudflare）を「シェルと同じ Worker」から「サイトと同じ Worker」に替えた（SPA と Astro で共有する）。
+- 追記（レビュー OCL-4D1F5201・2026-11-02）: Cloudflare の Astro + VPS の API で、マイページの描画の CPU を VPS にも数えていた。VPS ではマイページの 1 回を API の 1 回（Workload の api の CPU と応答の大きさ）として数え、描画は Worker だけに数える（`host` の `serverApiClasses`）。基準プレイの結果は変わらない（VPS の CPU の上限から遠い）。
 
 ### D-70 記事のページを作り直す更新は記事の投稿・編集だけ（コメントは別のデータ）（確定・2026-11-02）
 

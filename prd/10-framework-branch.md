@@ -494,7 +494,7 @@ D-67 と D-68 が並行で入ったので、Astro では「同じ事業者のみ
 - 出さない組: Astro × AWS（D-68 で載せない）。Cloudflare の Astro + AWS の API（`aws-lambda`）は、Worker の SSR から API Gateway を呼ぶ転送の扱い（Lambda の応答が Worker に返る分）を確かめていないので出さない。VPS の Astro + 他の事業者の画像も今までどおり出さない。
 - 構成の名前（ゲーム中）: 「Vercel Pro + Cloudflare Workers・D1（Astro）」「さくらの VPS 2GB（東京） + Cloudflare Workers・D1（Astro）」「Cloudflare Paid + さくらの VPS 2GB（API・MySQL）（Astro）」（D-65 の実際の組の名前 +「（Astro）」）。
 - 自前運用（D-67 の `selfHostedOf`）: Cloudflare + VPS の API は部品の VPS で維持・障害がかかる。VPS の Astro から Workers に出しても VPS の構成のまま（維持・障害は変わらない）。
-- 置いた仮定: Worker の CPU は 1 回 5 ms（`SERVER_API_WORKER_CPU_MS`・D-67 と同じ）。VPS の Astro + Workers の Workers のプランは Paid（Vercel Hobby だけ Free・§9.1 と同じ）。Cloudflare + VPS の API で、Worker が VPS を呼ぶ 1 回の受け渡しは VPS の回線にページの大きさで数える（多めの見積もり。マイページの分だけなので小さい）。
+- 置いた仮定: Worker の CPU は 1 回 5 ms（`SERVER_API_WORKER_CPU_MS`・D-67 と同じ）。VPS の Astro + Workers の Workers のプランは Paid（Vercel Hobby だけ Free・§9.1 と同じ）。Cloudflare + VPS の API で、マイページを描く Worker が VPS を呼ぶ 1 回は、VPS では API の 1 回（Workload の api の 1 件の CPU と応答の大きさ）として数える。描画の CPU は Worker に残る（エンジンに `host` の `serverApiClasses`。OCL-4D1F5201）。
 
 基準プレイ（何もしない・シード 1〜20・ビルドの間隔 5 分・始める画面で部品を選ぶ）。12 か月の費用は事業者別の中央値、所持金は中央値（§9.3 と同じ取り方）。
 

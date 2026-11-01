@@ -183,6 +183,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     storesImages: z.boolean().default(true),
     /** DB もこのディスクに置くか（既定 true。DB を他の事業者の API に出した VPS は置かない。D-69）。 */
     storesDb: z.boolean().default(true),
+    /**
+     * 他の事業者のサーバーから API として呼ばれるクラス（D-69・OCL-4D1F5201）。このホストではページを描かず、
+     * 1 件を API の 1 回（Workload の api の 1 件の CPU と応答の大きさ）として数える。DB の問い合わせはそのクラスのまま。
+     */
+    serverApiClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;

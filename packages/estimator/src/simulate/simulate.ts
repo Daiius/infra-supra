@@ -294,13 +294,18 @@ function consume(
       // 経路を持たない（ビルドの時間は staticUsage で数える。D-68）
       return f;
     case 'host': {
-      hostAcc.kb += n * p.kb;
+      // 他のサーバーから API として呼ばれるクラスは、描画でなく API の 1 回の CPU と応答の大きさ（D-69・OCL-4D1F5201）
+      const api = c.serverApiClasses?.includes(cls)
+        ? w.classes.api.perRequest
+        : undefined;
+      const kb = api?.kb ?? p.kb;
+      hostAcc.kb += n * kb;
       hostAcc.requests += n;
-      hostAcc.cpuMs += n * p.cpuMs;
+      hostAcc.cpuMs += n * (api?.cpuMs ?? p.cpuMs);
       hostAcc.queries += n * p.queries;
       if (cls === 'image-transform') hostAcc.transforms += n;
       add(u, 'requests', n);
-      add(u, 'egress-gb', kbToGb(n * p.kb));
+      add(u, 'egress-gb', kbToGb(n * kb));
       return f;
     }
   }

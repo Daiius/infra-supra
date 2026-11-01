@@ -665,6 +665,45 @@ describe('Astro の API の置き場（D-69）', () => {
     expect(h.routes['document-ssr']).toEqual(['worker', 'vps']);
   });
 
+  it('Cloudflare + VPS の API: マイページの描画の CPU は Worker に残り、VPS は API の 1 回として数える（OCL-4D1F5201）', () => {
+    const a = astro('cloudflare-vinext-paid', { api: 'sakura-vps-2gb' });
+    const r = w();
+    const doc = r.classes['document-ssr'];
+    const heavy = {
+      ...r,
+      classes: {
+        ...r.classes,
+        'document-ssr': {
+          ...doc,
+          perRequest: { ...doc.perRequest, cpuMs: doc.perRequest.cpuMs * 3 },
+        },
+      },
+    };
+    const sim = simulateResources(r, a);
+    const sim3 = simulateResources(heavy, a);
+    // VPS の CPU・回線は描画の重さで変わらない
+    expect(sim3.nodes.vps!.host!.peakCores).toBeCloseTo(
+      sim.nodes.vps!.host!.peakCores,
+    );
+    expect(sim3.nodes.vps!.host!.peakMbps).toBeCloseTo(
+      sim.nodes.vps!.host!.peakMbps,
+    );
+    expect(sim3.nodes.worker!.resources['cpu-ms']!).toBeGreaterThan(
+      sim.nodes.worker!.resources['cpu-ms']!,
+    );
+    // 1 回は API の 1 件と同じ（同じ数の API を直接受けた VPS と等しい）
+    const ssr = r.classes['document-ssr'];
+    const apiCls = r.classes.api;
+    const vps = a.nodes.find((n) => n.id === 'vps')!;
+    expect(vps.config).toMatchObject({ serverApiClasses: ['document-ssr'] });
+    expect(sim.nodes.vps!.resources['egress-gb']).toBeCloseTo(
+      ((ssr.count + apiCls.count) * apiCls.perRequest.kb +
+        r.classes['image-write'].count *
+          r.classes['image-write'].perRequest.kb) /
+        1e6,
+    );
+  });
+
   it('Cloudflare + VPS の API: VPS に届くのはマイページの描画の問い合わせ・API・投稿だけ', () => {
     const a = astro('cloudflare-vinext-paid', { api: 'sakura-vps-2gb' });
     const r = w();

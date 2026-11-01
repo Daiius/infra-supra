@@ -847,20 +847,26 @@ export function applyCrossApi(
           }
         : n,
     );
-  // Cloudflare の Astro: マイページを描く Worker が VPS の API を fetch で呼ぶ（課金されず、待つ時間は CPU 時間に数えない）
+  // Cloudflare の Astro: マイページを描く Worker が VPS の API を fetch で呼ぶ（課金されず、待つ時間は CPU 時間に数えない）。
+  // VPS はページを描かず、API の 1 回として数える（OCL-4D1F5201）
   if (cur && astro && host === 'cloudflare')
     nodes = nodes.map((n): ArchNodeIn =>
-      n.id === 'worker'
+      n.config.kind === 'host' && cur.nodes.some((x) => x.id === n.id)
         ? {
             ...n,
-            label: 'Worker（Astro。VPS の API を呼ぶ）',
-            facts: [
-              ...(n.facts ?? []),
-              'astro-server-fetch',
-              'worker-outbound',
-            ],
+            config: { ...n.config, serverApiClasses: ['document-ssr'] },
           }
-        : n,
+        : n.id === 'worker'
+          ? {
+              ...n,
+              label: 'Worker（Astro。VPS の API を呼ぶ）',
+              facts: [
+                ...(n.facts ?? []),
+                'astro-server-fetch',
+                'worker-outbound',
+              ],
+            }
+          : n,
     );
   if (cur && !spa)
     nodes = nodes.map((n): ArchNodeIn => {
