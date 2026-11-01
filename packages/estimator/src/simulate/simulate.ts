@@ -9,10 +9,11 @@ import {
   type Architecture,
   type ArchitectureInput,
 } from '../architecture/schema.ts';
-import type {
-  ClassFlow,
-  RequestClass,
-  ResolvedWorkload,
+import {
+  kbMixOf,
+  type ClassFlow,
+  type RequestClass,
+  type ResolvedWorkload,
 } from '../workload/resolve.ts';
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
@@ -117,7 +118,14 @@ function consume(
         'requests',
         c.requestUnitKB === undefined
           ? n
-          : n * Math.max(1, ceilUnits(p.kb, c.requestUnitKB)),
+          : n *
+              kbMixOf(p).reduce(
+                (s, part) =>
+                  s +
+                  part.share *
+                    Math.max(1, ceilUnits(part.kb, c.requestUnitKB!)),
+                0,
+              ),
       );
       add(u, 'egress-gb', kbToGb(n * p.kb));
       const out = ttl ?? {

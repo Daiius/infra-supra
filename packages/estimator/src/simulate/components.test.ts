@@ -342,6 +342,45 @@ describe('部品の選択で足した振る舞い', () => {
     expect(u.p!.resources.queries).toBeCloseTo(api.count * 2, 9);
   });
 
+  it('大きさの単位で数える CDN は、ルートごとの大きさで切り上げてから足す（平均で切り上げない。OCL-663E589C）', () => {
+    const w2 = resolveWorkload(
+      workload({
+        routes: [
+          {
+            id: 'small',
+            rendering: 'ssr',
+            share: 0.5,
+            pages: 1,
+            processing: { ...processing, responseKB: 50 },
+          },
+          {
+            id: 'large',
+            rendering: 'ssr',
+            share: 0.5,
+            pages: 1,
+            processing: { ...processing, responseKB: 900 },
+          },
+        ],
+      }),
+    );
+    const ssr = w2.classes['document-ssr'];
+    // 平均（約 475 KB）で切り上げると 1 件 1 だが、ルートごとなら 1 と 2 で平均 1.5
+    expect(Math.ceil(ssr.perRequest.kb / 512)).toBe(1);
+    const u = simulateResources(w2, {
+      id: 'x',
+      name: 'x',
+      nodes: [
+        {
+          id: 'g',
+          label: 'g',
+          config: { kind: 'cdn', hitRate: {}, requestUnitKB: 512 },
+        },
+      ],
+      routes: { 'document-ssr': ['g'] },
+    }).nodes.g!;
+    expect(u.resources.requests).toBeCloseTo(ssr.count * 1.5, 6);
+  });
+
   it('止まる DB: 動いている割合は λT / (1 + λT)、時間課金は容量の単位の数を掛ける。止まらない DB は 730 時間', () => {
     const node = (pauseAfterIdleSeconds?: number) => ({
       id: 'a',
