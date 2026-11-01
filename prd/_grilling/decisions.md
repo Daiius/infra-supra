@@ -378,11 +378,13 @@
 - 公式で確かめたこと（2026-11-01）: R2 の転送は無料・本番の公開バケットは同じアカウントのゾーンのカスタムドメイン・URL の変換は変換を有効にしたゾーンで頼め、同じゾーンの元の画像は既定で受け付ける・Free のプランでも Images の外の画像を変換できる・Next.js のローダーに Cloudflare の例。
   確かめられなかったこと: Vercel の関数から外への通信の課金（数えない）・R2 の申し込みの要否・Images Paid の基本料・部分的な設定のプランの条件。prd/11 §2.1・§2.5。
 - アカウントの手間は構成の既定より増えたアカウントで数える（Vercel + Supabase の Supabase は数えない）。既存の Cloudflare + Hyperdrive・VPS + 前段の CDN にも効くが、基準プレイ・golden は変わらなかった。手間の内訳に「他の事業者の管理」、始める画面の手間のバーはマスの左半分を薄い維持の色で塗る。
-- 基準プレイ（記事コミュニティ × Vercel Pro・シード 1〜20・1 か月目の終わりに画像の部品を替える）: Vercel の請求は約半分（Next.js $1,389 → $671）、所持金の中央値 $647 → $1,249〜$1,364（SPA $774 → $1,222〜$1,328）。**達成は 0 / 20 のまま**。
+- 基準プレイ（記事コミュニティ × Vercel Pro・シード 1〜20・1 か月目の終わりに画像の部品を替える）: Vercel の請求は約半分（Next.js $1,191 → $666。D-58 の取り込み後）、所持金の中央値 $851 → $1,255〜$1,369（SPA $774 → $1,222〜$1,328）。**達成は 0 / 20 のまま**。
   負けの主因が画像の Fast Data Transfer という仮説は当たり、画像だけ Cloudflare で勝ち筋ができるという仮説は外れた（席の基本料・HTML の転送・Supabase Pro が残る）。目標は動かさない。CF Paid・既定は 20 / 20 のまま。prd/11 §3.6。
 - 追記（ユーザーの依頼「AWS にも画像だけ Cloudflare を広げる」・2026-11-01）: feat/aws-stage1 を取り込み、`CROSS_PAIRS` に AWS（Next.js の Amplify・SPA の S3 + CloudFront + Lambda）× 画像 × Cloudflare を足した。土台ごとの差は cross.ts の `hostImageShape` に閉じた（aws.ts は変えない）。
   AWS の画像のノード（Amplify の最適化・画像だけの CloudFront・S3）が外れる。SPA の Lambda から R2 への書き込みは、Lambda の料金ページ（リージョンの外とのデータは EC2 のデータ転送の料金）と AWSDataTransfer（東京 → インターネット $0.114/GB〜・月 100 GB 無料）で数える。Amplify の SSR から外への通信は料金ページに記載が無く、数えない。
   基準プレイ（同じ条件）: AWS Next.js は既定 10 / 20 → R2 + Images・R2 に一律で縮めるとも **20 / 20**（所持金 $1,702 → $1,835・$1,948）。AWS SPA は 19 / 20 → 20 / 20。AWS では画像だけ Cloudflare が勝ち筋を作る。prd/11 §2.5・§3.6。
+- 追記（origin/main の D-58 を取り込み・2026-11-01）: 振る舞いの id で画像の大きさを見るので、Cloudflare: R2 に一律で縮めるは JPEG のフォールバックも保存し、Cloudflare: R2 + Images は形式で変換の数が増えない（D-58 の Cloudflare Images と同じ）。
+  Cloudflare の変換の URL は Cloudflare の構成と同じく設定の形式で配る扱い（next/image の WebP の既定は当てない）。基準プレイで変わったのは Vercel Pro の Next.js の行だけ（既定の所持金 $647 → $851）。prd/11 §3.6。
 
 ### D-55 VPS の前段の CDN で HTML もキャッシュするときの再生成の数え方を直す（確定・2026-11-01）
 

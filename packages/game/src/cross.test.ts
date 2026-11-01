@@ -10,6 +10,7 @@ import {
   newGame,
   newSave,
   pageWeightOf,
+  IMAGE_FORMAT_KB,
   playMonth,
   replaySave,
   setupSlots,
@@ -204,5 +205,36 @@ describe('AWS + 画像だけ Cloudflare', () => {
     expect(out?.ratio).toBeGreaterThan(0);
     expect(out!.ratio).toBeLessThan(1);
     expect(last(cf).effort.accounts).toBe(EFFORT.accountUpkeep);
+  });
+});
+
+describe('画像の形式（D-58）との整合', () => {
+  const after = (option: string, kb?: number) => {
+    let s = playMonth(newGame(VERCEL_PRO, 1));
+    s = applyAction(s, swap(option));
+    if (kb !== undefined)
+      s = applyAction(s, { type: 'set', key: 'format', value: kb });
+    return playMonth(playMonth(s));
+  };
+
+  it('Cloudflare: R2 + Images は形式を替えても変換の数が増えない', () => {
+    const jpeg = after('cf-images');
+    const avif = after('cf-images', IMAGE_FORMAT_KB.avif);
+    expect(line(avif, 'cloudflare transformations')).toBeCloseTo(
+      line(jpeg, 'cloudflare transformations'),
+      1,
+    );
+  });
+
+  it('Cloudflare: R2 に一律で縮めるは、WebP にすると JPEG のフォールバックも置く（Vercel の一律で縮めると同じ）', () => {
+    const webp = after('cf-resize', IMAGE_FORMAT_KB.webp);
+    expect(webp.stock.imagesGB).toBeGreaterThan(
+      after('cf-resize').stock.imagesGB,
+    );
+    expect(webp.stock.imagesGB).toBeCloseTo(
+      after('resize', IMAGE_FORMAT_KB.webp).stock.imagesGB,
+      // 他の事業者の管理の手間で機能開発が少し減り、PV がわずかに違う
+      1,
+    );
   });
 });
