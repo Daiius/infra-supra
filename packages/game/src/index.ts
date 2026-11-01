@@ -2732,6 +2732,276 @@ export function reflectionOf(state: GameState): Reflection {
   };
 }
 
+// ---- 次のプレイへのヒント（目標に届かなかったとき。D-40）----
+
+export type RetryHint = {
+  /** 原因の種類（画面のキー・テスト用）。 */
+  kind: 'limit' | 'incident' | 'policy' | 'cost' | 'overage' | 'element';
+  /** 何が起きたか（何か月目に・数値）。 */
+  what: string;
+  /** 次に試せる方向。正解の構成名は出さない（事業者の制限・プラン名など事実の名前は出してよい。D-40）。 */
+  next: string;
+};
+
+const usd = (x: number) =>
+  `$${Math.round(x)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+
+/** 月の並び（1 つなら「3 か月目」、続くなら「3〜5 か月目」、飛ぶなら「3・7 か月目」）。 */
+function monthsText(ms: readonly number[]): string {
+  if (ms.length === 1) return `${ms[0]} か月目`;
+  const contiguous = ms.every((m, i) => i === 0 || m === ms[i - 1]! + 1);
+  return contiguous
+    ? `${ms[0]}〜${ms[ms.length - 1]} か月目`
+    : ms.length <= 4
+      ? `${ms.join('・')} か月目`
+      : `${ms[0]} か月目から計 ${ms.length} か月`;
+}
+
+const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
+  speed:
+    'ページの重さ（サーバーの処理・画像の大きさと種類）を設定や部品で軽くするか、処理の上限に余裕のある構成を考える',
+  quality: '画像の圧縮を強くしすぎている。画質と転送量の釣り合いを見直す',
+  freshness:
+    'キャッシュの間隔や部品の性質で更新が遅れて見える。間隔を短くするか、更新がすぐ届く部品を考える',
+  feature:
+    '機能開発に回せる手間が期待に届かない。維持・出来事への対応・行動の手間を減らして、機能開発に回す',
+};
+
+/**
+ * 次のプレイへのヒント（目標に届かなかったとき・途中で終わったとき。達成なら空）。
+ * 未達の目標と終わり方ごとに、原因を月の記録（止まった月の前提・費用の内訳・満足度の理由・手間の内訳・出来事）から特定し、
+ * 影響の大きい順に最大 3 つ返す。終わり方の直接の原因 → 未達の目標の原因 の順に並べる。
+ */
+export function retryHintsOf(state: GameState): RetryHint[] {
+  if (state.phase !== 'lost' || !state.end) return [];
+  const sc = scenarioOf(state);
+  const h = state.history;
+  const n = Math.max(1, h.length);
+  const reason = state.end.reason;
+  const early = reason !== 'goal';
+  const cashShort = reason === 'cash' || (!early && state.cash < sc.goal.cash);
+  const satShort = !early && averageSatisfaction(h) < sc.goal.satisfaction;
+  const w = sc.satisfaction.weights;
+  const out: { hint: RetryHint; score: number }[] = [];
+  // 終わり方の直接の原因は 300 台、未達の目標の原因は 200 台、補足は 100 台（それぞれの中は影響の大きさ）
+  const tier = (direct: boolean, metric: number) =>
+    (direct ? 300 : 200) + Math.min(99, metric);
+
+  // ① 前提（上限）に当たって止まった月
+  const limits = new Map<
+    string,
+    { text: string; months: number[]; ratio: number; accumulates: boolean }
+  >();
+  for (const r of h) {
+    if (r.status !== 'down') continue;
+    for (const p of r.premises) {
+      if (!p.hit || (p.effect !== 'block' && p.effect !== 'upgrade-required'))
+        continue;
+      const cur = limits.get(p.id) ?? {
+        text: p.text,
+        months: [],
+        ratio: 0,
+        accumulates: p.accumulates ?? false,
+      };
+      cur.months.push(r.month);
+      cur.ratio = Math.max(cur.ratio, p.ratio ?? 0);
+      limits.set(p.id, cur);
+    }
+  }
+  // 同じ方向の対策になる前提はまとめる（無料プランは同じ月に複数の上限に当たる）
+  const groups = new Map<
+    string,
+    {
+      months: Set<number>;
+      items: { text: string; ratio: number }[];
+      cause?: string;
+    }
+  >();
+  for (const [id, l] of limits) {
+    const crossing = h
+      .flatMap((r) => r.crossings)
+      .find((c) => c.premiseId === id && c.causes.length);
+    const cause = crossing
+      ? [...crossing.causes].sort((a, b) => a.ratioWithout - b.ratioWithout)[0]
+      : undefined;
+    // 原因は一時的な流量の出来事か、受けた提案（以後ずっと効く負荷・保存量の追加）のどちらか（crossingsOf）
+    const permanent =
+      cause !== undefined && eventDef(sc, cause.eventId)?.kind === 'proposal';
+    const next = permanent
+      ? l.accumulates
+        ? '受けた提案で保存量が増え、上限を越えた。ためていく量は減らない。受ける前に容量との余裕を確かめるか、容量の大きいプラン・部品へ移す'
+        : '受けた提案で以後の負荷が増え、上限を越えた。受ける前に上限との余裕を確かめるか、上限の大きいプラン・部品・設定で負荷を下げる'
+      : cause
+        ? cause.eventId === 'bot'
+          ? 'Bot の大量アクセスで上限を越えた。Bot を遮断するか、上限に余裕のあるプラン・部品を考える'
+          : '一時的に流量が増える出来事で上限を越えた。予告や前兆が来たら、前もって上限に余裕を作る'
+        : l.accumulates
+          ? 'ためていく量（保存量）は減らない。上限に届く前に、容量の大きいプラン・部品へ移すか、ためる量を減らす'
+          : '込みの量・無料枠の上限に当たると止まる。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らす';
+    const g = groups.get(next) ?? { months: new Set<number>(), items: [] };
+    l.months.forEach((m) => g.months.add(m));
+    g.items.push({ text: l.text, ratio: l.ratio });
+    if (cause && !g.cause) g.cause = cause.title;
+    groups.set(next, g);
+  }
+  const times = (r: number) =>
+    r > 1 && Number.isFinite(r) ? `${r.toFixed(1)} 倍` : '';
+  for (const [next, g] of groups) {
+    const months = [...g.months].sort((a, b) => a - b);
+    const items = [...g.items].sort((a, b) => b.ratio - a.ratio);
+    const top = items[0]!;
+    const by = g.cause ? `。「${g.cause}」が無ければ越えなかった` : '';
+    const what =
+      items.length === 1
+        ? `${monthsText(months)}に「${top.text}」に当たって止まった${times(top.ratio) ? `。使用量は上限の ${times(top.ratio)}` : ''}${by}`
+        : `${monthsText(months)}に止まった。当たった上限: ${items
+            .slice(0, 2)
+            .map(
+              (x) =>
+                `「${x.text}」${times(x.ratio) ? `（${times(x.ratio)}）` : ''}`,
+            )
+            .join(
+              '・',
+            )}${items.length > 2 ? ` ほか ${items.length - 2} 件` : ''}${by}`;
+    out.push({
+      hint: { kind: 'limit', what, next },
+      score: tier(
+        reason === 'outages',
+        reason === 'outages'
+          ? months.length * 10 + Math.min(9, top.ratio)
+          : (100 * w.availability * months.length) / n,
+      ),
+    });
+  }
+
+  // ② 自前運用の偶発的な障害
+  const incidents = h
+    .filter((r) => r.status === 'incident')
+    .map((r) => r.month);
+  if (incidents.length)
+    out.push({
+      hint: {
+        kind: 'incident',
+        what: `${monthsText(incidents)}に自前運用のサーバーの障害で止まった（偶発的。1 台構成・SLA なし）`,
+        next: '自前運用は偶発的に止まることがある。止まった回数の上限に余裕を残すか、障害の対応を事業者に任せられる構成を考える',
+      },
+      score: tier(
+        reason === 'outages',
+        reason === 'outages'
+          ? incidents.length * 10
+          : (100 * w.availability * incidents.length * 0.5) / n,
+      ),
+    });
+
+  // ③ 規約違反（指摘の翌月も違反したまま）
+  if (reason === 'policy') {
+    // 停止につながった指摘は最後の指摘（一度解消して再び違反すると、指摘からやり直しになる。policyStep）
+    const warned = h.findLast((r) => r.policyWarning);
+    const p = warned?.premises.find((x) => x.hit && x.effect === 'policy');
+    out.push({
+      hint: {
+        kind: 'policy',
+        what: `${warned ? `${warned.month} か月目に運営元から規約違反の指摘${p ? `（${p.text}）` : ''}を受け、` : ''}${state.end.month} か月目も違反したままでアカウントが停止された`,
+        next: '指摘が来た月のうちにプランを変えるか、乗り換えを始める（乗り換えの作業中は猶予される）。規約の条件は始める前に構成の説明で確かめられる',
+      },
+      score: tier(true, 99),
+    });
+  }
+
+  // ④ 費用（所持金が足りない・尽きた）
+  if (cashShort) {
+    const byLabel = new Map<string, number>();
+    for (const r of h)
+      for (const l of r.lines) {
+        const v = l.currency === 'JPY' ? l.amount / USD_JPY : l.amount;
+        if (v > 0) byLabel.set(l.label, (byLabel.get(l.label) ?? 0) + v);
+      }
+    const top = [...byLabel].sort((a, b) => b[1] - a[1]).slice(0, 2);
+    const infra = h.reduce((a, r) => a + r.infraCost, 0);
+    const revenue = h.reduce((a, r) => a + r.revenue, 0);
+    const positive = [...byLabel.values()].reduce((a, v) => a + v, 0);
+    const baseSum = [...byLabel]
+      .filter(([k]) => k.endsWith('基本料'))
+      .reduce((a, [, v]) => a + v, 0);
+    const base = baseSum > positive / 2;
+    const share = infra / Math.max(1, revenue);
+    const shortText =
+      reason === 'cash'
+        ? `${state.end.month} か月目に所持金が尽きた`
+        : `所持金 ${usd(state.cash)} で、目標 ${usd(sc.goal.cash)} に ${usd(sc.goal.cash - state.cash)} 足りない`;
+    if (top.length)
+      out.push({
+        hint: {
+          kind: 'cost',
+          what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
+          next:
+            share < 0.2
+              ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
+              : base
+                ? '基本料（固定費）が費用の大半。今の規模に見合う基本料か、込みの量や席がそこまで要るかを見直す'
+                : '使った分の費用が大きい。設定・部品で量（転送・変換・実行）を下げるか、込みの量の大きいプランと比べる',
+        },
+        score: tier(reason === 'cash', 50 + Math.min(49, 100 * share)),
+      });
+    // 込み分を超えて請求が付いた前提
+    const over = new Map<string, { text: string; months: number[] }>();
+    for (const r of h)
+      for (const p of r.premises) {
+        if (!p.hit || p.effect !== 'cost') continue;
+        const cur = over.get(p.id) ?? { text: p.text, months: [] };
+        cur.months.push(r.month);
+        over.set(p.id, cur);
+      }
+    for (const o of over.values())
+      out.push({
+        hint: {
+          kind: 'overage',
+          what: `${o.months[0]} か月目から「${o.text}」を超え、超えた分が請求された`,
+          next: '込みの量を超えた分は使った分だけ請求される。設定・部品で量を下げるか、超えたときの単価をプランごとに比べる',
+        },
+        score: tier(false, 20 + o.months.length),
+      });
+  }
+
+  // ⑤ 満足度の要素（満足度の目標・伸び＝収益にも効く。可用性は ①② で扱う）
+  if (satShort || cashShort) {
+    const eff = reflectionOf(state).effort;
+    for (const e of ELEMENTS) {
+      if (e === 'availability' || !w[e]) continue;
+      const months = h.filter((r) => r.satisfaction.stages[e] !== 'good');
+      if (!months.length) continue;
+      const loss =
+        h.reduce(
+          (a, r) => a + w[e] * (1 - STAGE_VALUE[r.satisfaction.stages[e]]),
+          0,
+        ) / n;
+      const last = months[months.length - 1]!;
+      const effortText =
+        e === 'feature' && eff.upkeep + eff.interrupt > 0
+          ? `。維持の手間 計 ${eff.upkeep}・出来事への対応 計 ${eff.interrupt}（手間の合計 ${eff.total} の ${Math.round((100 * (eff.upkeep + eff.interrupt)) / Math.max(1, eff.total))}%）`
+          : '';
+      const growth = satShort ? '' : '満足度は伸び（PV と収益）にも効く。';
+      out.push({
+        hint: {
+          kind: 'element',
+          what: `${ELEMENT_LABEL[e]}が「良い」でない月が ${months.length} か月${last.satisfaction.reasons[e] ? `（${last.month} か月目: ${last.satisfaction.reasons[e]}）` : ''}${effortText}`,
+          next: growth + ELEMENT_NEXT[e],
+        },
+        score: satShort
+          ? tier(false, 100 * loss)
+          : 100 + Math.min(99, 100 * loss),
+      });
+    }
+  }
+
+  return out
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((x) => x.hint);
+}
+
 // ---- 基準プレイ（目標値の根拠・成績の目盛り。prd/07 §9.6・§10.8）----
 
 /** 記事コミュニティの基準プレイ（シナリオのデータ）。 */
@@ -2794,3 +3064,11 @@ export * from './scenario.ts';
 export * from './save.ts';
 export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
+
+// フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
+import { STACK_FLAVOR } from 'catalog';
+
+/** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
+export function stackFlavor(stackIndex: number): string | undefined {
+  return STACK_FLAVOR[STACKS[stackIndex]!.id];
+}
