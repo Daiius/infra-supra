@@ -575,6 +575,24 @@ export function defaultCurveStacks(
   return inStackOrder([...current, ...cheap]);
 }
 
+/**
+ * 足し引きした後の曲線の構成: 今の構成を必ず入れ、載せられない構成（フレームワークを替えたとき）は外し、
+ * 合わせて CURVE_MAX までに抑える（OCL-E5E5FCBD。選んだ後に未選択の構成へ切り替えても超えない）。
+ * 溢れたときは選んだ順の先頭から残す。並びは STACKS の順。
+ */
+export function pickedCurveStacks(
+  picked: readonly string[],
+  rows: readonly ComparisonRow[],
+  max = CURVE_MAX,
+): string[] {
+  const current = rows.filter((r) => r.current).map((r) => r.stack);
+  const others = [...new Set(picked)]
+    .filter((id) => !current.includes(id))
+    .filter((id) => rows.some((r) => r.stack === id))
+    .slice(0, Math.max(0, max - current.length));
+  return inStackOrder([...current, ...others]);
+}
+
 /** 曲線の色の枠（0 始まり）。事業者ごとに STACKS に初めて出る順で固定する（表示の順位で塗り替えない）。 */
 export function curveColorSlot(provider: string): number {
   return [...new Set(STACKS.map((s) => s.provider as string))].indexOf(

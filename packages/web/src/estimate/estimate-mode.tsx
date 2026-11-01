@@ -25,7 +25,7 @@ import {
   CURVE_PVS,
   curveColorSlot,
   defaultCurveStacks,
-  inStackOrder,
+  pickedCurveStacks,
   fromQuery,
   IMAGE_FORMATS,
   normalizeInput,
@@ -679,16 +679,12 @@ function CostCurve({
 }) {
   // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
   const [picked, setPicked] = useState<string[] | null>(null);
-  // 載せられない構成（フレームワークを替えたとき）は外し、今の構成は必ず入れる
   const stacks = useMemo(
     () =>
       picked === null
         ? defaultCurveStacks(rows)
-        : inStackOrder([
-            input.stack,
-            ...picked.filter((id) => rows.some((r) => r.stack === id)),
-          ]),
-    [picked, rows, input.stack],
+        : pickedCurveStacks(picked, rows),
+    [picked, rows],
   );
   const curves = useMemo(() => costCurves(input, stacks), [input, stacks]);
   const series: CurveChartSeries[] = curves.map((c) => ({
@@ -698,9 +694,12 @@ function CostCurve({
     shape: SHAPES[c.variant] ?? 'circle',
     points: c.points.map((p) => ({ y: p.totalUsd, flags: p.blocking })),
   }));
+  // 選んだ順を保つ（上限を超えるときは先に選んだものから残す。pickedCurveStacks）
   const toggle = (id: string) =>
     setPicked(
-      stacks.includes(id) ? stacks.filter((s) => s !== id) : [...stacks, id],
+      stacks.includes(id)
+        ? stacks.filter((s) => s !== id)
+        : [...(picked ?? stacks).filter((s) => stacks.includes(s)), id],
     );
   const full = stacks.length >= CURVE_MAX;
   const anyStop = curves.some((c) => c.points.some((p) => p.blocking.length));

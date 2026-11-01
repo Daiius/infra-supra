@@ -6,6 +6,7 @@ import {
   CURVE_PVS,
   curveColorSlot,
   defaultCurveStacks,
+  pickedCurveStacks,
   fromQuery,
   normalizeInput,
   runEstimate,
@@ -207,6 +208,28 @@ describe('費用の曲線（D-74）', () => {
     expect(ids).toEqual(
       [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b)),
     );
+  });
+
+  it('6 構成を選んだ後に未選択の構成へ切り替えても、今の構成を入れて 6 構成に抑える（OCL-E5E5FCBD）', () => {
+    const before = compareStacks(
+      normalizeInput({ stack: 'cloudflare-vinext-free' }),
+    );
+    const picked = before.slice(0, 6).map((r) => r.stack);
+    expect(picked).toContain('cloudflare-vinext-free');
+    const outside = before.find((r) => !picked.includes(r.stack))!.stack;
+    const rows = compareStacks(normalizeInput({ stack: outside }));
+    const ids = pickedCurveStacks(picked, rows);
+    expect(ids).toHaveLength(6);
+    expect(ids).toContain(outside);
+    // 先に選んだものから残す
+    expect(ids).toEqual(
+      expect.arrayContaining(picked.filter((id) => id !== outside).slice(0, 5)),
+    );
+    // 載せられない構成は外す
+    const astro = compareStacks(normalizeInput({ framework: 'astro' }));
+    expect(
+      pickedCurveStacks(['aws-amplify'], astro).includes('aws-amplify'),
+    ).toBe(false);
   });
 
   it('色は事業者に固定（6 事業者で 6 色の枠に収まり、同じ事業者は同じ色）', () => {
