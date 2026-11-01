@@ -243,7 +243,14 @@ export type Scenario = {
    * API の書き込みのうちこの割合（コメントの投稿）も記事のページを作り直す（pageUpdateShare に足す）。
    * 省略したシナリオでは設定を出さない（受託など、コメントの無いアプリ）。値はゲーム上の仮定。
    */
-  comments?: { pageUpdateShare: number };
+  comments?: {
+    pageUpdateShare: number;
+    /**
+     * 記事のページに含めて時間で再検証・ビルドするとき、コメントが間隔の分だけ遅れて見える。その遅れ（秒）の鮮度の段階の境目
+     * （D-85。記事の freshness より厳しい。満足度の鮮度は記事とコメントの悪い方）。値はゲーム上の仮定。
+     */
+    freshness: { good: number; fair: number };
+  };
   /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ＝stock.gbPerImage と同じ。ゲーム上の仮定・D-24・D-47）。 */
   unoptimizedImageKB: number;
   /**

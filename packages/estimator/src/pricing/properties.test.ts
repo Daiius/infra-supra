@@ -44,12 +44,13 @@ const magnitude = (...bills: Bill[]) =>
     .reduce((s, l) => s + Math.abs(l.amount ?? 0), 0);
 
 describe('単調性', () => {
-  it('flat と tiered だけなら、使用量を増やしても合計は減らない（プール・丸め・止まる挙動・クレジットを含む）', () => {
+  it('flat と tiered だけなら、使用量を増やしても合計は減らない（プール・丸め・最小の課金量・止まる挙動・クレジットを含む）', () => {
     forSeeds(RUNS, (r) => {
       const book = parse(
         genBook(r, {
           pools: true,
           rounding: true,
+          minimum: true,
           blockMeters: true,
           credits: 'any',
           baseFee: true,
@@ -86,6 +87,66 @@ describe('単調性', () => {
     );
     const at = (q: number) => total(run(book, [usageOf('m0', q)]));
     expect(at(11)).toBeLessThan(at(10));
+  });
+});
+
+describe('最小の課金量（D-85）', () => {
+  it('0 より多く最小の量以下なら最小の量と同じ請求、0 なら 0、最小を超えると使用量どおり（丸め・プール・段を含む）', () => {
+    forSeeds(RUNS, (r) => {
+      const raw = genBook(r, { pools: true, rounding: true, volume: true });
+      const min = r.pick([0.5, 1, 20, 1_000, 100_000]);
+      const book = parse({
+        ...raw,
+        plans: raw.plans.map((p) => ({
+          ...p,
+          meters: p.meters.map((m, i) =>
+            i === 0 ? { ...m, minimumQuantity: min } : m,
+          ),
+        })),
+      });
+      const events = r.chance(0.5) ? { events: r.int(1, 100) } : {};
+      const at = (q: number) => run(book, [usageOf('m0', q, events)]);
+      const atMin = total(at(min));
+      // 最小の量より小さい（ちょうどを含む）。events があると 1 回ごとの丸めの後で比べるので、丸めの単位より小さく取る
+      const below = min * r.pick([1e-6, 0.01, 0.5, 0.999, 1]);
+      const meter = book.plans[0]!.meters[0]!;
+      const roundsUp =
+        meter.rounding !== undefined &&
+        meter.rounding !== 'not-stated' &&
+        meter.rounding.scope === 'event' &&
+        'events' in events;
+      if (!roundsUp) {
+        expect(close(total(at(below)), atMin), `${below} / ${min}`).toBe(true);
+        const line = at(below).lines.find((l) => l.kind === 'usage')!;
+        expect(line.quantity).toBe(min);
+      }
+      expect(total(at(0))).toBe(0);
+      // 最小を超えた分は最小の量の請求以上（単調。volume は除く）
+      if (meter.pricing.model !== 'volume') {
+        const above = min * r.pick([1.001, 2, 10]);
+        expect(atLeast(total(at(above)), atMin)).toBe(true);
+      }
+    });
+  });
+
+  it('最小の量はノード（明細）ごとに当たる: 2 つのノードがそれぞれ最小の量に満たなければ、最小の量 × 2 で課金', () => {
+    const book = parse(
+      singleMeter(
+        { model: 'flat', per: 1, unitPrice: 0.5 },
+        {},
+        { minimumQuantity: 20 },
+      ),
+    );
+    const b = run(book, [
+      usageOf('m0', 3),
+      usageOf('m0', 30, { nodeId: 'n2' }),
+    ]);
+    expect(total(b)).toBe((20 + 30) * 0.5);
+    const one = run(book, [
+      usageOf('m0', 3),
+      usageOf('m0', 5, { nodeId: 'n2' }),
+    ]);
+    expect(total(one)).toBe(40 * 0.5);
   });
 });
 

@@ -92,6 +92,7 @@ type Meter = {
     scope: 'event' | 'period';       // 1 回ごとに切り上げるか、期間の合計を切り上げるか
     mode: 'ceil' | 'none';
   };
+  minimumQuantity?: number;          // 最小の課金量（D-85）。明細（ノード）ごと・月あたりで、これ未満でもこの量で課金
   pricing: Tiered | Volume | Flat;
   onExceed?: OverageBehavior;        // 無料枠を超えたときの挙動（§6）。既定は 'bill'
 };
@@ -102,6 +103,12 @@ type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unit
 
 - `rounding.scope: 'event'` は 1 リクエストごとの切り上げ。エンジンは分布を持たないので、
   **「全リクエストが平均値をとる」と仮定**して `ceil(平均 / 単位) × 単位 × 件数` で計算する（仮定として明示する）。
+- **最小の課金量（`minimumQuantity`。D-85）**: 割り当ての最小がある保存など、使用量がそれ未満でもその量で課金するメーターに付ける
+  （RDS for PostgreSQL の gp3 は 20 GiB から。[CHAP_Storage](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Storage.html)・2026-11-02 取得）。
+  使用量の明細（ノード）ごとに当て、ノードをまたいで合算しない（最小は DB のインスタンスごと）。使用量が 0 の明細は 0 のまま（使っていない）。
+  当てた明細には仮定の文を残す。切り上げではないので `ceilUnits` を通さない（期間の丸めはこの後の課金対象に当たる。§11）。
+  2026-11-02 時点の料金データで使うのは RDS の保存だけ（他の事業者の注記に、メーターの最小の量にあたるものは無い。さくらの VPS の最低利用期間は契約の期間、
+  Workers Paid の最低料金は基本料で、どちらも別の仕組み）。
 - `tiered` と `volume` の違いはテストで必ず押さえる（[05](./05-test-strategy.md) §2）。
 - **表示名（`label`。D-75）**: 明細の行に出す名前。メーター・基本料（`baseFee.label`）・クレジット・一度だけの手数料（`addons[].label`）に付け、
   計算には使わない（明細の行の `LineItem.label` に写すだけ）。形は「何の費用かを日本語で（公式の名称）」で、括弧の中に事業者の画面・料金表の呼び方を残す
@@ -200,6 +207,7 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 | 日次プール | 平日・休日の 1 日分の使用量で判定し、超過 × 日数（平日 21.7 日・休日 8.7 日）。1 日分が無ければ均等割りを仮定し、仮定を明細に残す | prd/01 §3.3 |
 | 期間の丸め | **無料枠を引いた後**の課金対象に当てる | 使用量 0 の月に 1 単位を課金しないため。プロバイダーが「使用量全体を切り上げてから枠を引く」と明記していたら見直す |
 | 1 回ごとの丸め | 平均値で切り上げ、`件数 × 切り上げた平均` | 分布を持たないため（仮定として明細に残す） |
+| 最小の課金量 | 1 回ごとの丸めの後・無料枠の前に、明細（ノード）ごとに `max(使用量, 最小)`（0 は 0 のまま）。D-85 | 割り当ての最小は資源（インスタンス）ごとで、枠は割り当てた量から引くため。0 は資源が無いとみなす |
 | 超過時の挙動 | `bill` 以外は金額 0 の明細（status: blocked）と `LimitBreach`。利用者は `configurableOnExceed` の範囲だけ選べる | prd/01 §5.3 |
 | 料金未取得 | 金額 null の明細（status: unpriced）。合計は下限で、件数を `unpricedLines` に出す | D-09 |
 | クレジット | 同じアカウント × プランの従量の明細に当て、上限を超えた分は捨てる（繰り越さない）。固定費には当てない | Vercel・Supabase とも従量（Supabase は Compute だけ）に当たるため |

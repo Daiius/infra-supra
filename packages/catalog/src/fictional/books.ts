@@ -281,7 +281,8 @@ export const FICTIONAL_YEN_HOST: PriceBookInput = {
 };
 
 /**
- * DB 型（USD・税抜）。時間課金の基本料と月額上限、volume（到達した段の単価が全量にかかる）、丸めの記載なし。
+ * DB 型（USD・税抜）。時間課金の基本料と月額上限、volume（到達した段の単価が全量にかかる）、丸めの記載なし、
+ * 最小の課金量（ノードごとに 10 GB から。D-85）。
  */
 export const FICTIONAL_DB: PriceBookInput = {
   schemaVersion: 1,
@@ -317,6 +318,16 @@ export const FICTIONAL_DB: PriceBookInput = {
               { upTo: null, unitPrice: 0.5 },
             ],
           },
+          sourceIds: S,
+        },
+        {
+          // 架空: バックアップの保存はノードごとに 10 GB から課金（期間の切り上げは 1 GB 単位）
+          id: 'backup',
+          resource: 'storage-gb-month',
+          unit: 'gb-month',
+          minimumQuantity: 10,
+          rounding: { granularity: 1, scope: 'period' },
+          pricing: { model: 'flat', per: 1, unitPrice: 1 },
           sourceIds: S,
         },
         {

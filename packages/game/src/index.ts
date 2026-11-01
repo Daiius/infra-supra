@@ -309,7 +309,7 @@ export const SETTINGS = {
     label: 'コメントの描き方',
     field: 'comments',
     effort: EFFORT.setting.comments,
-    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro・静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見える。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
+    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro・静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見え、鮮度（満足度）が下がる（コメントは記事より厳しく、1 分までなら「良い」・5 分までなら「普通」とみなす。ゲーム上の仮定）。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
     options: [
       { value: COMMENTS_IN_BROWSER, label: 'ブラウザで読み込む' },
       { value: COMMENTS_IN_PAGE, label: '記事のページに含める' },
@@ -1990,7 +1990,7 @@ export function settingNote(
 /**
  * コメントを記事のページに含めているときの効き方の注記（D-82）。作り直しが増えるのは、更新のたびに作り直すとき
  * （オンデマンドの再検証・更新のたびのビルド）。時間の再検証は更新の数に依らないので増えず、間隔でまとめるビルドも
- * 間隔の数までしか増えない。どちらもコメントは間隔の分だけ遅れて見える。
+ * 間隔の数までしか増えない。どちらもコメントは間隔の分だけ遅れて見え、鮮度の判定に入る（D-85）。
  */
 function commentsNote(state: GameState): string | undefined {
   if (!commentsInPage(state.settings, state.framework, scenarioOf(state)))
@@ -2003,8 +2003,8 @@ function commentsNote(state: GameState): string | undefined {
       ? 'コメントの投稿のたびにビルドし直す'
       : 'コメントの投稿のたびに記事のページを再検証する（再生成・CDN の無効化が増える）';
   return rebuilds
-    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントはその分遅れて見える`
-    : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えない。コメントはその分遅れて見える`;
+    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントはその分遅れて見え、鮮度が下がる`
+    : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`;
 }
 
 /** ISR のキャッシュの部品（Next.js）。 */
@@ -3796,6 +3796,13 @@ export function playMonth(input: GameState): GameState {
     state.requirements.includes('on-demand-isr') || onDemandSetting
       ? onDemandBlocker(stackIndexNow, state.components, state.framework)
       : undefined;
+  // コメントを記事のページに含め、時間で再検証・ビルドするなら、コメントは間隔の分だけ遅れて見える（D-85）。
+  // オンデマンド（コメントのたびに作り直す）・キャッシュしない（毎回 SSR）なら遅れない
+  const commentsDelayed =
+    sc.comments !== undefined &&
+    commentsInPage(viewed, state.framework, sc) &&
+    !uncached &&
+    !isOnDemand(viewed);
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
@@ -3814,6 +3821,14 @@ export function playMonth(input: GameState): GameState {
       uncached,
       eventuallyConsistent,
       onDemandUnmet: onDemand !== undefined,
+      ...(commentsDelayed
+        ? {
+            commentFreshness: {
+              delaySec: viewed.revalidateSec,
+              ...sc.comments!.freshness,
+            },
+          }
+        : {}),
       speedDown: adjusted.length > 0,
     },
     sat,
@@ -3858,6 +3873,9 @@ export function playMonth(input: GameState): GameState {
     qualityReason: redesign,
     eventuallyConsistent,
     uncached,
+    // 遅れがコメントの「良い」の境目を超えたときだけ理由に出す
+    commentsDelayed:
+      commentsDelayed && viewed.revalidateSec > sc.comments!.freshness.good,
     onDemandReason: onDemand
       ? state.requirements.includes('on-demand-isr')
         ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
@@ -4303,6 +4321,8 @@ function stageReasons(
     qualityReason?: string | undefined;
     eventuallyConsistent: boolean;
     uncached: boolean;
+    /** コメントを記事のページに含め、時間で再検証・ビルドしている（コメントが間隔の分だけ遅れて見える。D-85）。 */
+    commentsDelayed?: boolean;
     onDemandReason?: string | undefined;
   },
 ): Partial<Record<Element, string>> {
@@ -4334,6 +4354,8 @@ function stageReasons(
             : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
       c.eventuallyConsistent &&
         'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて、更新がすぐ見えない',
+      c.commentsDelayed &&
+        'コメントを記事のページに含めているので、コメントも間隔の分だけ遅れて見える',
       c.onDemandReason,
     ]
       .filter(Boolean)

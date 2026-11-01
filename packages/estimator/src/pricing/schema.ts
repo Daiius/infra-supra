@@ -97,6 +97,12 @@ export const MeterSchema = z.object({
   unit: z.enum(UNITS),
   allowancePool: Id.optional(),
   rounding: RoundingSchema.optional(),
+  /**
+   * 最小の課金量（D-85）。使用量の明細（ノード）ごと・月あたりで、使用量がこれ未満でもこの量で課金する
+   * （RDS for PostgreSQL の gp3 は 20 GiB から割り当てる、など）。使用量が 0 の明細は 0 のまま（使っていない）。
+   * 1 回ごとの丸めの後・無料枠の前に当てる。切り上げではないので ceilUnits を通さない（期間の丸めはこの後に当たる）。
+   */
+  minimumQuantity: Positive.optional(),
   pricing: PricingSchema,
   /** 無料枠・込み分を超えたときの挙動。既定は bill。 */
   onExceed: OverageBehaviorSchema.default('bill'),
