@@ -10,6 +10,7 @@ import {
   comparisonRows,
   checkActions,
   componentEffortLabel,
+  componentFlavor,
   componentPreview,
   componentProposal,
   componentSlots,
@@ -33,6 +34,7 @@ import {
   nextSsrCpuMs,
   parseSave,
   replaySave,
+  validSetupChoices,
   withTurn,
   playMonth,
   premiseTrends,
@@ -42,6 +44,7 @@ import {
   scenarioOf,
   SCENARIOS,
   selectTrends,
+  setupProblem,
   SETTINGS,
   STACKS,
   STAGE_LABEL,
@@ -67,6 +70,7 @@ import {
   SCENARIO_LIST,
 } from './scenario-briefing.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
+import { SetupComponents, type SetupChoices } from './setup-components.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -184,9 +188,31 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [stack, setStack] = useState(0);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
+  // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワーク・シナリオを替えたら、選べなくなった選択を
+  // 状態からも外す（元の組み合わせに戻しても復活しない。OCL-09D12A43）
+  const [parts, setParts] = useState<SetupChoices>({});
+  const change = (next: {
+    scenarioId?: string;
+    stack?: number;
+    framework?: FrameworkId;
+  }) => {
+    const sc = SCENARIOS[next.scenarioId ?? scenarioId]!;
+    const fws = frameworksOf(sc);
+    const fwChoice = next.framework ?? frameworkChoice;
+    const fw = fws.allowed.includes(fwChoice) ? fwChoice : fws.default;
+    const st = next.stack ?? stack;
+    if (next.scenarioId !== undefined) setScenarioId(next.scenarioId);
+    if (next.framework !== undefined) setFramework(next.framework);
+    if (next.stack !== undefined) setStack(next.stack);
+    setParts(validSetupChoices(sc, st, fw, parts));
+  };
+  const problem = setupProblem(scenario, stack, framework, parts);
   return (
     <>
-      <ScenarioPicker value={scenarioId} onChange={setScenarioId} />
+      <ScenarioPicker
+        value={scenarioId}
+        onChange={(id) => change({ scenarioId: id })}
+      />
       <ScenarioDescription scenario={scenario} usdJpy={USD_JPY} />
       <div className="card bg-base-100 shadow">
         <div className="card-body">
@@ -196,7 +222,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             scenario={scenario}
             allowed={frameworks.allowed}
             value={framework}
-            onChange={setFramework}
+            onChange={(id) => change({ framework: id })}
           />
           <h3 className="mt-2 font-bold">インフラの構成</h3>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -209,7 +235,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   type="radio"
                   className="radio radio-primary mt-0.5 shrink-0"
                   checked={stack === s.index}
-                  onChange={() => setStack(s.index)}
+                  onChange={() => change({ stack: s.index })}
                 />
                 <span className="block min-w-0">
                   <span className="block">
@@ -224,6 +250,21 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               </label>
             ))}
           </div>
+          <SetupComponents
+            scenario={scenario}
+            stackIndex={stack}
+            framework={framework}
+            value={parts}
+            // 選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
+            onChange={(v) =>
+              setParts(validSetupChoices(scenario, stack, framework, v))
+            }
+          />
+          {problem && (
+            <p className="text-right text-sm" role="status">
+              {problem}
+            </p>
+          )}
           <div className="card-actions flex-wrap items-center justify-end">
             <label
               className="flex items-center gap-2 text-sm whitespace-nowrap"
@@ -248,6 +289,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             </label>
             <button
               className="btn btn-primary"
+              disabled={problem !== null}
+              title={problem ?? undefined}
               onClick={() => {
                 onStart(
                   newSave({
@@ -256,6 +299,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     framework,
                     seed,
                     startDate,
+                    components: parts,
                   }),
                 );
                 scrollTop();
@@ -1341,11 +1385,6 @@ function ComponentsSection({
                             {x.options.map((o) => (
                               <li key={o.id}>
                                 <span className="font-semibold">{o.label}</span>
-                                {o.inappropriate && (
-                                  <span className="badge badge-xs badge-warning ml-1">
-                                    ⚠ 不適切
-                                  </span>
-                                )}
                                 : {o.note}
                               </li>
                             ))}
@@ -1400,7 +1439,6 @@ function ComponentsSection({
                     return (
                       <option key={o.id} value={o.id} disabled={why !== null}>
                         {o.label}
-                        {o.inappropriate ? '（不適切）' : ''}
                         {o.id === x.current ? '（今）' : ''}
                         {p ? '（届いた提案を受ける）' : ''}
                         {why ? `（${why}）` : ''}
@@ -1408,14 +1446,10 @@ function ComponentsSection({
                     );
                   })}
                 </select>
-                {opt.inappropriate && (
-                  <span className="mt-1 text-xs opacity-80">
-                    <span className="badge badge-xs badge-warning mr-1">
-                      ⚠ 不適切
-                    </span>
-                    学びのための選択肢
-                  </span>
-                )}
+                {/* 選んだ部品の短い説明（フレーバー。「不適切」の印は出さない。D-45） */}
+                <span className="mt-1 block text-xs opacity-70">
+                  {componentFlavor(opt)}
+                </span>
                 {preview.length > 0 && (
                   <ul className="mt-1 space-y-0.5 text-xs">
                     {preview.map((p) => (

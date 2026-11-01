@@ -56,11 +56,18 @@ export type ResolvedWorkload = {
    */
   cacheHitRate: Partial<Record<RequestClass, number>>;
   /**
+   * ピークの時間帯の同じヒット率。その時間帯は 1 ページへの到着率が λ × peakHourFactor になるので、
+   * λT を peakHourFactor 倍して出す（容量の判定だけに使う。課金は cacheHitRate。D-44・prd/04 §2）。
+   */
+  peakCacheHitRate: Partial<Record<RequestClass, number>>;
+  /**
    * 期間つきのキャッシュを miss した流れ（ルートごとの miss の件数で重み付けしてまとめる。OCL-48C8B649）。
    * 閲覧の密度・期間・処理の重さがルートで違うと、miss の 1 件あたりの処理はクラス全体の平均と違うので、
    * キャッシュの後ろへはこの流れを渡す（件数は cacheHitRate と整合する）。
    */
   cacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
+  /** ピークの時間帯の miss の流れ（peakCacheHitRate と整合する。容量の判定だけに使う。D-44）。 */
+  peakCacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
@@ -151,10 +158,16 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   /** ルートごとの miss の流れ（キャッシュの後ろへ渡す）。 */
   const spaContentMiss: ClassFlow[] = [];
   const isrMiss: ClassFlow[] = [];
+  const spaContentPeakMiss: ClassFlow[] = [];
+  const isrPeakMiss: ClassFlow[] = [];
   let spaContentHits = 0;
   let spaContentViews = 0;
   let isrViews = 0;
   let isrMisses = 0;
+  // ピークの時間帯の miss（到着率が peakHourFactor 倍）
+  let spaContentPeakMisses = 0;
+  let isrPeakMisses = 0;
+  const peakRate = t.peakHourFactor;
   /** SPA のルートの閲覧と入口（シェルと JS・CSS を読むのは入口だけ）。 */
   let spaViews = 0;
   let spaEntries = 0;
@@ -186,6 +199,8 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         spaContentMiss.push(flow(misses, work));
         spaContentHits += views - misses;
         spaContentViews += views;
+        spaContentPeakMisses += views / (1 + lambdaT * peakRate);
+        spaContentPeakMiss.push(flow(views / (1 + lambdaT * peakRate), work));
         derivations.push({
           id: `api-cache-misses:${r.id}`,
           label: `API の応答のキャッシュの取り直し（${r.id}）`,
@@ -234,6 +249,8 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       isrMiss.push(flow(count, served));
       isrViews += views;
       isrMisses += count;
+      isrPeakMisses += views / (1 + lambdaT * peakRate);
+      isrPeakMiss.push(flow(views / (1 + lambdaT * peakRate), served));
       if (count > 0) {
         isrWithRevalidate = Math.max(
           isrWithRevalidate,
@@ -321,9 +338,21 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         ? { 'api-content': spaContentHits / spaContentViews }
         : {}),
     },
+    peakCacheHitRate: {
+      ...(isrViews > 0 ? { 'document-isr': 1 - isrPeakMisses / isrViews } : {}),
+      ...(spaContentViews > 0
+        ? { 'api-content': 1 - spaContentPeakMisses / spaContentViews }
+        : {}),
+    },
     cacheMissFlow: {
       ...(isrViews > 0 ? { 'document-isr': merge(isrMiss) } : {}),
       ...(spaContentViews > 0 ? { 'api-content': merge(spaContentMiss) } : {}),
+    },
+    peakCacheMissFlow: {
+      ...(isrViews > 0 ? { 'document-isr': merge(isrPeakMiss) } : {}),
+      ...(spaContentViews > 0
+        ? { 'api-content': merge(spaContentPeakMiss) }
+        : {}),
     },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,

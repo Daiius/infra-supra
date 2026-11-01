@@ -283,3 +283,33 @@ describe('キャッシュの後ろへは、ルートごとの miss で重み付�
     expect(sim(150)).toBe(150);
   });
 });
+
+describe('ピークの時間帯のヒット率（D-44）', () => {
+  it('到着率が peakHourFactor 倍になるので、ピークのヒット率は月の平均より高い', () => {
+    const w = resolveWorkload(
+      base([
+        {
+          id: 'article',
+          rendering: 'spa',
+          share: 1,
+          pages: 100,
+          processing,
+          shellKB: 3,
+          cacheSeconds: 300,
+        },
+      ]),
+    );
+    const lt = (100_000 / 100) * (300 / (730 * 3600));
+    const p = 2;
+    expect(w.peakCacheHitRate['api-content']).toBeCloseTo(
+      (lt * p) / (1 + lt * p),
+      12,
+    );
+    expect(w.peakCacheHitRate['api-content']!).toBeGreaterThan(
+      w.cacheHitRate['api-content']!,
+    );
+    expect(w.peakCacheMissFlow['api-content']!.count).toBeLessThan(
+      w.cacheMissFlow['api-content']!.count,
+    );
+  });
+});

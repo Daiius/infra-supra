@@ -8,7 +8,7 @@ import {
   type Action,
   type GameState,
 } from './index.ts';
-import type { FrameworkId } from 'catalog';
+import type { Choices, FrameworkId } from 'catalog';
 
 const FRAMEWORK_IDS: readonly FrameworkId[] = ['nextjs', 'vite-spa'];
 
@@ -26,6 +26,10 @@ export type SaveData = {
   seed: number;
   /** 始めた日（YYYY-MM-DD）。改定の出来事の条件（D-21）。 */
   startDate: string;
+  /**
+   * 始める画面で選んだ部品（D-45）。部品を選べるようになる前の保存には無く、そのときは今の既定の部品で読む（版は上げない）。
+   */
+  components?: Choices;
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
 };
@@ -60,6 +64,15 @@ export function parseSave(raw: unknown): SaveData | null {
   if (!isObject(raw) || raw.version !== SAVE_VERSION) return null;
   const { scenarioId, stackIndex, seed, startDate, turns } = raw;
   const framework = raw.framework ?? 'nextjs';
+  const components = raw.components;
+  if (
+    components !== undefined &&
+    !(
+      isObject(components) &&
+      Object.values(components).every((v) => typeof v === 'string')
+    )
+  )
+    return null;
   if (
     !FRAMEWORK_IDS.includes(framework as FrameworkId) ||
     typeof scenarioId !== 'string' ||
@@ -84,6 +97,7 @@ export function parseSave(raw: unknown): SaveData | null {
     framework: framework as FrameworkId,
     seed,
     startDate,
+    ...(components ? { components: components as Choices } : {}),
     turns: turns as Action[][],
   };
 }
@@ -102,6 +116,7 @@ export function replaySave(save: SaveData): GameState {
       scenario,
       save.startDate,
       save.framework,
+      save.components,
     ),
   );
   for (const actions of save.turns) {

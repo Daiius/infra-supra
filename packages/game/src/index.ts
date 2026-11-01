@@ -528,7 +528,31 @@ type WorkloadParts = {
   framework: FrameworkId;
   /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
   peakFactor?: number;
+  /** 短い期間に集中する上乗せの PV（話題・Bot。容量の判定だけに効く。D-44）。 */
+  spikes?: Spike[];
 };
+
+/** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。 */
+type Spike = { id: string; extraPV: number; days: number };
+
+const DAYS_PER_MONTH = 730 / 24;
+
+/**
+ * 集中する上乗せがあるときのピークの係数の倍率（D-44・prd/04 §5）。上乗せ分 E_i が D_i 日に集中し、その日の時間帯の形
+ * （ピーク / 平均）はふだんと同じと仮定すると、ピークの時間帯の量は (N + Σ E_i × 30.4 / D_i) / 30.4 日 × ピーク係数
+ * （N は集中しない分の PV）。月の PV で割った倍率を返す（課金は月の総量のまま）。
+ */
+export function spikePeakFactor(pv: number, spikes: readonly Spike[]): number {
+  if (pv <= 0 || spikes.length === 0) return 1;
+  const extra = spikes.reduce((a, s) => a + s.extraPV, 0);
+  const steady = Math.max(0, pv - extra);
+  const peakDay = spikes.reduce(
+    (a, s) =>
+      a + s.extraPV * (DAYS_PER_MONTH / Math.min(s.days, DAYS_PER_MONTH)),
+    0,
+  );
+  return Math.max(1, (steady + peakDay) / pv);
+}
 
 function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   const w = sc.template(Math.round(p.pv));
@@ -565,10 +589,11 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.api = { ...w.api, cpuMs: p.mods.apiCpuMs };
   if (p.mods.apiResponseKB !== undefined)
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
-  if (p.peakFactor !== undefined && p.peakFactor !== 1)
+  const peak = (p.peakFactor ?? 1) * spikePeakFactor(p.pv, p.spikes ?? []);
+  if (peak !== 1)
     w.traffic = {
       ...w.traffic,
-      peakHourFactor: w.traffic.peakHourFactor * p.peakFactor,
+      peakHourFactor: w.traffic.peakHourFactor * peak,
     };
   // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
@@ -1069,6 +1094,33 @@ function proposalOnlyComponent(
   );
 }
 
+/**
+ * 部品どうしの依存で選べない理由（ゲーム中の差し替えと始める画面で共有。D-37・D-45）。
+ * さくらの VPS の API の応答のキャッシュは前段の CDN の上で効くので、前段の CDN なしでは選べず、
+ * キャッシュしている間は前段の CDN を外せない。choices はスロットごとの今の選択（始める画面では未選択もある）。
+ */
+export function componentConflict(
+  platform: Platform,
+  slot: SlotId,
+  option: string,
+  choices: Choices,
+): string | null {
+  if (platform !== 'sakura') return null;
+  if (
+    slot === 'apiCache' &&
+    option !== 'none' &&
+    (choices.frontCdn ?? 'none') === 'none'
+  )
+    return '前段の CDN が要る（先に前段の CDN を選ぶ）';
+  if (
+    slot === 'frontCdn' &&
+    option === 'none' &&
+    (choices.apiCache ?? 'none') !== 'none'
+  )
+    return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';
+  return null;
+}
+
 /** 行動の規則（手間の残りは見ない）。選べない理由を区別して返す。 */
 function actionRule(state: GameState, action: Action): ActionCheck {
   if (state.phase !== 'playing')
@@ -1162,23 +1214,13 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (action.slot === 'realtime' && state.mods.realtime)
         return ng('irreversible', 'チャットを受けたので外せない');
       // さくらの VPS の API の応答のキャッシュは前段の CDN の上で効く（D-37）
-      if (
-        platform === 'sakura' &&
-        action.slot === 'apiCache' &&
-        action.option !== 'none' &&
-        (current.frontCdn ?? 'none') === 'none'
-      )
-        return ng('unavailable', '前段の CDN が要る（先に前段の CDN を選ぶ）');
-      if (
-        platform === 'sakura' &&
-        action.slot === 'frontCdn' &&
-        action.option === 'none' &&
-        (current.apiCache ?? 'none') !== 'none'
-      )
-        return ng(
-          'unavailable',
-          'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）',
-        );
+      const conflict = componentConflict(
+        platform,
+        action.slot,
+        action.option,
+        current,
+      );
+      if (conflict) return ng('unavailable', conflict);
       // 提案で付く部品は、提案が届いている月だけ選べる（選ぶと提案を受けたのと同じ）
       const via = proposalOnlyComponent(sc, action.slot, action.option);
       if (via) {
@@ -1286,6 +1328,110 @@ export function componentSlots(state: GameState): {
     );
 }
 
+// ---- 始める画面の部品の選択（D-45）----
+
+/** 始める画面の部品の選択肢（files は構成が暗黙に持つファイルの置き場。catalog の fileStorageOf）。 */
+export type SetupOption = {
+  id: string;
+  platform: Platform;
+  slot: SlotId | 'files';
+  label: string;
+  note: string;
+};
+
+export type SetupSlot = {
+  slot: SlotId | 'files';
+  label: string;
+  options: SetupOption[];
+  /** この構成では 1 択（変更できない。未選択の判定に含めない）。 */
+  fixed: boolean;
+};
+
+/**
+ * 始める画面の部品のスロット（構成・フレームワークの組み合わせで）。ゲーム中の部品の欄（componentSlots）と同じ
+ * スロットから、提案で付く部品（チャットの Durable Objects など）を除く。選択肢が 1 つしか残らないスロットは「固定」として出す。
+ * 最後に、構成が暗黙に持つファイルの置き場（R2・VPS のディスクなど。構成のノードから引く）を固定のスロットとして足す。
+ * スロットの一覧は持たず、catalog の部品の定義から引く（スロットが増えても追従する）。
+ */
+export function setupSlots(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+): SetupSlot[] {
+  const draft = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
+  const slots: SetupSlot[] = componentSlots(draft).map(
+    ({ slot, label, options }) => {
+      const usable = options.filter(
+        (o) => !proposalOnlyComponent(scenario, slot, o.id),
+      );
+      return { slot, label, options: usable, fixed: usable.length < 2 };
+    },
+  );
+  const files = fileStorageOf(STACKS[stackIndex]!.id);
+  if (files)
+    slots.push({
+      slot: 'files',
+      label: FILE_STORAGE_LABEL,
+      options: [{ ...files, slot: 'files' }],
+      fixed: true,
+    });
+  return slots.filter((x) => x.options.length > 0);
+}
+
+/** 選ぶスロット（固定でないもの）。 */
+const choosable = (slots: SetupSlot[]) =>
+  slots.filter(
+    (x): x is SetupSlot & { slot: SlotId } => !x.fixed && x.slot !== 'files',
+  );
+
+/** 選んだ部品のうち、その組み合わせで選べるものだけを残す（構成・フレームワークを替えたとき）。 */
+export function validSetupChoices(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): Choices {
+  const out: Choices = {};
+  const slots = choosable(setupSlots(scenario, stackIndex, framework));
+  for (const x of slots) {
+    const v = choices[x.slot];
+    if (v !== undefined && x.options.some((o) => o.id === v)) out[x.slot] = v;
+  }
+  // 依存の崩れた選択（前段の CDN を外したのに残っている API のキャッシュなど）は外す。
+  // 頼る側（後ろのスロット）から見るので、頼られる側（前段の CDN）の選択は残る
+  const platform = STACKS[stackIndex]!.provider;
+  for (const x of [...slots].reverse()) {
+    const v = out[x.slot];
+    if (v !== undefined && componentConflict(platform, x.slot, v, out))
+      delete out[x.slot];
+  }
+  return out;
+}
+
+/** 始められない理由（まだ選んでいないスロット）。選び終えていれば null。 */
+export function setupProblem(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): string | null {
+  const missing = choosable(setupSlots(scenario, stackIndex, framework)).filter(
+    (x) => !x.options.some((o) => o.id === choices[x.slot]),
+  );
+  return missing.length
+    ? `部品をまだ選んでいない: ${missing.map((x) => x.label).join('・')}`
+    : null;
+}
+
+/** 部品の選択肢の短い説明（フレーバー。catalog の COMPONENT_FLAVOR。D-45）。 */
+export function componentFlavor(o: {
+  platform: Platform;
+  slot: SlotId | 'files';
+  id: string;
+}): string | undefined {
+  return COMPONENT_FLAVOR[`${o.platform}:${o.slot}:${o.id}`];
+}
+
 /** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
 export function componentEffortLabel(slot: SlotId): string[] {
   return slot === 'db'
@@ -1356,12 +1502,17 @@ export function newGame(
   startDate: string = DEFAULT_START_DATE,
   /** アプリのフレームワーク（省略はシナリオの既定。シナリオで選べないものは既定にする。prd/10 F-04）。 */
   framework?: FrameworkId,
+  /** 始める画面で選んだ部品（D-45）。選べないものは捨て、省略したスロットは既定の部品。 */
+  components?: Choices,
 ): GameState {
   const fw = frameworksOf(scenario);
   const app =
     framework !== undefined && fw.allowed.includes(framework)
       ? framework
       : fw.default;
+  const chosen = components
+    ? validSetupChoices(scenario, stackIndex, app, components)
+    : {};
   return {
     startDate,
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
@@ -1375,6 +1526,7 @@ export function newGame(
     components: {
       ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider],
       ...frameworkDefaults(app),
+      ...chosen,
     },
     storageOption: false,
     storageOptionFeeDue: null,
@@ -1623,6 +1775,7 @@ export function playMonth(input: GameState): GameState {
     bot: boolean;
     factor: number;
     peak?: number;
+    spikeDays?: number;
   }[] = [];
   const trafficNotes: string[] = [];
   for (const x of noticed) {
@@ -1667,6 +1820,7 @@ export function playMonth(input: GameState): GameState {
           title: def.title,
           bot: true,
           factor: 1 + extra,
+          ...(e.spikeDays ? { spikeDays: e.spikeDays } : {}),
         });
         trafficNotes.push(`${def.title}（Bot は収益にならない）`);
       } else {
@@ -1685,6 +1839,7 @@ export function playMonth(input: GameState): GameState {
           bot: false,
           factor,
           ...(e.peakFactor ? { peak: e.peakFactor } : {}),
+          ...(e.spikeDays ? { spikeDays: e.spikeDays } : {}),
         });
         if (!e.lasting) trafficNotes.push(def.title);
       }
@@ -1706,6 +1861,20 @@ export function playMonth(input: GameState): GameState {
   const humanPV = basePV * humanFactor;
   const botPV = humanPV * botExtra;
   const pv = humanPV + botPV;
+  // 話題・Bot の上乗せ分は短い期間に集中する（容量の判定だけ。D-44）
+  const spikes: Spike[] = trafficEvents.flatMap((t) =>
+    t.spikeDays
+      ? [
+          {
+            id: t.id,
+            extraPV: t.bot
+              ? humanPV * (t.factor - 1)
+              : humanPV * (1 - 1 / t.factor),
+            days: t.spikeDays,
+          },
+        ]
+      : [],
+  );
 
   const stackIndexNow = state.stackIndex;
   const stack = MVP_STACKS[stackIndexNow]!;
@@ -1720,6 +1889,7 @@ export function playMonth(input: GameState): GameState {
     components: state.components,
     framework: state.framework,
     ...(peakFactor !== 1 ? { peakFactor } : {}),
+    ...(spikes.length ? { spikes } : {}),
   };
   const workload = workloadFor(sc, parts);
   const swap = state.componentSwap;
@@ -2309,10 +2479,14 @@ function crossingsOf(
       ? c.parts.pv - c.humanPV * (t.factor - 1)
       : c.parts.pv / t.factor;
     const peakFactor = (c.parts.peakFactor ?? 1) / (t.peak ?? 1);
+    // 外した出来事の集中を除き、人の流量の出来事を外すなら残りの上乗せも同じ割合で小さくする
+    const spikes = (c.parts.spikes ?? [])
+      .filter((s) => s.id !== t.id)
+      .map((s) => (t.bot ? s : { ...s, extraPV: s.extraPV / t.factor }));
     variants.push({
       eventId: t.id,
       title: t.title,
-      parts: { ...c.parts, pv, peakFactor },
+      parts: { ...c.parts, pv, peakFactor, spikes },
     });
   }
   for (const [id, res] of Object.entries(c.state.responses)) {
@@ -2322,6 +2496,8 @@ function crossingsOf(
     let mods = c.parts.mods;
     let stock = c.parts.stock;
     let pv = c.parts.pv;
+    // basePV を外すと、話題・Bot の上乗せ（集中する分）も同じ割合で小さくなる（OCL-37A91830）
+    let baseFactor = 1;
     for (const e of def.accept.effects) {
       if (e.type === 'workload') {
         const next = { ...mods };
@@ -2335,12 +2511,19 @@ function crossingsOf(
           images: stock.images - (e.add.images ?? 0),
           articlePages: stock.articlePages - (e.add.articlePages ?? 0),
         };
-      } else if (e.type === 'basePV') pv /= e.factor;
+      } else if (e.type === 'basePV') {
+        pv /= e.factor;
+        baseFactor *= e.factor;
+      }
     }
+    const spikes = (c.parts.spikes ?? []).map((s) => ({
+      ...s,
+      extraPV: s.extraPV / baseFactor,
+    }));
     variants.push({
       eventId: id,
       title: def.title,
-      parts: { ...c.parts, mods, stock, pv },
+      parts: { ...c.parts, mods, stock, pv, spikes },
     });
   }
   const ratios = variants.map((v) => {
@@ -3068,11 +3251,16 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const ogp = socialCardLoss(state);
     if (ogp) {
       const shortfall = Math.max(1, sc.goal.cash - state.cash);
+      const platform = STACKS[state.stackIndex]!.provider;
+      // VPS で前段の CDN が無いと、伸びた話題の月に回線が詰まりうる（話題は短い期間に集中する。D-44）
+      const noFrontCdn =
+        platform === 'sakura' &&
+        (state.components.frontCdn ?? 'none') === 'none';
       out.push({
         hint: {
           kind: 'ogp',
-          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み`,
-          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(STACKS[state.stackIndex]!.provider, 'ogp', 'prerender')}）を、話題の前に付ける`,
+          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み${noFrontCdn ? '（ただし前段の CDN が無いと、伸びた話題の月に回線が詰まりうるので、増えた分の一部が失われる）' : ''}`,
+          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付ける${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられる' : ''}`,
         },
         // 影響額で比べる: 足りない額に対する、取り戻せた収益の割合（半分以上なら最上位）
         score: tier(
@@ -3184,7 +3372,12 @@ export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
 
 // フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
-import { STACK_FLAVOR } from 'catalog';
+import {
+  COMPONENT_FLAVOR,
+  FILE_STORAGE_LABEL,
+  fileStorageOf,
+  STACK_FLAVOR,
+} from 'catalog';
 
 /** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
 export function stackFlavor(stackIndex: number): string | undefined {
