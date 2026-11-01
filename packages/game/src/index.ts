@@ -2826,13 +2826,20 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const cause = crossing
       ? [...crossing.causes].sort((a, b) => a.ratioWithout - b.ratioWithout)[0]
       : undefined;
-    const next = cause
-      ? cause.eventId === 'bot'
-        ? 'Bot の大量アクセスで上限を越えた。Bot を遮断するか、上限に余裕のあるプラン・部品を考える'
-        : '一時的に流量が増える出来事で上限を越えた。予告や前兆が来たら、前もって上限に余裕を作る'
-      : l.accumulates
-        ? 'ためていく量（保存量）は減らない。上限に届く前に、容量の大きいプラン・部品へ移すか、ためる量を減らす'
-        : '込みの量・無料枠の上限に当たると止まる。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らす';
+    // 原因は一時的な流量の出来事か、受けた提案（以後ずっと効く負荷・保存量の追加）のどちらか（crossingsOf）
+    const permanent =
+      cause !== undefined && eventDef(sc, cause.eventId)?.kind === 'proposal';
+    const next = permanent
+      ? l.accumulates
+        ? '受けた提案で保存量が増え、上限を越えた。ためていく量は減らない。受ける前に容量との余裕を確かめるか、容量の大きいプラン・部品へ移す'
+        : '受けた提案で以後の負荷が増え、上限を越えた。受ける前に上限との余裕を確かめるか、上限の大きいプラン・部品・設定で負荷を下げる'
+      : cause
+        ? cause.eventId === 'bot'
+          ? 'Bot の大量アクセスで上限を越えた。Bot を遮断するか、上限に余裕のあるプラン・部品を考える'
+          : '一時的に流量が増える出来事で上限を越えた。予告や前兆が来たら、前もって上限に余裕を作る'
+        : l.accumulates
+          ? 'ためていく量（保存量）は減らない。上限に届く前に、容量の大きいプラン・部品へ移すか、ためる量を減らす'
+          : '込みの量・無料枠の上限に当たると止まる。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らす';
     const g = groups.get(next) ?? { months: new Set<number>(), items: [] };
     l.months.forEach((m) => g.months.add(m));
     g.items.push({ text: l.text, ratio: l.ratio });
@@ -2890,12 +2897,13 @@ export function retryHintsOf(state: GameState): RetryHint[] {
 
   // ③ 規約違反（指摘の翌月も違反したまま）
   if (reason === 'policy') {
-    const warned = h.find((r) => r.policyWarning);
+    // 停止につながった指摘は最後の指摘（一度解消して再び違反すると、指摘からやり直しになる。policyStep）
+    const warned = h.findLast((r) => r.policyWarning);
     const p = warned?.premises.find((x) => x.hit && x.effect === 'policy');
     out.push({
       hint: {
         kind: 'policy',
-        what: `${warned?.month ?? state.end.month} か月目に運営元から規約違反の指摘${p ? `（${p.text}）` : ''}を受け、翌月も違反したままでアカウントが停止された`,
+        what: `${warned ? `${warned.month} か月目に運営元から規約違反の指摘${p ? `（${p.text}）` : ''}を受け、` : ''}${state.end.month} か月目も違反したままでアカウントが停止された`,
         next: '指摘が来た月のうちにプランを変えるか、乗り換えを始める（乗り換えの作業中は猶予される）。規約の条件は始める前に構成の説明で確かめられる',
       },
       score: tier(true, 99),

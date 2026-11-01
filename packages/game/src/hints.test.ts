@@ -98,6 +98,65 @@ describe('retryHintsOf', () => {
     expect(hints[2]!.what).toContain('ディスク');
   });
 
+  it('規約違反を一度解消して再び違反したときは、最後の指摘の月と停止の月を出す（OCL-7A142E66）', () => {
+    // 1 か月目に指摘 → Pro に変えて解消 → Hobby に戻して 3 か月目に再び指摘 → 4 か月目に停止
+    const st = playStrategy(
+      {
+        id: 'back',
+        label: 'Hobby に戻す',
+        stackIndex: HOBBY,
+        actions: [
+          [{ type: 'plan', stackIndex: PRO }],
+          [{ type: 'plan', stackIndex: HOBBY }],
+        ],
+      },
+      42,
+    );
+    expect(st.end).toEqual({ reason: 'policy', month: 4 });
+    expect(
+      st.history.filter((r) => r.policyWarning).map((r) => r.month),
+    ).toEqual([1, 3]);
+    const policy = retryHintsOf(st).find((x) => x.kind === 'policy')!;
+    expect(policy.what).toMatch(/^3 か月目に運営元から規約違反の指摘/);
+    expect(policy.what).toContain('4 か月目も違反したまま');
+  });
+
+  it('受けた提案で上限を越えたときは、一時的な流量の出来事と言わない（OCL-7878F16B）', () => {
+    // 受託・VPS 2GB の 12 か月目のディスクの超過を、受けた提案が原因だったことにする
+    const st = idle(VPS_2GB, CONTRACT_OPERATIONS);
+    const last = st.history.at(-1)!;
+    const disk = last.premises.find(
+      (p) => p.hit && p.text.includes('ディスク'),
+    )!;
+    const withCause = (eventId: string, title: string) =>
+      retryHintsOf({
+        ...st,
+        history: [
+          ...st.history.slice(0, -1),
+          {
+            ...last,
+            crossings: [
+              {
+                premiseId: disk.id,
+                text: disk.text,
+                causes: [{ eventId, title, ratioWithout: 0.9 }],
+              },
+            ],
+          },
+        ],
+      }).find((x) => x.kind === 'limit')!;
+    const proposal = withCause('c-p-attachments', '添付ファイルの提案');
+    expect(proposal.what).toContain(
+      '「添付ファイルの提案」が無ければ越えなかった',
+    );
+    expect(proposal.next).toContain('受けた提案で保存量が増え');
+    expect(proposal.next).not.toContain('一時的');
+    // 流量の出来事なら従来どおり
+    expect(withCause('c-busy', '繁忙期').next).toContain(
+      '一時的に流量が増える',
+    );
+  });
+
   it('負けたすべての何もしない方針で 1〜3 個。対策の方向に構成の名前を出さない', () => {
     const names = STACKS.map((s) => s.name.replace(/（.*）/, ''));
     for (const sc of Object.values(SCENARIOS))
