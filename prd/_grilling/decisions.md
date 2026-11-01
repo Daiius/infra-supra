@@ -785,6 +785,12 @@
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧。本文は消していないので、詳細は参照先を読む。
 > 決めたら行を ~~取り消し線~~ にし、決めた D-番号を書く。
 
+
+### D-87 型検査・テスト・整形の確認を CI で回す（確定・2026-11-02）
+
+- 背景: CI は秘密の検査（secret-scan.yml）だけで、`pnpm test` は手元でしか走っていなかった（D-86 の残した点）。
+- 推奨案で決定（autonomous-log B-41）: `.github/workflows/test.yml` を足し、全ブランチの push と PR で `pnpm install --frozen-lockfile`・`pnpm typecheck`・`pnpm test`・`pnpm format:check` を回す。Node 24、pnpm は packageManager の版。Action は secret-scan.yml と同じく commit の SHA で固定（checkout v7.0.1・pnpm/action-setup v6.1.0・setup-node v7.1.0）。権限は contents: read だけ。
+
 ### 論点（ユーザーの判断が要るもの）
 
 | # | 論点 | 参照 |
@@ -817,7 +823,7 @@
 | D-68 | Vercel の isr で記事を描く形・Server Islands・Astro × AWS・VPS のビルドの CPU・Hobby の 1 日 100 デプロイ・ビルドの遅れを鮮度に足すこと・初回表示の仮定の大きさの見直し |
 | D-71・D-77 | Netlify・Neon の構成をシナリオの `baselines` に足していない |
 | D-85 | RDS の割り当てを DB の大きさに合わせて増やすこと（gp3 は減らせない）・コメントの鮮度の境目（1 分・5 分）の見直し |
-| D-86 | CI でテスト（`pnpm test`）を走らせる workflow・見た目（CSS・レイアウト）をブラウザで確かめるテスト |
+| D-86 | ~~CI でテスト（`pnpm test`）を走らせる workflow~~ → D-87・見た目（CSS・レイアウト）をブラウザで確かめるテスト |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 

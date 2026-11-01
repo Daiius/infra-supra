@@ -127,4 +127,4 @@ PV を 1 万・10 万・100 万・1000 万と振り、**規模によって最安
 | W-05 | `estimate/estimate-mode.smoke.test.tsx` | 見積のタブを開き、選べる構成をすべて切り替え、比較表の行を押し、フレームワーク・テンプレート・PV を切り替える。毎回、月の費用・明細・比較表（今の構成の印が 1 つ）・費用の曲線（`path` のある SVG）が出る。入力の URL で開き直すと同じ見積 |
 
 時間: web のテスト全体で約 4 秒（目安 30 秒以内）。
-**CI**: `.github/workflows` には秘密の検査しか無く、`pnpm test` は CI で走っていない（手元の `pnpm test` で走る）。テストの workflow を足すときはこの描画テストも乗る（D-86 の残した点）。
+**CI**: `.github/workflows/test.yml`（D-87）が全ブランチの push と PR で `pnpm typecheck`・`pnpm test`（この描画テストを含む）・`pnpm format:check` を回す。
