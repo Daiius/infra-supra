@@ -52,13 +52,20 @@ describe('COMPONENT_FLAVOR', () => {
       expect(label).not.toContain('不適切');
   });
 
-  it('ファイルの置き場は構成のノードから引く（Cloudflare は R2・Vercel は未定の置き場・VPS はディスク）', () => {
+  it('ファイルの置き場は構成のノードから引く（Cloudflare は R2・Vercel は Vercel Blob・VPS はディスク。D-46）', () => {
     expect(fileStorageOf('cloudflare-vinext-free')).toMatchObject({
       id: 'r2',
       label: 'R2',
     });
     expect(fileStorageOf('cloudflare-vinext-paid')!.id).toBe('r2');
-    expect(fileStorageOf('vercel-supabase-pro')!.id).toBe('blob');
+    expect(fileStorageOf('vercel-supabase-pro')).toMatchObject({
+      id: 'blob',
+      label: 'Vercel Blob（画像の原本）',
+    });
+    // 課金先が付いたので、事実の説明は料金の見積もり方を出す（「対応なし」ではない）
+    expect(fileStorageOf('vercel-supabase-hobby')!.note).toContain(
+      'vercel のプラン（hobby）',
+    );
     expect(fileStorageOf('sakura-vps-4gb')!.id).toBe('host-disk');
     expect(fileStorageOf('no-such-stack')).toBeUndefined();
   });
