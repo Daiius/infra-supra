@@ -84,6 +84,20 @@ export const aws: PriceBookInput = {
     ),
     lambdaPrices: priceList('AWSLambda'),
     lambdaPricing: src('https://aws.amazon.com/lambda/pricing/'),
+    lambdaUrls: src(
+      'https://docs.aws.amazon.com/lambda/latest/dg/urls-configuration.html',
+    ),
+    opennextAws: src('https://opennext.js.org/aws'),
+    opennextArch: src(
+      'https://opennext.js.org/aws/inner_workings/architecture',
+    ),
+    opennextServer: src(
+      'https://opennext.js.org/aws/inner_workings/components/server/node',
+    ),
+    opennextCaching: src('https://opennext.js.org/aws/inner_workings/caching'),
+    opennextImage: src(
+      'https://opennext.js.org/aws/inner_workings/components/image_optimization',
+    ),
     apiGatewayPrices: priceList('AmazonApiGateway'),
     apiGatewayPricing: src('https://aws.amazon.com/api-gateway/pricing/'),
     cloudfrontPrices: src(
@@ -106,6 +120,9 @@ export const aws: PriceBookInput = {
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
     rdsPrices: priceList('AmazonRDS'),
+    // 版（publicationDate）: AWSQueueService 2026-09-11
+    sqsPrices: priceList('AWSQueueService'),
+    sqsPricing: src('https://aws.amazon.com/sqs/pricing/'),
     auroraPricing: src('https://aws.amazon.com/rds/aurora/pricing/'),
     auroraAutoPause: src(
       'https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless-v2-auto-pause.html',
@@ -159,6 +176,15 @@ export const aws: PriceBookInput = {
       premise:
         'CloudFront（従量の料金）は HTTP・HTTPS のリクエストが月 1,000 万まで常時無料',
       sourceIds: ['cloudfrontFree'],
+    },
+    {
+      id: 'sqs-free-requests',
+      quantity: 1_000_000,
+      unit: 'request',
+      period: 'month',
+      scope: 'account',
+      premise: 'SQS は月 100 万リクエストまで無料（全リージョンの合計）',
+      sourceIds: ['sqsPrices', 'sqsPricing'],
     },
     {
       id: 'dynamodb-free-storage',
@@ -356,6 +382,26 @@ export const aws: PriceBookInput = {
       ...common,
       name: 'Lambda（x86）',
       sourceIds: ['lambdaPrices', 'lambdaPricing'],
+      facts: [
+        {
+          id: 'opennext-isr',
+          premise:
+            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から再生成する。オンデマンドの再検証（revalidatePath・revalidateTag）にも対応するが、CloudFront のキャッシュは別に無効化が要る（無効化は月 1,000 パスまで無料・以降 1 パス $0.005。このモデルでは数えていない）',
+          sourceIds: ['opennextServer', 'opennextCaching', 'cloudfrontPrices'],
+        },
+        {
+          id: 'opennext-versions',
+          premise:
+            'OpenNext の AWS 向け（V3）は Next.js 15 の機能に対応することを目指している。インフラは作らない（SST などで自分で組み、保守も自分で行う）',
+          sourceIds: ['opennextAws', 'opennextArch'],
+        },
+        {
+          id: 'function-url',
+          premise:
+            'Lambda の関数 URL に専用の料金の行は無く、Lambda のリクエストと実行時間だけで数えている（追加の料金が無いとは明記されていない）',
+          sourceIds: ['lambdaPrices', 'lambdaUrls'],
+        },
+      ],
       meters: [
         {
           id: 'requests',
@@ -782,6 +828,34 @@ export const aws: PriceBookInput = {
           unit: 'gb',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['cloudfrontFlatDocs'],
+        },
+      ],
+    },
+    {
+      ...common,
+      id: 'sqs-fifo',
+      service: 'sqs',
+      name: 'SQS（FIFO）',
+      sourceIds: ['sqsPrices', 'sqsPricing'],
+      notes: [
+        'すべての操作が 1 リクエスト（64 KB ごと）。OpenNext の再検証の待ち行列はメッセージ 1 件を送信・受信・削除の 3 リクエストと数える（仮定）',
+      ],
+      meters: [
+        {
+          id: 'requests',
+          resource: 'requests',
+          unit: 'request',
+          allowancePool: 'sqs-free-requests',
+          pricing: {
+            model: 'tiered',
+            per: 1_000_000,
+            tiers: [
+              { upTo: 100_000_000_000, unitPrice: 0.5 },
+              { upTo: 200_000_000_000, unitPrice: 0.46 },
+              { upTo: null, unitPrice: 0.42 },
+            ],
+          },
+          sourceIds: ['sqsPrices'],
         },
       ],
     },

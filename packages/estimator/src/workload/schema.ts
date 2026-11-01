@@ -96,6 +96,11 @@ export const WorkloadInputSchema = z
        * upload: 投稿のときに 1 回（= 投稿数 × サイズ違い）・none: 変換しない。
        */
       transformAt: z.enum(['request', 'upload', 'none']).default('request'),
+      /**
+       * 画像の変換 1 回の重さの倍率（画像の形式で変わる。AVIF は WebP より約 50% 長い。D-58）。
+       * 構成の関数が変換の時間（classCpuMs）を持つときだけ、その時間に掛ける（OCL-ECDEF8A1）。
+       */
+      transformWorkFactor: z.number().finite().positive().default(1),
     }),
     db: z.object({
       sizeGB: NonNeg,

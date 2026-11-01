@@ -7,6 +7,7 @@ import {
   FRAMEWORKS,
   growthFromReputation,
   SCENARIOS,
+  STACKS,
   type FrameworkId,
   type Scenario,
   upkeepOf,
@@ -85,7 +86,8 @@ export function EffortBar({
         ]
       : []),
     `機能開発に ${free}`,
-    ...(upkeep > 0
+    // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の手間だけ（D-63）
+    ...(STACKS[stackIndex]!.selfHosted
       ? [
           `自前の障害 月 ${Math.round(sc.incidents.selfHostedChancePerMonth * 100)}%`,
         ]

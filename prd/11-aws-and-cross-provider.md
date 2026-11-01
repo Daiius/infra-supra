@@ -600,3 +600,50 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 - **記事コミュニティでは定額 Pro が全シードで合格**する（Next.js の前段の CloudFront で、従量の 1 TB・1,000 万を超えた分が込みに入る）。公式どおりの結果として受け入れる（目標と単価は後でまとめて決め直す）。
 - 定額 Free は安いが込み（100 万・100 GB）を最初から大きく超え、2 か月目から速さが下がり続けて満足度で落ちる。受託でも同じ。
 - 受託のように小さな規模では、Pro の $15 × 12 が従量の常時無料より高くつく（従量のほうが安い）。規模によって最適が入れ替わる例になる。
+
+## 13. AWS の 2 つ目の構成: OpenNext（2026-11-01・D-63）
+
+AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ目の AWS の構成として足した。ユーザーの方針「より現実的なコスト感・費用を抑える複雑な構成も可能にしたい」による。
+
+確かめた事実（2026-11-01 取得）:
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| 対象 | OpenNext の AWS 向けは V3。「aims to support all Next.js 15 features」。ISR・ミドルウェア・画像の最適化・`after` などを挙げる | [opennext.js.org/aws](https://opennext.js.org/aws) |
+| 部品 | サーバーの関数（SSR・ISR・SSG・API）・画像の最適化の関数・再検証の待ち行列（FIFO）と関数・タグの表・ウォーマー。インフラは作らない（SST などで組む） | [architecture](https://opennext.js.org/aws/inner_workings/architecture) |
+| 既定の置き場 | 「By default, OpenNext uses S3 as the default incremental cache」「DynamoDB …（タグ）」「SQS as the default revalidation queue」。再検証の関数が HEAD でサーバーの関数を呼んで作り直す | [server（node）](https://opennext.js.org/aws/inner_workings/components/server/node) |
+| オンデマンドの再検証 | S3 の ISR のキャッシュは更新されるが、CloudFront のキャッシュは別に無効化が要る（自動の無効化は既定で無効）。`revalidateTag` はタグの表で対象のパスを引く | [caching](https://opennext.js.org/aws/inner_workings/caching)・[自動の CDN の無効化](https://opennext.js.org/aws/config/overrides/automatic_cdn_invalidation) |
+| 画像の最適化 | `/_next/image` で受け、既定では S3 の API で原本を読む | [image optimization](https://opennext.js.org/aws/inner_workings/components/image_optimization) |
+| 入口 | 既定のラッパーは AWS Lambda、既定の変換は API Gateway v2 の形式。どの入口（関数 URL・API Gateway）を作るかは組む道具しだい（文書では確定しない） | [components overview](https://opennext.js.org/aws/inner_workings/components/overview) |
+| SQS（東京） | FIFO $0.50 / 100 万リクエスト（標準 $0.40）。毎月 100 万リクエストは無料（全リージョンの合計）。64 KB ごとに 1 リクエスト | Price List API（AWSQueueService・2026-09-11）・[SQS の料金](https://aws.amazon.com/sqs/pricing/) |
+| CloudFront の無効化 | 月 1,000 パスまで $0・以降 1 パス $0.005 | Price List API（AmazonCloudFront） |
+| 関数 URL | 料金表に専用の行が無い（追加の料金が無いとは明記されていない） | Price List API（AWSLambda）・[関数 URL](https://docs.aws.amazon.com/lambda/latest/dg/urls-configuration.html) |
+
+入れた形:
+
+- 事業者（Platform）`aws-opennext`・構成 `aws-opennext`「AWS（OpenNext・自分で組む）」（添字 7）。課金先は AWS の料金データをそのまま使い、SQS（FIFO）だけ足した。Amplify の構成の id・経路は変えていない。Amplify との行き来はプラン変更でなく乗り換え。
+- 経路（Next.js）: 1 つの CloudFront → サーバーの Lambda（関数 URL を入口とみなす）→ DB。ISR のページは CloudFront が期間でキャッシュし、外れると関数が S3 のキャッシュと DynamoDB のタグを読む。再生成は SQS（1 件 = 送信・受信・削除の 3 リクエスト。仮定）→ サーバーの関数（別の実行）→ DB・S3 に書く・タグを書く。**オンデマンドの再検証に対応**（`onDemandIsr: ok`。即時反映の提案を受けられる）。
+- 部品: ISR（S3 + タグ + SQS / キャッシュしない）・画像（OpenNext の画像の最適化 = Lambda / 最適化しない / 投稿のときに縮める）・DB（Amplify と同じ 5 つ）・CDN の料金のプラン（従量 / 定額。D-61）・ファイル S3。SPA では OpenNext を使わず、AWS の SPA と同じ形。
+- 仮定: 関数のメモリ 1 GB・画像の変換 1 回 150 ms（VPS の `imageTransformCpuMs` と同じ）・CloudFront の外れた分ごとに変換・タグの読み書きは 1 回 1 単位・関数 URL と Lambda → CloudFront の転送に追加の料金なし（AWS のオリジンからの取得は無料の扱い）。
+- 数えていないもの: CloudFront の無効化（オンデマンドの更新が月 1,000 パスを超えると費用が増える）・再検証の関数・ウォーマーの Lambda・S3 のキャッシュの保存量。
+- レビューの指摘で直したもの: 画像の最適化の関数は外れた分ごとに S3 の原本を読む（GET を数える。OCL-A575F009）。AVIF は変換 1 回の時間を 1.5 倍にする（Workload の `images.transformWorkFactor`。OCL-ECDEF8A1）。
+- 「画像だけ Cloudflare」（D-52 の `cf-images`・`cf-resize`）を OpenNext にも許した（`CROSS_PAIRS`）。画像の関数と S3 を外し、投稿はサーバーの関数が受けて R2 に書く（Lambda → インターネットの転送で数える）。CloudFront はページと静的に残る。
+- **維持の手間 1 / 月**（ゲーム上の仮定。デプロイの仕組み・依存の更新・インフラの定義の管理。VPS の 3 より小さい）。手間のバーに「維持 1」と出る（自前の障害の確率は出さない）。
+
+基準プレイ（何もしない・シード 1〜20・合格数・12 か月の費用の中央値）:
+
+| シナリオ | 構成 | 従量 | 定額 Pro |
+|---|---|---|---|
+| 記事コミュニティ | Amplify・既定 | 10/20・$671 | 17/20・$579 |
+| 〃 | Amplify・前段 CF（静的と画像） | 10/20・$623 | 20/20・$381 |
+| 〃 | OpenNext・既定（画像を縮める） | 18/20・$475 | 20/20・$237 |
+| 〃 | OpenNext・画像の最適化（Lambda） | **20/20・$74** | 20/20・$241 |
+| 〃 | OpenNext・画像だけ Cloudflare（R2 + Images。D-52） | 20/20・$170 | 20/20・$350 |
+| 受託 | Amplify・既定 | 20/20・$180 | 8/20・$360 |
+| 〃 | Amplify・前段 CF（静的と画像） | 20/20・$154 | 16/20・$334 |
+| 〃 | OpenNext・既定 / 画像の最適化 | 20/20・$22 | 20/20・$202 |
+
+- OpenNext は Amplify より大幅に安い（Amplify の配信 $0.15/GB と SSR の計算が無く、CloudFront の常時無料と Lambda の無料枠に収まる）。代わりに毎月の維持の手間 1 がかかり、機能開発に回せる手間が減る。
+- OpenNext で画像を Lambda で最適化すると、縮めて置く（1 枚 400 KB）より配信が小さく、記事コミュニティでも CloudFront の常時無料（1 TB）にほぼ収まる。
+- 受託のような小さな規模では、定額 Pro の $15 × 12 が従量の無料枠より高い。
+- 即時反映の提案: OpenNext は満たせる（Amplify は満たせない）。

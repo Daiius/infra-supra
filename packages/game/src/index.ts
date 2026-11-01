@@ -507,6 +507,8 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   provider: STACK_DEFS[i]!.platform as Platform,
   plan: STACK_DEFS[i]!.plan,
   selfHosted: s.nodes.some((n) => n.config.kind === 'host'),
+  /** 自分で組む構成（OpenNext など。維持の手間がかかる。D-63）。 */
+  assembled: STACK_DEFS[i]!.assembled ?? false,
   /** ホストのディスク（VPS だけ。下位のプランへ変更できるかの判定に使う）。 */
   diskGB: s.nodes.reduce(
     (a, n) => (n.config.kind === 'host' ? n.config.diskGB : a),
@@ -749,6 +751,13 @@ function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
   const format = imageFormatOf(p.settings.imageKB);
   if (format === 'jpeg') return w;
   const images = { ...DEFAULT_CHOICES[p.platform], ...p.components }.images;
+  // OpenNext の画像の最適化（Lambda）: CloudFront の外れた分ごとに変換するので、変換 1 回の時間を 1.5 倍にする（OCL-ECDEF8A1・D-63）
+  if (
+    format === 'avif' &&
+    p.platform === 'aws-opennext' &&
+    usesNextImage(p.platform, p.framework, images)
+  )
+    return { ...w, images: { ...w.images, transformWorkFactor: 1.5 } };
   const factor =
     images === 'r2-variants'
       ? 2
@@ -1135,9 +1144,17 @@ export function stackChangeText(
   };
 }
 
-/** 構成ごとの自前運用の維持の手間（毎月。自前運用でなければ 0）。始める画面の手間のバーにも使う（D-36）。 */
+/**
+ * 構成ごとの維持の手間（毎月）。自前運用（VPS）はシナリオの値、自分で組む構成（OpenNext）は EFFORT.assembledUpkeep、
+ * マネージドなら 0。始める画面の手間のバーにも使う（D-36・D-63）。
+ */
 export function upkeepOf(sc: Scenario, stackIndex: number): number {
-  return STACKS[stackIndex]!.selfHosted ? sc.effort.selfHostedUpkeep : 0;
+  const s = STACKS[stackIndex]!;
+  return s.selfHosted
+    ? sc.effort.selfHostedUpkeep
+    : s.assembled
+      ? EFFORT.assembledUpkeep
+      : 0;
 }
 
 /** 課金のアカウントの画面の名前（D-52）。 */
@@ -1521,7 +1538,8 @@ export function componentConflict(
   /** フレームワーク（AWS の CDN の料金のプランの判定に使う。省略は Next.js）。 */
   framework: FrameworkId = 'nextjs',
 ): string | null {
-  if (platform === 'aws')
+  // OpenNext は 1 つの CloudFront がページを返すので、画像を R2 に出しても CloudFront は残る（同じ規則で衝突しない。D-63）
+  if (platform === 'aws' || platform === 'aws-opennext')
     return cdnPlanConflict(platform, slot, option, choices, framework);
   if (platform !== 'sakura') return null;
   if (

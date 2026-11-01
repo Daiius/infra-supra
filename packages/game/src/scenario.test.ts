@@ -18,6 +18,7 @@ import {
   upkeepOf,
   type Action,
   type GameState,
+  EFFORT,
 } from './index.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 
@@ -340,11 +341,17 @@ describe('まれな出来事（シード 31: 記事の引き取り → D1 の 10
 });
 
 describe('構成ごとの維持の手間（始める画面の手間のバー。D-36）', () => {
-  it('自前運用の構成だけシナリオの維持の手間がかかり、1 か月目の配分と一致する', () => {
+  it('自前運用の構成はシナリオの維持の手間、自分で組む構成は EFFORT.assembledUpkeep がかかり、1 か月目の配分と一致する（D-63）', () => {
     for (const scenario of Object.values(SCENARIOS)) {
       for (const st of STACKS) {
         const u = upkeepOf(scenario, st.index);
-        expect(u).toBe(st.selfHosted ? scenario.effort.selfHostedUpkeep : 0);
+        expect(u).toBe(
+          st.selfHosted
+            ? scenario.effort.selfHostedUpkeep
+            : st.assembled
+              ? EFFORT.assembledUpkeep
+              : 0,
+        );
         const s = playMonth(newGame(st.index, 42, scenario));
         expect(s.history[0]!.effort.upkeep).toBe(u);
       }

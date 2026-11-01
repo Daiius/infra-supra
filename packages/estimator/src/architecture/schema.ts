@@ -29,6 +29,8 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * 1 件は最低 1 リクエスト。次のノードへ渡す件数は変わらない。
      */
     requestUnitKB: Pos.optional(),
+    /** 1 件を何リクエストと数えるか（SQS のメッセージの送信・受信・削除など。仮定。既定 1）。次へ渡す件数は変わらない。 */
+    requestsPerItem: Pos.default(1),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({
@@ -52,6 +54,10 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
         hitCpuMs: NonNeg,
       })
       .optional(),
+    /**
+     * クラスの 1 件の処理の時間（CPU と壁時計時間・ms）をこの関数で決める（画像の変換の関数など、Workload が処理を持たないクラス。仮定）。
+     */
+    classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
   }),
   /**
    * KV。cache: ISR のキャッシュ（閲覧で読み、再生成で書く）。db: DB の代わり（問い合わせ 1 回を読み取り 1 回、

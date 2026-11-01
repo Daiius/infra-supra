@@ -117,8 +117,9 @@ function consume(
         u,
         'requests',
         c.requestUnitKB === undefined
-          ? n
+          ? n * c.requestsPerItem
           : n *
+              c.requestsPerItem *
               kbMixOf(p).reduce(
                 (s, part) =>
                   s +
@@ -144,7 +145,19 @@ function consume(
         ? ttlMiss(w, cls, f)
         : undefined;
       const miss = missFlow?.count ?? n;
-      const mp = missFlow?.perRequest ?? p;
+      // 画像のクラスの変換の時間は、画像の形式による重さの倍率を掛ける（OCL-ECDEF8A1）
+      const fixedCpu =
+        c.classCpuMs?.[cls] === undefined
+          ? undefined
+          : c.classCpuMs[cls]! *
+            (cls === 'image-read' || cls === 'image-transform'
+              ? w.input.images.transformWorkFactor
+              : 1);
+      const base = missFlow?.perRequest ?? p;
+      const mp =
+        fixedCpu === undefined
+          ? base
+          : { ...base, cpuMs: fixedCpu, maxCpuMs: fixedCpu, wallMs: fixedCpu };
       const hits = n - miss;
       const hitCpu = missFlow ? c.cache!.hitCpuMs : 0;
       // 1 リクエストの CPU の最大は、件数が正の経路（miss の処理・ヒットの返却）それぞれの最大（OCL-8B3B0CB7）

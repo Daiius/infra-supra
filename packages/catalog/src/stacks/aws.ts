@@ -25,9 +25,9 @@ export const AWS_DEFAULT_CHOICES: Choices = {
 };
 
 /** CloudFront・Amplify の CDN の画像のヒット率（仮定。Vercel の CDN と同じ値）。 */
-const IMAGE_CDN_HIT_RATE = 0.9;
+export const IMAGE_CDN_HIT_RATE = 0.9;
 /** Amplify の SSR・Lambda のメモリ（GB。ゲーム上の仮定。Amplify の SSR のメモリは公式の記載が見当たらない）。 */
-const COMPUTE_MEMORY_GB = 1;
+export const COMPUTE_MEMORY_GB = 1;
 /** Aurora Serverless v2 の最小の容量（ACU。0.5 が 0 以外の最小。負荷で伸びる分は数えない仮定）。 */
 const AURORA_MIN_ACU = 0.5;
 /** 0 ACU まで縮めるときの、止まるまでの接続の無い時間（秒。公式の最短の値）。 */
@@ -255,14 +255,14 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
   },
 ];
 
-const bill = (planId: string, meters: Record<string, string>) => ({
+export const bill = (planId: string, meters: Record<string, string>) => ({
   accountId: 'aws',
   provider: 'aws',
   planId,
   meters,
 });
 
-function dbNode(opt: string | undefined): ArchNodeIn {
+export function dbNode(opt: string | undefined): ArchNodeIn {
   if (opt === 'aurora' || opt === 'aurora-pause') {
     const pause = opt === 'aurora-pause';
     return {
@@ -322,7 +322,7 @@ function dbNode(opt: string | undefined): ArchNodeIn {
       };
 }
 
-const s3: ArchNodeIn = {
+export const s3: ArchNodeIn = {
   id: 's3',
   label: 'S3（画像の原本）',
   config: { kind: 'object-storage' },
@@ -365,7 +365,7 @@ function cdnBilling(
   };
 }
 
-const cloudfront = (
+export const cloudfront = (
   choices: Choices,
   hitRate: Partial<Record<RequestClass, number>>,
   ttlClasses: RequestClass[] = [],
@@ -508,7 +508,7 @@ function composeAmplify(
   };
 }
 
-function composeSpa(
+export function composeSpa(
   db: ArchNodeIn,
   standbyDb: ArchNodeIn[],
   choices: Choices,

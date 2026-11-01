@@ -65,6 +65,23 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-northeast-1/index.json',
     ].map((url) => ({ url, retrievedAt: '2026-11-01' })),
   },
+  {
+    host: 'aws-opennext',
+    slot: 'images',
+    provider: 'cloudflare',
+    basis:
+      'AWS（Amplify）と同じ（画像のドメインを Cloudflare のゾーンに置き、R2 から配る・URL で変換する）。' +
+      '投稿は OpenNext のサーバーの関数（Lambda）が受けて R2 に書き、その転送は EC2 のデータ転送の料金（東京 → インターネット $0.114/GB・月 100 GB は無料）。D-63',
+    sources: [
+      'https://developers.cloudflare.com/r2/buckets/public-buckets/',
+      'https://developers.cloudflare.com/r2/pricing/',
+      'https://developers.cloudflare.com/images/transform-images/transform-via-url/',
+      'https://developers.cloudflare.com/images/transform-images/sources/',
+      'https://aws.amazon.com/lambda/pricing/',
+      'https://aws.amazon.com/ec2/pricing/on-demand/',
+      'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-northeast-1/index.json',
+    ].map((url) => ({ url, retrievedAt: '2026-11-01' })),
+  },
 ];
 
 const VERCEL_TO_CF_IMAGES_REFS = [
@@ -78,7 +95,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-images',
     slot: 'images',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws'],
+    hosts: ['vercel', 'aws', 'aws-opennext'],
     link: { via: 'http', as: 'images' },
     label: 'Cloudflare: R2 に置き、閲覧のときに Images で変換',
     note:
@@ -96,7 +113,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-resize',
     slot: 'images',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws'],
+    hosts: ['vercel', 'aws', 'aws-opennext'],
     link: { via: 'http', as: 'resize' },
     label: 'Cloudflare: 投稿のときに一律で縮めて R2 に置く',
     note:
@@ -145,7 +162,8 @@ const CF_IMAGE_HIT_RATE = 0.9;
  *   公式の文書に記載が見当たらない（未確認）ので数えない。
  * - AWS（Amplify）: 画像の最適化（image）・画像だけの CloudFront（cf）・S3（s3）を外す。投稿は Amplify の SSR が受けて R2 に書く。
  *   Amplify の SSR から外への通信の課金は料金ページに記載が無い（未確認）ので数えない。
- * - AWS（S3 + CloudFront + Lambda の SPA）: S3（s3）を外す（CloudFront はシェルと API に残る）。投稿は Lambda が受けて R2 に書き、
+ * - AWS の OpenNext（Next.js）: 画像の最適化の関数（image-fn）・S3（s3）を外す。投稿はサーバーの関数が受けて R2 に書き、転送を数える（D-63）。
+ * - AWS（S3 + CloudFront + Lambda の SPA。OpenNext の SPA も同じ）: S3（s3）を外す（CloudFront はシェルと API に残る）。投稿は Lambda が受けて R2 に書き、
  *   その転送を東京 → インターネットの転送（月 100 GB 無料の後 $0.114/GB）で数える（Lambda の料金ページ: リージョンの外との
  *   データの出入りは EC2 のデータ転送の料金）。
  * R2 は書き込みの受信に課金しない（料金表に項目が無い）。
@@ -155,24 +173,29 @@ function hostImageShape(
   arch: ArchitectureInput,
 ): { remove: string[]; write: string[]; out?: ArchNodeIn } | undefined {
   if (host === 'vercel') return { remove: ['image', 'blob'], write: ['fn'] };
-  if (host !== 'aws') return undefined;
+  if (host !== 'aws' && host !== 'aws-opennext') return undefined;
   if (arch.id === 'aws-amplify')
     return { remove: ['image', 'cf', 's3'], write: ['ssr'] };
+  const out = awsOut();
+  // OpenNext（Next.js）: 画像の最適化の関数（image-fn）・S3（s3）を外す。CloudFront（cf）はページ・静的に残る。
+  // 投稿はサーバーの関数（Lambda）が受けて R2 に書き、その転送を東京 → インターネットで数える（D-63）
+  if (arch.id === 'aws-opennext')
+    return { remove: ['image-fn', 's3'], write: ['server', 'aws-out'], out };
+  return { remove: ['s3'], write: ['apigw', 'lambda', 'aws-out'], out };
+}
+
+/** Lambda から外（R2）へ送る転送を数えるだけのノード（cdn の種類でヒットなし。課金は転送だけ）。 */
+function awsOut(): ArchNodeIn {
   return {
-    remove: ['s3'],
-    write: ['apigw', 'lambda', 'aws-out'],
-    out: {
-      // 転送を数えるだけのノード（cdn の種類でヒットなし。課金は転送だけ）
-      id: 'aws-out',
-      label: 'AWS → インターネット（R2 への書き込み）',
-      config: { kind: 'cdn', hitRate: {} },
-      facts: ['lambda-out'],
-      billing: {
-        accountId: 'aws',
-        provider: 'aws',
-        planId: 'data-transfer-out',
-        meters: { 'egress-gb': 'internet-out' },
-      },
+    id: 'aws-out',
+    label: 'AWS → インターネット（R2 への書き込み）',
+    config: { kind: 'cdn', hitRate: {} },
+    facts: ['lambda-out'],
+    billing: {
+      accountId: 'aws',
+      provider: 'aws',
+      planId: 'data-transfer-out',
+      meters: { 'egress-gb': 'internet-out' },
     },
   };
 }

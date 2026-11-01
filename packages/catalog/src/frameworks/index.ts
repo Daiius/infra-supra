@@ -136,6 +136,27 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     note: 'シェルと静的なファイルを S3 に置いて CloudFront で配り、API は HTTP API の後ろの Lambda。ディープリンクをシェルへ寄せる設定（CloudFront のエラー応答など）の手順は未確認（prd/11 §1.2）',
     sources: [src('https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/')],
   },
+  // AWS の OpenNext（D-63）
+  {
+    framework: 'nextjs',
+    platform: 'aws-opennext',
+    adapter: 'OpenNext（Lambda + CloudFront + S3 + DynamoDB + SQS）',
+    support: 'emulated',
+    note: 'OpenNext がビルド出力を Lambda 向けに直す。ISR は S3 のキャッシュ・DynamoDB のタグ・SQS の再検証で自前に再現する（オンデマンドの再検証に対応）。Next.js 15 が対象。インフラは SST などで自分で組む',
+    sources: [
+      src('https://opennext.js.org/aws'),
+      src('https://opennext.js.org/aws/inner_workings/architecture'),
+      src('https://opennext.js.org/aws/inner_workings/components/server/node'),
+    ],
+  },
+  {
+    framework: 'vite-spa',
+    platform: 'aws-opennext',
+    adapter: 'S3 + CloudFront + Lambda（API Gateway の HTTP API）',
+    support: 'native',
+    note: 'SPA では OpenNext を使わず、AWS の SPA と同じ形になる',
+    sources: [src('https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/')],
+  },
 ];
 
 export function deployTarget(

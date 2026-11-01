@@ -48,6 +48,11 @@ export const EFFORT = {
   /** 月の総量と自前運用（VPS）の維持はシナリオの値（ここは記事コミュニティの既定）。 */
   perMonth: ARTICLE_COMMUNITY.effort.perMonth,
   selfHostedUpkeep: ARTICLE_COMMUNITY.effort.selfHostedUpkeep,
+  /**
+   * 自分で組む構成（OpenNext など）の毎月の維持の手間（デプロイの仕組み・依存の更新・インフラの定義の管理。仮定・D-63）。
+   * VPS の自前運用（サーバーそのものの運用）より小さい。
+   */
+  assembledUpkeep: 1,
   /** 設定の変更の手間。 */
   setting: { format: 1, variants: 1, isr: 0 },
   /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */

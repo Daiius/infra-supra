@@ -14,6 +14,8 @@ export const STACK_FLAVOR: Readonly<Record<string, string>> = {
     '月額が固定で、使った分の請求に驚かされない。サーバーの中を自由に設定できる',
   'sakura-vps-4gb':
     'メモリに余裕のある上のプラン。稼働率の SLA の対象にもなり、アクセスが増えても安心',
+  'aws-opennext':
+    'Next.js を関数と CDN とストレージに自分で載せる。部品ごとの従量で安く組めるが、仕組みの面倒は自分で見る',
   'aws-amplify':
     '大手のクラウドのマネージドなホスティング。基本料が無く使った分だけの支払いで、常に無料で使える量もある',
 };
@@ -24,7 +26,7 @@ export const STACK_FLAVOR: Readonly<Record<string, string>> = {
  * 説明だけで正解が分からないようにする。数値は書かない。事実の説明は部品の note（ⓘ）に残す。
  * シナリオをまたいで使うので「記事」でなく「ページ」と書く。
  */
-export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
+const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   // Cloudflare
   'cloudflare:isrCache:kv':
     '世界中の拠点に置かれるキーと値の保存。ページを近くの拠点から返せる',
@@ -164,4 +166,23 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '全ページで同じカードを出す。シェルは CDN から静的なまま配れる',
   'aws:files:s3':
     'クラウドの定番のストレージ。保存も読み書きも安く、CDN からそのまま配れる',
+};
+
+/** OpenNext の構成（D-63）が Amplify の構成と共有する部品は、同じ説明文を使う。 */
+const SHARED_WITH_OPENNEXT =
+  /^aws:(db|cdnPlan|ogp|apiCache|files):|^aws:images:(none|resize)$/;
+
+export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
+  ...BASE_COMPONENT_FLAVOR,
+  ...Object.fromEntries(
+    Object.entries(BASE_COMPONENT_FLAVOR)
+      .filter(([k]) => SHARED_WITH_OPENNEXT.test(k))
+      .map(([k, v]) => [k.replace(/^aws:/, 'aws-opennext:'), v]),
+  ),
+  'aws-opennext:isrCache:default':
+    'ページは CDN から返し、更新したページだけをすぐ作り直せる。仕組みは自分で組む',
+  'aws-opennext:isrCache:none':
+    '毎回サーバーで描くので、ページはいつも最新。キャッシュの仕組みを気にしなくてよい',
+  'aws-opennext:images:default':
+    'Next.js の画像の部品がそのまま使え、変換は自分の関数で行う。使った分だけの支払い',
 };
