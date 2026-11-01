@@ -483,11 +483,10 @@ export const ARTICLE_COMMUNITY: Scenario = {
       short: 'CF Free・何もしない',
       stackIndex: CF_FREE,
     },
-    // GD-4（D-24）の目盛り。不適切な選択と、部品の追加・SLA の対応
+    // GD-4（D-24）の目盛り。不適切な選択（画面では印を出さない。D-45）と、部品の追加・SLA の対応
     {
       id: 'cf-paid-kvdb',
-      label:
-        'Cloudflare Paid・1 か月目の終わりに DB を KV に差し替える（不適切な選択）',
+      label: 'Cloudflare Paid・1 か月目の終わりに DB を KV に差し替える',
       short: 'CF Paid・KV を DB 代わり',
       stackIndex: CF_PAID,
       actions: [[{ type: 'component', slot: 'db', option: 'kv' }]],

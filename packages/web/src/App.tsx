@@ -9,6 +9,7 @@ import {
   comparisonRows,
   checkActions,
   componentEffortLabel,
+  componentFlavor,
   componentPreview,
   componentProposal,
   componentSlots,
@@ -32,6 +33,7 @@ import {
   nextSsrCpuMs,
   parseSave,
   replaySave,
+  validSetupChoices,
   withTurn,
   playMonth,
   premiseTrends,
@@ -41,6 +43,7 @@ import {
   scenarioOf,
   SCENARIOS,
   selectTrends,
+  setupProblem,
   SETTINGS,
   STACKS,
   STAGE_LABEL,
@@ -66,6 +69,7 @@ import {
   SCENARIO_LIST,
 } from './scenario-briefing.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
+import { SetupComponents, type SetupChoices } from './setup-components.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -183,6 +187,10 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [stack, setStack] = useState(0);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
+  // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワークを替えて選べなくなったものは外して見る
+  const [partsChoice, setParts] = useState<SetupChoices>({});
+  const parts = validSetupChoices(scenario, stack, framework, partsChoice);
+  const problem = setupProblem(scenario, stack, framework, parts);
   return (
     <>
       <ScenarioPicker value={scenarioId} onChange={setScenarioId} />
@@ -223,6 +231,18 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               </label>
             ))}
           </div>
+          <SetupComponents
+            scenario={scenario}
+            stackIndex={stack}
+            framework={framework}
+            value={parts}
+            onChange={setParts}
+          />
+          {problem && (
+            <p className="text-right text-sm" role="status">
+              {problem}
+            </p>
+          )}
           <div className="card-actions flex-wrap items-center justify-end">
             <label
               className="flex items-center gap-2 text-sm whitespace-nowrap"
@@ -247,6 +267,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             </label>
             <button
               className="btn btn-primary"
+              disabled={problem !== null}
+              title={problem ?? undefined}
               onClick={() => {
                 onStart(
                   newSave({
@@ -255,6 +277,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     framework,
                     seed,
                     startDate,
+                    components: parts,
                   }),
                 );
                 scrollTop();
@@ -1331,11 +1354,6 @@ function ComponentsSection({
                             {x.options.map((o) => (
                               <li key={o.id}>
                                 <span className="font-semibold">{o.label}</span>
-                                {o.inappropriate && (
-                                  <span className="badge badge-xs badge-warning ml-1">
-                                    ⚠ 不適切
-                                  </span>
-                                )}
                                 : {o.note}
                               </li>
                             ))}
@@ -1390,7 +1408,6 @@ function ComponentsSection({
                     return (
                       <option key={o.id} value={o.id} disabled={why !== null}>
                         {o.label}
-                        {o.inappropriate ? '（不適切）' : ''}
                         {o.id === x.current ? '（今）' : ''}
                         {p ? '（届いた提案を受ける）' : ''}
                         {why ? `（${why}）` : ''}
@@ -1398,14 +1415,10 @@ function ComponentsSection({
                     );
                   })}
                 </select>
-                {opt.inappropriate && (
-                  <span className="mt-1 text-xs opacity-80">
-                    <span className="badge badge-xs badge-warning mr-1">
-                      ⚠ 不適切
-                    </span>
-                    学びのための選択肢
-                  </span>
-                )}
+                {/* 選んだ部品の短い説明（フレーバー。「不適切」の印は出さない。D-45） */}
+                <span className="mt-1 block text-xs opacity-70">
+                  {componentFlavor(opt)}
+                </span>
                 {preview.length > 0 && (
                   <ul className="mt-1 space-y-0.5 text-xs">
                     {preview.map((p) => (

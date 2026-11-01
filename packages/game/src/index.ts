@@ -1241,6 +1241,69 @@ export function componentSlots(state: GameState): {
     );
 }
 
+// ---- 始める画面の部品の選択（D-45）----
+
+/**
+ * 始める画面で選ぶ部品のスロット（構成・フレームワークの組み合わせで）。ゲーム中の部品の欄（componentSlots）と同じ
+ * スロットから、提案で付く部品（チャットの Durable Objects など）を除く。選択肢が 1 つしか残らないスロットは選ばせない。
+ * スロットの一覧は持たず、catalog の部品の定義から引く（スロットが増えても追従する）。
+ */
+export function setupSlots(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+): { slot: SlotId; label: string; options: ReturnType<typeof componentsOf> }[] {
+  const draft = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
+  return componentSlots(draft)
+    .map(({ slot, label, options }) => ({
+      slot,
+      label,
+      options: options.filter(
+        (o) => !proposalOnlyComponent(scenario, slot, o.id),
+      ),
+    }))
+    .filter((x) => x.options.length > 1);
+}
+
+/** 選んだ部品のうち、その組み合わせで選べるものだけを残す（構成・フレームワークを替えたとき）。 */
+export function validSetupChoices(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): Choices {
+  const out: Choices = {};
+  for (const x of setupSlots(scenario, stackIndex, framework)) {
+    const v = choices[x.slot];
+    if (v !== undefined && x.options.some((o) => o.id === v)) out[x.slot] = v;
+  }
+  return out;
+}
+
+/** 始められない理由（まだ選んでいないスロット）。選び終えていれば null。 */
+export function setupProblem(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): string | null {
+  const missing = setupSlots(scenario, stackIndex, framework).filter(
+    (x) => !x.options.some((o) => o.id === choices[x.slot]),
+  );
+  return missing.length
+    ? `部品をまだ選んでいない: ${missing.map((x) => x.label).join('・')}`
+    : null;
+}
+
+/** 部品の選択肢の短い説明（フレーバー。catalog の COMPONENT_FLAVOR。D-45）。 */
+export function componentFlavor(o: {
+  platform: Platform;
+  slot: SlotId;
+  id: string;
+}): string | undefined {
+  return COMPONENT_FLAVOR[`${o.platform}:${o.slot}:${o.id}`];
+}
+
 /** 部品の差し替えの手間の説明（DB は進行中の月ごと）。 */
 export function componentEffortLabel(slot: SlotId): string[] {
   return slot === 'db'
@@ -1311,12 +1374,17 @@ export function newGame(
   startDate: string = DEFAULT_START_DATE,
   /** アプリのフレームワーク（省略はシナリオの既定。シナリオで選べないものは既定にする。prd/10 F-04）。 */
   framework?: FrameworkId,
+  /** 始める画面で選んだ部品（D-45）。選べないものは捨て、省略したスロットは既定の部品。 */
+  components?: Choices,
 ): GameState {
   const fw = frameworksOf(scenario);
   const app =
     framework !== undefined && fw.allowed.includes(framework)
       ? framework
       : fw.default;
+  const chosen = components
+    ? validSetupChoices(scenario, stackIndex, app, components)
+    : {};
   return {
     startDate,
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
@@ -1330,6 +1398,7 @@ export function newGame(
     components: {
       ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider],
       ...frameworkDefaults(app),
+      ...chosen,
     },
     storageOption: false,
     storageOptionFeeDue: null,
@@ -3066,7 +3135,7 @@ export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
 
 // フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
-import { STACK_FLAVOR } from 'catalog';
+import { COMPONENT_FLAVOR, STACK_FLAVOR } from 'catalog';
 
 /** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
 export function stackFlavor(stackIndex: number): string | undefined {
