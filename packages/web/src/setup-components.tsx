@@ -119,7 +119,7 @@ export function SetupComponents({
 }
 
 /**
- * 始める画面の ISR の再検証（D-49）・Astro のビルドの間隔（D-68）。Next.js と Astro だけ。始める前なので手間はかからない
+ * 始める画面の ISR の再検証（D-49）・Astro と Next.js の静的書き出しのビルドの間隔（D-68・D-80）。SPA 以外。始める前なので手間はかからない
  * （ゲーム中に時間からオンデマンドへ切り替えるときだけ実装の手間がかかる）。既定は 5 分を選んだ状態。
  */
 export function SetupRevalidate({
@@ -156,7 +156,7 @@ export function SetupRevalidate({
     return e && invalidationNote(e);
   }, [scenario, stackIndex, framework, components, options.length]);
   if (options.length === 0) return null;
-  // Next.js は ISR の再検証、Astro はビルドの間隔（同じ値をフレームワークの意味で選ぶ。D-68）
+  // Next.js は ISR の再検証、Astro・静的書き出しはビルドの間隔（同じ値をフレームワークの意味で選ぶ。D-68・D-80）
   const def = SETTINGS[revalidateSettingOf(framework)];
   return (
     <div className="space-y-2">

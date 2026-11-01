@@ -464,7 +464,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
   text: ARTICLE_COMMUNITY_TEXT,
   // フレームワーク（prd/10 F-04・F-05）。既定は Next.js。SPA の効き方の値はゲーム上の仮定
   frameworks: {
-    allowed: ['nextjs', 'vite-spa', 'astro'],
+    allowed: ['nextjs', 'vite-spa', 'astro', 'nextjs-export'],
     default: 'nextjs',
     // Astro（D-68）: 記事は静的にビルドし、JS はアイランドの分だけ。記事は検索・SNS から初めて来る読者が多いので、
     // 初回表示の軽さが効く（仮定: 速さの重さを 1 つ減らす）

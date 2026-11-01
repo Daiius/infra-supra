@@ -139,7 +139,11 @@ function FrameworkDetail({
 }) {
   const f = FRAMEWORKS[id];
   const app = sc.text?.byFramework?.[id]?.app ?? [];
-  const spa = id === 'vite-spa' ? sc.frameworks?.spa : undefined;
+  // Next.js の静的書き出し（D-80）も、サーバーが受けるのは中身を返す API だけ（SPA と同じ行）
+  const spa =
+    id === 'vite-spa' || id === 'nextjs-export'
+      ? sc.frameworks?.spa
+      : undefined;
   const ssrCpuMs = sc.template(1).routes[0]!.processing.cpuMs;
   return (
     <span className="block space-y-1">
@@ -201,7 +205,7 @@ export function FrameworkField({
   return (
     <div className="space-y-2">
       <h3 className="font-bold">アプリを何で作りましたか？</h3>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {allowed.map((id) => (
           <label
             key={id}

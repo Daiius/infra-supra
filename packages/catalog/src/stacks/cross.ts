@@ -13,7 +13,7 @@ import {
   dbNode as awsDbNode,
 } from './aws.ts';
 import { vpsNode } from './sakura.ts';
-import type { FrameworkId } from '../frameworks/index.ts';
+import { browserCallsApi, type FrameworkId } from '../frameworks/index.ts';
 import type {
   Choices,
   ComponentOption,
@@ -113,7 +113,8 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'Vercel の外部への rewrite で同じドメインに見せる形は課金の記載が無い（prd/10 B-3）ので使わない。' +
       'Next.js（D-67）: Server Components は fetch で外の API を呼べ、キャッシュしない fetch は応答まで描画を止める。' +
       'Vercel の料金の文書の課金の項目に、関数から外への通信の転送は無い（数えない）。' +
-      'Astro（D-69）: @astrojs/vercel のサーバー（Vercel Functions）が描くページの fetch は実行時に走り、Worker の API を呼べる',
+      'Astro（D-69）: @astrojs/vercel のサーバー（Vercel Functions）が描くページの fetch は実行時に走り、Worker の API を呼べる。' +
+      'Next.js の静的書き出し（D-80）: クライアントでのデータの取得は Client Component から（公式の例は SWR）。SPA と同じくブラウザが Worker の API を呼ぶ',
     sources: [
       'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
       'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
@@ -124,6 +125,7 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://vercel.com/docs/pricing',
       'https://docs.astro.build/en/guides/data-fetching/',
       'https://docs.astro.build/en/guides/integrations-guide/vercel/',
+      'https://nextjs.org/docs/app/guides/static-exports',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
   {
@@ -332,7 +334,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'api',
     platform: 'cloudflare',
     hosts: ['vercel', 'aws', 'netlify'],
-    frameworks: ['vite-spa'],
+    frameworks: ['vite-spa', 'nextjs-export'],
     link: { via: 'http', as: 'same' },
     label: 'Cloudflare: Workers に API を置き、DB は D1',
     note:
@@ -352,7 +354,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'api',
     platform: 'aws',
     hosts: ['cloudflare'],
-    frameworks: ['vite-spa'],
+    frameworks: ['vite-spa', 'nextjs-export'],
     link: { via: 'http', as: 'same' },
     label: 'AWS: API Gateway + Lambda に API を置き、DB は DynamoDB',
     note:
@@ -448,12 +450,13 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     platform: 'sakura',
     hosts: ['cloudflare'],
     // Astro（D-69）: 記事は静的アセット、マイページを描く Worker が VPS の API を呼ぶ
-    frameworks: ['vite-spa', 'astro'],
+    // Next.js の静的書き出し（D-80）: SPA と同じく、ブラウザ（Client Component）が VPS の API を呼ぶ
+    frameworks: ['vite-spa', 'astro', 'nextjs-export'],
     link: { via: 'http', as: 'same' },
     label: `さくらの VPS: ${plan.toUpperCase()} に API と MySQL を置く（自前運用）`,
     note:
       `API を さくらの VPS ${plan.toUpperCase()}（東京）の Node に置き、DB は同じ VPS の MySQL。api のサブドメインは Cloudflare の DNS で VPS に直接向ける（プロキシしない DNS だけのレコードで、CDN を通らない）。` +
-      '静的なファイル（SPA のシェル・Astro の記事のページ）・JS・CSS と画像は Cloudflare から配る。Astro のマイページは Worker が描き、その中から VPS の API を呼ぶ。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
+      '静的なファイル（SPA のシェル・Astro と Next.js の静的書き出しの記事のページ）・JS・CSS と画像は Cloudflare から配る。Astro のマイページは Worker が描き、その中から VPS の API を呼ぶ。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
       '自前運用の維持の手間と偶発的な障害（1 台構成）が加わる。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要る。' +
       'さくらのアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
     premiseRefs: [
@@ -644,7 +647,9 @@ export function applyCross(
             facts: [
               'transform-url',
               'outside-images',
-              ...(framework === undefined || framework === 'nextjs'
+              ...(framework === undefined ||
+              framework === 'nextjs' ||
+              framework === 'nextjs-export'
                 ? ['next-loader']
                 : []),
             ],
@@ -987,7 +992,8 @@ export function applyCrossApi(
       ? placement(next, plan, host)
       : undefined;
   if (!cur && !nxt) return arch;
-  const spa = framework === 'vite-spa';
+  // Next.js の静的書き出し（D-80）も SPA と同じく、ブラウザが API を呼ぶ
+  const spa = browserCallsApi(framework);
   const astro = framework === 'astro';
   // Cloudflare の Astro + VPS の API（D-69）: ブラウザの API・投稿は SPA と同じく VPS へ直接、マイページを描く Worker も VPS の API を呼ぶ
   const browserCalls = spa || (astro && host === 'cloudflare');

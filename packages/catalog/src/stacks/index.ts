@@ -2,7 +2,7 @@
 // 振る舞いは estimator の ComponentKind、ここはノードの値と課金先のメーターの対応だけを持つ。
 // GD-4（D-24・prd/07 §11）: 構成は役割ごとのスロットの選択（部品）から組み立てる。完成品は「既定の選択」。
 import type { ArchitectureInput, RequestClass, WorkloadInput } from 'estimator';
-import type { FrameworkId } from '../frameworks/index.ts';
+import { browserCallsApi, type FrameworkId } from '../frameworks/index.ts';
 import {
   AWS_COMPONENTS,
   AWS_DEFAULT_CHOICES,
@@ -326,10 +326,12 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
       'fact:vercel:pro:active-cpu',
     ],
   },
+  // Next.js の静的書き出しでは next/image の既定のローダーが使えない（D-80）ので、閲覧のときの変換は選べない
   {
     id: 'default',
     slot: 'images',
     platform: 'vercel',
+    frameworks: ['nextjs', 'vite-spa', 'astro'],
     label: '画像の最適化',
     note: '閲覧のときに変換する',
     premiseRefs: [],
@@ -373,6 +375,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     id: 'default',
     slot: 'images',
     platform: 'sakura',
+    frameworks: ['nextjs', 'vite-spa', 'astro'],
     label: 'ホストで変換',
     note: '閲覧のときに VPS の CPU で変換する',
     premiseRefs: [],
@@ -580,7 +583,7 @@ const SPA_API_SAME: ComponentOption[] = (
   id: 'same',
   slot: 'api',
   platform,
-  frameworks: ['vite-spa'],
+  frameworks: ['vite-spa', 'nextjs-export'],
   label: '同じ事業者（同居）',
   note,
   premiseRefs: [],
@@ -1192,9 +1195,11 @@ export function composeStack(
   } = {},
 ): ArchitectureInput {
   const def = typeof stack === 'string' ? stackDef(stack) : stack;
-  const spa = options.framework === 'vite-spa';
+  // Next.js の静的書き出し（D-80）は SPA と同じ形（静的な配信 + API）にし、ビルドし直しのノードを足す
+  const spa = browserCallsApi(options.framework);
+  const nextExport = options.framework === 'nextjs-export';
   const astro = options.framework === 'astro';
-  // SPA・Astro には ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品も Next.js だけ
+  // SPA・Astro・静的書き出しには ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品も Next.js だけ
   const c =
     spa || astro
       ? {
@@ -1227,7 +1232,7 @@ export function composeStack(
       case 'netlify':
         return composeNetlify(def.plan as 'free' | 'personal' | 'pro', c, {
           framework: options.framework ?? 'nextjs',
-          prerender: c.ogp === 'prerender',
+          prerender: !nextExport && c.ogp === 'prerender',
           apiCache: apiCacheActive('netlify', c, options.framework)
             ? c.apiCache!
             : 'none',
@@ -1256,17 +1261,28 @@ export function composeStack(
   const shaped =
     spa && !direct
       ? asSpa(crossed, def.platform, {
-          prerender: c.ogp === 'prerender',
-          apiCache: apiCacheActive(def.platform, c, 'vite-spa')
+          prerender: !nextExport && c.ogp === 'prerender',
+          apiCache: apiCacheActive(def.platform, c, options.framework)
             ? c.apiCache!
             : 'none',
+          suffix: nextExport ? EXPORT_SUFFIX : '（Vite の SPA）',
         })
-      : crossed;
-  // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
-  return applyCrossApi(
+      : nextExport && def.platform !== 'netlify'
+        ? // AWS（S3 + CloudFront + Lambda）は SPA の形を stacks/aws.ts で組む。名前だけ替える
+          {
+            ...crossed,
+            name: crossed.name.replace('（Vite の SPA）', EXPORT_SUFFIX),
+          }
+        : crossed;
+  const built =
     astro && def.platform !== 'netlify'
       ? asAstro(shaped, def.platform, def.plan)
-      : shaped,
+      : nextExport
+        ? withBuild(shaped, def.platform, def.plan, 'Next.js')
+        : shaped;
+  // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
+  return applyCrossApi(
+    built,
     def.platform,
     def.plan,
     c,
@@ -1274,6 +1290,9 @@ export function composeStack(
     options.framework ?? 'nextjs',
   );
 }
+
+/** Next.js の静的書き出しの構成の名前に添える文字（D-80）。 */
+const EXPORT_SUFFIX = '（Next.js の静的書き出し）';
 
 /** Vercel の Elastic のビルドのマシンの vCPU の最小（新しい Pro の既定。CPU minute の数に効く。D-68）。 */
 const VERCEL_BUILD_CPUS = 4;
@@ -1292,13 +1311,45 @@ function asAstro(
   const routes = { ...arch.routes };
   delete routes['document-isr'];
   delete routes['isr-revalidate'];
+  const label: Record<string, string> = {
+    worker: 'Worker（Astro）',
+    fn: 'Vercel Functions（Astro）',
+    vps: 'VPS（nginx + Astro の Node + MySQL）',
+  };
+  const nodes = arch.nodes.map((n): ArchNodeIn =>
+    label[n.id] ? { ...n, label: label[n.id]! } : n,
+  );
+  return withBuild(
+    {
+      ...arch,
+      name: arch.name.replace(' + vinext', '') + '（Astro）',
+      nodes,
+      routes,
+    },
+    platform,
+    plan,
+    'Astro',
+  );
+}
+
+/**
+ * 静的なページのビルドし直しのノード（経路を持たない）を足す（Astro は D-68・Next.js の静的書き出しは D-80）。
+ * Cloudflare は Workers Builds、Vercel はビルドの CPU minute（Pro）・込み（Hobby）。VPS は同じホストでビルドし（CPU は数えない・仮定）、
+ * AWS（S3 + CloudFront）は手元か CI でビルドする前提で数えない（仮定）。Netlify は stacks/netlify.ts（デプロイの回数）。
+ */
+function withBuild(
+  arch: ArchitectureInput,
+  platform: Platform,
+  plan: string,
+  what: string,
+): ArchitectureInput {
   const billingOf = (id: string) =>
     arch.nodes.find((n) => n.id === id)?.billing;
   const ci: ArchNodeIn | undefined =
     platform === 'cloudflare'
       ? {
           id: 'build',
-          label: 'Workers Builds（静的なページのビルド）',
+          label: `Workers Builds（${what} の静的なページのビルド）`,
           config: { kind: 'ci-build' },
           billing: {
             ...billingOf('worker')!,
@@ -1308,7 +1359,7 @@ function asAstro(
       : platform === 'vercel'
         ? {
             id: 'build',
-            label: 'Vercel のビルド（静的なページ）',
+            label: `Vercel のビルド（${what} の静的なページ）`,
             config: {
               kind: 'ci-build',
               cpusPerBuild: plan === 'pro' ? VERCEL_BUILD_CPUS : 2,
@@ -1322,20 +1373,7 @@ function asAstro(
             },
           }
         : undefined;
-  const label: Record<string, string> = {
-    worker: 'Worker（Astro）',
-    fn: 'Vercel Functions（Astro）',
-    vps: 'VPS（nginx + Astro の Node + MySQL）',
-  };
-  const nodes = arch.nodes.map((n): ArchNodeIn =>
-    label[n.id] ? { ...n, label: label[n.id]! } : n,
-  );
-  return {
-    ...arch,
-    name: arch.name.replace(' + vinext', '') + '（Astro）',
-    nodes: ci ? [...nodes, ci] : nodes,
-    routes,
-  };
+  return ci ? { ...arch, nodes: [...arch.nodes, ci] } : arch;
 }
 
 /**
@@ -1346,7 +1384,7 @@ function asAstro(
 function asSpa(
   arch: ArchitectureInput,
   platform: Platform,
-  opts: { prerender: boolean; apiCache: string },
+  opts: { prerender: boolean; apiCache: string; suffix: string },
 ): ArchitectureInput {
   const { prerender, apiCache } = opts;
   const routes = { ...arch.routes };
@@ -1451,7 +1489,7 @@ function asSpa(
     routes['document-static'] = ['cdn', 'fn'];
   return {
     ...arch,
-    name: arch.name.replace(' + vinext', '') + '（Vite の SPA）',
+    name: arch.name.replace(' + vinext', '') + opts.suffix,
     nodes,
     routes,
   };

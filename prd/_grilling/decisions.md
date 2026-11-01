@@ -660,6 +660,20 @@
   CF Paid × Next.js（目標の根拠）は 20/20・$183 で不変。既定（ページごと）は値が変わらないので golden は不変。
 - 残した点: 時間で間引く無効化（数分ごとに `/*`）・CDN のヒット率の低下を速さに効かせること・タグの無効化（OpenNext の対応待ち）。
 
+### D-80 Next.js の静的書き出し（output: 'export'）を 4 つ目のフレームワークに（確定・2026-11-02）
+
+- prd/10 の未決 F-03。ユーザーの方針「費用を抑えるより複雑な構成も可能にしたい」「作者のスタックに寄せない」。推奨案で自律に決定。仕様・出典・基準プレイは prd/06 §7、分岐との関係は prd/10 §11。
+- 確かめた事実（nextjs.org の Static Exports・2026-08-09 更新・2026-11-02 取得）: ルートごとに HTML をビルドで作り、静的なファイルを配れるサーバーならどこにでも載る。使えないのは ISR・Server Actions・Cookies・Rewrites / Redirects / Headers・Proxy（Middleware）・Request に依る Route Handler・`generateStaticParams` の無い動的ルート・Draft Mode・Intercepting Routes・**既定のローダーでの画像の最適化**。できるのはビルドのときの Server Components・Client Component でのデータの取得（SWR の例）・`GET` の静的な Route Handler・`loaderFile` のローダーでの `next/image`。
+- 決定:
+  - **独立した選択肢** `nextjs-export`（F-03 の ③）。記事は静的にビルドし直し（D-68 の `build`・`ci-build`・`build-minutes` / Netlify の `deploys`）、マイページはブラウザが API で中身を取る（D-34 の `spa`）。テンプレートの書き換えは `toNextExport` = `toSpa(toAstro(…))`、構成は SPA の形 + ビルドのノード。estimator の拡張は無い。
+  - 載せ方: Cloudflare（静的アセット）・Vercel（静的）・さくらの VPS（nginx）・AWS（S3 + CloudFront）・Netlify は native、AWS の OpenNext は unsupported。API の置き場は SPA と同じ部品・組（D-65・D-67）。
+  - 画像（公式どおり）: 既定のローダーが使えないので、Vercel の画像の最適化と VPS のホストでの変換は選べない（既定は投稿のときに縮める。受託は画像のスロットを出さないので替えない）。Cloudflare Images（公式の `/cdn-cgi/image/` のローダー）と Netlify Image CDN（`/.netlify/images`）は URL を返すローダーで使えるので選べる。Vercel の `/_vercel/image` を静的書き出しから使う手順は未確認。
+  - 満足度: 初回表示・JS の量は Next.js と同じ扱い（速さには SSR の CPU の値をそのまま使う）。SNS のカードは HTML に入る。鮮度・即時反映は Astro と同じ（設定「ビルドの間隔」）。
+  - 仮定: 1 回のビルドの時間は Astro と同じ式。AWS（S3 + CloudFront）のビルドとデプロイの無効化、VPS のビルドの CPU は数えない。
+- 基準プレイ（何もしない・シード 1〜20）: **CF Paid × Next.js（目標の根拠）は不変**（golden も不変）。静的書き出しの CF Paid は記事 20 / 20・$2,153（Next.js $2,152）・受託 20 / 20。AWS（S3 + CloudFront）は記事 19 / 20（Amplify の Next.js は 10 / 20）。Vercel Pro は画像を縮める分だけ Next.js より悪い（$851 → $592）。受託の Vercel Pro + Workers・D1 は 20 / 20（Next.js と同じ）。
+- 文言の変更: Astro のビルドのノードの名前に「Astro の」を入れた（静的書き出しと見分ける）。
+- 残した点: 途中の作り直し（F-06）・Vercel の `/_vercel/image` を静的書き出しから使う形・AWS のビルド（Amplify の静的・CodeBuild）とデプロイの無効化・`trailingSlash` などの細かい設定。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧。本文は消していないので、詳細は参照先を読む。
@@ -673,7 +687,7 @@
 | ~~D-66 の残り~~ | ~~OpenNext の CloudFront の無効化で、ワイルドカード・タグの無効化を部品にするか~~ → D-79（ワイルドカードを部品に。タグは OpenNext の対応待ちで入れない） | D-66・D-79・prd/11 §13.1 |
 | D-70 の残り | コメントを ISR のページに含める作り（コメントのたびに作り直す）を、部品・設定の選択肢にするか。見送った案: 中間の割合（例 0.1） | D-70 |
 | D-22 の保留 | 画面の形（上部の固定バー + 今月 / 推移 / 明細のタブ）。出来事のダイアログだけ先に採用（D-23） | D-22・prd/07 §10.14 |
-| F-03・F-06・F-08 | Next.js の `output: 'export'`・途中の作り直し（Next.js ↔ SPA。① 入れない → 後で ②）・検索の差（表さない） | prd/10 §5 |
+| F-06・F-08 | 途中の作り直し（Next.js ↔ SPA。① 入れない → 後で ②）・検索の差（表さない）。~~F-03 Next.js の `output: 'export'`~~ → D-80（独立したフレームワークの選択肢） | prd/10 §5・§11 |
 | 見積モードの残り | JSON の保存・料金の改定の予告・判断ポイントの境目の値（どの PV で入れ替わるか）・PV 以外を振る曲線・見積だけの切り出し（部品の規則と Workload の組み立てを game から移す） | D-73・D-74・prd/08「見積モードの今の形」 |
 | 04 §5 | `burst` の既定値・画像の派生（サムネイル）の数え方 | prd/04 §5 |
 

@@ -4,6 +4,7 @@
 > 料金データと同じく公式ドキュメントを出典にして catalog に入れる（[03](./03-pricing-schema.md) §1 と同じ規律）。
 > 今は Next.js・Vite の SPA・Astro × Cloudflare・Vercel・さくらの VPS・AWS（Amplify・S3 + CloudFront・OpenNext）・Netlify を、出典つきで `packages/catalog/src/frameworks` の DeployTarget の表に入れた（Astro × AWS は unsupported）。
 > ⚠ **一部実装済み**（Next.js と Vite の SPA の 2 つだけの最小の形。BuildOutput は Workload の routes で代用）→ [10](./10-framework-branch.md) §7・「D-34」（2026-11-01）
+> ⚠ **Next.js の静的書き出し（`output: 'export'`）を 4 つ目の選択肢として実装**（§7・D-80・2026-11-02）。Astro と SPA の仕組みの組み合わせで足せた（新しい型・エンジンの拡張なし）。
 > ⚠ **Astro を実装**（§6・D-68・2026-11-02）。BuildOutput の型は作らず、SPA と同じく「テンプレートの書き換え（`toAstro`）+ DeployTarget の表 + `composeStack` の分岐」で足せた（§3 の「データ追加だけで足せるか」の検証の答えは §6.6）
 
 ## 1. なぜ入力の軸にするか
@@ -203,4 +204,81 @@ MVP の比較対象は「フレームワーク × ホスト」の組み合わせ
 
 - データだけでは足りなかったのは 2 つ: **ビルドし直しの費用**（estimator の資源・Workload の `build`・ノード `ci-build`）と、**載せられない組の検証**（`unsupported` の DeployTarget を始める画面・乗り換えで弾く）。それ以外（ルートの書き換え・構成の分岐・部品の出し分け・設定の意味）は SPA と同じ仕組みで足りた。06 §2.1 の BuildOutput の型は、まだ作らなくてよい。
 - API の置き場（D-69・prd/10 §9.7）: Vercel・VPS の Astro + Cloudflare Workers・D1、Cloudflare の Astro + さくらの VPS の API を許した。
-- 後の段: Vercel の `isr` で記事をリクエストのたびに描く形（Next.js の ISR と同じ経路になる）、Server Islands、Astro × AWS（コミュニティのアダプター・SST）、VPS のビルドの CPU、Vercel Hobby の 1 日 100 デプロイの判定、ビルドの遅れを鮮度に足すこと、Astro の静的出力の画像をビルドで変換する形（`compile`）、Next.js の `output: 'export'`（F-03）。
+- 後の段: Vercel の `isr` で記事をリクエストのたびに描く形（Next.js の ISR と同じ経路になる）、Server Islands、Astro × AWS（コミュニティのアダプター・SST）、VPS のビルドの CPU、Vercel Hobby の 1 日 100 デプロイの判定、ビルドの遅れを鮮度に足すこと、Astro の静的出力の画像をビルドで変換する形（`compile`）。Next.js の `output: 'export'`（F-03）は §7（D-80）で入れた。
+
+## 7. Next.js の静的書き出し（`output: 'export'`。実装・2026-11-02・D-80）
+
+### 7.1 確かめた公式の事実（2026-11-02 取得）
+
+| 事実 | 出典 |
+|---|---|
+| `next build` でルートごとに HTML を作り、HTML・CSS・JS の静的なファイルを配れる Web サーバーならどこにでも載る。出力は `out/`（例: `/blog/[id]` → `/out/blog/post-1.html`） | [Static Exports](https://nextjs.org/docs/app/guides/static-exports)（2026-08-09 更新） |
+| できること: Server Components はビルドのときに動く（静的な HTML と、遷移のための静的なペイロード）。クライアントでのデータの取得は Client Component から（公式の例は SWR）。Route Handler は `GET` だけ、`dynamic = 'force-static'` でビルドのときに静的なファイルになる。`next/image` は `loader: 'custom'`・`loaderFile` で使える（例は Cloudinary） | 同上 |
+| 使えないもの: `dynamicParams: true` の動的ルート・`generateStaticParams()` の無い動的ルート・Request に依る Route Handler・Cookies・Rewrites・Redirects・Headers・Proxy（Middleware）・ISR・**既定のローダーでの画像の最適化**・Draft Mode・Server Actions・Intercepting Routes。「If you need to read dynamic values from the incoming request, you cannot use a static export」 | 同上 |
+| nginx の例: `try_files $uri $uri.html $uri/ =404` | 同上 |
+| `unoptimized: true`（全体は `images.unoptimized`）は原本をそのまま配る。`loaderFile` は「use a custom image optimization service instead of Next.js」 | [Image Component](https://nextjs.org/docs/app/api-reference/components/image)（2026-09-28 更新） |
+| Cloudflare の公式の Next.js のローダーは `/cdn-cgi/image/<変換>/<元の画像>` を返す（Images の URL での変換） | [Integrate with frameworks](https://developers.cloudflare.com/images/transform-images/integrate-with-frameworks/)（2026-04-21 更新） |
+| Workers の静的アセットの `html_handling` の既定は `auto-trailing-slash` で、`/file` に `/file.html` を返す（リダイレクトなし） | [HTML handling](https://developers.cloudflare.com/workers/static-assets/routing/advanced/html-handling/)（2026-04-23 更新） |
+| Netlify Image CDN は `/.netlify/images?url=…&w=…` で使え、「For all other frameworks, you can use Netlify Image CDN directly」 | [Image CDN](https://docs.netlify.com/build/image-cdn/overview/)（2026-09-25 更新） |
+| Vercel の画像の最適化は、Next.js では `/_next/image`（next/image の既定のローダー）、他のフレームワークは `/_vercel/image`（Build Output API の設定）。Next.js の静的書き出しから使う手順は書かれていない（**未確認**なので選べなくした） | [Image Optimization](https://vercel.com/docs/image-optimization)（2026-08-13 更新） |
+
+### 7.2 入れた形（推奨案で自律に決定）
+
+- **独立したフレームワークの選択肢** `nextjs-export`（label「Next.js（静的書き出し）」・`renderingModes: static・spa`）。Next.js の設定・部品にしなかったのは、載せられる事業者・API の置き場・画像の部品・設定の意味がすべて Next.js と違い、Astro・SPA と同じ「始める画面でアプリを選ぶ」形（F-04）がそのまま使えるため。
+- **テンプレートの書き換え** `toNextExport(w, spaShape, minutesPerBuild, build)` = `toSpa(toAstro(w, { assetsFactor: 1, … }))`。記事（ISR だったルート）は静的なページにしてビルドし直し（Astro と同じ・D-68 の `build`）、マイページ（SSR だったルート）はブラウザが API で中身を取る（SPA と同じ `spa`。HTML はルートごとの静的なファイル）。JS・CSS は Next.js のまま（倍率 1）。
+- **構成**: `composeStack(…, { framework: 'nextjs-export' })` は SPA と同じ形（ISR・SSR の経路なし・静的な配信 + API）に、Astro と同じビルドのノードを足す。名前は「（Next.js の静的書き出し）」。
+
+| 事業者 | 載せ方（DeployTarget） | ビルドし直し | 画像の部品 |
+|---|---|---|---|
+| Cloudflare | Workers の静的アセット + 同じ Worker の API | Workers Builds | Images（公式のローダー）・R2・縮める・最適化しない |
+| Vercel | 静的（CDN）+ Vercel Functions の API | Vercel のビルド（Pro は CPU minute） | **画像の最適化は選べない**（既定は縮める）。縮める・最適化しない・Cloudflare の R2 + Images |
+| さくらの VPS | nginx で静的 + 同じホストの Node の API | 同じホスト（数えない・仮定） | **ホストで変換は選べない**（既定は縮める）。縮める・最適化しない |
+| AWS | S3 + CloudFront + Lambda（SPA と同じ形） | 手元・CI（数えない・仮定。デプロイの無効化も数えない） | 縮める（既定）・最適化しない・Cloudflare |
+| Netlify | 静的 + Netlify Functions の API | 本番のデプロイ 1 回 15 クレジット（Astro と同じ） | Image CDN（URL のローダー）・縮める・最適化しない |
+| AWS の OpenNext | **unsupported**（サーバーが無いので OpenNext は使わない） | — | — |
+
+- **API の置き場**: SPA と同じ部品・同じ組（D-65・D-67）。Vercel・AWS・Netlify の静的 + Cloudflare Workers・D1、Cloudflare の静的 + AWS Lambda・DynamoDB／さくらの VPS。ブラウザ（Client Component）が別のサブドメインの API を呼ぶ（CORS・Cookie の前提は F-13 と同じ）。
+- **部品**: ISR のキャッシュ・HTML を前段の CDN でキャッシュする部品・OGP の前処理・API の応答のキャッシュは出さない（記事は静的、マイページは個人化）。
+- **満足度**: 初回表示・JS の量は Next.js と同じ扱い（`firstLoadHeavy`・`firstLoadLight` なし。速さの重さには SSR の CPU の値をそのまま使う: マイページはサーバーの描画が無い代わりにブラウザが HTML → JS → API を待つ、という仮定）。記事ごとの SNS のカードは HTML に入る（`noSocialCards` は SPA だけ）。鮮度・即時反映は Astro と同じ（設定「ビルドの間隔」・オンデマンドは更新のたびにビルド）。
+- **仮定**（ゲーム上）: 1 回のビルドの時間は Astro と同じ式（1 分 + 記事 1,000 ページあたり 0.5 分）。マイページの中身の API の CPU は SPA の `dataCpuFactor`（0.5）倍。受託は画像のスロットを出さないので、画像の既定は替えない（添付ファイルを縮めない）。
+
+### 7.3 基準プレイ（何もしない・シード 1〜20・ビルドの間隔 5 分）
+
+達成・12 か月のインフラ費の中央値・所持金の中央値。Next.js・SPA・Astro の列は今の値（変わらない）。
+
+| 記事コミュニティ | Next.js | Vite の SPA | Astro | Next.js（静的書き出し） |
+|---|---|---|---|---|
+| CF Free | 0 / 20（3 か月目に停止） | 0 / 20 | 0 / 20 | 0 / 20（同じ） |
+| **CF Paid（目標の根拠）** | **20 / 20・$182・$2,152** | 20 / 20・$175・$1,870 | 20 / 20・$189・$2,601 | 20 / 20・$181・$2,153 |
+| Vercel Pro | 0 / 20・$1,491・$851 | 0 / 20・$1,274・$774 | 0 / 20・$1,712・$1,076 | 0 / 20・$1,742・$592（画像は縮める） |
+| さくらの VPS 2GB | 10 / 20・$157・$1,720 | 0 / 20・$157・$1,566 | 17 / 20・$157・$2,090 | 10 / 20・$157・$1,717 |
+| さくらの VPS 4GB | 0 / 20・$317・$1,560 | 0 / 20・$317・$1,405 | 16 / 20・$317・$1,930 | 0 / 20・$317・$1,557 |
+| AWS（Amplify / S3 + CloudFront） | 10 / 20・$623・$1,702 | 19 / 20・$179・$1,860 | 載せない | 19 / 20・$378・$1,943 |
+| Netlify Pro | 0 / 20・$1,072・$1,263 | 0 / 20・$964・$1,084 | 0 / 20（所持金が尽きる） | 0 / 20（所持金が尽きる。Astro と同じくデプロイのクレジット） |
+
+| 受託 | Next.js | Vite の SPA | Astro | Next.js（静的書き出し） |
+|---|---|---|---|---|
+| CF Paid | 20 / 20・$68・$2,036 | 20 / 20・$68・$2,100 | 20 / 20・$68・$2,036 | 20 / 20・$68・$2,036 |
+| Vercel Pro | 0 / 20・$559・$1,545 | 0 / 20・$542・$1,624 | 0 / 20・$559・$1,545 | 0 / 20・$540・$1,563 |
+| さくらの VPS 2GB / 4GB | 0・8 / 20 | 1・12 / 20 | 0・8 / 20 | 0・8 / 20 |
+| AWS | 20 / 20・$180・$1,872 | 20 / 20・$50・$2,002 | 載せない | 20 / 20・$50・$2,002 |
+
+API の置き場・画像を替えた静的書き出し（同じ取り方）:
+
+| シナリオ | 構成 | 部品 | 達成 | 12 か月の費用 | 所持金 |
+|---|---|---|---|---|---|
+| 記事 | Vercel Pro | 画像: Cloudflare の R2 + Images | 0 / 20 | $1,186 | $1,156 |
+| 記事 | Vercel Pro | 画像: 最適化しない（原本） | 0 / 20（1 か月目に所持金が尽きる） | — | −$78 |
+| 記事 | Vercel Pro | API: Workers + D1・画像: Cloudflare に縮める | 0 / 20 | $760 | $1,577 |
+| 記事 | CF Paid | API: AWS Lambda | 20 / 20 | $205 | $2,130 |
+| 記事 | CF Free | API: AWS Lambda・画像は縮める | 16 / 20 | $25 | $1,930 |
+| 記事 | CF Paid | API: VPS 2GB | 4 / 20 | $329 | $1,634 |
+| 記事 | AWS（S3 + CloudFront） | API: Workers + D1 | 19 / 20 | $402 | $1,919 |
+| 記事 | VPS 2GB | 前段の CDN（静的と画像） | 16 / 20 | $157 | $1,809 |
+| 受託 | Vercel Pro | API: Workers + D1 | **20 / 20** | $300 | $1,817 |
+| 受託 | CF Paid | API: AWS Lambda / VPS 2GB | 20 / 20・12 / 20 | $119 / $224 | $1,998 / $1,775 |
+
+- **目標の根拠（CF Paid × Next.js）は変わらない**（既存の golden・基準プレイもすべて同じ）。静的書き出しの CF Paid は Next.js とほぼ同じ（初回表示を同じ扱いにしたので、差は Worker のリクエストと KV の書き込みが減る分だけ）。
+- **Vercel Pro は Next.js より悪い**: 既定のローダーが使えず、画像を縮めて配る（サイズ違いが無い）分だけ Fast Data Transfer が増える。Cloudflare の Images に出すと費用は Next.js より下がる。
+- **AWS（S3 + CloudFront）は Amplify の Next.js より安く届く**（10 → 19 / 20）。SPA より費用が高いのは、ページごとの HTML と Next.js の JS・CSS を CloudFront から配る分（SPA は入口だけ）。
+- 受託はビルドし直しが無く、ほぼ Next.js と同じ（Vercel Pro + Workers・D1 で届くのも同じ）。

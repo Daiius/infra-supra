@@ -21,6 +21,7 @@ import {
   deployTarget,
   frameworkSupported,
   toAstro,
+  toNextExport,
   toSpa,
 } from './index.ts';
 
@@ -356,5 +357,150 @@ describe('Astro（D-68）', () => {
     expect(u.quantity).toBeCloseTo(minutes * 4, 6);
     const hobby = est('vercel-supabase-hobby', 3600);
     expect(hobby.usage.some((x) => x.nodeId === 'build')).toBe(false);
+  });
+});
+
+describe('Next.js の静的書き出し（D-80）', () => {
+  const pv = 300_000;
+  const updates = pv * 0.1 * 0.01;
+  const w = () =>
+    toNextExport(
+      articleCommunity(pv),
+      ARTICLE_COMMUNITY_SPA,
+      ARTICLE_COMMUNITY_ASTRO.minutesPerBuild,
+      { updatesPerMonth: updates, intervalSeconds: 300 },
+    );
+  const est = (id: string, choices = {}) =>
+    estimate({
+      workload: w(),
+      architecture: composeStack(id, choices, { framework: 'nextjs-export' }),
+      books,
+    });
+
+  it('載せ方: 静的な配信のある事業者（Cloudflare・Vercel・VPS・S3 + CloudFront・Netlify）に載り、OpenNext は使わない。出典は公式の静的書き出しの文書', () => {
+    for (const p of [
+      'cloudflare',
+      'vercel',
+      'sakura',
+      'aws',
+      'netlify',
+    ] as const) {
+      expect(frameworkSupported('nextjs-export', p)).toBe(true);
+      expect(
+        deployTarget('nextjs-export', p)?.sources.map((x) => x.url),
+      ).toContain('https://nextjs.org/docs/app/guides/static-exports');
+    }
+    expect(deployTarget('nextjs-export', 'aws-opennext')?.support).toBe(
+      'unsupported',
+    );
+    expect(FRAMEWORKS['nextjs-export'].renderingModes).toEqual([
+      'static',
+      'spa',
+    ]);
+  });
+
+  it('記事（ISR）は静的なページにしてビルドし直し、個人化（SSR）はブラウザが API で取る。JS・CSS は Next.js のまま', () => {
+    const a = w();
+    expect(a.routes.map((r) => r.rendering)).toEqual(['static', 'spa']);
+    expect(a.perPage.assets).toBe(articleCommunity(pv).perPage.assets);
+    expect(a.build).toEqual({
+      updatesPerMonth: updates,
+      intervalSeconds: 300,
+      minutesPerBuild: 2,
+    });
+    // 業務アプリは静的なページが無いので、SPA と同じ形でビルドし直しが無い
+    const b = toNextExport(
+      businessApp(100_000),
+      ARTICLE_COMMUNITY_SPA,
+      ARTICLE_COMMUNITY_ASTRO.minutesPerBuild,
+      { updatesPerMonth: 1000 },
+    );
+    expect(b.build).toBeUndefined();
+    expect(b.routes.every((r) => r.rendering !== 'ssr')).toBe(true);
+  });
+
+  it('構成: SPA と同じ形（ISR・SSR の経路なし・API）で、Cloudflare・Vercel・Netlify はビルドのノードを持つ', () => {
+    for (const d of STACK_DEFS) {
+      if (!frameworkSupported('nextjs-export', d.platform)) continue;
+      const a = composeStack(d, {}, { framework: 'nextjs-export' });
+      expect(() => ArchitectureSchema.parse(a)).not.toThrow();
+      expect(a.routes['document-isr']).toBeUndefined();
+      expect(a.routes['document-ssr']).toBeUndefined();
+      expect(a.routes.api).toBeDefined();
+      expect(a.nodes.some((n) => n.id === 'build')).toBe(
+        ['cloudflare', 'vercel', 'netlify'].includes(d.platform),
+      );
+      expect(a.name).toContain('（Next.js の静的書き出し）');
+      expect(a.name).not.toContain('vinext');
+    }
+  });
+
+  it('Cloudflare: 記事もマイページの HTML も静的アセット（Worker を起動しない）。Worker はマイページの中身の API の分だけ増える', () => {
+    const a = composeStack(
+      'cloudflare-vinext-paid',
+      {},
+      { framework: 'nextjs-export' },
+    );
+    expect(a.routes['document-static']).toEqual(['assets']);
+    const next = estimate({
+      workload: articleCommunity(pv),
+      architecture: composeStack('cloudflare-vinext-paid'),
+      books,
+    });
+    const req = (e: typeof next) =>
+      e.usage.find((u) => u.nodeId === 'worker' && u.meterId === 'requests')
+        ?.quantity ?? 0;
+    // Next.js の HTML（PV）が消え、マイページ（PV × 0.4）の中身の API が足される
+    expect(req(next) - req(est('cloudflare-vinext-paid'))).toBeCloseTo(
+      pv * 0.6,
+      -1,
+    );
+  });
+
+  it('画像: 既定のローダーが使えないので、Vercel の画像の最適化・VPS のホストでの変換は選べない（Cloudflare Images・Netlify Image CDN は URL のローダーで選べる）', () => {
+    const ids = (p: Parameters<typeof componentsOf>[0]) =>
+      componentsOf(p, 'images', 'nextjs-export').map((o) => o.id);
+    expect(ids('vercel')).not.toContain('default');
+    expect(ids('sakura')).not.toContain('default');
+    expect(ids('vercel')).toEqual(
+      expect.arrayContaining(['resize', 'none', 'cf-images', 'cf-resize']),
+    );
+    expect(ids('cloudflare')).toContain('images');
+    expect(ids('netlify')).toContain('default');
+    // Next.js・SPA・Astro では今までどおり選べる
+    for (const f of ['nextjs', 'vite-spa', 'astro'] as const)
+      expect(componentsOf('vercel', 'images', f).map((o) => o.id)).toContain(
+        'default',
+      );
+  });
+
+  it('API の置き場は SPA と同じ組（ブラウザから呼ぶ）。OGP の前処理・API の応答のキャッシュは出さない', () => {
+    const api = (p: Parameters<typeof componentsOf>[0]) =>
+      componentsOf(p, 'api', 'nextjs-export').map((o) => o.id);
+    expect(api('vercel')).toEqual(['same', 'cf-workers']);
+    expect(api('cloudflare')).toEqual([
+      'same',
+      'aws-lambda',
+      'sakura-vps-2gb',
+      'sakura-vps-4gb',
+    ]);
+    expect(componentsOf('cloudflare', 'ogp', 'nextjs-export')).toEqual([]);
+    expect(componentsOf('cloudflare', 'apiCache', 'nextjs-export')).toEqual([]);
+    const a = composeStack(
+      'vercel-supabase-pro',
+      { api: 'cf-workers', images: 'resize' },
+      { framework: 'nextjs-export' },
+    );
+    expect(a.routes.api).toEqual(['cf-worker', 'cf-d1']);
+    expect(a.nodes.some((n) => n.id === 'db')).toBe(false);
+  });
+
+  it('Vercel Pro はビルドの CPU minute を数える（Astro と同じ）', () => {
+    const e = est('vercel-supabase-pro', { images: 'resize' });
+    expect(
+      e.usage.find(
+        (u) => u.nodeId === 'build' && u.meterId === 'build-cpu-minutes',
+      )?.quantity,
+    ).toBeGreaterThan(0);
   });
 });

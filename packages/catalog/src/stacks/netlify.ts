@@ -3,7 +3,11 @@
 // SPA と Astro の形はここで直接組む（index.ts の asSpa・asAstro は通さない。AWS と同じ）。ノードの id は Vercel の構成と同じ
 // （cdn・fn・image・blob・db）にして、他の事業者の部品（cross.ts）の差し方を揃える。
 import type { ArchitectureInput, RequestClass } from 'estimator';
-import type { FrameworkId } from '../frameworks/index.ts';
+import {
+  browserCallsApi,
+  rebuildsStaticPages,
+  type FrameworkId,
+} from '../frameworks/index.ts';
 import type { Choices, ComponentOption, StackDef } from './index.ts';
 
 type ArchNodeIn = ArchitectureInput['nodes'][number];
@@ -118,6 +122,10 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
         'astro',
         'Astro のサーバー（Netlify のアダプター・Netlify Functions）が同じ構成の Supabase を直接読む。API を別に立てない',
       ],
+      [
+        'nextjs-export',
+        '同じサイトの Netlify Functions に API を置き、DB は Supabase。ブラウザ（Client Component）から呼ぶ。同じドメインなので CORS の設定は要らない',
+      ],
     ] as const
   ).map(([framework, note]): ComponentOption => ({
     id: 'same',
@@ -190,7 +198,9 @@ export function composeNetlify(
     planId: plan,
     meters,
   });
-  const spa = opts.framework === 'vite-spa';
+  // Next.js の静的書き出し（D-80）は SPA と同じ形（静的 + Functions の API）に、Astro と同じビルドし直しを足す
+  const spa = browserCallsApi(opts.framework);
+  const nextExport = opts.framework === 'nextjs-export';
   const astro = opts.framework === 'astro';
   const isr = !spa && !astro && choices.isrCache !== 'none';
   const optimize = choices.images !== 'none' && choices.images !== 'resize';
@@ -278,7 +288,7 @@ export function composeNetlify(
             : { 'egress-gb': 'egress' },
       },
     },
-    ...(astro
+    ...(rebuildsStaticPages(opts.framework)
       ? [
           {
             id: 'build',
@@ -320,11 +330,13 @@ export function composeNetlify(
   const base = NETLIFY_STACK_DEFS.find((d) => d.plan === plan)!;
   return {
     id: base.id,
-    name: spa
-      ? `${base.name}（Vite の SPA）`
-      : astro
-        ? `${base.name}（Astro）`
-        : base.name,
+    name: nextExport
+      ? `${base.name}（Next.js の静的書き出し）`
+      : spa
+        ? `${base.name}（Vite の SPA）`
+        : astro
+          ? `${base.name}（Astro）`
+          : base.name,
     nodes,
     routes,
   };
