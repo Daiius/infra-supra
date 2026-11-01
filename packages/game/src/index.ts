@@ -1061,7 +1061,19 @@ const acceptEffort = (def: EventDef, state: GameState) =>
 function imageRedesignEffort(state: GameState): number {
   const platform = STACKS[state.stackIndex]!.provider;
   const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
-  return images === 'none' ? 0 : images === 'resize' ? 2 : 1;
+  // 今の部品が原本を配っていても、一律で縮めて置いた原本の無い画像が多く残っていれば、一律で縮めた構成と同じ（OCL-0A3AC32F）
+  if (images === 'none') return hasManyCoarseImages(state) ? 2 : 0;
+  return images === 'resize' ? 2 : 1;
+}
+
+/**
+ * 一律で縮めて置いた原本の無い画像が、在庫の coarseShare 以上残っているか（D-47）。部品を替えても、
+ * それまでに縮めて置いた画像は大きくできない（OCL-0A3AC32F）。
+ */
+function hasManyCoarseImages(state: GameState): boolean {
+  const rule = scenarioOf(state).imageRedesign;
+  if (!rule || state.stock.images <= 0) return false;
+  return (state.coarseImages ?? 0) / state.stock.images >= rule.coarseShare;
 }
 
 /** 記事のデザインの刷新の提案の id（D-47）。 */
@@ -1085,7 +1097,8 @@ function imageRedesignQuality(
   if (
     res === 'declined' &&
     at !== undefined &&
-    images !== 'none' &&
+    // 原本を配っている構成は既に大きいので下げない。ただし原本の無い画像が多く残っていれば下げる（OCL-0A3AC32F）
+    (images !== 'none' || hasManyCoarseImages(state)) &&
     month > at &&
     month <= at + rule.declineMonths
   )

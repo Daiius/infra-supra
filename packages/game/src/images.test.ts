@@ -176,6 +176,28 @@ describe('記事のデザインの刷新の提案（D-47）', () => {
     expect(none.history[3]!.satisfaction.stages.quality).toBe('good');
   });
 
+  it('一律で縮めて画像をためてから「最適化しない」に替えても、断れば画質が下がり、受ける手間は 2（OCL-0A3AC32F）', () => {
+    const sc = withRedesign(1, 8);
+    // 1 か月目の終わりに一律で縮める → 6 か月目の終わりに最適化しないへ替える → 8 か月目に提案
+    let s = playMonth(newGame(CF_PAID, 42, sc, DEFAULT_START_DATE));
+    s = applyActions(s, images('resize'));
+    while (s.history.length < 6) s = playMonth(applyActions(s, []));
+    s = playMonth(applyActions(s, images('none')));
+    s = playMonth(applyActions(s, []));
+    expect(s.pendingProposals).toContain(IMAGE_REDESIGN_ID);
+    const accept = {
+      type: 'respond',
+      eventId: IMAGE_REDESIGN_ID,
+      accept: true,
+    } as const;
+    expect(actionEffort(s, accept)).toBe(2);
+    s = playMonth(applyActions(s, [{ ...accept, accept: false }]));
+    const r = s.history[8]!;
+    expect(r.components.images).toBe('none');
+    expect(r.satisfaction.stages.quality).toBe('fair');
+    expect(r.satisfaction.reasons.quality).toContain('デザインの刷新を断った');
+  });
+
   it('一律で縮めた構成で受けても、原本の無い粗い画像が多い間は画質が下がる（原本がある構成は下がらない）', () => {
     const sc = withRedesign(1, 8);
     const resize = play(sc, CF_PAID, images('resize'), true, 10);
