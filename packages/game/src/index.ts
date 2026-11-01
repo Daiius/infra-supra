@@ -2369,6 +2369,8 @@ function crossingsOf(
     let mods = c.parts.mods;
     let stock = c.parts.stock;
     let pv = c.parts.pv;
+    // basePV を外すと、話題・Bot の上乗せ（集中する分）も同じ割合で小さくなる（OCL-37A91830）
+    let baseFactor = 1;
     for (const e of def.accept.effects) {
       if (e.type === 'workload') {
         const next = { ...mods };
@@ -2382,12 +2384,19 @@ function crossingsOf(
           images: stock.images - (e.add.images ?? 0),
           articlePages: stock.articlePages - (e.add.articlePages ?? 0),
         };
-      } else if (e.type === 'basePV') pv /= e.factor;
+      } else if (e.type === 'basePV') {
+        pv /= e.factor;
+        baseFactor *= e.factor;
+      }
     }
+    const spikes = (c.parts.spikes ?? []).map((s) => ({
+      ...s,
+      extraPV: s.extraPV / baseFactor,
+    }));
     variants.push({
       eventId: id,
       title: def.title,
-      parts: { ...c.parts, mods, stock, pv },
+      parts: { ...c.parts, mods, stock, pv, spikes },
     });
   }
   const ratios = variants.map((v) => {

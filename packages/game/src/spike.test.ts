@@ -49,6 +49,16 @@ describe('話題・Bot の集中（D-44）', () => {
     expect(f).toBeGreaterThan(10);
   });
 
+  it('PV と上乗せを同じ割合で縮めれば倍率は変わらず、PV だけ縮めると過大になる（反実仮想で両方縮める理由。OCL-37A91830）', () => {
+    const spikes = [{ id: 'buzz', extraPV: 200, days: 2 }];
+    const f = spikePeakFactor(300, spikes);
+    expect(spikePeakFactor(150, [{ ...spikes[0]!, extraPV: 100 }])).toBeCloseTo(
+      f,
+      12,
+    );
+    expect(spikePeakFactor(150, spikes)).toBeGreaterThan(f);
+  });
+
   it('話題の月だけピークが上がる（VPS の回線の比率が、PV の伸びより大きく跳ねる）', () => {
     const s = play(article, VPS);
     const f = play(flat, VPS);
