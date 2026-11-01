@@ -897,7 +897,9 @@ export const cloudflare: PriceBookInput = {
       name: 'Images Paid',
       sourceIds: ['imagesPricing'],
       uptimeSla: NO_SELF_SERVE_SLA,
-      notes: ['Images Paid の基本料は取得したページに記載がなかった'],
+      notes: [
+        'Images Paid に基本料は無いとみる。料金のページに基本料の記載が無く、Paid の例（R2 の画像 2,000 枚 × 5 サイズ）の月の合計は変換 $2.50 + R2 $0.22 = $2.72 で基本料を含まない（2026-11-02 確認）',
+      ],
       facts: IMAGES_FACTS,
       meters: [
         {

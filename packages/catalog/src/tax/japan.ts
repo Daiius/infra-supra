@@ -59,38 +59,54 @@ export const JAPAN_TAX: readonly JapanTaxTreatment[] = [
   },
   {
     provider: 'vercel',
-    status: 'unconfirmed',
+    status: 'added',
     premise:
-      'Vercel の価格は税抜（USD）で、2026-04-01 の請求から登録のある国では VAT・GST などを足すと書かれているが、日本が対象かは書かれていない（消費税の扱いは未確認。税抜のまま）',
-    sources: [src('https://vercel.com/docs/pricing/taxes')],
+      'Vercel の価格は税抜（USD）で、登録のある国の請求に 2026-04-01 の発行分から VAT・GST などを足す。Vercel Inc. は国税庁の適格請求書発行事業者の公表サイトに 2026-02-01 から登録されている（T9700150136044）ので、日本の住所の請求には消費税が足されるとみる（日本の名を挙げた Vercel の文書は無い）',
+    sources: [
+      src('https://vercel.com/docs/pricing/taxes'),
+      src(
+        'https://www.invoice-kohyo.nta.go.jp/regno-search/detail?selRegNo=9700150136044',
+      ),
+    ],
   },
   {
     provider: 'supabase',
     status: 'unconfirmed',
     premise:
-      'Supabase は 2026-05〜06 から登録のある国で VAT・GST などを請求に足すと書かれているが、日本が対象かは書かれていない（消費税の扱いは未確認。税抜のまま）',
-    sources: [src('https://supabase.com/docs/guides/platform/billing-faq')],
+      'Supabase は 2026-05〜06 から登録のある国で VAT・GST などを請求に足すと書かれているが、日本が対象かは書かれていない。国税庁の適格請求書発行事業者の公表情報（2026-10-30 まで）にも Supabase の登録は見当たらない（消費税の扱いは未確認。税抜のまま）',
+    sources: [
+      src('https://supabase.com/docs/guides/platform/billing-faq'),
+      // 国税庁の公表情報（法人・国外を含む分割 5 の 2026-09-30 時点の全件と 2026-10 の差分）に、この事業者の名は無かった
+      src('https://www.invoice-kohyo.nta.go.jp/download/zenken'),
+    ],
   },
   {
     provider: 'netlify',
     status: 'unconfirmed',
     premise:
-      'Netlify の請求の文書（概要・FAQ）に税の記載がない（消費税の扱いは未確認。税抜のまま）',
+      'Netlify の契約（Self-Serve Subscription Agreement 2025-10 §5.4）は料金に税を含まず、利用者が払い Netlify が請求できると書くが、請求の文書に国ごとの記載は無い。国税庁の適格請求書発行事業者の公表情報（2026-10-30 まで）にも Netlify の登録は見当たらない（消費税の扱いは未確認。税抜のまま）',
     sources: [
+      src('https://www.netlify.com/legal/self-serve-subscription-agreement/'),
       src(
         'https://docs.netlify.com/manage/accounts-and-billing/billing/overview/',
       ),
       src(
         'https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/billing-faq-for-credit-based-plans/',
       ),
+      // 国税庁の公表情報（法人・国外を含む分割 5 の 2026-09-30 時点の全件と 2026-10 の差分）に、この事業者の名は無かった
+      src('https://www.invoice-kohyo.nta.go.jp/download/zenken'),
     ],
   },
   {
     provider: 'neon',
     status: 'unconfirmed',
     premise:
-      'Neon の請求の文書は請求先の情報に VAT・税の ID を入れられると書くだけで、日本の消費税を足すかは書かれていない（消費税の扱いは未確認。税抜のまま）',
-    sources: [src('https://neon.com/docs/introduction/manage-billing')],
+      'Neon の請求の文書は請求先の情報に VAT・税の ID を入れられると書くだけで、日本の消費税を足すかは書かれていない。国税庁の適格請求書発行事業者の公表情報（2026-10-30 まで）にも Neon の登録は見当たらない（消費税の扱いは未確認。税抜のまま）',
+    sources: [
+      src('https://neon.com/docs/introduction/manage-billing'),
+      // 国税庁の公表情報（法人・国外を含む分割 5 の 2026-09-30 時点の全件と 2026-10 の差分）に、この事業者の名は無かった
+      src('https://www.invoice-kohyo.nta.go.jp/download/zenken'),
+    ],
   },
 ];
 

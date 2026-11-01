@@ -133,7 +133,7 @@ Price List API の版の日付（publicationDate）も残す。料金ページ�
 |---|---|
 | Lambda の Arm の料金の表（料金ページ） | ページの表が読めなかった。Price List API の値は取れた（§1.5） |
 | Amplify Hosting の無料枠（ビルド分・転送量など） | 料金ページを読んでいない。Price List API には無料枠が載らない |
-| Amplify の ISR・画像の最適化の課金の内訳 | 料金表に専用の行が無い。SSR の計算に含まれるか未確認 |
+| Amplify の ISR・画像の最適化の課金の内訳 | 料金表に専用の行が無い。SSR の計算に含まれるか未確認（2026-11-02 に料金ページ・Next.js の対応・デプロイの仕様を読み直したが、課金の記載は無い。D-84） |
 | CloudFront の定額のプランで込み分を超えたときの挙動 | 「no overage charges」だけ確認。止まるのか・速度が落ちるのか未確認 |
 | Lambda の関数 URL の料金・制限、RDS Proxy、AppSync、SQS、ECS Express Mode の料金 | 未取得 |
 | OpenNext の ISR のキャッシュの置き場・タグの表のサービス名 | 文書のページでは名指しされていない |
@@ -227,7 +227,8 @@ type CrossLink = {
     AWSDataTransfer（東京・版 2026-09-16）の「AWS Outbound」: $0.114/GB（「first 10 TB / month data transfer out beyond the global free tier」）・$0.089・$0.086・$0.084。
     [EC2 の料金](https://aws.amazon.com/ec2/pricing/on-demand/): 「100 GB of free data transfer out to the internet free each month」（全サービス・リージョンの合計）。providers/aws.ts にプラン `data-transfer-out` とプール `internet-free-transfer` を足した。記事コミュニティの投稿は月 1 GB 未満で、無料の内に収まる。
   - 変換は Images Paid（仮定）。
-- 未確認: R2 を使うのに支払い方法の登録・別の申し込みが要るか（料金表は「applies regardless of your Workers plan」だけ）。Images Paid の基本料（取得したページに記載なし・既存の notes）。
+- 未確認: R2 を使うのに支払い方法の登録・別の申し込みが要るか（料金表は「applies regardless of your Workers plan」だけ）。
+- Images Paid の基本料: 無いとみる（D-84）。[料金のページ](https://developers.cloudflare.com/images/pricing/)（2026-10-19 更新）に基本料の記載が無く、Paid の例の月の合計（変換 $2.50 + R2 $0.22 = $2.72）に基本料が入っていない。料金データは前から基本料なしで、値は変わらない。
   R2 のカスタムドメインを部分的な（CNAME の）設定で置くときのプランの条件。Cloudflare の CDN の規約（画像の割合）が R2 のカスタムドメインの配信にどう当たるか（Cloudflare の構成と同じく前提に出していない）。
 
 ## 3. ゲームへの載せ方
@@ -437,7 +438,7 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
   - SPA: CloudFront → API Gateway（HTTP API）→ Lambda → DB。シェルと静的なファイルは CloudFront が返す。
   - 部品: ISR（Amplify の ISR / キャッシュしない）・画像（Amplify の最適化（Next.js だけ）/ 最適化しない / 投稿のときに縮める。後の 2 つは S3 + CloudFront で配る）・DB（DynamoDB / RDS）・API の応答のキャッシュ（SPA・CloudFront）・ファイル（S3・固定）。既定は ISR・縮める・DynamoDB。
 - estimator: ノードの種類 `request-db`（読み取りは応答を 4 KB 単位で切り上げ・結果整合は半分、書き込みは 1 行を 1 KB 単位。1 行の大きさ 1 KB は仮定）と、リソース `read-request-units`・`write-request-units`。単位の換算に GB 時間 ↔ GB 秒を足した。
-- 仮定: Amplify の SSR と Lambda のメモリ 1 GB（Amplify は公式の記載が見当たらない）・画像の CDN のヒット率 0.9（Vercel と同じ）・DynamoDB の 1 行 1 KB。RDS のストレージは DB の大きさで近似、アプリと RDS の間の転送は数えない（未確認）。
+- 仮定: Amplify の SSR と Lambda のメモリ 1 GB（Amplify は公式の記載が見当たらない）・画像の CDN のヒット率 0.9（Vercel と同じ）・DynamoDB の 1 行 1 KB。RDS のストレージは DB の大きさで近似（PostgreSQL の gp3 は 20 GiB からと確かめたが、最小は数えていない。D-84）、アプリと RDS の間の転送は数えない（未確認）。
 
 ### 9.1 基準プレイ（何もしない・シード 1〜20・目標は今の値）
 
@@ -779,9 +780,9 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 
 | 項目 | 扱い |
 |---|---|
-| Netlify Blobs の単価 | 保存量を料金未取得の明細（`blobs-storage`）で残す。操作・転送は数えない |
-| Pro の上の段（5,000〜20,000 クレジット）の価格 | 扱わない |
-| Free の商用利用の可否 | 今の利用規約・料金のページに禁止の記載は無い。規約の本体（Self-Serve Subscription Agreement の PDF）は読めていない（**未確認**）。利用資格は付けない |
+| Netlify Blobs の単価 | 保存量を料金未取得の明細（`blobs-storage`）で残す。操作・転送は数えない（2026-11-02 に Blobs の文書・クレジットの表・料金のページを再確認。単価の記載なし） |
+| Pro の上の段（5,000〜20,000 クレジット）の価格 | 扱わない（プランの文書は料金のページを指すが、料金のページにも載っていない。2026-11-02 再確認） |
+| ~~Free の商用利用の可否~~ | 確かめた（D-84）: 契約の本体（[Self-Serve Subscription Agreement](https://www.netlify.com/legal/self-serve-subscription-agreement/) 2025-10 版）の §6 Free Usage Tier に商用利用を禁じる記載は無い。Free のサイトは予告なく止め・消せる・SLA なしと書かれている。利用資格は付けない（今のまま） |
 | 関数の 1 回ごとの丸め・最低課金 | 書かれていない（`rounding: not-stated`） |
 | Edge Functions の計算 | Web requests として数える（文書）。ミドルウェアの計算は数えていない |
 | 関数から外への通信が転送に入るか | 書かれていない。数える方を採った（§14.2） |
@@ -858,8 +859,8 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 |---|---|
 | 負荷と CU の関係（自動の拡大） | 公式に無い。0.25 CU に固定 |
 | instant restore の履歴の量 | 変更の量を出していないので数えない（単価 $0.20/GB 月は確認済み） |
-| Neon の日本の消費税 | 未確認（税抜のまま） |
-| Vercel の Marketplace で作ったときの請求（Vercel にまとまる） | Neon に直接払う形で数える（アカウントの手間も数える） |
+| Neon の日本の消費税 | 未確認（税抜のまま）。国税庁の適格請求書発行事業者の公表情報にも登録が見当たらない（D-84） |
+| Vercel の Marketplace で作ったときの請求（Vercel にまとまる） | Neon に直接払う形で数える（アカウントの手間も数える）。Vercel の請求にまとまることは [Neon の文書](https://neon.com/docs/guides/vercel-native-integration)で確認、価格が直接の契約と同じかは書かれていない（D-84） |
 | Netlify Database（Netlify 自身の Postgres・クレジットで課金） | 扱わない |
 | Scale のプラン | 組まない |
 

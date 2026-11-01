@@ -154,6 +154,11 @@ export const aws: PriceBookInput = {
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
     rdsPrices: priceList('AmazonRDS'),
+    // gp3 の割り当ての範囲（2026-11-02 取得）
+    rdsStorage: {
+      url: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Storage.html',
+      retrievedAt: '2026-11-02',
+    },
     // 版（publicationDate）: AWSQueueService 2026-09-11
     sqsPrices: priceList('AWSQueueService'),
     sqsPricing: src('https://aws.amazon.com/sqs/pricing/'),
@@ -694,9 +699,9 @@ export const aws: PriceBookInput = {
       service: 'rds',
       ...common,
       name: 'RDS for PostgreSQL（db.t4g.micro・Single-AZ）',
-      sourceIds: ['rdsPrices'],
+      sourceIds: ['rdsPrices', 'rdsStorage'],
       notes: [
-        'ストレージ（gp3）は割り当てた容量で課金される。このモデルは DB の大きさで近似する（最小の割り当て容量は未確認）',
+        'ストレージ（gp3）は割り当てた容量で課金され、PostgreSQL の gp3 は 20 GiB から（RDS の利用者ガイド）。このモデルは DB の大きさで近似し、最小の 20 GiB は数えていない（20 GB 未満の DB では保存が月 最大 $2.76 低め）',
         'アプリ（Amplify・Lambda）と RDS の間の転送の料金は未確認なので数えない',
       ],
       meters: [

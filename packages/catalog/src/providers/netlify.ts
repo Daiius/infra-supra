@@ -93,7 +93,7 @@ const meters = (usd: number) => [
     unit: 'gb-month' as const,
     pricing: {
       model: 'unpriced' as const,
-      note: 'Netlify Blobs は月のクレジットから使うと Netlify の比較の記事にあるが、GB・操作あたりの単価は公開されていない（文書にも記載なし）',
+      note: 'Netlify Blobs は月のクレジットから使うと Netlify の比較の記事にあるが、GB・操作あたりの単価は公開されていない（Blobs の文書・クレジットの表・料金のページにも記載なし。2026-11-02 に再確認）',
     },
     sourceIds: ['blobs', 'blobsVsVercel'],
   },
@@ -221,6 +221,10 @@ export const netlify: PriceBookInput = {
   retrievedAt: R,
   sources: {
     pricing: src('https://www.netlify.com/pricing/'),
+    // 契約の本体（PDF。2025-10 版。§5.4 税・§6 Free Usage Tier）
+    agreement: src(
+      'https://www.netlify.com/legal/self-serve-subscription-agreement/',
+    ),
     // クレジットの単価・使い切ったとき・自動の補充（2026-08-12 更新）
     credits: src(
       'https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work/',
@@ -263,7 +267,7 @@ export const netlify: PriceBookInput = {
       id: 'free',
       service: 'platform',
       name: 'Free',
-      sourceIds: ['pricing', 'credits'],
+      sourceIds: ['pricing', 'credits', 'agreement'],
       facts: FACTS,
       uptimeSla: UPTIME,
       members: PERSONAL_MEMBERS,
@@ -291,7 +295,7 @@ export const netlify: PriceBookInput = {
       ],
       notes: [
         'Free は補充が無く、使い切ると次の月まで止まる（hard limit）',
-        '商用利用の可否: 今の利用規約・料金のページに Free の商用利用を禁じる記載は見当たらない。規約の本体（Self-Serve Subscription Agreement の PDF）は読めていない（未確認）。旧来の Free の告知（2024）は商用のプロジェクトも置けると書いていた',
+        '商用利用の可否: 契約（Self-Serve Subscription Agreement 2025-10 §6）の Free Usage Tier の条項に商用利用を禁じる記載は無い（2026-11-02 に PDF の本文で確認。旧来の Free の告知（2024）も商用のプロジェクトを置けると書いていた）。ただし同じ条項は、Free のサイトを予告なく止め・消せる・SLA は無いと書いている',
       ],
       meters: meters(CREDIT_USD.free),
     },
@@ -356,7 +360,7 @@ export const netlify: PriceBookInput = {
         },
       ],
       notes: [
-        '月 5,000 クレジット以上の Pro は余りを 1 か月繰り越せる（その段の価格は未取得。扱わない）',
+        '月 5,000〜20,000 クレジットの Pro は余りを 1 か月繰り越せる（その段の価格はプランの文書が料金のページを指し、料金のページにも載っていない。扱わない）',
         '同時に走るビルドは 3（追加は 1 つ $40 / 月。扱わない）',
       ],
       meters: meters(CREDIT_USD.pro),
