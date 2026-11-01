@@ -273,6 +273,41 @@ describe('日次のプールの前提は平日と休日の両方で判定する'
     ]);
     expect(premises[0]).toMatchObject({ used: 90, hit: false });
   });
+
+  it('話題・Bot が集中する日（peakDay）があれば、その日で判定し仮定を添える。課金は平日・休日のまま（D-60）', () => {
+    const daily = { weekday: 90, weekend: 30 };
+    const flat = assess([use('free', 'requests', 3000, { daily })]);
+    const spike = assess([
+      use('free', 'requests', 3000, { daily: { ...daily, peakDay: 250 } }),
+    ]);
+    const p = spike.premises[0]!;
+    expect(p).toMatchObject({ used: 250, hit: true });
+    expect(p.assumption).toContain('短い期間に集中');
+    expect(flat.premises[0]!.assumption).toBeUndefined();
+    // 課金（超過・明細）は変わらない
+    expect(spike.bill.totals).toEqual(flat.bill.totals);
+    expect(spike.bill.breaches).toEqual(flat.bill.breaches);
+    // 平日より少ない集中の日は判定を変えない
+    const small = assess([
+      use('free', 'requests', 3000, { daily: { ...daily, peakDay: 80 } }),
+    ]);
+    expect(small.premises[0]).toMatchObject({ used: 90 });
+    expect(small.premises[0]!.assumption).toBeUndefined();
+  });
+
+  it('集中の指定が無ければ、曜日ごとに合算してから多いほうを取る（使用量ごとの最大を足さない。OCL-EE85F3D0）', () => {
+    // 平日に多い使用量と休日に多い使用量: 平日 60 + 30 = 90、休日 30 + 60 = 90 で上限内（使用量ごとの最大を足すと 120 になってしまう）
+    const { premises } = assess([
+      use('free', 'requests', 1500, { daily: { weekday: 60, weekend: 30 } }),
+      use('free', 'requests', 1500, {
+        nodeId: 'n2',
+        daily: { weekday: 30, weekend: 60 },
+      }),
+    ]);
+    const p = premises.find((x) => x.id.startsWith('pool:'))!;
+    expect(p).toMatchObject({ used: 90, hit: false });
+    expect(p.assumption).toBeUndefined();
+  });
 });
 
 describe('金額のクレジットの使用率（D-48）', () => {

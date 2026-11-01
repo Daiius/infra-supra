@@ -690,12 +690,15 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       };
     });
   }
-  const peak = (p.peakFactor ?? 1) * spikePeakFactor(p.pv, p.spikes ?? []);
+  // 話題・Bot の上乗せが短い期間に集中する月: その日の量はピークの時間帯（容量。D-44）と、日次の無料枠の判定（D-60）に効く
+  const spikeDay = spikePeakFactor(p.pv, p.spikes ?? []);
+  const peak = (p.peakFactor ?? 1) * spikeDay;
   if (peak !== 1)
     w.traffic = {
       ...w.traffic,
       peakHourFactor: w.traffic.peakHourFactor * peak,
     };
+  if (spikeDay > 1) w.traffic = { ...w.traffic, peakDayFactor: spikeDay };
   // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
   const shape = sc.frameworks?.spa?.shape;

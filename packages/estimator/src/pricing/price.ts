@@ -41,7 +41,15 @@ export type MeterUsage = {
   /** 1 回ごとの丸め（rounding.scope: event）に使う件数。 */
   events?: number;
   /** 日次の無料枠の評価に使う 1 日あたりの使用量。無い場合は月の使用量を日数で均等に割る仮定。 */
-  daily?: { weekday: number; weekend: number };
+  daily?: {
+    weekday: number;
+    weekend: number;
+    /**
+     * 月のうち最も多い日（話題・Bot の上乗せが短い期間に集中する日。D-60）。日次の前提の判定だけに使い、課金には使わない。
+     * 無ければ平日・休日の多いほう。
+     */
+    peakDay?: number;
+  };
 };
 
 export type PricingContext = {

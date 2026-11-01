@@ -63,6 +63,11 @@ export const WorkloadInputSchema = z
       weekdayToWeekend: Pos,
       /** 多い時間帯 / 平均（容量の判定に使う）。 */
       peakHourFactor: Pos,
+      /**
+       * 月のうち最も多い日 / 平均の日（話題・Bot の上乗せが短い期間に集中する月。D-60）。日次の無料枠の判定だけに使い、
+       * 課金（月の総量）は変えない。省略は 1。
+       */
+      peakDayFactor: Pos.optional(),
       /** 月間 PV を直接与える上書き（与えたら MAU からの導出より優先し、上書きしたことを残す）。 */
       monthlyPageViewsOverride: NonNeg.optional(),
     }),
