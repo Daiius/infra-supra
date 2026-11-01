@@ -64,6 +64,11 @@ export type Effect =
       /** その月のピークの係数の倍率（繁忙期。D-33・prd/09 E-2）。 */
       peakFactor?: number;
       /**
+       * 上乗せ分（factor − 1 の PV）がその月のうち何日に集中するか（話題・Bot。ゲーム上の仮定・D-44）。
+       * 容量の判定（ピークの時間帯）だけに効き、課金は月の総量のまま。省略は月全体に均等。
+       */
+      spikeDays?: number;
+      /**
        * SNS で共有されて伸びる流量（話題）。記事ごとのカード（OGP）が出ない構成（SPA で前処理なし）では、
        * 伸びの分が Scenario.frameworks.spa.socialCardFactor 倍になる（ゲーム上の仮定・prd/10 F-05）。
        */
