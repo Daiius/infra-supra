@@ -23,6 +23,7 @@
 | [prd/07-game-design.md](./prd/07-game-design.md) | ゲームデザイン（試作への指摘から決めた満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 GD-1〜5 |
 | [prd/08-roadmap.md](./prd/08-roadmap.md) | フェーズと Phase 1 のタスク分解 |
 | [prd/09-scenario-contract.md](./prd/09-scenario-contract.md) | 2 本目のシナリオ: 受託先の業務アプリの運用（受託は設定だけ・運用費に集中。D-33） |
+| [prd/11-aws-and-cross-provider.md](./prd/11-aws-and-cross-provider.md) | 草案: AWS を事業者として足す案と、事業者をまたぐ構成（部品ごとに別の事業者）の案。未決 AX-01〜14 |
 
 > 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)
 
