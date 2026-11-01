@@ -6,6 +6,7 @@ import {
   averageSatisfaction,
   axesOf,
   BOT_BLOCK,
+  cashProjectionOf,
   comparisonRows,
   checkActions,
   componentEffortLabel,
@@ -21,6 +22,7 @@ import {
   goalChecks,
   isPlanChange,
   stackChangeText,
+  stackFlavor,
   stackName,
   frameworksOf,
   hiddenSettings,
@@ -36,6 +38,7 @@ import {
   premiseTrends,
   projectionNote,
   reflectionOf,
+  retryHintsOf,
   scenarioOf,
   SCENARIOS,
   selectTrends,
@@ -177,7 +180,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const framework = frameworks.allowed.includes(frameworkChoice)
     ? frameworkChoice
     : frameworks.default;
-  const [stack, setStack] = useState(1);
+  // 既定は一覧の 1 番目（正解になりやすい構成を既定にしない。D-41）
+  const [stack, setStack] = useState(0);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
   return (
@@ -210,6 +214,10 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                 <span className="block min-w-0">
                   <span className="block">
                     {stackName(s.index, framework, false)}
+                  </span>
+                  {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
+                  <span className="mt-0.5 block text-xs opacity-70">
+                    {stackFlavor(s.index)}
                   </span>
                   <EffortBar scenario={scenario} stackIndex={s.index} />
                 </span>
@@ -306,7 +314,11 @@ function Game({
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         />
       )}
-      <Trends history={state.history} scenario={scenarioOf(state)} />
+      <Trends
+        history={state.history}
+        scenario={scenarioOf(state)}
+        ended={state.phase !== 'playing'}
+      />
       <MonthCard
         report={report}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
@@ -1494,6 +1506,8 @@ function Result({
     (b) => b.short && b.short !== b.label,
   );
   const reflection = reflectionOf(state);
+  // 次のプレイへのヒント（未達成・ゲームオーバーのとき。達成なら空。D-40）
+  const hints = retryHintsOf(state);
   const rows: { label: string; get: (a: Axes) => string }[] = [
     { label: '累積の利益', get: (a) => usd(a.profit) },
     { label: '満足度の平均', get: (a) => a.satisfaction.toFixed(2) },
@@ -1545,6 +1559,35 @@ function Result({
             </button>
           )}
         </div>
+        {hints.length > 0 && (
+          // 折りたたまずに出す。原因と対策の方向だけで、正解の構成名は出さない（D-40）
+          <section
+            className="rounded-box border-2 border-warning bg-warning/10 p-3 sm:p-4"
+            aria-labelledby="retry-hints-title"
+          >
+            <h3 id="retry-hints-title" className="mb-2 font-bold">
+              次のプレイへのヒント
+            </h3>
+            <ol className="space-y-3">
+              {hints.map((x, i) => (
+                <li key={`${x.kind}:${i}`} className="flex gap-2">
+                  <span className="badge badge-warning badge-sm mt-0.5 shrink-0 tabular-nums">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm">{x.what}</p>
+                    <p className="mt-1 text-sm">
+                      <span className="mr-1 font-semibold whitespace-nowrap">
+                        次に試せる方向:
+                      </span>
+                      {x.next}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
         <div className="space-y-3">
           {meters.map((m) => (
             <Meter key={m.label} {...m} />
@@ -1873,15 +1916,27 @@ function History({ history }: { history: MonthReport[] }) {
   );
 }
 
+/** 所持金の見込みの判定の印と文字（色だけに頼らない。D-42）。 */
+const OUTLOOK = {
+  ahead: { cls: 'badge-success', label: '● 届きそう' },
+  close: { cls: 'badge-info', label: '◐ 目標の前後' },
+  behind: { cls: 'badge-warning', label: '▲ 届かなそう' },
+} as const;
+
 /** 推移と見込み（prd/07 §5・GD-1）。毎月の画面の上に常に出し、続いている感じを見せる。 */
 function Trends({
   history,
   scenario,
+  ended,
 }: {
   history: MonthReport[];
   scenario: Scenario;
+  /** 終わったら見込みを出さない（途中のゲームオーバーで残りの月を伸ばさない）。 */
+  ended: boolean;
 }) {
   const last = history[history.length - 1]!;
+  // 所持金の見込み（目安。直近 3 か月の月の利益の平均で線形に伸ばす。D-42）
+  const cashProj = ended ? undefined : cashProjectionOf({ history, scenario });
   const prev = history[history.length - 2];
   const cost = (r: MonthReport) => r.infraCost;
   const trends = selectTrends(
@@ -1957,7 +2012,58 @@ function Trends({
             </div>
           ))}
         </div>
+        {cashProj && cashProj.projection.length > 0 && (
+          <p className="text-sm">
+            <span
+              className={`badge badge-sm mr-1 ${OUTLOOK[cashProj.outlook].cls}`}
+            >
+              {OUTLOOK[cashProj.outlook].label}
+            </span>
+            <span className="whitespace-nowrap">このペースだと</span> <wbr />
+            <span className="whitespace-nowrap">
+              {`${scenario.months} か月目に約 ${usd(Math.round(cashProj.final))}`}
+            </span>
+            <wbr />
+            <span className="whitespace-nowrap">
+              {`（目標 ${usd(cashProj.goal)} の ${Math.round(cashProj.ratio * 100)}%）`}
+            </span>{' '}
+            <Info label="所持金の見込みの出し方">
+              {cashProj.method === 'growth'
+                ? `月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
+                : `月の利益（収益 − 費用。所持金の実際の増減）が 0 以下なので、伸びを入れず直近 3 か月の平均（約 ${usd(Math.round(cashProj.nextProfit))}）で残りの月を線形に伸ばしたゲーム上の目安。`}
+              話題・前兆・Bot で一時的に流量が増えた月は、基準にも比にも使わない
+              {cashProj.skipped > 0
+                ? `（今回は ${cashProj.skipped} か月を除いた）`
+                : ''}
+              。予告済みの出来事・料金の改定は織り込まない。見込みが目標の ±5%
+              なら「目標の前後」と出す
+            </Info>
+          </p>
+        )}
         <div className="grid gap-4 md:grid-cols-2">
+          <LineChart
+            title={`所持金（目標 ${usd(scenario.goal.cash)}）`}
+            months={scenario.months}
+            format={(v) => `$${compact(Math.round(v))}`}
+            reference={{ value: scenario.goal.cash, label: '目標' }}
+            series={[
+              {
+                id: 'cash',
+                label: '所持金',
+                color: 'var(--series-1)',
+                // 負の値は軸の下に出ないよう 0 で切る（表示だけ。負になった月にゲームは終わる）
+                values: history.map((r) => Math.max(0, r.cash)),
+                ...(cashProj && cashProj.projection.length > 1
+                  ? {
+                      projection: cashProj.projection.map((p) => ({
+                        month: p.month,
+                        value: Math.max(0, p.value),
+                      })),
+                    }
+                  : {}),
+              },
+            ]}
+          />
           <LineChart
             title="収益と費用（月）"
             months={scenario.months}
