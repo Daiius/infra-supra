@@ -243,12 +243,13 @@ export type ScenarioText = {
   events: string;
   /** 満足度の要素の説明。 */
   satisfaction: string;
-  /** アプリの形（コストに効く判断ポイント）。SSR の CPU の行は画面がテンプレートから足す。 */
+  /** アプリの形（コストに効く判断ポイント）のうち、フレームワークに依らない文。 */
   app: string[];
-  /** フレームワークごとに差し替える文（省略は intro・app のまま。prd/10 F-04）。 */
-  byFramework?: Partial<
-    Record<FrameworkId, { intro?: string; app?: string[] }>
-  >;
+  /**
+   * フレームワークごとの文（D-35。シナリオの説明には入れず、始める画面の構成のカードのフレームワーク欄に出す）。
+   * note: 選んだときだけ出す短い注記。app: ⓘ に畳む長い説明（SSR / API の CPU の行は画面がテンプレートから足す）。
+   */
+  byFramework?: Partial<Record<FrameworkId, { note?: string; app?: string[] }>>;
   /** 収益の文（ゲーム上の仮定であることを含める）。 */
   revenue?: string;
 };

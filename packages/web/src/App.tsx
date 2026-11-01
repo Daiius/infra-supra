@@ -57,7 +57,7 @@ import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
 import {
-  FrameworkPicker,
+  FrameworkField,
   ScenarioDescription,
   ScenarioPicker,
   SCENARIO_LIST,
@@ -182,19 +182,18 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   return (
     <>
       <ScenarioPicker value={scenarioId} onChange={setScenarioId} />
-      <FrameworkPicker
-        allowed={frameworks.allowed}
-        value={framework}
-        onChange={setFramework}
-      />
-      <ScenarioDescription
-        scenario={scenario}
-        framework={framework}
-        usdJpy={USD_JPY}
-      />
+      <ScenarioDescription scenario={scenario} usdJpy={USD_JPY} />
       <div className="card bg-base-100 shadow">
         <div className="card-body">
           <h2 className="card-title">どの構成で始めますか？</h2>
+          {/* フレームワークは構成と同列の判断（D-35）。シナリオの属性として先に選ばせない */}
+          <FrameworkField
+            scenario={scenario}
+            allowed={frameworks.allowed}
+            value={framework}
+            onChange={setFramework}
+          />
+          <h3 className="mt-2 font-bold">インフラの構成</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             {STACKS.map((s) => (
               <label
@@ -207,13 +206,13 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   checked={stack === s.index}
                   onChange={() => setStack(s.index)}
                 />
-                <span>{stackName(s.index, framework)}</span>
+                <span>{stackName(s.index, framework, false)}</span>
               </label>
             ))}
           </div>
-          <div className="card-actions items-center justify-end">
+          <div className="card-actions flex-wrap items-center justify-end">
             <label
-              className="flex items-center gap-2 text-sm"
+              className="flex items-center gap-2 text-sm whitespace-nowrap"
               title="この日より後に施行される、実際に予告されている料金・制限の改定だけが出来事として出る"
             >
               始めた日
@@ -224,7 +223,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                 onChange={(e) => setStartDate(e.target.value || today())}
               />
             </label>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm whitespace-nowrap">
               乱数のシード
               <input
                 type="number"

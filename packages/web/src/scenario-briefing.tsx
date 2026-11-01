@@ -1,4 +1,4 @@
-// 始める画面のシナリオの選択と説明（D-33・prd/09 E-5・E-6）。文言はシナリオのデータ（Scenario.text）から読む。
+// 始める画面のシナリオの選択と説明（D-33・prd/09 E-5・E-6）と、構成のカードのフレームワーク欄（D-35）。文言はシナリオのデータ（Scenario.text）から読む。
 import {
   FRAMEWORKS,
   growthFromReputation,
@@ -6,6 +6,8 @@ import {
   type FrameworkId,
   type Scenario,
 } from 'game';
+import { Info } from './info.tsx';
+import { NameWithInfo } from './option-text.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -48,49 +50,106 @@ export function ScenarioPicker({
   );
 }
 
-/** アプリのフレームワークを選ぶ（シナリオで選べるものが 2 つ以上のときだけ。prd/10 F-04）。 */
-export function FrameworkPicker({
+/** フレームワークの長い説明（ⓘ に畳む）。SSR / API の CPU の行はテンプレートから足す。 */
+function FrameworkDetail({
+  scenario: sc,
+  id,
+}: {
+  scenario: Scenario;
+  id: FrameworkId;
+}) {
+  const f = FRAMEWORKS[id];
+  const app = sc.text?.byFramework?.[id]?.app ?? [];
+  const spa = id === 'vite-spa' ? sc.frameworks?.spa : undefined;
+  const ssrCpuMs = sc.template(1).routes[0]!.processing.cpuMs;
+  return (
+    <span className="block space-y-1">
+      <span className="block">{f.note}</span>
+      <span className="block font-semibold">このシナリオでは</span>
+      <ul className="list-disc space-y-0.5 pl-5">
+        {app.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+        {spa ? (
+          <li>
+            中身を返す API 1 回の CPU は約 {ssrCpuMs * spa.shape.dataCpuFactor}{' '}
+            ms（HTML を描かない分 SSR の {spa.shape.dataCpuFactor}{' '}
+            倍と仮定。機能が増えると重くなる）。この仮定で Cloudflare Free の 1
+            リクエスト CPU 10 ms に当たるかが決まる
+          </li>
+        ) : (
+          <li>SSR 1 回の CPU は約 {ssrCpuMs} ms（機能が増えると重くなる）</li>
+        )}
+      </ul>
+    </span>
+  );
+}
+
+/**
+ * アプリのフレームワーク（構成のカードの中で、インフラの構成と同列に選ぶ。D-35・prd/10 F-04）。
+ * どちらにも推奨・既定の印を付けない。選んだものだけ短い注記を出し、長い説明は ⓘ に畳む。
+ * シナリオで選べるものが 1 つだけのときは選択肢を出さず、そのフレームワークの説明だけを出す。
+ */
+export function FrameworkField({
+  scenario,
   allowed,
   value,
   onChange,
 }: {
+  scenario: Scenario;
   allowed: FrameworkId[];
   value: FrameworkId;
   onChange: (id: FrameworkId) => void;
 }) {
-  if (allowed.length < 2) return null;
-  return (
-    <div className="card bg-base-100 shadow">
-      <div className="card-body">
-        <h2 className="card-title">アプリを何で作りましたか？</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {allowed.map((id) => {
-            const f = FRAMEWORKS[id];
-            return (
-              <label
-                key={id}
-                className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${value === id ? 'border-primary bg-primary/5' : 'border-base-300'}`}
-              >
-                <input
-                  type="radio"
-                  name="framework"
-                  className="radio radio-primary mt-1"
-                  checked={value === id}
-                  onChange={() => onChange(id)}
-                />
-                <span>
-                  <span className="font-semibold">{f.label}</span>
-                  <span className="block text-sm opacity-70">{f.note}</span>
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        <p className="text-sm opacity-60">
-          途中で作り直すことはできない（乗り換えても同じアプリのまま）。SNS
-          のカード・初回表示への効き方はゲーム上の仮定。
+  const note = (id: FrameworkId) => scenario.text?.byFramework?.[id]?.note;
+  const info = (id: FrameworkId) => (
+    <Info label={`${FRAMEWORKS[id].label} の説明`}>
+      <FrameworkDetail scenario={scenario} id={id} />
+    </Info>
+  );
+  if (allowed.length < 2) {
+    const id = allowed[0] ?? value;
+    return (
+      <div className="space-y-1">
+        <h3 className="font-bold">アプリのフレームワーク</h3>
+        <p>
+          <NameWithInfo name={FRAMEWORKS[id].label} info={info(id)} />
         </p>
+        {note(id) && <p className="text-sm opacity-70">{note(id)}</p>}
       </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <h3 className="font-bold">アプリを何で作りましたか？</h3>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {allowed.map((id) => (
+          <label
+            key={id}
+            className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${value === id ? 'border-primary bg-primary/5' : 'border-base-300'}`}
+          >
+            <input
+              type="radio"
+              name="framework"
+              className="radio radio-primary mt-0.5 shrink-0"
+              checked={value === id}
+              onChange={() => onChange(id)}
+            />
+            <span className="block min-w-0">
+              <span className="block">
+                <NameWithInfo name={FRAMEWORKS[id].label} info={info(id)} />
+              </span>
+              {value === id && note(id) && (
+                <span className="block text-xs opacity-70">{note(id)}</span>
+              )}
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="text-sm opacity-60">
+        途中で作り直すことはできない（乗り換えても同じアプリのまま）。SNS
+        のカード・初回表示への効き方はゲーム上の仮定。
+      </p>
     </div>
   );
 }
@@ -98,19 +157,14 @@ export function FrameworkPicker({
 /** シナリオの説明・目標・アプリの形。 */
 export function ScenarioDescription({
   scenario: sc,
-  framework = 'nextjs',
   usdJpy,
 }: {
   scenario: Scenario;
-  framework?: FrameworkId;
   usdJpy: number;
 }) {
   const t = sc.text;
-  const byFw = t?.byFramework?.[framework];
-  const intro = byFw?.intro ?? t?.intro;
-  const app = byFw?.app ?? t?.app ?? [];
-  const spa = framework === 'vite-spa' ? sc.frameworks?.spa : undefined;
-  const ssrCpuMs = sc.template(1).routes[0]!.processing.cpuMs;
+  const intro = t?.intro;
+  const app = t?.app ?? [];
   const growth = (
     growthFromReputation(0.9, false, sc.growth).net * 100
   ).toFixed(0);
@@ -175,21 +229,14 @@ export function ScenarioDescription({
         <h3 className="mt-2 font-bold">
           アプリの形（コストに効く判断ポイント）
         </h3>
+        <p className="text-sm opacity-70">
+          フレームワークで変わる点（ページの描き方・SNS のカード・CPU
+          の重さ）は、下の構成のカードで選ぶときに出る。
+        </p>
         <ul className="list-disc space-y-1 pl-6">
           {app.map((line) => (
             <li key={line}>{line}</li>
           ))}
-          {spa ? (
-            <li>
-              中身を返す API 1 回の CPU は約{' '}
-              {ssrCpuMs * spa.shape.dataCpuFactor} ms（HTML を描かない分 SSR の{' '}
-              {spa.shape.dataCpuFactor}{' '}
-              倍と仮定。機能が増えると重くなる）。この仮定で Cloudflare Free の
-              1 リクエスト CPU 10 ms に当たるかが決まる
-            </li>
-          ) : (
-            <li>SSR 1 回の CPU は約 {ssrCpuMs} ms（機能が増えると重くなる）</li>
-          )}
         </ul>
         <p className="text-sm opacity-60">
           料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては 1

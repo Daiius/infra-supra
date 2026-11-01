@@ -261,13 +261,13 @@ GD-4 の `composeStack` / `COMPONENTS` の仕組みに、スロット `api`（�
 | catalog | `frameworks/`（`FRAMEWORKS`・`DEPLOY_TARGETS`・`toSpa`）。テンプレートの SPA の形 `ARTICLE_COMMUNITY_SPA`・`BUSINESS_APP_SPA`（シェル 5 KB・API の CPU は SSR の 0.5 倍・応答 10 KB。template-default）。`composeStack(…, { framework })` が SPA の構成を組む（ISR のキャッシュを作らない・SSR / ISR の経路を外す）。部品に選べるフレームワーク（`frameworks`）を持たせ、ISR のキャッシュと「HTML もキャッシュする前段の CDN」は Next.js だけ、スロット `ogp`（OGP の前処理）は SPA だけ。Cloudflare の静的アセットの事実（無料・無制限・ファイル数の制限・ページ遷移は Worker を起動しない・`run_worker_first` の課金と Free の 429）を `notes` から `facts` へ（出典つき） |
 | game | `GameState.framework`（乗り換えでも変わらない）。`Scenario.frameworks`（選べるもの・既定・SPA の形と効き方）。SPA は鮮度が「常に新しい」・即時反映の要件を満たす・速さは SSR の代わりに API の CPU で判定し、初回表示を重さ 1 つに数える（`firstLoadHeavy`。記事コミュニティだけ）。話題の流量に `social` の印を付け、SPA で前処理なしのときは伸び（倍率 − 1 と後に残る分）を `socialCardFactor` 倍（記事コミュニティ 0.5）。比較の表の基準プレイは、あなたと同じフレームワークで回す |
 | 保存 | `SaveData.framework`。無い古い保存は Next.js として読む（版は上げない・B-9） |
-| web | 始める画面に「アプリを何で作りましたか？」（シナリオで 2 つ以上選べるときだけ）。説明の文はシナリオの `text.byFramework` で差し替え、SPA では API の CPU の行と 10 ms の境目の注記を出す。構成の名前は SPA では vinext を外し「（Vite の SPA）」を添える |
+| web | 始める画面は「シナリオ → シナリオの説明 → 『どの構成で始めますか？』」の順（D-35）。フレームワークはシナリオの属性ではなく構成と同列の選択なので、構成のカードの中で「アプリを何で作りましたか？」（シナリオで 2 つ以上選べるときだけ。推奨・既定の印は付けない）とインフラの構成を並べて選ぶ。シナリオの説明はフレームワークに依らない文だけにし、フレームワークで変わる文（シナリオの `text.byFramework`）は、選んだときだけ出る短い注記（`note`）と ⓘ の長い説明（`app` と、SSR / API の CPU の行・10 ms の境目の注記）に置く。構成の名前は SPA では vinext を外し「（Vite の SPA）」を添える |
 
 ### 7.1 B-5: Cloudflare Free の 10 ms の境目
 
 SPA のデータの API の CPU は「SSR の CPU × `dataCpuFactor`（0.5・仮定）」。記事コミュニティは 15 ms × 0.5 = 7.5 ms で当たらず、
 機能開発で SSR が重くなる（最大 +5 ms）と 10 ms に届く。受託の業務アプリは 20 ms × 0.5 = 10 ms で境目にちょうど乗る。
-**この仮定の値で、SPA なら Cloudflare Free で済むかが決まる**（catalog `frameworks.test.ts` で 0.5 と 1 の反転を固定）。始める画面の「アプリの形」と、テンプレートの注記に同じことを書いた。
+**この仮定の値で、SPA なら Cloudflare Free で済むかが決まる**（catalog `frameworks.test.ts` で 0.5 と 1 の反転を固定）。始める画面のフレームワーク欄の ⓘ と、テンプレートの注記に同じことを書いた。
 
 ### 7.2 基準プレイ（シード 1〜50。目標の値は Next.js のまま）
 

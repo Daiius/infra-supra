@@ -70,8 +70,8 @@ describe('フレームワークの選択', () => {
     expect(hiddenSettings(next)).not.toContain('isr');
   });
 
-  it('受託の SPA の説明の添付件数は計算と同じ（月 2 件。OCL-A1AC2862）', () => {
-    const app = contract.text?.byFramework?.['vite-spa']?.app ?? [];
+  it('受託の説明の添付件数は計算と同じ（月 2 件。OCL-A1AC2862）', () => {
+    const app = contract.text?.app ?? [];
     const perUser = contract.template(300_000).images.uploadsPerMau;
     expect(app.some((l) => l.includes(`月 ${perUser} 件`))).toBe(true);
   });

@@ -414,11 +414,13 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
 export function stackName(
   stackIndex: number,
   framework: FrameworkId = 'nextjs',
+  /** false なら「（Vite の SPA）」を添えない（フレームワークをすぐ隣で選んでいる始める画面。D-35）。 */
+  withFramework = true,
 ): string {
   const name = STACKS[stackIndex]!.name;
-  return framework === 'vite-spa'
-    ? `${name.replace(' + vinext', '')}（Vite の SPA）`
-    : name;
+  if (framework !== 'vite-spa') return name;
+  const base = name.replace(' + vinext', '');
+  return withFramework ? `${base}（Vite の SPA）` : base;
 }
 
 const books = loadPriceBooks();
