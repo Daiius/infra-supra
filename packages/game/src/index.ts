@@ -528,7 +528,31 @@ type WorkloadParts = {
   framework: FrameworkId;
   /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
   peakFactor?: number;
+  /** 短い期間に集中する上乗せの PV（話題・Bot。容量の判定だけに効く。D-44）。 */
+  spikes?: Spike[];
 };
+
+/** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。 */
+type Spike = { id: string; extraPV: number; days: number };
+
+const DAYS_PER_MONTH = 730 / 24;
+
+/**
+ * 集中する上乗せがあるときのピークの係数の倍率（D-44・prd/04 §5）。上乗せ分 E_i が D_i 日に集中し、その日の時間帯の形
+ * （ピーク / 平均）はふだんと同じと仮定すると、ピークの時間帯の量は (N + Σ E_i × 30.4 / D_i) / 30.4 日 × ピーク係数
+ * （N は集中しない分の PV）。月の PV で割った倍率を返す（課金は月の総量のまま）。
+ */
+export function spikePeakFactor(pv: number, spikes: readonly Spike[]): number {
+  if (pv <= 0 || spikes.length === 0) return 1;
+  const extra = spikes.reduce((a, s) => a + s.extraPV, 0);
+  const steady = Math.max(0, pv - extra);
+  const peakDay = spikes.reduce(
+    (a, s) =>
+      a + s.extraPV * (DAYS_PER_MONTH / Math.min(s.days, DAYS_PER_MONTH)),
+    0,
+  );
+  return Math.max(1, (steady + peakDay) / pv);
+}
 
 function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   const w = sc.template(Math.round(p.pv));
@@ -565,10 +589,11 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.api = { ...w.api, cpuMs: p.mods.apiCpuMs };
   if (p.mods.apiResponseKB !== undefined)
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
-  if (p.peakFactor !== undefined && p.peakFactor !== 1)
+  const peak = (p.peakFactor ?? 1) * spikePeakFactor(p.pv, p.spikes ?? []);
+  if (peak !== 1)
     w.traffic = {
       ...w.traffic,
-      peakHourFactor: w.traffic.peakHourFactor * p.peakFactor,
+      peakHourFactor: w.traffic.peakHourFactor * peak,
     };
   // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
@@ -1623,6 +1648,7 @@ export function playMonth(input: GameState): GameState {
     bot: boolean;
     factor: number;
     peak?: number;
+    spikeDays?: number;
   }[] = [];
   const trafficNotes: string[] = [];
   for (const x of noticed) {
@@ -1667,6 +1693,7 @@ export function playMonth(input: GameState): GameState {
           title: def.title,
           bot: true,
           factor: 1 + extra,
+          ...(e.spikeDays ? { spikeDays: e.spikeDays } : {}),
         });
         trafficNotes.push(`${def.title}（Bot は収益にならない）`);
       } else {
@@ -1685,6 +1712,7 @@ export function playMonth(input: GameState): GameState {
           bot: false,
           factor,
           ...(e.peakFactor ? { peak: e.peakFactor } : {}),
+          ...(e.spikeDays ? { spikeDays: e.spikeDays } : {}),
         });
         if (!e.lasting) trafficNotes.push(def.title);
       }
@@ -1706,6 +1734,20 @@ export function playMonth(input: GameState): GameState {
   const humanPV = basePV * humanFactor;
   const botPV = humanPV * botExtra;
   const pv = humanPV + botPV;
+  // 話題・Bot の上乗せ分は短い期間に集中する（容量の判定だけ。D-44）
+  const spikes: Spike[] = trafficEvents.flatMap((t) =>
+    t.spikeDays
+      ? [
+          {
+            id: t.id,
+            extraPV: t.bot
+              ? humanPV * (t.factor - 1)
+              : humanPV * (1 - 1 / t.factor),
+            days: t.spikeDays,
+          },
+        ]
+      : [],
+  );
 
   const stackIndexNow = state.stackIndex;
   const stack = MVP_STACKS[stackIndexNow]!;
@@ -1720,6 +1762,7 @@ export function playMonth(input: GameState): GameState {
     components: state.components,
     framework: state.framework,
     ...(peakFactor !== 1 ? { peakFactor } : {}),
+    ...(spikes.length ? { spikes } : {}),
   };
   const workload = workloadFor(sc, parts);
   const swap = state.componentSwap;
@@ -2309,10 +2352,14 @@ function crossingsOf(
       ? c.parts.pv - c.humanPV * (t.factor - 1)
       : c.parts.pv / t.factor;
     const peakFactor = (c.parts.peakFactor ?? 1) / (t.peak ?? 1);
+    // 外した出来事の集中を除き、人の流量の出来事を外すなら残りの上乗せも同じ割合で小さくする
+    const spikes = (c.parts.spikes ?? [])
+      .filter((s) => s.id !== t.id)
+      .map((s) => (t.bot ? s : { ...s, extraPV: s.extraPV / t.factor }));
     variants.push({
       eventId: t.id,
       title: t.title,
-      parts: { ...c.parts, pv, peakFactor },
+      parts: { ...c.parts, pv, peakFactor, spikes },
     });
   }
   for (const [id, res] of Object.entries(c.state.responses)) {
@@ -2322,6 +2369,8 @@ function crossingsOf(
     let mods = c.parts.mods;
     let stock = c.parts.stock;
     let pv = c.parts.pv;
+    // basePV を外すと、話題・Bot の上乗せ（集中する分）も同じ割合で小さくなる（OCL-37A91830）
+    let baseFactor = 1;
     for (const e of def.accept.effects) {
       if (e.type === 'workload') {
         const next = { ...mods };
@@ -2335,12 +2384,19 @@ function crossingsOf(
           images: stock.images - (e.add.images ?? 0),
           articlePages: stock.articlePages - (e.add.articlePages ?? 0),
         };
-      } else if (e.type === 'basePV') pv /= e.factor;
+      } else if (e.type === 'basePV') {
+        pv /= e.factor;
+        baseFactor *= e.factor;
+      }
     }
+    const spikes = (c.parts.spikes ?? []).map((s) => ({
+      ...s,
+      extraPV: s.extraPV / baseFactor,
+    }));
     variants.push({
       eventId: id,
       title: def.title,
-      parts: { ...c.parts, mods, stock, pv },
+      parts: { ...c.parts, mods, stock, pv, spikes },
     });
   }
   const ratios = variants.map((v) => {
@@ -3068,11 +3124,16 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const ogp = socialCardLoss(state);
     if (ogp) {
       const shortfall = Math.max(1, sc.goal.cash - state.cash);
+      const platform = STACKS[state.stackIndex]!.provider;
+      // VPS で前段の CDN が無いと、伸びた話題の月に回線が詰まりうる（話題は短い期間に集中する。D-44）
+      const noFrontCdn =
+        platform === 'sakura' &&
+        (state.components.frontCdn ?? 'none') === 'none';
       out.push({
         hint: {
           kind: 'ogp',
-          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み`,
-          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(STACKS[state.stackIndex]!.provider, 'ogp', 'prerender')}）を、話題の前に付ける`,
+          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み${noFrontCdn ? '（ただし前段の CDN が無いと、伸びた話題の月に回線が詰まりうるので、増えた分の一部が失われる）' : ''}`,
+          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付ける${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられる' : ''}`,
         },
         // 影響額で比べる: 足りない額に対する、取り戻せた収益の割合（半分以上なら最上位）
         score: tier(

@@ -315,6 +315,8 @@ const EVENTS: EventDef[] = [
         months: 1,
         lasting: true,
         social: true,
+        // 上乗せ分は 2 日に集中する（SNS の拡散は 1〜2 日で山を作る。容量の判定だけ・ゲーム上の仮定。D-44）
+        spikeDays: 2,
       },
     ],
   },
@@ -352,6 +354,8 @@ const EVENTS: EventDef[] = [
         earnsRevenue: false,
         months: 2,
         bot: true,
+        // 上乗せ分は月のうち 7 日に集中する（クローラーは波で来る。容量の判定だけ・ゲーム上の仮定。D-44）
+        spikeDays: 7,
       },
     ],
   },

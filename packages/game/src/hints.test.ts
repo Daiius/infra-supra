@@ -158,6 +158,19 @@ describe('retryHintsOf', () => {
   });
 
   describe('SPA で OGP の前処理なしに話題を迎えた（D-43）', () => {
+    // D-44 の話題の集中を外した同じシナリオ。前処理で話題が × 3 に戻ると VPS は話題の月に回線が詰まり、
+    // カードの効きと回線の詰まりが混ざるので、見積もり（カードの効きだけ）と比べるときは集中を外す
+    const SC: Scenario = {
+      ...ARTICLE_COMMUNITY,
+      events: ARTICLE_COMMUNITY.events.map((e) => ({
+        ...e,
+        effects: (e.effects ?? []).map((x) => {
+          if (x.type !== 'traffic') return x;
+          const { spikeDays: _, ...rest } = x;
+          return rest;
+        }),
+      })),
+    };
     const withOgp = (seed: number) =>
       playStrategy(
         {
@@ -167,7 +180,7 @@ describe('retryHintsOf', () => {
           actions: [[{ type: 'component', slot: 'ogp', option: 'prerender' }]],
         },
         seed,
-        ARTICLE_COMMUNITY,
+        SC,
         undefined,
         'vite-spa',
       );
@@ -180,7 +193,7 @@ describe('retryHintsOf', () => {
         const st = playStrategy(
           { id: 'idle', label: '何もしない', stackIndex: VPS_2GB },
           seed,
-          ARTICLE_COMMUNITY,
+          SC,
           undefined,
           'vite-spa',
         );
@@ -193,6 +206,9 @@ describe('retryHintsOf', () => {
         );
         expect(hint.what).toContain('× 3 → × 2');
         expect(hint.next).toContain('OGP の前処理');
+        // VPS で前段の CDN が無いと、話題の月に回線が詰まりうる（D-44）
+        expect(hint.what).toContain('回線が詰まりうる');
+        expect(hint.next).toContain('前段の CDN');
         // 前処理を付けたプレイとの収益の差（VPS は固定費なので所持金の差も同じ）
         const diff = revenue(withOgp(seed)) - revenue(st);
         const est = Number(
@@ -201,6 +217,26 @@ describe('retryHintsOf', () => {
         expect(Math.abs(est - diff)).toBeLessThanOrEqual(2);
       },
     );
+
+    it('前段の CDN があれば、回線の詰まりの但し書きは付けない（D-44）', () => {
+      const st = playStrategy(
+        {
+          id: 'cdn',
+          label: '前段の CDN',
+          stackIndex: VPS_2GB,
+          actions: [
+            [{ type: 'component', slot: 'frontCdn', option: 'static' }],
+          ],
+        },
+        42,
+        ARTICLE_COMMUNITY,
+        undefined,
+        'vite-spa',
+      );
+      const hint = retryHintsOf(st).find((x) => x.kind === 'ogp');
+      expect(hint).toBeDefined();
+      expect(hint!.what).not.toContain('回線');
+    });
 
     it('前処理を付けたプレイ・Next.js では出さない', () => {
       expect(retryHintsOf(withOgp(42)).some((x) => x.kind === 'ogp')).toBe(
