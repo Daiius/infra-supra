@@ -1,6 +1,7 @@
 // サービスカタログと料金データ（プロバイダー別・版付き）・構成・テンプレート。スキーマと計算は estimator 側にあり、
 // ここはデータだけを持つ（prd/03-pricing-schema.md）。架空の料金はここには置かない（estimator のテスト用の架空データを使う）。
 import { parsePriceBook, type PriceBook, type PriceBookInput } from 'estimator';
+import { aws } from './providers/aws.ts';
 import { cloudflare } from './providers/cloudflare.ts';
 import { sakuraVps } from './providers/sakura-vps.ts';
 import { supabase } from './providers/supabase.ts';
@@ -11,6 +12,7 @@ export const RAW_PRICE_BOOKS: readonly PriceBookInput[] = [
   vercel,
   supabase,
   sakuraVps,
+  aws,
 ];
 
 /** 検証済みの料金データ。本番の読み込みなので架空の料金は拒否される。 */

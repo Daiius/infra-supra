@@ -150,6 +150,76 @@ describe('部品の選択で足した振る舞い', () => {
     expect(u.resources.queries).toBe(w.classes.api.count * 2);
   });
 
+  it('要求の単位で課金する DB: 読み取りは応答を単位で切り上げ（結果整合は半分）、書き込みは 1 行を単位で切り上げ（AX-05）', () => {
+    const node = (eventuallyConsistent: boolean) => ({
+      id: 'd',
+      label: 'd',
+      config: {
+        kind: 'request-db' as const,
+        readUnitKB: 4,
+        writeUnitKB: 1,
+        eventuallyConsistent,
+        itemKB: 1.5,
+      },
+    });
+    const api = w.classes.api;
+    // 応答 1 KB → 4 KB の 1 単位。問い合わせ 2 回。書き込みは 1 行 1.5 KB → 2 単位
+    const strong = sim([node(false)], { api: ['d'] }).d!;
+    expect(strong.resources['read-request-units']).toBeCloseTo(
+      api.count * 2,
+      9,
+    );
+    expect(strong.resources['write-request-units']).toBeCloseTo(
+      api.count * api.perRequest.rowsWritten * 2,
+      9,
+    );
+    const eventual = sim([node(true)], { api: ['d'] }).d!;
+    expect(eventual.resources['read-request-units']).toBeCloseTo(api.count, 9);
+    // 保存量はアプリの DB の大きさ（時間課金のコンピュートは無い）
+    expect(eventual.resources['storage-gb-month']).toBe(w.storage.dbGB);
+    expect(eventual.resources['instance-hours']).toBeUndefined();
+  });
+
+  it('止まる DB: 動いている割合は λT / (1 + λT)、時間課金は容量の単位の数を掛ける。止まらない DB は 730 時間', () => {
+    const node = (pauseAfterIdleSeconds?: number) => ({
+      id: 'a',
+      label: 'a',
+      config: {
+        kind: 'managed-db' as const,
+        capacityUnits: 0.5,
+        ...(pauseAfterIdleSeconds ? { pauseAfterIdleSeconds } : {}),
+      },
+    });
+    const always = sim([node()], { api: ['a'] }).a!;
+    expect(always.resources['instance-hours']).toBeCloseTo(730 * 0.5, 9);
+    expect(always.awakeShare).toBeUndefined();
+    const paused = sim([node(300)], { api: ['a'] }).a!;
+    const lt = (w.classes.api.count / (730 * 3600)) * 300;
+    expect(paused.awakeShare).toBeCloseTo(lt / (1 + lt), 12);
+    expect(paused.resources['instance-hours']).toBeCloseTo(
+      730 * 0.5 * (lt / (1 + lt)),
+      9,
+    );
+  });
+
+  it('処理の量で課金する DB: 届いた 1 件を決まった単位で数える', () => {
+    const u = sim(
+      [
+        {
+          id: 'q',
+          label: 'q',
+          config: { kind: 'processing-db', unitsPerRequest: 0.14 },
+        },
+      ],
+      { api: ['q'] },
+    ).q!;
+    expect(u.resources['processing-units']).toBeCloseTo(
+      w.classes.api.count * 0.14,
+      9,
+    );
+    expect(u.resources['storage-gb-month']).toBe(w.storage.dbGB);
+  });
+
   it('Durable Objects 型: 受信メッセージは N 件で 1 リクエスト、実行時間は処理の間だけ', () => {
     const u = sim(
       [

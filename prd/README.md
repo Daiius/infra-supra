@@ -37,7 +37,7 @@
 - **計画中（Phase 1）**: 計算エンジン（workload → 使用量 → 請求）と MVP の 3 構成の料金データ。[08](./08-roadmap.md)。
 - **MVP の対象構成**: ① Cloudflare Workers + D1 + R2、② Vercel + Supabase、③ VPS + Docker Compose + MySQL + Nginx（さくらの VPS 2GB に固定。D-13）。
 - **MVP の対象フレームワーク**: Vite（SPA）・Next.js・vinext。Astro は MVP 直後に足す（[06](./06-frameworks.md) §3）。
-- **MVP の対象外**: 企画書 §8 のとおり（WebRTC の詳細・動画エンコード・AWS 全般・マルチリージョン・障害伝播・認証など）。
+- **MVP の対象外**: 企画書 §8 のとおり（WebRTC の詳細・動画エンコード・AWS 全般・マルチリージョン・障害伝播・認証など）。ただし AWS は東京の 1 構成（Amplify Hosting・S3 + CloudFront + Lambda）を足した（[11](./11-aws-and-cross-provider.md)・D-51）。
 
 ## 文書
 

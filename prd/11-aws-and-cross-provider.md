@@ -1,6 +1,6 @@
 # 11. AWS の追加と、事業者をまたぐ構成（草案）
 
-> 状態: **草案（2026-11-01）**。**段 2 の最初の組「Vercel + 画像だけ Cloudflare」は実装した（D-52・§2.5・§3.6）**。AWS（段 1）は別の作業。残りの論点は §7。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
+> 状態: **論点は決定済み（2026-11-01・D-50）・段 1（AWS・D-51）と段 2 の最初の組（Vercel・AWS + 画像だけ Cloudflare・D-52・§2.5・§3.6）を実装した**。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
 > （DB だけ Cloudflare だが Vercel + Next.js など）も入れてみたい」に対し、今までの積み重ね（prd/06・07 §11・10 §3、D-20・D-24・D-31・D-37・D-44〜D-48）の上に載せるならどうするかの案。
 > 料金・制限の数値は §1.5・§2.1 に**公式で確かめたものだけ**を出典 URL と取得日（2026-11-01）つきで書く。確かめていないことは「未確認」「推測」と書く。
 > 手間・倍率・遅延の値は**ゲーム上の仮定**で、実在の値ではない。
@@ -74,10 +74,11 @@ AWS の無料枠は 3 つの層がある。どれも公式の文書で確かめ�
 | 新規のクレジット | 新規のアカウントに $100、主要なサービスを試すと最大 $100 を追加（計 $200）。Free plan は「6 months after you open it or when your credits run out」で閉じる。Paid plan に移ってもクレジットは使える | [aws.amazon.com/free](https://aws.amazon.com/free/)・[FAQ](https://aws.amazon.com/free/free-tier-faqs/) | **今のスキーマで表せない**（prd/03 §7 のクレジットは `period: 'month'`・繰り越さない）。「1 回きり・期限つき」のクレジットが要る（§4.2・AX-06） |
 | 旧来の 12 か月の無料枠 | 2025-07-15 より前に作ったアカウントは、RDS の一部のインスタンスを「up to 12 months after your sign-up date」無料（RDS の無料のページ） | [aws.amazon.com/rds/free](https://aws.amazon.com/rds/free/) | **入れない**。ゲームは新しいアカウントで始める前提にし、前提の文で明示する |
 
+- **決定（AX-06・D-50）: ゲームでは常時無料だけを入れる**（既存のアカウントを想定。新規の 1 回きりのクレジットは入れず、スキーマの追加は要らない）。下の新規のクレジットの記述は事実の記録として残す。
 - ⚠ **食い違い**: FAQ はクレジットの期限を「6 months from the date you create your AWS account」とも「12 months after you create your account」とも書いている。
   FAQ には「the new sign-up experience in October 2026」という記述もあり、2026-10 に申し込みの形が変わった可能性がある（日付の 2025-07-15 は RDS の無料のページにだけある）。
   D-10 と同じく**最もらしい方に固定して記録**する: 案は「Free plan は 6 か月で閉じる。Paid plan に移った後のクレジットの期限は 12 か月」。ゲームは 12 か月なので、どちらでも「最初の数か月だけ効く」ことは変わらない。
-- **無料の Free plan のまま運営はできない**（6 か月で閉じ、Paid に移す必要がある）。ゲームでは Paid plan + 新規のクレジットで始める案（AX-06）。
+- **無料の Free plan のまま運営はできない**（6 か月で閉じ、Paid に移す必要がある）。ゲームは既存のアカウント（Paid plan・常時無料だけ）で始める（AX-06）。
 - CloudFront には別に**定額のプラン**（Free $0・Pro $15・Business $200 / 月、超過の課金なし）がある（[CloudFront の料金](https://aws.amazon.com/cloudfront/pricing/)）。
   Free は 100 万リクエスト・100 GB、Pro は 1,000 万リクエスト・50 TB。「flat-rate plans can't be combined with other offers」。
   **込み分を超えたときの挙動は確かめられていない**（未確認）。Cloudflare の Free / Pro に近い「プラン」の選択として面白いが、挙動が分かるまで段 1 では入れない（AX-07）。
@@ -254,7 +255,6 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 |---|---|---|
 | 提案 | **画像の配信を別の事業者に移す**（Vercel・AWS のとき・転送量の前提が 70% を超えた月） | 受けると画像のスロットを Cloudflare に差し替える（手間 2 + 1）。以後、アカウントの維持 0.5 |
 | 提案 | **DB を別の事業者に移す**（固定費の DB を従量の DB へ・または D1 の 10 GB に近づいたとき RDS へ） | 今の DB の差し替え（6 × 1 か月・新旧両方の費用）に、またぐ分の手間 1 を足す |
-| 出来事 | 新規のクレジットが切れる（AWS・6 か月目か 12 か月目。§1.4 の固定した方） | 予告 1 か月前（D-20 の予告の形）。前提の推移に「クレジットの残り」を出す |
 | 出来事 | 事業者の障害（片方だけ） | 段 3。可用性の 1 段下げ（どちらかに依存する機能だけ） |
 | 出来事（既存の流用） | 込み分・クレジットの 70% を超えた（D-48） | AWS の常時無料のプール（CloudFront 1 TB など）にもそのまま効く |
 
@@ -271,7 +271,7 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 | Vercel Pro + **画像だけ Cloudflare** | 変わらない（Vercel $20/席・Supabase $25 のまま + Workers の $5 が要るかは部品しだい） | — | **最も効く見込み**。D-48 で Vercel Pro の費用の大半は Fast Data Transfer（12 か月目に約 1.36 TB）で、その多くは画像。R2 の転送は無料 |
 | Vercel Pro + **従量の DB**（DynamoDB・Neon） | Supabase Pro の $25 → 0 に近づく | 〇 | **単独では届かない見込み**。月 $25 × 12 = $300 は、D-48 の後の Vercel Pro の所持金（$546〜$768）と目標（$1,730）の差より小さい |
 | Vercel Pro + **RDS** | $25 → 約 $21（+ IPv4 $3.65） | × | ほぼ変わらない。「AWS の DB は安い」は誤解を誘う好例 |
-| **AWS（Amplify + DynamoDB）** | Vercel の席の $20 が無い・DB の固定費が無い | 〇（新規のクレジットも最初の数か月に効く） | 不明。Amplify の転送 $0.15/GB は Vercel と同じ側の単価で、画像が多い記事コミュニティでは画像の部品しだい |
+| **AWS（Amplify + DynamoDB）** | Vercel の席の $20 が無い・DB の固定費が無い | 〇（常時無料のプールが効く） | 不明。Amplify の転送 $0.15/GB は Vercel と同じ側の単価で、画像が多い記事コミュニティでは画像の部品しだい |
 | **AWS（S3 + CloudFront + Lambda の SPA・または OpenNext）** | 固定費がほぼ無い | 〇（CloudFront の常時無料 1 TB・1,000 万リクエスト） | **勝てる見込みがある**。1 TB / 月の無料の転送は記事コミュニティの前半をほぼ覆う。リクエストは 1,000 万を超えると $0.012 / 1 万 |
 | 受託（業務アプリ）で Aurora の 0 ACU | 夜間・休日に止まる | 〇 | 受託は閲覧が業務時間に寄るので効きうる。ただし今の受託のシナリオは「稼働時間帯は入れない」（C-01〜C-11）ので、効かせるには稼働時間帯が要る（AX-12） |
 
@@ -288,7 +288,6 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 | Vercel Pro + 従量の DB | Vercel Pro・DB を DynamoDB（段 2）・何もしない | **不合格のまま**（仮説）。費用の差を「DB の差し替えで減った分」として出す |
 | Vercel Pro + 画像だけ Cloudflare | Vercel Pro・images を Cloudflare・何もしない | 合格の数が 0 / 50 から増える（仮説） |
 | またぐ構成が負けるケース | Vercel + D1（Workers の API を挟む） | 手間（一度きり + 維持）と Workers Paid の $5 で、Vercel + Supabase と同程度か悪い |
-| クレジットが切れる月 | AWS・何もしない | 切れた月に所持金の傾きが変わり、見込み（D-42）がそれを織り込まない（予告の出来事で知らせる） |
 | 詰まない | シード 1〜50 のどれでも、基準プレイの少なくとも 1 本が合格（今の性質） | 構成が増えても保たれる |
 
 ### 3.6 基準プレイの結果（D-52・2026-11-01）
@@ -326,7 +325,7 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 | 時間課金の DB の止まる / 止まらない | `managed-db` に `minCapacity`・`pausable` を足し、記事コミュニティでは常時動く（止まらない）と判定する。Aurora の ACU の伸縮は段 1 では最小の値で固定（仮定） | 2 |
 | 接続時間で課金するリアルタイム（API Gateway の WebSocket） | `durable-object` とは別の種類（接続分 + メッセージ）。チャットの提案を AWS で出すとき | 3 |
 | 事業者の境界 | 経路の列から境界を導く純関数（§2.3）。段 2 は印と前提の文だけ、段 3 で遅延 | 2・3 |
-| 1 回きり・期限つきのクレジット | prd/03 §7 の `Credit` に `period: 'once'`・`expiresAfterMonths` を足し、ゲームの月の番号を料金計算に渡す（今は月ごとに独立）。見積モードでは「最初の N か月」の注記だけ | 1 |
+| ~~1 回きり・期限つきのクレジット~~ | AX-06 で入れないことにした（常時無料だけ）。入れるなら prd/03 §7 の `Credit` に `period: 'once'`・`expiresAfterMonths` を足す | — |
 | 全サービス共通の転送の無料枠 | 今のプール（`scope: 'account'`）で表せる。AWS の複数のサービス（S3・EC2・RDS）が同じプールを食う形 | 1 |
 
 ### 4.2 catalog
@@ -344,15 +343,14 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 | 足りないもの | 案 |
 |---|---|
 | アカウントの数による維持の手間 | `upkeepOf` に「課金のアカウントの数 − 1」× 0.5（仮定）を足す（§2.4） |
-| 1 回きりのクレジット | ゲームの月の番号を見積に渡す。クレジットの残りを前提の推移に出す |
-| 提案・出来事 | §3.3（画像を別の事業者に・DB を別の事業者に・クレジットが切れる） |
+| 提案・出来事 | §3.3（画像を別の事業者に・DB を別の事業者に） |
 | 乗り換え | AWS への・AWS からの乗り換え（手間は今の乗り換えと同じ 12〜18） |
 
 ## 5. 段階の計画
 
 | 段 | 入れるもの | 規模の目安（推測） | golden |
 |---|---|---|---|
-| **段 1** | AWS の 1 構成（Amplify Hosting の Next.js + DynamoDB）と部品数個（DB: DynamoDB / RDS、画像: Amplify の最適化 / 投稿のときに縮める / 最適化しない、ISR: Amplify の既定 / しない）。SPA は S3 + CloudFront + Lambda（HTTP API）。新規のクレジット（1 回きり）と常時無料のプール。estimator に DynamoDB 型・1 回きりのクレジット | catalog: `providers/aws.ts`（新規・約 400 行）・`stacks/index.ts`（`composeAws`・約 150 行）・`frameworks`・`flavor`。estimator: 種類 1 つ・クレジット。テスト: 料金の単体（架空の料金・prd/05）・構成の検証・基準プレイ 2〜3 本。ファイル 8〜10 | 既存の基準プレイは変わらない（新しい構成を足すだけ）ことを確かめる |
+| **段 1** | AWS の 1 構成（Amplify Hosting の Next.js + DynamoDB）と部品数個（DB: DynamoDB / RDS、画像: Amplify の最適化 / 投稿のときに縮める / 最適化しない、ISR: Amplify の既定 / しない）。SPA は S3 + CloudFront + Lambda（HTTP API）。常時無料のプール（AX-06）。estimator に DynamoDB 型（`request-db`） | catalog: `providers/aws.ts`（新規・約 400 行）・`stacks/index.ts`（`composeAws`・約 150 行）・`frameworks`・`flavor`。estimator: 種類 1 つ。テスト: 料金の単体（架空の料金・prd/05）・構成の検証・基準プレイ 2〜3 本。ファイル 8〜10 | 既存の基準プレイは変わらない（新しい構成を足すだけ）ことを確かめる |
 | **段 2** | またぐ構成のデータの形（`hosts`・`link`・`CROSS_PAIRS`・境界の印）と少数の組（Vercel + 画像だけ Cloudflare・Vercel + RDS / DynamoDB・Cloudflare + Hyperdrive → RDS）。アカウントの維持の手間。提案「画像を別の事業者に」 | catalog の部品 5〜6 個・`componentConflict` の拡張・game の手間。テスト: 組の可否の性質・アカウントの数・基準プレイ 3〜4 本。ファイル 6〜8 | 既定の選択では変わらない。維持の手間を入れるコミットで、またぐ既存の構成（Hyperdrive・前段の CDN）の基準プレイが変わる |
 | **段 3** | 往復の遅延（境界 × rtt の仮定）・API の置き場（prd/10 F-14）と組んだ「Vercel + Workers の API + D1」・Aurora の 0 ACU と受託の稼働時間帯・OpenNext・CloudFront の定額のプラン（挙動を確かめてから）・AWS のリアルタイム | 種類・仮定が増える。シナリオの値の見直しが要りうる | 速さの満足度が変わるので golden が広く変わる |
 
@@ -364,25 +362,26 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 - prd/10 §3（API の置き場・F-10〜F-14）と同じ「決まった組だけ・遅延は計算しない」を採る。「Vercel + D1」は API の置き場（F-14）が前提になるので段 3。
 - prd/README の「MVP の対象外: AWS 全般」を改める必要がある（段 1 を決めるとき）。
 
-## 7. 論点の一覧（未決・推奨案つき）
+## 7. 論点の一覧（2026-11-01 に決定・D-50）
 
 > 番号の接頭辞は AX（AWS と cross-provider）。G-xx は D-17 で使っているので避けた。
+> **決定**: AX-01 は「両方を並行で」（推奨の ② ではなく ③ に近い形。AWS の段 1 と、Vercel + 画像だけ Cloudflare を別々のブランチで同時に進める）、AX-06 は「常時無料だけ」（推奨の ① から改めた）。ほかはすべて推奨のとおり。
 > **決まったもの（ユーザーの決定・2026-11-01・D-52）**: AX-01 は ③（AWS の段 1 と並行で、まず「Vercel + 画像だけ Cloudflare」）・AX-08 ①・AX-10 ①・AX-11 ①（0.5 はマスの半分で出す）・AX-13 ①。
 
 | # | 論点 | 選択肢 | 推奨 |
 |---|---|---|---|
-| AX-01 | 段の順番 | ① AWS の 1 構成が先（段 1）・またぐ構成が後（段 2）② またぐ構成（Vercel + 画像だけ Cloudflare）が先 ③ 同時 | **②**。ユーザーの目的（Vercel を選んでも正解に持って行ける道筋）にいちばん効き、AWS の料金データを待たずに既存の事業者 2 つだけで入れられる。AWS はその後 |
+| AX-01 | 段の順番 | ① AWS の 1 構成が先（段 1）・またぐ構成が後（段 2）② またぐ構成（Vercel + 画像だけ Cloudflare）が先 ③ 同時 | **決定: ③（並行）**。推奨は ② だった:ユーザーの目的（Vercel を選んでも正解に持って行ける道筋）にいちばん効き、AWS の料金データを待たずに既存の事業者 2 つだけで入れられる。AWS はその後 |
 | AX-02 | AWS の Next.js の載せ方（段 1） | ① Amplify Hosting ② OpenNext（Lambda + CloudFront + S3 + DynamoDB + SQS）③ ECS Fargate + ALB ④ 複数 | **①**。料金表 1 つで完結。② は ISR の置き場が文書で確定せず部品が多い。③ は VPS と同じ側の比較で後の段 |
 | AX-03 | Amplify が Next.js 15 までであること | ① 前提の文で「16 の機能を使わない」と出す ② FrameworkProfile に版を持たせて弾く ③ 無視 | **①**。今の FrameworkProfile は版を持たない（prd/06 §2.2 の `version` は未実装） |
 | AX-04 | AWS の SPA の形 | ① S3 + CloudFront + Lambda（HTTP API）② Amplify の静的 + Lambda | **①**。CloudFront の常時無料が効き、Amplify との違いが前提として出る |
 | AX-05 | DynamoDB を estimator でどう表すか | ① 新しい種類 `request-db` ② `kv` の `mode: 'db'` に `unitKB` を足す | **①**。KV（同じキー 1 秒 1 回・反映の遅れ）の前提を引きずらない。単位の大きさは DynamoDB の文書で確かめてから |
-| AX-06 | AWS の無料枠・クレジット | ① Paid plan + 新規のクレジット $100（1 回きり・期限は §1.4 で固定）+ 常時無料のプール ② 常時無料だけ ③ 旧来の 12 か月の無料枠も | **①**。追加の $100（試すと付く）は入れない（プレイの行動と結びつかない）。期限の食い違いは「6 か月」に固定し、D-10 と同じく記録する |
+| AX-06 | AWS の無料枠・クレジット | ① Paid plan + 新規のクレジット $100（1 回きり・期限は §1.4 で固定）+ 常時無料のプール ② 常時無料だけ ③ 旧来の 12 か月の無料枠も | **決定: ②**（既存のアカウントを想定。スキーマの追加は要らない）。推奨は ① だった:追加の $100（試すと付く）は入れない（プレイの行動と結びつかない）。期限の食い違いは「6 か月」に固定し、D-10 と同じく記録する |
 | AX-07 | CloudFront の定額のプラン | ① 超えたときの挙動を確かめるまで入れない ② Pro $15 をプランとして入れる | **①** |
 | AX-08 | 他の事業者の部品の選べる範囲 | ① 表で許した組だけ（§2.2）② 全部の事業者 × 全部のスロット ③ 同じ事業者だけ | **①**（prd/10 F-11 と同じ理由） |
 | AX-09 | 段 2 で最初に入れる組 | ① Vercel + 画像だけ Cloudflare ② Vercel + 従量の DB ③ 両方 | **③**。① は道筋を増やす、② は「固定費に見えて転送量が支配的」を見せる（届かないことが学び）。どちらも基準プレイで確かめる |
 | AX-10 | D1 を REST API で直接つなぐ部品 | ① 出さない（Workers の API を挟む形だけ・段 3）② 不適切相当の部品として出し、API の上限（5 分 1,200 回）に当てる | **①**。API の上限で止まる以前に、管理用の面をアプリに使う前提の文が弱い（本番向けかの記述が無い） |
 | AX-11 | アカウントが増える手間 | ① 2 つ目以降 1 つごとに維持 0.5 + 差すときの一度きり 1 ② 足さない ③ 一度きりだけ | **①**。値は基準プレイで確かめて確定 |
-| AX-12 | Aurora の 0 ACU（止まる DB）をいつ入れるか | ① 段 3（受託に稼働時間帯を入れるときと一緒）② 段 1 から（記事コミュニティでは止まらないと出すだけ） | **①**。今の受託は稼働時間帯が無い（prd/09）ので、効く場面が無い |
+| AX-12 | Aurora の 0 ACU（止まる DB）をいつ入れるか（→ ユーザーの決定で段 1 に前倒し・§11） | ① 段 3（受託に稼働時間帯を入れるときと一緒）② 段 1 から（記事コミュニティでは止まらないと出すだけ） | **①**。今の受託は稼働時間帯が無い（prd/09）ので、効く場面が無い |
 | AX-13 | 往復の遅延 | ① 段 2 は計算せず前提の文 ② 段 2 から仮定の rtt で速さに効かせる | **①**（prd/10 F-12 と同じ） |
 | AX-14 | Neon（東京が無い）を入れるか | ① 入れて前提の文に「最寄りはシンガポール」② 入れない | **①**（段 2 の後半）。遅延を計算しない間は前提の文だけだが、「従量で小さく始められる Postgres」の代表で、ユーザーの「Vercel + 従量の DB」の具体例になる。料金は §2.1 の Neon の料金ページの値を取り直してから |
 
@@ -398,3 +397,127 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
   [API の上限](https://developers.cloudflare.com/fundamentals/api/reference/limits/)・[Hyperdrive](https://developers.cloudflare.com/hyperdrive/)・[Hyperdrive の private database](https://developers.cloudflare.com/hyperdrive/configuration/connect-to-private-database/)・[R2 の料金](https://developers.cloudflare.com/r2/pricing/)
 - Vercel: [関数のリージョン](https://vercel.com/docs/functions/configuring-functions/region)（2026-08-11 更新）・[Marketplace の AWS](https://vercel.com/marketplace/aws)
 - Neon: [料金](https://neon.com/pricing)・[リージョン](https://neon.com/docs/introduction/regions)
+
+## 9. 実装（段 1・2026-11-01・D-51）
+
+- 料金: `packages/catalog/src/providers/aws.ts`（provider `aws`・東京・常時無料のプールだけ）。Amplify Hosting・Lambda（x86）・API Gateway（HTTP API）・CloudFront（従量の料金・日本）・S3 標準・DynamoDB（オンデマンド）・RDS for PostgreSQL（db.t4g.micro）。
+  Amplify の画像の最適化は料金表に専用の行が無いので `unpriced`（料金未取得。明細に残り合計に入らない）。Amplify の無料枠は「Free for 12 months」なので入れない（AX-06）。メンバーと SLA は「取得していない」の文（`not-stated`）。
+- 構成: `packages/catalog/src/stacks/aws.ts`（`composeAws`・部品・既定の選択）。`stacks/index.ts` は登録の数行だけ（`Platform` に `aws`・`STACK_DEFS`・`COMPONENTS`・`DEFAULT_CHOICES`・`composeStack` の分岐）。構成の添字は 6（既存の後ろ）。
+  - Next.js: Amplify の CDN（転送 $0.15/GB）→ Amplify の SSR（リクエスト + GB 時間）→ DB。ISR は CDN の期間つきのキャッシュ（D-37 の式）で、miss は SSR が返す。オンデマンド ISR は非対応（`onDemandIsr: false`）。
+  - SPA: CloudFront → API Gateway（HTTP API）→ Lambda → DB。シェルと静的なファイルは CloudFront が返す。
+  - 部品: ISR（Amplify の ISR / キャッシュしない）・画像（Amplify の最適化（Next.js だけ）/ 最適化しない / 投稿のときに縮める。後の 2 つは S3 + CloudFront で配る）・DB（DynamoDB / RDS）・API の応答のキャッシュ（SPA・CloudFront）・ファイル（S3・固定）。既定は ISR・縮める・DynamoDB。
+- estimator: ノードの種類 `request-db`（読み取りは応答を 4 KB 単位で切り上げ・結果整合は半分、書き込みは 1 行を 1 KB 単位。1 行の大きさ 1 KB は仮定）と、リソース `read-request-units`・`write-request-units`。単位の換算に GB 時間 ↔ GB 秒を足した。
+- 仮定: Amplify の SSR と Lambda のメモリ 1 GB（Amplify は公式の記載が見当たらない）・画像の CDN のヒット率 0.9（Vercel と同じ）・DynamoDB の 1 行 1 KB。RDS のストレージは DB の大きさで近似、アプリと RDS の間の転送は数えない（未確認）。
+
+### 9.1 基準プレイ（何もしない・シード 1〜20・目標は今の値）
+
+| シナリオ | 構成・部品 | 合格 | 12 か月の費用（中央値） | 所持金（中央値） | 当たった前提 |
+|---|---|---|---|---|---|
+| 記事コミュニティ | AWS Next.js・既定（ISR・縮める・DynamoDB） | 10 / 20 | $671 | $1,751 | CloudFront の転送 1 TB |
+| 〃 | AWS Next.js・Amplify の画像の最適化 | 0 / 20 | $1,016（＋料金未取得） | $1,348 | — |
+| 〃 | AWS Next.js・最適化しない | 0 / 20（1 か月目に所持金が尽きる） | $237 | −$102 | CloudFront の転送 1 TB |
+| 〃 | AWS Next.js・RDS | 0 / 20 | $885 | $1,537 | CloudFront の転送 1 TB |
+| 〃 | AWS Next.js・キャッシュしない | 10 / 20 | $670 | $1,753 | CloudFront の転送 1 TB |
+| 〃 | AWS SPA・既定（縮める・DynamoDB） | 19 / 20 | $197 | $1,885 | Lambda の 100 万・CloudFront の 1 TB・1,000 万 |
+| 〃 | AWS SPA・API を CloudFront でキャッシュ | 19 / 20 | $197 | $1,886 | 同上 |
+| 〃 | AWS SPA・RDS | 8 / 20 | $412 | $1,670 | 同上 |
+| 〃 | CF Paid・何もしない（目標の根拠） | 20 / 20 | $182 | $2,153 | 変わらない |
+| 受託 | AWS Next.js・既定 | 20 / 20 | $180 | $1,873 | — |
+| 〃 | AWS Next.js・RDS | 0 / 20 | $388 | $1,665 | — |
+| 〃 | AWS SPA・既定 | 20 / 20 | $50 | $2,003 | Lambda の 100 万 |
+| 〃 | AWS SPA・RDS | 20 / 20 | $258 | $1,795 | — |
+| 〃 | CF Paid・何もしない（目標の根拠） | 20 / 20 | $68 | $2,037 | 変わらない |
+
+- 未達の理由はすべて所持金（満足度は 0.85〜0.89 で目標を超える）。受託は画像のスロットを出さないので、画像の部品の違いは効かない。
+- **Next.js の AWS は目標の前後**（Amplify の転送 $0.15/GB が効く）。画像を Amplify で最適化すると転送が増えて届かない。**SPA の AWS は CloudFront の常時無料で記事コミュニティでも勝てる**（§3.4 の見立てどおり）。RDS の固定費（約 $18/月 + ストレージ）は小さな規模ほど効く。
+- 「API を CloudFront でキャッシュ」がほぼ効かないのは、ゲームの API のキャッシュの期間の設定（D-37）が既定で 0 だから（他の事業者と同じ）。
+- 所持金の目標と広告の単価は、この表を見て決め直す（D-50）。既存の golden（CF・Vercel・VPS の基準プレイ）は変わらない。
+
+### 9.2 Amplify の前段の自前の CloudFront（2026-11-01・D-51 の追記）
+
+ユーザーの問い: 「CloudFront を使ったキャッシュの設定を入れられないか。普通にプレイすると data-transfer-out で厳しい。Amplify で構成するとデフォルトで入らなかったか」。
+
+公式で確かめたこと（2026-11-01 取得）:
+
+| 問い | 事実 | 出典 |
+|---|---|---|
+| Amplify は CloudFront を使うか | 「Amplify uses Amazon CloudFront to manage the caching configuration」。ただし Amplify が管理する配信で、課金は Amplify の料金表（「$0.15 per GB served」）。料金表に CloudFront・キャッシュのヒットの扱いの記述は無い | [caching](https://docs.aws.amazon.com/amplify/latest/userguide/caching.html)・[Amplify の料金](https://aws.amazon.com/amplify/pricing/) |
+| Amplify の既定のキャッシュ | 静的なファイルは 1 年、SSR（reverse proxy）の応答は 0 秒（キャッシュしない）。SSR の応答の `Cache-Control`（`s-maxage`）に従い、カスタムヘッダーで上書きできる | [caching](https://docs.aws.amazon.com/amplify/latest/userguide/caching.html)・[Cache-Control](https://docs.aws.amazon.com/amplify/latest/userguide/Using-headers-to-control-cache-duration.html) |
+| CloudFront の常時無料は Amplify に効くか | CloudFront の料金ページの無料の取得の例は S3・EC2・ELB などで、**Amplify は挙がっていない**。Amplify の配信に CloudFront の常時無料（1 TB）を当てる記述は無い | [CloudFront の従量の料金](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) |
+| 自前の CloudFront を前に置けるか | Amplify の利用者ガイドに手順は無い。AWS Prescriptive Guidance に「Amplify の前に CloudFront を置く」パターンがある（本文は取得できず、検索の要約だけ）。re:Post の回答も同じ形（Amplify の既定のドメインを origin にする・独自ドメインは CloudFront 側に）。**Amplify 側の origin への応答の課金は記載が無い** | [Prescriptive Guidance のパターン](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/enable-aws-waf-for-web-applications-hosted-by-aws-amplify.html)・re:Post |
+
+- 既存のモデルでも ISR のページは Amplify の CDN でキャッシュしていた（D-37 の式）。問題は**キャッシュしたものも Amplify の配信（$0.15/GB）として課金される**こと。
+- 入れた部品「前段の CDN」（AWS × Next.js だけ。D-31 と同じ id）: なし / 自前の CloudFront（静的と画像だけ）/ 自前の CloudFront（ISR のページもキャッシュ）。
+  前段のヒット分は CloudFront の単価・常時無料、外れた分と HTML・API は **Amplify の配信としても課金**（二重）とみなす（catalog の `front-cloudfront` の解釈。高めの側の読み）。キャッシュは前段の 1 層で数え、Amplify の CDN は前段が持つクラスを素通しにする。
+  「ISR のページも」は D-31 と同じく鮮度を 1 段下げる（オンデマンドの再検証が届かない。Amplify はもともとオンデマンド ISR に非対応）。手間は前段の CDN と同じ 2。
+- 同じ確認で、課金の明細のメーターの名前を `amplify-transfer-out` と `cloudfront-transfer-out` に分けた（どちらも `data-transfer-out` で、画面で見分けられなかった）。
+
+基準プレイ（記事コミュニティ × AWS Next.js・何もしない・シード 1〜20）:
+
+| 画像 | 前段 | 合格 | 12 か月の費用 | 所持金（中央値） | 満足度 |
+|---|---|---|---|---|---|
+| 縮める（既定。画像はもともと S3 + CloudFront） | なし | 10 / 20 | $671 | $1,751 | 0.89 |
+| 〃 | 静的と画像 | 10 / 20 | $623 | $1,779 | 0.89 |
+| 〃 | ISR のページも | 8 / 20 | $518 | $1,706 | 0.84（鮮度） |
+| Amplify の最適化 | なし | 0 / 20 | $1,016 | $1,348 | 0.89 |
+| 〃 | 静的と画像 | **20 / 20** | $287 | $2,059 | 0.89 |
+| 〃 | ISR のページも | 20 / 20 | $249 | $1,891 | 0.84 |
+
+- 縮める画像（既定）では、画像の配信がもともと CloudFront にあり、前段で減るのは HTML と静的なファイルだけ。HTML・API は二重に課金されるので効果は小さい。
+- **Amplify で最適化した画像を前段の CloudFront から配ると、記事コミュニティで全シード合格**（画像の転送が Amplify の $0.15/GB から CloudFront の常時無料 1 TB へ移る）。Amplify の最適化の料金は未取得のまま（明細に料金未取得が残る）なので、この合格は下限の費用で出ている。
+- 前段の課金の解釈（外れた分を Amplify の配信として数える）が逆なら、さらに安くなる。
+
+## 10. Amplify の制限（文書化だけ・2026-11-01）
+
+ユーザーが確かめた Amplify の制限。ゲームで使う仕組み（依存の大きさ・応答の大きさ・ストリーミング）が今は無いので、catalog の前提には入れず、ここに記録する（Next.js の版とオンデマンド ISR は既存の部品・事実で出している）。
+
+| 制限 | 内容 | 出典 |
+|---|---|---|
+| SSR のビルド出力 | 計算のリソースの束は展開して 220 MB まで | [デプロイの仕様](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html) |
+| 応答の大きさ | Next.js 12 以降（Web Compute）の応答は 5.72 MB まで。超えると 504（中身なし） | [SSR のトラブルシューティング](https://docs.aws.amazon.com/amplify/latest/userguide/troubleshooting-SSR.html) |
+| 画像の最適化の出力 | 出力する画像は 4.3 MB まで | [Amplify の Next.js の対応](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html) |
+| 非対応の機能 | オンデマンド ISR・ストリーミング・Edge のミドルウェア・静的アセットと最適化した画像へのミドルウェア・`unstable_after` | 同上 |
+| Next.js の版 | 12〜15 | 同上 |
+| 実行の時間・一時領域 | 実行は最大 15 分、一時領域は 512 MB（`/tmp` だけ書ける） | [デプロイの仕様](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html)（検索の要約で確認。本文は未読） |
+
+ゲームで扱うなら（将来の出来事の候補・仮定）:
+
+- **依存を足す提案**（機能追加で大きなライブラリ・画像処理のネイティブの依存が増える）→ SSR のビルド出力が 220 MB に近づき、超えるとデプロイできない。対策は依存の整理（手間）か、重い処理だけ Lambda・別の事業者へ出す（prd/10 F-14 の API の置き場と重なる）。
+- **大きな応答**（一覧のページ・CSV の出力など）→ 5.72 MB を超えると 504。受託の業務アプリの「帳票の出力」の出来事の候補。
+- **ストリーミングを前提にする機能**（AI の応答の逐次表示など）→ Amplify では使えない。Vercel・Cloudflare では使える、という前提の差として出せる。
+- **原本の大きい画像**（4.3 MB を超える出力）→ D-47 の「最適化しない＝原本 4 MB」の近くにある。原本の大きさを上げる出来事と組むと当たる。
+
+## 11. Aurora 系の DB（2026-11-01・D-51 の追記。AX-12 の「段 3」を前倒し）
+
+ユーザーの決定で、AWS の DB に Aurora Serverless v2 と Aurora DSQL を足した。確かめた事実（2026-11-01 取得）:
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| Serverless v2 の料金（東京・PostgreSQL） | 標準 $0.15 / ACU 時間・保存 $0.12/GB 月・I/O $0.24 / 100 万。I/O-Optimized は $0.20 / ACU 時間・保存 $0.27/GB 月で I/O に課金されない | Price List API（AmazonRDS・2026-10-29）・[Aurora の料金](https://aws.amazon.com/rds/aurora/pricing/) |
+| I/O-Optimized の目安 | 「if your I/O spend exceeds 25% of your total Aurora database spend, you can save up to 40%」 | 同上 |
+| 0 ACU と自動停止 | 最小の容量を 0 ACU にすると、ユーザーの接続が指定の時間（最短 300 秒・既定も 300 秒）無いと止まり、止まっている間はインスタンスの料金が 0。再開はふつう約 15 秒、24 時間を超えて止まると 30 秒以上。RDS Proxy を付けると止まらない。0 にしないときの最小は 0.5 ACU | [auto-pause](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless-v2-auto-pause.html) |
+| DSQL の料金（東京） | $0.00001 / DPU（$10 / 100 万 DPU）・保存 $0.40/GB 月。毎月 10 万 DPU と 1 GB は無料（常時無料） | Price List API（AuroraDSQL・2026-09-11）・[DSQL の料金](https://aws.amazon.com/rds/aurora/dsql/pricing/)・[RDS の無料](https://aws.amazon.com/rds/free/) |
+| DSQL の DPU | SQL の処理（ComputeDPU）と保存の読み書き（ReadDPU・WriteDPU）などの量。**1 件あたりの DPU は書かれていない**。料金ページに「10 万 DPU ≈ TPC-C 由来の 70 万トランザクション（読み 95%）」の例 | [DSQL の料金](https://aws.amazon.com/rds/aurora/dsql/pricing/) |
+| DSQL の制約 | 一時テーブル・トリガー・PL/pgSQL が無い。1 トランザクションで変更できる行は 3,000 まで・DDL と DML は別のトランザクション。分離レベルは Repeatable Read に固定・楽観的な並行制御で競合すると再試行。接続は 1 時間で切れる | [PostgreSQL との違い](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-unsupported-features.html) |
+
+扱い（判断）:
+
+- **Serverless v2 は I/O-Optimized を既定（唯一）にした**。標準の I/O は「1 件あたりの I/O の数」という確かめられない量に依るため（I/O を料金未取得にすると標準が不当に安く見える）。
+- 容量は最小の 0.5 ACU で固定（負荷で伸びた分は数えない。RDS の db.t4g.micro と同じ単純化）。部品は「最小 0.5 ACU」と「0 ACU まで縮める」の 2 つ。
+- **0 ACU の止まり方は素直に計算する**: 接続の無い時間 T（300 秒）の間に DB へ 1 件も届かない割合を、月の平均の到着率 λ から `1 / (1 + λT)` で近似し、動いている割合 `λT / (1 + λT)` だけ ACU を課金する（キャッシュのヒット率と同じ近似。estimator の `managed-db` に `capacityUnits`・`pauseAfterIdleSeconds`）。夜間に減る分は入れていない。
+  記事コミュニティ・受託ともに常に誰かが見ているので、**ほぼ止まらない**（動いている割合 0.9 を超える）。再開の待ち（約 15 秒）は止まる時間がほぼ無いので速さに入れない（前提の文で出す）。
+- DSQL は estimator の新しい種類 `processing-db`（DB に届く 1 件 = 0.14 DPU。料金ページの例からの**仮定**）。DPU の単価・無料枠は公式の値。
+
+基準プレイ（何もしない・シード 1〜20・ほかの部品は既定（ISR・縮める・前段なし））:
+
+| シナリオ | フレームワーク | DynamoDB | RDS | Aurora（0.5 ACU） | Aurora（0 ACU まで） | DSQL |
+|---|---|---|---|---|---|---|
+| 記事コミュニティ | Next.js | 10/20・$671 | 0/20・$885 | 0/20・$1,543 | 0/20・$1,537 | 10/20・$684 |
+| 記事コミュニティ | SPA | 19/20・$197 | 8/20・$412 | 0/20・$1,070 | 0/20・$1,063 | 19/20・$207 |
+| 受託 | Next.js | 20/20・$180 | 0/20・$388 | 0/20・$1,048 | 0/20・$1,043 | 20/20・$189 |
+| 受託 | SPA | 20/20・$50 | 20/20・$258 | 0/20・$918 | 0/20・$913 | 20/20・$59 |
+
+（合格数・12 か月の費用の中央値。未達の理由はすべて所持金）
+
+- **Aurora Serverless v2 は AWS を有利にしない**（ユーザーの見立てどおり）。最小 0.5 ACU × $0.20 で月約 $73 の固定費になり、12 か月で約 $870 増える。0 ACU まで縮めても止まらないので、差は $5 前後しか縮まない。
+- DSQL は DynamoDB とほぼ同じ（無料の 10 万 DPU の後は月数ドル）。ただし DPU の量は仮定に強く依る（1 件 0.14 DPU）。RDB を使えるが制約がある、という前提の文で選び分ける形になる。

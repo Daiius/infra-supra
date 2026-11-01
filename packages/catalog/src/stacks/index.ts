@@ -4,6 +4,12 @@
 import type { ArchitectureInput, RequestClass, WorkloadInput } from 'estimator';
 import type { FrameworkId } from '../frameworks/index.ts';
 import {
+  AWS_COMPONENTS,
+  AWS_DEFAULT_CHOICES,
+  AWS_STACK_DEFS,
+  composeAws,
+} from './aws.ts';
+import {
   applyCross,
   behaviorOf,
   CROSS_COMPONENTS,
@@ -11,7 +17,7 @@ import {
   type CrossLink,
 } from './cross.ts';
 
-export type Platform = 'cloudflare' | 'vercel' | 'sakura';
+export type Platform = 'cloudflare' | 'vercel' | 'sakura' | 'aws';
 export type SlotId =
   'isrCache' | 'images' | 'db' | 'realtime' | 'frontCdn' | 'ogp' | 'apiCache';
 export type Choices = Partial<Record<SlotId, string>>;
@@ -62,6 +68,8 @@ export const STACK_DEFS: readonly StackDef[] = [
     plan: '4gb',
     name: 'さくらの VPS 4GB（東京）',
   },
+  // AWS（prd/11 段 1・D-50）。構成は stacks/aws.ts
+  ...AWS_STACK_DEFS,
 ];
 
 /** スロットの部品（catalog のデータ）。当たりうる前提は前提の id の前方一致で挙げる（選ぶ前に出す）。 */
@@ -502,6 +510,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...SAKURA_FRONT_CDN,
   ...SPA_OGP,
   ...SPA_API_CACHE,
+  ...AWS_COMPONENTS,
   ...CROSS_COMPONENTS,
 ];
 
@@ -510,6 +519,7 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   cloudflare: { isrCache: 'kv', images: 'images', db: 'd1', realtime: 'none' },
   vercel: { isrCache: 'default', images: 'default' },
   sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
+  aws: AWS_DEFAULT_CHOICES,
 };
 
 /**
@@ -1080,6 +1090,13 @@ export function composeStack(
         return composeCloudflare(def.plan as 'free' | 'paid', c, standby);
       case 'vercel':
         return composeVercel(def.plan as 'hobby' | 'pro', c);
+      case 'aws':
+        return composeAws(c, standby, {
+          spa,
+          apiCache: apiCacheActive('aws', c, options.framework)
+            ? c.apiCache!
+            : 'none',
+        });
       case 'sakura':
         return composeSakura(
           def.plan as '2gb' | '4gb',
@@ -1096,7 +1113,8 @@ export function composeStack(
     c,
     options.framework,
   );
-  return spa
+  // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で直接組む
+  return spa && def.platform !== 'aws'
     ? asSpa(crossed, def.platform, {
         prerender: c.ogp === 'prerender',
         apiCache: apiCacheActive(def.platform, c, 'vite-spa')
