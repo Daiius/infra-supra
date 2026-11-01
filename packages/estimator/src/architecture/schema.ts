@@ -77,10 +77,15 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
   }),
   /** コンピュートを時間で買うマネージド DB（Supabase 型）。 */
   z.object({ kind: z.literal('managed-db') }),
-  /** オブジェクトストレージ（R2・S3 型）。storesImages: false なら画像の保存量を載せない（ISR のキャッシュだけに使う場合）。 */
+  /**
+   * オブジェクトストレージ（R2・S3 型）。storesImages: false なら画像の保存量を載せない（ISR のキャッシュだけに使う場合）。
+   * cdnHitRate: 事業者の CDN が自分で配信する型（Vercel Blob の公開のストア）。読み取りは全件を CDN のリクエストと
+   * 配信の転送（egress）に数え、miss だけを読み取りの操作と origin への転送に数える（経路に CDN のノードを置かない）。
+   */
   z.object({
     kind: z.literal('object-storage'),
     storesImages: z.boolean().default(true),
+    cdnHitRate: Ratio.optional(),
   }),
   /** 画像の最適化。cacheMissRate はキャッシュの読み取りが共有キャッシュまで届く割合。 */
   z.object({

@@ -207,7 +207,14 @@ function consume(
         cls === 'image-transform'
       )
         add(u, 'object-writes', n);
-      else {
+      else if (c.cdnHitRate !== undefined) {
+        // 事業者の CDN が配信する（Vercel Blob）: 転送とリクエストはヒットも含む全件、操作と origin への転送は miss だけ
+        const miss = n * (1 - c.cdnHitRate);
+        add(u, 'requests', n);
+        add(u, 'egress-gb', kbToGb(n * p.kb));
+        add(u, 'object-reads', miss);
+        add(u, 'origin-transfer-gb', kbToGb(miss * p.kb));
+      } else {
         add(u, 'object-reads', n);
         add(u, 'egress-gb', kbToGb(n * p.kb));
       }

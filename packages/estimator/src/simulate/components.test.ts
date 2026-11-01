@@ -124,6 +124,25 @@ describe('部品の選択で足した振る舞い', () => {
     expect(u.resources['storage-gb-month']).toBeUndefined();
   });
 
+  it('事業者の CDN が配信するオブジェクトストレージ（Vercel Blob 型）: 転送とリクエストはヒットも含む全件、操作と origin は miss だけ（OCL-2AE853BD）', () => {
+    const u = sim(
+      [
+        {
+          id: 'blob',
+          label: 'blob',
+          config: { kind: 'object-storage', cdnHitRate: 0.9 },
+        },
+      ],
+      { 'image-read': ['blob'] },
+    ).blob!;
+    const reads = w.classes['image-read'];
+    const gb = (reads.count * reads.perRequest.kb) / 1e6; // 1 KB = 1,000 バイト（num/unit）
+    expect(u.resources.requests).toBe(reads.count);
+    expect(u.resources['egress-gb']).toBeCloseTo(gb, 9);
+    expect(u.resources['object-reads']).toBeCloseTo(reads.count * 0.1, 9);
+    expect(u.resources['origin-transfer-gb']).toBeCloseTo(gb * 0.1, 9);
+  });
+
   it('DB のプロキシは問い合わせの件数を数える', () => {
     const u = sim([{ id: 'p', label: 'p', config: { kind: 'db-proxy' } }], {
       api: ['p'],
