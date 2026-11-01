@@ -110,6 +110,8 @@ export function speedHeaviness(
     premises: readonly PlatformPremise[];
     /** SPA の初回表示（シェル → JS → API の順に待つ）。重さを 1 つ数える（ゲーム上の仮定・prd/10 F-05）。 */
     firstLoadHeavy?: boolean;
+    /** Astro の初回表示（JS はアイランドの分だけ）。重さを 1 つ減らす（0 より下げない。ゲーム上の仮定・D-68）。 */
+    firstLoadLight?: boolean;
   },
   sat: SatisfactionRules = SATISFACTION,
 ): number {
@@ -117,12 +119,12 @@ export function speedHeaviness(
   const near = input.premises.some(
     (p) => p.effect === 'throttle' && !p.hit && (p.ratio ?? 0) >= s.nearRatio,
   );
-  return (
+  const heavy =
     (input.ssrCpuMs >= s.heavySsrCpuMs ? 1 : 0) +
     (input.imageKB >= s.heavyImageKB || input.variants <= 1 ? 1 : 0) +
     (near ? 1 : 0) +
-    (input.firstLoadHeavy ? 1 : 0)
-  );
+    (input.firstLoadHeavy ? 1 : 0);
+  return input.firstLoadLight ? Math.max(0, heavy - 1) : heavy;
 }
 
 export type JudgeInput = {
@@ -146,6 +148,8 @@ export type JudgeInput = {
   onDemandUnmet?: boolean;
   /** SPA の初回表示（速さの重さを 1 つ数える。仮定・prd/10 F-05）。 */
   firstLoadHeavy?: boolean;
+  /** Astro の初回表示（速さの重さを 1 つ減らす。仮定・D-68）。 */
+  firstLoadLight?: boolean;
   /** 画質の判定に使う大きさ（省略は imageKB。画像の形式では画質を下げない。D-47・D-58）。 */
   qualityImageKB?: number;
   /** 画質を 1 段下げる（記事のデザインの刷新を断った・粗い画像が多い。仮定・D-47）。 */

@@ -1,7 +1,7 @@
 // アプリのテンプレート（prd/README のスコープ・企画書 §4.2）。値はすべてテンプレートの既定値（template-default）で、
 // 実測ではない。コストに効く値は判断ポイント（prd/01 §8）として選択肢にする（D-11）。
 import type { WorkloadInput } from 'estimator';
-import type { SpaShape } from '../frameworks/index.ts';
+import type { AstroShape, SpaShape } from '../frameworks/index.ts';
 
 /**
  * 記事 + コメントのコミュニティ（Next.js 製を想定）。スパイク（spikes/concept-2026-10-31）と同じ仮定。
@@ -69,7 +69,11 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
   };
 }
 
-export { businessApp, BUSINESS_APP_SPA } from './business-app.ts';
+export {
+  businessApp,
+  BUSINESS_APP_ASTRO,
+  BUSINESS_APP_SPA,
+} from './business-app.ts';
 
 /**
  * 記事コミュニティを Vite の SPA で作ったときの形（prd/10。template-default・実測ではない）。
@@ -80,4 +84,17 @@ export const ARTICLE_COMMUNITY_SPA: SpaShape = {
   shellKB: 5,
   dataCpuFactor: 0.5,
   dataResponseKB: 10,
+};
+
+/**
+ * 記事コミュニティを Astro で作ったときの形（D-68。template-default・実測ではない）。
+ * - JS・CSS: 動きのある部品（コメント欄・いいね・ログインの表示）だけがアイランドで、ページあたりのファイル数は Next.js の 0.3 倍。
+ * - ビルドし直し: 内容の更新（記事の投稿・編集・ページに出るコメント。PV × 0.05）のうち 2% が記事の本文（静的なページ）を変える
+ *   （30 万 PV で月 300 回 = 1 日 10 回ほど）。コメントはアイランドが API で読むのでビルドしない。
+ * - 1 回のビルドの時間: 1 分（依存の取得・デプロイ）+ 静的なページ 1,000 あたり 0.5 分（記事 2,000 ページで 2 分）。
+ */
+export const ARTICLE_COMMUNITY_ASTRO: AstroShape = {
+  assetsFactor: 0.3,
+  rebuildShare: 0.02,
+  minutesPerBuild: { base: 1, perThousandPages: 0.5 },
 };

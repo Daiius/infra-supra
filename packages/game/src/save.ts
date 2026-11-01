@@ -10,7 +10,7 @@ import {
 } from './index.ts';
 import type { Choices, FrameworkId } from 'catalog';
 
-const FRAMEWORK_IDS: readonly FrameworkId[] = ['nextjs', 'vite-spa'];
+const FRAMEWORK_IDS: readonly FrameworkId[] = ['nextjs', 'vite-spa', 'astro'];
 
 export const SAVE_VERSION = 1;
 

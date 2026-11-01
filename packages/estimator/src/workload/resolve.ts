@@ -1,4 +1,5 @@
 // Workload の解決（prd/01 §3・prd/04 §2）。入力からリクエストクラスごとの月間件数と性質を導く。純粋関数。
+import { ceilUnits } from '../num/arith.ts';
 import { HOURS_PER_MONTH } from '../num/unit.ts';
 import type { Derivation } from '../provenance.ts';
 import {
@@ -99,6 +100,11 @@ export type ResolvedWorkload = {
    * 再生成の回数ではない（再生成は更新のあとの最初の閲覧で起きる）。CDN のキャッシュの無効化に使う（D-66）。
    */
   onDemandPageRevalidations: number;
+  /**
+   * 静的なページのビルドし直し（Workload の build。D-68）。count は月のビルドの回数、minutes はビルドの時間の合計
+   * （1 回ごとに分へ切り上げる）。build が無ければ 0。
+   */
+  builds: { count: number; minutes: number };
   derivations: Derivation[];
 };
 
@@ -452,6 +458,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     ),
   };
 
+  const builds = resolveBuilds(w, derivations);
   const r = t.weekdayToWeekend;
   return {
     input: w,
@@ -496,6 +503,49 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       isrPagesGB: isrPagesKB / 1_000_000,
     },
     onDemandPageRevalidations,
+    builds,
     derivations,
   };
+}
+
+/**
+ * 月のビルドの回数と時間（D-68）。間隔 T ごとの枠（ビルドの時間より短い枠は作れない）に、更新が 1 回でもあれば 1 回ビルドする。
+ * 更新が一様に到着すると仮定して、枠の数 N のうち更新のある枠は N × (1 − e^(−更新 / N))。
+ */
+function resolveBuilds(
+  w: ParsedWorkload,
+  derivations: Derivation[],
+): { count: number; minutes: number } {
+  const b = w.build;
+  if (!b || b.updatesPerMonth <= 0) return { count: 0, minutes: 0 };
+  const slotSec = Math.max(b.intervalSeconds ?? 0, b.minutesPerBuild * 60);
+  const slots = SECONDS_PER_MONTH / slotSec;
+  const count = slots * (1 - Math.exp(-b.updatesPerMonth / slots));
+  const minutes = count * ceilUnits(b.minutesPerBuild, 1);
+  derivations.push({
+    id: 'builds',
+    label: '静的なページのビルドし直し',
+    expression:
+      '枠の数 × (1 − e^(−更新 / 枠の数))。枠 = 1 か月 / max(ビルドの間隔, 1 回のビルドの時間)（更新が一様に到着すると仮定）',
+    inputs: [
+      { name: '内容の更新', value: b.updatesPerMonth, basis: 'user-input' },
+      ...(b.intervalSeconds !== undefined
+        ? [
+            {
+              name: 'ビルドの間隔',
+              value: b.intervalSeconds,
+              unit: 'second' as const,
+              basis: 'user-input' as const,
+            },
+          ]
+        : []),
+      {
+        name: '1 回のビルドの時間（分）',
+        value: b.minutesPerBuild,
+        basis: 'user-input',
+      },
+    ],
+    result: count,
+  });
+  return { count, minutes };
 }

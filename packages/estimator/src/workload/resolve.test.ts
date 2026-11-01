@@ -405,3 +405,71 @@ describe('ピークの時間帯のヒット率（D-44）', () => {
     );
   });
 });
+
+describe('静的なページのビルドし直し（D-68）', () => {
+  const month = 730 * 3600;
+  const w = (build: WorkloadInput['build']) =>
+    resolveWorkload({
+      ...base([
+        { id: 'a', rendering: 'static', share: 1, pages: 10, processing },
+      ]),
+      build,
+    });
+
+  it('build が無ければ 0', () => {
+    expect(w(undefined).builds).toEqual({ count: 0, minutes: 0 });
+  });
+
+  it('間隔の枠に更新が 1 回でもあれば 1 回（N × (1 − e^(−U/N))）。時間は 1 回ごとに分へ切り上げる', () => {
+    const r = w({
+      updatesPerMonth: 730,
+      intervalSeconds: 3600,
+      minutesPerBuild: 1.5,
+    });
+    const n = month / 3600;
+    expect(r.builds.count).toBeCloseTo(n * (1 - Math.exp(-1)), 9);
+    expect(r.builds.minutes).toBeCloseTo(r.builds.count * 2, 9);
+  });
+
+  it('更新が少なければ回数は更新の数に近く、多くても枠の数を超えない', () => {
+    const few = w({
+      updatesPerMonth: 10,
+      intervalSeconds: 3600,
+      minutesPerBuild: 1,
+    });
+    expect(few.builds.count).toBeLessThan(10);
+    expect(few.builds.count).toBeGreaterThan(9.9);
+    const many = w({
+      updatesPerMonth: 1e9,
+      intervalSeconds: 3600,
+      minutesPerBuild: 1,
+    });
+    expect(many.builds.count).toBeCloseTo(730, 6);
+  });
+
+  it('更新のたび（間隔なし）は 1 回のビルドの時間が枠になる', () => {
+    const r = w({ updatesPerMonth: 1e9, minutesPerBuild: 2 });
+    expect(r.builds.count).toBeCloseTo(month / 120, 6);
+  });
+
+  it('ci-build のノードは時間 × CPU の数を build-minutes に数える（経路は要らない）', () => {
+    const r = w({
+      updatesPerMonth: 730,
+      intervalSeconds: 3600,
+      minutesPerBuild: 2,
+    });
+    const u = simulateResources(r, {
+      id: 'x',
+      name: 'x',
+      nodes: [
+        {
+          id: 'ci',
+          label: 'ci',
+          config: { kind: 'ci-build', cpusPerBuild: 4 },
+        },
+      ],
+      routes: {},
+    }).nodes.ci!;
+    expect(u.resources['build-minutes']).toBeCloseTo(r.builds.minutes * 4, 9);
+  });
+});

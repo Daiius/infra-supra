@@ -1,6 +1,12 @@
 // シナリオと出来事のデータの形（prd/07 §10.1・§10.2・D-20）。ここは型と、台本の表を作る純粋関数だけ。
 // シナリオの値（規模・収益・満足度の重み・手間・確率・時期・効果）はすべてゲーム上の仮定。
-import type { FrameworkId, Platform, SlotId, SpaShape } from 'catalog';
+import type {
+  AstroShape,
+  FrameworkId,
+  Platform,
+  SlotId,
+  SpaShape,
+} from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import { draws } from './random.ts';
 import type { Element } from './rules.ts';
@@ -264,12 +270,23 @@ export type Scenario = {
       /** 初回表示（シェル → JS → API）を速さの重さに 1 つ数えるか（ゲーム上の仮定）。 */
       firstLoadHeavy: boolean;
     };
+    /**
+     * Astro にしたときのアプリの形（catalog のテンプレートの既定値）と、初回表示の効き方（ゲーム上の仮定。D-68）。
+     * 記事は静的にビルドし、更新はビルドし直し（間隔は設定「ビルドの間隔」）。
+     */
+    astro?: {
+      shape: AstroShape;
+      /** JS がアイランドの分だけで初回表示が軽いとみなし、速さの重さを 1 つ減らすか（ゲーム上の仮定）。 */
+      firstLoadLight: boolean;
+    };
   };
   /** 画面の文言（始める画面の説明。D-33・prd/09 E-6）。省略時は画面の既定。 */
   text?: ScenarioText;
   /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
   hidden?: {
-    settings?: ('format' | 'variants' | 'isr' | 'apiCacheTtl')[];
+    settings?: (
+      'format' | 'variants' | 'isr' | 'apiCacheTtl' | 'buildInterval'
+    )[];
     slots?: SlotId[];
     blockBots?: boolean;
   };

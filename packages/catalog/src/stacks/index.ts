@@ -1133,14 +1133,16 @@ export function composeStack(
 ): ArchitectureInput {
   const def = typeof stack === 'string' ? stackDef(stack) : stack;
   const spa = options.framework === 'vite-spa';
-  // SPA には ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品も Next.js だけ
-  const c = spa
-    ? {
-        ...withDefaults(def.platform, choices),
-        isrCache: 'none',
-        ...(choices.frontCdn === 'html' ? { frontCdn: 'static' } : {}),
-      }
-    : withDefaults(def.platform, choices);
+  const astro = options.framework === 'astro';
+  // SPA・Astro には ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品も Next.js だけ
+  const c =
+    spa || astro
+      ? {
+          ...withDefaults(def.platform, choices),
+          isrCache: 'none',
+          ...(choices.frontCdn === 'html' ? { frontCdn: 'static' } : {}),
+        }
+      : withDefaults(def.platform, choices);
   const standby = options.standby ?? {};
   const arch = (() => {
     switch (def.platform) {
@@ -1188,10 +1190,75 @@ export function composeStack(
             : 'none',
         })
       : crossed;
+  // Astro は静的なページのビルドし直しを足す（D-68）
+  if (astro) return asAstro(shaped, def.platform, def.plan);
   // SPA の API を他の事業者に置く（D-65）
   return spa
     ? applyCrossApi(shaped, def.platform, def.plan, c, standby)
     : shaped;
+}
+
+/** Vercel の Elastic のビルドのマシンの vCPU の最小（新しい Pro の既定。CPU minute の数に効く。D-68）。 */
+const VERCEL_BUILD_CPUS = 4;
+
+/**
+ * Next.js の構成を Astro の形に直す（D-68・prd/06 §6）。記事（ISR だったルート）は静的なページとして事業者の静的な配信から返し、
+ * ログインの要るページ（SSR）はアダプター（Cloudflare は Worker・Vercel は Functions・VPS は Node）が描く。
+ * 静的なページの更新はビルドし直しで、ビルドの時間を事業者のビルド（Workers Builds・Vercel のビルド）で数える。
+ * VPS はビルドも同じホストで行う（ビルドの CPU は数えない・仮定）。
+ */
+function asAstro(
+  arch: ArchitectureInput,
+  platform: Platform,
+  plan: string,
+): ArchitectureInput {
+  const routes = { ...arch.routes };
+  delete routes['document-isr'];
+  delete routes['isr-revalidate'];
+  const billingOf = (id: string) =>
+    arch.nodes.find((n) => n.id === id)?.billing;
+  const ci: ArchNodeIn | undefined =
+    platform === 'cloudflare'
+      ? {
+          id: 'build',
+          label: 'Workers Builds（静的なページのビルド）',
+          config: { kind: 'ci-build' },
+          billing: {
+            ...billingOf('worker')!,
+            meters: { 'build-minutes': 'build-minutes' },
+          },
+        }
+      : platform === 'vercel'
+        ? {
+            id: 'build',
+            label: 'Vercel のビルド（静的なページ）',
+            config: {
+              kind: 'ci-build',
+              cpusPerBuild: plan === 'pro' ? VERCEL_BUILD_CPUS : 2,
+            },
+            // Hobby は Basic のマシンで込み（メーターなし。1 日のデプロイの上限は事実として出す）
+            ...(plan === 'pro' ? {} : { facts: ['builds-hobby'] }),
+            billing: {
+              ...billingOf('fn')!,
+              meters:
+                plan === 'pro' ? { 'build-minutes': 'build-cpu-minutes' } : {},
+            },
+          }
+        : undefined;
+  const label: Record<string, string> = {
+    worker: 'Worker（Astro）',
+    fn: 'Vercel Functions（Astro）',
+    vps: 'VPS（nginx + Astro の Node + MySQL）',
+  };
+  const nodes = arch.nodes.map((n): ArchNodeIn =>
+    label[n.id] ? { ...n, label: label[n.id]! } : n,
+  );
+  return {
+    ...arch,
+    name: arch.name.replace(' + vinext', '') + '（Astro）',
+    nodes: ci ? [...nodes, ci] : nodes,
+    routes,
+  };
 }
 
 /**
