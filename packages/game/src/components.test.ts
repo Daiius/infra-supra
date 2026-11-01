@@ -242,7 +242,7 @@ describe('選べない理由の区別', () => {
     // 手間を使い切ると、手間の理由になる
     const tired = applyActions(s, [
       { type: 'optimize' },
-      { type: 'set', key: 'compress', value: 100 },
+      { type: 'set', key: 'format', value: 105 },
       { type: 'set', key: 'variants', value: 2 },
       comp('isrCache', 'r2'),
       { type: 'block-bots' },

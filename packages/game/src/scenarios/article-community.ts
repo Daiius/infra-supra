@@ -27,7 +27,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'common',
     title: '込み分・クレジットの 70% を超えた',
-    text: '流量で決まる込み分（Vercel Pro は月のクレジット）に近づいた。設定（ISR・圧縮）やプランで対応できる',
+    text: '流量で決まる込み分（Vercel Pro は月のクレジット）に近づいた。設定（ISR・画像の形式）やプランで対応できる',
     when: {
       type: 'premise',
       premiseIds: [
@@ -486,7 +486,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
     {
       id: 'vps-images',
       label:
-        'さくらの VPS・画像を多く載せる提案だけ受け、画像の保存量が 70% を超えたら中程度に圧縮',
+        'さくらの VPS・画像を多く載せる提案だけ受け、画像の保存量が 70% を超えたら画像を WebP にする',
       short: 'VPS・画像の提案を受ける',
       stackIndex: VPS,
       decide: (s) => [
@@ -495,8 +495,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
           eventId,
           accept: eventId === 'p-images',
         })),
-        ...(sawEvent(s, 's-image-storage') && s.settings.imageKB > 100
-          ? [{ type: 'set', key: 'compress', value: 100 } as const]
+        ...(sawEvent(s, 's-image-storage') && s.settings.imageKB > 105
+          ? [{ type: 'set', key: 'format', value: 105 } as const]
           : []),
       ],
     },

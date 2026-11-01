@@ -49,7 +49,7 @@ export const EFFORT = {
   perMonth: ARTICLE_COMMUNITY.effort.perMonth,
   selfHostedUpkeep: ARTICLE_COMMUNITY.effort.selfHostedUpkeep,
   /** 設定の変更の手間。 */
-  setting: { compress: 1, variants: 1, isr: 0 },
+  setting: { format: 1, variants: 1, isr: 0 },
   /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */
   onDemandSwitch: 2,
   optimize: 4,
@@ -132,7 +132,7 @@ export type JudgeInput = {
   onDemandUnmet?: boolean;
   /** SPA の初回表示（速さの重さを 1 つ数える。仮定・prd/10 F-05）。 */
   firstLoadHeavy?: boolean;
-  /** 画質の判定に使う大きさ（省略は imageKB。一律で縮める部品では圧縮の設定の値。D-47）。 */
+  /** 画質の判定に使う大きさ（省略は imageKB。画像の形式では画質を下げない。D-47・D-58）。 */
   qualityImageKB?: number;
   /** 画質を 1 段下げる（記事のデザインの刷新を断った・粗い画像が多い。仮定・D-47）。 */
   qualityDown?: boolean;

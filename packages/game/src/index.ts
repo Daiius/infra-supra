@@ -89,6 +89,9 @@ export const GAME = {
 } as const;
 
 export type Settings = {
+  /**
+   * 画像 1 枚（サイズ違い 1 種）の大きさ（KB）。画像の形式で決まる（JPEG 150・WebP 105・AVIF 84。同じ見た目の画質での比較。D-58）。
+   */
   imageKB: number;
   variants: number;
   revalidateSec: number;
@@ -111,17 +114,50 @@ export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
 export const ON_DEMAND_MAX_AGE_NOTE =
   '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多い（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがある）。このゲームでは 1 日とみなし、その分の再生成も数える';
 
+/**
+ * 画像の形式ごとの 1 枚の大きさ（KB。同じ見た目の画質。D-58）。JPEG はテンプレートの 150 KB。
+ * WebP: 同等の SSIM の JPEG より 25〜34% 小さい（https://developers.google.com/speed/webp/docs/webp_study ・2025-08-07 更新・
+ * 2026-11-01 取得）の中ほどの 30% とする。AVIF: WebP より約 20% 小さい（https://nextjs.org/docs/app/api-reference/components/image
+ * の formats・2026-09-28 更新・2026-11-01 取得）。範囲の取り方はゲーム上の仮定。
+ */
+export const IMAGE_FORMAT_KB = { jpeg: 150, webp: 105, avif: 84 } as const;
+
+/** 画像の形式（設定の値から）。 */
+export function imageFormatOf(imageKB: number): 'jpeg' | 'webp' | 'avif' {
+  return imageKB <= IMAGE_FORMAT_KB.avif
+    ? 'avif'
+    : imageKB <= IMAGE_FORMAT_KB.webp
+      ? 'webp'
+      : 'jpeg';
+}
+
+/**
+ * Next.js の画像の部品（next/image）で閲覧のときに変換する構成か（Vercel の画像の最適化・VPS の next start）。
+ * next/image の formats の既定は WebP で、ブラウザの Accept を見て形式を選ぶ（JPEG は選べない。D-58）。
+ */
+export function usesNextImage(
+  platform: Platform,
+  framework: FrameworkId,
+  images: string | undefined,
+): boolean {
+  return (
+    framework === 'nextjs' &&
+    platform !== 'cloudflare' &&
+    (images ?? 'default') === 'default'
+  );
+}
+
 /** 戻せる設定（prd/07 §9.5）。値はゲーム上の仮定。 */
 export const SETTINGS = {
-  compress: {
-    label: '画像の圧縮',
+  format: {
+    label: '画像の形式',
     field: 'imageKB',
-    effort: EFFORT.setting.compress,
-    note: '転送量と速さに効く。画質（満足度）が下がる',
+    effort: EFFORT.setting.format,
+    note: '同じ見た目の画質のまま、画像を小さくする形式（転送量・保存量・速さに効き、画質は下がらない）。WebP は同等の SSIM の JPEG より 25〜34% 小さい（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいが、変換に約 50% 長くかかる（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存する。閲覧のときに変換するサービスはブラウザに合わせて形式を選ぶ（Cloudflare Images の変換の数は形式で増えない・Vercel は形式ごとにキャッシュする）',
     options: [
-      { value: 150, label: 'なし（150 KB）' },
-      { value: 100, label: '中（100 KB）' },
-      { value: 70, label: '強（70 KB）' },
+      { value: IMAGE_FORMAT_KB.jpeg, label: 'JPEG（そのまま）' },
+      { value: IMAGE_FORMAT_KB.webp, label: 'WebP' },
+      { value: IMAGE_FORMAT_KB.avif, label: 'AVIF' },
     ],
   },
   variants: {
@@ -617,9 +653,14 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? { pages: p.stock.articlePages }
       : {}),
   }));
+  const nextImage = usesNextImage(
+    p.platform,
+    p.framework,
+    { ...DEFAULT_CHOICES[p.platform], ...p.components }.images,
+  );
   w.images = {
     ...w.images,
-    sizeKB: p.settings.imageKB,
+    sizeKB: deliveredImageKB(sc, p.settings, undefined, nextImage),
     variants: p.settings.variants,
     uploadsPerMau: w.images.uploadsPerMau * (p.mods.uploadsFactor ?? 1),
     ...(p.stock
@@ -664,10 +705,39 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? toSpa(w, shape, cache ? { cacheContent: true } : {})
       : w;
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
-  return applyComponentsToWorkload(app, p.platform, p.components, {
+  const out = applyComponentsToWorkload(app, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
     resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
   });
+  return withImageFormat(out, p);
+}
+
+/**
+ * 画像の形式の損の側（D-58）。変換の件数（サイズ違いの数）で表す。値の倍率は出典の文から取ったゲーム上の近似。
+ * - Vercel の next/image で AVIF: AVIF と WebP を形式ごとにキャッシュする（Next.js の文書）→ 変換を 2 倍に数える
+ *   （ほぼすべてのブラウザが AVIF を受けるが、WebP の版も一度は作られると読む）。
+ * - VPS のホストで変換して AVIF: 変換に約 50% 長くかかる（Next.js の文書）→ 変換の件数を 1.5 倍（CPU の重さとして）。
+ * - 投稿のときにサイズ違いを作る（R2）で WebP・AVIF: JPEG のフォールバックも作って置く（MDN）→ 変換と保存を 2 倍
+ *   （フォールバックの大きさは同じとみなす近似）。
+ * - Cloudflare Images（閲覧のときに変換）は形式で変換の数が増えない（料金の文書: format は一意の判定から除く）。
+ */
+function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
+  const format = imageFormatOf(p.settings.imageKB);
+  if (format === 'jpeg') return w;
+  const images = { ...DEFAULT_CHOICES[p.platform], ...p.components }.images;
+  const factor =
+    images === 'r2-variants'
+      ? 2
+      : format === 'avif' && usesNextImage(p.platform, p.framework, images)
+        ? p.platform === 'vercel'
+          ? 2
+          : 1.5
+        : format === 'avif' && p.platform === 'sakura' && images === 'default'
+          ? 1.5
+          : 1;
+  return factor === 1
+    ? w
+    : { ...w, images: { ...w.images, variants: w.images.variants * factor } };
 }
 
 /** テンプレートの値から在庫の初期値を作る。 */
@@ -1184,23 +1254,50 @@ export function settingInactiveReason(
   state: GameState,
   key: SettingKey,
 ): string | undefined {
-  if (key !== 'variants') return undefined;
   const platform = STACKS[state.stackIndex]!.provider;
   const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  // 原本をそのまま配るので、形式は変わらない（D-58）
+  if (key === 'format')
+    return images === 'none'
+      ? `画像の部品が「${componentLabel(platform, 'images', images)}」なので原本の形式のまま配る`
+      : undefined;
+  if (key !== 'variants') return undefined;
   return images === 'none' || images === 'resize'
     ? `画像の部品が「${componentLabel(platform, 'images', images)}」なのでサイズ違いは作らない（1 種）`
     : undefined;
 }
 
-/** 1 枚あたり配る画像の大きさ（KB）。画像の部品と圧縮の設定から（D-47）。 */
+/**
+ * 設定の今の効き方の注記（効かないわけではないが、選んだ値どおりにならないとき）。Next.js の画像の部品は JPEG を選んでも
+ * WebP で配る（formats の既定。D-58）。
+ */
+export function settingNote(
+  state: GameState,
+  key: SettingKey,
+): string | undefined {
+  if (key !== 'format') return undefined;
+  const platform = STACKS[state.stackIndex]!.provider;
+  const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  return usesNextImage(platform, state.framework, images)
+    ? 'Next.js の画像の部品は、ブラウザに合わせて既定で WebP を配る（JPEG を選んでも WebP）'
+    : undefined;
+}
+
+/** 1 枚あたり配る画像の大きさ（KB）。画像の部品と画像の形式の設定から（D-47・D-58）。 */
 export function deliveredImageKB(
   sc: Scenario,
   settings: Settings,
   images: string | undefined,
+  /** Next.js の画像の部品で変換する（JPEG を選んでも WebP で配る。usesNextImage）。 */
+  nextImage = false,
 ): number {
   if (images === 'none') return sc.unoptimizedImageKB;
-  if (images === 'resize') return sc.resizedImageKB * (settings.imageKB / 150);
-  return settings.imageKB;
+  const kb = nextImage
+    ? Math.min(settings.imageKB, IMAGE_FORMAT_KB.webp)
+    : settings.imageKB;
+  if (images === 'resize')
+    return sc.resizedImageKB * (kb / IMAGE_FORMAT_KB.jpeg);
+  return kb;
 }
 
 /**
@@ -1212,10 +1309,11 @@ export function pageWeightKB(
   settings: Settings,
   mods: WorkloadMods,
   images: string | undefined,
+  nextImage = false,
 ): number {
   const w = sc.template(1);
   const html = w.routes[0]!.processing.responseKB;
-  const perImage = deliveredImageKB(sc, settings, images);
+  const perImage = deliveredImageKB(sc, settings, images, nextImage);
   return (
     html +
     w.perPage.assets * w.assets.sizeKB +
@@ -1236,7 +1334,13 @@ export function pageWeightOf(state: GameState, images?: string): string {
   const opt =
     images ?? { ...DEFAULT_CHOICES[platform], ...state.components }.images;
   return pageWeightLabel(
-    pageWeightKB(scenarioOf(state), state.settings, state.mods, opt),
+    pageWeightKB(
+      scenarioOf(state),
+      state.settings,
+      state.mods,
+      opt,
+      usesNextImage(platform, state.framework, opt),
+    ),
   );
 }
 
@@ -1635,6 +1739,12 @@ export function setupRevalidateOptions(
  * 「設定:値」で引く。
  */
 export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
+  [`format:${IMAGE_FORMAT_KB.jpeg}`]:
+    'どのブラウザでも表示でき、作るのも速い。仕組みがいちばん単純',
+  [`format:${IMAGE_FORMAT_KB.webp}`]:
+    '見た目の画質を保ったまま小さくなり、今の主なブラウザで表示できる',
+  [`format:${IMAGE_FORMAT_KB.avif}`]:
+    'いちばん小さくなる新しい形式。画質を保ったまま転送量を大きく減らせる',
   'isr:0': '記事を更新したときだけ作り直すので、無駄な再生成がなく、いつも最新',
   'isr:60': '少し待てば更新が見える。設定を書くだけで、追加の実装は要らない',
   'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔',
@@ -2421,16 +2531,22 @@ export function playMonth(input: GameState): GameState {
   const comps = { ...DEFAULT_CHOICES[platformNow], ...state.components };
   const viewed: Settings = {
     ...state.settings,
-    imageKB: deliveredImageKB(sc, state.settings, comps.images),
+    imageKB: deliveredImageKB(
+      sc,
+      state.settings,
+      comps.images,
+      usesNextImage(platformNow, state.framework, comps.images),
+    ),
     // 最適化しない・一律で縮めて置くは、サイズ違いを作らず 1 種を配る（D-47）
     ...(comps.images === 'resize' || comps.images === 'none'
       ? { variants: 1 }
       : {}),
   };
-  // 画質: 最適化しないは原本、それ以外は圧縮の設定で決まる。記事のデザインの刷新を断った月・
+  // 画質: 最適化しないは原本、それ以外は JPEG と同じ見た目（形式では下げない。D-58）。記事のデザインの刷新を断った月・
   // 受けたあと粗い画像（一律で縮めた原本の無い画像）が多い月は 1 段下げる（D-47）
+  // 画像の形式は同じ見た目の画質で小さくするので、画質は下げない（D-58）。JPEG の大きさで判定する
   const qualityImageKB =
-    comps.images === 'none' ? viewed.imageKB : state.settings.imageKB;
+    comps.images === 'none' ? viewed.imageKB : IMAGE_FORMAT_KB.jpeg;
   const redesign = imageRedesignQuality(state, sc, month, comps.images);
   // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）。
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
@@ -2494,7 +2610,13 @@ export function playMonth(input: GameState): GameState {
     month,
     imagesUnoptimized: comps.images === 'none',
     pageWeight: pageWeightLabel(
-      pageWeightKB(sc, state.settings, state.mods, comps.images),
+      pageWeightKB(
+        sc,
+        state.settings,
+        state.mods,
+        comps.images,
+        usesNextImage(platformNow, state.framework, comps.images),
+      ),
     ),
     qualityReason: redesign,
     eventuallyConsistent,
@@ -2745,8 +2867,14 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
   const resize =
     { ...DEFAULT_CHOICES[platform], ...state.components }.images === 'resize';
   const gbPerUpload = resize
-    ? deliveredImageKB(sc, state.settings, 'resize') / 1e6
-    : rule.gbPerImage * (state.settings.imageKB / 150);
+    ? // 一律で縮めて置く: 形式が JPEG でなければ、古いブラウザ向けの JPEG も置く（MDN の推奨。D-58）
+      (deliveredImageKB(sc, state.settings, 'resize') +
+        (imageFormatOf(state.settings.imageKB) === 'jpeg'
+          ? 0
+          : sc.resizedImageKB)) /
+      1e6
+    : // 原本はそのまま置く（形式は閲覧・投稿のときに変える。D-58 で圧縮の比を掛けるのをやめた）
+      rule.gbPerImage;
   return {
     dbGB:
       s.dbGB +
@@ -2901,9 +3029,7 @@ function stageReasons(
         ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
         : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`;
   if (stages.quality !== 'good')
-    out.quality =
-      c.qualityReason ??
-      `画像の圧縮 ${optionLabel('compress', c.settings.imageKB)}`;
+    out.quality = c.qualityReason ?? `画像 ${c.settings.imageKB} KB`;
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
@@ -3326,7 +3452,8 @@ function monthsText(ms: readonly number[]): string {
 const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
   speed:
     'ページの重さ（サーバーの処理・画像の大きさと種類）を設定や部品で軽くするか、処理の上限に余裕のある構成を考える',
-  quality: '画像の圧縮を強くしすぎている。画質と転送量の釣り合いを見直す',
+  quality:
+    '画像の画質が下がっている（記事のデザインの刷新など）。画像の部品と、原本を残しているかを見直す',
   freshness:
     'キャッシュの間隔や部品の性質で更新が遅れて見える。間隔を短くするか、更新がすぐ届く部品を考える',
   feature:
