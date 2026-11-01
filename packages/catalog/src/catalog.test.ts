@@ -33,6 +33,35 @@ describe('料金データ', () => {
   });
 });
 
+describe('表示名（D-75）', () => {
+  it('すべてのメーター・基本料・クレジット・一度だけの手数料が label を持つ', () => {
+    const missing = loadPriceBooks().flatMap((b) =>
+      b.plans.flatMap((p) => {
+        const at = `${b.provider}/${p.id}`;
+        return [
+          ...p.meters.filter((m) => !m.label).map((m) => `${at}/${m.id}`),
+          ...(p.baseFee && !p.baseFee.label ? [`${at} 基本料`] : []),
+          ...p.credits.filter((c) => !c.label).map((c) => `${at}/${c.id}`),
+          ...p.addons.filter((a) => !a.label).map((a) => `${at}/${a.id}`),
+        ];
+      }),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('label は公式の名称を括弧で残す（「日本語の説明（公式の名称）」）', () => {
+    for (const b of loadPriceBooks())
+      for (const p of b.plans)
+        for (const l of [
+          ...p.meters.map((m) => m.label),
+          p.baseFee?.label,
+          ...p.credits.map((c) => c.label),
+          ...p.addons.map((a) => a.label),
+        ])
+          if (l !== undefined) expect(l).toMatch(/^[^（]+（.+）$/);
+  });
+});
+
 describe('R2 の操作は 100 万件単位で切り上げる（r2/pricing: "Cloudflare rounds up your usage to the next billing unit."）', () => {
   // 金額は書かず、課金対象の量（billableQuantity）だけを見る
   const billable = (meterId: string, quantity: number) =>

@@ -131,8 +131,8 @@ describe('AWS の構成', () => {
     );
     // CloudFront の料金は定額（Free は 0 円）で、従量の転送の明細が無い
     expect(
-      free.history[0]!.lines.some((l) =>
-        l.label.includes('cloudfront-transfer-out'),
+      free.history[0]!.lines.some(
+        (l) => l.meterId === 'cloudfront-transfer-out',
       ),
     ).toBe(false);
   });
@@ -209,7 +209,7 @@ describe('AWS の構成', () => {
         ),
       ).history[0]!;
     const line = (h: ReturnType<typeof first>) =>
-      h.lines.find((l) => l.label.includes('invalidation-paths'));
+      h.lines.find((l) => l.meterId === 'invalidation-paths');
     // 1 か月目: PV 30 万 × 書き込み 0.1 × 記事の投稿・編集 0.01 = 更新 300 × 2 ページ × 2 パス = 1,200 パス（D-70）
     const payg = first('payg', 0);
     expect(line(payg)!.amount).toBeCloseTo((1_200 - 1_000) * 0.005, 6);
@@ -297,7 +297,9 @@ describe('AWS の構成', () => {
     while (s.phase === 'playing') s = playMonth(applyActions(s, []));
     expect(s.end?.reason).toBe('cash');
     const cost = retryHintsOf(s).find((x) => x.kind === 'cost')!;
-    expect(cost.what).toContain('aws invalidation-paths');
+    expect(cost.what).toContain(
+      'キャッシュの無効化（CloudFront: invalidation paths）',
+    );
     expect(cost.next).toContain('60,000 パス・$295');
     expect(cost.next).toContain('定額のプラン');
     expect(cost.next).toContain('時間の再検証');

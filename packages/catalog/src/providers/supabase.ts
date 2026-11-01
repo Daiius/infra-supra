@@ -78,6 +78,7 @@ export const supabase: PriceBookInput = {
       meters: [
         {
           id: 'egress',
+          label: 'DB からの転送（Supabase: egress）',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'free-egress',
@@ -104,7 +105,12 @@ export const supabase: PriceBookInput = {
       id: 'pro-micro',
       service: 'database',
       name: 'Pro（Micro）',
-      baseFee: { amount: 25, per: 'month', scope: 'account' },
+      baseFee: {
+        label: '基本料（Supabase Pro）',
+        amount: 25,
+        per: 'month',
+        scope: 'account',
+      },
       sourceIds: ['pricing', 'compute'],
       uptimeSla: {
         status: 'none',
@@ -121,6 +127,7 @@ export const supabase: PriceBookInput = {
       credits: [
         {
           id: 'compute-credit',
+          label: 'Compute のクレジット（Supabase: Compute Credits）',
           amount: 10,
           appliesTo: { meterIds: ['compute'] },
           sourceIds: ['compute'],
@@ -133,6 +140,7 @@ export const supabase: PriceBookInput = {
       meters: [
         {
           id: 'compute',
+          label: 'DB のサーバーの稼働（Supabase: Compute）',
           resource: 'instance-hours',
           unit: 'hour',
           rounding: { granularity: 1, scope: 'period' },
@@ -143,6 +151,7 @@ export const supabase: PriceBookInput = {
         },
         {
           id: 'egress',
+          label: 'DB からの転送（Supabase: egress）',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'pro-egress',
@@ -151,6 +160,7 @@ export const supabase: PriceBookInput = {
         },
         {
           id: 'disk',
+          label: 'DB のディスク（Supabase: Disk Size）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           allowancePool: 'pro-disk',

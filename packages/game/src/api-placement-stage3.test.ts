@@ -109,9 +109,9 @@ describe('Next.js のサーバーから別の事業者の API を呼ぶ（F-14�
     expect(ids(ON)).toContain('fact:aws:data-transfer-out:lambda-out');
     const s = playMonth(game(VERCEL_PRO, 'nextjs', NEXT_API));
     expect(s.history[0]!.stackName).toBe('Vercel Pro + Cloudflare Workers・D1');
-    expect(
-      s.history[0]!.lines.some((l) => l.label.startsWith('supabase')),
-    ).toBe(false);
+    expect(s.history[0]!.lines.some((l) => l.provider === 'supabase')).toBe(
+      false,
+    );
   });
 
   it('ゲーム中の移し替えは DB の差し替えと同じデータの移行', () => {
@@ -164,7 +164,7 @@ describe('Cloudflare の静的 + さくらの VPS の API', () => {
     );
     const r = t.history[t.history.length - 1]!;
     expect(r.effort.upkeep).toBe(article.effort.selfHostedUpkeep);
-    expect(r.lines.some((l) => l.label.startsWith('sakura-vps'))).toBe(true);
+    expect(r.lines.some((l) => l.provider === 'sakura-vps')).toBe(true);
   });
 
   it('自前の障害（偶発的）は API の VPS にも当たり、文で API の障害と分かる', () => {

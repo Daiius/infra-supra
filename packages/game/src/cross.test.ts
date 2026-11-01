@@ -36,10 +36,12 @@ const swap = (option: string) =>
 const last = (s: GameState) => s.history[s.history.length - 1]!;
 const costOf = (s: GameState, provider: string) =>
   last(s)
-    .lines.filter((l) => l.label.startsWith(`${provider} `))
+    .lines.filter((l) => l.provider === provider)
     .reduce((a, l) => a + l.amount, 0);
-const line = (s: GameState, label: string) =>
-  last(s).lines.find((l) => l.label === label)?.amount ?? 0;
+/** 「事業者 メーター」で明細を引く（行の名前は表示名なので、ID で引く。D-75）。 */
+const line = (s: GameState, id: string) =>
+  last(s).lines.find((l) => `${l.provider} ${l.meterId ?? ''}` === id)
+    ?.amount ?? 0;
 
 describe('許した組だけ選べる', () => {
   it('始める画面: Vercel の画像のスロットにだけ Cloudflare の部品が出る', () => {

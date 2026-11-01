@@ -15,11 +15,11 @@ describe('Vercel Blob（D-46）', () => {
 
   it('Pro: 保存量とアップロード（Advanced Operations）の明細が出る（iad1 の単価）', () => {
     const r = playMonth(newGame(PRO, 42)).history[0]!;
-    const storage = r.lines.find((l) => l.label === 'vercel blob-storage')!;
+    const storage = r.lines.find((l) => l.meterId === 'blob-storage')!;
     expect(storage.amount).toBeCloseTo(20 * 0.023);
-    expect(
-      r.lines.some((l) => l.label === 'vercel blob-advanced-operations'),
-    ).toBe(true);
+    expect(r.lines.some((l) => l.meterId === 'blob-advanced-operations')).toBe(
+      true,
+    );
   });
 
   it('最適化しない画像は Blob の URL から配信: 転送はヒットも含む全件、Simple Operations は miss だけ（OCL-2AE853BD）', () => {
@@ -31,8 +31,10 @@ describe('Vercel Blob（D-46）', () => {
         }),
       ).history[0]!;
     const r = month1(PRO);
-    const lineOf = (rep: typeof r) => (label: string) =>
-      rep.lines.find((l) => l.label === label)?.amount ?? 0;
+    // 「事業者 メーター」で引く（行の名前は表示名なので、ID で引く。D-75）
+    const lineOf = (rep: typeof r) => (id: string) =>
+      rep.lines.find((l) => `${l.provider} ${l.meterId ?? ''}` === id)
+        ?.amount ?? 0;
     const amount = lineOf(r);
     const transferGB = amount('vercel blob-data-transfer') / 0.05;
     const simpleOps = (amount('vercel blob-simple-operations') / 0.4) * 1e6;

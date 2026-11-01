@@ -82,6 +82,8 @@ export type LineItem = {
   amount: number | null;
   status: 'priced' | 'unpriced' | 'blocked';
   priceRef: PriceRef;
+  /** 表示名（料金データのメーター・基本料・クレジットの label。D-75）。無ければ表示側が ID から作る。 */
+  label?: string;
   quantity?: number;
   allowanceApplied?: number;
   billableQuantity?: number;
@@ -343,6 +345,7 @@ export function priceUsage(input: {
       nodeIds,
       currency: book.currency,
       priceRef,
+      ...(meter.label ? { label: meter.label } : {}),
       quantity: a.quantity,
       allowanceApplied: a.quantity - a.billable,
       assumptions,
@@ -460,6 +463,7 @@ export function priceUsage(input: {
           version: book.version,
           planId: plan.id,
         },
+        ...(c.label ? { label: c.label } : {}),
         assumptions: [],
         note: `${c.id}（上限 ${c.amount}）`,
         credit: { id: c.id, limit: c.amount, eligible },
@@ -491,6 +495,7 @@ export function priceUsage(input: {
         version: book.version,
         planId: plan.id,
       },
+      ...(fee.label ? { label: fee.label } : {}),
       quantity: count * seats,
       assumptions: fee.per === 'hour' ? ['1 か月 = 730 時間'] : [],
     });

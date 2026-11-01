@@ -115,7 +115,7 @@ function violations(s: GameState): string[] {
     // クレジットを当てたあとも、事業者ごとの金額は負にならない（対象外のメーターに当たらない・余りを繰り越さない）
     const byProvider = new Map<string, number>();
     for (const l of h.lines) {
-      const p = l.label.split(' ')[0]!;
+      const p = l.provider;
       byProvider.set(p, (byProvider.get(p) ?? 0) + toUsd(l.amount, l.currency));
     }
     for (const [p, v] of byProvider)

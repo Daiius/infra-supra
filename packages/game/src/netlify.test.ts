@@ -101,9 +101,7 @@ describe('Netlify の構成', () => {
   it('Astro: 記事のビルドし直しが本番のデプロイ（クレジット）になり、Next.js より高くつく', () => {
     const astro = doNothing(PRO, 1, 'astro');
     expect(
-      astro.history[0]!.lines.some((l) =>
-        l.label.includes('production-deploys'),
-      ),
+      astro.history[0]!.lines.some((l) => l.meterId === 'production-deploys'),
     ).toBe(true);
     const next = doNothing(PRO, 1, 'nextjs');
     expect(astro.history[0]!.infraCost).toBeGreaterThan(

@@ -90,6 +90,8 @@ export const RoundingSchema = z.union([
 
 export const MeterSchema = z.object({
   id: Id,
+  /** 表示名（明細の行の名前。D-75）。日本語の説明に公式の名称を括弧で残す。計算には使わない。 */
+  label: z.string().min(1).optional(),
   aliases: z.array(z.string()).optional(), // 名称変更（Edge Requests → CDN Requests など）
   resource: z.enum(RESOURCES),
   unit: z.enum(UNITS),
@@ -122,6 +124,8 @@ export const AllowancePoolSchema = z.object({
 export type AllowancePool = z.infer<typeof AllowancePoolSchema>;
 
 export const BaseFeeSchema = z.object({
+  /** 表示名（明細の行の名前。D-75）。日本語の説明に公式の名称を括弧で残す。計算には使わない。 */
+  label: z.string().min(1).optional(),
   amount: NonNegative,
   per: z.enum(['month', 'hour']),
   monthlyCap: NonNegative.optional(),
@@ -131,6 +135,8 @@ export const BaseFeeSchema = z.object({
 
 export const CreditSchema = z.object({
   id: Id,
+  /** 表示名（明細の行の名前。D-75）。日本語の説明に公式の名称を括弧で残す。計算には使わない。 */
+  label: z.string().min(1).optional(),
   amount: NonNegative,
   /** 当てる先。'all-usage' は同じプランの従量の明細すべて。 */
   appliesTo: z.union([
@@ -205,6 +211,8 @@ export const UptimeSlaSchema = z
 export const AddonSchema = z.object({
   id: Id,
   name: z.string(),
+  /** 一度だけの手数料の明細の行の名前（D-75）。 */
+  label: z.string().min(1).optional(),
   oneTimeFee: NonNegative,
   premise: Premise,
   interpretation: InterpretationSchema.optional(),

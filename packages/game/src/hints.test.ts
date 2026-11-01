@@ -63,7 +63,7 @@ describe('retryHintsOf', () => {
     const hints = retryHintsOf(st);
     expect(hints[0]!.kind).toBe('cost');
     expect(hints[0]!.what).toMatch(/目標 \$1,730 に \$\d+ 足りない/);
-    expect(hints[0]!.what).toContain('vercel pro 基本料');
+    expect(hints[0]!.what).toContain('基本料（Vercel Pro: 1 席ごと）');
     // 込み分を超えて請求が付いた前提も挙がる
     expect(hints.some((x) => x.kind === 'overage')).toBe(true);
   });
