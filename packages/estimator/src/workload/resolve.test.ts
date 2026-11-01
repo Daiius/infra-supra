@@ -260,6 +260,28 @@ describe('キャッシュの後ろへは、ルートごとの miss で重み付�
     expect(sim.nodes.fn!.resources.requests).toBeCloseTo(100_000, 6);
     expect(sim.nodes.db!.resources['rows-read']).toBeCloseTo(expectedRows, 6);
   });
+
+  it('1 リクエストの CPU の最大は、ヒットの CPU が miss の処理より重ければヒットの CPU（OCL-8B3B0CB7）', () => {
+    const sim = (hitCpuMs: number) =>
+      simulateResources(w, {
+        id: 'a',
+        name: 'a',
+        nodes: [
+          {
+            id: 'fn',
+            label: 'fn',
+            config: {
+              kind: 'function',
+              cache: { classes: ['api-content'], hitCpuMs },
+            },
+          },
+        ],
+        routes: { 'api-content': ['fn'] },
+      }).nodes.fn!.maxCpuMsPerRequest;
+    // miss の処理は最大 100 ms（cold）。ヒットが 150 ms ならそちらが上限の判定に使われる
+    expect(sim(2)).toBe(100);
+    expect(sim(150)).toBe(150);
+  });
 });
 
 describe('ピークの時間帯のヒット率（D-44）', () => {
