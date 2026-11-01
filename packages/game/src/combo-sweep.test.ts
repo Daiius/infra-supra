@@ -2,7 +2,10 @@
 // 何もしないで最後まで（終わるまで）回し、壊れていないことを確かめる。金額そのものは期待値に書かない（実在の料金のため）。
 // 組み合わせは全部で約 2,000（全部回して数秒）。増えて遅くなったら、各スロットの各選択肢が 1 回は出る組（pairwise）に絞る。
 import type { Choices, SlotId } from 'catalog';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// 1 群で数百の組を 12 か月回すので、CI の遅い実行環境では既定の 5 秒を超えることがある（D-87）。
+vi.setConfig({ testTimeout: 60_000 });
 import {
   applyAction,
   checkAction,
