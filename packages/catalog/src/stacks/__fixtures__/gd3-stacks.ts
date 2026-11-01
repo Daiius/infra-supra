@@ -326,11 +326,23 @@ export const GD3_STACKS: unknown[] = [
           },
         },
       },
+      // D-46: 置き場所が未定（課金先なし）だった画像の原本を Vercel Blob にした
       {
         id: 'blob',
-        label: '画像の原本（置き場所は未定）',
+        label: 'Vercel Blob（画像の原本）',
         config: {
           kind: 'object-storage',
+        },
+        billing: {
+          accountId: 'vercel',
+          provider: 'vercel',
+          planId: 'hobby',
+          meters: {
+            'storage-gb-month': 'blob-storage',
+            'object-writes': 'blob-advanced-operations',
+            'object-reads': 'blob-simple-operations',
+            'egress-gb': 'blob-data-transfer',
+          },
         },
       },
       {
@@ -446,11 +458,23 @@ export const GD3_STACKS: unknown[] = [
           },
         },
       },
+      // D-46: 置き場所が未定（課金先なし）だった画像の原本を Vercel Blob にした
       {
         id: 'blob',
-        label: '画像の原本（置き場所は未定）',
+        label: 'Vercel Blob（画像の原本）',
         config: {
           kind: 'object-storage',
+        },
+        billing: {
+          accountId: 'vercel',
+          provider: 'vercel',
+          planId: 'pro',
+          meters: {
+            'storage-gb-month': 'blob-storage',
+            'object-writes': 'blob-advanced-operations',
+            'object-reads': 'blob-simple-operations',
+            'egress-gb': 'blob-data-transfer',
+          },
         },
       },
       {

@@ -58,7 +58,8 @@ describe('受託先の業務アプリの運用', () => {
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2036.76', 'won', 12],
-      'cf-paid-accept': ['1998.07', 'won', 12],
+      // D-46: 乗り換え先の Vercel で添付が Vercel Blob の課金になる
+      'cf-paid-accept': ['1964.90', 'won', 12],
       vps: ['1715.59', 'outages', 12],
       'vps-care': ['1821.02', 'won', 12],
       'vps-sla': ['1821.02', 'won', 12],

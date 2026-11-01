@@ -189,3 +189,10 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 | 利用資格 | `context.commercial` が true のとき、非商用のみのプランを `eligibilityViolations` に出す | D-09 |
 | 施行日つきの予告 | `scheduledChanges` に記録するだけで、計算には使わない | gap。見積の対象月で切り替える機能は必要になってから |
 | 制限（Limit） | 料金計算では評価しない | 容量の判定（P1-8）で、資源シミュレーションの結果と合わせて評価する |
+
+## 12. 構成が使うサービスの選び方（データの補足）
+
+- **Vercel + Supabase の画像の原本の置き場は Vercel Blob**（D-46・2026-11-01 取得）。それまでは料金を取得しておらず、課金先なし（明細に「対応なし」）で残していた。
+  - 選んだ理由: アプリは Next.js を Vercel に載せており、画像の最適化（Image Optimization）と同じ Vercel のアカウント・同じ込み分・同じクレジットの中で数えられる。Hobby の込み分を超えると 30 日使えない、という他の Hobby のメーターと同じ止まり方になる。Supabase Storage も構成として自然だが、DB の egress と込み分を共有するので、画像の配信が DB の egress の上限に効く形になる。そうするとアプリの DB の扱い（D-24 の部品）と絡むため、今回は採らない（部品として選べるようにするなら、そのときに料金を取得する）。
+  - 単価: 既定は iad1（$0.023/GB 月・Simple Operations $0.40/100 万・Advanced Operations $5.00/100 万・Blob Data Transfer $0.05/GB）、東京（hnd1）は地域料金（$0.025・$0.37・$4.70・$0.053）。Hobby の込み分は保存量 1 GB・Simple 1 万・Advanced 2,000・転送 10 GB で、超えると使えない（追加の請求はない）。Pro は込み分なしで、月のクレジットに当たる。出典は vercel.com/docs/vercel-blob/usage-and-pricing（2026-09-23 更新）と地域料金のページ（2026-09-14 更新）。
+  - 経路の近似: 閲覧は Vercel の CDN を通り、miss だけが Blob に届く（Simple Operations は miss の読み取りだけ・公式どおり）。ただし公式の例では、Blob Data Transfer はヒットも含む全ダウンロードにかかり、CDN 側は Fast Data Transfer にならない。このモデルは画像の閲覧の転送を Fast Data Transfer（Blob Data Transfer の約 3 倍）で数えるので、高めに見積もる側に倒れる。画像を最適化する経路では、変換のときの原本の読み取りを数えていない。

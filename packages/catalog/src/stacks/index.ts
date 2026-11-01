@@ -836,11 +836,21 @@ function composeVercel(
           } as ArchNodeIn,
         ]
       : []),
-    // 画像の原本の置き場所（Vercel Blob など）は料金を取得していない。課金先なしで残し、見積に「対応なし」として出す
+    // 画像の原本の置き場所は Vercel Blob（公開のストア。D-46）。保存量・Advanced Operations（アップロード）・
+    // Simple Operations（キャッシュの miss の読み取り）・Blob Data Transfer で課金する。
+    // 経路の近似: 閲覧は CDN を通り（ヒットは CDN の分だけ）、miss だけが Blob に届く。公式の例では Blob Data Transfer は
+    // ヒットも含む全ダウンロードにかかり、CDN 側は Fast Data Transfer でなく Blob Data Transfer になるので、
+    // このモデルは転送の単価を高め（FDT）に見積もる側に倒れる（prd/03・D-46）
     {
       id: 'blob',
-      label: '画像の原本（置き場所は未定）',
+      label: 'Vercel Blob（画像の原本）',
       config: { kind: 'object-storage' },
+      billing: v({
+        'storage-gb-month': 'blob-storage',
+        'object-writes': 'blob-advanced-operations',
+        'object-reads': 'blob-simple-operations',
+        'egress-gb': 'blob-data-transfer',
+      }),
     },
     {
       id: 'db',
