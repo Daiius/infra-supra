@@ -349,7 +349,7 @@ export const CONTRACT_OPERATIONS: Scenario = {
   startCash: 60,
   // フレームワーク（prd/10 F-04）。既定は Next.js。業務アプリは SPA で作ることも多いので選べる
   frameworks: {
-    allowed: ['nextjs', 'vite-spa', 'astro'],
+    allowed: ['nextjs', 'vite-spa', 'astro', 'nextjs-export'],
     default: 'nextjs',
     // Astro（D-68）: 画面はすべてログインの要る SSR で、静的にビルドするページが無い。表・フォームが画面の大半なので、
     // 初回表示は軽くならないとみなす（仮定）
@@ -404,6 +404,13 @@ export const CONTRACT_OPERATIONS: Scenario = {
         app: [
           'ページはすべてアダプターで SSR（ログインが要る）。静的にビルドするページは無く、ビルドし直しは起きない',
           '表・フォームなど動きのある部品が画面の大半で、ブラウザの JS は Next.js と同じくらいとみなす（ゲーム上の仮定）',
+        ],
+      },
+      'nextjs-export': {
+        note: "画面ごとの HTML をビルドのときに作り（output: 'export'）、中身はブラウザから API で取る。ログインの要る画面ばかりなので、ビルドし直しは起きない",
+        app: [
+          '画面ごとの HTML をビルドのときに作り、中身はブラウザ（Client Component）が API で取る（サーバーを持たない。SPA と同じく、画面の中身の API が 1 PV あたり 1 回増える）',
+          'ログインの要る画面ばかりで、記事のように中身を HTML に入れるページが無いので、ビルドし直しは起きない。JS の量は Next.js と同じとみなす（ゲーム上の仮定）',
         ],
       },
       'vite-spa': {

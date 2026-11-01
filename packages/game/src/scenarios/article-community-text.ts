@@ -32,6 +32,16 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
         '記事ごとの SNS のカード（OGP）は HTML に入る。コメントはアイランドが API で読む',
       ],
     },
+    'nextjs-export': {
+      note: "記事はビルドのときに静的な HTML にし（output: 'export'）、マイページなどの中身はブラウザから API で取る。記事ごとの SNS のカード（OGP）は HTML に入る。記事の更新はビルドし直し",
+      app: [
+        '記事ページ（2,000 ページ）はビルドのときに静的な HTML にし、事業者の静的な配信から返す。サーバーを持たない（ISR・SSR・Cookie・Server Actions・Proxy は使えない）',
+        'マイページなどは静的な HTML の上で、ブラウザ（Client Component）が API で中身を取る（SPA と同じく、中身の API が 1 PV あたり 1 回増える。API の置き場は SPA と同じく選べる）',
+        '記事の投稿・編集はビルドし直しで反映する（間隔は設定「ビルドの間隔」。1 回のビルドの時間は Astro と同じとみなす: 記事 1,000 ページあたり 0.5 分 + 1 分）。ビルドの時間は Workers Builds・Vercel のビルドの料金、Netlify はデプロイの回数で数える（VPS は同じホスト、AWS は手元か CI でビルドし、数えない）',
+        '画像の部品（next/image）は既定のローダーが使えない。Cloudflare Images・Netlify Image CDN は変換の URL を返すローダーで使え、Vercel の画像の最適化・VPS のホストでの変換は選べない（既定は投稿のときに縮める）',
+        '初回表示・JS の量は Next.js と同じとみなす。記事ごとの SNS のカード（OGP）は HTML に入る',
+      ],
+    },
     'vite-spa': {
       note: '記事・マイページの中身は API で取る（記事は常に新しい）。記事ごとの SNS のカードは前処理の部品を付けないと出ない',
       app: [

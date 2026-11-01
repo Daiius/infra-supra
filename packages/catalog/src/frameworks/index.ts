@@ -5,13 +5,26 @@
 import type { WorkloadInput } from 'estimator';
 import type { Platform } from '../stacks/index.ts';
 
-export type FrameworkId = 'nextjs' | 'vite-spa' | 'astro';
+export type FrameworkId = 'nextjs' | 'vite-spa' | 'astro' | 'nextjs-export';
+
+/**
+ * サーバーで HTML を描かず、ログインの要る中身をブラウザが API で取るか（Vite の SPA と Next.js の静的書き出し。D-80）。
+ * 構成は SPA と同じ形（静的な配信 + API。API の置き場は D-65 の仕組み）になる。
+ */
+export const browserCallsApi = (f: FrameworkId | undefined): boolean =>
+  f === 'vite-spa' || f === 'nextjs-export';
+
+/** 記事を静的なページにし、更新をビルドし直しで反映するか（Astro・Next.js の静的書き出し。D-68・D-80）。 */
+export const rebuildsStaticPages = (f: FrameworkId | undefined): boolean =>
+  f === 'astro' || f === 'nextjs-export';
 
 type Source = { url: string; retrievedAt: string };
 const R = '2026-11-01';
 const src = (url: string): Source => ({ url, retrievedAt: R });
-/** Astro の調査の取得日（D-68）。 */
+/** Astro の調査の取得日（D-68）。Next.js の静的書き出し（D-80）も同じ日。 */
 const src2 = (url: string): Source => ({ url, retrievedAt: '2026-11-02' });
+/** Next.js の静的書き出しの公式の文書（2026-08-09 更新・2026-11-02 取得。D-80）。 */
+const NEXT_EXPORT_DOC = 'https://nextjs.org/docs/app/guides/static-exports';
 
 export type FrameworkProfile = {
   id: FrameworkId;
@@ -51,6 +64,16 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
     sources: [
       src2('https://docs.astro.build/en/guides/on-demand-rendering/'),
       src2('https://docs.astro.build/en/concepts/islands/'),
+    ],
+  },
+  'nextjs-export': {
+    id: 'nextjs-export',
+    label: 'Next.js（静的書き出し）',
+    renderingModes: ['static', 'spa'],
+    note: "next.config の output: 'export' で、ルートごとの HTML をビルドのときに作る（サーバーを持たない）。記事ごとの SNS のカード（OGP）は HTML に入る。ISR・SSR・Cookie・Server Actions・リクエストに依る Route Handler・Proxy（Middleware）・既定のローダーでの画像の最適化は使えないので、マイページなどの中身はブラウザ（Client Component）から API で取り、記事の更新はビルドし直しで反映する",
+    sources: [
+      src2(NEXT_EXPORT_DOC),
+      src2('https://nextjs.org/docs/app/api-reference/components/image'),
     ],
   },
 };
@@ -177,6 +200,77 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     support: 'unsupported',
     note: 'OpenNext は Next.js のビルド出力を直す道具で、Astro には使えない',
     sources: [src2('https://docs.astro.build/en/guides/deploy/aws/')],
+  },
+  // Next.js の静的書き出し（D-80）。out/ の静的なファイルを事業者の静的な配信から返し、API は SPA と同じ置き場（D-65）。
+  // 画像は既定のローダーが使えないので、変換のサービスの URL を返すローダー（loaderFile）か、最適化しない（unoptimized）か、投稿のときに縮める
+  {
+    framework: 'nextjs-export',
+    platform: 'cloudflare',
+    adapter: 'Workers の静的アセット + 同じ Worker の API',
+    support: 'native',
+    note: 'out/ を静的アセットで配る（Worker を起動しない）。/blog/post-1 は既定の html_handling（auto-trailing-slash）で /blog/post-1.html を返す。API（/api/*）は同じ Worker。画像は Cloudflare の公式の Next.js のローダー（/cdn-cgi/image/ の URL）で Images の変換を使える。記事の更新は Workers Builds でビルドし直す',
+    sources: [
+      src2(NEXT_EXPORT_DOC),
+      src2(
+        'https://developers.cloudflare.com/workers/static-assets/routing/advanced/html-handling/',
+      ),
+      src2(
+        'https://developers.cloudflare.com/images/transform-images/integrate-with-frameworks/',
+      ),
+      src2(
+        'https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/',
+      ),
+    ],
+  },
+  {
+    framework: 'nextjs-export',
+    platform: 'vercel',
+    adapter: '静的 + Vercel Functions の API',
+    support: 'native',
+    note: 'out/ を CDN から配り、API は同じプロジェクトの関数。Vercel の画像の最適化は next/image の既定のローダー（/_next/image）で使う形で、静的書き出しでは既定のローダーが使えない（他のフレームワークの /_vercel/image は Build Output API の設定。Next.js の静的書き出しから使う手順は未確認）ので、画像は投稿のときに縮める・最適化しない・他の事業者の変換のどれか。記事の更新は Vercel のビルドでビルドし直す',
+    sources: [
+      src2(NEXT_EXPORT_DOC),
+      src2('https://vercel.com/docs/image-optimization'),
+      src2('https://vercel.com/docs/builds/managing-builds'),
+    ],
+  },
+  {
+    framework: 'nextjs-export',
+    platform: 'sakura',
+    adapter: 'nginx で静的 + 同じホストの Node の API',
+    support: 'native',
+    note: 'nginx が out/ を配る（公式の例: try_files $uri $uri.html $uri/ =404）。API は同じ VPS の Node。next start が無いので、ホストでの画像の変換（next/image の既定のローダー）は使えない。ビルドも VPS の上（ビルドの CPU は数えていない・仮定）',
+    sources: [src2(NEXT_EXPORT_DOC)],
+  },
+  {
+    framework: 'nextjs-export',
+    platform: 'aws',
+    adapter: 'S3 + CloudFront + Lambda（API Gateway の HTTP API）',
+    support: 'native',
+    note: 'out/ を S3 に置いて CloudFront で配り、API は HTTP API の後ろの Lambda（SPA と同じ形）。ビルドは手元か CI（GitHub Actions など）で行う前提で、ビルドの費用は数えない（仮定）。デプロイのたびの CloudFront の無効化（/* は 1 パス）も数えていない',
+    sources: [
+      src2(NEXT_EXPORT_DOC),
+      src2('https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/'),
+    ],
+  },
+  {
+    framework: 'nextjs-export',
+    platform: 'aws-opennext',
+    adapter: 'なし（OpenNext はサーバーの出力を直す道具）',
+    support: 'unsupported',
+    note: '静的書き出しにはサーバーが無いので OpenNext は使わない。AWS（S3 + CloudFront）の構成を選ぶ',
+    sources: [src2('https://opennext.js.org/aws')],
+  },
+  {
+    framework: 'nextjs-export',
+    platform: 'netlify',
+    adapter: '静的 + Netlify Functions の API',
+    support: 'native',
+    note: 'out/ を CDN から配り、API は同じサイトの Netlify Functions。画像は Netlify Image CDN を /.netlify/images の URL で使える（「For all other frameworks, you can use Netlify Image CDN directly」。ローダーで URL を返す）。ビルドし直しは本番のデプロイ 1 回ごとにクレジットを使う',
+    sources: [
+      src2(NEXT_EXPORT_DOC),
+      src2('https://docs.netlify.com/build/image-cdn/overview/'),
+    ],
   },
   // AWS（prd/11 段 1・D-50）
   {
@@ -372,4 +466,19 @@ export function toAstro(
         }
       : {}),
   };
+}
+
+/**
+ * テンプレートの Workload を Next.js の静的書き出しの形に書き換える（D-80）。ISR だったルート（全員に同じ中身の記事）は
+ * ビルドのときに HTML にし（Astro と同じく更新はビルドし直し）、SSR だったルート（個人化）はビルドした HTML の上で
+ * Client Component が API で中身を取る（SPA と同じく、ページの中身はデータの API）。JS・CSS は Next.js のまま。
+ * 1 回のビルドの時間は Astro と同じ式（minutesPerBuild）を使う（ゲーム上の仮定）。
+ */
+export function toNextExport(
+  w: WorkloadInput,
+  spa: SpaShape,
+  minutesPerBuild: AstroShape['minutesPerBuild'],
+  build: { updatesPerMonth: number; intervalSeconds?: number },
+): WorkloadInput {
+  return toSpa(toAstro(w, { assetsFactor: 1, minutesPerBuild }, build), spa);
 }

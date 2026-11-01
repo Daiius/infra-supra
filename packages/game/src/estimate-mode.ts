@@ -28,7 +28,7 @@ export function estimateComponents(
   const platform = STACKS[stackIndex]!.provider;
   const base: Choices = {
     ...DEFAULT_CHOICES[platform],
-    ...frameworkDefaults(framework),
+    ...frameworkDefaults(framework, platform, sc),
   };
   let chosen = validSetupChoices(sc, stackIndex, framework, choices);
   // 選択でスロットが増減する（API を他の事業者に置くと DB のスロットが消える。D-65）ので、埋まるまで繰り返す

@@ -124,6 +124,16 @@ describe('compareStacks', () => {
     expect(cur.totalUsd).toBeCloseTo(runEstimate(i).totalUsd, 9);
     const astro = compareStacks(normalizeInput({ framework: 'astro' }));
     expect(astro.some((r) => r.stack.startsWith('aws'))).toBe(false);
+    // Next.js の静的書き出し（D-80）: AWS は S3 + CloudFront に載り、OpenNext は使わない。Vercel・VPS の画像は投稿のときに縮める
+    const ex = compareStacks(normalizeInput({ framework: 'nextjs-export' }));
+    expect(ex.some((r) => r.stack === 'aws-amplify')).toBe(true);
+    expect(ex.some((r) => r.stack.startsWith('aws-opennext'))).toBe(false);
+    const v = normalizeInput({
+      framework: 'nextjs-export',
+      stack: 'vercel-supabase-pro',
+    });
+    expect(v.parts.images).toBe('resize');
+    expect(runEstimate(v).totalUsd).toBeGreaterThan(0);
   });
 
   it('並べ替え: 費用の安い順・高い順', () => {

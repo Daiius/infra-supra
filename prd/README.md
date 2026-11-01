@@ -54,7 +54,7 @@
   | Neon | Vercel・Netlify の DB の他の事業者の部品（従量の Postgres） | D-77 |
 
   事業者をまたぐ部品（画像だけ Cloudflare・API を Workers + D1 に・Cloudflare の静的 + AWS / VPS の API・DB だけ Neon）は、公式で確かめた組だけを catalog の `CROSS_PAIRS` で許す（D-52・D-65・D-67・D-69・D-77。[11](./11-aws-and-cross-provider.md) §2・[10](./10-framework-branch.md) §9）。
-- **対象のフレームワーク**: Next.js（App Router）・Vite（SPA）+ API・Astro（[06](./06-frameworks.md)・[10](./10-framework-branch.md)・D-34・D-68）。vinext はフレームワークではなく、Next.js を Cloudflare に載せる経路（D-08）。Astro × AWS は公式のアダプターが無いので対象外。
+- **対象のフレームワーク**: Next.js（App Router）・Vite（SPA）+ API・Astro・Next.js の静的書き出し（`output: 'export'`）（[06](./06-frameworks.md)・[10](./10-framework-branch.md)・D-34・D-68・D-80）。vinext はフレームワークではなく、Next.js を Cloudflare に載せる経路（D-08）。Astro × AWS は公式のアダプターが無いので対象外。
 - **対象外**: 企画書 §8 のとおり（WebRTC の詳細・動画エンコード・マルチリージョン・障害伝播・認証など）。遅延は計算しない（AX-13）。AWS の新規アカウントの 1 回きりのクレジットは入れない（AX-06）。
 
 ## 文書
@@ -71,7 +71,7 @@
 | [07-game-design.md](./07-game-design.md) | ゲームデザイン（満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 |
 | [08-roadmap.md](./08-roadmap.md) | フェーズの状態（済み・残り）・見積モードの今の形・Phase 1 のタスク分解 |
 | [09-scenario-contract.md](./09-scenario-contract.md) | 2 本目のシナリオ: 受託先の業務アプリの運用（テンプレート・出来事・確定した値と基準プレイ） |
-| [10-framework-branch.md](./10-framework-branch.md) | フレームワークの分岐（Vite の SPA か Next.js か）・API の応答のキャッシュ・API の置き場（段 1〜3）・Astro の API の置き場。確定・実装済み |
+| [10-framework-branch.md](./10-framework-branch.md) | フレームワークの分岐（Vite の SPA か Next.js か）・API の応答のキャッシュ・API の置き場（段 1〜3）・Astro の API の置き場・Next.js の静的書き出し（§11）。確定・実装済み |
 | [11-aws-and-cross-provider.md](./11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext・Aurora 系・CloudFront の定額）・事業者をまたぐ構成・Netlify・Neon。論点 AX-01〜14 は D-50 で決定・実装済み |
 | [12-external-scenarios-and-ranking.md](./12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod）と再生による検証のランキング。**下書き・未実装・未決 ES-01〜16** |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |

@@ -17,7 +17,10 @@ import {
   SLOT_LABELS,
   frameworkSupported,
   STACK_DEFS,
+  browserCallsApi,
+  rebuildsStaticPages,
   toAstro,
+  toNextExport,
   toSpa,
   type Choices,
   type FrameworkId,
@@ -522,12 +525,27 @@ export function frameworksOf(sc: Scenario): {
   return sc.frameworks ?? { allowed: ['nextjs'], default: 'nextjs' };
 }
 
-/** フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。 */
-export function frameworkDefaults(framework: FrameworkId): Choices {
+/**
+ * フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。
+ * Next.js の静的書き出し（D-80）は next/image の既定のローダーが使えないので、閲覧のときに変換する事業者の画像の部品
+ * （Vercel の画像の最適化・VPS のホストで変換）が無い。platform を渡すと、その事業者では投稿のときに縮める部品を既定にする。
+ * シナリオが画像のスロットを隠しているとき（受託の添付ファイル）は、画像の部品は効かせないので替えない。
+ */
+export function frameworkDefaults(
+  framework: FrameworkId,
+  platform?: Platform,
+  scenario?: Pick<Scenario, 'hidden'>,
+): Choices {
   // API の置き場の既定は同じ事業者（SPA は D-65・Next.js は D-67）
-  return framework === 'vite-spa'
-    ? { ogp: 'none', apiCache: 'none', api: 'same' }
-    : { api: 'same' };
+  if (framework === 'vite-spa')
+    return { ogp: 'none', apiCache: 'none', api: 'same' };
+  if (
+    framework === 'nextjs-export' &&
+    (platform === 'vercel' || platform === 'sakura') &&
+    !scenario?.hidden?.slots?.includes('images')
+  )
+    return { api: 'same', images: 'resize' };
+  return { api: 'same' };
 }
 
 /**
@@ -573,13 +591,14 @@ const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
   nextjs: ['apiCacheTtl', 'buildInterval'],
   'vite-spa': ['isr', 'buildInterval'],
   astro: ['isr', 'apiCacheTtl'],
+  'nextjs-export': ['isr', 'apiCacheTtl'],
 };
 
 /** revalidateSec をこのフレームワークで何の設定として出すか（ISR の間隔・API のキャッシュの期間・ビルドの間隔）。 */
 export function revalidateSettingOf(framework: FrameworkId): SettingKey {
   return framework === 'vite-spa'
     ? 'apiCacheTtl'
-    : framework === 'astro'
+    : rebuildsStaticPages(framework)
       ? 'buildInterval'
       : 'isr';
 }
@@ -706,14 +725,19 @@ export function stackName(
     return withFramework ? `${base}（Astro）` : base;
   }
   // Next.js のサーバーから別の事業者の API を呼ぶ（D-67）: Next.js を載せている側 + API と DB
-  if (framework !== 'vite-spa')
+  if (!browserCallsApi(framework))
     return api
       ? `${NEXT_HOST_NAME[s.id] ?? s.name.split(' + ')[0]} + ${api}`
       : s.name;
   const base = api
     ? `${s.provider === 'aws' ? 'AWS の S3 + CloudFront' : s.name.split(' + ')[0]} の静的 + ${api}`
     : s.name.replace(' + vinext', '');
-  return withFramework ? `${base}（Vite の SPA）` : base;
+  // Next.js の静的書き出し（D-80）は SPA と同じ形（静的 + API）で、添える名前だけ違う
+  const label =
+    framework === 'nextjs-export'
+      ? '（Next.js の静的書き出し）'
+      : '（Vite の SPA）';
+  return withFramework ? `${base}${label}` : base;
 }
 
 const books = loadPriceBooks();
@@ -918,17 +942,22 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // Astro は記事（ISR だったルート）を静的なページにし、更新をビルドし直しで反映する（D-68）。ビルドを起こす更新は
   // オンデマンドの再検証と同じ数え方の内容の更新、間隔は revalidateSec（オンデマンドは更新のたび）
   const astro = sc.frameworks?.astro?.shape;
+  const build = {
+    updatesPerMonth: onDemandUpdates(sc, p.pv, w),
+    ...(isOnDemand(p.settings)
+      ? {}
+      : { intervalSeconds: p.settings.revalidateSec }),
+  };
+  // Next.js の静的書き出し（D-80）: 記事は Astro と同じく静的にビルドし直し（1 回のビルドの時間は Astro と同じ式・仮定）、
+  // マイページは SPA と同じく Client Component が API で中身を取る（API の CPU は SPA の dataCpuFactor 倍）
   const app =
     p.framework === 'vite-spa' && shape
       ? toSpa(w, shape, cache ? { cacheContent: true } : {})
       : p.framework === 'astro' && astro
-        ? toAstro(w, astro, {
-            updatesPerMonth: onDemandUpdates(sc, p.pv, w),
-            ...(isOnDemand(p.settings)
-              ? {}
-              : { intervalSeconds: p.settings.revalidateSec }),
-          })
-        : w;
+        ? toAstro(w, astro, build)
+        : p.framework === 'nextjs-export' && shape && astro
+          ? toNextExport(w, shape, astro.minutesPerBuild, build)
+          : w;
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
   const out = applyComponentsToWorkload(app, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
@@ -1097,8 +1126,8 @@ function onDemandBlocker(
 ): { slot: SlotId; label: string; reason: string } | undefined {
   // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
   if (framework === 'vite-spa') return undefined;
-  // Astro は記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-68）
-  if (framework === 'astro') return undefined;
+  // Astro・Next.js の静的書き出しは記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-68・D-80）
+  if (rebuildsStaticPages(framework)) return undefined;
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
@@ -1135,10 +1164,10 @@ export function requirementStatus(
         current: true,
       },
     ];
-  if (framework === 'astro')
+  if (rebuildsStaticPages(framework))
     return [
       {
-        label: 'Astro',
+        label: FRAMEWORKS[framework].label,
         ok: true,
         reason:
           '記事を更新するたびにビルドし直す（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増える',
@@ -1184,11 +1213,12 @@ function componentsAfterMigration(
   to: number,
   mods: WorkloadMods,
   framework: FrameworkId,
+  scenario: Scenario,
 ): Choices {
   const platform = STACKS[to]!.provider;
   const base = {
     ...DEFAULT_CHOICES[platform],
-    ...frameworkDefaults(framework),
+    ...frameworkDefaults(framework, platform, scenario),
   };
   if (mods.realtime && platform === 'cloudflare')
     base.realtime = 'durable-objects';
@@ -1494,7 +1524,11 @@ function upkeepFor(
           upkeepOf(
             sc,
             state.migration.to,
-            frameworkDefaults(state.framework),
+            frameworkDefaults(
+              state.framework,
+              STACKS[state.migration.to]!.provider,
+              sc,
+            ),
             state.framework,
           ),
         ]
@@ -2106,7 +2140,7 @@ export function componentSlots(state: GameState): {
   const platform = STACKS[state.stackIndex]!.provider;
   const current = {
     ...DEFAULT_CHOICES[platform],
-    ...frameworkDefaults(state.framework),
+    ...frameworkDefaults(state.framework, platform, scenarioOf(state)),
     ...state.components,
   };
   return (Object.keys(SLOT_LABELS) as SlotId[])
@@ -2649,7 +2683,7 @@ export function newGame(
     framework: app,
     components: {
       ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider],
-      ...frameworkDefaults(app),
+      ...frameworkDefaults(app, STACKS[stackIndex]!.provider, scenario),
       ...chosen,
     },
     storageOption: false,
@@ -3068,6 +3102,7 @@ export function playMonth(input: GameState): GameState {
           to,
           state.mods,
           state.framework,
+          sc,
         );
         return estimate({
           workload: workloadFor(sc, {
@@ -3344,15 +3379,20 @@ export function playMonth(input: GameState): GameState {
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
   const spa = state.framework === 'vite-spa';
   const astro = state.framework === 'astro';
+  // Next.js の静的書き出し（D-80）: 記事は Astro と同じく静的なページ（鮮度はビルドの間隔）、マイページの中身は SPA と同じく API
+  const nextExport = state.framework === 'nextjs-export';
+  const rebuilds = astro || nextExport;
   // Astro の記事は静的なページで、鮮度はビルドの間隔で決まる（ISR のキャッシュの部品は無い。D-68）
   const uncached = spa
     ? !apiCacheActive(platformNow, state.components, state.framework)
-    : !astro && comps.isrCache === 'none';
+    : !rebuilds && comps.isrCache === 'none';
   // SPA の API の CPU（速さの「SSR の重さ」の代わりに使う。SSR の CPU × dataCpuFactor）
   const firstLoad = spa && (sc.frameworks?.spa?.firstLoadHeavy ?? false);
   // Astro の初回表示の軽さ（JS はアイランドの分だけ。速さの重さを 1 つ減らす。ゲーム上の仮定・D-68）
   const firstLoadLight =
     astro && (sc.frameworks?.astro?.firstLoadLight ?? false);
+  // 静的書き出しのマイページは、サーバーの描画が無い代わりにブラウザが HTML → JS → API の順に待つ。速さ・初回表示は
+  // Next.js と同じ扱い（SSR の CPU の値をそのまま重さに使う。ゲーム上の仮定・D-80）
   const serverCpuMs = spa
     ? ssrCpuMs * (sc.frameworks?.spa?.shape.dataCpuFactor ?? 1)
     : ssrCpuMs;
@@ -3402,7 +3442,8 @@ export function playMonth(input: GameState): GameState {
     switching: state.switching,
     ssrCpuMs: serverCpuMs,
     spa,
-    astro,
+    apiOnly: nextExport,
+    astro: rebuilds,
     settings: viewed,
     heaviness: speedHeaviness(
       {
@@ -3476,6 +3517,7 @@ export function playMonth(input: GameState): GameState {
       migration.to,
       state.mods,
       state.framework,
+      scenarioOf(state),
     );
     // 乗り換え・契約し直しは新しいサーバーなので、ストレージ変更オプションは付いていない
     storageOption = false;
@@ -3830,7 +3872,9 @@ function stageReasons(
     ssrCpuMs: number;
     /** SPA（速さの理由を「API の CPU・初回表示」で書く）。 */
     spa: boolean;
-    /** Astro（鮮度の理由を「ビルドの間隔」で書く。D-68）。 */
+    /** Next.js の静的書き出し（速さは Next.js と同じ扱いで、理由を「API を待つブラウザの描画」で書く。D-80）。 */
+    apiOnly?: boolean;
+    /** 記事をビルドし直す（Astro・Next.js の静的書き出し。鮮度の理由を「ビルドの間隔」で書く。D-68・D-80）。 */
     astro?: boolean;
     settings: Settings;
     heaviness: number;
@@ -3858,7 +3902,9 @@ function stageReasons(
       ? `前提に当たった: ${c.throttling[0]!.text}`
       : c.spa
         ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
-        : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`;
+        : c.apiOnly
+          ? `重さ ${c.heaviness}（API を待つブラウザの描画 ${c.ssrCpuMs} ms 相当・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
+          : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`;
   if (stages.quality !== 'good')
     out.quality = c.qualityReason ?? `画像 ${c.settings.imageKB} KB`;
   if (stages.freshness !== 'good')
