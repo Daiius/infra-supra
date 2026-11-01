@@ -110,6 +110,12 @@ export function settingsOf(template: TemplateId, framework: FrameworkId) {
   };
 }
 
+/** 席の数を 1〜SEATS_MAX の整数に直す（読めない値は 1）。 */
+export const normalizeSeats = (n: number | undefined): number =>
+  n !== undefined && Number.isFinite(n)
+    ? Math.min(SEATS_MAX, Math.max(1, Math.round(n)))
+    : 1;
+
 /**
  * 入力を選べる組み合わせに直す（URL から読んだ値・テンプレートを替えた後など）。選べない値は既定にする。
  * 部品は始める画面と同じ規則で選べるものだけを残し、残りは既定（game の estimateComponents）。
@@ -147,10 +153,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     settings.variants && VARIANTS.some((v) => v === raw.variants)
       ? raw.variants!
       : 3;
-  const seats =
-    raw.seats !== undefined && Number.isFinite(raw.seats)
-      ? Math.min(SEATS_MAX, Math.max(1, Math.round(raw.seats)))
-      : 1;
+  const seats = normalizeSeats(raw.seats);
   return {
     template,
     pv,
@@ -288,13 +291,18 @@ export type TaxLine = {
   subtotalJpy: number;
   /** 足す消費税（円）。added の事業者だけ。 */
   taxJpy: number;
+  /** 税込の価格に含まれる消費税（円）。included の事業者だけ。合計には足さない（OCL-66B5BAF1）。 */
+  includedTaxJpy: number;
   sources: { url: string; retrievedAt: string }[];
 };
 
 export type TaxView = {
   /** 税込の目安（円）。未確認の事業者は税抜のまま足す。 */
   totalJpy: number;
+  /** 税抜の価格に足した消費税（円）。 */
   taxJpy: number;
+  /** 税込の価格に含まれる消費税（円）。totalJpy に含まれていて、足してはいない。 */
+  includedTaxJpy: number;
   lines: TaxLine[];
   /** 消費税の扱いを確かめられなかった事業者。 */
   unconfirmed: string[];
@@ -352,17 +360,24 @@ export function japanTax(
         t?.premise ?? `${s.provider} の消費税の扱いは未確認（税抜のまま）`,
       subtotalJpy,
       taxJpy: 0,
+      includedTaxJpy: 0,
       sources: t?.sources ?? [],
     });
   }
   // 税は事業者の小計（クレジットを引いた後）に当てる
-  for (const l of lines)
-    if (l.status === 'added')
-      l.taxJpy = Math.max(0, l.subtotalJpy) * JP_CONSUMPTION_TAX_RATE;
+  // 税込の価格は内税を割り戻すだけで足さない
+  for (const l of lines) {
+    const base = Math.max(0, l.subtotalJpy);
+    if (l.status === 'added') l.taxJpy = base * JP_CONSUMPTION_TAX_RATE;
+    if (l.status === 'included')
+      l.includedTaxJpy =
+        (base * JP_CONSUMPTION_TAX_RATE) / (1 + JP_CONSUMPTION_TAX_RATE);
+  }
   const taxJpy = lines.reduce((a, l) => a + l.taxJpy, 0);
   return {
     totalJpy: lines.reduce((a, l) => a + l.subtotalJpy, 0) + taxJpy,
     taxJpy,
+    includedTaxJpy: lines.reduce((a, l) => a + l.includedTaxJpy, 0),
     lines,
     unconfirmed: lines
       .filter((l) => l.status === 'unconfirmed')

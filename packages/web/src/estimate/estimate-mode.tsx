@@ -29,6 +29,7 @@ import {
   fromQuery,
   IMAGE_FORMATS,
   normalizeInput,
+  normalizeSeats,
   PV_PRESETS,
   runEstimate,
   scenarioOfTemplate,
@@ -459,6 +460,12 @@ function Seats({
 }) {
   const [text, setText] = useState(String(seats));
   useEffect(() => setText(String(seats)), [seats]);
+  // 直した値を欄にも戻す（値が変わらないと上の effect が走らないため。OCL-5160B6D1）
+  const commit = () => {
+    const n = normalizeSeats(text.trim() === '' ? undefined : Number(text));
+    setText(String(n));
+    setInput({ seats: n });
+  };
   return (
     <Field
       label="チームの人数（管理画面を使う人）"
@@ -473,9 +480,9 @@ function Seats({
         step={1}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onBlur={() => setInput({ seats: Number(text) })}
+        onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') setInput({ seats: Number(text) });
+          if (e.key === 'Enter') commit();
         }}
       />
     </Field>
@@ -538,7 +545,9 @@ function Tax({ tax }: { tax: TaxView }) {
       <p>
         <span className="font-semibold">税込の目安 約 {jpy(tax.totalJpy)}</span>
         <span className="opacity-70">
-          （うち消費税 約 {jpy(tax.taxJpy)}
+          （うち消費税 約 {jpy(tax.taxJpy + tax.includedTaxJpy)}
+          {tax.includedTaxJpy > 0 &&
+            `: 足した分 ${jpy(tax.taxJpy)}・税込の価格に含まれる分 ${jpy(tax.includedTaxJpy)}`}
           {tax.unconfirmed.length > 0 &&
             `・${tax.unconfirmed.join('・')} は消費税の扱いが未確認のため税抜のまま`}
           ）
@@ -557,7 +566,9 @@ function Tax({ tax }: { tax: TaxView }) {
                 {TAX_BADGE[l.status]}
               </span>
               {l.provider}: {l.premise}
-              {l.status === 'added' && `（+${jpy(l.taxJpy)}）`}{' '}
+              {l.status === 'added' && `（+${jpy(l.taxJpy)}）`}
+              {l.status === 'included' &&
+                `（うち消費税 ${jpy(l.includedTaxJpy)}）`}{' '}
               {l.sources.map((x) => (
                 <a
                   key={x.url}

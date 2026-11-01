@@ -10,6 +10,7 @@ import {
   fromQuery,
   japanTax,
   normalizeInput,
+  normalizeSeats,
   runEstimate,
   sortRows,
   toQuery,
@@ -270,6 +271,10 @@ describe('チームの人数（席。D-76）', () => {
     expect(normalizeInput({ seats: 0 }).seats).toBe(1);
     expect(normalizeInput({ seats: 1e6 }).seats).toBe(100);
     expect(normalizeInput({ seats: 2.6 }).seats).toBe(3);
+    // 入力欄の確定で使う（空・範囲外を直した値を欄にも戻す。OCL-5160B6D1）
+    expect(normalizeSeats(undefined)).toBe(1);
+    expect(normalizeSeats(Number.NaN)).toBe(1);
+    expect(normalizeSeats(101)).toBe(100);
   });
 
   const base = (stack: string, seats: number) =>
@@ -339,6 +344,8 @@ describe('日本から契約するときの消費税（D-76）', () => {
     expect(t.taxJpy).toBeCloseTo((10 + 1) * 150 * 0.1, 9);
     expect(t.totalJpy).toBeCloseTo((10 + 1 + 20) * 150 + 1000 + t.taxJpy, 9);
     expect(t.unconfirmed).toEqual(['vercel']);
+    // 税込の価格の内税は割り戻して出すが、合計には足さない（OCL-66B5BAF1）
+    expect(t.includedTaxJpy).toBeCloseTo(1000 * (0.1 / 1.1), 9);
     expect(t.lines.find((l) => l.provider === 'sakura-vps')!.status).toBe(
       'included',
     );
