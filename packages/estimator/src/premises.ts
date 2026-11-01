@@ -280,7 +280,7 @@ export function assessPremises(input: {
       threshold({
         ...base,
         id: `host:line:${node.id}`,
-        text: `回線 ${c.lineMbps} Mbps は共有で、使えるのはその一部（ピーク時間帯）`,
+        text: `回線 ${c.lineMbps} Mbps は共有で、使えるのはその一部（ピーク時間帯。話題・Bot の上乗せは短い期間に集中すると仮定）`,
         effect: 'throttle',
         used: h.peakMbps,
         limit: c.lineMbps * c.lineUsable,
@@ -290,7 +290,7 @@ export function assessPremises(input: {
       threshold({
         ...base,
         id: `host:cpu:${node.id}`,
-        text: `${c.vcpu} vCPU をピーク時間帯に使い切ると遅くなる`,
+        text: `${c.vcpu} vCPU をピーク時間帯に使い切ると遅くなる（話題・Bot の上乗せは短い期間に集中すると仮定）`,
         effect: 'throttle',
         used: h.peakCores,
         limit: c.vcpu * c.cpuUtilMax,
