@@ -294,6 +294,20 @@ describe('日次のプールの前提は平日と休日の両方で判定する'
     expect(small.premises[0]).toMatchObject({ used: 90 });
     expect(small.premises[0]!.assumption).toBeUndefined();
   });
+
+  it('集中の指定が無ければ、曜日ごとに合算してから多いほうを取る（使用量ごとの最大を足さない。OCL-EE85F3D0）', () => {
+    // 平日に多い使用量と休日に多い使用量: 平日 60 + 30 = 90、休日 30 + 60 = 90 で上限内（使用量ごとの最大を足すと 120 になってしまう）
+    const { premises } = assess([
+      use('free', 'requests', 1500, { daily: { weekday: 60, weekend: 30 } }),
+      use('free', 'requests', 1500, {
+        nodeId: 'n2',
+        daily: { weekday: 30, weekend: 60 },
+      }),
+    ]);
+    const p = premises.find((x) => x.id.startsWith('pool:'))!;
+    expect(p).toMatchObject({ used: 90, hit: false });
+    expect(p.assumption).toBeUndefined();
+  });
 });
 
 describe('金額のクレジットの使用率（D-48）', () => {
