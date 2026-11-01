@@ -32,6 +32,7 @@ import {
   allocateEffort,
   buzzLasting,
   EFFORT,
+  FLAT_PLAN_ADJUST,
   effectiveSsrCpuMs,
   ELEMENT_LABEL,
   ELEMENTS,
@@ -2470,6 +2471,20 @@ export function playMonth(input: GameState): GameState {
   );
   const policy = r.premises.filter((p) => p.hit && p.effect === 'policy');
   const throttling = r.premises.filter((p) => p.hit && p.effect === 'throttle');
+  // CDN の定額のプランの込みを超えた前提（請求は増えない）。急増が大きいか、続けて超えると性能が調整される（D-61）
+  const prevAdjust = new Set(
+    (state.history[state.history.length - 1]?.premises ?? [])
+      .filter((p) => p.hit && p.effect === 'adjust')
+      .map((p) => p.id),
+  );
+  const adjusted = r.premises.filter(
+    (p) =>
+      p.hit &&
+      p.effect === 'adjust' &&
+      ((p.ratio ?? 0) > FLAT_PLAN_ADJUST.spikeRatio ||
+        // 続けて超えた: 前の月も同じ前提で超えていた（sustainedMonths = 2 か月）
+        prevAdjust.has(p.id)),
+  );
   const loss = sc.revenue.loss;
   let revenue =
     (sc.revenue.fixedUsdPerMonth ?? 0) +
@@ -2596,12 +2611,18 @@ export function playMonth(input: GameState): GameState {
       uncached,
       eventuallyConsistent,
       onDemandUnmet: onDemand !== undefined,
+      speedDown: adjusted.length > 0,
     },
     sat,
   );
+  if (adjusted.length)
+    notes.push(
+      'CDN の定額のプランの込みを超え続け、配信の性能が調整された（請求は増えない。ゲーム上の仮定）',
+    );
   const reasons = stageReasons(sc, stages, {
     blocking,
     throttling,
+    adjusted,
     incident,
     switching: state.switching,
     ssrCpuMs: serverCpuMs,
@@ -3006,6 +3027,8 @@ function stageReasons(
   c: {
     blocking: PlatformPremise[];
     throttling: PlatformPremise[];
+    /** 定額のプランの込みを超えて性能が調整された前提（D-61）。 */
+    adjusted: PlatformPremise[];
     incident: boolean;
     switching: boolean;
     ssrCpuMs: number;
@@ -3053,6 +3076,8 @@ function stageReasons(
     ]
       .filter(Boolean)
       .join('・');
+  if (stages.speed !== 'good' && c.adjusted.length)
+    out.speed = `配信の性能が調整された: ${c.adjusted[0]!.text}・${out.speed}`;
   if (c.imagesUnoptimized && out.speed && !c.throttling.length)
     out.speed += '（画像を最適化していない）';
   if (stages.feature !== 'good') {

@@ -13,11 +13,18 @@ const OVERAGE_SEVERITY: readonly OverageBehavior[] = [
   'block',
   'upgrade-required',
   'throttle',
+  'adjust',
   'bill',
 ];
 
 export type PremiseEffect =
-  'block' | 'throttle' | 'upgrade-required' | 'cost' | 'policy' | 'info';
+  | 'block'
+  | 'throttle'
+  | 'upgrade-required'
+  | 'adjust'
+  | 'cost'
+  | 'policy'
+  | 'info';
 
 export type PlatformPremise = {
   id: string;

@@ -21,6 +21,7 @@ export const AWS_DEFAULT_CHOICES: Choices = {
   images: 'resize',
   db: 'dynamodb',
   frontCdn: 'none',
+  cdnPlan: 'payg',
 };
 
 /** CloudFront・Amplify の CDN の画像のヒット率（仮定。Vercel の CDN と同じ値）。 */
@@ -173,6 +174,54 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     note: '定番の Postgres の最小のインスタンス（Single-AZ）。時間課金で、使われていなくても毎月かかる。アプリとの間の転送の料金は未確認で数えない',
     premiseRefs: [],
   },
+  // CloudFront の料金（D-61）。従量 / 定額のプラン。CloudFront を使う部品（SPA の配信・画像の S3 + CloudFront・前段）に効く
+  {
+    id: 'payg',
+    slot: 'cdnPlan',
+    platform: 'aws',
+    label: '従量（常時無料つき）',
+    note: 'リクエスト $0.012 / 1 万・転送 $0.114/GB（日本）。月 1,000 万リクエスト・1 TB までは常時無料。超えた分だけ請求が増える',
+    premiseRefs: [
+      'pool:aws:cloudfront:cloudfront-free-transfer',
+      'pool:aws:cloudfront:cloudfront-free-requests',
+    ],
+  },
+  {
+    id: 'flat-free',
+    slot: 'cdnPlan',
+    platform: 'aws',
+    label: '定額 Free（月 $0）',
+    note: '込みはリクエスト月 100 万・転送 100 GB。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できない。Amplify の前段に使う構成は公式に未確認',
+    premiseRefs: [
+      'pool:aws:cloudfront-flat-free:flat-free-requests',
+      'pool:aws:cloudfront-flat-free:flat-free-transfer',
+      'fact:aws:cloudfront-flat-free:flat-overage',
+    ],
+  },
+  {
+    id: 'flat-pro',
+    slot: 'cdnPlan',
+    platform: 'aws',
+    label: '定額 Pro（月 $15）',
+    note: '込みはリクエスト月 1,000 万・転送 50 TB。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できない。Amplify の前段に使う構成は公式に未確認',
+    premiseRefs: [
+      'pool:aws:cloudfront-flat-pro:flat-pro-requests',
+      'pool:aws:cloudfront-flat-pro:flat-pro-transfer',
+      'fact:aws:cloudfront-flat-pro:flat-overage',
+    ],
+  },
+  {
+    id: 'flat-business',
+    slot: 'cdnPlan',
+    platform: 'aws',
+    label: '定額 Business（月 $200）',
+    note: '込みはリクエスト月 1 億 2,500 万・転送 50 TB。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できない。Amplify の前段に使う構成は公式に未確認',
+    premiseRefs: [
+      'pool:aws:cloudfront-flat-business:flat-business-requests',
+      'pool:aws:cloudfront-flat-business:flat-business-transfer',
+      'fact:aws:cloudfront-flat-business:flat-overage',
+    ],
+  },
   // SPA の部品（OGP の前処理はこの段では入れない。1 択）
   {
     id: 'none',
@@ -285,7 +334,39 @@ const s3: ArchNodeIn = {
   }),
 };
 
+/** CloudFront の料金のプラン（従量・定額。D-61）。構成の CloudFront は 1 つの distribution にまとめる。 */
+const CDN_PLANS: Record<string, string> = {
+  payg: 'cloudfront',
+  'flat-free': 'cloudfront-flat-free',
+  'flat-pro': 'cloudfront-flat-pro',
+  'flat-business': 'cloudfront-flat-business',
+};
+
+/** CloudFront のノードの課金先と、そのプランで出す事実。amplifyOrigin: Amplify をオリジンにする前段。 */
+function cdnBilling(
+  choices: Choices,
+  amplifyOrigin = false,
+): Pick<ArchNodeIn, 'billing' | 'facts'> {
+  const planId = CDN_PLANS[choices.cdnPlan ?? 'payg'] ?? 'cloudfront';
+  const flat = planId !== 'cloudfront';
+  return {
+    facts: flat
+      ? [
+          'flat-overage',
+          'flat-no-discount',
+          ...(amplifyOrigin ? ['flat-amplify-origin'] : []),
+        ]
+      : ['origin-fetch-free'],
+    billing: bill(planId, {
+      requests: 'https-requests',
+      'egress-gb': 'cloudfront-transfer-out',
+      'origin-transfer-gb': 'origin-fetch',
+    }),
+  };
+}
+
 const cloudfront = (
+  choices: Choices,
   hitRate: Partial<Record<RequestClass, number>>,
   ttlClasses: RequestClass[] = [],
 ): ArchNodeIn => ({
@@ -296,12 +377,7 @@ const cloudfront = (
     hitRate,
     ...(ttlClasses.length ? { ttlClasses } : {}),
   },
-  facts: ['origin-fetch-free'],
-  billing: bill('cloudfront', {
-    requests: 'https-requests',
-    'egress-gb': 'cloudfront-transfer-out',
-    'origin-transfer-gb': 'origin-fetch',
-  }),
+  ...cdnBilling(choices),
 });
 
 /**
@@ -352,12 +428,7 @@ function composeAmplify(
               ? { ttlClasses: ['document-isr'] as RequestClass[] }
               : {}),
           },
-          facts: ['origin-fetch-free'],
-          billing: bill('cloudfront', {
-            requests: 'https-requests',
-            'egress-gb': 'cloudfront-transfer-out',
-            'origin-transfer-gb': 'origin-fetch',
-          }),
+          ...cdnBilling(choices, true),
         },
       ]
     : [];
@@ -406,7 +477,7 @@ function composeAmplify(
             billing: amplify({ 'image-transformations': 'image-optimization' }),
           } as ArchNodeIn,
         ]
-      : [cloudfront({ 'image-read': IMAGE_CDN_HIT_RATE })]),
+      : [cloudfront(choices, { 'image-read': IMAGE_CDN_HIT_RATE })]),
     s3,
     db,
     ...standbyDb,
@@ -447,6 +518,7 @@ function composeSpa(
   const nodes: ArchNodeIn[] = [
     // シェル・JS・CSS は S3 に置き、CloudFront がすべて返す（オリジンの取得は無料・件数は無視できる）
     cloudfront(
+      choices,
       { asset: 1, 'document-static': 1, 'image-read': IMAGE_CDN_HIT_RATE },
       cached ? ['api-content'] : [],
     ),
