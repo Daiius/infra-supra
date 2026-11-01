@@ -39,6 +39,7 @@ const CREDIT_INTERPRETATION = {
 const meters = (usd: number) => [
   {
     id: 'web-requests',
+    label: 'Web のリクエスト（Netlify: web requests）',
     resource: 'requests' as const,
     unit: 'request' as const,
     pricing: {
@@ -50,6 +51,7 @@ const meters = (usd: number) => [
   },
   {
     id: 'bandwidth',
+    label: '転送（Netlify: bandwidth）',
     resource: 'egress-gb' as const,
     unit: 'gb' as const,
     pricing: {
@@ -61,6 +63,7 @@ const meters = (usd: number) => [
   },
   {
     id: 'compute',
+    label: '関数の実行（Netlify: compute）',
     resource: 'memory-gb-hours' as const,
     unit: 'gb-hour' as const,
     rounding: 'not-stated' as const,
@@ -73,6 +76,7 @@ const meters = (usd: number) => [
   },
   {
     id: 'production-deploys',
+    label: '本番のデプロイ（Netlify: production deploys）',
     resource: 'deploys' as const,
     unit: 'count' as const,
     pricing: {
@@ -84,6 +88,7 @@ const meters = (usd: number) => [
   },
   {
     id: 'blobs-storage',
+    label: 'ファイルの保存量（Netlify Blobs: storage）',
     resource: 'storage-gb-month' as const,
     unit: 'gb-month' as const,
     pricing: {
@@ -265,6 +270,7 @@ export const netlify: PriceBookInput = {
       credits: [
         {
           id: 'monthly-credits',
+          label: '月のクレジット（Netlify: monthly credits）',
           amount: INCLUDED.free * CREDIT_USD.free,
           appliesTo: 'all-usage',
           onExhausted: 'block',
@@ -293,7 +299,12 @@ export const netlify: PriceBookInput = {
       id: 'personal',
       service: 'platform',
       name: 'Personal',
-      baseFee: { amount: 9, per: 'month', scope: 'account' },
+      baseFee: {
+        label: '基本料（Netlify Personal）',
+        amount: 9,
+        per: 'month',
+        scope: 'account',
+      },
       sourceIds: ['pricing', 'credits'],
       facts: FACTS,
       uptimeSla: UPTIME,
@@ -301,6 +312,7 @@ export const netlify: PriceBookInput = {
       credits: [
         {
           id: 'monthly-credits',
+          label: '月のクレジット（Netlify: monthly credits）',
           amount: INCLUDED.personal * CREDIT_USD.personal,
           appliesTo: 'all-usage',
           premise:
@@ -316,7 +328,12 @@ export const netlify: PriceBookInput = {
       id: 'pro',
       service: 'platform',
       name: 'Pro',
-      baseFee: { amount: 20, per: 'month', scope: 'account' },
+      baseFee: {
+        label: '基本料（Netlify Pro）',
+        amount: 20,
+        per: 'month',
+        scope: 'account',
+      },
       sourceIds: ['pricing', 'credits', 'plans'],
       facts: FACTS,
       uptimeSla: UPTIME,
@@ -329,6 +346,7 @@ export const netlify: PriceBookInput = {
       credits: [
         {
           id: 'monthly-credits',
+          label: '月のクレジット（Netlify: monthly credits）',
           amount: INCLUDED.pro * CREDIT_USD.pro,
           appliesTo: 'all-usage',
           premise:

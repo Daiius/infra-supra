@@ -15,6 +15,7 @@ const MEMBERS: PlanInput['members'] = {
 
 const TRANSFER: PlanInput['meters'][number] = {
   id: 'transfer',
+  label: '転送量（さくらの VPS: 転送量無制限）',
   resource: 'egress-gb',
   unit: 'gb',
   premise: 'さくらの VPS は転送量無制限（ただし回線は 100 Mbps の共有）',
@@ -63,7 +64,12 @@ export const sakuraVps: PriceBookInput = {
       id: '2gb-tokyo',
       service: 'vps',
       name: '2GB（東京）',
-      baseFee: { amount: 1_958, per: 'month', scope: 'node' },
+      baseFee: {
+        label: '月額料金（さくらの VPS 2GB）',
+        amount: 1_958,
+        per: 'month',
+        scope: 'node',
+      },
       sourceIds: ['spec'],
       members: MEMBERS,
       uptimeSla: {
@@ -90,6 +96,8 @@ export const sakuraVps: PriceBookInput = {
       addons: [
         {
           id: 'storage-change',
+          label:
+            'ストレージ変更の手数料（さくらの VPS: ストレージ変更オプション・一度だけ）',
           name: 'ストレージ変更オプション',
           oneTimeFee: 2_200,
           premise:
@@ -116,7 +124,12 @@ export const sakuraVps: PriceBookInput = {
       id: '4gb-tokyo',
       service: 'vps',
       name: '4GB（東京）',
-      baseFee: { amount: 3_960, per: 'month', scope: 'node' },
+      baseFee: {
+        label: '月額料金（さくらの VPS 4GB）',
+        amount: 3_960,
+        per: 'month',
+        scope: 'node',
+      },
       sourceIds: ['spec'],
       members: MEMBERS,
       uptimeSla: {
@@ -144,6 +157,8 @@ export const sakuraVps: PriceBookInput = {
       addons: [
         {
           id: 'storage-change',
+          label:
+            'ストレージ変更の手数料（さくらの VPS: ストレージ変更オプション・一度だけ）',
           name: 'ストレージ変更オプション',
           oneTimeFee: 4_400,
           premise:

@@ -20,6 +20,30 @@ const PRO_INTERPRETATION = {
   ],
 };
 
+/** メーターの表示名（D-75。公式の名称を括弧に残す）。Hobby・Pro で同じ。 */
+const LABELS = {
+  'build-cpu-minutes': 'ビルドの時間（Vercel: Build CPU minutes）',
+  'cdn-requests': 'CDN のリクエスト（Vercel: CDN Requests）',
+  'fast-data-transfer': 'CDN の転送（Vercel: Fast Data Transfer）',
+  'fast-origin-transfer':
+    '関数から CDN への転送（Vercel: Fast Origin Transfer）',
+  invocations: '関数の呼び出し（Vercel: Function Invocations）',
+  'active-cpu': '関数の実行時間（Vercel: Active CPU）',
+  'provisioned-memory': '関数のメモリ（Vercel: Provisioned Memory）',
+  'image-transformations': '画像の変換（Vercel: Image Transformations）',
+  'image-cache-reads': '画像キャッシュの読み取り（Vercel: Image Cache Reads）',
+  'image-cache-writes':
+    '画像キャッシュの書き込み（Vercel: Image Cache Writes）',
+  'isr-reads': 'ISR の読み取り（Vercel: ISR Reads）',
+  'isr-writes': 'ISR の書き込み（Vercel: ISR Writes）',
+  'blob-storage': 'ファイルの保存量（Vercel Blob: storage）',
+  'blob-simple-operations':
+    'ファイルの読み取り（Vercel Blob: Simple Operations）',
+  'blob-advanced-operations':
+    'ファイルのアップロード（Vercel Blob: Advanced Operations）',
+  'blob-data-transfer': 'ファイルの転送（Vercel Blob: Blob Data Transfer）',
+} as const;
+
 export const vercel: PriceBookInput = {
   schemaVersion: 1,
   provider: 'vercel',
@@ -345,6 +369,7 @@ export const vercel: PriceBookInput = {
           ],
         ].map(([id, resource, unit, pool, premise]) => ({
           id: id!,
+          label: LABELS[id as keyof typeof LABELS],
           resource: resource as never,
           unit: unit as never,
           allowancePool: pool!,
@@ -387,6 +412,7 @@ export const vercel: PriceBookInput = {
           ] as const
         ).map(([id, resource, unit, pool, premise]) => ({
           id,
+          label: LABELS[id],
           resource,
           unit,
           allowancePool: pool,
@@ -401,7 +427,13 @@ export const vercel: PriceBookInput = {
       id: 'pro',
       service: 'platform',
       name: 'Pro',
-      baseFee: { amount: 20, per: 'month', scope: 'account', perSeat: true },
+      baseFee: {
+        label: '基本料（Vercel Pro: 1 席ごと）',
+        amount: 20,
+        per: 'month',
+        scope: 'account',
+        perSeat: true,
+      },
       sourceIds: ['pro', 'pricing'],
       facts: [
         {
@@ -449,6 +481,7 @@ export const vercel: PriceBookInput = {
       credits: [
         {
           id: 'usage-credit',
+          label: '月の利用クレジット（Vercel Pro: monthly usage credit）',
           amount: 20,
           appliesTo: 'all-usage',
           premise:
@@ -463,6 +496,7 @@ export const vercel: PriceBookInput = {
       meters: [
         {
           id: 'build-cpu-minutes',
+          label: LABELS['build-cpu-minutes'],
           resource: 'build-minutes',
           unit: 'minute',
           premise:
@@ -483,6 +517,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'cdn-requests',
+          label: LABELS['cdn-requests'],
           aliases: ['edge-requests'],
           resource: 'requests',
           unit: 'request',
@@ -492,6 +527,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'fast-data-transfer',
+          label: LABELS['fast-data-transfer'],
           resource: 'egress-gb',
           unit: 'gb',
           interpretation: PRO_INTERPRETATION,
@@ -500,6 +536,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'fast-origin-transfer',
+          label: LABELS['fast-origin-transfer'],
           resource: 'origin-transfer-gb',
           unit: 'gb',
           pricing: { model: 'flat', per: 1, unitPrice: 0.06 },
@@ -507,6 +544,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'invocations',
+          label: LABELS['invocations'],
           resource: 'invocations',
           unit: 'count',
           interpretation: {
@@ -524,6 +562,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'active-cpu',
+          label: LABELS['active-cpu'],
           resource: 'cpu-ms',
           unit: 'cpu-hour',
           rounding: 'not-stated',
@@ -543,6 +582,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'provisioned-memory',
+          label: LABELS['provisioned-memory'],
           resource: 'memory-gb-hours',
           unit: 'gb-hour',
           rounding: 'not-stated',
@@ -563,6 +603,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'image-transformations',
+          label: LABELS['image-transformations'],
           resource: 'image-transformations',
           unit: 'count',
           pricing: { model: 'flat', per: 1_000, unitPrice: 0.05 },
@@ -570,6 +611,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'image-cache-reads',
+          label: LABELS['image-cache-reads'],
           resource: 'image-cache-reads',
           unit: 'operation',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.4 },
@@ -577,6 +619,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'image-cache-writes',
+          label: LABELS['image-cache-writes'],
           resource: 'image-cache-writes',
           unit: 'operation',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 4 },
@@ -584,6 +627,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'isr-reads',
+          label: LABELS['isr-reads'],
           resource: 'isr-reads',
           unit: 'operation',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.4 },
@@ -591,6 +635,7 @@ export const vercel: PriceBookInput = {
         },
         {
           id: 'isr-writes',
+          label: LABELS['isr-writes'],
           resource: 'isr-writes',
           unit: 'operation',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 4 },
@@ -620,6 +665,7 @@ export const vercel: PriceBookInput = {
           ] as const
         ).map(([id, resource, unit, per, iad1, hnd1]) => ({
           id,
+          label: LABELS[id],
           resource,
           unit,
           pricing: { model: 'flat' as const, per, unitPrice: iad1 },

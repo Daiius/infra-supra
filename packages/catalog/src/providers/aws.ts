@@ -62,6 +62,7 @@ const FLAT_FACTS = [
  */
 const FLAT_INVALIDATION: PriceBookInput['plans'][number]['meters'][number] = {
   id: 'invalidation-paths',
+  label: 'キャッシュの無効化（CloudFront: invalidation paths）',
   resource: 'invalidation-paths',
   unit: 'count',
   interpretation: {
@@ -394,6 +395,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'amplify-transfer-out',
+          label: '配信の転送（Amplify Hosting: data transfer out）',
           resource: 'egress-gb',
           unit: 'gb',
           premise: 'Amplify Hosting の配信の転送は $0.15/GB（無料の量なし）',
@@ -402,6 +404,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'ssr-requests',
+          label: 'SSR のリクエスト（Amplify Hosting: SSR requests）',
           resource: 'invocations',
           unit: 'request',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.3 },
@@ -409,6 +412,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'ssr-duration',
+          label: 'SSR の実行時間（Amplify Hosting: SSR duration）',
           resource: 'memory-gb-hours',
           unit: 'gb-hour',
           pricing: { model: 'flat', per: 1, unitPrice: 0.2 },
@@ -416,6 +420,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'image-optimization',
+          label: '画像の変換（Amplify Hosting: image optimization）',
           resource: 'image-transformations',
           unit: 'count',
           pricing: {
@@ -460,6 +465,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'requests',
+          label: '関数の呼び出し（Lambda: requests）',
           resource: 'invocations',
           unit: 'request',
           allowancePool: 'lambda-free-requests',
@@ -468,6 +474,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'compute',
+          label: '関数の実行時間（Lambda: duration）',
           resource: 'memory-gb-hours',
           unit: 'gb-second',
           allowancePool: 'lambda-free-compute',
@@ -496,6 +503,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'requests',
+          label: 'API のリクエスト（API Gateway: HTTP API requests）',
           resource: 'requests',
           unit: 'request',
           pricing: {
@@ -531,6 +539,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'https-requests',
+          label: 'CDN のリクエスト（CloudFront: HTTPS requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'cloudfront-free-requests',
@@ -539,6 +548,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'cloudfront-transfer-out',
+          label: 'CDN の転送（CloudFront: data transfer out）',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'cloudfront-free-transfer',
@@ -569,6 +579,8 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'origin-fetch',
+          label:
+            'CDN からオリジンへの転送（CloudFront: data transfer to origin）',
           resource: 'origin-transfer-gb',
           unit: 'gb',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
@@ -576,6 +588,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'invalidation-paths',
+          label: 'キャッシュの無効化（CloudFront: invalidation paths）',
           resource: 'invalidation-paths',
           unit: 'count',
           allowancePool: 'cloudfront-free-invalidations',
@@ -593,6 +606,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'storage',
+          label: 'ファイルの保存量（S3 Standard: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           pricing: {
@@ -608,6 +622,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'put-requests',
+          label: 'ファイルの書き込み（S3: PUT requests）',
           resource: 'object-writes',
           unit: 'operation',
           pricing: { model: 'flat', per: 1000, unitPrice: 0.0047 },
@@ -615,6 +630,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'get-requests',
+          label: 'ファイルの読み取り（S3: GET requests）',
           resource: 'object-reads',
           unit: 'operation',
           pricing: { model: 'flat', per: 10_000, unitPrice: 0.0037 },
@@ -622,6 +638,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'transfer-to-cloudfront',
+          label: 'S3 から CDN への転送（S3: data transfer to CloudFront）',
           resource: 'egress-gb',
           unit: 'gb',
           premise: '東京の S3 から CloudFront への転送は $0',
@@ -647,6 +664,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'read-request-units',
+          label: 'DB の読み取り（DynamoDB: read request units）',
           resource: 'read-request-units',
           unit: 'operation',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.1425 },
@@ -654,6 +672,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'write-request-units',
+          label: 'DB の書き込み（DynamoDB: write request units）',
           resource: 'write-request-units',
           unit: 'operation',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.715 },
@@ -661,6 +680,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'storage',
+          label: 'DB の保存量（DynamoDB: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           allowancePool: 'dynamodb-free-storage',
@@ -682,6 +702,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'instance',
+          label: 'DB のサーバーの稼働（RDS: instance hours）',
           resource: 'instance-hours',
           unit: 'hour',
           premise:
@@ -691,6 +712,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'storage',
+          label: 'DB のディスク（RDS: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           pricing: { model: 'flat', per: 1, unitPrice: 0.138 },
@@ -725,6 +747,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'acu',
+          label: 'DB の処理能力（Aurora Serverless v2: ACU hours）',
           resource: 'instance-hours',
           unit: 'hour',
           premise:
@@ -734,6 +757,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'storage',
+          label: 'DB の保存量（Aurora: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           pricing: { model: 'flat', per: 1, unitPrice: 0.27 },
@@ -767,6 +791,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'dpu',
+          label: 'DB の処理量（Aurora DSQL: DPU）',
           resource: 'processing-units',
           unit: 'count',
           allowancePool: 'dsql-free-dpu',
@@ -775,6 +800,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'storage',
+          label: 'DB の保存量（Aurora DSQL: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           allowancePool: 'dsql-free-storage',
@@ -788,13 +814,19 @@ export const aws: PriceBookInput = {
       id: 'cloudfront-flat-free',
       service: 'cloudfront',
       name: 'CloudFront 定額 Free',
-      baseFee: { amount: 0, per: 'month', scope: 'account' },
+      baseFee: {
+        label: '定額料金（CloudFront flat-rate: Free）',
+        amount: 0,
+        per: 'month',
+        scope: 'account',
+      },
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs', 'cloudfrontFlatBlog'],
       notes: FLAT_NOTES,
       facts: FLAT_FACTS,
       meters: [
         {
           id: 'https-requests',
+          label: 'CDN のリクエスト（CloudFront: HTTPS requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'flat-free-requests',
@@ -804,6 +836,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'cloudfront-transfer-out',
+          label: 'CDN の転送（CloudFront: data transfer out）',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'flat-free-transfer',
@@ -813,6 +846,8 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'origin-fetch',
+          label:
+            'CDN からオリジンへの転送（CloudFront: data transfer to origin）',
           resource: 'origin-transfer-gb',
           unit: 'gb',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
@@ -826,13 +861,19 @@ export const aws: PriceBookInput = {
       id: 'cloudfront-flat-pro',
       service: 'cloudfront',
       name: 'CloudFront 定額 Pro',
-      baseFee: { amount: 15, per: 'month', scope: 'account' },
+      baseFee: {
+        label: '定額料金（CloudFront flat-rate: Pro）',
+        amount: 15,
+        per: 'month',
+        scope: 'account',
+      },
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs', 'cloudfrontFlatBlog'],
       notes: FLAT_NOTES,
       facts: FLAT_FACTS,
       meters: [
         {
           id: 'https-requests',
+          label: 'CDN のリクエスト（CloudFront: HTTPS requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'flat-pro-requests',
@@ -842,6 +883,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'cloudfront-transfer-out',
+          label: 'CDN の転送（CloudFront: data transfer out）',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'flat-pro-transfer',
@@ -851,6 +893,8 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'origin-fetch',
+          label:
+            'CDN からオリジンへの転送（CloudFront: data transfer to origin）',
           resource: 'origin-transfer-gb',
           unit: 'gb',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
@@ -864,13 +908,19 @@ export const aws: PriceBookInput = {
       id: 'cloudfront-flat-business',
       service: 'cloudfront',
       name: 'CloudFront 定額 Business',
-      baseFee: { amount: 200, per: 'month', scope: 'account' },
+      baseFee: {
+        label: '定額料金（CloudFront flat-rate: Business）',
+        amount: 200,
+        per: 'month',
+        scope: 'account',
+      },
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs', 'cloudfrontFlatBlog'],
       notes: FLAT_NOTES,
       facts: FLAT_FACTS,
       meters: [
         {
           id: 'https-requests',
+          label: 'CDN のリクエスト（CloudFront: HTTPS requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'flat-business-requests',
@@ -880,6 +930,7 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'cloudfront-transfer-out',
+          label: 'CDN の転送（CloudFront: data transfer out）',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'flat-business-transfer',
@@ -889,6 +940,8 @@ export const aws: PriceBookInput = {
         },
         {
           id: 'origin-fetch',
+          label:
+            'CDN からオリジンへの転送（CloudFront: data transfer to origin）',
           resource: 'origin-transfer-gb',
           unit: 'gb',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
@@ -909,6 +962,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'requests',
+          label: 'キューのリクエスト（SQS: FIFO requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'sqs-free-requests',
@@ -951,6 +1005,7 @@ export const aws: PriceBookInput = {
       meters: [
         {
           id: 'internet-out',
+          label: 'インターネットへの転送（AWS: data transfer out to internet）',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'internet-free-transfer',

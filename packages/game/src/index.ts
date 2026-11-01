@@ -391,7 +391,12 @@ export type MonthReport = {
   /** 量の境目がある前提すべての記録（推移と見込みに使う。prd/07 §5）。 */
   snapshots: PremiseSnapshot[];
   lines: {
+    /** 行の名前（料金データの label。D-75）。 */
     label: string;
+    /** 事業者・行の種類・メーター（名前の文字列から読み取らないためのもの。fee は一度だけの手数料）。 */
+    provider: string;
+    kind: LineItem['kind'] | 'fee';
+    meterId?: string;
     amount: number;
     currency: string;
     /** 使用量（CloudFront の無効化のパスだけ。次のプレイへのヒントに使う。D-66）。 */
@@ -481,7 +486,8 @@ export type GameState = {
   /** さくらの VPS のストレージ変更オプション（付けたら戻せない）と、手数料をまだ払っていないか（D-30）。 */
   storageOption: boolean;
   /** 申し込んだときのプランの手数料（まだ払っていない。払ったら null。OCL-91E46AC4）。 */
-  storageOptionFeeDue: { name: string; amount: number } | null;
+  /** label は明細の行の名前（料金データの addon の label。D-75）。 */
+  storageOptionFeeDue: { name: string; label?: string; amount: number } | null;
   /** 返事を待っている提案。 */
   pendingProposals: string[];
   responses: Record<string, 'accepted' | 'declined'>;
@@ -981,7 +987,9 @@ function architectureFor(
 const toUsd = (totals: Partial<Record<string, number>>) =>
   (totals.USD ?? 0) + (totals.JPY ?? 0) / USD_JPY;
 
+/** 明細の行の名前。料金データの label があればそれ（D-75）、無ければ ID から作る（架空の料金など）。 */
 function lineLabel(l: LineItem): string {
+  if (l.label) return l.label;
   if (l.kind === 'base-fee')
     return `${l.priceRef.provider} ${l.priceRef.planId} 基本料`;
   if (l.kind === 'credit') return `${l.priceRef.provider} クレジット`;
@@ -3484,6 +3492,9 @@ export function playMonth(input: GameState): GameState {
           .filter((l) => l.amount)
           .map((l) => ({
             label: lineLabel(l),
+            provider: l.priceRef.provider,
+            kind: l.kind,
+            ...(l.priceRef.meterId ? { meterId: l.priceRef.meterId } : {}),
             amount: l.amount!,
             currency: l.currency,
             ...(l.priceRef.meterId === INVALIDATION_METER
@@ -3494,7 +3505,9 @@ export function playMonth(input: GameState): GameState {
       ...(fee
         ? [
             {
-              label: `sakura-vps ${fee.name}（手数料・一度だけ）`,
+              label: fee.label ?? `sakura-vps ${fee.name}（手数料・一度だけ）`,
+              provider: 'sakura-vps',
+              kind: 'fee' as const,
               amount: fee.amount,
               currency: 'JPY',
             },
@@ -3922,16 +3935,19 @@ export function applyAction(state: GameState, action: Action): GameState {
           : responded,
       );
     }
-    case 'storage-option':
+    case 'storage-option': {
+      const addon = storageOptionAddon(state.stackIndex)!;
       return withNote('ストレージ変更オプションを付けた', {
         ...state,
         ...planned,
         storageOption: true,
         storageOptionFeeDue: {
-          name: storageOptionAddon(state.stackIndex)!.name,
-          amount: storageOptionAddon(state.stackIndex)!.oneTimeFee,
+          name: addon.name,
+          ...(addon.label ? { label: addon.label } : {}),
+          amount: addon.oneTimeFee,
         },
       });
+    }
     case 'block-bots':
       return withNote('Bot を遮断するルールを入れた', {
         ...state,
@@ -4410,26 +4426,30 @@ export function retryHintsOf(state: GameState): RetryHint[] {
   // ④ 費用（所持金が足りない・尽きた）
   if (cashShort) {
     const byLabel = new Map<string, number>();
+    const baseLabels = new Set<string>();
+    const invLabels = new Set<string>();
     for (const r of h)
       for (const l of r.lines) {
         const v = l.currency === 'JPY' ? l.amount / USD_JPY : l.amount;
         if (v > 0) byLabel.set(l.label, (byLabel.get(l.label) ?? 0) + v);
+        if (l.kind === 'base-fee') baseLabels.add(l.label);
+        if (l.meterId === INVALIDATION_METER) invLabels.add(l.label);
       }
     const top = [...byLabel].sort((a, b) => b[1] - a[1]).slice(0, 2);
     const infra = h.reduce((a, r) => a + r.infraCost, 0);
     const revenue = h.reduce((a, r) => a + r.revenue, 0);
     const positive = [...byLabel.values()].reduce((a, v) => a + v, 0);
     const baseSum = [...byLabel]
-      .filter(([k]) => k.endsWith('基本料'))
+      .filter(([k]) => baseLabels.has(k))
       .reduce((a, [, v]) => a + v, 0);
     const base = baseSum > positive / 2;
     const share = infra / Math.max(1, revenue);
     // オンデマンドの再検証の CloudFront の無効化が最も大きい費用（D-66）
     const inv = h.flatMap((r) =>
-      r.lines.filter((l) => l.label.endsWith(` ${INVALIDATION_METER}`)),
+      r.lines.filter((l) => l.meterId === INVALIDATION_METER),
     );
     const invalidation =
-      top[0] && top[0][0].endsWith(` ${INVALIDATION_METER}`)
+      top[0] && invLabels.has(top[0][0])
         ? {
             paths: inv.reduce((a, l) => a + (l.quantity ?? 0), 0),
             usd: top[0][1],

@@ -46,6 +46,18 @@ describe('normalizeInput', () => {
   });
 });
 
+describe('明細の行の名前（D-75）', () => {
+  it('料金データの表示名を使う（ID のままにしない）', () => {
+    const v = runEstimate(
+      normalizeInput({ stack: 'vercel-supabase-pro', pv: 1_000_000 }),
+    );
+    const labels = v.providers.flatMap((p) => p.lines.map((l) => l.label));
+    expect(labels).toContain('基本料（Vercel Pro: 1 席ごと）');
+    expect(labels).toContain('CDN の転送（Vercel: Fast Data Transfer）');
+    expect(labels.filter((l) => !/（.+）$/.test(l))).toEqual([]);
+  });
+});
+
 describe('URL のクエリ', () => {
   it('書いて読むと同じ入力に戻る', () => {
     const i = normalizeInput({

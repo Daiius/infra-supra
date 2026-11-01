@@ -83,7 +83,7 @@ describe('部品の差し替え', () => {
     const plain = playMonth(s);
     expect(last(during).componentSwap).toBeDefined();
     expect(last(during).infraCost).toBeGreaterThan(last(plain).infraCost);
-    expect(last(during).lines.some((l) => l.label.startsWith('supabase'))).toBe(
+    expect(last(during).lines.some((l) => l.provider === 'supabase')).toBe(
       true,
     );
     expect(during.componentSwap).toBeNull();

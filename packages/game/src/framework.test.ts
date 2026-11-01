@@ -273,8 +273,8 @@ describe('Astro（D-68）', () => {
 
   it('Vercel Pro ではビルドの時間が請求に出る。即時反映の要件は記事の更新ごとのビルドで満たす（仮定）', () => {
     const s = astro(VERCEL_PRO);
-    const ids = s.history[0]!.lines.map((l) => l.label);
-    expect(ids.some((l) => l.includes('build-cpu-minutes'))).toBe(true);
+    const ids = s.history[0]!.lines.map((l) => l.meterId);
+    expect(ids).toContain('build-cpu-minutes');
     expect(requirementStatus(1, {}, 'on-demand-isr', 'astro')[0]?.ok).toBe(
       true,
     );

@@ -81,6 +81,7 @@ type AllowancePool = {
 ```ts
 type Meter = {
   id: MeterId;                       // 'requests' | 'cpu-ms' | 'rows-read' | 'storage-gb-month' | …（プロバイダーの呼び方）
+  label?: string;                    // 表示名（明細の行の名前。下の「表示名」）
   resource: ResourceKey;             // 01 §5.1 の汎用リソースとの対応
   unit: Unit;
   allowancePool?: PoolId;
@@ -100,6 +101,11 @@ type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unit
 - `rounding.scope: 'event'` は 1 リクエストごとの切り上げ。エンジンは分布を持たないので、
   **「全リクエストが平均値をとる」と仮定**して `ceil(平均 / 単位) × 単位 × 件数` で計算する（仮定として明示する）。
 - `tiered` と `volume` の違いはテストで必ず押さえる（[05](./05-test-strategy.md) §2）。
+- **表示名（`label`。D-75）**: 明細の行に出す名前。メーター・基本料（`baseFee.label`）・クレジット・一度だけの手数料（`addons[].label`）に付け、
+  計算には使わない（明細の行の `LineItem.label` に写すだけ）。形は「何の費用かを日本語で（公式の名称）」で、括弧の中に事業者の画面・料金表の呼び方を残す
+  （例:「画像の変換（Images: unique transformations）」「CDN の転送（CloudFront: data transfer out）」「関数の実行時間（Vercel: Active CPU）」）。
+  括弧の前は事業者をまたいで同じ言葉にそろえ（CDN の転送・関数の実行時間・DB の保存量など）、比べやすくする。括弧の中は「サービス: 名称」で、
+  同じ事業者の別のサービスと区別できるようにする。実在の料金データは全部に付ける（catalog のテスト）。架空の料金は省略でき、表示側が ID から作る。
 
 ## 6. 制限と超過時の挙動
 

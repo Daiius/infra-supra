@@ -574,6 +574,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'build-minutes',
+          label: 'ビルドの時間（Workers Builds: build minutes）',
           resource: 'build-minutes',
           unit: 'minute',
           allowancePool: 'free-build-minutes',
@@ -596,6 +597,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'requests',
+          label: 'Workers のリクエスト（Workers: requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'free-requests',
@@ -607,6 +609,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'cpu-ms',
+          label: 'Workers の CPU 時間（Workers: CPU time）',
           resource: 'cpu-ms',
           unit: 'ms',
           rounding: 'not-stated',
@@ -615,6 +618,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'd1-rows-read',
+          label: 'DB の行の読み取り（D1: rows read）',
           resource: 'rows-read',
           unit: 'row',
           allowancePool: 'free-d1-rows-read',
@@ -626,6 +630,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'd1-rows-written',
+          label: 'DB の行の書き込み（D1: rows written）',
           resource: 'rows-written',
           unit: 'row',
           allowancePool: 'free-d1-rows-written',
@@ -636,6 +641,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'kv-reads',
+          label: 'KV の読み取り（Workers KV: reads）',
           resource: 'kv-reads',
           unit: 'operation',
           allowancePool: 'free-kv-reads',
@@ -646,6 +652,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'kv-writes',
+          label: 'KV の書き込み（Workers KV: writes）',
           resource: 'kv-writes',
           unit: 'operation',
           allowancePool: 'free-kv-writes',
@@ -687,7 +694,12 @@ export const cloudflare: PriceBookInput = {
       id: 'workers-paid',
       service: 'workers',
       name: 'Workers Paid',
-      baseFee: { amount: 5, per: 'month', scope: 'account' },
+      baseFee: {
+        label: '基本料（Workers Paid）',
+        amount: 5,
+        per: 'month',
+        scope: 'account',
+      },
       sourceIds: ['workersPricing'],
       members: {
         pricing: 'not-stated',
@@ -698,6 +710,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'build-minutes',
+          label: 'ビルドの時間（Workers Builds: build minutes）',
           resource: 'build-minutes',
           unit: 'minute',
           allowancePool: 'paid-build-minutes',
@@ -707,6 +720,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'requests',
+          label: 'Workers のリクエスト（Workers: requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'paid-requests',
@@ -715,6 +729,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'cpu-ms',
+          label: 'Workers の CPU 時間（Workers: CPU time）',
           resource: 'cpu-ms',
           unit: 'ms',
           allowancePool: 'paid-cpu-ms',
@@ -724,6 +739,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'd1-rows-read',
+          label: 'DB の行の読み取り（D1: rows read）',
           resource: 'rows-read',
           unit: 'row',
           allowancePool: 'paid-d1-rows-read',
@@ -732,6 +748,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'd1-rows-written',
+          label: 'DB の行の書き込み（D1: rows written）',
           resource: 'rows-written',
           unit: 'row',
           allowancePool: 'paid-d1-rows-written',
@@ -740,6 +757,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'd1-storage',
+          label: 'DB の保存量（D1: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           allowancePool: 'paid-d1-storage',
@@ -748,6 +766,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'kv-reads',
+          label: 'KV の読み取り（Workers KV: reads）',
           resource: 'kv-reads',
           unit: 'operation',
           allowancePool: 'paid-kv-reads',
@@ -756,6 +775,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'kv-writes',
+          label: 'KV の書き込み（Workers KV: writes）',
           resource: 'kv-writes',
           unit: 'operation',
           allowancePool: 'paid-kv-writes',
@@ -808,6 +828,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'storage',
+          label: 'ファイルの保存量（R2: storage）',
           resource: 'storage-gb-month',
           unit: 'gb-month',
           allowancePool: 'r2-storage',
@@ -817,6 +838,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'class-a',
+          label: 'ファイルの書き込み（R2: Class A operations）',
           resource: 'object-writes',
           unit: 'operation',
           allowancePool: 'r2-class-a',
@@ -827,6 +849,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'class-b',
+          label: 'ファイルの読み取り（R2: Class B operations）',
           resource: 'object-reads',
           unit: 'operation',
           allowancePool: 'r2-class-b',
@@ -837,6 +860,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'egress',
+          label: 'R2 からの転送（R2: egress）',
           resource: 'egress-gb',
           unit: 'gb',
           premise: 'R2 は転送量（egress）に課金しない',
@@ -855,6 +879,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'transformations',
+          label: '画像の変換（Images: unique transformations）',
           resource: 'image-transformations',
           unit: 'count',
           allowancePool: 'images-transformations',
@@ -877,6 +902,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'transformations',
+          label: '画像の変換（Images: unique transformations）',
           resource: 'image-transformations',
           unit: 'count',
           allowancePool: 'images-transformations',
@@ -928,6 +954,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'requests',
+          label: 'Durable Objects のリクエスト（Durable Objects: requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'do-free-requests',
@@ -939,6 +966,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'duration',
+          label: 'Durable Objects の実行時間（Durable Objects: duration）',
           resource: 'gb-seconds',
           unit: 'gb-second',
           allowancePool: 'do-free-duration',
@@ -950,6 +978,8 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'rows-read',
+          label:
+            'Durable Objects の行の読み取り（Durable Objects SQLite: rows read）',
           resource: 'rows-read',
           unit: 'row',
           allowancePool: 'do-free-rows-read',
@@ -959,6 +989,8 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'rows-written',
+          label:
+            'Durable Objects の行の書き込み（Durable Objects SQLite: rows written）',
           resource: 'rows-written',
           unit: 'row',
           allowancePool: 'do-free-rows-written',
@@ -980,6 +1012,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'requests',
+          label: 'Durable Objects のリクエスト（Durable Objects: requests）',
           resource: 'requests',
           unit: 'request',
           allowancePool: 'do-paid-requests',
@@ -988,6 +1021,7 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'duration',
+          label: 'Durable Objects の実行時間（Durable Objects: duration）',
           resource: 'gb-seconds',
           unit: 'gb-second',
           allowancePool: 'do-paid-duration',
@@ -996,6 +1030,8 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'rows-read',
+          label:
+            'Durable Objects の行の読み取り（Durable Objects SQLite: rows read）',
           resource: 'rows-read',
           unit: 'row',
           allowancePool: 'do-paid-rows-read',
@@ -1004,6 +1040,8 @@ export const cloudflare: PriceBookInput = {
         },
         {
           id: 'rows-written',
+          label:
+            'Durable Objects の行の書き込み（Durable Objects SQLite: rows written）',
           resource: 'rows-written',
           unit: 'row',
           allowancePool: 'do-paid-rows-written',
@@ -1021,6 +1059,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'queries',
+          label: 'DB への問い合わせ（Hyperdrive: queries）',
           resource: 'queries',
           unit: 'count',
           allowancePool: 'hyperdrive-free-queries',
@@ -1041,6 +1080,7 @@ export const cloudflare: PriceBookInput = {
       meters: [
         {
           id: 'queries',
+          label: 'DB への問い合わせ（Hyperdrive: queries）',
           resource: 'queries',
           unit: 'count',
           premise:

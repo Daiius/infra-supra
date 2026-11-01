@@ -139,15 +139,13 @@ describe('ゲーム中の移し替え（データの移行）', () => {
     let t: GameState = playMonth(started);
     const during = t.history[t.history.length - 1]!;
     // 期間中は Supabase と Cloudflare の両方を払う
-    expect(during.lines.some((l) => l.label.startsWith('supabase'))).toBe(true);
-    expect(during.lines.some((l) => l.label.startsWith('cloudflare'))).toBe(
-      true,
-    );
+    expect(during.lines.some((l) => l.provider === 'supabase')).toBe(true);
+    expect(during.lines.some((l) => l.provider === 'cloudflare')).toBe(true);
     while (t.componentSwap) t = playMonth(t);
     expect(t.components.api).toBe('cf-workers');
     t = playMonth(t);
     const after = t.history[t.history.length - 1]!;
-    expect(after.lines.some((l) => l.label.startsWith('supabase'))).toBe(false);
+    expect(after.lines.some((l) => l.provider === 'supabase')).toBe(false);
   });
 });
 

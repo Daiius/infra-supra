@@ -419,3 +419,33 @@ describe('決定論', () => {
     expect(JSON.stringify(bill(usage))).toBe(JSON.stringify(bill(usage)));
   });
 });
+
+describe('表示名（D-75）', () => {
+  it('メーター・基本料の label を明細の行に写す。無ければ持たない', () => {
+    const labeled = parsePriceBook(
+      {
+        ...FICTIONAL_CLOUD,
+        plans: FICTIONAL_CLOUD.plans.map((p) => ({
+          ...p,
+          ...(p.baseFee
+            ? { baseFee: { ...p.baseFee, label: '基本料（架空）' } }
+            : {}),
+          meters: p.meters.map((m) => ({ ...m, label: `${m.id}（架空）` })),
+        })),
+      },
+      { allowFictional: true },
+    );
+    const b = priceUsage({
+      books: [labeled],
+      subscriptions: [sub('basic')],
+      usage: [use('cpu-ms', 1500)],
+    });
+    expect(usageLine(b, 'cpu-ms').label).toBe('cpu-ms（架空）');
+    expect(b.lines.find((l) => l.kind === 'base-fee')?.label).toBe(
+      '基本料（架空）',
+    );
+    expect(usageLine(bill([use('cpu-ms', 1500)]), 'cpu-ms').label).toBe(
+      undefined,
+    );
+  });
+});

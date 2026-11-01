@@ -278,12 +278,14 @@ function lineView(l: LineItem): LineView {
   const meter = l.priceRef.meterId
     ? plan?.meters.find((m) => m.id === l.priceRef.meterId)
     : undefined;
+  // 料金データの表示名（D-75）。無ければ ID から作る
   const label =
-    l.kind === 'base-fee'
+    l.label ??
+    (l.kind === 'base-fee'
       ? `${plan?.name ?? l.priceRef.planId} の基本料`
       : l.kind === 'credit'
         ? `クレジット（${l.credit?.id ?? ''}）`
-        : `${plan?.name ?? l.priceRef.planId}・${l.priceRef.meterId ?? ''}`;
+        : `${plan?.name ?? l.priceRef.planId}・${l.priceRef.meterId ?? ''}`);
   return {
     kind: l.kind,
     label,

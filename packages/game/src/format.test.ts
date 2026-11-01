@@ -40,8 +40,10 @@ function month2(
   );
   return playMonth(applyActions(s, acts));
 }
-const usage = (s: GameState, label: string) =>
-  s.history[1]!.lines.find((l) => l.label.includes(label))?.amount ?? 0;
+/** 「事業者 メーター」で明細を引く（行の名前は表示名なので、ID で引く。D-75）。 */
+const usage = (s: GameState, id: string) =>
+  s.history[1]!.lines.find((l) => `${l.provider} ${l.meterId ?? ''}` === id)
+    ?.amount ?? 0;
 
 describe('画像の形式（D-58）', () => {
   it('WebP・AVIF は小さく配り、画質は下げない（CF Paid）', () => {
@@ -69,7 +71,7 @@ describe('画像の形式（D-58）', () => {
     const webp = month2(VERCEL_PRO, [format(IMAGE_FORMAT_KB.webp)]);
     const avif = month2(VERCEL_PRO, [format(IMAGE_FORMAT_KB.avif)]);
     const t = (s: GameState) =>
-      s.history[1]!.lines.find((l) => l.label.includes('image-transformations'))
+      s.history[1]!.lines.find((l) => l.meterId === 'image-transformations')
         ?.amount ?? 0;
     expect(t(avif)).toBeGreaterThan(t(webp));
   });

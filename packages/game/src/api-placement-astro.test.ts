@@ -93,9 +93,9 @@ describe('Astro の API の置き場（D-69）', () => {
     expect(s.history[0]!.stackName).toBe(
       'Vercel Pro + Cloudflare Workers・D1（Astro）',
     );
-    expect(
-      s.history[0]!.lines.some((l) => l.label.startsWith('supabase')),
-    ).toBe(false);
+    expect(s.history[0]!.lines.some((l) => l.provider === 'supabase')).toBe(
+      false,
+    );
   });
 
   it('SSR が外の API を待つこと・外への通信の数え方を前提の文で出す', () => {

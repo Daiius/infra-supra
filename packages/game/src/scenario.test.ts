@@ -155,7 +155,7 @@ describe('出来事（シード 42。話題の予告はシード 4）', () => {
     // 席の分（$20）だけ基本料が増える
     const fees = (m: number) =>
       month(v, m)
-        .lines.filter((l) => l.label === 'vercel pro 基本料')
+        .lines.filter((l) => l.provider === 'vercel' && l.kind === 'base-fee')
         .reduce((a, l) => a + l.amount, 0);
     expect(fees(team.month) - fees(team.month - 1)).toBeCloseTo(20);
   });
