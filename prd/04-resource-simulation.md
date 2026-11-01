@@ -79,6 +79,8 @@ miss_r = min(閲覧_r, U_r × 閲覧_r / (U_r + 閲覧_r) + 閲覧_r / (1 + λ_r
 **オンデマンドの再検証と CDN の無効化**（D-66）: 再検証を呼ぶページの数 = U_r × 1 回の更新で再検証するページ（`onDemandPagesPerUpdate`・既定 1）。
 再生成の回数（miss_r）とは別で、閲覧が無くても更新のたびに呼ぶ。`cdn` が `invalidationPathsPerPage` を持ち、ISR のページを期間つきでキャッシュする（`ttlClasses` に document-isr）ときだけ、
 `invalidation-paths = 再検証を呼ぶページ × invalidationPathsPerPage` を数える（OpenNext の CloudFront。prd/11 §13.1）。
+`cdn` が `invalidationWildcardPathsPerUpdate` を持つ（ワイルドカードでまとめる。D-79）ときは `invalidation-paths = U × その値` とし、更新のたびにルートの全ページがその CDN から消えるとみなす:
+CDN の miss = min(閲覧, U × 閲覧 / (U + 閲覧 / ページ数) + 最大寿命の分)（`cdnFlushMissFlow`）。後ろの ISR のキャッシュは消えないので、再生成（miss_r）は変えない。
 ゲームでは 1 回の更新で記事のページと一覧の 2 ページ（`ON_DEMAND_PAGES_PER_UPDATE`・仮定）。記事コミュニティの 1 か月目で 300 × 2 = 600 ページ（OpenNext の CloudFront で 1,200 パス）。
 
 **ISR のキャッシュの保存量**（D-66）: `object-storage` の `isrCacheSizeFactor` が正なら、ISR のページの大きさ（ページ数 × 応答の大きさ。`storage.isrPagesGB`）× その倍率を保存する。

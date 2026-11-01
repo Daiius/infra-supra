@@ -86,6 +86,8 @@ export const EFFORT = {
     apiCache: 2,
     // CloudFront の料金（従量 ↔ 定額のプラン。D-61）。設定の変更に近いので 1（仮定）
     cdnPlan: 1,
+    // CDN の無効化のまとめ方（D-79）。自作の無効化の処理（OpenNext の override）を書く・戻すので 1（仮定）
+    cdnInvalidation: 1,
   },
   // DB の差し替えと API の置き場の移し替え（API と DB を一緒に移す。D-65）で共通の大きさ（仮定）
   dbSwap: { perMonth: 6, months: 1 },

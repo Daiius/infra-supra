@@ -545,9 +545,11 @@ export const swapLabel = (slot: SlotId): string =>
 
 /**
  * 今の選択で効かないスロット（出さない）。API を他の事業者に置くと、DB はその事業者の部品になるので、
- * 構成の DB のスロットは出さない（D-65）。
+ * 構成の DB のスロットは出さない（D-65）。ISR をキャッシュしない部品では CDN の無効化が起きないので、
+ * 無効化のまとめ方も出さない（D-79）。
  */
 export function slotIneffective(slot: SlotId, choices: Choices): boolean {
+  if (slot === 'cdnInvalidation') return choices.isrCache === 'none';
   return slot === 'db' && apiPlacedElsewhere(choices);
 }
 
@@ -2390,40 +2392,41 @@ export type InvalidationEstimate = {
   included: boolean;
   freePaths: number;
   unitUsd: number;
+  /** 無効化をワイルドカードでまとめているか（D-79）。 */
+  wildcard: boolean;
+  /**
+   * ページごとに無効化している従量の構成で、ワイルドカードでまとめたときの見込み（選ぶ前に比べるため。D-79）。
+   * まとめ方を選べない構成・定額のプラン（込み）・すでにまとめているときは undefined。
+   */
+  ifWildcard?: { paths: number; usd: number };
 };
+
+/** 無効化のまとめ方のスロット（D-79）。 */
+const INVALIDATION_SLOT = 'cdnInvalidation';
+const WILDCARD = 'wildcard';
 
 export function onDemandInvalidationEstimate(
   state: GameState,
 ): InvalidationEstimate | undefined {
-  const sc = scenarioOf(state);
   const platform = STACKS[state.stackIndex]!.provider;
-  const settings = { ...state.settings, revalidateSec: ON_DEMAND_REVALIDATE };
   const bk = booksAt(state, state.history.length + 1);
-  const r = estimate({
-    workload: workloadFor(sc, {
-      pv: state.basePV,
-      settings,
-      ssrCpuMs: nextSsrCpuMs(state),
-      mods: state.mods,
-      stock: sc.stock ? state.stock : null,
-      platform,
-      components: state.components,
-      framework: state.framework,
-    }),
-    architecture: architectureFor(
-      state.stackIndex,
-      state.seats,
-      state.framework,
-      state.components,
-      {},
-      state.storageOption,
-    ),
-    books: bk,
-  });
-  const lines = r.bill.lines.filter(
-    (l) => l.priceRef.meterId === INVALIDATION_METER && (l.quantity ?? 0) > 0,
-  );
+  const lines = invalidationLines(state, state.components, bk);
   if (lines.length === 0) return undefined;
+  const wildcard = state.components[INVALIDATION_SLOT] === WILDCARD;
+  const included = lines.every((l) => l.priceRef.planId !== 'cloudfront');
+  const canWildcard = componentsOf(
+    platform,
+    INVALIDATION_SLOT,
+    state.framework,
+  ).some((o) => o.id === WILDCARD);
+  const alt =
+    !wildcard && !included && canWildcard
+      ? invalidationLines(
+          state,
+          { ...state.components, [INVALIDATION_SLOT]: WILDCARD },
+          bk,
+        )
+      : undefined;
   // 従量の料金データ（CloudFront の無効化の無料のパスと単価）
   const payg = bk
     .find((b) => b.provider === 'aws')
@@ -2436,13 +2439,53 @@ export function onDemandInvalidationEstimate(
     meter?.pricing.model === 'flat'
       ? meter.pricing.unitPrice / meter.pricing.per
       : 0;
+  const sum = (ls: typeof lines) => ({
+    paths: ls.reduce((a, l) => a + (l.quantity ?? 0), 0),
+    usd: ls.reduce((a, l) => a + (l.amount ?? 0), 0),
+  });
   return {
-    paths: lines.reduce((a, l) => a + (l.quantity ?? 0), 0),
-    usd: lines.reduce((a, l) => a + (l.amount ?? 0), 0),
-    included: lines.every((l) => l.priceRef.planId !== 'cloudfront'),
+    ...sum(lines),
+    included,
     freePaths: pool?.quantity ?? 0,
     unitUsd,
+    wildcard,
+    ...(alt ? { ifWildcard: sum(alt) } : {}),
   };
+}
+
+/** オンデマンドにしたときの、今月の基準の PV での無効化のメーターの明細（部品を差し替えて引けるようにした。D-79）。 */
+function invalidationLines(
+  state: GameState,
+  components: Choices,
+  bk: ReturnType<typeof booksAt>,
+) {
+  const sc = scenarioOf(state);
+  const platform = STACKS[state.stackIndex]!.provider;
+  const settings = { ...state.settings, revalidateSec: ON_DEMAND_REVALIDATE };
+  const r = estimate({
+    workload: workloadFor(sc, {
+      pv: state.basePV,
+      settings,
+      ssrCpuMs: nextSsrCpuMs(state),
+      mods: state.mods,
+      stock: sc.stock ? state.stock : null,
+      platform,
+      components,
+      framework: state.framework,
+    }),
+    architecture: architectureFor(
+      state.stackIndex,
+      state.seats,
+      state.framework,
+      components,
+      {},
+      state.storageOption,
+    ),
+    books: bk,
+  });
+  return r.bill.lines.filter(
+    (l) => l.priceRef.meterId === INVALIDATION_METER && (l.quantity ?? 0) > 0,
+  );
 }
 
 const INVALIDATION_METER = 'invalidation-paths';
@@ -2469,10 +2512,13 @@ export function setupInvalidationEstimate(
 
 /** 無効化の見込みの文（再検証の設定の「オンデマンド」の選択肢に添える。D-66）。 */
 export function invalidationNote(e: InvalidationEstimate): string {
-  const paths = `無効化 月約 ${commas(e.paths)} パス`;
+  const paths = `無効化 月約 ${commas(e.paths)} パス${e.wildcard ? '（ワイルドカードでまとめた分。更新していないページの CDN のキャッシュも消える）' : ''}`;
+  const alt = e.ifWildcard
+    ? `。ワイルドカードでまとめると 約 ${commas(e.ifWildcard.paths)} パス・約 ${usd(e.ifWildcard.usd)}（代わりに更新していないページの CDN のキャッシュも消える）`
+    : '';
   return e.included
     ? `${paths}（定額のプランでは込み。解釈）`
-    : `${paths}・約 ${usd(e.usd)}（月 ${commas(e.freePaths)} パスまで無料、以降 1 パス $${e.unitUsd}）`;
+    : `${paths}・約 ${usd(e.usd)}（月 ${commas(e.freePaths)} パスまで無料、以降 1 パス $${e.unitUsd}）${alt}`;
 }
 
 /**
@@ -4486,7 +4532,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
           next: invalidation
-            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または無効化をワイルドカード・タグでまとめる`
+            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる`
             : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
               : base

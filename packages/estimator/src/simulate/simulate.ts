@@ -91,8 +91,10 @@ function ttlMiss(
   w: ResolvedWorkload,
   cls: RequestClass,
   f: ClassFlow,
+  flush = false,
 ): ClassFlow | undefined {
-  const miss = w.cacheMissFlow[cls];
+  // ワイルドカードでまとめた無効化の CDN は、更新のたびにルートの全ページを失う（D-79）
+  const miss = (flush ? w.cdnFlushMissFlow : w.cacheMissFlow)[cls];
   const total = w.classes[cls].count;
   if (!miss || total <= 0) return undefined;
   return { count: f.count * (miss.count / total), perRequest: miss.perRequest };
@@ -112,7 +114,9 @@ function consume(
   const p = f.perRequest;
   switch (c.kind) {
     case 'cdn': {
-      const ttl = c.ttlClasses?.includes(cls) ? ttlMiss(w, cls, f) : undefined;
+      const ttl = c.ttlClasses?.includes(cls)
+        ? ttlMiss(w, cls, f, c.invalidationWildcardPathsPerUpdate !== undefined)
+        : undefined;
       add(
         u,
         'requests',
@@ -350,15 +354,15 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
       break;
     case 'cdn':
       // オンデマンドの再検証のたびに、ISR のページ（とそのデータのルート）を無効化する（D-66）
-      if (
-        node.config.invalidationPathsPerPage !== undefined &&
-        node.config.ttlClasses?.includes('document-isr')
-      )
-        add(
-          u,
-          'invalidation-paths',
-          w.onDemandPageRevalidations * node.config.invalidationPathsPerPage,
-        );
+      // ワイルドカードでまとめるなら、更新 1 回あたりのパスで数える（D-79）
+      if (node.config.ttlClasses?.includes('document-isr')) {
+        const wildcard = node.config.invalidationWildcardPathsPerUpdate;
+        const perPage = node.config.invalidationPathsPerPage;
+        if (wildcard !== undefined)
+          add(u, 'invalidation-paths', w.onDemandUpdates * wildcard);
+        else if (perPage !== undefined)
+          add(u, 'invalidation-paths', w.onDemandPageRevalidations * perPage);
+      }
       break;
     default:
       break;
@@ -444,6 +448,7 @@ export function simulateResources(
           ...workload,
           cacheHitRate: workload.peakCacheHitRate,
           cacheMissFlow: workload.peakCacheMissFlow,
+          cdnFlushMissFlow: workload.peakCdnFlushMissFlow,
         },
         false,
         true,

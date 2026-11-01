@@ -213,6 +213,7 @@ describe('部品の組み合わせ', () => {
       [
         'api',
         'apiCache',
+        'cdnInvalidation',
         'cdnPlan',
         'db',
         'frontCdn',
