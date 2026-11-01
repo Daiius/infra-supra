@@ -1684,6 +1684,19 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
     });
     if (after < 0) return short(-after);
   }
+  // DB 以外の部品は今月から差し替わるので、増えるアカウントの維持（D-52）も今月の余力に含めて確かめる（OCL-73780314）
+  if (
+    action.type === 'component' &&
+    action.slot !== 'db' &&
+    !proposalOnlyComponent(scenarioOf(state), action.slot, action.option)
+  ) {
+    const after = effortAvailable({
+      ...state,
+      components: { ...state.components, [action.slot]: action.option },
+      plannedEffort: state.plannedEffort + r.cost,
+    });
+    if (after < 0) return short(-after);
+  }
   return r;
 }
 

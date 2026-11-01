@@ -5,6 +5,7 @@ import {
   addedAccounts,
   applyAction,
   checkAction,
+  effortAvailable,
   componentEffortLabel,
   EFFORT,
   newGame,
@@ -257,5 +258,29 @@ describe('DB の差し替えでアカウントが増えるとき（OCL-B6A107A3�
       reason: 'effort',
     });
     expect(applyAction(busy, hd)).toBe(busy);
+  });
+});
+
+describe('差し替えで増える維持の手間の余力（OCL-73780314）', () => {
+  it('部品の手間 + 設定の手間はちょうど足りても、増える維持 0.5 が足りなければ選べない', () => {
+    const s = playMonth(newGame(VERCEL_PRO));
+    const cost = EFFORT.component.images + EFFORT.accountSetup;
+    // 残りをちょうど部品と設定の手間にする
+    const tight = {
+      ...s,
+      plannedEffort: s.plannedEffort + effortAvailable(s) - cost,
+    };
+    expect(effortAvailable(tight)).toBe(cost);
+    expect(checkAction(tight, swap('cf-images'))).toMatchObject({
+      ok: false,
+      reason: 'effort',
+    });
+    expect(applyAction(tight, swap('cf-images'))).toBe(tight);
+    // アカウントが増えない部品は今までどおり選べる
+    expect(checkAction(tight, swap('resize')).ok).toBe(true);
+    // 0.5 の余裕があれば選べ、適用後の余力は 0
+    const ok = { ...tight, plannedEffort: tight.plannedEffort - 0.5 };
+    expect(checkAction(ok, swap('cf-images')).ok).toBe(true);
+    expect(effortAvailable(applyAction(ok, swap('cf-images')))).toBe(0);
   });
 });
