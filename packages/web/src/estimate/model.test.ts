@@ -2,6 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   compareStacks,
+  costCurves,
+  CURVE_PVS,
+  curveColorSlot,
+  defaultCurveStacks,
   fromQuery,
   normalizeInput,
   runEstimate,
@@ -139,5 +143,84 @@ describe('MAU の換算（OCL-D4F7AE54）', () => {
     const b = normalizeInput({ template: 'business', pv: 300_000 });
     expect(a.pv / runEstimate(a).mau).toBeCloseTo(10, 6);
     expect(b.pv / runEstimate(b).mau).toBeCloseTo(200, 6);
+  });
+});
+
+describe('費用の曲線（D-74）', () => {
+  it('今の構成の点は、その PV の見積と同じ（今の部品で数える）', () => {
+    const i = normalizeInput({
+      stack: 'cloudflare-vinext-paid',
+      parts: { isrCache: 'workers-cache' },
+    });
+    const [c] = costCurves(i, [i.stack]);
+    expect(c!.current).toBe(true);
+    expect(c!.points.map((p) => p.pv)).toEqual([...CURVE_PVS]);
+    for (const p of c!.points)
+      expect(p.totalUsd).toBeCloseTo(
+        runEstimate({ ...i, pv: p.pv }).totalUsd,
+        9,
+      );
+  });
+
+  it('他の構成は既定の部品で数え、その PV の比較の表と同じ月額', () => {
+    const i = normalizeInput({
+      stack: 'cloudflare-vinext-free',
+      parts: { isrCache: 'workers-cache' },
+    });
+    const [c] = costCurves(i, ['cloudflare-vinext-paid']);
+    for (const p of c!.points) {
+      const row = compareStacks({ ...i, pv: p.pv }).find(
+        (r) => r.stack === 'cloudflare-vinext-paid',
+      )!;
+      expect(p.totalUsd).toBeCloseTo(row.totalUsd, 9);
+      expect(p.blocking.length).toBe(row.blocking);
+    }
+  });
+
+  it('止まる前提に当たる点は文を持つ（無料プランは PV を上げると止まる）', () => {
+    const i = normalizeInput({ stack: 'netlify-supabase-free' });
+    const [c] = costCurves(i, [i.stack]);
+    expect(c!.points.at(-1)!.blocking.length).toBeGreaterThan(0);
+    expect(c!.points.at(-1)!.blocking.every((t) => t.length > 0)).toBe(true);
+  });
+
+  it('載せられない構成は捨てる', () => {
+    const i = normalizeInput({ framework: 'astro' });
+    expect(costCurves(i, ['aws-amplify'])).toEqual([]);
+  });
+
+  it('既定は今の構成 + 今の PV で安い順に 4 構成で、STACKS の順に並ぶ', () => {
+    const i = normalizeInput({ stack: 'vercel-supabase-pro' });
+    const rows = compareStacks(i);
+    const ids = defaultCurveStacks(rows);
+    expect(ids).toHaveLength(5);
+    expect(ids).toContain('vercel-supabase-pro');
+    const priciestPicked = Math.max(
+      ...ids
+        .filter((id) => id !== i.stack)
+        .map((id) => rows.find((r) => r.stack === id)!.totalUsd),
+    );
+    for (const r of rows)
+      if (!ids.includes(r.stack))
+        expect(r.totalUsd).toBeGreaterThanOrEqual(priciestPicked);
+    const order = rows.map((r) => r.stack);
+    expect(ids).toEqual(
+      [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b)),
+    );
+  });
+
+  it('色は事業者に固定（6 事業者で 6 色の枠に収まり、同じ事業者は同じ色）', () => {
+    const c = costCurves(
+      normalizeInput({}),
+      compareStacks(normalizeInput({})).map((r) => r.stack),
+    );
+    const slots = new Set(c.map((s) => curveColorSlot(s.provider)));
+    for (const s of slots) expect(s).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...slots)).toBeLessThan(6);
+    expect(curveColorSlot('cloudflare')).toBe(0);
+    // 同じ事業者の中で形（variant）が重ならない
+    const keys = c.map((s) => `${s.provider}:${s.variant}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(Math.max(...c.map((s) => s.variant))).toBeLessThan(3);
   });
 });

@@ -480,6 +480,114 @@ export function compareStacks(input: EstimateInput): ComparisonRow[] {
   );
 }
 
+// ---- 費用の曲線（D-74）----
+
+/** 曲線の PV の刻み（対数でほぼ等間隔。1 万〜3,000 万）。点の数は再計算の重さに効くので増やしすぎない。 */
+export const CURVE_PVS = [
+  10_000, 30_000, 100_000, 300_000, 1_000_000, 3_000_000, 10_000_000,
+  30_000_000,
+] as const;
+
+/** 既定で曲線に出す構成の数（今の構成を除く、月額の安い順）。 */
+export const CURVE_DEFAULT_COUNT = 4;
+/** 曲線に同時に出せる構成の数の上限（色と形の組で見分けられる数に抑える）。 */
+export const CURVE_MAX = 6;
+
+export type CurvePoint = {
+  pv: number;
+  totalUsd: number;
+  unpricedLines: number;
+  /** 当たっている止まる前提（`block`・`upgrade-required`）の文。空なら止まらない。 */
+  blocking: string[];
+};
+
+export type CurveSeries = {
+  stack: string;
+  name: string;
+  /** 事業者（色に使う）。 */
+  provider: string;
+  /** 同じ事業者の構成の中での順（形に使う。STACKS の並びで固定）。 */
+  variant: number;
+  current: boolean;
+  points: CurvePoint[];
+};
+
+/**
+ * 今の条件（テンプレート・フレームワーク・設定）のまま PV だけを振った、構成ごとの月額。
+ * 部品は今の構成だけ今の選択、他の構成は既定（構成で選べる部品が違うため。compareStacks と同じ）。
+ * 載せられない構成の id は捨てる。
+ */
+export function costCurves(
+  input: EstimateInput,
+  stacks: readonly string[],
+  pvs: readonly number[] = CURVE_PVS,
+): CurveSeries[] {
+  return stacks.flatMap((id) => {
+    const index = stackIndexOf(id);
+    if (index < 0 || !stackSupports(index, input.framework)) return [];
+    const r = resolve(input, id);
+    const provider = STACKS[index]!.provider;
+    const points = pvs.map((pv): CurvePoint => {
+      const res = run({ ...input, pv }, r);
+      return {
+        pv,
+        totalUsd: toUsd(res.bill.totals),
+        unpricedLines: res.bill.unpricedLines,
+        blocking: res.premises
+          .filter(
+            (p) =>
+              p.hit &&
+              (p.effect === 'block' || p.effect === 'upgrade-required'),
+          )
+          .map((p) => p.text),
+      };
+    });
+    return [
+      {
+        stack: id,
+        name: stackName(index, input.framework, false, r.components),
+        provider,
+        variant: STACKS.filter(
+          (s) => s.provider === provider && s.index < index,
+        ).length,
+        current: id === input.stack,
+        points,
+      },
+    ];
+  });
+}
+
+/**
+ * 曲線に既定で出す構成: 今の構成と、今の PV の月額の安い順に CURVE_DEFAULT_COUNT 構成（今の構成を除く）。
+ * 並びは STACKS の順（表示の順位で色や並びが入れ替わらないように）。
+ */
+export function defaultCurveStacks(
+  rows: readonly ComparisonRow[],
+  count = CURVE_DEFAULT_COUNT,
+): string[] {
+  const cheap = sortRows(
+    rows.filter((r) => !r.current),
+    'cost',
+  )
+    .slice(0, count)
+    .map((r) => r.stack);
+  const current = rows.filter((r) => r.current).map((r) => r.stack);
+  return inStackOrder([...current, ...cheap]);
+}
+
+/** 曲線の色の枠（0 始まり）。事業者ごとに STACKS に初めて出る順で固定する（表示の順位で塗り替えない）。 */
+export function curveColorSlot(provider: string): number {
+  return [...new Set(STACKS.map((s) => s.provider as string))].indexOf(
+    provider,
+  );
+}
+
+/** 構成の id を STACKS の順に並べる（重複は除く）。 */
+export function inStackOrder(ids: readonly string[]): string[] {
+  const set = new Set(ids);
+  return STACKS.filter((s) => set.has(s.id)).map((s) => s.id);
+}
+
 export type SortKey = 'cost' | 'name' | 'blocking';
 
 export function sortRows(
