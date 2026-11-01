@@ -1096,10 +1096,11 @@ function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
   const format = imageFormatOf(p.settings.imageKB);
   if (format === 'jpeg') return w;
   const images = { ...DEFAULT_CHOICES[p.platform], ...p.components }.images;
-  // OpenNext の画像の最適化（Lambda）: CloudFront の外れた分ごとに変換するので、変換 1 回の時間を 1.5 倍にする（OCL-ECDEF8A1・D-63）
+  // OpenNext の画像の最適化（Lambda）・Cloud Run の next/image: CDN の外れた分ごとに変換するので、変換 1 回の時間を 1.5 倍にする
+  // （OCL-ECDEF8A1・D-63・OCL-CDDD26AB）
   if (
     format === 'avif' &&
-    p.platform === 'aws-opennext' &&
+    (p.platform === 'aws-opennext' || p.platform === 'gcp') &&
     usesNextImage(p.platform, p.framework, images)
   )
     return { ...w, images: { ...w.images, transformWorkFactor: 1.5 } };
@@ -3785,15 +3786,25 @@ export function playMonth(input: GameState): GameState {
   // Astro の初回表示の軽さ（JS はアイランドの分だけ。速さの重さを 1 つ減らす。ゲーム上の仮定・D-68）
   const firstLoadLight =
     astro && (sc.frameworks?.astro?.firstLoadLight ?? false);
-  // コンテナの冷えた起動（Cloud Run の最小インスタンス 0。D-88）: 経路に載るコンテナのうち、起動を待つ閲覧の割合の最大
-  const routedNow = new Set(
-    Object.values(r.simulation.architecture.routes).flat(),
-  );
+  // コンテナの冷えた起動（Cloud Run の最小インスタンス 0。D-88）: コンテナに届いた要求のうち起動を待つ割合を、閲覧全体の割合に
+  // 直す（閲覧 1 件あたりコンテナに届く要求の数を掛け、1 を上限にする。画像の投稿など閲覧に関係しない経路は除く。OCL-554477DF）
+  const monthPV = r.simulation.workload.monthlyPageViews;
   const coldShare = Math.max(
     0,
-    ...Object.values(r.simulation.nodes)
-      .filter((u) => routedNow.has(u.nodeId))
-      .map((u) => u.coldStartShare ?? 0),
+    ...r.simulation.architecture.nodes.map((n) => {
+      const u = r.simulation.nodes[n.id]!;
+      if (!u.coldStartShare || monthPV <= 0) return 0;
+      const nonView = (['image-write'] as const).reduce(
+        (a, cls) =>
+          a +
+          (r.simulation.architecture.routes[cls]?.includes(n.id)
+            ? r.simulation.workload.classes[cls].count
+            : 0),
+        0,
+      );
+      const viewRequests = Math.max(0, (u.resources.requests ?? 0) - nonView);
+      return u.coldStartShare * Math.min(1, viewRequests / monthPV);
+    }),
   );
   const coldStart = coldShare >= COLD_START.heavyShare;
   // 静的書き出しのマイページは、サーバーの描画が無い代わりにブラウザが HTML → JS → API の順に待つ。速さ・初回表示は
