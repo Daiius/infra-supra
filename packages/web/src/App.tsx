@@ -36,6 +36,7 @@ import {
   premiseTrends,
   projectionNote,
   reflectionOf,
+  retryHintsOf,
   scenarioOf,
   SCENARIOS,
   selectTrends,
@@ -1489,6 +1490,8 @@ function Result({
     (b) => b.short && b.short !== b.label,
   );
   const reflection = reflectionOf(state);
+  // 次のプレイへのヒント（未達成・ゲームオーバーのとき。達成なら空。D-40）
+  const hints = retryHintsOf(state);
   const rows: { label: string; get: (a: Axes) => string }[] = [
     { label: '累積の利益', get: (a) => usd(a.profit) },
     { label: '満足度の平均', get: (a) => a.satisfaction.toFixed(2) },
@@ -1540,6 +1543,35 @@ function Result({
             </button>
           )}
         </div>
+        {hints.length > 0 && (
+          // 折りたたまずに出す。原因と対策の方向だけで、正解の構成名は出さない（D-40）
+          <section
+            className="rounded-box border-2 border-warning bg-warning/10 p-3 sm:p-4"
+            aria-labelledby="retry-hints-title"
+          >
+            <h3 id="retry-hints-title" className="mb-2 font-bold">
+              次のプレイへのヒント
+            </h3>
+            <ol className="space-y-3">
+              {hints.map((x, i) => (
+                <li key={`${x.kind}:${i}`} className="flex gap-2">
+                  <span className="badge badge-warning badge-sm mt-0.5 shrink-0 tabular-nums">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm">{x.what}</p>
+                    <p className="mt-1 text-sm">
+                      <span className="mr-1 font-semibold whitespace-nowrap">
+                        次に試せる方向:
+                      </span>
+                      {x.next}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
         <div className="space-y-3">
           {meters.map((m) => (
             <Meter key={m.label} {...m} />
