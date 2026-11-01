@@ -948,6 +948,12 @@ export function stackChangeText(
   };
 }
 
+/** 構成ごとの自前運用の維持の手間（毎月。自前運用でなければ 0）。始める画面の手間のバーにも使う（D-36）。 */
+export function upkeepOf(sc: Scenario, stackIndex: number): number {
+  return STACKS[stackIndex]!.selfHosted ? sc.effort.selfHostedUpkeep : 0;
+}
+
+/** 動いている構成（乗り換え中は新旧両方）の維持の手間。両方が自前運用でも 1 回分。 */
 function upkeepFor(
   state: Pick<GameState, 'stackIndex' | 'migration' | 'scenario'>,
 ) {
@@ -955,9 +961,7 @@ function upkeepFor(
     state.stackIndex,
     ...(state.migration ? [state.migration.to] : []),
   ];
-  return running.some((i) => STACKS[i]!.selfHosted)
-    ? scenarioOf(state).effort.selfHostedUpkeep
-    : 0;
+  return Math.max(...running.map((i) => upkeepOf(scenarioOf(state), i)));
 }
 
 function migrationWanted(m: Migration | null): number {

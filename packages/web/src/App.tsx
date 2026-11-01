@@ -57,6 +57,7 @@ import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
 import {
+  EffortBar,
   FrameworkField,
   ScenarioDescription,
   ScenarioPicker,
@@ -198,15 +199,20 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             {STACKS.map((s) => (
               <label
                 key={s.id}
-                className={`flex cursor-pointer items-center gap-3 rounded-box border p-3 ${stack === s.index ? 'border-primary bg-primary/5' : 'border-base-300'}`}
+                className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${stack === s.index ? 'border-primary bg-primary/5' : 'border-base-300'}`}
               >
                 <input
                   type="radio"
-                  className="radio radio-primary"
+                  className="radio radio-primary mt-0.5 shrink-0"
                   checked={stack === s.index}
                   onChange={() => setStack(s.index)}
                 />
-                <span>{stackName(s.index, framework, false)}</span>
+                <span className="block min-w-0">
+                  <span className="block">
+                    {stackName(s.index, framework, false)}
+                  </span>
+                  <EffortBar scenario={scenario} stackIndex={s.index} />
+                </span>
               </label>
             ))}
           </div>

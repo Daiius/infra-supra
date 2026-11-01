@@ -5,9 +5,10 @@ import {
   SCENARIOS,
   type FrameworkId,
   type Scenario,
+  upkeepOf,
 } from 'game';
 import { Info } from './info.tsx';
-import { NameWithInfo } from './option-text.tsx';
+import { Meta, NameWithInfo } from './option-text.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -47,6 +48,46 @@ export function ScenarioPicker({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 構成の毎月の手間（D-36）。シナリオの毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・機能開発 success）。
+ * 色だけに頼らず、数を文字でも出す。自前運用の構成には、自前の障害の確率を添える。
+ */
+export function EffortBar({
+  scenario: sc,
+  stackIndex,
+}: {
+  scenario: Scenario;
+  stackIndex: number;
+}) {
+  const total = sc.effort.perMonth;
+  const upkeep = upkeepOf(sc, stackIndex);
+  const items =
+    upkeep > 0
+      ? [
+          `維持 ${upkeep}`,
+          `機能開発に ${total - upkeep}`,
+          `自前の障害 月 ${Math.round(sc.incidents.selfHostedChancePerMonth * 100)}%`,
+        ]
+      : [`機能開発に ${total}`];
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span
+        role="img"
+        aria-label={`毎月の手間 ${total} のうち、維持 ${upkeep}`}
+        className="flex shrink-0 gap-0.5"
+      >
+        {Array.from({ length: Math.max(0, total) }, (_, k) => (
+          <span
+            key={k}
+            className={`h-2.5 w-2.5 rounded-sm ${k < upkeep ? 'bg-warning' : 'bg-success'}`}
+          />
+        ))}
+      </span>
+      <Meta items={items} className="text-xs opacity-80" />
+    </span>
   );
 }
 
