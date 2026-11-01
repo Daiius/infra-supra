@@ -112,6 +112,26 @@ describe('AWS の構成（Next.js・Amplify Hosting）', () => {
     expect(cf.reduce((a, l) => a + (l.amount ?? 0), 0)).toBe(0);
   });
 
+  it('自前の CloudFront を前に置くと、静的なファイルは Amplify から配らず、HTML と API は両方で数える', () => {
+    const base = run(1_000_000);
+    const st = run(1_000_000, { frontCdn: 'static' });
+    const html = run(1_000_000, { frontCdn: 'html' });
+    const amplifyGB = (r: typeof base) =>
+      r.simulation.nodes.cdn!.resources['egress-gb'] ?? 0;
+    expect(amplifyGB(st)).toBeLessThan(amplifyGB(base));
+    expect(amplifyGB(html)).toBeLessThan(amplifyGB(st));
+    // API は前段でキャッシュしないので、前段と Amplify の両方の転送に乗る
+    expect(st.simulation.nodes.front!.resources['egress-gb']).toBeGreaterThan(
+      0,
+    );
+    const a = composeStack('aws-amplify', { frontCdn: 'html' });
+    expect(a.routes.api).toEqual(['front', 'cdn', 'ssr', 'dynamodb']);
+    const cdn = a.nodes.find((n) => n.id === 'cdn')!.config;
+    expect(cdn.kind === 'cdn' && cdn.ttlClasses).toBeFalsy();
+    const opt = componentsOf('aws', 'frontCdn').find((c) => c.id === 'html')!;
+    expect(opt.onDemandIsr?.ok).toBe(false);
+  });
+
   it('ファイルの置き場は S3、載せ方の表に Next.js と SPA の両方がある', () => {
     expect(fileStorageOf('aws-amplify')?.id).toBe('s3');
     expect(deployTarget('nextjs', 'aws')?.adapter).toContain('Amplify');

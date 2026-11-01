@@ -20,6 +20,7 @@ export const AWS_DEFAULT_CHOICES: Choices = {
   isrCache: 'default',
   images: 'resize',
   db: 'dynamodb',
+  frontCdn: 'none',
 };
 
 /** CloudFront・Amplify の CDN の画像のヒット率（仮定。Vercel の CDN と同じ値）。 */
@@ -77,6 +78,44 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     label: '投稿のときに一律で縮めて置く',
     note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて S3 に置き、CloudFront で配る。原本は残さない。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
     premiseRefs: [
+      'pool:aws:cloudfront:cloudfront-free-transfer',
+      'pool:aws:cloudfront:cloudfront-free-requests',
+    ],
+  },
+  // Amplify の前に自前の CloudFront（D-31 の VPS の前段の CDN と同じ考え方。Next.js だけ。SPA は最初から CloudFront）
+  {
+    id: 'none',
+    slot: 'frontCdn',
+    frameworks: ['nextjs'],
+    platform: 'aws',
+    label: 'なし',
+    note: 'すべてを Amplify の CDN が返す（配信は Amplify の料金 $0.15/GB）',
+    premiseRefs: ['fact:aws:amplify-hosting:transfer-not-cloudfront'],
+  },
+  {
+    id: 'static',
+    slot: 'frontCdn',
+    frameworks: ['nextjs'],
+    platform: 'aws',
+    label: '自前の CloudFront（静的と画像だけ）',
+    note: '自前の CloudFront の後ろに Amplify を置き、静的なファイルと Amplify で最適化した画像を CloudFront が返す（CloudFront の単価・常時無料）。外れた分と HTML・API は Amplify の配信としても課金される（二重になる）とみなす。Amplify の利用者ガイドに手順は無い',
+    premiseRefs: [
+      'fact:aws:amplify-hosting:front-cloudfront',
+      'pool:aws:cloudfront:cloudfront-free-transfer',
+      'pool:aws:cloudfront:cloudfront-free-requests',
+    ],
+  },
+  {
+    id: 'html',
+    slot: 'frontCdn',
+    frameworks: ['nextjs'],
+    platform: 'aws',
+    label: '自前の CloudFront（ISR のページもキャッシュ）',
+    note: 'ISR のページも s-maxage（ISR の間隔）で CloudFront が返す。オンデマンドの再検証は CloudFront に届かない（Amplify もオンデマンド ISR に非対応）。外れた分と SSR・API は Amplify の配信としても課金されるとみなす',
+    onDemandIsr: { ok: false, fact: 'aws:amplify-hosting:front-cloudfront' },
+    premiseRefs: [
+      'fact:aws:amplify-hosting:front-cloudfront',
+      'fact:aws:amplify-hosting:cache-control',
       'pool:aws:cloudfront:cloudfront-free-transfer',
       'pool:aws:cloudfront:cloudfront-free-requests',
     ],
@@ -196,7 +235,7 @@ const cloudfront = (
   facts: ['origin-fetch-free'],
   billing: bill('cloudfront', {
     requests: 'https-requests',
-    'egress-gb': 'data-transfer-out',
+    'egress-gb': 'cloudfront-transfer-out',
     'origin-transfer-gb': 'origin-fetch',
   }),
 });
@@ -227,24 +266,62 @@ function composeAmplify(
 ): ArchitectureInput {
   const isr = choices.isrCache !== 'none';
   const optimize = choices.images === 'default';
+  // 自前の CloudFront を Amplify の前に置く（static: 静的と画像だけ・html: ISR のページも）。
+  // キャッシュは前段の 1 層で数え、Amplify の CDN は前段が持つクラスを素通しにする（二重に当てない）
+  const front = choices.frontCdn === 'static' || choices.frontCdn === 'html';
+  const frontIsr = isr && choices.frontCdn === 'html';
   const amplify = (meters: Record<string, string>) =>
     bill('amplify-hosting', meters);
+  const frontNodes: ArchNodeIn[] = front
+    ? [
+        {
+          id: 'front',
+          label: '自前の CloudFront（Amplify の前段）',
+          config: {
+            kind: 'cdn',
+            hitRate: {
+              asset: 1,
+              'document-static': 1,
+              ...(optimize ? { 'image-read': IMAGE_CDN_HIT_RATE } : {}),
+            },
+            ...(frontIsr
+              ? { ttlClasses: ['document-isr'] as RequestClass[] }
+              : {}),
+          },
+          facts: ['origin-fetch-free'],
+          billing: bill('cloudfront', {
+            requests: 'https-requests',
+            'egress-gb': 'cloudfront-transfer-out',
+            'origin-transfer-gb': 'origin-fetch',
+          }),
+        },
+      ]
+    : [];
   const nodes: ArchNodeIn[] = [
+    ...frontNodes,
     {
       id: 'cdn',
       label: 'Amplify の CDN',
       config: {
         kind: 'cdn',
-        hitRate: {
-          asset: 1,
-          'document-static': 1,
-          ...(optimize ? { 'image-read': IMAGE_CDN_HIT_RATE } : {}),
-        },
+        hitRate: front
+          ? {}
+          : {
+              asset: 1,
+              'document-static': 1,
+              ...(optimize ? { 'image-read': IMAGE_CDN_HIT_RATE } : {}),
+            },
         // ISR のページのヒット率は閲覧の密度 × 再検証の間隔から出す（D-37 と同じ式）
-        ...(isr ? { ttlClasses: ['document-isr'] as RequestClass[] } : {}),
+        ...(isr && !frontIsr
+          ? { ttlClasses: ['document-isr'] as RequestClass[] }
+          : {}),
       },
-      facts: ['transfer-not-cloudfront'],
-      billing: amplify({ 'egress-gb': 'data-transfer-out' }),
+      facts: [
+        'transfer-not-cloudfront',
+        'cache-control',
+        ...(front ? ['front-cloudfront'] : []),
+      ],
+      billing: amplify({ 'egress-gb': 'amplify-transfer-out' }),
     },
     {
       id: 'ssr',
@@ -270,19 +347,21 @@ function composeAmplify(
     db,
     ...standbyDb,
   ];
+  // 前段があれば、Amplify の CDN を通る経路の先頭に前段を足す
+  const edge = front ? ['front', 'cdn'] : ['cdn'];
   const routes: Partial<Record<RequestClass, string[]>> = {
-    'document-static': ['cdn'],
-    asset: ['cdn'],
-    'document-ssr': ['cdn', 'ssr', db.id],
+    'document-static': edge,
+    asset: edge,
+    'document-ssr': [...edge, 'ssr', db.id],
     ...(isr
       ? {
           // CDN の miss は SSR の計算が返す（再生成は裏で別の実行として数える）
-          'document-isr': ['cdn', 'ssr'],
+          'document-isr': [...edge, 'ssr'],
           'isr-revalidate': ['ssr', db.id],
         }
       : {}),
-    api: ['cdn', 'ssr', db.id],
-    'image-read': optimize ? ['cdn', 'image'] : ['cf', 's3'],
+    api: [...edge, 'ssr', db.id],
+    'image-read': optimize ? [...edge, 'image'] : ['cf', 's3'],
     'image-write': ['ssr', 's3'],
     ...(optimize ? { 'image-transform': ['image'] } : {}),
   };

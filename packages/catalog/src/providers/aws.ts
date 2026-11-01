@@ -42,6 +42,12 @@ export const aws: PriceBookInput = {
     // AmazonRDS 2026-10-29・AWSDataTransfer 2026-09-16
     amplifyPrices: priceList('AWSAmplify'),
     amplifyPricing: src('https://aws.amazon.com/amplify/pricing/'),
+    amplifyCaching: src(
+      'https://docs.aws.amazon.com/amplify/latest/userguide/caching.html',
+    ),
+    amplifyCacheControl: src(
+      'https://docs.aws.amazon.com/amplify/latest/userguide/Using-headers-to-control-cache-duration.html',
+    ),
     amplifyNext: src(
       'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
     ),
@@ -137,6 +143,29 @@ export const aws: PriceBookInput = {
           sourceIds: ['amplifyNext'],
         },
         {
+          id: 'cache-control',
+          premise:
+            'Amplify の CDN（Amplify が管理する CloudFront）は SSR の応答の Cache-Control（s-maxage）に従う。既定では SSR の応答をキャッシュせず（0 秒）、静的なファイルは 1 年',
+          sourceIds: ['amplifyCaching', 'amplifyCacheControl'],
+        },
+        {
+          id: 'front-cloudfront',
+          premise:
+            'Amplify の前に自前の CloudFront を置く手順は Amplify の利用者ガイドに無い（AWS の Prescriptive Guidance のパターンと re:Post の回答が根拠）。Amplify は CloudFront の「AWS のオリジンからの取得は無料」の例に挙がっていない',
+          interpretation: {
+            adopted:
+              '自前の CloudFront の外れた分（Amplify への取得）は Amplify の配信（$0.15/GB served）として課金されるとみなす（高めの側の読み）',
+            rejected: [
+              {
+                reading: 'AWS のオリジンとして Amplify からの取得も無料',
+                reason:
+                  'CloudFront の料金ページの無料の例は S3・EC2・ELB などで、Amplify は挙がっていない',
+              },
+            ],
+          },
+          sourceIds: ['cloudfrontFree', 'amplifyPricing'],
+        },
+        {
           id: 'transfer-not-cloudfront',
           premise:
             'Amplify Hosting の配信は自前の料金（$0.15/GB）で数え、CloudFront の常時無料（月 1 TB）はここには当てていない（Amplify の料金表は別の行。推測）',
@@ -145,7 +174,7 @@ export const aws: PriceBookInput = {
       ],
       meters: [
         {
-          id: 'data-transfer-out',
+          id: 'amplify-transfer-out',
           resource: 'egress-gb',
           unit: 'gb',
           premise: 'Amplify Hosting の配信の転送は $0.15/GB（無料の量なし）',
@@ -262,7 +291,7 @@ export const aws: PriceBookInput = {
           sourceIds: ['cloudfrontPrices'],
         },
         {
-          id: 'data-transfer-out',
+          id: 'cloudfront-transfer-out',
           resource: 'egress-gb',
           unit: 'gb',
           allowancePool: 'cloudfront-free-transfer',

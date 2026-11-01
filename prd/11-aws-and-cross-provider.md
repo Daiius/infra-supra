@@ -390,3 +390,57 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 - **Next.js の AWS は目標の前後**（Amplify の転送 $0.15/GB が効く）。画像を Amplify で最適化すると転送が増えて届かない。**SPA の AWS は CloudFront の常時無料で記事コミュニティでも勝てる**（§3.4 の見立てどおり）。RDS の固定費（約 $18/月 + ストレージ）は小さな規模ほど効く。
 - 「API を CloudFront でキャッシュ」がほぼ効かないのは、ゲームの API のキャッシュの期間の設定（D-37）が既定で 0 だから（他の事業者と同じ）。
 - 所持金の目標と広告の単価は、この表を見て決め直す（D-50）。既存の golden（CF・Vercel・VPS の基準プレイ）は変わらない。
+
+### 9.2 Amplify の前段の自前の CloudFront（2026-11-01・D-51 の追記）
+
+ユーザーの問い: 「CloudFront を使ったキャッシュの設定を入れられないか。普通にプレイすると data-transfer-out で厳しい。Amplify で構成するとデフォルトで入らなかったか」。
+
+公式で確かめたこと（2026-11-01 取得）:
+
+| 問い | 事実 | 出典 |
+|---|---|---|
+| Amplify は CloudFront を使うか | 「Amplify uses Amazon CloudFront to manage the caching configuration」。ただし Amplify が管理する配信で、課金は Amplify の料金表（「$0.15 per GB served」）。料金表に CloudFront・キャッシュのヒットの扱いの記述は無い | [caching](https://docs.aws.amazon.com/amplify/latest/userguide/caching.html)・[Amplify の料金](https://aws.amazon.com/amplify/pricing/) |
+| Amplify の既定のキャッシュ | 静的なファイルは 1 年、SSR（reverse proxy）の応答は 0 秒（キャッシュしない）。SSR の応答の `Cache-Control`（`s-maxage`）に従い、カスタムヘッダーで上書きできる | [caching](https://docs.aws.amazon.com/amplify/latest/userguide/caching.html)・[Cache-Control](https://docs.aws.amazon.com/amplify/latest/userguide/Using-headers-to-control-cache-duration.html) |
+| CloudFront の常時無料は Amplify に効くか | CloudFront の料金ページの無料の取得の例は S3・EC2・ELB などで、**Amplify は挙がっていない**。Amplify の配信に CloudFront の常時無料（1 TB）を当てる記述は無い | [CloudFront の従量の料金](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/) |
+| 自前の CloudFront を前に置けるか | Amplify の利用者ガイドに手順は無い。AWS Prescriptive Guidance に「Amplify の前に CloudFront を置く」パターンがある（本文は取得できず、検索の要約だけ）。re:Post の回答も同じ形（Amplify の既定のドメインを origin にする・独自ドメインは CloudFront 側に）。**Amplify 側の origin への応答の課金は記載が無い** | [Prescriptive Guidance のパターン](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/enable-aws-waf-for-web-applications-hosted-by-aws-amplify.html)・re:Post |
+
+- 既存のモデルでも ISR のページは Amplify の CDN でキャッシュしていた（D-37 の式）。問題は**キャッシュしたものも Amplify の配信（$0.15/GB）として課金される**こと。
+- 入れた部品「前段の CDN」（AWS × Next.js だけ。D-31 と同じ id）: なし / 自前の CloudFront（静的と画像だけ）/ 自前の CloudFront（ISR のページもキャッシュ）。
+  前段のヒット分は CloudFront の単価・常時無料、外れた分と HTML・API は **Amplify の配信としても課金**（二重）とみなす（catalog の `front-cloudfront` の解釈。高めの側の読み）。キャッシュは前段の 1 層で数え、Amplify の CDN は前段が持つクラスを素通しにする。
+  「ISR のページも」は D-31 と同じく鮮度を 1 段下げる（オンデマンドの再検証が届かない。Amplify はもともとオンデマンド ISR に非対応）。手間は前段の CDN と同じ 2。
+- 同じ確認で、課金の明細のメーターの名前を `amplify-transfer-out` と `cloudfront-transfer-out` に分けた（どちらも `data-transfer-out` で、画面で見分けられなかった）。
+
+基準プレイ（記事コミュニティ × AWS Next.js・何もしない・シード 1〜20）:
+
+| 画像 | 前段 | 合格 | 12 か月の費用 | 所持金（中央値） | 満足度 |
+|---|---|---|---|---|---|
+| 縮める（既定。画像はもともと S3 + CloudFront） | なし | 10 / 20 | $671 | $1,751 | 0.89 |
+| 〃 | 静的と画像 | 10 / 20 | $623 | $1,779 | 0.89 |
+| 〃 | ISR のページも | 8 / 20 | $518 | $1,706 | 0.84（鮮度） |
+| Amplify の最適化 | なし | 0 / 20 | $1,016 | $1,348 | 0.89 |
+| 〃 | 静的と画像 | **20 / 20** | $287 | $2,059 | 0.89 |
+| 〃 | ISR のページも | 20 / 20 | $249 | $1,891 | 0.84 |
+
+- 縮める画像（既定）では、画像の配信がもともと CloudFront にあり、前段で減るのは HTML と静的なファイルだけ。HTML・API は二重に課金されるので効果は小さい。
+- **Amplify で最適化した画像を前段の CloudFront から配ると、記事コミュニティで全シード合格**（画像の転送が Amplify の $0.15/GB から CloudFront の常時無料 1 TB へ移る）。Amplify の最適化の料金は未取得のまま（明細に料金未取得が残る）なので、この合格は下限の費用で出ている。
+- 前段の課金の解釈（外れた分を Amplify の配信として数える）が逆なら、さらに安くなる。
+
+## 10. Amplify の制限（文書化だけ・2026-11-01）
+
+ユーザーが確かめた Amplify の制限。ゲームで使う仕組み（依存の大きさ・応答の大きさ・ストリーミング）が今は無いので、catalog の前提には入れず、ここに記録する（Next.js の版とオンデマンド ISR は既存の部品・事実で出している）。
+
+| 制限 | 内容 | 出典 |
+|---|---|---|
+| SSR のビルド出力 | 計算のリソースの束は展開して 220 MB まで | [デプロイの仕様](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html) |
+| 応答の大きさ | Next.js 12 以降（Web Compute）の応答は 5.72 MB まで。超えると 504（中身なし） | [SSR のトラブルシューティング](https://docs.aws.amazon.com/amplify/latest/userguide/troubleshooting-SSR.html) |
+| 画像の最適化の出力 | 出力する画像は 4.3 MB まで | [Amplify の Next.js の対応](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html) |
+| 非対応の機能 | オンデマンド ISR・ストリーミング・Edge のミドルウェア・静的アセットと最適化した画像へのミドルウェア・`unstable_after` | 同上 |
+| Next.js の版 | 12〜15 | 同上 |
+| 実行の時間・一時領域 | 実行は最大 15 分、一時領域は 512 MB（`/tmp` だけ書ける） | [デプロイの仕様](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html)（検索の要約で確認。本文は未読） |
+
+ゲームで扱うなら（将来の出来事の候補・仮定）:
+
+- **依存を足す提案**（機能追加で大きなライブラリ・画像処理のネイティブの依存が増える）→ SSR のビルド出力が 220 MB に近づき、超えるとデプロイできない。対策は依存の整理（手間）か、重い処理だけ Lambda・別の事業者へ出す（prd/10 F-14 の API の置き場と重なる）。
+- **大きな応答**（一覧のページ・CSV の出力など）→ 5.72 MB を超えると 504。受託の業務アプリの「帳票の出力」の出来事の候補。
+- **ストリーミングを前提にする機能**（AI の応答の逐次表示など）→ Amplify では使えない。Vercel・Cloudflare では使える、という前提の差として出せる。
+- **原本の大きい画像**（4.3 MB を超える出力）→ D-47 の「最適化しない＝原本 4 MB」の近くにある。原本の大きさを上げる出来事と組むと当たる。

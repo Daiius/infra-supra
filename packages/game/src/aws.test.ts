@@ -45,12 +45,13 @@ describe('AWS の構成', () => {
     expect(stackFlavor(AWS)).toBeDefined();
   });
 
-  it('始める画面: Next.js は ISR のキャッシュ・画像・DB を選び、ファイルの置き場（S3）は固定', () => {
+  it('始める画面: Next.js は ISR のキャッシュ・画像・DB・前段の CDN を選び、ファイルの置き場（S3）は固定', () => {
     const slots = setupSlots(ARTICLE_COMMUNITY, AWS, 'nextjs');
     expect(slots.map((x) => [x.slot, x.fixed])).toEqual([
       ['isrCache', false],
       ['images', false],
       ['db', false],
+      ['frontCdn', false],
       ['files', true],
     ]);
     expect(
@@ -61,6 +62,7 @@ describe('AWS の構成', () => {
   it('始める画面: SPA は Amplify の画像の最適化を選べない', () => {
     const slots = setupSlots(ARTICLE_COMMUNITY, AWS, 'vite-spa');
     expect(slots.map((x) => x.slot)).not.toContain('isrCache');
+    expect(slots.map((x) => x.slot)).not.toContain('frontCdn');
     expect(
       slots.find((x) => x.slot === 'images')!.options.map((o) => o.id),
     ).toEqual(['none', 'resize']);

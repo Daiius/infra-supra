@@ -128,6 +128,12 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '原本をそのまま配るので、画質が落ちない。CDN の無料で使える量も大きい',
   'aws:images:resize':
     '投稿のときに一度だけ縮めて置き、CDN から配る。変換の費用がかからず、仕組みも単純',
+  'aws:frontCdn:none':
+    '間に何も挟まないので構成が単純。Amplify が管理する CDN がそのまま配る',
+  'aws:frontCdn:static':
+    '自前の CDN を前に置き、静的なファイルと画像を CDN の料金と無料の量で配る',
+  'aws:frontCdn:html':
+    'ページまで自前の CDN から返すので、Amplify から配る量がいちばん減る',
   'aws:db:dynamodb':
     '使った分だけの支払いで、保存も一定量まで無料。アクセスが増えても自動で追従する',
   'aws:db:rds':
