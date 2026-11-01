@@ -7,7 +7,7 @@
 
 - `packages/catalog/src/providers/<provider>/` に、プロバイダーごとの PriceBook を**版ごとのファイル**で置く
   （例: `cloudflare/2026-11-01.ts`）。古い版は消さない（保存済みの見積を当時の料金で再計算するため）。
-  **gap**（2026-11-02）: 今は `providers/<provider>.ts` の 1 ファイルに今の版だけを置いている（cloudflare・vercel・supabase・sakura-vps・aws・netlify・neon）。
+  **gap**（2026-11-02）: 今は `providers/<provider>.ts` の 1 ファイルに今の版だけを置いている（cloudflare・vercel・supabase・sakura-vps・aws・netlify・neon・gcp）。
 - 架空の料金は `packages/catalog/src/fictional/` に置き、provider の ID を `fictional-` で始める。
   **gap**: 今はテストの中（`packages/estimator/src/pricing/fixtures.test-helpers.ts`・各テスト）に置いている。ID と `status` の一致はスキーマが検査する。
 - 1 つの PriceBook = 1 プロバイダー × 1 版。中に複数のサービス・プランを持つ。

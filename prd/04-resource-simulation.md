@@ -146,6 +146,22 @@ peak-concurrency = max_h（h の RPS × burst × 平均 wall-ms / 1000）   … 
   離れていると壁時計時間が伸びる、という差がここに出る。
 - 1 リクエストあたりの CPU 上限（Limit）を `cpu(k)` が超えたら `LimitBreach`。
 
+### 3.3.1 `container`（Cloud Run 型。D-88・2026-11-02）
+
+コンテナのサービスをリクエストで課金する型。件ごとの CPU・壁時計時間の数え方は §3.3 と同じで、課金はインスタンスが 1 件以上を処理している時間（アクティブ）に掛かる。
+
+```
+x                  = Σ N_in(k) × wall(k) / S              S: 月の秒数（730 時間）。同時に処理している件数の平均
+active-instances   = max(1 − e^(−x), x / concurrency, cpu-ms / 1000 / S / vCPU)
+cpu-hours          = active-instances × 730 × vCPU        memory-gb-hours = active-instances × 730 × メモリ(GB)
+idle-cpu-hours     = max(0, minInstances × 730 − active-instances × 730) × vCPU   （メモリも同じ）
+cold-start-share   = minInstances = 0 なら e^(−λ × idleKeepSeconds)、1 以上なら 0      λ: 前景のリクエストの月の平均の到着率
+```
+
+- 1 − e^(−x) は到着をポアソンとみたときに 1 件以上を処理している時間の割合（M/G/∞ の空でない確率）。閲覧が薄いと重ならず ≒ 壁時計時間の合計、
+  濃いと同時実行の上限で割った値（x / concurrency）と CPU を使い切る分が下限になる。月の平均で出すので、時間帯の偏り（夜間）は入れていない（凹なので高めの側）。
+- 裏で走るクラス（ISR の作り直し・一意な変換）はリクエストの件数に数えず、時間には数える。インスタンスの時間の 100 ms の切り上げは数えない。
+
 ### 3.4 `serverless-sql`（D1 型）
 
 ```

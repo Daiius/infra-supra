@@ -791,6 +791,20 @@
 - 背景: CI は秘密の検査（secret-scan.yml）だけで、`pnpm test` は手元でしか走っていなかった（D-86 の残した点）。
 - 推奨案で決定（autonomous-log B-41）: `.github/workflows/test.yml` を足し、全ブランチの push と PR で `pnpm install --frozen-lockfile`・`pnpm typecheck`・`pnpm test`・`pnpm format:check` を回す。Node 24、pnpm は packageManager の版。Action は secret-scan.yml と同じく commit の SHA で固定（checkout v7.0.1・pnpm/action-setup v6.1.0・setup-node v7.1.0）。権限は contents: read だけ。
 
+### D-88 Google Cloud（Cloud Run + Firebase Hosting）を足す（確定・2026-11-02）
+
+- 背景: ユーザーの方針「より現実的なコスト感・費用を抑えるより複雑な構成も可能にしたい」「作者のスタックに寄せない」。コンテナを従量で動かす代表が無かった。推奨案で自律に決定。prd/11 §16・prd/04 §3.3.1。
+- 決定:
+  - 構成「Google Cloud（Cloud Run + Firebase Hosting）」を STACK_DEFS の後ろ（添字 11）に足した（`platform: 'gcp'`・東京・Blaze）。料金は `providers/gcp.ts`（Cloud Run のリクエストで課金・Hosting・Cloud Storage・Firestore Standard・Cloud SQL db-f1-micro・Premium Tier の転送）、構成は `stacks/gcp.ts`。
+  - Next.js は `output: 'standalone'` のコンテナ。ISR は Hosting の CDN（`s-maxage`）+ インスタンスごとのローカル（共有しない事実を部品の文と前提に出す）。オンデマンドの再検証は CDN に届かないので満たさない。SPA・静的書き出し・Astro は Hosting + Cloud Run の API。
+  - estimator に `container` の種類（アクティブな時間 = `S × max(1 − e^(−x), x / 同時実行, CPU 秒 / vCPU)`・最小インスタンスの待機・冷えた起動の割合）と資源 `idle-cpu-hours`・`idle-memory-gb-hours` を足した。同時実行で割るだけの読みは、閲覧が薄いときに安く出すぎるので採らない。
+  - 部品: DB は Firestore（従量・既定）/ Cloud SQL（最小・固定）、新しいスロット「最小インスタンス数」（0 既定 / 1）、画像だけ Cloudflare（CROSS_PAIRS に 1 行。R2 への書き込みは Premium Tier の転送で数える）。
+  - ゲーム: 維持の手間 0.5 / 月（`EFFORT.containerUpkeep`・StackDef の `containerized`）、最小インスタンス数の切り替えの手間 1、冷えた起動を待つ閲覧が 5% 以上の月は速さの重さ +1（`COLD_START`）。いずれもゲーム上の仮定。
+  - 消費税は `added`（Google Cloud の VAT の文書に「customers in Japan is subject to 10% JCT」）。見積モードの曲線は AWS の 2 つの構成を同じ色にして 6 色に収めた。
+  - 解釈: Cloud Run の無料の分はアクティブの分にだけ当てる・Cloud Run → Hosting の応答は転送に数えない・Cloud SQL は時間の単価（$0.0122。月額の表示 $10.22 は 730 時間と合わない）。
+- 基準プレイ（何もしない・シード 1〜20。達成数・12 か月の費用の平均 / 月）: 記事 × Next.js 0/20・$62.1（画像だけ Cloudflare で 20/20・$26.0）、記事 × SPA 0/20・$54.2（同 20/20・$9.7）、受託 × Next.js 20/20・$12.2、受託 × SPA 20/20・$8.7。最小インスタンス 1 は月 約 $9.7 増えるだけ（冷えた起動はどちらのシナリオでもほぼ 0）。Cloud SQL は月 約 $4〜7 高い。**CF Paid × Next.js（目標の根拠）は不変**（記事 20/20・$15.2・受託 20/20・$5.7）。既存の golden・網羅テストも通る。
+- 残した点: 冷えた起動を時間帯（夜間・朝）で見る・共有の ISR のキャッシュ（Memorystore など）・API を Workers に置く組・Google Cloud の SLA・Cloud Run → Hosting の転送の課金の確認。
+
 ### 論点（ユーザーの判断が要るもの）
 
 | # | 論点 | 参照 |
@@ -813,6 +827,7 @@
 | Neon | 負荷と CU の関係・instant restore の履歴の量・Vercel の Marketplace 経由の価格（請求が Vercel にまとまることは D-84 で確認）・Netlify Database | D-77・D-84・prd/11 §15 |
 | AWS | Amplify の画像の最適化の課金（料金未取得のまま。D-84 で再確認）・Amplify をオリジンにした CloudFront の定額・~~RDS の最小の割り当て 20 GiB を数えること~~ → D-85（メーターの最小の課金量） | D-51・D-61・D-84・D-85・prd/11 §1.6・§9・§12 |
 | 事業者の間の通信 | Vercel・Amplify の関数から外への通信の課金（数えていない。D-84 で再確認しても課金の項目に無い） | D-52・D-67・D-84・prd/11 §2 |
+| Google Cloud | Cloud Run・Firebase Hosting の SLA（未取得）・Cloud Run → Firebase Hosting の応答の転送の課金（書かれていない。数えない）・Cloud SQL の最小の割り当ての量 | D-88・prd/11 §16.3 |
 | ~~Cloudflare Images Paid~~ | ~~基本料~~ → D-84（基本料なしとみる。公式の例の合計に入っていない。値は不変） | D-84・prd/11 §2 |
 
 ### 残した点（直す方針はあるが、今は入れていないもの）
@@ -824,6 +839,7 @@
 | D-71・D-77 | Netlify・Neon の構成をシナリオの `baselines` に足していない |
 | D-85 | RDS の割り当てを DB の大きさに合わせて増やすこと（gp3 は減らせない）・コメントの鮮度の境目（1 分・5 分）の見直し |
 | D-86 | ~~CI でテスト（`pnpm test`）を走らせる workflow~~ → D-87・見た目（CSS・レイアウト）をブラウザで確かめるテスト |
+| D-88 | 冷えた起動を時間帯で見る（今は月の平均の到着率なので、どのシナリオでもほぼ 0）・共有の ISR のキャッシュの部品・Google Cloud の API を Workers に置く組・DB だけ Neon・シナリオの `baselines` に足していない |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 
