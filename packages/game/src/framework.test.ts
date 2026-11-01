@@ -194,6 +194,10 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       'cf-paid-kvdb': ['1695.56', 'goal', 12],
       'cf-paid-chat': ['1867.32', 'won', 12],
       'vps-sla': ['1593.41', 'goal', 12],
+      'vps-cdn': ['1575.57', 'goal', 12],
+      'vercel-cf-images': ['1355.55', 'goal', 12],
+      'aws-amplify-cdn': ['1815.39', 'won', 12],
+      'aws-opennext-images': ['1955.85', 'won', 12],
     });
   });
 });

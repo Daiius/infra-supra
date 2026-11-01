@@ -45,6 +45,8 @@ describe('受託先の業務アプリの運用', () => {
       'vercel-to-cf': ['1800.47', 'won', 12],
       'vercel-hobby': ['179.19', 'policy', 2],
       'cf-free': ['237.47', 'outages', 3],
+      'aws-amplify': ['1842.60', 'won', 12],
+      'aws-opennext': ['1988.68', 'won', 12],
     });
     expect(r(11)).toEqual({
       'cf-paid': ['2069.97', 'won', 12],
@@ -56,6 +58,8 @@ describe('受託先の業務アプリの運用', () => {
       'vercel-to-cf': ['1874.23', 'won', 12],
       'vercel-hobby': ['179.19', 'policy', 2],
       'cf-free': ['237.47', 'outages', 3],
+      'aws-amplify': ['1893.60', 'won', 12],
+      'aws-opennext': ['2060.99', 'won', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2036.76', 'won', 12],
@@ -68,6 +72,8 @@ describe('受託先の業務アプリの運用', () => {
       'vercel-to-cf': ['1845.17', 'won', 12],
       'vercel-hobby': ['179.19', 'policy', 2],
       'cf-free': ['237.47', 'outages', 3],
+      'aws-amplify': ['1872.68', 'won', 12],
+      'aws-opennext': ['2031.30', 'won', 12],
     });
   });
 
@@ -77,6 +83,9 @@ describe('受託先の業務アプリの運用', () => {
       // 込み分の内で固定費の差だけが効く: Cloudflare Paid は届き、Vercel Pro は届かない
       expect(won('cf-paid'), `seed ${seed}`).toBe(true);
       expect(won('vercel-pro'), `seed ${seed}`).toBe(false);
+      // 構成に合った対策（D-64）: AWS は既定の部品のまま届く
+      expect(won('aws-amplify'), `seed ${seed}`).toBe(true);
+      expect(won('aws-opennext'), `seed ${seed}`).toBe(true);
       // 受託の案件で非商用のプランは規約違反で終わる
       expect(run('vercel-hobby', seed).end?.reason).toBe('policy');
     }

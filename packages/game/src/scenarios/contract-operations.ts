@@ -12,6 +12,8 @@ const VERCEL_HOBBY = 2;
 const VERCEL_PRO = 3;
 const VPS = 4;
 const VPS_4GB = 5;
+const AWS_AMPLIFY = 6;
+const AWS_OPENNEXT = 7;
 
 /** 前の月の終わりに出ていた出来事（基準プレイが状態を見て行動を決めるため）。 */
 const sawEvent = (s: GameState, id: string, phase?: string) =>
@@ -339,6 +341,8 @@ export const CONTRACT_OPERATIONS: Scenario = {
   rare: { perGame: 0.25, from: 5, to: 9 },
   events: EVENTS,
   revisions: { from: 3, to: 10 },
+  // 目標は prd/07 §10.8 の決め方（D-64）で確かめ直した: CF Paid・VPS 手入れ・Vercel Pro → CF Paid・AWS 2 構成は
+  // まれな出来事の無いシードで全部届き（VPS は偶発的な障害を除く）、Vercel Pro・何もしない（最大 $1,580）は届かない
   goal: { cash: 1700, satisfaction: 0.75, maxOutageMonths: 2 },
   startCash: 60,
   // フレームワーク（prd/10 F-04）。既定は Next.js。業務アプリは SPA で作ることも多いので選べる
@@ -470,6 +474,19 @@ export const CONTRACT_OPERATIONS: Scenario = {
       label: 'Cloudflare Free・何もしない',
       short: 'CF Free・何もしない',
       stackIndex: CF_FREE,
+    },
+    // 構成に合った対策（D-64）。AWS は画像を配らないこのシナリオでは既定の部品のままで足りる
+    {
+      id: 'aws-amplify',
+      label: 'AWS Amplify・何もしない（依頼は断る）',
+      short: 'Amplify・何もしない',
+      stackIndex: AWS_AMPLIFY,
+    },
+    {
+      id: 'aws-opennext',
+      label: 'AWS OpenNext・何もしない（依頼は断る）',
+      short: 'OpenNext・何もしない',
+      stackIndex: AWS_OPENNEXT,
     },
   ],
 };

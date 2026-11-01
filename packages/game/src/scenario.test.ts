@@ -84,6 +84,28 @@ describe('シナリオのデータ', () => {
       expect(won, `seed ${seed}`).toBe(true);
     }
   });
+
+  it('目標の決め方（D-64・prd/07 §10.8）: CF Paid と構成に合った対策の 3 構成はまれな出来事の無いシードで全部届き、Vercel Pro・何もしないと原本のまま配るは届かない', () => {
+    const rare = new Set(
+      sc.events.filter((e) => e.tier === 'rare').map((e) => e.id),
+    );
+    const baseline = (id: string) => BASELINES.find((b) => b.id === id)!;
+    const originals = {
+      id: 'cf-paid-originals',
+      label: 'Cloudflare Paid・画像を原本のまま配る（D-47 の明らかな誤り）',
+      stackIndex: CF_PAID,
+      actions: [[{ type: 'component', slot: 'images', option: 'none' }]],
+    } satisfies Parameters<typeof playStrategy>[0];
+    for (let seed = 1; seed <= 50; seed++) {
+      const won = (b: Parameters<typeof playStrategy>[0]) =>
+        playStrategy(b, seed).phase === 'won';
+      if (!rollSchedule(sc, seed).some((x) => rare.has(x.id)))
+        for (const id of ['cf-paid', 'aws-amplify-cdn', 'aws-opennext-images'])
+          expect(won(baseline(id)), `${id} seed ${seed}`).toBe(true);
+      expect(won(baseline('vercel-pro')), `seed ${seed}`).toBe(false);
+      expect(won(originals), `seed ${seed}`).toBe(false);
+    }
+  });
 });
 
 describe('出来事（シード 42。話題の予告はシード 4）', () => {
