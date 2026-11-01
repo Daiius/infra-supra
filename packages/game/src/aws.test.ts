@@ -16,6 +16,10 @@ import {
   stackFlavor,
   STACKS,
   upkeepOf,
+  invalidationNote,
+  onDemandInvalidationEstimate,
+  retryHintsOf,
+  setupInvalidationEstimate,
   type FrameworkId,
 } from './index.ts';
 import type { Choices } from 'catalog';
@@ -204,5 +208,64 @@ describe('AWS の構成', () => {
     // 定額 Pro は込み・時間の再検証は無効化しない
     expect(line(first('flat-pro', 0))?.amount ?? 0).toBe(0);
     expect(line(first('payg', 300))?.amount ?? 0).toBe(0);
+  });
+
+  it('オンデマンドを選ぶ前に無効化の見込みが分かる: 従量はパスと金額、定額は込み、無効化しない構成は出さない（D-66）', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    const payg = setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
+      cdnPlan: 'payg',
+    })!;
+    // 1 か月目（30 万 PV）: 更新 1.5 万 × 2 ページ × 2 パス
+    expect(payg.paths).toBeCloseTo(60_000, 6);
+    expect(payg.usd).toBeCloseTo(59_000 * 0.005, 6);
+    expect(payg.included).toBe(false);
+    expect(invalidationNote(payg)).toBe(
+      '無効化 月約 60,000 パス・約 $295（月 1,000 パスまで無料、以降 1 パス $0.005）',
+    );
+    const flat = setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
+      cdnPlan: 'flat-pro',
+    })!;
+    expect(flat.included).toBe(true);
+    expect(invalidationNote(flat)).toBe(
+      '無効化 月約 60,000 パス（定額のプランでは込み。解釈）',
+    );
+    // ISR をキャッシュしない部品・Amplify は無効化しない
+    expect(
+      setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
+        isrCache: 'none',
+      }),
+    ).toBeUndefined();
+    expect(
+      setupInvalidationEstimate(ARTICLE_COMMUNITY, AWS, 'nextjs', {}),
+    ).toBeUndefined();
+    // ゲーム中は今月の規模で引く（今の設定が時間の再検証でも、オンデマンドにしたときの見込み）
+    const st = newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
+      cdnPlan: 'payg',
+    });
+    expect(st.settings.revalidateSec).toBe(300);
+    expect(onDemandInvalidationEstimate(st)!.paths).toBeCloseTo(60_000, 6);
+  });
+
+  it('無効化の費用が主因で負けたら、次のプレイへのヒントが定額・時間の再検証・まとめる方向を出す（D-66）', () => {
+    const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    let s = playMonth(
+      newGame(
+        ON,
+        1,
+        ARTICLE_COMMUNITY,
+        DEFAULT_START_DATE,
+        'nextjs',
+        { cdnPlan: 'payg', images: 'default' },
+        0,
+      ),
+    );
+    while (s.phase === 'playing') s = playMonth(applyActions(s, []));
+    expect(s.end?.reason).toBe('cash');
+    const cost = retryHintsOf(s).find((x) => x.kind === 'cost')!;
+    expect(cost.what).toContain('aws invalidation-paths');
+    expect(cost.next).toContain('60,000 パス・$295');
+    expect(cost.next).toContain('定額のプラン');
+    expect(cost.next).toContain('時間の再検証');
+    expect(cost.next).toContain('タグ');
   });
 });

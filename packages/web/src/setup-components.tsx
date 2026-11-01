@@ -4,13 +4,17 @@
 import {
   componentConflict,
   componentFlavor,
+  invalidationNote,
+  ON_DEMAND_REVALIDATE,
   SETTINGS,
+  setupInvalidationEstimate,
   setupRevalidateOptions,
   setupSlots,
   STACKS,
   type FrameworkId,
   type Scenario,
 } from 'game';
+import { useMemo } from 'react';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
 
@@ -118,16 +122,37 @@ export function SetupComponents({
  */
 export function SetupRevalidate({
   scenario,
+  stackIndex,
   framework,
+  components,
   value,
   onChange,
 }: {
   scenario: Scenario;
+  stackIndex: number;
   framework: FrameworkId;
+  /** 選んだ部品（オンデマンドの CloudFront の無効化の見込みに使う。D-66）。 */
+  components: SetupChoices;
   value: number;
   onChange: (v: number) => void;
 }) {
   const options = setupRevalidateOptions(scenario, framework);
+  // OpenNext で ISR を CloudFront にキャッシュするとき、オンデマンドの無効化の見込み（1 か月目の規模。D-66）
+  const invalidation = useMemo(() => {
+    if (options.length === 0) return undefined;
+    const chosen = Object.fromEntries(
+      Object.entries(components).filter(
+        (e): e is [string, string] => e[1] !== undefined,
+      ),
+    );
+    const e = setupInvalidationEstimate(
+      scenario,
+      stackIndex,
+      framework,
+      chosen,
+    );
+    return e && invalidationNote(e);
+  }, [scenario, stackIndex, framework, components, options.length]);
   if (options.length === 0) return null;
   return (
     <div className="space-y-2">
@@ -159,6 +184,11 @@ export function SetupRevalidate({
               <span className="block min-w-0">
                 <span className="block text-sm">{o.label}</span>
                 <span className="block text-xs opacity-70">{o.flavor}</span>
+                {o.value === ON_DEMAND_REVALIDATE && invalidation && (
+                  <span className="block text-xs text-warning">
+                    {invalidation}
+                  </span>
+                )}
               </span>
             </label>
           ))}
