@@ -92,6 +92,25 @@ const WORKERS_FACTS = [
     },
     sourceIds: ['cacheApi', 'howTheCacheWorks'],
   },
+  // API を他の事業者の静的なサイトから呼ぶ形（SPA の API の置き場・D-65。2026-11-02 に原文で確認）
+  {
+    id: 'custom-domain-origin',
+    premise:
+      'Worker はカスタムドメイン（Cloudflare のゾーンのドメイン・サブドメイン）に置け、そのホスト名では Worker がオリジンになる。DNS のレコードと証明書は Cloudflare が作る。使うには自分のゾーンが Cloudflare に要る',
+    sourceIds: ['workersCustomDomains'],
+  },
+  {
+    id: 'cors-headers',
+    premise:
+      '別のホスト名のサイトからブラウザで呼ぶ API は、Worker が CORS のヘッダー（Access-Control-Allow-Origin など）を返し、事前のリクエスト（OPTIONS）に答える（公式の例がある）',
+    sourceIds: ['workersCors'],
+  },
+  {
+    id: 'd1-binding',
+    premise:
+      'D1 は Worker の binding（Worker Binding API）から SQL を実行する。他の事業者のサーバーから直接つなぐ形（REST API）は管理用の面で、このゲームでは選べない',
+    sourceIds: ['d1WorkerApi'],
+  },
 ];
 
 /** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
@@ -246,6 +265,18 @@ export const cloudflare: PriceBookInput = {
     nextImageLoader: {
       url: 'https://nextjs.org/docs/app/api-reference/config/next-config-js/images',
       retrievedAt: '2026-11-01',
+    },
+    workersCustomDomains: {
+      url: 'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
+      retrievedAt: '2026-11-02',
+    },
+    workersCors: {
+      url: 'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
+      retrievedAt: '2026-11-02',
+    },
+    d1WorkerApi: {
+      url: 'https://developers.cloudflare.com/d1/worker-api/',
+      retrievedAt: '2026-11-02',
     },
   },
   allowancePools: [

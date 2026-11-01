@@ -104,6 +104,17 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'API はいつもサーバーが処理する。前段の CDN が無くても使える',
   'sakura:apiCache:cdn':
     '前段の CDN が API の応答も返し、サーバーの CPU と回線が減る',
+  // SPA の API の置き場（D-65）。他の事業者の部品は利点だけを書き、損（CORS・アカウント・転送・移行）は ⓘ と手間に出す
+  'cloudflare:api:same':
+    'シェルと同じ Worker に API を置くので、ドメインが一つで設定も少ない',
+  'vercel:api:same':
+    '同じプロジェクトの関数に API を置くので、デプロイも請求もひとまとめ',
+  'aws:api:same':
+    '同じ CDN の後ろに API を置くので、ドメインが一つで CORS の設定も要らない',
+  'cloudflare:api:cf-workers':
+    '起動の速い Worker に API を置き、安い SQL のデータベースをそのまま使う',
+  'aws:api:aws-lambda':
+    '静的なファイルは無料の配信に任せ、API は使った分だけの支払いの関数と DB に置く',
   // ファイルの保存（構成が暗黙に持つ置き場。1 択。files.ts の fileStorageOf）
   'cloudflare:files:r2':
     '転送量に課金されない S3 互換のストレージ。ファイルなら何でも置ける',
