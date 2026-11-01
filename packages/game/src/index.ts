@@ -31,6 +31,7 @@ import {
 } from 'catalog';
 import {
   estimate,
+  type EstimateResult,
   type ArchitectureInput,
   type LineItem,
   type PlatformPremise,
@@ -1117,6 +1118,29 @@ function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
   return factor === 1
     ? w
     : { ...w, images: { ...w.images, variants: w.images.variants * factor } };
+}
+
+/**
+ * 冷えた起動を待つ閲覧の割合（D-88・OCL-554477DF）。コンテナに届いた要求のうち起動を待つ割合（coldStartShare）を、
+ * 閲覧 1 件あたりコンテナに届く要求の数を掛けて閲覧全体の割合に直し、1 を上限にする。画像の投稿（image-write）は閲覧に
+ * 関係しないので数えない。コンテナが複数あれば最大。
+ */
+export function coldStartViewShare(r: EstimateResult): number {
+  const sim = r.simulation;
+  const pv = sim.workload.monthlyPageViews;
+  if (pv <= 0) return 0;
+  return Math.max(
+    0,
+    ...sim.architecture.nodes.map((n) => {
+      const u = sim.nodes[n.id]!;
+      if (!u.coldStartShare) return 0;
+      const nonView = sim.architecture.routes['image-write']?.includes(n.id)
+        ? sim.workload.classes['image-write'].count
+        : 0;
+      const viewRequests = Math.max(0, (u.resources.requests ?? 0) - nonView);
+      return u.coldStartShare * Math.min(1, viewRequests / pv);
+    }),
+  );
 }
 
 /** テンプレートの値から在庫の初期値を作る。 */
@@ -3786,26 +3810,8 @@ export function playMonth(input: GameState): GameState {
   // Astro の初回表示の軽さ（JS はアイランドの分だけ。速さの重さを 1 つ減らす。ゲーム上の仮定・D-68）
   const firstLoadLight =
     astro && (sc.frameworks?.astro?.firstLoadLight ?? false);
-  // コンテナの冷えた起動（Cloud Run の最小インスタンス 0。D-88）: コンテナに届いた要求のうち起動を待つ割合を、閲覧全体の割合に
-  // 直す（閲覧 1 件あたりコンテナに届く要求の数を掛け、1 を上限にする。画像の投稿など閲覧に関係しない経路は除く。OCL-554477DF）
-  const monthPV = r.simulation.workload.monthlyPageViews;
-  const coldShare = Math.max(
-    0,
-    ...r.simulation.architecture.nodes.map((n) => {
-      const u = r.simulation.nodes[n.id]!;
-      if (!u.coldStartShare || monthPV <= 0) return 0;
-      const nonView = (['image-write'] as const).reduce(
-        (a, cls) =>
-          a +
-          (r.simulation.architecture.routes[cls]?.includes(n.id)
-            ? r.simulation.workload.classes[cls].count
-            : 0),
-        0,
-      );
-      const viewRequests = Math.max(0, (u.resources.requests ?? 0) - nonView);
-      return u.coldStartShare * Math.min(1, viewRequests / monthPV);
-    }),
-  );
+  // コンテナの冷えた起動（Cloud Run の最小インスタンス 0。D-88）
+  const coldShare = coldStartViewShare(r);
   const coldStart = coldShare >= COLD_START.heavyShare;
   // 静的書き出しのマイページは、サーバーの描画が無い代わりにブラウザが HTML → JS → API の順に待つ。速さ・初回表示は
   // Next.js と同じ扱い（SSR の CPU の値をそのまま重さに使う。ゲーム上の仮定・D-80）

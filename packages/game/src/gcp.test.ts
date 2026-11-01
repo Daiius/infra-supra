@@ -1,8 +1,14 @@
 // Google Cloud（Cloud Run + Firebase Hosting。D-88・prd/11 §16）をゲームで選べること。最小インスタンス数・DB（Firestore・Cloud SQL）・
 // 画像だけ Cloudflare を選べ、コンテナの維持の手間が少しかかる。基準プレイ（何もしない・シード 1〜20）。
 import { describe, expect, it } from 'vitest';
+import { composeStack, loadPriceBooks, type Choices } from 'catalog';
+import { estimate } from 'estimator';
 import {
   addedAccounts,
+  coldStartViewShare,
+  COLD_START,
+  IMAGE_FORMAT_KB,
+  workloadFor,
   ARTICLE_COMMUNITY,
   componentFlavor,
   DEFAULT_START_DATE,
@@ -18,7 +24,6 @@ import {
   upkeepOf,
   type FrameworkId,
 } from './index.ts';
-import type { Choices } from 'catalog';
 import type { Scenario } from './scenario.ts';
 
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
@@ -141,5 +146,73 @@ describe('Google Cloud の構成', () => {
     // 目標の根拠（CF Paid × Next.js）は不変
     expect(run(article, CF_PAID, 'nextjs')).toEqual({ won: 20, monthly: 15.2 });
     expect(run(contract, CF_PAID, 'nextjs')).toEqual({ won: 20, monthly: 5.7 });
+  });
+
+  /** 1 か月目の部品・設定で、PV と画像の大きさだけを替えた見積（Cloud Run の構成）。 */
+  const monthOne = (pv: number, imageKB: number, components: Choices = {}) => {
+    const g = newGame(
+      GCP,
+      1,
+      article,
+      DEFAULT_START_DATE,
+      'nextjs',
+      components,
+    );
+    const parts = {
+      pv,
+      settings: { ...g.settings, imageKB },
+      ssrCpuMs: 15,
+      mods: g.mods,
+      stock: null,
+      platform: 'gcp' as const,
+      components: g.components,
+      framework: 'nextjs' as const,
+    };
+    const workload = workloadFor(article, parts);
+    const r = estimate({
+      workload,
+      architecture: composeStack(STACKS[GCP]!.id, g.components),
+      books: loadPriceBooks(),
+    });
+    return { workload, r };
+  };
+
+  it('next/image の AVIF: Cloud Run の変換の CPU が WebP の 1.5 倍になり、サイズ違いの数は増えない（OCL-CDDD26AB）', () => {
+    const webp = monthOne(300_000, IMAGE_FORMAT_KB.webp);
+    const avif = monthOne(300_000, IMAGE_FORMAT_KB.avif);
+    expect(avif.workload.images.variants).toBe(webp.workload.images.variants);
+    expect(avif.workload.images.transformWorkFactor).toBe(1.5);
+    expect(webp.workload.images.transformWorkFactor ?? 1).toBe(1);
+    // Cloud Run に届く画像の閲覧（CDN の外れ）ごとの変換 150 ms が 225 ms になる。他のクラスの CPU は同じ
+    const cpu = (x: typeof webp) =>
+      x.r.simulation.nodes.run!.resources['cpu-ms']!;
+    const misses = webp.r.simulation.workload.classes['image-read'].count * 0.1;
+    expect(cpu(avif) - cpu(webp)).toBeCloseTo(misses * 150 * 0.5, 3);
+  });
+
+  it('冷えた起動は閲覧全体の割合に直して閾値と比べる（閲覧 1 件あたりの要求数を掛けて 1 で頭打ち・投稿は数えない。OCL-554477DF）', () => {
+    const at = (pv: number, components: Choices = {}) => {
+      const { r } = monthOne(pv, IMAGE_FORMAT_KB.webp, components);
+      const u = r.simulation.nodes.run!;
+      const w = r.simulation.workload;
+      const view = (u.resources.requests ?? 0) - w.classes['image-write'].count;
+      const expected =
+        u.coldStartShare! * Math.min(1, view / w.monthlyPageViews);
+      expect(coldStartViewShare(r)).toBeCloseTo(expected, 12);
+      // 要求の割合より大きくはならない（閲覧 1 件あたり 1 件未満しか届かなければ小さくなる）
+      expect(coldStartViewShare(r)).toBeLessThanOrEqual(u.coldStartShare!);
+      return coldStartViewShare(r);
+    };
+    // 到着率の低い入力では効き、PV を増やすと効かなくなる（境目は月 3,000〜1 万 PV の間。3,000 PV で約 10%・1 万 PV で約 0.04%）
+    const pvs = [100, 1_000, 3_000, 10_000, 300_000];
+    const shares = pvs.map((pv) => at(pv));
+    for (let i = 1; i < shares.length; i++)
+      expect(shares[i]!).toBeLessThanOrEqual(shares[i - 1]!);
+    expect(shares[0]!).toBeGreaterThanOrEqual(COLD_START.heavyShare);
+    expect(shares[4]!).toBeLessThan(COLD_START.heavyShare);
+    const edge = pvs.findIndex((_, i) => shares[i]! < COLD_START.heavyShare);
+    expect(pvs[edge]).toBe(10_000);
+    // 最小インスタンス 1 なら低い PV でも 0
+    expect(at(100, { minInstances: '1' })).toBe(0);
   });
 });
