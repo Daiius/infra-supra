@@ -240,6 +240,51 @@ describe('P-09 クレジット', () => {
     expect(small.lines.filter((l) => l.kind === 'credit')).toHaveLength(1);
     expect(small.totals.USD).toBe(20);
   });
+
+  it('使い切ると止まるクレジット（onExhausted: block。D-71）: 超えた分は請求せず、止まった印を残す', () => {
+    const blocking = parsePriceBook(
+      {
+        ...FICTIONAL_CLOUD,
+        plans: FICTIONAL_CLOUD.plans.map((p) =>
+          p.id === 'team'
+            ? {
+                ...p,
+                credits: (p.credits ?? []).map((c) => ({
+                  ...c,
+                  onExhausted: 'block' as const,
+                })),
+              }
+            : p,
+        ),
+      },
+      { allowFictional: true },
+    );
+    const run = (q: number) =>
+      priceUsage({
+        books: [blocking],
+        subscriptions: [sub('team')],
+        usage: [use('usage', q, { planId: 'team' })],
+      });
+    const within = run(10);
+    expect(within.totals.USD).toBe(20);
+    expect(within.breaches).toHaveLength(0);
+    const over = run(30); // 従量 30 > クレジット 20
+    expect(over.totals.USD).toBe(20); // 固定費だけ（超えた 10 は請求されない）
+    const credit = over.lines.find((l) => l.kind === 'credit')!;
+    expect(credit.amount).toBe(-30);
+    expect(credit.credit).toEqual({
+      id: expect.any(String),
+      limit: 20,
+      eligible: 30,
+    });
+    expect(over.breaches).toEqual([
+      expect.objectContaining({
+        kind: 'credit-exhausted',
+        behavior: 'block',
+        excess: 10,
+      }),
+    ]);
+  });
 });
 
 describe('P-10 固定費', () => {

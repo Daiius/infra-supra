@@ -139,6 +139,11 @@ export const CreditSchema = z.object({
   ]),
   period: z.literal('month').default('month'),
   /**
+   * 使い切ったときの挙動（D-71）。bill: 超えた分を請求する（Vercel Pro など）。block: 超えると止まり、超えた分は請求されない
+   * （Netlify のクレジットを使い切るとサイトが止まる）。前提の effect は bill なら cost、block なら block。
+   */
+  onExhausted: z.enum(['bill', 'block']).default('bill'),
+  /**
    * 使用率を前提として出すときの 1 文（無料枠のプールの premise と同じ扱い。D-48）。
    * 使った割合は「当てられる従量の金額 / クレジットの額」で、超えると請求が増える（effect: cost）。
    */

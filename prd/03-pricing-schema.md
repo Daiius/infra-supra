@@ -140,6 +140,9 @@ type Credit = {
   - 出典: [docs/plans/pro-plan](https://vercel.com/docs/plans/pro-plan) 「The monthly credit applies to all managed infrastructure billable resources from the first unit you use.」
   - 出典: [docs/pricing](https://vercel.com/docs/pricing) 「Pro teams get a monthly usage credit instead」
   - pricing ページの「10M / 1TB included」は、2025-09-09 の changelog で置き換えられる前の表記として退けた。申し込み制の Flat Rate CDN は扱わない。
+- `onExhausted`（D-71）: 使い切ったときの挙動。`bill`（既定。超えた分を請求）/ `block`（超えると止まり、超えた分は請求しない。前提の effect は `block`、明細の `breaches` に `credit-exhausted`）。
+  - Netlify（D-71・2026-11-02 取得）: 消費の単位が金額でなくクレジット（デプロイ 1 回・GB 時間・GB・1 万リクエスト）なので、補充の 1 クレジットの金額（Pro $10/1,500・Personal $5/500）でメーターを金額に直し、込みのクレジットを金額のクレジットにする。Free は補充が無く `block`（金額は使用率の判定のための換算で、請求は 0）。Personal・Pro は自動の補充を有効にする前提で `bill`。prd/11 §14。
+  - 本番のデプロイの回数を数える資源 `deploys`（`ci-build` のビルドし直しの回数）を足した。
 この順序はプロバイダーによって異なる可能性がある。異なる場合は PriceBook 側で指定できるようにする（要確認・実データで判断）。
 
 ## 8. 為替

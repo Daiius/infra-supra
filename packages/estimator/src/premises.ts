@@ -212,6 +212,7 @@ export function assessPremises(input: {
 
   // 1b. 金額のクレジット（料金データの premise の文を使う。D-48）。
   //     使用率は「当てられる従量の金額 / クレジットの額」。超えても止まらず、超えた分が請求される（cost）。
+  //     onExhausted が block のクレジットは、超えると止まる（block。D-71）。
   //     流量と同じく伸び率で先を見込む（accumulates: false）
   for (const l of bill.lines) {
     if (l.kind !== 'credit' || !l.credit) continue;
@@ -224,7 +225,8 @@ export function assessPremises(input: {
       threshold({
         id: `credit:${l.priceRef.provider}:${l.priceRef.planId}:${credit.id}`,
         text: credit.premise,
-        effect: 'cost',
+        // 使い切ると止まるクレジット（D-71）は block
+        effect: credit.onExhausted === 'block' ? 'block' : 'cost',
         nodeIds: l.nodeIds,
         provider: l.priceRef.provider,
         planId: l.priceRef.planId,

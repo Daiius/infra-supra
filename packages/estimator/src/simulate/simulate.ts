@@ -345,6 +345,8 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
     case 'ci-build':
       // 静的なページのビルドし直し（D-68）。経路を持たない
       add(u, 'build-minutes', w.builds.minutes * node.config.cpusPerBuild);
+      // 本番へのデプロイの回数（Netlify は 1 回ごとにクレジットを使う。D-71）
+      add(u, 'deploys', w.builds.count);
       break;
     case 'cdn':
       // オンデマンドの再検証のたびに、ISR のページ（とそのデータのルート）を無効化する（D-66）

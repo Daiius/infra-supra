@@ -18,6 +18,12 @@ export const STACK_FLAVOR: Readonly<Record<string, string>> = {
     'Next.js を関数と CDN とストレージに自分で載せる。部品ごとの従量で安く組めるが、仕組みの面倒は自分で見る',
   'aws-amplify':
     '大手のクラウドのマネージドなホスティング。基本料が無く使った分だけの支払いで、常に無料で使える量もある',
+  'netlify-supabase-free':
+    '静的なサイトの老舗のホスティングの無料プラン。毎月のクレジットの中なら請求は来ず、データベースも無料で始められる',
+  'netlify-supabase-personal':
+    '個人向けの手ごろな月額のプラン。クレジットが増え、足りなければ少額ずつ買い足せる',
+  'netlify-supabase-pro':
+    'チーム向けのプラン。メンバーを何人足しても月額は同じで、クレジットも多い',
 };
 
 /**
@@ -72,6 +78,29 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '転送量に課金されないストレージから画像を配り、閲覧のときに必要なサイズへ変換する',
   'cloudflare:images:cf-resize':
     '投稿のときに一度だけ縮め、転送量に課金されないストレージから配る',
+  // Netlify（D-71）
+  'netlify:isrCache:default':
+    'ページは CDN から返し、更新したページだけをすぐ作り直せる。設定なしで動く',
+  'netlify:isrCache:none':
+    '毎回関数で描くので、ページはいつも最新。キャッシュの仕組みを気にしなくてよい',
+  'netlify:images:default':
+    '閲覧のときに自動で変換される。変換そのものに料金の項目はない',
+  'netlify:images:none':
+    '原本をそのまま配るので、画質が落ちず、変換の仕組みも要らない',
+  'netlify:images:resize':
+    '投稿のときに一度だけ縮めて置くので、配信が軽く、仕組みも単純',
+  'netlify:api:same':
+    '同じサイトの関数に API を置くので、デプロイも請求もひとまとめ',
+  'netlify:ogp:none':
+    '全ページで同じカードを出す。シェルは CDN から静的なまま配れる',
+  'netlify:ogp:prerender':
+    'ページごとのカードを出せる。シェルの読み込みが関数の起動になる',
+  'netlify:apiCache:none':
+    'API を毎回関数で処理するので、ページの中身はいつも最新',
+  'netlify:apiCache:cdn':
+    '応答にキャッシュの指定を足すだけで、ヒットは CDN が返し、タグですぐ消せる',
+  'netlify:files:blob':
+    '同じサイトから使えるファイルの置き場。プランに含まれ、すぐに使い始められる',
   // さくらの VPS
   'sakura:isrCache:default':
     'キャッシュをサーバーのディスクに置く。追加の費用はかからない',
