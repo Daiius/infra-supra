@@ -104,6 +104,13 @@ export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
   return settings.revalidateSec === ON_DEMAND_REVALIDATE;
 }
 
+/**
+ * オンデマンドの最大寿命の説明（設定の ⓘ に出す。D-56）。Next.js の文書（ISR のガイド・2026-10-15 更新）で確かめたのは、
+ * タグで再検証するデータに revalidate: 3600 を併せて付けた例（unstable_cache）があることまで。
+ */
+export const ON_DEMAND_MAX_AGE_NOTE =
+  '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多い（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがある）。このゲームでは 1 日とみなし、その分の再生成も数える';
+
 /** 戻せる設定（prd/07 §9.5）。値はゲーム上の仮定。 */
 export const SETTINGS = {
   compress: {
@@ -132,7 +139,9 @@ export const SETTINGS = {
     label: 'ISR の再検証',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: '再生成の回数に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事の更新のときに再検証する（再生成は更新の回数。ISR のキャッシュの置き場所によっては再検証が届かない。時間からの切り替えは実装の手間がかかる）',
+    note:
+      '再生成の回数に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事の更新のときに再検証する（再生成はおもに更新の回数。ISR のキャッシュの置き場所によっては再検証が届かない。時間からの切り替えは実装の手間がかかる）。' +
+      ON_DEMAND_MAX_AGE_NOTE,
     options: [
       {
         value: ON_DEMAND_REVALIDATE,
@@ -578,6 +587,13 @@ export function spikePeakFactor(pv: number, spikes: readonly Spike[]): number {
  */
 export const ON_DEMAND_PAGE_UPDATE_SHARE = 0.5;
 
+/**
+ * オンデマンドの再検証に併せて持つとみなす最大寿命（保険の時間の再検証・秒）。再検証の呼び出しの取りこぼし
+ * （webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証を併せて設定することが多い（1 時間〜1 日など）。
+ * 選択肢にはせず、長い側の 1 日とみなす（ゲーム上の仮定。D-56）。
+ */
+export const ON_DEMAND_MAX_AGE_SEC = 86_400;
+
 /** オンデマンドの再検証の、月の内容の更新の回数（API の書き込み × ページを変える割合）。 */
 function onDemandUpdates(pv: number, w: WorkloadInput): number {
   return (
@@ -626,7 +642,11 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.routes = w.routes.map((r) => {
       if (r.rendering !== 'isr') return r;
       const { revalidateSeconds: _, ...rest } = r;
-      return { ...rest, onDemandUpdatesPerMonth: updates };
+      return {
+        ...rest,
+        onDemandUpdatesPerMonth: updates,
+        onDemandMaxAgeSeconds: ON_DEMAND_MAX_AGE_SEC,
+      };
     });
   }
   const peak = (p.peakFactor ?? 1) * spikePeakFactor(p.pv, p.spikes ?? []);

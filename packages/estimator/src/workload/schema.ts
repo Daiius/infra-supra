@@ -33,6 +33,11 @@ export const RouteGroupSchema = z.object({
    * 再生成の回数をこの月の内容の更新の回数から出す（prd/04 §2）。
    */
   onDemandUpdatesPerMonth: NonNeg.optional(),
+  /**
+   * isr・オンデマンドのみ: 最大寿命（保険の時間の再検証・秒）。再検証の呼び出しの取りこぼしに備えて、時間の再検証を併せて持つ。
+   * 与えると再生成の回数に時間の式の分を足す（prd/04 §2・D-56）。
+   */
+  onDemandMaxAgeSeconds: Pos.optional(),
   processing: ProcessingSchema,
   /** ISR のページをキャッシュから返すときの CPU（ホストによっては関数・Worker を通る）。 */
   cachedServeCpuMs: NonNeg.default(0),

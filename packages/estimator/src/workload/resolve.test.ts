@@ -76,6 +76,33 @@ describe('オンデマンドの再検証（D-49・prd/04 §2）', () => {
     ).toContain('オンデマンド');
   });
 
+  it('最大寿命（保険の時間の再検証）を併せると、時間の式の分が加わる。閲覧が少ないと小さく、閲覧の回数は超えない（D-56）', () => {
+    const DAY = 86_400;
+    const SECONDS_PER_MONTH = 730 * 3600;
+    const at = (views: number) =>
+      resolveWorkload({
+        ...isr({ onDemandUpdatesPerMonth: 1_000, onDemandMaxAgeSeconds: DAY }),
+        traffic: {
+          ...base([]).traffic,
+          monthlyPageViewsOverride: views,
+        },
+      }).classes['isr-revalidate'].count;
+    const expected = (v: number) => {
+      const lt = (v / 1_000) * (DAY / SECONDS_PER_MONTH);
+      return Math.min(v, (1_000 * v) / (1_000 + v) + v / (1 + lt));
+    };
+    expect(at(100_000)).toBeCloseTo(expected(100_000), 6);
+    expect(at(100_000)).toBeGreaterThan((1_000 * 100_000) / 101_000);
+    // 閲覧が少ないと再生成も少ない（閲覧の回数を超えない）
+    expect(at(100)).toBeLessThanOrEqual(100);
+    expect(at(100)).toBeLessThan(at(100_000));
+    // 時間の分は、ページ数 × 1 か月 / 最大寿命 を超えない（閲覧が濃くても頭打ち）
+    const timedOnly = (v: number) => expected(v) - (1_000 * v) / (1_000 + v);
+    expect(timedOnly(10_000_000)).toBeLessThan(
+      1_000 * (SECONDS_PER_MONTH / DAY),
+    );
+  });
+
   it('更新が 0 なら再生成も 0', () => {
     const w = resolveWorkload(isr({ onDemandUpdatesPerMonth: 0 }));
     expect(w.classes['isr-revalidate'].count).toBe(0);
