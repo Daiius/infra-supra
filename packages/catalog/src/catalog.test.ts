@@ -13,6 +13,8 @@ import {
   RAW_PRICE_BOOKS,
   STACK_DEFS,
   articleCommunity,
+  JAPAN_TAX,
+  japanTaxOf,
 } from './index.ts';
 
 describe('料金データ', () => {
@@ -257,5 +259,21 @@ describe('稼働率の SLA（D-24）', () => {
         .map((p) => `${b.provider}/${p.id}`),
     );
     expect(offered).toEqual(['sakura-vps/4gb-tokyo']);
+  });
+});
+
+describe('日本から契約するときの消費税（D-76）', () => {
+  it('全事業者に扱いがあり、料金データの taxIncluded と食い違わない', () => {
+    const books = loadPriceBooks();
+    for (const b of books) {
+      const t = japanTaxOf(b.provider);
+      expect(t, b.provider).toBeDefined();
+      // 税込の価格なのは taxIncluded の事業者だけ（足すのは税抜の事業者だけ）
+      expect(t!.status === 'included', b.provider).toBe(b.taxIncluded);
+      expect(t!.sources.length, b.provider).toBeGreaterThan(0);
+    }
+    expect(JAPAN_TAX.map((t) => t.provider).sort()).toEqual(
+      books.map((b) => b.provider).sort(),
+    );
   });
 });

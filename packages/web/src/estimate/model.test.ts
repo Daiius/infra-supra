@@ -8,7 +8,9 @@ import {
   defaultCurveStacks,
   pickedCurveStacks,
   fromQuery,
+  japanTax,
   normalizeInput,
+  normalizeSeats,
   runEstimate,
   sortRows,
   toQuery,
@@ -68,6 +70,8 @@ describe('URL のクエリ', () => {
       imageFormat: 'webp',
       variants: 2,
       revalidateSec: 3600,
+      seats: 3,
+      showTax: false,
     });
     expect(normalizeInput(fromQuery(`?${toQuery(i)}`))).toEqual(i);
   });
@@ -257,5 +261,102 @@ describe('費用の曲線（D-74）', () => {
     const keys = c.map((s) => `${s.provider}:${s.variant}`);
     expect(new Set(keys).size).toBe(keys.length);
     expect(Math.max(...c.map((s) => s.variant))).toBeLessThan(3);
+  });
+});
+
+describe('チームの人数（席。D-76）', () => {
+  it('既定は 1 人で、1〜100 に収める', () => {
+    expect(normalizeInput({}).seats).toBe(1);
+    expect(normalizeInput({}).showTax).toBe(true);
+    expect(normalizeInput({ seats: 0 }).seats).toBe(1);
+    expect(normalizeInput({ seats: 1e6 }).seats).toBe(100);
+    expect(normalizeInput({ seats: 2.6 }).seats).toBe(3);
+    // 入力欄の確定で使う（空・範囲外を直した値を欄にも戻す。OCL-5160B6D1）
+    expect(normalizeSeats(undefined)).toBe(1);
+    expect(normalizeSeats(Number.NaN)).toBe(1);
+    expect(normalizeSeats(101)).toBe(100);
+  });
+
+  const base = (stack: string, seats: number) =>
+    runEstimate(normalizeInput({ stack, pv: 300_000, seats }));
+  const fee = (v: ReturnType<typeof runEstimate>) =>
+    v.providers
+      .flatMap((p) => p.lines)
+      .find((l) => l.kind === 'base-fee' && l.label.includes('席'))!;
+
+  it('席課金のプラン（Vercel Pro）は基本料が席の数ぶんになり、月額・比較・曲線に効く', () => {
+    const one = base('vercel-supabase-pro', 1);
+    const three = base('vercel-supabase-pro', 3);
+    const perSeat = fee(one).amount!;
+    expect(fee(three).amount).toBeCloseTo(perSeat * 3, 9);
+    expect(three.totalUsd - one.totalUsd).toBeCloseTo(perSeat * 2, 9);
+    const m = three.members.find((x) => x.pricing === 'per-seat')!;
+    expect(m.seatFee).toEqual({
+      amount: perSeat * 3,
+      currency: 'USD',
+      seats: 3,
+    });
+
+    const row = (seats: number) =>
+      compareStacks(
+        normalizeInput({ stack: 'cloudflare-vinext-free', pv: 300_000, seats }),
+      ).find((r) => r.stack === 'vercel-supabase-pro')!;
+    expect(row(3).totalUsd - row(1).totalUsd).toBeCloseTo(perSeat * 2, 9);
+
+    const curve = (seats: number) =>
+      costCurves(
+        normalizeInput({ seats }),
+        ['vercel-supabase-pro'],
+        [100_000],
+      )[0]!.points[0]!.totalUsd;
+    expect(curve(3) - curve(1)).toBeCloseTo(perSeat * 2, 9);
+  });
+
+  it('席の料金が無い・書かれていないプランは月額が変わらず、前提の文が出る', () => {
+    for (const stack of [
+      'netlify-supabase-pro',
+      'sakura-vps-2gb',
+      'aws-amplify',
+    ]) {
+      const one = base(stack, 1);
+      const five = base(stack, 5);
+      expect(five.totalUsd, stack).toBeCloseTo(one.totalUsd, 9);
+      expect(five.members.length, stack).toBeGreaterThan(0);
+      expect(
+        five.members.every((m) => m.pricing !== 'per-seat'),
+        stack,
+      ).toBe(true);
+    }
+    const sakura = base('sakura-vps-2gb', 5);
+    expect(sakura.members.some((m) => m.pricing === 'not-stated')).toBe(true);
+  });
+});
+
+describe('日本から契約するときの消費税（D-76）', () => {
+  it('文書で確かめた事業者だけ 10% を足し、税込の価格・未確認は足さない', () => {
+    const t = japanTax([
+      { provider: 'cloudflare', currency: 'USD', amount: 10 },
+      { provider: 'aws', currency: 'USD', amount: 2 },
+      { provider: 'aws', currency: 'USD', amount: -1 },
+      { provider: 'sakura-vps', currency: 'JPY', amount: 1000 },
+      { provider: 'vercel', currency: 'USD', amount: 20 },
+    ]);
+    expect(t.taxJpy).toBeCloseTo((10 + 1) * 150 * 0.1, 9);
+    expect(t.totalJpy).toBeCloseTo((10 + 1 + 20) * 150 + 1000 + t.taxJpy, 9);
+    expect(t.unconfirmed).toEqual(['vercel']);
+    // 税込の価格の内税は割り戻して出すが、合計には足さない（OCL-66B5BAF1）
+    expect(t.includedTaxJpy).toBeCloseTo(1000 * (0.1 / 1.1), 9);
+    expect(t.lines.find((l) => l.provider === 'sakura-vps')!.status).toBe(
+      'included',
+    );
+    expect(t.assumption).toContain('個人');
+  });
+
+  it('見積と比較の表の税込の目安が一致し、税抜の円より小さくならない', () => {
+    const input = normalizeInput({ stack: 'aws-amplify', pv: 1_000_000 });
+    const v = runEstimate(input);
+    expect(v.tax.totalJpy).toBeGreaterThanOrEqual(v.totalJpy - 1e-6);
+    const row = compareStacks(input).find((r) => r.current)!;
+    expect(row.taxInclJpy).toBeCloseTo(v.tax.totalJpy, 6);
   });
 });

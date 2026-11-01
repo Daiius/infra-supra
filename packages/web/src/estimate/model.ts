@@ -3,14 +3,19 @@
 // テンプレートの Workload の組み立て（ゲームの 1 か月目と同じ数え方。game の estimate-mode.ts）と、設定の選択肢だけ。
 import {
   composeStack,
+  JAPAN_TAX_ASSUMPTION,
+  JP_CONSUMPTION_TAX_RATE,
+  japanTaxOf,
   loadPriceBooks,
   SLOT_LABELS,
   STACK_DEFS,
   type Choices,
+  type JapanTaxTreatment,
   type SlotId,
 } from 'catalog';
 import {
   estimate,
+  type ArchitectureInput,
   type LineItem,
   type PlatformPremise,
   type PriceBook,
@@ -59,6 +64,8 @@ export const IMAGE_FORMATS: readonly { id: ImageFormat; label: string }[] = [
   { id: 'avif', label: 'AVIF' },
 ];
 export const VARIANTS = [3, 2, 1] as const;
+/** チームの人数（席）の上限。 */
+export const SEATS_MAX = 100;
 
 export type EstimateInput = {
   template: TemplateId;
@@ -73,6 +80,10 @@ export type EstimateInput = {
   revalidateSec: number;
   imageFormat: ImageFormat;
   variants: number;
+  /** チームの人数（管理画面を使う人。席）。席課金のプランだけ費用が変わる（D-76）。 */
+  seats: number;
+  /** 税込の目安（円）を出すか（D-76）。計算には効かない。 */
+  showTax: boolean;
 };
 
 export const scenarioOfTemplate = (t: TemplateId): Scenario =>
@@ -98,6 +109,12 @@ export function settingsOf(template: TemplateId, framework: FrameworkId) {
     variants: !hidden.includes('variants'),
   };
 }
+
+/** 席の数を 1〜SEATS_MAX の整数に直す（読めない値は 1）。 */
+export const normalizeSeats = (n: number | undefined): number =>
+  n !== undefined && Number.isFinite(n)
+    ? Math.min(SEATS_MAX, Math.max(1, Math.round(n)))
+    : 1;
 
 /**
  * 入力を選べる組み合わせに直す（URL から読んだ値・テンプレートを替えた後など）。選べない値は既定にする。
@@ -136,6 +153,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     settings.variants && VARIANTS.some((v) => v === raw.variants)
       ? raw.variants!
       : 3;
+  const seats = normalizeSeats(raw.seats);
   return {
     template,
     pv,
@@ -146,6 +164,8 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     revalidateSec,
     imageFormat,
     variants,
+    seats,
+    showTax: raw.showTax ?? true,
   };
 }
 
@@ -174,6 +194,8 @@ export function toQuery(input: EstimateInput): URLSearchParams {
   q.set('r', String(input.revalidateSec));
   q.set('img', input.imageFormat);
   q.set('v', String(input.variants));
+  q.set('seats', String(input.seats));
+  if (!input.showTax) q.set('tax', '0');
   for (const [slot, id] of Object.entries(input.parts))
     if (id !== undefined) q.set(PART_PREFIX + slot, id);
   return q;
@@ -207,6 +229,9 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   set('revalidateSec', num('r'));
   set('imageFormat', str('img') as ImageFormat | undefined);
   set('variants', num('v'));
+  set('seats', num('seats'));
+  const tax = str('tax');
+  if (tax === '0' || tax === '1') out.showTax = tax === '1';
   return out;
 }
 
@@ -248,6 +273,42 @@ export type SourceView = {
   links: { id: string; url: string; retrievedAt: string }[];
 };
 
+export type MemberView = {
+  provider: string;
+  plan: string;
+  /** 料金データの members。無ければ unknown（席の料金は未取得）。 */
+  pricing: 'per-seat' | 'included' | 'not-stated' | 'unknown';
+  premise: string;
+  /** 席課金の基本料（席の数ぶん。明細の通貨）。 */
+  seatFee?: { amount: number; currency: string; seats: number };
+};
+
+export type TaxLine = {
+  provider: string;
+  status: JapanTaxTreatment['status'];
+  premise: string;
+  /** その事業者の小計（円。USD は為替の仮定で換算）。 */
+  subtotalJpy: number;
+  /** 足す消費税（円）。added の事業者だけ。 */
+  taxJpy: number;
+  /** 税込の価格に含まれる消費税（円）。included の事業者だけ。合計には足さない（OCL-66B5BAF1）。 */
+  includedTaxJpy: number;
+  sources: { url: string; retrievedAt: string }[];
+};
+
+export type TaxView = {
+  /** 税込の目安（円）。未確認の事業者は税抜のまま足す。 */
+  totalJpy: number;
+  /** 税抜の価格に足した消費税（円）。 */
+  taxJpy: number;
+  /** 税込の価格に含まれる消費税（円）。totalJpy に含まれていて、足してはいない。 */
+  includedTaxJpy: number;
+  lines: TaxLine[];
+  /** 消費税の扱いを確かめられなかった事業者。 */
+  unconfirmed: string[];
+  assumption: string;
+};
+
 export type EstimateView = {
   name: string;
   /** 月の合計（USD。円建ての明細は為替の仮定で換算）。料金未取得の明細は含まない（下限）。 */
@@ -262,10 +323,121 @@ export type EstimateView = {
   facts: PlatformPremise[];
   sources: SourceView[];
   mau: number;
+  seats: number;
+  /** 構成が使うプランの席（メンバー）の料金。 */
+  members: MemberView[];
+  tax: TaxView;
 };
 
 const toUsd = (totals: Partial<Record<string, number>>) =>
   (totals.USD ?? 0) + (totals.JPY ?? 0) / USD_JPY;
+
+const toJpy = (amount: number, currency: string) =>
+  currency === 'JPY' ? amount : amount * USD_JPY;
+
+/**
+ * 日本から契約するときの税込の目安（D-76）。事業者の小計（明細の通貨・料金未取得を除く）に、
+ * 文書で確かめた事業者（added）だけ消費税 10% を足す。税込の価格（included）と未確認（unconfirmed）は足さない。
+ * 個人・登録番号なしの想定の 1 つだけ（catalog の JAPAN_TAX_ASSUMPTION）。
+ */
+export function japanTax(
+  subtotals: readonly { provider: string; currency: string; amount: number }[],
+): TaxView {
+  const lines: TaxLine[] = [];
+  for (const s of subtotals) {
+    const t = japanTaxOf(s.provider);
+    const status = t?.status ?? 'unconfirmed';
+    const subtotalJpy = toJpy(s.amount, s.currency);
+    const prev = lines.find((l) => l.provider === s.provider);
+    if (prev) {
+      prev.subtotalJpy += subtotalJpy;
+      continue;
+    }
+    lines.push({
+      provider: s.provider,
+      status,
+      premise:
+        t?.premise ?? `${s.provider} の消費税の扱いは未確認（税抜のまま）`,
+      subtotalJpy,
+      taxJpy: 0,
+      includedTaxJpy: 0,
+      sources: t?.sources ?? [],
+    });
+  }
+  // 税は事業者の小計（クレジットを引いた後）に当てる
+  // 税込の価格は内税を割り戻すだけで足さない
+  for (const l of lines) {
+    const base = Math.max(0, l.subtotalJpy);
+    if (l.status === 'added') l.taxJpy = base * JP_CONSUMPTION_TAX_RATE;
+    if (l.status === 'included')
+      l.includedTaxJpy =
+        (base * JP_CONSUMPTION_TAX_RATE) / (1 + JP_CONSUMPTION_TAX_RATE);
+  }
+  const taxJpy = lines.reduce((a, l) => a + l.taxJpy, 0);
+  return {
+    totalJpy: lines.reduce((a, l) => a + l.subtotalJpy, 0) + taxJpy,
+    taxJpy,
+    includedTaxJpy: lines.reduce((a, l) => a + l.includedTaxJpy, 0),
+    lines,
+    unconfirmed: lines
+      .filter((l) => l.status === 'unconfirmed')
+      .map((l) => l.provider),
+    assumption: JAPAN_TAX_ASSUMPTION,
+  };
+}
+
+const subtotalsOf = (lines: readonly LineItem[]) =>
+  lines.map((l) => ({
+    provider: l.priceRef.provider,
+    currency: l.currency,
+    amount: l.amount ?? 0,
+  }));
+
+/** 構成のアカウントすべてに席の数を置く（席課金のプランだけ費用が変わる。game の architectureFor と同じ形）。 */
+function withSeats(arch: ArchitectureInput, seats: number): ArchitectureInput {
+  if (seats <= 1) return arch;
+  const ids = [
+    ...new Set(
+      arch.nodes.flatMap((n) => (n.billing ? [n.billing.accountId] : [])),
+    ),
+  ];
+  return { ...arch, accounts: ids.map((id) => ({ id, seats })) };
+}
+
+/** 構成が使うプランの席の料金（料金データの members。無いプランは「席の料金は未取得」）。 */
+function membersOf(
+  used: { provider: string; planId: string }[],
+  lines: readonly LineItem[],
+  seats: number,
+): MemberView[] {
+  const seen = new Set<string>();
+  const out: MemberView[] = [];
+  for (const u of used) {
+    const key = `${u.provider}|${u.planId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const plan = planOf(u.provider, u.planId);
+    const members = plan?.members;
+    const fee = lines.find(
+      (l) =>
+        l.kind === 'base-fee' &&
+        l.priceRef.provider === u.provider &&
+        l.priceRef.planId === u.planId,
+    );
+    out.push({
+      provider: u.provider,
+      plan: plan?.name ?? u.planId,
+      pricing: members?.pricing ?? 'unknown',
+      premise:
+        members?.premise ??
+        `${u.provider} ${plan?.name ?? u.planId} の席（メンバー）の料金は未取得`,
+      ...(members?.pricing === 'per-seat' && fee && fee.amount !== null
+        ? { seatFee: { amount: fee.amount, currency: fee.currency, seats } }
+        : {}),
+    });
+  }
+  return out;
+}
 
 function planOf(provider: string, planId: string) {
   return BOOKS.find((b) => b.provider === provider)?.plans.find(
@@ -374,9 +546,12 @@ function run(input: EstimateInput, r: Resolved) {
       revalidateSec: input.revalidateSec,
     },
   });
-  const architecture = composeStack(STACK_DEFS[r.stackIndex]!, r.components, {
-    framework: input.framework,
-  });
+  const architecture = withSeats(
+    composeStack(STACK_DEFS[r.stackIndex]!, r.components, {
+      framework: input.framework,
+    }),
+    input.seats,
+  );
   return estimate({ workload, architecture, books: BOOKS });
 }
 
@@ -432,6 +607,9 @@ export function runEstimate(input: EstimateInput): EstimateView {
     facts,
     sources: sourcesOf(used),
     mau: result.simulation.workload.input.traffic.mau ?? 0,
+    seats: input.seats,
+    members: membersOf(used, bill.lines, input.seats),
+    tax: japanTax(subtotalsOf(bill.lines)),
   };
 }
 
@@ -442,6 +620,8 @@ export type ComparisonRow = {
   stack: string;
   name: string;
   totalUsd: number;
+  /** 日本から契約するときの税込の目安（円。D-76）。 */
+  taxInclJpy: number;
   unpricedLines: number;
   /** 当たっている前提のうち、止まる・プランの変更が要るもの（費用の増えるだけの前提は除く）。 */
   blocking: number;
@@ -470,6 +650,7 @@ export function compareStacks(input: EstimateInput): ComparisonRow[] {
         stack: s.id,
         name: stackName(s.index, input.framework, false, r.components),
         totalUsd: toUsd(res.bill.totals),
+        taxInclJpy: japanTax(subtotalsOf(res.bill.lines)).totalJpy,
         unpricedLines: res.bill.unpricedLines,
         blocking: hit.filter(
           (p) => p.effect === 'block' || p.effect === 'upgrade-required',
