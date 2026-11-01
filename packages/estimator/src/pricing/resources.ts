@@ -32,6 +32,8 @@ export const RESOURCES = [
   'invalidation-paths', // CDN のキャッシュの無効化のパス（CloudFront の無効化。D-66）
   'build-minutes', // 静的なページをビルドし直す時間 × CPU の数（Astro の静的出力。D-68）
   'deploys', // 本番へのデプロイの回数（Netlify のクレジットは 1 回ごと。ビルドし直しの回数。D-71）
+  'idle-cpu-hours', // 待機しているインスタンスの vCPU 時間（Cloud Run の最小インスタンスの idle。D-88）
+  'idle-memory-gb-hours', // 待機しているインスタンスのメモリ × 時間（同じ）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -66,4 +68,6 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'invalidation-paths': 'count',
   'build-minutes': 'minute',
   deploys: 'count',
+  'idle-cpu-hours': 'cpu-hour',
+  'idle-memory-gb-hours': 'gb-hour',
 };

@@ -280,7 +280,7 @@ describe('費用の曲線（D-74）', () => {
     ).toBe(false);
   });
 
-  it('色は事業者に固定（6 事業者で 6 色の枠に収まり、同じ事業者は同じ色）', () => {
+  it('色は会社に固定（AWS の 2 つの構成は同じ色で、7 事業者が 6 色の枠に収まる。D-88）', () => {
     const c = costCurves(
       normalizeInput({}),
       compareStacks(normalizeInput({})).map((r) => r.stack),
@@ -289,6 +289,8 @@ describe('費用の曲線（D-74）', () => {
     for (const s of slots) expect(s).toBeGreaterThanOrEqual(0);
     expect(Math.max(...slots)).toBeLessThan(6);
     expect(curveColorSlot('cloudflare')).toBe(0);
+    expect(curveColorSlot('aws-opennext')).toBe(curveColorSlot('aws'));
+    expect(curveColorSlot('gcp')).toBe(5);
     // 同じ事業者の中で形（variant）が重ならない
     const keys = c.map((s) => `${s.provider}:${s.variant}`);
     expect(new Set(keys).size).toBe(keys.length);

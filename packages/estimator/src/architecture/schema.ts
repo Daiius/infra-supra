@@ -76,6 +76,26 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
   }),
   /**
+   * コンテナのサービス（Cloud Run のリクエストで課金する型。D-88・prd/04 §3.3.1）。1 インスタンスが同時に concurrency 件までさばき、
+   * インスタンスが 1 件以上を処理している時間（アクティブ）に vcpu・memoryGB を課金する。件ごとの数え方（CPU・壁時計時間・
+   * classCpuMs・backgroundClasses）は function と同じで、月のアクティブなインスタンスの秒数は
+   * S × max(1 − e^(−W/S), W / (S × concurrency), CPU 秒 / (S × vcpu))（S は月の秒数、W は壁時計時間の合計の秒数。
+   * 到着がポアソンのときに 1 件以上を処理している時間の割合 = M/G/∞ の空でない確率。同時実行の上限と CPU の上限で下から抑える）。
+   * minInstances（最小インスタンス数）は、アクティブでない間も待機（idle）として課金し、冷えた起動の割合を 0 にする。
+   * minInstances が 0 のときの冷えた起動の割合は、直前の idleKeepSeconds 秒に 1 件も届かない確率 e^(−λ T)（月の平均の到着率）。
+   */
+  z.object({
+    kind: z.literal('container'),
+    vcpu: Pos,
+    memoryGB: Pos,
+    concurrency: Pos.default(80),
+    minInstances: z.number().int().nonnegative().default(0),
+    /** 仕事の無いインスタンスを残す秒数（冷えた起動の割合に使う）。 */
+    idleKeepSeconds: Pos.default(900),
+    backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
+  }),
+  /**
    * KV。cache: ISR のキャッシュ（閲覧で読み、再生成で書く）。db: DB の代わり（問い合わせ 1 回を読み取り 1 回、
    * 書く行 1 行を書き込み 1 回と数える。仮定・D-24）。hotKeyShare は同じキーに集中する書き込みの割合（仮定）。
    */

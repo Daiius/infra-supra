@@ -108,6 +108,15 @@ export const JAPAN_TAX: readonly JapanTaxTreatment[] = [
       src('https://www.invoice-kohyo.nta.go.jp/download/zenken'),
     ],
   },
+  {
+    provider: 'gcp',
+    status: 'added',
+    premise:
+      'Google Cloud の価格は税抜（USD）で、Google Cloud の VAT の文書に「Google Cloud usage by customers in Japan is subject to 10% JCT」とある（Firebase の Blaze も Google Cloud の請求先アカウントで払う）',
+    sources: [
+      src('https://docs.cloud.google.com/billing/docs/resources/vat-overview'),
+    ],
+  },
 ];
 
 export const japanTaxOf = (provider: string): JapanTaxTreatment | undefined =>

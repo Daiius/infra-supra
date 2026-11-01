@@ -21,6 +21,12 @@ import {
   NETLIFY_DEFAULT_CHOICES,
   NETLIFY_STACK_DEFS,
 } from './netlify.ts';
+import {
+  composeGcp,
+  GCP_COMPONENTS,
+  GCP_DEFAULT_CHOICES,
+  GCP_STACK_DEFS,
+} from './gcp.ts';
 import { vpsNode } from './sakura.ts';
 import {
   apiPlacedElsewhere,
@@ -34,7 +40,13 @@ import {
 } from './cross.ts';
 
 export type Platform =
-  'cloudflare' | 'vercel' | 'sakura' | 'aws' | 'aws-opennext' | 'netlify';
+  | 'cloudflare'
+  | 'vercel'
+  | 'sakura'
+  | 'aws'
+  | 'aws-opennext'
+  | 'netlify'
+  | 'gcp';
 /** 部品の事業者（土台の事業者に加えて、部品だけを出す事業者。Neon は DB の部品だけ。D-77）。 */
 export type ComponentProvider = Platform | 'neon';
 export type SlotId =
@@ -47,7 +59,8 @@ export type SlotId =
   | 'ogp'
   | 'apiCache'
   | 'cdnPlan'
-  | 'cdnInvalidation';
+  | 'cdnInvalidation'
+  | 'minInstances';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -58,6 +71,8 @@ export type StackDef = {
   name: string;
   /** 自分で組む構成（OpenNext など。ゲームでは維持の手間がかかる。D-63）。 */
   assembled?: boolean;
+  /** コンテナで動かすマネージドの構成（Cloud Run。ゲームでは小さな維持の手間がかかる。D-88）。 */
+  containerized?: boolean;
 };
 
 export const STACK_DEFS: readonly StackDef[] = [
@@ -104,6 +119,8 @@ export const STACK_DEFS: readonly StackDef[] = [
   ...OPENNEXT_STACK_DEFS,
   // Netlify（D-71）。構成は stacks/netlify.ts
   ...NETLIFY_STACK_DEFS,
+  // Google Cloud（D-88）。構成は stacks/gcp.ts
+  ...GCP_STACK_DEFS,
 ];
 
 /** スロットの部品（catalog のデータ）。当たりうる前提は前提の id の前方一致で挙げる（選ぶ前に出す）。 */
@@ -141,6 +158,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   apiCache: 'API の応答のキャッシュ',
   cdnPlan: 'CDN の料金のプラン',
   cdnInvalidation: 'CDN の無効化のまとめ方',
+  minInstances: '最小インスタンス数',
 };
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [
@@ -659,6 +677,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...AWS_COMPONENTS,
   ...OPENNEXT_COMPONENTS,
   ...NETLIFY_COMPONENTS,
+  ...GCP_COMPONENTS,
   ...CROSS_COMPONENTS,
 ];
 
@@ -670,6 +689,7 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   aws: AWS_DEFAULT_CHOICES,
   'aws-opennext': OPENNEXT_DEFAULT_CHOICES,
   netlify: NETLIFY_DEFAULT_CHOICES,
+  gcp: GCP_DEFAULT_CHOICES,
 };
 
 /**
@@ -1237,6 +1257,14 @@ export function composeStack(
             ? c.apiCache!
             : 'none',
         });
+      case 'gcp':
+        return composeGcp(c, standby, {
+          framework: options.framework ?? 'nextjs',
+          prerender: !nextExport && c.ogp === 'prerender',
+          apiCache: apiCacheActive('gcp', c, options.framework)
+            ? c.apiCache!
+            : 'none',
+        });
       case 'sakura':
         return composeSakura(
           def.plan as '2gb' | '4gb',
@@ -1253,11 +1281,15 @@ export function composeStack(
     c,
     options.framework,
   );
-  // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で、Netlify は SPA・Astro の形を stacks/netlify.ts で直接組む
+  // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で、Netlify・Google Cloud は SPA・Astro の形を
+  // stacks/netlify.ts・stacks/gcp.ts で直接組む
   const direct =
     def.platform === 'aws' ||
     def.platform === 'aws-opennext' ||
-    def.platform === 'netlify';
+    def.platform === 'netlify' ||
+    def.platform === 'gcp';
+  // 静的書き出し・Astro の形（名前・ビルドし直し）まで自分で組む事業者
+  const shapesAll = def.platform === 'netlify' || def.platform === 'gcp';
   const shaped =
     spa && !direct
       ? asSpa(crossed, def.platform, {
@@ -1267,7 +1299,7 @@ export function composeStack(
             : 'none',
           suffix: nextExport ? EXPORT_SUFFIX : '（Vite の SPA）',
         })
-      : nextExport && def.platform !== 'netlify'
+      : nextExport && !shapesAll
         ? // AWS（S3 + CloudFront + Lambda）は SPA の形を stacks/aws.ts で組む。名前だけ替える
           {
             ...crossed,
@@ -1275,7 +1307,7 @@ export function composeStack(
           }
         : crossed;
   const built =
-    astro && def.platform !== 'netlify'
+    astro && !shapesAll
       ? asAstro(shaped, def.platform, def.plan)
       : nextExport
         ? withBuild(shaped, def.platform, def.plan, 'Next.js')
@@ -1335,7 +1367,7 @@ function asAstro(
 /**
  * 静的なページのビルドし直しのノード（経路を持たない）を足す（Astro は D-68・Next.js の静的書き出しは D-80）。
  * Cloudflare は Workers Builds、Vercel はビルドの CPU minute（Pro）・込み（Hobby）。VPS は同じホストでビルドし（CPU は数えない・仮定）、
- * AWS（S3 + CloudFront）は手元か CI でビルドする前提で数えない（仮定）。Netlify は stacks/netlify.ts（デプロイの回数）。
+ * AWS（S3 + CloudFront）・Google Cloud（Firebase Hosting）は手元か CI でビルドする前提で数えない（仮定）。Netlify は stacks/netlify.ts（デプロイの回数）。
  */
 function withBuild(
   arch: ArchitectureInput,

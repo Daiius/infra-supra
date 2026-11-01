@@ -708,7 +708,7 @@ export type CurveSeries = {
   name: string;
   /** 事業者（色に使う）。 */
   provider: string;
-  /** 同じ事業者の構成の中での順（形に使う。STACKS の並びで固定）。 */
+  /** 同じ会社の構成の中での順（形に使う。STACKS の並びで固定。AWS の Amplify と OpenNext は同じ会社）。 */
   variant: number;
   current: boolean;
   points: CurvePoint[];
@@ -750,7 +750,7 @@ export function costCurves(
         name: stackName(index, input.framework, false, r.components),
         provider,
         variant: STACKS.filter(
-          (s) => s.provider === provider && s.index < index,
+          (s) => vendorOf(s.provider) === vendorOf(provider) && s.index < index,
         ).length,
         current: id === input.stack,
         points,
@@ -795,10 +795,17 @@ export function pickedCurveStacks(
   return inStackOrder([...current, ...others]);
 }
 
-/** 曲線の色の枠（0 始まり）。事業者ごとに STACKS に初めて出る順で固定する（表示の順位で塗り替えない）。 */
+/**
+ * 色を分ける単位の会社。AWS の 2 つの構成（Amplify・OpenNext）は同じ会社なので同じ色にし、形（variant）で分ける
+ * （事業者が 7 つになり 6 色の枠を超えたため。D-88）。
+ */
+const vendorOf = (provider: string): string =>
+  provider === 'aws-opennext' ? 'aws' : provider;
+
+/** 曲線の色の枠（0 始まり）。会社ごとに STACKS に初めて出る順で固定する（表示の順位で塗り替えない）。 */
 export function curveColorSlot(provider: string): number {
-  return [...new Set(STACKS.map((s) => s.provider as string))].indexOf(
-    provider,
+  return [...new Set(STACKS.map((s) => vendorOf(s.provider)))].indexOf(
+    vendorOf(provider),
   );
 }
 

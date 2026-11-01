@@ -43,6 +43,13 @@ export type NodeUsage = {
   peakBusyMs: number;
   /** 止まる DB の動いている時間の割合（0〜1。止まらない DB では持たない）。 */
   awakeShare?: number;
+  /** コンテナのサービスの、1 件以上を処理しているインスタンスの数の月の平均（D-88。コンテナのサービスだけ）。 */
+  activeInstanceShare?: number;
+  /**
+   * コンテナのサービスで、届いたリクエストのうち動いているインスタンスが無く冷えた起動を待つ割合（0〜1。D-88）。
+   * 最小インスタンスが 1 以上なら 0（話題の集中で増やすインスタンスの起動は数えない）。
+   */
+  coldStartShare?: number;
   host?: HostLoad;
 };
 
@@ -150,9 +157,11 @@ function consume(
       }
       return out;
     }
-    case 'function': {
+    case 'function':
+    case 'container': {
       // コードの中のキャッシュ: ヒットはキャッシュから返す CPU だけ、miss は処理して次（DB）へ流す
-      const missFlow = c.cache?.classes.includes(cls)
+      const cache = c.kind === 'function' ? c.cache : undefined;
+      const missFlow = cache?.classes.includes(cls)
         ? ttlMiss(w, cls, f)
         : undefined;
       const miss = missFlow?.count ?? n;
@@ -170,7 +179,7 @@ function consume(
           ? base
           : { ...base, cpuMs: fixedCpu, maxCpuMs: fixedCpu, wallMs: fixedCpu };
       const hits = n - miss;
-      const hitCpu = missFlow ? c.cache!.hitCpuMs : 0;
+      const hitCpu = missFlow ? cache!.hitCpuMs : 0;
       // 1 リクエストの CPU の最大は、件数が正の経路（miss の処理・ヒットの返却）それぞれの最大（OCL-8B3B0CB7）
       const maxCpu = Math.max(
         miss > 0 ? mp.maxCpuMs : 0,
@@ -183,16 +192,21 @@ function consume(
         );
       const wallMs = hits * hitCpu + miss * mp.wallMs;
       u.busyMs += wallMs;
-      add(u, 'cpu-ms', hits * hitCpu + miss * mp.cpuMs);
-      add(
-        u,
-        'memory-gb-hours',
-        (wallMs / 3_600_000) * (c.memoryGB / c.concurrency),
-      );
+      const cpuMs = hits * hitCpu + miss * mp.cpuMs;
+      add(u, 'cpu-ms', cpuMs);
+      // コンテナのサービスはインスタンスの時間を経路の後でまとめて出す（月の壁時計時間・CPU・件数から。D-88）
+      if (c.kind === 'function')
+        add(
+          u,
+          'memory-gb-hours',
+          (wallMs / 3_600_000) * (c.memoryGB / c.concurrency),
+        );
+      else hostAcc.cpuMs += cpuMs;
       if (!c.backgroundClasses?.includes(cls)) {
         add(u, 'requests', n);
         add(u, 'invocations', n);
         u.events += n;
+        hostAcc.requests += n;
       }
       return missFlow ?? f;
     }
@@ -479,9 +493,40 @@ export function simulateResources(
       HOURS_PER_MONTH * c.capacityUnits * awake;
   }
 
+  // コンテナのサービス（Cloud Run の型。D-88）: 月のアクティブなインスタンスの秒数と、最小インスタンスの待機・冷えた起動の割合
+  for (const n of architecture.nodes) {
+    const c = n.config;
+    if (c.kind !== 'container') continue;
+    const u = nodes[n.id]!;
+    const acc = hostAcc.get(n.id)!;
+    const s = SECONDS_PER_MONTH;
+    const x = u.busyMs / 1000 / s; // 同時に処理している件数の平均（Σ λ × 壁時計時間）
+    // 1 件以上を処理しているインスタンスの数の平均（1 を超えうる）。到着がポアソンなら 1 件以上を処理している時間の割合は
+    // 1 − e^(−x)。同時実行の上限（x / concurrency）と、CPU を使い切る分（CPU 秒 / vCPU）より少なくはならない
+    const activeShare = Math.max(
+      -Math.expm1(-x),
+      x / c.concurrency,
+      acc.cpuMs / 1000 / s / c.vcpu,
+    );
+    const activeHours = (activeShare * s) / 3600;
+    add(u, 'cpu-hours', activeHours * c.vcpu);
+    add(u, 'memory-gb-hours', activeHours * c.memoryGB);
+    const idleHours = Math.max(
+      0,
+      c.minInstances * HOURS_PER_MONTH - activeHours,
+    );
+    add(u, 'idle-cpu-hours', idleHours * c.vcpu);
+    add(u, 'idle-memory-gb-hours', idleHours * c.memoryGB);
+    u.activeInstanceShare = activeShare;
+    u.coldStartShare =
+      c.minInstances > 0 || acc.requests <= 0
+        ? 0
+        : Math.exp(-(acc.requests / s) * c.idleKeepSeconds);
+  }
+
   // 関数の 1 回の実行の CPU の最大: 前景のクラスはそのまま、裏のクラスは起こした閲覧の CPU に足す
   for (const n of architecture.nodes) {
-    if (n.config.kind !== 'function') continue;
+    if (n.config.kind !== 'function' && n.config.kind !== 'container') continue;
     const bg = new Set(n.config.backgroundClasses ?? []);
     const byClass = Object.entries(hostAcc.get(n.id)!.maxCpuByClass) as [
       RequestClass,
