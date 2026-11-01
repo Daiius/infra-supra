@@ -1099,15 +1099,11 @@ function Actions({
     (k) => !hiddenKeys.includes(k),
   );
   // オンデマンドにしたときの CloudFront の無効化の見込み（今月の規模・OpenNext。D-66）。
-  // 選んでいる行動を当てた draft から引く（同じ月に CDN の料金のプラン・ISR の部品を替えると、見込みもそれに合わせる。OCL-7EDA42D6）
-  const showIsr = settingKeys.includes('isr');
-  const draftKey = `${draft.stackIndex}:${JSON.stringify(draft.components)}`;
-  const invalidation = useMemo(() => {
-    if (!showIsr) return undefined;
-    const e = onDemandInvalidationEstimate(draft);
-    return e && invalidationNote(e);
-    // draft は描画ごとに作り直すので、見込みに効く構成と部品の選択（draftKey）が変わったときだけ引き直す
-  }, [state, showIsr, draftKey]);
+  // 選んでいる行動を当てた draft から毎回引く（部品・提案への返事など、見積が読む行動の値をすべて反映する。OCL-7EDA42D6・OCL-8B602E76）
+  const invalidationEst = settingKeys.includes('isr')
+    ? onDemandInvalidationEstimate(draft)
+    : undefined;
+  const invalidation = invalidationEst && invalidationNote(invalidationEst);
 
   return (
     <div className="card bg-base-100 shadow">

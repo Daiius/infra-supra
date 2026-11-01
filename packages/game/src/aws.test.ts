@@ -255,6 +255,13 @@ describe('AWS の構成', () => {
       { type: 'component', slot: 'cdnPlan', option: 'payg' },
     ]);
     expect(onDemandInvalidationEstimate(draft)!.included).toBe(false);
+    // 提案への返事で変わる書き込み量（mods）も読む（OCL-8B602E76）: 書き込み 0.1 → 0.2 で更新もパスも倍
+    expect(
+      onDemandInvalidationEstimate({
+        ...draft,
+        mods: { ...draft.mods, writesPerCall: 0.2 },
+      })!.paths,
+    ).toBeCloseTo(2 * onDemandInvalidationEstimate(draft)!.paths, 6);
     expect(
       onDemandInvalidationEstimate(
         applyActions(flatSt, [
