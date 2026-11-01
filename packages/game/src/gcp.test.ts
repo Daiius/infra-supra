@@ -196,11 +196,11 @@ describe('Google Cloud の構成', () => {
       const u = r.simulation.nodes.run!;
       const w = r.simulation.workload;
       const view = (u.resources.requests ?? 0) - w.classes['image-write'].count;
-      const expected =
-        u.coldStartShare! * Math.min(1, view / w.monthlyPageViews);
+      const expected = Math.min(
+        1,
+        (u.coldStartShare! * view) / w.monthlyPageViews,
+      );
       expect(coldStartViewShare(r)).toBeCloseTo(expected, 12);
-      // 要求の割合より大きくはならない（閲覧 1 件あたり 1 件未満しか届かなければ小さくなる）
-      expect(coldStartViewShare(r)).toBeLessThanOrEqual(u.coldStartShare!);
       return coldStartViewShare(r);
     };
     // 到着率の低い入力では効き、PV を増やすと効かなくなる（境目は月 3,000〜1 万 PV の間。3,000 PV で約 10%・1 万 PV で約 0.04%）
@@ -214,5 +214,31 @@ describe('Google Cloud の構成', () => {
     expect(pvs[edge]).toBe(10_000);
     // 最小インスタンス 1 なら低い PV でも 0
     expect(at(100, { minInstances: '1' })).toBe(0);
+  });
+
+  it('閲覧 1 件から複数の要求が届くと、要求の割合より大きくなり 5% の判定が変わる。1 で頭打ち（OCL-151B35E0）', () => {
+    const fake = (coldStartShare: number, requests: number) =>
+      ({
+        simulation: {
+          architecture: {
+            nodes: [{ id: 'run' }],
+            routes: { 'image-write': ['run'] },
+          },
+          nodes: { run: { coldStartShare, resources: { requests } } },
+          workload: {
+            monthlyPageViews: 100,
+            classes: { 'image-write': { count: 50 } },
+          },
+        },
+      }) as unknown as Parameters<typeof coldStartViewShare>[0];
+    // 要求の 3% が冷えた起動・閲覧 1 件あたり 2.5 件（投稿の 50 件を除く）→ 閲覧の 7.5%（要求の割合 3% のままなら閾値の下）
+    const share = coldStartViewShare(fake(0.03, 300));
+    expect(share).toBeCloseTo(0.075, 12);
+    expect(0.03).toBeLessThan(COLD_START.heavyShare);
+    expect(share).toBeGreaterThanOrEqual(COLD_START.heavyShare);
+    // 投稿だけならコンテナに届いても閲覧は待たない
+    expect(coldStartViewShare(fake(0.5, 50))).toBe(0);
+    // 掛けた後に 1 で頭打ち
+    expect(coldStartViewShare(fake(0.9, 1_050))).toBe(1);
   });
 });

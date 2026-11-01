@@ -1121,8 +1121,8 @@ function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
 }
 
 /**
- * 冷えた起動を待つ閲覧の割合（D-88・OCL-554477DF）。コンテナに届いた要求のうち起動を待つ割合（coldStartShare）を、
- * 閲覧 1 件あたりコンテナに届く要求の数を掛けて閲覧全体の割合に直し、1 を上限にする。画像の投稿（image-write）は閲覧に
+ * 冷えた起動を待つ閲覧の割合（D-88・OCL-554477DF・OCL-151B35E0）。コンテナに届いた要求のうち起動を待つ割合（coldStartShare）に、
+ * 閲覧 1 件あたりコンテナに届く要求の数（1 を超えうる）を掛けて閲覧全体の割合に直し、掛けた後に 1 を上限にする。画像の投稿（image-write）は閲覧に
  * 関係しないので数えない。コンテナが複数あれば最大。
  */
 export function coldStartViewShare(r: EstimateResult): number {
@@ -1138,7 +1138,7 @@ export function coldStartViewShare(r: EstimateResult): number {
         ? sim.workload.classes['image-write'].count
         : 0;
       const viewRequests = Math.max(0, (u.resources.requests ?? 0) - nonView);
-      return u.coldStartShare * Math.min(1, viewRequests / pv);
+      return Math.min(1, (u.coldStartShare * viewRequests) / pv);
     }),
   );
 }
