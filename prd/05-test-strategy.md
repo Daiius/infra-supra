@@ -1,6 +1,6 @@
 # 05. テスト設計（料金計算を中心に）
 
-> 状態: **設計中**。テストはすべて vitest（estimator・catalog は node 環境・DOM なし）。
+> 状態: **設計中**。テストはすべて vitest（estimator・catalog・game は node 環境・DOM なし。web の画面の描画テストだけ jsdom。§7）。
 
 ## 1. 架空の料金データ（fictional）
 
@@ -102,3 +102,29 @@ PV を 1 万・10 万・100 万・1000 万と振り、**規模によって最安
 
 - 同じ入力で 2 回計算し、JSON に直列化した結果が一致する。
 - Estimate を保存 → 読み込み → 再計算して一致する。
+
+## 7. 画面の描画テスト（web・D-86）
+
+画面を描いて操作し、**画面の壊れ**（例外・描けない・選択肢が出ない）を見つける。値（金額・満足度）は確かめない（game・estimator のテストが持つ）。
+見た目（CSS・レイアウト・狭い幅）は見ない（jsdom はレイアウトを計算しない）。
+
+- 道具: vitest + **jsdom** + `@testing-library/react`（と peer の `@testing-library/dom`）。依存を足した理由: 画面の確認が開発サーバーでの手作業だけで、
+  描画の例外や選択肢の出し忘れを機械で拾えなかった。jsdom は happy-dom より標準に忠実で、Testing Library の標準の組み合わせ。
+  `user-event`・`jest-dom` は入れない（`fireEvent` と素の `expect` で足りる）。
+- 設定: テストのファイルの先頭の `// @vitest-environment jsdom` で、描画テストだけ jsdom にする（`model.test.ts` は node のまま。vitest の設定ファイルは足さない）。
+  jsdom に無い API は [`smoke.test-helpers.tsx`](../packages/web/src/smoke.test-helpers.tsx) で最小限に補う:
+  matchMedia（常に「動きを減らす」にして花火の canvas・数え上げを止める）・dialog の `showModal` と `<form method="dialog">` の送信・ResizeObserver と要素の大きさ（幅 640。グラフは幅 0 だと描かない）・scrollTo。
+- 決定論: 乱数のシード 42・始めた日 2026-11-02 を画面の入力で与える（既定の「今日」に頼らない）。保存（localStorage）と URL はテストごとに消す。
+- 失敗にするもの: 描画・操作の例外（`render`・`fireEvent` が投げる）、React の `console.error`（key の重複・描画の例外の報告）、期待した見出し・選択肢・表・グラフ（`role="img"`）が無いこと。
+- 出来事のダイアログは自動で開いたら、中身が描けていることを見て「閉じて今月の行動へ」で閉じる（利用者と同じ操作）。
+
+| # | ファイル | シナリオ |
+|---|---|---|
+| W-01 | `App.smoke.test.tsx` | 記事コミュニティ × Next.js × CF Paid で部品を選んで始め、3 か月進める。推移のグラフ・今の月・料金の明細・これまでの運営（月の数の行）が出る |
+| W-02 | 〃 | SPA × AWS（Amplify。画像は縮めて置く）・Astro × Vercel Pro・静的書き出し × Netlify Personal・受託 × さくらの VPS 2GB で始めて 1 か月進める（指定の無い部品は選べる最初の選択肢） |
+| W-03 | 〃 | 所持金が尽きる組（Astro × Netlify Personal。3 か月目）で、結果の画面「所持金が尽きた」と次のプレイへのヒントが出て、「次の月へ」が消える |
+| W-04 | 〃 | 2 か月進めて画面を閉じ、開き直すと 3 か月目から再開し、これまでの運営の表が同じ。続けて進められる |
+| W-05 | `estimate/estimate-mode.smoke.test.tsx` | 見積のタブを開き、選べる構成をすべて切り替え、比較表の行を押し、フレームワーク・テンプレート・PV を切り替える。毎回、月の費用・明細・比較表（今の構成の印が 1 つ）・費用の曲線（`path` のある SVG）が出る。入力の URL で開き直すと同じ見積 |
+
+時間: web のテスト全体で約 4 秒（目安 30 秒以内）。
+**CI**: `.github/workflows` には秘密の検査しか無く、`pnpm test` は CI で走っていない（手元の `pnpm test` で走る）。テストの workflow を足すときはこの描画テストも乗る（D-86 の残した点）。
