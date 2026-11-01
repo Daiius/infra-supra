@@ -12,7 +12,9 @@ import {
   playStrategy,
   retryHintsOf,
   SCENARIOS,
+  checkAction,
   componentFlavor,
+  settingInactiveReason,
   setupSlots,
   type Action,
   type GameState,
@@ -104,6 +106,8 @@ describe('画像の大きさ（D-47）', () => {
     const r = none.history[2]!;
     expect(r.satisfaction.stages.speed).toBe('bad');
     expect(r.satisfaction.reasons.speed).toContain('1 ページ約 20.5 MB');
+    // サイズ違いは作らないので 1 種と出す
+    expect(r.satisfaction.reasons.speed).toContain('4000 KB × 1 種');
     const resize = play(
       withRedesign(0),
       CF_PAID,
@@ -221,5 +225,22 @@ describe('速さが「悪い」月は PV の伸びが下がる（D-47）', () =>
     const hint = retryHintsOf(st).find((x) => x.kind === 'slow');
     expect(hint?.what).toContain('速さが悪く PV の伸びが下がった');
     expect(hint?.what).toContain('1 ページ約 20.5 MB');
+  });
+});
+
+describe('サイズ違いの設定は、最適化しない・一律で縮めるでは効かない（D-47）', () => {
+  it('理由を出して選べなくする（既定では選べる）', () => {
+    const set = { type: 'set', key: 'variants', value: 2 } as const;
+    const base = playMonth(newGame(CF_PAID, 42, withRedesign(0)));
+    expect(settingInactiveReason(base, 'variants')).toBeUndefined();
+    expect(checkAction(base, set).ok).toBe(true);
+    for (const opt of ['none', 'resize']) {
+      const s = applyActions(base, images(opt));
+      expect(settingInactiveReason(s, 'variants')).toContain(
+        'サイズ違いは作らない',
+      );
+      expect(settingInactiveReason(s, 'compress')).toBeUndefined();
+      expect(checkAction(s, set).ok).toBe(false);
+    }
   });
 });

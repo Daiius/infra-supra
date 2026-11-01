@@ -1098,6 +1098,22 @@ function imageRedesignQuality(
   return undefined;
 }
 
+/**
+ * 設定が今の部品では効かない理由（効くなら undefined）。画像のサイズ違いは、最適化しない・一律で縮めて置く部品では
+ * 作らない（1 種を配る）ので効かない（D-47）。画面は選択肢を無効にしてこの文を出す。
+ */
+export function settingInactiveReason(
+  state: GameState,
+  key: SettingKey,
+): string | undefined {
+  if (key !== 'variants') return undefined;
+  const platform = STACKS[state.stackIndex]!.provider;
+  const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  return images === 'none' || images === 'resize'
+    ? `画像の部品が「${componentLabel(platform, 'images', images)}」なのでサイズ違いは作らない（1 種）`
+    : undefined;
+}
+
 /** 1 枚あたり配る画像の大きさ（KB）。画像の部品と圧縮の設定から（D-47）。 */
 export function deliveredImageKB(
   sc: Scenario,
@@ -1253,6 +1269,8 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         );
       if (state.settings[def.field] === action.value)
         return ng('same', '今と同じ（または選択済み）');
+      const inactive = settingInactiveReason(state, action.key);
+      if (inactive) return ng('unavailable', inactive);
       return ok(def.effort);
     }
     case 'optimize':
@@ -2267,8 +2285,10 @@ export function playMonth(input: GameState): GameState {
   const viewed: Settings = {
     ...state.settings,
     imageKB: deliveredImageKB(sc, state.settings, comps.images),
-    // 一律で縮めて置くと、サイズ違いが無くスマホにも同じ大きさを配る（D-47）
-    ...(comps.images === 'resize' ? { variants: 1 } : {}),
+    // 最適化しない・一律で縮めて置くは、サイズ違いを作らず 1 種を配る（D-47）
+    ...(comps.images === 'resize' || comps.images === 'none'
+      ? { variants: 1 }
+      : {}),
   };
   // 画質: 最適化しないは原本、それ以外は圧縮の設定で決まる。記事のデザインの刷新を断った月・
   // 受けたあと粗い画像（一律で縮めた原本の無い画像）が多い月は 1 段下げる（D-47）
