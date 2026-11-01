@@ -13,6 +13,7 @@ import {
   componentPreview,
   componentProposal,
   componentSlots,
+  pageWeightOf,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
@@ -1347,6 +1348,8 @@ function ComponentsSection({
                                   </span>
                                 )}
                                 : {o.note}
+                                {x.slot === 'images' &&
+                                  `（${pageWeightOf(state, o.id)}・画像込み）`}
                               </li>
                             ))}
                           </ul>

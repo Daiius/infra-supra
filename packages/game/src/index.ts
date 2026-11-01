@@ -327,6 +327,10 @@ export type GameState = {
   contracts: { eventId: string; usdPerMonth: number; requires: Requirement }[];
   /** 受けた提案で以後ずっと求められる要件（D-32）。 */
   requirements: Requirement[];
+  /** 投稿のときに一律で縮めて置いた（原本の無い）画像の枚数（D-47）。 */
+  coarseImages?: number;
+  /** 記事のデザインの刷新を受けた（そのときの粗い画像の枚数。以後の投稿は大きく置く。D-47）。 */
+  imageRedesign?: { coarseImages: number };
   settings: Settings;
   cash: number;
   basePV: number;
@@ -606,6 +610,7 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
   return applyComponentsToWorkload(app, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
+    resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
   });
 }
 
@@ -1035,11 +1040,109 @@ export function nextSsrCpuMs(state: GameState): number {
   );
 }
 
-const acceptEffort = (def: EventDef) =>
+const acceptEffort = (def: EventDef, state: GameState) =>
   (def.accept?.effects ?? []).reduce(
-    (a, e) => a + (e.type === 'interrupt' ? e.points : 0),
+    (a, e) =>
+      a +
+      (e.type === 'interrupt'
+        ? e.points
+        : e.type === 'imageRedesign'
+          ? imageRedesignEffort(state)
+          : 0),
     0,
   );
+
+/**
+ * 記事のデザインの刷新を受ける手間（D-47・ゲーム上の仮定）。原本を配っている（最適化しない）なら 0、
+ * 一律で縮めて原本が無いなら 2（これからの投稿だけ大きくする作業）、原本があるなら 1。
+ */
+function imageRedesignEffort(state: GameState): number {
+  const platform = STACKS[state.stackIndex]!.provider;
+  const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  return images === 'none' ? 0 : images === 'resize' ? 2 : 1;
+}
+
+/** 記事のデザインの刷新の提案の id（D-47）。 */
+export const IMAGE_REDESIGN_ID = 'p-image-redesign';
+
+/**
+ * 記事のデザインの刷新で、今月の画質を 1 段下げる理由（下げないなら undefined。D-47・ゲーム上の仮定）。
+ * 断った: 断った後の declineMonths か月（原本を配っている構成は画像が既に大きいので下げない）。
+ * 受けた: 原本の無い粗い画像が在庫の coarseShare 以上ある間。
+ */
+function imageRedesignQuality(
+  state: GameState,
+  sc: Scenario,
+  month: number,
+  images: string | undefined,
+): string | undefined {
+  const rule = sc.imageRedesign;
+  if (!rule) return undefined;
+  const res = state.responses[IMAGE_REDESIGN_ID];
+  const at = state.schedule.find((x) => x.id === IMAGE_REDESIGN_ID)?.month;
+  if (
+    res === 'declined' &&
+    at !== undefined &&
+    images !== 'none' &&
+    month > at &&
+    month <= at + rule.declineMonths
+  )
+    return '記事のデザインの刷新を断った（大きな画面で画像が小さく粗く見える）';
+  if (state.imageRedesign && state.stock.images > 0) {
+    const share = state.imageRedesign.coarseImages / state.stock.images;
+    if (share >= rule.coarseShare)
+      return `原本の無い粗い画像が在庫の ${Math.round(share * 100)}%（一律で縮めて置いた画像は、後から大きくできない）`;
+  }
+  return undefined;
+}
+
+/** 1 枚あたり配る画像の大きさ（KB）。画像の部品と圧縮の設定から（D-47）。 */
+export function deliveredImageKB(
+  sc: Scenario,
+  settings: Settings,
+  images: string | undefined,
+): number {
+  if (images === 'none') return sc.unoptimizedImageKB;
+  if (images === 'resize') return sc.resizedImageKB * (settings.imageKB / 150);
+  return settings.imageKB;
+}
+
+/**
+ * 1 ページの通信量（KB）: HTML（SPA はデータの API）+ JS・CSS + 画像。ブラウザのキャッシュが無い最初の 1 ページ（D-47）。
+ * 画像の枚数は提案で変わる（mods.imagesPerPage）。
+ */
+export function pageWeightKB(
+  sc: Scenario,
+  settings: Settings,
+  mods: WorkloadMods,
+  images: string | undefined,
+): number {
+  const w = sc.template(1);
+  const html = w.routes[0]!.processing.responseKB;
+  const perImage = deliveredImageKB(sc, settings, images);
+  return (
+    html +
+    w.perPage.assets * w.assets.sizeKB +
+    (mods.imagesPerPage ?? w.perPage.images) * perImage
+  );
+}
+
+/** 1 ページの通信量の表示（例: 「1 ページ約 20.5 MB」）。 */
+export function pageWeightLabel(kb: number): string {
+  return kb >= 1000
+    ? `1 ページ約 ${Number((kb / 1000).toFixed(1))} MB`
+    : `1 ページ約 ${Math.round(kb)} KB`;
+}
+
+/** 状態の画像の部品で、1 ページの通信量の表示（画像の部品の ⓘ に使う）。 */
+export function pageWeightOf(state: GameState, images?: string): string {
+  const platform = STACKS[state.stackIndex]!.provider;
+  const opt =
+    images ?? { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  return pageWeightLabel(
+    pageWeightKB(scenarioOf(state), state.settings, state.mods, opt),
+  );
+}
 
 /** 行動を選べない理由（画面はこの文をそのまま出す）。 */
 export type ActionBlockReason =
@@ -1158,7 +1261,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         const why = unavailableReason(state, def);
         if (why) return ng('unavailable', why);
       }
-      return ok(action.accept ? acceptEffort(def) : 0);
+      return ok(action.accept ? acceptEffort(def, state) : 0);
     }
     case 'storage-option': {
       if (busy) return busy;
@@ -1492,6 +1595,8 @@ export function describeEffect(e: Effect): string {
       return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がる）`;
     case 'contract':
       return `契約の収益 $${e.usdPerMonth} / 月（${REQUIREMENT_LABEL[e.requires]}のときだけ）`;
+    case 'imageRedesign':
+      return '画像を大きく綺麗に出す（原本がある構成は過去の記事も・一律で縮めた構成はこれからの投稿だけ。原本が無いと過去の画像は大きくできない）';
   }
 }
 
@@ -1564,6 +1669,20 @@ function applyEffects(
       case 'component':
         s = { ...s, components: { ...s.components, [e.slot]: e.option } };
         break;
+      case 'imageRedesign': {
+        // 手間は画像の部品で決まる（D-47）。粗い画像の数はここで固定し、以後の一律で縮めた投稿は粗くない
+        const points = imageRedesignEffort(s);
+        s = {
+          ...s,
+          imageRedesign: { coarseImages: s.coarseImages ?? 0 },
+          ...(points > 0
+            ? {
+                interrupts: [...s.interrupts, { points, months: 1, eventId }],
+              }
+            : {}),
+        };
+        break;
+      }
       case 'requirement':
         s = s.requirements.includes(e.requirement)
           ? s
@@ -1846,7 +1965,7 @@ export function playMonth(input: GameState): GameState {
             accept: {
               label: def.accept.label,
               effects: def.accept.effects.map(describeEffect),
-              effort: acceptEffort(def),
+              effort: acceptEffort(def, state),
               ...(unavailableReason(state, def)
                 ? { unavailable: unavailableReason(state, def)! }
                 : {}),
@@ -2018,8 +2137,15 @@ export function playMonth(input: GameState): GameState {
   const comps = { ...DEFAULT_CHOICES[platformNow], ...state.components };
   const viewed: Settings = {
     ...state.settings,
-    ...(comps.images === 'none' ? { imageKB: sc.unoptimizedImageKB } : {}),
+    imageKB: deliveredImageKB(sc, state.settings, comps.images),
+    // 一律で縮めて置くと、サイズ違いが無くスマホにも同じ大きさを配る（D-47）
+    ...(comps.images === 'resize' ? { variants: 1 } : {}),
   };
+  // 画質: 最適化しないは原本、それ以外は圧縮の設定で決まる。記事のデザインの刷新を断った月・
+  // 受けたあと粗い画像（一律で縮めた原本の無い画像）が多い月は 1 段下げる（D-47）
+  const qualityImageKB =
+    comps.images === 'none' ? viewed.imageKB : state.settings.imageKB;
+  const redesign = imageRedesignQuality(state, sc, month, comps.images);
   // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）。
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
   const spa = state.framework === 'vite-spa';
@@ -2047,6 +2173,8 @@ export function playMonth(input: GameState): GameState {
       imageKB: viewed.imageKB,
       variants: viewed.variants,
       revalidateSec: viewed.revalidateSec,
+      qualityImageKB,
+      qualityDown: redesign !== undefined,
       featurePoints,
       month,
       premises: r.premises,
@@ -2076,6 +2204,10 @@ export function playMonth(input: GameState): GameState {
     featurePoints,
     month,
     imagesUnoptimized: comps.images === 'none',
+    pageWeight: pageWeightLabel(
+      pageWeightKB(sc, state.settings, state.mods, comps.images),
+    ),
+    qualityReason: redesign,
     eventuallyConsistent,
     uncached,
     onDemandReason: onDemand
@@ -2144,6 +2276,12 @@ export function playMonth(input: GameState): GameState {
 
   // ためていく量（月ごとに増える。prd/07 §10.4）
   const stock = sc.stock ? grow(sc, state, humanPV) : state.stock;
+  // 一律で縮めて置いた画像（原本が無い）は、記事のデザインの刷新を受ける前の分だけ粗い画像として数える（D-47）
+  const coarseImages =
+    (state.coarseImages ?? 0) +
+    (comps.images === 'resize' && !state.imageRedesign
+      ? stock.images - state.stock.images
+      : 0);
 
   const report: MonthReport = {
     month,
@@ -2280,6 +2418,7 @@ export function playMonth(input: GameState): GameState {
     plannedEffort: 0,
     policyWarnedMonth,
     stock,
+    ...(coarseImages > 0 ? { coarseImages } : {}),
     fired,
     pendingProposals: end ? [] : proposals.map((x) => x.id),
     interrupts: state.interrupts
@@ -2303,12 +2442,18 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
   const uploads =
     mau * w.images.uploadsPerMau * (state.mods.uploadsFactor ?? 1);
   const s = state.stock;
+  // 一律で縮めて置く部品なら、保存するのは縮めた大きさ（原本は残さない。D-47）
+  const platform = STACKS[state.stackIndex]!.provider;
+  const resize =
+    { ...DEFAULT_CHOICES[platform], ...state.components }.images === 'resize';
+  const gbPerUpload = resize
+    ? deliveredImageKB(sc, state.settings, 'resize') / 1e6
+    : rule.gbPerImage * (state.settings.imageKB / 150);
   return {
     dbGB:
       s.dbGB +
       (rule.dbGBPerMillionPV * humanPV * (state.mods.dbRateFactor ?? 1)) / 1e6,
-    imagesGB:
-      s.imagesGB + uploads * rule.gbPerImage * (state.settings.imageKB / 150),
+    imagesGB: s.imagesGB + uploads * gbPerUpload,
     images: s.images + uploads,
     articlePages: s.articlePages,
   };
@@ -2435,6 +2580,10 @@ function stageReasons(
     featurePoints: number;
     month: number;
     imagesUnoptimized: boolean;
+    /** 1 ページの通信量の表示（速さの理由に添える。D-47）。 */
+    pageWeight: string;
+    /** 画質を下げた理由（記事のデザインの刷新。D-47）。 */
+    qualityReason?: string | undefined;
     eventuallyConsistent: boolean;
     uncached: boolean;
     onDemandReason?: string | undefined;
@@ -2451,10 +2600,12 @@ function stageReasons(
     out.speed = c.throttling.length
       ? `前提に当たった: ${c.throttling[0]!.text}`
       : c.spa
-        ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種）`
-        : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種）`;
+        ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
+        : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`;
   if (stages.quality !== 'good')
-    out.quality = `画像の圧縮 ${optionLabel('compress', c.settings.imageKB)}`;
+    out.quality =
+      c.qualityReason ??
+      `画像の圧縮 ${optionLabel('compress', c.settings.imageKB)}`;
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
