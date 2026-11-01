@@ -50,12 +50,13 @@ describe('Netlify の構成', () => {
     }
   });
 
-  it('始める画面: Next.js は ISR・画像（Cloudflare の部品も）・API の置き場を選び、ファイルの置き場（Netlify Blobs）は固定', () => {
+  it('始める画面: Next.js は ISR・画像（Cloudflare の部品も）・DB（Neon も。D-77）・API の置き場を選び、ファイルの置き場（Netlify Blobs）は固定', () => {
     const slots = setupSlots(ARTICLE_COMMUNITY, PRO, 'nextjs');
     expect(slots.map((x) => [x.slot, x.fixed])).toEqual([
       ['isrCache', false],
       ['images', false],
       ['api', false],
+      ['db', false],
       ['files', true],
     ]);
     expect(

@@ -142,6 +142,7 @@ describe('部品の差し替え', () => {
     expect(m.components).toEqual({
       isrCache: 'default',
       images: 'default',
+      db: 'supabase',
       api: 'same',
     });
   });

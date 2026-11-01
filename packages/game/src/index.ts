@@ -21,6 +21,7 @@ import {
   toSpa,
   type Choices,
   type FrameworkId,
+  type ComponentProvider,
   type Platform,
   type SlotId,
 } from 'catalog';
@@ -1369,6 +1370,7 @@ const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
   aws: 'AWS',
   supabase: 'Supabase',
   netlify: 'Netlify',
+  neon: 'Neon',
   sakura: 'さくらのクラウド',
 };
 export const accountLabel = (id: string) => ACCOUNT_LABEL[id] ?? id;
@@ -2108,7 +2110,7 @@ export function componentSlots(state: GameState): {
 /** 始める画面の部品の選択肢（files は構成が暗黙に持つファイルの置き場。catalog の fileStorageOf）。 */
 export type SetupOption = {
   id: string;
-  platform: Platform;
+  platform: ComponentProvider;
   slot: SlotId | 'files';
   label: string;
   note: string;
@@ -2262,7 +2264,7 @@ export function setupProblem(
 
 /** 部品の選択肢の短い説明（フレーバー。catalog の COMPONENT_FLAVOR。D-45）。 */
 export function componentFlavor(o: {
-  platform: Platform;
+  platform: ComponentProvider;
   slot: SlotId | 'files';
   id: string;
 }): string | undefined {

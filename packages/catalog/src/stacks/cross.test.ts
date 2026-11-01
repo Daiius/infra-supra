@@ -12,6 +12,8 @@ import {
   CROSS_COMPONENTS,
   CROSS_PAIRS,
   hostsOf,
+  NEON_MIN_CU,
+  NEON_SUSPEND_SECONDS,
   SERVER_API_REQUEST_KB,
   SERVER_API_WORKER_CPU_MS,
   VPS_RESIDENT_WITHOUT_DB_GB,
@@ -53,8 +55,13 @@ describe('許した組（CROSS_PAIRS）', () => {
         'cf-resize',
       ]);
     for (const p of PLATFORMS)
-      for (const slot of ['isrCache', 'db', 'realtime', 'apiCache'] as const)
+      for (const slot of ['isrCache', 'realtime', 'apiCache'] as const)
         expect(cross(p, slot)).toEqual([]);
+    // DB に他の事業者の部品を差せるのは Vercel・Netlify の Neon だけ（D-77）
+    for (const p of [...PLATFORMS, 'aws-opennext', 'netlify'] as const)
+      expect(cross(p, 'db').map((c) => c.id)).toEqual(
+        p === 'vercel' || p === 'netlify' ? ['neon'] : [],
+      );
     expect(cross('cloudflare', 'images')).toEqual([]);
     expect(cross('sakura', 'images')).toEqual([]);
   });
@@ -83,6 +90,7 @@ describe('許した組（CROSS_PAIRS）', () => {
       cloudflare: 'Cloudflare',
       aws: 'AWS',
       sakura: 'さくらの VPS',
+      neon: 'Neon',
     } as const;
     for (const c of CROSS_COMPONENTS)
       expect(
@@ -713,5 +721,92 @@ describe('Astro の API の置き場（D-69）', () => {
         r.classes.api.count +
         r.classes['image-write'].count,
     );
+  });
+});
+
+describe('DB だけ Neon（D-77）', () => {
+  const neon = (stack: string, choices = {}, options = {}) =>
+    composeStack(stack, { db: 'neon', ...choices }, options);
+  const dbNode = (a: ReturnType<typeof neon>, id = 'db') =>
+    a.nodes.find((n) => n.id === id);
+
+  it('Supabase のノードを Neon に差し替え、経路は変えない（Pro・Personal は Launch、Hobby・Free は Free）', () => {
+    for (const fw of ['nextjs', 'vite-spa', 'astro'] as const)
+      for (const stack of ['vercel-supabase-pro', 'netlify-supabase-pro']) {
+        const base = composeStack(stack, {}, { framework: fw });
+        const a = neon(stack, {}, { framework: fw });
+        expect(a.routes).toEqual(base.routes);
+        expect(accountsOf(a)).not.toContain('supabase');
+        expect(accountsOf(a)).toContain('neon');
+        expect(dbNode(a)).toMatchObject({
+          config: {
+            kind: 'managed-db',
+            capacityUnits: NEON_MIN_CU,
+            pauseAfterIdleSeconds: NEON_SUSPEND_SECONDS,
+          },
+          billing: { provider: 'neon', planId: 'launch' },
+        });
+      }
+    expect(neon('vercel-supabase-pro').name).toBe('Vercel Pro + Neon Launch');
+    expect(neon('vercel-supabase-hobby').name).toBe('Vercel Hobby + Neon Free');
+    expect(dbNode(neon('netlify-supabase-personal'))!.billing!.planId).toBe(
+      'launch',
+    );
+    expect(dbNode(neon('netlify-supabase-free'))!.billing!.planId).toBe('free');
+    // 既定は Supabase のまま（完成品の構成は変わらない）
+    expect(dbNode(composeStack('vercel-supabase-pro'))!.billing!.provider).toBe(
+      'supabase',
+    );
+  });
+
+  it('東京が無いこと・serverless driver・止まる仕組みを前提に出す', () => {
+    expect(dbNode(neon('vercel-supabase-pro'))!.facts).toEqual([
+      'region',
+      'serverless-driver',
+      'scale-to-zero',
+      'compute-size',
+    ]);
+  });
+
+  it('動いている割合は DB に届く件数から出す（閲覧が少ないと止まる時間が増える）', () => {
+    const awake = (pv: number) =>
+      simulateResources(
+        resolveWorkload(articleCommunity(pv)),
+        neon('vercel-supabase-pro'),
+      ).nodes.db!;
+    const small = awake(1_000);
+    const big = awake(1_000_000);
+    expect(small.awakeShare!).toBeLessThan(big.awakeShare!);
+    expect(big.awakeShare!).toBeLessThanOrEqual(1);
+    expect(big.resources['instance-hours']).toBeCloseTo(
+      730 * NEON_MIN_CU * big.awakeShare!,
+    );
+  });
+
+  it('差し替えの途中は移す先の DB を経路に載せずに足す（新旧の両方の費用）', () => {
+    const toNeon = composeStack(
+      'vercel-supabase-pro',
+      {},
+      { standby: { db: 'neon' } },
+    );
+    expect(dbNode(toNeon)!.billing!.provider).toBe('supabase');
+    expect(dbNode(toNeon, 'db-next')!.billing!.provider).toBe('neon');
+    expect(Object.values(toNeon.routes).flat()).not.toContain('db-next');
+    const back = neon(
+      'netlify-supabase-pro',
+      {},
+      { standby: { db: 'supabase' } },
+    );
+    expect(dbNode(back)!.billing!.provider).toBe('neon');
+    expect(dbNode(back, 'db-next')!.billing!.provider).toBe('supabase');
+  });
+
+  it('API を他の事業者に置くと、DB のノード（Neon）は外れる', () => {
+    const a = neon(
+      'vercel-supabase-pro',
+      { api: 'cf-workers' },
+      { framework: 'vite-spa' },
+    );
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
   });
 });

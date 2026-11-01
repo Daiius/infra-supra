@@ -601,6 +601,17 @@
 - 表示: 「税込の目安（円）」は既定で出し、チェックで消せる（URL の `tax=0`）。比較の表にも列を足す。費用の曲線は USD の税抜のまま。ゲームの所持金（USD）には効かせない（web の model.ts の `japanTax` だけで計算）。
 - 残した点: Vercel・Supabase・Netlify の日本の扱い（実請求か問い合わせで確かめたら `JAPAN_TAX` を直す）・事業者として契約する場合の計算・Vercel Pro の席の種類（閲覧だけの席など）。
 
+### D-77 DB だけ Neon（従量の Postgres）を Vercel・Netlify の DB に（確定・2026-11-02）
+
+- ユーザーの方針「費用を抑えるより複雑な構成も可能にしたい」。Vercel・Netlify の構成は DB に Supabase（Pro は月 $25 の基本料）を組むので、従量の Postgres に替える道を足す。prd/11 AX-14 の推奨案①。推奨案で自律に決定。詳細と出典は prd/11 §15。
+- 確かめた範囲（2026-11-02 取得）: 有料のプランは月の最低額の無い従量制。Launch は計算 $0.106 / CU 時間・保存 $0.35/GB 月・公開の転送 500 GB 込み + $0.10/GB。Free は月 100 CU 時間・転送 5 GB・1 GB まで（超えると止まる）。問い合わせが 5 分無いと止まる（Free は外せない）。最小 0.25 CU。東京のリージョンは無く、最寄りはシンガポール。serverless driver（HTTP が既定）か接続のプールで関数から使う。
+- 決定:
+  - DB のスロットに Vercel・Netlify の「Supabase」（既定・構成は今と同じ）と、他の事業者の部品「Neon」（`CROSS_PAIRS` に 2 行）。部品の事業者の型を `ComponentProvider`（土台 + `neon`）に広げた。Next.js・SPA・Astro・始める画面・ゲーム中の差し替え・見積モードで選べる。
+  - 土台が無料のプラン（Hobby・Free）は Neon Free、それ以外は Neon Launch。0.25 CU に固定、止まる割合は D-51 の 0 ACU と同じ到着率の式。関数から serverless driver で直接（接続の数の上限なし）。東京が無いことは前提の文（遅延は計算しない）。
+  - アカウントの手間は D-52 の規則のまま（構成の既定に無い Neon を増えたアカウントとして数える）。
+- 基準プレイ（何もしない・シード 1〜20）: 記事 × Vercel Pro × Next.js は月 $123.6 → $118.0（0/20 のまま）。記事 × Netlify Pro × Next.js × Neon + 画像だけ Cloudflare で 7/20。受託の SPA は Vercel Pro・Netlify Pro とも 0/20 → 7/20、Netlify Personal × SPA × Neon は 20/20（Supabase Free は止まっていた）。CF Paid × Next.js（目標の根拠）を含む既存の golden は不変。シナリオの `baselines` には足していない。
+- 未取得: 負荷と CU の関係・instant restore の履歴の量・日本の消費税・Vercel の Marketplace 経由の請求・Netlify Database。
+
 ## 未決（grill で詰める）
 
 | # | 論点 | 関係する章 |

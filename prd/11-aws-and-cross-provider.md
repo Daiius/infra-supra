@@ -411,7 +411,7 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 | AX-11 | アカウントが増える手間 | ① 2 つ目以降 1 つごとに維持 0.5 + 差すときの一度きり 1 ② 足さない ③ 一度きりだけ | **①**。値は基準プレイで確かめて確定 |
 | AX-12 | Aurora の 0 ACU（止まる DB）をいつ入れるか（→ ユーザーの決定で段 1 に前倒し・§11） | ① 段 3（受託に稼働時間帯を入れるときと一緒）② 段 1 から（記事コミュニティでは止まらないと出すだけ） | **①**。今の受託は稼働時間帯が無い（prd/09）ので、効く場面が無い |
 | AX-13 | 往復の遅延 | ① 段 2 は計算せず前提の文 ② 段 2 から仮定の rtt で速さに効かせる | **①**（prd/10 F-12 と同じ） |
-| AX-14 | Neon（東京が無い）を入れるか | ① 入れて前提の文に「最寄りはシンガポール」② 入れない | **①**（段 2 の後半）。遅延を計算しない間は前提の文だけだが、「従量で小さく始められる Postgres」の代表で、ユーザーの「Vercel + 従量の DB」の具体例になる。料金は §2.1 の Neon の料金ページの値を取り直してから |
+| AX-14 | Neon（東京が無い）を入れるか | ① 入れて前提の文に「最寄りはシンガポール」② 入れない | **①**（段 2 の後半）。遅延を計算しない間は前提の文だけだが、「従量で小さく始められる Postgres」の代表で、ユーザーの「Vercel + 従量の DB」の具体例になる。料金は §2.1 の Neon の料金ページの値を取り直してから。→ 入れた（D-77・§15） |
 
 ## 8. 出典（2026-11-01 取得）
 
@@ -754,3 +754,66 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 - Astro は記事のビルドし直し（月 約 300 回）が本番のデプロイ 1 回 15 クレジットになり、月 約 $30 上がる（Vercel の CPU minute より高い）。ビルドの間隔を延ばす設定が効く。
 - 画像だけ Cloudflare（`cf-resize`）にすると、Personal × SPA は $132・Pro × Next.js は $695 に下がる（どちらも 0/20）。
 - 基準プレイの戦略（シナリオの `baselines`）には足していない（golden を変えない）。CF Paid × Next.js（目標の根拠）を含む既存の golden はすべて不変。
+
+## 15. DB だけ Neon（2026-11-02・D-77）
+
+ユーザーの方針「費用を抑えるより複雑な構成も可能にしたい」に沿って、AX-14 の推奨案①で入れた。Vercel・Netlify の構成は DB に Supabase（Pro は月 $25 の基本料）を組むので、
+その代わりに**従量の Postgres** の Neon を DB のスロットに差せるようにした。料金は `providers/neon.ts`、組み合わせは `stacks/cross.ts`（`CROSS_PAIRS` の 2 行・`applyCrossDb`）。
+
+### 15.1 確かめた公式の事実（2026-11-02 取得）
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| プラン | Free $0・Launch・Scale。有料のプランは「no minimum monthly fee」の従量制（$0.50 未満の請求は取り立てない）。組織のメンバーは全プランで無制限。稼働率の SLA は Scale だけ | [pricing](https://neon.com/pricing)・[plans](https://neon.com/docs/introduction/plans) |
+| 計算 | CU 時間 = 大きさ × 動いている時間（「0.25 CU for 4 hours = 1 CU-hour」）。Launch $0.106・Scale $0.222 / CU 時間。1 CU ≒ 4 GB の RAM、最小は 0.25 CU。自動の拡大は Free 2 CU・Launch / Scale 16 CU まで | plans・[computes](https://neon.com/docs/manage/computes) |
+| 保存 | Launch・Scale $0.35/GB 月（根のブランチは論理的なデータの大きさ）。instant restore の履歴 $0.20/GB 月（Launch は最長 7 日）。Free は 1 プロジェクト 1 GB・全体 20 GB | pricing・plans |
+| 転送 | 公開の転送は Free 5 GB・Launch / Scale 500 GB / プロジェクト・月まで込み、以降 $0.10/GB。私的な転送（Scale）$0.01/GB | pricing・plans |
+| Free を超えたとき | CU 時間か転送を使い切ると「compute is suspended until the next billing period」、保存の上限では保存を増やす書き込みが失敗する。データは消えない。Free の 100 CU 時間は「0.25 CU compute … for 400 hours/month」 | plans |
+| 止まる仕組み | 問い合わせが 5 分無いと止まり（scale to zero）、「within a few hundred milliseconds」で再開。Free は外せず、Launch は外せ、Scale は 1 分〜常時を選べる。何もしない接続は止まるのを妨げない（idle-in-transaction は妨げる） | [scale-to-zero](https://neon.com/docs/introduction/scale-to-zero)・[compute-lifecycle](https://neon.com/docs/introduction/compute-lifecycle) |
+| 接続 | serverless driver は「serverless and edge environments」から HTTP か WebSocket で問い合わせ、HTTP を既定に使う。TCP なら serverless の関数は接続のプール（PgBouncer。`max_client_conn=10000`、0.25 CU の `max_connections` は 104） | [serverless-driver](https://neon.com/docs/serverless/serverless-driver)・[connection-pooling](https://neon.com/docs/connect/connection-pooling) |
+| リージョン | AWS の 8 つ（米国 3・欧州 2・シンガポール・シドニー・サンパウロ）。**東京は無い**（Azure は新規の作成不可） | [regions](https://neon.com/docs/introduction/regions) |
+| Vercel | Marketplace に Neon（Vercel Native）。新しく作ると「Billing is managed through Vercel」 | [Vercel Marketplace の Neon](https://vercel.com/marketplace/neon) |
+
+### 15.2 入れた形
+
+- **部品**: DB のスロットに「Supabase（Postgres）」（Vercel・Netlify の既定。今までの構成と同じ）と「Neon: 従量の Postgres（閲覧が途切れると止まる）」。Neon は他の事業者の部品（`platform: 'neon'`・`hosts: ['vercel', 'netlify']`）で、`CROSS_PAIRS` に Vercel × db × Neon・Netlify × db × Neon の 2 行。Next.js・SPA・Astro のすべてで選べる。始める画面・ゲーム中の差し替え（データの移行）・見積モードに出る。
+  部品の事業者の型を `ComponentProvider`（土台の事業者 + `'neon'`）に広げた（Neon は土台にならない）。
+- **プラン**: 土台が無料のプラン（Vercel Hobby・Netlify Free）なら Neon Free、それ以外（Vercel Pro・Netlify Personal・Pro）は Neon Launch。Scale は組まない。
+- **計算**: `managed-db` に `capacityUnits: 0.25`・`pauseAfterIdleSeconds: 300`。動いている割合は Aurora Serverless v2 の 0 ACU（D-51）と同じ λT / (1 + λT)（DB に届く件数の月の平均の到着率。夜間に減る分は入れない）。最小の 0.25 CU に固定し、自動の拡大は計算しない（解釈）。
+  転送は DB の応答を Neon の公開の転送で数え、関数から送る問い合わせは Supabase のときと同じく数えない。instant restore の履歴は変更の量に依るので数えない（プランの注記）。
+- **接続**: 関数から serverless driver（HTTP）で直接。接続の数の上限は付けない（Supabase の pooler 200 の制限は外れる）。
+- **前提の文**: 東京が無く最寄りはシンガポール（往復の遅延は計算しない。AX-13）・serverless driver・止まる仕組み・0.25 CU の固定。
+- **ノード**: Supabase のノード `db` を同じ id のまま Neon に差し替える（経路は変えない）。差し替えの途中は移す先を `db-next` として経路に載せずに足す（Supabase は常に動く分、Neon は件数が無いので止まっている）。API を他の事業者に置くと DB のノードは外れる（D-65 のまま）。構成の名前は「Vercel Pro + Neon Launch」のように替える。
+- **アカウントの手間**: D-52 の規則のまま、構成の既定（Vercel + Supabase）に無い Neon を「増えたアカウント」として数える（Supabase は消えるが既定の内なので差し引かない）。
+- **税**: 日本の消費税は未確認（`JAPAN_TAX` に `unconfirmed`）。
+
+### 15.3 基準プレイ（何もしない・シード 1〜20・達成数・12 か月の費用の平均 / 月）
+
+| シナリオ × 構成 × フレームワーク | Supabase | Neon | Neon + 画像だけ Cloudflare（`cf-resize`） |
+|---|---|---|---|
+| 記事 × Vercel Pro × Next.js | 0/20・$123.6 | 0/20・$118.0 | 0/20・$74.8 |
+| 記事 × Vercel Pro × SPA | 0/20・$107.2 | 0/20・$101.5 | 0/20・$53.9 |
+| 記事 × Netlify Pro × Next.js | 0/20・$89.3 | 0/20・$83.7 | **7/20**・$52.3（Supabase + `cf-resize` は 0/20・$57.9） |
+| 記事 × Netlify Pro × SPA | 0/20・$80.4 | 0/20・$74.7 | 0/20・$40.7 |
+| 受託 × Vercel Pro × Next.js / SPA | 0/20・$46.4 / 0/20・$45.1 | 0/20・$41.8 / **7/20**・$40.2 | — |
+| 受託 × Netlify Pro × Next.js / SPA | 0/20・$45.0 / 0/20・$45.0 | 0/20・$40.1 / **7/20**・$40.0 | — |
+| 受託 × Netlify Personal × SPA | 0/20・止まる（Supabase Free の DB の大きさ） | **20/20**・$32.6 | — |
+| CF Paid × Next.js（目標の根拠） | 記事 20/20・$15.2・受託 20/20・$5.7（不変） | | |
+
+- 記事コミュニティは常に誰かが見ているので Neon はほとんど止まらず（0.25 CU × 730 時間 ≒ $19.4 / 月）、Supabase Pro の $25 との差は月 $5〜6。単独では届かない（§3.4 の見込みどおり）が、画像だけ Cloudflare と重ねると Netlify Pro × Next.js で 7/20 が届く。
+- 受託は Supabase Pro の基本料が消える分が効き、SPA で 7/20、Netlify Personal（$9）+ Neon Launch では 20/20。Netlify Personal + Supabase Free は 1 か月目に DB の大きさで止まっていたので、**従量の DB が「有料の土台 + 無料の DB」の穴を埋める**形になった。
+- Vercel Hobby・Netlify Free × Neon Free は記事コミュニティで月 100 CU 時間を 1〜2 か月で使い切って止まる（Supabase Free と同じく商用の規模には足りない）。
+- 受託の業務アプリは夜間に使われないので実際はもっと止まるが、月の平均の到着率で数えるので反映していない（AX-12 と同じ。稼働時間帯は段 3）。
+- 既存の golden（CF Paid を含む）はすべて不変。シナリオの `baselines` には足していない。
+
+### 15.4 未取得・扱わないもの
+
+| 項目 | 扱い |
+|---|---|
+| 負荷と CU の関係（自動の拡大） | 公式に無い。0.25 CU に固定 |
+| instant restore の履歴の量 | 変更の量を出していないので数えない（単価 $0.20/GB 月は確認済み） |
+| Neon の日本の消費税 | 未確認（税抜のまま） |
+| Vercel の Marketplace で作ったときの請求（Vercel にまとまる） | Neon に直接払う形で数える（アカウントの手間も数える） |
+| Netlify Database（Netlify 自身の Postgres・クレジットで課金） | 扱わない |
+| Scale のプラン | 組まない |
+
