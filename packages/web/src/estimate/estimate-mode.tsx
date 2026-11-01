@@ -382,7 +382,10 @@ function Conditions({
           );
         })}
       </div>
-      {(settings.revalidate || settings.format || settings.variants) && (
+      {(settings.revalidate ||
+        settings.comments ||
+        settings.format ||
+        settings.variants) && (
         <>
           <h3 className="font-semibold">設定</h3>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -399,6 +402,26 @@ function Conditions({
                   }
                 >
                   {settings.revalidate.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {settings.comments && (
+              <Field
+                label={settings.comments.label}
+                info={settings.comments.note}
+              >
+                <select
+                  className={select}
+                  value={input.comments}
+                  onChange={(e) =>
+                    setInput({ comments: Number(e.target.value) })
+                  }
+                >
+                  {settings.comments.options.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>

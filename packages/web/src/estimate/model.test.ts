@@ -76,6 +76,28 @@ describe('URL のクエリ', () => {
     expect(normalizeInput(fromQuery(`?${toQuery(i)}`))).toEqual(i);
   });
 
+  it('コメントの描き方（D-82）: 書いて読むと戻り、SPA・業務アプリでは既定（ブラウザで読み込む）', () => {
+    const i = normalizeInput({ framework: 'astro', comments: 1 });
+    expect(i.comments).toBe(1);
+    expect(normalizeInput(fromQuery(`?${toQuery(i)}`))).toEqual(i);
+    expect(
+      normalizeInput({ framework: 'vite-spa', comments: 1 }).comments,
+    ).toBe(0);
+    expect(normalizeInput({ template: 'business', comments: 1 }).comments).toBe(
+      0,
+    );
+    // 時間の再検証で記事のページに含めると、記事を開いたときのコメントの取得（API の関数）が無くなり安くなる
+    const usd = (comments: number) =>
+      runEstimate(
+        normalizeInput({
+          stack: 'vercel-supabase-pro',
+          pv: 3_000_000,
+          comments,
+        }),
+      ).totalUsd;
+    expect(usd(1)).toBeLessThan(usd(0));
+  });
+
   it('読めない値は捨てる', () => {
     const q = fromQuery('?pv=abc&c.nope=x&c.images=none');
     expect(q.pv).toBeUndefined();

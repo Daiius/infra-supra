@@ -53,6 +53,8 @@ import {
   selectTrends,
   setupProblem,
   setupRevalidateOptions,
+  setupCommentOptions,
+  COMMENTS_IN_BROWSER,
   stackSupports,
   DEFAULT_REVALIDATE_SEC,
   invalidationNote,
@@ -266,6 +268,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const problem = setupProblem(scenario, stack, framework, parts);
   // ISR の再検証（D-49。Next.js のときだけ出る。既定は 5 分）
   const [revalidateSec, setRevalidateSec] = useState(DEFAULT_REVALIDATE_SEC);
+  // コメントの描き方（D-82。記事のページがあり、コメントのあるシナリオだけ。既定はブラウザで読み込む）
+  const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
+  const commentsChoosable = setupCommentOptions(scenario, framework).length > 0;
   return (
     <>
       <ScenarioPicker
@@ -335,6 +340,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             components={parts}
             value={revalidateSec}
             onChange={setRevalidateSec}
+            comments={comments}
+            onCommentsChange={setComments}
           />
           {problem ? (
             <p className="text-right text-sm" role="status">
@@ -352,6 +359,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   ? revalidateSec
                   : undefined
               }
+              comments={commentsChoosable ? comments : undefined}
             />
           )}
           <div className="card-actions flex-wrap items-center justify-end">
@@ -392,6 +400,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     ...(setupRevalidateOptions(scenario, framework).length
                       ? { revalidateSec }
                       : {}),
+                    ...(commentsChoosable ? { comments } : {}),
                   }),
                 );
                 scrollTop();

@@ -107,12 +107,41 @@ export type Settings = {
   imageKB: number;
   variants: number;
   revalidateSec: number;
+  /** コメントの描き方（COMMENTS_IN_BROWSER・COMMENTS_IN_PAGE。D-82）。 */
+  comments: number;
   /** SSR の最適化の段数。 */
   ssrOptimizations: number;
 };
 
 /** ISR の再検証の設定の「オンデマンド」（revalidateSec の値。時間の間隔はすべて正。D-49）。 */
 export const ON_DEMAND_REVALIDATE = 0;
+
+/** コメントの描き方: ブラウザで読み込む（既定。記事のページはコメントを含まない。D-70）。 */
+export const COMMENTS_IN_BROWSER = 0;
+/** コメントの描き方: 記事のページに含める（ISR・静的なページの HTML にコメントも入れる。D-82）。 */
+export const COMMENTS_IN_PAGE = 1;
+
+/**
+ * コメントの投稿で再検証するページの数（その記事のページだけ。一覧にはコメントを出さないとみなす。ゲーム上の仮定・D-82）。
+ * 記事の投稿・編集は ON_DEMAND_PAGES_PER_UPDATE（記事と一覧の 2）。
+ */
+export const COMMENT_PAGES_PER_UPDATE = 1;
+
+/**
+ * コメントを記事のページに含めるか（D-82）。設定が「記事のページに含める」で、シナリオにコメントがあり、
+ * 記事のページがある（SPA はページが無いので含められない）ときだけ。
+ */
+export function commentsInPage(
+  settings: Pick<Settings, 'comments'>,
+  framework: FrameworkId,
+  sc: Pick<Scenario, 'comments'>,
+): boolean {
+  return (
+    settings.comments === COMMENTS_IN_PAGE &&
+    framework !== 'vite-spa' &&
+    sc.comments !== undefined
+  );
+}
 
 /** 再検証がオンデマンドか（Next.js の ISR の設定。SPA では revalidateSec は API のキャッシュの期間で、0 にならない）。 */
 export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
@@ -270,6 +299,20 @@ export const SETTINGS = {
       { value: 300, label: '5 分' },
       { value: 3600, label: '1 時間' },
       { value: 21600, label: '6 時間' },
+    ],
+  },
+  /**
+   * コメントの描き方（D-82）。記事のページに含めると、コメントの投稿も記事のページを作り直す更新に数え（シナリオの
+   * comments.pageUpdateShare）、記事のページの API の読み込み（コメントの取得）が無くなる。SPA・コメントの無いシナリオでは出さない。
+   */
+  comments: {
+    label: 'コメントの描き方',
+    field: 'comments',
+    effort: EFFORT.setting.comments,
+    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro・静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見える。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
+    options: [
+      { value: COMMENTS_IN_BROWSER, label: 'ブラウザで読み込む' },
+      { value: COMMENTS_IN_PAGE, label: '記事のページに含める' },
     ],
   },
 } as const satisfies Record<
@@ -601,18 +644,20 @@ export function slotIneffective(slot: SlotId, choices: Choices): boolean {
 export function hiddenSettings(
   state: Pick<GameState, 'framework' | 'scenario'>,
 ): SettingKey[] {
-  const fromScenario = state.scenario.hidden?.settings ?? [];
-  const byFramework = FRAMEWORK_HIDDEN_SETTINGS[state.framework];
-  return [
-    ...fromScenario,
-    ...byFramework.filter((k) => !fromScenario.includes(k)),
+  // コメントの無いシナリオでは、コメントの描き方を出さない（D-82）
+  const fromScenario: SettingKey[] = [
+    ...(state.scenario.hidden?.settings ?? []),
+    ...(state.scenario.comments === undefined ? (['comments'] as const) : []),
   ];
+  const byFramework = FRAMEWORK_HIDDEN_SETTINGS[state.framework];
+  return [...new Set([...fromScenario, ...byFramework])];
 }
 
 /** フレームワークで意味の無い設定（revalidateSec をフレームワークごとの意味で 1 つだけ出す。D-37・D-68）。 */
 const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
   nextjs: ['apiCacheTtl', 'buildInterval'],
-  'vite-spa': ['isr', 'buildInterval'],
+  // SPA は記事のページが無いので、コメントを含められない（D-82）
+  'vite-spa': ['isr', 'buildInterval', 'comments'],
   astro: ['isr', 'apiCacheTtl'],
   'nextjs-export': ['isr', 'apiCacheTtl'],
 };
@@ -888,11 +933,50 @@ export const ON_DEMAND_MAX_AGE_SEC = 86_400;
 export const ON_DEMAND_PAGES_PER_UPDATE = 2;
 
 /**
- * 月の内容の更新の回数（記事のページを作り直す更新。API の書き込み × シナリオの pageUpdateShare。D-49・D-70）。
- * オンデマンドの再検証の再生成・無効化と、Astro のビルドし直しの数のもと。
+ * 月の内容の更新の回数（記事のページを作り直す更新。API の書き込み × シナリオの pageUpdateShare。D-49・D-70）と、
+ * 1 回の更新で再検証するページの数。オンデマンドの再検証の再生成・無効化と、Astro のビルドし直しの数のもと。
+ * コメントを記事のページに含めると、コメントの投稿（comments.pageUpdateShare）も足し、そのページの数は記事だけ（D-82）。
  */
-function onDemandUpdates(sc: Scenario, pv: number, w: WorkloadInput): number {
-  return pv * w.perPage.apiCalls * w.api.writesPerCall * sc.pageUpdateShare;
+function pageUpdates(
+  sc: Scenario,
+  pv: number,
+  w: WorkloadInput,
+  inPage: boolean,
+): { updates: number; pagesPerUpdate: number } {
+  const writes = pv * w.perPage.apiCalls * w.api.writesPerCall;
+  const articles = writes * sc.pageUpdateShare;
+  const comments =
+    inPage && sc.comments ? writes * sc.comments.pageUpdateShare : 0;
+  const updates = articles + comments;
+  return {
+    updates,
+    pagesPerUpdate:
+      updates > 0
+        ? (articles * ON_DEMAND_PAGES_PER_UPDATE +
+            comments * COMMENT_PAGES_PER_UPDATE) /
+          updates
+        : ON_DEMAND_PAGES_PER_UPDATE,
+  };
+}
+
+/**
+ * コメントを記事のページに含めたときの API（D-82）: 記事のページ（ISR だったルート）を開いたときのコメントの取得
+ * （API の読み込み）が無くなる。記事のページの API の読み込みはコメントの取得とみなし（ゲーム上の仮定）、書き込み
+ * （コメントの投稿など）の回数は変えない（呼び出しが減った分、1 回あたりの書き込みの割合を上げる）。
+ */
+function withoutCommentFetch(w: WorkloadInput): WorkloadInput {
+  const articleShare = w.routes
+    .filter((r) => r.rendering === 'isr')
+    .reduce((a, r) => a + r.share, 0);
+  const calls = w.perPage.apiCalls;
+  const wpc = w.api.writesPerCall;
+  const after = calls - calls * articleShare * Math.max(0, 1 - wpc);
+  if (after <= 0 || after >= calls) return w;
+  return {
+    ...w,
+    perPage: { ...w.perPage, apiCalls: after },
+    api: { ...w.api, writesPerCall: (calls * wpc) / after },
+  };
 }
 
 export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
@@ -935,9 +1019,16 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.api = { ...w.api, cpuMs: p.mods.apiCpuMs };
   if (p.mods.apiResponseKB !== undefined)
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
+  // コメントを記事のページに含める（D-82）: コメントの投稿も記事のページを作り直す更新に数え、記事を開いたときのコメントの取得が無くなる
+  const inPage = commentsInPage(p.settings, p.framework, sc);
+  const { updates, pagesPerUpdate } = pageUpdates(sc, p.pv, w, inPage);
+  if (inPage) {
+    const v = withoutCommentFetch(w);
+    w.perPage = v.perPage;
+    w.api = v.api;
+  }
   // オンデマンドの再検証（D-49）: 再生成の回数は、時間でなく内容の更新の回数から出す
   if (isOnDemand(p.settings)) {
-    const updates = onDemandUpdates(sc, p.pv, w);
     w.routes = w.routes.map((r) => {
       if (r.rendering !== 'isr') return r;
       const { revalidateSeconds: _, ...rest } = r;
@@ -945,7 +1036,7 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
         ...rest,
         onDemandUpdatesPerMonth: updates,
         onDemandMaxAgeSeconds: ON_DEMAND_MAX_AGE_SEC,
-        onDemandPagesPerUpdate: ON_DEMAND_PAGES_PER_UPDATE,
+        onDemandPagesPerUpdate: pagesPerUpdate,
       };
     });
   }
@@ -966,7 +1057,7 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // オンデマンドの再検証と同じ数え方の内容の更新、間隔は revalidateSec（オンデマンドは更新のたび）
   const astro = sc.frameworks?.astro?.shape;
   const build = {
-    updatesPerMonth: onDemandUpdates(sc, p.pv, w),
+    updatesPerMonth: updates,
     ...(isOnDemand(p.settings)
       ? {}
       : { intervalSeconds: p.settings.revalidateSec }),
@@ -1883,6 +1974,7 @@ export function settingNote(
   state: GameState,
   key: SettingKey,
 ): string | undefined {
+  if (key === 'comments') return commentsNote(state);
   if (key !== 'format') return undefined;
   const platform = STACKS[state.stackIndex]!.provider;
   const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
@@ -1893,6 +1985,32 @@ export function settingNote(
   return autoImageFormat(platform, state.framework, images)
     ? 'Cloudflare Images の閲覧のときの変換は、ブラウザに合わせた形式（format=auto）で配る（JPEG を選んでも WebP とみなす）'
     : undefined;
+}
+
+/**
+ * コメントを記事のページに含めているときの効き方の注記（D-82）。作り直しが増えるのは、更新のたびに作り直すとき
+ * （オンデマンドの再検証・更新のたびのビルド）。時間の再検証は更新の数に依らないので増えず、間隔でまとめるビルドも
+ * 間隔の数までしか増えない。どちらもコメントは間隔の分だけ遅れて見える。
+ */
+function commentsNote(state: GameState): string | undefined {
+  if (!commentsInPage(state.settings, state.framework, scenarioOf(state)))
+    return undefined;
+  const rebuilds = rebuildsStaticPages(state.framework);
+  if (!rebuilds && isrCacheOf(state) === 'none')
+    return 'ISR のキャッシュを使わない（毎回描く）ので、作り直しは増えない';
+  if (isOnDemand(state.settings))
+    return rebuilds
+      ? 'コメントの投稿のたびにビルドし直す'
+      : 'コメントの投稿のたびに記事のページを再検証する（再生成・CDN の無効化が増える）';
+  return rebuilds
+    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントはその分遅れて見える`
+    : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えない。コメントはその分遅れて見える`;
+}
+
+/** ISR のキャッシュの部品（Next.js）。 */
+function isrCacheOf(state: GameState): string | undefined {
+  const platform = STACKS[state.stackIndex]!.provider;
+  return { ...DEFAULT_CHOICES[platform], ...state.components }.isrCache;
 }
 
 /** 1 枚あたり配る画像の大きさ（KB）。画像の部品と画像の形式の設定から（D-47・D-58）。 */
@@ -2138,7 +2256,9 @@ function actionRule(state: GameState, action: Action): ActionCheck {
             action.key === 'apiCacheTtl' ||
             action.key === 'buildInterval'
             ? `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework)].label}」で選ぶ`
-            : 'このシナリオでは効かない',
+            : action.key === 'comments' && state.framework === 'vite-spa'
+              ? 'SPA には記事のページが無い（コメントはブラウザで読み込む）'
+              : 'このシナリオでは効かない',
         );
       if (state.settings[def.field] === action.value)
         return ng('same', '今と同じ（または選択済み）');
@@ -2502,6 +2622,20 @@ export function setupRevalidateOptions(
 }
 
 /**
+ * 始める画面で選べるコメントの描き方（D-82）。コメントのあるシナリオで、記事のページがあるフレームワーク（SPA 以外）だけ。
+ */
+export function setupCommentOptions(
+  scenario: Scenario,
+  framework: FrameworkId,
+): { value: number; label: string; flavor: string }[] {
+  if (hiddenSettings({ scenario, framework }).includes('comments')) return [];
+  return SETTINGS.comments.options.map((o) => ({
+    ...o,
+    flavor: settingFlavor('comments', o.value) ?? '',
+  }));
+}
+
+/**
  * 設定の選択肢の短い説明（部品の説明 COMPONENT_FLAVOR と同じ方針: 事実だが、それだけで選ぶと外れうる文。数値は書かない。D-49）。
  * 「設定:値」で引く。
  */
@@ -2525,6 +2659,10 @@ export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
     '更新の反映とビルドの回数の釣り合いを取った、ほどほどの間隔',
   'buildInterval:3600': '間隔が長いほど、ビルドの回数はまとまって減る',
   'buildInterval:21600': '更新はゆっくり見えるが、ビルドは一日に数回まで',
+  [`comments:${COMMENTS_IN_BROWSER}`]:
+    '記事のページはコメントが付いても変わらないので、作り直すのは記事を更新したときだけ',
+  [`comments:${COMMENTS_IN_PAGE}`]:
+    'コメントも記事と一緒に HTML で届き、ページを開いてからコメントを取りに行く通信が要らない',
 };
 
 export function settingFlavor(
@@ -2762,6 +2900,8 @@ export function setupInvalidationEstimate(
   stackIndex: number,
   framework: FrameworkId,
   components: Choices,
+  /** 始める画面で選んだコメントの描き方（記事のページに含めると無効化が増える。D-82）。 */
+  comments?: number,
 ): InvalidationEstimate | undefined {
   return onDemandInvalidationEstimate(
     newGame(
@@ -2772,6 +2912,7 @@ export function setupInvalidationEstimate(
       framework,
       components,
       ON_DEMAND_REVALIDATE,
+      comments,
     ),
   );
 }
@@ -2807,6 +2948,7 @@ export function setupMonthOneEstimate(
   framework: FrameworkId,
   components: Choices,
   revalidateSec?: number,
+  comments?: number,
 ): MonthOneEstimate {
   const state = newGame(
     stackIndex,
@@ -2816,6 +2958,7 @@ export function setupMonthOneEstimate(
     framework,
     components,
     revalidateSec,
+    comments,
   );
   const r = estimate({
     workload: workloadFor(scenario, {
@@ -2891,6 +3034,8 @@ export function newGame(
   components?: Choices,
   /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（5 分）。 */
   revalidateSec?: number,
+  /** 始める画面で選んだコメントの描き方（D-82）。選べないもの・省略は既定（ブラウザで読み込む）。 */
+  comments?: number,
 ): GameState {
   const fw = frameworksOf(scenario);
   // 載せられない構成（Astro × AWS など）では既定のフレームワークにする（画面では選べない。D-68）
@@ -2934,6 +3079,11 @@ export function newGame(
         )
           ? revalidateSec
           : DEFAULT_REVALIDATE_SEC,
+      comments:
+        comments !== undefined &&
+        setupCommentOptions(scenario, app).some((o) => o.value === comments)
+          ? comments
+          : COMMENTS_IN_BROWSER,
       ssrOptimizations: 0,
     },
     cash: scenario.startCash,
@@ -4851,7 +5001,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
           next: invalidation
-            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる`
+            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる${commentsInPage(state.settings, state.framework, sc) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなる' : ''}`
             : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
               : base

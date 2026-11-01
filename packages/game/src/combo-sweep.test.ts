@@ -14,6 +14,7 @@ import {
   replaySave,
   SCENARIOS,
   setupProblem,
+  setupCommentOptions,
   setupMonthOneEstimate,
   setupRevalidateOptions,
   setupSlots,
@@ -70,6 +71,16 @@ function selectableCombos(
   }
   return [...out.values()];
 }
+
+/** 組み合わせ i のコメントの描き方（再検証の一巡ごとに替える。選べないなら undefined。D-82）。 */
+const commentAt = (
+  comments: readonly number[],
+  i: number,
+  revalidateCount: number,
+): number | undefined =>
+  comments.length
+    ? comments[Math.floor(i / Math.max(1, revalidateCount)) % comments.length]
+    : undefined;
 
 type Group = { sc: Scenario; fw: FrameworkId; stackIndex: number };
 const GROUPS: Group[] = Object.values(SCENARIOS).flatMap((sc) =>
@@ -154,14 +165,17 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
         ).toBe(true);
 
     const revalidate = setupRevalidateOptions(sc, fw).map((o) => o.value);
+    const comments = setupCommentOptions(sc, fw).map((o) => o.value);
     const problems: string[] = [];
     combos.forEach((c, i) => {
       // 再検証の選択肢は組み合わせごとに順に回す。シードも組み合わせごとに変える（出来事の出方を散らす）
       const r = revalidate.length
         ? revalidate[i % revalidate.length]
         : undefined;
+      // コメントの描き方（D-82）は再検証の一巡ごとに替える（再検証の各値と組む）
+      const cm = commentAt(comments, i, revalidate.length);
       const seed = 1000 + i;
-      const id = `${JSON.stringify(c)} r=${r} seed=${seed}`;
+      const id = `${JSON.stringify(c)} r=${r} cm=${cm} seed=${seed}`;
       try {
         // 始める画面で選べた組み合わせは、始められて、newGame がそのまま受け付ける
         if (setupProblem(sc, stackIndex, fw, c) !== null)
@@ -169,10 +183,11 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
             `${id}: setupProblem ${setupProblem(sc, stackIndex, fw, c)}`,
           );
         expect(validSetupChoices(sc, stackIndex, fw, c)).toEqual(c);
-        const g0 = newGame(stackIndex, seed, sc, undefined, fw, c, r);
+        const g0 = newGame(stackIndex, seed, sc, undefined, fw, c, r, cm);
         expect(g0.framework).toBe(fw);
         expect(g0.components).toMatchObject(c);
         if (r !== undefined) expect(g0.settings.revalidateSec).toBe(r);
+        if (cm !== undefined) expect(g0.settings.comments).toBe(cm);
 
         const end = playToEnd(g0);
         for (const v of violations(end)) problems.push(`${id}: ${v}`);
@@ -187,6 +202,7 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
             startDate: end.startDate,
             components: c,
             ...(r !== undefined ? { revalidateSec: r } : {}),
+            ...(cm !== undefined ? { comments: cm } : {}),
           });
           for (let t = 1; t < end.history.length; t++)
             save = withTurn(save, []);
@@ -297,16 +313,18 @@ describe('1 か月目の費用の見込み（D-72）', () => {
     let short = 0;
     for (const { sc, fw, stackIndex } of GROUPS) {
       const revalidate = setupRevalidateOptions(sc, fw).map((o) => o.value);
+      const comments = setupCommentOptions(sc, fw).map((o) => o.value);
       selectableCombos(sc, stackIndex, fw).forEach((c, i) => {
         const r = revalidate.length
           ? revalidate[i % revalidate.length]
           : undefined;
-        const id = `${sc.id} × ${fw} × ${STACKS[stackIndex]!.id} ${JSON.stringify(c)} r=${r}`;
-        const e = setupMonthOneEstimate(sc, stackIndex, fw, c, r);
+        const cm = commentAt(comments, i, revalidate.length);
+        const id = `${sc.id} × ${fw} × ${STACKS[stackIndex]!.id} ${JSON.stringify(c)} r=${r} cm=${cm}`;
+        const e = setupMonthOneEstimate(sc, stackIndex, fw, c, r, cm);
         // 出来事も障害も無い 1 か月目になるシードを探す
         for (let seed = 1; seed <= 30; seed++) {
           const s = playMonth(
-            newGame(stackIndex, seed, sc, undefined, fw, c, r),
+            newGame(stackIndex, seed, sc, undefined, fw, c, r, cm),
           );
           const h = s.history[0]!;
           if (h.events.length > 0 || h.status === 'incident') continue;

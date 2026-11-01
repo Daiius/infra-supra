@@ -37,6 +37,8 @@ export type SaveData = {
   components?: Choices;
   /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。無い保存は今の既定（5 分）で読む。 */
   revalidateSec?: number;
+  /** 始める画面で選んだコメントの描き方（D-82。0 ブラウザ・1 記事のページ）。無い保存は既定（ブラウザで読み込む）で読む。 */
+  comments?: number;
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
 };
@@ -88,11 +90,10 @@ export function parseSave(raw: unknown): SaveData | null {
   const framework = raw.framework ?? 'nextjs';
   const components = raw.components;
   const revalidateSec = raw.revalidateSec;
-  if (
-    revalidateSec !== undefined &&
-    !(typeof revalidateSec === 'number' && Number.isFinite(revalidateSec))
-  )
-    return null;
+  const comments = raw.comments;
+  const badNum = (v: unknown) =>
+    v !== undefined && !(typeof v === 'number' && Number.isFinite(v));
+  if (badNum(revalidateSec) || badNum(comments)) return null;
   if (
     components !== undefined &&
     !(
@@ -126,7 +127,10 @@ export function parseSave(raw: unknown): SaveData | null {
     seed,
     startDate,
     ...(components ? { components: components as Choices } : {}),
-    ...(revalidateSec !== undefined ? { revalidateSec } : {}),
+    ...(revalidateSec !== undefined
+      ? { revalidateSec: revalidateSec as number }
+      : {}),
+    ...(comments !== undefined ? { comments: comments as number } : {}),
     turns: (turns as Action[][]).map((t) => t.map(migrateAction)),
   };
 }
@@ -147,6 +151,7 @@ export function replaySave(save: SaveData): GameState {
       save.framework,
       save.components,
       save.revalidateSec,
+      save.comments,
     ),
   );
   for (const actions of save.turns) {
