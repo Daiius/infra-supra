@@ -96,7 +96,11 @@ export type Effect =
        * 同じ提案の feature の加点は受けた瞬間でなく、この作業の月に按分して足す。
        */
       featureWork?: boolean;
+      /** 再検証がすでにオンデマンド（Next.js）なら要らない作業（オンデマンドへの切り替えの実装。D-49）。 */
+      unlessOnDemand?: boolean;
     }
+  /** ISR の再検証をオンデマンドにする（Next.js だけ。D-49）。 */
+  | { type: 'on-demand-revalidate' }
   | { type: 'feature'; points: number }
   /** 成長率に足す（翌月から months か月）。 */
   | { type: 'growth'; add: number; months: number }

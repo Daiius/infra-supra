@@ -246,12 +246,21 @@ const EVENTS: EventDef[] = [
       'fact:cloudflare:workers-paid:',
       'fact:cloudflare:cdn-free:next-on-demand',
     ],
+    // 受けると再検証をオンデマンドにする。時間のままなら切り替えの実装（設定の切り替えと同じ手間 2）がかかり、
+    // すでにオンデマンドなら作業は要らない（D-49。それまでは一律に手間 3）
     accept: {
-      label: '受ける（手間 3）',
+      label: '受ける（手間 2。再検証がすでにオンデマンドなら 0）',
       effects: [
         { type: 'feature', points: 5 },
         { type: 'growth', add: 0.02, months: 3 },
-        { type: 'interrupt', featureWork: true, points: 3, months: 1 },
+        {
+          type: 'interrupt',
+          featureWork: true,
+          points: 2,
+          months: 1,
+          unlessOnDemand: true,
+        },
+        { type: 'on-demand-revalidate' },
         { type: 'requirement', requirement: 'on-demand-isr' },
       ],
     },

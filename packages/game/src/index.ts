@@ -96,6 +96,21 @@ export type Settings = {
   ssrOptimizations: number;
 };
 
+/** ISR の再検証の設定の「オンデマンド」（revalidateSec の値。時間の間隔はすべて正。D-49）。 */
+export const ON_DEMAND_REVALIDATE = 0;
+
+/** 再検証がオンデマンドか（Next.js の ISR の設定。SPA では revalidateSec は API のキャッシュの期間で、0 にならない）。 */
+export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
+  return settings.revalidateSec === ON_DEMAND_REVALIDATE;
+}
+
+/**
+ * オンデマンドの最大寿命の説明（設定の ⓘ に出す。D-56）。Next.js の文書（ISR のガイド・2026-10-15 更新）で確かめたのは、
+ * タグで再検証するデータに revalidate: 3600 を併せて付けた例（unstable_cache）があることまで。
+ */
+export const ON_DEMAND_MAX_AGE_NOTE =
+  '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多い（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがある）。このゲームでは 1 日とみなし、その分の再生成も数える';
+
 /** 戻せる設定（prd/07 §9.5）。値はゲーム上の仮定。 */
 export const SETTINGS = {
   compress: {
@@ -121,11 +136,17 @@ export const SETTINGS = {
     ],
   },
   isr: {
-    label: 'ISR の再検証の間隔',
+    label: 'ISR の再検証',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: '再生成の回数に効く。延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる',
+    note:
+      '再生成の回数に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事の更新のときに再検証する（再生成はおもに更新の回数。ISR のキャッシュの置き場所によっては再検証が届かない。時間からの切り替えは実装の手間がかかる）。' +
+      ON_DEMAND_MAX_AGE_NOTE,
     options: [
+      {
+        value: ON_DEMAND_REVALIDATE,
+        label: 'オンデマンド（記事の更新のとき）',
+      },
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
       { value: 3600, label: '1 時間' },
@@ -560,6 +581,26 @@ export function spikePeakFactor(pv: number, spikes: readonly Spike[]): number {
   return Math.max(1, (steady + peakDay) / pv);
 }
 
+/**
+ * 書き込みのうち、ISR のページの中身を変える割合（記事の投稿・編集・ページに出るコメント。いいね・既読などは変えない）。
+ * ゲーム上の仮定（D-49・prd/04 §2）。
+ */
+export const ON_DEMAND_PAGE_UPDATE_SHARE = 0.5;
+
+/**
+ * オンデマンドの再検証に併せて持つとみなす最大寿命（保険の時間の再検証・秒）。再検証の呼び出しの取りこぼし
+ * （webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証を併せて設定することが多い（1 時間〜1 日など）。
+ * 選択肢にはせず、長い側の 1 日とみなす（ゲーム上の仮定。D-56）。
+ */
+export const ON_DEMAND_MAX_AGE_SEC = 86_400;
+
+/** オンデマンドの再検証の、月の内容の更新の回数（API の書き込み × ページを変える割合）。 */
+function onDemandUpdates(pv: number, w: WorkloadInput): number {
+  return (
+    pv * w.perPage.apiCalls * w.api.writesPerCall * ON_DEMAND_PAGE_UPDATE_SHARE
+  );
+}
+
 function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   const w = sc.template(Math.round(p.pv));
   const ssr = p.mods.ssrShare;
@@ -595,6 +636,19 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.api = { ...w.api, cpuMs: p.mods.apiCpuMs };
   if (p.mods.apiResponseKB !== undefined)
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
+  // オンデマンドの再検証（D-49）: 再生成の回数は、時間でなく内容の更新の回数から出す
+  if (isOnDemand(p.settings)) {
+    const updates = onDemandUpdates(p.pv, w);
+    w.routes = w.routes.map((r) => {
+      if (r.rendering !== 'isr') return r;
+      const { revalidateSeconds: _, ...rest } = r;
+      return {
+        ...rest,
+        onDemandUpdatesPerMonth: updates,
+        onDemandMaxAgeSeconds: ON_DEMAND_MAX_AGE_SEC,
+      };
+    });
+  }
   const peak = (p.peakFactor ?? 1) * spikePeakFactor(p.pv, p.spikes ?? []);
   if (peak !== 1)
     w.traffic = {
@@ -1042,8 +1096,19 @@ export function nextSsrCpuMs(state: GameState): number {
   );
 }
 
+/** 今の状態で要る効果（再検証がすでにオンデマンドなら、切り替えの作業を除く。D-49）。 */
+function effectsFor(
+  state: Pick<GameState, 'framework' | 'settings'>,
+  effects: readonly Effect[],
+): Effect[] {
+  const already = state.framework !== 'vite-spa' && isOnDemand(state.settings);
+  return effects.filter(
+    (e) => !(e.type === 'interrupt' && e.unlessOnDemand && already),
+  );
+}
+
 const acceptEffort = (def: EventDef, state: GameState) =>
-  (def.accept?.effects ?? []).reduce(
+  effectsFor(state, def.accept?.effects ?? []).reduce(
     (a, e) =>
       a +
       (e.type === 'interrupt'
@@ -1284,6 +1349,9 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         return ng('same', '今と同じ（または選択済み）');
       const inactive = settingInactiveReason(state, action.key);
       if (inactive) return ng('unavailable', inactive);
+      // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の手間がかかる（D-49）
+      if (action.key === 'isr' && action.value === ON_DEMAND_REVALIDATE)
+        return ok(EFFORT.onDemandSwitch);
       return ok(def.effort);
     }
     case 'optimize':
@@ -1544,6 +1612,43 @@ export function validSetupChoices(
   return out;
 }
 
+/** ISR の再検証の既定（5 分）。 */
+export const DEFAULT_REVALIDATE_SEC = 300;
+
+/**
+ * 始める画面で選べる ISR の再検証（D-49）。ISR のある構成（Next.js）で、シナリオが隠していないときだけ。
+ * 各選択肢に短い説明（フレーバー）を添える。
+ */
+export function setupRevalidateOptions(
+  scenario: Scenario,
+  framework: FrameworkId,
+): { value: number; label: string; flavor: string }[] {
+  if (hiddenSettings({ scenario, framework }).includes('isr')) return [];
+  return SETTINGS.isr.options.map((o) => ({
+    ...o,
+    flavor: settingFlavor('isr', o.value) ?? '',
+  }));
+}
+
+/**
+ * 設定の選択肢の短い説明（部品の説明 COMPONENT_FLAVOR と同じ方針: 事実だが、それだけで選ぶと外れうる文。数値は書かない。D-49）。
+ * 「設定:値」で引く。
+ */
+export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
+  'isr:0': '記事を更新したときだけ作り直すので、無駄な再生成がなく、いつも最新',
+  'isr:60': '少し待てば更新が見える。設定を書くだけで、追加の実装は要らない',
+  'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔',
+  'isr:3600': '間隔が長いほど、同じページを作り直すまでの間があく',
+  'isr:21600': '更新はゆっくり見えるが、同じページを作り直すのは一日に数回まで',
+};
+
+export function settingFlavor(
+  key: SettingKey,
+  value: number,
+): string | undefined {
+  return SETTING_FLAVOR[`${key}:${value}`];
+}
+
 /** 始められない理由（まだ選んでいないスロット）。選び終えていれば null。 */
 export function setupProblem(
   scenario: Scenario,
@@ -1640,6 +1745,8 @@ export function newGame(
   framework?: FrameworkId,
   /** 始める画面で選んだ部品（D-45）。選べないものは捨て、省略したスロットは既定の部品。 */
   components?: Choices,
+  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（5 分）。 */
+  revalidateSec?: number,
 ): GameState {
   const fw = frameworksOf(scenario);
   const app =
@@ -1672,7 +1779,13 @@ export function newGame(
     settings: {
       imageKB: 150,
       variants: 3,
-      revalidateSec: 300,
+      revalidateSec:
+        revalidateSec !== undefined &&
+        setupRevalidateOptions(scenario, app).some(
+          (o) => o.value === revalidateSec,
+        )
+          ? revalidateSec
+          : DEFAULT_REVALIDATE_SEC,
       ssrOptimizations: 0,
     },
     cash: scenario.startCash,
@@ -1743,7 +1856,7 @@ export function describeEffect(e: Effect): string {
       return `開発の手間 +${e.add} / 月`;
     case 'interrupt':
       if (e.featureWork)
-        return `機能の追加の作業 ${e.points} × ${e.months} か月（翌月から。その月の機能開発に数える）`;
+        return `機能の追加の作業 ${e.points} × ${e.months} か月（翌月から。その月の機能開発に数える${e.unlessOnDemand ? '。再検証がすでにオンデマンドなら不要' : ''}）`;
       return `対応の手間 ${e.points} × ${e.months} か月（翌月から）`;
     case 'feature':
       return `機能開発 +${e.points}`;
@@ -1751,6 +1864,8 @@ export function describeEffect(e: Effect): string {
       return `成長 +${Math.round(e.add * 100)} ポイント × ${e.months} か月`;
     case 'component':
       return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel('cloudflare', e.slot, e.option)}）`;
+    case 'on-demand-revalidate':
+      return 'ISR の再検証をオンデマンドにする（Next.js）';
     case 'requirement':
       return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がる）`;
     case 'contract':
@@ -1763,10 +1878,11 @@ export function describeEffect(e: Effect): string {
 /** 効果を状態に当てる（traffic はその月の計算で扱うのでここでは何もしない）。 */
 function applyEffects(
   state: GameState,
-  effects: Effect[],
+  allEffects: Effect[],
   eventId: string,
 ): GameState {
   let s = state;
+  const effects = effectsFor(state, allEffects);
   const deferFeature = effects.some(
     (e) => e.type === 'interrupt' && e.featureWork,
   );
@@ -1828,6 +1944,14 @@ function applyEffects(
         break;
       case 'component':
         s = { ...s, components: { ...s.components, [e.slot]: e.option } };
+        break;
+      case 'on-demand-revalidate':
+        // SPA には ISR が無い（revalidateSec は API のキャッシュの期間）ので変えない
+        if (s.framework !== 'vite-spa')
+          s = {
+            ...s,
+            settings: { ...s.settings, revalidateSec: ON_DEMAND_REVALIDATE },
+          };
         break;
       case 'imageRedesign': {
         // 手間は画像の部品で決まる（D-47）。粗い画像の数はここで固定し、以後の一律で縮めた投稿は粗くない
@@ -2322,10 +2446,13 @@ export function playMonth(input: GameState): GameState {
   // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
   const eventuallyConsistent =
     comps.db === 'kv' || (!spa && comps.frontCdn === 'html');
-  // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）
-  const onDemand = state.requirements.includes('on-demand-isr')
-    ? onDemandBlocker(stackIndexNow, state.components, state.framework)
-    : undefined;
+  // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
+  // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
+  const onDemandSetting = !spa && isOnDemand(state.settings);
+  const onDemand =
+    state.requirements.includes('on-demand-isr') || onDemandSetting
+      ? onDemandBlocker(stackIndexNow, state.components, state.framework)
+      : undefined;
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
@@ -2373,7 +2500,9 @@ export function playMonth(input: GameState): GameState {
     eventuallyConsistent,
     uncached,
     onDemandReason: onDemand
-      ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
+      ? state.requirements.includes('on-demand-isr')
+        ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
+        : `オンデマンドの再検証が届かない（${onDemand.label}。${onDemand.reason}）`
       : undefined,
   });
   const score = satisfactionScore(stages, sat.weights);
@@ -2778,6 +2907,7 @@ function stageReasons(
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
+        (c.spa || !isOnDemand(c.settings)) &&
         (c.spa
           ? `API のキャッシュの期間 ${optionLabel('apiCacheTtl', c.settings.revalidateSec)}`
           : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
