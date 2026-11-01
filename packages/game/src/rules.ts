@@ -130,6 +130,10 @@ export type JudgeInput = {
   onDemandUnmet?: boolean;
   /** SPA の初回表示（速さの重さを 1 つ数える。仮定・prd/10 F-05）。 */
   firstLoadHeavy?: boolean;
+  /** 画質の判定に使う大きさ（省略は imageKB。一律で縮める部品では圧縮の設定の値。D-47）。 */
+  qualityImageKB?: number;
+  /** 画質を 1 段下げる（記事のデザインの刷新を断った・粗い画像が多い。仮定・D-47）。 */
+  qualityDown?: boolean;
 };
 
 const STAGE_DOWN: Record<Stage, Stage> = {
@@ -150,7 +154,14 @@ export function judgeStages(
   const featureRatio = i.featurePoints / (ft.expectedPerMonth * i.month);
   return {
     availability: i.blocked ? 'bad' : i.degraded ? 'fair' : 'good',
-    speed: throttled || heavy >= 3 ? 'bad' : heavy >= 1 ? 'fair' : 'good',
+    speed:
+      throttled ||
+      heavy >= 3 ||
+      i.imageKB >= (sat.speed.veryHeavyImageKB ?? Infinity)
+        ? 'bad'
+        : heavy >= 1
+          ? 'fair'
+          : 'good',
     feature:
       featureRatio >= ft.good
         ? 'good'
@@ -168,8 +179,11 @@ export function judgeStages(
       const a = i.eventuallyConsistent ? STAGE_DOWN[base] : base;
       return i.onDemandUnmet ? STAGE_DOWN[a] : a;
     })(),
-    quality:
-      i.imageKB >= q.good ? 'good' : i.imageKB >= q.fair ? 'fair' : 'bad',
+    quality: ((): Stage => {
+      const kb = i.qualityImageKB ?? i.imageKB;
+      const base: Stage = kb >= q.good ? 'good' : kb >= q.fair ? 'fair' : 'bad';
+      return i.qualityDown ? STAGE_DOWN[base] : base;
+    })(),
   };
 }
 

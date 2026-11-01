@@ -38,6 +38,8 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '投稿のときに一度だけ変換して置いておく。保存する画像はサイズ違いの分だけ増える',
   'cloudflare:images:none':
     '原本をそのまま配るので、画質が落ちない。R2 は転送量に課金しない',
+  'cloudflare:images:resize':
+    '投稿のときに一度だけ縮めて置くので、保存も配信も軽く、変換の費用もかからない',
   'cloudflare:images:d1':
     '画像もデータと一緒にまとめて管理でき、バックアップも一度で済む',
   'cloudflare:db:d1':
@@ -59,6 +61,8 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '閲覧のときに自動で最適化される。Next.js の画像の部品がそのまま使える',
   'vercel:images:none':
     '原本をそのまま配るので、画質が落ちず、変換の費用もかからない',
+  'vercel:images:resize':
+    '投稿のときに一度だけ縮めて置くので、変換の費用がかからず、仕組みも単純',
   // さくらの VPS
   'sakura:isrCache:default':
     'キャッシュをサーバーのディスクに置く。追加の費用はかからない',
@@ -68,6 +72,8 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'サーバーの中で変換するので、外部のサービスに払う費用がない',
   'sakura:images:none':
     '原本をそのまま配る。転送量は無制限なので、費用は増えない',
+  'sakura:images:resize':
+    '投稿のときに一度だけ縮めて置くので、サーバーで変換する負荷がなく、ディスクも節約できる',
   'sakura:frontCdn:none':
     '間に何も挟まないので構成が単純で、問題の切り分けもしやすい',
   'sakura:frontCdn:static':

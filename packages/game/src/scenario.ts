@@ -27,7 +27,13 @@ export type StockRule = {
 
 export type SatisfactionRules = {
   weights: Record<Element, number>;
-  speed: { heavySsrCpuMs: number; heavyImageKB: number; nearRatio: number };
+  speed: {
+    heavySsrCpuMs: number;
+    heavyImageKB: number;
+    nearRatio: number;
+    /** 1 枚がこれ以上の画像（原本級）を配ると、速さはそれだけで「悪い」（ゲーム上の仮定・D-47）。省略は効かない。 */
+    veryHeavyImageKB?: number;
+  };
   quality: { good: number; fair: number };
   freshness: { good: number; fair: number };
   feature: { expectedPerMonth: number; good: number; fair: number };
@@ -101,7 +107,12 @@ export type Effect =
    */
   | { type: 'contract'; usdPerMonth: number; requires: Requirement }
   /** 以後ずっと構成に求める要件（満たさない月は満足度に効く。D-32）。 */
-  | { type: 'requirement'; requirement: Requirement };
+  | { type: 'requirement'; requirement: Requirement }
+  /**
+   * 記事のデザインの刷新を受ける（D-47）。手間は画像の部品で決まる: 原本がある構成 1・一律で縮めた構成 2
+   * （これからの投稿だけ大きくできる）・最適化しない（原本を配っている）0。
+   */
+  | { type: 'imageRedesign' };
 
 /** 構成に求める要件。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
 export type Requirement = 'uptime-sla' | 'on-demand-isr';
@@ -117,7 +128,13 @@ export type EventDef = {
   text: string;
   when:
     /** 時期をシードで決める（台本・提案）。 */
-    | { type: 'window'; from: number; to: number }
+    | {
+        type: 'window';
+        from: number;
+        to: number;
+        /** 起きる確率（省略は必ず起きる。乱数は出来事の列の 3 つ目。月と予告の乱数は変わらない。D-47）。 */
+        chance?: number;
+      }
     /** まれな出来事の候補（1 ゲームに高々 1 回。Scenario.rare で引く）。 */
     | { type: 'rare'; weight: number }
     /** 前提の使用率が境目を越えた月（前の月は下だった。状態）。premiseIds は前提の id の前方一致。 */
@@ -180,7 +197,15 @@ export type Scenario = {
   /** ためていく量の増え方。null なら増えない（テンプレートの値のまま）。 */
   stock: StockRule | null;
   scale: { startPV: number };
-  growth: { acquisition: number; churn: number };
+  growth: {
+    acquisition: number;
+    churn: number;
+    /**
+     * 速さが「悪い」月に、PV の伸び（純成長率）から引くポイント（離脱・検索からの流入の減り。ゲーム上の仮定・D-47）。
+     * 省略は 0。
+     */
+    slowPenalty?: number;
+  };
   /** 話題の月の後に残る倍率 = 1 + extra × 評判 / reference。 */
   buzz: { extra: number; reference: number };
   revenue: {
@@ -196,8 +221,18 @@ export type Scenario = {
     };
   };
   incidents: { selfHostedChancePerMonth: number };
-  /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ。ゲーム上の仮定・D-24）。 */
+  /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ＝stock.gbPerImage と同じ。ゲーム上の仮定・D-24・D-47）。 */
   unoptimizedImageKB: number;
+  /**
+   * 画像を投稿のときに一律で縮めて置く部品の、1 枚の大きさ（圧縮なしのとき。保存も配信もこの大きさ。
+   * 長い辺 1,600〜2,000px 程度の JPEG・WebP を想定したゲーム上の仮定・D-47）。
+   */
+  resizedImageKB: number;
+  /**
+   * 記事のデザインの刷新（大きな画面向けに画像を大きく出したい）の提案（D-47）。確率と、断ったときに画質を下げる月数、
+   * 受けたあと一律で縮めた粗い画像が在庫のこの割合以上なら画質を 1 段下げる（いずれもゲーム上の仮定）。
+   */
+  imageRedesign?: { declineMonths: number; coarseShare: number };
   satisfaction: SatisfactionRules;
   effort: { perMonth: number; selfHostedUpkeep: number };
   /** まれな出来事: 1 ゲームに高々 1 回。起きる確率と時期の幅。 */
@@ -284,7 +319,9 @@ export function rollSchedule(sc: Scenario, startSeed: number): Scheduled[] {
   for (const def of sc.events) {
     if (def.when.type !== 'window') continue;
     // 1 つ目で月、2 つ目で予告の有無（同じ列の続きなので、月は予告の有無を足す前と変わらない）
-    const [r, rn] = draws(startSeed, def.id, 2);
+    const chance = def.when.chance;
+    const [r, rn, rc] = draws(startSeed, def.id, chance === undefined ? 2 : 3);
+    if (chance !== undefined && rc! >= chance) continue;
     const span = def.when.to - def.when.from + 1;
     out.push(at(def, def.when.from + Math.floor(r! * span), rn));
   }

@@ -14,6 +14,8 @@ import {
   componentPreview,
   componentProposal,
   componentSlots,
+  pageWeightOf,
+  settingInactiveReason,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
@@ -1136,9 +1138,18 @@ function Actions({
                     />
                   </span>
                   <Meta items={[`手間 ${def.effort}`, '来月から']} />
+                  {settingInactiveReason(draft, key) && (
+                    <span className="block text-xs opacity-70">
+                      今は効かない: {settingInactiveReason(draft, key)}
+                    </span>
+                  )}
                 </span>
                 <select
                   className="select select-bordered select-sm w-full"
+                  disabled={
+                    settingInactiveReason(draft, key) !== undefined &&
+                    settings[key] === undefined
+                  }
                   value={chosen}
                   onChange={(e) => {
                     const v = Number(e.target.value);
@@ -1386,6 +1397,8 @@ function ComponentsSection({
                               <li key={o.id}>
                                 <span className="font-semibold">{o.label}</span>
                                 : {o.note}
+                                {x.slot === 'images' &&
+                                  `（${pageWeightOf(state, o.id)}・画像込み）`}
                               </li>
                             ))}
                           </ul>

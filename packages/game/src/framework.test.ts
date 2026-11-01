@@ -175,6 +175,7 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       expect(failing).toEqual([]);
     });
 
+  // D-47: 記事のデザインの刷新の提案（7 か月目）を断る基準プレイは、2 か月画質が下がって所持金が少し下がる
   it('記事コミュニティの SPA の基準プレイ（golden。シード 42）', () => {
     const r = Object.fromEntries(
       article.baselines.map((b) => {
@@ -183,15 +184,15 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       }),
     );
     expect(r).toEqual({
-      'cf-paid': ['1859.73', 'won', 12],
+      'cf-paid': ['1840.83', 'won', 12],
       'cf-paid-accept': ['1936.66', 'won', 12],
-      'vps-images': ['1657.84', 'goal', 12],
-      'vercel-pro': ['1394.34', 'goal', 12],
-      'vercel-to-cf': ['1490.75', 'goal', 12],
+      'vps-images': ['1641.36', 'goal', 12],
+      'vercel-pro': ['1375.32', 'goal', 12],
+      'vercel-to-cf': ['1474.62', 'goal', 12],
       'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1712.50', 'goal', 12],
-      'cf-paid-chat': ['1886.68', 'won', 12],
-      'vps-sla': ['1609.19', 'goal', 12],
+      'cf-paid-kvdb': ['1695.56', 'goal', 12],
+      'cf-paid-chat': ['1867.32', 'won', 12],
+      'vps-sla': ['1593.41', 'goal', 12],
     });
   });
 });
