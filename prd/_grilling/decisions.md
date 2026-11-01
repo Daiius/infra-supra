@@ -767,6 +767,19 @@
   - 1 分・オンデマンドで含める組、ブラウザで読み込む組（既定）はすべて不変。**CF Paid × Next.js（目標の根拠・既定）は不変**。golden（GD-2・GD-4・SPA・受託）も不変（既定はブラウザで読み込む・RDS を使う golden は無い）。網羅テスト（combo-sweep）も通る。
 - 残した点: RDS の割り当てを DB の大きさに合わせて増やす（gp3 は割り当てを減らせない・自動の拡張の閾値は表さない）。コメントの鮮度の境目の見直し（返信の待ち方の出典があれば）。
 
+### D-86 画面の描画テスト（jsdom・Testing Library）を web に足す（確定・2026-11-02）
+
+- これまで画面の確認は開発サーバーで手で行っていた。画面を描いて操作する軽い自動テストで、画面の壊れ（例外・描けない・選択肢が出ない）を `pnpm test` で見つける。推奨案で自律に決定。prd/05 §7。
+- 決定:
+  - web の devDependencies に `jsdom`・`@testing-library/react`・`@testing-library/dom` を足す。テストのファイルの先頭の `// @vitest-environment jsdom` で、描画テストだけ jsdom で動かす（`model.test.ts` は node のまま。vitest の設定は増やさない）。
+  - happy-dom ではなく jsdom: 標準への忠実さを優先した。jsdom に無い API（matchMedia・dialog の showModal と `method="dialog"` の送信・ResizeObserver・要素の大きさ）は `smoke.test-helpers.tsx` で最小限に補う。`@testing-library/user-event`・`jest-dom` は入れない（`fireEvent` と素の `expect` で足りる・時間を抑える）。
+  - 動きは「動きを減らす」設定（matchMedia）で止める（花火の canvas・数え上げ）。画面のコードには手を入れない。
+  - 乱数・時刻は画面の入力（シード 42・始めた日 2026-11-02）で固定する。
+  - 値（金額・満足度）は確かめない（game・estimator のテストが持つ）。描けること・操作できること・React の `console.error`（key の重複・描画の例外）が出ないことだけを見る。
+  - 時間は web 全体で約 4 秒（目安 30 秒以内）。CI には `pnpm test` を走らせる workflow が無い（秘密の検査だけ）ので、新しい workflow は足さず prd/05 §7 に記す。
+- 見つかった不具合: なし。ただし始める画面で未選択のスロットに一覧の最初の選択肢を選ぶと、SPA × AWS（Amplify・OpenNext）・静的書き出し × Amplify・静的書き出し × Vercel Pro は 1 か月目に所持金が尽きる（画像「最適化しない」の CloudFront の転送など）。部品の選択の結果で、ゲームの意図どおり（始める画面の見込みが警告する。D-72）。
+- 残した点: CI でテストを走らせる workflow・見た目（CSS・レイアウト）の確認（ブラウザでのテスト）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧。本文は消していないので、詳細は参照先を読む。
@@ -804,6 +817,7 @@
 | D-68 | Vercel の isr で記事を描く形・Server Islands・Astro × AWS・VPS のビルドの CPU・Hobby の 1 日 100 デプロイ・ビルドの遅れを鮮度に足すこと・初回表示の仮定の大きさの見直し |
 | D-71・D-77 | Netlify・Neon の構成をシナリオの `baselines` に足していない |
 | D-85 | RDS の割り当てを DB の大きさに合わせて増やすこと（gp3 は減らせない）・コメントの鮮度の境目（1 分・5 分）の見直し |
+| D-86 | CI でテスト（`pnpm test`）を走らせる workflow・見た目（CSS・レイアウト）をブラウザで確かめるテスト |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 
