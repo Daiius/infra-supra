@@ -1,10 +1,18 @@
 // 説明の ⓘ ボタン（選択肢の長い説明を畳む）。タップ・クリックで開閉し、Esc・外側のクリックで閉じる（hover だけに頼らない）。
 // 吹き出しは画面に固定して置き、画面の端からはみ出さないように横位置を詰める（狭い画面でも読める）。
+// 縦は、ボタンの下（足りなければ上の広い方）に置き、残りの高さを上限にして中でスクロールする（長い説明でも末尾まで読める）。
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 const WIDTH = 288;
 const MARGIN = 8;
+const GAP = 4;
+/** 下にこれだけ入れば、上の方が広くても下に置く。 */
+const MIN_BELOW = 200;
+
+type Pos = { left: number; maxHeight: number } & (
+  { top: number; bottom?: undefined } | { bottom: number; top?: undefined }
+);
 
 export function Info({
   children,
@@ -14,7 +22,7 @@ export function Info({
   /** ボタンの読み上げ（既定「説明」）。 */
   label?: string;
 }) {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<Pos | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const id = useId();
@@ -23,13 +31,17 @@ export function Info({
   const show = () => {
     const r = button.current!.getBoundingClientRect();
     const width = Math.min(WIDTH, window.innerWidth - MARGIN * 2);
-    setPos({
-      top: r.bottom + 4,
-      left: Math.min(
-        Math.max(MARGIN, r.left - 8),
-        window.innerWidth - width - MARGIN,
-      ),
-    });
+    const left = Math.min(
+      Math.max(MARGIN, r.left - 8),
+      window.innerWidth - width - MARGIN,
+    );
+    const below = window.innerHeight - r.bottom - GAP - MARGIN;
+    const above = r.top - GAP - MARGIN;
+    setPos(
+      below >= MIN_BELOW || below >= above
+        ? { left, top: r.bottom + GAP, maxHeight: below }
+        : { left, bottom: window.innerHeight - r.top + GAP, maxHeight: above },
+    );
   };
 
   useEffect(() => {
@@ -114,7 +126,11 @@ export function Info({
             style={{
               position: 'fixed',
               top: pos.top,
+              bottom: pos.bottom,
               left: pos.left,
+              maxHeight: pos.maxHeight,
+              overflowY: 'auto',
+              overscrollBehavior: 'contain',
               width: Math.min(WIDTH, window.innerWidth - MARGIN * 2),
               zIndex: 60,
             }}
