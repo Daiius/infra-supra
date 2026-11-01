@@ -5,6 +5,7 @@ import { DEFAULT_CHOICES, type Choices, type FrameworkId } from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import {
   baseSsrCpuMsOf,
+  COMMENTS_IN_BROWSER,
   frameworkDefaults,
   setupSlots,
   STACKS,
@@ -62,12 +63,19 @@ export function estimateWorkload(
     stackIndex: number;
     framework: FrameworkId;
     components: Choices;
-    settings: Omit<Settings, 'ssrOptimizations'>;
+    /** コメントの描き方（D-82）は省略するとブラウザで読み込む。 */
+    settings: Omit<Settings, 'ssrOptimizations' | 'comments'> & {
+      comments?: number;
+    };
   },
 ): WorkloadInput {
   return workloadFor(sc, {
     pv: p.pv,
-    settings: { ...p.settings, ssrOptimizations: 0 },
+    settings: {
+      comments: COMMENTS_IN_BROWSER,
+      ...p.settings,
+      ssrOptimizations: 0,
+    },
     ssrCpuMs: baseSsrCpuMsOf(sc),
     mods: {},
     stock: null,

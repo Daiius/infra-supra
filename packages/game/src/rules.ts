@@ -53,8 +53,11 @@ export const EFFORT = {
    * VPS の自前運用（サーバーそのものの運用）より小さい。
    */
   assembledUpkeep: 1,
-  /** 設定の変更の手間。 */
-  setting: { format: 1, variants: 1, isr: 0 },
+  /**
+   * 設定の変更の手間。コメントの描き方は、コメント欄をサーバーで描く形とブラウザで読み込む形の書き換え
+   * （記事のページに含めるなら、コメントの投稿のたびに再検証・ビルドを起こす実装も）で、どちらの向きも 2（仮定・D-82）。
+   */
+  setting: { format: 1, variants: 1, isr: 0, comments: 2 },
   /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */
   onDemandSwitch: 2,
   optimize: 4,

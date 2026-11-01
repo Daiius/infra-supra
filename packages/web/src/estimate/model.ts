@@ -21,6 +21,7 @@ import {
   type PriceBook,
 } from 'estimator';
 import {
+  COMMENTS_IN_BROWSER,
   DEFAULT_REVALIDATE_SEC,
   estimateComponents,
   estimateWorkload,
@@ -78,6 +79,8 @@ export type EstimateInput = {
   parts: Choices;
   /** 再検証の間隔・API のキャッシュの期間・ビルドの間隔（秒。オンデマンドは 0）。フレームワークで意味が替わる。 */
   revalidateSec: number;
+  /** コメントの描き方（D-82。0 ブラウザで読み込む・1 記事のページに含める）。選べないテンプレート・SPA では 0。 */
+  comments: number;
   imageFormat: ImageFormat;
   variants: number;
   /** チームの人数（管理画面を使う人。席）。席課金のプランだけ費用が変わる（D-76）。 */
@@ -104,6 +107,13 @@ export function settingsOf(template: TemplateId, framework: FrameworkId) {
           label: SETTINGS[revalidateKey].label,
           note: SETTINGS[revalidateKey].note,
           options: SETTINGS[revalidateKey].options,
+        },
+    comments: hidden.includes('comments')
+      ? null
+      : {
+          label: SETTINGS.comments.label,
+          note: SETTINGS.comments.note,
+          options: SETTINGS.comments.options,
         },
     format: !hidden.includes('format'),
     variants: !hidden.includes('variants'),
@@ -145,6 +155,10 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     true
       ? raw.revalidateSec!
       : DEFAULT_REVALIDATE_SEC;
+  const comments =
+    settings.comments?.options.some((o) => o.value === raw.comments) === true
+      ? raw.comments!
+      : COMMENTS_IN_BROWSER;
   const imageFormat =
     settings.format && IMAGE_FORMATS.some((f) => f.id === raw.imageFormat)
       ? raw.imageFormat!
@@ -162,6 +176,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     parts: estimateComponents(scenario, stackIndex, framework, raw.parts ?? {})
       .chosen,
     revalidateSec,
+    comments,
     imageFormat,
     variants,
     seats,
@@ -192,6 +207,8 @@ export function toQuery(input: EstimateInput): URLSearchParams {
   q.set('fw', input.framework);
   q.set('s', input.stack);
   q.set('r', String(input.revalidateSec));
+  if (input.comments !== COMMENTS_IN_BROWSER)
+    q.set('cm', String(input.comments));
   q.set('img', input.imageFormat);
   q.set('v', String(input.variants));
   q.set('seats', String(input.seats));
@@ -227,6 +244,7 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   set('framework', str('fw') as FrameworkId | undefined);
   set('stack', str('s'));
   set('revalidateSec', num('r'));
+  set('comments', num('cm'));
   set('imageFormat', str('img') as ImageFormat | undefined);
   set('variants', num('v'));
   set('seats', num('seats'));
@@ -544,6 +562,7 @@ function run(input: EstimateInput, r: Resolved) {
       imageKB: IMAGE_FORMAT_KB[input.imageFormat],
       variants: input.variants,
       revalidateSec: input.revalidateSec,
+      comments: input.comments,
     },
   });
   const architecture = withSeats(

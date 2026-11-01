@@ -7,6 +7,7 @@ import {
   invalidationNote,
   ON_DEMAND_REVALIDATE,
   SETTINGS,
+  setupCommentOptions,
   setupInvalidationEstimate,
   setupMonthOneEstimate,
   revalidateSettingOf,
@@ -119,8 +120,8 @@ export function SetupComponents({
 }
 
 /**
- * 始める画面の ISR の再検証（D-49）・Astro と Next.js の静的書き出しのビルドの間隔（D-68・D-80）。SPA 以外。始める前なので手間はかからない
- * （ゲーム中に時間からオンデマンドへ切り替えるときだけ実装の手間がかかる）。既定は 5 分を選んだ状態。
+ * 始める画面の ISR の再検証（D-49）・Astro と Next.js の静的書き出しのビルドの間隔（D-68・D-80）と、コメントの描き方（D-82）。
+ * SPA 以外。始める前なので手間はかからない（ゲーム中に切り替えるときだけ実装の手間がかかる）。既定は 5 分・ブラウザで読み込む。
  */
 export function SetupRevalidate({
   scenario,
@@ -129,6 +130,8 @@ export function SetupRevalidate({
   components,
   value,
   onChange,
+  comments,
+  onCommentsChange,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -137,8 +140,12 @@ export function SetupRevalidate({
   components: SetupChoices;
   value: number;
   onChange: (v: number) => void;
+  /** コメントの描き方（記事のページに含めると、オンデマンドの無効化の見込みも増える。D-82）。 */
+  comments: number;
+  onCommentsChange: (v: number) => void;
 }) {
   const options = setupRevalidateOptions(scenario, framework);
+  const commentOptions = setupCommentOptions(scenario, framework);
   // OpenNext で ISR を CloudFront にキャッシュするとき、オンデマンドの無効化の見込み（1 か月目の規模。D-66）
   const invalidation = useMemo(() => {
     if (options.length === 0) return undefined;
@@ -152,9 +159,10 @@ export function SetupRevalidate({
       stackIndex,
       framework,
       chosen,
+      comments,
     );
     return e && invalidationNote(e);
-  }, [scenario, stackIndex, framework, components, options.length]);
+  }, [scenario, stackIndex, framework, components, options.length, comments]);
   if (options.length === 0) return null;
   // Next.js は ISR の再検証、Astro・静的書き出しはビルドの間隔（同じ値をフレームワークの意味で選ぶ。D-68・D-80）
   const def = SETTINGS[revalidateSettingOf(framework)];
@@ -194,6 +202,40 @@ export function SetupRevalidate({
           ))}
         </div>
       </fieldset>
+      {commentOptions.length > 0 && (
+        <fieldset className="min-w-0 rounded-box border border-base-300 p-3">
+          <legend className="px-1 font-semibold">
+            <NameWithInfo
+              name={SETTINGS.comments.label}
+              info={
+                <Info label={`${SETTINGS.comments.label} の説明`}>
+                  {SETTINGS.comments.note}
+                </Info>
+              }
+            />
+          </legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {commentOptions.map((o) => (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-start gap-2"
+              >
+                <input
+                  type="radio"
+                  name="setup-comments"
+                  className="radio radio-primary radio-sm mt-0.5 shrink-0"
+                  checked={comments === o.value}
+                  onChange={() => onCommentsChange(o.value)}
+                />
+                <span className="block min-w-0">
+                  <span className="block text-sm">{o.label}</span>
+                  <span className="block text-xs opacity-70">{o.flavor}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
     </div>
   );
 }
@@ -211,6 +253,7 @@ export function SetupCostPreview({
   framework,
   components,
   revalidateSec,
+  comments,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -218,6 +261,8 @@ export function SetupCostPreview({
   components: SetupChoices;
   /** 再検証・ビルドの間隔（選べないフレームワークでは undefined）。 */
   revalidateSec: number | undefined;
+  /** コメントの描き方（選べないシナリオ・フレームワークでは undefined。D-82）。 */
+  comments: number | undefined;
 }) {
   const e = useMemo(() => {
     const chosen = Object.fromEntries(
@@ -231,8 +276,9 @@ export function SetupCostPreview({
       framework,
       chosen,
       revalidateSec,
+      comments,
     );
-  }, [scenario, stackIndex, framework, components, revalidateSec]);
+  }, [scenario, stackIndex, framework, components, revalidateSec, comments]);
   return (
     <div
       role="status"

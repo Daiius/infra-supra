@@ -234,10 +234,16 @@ export type Scenario = {
   /**
    * API の書き込みのうち、記事のページ（ISR・Astro の静的なページ）の HTML を作り直す更新の割合（記事の投稿・編集）。
    * 月の内容の更新 = PV × 1 PV あたりの API × 書き込みの割合 × この値。オンデマンドの再検証の再生成・CDN の無効化と、
-   * Astro のビルドし直しの数のもと。コメント・いいねは別のデータとして読み込み、ページを作り直さないとみなす
+   * Astro のビルドし直しの数のもと。コメント・いいねは別のデータとして読み込み、ページを作り直さないとみなす（既定。設定「コメントの描き方」で含めると comments を足す）
    * （一般的な作り方の仮定。D-49・D-70・prd/04 §2）。
    */
   pageUpdateShare: number;
+  /**
+   * 設定「コメントの描き方」（D-82）。記事のページに含める（ISR・静的なページの HTML にコメントも入れる）と、
+   * API の書き込みのうちこの割合（コメントの投稿）も記事のページを作り直す（pageUpdateShare に足す）。
+   * 省略したシナリオでは設定を出さない（受託など、コメントの無いアプリ）。値はゲーム上の仮定。
+   */
+  comments?: { pageUpdateShare: number };
   /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ＝stock.gbPerImage と同じ。ゲーム上の仮定・D-24・D-47）。 */
   unoptimizedImageKB: number;
   /**
@@ -292,7 +298,12 @@ export type Scenario = {
   /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
   hidden?: {
     settings?: (
-      'format' | 'variants' | 'isr' | 'apiCacheTtl' | 'buildInterval'
+      | 'format'
+      | 'variants'
+      | 'isr'
+      | 'apiCacheTtl'
+      | 'buildInterval'
+      | 'comments'
     )[];
     slots?: SlotId[];
     blockBots?: boolean;
