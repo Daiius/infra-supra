@@ -206,13 +206,13 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   checked={stack === s.index}
                   onChange={() => setStack(s.index)}
                 />
-                <span>{stackName(s.index, framework)}</span>
+                <span>{stackName(s.index, framework, false)}</span>
               </label>
             ))}
           </div>
-          <div className="card-actions items-center justify-end">
+          <div className="card-actions flex-wrap items-center justify-end">
             <label
-              className="flex items-center gap-2 text-sm"
+              className="flex items-center gap-2 text-sm whitespace-nowrap"
               title="この日より後に施行される、実際に予告されている料金・制限の改定だけが出来事として出る"
             >
               始めた日
@@ -223,7 +223,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                 onChange={(e) => setStartDate(e.target.value || today())}
               />
             </label>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm whitespace-nowrap">
               乱数のシード
               <input
                 type="number"
