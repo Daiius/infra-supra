@@ -16,6 +16,7 @@ import {
   MVP_STACKS,
   SLOT_LABELS,
   frameworkSupported,
+  deployTarget,
   STACK_DEFS,
   browserCallsApi,
   rebuildsStaticPages,
@@ -301,7 +302,9 @@ export type Action =
   /** スロットの部品を差し替える（同じ事業者の中。D-24・prd/07 §11.3）。 */
   | { type: 'component'; slot: SlotId; option: string }
   /** さくらの VPS のストレージ変更オプションを付ける（ディスク 2 倍・手数料一度だけ・戻せない。D-30）。 */
-  | { type: 'storage-option' };
+  | { type: 'storage-option' }
+  /** アプリを作り直す（フレームワークを替える。大きな手間・数か月。済んだ翌月から新しいフレームワーク。D-81）。 */
+  | { type: 'rewrite'; framework: FrameworkId };
 
 /** DB の差し替えの進行（データの移行。期間中は新旧の両方の DB の費用）。 */
 export type ComponentSwap = {
@@ -315,6 +318,17 @@ export type Migration = {
   from: number;
   to: number;
   /** 必要な手間の合計と、入れた手間。 */
+  required: number;
+  done: number;
+};
+
+/**
+ * アプリの作り直しの進行（D-81・prd/10 F-06）。作業の間は旧アプリのまま動き（費用・満足度は今のフレームワーク）、
+ * 手間を入れ終えた翌月から新しいフレームワークになる。事業者は変わらない。
+ */
+export type Rewrite = {
+  from: FrameworkId;
+  to: FrameworkId;
   required: number;
   done: number;
 };
@@ -427,6 +441,10 @@ export type MonthReport = {
   /** 今月までの累積の機能ポイント。 */
   featurePoints: number;
   migration?: { toName: string; done: number; required: number };
+  /** 作り直しの進行（D-81）。toLabel は新しいフレームワークの名前。 */
+  rewrite?: { toLabel: string; done: number; required: number };
+  /** その月に動いていたアプリのフレームワーク（作り直しで変わる。D-81）。古い保存の再生でも入る。 */
+  framework?: FrameworkId;
   /** その月の部品の選択（D-24）と、画面に出す要約（選べるスロットだけ）。 */
   components: Choices;
   componentSummary: string;
@@ -453,8 +471,13 @@ export type GameState = {
   /** 実際に予告されている改定の出来事（始めた日が施行日より前のものだけ）と、起きる月。 */
   revisions: { id: string; month: number }[];
   stackIndex: number;
-  /** アプリのフレームワーク（始める画面で選ぶ。乗り換えでも変わらない。prd/10 F-04）。 */
+  /**
+   * アプリのフレームワーク（始める画面で選ぶ。乗り換えでは変わらない。prd/10 F-04）。
+   * 作り直し（D-81）が済むと替わる。
+   */
   framework: FrameworkId;
+  /** 進行中のアプリの作り直し（D-81）。 */
+  rewrite: Rewrite | null;
   /** 部品の選択（今の構成の事業者のスロット。D-24）。 */
   components: Choices;
   /** 進行中の DB の差し替え。 */
@@ -1395,6 +1418,134 @@ export function stackChangeText(
 }
 
 /**
+ * 作り直した後の部品の選択（D-81）。新しいフレームワークでも選べる部品はそのまま（始める画面と同じ規則 validSetupChoices で確かめる）、
+ * 選べない部品はフレームワークの既定に戻す。API の置き場は、同じ選択肢が無ければ同じ事業者に置く選択肢に替えて維持する
+ * （例: Next.js の「Cloudflare Workers・D1」→ SPA の同じ名前の選択肢）。どちらも無ければ同じ事業者に同居（既定）。
+ * 提案で付いた部品（チャットの Durable Objects など）は、新しいフレームワークでも選べれば残す。
+ */
+export function componentsAfterRewrite(
+  state: Pick<
+    GameState,
+    'scenario' | 'stackIndex' | 'components' | 'framework'
+  >,
+  to: FrameworkId,
+): Choices {
+  const sc = scenarioOf(state);
+  const platform = STACKS[state.stackIndex]!.provider;
+  const cur = state.components;
+  const apiOpts = componentsOf(platform, 'api', to);
+  let api = cur.api;
+  if (api !== undefined && !apiOpts.some((o) => o.id === api)) {
+    const where = componentsOf(platform, 'api', state.framework).find(
+      (o) => o.id === api,
+    )?.platform;
+    api = apiOpts.find((o) => o.id !== 'same' && o.platform === where)?.id;
+  }
+  const kept = validSetupChoices(sc, state.stackIndex, to, {
+    ...cur,
+    api: api ?? 'same',
+  });
+  const viaProposal: Choices = {};
+  for (const [slot, option] of Object.entries(cur) as [SlotId, string][])
+    if (
+      proposalOnlyComponent(sc, slot, option) &&
+      componentsOf(platform, slot, to).some((o) => o.id === option)
+    )
+      viaProposal[slot] = option;
+  const out: Choices = {
+    ...DEFAULT_CHOICES[platform],
+    ...frameworkDefaults(to, platform, sc),
+    ...kept,
+    ...viaProposal,
+  };
+  // API を他の事業者に置いている間は、構成の DB の選択は使わない（D-65。差し替えの完了と同じ）
+  if (apiPlacedElsewhere(out)) delete out.db;
+  return out;
+}
+
+/** 作り直した後の再検証の値（新しいフレームワークの設定に無い値は既定の 5 分に戻す。例: オンデマンド → SPA の API のキャッシュの期間）。 */
+function revalidateAfterRewrite(revalidateSec: number, to: FrameworkId) {
+  return SETTINGS[revalidateSettingOf(to)].options.some(
+    (o) => o.value === revalidateSec,
+  )
+    ? revalidateSec
+    : DEFAULT_REVALIDATE_SEC;
+}
+
+/** 作り直せないとき、その理由（今の構成の事業者に新しいフレームワークを載せられない）。載せられれば undefined。 */
+function rewriteUnsupported(
+  stackIndex: number,
+  to: FrameworkId,
+): string | undefined {
+  if (stackSupports(stackIndex, to)) return undefined;
+  const note = deployTarget(to, STACKS[stackIndex]!.provider)?.note;
+  return `今の構成に ${FRAMEWORKS[to].label} を載せる公式のアダプターが無い${note ? `（${note}）` : ''}`;
+}
+
+/** 作り直し先の候補（シナリオで選べるフレームワークのうち、今のもの以外）。 */
+export function rewriteTargets(
+  state: Pick<GameState, 'scenario' | 'framework'>,
+): FrameworkId[] {
+  return frameworksOf(scenarioOf(state)).allowed.filter(
+    (f) => f !== state.framework,
+  );
+}
+
+/**
+ * アプリの作り直しの選択肢の文（D-81）。label は判断に直接効く数だけの短い文、detail は理由・仮定の説明（画面の ⓘ）。
+ * 月あたりは今の維持の手間で減ることがあるので、見込みの月数は今の余力で数える。
+ */
+export function rewriteText(
+  state: GameState,
+  to: FrameworkId,
+): { name: string; meta: string[]; detail: string } {
+  const per = EFFORT.rewrite.perMonth;
+  const required = rewriteEffort();
+  const room = rewriteWanted({
+    ...state,
+    plannedEffort: 0,
+    rewrite: { from: state.framework, to, required, done: 0 },
+  });
+  const months = room > 0 ? Math.ceil(required / room) : Infinity;
+  const left = scenarioOf(state).months - state.history.length;
+  const after = componentsAfterRewrite(state, to);
+  const platform = STACKS[state.stackIndex]!.provider;
+  const lost = (Object.keys(SLOT_LABELS) as SlotId[]).filter(
+    (slot) =>
+      state.components[slot] !== undefined &&
+      after[slot] !== undefined &&
+      componentsOf(platform, slot, state.framework).length > 1 &&
+      componentsOf(platform, slot, to).length > 1 &&
+      componentLabel(platform, slot, state.components[slot]) !==
+        componentLabel(platform, slot, after[slot]),
+  );
+  return {
+    name: `${FRAMEWORKS[to].label} に作り直す`,
+    meta: [
+      `手間 ${required}（毎月 ${Math.min(per, room)} を取る）`,
+      Number.isFinite(months) ? `約 ${months} か月` : '今は進められない',
+      '機能開発がほぼ止まる',
+    ],
+    detail:
+      `アプリを ${FRAMEWORKS[to].label} で作り直す（事業者はそのまま）。作業の間は今のアプリのまま動き、` +
+      `手間を入れ終えた翌月から新しいフレームワークの費用・満足度（SNS のカード・初回表示・鮮度）になる。` +
+      `毎月の手間のうち最大 ${per} を作り直しに回すので、その間の機能開発はほぼ止まる（満足度の「機能」が下がる）。` +
+      `構成の乗り換え・部品の差し替えとは同時に進められない。新しいフレームワークで選べない部品は既定に戻り、` +
+      `API の置き場は同じ事業者に置ける選択肢があれば維持する。` +
+      (lost.length
+        ? `替わる部品: ${lost
+            .map(
+              (slot) =>
+                `${SLOT_LABELS[slot]}（${componentLabel(platform, slot, state.components[slot])} → ${componentLabel(platform, slot, after[slot])}）`,
+            )
+            .join('・')}。`
+        : '') +
+      (months > left ? `残り ${left} か月では済まない見込み。` : '') +
+      `手間の大きさはゲーム上の仮定。`,
+  };
+}
+
+/**
  * 構成ごとの維持の手間（毎月）。自前運用（VPS）はシナリオの値、自分で組む構成（OpenNext）は EFFORT.assembledUpkeep、
  * マネージドなら 0。始める画面の手間のバーにも使う（D-36・D-63）。
  */
@@ -1544,6 +1695,45 @@ function swapWanted(s: ComponentSwap | null): number {
   return s ? Math.min(EFFORT.dbSwap.perMonth, s.required - s.done) : 0;
 }
 
+/** 作り直しに必要な手間の合計（ゲーム上の仮定。D-81）。 */
+export function rewriteEffort(): number {
+  return EFFORT.rewrite.perMonth * EFFORT.rewrite.months;
+}
+
+/**
+ * 作り直しに今月入れる手間（D-81）。月あたり EFFORT.rewrite.perMonth まで、維持・出来事への対応・機能の追加の作業・
+ * 予定した行動の残りをすべて取る（維持の手間がある構成では月あたりが減り、そのぶん長くかかる）。
+ */
+function rewriteWanted(
+  state: Pick<
+    GameState,
+    | 'rewrite'
+    | 'effortPerMonth'
+    | 'plannedEffort'
+    | 'interrupts'
+    | 'stackIndex'
+    | 'migration'
+    | 'scenario'
+    | 'components'
+    | 'framework'
+    | 'componentSwap'
+  >,
+): number {
+  const w = state.rewrite;
+  if (!w) return 0;
+  const room =
+    state.effortPerMonth -
+    upkeepFor(state) -
+    accountUpkeepFor(state) -
+    interruptOf(state) -
+    featureWorkOf(state) -
+    state.plannedEffort;
+  return Math.max(
+    0,
+    Math.min(EFFORT.rewrite.perMonth, w.required - w.done, room),
+  );
+}
+
 const interruptOf = (state: Pick<GameState, 'interrupts'>) =>
   state.interrupts.reduce(
     (a, i) => a + (i.months > 0 && !i.featureWork ? i.points : 0),
@@ -1570,6 +1760,7 @@ export function effortAvailable(state: GameState): number {
     featureWorkOf(state) -
     migrationWanted(state.migration) -
     swapWanted(state.componentSwap) -
+    rewriteWanted(state) -
     state.plannedEffort
   );
 }
@@ -1925,6 +2116,14 @@ function actionRule(state: GameState, action: Action): ActionCheck {
     : state.componentSwap
       ? ng('busy', `${swapLabel(state.componentSwap.slot)}の最中は選べない`)
       : null;
+  // 作り直しの最中は、乗り換え・部品の差し替え・別の作り直しを選べない（済むと部品が新しいフレームワークの選択に替わるため。
+  // 同じ事業者のプラン変更・ストレージ変更オプションは選べる。D-81）
+  const rewriting = state.rewrite
+    ? ng(
+        'busy',
+        `${FRAMEWORKS[state.rewrite.to].label} への作り直しの最中は選べない`,
+      )
+    : null;
   switch (action.type) {
     case 'none':
       return ok(0);
@@ -1964,6 +2163,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
     case 'plan':
     case 'migrate': {
       if (busy) return busy;
+      if (action.type === 'migrate' && rewriting) return rewriting;
       if (!STACKS[action.stackIndex]) return ng('invalid', '構成が無い');
       if (action.stackIndex === state.stackIndex)
         return ng('same', '今の構成と同じ');
@@ -2008,8 +2208,24 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       return state.botBlocked
         ? ng('same', 'すでに入れている')
         : ok(BOT_BLOCK.effort);
+    case 'rewrite': {
+      if (busy) return busy;
+      if (rewriting) return rewriting;
+      if (!frameworksOf(scenarioOf(state)).allowed.includes(action.framework))
+        return ng('invalid', 'このシナリオでは選べないフレームワーク');
+      if (action.framework === state.framework)
+        return ng('same', '今のフレームワークと同じ');
+      const unsupported = rewriteUnsupported(
+        state.stackIndex,
+        action.framework,
+      );
+      if (unsupported) return ng('unavailable', unsupported);
+      // 作り直しの手間は進行中の月ごとに取る（effortAvailable が減る）
+      return ok(0);
+    }
     case 'component': {
       if (busy) return busy;
+      if (rewriting) return rewriting;
       const sc = scenarioOf(state);
       const platform = STACKS[state.stackIndex]!.provider;
       const opt = componentsOf(platform, action.slot, state.framework).find(
@@ -2054,6 +2270,13 @@ function actionRule(state: GameState, action: Action): ActionCheck {
   }
 }
 
+function newRewrite(
+  state: Pick<GameState, 'framework'>,
+  to: FrameworkId,
+): Rewrite {
+  return { from: state.framework, to, required: rewriteEffort(), done: 0 };
+}
+
 /** 行動の手間（選べない行動は null。手間の残りは見ない）。 */
 export function actionEffort(state: GameState, action: Action): number | null {
   const r = actionRule(state, action);
@@ -2077,6 +2300,15 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
     const after = effortAvailable({ ...state, migration: m });
     if (after < 0) return short(-after);
   }
+  // 作り直しは残りの手間をすべて取れる（月あたりの上限まで）。今月 1 も回せないときだけ選べない
+  if (
+    action.type === 'rewrite' &&
+    rewriteWanted({
+      ...state,
+      rewrite: newRewrite(state, action.framework),
+    }) <= 0
+  )
+    return ng('effort', '作り直しに回せる手間が残っていない');
   if (
     action.type === 'component' &&
     isDataSwap(action.slot) &&
@@ -2681,6 +2913,7 @@ export function newGame(
     schedule: rollSchedule(scenario, seed),
     stackIndex,
     framework: app,
+    rewrite: null,
     components: {
       ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider],
       ...frameworkDefaults(app, STACKS[stackIndex]!.provider, scenario),
@@ -3242,9 +3475,11 @@ export function playMonth(input: GameState): GameState {
     interrupt: interruptOf(state),
     featureWork: featureWorkOf(state),
     featureBonus: featureBonusOf(state),
-    // 乗り換えと DB の差し替えは同時に進めない（どちらかだけ）
+    // 乗り換え・DB の差し替え・作り直しは同時に進めない（どれか 1 つだけ。D-81）
     migrationWanted:
-      migrationWanted(state.migration) + swapWanted(state.componentSwap),
+      migrationWanted(state.migration) +
+      swapWanted(state.componentSwap) +
+      rewriteWanted(state),
     actions: state.plannedEffort,
     perMonth: state.effortPerMonth,
   });
@@ -3254,6 +3489,9 @@ export function playMonth(input: GameState): GameState {
     : null;
   let componentSwap = swap
     ? { ...swap, done: swap.done + effort.migration }
+    : null;
+  let rewrite = state.rewrite
+    ? { ...state.rewrite, done: state.rewrite.done + effort.migration }
     : null;
 
   const [rand, seed] = nextRandom(state.seed);
@@ -3546,6 +3784,21 @@ export function playMonth(input: GameState): GameState {
     );
     componentSwap = null;
   }
+  // 作り直しが済んだら、次の月から新しいフレームワークで動かす（事業者はそのまま。D-81）
+  let framework = state.framework;
+  let settings = state.settings;
+  if (rewrite && rewrite.done >= rewrite.required) {
+    framework = rewrite.to;
+    components = componentsAfterRewrite({ ...state, components }, rewrite.to);
+    settings = {
+      ...settings,
+      revalidateSec: revalidateAfterRewrite(settings.revalidateSec, rewrite.to),
+    };
+    notes.push(
+      `作り直しが済んだ。来月から ${FRAMEWORKS[rewrite.to].label} で動かす（${stackName(stackIndex, rewrite.to, true, components)}。新しいフレームワークで選べない部品は既定に戻した）`,
+    );
+    rewrite = null;
+  }
 
   // ためていく量（月ごとに増える。prd/07 §10.4）
   const stock = sc.stock ? grow(sc, state, humanPV) : state.stock;
@@ -3671,6 +3924,16 @@ export function playMonth(input: GameState): GameState {
           },
         }
       : {}),
+    ...(state.rewrite
+      ? {
+          rewrite: {
+            toLabel: FRAMEWORKS[state.rewrite.to].label,
+            done: state.rewrite.done + effort.migration,
+            required: state.rewrite.required,
+          },
+        }
+      : {}),
+    framework: state.framework,
   };
 
   // 今月届いた提案は、月の終わりに返事を待つ
@@ -3694,6 +3957,9 @@ export function playMonth(input: GameState): GameState {
     ...state,
     seed,
     stackIndex,
+    framework,
+    rewrite,
+    settings,
     components,
     componentSwap,
     mods,
@@ -4013,6 +4279,11 @@ export function applyAction(state: GameState, action: Action): GameState {
           ...planned,
           stackIndex: action.stackIndex,
         },
+      );
+    case 'rewrite':
+      return withNote(
+        `${FRAMEWORKS[action.framework].label} への作り直しを始めた`,
+        { ...state, rewrite: newRewrite(state, action.framework) },
       );
     case 'migrate': {
       const migration: Migration = {
@@ -4362,7 +4633,7 @@ function socialCardLoss(
   | undefined {
   const sc = scenarioOf(state);
   const c = sc.frameworks?.spa?.socialCardFactor ?? 1;
-  if (state.framework !== 'vite-spa' || c === 1) return undefined;
+  if (c === 1) return undefined;
   const h = state.history;
   const ads = (r: MonthReport) => {
     const raw = (r.humanPV / 1000) * sc.revenue.adsUsdPer1000PV;
@@ -4373,6 +4644,8 @@ function socialCardLoss(
       : 0;
   };
   for (const r of h) {
+    // その月に動いていたフレームワークで見る（作り直しで替わる。D-81）
+    if ((r.framework ?? state.framework) !== 'vite-spa') continue;
     if (!r.buzz || r.components.ogp === 'prerender') continue;
     const effect = state.schedule
       .filter((x) => x.month === r.month)
@@ -4643,7 +4916,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         hint: {
           kind: 'ogp',
           what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み${noFrontCdn ? '（ただし前段の CDN が無いと、伸びた話題の月に回線が詰まりうるので、増えた分の一部が失われる）' : ''}`,
-          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付ける${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられる' : ''}`,
+          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付ける${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられる' : ''}。または、記事ごとに HTML を返すフレームワークへ作り直す（大きな手間で数か月かかり、その間は機能開発がほぼ止まるので、話題に間に合うよう早めに）`,
         },
         // 影響額で比べる: 足りない額に対する、取り戻せた収益の割合（半分以上なら最上位）
         score: tier(
@@ -4669,16 +4942,26 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       const last = months[months.length - 1]!;
       // 維持には他の事業者の管理（D-52）を含める
       const upkeepSum = eff.upkeep + (eff.accounts ?? 0);
+      // 作り直し（D-81）に入れた手間。その間は機能開発がほぼ止まる
+      const rewriteSum = h.reduce(
+        (a, r) => a + (r.rewrite ? r.effort.migration : 0),
+        0,
+      );
+      const spent = upkeepSum + eff.interrupt + rewriteSum;
       const effortText =
-        e === 'feature' && upkeepSum + eff.interrupt > 0
-          ? `。維持の手間 計 ${upkeepSum}・出来事への対応 計 ${eff.interrupt}（手間の合計 ${eff.total} の ${Math.round((100 * (upkeepSum + eff.interrupt)) / Math.max(1, eff.total))}%）`
+        e === 'feature' && spent > 0
+          ? `。維持の手間 計 ${upkeepSum}・出来事への対応 計 ${eff.interrupt}${rewriteSum > 0 ? `・作り直し 計 ${rewriteSum}` : ''}（手間の合計 ${eff.total} の ${Math.round((100 * spent) / Math.max(1, eff.total))}%）`
           : '';
       const growth = satShort ? '' : '満足度は伸び（PV と収益）にも効く。';
+      const rewriteNext =
+        e === 'feature' && rewriteSum > 0
+          ? '。作り直しの間は機能開発がほぼ止まるので、作り直すなら早い月に始めて、止まる月を短くする'
+          : '';
       out.push({
         hint: {
           kind: 'element',
           what: `${ELEMENT_LABEL[e]}が「良い」でない月が ${months.length} か月${last.satisfaction.reasons[e] ? `（${last.month} か月目: ${last.satisfaction.reasons[e]}）` : ''}${effortText}`,
-          next: growth + ELEMENT_NEXT[e],
+          next: growth + ELEMENT_NEXT[e] + rewriteNext,
         },
         score: satShort
           ? tier(false, 100 * loss)

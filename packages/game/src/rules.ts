@@ -101,6 +101,12 @@ export const EFFORT = {
   migrationPerMonth: 6,
   /** recontract: 同じ事業者の下位プランへ契約し直してデータを移す（さくらの VPS 4GB → 2GB。D-27）。 */
   migrationMonths: { serverless: 2, selfHosted: 3, recontract: 2 },
+  /**
+   * アプリの作り直し（フレームワークを替える。D-81・prd/10 F-06）: 月あたりの手間と、必要な月数（仮定）。
+   * 合計 24 は乗り換え（12〜18）より重い。月の手間 10 のうち 8 を取るので、作り直しの間は機能開発がほぼ止まる
+   * （維持の手間がある構成では残りをすべて取り、そのぶん長くかかる）。
+   */
+  rewrite: { perMonth: 8, months: 3 },
 } as const;
 
 /** 速さの「重さ」の数（0〜3）。 */
