@@ -747,8 +747,12 @@ describe('DB だけ Neon（D-77）', () => {
           billing: { provider: 'neon', planId: 'launch' },
         });
       }
-    expect(neon('vercel-supabase-pro').name).toBe('Vercel Pro + Neon Launch');
-    expect(neon('vercel-supabase-hobby').name).toBe('Vercel Hobby + Neon Free');
+    expect(neon('vercel-supabase-pro').name).toBe(
+      'Vercel Pro + Neon（Launch）',
+    );
+    expect(neon('vercel-supabase-hobby').name).toBe(
+      'Vercel Hobby + Neon（Free）',
+    );
     expect(dbNode(neon('netlify-supabase-personal'))!.billing!.planId).toBe(
       'launch',
     );

@@ -11,6 +11,7 @@ import {
   playMonth,
   SCENARIOS,
   setupSlots,
+  stackName,
   STACKS,
   type FrameworkId,
 } from './index.ts';
@@ -62,6 +63,24 @@ describe('DB だけ Neon', () => {
         (x) => x.slot === 'db',
       ),
     ).toBe(false);
+  });
+
+  it('構成の名前は実際の組で出す（ゲーム中・見積モード。始める画面の一覧は今のまま）', () => {
+    const neon = { db: 'neon' };
+    expect(stackName(VERCEL_PRO, 'nextjs', true, neon)).toBe(
+      'Vercel Pro + Neon（Launch）',
+    );
+    expect(stackName(VERCEL_HOBBY, 'vite-spa', true, neon)).toBe(
+      'Vercel Hobby + Neon（Free）（Vite の SPA）',
+    );
+    expect(stackName(NETLIFY_PERSONAL, 'astro', true, neon)).toBe(
+      'Netlify Personal + Neon（Launch）（Astro）',
+    );
+    expect(stackName(VERCEL_PRO, 'nextjs')).toBe('Vercel Pro + Supabase Pro');
+    // API を他の事業者に置くと DB はその事業者の部品（D-65 の名前のまま）
+    expect(
+      stackName(VERCEL_PRO, 'vite-spa', true, { ...neon, api: 'cf-workers' }),
+    ).not.toContain('Neon');
   });
 
   it('Neon のアカウントが増える（アカウントの手間。D-52）', () => {

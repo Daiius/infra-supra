@@ -734,7 +734,7 @@ export function applyCrossDb(
     ...arch,
     name: arch.name.replace(
       /Supabase (Free|Pro)/,
-      free ? 'Neon Free' : 'Neon Launch',
+      free ? 'Neon（Free）' : 'Neon（Launch）',
     ),
     nodes,
   };

@@ -783,7 +783,7 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
   転送は DB の応答を Neon の公開の転送で数え、関数から送る問い合わせは Supabase のときと同じく数えない。instant restore の履歴は変更の量に依るので数えない（プランの注記）。
 - **接続**: 関数から serverless driver（HTTP）で直接。接続の数の上限は付けない（Supabase の pooler 200 の制限は外れる）。
 - **前提の文**: 東京が無く最寄りはシンガポール（往復の遅延は計算しない。AX-13）・serverless driver・止まる仕組み・0.25 CU の固定。
-- **ノード**: Supabase のノード `db` を同じ id のまま Neon に差し替える（経路は変えない）。差し替えの途中は移す先を `db-next` として経路に載せずに足す（Supabase は常に動く分、Neon は件数が無いので止まっている）。API を他の事業者に置くと DB のノードは外れる（D-65 のまま）。構成の名前は「Vercel Pro + Neon Launch」のように替える。
+- **ノード**: Supabase のノード `db` を同じ id のまま Neon に差し替える（経路は変えない）。差し替えの途中は移す先を `db-next` として経路に載せずに足す（Supabase は常に動く分、Neon は件数が無いので止まっている）。API を他の事業者に置くと DB のノードは外れる（D-65 のまま）。構成の名前は実際の組で「Vercel Pro + Neon（Launch）」のように出す（catalog の構成の名前と、game の `stackName` のゲーム中・見積モードの構成名・比較表。始める画面の構成の一覧は STACK_DEFS の名前のまま）。Netlify Personal に Neon Launch を当てるのは、Personal が商用可で Launch に最低料金が無いため（コーディネーターの判断で確定）。
 - **アカウントの手間**: D-52 の規則のまま、構成の既定（Vercel + Supabase）に無い Neon を「増えたアカウント」として数える（Supabase は消えるが既定の内なので差し引かない）。
 - **税**: 日本の消費税は未確認（`JAPAN_TAX` に `unconfirmed`）。
 
