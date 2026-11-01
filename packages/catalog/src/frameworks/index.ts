@@ -220,6 +220,40 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     note: 'SPA では OpenNext を使わず、AWS の SPA と同じ形になる',
     sources: [src('https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/')],
   },
+  // Netlify（D-71・prd/11 §14）
+  {
+    framework: 'nextjs',
+    platform: 'netlify',
+    adapter: 'OpenNext のアダプター（設定なし）',
+    support: 'native',
+    note: 'Next.js 13.5 以降を設定なしで載せる。SSR・ISR・Route Handler・Server Actions は Netlify Functions、ミドルウェアは Edge Functions。ISR は時間・オンデマンド（パス・タグ）の再検証とも完全に対応。next/image は Netlify Image CDN',
+    sources: [src2('https://docs.netlify.com/frameworks/next-js/overview/')],
+  },
+  {
+    framework: 'vite-spa',
+    platform: 'netlify',
+    adapter: '静的 + Netlify Functions の API',
+    support: 'native',
+    note: 'dist を配り、SPA は書き換えの規則で index.html を返す。API は同じサイトの Netlify Functions',
+    sources: [
+      src2(
+        'https://docs.netlify.com/build/frameworks/framework-setup-guides/vite/',
+      ),
+    ],
+  },
+  {
+    framework: 'astro',
+    platform: 'netlify',
+    adapter: '@astrojs/netlify',
+    support: 'native',
+    note: '静的なページは CDN、リクエストのたびに描くページは Netlify Functions。画像は既定で Netlify Image CDN。cacheOnDemandPages で描いたページを CDN にキャッシュできる（このモデルでは使わず、記事は静的にビルドする）。ビルドし直しは本番のデプロイ 1 回ごとにクレジットを使う',
+    sources: [
+      src2('https://docs.astro.build/en/guides/integrations-guide/netlify/'),
+      src2(
+        'https://docs.netlify.com/build/frameworks/framework-setup-guides/astro/',
+      ),
+    ],
+  },
 ];
 
 /** フレームワークをその事業者に載せられるか（DeployTarget が unsupported・無いなら載せられない。D-68）。 */

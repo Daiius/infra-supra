@@ -211,6 +211,43 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://vps.sakura.ad.jp/specification/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
+  // Netlify（D-71・2026-11-02 に原文で確かめた）。関数から外へ送るデータは Netlify の転送量（クレジット）に数える（netlify の
+  // function-outbound の解釈）。Workers の API・R2 の画像は Vercel と同じ形
+  {
+    host: 'netlify',
+    slot: 'images',
+    provider: 'cloudflare',
+    basis:
+      'Vercel と同じ（R2 の公開バケットを Cloudflare のゾーンのカスタムドメインで配り、URL で変換する。next/image はローダーを替えられる）。' +
+      '投稿は Netlify Functions が受けて R2 に書き、送るデータは Netlify の転送量（Bandwidth は「サイトがインターネットへ送るデータ」）に数える',
+    sources: [
+      'https://developers.cloudflare.com/r2/buckets/public-buckets/',
+      'https://developers.cloudflare.com/r2/pricing/',
+      'https://developers.cloudflare.com/images/transform-images/transform-via-url/',
+      'https://nextjs.org/docs/app/api-reference/config/next-config-js/images',
+      'https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work/',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
+  {
+    host: 'netlify',
+    slot: 'api',
+    provider: 'cloudflare',
+    basis:
+      'Vercel と同じ（Worker をカスタムドメインに置き、CORS のヘッダーを返し、D1 を binding で使う）。' +
+      'SPA: シェル・JS・CSS・画像は Netlify に残り、投稿の画像は Netlify Functions が Netlify Blobs に書く（Blobs は自分のサイトからだけ使える）。' +
+      'Next.js: Netlify Functions のサーバーが fetch で Worker の API を呼ぶ。Astro: @astrojs/netlify の関数が描くページの fetch は実行時に走る。' +
+      'サーバーから Worker へ送る問い合わせは Netlify の転送量に数える（受け取る応答は数えない）',
+    sources: [
+      'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
+      'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
+      'https://developers.cloudflare.com/d1/worker-api/',
+      'https://nextjs.org/docs/app/getting-started/fetching-data',
+      'https://docs.astro.build/en/guides/data-fetching/',
+      'https://docs.astro.build/en/guides/integrations-guide/netlify/',
+      'https://docs.netlify.com/build/data-and-storage/netlify-blobs/',
+      'https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work/',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
 ];
 
 const VERCEL_TO_CF_IMAGES_REFS = [
@@ -224,11 +261,11 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-images',
     slot: 'images',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws', 'aws-opennext'],
+    hosts: ['vercel', 'aws', 'aws-opennext', 'netlify'],
     link: { via: 'http', as: 'images' },
     label: 'Cloudflare: R2 に置き、閲覧のときに Images で変換',
     note:
-      '画像の原本を Cloudflare の R2 に置き、画像のドメイン（Cloudflare のゾーン）の URL で変換して配る。土台（Vercel・AWS）の CDN を通らないので、' +
+      '画像の原本を Cloudflare の R2 に置き、画像のドメイン（Cloudflare のゾーン）の URL で変換して配る。土台（Vercel・AWS・Netlify）の CDN を通らないので、' +
       '画像の転送は土台の転送の料金にならない（R2 の転送は無料）。一意な変換（種類 × サイズ違い）を月ごとに数える。' +
       'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
     premiseRefs: [
@@ -242,12 +279,12 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-resize',
     slot: 'images',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws', 'aws-opennext'],
+    hosts: ['vercel', 'aws', 'aws-opennext', 'netlify'],
     link: { via: 'http', as: 'resize' },
     label: 'Cloudflare: 投稿のときに一律で縮めて R2 に置く',
     note:
       '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて Cloudflare の R2 に置き、原本は残さない。' +
-      '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS）の転送の料金にならない（R2 の転送は無料）。' +
+      '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS・Netlify）の転送の料金にならない（R2 の転送は無料）。' +
       '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: [...VERCEL_TO_CF_IMAGES_REFS],
   },
@@ -256,7 +293,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-workers',
     slot: 'api',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws'],
+    hosts: ['vercel', 'aws', 'netlify'],
     frameworks: ['vite-spa'],
     link: { via: 'http', as: 'same' },
     label: 'Cloudflare: Workers に API を置き、DB は D1',
@@ -296,7 +333,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-workers-server',
     slot: 'api',
     platform: 'cloudflare',
-    hosts: ['vercel', 'aws', 'aws-opennext'],
+    hosts: ['vercel', 'aws', 'aws-opennext', 'netlify'],
     frameworks: ['nextjs'],
     link: { via: 'http', as: 'same' },
     label:
@@ -305,7 +342,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、' +
       'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。ブラウザは今の事業者の Next.js だけを呼ぶので CORS の設定は要らない（サーバーどうしの認証は要る）。' +
       'API を呼ぶたびに Worker のリクエストとして数える。今の事業者の DB は使わなくなる。' +
-      'OpenNext の Lambda から送る問い合わせは AWS のデータ転送の料金で数え、Vercel・Amplify は料金の文書に項目が無いので数えない。' +
+      'OpenNext の Lambda から送る問い合わせは AWS のデータ転送の料金、Netlify の関数から送る問い合わせは Netlify の転送量で数え、Vercel・Amplify は料金の文書に項目が無いので数えない。' +
       'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: [
       'fact:cloudflare:workers-paid:custom-domain-origin',
@@ -317,6 +354,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'fact:vercel:pro:function-outbound',
       'fact:aws:amplify-hosting:ssr-outbound',
       'fact:aws:data-transfer-out:lambda-out',
+      'fact:netlify:pro:function-outbound',
       'pool:cloudflare:workers-paid:paid-requests',
       'limit:cloudflare:workers-free:cpu-ms-per-request',
     ],
@@ -327,7 +365,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     id: 'cf-workers-astro',
     slot: 'api',
     platform: 'cloudflare',
-    hosts: ['vercel', 'sakura'],
+    hosts: ['vercel', 'sakura', 'netlify'],
     frameworks: ['astro'],
     link: { via: 'http', as: 'same' },
     label:
@@ -336,7 +374,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。Astro のサーバー（マイページの SSR・エンドポイント）は DB を直接読まず、' +
       'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。記事は今までどおり静的にビルドして今の場所から配る。' +
       'ブラウザは今の事業者の Astro だけを呼ぶので CORS の設定は要らない（サーバーどうしの認証は要る）。API を呼ぶたびに Worker のリクエストとして数える。' +
-      '今の DB（Supabase・VPS の MySQL）は使わなくなる。Vercel の関数・VPS から外への通信は数えない（Vercel は料金の文書に項目が無く、VPS は転送量が無制限）。' +
+      '今の DB（Supabase・VPS の MySQL）は使わなくなる。Vercel の関数・VPS から外への通信は数えない（Vercel は料金の文書に項目が無く、VPS は転送量が無制限）。Netlify の関数から送る問い合わせは Netlify の転送量で数える。' +
       'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: [
       'fact:cloudflare:workers-paid:custom-domain-origin',
@@ -345,6 +383,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'fact:cloudflare:workers-paid:d1-binding',
       'fact:vercel:hobby:function-outbound',
       'fact:vercel:pro:function-outbound',
+      'fact:netlify:pro:function-outbound',
       'pool:cloudflare:workers-paid:paid-requests',
       'limit:cloudflare:workers-free:cpu-ms-per-request',
     ],
@@ -429,6 +468,14 @@ function hostImageShape(
   arch: ArchitectureInput,
 ): { remove: string[]; write: string[]; out?: ArchNodeIn } | undefined {
   if (host === 'vercel') return { remove: ['image', 'blob'], write: ['fn'] };
+  // Netlify（D-71）: Image CDN（image）・Blobs（blob）を外す。投稿は関数が受けて（Web requests は upload で数える）R2 に書き、
+  // 送るデータを Netlify の転送量で数える
+  if (host === 'netlify') {
+    const out = netlifyOut(arch, 'R2 への書き込み');
+    return out
+      ? { remove: ['image', 'blob'], write: ['upload', 'fn', out.id], out }
+      : undefined;
+  }
   if (host !== 'aws' && host !== 'aws-opennext') return undefined;
   if (arch.id === 'aws-amplify')
     return { remove: ['image', 'cf', 's3'], write: ['ssr'] };
@@ -438,6 +485,38 @@ function hostImageShape(
   if (arch.id === 'aws-opennext')
     return { remove: ['image-fn', 's3'], write: ['server', 'aws-out'], out };
   return { remove: ['s3'], write: ['apigw', 'lambda', 'aws-out'], out };
+}
+
+/**
+ * Netlify の関数から外（R2・Worker の API）へ送るデータを、Netlify の転送量（Bandwidth）で数えるだけのノード（D-71）。
+ * 課金先のプランは土台の関数（fn）と同じ。requestKB を渡すと 1 回の大きさをそれにする（問い合わせ）。
+ */
+function netlifyOut(
+  arch: ArchitectureInput | { plan: string },
+  what: string,
+  requestKB?: number,
+): ArchNodeIn | undefined {
+  const planId =
+    'plan' in arch
+      ? arch.plan
+      : arch.nodes.find((n) => n.id === 'fn')?.billing?.planId;
+  if (!planId) return undefined;
+  return {
+    id: requestKB === undefined ? 'netlify-out' : 'netlify-out-api',
+    label: `Netlify → インターネット（${what}）`,
+    config: {
+      kind: 'cdn',
+      hitRate: {},
+      ...(requestKB !== undefined ? { egressKBPerRequest: requestKB } : {}),
+    },
+    facts: ['function-outbound'],
+    billing: {
+      accountId: 'netlify',
+      provider: 'netlify',
+      planId,
+      meters: { 'egress-gb': 'bandwidth' },
+    },
+  };
 }
 
 /** Lambda から外（R2）へ送る転送を数えるだけのノード（cdn の種類でヒットなし。課金は転送だけ）。 */
@@ -549,6 +628,7 @@ const AWS_API_NODES = [
 ] as const;
 const HOST_API_NODES: Partial<Record<Platform, readonly string[]>> = {
   vercel: ['fn', 'db'],
+  netlify: ['fn', 'db'],
   aws: AWS_API_NODES,
   'aws-opennext': AWS_API_NODES,
   cloudflare: ['worker', 'd1', 'kv-db', 'hyperdrive', 'supabase'],
@@ -557,6 +637,7 @@ const HOST_API_NODES: Partial<Record<Platform, readonly string[]>> = {
 /** Next.js・Astro の構成で、サーバーが読む DB のノード（ここを他の事業者の API に差し替える）。 */
 const HOST_DB_NODES: Partial<Record<Platform, readonly string[]>> = {
   vercel: ['db'],
+  netlify: ['db'],
   cloudflare: ['d1', 'kv-db', 'hyperdrive', 'supabase'],
   aws: ['dynamodb', 'rds', 'aurora', 'aurora-pause', 'dsql'],
   'aws-opennext': ['dynamodb', 'rds', 'aurora', 'aurora-pause', 'dsql'],
@@ -643,6 +724,10 @@ function awsOutToApi(): ArchNodeIn {
   };
 }
 
+/** Netlify の関数から外の API へ送る問い合わせ（1 回 SERVER_API_REQUEST_KB。D-71）。 */
+const netlifyOutToApi = (plan: string): ArchNodeIn =>
+  netlifyOut({ plan }, '外の API への問い合わせ', SERVER_API_REQUEST_KB)!;
+
 /** AWS の API Gateway（HTTP API）+ Lambda + DynamoDB と、AWS から外へ送る転送（API の応答・R2 への書き込み）。 */
 function awsApiNodes(): ArchNodeIn[] {
   return [
@@ -698,7 +783,13 @@ function placement(
     };
   if (id === 'cf-workers-server') {
     // OpenNext の Lambda から外へ送る問い合わせだけ数える（Vercel・Amplify は料金の文書に項目が無い。数えない）
-    const out = host === 'aws-opennext' ? [awsOutToApi()] : [];
+    // Netlify の関数から送る問い合わせは Netlify の転送量で数える（D-71）
+    const out =
+      host === 'aws-opennext'
+        ? [awsOutToApi()]
+        : host === 'netlify'
+          ? [netlifyOutToApi(plan)]
+          : [];
     return {
       nodes: [...out, ...cfApiNodes(plan, 'nextjs')],
       api: [...out.map((n) => n.id), 'cf-worker', 'cf-d1'],
@@ -706,12 +797,14 @@ function placement(
     };
   }
   // Astro のサーバー（Vercel の関数・VPS の Node）から呼ぶ（D-69）。Vercel の関数・VPS から外への通信は数えない
-  if (id === 'cf-workers-astro')
+  if (id === 'cf-workers-astro') {
+    const out = host === 'netlify' ? [netlifyOutToApi(plan)] : [];
     return {
-      nodes: cfApiNodes(plan, 'astro'),
-      api: ['cf-worker', 'cf-d1'],
+      nodes: [...out, ...cfApiNodes(plan, 'astro')],
+      api: [...out.map((n) => n.id), 'cf-worker', 'cf-d1'],
       write: [],
     };
+  }
   if (id === 'sakura-vps-2gb' || id === 'sakura-vps-4gb') {
     const vps = id === 'sakura-vps-2gb' ? '2gb' : '4gb';
     return {
@@ -871,7 +964,7 @@ export function applyCrossApi(
   if (cur && !spa)
     nodes = nodes.map((n): ArchNodeIn => {
       // サーバーから外の API への通信: Vercel の関数・Amplify の SSR は料金の文書に項目が無いので数えない（事実の文で出す）
-      if (host === 'vercel' && n.id === 'fn')
+      if ((host === 'vercel' || host === 'netlify') && n.id === 'fn')
         return { ...n, facts: [...(n.facts ?? []), 'function-outbound'] };
       if (host === 'aws' && n.id === 'ssr')
         return { ...n, facts: [...(n.facts ?? []), 'ssr-outbound'] };

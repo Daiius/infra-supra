@@ -1360,6 +1360,7 @@ const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
   vercel: 'Vercel',
   aws: 'AWS',
   supabase: 'Supabase',
+  netlify: 'Netlify',
   sakura: 'さくらのクラウド',
 };
 export const accountLabel = (id: string) => ACCOUNT_LABEL[id] ?? id;

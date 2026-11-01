@@ -15,6 +15,12 @@ import {
   OPENNEXT_DEFAULT_CHOICES,
   OPENNEXT_STACK_DEFS,
 } from './opennext.ts';
+import {
+  composeNetlify,
+  NETLIFY_COMPONENTS,
+  NETLIFY_DEFAULT_CHOICES,
+  NETLIFY_STACK_DEFS,
+} from './netlify.ts';
 import { vpsNode } from './sakura.ts';
 import {
   apiPlacedElsewhere,
@@ -27,7 +33,7 @@ import {
 } from './cross.ts';
 
 export type Platform =
-  'cloudflare' | 'vercel' | 'sakura' | 'aws' | 'aws-opennext';
+  'cloudflare' | 'vercel' | 'sakura' | 'aws' | 'aws-opennext' | 'netlify';
 export type SlotId =
   | 'isrCache'
   | 'images'
@@ -92,6 +98,8 @@ export const STACK_DEFS: readonly StackDef[] = [
   ...AWS_STACK_DEFS,
   // AWS の 2 つ目（OpenNext・D-63）。構成は stacks/opennext.ts
   ...OPENNEXT_STACK_DEFS,
+  // Netlify（D-71）。構成は stacks/netlify.ts
+  ...NETLIFY_STACK_DEFS,
 ];
 
 /** スロットの部品（catalog のデータ）。当たりうる前提は前提の id の前方一致で挙げる（選ぶ前に出す）。 */
@@ -629,6 +637,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...ASTRO_API_SAME,
   ...AWS_COMPONENTS,
   ...OPENNEXT_COMPONENTS,
+  ...NETLIFY_COMPONENTS,
   ...CROSS_COMPONENTS,
 ];
 
@@ -639,6 +648,7 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
   aws: AWS_DEFAULT_CHOICES,
   'aws-opennext': OPENNEXT_DEFAULT_CHOICES,
+  netlify: NETLIFY_DEFAULT_CHOICES,
 };
 
 /**
@@ -1196,6 +1206,14 @@ export function composeStack(
             ? c.apiCache!
             : 'none',
         });
+      case 'netlify':
+        return composeNetlify(def.plan as 'free' | 'personal' | 'pro', c, {
+          framework: options.framework ?? 'nextjs',
+          prerender: c.ogp === 'prerender',
+          apiCache: apiCacheActive('netlify', c, options.framework)
+            ? c.apiCache!
+            : 'none',
+        });
       case 'sakura':
         return composeSakura(
           def.plan as '2gb' | '4gb',
@@ -1212,9 +1230,13 @@ export function composeStack(
     c,
     options.framework,
   );
-  // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で直接組む
+  // AWS は SPA の形（S3 + CloudFront + Lambda）を stacks/aws.ts で、Netlify は SPA・Astro の形を stacks/netlify.ts で直接組む
+  const direct =
+    def.platform === 'aws' ||
+    def.platform === 'aws-opennext' ||
+    def.platform === 'netlify';
   const shaped =
-    spa && def.platform !== 'aws' && def.platform !== 'aws-opennext'
+    spa && !direct
       ? asSpa(crossed, def.platform, {
           prerender: c.ogp === 'prerender',
           apiCache: apiCacheActive(def.platform, c, 'vite-spa')
@@ -1224,7 +1246,9 @@ export function composeStack(
       : crossed;
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
   return applyCrossApi(
-    astro ? asAstro(shaped, def.platform, def.plan) : shaped,
+    astro && def.platform !== 'netlify'
+      ? asAstro(shaped, def.platform, def.plan)
+      : shaped,
     def.platform,
     def.plan,
     c,

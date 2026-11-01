@@ -695,3 +695,62 @@ AX-02 で Amplify を選んだときの対案（§1.1 の OpenNext）を、2 つ
   選ぶ前に分かるように、再検証の設定の「オンデマンド」に今月の規模での無効化の見込み（パスと金額。定額は込み）を出す。負けたときの次のプレイへのヒントも、無効化が主因なら定額・時間の再検証・まとめる方向を出す。
 - 5 分の再検証は再検証の関数の GB 秒の分だけ増える（数ドル）。縮める・従量の 18 → 17/20 は、ぎりぎりのシード 1 つが所持金の目標に届かなくなったもの。
 - 数えていないもの: ウォーマー（既定で無効）・デプロイのときの全体の無効化（1 回 1 パス）・SQS を Lambda が待つ空の受信（未確認）・fetch のキャッシュ・タグの表の保存量。
+
+## 14. Netlify（2026-11-02・D-71）
+
+ユーザーの方針「より現実的なコスト感・費用を抑える複雑な構成も可能にしたい」「見積対象を作者のスタックに寄せない」に沿って、
+Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプター）にも使われる代表的なホスティングとして Netlify を 5 つ目の事業者（`platform: 'netlify'`）に足した。
+料金は `providers/netlify.ts`、構成は `stacks/netlify.ts`（SPA・Astro の形もここで組む）。
+
+### 14.1 確かめた公式の事実（2026-11-02 取得）
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| プラン | Free $0（月 300 クレジット）・Personal $9 / 月（1,000）・Pro $20 / 月・メンバー無制限（3,000。上の段 5,000〜20,000 は価格未取得）・Enterprise は個別。SLA（99.99%）は Enterprise だけ | [pricing](https://www.netlify.com/pricing/)・[credit-based-pricing-plans](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/credit-based-pricing-plans/) |
+| クレジット制への移行 | 「Starting on September 4, 2025, all new Netlify accounts will use the new credit-based pricing plans」。旧来のプラン（Starter・Pro $19 / メンバーなど）は既存のアカウントだけ | [legacy-pricing-plans](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-legacy-plans/legacy-pricing-plans/) |
+| 消費の単価 | 本番のデプロイ 15 / 回（プレビュー・ブランチは 0、ビルドの時間は数えない）・計算 10 / GB 時間・転送 20 / GB・Web requests 2 / 1 万・フォーム無料・AI 180 / USD | [how-credits-work](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work/)（2026-08-12 更新） |
+| 使い切ったとき | 「all of your web projects (sites/apps) are paused」（Site not available）。Free は hard limit で買えない。自動の補充は Personal 500 クレジット $5・Pro 1,500 クレジット $10、**既定は無効**（Team Owner が有効にする）。買った束は繰り越す。月のクレジットは繰り越さない（Pro の 5,000 以上は 1 か月） | 同上 |
+| 関数 | GB 時間 = 実行時間の合計 × メモリ（既定 1 GB。増やせるのはクレジット制の Pro・Enterprise）。同期 60 秒。既定のリージョンは米国東部（cmh）、替えられるのは Pro・Enterprise | [usage-and-billing](https://docs.netlify.com/build/functions/usage-and-billing/)・[configuration](https://docs.netlify.com/build/functions/configuration/)・[optional-configuration](https://docs.netlify.com/build/functions/optional-configuration/) |
+| 関数の応答のキャッシュ | 既定はキャッシュしない。`Netlify-CDN-Cache-Control` でキャッシュし、`durable` で拠点をまたいで使い回す。タグで数秒のうちに消せる（同じタグは 5 秒に 2 回） | [caching-overview](https://docs.netlify.com/build/caching/caching-overview/)（2026-10-10 更新） |
+| Next.js | OpenNext のアダプターで設定なし（13.5 以降）。ISR は時間・オンデマンド（パス・タグ）とも「Full Support」。SSR・ISR・Route Handler・Server Actions は Functions、ミドルウェアは Edge Functions。next/image は Image CDN | [next-js/overview](https://docs.netlify.com/frameworks/next-js/overview/) |
+| Astro | `@astrojs/netlify`。リクエストのたびに描くページは Functions、画像は既定で Image CDN、`cacheOnDemandPages` で描いたページをキャッシュできる | [@astrojs/netlify](https://docs.astro.build/en/guides/integrations-guide/netlify/)・[Netlify の Astro](https://docs.netlify.com/build/frameworks/framework-setup-guides/astro/) |
+| Image CDN | 閲覧のときに変換して拠点にキャッシュ。クレジットの表に変換の項目は無く、画像の配信は転送の内訳「Image serving」 | [image-cdn](https://docs.netlify.com/build/image-cdn/overview/)・how-credits-work |
+| Blobs | 自分のサイト（関数・Edge Functions）からだけ使える。文書に料金の記載なし。Netlify の比較の記事は「draws from your account's monthly credit pool」・単価は公開しないと書く | [netlify-blobs](https://docs.netlify.com/build/data-and-storage/netlify-blobs/)・[Blobs vs Vercel Blob](https://www.netlify.com/knowledge-base/netlify-blobs-vs-vercel-blob/) |
+
+### 14.2 入れた形
+
+- **クレジットを金額に直す**（解釈。`providers/netlify.ts` の interpretation）: メーターの単価 = 消費のクレジット × 補充の 1 クレジットの金額（Pro $10/1,500・Personal $5/500）、月のクレジット = 込みのクレジット × 同じ金額（Pro $20・Personal $10）の金額のクレジット（prd/03 §7）。
+  - Personal・Pro は**自動の補充を有効にして運営する前提**（既定は無効だが、商用のサイトを毎月止める設定のまま続けるとは読まない）。束の余りは繰り越すので、長い目では使った分 × 単価とみる。
+  - Free は補充が無く止まる。金額は使用率の判定のための換算（Personal の単価）で、請求は 0。estimator のクレジットに **`onExhausted: 'block'`** を足し、使い切ると前提が block（サービスが止まる）になるようにした（prd/03 §7）。
+- **資源**: Web requests = CDN のノードのリクエスト（関数へのリクエストも CDN で数え、関数のノードでは数えない。画像の投稿はリクエストだけを数えるノード `upload` で数え、投稿の大きさは転送に入れない。OCL-0FA096BD）、転送 = CDN の転送、計算 = 関数の GB 時間（壁時計時間 × 1 GB。DB を待つ時間も含む）、本番のデプロイ = 新しい資源 `deploys`（`ci-build` のビルドし直しの回数。Astro の記事の更新）。コードのデプロイは他の事業者と同じく数えない。
+- **構成**: Netlify Free + Supabase Free・Netlify Personal + Supabase Free・Netlify Pro + Supabase Pro（STACK_DEFS の 8〜10。添字は既存の後ろ）。DB は Netlify の外（既定は Supabase。推奨案の最小）。
+- **部品**: ISR（CDN の期限つきのキャッシュ・オンデマンドに対応）/ キャッシュしない、画像は Image CDN（変換は無料と読む）/ 最適化しない / 投稿のときに縮める、SPA の OGP の前処理・API の応答のキャッシュ（`Netlify-CDN-Cache-Control`）、API の置き場（同居）。ファイルの置き場は Netlify Blobs（固定）。
+- **事業者をまたぐ部品**（cross.ts の CROSS_PAIRS に 2 行）: 画像だけ Cloudflare（`cf-images`・`cf-resize`）、Workers の API + D1（SPA の `cf-workers`・Next.js の `cf-workers-server`・Astro の `cf-workers-astro`）。
+  関数から外（R2・Worker の API）へ送るデータは、Netlify の転送の定義「sends out to the internet」に含めて**数える**（解釈。受け取る応答は数えない）。Vercel・Amplify は料金の文書に項目が無く数えない、と扱いが分かれる。
+- 手間: マネージドなので維持の手間 0（Vercel と同じ）。他の事業者の部品のアカウントの手間は D-52 のまま。
+
+### 14.3 未取得（見積に入れない・料金未取得）
+
+| 項目 | 扱い |
+|---|---|
+| Netlify Blobs の単価 | 保存量を料金未取得の明細（`blobs-storage`）で残す。操作・転送は数えない |
+| Pro の上の段（5,000〜20,000 クレジット）の価格 | 扱わない |
+| Free の商用利用の可否 | 今の利用規約・料金のページに禁止の記載は無い。規約の本体（Self-Serve Subscription Agreement の PDF）は読めていない（**未確認**）。利用資格は付けない |
+| 関数の 1 回ごとの丸め・最低課金 | 書かれていない（`rounding: not-stated`） |
+| Edge Functions の計算 | Web requests として数える（文書）。ミドルウェアの計算は数えていない |
+| 関数から外への通信が転送に入るか | 書かれていない。数える方を採った（§14.2） |
+
+### 14.4 基準プレイ（何もしない・シード 1〜20・合格数・12 か月の費用の平均）
+
+| 構成 | 記事 Next.js | 記事 SPA | 記事 Astro | 受託 Next.js / SPA / Astro |
+|---|---|---|---|---|
+| Netlify Free | 0/20・1 か月目に止まる（クレジット） | 0/20・同じ | 0/20・同じ | 0/20・1 か月目に止まる |
+| Netlify Personal | 0/20・$602（8 か月目から Supabase Free の転送で止まる） | 0/20・$534 | 0/20・$801 | 0/20・1 か月目に止まる（Supabase Free の DB の大きさ） |
+| Netlify Pro | 0/20・$1,072（止まらない） | 0/20・$964 | 0/20・$1,371 | 0/20・$540（月 $45 のまま） |
+| （参考）Vercel Pro | 0/20・$1,484 | 0/20・$1,286 | 0/20・$1,712 | 0/20・$557 / $542 / $557 |
+| CF Paid（目標の根拠） | 20/20・$183（不変） | 20/20・$174 | 20/20・$189 | 20/20・$68 |
+
+- Netlify Pro は Vercel Pro より 3 割ほど安い（転送 20 クレジット = $0.133/GB と Vercel の $0.15/GB、関数は GB 時間だけ）が、目標には届かない。負けの主因は Vercel と同じく転送（画像）。
+- Astro は記事のビルドし直し（月 約 300 回）が本番のデプロイ 1 回 15 クレジットになり、月 約 $30 上がる（Vercel の CPU minute より高い）。ビルドの間隔を延ばす設定が効く。
+- 画像だけ Cloudflare（`cf-resize`）にすると、Personal × SPA は $132・Pro × Next.js は $695 に下がる（どちらも 0/20）。
+- 基準プレイの戦略（シナリオの `baselines`）には足していない（golden を変えない）。CF Paid × Next.js（目標の根拠）を含む既存の golden はすべて不変。

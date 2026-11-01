@@ -94,7 +94,8 @@ export type LineItem = {
 };
 
 export type LimitBreach = {
-  kind: 'allowance-exceeded';
+  /** allowance-exceeded: 無料枠・込み分のプール。credit-exhausted: 使い切ると止まるクレジット（D-71。excess は金額）。 */
+  kind: 'allowance-exceeded' | 'credit-exhausted';
   accountId: string;
   nodeIds: string[];
   priceRef: PriceRef;
@@ -423,7 +424,23 @@ export function priceUsage(input: {
             c.appliesTo.meterIds.includes(l.priceRef.meterId!)),
       );
       const eligible = sum(targets.map((l) => uncredited.get(l)!));
-      const applied = Math.min(c.amount, eligible);
+      // 使い切ると止まるクレジット（D-71）: 超えた分は請求されない（止まる）ので、従量はすべてクレジットで打ち消す
+      const block = c.onExhausted === 'block';
+      const applied = block ? eligible : Math.min(c.amount, eligible);
+      if (block && eligible > c.amount)
+        breaches.push({
+          kind: 'credit-exhausted',
+          accountId: sub.accountId,
+          nodeIds: [...new Set(targets.flatMap((l) => l.nodeIds))],
+          priceRef: {
+            provider: book.provider,
+            version: book.version,
+            planId: plan.id,
+          },
+          behavior: 'block',
+          excess: eligible - c.amount,
+          ...(c.premise ? { premise: c.premise } : {}),
+        });
       if (applied <= 0) continue;
       let rest = applied;
       for (const l of targets) {

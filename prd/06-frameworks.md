@@ -156,6 +156,8 @@ MVP の比較対象は「フレームワーク × ホスト」の組み合わせ
 - **構成**（`composeStack(…, { framework: 'astro' })`）: ISR のキャッシュの部品・HTML を前段でキャッシュする部品を出さない（Next.js だけ）。記事は `document-static`（Cloudflare は Workers の静的アセット＝Worker を起動しない・Vercel は CDN・VPS は nginx）。名前は vinext を外して「（Astro）」。
 - **画像**: 事業者の画像の部品はそのまま。Vercel・VPS の既定の画像（閲覧のときに変換）は `<Image />` の既定に合わせて WebP で配る（`autoImageFormat`）。投稿された画像は静的なページのビルドで変換しない（ビルドの時間に入れない）。
 
+- **Netlify（D-71・prd/11 §14）**: Next.js（OpenNext のアダプター・ISR はオンデマンドも対応）・Vite の SPA（静的 + Netlify Functions）・Astro（`@astrojs/netlify`）をすべて `native` で足した。Astro のビルドし直しは、ビルドの時間でなく本番のデプロイ 1 回ごとのクレジット（資源 `deploys`）で数える。
+
 ### 6.3 置いた仮定（template-default・ゲーム上の仮定）
 
 | 値 | 記事コミュニティ | 受託（業務アプリ） |

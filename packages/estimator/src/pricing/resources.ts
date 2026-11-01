@@ -31,6 +31,7 @@ export const RESOURCES = [
   'processing-units', // 処理の量の単位で課金する DB の単位（Aurora DSQL の DPU）
   'invalidation-paths', // CDN のキャッシュの無効化のパス（CloudFront の無効化。D-66）
   'build-minutes', // 静的なページをビルドし直す時間 × CPU の数（Astro の静的出力。D-68）
+  'deploys', // 本番へのデプロイの回数（Netlify のクレジットは 1 回ごと。ビルドし直しの回数。D-71）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -64,4 +65,5 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'processing-units': 'count',
   'invalidation-paths': 'count',
   'build-minutes': 'minute',
+  deploys: 'count',
 };

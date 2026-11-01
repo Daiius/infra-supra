@@ -346,6 +346,48 @@ describe('金額のクレジットの使用率（D-48）', () => {
     expect(p.ratio).toBeCloseTo(1.6, 12);
   });
 
+  it('使い切ると止まるクレジット（onExhausted: block。D-71）は、超えると止まる前提（block）になる', () => {
+    const blocking = parsePriceBook(
+      {
+        ...book,
+        plans: book.plans.map((p) =>
+          p.id === 'team'
+            ? {
+                ...p,
+                credits: p.credits.map((c) => ({
+                  ...c,
+                  onExhausted: 'block' as const,
+                })),
+              }
+            : p,
+        ),
+      },
+      { allowFictional: true },
+    );
+    const usage = [use('team', 'requests', 6000), use('team', 'egress', 8)];
+    const bill = priceUsage({
+      books: [blocking],
+      subscriptions: [
+        {
+          accountId: 'acct',
+          provider: 'fictional-premise',
+          planId: 'team',
+          nodeIds: ['n1'],
+        },
+      ],
+      usage,
+    });
+    expect(bill.totals.USD).toBeCloseTo(20, 12); // 超えた分は請求されない
+    const p = assessPremises({
+      simulation: sim,
+      usage,
+      bill,
+      books: [blocking],
+    }).find((x) => x.id.startsWith('credit:'))!;
+    expect(p).toMatchObject({ hit: true, effect: 'block' });
+    expect(p.ratio).toBeCloseTo(1.6, 12);
+  });
+
   it('従量が 0 なら前提を出さない', () => {
     const { premises } = assess([use('team', 'requests', 0)]);
     expect(premises.some((x) => x.id.startsWith('credit:'))).toBe(false);
