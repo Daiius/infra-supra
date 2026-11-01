@@ -79,6 +79,8 @@ export const EFFORT = {
     ogp: 2,
     // API の応答のキャッシュ（D-37）。ISR のキャッシュ・前段の CDN と同じ大きさ
     apiCache: 2,
+    // CloudFront の料金（従量 ↔ 定額のプラン。D-61）。設定の変更に近いので 1（仮定）
+    cdnPlan: 1,
   },
   dbSwap: { perMonth: 6, months: 1 },
   /** 乗り換え: 月あたりの手間と、必要な月数（VPS が絡むと長い）。 */
@@ -136,7 +138,16 @@ export type JudgeInput = {
   qualityImageKB?: number;
   /** 画質を 1 段下げる（記事のデザインの刷新を断った・粗い画像が多い。仮定・D-47）。 */
   qualityDown?: boolean;
+  /** 速さを 1 段下げる（CDN の定額のプランの込みを超え続け、配信の性能が調整された。仮定・D-61）。 */
+  speedDown?: boolean;
 };
+
+/**
+ * CDN の定額のプランの込みを超えたときの性能の調整（ゲーム上の仮定・D-61）。公式は「最初の月の 3 倍までの急増は影響しない」
+ * 「超えた状態は 2〜3 か月以上で評価する」「調整は超えた量に比例する」と書く（CloudFront の定額のプラン）。
+ * ゲームでは、込みの spikeRatio 倍を超えた月、または sustainedMonths か月続けて超えた月に、速さを 1 段下げる。
+ */
+export const FLAT_PLAN_ADJUST = { spikeRatio: 3, sustainedMonths: 2 } as const;
 
 const STAGE_DOWN: Record<Stage, Stage> = {
   good: 'fair',
@@ -154,16 +165,17 @@ export function judgeStages(
   const f = sat.freshness;
   const ft = sat.feature;
   const featureRatio = i.featurePoints / (ft.expectedPerMonth * i.month);
+  const speed: Stage =
+    throttled ||
+    heavy >= 3 ||
+    i.imageKB >= (sat.speed.veryHeavyImageKB ?? Infinity)
+      ? 'bad'
+      : heavy >= 1
+        ? 'fair'
+        : 'good';
   return {
     availability: i.blocked ? 'bad' : i.degraded ? 'fair' : 'good',
-    speed:
-      throttled ||
-      heavy >= 3 ||
-      i.imageKB >= (sat.speed.veryHeavyImageKB ?? Infinity)
-        ? 'bad'
-        : heavy >= 1
-          ? 'fair'
-          : 'good',
+    speed: i.speedDown ? STAGE_DOWN[speed] : speed,
     feature:
       featureRatio >= ft.good
         ? 'good'

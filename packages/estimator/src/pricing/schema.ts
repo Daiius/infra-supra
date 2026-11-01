@@ -18,6 +18,8 @@ export const OVERAGE_BEHAVIORS = [
   'block', // リクエスト・操作が失敗する
   'throttle', // 遅くなる
   'upgrade-required', // 上位プランが必須
+  // 超えても請求は増えず止まりもしないが、超えた状態が続くと性能が調整されうる（CloudFront の定額のプラン。D-61）
+  'adjust',
 ] as const;
 export const OverageBehaviorSchema = z.enum(OVERAGE_BEHAVIORS);
 
