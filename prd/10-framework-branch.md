@@ -423,6 +423,6 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
 
 - F-14（Next.js でも API を別に置く）: 入れていない。Next.js の Route Handler を外へ出すと HTML の生成（SSR・ISR）と API で DB が別になりうるため、DB の置き場の規則（API と同じ事業者）と一緒に決め直す。
 - VPS（API）の組（§9.1）・Vercel の外部への rewrite（B-3）・往復の遅延（F-12・段 3）。
-- 構成の名前（例「Vercel Pro + Supabase Pro（Vite の SPA）」）は API の置き場で変えていない。DB が D1 になっても名前に Supabase が残る（部品の要約と ⓘ で分かる）。
+- 構成の名前: ゲーム中（月の表・結果・プラン変更の文面）は、API を他の事業者に置くと実際の組で出す（例「Vercel Pro の静的 + Cloudflare Workers・D1（Vite の SPA）」「Cloudflare Paid の静的 + AWS Lambda・DynamoDB（Vite の SPA）」。`stackName` に部品を渡す）。始める画面の構成の一覧と乗り換え先（既定の部品に戻る）は構成の名前のまま。
 - Cloudflare Paid の構成で API を AWS に出すと、Workers Paid の基本料は数えない（Worker を使わないので契約しない前提）。構成の名前は Paid のまま。
 

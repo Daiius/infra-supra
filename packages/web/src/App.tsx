@@ -1336,7 +1336,12 @@ function Actions({
               const text =
                 idx === null
                   ? null
-                  : stackChangeText(state.stackIndex, idx, state.framework);
+                  : stackChangeText(
+                      state.stackIndex,
+                      idx,
+                      state.framework,
+                      state.components,
+                    );
               return (
                 <label
                   key={idx ?? 'keep'}

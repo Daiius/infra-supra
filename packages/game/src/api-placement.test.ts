@@ -14,6 +14,8 @@ import {
   SCENARIOS,
   setupProblem,
   setupSlots,
+  stackChangeText,
+  stackName,
   STACKS,
   validSetupChoices,
   type GameState,
@@ -140,6 +142,41 @@ describe('ゲーム中の移し替え（データの移行）', () => {
     t = playMonth(t);
     const after = t.history[t.history.length - 1]!;
     expect(after.lines.some((l) => l.label.startsWith('supabase'))).toBe(false);
+  });
+});
+
+describe('構成の名前（ゲーム中）', () => {
+  it('API を他の事業者に置くと実際の組で出す（月の表・プラン変更の文面。始める画面の一覧は構成の名前のまま）', () => {
+    expect(stackName(VERCEL_PRO, 'vite-spa', true, { api: 'cf-workers' })).toBe(
+      'Vercel Pro の静的 + Cloudflare Workers・D1（Vite の SPA）',
+    );
+    expect(stackName(CF_PAID, 'vite-spa', true, { api: 'aws-lambda' })).toBe(
+      'Cloudflare Paid の静的 + AWS Lambda・DynamoDB（Vite の SPA）',
+    );
+    expect(stackName(AWS, 'vite-spa', true, { api: 'cf-workers' })).toBe(
+      'AWS の S3 + CloudFront の静的 + Cloudflare Workers・D1（Vite の SPA）',
+    );
+    expect(stackName(VERCEL_PRO, 'vite-spa', true, { api: 'same' })).toBe(
+      'Vercel Pro + Supabase Pro（Vite の SPA）',
+    );
+    expect(stackName(VERCEL_PRO, 'vite-spa', false)).toBe(
+      'Vercel Pro + Supabase Pro',
+    );
+    const s = playMonth(spaGame(VERCEL_PRO, { api: 'cf-workers' }));
+    expect(s.history[0]!.stackName).toBe(
+      'Vercel Pro の静的 + Cloudflare Workers・D1（Vite の SPA）',
+    );
+    // プラン変更は部品を引き継ぐ（Hobby → Pro）。乗り換えは既定の部品に戻るので構成の名前
+    const h = spaGame(VERCEL_HOBBY, { api: 'cf-workers' });
+    expect(
+      stackChangeText(VERCEL_HOBBY, VERCEL_PRO, 'vite-spa', h.components).name,
+    ).toBe(
+      'Vercel Pro の静的 + Cloudflare Workers・D1（Vite の SPA） にプラン変更',
+    );
+    expect(
+      stackChangeText(VERCEL_PRO, CF_PAID, 'vite-spa', { api: 'cf-workers' })
+        .name,
+    ).toMatch(/^Cloudflare Paid（Vite の SPA）/);
   });
 });
 

@@ -540,16 +540,32 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   ),
 }));
 
-/** 構成の名前（SPA では vinext を使わないので外し、フレームワークを添える。prd/10）。 */
+/** API を他の事業者に置いたときの、API と DB の名前（D-65）。 */
+const API_PLACEMENT_NAME: Readonly<Record<string, string>> = {
+  'cf-workers': 'Cloudflare Workers・D1',
+  'aws-lambda': 'AWS Lambda・DynamoDB',
+};
+
+/**
+ * 構成の名前（SPA では vinext を使わないので外し、フレームワークを添える。prd/10）。
+ * components を渡すと、SPA の API を他の事業者に置いているときは実際の組で出す（例「Vercel Pro の静的 + Cloudflare Workers・D1」。
+ * 構成の既定の DB の名前を出さない。D-65）。始める画面の構成の一覧は渡さない（構成の名前のまま）。
+ */
 export function stackName(
   stackIndex: number,
   framework: FrameworkId = 'nextjs',
   /** false なら「（Vite の SPA）」を添えない（フレームワークをすぐ隣で選んでいる始める画面。D-35）。 */
   withFramework = true,
+  components: Choices = {},
 ): string {
-  const name = STACKS[stackIndex]!.name;
-  if (framework !== 'vite-spa') return name;
-  const base = name.replace(' + vinext', '');
+  const s = STACKS[stackIndex]!;
+  if (framework !== 'vite-spa') return s.name;
+  const api = apiPlacedElsewhere(components)
+    ? API_PLACEMENT_NAME[components.api!]
+    : undefined;
+  const base = api
+    ? `${s.provider === 'aws' ? 'AWS の S3 + CloudFront' : s.name.split(' + ')[0]} の静的 + ${api}`
+    : s.name.replace(' + vinext', '');
   return withFramework ? `${base}（Vite の SPA）` : base;
 }
 
@@ -1133,8 +1149,15 @@ export function stackChangeText(
   from: number,
   to: number,
   framework: FrameworkId = 'nextjs',
+  /** 今の部品（プラン変更は部品を引き継ぐので、API の置き場を名前に出す。乗り換えは既定の部品に戻る。D-65）。 */
+  components: Choices = {},
 ): { name: string; meta: string[]; detail: string } {
-  const target = stackName(to, framework);
+  const target = stackName(
+    to,
+    framework,
+    true,
+    isPlanChange(from, to) ? components : {},
+  );
   const months = migrationEffort(from, to) / EFFORT.migrationPerMonth;
   const per = EFFORT.migrationPerMonth;
   const both = '期間中は新旧両方の費用';
@@ -3000,7 +3023,12 @@ export function playMonth(input: GameState): GameState {
 
   const report: MonthReport = {
     month,
-    stackName: stackName(stackIndexNow, state.framework),
+    stackName: stackName(
+      stackIndexNow,
+      state.framework,
+      true,
+      state.components,
+    ),
     buzz,
     ...(trafficNotes.length ? { trafficNote: trafficNotes.join('・') } : {}),
     pv,
@@ -3428,7 +3456,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       });
     case 'plan':
       return withNote(
-        `${stackName(action.stackIndex, state.framework)} にプラン変更`,
+        `${stackName(action.stackIndex, state.framework, true, state.components)} にプラン変更`,
         {
           ...state,
           ...planned,
