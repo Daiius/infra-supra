@@ -6,7 +6,8 @@
     "dev": "vite",
     "dev:remote": "vite --mode remote",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "catalog": "workspace:*",
@@ -23,6 +24,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "daisyui": "^5.7.50",
     "tailwindcss": "4.2.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vitest": "^4.1.12"
   }
 }
