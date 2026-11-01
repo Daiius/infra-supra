@@ -12,7 +12,7 @@ import {
   type SlotId,
 } from './index.ts';
 
-const PLATFORMS: Platform[] = ['cloudflare', 'vercel', 'sakura'];
+const PLATFORMS: Platform[] = ['cloudflare', 'vercel', 'sakura', 'aws'];
 
 describe('許した組（CROSS_PAIRS）', () => {
   it('他の事業者に差せる部品は、表で許した組だけ', () => {
@@ -33,10 +33,11 @@ describe('許した組（CROSS_PAIRS）', () => {
   it('表に無い組は選択肢に出ない（Cloudflare・VPS の画像に他の事業者の部品は出ない）', () => {
     const cross = (host: Platform, slot: SlotId) =>
       componentsOf(host, slot).filter((c) => c.platform !== host);
-    expect(cross('vercel', 'images').map((c) => c.id)).toEqual([
-      'cf-images',
-      'cf-resize',
-    ]);
+    for (const host of ['vercel', 'aws'] as const)
+      expect(cross(host, 'images').map((c) => c.id)).toEqual([
+        'cf-images',
+        'cf-resize',
+      ]);
     for (const p of PLATFORMS)
       for (const slot of ['isrCache', 'db', 'realtime', 'apiCache'] as const)
         expect(cross(p, slot)).toEqual([]);
@@ -144,5 +145,51 @@ describe('Vercel + 画像だけ Cloudflare', () => {
     expect(
       applyComponentsToWorkload(w, 'vercel', { images: 'cf-images' }).images,
     ).toEqual(w.images);
+  });
+});
+
+describe('AWS + 画像だけ Cloudflare', () => {
+  const aws = (images: string, framework?: 'vite-spa') =>
+    composeStack('aws-amplify', { images }, framework ? { framework } : {});
+
+  it('Amplify（Next.js）: 画像の最適化・画像だけの CloudFront・S3 が外れ、投稿は SSR から R2 へ（外への転送は数えない）', () => {
+    const a = aws('cf-images');
+    expect(accountsOf(a)).toEqual(['aws', 'cloudflare']);
+    expect(a.nodes.some((n) => ['image', 'cf', 's3'].includes(n.id))).toBe(
+      false,
+    );
+    expect(a.routes['image-read']).toEqual(['cf-cache', 'cf-r2']);
+    expect(a.routes['image-write']).toEqual(['ssr', 'cf-r2']);
+    expect(a.routes['image-transform']).toEqual(['cf-images']);
+    expect(a.nodes.find((n) => n.id === 'cf-images')!.billing!.planId).toBe(
+      'images-paid',
+    );
+  });
+
+  it('SPA（S3 + CloudFront + Lambda）: CloudFront はシェルと API に残り、Lambda から R2 への転送を AWS のインターネットへの転送で数える', () => {
+    const a = aws('cf-resize', 'vite-spa');
+    expect(a.nodes.some((n) => n.id === 's3')).toBe(false);
+    expect(a.nodes.some((n) => n.id === 'cf')).toBe(true);
+    expect(a.routes['image-read']).toEqual(['cf-cache', 'cf-r2']);
+    expect(a.routes['image-write']).toEqual([
+      'apigw',
+      'lambda',
+      'aws-out',
+      'cf-r2',
+    ]);
+    expect(a.nodes.find((n) => n.id === 'aws-out')!.billing).toMatchObject({
+      accountId: 'aws',
+      planId: 'data-transfer-out',
+      meters: { 'egress-gb': 'internet-out' },
+    });
+    expect(a.routes['image-transform']).toBeUndefined();
+  });
+
+  it('既定の AWS の構成は変わらない', () => {
+    expect(accountsOf(composeStack('aws-amplify'))).toEqual(['aws']);
+    expect(composeStack('aws-amplify').routes['image-read']).toEqual([
+      'cf',
+      's3',
+    ]);
   });
 });

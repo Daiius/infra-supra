@@ -23,6 +23,7 @@ import {
 const CF_PAID = 1;
 const VERCEL_PRO = 3;
 const VPS = 4;
+const AWS = STACKS.findIndex((s) => s.provider === 'aws');
 const swap = (option: string) =>
   ({ type: 'component', slot: 'images', option }) as const;
 const last = (s: GameState) => s.history[s.history.length - 1]!;
@@ -39,6 +40,13 @@ describe('許した組だけ選べる', () => {
       setupSlots(ARTICLE_COMMUNITY, stack, fw)
         .find((x) => x.slot === 'images')!
         .options.map((o) => `${o.platform}:${o.id}`);
+    for (const fw of ['nextjs', 'vite-spa'] as const)
+      expect(images(AWS, fw)).toEqual(
+        expect.arrayContaining([
+          'cloudflare:cf-images',
+          'cloudflare:cf-resize',
+        ]),
+      );
     for (const fw of ['nextjs', 'vite-spa'] as const)
       expect(images(VERCEL_PRO, fw)).toEqual(
         expect.arrayContaining([
@@ -76,6 +84,7 @@ describe('アカウントの手間', () => {
     );
     expect(addedAccounts(CF_PAID, { db: 'hyperdrive' })).toEqual(['supabase']);
     expect(addedAccounts(VPS, { frontCdn: 'static' })).toEqual(['cloudflare']);
+    expect(addedAccounts(AWS, { images: 'cf-images' })).toEqual(['cloudflare']);
   });
 
   it('差すときは部品の手間に一度きりの 1 が足され、翌月から維持 0.5 が引かれる', () => {
@@ -175,5 +184,25 @@ describe('保存の再生', () => {
     const back = replaySave(JSON.parse(JSON.stringify(save)));
     expect(back).toEqual(s);
     expect(back.components.images).toBe('cf-resize');
+  });
+});
+
+describe('AWS + 画像だけ Cloudflare', () => {
+  it('SPA: Cloudflare の請求が加わり、Lambda から R2 への書き込みを AWS の転送で数える（月 100 GB までは無料）', () => {
+    const s = playMonth(
+      newGame(AWS, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'vite-spa'),
+    );
+    expect(checkAction(s, swap('cf-images'))).toEqual({
+      ok: true,
+      cost: EFFORT.component.images + EFFORT.accountSetup,
+    });
+    const cf = playMonth(playMonth(applyAction(s, swap('cf-images'))));
+    expect(costOf(cf, 'cloudflare')).toBeGreaterThan(0);
+    const out = last(cf).snapshots.find(
+      (p) => p.id === 'pool:aws:data-transfer-out:internet-free-transfer',
+    );
+    expect(out?.ratio).toBeGreaterThan(0);
+    expect(out!.ratio).toBeLessThan(1);
+    expect(last(cf).effort.accounts).toBe(EFFORT.accountUpkeep);
   });
 });

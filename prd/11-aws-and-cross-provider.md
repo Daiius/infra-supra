@@ -218,6 +218,13 @@ type CrossLink = {
 - アカウントの手間（AX-11）: **構成の既定より増えた課金のアカウント 1 つにつき毎月 0.5**、増える部品を差すときに一度きり **1**（ゲーム上の仮定・`EFFORT.accountUpkeep`・`accountSetup`）。
   既定の Vercel + Supabase の Supabase は数えない。**既存の Cloudflare + Hyperdrive（Supabase）・VPS + 前段の CDN（Cloudflare）にも同じ規則が効く**（基準プレイ・golden はどれも変わらなかった）。
   月の手間の内訳に「他の事業者の管理」を出し（増えていなければ出さない）、始める画面の手間のバー（D-36）では**マスの左半分を薄い維持の色で塗る**（0.5 の表示の形）。選んでいる構成のカードだけ、選んだ部品で増えるアカウントの名前を添える。
+- **AWS への拡張（D-52 の追記・2026-11-01）**: `CROSS_PAIRS` に AWS × 画像 × Cloudflare を足し、2 つの部品の `hosts` を `['vercel', 'aws']` にした。土台ごとの差は `cross.ts` の `hostImageShape` に閉じる（aws.ts は変えない）。
+  - Amplify（Next.js）: 画像の最適化（`image`）・画像だけの CloudFront（`cf`）・S3 を外す。投稿は Amplify の SSR から R2 へ。**Amplify の SSR から外への通信の課金は [Amplify の料金](https://aws.amazon.com/amplify/pricing/) に記載が無い**（転送は「per GB served」だけ）ので未確認として数えない。
+  - S3 + CloudFront + Lambda（SPA）: S3 を外す（CloudFront はシェルと API に残る）。投稿は Lambda から R2 へ書き、その転送を**東京 → インターネットの転送**で数える。
+    [Lambda の料金](https://aws.amazon.com/lambda/pricing/): 関数とリージョンの外とのデータの出入りは「charged at the Amazon EC2 data transfer rates」。
+    AWSDataTransfer（東京・版 2026-09-16）の「AWS Outbound」: $0.114/GB（「first 10 TB / month data transfer out beyond the global free tier」）・$0.089・$0.086・$0.084。
+    [EC2 の料金](https://aws.amazon.com/ec2/pricing/on-demand/): 「100 GB of free data transfer out to the internet free each month」（全サービス・リージョンの合計）。providers/aws.ts にプラン `data-transfer-out` とプール `internet-free-transfer` を足した。記事コミュニティの投稿は月 1 GB 未満で、無料の内に収まる。
+  - 変換は Images Paid（仮定）。
 - 未確認: R2 を使うのに支払い方法の登録・別の申し込みが要るか（料金表は「applies regardless of your Workers plan」だけ）。Images Paid の基本料（取得したページに記載なし・既存の notes）。
   R2 のカスタムドメインを部分的な（CNAME の）設定で置くときのプランの条件。Cloudflare の CDN の規約（画像の割合）が R2 のカスタムドメインの配信にどう当たるか（Cloudflare の構成と同じく前提に出していない）。
 
@@ -314,6 +321,20 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
   Supabase を従量の DB に替えて $300 が消えても約 $1,650〜$1,660 で、まだ届かない見込み（推測・回していない）。**記事コミュニティの Vercel Pro は、画像と DB の両方を替えてもぎりぎり届かない側**にある。
 - CF Paid・既定（目標の根拠）は変わらない（20 / 20・既存の golden もすべて同じ）。満足度は替えても同じ（速さは「普通」のまま。またぐ往復の遅延は計算しない・AX-13）。
 - 目標の値は動かさない（§3.4 のユーザーの方針）。道筋を増やすなら、次は「従量の DB」（AX-09 の ②）と組んだ基準プレイで確かめる。
+
+**AWS（D-51 の構成・常時無料だけ）× 画像だけ Cloudflare**（同じ条件。AWS の既定の画像は「投稿のときに縮める」）:
+
+| フレームワーク | 画像の部品 | 達成 | 12 か月の費用 | うち AWS / Cloudflare | 所持金 |
+|---|---|---|---|---|---|
+| Next.js（Amplify） | 既定 | 10 / 20 | $623 | $623 / — | $1,702 |
+| Next.js（Amplify） | **Cloudflare: R2 + Images** | **20 / 20** | $501 | $385 / $116 | $1,835 |
+| Next.js（Amplify） | **Cloudflare: R2 に一律で縮める** | **20 / 20** | $387 | $385 / $2 | $1,948 |
+| SPA（S3 + CloudFront + Lambda） | 既定 | 19 / 20 | $179 | $179 / — | $1,860 |
+| SPA | **Cloudflare: R2 + Images** | **20 / 20** | $140 | $31 / $109 | $1,905 |
+| SPA | **Cloudflare: R2 に一律で縮める** | **20 / 20** | $33 | $31 / $2 | $2,012 |
+
+- AWS の Next.js は既定で半分のシードが所持金で落ちる（Amplify の転送 $0.15/GB）。画像を R2 に出すと AWS の請求が $238 減り、**全シードで合格**する。**AWS では「画像だけ Cloudflare」が勝ち筋を作る**（Vercel Pro では作らない。席の基本料と Supabase Pro の固定費の差）。
+- SPA は既定でも CloudFront の常時無料 1 TB にほぼ収まっている。画像を出すと残りの 1 シードも合格する。Lambda から R2 への転送は月 100 GB の無料の内（費用 0）。
 
 ## 4. 既存の仕組みで足りないもの
 
