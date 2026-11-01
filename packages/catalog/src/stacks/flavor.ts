@@ -63,6 +63,11 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '原本をそのまま配るので、画質が落ちず、変換の費用もかからない',
   'vercel:images:resize':
     '投稿のときに一度だけ縮めて置くので、変換の費用がかからず、仕組みも単純',
+  // 他の事業者の部品（Vercel の画像だけ Cloudflare。D-52）。利点だけを書き、損（アカウント・請求が増える）は ⓘ と手間に出す
+  'cloudflare:images:cf-images':
+    '転送量に課金されないストレージから画像を配り、閲覧のときに必要なサイズへ変換する',
+  'cloudflare:images:cf-resize':
+    '投稿のときに一度だけ縮め、転送量に課金されないストレージから配る',
   // さくらの VPS
   'sakura:isrCache:default':
     'キャッシュをサーバーのディスクに置く。追加の費用はかからない',
