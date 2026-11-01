@@ -7,6 +7,9 @@ import {
   EFFORT,
   newGame,
   newSave,
+  ON_DEMAND_MAX_AGE_NOTE,
+  ON_DEMAND_MAX_AGE_SEC,
+  SETTINGS,
   parseSave,
   playMonth,
   replaySave,
@@ -127,5 +130,19 @@ describe('オンデマンドの再検証（D-49）', () => {
     expect(acceptedOd.interrupts).toEqual([]);
     // 作業が無いので、機能の加点は受けたときに足す
     expect(acceptedOd.featurePoints).toBe(od.featurePoints + 5);
+  });
+
+  it('最大寿命は選択肢にせず 1 日とみなし、設定の説明（ⓘ）に書く（D-56）', () => {
+    expect(ON_DEMAND_MAX_AGE_SEC).toBe(86_400);
+    expect(SETTINGS.isr.options.map((o) => o.value)).toEqual([
+      0, 60, 300, 3600, 21600,
+    ]);
+    expect(SETTINGS.isr.note).toContain(ON_DEMAND_MAX_AGE_NOTE);
+    expect(ON_DEMAND_MAX_AGE_NOTE).toContain('このゲームでは 1 日とみなし');
+  });
+
+  it('最大寿命の分を足しても、オンデマンドの費用は 5 分以下（Vercel Pro・1 か月目）', () => {
+    const cost = (rv?: number) => playMonth(start(3, rv)).history[0]!.infraCost;
+    expect(cost(0)).toBeLessThanOrEqual(cost());
   });
 });

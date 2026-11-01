@@ -250,19 +250,29 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       const updates = r.onDemandUpdatesPerMonth;
       // 時間: 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → 閲覧 / (1 + λT)（人気が一様と仮定。prd/04 §2）
       // オンデマンド: 更新のあとの最初の閲覧で 1 回 → 更新 × 閲覧 / (更新 + 閲覧)（更新と閲覧がページに一様に散ると仮定。
-      // 更新が閲覧よりずっと少なければ更新の回数、閲覧が少なければ閲覧の回数に近づく）。ピークでも外れる割合は同じとみなす
+      // 更新が閲覧よりずっと少なければ更新の回数、閲覧が少なければ閲覧の回数に近づく）。ピークでも外れる割合は同じとみなす。
+      // オンデマンドに最大寿命（保険の時間の再検証）を併せるときは、その分（時間の式）を足す。閲覧の回数を超えない（D-56）
+      const maxAge =
+        updates === undefined ? undefined : r.onDemandMaxAgeSeconds;
+      const T = updates === undefined ? r.revalidateSeconds : maxAge;
       const lambdaT =
+        T === undefined ? 0 : (views / r.pages) * (T / SECONDS_PER_MONTH);
+      const onDemandPart =
         updates === undefined
-          ? (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH)
-          : 0;
-      const count =
-        updates === undefined
-          ? views / (1 + lambdaT)
+          ? 0
           : updates + views > 0
             ? (updates * views) / (updates + views)
             : 0;
+      const timedPart = (lt: number) =>
+        T === undefined ? 0 : views / (1 + lt);
+      const count =
+        updates === undefined
+          ? timedPart(lambdaT)
+          : Math.min(views, onDemandPart + timedPart(lambdaT));
       const peakMisses =
-        updates === undefined ? views / (1 + lambdaT * peakRate) : count;
+        updates === undefined
+          ? timedPart(lambdaT * peakRate)
+          : Math.min(views, onDemandPart + timedPart(lambdaT * peakRate));
       revalidations.push(flow(count, work));
       isrMiss.push(flow(count, served));
       isrViews += views;
@@ -299,7 +309,9 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
               id: `isr-revalidations:${r.id}`,
               label: `ISR の再生成（${r.id}・オンデマンド）`,
               expression:
-                '更新 × 閲覧 / (更新 + 閲覧)（更新のあとの最初の閲覧で 1 回。更新と閲覧がページに一様に散ると仮定）',
+                maxAge === undefined
+                  ? '更新 × 閲覧 / (更新 + 閲覧)（更新のあとの最初の閲覧で 1 回。更新と閲覧がページに一様に散ると仮定）'
+                  : 'min(閲覧, 更新 × 閲覧 / (更新 + 閲覧) + 閲覧 / (1 + ページあたりの閲覧 × 最大寿命 / 1 か月))（オンデマンドに最大寿命の時間の再検証を足す）',
               inputs: [
                 { name: '閲覧', value: views, basis: 'derived' },
                 {
@@ -307,6 +319,21 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
                   value: updates,
                   basis: 'user-input',
                 },
+                ...(maxAge !== undefined
+                  ? [
+                      {
+                        name: 'ページ数',
+                        value: r.pages,
+                        basis: 'user-input' as const,
+                      },
+                      {
+                        name: '最大寿命',
+                        value: maxAge,
+                        unit: 'second' as const,
+                        basis: 'user-input' as const,
+                      },
+                    ]
+                  : []),
               ],
               result: count,
             },
