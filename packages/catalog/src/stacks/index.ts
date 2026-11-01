@@ -767,6 +767,9 @@ function composeCloudflare(
   };
 }
 
+/** Vercel の CDN の画像のヒット率（仮定。最適化した画像・Blob の画像で同じ値）。 */
+const IMAGE_CDN_HIT_RATE = 0.9;
+
 /** Vercel に Next.js をネイティブで載せ、DB は Supabase。 */
 function composeVercel(
   plan: 'hobby' | 'pro',
@@ -786,7 +789,11 @@ function composeVercel(
       label: 'Vercel CDN',
       config: {
         kind: 'cdn',
-        hitRate: { asset: 1, 'document-static': 1, 'image-read': 0.9 },
+        hitRate: {
+          asset: 1,
+          'document-static': 1,
+          'image-read': IMAGE_CDN_HIT_RATE,
+        },
         // ISR のページのヒット率は固定値にせず、再生成の数と同じ式（閲覧の密度 × 再検証の間隔）から出す（D-37）
         ttlClasses: ['document-isr'],
         // Fast Origin Transfer は Functions・Middleware・Blob・Data Cache（ISR）で発生（画像最適化は挙がっていない）
@@ -836,11 +843,22 @@ function composeVercel(
           } as ArchNodeIn,
         ]
       : []),
-    // 画像の原本の置き場所（Vercel Blob など）は料金を取得していない。課金先なしで残し、見積に「対応なし」として出す
+    // 画像の原本の置き場所は Vercel Blob（公開のストア。D-46）。保存量・Advanced Operations（アップロード）・
+    // Simple Operations・Blob Data Transfer で課金する。最適化しない画像は、ブラウザが Blob の URL から直接読む:
+    // CDN Requests と Blob Data Transfer はヒットも含む全件、Simple Operations と Fast Origin Transfer は miss だけ
+    // （公式の料金の例どおり。Fast Data Transfer にはならない。OCL-2AE853BD）。ヒット率は画像の CDN のヒット率と同じ
     {
       id: 'blob',
-      label: '画像の原本（置き場所は未定）',
-      config: { kind: 'object-storage' },
+      label: 'Vercel Blob（画像の原本）',
+      config: { kind: 'object-storage', cdnHitRate: IMAGE_CDN_HIT_RATE },
+      billing: v({
+        'storage-gb-month': 'blob-storage',
+        'object-writes': 'blob-advanced-operations',
+        'object-reads': 'blob-simple-operations',
+        'egress-gb': 'blob-data-transfer',
+        requests: 'cdn-requests',
+        'origin-transfer-gb': 'fast-origin-transfer',
+      }),
     },
     {
       id: 'db',
@@ -879,7 +897,8 @@ function composeVercel(
           }
         : {}),
       api: ['cdn', 'fn', 'db'],
-      'image-read': optimize ? ['cdn', 'image'] : ['cdn', 'blob'],
+      // 最適化しない画像は Blob の URL から直接（CDN のノードを通さず、Blob のノードが配信を数える。OCL-2AE853BD）
+      'image-read': optimize ? ['cdn', 'image'] : ['blob'],
       'image-write': ['fn', 'blob'],
       ...(optimize ? { 'image-transform': ['image'] } : {}),
     },

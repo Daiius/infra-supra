@@ -58,6 +58,7 @@ describe('game', () => {
     // D-28: 話題と Bot は 50% で予告なし（話題の前兆 PV × 1.2 が無いシード・Bot の前兆が増えたシードで値が変わる。月は変わらない）
     // D-44: 話題（2 日）・Bot（7 日）の上乗せが短い期間に集中し、VPS の回線・KV の同じキーへの書き込みが話題の月に詰まる（課金は同じ）
     // D-37: Vercel の CDN の ISR のページのヒット率を固定の 0.8 から再生成の数と同じ式に（ISR の読み取りと FOT が増え、Vercel の構成の所持金が減る。結果は変わらない）
+    // D-46: Vercel の画像の原本を Vercel Blob に（保存量・アップロード・転送の課金。Vercel の構成と乗り換え先が Vercel の基準プレイの所持金が数ドル減る。結果は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -69,7 +70,7 @@ describe('game', () => {
       'cf-paid': ['2145.46', 'won', 12],
       'cf-paid-accept': ['2223.52', 'won', 12],
       'vps-images': ['1834.94', 'won', 12],
-      'vercel-pro': ['1681.81', 'goal', 12],
+      'vercel-pro': ['1680.36', 'goal', 12],
       'vercel-to-cf': ['1729.08', 'goal', 12],
       'cf-free': ['142.89', 'outages', 3],
       'cf-paid-kvdb': ['1936.00', 'won', 12],
@@ -80,7 +81,7 @@ describe('game', () => {
       'cf-paid': ['2153.58', 'won', 12],
       'cf-paid-accept': ['2197.12', 'won', 12],
       'vps-images': ['1720.35', 'goal', 12],
-      'vercel-pro': ['1585.49', 'goal', 12],
+      'vercel-pro': ['1582.04', 'goal', 12],
       'vercel-to-cf': ['1773.16', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
       'cf-paid-kvdb': ['1940.60', 'won', 12],
@@ -89,9 +90,9 @@ describe('game', () => {
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2163.40', 'won', 12],
-      'cf-paid-accept': ['1551.68', 'goal', 12],
+      'cf-paid-accept': ['1541.87', 'goal', 12],
       'vps-images': ['1717.60', 'goal', 12],
-      'vercel-pro': ['1591.32', 'goal', 12],
+      'vercel-pro': ['1587.79', 'goal', 12],
       'vercel-to-cf': ['1741.69', 'won', 12],
       'cf-free': ['142.89', 'outages', 3],
       'cf-paid-kvdb': ['1904.87', 'won', 12],

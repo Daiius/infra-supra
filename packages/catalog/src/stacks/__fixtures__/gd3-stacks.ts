@@ -326,11 +326,27 @@ export const GD3_STACKS: unknown[] = [
           },
         },
       },
+      // D-46: 置き場所が未定（課金先なし）だった画像の原本を Vercel Blob にした
       {
         id: 'blob',
-        label: '画像の原本（置き場所は未定）',
+        label: 'Vercel Blob（画像の原本）',
+        // OCL-2AE853BD: Blob の URL から直接配信する（CDN のヒット率で操作と origin への転送を数える）
         config: {
           kind: 'object-storage',
+          cdnHitRate: 0.9,
+        },
+        billing: {
+          accountId: 'vercel',
+          provider: 'vercel',
+          planId: 'hobby',
+          meters: {
+            'storage-gb-month': 'blob-storage',
+            'object-writes': 'blob-advanced-operations',
+            'object-reads': 'blob-simple-operations',
+            'egress-gb': 'blob-data-transfer',
+            requests: 'cdn-requests',
+            'origin-transfer-gb': 'fast-origin-transfer',
+          },
         },
       },
       {
@@ -446,11 +462,27 @@ export const GD3_STACKS: unknown[] = [
           },
         },
       },
+      // D-46: 置き場所が未定（課金先なし）だった画像の原本を Vercel Blob にした
       {
         id: 'blob',
-        label: '画像の原本（置き場所は未定）',
+        label: 'Vercel Blob（画像の原本）',
+        // OCL-2AE853BD: Blob の URL から直接配信する（CDN のヒット率で操作と origin への転送を数える）
         config: {
           kind: 'object-storage',
+          cdnHitRate: 0.9,
+        },
+        billing: {
+          accountId: 'vercel',
+          provider: 'vercel',
+          planId: 'pro',
+          meters: {
+            'storage-gb-month': 'blob-storage',
+            'object-writes': 'blob-advanced-operations',
+            'object-reads': 'blob-simple-operations',
+            'egress-gb': 'blob-data-transfer',
+            requests: 'cdn-requests',
+            'origin-transfer-gb': 'fast-origin-transfer',
+          },
         },
       },
       {
