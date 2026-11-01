@@ -118,11 +118,6 @@ function consume(
       return out;
     }
     case 'function': {
-      if (n > 0)
-        hostAcc.maxCpuByClass[cls] = Math.max(
-          hostAcc.maxCpuByClass[cls] ?? 0,
-          p.maxCpuMs,
-        );
       // コードの中のキャッシュ: ヒットはキャッシュから返す CPU だけ、miss は処理して次（DB）へ流す
       const missFlow = c.cache?.classes.includes(cls)
         ? ttlMiss(w, cls, f)
@@ -131,6 +126,16 @@ function consume(
       const mp = missFlow?.perRequest ?? p;
       const hits = n - miss;
       const hitCpu = missFlow ? c.cache!.hitCpuMs : 0;
+      // 1 リクエストの CPU の最大は、件数が正の経路（miss の処理・ヒットの返却）それぞれの最大（OCL-8B3B0CB7）
+      const maxCpu = Math.max(
+        miss > 0 ? mp.maxCpuMs : 0,
+        hits > 0 ? hitCpu : 0,
+      );
+      if (n > 0)
+        hostAcc.maxCpuByClass[cls] = Math.max(
+          hostAcc.maxCpuByClass[cls] ?? 0,
+          maxCpu,
+        );
       const wallMs = hits * hitCpu + miss * mp.wallMs;
       u.busyMs += wallMs;
       add(u, 'cpu-ms', hits * hitCpu + miss * mp.cpuMs);
