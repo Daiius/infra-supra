@@ -66,7 +66,7 @@ export const WorkloadInputSchema = z
       pagesPerSession: NonNeg,
       /** 平日 1 日 / 休日 1 日 の比（日次の無料枠の判定に使う）。 */
       weekdayToWeekend: Pos,
-      /** 多い時間帯 / 平均（容量の判定に使う）。 */
+      /** 多い時間帯 / 平均（容量の判定に使う）。時間より短い山もこれに含める（別の burst は持たない。D-83）。 */
       peakHourFactor: Pos,
       /**
        * 月のうち最も多い日 / 平均の日（話題・Bot の上乗せが短い期間に集中する月。D-60）。日次の無料枠の判定だけに使い、
@@ -90,7 +90,10 @@ export const WorkloadInputSchema = z
     images: z.object({
       sizeKB: NonNeg,
       browserReuse: Ratio,
-      /** コンテンツの在庫: 画像の種類数とサイズ違いの数（画像変換の件数は PV でなくこれで頭打ちになる）。 */
+      /**
+       * コンテンツの在庫: 画像の種類数とサイズ違いの数（画像変換の件数は PV でなくこれで頭打ちになる）。
+       * 一覧のサムネイルはサイズ違いの 1 つとして数える（別には数えない。D-83）。
+       */
       distinct: NonNeg,
       variants: NonNeg,
       /** 画像の原本の保存量（サイズ違いは含まない。投稿のときに作るサイズ違いは resolve で足す）。 */
