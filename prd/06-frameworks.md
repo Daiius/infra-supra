@@ -199,4 +199,5 @@ MVP の比較対象は「フレームワーク × ホスト」の組み合わせ
 ### 6.6 残した点・「データ追加だけで足せるか」の答え
 
 - データだけでは足りなかったのは 2 つ: **ビルドし直しの費用**（estimator の資源・Workload の `build`・ノード `ci-build`）と、**載せられない組の検証**（`unsupported` の DeployTarget を始める画面・乗り換えで弾く）。それ以外（ルートの書き換え・構成の分岐・部品の出し分け・設定の意味）は SPA と同じ仕組みで足りた。06 §2.1 の BuildOutput の型は、まだ作らなくてよい。
+- API の置き場（D-69・prd/10 §9.7）: Vercel・VPS の Astro + Cloudflare Workers・D1、Cloudflare の Astro + さくらの VPS の API を許した。
 - 後の段: Vercel の `isr` で記事をリクエストのたびに描く形（Next.js の ISR と同じ経路になる）、Server Islands、Astro × AWS（コミュニティのアダプター・SST）、VPS のビルドの CPU、Vercel Hobby の 1 日 100 デプロイの判定、ビルドの遅れを鮮度に足すこと、Astro の静的出力の画像をビルドで変換する形（`compile`）、Next.js の `output: 'export'`（F-03）。

@@ -497,6 +497,18 @@
 - 保存の形は変えない（framework の id に astro を足しただけ。古い保存は今のまま読める）。golden は変わらない。
 - 残した点: Vercel の isr で記事を描く形、Server Islands、Astro × AWS、VPS のビルドの CPU、Hobby の 1 日 100 デプロイ、ビルドの遅れを鮮度に足すこと、初回表示の仮定の大きさの見直し。
 
+### D-69 Astro の API の置き場（確定・2026-11-02）
+
+- D-67 と D-68 が並行で入ったので、Astro では API の置き場を同じ事業者のみにしていた（自律の作業の推奨案）。公式で確かめて、現実にできる 2 つの組を推奨案で許した。prd/10 §9.7。
+- **Vercel・VPS の Astro + Cloudflare Workers・D1**（`cf-workers-astro`）: Astro の SSR の fetch は実行時に走る（docs.astro.build の Data fetching）。D-67 の `cf-workers-server` と同じ形で、マイページ・API の経路の DB を Worker → D1 に差し替える。Vercel の関数から外への通信は数えない（D-67 と同じ）、VPS は転送量が無制限。
+  VPS は MySQL を動かさない（常駐メモリ 0.75 GB・DB の CPU 0・ディスクに DB を置かない。エンジンに `host` の `storesDb`）。
+- **Cloudflare の Astro + さくらの VPS の API**（SPA と同じ部品 `sakura-vps-2gb`・`4gb`）: ブラウザの API・投稿は D-67 と同じく VPS に直接。マイページを描く Worker が VPS の API を fetch で呼ぶ。Worker から外への fetch は課金されず転送の料金も無く、待つ時間は CPU 時間に数えない（Workers の料金・制限のページ）。
+- 出さない組: Cloudflare の Astro + AWS の API（Worker の SSR が API Gateway を呼ぶ転送を確かめていない）・Astro × AWS（D-68）。
+- 構成の名前は D-65 の実際の組の名前 +「（Astro）」。SSR が外の API を待つことは前提の文（`astro-server-fetch`）、遅延は計算しない（AX-13）。
+- 基準プレイ（何もしない・シード 1〜20）: **CF Paid × Next.js（目標の根拠）と Astro の既定は不変**（golden も不変）。受託の Vercel Pro の Astro + Workers は 0 → 20 / 20（Supabase Pro の固定費が消える）。Cloudflare の Astro + VPS の API は記事 17 / 20・受託 12 / 20（Cloudflare の Astro だけより損）。VPS の Astro + Workers は Workers Paid の基本料の分だけ損。
+- 文言: 「同じ事業者」の説明文（Cloudflare）を「シェルと同じ Worker」から「サイトと同じ Worker」に替えた（SPA と Astro で共有する）。
+- 追記（レビュー OCL-4D1F5201・2026-11-02）: Cloudflare の Astro + VPS の API で、マイページの描画の CPU を VPS にも数えていた。VPS ではマイページの 1 回を API の 1 回（Workload の api の CPU と応答の大きさ）として数え、描画は Worker だけに数える（`host` の `serverApiClasses`）。基準プレイの結果は変わらない（VPS の CPU の上限から遠い）。
+
 ### D-70 記事のページを作り直す更新は記事の投稿・編集だけ（コメントは別のデータ）（確定・2026-11-02）
 
 - ユーザーの確認事項: D-49 の内容の更新（PV × API × 書き込み × ページを変える割合 0.5。記事コミュニティで月 1.5 万回）は多めではないか。OpenNext × オンデマンド × 従量の無効化が 1 か月目 6 万パス・$295 になり、1 か月目に破綻していた（D-66）。方針「より現実的なコスト感」で、推奨案で自律に決定。

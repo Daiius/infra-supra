@@ -620,6 +620,7 @@ const API_PLACEMENT_NAME: Readonly<Record<string, string>> = {
   'cf-workers': 'Cloudflare Workers・D1',
   'aws-lambda': 'AWS Lambda・DynamoDB',
   'cf-workers-server': 'Cloudflare Workers・D1',
+  'cf-workers-astro': 'Cloudflare Workers・D1',
   'sakura-vps-2gb': 'さくらの VPS 2GB（API・MySQL）',
   'sakura-vps-4gb': 'さくらの VPS 4GB（API・MySQL）',
 };
@@ -666,14 +667,16 @@ export function stackName(
   components: Choices = {},
 ): string {
   const s = STACKS[stackIndex]!;
-  // Astro は vinext を使わないので外し、フレームワークを添える（D-68）
-  if (framework === 'astro') {
-    const base = s.name.replace(' + vinext', '');
-    return withFramework ? `${base}（Astro）` : base;
-  }
   const api = apiPlacedElsewhere(components)
     ? API_PLACEMENT_NAME[components.api!]
     : undefined;
+  // Astro は vinext を使わないので外し、フレームワークを添える（D-68）。API を他の事業者に置くと、Astro を載せている側 + API と DB（D-69）
+  if (framework === 'astro') {
+    const base = api
+      ? `${s.name.split(' + ')[0]} + ${api}`
+      : s.name.replace(' + vinext', '');
+    return withFramework ? `${base}（Astro）` : base;
+  }
   // Next.js のサーバーから別の事業者の API を呼ぶ（D-67）: Next.js を載せている側 + API と DB
   if (framework !== 'vite-spa')
     return api

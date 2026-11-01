@@ -440,7 +440,7 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
   始める画面の手間のバー・部品の手間の見込み（「自前運用になる（毎月の維持 3・自前の障害 月 8%）」）にも出す。
 - 構成の名前（ゲーム中）: 「Vercel Pro + Cloudflare Workers・D1」「AWS Amplify の Next.js + Cloudflare Workers・D1」「AWS の OpenNext + Cloudflare Workers・D1」「Cloudflare Paid の静的 + さくらの VPS 2GB（API・MySQL）（Vite の SPA）」。
 - Next.js の既定の部品にも `api: 'same'` を足した（SPA と同じ）。既存の基準プレイ・golden は変わらない。
-- **Astro（§10・D-68）では API の置き場は同じ事業者のみ**（推奨案）。Astro の SSR から Workers を呼ぶ組・Astro の静的 + VPS の API は許さず、選択肢に出さない（渡されても既定に戻る）。
+- Astro（§10・D-68）の API の置き場は、最初は同じ事業者のみにしていた。公式で組を確かめて D-69 で 2 つを許した（§9.7）。
 
 **置いた仮定**（ゲーム上の仮定）:
 - Next.js のサーバーは 1 回の描画（SSR・ISR の作り直し）・1 回の API で Worker を 1 回呼ぶ。Worker の CPU は 1 回 5 ms（`SERVER_API_WORKER_CPU_MS`。記事コミュニティの API の CPU と同じ値。HTML の描画の CPU はサーバーの側に残る）。
@@ -482,6 +482,46 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
   記事コミュニティでは VPS の構成と同じく届かない（維持の手間 3 とアカウントの 0.5 で機能開発が減る）。VPS の回線の使用率は、VPS だけの構成の 0.66 から 0.02 に下がる（シード 1 の最大）。
 - 満足度は替えても同じ（往復の遅延は計算しない・AX-13）。SSR が外の API を待つことは前提の文（`server-fetch`）で出す。
 
+### 9.7 Astro の API の置き場（2026-11-02・D-69）
+
+D-67 と D-68 が並行で入ったので、Astro では「同じ事業者のみ」にしていた。公式で確かめて、現実にできる 2 つの組だけを許した。不可・未確認の組は出さない（渡されても既定に戻る）。仕組みは同じ（`CROSS_PAIRS`・アカウントの手間 D-52・データの移行 6 × 1 か月）。
+
+| 土台（Astro のアダプター） | API と DB（部品） | 経路と課金 | 根拠（公式・2026-11-02 取得） |
+|---|---|---|---|
+| Vercel（Hobby・Pro。`@astrojs/vercel`）・さくらの VPS（`@astrojs/node` standalone） | **Cloudflare: Workers + D1（Astro のサーバーから呼ぶ）**（`cf-workers-astro`） | D-67 の `cf-workers-server` と同じ形。ブラウザは今の事業者の Astro だけを呼び（CORS は要らない）、マイページの SSR・API の経路の DB を Worker → D1 に差し替える。記事は静的なビルドのまま今の場所から配る。Vercel の関数から外への通信は数えず（前提の文 `function-outbound`）、VPS は転送量が無制限なので数えない。**VPS は MySQL を動かさない**（常駐メモリ 1.35 → 0.75 GB・DB の CPU 0・ディスクに DB を置かない。エンジンに `host` の `storesDb`） | [Data fetching](https://docs.astro.build/en/guides/data-fetching/)（「If SSR mode is enabled, any fetch calls will be executed at runtime」）・[@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)・[@astrojs/node](https://docs.astro.build/en/guides/integrations-guide/node/)・[さくらの VPS の仕様](https://vps.sakura.ad.jp/specification/)（データ転送量 無制限）・§9.1 の Workers・D1 |
+| Cloudflare（Free・Paid。`@astrojs/cloudflare`） | **さくらの VPS 2GB / 4GB: API と MySQL**（`sakura-vps-2gb`・`sakura-vps-4gb`。SPA と同じ部品） | D-67 の VPS の API と同じ形（api のサブドメインを DNS だけのレコードで VPS へ。ブラウザの API・投稿は VPS に直接、画像は R2）。加えて、**マイページを描く Worker が VPS の API を fetch で呼ぶ**（経路 `document-ssr` = Worker → VPS）。D1 は外れ、Worker・Images（binding）・ビルドは残る。Worker から外への fetch は課金されず転送の料金も無く、待つ時間は CPU 時間に数えない（前提の文 `worker-outbound`） | [Workers の料金](https://developers.cloudflare.com/workers/platform/pricing/)（「There are no additional charges for data transfer (egress) or throughput (bandwidth)」・「Cloudflare does not bill for subrequests you make from your Worker」）・[Workers の制限](https://developers.cloudflare.com/workers/platform/limits/)（「Waiting on network requests (such as fetch() calls …) does not count toward CPU time」・サブリクエスト Free 50 / Paid 10,000）・[@astrojs/cloudflare](https://docs.astro.build/en/guides/integrations-guide/cloudflare/)・§9.5 の DNS・VPS |
+
+- 出さない組: Astro × AWS（D-68 で載せない）。Cloudflare の Astro + AWS の API（`aws-lambda`）は、Worker の SSR から API Gateway を呼ぶ転送の扱い（Lambda の応答が Worker に返る分）を確かめていないので出さない。VPS の Astro + 他の事業者の画像も今までどおり出さない。
+- 構成の名前（ゲーム中）: 「Vercel Pro + Cloudflare Workers・D1（Astro）」「さくらの VPS 2GB（東京） + Cloudflare Workers・D1（Astro）」「Cloudflare Paid + さくらの VPS 2GB（API・MySQL）（Astro）」（D-65 の実際の組の名前 +「（Astro）」）。
+- 自前運用（D-67 の `selfHostedOf`）: Cloudflare + VPS の API は部品の VPS で維持・障害がかかる。VPS の Astro から Workers に出しても VPS の構成のまま（維持・障害は変わらない）。
+- 置いた仮定: Worker の CPU は 1 回 5 ms（`SERVER_API_WORKER_CPU_MS`・D-67 と同じ）。VPS の Astro + Workers の Workers のプランは Paid（Vercel Hobby だけ Free・§9.1 と同じ）。Cloudflare + VPS の API で、マイページを描く Worker が VPS を呼ぶ 1 回は、VPS では API の 1 回（Workload の api の 1 件の CPU と応答の大きさ）として数える。描画の CPU は Worker に残る（エンジンに `host` の `serverApiClasses`。OCL-4D1F5201）。
+
+基準プレイ（何もしない・シード 1〜20・ビルドの間隔 5 分・始める画面で部品を選ぶ）。12 か月の費用は事業者別の中央値、所持金は中央値（§9.3 と同じ取り方）。
+
+| シナリオ | 構成（Astro） | API の置き場（他の部品） | 達成 | 12 か月の費用（事業者別） | 所持金 |
+|---|---|---|---|---|---|
+| 記事 | CF Paid（Next.js・目標の根拠） | 同じ | **20 / 20** | $182 | $2,152 |
+| 記事 | CF Paid | 同じ（既定） | 20 / 20 | $189 | $2,601 |
+| 記事 | CF Paid | VPS 2GB | 17 / 20（障害 3） | $336（CF $179・さくら $157） | $2,003 |
+| 記事 | CF Paid | VPS 4GB | 16 / 20 | $496（CF $179・さくら $317） | $1,842 |
+| 記事 | CF Paid | VPS 2GB（画像は投稿のときに縮める） | 11 / 20 | $219（CF $62・さくら $157） | $1,747 |
+| 記事 | CF Free | VPS 2GB / 4GB | 0 / 20（3 か月目に停止: マイページの SSR が CPU 10 ms に当たる） | — | $104 / $64 |
+| 記事 | Vercel Pro | 同じ → Workers + D1 | 0 / 20 | $1,712 → $1,472（Vercel $1,412・CF $60） | $1,076 → $1,316 |
+| 記事 | Vercel Pro | Workers + D1（画像: Cloudflare に縮める） | 0 / 20 | $740（Vercel $678・CF $62） | $1,595 |
+| 記事 | Vercel Hobby | Workers + D1 | 0 / 20（2 か月目に規約で停止） | — | $118 |
+| 記事 | VPS 2GB | 同じ → Workers + D1 | 17 / 20 → 17 / 20 | $157 → $217（さくら $157・CF $60） | $2,090 → $2,030 |
+| 記事 | VPS 4GB | 同じ → Workers + D1 | 16 / 20 → 16 / 20 | $317 → $377 | $1,930 → $1,870 |
+| 受託 | CF Paid | 同じ（既定） | **20 / 20** | $68 | $2,036 |
+| 受託 | CF Paid | VPS 2GB / 4GB | 12 / 20・0 / 20 | $224 / $384（CF $67・さくら $157 / $317） | $1,775 / $1,615 |
+| 受託 | CF Free | VPS 2GB | 0 / 20（3 か月目に停止） | — | $198 |
+| 受託 | Vercel Pro | 同じ → Workers + D1 | 0 / 20 → **20 / 20** | $559 → $323（Vercel $263・CF $60） | $1,545 → $1,794 |
+| 受託 | VPS 2GB | 同じ → Workers + D1 | 0 / 20 → 1 / 20 | $157 → $217 | $1,653 → $1,599 |
+| 受託 | VPS 4GB | 同じ → Workers + D1 | 8 / 20 → 0 / 20 | $317 → $377 | $1,683 → $1,623 |
+
+- **目標の根拠（CF Paid × Next.js）と Astro の既定は変わらない**（既存の golden・基準プレイもすべて同じ）。
+- **受託の Vercel Pro の Astro は Workers + D1 で届く**（0 → 20 / 20）。Next.js（§9.6）と同じく Supabase Pro の固定費 $300 が消える分。記事は Vercel の転送と席が残り届かない。
+- **Cloudflare の Astro + VPS の API は、Cloudflare の Astro だけより損**（記事 20 → 17 / 20・受託 20 → 12 / 20）。Workers Paid の費用はほぼ残り（マイページの SSR とビルド）、VPS の月額・維持の手間 3・偶発的な障害が足される。CF Free では、マイページの SSR が CPU 10 ms に当たるので VPS に出しても止まる（D-68 の CF Free と同じ）。
+- **VPS の Astro + Workers は、MySQL を外しても VPS の上限に当たらない規模なので得にならない**（Workers Paid の $5 / 月の分だけ所持金が減る）。受託の VPS 2GB は画像でディスクが埋まって止まる（DB を外した分だけ 1 件届く）。
 
 ## 10. 3 つ目のフレームワーク: Astro（2026-11-02・D-68）
 

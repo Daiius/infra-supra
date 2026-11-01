@@ -130,18 +130,6 @@ describe('Next.js のサーバーから別の事業者の API を呼ぶ（F-14�
   });
 });
 
-describe('Astro（D-68）では API の置き場は同じ事業者のみ', () => {
-  it('どの構成でも API の置き場のスロットは出ず、他の事業者の部品を渡しても既定に戻る', () => {
-    for (const s of [CF_FREE, CF_PAID, VERCEL_PRO, idx('sakura-vps-2gb')]) {
-      expect(setupSlots(article, s, 'astro').map((x) => x.slot)).not.toContain(
-        'api',
-      );
-      for (const api of ['cf-workers-server', 'sakura-vps-2gb', 'cf-workers'])
-        expect(game(s, 'astro', { api }).components.api).toBe('same');
-    }
-  });
-});
-
 describe('Cloudflare の静的 + さくらの VPS の API', () => {
   it('部品で VPS を使うと、自前運用の維持の手間（シナリオの値）がかかる', () => {
     expect(selfHostedOf(CF_PAID, VPS2, 'vite-spa')).toBe(true);

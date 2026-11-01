@@ -589,6 +589,36 @@ const NEXT_API_SAME: ComponentOption[] = (
   premiseRefs: [],
 }));
 
+/**
+ * Astro の API・DB の置き場（D-69）。Astro のアダプターで描くページ（マイページ）とエンドポイントがサーバーの側で DB を読むので、
+ * 既定は同じ事業者。他の事業者に置く部品は cross.ts の CROSS_COMPONENTS（Vercel・VPS の Astro から Workers を呼ぶ・
+ * Cloudflare の Astro + VPS の API）。AWS は Astro を載せない（D-68）。
+ */
+const ASTRO_API_SAME: ComponentOption[] = (
+  [
+    [
+      'cloudflare',
+      'Astro の Worker（アダプター）が同じ構成の DB の部品を binding で直接読む。API を別に立てない',
+    ],
+    [
+      'vercel',
+      'Astro のサーバー（Vercel Functions）が同じ構成の Supabase を直接読む。API を別に立てない',
+    ],
+    [
+      'sakura',
+      'Astro の Node（@astrojs/node）が同じ VPS の MySQL を直接読む。API を別に立てない',
+    ],
+  ] as const
+).map(([platform, note]): ComponentOption => ({
+  id: 'same',
+  slot: 'api',
+  platform,
+  frameworks: ['astro'],
+  label: '同じ事業者（同居）',
+  note,
+  premiseRefs: [],
+}));
+
 export const COMPONENTS: readonly ComponentOption[] = [
   ...BASE_COMPONENTS,
   ...SAKURA_FRONT_CDN,
@@ -596,6 +626,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...SPA_API_CACHE,
   ...SPA_API_SAME,
   ...NEXT_API_SAME,
+  ...ASTRO_API_SAME,
   ...AWS_COMPONENTS,
   ...OPENNEXT_COMPONENTS,
   ...CROSS_COMPONENTS,
@@ -1191,11 +1222,9 @@ export function composeStack(
             : 'none',
         })
       : crossed;
-  // Astro は静的なページのビルドし直しを足す（D-68）。API の置き場は同じ事業者のみ（D-67 の組は Astro に出さない）
-  if (astro) return asAstro(shaped, def.platform, def.plan);
-  // API を他の事業者に置く（SPA は D-65・Next.js は D-67）
+  // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
   return applyCrossApi(
-    shaped,
+    astro ? asAstro(shaped, def.platform, def.plan) : shaped,
     def.platform,
     def.plan,
     c,
