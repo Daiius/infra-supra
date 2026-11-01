@@ -39,6 +39,19 @@ export const vercel: PriceBookInput = {
       url: 'https://vercel.com/docs/pricing',
       retrievedAt: '2026-11-01',
     },
+    // ビルドの料金・マシン・1 日のデプロイの上限（Astro の静的出力のビルドし直し。D-68）
+    builds: {
+      url: 'https://vercel.com/docs/builds/managing-builds',
+      retrievedAt: '2026-11-02',
+    },
+    buildsPricing: {
+      url: 'https://vercel.com/docs/pricing',
+      retrievedAt: '2026-11-02',
+    },
+    limits: {
+      url: 'https://vercel.com/docs/limits',
+      retrievedAt: '2026-11-02',
+    },
     cdnUsage: {
       url: 'https://vercel.com/docs/manage-cdn-usage',
       retrievedAt: '2026-11-01',
@@ -200,6 +213,12 @@ export const vercel: PriceBookInput = {
       name: 'Hobby',
       sourceIds: ['hobby', 'pricing'],
       facts: [
+        {
+          id: 'builds-hobby',
+          premise:
+            'Hobby のビルドは Basic のマシン（2 vCPU）で込み。1 日に作れるデプロイは 100 まで（このモデルでは 1 日の上限を判定していない）',
+          sourceIds: ['builds', 'buildsPricing', 'limits'],
+        },
         {
           id: 'isr-purge',
           premise:
@@ -428,6 +447,26 @@ export const vercel: PriceBookInput = {
         'Pro の従量は既定で上限なし。予算で一時停止できるが、数分の遅れがある（spend management）',
       ],
       meters: [
+        {
+          id: 'build-cpu-minutes',
+          resource: 'build-minutes',
+          unit: 'minute',
+          premise:
+            'Vercel Pro のビルドは CPU minute（ビルドの時間を分に切り上げ × マシンの vCPU の数）あたり $0.0035。新しい Pro の既定は Elastic（4〜30 vCPU）で、このモデルは最小の 4 vCPU とみなす（Basic の 2 vCPU を選べば半分）',
+          interpretation: {
+            adopted:
+              'Elastic が 4 vCPU（Standard 相当）を割り当てるとみなし、1 分のビルドを 4 CPU minute と数える。月のクレジットはビルドにも当たる（ビルドの料金は Managed Infrastructure の節にある）',
+            rejected: [
+              {
+                reading: 'Basic（2 vCPU・$0.007 / 分）で数える',
+                reason:
+                  '新しい Pro のアカウントの既定は Elastic（「New Pro and Enterprise accounts use Elastic machines by default」）',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0.0035 },
+          sourceIds: ['builds', 'buildsPricing'],
+        },
         {
           id: 'cdn-requests',
           aliases: ['edge-requests'],

@@ -2,14 +2,27 @@
 import { describe, expect, it } from 'vitest';
 import { ArchitectureSchema, estimate, resolveWorkload } from 'estimator';
 import { loadPriceBooks } from '../index.ts';
-import { ARTICLE_COMMUNITY_SPA, articleCommunity } from '../templates/index.ts';
+import {
+  ARTICLE_COMMUNITY_ASTRO,
+  ARTICLE_COMMUNITY_SPA,
+  BUSINESS_APP_ASTRO,
+  articleCommunity,
+  businessApp,
+} from '../templates/index.ts';
 import {
   componentsOf,
   composeStack,
   MVP_STACKS,
   STACK_DEFS,
 } from '../stacks/index.ts';
-import { DEPLOY_TARGETS, FRAMEWORKS, deployTarget, toSpa } from './index.ts';
+import {
+  DEPLOY_TARGETS,
+  FRAMEWORKS,
+  deployTarget,
+  frameworkSupported,
+  toAstro,
+  toSpa,
+} from './index.ts';
 
 const books = loadPriceBooks();
 
@@ -223,5 +236,125 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
     const noCdn = sim('sakura-vps-2gb', { apiCache: 'cdn' }, true);
     const noCdnPlain = sim('sakura-vps-2gb', {}, false);
     expect(cores(noCdn)).toBeCloseTo(cores(noCdnPlain), 9);
+  });
+});
+
+describe('Astro（D-68）', () => {
+  const pv = 300_000;
+  // 内容の更新（ゲームのオンデマンドの更新と同じ数え方: PV × API × 書き込み × 0.5）
+  const updates = pv * 0.1 * 0.5;
+  const w = (intervalSeconds?: number) =>
+    toAstro(articleCommunity(pv), ARTICLE_COMMUNITY_ASTRO, {
+      updatesPerMonth: updates,
+      ...(intervalSeconds ? { intervalSeconds } : {}),
+    });
+  const est = (id: string, intervalSeconds?: number) =>
+    estimate({
+      workload: w(intervalSeconds),
+      architecture: composeStack(id, {}, { framework: 'astro' }),
+      books,
+    });
+  const build = (e: ReturnType<typeof est>) =>
+    e.usage.find((u) => u.nodeId === 'build');
+
+  it('載せ方: Cloudflare・Vercel・VPS はアダプターで載り、AWS は公式のアダプターが無いので載せない', () => {
+    for (const p of ['cloudflare', 'vercel', 'sakura'] as const)
+      expect(frameworkSupported('astro', p)).toBe(true);
+    for (const p of ['aws', 'aws-opennext'] as const) {
+      expect(deployTarget('astro', p)?.support).toBe('unsupported');
+      expect(frameworkSupported('astro', p)).toBe(false);
+    }
+    expect(frameworkSupported('nextjs', 'aws')).toBe(true);
+  });
+
+  it('記事（ISR）は静的なページに、個人化（SSR）はそのまま。JS・CSS はアイランドの分だけ。ビルドは記事のページ数で長くなる', () => {
+    const a = w(300);
+    expect(a.routes.map((r) => r.rendering)).toEqual(['static', 'ssr']);
+    expect(a.perPage.assets).toBeCloseTo(10 * 0.3, 12);
+    expect(a.build).toEqual({
+      updatesPerMonth: updates * 0.02,
+      intervalSeconds: 300,
+      minutesPerBuild: 2,
+    });
+    // 業務アプリは静的なページが無いのでビルドし直しが無い
+    const b = toAstro(businessApp(100_000), BUSINESS_APP_ASTRO, {
+      updatesPerMonth: 1000,
+    });
+    expect(b.build).toBeUndefined();
+  });
+
+  it('構成: ISR の経路とキャッシュを持たず、Cloudflare・Vercel はビルドのノードを持つ（VPS は同じホストでビルド）', () => {
+    for (const d of STACK_DEFS) {
+      if (!frameworkSupported('astro', d.platform)) continue;
+      const a = composeStack(d, {}, { framework: 'astro' });
+      expect(() => ArchitectureSchema.parse(a)).not.toThrow();
+      expect(a.routes['document-isr']).toBeUndefined();
+      expect(a.routes['document-ssr']).toBeDefined();
+      expect(a.nodes.some((n) => n.id === 'kv' || n.id === 'isr')).toBe(false);
+      expect(a.nodes.some((n) => n.id === 'build')).toBe(
+        d.platform !== 'sakura',
+      );
+      expect(a.name).toContain('（Astro）');
+      expect(a.name).not.toContain('vinext');
+    }
+  });
+
+  it('Cloudflare: 記事は静的アセット（Worker を起動しない）。Next.js より記事の閲覧の分（PV × 0.6）だけ Worker のリクエストが減る', () => {
+    const astro = est('cloudflare-vinext-paid', 300);
+    const next = estimate({
+      workload: articleCommunity(pv),
+      architecture: composeStack('cloudflare-vinext-paid'),
+      books,
+    });
+    const req = (e: typeof astro) =>
+      e.usage.find((u) => u.nodeId === 'worker' && u.meterId === 'requests')
+        ?.quantity ?? 0;
+    expect(req(next) - req(astro)).toBeCloseTo(pv * 0.6, -1);
+  });
+
+  it('ビルドの時間: Workers Paid は月 6,000 分まで込み・以降 $0.005、Free は 3,000 分を超えると上位のプランが要る', () => {
+    // 更新のたび（1 回 2 分の枠）。1,000 万 PV で記事の更新は月 1 万回
+    const big = (id: string, intervalSeconds?: number) =>
+      estimate({
+        workload: toAstro(
+          articleCommunity(10_000_000),
+          ARTICLE_COMMUNITY_ASTRO,
+          {
+            updatesPerMonth: 10_000_000 * 0.05,
+            ...(intervalSeconds ? { intervalSeconds } : {}),
+          },
+        ),
+        architecture: composeStack(id, {}, { framework: 'astro' }),
+        books,
+      });
+    const paid = big('cloudflare-vinext-paid');
+    const minutes = build(paid)!.quantity;
+    const slots = (730 * 3600) / 120;
+    expect(minutes).toBeCloseTo(slots * (1 - Math.exp(-10_000 / slots)) * 2, 6);
+    const line = paid.bill.lines.find(
+      (l) => l.priceRef.meterId === 'build-minutes',
+    );
+    expect(line?.amount).toBeCloseTo((minutes - 6000) * 0.005, 6);
+    const hit = (e: ReturnType<typeof big>) =>
+      e.premises.find(
+        (x) => x.id === 'pool:cloudflare:workers-free:free-build-minutes',
+      );
+    expect(hit(big('cloudflare-vinext-free'))?.hit).toBe(true);
+    expect(hit(big('cloudflare-vinext-free'))?.effect).toBe('upgrade-required');
+    // 1 時間ごとにまとめると Free の 3,000 分に収まる（730 回 × 2 分）
+    expect(hit(big('cloudflare-vinext-free', 3600))?.hit).toBe(false);
+    // 30 万 PV・5 分ごと（記事の更新は月 300 回）なら Free にも収まる
+    expect(hit(est('cloudflare-vinext-free', 300))?.hit).toBe(false);
+  });
+
+  it('Vercel Pro はビルドの分 × 4 vCPU の CPU minute を $0.0035 で数え、Hobby は込み', () => {
+    const pro = est('vercel-supabase-pro', 3600);
+    const u = pro.usage.find(
+      (x) => x.nodeId === 'build' && x.meterId === 'build-cpu-minutes',
+    )!;
+    const minutes = pro.simulation.workload.builds.minutes;
+    expect(u.quantity).toBeCloseTo(minutes * 4, 6);
+    const hobby = est('vercel-supabase-hobby', 3600);
+    expect(hobby.usage.some((x) => x.nodeId === 'build')).toBe(false);
   });
 });

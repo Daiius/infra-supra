@@ -148,6 +148,14 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     /** 再生成で内容が変わる割合（変わらなければ書き込みは 0）。 */
     changedRate: Ratio,
   }),
+  /**
+   * 事業者のビルド（Workers Builds・Vercel のビルド）。経路を持たず、Workload の build から出る月のビルドの時間を数える
+   * （build-minutes = 分 × cpusPerBuild。Vercel は CPU の数を掛けた CPU minute で課金する。D-68）。
+   */
+  z.object({
+    kind: z.literal('ci-build'),
+    cpusPerBuild: Pos.default(1),
+  }),
   /** VPS などのホスト。課金は固定費で、使用量は容量の判定（P1-8）に使う。 */
   z.object({
     kind: z.literal('host'),

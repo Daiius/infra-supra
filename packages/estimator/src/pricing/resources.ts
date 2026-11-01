@@ -30,6 +30,7 @@ export const RESOURCES = [
   'write-request-units', // 同じく書き込みの単位（DynamoDB の WRU）
   'processing-units', // 処理の量の単位で課金する DB の単位（Aurora DSQL の DPU）
   'invalidation-paths', // CDN のキャッシュの無効化のパス（CloudFront の無効化。D-66）
+  'build-minutes', // 静的なページをビルドし直す時間 × CPU の数（Astro の静的出力。D-68）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -62,4 +63,5 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'write-request-units': 'operation',
   'processing-units': 'count',
   'invalidation-paths': 'count',
+  'build-minutes': 'minute',
 };

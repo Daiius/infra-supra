@@ -179,6 +179,11 @@ export const cloudflare: PriceBookInput = {
     kvPricing: src('https://developers.cloudflare.com/kv/platform/pricing/'),
     r2Pricing: src('https://developers.cloudflare.com/r2/pricing/'),
     imagesPricing: src('https://developers.cloudflare.com/images/pricing/'),
+    // Workers Builds（2026-10-28 更新・2026-11-02 取得。D-68）
+    workersBuilds: {
+      url: 'https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/',
+      retrievedAt: '2026-11-02',
+    },
     kvLimits: src('https://developers.cloudflare.com/kv/platform/limits/'),
     kvWrite: src(
       'https://developers.cloudflare.com/kv/api/write-key-value-pairs/',
@@ -320,6 +325,26 @@ export const cloudflare: PriceBookInput = {
       period: 'day',
       scope: 'account',
       sourceIds: ['kvPricing'],
+    },
+    // Workers Builds（月次。D-68）
+    {
+      id: 'free-build-minutes',
+      quantity: 3_000,
+      unit: 'minute',
+      period: 'month',
+      scope: 'account',
+      premise: 'Workers Builds は Free で月 3,000 分まで',
+      sourceIds: ['workersBuilds'],
+    },
+    {
+      id: 'paid-build-minutes',
+      quantity: 6_000,
+      unit: 'minute',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'Workers Builds は Paid で月 6,000 分まで込み（以降 $0.005 / 分）',
+      sourceIds: ['workersBuilds'],
     },
     // Workers Paid（月次。Workers・Pages Functions で共有）
     {
@@ -512,6 +537,28 @@ export const cloudflare: PriceBookInput = {
       },
       meters: [
         {
+          id: 'build-minutes',
+          resource: 'build-minutes',
+          unit: 'minute',
+          allowancePool: 'free-build-minutes',
+          onExceed: 'upgrade-required',
+          rounding: 'not-stated',
+          premise:
+            'Workers Builds は Free で月 3,000 分まで。超えたときの扱い（止まる・待つ）は文書に記載なし',
+          interpretation: {
+            adopted:
+              '超えた分はビルドできず、Paid にしないと記事を出せない（上位のプランが必須とみなす）',
+            rejected: [
+              {
+                reading: '超えても待てばビルドされる',
+                reason: '文書に記載がなく、Free に超過の料金の行も無い',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['workersBuilds'],
+        },
+        {
           id: 'requests',
           resource: 'requests',
           unit: 'request',
@@ -613,6 +660,15 @@ export const cloudflare: PriceBookInput = {
         sourceIds: ['members', 'workersPricing'],
       },
       meters: [
+        {
+          id: 'build-minutes',
+          resource: 'build-minutes',
+          unit: 'minute',
+          allowancePool: 'paid-build-minutes',
+          rounding: 'not-stated',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.005 },
+          sourceIds: ['workersBuilds'],
+        },
         {
           id: 'requests',
           resource: 'requests',

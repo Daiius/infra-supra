@@ -426,3 +426,12 @@ SPA に部品のスロット「API の置き場」（`api`）を足した。既�
 - 構成の名前: ゲーム中（月の表・結果・プラン変更の文面）は、API を他の事業者に置くと実際の組で出す（例「Vercel Pro の静的 + Cloudflare Workers・D1（Vite の SPA）」「Cloudflare Paid の静的 + AWS Lambda・DynamoDB（Vite の SPA）」。`stackName` に部品を渡す）。始める画面の構成の一覧と乗り換え先（既定の部品に戻る）は構成の名前のまま。
 - Cloudflare Paid の構成で API を AWS に出すと、Workers Paid の基本料は数えない（Worker を使わないので契約しない前提）。構成の名前は Paid のまま。
 
+
+## 10. 3 つ目のフレームワーク: Astro（2026-11-02・D-68）
+
+仕様・出典・仮定・基準プレイは [06](./06-frameworks.md) §6。この文書の分岐（Next.js か SPA か）との関係だけ書く。
+
+- Astro は「記事は静的にビルド（ISR の代わりにビルドし直し）+ マイページは SSR（アダプター）+ JS はアイランドだけ」。SNS のカードは Next.js と同じく HTML に入る（`noSocialCards` は SPA だけ）。
+- 始める画面のフレームワーク欄（F-04・D-35）に 3 つ目として出る。§7 の `framework` の保存は id だけで、古い保存は今のまま読める（`astro` を許す id に足しただけ）。
+- 載せられない組（§2.2 の E-3）を初めて入れた: Astro × AWS（公式のアダプターが無い）は始める画面の一覧に出さず、乗り換えもできない（`stackSupports`）。
+- revalidateSec の意味はフレームワークごと: Next.js は ISR の間隔・SPA は API のキャッシュの期間（§8）・Astro はビルドの間隔（`revalidateSettingOf`・`hiddenSettings`）。

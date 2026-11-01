@@ -1,6 +1,10 @@
 // シナリオ: 記事コミュニティ（prd/07 §7・§10・D-20）。値はすべてゲーム上の仮定で、実在の値ではない。
 // 料金・制限は catalog のデータをそのまま使う（ここで料金を作らない）。前提の文も catalog のもの（premiseRefs で参照する）。
-import { ARTICLE_COMMUNITY_SPA, articleCommunity } from 'catalog';
+import {
+  ARTICLE_COMMUNITY_ASTRO,
+  ARTICLE_COMMUNITY_SPA,
+  articleCommunity,
+} from 'catalog';
 import type { Action, GameState } from '../index.ts';
 import type { EventDef, Scenario } from '../scenario.ts';
 import { ARTICLE_COMMUNITY_TEXT } from './article-community-text.ts';
@@ -456,8 +460,11 @@ export const ARTICLE_COMMUNITY: Scenario = {
   text: ARTICLE_COMMUNITY_TEXT,
   // フレームワーク（prd/10 F-04・F-05）。既定は Next.js。SPA の効き方の値はゲーム上の仮定
   frameworks: {
-    allowed: ['nextjs', 'vite-spa'],
+    allowed: ['nextjs', 'vite-spa', 'astro'],
     default: 'nextjs',
+    // Astro（D-68）: 記事は静的にビルドし、JS はアイランドの分だけ。記事は検索・SNS から初めて来る読者が多いので、
+    // 初回表示の軽さが効く（仮定: 速さの重さを 1 つ減らす）
+    astro: { shape: ARTICLE_COMMUNITY_ASTRO, firstLoadLight: true },
     spa: {
       shape: ARTICLE_COMMUNITY_SPA,
       // 記事ごとのカードが出ないと、話題の伸び（× 3 の 2 倍分と後に残る分）が半分（仮定）

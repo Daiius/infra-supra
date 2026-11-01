@@ -8,6 +8,7 @@ export const UNITS = [
   'operation',
   'ms',
   'second',
+  'minute', // ビルドの時間（Workers Builds・Vercel の build minutes。prd/06 §6）
   'hour',
   'byte',
   'gb',
@@ -71,6 +72,7 @@ export class UnitConversionError extends Error {
 const TO_HOURS: Partial<Record<Unit, number>> = {
   ms: 1 / MS_PER_HOUR,
   second: 1 / SECONDS_PER_HOUR,
+  minute: 1 / 60,
   hour: 1,
   'cpu-hour': 1,
 };

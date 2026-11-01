@@ -199,7 +199,7 @@ export function FrameworkField({
   return (
     <div className="space-y-2">
       <h3 className="font-bold">アプリを何で作りましたか？</h3>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {allowed.map((id) => (
           <label
             key={id}

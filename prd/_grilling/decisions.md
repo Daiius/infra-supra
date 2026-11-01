@@ -475,6 +475,16 @@
   無効化の費用が最も大きくて負けたときは、次のプレイへのヒント（費用）が「定額のプラン・時間の再検証・ワイルドカードやタグでまとめる」の方向を出す。
 - 未決: ワイルドカード・タグの無効化を部品にするか。
 
+### D-68 3 つ目のフレームワーク: Astro（確定・2026-11-02）
+
+- ユーザーの方針「見積対象を作者のスタックに寄せない。Vite・Next.js・vinext、後で Astro」による。推奨案で自律に決定。仕様・出典・仮定・基準プレイは prd/06 §6。
+- 形: 記事は静的にビルド（ISR の代わりにビルドし直し）・マイページはアダプターで SSR・JS はアイランドだけ。DeployTarget は Cloudflare（@astrojs/cloudflare・Workers）・Vercel（@astrojs/vercel）・VPS（@astrojs/node）が native、**AWS は unsupported**（公式のアダプターが無い。始める画面・乗り換えで選べない）。
+- ビルドの課金を公式で確かめた範囲で数える: Workers Builds（Free 3,000 分・Paid 6,000 分 + $0.005 / 分。Free の超過は記載なしで「上位のプランが必須」と解釈）、Vercel Pro（CPU minute $0.0035・Elastic の最小 4 vCPU と解釈。Hobby は込み）。VPS は同じホストでビルドし数えない。エンジンに資源 `build-minutes`・単位 `minute`・Workload の `build`・ノード `ci-build` を足した（prd/04 §2）。
+- 仮定: JS・CSS 0.3 倍、ビルドを起こす更新は内容の更新の 2%（30 万 PV で月 300 回）、1 回 1 分 + 1,000 ページあたり 0.5 分、初回表示で速さの重さを 1 つ減らす（記事コミュニティだけ）、オンデマンド = 更新のたびにビルドで即時反映の要件を満たす。設定「ビルドの間隔」は revalidateSec をこの意味で使う。
+- 結果（何もしない・シード 1〜20）: 目標の根拠（CF Paid × Next.js）は変わらない。記事コミュニティの Astro は CF Paid 20 / 20・所持金 $2,601（Next.js $2,152）・VPS 2GB 17 / 20（Next.js 10 / 20）。差のほぼすべてが初回表示の仮定で、外すと Next.js とほぼ同じ。ビルドの費用は 30 万 PV では小さい（Vercel Pro で月 約 $8）。受託は Next.js と同じ値。
+- 保存の形は変えない（framework の id に astro を足しただけ。古い保存は今のまま読める）。golden は変わらない。
+- 残した点: Vercel の isr で記事を描く形、Server Islands、Astro × AWS、VPS のビルドの CPU、Hobby の 1 日 100 デプロイ、ビルドの遅れを鮮度に足すこと、初回表示の仮定の大きさの見直し。
+
 ## 未決（grill で詰める）
 
 | # | 論点 | 関係する章 |
