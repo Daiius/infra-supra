@@ -76,7 +76,7 @@
 
 | # | 種類 | 出来事 | 効果（仮定） | データ | 当たりうる前提（catalog） |
 |---|---|---|---|---|---|
-| CS-1 | S | 込み分の 70% を超えた | 通知（記事コミュニティの S-1 と同じ） | ○ | Workers Paid のリクエスト・CPU・Vercel Pro の CDN Requests と FDT・Supabase Pro の egress |
+| CS-1 | S | 込み分の 70% を超えた（→ D-48 で「込み分・クレジットの 70% を超えた」） | 通知（記事コミュニティの S-1 と同じ） | ○ | Workers Paid のリクエスト・CPU・Vercel Pro の CDN Requests と FDT（→ D-48 で Pro の込み分は無くなり、$20 のクレジットの使用率）・Supabase Pro の egress |
 | CSC-1 | SC | **繁忙期**（月末の締め・年度末） | その月だけピークを強める（`peakHourFactor` ↑）+ 利用 × 1.5。収益は増えない（固定が主） | △（ピークの mods） | Supabase Micro の pooler の接続・VPS の CPU と共有回線・Workers Free の 1 日のリクエスト |
 | CP-1 | P | **帳票の出力**（PDF・CSV） | 受ける: API の CPU ↑・応答の大きさ ↑・機能 +・手間 | ○（`workload` の mods を足す: △） | Workers Free の CPU 10 ms・Workers Paid の CPU の込み分・Workers のメモリ 128 MB（facts）・Vercel の Active CPU・VPS の CPU |
 | CSC-2 | SC | 実際に予告されている改定（D-21） | 今の仕組みのまま | ○ | catalog の `scheduledChanges` |

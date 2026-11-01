@@ -1,7 +1,8 @@
 # 06. フレームワークとビルド出力
 
-> 状態: **設計中**。各フレームワーク・ホストの対応状況（どの機能がどのホストで動くか）は**未調査**で、
+> 状態: **設計中（最小の形は実装済み。下の ⚠）**。各フレームワーク・ホストの対応状況（どの機能がどのホストで動くか）は、
 > 料金データと同じく公式ドキュメントを出典にして catalog に入れる（[03](./03-pricing-schema.md) §1 と同じ規律）。
+> 今は Next.js・Vite の SPA・Astro × Cloudflare・Vercel・さくらの VPS・AWS（Amplify・S3 + CloudFront・OpenNext）・Netlify を、出典つきで `packages/catalog/src/frameworks` の DeployTarget の表に入れた（Astro × AWS は unsupported）。
 > ⚠ **一部実装済み**（Next.js と Vite の SPA の 2 つだけの最小の形。BuildOutput は Workload の routes で代用）→ [10](./10-framework-branch.md) §7・「D-34」（2026-11-01）
 > ⚠ **Astro を実装**（§6・D-68・2026-11-02）。BuildOutput の型は作らず、SPA と同じく「テンプレートの書き換え（`toAstro`）+ DeployTarget の表 + `composeStack` の分岐」で足せた（§3 の「データ追加だけで足せるか」の検証の答えは §6.6）
 

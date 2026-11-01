@@ -3,26 +3,28 @@
 ## 1. パッケージと依存の向き
 
 ```
-                 web（Vite + React。Phase 2〜）
+                 web（Vite + React）
                 /        |         \
-           game  ───▶ estimator ◀── catalog
-       （Phase 3〜）   （純ロジック）   （データ）
+           game  ───▶ catalog ───▶ estimator
+             └───────────────────────▲
+       （ゲーム）      （データ）     （純ロジック）
 ```
 
-| パッケージ | 役割 | 状態 |
+| パッケージ | 役割 | 状態（2026-11-02） |
 |---|---|---|
-| `packages/estimator` | Workload・Architecture・ComponentKind・資源シミュレーション・料金計算・容量評価と、それらの zod スキーマ。**環境非依存** | 空の雛形 |
-| `packages/catalog` | ServiceOffering と PriceBook（プロバイダー別・版付き）、アプリのテンプレート、構成スタック。架空データは `src/fictional/` に分ける | 空の雛形 |
-| `packages/game` | 経営シミュレーション（ターン・ユーザー成長・イベント・収益・評価）。シード付き乱数 | 最初の形（スパイクから移した。1 シナリオ） |
-| `packages/web` | 見積モード・ゲームモードの UI | ゲームモードの試作と、見積モードの最初の形（ルーターなし・タブで切り替え。[08](./08-roadmap.md)・D-73） |
+| `packages/estimator` | Workload・Architecture・ComponentKind・資源シミュレーション・料金計算・容量評価（前提）と、それらの zod スキーマ。**環境非依存** | 実装済み（P1-2〜P1-8。[08](./08-roadmap.md)） |
+| `packages/catalog` | ServiceOffering と PriceBook（プロバイダー別・版付き）、フレームワーク、アプリのテンプレート、構成スタックと部品（事業者をまたぐ部品を含む）、日本の消費税。架空データは `src/fictional/` に分ける（**gap**: 今はテストの中にある） | 実装済み（7 事業者。[README](./README.md)「スコープ」） |
+| `packages/game` | 経営シミュレーション（ターン・ユーザー成長・イベント・収益・評価）。シード付き乱数 | 実装済み（GD-1〜GD-5・2 シナリオ。[07](./07-game-design.md) §8） |
+| `packages/web` | 見積モード・ゲームモードの UI | ゲームモードと、見積モードの最初の形（ルーターなし・タブで切り替え。[08](./08-roadmap.md)・D-73〜D-76） |
 
 依存の規則:
 
 - **estimator は他のどのパッケージにも依存しない。** catalog のデータは引数で受け取る（注入）。
   テストでは架空の PriceBook を渡せる。
 - **catalog → estimator**（型とスキーマだけを使う）。catalog のテストは「全データが estimator のスキーマを通る」ことを確かめる。
-- **game → estimator**。game は料金を計算しない。estimator の Bill をそのまま使う（企画書 §11.1）。
-- **estimator・catalog は game を知らない。** 見積ツールを単独で切り出すときは web から game を外すだけで済む。
+- **game → catalog・estimator**。game は料金を計算しない。catalog の `composeStack` で構成を組み、estimator の Bill をそのまま使う（企画書 §11.1）。
+- **estimator・catalog は game を知らない。** 見積ツールを単独で切り出すときは web から game を外す。
+  ただし今の見積モードは、ゲームと数え方をそろえるため部品の規則と Workload の組み立てを game の `estimate-mode.ts` から使っている。切り出すには、それを catalog（か新しいパッケージ）へ移す必要がある（D-73）。
 
 ## 2. 環境非依存
 
@@ -49,10 +51,10 @@ estimator・catalog・game は `lib: ["esnext"]` / `types: []` でビルドし�
 | 層 | 選定 | 理由 |
 |---|---|---|
 | 言語・構成 | TypeScript の pnpm monorepo | 企画書 §7.1。seseraki と同じ型 |
-| テスト | vitest（+ 性質ベースのテストに fast-check） | 単調性・保存則などを網羅的に確かめる（[05](./05-test-strategy.md)） |
+| テスト | vitest（+ 性質ベースのテストに fast-check） | 単調性・保存則などを網羅的に確かめる（[05](./05-test-strategy.md)）。fast-check はまだ入れていない（gap） |
 | スキーマ | zod | 保存データ・料金データ・UI 入力の検証を 1 か所にまとめる |
-| フロント | React 19 + **Vite**（Next.js は使わない）+ TanStack Router + Tailwind v4 + daisyUI | MVP はサーバーが要らない（計算はブラウザ、保存はローカル）。静的配信だけで動く |
-| グラフ | 費用曲線は Recharts か visx（Phase 2 で決める）、構成図は React Flow（Phase 5） | 企画書 §7.1 |
+| フロント | React 19 + **Vite**（Next.js は使わない）+ TanStack Router + Tailwind v4 + daisyUI | MVP はサーバーが要らない（計算はブラウザ、保存はローカル）。静的配信だけで動く。**今はルーターを入れていない**（画面は 2 つでタブで切り替え。画面が増えたら入れる。D-73） |
+| グラフ | 費用曲線は Recharts か visx（Phase 2 で決める）、構成図は React Flow（Phase 5） | 企画書 §7.1。**今は自前の SVG**（`packages/web/src/charts.tsx` の `LineChart`・`LogCurveChart`。D-74）でライブラリは入れていない |
 
 Vite を選んだ判断は [_grilling/decisions.md](./_grilling/decisions.md) D-01。
 

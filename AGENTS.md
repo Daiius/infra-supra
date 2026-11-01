@@ -21,35 +21,36 @@
 | [prd/05-test-strategy.md](./prd/05-test-strategy.md) | テスト設計（架空料金の扱い・料金計算・性質ベースのテスト・golden） |
 | [prd/06-frameworks.md](./prd/06-frameworks.md) | 見積対象のフレームワーク（Vite・Next.js・vinext・Astro（§6））とビルド出力の中間表現・ホストへの写し方 |
 | [prd/07-game-design.md](./prd/07-game-design.md) | ゲームデザイン（試作への指摘から決めた満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 GD-1〜5 |
-| [prd/08-roadmap.md](./prd/08-roadmap.md) | フェーズと Phase 1 のタスク分解 |
+| [prd/08-roadmap.md](./prd/08-roadmap.md) | フェーズの状態（済み・残り）・見積モードの今の形・Phase 1 のタスク分解 |
 | [prd/09-scenario-contract.md](./prd/09-scenario-contract.md) | 2 本目のシナリオ: 受託先の業務アプリの運用（受託は設定だけ・運用費に集中。D-33） |
-| [prd/11-aws-and-cross-provider.md](./prd/11-aws-and-cross-provider.md) | 草案: AWS を事業者として足す案と、事業者をまたぐ構成（部品ごとに別の事業者）の案。未決 AX-01〜14 |
-| [prd/12-external-scenarios-and-ranking.md](./prd/12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod・ファイル / URL の読み込み）と、再生による検証のランキング（下書き・未決 ES-xx） |
+| [prd/10-framework-branch.md](./prd/10-framework-branch.md) | フレームワークの分岐（Vite の SPA か Next.js か）と API の置き場（確定 D-34。段 1〜3・API の応答のキャッシュ・Astro の API の置き場まで実装済み。D-37・D-65・D-67・D-69） |
+| [prd/11-aws-and-cross-provider.md](./prd/11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext）・事業者をまたぐ構成（画像だけ Cloudflare など）・CloudFront の定額・Netlify・Neon（論点 AX-01〜14 は D-50 で決定し、実装済み。D-51・D-52・D-61・D-63・D-66・D-71・D-77） |
+| [prd/12-external-scenarios-and-ranking.md](./prd/12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod・ファイル / URL の読み込み）と、再生による検証のランキング（**下書き・未実装・未決 ES-01〜16**） |
 
-> 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)
+> 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)（未決の一覧は末尾の「未決」の節）
 
 ## 技術スタック / 構成
 
 - フルスタック TypeScript の **pnpm monorepo**。テストは vitest。
-- **Front**（Phase 2〜）: React 19 + Vite + TanStack Router + TailwindCSS v4 + daisyUI。サーバーなし・ローカル保存（[prd/02](./prd/02-architecture.md) §4〜5）。
+- **Front**: React 19 + Vite + TailwindCSS v4 + daisyUI。サーバーなし・ローカル保存（[prd/02](./prd/02-architecture.md) §4〜5）。
+  ルーターはまだ入れていない（画面はゲーム・見積の 2 つで、ヘッダーのタブで切り替える。TanStack Router は画面が増えたら。D-73）。グラフは `packages/web/src/charts.tsx` の自前の SVG。
 
 ### パッケージ
 
 | パッケージ | 役割 |
 |---|---|
 | [`packages/estimator`](./packages/estimator) | 見積エンジン（workload / architecture / resource / pricing / performance）と zod スキーマ。**環境非依存**（`lib: esnext` / `types: []`）。他パッケージに依存しない |
-| [`packages/catalog`](./packages/catalog) | サービスカタログと料金データ（プロバイダー別・版付き）・テンプレート・構成スタック。estimator の型だけに依存 |
+| [`packages/catalog`](./packages/catalog) | 料金データ（`src/providers/`: Cloudflare・Vercel・Supabase・さくらの VPS・AWS・Netlify・Neon。出典つき・版付き）・フレームワーク（Next.js・Vite の SPA・Astro）・テンプレート・構成スタック（`src/stacks/`。事業者をまたぐ部品は `cross.ts`）・日本の消費税（`src/tax/`）。estimator の型だけに依存 |
+| [`packages/game`](./packages/game) | ゲームエンジン。純粋関数・シード付き乱数。ゲームのバランスの値と出来事はシナリオのデータ `src/scenarios/`（記事コミュニティ・受託の業務アプリ。ゲーム上の仮定。prd/07 §10・prd/09）。見積モードと数え方をそろえる口（`estimate-mode.ts`） |
+| [`packages/web`](./packages/web) | 画面（Vite + React + Tailwind v4 + daisyUI）。ゲームモード（始める画面・月の報告・推移・ヒント）と見積モード（`?mode=estimate`。明細・構成の比較・費用の曲線・席・税込の目安。`src/estimate/`。D-73〜D-76。今の形は [prd/08](./prd/08-roadmap.md)「見積モードの今の形」） |
 
-| [`packages/game`](./packages/game) | ゲームエンジン（最初の形。spikes/game-2026-10-31 から移した）。純粋関数・シード付き乱数。ゲームのバランスの値と出来事はシナリオのデータ `src/scenarios/`（ゲーム上の仮定。prd/07 §10） |
-| [`packages/web`](./packages/web) | 画面（Vite + React + Tailwind v4 + daisyUI）。ゲームモードの試作と見積モードの最初の形（`?mode=estimate`。D-73） |
-
-依存の向きは [prd/02](./prd/02-architecture.md) §1（web → game → estimator ← catalog）。
+依存の向きは [prd/02](./prd/02-architecture.md) §1（web → game → catalog → estimator。web は catalog・estimator も直接呼ぶ）。
 
 ## 守ること
 
 - 🔒 **出典を確認していない数値を、実在の料金・制限のように書かない。** 実在の料金は公式の料金表を一次情報にし、
-  出典 URL と取得日を付ける。テスト用の架空料金は `packages/catalog/src/fictional/` に置き、provider ID を `fictional-` で始める
-  （[prd/03](./prd/03-pricing-schema.md) §1・§10）。
+  出典 URL と取得日を付ける。テスト用の架空料金は provider ID を `fictional-` で始める（`status: 'fictional'`。スキーマが ID と status の一致を検査する）
+  （[prd/03](./prd/03-pricing-schema.md) §1・§10）。置き場は設計では `packages/catalog/src/fictional/` だが、今はテストの中（例: `packages/estimator/src/pricing/fixtures.test-helpers.ts`）にある（gap）。
 - 見積対象のフレームワーク・構成を特定のスタックに寄せない。フレームワーク固有の扱いは FrameworkProfile / DeployTarget のデータに閉じ込める（[prd/06](./prd/06-frameworks.md)）。
 - 金額・使用量は number で計算し、課金の切り上げは `ceilUnits` だけを使う（`Math.ceil` を直接使わない）。丸めは表示のときだけ（[prd/02](./prd/02-architecture.md) §3）。
 - estimator・catalog・game の計算は純粋関数にする（時刻・乱数・I/O に触れない。乱数はシードを引数で受ける）。
@@ -61,9 +62,11 @@ pnpm install
 pnpm typecheck    # 全パッケージ tsc --noEmit
 pnpm test         # 全パッケージ vitest run
 pnpm format       # prettier（*.md は対象外）
+pnpm format:check # prettier の検査だけ（書き換えない）
 pnpm dev          # web を 127.0.0.1:5173 で起動
 pnpm dev:remote   # web を .env.remote の設定で起動（Cloudflare Tunnel 越しの確認用）
-pnpm play         # ゲームのスパイクをターミナルで遊ぶ
+pnpm play         # ゲームのスパイク（spikes/game-2026-10-31。今の packages/game より前の形）をターミナルで遊ぶ
+pnpm hooks:install # clone 後に一度だけ（下の「git hooks」）
 ```
 
 ### リモート dev（Cloudflare Tunnel 越し）

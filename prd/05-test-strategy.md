@@ -5,6 +5,7 @@
 ## 1. 架空の料金データ（fictional）
 
 - テストに使う料金は `packages/catalog/src/fictional/` の **`fictional-` で始まる provider** だけ。
+  （**gap**: 今は `packages/estimator/src/pricing/fixtures.test-helpers.ts` と各テストの中に置いている。golden は今はゲームの基準プレイの側（`packages/game` のテスト）にある）
   数値は手計算しやすい**わざと丸い値**（単価 1・10・100、無料枠 1,000 など）にし、実在の料金と取り違えないようにする。
 - 実在の PriceBook を使うテストは「スキーマを通る」「既知の構成で計算が完走する」までにとどめ、
   **金額をテストの期待値に書かない**（料金改定のたびにテストが壊れる・実在の値を二重管理することになるため）。
