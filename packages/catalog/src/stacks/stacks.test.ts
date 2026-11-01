@@ -211,6 +211,7 @@ describe('部品の組み合わせ', () => {
     const slots = new Set<SlotId>(COMPONENTS.map((c) => c.slot));
     expect([...slots].sort()).toEqual(
       [
+        'api',
         'apiCache',
         'cdnPlan',
         'db',

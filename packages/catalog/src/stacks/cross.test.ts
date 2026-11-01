@@ -58,13 +58,17 @@ describe('許した組（CROSS_PAIRS）', () => {
       expect(p.sources.length).toBeGreaterThan(0);
       for (const s of p.sources) {
         expect(s.url).toMatch(/^https:\/\//);
-        expect(s.retrievedAt).toBe('2026-11-01');
+        expect(['2026-11-01', '2026-11-02']).toContain(s.retrievedAt);
       }
     }
   });
 
   it('他の事業者の部品の名前は事業者の名前で始まる', () => {
-    for (const c of CROSS_COMPONENTS) expect(c.label).toMatch(/^Cloudflare: /);
+    const NAMES = { cloudflare: 'Cloudflare', aws: 'AWS' } as const;
+    for (const c of CROSS_COMPONENTS)
+      expect(
+        c.label.startsWith(`${NAMES[c.platform as keyof typeof NAMES]}: `),
+      ).toBe(true);
   });
 });
 
@@ -227,5 +231,129 @@ describe('AWS + 画像だけ Cloudflare × CloudFront の定額のプラン（D-
       'cloudfront-flat-pro',
     );
     expect(a.routes.asset).toEqual(['cf']);
+  });
+});
+
+describe('SPA の API の置き場（D-65）', () => {
+  const spa = (stack: string, choices: Record<string, string>, standby = {}) =>
+    composeStack(stack, choices, { framework: 'vite-spa', standby });
+  const ids = (a: ReturnType<typeof spa>) => a.nodes.map((n) => n.id);
+
+  it('選べる組は表で許したものだけ（SPA だけ。VPS・Next.js にはスロットが無い）', () => {
+    const opts = (p: Platform, fw: 'nextjs' | 'vite-spa' = 'vite-spa') =>
+      componentsOf(p, 'api', fw).map((c) => `${c.platform}:${c.id}`);
+    expect(opts('vercel')).toEqual(['vercel:same', 'cloudflare:cf-workers']);
+    expect(opts('aws')).toEqual(['aws:same', 'cloudflare:cf-workers']);
+    expect(opts('cloudflare')).toEqual(['cloudflare:same', 'aws:aws-lambda']);
+    expect(opts('sakura')).toEqual([]);
+    for (const p of PLATFORMS) expect(opts(p, 'nextjs')).toEqual([]);
+  });
+
+  it('既定（同じ事業者）は今までの SPA の構成と同じ', () => {
+    for (const s of [
+      'cloudflare-vinext-paid',
+      'vercel-supabase-pro',
+      'aws-amplify',
+    ])
+      expect(spa(s, { api: 'same' })).toEqual(spa(s, {}));
+  });
+
+  it('Next.js では API の置き場の選択は効かない', () => {
+    expect(composeStack('vercel-supabase-pro', { api: 'cf-workers' })).toEqual(
+      composeStack('vercel-supabase-pro'),
+    );
+  });
+
+  it('Vercel + Workers の API + D1: Supabase が外れ、API は Worker → D1。Blob への投稿は Vercel の関数に残る', () => {
+    const a = spa('vercel-supabase-pro', { api: 'cf-workers' });
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
+    expect(ids(a)).not.toContain('db');
+    expect(a.routes.api).toEqual(['cf-worker', 'cf-d1']);
+    expect(a.routes['api-content']).toEqual(['cf-worker', 'cf-d1']);
+    expect(a.routes['image-write']).toEqual(['fn', 'blob']);
+    const worker = a.nodes.find((n) => n.id === 'cf-worker')!;
+    expect(worker.billing!.planId).toBe('workers-paid');
+    expect(worker.facts).toEqual([
+      'custom-domain-origin',
+      'cors-headers',
+      'd1-binding',
+    ]);
+  });
+
+  it('画像も Cloudflare なら投稿も Worker が R2 に書き、Vercel の関数は無くなる（OGP の前処理には残る）', () => {
+    const a = spa('vercel-supabase-pro', {
+      api: 'cf-workers',
+      images: 'cf-resize',
+    });
+    expect(a.routes['image-write']).toEqual(['cf-worker', 'cf-r2']);
+    expect(ids(a)).not.toContain('fn');
+    const ogp = spa('vercel-supabase-pro', {
+      api: 'cf-workers',
+      images: 'cf-resize',
+      ogp: 'prerender',
+    });
+    expect(ids(ogp)).toContain('fn');
+  });
+
+  it('Vercel Hobby の静的な配信は Hobby のまま（非商用の規約の対象）で、Worker は Workers Free', () => {
+    const a = spa('vercel-supabase-hobby', { api: 'cf-workers' });
+    expect(a.nodes.find((n) => n.id === 'cdn')!.billing!.planId).toBe('hobby');
+    expect(a.nodes.find((n) => n.id === 'cf-worker')!.billing!.planId).toBe(
+      'workers-free',
+    );
+  });
+
+  it('AWS（S3 + CloudFront）+ Workers の API: API Gateway・Lambda・DynamoDB が外れ、投稿は Worker が S3 に書く', () => {
+    const a = spa('aws-amplify', { api: 'cf-workers' });
+    expect(accountsOf(a)).toEqual(['aws', 'cloudflare']);
+    for (const id of ['apigw', 'lambda', 'dynamodb'])
+      expect(ids(a)).not.toContain(id);
+    expect(a.routes.asset).toEqual(['cf']);
+    expect(a.routes.api).toEqual(['cf-worker', 'cf-d1']);
+    expect(a.routes['image-write']).toEqual(['cf-worker', 's3']);
+    const r2 = spa('aws-amplify', { api: 'cf-workers', images: 'cf-images' });
+    expect(r2.routes['image-write']).toEqual(['cf-worker', 'cf-r2']);
+    expect(ids(r2)).not.toContain('aws-out');
+  });
+
+  it('Cloudflare + AWS の API: Worker と D1 が外れ、応答は API Gateway から外へ（転送を数える）', () => {
+    const a = spa('cloudflare-vinext-paid', { api: 'aws-lambda' });
+    expect(accountsOf(a)).toEqual(['cloudflare', 'aws']);
+    for (const id of ['worker', 'd1']) expect(ids(a)).not.toContain(id);
+    expect(a.routes.api).toEqual(['aws-out', 'apigw', 'lambda', 'dynamodb']);
+    expect(a.routes['image-write']).toEqual([
+      'apigw',
+      'lambda',
+      'aws-out',
+      'r2',
+    ]);
+    expect(a.routes.asset).toEqual(['assets']);
+    expect(a.nodes.find((n) => n.id === 'aws-out')!.facts).toEqual([
+      'api-gateway-out',
+      'lambda-out',
+    ]);
+    const ogp = spa('cloudflare-vinext-paid', {
+      api: 'aws-lambda',
+      ogp: 'prerender',
+    });
+    expect(ids(ogp)).toContain('worker');
+    expect(ogp.routes['document-static']).toEqual(['worker']);
+  });
+
+  it('移し替えの途中（standby）: 新しい置き場のノードを経路に載せずに足し、戻すときは土台の関数・DB を残す', () => {
+    const to = spa('vercel-supabase-pro', {}, { api: 'cf-workers' });
+    expect(ids(to)).toEqual(
+      expect.arrayContaining(['fn', 'db', 'cf-worker', 'cf-d1']),
+    );
+    expect(to.routes.api).toEqual(['cdn', 'fn', 'db']);
+    const back = spa(
+      'vercel-supabase-pro',
+      { api: 'cf-workers' },
+      { api: 'same' },
+    );
+    expect(ids(back)).toEqual(
+      expect.arrayContaining(['fn', 'db', 'cf-worker']),
+    );
+    expect(back.routes.api).toEqual(['cf-worker', 'cf-d1']);
   });
 });

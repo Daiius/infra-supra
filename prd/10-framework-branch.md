@@ -1,7 +1,7 @@
 # 10. フレームワークの分岐（Vite の SPA か Next.js か）と API の置き場
 
-> 状態: **確定（2026-11-01・D-34）・段 1 は実装済み（§7）・API の応答のキャッシュを部品として追加（§8・D-37）**。F-01〜F-14 はユーザーが**推奨どおり一括で**決めた（§5）。
-> 段 1 で入れたのは F-01・F-02・F-04・F-05・F-07（F-09 は記録だけ）。API の置き場（F-10〜F-14）・F-03・F-06・F-08 は**後の段**（§3.5・§5）。
+> 状態: **確定（2026-11-01・D-34）・段 1 は実装済み（§7）・API の応答のキャッシュを部品として追加（§8・D-37）・段 2（API の置き場）を実装（§9・D-65・2026-11-02）**。F-01〜F-14 はユーザーが**推奨どおり一括で**決めた（§5）。
+> 段 1 で入れたのは F-01・F-02・F-04・F-05・F-07（F-09 は記録だけ）。段 2 で F-10〜F-13 を入れた（§9）。F-14（Next.js でも API を別に置く）・F-03・F-06・F-08 は**後の段**（§3.5・§5・§9.4）。
 > 調査の根拠は [調査メモ](./research/2026-11-01-framework-branch.md)（公式の文書・2026-11-01 取得）。
 > ここに出てくる効き方の大きさ（倍率・手間・段階）は**ゲーム上の仮定**で、実在の値ではない。
 
@@ -182,7 +182,7 @@ GD-4 の `composeStack` / `COMPONENTS` の仕組みに、スロット `api`（�
 | 段 | 入れるもの | 理由 |
 |---|---|---|
 | 1 | 分岐（§2）。SPA の API は `same` だけ | SPA は API の置き場が必須なので、分岐と同時に「既定の置き場」は要る。別の事業者は入れなくても SPA は成り立つ |
-| 2 | `api` のスロット（決まった組だけ・遅延は計算しない） | 事業者をまたぐ形が D-31 の 1 例目で固まってから。分岐と同時だと、基準プレイの組み合わせが一度に増えすぎる |
+| 2 | `api` のスロット（決まった組だけ・遅延は計算しない）。**入れた（§9・D-65）**。SPA だけで、Next.js（F-14）は段 3 に回した | 事業者をまたぐ形が D-31 の 1 例目で固まってから。分岐と同時だと、基準プレイの組み合わせが一度に増えすぎる |
 | 3 | 遅延の計算（`ArchEdge.boundary`・rtt の仮定）・Next.js で API を別に置く選択 | 往復の遅延は D-20 の将来の範囲と一緒に |
 
 ## 4. ゲームへの入れ方
@@ -245,7 +245,7 @@ GD-4 の `composeStack` / `COMPONENTS` の仕組みに、スロット `api`（�
 |---|---|---|
 | B-1 | **SNS のクローラーが JS を実行しないことは公式に書かれていない**（Facebook・Slack の文書は記載なし。X の文書は取得できなかった） | F-05・F-07 の効き方はすべてゲーム上の仮定になる。仮定の印と文面（§4.3 の末尾）を決めずに作ると、事実のように見える |
 | B-2 | 素の Vite のアプリに Vercel Functions を足す方法（`/api` のディレクトリ）が、Vercel の Vite のページでは確認できない（Nitro を推奨） | Vercel の SPA の DeployTarget の `adapter` と出典が決まらない。データにする前に確かめる |
-| B-3 | Vercel の外部への rewrite の課金（FOT・CDN Requests）が記載なし | §3.1 の「静的は Vercel・API は別」の組の費用が出せない。F-11 の組はこれを避けて選ぶか、確かめてから |
+| B-3 | Vercel の外部への rewrite の課金（FOT・CDN Requests）が記載なし | **解消（D-65）**: rewrite を使わず、API を別のサブドメイン（Worker のカスタムドメイン）に置いてブラウザから CORS で呼ぶ形にした（F-13 の前提）。rewrite の課金は今も未確認 |
 | B-4 | 記事コミュニティの目標（$1,730）と基準プレイは Next.js の構成で決めた | SPA を選べるようにすると、シード 1〜50 での公平さを確かめ直す必要がある（D-20 V-8 の作法）。SPA が全シードで楽に届くなら、満足度の仮定（F-05）を見直す |
 | B-5 | SPA のデータの API の重さ（CPU・I/O）は仮定で、Cloudflare Free の 10 ms の境目を左右する（§1.3） | 判断ポイント（`estimate-key-point`）として境目を出さないと、「SPA なら Free で済む」が仮定の値で決まってしまう |
 | B-6 | vinext は experimental（06 §5）。Next.js の Cloudflare の列は vinext の仕様の変化を受ける | SPA との比較で Cloudflare の Next.js の列が古くなりうる。DeployTarget の版と取得日で追う |
@@ -360,3 +360,69 @@ Next.js の golden（`game.test.ts`・`contract.test.ts`）は変わらない。
 
 - 5 分では記事の閲覧が薄く（ヒット 1%）、費用はほとんど変わらない。6 時間でもヒット 42% で、Vercel Pro で 12 か月 $3 ほど。記事コミュニティの費用は画像と転送量が支配的（§1.3）なので、API のキャッシュの効きは小さいのが実際の形。
 - 値の調整はしていない（Cloudflare の SPA をクリアできなくするような調整はしない。実際の料金に反するため）。
+
+## 9. API の置き場（段 2・2026-11-02・D-65）
+
+SPA に部品のスロット「API の置き場」（`api`）を足した。既定は同じ事業者（段 1 の形）。他の事業者の部品は `stacks/cross.ts` の `CROSS_PAIRS`（D-52 の仕組み）で許した組だけ（F-11・AX-08）。
+**DB は API と同じ事業者に置く**（API と DB の間に事業者をまたぐ往復を作らない）。遅延は計算しない（F-12・AX-13）。D1 の REST での直結は出さない（AX-10）。
+
+### 9.1 入れた組と根拠（公式・2026-11-02 取得）
+
+| 静的（土台） | API と DB（部品） | 経路と課金 | 根拠 |
+|---|---|---|---|
+| Vercel（Hobby・Pro） | **Cloudflare: Workers + D1**（`cf-workers`） | シェル・JS・CSS・画像は今の Vercel の CDN。API（`api`・`api-content`）は Worker → D1（binding）。Supabase は外れる。Worker の課金は Pro なら Workers Paid・Hobby なら Workers Free（どちらを使うかは仮定）。投稿の画像は、Vercel Blob ならアップロードを Vercel の関数に残し（仮定）、R2（画像だけ Cloudflare）なら Worker が書く | [カスタムドメイン](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)（「A Worker running on a Custom Domain is treated as an origin」・自分のゾーンが要る）・[CORS の例](https://developers.cloudflare.com/workers/examples/cors-header-proxy/)・[D1 の Worker の API](https://developers.cloudflare.com/d1/worker-api/)（「execute SQL queries on your D1 database from a Worker using the Worker Binding API」） |
+| AWS（S3 + CloudFront） | **Cloudflare: Workers + D1**（`cf-workers`） | シェル・JS・CSS・画像は CloudFront に残る。API Gateway・Lambda・DynamoDB は外れる。投稿の画像は Worker が S3 に書く（S3 はインターネットからの受信に課金しない）。Workers Paid（仮定） | 上と同じ + [S3 の料金](https://aws.amazon.com/s3/pricing/)（課金の例外に「Data transferred in from the internet」） |
+| Cloudflare（Free・Paid） | **AWS: API Gateway（HTTP API）+ Lambda + DynamoDB**（`aws-lambda`） | シェル・JS・CSS は Workers の静的アセット（Worker を起動しないので無料）。Worker と D1 は外れる（OGP の前処理・リアルタイムを使うときは Worker だけ残る）。API の応答は CloudFront を通らず API Gateway から外へ送るので、**東京 → インターネットの転送**（月 100 GB 無料の後 $0.114/GB）で数える。投稿の画像は Lambda が R2 に書く（同じ転送）。画像の変換は Worker の binding でなくゾーンの URL で頼む | [API Gateway の料金](https://aws.amazon.com/api-gateway/pricing/)（HTTP API は「Pay only for the API calls you receive and the amount of data transferred out」・「charged at the EC2 data transfer rate」）・[Lambda の料金](https://aws.amazon.com/lambda/pricing/)・[EC2 の料金](https://aws.amazon.com/ec2/pricing/on-demand/)（月 100 GB の無料） |
+
+- **入れなかった組**: VPS（API）+ 静的は Cloudflare。API だけを自前運用にすると、§3.4 の「偶発的な障害を API にだけ効かせる（可用性は普通）」と「自前運用の維持の手間を部品で足す」が要り、今の障害・維持のルールは構成（`STACKS[].selfHosted`）で決まっていて部品では変わらない。ルールを広げる段で入れる。
+  Vercel の外部への rewrite で同じドメインに見せる形も入れていない（課金が未確認・B-3）。
+- 事業者の間の転送: 送り出す側の egress で数える（prd/11 §2.3）。Cloudflare（Worker・R2）から外への転送は課金されない。Vercel の関数から外への通信は未確認なので数えない（この組では Vercel の関数は Blob のアップロードにしか残らない）。
+
+### 9.2 ゲーム
+
+- **CORS・Cookie（F-13）**: 別のサブドメイン（api）の API をブラウザから呼ぶ前提を部品の説明（ⓘ）と前提の文（`cors-headers`・`custom-domain-origin`）で出す。一度きりの手間は D-52 のアカウントの設定（1）に含める。
+- **依存**（`componentConflict`。始める画面とゲーム中で共通）: API を他の事業者に置くと、構成の DB のスロットは出さない（DB は API の事業者の部品）。API の応答のキャッシュ（この事業者の CDN・Worker の前のキャッシュ）とは同時に選べない。Cloudflare で画像を D1 に置いているときは選べない（読み出す Worker が無くなる）。頼る側を先に戻す（D-37 と同じ向き）。
+- **ゲーム中の移し替え**: API と一緒に DB のデータを移すので、DB の差し替えと同じく進行中の状態を持つ（手間 6 × 1 か月・期間中は新旧両方の費用・ゲーム上の仮定）。アカウントが増えるなら一度きりの 1 と毎月の維持 0.5（D-52）。始める画面では手間はかからない。
+- 説明文（`COMPONENT_FLAVOR`）は利点だけを書き、損（CORS・アカウント・転送・移行）は ⓘ と手間に出す（prd/11 §3.2 の方針）。
+- Vercel Hobby は静的の配信が Hobby のプランに残るので、API を Workers に出しても非商用の規約（`personal-non-commercial`）に当たる。
+
+### 9.3 基準プレイ（SPA・何もしない・シード 1〜20・始める画面で部品を選ぶ）
+
+12 か月の費用は事業者別の中央値（請求の明細を事業者で足した）。所持金は中央値。
+
+| シナリオ | 構成 | API の置き場（画像） | 達成 | 12 か月の費用（事業者別） | 所持金 |
+|---|---|---|---|---|---|
+| 記事 | CF Paid | 同じ（既定・目標の根拠） | **20 / 20** | $175（CF $175） | $1,870 |
+| 記事 | CF Paid | AWS（既定の Images） | 20 / 20 | $145（CF $115・AWS $30） | $1,900 |
+| 記事 | CF Free | 同じ | 0 / 20（3 か月目に停止） | $1 | $143 |
+| 記事 | CF Free | AWS（既定の Images） | 0 / 20（Images Free の月 5,000 の変換で停止） | $3 | $140 |
+| 記事 | CF Free | AWS（投稿のときに縮める） | **20 / 20** | $32（CF $2・AWS $30） | $2,013 |
+| 記事 | Vercel Pro | 同じ | 0 / 20 | $1,274（Vercel $974・Supabase $300） | $774 |
+| 記事 | Vercel Pro | Workers + D1（既定の画像） | 0 / 20 | $948（Vercel $888・CF $60） | $1,106 |
+| 記事 | Vercel Pro | Workers + D1（Cloudflare: R2 に縮める） | 0 / 20 | $442（Vercel $380・CF $62） | $1,613 |
+| 記事 | Vercel Pro | Workers + D1（Cloudflare: R2 + Images） | 0 / 20 | $555（Vercel $380・CF $175） | $1,501 |
+| 記事 | Vercel Hobby | Workers + D1 | 0 / 20（2 か月目に規約で停止） | — | $118 |
+| 記事 | AWS | 同じ | 19 / 20 | $179（AWS $179） | $1,860 |
+| 記事 | AWS | Workers + D1 | 19 / 20 | $199（AWS $139・CF $60） | $1,841 |
+| 記事 | AWS | Workers + D1（Cloudflare: R2 に縮める） | 20 / 20 | $62（CF $62） | $1,982 |
+| 受託 | CF Paid | 同じ（既定） | **20 / 20** | $68 | $2,100 |
+| 受託 | CF Free | 同じ | 0 / 20 | $0 | $237 |
+| 受託 | CF Free・Paid | AWS | **20 / 20** | $64（AWS $56・CF $8） | $2,104 |
+| 受託 | Vercel Pro | 同じ | 0 / 20 | $542（Vercel $242・Supabase $300） | $1,624 |
+| 受託 | Vercel Pro | Workers + D1 | **20 / 20** | $300（Vercel $240・CF $60） | $1,868 |
+| 受託 | Vercel Hobby | Workers + D1 | 0 / 20（規約） | — | $179 |
+| 受託 | AWS | 同じ / Workers + D1 | 20 / 20 | $50 / $65 | $2,002 / $1,988 |
+
+- **CF Paid・既定（目標の根拠）は変わらない**（既存の golden・基準プレイもすべて同じ。新しい部品の既定は同じ事業者）。
+- **「Vercel の静的 + Workers の API + D1」は記事コミュニティでは届かない**。Supabase Pro の固定費（$300）は消えるが、Vercel Pro の席（$240）と HTML・JS の転送（Fast Data Transfer）・CDN Requests が残る。画像も R2 に出して $1,613 で、目標 $1,730 に約 $120 足りない。Hobby は非商用の規約があるので静的だけでも使えず、**Vercel の席の固定費は避けられない**。
+  **受託では届く**（20 / 20）: 受託は画像と閲覧が少なく、Vercel の費用の大半が席と Supabase Pro の固定費で、Supabase が消える分が効く。
+- Cloudflare の静的 + AWS の API は、Workers の料金（Paid $5 / 月・Free の CPU 10 ms と 1 日 10 万リクエスト）を払わずに済むので、**CF Free の構成でも届く道筋**になる（受託・記事の画像を縮めるとき）。記事で Images を使うと Images Free の上限で止まる（Free のプランのまま）。
+- 満足度は替えても同じ（速さ・可用性に事業者をまたぐ往復を数えない・AX-13）。
+
+### 9.4 残した点
+
+- F-14（Next.js でも API を別に置く）: 入れていない。Next.js の Route Handler を外へ出すと HTML の生成（SSR・ISR）と API で DB が別になりうるため、DB の置き場の規則（API と同じ事業者）と一緒に決め直す。
+- VPS（API）の組（§9.1）・Vercel の外部への rewrite（B-3）・往復の遅延（F-12・段 3）。
+- 構成の名前: ゲーム中（月の表・結果・プラン変更の文面）は、API を他の事業者に置くと実際の組で出す（例「Vercel Pro の静的 + Cloudflare Workers・D1（Vite の SPA）」「Cloudflare Paid の静的 + AWS Lambda・DynamoDB（Vite の SPA）」。`stackName` に部品を渡す）。始める画面の構成の一覧と乗り換え先（既定の部品に戻る）は構成の名前のまま。
+- Cloudflare Paid の構成で API を AWS に出すと、Workers Paid の基本料は数えない（Worker を使わないので契約しない前提）。構成の名前は Paid のまま。
+

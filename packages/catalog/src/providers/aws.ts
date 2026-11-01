@@ -874,6 +874,13 @@ export const aws: PriceBookInput = {
             'Lambda の関数がリージョンの外（他の事業者など）とやり取りするデータは、EC2 のデータ転送の料金で課金される（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
           sourceIds: ['lambdaPricing', 'dataTransferPrices'],
         },
+        {
+          // SPA の API を AWS に置き、静的は他の事業者から配る形（D-65。2026-11-02 に原文で確認）
+          id: 'api-gateway-out',
+          premise:
+            'API Gateway の HTTP API は、受けた呼び出しと送り出したデータの量で課金される（「Pay only for the API calls you receive and the amount of data transferred out」）。外へのデータ転送は EC2 のデータ転送の料金（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
+          sourceIds: ['apiGatewayPricing', 'dataTransferPrices'],
+        },
       ],
       meters: [
         {

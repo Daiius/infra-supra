@@ -453,6 +453,16 @@
 - 見送った案: $1,620（VPS・前段の CDN と ⑤ も全部届き、道筋が 5 構成になる）。原本のまま配っても全シードで届き、D-47 の「重いページは PV の伸びも下げる」が目標の上で効かなくなるため。Vercel Pro は画像だけ Cloudflare にしても最大 $1,463 で、固定費（席と Supabase Pro）から正解が絞られる側に残る。
 - golden: 足した基準プレイの行が増えただけで、既存の行は 1 セントも変わらない。テストに決め方の条件（記事コミュニティ）と受託の AWS 2 構成の全シード合格を足した。
 
+### D-65 SPA の API の置き場（prd/10 段 2）（確定・2026-11-02）
+
+- ユーザーの希望（最初のセッション）「API サーバーの置き場についても選びたい」。prd/10 の F-10〜F-13（D-34 で決定済み）を、D-52 の事業者をまたぐ仕組み（`CROSS_PAIRS`・アカウントの手間）に載せて推奨案で入れた。
+- SPA の部品のスロット「API の置き場」（`api`）。既定は同じ事業者。許した組（公式で確かめた・2026-11-02）: Vercel・AWS（S3 + CloudFront）の静的 + **Cloudflare Workers + D1（binding）**、Cloudflare の静的 + **AWS API Gateway（HTTP API）+ Lambda + DynamoDB**。DB は API と同じ事業者に置く。遅延は計算しない（AX-13）。D1 の REST 直結は出さない（AX-10）。
+- 課金: API Gateway の応答は東京 → インターネットの転送（HTTP API は「data transferred out」で課金・EC2 の料金）。Worker から外・S3 への受信は課金なし。Vercel の外部への rewrite は使わずサブドメイン + CORS（B-3 を避けた）。Workers のプランは Vercel Hobby なら Free・それ以外は Paid（仮定）。
+- ゲーム: 移し替えは DB と同じデータの移行（6 × 1 か月・新旧両方の費用・仮定）+ アカウントの手間（D-52）。API を他の事業者に置くと構成の DB のスロットを出さず、API の応答のキャッシュ・D1 の画像とは同時に選べない（`componentConflict`）。
+- 入れなかった: VPS（API）+ 静的は Cloudflare（自前運用の維持・障害を部品で効かせるルールが無い）、F-14（Next.js で API を別に置く）。
+- 基準プレイ（何もしない・シード 1〜20）: **記事コミュニティの Vercel Pro + Workers + D1 は 0 / 20**（Supabase Pro は消えるが Vercel の席と HTML・JS の転送が残り、画像も R2 に出して所持金 $1,613。Hobby は静的だけでも非商用の規約で止まる）。**受託の Vercel Pro + Workers + D1 は 0 → 20 / 20**。Cloudflare の静的 + AWS の API は CF Free でも届く道筋になる（受託 20 / 20・記事は画像を縮めると 20 / 20）。CF Paid × 既定は不変（golden も不変）。prd/10 §9。
+- 追記（レビュー OCL-5A7916E6・2026-11-02）: API を他の事業者へ移し替え終えたら構成の DB の選択を既定に戻し、API を他の事業者に置いている間は構成の DB の選択（KV を DB の代わりに）で鮮度を下げない。
+
 ## 未決（grill で詰める）
 
 | # | 論点 | 関係する章 |
