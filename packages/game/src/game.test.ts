@@ -68,6 +68,7 @@ describe('game', () => {
     // D-58: Next.js の画像の部品（Vercel）は既定で WebP を配る（JPEG より小さく、Fast Data Transfer が減って Vercel の構成の所持金が増える。CF・VPS の値は変わらない）
     // D-62: Cloudflare Images の閲覧のときの変換も WebP で配る。CF Paid・既定の所持金・結果は変わらない（R2 の転送は無料で、変換の数も形式で増えない）。
     //       KV を DB の代わりにする基準プレイは、ページが軽くなり速さが「悪い」月が減って所持金が増える（シード 42・3。31 は変わらない）
+    // D-64: 構成に合った対策の基準プレイを 4 本足した（既存の行は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -85,6 +86,10 @@ describe('game', () => {
       'cf-paid-kvdb': ['1947.35', 'won', 12],
       'cf-paid-chat': ['2154.01', 'won', 12],
       'vps-sla': ['1731.82', 'won', 12],
+      'vps-cdn': ['1807.73', 'won', 12],
+      'vercel-cf-images': ['1414.19', 'goal', 12],
+      'aws-amplify-cdn': ['1953.36', 'won', 12],
+      'aws-opennext-images': ['2248.45', 'won', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2151.55', 'won', 12],
@@ -96,6 +101,10 @@ describe('game', () => {
       'cf-paid-kvdb': ['1964.47', 'won', 12],
       'cf-paid-chat': ['2181.80', 'won', 12],
       'vps-sla': ['1801.47', 'won', 12],
+      'vps-cdn': ['1741.52', 'won', 12],
+      'vercel-cf-images': ['1325.48', 'goal', 12],
+      'aws-amplify-cdn': ['1935.45', 'won', 12],
+      'aws-opennext-images': ['2259.29', 'won', 12],
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2163.40', 'won', 12],
@@ -107,6 +116,10 @@ describe('game', () => {
       'cf-paid-kvdb': ['1878.88', 'won', 12],
       'cf-paid-chat': ['2188.13', 'won', 12],
       'vps-sla': ['1665.79', 'goal', 12],
+      'vps-cdn': ['1713.54', 'goal', 12],
+      'vercel-cf-images': ['1354.43', 'goal', 12],
+      'aws-amplify-cdn': ['1910.10', 'won', 12],
+      'aws-opennext-images': ['2268.23', 'won', 12],
     });
   });
 
@@ -270,6 +283,10 @@ describe('結果の比較の表', () => {
       'CF Paid・KV を DB 代わり',
       'CF Paid・チャットを受ける',
       'VPS・SLA に応える',
+      'VPS・前段の CDN',
+      'Vercel Pro・画像だけ Cloudflare',
+      'Amplify・前段の CloudFront + 定額',
+      'OpenNext・画像の最適化',
     ]);
     expect(rows[5]!.description).toBe(BASELINES[4]!.label);
   });

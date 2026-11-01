@@ -11,6 +11,8 @@ const CF_PAID = 1;
 const VERCEL_PRO = 3;
 const VPS = 4;
 const VPS_4GB = 5;
+const AWS_AMPLIFY = 6;
+const AWS_OPENNEXT = 7;
 
 /** 前の月の終わりに出ていた出来事（基準プレイが状態を見て行動を決めるため）。 */
 const sawEvent = (s: GameState, id: string, phase?: string) =>
@@ -444,9 +446,10 @@ export const ARTICLE_COMMUNITY: Scenario = {
   // 実際に予告されている改定の出来事（D-21）。1〜2 か月目は出さない（V-12）
   revisions: { from: 3, to: 10 },
   /**
-   * 所持金の目標は基準プレイをシード 1〜50 で回して決めた（prd/07 §10.8）: CF Paid・何もしない（最小 $2,164）と
-   * Vercel Pro → CF Paid（最小 $1,746）は全シードで届き、Vercel Pro・何もしない（最大 $1,716）は届かない。
-   * VPS・画像の提案を受ける（中央値 $1,874）は、偶発的な障害が重ならなければ届く。
+   * 所持金の目標は基準プレイをシード 1〜50 で回して決めた（prd/07 §10.8・D-64）: CF Paid・何もしない（最小 $2,110）・
+   * Amplify・前段の CloudFront + 定額（最小 $1,834）・OpenNext・画像の最適化（最小 $2,145）は全シードで届き、
+   * Vercel Pro・何もしない（最大 $982）と CF Paid・原本のまま配る（最大 $1,702）は届かない。範囲（$1,702〜$1,834）に入るので動かさない。
+   * VPS・前段の CDN（37 / 50）と Vercel Pro → CF Paid（15 / 50）は、届きやすいが確実ではない道筋。
    */
   goal: { cash: 1730, satisfaction: 0.75, maxOutageMonths: 2 },
   startCash: 60,
@@ -556,6 +559,43 @@ export const ARTICLE_COMMUNITY: Scenario = {
           accept: eventId === 'p-sla',
         })),
       ],
+    },
+    // 構成に合った対策（D-64）。目標の根拠に使う。1 か月目の終わりに部品を替え、提案は断る
+    {
+      id: 'vps-cdn',
+      label:
+        'さくらの VPS 2GB・1 か月目の終わりに前段の CDN（静的と画像だけ）を付ける',
+      short: 'VPS・前段の CDN',
+      stackIndex: VPS,
+      actions: [[{ type: 'component', slot: 'frontCdn', option: 'static' }]],
+    },
+    {
+      id: 'vercel-cf-images',
+      label:
+        'Vercel Pro・1 か月目の終わりに画像を Cloudflare に出す（投稿のときに一律で縮めて R2 に置く）',
+      short: 'Vercel Pro・画像だけ Cloudflare',
+      stackIndex: VERCEL_PRO,
+      actions: [[{ type: 'component', slot: 'images', option: 'cf-resize' }]],
+    },
+    {
+      id: 'aws-amplify-cdn',
+      label:
+        'AWS Amplify・1 か月目の終わりに前段の CloudFront（静的と画像だけ）を付け、CDN の料金を定額 Pro にする',
+      short: 'Amplify・前段の CloudFront + 定額',
+      stackIndex: AWS_AMPLIFY,
+      actions: [
+        [
+          { type: 'component', slot: 'frontCdn', option: 'static' },
+          { type: 'component', slot: 'cdnPlan', option: 'flat-pro' },
+        ],
+      ],
+    },
+    {
+      id: 'aws-opennext-images',
+      label: 'AWS OpenNext・1 か月目の終わりに画像を OpenNext の最適化にする',
+      short: 'OpenNext・画像の最適化',
+      stackIndex: AWS_OPENNEXT,
+      actions: [[{ type: 'component', slot: 'images', option: 'default' }]],
     },
   ],
 };
