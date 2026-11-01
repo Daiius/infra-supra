@@ -1,5 +1,5 @@
 // サービスカタログと料金データ（プロバイダー別・版付き）・構成・テンプレート。スキーマと計算は estimator 側にあり、
-// ここはデータだけを持つ（prd/03-pricing-schema.md）。架空の料金はここには置かない（estimator のテスト用の架空データを使う）。
+// ここはデータだけを持つ（prd/03-pricing-schema.md）。架空の料金は src/fictional/ に分け、ここからは export しない（`catalog/fictional`）。
 import { parsePriceBook, type PriceBook, type PriceBookInput } from 'estimator';
 import { aws } from './providers/aws.ts';
 import { cloudflare } from './providers/cloudflare.ts';

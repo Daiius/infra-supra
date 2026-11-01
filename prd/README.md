@@ -33,7 +33,7 @@
 
 ## スコープ
 
-> 今の状態（2026-11-02・D-77 まで）。フェーズごとの済み・残りは [08](./08-roadmap.md)。
+> 今の状態（2026-11-02・D-78 まで）。フェーズごとの済み・残りは [08](./08-roadmap.md)。
 
 - **実装済み**:
   - 見積エンジン（estimator）: 数値の基盤・料金スキーマと料金計算・Workload・構成・資源シミュレーション・前提（使用率と止まる / 遅くなる / 課金が増える）の判定・`estimate`（P1-2〜P1-8）。
@@ -75,7 +75,7 @@
 | [11-aws-and-cross-provider.md](./11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext・Aurora 系・CloudFront の定額）・事業者をまたぐ構成・Netlify・Neon。論点 AX-01〜14 は D-50 で決定・実装済み |
 | [12-external-scenarios-and-ranking.md](./12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod）と再生による検証のランキング。**下書き・未実装・未決 ES-01〜16** |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |
-| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-77）と、末尾に未決の論点の一覧 |
+| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-78）と、末尾に未決の論点の一覧 |
 
 ## 用語
 

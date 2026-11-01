@@ -430,7 +430,8 @@ export function priceUsage(input: {
       // 使い切ると止まるクレジット（D-71）: 超えた分は請求されない（止まる）ので、従量はすべてクレジットで打ち消す
       const block = c.onExhausted === 'block';
       const applied = block ? eligible : Math.min(c.amount, eligible);
-      if (block && eligible > c.amount)
+      const exhausted = overage(eligible, c.amount); // 足し算の誤差では使い切りにしない
+      if (block && exhausted > 0)
         breaches.push({
           kind: 'credit-exhausted',
           accountId: sub.accountId,
@@ -441,7 +442,7 @@ export function priceUsage(input: {
             planId: plan.id,
           },
           behavior: 'block',
-          excess: eligible - c.amount,
+          excess: exhausted,
           ...(c.premise ? { premise: c.premise } : {}),
         });
       if (applied <= 0) continue;

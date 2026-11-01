@@ -636,6 +636,16 @@
 - 基準プレイ（何もしない・シード 1〜20）: 記事 × Vercel Pro × Next.js は月 $123.6 → $118.0（0/20 のまま）。記事 × Netlify Pro × Next.js × Neon + 画像だけ Cloudflare で 7/20。受託の SPA は Vercel Pro・Netlify Pro とも 0/20 → 7/20、Netlify Personal × SPA × Neon は 20/20（Supabase Free は止まっていた）。CF Paid × Next.js（目標の根拠）を含む既存の golden は不変。シナリオの `baselines` には足していない。
 - 未取得: 負荷と CU の関係・instant restore の履歴の量・日本の消費税・Vercel の Marketplace 経由の請求・Netlify Database。
 
+### D-78 架空の料金データを catalog に置き、料金計算に性質ベースのテストを足す（確定・2026-11-02）
+
+- 背景: AGENTS.md・prd/03 §1・prd/05 §1 は架空の料金の置き場を `packages/catalog/src/fictional/` としていたが、フォルダが無く、架空データはテストの中にあった（PR #44 で gap と注記）。実在の料金データに頼らない、料金計算の仕組みのテストの土台を作る。
+- 決定:
+  - `packages/catalog/src/fictional/` に架空の PriceBook を 3 つ（`fictional-edge`・`fictional-yen-host`・`fictional-db`）。仕組みを一通り使う形と値は prd/05 §1。出典は `example.invalid`（RFC 2606 の予約名）で、備考に「架空」と書く。catalog の本体の index からは export せず、サブパス `catalog/fictional` で読む（本番の `loadPriceBooks` に入らない）。
+  - estimator の単体テストは依存の向き（estimator は catalog を読まない）のため、従来の `fixtures.test-helpers.ts` を残し、性質ベースのテストは生成器で架空の PriceBook を作る（prd/05 §2b の PP-01〜15）。
+  - fast-check は入れない。決まったシードの mulberry32（game の random.ts と同じ式を estimator のテストに写した）で十分で、失敗はシードの番号で再現できる。
+- 見つかった不具合（直した）: 同じプールを使う使用量を足した誤差（0.1 + 0.2 > 0.3）で、ちょうど使い切ったのに超過と判定し、`block` のメーターが止まる breach を出していた。使い切ると止まるクレジットも同じ。`overage` が、小数の量では量の相対 1e-12（`SUM_TOLERANCE`。足し算の誤差の幅）以下の超過を 0 にし、両方が整数なら差をそのまま返す（大きな整数の枠を 1 だけ超えた超過を消さない。OCL-CD13AA33。最初は込み分の相対 1e-9 にしていて、D1 の 250 億行の枠では 25 行までの超過が消えていた）。クレジットの使い切りの判定も `overage` を通す。ゲームの基準プレイ・golden は不変。
+- 残した点: 架空の 3 構成の golden（prd/05 §5）・資源シミュレーションの性質（§3）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧。本文は消していないので、詳細は参照先を読む。
@@ -672,7 +682,7 @@
 | D-68 | Vercel の isr で記事を描く形・Server Islands・Astro × AWS・VPS のビルドの CPU・Hobby の 1 日 100 デプロイ・ビルドの遅れを鮮度に足すこと・初回表示の仮定の大きさの見直し |
 | D-71・D-77 | Netlify・Neon の構成をシナリオの `baselines` に足していない |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
-| 架空の料金の置き場 | 設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap） |
+| ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 
 ### 見送った案（記録だけ。蒸し返すときの参照）
 

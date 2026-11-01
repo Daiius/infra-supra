@@ -50,6 +50,14 @@ describe('overage・sum・nearlyEqual', () => {
   it('込み分を引いた残りは負にならない', () => {
     expect(overage(5, 10)).toBe(0);
     expect(overage(15, 10)).toBe(5);
+    // 足し算の誤差だけの超過は 0（D-78）。意味のある端数は残す
+    expect(overage(0.1 + 0.2, 0.3)).toBe(0);
+    expect(overage(0.31, 0.3)).toBeCloseTo(0.01);
+    // 大きな整数の枠を 1 だけ超えた超過は消さない（OCL-CD13AA33。D1 の 250 億行の枠など）
+    expect(overage(25_000_000_001, 25_000_000_000)).toBe(1);
+    expect(overage(1e15 + 1, 1e15)).toBe(1);
+    // 大きな小数の枠でも、意味のある端数（0.5）は残す
+    expect(overage(25_000_000_000.5, 25_000_000_000)).toBe(0.5);
   });
 
   it('730 時間の積み上げは表示の桁で一致する', () => {

@@ -46,10 +46,26 @@ export function ceilUnits(value: number, granularity: number): number {
   return Math.ceil(q);
 }
 
-/** `max(0, used - included)`。無料枠・込み分を引いた残り。 */
+/**
+ * `max(0, used - included)`。無料枠・込み分を引いた残り。
+ * 小数の量では、残りが足し算の誤差の大きさ（量の SUM_TOLERANCE 倍以下）なら 0 にする。
+ * 使用量を足し合わせた誤差（0.1 + 0.2 > 0.3）で「超えた」と判定し、止まる挙動の breach を出さないため（D-78）。
+ * 両方が整数なら差は正確なので許容しない（250 億行の枠を 1 行超えたら 1 行の超過）。
+ */
 export function overage(used: number, included: number): number {
-  return Math.max(0, used - included);
+  const rest = used - included;
+  if (rest <= 0) return 0;
+  if (Number.isSafeInteger(used) && Number.isSafeInteger(included)) return rest;
+  if (rest <= SUM_TOLERANCE * Math.max(Math.abs(used), Math.abs(included)))
+    return 0;
+  return rest;
 }
+
+/**
+ * overage が足し算の誤差とみなす相対の幅。倍精度の 1 回の足し算の誤差（2^-53 ≈ 1.1e-16）を数千回ぶん積んでも収まり、
+ * 課金の単位として意味のある端数よりずっと小さい（1 兆の量で 1 未満）。
+ */
+export const SUM_TOLERANCE = 1e-12;
 
 export function sum(values: readonly number[]): number {
   let total = 0;
