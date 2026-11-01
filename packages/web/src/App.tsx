@@ -16,6 +16,7 @@ import {
   componentSlots,
   pageWeightOf,
   settingInactiveReason,
+  settingNote,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
@@ -47,6 +48,9 @@ import {
   SCENARIOS,
   selectTrends,
   setupProblem,
+  setupRevalidateOptions,
+  DEFAULT_REVALIDATE_SEC,
+  settingFlavor,
   SETTINGS,
   STACKS,
   STAGE_LABEL,
@@ -72,7 +76,11 @@ import {
   SCENARIO_LIST,
 } from './scenario-briefing.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
-import { SetupComponents, type SetupChoices } from './setup-components.tsx';
+import {
+  SetupComponents,
+  SetupRevalidate,
+  type SetupChoices,
+} from './setup-components.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -209,6 +217,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     setParts(validSetupChoices(sc, st, fw, parts));
   };
   const problem = setupProblem(scenario, stack, framework, parts);
+  // ISR の再検証（D-49。Next.js のときだけ出る。既定は 5 分）
+  const [revalidateSec, setRevalidateSec] = useState(DEFAULT_REVALIDATE_SEC);
   return (
     <>
       <ScenarioPicker
@@ -269,6 +279,12 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               setParts(validSetupChoices(scenario, stack, framework, v))
             }
           />
+          <SetupRevalidate
+            scenario={scenario}
+            framework={framework}
+            value={revalidateSec}
+            onChange={setRevalidateSec}
+          />
           {problem && (
             <p className="text-right text-sm" role="status">
               {problem}
@@ -309,6 +325,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     seed,
                     startDate,
                     components: parts,
+                    ...(setupRevalidateOptions(scenario, framework).length
+                      ? { revalidateSec }
+                      : {}),
                   }),
                 );
                 scrollTop();
@@ -1148,10 +1167,23 @@ function Actions({
                       info={<Info>{def.note}</Info>}
                     />
                   </span>
-                  <Meta items={[`手間 ${def.effort}`, '来月から']} />
+                  <Meta
+                    items={[
+                      // 時間 → オンデマンドだけ実装の手間がかかる（D-49）
+                      key === 'isr'
+                        ? `手間 ${def.effort}（オンデマンドへは ${EFFORT.onDemandSwitch}）`
+                        : `手間 ${def.effort}`,
+                      '来月から',
+                    ]}
+                  />
                   {settingInactiveReason(draft, key) && (
                     <span className="block text-xs opacity-70">
                       今は効かない: {settingInactiveReason(draft, key)}
+                    </span>
+                  )}
+                  {settingNote(draft, key) && (
+                    <span className="block text-xs opacity-70">
+                      {settingNote(draft, key)}
                     </span>
                   )}
                 </span>
@@ -1190,6 +1222,11 @@ function Actions({
                     );
                   })}
                 </select>
+                {settingFlavor(key, chosen) && (
+                  <span className="mt-1 block text-xs opacity-70">
+                    {settingFlavor(key, chosen)}
+                  </span>
+                )}
               </label>
             );
           })}

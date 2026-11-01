@@ -30,6 +30,8 @@ export type SaveData = {
    * 始める画面で選んだ部品（D-45）。部品を選べるようになる前の保存には無く、そのときは今の既定の部品で読む（版は上げない）。
    */
   components?: Choices;
+  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。無い保存は今の既定（5 分）で読む。 */
+  revalidateSec?: number;
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
 };
@@ -53,6 +55,21 @@ export function withTurn(save: SaveData, actions: readonly Action[]): SaveData {
   return { ...save, turns: [...save.turns, [...actions]] };
 }
 
+/**
+ * 古い保存の行動を今の形に直す（版は上げない）。設定「画像の圧縮」（compress: 150 / 100 / 70 KB）は「画像の形式」（format）に
+ * 置き換えた（D-58）ので、近い大きさの形式に読み替える: 150 → JPEG・100 → WebP（105）・70 → AVIF（84）。
+ */
+function migrateAction(a: Action): Action {
+  const old = a as { type: string; key?: string; value?: number };
+  if (old.type !== 'set' || old.key !== 'compress') return a;
+  const v = old.value ?? 150;
+  return {
+    type: 'set',
+    key: 'format',
+    value: v >= 150 ? 150 : v >= 100 ? 105 : 84,
+  };
+}
+
 const isObject = (x: unknown): x is Record<string, unknown> =>
   typeof x === 'object' && x !== null && !Array.isArray(x);
 
@@ -65,6 +82,12 @@ export function parseSave(raw: unknown): SaveData | null {
   const { scenarioId, stackIndex, seed, startDate, turns } = raw;
   const framework = raw.framework ?? 'nextjs';
   const components = raw.components;
+  const revalidateSec = raw.revalidateSec;
+  if (
+    revalidateSec !== undefined &&
+    !(typeof revalidateSec === 'number' && Number.isFinite(revalidateSec))
+  )
+    return null;
   if (
     components !== undefined &&
     !(
@@ -98,7 +121,8 @@ export function parseSave(raw: unknown): SaveData | null {
     seed,
     startDate,
     ...(components ? { components: components as Choices } : {}),
-    turns: turns as Action[][],
+    ...(revalidateSec !== undefined ? { revalidateSec } : {}),
+    turns: (turns as Action[][]).map((t) => t.map(migrateAction)),
   };
 }
 
@@ -117,6 +141,7 @@ export function replaySave(save: SaveData): GameState {
       save.startDate,
       save.framework,
       save.components,
+      save.revalidateSec,
     ),
   );
   for (const actions of save.turns) {

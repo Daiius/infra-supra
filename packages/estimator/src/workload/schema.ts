@@ -28,6 +28,16 @@ export const RouteGroupSchema = z.object({
   /** コンテンツの在庫: このルートのページ数（ISR の再生成の見積に使う）。 */
   pages: Pos,
   revalidateSeconds: Pos.optional(),
+  /**
+   * isr のみ: オンデマンドの再検証（内容を更新したときに再検証する）。与えると revalidateSeconds の代わりに、
+   * 再生成の回数をこの月の内容の更新の回数から出す（prd/04 §2）。
+   */
+  onDemandUpdatesPerMonth: NonNeg.optional(),
+  /**
+   * isr・オンデマンドのみ: 最大寿命（保険の時間の再検証・秒）。再検証の呼び出しの取りこぼしに備えて、時間の再検証を併せて持つ。
+   * 与えると再生成の回数に時間の式の分を足す（prd/04 §2・D-56）。
+   */
+  onDemandMaxAgeSeconds: Pos.optional(),
   processing: ProcessingSchema,
   /** ISR のページをキャッシュから返すときの CPU（ホストによっては関数・Worker を通る）。 */
   cachedServeCpuMs: NonNeg.default(0),
@@ -113,11 +123,27 @@ export const WorkloadInputSchema = z
       });
     }
     w.routes.forEach((r, i) => {
-      if (r.rendering === 'isr' && r.revalidateSeconds === undefined) {
+      if (
+        r.rendering === 'isr' &&
+        r.revalidateSeconds === undefined &&
+        r.onDemandUpdatesPerMonth === undefined
+      ) {
         ctx.addIssue({
           code: 'custom',
           path: ['routes', i, 'revalidateSeconds'],
-          message: 'ISR のルートには revalidateSeconds が必要',
+          message:
+            'ISR のルートには revalidateSeconds か onDemandUpdatesPerMonth が必要',
+        });
+      }
+      if (
+        r.revalidateSeconds !== undefined &&
+        r.onDemandUpdatesPerMonth !== undefined
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['routes', i, 'onDemandUpdatesPerMonth'],
+          message:
+            '再検証は時間（revalidateSeconds）かオンデマンド（onDemandUpdatesPerMonth）のどちらか',
         });
       }
       if (r.rendering !== 'spa' && r.cacheSeconds !== undefined) {

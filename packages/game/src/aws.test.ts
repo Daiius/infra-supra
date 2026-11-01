@@ -76,6 +76,19 @@ describe('AWS の構成', () => {
       true,
     );
     expect(meetsRequirement(AWS, 'uptime-sla')).toBe(false);
+    // ISR をキャッシュしなければ、前段の CDN の「HTML も」は即時反映を妨げない（OCL-490F1874）
+    expect(
+      meetsRequirement(AWS, 'on-demand-isr', {
+        isrCache: 'none',
+        frontCdn: 'html',
+      }),
+    ).toBe(true);
+    expect(
+      meetsRequirement(AWS, 'on-demand-isr', {
+        isrCache: 'default',
+        frontCdn: 'html',
+      }),
+    ).toBe(false);
   });
 
   it('何もしない方針で 12 か月を終える。SPA は Lambda の常時無料のプールに当たる（または近づく）', () => {

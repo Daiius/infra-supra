@@ -19,7 +19,7 @@ export type StockRule = {
   /** DB の増え方（PV 100 万あたり・月）。 */
   dbGBPerMillionPV: number;
   /**
-   * 画像 1 枚の原本の保存量。圧縮なし（150 KB）のときの値で、圧縮の度合いに比例して減る。
+   * 画像 1 枚の原本の保存量。原本はそのまま置く（画像の形式は閲覧・投稿のときに変える。D-58 で圧縮の比を掛けるのをやめた）。
    * サイズ違いは含まない（投稿のときに作って保存する構成だけ、estimator が別に数える。OCL-F3098083）。
    */
   gbPerImage: number;
@@ -96,7 +96,11 @@ export type Effect =
        * 同じ提案の feature の加点は受けた瞬間でなく、この作業の月に按分して足す。
        */
       featureWork?: boolean;
+      /** 再検証がすでにオンデマンド（Next.js）なら要らない作業（オンデマンドへの切り替えの実装。D-49）。 */
+      unlessOnDemand?: boolean;
     }
+  /** ISR の再検証をオンデマンドにする（Next.js だけ。D-49）。 */
+  | { type: 'on-demand-revalidate' }
   | { type: 'feature'; points: number }
   /** 成長率に足す（翌月から months か月）。 */
   | { type: 'growth'; add: number; months: number }
@@ -224,7 +228,7 @@ export type Scenario = {
   /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ＝stock.gbPerImage と同じ。ゲーム上の仮定・D-24・D-47）。 */
   unoptimizedImageKB: number;
   /**
-   * 画像を投稿のときに一律で縮めて置く部品の、1 枚の大きさ（圧縮なしのとき。保存も配信もこの大きさ。
+   * 画像を投稿のときに一律で縮めて置く部品の、1 枚の大きさ（JPEG のとき。保存も配信もこの大きさで、画像の形式の比で小さくなる。
    * 長い辺 1,600〜2,000px 程度の JPEG・WebP を想定したゲーム上の仮定・D-47）。
    */
   resizedImageKB: number;
@@ -265,7 +269,7 @@ export type Scenario = {
   text?: ScenarioText;
   /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
   hidden?: {
-    settings?: ('compress' | 'variants' | 'isr' | 'apiCacheTtl')[];
+    settings?: ('format' | 'variants' | 'isr' | 'apiCacheTtl')[];
     slots?: SlotId[];
     blockBots?: boolean;
   };

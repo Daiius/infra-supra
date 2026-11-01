@@ -91,6 +91,9 @@ export const GAME = {
 } as const;
 
 export type Settings = {
+  /**
+   * 画像 1 枚（サイズ違い 1 種）の大きさ（KB）。画像の形式で決まる（JPEG 150・WebP 105・AVIF 84。同じ見た目の画質での比較。D-58）。
+   */
   imageKB: number;
   variants: number;
   revalidateSec: number;
@@ -98,17 +101,65 @@ export type Settings = {
   ssrOptimizations: number;
 };
 
+/** ISR の再検証の設定の「オンデマンド」（revalidateSec の値。時間の間隔はすべて正。D-49）。 */
+export const ON_DEMAND_REVALIDATE = 0;
+
+/** 再検証がオンデマンドか（Next.js の ISR の設定。SPA では revalidateSec は API のキャッシュの期間で、0 にならない）。 */
+export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
+  return settings.revalidateSec === ON_DEMAND_REVALIDATE;
+}
+
+/**
+ * オンデマンドの最大寿命の説明（設定の ⓘ に出す。D-56）。Next.js の文書（ISR のガイド・2026-10-15 更新）で確かめたのは、
+ * タグで再検証するデータに revalidate: 3600 を併せて付けた例（unstable_cache）があることまで。
+ */
+export const ON_DEMAND_MAX_AGE_NOTE =
+  '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多い（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがある）。このゲームでは 1 日とみなし、その分の再生成も数える';
+
+/**
+ * 画像の形式ごとの 1 枚の大きさ（KB。同じ見た目の画質。D-58）。JPEG はテンプレートの 150 KB。
+ * WebP: 同等の SSIM の JPEG より 25〜34% 小さい（https://developers.google.com/speed/webp/docs/webp_study ・2025-08-07 更新・
+ * 2026-11-01 取得）の中ほどの 30% とする。AVIF: WebP より約 20% 小さい（https://nextjs.org/docs/app/api-reference/components/image
+ * の formats・2026-09-28 更新・2026-11-01 取得）。範囲の取り方はゲーム上の仮定。
+ */
+export const IMAGE_FORMAT_KB = { jpeg: 150, webp: 105, avif: 84 } as const;
+
+/** 画像の形式（設定の値から）。 */
+export function imageFormatOf(imageKB: number): 'jpeg' | 'webp' | 'avif' {
+  return imageKB <= IMAGE_FORMAT_KB.avif
+    ? 'avif'
+    : imageKB <= IMAGE_FORMAT_KB.webp
+      ? 'webp'
+      : 'jpeg';
+}
+
+/**
+ * Next.js の画像の部品（next/image）で閲覧のときに変換する構成か（Vercel の画像の最適化・VPS の next start）。
+ * next/image の formats の既定は WebP で、ブラウザの Accept を見て形式を選ぶ（JPEG は選べない。D-58）。
+ */
+export function usesNextImage(
+  platform: Platform,
+  framework: FrameworkId,
+  images: string | undefined,
+): boolean {
+  return (
+    framework === 'nextjs' &&
+    platform !== 'cloudflare' &&
+    (images ?? 'default') === 'default'
+  );
+}
+
 /** 戻せる設定（prd/07 §9.5）。値はゲーム上の仮定。 */
 export const SETTINGS = {
-  compress: {
-    label: '画像の圧縮',
+  format: {
+    label: '画像の形式',
     field: 'imageKB',
-    effort: EFFORT.setting.compress,
-    note: '転送量と速さに効く。画質（満足度）が下がる',
+    effort: EFFORT.setting.format,
+    note: '同じ見た目の画質のまま、画像を小さくする形式（転送量・保存量・速さに効き、画質は下がらない）。WebP は同等の SSIM の JPEG より 25〜34% 小さい（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいが、変換に約 50% 長くかかる（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存する。閲覧のときに変換するサービスはブラウザに合わせて形式を選ぶ（Cloudflare Images の変換の数は形式で増えない・Vercel は形式ごとにキャッシュする）',
     options: [
-      { value: 150, label: 'なし（150 KB）' },
-      { value: 100, label: '中（100 KB）' },
-      { value: 70, label: '強（70 KB）' },
+      { value: IMAGE_FORMAT_KB.jpeg, label: 'JPEG（そのまま）' },
+      { value: IMAGE_FORMAT_KB.webp, label: 'WebP' },
+      { value: IMAGE_FORMAT_KB.avif, label: 'AVIF' },
     ],
   },
   variants: {
@@ -123,11 +174,17 @@ export const SETTINGS = {
     ],
   },
   isr: {
-    label: 'ISR の再検証の間隔',
+    label: 'ISR の再検証',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: '再生成の回数に効く。延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる',
+    note:
+      '再生成の回数に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事の更新のときに再検証する（再生成はおもに更新の回数。ISR のキャッシュの置き場所によっては再検証が届かない。時間からの切り替えは実装の手間がかかる）。' +
+      ON_DEMAND_MAX_AGE_NOTE,
     options: [
+      {
+        value: ON_DEMAND_REVALIDATE,
+        label: 'オンデマンド（記事の更新のとき）',
+      },
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
       { value: 3600, label: '1 時間' },
@@ -562,6 +619,26 @@ export function spikePeakFactor(pv: number, spikes: readonly Spike[]): number {
   return Math.max(1, (steady + peakDay) / pv);
 }
 
+/**
+ * 書き込みのうち、ISR のページの中身を変える割合（記事の投稿・編集・ページに出るコメント。いいね・既読などは変えない）。
+ * ゲーム上の仮定（D-49・prd/04 §2）。
+ */
+export const ON_DEMAND_PAGE_UPDATE_SHARE = 0.5;
+
+/**
+ * オンデマンドの再検証に併せて持つとみなす最大寿命（保険の時間の再検証・秒）。再検証の呼び出しの取りこぼし
+ * （webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証を併せて設定することが多い（1 時間〜1 日など）。
+ * 選択肢にはせず、長い側の 1 日とみなす（ゲーム上の仮定。D-56）。
+ */
+export const ON_DEMAND_MAX_AGE_SEC = 86_400;
+
+/** オンデマンドの再検証の、月の内容の更新の回数（API の書き込み × ページを変える割合）。 */
+function onDemandUpdates(pv: number, w: WorkloadInput): number {
+  return (
+    pv * w.perPage.apiCalls * w.api.writesPerCall * ON_DEMAND_PAGE_UPDATE_SHARE
+  );
+}
+
 function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   const w = sc.template(Math.round(p.pv));
   const ssr = p.mods.ssrShare;
@@ -578,9 +655,14 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? { pages: p.stock.articlePages }
       : {}),
   }));
+  const nextImage = usesNextImage(
+    p.platform,
+    p.framework,
+    { ...DEFAULT_CHOICES[p.platform], ...p.components }.images,
+  );
   w.images = {
     ...w.images,
-    sizeKB: p.settings.imageKB,
+    sizeKB: deliveredImageKB(sc, p.settings, undefined, nextImage),
     variants: p.settings.variants,
     uploadsPerMau: w.images.uploadsPerMau * (p.mods.uploadsFactor ?? 1),
     ...(p.stock
@@ -597,6 +679,19 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.api = { ...w.api, cpuMs: p.mods.apiCpuMs };
   if (p.mods.apiResponseKB !== undefined)
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
+  // オンデマンドの再検証（D-49）: 再生成の回数は、時間でなく内容の更新の回数から出す
+  if (isOnDemand(p.settings)) {
+    const updates = onDemandUpdates(p.pv, w);
+    w.routes = w.routes.map((r) => {
+      if (r.rendering !== 'isr') return r;
+      const { revalidateSeconds: _, ...rest } = r;
+      return {
+        ...rest,
+        onDemandUpdatesPerMonth: updates,
+        onDemandMaxAgeSeconds: ON_DEMAND_MAX_AGE_SEC,
+      };
+    });
+  }
   const peak = (p.peakFactor ?? 1) * spikePeakFactor(p.pv, p.spikes ?? []);
   if (peak !== 1)
     w.traffic = {
@@ -612,10 +707,39 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? toSpa(w, shape, cache ? { cacheContent: true } : {})
       : w;
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
-  return applyComponentsToWorkload(app, p.platform, p.components, {
+  const out = applyComponentsToWorkload(app, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
     resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
   });
+  return withImageFormat(out, p);
+}
+
+/**
+ * 画像の形式の損の側（D-58）。変換の件数（サイズ違いの数）で表す。値の倍率は出典の文から取ったゲーム上の近似。
+ * - Vercel の next/image で AVIF: AVIF と WebP を形式ごとにキャッシュする（Next.js の文書）→ 変換を 2 倍に数える
+ *   （ほぼすべてのブラウザが AVIF を受けるが、WebP の版も一度は作られると読む）。
+ * - VPS のホストで変換して AVIF: 変換に約 50% 長くかかる（Next.js の文書）→ 変換の件数を 1.5 倍（CPU の重さとして）。
+ * - 投稿のときにサイズ違いを作る（R2）で WebP・AVIF: JPEG のフォールバックも作って置く（MDN）→ 変換と保存を 2 倍
+ *   （フォールバックの大きさは同じとみなす近似）。
+ * - Cloudflare Images（閲覧のときに変換）は形式で変換の数が増えない（料金の文書: format は一意の判定から除く）。
+ */
+function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
+  const format = imageFormatOf(p.settings.imageKB);
+  if (format === 'jpeg') return w;
+  const images = { ...DEFAULT_CHOICES[p.platform], ...p.components }.images;
+  const factor =
+    images === 'r2-variants'
+      ? 2
+      : format === 'avif' && usesNextImage(p.platform, p.framework, images)
+        ? p.platform === 'vercel'
+          ? 2
+          : 1.5
+        : format === 'avif' && p.platform === 'sakura' && images === 'default'
+          ? 1.5
+          : 1;
+  return factor === 1
+    ? w
+    : { ...w, images: { ...w.images, variants: w.images.variants * factor } };
 }
 
 /** テンプレートの値から在庫の初期値を作る。 */
@@ -729,6 +853,11 @@ function factByRef(ref: string) {
 }
 
 /** 即時反映を妨げている部品（無ければ undefined）。理由は catalog の事実の文（D-32）。 */
+/** 前段の CDN が ISR のページ（HTML）を実際にキャッシュするか（HTML もキャッシュ × ISR のキャッシュが有効）。 */
+function htmlCachedAtFront(c: Choices): boolean {
+  return c.frontCdn === 'html' && c.isrCache !== 'none';
+}
+
 function onDemandBlocker(
   stackIndex: number,
   components: Choices = {},
@@ -739,6 +868,8 @@ function onDemandBlocker(
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
+    // ISR をキャッシュしない（毎回 SSR）なら、前段の CDN に HTML のキャッシュは載らない（OCL-490F1874）
+    if (slot === 'frontCdn' && !htmlCachedAtFront(c)) continue;
     const opt = componentsOf(platform, slot).find((o) => o.id === c[slot]);
     if (opt?.onDemandIsr && !opt.onDemandIsr.ok)
       return {
@@ -1122,8 +1253,19 @@ export function nextSsrCpuMs(state: GameState): number {
   );
 }
 
+/** 今の状態で要る効果（再検証がすでにオンデマンドなら、切り替えの作業を除く。D-49）。 */
+function effectsFor(
+  state: Pick<GameState, 'framework' | 'settings'>,
+  effects: readonly Effect[],
+): Effect[] {
+  const already = state.framework !== 'vite-spa' && isOnDemand(state.settings);
+  return effects.filter(
+    (e) => !(e.type === 'interrupt' && e.unlessOnDemand && already),
+  );
+}
+
 const acceptEffort = (def: EventDef, state: GameState) =>
-  (def.accept?.effects ?? []).reduce(
+  effectsFor(state, def.accept?.effects ?? []).reduce(
     (a, e) =>
       a +
       (e.type === 'interrupt'
@@ -1198,23 +1340,51 @@ export function settingInactiveReason(
   state: GameState,
   key: SettingKey,
 ): string | undefined {
-  if (key !== 'variants') return undefined;
   const platform = STACKS[state.stackIndex]!.provider;
   const images = imagesOf(state);
+  const raw = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  // 原本をそのまま配るので、形式は変わらない（D-58）
+  if (key === 'format')
+    return images === 'none'
+      ? `画像の部品が「${componentLabel(platform, 'images', raw)}」なので原本の形式のまま配る`
+      : undefined;
+  if (key !== 'variants') return undefined;
   return images === 'none' || images === 'resize'
-    ? `画像の部品が「${componentLabel(platform, 'images', { ...DEFAULT_CHOICES[platform], ...state.components }.images)}」なのでサイズ違いは作らない（1 種）`
+    ? `画像の部品が「${componentLabel(platform, 'images', raw)}」なのでサイズ違いは作らない（1 種）`
     : undefined;
 }
 
-/** 1 枚あたり配る画像の大きさ（KB）。画像の部品と圧縮の設定から（D-47）。 */
+/**
+ * 設定の今の効き方の注記（効かないわけではないが、選んだ値どおりにならないとき）。Next.js の画像の部品は JPEG を選んでも
+ * WebP で配る（formats の既定。D-58）。
+ */
+export function settingNote(
+  state: GameState,
+  key: SettingKey,
+): string | undefined {
+  if (key !== 'format') return undefined;
+  const platform = STACKS[state.stackIndex]!.provider;
+  const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  return usesNextImage(platform, state.framework, images)
+    ? 'Next.js の画像の部品は、ブラウザに合わせて既定で WebP を配る（JPEG を選んでも WebP）'
+    : undefined;
+}
+
+/** 1 枚あたり配る画像の大きさ（KB）。画像の部品と画像の形式の設定から（D-47・D-58）。 */
 export function deliveredImageKB(
   sc: Scenario,
   settings: Settings,
   images: string | undefined,
+  /** Next.js の画像の部品で変換する（JPEG を選んでも WebP で配る。usesNextImage）。 */
+  nextImage = false,
 ): number {
   if (images === 'none') return sc.unoptimizedImageKB;
-  if (images === 'resize') return sc.resizedImageKB * (settings.imageKB / 150);
-  return settings.imageKB;
+  const kb = nextImage
+    ? Math.min(settings.imageKB, IMAGE_FORMAT_KB.webp)
+    : settings.imageKB;
+  if (images === 'resize')
+    return sc.resizedImageKB * (kb / IMAGE_FORMAT_KB.jpeg);
+  return kb;
 }
 
 /**
@@ -1226,10 +1396,11 @@ export function pageWeightKB(
   settings: Settings,
   mods: WorkloadMods,
   images: string | undefined,
+  nextImage = false,
 ): number {
   const w = sc.template(1);
   const html = w.routes[0]!.processing.responseKB;
-  const perImage = deliveredImageKB(sc, settings, images);
+  const perImage = deliveredImageKB(sc, settings, images, nextImage);
   return (
     html +
     w.perPage.assets * w.assets.sizeKB +
@@ -1250,7 +1421,13 @@ export function pageWeightOf(state: GameState, images?: string): string {
   const opt =
     images !== undefined ? imagesBehavior(platform, images) : imagesOf(state);
   return pageWeightLabel(
-    pageWeightKB(scenarioOf(state), state.settings, state.mods, opt),
+    pageWeightKB(
+      scenarioOf(state),
+      state.settings,
+      state.mods,
+      opt,
+      usesNextImage(platform, state.framework, opt),
+    ),
   );
 }
 
@@ -1363,6 +1540,9 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         return ng('same', '今と同じ（または選択済み）');
       const inactive = settingInactiveReason(state, action.key);
       if (inactive) return ng('unavailable', inactive);
+      // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の手間がかかる（D-49）
+      if (action.key === 'isr' && action.value === ON_DEMAND_REVALIDATE)
+        return ok(EFFORT.onDemandSwitch);
       return ok(def.effort);
     }
     case 'optimize':
@@ -1628,6 +1808,49 @@ export function validSetupChoices(
   return out;
 }
 
+/** ISR の再検証の既定（5 分）。 */
+export const DEFAULT_REVALIDATE_SEC = 300;
+
+/**
+ * 始める画面で選べる ISR の再検証（D-49）。ISR のある構成（Next.js）で、シナリオが隠していないときだけ。
+ * 各選択肢に短い説明（フレーバー）を添える。
+ */
+export function setupRevalidateOptions(
+  scenario: Scenario,
+  framework: FrameworkId,
+): { value: number; label: string; flavor: string }[] {
+  if (hiddenSettings({ scenario, framework }).includes('isr')) return [];
+  return SETTINGS.isr.options.map((o) => ({
+    ...o,
+    flavor: settingFlavor('isr', o.value) ?? '',
+  }));
+}
+
+/**
+ * 設定の選択肢の短い説明（部品の説明 COMPONENT_FLAVOR と同じ方針: 事実だが、それだけで選ぶと外れうる文。数値は書かない。D-49）。
+ * 「設定:値」で引く。
+ */
+export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
+  [`format:${IMAGE_FORMAT_KB.jpeg}`]:
+    'どのブラウザでも表示でき、作るのも速い。仕組みがいちばん単純',
+  [`format:${IMAGE_FORMAT_KB.webp}`]:
+    '見た目の画質を保ったまま小さくなり、今の主なブラウザで表示できる',
+  [`format:${IMAGE_FORMAT_KB.avif}`]:
+    'いちばん小さくなる新しい形式。画質を保ったまま転送量を大きく減らせる',
+  'isr:0': '記事を更新したときだけ作り直すので、無駄な再生成がなく、いつも最新',
+  'isr:60': '少し待てば更新が見える。設定を書くだけで、追加の実装は要らない',
+  'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔',
+  'isr:3600': '間隔が長いほど、同じページを作り直すまでの間があく',
+  'isr:21600': '更新はゆっくり見えるが、同じページを作り直すのは一日に数回まで',
+};
+
+export function settingFlavor(
+  key: SettingKey,
+  value: number,
+): string | undefined {
+  return SETTING_FLAVOR[`${key}:${value}`];
+}
+
 /** 始められない理由（まだ選んでいないスロット）。選び終えていれば null。 */
 export function setupProblem(
   scenario: Scenario,
@@ -1745,6 +1968,8 @@ export function newGame(
   framework?: FrameworkId,
   /** 始める画面で選んだ部品（D-45）。選べないものは捨て、省略したスロットは既定の部品。 */
   components?: Choices,
+  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（5 分）。 */
+  revalidateSec?: number,
 ): GameState {
   const fw = frameworksOf(scenario);
   const app =
@@ -1777,7 +2002,13 @@ export function newGame(
     settings: {
       imageKB: 150,
       variants: 3,
-      revalidateSec: 300,
+      revalidateSec:
+        revalidateSec !== undefined &&
+        setupRevalidateOptions(scenario, app).some(
+          (o) => o.value === revalidateSec,
+        )
+          ? revalidateSec
+          : DEFAULT_REVALIDATE_SEC,
       ssrOptimizations: 0,
     },
     cash: scenario.startCash,
@@ -1848,7 +2079,7 @@ export function describeEffect(e: Effect): string {
       return `開発の手間 +${e.add} / 月`;
     case 'interrupt':
       if (e.featureWork)
-        return `機能の追加の作業 ${e.points} × ${e.months} か月（翌月から。その月の機能開発に数える）`;
+        return `機能の追加の作業 ${e.points} × ${e.months} か月（翌月から。その月の機能開発に数える${e.unlessOnDemand ? '。再検証がすでにオンデマンドなら不要' : ''}）`;
       return `対応の手間 ${e.points} × ${e.months} か月（翌月から）`;
     case 'feature':
       return `機能開発 +${e.points}`;
@@ -1856,6 +2087,8 @@ export function describeEffect(e: Effect): string {
       return `成長 +${Math.round(e.add * 100)} ポイント × ${e.months} か月`;
     case 'component':
       return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel('cloudflare', e.slot, e.option)}）`;
+    case 'on-demand-revalidate':
+      return 'ISR の再検証をオンデマンドにする（Next.js）';
     case 'requirement':
       return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がる）`;
     case 'contract':
@@ -1868,10 +2101,11 @@ export function describeEffect(e: Effect): string {
 /** 効果を状態に当てる（traffic はその月の計算で扱うのでここでは何もしない）。 */
 function applyEffects(
   state: GameState,
-  effects: Effect[],
+  allEffects: Effect[],
   eventId: string,
 ): GameState {
   let s = state;
+  const effects = effectsFor(state, allEffects);
   const deferFeature = effects.some(
     (e) => e.type === 'interrupt' && e.featureWork,
   );
@@ -1933,6 +2167,14 @@ function applyEffects(
         break;
       case 'component':
         s = { ...s, components: { ...s.components, [e.slot]: e.option } };
+        break;
+      case 'on-demand-revalidate':
+        // SPA には ISR が無い（revalidateSec は API のキャッシュの期間）ので変えない
+        if (s.framework !== 'vite-spa')
+          s = {
+            ...s,
+            settings: { ...s.settings, revalidateSec: ON_DEMAND_REVALIDATE },
+          };
         break;
       case 'imageRedesign': {
         // 手間は画像の部品で決まる（D-47）。粗い画像の数はここで固定し、以後の一律で縮めた投稿は粗くない
@@ -2405,14 +2647,20 @@ export function playMonth(input: GameState): GameState {
   const imgs = imagesBehavior(platformNow, comps.images);
   const viewed: Settings = {
     ...state.settings,
-    imageKB: deliveredImageKB(sc, state.settings, imgs),
+    imageKB: deliveredImageKB(
+      sc,
+      state.settings,
+      imgs,
+      usesNextImage(platformNow, state.framework, comps.images),
+    ),
     // 最適化しない・一律で縮めて置くは、サイズ違いを作らず 1 種を配る（D-47）
     ...(imgs === 'resize' || imgs === 'none' ? { variants: 1 } : {}),
   };
-  // 画質: 最適化しないは原本、それ以外は圧縮の設定で決まる。記事のデザインの刷新を断った月・
+  // 画質: 最適化しないは原本、それ以外は JPEG と同じ見た目（形式では下げない。D-58）。記事のデザインの刷新を断った月・
   // 受けたあと粗い画像（一律で縮めた原本の無い画像）が多い月は 1 段下げる（D-47）
+  // 画像の形式は同じ見た目の画質で小さくするので、画質は下げない（D-58）。JPEG の大きさで判定する
   const qualityImageKB =
-    imgs === 'none' ? viewed.imageKB : state.settings.imageKB;
+    imgs === 'none' ? viewed.imageKB : IMAGE_FORMAT_KB.jpeg;
   const redesign = imageRedesignQuality(state, sc, month, imgs);
   // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）。
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
@@ -2427,11 +2675,14 @@ export function playMonth(input: GameState): GameState {
     : ssrCpuMs;
   // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
   const eventuallyConsistent =
-    comps.db === 'kv' || (!spa && comps.frontCdn === 'html');
-  // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）
-  const onDemand = state.requirements.includes('on-demand-isr')
-    ? onDemandBlocker(stackIndexNow, state.components, state.framework)
-    : undefined;
+    comps.db === 'kv' || (!spa && htmlCachedAtFront(comps));
+  // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
+  // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
+  const onDemandSetting = !spa && isOnDemand(state.settings);
+  const onDemand =
+    state.requirements.includes('on-demand-isr') || onDemandSetting
+      ? onDemandBlocker(stackIndexNow, state.components, state.framework)
+      : undefined;
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
@@ -2473,13 +2724,21 @@ export function playMonth(input: GameState): GameState {
     month,
     imagesUnoptimized: imgs === 'none',
     pageWeight: pageWeightLabel(
-      pageWeightKB(sc, state.settings, state.mods, imgs),
+      pageWeightKB(
+        sc,
+        state.settings,
+        state.mods,
+        imgs,
+        usesNextImage(platformNow, state.framework, comps.images),
+      ),
     ),
     qualityReason: redesign,
     eventuallyConsistent,
     uncached,
     onDemandReason: onDemand
-      ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
+      ? state.requirements.includes('on-demand-isr')
+        ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
+        : `オンデマンドの再検証が届かない（${onDemand.label}。${onDemand.reason}）`
       : undefined,
   });
   const score = satisfactionScore(stages, sat.weights);
@@ -2720,8 +2979,14 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
   // 一律で縮めて置く部品なら、保存するのは縮めた大きさ（原本は残さない。D-47）
   const resize = imagesOf(state) === 'resize';
   const gbPerUpload = resize
-    ? deliveredImageKB(sc, state.settings, 'resize') / 1e6
-    : rule.gbPerImage * (state.settings.imageKB / 150);
+    ? // 一律で縮めて置く: 形式が JPEG でなければ、古いブラウザ向けの JPEG も置く（MDN の推奨。D-58）
+      (deliveredImageKB(sc, state.settings, 'resize') +
+        (imageFormatOf(state.settings.imageKB) === 'jpeg'
+          ? 0
+          : sc.resizedImageKB)) /
+      1e6
+    : // 原本はそのまま置く（形式は閲覧・投稿のときに変える。D-58 で圧縮の比を掛けるのをやめた）
+      rule.gbPerImage;
   return {
     dbGB:
       s.dbGB +
@@ -2876,12 +3141,11 @@ function stageReasons(
         ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
         : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`;
   if (stages.quality !== 'good')
-    out.quality =
-      c.qualityReason ??
-      `画像の圧縮 ${optionLabel('compress', c.settings.imageKB)}`;
+    out.quality = c.qualityReason ?? `画像 ${c.settings.imageKB} KB`;
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
+        (c.spa || !isOnDemand(c.settings)) &&
         (c.spa
           ? `API のキャッシュの期間 ${optionLabel('apiCacheTtl', c.settings.revalidateSec)}`
           : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
@@ -3302,7 +3566,8 @@ function monthsText(ms: readonly number[]): string {
 const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
   speed:
     'ページの重さ（サーバーの処理・画像の大きさと種類）を設定や部品で軽くするか、処理の上限に余裕のある構成を考える',
-  quality: '画像の圧縮を強くしすぎている。画質と転送量の釣り合いを見直す',
+  quality:
+    '画像の画質が下がっている（記事のデザインの刷新など）。画像の部品と、原本を残しているかを見直す',
   freshness:
     'キャッシュの間隔や部品の性質で更新が遅れて見える。間隔を短くするか、更新がすぐ届く部品を考える',
   feature:

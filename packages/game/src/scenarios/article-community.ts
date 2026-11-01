@@ -27,7 +27,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'common',
     title: '込み分・クレジットの 70% を超えた',
-    text: '流量で決まる込み分（Vercel Pro は月のクレジット）に近づいた。設定（ISR・圧縮）やプランで対応できる',
+    text: '流量で決まる込み分（Vercel Pro は月のクレジット）に近づいた。設定（ISR・画像の形式）やプランで対応できる',
     when: {
       type: 'premise',
       premiseIds: [
@@ -246,12 +246,21 @@ const EVENTS: EventDef[] = [
       'fact:cloudflare:workers-paid:',
       'fact:cloudflare:cdn-free:next-on-demand',
     ],
+    // 受けると再検証をオンデマンドにする。時間のままなら切り替えの実装（設定の切り替えと同じ手間 2）がかかり、
+    // すでにオンデマンドなら作業は要らない（D-49。それまでは一律に手間 3）
     accept: {
-      label: '受ける（手間 3）',
+      label: '受ける（手間 2。再検証がすでにオンデマンドなら 0）',
       effects: [
         { type: 'feature', points: 5 },
         { type: 'growth', add: 0.02, months: 3 },
-        { type: 'interrupt', featureWork: true, points: 3, months: 1 },
+        {
+          type: 'interrupt',
+          featureWork: true,
+          points: 2,
+          months: 1,
+          unlessOnDemand: true,
+        },
+        { type: 'on-demand-revalidate' },
         { type: 'requirement', requirement: 'on-demand-isr' },
       ],
     },
@@ -477,7 +486,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
     {
       id: 'vps-images',
       label:
-        'さくらの VPS・画像を多く載せる提案だけ受け、画像の保存量が 70% を超えたら中程度に圧縮',
+        'さくらの VPS・画像を多く載せる提案だけ受け、画像の保存量が 70% を超えたら画像を WebP にする',
       short: 'VPS・画像の提案を受ける',
       stackIndex: VPS,
       decide: (s) => [
@@ -486,8 +495,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
           eventId,
           accept: eventId === 'p-images',
         })),
-        ...(sawEvent(s, 's-image-storage') && s.settings.imageKB > 100
-          ? [{ type: 'set', key: 'compress', value: 100 } as const]
+        ...(sawEvent(s, 's-image-storage') && s.settings.imageKB > 105
+          ? [{ type: 'set', key: 'format', value: 105 } as const]
           : []),
       ],
     },

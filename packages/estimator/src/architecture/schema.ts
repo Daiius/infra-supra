@@ -24,6 +24,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * Workload の閲覧の密度と期間から出す（ResolvedWorkload.cacheHitRate。prd/04 §2）。
      */
     ttlClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * リクエストを大きさの単位で数える（API Gateway の HTTP API は 512 KB ごとに 1 リクエスト。OCL-70ABEDB7）。
+     * 1 件は最低 1 リクエスト。次のノードへ渡す件数は変わらない。
+     */
+    requestUnitKB: Pos.optional(),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({

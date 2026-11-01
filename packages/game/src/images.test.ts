@@ -261,7 +261,10 @@ describe('サイズ違いの設定は、最適化しない・一律で縮める�
       expect(settingInactiveReason(s, 'variants')).toContain(
         'サイズ違いは作らない',
       );
-      expect(settingInactiveReason(s, 'compress')).toBeUndefined();
+      // 形式は一律で縮めるでは効き、原本を配る最適化しないでは効かない（D-58）
+      expect(settingInactiveReason(s, 'format') === undefined).toBe(
+        opt === 'resize',
+      );
       expect(checkAction(s, set).ok).toBe(false);
     }
   });

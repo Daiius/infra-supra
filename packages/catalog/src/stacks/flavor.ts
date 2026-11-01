@@ -128,7 +128,7 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   'aws:isrCache:none':
     '毎回サーバーで描くので、ページはいつも最新。キャッシュの仕組みを気にしなくてよい',
   'aws:images:default':
-    'Next.js の画像の部品がそのまま使え、閲覧のときに自動で最適化される',
+    'Next.js の画像の部品がそのまま使え、自動で最適化される。変換の料金は未取得で、費用は下限',
   'aws:images:none':
     '原本をそのまま配るので、画質が落ちない。CDN の無料で使える量も大きい',
   'aws:images:resize':

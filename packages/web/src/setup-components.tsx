@@ -4,6 +4,8 @@
 import {
   componentConflict,
   componentFlavor,
+  SETTINGS,
+  setupRevalidateOptions,
   setupSlots,
   type FrameworkId,
   type Scenario,
@@ -98,6 +100,62 @@ export function SetupComponents({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 始める画面の ISR の再検証（D-49）。ISR のある構成（Next.js）だけ。始める前なので手間はかからない
+ * （ゲーム中に時間からオンデマンドへ切り替えるときだけ実装の手間がかかる）。既定は 5 分を選んだ状態。
+ */
+export function SetupRevalidate({
+  scenario,
+  framework,
+  value,
+  onChange,
+}: {
+  scenario: Scenario;
+  framework: FrameworkId;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const options = setupRevalidateOptions(scenario, framework);
+  if (options.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <h3 className="mt-2 font-bold">設定</h3>
+      <fieldset className="min-w-0 rounded-box border border-base-300 p-3">
+        <legend className="px-1 font-semibold">
+          <NameWithInfo
+            name={SETTINGS.isr.label}
+            info={
+              <Info label={`${SETTINGS.isr.label} の説明`}>
+                {SETTINGS.isr.note}
+              </Info>
+            }
+          />
+        </legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {options.map((o) => (
+            <label
+              key={o.value}
+              className="flex cursor-pointer items-start gap-2"
+            >
+              <input
+                type="radio"
+                name="setup-revalidate"
+                className="radio radio-primary radio-sm mt-0.5 shrink-0"
+                checked={value === o.value}
+                onChange={() => onChange(o.value)}
+              />
+              <span className="block min-w-0">
+                <span className="block text-sm">{o.label}</span>
+                <span className="block text-xs opacity-70">{o.flavor}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
     </div>
   );
 }

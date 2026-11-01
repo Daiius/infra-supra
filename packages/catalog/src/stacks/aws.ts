@@ -62,8 +62,8 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     frameworks: ['nextjs'],
     platform: 'aws',
-    label: 'Amplify の画像の最適化',
-    note: 'next/image の最適化を Amplify が行い、Amplify の CDN から配る（転送は $0.15/GB）。最適化の料金は料金表に専用の行が無く、料金未取得として出す',
+    label: 'Amplify の画像の最適化（料金未取得）',
+    note: '⚠ 料金未取得（この部品を選ぶと費用は下限）。next/image の最適化を Amplify の画像の最適化（Compute とは別の仕組み。デプロイの仕様の ImageOptimization）が行い、Amplify の CDN から配る（転送は $0.15/GB）。最適化そのものの料金は料金表に行が無く、Compute の料金に含まれるかも書かれていないので、変換の費用は 0 ではなく「未取得」として明細に残す',
     premiseRefs: ['fact:aws:amplify-hosting:transfer-not-cloudfront'],
   },
   {
@@ -401,7 +401,7 @@ function composeAmplify(
       ? [
           {
             id: 'image',
-            label: 'Amplify の画像の最適化',
+            label: 'Amplify の画像の最適化（料金未取得）',
             config: { kind: 'image-optimizer' },
             billing: amplify({ 'image-transformations': 'image-optimization' }),
           } as ArchNodeIn,
@@ -454,7 +454,8 @@ function composeSpa(
       // 振る舞いは「リクエストを数えて次へ渡す」ので cdn の種類で表す（ヒットは無い）。課金はリクエストだけ
       id: 'apigw',
       label: 'API Gateway（HTTP API）',
-      config: { kind: 'cdn', hitRate: {} },
+      // HTTP API は 512 KB ごとに 1 リクエストとして数える（料金ページの例 2: 4.5 MB / 512 KB）
+      config: { kind: 'cdn', hitRate: {}, requestUnitKB: 512 },
       billing: bill('api-gateway-http', { requests: 'requests' }),
     },
     {

@@ -48,12 +48,16 @@ export const aws: PriceBookInput = {
     amplifyCacheControl: src(
       'https://docs.aws.amazon.com/amplify/latest/userguide/Using-headers-to-control-cache-duration.html',
     ),
+    amplifySpec: src(
+      'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html',
+    ),
     amplifyNext: src(
       'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
     ),
     lambdaPrices: priceList('AWSLambda'),
     lambdaPricing: src('https://aws.amazon.com/lambda/pricing/'),
     apiGatewayPrices: priceList('AmazonApiGateway'),
+    apiGatewayPricing: src('https://aws.amazon.com/api-gateway/pricing/'),
     cloudfrontPrices: src(
       'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/current/index.json',
     ),
@@ -244,9 +248,9 @@ export const aws: PriceBookInput = {
           unit: 'count',
           pricing: {
             model: 'unpriced',
-            note: '画像の最適化に専用の行が料金表に無い（SSR の計算に含まれるかは未確認）',
+            note: '画像の最適化は Compute とは別の仕組み（デプロイの仕様の ImageOptimization）で、料金表に専用の行が無く、Compute の料金に含まれるかも書かれていない（2026-11-01 確認）',
           },
-          sourceIds: ['amplifyPrices', 'amplifyNext'],
+          sourceIds: ['amplifyPrices', 'amplifyPricing', 'amplifySpec'],
         },
       ],
     },
@@ -288,7 +292,10 @@ export const aws: PriceBookInput = {
       service: 'api-gateway',
       ...common,
       name: 'API Gateway（HTTP API）',
-      sourceIds: ['apiGatewayPrices'],
+      sourceIds: ['apiGatewayPrices', 'apiGatewayPricing'],
+      notes: [
+        'HTTP API は 512 KB ごとに 1 リクエストとして数える（料金ページの例 2 が 4.5 MB のペイロードを 512 KB で割っている）',
+      ],
       meters: [
         {
           id: 'requests',

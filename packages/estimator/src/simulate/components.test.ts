@@ -63,6 +63,120 @@ const sim = (
   routes: ArchitectureInput['routes'],
 ) => simulateResources(w, { id: 'x', name: 'x', nodes, routes }).nodes;
 
+describe('ISR のページを期間つきでキャッシュする CDN の後ろのホスト（D-55）', () => {
+  const host = {
+    id: 'vps',
+    label: 'vps',
+    config: {
+      kind: 'host' as const,
+      vcpu: 1,
+      memoryGB: 1,
+      diskGB: 100,
+      lineMbps: 100,
+      residentMemoryGB: 0,
+      dbCpuMsPerQuery: 0,
+      imageTransformCpuMs: 0,
+    },
+  };
+  const cdn = {
+    id: 'cdn',
+    label: 'cdn',
+    config: {
+      kind: 'cdn' as const,
+      hitRate: {},
+      ttlClasses: ['document-isr' as const],
+    },
+  };
+  const run = (behindCdn: boolean, rw = w) =>
+    simulateResources(rw, {
+      id: 'x',
+      name: 'x',
+      nodes: behindCdn ? [cdn, host] : [host],
+      routes: {
+        'document-isr': behindCdn ? ['cdn', 'vps'] : ['vps'],
+        'isr-revalidate': ['vps'],
+      },
+    }).nodes.vps!;
+  const SECONDS_PER_MONTH = 730 * 3600;
+  const reval = w.classes['isr-revalidate'];
+
+  it('月: 再生成は CDN を miss して届いた閲覧と同じ数（従来と同じ）', () => {
+    const miss = w.cacheMissFlow['document-isr']!;
+    expect(miss.count).toBeCloseTo(reval.count, 9);
+    expect(run(true).resources.requests).toBeCloseTo(miss.count * 2, 6);
+  });
+
+  it('ピーク: 再生成はピークの miss の数になり、ホストの CPU が下がる（CDN が無ければ従来どおり）', () => {
+    const pm = w.peakCacheMissFlow['document-isr']!;
+    const peak = w.peakHourFactor / SECONDS_PER_MONTH;
+    expect(pm.count).toBeLessThan(reval.count);
+    expect(run(true).host!.peakCores).toBeCloseTo(
+      ((pm.count * pm.perRequest.cpuMs + pm.count * reval.perRequest.cpuMs) /
+        1000) *
+        peak,
+      12,
+    );
+    // CDN が無いホスト: 閲覧は全部届き、再生成は月の数のまま（既定の構成は変えない）
+    const doc = w.classes['document-isr'];
+    expect(run(false).host!.peakCores).toBeCloseTo(
+      ((doc.count * doc.perRequest.cpuMs +
+        reval.count * reval.perRequest.cpuMs) /
+        1000) *
+        peak,
+      12,
+    );
+  });
+
+  it('ピーク: 密度と処理の重さが違う ISR のルートが複数あると、再生成の処理もルートごとのピークの miss で重み付けする（OCL-55732091）', () => {
+    const route = (
+      id: string,
+      share: number,
+      pages: number,
+      cpuMs: number,
+    ) => ({
+      id,
+      rendering: 'isr' as const,
+      share,
+      pages,
+      revalidateSeconds: 600,
+      processing: { ...processing, cpuMs },
+      cachedServeCpuMs: 1,
+    });
+    const multi = resolveWorkload(
+      workload({
+        routes: [
+          route('hot', 0.4, 5, 40),
+          route('cold', 0.4, 2_000, 4),
+          { id: 'mypage', rendering: 'ssr', share: 0.2, pages: 1, processing },
+        ],
+      }),
+    );
+    const pv = multi.monthlyPageViews;
+    const T = 600 / SECONDS_PER_MONTH;
+    const p = multi.peakHourFactor;
+    const peakMiss = (share: number, pages: number) =>
+      (pv * share) / (1 + ((pv * share) / pages) * T * p);
+    const hot = peakMiss(0.4, 5);
+    const cold = peakMiss(0.4, 2_000);
+    expect(multi.peakRevalidateFlow.count).toBeCloseTo(hot + cold, 6);
+    expect(multi.peakRevalidateFlow.perRequest.cpuMs).toBeCloseTo(
+      (hot * 40 + cold * 4) / (hot + cold),
+      9,
+    );
+    // 月の平均で重み付けした処理とは違う（ピークは閲覧の濃い hot がよく当たって、軽い cold の比が上がる）
+    expect(multi.peakRevalidateFlow.perRequest.cpuMs).not.toBeCloseTo(
+      multi.classes['isr-revalidate'].perRequest.cpuMs,
+      3,
+    );
+    const pm = multi.peakCacheMissFlow['document-isr']!;
+    expect(run(true, multi).host!.peakCores).toBeCloseTo(
+      ((pm.count * pm.perRequest.cpuMs + hot * 40 + cold * 4) / 1000) *
+        (p / SECONDS_PER_MONTH),
+      12,
+    );
+  });
+});
+
 describe('部品の選択で足した振る舞い', () => {
   it('サイズ違いを投稿のときに作ると、変換 = 投稿数 × サイズ違い。作らないなら 0', () => {
     const at = (transformAt: 'upload' | 'none') =>
@@ -178,6 +292,93 @@ describe('部品の選択で足した振る舞い', () => {
     // 保存量はアプリの DB の大きさ（時間課金のコンピュートは無い）
     expect(eventual.resources['storage-gb-month']).toBe(w.storage.dbGB);
     expect(eventual.resources['instance-hours']).toBeUndefined();
+  });
+
+  it('要求の単位で課金する DB: 応答が 0 KB でも問い合わせ 1 回に 1 単位（OCL-0E5E2CF2）', () => {
+    const w0 = resolveWorkload(
+      workload({ db: { sizeGB: 1, responseKBPerQuery: 0 } }),
+    );
+    const u = simulateResources(w0, {
+      id: 'x',
+      name: 'x',
+      nodes: [
+        {
+          id: 'd',
+          label: 'd',
+          config: {
+            kind: 'request-db',
+            readUnitKB: 4,
+            writeUnitKB: 1,
+            eventuallyConsistent: false,
+            itemKB: 1,
+          },
+        },
+      ],
+      routes: { api: ['d'] },
+    }).nodes.d!;
+    expect(u.resources['read-request-units']).toBeCloseTo(
+      w0.classes.api.count * 2,
+      9,
+    );
+  });
+
+  it('リクエストを大きさの単位で数える CDN: 1 件は最低 1、超えた分は単位で切り上げ。次へ渡す件数は変わらない（OCL-70ABEDB7）', () => {
+    const u = sim(
+      [
+        {
+          id: 'g',
+          label: 'g',
+          config: { kind: 'cdn', hitRate: {}, requestUnitKB: 30 },
+        },
+        { id: 'p', label: 'p', config: { kind: 'db-proxy' } },
+      ],
+      { api: ['g', 'p'] },
+    );
+    const api = w.classes.api;
+    expect(u.g!.resources.requests).toBeCloseTo(
+      api.count * Math.max(1, Math.ceil(api.perRequest.kb / 30)),
+      9,
+    );
+    expect(u.p!.resources.queries).toBeCloseTo(api.count * 2, 9);
+  });
+
+  it('大きさの単位で数える CDN は、ルートごとの大きさで切り上げてから足す（平均で切り上げない。OCL-663E589C）', () => {
+    const w2 = resolveWorkload(
+      workload({
+        routes: [
+          {
+            id: 'small',
+            rendering: 'ssr',
+            share: 0.5,
+            pages: 1,
+            processing: { ...processing, responseKB: 50 },
+          },
+          {
+            id: 'large',
+            rendering: 'ssr',
+            share: 0.5,
+            pages: 1,
+            processing: { ...processing, responseKB: 900 },
+          },
+        ],
+      }),
+    );
+    const ssr = w2.classes['document-ssr'];
+    // 平均（約 475 KB）で切り上げると 1 件 1 だが、ルートごとなら 1 と 2 で平均 1.5
+    expect(Math.ceil(ssr.perRequest.kb / 512)).toBe(1);
+    const u = simulateResources(w2, {
+      id: 'x',
+      name: 'x',
+      nodes: [
+        {
+          id: 'g',
+          label: 'g',
+          config: { kind: 'cdn', hitRate: {}, requestUnitKB: 512 },
+        },
+      ],
+      routes: { 'document-ssr': ['g'] },
+    }).nodes.g!;
+    expect(u.resources.requests).toBeCloseTo(ssr.count * 1.5, 6);
   });
 
   it('止まる DB: 動いている割合は λT / (1 + λT)、時間課金は容量の単位の数を掛ける。止まらない DB は 730 時間', () => {
