@@ -290,20 +290,18 @@ export function toSpa(
 /**
  * Astro にしたときのアプリの形（テンプレートの既定値。template-default・実測ではない。D-68）。
  * assetsFactor: ページあたりの JS・CSS のファイル数を Next.js の何倍とみなすか（アイランドの分だけ）。
- * rebuildShare: 内容の更新（ページの中身を変える書き込み）のうち、静的なページを変えてビルドし直すものの割合
- *   （記事の投稿・編集。コメントはアイランドが API で読むのでビルドしない）。
  * minutesPerBuild: 1 回のビルドの時間（分）= base + 静的なページ 1,000 あたり perThousandPages。
  */
 export type AstroShape = {
   assetsFactor: number;
-  rebuildShare: number;
   minutesPerBuild: { base: number; perThousandPages: number };
 };
 
 /**
  * テンプレートの Workload を Astro の形に書き換える（D-68）。ISR だったルート（全員に同じ中身の記事）は静的にビルドし、
  * SSR のルート（個人化）はアダプターでリクエストのたびに描く。JS・CSS はアイランドの分だけ（assetsFactor）。
- * 静的なページの更新はビルドし直し: 内容の更新（updatesPerMonth）× rebuildShare を、間隔（省略は更新のたび）でまとめてビルドする。
+ * 静的なページの更新はビルドし直し: 内容の更新（updatesPerMonth。記事のページを作り直す更新 = 記事の投稿・編集。
+ * コメントはアイランドが API で読むのでビルドしない。D-70）を、間隔（省略は更新のたび）でまとめてビルドする。
  */
 export function toAstro(
   w: WorkloadInput,
@@ -329,7 +327,7 @@ export function toAstro(
     ...(staticPages > 0
       ? {
           build: {
-            updatesPerMonth: build.updatesPerMonth * shape.rebuildShare,
+            updatesPerMonth: build.updatesPerMonth,
             ...(build.intervalSeconds !== undefined
               ? { intervalSeconds: build.intervalSeconds }
               : {}),

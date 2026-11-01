@@ -800,12 +800,6 @@ export function spikePeakFactor(pv: number, spikes: readonly Spike[]): number {
 }
 
 /**
- * 書き込みのうち、ISR のページの中身を変える割合（記事の投稿・編集・ページに出るコメント。いいね・既読などは変えない）。
- * ゲーム上の仮定（D-49・prd/04 §2）。
- */
-export const ON_DEMAND_PAGE_UPDATE_SHARE = 0.5;
-
-/**
  * オンデマンドの再検証に併せて持つとみなす最大寿命（保険の時間の再検証・秒）。再検証の呼び出しの取りこぼし
  * （webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証を併せて設定することが多い（1 時間〜1 日など）。
  * 選択肢にはせず、長い側の 1 日とみなす（ゲーム上の仮定。D-56）。
@@ -818,11 +812,12 @@ export const ON_DEMAND_MAX_AGE_SEC = 86_400;
  */
 export const ON_DEMAND_PAGES_PER_UPDATE = 2;
 
-/** オンデマンドの再検証の、月の内容の更新の回数（API の書き込み × ページを変える割合）。 */
-function onDemandUpdates(pv: number, w: WorkloadInput): number {
-  return (
-    pv * w.perPage.apiCalls * w.api.writesPerCall * ON_DEMAND_PAGE_UPDATE_SHARE
-  );
+/**
+ * 月の内容の更新の回数（記事のページを作り直す更新。API の書き込み × シナリオの pageUpdateShare。D-49・D-70）。
+ * オンデマンドの再検証の再生成・無効化と、Astro のビルドし直しの数のもと。
+ */
+function onDemandUpdates(sc: Scenario, pv: number, w: WorkloadInput): number {
+  return pv * w.perPage.apiCalls * w.api.writesPerCall * sc.pageUpdateShare;
 }
 
 function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
@@ -867,7 +862,7 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
   // オンデマンドの再検証（D-49）: 再生成の回数は、時間でなく内容の更新の回数から出す
   if (isOnDemand(p.settings)) {
-    const updates = onDemandUpdates(p.pv, w);
+    const updates = onDemandUpdates(sc, p.pv, w);
     w.routes = w.routes.map((r) => {
       if (r.rendering !== 'isr') return r;
       const { revalidateSeconds: _, ...rest } = r;
@@ -900,7 +895,7 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? toSpa(w, shape, cache ? { cacheContent: true } : {})
       : p.framework === 'astro' && astro
         ? toAstro(w, astro, {
-            updatesPerMonth: onDemandUpdates(p.pv, w),
+            updatesPerMonth: onDemandUpdates(sc, p.pv, w),
             ...(isOnDemand(p.settings)
               ? {}
               : { intervalSeconds: p.settings.revalidateSec }),
@@ -4369,7 +4364,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
           next: invalidation
-            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、コメントの多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または無効化をワイルドカード・タグでまとめる`
+            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または無効化をワイルドカード・タグでまとめる`
             : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
               : base

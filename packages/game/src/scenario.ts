@@ -231,6 +231,13 @@ export type Scenario = {
     };
   };
   incidents: { selfHostedChancePerMonth: number };
+  /**
+   * API の書き込みのうち、記事のページ（ISR・Astro の静的なページ）の HTML を作り直す更新の割合（記事の投稿・編集）。
+   * 月の内容の更新 = PV × 1 PV あたりの API × 書き込みの割合 × この値。オンデマンドの再検証の再生成・CDN の無効化と、
+   * Astro のビルドし直しの数のもと。コメント・いいねは別のデータとして読み込み、ページを作り直さないとみなす
+   * （一般的な作り方の仮定。D-49・D-70・prd/04 §2）。
+   */
+  pageUpdateShare: number;
   /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ＝stock.gbPerImage と同じ。ゲーム上の仮定・D-24・D-47）。 */
   unoptimizedImageKB: number;
   /**

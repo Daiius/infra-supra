@@ -70,6 +70,8 @@ describe('game', () => {
     //       KV を DB の代わりにする基準プレイは、ページが軽くなり速さが「悪い」月が減って所持金が増える（シード 42・3。31 は変わらない）
     // D-64: 構成に合った対策の基準プレイを 4 本足した（既存の行は変わらない）
     // D-66: OpenNext の再検証の関数（Lambda）と S3 の ISR のキャッシュの保存量を数えた（OpenNext・画像の最適化の所持金が $1.2〜1.6 減る。結果は変わらない）
+    // D-70: 記事のページを作り直す更新を記事の投稿・編集だけに（書き込みの 0.5 → 0.01）。オンデマンドの再生成が減り、
+    //       提案を受けてオンデマンドになる全部受ける ② の所持金が少し増える（シード 3・31。42 は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -94,7 +96,7 @@ describe('game', () => {
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2151.55', 'won', 12],
-      'cf-paid-accept': ['2197.81', 'won', 12],
+      'cf-paid-accept': ['2197.98', 'won', 12],
       'vps-images': ['1689.33', 'goal', 12],
       'vercel-pro': ['809.20', 'goal', 12],
       'vercel-to-cf': ['1730.33', 'won', 12],
@@ -109,7 +111,7 @@ describe('game', () => {
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2163.40', 'won', 12],
-      'cf-paid-accept': ['1092.72', 'goal', 12],
+      'cf-paid-accept': ['1100.30', 'goal', 12],
       'vps-images': ['1693.43', 'goal', 12],
       'vercel-pro': ['836.56', 'goal', 12],
       'vercel-to-cf': ['1700.64', 'goal', 12],
