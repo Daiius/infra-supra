@@ -136,6 +136,11 @@ export const CreditSchema = z.object({
     z.object({ meterIds: z.array(Id).min(1) }),
   ]),
   period: z.literal('month').default('month'),
+  /**
+   * 使用率を前提として出すときの 1 文（無料枠のプールの premise と同じ扱い。D-48）。
+   * 使った割合は「当てられる従量の金額 / クレジットの額」で、超えると請求が増える（effect: cost）。
+   */
+  premise: Premise.optional(),
   interpretation: InterpretationSchema.optional(),
   sourceIds: SourceIds,
 });

@@ -71,6 +71,7 @@
 
 - ユーザーの判断: 幅（Vercel Pro で 5 倍）にすると、見積としてもゲームとしても成り立たない。最もらしい方で固定する。
 - Vercel Pro は「pricing ページの込み分 + $20 のクレジット」を採用（根拠はスパイクの README「Vercel Pro の解釈」）。
+  ⚠ 2026-11-01 に公式を読み直し、「込み分なし・クレジットがすべての従量に最初の 1 単位から当たる」に改めた → D-48。
 - 会社の Pro プランの使用量と請求で確かめる。手順は [`calibration-vercel-pro.md`](../../spikes/concept-2026-10-31/calibration-vercel-pro.md)。
   🔒 実数値は `.claude-personal/`（gitignore）に置き、リポジトリには結論だけを残す。
 - 03 §9 の `interpretation`（採用した解釈 + 退けた解釈 + `verifiedAt`）。
@@ -322,6 +323,25 @@
 - golden: 刷新の提案が来るシード（42・3）で、断る基準プレイの所持金が少し下がる（結果は変わらない）。CF Paid・何もしないは 50 / 50 のまま。
 - 追記（ユーザーの決定「重いページは PV の伸びも下げる」）: 速さが「悪い」月は PV の伸びを 3 ポイント下げる（離脱・検索からの流入の減り。割合は出典なしの仮定・記事コミュニティだけ）。CF Paid・最適化しないは 0 / 20、既定は 20 / 20。月の報告・説明・ヒントに出す。VPS は話題の月の回線の詰まりでも下がる（シード 1〜50: VPS・画像の提案 38 → 36・VPS・SLA 32 → 29）。prd/07 §10.4。
 
+### D-48 Vercel Pro は込み分なし・$20 のクレジットがすべての従量に当たる（確定・2026-11-01）
+
+- ユーザーの問い: 今の Vercel Pro は $20 のクレジットが一種の無料枠として、すべての課金要素で消費される仕組みではないか。画面には CDN Requests の上限の前提だけが出ていた。
+- ユーザーの決定: 公式の今の版を読み直し、クレジットの使った割合も前提として出す。
+- 公式の記述（2026-11-01 取得）:
+  - [docs/plans/pro-plan](https://vercel.com/docs/plans/pro-plan)（2026-09-15 更新）: 「The monthly credit applies to all managed infrastructure billable resources from the first unit you use.」「Once you have used your monthly credit, Vercel bills additional usage on-demand.」「The platform fee is a fixed monthly fee that includes $20 in usage credit.」「Your credit expires at the end of the month」
+  - [docs/pricing](https://vercel.com/docs/pricing)（2026-09-14 更新）: 「For Hobby teams, some resources include an amount of usage … Pro teams get a monthly usage credit instead, then move to on-demand pricing.」CDN の表の Pro の込み分は CDN Requests・Fast Data Transfer とも「Flat Rate CDN」、Fast Origin Transfer は「Usage-based」。[docs/manage-cdn-usage](https://vercel.com/docs/manage-cdn-usage) も同じ表で「Pro plans charge for CDN usage per unit」。
+  - [docs/pricing/flat-rate-cdn](https://vercel.com/docs/pricing/flat-rate-cdn)（2026-09-14 更新）: 請求ページで有効にする申し込み制。「Pro includes the lowest tier at no additional cost」（CDN requests 1M・data transfer 1 TB）。超えると翌月から上の段（$20/月で 10M・50 TB …）。
+  - [changelog「Included Pro usage is now credit-based」](https://vercel.com/changelog/included-pro-usage-is-now-credit-based)（2025-09-09）: Pro は「now includes $20 in monthly usage credit instead of fixed allocations」。
+  - [vercel.com/pricing](https://vercel.com/pricing) だけが今も CDN Requests「10M / month included」・Fast Data Transfer「1TB / month included」と書く。
+  - Hobby（[docs/plans/hobby](https://vercel.com/docs/plans/hobby)・2026-09-14 更新）は変わらない: 込み分（CDN Requests 100 万・Fast Data Transfer 100 GB など）を超えると「you will have to wait until 30 days have passed」。
+- 決定（D-10 の改め）: 文書 4 つと changelog が揃っているので、pricing ページの込み分は置き換え前の表記が残っていると読む。Pro は資源ごとの込み分を持たず、$20 のクレジットが CDN Requests・Fast Data Transfer を含むすべての従量に最初の 1 単位から当たる。席の基本料には当たらず、繰り越さない。Flat Rate CDN は申し込み制なので既定の On-demand CDN で計算し、扱わない（料金データの notes に残した）。catalog の `pro-cdn-requests`・`pro-fdt` のプールを外し、PRO_INTERPRETATION を入れ替えた（旧の読みは退けた解釈として理由つきで残す）。
+- 使用率の前提: クレジットに `premise` の 1 文を持たせ、estimator の `assessPremises` が `credit:<provider>:<plan>:<credit>` の量の前提として出す。使用率は「当てられる従量の金額 / クレジットの額」（料金計算のクレジットの明細に `credit: { id, limit, eligible }` を足した）。超えても止まらず請求が増えるので effect は `cost`（込み分を超えると課金されるプールと同じ扱い）。流量として伸び率で見込む（`accumulates: false`）。単位は持たず `currency` を持つ。ゲームの推移・見込み・「見込みが外れた理由」・超えた月のヒント（overage）はこの前提を他の量の前提と同じように扱う。シナリオ・部品が参照していた `pool:vercel:pro:pro-cdn-requests`・`pro-fdt` は `credit:vercel:pro:usage-credit` に置き換え、出来事「込み分の 70% を超えた」は「込み分・クレジットの 70% を超えた」にした。
+- 影響（何もしない・Vercel Pro・シード 1〜20。D-47 を含む main と比べた）: 合否は変わらない（どちらのシナリオも全シードで目標未達のまま）。
+  - 記事コミュニティ（Next.js）: 1 か月目からクレジットを超える（使用率 1.8 → 12 か月目に約 7、話題の月は 12〜22）。大半は Fast Data Transfer（1 か月目 168 GB → 12 か月目 1.36 TB）。12 か月の費用は $667〜$934 → $1,568〜$1,811、所持金は $843〜$967 減る（$1,389〜$1,669 → $546〜$768）。SPA は所持金が $544〜$682 減る。
+  - 受託: 使用率は 0.5 から月 6% ほど伸び、6〜9 か月目にクレジットを超える（繁忙期の月に早まる）。所持金は $8〜$20 減る。出来事「込み分・クレジットの 70% を超えた」が全シードで出る。
+- golden: Vercel Pro・何もしない（記事コミュニティ・Next.js で約 $900、SPA で約 $550 減）、Vercel で始めて乗り換える基準プレイ（乗り換えまで 3 か月 Vercel を使う分。シード 3・31 で合格 → 不合格）、提案を受けて Vercel Pro へ乗り換える基準プレイ（記事コミュニティのシード 31 で $933 減、受託で $28〜$238 減）が変わった。CF・VPS の基準プレイは変わらない。
+- 確かめ方は D-10 と同じ（会社の Pro の請求で、CDN Requests・Fast Data Transfer が最初から請求されクレジットで相殺されているか）。
+
 ### D-49 ISR の再検証にオンデマンドを足す（確定・2026-11-01）
 
 - ユーザーの依頼: ISR の再検証の時間について、最初からオンデマンド ISR を選択肢として入れられないか。それまでは時間の間隔だけで、オンデマンドは即時反映の提案（p-ondemand・D-32）を受けたときの要件として入るだけだった。
@@ -329,7 +349,7 @@
 - 効き方: 再生成の回数は、閲覧 × 時間でなく内容の更新の回数から出す（estimator の `onDemandUpdatesPerMonth`。式と仮定は prd/04 §2）。鮮度は「良い」。ただし ISR のキャッシュの置き場所が対応しない部品（`onDemandIsr.ok: false`。KV・前段の CDN で HTML もキャッシュ）だと再検証が届かず、鮮度が 1 段下がる（既存の `onDemandBlocker` と同じ判定・理由の文）。
 - 手間: 時間 → オンデマンドは 2（更新のたびに revalidatePath を呼ぶ実装。仮定）、オンデマンド → 時間は 0。p-ondemand は、受けると再検証をオンデマンドにする。時間のままなら同じ作業の手間 2（それまでの 3 から揃えた）、すでにオンデマンドなら 0 で要件を満たす（作業が無いときは機能の加点を受けたときに足す）。
 - 説明文（`SETTING_FLAVOR`。部品の説明と同じ方針）を再検証の各選択肢に付けた。ゲーム中の設定の欄でも、選んでいる値の説明を出す。
-- 基準プレイ（何もしない・シード 1〜20・記事コミュニティ）: 合否は変わらない。オンデマンドで再生成は 1 か月目が約 18 万 → 1.4 万回、12 か月目が約 70 万 → 5 万回になる。12 か月の費用は CF Paid が $182 → $178、Vercel Pro が $748 → $720、VPS 2GB は $157 のまま。CF Paid は既定の部品（KV）だと届かないので、満足度の平均は 0.89 → 0.84（D-47 を取り込んだ後の値）。CF Paid × 既定（目標の根拠）は変わらない。golden は提案を全部受ける基準プレイ（cf-paid-accept）だけが変わった。
+- 基準プレイ（何もしない・シード 1〜20・記事コミュニティ）: 合否は変わらない。オンデマンドで再生成は 1 か月目が約 18 万 → 1.4 万回、12 か月目が約 70 万 → 5 万回になる。12 か月の費用は CF Paid が $182 → $178、Vercel Pro が $1,689 → $1,621（D-48 を取り込んだ後の値）、VPS 2GB は $157 のまま。CF Paid は既定の部品（KV）だと届かないので、満足度の平均は 0.89 → 0.84（D-47 を取り込んだ後の値）。CF Paid × 既定（目標の根拠）は変わらない。golden は提案を全部受ける基準プレイ（cf-paid-accept）だけが変わった。
 
 ## 未決（grill で詰める）
 

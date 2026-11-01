@@ -7,6 +7,7 @@ import {
   playMonth,
   type GameState,
 } from './index.ts';
+import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 import {
   extrapolate,
   premiseTrends,
@@ -142,14 +143,31 @@ describe('ゲームの記録', () => {
     }
   });
 
-  it('Vercel Pro は込み分（CDN Requests）に近づく見込みが、超える前に出る', () => {
-    const s = playN(4);
+  it('Vercel Pro は月のクレジットの使用率を記録し、超える前に見込みが出る（受託・シード 2。D-48）', () => {
+    let s = playMonth(newGame(3, 2, CONTRACT_OPERATIONS));
+    for (let i = 1; i < 5; i++) s = playMonth(applyAction(s, { type: 'none' }));
     const trends = premiseTrends(
       s.history.map((m) => m.snapshots),
-      GAME.months,
+      CONTRACT_OPERATIONS.months,
     );
-    const cdn = trends.find((t) => t.id.includes('pro-cdn-requests'))!;
-    expect(cdn.hitNow).toBe(false);
-    expect(cdn.monthsUntil).not.toBeNull();
+    const credit = trends.find(
+      (t) => t.id === 'credit:vercel:pro:usage-credit',
+    )!;
+    // 止まらず請求が増える前提で、流量として伸び率で見込む
+    expect(credit.effect).toBe('cost');
+    expect(credit.accumulates).toBe(false);
+    expect(credit.ratios.every((r) => r !== null && r > 0)).toBe(true);
+    expect(credit.hitNow).toBe(false);
+    expect(credit.monthsUntil).not.toBeNull();
+  });
+
+  it('記事コミュニティの Vercel Pro は 1 か月目からクレジットを超え、超えた分が請求される（D-48）', () => {
+    const s = playN(1);
+    const p = s.history[0]!.snapshots.find(
+      (x) => x.id === 'credit:vercel:pro:usage-credit',
+    )!;
+    expect(p.hit).toBe(true);
+    expect(p.effect).toBe('cost');
+    expect(s.phase).toBe('playing');
   });
 });

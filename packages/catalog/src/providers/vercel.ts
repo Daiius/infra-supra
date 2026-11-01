@@ -1,19 +1,21 @@
 // Vercel（Hobby・Pro）。2026-10-31 に公式ページから取得（spikes/concept-2026-10-31）。USD・税抜。
-// Pro の込み分とクレジットの関係は文書が食い違うため、採用した解釈を interpretation に残す（D-10）。
+// Pro の込み分とクレジットの関係は 2026-11-01 に読み直し、文書に揃えた（D-10・D-48）。採った解釈を interpretation に残す。
 import type { PriceBookInput } from 'estimator';
 
 const R = '2026-10-31';
 const src = (url: string) => ({ url, retrievedAt: R });
 
+// 2026-11-01 に読み直した（D-48）。Pro の文書・料金の文書・CDN の文書・Flat Rate CDN の文書（いずれも 2026-09 更新）が
+// 「Pro は込み分の代わりに月のクレジット」で揃い、pricing ページの「10M / 1TB included」だけが古い表記として残っている。
 const PRO_INTERPRETATION = {
   adopted:
-    'pricing ページの込み分（CDN Requests 月 1,000 万・Fast Data Transfer 月 1 TB）が残り、$20 のクレジットはそれ以外の従量と超過分に当たる',
+    '資源ごとの込み分はなく、$20 のクレジットがすべての従量（CDN Requests・Fast Data Transfer を含む）に最初の 1 単位から当たる。使い切ったら従量で請求される（On-demand CDN。Flat Rate CDN は申し込み制で、扱わない）',
   rejected: [
     {
       reading:
-        '込み分はなく、すべての従量に最初の 1 単位からクレジットが当たる',
+        'pricing ページの込み分（CDN Requests 月 1,000 万・Fast Data Transfer 月 1 TB）が残り、$20 のクレジットはそれ以外の従量と超過分に当たる',
       reason:
-        'pricing ページが資源ごとの込み分を明示している。Pro の文書の「from the first unit」は込み分のない資源の話と読めば両立する',
+        'Pro の文書に「The monthly credit applies to all managed infrastructure billable resources from the first unit you use」、料金の文書に「Pro teams get a monthly usage credit instead」とあり、CDN の表の Pro の込み分は「Flat Rate CDN」（申し込み制の定額の段）になっている。2025-09-09 の changelog「Included Pro usage is now credit-based」で込み分をクレジットに置き換えた。pricing ページの込み分の表記は置き換え前のものが残っていると読む',
     },
   ],
 };
@@ -28,8 +30,31 @@ export const vercel: PriceBookInput = {
   retrievedAt: R,
   sources: {
     pricing: src('https://vercel.com/pricing'),
-    pro: src('https://vercel.com/docs/plans/pro-plan'),
-    hobby: src('https://vercel.com/docs/plans/hobby'),
+    // Pro のクレジットと込み分の扱い（2026-11-01 に読み直した。D-48）。pro-plan は 2026-09-15 更新、他は 2026-09-14 更新
+    pro: {
+      url: 'https://vercel.com/docs/plans/pro-plan',
+      retrievedAt: '2026-11-01',
+    },
+    pricingDocs: {
+      url: 'https://vercel.com/docs/pricing',
+      retrievedAt: '2026-11-01',
+    },
+    cdnUsage: {
+      url: 'https://vercel.com/docs/manage-cdn-usage',
+      retrievedAt: '2026-11-01',
+    },
+    flatRateCdn: {
+      url: 'https://vercel.com/docs/pricing/flat-rate-cdn',
+      retrievedAt: '2026-11-01',
+    },
+    creditChangelog: {
+      url: 'https://vercel.com/changelog/included-pro-usage-is-now-credit-based',
+      retrievedAt: '2026-11-01',
+    },
+    hobby: {
+      url: 'https://vercel.com/docs/plans/hobby',
+      retrievedAt: '2026-11-01',
+    },
     functions: src('https://vercel.com/docs/functions/usage-and-pricing'),
     images: src(
       'https://vercel.com/docs/image-optimization/limits-and-pricing',
@@ -167,26 +192,6 @@ export const vercel: PriceBookInput = {
       scope: 'account' as const,
       sourceIds: ['blob'],
     })),
-    {
-      id: 'pro-cdn-requests',
-      quantity: 10_000_000,
-      unit: 'request',
-      period: 'month',
-      scope: 'account',
-      premise:
-        'Vercel Pro は CDN Requests 月 1,000 万まで込み（静的アセット・画像も 1 件ずつ数える）',
-      sourceIds: ['pricing'],
-    },
-    {
-      id: 'pro-fdt',
-      quantity: 1_000,
-      unit: 'gb',
-      period: 'month',
-      scope: 'account',
-      premise:
-        'Vercel Pro は Fast Data Transfer 月 1 TB まで込み、以降 $0.15/GB（Cloudflare は egress 無料）',
-      sourceIds: ['pricing'],
-    },
   ],
   plans: [
     {
@@ -413,8 +418,10 @@ export const vercel: PriceBookInput = {
           id: 'usage-credit',
           amount: 20,
           appliesTo: 'all-usage',
+          premise:
+            'Vercel Pro は月 $20 のクレジットがすべての従量に最初から当たり、使い切ると使った分だけ請求される（席の基本料には当たらない。余りは繰り越さない）',
           interpretation: PRO_INTERPRETATION,
-          sourceIds: ['pro'],
+          sourceIds: ['pro', 'pricingDocs', 'creditChangelog'],
         },
       ],
       notes: [
@@ -426,19 +433,17 @@ export const vercel: PriceBookInput = {
           aliases: ['edge-requests'],
           resource: 'requests',
           unit: 'request',
-          allowancePool: 'pro-cdn-requests',
           interpretation: PRO_INTERPRETATION,
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 2 },
-          sourceIds: ['pricing'],
+          sourceIds: ['pricing', 'cdnUsage'],
         },
         {
           id: 'fast-data-transfer',
           resource: 'egress-gb',
           unit: 'gb',
-          allowancePool: 'pro-fdt',
           interpretation: PRO_INTERPRETATION,
           pricing: { model: 'flat', per: 1, unitPrice: 0.15 },
-          sourceIds: ['pricing'],
+          sourceIds: ['pricing', 'cdnUsage'],
         },
         {
           id: 'fast-origin-transfer',
@@ -577,6 +582,7 @@ export const vercel: PriceBookInput = {
     },
   ],
   notes: [
+    'Pro の CDN（CDN Requests・Fast Data Transfer・Blob Data Transfer）は既定の On-demand CDN で計算する。申し込み制の Flat Rate CDN（Pro は最下段の月 100 万リクエスト・1 TB を追加料金なしで選べ、超えると翌月から上の段）は扱わない（D-48）',
     'CDN・FDT・ISR・画像の単価は地域で変わる（地域別の表は未取得。pricing ページの「starting at」を使っている）',
     'Active CPU・メモリの既定の単価は iad1（最安の地域）。hnd1・kix1 は地域料金として持つ',
   ],

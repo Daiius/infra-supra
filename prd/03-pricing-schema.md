@@ -133,6 +133,13 @@ type Credit = {
 ```
 
 クレジットは**メーター単位の無料枠を引いた後の金額**に当てる。順序: 無料枠 → 段階料金 → クレジット → 固定費の加算 → 最低請求額。
+
+`premise`（任意）を持つクレジットは、使った割合を量の前提（`credit:<provider>:<plan>:<credit>`）として出す。使用率は「当てられる従量の金額 / クレジットの額」で、超えても止まらず請求が増える（effect `cost`）。
+
+- Vercel Pro（D-48・2026-11-01 取得）: 資源ごとの込み分はなく、月 $20 のクレジットがすべての従量に最初の 1 単位から当たる。
+  - 出典: [docs/plans/pro-plan](https://vercel.com/docs/plans/pro-plan) 「The monthly credit applies to all managed infrastructure billable resources from the first unit you use.」
+  - 出典: [docs/pricing](https://vercel.com/docs/pricing) 「Pro teams get a monthly usage credit instead」
+  - pricing ページの「10M / 1TB included」は、2025-09-09 の changelog で置き換えられる前の表記として退けた。申し込み制の Flat Rate CDN は扱わない。
 この順序はプロバイダーによって異なる可能性がある。異なる場合は PriceBook 側で指定できるようにする（要確認・実データで判断）。
 
 ## 8. 為替

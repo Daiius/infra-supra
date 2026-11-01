@@ -1,5 +1,6 @@
 // プラットフォームの前提の判定（prd/01-domain-model.md §8.1・D-12）。純粋関数。
 // 「この構成で当たっている前提」と「あと少しで当たる前提」を、見積の説明とゲームのイベントで同じ文のまま使えるように出す。
+import type { Currency } from './num/money.ts';
 import { HOURS_PER_MONTH, type Unit } from './num/unit.ts';
 import type { Bill, MeterUsage, OverageBehavior } from './pricing/price.ts';
 import type { PriceBook } from './pricing/schema.ts';
@@ -30,6 +31,8 @@ export type PlatformPremise = {
   used?: number;
   limit?: number;
   unit?: Unit;
+  /** used・limit が金額のとき（クレジット）の通貨。このとき unit は持たない。 */
+  currency?: Currency;
   /** used / limit。threshold のときだけ。 */
   ratio?: number;
   /** 当たっている（境目を超えた・資格を満たさない）。 */
@@ -179,6 +182,32 @@ export function assessPremises(input: {
       planId: f.planId,
       hit: false,
     });
+  }
+
+  // 1b. 金額のクレジット（料金データの premise の文を使う。D-48）。
+  //     使用率は「当てられる従量の金額 / クレジットの額」。超えても止まらず、超えた分が請求される（cost）。
+  //     流量と同じく伸び率で先を見込む（accumulates: false）
+  for (const l of bill.lines) {
+    if (l.kind !== 'credit' || !l.credit) continue;
+    const credit = books
+      .get(l.priceRef.provider)
+      ?.plans.find((p) => p.id === l.priceRef.planId)
+      ?.credits.find((c) => c.id === l.credit!.id);
+    if (!credit?.premise) continue;
+    out.push(
+      threshold({
+        id: `credit:${l.priceRef.provider}:${l.priceRef.planId}:${credit.id}`,
+        text: credit.premise,
+        effect: 'cost',
+        nodeIds: l.nodeIds,
+        provider: l.priceRef.provider,
+        planId: l.priceRef.planId,
+        used: l.credit.eligible,
+        limit: l.credit.limit,
+        currency: l.currency,
+        accumulates: false,
+      }),
+    );
   }
 
   // 2. 制限（Limit）: 資源シミュレーションの値と比べる

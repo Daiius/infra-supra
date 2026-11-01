@@ -114,6 +114,35 @@ const book = parsePriceBook(
           },
         ],
       },
+      {
+        id: 'team',
+        service: 'compute',
+        name: 'Team',
+        baseFee: { amount: 20, per: 'month', scope: 'account' },
+        meters: [
+          {
+            id: 'requests',
+            resource: 'requests',
+            unit: 'request',
+            pricing: { model: 'flat', per: 1000, unitPrice: 2 },
+          },
+          {
+            id: 'egress',
+            resource: 'egress-gb',
+            unit: 'gb',
+            pricing: { model: 'flat', per: 1, unitPrice: 0.5 },
+          },
+        ],
+        credits: [
+          {
+            id: 'usage-credit',
+            amount: 10,
+            appliesTo: 'all-usage',
+            premise:
+              '月 $10 のクレジットがすべての従量に当たり、超えると請求される',
+          },
+        ],
+      },
     ],
   } satisfies PriceBookInput,
   { allowFictional: true },
@@ -243,5 +272,47 @@ describe('日次のプールの前提は平日と休日の両方で判定する'
       use('free', 'requests', 3000, { daily: { weekday: 90, weekend: 30 } }),
     ]);
     expect(premises[0]).toMatchObject({ used: 90, hit: false });
+  });
+});
+
+describe('金額のクレジットの使用率（D-48）', () => {
+  it('当てられる従量の金額 / クレジットの額を、超えると請求が増える前提として出す', () => {
+    // 3000 件 × $2/1000 = $6、4 GB × $0.5 = $2 → $8 / $10
+    const { bill, premises } = assess([
+      use('team', 'requests', 3000),
+      use('team', 'egress', 4),
+    ]);
+    expect(bill.totals.USD).toBeCloseTo(20, 12); // 基本料だけ（従量はクレジットに収まる）
+    const p = premises.find((x) => x.id.startsWith('credit:'))!;
+    expect(p).toMatchObject({
+      id: 'credit:fictional-premise:team:usage-credit',
+      kind: 'threshold',
+      effect: 'cost',
+      currency: 'USD',
+      limit: 10,
+      hit: false,
+      accumulates: false,
+    });
+    expect(p.used).toBeCloseTo(8, 12);
+    expect(p.ratio).toBeCloseTo(0.8, 12);
+    expect(p.unit).toBeUndefined();
+  });
+
+  it('超えても止まらず、使用率は 1 を超え、超えた分だけ請求される', () => {
+    // 6000 件 = $12、8 GB = $4 → $16 / $10
+    const { bill, premises } = assess([
+      use('team', 'requests', 6000),
+      use('team', 'egress', 8),
+    ]);
+    expect(bill.breaches).toEqual([]);
+    expect(bill.totals.USD).toBeCloseTo(20 + 6, 12);
+    const p = premises.find((x) => x.id.startsWith('credit:'))!;
+    expect(p).toMatchObject({ hit: true, effect: 'cost' });
+    expect(p.ratio).toBeCloseTo(1.6, 12);
+  });
+
+  it('従量が 0 なら前提を出さない', () => {
+    const { premises } = assess([use('team', 'requests', 0)]);
+    expect(premises.some((x) => x.id.startsWith('credit:'))).toBe(false);
   });
 });

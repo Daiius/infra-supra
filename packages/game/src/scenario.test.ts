@@ -19,6 +19,7 @@ import {
   type Action,
   type GameState,
 } from './index.ts';
+import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 
 const CF_PAID = 1;
 const VERCEL_PRO = 3;
@@ -159,18 +160,22 @@ describe('出来事（シード 42。話題の予告はシード 4）', () => {
     expect(disk.ratio).toBeGreaterThanOrEqual(0.7);
   });
 
-  it('見込みが外れた理由: Vercel Pro は話題の月に CDN Requests の込み分を超え、理由は話題', () => {
+  it('見込みが外れた理由: 受託の Vercel Pro は繁忙期の月に月のクレジットを超え、理由は繁忙期（シード 8。D-48）', () => {
     const s = playStrategy(
-      BASELINES.find((b) => b.id === 'vercel-pro')!,
-      42,
+      CONTRACT_OPERATIONS.baselines.find((b) => b.id === 'vercel-pro')!,
+      8,
+      CONTRACT_OPERATIONS,
     );
     const sp = surprisesOf(s);
     expect(sp).toHaveLength(1);
-    expect(sp[0]!.premiseId).toBe('pool:vercel:pro:pro-cdn-requests');
-    expect(sp[0]!.month).toBe(at(42, 'buzz')!.month);
+    expect(sp[0]!.premiseId).toBe('credit:vercel:pro:usage-credit');
+    expect(sp[0]!.month).toBe(
+      rollSchedule(CONTRACT_OPERATIONS, 8).find((x) => x.id === 'c-busy')!
+        .month,
+    );
     expect(sp[0]!.cause).toMatchObject({
       kind: 'event',
-      title: 'SNS で話題になった！',
+      title: '繁忙期（年度末の締め）',
     });
   });
 });

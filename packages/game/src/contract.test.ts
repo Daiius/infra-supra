@@ -27,6 +27,7 @@ const run = (id: string, seed: number): GameState =>
 
 describe('受託先の業務アプリの運用', () => {
   it('基準プレイ（golden。シード 42・SLA の打診が来るシード 11・全社展開の打診が来るシード 3）', () => {
+    // D-48: Vercel Pro のクレジットがすべての従量に当たる形に（込み分なし）。使用量は月 $10〜25 で、9 か月目ごろからクレジットを超える分だけ所持金が減る
     const r = (seed: number) =>
       Object.fromEntries(
         sc.baselines.map((b) => {
@@ -36,22 +37,22 @@ describe('受託先の業務アプリの運用', () => {
       );
     expect(r(42)).toEqual({
       'cf-paid': ['1988.27', 'won', 12],
-      'cf-paid-accept': ['1617.66', 'goal', 12],
+      'cf-paid-accept': ['1589.92', 'goal', 12],
       vps: ['1737.44', 'goal', 12],
       'vps-care': ['1844.57', 'won', 12],
       'vps-sla': ['1844.57', 'won', 12],
-      'vercel-pro': ['1515.40', 'goal', 12],
+      'vercel-pro': ['1507.07', 'goal', 12],
       'vercel-to-cf': ['1800.47', 'won', 12],
       'vercel-hobby': ['179.19', 'policy', 2],
       'cf-free': ['237.47', 'outages', 3],
     });
     expect(r(11)).toEqual({
       'cf-paid': ['2069.97', 'won', 12],
-      'cf-paid-accept': ['1659.86', 'goal', 12],
+      'cf-paid-accept': ['1581.77', 'goal', 12],
       vps: ['1603.33', 'outages', 12],
       'vps-care': ['1921.04', 'won', 12],
       'vps-sla': ['2028.98', 'won', 12],
-      'vercel-pro': ['1598.61', 'goal', 12],
+      'vercel-pro': ['1578.94', 'goal', 12],
       'vercel-to-cf': ['1874.23', 'won', 12],
       'vercel-hobby': ['179.19', 'policy', 2],
       'cf-free': ['237.47', 'outages', 3],
@@ -59,11 +60,11 @@ describe('受託先の業務アプリの運用', () => {
     expect(r(3)).toEqual({
       'cf-paid': ['2036.76', 'won', 12],
       // D-46: 乗り換え先の Vercel で添付が Vercel Blob の課金になる
-      'cf-paid-accept': ['1964.90', 'won', 12],
+      'cf-paid-accept': ['1726.18', 'won', 12],
       vps: ['1715.59', 'outages', 12],
       'vps-care': ['1821.02', 'won', 12],
       'vps-sla': ['1821.02', 'won', 12],
-      'vercel-pro': ['1564.45', 'goal', 12],
+      'vercel-pro': ['1545.47', 'goal', 12],
       'vercel-to-cf': ['1845.17', 'won', 12],
       'vercel-hobby': ['179.19', 'policy', 2],
       'cf-free': ['237.47', 'outages', 3],

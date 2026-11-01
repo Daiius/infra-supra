@@ -177,6 +177,7 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
 
   // D-47: 記事のデザインの刷新の提案（7 か月目）を断る基準プレイは、2 か月画質が下がって所持金が少し下がる
   it('記事コミュニティの SPA の基準プレイ（golden。シード 42）', () => {
+    // D-48: Vercel Pro の込み分をやめ、クレジットがすべての従量に当たる形に（Vercel Pro・何もしないは所持金が約 $550 減る）
     const r = Object.fromEntries(
       article.baselines.map((b) => {
         const s = playStrategy(b, 42, article, DEFAULT_START_DATE, 'vite-spa');
@@ -187,8 +188,8 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       'cf-paid': ['1840.83', 'won', 12],
       'cf-paid-accept': ['1936.66', 'won', 12],
       'vps-images': ['1641.36', 'goal', 12],
-      'vercel-pro': ['1375.32', 'goal', 12],
-      'vercel-to-cf': ['1474.62', 'goal', 12],
+      'vercel-pro': ['829.40', 'goal', 12],
+      'vercel-to-cf': ['1408.57', 'goal', 12],
       'cf-free': ['142.89', 'outages', 3],
       'cf-paid-kvdb': ['1695.56', 'goal', 12],
       'cf-paid-chat': ['1867.32', 'won', 12],
