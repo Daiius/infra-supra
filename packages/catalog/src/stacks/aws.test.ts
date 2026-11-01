@@ -90,6 +90,27 @@ describe('AWS の構成（Next.js・Amplify Hosting）', () => {
     );
   });
 
+  it('Aurora Serverless v2: 最小 0.5 ACU は 730 時間 × 0.5 × $0.20。0 ACU まで縮めても記事コミュニティではほぼ止まらない', () => {
+    const a = run(300_000, { db: 'aurora' });
+    expect(lines(a, 'aurora-serverless-v2-io', 'acu')[0]!.amount).toBeCloseTo(
+      730 * 0.5 * 0.2,
+      6,
+    );
+    const p = run(300_000, { db: 'aurora-pause' });
+    const awake = p.simulation.nodes['aurora-pause']!.awakeShare!;
+    expect(awake).toBeGreaterThan(0.9);
+    expect(awake).toBeLessThan(1);
+  });
+
+  it('Aurora DSQL: DB に届く件数 × 0.14 DPU（仮定）で、月 10 万 DPU までは無料', () => {
+    const small = run(30_000, { db: 'dsql' });
+    const dpu = lines(small, 'aurora-dsql', 'dpu');
+    expect(dpu.length).toBeGreaterThan(0);
+    expect(
+      small.simulation.nodes.dsql!.resources['processing-units'],
+    ).toBeGreaterThan(0);
+  });
+
   it('DB の差し替えの途中は新旧の両方の DB が載り、経路は今の DB だけ', () => {
     const a = composeStack(
       'aws-amplify',

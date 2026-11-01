@@ -227,7 +227,8 @@ export function assessPremises(input: {
         limit.measure === 'storage-gb' &&
         (node.config.kind === 'sql-db' ||
           node.config.kind === 'managed-db' ||
-          node.config.kind === 'request-db')
+          node.config.kind === 'request-db' ||
+          node.config.kind === 'processing-db')
       ) {
         used = nu.resources['storage-gb-month'] ?? 0;
       } else if (

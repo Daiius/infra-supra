@@ -136,6 +136,12 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'ページまで自前の CDN から返すので、Amplify から配る量がいちばん減る',
   'aws:db:dynamodb':
     '使った分だけの支払いで、保存も一定量まで無料。アクセスが増えても自動で追従する',
+  'aws:db:aurora':
+    '大手のクラウドの看板の Postgres。負荷に応じて自動で容量が伸び縮みする',
+  'aws:db:aurora-pause':
+    '使われていない間は止まり、その間の費用がかからない。小さく始めるのに向く',
+  'aws:db:dsql':
+    'サーバーの管理が要らない分散の SQL。使った分だけの支払いで、無料で使える量もある',
   'aws:db:rds':
     '定番の Postgres を小さいインスタンスから始められる。いつもの SQL がそのまま使える',
   'aws:apiCache:none': 'API を毎回処理するので、ページの中身はいつも最新',

@@ -356,6 +356,7 @@
 - 料金は Price List API と公式の文書で確かめた値だけ。Amplify の画像の最適化は料金未取得（unpriced）で明細に残す。estimator に `request-db`（DynamoDB 型）を足した。
 - 基準プレイ（何もしない・シード 1〜20）: 記事コミュニティで AWS SPA・既定は 19 / 20、AWS Next.js・既定は 10 / 20（所持金が目標の前後）。CF Paid の基準プレイと既存の golden は変わらない。目標の値の見直しは D-50 のとおりこの後。
 - 追記（ユーザーの問い「CloudFront のキャッシュを入れられないか」）: Amplify は自前で CloudFront を管理するが課金は Amplify の配信（$0.15/GB）で、CloudFront の常時無料は効かない（公式）。部品「前段の CDN」（なし / 自前の CloudFront（静的と画像）/（ISR のページも））を AWS の Next.js に足した。外れた分と HTML・API は Amplify の配信としても数える（高めの側の解釈・手順は Amplify のガイドに無い）。Amplify で最適化した画像 × 前段の CloudFront で記事コミュニティは 20 / 20。Amplify の制限（220 MB・5.72 MB・4.3 MB など）は文書化だけ（prd/11 §9.2・§10）。
+- 追記（ユーザーの決定・AX-12 を前倒し）: AWS の DB に Aurora Serverless v2（I/O-Optimized・最小 0.5 ACU / 0 ACU まで縮める）と Aurora DSQL を足した。0 ACU の止まり方は DB に届く件数の到着率から λT/(1+λT) で動いている割合を出す（記事コミュニティ・受託ともにほぼ止まらない）。DSQL の 1 件 0.14 DPU は料金ページの例からの仮定。基準プレイでは Aurora は全組で不合格（月約 $73 の固定費）、DSQL は DynamoDB とほぼ同じ（prd/11 §11）。
 
 ## 未決（grill で詰める）
 

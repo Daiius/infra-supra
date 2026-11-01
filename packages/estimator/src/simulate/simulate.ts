@@ -40,6 +40,8 @@ export type NodeUsage = {
    * ピークの同時数の判定はこちらを使う（D-44）。
    */
   peakBusyMs: number;
+  /** 止まる DB の動いている時間の割合（0〜1。止まらない DB では持たない）。 */
+  awakeShare?: number;
   host?: HostLoad;
 };
 
@@ -191,12 +193,18 @@ function consume(
       return f;
     }
     case 'managed-db': {
+      hostAcc.requests += n; // 止まる DB の動いている時間の割合に使う
       u.busyMs += n * p.wallMs; // 関数が接続を持っている間（壁時計時間）
       add(
         u,
         'egress-gb',
         kbToGb(n * p.queries * w.input.db.responseKBPerQuery),
       );
+      return f;
+    }
+    case 'processing-db': {
+      u.busyMs += n * p.wallMs;
+      add(u, 'processing-units', n * c.unitsPerRequest);
       return f;
     }
     case 'request-db': {
@@ -280,7 +288,10 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
       break;
     case 'managed-db':
       add(u, 'storage-gb-month', w.storage.dbGB);
-      add(u, 'instance-hours', HOURS_PER_MONTH);
+      add(u, 'instance-hours', HOURS_PER_MONTH * node.config.capacityUnits);
+      break;
+    case 'processing-db':
+      add(u, 'storage-gb-month', w.storage.dbGB);
       break;
     case 'request-db':
       add(u, 'storage-gb-month', w.storage.dbGB);
@@ -365,6 +376,21 @@ export function simulateResources(
     : { nodes, hostAcc };
   for (const n of architecture.nodes)
     nodes[n.id]!.peakBusyMs = peakAcc.nodes[n.id]!.busyMs;
+
+  // 止まる DB（Aurora Serverless v2 の 0 ACU）: 待ちの秒数 T の間に 1 件も届かない時間だけ止まる。
+  // 動いている割合は λT / (1 + λT)（月の平均の到着率。夜間に減る分は入れない）
+  for (const n of architecture.nodes) {
+    const c = n.config;
+    if (c.kind !== 'managed-db' || c.pauseAfterIdleSeconds === undefined)
+      continue;
+    const lt =
+      (hostAcc.get(n.id)!.requests / SECONDS_PER_MONTH) *
+      c.pauseAfterIdleSeconds;
+    const awake = lt / (1 + lt);
+    nodes[n.id]!.awakeShare = awake;
+    nodes[n.id]!.resources['instance-hours'] =
+      HOURS_PER_MONTH * c.capacityUnits * awake;
+  }
 
   // 関数の 1 回の実行の CPU の最大: 前景のクラスはそのまま、裏のクラスは起こした閲覧の CPU に足す
   for (const n of architecture.nodes) {

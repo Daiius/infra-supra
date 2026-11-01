@@ -27,6 +27,12 @@ export const AWS_DEFAULT_CHOICES: Choices = {
 const IMAGE_CDN_HIT_RATE = 0.9;
 /** Amplify の SSR・Lambda のメモリ（GB。ゲーム上の仮定。Amplify の SSR のメモリは公式の記載が見当たらない）。 */
 const COMPUTE_MEMORY_GB = 1;
+/** Aurora Serverless v2 の最小の容量（ACU。0.5 が 0 以外の最小。負荷で伸びる分は数えない仮定）。 */
+const AURORA_MIN_ACU = 0.5;
+/** 0 ACU まで縮めるときの、止まるまでの接続の無い時間（秒。公式の最短の値）。 */
+const AURORA_PAUSE_SECONDS = 300;
+/** Aurora DSQL の DB に届く 1 件あたりの DPU（仮定。料金ページの例 10 万 DPU ≈ 70 万トランザクションから）。 */
+const DSQL_DPU_PER_REQUEST = 0.14;
 /** DynamoDB の 1 行（item）の大きさ（KB。仮定。書き込みの単位 1 KB に収まるとみる）。 */
 const ITEM_KB = 1;
 
@@ -132,6 +138,34 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     ],
   },
   {
+    id: 'aurora',
+    slot: 'db',
+    platform: 'aws',
+    label: 'Aurora Serverless v2（最小 0.5 ACU）',
+    note: 'Aurora PostgreSQL の Serverless v2（I/O-Optimized。I/O に課金されない）。ACU の時間で課金し、最小の 0.5 ACU の分は常にかかる（負荷で伸びた分はこのモデルでは数えない）',
+    premiseRefs: ['fact:aws:aurora-serverless-v2-io:io-optimized'],
+  },
+  {
+    id: 'aurora-pause',
+    slot: 'db',
+    platform: 'aws',
+    label: 'Aurora Serverless v2（0 ACU まで縮める）',
+    note: '接続が 300 秒ないと止まり、止まっている間は ACU の料金がかからない。動いている割合は DB に届く件数から出す（ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。再開の待ち（約 15 秒）は速さに入れていない',
+    premiseRefs: ['fact:aws:aurora-serverless-v2-io:auto-pause'],
+  },
+  {
+    id: 'dsql',
+    slot: 'db',
+    platform: 'aws',
+    label: 'Aurora DSQL',
+    note: '処理の量（DPU）と保存で課金するサーバーレスの分散 SQL。月 10 万 DPU と 1 GB は無料。1 件あたりの DPU は公式に無く、料金ページの例から仮定している。PostgreSQL の一部の機能が無い',
+    premiseRefs: [
+      'fact:aws:aurora-dsql:dpu',
+      'fact:aws:aurora-dsql:compat',
+      'pool:aws:aurora-dsql:dsql-free-dpu',
+    ],
+  },
+  {
     id: 'rds',
     slot: 'db',
     platform: 'aws',
@@ -180,6 +214,36 @@ const bill = (planId: string, meters: Record<string, string>) => ({
 });
 
 function dbNode(opt: string | undefined): ArchNodeIn {
+  if (opt === 'aurora' || opt === 'aurora-pause') {
+    const pause = opt === 'aurora-pause';
+    return {
+      id: pause ? 'aurora-pause' : 'aurora',
+      label: pause
+        ? 'Aurora Serverless v2（0 ACU まで縮める）'
+        : 'Aurora Serverless v2（最小 0.5 ACU）',
+      config: {
+        kind: 'managed-db',
+        capacityUnits: AURORA_MIN_ACU,
+        ...(pause ? { pauseAfterIdleSeconds: AURORA_PAUSE_SECONDS } : {}),
+      },
+      facts: ['io-optimized', ...(pause ? ['auto-pause'] : [])],
+      billing: bill('aurora-serverless-v2-io', {
+        'instance-hours': 'acu',
+        'storage-gb-month': 'storage',
+      }),
+    };
+  }
+  if (opt === 'dsql')
+    return {
+      id: 'dsql',
+      label: 'Aurora DSQL',
+      config: { kind: 'processing-db', unitsPerRequest: DSQL_DPU_PER_REQUEST },
+      facts: ['dpu', 'compat'],
+      billing: bill('aurora-dsql', {
+        'processing-units': 'dpu',
+        'storage-gb-month': 'storage',
+      }),
+    };
   return opt === 'rds'
     ? {
         id: 'rds',

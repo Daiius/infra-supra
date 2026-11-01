@@ -180,6 +180,46 @@ describe('部品の選択で足した振る舞い', () => {
     expect(eventual.resources['instance-hours']).toBeUndefined();
   });
 
+  it('止まる DB: 動いている割合は λT / (1 + λT)、時間課金は容量の単位の数を掛ける。止まらない DB は 730 時間', () => {
+    const node = (pauseAfterIdleSeconds?: number) => ({
+      id: 'a',
+      label: 'a',
+      config: {
+        kind: 'managed-db' as const,
+        capacityUnits: 0.5,
+        ...(pauseAfterIdleSeconds ? { pauseAfterIdleSeconds } : {}),
+      },
+    });
+    const always = sim([node()], { api: ['a'] }).a!;
+    expect(always.resources['instance-hours']).toBeCloseTo(730 * 0.5, 9);
+    expect(always.awakeShare).toBeUndefined();
+    const paused = sim([node(300)], { api: ['a'] }).a!;
+    const lt = (w.classes.api.count / (730 * 3600)) * 300;
+    expect(paused.awakeShare).toBeCloseTo(lt / (1 + lt), 12);
+    expect(paused.resources['instance-hours']).toBeCloseTo(
+      730 * 0.5 * (lt / (1 + lt)),
+      9,
+    );
+  });
+
+  it('処理の量で課金する DB: 届いた 1 件を決まった単位で数える', () => {
+    const u = sim(
+      [
+        {
+          id: 'q',
+          label: 'q',
+          config: { kind: 'processing-db', unitsPerRequest: 0.14 },
+        },
+      ],
+      { api: ['q'] },
+    ).q!;
+    expect(u.resources['processing-units']).toBeCloseTo(
+      w.classes.api.count * 0.14,
+      9,
+    );
+    expect(u.resources['storage-gb-month']).toBe(w.storage.dbGB);
+  });
+
   it('Durable Objects 型: 受信メッセージは N 件で 1 リクエスト、実行時間は処理の間だけ', () => {
     const u = sim(
       [

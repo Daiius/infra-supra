@@ -67,6 +67,17 @@ export const aws: PriceBookInput = {
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
     rdsPrices: priceList('AmazonRDS'),
+    auroraPricing: src('https://aws.amazon.com/rds/aurora/pricing/'),
+    auroraAutoPause: src(
+      'https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless-v2-auto-pause.html',
+    ),
+    // 版（publicationDate）: AuroraDSQL 2026-09-11
+    dsqlPrices: priceList('AuroraDSQL'),
+    dsqlPricing: src('https://aws.amazon.com/rds/aurora/dsql/pricing/'),
+    dsqlCompat: src(
+      'https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-unsupported-features.html',
+    ),
+    rdsFree: src('https://aws.amazon.com/rds/free/'),
     freeTier: src('https://aws.amazon.com/free/'),
   },
   allowancePools: [
@@ -116,6 +127,24 @@ export const aws: PriceBookInput = {
       scope: 'account',
       premise: 'DynamoDB の保存は 25 GB 月まで無料（東京の料金表の最初の段）',
       sourceIds: ['dynamodbPrices'],
+    },
+    {
+      id: 'dsql-free-dpu',
+      quantity: 100_000,
+      unit: 'count',
+      period: 'month',
+      scope: 'account',
+      premise: 'Aurora DSQL は月 10 万 DPU まで無料（常時無料）',
+      sourceIds: ['dsqlPrices', 'dsqlPricing', 'rdsFree'],
+    },
+    {
+      id: 'dsql-free-storage',
+      quantity: 1,
+      unit: 'gb-month',
+      period: 'month',
+      scope: 'account',
+      premise: 'Aurora DSQL は保存 1 GB 月まで無料（常時無料）',
+      sourceIds: ['dsqlPrices', 'dsqlPricing', 'rdsFree'],
     },
   ],
   plans: [
@@ -440,6 +469,91 @@ export const aws: PriceBookInput = {
           unit: 'gb-month',
           pricing: { model: 'flat', per: 1, unitPrice: 0.138 },
           sourceIds: ['rdsPrices'],
+        },
+      ],
+    },
+    {
+      ...common,
+      id: 'aurora-serverless-v2-io',
+      service: 'aurora',
+      name: 'Aurora PostgreSQL Serverless v2（I/O-Optimized）',
+      sourceIds: ['rdsPrices', 'auroraPricing'],
+      notes: [
+        'I/O-Optimized を選んだのは、読み書きの I/O に課金されず、1 件あたりの I/O の数という確かめられない量に依らないため（標準は I/O が $0.24 / 100 万）',
+        'ACU は負荷に応じて伸縮するが、このモデルは最小の容量で動くとみなす（伸びた分は数えない）',
+      ],
+      facts: [
+        {
+          id: 'io-optimized',
+          premise:
+            'Aurora I/O-Optimized は読み書きの I/O に課金されない（インスタンスと保存だけ）。I/O の費用が全体の 25% を超えるなら I/O-Optimized が得とされる',
+          sourceIds: ['auroraPricing'],
+        },
+        {
+          id: 'auto-pause',
+          premise:
+            'Aurora Serverless v2 は最小の容量を 0 ACU にすると、ユーザーの接続が指定の時間（最短 300 秒）無いときに止まり、止まっている間はインスタンスの料金がかからない。再開はふつう約 15 秒（24 時間を超えて止まると 30 秒以上）。RDS Proxy を付けると止まらない',
+          sourceIds: ['auroraAutoPause'],
+        },
+      ],
+      meters: [
+        {
+          id: 'acu',
+          resource: 'instance-hours',
+          unit: 'hour',
+          premise:
+            'Aurora Serverless v2 は ACU の時間で課金され、動いている間は使われていなくても最小の容量の分がかかる',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.2 },
+          sourceIds: ['rdsPrices'],
+        },
+        {
+          id: 'storage',
+          resource: 'storage-gb-month',
+          unit: 'gb-month',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.27 },
+          sourceIds: ['rdsPrices'],
+        },
+      ],
+    },
+    {
+      ...common,
+      id: 'aurora-dsql',
+      service: 'aurora-dsql',
+      name: 'Aurora DSQL',
+      sourceIds: ['dsqlPrices', 'dsqlPricing'],
+      notes: [
+        'DPU は SQL の処理（ComputeDPU）と保存の読み書き（ReadDPU・WriteDPU）の量。1 件あたりの DPU は公式に書かれていない',
+      ],
+      facts: [
+        {
+          id: 'dpu',
+          premise:
+            'Aurora DSQL は処理の量（DPU）と保存で課金され、使われていなければ費用は保存だけ。1 件あたりの DPU は公式に書かれておらず、料金ページの例（10 万 DPU ≈ TPC-C 由来の 70 万トランザクション）から 1 件 0.14 DPU と仮定している',
+          sourceIds: ['dsqlPricing'],
+        },
+        {
+          id: 'compat',
+          premise:
+            'Aurora DSQL は PostgreSQL 互換だが、一時テーブル・トリガー・PL/pgSQL が無く、1 つのトランザクションで変更できる行は 3,000 まで。分離レベルは Repeatable Read に固定で、競合すると再試行が要る（楽観的な並行制御）。接続は 1 時間で切れる',
+          sourceIds: ['dsqlCompat'],
+        },
+      ],
+      meters: [
+        {
+          id: 'dpu',
+          resource: 'processing-units',
+          unit: 'count',
+          allowancePool: 'dsql-free-dpu',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 10 },
+          sourceIds: ['dsqlPrices'],
+        },
+        {
+          id: 'storage',
+          resource: 'storage-gb-month',
+          unit: 'gb-month',
+          allowancePool: 'dsql-free-storage',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.4 },
+          sourceIds: ['dsqlPrices'],
         },
       ],
     },
