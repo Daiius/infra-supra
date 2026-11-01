@@ -75,6 +75,12 @@ const TO_HOURS: Partial<Record<Unit, number>> = {
   'cpu-hour': 1,
 };
 
+/** メモリ × 時間の単位を GB 時間に直す係数（Lambda の GB 秒と、関数の memory-gb-hours の換算）。 */
+const TO_GB_HOURS: Partial<Record<Unit, number>> = {
+  'gb-hour': 1,
+  'gb-second': 1 / SECONDS_PER_HOUR,
+};
+
 /** 件数の単位は互いに同じ数として扱う（1 リクエスト = 1 回 = 1 操作）。 */
 const COUNT_LIKE: ReadonlySet<Unit> = new Set([
   'count',
@@ -92,6 +98,9 @@ export function convertUnit(value: number, from: Unit, to: Unit): number {
   const fh = TO_HOURS[from];
   const th = TO_HOURS[to];
   if (fh !== undefined && th !== undefined) return (value * fh) / th;
+  const fg = TO_GB_HOURS[from];
+  const tg = TO_GB_HOURS[to];
+  if (fg !== undefined && tg !== undefined) return (value * fg) / tg;
   if (COUNT_LIKE.has(from) && COUNT_LIKE.has(to)) return value;
   if (from === 'byte' && to === 'gb') return bytesToGb(value);
   throw new UnitConversionError(from, to);

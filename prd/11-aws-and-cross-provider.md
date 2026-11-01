@@ -355,3 +355,38 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
   [API の上限](https://developers.cloudflare.com/fundamentals/api/reference/limits/)・[Hyperdrive](https://developers.cloudflare.com/hyperdrive/)・[Hyperdrive の private database](https://developers.cloudflare.com/hyperdrive/configuration/connect-to-private-database/)・[R2 の料金](https://developers.cloudflare.com/r2/pricing/)
 - Vercel: [関数のリージョン](https://vercel.com/docs/functions/configuring-functions/region)（2026-08-11 更新）・[Marketplace の AWS](https://vercel.com/marketplace/aws)
 - Neon: [料金](https://neon.com/pricing)・[リージョン](https://neon.com/docs/introduction/regions)
+
+## 9. 実装（段 1・2026-11-01・D-51）
+
+- 料金: `packages/catalog/src/providers/aws.ts`（provider `aws`・東京・常時無料のプールだけ）。Amplify Hosting・Lambda（x86）・API Gateway（HTTP API）・CloudFront（従量の料金・日本）・S3 標準・DynamoDB（オンデマンド）・RDS for PostgreSQL（db.t4g.micro）。
+  Amplify の画像の最適化は料金表に専用の行が無いので `unpriced`（料金未取得。明細に残り合計に入らない）。Amplify の無料枠は「Free for 12 months」なので入れない（AX-06）。メンバーと SLA は「取得していない」の文（`not-stated`）。
+- 構成: `packages/catalog/src/stacks/aws.ts`（`composeAws`・部品・既定の選択）。`stacks/index.ts` は登録の数行だけ（`Platform` に `aws`・`STACK_DEFS`・`COMPONENTS`・`DEFAULT_CHOICES`・`composeStack` の分岐）。構成の添字は 6（既存の後ろ）。
+  - Next.js: Amplify の CDN（転送 $0.15/GB）→ Amplify の SSR（リクエスト + GB 時間）→ DB。ISR は CDN の期間つきのキャッシュ（D-37 の式）で、miss は SSR が返す。オンデマンド ISR は非対応（`onDemandIsr: false`）。
+  - SPA: CloudFront → API Gateway（HTTP API）→ Lambda → DB。シェルと静的なファイルは CloudFront が返す。
+  - 部品: ISR（Amplify の ISR / キャッシュしない）・画像（Amplify の最適化（Next.js だけ）/ 最適化しない / 投稿のときに縮める。後の 2 つは S3 + CloudFront で配る）・DB（DynamoDB / RDS）・API の応答のキャッシュ（SPA・CloudFront）・ファイル（S3・固定）。既定は ISR・縮める・DynamoDB。
+- estimator: ノードの種類 `request-db`（読み取りは応答を 4 KB 単位で切り上げ・結果整合は半分、書き込みは 1 行を 1 KB 単位。1 行の大きさ 1 KB は仮定）と、リソース `read-request-units`・`write-request-units`。単位の換算に GB 時間 ↔ GB 秒を足した。
+- 仮定: Amplify の SSR と Lambda のメモリ 1 GB（Amplify は公式の記載が見当たらない）・画像の CDN のヒット率 0.9（Vercel と同じ）・DynamoDB の 1 行 1 KB。RDS のストレージは DB の大きさで近似、アプリと RDS の間の転送は数えない（未確認）。
+
+### 9.1 基準プレイ（何もしない・シード 1〜20・目標は今の値）
+
+| シナリオ | 構成・部品 | 合格 | 12 か月の費用（中央値） | 所持金（中央値） | 当たった前提 |
+|---|---|---|---|---|---|
+| 記事コミュニティ | AWS Next.js・既定（ISR・縮める・DynamoDB） | 10 / 20 | $671 | $1,751 | CloudFront の転送 1 TB |
+| 〃 | AWS Next.js・Amplify の画像の最適化 | 0 / 20 | $1,016（＋料金未取得） | $1,348 | — |
+| 〃 | AWS Next.js・最適化しない | 0 / 20（1 か月目に所持金が尽きる） | $237 | −$102 | CloudFront の転送 1 TB |
+| 〃 | AWS Next.js・RDS | 0 / 20 | $885 | $1,537 | CloudFront の転送 1 TB |
+| 〃 | AWS Next.js・キャッシュしない | 10 / 20 | $670 | $1,753 | CloudFront の転送 1 TB |
+| 〃 | AWS SPA・既定（縮める・DynamoDB） | 19 / 20 | $197 | $1,885 | Lambda の 100 万・CloudFront の 1 TB・1,000 万 |
+| 〃 | AWS SPA・API を CloudFront でキャッシュ | 19 / 20 | $197 | $1,886 | 同上 |
+| 〃 | AWS SPA・RDS | 8 / 20 | $412 | $1,670 | 同上 |
+| 〃 | CF Paid・何もしない（目標の根拠） | 20 / 20 | $182 | $2,153 | 変わらない |
+| 受託 | AWS Next.js・既定 | 20 / 20 | $180 | $1,873 | — |
+| 〃 | AWS Next.js・RDS | 0 / 20 | $388 | $1,665 | — |
+| 〃 | AWS SPA・既定 | 20 / 20 | $50 | $2,003 | Lambda の 100 万 |
+| 〃 | AWS SPA・RDS | 20 / 20 | $258 | $1,795 | — |
+| 〃 | CF Paid・何もしない（目標の根拠） | 20 / 20 | $68 | $2,037 | 変わらない |
+
+- 未達の理由はすべて所持金（満足度は 0.85〜0.89 で目標を超える）。受託は画像のスロットを出さないので、画像の部品の違いは効かない。
+- **Next.js の AWS は目標の前後**（Amplify の転送 $0.15/GB が効く）。画像を Amplify で最適化すると転送が増えて届かない。**SPA の AWS は CloudFront の常時無料で記事コミュニティでも勝てる**（§3.4 の見立てどおり）。RDS の固定費（約 $18/月 + ストレージ）は小さな規模ほど効く。
+- 「API を CloudFront でキャッシュ」がほぼ効かないのは、ゲームの API のキャッシュの期間の設定（D-37）が既定で 0 だから（他の事業者と同じ）。
+- 所持金の目標と広告の単価は、この表を見て決め直す（D-50）。既存の golden（CF・Vercel・VPS の基準プレイ）は変わらない。

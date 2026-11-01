@@ -26,6 +26,8 @@ export const RESOURCES = [
   'monthly-active-users',
   'queries', // DB への問い合わせ（Hyperdrive のクエリ数など）
   'gb-seconds', // メモリ × 実行時間（秒。Durable Objects の Duration）
+  'read-request-units', // 要求の単位で課金する DB の読み取りの単位（DynamoDB の RRU。AX-05）
+  'write-request-units', // 同じく書き込みの単位（DynamoDB の WRU）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -54,4 +56,6 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'monthly-active-users': 'count',
   queries: 'count',
   'gb-seconds': 'gb-second',
+  'read-request-units': 'operation',
+  'write-request-units': 'operation',
 };

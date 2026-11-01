@@ -350,6 +350,12 @@
 - 話題の集中（D-44）を日次の無料枠にも効かせる変更は、AWS の段 1 と同じ時期に別の小さな変更で入れる。
 - 料金は AWS の Price List API（東京）と公式の文書で確かめた値だけ（prd/11 §1.5）。確かめられなかったものは prd/11 §1.6。
 
+### D-51 AWS の段 1 の実装（確定・2026-11-01）
+
+- D-50 の AX-02・AX-06 に沿って、AWS（東京・常時無料だけ）を 7 つ目の構成（添字 6）として足した。Next.js は Amplify Hosting、Vite の SPA は S3 + CloudFront + Lambda（HTTP API）。部品は ISR（既定 / しない）・画像（Amplify の最適化 / 最適化しない / 投稿のときに縮める）・DB（DynamoDB / RDS db.t4g.micro）・SPA の API のキャッシュ（CloudFront）・ファイル（S3）。prd/11 §9。
+- 料金は Price List API と公式の文書で確かめた値だけ。Amplify の画像の最適化は料金未取得（unpriced）で明細に残す。estimator に `request-db`（DynamoDB 型）を足した。
+- 基準プレイ（何もしない・シード 1〜20）: 記事コミュニティで AWS SPA・既定は 19 / 20、AWS Next.js・既定は 10 / 20（所持金が目標の前後）。CF Paid の基準プレイと既存の golden は変わらない。目標の値の見直しは D-50 のとおりこの後。
+
 ## 未決（grill で詰める）
 
 | # | 論点 | 関係する章 |

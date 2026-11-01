@@ -78,6 +78,18 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
   /** コンピュートを時間で買うマネージド DB（Supabase 型）。 */
   z.object({ kind: z.literal('managed-db') }),
   /**
+   * 要求の単位で課金する DB（DynamoDB のオンデマンド型。prd/11 AX-05）。読み取りは問い合わせ 1 回の応答の大きさを
+   * readUnitKB 単位で切り上げた数（結果整合なら半分）、書き込みは 1 行（itemKB）を writeUnitKB 単位で切り上げた数。
+   * 単位の大きさは公式の文書、1 行の大きさ itemKB は仮定（catalog の構成が値を持つ）。
+   */
+  z.object({
+    kind: z.literal('request-db'),
+    readUnitKB: Pos,
+    writeUnitKB: Pos,
+    eventuallyConsistent: z.boolean().default(true),
+    itemKB: Pos,
+  }),
+  /**
    * オブジェクトストレージ（R2・S3 型）。storesImages: false なら画像の保存量を載せない（ISR のキャッシュだけに使う場合）。
    * cdnHitRate: 事業者の CDN が自分で配信する型（Vercel Blob の公開のストア）。読み取りは全件を CDN のリクエストと
    * 配信の転送（egress）に数え、miss だけを読み取りの操作と origin への転送に数える（経路に CDN のノードを置かない）。

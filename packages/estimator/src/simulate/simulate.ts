@@ -199,6 +199,19 @@ function consume(
       );
       return f;
     }
+    case 'request-db': {
+      u.busyMs += n * p.wallMs;
+      const readUnits =
+        ceilUnits(w.input.db.responseKBPerQuery, c.readUnitKB) *
+        (c.eventuallyConsistent ? 0.5 : 1);
+      add(u, 'read-request-units', n * p.queries * readUnits);
+      add(
+        u,
+        'write-request-units',
+        n * p.rowsWritten * ceilUnits(c.itemKB, c.writeUnitKB),
+      );
+      return f;
+    }
     case 'object-storage': {
       // 投稿のときに作ったサイズ違いの書き込み（image-transform）も書き込み
       if (
@@ -268,6 +281,9 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
     case 'managed-db':
       add(u, 'storage-gb-month', w.storage.dbGB);
       add(u, 'instance-hours', HOURS_PER_MONTH);
+      break;
+    case 'request-db':
+      add(u, 'storage-gb-month', w.storage.dbGB);
       break;
     case 'object-storage':
       if (node.config.storesImages)
