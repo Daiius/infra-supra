@@ -21,6 +21,7 @@ import {
   toSpa,
   type Choices,
   type FrameworkId,
+  type ComponentProvider,
   type Platform,
   type SlotId,
 } from 'catalog';
@@ -665,6 +666,25 @@ export function selfHostedOf(
  * components を渡すと、SPA の API を他の事業者に置いているときは実際の組で出す（例「Vercel Pro の静的 + Cloudflare Workers・D1」。
  * 構成の既定の DB の名前を出さない。D-65）。始める画面の構成の一覧は渡さない（構成の名前のまま）。
  */
+/**
+ * DB を Neon にした Vercel・Netlify の構成の名前（D-77）。「Supabase Pro」を実際の組「Neon（Launch）」に替える
+ * （土台が Hobby・Free なら Neon（Free））。API を他の事業者に置くと DB の名前は使わないので、そのまま。
+ */
+function withDbName<T extends { name: string; id: string }>(
+  s: T,
+  components: Choices,
+): T {
+  if (components.db !== 'neon') return s;
+  const free = /-(hobby|free)$/.test(s.id);
+  return {
+    ...s,
+    name: s.name.replace(
+      /Supabase (Free|Pro)/,
+      `Neon（${free ? 'Free' : 'Launch'}）`,
+    ),
+  };
+}
+
 export function stackName(
   stackIndex: number,
   framework: FrameworkId = 'nextjs',
@@ -672,7 +692,7 @@ export function stackName(
   withFramework = true,
   components: Choices = {},
 ): string {
-  const s = STACKS[stackIndex]!;
+  const s = withDbName(STACKS[stackIndex]!, components);
   const api = apiPlacedElsewhere(components)
     ? API_PLACEMENT_NAME[components.api!]
     : undefined;
@@ -1369,6 +1389,7 @@ const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
   aws: 'AWS',
   supabase: 'Supabase',
   netlify: 'Netlify',
+  neon: 'Neon',
   sakura: 'さくらのクラウド',
 };
 export const accountLabel = (id: string) => ACCOUNT_LABEL[id] ?? id;
@@ -2108,7 +2129,7 @@ export function componentSlots(state: GameState): {
 /** 始める画面の部品の選択肢（files は構成が暗黙に持つファイルの置き場。catalog の fileStorageOf）。 */
 export type SetupOption = {
   id: string;
-  platform: Platform;
+  platform: ComponentProvider;
   slot: SlotId | 'files';
   label: string;
   note: string;
@@ -2262,7 +2283,7 @@ export function setupProblem(
 
 /** 部品の選択肢の短い説明（フレーバー。catalog の COMPONENT_FLAVOR。D-45）。 */
 export function componentFlavor(o: {
-  platform: Platform;
+  platform: ComponentProvider;
   slot: SlotId | 'files';
   id: string;
 }): string | undefined {

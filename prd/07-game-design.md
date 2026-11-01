@@ -838,6 +838,7 @@ export const cloudflareVinext = (plan) => composeStack('cloudflare', plan, DEFAU
 
 - 「キャッシュしない」「最適化しない」は 3 事業者で同じ意味を持つので、**事業者の違いがそのまま前提の違いとして出る**（Cloudflare は転送量 0 円で速さだけ・Vercel は Fast Data Transfer と関数の費用・VPS は CPU と共有回線）。D-12 の比べ方がいちばん素直に出る組み合わせ。
 - DB の差し替えを Vercel・VPS で出さないのは、選択肢が別の事業者（Neon・RDS など）になり、§11.6 のプロバイダーをまたぐ構成そのものになるため。
+  （追記・D-77）事業者をまたぐ仕組み（D-52）の上で、Vercel・Netlify の DB に Supabase（既定）と Neon を出した（prd/11 §15）。
 
 ### 11.3 ゲームでの操作
 

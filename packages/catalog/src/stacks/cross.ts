@@ -14,7 +14,13 @@ import {
 } from './aws.ts';
 import { vpsNode } from './sakura.ts';
 import type { FrameworkId } from '../frameworks/index.ts';
-import type { Choices, ComponentOption, Platform, SlotId } from './index.ts';
+import type {
+  Choices,
+  ComponentOption,
+  ComponentProvider,
+  Platform,
+  SlotId,
+} from './index.ts';
 
 /** 土台と別の事業者の部品の接続の形。 */
 export type CrossLink = {
@@ -34,7 +40,7 @@ export type CrossLink = {
 export type CrossPair = {
   host: Platform;
   slot: SlotId;
-  provider: Platform;
+  provider: ComponentProvider;
   /** 根拠の要約（出典は catalog の料金データの facts と同じ URL）。 */
   basis: string;
   sources: { url: string; retrievedAt: string }[];
@@ -248,6 +254,38 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/how-credits-work/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
+  // DB だけ Neon（従量の Postgres。D-77・2026-11-02 に原文で確かめた）。Supabase の代わりに、関数から serverless driver で問い合わせる
+  {
+    host: 'vercel',
+    slot: 'db',
+    provider: 'neon',
+    basis:
+      'Neon の serverless driver は「serverless and edge environments」から HTTP か WebSocket で問い合わせられ、HTTP を既定に使うよう書かれる（Next.js・Vercel Functions の例がある）。' +
+      'TCP でつなぐなら serverless の関数には接続のプール（PgBouncer）が推奨。Vercel の Marketplace に Neon があり、新しく作ると請求は Vercel にまとまる（ここでは Neon に直接払う形で数える）。' +
+      'Neon の AWS のリージョンに東京は無く、近いのはシンガポール（往復の遅延は計算しない。AX-13・AX-14）',
+    sources: [
+      'https://neon.com/docs/serverless/serverless-driver',
+      'https://neon.com/docs/connect/connection-pooling',
+      'https://neon.com/docs/introduction/regions',
+      'https://neon.com/pricing',
+      'https://vercel.com/marketplace/neon',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
+  {
+    host: 'netlify',
+    slot: 'db',
+    provider: 'neon',
+    basis:
+      'Vercel と同じ（Netlify Functions から serverless driver の HTTP で問い合わせる）。DB からの応答は Neon の公開の転送で数え、関数から送る問い合わせは Supabase のときと同じく数えない。' +
+      'Netlify 自身の Postgres（Netlify Database・クレジットで課金）は扱っていない',
+    sources: [
+      'https://neon.com/docs/serverless/serverless-driver',
+      'https://neon.com/docs/connect/connection-pooling',
+      'https://neon.com/docs/introduction/regions',
+      'https://neon.com/pricing',
+      'https://docs.netlify.com/build/data-and-storage/netlify-db/',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
 ];
 
 const VERCEL_TO_CF_IMAGES_REFS = [
@@ -388,6 +426,20 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'limit:cloudflare:workers-free:cpu-ms-per-request',
     ],
   },
+  // DB だけ Neon（D-77）。Vercel・Netlify の Supabase の代わり。API の置き場が同居のときだけ効く（他の事業者に置くと DB はその事業者の部品）
+  {
+    id: 'neon',
+    slot: 'db',
+    platform: 'neon',
+    hosts: ['vercel', 'netlify'],
+    link: { via: 'http', as: 'neon' },
+    label: 'Neon: 従量の Postgres（閲覧が途切れると止まる）',
+    note:
+      'DB を Supabase から Neon に替える。基本料が無く、動いている時間（最小の 0.25 CU）・保存・転送（月 500 GB の後）の分だけ払う。問い合わせが 5 分無いと止まり、止まっている間は計算に払わない（動いている割合は DB に届く件数から出す。ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。' +
+      '土台が無料のプラン（Vercel Hobby・Netlify Free）なら Neon Free（月 100 CU 時間・転送 5 GB・1 GB まで。超えると止まる）、それ以外は Neon Launch。' +
+      '関数から serverless driver（HTTP）で問い合わせる。東京のリージョンが無く、最寄りはシンガポール（往復の遅延は計算しない）。Neon のアカウントが 1 つ増え、請求が 2 つになる',
+    premiseRefs: ['fact:neon:', 'pool:neon:', 'limit:neon:'],
+  },
   // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の手間・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
   // プランは 2GB と 4GB（ディスクが 2 倍）。プランの間の移し替えも API と DB のデータの移行として扱う（仮定）
   ...(['2gb', '4gb'] as const).map((plan): ComponentOption => ({
@@ -420,7 +472,7 @@ export const apiPlacedElsewhere = (c: Choices): boolean =>
   c.api !== undefined && c.api !== 'same';
 
 /** 部品を差せる土台の事業者（省略は自分の事業者だけ）。 */
-export const hostsOf = (c: ComponentOption): readonly Platform[] =>
+export const hostsOf = (c: ComponentOption): readonly ComponentProvider[] =>
   c.hosts ?? [c.platform];
 
 /** 部品の振る舞いの id（他の事業者の部品は、同じ振る舞いの部品の id。それ以外はそのまま）。 */
@@ -613,6 +665,81 @@ export function applyCross(
   return { ...arch, nodes, routes };
 }
 
+// ---- DB だけ Neon（D-77・prd/11 §15）----
+
+/** Neon の最小の計算の大きさ（CU。0.25 CU は約 1 GB の RAM。自動の拡大は計算しない）。 */
+export const NEON_MIN_CU = 0.25;
+/** Neon が止まるまでの、問い合わせの無い時間（秒。既定の 5 分）。 */
+export const NEON_SUSPEND_SECONDS = 300;
+
+/** Neon の DB のノード。土台が無料のプラン（Vercel Hobby・Netlify Free）なら Neon Free、それ以外は Neon Launch。 */
+function neonNode(id: string, hostPlan: string): ArchNodeIn {
+  const free = hostPlan === 'hobby' || hostPlan === 'free';
+  return {
+    id,
+    label: free ? 'Neon Free（Postgres）' : 'Neon Launch（Postgres）',
+    config: {
+      kind: 'managed-db',
+      capacityUnits: NEON_MIN_CU,
+      pauseAfterIdleSeconds: NEON_SUSPEND_SECONDS,
+    },
+    facts: ['region', 'serverless-driver', 'scale-to-zero', 'compute-size'],
+    billing: {
+      accountId: 'neon',
+      provider: 'neon',
+      planId: free ? 'free' : 'launch',
+      meters: free
+        ? { 'instance-hours': 'compute', 'egress-gb': 'transfer' }
+        : {
+            'instance-hours': 'compute',
+            'storage-gb-month': 'storage',
+            'egress-gb': 'transfer',
+          },
+    },
+  };
+}
+
+/**
+ * Vercel・Netlify の DB（Supabase のノード `db`）を Neon に差し替える（composeStack から、画像・API の前に呼ぶ）。
+ * 経路はそのまま（ノードの id を変えない）。standby.db（差し替えの途中）が今と違えば、移す先の DB を `db-next` で経路に載せずに足す
+ * （Supabase は常に動く分・Neon は届く件数が無いので止まっている。新旧の両方の費用）。
+ */
+export function applyCrossDb(
+  arch: ArchitectureInput,
+  host: Platform,
+  plan: string,
+  choices: Choices,
+  standby: Choices,
+): ArchitectureInput {
+  if (host !== 'vercel' && host !== 'netlify') return arch;
+  const supabase = arch.nodes.find((n) => n.id === 'db');
+  if (!supabase) return arch;
+  const current = choices.db ?? 'supabase';
+  const next = standby.db;
+  const of = (opt: string, id: string): ArchNodeIn | undefined =>
+    opt === 'neon'
+      ? neonNode(id, plan)
+      : opt === 'supabase'
+        ? { ...supabase, id }
+        : undefined;
+  let nodes = arch.nodes.map((n) =>
+    n.id === 'db' ? (of(current, 'db') ?? n) : n,
+  );
+  const standbyNode =
+    next !== undefined && next !== current ? of(next, 'db-next') : undefined;
+  if (standbyNode) nodes = [...nodes, standbyNode];
+  if (current !== 'neon') return { ...arch, nodes };
+  const free = plan === 'hobby' || plan === 'free';
+  return {
+    ...arch,
+    name: arch.name.replace(
+      /Supabase (Free|Pro)/,
+      free ? 'Neon（Free）' : 'Neon（Launch）',
+    ),
+    nodes,
+  };
+}
+
 // ---- API の置き場（SPA は D-65・prd/10 §3。Next.js と VPS は D-67）----
 
 /** API と一緒に他の事業者に移す（使わなくなれば外す）土台のノード。DB は API と同じ事業者に置く。 */
@@ -627,8 +754,8 @@ const AWS_API_NODES = [
   'dsql',
 ] as const;
 const HOST_API_NODES: Partial<Record<Platform, readonly string[]>> = {
-  vercel: ['fn', 'db'],
-  netlify: ['fn', 'db'],
+  vercel: ['fn', 'db', 'db-next'],
+  netlify: ['fn', 'db', 'db-next'],
   aws: AWS_API_NODES,
   'aws-opennext': AWS_API_NODES,
   cloudflare: ['worker', 'd1', 'kv-db', 'hyperdrive', 'supabase'],

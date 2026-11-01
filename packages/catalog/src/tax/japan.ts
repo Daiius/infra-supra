@@ -85,6 +85,13 @@ export const JAPAN_TAX: readonly JapanTaxTreatment[] = [
       ),
     ],
   },
+  {
+    provider: 'neon',
+    status: 'unconfirmed',
+    premise:
+      'Neon の請求の文書は請求先の情報に VAT・税の ID を入れられると書くだけで、日本の消費税を足すかは書かれていない（消費税の扱いは未確認。税抜のまま）',
+    sources: [src('https://neon.com/docs/introduction/manage-billing')],
+  },
 ];
 
 export const japanTaxOf = (provider: string): JapanTaxTreatment | undefined =>

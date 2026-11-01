@@ -26,6 +26,7 @@ import {
   apiPlacedElsewhere,
   applyCross,
   applyCrossApi,
+  applyCrossDb,
   behaviorOf,
   CROSS_COMPONENTS,
   hostsOf,
@@ -34,6 +35,8 @@ import {
 
 export type Platform =
   'cloudflare' | 'vercel' | 'sakura' | 'aws' | 'aws-opennext' | 'netlify';
+/** 部品の事業者（土台の事業者に加えて、部品だけを出す事業者。Neon は DB の部品だけ。D-77）。 */
+export type ComponentProvider = Platform | 'neon';
 export type SlotId =
   | 'isrCache'
   | 'images'
@@ -106,7 +109,7 @@ export const STACK_DEFS: readonly StackDef[] = [
 export type ComponentOption = {
   id: string;
   slot: SlotId;
-  platform: Platform;
+  platform: ComponentProvider;
   label: string;
   /** 選ぶ前に出す説明（何が変わるか）。 */
   note: string;
@@ -283,6 +286,19 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     premiseRefs: [
       'pool:cloudflare:durable-objects-paid',
       'pool:cloudflare:durable-objects-free',
+    ],
+  },
+  // Vercel の DB（D-77）。既定は Supabase（構成の名前の DB）。Neon（従量の Postgres）は cross.ts の他の事業者の部品
+  {
+    id: 'supabase',
+    slot: 'db',
+    platform: 'vercel',
+    label: 'Supabase（Postgres）',
+    note: 'Hobby は Supabase Free、Pro は Supabase Pro（月の基本料つき・Micro のサーバーが常に動く）。関数から接続のプール（pooler）でつなぐ',
+    premiseRefs: [
+      'fact:supabase:pro-micro:compute',
+      'limit:supabase:pro-micro:pooler-connections',
+      'limit:supabase:free:db-size',
     ],
   },
   // Vercel・VPS は共通の役割だけ（G-04）
@@ -644,7 +660,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
 export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   cloudflare: { isrCache: 'kv', images: 'images', db: 'd1', realtime: 'none' },
-  vercel: { isrCache: 'default', images: 'default' },
+  vercel: { isrCache: 'default', images: 'default', db: 'supabase' },
   sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
   aws: AWS_DEFAULT_CHOICES,
   'aws-opennext': OPENNEXT_DEFAULT_CHOICES,
@@ -1222,9 +1238,9 @@ export function composeStack(
         );
     }
   })();
-  // 他の事業者の部品（D-52）
+  // 他の事業者の部品（D-52）。DB（Neon。D-77）は画像・API より先に差す（API を他の事業者に置くと DB のノードは外れる）
   const crossed = applyCross(
-    arch,
+    applyCrossDb(arch, def.platform, def.plan, c, standby),
     def.platform,
     def.plan,
     c,

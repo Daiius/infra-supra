@@ -218,6 +218,13 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '応答にキャッシュの指定を足すだけで、ヒットは CDN が返し関数が起動しない',
   'aws:ogp:none':
     '全ページで同じカードを出す。シェルは CDN から静的なまま配れる',
+  // DB（D-77）。Vercel・Netlify は Supabase が既定、Neon は他の事業者の部品
+  'vercel:db:supabase':
+    '認証やストレージまで揃う人気の Postgres。決まった月額で、サーバーが常に動いている',
+  'netlify:db:supabase':
+    '認証やストレージまで揃う人気の Postgres。決まった月額で、サーバーが常に動いている',
+  'neon:db:neon':
+    '使われていない間は止まる従量の Postgres。基本料が無く、小さく始めるのに向く',
   'aws:files:s3':
     'クラウドの定番のストレージ。保存も読み書きも安く、CDN からそのまま配れる',
 };

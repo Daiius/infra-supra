@@ -33,6 +33,7 @@ export const NETLIFY_STACK_DEFS: readonly StackDef[] = [
 export const NETLIFY_DEFAULT_CHOICES: Choices = {
   isrCache: 'default',
   images: 'default',
+  db: 'supabase',
 };
 
 /** Netlify の CDN の画像のヒット率（仮定。Vercel の CDN と同じ値）。 */
@@ -46,6 +47,19 @@ const RESIZE_NOTE =
   '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）';
 
 export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
+  // DB（D-77）。既定は Supabase（構成の名前の DB）。Neon（従量の Postgres）は cross.ts の他の事業者の部品
+  {
+    id: 'supabase',
+    slot: 'db',
+    platform: 'netlify',
+    label: 'Supabase（Postgres）',
+    note: 'Free・Personal は Supabase Free、Pro は Supabase Pro（月の基本料つき・Micro のサーバーが常に動く）。関数から接続のプール（pooler）でつなぐ',
+    premiseRefs: [
+      'fact:supabase:pro-micro:compute',
+      'limit:supabase:pro-micro:pooler-connections',
+      'limit:supabase:free:db-size',
+    ],
+  },
   {
     id: 'default',
     slot: 'isrCache',
