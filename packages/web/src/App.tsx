@@ -21,6 +21,7 @@ import {
   goalChecks,
   isPlanChange,
   stackChangeText,
+  stackFlavor,
   stackName,
   frameworksOf,
   hiddenSettings,
@@ -178,7 +179,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const framework = frameworks.allowed.includes(frameworkChoice)
     ? frameworkChoice
     : frameworks.default;
-  const [stack, setStack] = useState(1);
+  // 既定は一覧の 1 番目（正解になりやすい構成を既定にしない。D-41）
+  const [stack, setStack] = useState(0);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
   return (
@@ -211,6 +213,10 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                 <span className="block min-w-0">
                   <span className="block">
                     {stackName(s.index, framework, false)}
+                  </span>
+                  {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
+                  <span className="mt-0.5 block text-xs opacity-70">
+                    {stackFlavor(s.index)}
                   </span>
                   <EffortBar scenario={scenario} stackIndex={s.index} />
                 </span>

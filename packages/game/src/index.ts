@@ -3056,3 +3056,11 @@ export * from './scenario.ts';
 export * from './save.ts';
 export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
+
+// フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
+import { STACK_FLAVOR } from 'catalog';
+
+/** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
+export function stackFlavor(stackIndex: number): string | undefined {
+  return STACK_FLAVOR[STACKS[stackIndex]!.id];
+}
