@@ -55,6 +55,12 @@ export type ResolvedWorkload = {
    * document-isr と api-content だけ。構成の cdn（ttlClasses）と function（cache）が使う。
    */
   cacheHitRate: Partial<Record<RequestClass, number>>;
+  /**
+   * 期間つきのキャッシュを miss した流れ（ルートごとの miss の件数で重み付けしてまとめる。OCL-48C8B649）。
+   * 閲覧の密度・期間・処理の重さがルートで違うと、miss の 1 件あたりの処理はクラス全体の平均と違うので、
+   * キャッシュの後ろへはこの流れを渡す（件数は cacheHitRate と整合する）。
+   */
+  cacheMissFlow: Partial<Record<RequestClass, ClassFlow>>;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
@@ -142,6 +148,9 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   const spaData: ClassFlow[] = [];
   /** SPA の共有の中身のうち、応答をキャッシュするもの（cacheSeconds）。hits はキャッシュから返る件数。 */
   const spaContent: ClassFlow[] = [];
+  /** ルートごとの miss の流れ（キャッシュの後ろへ渡す）。 */
+  const spaContentMiss: ClassFlow[] = [];
+  const isrMiss: ClassFlow[] = [];
   let spaContentHits = 0;
   let spaContentViews = 0;
   let isrViews = 0;
@@ -174,6 +183,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           (views / r.pages) * (r.cacheSeconds / SECONDS_PER_MONTH);
         const misses = views / (1 + lambdaT);
         spaContent.push(flow(views, work));
+        spaContentMiss.push(flow(misses, work));
         spaContentHits += views - misses;
         spaContentViews += views;
         derivations.push({
@@ -214,14 +224,14 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     } else if (r.rendering === 'ssr') {
       byRendering.ssr.push(flow(views, work));
     } else {
-      byRendering.isr.push(
-        flow(views, { kb: p.responseKB, cpuMs: r.cachedServeCpuMs }),
-      );
+      const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };
+      byRendering.isr.push(flow(views, served));
       // 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → 閲覧 / (1 + λT)（人気が一様と仮定。prd/04 §2）
       const lambdaT =
         (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH);
       const count = views / (1 + lambdaT);
       revalidations.push(flow(count, work));
+      isrMiss.push(flow(count, served));
       isrViews += views;
       isrMisses += count;
       if (count > 0) {
@@ -310,6 +320,10 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       ...(spaContentViews > 0
         ? { 'api-content': spaContentHits / spaContentViews }
         : {}),
+    },
+    cacheMissFlow: {
+      ...(isrViews > 0 ? { 'document-isr': merge(isrMiss) } : {}),
+      ...(spaContentViews > 0 ? { 'api-content': merge(spaContentMiss) } : {}),
     },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,

@@ -75,6 +75,21 @@ function add(u: NodeUsage, r: ResourceKey, v: number) {
   u.resources[r] = (u.resources[r] ?? 0) + v;
 }
 
+/**
+ * 期間つきのキャッシュを通った後の流れ（miss）。ルートごとの miss で重み付けした流れ（cacheMissFlow）を、
+ * 届いた件数の割合で縮めて使う（OCL-48C8B649）。キャッシュの対象でなければ undefined。
+ */
+function ttlMiss(
+  w: ResolvedWorkload,
+  cls: RequestClass,
+  f: ClassFlow,
+): ClassFlow | undefined {
+  const miss = w.cacheMissFlow[cls];
+  const total = w.classes[cls].count;
+  if (!miss || total <= 0) return undefined;
+  return { count: f.count * (miss.count / total), perRequest: miss.perRequest };
+}
+
 /** 1 ノードがクラスの流れを受け取ったときの使用量と、次のノードへ渡す流れ。 */
 function consume(
   node: ArchNode,
@@ -89,16 +104,18 @@ function consume(
   const p = f.perRequest;
   switch (c.kind) {
     case 'cdn': {
-      const hit = c.ttlClasses?.includes(cls)
-        ? (w.cacheHitRate[cls] ?? 0)
-        : (c.hitRate[cls] ?? 0);
+      const ttl = c.ttlClasses?.includes(cls) ? ttlMiss(w, cls, f) : undefined;
       add(u, 'requests', n);
       add(u, 'egress-gb', kbToGb(n * p.kb));
-      const miss = n * (1 - hit);
+      const out = ttl ?? {
+        count:
+          n * (1 - (c.ttlClasses?.includes(cls) ? 0 : (c.hitRate[cls] ?? 0))),
+        perRequest: p,
+      };
       if (!c.originClasses || c.originClasses.includes(cls)) {
-        add(u, 'origin-transfer-gb', kbToGb(miss * p.kb));
+        add(u, 'origin-transfer-gb', kbToGb(out.count * out.perRequest.kb));
       }
-      return { count: miss, perRequest: p };
+      return out;
     }
     case 'function': {
       if (n > 0)
@@ -107,13 +124,16 @@ function consume(
           p.maxCpuMs,
         );
       // コードの中のキャッシュ: ヒットはキャッシュから返す CPU だけ、miss は処理して次（DB）へ流す
-      const cached = c.cache?.classes.includes(cls) ?? false;
-      const hits = cached ? n * (w.cacheHitRate[cls] ?? 0) : 0;
-      const miss = n - hits;
-      const hitCpu = cached ? c.cache!.hitCpuMs : 0;
-      const wallMs = hits * hitCpu + miss * p.wallMs;
+      const missFlow = c.cache?.classes.includes(cls)
+        ? ttlMiss(w, cls, f)
+        : undefined;
+      const miss = missFlow?.count ?? n;
+      const mp = missFlow?.perRequest ?? p;
+      const hits = n - miss;
+      const hitCpu = missFlow ? c.cache!.hitCpuMs : 0;
+      const wallMs = hits * hitCpu + miss * mp.wallMs;
       u.busyMs += wallMs;
-      add(u, 'cpu-ms', hits * hitCpu + miss * p.cpuMs);
+      add(u, 'cpu-ms', hits * hitCpu + miss * mp.cpuMs);
       add(
         u,
         'memory-gb-hours',
@@ -124,7 +144,7 @@ function consume(
         add(u, 'invocations', n);
         u.events += n;
       }
-      return cached ? { count: miss, perRequest: p } : f;
+      return missFlow ?? f;
     }
     case 'kv': {
       if (c.mode === 'db') {

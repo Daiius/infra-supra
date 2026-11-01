@@ -1,5 +1,6 @@
 // SPA のルートの件数（prd/10 F-01・prd/04 §2）。値はすべて架空。
 import { describe, expect, it } from 'vitest';
+import { simulateResources } from '../simulate/simulate.ts';
 import { resolveWorkload } from './resolve.ts';
 import type { WorkloadInput } from './schema.ts';
 
@@ -181,5 +182,82 @@ describe('期間つきのキャッシュのヒット率（D-37・prd/04 §2）',
         ]),
       ),
     ).toThrow(/cacheSeconds/);
+  });
+});
+
+describe('キャッシュの後ろへは、ルートごとの miss で重み付けした処理を渡す（OCL-48C8B649）', () => {
+  // 閲覧が濃く軽いルート（hot）と、閲覧が薄く重いルート（cold）
+  const w = resolveWorkload(
+    base([
+      {
+        id: 'hot',
+        rendering: 'spa',
+        share: 0.5,
+        pages: 1,
+        processing: { ...processing, cpuMs: 1, queries: 1 },
+        shellKB: 3,
+        cacheSeconds: 3600,
+      },
+      {
+        id: 'cold',
+        rendering: 'spa',
+        share: 0.5,
+        pages: 100_000,
+        processing: { ...processing, cpuMs: 100, queries: 4 },
+        shellKB: 3,
+        cacheSeconds: 3600,
+      },
+    ]),
+  );
+  const miss = (pages: number) => {
+    const lt = (50_000 / pages) * (3600 / (730 * 3600));
+    return 50_000 / (1 + lt);
+  };
+  const expectedCpu = miss(1) * 1 + miss(100_000) * 100;
+  const expectedRows = (miss(1) * 1 + miss(100_000) * 4) * 5;
+
+  it('CDN（ttlClasses）の後ろの関数の CPU と DB の読み取り', () => {
+    const sim = simulateResources(w, {
+      id: 'a',
+      name: 'a',
+      nodes: [
+        {
+          id: 'cdn',
+          label: 'cdn',
+          config: { kind: 'cdn', ttlClasses: ['api-content'] },
+        },
+        { id: 'fn', label: 'fn', config: { kind: 'function' } },
+        { id: 'db', label: 'db', config: { kind: 'sql-db' } },
+      ],
+      routes: { 'api-content': ['cdn', 'fn', 'db'] },
+    });
+    expect(sim.nodes.fn!.resources['cpu-ms']).toBeCloseTo(expectedCpu, 6);
+    expect(sim.nodes.db!.resources['rows-read']).toBeCloseTo(expectedRows, 6);
+  });
+
+  it('関数の中のキャッシュ（cache）でも同じ。ヒットは hitCpuMs だけ', () => {
+    const sim = simulateResources(w, {
+      id: 'a',
+      name: 'a',
+      nodes: [
+        {
+          id: 'fn',
+          label: 'fn',
+          config: {
+            kind: 'function',
+            cache: { classes: ['api-content'], hitCpuMs: 2 },
+          },
+        },
+        { id: 'db', label: 'db', config: { kind: 'sql-db' } },
+      ],
+      routes: { 'api-content': ['fn', 'db'] },
+    });
+    const hits = 100_000 - miss(1) - miss(100_000);
+    expect(sim.nodes.fn!.resources['cpu-ms']).toBeCloseTo(
+      expectedCpu + hits * 2,
+      6,
+    );
+    expect(sim.nodes.fn!.resources.requests).toBeCloseTo(100_000, 6);
+    expect(sim.nodes.db!.resources['rows-read']).toBeCloseTo(expectedRows, 6);
   });
 });
