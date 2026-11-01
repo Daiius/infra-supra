@@ -24,6 +24,7 @@
 | [prd/08-roadmap.md](./prd/08-roadmap.md) | フェーズと Phase 1 のタスク分解 |
 | [prd/09-scenario-contract.md](./prd/09-scenario-contract.md) | 2 本目のシナリオ: 受託先の業務アプリの運用（受託は設定だけ・運用費に集中。D-33） |
 | [prd/11-aws-and-cross-provider.md](./prd/11-aws-and-cross-provider.md) | 草案: AWS を事業者として足す案と、事業者をまたぐ構成（部品ごとに別の事業者）の案。未決 AX-01〜14 |
+| [prd/12-external-scenarios-and-ranking.md](./prd/12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod・ファイル / URL の読み込み）と、再生による検証のランキング（下書き・未決 ES-xx） |
 
 > 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)
 
