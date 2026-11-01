@@ -231,6 +231,14 @@ export function composeNetlify(
           } as ArchNodeIn,
         ]
       : []),
+    // 画像の投稿は関数へのリクエスト（Web requests）。CDN のノードに通すと投稿の大きさを転送量に数えてしまうので、
+    // リクエストだけを数えるノードを前に置く（受け取るデータは転送に数えない。OCL-0FA096BD）
+    {
+      id: 'upload',
+      label: 'Netlify（画像の投稿のリクエスト）',
+      config: { kind: 'cdn', hitRate: {} },
+      billing: bill({ requests: 'web-requests' }),
+    },
     {
       id: 'blob',
       label: 'Netlify Blobs（画像の原本）',
@@ -270,7 +278,7 @@ export function composeNetlify(
   ];
   const images: Partial<Record<RequestClass, string[]>> = {
     'image-read': optimize ? ['cdn', 'image'] : ['cdn', 'blob'],
-    'image-write': ['fn', 'blob'],
+    'image-write': ['upload', 'fn', 'blob'],
     ...(optimize ? { 'image-transform': ['image'] } : {}),
   };
   const routes: Partial<Record<RequestClass, string[]>> = spa

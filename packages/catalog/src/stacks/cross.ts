@@ -468,11 +468,12 @@ function hostImageShape(
   arch: ArchitectureInput,
 ): { remove: string[]; write: string[]; out?: ArchNodeIn } | undefined {
   if (host === 'vercel') return { remove: ['image', 'blob'], write: ['fn'] };
-  // Netlify（D-71）: Image CDN（image）・Blobs（blob）を外す。投稿は関数が受けて R2 に書き、送るデータを Netlify の転送量で数える
+  // Netlify（D-71）: Image CDN（image）・Blobs（blob）を外す。投稿は関数が受けて（Web requests は upload で数える）R2 に書き、
+  // 送るデータを Netlify の転送量で数える
   if (host === 'netlify') {
     const out = netlifyOut(arch, 'R2 への書き込み');
     return out
-      ? { remove: ['image', 'blob'], write: ['fn', out.id], out }
+      ? { remove: ['image', 'blob'], write: ['upload', 'fn', out.id], out }
       : undefined;
   }
   if (host !== 'aws' && host !== 'aws-opennext') return undefined;

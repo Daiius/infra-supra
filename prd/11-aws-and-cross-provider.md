@@ -722,7 +722,7 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 - **クレジットを金額に直す**（解釈。`providers/netlify.ts` の interpretation）: メーターの単価 = 消費のクレジット × 補充の 1 クレジットの金額（Pro $10/1,500・Personal $5/500）、月のクレジット = 込みのクレジット × 同じ金額（Pro $20・Personal $10）の金額のクレジット（prd/03 §7）。
   - Personal・Pro は**自動の補充を有効にして運営する前提**（既定は無効だが、商用のサイトを毎月止める設定のまま続けるとは読まない）。束の余りは繰り越すので、長い目では使った分 × 単価とみる。
   - Free は補充が無く止まる。金額は使用率の判定のための換算（Personal の単価）で、請求は 0。estimator のクレジットに **`onExhausted: 'block'`** を足し、使い切ると前提が block（サービスが止まる）になるようにした（prd/03 §7）。
-- **資源**: Web requests = CDN のノードのリクエスト（関数へのリクエストも CDN で数え、関数のノードでは数えない）、転送 = CDN の転送、計算 = 関数の GB 時間（壁時計時間 × 1 GB。DB を待つ時間も含む）、本番のデプロイ = 新しい資源 `deploys`（`ci-build` のビルドし直しの回数。Astro の記事の更新）。コードのデプロイは他の事業者と同じく数えない。
+- **資源**: Web requests = CDN のノードのリクエスト（関数へのリクエストも CDN で数え、関数のノードでは数えない。画像の投稿はリクエストだけを数えるノード `upload` で数え、投稿の大きさは転送に入れない。OCL-0FA096BD）、転送 = CDN の転送、計算 = 関数の GB 時間（壁時計時間 × 1 GB。DB を待つ時間も含む）、本番のデプロイ = 新しい資源 `deploys`（`ci-build` のビルドし直しの回数。Astro の記事の更新）。コードのデプロイは他の事業者と同じく数えない。
 - **構成**: Netlify Free + Supabase Free・Netlify Personal + Supabase Free・Netlify Pro + Supabase Pro（STACK_DEFS の 8〜10。添字は既存の後ろ）。DB は Netlify の外（既定は Supabase。推奨案の最小）。
 - **部品**: ISR（CDN の期限つきのキャッシュ・オンデマンドに対応）/ キャッシュしない、画像は Image CDN（変換は無料と読む）/ 最適化しない / 投稿のときに縮める、SPA の OGP の前処理・API の応答のキャッシュ（`Netlify-CDN-Cache-Control`）、API の置き場（同居）。ファイルの置き場は Netlify Blobs（固定）。
 - **事業者をまたぐ部品**（cross.ts の CROSS_PAIRS に 2 行）: 画像だけ Cloudflare（`cf-images`・`cf-resize`）、Workers の API + D1（SPA の `cf-workers`・Next.js の `cf-workers-server`・Astro の `cf-workers-astro`）。

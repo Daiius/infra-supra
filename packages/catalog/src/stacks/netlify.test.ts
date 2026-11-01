@@ -8,10 +8,15 @@ const ids = (a: ReturnType<typeof composeStack>) => a.nodes.map((n) => n.id);
 describe('Netlify の構成', () => {
   it('Next.js: ISR は CDN の期限つきのキャッシュ、miss と作り直しは関数。画像は Image CDN、原本は Blobs', () => {
     const a = composeStack('netlify-supabase-pro');
-    expect(ids(a)).toEqual(['cdn', 'fn', 'image', 'blob', 'db']);
+    expect(ids(a)).toEqual(['cdn', 'fn', 'image', 'upload', 'blob', 'db']);
     expect(a.routes['document-isr']).toEqual(['cdn', 'fn']);
     expect(a.routes['isr-revalidate']).toEqual(['fn', 'db']);
     expect(a.routes['image-read']).toEqual(['cdn', 'image']);
+    // 画像の投稿は Web requests だけを数え、投稿の大きさを転送量に数えない（OCL-0FA096BD）
+    expect(a.routes['image-write']).toEqual(['upload', 'fn', 'blob']);
+    expect(a.nodes.find((n) => n.id === 'upload')!.billing?.meters).toEqual({
+      requests: 'web-requests',
+    });
     const cdn = a.nodes.find((n) => n.id === 'cdn')!;
     expect(cdn.config).toMatchObject({ ttlClasses: ['document-isr'] });
   });
@@ -42,7 +47,12 @@ describe('Netlify の構成', () => {
     });
     expect(ids(a)).not.toContain('image');
     expect(ids(a)).not.toContain('blob');
-    expect(a.routes['image-write']).toEqual(['fn', 'netlify-out', 'cf-r2']);
+    expect(a.routes['image-write']).toEqual([
+      'upload',
+      'fn',
+      'netlify-out',
+      'cf-r2',
+    ]);
     expect(a.nodes.find((n) => n.id === 'netlify-out')!.billing).toMatchObject({
       planId: 'personal',
       meters: { 'egress-gb': 'bandwidth' },
