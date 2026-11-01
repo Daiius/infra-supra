@@ -99,7 +99,7 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   'cloudflare:files:r2':
     '転送量に課金されない S3 互換のストレージ。ファイルなら何でも置ける',
   'vercel:files:blob':
-    '画像の原本の置き場はまだ決めていない。料金の計算に入らないので、費用はかからないように見える',
+    '同じ Vercel のアカウントで使えるファイルの置き場。設定いらずですぐに使い始められる',
   'sakura:files:host-disk':
     'サーバーのディスクにそのまま置く。追加の契約も費用も要らない',
   // SPA の SNS のカード（OGP）

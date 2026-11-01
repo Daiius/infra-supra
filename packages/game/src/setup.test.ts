@@ -40,7 +40,7 @@ describe('setupSlots', () => {
     });
   });
 
-  it('ファイルの置き場は構成ごと（Vercel は未定の置き場・VPS はディスク）', () => {
+  it('ファイルの置き場は構成ごと（Vercel は Vercel Blob・VPS はディスク。D-46）', () => {
     const files = (i: number) =>
       setupSlots(ARTICLE_COMMUNITY, i, 'nextjs').find(
         (x) => x.slot === 'files',
