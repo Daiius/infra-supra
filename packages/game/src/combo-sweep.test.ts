@@ -12,6 +12,7 @@ import {
   replaySave,
   SCENARIOS,
   setupProblem,
+  setupMonthOneEstimate,
   setupRevalidateOptions,
   setupSlots,
   STACKS,
@@ -194,5 +195,51 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
       }
     });
     expect(problems).toEqual([]);
+  });
+});
+
+// 始める画面の 1 か月目の見込み（D-72）: 出来事の無い 1 か月目の実際の費用と一致し、所持金が尽きる組で警告が出る
+describe('1 か月目の費用の見込み（D-72）', () => {
+  it('出来事の無い 1 か月目の実際の費用・所持金切れと一致する（全組み合わせ）', () => {
+    const problems: string[] = [];
+    let checked = 0;
+    let short = 0;
+    for (const { sc, fw, stackIndex } of GROUPS) {
+      const revalidate = setupRevalidateOptions(sc, fw).map((o) => o.value);
+      selectableCombos(sc, stackIndex, fw).forEach((c, i) => {
+        const r = revalidate.length
+          ? revalidate[i % revalidate.length]
+          : undefined;
+        const id = `${sc.id} × ${fw} × ${STACKS[stackIndex]!.id} ${JSON.stringify(c)} r=${r}`;
+        const e = setupMonthOneEstimate(sc, stackIndex, fw, c, r);
+        // 出来事も障害も無い 1 か月目になるシードを探す
+        for (let seed = 1; seed <= 30; seed++) {
+          const s = playMonth(
+            newGame(stackIndex, seed, sc, undefined, fw, c, r),
+          );
+          const h = s.history[0]!;
+          if (h.events.length > 0 || h.status === 'incident') continue;
+          checked++;
+          const near = (a: number, b: number) =>
+            Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b));
+          if (!near(e.costUsd, h.infraCost))
+            problems.push(`${id}: 費用 ${e.costUsd} ≠ ${h.infraCost}`);
+          if (!near(e.revenueUsd, h.revenue))
+            problems.push(`${id}: 収益 ${e.revenueUsd} ≠ ${h.revenue}`);
+          const ranOut = s.end?.reason === 'cash' && s.end.month === 1;
+          if (e.short !== ranOut)
+            problems.push(`${id}: 見込み ${e.short} ≠ 所持金切れ ${ranOut}`);
+          if (e.short) {
+            short++;
+            if (e.topLines.length === 0) problems.push(`${id}: 主な費用が無い`);
+          }
+          break;
+        }
+      });
+    }
+    expect(problems).toEqual([]);
+    expect(checked).toBeGreaterThan(500);
+    // 尽きる組は実際にある（網羅テスト #36 で約 390 組）
+    expect(short).toBeGreaterThan(50);
   });
 });
