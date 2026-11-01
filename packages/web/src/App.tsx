@@ -16,6 +16,7 @@ import {
   componentSlots,
   pageWeightOf,
   settingInactiveReason,
+  settingNote,
   EFFORT,
   effortAvailable,
   ELEMENT_LABEL,
@@ -1171,6 +1172,11 @@ function Actions({
                   {settingInactiveReason(draft, key) && (
                     <span className="block text-xs opacity-70">
                       今は効かない: {settingInactiveReason(draft, key)}
+                    </span>
+                  )}
+                  {settingNote(draft, key) && (
+                    <span className="block text-xs opacity-70">
+                      {settingNote(draft, key)}
                     </span>
                   )}
                 </span>
