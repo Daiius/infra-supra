@@ -3115,11 +3115,16 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const ogp = socialCardLoss(state);
     if (ogp) {
       const shortfall = Math.max(1, sc.goal.cash - state.cash);
+      const platform = STACKS[state.stackIndex]!.provider;
+      // VPS で前段の CDN が無いと、伸びた話題の月に回線が詰まりうる（話題は短い期間に集中する。D-44）
+      const noFrontCdn =
+        platform === 'sakura' &&
+        (state.components.frontCdn ?? 'none') === 'none';
       out.push({
         hint: {
           kind: 'ogp',
-          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み`,
-          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(STACKS[state.stackIndex]!.provider, 'ogp', 'prerender')}）を、話題の前に付ける`,
+          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み${noFrontCdn ? '（ただし前段の CDN が無いと、伸びた話題の月に回線が詰まりうるので、増えた分の一部が失われる）' : ''}`,
+          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付ける${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられる' : ''}`,
         },
         // 影響額で比べる: 足りない額に対する、取り戻せた収益の割合（半分以上なら最上位）
         score: tier(

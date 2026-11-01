@@ -206,6 +206,9 @@ describe('retryHintsOf', () => {
         );
         expect(hint.what).toContain('× 3 → × 2');
         expect(hint.next).toContain('OGP の前処理');
+        // VPS で前段の CDN が無いと、話題の月に回線が詰まりうる（D-44）
+        expect(hint.what).toContain('回線が詰まりうる');
+        expect(hint.next).toContain('前段の CDN');
         // 前処理を付けたプレイとの収益の差（VPS は固定費なので所持金の差も同じ）
         const diff = revenue(withOgp(seed)) - revenue(st);
         const est = Number(
@@ -214,6 +217,26 @@ describe('retryHintsOf', () => {
         expect(Math.abs(est - diff)).toBeLessThanOrEqual(2);
       },
     );
+
+    it('前段の CDN があれば、回線の詰まりの但し書きは付けない（D-44）', () => {
+      const st = playStrategy(
+        {
+          id: 'cdn',
+          label: '前段の CDN',
+          stackIndex: VPS_2GB,
+          actions: [
+            [{ type: 'component', slot: 'frontCdn', option: 'static' }],
+          ],
+        },
+        42,
+        ARTICLE_COMMUNITY,
+        undefined,
+        'vite-spa',
+      );
+      const hint = retryHintsOf(st).find((x) => x.kind === 'ogp');
+      expect(hint).toBeDefined();
+      expect(hint!.what).not.toContain('回線');
+    });
 
     it('前処理を付けたプレイ・Next.js では出さない', () => {
       expect(retryHintsOf(withOgp(42)).some((x) => x.kind === 'ogp')).toBe(
