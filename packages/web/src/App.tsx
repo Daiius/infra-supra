@@ -188,13 +188,31 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [stack, setStack] = useState(0);
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
-  // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワークを替えて選べなくなったものは外して見る
-  const [partsChoice, setParts] = useState<SetupChoices>({});
-  const parts = validSetupChoices(scenario, stack, framework, partsChoice);
+  // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワーク・シナリオを替えたら、選べなくなった選択を
+  // 状態からも外す（元の組み合わせに戻しても復活しない。OCL-09D12A43）
+  const [parts, setParts] = useState<SetupChoices>({});
+  const change = (next: {
+    scenarioId?: string;
+    stack?: number;
+    framework?: FrameworkId;
+  }) => {
+    const sc = SCENARIOS[next.scenarioId ?? scenarioId]!;
+    const fws = frameworksOf(sc);
+    const fwChoice = next.framework ?? frameworkChoice;
+    const fw = fws.allowed.includes(fwChoice) ? fwChoice : fws.default;
+    const st = next.stack ?? stack;
+    if (next.scenarioId !== undefined) setScenarioId(next.scenarioId);
+    if (next.framework !== undefined) setFramework(next.framework);
+    if (next.stack !== undefined) setStack(next.stack);
+    setParts(validSetupChoices(sc, st, fw, parts));
+  };
   const problem = setupProblem(scenario, stack, framework, parts);
   return (
     <>
-      <ScenarioPicker value={scenarioId} onChange={setScenarioId} />
+      <ScenarioPicker
+        value={scenarioId}
+        onChange={(id) => change({ scenarioId: id })}
+      />
       <ScenarioDescription scenario={scenario} usdJpy={USD_JPY} />
       <div className="card bg-base-100 shadow">
         <div className="card-body">
@@ -204,7 +222,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             scenario={scenario}
             allowed={frameworks.allowed}
             value={framework}
-            onChange={setFramework}
+            onChange={(id) => change({ framework: id })}
           />
           <h3 className="mt-2 font-bold">インフラの構成</h3>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -217,7 +235,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   type="radio"
                   className="radio radio-primary mt-0.5 shrink-0"
                   checked={stack === s.index}
-                  onChange={() => setStack(s.index)}
+                  onChange={() => change({ stack: s.index })}
                 />
                 <span className="block min-w-0">
                   <span className="block">
@@ -237,7 +255,10 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             stackIndex={stack}
             framework={framework}
             value={parts}
-            onChange={setParts}
+            // 選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
+            onChange={(v) =>
+              setParts(validSetupChoices(scenario, stack, framework, v))
+            }
           />
           {problem && (
             <p className="text-right text-sm" role="status">
