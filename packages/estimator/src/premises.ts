@@ -203,7 +203,7 @@ export function assessPremises(input: {
         limit.measure === 'peak-concurrency' &&
         node.config.kind === 'managed-db'
       ) {
-        used = (nu.busyMs / 1000) * peak;
+        used = (nu.peakBusyMs / 1000) * peak;
       } else if (
         limit.measure === 'writes-per-second-per-key' &&
         node.config.kind === 'kv' &&

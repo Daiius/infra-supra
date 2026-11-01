@@ -55,6 +55,11 @@ export type ResolvedWorkload = {
    * document-isr と api-content だけ。構成の cdn（ttlClasses）と function（cache）が使う。
    */
   cacheHitRate: Partial<Record<RequestClass, number>>;
+  /**
+   * ピークの時間帯の同じヒット率。その時間帯は 1 ページへの到着率が λ × peakHourFactor になるので、
+   * λT を peakHourFactor 倍して出す（容量の判定だけに使う。課金は cacheHitRate。D-44・prd/04 §2）。
+   */
+  peakCacheHitRate: Partial<Record<RequestClass, number>>;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
@@ -146,6 +151,10 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   let spaContentViews = 0;
   let isrViews = 0;
   let isrMisses = 0;
+  // ピークの時間帯の miss（到着率が peakHourFactor 倍）
+  let spaContentPeakMisses = 0;
+  let isrPeakMisses = 0;
+  const peakRate = t.peakHourFactor;
   /** SPA のルートの閲覧と入口（シェルと JS・CSS を読むのは入口だけ）。 */
   let spaViews = 0;
   let spaEntries = 0;
@@ -176,6 +185,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         spaContent.push(flow(views, work));
         spaContentHits += views - misses;
         spaContentViews += views;
+        spaContentPeakMisses += views / (1 + lambdaT * peakRate);
         derivations.push({
           id: `api-cache-misses:${r.id}`,
           label: `API の応答のキャッシュの取り直し（${r.id}）`,
@@ -224,6 +234,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       revalidations.push(flow(count, work));
       isrViews += views;
       isrMisses += count;
+      isrPeakMisses += views / (1 + lambdaT * peakRate);
       if (count > 0) {
         isrWithRevalidate = Math.max(
           isrWithRevalidate,
@@ -309,6 +320,12 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       ...(isrViews > 0 ? { 'document-isr': 1 - isrMisses / isrViews } : {}),
       ...(spaContentViews > 0
         ? { 'api-content': spaContentHits / spaContentViews }
+        : {}),
+    },
+    peakCacheHitRate: {
+      ...(isrViews > 0 ? { 'document-isr': 1 - isrPeakMisses / isrViews } : {}),
+      ...(spaContentViews > 0
+        ? { 'api-content': 1 - spaContentPeakMisses / spaContentViews }
         : {}),
     },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },

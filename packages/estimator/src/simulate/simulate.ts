@@ -35,6 +35,11 @@ export type NodeUsage = {
   maxCpuMsPerRequest: number;
   /** 接続・実行を保持している時間の合計（ms・月。ピークの同時数の判定用）。 */
   busyMs: number;
+  /**
+   * ピークの時間帯のヒット率（ResolvedWorkload.peakCacheHitRate）で流したときの busyMs（ms・月の換算）。
+   * ピークの同時数の判定はこちらを使う（D-44）。
+   */
+  peakBusyMs: number;
   host?: HostLoad;
 };
 
@@ -247,49 +252,64 @@ export function simulateResources(
 ): Simulation {
   const architecture = ArchitectureSchema.parse(architectureInput);
   const byId = new Map(architecture.nodes.map((n) => [n.id, n]));
-  const nodes: Record<string, NodeUsage> = {};
-  const hostAcc = new Map<string, NodeAcc>();
-  for (const n of architecture.nodes) {
-    nodes[n.id] = {
-      nodeId: n.id,
-      resources: {},
-      events: 0,
-      maxCpuMsPerRequest: 0,
-      busyMs: 0,
-    };
-    hostAcc.set(n.id, {
-      kb: 0,
-      cpuMs: 0,
-      queries: 0,
-      transforms: 0,
-      requests: 0,
-      maxCpuByClass: {},
-    });
-    staticUsage(n, nodes[n.id]!, workload);
-  }
-
   const unroutedClasses: RequestClass[] = [];
-  for (const [cls, f] of Object.entries(workload.classes) as [
-    RequestClass,
-    ClassFlow,
-  ][]) {
-    const path = architecture.routes[cls];
-    if (!path) {
-      if (f.count > 0) unroutedClasses.push(cls);
-      continue;
+
+  /** クラスの流れを経路に流す。w の cacheHitRate で期間つきのキャッシュのヒットを決める。 */
+  const run = (w: ResolvedWorkload, collectUnrouted: boolean) => {
+    const nodes: Record<string, NodeUsage> = {};
+    const hostAcc = new Map<string, NodeAcc>();
+    for (const n of architecture.nodes) {
+      nodes[n.id] = {
+        nodeId: n.id,
+        resources: {},
+        events: 0,
+        maxCpuMsPerRequest: 0,
+        busyMs: 0,
+        peakBusyMs: 0,
+      };
+      hostAcc.set(n.id, {
+        kb: 0,
+        cpuMs: 0,
+        queries: 0,
+        transforms: 0,
+        requests: 0,
+        maxCpuByClass: {},
+      });
+      staticUsage(n, nodes[n.id]!, w);
     }
-    let current = f;
-    for (const id of path) {
-      current = consume(
-        byId.get(id)!,
-        cls,
-        current,
-        nodes[id]!,
-        workload,
-        hostAcc.get(id)!,
-      );
+    for (const [cls, f] of Object.entries(w.classes) as [
+      RequestClass,
+      ClassFlow,
+    ][]) {
+      const path = architecture.routes[cls];
+      if (!path) {
+        if (collectUnrouted && f.count > 0) unroutedClasses.push(cls);
+        continue;
+      }
+      let current = f;
+      for (const id of path) {
+        current = consume(
+          byId.get(id)!,
+          cls,
+          current,
+          nodes[id]!,
+          w,
+          hostAcc.get(id)!,
+        );
+      }
     }
-  }
+    return { nodes, hostAcc };
+  };
+
+  // 課金は月の平均のヒット率で流す。容量（ホストのピーク・同時数）は、ピークの時間帯のヒット率で流し直した値を使う
+  // （その時間帯は閲覧の密度が高いので、期間つきのキャッシュがよく当たる。D-44）
+  const { nodes, hostAcc } = run(workload, true);
+  const hasPeakRates = Object.keys(workload.peakCacheHitRate).length > 0;
+  const peakAcc = hasPeakRates
+    ? run({ ...workload, cacheHitRate: workload.peakCacheHitRate }, false)
+    : { nodes, hostAcc };
+  for (const n of architecture.nodes)
+    nodes[n.id]!.peakBusyMs = peakAcc.nodes[n.id]!.busyMs;
 
   // 関数の 1 回の実行の CPU の最大: 前景のクラスはそのまま、裏のクラスは起こした閲覧の CPU に足す
   for (const n of architecture.nodes) {
@@ -322,7 +342,7 @@ export function simulateResources(
 
   for (const n of architecture.nodes) {
     if (n.config.kind !== 'host') continue;
-    const acc = hostAcc.get(n.id)!;
+    const acc = peakAcc.hostAcc.get(n.id)!;
     const c = n.config;
     const peak = workload.peakHourFactor / SECONDS_PER_MONTH;
     nodes[n.id]!.host = {
