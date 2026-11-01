@@ -1911,6 +1911,13 @@ function History({ history }: { history: MonthReport[] }) {
   );
 }
 
+/** 所持金の見込みの判定の印と文字（色だけに頼らない。D-42）。 */
+const OUTLOOK = {
+  ahead: { cls: 'badge-success', label: '● 届きそう' },
+  close: { cls: 'badge-info', label: '◐ 目標の前後' },
+  behind: { cls: 'badge-warning', label: '▲ 届かなそう' },
+} as const;
+
 /** 推移と見込み（prd/07 §5・GD-1）。毎月の画面の上に常に出し、続いている感じを見せる。 */
 function Trends({
   history,
@@ -2003,25 +2010,28 @@ function Trends({
         {cashProj && cashProj.projection.length > 0 && (
           <p className="text-sm">
             <span
-              className={`badge badge-sm mr-1 ${cashProj.onTrack ? 'badge-success' : 'badge-warning'}`}
+              className={`badge badge-sm mr-1 ${OUTLOOK[cashProj.outlook].cls}`}
             >
-              {cashProj.onTrack ? '● 届きそう' : '▲ 届かなそう'}
+              {OUTLOOK[cashProj.outlook].label}
             </span>
-            <span className="whitespace-nowrap">このペースだと</span>
+            <span className="whitespace-nowrap">このペースだと</span> <wbr />
+            <span className="whitespace-nowrap">
+              {`${scenario.months} か月目に約 ${usd(Math.round(cashProj.final))}`}
+            </span>
             <wbr />
             <span className="whitespace-nowrap">
-              {scenario.months} か月目に約 {usd(Math.round(cashProj.final))}
-            </span>
-            <wbr />
-            <span className="whitespace-nowrap">
-              （目標 {usd(cashProj.goal)} の {Math.round(cashProj.ratio * 100)}
-              %）
+              {`（目標 ${usd(cashProj.goal)} の ${Math.round(cashProj.ratio * 100)}%）`}
             </span>{' '}
             <Info label="所持金の見込みの出し方">
-              直近 {cashProj.window} か月の月の利益（収益 −
-              費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）の平均
-              {usd(Math.round(cashProj.perMonth))}
-              で、残りの月を線形に伸ばしたゲーム上の目安。予告済みの出来事・料金の改定・これからの成長は織り込まない
+              {cashProj.method === 'growth'
+                ? `月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
+                : `月の利益（収益 − 費用。所持金の実際の増減）が 0 以下なので、伸びを入れず直近 3 か月の平均（約 ${usd(Math.round(cashProj.nextProfit))}）で残りの月を線形に伸ばしたゲーム上の目安。`}
+              話題・前兆・Bot で一時的に流量が増えた月は、基準にも比にも使わない
+              {cashProj.skipped > 0
+                ? `（今回は ${cashProj.skipped} か月を除いた）`
+                : ''}
+              。予告済みの出来事・料金の改定は織り込まない。見込みが目標の ±5%
+              なら「目標の前後」と出す
             </Info>
           </p>
         )}

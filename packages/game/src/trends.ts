@@ -188,29 +188,48 @@ export function selectTrends(
 }
 
 // ---- 所持金の見込み（目標に対する目安。D-42）----
+// 比べた方式と結果は prd/07 §5 と D-42（線形は月の利益の伸びを入れず、伸びている構成で「届かなそう」と誤って出た）。
 
-/** 見込みに使う直近の月数（それより短ければある分だけ）。 */
-export const CASH_PROJECTION_WINDOW = 3;
+/** 月の利益の前月比に使う数（直近の比の中央値）と、比のクランプ（外れ値に引っ張られにくくする）。 */
+export const CASH_GROWTH = { ratios: 3, min: 0.8, max: 1.2 } as const;
+/** 目標の前後とみなす幅（見込みが目標の ±5% なら「届きそう / 届かなそう」と言い切らない）。 */
+export const CASH_CLOSE_BAND = 0.05;
+/** 伸びを入れられないとき（月の利益が 0 以下）に平均する直近の月数。 */
+export const CASH_LINEAR_WINDOW = 3;
 
 export type CashProjection = {
-  /** 直近の月の利益（所持金の差分）の平均。見込みの傾き。 */
-  perMonth: number;
-  /** 平均に使った月数（1〜CASH_PROJECTION_WINDOW）。 */
-  window: number;
+  /** growth: 月の利益を前月比で伸ばした / linear: 月の利益が 0 以下なので、直近の平均で線形に伸ばした。 */
+  method: 'growth' | 'linear';
+  /** 来月の月の利益の見込み。 */
+  nextProfit: number;
+  /** 月の利益の前月比（クランプ後。linear は 1）。 */
+  growth: number;
+  /** 一時的に流量が増えた月（話題・前兆・Bot）として除いた月の数。 */
+  skipped: number;
   /** 最終月の見込みの所持金（最終月まで済んでいれば実際の値）。 */
   final: number;
   goal: number;
   /** 目標に対する割合（final / goal）。 */
   ratio: number;
   onTrack: boolean;
+  /** ahead: 目標を上回る / close: 目標の ±5% / behind: 届かない（最終月まで済んでいれば ahead か behind）。 */
+  outlook: 'ahead' | 'close' | 'behind';
   /** 見込みの線（今の月から最終月まで。済んでいれば空）。 */
   projection: { month: number; value: number }[];
 };
 
+function median(xs: readonly number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const k = s.length >> 1;
+  return s.length % 2 ? s[k]! : (s[k - 1]! + s[k]!) / 2;
+}
+
 /**
- * 所持金の見込み（ゲーム上の目安）: 直近 3 か月（足りなければある分）の月の利益の平均で、残りの月を線形に伸ばす。
- * 月の利益は所持金の実際の差分（乗り換え中の並行費・一度だけの手数料も含む）。予告済みの出来事・改定・成長は織り込まない。
- * まだ 1 か月も進んでいなければ undefined。
+ * 所持金の見込み（ゲーム上の目安）。月の利益（所持金の実際の差分。乗り換え中の並行費・一度だけの手数料も含む）を、
+ * 直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 に収める）で残りの月も伸ばして足す（幾何級数）。
+ * 一時的に流量が増えた月（話題・前兆・Bot。プレイヤーにも見えている出来事）は、基準にも比にも使わない。
+ * 基準の月の利益が 0 以下なら伸びを入れず、直近 3 か月の平均で線形に伸ばす。
+ * 予告済みの出来事・改定は織り込まない。まだ 1 か月も進んでいなければ undefined。
  */
 export function cashProjectionOf(
   state: Pick<GameState, 'history' | 'scenario'>,
@@ -220,23 +239,62 @@ export function cashProjectionOf(
   const { months, goal, startCash } = state.scenario;
   const cash = [startCash, ...h.map((r) => r.cash)];
   const now = h.length;
-  const window = Math.min(CASH_PROJECTION_WINDOW, now);
-  const perMonth = (cash[now]! - cash[now - window]!) / window;
+  const profit = (i: number) => cash[i + 1]! - cash[i]!; // i は 0 始まり（i + 1 か月目）
+  const usable = h
+    .map((r, i) => ({ i, skip: r.buzz || r.trafficNote !== undefined }))
+    .filter((x) => !x.skip)
+    .map((x) => x.i);
+  const base = usable[usable.length - 1];
+  let method: CashProjection['method'] = 'growth';
+  let growth = 1;
+  let next: number;
+  if (base !== undefined && profit(base) > 0) {
+    const tail = usable.slice(-(CASH_GROWTH.ratios + 1));
+    const ratios: number[] = [];
+    for (let k = 1; k < tail.length; k++) {
+      const a = profit(tail[k - 1]!);
+      const b = profit(tail[k]!);
+      // 飛んだ月をはさむ比は 1 か月あたりに直す
+      if (a > 0 && b > 0)
+        ratios.push(Math.pow(b / a, 1 / (tail[k]! - tail[k - 1]!)));
+    }
+    if (ratios.length)
+      growth = Math.min(
+        CASH_GROWTH.max,
+        Math.max(CASH_GROWTH.min, median(ratios)),
+      );
+    // 基準の月から来月までの分を伸ばす
+    next = profit(base) * Math.pow(growth, now - base);
+  } else {
+    method = 'linear';
+    const w = Math.min(CASH_LINEAR_WINDOW, now);
+    next = (cash[now]! - cash[now - w]!) / w;
+  }
   const rest = Math.max(0, months - now);
-  const projection = rest
-    ? Array.from({ length: rest + 1 }, (_, i) => ({
-        month: now + i,
-        value: cash[now]! + perMonth * i,
-      }))
-    : [];
-  const final = cash[now]! + perMonth * rest;
+  const projection: CashProjection['projection'] = [];
+  let value = cash[now]!;
+  let q = next;
+  if (rest) projection.push({ month: now, value });
+  for (let m = now + 1; m <= months; m++) {
+    value += q;
+    q *= growth;
+    projection.push({ month: m, value });
+  }
   return {
-    perMonth,
-    window,
-    final,
+    method,
+    nextProfit: next,
+    growth,
+    skipped: now - usable.length,
+    final: value,
     goal: goal.cash,
-    ratio: goal.cash > 0 ? final / goal.cash : 1,
-    onTrack: final >= goal.cash,
+    ratio: goal.cash > 0 ? value / goal.cash : 1,
+    onTrack: value >= goal.cash,
+    outlook:
+      rest && Math.abs(value / goal.cash - 1) <= CASH_CLOSE_BAND
+        ? 'close'
+        : value >= goal.cash
+          ? 'ahead'
+          : 'behind',
     projection,
   };
 }
