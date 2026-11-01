@@ -12,7 +12,7 @@ import {
 } from './index.ts';
 
 const TURNS: Action[][] = [
-  [{ type: 'set', key: 'compress', value: 100 }],
+  [{ type: 'set', key: 'format', value: 105 }],
   [],
   [{ type: 'component', slot: 'db', option: 'kv' }],
   [{ type: 'optimize' }],
@@ -79,6 +79,31 @@ describe('保存と再生', () => {
     const s = replaySave(parsed!);
     expect(s.framework).toBe('nextjs');
     expect(s).toEqual(replaySave({ ...parsed!, framework: 'nextjs' }));
+  });
+
+  it('「画像の圧縮」の古い保存は「画像の形式」に読み替える（D-58）', () => {
+    const old = {
+      version: 1,
+      scenarioId: 'article-community',
+      stackIndex: 1,
+      seed: 7,
+      startDate: '2026-10-31',
+      turns: [
+        [{ type: 'set', key: 'compress', value: 100 }],
+        [{ type: 'set', key: 'compress', value: 70 }],
+        [{ type: 'set', key: 'compress', value: 150 }],
+      ],
+    };
+    const parsed = parseSave(old)!;
+    expect(parsed.turns.map((t) => t[0])).toEqual([
+      { type: 'set', key: 'format', value: 105 },
+      { type: 'set', key: 'format', value: 84 },
+      { type: 'set', key: 'format', value: 150 },
+    ]);
+    const s = replaySave(parsed);
+    expect(s.history.map((h) => h.settings.imageKB)).toEqual([
+      150, 105, 84, 150,
+    ]);
   });
 
   it('SPA の保存は SPA のまま再生し、知らないフレームワークは読めない', () => {

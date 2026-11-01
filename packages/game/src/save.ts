@@ -55,6 +55,21 @@ export function withTurn(save: SaveData, actions: readonly Action[]): SaveData {
   return { ...save, turns: [...save.turns, [...actions]] };
 }
 
+/**
+ * 古い保存の行動を今の形に直す（版は上げない）。設定「画像の圧縮」（compress: 150 / 100 / 70 KB）は「画像の形式」（format）に
+ * 置き換えた（D-58）ので、近い大きさの形式に読み替える: 150 → JPEG・100 → WebP（105）・70 → AVIF（84）。
+ */
+function migrateAction(a: Action): Action {
+  const old = a as { type: string; key?: string; value?: number };
+  if (old.type !== 'set' || old.key !== 'compress') return a;
+  const v = old.value ?? 150;
+  return {
+    type: 'set',
+    key: 'format',
+    value: v >= 150 ? 150 : v >= 100 ? 105 : 84,
+  };
+}
+
 const isObject = (x: unknown): x is Record<string, unknown> =>
   typeof x === 'object' && x !== null && !Array.isArray(x);
 
@@ -107,7 +122,7 @@ export function parseSave(raw: unknown): SaveData | null {
     startDate,
     ...(components ? { components: components as Choices } : {}),
     ...(revalidateSec !== undefined ? { revalidateSec } : {}),
-    turns: turns as Action[][],
+    turns: (turns as Action[][]).map((t) => t.map(migrateAction)),
   };
 }
 
