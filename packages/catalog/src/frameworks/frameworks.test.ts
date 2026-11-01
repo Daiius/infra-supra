@@ -241,8 +241,8 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
 
 describe('Astro（D-68）', () => {
   const pv = 300_000;
-  // 内容の更新（ゲームのオンデマンドの更新と同じ数え方: PV × API × 書き込み × 0.5）
-  const updates = pv * 0.1 * 0.5;
+  // 内容の更新（ゲームの記事コミュニティと同じ数え方: PV × API × 書き込み × 記事の投稿・編集 0.01 = 月 300 回。D-70）
+  const updates = pv * 0.1 * 0.01;
   const w = (intervalSeconds?: number) =>
     toAstro(articleCommunity(pv), ARTICLE_COMMUNITY_ASTRO, {
       updatesPerMonth: updates,
@@ -272,7 +272,7 @@ describe('Astro（D-68）', () => {
     expect(a.routes.map((r) => r.rendering)).toEqual(['static', 'ssr']);
     expect(a.perPage.assets).toBeCloseTo(10 * 0.3, 12);
     expect(a.build).toEqual({
-      updatesPerMonth: updates * 0.02,
+      updatesPerMonth: updates,
       intervalSeconds: 300,
       minutesPerBuild: 2,
     });
@@ -320,7 +320,7 @@ describe('Astro（D-68）', () => {
           articleCommunity(10_000_000),
           ARTICLE_COMMUNITY_ASTRO,
           {
-            updatesPerMonth: 10_000_000 * 0.05,
+            updatesPerMonth: 10_000_000 * 0.1 * 0.01,
             ...(intervalSeconds ? { intervalSeconds } : {}),
           },
         ),

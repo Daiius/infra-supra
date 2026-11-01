@@ -319,6 +319,8 @@ export const CONTRACT_OPERATIONS: Scenario = {
     loss: { block: 0.6, throttle: 0.1, incident: 0.1, migration: 0.15 },
   },
   incidents: { selfHostedChancePerMonth: 0.08 },
+  // 画面はすべてログインの要る SSR で、作り直す静的なページ（ISR・Astro の静的出力）が無い（D-70）
+  pageUpdateShare: 0,
   // 添付の原本（stock.gbPerImage の 2 MB）。画像の部品はこのシナリオでは出さない（hidden.slots）ので効かない（D-47）
   unoptimizedImageKB: 2_000,
   resizedImageKB: 400,

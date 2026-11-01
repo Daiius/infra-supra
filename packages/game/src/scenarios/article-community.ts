@@ -419,6 +419,10 @@ export const ARTICLE_COMMUNITY: Scenario = {
     loss: { block: 0.6, throttle: 0.1, incident: 0.1, migration: 0.15 },
   },
   incidents: { selfHostedChancePerMonth: 0.08 },
+  // 記事のページを作り直すのは記事の投稿・編集だけ（書き込みの 1%。30 万 PV で月 300 回 ≒ 1 日 10 回）。
+  // コメント・いいねは別のデータとして読み込み（クライアントで取得・Suspense で後から流す）、記事のページを再生成しない
+  // （一般的な作り方の仮定。D-70・prd/04 §2）。Astro のビルドし直しも同じ回数（D-68）
+  pageUpdateShare: 0.01,
   // 最適化しない画像の大きさ = 原本（stock.gbPerImage の 4 MB。D-47 で 400 KB から揃えた）
   unoptimizedImageKB: 4_000,
   // 投稿のときに一律で縮めて置く 1 枚（長い辺 1,600〜2,000px の JPEG・WebP を想定。ゲーム上の仮定・D-47）

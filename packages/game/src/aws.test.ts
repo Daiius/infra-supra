@@ -210,9 +210,9 @@ describe('AWS の構成', () => {
       ).history[0]!;
     const line = (h: ReturnType<typeof first>) =>
       h.lines.find((l) => l.label.includes('invalidation-paths'));
-    // 1 か月目: PV 30 万 × 書き込み 0.1 × ページを変える 0.5 = 更新 1.5 万 × 2 ページ × 2 パス = 6 万パス
+    // 1 か月目: PV 30 万 × 書き込み 0.1 × 記事の投稿・編集 0.01 = 更新 300 × 2 ページ × 2 パス = 1,200 パス（D-70）
     const payg = first('payg', 0);
-    expect(line(payg)!.amount).toBeCloseTo((60_000 - 1_000) * 0.005, 6);
+    expect(line(payg)!.amount).toBeCloseTo((1_200 - 1_000) * 0.005, 6);
     // 定額 Pro は込み・時間の再検証は無効化しない
     expect(line(first('flat-pro', 0))?.amount ?? 0).toBe(0);
     expect(line(first('payg', 300))?.amount ?? 0).toBe(0);
@@ -223,19 +223,19 @@ describe('AWS の構成', () => {
     const payg = setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
       cdnPlan: 'payg',
     })!;
-    // 1 か月目（30 万 PV）: 更新 1.5 万 × 2 ページ × 2 パス
-    expect(payg.paths).toBeCloseTo(60_000, 6);
-    expect(payg.usd).toBeCloseTo(59_000 * 0.005, 6);
+    // 1 か月目（30 万 PV）: 更新 300 × 2 ページ × 2 パス（D-70）
+    expect(payg.paths).toBeCloseTo(1_200, 6);
+    expect(payg.usd).toBeCloseTo(200 * 0.005, 6);
     expect(payg.included).toBe(false);
     expect(invalidationNote(payg)).toBe(
-      '無効化 月約 60,000 パス・約 $295（月 1,000 パスまで無料、以降 1 パス $0.005）',
+      '無効化 月約 1,200 パス・約 $1（月 1,000 パスまで無料、以降 1 パス $0.005）',
     );
     const flat = setupInvalidationEstimate(ARTICLE_COMMUNITY, ON, 'nextjs', {
       cdnPlan: 'flat-pro',
     })!;
     expect(flat.included).toBe(true);
     expect(invalidationNote(flat)).toBe(
-      '無効化 月約 60,000 パス（定額のプランでは込み。解釈）',
+      '無効化 月約 1,200 パス（定額のプランでは込み。解釈）',
     );
     // ISR をキャッシュしない部品・Amplify は無効化しない
     expect(
@@ -251,7 +251,7 @@ describe('AWS の構成', () => {
       cdnPlan: 'payg',
     });
     expect(st.settings.revalidateSec).toBe(300);
-    expect(onDemandInvalidationEstimate(st)!.paths).toBeCloseTo(60_000, 6);
+    expect(onDemandInvalidationEstimate(st)!.paths).toBeCloseTo(1_200, 6);
     // 同じ月に選んだ部品の変更（行動を当てた draft）にも合わせる（OCL-7EDA42D6）
     const flatSt = playMonth(
       newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
@@ -281,11 +281,13 @@ describe('AWS の構成', () => {
 
   it('無効化の費用が主因で負けたら、次のプレイへのヒントが定額・時間の再検証・まとめる方向を出す（D-66）', () => {
     const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
+    // コメントでも記事のページを作り直す作り方（書き込みの半分。D-70 より前の仮定）なら、1 か月目の無効化 6 万パスで負ける
+    const commentsRegenerate = { ...ARTICLE_COMMUNITY, pageUpdateShare: 0.5 };
     let s = playMonth(
       newGame(
         ON,
         1,
-        ARTICLE_COMMUNITY,
+        commentsRegenerate,
         DEFAULT_START_DATE,
         'nextjs',
         { cdnPlan: 'payg', images: 'default' },
