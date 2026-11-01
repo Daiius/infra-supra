@@ -19,6 +19,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * 例: Vercel の Fast Origin Transfer は Functions・Middleware・Blob・Data Cache（ISR）で発生し、画像最適化は挙がっていない。
      */
     originClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * 期間つきのキャッシュ（ISR の再検証・API の応答の s-maxage）として持つクラス。ヒット率は hitRate でなく
+     * Workload の閲覧の密度と期間から出す（ResolvedWorkload.cacheHitRate。prd/04 §2）。
+     */
+    ttlClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({
@@ -31,6 +36,17 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * リクエスト・実行の件数には数えない。省略時はすべて別の実行として数える。
      */
     backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * コードの中のキャッシュ（Workers の Cache API など）。classes の応答をキャッシュから返すと、関数は起動して
+     * リクエスト・実行の件数は変わらず、CPU は hitCpuMs だけになり、経路の次（DB）へは miss だけが流れる。
+     * ヒット率は Workload の閲覧の密度と期間から出す（ResolvedWorkload.cacheHitRate）。
+     */
+    cache: z
+      .object({
+        classes: z.array(z.enum(REQUEST_CLASSES)),
+        hitCpuMs: NonNeg,
+      })
+      .optional(),
   }),
   /**
    * KV。cache: ISR のキャッシュ（閲覧で読み、再生成で書く）。db: DB の代わり（問い合わせ 1 回を読み取り 1 回、

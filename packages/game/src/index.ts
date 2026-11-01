@@ -3,6 +3,7 @@
 // 料金・前提は estimator と catalog（実データ）をそのまま使い、ゲームのために料金を作らない（企画書 §11.1）。
 // シナリオの値（収益・成長・手間・満足度・障害の影響・出来事・目標）はゲーム上の仮定で、実在の値ではない（prd/07 §10）。
 import {
+  apiCacheActive,
   applyComponentsToWorkload,
   componentsOf,
   composeStack,
@@ -124,6 +125,22 @@ export const SETTINGS = {
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
     note: '再生成の回数に効く。延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる',
+    options: [
+      { value: 60, label: '1 分' },
+      { value: 300, label: '5 分' },
+      { value: 3600, label: '1 時間' },
+      { value: 21600, label: '6 時間' },
+    ],
+  },
+  /**
+   * SPA の記事の中身の API の応答のキャッシュの期間（s-maxage。D-37）。ISR の間隔と同じ値（revalidateSec）を使う
+   * （SPA には ISR が無いので、同じ値をこちらの意味で選ぶ）。
+   */
+  apiCacheTtl: {
+    label: 'API のキャッシュの期間',
+    field: 'revalidateSec',
+    effort: EFFORT.setting.isr,
+    note: 'API の応答のキャッシュを使うときだけ効く。延ばすとヒットが増えて取り直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる',
     options: [
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
@@ -367,21 +384,24 @@ export function frameworksOf(sc: Scenario): {
   return sc.frameworks ?? { allowed: ['nextjs'], default: 'nextjs' };
 }
 
-/** フレームワークの既定の部品（SPA は OGP の前処理なし。prd/10 F-07）。 */
+/** フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。 */
 function frameworkDefaults(framework: FrameworkId): Choices {
-  return framework === 'vite-spa' ? { ogp: 'none' } : {};
+  return framework === 'vite-spa' ? { ogp: 'none', apiCache: 'none' } : {};
 }
 
 /**
- * 画面に出さず、選べない設定（シナリオで効かないもの + SPA の ISR の間隔。prd/10・OCL-8DFFDBEC）。
+ * 画面に出さず、選べない設定（シナリオで効かないもの + SPA の ISR の間隔・Next.js の API のキャッシュの期間。
+ * prd/10・OCL-8DFFDBEC・D-37）。
  */
 export function hiddenSettings(
   state: Pick<GameState, 'framework' | 'scenario'>,
 ): SettingKey[] {
   const fromScenario = state.scenario.hidden?.settings ?? [];
-  return state.framework === 'vite-spa' && !fromScenario.includes('isr')
-    ? [...fromScenario, 'isr']
-    : [...fromScenario];
+  const byFramework: SettingKey =
+    state.framework === 'vite-spa' ? 'isr' : 'apiCacheTtl';
+  return fromScenario.includes(byFramework)
+    ? [...fromScenario]
+    : [...fromScenario, byFramework];
 }
 
 /** 記事ごとの SNS のカードが出ないか（SPA で OGP の前処理なし。prd/10 F-05）。 */
@@ -550,9 +570,14 @@ function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ...w.traffic,
       peakHourFactor: w.traffic.peakHourFactor * p.peakFactor,
     };
-  // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）
+  // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
+  // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
   const shape = sc.frameworks?.spa?.shape;
-  const app = p.framework === 'vite-spa' && shape ? toSpa(w, shape) : w;
+  const cache = apiCacheActive(p.platform, p.components, p.framework);
+  const app =
+    p.framework === 'vite-spa' && shape
+      ? toSpa(w, shape, cache ? { cacheContent: true } : {})
+      : w;
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
   return applyComponentsToWorkload(app, p.platform, p.components, {
     originalImageKB: sc.unoptimizedImageKB,
@@ -1064,8 +1089,10 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         return ng(
           'unavailable',
           state.framework === 'vite-spa' && action.key === 'isr'
-            ? 'Vite の SPA には ISR が無い（ページの中身を毎回 API で読む）'
-            : 'このシナリオでは効かない',
+            ? 'Vite の SPA には ISR が無い（期間は「API のキャッシュの期間」で選ぶ）'
+            : state.framework !== 'vite-spa' && action.key === 'apiCacheTtl'
+              ? 'Next.js では ISR の間隔で選ぶ'
+              : 'このシナリオでは効かない',
         );
       if (state.settings[def.field] === action.value)
         return ng('same', '今と同じ（または選択済み）');
@@ -1134,6 +1161,24 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       // チャットを受けたあとはリアルタイムを外せない
       if (action.slot === 'realtime' && state.mods.realtime)
         return ng('irreversible', 'チャットを受けたので外せない');
+      // さくらの VPS の API の応答のキャッシュは前段の CDN の上で効く（D-37）
+      if (
+        platform === 'sakura' &&
+        action.slot === 'apiCache' &&
+        action.option !== 'none' &&
+        (current.frontCdn ?? 'none') === 'none'
+      )
+        return ng('unavailable', '前段の CDN が要る（先に前段の CDN を選ぶ）');
+      if (
+        platform === 'sakura' &&
+        action.slot === 'frontCdn' &&
+        action.option === 'none' &&
+        (current.apiCache ?? 'none') !== 'none'
+      )
+        return ng(
+          'unavailable',
+          'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）',
+        );
       // 提案で付く部品は、提案が届いている月だけ選べる（選ぶと提案を受けたのと同じ）
       const via = proposalOnlyComponent(sc, action.slot, action.option);
       if (via) {
@@ -1932,9 +1977,12 @@ export function playMonth(input: GameState): GameState {
     ...state.settings,
     ...(comps.images === 'none' ? { imageKB: sc.unoptimizedImageKB } : {}),
   };
-  // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）
+  // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）。
+  // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
   const spa = state.framework === 'vite-spa';
-  const uncached = spa || comps.isrCache === 'none';
+  const uncached = spa
+    ? !apiCacheActive(platformNow, state.components, state.framework)
+    : comps.isrCache === 'none';
   // SPA の API の CPU（速さの「SSR の重さ」の代わりに使う。SSR の CPU × dataCpuFactor）
   const firstLoad = spa && (sc.frameworks?.spa?.firstLoadHeavy ?? false);
   const serverCpuMs = spa
@@ -2354,7 +2402,9 @@ function stageReasons(
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
-        `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`,
+        (c.spa
+          ? `API のキャッシュの期間 ${optionLabel('apiCacheTtl', c.settings.revalidateSec)}`
+          : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
       c.eventuallyConsistent &&
         'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて、更新がすぐ見えない',
       c.onDemandReason,

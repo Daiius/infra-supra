@@ -978,7 +978,12 @@ function Actions({
       out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
     if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
     if (o.storage ?? storage) out.push({ type: 'storage-option' });
-    for (const [slot, option] of Object.entries(ps))
+    // VPS の API の応答のキャッシュは前段の CDN が要る（D-37）。付けるときは前段の CDN の後、外すときは先に当てる
+    const order = ([slot, option]: [string, string | undefined]) =>
+      slot === 'apiCache' ? (option === 'none' ? -1 : 1) : 0;
+    for (const [slot, option] of Object.entries(ps).sort(
+      (a, b) => order(a) - order(b),
+    ))
       out.push({ type: 'component', slot: slot as SlotId, option: option! });
     if (stack !== null)
       out.push({

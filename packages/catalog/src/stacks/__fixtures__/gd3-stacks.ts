@@ -253,9 +253,10 @@ export const GD3_STACKS: unknown[] = [
           hitRate: {
             asset: 1,
             'document-static': 1,
-            'document-isr': 0.8,
             'image-read': 0.9,
           },
+          // D-37: ISR のページのヒット率は固定の 0.8 をやめ、再生成の数と同じ式（閲覧の密度 × 再検証の間隔）から出す
+          ttlClasses: ['document-isr'],
           originClasses: ['document-ssr', 'document-isr', 'api'],
         },
         billing: {
@@ -372,9 +373,10 @@ export const GD3_STACKS: unknown[] = [
           hitRate: {
             asset: 1,
             'document-static': 1,
-            'document-isr': 0.8,
             'image-read': 0.9,
           },
+          // D-37: ISR のページのヒット率は固定の 0.8 をやめ、再生成の数と同じ式（閲覧の密度 × 再検証の間隔）から出す
+          ttlClasses: ['document-isr'],
           originClasses: ['document-ssr', 'document-isr', 'api'],
         },
         billing: {

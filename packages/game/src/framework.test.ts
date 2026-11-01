@@ -5,6 +5,7 @@ import {
   applyActions,
   checkAction,
   hiddenSettings,
+  componentPreview,
   componentSlots,
   DEFAULT_START_DATE,
   newGame,
@@ -96,6 +97,66 @@ describe('フレームワークの選択', () => {
       );
       expect(last(plain).trafficNote).toContain('SNS のカードが出ない');
     }
+  });
+});
+
+describe('SPA の API の応答のキャッシュ（D-37）', () => {
+  const VERCEL_PRO = 3;
+  const VPS = 4;
+  const spaGame = (stack: number) =>
+    playMonth(newGame(stack, 42, article, DEFAULT_START_DATE, 'vite-spa'));
+
+  it('記事コミュニティの SPA だけに出る（Next.js・受託では出さない）。期間の設定も SPA だけ', () => {
+    const spa = spaGame(VERCEL_PRO);
+    expect(componentSlots(spa).map((x) => x.slot)).toContain('apiCache');
+    expect(hiddenSettings(spa)).not.toContain('apiCacheTtl');
+    const next = playMonth(newGame(VERCEL_PRO, 42, article));
+    expect(componentSlots(next).map((x) => x.slot)).not.toContain('apiCache');
+    expect(hiddenSettings(next)).toContain('apiCacheTtl');
+    const c = newGame(1, 42, contract, DEFAULT_START_DATE, 'vite-spa');
+    expect(componentSlots(c).map((x) => x.slot)).not.toContain('apiCache');
+    expect(hiddenSettings(c)).toContain('apiCacheTtl');
+  });
+
+  it('キャッシュすると記事は期間だけ古く見え、期間を延ばすと鮮度が下がる', () => {
+    let s = applyActions(spaGame(VERCEL_PRO), [
+      { type: 'component', slot: 'apiCache', option: 'cdn' },
+      { type: 'set', key: 'apiCacheTtl', value: 21600 },
+    ]);
+    s = playMonth(s);
+    const r = s.history[s.history.length - 1]!;
+    expect(r.satisfaction.stages.freshness).toBe('bad');
+    expect(r.satisfaction.reasons.freshness).toContain(
+      'API のキャッシュの期間',
+    );
+  });
+
+  it('選ぶ前に、Workers Cache の課金の事実を出す（Free・Paid とも）', () => {
+    for (const stack of [0, 1]) {
+      const ids = componentPreview(spaGame(stack), 'apiCache', 'cdn').map(
+        (p) => p.id,
+      );
+      expect(ids.some((id) => id.endsWith(':workers-cache-front'))).toBe(true);
+    }
+  });
+
+  it('VPS は前段の CDN が無いと選べず、キャッシュしている間は前段の CDN を外せない', () => {
+    const s = spaGame(VPS);
+    const cache = {
+      type: 'component',
+      slot: 'apiCache',
+      option: 'cdn',
+    } as const;
+    expect(checkAction(s, cache).ok).toBe(false);
+    const withCdn = applyActions(s, [
+      { type: 'component', slot: 'frontCdn', option: 'static' },
+    ]);
+    expect(checkAction(withCdn, cache).ok).toBe(true);
+    const both = applyActions(withCdn, [cache]);
+    expect(
+      checkAction(both, { type: 'component', slot: 'frontCdn', option: 'none' })
+        .ok,
+    ).toBe(false);
   });
 });
 
