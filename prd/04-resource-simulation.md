@@ -39,6 +39,19 @@ N(image-transform)         = on-demand なら 画像の種類 × variantsPerImag
 
 ISR のルートの閲覧（`document-isr`）自体は CDN・ホストのキャッシュで返るクラスとして数え、再生成だけが関数に届く。
 
+期間つきのキャッシュ（ISR の再検証の間隔・SPA の記事の中身の API の s-maxage。D-37・[10](./10-framework-branch.md) §8）は、同じ式で miss とヒット率を出す（実装の正。上の `min` の式は古い案）:
+
+```
+λ_r        = ルート r の月の閲覧 / ページ数            （1 ページへの到着率。人気が一様と仮定）
+miss_r     = 閲覧_r / (1 + λ_r × T_r / 1 か月)         （T: 再検証の間隔・s-maxage）
+hit(k)     = 1 − Σ miss_r / Σ 閲覧_r                    （k = document-isr・api-content。ResolvedWorkload.cacheHitRate）
+N(isr-revalidate) = Σ miss_r                           （ISR の再生成 = CDN の miss と同じ数）
+N(api-content)    = Σ 閲覧_r（SPA で cacheSeconds を持つルートだけ。持たない中身は api にまとめる）
+```
+
+構成の `cdn` は `ttlClasses` に挙げたクラス、`function` は `cache.classes` に挙げたクラス（Workers の Cache API などコードの中のキャッシュ。
+リクエスト・実行の件数は変わらず、ヒットは `hitCpuMs` だけ・次のノードへは miss だけ）でこのヒット率を使う。
+
 ## 3. ComponentKind ごとの変換
 
 各 Kind は「受け取った件数と転送量」から **Usage（汎用リソース）** と **次のノードへ流す件数** を返す。
@@ -54,6 +67,7 @@ origin     = Σ misses(k) × size(k)     （オリジン→CDN の転送。edge:
 ```
 
 キャッシュできないクラス（`api`・個人向けの `document-ssr`）は `hit = 0` に固定し、入力で変えられないようにする。
+キャッシュできる中身の API は別のクラス `api-content` にし、ヒット率は §2 の期間つきのキャッシュの式から出す（D-37）。
 
 ### 3.2 `static-hosting`
 

@@ -89,7 +89,9 @@ function consume(
   const p = f.perRequest;
   switch (c.kind) {
     case 'cdn': {
-      const hit = c.hitRate[cls] ?? 0;
+      const hit = c.ttlClasses?.includes(cls)
+        ? (w.cacheHitRate[cls] ?? 0)
+        : (c.hitRate[cls] ?? 0);
       add(u, 'requests', n);
       add(u, 'egress-gb', kbToGb(n * p.kb));
       const miss = n * (1 - hit);
@@ -104,19 +106,25 @@ function consume(
           hostAcc.maxCpuByClass[cls] ?? 0,
           p.maxCpuMs,
         );
-      u.busyMs += n * p.wallMs;
-      add(u, 'cpu-ms', n * p.cpuMs);
+      // コードの中のキャッシュ: ヒットはキャッシュから返す CPU だけ、miss は処理して次（DB）へ流す
+      const cached = c.cache?.classes.includes(cls) ?? false;
+      const hits = cached ? n * (w.cacheHitRate[cls] ?? 0) : 0;
+      const miss = n - hits;
+      const hitCpu = cached ? c.cache!.hitCpuMs : 0;
+      const wallMs = hits * hitCpu + miss * p.wallMs;
+      u.busyMs += wallMs;
+      add(u, 'cpu-ms', hits * hitCpu + miss * p.cpuMs);
       add(
         u,
         'memory-gb-hours',
-        ((n * p.wallMs) / 3_600_000) * (c.memoryGB / c.concurrency),
+        (wallMs / 3_600_000) * (c.memoryGB / c.concurrency),
       );
       if (!c.backgroundClasses?.includes(cls)) {
         add(u, 'requests', n);
         add(u, 'invocations', n);
         u.events += n;
       }
-      return f;
+      return cached ? { count: miss, perRequest: p } : f;
     }
     case 'kv': {
       if (c.mode === 'db') {

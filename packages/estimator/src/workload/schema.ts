@@ -33,6 +33,11 @@ export const RouteGroupSchema = z.object({
   cachedServeCpuMs: NonNeg.default(0),
   /** spa のみ: シェル（index.html）の大きさ。 */
   shellKB: NonNeg.optional(),
+  /**
+   * spa のみ: ページの中身の API の応答をキャッシュする期間（s-maxage・秒）。与えると中身の API を api-content のクラスに分け、
+   * ヒット率を閲覧の密度と期間から出す（prd/04 §2）。全員に同じ中身（記事）だけに付ける（個人化された中身はキャッシュできない）。
+   */
+  cacheSeconds: Pos.optional(),
 });
 
 export const WorkloadInputSchema = z
@@ -113,6 +118,14 @@ export const WorkloadInputSchema = z
           code: 'custom',
           path: ['routes', i, 'revalidateSeconds'],
           message: 'ISR のルートには revalidateSeconds が必要',
+        });
+      }
+      if (r.rendering !== 'spa' && r.cacheSeconds !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['routes', i, 'cacheSeconds'],
+          message:
+            'cacheSeconds は SPA のルートだけ（ISR は revalidateSeconds）',
         });
       }
       if (r.rendering === 'spa' && r.shellKB === undefined) {

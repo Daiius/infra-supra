@@ -140,8 +140,14 @@ export type SpaShape = {
 /**
  * テンプレートの Workload を SPA の形に書き換える（ISR・SSR のルートを spa に。静的なルートはそのまま）。
  * ページの中身はデータの API で取り、処理は SSR の値から作る（CPU は dataCpuFactor 倍・DB の往復は同じ）。
+ * cacheContent: 記事（ISR だったルート＝全員に同じ中身）の API の応答をキャッシュする。期間は ISR の間隔
+ * （revalidateSeconds）をそのまま使う。SSR だったルートは個人化された中身なのでキャッシュしない（D-37）。
  */
-export function toSpa(w: WorkloadInput, shape: SpaShape): WorkloadInput {
+export function toSpa(
+  w: WorkloadInput,
+  shape: SpaShape,
+  options: { cacheContent?: boolean } = {},
+): WorkloadInput {
   return {
     ...w,
     routes: w.routes.map((r) => {
@@ -152,6 +158,11 @@ export function toSpa(w: WorkloadInput, shape: SpaShape): WorkloadInput {
         share: r.share,
         pages: r.pages,
         shellKB: shape.shellKB,
+        ...(options.cacheContent &&
+        r.rendering === 'isr' &&
+        r.revalidateSeconds !== undefined
+          ? { cacheSeconds: r.revalidateSeconds }
+          : {}),
         processing: {
           ...r.processing,
           cpuMs: r.processing.cpuMs * shape.dataCpuFactor,

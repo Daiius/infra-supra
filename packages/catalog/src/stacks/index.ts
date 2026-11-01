@@ -6,7 +6,7 @@ import type { FrameworkId } from '../frameworks/index.ts';
 
 export type Platform = 'cloudflare' | 'vercel' | 'sakura';
 export type SlotId =
-  'isrCache' | 'images' | 'db' | 'realtime' | 'frontCdn' | 'ogp';
+  'isrCache' | 'images' | 'db' | 'realtime' | 'frontCdn' | 'ogp' | 'apiCache';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -84,6 +84,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   realtime: 'リアルタイム',
   frontCdn: '前段の CDN',
   ogp: 'SNS のカード（OGP）',
+  apiCache: 'API の応答のキャッシュ',
 };
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [
@@ -393,17 +394,105 @@ const SPA_OGP: ComponentOption[] = (
   },
 ]);
 
+/**
+ * SPA の API の応答のキャッシュ（D-37・prd/10 §8）。対象は全員に同じ中身（記事）を返すデータの API だけで、
+ * 個人化された API（マイページ・ログインの要る API・書き込み）は対象にしない。期間（s-maxage）は ISR の間隔と同じ設定で選ぶ。
+ * ヒット率は固定値にせず、閲覧の密度 × 期間から出す（ISR の再生成と同じ式。prd/04 §2）。
+ */
+const SPA_API_CACHE: ComponentOption[] = [
+  ...(['cloudflare', 'vercel', 'sakura'] as const).map(
+    (platform): ComponentOption => ({
+      id: 'none',
+      slot: 'apiCache',
+      platform,
+      frameworks: ['vite-spa'],
+      label: 'なし',
+      note: '記事の中身の API を毎回処理して DB を読む。記事は常に新しい',
+      premiseRefs: [],
+    }),
+  ),
+  {
+    id: 'cdn',
+    slot: 'apiCache',
+    platform: 'cloudflare',
+    frameworks: ['vite-spa'],
+    label: 'Workers Cache（Worker の前のキャッシュ）',
+    note: 'Cache-Control に従い、ヒットは Worker を動かさずに返す（CPU と D1 の読み取りが減る）。有効にすると、キャッシュから返したものも静的アセットも、Worker へのリクエストはすべて課金される',
+    premiseRefs: [
+      'fact:cloudflare:workers-free:workers-cache-front',
+      'fact:cloudflare:workers-paid:workers-cache-front',
+      'pool:cloudflare:workers-free:free-requests',
+      'pool:cloudflare:workers-paid:paid-requests',
+    ],
+  },
+  {
+    id: 'cache-api',
+    slot: 'apiCache',
+    platform: 'cloudflare',
+    frameworks: ['vite-spa'],
+    label: 'Workers の Cache API（コードの中）',
+    note: 'Worker が拠点のキャッシュを読み、ヒットなら D1 を読まずに返す。Worker は毎回動くのでリクエスト数は減らず、CPU と D1 の読み取りが減る。キャッシュは拠点ごとで複製されない（拠点に分かれてヒット率が下がる分は計算に入れていない）',
+    premiseRefs: [
+      'fact:cloudflare:workers-free:cache-api-local',
+      'fact:cloudflare:workers-paid:cache-api-local',
+      'pool:cloudflare:workers-paid:paid-cpu-ms',
+    ],
+  },
+  {
+    id: 'cdn',
+    slot: 'apiCache',
+    platform: 'vercel',
+    frameworks: ['vite-spa'],
+    label: 'CDN のキャッシュ（s-maxage）',
+    note: '記事の中身の API の応答に Cache-Control: s-maxage を付け、ヒットは CDN が返す（関数の起動・CPU・Fast Origin Transfer が減る。CDN Requests と Fast Data Transfer は残る）。キャッシュはリージョンごと（分かれてヒット率が下がる分は計算に入れていない）',
+    premiseRefs: [
+      'fact:vercel:hobby:cdn-cache-functions',
+      'fact:vercel:pro:cdn-cache-functions',
+      'pool:vercel:pro:pro-cdn-requests',
+    ],
+  },
+  {
+    id: 'cdn',
+    slot: 'apiCache',
+    platform: 'sakura',
+    frameworks: ['vite-spa'],
+    label: '前段の CDN でキャッシュ（s-maxage）',
+    note: '前段の CDN（Cloudflare）が記事の中身の API の応答を返し、VPS の CPU と回線が減る。前段の CDN が要る。Cloudflare は既定で JSON をキャッシュしないので、Cache Rules で API のパスを対象にする前提（推測）',
+    premiseRefs: ['fact:cloudflare:cdn-free:html-not-cached', 'host:cpu'],
+  },
+];
+
 export const COMPONENTS: readonly ComponentOption[] = [
   ...BASE_COMPONENTS,
   ...SAKURA_FRONT_CDN,
   ...SPA_OGP,
+  ...SPA_API_CACHE,
 ];
 
+// SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
 export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   cloudflare: { isrCache: 'kv', images: 'images', db: 'd1', realtime: 'none' },
   vercel: { isrCache: 'default', images: 'default' },
   sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
 };
+
+/**
+ * Cache API でヒットを返すときの Worker の CPU（ms）。記事の ISR のページをキャッシュから返す CPU
+ * （テンプレートの cachedServeCpuMs）と同じ値（ゲーム上の仮定）。
+ */
+const CACHE_API_HIT_CPU_MS = 2;
+
+/** 選択で API の応答のキャッシュが効くか（SPA だけ。VPS は前段の CDN が要る）。 */
+export function apiCacheActive(
+  platform: Platform,
+  choices: Choices,
+  framework: FrameworkId | undefined,
+): boolean {
+  if (framework !== 'vite-spa') return false;
+  const c = { ...DEFAULT_CHOICES[platform], ...choices };
+  if (!c.apiCache || c.apiCache === 'none') return false;
+  return platform !== 'sakura' || (c.frontCdn ?? 'none') !== 'none';
+}
 
 /**
  * 事業者のスロットの部品（スロットの順）。framework を渡すと、そのフレームワークで選べる部品だけ
@@ -697,12 +786,9 @@ function composeVercel(
       label: 'Vercel CDN',
       config: {
         kind: 'cdn',
-        hitRate: {
-          asset: 1,
-          'document-static': 1,
-          'document-isr': 0.8,
-          'image-read': 0.9,
-        },
+        hitRate: { asset: 1, 'document-static': 1, 'image-read': 0.9 },
+        // ISR のページのヒット率は固定値にせず、再生成の数と同じ式（閲覧の密度 × 再検証の間隔）から出す（D-37）
+        ttlClasses: ['document-isr'],
         // Fast Origin Transfer は Functions・Middleware・Blob・Data Cache（ISR）で発生（画像最適化は挙がっていない）
         originClasses: ['document-ssr', 'document-isr', 'api'],
       },
@@ -829,12 +915,15 @@ function composeSakura(
               config: {
                 kind: 'cdn' as const,
                 // ヒット率は仮定（Vercel の CDN と同じ値を使う）。HTML もキャッシュするときだけ ISR のページを返す
+                // （ISR のページのヒット率は再生成の数と同じ式から出す。D-37）
                 hitRate: {
                   asset: 1,
                   'document-static': frontCdn === 'html' ? 1 : 0,
                   'image-read': 0.9,
-                  ...(frontCdn === 'html' ? { 'document-isr': 0.8 } : {}),
                 },
+                ...(frontCdn === 'html'
+                  ? { ttlClasses: ['document-isr' as const] }
+                  : {}),
               },
               facts:
                 frontCdn === 'html'
@@ -940,7 +1029,14 @@ export function composeStack(
         );
     }
   })();
-  return spa ? asSpa(arch, def.platform, c.ogp === 'prerender') : arch;
+  return spa
+    ? asSpa(arch, def.platform, {
+        prerender: c.ogp === 'prerender',
+        apiCache: apiCacheActive(def.platform, c, 'vite-spa')
+          ? c.apiCache!
+          : 'none',
+      })
+    : arch;
 }
 
 /**
@@ -951,12 +1047,18 @@ export function composeStack(
 function asSpa(
   arch: ArchitectureInput,
   platform: Platform,
-  prerender: boolean,
+  opts: { prerender: boolean; apiCache: string },
 ): ArchitectureInput {
+  const { prerender, apiCache } = opts;
   const routes = { ...arch.routes };
   delete routes['document-ssr'];
   delete routes['document-isr'];
   delete routes['isr-revalidate'];
+  // 記事の中身の API は、キャッシュの有無によらず api と同じ経路（キャッシュはノードの側で効かせる。D-37）
+  if (routes.api) routes['api-content'] = [...routes.api];
+  // Workers Cache を有効にすると、静的アセットへのリクエストも Workers の料金で課金される（workers-cache-front）
+  const workersCacheFront = platform === 'cloudflare' && apiCache === 'cdn';
+  const worker = arch.nodes.find((x) => x.id === 'worker');
   const nodes = arch.nodes.map((n): ArchNodeIn => {
     if (platform === 'cloudflare' && n.id === 'worker') {
       const facts = [
@@ -964,29 +1066,75 @@ function asSpa(
         'static-assets',
         'spa-navigation',
         ...(prerender ? ['run-worker-first'] : []),
+        ...(workersCacheFront ? ['workers-cache-front'] : []),
+        ...(apiCache === 'cache-api' ? ['cache-api-local'] : []),
       ];
+      // Workers Cache: ヒットは Worker を動かさない（CPU 0）がリクエストは課金。Cache API: Worker が動いてキャッシュを読む
+      const hitCpuMs =
+        apiCache === 'cdn'
+          ? 0
+          : apiCache === 'cache-api'
+            ? CACHE_API_HIT_CPU_MS
+            : undefined;
       return {
         ...n,
         label: prerender ? 'Worker（API・OGP の前処理）' : 'Worker（API）',
-        config: { kind: 'function' },
+        config: {
+          kind: 'function',
+          ...(hitCpuMs !== undefined
+            ? { cache: { classes: ['api-content'], hitCpuMs } }
+            : {}),
+        },
         facts,
       };
     }
+    if (workersCacheFront && n.id === 'assets' && worker?.billing)
+      return {
+        ...n,
+        label: 'Workers 静的アセット（Workers Cache で課金）',
+        billing: { ...worker.billing, meters: { requests: 'requests' } },
+      };
     if (platform === 'vercel' && n.id === 'cdn' && n.config.kind === 'cdn') {
-      return prerender
-        ? {
-            ...n,
-            config: {
-              ...n.config,
-              hitRate: { ...n.config.hitRate, 'document-static': 0 },
-              originClasses: [
-                ...(n.config.originClasses ?? []),
-                'document-static',
-              ],
-            },
-          }
-        : n;
+      const cached = apiCache === 'cdn';
+      return {
+        ...n,
+        ...(cached
+          ? { facts: [...(n.facts ?? []), 'cdn-cache-functions'] }
+          : {}),
+        config: {
+          ...n.config,
+          ...(prerender
+            ? { hitRate: { ...n.config.hitRate, 'document-static': 0 } }
+            : {}),
+          originClasses: [
+            ...(n.config.originClasses ?? []),
+            ...(prerender ? (['document-static'] as const) : []),
+            'api-content',
+          ],
+          ...(cached
+            ? {
+                ttlClasses: [
+                  ...(n.config.ttlClasses ?? []),
+                  'api-content' as const,
+                ],
+              }
+            : {}),
+        },
+      };
     }
+    if (
+      platform === 'sakura' &&
+      apiCache === 'cdn' &&
+      n.id === 'cf-cdn' &&
+      n.config.kind === 'cdn'
+    )
+      return {
+        ...n,
+        config: {
+          ...n.config,
+          ttlClasses: [...(n.config.ttlClasses ?? []), 'api-content'],
+        },
+      };
     if (platform === 'vercel' && n.id === 'fn')
       return {
         ...n,

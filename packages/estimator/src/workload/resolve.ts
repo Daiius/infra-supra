@@ -14,6 +14,7 @@ export const REQUEST_CLASSES = [
   'isr-revalidate', // ISR の再生成（関数が動く）
   'asset',
   'api',
+  'api-content', // SPA の共有の中身（記事）を返すデータの API。応答を CDN 等でキャッシュするとき（cacheSeconds）だけ api から分ける
   'image-read',
   'image-write',
   'image-transform', // 画像の最適化（一意な変換）
@@ -48,6 +49,12 @@ export type ResolvedWorkload = {
    * 構成がそのクラスを裏で走らせるとき（function の backgroundClasses）だけ使う。
    */
   backgroundCpuMs: Partial<Record<RequestClass, number>>;
+  /**
+   * 期間つきのキャッシュ（ISR の再検証の間隔・API の応答の s-maxage）のヒット率（件数で重み付け）。
+   * 1 ページへの閲覧の到着率 λ と期間 T から λT / (1 + λT)（= 1 − 再生成・取り直しの数 / 閲覧。人気が一様と仮定。prd/04 §2）。
+   * document-isr と api-content だけ。構成の cdn（ttlClasses）と function（cache）が使う。
+   */
+  cacheHitRate: Partial<Record<RequestClass, number>>;
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
@@ -133,6 +140,12 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   const revalidations: ClassFlow[] = [];
   /** SPA のページの中身を取るデータの API（ページごとに 1 回）。 */
   const spaData: ClassFlow[] = [];
+  /** SPA の共有の中身のうち、応答をキャッシュするもの（cacheSeconds）。hits はキャッシュから返る件数。 */
+  const spaContent: ClassFlow[] = [];
+  let spaContentHits = 0;
+  let spaContentViews = 0;
+  let isrViews = 0;
+  let isrMisses = 0;
   /** SPA のルートの閲覧と入口（シェルと JS・CSS を読むのは入口だけ）。 */
   let spaViews = 0;
   let spaEntries = 0;
@@ -155,7 +168,32 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       spaViews += views;
       spaEntries += entries;
       byRendering.static.push(flow(entries, { kb: r.shellKB! }));
-      spaData.push(flow(views, work));
+      if (r.cacheSeconds !== undefined) {
+        // ISR の再生成と同じ形: 期間 T あたり 1 ページ高々 1 回だけ取り直す（miss）→ 閲覧 / (1 + λT)
+        const lambdaT =
+          (views / r.pages) * (r.cacheSeconds / SECONDS_PER_MONTH);
+        const misses = views / (1 + lambdaT);
+        spaContent.push(flow(views, work));
+        spaContentHits += views - misses;
+        spaContentViews += views;
+        derivations.push({
+          id: `api-cache-misses:${r.id}`,
+          label: `API の応答のキャッシュの取り直し（${r.id}）`,
+          expression:
+            '閲覧 / (1 + ページあたりの閲覧 × キャッシュの期間 / 1 か月)（人気が一様と仮定。ISR の再生成と同じ形）',
+          inputs: [
+            { name: '閲覧', value: views, basis: 'derived' },
+            { name: 'ページ数', value: r.pages, basis: 'user-input' },
+            {
+              name: 'キャッシュの期間',
+              value: r.cacheSeconds,
+              unit: 'second',
+              basis: 'user-input',
+            },
+          ],
+          result: misses,
+        });
+      } else spaData.push(flow(views, work));
       derivations.push({
         id: `spa-entries:${r.id}`,
         label: `SPA のシェルの読み込み（${r.id}）`,
@@ -184,6 +222,8 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         (views / r.pages) * (r.revalidateSeconds! / SECONDS_PER_MONTH);
       const count = views / (1 + lambdaT);
       revalidations.push(flow(count, work));
+      isrViews += views;
+      isrMisses += count;
       if (count > 0) {
         isrWithRevalidate = Math.max(
           isrWithRevalidate,
@@ -232,6 +272,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       kb: w.assets.sizeKB,
     }),
     api: spaData.length ? merge([apiFlow, ...spaData]) : apiFlow,
+    'api-content': merge(spaContent),
     'image-read': flow(images, { kb: w.images.sizeKB }),
     'image-write': flow(t.mau * w.images.uploadsPerMau, {
       kb: w.images.sizeKB,
@@ -264,6 +305,12 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     monthlyPageViews: pv,
     classes,
     backgroundCpuMs: { 'isr-revalidate': isrWithRevalidate },
+    cacheHitRate: {
+      ...(isrViews > 0 ? { 'document-isr': 1 - isrMisses / isrViews } : {}),
+      ...(spaContentViews > 0
+        ? { 'api-content': spaContentHits / spaContentViews }
+        : {}),
+    },
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
     storage: {

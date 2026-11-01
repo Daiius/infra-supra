@@ -95,3 +95,91 @@ describe('SPA のルート', () => {
     ).toThrow();
   });
 });
+
+describe('期間つきのキャッシュのヒット率（D-37・prd/04 §2）', () => {
+  const content = (pages: number, cacheSeconds?: number) =>
+    resolveWorkload(
+      base([
+        {
+          id: 'article',
+          rendering: 'spa',
+          share: 0.6,
+          pages,
+          processing,
+          shellKB: 3,
+          ...(cacheSeconds !== undefined ? { cacheSeconds } : {}),
+        },
+        {
+          id: 'personal',
+          rendering: 'spa',
+          share: 0.4,
+          pages: 1,
+          processing,
+          shellKB: 3,
+        },
+      ]),
+    );
+
+  it('期間を付けた中身だけ api-content に分かれ、個人化された中身は api のまま', () => {
+    const off = content(100);
+    const on = content(100, 300);
+    expect(off.classes['api-content'].count).toBe(0);
+    expect(off.cacheHitRate['api-content']).toBeUndefined();
+    expect(on.classes['api-content'].count).toBeCloseTo(60_000);
+    // api = もともとの API（PV × 1）+ 個人化の中身（40%）
+    expect(on.classes.api.count).toBeCloseTo(100_000 + 40_000);
+    expect(on.classes.api.count + on.classes['api-content'].count).toBeCloseTo(
+      off.classes.api.count,
+    );
+  });
+
+  it('ヒット率は λT / (1 + λT)。閲覧の密度（ページが少ない）と期間で単調に増え、1 未満', () => {
+    const hit = (pages: number, sec: number) =>
+      content(pages, sec).cacheHitRate['api-content']!;
+    const lambdaT = (60_000 / 100) * (300 / (730 * 3600));
+    expect(hit(100, 300)).toBeCloseTo(lambdaT / (1 + lambdaT), 12);
+    const secs = [60, 300, 3600, 21600];
+    for (let i = 1; i < secs.length; i++)
+      expect(hit(100, secs[i]!)).toBeGreaterThan(hit(100, secs[i - 1]!));
+    const pages = [10_000, 1_000, 100, 10];
+    for (let i = 1; i < pages.length; i++)
+      expect(hit(pages[i]!, 300)).toBeGreaterThan(hit(pages[i - 1]!, 300));
+    expect(hit(1, 21600)).toBeLessThan(1);
+  });
+
+  it('ISR のページのヒット率は 1 − 再生成の数 / 閲覧（同じ式）', () => {
+    const r = resolveWorkload(
+      base([
+        {
+          id: 'article',
+          rendering: 'isr',
+          share: 1,
+          pages: 100,
+          revalidateSeconds: 300,
+          processing,
+        },
+      ]),
+    );
+    expect(r.cacheHitRate['document-isr']).toBeCloseTo(
+      1 - r.classes['isr-revalidate'].count / r.classes['document-isr'].count,
+      12,
+    );
+  });
+
+  it('cacheSeconds は SPA のルートだけ', () => {
+    expect(() =>
+      resolveWorkload(
+        base([
+          {
+            id: 'x',
+            rendering: 'ssr',
+            share: 1,
+            pages: 1,
+            processing,
+            cacheSeconds: 60,
+          },
+        ]),
+      ),
+    ).toThrow(/cacheSeconds/);
+  });
+});
