@@ -2875,8 +2875,10 @@ export function playMonth(input: GameState): GameState {
     ? ssrCpuMs * (sc.frameworks?.spa?.shape.dataCpuFactor ?? 1)
     : ssrCpuMs;
   // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
+  // API を他の事業者に置いている間は、構成の DB の選択は使われない（DB は API の事業者の部品。OCL-5A7916E6）
   const eventuallyConsistent =
-    comps.db === 'kv' || (!spa && htmlCachedAtFront(comps));
+    (comps.db === 'kv' && !apiPlacedElsewhere(comps)) ||
+    (!spa && htmlCachedAtFront(comps));
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
   // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
   const onDemandSetting = !spa && isOnDemand(state.settings);
@@ -3006,6 +3008,12 @@ export function playMonth(input: GameState): GameState {
   // DB の差し替えが済んだら、次の月から新しい DB に切り替える
   if (componentSwap && componentSwap.done >= componentSwap.required) {
     components = { ...components, [componentSwap.slot]: componentSwap.option };
+    // API を他の事業者に移したら、構成の DB の選択は既定に戻す（DB は API の事業者に移った。
+    // 同じ事業者へ戻すときは既定の DB へ移す。OCL-5A7916E6）
+    if (componentSwap.slot === 'api' && apiPlacedElsewhere(components)) {
+      const { db: _db, ...rest } = components;
+      components = rest;
+    }
     notes.push(
       `${swapLabel(componentSwap.slot)}が済んだ。来月から ${componentLabel(platformNow, componentSwap.slot, componentSwap.option)} を使う`,
     );

@@ -145,6 +145,22 @@ describe('ゲーム中の移し替え（データの移行）', () => {
   });
 });
 
+describe('KV を DB にした構成から API を移す（OCL-5A7916E6）', () => {
+  it('移し替えが済むと構成の DB の選択は既定に戻り、KV の鮮度の低下も消える', () => {
+    let s = playMonth(spaGame(CF_PAID, { db: 'kv' }));
+    const kvMonth = s.history[0]!;
+    expect(kvMonth.satisfaction.stages.freshness).not.toBe('good');
+    s = applyAction(s, api('aws-lambda'));
+    while (s.componentSwap) s = playMonth(s);
+    expect(s.components.api).toBe('aws-lambda');
+    expect(s.components.db).toBeUndefined();
+    s = playMonth(s);
+    const r = s.history[s.history.length - 1]!;
+    expect(r.satisfaction.stages.freshness).toBe('good');
+    expect(r.lines.some((l) => l.label.includes('KV'))).toBe(false);
+  });
+});
+
 describe('構成の名前（ゲーム中）', () => {
   it('API を他の事業者に置くと実際の組で出す（月の表・プラン変更の文面。始める画面の一覧は構成の名前のまま）', () => {
     expect(stackName(VERCEL_PRO, 'vite-spa', true, { api: 'cf-workers' })).toBe(
