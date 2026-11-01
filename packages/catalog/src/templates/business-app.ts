@@ -82,6 +82,5 @@ export const BUSINESS_APP_SPA: SpaShape = {
  */
 export const BUSINESS_APP_ASTRO: AstroShape = {
   assetsFactor: 1,
-  rebuildShare: 0,
   minutesPerBuild: { base: 1, perThousandPages: 0 },
 };
