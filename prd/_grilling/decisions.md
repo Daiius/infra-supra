@@ -623,7 +623,7 @@
   - 率は標準税率 10%（国税庁 No.6303）。税は事業者の小計（クレジットを引いた後・料金未取得を除く）に当て、円に換算して足す。税込の価格（さくら）の内税は小計 × 10/110 で割り戻して「うち消費税」に含めるが、合計には足さない（OCL-66B5BAF1）。
 - **計算の想定は 1 つ**: 個人が日本の住所で契約し、登録番号・税の ID を入れない。事業者向けの電気通信利用役務（リバースチャージ）・登録番号で請求の扱いが変わる点は前提の文で注意するだけ。
 - 表示: 「税込の目安（円）」は既定で出し、チェックで消せる（URL の `tax=0`）。比較の表にも列を足す。費用の曲線は USD の税抜のまま。ゲームの所持金（USD）には効かせない（web の model.ts の `japanTax` だけで計算）。
-- 残した点: Vercel・Supabase・Netlify の日本の扱い（実請求か問い合わせで確かめたら `JAPAN_TAX` を直す）・事業者として契約する場合の計算・Vercel Pro の席の種類（閲覧だけの席など）。
+- 残した点: Vercel・Supabase・Netlify の日本の扱い（実請求か問い合わせで確かめたら `JAPAN_TAX` を直す）・事業者として契約する場合の計算・Vercel Pro の席の種類（閲覧だけの席など）。→ Vercel と席の種類は D-84。
 
 ### D-77 DB だけ Neon（従量の Postgres）を Vercel・Netlify の DB に（確定・2026-11-02）
 
@@ -718,6 +718,26 @@
   - 派生を作る処理は `image-write` の処理にも別のバッチにもせず、`image-transform` のクラスで数える（いつ作るかは `transformAt`）。投稿のときに作るサイズ違いの保存は 1 枚を `sizeKB` とみなす（サムネイルの分は多めの近似）。
 - 残した点: サムネイルの大きさを分けて持つこと（保存量・転送量が少し下がる）・一覧のページを別のルートにすること。
 
+### D-84 「未確認」「料金未取得」の項目を公式の文書で確かめ直す（確定・2026-11-02）
+
+- 末尾の「確かめ待ち」と catalog の `unpriced`・`not-stated`・「未確認」の注記を、公式の文書でもう一度読んだ（取得日 2026-11-02）。確かめられたものだけ catalog を直し、確かめられないものは未確認のまま（推測の値は入れない）。
+- 日本の消費税の登録は、国税庁の[適格請求書発行事業者公表サイト](https://www.invoice-kohyo.nta.go.jp/)が事業者名で検索できない（登録番号だけ）ので、[公表情報の全件](https://www.invoice-kohyo.nta.go.jp/download/zenken)（法人の分割 5 = 国外を含む・2026-09-30 時点）と 2026-10 の差分を落として名前で探した。
+- 確かめて直したもの:
+  - **Vercel の消費税 → `added`**。Vercel Inc. は 2026-02-01 から登録（[T9700150136044](https://www.invoice-kohyo.nta.go.jp/regno-search/detail?selRegNo=9700150136044)・所在地 Covina, CA）。[Vercel の税の文書](https://vercel.com/docs/pricing/taxes)は「Sales tax and VAT are only charged in jurisdictions where Vercel is registered to collect tax」「invoices issued on and after April 1, 2026」と書く。2 つを合わせて日本の請求に足されるとみる（日本の名を挙げた Vercel の文書は無い。前提の文に書いた）。見積モードの税込の目安だけが変わり（Vercel の構成で 10% が足される）、ゲーム・golden・基準プレイは変わらない。
+  - **Netlify Free の商用利用**: 契約の本体（Self-Serve Subscription Agreement 2025-10 版の PDF）を読んだ。§6 Free Usage Tier に商用利用の禁止は無く、「disable or remove any website project … without notice」「no service level commitments」とある。利用資格は今のまま付けない。§5.4 は「The Fees do not include any … taxes … Netlify may invoice them」（日本の扱いは書かれていない）。
+  - **Cloudflare Images Paid の基本料**: 無いとみる。[料金のページ](https://developers.cloudflare.com/images/pricing/)（2026-10-19 更新）に基本料の記載が無く、Paid の例の月の合計は「Total $2.72」（変換 $2.50 + R2 $0.22）。料金データは前から基本料なしで、値は変わらない（注記だけ直した）。
+  - **Vercel Pro の席の種類**: 基本料 $20 に配備できる席（Owner・Member）1 つが含まれ、足す席は $20 / 月、閲覧だけの席（Viewer Pro）は無料で無制限（[pro-plan](https://vercel.com/docs/plans/pro-plan)・2026-09-15 更新）。今の `perSeat` の計算と一致するので、`members` の前提の文だけ直した。
+  - **RDS for PostgreSQL の gp3 の最小**: 20 GiB から（[RDS の利用者ガイド](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Storage.html)）。料金データに最小の量を表す仕組みが無いので計算は今のまま（20 GB 未満の DB では保存が月 最大 $2.76 低め）。注記と出典を直した。
+- 確かめられなかったもの（未確認のまま）:
+  - Supabase・Netlify・Neon の消費税: 各社の文書に日本の記載が無く、公表情報にも名前が無い（2026-10-30 まで）。`unconfirmed` のまま、前提の文に「登録が見当たらない」を足した。
+  - Amplify の画像の最適化: 料金ページ・Next.js の対応・デプロイの仕様（ImageOptimization の primitive）・`image-optimization.html`（本文が取れない）を読んだが、課金の記載が無い。`unpriced` のまま。
+  - Amplify をオリジンにした CloudFront の定額: 定額の文書・料金ページは S3・ALB・API Gateway と「any publicly accessible URL」を挙げるだけで、Amplify の名は無い。
+  - Vercel・Amplify の関数から外への通信: [Vercel の料金](https://vercel.com/docs/pricing)（2026-09-14 更新）・[Amplify の料金](https://aws.amazon.com/amplify/pricing/)の課金の項目に無い（前と同じ）。数えないまま。
+  - Netlify Blobs の単価（Blobs の文書 2026-10-16 更新・クレジットの表・料金のページに無い）・Pro の上の段の価格（プランの文書は料金のページを指すが載っていない）・関数の丸め（関数の課金の文書 2026-09-15 更新に無い）。
+  - Neon の Vercel Marketplace 経由: Vercel の請求にまとまることは確認、価格が直接の契約と同じかは書かれていない。
+- CF Paid × Next.js（目標の根拠）を含む料金の値は変えていない。golden・基準プレイは不変（typecheck・test は通る）。
+- 残した点: 消費税の未確認の 3 社は実請求か問い合わせで確かめる。RDS の最小の割り当て（料金データに最小の量の仕組みが要る）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧。本文は消していないので、詳細は参照先を読む。
@@ -740,11 +760,12 @@
 | 対象 | 何が未確認か | 参照 |
 |---|---|---|
 | Vercel Pro | 込み分なし・クレジットの読み（D-48）を会社の請求で確かめる | D-10・D-48 |
-| 日本の消費税 | Vercel・Supabase・Netlify・Neon の日本の扱い（今は税抜のまま）・事業者として契約する場合・Vercel Pro の席の種類 | D-76・D-77 |
-| Netlify | Blobs の単価・Pro の上の段の価格・Free の商用利用の可否・関数の丸め | D-71・prd/11 §14 |
-| Neon | 負荷と CU の関係・instant restore の履歴の量・Vercel の Marketplace 経由の請求・Netlify Database | D-77・prd/11 §15 |
-| AWS | Amplify の画像の最適化の課金（料金未取得のまま）・Amplify をオリジンにした CloudFront の定額 | D-51・D-61・prd/11 §1.6・§9・§12 |
-| 事業者の間の通信 | Vercel・Amplify の関数から外への通信の課金（数えていない） | D-52・D-67・prd/11 §2 |
+| 日本の消費税 | ~~Vercel~~ → D-84（国税庁の公表サイトに登録があり `added`）。Supabase・Netlify・Neon の日本の扱い（文書に記載なし・公表情報にも名前なし。税抜のまま）・事業者として契約する場合。~~Vercel Pro の席の種類~~ → D-84（閲覧の席は無料。計算は今のまま） | D-76・D-77・D-84 |
+| Netlify | Blobs の単価・Pro の上の段の価格・関数の丸め（D-84 で再確認しても記載なし）。~~Free の商用利用の可否~~ → D-84（契約の §6 に禁止なし） | D-71・D-84・prd/11 §14 |
+| Neon | 負荷と CU の関係・instant restore の履歴の量・Vercel の Marketplace 経由の価格（請求が Vercel にまとまることは D-84 で確認）・Netlify Database | D-77・D-84・prd/11 §15 |
+| AWS | Amplify の画像の最適化の課金（料金未取得のまま。D-84 で再確認）・Amplify をオリジンにした CloudFront の定額・RDS の最小の割り当て 20 GiB を数えること（D-84 で確認。計算に入れる仕組みが無い） | D-51・D-61・D-84・prd/11 §1.6・§9・§12 |
+| 事業者の間の通信 | Vercel・Amplify の関数から外への通信の課金（数えていない。D-84 で再確認しても課金の項目に無い） | D-52・D-67・D-84・prd/11 §2 |
+| ~~Cloudflare Images Paid~~ | ~~基本料~~ → D-84（基本料なしとみる。公式の例の合計に入っていない。値は不変） | D-84・prd/11 §2 |
 
 ### 残した点（直す方針はあるが、今は入れていないもの）
 

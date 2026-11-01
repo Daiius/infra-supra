@@ -475,7 +475,8 @@ export const vercel: PriceBookInput = {
       },
       members: {
         pricing: 'per-seat',
-        premise: 'Vercel Pro は基本料 $20 が席（メンバー）ごとにかかる',
+        premise:
+          'Vercel Pro は基本料 $20 に配備できる席（Owner・Member）1 つが含まれ、足す席は 1 つ $20 / 月。閲覧だけの席（Viewer Pro）は無料で数に制限なし（このモデルの席は管理画面で配備する人の数）',
         sourceIds: ['pro', 'pricing'],
       },
       credits: [

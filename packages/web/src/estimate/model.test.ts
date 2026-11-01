@@ -371,11 +371,11 @@ describe('日本から契約するときの消費税（D-76）', () => {
       { provider: 'aws', currency: 'USD', amount: 2 },
       { provider: 'aws', currency: 'USD', amount: -1 },
       { provider: 'sakura-vps', currency: 'JPY', amount: 1000 },
-      { provider: 'vercel', currency: 'USD', amount: 20 },
+      { provider: 'netlify', currency: 'USD', amount: 20 },
     ]);
     expect(t.taxJpy).toBeCloseTo((10 + 1) * 150 * 0.1, 9);
     expect(t.totalJpy).toBeCloseTo((10 + 1 + 20) * 150 + 1000 + t.taxJpy, 9);
-    expect(t.unconfirmed).toEqual(['vercel']);
+    expect(t.unconfirmed).toEqual(['netlify']);
     // 税込の価格の内税は割り戻して出すが、合計には足さない（OCL-66B5BAF1）
     expect(t.includedTaxJpy).toBeCloseTo(1000 * (0.1 / 1.1), 9);
     expect(t.lines.find((l) => l.provider === 'sakura-vps')!.status).toBe(
