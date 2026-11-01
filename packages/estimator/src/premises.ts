@@ -368,7 +368,9 @@ export function assessPremises(input: {
       threshold({
         ...base,
         id: `host:disk:${node.id}`,
-        text: `ディスク ${c.diskGB} GB に DB と画像を置く`,
+        text: c.storesImages
+          ? `ディスク ${c.diskGB} GB に DB と画像を置く`
+          : `ディスク ${c.diskGB} GB に DB を置く（画像は別の置き場）`,
         effect: 'block',
         used: h.diskGB,
         limit: c.diskGB,

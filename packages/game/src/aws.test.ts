@@ -52,11 +52,12 @@ describe('AWS の構成', () => {
     expect(stackFlavor(AWS)).toBeDefined();
   });
 
-  it('始める画面: Next.js は ISR のキャッシュ・画像・DB・前段の CDN を選び、ファイルの置き場（S3）は固定', () => {
+  it('始める画面: Next.js は ISR のキャッシュ・画像・API の置き場（D-67）・DB・前段の CDN を選び、ファイルの置き場（S3）は固定', () => {
     const slots = setupSlots(ARTICLE_COMMUNITY, AWS, 'nextjs');
     expect(slots.map((x) => [x.slot, x.fixed])).toEqual([
       ['isrCache', false],
       ['images', false],
+      ['api', false],
       ['db', false],
       ['frontCdn', false],
       ['cdnPlan', false],
@@ -165,7 +166,14 @@ describe('AWS の構成', () => {
     const slots = setupSlots(ARTICLE_COMMUNITY, ON, 'nextjs').map(
       (x) => x.slot,
     );
-    expect(slots).toEqual(['isrCache', 'images', 'db', 'cdnPlan', 'files']);
+    expect(slots).toEqual([
+      'isrCache',
+      'images',
+      'api',
+      'db',
+      'cdnPlan',
+      'files',
+    ]);
   });
 
   it('OpenNext の画像の最適化は next/image（Lambda）なのでブラウザに合わせた形式の対象。画像を R2 に出しても CloudFront が残り、定額のプランを選べる（D-62・D-63）', () => {

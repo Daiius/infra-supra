@@ -111,6 +111,13 @@ const WORKERS_FACTS = [
       'D1 は Worker の binding（Worker Binding API）から SQL を実行する。他の事業者のサーバーから直接つなぐ形（REST API）は管理用の面で、このゲームでは選べない',
     sourceIds: ['d1WorkerApi'],
   },
+  // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
+  {
+    id: 'server-fetch',
+    premise:
+      'Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、Worker の API を fetch で呼ぶ。キャッシュしない fetch は応答が返るまでページの描画を止める（「will block the page from rendering until the request is complete」）。事業者をまたぐ往復の遅延はこのゲームでは計算しない',
+    sourceIds: ['nextFetchingData', 'workersCustomDomains'],
+  },
 ];
 
 /** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
@@ -281,6 +288,10 @@ export const cloudflare: PriceBookInput = {
     },
     d1WorkerApi: {
       url: 'https://developers.cloudflare.com/d1/worker-api/',
+      retrievedAt: '2026-11-02',
+    },
+    nextFetchingData: {
+      url: 'https://nextjs.org/docs/app/getting-started/fetching-data',
       retrievedAt: '2026-11-02',
     },
   },

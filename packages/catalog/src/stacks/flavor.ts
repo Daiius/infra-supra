@@ -115,6 +115,15 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '起動の速い Worker に API を置き、安い SQL のデータベースをそのまま使う',
   'aws:api:aws-lambda':
     '静的なファイルは無料の配信に任せ、API は使った分だけの支払いの関数と DB に置く',
+  // Next.js のサーバーから呼ぶ API（D-67）と、VPS の API（D-67）
+  'cloudflare:api:cf-workers-server':
+    'データの読み書きを安い SQL のデータベースと起動の速い Worker に任せ、ページの描画だけを今の事業者に残す',
+  'sakura:api:sakura-vps-2gb':
+    '月額が固定の VPS に API とデータベースを置き、使った分の請求に驚かされない',
+  'sakura:api:sakura-vps-4gb':
+    'メモリとディスクに余裕のある上のプランの VPS に、API とデータベースを置く',
+  'aws-opennext:api:same':
+    'サーバーの関数が同じクラウドの DB を直接読む。部品が一か所にまとまる',
   // ファイルの保存（構成が暗黙に持つ置き場。1 択。files.ts の fileStorageOf）
   'cloudflare:files:r2':
     '転送量に課金されない S3 互換のストレージ。ファイルなら何でも置ける',

@@ -214,6 +214,13 @@ export const vercel: PriceBookInput = {
       sourceIds: ['hobby', 'pricing'],
       facts: [
         {
+          // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
+          id: 'function-outbound',
+          premise:
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送は無い（Static IPs の Private Data Transfer を除く）。このゲームでは数えない',
+          sourceIds: ['pricingDocs'],
+        },
+        {
           id: 'builds-hobby',
           premise:
             'Hobby のビルドは Basic のマシン（2 vCPU）で込み。1 日に作れるデプロイは 100 まで（このモデルでは 1 日の上限を判定していない）',
@@ -397,6 +404,13 @@ export const vercel: PriceBookInput = {
       baseFee: { amount: 20, per: 'month', scope: 'account', perSeat: true },
       sourceIds: ['pro', 'pricing'],
       facts: [
+        {
+          // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
+          id: 'function-outbound',
+          premise:
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送は無い（Static IPs の Private Data Transfer を除く）。このゲームでは数えない',
+          sourceIds: ['pricingDocs'],
+        },
         {
           id: 'isr-purge',
           premise:

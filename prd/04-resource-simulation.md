@@ -167,6 +167,10 @@ disk         = DB 容量 + オブジェクトの保存量（VPS に置く場合�
 
 - `process`（nginx・アプリ・MySQL）は `hostedOn` のホストの容量を共有し、それ自体は課金されない。
 - 使用率が閾値（assumption）を超えたら `throttle` 相当の劣化、メモリ・ディスクが溢れたら `block` 相当とする。
+- API だけを置く VPS（Cloudflare の静的 + VPS の API。D-67）は `storesImages: false` で、ディスクに画像を数えない（画像は R2）。
+  経路に載るのは API と投稿だけなので、回線・CPU の使用率と話題の集中（§3.8）も API の分だけになる。
+- サーバーから外の API への問い合わせ（Next.js のサーバー → 別の事業者の API。D-67）は、`cdn` の `egressKBPerRequest` で
+  1 件あたりの送信を固定の KB で数える（応答の受信は課金されない向き）。
 
 ### 3.8 話題・Bot の集中（容量の判定だけ。D-44・2026-11-01）
 

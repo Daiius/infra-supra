@@ -190,12 +190,13 @@ describe('初期の部品', () => {
       ...chosen,
       frontCdn: 'html',
     });
-    expect(st.components).toEqual({ ...chosen, realtime: 'none' });
+    expect(st.components).toEqual({ ...chosen, realtime: 'none', api: 'same' });
     expect(newGame(CF_PAID, 42).components).toEqual({
       isrCache: 'kv',
       images: 'images',
       db: 'd1',
       realtime: 'none',
+      api: 'same',
     });
   });
 

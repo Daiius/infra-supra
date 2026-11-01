@@ -1,7 +1,16 @@
 // 事業者をまたぐ構成（D-52・prd/11 §2）: 許した組だけが選択肢に出る・課金が事業者ごとに分かれる。
 import { describe, expect, it } from 'vitest';
-import { articleCommunity } from '../templates/index.ts';
-import { accountsOf, CROSS_COMPONENTS, CROSS_PAIRS, hostsOf } from './cross.ts';
+import { resolveWorkload, simulateResources } from 'estimator';
+import { toSpa } from '../frameworks/index.ts';
+import { ARTICLE_COMMUNITY_SPA, articleCommunity } from '../templates/index.ts';
+import {
+  accountsOf,
+  CROSS_COMPONENTS,
+  CROSS_PAIRS,
+  hostsOf,
+  SERVER_API_REQUEST_KB,
+  SERVER_API_WORKER_CPU_MS,
+} from './cross.ts';
 import {
   applyComponentsToWorkload,
   COMPONENTS,
@@ -45,12 +54,13 @@ describe('許した組（CROSS_PAIRS）', () => {
     expect(cross('sakura', 'images')).toEqual([]);
   });
 
-  it('部品の id は差せる土台の事業者のスロットの中で重ならない', () => {
-    for (const host of PLATFORMS)
-      for (const slot of new Set(COMPONENTS.map((c) => c.slot))) {
-        const ids = componentsOf(host, slot).map((c) => c.id);
-        expect(new Set(ids).size, `${host}:${slot}`).toBe(ids.length);
-      }
+  it('部品の id は差せる土台の事業者のスロットの中で重ならない（フレームワークごと。API の置き場の同居は SPA と Next.js で別の説明）', () => {
+    for (const host of [...PLATFORMS, 'aws-opennext'] as const)
+      for (const fw of ['nextjs', 'vite-spa'] as const)
+        for (const slot of new Set(COMPONENTS.map((c) => c.slot))) {
+          const ids = componentsOf(host, slot, fw).map((c) => c.id);
+          expect(new Set(ids).size, `${host}:${slot}:${fw}`).toBe(ids.length);
+        }
   });
 
   it('根拠の出典は URL と取得日を持つ', () => {
@@ -64,7 +74,11 @@ describe('許した組（CROSS_PAIRS）', () => {
   });
 
   it('他の事業者の部品の名前は事業者の名前で始まる', () => {
-    const NAMES = { cloudflare: 'Cloudflare', aws: 'AWS' } as const;
+    const NAMES = {
+      cloudflare: 'Cloudflare',
+      aws: 'AWS',
+      sakura: 'さくらの VPS',
+    } as const;
     for (const c of CROSS_COMPONENTS)
       expect(
         c.label.startsWith(`${NAMES[c.platform as keyof typeof NAMES]}: `),
@@ -239,14 +253,26 @@ describe('SPA の API の置き場（D-65）', () => {
     composeStack(stack, choices, { framework: 'vite-spa', standby });
   const ids = (a: ReturnType<typeof spa>) => a.nodes.map((n) => n.id);
 
-  it('選べる組は表で許したものだけ（SPA だけ。VPS・Next.js にはスロットが無い）', () => {
+  it('選べる組は表で許したものだけ（VPS の構成にはスロットが無い。Next.js は D-67）', () => {
     const opts = (p: Platform, fw: 'nextjs' | 'vite-spa' = 'vite-spa') =>
       componentsOf(p, 'api', fw).map((c) => `${c.platform}:${c.id}`);
     expect(opts('vercel')).toEqual(['vercel:same', 'cloudflare:cf-workers']);
     expect(opts('aws')).toEqual(['aws:same', 'cloudflare:cf-workers']);
-    expect(opts('cloudflare')).toEqual(['cloudflare:same', 'aws:aws-lambda']);
+    expect(opts('cloudflare')).toEqual([
+      'cloudflare:same',
+      'aws:aws-lambda',
+      'sakura:sakura-vps-2gb',
+      'sakura:sakura-vps-4gb',
+    ]);
     expect(opts('sakura')).toEqual([]);
-    for (const p of PLATFORMS) expect(opts(p, 'nextjs')).toEqual([]);
+    expect(opts('aws-opennext')).toEqual([]);
+    for (const p of ['vercel', 'aws', 'aws-opennext'] as const)
+      expect(opts(p, 'nextjs')).toEqual([
+        `${p}:same`,
+        'cloudflare:cf-workers-server',
+      ]);
+    for (const p of ['cloudflare', 'sakura'] as const)
+      expect(opts(p, 'nextjs')).toEqual([]);
   });
 
   it('既定（同じ事業者）は今までの SPA の構成と同じ', () => {
@@ -355,5 +381,147 @@ describe('SPA の API の置き場（D-65）', () => {
       expect.arrayContaining(['fn', 'db', 'cf-worker']),
     );
     expect(back.routes.api).toEqual(['cf-worker', 'cf-d1']);
+  });
+});
+
+describe('Next.js のサーバーから別の事業者の API を呼ぶ（F-14・D-67）', () => {
+  const next = (stack: string, choices: Record<string, string>, standby = {}) =>
+    composeStack(stack, choices, { framework: 'nextjs', standby });
+  const ids = (a: ReturnType<typeof next>) => a.nodes.map((n) => n.id);
+  const api = { api: 'cf-workers-server' };
+
+  it('既定（同じ事業者）は今までの Next.js の構成と同じ', () => {
+    for (const s of ['vercel-supabase-pro', 'aws-amplify', 'aws-opennext'])
+      expect(next(s, { api: 'same' })).toEqual(next(s, {}));
+  });
+
+  it('SPA の部品（cf-workers）は Next.js では効かず、Next.js の部品は SPA では効かない', () => {
+    expect(next('vercel-supabase-pro', { api: 'cf-workers' })).toEqual(
+      next('vercel-supabase-pro', {}),
+    );
+    const spa = (c: Record<string, string>) =>
+      composeStack('vercel-supabase-pro', c, { framework: 'vite-spa' });
+    expect(spa(api)).toEqual(spa({}));
+  });
+
+  it('Vercel: Supabase が外れ、SSR・ISR の作り直し・API の経路の DB が Worker → D1 になる（CDN と関数は残る）', () => {
+    const a = next('vercel-supabase-pro', api);
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
+    expect(ids(a)).not.toContain('db');
+    expect(a.routes['document-ssr']).toEqual([
+      'cdn',
+      'fn',
+      'cf-worker',
+      'cf-d1',
+    ]);
+    expect(a.routes['isr-revalidate']).toEqual([
+      'fn',
+      'isr',
+      'cf-worker',
+      'cf-d1',
+    ]);
+    expect(a.routes.api).toEqual(['cdn', 'fn', 'cf-worker', 'cf-d1']);
+    expect(a.routes['document-isr']).toEqual(['cdn', 'isr']);
+    const worker = a.nodes.find((n) => n.id === 'cf-worker')!;
+    expect(worker.billing!.planId).toBe('workers-paid');
+    expect(worker.facts).toContain('server-fetch');
+    // 関数から外への通信は数えない（事実の文で出す）
+    expect(a.nodes.find((n) => n.id === 'fn')!.facts).toContain(
+      'function-outbound',
+    );
+    expect(
+      next('vercel-supabase-hobby', api).nodes.find(
+        (n) => n.id === 'cf-worker',
+      )!.billing!.planId,
+    ).toBe('workers-free');
+  });
+
+  it('Worker の CPU は API の処理だけ（HTML の描画は Next.js のサーバーに残る）', () => {
+    const w = resolveWorkload(articleCommunity(100_000));
+    const sim = simulateResources(w, next('vercel-supabase-pro', api));
+    const ssr = w.classes['document-ssr'];
+    const rev = w.classes['isr-revalidate'];
+    const apiCls = w.classes.api;
+    expect(sim.nodes['cf-worker']!.resources['cpu-ms']).toBeCloseTo(
+      (ssr.count + rev.count) * SERVER_API_WORKER_CPU_MS +
+        apiCls.count * apiCls.perRequest.cpuMs,
+    );
+    // API を呼ぶたびに Worker のリクエスト
+    expect(sim.nodes['cf-worker']!.resources.requests).toBeCloseTo(
+      ssr.count + rev.count + apiCls.count,
+    );
+  });
+
+  it('Amplify: DB が外れ、SSR から外への通信は数えない（事実の文で出す）', () => {
+    const a = next('aws-amplify', api);
+    expect(accountsOf(a)).toEqual(['aws', 'cloudflare']);
+    expect(ids(a)).not.toContain('dynamodb');
+    expect(ids(a)).not.toContain('aws-out-api');
+    expect(a.routes['document-ssr']).toEqual([
+      'cdn',
+      'ssr',
+      'cf-worker',
+      'cf-d1',
+    ]);
+    expect(a.nodes.find((n) => n.id === 'ssr')!.facts).toContain(
+      'ssr-outbound',
+    );
+  });
+
+  it('OpenNext: Lambda から外へ送る問い合わせを 1 回 1 KB（仮定）として AWS のデータ転送で数える', () => {
+    const a = next('aws-opennext', api);
+    expect(ids(a)).not.toContain('dynamodb');
+    expect(ids(a)).toContain('tags'); // ISR のタグの表は OpenNext の仕組みなので残る
+    expect(a.routes['document-ssr']).toEqual([
+      'cf',
+      'server',
+      'aws-out-api',
+      'cf-worker',
+      'cf-d1',
+    ]);
+    const out = a.nodes.find((n) => n.id === 'aws-out-api')!;
+    expect(out.billing!.planId).toBe('data-transfer-out');
+    const w = resolveWorkload(articleCommunity(100_000));
+    const sim = simulateResources(w, a);
+    const calls = sim.nodes['cf-worker']!.resources.requests!;
+    expect(sim.nodes['aws-out-api']!.resources['egress-gb']).toBeCloseTo(
+      (calls * SERVER_API_REQUEST_KB * 1000) / 1e9,
+    );
+  });
+
+  it('移し替えの途中（standby）: Worker と D1 を経路に載せずに足す', () => {
+    const to = next('vercel-supabase-pro', {}, api);
+    expect(ids(to)).toEqual(expect.arrayContaining(['db', 'cf-worker']));
+    expect(to.routes['document-ssr']).toEqual(['cdn', 'fn', 'db']);
+  });
+});
+
+describe('Cloudflare の静的 + さくらの VPS の API（D-67）', () => {
+  const spa = (c: Record<string, string>) =>
+    composeStack('cloudflare-vinext-paid', c, { framework: 'vite-spa' });
+  const a = spa({ api: 'sakura-vps-2gb' });
+
+  it('Worker と D1 が外れ、API は VPS に直接（CDN を通らない）。投稿の画像は VPS が R2 に書く', () => {
+    expect(accountsOf(a)).toEqual(['cloudflare', 'sakura']);
+    for (const id of ['worker', 'd1'])
+      expect(a.nodes.map((n) => n.id)).not.toContain(id);
+    expect(a.routes.api).toEqual(['vps']);
+    expect(a.routes['api-content']).toEqual(['vps']);
+    expect(a.routes['image-write']).toEqual(['vps', 'r2']);
+    expect(a.routes.asset).toEqual(['assets']);
+    const vps = a.nodes.find((n) => n.id === 'vps')!;
+    expect(vps.config).toMatchObject({ kind: 'host', vcpu: 3, lineMbps: 100 });
+    expect(vps.billing!.planId).toBe('2gb-tokyo');
+  });
+
+  it('VPS の回線と CPU に届くのは API の分だけ（静的・画像の閲覧は Cloudflare）', () => {
+    const w = resolveWorkload(
+      toSpa(articleCommunity(100_000), ARTICLE_COMMUNITY_SPA),
+    );
+    const sim = simulateResources(w, a);
+    const apiReqs = w.classes.api.count + w.classes['api-content'].count;
+    expect(sim.nodes.vps!.resources.requests).toBeCloseTo(
+      apiReqs + w.classes['image-write'].count,
+    );
   });
 });

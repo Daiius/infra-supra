@@ -15,6 +15,7 @@ import {
   OPENNEXT_DEFAULT_CHOICES,
   OPENNEXT_STACK_DEFS,
 } from './opennext.ts';
+import { vpsNode } from './sakura.ts';
 import {
   apiPlacedElsewhere,
   applyCross,
@@ -531,7 +532,8 @@ const SPA_API_CACHE: ComponentOption[] = [
 /**
  * SPA の API の置き場（prd/10 §3・F-10〜F-13・D-65）。既定は同じ事業者に同居（段 1 の形）。他の事業者に置く部品は
  * cross.ts の CROSS_COMPONENTS（CROSS_PAIRS で許した組だけ）。DB は API と同じ事業者に置く（またぐ往復を API と DB の間に作らない）。
- * さくらの VPS は API を他の事業者に置く組を入れていないので、スロットを出さない（同居だけ）。
+ * さくらの VPS の構成は API を他の事業者に置く組を入れていないので、スロットを出さない（同居だけ。VPS を API の置き場として
+ * 他の構成に差す組は cross.ts。D-67）。
  */
 const SPA_API_SAME: ComponentOption[] = (
   [
@@ -558,12 +560,42 @@ const SPA_API_SAME: ComponentOption[] = (
   premiseRefs: [],
 }));
 
+/**
+ * Next.js の API・DB の置き場（F-14・D-67）。Next.js は SSR・ISR の再生成・Route Handler がサーバーの側で DB を読むので、
+ * 既定は同じ事業者。他の事業者に置く部品は cross.ts の CROSS_COMPONENTS（Next.js のサーバーから別の事業者の API を呼ぶ形）。
+ */
+const NEXT_API_SAME: ComponentOption[] = (
+  [
+    [
+      'vercel',
+      'Next.js のサーバー（Vercel Functions）が同じ構成の Supabase を直接読む。API を別に立てない',
+    ],
+    [
+      'aws',
+      'Next.js のサーバー（Amplify の SSR）が同じ AWS の DB の部品を直接読む。API を別に立てない',
+    ],
+    [
+      'aws-opennext',
+      'Next.js のサーバーの関数（Lambda）が同じ AWS の DB の部品を直接読む。API を別に立てない',
+    ],
+  ] as const
+).map(([platform, note]): ComponentOption => ({
+  id: 'same',
+  slot: 'api',
+  platform,
+  frameworks: ['nextjs'],
+  label: '同じ事業者（同居）',
+  note,
+  premiseRefs: [],
+}));
+
 export const COMPONENTS: readonly ComponentOption[] = [
   ...BASE_COMPONENTS,
   ...SAKURA_FRONT_CDN,
   ...SPA_OGP,
   ...SPA_API_CACHE,
   ...SPA_API_SAME,
+  ...NEXT_API_SAME,
   ...AWS_COMPONENTS,
   ...OPENNEXT_COMPONENTS,
   ...CROSS_COMPONENTS,
@@ -1013,23 +1045,12 @@ function composeVercel(
   };
 }
 
-/** さくらの VPS の仕様。storageOptionDiskGB はストレージ変更オプションを付けたときのディスク（D-30・機能ページの表）。 */
-const SAKURA_HOST = {
-  '2gb': { vcpu: 3, memoryGB: 2, diskGB: 100, storageOptionDiskGB: 200 },
-  '4gb': { vcpu: 4, memoryGB: 4, diskGB: 200, storageOptionDiskGB: 400 },
-} as const;
-
-/** さくらの VPS に nginx・next start・MySQL を同居させる（D-13・D-24）。 */
+/** さくらの VPS に nginx・next start・MySQL を同居させる（D-13・D-24）。ホストのノードは stacks/sakura.ts。 */
 function composeSakura(
   plan: '2gb' | '4gb',
   storageOption: boolean,
   frontCdn: string | undefined,
 ): ArchitectureInput {
-  const { storageOptionDiskGB, ...spec } = SAKURA_HOST[plan];
-  const h = {
-    ...spec,
-    ...(storageOption ? { diskGB: storageOptionDiskGB } : {}),
-  };
   return {
     id: `sakura-vps-${plan}`,
     name: `さくらの VPS ${plan === '2gb' ? '2GB' : '4GB'}（東京）`,
@@ -1065,27 +1086,7 @@ function composeSakura(
             } as ArchNodeIn,
           ]
         : []),
-      {
-        id: 'vps',
-        label: 'VPS（nginx + next start + MySQL）',
-        config: {
-          kind: 'host',
-          ...h,
-          lineMbps: 100,
-          residentMemoryGB: 1.35, // OS 0.3・MySQL 0.6・Node 0.4・nginx 0.05（仮定）
-          dbCpuMsPerQuery: 0.3,
-          imageTransformCpuMs: 150,
-          otherDiskGB: 10,
-          // nginx の TLS・転送の 1 リクエストあたりの CPU（仮定。D-31）
-          proxyCpuMsPerRequest: 0.3,
-        },
-        billing: {
-          accountId: 'sakura',
-          provider: 'sakura-vps',
-          planId: `${plan}-tokyo`,
-          meters: { 'egress-gb': 'transfer' },
-        },
-      },
+      vpsNode(plan, storageOption, 'VPS（nginx + next start + MySQL）'),
     ],
     // キャッシュしない・最適化しないは Workload の側で変わる（経路は同じ VPS）
     routes:
@@ -1190,12 +1191,17 @@ export function composeStack(
             : 'none',
         })
       : crossed;
-  // Astro は静的なページのビルドし直しを足す（D-68）
+  // Astro は静的なページのビルドし直しを足す（D-68）。API の置き場は同じ事業者のみ（D-67 の組は Astro に出さない）
   if (astro) return asAstro(shaped, def.platform, def.plan);
-  // SPA の API を他の事業者に置く（D-65）
-  return spa
-    ? applyCrossApi(shaped, def.platform, def.plan, c, standby)
-    : shaped;
+  // API を他の事業者に置く（SPA は D-65・Next.js は D-67）
+  return applyCrossApi(
+    shaped,
+    def.platform,
+    def.plan,
+    c,
+    standby,
+    options.framework ?? 'nextjs',
+  );
 }
 
 /** Vercel の Elastic のビルドのマシンの vCPU の最小（新しい Pro の既定。CPU minute の数に効く。D-68）。 */

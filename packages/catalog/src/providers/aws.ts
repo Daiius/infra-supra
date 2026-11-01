@@ -378,6 +378,13 @@ export const aws: PriceBookInput = {
           sourceIds: ['cloudfrontFree', 'amplifyPricing'],
         },
         {
+          // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
+          id: 'ssr-outbound',
+          premise:
+            'Amplify Hosting の料金ページの課金の項目（ビルド・保存・配信の転送・SSR のリクエストと時間）に、SSR から外の API への通信の転送は無い（配信の転送は閲覧者へ配った量）。このゲームでは数えない（未確認）',
+          sourceIds: ['amplifyPricing'],
+        },
+        {
           id: 'transfer-not-cloudfront',
           premise:
             'Amplify Hosting の配信は自前の料金（$0.15/GB）で数え、CloudFront の常時無料（月 1 TB）はここには当てていない（Amplify の料金表は別の行。推測）',

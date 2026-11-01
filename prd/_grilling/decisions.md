@@ -475,6 +475,17 @@
   無効化の費用が最も大きくて負けたときは、次のプレイへのヒント（費用）が「定額のプラン・時間の再検証・ワイルドカードやタグでまとめる」の方向を出す。
 - 未決: ワイルドカード・タグの無効化を部品にするか。
 
+### D-67 API の置き場の段 3: Next.js の API を別の事業者に・Cloudflare の静的 + VPS の API（確定・2026-11-02）
+
+- ユーザーの方針「より現実的なコスト感・費用を抑える複雑な構成も可能にしたい」。D-65 で入れなかった 2 つ（F-14・VPS の API）を推奨案で自律に入れた。prd/10 §9.5・§9.6。
+- **Next.js（F-14）**: Vercel（Hobby・Pro）・Amplify・OpenNext の Next.js に「Cloudflare: Workers に API を置き、DB は D1（Next.js のサーバーから呼ぶ）」。SSR・ISR の作り直し・Route Handler の経路の DB を Worker → D1 に差し替え、ブラウザは今の事業者だけを呼ぶ（CORS なし）。
+  サーバーから外への通信は OpenNext の Lambda だけ EC2 のデータ転送で数え（1 回 1 KB・仮定。エンジンに `cdn` の `egressKBPerRequest`）、Vercel・Amplify は料金の文書に項目が無いので数えない（前提の文）。SSR が API を待つことは前提の文（Next.js の文書の「will block the page from rendering」）で出し、遅延は計算しない（AX-13）。Worker の CPU は 1 回 5 ms（仮定）。
+- **VPS の API**: Cloudflare（Free・Paid）の SPA に「さくらの VPS 2GB / 4GB に API と MySQL」。api のサブドメインは DNS だけのレコードで VPS に直接向ける。画像は R2 に置くので VPS のディスクに数えない（エンジンに `host` の `storesImages`）。
+  **自前運用の維持（3 / 月）と偶発的な障害（月 8%）を部品にも効かせた**（構成のノードに VPS のホストがあれば。`selfHostedOf`）。障害は VPS が経路に載っている月だけ。
+- 基準プレイ（何もしない・シード 1〜20）: **CF Paid × 既定は不変**（golden も不変）。受託の Vercel Pro の Next.js + Workers・D1 は 0 → 20 / 20（Supabase Pro の固定費が消える）、記事は 0 / 20 のまま。
+  受託の Cloudflare + VPS 2GB の API は 17 / 20（VPS だけの構成は画像でディスクが埋まり 1 / 20）。記事は VPS の構成と同じく 0 / 20。DB が従量の AWS では Workers の基本料の分だけ高くなる。
+- 見送った案: API の VPS の障害を「可用性は普通」として軽くする（§3.4）。売上の減り方は VPS の構成と同じにした（新しい係数の根拠が無い）。
+
 ### D-68 3 つ目のフレームワーク: Astro（確定・2026-11-02）
 
 - ユーザーの方針「見積対象を作者のスタックに寄せない。Vite・Next.js・vinext、後で Astro」による。推奨案で自律に決定。仕様・出典・仮定・基準プレイは prd/06 §6。

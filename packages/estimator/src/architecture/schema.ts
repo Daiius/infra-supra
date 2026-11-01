@@ -36,6 +36,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * 値は 1 ページあたりのパスの数（ページとそのデータのルート）。ttlClasses に document-isr を持つときだけ数える。
      */
     invalidationPathsPerPage: Pos.optional(),
+    /**
+     * 1 件あたりの転送（egress-gb）を応答の大きさでなく固定の KB で数える（サーバーから外の API への問い合わせの送信など。
+     * 応答の受信は課金されない向き。仮定の値はデータの側が持つ）。次へ渡す流れは変わらない。
+     */
+    egressKBPerRequest: NonNeg.optional(),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({
@@ -174,6 +179,8 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     cpuUtilMax: Ratio.default(0.7),
     /** 前段の Web サーバー（nginx・TLS）の 1 リクエストあたりの CPU（ms・仮定。D-31）。 */
     proxyCpuMsPerRequest: NonNeg.default(0),
+    /** 画像（原本・サイズ違い）もこのディスクに置くか（既定 true。API だけを置く VPS は画像を別の置き場に置く。D-67）。 */
+    storesImages: z.boolean().default(true),
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;
