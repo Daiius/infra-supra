@@ -48,6 +48,9 @@ export const aws: PriceBookInput = {
     amplifyCacheControl: src(
       'https://docs.aws.amazon.com/amplify/latest/userguide/Using-headers-to-control-cache-duration.html',
     ),
+    amplifySpec: src(
+      'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html',
+    ),
     amplifyNext: src(
       'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
     ),
@@ -230,9 +233,9 @@ export const aws: PriceBookInput = {
           unit: 'count',
           pricing: {
             model: 'unpriced',
-            note: '画像の最適化に専用の行が料金表に無い（SSR の計算に含まれるかは未確認）',
+            note: '画像の最適化は Compute とは別の仕組み（デプロイの仕様の ImageOptimization）で、料金表に専用の行が無く、Compute の料金に含まれるかも書かれていない（2026-11-01 確認）',
           },
-          sourceIds: ['amplifyPrices', 'amplifyNext'],
+          sourceIds: ['amplifyPrices', 'amplifyPricing', 'amplifySpec'],
         },
       ],
     },
