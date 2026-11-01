@@ -181,6 +181,8 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     proxyCpuMsPerRequest: NonNeg.default(0),
     /** 画像（原本・サイズ違い）もこのディスクに置くか（既定 true。API だけを置く VPS は画像を別の置き場に置く。D-67）。 */
     storesImages: z.boolean().default(true),
+    /** DB もこのディスクに置くか（既定 true。DB を他の事業者の API に出した VPS は置かない。D-69）。 */
+    storesDb: z.boolean().default(true),
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;

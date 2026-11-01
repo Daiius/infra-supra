@@ -118,6 +118,19 @@ const WORKERS_FACTS = [
       'Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、Worker の API を fetch で呼ぶ。キャッシュしない fetch は応答が返るまでページの描画を止める（「will block the page from rendering until the request is complete」）。事業者をまたぐ往復の遅延はこのゲームでは計算しない',
     sourceIds: ['nextFetchingData', 'workersCustomDomains'],
   },
+  // Astro のサーバーから別の事業者の API を呼ぶ形（D-69。2026-11-02 に原文で確認）
+  {
+    id: 'astro-server-fetch',
+    premise:
+      'Astro のアダプターで描くページ（SSR）は DB を直接読まず、外の API を fetch で呼ぶ。リクエストのたびに描くページの fetch は実行時に走り、応答を待ってページを描く（「If SSR mode is enabled, any fetch calls will be executed at runtime」）。事業者をまたぐ往復の遅延はこのゲームでは計算しない',
+    sourceIds: ['astroDataFetching', 'workersCustomDomains'],
+  },
+  {
+    id: 'worker-outbound',
+    premise:
+      'Worker から外へ送る fetch（サブリクエスト）は課金されず、データ転送（egress）の料金もない。応答を待つ時間は CPU 時間に数えない。1 回の呼び出しのサブリクエストは Free 50・Paid 10,000 まで',
+    sourceIds: ['workersPricingOutbound', 'workersLimitsOutbound'],
+  },
 ];
 
 /** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
@@ -292,6 +305,18 @@ export const cloudflare: PriceBookInput = {
     },
     nextFetchingData: {
       url: 'https://nextjs.org/docs/app/getting-started/fetching-data',
+      retrievedAt: '2026-11-02',
+    },
+    astroDataFetching: {
+      url: 'https://docs.astro.build/en/guides/data-fetching/',
+      retrievedAt: '2026-11-02',
+    },
+    workersPricingOutbound: {
+      url: 'https://developers.cloudflare.com/workers/platform/pricing/',
+      retrievedAt: '2026-11-02',
+    },
+    workersLimitsOutbound: {
+      url: 'https://developers.cloudflare.com/workers/platform/limits/',
       retrievedAt: '2026-11-02',
     },
   },

@@ -505,7 +505,7 @@ export function simulateResources(
         peak,
       memoryGB: c.residentMemoryGB,
       diskGB:
-        workload.storage.dbGB +
+        (c.storesDb ? workload.storage.dbGB : 0) +
         (c.storesImages
           ? workload.storage.imagesGB + workload.storage.variantsGB
           : 0) +

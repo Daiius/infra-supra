@@ -230,10 +230,12 @@ describe('Astro（D-68）', () => {
     ).toBe(true);
   });
 
-  it('ISR のキャッシュ・OGP の前処理・API の部品は出さない。構成の名前は vinext を外して（Astro）を添える', () => {
+  it('ISR のキャッシュ・OGP の前処理・API の応答のキャッシュは出さない。構成の名前は vinext を外して（Astro）を添える', () => {
     const slots = componentSlots(astro()).map((x) => x.slot);
-    for (const x of ['isrCache', 'ogp', 'apiCache', 'api'])
+    for (const x of ['isrCache', 'ogp', 'apiCache'])
       expect(slots).not.toContain(x);
+    // API の置き場は許した組だけ（Cloudflare の Astro + VPS の API。D-69）
+    expect(slots).toContain('api');
     expect(slots).toContain('images');
     expect(stackName(CF_PAID, 'astro')).toBe('Cloudflare Paid（Astro）');
     expect(stackName(CF_PAID, 'astro', false)).toBe('Cloudflare Paid');

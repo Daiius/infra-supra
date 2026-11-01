@@ -2,7 +2,8 @@
 // 接続の形（link）を持つ。差せる組は CROSS_PAIRS の表で許したものだけ（AX-08。公式の文書で現実にできると確かめた組）。
 // 表に無い組は部品の選択肢に出さない。今の組は「Vercel・AWS の画像だけ Cloudflare（R2 + 変換）」と、
 // SPA の API の置き場（Vercel・AWS の静的 + Cloudflare Workers の API + D1／Cloudflare の静的 + AWS の API Gateway + Lambda + DynamoDB。D-65）、
-// Next.js のサーバーから呼ぶ Cloudflare Workers の API + D1（Vercel・Amplify・OpenNext）と、Cloudflare の静的 + さくらの VPS の API（D-67）。
+// Next.js のサーバーから呼ぶ Cloudflare Workers の API + D1（Vercel・Amplify・OpenNext）と、Cloudflare の静的 + さくらの VPS の API（D-67）、
+// Astro のサーバー（Vercel・VPS）から呼ぶ Cloudflare Workers の API + D1 と、Cloudflare の Astro + さくらの VPS の API（D-69）。
 // 既存の Cloudflare + Hyperdrive（Supabase）・さくらの VPS + 前段の CDN（Cloudflare）は、土台の事業者の部品として
 // 先に入っていたもの（D-24 X-6・D-31）で、この表の外にある（アカウントの数は accountsOf で同じく数える）。
 import type { ArchitectureInput, RequestClass } from 'estimator';
@@ -105,7 +106,8 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       '（D1 の REST API は管理用の面で、Vercel から直接つなぐ形は出さない。AX-10）。' +
       'Vercel の外部への rewrite で同じドメインに見せる形は課金の記載が無い（prd/10 B-3）ので使わない。' +
       'Next.js（D-67）: Server Components は fetch で外の API を呼べ、キャッシュしない fetch は応答まで描画を止める。' +
-      'Vercel の料金の文書の課金の項目に、関数から外への通信の転送は無い（数えない）',
+      'Vercel の料金の文書の課金の項目に、関数から外への通信の転送は無い（数えない）。' +
+      'Astro（D-69）: @astrojs/vercel のサーバー（Vercel Functions）が描くページの fetch は実行時に走り、Worker の API を呼べる',
     sources: [
       'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
       'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
@@ -114,6 +116,8 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://developers.cloudflare.com/workers/platform/pricing/',
       'https://nextjs.org/docs/app/getting-started/fetching-data',
       'https://vercel.com/docs/pricing',
+      'https://docs.astro.build/en/guides/data-fetching/',
+      'https://docs.astro.build/en/guides/integrations-guide/vercel/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
   {
@@ -176,11 +180,34 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
     basis:
       'シェル・JS・CSS は Workers の静的アセット（Worker を起動しないので無料）。API は さくらの VPS の Node と MySQL。' +
       'api のサブドメインは DNS だけのレコード（「does not route HTTP/HTTPS traffic through its network」）で VPS に直接向け、CDN を通さない。' +
-      'さくらの VPS は転送量が無制限（回線は 100 Mbps の共有）。投稿の画像は VPS が R2 に書く（R2 は書き込みの受信に課金しない）',
+      'さくらの VPS は転送量が無制限（回線は 100 Mbps の共有）。投稿の画像は VPS が R2 に書く（R2 は書き込みの受信に課金しない）。' +
+      'Astro（D-69）: 記事は Workers の静的アセット、マイページは @astrojs/cloudflare の Worker が描き、その fetch（実行時に走る）が VPS の API を呼ぶ。' +
+      'Worker から外への fetch（サブリクエスト）は課金されず転送の料金も無く、応答を待つ時間は CPU 時間に数えない',
     sources: [
       'https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/',
       'https://developers.cloudflare.com/dns/proxy-status/',
       'https://developers.cloudflare.com/workers/examples/cors-header-proxy/',
+      'https://vps.sakura.ad.jp/specification/',
+      'https://docs.astro.build/en/guides/data-fetching/',
+      'https://docs.astro.build/en/guides/integrations-guide/cloudflare/',
+      'https://developers.cloudflare.com/workers/platform/pricing/',
+      'https://developers.cloudflare.com/workers/platform/limits/',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  },
+  // Astro の VPS（@astrojs/node）から Cloudflare Workers の API + D1 を呼ぶ（D-69）。ページ・静的なファイル・画像は VPS に残る
+  {
+    host: 'sakura',
+    slot: 'api',
+    provider: 'cloudflare',
+    basis:
+      '@astrojs/node（standalone）の Node がページ・API・静的なファイルを配り、リクエストのたびに描くページの fetch は実行時に走る。' +
+      'Worker はカスタムドメイン（Cloudflare のゾーンのサブドメイン）に置け、D1 は Worker の binding で使う。' +
+      'さくらの VPS は転送量が無制限なので、VPS から Worker への問い合わせに転送の料金はかからない。MySQL は VPS に置かない',
+    sources: [
+      'https://docs.astro.build/en/guides/data-fetching/',
+      'https://docs.astro.build/en/guides/integrations-guide/node/',
+      'https://developers.cloudflare.com/workers/configuration/routing/custom-domains/',
+      'https://developers.cloudflare.com/d1/worker-api/',
       'https://vps.sakura.ad.jp/specification/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
@@ -294,6 +321,34 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'limit:cloudflare:workers-free:cpu-ms-per-request',
     ],
   },
+  // Astro のサーバーから呼ぶ API（D-69）。Next.js の cf-workers-server と同じ形（ブラウザは今の事業者の Astro だけを呼ぶ）で、
+  // 差せる土台が違う（Vercel と VPS。Astro は AWS に載せない）ので部品を分ける
+  {
+    id: 'cf-workers-astro',
+    slot: 'api',
+    platform: 'cloudflare',
+    hosts: ['vercel', 'sakura'],
+    frameworks: ['astro'],
+    link: { via: 'http', as: 'same' },
+    label:
+      'Cloudflare: Workers に API を置き、DB は D1（Astro のサーバーから呼ぶ）',
+    note:
+      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。Astro のサーバー（マイページの SSR・エンドポイント）は DB を直接読まず、' +
+      'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。記事は今までどおり静的にビルドして今の場所から配る。' +
+      'ブラウザは今の事業者の Astro だけを呼ぶので CORS の設定は要らない（サーバーどうしの認証は要る）。API を呼ぶたびに Worker のリクエストとして数える。' +
+      '今の DB（Supabase・VPS の MySQL）は使わなくなる。Vercel の関数・VPS から外への通信は数えない（Vercel は料金の文書に項目が無く、VPS は転送量が無制限）。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
+    premiseRefs: [
+      'fact:cloudflare:workers-paid:custom-domain-origin',
+      'fact:cloudflare:workers-paid:astro-server-fetch',
+      'fact:cloudflare:workers-free:astro-server-fetch',
+      'fact:cloudflare:workers-paid:d1-binding',
+      'fact:vercel:hobby:function-outbound',
+      'fact:vercel:pro:function-outbound',
+      'pool:cloudflare:workers-paid:paid-requests',
+      'limit:cloudflare:workers-free:cpu-ms-per-request',
+    ],
+  },
   // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の手間・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
   // プランは 2GB と 4GB（ディスクが 2 倍）。プランの間の移し替えも API と DB のデータの移行として扱う（仮定）
   ...(['2gb', '4gb'] as const).map((plan): ComponentOption => ({
@@ -301,15 +356,23 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'api',
     platform: 'sakura',
     hosts: ['cloudflare'],
-    frameworks: ['vite-spa'],
+    // Astro（D-69）: 記事は静的アセット、マイページを描く Worker が VPS の API を呼ぶ
+    frameworks: ['vite-spa', 'astro'],
     link: { via: 'http', as: 'same' },
     label: `さくらの VPS: ${plan.toUpperCase()} に API と MySQL を置く（自前運用）`,
     note:
       `API を さくらの VPS ${plan.toUpperCase()}（東京）の Node に置き、DB は同じ VPS の MySQL。api のサブドメインは Cloudflare の DNS で VPS に直接向ける（プロキシしない DNS だけのレコードで、CDN を通らない）。` +
-      'シェル・JS・CSS と画像は Cloudflare から配る。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
+      '静的なファイル（SPA のシェル・Astro の記事のページ）・JS・CSS と画像は Cloudflare から配る。Astro のマイページは Worker が描き、その中から VPS の API を呼ぶ。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
       '自前運用の維持の手間と偶発的な障害（1 台構成）が加わる。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要る。' +
       'さくらのアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
-    premiseRefs: ['host:', 'fact:cloudflare:workers-paid:static-assets'],
+    premiseRefs: [
+      'host:',
+      'fact:cloudflare:workers-paid:static-assets',
+      'fact:cloudflare:workers-paid:astro-server-fetch',
+      'fact:cloudflare:workers-free:astro-server-fetch',
+      'fact:cloudflare:workers-paid:worker-outbound',
+      'fact:cloudflare:workers-free:worker-outbound',
+    ],
   })),
 ];
 
@@ -491,9 +554,10 @@ const HOST_API_NODES: Partial<Record<Platform, readonly string[]>> = {
   cloudflare: ['worker', 'd1', 'kv-db', 'hyperdrive', 'supabase'],
 };
 
-/** Next.js の構成で、サーバーが読む DB のノード（ここを他の事業者の API に差し替える）。 */
+/** Next.js・Astro の構成で、サーバーが読む DB のノード（ここを他の事業者の API に差し替える）。 */
 const HOST_DB_NODES: Partial<Record<Platform, readonly string[]>> = {
   vercel: ['db'],
+  cloudflare: ['d1', 'kv-db', 'hyperdrive', 'supabase'],
   aws: ['dynamodb', 'rds', 'aurora', 'aurora-pause', 'dsql'],
   'aws-opennext': ['dynamodb', 'rds', 'aurora', 'aurora-pause', 'dsql'],
 };
@@ -503,11 +567,21 @@ const HOST_DB_NODES: Partial<Record<Platform, readonly string[]>> = {
  * SSR・ISR の作り直しの CPU（HTML の描画）は Next.js のサーバーの側に残る。
  */
 export const SERVER_API_WORKER_CPU_MS = 5;
+/**
+ * DB を他の事業者に出した VPS の常駐メモリ（GB。仮定）。vpsNode の 1.35（OS 0.3・MySQL 0.6・Node 0.4・nginx 0.05）から MySQL を除いた値。
+ */
+export const VPS_RESIDENT_WITHOUT_DB_GB = 0.75;
 /** Next.js のサーバーから外の API への 1 回の問い合わせで送るデータ（KB。ゲーム上の仮定）。応答の受信は課金されない。 */
 export const SERVER_API_REQUEST_KB = 1;
 
-/** Cloudflare の Worker（API）と D1。土台が Vercel Hobby なら Workers Free、それ以外は Workers Paid（仮定）。 */
-function cfApiNodes(plan: string, server: boolean): ArchNodeIn[] {
+/**
+ * Cloudflare の Worker（API）と D1。土台が Vercel Hobby なら Workers Free、それ以外は Workers Paid（仮定）。
+ * server はサーバーから呼ぶ形のフレームワーク（Next.js は D-67・Astro は D-69。false はブラウザから呼ぶ SPA）。
+ */
+function cfApiNodes(
+  plan: string,
+  server: false | 'nextjs' | 'astro',
+): ArchNodeIn[] {
   const workers = plan === 'hobby' ? 'workers-free' : 'workers-paid';
   const bill = (meters: Record<string, string>) => ({
     accountId: 'cloudflare',
@@ -519,7 +593,7 @@ function cfApiNodes(plan: string, server: boolean): ArchNodeIn[] {
     {
       id: 'cf-worker',
       label: server
-        ? 'Cloudflare Worker（API・Next.js のサーバーから呼ぶ）'
+        ? `Cloudflare Worker（API・${server === 'astro' ? 'Astro' : 'Next.js'} のサーバーから呼ぶ）`
         : 'Cloudflare Worker（API）',
       config: server
         ? {
@@ -531,7 +605,11 @@ function cfApiNodes(plan: string, server: boolean): ArchNodeIn[] {
           }
         : { kind: 'function' },
       facts: server
-        ? ['custom-domain-origin', 'server-fetch', 'd1-binding']
+        ? [
+            'custom-domain-origin',
+            server === 'astro' ? 'astro-server-fetch' : 'server-fetch',
+            'd1-binding',
+          ]
         : ['custom-domain-origin', 'cors-headers', 'd1-binding'],
       billing: bill({ requests: 'requests', 'cpu-ms': 'cpu-ms' }),
     },
@@ -622,11 +700,18 @@ function placement(
     // OpenNext の Lambda から外へ送る問い合わせだけ数える（Vercel・Amplify は料金の文書に項目が無い。数えない）
     const out = host === 'aws-opennext' ? [awsOutToApi()] : [];
     return {
-      nodes: [...out, ...cfApiNodes(plan, true)],
+      nodes: [...out, ...cfApiNodes(plan, 'nextjs')],
       api: [...out.map((n) => n.id), 'cf-worker', 'cf-d1'],
       write: [],
     };
   }
+  // Astro のサーバー（Vercel の関数・VPS の Node）から呼ぶ（D-69）。Vercel の関数・VPS から外への通信は数えない
+  if (id === 'cf-workers-astro')
+    return {
+      nodes: cfApiNodes(plan, 'astro'),
+      api: ['cf-worker', 'cf-d1'],
+      write: [],
+    };
   if (id === 'sakura-vps-2gb' || id === 'sakura-vps-4gb') {
     const vps = id === 'sakura-vps-2gb' ? '2gb' : '4gb';
     return {
@@ -683,26 +768,45 @@ export function applyCrossApi(
       : undefined;
   if (!cur && !nxt) return arch;
   const spa = framework === 'vite-spa';
+  const astro = framework === 'astro';
+  // Cloudflare の Astro + VPS の API（D-69）: ブラウザの API・投稿は SPA と同じく VPS へ直接、マイページを描く Worker も VPS の API を呼ぶ
+  const browserCalls = spa || (astro && host === 'cloudflare');
   let routes: Partial<Record<RequestClass, string[]>> = { ...arch.routes };
   let nodes = [...arch.nodes];
   const addAll = (ns: ArchNodeIn[]) =>
     nodes.push(...ns.filter((n) => !nodes.some((x) => x.id === n.id)));
-  if (cur && spa) {
-    routes.api = [...cur.api];
-    routes['api-content'] = [...cur.api];
-    const write = routes['image-write'];
-    const target = write?.[write.length - 1];
-    if (target && target !== 'blob')
-      routes['image-write'] = [...cur.write, target];
-  } else if (cur) {
+  /** 経路の DB のノードを API の列に差し替える（連続した DB のノード（Hyperdrive → Supabase）は 1 回だけ）。 */
+  const replaceDb = (api: readonly string[]) => {
     const db = HOST_DB_NODES[host] ?? [];
     routes = Object.fromEntries(
       Object.entries(routes).map(([cls, path]) => [
         cls,
-        path!.flatMap((id) => (db.includes(id) ? cur.api : [id])),
+        path!.flatMap((id, i) =>
+          !db.includes(id)
+            ? [id]
+            : i > 0 && db.includes(path![i - 1]!)
+              ? []
+              : api,
+        ),
       ]),
     );
-  }
+  };
+  if (cur && browserCalls) {
+    if (astro) replaceDb(cur.api);
+    routes.api = [...cur.api];
+    if (spa || routes['api-content']) routes['api-content'] = [...cur.api];
+    const write = routes['image-write'];
+    const target = write?.[write.length - 1];
+    if (target && target !== 'blob')
+      routes['image-write'] = [...cur.write, target];
+  } else if (cur && host === 'sakura') {
+    // VPS の Astro（D-69）: DB は VPS の中（ノードが無い）ので、DB を読む経路（マイページ・API）の VPS の後に API を足す
+    for (const cls of ['document-ssr', 'api', 'api-content'] as const)
+      if (routes[cls]?.includes('vps'))
+        routes[cls] = routes[cls]!.flatMap((id) =>
+          id === 'vps' ? ['vps', ...cur.api] : [id],
+        );
+  } else if (cur) replaceDb(cur.api);
   if (cur) addAll(cur.nodes);
   // 同じ id で別の契約のノード（VPS 2GB ↔ 4GB の移し替え）は、新しい側を別の id で足す（新旧の両方の月額を払う）
   if (nxt)
@@ -727,6 +831,37 @@ export function applyCrossApi(
     );
     nodes = nodes.filter((n) => !drop.includes(n.id));
   }
+  // VPS の Astro の DB を Workers・D1 に出したら、VPS は MySQL を動かさず、ディスクに DB を置かない（D-69。移し替えの途中は残す）
+  if (cur && host === 'sakura' && !keepHost)
+    nodes = nodes.map((n): ArchNodeIn =>
+      n.id === 'vps' && n.config.kind === 'host'
+        ? {
+            ...n,
+            label: 'VPS（nginx + Astro の Node。DB は D1）',
+            config: {
+              ...n.config,
+              residentMemoryGB: VPS_RESIDENT_WITHOUT_DB_GB,
+              dbCpuMsPerQuery: 0,
+              storesDb: false,
+            },
+          }
+        : n,
+    );
+  // Cloudflare の Astro: マイページを描く Worker が VPS の API を fetch で呼ぶ（課金されず、待つ時間は CPU 時間に数えない）
+  if (cur && astro && host === 'cloudflare')
+    nodes = nodes.map((n): ArchNodeIn =>
+      n.id === 'worker'
+        ? {
+            ...n,
+            label: 'Worker（Astro。VPS の API を呼ぶ）',
+            facts: [
+              ...(n.facts ?? []),
+              'astro-server-fetch',
+              'worker-outbound',
+            ],
+          }
+        : n,
+    );
   if (cur && !spa)
     nodes = nodes.map((n): ArchNodeIn => {
       // サーバーから外の API への通信: Vercel の関数・Amplify の SSR は料金の文書に項目が無いので数えない（事実の文で出す）
@@ -736,7 +871,7 @@ export function applyCrossApi(
         return { ...n, facts: [...(n.facts ?? []), 'ssr-outbound'] };
       return n;
     });
-  if (cur && host === 'cloudflare')
+  if (cur && host === 'cloudflare' && !astro)
     nodes = nodes.map((n): ArchNodeIn => {
       // Worker が OGP の前処理・リアルタイムだけに残るときの名前
       if (n.id === 'worker')

@@ -1,8 +1,12 @@
 // 事業者をまたぐ構成（D-52・prd/11 §2）: 許した組だけが選択肢に出る・課金が事業者ごとに分かれる。
 import { describe, expect, it } from 'vitest';
 import { resolveWorkload, simulateResources } from 'estimator';
-import { toSpa } from '../frameworks/index.ts';
-import { ARTICLE_COMMUNITY_SPA, articleCommunity } from '../templates/index.ts';
+import { toAstro, toSpa } from '../frameworks/index.ts';
+import {
+  ARTICLE_COMMUNITY_ASTRO,
+  ARTICLE_COMMUNITY_SPA,
+  articleCommunity,
+} from '../templates/index.ts';
 import {
   accountsOf,
   CROSS_COMPONENTS,
@@ -10,6 +14,7 @@ import {
   hostsOf,
   SERVER_API_REQUEST_KB,
   SERVER_API_WORKER_CPU_MS,
+  VPS_RESIDENT_WITHOUT_DB_GB,
 } from './cross.ts';
 import {
   applyComponentsToWorkload,
@@ -56,7 +61,7 @@ describe('許した組（CROSS_PAIRS）', () => {
 
   it('部品の id は差せる土台の事業者のスロットの中で重ならない（フレームワークごと。API の置き場の同居は SPA と Next.js で別の説明）', () => {
     for (const host of [...PLATFORMS, 'aws-opennext'] as const)
-      for (const fw of ['nextjs', 'vite-spa'] as const)
+      for (const fw of ['nextjs', 'vite-spa', 'astro'] as const)
         for (const slot of new Set(COMPONENTS.map((c) => c.slot))) {
           const ids = componentsOf(host, slot, fw).map((c) => c.id);
           expect(new Set(ids).size, `${host}:${slot}:${fw}`).toBe(ids.length);
@@ -522,6 +527,152 @@ describe('Cloudflare の静的 + さくらの VPS の API（D-67）', () => {
     const apiReqs = w.classes.api.count + w.classes['api-content'].count;
     expect(sim.nodes.vps!.resources.requests).toBeCloseTo(
       apiReqs + w.classes['image-write'].count,
+    );
+  });
+});
+
+describe('Astro の API の置き場（D-69）', () => {
+  const astro = (stack: string, c: Record<string, string>, standby = {}) =>
+    composeStack(stack, c, { framework: 'astro', standby });
+  const ids = (a: ReturnType<typeof astro>) => a.nodes.map((n) => n.id);
+  const w = () =>
+    resolveWorkload(
+      toAstro(articleCommunity(100_000), ARTICLE_COMMUNITY_ASTRO, {
+        updatesPerMonth: 5_000,
+      }),
+    );
+
+  it('選べる組は Vercel・VPS の Astro + Workers・D1 と、Cloudflare の Astro + VPS の API だけ（AWS には Astro を載せない）', () => {
+    const opts = (host: Platform) =>
+      componentsOf(host, 'api', 'astro').map((c) => c.id);
+    expect(opts('cloudflare')).toEqual([
+      'same',
+      'sakura-vps-2gb',
+      'sakura-vps-4gb',
+    ]);
+    expect(opts('vercel')).toEqual(['same', 'cf-workers-astro']);
+    expect(opts('sakura')).toEqual(['same', 'cf-workers-astro']);
+    // Next.js・SPA の部品は Astro に出ず、Astro の部品は Next.js・SPA に出ない
+    for (const fw of ['nextjs', 'vite-spa'] as const)
+      for (const host of ['vercel', 'sakura'] as const)
+        expect(componentsOf(host, 'api', fw).map((c) => c.id)).not.toContain(
+          'cf-workers-astro',
+        );
+  });
+
+  it('既定（同じ事業者）は今までの Astro の構成と同じ。Next.js の部品を渡しても変わらない', () => {
+    for (const s of [
+      'cloudflare-vinext-paid',
+      'vercel-supabase-pro',
+      'sakura-vps-2gb',
+    ]) {
+      expect(astro(s, { api: 'same' })).toEqual(astro(s, {}));
+      expect(astro(s, { api: 'cf-workers-server' })).toEqual(astro(s, {}));
+    }
+  });
+
+  it('Vercel: Supabase が外れ、マイページ・API の DB が Worker → D1 になる（記事は静的・ビルドは残る）', () => {
+    const a = astro('vercel-supabase-pro', { api: 'cf-workers-astro' });
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
+    expect(ids(a)).not.toContain('db');
+    expect(ids(a)).toContain('build');
+    expect(a.routes['document-ssr']).toEqual([
+      'cdn',
+      'fn',
+      'cf-worker',
+      'cf-d1',
+    ]);
+    expect(a.routes.api).toEqual(['cdn', 'fn', 'cf-worker', 'cf-d1']);
+    expect(a.routes['document-static']).toEqual(['cdn']);
+    const worker = a.nodes.find((n) => n.id === 'cf-worker')!;
+    expect(worker.label).toContain('Astro');
+    expect(worker.facts).toContain('astro-server-fetch');
+    expect(a.nodes.find((n) => n.id === 'fn')!.facts).toContain(
+      'function-outbound',
+    );
+    expect(
+      astro('vercel-supabase-hobby', {
+        api: 'cf-workers-astro',
+      }).nodes.find((n) => n.id === 'cf-worker')!.billing!.planId,
+    ).toBe('workers-free');
+  });
+
+  it('VPS: マイページ・API の VPS の後に Worker → D1。VPS は MySQL を動かさず、ディスクに DB を置かない', () => {
+    const a = astro('sakura-vps-2gb', { api: 'cf-workers-astro' });
+    expect(accountsOf(a)).toEqual(['sakura', 'cloudflare']);
+    expect(a.routes['document-ssr']).toEqual(['vps', 'cf-worker', 'cf-d1']);
+    expect(a.routes.api).toEqual(['vps', 'cf-worker', 'cf-d1']);
+    expect(a.routes['document-static']).toEqual(['vps']);
+    expect(a.routes['image-read']).toEqual(['vps']);
+    const vps = a.nodes.find((n) => n.id === 'vps')!;
+    expect(vps.config).toMatchObject({
+      kind: 'host',
+      residentMemoryGB: VPS_RESIDENT_WITHOUT_DB_GB,
+      dbCpuMsPerQuery: 0,
+      storesDb: false,
+    });
+    expect(a.nodes.find((n) => n.id === 'cf-worker')!.billing!.planId).toBe(
+      'workers-paid',
+    );
+    const sim = simulateResources(w(), a);
+    const same = simulateResources(w(), astro('sakura-vps-2gb', {}));
+    expect(sim.nodes.vps!.host!.diskGB).toBeLessThan(
+      same.nodes.vps!.host!.diskGB,
+    );
+    expect(sim.nodes.vps!.host!.memoryGB).toBe(VPS_RESIDENT_WITHOUT_DB_GB);
+  });
+
+  it('VPS の移し替えの途中（standby）は MySQL を残し、Worker と D1 を経路に載せずに足す', () => {
+    const to = astro('sakura-vps-2gb', {}, { api: 'cf-workers-astro' });
+    expect(ids(to)).toEqual(expect.arrayContaining(['vps', 'cf-worker']));
+    expect(to.routes['document-ssr']).toEqual(['vps']);
+    expect(to.nodes.find((n) => n.id === 'vps')!.config).toMatchObject({
+      residentMemoryGB: 1.35,
+    });
+    const back = astro(
+      'sakura-vps-2gb',
+      { api: 'cf-workers-astro' },
+      { api: 'same' },
+    );
+    expect(back.nodes.find((n) => n.id === 'vps')!.config).toMatchObject({
+      residentMemoryGB: 1.35,
+    });
+  });
+
+  it('Cloudflare: D1 が外れ、ブラウザの API・投稿は VPS に直接。マイページを描く Worker は残り、VPS の API を呼ぶ', () => {
+    const a = astro('cloudflare-vinext-paid', { api: 'sakura-vps-2gb' });
+    expect(accountsOf(a)).toEqual(['cloudflare', 'sakura']);
+    expect(ids(a)).not.toContain('d1');
+    expect(ids(a)).toContain('worker');
+    expect(ids(a)).toContain('build');
+    expect(a.routes['document-ssr']).toEqual(['worker', 'vps']);
+    expect(a.routes.api).toEqual(['vps']);
+    expect(a.routes['image-write']).toEqual(['vps', 'r2']);
+    expect(a.routes['document-static']).toEqual(['assets']);
+    const worker = a.nodes.find((n) => n.id === 'worker')!;
+    expect(worker.facts).toEqual(
+      expect.arrayContaining(['astro-server-fetch', 'worker-outbound']),
+    );
+    // Images は Worker が残るので binding のまま（URL での変換に替えない）
+    expect(a.nodes.find((n) => n.id === 'images')!.facts ?? []).not.toContain(
+      'transform-url',
+    );
+    // Hyperdrive + Supabase を選んでいても、VPS に 1 回だけ差し替える
+    const h = astro('cloudflare-vinext-paid', {
+      api: 'sakura-vps-2gb',
+      db: 'hyperdrive',
+    });
+    expect(h.routes['document-ssr']).toEqual(['worker', 'vps']);
+  });
+
+  it('Cloudflare + VPS の API: VPS に届くのはマイページの描画の問い合わせ・API・投稿だけ', () => {
+    const a = astro('cloudflare-vinext-paid', { api: 'sakura-vps-2gb' });
+    const r = w();
+    const sim = simulateResources(r, a);
+    expect(sim.nodes.vps!.resources.requests).toBeCloseTo(
+      r.classes['document-ssr'].count +
+        r.classes.api.count +
+        r.classes['image-write'].count,
     );
   });
 });

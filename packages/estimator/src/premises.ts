@@ -358,7 +358,9 @@ export function assessPremises(input: {
       threshold({
         ...base,
         id: `host:memory:${node.id}`,
-        text: `メモリ ${c.memoryGB} GB に OS・DB・アプリが同居する`,
+        text: c.storesDb
+          ? `メモリ ${c.memoryGB} GB に OS・DB・アプリが同居する`
+          : `メモリ ${c.memoryGB} GB に OS・アプリが同居する（DB は別の置き場）`,
         effect: 'block',
         used: h.memoryGB,
         limit: c.memoryGB,
@@ -368,9 +370,13 @@ export function assessPremises(input: {
       threshold({
         ...base,
         id: `host:disk:${node.id}`,
-        text: c.storesImages
-          ? `ディスク ${c.diskGB} GB に DB と画像を置く`
-          : `ディスク ${c.diskGB} GB に DB を置く（画像は別の置き場）`,
+        text: !c.storesDb
+          ? c.storesImages
+            ? `ディスク ${c.diskGB} GB に画像を置く（DB は別の置き場）`
+            : `ディスク ${c.diskGB} GB にアプリを置く（DB と画像は別の置き場）`
+          : c.storesImages
+            ? `ディスク ${c.diskGB} GB に DB と画像を置く`
+            : `ディスク ${c.diskGB} GB に DB を置く（画像は別の置き場）`,
         effect: 'block',
         used: h.diskGB,
         limit: c.diskGB,

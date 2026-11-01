@@ -106,7 +106,7 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '前段の CDN が API の応答も返し、サーバーの CPU と回線が減る',
   // SPA の API の置き場（D-65）。他の事業者の部品は利点だけを書き、損（CORS・アカウント・転送・移行）は ⓘ と手間に出す
   'cloudflare:api:same':
-    'シェルと同じ Worker に API を置くので、ドメインが一つで設定も少ない',
+    'サイトと同じ Worker に API を置くので、ドメインが一つで設定も少ない',
   'vercel:api:same':
     '同じプロジェクトの関数に API を置くので、デプロイも請求もひとまとめ',
   'aws:api:same':
@@ -122,6 +122,11 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '月額が固定の VPS に API とデータベースを置き、使った分の請求に驚かされない',
   'sakura:api:sakura-vps-4gb':
     'メモリとディスクに余裕のある上のプランの VPS に、API とデータベースを置く',
+  // Astro のサーバーから呼ぶ API（D-69）
+  'cloudflare:api:cf-workers-astro':
+    'データの読み書きを安い SQL のデータベースと起動の速い Worker に任せ、ページの描画だけを今の場所に残す',
+  'sakura:api:same':
+    '同じサーバーのデータベースを直接読むので、部品も請求もひとまとめ',
   'aws-opennext:api:same':
     'サーバーの関数が同じクラウドの DB を直接読む。部品が一か所にまとまる',
   // ファイルの保存（構成が暗黙に持つ置き場。1 択。files.ts の fileStorageOf）
