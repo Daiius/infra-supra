@@ -524,7 +524,11 @@ type StockRule = {
   - VPS のホストで変換して AVIF: 変換に約 50% 長くかかる → 変換の CPU を 1.5 倍（件数で表す）。Cloudflare は「AVIF の変換は他の形式より桁違いに遅いことがあり、大きな画像は WebP か JPEG に戻す」と書く（[変換の URL](https://developers.cloudflare.com/images/transform-images/transform-via-url/)）が、戻る割合は記載が無いので数えない。
   - 投稿のときに作って置く構成（サイズ違い・一律で縮める）で WebP・AVIF: 古いブラウザ向けの JPEG も置く（MDN は WebP・AVIF ともフォールバックを推奨: [画像の形式](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types)・2026-10-08 更新）→ サイズ違いは変換と保存を 2 倍、一律で縮めるは保存に JPEG の 400 KB を足す。
   - Cloudflare Images（閲覧のときに変換）: 形式は一意な変換の判定から除く（[料金](https://developers.cloudflare.com/images/pricing/)・2026-10-19 更新）→ 変換の数は変わらない。
-- **自動で選ぶ部品**: Next.js の画像の部品（Vercel の画像の最適化・VPS の next start）は formats の既定が WebP で、Accept を見て選ぶ → JPEG を選んでも WebP で配る（設定の欄に注記）。このため Vercel の構成は既定のまま費用が下がる（golden）。Cloudflare（vinext + Images のバインディング）は形式の指定が要るので設定どおり。SPA は next/image を使わないので設定どおり。最適化しない（原本）では形式は効かない。
+- **自動で選ぶ部品**: Next.js の画像の部品（Vercel の画像の最適化・VPS の next start）は formats の既定が WebP で、Accept を見て選ぶ → JPEG を選んでも WebP で配る（設定の欄に注記）。このため Vercel の構成は既定のまま費用が下がる（golden）。~~Cloudflare（vinext + Images のバインディング）は形式の指定が要るので設定どおり。~~
+  **D-62 で改めた**: 閲覧のときに変換する Cloudflare Images（Cloudflare の構成の Images・他の事業者の部品「Cloudflare: R2 に置き、閲覧のときに Images で変換」）も WebP で配るとみなす（`autoImageFormat`）。
+  URL の変換の `format=auto` は「Automatically serves the most efficient format that the requesting browser supports」（[変換の URL](https://developers.cloudflare.com/images/transform-images/transform-via-url/)・[最適化の機能](https://developers.cloudflare.com/images/optimization/features/)）、
+  Workers・バインディングでは「Your Worker is responsible for automatic format negotiation. Check the Accept header.」で、Accept を見て AVIF・WebP を選ぶ例がある（[Workers で変換](https://developers.cloudflare.com/images/transform-images/transform-via-workers/)。コードを書く前提）。
+  AVIF も選びうるが next/image と揃えて WebP とみなす（AVIF の設定を選べばそちら）。SPA は next/image を使わないが、Cloudflare Images の変換は SPA でも同じ。投稿のときに作る・一律で縮めるは設定どおり。最適化しない（原本）では形式は効かない。
 - **在庫の原本**は形式に依らずそのまま置く（今までの「圧縮の比で原本の保存量も減る」をやめた）。
 - **画質を落とす強い圧縮は残さない**: WebP・AVIF で画質を保ったまま同じくらい小さくなるので、画質を下げる選択肢は「損だけがある」選択になる。画質の満足度の要素は、原本の有無（デザインの刷新）で効く。
 - 古い保存の「画像の圧縮」は近い大きさの形式に読み替える（150 → JPEG・100 → WebP・70 → AVIF）。
