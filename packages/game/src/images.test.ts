@@ -94,9 +94,10 @@ describe('画像の大きさ（D-47）', () => {
     }
   });
 
-  it('1 ページの通信量: 既定 約 1.2 MB・最適化しない 約 20.5 MB・一律で縮める 約 2.5 MB', () => {
+  it('1 ページの通信量: 既定 約 985 KB・最適化しない 約 20.5 MB・一律で縮める 約 2.5 MB', () => {
     const s = playMonth(newGame(CF_PAID, 42, article));
-    expect(pageWeightOf(s)).toBe('1 ページ約 1.2 MB');
+    // Cloudflare Images（閲覧のときに変換）はブラウザに合わせて WebP で配る（D-62。JPEG では約 1.2 MB）
+    expect(pageWeightOf(s)).toBe('1 ページ約 985 KB');
     expect(pageWeightOf(s, 'none')).toBe('1 ページ約 20.5 MB');
     expect(pageWeightOf(s, 'resize')).toBe('1 ページ約 2.5 MB');
   });

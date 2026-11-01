@@ -425,6 +425,17 @@
 - 性能の調整はゲーム上の仮定: 込みの 3 倍を超えた月か、2 か月続けて超えた月に速さを 1 段下げる（公式の「最初の 3 倍までは影響なし」「2〜3 か月以上で評価」に沿う）。Amplify の前段に使うと「Amplify をオリジンにする構成は公式に未確認」を前提の文で出す。
 - 基準プレイ: 記事コミュニティの定額 Pro は Next.js（前段の CloudFront）・SPA とも 20 / 20。定額 Free は込みを大きく超えて速さで落ちる。受託は従量のほうが安い。prd/11 §12。
 
+### D-62 閲覧のときに変換する Cloudflare Images もブラウザに合わせて WebP で配る・CloudFront の無い構成の CDN の料金のプラン（確定・2026-11-01）
+
+- 推奨案で決定（B-8・B-11）。D-58 の「Cloudflare（Images のバインディング）は形式の指定が要るので設定どおり」を改めた。
+- B-8: 閲覧のときに変換する Cloudflare Images（Cloudflare の構成の Images・またぐ部品 cf-images）も、next/image と同じく JPEG を選んでも WebP で配るとみなす（`autoImageFormat` = `usesNextImage` ∪ 振る舞いが Images の部品）。
+  公式（2026-11-01）: URL の `format=auto` は「Automatically serves the most efficient format that the requesting browser supports」、Workers・バインディングは「Your Worker is responsible for automatic format negotiation. Check the Accept header.」（Accept を見て AVIF・WebP を選ぶ例）。AVIF も選びうるが WebP とみなす。変換の数は形式で増えない（D-58 のまま）。
+  OpenNext（PR #26・aws-opennext）の画像は next/image の最適化（Lambda）なので、`usesNextImage` の対象に入る形で揃えれば足りる（この変更の時点では main に無い）。
+- 影響（シード 1〜50・記事コミュニティ・受託 × Next.js・SPA）: **CF Paid・既定（目標の根拠）は所持金・合否とも変わらない**（R2 の転送は無料・変換の数も変わらない。1 ページの通信量の表示だけ約 1.2 MB → 985 KB）。Vercel・AWS の画像だけ Cloudflare の表も変わらない。
+  golden で変わったのは KV を DB の代わりにする基準プレイだけ（ページが軽くなり速さが「悪い」月が減る。シード 42: $1,882.01 → $1,947.35・3: $1,907.89 → $1,964.47・31 は同じ）。
+- B-11: 前段の CloudFront が無い Amplify で画像を R2 に出すと CloudFront が無くなるので、「CDN の料金のプラン」の定額を選べなくして理由を出す（`componentConflict`。始める画面とゲーム中で共通）。
+  定額のプランを選んでいる間は、CloudFront が無くなる選択（画像を R2 に出す）も選べない（先にプランを従量に戻す。D-37 と同じ向き）。始める画面の部品の依存の判定は、部品の事業者でなく構成の事業者で見るように直した。
+
 ## 未決（grill で詰める）
 
 | # | 論点 | 関係する章 |
