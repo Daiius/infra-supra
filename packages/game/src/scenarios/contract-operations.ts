@@ -318,7 +318,9 @@ export const CONTRACT_OPERATIONS: Scenario = {
     loss: { block: 0.6, throttle: 0.1, incident: 0.1, migration: 0.15 },
   },
   incidents: { selfHostedChancePerMonth: 0.08 },
-  unoptimizedImageKB: 150,
+  // 添付の原本（stock.gbPerImage の 2 MB）。画像の部品はこのシナリオでは出さない（hidden.slots）ので効かない（D-47）
+  unoptimizedImageKB: 2_000,
+  resizedImageKB: 400,
   satisfaction: {
     // 顧客の満足。業務アプリなので画質・鮮度は効かせない
     weights: {

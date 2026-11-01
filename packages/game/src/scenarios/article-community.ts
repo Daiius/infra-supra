@@ -292,6 +292,22 @@ const EVENTS: EventDef[] = [
       ],
     },
   },
+  {
+    // D-47: 投稿のときに一律で縮めて置くと原本が残らず、後から大きな表示に対応しにくい
+    id: 'p-image-redesign',
+    kind: 'proposal',
+    tier: 'occasional',
+    title: '記事のデザインを刷新して、画像を大きく綺麗に出したい',
+    text: '大きな画面・高精細の端末で記事を読む人が増え、画像をもっと大きく綺麗に出したいという声が上がった。原本が無いと、過去の画像は大きくできない（縮めて置いた画像からは元の細かさを戻せない）。原本を保存している構成（閲覧のときに変換・投稿のときにサイズ違いを作る）なら過去の記事も含めて大きくでき、一律で縮めて置いた構成はこれからの投稿だけ大きくできる。原本をそのまま配っている構成は既に大きい。断ると、しばらく画質の評価が下がる',
+    // 確率は基準プレイを見て決めた（ゲーム上の仮定）
+    when: { type: 'window', from: 5, to: 10, chance: 0.5 },
+    premiseRefs: [],
+    accept: {
+      label:
+        '受ける（手間: 原本がある構成 1・一律で縮めた構成 2・原本を配っている構成 0）',
+      effects: [{ type: 'imageRedesign' }],
+    },
+  },
   // ---- シナリオの台本（SC）----
   {
     id: 'buzz',
@@ -392,15 +408,20 @@ export const ARTICLE_COMMUNITY: Scenario = {
   // 1 枚 4 MB は テンプレートの 20 GB / 5,000 枚。DB の増え方は仮定
   stock: { dbGBPerMillionPV: 0.05, gbPerImage: 0.004 },
   scale: { startPV: 300_000 },
-  growth: { acquisition: 0.15, churn: 0.15 },
+  // slowPenalty: 速さが「悪い」月は PV の伸びを 3 ポイント下げる（離脱・検索からの流入。割合は出典なしの仮定・D-47）
+  growth: { acquisition: 0.15, churn: 0.15, slowPenalty: 0.03 },
   buzz: { extra: 0.3, reference: 0.9 },
   revenue: {
     adsUsdPer1000PV: 0.25,
     loss: { block: 0.6, throttle: 0.1, incident: 0.1, migration: 0.15 },
   },
   incidents: { selfHostedChancePerMonth: 0.08 },
-  // 最適化しない画像の大きさ（原本。仮定）
-  unoptimizedImageKB: 400,
+  // 最適化しない画像の大きさ = 原本（stock.gbPerImage の 4 MB。D-47 で 400 KB から揃えた）
+  unoptimizedImageKB: 4_000,
+  // 投稿のときに一律で縮めて置く 1 枚（長い辺 1,600〜2,000px の JPEG・WebP を想定。ゲーム上の仮定・D-47）
+  resizedImageKB: 400,
+  // 記事のデザインの刷新を断ると 2 か月画質が 1 段下がる・受けたあと粗い画像が在庫の 2 割以上なら 1 段下がる（仮定・D-47）
+  imageRedesign: { declineMonths: 2, coarseShare: 0.2 },
   satisfaction: {
     weights: {
       availability: 0.4,
@@ -409,7 +430,13 @@ export const ARTICLE_COMMUNITY: Scenario = {
       freshness: 0.1,
       quality: 0.1,
     },
-    speed: { heavySsrCpuMs: 12, heavyImageKB: 120, nearRatio: 0.7 },
+    // 1 枚 1 MB 以上（原本級）を配ると速さは「悪い」（ゲーム上の仮定・D-47）
+    speed: {
+      heavySsrCpuMs: 12,
+      heavyImageKB: 120,
+      nearRatio: 0.7,
+      veryHeavyImageKB: 1_000,
+    },
     quality: { good: 150, fair: 100 },
     freshness: { good: 300, fair: 3600 },
     feature: { expectedPerMonth: 8, good: 1, fair: 0.6 },

@@ -158,8 +158,16 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'cloudflare',
     label: '最適化しない',
-    note: '原本をそのまま配る。R2 は転送量に課金しないので費用は増えず、遅くなる',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。R2 は転送量に課金しないので費用は増えないが、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['fact:cloudflare:r2-standard:egress'],
+  },
+  {
+    id: 'resize',
+    slot: 'images',
+    platform: 'cloudflare',
+    label: '投稿のときに一律で縮めて置く',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    premiseRefs: [],
   },
   {
     id: 'd1',
@@ -262,8 +270,16 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'vercel',
     label: '最適化しない',
-    note: '原本をそのまま配る。転送量（Fast Data Transfer）が増え、遅くなる',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。転送量（Fast Data Transfer）が大きく増え、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['pool:vercel:pro:pro-fdt'],
+  },
+  {
+    id: 'resize',
+    slot: 'images',
+    platform: 'vercel',
+    label: '投稿のときに一律で縮めて置く',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    premiseRefs: [],
   },
   {
     id: 'default',
@@ -297,8 +313,16 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'sakura',
     label: '最適化しない',
-    note: '原本をそのまま配る。共有回線を多く使い、遅くなる',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。共有回線を大きく使い、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['host:line'],
+  },
+  {
+    id: 'resize',
+    slot: 'images',
+    platform: 'sakura',
+    label: '投稿のときに一律で縮めて置く',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    premiseRefs: [],
   },
 ];
 
@@ -534,6 +558,10 @@ class Builder {
 }
 type ArchNodeIn = ArchitectureInput['nodes'][number];
 
+/** 画像を変換のサービス・ホストで変換するか（最適化しない・投稿のときに一律で縮めるは変換しない。D-47）。 */
+const transformsImages = (c: Choices) =>
+  c.images !== 'none' && c.images !== 'resize';
+
 /** Cloudflare Workers + D1 + R2 + KV + Images に vinext で載せる（D-08）。 */
 function composeCloudflare(
   plan: 'free' | 'paid',
@@ -685,7 +713,7 @@ function composeCloudflare(
       r2(true),
     );
   }
-  if (choices.images !== 'none')
+  if (transformsImages(choices))
     b.add({
       id: 'images',
       label: 'Images（バインディング）',
@@ -752,7 +780,7 @@ function composeCloudflare(
     // 投稿のときに作るサイズ違いは R2 に書き込む（変換 1 件 = 書き込み 1 件。OCL-F3098083）
     ...(choices.images === 'r2-variants'
       ? { 'image-transform': ['images', 'r2'] }
-      : choices.images !== 'none'
+      : transformsImages(choices)
         ? { 'image-transform': ['images'] }
         : {}),
     ...(choices.realtime === 'durable-objects'
@@ -782,7 +810,7 @@ function composeVercel(
     meters,
   });
   const isr = choices.isrCache !== 'none';
-  const optimize = choices.images !== 'none';
+  const optimize = transformsImages(choices);
   const nodes: ArchNodeIn[] = [
     {
       id: 'cdn',
@@ -1179,13 +1207,13 @@ function asSpa(
 
 /**
  * 部品が Workload の側を変えるもの（キャッシュしない → ISR を SSR に・サイズ違いを作る時）。
- * 最適化しない画像の大きさはテンプレート・シナリオの仮定なので、呼ぶ側が originalImageKB で渡す。
+ * 最適化しない画像（原本）と、投稿のときに一律で縮めた画像の大きさはシナリオの仮定なので、呼ぶ側が渡す（D-47）。
  */
 export function applyComponentsToWorkload(
   w: WorkloadInput,
   platform: Platform,
   choices: Choices = {},
-  options: { originalImageKB?: number } = {},
+  options: { originalImageKB?: number; resizedImageKB?: number } = {},
 ): WorkloadInput {
   const c = withDefaults(platform, choices);
   const out: WorkloadInput = { ...w };
@@ -1199,6 +1227,16 @@ export function applyComponentsToWorkload(
       transformAt: 'none',
       ...(options.originalImageKB !== undefined
         ? { sizeKB: options.originalImageKB }
+        : {}),
+    };
+  else if (c.images === 'resize')
+    // 投稿のときに 1 回だけ縮めて置く: 変換のサービスは使わず、サイズ違いは 1 種（スマホにも同じ大きさ）
+    out.images = {
+      ...w.images,
+      transformAt: 'none',
+      variants: 1,
+      ...(options.resizedImageKB !== undefined
+        ? { sizeKB: options.resizedImageKB }
         : {}),
     };
   else if (c.images === 'r2-variants')
