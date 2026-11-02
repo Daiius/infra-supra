@@ -22,6 +22,19 @@ export const supabase: PriceBookInput = {
     egress: src(
       'https://supabase.com/docs/guides/platform/manage-your-usage/egress',
     ),
+    // バックアップ・PITR（2026-11-02 取得。D-93）
+    backups: {
+      url: 'https://supabase.com/docs/guides/platform/backups',
+      retrievedAt: '2026-11-02',
+    },
+    pitr: {
+      url: 'https://supabase.com/docs/guides/platform/manage-your-usage/point-in-time-recovery',
+      retrievedAt: '2026-11-02',
+    },
+    computeSmall: {
+      url: 'https://supabase.com/docs/guides/platform/compute-and-disk',
+      retrievedAt: '2026-11-02',
+    },
   },
   allowancePools: [
     {
@@ -136,6 +149,7 @@ export const supabase: PriceBookInput = {
       notes: [
         'Pro は支出上限が既定で有効。ただし Compute は上限の対象外',
         'Compute は 1 時間単位で切り上げ',
+        '日次のバックアップは 7 日分を残す（Pro に込み）。任意の時点への復元（PITR）はアドオン（D-93）',
       ],
       meters: [
         {
@@ -166,6 +180,29 @@ export const supabase: PriceBookInput = {
           allowancePool: 'pro-disk',
           pricing: { model: 'flat', per: 1, unitPrice: 0.125 },
           sourceIds: ['pricing'],
+        },
+        {
+          id: 'pitr',
+          label:
+            'PITR（Supabase: Point-in-Time Recovery 7 日 + Small の compute）',
+          resource: 'backup-hours',
+          unit: 'hour',
+          rounding: { granularity: 1, scope: 'period' },
+          premise:
+            'Supabase の PITR（7 日）は 1 時間 $0.137（月 約 $100）のアドオンで、compute が Small 以上でないと付けられない（Small は 1 時間 $0.0206、Micro は $0.01344）。PITR を付けると日次のバックアップは取らなくなる',
+          interpretation: {
+            adopted:
+              'PITR の $0.137 と、Micro から Small に上げる差額 $0.00716 を合わせた 1 時間 $0.14416 で、付けている時間に課金する（compute のメーターは Micro のまま。Small の pooler の接続 400 は数えず、Micro の 200 で判定する）',
+            rejected: [
+              {
+                reading: 'Small を別のプランとして持つ',
+                reason:
+                  'PITR の前提として上げるだけで、他の判定（接続の上限）は Micro のまま見る方が高めの側に寄る',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0.14416 },
+          sourceIds: ['pitr', 'backups', 'computeSmall'],
         },
       ],
       limits: [

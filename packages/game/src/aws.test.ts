@@ -63,6 +63,7 @@ describe('AWS の構成', () => {
       ['db', false],
       ['frontCdn', false],
       ['cdnPlan', false],
+      ['dbBackup', false],
       ['files', true],
     ]);
     expect(
@@ -194,6 +195,7 @@ describe('AWS の構成', () => {
       'db',
       'cdnPlan',
       'cdnInvalidation',
+      'dbBackup',
       'files',
     ]);
   });

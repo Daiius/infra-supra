@@ -223,7 +223,8 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
       contractOpenNextPause: '0/20 $52.9',
       articleAwsSpaAurora: '0/20 $88.1',
       articleAwsSpaPause: '0/20 $88.1',
-      contractVercelNext: '6/20 $36.2',
+      // Neon Launch の履歴の窓（既定 1 日）を数えた分（D-93。前は $36.2）
+      contractVercelNext: '6/20 $36.3',
       contractVercelSpa: '18/20 $34.7',
       contractNetlifyNext: '14/20 $34.6',
       contractNetlifySpa: '18/20 $34.5',

@@ -202,6 +202,23 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     kind: z.literal('ci-build'),
     cpusPerBuild: Pos.default(1),
   }),
+  /**
+   * DB のバックアップ・任意の時点への復元（PITR。D-93・prd/04 §3.9）。経路を持たず、DB の大きさ（storage.dbGB）と
+   * 月に書く行の数から、保持の間に残す量を数える（backup-gb-month）。
+   *   残す量 = fullCopies × DB の大きさ + 月に書く行 × changeKBPerRow × retentionDays / 30 − 無料の分
+   * 無料の分は freeUpToDbSize のとき max(DB の大きさ, minFreeGB)（RDS・Aurora は DB の割り当ての大きさまで無料）。
+   * addonHours: 付けている時間で課金するアドオン（Supabase の PITR）。月の時間をそのまま数える（backup-hours）。
+   * 値は catalog の構成が持つ（保持の日数・課金の形は事業者の文書、1 行の変更の量は仮定）。
+   */
+  z.object({
+    kind: z.literal('db-backup'),
+    retentionDays: NonNeg,
+    fullCopies: NonNeg.default(0),
+    changeKBPerRow: NonNeg.default(0),
+    freeUpToDbSize: z.boolean().default(false),
+    minFreeGB: NonNeg.default(0),
+    addonHours: z.boolean().default(false),
+  }),
   /** VPS などのホスト。課金は固定費で、使用量は容量の判定（P1-8）に使う。 */
   z.object({
     kind: z.literal('host'),

@@ -57,6 +57,8 @@ describe('Netlify の構成', () => {
       ['images', false],
       ['api', false],
       ['db', false],
+      // DB のバックアップ（D-93）: Supabase Pro に PITR を付けられる
+      ['dbBackup', false],
       ['files', true],
     ]);
     expect(

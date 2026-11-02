@@ -1106,3 +1106,57 @@ describe('実行ごとのログ（D-92）', () => {
     expect(u.plain!.resources['log-events']).toBeUndefined();
   });
 });
+
+describe('DB のバックアップ（D-93）', () => {
+  const rows = Object.values(w.classes).reduce(
+    (a, f) => a + f.count * f.perRequest.rowsWritten,
+    0,
+  );
+  const changesGB = (rows * 2 * 1000) / 1e9;
+  const backup = (
+    config: Omit<
+      Extract<
+        ArchitectureInput['nodes'][number]['config'],
+        { kind: 'db-backup' }
+      >,
+      'kind'
+    >,
+  ) =>
+    sim([{ id: 'b', label: 'b', config: { kind: 'db-backup', ...config } }], {})
+      .b!.resources;
+
+  it('全体の写し × DB の大きさ + 保持の日数分の変更を残し、経路を持たない', () => {
+    expect(rows).toBeGreaterThan(0);
+    const r = backup({ retentionDays: 7, fullCopies: 1, changeKBPerRow: 2 });
+    expect(r['backup-gb-month']).toBeCloseTo(
+      w.storage.dbGB + (changesGB * 7) / 30,
+      12,
+    );
+    expect(r['backup-hours']).toBeUndefined();
+  });
+
+  it('DB の大きさ（と最小の割り当て）までは無料で、超えた分だけ数える。アドオンは月の時間', () => {
+    // 割り当て 20 GB の中に収まる
+    expect(
+      backup({
+        retentionDays: 7,
+        fullCopies: 1,
+        changeKBPerRow: 2,
+        freeUpToDbSize: true,
+        minFreeGB: 20,
+      })['backup-gb-month'],
+    ).toBeUndefined();
+    // DB の大きさだけが無料なら、変更の分だけ残る
+    expect(
+      backup({
+        retentionDays: 35,
+        fullCopies: 1,
+        changeKBPerRow: 2,
+        freeUpToDbSize: true,
+      })['backup-gb-month'],
+    ).toBeCloseTo((changesGB * 35) / 30, 12);
+    expect(backup({ retentionDays: 7, addonHours: true })).toEqual({
+      'backup-hours': 730,
+    });
+  });
+});

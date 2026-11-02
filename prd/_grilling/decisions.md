@@ -869,6 +869,31 @@
   ただし規模を上げると Workers Paid は合計に占める割合が大きい（月 1,000 万 PV で $12 / $46・3,000 万 PV で $60 / $138）。AWS・Google Cloud は 1% 前後。
 - 残した点: Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access を部品にすること・アプリのログの量をフレームワーク・出来事（エラーの急増）で変えること。
 
+### D-93 DB のバックアップ・任意の時点への復元（PITR）の費用と、受託の依頼（確定・2026-11-02）
+
+- 依頼: 業務アプリの運用で見落とされやすい現実の費用として、DB のバックアップと PITR を入れる。推奨案で自律に決定。prd/11 §19・prd/04 §3.9・prd/03 §5・prd/09 §3.2（CP-6。W-2 を解消）。
+- 公式で確かめたこと（2026-11-02 取得・東京。出典は prd/11 §19.1）: RDS は割り当ての容量まで無料・超過 $0.095 / GB 月・保持はコンソールの既定 7 日（API は 1 日・最大 35 日）。
+  Aurora は常に有効・既定 1 日で課金なし・延ばすとクラスターの大きさを超えた分 $0.023。DynamoDB の PITR は既定で無効・$0.228 / GB 月。DSQL は AWS Backup だけ（PITR の記載なし）。
+  Supabase Pro は日次 7 日分、PITR 7 日は 1 時間 $0.137 で Small（$0.0206 / 時）以上が前提、Free はバックアップなし。Neon は Free 6 時間・Launch 既定 1 日（最長 7 日）で履歴に $0.20 / GB 月。
+  Cloud SQL は自動バックアップ 7 つ・差分・月 約 $0.104 / GiB、コンソールで作る Enterprise は PITR も既定で有効。Firestore の PITR は既定で無効・月 約 $0.195 / GiB。
+  D1 の Time Travel は常に有効（Paid 30 日・Free 7 日）で追加の費用なし。さくらの VPS にバックアップの機能は無く、さくらのオブジェクトストレージは月 495 円（税込）に 100 GiB 込み。
+  確かめられなかったこと: Cloud SQL の PITR のログの量の課金・RDS の PITR に別の課金が無いこと（課金の項目が無いことからの読み）。
+- 決定:
+  - estimator に経路を持たないノード `db-backup` と資源 `backup-gb-month`・`backup-hours` を足した。残す量 = 全体の写し × DB の大きさ + 変更 × 保持の日数 / 30 − 無料の分（RDS・Aurora は DB の大きさまで）。
+  - catalog の `stacks/backups.ts`（`withBackups`・`backupStatus`）が、経路の DB ごとに費用のノードを足し、戻せる日数を返す。料金データに各社のメーターと、さくらのオブジェクトストレージのプランを足した。
+  - 部品「DB のバックアップ」（`dbBackup`）: どの事業者も「事業者の既定のまま / 保持を延ばす・PITR を付ける」の 2 択。今の DB で変わらない（D1・KV・DSQL・Cloud SQL・Supabase Free・Neon Free）ときはゲームで出さない。
+    既定は事業者の既定（RDS 7 日・Cloud SQL 7 つ・Neon 1 日は既定で費用を数え始めた）。延ばすと RDS 35 日・Aurora 7 日・Neon 7 日・DynamoDB・Firestore・Supabase の PITR。
+  - VPS は「延ばす・付ける」= 自前で日次のダンプ 7 つと 7 日分のバイナリログをオブジェクトストレージへ。手間は作る 3・毎月 0.5（`EFFORT.selfBackup`）。マネージドの DB は設定だけで手間 1。
+  - ゲーム: 受託に依頼 `c-p-backup`「直近 7 日の任意の時点に戻せることを契約に入れたい」（窓 3〜10 か月目・確率 1 / 2・受けると上乗せ $20 / 月を要件 `db-pitr` を満たす月だけ）。
+    SLA の打診（D-24）と同じ契約の収益の形で、新しい障害の出来事は足していない。窓の出来事なので他の出来事の月は動かない。カードに DB のバックアップの選択肢ごとの可否を出す。
+  - 仮定（ゲーム上の仮定・出典なし）: 1 行の書き込みが変える量 2 KB・VPS のダンプは DB と同じ大きさ・依頼の確率と額・手間の値。
+  - 直したこと: 始める画面の選択の検証（`validSetupChoices`）が、選んだ部品で現れるスロット（Hyperdrive・API の先の DynamoDB で現れる DB のバックアップ）を落としていたので、選んだ部品で見るようにした。
+- 基準プレイ（記事・受託 × 全構成 × Next.js・SPA × シード 1〜20）: **既定のままはすべて不変**。**CF Paid × Next.js（目標の根拠。記事 20/20・$15.25・受託 20/20・$5.67）・記事の golden・網羅テストは不変**。
+  部品の DB で既定の費用を数え始めた分だけ変わる（受託 × Google Cloud × Cloud SQL $16.7 → $17.0・SPA $12.7 → $13.0、受託 × Vercel Pro × Neon $36.2 → $36.3）。
+  受託の「CF Paid・依頼を受ける」は D1 で依頼を満たし 9/20 → 11/20（golden のシード 42 は $1,589.92・goal → $1,769.92・won。シード 11・3 は不変）。
+  付けると: Supabase Pro の PITR は月 約 $105（受託 × Vercel Pro $46 → $152）で依頼の $20 を上回る。DynamoDB・Firestore は月 $0.1〜0.5。VPS は月 495 円と手間で、記事 × 2GB の達成が 10/20 → 6/20。表は prd/11 §19.3。
+- 残した点: 保持の日数を細かく選ぶこと・Supabase の Small の接続の上限・Cloud SQL の PITR のログの量・実際に壊れて戻す出来事（戻せない構成で何が失われるか）。
+
 ### 論点（ユーザーの判断が要るもの）
 
 | # | 論点 | 参照 |
@@ -888,11 +913,12 @@
 | Vercel Pro | 込み分なし・クレジットの読み（D-48）を会社の請求で確かめる | D-10・D-48 |
 | 日本の消費税 | ~~Vercel~~ → D-84（国税庁の公表サイトに登録があり `added`）。Supabase・Netlify・Neon の日本の扱い（文書に記載なし・公表情報にも名前なし。税抜のまま）・事業者として契約する場合。~~Vercel Pro の席の種類~~ → D-84（閲覧の席は無料。計算は今のまま） | D-76・D-77・D-84 |
 | Netlify | Blobs の単価・Pro の上の段の価格・関数の丸め（D-84 で再確認しても記載なし）。~~Free の商用利用の可否~~ → D-84（契約の §6 に禁止なし） | D-71・D-84・prd/11 §14 |
-| Neon | 負荷と CU の関係・instant restore の履歴の量・Vercel の Marketplace 経由の価格（請求が Vercel にまとまることは D-84 で確認）・Netlify Database | D-77・D-84・prd/11 §15 |
+| Neon | 負荷と CU の関係・~~instant restore の履歴の量~~ → D-93（窓の間の変更の量で数える。1 行 2 KB の仮定）・Vercel の Marketplace 経由の価格（請求が Vercel にまとまることは D-84 で確認）・Netlify Database | D-77・D-84・prd/11 §15 |
 | AWS | Amplify の画像の最適化の課金（料金未取得のまま。D-84 で再確認）・Amplify をオリジンにした CloudFront の定額・~~RDS の最小の割り当て 20 GiB を数えること~~ → D-85（メーターの最小の課金量） | D-51・D-61・D-84・D-85・prd/11 §1.6・§9・§12 |
 | 事業者の間の通信 | Vercel・Amplify の関数から外への通信の課金（数えていない。D-84 で再確認しても課金の項目に無い） | D-52・D-67・D-84・prd/11 §2 |
 | Google Cloud | Cloud Run・Firebase Hosting の SLA（未取得）・Cloud Run → Firebase Hosting の応答の転送の課金（書かれていない。数えない）・Cloud SQL の最小の割り当ての量 | D-88・prd/11 §16.3 |
 | Cloudflare の CDN（Free） | 転送量の上限（第三者の記事 1 件だけ・公式に見当たらない。課金なしのまま）・規約の「不釣り合いな割合の画像」の境目（数値なし） | D-91・prd/11 §17.1 |
+| バックアップ（D-93） | Cloud SQL の PITR のログ（ディスクに置く）の量の課金（料金ページに記載なし。数えていない）・RDS の PITR に別の課金が無いこと（課金の項目が無いことからの読み） | D-93・prd/11 §19 |
 | ログ（D-92） | CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし。数えていない）・Vercel の Observability Plus の 1 要求あたりの event の数（数えていない）・Workers Logs の 2026-12-01 以降の料金（今の値で数えている） | D-92・prd/11 §18 |
 | ~~Cloudflare Images Paid~~ | ~~基本料~~ → D-84（基本料なしとみる。公式の例の合計に入っていない。値は不変） | D-84・prd/11 §2 |
 
@@ -910,6 +936,7 @@
 | D-90 | 受託 × Neon の釣り合いの見直し・金曜 → 土曜の境目・メンテナンスで起こされる分・接続を開いたままにする作り |
 | D-91 | 前段の CDN のパージの連携の作り込みの手間・Cloudflare の静的 + VPS の API で api もプロキシしてキャッシュする形・画像の割合の規約の判定 |
 | D-92 | Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access の部品・アプリのログの量をフレームワーク・出来事で変えること |
+| D-93 | 保持の日数を 2 択より細かく選ぶこと・Supabase の Small の pooler の接続 400・Cloud SQL の PITR のログの量・Firestore の日次のバックアップ・実際に壊れて戻す出来事 |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 

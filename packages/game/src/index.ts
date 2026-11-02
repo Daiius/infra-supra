@@ -28,6 +28,8 @@ import {
   type ComponentProvider,
   type Platform,
   type SlotId,
+  backupStatus,
+  PITR_REQUIRED_DAYS,
 } from 'catalog';
 import {
   estimate,
@@ -634,9 +636,45 @@ export const swapLabel = (slot: SlotId): string =>
  * 構成の DB のスロットは出さない（D-65）。ISR をキャッシュしない部品では CDN の無効化が起きないので、
  * 無効化のまとめ方も出さない（D-79）。
  */
-export function slotIneffective(slot: SlotId, choices: Choices): boolean {
+export function slotIneffective(
+  slot: SlotId,
+  choices: Choices,
+  /** DB のバックアップは今の DB で決まる（D1 のように既定で足りる・延ばせない DB では出さない。D-93）。 */
+  stack?: { stackIndex: number; framework: FrameworkId },
+): boolean {
   if (slot === 'cdnInvalidation') return choices.isrCache === 'none';
+  if (slot === 'dbBackup')
+    return (
+      stack !== undefined &&
+      !dbBackupStatus(stack.stackIndex, choices, stack.framework).some(
+        (s) => s.extendable,
+      )
+    );
   return slot === 'db' && apiPlacedElsewhere(choices);
+}
+
+/** 構成の DB ごとのバックアップの状態（D-93。catalog の backupStatus）。 */
+export function dbBackupStatus(
+  stackIndex: number,
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+) {
+  const c = { ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider], ...components };
+  return backupStatus(
+    composeStack(STACK_DEFS[stackIndex]!, c, { framework }),
+    c.dbBackup,
+  );
+}
+
+/** 自前で取るバックアップ（VPS）を選んでいるか（毎月の維持の手間。D-93）。 */
+export function selfBackupOf(
+  stackIndex: number,
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+): boolean {
+  return dbBackupStatus(stackIndex, components, framework).some(
+    (s) => s.selfManaged,
+  );
 }
 
 /**
@@ -1212,9 +1250,16 @@ export function meetsRequirement(
   switch (requirement) {
     case 'on-demand-isr':
       return onDemandBlocker(stackIndex, components, framework) === undefined;
+    case 'db-pitr': {
+      const st = dbBackupStatus(stackIndex, components, framework);
+      return st.length > 0 && st.every((s) => s.pitrDays >= PITR_REQUIRED_DAYS);
+    }
     case 'uptime-sla': {
+      // バックアップの置き場（VPS の自前のバックアップのオブジェクトストレージ）はアプリの稼働に関わらないので見ない（D-93）
       const plans = composeStack(STACK_DEFS[stackIndex]!, components)
-        .nodes.flatMap((n) => (n.billing ? [n.billing] : []))
+        .nodes.flatMap((n) =>
+          n.billing && n.config.kind !== 'db-backup' ? [n.billing] : [],
+        )
         .map((b) =>
           books
             .find((x) => x.provider === b.provider)
@@ -1237,13 +1282,22 @@ export function requirementReachable(
   return STACKS.some(
     (s) =>
       s.provider === STACKS[stackIndex]!.provider &&
-      meetsRequirement(s.index, requirement, {}, framework),
+      (meetsRequirement(s.index, requirement, {}, framework) ||
+        // DB のバックアップは部品で満たせる（D-93）
+        (requirement === 'db-pitr' &&
+          meetsRequirement(
+            s.index,
+            requirement,
+            { dbBackup: 'pitr' },
+            framework,
+          ))),
   );
 }
 
 const REQUIREMENT_LABEL: Record<Requirement, string> = {
   'uptime-sla': '稼働率の SLA があるプラン',
   'on-demand-isr': '即時反映（オンデマンド ISR）',
+  'db-pitr': `DB を直近 ${PITR_REQUIRED_DAYS} 日の任意の時点に戻せる構成`,
 };
 
 /** catalog の事実を「provider:planId:factId」で引く。 */
@@ -1302,6 +1356,23 @@ export function requirementStatus(
   requirement: Requirement,
   framework: FrameworkId = 'nextjs',
 ): { label: string; ok: boolean; reason: string; current: boolean }[] {
+  if (requirement === 'db-pitr') {
+    // DB のバックアップの選択肢ごとに、今の DB で何日戻せるか（D-93）
+    const platform = STACKS[stackIndex]!.provider;
+    const c = { ...DEFAULT_CHOICES[platform], ...components };
+    return componentsOf(platform, 'dbBackup').flatMap((opt) =>
+      dbBackupStatus(
+        stackIndex,
+        { ...components, dbBackup: opt.id },
+        framework,
+      ).map((s) => ({
+        label: `${SLOT_LABELS.dbBackup}: ${opt.label}（${s.dbLabel}）`,
+        ok: s.pitrDays >= PITR_REQUIRED_DAYS,
+        reason: s.text,
+        current: c.dbBackup === opt.id,
+      })),
+    );
+  }
   if (requirement !== 'on-demand-isr') return [];
   if (framework === 'vite-spa')
     return [
@@ -1683,13 +1754,20 @@ export function upkeepOf(
   standby: Choices = {},
 ): number {
   const s = STACKS[stackIndex]!;
-  return selfHostedOf(stackIndex, components, framework, standby)
-    ? sc.effort.selfHostedUpkeep
-    : s.assembled
-      ? EFFORT.assembledUpkeep
-      : s.containerized
-        ? EFFORT.containerUpkeep
-        : 0;
+  // 自前で取るバックアップ（VPS の DB のダンプ・バイナリログ。D-93）は、構成の維持に足す
+  const backup = selfBackupOf(stackIndex, components, framework)
+    ? EFFORT.selfBackup.upkeep
+    : 0;
+  return (
+    backup +
+    (selfHostedOf(stackIndex, components, framework, standby)
+      ? sc.effort.selfHostedUpkeep
+      : s.assembled
+        ? EFFORT.assembledUpkeep
+        : s.containerized
+          ? EFFORT.containerUpkeep
+          : 0)
+  );
 }
 
 /** 課金のアカウントの画面の名前（D-52）。 */
@@ -2422,7 +2500,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
           ? EFFORT.accountSetup
           : 0;
       if (isDataSwap(action.slot)) return ok(setup); // 移行の手間は進行中の月ごとに取る（effortAvailable が減る）
-      return ok(EFFORT.component[action.slot] + setup);
+      return ok(componentBaseEffort(state, action.slot, action.option) + setup);
     }
   }
 }
@@ -2545,7 +2623,10 @@ export function componentSlots(state: GameState): {
         // このシナリオで効かないスロットは出さない（D-33・prd/09 E-6）
         !scenarioOf(state).hidden?.slots?.includes(x.slot) &&
         // 今の選択で効かないスロット（API を他の事業者に置いたときの DB。D-65）
-        !slotIneffective(x.slot, current),
+        !slotIneffective(x.slot, current, {
+          stackIndex: state.stackIndex,
+          framework: state.framework,
+        }),
     );
 }
 
@@ -2619,7 +2700,8 @@ export function validSetupChoices(
   choices: Choices,
 ): Choices {
   const out: Choices = {};
-  const slots = choosable(setupSlots(scenario, stackIndex, framework));
+  // 選んだ部品で効くスロットを見る（DB で決まる DB のバックアップ。D-93）
+  const slots = choosable(setupSlots(scenario, stackIndex, framework, choices));
   for (const x of slots) {
     const v = choices[x.slot];
     if (v !== undefined && x.options.some((o) => o.id === v)) out[x.slot] = v;
@@ -2776,10 +2858,42 @@ export function componentEffortLabel(
         ...cross,
       ]
     : [
-        `手間 ${EFFORT.component[slot] + setup}${setup ? `（他の事業者の設定 ${setup} を含む）` : ''}`,
+        `手間 ${(state && option !== undefined ? componentBaseEffort(state, slot, option) : EFFORT.component[slot]) + setup}${setup ? `（他の事業者の設定 ${setup} を含む）` : ''}`,
         '来月から',
+        ...(state && option !== undefined && selfBackupBy(state, slot, option)
+          ? [
+              `自前のバックアップの維持（毎月の手間 ${EFFORT.selfBackup.upkeep}）`,
+            ]
+          : []),
         ...cross,
       ];
+}
+
+/** その部品に替えると、自前で取るバックアップ（VPS）になるか（D-93）。 */
+function selfBackupBy(
+  state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
+  slot: SlotId,
+  option: string,
+): boolean {
+  return (
+    slot === 'dbBackup' &&
+    selfBackupOf(
+      state.stackIndex,
+      { ...state.components, [slot]: option },
+      state.framework,
+    )
+  );
+}
+
+/** 部品の差し替えの一度きりの手間（他の事業者の設定を除く）。VPS の自前のバックアップは仕組みを作る手間（D-93）。 */
+function componentBaseEffort(
+  state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
+  slot: Exclude<SlotId, 'db' | 'api'>,
+  option: string,
+): number {
+  return selfBackupBy(state, slot, option)
+    ? EFFORT.selfBackup.setup
+    : EFFORT.component[slot];
 }
 
 /**
@@ -4122,7 +4236,10 @@ export function playMonth(input: GameState): GameState {
       .filter(
         (slot) =>
           componentsOf(platformNow, slot, state.framework).length > 1 &&
-          !slotIneffective(slot, comps),
+          !slotIneffective(slot, comps, {
+            stackIndex: stackIndexNow,
+            framework: state.framework,
+          }),
       )
       .map(
         (slot) =>

@@ -58,8 +58,64 @@ export const sakuraVps: PriceBookInput = {
       url: 'https://manual.sakura.ad.jp/vps/server/storage-change-option.html',
       retrievedAt: '2026-11-01',
     },
+    // バックアップ（2026-11-02 取得。D-93）。VPS にバックアップの機能は無く、自前でオブジェクトストレージに送る
+    vpsBackupFaq: {
+      url: 'https://manual.sakura.ad.jp/vps/support/others.html',
+      retrievedAt: '2026-11-02',
+    },
+    objectStorage: {
+      url: 'https://cloud.sakura.ad.jp/products/object-storage/',
+      retrievedAt: '2026-11-02',
+    },
   },
+  allowancePools: [
+    {
+      id: 'object-storage-included',
+      quantity: 100,
+      unit: 'gb-month',
+      period: 'month',
+      scope: 'node',
+      premise:
+        'さくらのオブジェクトストレージ（標準プラン）は月額 495 円に保存 100 GiB まで込み（バケットごと）',
+      sourceIds: ['objectStorage'],
+    },
+  ],
   plans: [
+    {
+      // さくらのクラウドのオブジェクトストレージ（標準プラン・バケットごと）。VPS の DB のバックアップの置き場（D-93）
+      id: 'object-storage',
+      service: 'object-storage',
+      name: 'オブジェクトストレージ（標準プラン）',
+      baseFee: {
+        label: '月額料金（さくらのオブジェクトストレージ: 標準プラン）',
+        amount: 495,
+        per: 'month',
+        scope: 'node',
+      },
+      sourceIds: ['objectStorage'],
+      notes: [
+        '標準プランはバケットごとに月 495 円（税込）で、保存 100 GiB・転送 10 GiB・リクエスト 10 万・オブジェクト 10 万まで込み',
+        'バックアップを送る（書き込み）だけなら転送の課金は無い（課金はさくらの外への GET だけ）。リクエスト・オブジェクトの数は 1 日数件で、込みの分に収まるので数えない',
+      ],
+      meters: [
+        {
+          id: 'storage',
+          label: '保存（さくらのオブジェクトストレージ: 追加の容量）',
+          resource: 'backup-gb-month',
+          unit: 'gb-month',
+          allowancePool: 'object-storage-included',
+          premise:
+            'さくらのオブジェクトストレージ（標準プラン）は 100 GiB まで込みで、超えると 10 GiB ごとに 49.5 円（税込）',
+          interpretation: {
+            adopted:
+              '10 GiB 49.5 円を 1 GB 4.95 円の比例で数え、GiB を GB で数える（10 GiB の区切りの切り上げは数えない）',
+            rejected: [],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 4.95 },
+          sourceIds: ['objectStorage'],
+        },
+      ],
+    },
     {
       id: '2gb-tokyo',
       service: 'vps',

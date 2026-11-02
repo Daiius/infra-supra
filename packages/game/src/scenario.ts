@@ -125,7 +125,7 @@ export type Effect =
   | { type: 'imageRedesign' };
 
 /** 構成に求める要件。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
-export type Requirement = 'uptime-sla' | 'on-demand-isr';
+export type Requirement = 'uptime-sla' | 'on-demand-isr' | 'db-pitr';
 
 export type EventKind = 'state' | 'proposal' | 'script';
 export type EventTier = 'common' | 'occasional' | 'rare';

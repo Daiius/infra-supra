@@ -55,6 +55,16 @@ function selectableCombos(
   let raw: Choices[] = [{}];
   for (const x of choosable(sc, stackIndex, fw))
     raw = raw.flatMap((c) => x.options.map((o) => ({ ...c, [x.slot]: o.id })));
+  // 選択で現れるスロット（DB で決まる DB のバックアップ。D-93）も、現れた組の中で選択肢ごとに広げる
+  raw = raw.flatMap((c) => {
+    let cs: Choices[] = [c];
+    for (const x of choosable(sc, stackIndex, fw, c))
+      if (c[x.slot] === undefined)
+        cs = cs.flatMap((d) =>
+          x.options.map((o) => ({ ...d, [x.slot]: o.id })),
+        );
+    return cs;
+  });
   const out = new Map<string, Choices>();
   for (const c of raw) {
     const visible = choosable(sc, stackIndex, fw, c);

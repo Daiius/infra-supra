@@ -324,7 +324,8 @@ function consume(
       return f;
     }
     case 'ci-build':
-      // 経路を持たない（ビルドの時間は staticUsage で数える。D-68）
+    case 'db-backup':
+      // 経路を持たない（ビルドの時間・バックアップの量は staticUsage で数える。D-68・D-93）
       return f;
     case 'host': {
       // 他のサーバーから API として呼ばれるクラスは、描画でなく API の 1 回の CPU と応答の大きさ（D-69・OCL-4D1F5201）
@@ -375,6 +376,21 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
           w.storage.isrPagesGB * node.config.isrCacheSizeFactor,
       );
       break;
+    case 'db-backup': {
+      // DB のバックアップ・PITR（D-93）。経路を持たない。変更の量は月に書く行の数（どのクラスでも DB に書く行）から
+      const c = node.config;
+      const rows = Object.values(w.classes).reduce(
+        (a, f) => a + f.count * f.perRequest.rowsWritten,
+        0,
+      );
+      const changesGB = kbToGb(rows * c.changeKBPerRow);
+      const kept =
+        c.fullCopies * w.storage.dbGB + (changesGB * c.retentionDays) / 30;
+      const free = c.freeUpToDbSize ? Math.max(w.storage.dbGB, c.minFreeGB) : 0;
+      add(u, 'backup-gb-month', Math.max(0, kept - free));
+      if (c.addonHours) add(u, 'backup-hours', HOURS_PER_MONTH);
+      break;
+    }
     case 'ci-build':
       // 静的なページのビルドし直し（D-68）。経路を持たない
       add(u, 'build-minutes', w.builds.minutes * node.config.cpusPerBuild);

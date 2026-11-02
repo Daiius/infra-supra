@@ -62,6 +62,17 @@ export const gcp: PriceBookInput = {
     // Cloud Logging（2026-11-02 取得。D-92）
     loggingPricing: src('https://cloud.google.com/stackdriver/pricing'),
     runLogging: src('https://cloud.google.com/run/docs/logging'),
+    // DB のバックアップ・PITR（2026-11-02 取得。D-93）
+    sqlBackups: src(
+      'https://cloud.google.com/sql/docs/postgres/backup-recovery/backups',
+    ),
+    sqlBackingUp: src(
+      'https://cloud.google.com/sql/docs/postgres/backup-recovery/backing-up',
+    ),
+    sqlPitr: src(
+      'https://cloud.google.com/sql/docs/postgres/backup-recovery/configure-pitr',
+    ),
+    firestorePitr: src('https://cloud.google.com/firestore/docs/pitr'),
   },
   allowancePools: [
     {
@@ -472,9 +483,24 @@ export const gcp: PriceBookInput = {
           pricing: { model: 'flat', per: 1, unitPrice: 0.115 },
           sourceIds: ['firestorePricing'],
         },
+        {
+          id: 'pitr',
+          label: 'PITR（Firestore: PITR data）',
+          resource: 'backup-gb-month',
+          unit: 'gb-month',
+          premise:
+            'Firestore の PITR（直近 7 日の任意の時点に戻す）は既定で無効。有効にすると、DB の大きさに $0.000267123 / GiB 時（月 約 $0.195 / GiB。東京・無料の分なし）で課金する',
+          interpretation: {
+            adopted:
+              '時間の単価 × 730 時間 = $0.195 / GiB 月を、DB の大きさ（GB）に当てる（GiB を GB で数え、量は約 7% 多めの側）',
+            rejected: [],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0.195 },
+          sourceIds: ['firestorePricing', 'firestorePitr'],
+        },
       ],
       notes: [
-        '削除（10 万件 $0.013）・PITR・バックアップは数えない',
+        '削除（10 万件 $0.013）・日次 / 週次のバックアップ（$0.038 / GiB 月）は数えない。PITR はバックアップの部品で選ぶ（D-93）',
         '無料の分は 1 日ごと（太平洋時間の真夜中にリセット）',
       ],
     },
@@ -519,10 +545,30 @@ export const gcp: PriceBookInput = {
           pricing: { model: 'flat', per: 1, unitPrice: 0.221 },
           sourceIds: ['sqlPricing'],
         },
+        {
+          id: 'backup',
+          label: 'バックアップ（Cloud SQL: backups used）',
+          resource: 'backup-gb-month',
+          unit: 'gb-month',
+          premise:
+            'Cloud SQL の自動バックアップは既定で 7 つ（1 日 1 つ）を残し、最初の 1 つは全体・以降は差分。使った量に $0.000142466 / GiB 時（月 約 $0.104 / GiB。東京）で課金する。コンソールで作った Enterprise のインスタンスは PITR も既定で有効（ログの保持 7 日）',
+          interpretation: {
+            adopted:
+              'コンソールで作った既定（自動バックアップ 7 つ・PITR 有効）とみる。量は全体 1 つ + 7 日分の差分。PITR のログはインスタンスのディスクに置かれ、その分の大きさは数えない（ログの量の課金の記載が料金ページに無い）',
+            rejected: [
+              {
+                reading: 'バックアップを数えない（前の扱い）',
+                reason: '既定で有効で、使った量に課金される（D-93）',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0.104 },
+          sourceIds: ['sqlPricing', 'sqlBackups', 'sqlBackingUp', 'sqlPitr'],
+        },
       ],
       notes: [
         '保存は割り当てた量で課金する（自動で増やせるが減らせない）。最小の割り当ての量は確かめていない（使用量で数える）',
-        'バックアップ（$0.104 / GiB 月）・高可用性（HA は 2 倍）は数えない',
+        '高可用性（HA は 2 倍）は数えない',
       ],
     },
     {

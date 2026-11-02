@@ -169,7 +169,12 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
     expect(setupProblem(ARTICLE_COMMUNITY, VPS_2GB, 'vite-spa', fixed)).toMatch(
       /API の応答のキャッシュ/,
     );
-    const ok = { ...fixed, frontCdn: 'static', apiCache: 'cdn' };
+    const ok = {
+      ...fixed,
+      frontCdn: 'static',
+      apiCache: 'cdn',
+      dbBackup: 'default',
+    };
     expect(
       validSetupChoices(ARTICLE_COMMUNITY, VPS_2GB, 'vite-spa', ok),
     ).toEqual(ok);
@@ -190,12 +195,18 @@ describe('初期の部品', () => {
       ...chosen,
       frontCdn: 'html',
     });
-    expect(st.components).toEqual({ ...chosen, realtime: 'none', api: 'same' });
+    expect(st.components).toEqual({
+      ...chosen,
+      realtime: 'none',
+      dbBackup: 'default',
+      api: 'same',
+    });
     expect(newGame(CF_PAID, 42).components).toEqual({
       isrCache: 'kv',
       images: 'images',
       db: 'd1',
       realtime: 'none',
+      dbBackup: 'default',
       api: 'same',
     });
   });
