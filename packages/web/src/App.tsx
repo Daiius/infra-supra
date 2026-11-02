@@ -1902,6 +1902,8 @@ function ComponentsSection({
               state.stackIndex,
               state.framework,
               state.components,
+              // 選んだページの描き方（S1 のビルド・Astro の記事のキャッシュの有無。D-107・OCL-C9CD8783）
+              state.routes,
             )}
             caption={DIAGRAM_NOTE}
           />

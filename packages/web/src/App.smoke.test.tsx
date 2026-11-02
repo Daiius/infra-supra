@@ -370,6 +370,25 @@ describe('ゲームモードの画面', () => {
     ).toContain('S5');
   });
 
+  it('W-15 ゲーム中の「今の構成図」も選んだ描き方で描く（記事 S1 のビルドのノード。OCL-C9CD8783）', () => {
+    renderApp();
+    startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Vercel Pro + Supabase Pro',
+      beforeStart: () =>
+        fireEvent.click(
+          within(
+            screen.getByRole('region', { name: 'ページの描き方' }),
+          ).getByRole('button', { name: /^記事のページを S1/ }),
+        ),
+    });
+    const summary = screen.getByText('今の構成図');
+    fireEvent.click(summary);
+    const details = summary.closest('details')!;
+    expect(details.querySelector('[data-side-node="build"]')).not.toBeNull();
+  });
+
   it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', () => {
     renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
