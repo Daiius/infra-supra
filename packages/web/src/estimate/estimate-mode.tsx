@@ -27,6 +27,7 @@ import {
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
 import {
+  type EstimateView,
   compareStacks,
   costCurves,
   CURVE_MAX,
@@ -124,6 +125,7 @@ export function EstimateMode() {
           日本から契約するときの税込の目安（円）を出す
         </label>
         {input.showTax && <Tax tax={view.tax} />}
+        <Commitments view={view} />
         <Members members={view.members} seats={view.seats} />
         {view.totals.JPY !== undefined && (
           <p className="text-xs opacity-70">
@@ -533,6 +535,32 @@ const MEMBER_BADGE: Record<MemberView['pricing'], string> = {
   'not-stated': '記載なし',
   unknown: '未取得',
 };
+
+/** 1 年の確約を結んだときの月額（D-97）。結べる確約が無い構成では出さない。 */
+function Commitments({ view }: { view: EstimateView }) {
+  if (!view.commitments.length) return null;
+  return (
+    <div className="space-y-1 text-sm">
+      <h3 className="font-semibold">1 年の確約を結んだときの月額</h3>
+      <ul className="space-y-1">
+        {view.commitments.map((c) => (
+          <li key={`${c.label}|${c.payment}`} className="min-w-0">
+            <span className="break-words">
+              {c.label}（{c.payment}）: 月 {usd(c.totalUsd)}（
+              {usd(view.totalUsd - c.totalUsd)} 安い）
+            </span>{' '}
+            <Info label={`${c.label}の説明`}>
+              {c.premise}
+              。この月の対象の使用（{usd(c.coversUsd)}
+              ）を確約で覆うとみた額。前払いは 1 年分を 12
+              で割った。取り消せず、使わなくなっても支払いは残る。
+            </Info>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /** 構成が使うプランの席の料金（料金データの members）。 */
 function Members({ members, seats }: { members: MemberView[]; seats: number }) {

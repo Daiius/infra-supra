@@ -1,6 +1,12 @@
 // ゲームモードの画面（Phase 2〜4 の前倒しの試作）。ロジックは game パッケージ、ここは表示と操作だけ。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  activeCommitments,
+  commitmentOffers,
+  PAYMENT_LABEL,
+  setupCommitments,
+  type CommitmentOffer,
+  type CommitmentPaymentId,
   actionEffort,
   applyActions,
   averageSatisfaction,
@@ -271,6 +277,16 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   // コメントの描き方（D-82。記事のページがあり、コメントのあるシナリオだけ。既定はブラウザで読み込む）
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
   const commentsChoosable = setupCommentOptions(scenario, framework).length > 0;
+  // 始めから結ぶ確約（台数の予約・年払いで、前払いが始めの所持金に収まるものだけ。D-97）
+  const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
+    {},
+  );
+  const commitOptions = problem
+    ? []
+    : setupCommitments(scenario, stack, framework, parts);
+  const chosenCommits = commitOptions
+    .filter((o) => commits[o.key] === o.payment)
+    .map((o) => ({ key: o.key, payment: o.payment }));
   return (
     <>
       <ScenarioPicker
@@ -343,6 +359,38 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             comments={comments}
             onCommentsChange={setComments}
           />
+          {commitOptions.length > 0 && (
+            <div className="mt-2">
+              <h3 className="font-bold">長期の確約（1 年）</h3>
+              <p className="text-xs opacity-70">
+                安くなる代わりに取り消せない。乗り換え・部品の切り替えで使わなくなっても支払いは残る。前払いのある形（さくらの年額・全額前払い）は始めの所持金を超えるので、運営の途中から選べる
+              </p>
+              {commitOptions.map((o) => (
+                <label
+                  key={`${o.key}:${o.payment}`}
+                  className="flex cursor-pointer items-start gap-3 py-1"
+                >
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-sm mt-1"
+                    checked={commits[o.key] === o.payment}
+                    onChange={(e) => {
+                      const v = { ...commits };
+                      if (e.target.checked) v[o.key] = o.payment;
+                      else delete v[o.key];
+                      setCommits(v);
+                    }}
+                  />
+                  <OptionText
+                    name={`${o.label}を結ぶ`}
+                    meta={[...commitmentMeta(o), '1 か月目から']}
+                    info={<Info>{o.premise}</Info>}
+                    why={null}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
           {problem ? (
             <p className="text-right text-sm" role="status">
               {problem}
@@ -401,6 +449,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                       ? { revalidateSec }
                       : {}),
                     ...(commentsChoosable ? { comments } : {}),
+                    ...(chosenCommits.length
+                      ? { commitments: chosenCommits }
+                      : {}),
                   }),
                 );
                 scrollTop();
@@ -411,6 +462,87 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+/** 確約の選択肢の文（期間・支払い・割引の率。D-97）。 */
+function commitmentMeta(o: CommitmentOffer): string[] {
+  const money = (n: number) =>
+    o.currency === 'JPY' ? `${Math.round(n).toLocaleString()} 円` : usd(n);
+  return [
+    `1 年・${PAYMENT_LABEL[o.payment]}`,
+    o.upfront > 0
+      ? o.months < 12
+        ? `前払い ${money(o.upfront)}（1 年分 ${money(o.upfrontYear)} のうちゲームの残り ${o.months} か月分）`
+        : `前払い ${money(o.upfront)}`
+      : `毎月 ${money(o.monthly)}`,
+    `月 ${money(o.covers)} 分まで割引`,
+    `1 年で ${Math.round(o.discount * 100)}% 安い`,
+  ];
+}
+
+/** 確約の行動（D-97）。今月の明細に対象の使用がある確約だけ出す。結んだ確約は期間を出す。 */
+function CommitmentsSection({
+  state,
+  value,
+  onChange,
+  blocked,
+}: {
+  state: GameState;
+  value: Record<string, CommitmentPaymentId>;
+  onChange: (v: Record<string, CommitmentPaymentId>) => void;
+  blocked: (v: Record<string, CommitmentPaymentId>) => string | null;
+}) {
+  const active = activeCommitments(state);
+  const offers = commitmentOffers(state).filter(
+    (o) => !active.some((c) => c.key === o.key),
+  );
+  if (!active.length && !offers.length) return null;
+  return (
+    <>
+      <div className="divider my-1 text-xs">長期の確約（1 年）</div>
+      {active.map((c) => (
+        <div key={c.key} className="py-1 text-sm">
+          確約中: {c.label}（{PAYMENT_LABEL[c.payment]}・{c.endMonth}{' '}
+          か月目まで。取り消せない）
+        </div>
+      ))}
+      {offers.map((o) => {
+        const on = value[o.key] === o.payment;
+        const next = { ...value, [o.key]: o.payment };
+        const why = on ? null : blocked(next);
+        return (
+          <label
+            key={`${o.key}:${o.payment}`}
+            className="flex cursor-pointer items-start gap-3 py-1"
+          >
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm mt-1"
+              checked={on}
+              disabled={!on && why !== null}
+              onChange={(e) => {
+                const v = { ...value };
+                if (e.target.checked) v[o.key] = o.payment;
+                else delete v[o.key];
+                onChange(v);
+              }}
+            />
+            <OptionText
+              name={`${o.label}を結ぶ`}
+              meta={[...commitmentMeta(o), '来月から']}
+              info={
+                <Info>
+                  {o.premise}
+                  。確約の額は今月の対象の使用（オンデマンドの額）で決まり、超えた分はオンデマンドのまま。取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残る。
+                </Info>
+              }
+              why={why}
+            />
+          </label>
+        );
+      })}
     </>
   );
 }
@@ -1112,7 +1244,12 @@ function Actions({
   const [storage, setStorage] = useState(false);
   /** 部品の差し替え（スロットごと。D-24）。 */
   const [parts, setParts] = useState<Partial<Record<SlotId, string>>>({});
+  /** 結ぶ確約（確約ごとの支払いの形。D-97）。 */
+  const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
+    {},
+  );
   const reset = () => {
+    setCommits({});
     setSettings({});
     setOptimize(false);
     setStackChange(null);
@@ -1133,6 +1270,7 @@ function Actions({
       blockBots?: boolean;
       storage?: boolean;
       parts?: Partial<Record<SlotId, string>>;
+      commits?: Record<string, CommitmentPaymentId>;
     } = {},
   ): Action[] => {
     const st = o.settings ?? settings;
@@ -1147,6 +1285,9 @@ function Actions({
       out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
     if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
     if (o.storage ?? storage) out.push({ type: 'storage-option' });
+    // 確約は今月の明細の使用で結ぶので、構成を変える行動より先に当てる（D-97）
+    for (const [key, payment] of Object.entries(o.commits ?? commits))
+      out.push({ type: 'commit', key, payment });
     // VPS の API の応答のキャッシュは前段の CDN が要る（D-37）。付けるときは前段の CDN の後、外すときは先に当てる
     const order = ([slot, option]: [string, string | undefined]) =>
       slot === 'apiCache' ? (option === 'none' ? -1 : 1) : 0;
@@ -1410,6 +1551,12 @@ function Actions({
             </label>
           );
         })()}
+        <CommitmentsSection
+          state={state}
+          value={commits}
+          onChange={setCommits}
+          blocked={(c) => blocked(build({ commits: c }))}
+        />
         <ComponentsSection
           state={state}
           parts={parts}

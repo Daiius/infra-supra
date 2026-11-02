@@ -173,6 +173,99 @@ describe('PriceBookSchema', () => {
     };
     expect(issues(c).length).toBeGreaterThan(0);
   });
+
+  it('確約（D-97）: 種類ごとに要る値・対象のメーター・基本料・出典を検証する', () => {
+    const withCommitment = (
+      c: NonNullable<PriceBookInput['plans'][number]['commitments']>[number],
+      baseFee = false,
+    ) => {
+      const b = officialMinimal();
+      b.plans[0]!.commitments = [c];
+      if (baseFee)
+        b.plans[0]!.baseFee = { amount: 10, per: 'month', scope: 'node' };
+      return issues(b).join();
+    };
+    const common = {
+      id: 'c',
+      label: '確約',
+      termMonths: 12 as const,
+      premise: '確約の文',
+      sourceIds: ['pricing'],
+    };
+    expect(
+      withCommitment({
+        ...common,
+        kind: 'spend',
+        meterIds: ['requests'],
+        payments: [{ payment: 'no-upfront', discount: 0.1 }],
+      }),
+    ).toBe('');
+    expect(
+      withCommitment({
+        ...common,
+        kind: 'instance',
+        meterIds: ['requests'],
+        payments: [
+          { payment: 'no-upfront', hourly: 0.01 },
+          { payment: 'all-upfront', upfront: 50 },
+        ],
+      }),
+    ).toBe('');
+    expect(
+      withCommitment(
+        {
+          ...common,
+          kind: 'prepay',
+          payments: [{ payment: 'all-upfront', upfront: 110 }],
+        },
+        true,
+      ),
+    ).toBe('');
+    // spend に割引の率が無い・prepay の前払いなし
+    expect(
+      withCommitment({
+        ...common,
+        kind: 'spend',
+        meterIds: ['requests'],
+        payments: [{ payment: 'no-upfront' }],
+      }),
+    ).toContain('要る値が無い');
+    expect(
+      withCommitment(
+        {
+          ...common,
+          kind: 'prepay',
+          payments: [{ payment: 'no-upfront', upfront: 110 }],
+        },
+        true,
+      ),
+    ).toContain('要る値が無い');
+    // 対象のメーターが無い・基本料の無いプランの前払い・出典なし
+    expect(
+      withCommitment({
+        ...common,
+        kind: 'spend',
+        meterIds: ['ghost'],
+        payments: [{ payment: 'no-upfront', discount: 0.1 }],
+      }),
+    ).toContain('確約の対象メーター ghost がない');
+    expect(
+      withCommitment({
+        ...common,
+        kind: 'prepay',
+        payments: [{ payment: 'all-upfront', upfront: 110 }],
+      }),
+    ).toContain('基本料のあるプランだけ');
+    expect(
+      withCommitment({
+        ...common,
+        sourceIds: [],
+        kind: 'spend',
+        meterIds: ['requests'],
+        payments: [{ payment: 'no-upfront', discount: 0.1 }],
+      }),
+    ).toContain('出典が必要');
+  });
 });
 
 describe('parsePriceBook', () => {

@@ -239,3 +239,32 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
   - 単価: 既定は iad1（$0.023/GB 月・Simple Operations $0.40/100 万・Advanced Operations $5.00/100 万・Blob Data Transfer $0.05/GB）、東京（hnd1）は地域料金（$0.025・$0.37・$4.70・$0.053）。Hobby の込み分は保存量 1 GB・Simple 1 万・Advanced 2,000・転送 10 GB で、超えると使えない（追加の請求はない）。Pro は込み分なしで、月のクレジットに当たる。出典は vercel.com/docs/vercel-blob/usage-and-pricing（2026-09-23 更新）と地域料金のページ（2026-09-14 更新）。
   - 配信の数え方（公式の料金の例どおり。OCL-2AE853BD）: 最適化しない画像は、ブラウザが Blob の URL から直接読む。CDN Requests と Blob Data Transfer はヒットも含む全件で、Simple Operations と Fast Origin Transfer は miss だけになる。Fast Data Transfer にはならない。estimator の `object-storage` に `cdnHitRate`（事業者の CDN が自分で配信するときのヒット率）を足して、Blob のノードがこれを数える。ヒット率は画像の CDN のヒット率と同じ 0.9（仮定）。Hobby は画像の配信だけで Blob Data Transfer の込み分（10 GB）に当たりうる。
   - 残る近似: 画像を最適化する経路では、変換のときに原本を読む分（Simple Operations・転送）を数えていない。
+
+## 13. 確約（長期の利用の約束による割引。D-97）
+
+```ts
+type Commitment = {
+  id: string;
+  label: string;                     // 明細の行の名前に使う
+  kind: 'instance' | 'spend' | 'prepay';
+  termMonths: 12;                    // 1 年だけ（3 年は 12 か月のゲームで扱いにくいので持たない）
+  meterIds: string[];                // instance・spend が割り引くメーター。prepay は空（基本料に当てる）
+  payments: {
+    payment: 'no-upfront' | 'all-upfront';
+    discount?: number;               // spend: オンデマンドに対する割引の率
+    hourly?: number;                 // instance の no-upfront: 1 時間の額
+    upfront?: number;                // instance・prepay の all-upfront: 1 年分の前払い
+  }[];
+  premise: string;
+  interpretation?: Interpretation;
+  sourceIds: string[];
+};
+```
+
+- Plan の `commitments` に持つ。**見積の計算（estimate）には使わない**。ゲームの行動「確約する」（prd/07 §11.13）と見積モードの注記（確約したときの月額）が、明細から対象の額を引いて当てる（game の `commitments.ts`）。
+- `instance`: 台数の予約（RDS のリザーブドインスタンス）。1 台の月 730 時間の分（メーターの単価 × 730）を覆う。
+  `spend`: 時間あたりの額の確約（Savings Plans・CUD）。額は使う側が決める（ゲームでは結んだ月の対象の額）。
+  `prepay`: 基本料の前払い（さくらの VPS の年額）。`baseFee.per: 'month'` のプランだけ。
+- 対象の額は**無料枠・段階料金を引いた後の明細の額**（クレジットと同じ順。確約は従量の明細に当たり、固定費には prepay だけが当たる）。
+- 検証: 種類ごとに要る値（spend は `discount`・instance の no-upfront は `hourly`・all-upfront は `upfront`・prepay は all-upfront だけ）、対象のメーターが同じプランにある、prepay は基本料のあるプラン、出典。
+- 一部前払いは持たない（選べる形を増やしすぎない）。

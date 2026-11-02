@@ -278,3 +278,51 @@ describe('日本から契約するときの消費税（D-76）', () => {
     );
   });
 });
+
+describe('確約（D-97）', () => {
+  const all = loadPriceBooks().flatMap((b) =>
+    b.plans.flatMap((p) =>
+      p.commitments.map((c) => ({
+        key: `${b.provider}:${p.id}:${c.id}`,
+        p,
+        c,
+      })),
+    ),
+  );
+
+  it('確かめた確約だけを持つ（RDS の予約・Lambda の Savings Plans・Cloud Run の CUD・さくらの年額。Cloud SQL の共有の vCPU は対象外）', () => {
+    expect(all.map((x) => x.key).sort()).toEqual([
+      'aws:lambda:compute-savings-plan',
+      'aws:rds-postgres-t4g-micro:reserved-instance',
+      'gcp:cloud-run:flexible-cud',
+      'sakura-vps:2gb-tokyo:annual',
+      'sakura-vps:4gb-tokyo:annual',
+    ]);
+  });
+
+  it('どの形も 1 年のオンデマンドより安く、全額前払いは前払いなしより安い', () => {
+    for (const { p, c } of all) {
+      expect(c.termMonths).toBe(12);
+      const nu = c.payments.find((x) => x.payment === 'no-upfront');
+      const au = c.payments.find((x) => x.payment === 'all-upfront');
+      if (c.kind === 'spend') {
+        for (const x of c.payments) {
+          expect(x.discount).toBeGreaterThan(0);
+          expect(x.discount).toBeLessThan(1);
+        }
+        if (nu && au) expect(au.discount!).toBeGreaterThan(nu.discount!);
+        continue;
+      }
+      if (c.kind === 'prepay') {
+        expect(au!.upfront!).toBeLessThan(12 * p.baseFee!.amount);
+        continue;
+      }
+      const m = p.meters.find((x) => x.id === c.meterIds[0])!;
+      const hourly =
+        m.pricing.model === 'flat' ? m.pricing.unitPrice / m.pricing.per : 0;
+      expect(hourly).toBeGreaterThan(0);
+      expect(nu!.hourly!).toBeLessThan(hourly);
+      expect(au!.upfront!).toBeLessThan(nu!.hourly! * 730 * 12);
+    }
+  });
+});

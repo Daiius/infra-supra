@@ -21,6 +21,10 @@ import {
   type PriceBook,
 } from 'estimator';
 import {
+  COMMITMENTS,
+  commitmentEligible,
+  commitmentTerms,
+  PAYMENT_LABEL,
   COMMENTS_IN_BROWSER,
   DEFAULT_REVALIDATE_SEC,
   estimateComponents,
@@ -345,7 +349,49 @@ export type EstimateView = {
   /** 構成が使うプランの席（メンバー）の料金。 */
   members: MemberView[];
   tax: TaxView;
+  /** 1 年の確約を結んだときの月額の目安（この月の対象の使用を確約で覆うとき。D-97）。 */
+  commitments: CommitmentView[];
 };
+
+export type CommitmentView = {
+  label: string;
+  payment: string;
+  /** 確約で覆う月の額（オンデマンド。USD）と、確約したときの月の支払い（前払いは 12 で割った額）。 */
+  coversUsd: number;
+  paidUsd: number;
+  /** 確約したときの月額の合計（USD）。 */
+  totalUsd: number;
+  premise: string;
+};
+
+/**
+ * この月の明細で結べる確約と、結んだときの月額（D-97）。時間あたりの額の確約はこの月の対象の額で結ぶとみる。
+ * 前払いは 1 年分を 12 で割り、月の額にそろえて比べる（ゲームでは所持金から一度に引く）。
+ */
+function commitmentsOf(lines: readonly LineItem[], totalUsd: number) {
+  const eligible = commitmentEligible(lines, COMMITMENTS);
+  return COMMITMENTS.flatMap((d) => {
+    const spend = eligible[d.key];
+    if (!spend) return [];
+    const fx = (n: number) => (d.currency === 'JPY' ? n / USD_JPY : n);
+    return d.commitment.payments.flatMap((p): CommitmentView[] => {
+      const t = commitmentTerms(d, p.payment, spend);
+      if (!t) return [];
+      const covered = fx(Math.min(spend, t.covers));
+      const paidUsd = fx(t.monthly + t.upfront / d.commitment.termMonths);
+      return [
+        {
+          label: d.commitment.label,
+          payment: PAYMENT_LABEL[p.payment],
+          coversUsd: fx(t.covers),
+          paidUsd,
+          totalUsd: totalUsd - covered + paidUsd,
+          premise: d.commitment.premise,
+        },
+      ];
+    });
+  });
+}
 
 const toUsd = (totals: Partial<Record<string, number>>) =>
   (totals.USD ?? 0) + (totals.JPY ?? 0) / USD_JPY;
@@ -629,6 +675,7 @@ export function runEstimate(input: EstimateInput): EstimateView {
     seats: input.seats,
     members: membersOf(used, bill.lines, input.seats),
     tax: japanTax(subtotalsOf(bill.lines)),
+    commitments: commitmentsOf(bill.lines, totalUsd),
   };
 }
 

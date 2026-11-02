@@ -6,6 +6,7 @@ import {
   playMonth,
   SCENARIOS,
   type Action,
+  type CommitmentPaymentId,
   type GameState,
 } from './index.ts';
 import type { Choices, FrameworkId } from 'catalog';
@@ -39,6 +40,8 @@ export type SaveData = {
   revalidateSec?: number;
   /** 始める画面で選んだコメントの描き方（D-82。0 ブラウザ・1 記事のページ）。無い保存は既定（ブラウザで読み込む）で読む。 */
   comments?: number;
+  /** 始める画面で結んだ確約（D-97）。無い保存は確約なしで読む（版は上げない）。 */
+  commitments?: { key: string; payment: CommitmentPaymentId }[];
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
 };
@@ -91,6 +94,20 @@ export function parseSave(raw: unknown): SaveData | null {
   const components = raw.components;
   const revalidateSec = raw.revalidateSec;
   const comments = raw.comments;
+  const commitments = raw.commitments;
+  if (
+    commitments !== undefined &&
+    !(
+      Array.isArray(commitments) &&
+      commitments.every(
+        (c) =>
+          isObject(c) &&
+          typeof c.key === 'string' &&
+          (c.payment === 'no-upfront' || c.payment === 'all-upfront'),
+      )
+    )
+  )
+    return null;
   const badNum = (v: unknown) =>
     v !== undefined && !(typeof v === 'number' && Number.isFinite(v));
   if (badNum(revalidateSec) || badNum(comments)) return null;
@@ -131,6 +148,11 @@ export function parseSave(raw: unknown): SaveData | null {
       ? { revalidateSec: revalidateSec as number }
       : {}),
     ...(comments !== undefined ? { comments: comments as number } : {}),
+    ...(commitments !== undefined
+      ? {
+          commitments: commitments as NonNullable<SaveData['commitments']>,
+        }
+      : {}),
     turns: (turns as Action[][]).map((t) => t.map(migrateAction)),
   };
 }
@@ -152,6 +174,7 @@ export function replaySave(save: SaveData): GameState {
       save.components,
       save.revalidateSec,
       save.comments,
+      save.commitments,
     ),
   );
   for (const actions of save.turns) {

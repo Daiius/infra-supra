@@ -58,6 +58,9 @@ export const gcp: PriceBookInput = {
     storagePricing: src('https://cloud.google.com/storage/pricing'),
     firestorePricing: src('https://cloud.google.com/firestore/pricing'),
     sqlPricing: src('https://cloud.google.com/sql/pricing'),
+    // 確約利用割引（CUD。2026-11-02 取得。D-97）
+    runCud: src('https://docs.cloud.google.com/run/cud'),
+    sqlCud: src('https://docs.cloud.google.com/sql/docs/postgres/cud'),
     networkPricing: src('https://cloud.google.com/vpc/network-pricing'),
     // Cloud Logging（2026-11-02 取得。D-92）
     loggingPricing: src('https://cloud.google.com/stackdriver/pricing'),
@@ -237,6 +240,31 @@ export const gcp: PriceBookInput = {
           sourceIds: ['nextSelfHosting'],
         },
       ],
+      commitments: [
+        {
+          id: 'flexible-cud',
+          label: '確約利用割引（Cloud Run: flexible CUD・1 年）',
+          kind: 'spend',
+          termMonths: 12,
+          meterIds: ['cpu', 'memory', 'idle-cpu', 'idle-memory'],
+          // リクエストで課金する設定のサービスは 1 年・3 年とも 17%（インスタンスで課金する設定は 1 年 28%・3 年 46%）
+          payments: [{ payment: 'no-upfront', discount: 0.17 }],
+          premise:
+            'Cloud Run の確約利用割引（Compute flexible CUD）は 1 時間あたりの使用の額を 1 年（または 3 年）確約し、確約の額までの使用を割り引く。リクエストで課金する設定のサービスは 1 年・3 年とも 17%。確約を超えた分はオンデマンドの単価で、ネットワークの料金には効かない',
+          interpretation: {
+            adopted:
+              'CPU・メモリ（アクティブと最小インスタンスの待機）に当て、リクエストの料金（100 万件 $0.40）には当てない。確約の額は月の平均の使用（無料枠を引いた後の額）で比べ、時間ごとの揺れは数えない。請求は月ごと（前払いの形は無い）',
+            rejected: [
+              {
+                reading: 'リクエストの料金も割り引く',
+                reason:
+                  'CUD の文書の例は vCPU 秒・GiB 秒の単価だけで、リクエストに効くとは書かれていない（確かめられない分は割り引かない側に置いた）',
+              },
+            ],
+          },
+          sourceIds: ['runCud', 'runPricing'],
+        },
+      ],
       meters: [
         {
           id: 'requests',
@@ -327,7 +355,7 @@ export const gcp: PriceBookInput = {
       ],
       notes: [
         '東京（asia-northeast1）は Tier 1。表の単価は us-central1 と同じ',
-        'インスタンスで課金する設定（CPU $0.000018 / vCPU 秒・メモリ $0.000002 / GiB 秒。リクエストの料金なし・起動から終了まで課金）と確約の割引（CUD）は扱わない',
+        'インスタンスで課金する設定（CPU $0.000018 / vCPU 秒・メモリ $0.000002 / GiB 秒。リクエストの料金なし・起動から終了まで課金）は扱わない（その設定の確約利用割引 1 年 28%・3 年 46% も）',
         'インスタンスの時間は 100 ms 単位で切り上げる（料金ページ）。このモデルは月の時間を連続の値で出し、切り上げは数えない',
       ],
     },
@@ -514,7 +542,7 @@ export const gcp: PriceBookInput = {
       service: 'cloud-sql',
       ...common,
       name: 'Cloud SQL for PostgreSQL（db-f1-micro・東京）',
-      sourceIds: ['sqlPricing'],
+      sourceIds: ['sqlPricing', 'sqlCud'],
       facts: [
         {
           id: 'shared-core',
@@ -574,6 +602,7 @@ export const gcp: PriceBookInput = {
       notes: [
         '保存は割り当てた量で課金する（自動で増やせるが減らせない）。最小の割り当ての量は確かめていない（使用量で数える）',
         '高可用性（HA は 2 倍）は数えない',
+        'Cloud SQL の確約利用割引（1 年 25%・3 年 52%）は共有の vCPU の種類（db-f1-micro・db-g1-small）に効かないので、確約の行動は無い（D-97）',
       ],
     },
     {

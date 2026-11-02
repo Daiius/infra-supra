@@ -1326,3 +1326,66 @@ golden: 記事のシード 3 の「VPS・前段の CDN」が $1,730.88・won →
 - メールの送信の認証（SPF・DKIM）の TXT の問い合わせ（Route 53 ではエイリアスでなく標準の問い合わせ）。1 閲覧あたりの問い合わせの仮定の確かめ。
 - 見積モード・ゲームの画面で、無料の DNS（Cloudflare・Vercel・Netlify・さくら）を注記として出すこと（今は明細に出ない）。
 - Vercel・Netlify の DNS が無料であることの確かめ。.com の卸値の次の値上げ（施行日つきの予告として持つ）。
+
+## 22. 長期の利用の確約（確約・予約・年払い。2026-11-02・D-97）
+
+> 長期の利用を約束して割り引きを受ける仕組みを、ゲームの行動「確約する」として選べるようにする（安さと柔軟さの引き換え）。期間は 1 年だけ（3 年は 12 か月のゲームで扱いにくい）。
+> 料金データの形は prd/03 §13、ゲームの行動は prd/07 §11.13。
+
+### 22.1 確かめた公式の事実（2026-11-02 取得・東京）
+
+| 対象 | 料金・条件 | 出典 |
+|---|---|---|
+| RDS のリザーブドインスタンス（db.t4g.micro・PostgreSQL・Single-AZ） | オンデマンド $0.025 / 時間。1 年: 前払いなし $0.0197 / 時間・一部前払い $82 + $0.0093 / 時間・全額前払い $161。前払いなしは使っていなくても期間中の毎時間を課金し、取り消せない。時間の料金だけを割り引き、ストレージ・バックアップ・I/O には効かない | [Price List（AmazonRDS・東京・版 2026-10-29）](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-northeast-1/index.json)・[利用者ガイド](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithReservedDBInstances.html) |
+| Compute Savings Plans（Lambda） | 1 時間あたりの額を 1 年・3 年確約する。Lambda の x86 の duration は 1 年・前払いなし $0.000015・全額前払い $0.0000142 / GB 秒（オンデマンド $0.0000166667。10.0%・14.8%）。リクエストは $0.20 / 100 万のまま。確約を超えた分はオンデマンド、その時間の確約は持ち越せない。Fargate・EC2 にも効く（catalog の構成は使っていない） | [Price List（AWSComputeSavingsPlan・東京・版 2026-10-29）](https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/current/ap-northeast-1/index.json)・[概要](https://docs.aws.amazon.com/savingsplans/latest/userguide/what-is-savings-plans.html)・[当て方](https://docs.aws.amazon.com/savingsplans/latest/userguide/sp-applying.html) |
+| Cloud Run の確約利用割引（Compute flexible CUD） | 1 時間あたりの使用の額を 1 年・3 年確約する。リクエストで課金する設定のサービスは 1 年・3 年とも 17%（インスタンスで課金する設定は 1 年 28%・3 年 46%）。超えた分はオンデマンド。ネットワークの料金には効かない | [Cloud Run CUD](https://docs.cloud.google.com/run/cud) |
+| Cloud SQL の確約利用割引 | 1 年 25%・3 年 52%。CPU とメモリに効き、ストレージ・バックアップには効かない。**共有の vCPU の種類（db-f1-micro・db-g1-small）は対象外**（catalog の Cloud SQL は db-f1-micro なので確約の行動は無い） | [Cloud SQL CUD](https://docs.cloud.google.com/sql/docs/postgres/cud) |
+| さくらの VPS の年額（12 か月一括） | 2GB（東京）は月額 1,958 円・年額 21,538 円、4GB は 3,960 円・43,560 円（税込。月額の 11 か月分）。12 か月一括のままスケールアップすると「スケールアップ先の 1 年分 − 今のプランの使っていない分（日割り・税抜の年額 / 契約日数）」を払う | [仕様](https://vps.sakura.ad.jp/specification/)・[スケールアップ](https://manual.sakura.ad.jp/vps/server/scaleup.html) |
+
+確かめられなかったこと: さくらの年額の途中解約で使っていない分が戻るか（仕様・マニュアルに記載なし。戻らない側に置いた）・Cloud Run の CUD がリクエストの料金に効くか（文書の例は vCPU 秒・GiB 秒だけ。効かない側に置いた）・CUD・Savings Plans と無料枠の順（無料枠を引いた後の明細の額に当てた）。
+記録だけ（入れていない）: AWS の Database Savings Plans（1 年・前払いなしだけ。東京の Aurora Serverless v2 の I/O-Optimized は $0.13 / ACU 時間でオンデマンド $0.20 の 35% 引き。db.t4g は対象外。Price List の AWSDatabaseSavingsPlans）・一部前払い・3 年。
+
+### 22.2 入れた形
+
+| 確約（`provider:plan:id`） | 種類 | 支払いの形 | 覆う額 |
+|---|---|---|---|
+| `aws:rds-postgres-t4g-micro:reserved-instance` | 台数の予約（instance） | 前払いなし・全額前払い | 1 台の月 730 時間 |
+| `aws:lambda:compute-savings-plan` | 時間あたりの額（spend） | 前払いなし（10%）・全額前払い（14.8%） | 結んだ月の Lambda の duration の額 |
+| `gcp:cloud-run:flexible-cud` | 時間あたりの額（spend） | 前払いなし（17%。GCP の CUD は月ごとの請求） | 結んだ月の CPU・メモリ（アクティブと待機）の額 |
+| `sakura-vps:2gb-tokyo:annual`・`4gb-tokyo:annual` | 基本料の前払い（prepay） | 全額前払い（年額） | 基本料の月額 |
+
+- 確約は対象の事業者・プランの明細（無料枠を引いた後のオンデマンドの額）に当てる。覆った分を割り引き（明細に負の行）、前払いなしは毎月の支払い、全額前払いは結んだ月に一度だけ払う（明細の種類 `commitment`）。
+- 構成ではなく明細に当てるので、乗り換え・部品の切り替えで対象を使わなくなると割引は無くなり、支払いは残る（取り消せない）。乗り換え先・API の置き場で同じプランを使えば割引は続く（同じアカウント・リージョンの読み）。
+- 時間あたりの額は月の平均で当てる（時間ごとの揺れで確約が余る分・超える分は数えない。割引を少し大きく見る近似）。
+
+### 22.3 基準プレイ（何もしない / 確約する・シード 1〜20。達成数・12 か月の費用の平均 / 月・確約で減った額の合計の平均）
+
+確約ありは「結べる最初の月に結ぶ」: RDS は始める画面で前払いなし（全額前払い $161 は始めの所持金 $60 を超える）、さくらの年額は前払いが所持金に収まった月、Lambda・Cloud Run は対象の使用（無料枠を超えた分）が出た最初の月の水準で前払いなし。
+**確約なしの結果は D-96 の表から不変**（CF Paid × Next.js は記事 20/20 $18.88・受託 20/20 $14.36。golden も不変）。
+
+| シナリオ × 構成（Next.js） | 確約なし | 確約あり | 確約で減った額 |
+|---|---|---|---|
+| 記事 × AWS（Amplify）× RDS | 0/20 $74.98 | 0/20 $71.11 | $46.43 |
+| 記事 × OpenNext × RDS | 8/20 $59.75 | 8/20 $56.19 | $42.67（全額前払いに替えると $42.87） |
+| 記事 × OpenNext（DynamoDB） | 15/20 $39.18 | 15/20 $39.49 | **−$3.76**（流量の増えた月に無料枠を超えた使用の水準で結び、その後は無料枠に収まって確約が余った） |
+| 記事 × Google Cloud（最小インスタンス 0） | 0/20 $64.29 | 0/20 $65.24 | **−$11.43**（同じく確約が余った） |
+| 記事 × Google Cloud（最小インスタンス 1） | 0/20 $73.63 | 0/20 $72.32 | $15.78 |
+| 記事 × さくらの VPS 2GB | 8/20 $14.87 | 9/20 $15.30 | $2.39（前払いの後に障害で終わるシードは損） |
+| 記事 × さくらの VPS 4GB | 0/20 $28.21 | 0/20 $29.38 | $1.87 |
+| 受託 × AWS（Amplify）× RDS | 0/20 $38.52 | 0/20 $34.65 | $46.43 |
+| 受託 × OpenNext × RDS | 19/20 $25.30 | **20/20** $21.43 | $46.43 |
+| 受託 × Google Cloud（最小インスタンス 0） | 20/20 $15.94 | 20/20 $16.00 | −$0.72 |
+| 受託 × Google Cloud（最小インスタンス 1） | 20/20 $25.36 | 20/20 $24.02 | $16.08 |
+| 受託 × さくらの VPS 2GB | 0/20 $16.13 | 0/20 $16.57 | $2.18 |
+| 受託 × さくらの VPS 4GB | 3/20 $29.49 | **6/20** $30.36 | $4.84 |
+
+- Amplify × SPA・OpenNext（受託）・CF Paid は確約の対象の使用が無い（Lambda は無料枠の中・Cloudflare に確約の仕組みなし）ので行が同じ。
+- 費用の平均が確約ありで上がる行（さくら）は、前払いの月の費用に 1 年分（の残りの月数の分）が乗るため。所持金は確約ありのほうが多い。
+
+### 22.4 残した点
+
+- 時間ごとの使用で確約を当てること（ピークの時間帯は超え、夜は余る）。Savings Plans の確約の額を選べること（今は結んだ月の使用の水準だけ）。
+- Database Savings Plans（Aurora Serverless v2）・一部前払い・3 年・EC2 Instance Savings Plans。
+- ゲームの終わりの後の月の支払い（前払いなしで、乗り換えで使わなくなった確約の残りの月）を評価に入れること。
+- さくらの年額の途中解約の返金の確かめ・Cloud Run の CUD がリクエストに効くかの確かめ。
+- 見積モードの構成の比較の表・費用の曲線に確約の月額を出すこと（今は明細の下の注記だけ）。始める画面の 1 か月目の費用の見込みに確約を含めること。
