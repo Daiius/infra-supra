@@ -3931,20 +3931,52 @@ export function rewriteRouteNotice(
  */
 export function setupRouteNotice(
   sc: Scenario,
-  cur: {
-    stackIndex: number;
-    framework: FrameworkId;
-    components: Choices;
-    revalidateSec: number;
-    comments: number;
-    routes: RouteOverrides | undefined;
-  },
+  cur: SetupRouteState,
   next: { stackIndex?: number; framework?: FrameworkId },
 ): string | null {
+  const fwChanged =
+    next.framework !== undefined && next.framework !== cur.framework;
+  return routeFallbackNotice(
+    fwChanged ? 'このフレームワークにする' : 'この構成にする',
+    setupRouteFallbacks(sc, cur, next),
+  );
+}
+
+/** 始める画面の今の選択（描き方の予測に使う分）。 */
+export type SetupRouteState = {
+  stackIndex: number;
+  framework: FrameworkId;
+  components: Choices;
+  revalidateSec: number;
+  /** 始める画面で選んだ再検証（選んでいなければ undefined）。替えた先でも選べれば残る。 */
+  revalidateChosen?: number | undefined;
+  comments: number;
+  routes: RouteOverrides | undefined;
+};
+
+/** 始める画面で構成・フレームワークを替えると既定に戻る描き方（setupRouteNotice の中身）。 */
+export function setupRouteFallbacks(
+  sc: Scenario,
+  cur: SetupRouteState,
+  next: { stackIndex?: number; framework?: FrameworkId },
+): RouteFallback[] {
   const stackIndex = next.stackIndex ?? cur.stackIndex;
   const framework = next.framework ?? cur.framework;
   const fwChanged = framework !== cur.framework;
-  const list = routeFallbacks(
+  // 替えた後の描き方と再検証は始める画面と同じ規則で決める: フレームワークを替えると描き方は既定、
+  // 選んだ再検証は替えた先で選べれば残し、それ以外は既定（OCL-0ABECA36）
+  const nextRoutes = fwChanged
+    ? undefined
+    : validRouteOverrides(sc, stackIndex, framework, cur.routes);
+  const chosen = cur.revalidateChosen;
+  const revalidateSec =
+    chosen !== undefined &&
+    setupRevalidateOptions(sc, framework, nextRoutes).some(
+      (o) => o.value === chosen,
+    )
+      ? chosen
+      : defaultRevalidateSec(framework, stackIndex, sc, nextRoutes);
+  return routeFallbacks(
     sc,
     {
       framework: cur.framework,
@@ -3956,19 +3988,10 @@ export function setupRouteNotice(
     {
       framework,
       stackIndex,
-      settings: {
-        revalidateSec: fwChanged
-          ? defaultRevalidateSec(framework, stackIndex, sc)
-          : cur.revalidateSec,
-        comments: cur.comments,
-      },
+      settings: { revalidateSec, comments: cur.comments },
       components: validSetupChoices(sc, stackIndex, framework, cur.components),
     },
     fwChanged ? SETUP_FRAMEWORK_RESETS_ROUTES : undefined,
-  );
-  return routeFallbackNotice(
-    fwChanged ? 'このフレームワークにする' : 'この構成にする',
-    list,
   );
 }
 

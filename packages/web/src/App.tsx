@@ -323,6 +323,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
         framework,
         components: parts,
         revalidateSec,
+        revalidateChosen,
         comments,
         routes,
       },

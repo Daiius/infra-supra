@@ -8,6 +8,8 @@ import {
   applyAction,
   ARTICLE_COMMUNITY,
   checkAction,
+  COMMENTS_IN_BROWSER,
+  defaultRevalidateSec,
   DEFAULT_START_DATE,
   frameworksOf,
   isPlanChange,
@@ -18,6 +20,8 @@ import {
   rewriteText,
   routePlanOf,
   SCENARIOS,
+  setupRevalidateOptions,
+  setupRouteFallbacks,
   setupRouteNotice,
   stackChangeRouteFallbacks,
   stackChangeRouteNotice,
@@ -28,6 +32,7 @@ import {
   type GameState,
   type RouteOverrides,
   type Scenario,
+  type SetupRouteState,
 } from './index.ts';
 import type { RouteStrategyId } from 'catalog';
 
@@ -254,5 +259,92 @@ describe('始める画面のカードの注意（D-107 の補足）', () => {
         },
       ),
     ).toBeNull();
+  });
+
+  // 始める画面の動き（App.tsx の Briefing と同じ規則）: フレームワークを替えると描き方は既定、
+  // 選んだ再検証は替えた先で選べれば残し、それ以外は既定
+  const revalidateOn = (
+    st: number,
+    fw: FrameworkId,
+    routes: RouteOverrides | undefined,
+    chosen: number | undefined,
+  ) =>
+    chosen !== undefined &&
+    setupRevalidateOptions(ARTICLE, fw, routes).some((o) => o.value === chosen)
+      ? chosen
+      : defaultRevalidateSec(fw, st, ARTICLE, routes);
+  const setupStart = (
+    st: number,
+    fw: FrameworkId,
+    routes: RouteOverrides | undefined,
+    chosen: number | undefined,
+  ) =>
+    newGame(
+      st,
+      42,
+      ARTICLE,
+      DEFAULT_START_DATE,
+      fw,
+      {},
+      revalidateOn(st, fw, routes, chosen),
+      COMMENTS_IN_BROWSER,
+      undefined,
+      routes,
+    );
+
+  it('選んだ再検証が替えた先でも選べれば残る（Vercel の Next.js の記事 S1・ビルドの間隔 5 分 → Astro は S2。OCL-0ABECA36）', () => {
+    const chosen = { ...cur, revalidateChosen: 300 };
+    expect(setupRouteNotice(ARTICLE, chosen, { framework: 'astro' })).toMatch(
+      /^このフレームワークにすると、記事のページは S1 → S2（既定）/,
+    );
+    const after = setupStart(VERCEL_PRO, 'astro', undefined, 300);
+    expect(planOf(after).article).toBe('cached-ttl');
+  });
+
+  it('予測が始める画面で替えた後と一致する（選べる構成 × フレームワーク × 描き方 × 選んだ再検証）', () => {
+    let found = 0;
+    for (const fw of frameworksOf(ARTICLE).allowed)
+      for (const g of starts(ARTICLE, fw)) {
+        const st = g.stackIndex;
+        const routes = g.routes;
+        const chosens = [
+          undefined,
+          ...setupRevalidateOptions(ARTICLE, fw, routes).map((o) => o.value),
+        ];
+        const nexts: { framework?: FrameworkId; stackIndex?: number }[] = [
+          ...frameworksOf(ARTICLE)
+            .allowed.filter((f) => f !== fw && stackOffered(st, f))
+            .map((f) => ({ framework: f })),
+          ...STACKS.filter(
+            (x) => x.index !== st && stackOffered(x.index, fw),
+          ).map((x) => ({ stackIndex: x.index })),
+        ];
+        for (const chosen of chosens) {
+          const before = setupStart(st, fw, routes, chosen);
+          const state: SetupRouteState = {
+            stackIndex: st,
+            framework: fw,
+            components: {},
+            revalidateSec: before.settings.revalidateSec,
+            revalidateChosen: chosen,
+            comments: COMMENTS_IN_BROWSER,
+            routes,
+          };
+          for (const next of nexts) {
+            const fw2 = next.framework ?? fw;
+            const st2 = next.stackIndex ?? st;
+            const after = setupStart(
+              st2,
+              fw2,
+              fw2 === fw ? routes : undefined,
+              chosen,
+            );
+            const predicted = setupRouteFallbacks(ARTICLE, state, next);
+            expect(brief(predicted)).toEqual(actualFallbacks(before, after));
+            found += predicted.length;
+          }
+        }
+      }
+    expect(found).toBeGreaterThan(0);
   });
 });
