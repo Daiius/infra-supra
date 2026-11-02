@@ -312,7 +312,7 @@ describe('結果の比較の表', () => {
       'VPS・前段の CDN',
       'Vercel Pro・画像だけ Cloudflare',
       'Amplify・前段の CloudFront + 定額',
-      'OpenNext・画像の最適化',
+      // 'OpenNext・画像の最適化' は隠した構成なので出さない（D-100）
     ]);
     expect(rows[5]!.description).toBe(BASELINES[4]!.label);
   });

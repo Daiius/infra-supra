@@ -1,4 +1,4 @@
-// Netlify の構成（D-71・prd/11 §14）をゲームで選べること。クレジットを使い切ると止まる（Free）・補充で請求が増える（Personal・Pro）、
+// Netlify の構成（D-71・prd/11 §14）の計算（D-100 で選ぶ場所からは一時的に隠した。計算は残すのでテストも残す）。クレジットを使い切ると止まる（Free）・補充で請求が増える（Personal・Pro）、
 // Astro のビルドし直しは本番のデプロイ 1 回ごとにクレジットを使う、他の事業者の部品を差せる。
 import { describe, expect, it } from 'vitest';
 import {

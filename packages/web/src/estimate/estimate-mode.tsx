@@ -15,7 +15,7 @@ import {
   frameworksOf,
   setupSlots,
   stackName,
-  stackSupports,
+  stackOffered,
   STACKS,
   type FrameworkId,
 } from 'game';
@@ -342,7 +342,7 @@ function Conditions({
             value={input.stack}
             onChange={(e) => setInput(withStack(input, e.target.value))}
           >
-            {STACKS.filter((s) => stackSupports(s.index, input.framework)).map(
+            {STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
               (s) => (
                 <option key={s.id} value={s.id}>
                   {stackName(s.index, input.framework, false)}

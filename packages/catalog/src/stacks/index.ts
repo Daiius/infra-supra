@@ -133,6 +133,20 @@ export const STACK_DEFS: readonly StackDef[] = [
   ...GCP_STACK_DEFS,
 ];
 
+/**
+ * 一時的に隠す土台の事業者（D-100）。料金のデータ・構成・計算は残し、選ぶ場所（始める画面・乗り換え先・見積モードの構成と比較・
+ * 結果の比較の基準プレイ）と、組み合わせの総当たり・バランスの検査からだけ外す。戻すときはこの配列から消す（1 行）。
+ * STACK_DEFS からは消さない（添字が保存と基準プレイの stackIndex なので、並びを変えない）。
+ */
+export const HIDDEN_PLATFORMS: readonly Platform[] = [
+  'aws-opennext',
+  'netlify',
+];
+
+/** その構成を隠しているか（HIDDEN_PLATFORMS。D-100）。 */
+export const stackHidden = (def: Pick<StackDef, 'platform'>): boolean =>
+  HIDDEN_PLATFORMS.includes(def.platform);
+
 /** スロットの部品（catalog のデータ）。当たりうる前提は前提の id の前方一致で挙げる（選ぶ前に出す）。 */
 export type ComponentOption = {
   id: string;

@@ -32,6 +32,16 @@ describe('normalizeInput', () => {
     expect(i.stack).not.toBe('aws-amplify');
   });
 
+  it('隠した構成（D-100。OpenNext・Netlify）の URL は一覧の最初の構成にし、曲線にも出さない', () => {
+    for (const stack of ['aws-opennext', 'netlify-supabase-pro']) {
+      const q = fromQuery(`?mode=estimate&s=${stack}&c.images=default`);
+      expect(q.stack).toBe(stack);
+      const i = normalizeInput(q);
+      expect(i.stack).toBe('cloudflare-vinext-free');
+      expect(costCurves(i, [stack])).toEqual([]);
+    }
+  });
+
   it('選べない値は既定にし、PV は範囲に収める', () => {
     const i = normalizeInput({
       template: 'business',
@@ -230,7 +240,13 @@ describe('compareStacks', () => {
   it('フレームワークを載せられる全構成を並べ、選んだ構成の月額は見積と同じ', () => {
     const i = normalizeInput({ stack: 'cloudflare-vinext-paid' });
     const rows = compareStacks(i);
-    expect(rows.length).toBeGreaterThanOrEqual(11);
+    // 隠した構成（AWS の OpenNext・Netlify の 3 つ。D-100）は並べない
+    expect(rows.length).toBeGreaterThanOrEqual(7);
+    expect(
+      rows.some(
+        (r) => r.stack === 'aws-opennext' || r.stack.startsWith('netlify'),
+      ),
+    ).toBe(false);
     const cur = rows.find((r) => r.current)!;
     expect(cur.totalUsd).toBeCloseTo(runEstimate(i).totalUsd, 9);
     const astro = compareStacks(normalizeInput({ framework: 'astro' }));

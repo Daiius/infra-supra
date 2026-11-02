@@ -18,6 +18,7 @@ import {
   frameworkSupported,
   deployTarget,
   STACK_DEFS,
+  stackHidden,
   browserCallsApi,
   rebuildsStaticPages,
   toAstro,
@@ -763,6 +764,8 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   assembled: STACK_DEFS[i]!.assembled ?? false,
   /** コンテナで動かすマネージドの構成（Cloud Run。維持の手間が少しかかる。D-88）。 */
   containerized: STACK_DEFS[i]!.containerized ?? false,
+  /** 一時的に隠している構成（catalog の HIDDEN_PLATFORMS。選ぶ場所に出さない。計算はそのまま。D-100）。 */
+  hidden: stackHidden(STACK_DEFS[i]!),
   /** ホストのディスク（VPS だけ。下位のプランへ変更できるかの判定に使う）。 */
   diskGB: s.nodes.reduce(
     (a, n) => (n.config.kind === 'host' ? n.config.diskGB : a),
@@ -780,6 +783,22 @@ export function stackSupports(
 ): boolean {
   const s = STACKS[stackIndex];
   return s !== undefined && frameworkSupported(framework, s.provider);
+}
+
+/**
+ * 選ぶ場所に出す構成か（載せられて、隠していない。D-100）。始める画面の一覧・乗り換え先・見積モードの構成と比較・総当たりに使う。
+ * 隠した構成でも、保存の再生・newGame・行動の検査（rules）は今までどおり通す（古い保存を同じ結果で開けるように）。
+ */
+export function stackOffered(
+  stackIndex: number,
+  framework: FrameworkId,
+): boolean {
+  return stackSupports(stackIndex, framework) && !STACKS[stackIndex]!.hidden;
+}
+
+/** 結果の比較に出す基準プレイ（隠した構成で始めるものを除く。D-100）。 */
+export function offeredBaselines(sc: Scenario): Strategy[] {
+  return sc.baselines.filter((b) => !STACKS[b.stackIndex]!.hidden);
 }
 
 /** API を他の事業者に置いたときの、API と DB の名前（D-65・D-67）。 */
@@ -5815,7 +5834,7 @@ export function comparisonRows(state: GameState): ComparisonRow[] {
       axes: axesOf(state),
       you: true,
     },
-    ...sc.baselines.map((b) => ({
+    ...offeredBaselines(sc).map((b) => ({
       id: b.id,
       name: b.short ?? b.label,
       description: b.label,

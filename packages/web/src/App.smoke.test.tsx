@@ -64,11 +64,12 @@ describe('ゲームモードの画面', () => {
       },
     ],
     [
-      '静的書き出し × Netlify Personal',
+      // Netlify は隠した（D-100）ので Cloudflare Paid で回す
+      '静的書き出し × Cloudflare Paid',
       {
         scenario: ARTICLE,
         framework: 'Next.js（静的書き出し）',
-        stack: 'Netlify Personal + Supabase Free',
+        stack: 'Cloudflare Paid',
       },
     ],
     [
@@ -88,16 +89,16 @@ describe('ゲームモードの画面', () => {
     expectGameScreen(2);
   });
 
-  it('W-03 所持金が尽きる組（Astro × Netlify Personal）で結果の画面とヒントが出る', () => {
+  // 前は Astro × Netlify Personal（3 か月目に尽きる）。Netlify は隠した（D-100）ので、1 か月目に尽きる組にした
+  it('W-03 所持金が尽きる組（静的書き出し × Vercel Pro・画像を最適化しない）で結果の画面とヒントが出る', () => {
     renderApp();
     startGame({
       scenario: ARTICLE,
-      framework: 'Astro',
-      stack: 'Netlify Personal + Supabase Free',
+      framework: 'Next.js（静的書き出し）',
+      stack: 'Vercel Pro + Supabase Pro',
     });
-    advance(2);
     expect(screen.getByText('所持金が尽きた')).toBeDefined();
-    expect(screen.getByText(/3 か月目で終了/)).toBeDefined();
+    expect(screen.getByText(/1 か月目で終了/)).toBeDefined();
     const hints = screen
       .getByRole('heading', { name: '次のプレイへのヒント' })
       .closest('section')!;

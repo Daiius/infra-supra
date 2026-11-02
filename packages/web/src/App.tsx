@@ -61,7 +61,8 @@ import {
   setupRevalidateOptions,
   setupCommentOptions,
   COMMENTS_IN_BROWSER,
-  stackSupports,
+  offeredBaselines,
+  stackOffered,
   DEFAULT_REVALIDATE_SEC,
   invalidationNote,
   onDemandInvalidationEstimate,
@@ -263,9 +264,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     const fw = fws.allowed.includes(fwChoice) ? fwChoice : fws.default;
     // 載せられない構成（Astro × AWS など。D-68）を選んでいたら、一覧の最初の載せられる構成にする
     const want = next.stack ?? stack;
-    const st = stackSupports(want, fw)
+    const st = stackOffered(want, fw)
       ? want
-      : (STACKS.find((s) => stackSupports(s.index, fw))?.index ?? 0);
+      : (STACKS.find((s) => stackOffered(s.index, fw))?.index ?? 0);
     if (next.scenarioId !== undefined) setScenarioId(next.scenarioId);
     if (next.framework !== undefined) setFramework(next.framework);
     if (st !== stack) setStack(st);
@@ -306,38 +307,36 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           />
           <h3 className="mt-2 font-bold">インフラの構成</h3>
           <div className="grid gap-2 sm:grid-cols-2">
-            {STACKS.filter((s) => stackSupports(s.index, framework)).map(
-              (s) => (
-                <label
-                  key={s.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${stack === s.index ? 'border-primary bg-primary/5' : 'border-base-300'}`}
-                >
-                  <input
-                    type="radio"
-                    className="radio radio-primary mt-0.5 shrink-0"
-                    checked={stack === s.index}
-                    onChange={() => change({ stack: s.index })}
-                  />
-                  <span className="block min-w-0">
-                    <span className="block">
-                      {stackName(s.index, framework, false)}
-                    </span>
-                    {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
-                    <span className="mt-0.5 block text-xs opacity-70">
-                      {stackFlavor(s.index)}
-                    </span>
-                    <EffortBar
-                      scenario={scenario}
-                      stackIndex={s.index}
-                      // 選んでいる構成は、選んだ部品で増える他の事業者の管理も出す（D-52）
-                      {...(stack === s.index
-                        ? { components: parts, framework }
-                        : {})}
-                    />
+            {STACKS.filter((s) => stackOffered(s.index, framework)).map((s) => (
+              <label
+                key={s.id}
+                className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${stack === s.index ? 'border-primary bg-primary/5' : 'border-base-300'}`}
+              >
+                <input
+                  type="radio"
+                  className="radio radio-primary mt-0.5 shrink-0"
+                  checked={stack === s.index}
+                  onChange={() => change({ stack: s.index })}
+                />
+                <span className="block min-w-0">
+                  <span className="block">
+                    {stackName(s.index, framework, false)}
                   </span>
-                </label>
-              ),
-            )}
+                  {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
+                  <span className="mt-0.5 block text-xs opacity-70">
+                    {stackFlavor(s.index)}
+                  </span>
+                  <EffortBar
+                    scenario={scenario}
+                    stackIndex={s.index}
+                    // 選んでいる構成は、選んだ部品で増える他の事業者の管理も出す（D-52）
+                    {...(stack === s.index
+                      ? { components: parts, framework }
+                      : {})}
+                  />
+                </span>
+              </label>
+            ))}
           </div>
           <SetupComponents
             scenario={scenario}
@@ -1572,6 +1571,12 @@ function Actions({
           blocked={(o) => blocked(build(o))}
         />
         <div className="divider my-1 text-xs">構成を変える</div>
+        {/* 隠した構成（D-100）で始めた古い保存はそのまま続けられる。選び直す先には出さない */}
+        {STACKS[state.stackIndex]!.hidden && (
+          <div className="text-xs opacity-70">
+            今の構成は、新しく始めるときには選べなくしている（一時的）。このまま続けられるが、同じ事業者のプラン変更や、乗り換えてから戻ることはできない。
+          </div>
+        )}
         {state.migration ? (
           <div className="text-sm">
             {stackName(state.migration.to, state.framework)} へ乗り換え中（
@@ -1582,9 +1587,10 @@ function Actions({
           <div className="space-y-1">
             {[
               null,
-              ...STACKS.filter((s) => s.index !== state.stackIndex).map(
-                (s) => s.index,
-              ),
+              // 隠した構成（D-100）は乗り換え・プラン変更の先に出さない
+              ...STACKS.filter(
+                (s) => s.index !== state.stackIndex && !s.hidden,
+              ).map((s) => s.index),
             ].map((idx) => {
               const why = idx === null ? null : blocked(build({ stack: idx }));
               const ok = why === null;
@@ -1919,7 +1925,7 @@ function Result({
   const table = useMemo(() => comparisonRows(state), [state]);
   const cfPaid = table.find((r) => r.id === 'cf-paid')!;
   /** 短い名前と説明が違う基準プレイだけを注記に出す。 */
-  const abbreviated = scenarioOf(state).baselines.filter(
+  const abbreviated = offeredBaselines(scenarioOf(state)).filter(
     (b) => b.short && b.short !== b.label,
   );
   const reflection = reflectionOf(state);
