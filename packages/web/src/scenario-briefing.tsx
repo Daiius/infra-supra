@@ -225,7 +225,7 @@ function FrameworkCard({
           : undefined
       }
     >
-      <div className="card-body gap-3 p-4">
+      <div className="card-body justify-start gap-3 p-4 *:grow-0">
         <h4 className="card-title text-lg">
           <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
           <NameWithInfo name={FRAMEWORKS[id].label} info={info} />

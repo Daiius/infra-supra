@@ -61,7 +61,8 @@ function StackCard({
           : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80'
       }`}
     >
-      <div className="card-body min-w-0 gap-3 p-4">
+      {/* 中身は上に詰める（carousel で高さを揃えたときの余りは下に回す） */}
+      <div className="card-body min-w-0 justify-start gap-3 p-4 *:grow-0">
         <h4 className="card-title text-lg">
           <PlatformMarks platform={STACKS[stackIndex]!.provider} />
           <NameWithInfo

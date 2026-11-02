@@ -110,6 +110,11 @@ export function ChoiceCarousel<T extends string>({
         ref={track}
         className="relative carousel w-full carousel-center gap-3 overflow-x-hidden py-2"
       >
+        {/* 最初と最後のカードも中央に来るように、両端に空きを置く（カードの幅の残りの半分 − 間隔） */}
+        <div
+          aria-hidden
+          className="w-[calc(6%-0.75rem)] shrink-0 lg:w-[calc(7.5%-0.75rem)]"
+        />
         {items.map((id) => (
           <div
             key={id}
@@ -133,6 +138,10 @@ export function ChoiceCarousel<T extends string>({
             {renderCard(id, { selected: id === value, idPrefix: headingId })}
           </div>
         ))}
+        <div
+          aria-hidden
+          className="w-[calc(6%-0.75rem)] shrink-0 lg:w-[calc(7.5%-0.75rem)]"
+        />
       </div>
     </div>
   );

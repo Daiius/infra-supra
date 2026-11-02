@@ -58,15 +58,20 @@ export function SystemDiagram({
   const title = (account: string) =>
     groupTitle(account, model.groups.find((g) => g.account === account)?.brand);
   return (
-    <figure className="space-y-2" data-diagram="system">
+    // figure にしない（daisyUI は .card の中の figure を横並びの flex にし、図が細く潰れる）
+    <div className="w-full min-w-0 space-y-2" data-diagram="system">
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200/40">
         <svg
           role="img"
           aria-label={diagramSummary(model, title)}
-          width={model.width}
-          height={model.height}
+          // 中身の大きさの viewBox で、カードの幅に合わせて縮める（広げない）。狭い画面では最小の幅を保ち、枠の中で横にスクロールする
+          width="100%"
           viewBox={`0 0 ${model.width} ${model.height}`}
-          className="block max-w-none"
+          className="block h-auto"
+          style={{
+            maxWidth: model.width,
+            minWidth: Math.min(model.width, MIN_WIDTH),
+          }}
         >
           <defs>
             <marker
@@ -116,7 +121,7 @@ export function SystemDiagram({
                 >
                   <span className="text-[10px] opacity-60">{n.caption}</span>
                   <span
-                    className={`line-clamp-2 text-[11px] ${n.compute ? 'font-semibold' : ''}`}
+                    className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
                   >
                     {n.label}
                   </span>
@@ -126,6 +131,7 @@ export function SystemDiagram({
           ))}
         </svg>
       </div>
+      {caption && <p className="text-xs opacity-60">{caption}</p>}
       <Legend model={model} active={active} onToggle={setActive} />
       {model.side.length > 0 && (
         <div className="text-xs">
@@ -150,10 +156,7 @@ export function SystemDiagram({
         </div>
       )}
       <ConnectionList model={model} title={title} />
-      {caption && (
-        <figcaption className="text-xs opacity-60">{caption}</figcaption>
-      )}
-    </figure>
+    </div>
   );
 }
 
@@ -250,6 +253,8 @@ function Viewer({ model }: { model: DiagramModel }) {
 }
 
 const STEP = 3;
+/** 縮めても文字が読める最小の幅（これより狭い画面では横にスクロールする）。 */
+const MIN_WIDTH = 560;
 
 function Edges({
   model,

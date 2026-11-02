@@ -167,8 +167,8 @@ export const BACK_LOOP = 24;
 export const LAYOUT = {
   viewerW: 64,
   viewerH: 64,
-  nodeW: 140,
-  nodeH: 52,
+  nodeW: 156,
+  nodeH: 66,
   colGap: 36,
   rowGap: 8,
   bandHeader: 22,
