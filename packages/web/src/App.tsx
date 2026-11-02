@@ -1410,7 +1410,9 @@ function Actions({
             const current = state.settings[def.field];
             const chosen = settings[key] ?? current;
             return (
-              <label key={key} className="form-control">
+              // 外側を label にしない: label の中で最初の操作できる要素は ⓘ のボタンなので、欄のどこを押しても説明が開く。
+              // ⓘ を含む見出しは label にできない（他の操作できる要素を含めない）ので、名前は select の aria-label で付ける
+              <div key={key} className="form-control">
                 <span className="label-text mb-1 block">
                   <span className="block font-semibold">
                     <NameWithInfo
@@ -1484,7 +1486,7 @@ function Actions({
                     オンデマンドでは {invalidation}
                   </span>
                 )}
-              </label>
+              </div>
             );
           })}
         </div>
@@ -1754,7 +1756,8 @@ function ComponentsSection({
                 ? []
                 : componentPreview(state, x.slot, chosen);
             return (
-              <label key={x.slot} className="form-control">
+              // 外側を label にしない（設定の欄と同じ。名前は select の aria-label）
+              <div key={x.slot} className="form-control">
                 <span className="label-text mb-1 block">
                   <span className="block font-semibold">
                     {/* select の選択肢の中には置けないので、選択肢ごとの説明をまとめて出す */}
@@ -1865,7 +1868,7 @@ function ComponentsSection({
                     ))}
                   </ul>
                 )}
-              </label>
+              </div>
             );
           })}
         </div>

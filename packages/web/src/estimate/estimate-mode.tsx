@@ -1,8 +1,10 @@
 // 見積モードの画面（D-73）。計算は model.ts（純粋関数）、ここは入力と表示だけ。入力は URL のクエリに残す（共有のため）。
 import {
+  Children,
   cloneElement,
   isValidElement,
   useEffect,
+  useId,
   useMemo,
   useState,
   type ReactElement,
@@ -221,17 +223,17 @@ function Field({
   info?: string | undefined;
   children: ReactNode;
 }) {
-  // ⓘ のボタンが label の名前に混ざらないよう、見出しの文字だけを aria-label で渡す（D-94）
-  const control =
-    info && isValidElement(children)
-      ? cloneElement(children as ReactElement<{ 'aria-label'?: string }>, {
-          'aria-label': label,
-        })
-      : children;
+  // 外側を label にしない: label の中で最初の操作できる要素が ⓘ のボタンになり、欄のどこを押しても説明が開く。
+  // 見出しの文字だけを label にして、htmlFor で最初の入力（select・input）に結ぶ（ⓘ は label の外に置く）
+  const id = useId();
+  const [first, ...rest] = Children.toArray(children);
+  const control = isValidElement(first)
+    ? cloneElement(first as ReactElement<{ id?: string }>, { id })
+    : first;
   return (
-    <label className="block min-w-0">
+    <div className="block min-w-0">
       <span className="mb-1 block text-sm font-semibold">
-        {label}
+        <label htmlFor={id}>{label}</label>
         {info && (
           <>
             {' '}
@@ -240,7 +242,8 @@ function Field({
         )}
       </span>
       {control}
-    </label>
+      {rest}
+    </div>
   );
 }
 
