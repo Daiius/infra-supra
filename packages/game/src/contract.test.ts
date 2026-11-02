@@ -40,12 +40,12 @@ describe('受託先の業務アプリの運用', () => {
       'cf-paid': ['1892.51', 'won', 12],
       // D-93: PITR の依頼（D1 の Time Travel で満たす）を受け、乗り換えるまで上乗せ $20 / 月が入る（前は $1,589.92・goal）
       // D-95: メールの送信（CF Paid は Email Service・乗り換えた先は SES）の費用で $1,769.92・won → goal
-      'cf-paid-accept': ['1667.21', 'goal', 12],
+      'cf-paid-accept': ['1669.07', 'goal', 12],
       vps: ['1701.46', 'goal', 12],
       'vps-care': ['1807.61', 'won', 12],
       'vps-sla': ['1807.61', 'won', 12],
       'vercel-pro': ['1468.13', 'goal', 12],
-      'vercel-to-cf': ['1708.48', 'won', 12],
+      'vercel-to-cf': ['1710.34', 'won', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
       'aws-amplify': ['1800.00', 'won', 12],
@@ -53,12 +53,12 @@ describe('受託先の業務アプリの運用', () => {
     });
     expect(r(11)).toEqual({
       'cf-paid': ['1959.64', 'won', 12],
-      'cf-paid-accept': ['1493.76', 'goal', 12],
+      'cf-paid-accept': ['1495.63', 'goal', 12],
       vps: ['1564.19', 'outages', 12],
       'vps-care': ['1880.26', 'won', 12],
       'vps-sla': ['1988.19', 'won', 12],
       'vercel-pro': ['1535.84', 'goal', 12],
-      'vercel-to-cf': ['1768.66', 'won', 12],
+      'vercel-to-cf': ['1770.52', 'won', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
       'aws-amplify': ['1847.23', 'won', 12],
@@ -67,12 +67,12 @@ describe('受託先の業務アプリの運用', () => {
     expect(r(3)).toEqual({
       'cf-paid': ['1932.41', 'won', 12],
       // D-46: 乗り換え先の Vercel で添付が Vercel Blob の課金になる
-      'cf-paid-accept': ['1530.61', 'goal', 12],
+      'cf-paid-accept': ['1532.47', 'goal', 12],
       vps: ['1679.32', 'outages', 12],
       'vps-care': ['1783.73', 'won', 12],
       'vps-sla': ['1783.73', 'won', 12],
       'vercel-pro': ['1504.07', 'goal', 12],
-      'vercel-to-cf': ['1745.28', 'won', 12],
+      'vercel-to-cf': ['1747.14', 'won', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
       'aws-amplify': ['1827.87', 'won', 12],

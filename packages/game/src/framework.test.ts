@@ -196,7 +196,7 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       'cf-paid-accept': ['1885.66', 'won', 12],
       'vps-images': ['1620.95', 'goal', 12],
       'vercel-pro': ['807.89', 'goal', 12],
-      'vercel-to-cf': ['1374.46', 'goal', 12],
+      'vercel-to-cf': ['1376.32', 'goal', 12],
       'cf-free': ['138.79', 'outages', 3],
       'cf-paid-kvdb': ['1663.35', 'goal', 12],
       'cf-paid-chat': ['1832.10', 'won', 12],

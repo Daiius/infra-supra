@@ -1,5 +1,6 @@
 // ゲームの再現性（企画書 §10「同じシナリオ・同じシード・同じ行動なら同じ結果」）と、GD-2 の基準プレイの golden（prd/07 §9.7）。
 import { describe, expect, it } from 'vitest';
+import { composeStack } from 'catalog';
 import {
   actionEffort,
   applyAction,
@@ -16,6 +17,7 @@ import {
   policyStep,
   type Action,
   type GameState,
+  withoutDomainRegistration,
 } from './index.ts';
 
 function play(stackIndex: number, actions: Action[][], seed = 42): GameState {
@@ -87,7 +89,7 @@ describe('game', () => {
       'cf-paid-accept': ['2165.93', 'won', 12],
       'vps-images': ['1761.16', 'won', 12],
       'vercel-pro': ['924.82', 'goal', 12],
-      'vercel-to-cf': ['1596.92', 'goal', 12],
+      'vercel-to-cf': ['1598.79', 'goal', 12],
       'cf-free': ['138.79', 'outages', 3],
       'cf-paid-kvdb': ['1910.77', 'won', 12],
       'cf-paid-chat': ['2113.86', 'won', 12],
@@ -102,7 +104,7 @@ describe('game', () => {
       'cf-paid-accept': ['2121.61', 'won', 12],
       'vps-images': ['1667.67', 'goal', 12],
       'vercel-pro': ['784.92', 'goal', 12],
-      'vercel-to-cf': ['1688.15', 'goal', 12],
+      'vercel-to-cf': ['1690.01', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1923.92', 'won', 12],
       'cf-paid-chat': ['2136.78', 'won', 12],
@@ -114,10 +116,10 @@ describe('game', () => {
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2118.78', 'won', 12],
-      'cf-paid-accept': ['1045.52', 'goal', 12],
+      'cf-paid-accept': ['1047.38', 'goal', 12],
       'vps-images': ['1671.74', 'goal', 12],
       'vercel-pro': ['812.23', 'goal', 12],
-      'vercel-to-cf': ['1659.17', 'goal', 12],
+      'vercel-to-cf': ['1661.03', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1839.37', 'won', 12],
       'cf-paid-chat': ['2143.01', 'won', 12],
@@ -226,6 +228,24 @@ describe('開発の手間と行動', () => {
     // サーバーレス同士は 2 か月。4 か月目が切り替えの月（可用性は普通）
     expect(m4!.stackName).toContain('Cloudflare');
     expect(m4!.satisfaction.stages.availability).toBe('fair');
+  });
+
+  it('乗り換え中の新しい構成ではドメインの登録料を数えない（同じ .com 1 つ。DNS のゾーンは残す。D-96・OCL-A580D510）', () => {
+    const aws = composeStack('aws-amplify');
+    const kinds = (a: typeof aws) => a.nodes.map((n) => n.config.kind);
+    expect(kinds(aws)).toContain('domain-registration');
+    const target = withoutDomainRegistration(aws);
+    expect(kinds(target)).not.toContain('domain-registration');
+    expect(kinds(target)).toContain('dns-zone');
+    expect(target.nodes).toHaveLength(aws.nodes.length - 1);
+    // 乗り換え中の明細（旧構成 + 並行の新構成）で、登録料は旧構成の $11.17 / 12 の 1 回だけ
+    const s = playUntil(VERCEL_PRO, 2, [
+      [{ type: 'migrate', stackIndex: CF_PAID }],
+    ]);
+    const m2 = s.history[1]!;
+    const own = m2.lines.filter((l) => l.provider === 'registrar');
+    expect(own.reduce((a, l) => a + l.amount, 0)).toBeCloseTo(11.17 / 12, 9);
+    expect(m2.parallelInfraCost).toBeGreaterThan(0);
   });
 
   it('VPS への乗り換えは 3 か月', () => {
