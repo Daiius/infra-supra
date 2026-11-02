@@ -454,6 +454,56 @@ describe('1 リクエストあたりの CPU の内訳（D-99）', () => {
     expect(n.maxCpuMsPerRequest).toBe(11);
   });
 
+  it('期間つきのキャッシュから完全に返るルート（更新 0 回の ISR）は、後ろの関数の内訳に入れない（OCL-E219321B）', () => {
+    const ttl: ArchitectureInput = {
+      ...arch,
+      nodes: arch.nodes.map((n) =>
+        n.id === 'cdn'
+          ? {
+              ...n,
+              config: {
+                kind: 'cdn',
+                hitRate: { asset: 0.9, 'document-static': 1 },
+                ttlClasses: ['document-isr'],
+              },
+            }
+          : n,
+      ),
+    };
+    const w = workload(10_000);
+    const isr = w.routes[0]!;
+    const { revalidateSeconds: _, ...ondemand } = isr;
+    w.routes = [
+      // 更新 0 回: 一度作ったら CDN から返り続け、関数に届かない
+      {
+        ...ondemand,
+        id: 'frozen',
+        share: 0.25,
+        cachedServeCpuMs: 30,
+        onDemandUpdatesPerMonth: 0,
+      },
+      {
+        ...ondemand,
+        id: 'news',
+        share: 0.25,
+        cachedServeCpuMs: 1,
+        onDemandUpdatesPerMonth: 1,
+      },
+      ...w.routes.slice(1),
+    ];
+    const n = simulateResources(resolveWorkload(w), ttl).nodes.fn!;
+    expect(n.cpuSources.some((s) => s.routeId === 'frozen')).toBe(false);
+    expect(
+      n.cpuSources.some(
+        (s) => s.routeId === 'news' && s.requestClass === 'document-isr',
+      ),
+    ).toBe(true);
+    expect(Math.max(...n.cpuSources.map((s) => s.cpuMs))).toBe(
+      n.maxCpuMsPerRequest,
+    );
+    expect(n.maxCpuMsPerRequest).toBe(10); // SSR・API の 10 ms（frozen の 30 ms は届かない）
+  });
+
   it('制限の前提に、超えるルートと関数を通らない静的なルートを添える', () => {
     const input = parsePriceBook(FICTIONAL_CLOUD, { allowFictional: true });
     const book = {
