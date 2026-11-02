@@ -1,7 +1,17 @@
 // アプリのテンプレート: 業務の Web アプリ（prd/09 §4・D-33）。値はすべてテンプレートの既定値（template-default）で、
 // 実測ではない。フレームワークは決めない（prd/06・AGENTS.md: 見積対象を特定のスタックに寄せない）。
 import type { WorkloadInput } from 'estimator';
-import type { AstroShape, SpaShape } from '../frameworks/index.ts';
+import type { AstroShape, RouteTraits, SpaShape } from '../frameworks/index.ts';
+
+/** 業務アプリのページの性質（D-107・RS-17）。 */
+export const BUSINESS_APP_ROUTES: Readonly<Record<string, RouteTraits>> = {
+  app: {
+    audience: 'personal',
+    needsOgp: false,
+    freshness: '登録した内容がすぐ一覧に出る',
+    parts: ['一覧・検索', '登録のフォーム', '添付ファイル'],
+  },
+};
 
 /**
  * 業務アプリの 1 日の時間帯の形（0 時〜23 時の重み。D-89）。ゲーム上の仮定（出典なし）: 9〜17 時の業務時間に集中し（昼休みは半分）、

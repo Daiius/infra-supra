@@ -10,6 +10,7 @@ import {
   SCENARIOS,
   selfHostedOf,
   type FrameworkId,
+  type RouteOverrides,
   type RoutePlanRow,
   type Scenario,
   upkeepOf,
@@ -24,7 +25,7 @@ import {
   PageWireframe,
   WireframeLegend,
 } from './page-wireframes.tsx';
-import { ROUTE_PLAN_NOTE, RoutePlanTable } from './route-plan-table.tsx';
+import { RoutePresetChips } from './route-plan-table.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -191,6 +192,7 @@ function FrameworkCard({
   selected,
   noteId,
   routes,
+  chosenRoutes,
 }: {
   scenario: Scenario;
   id: FrameworkId;
@@ -199,11 +201,19 @@ function FrameworkCard({
   selected: boolean;
   /** 要約の要素の id（タブのラジオの aria-describedby に使う）。 */
   noteId: string;
-  /** ページごとの描き方（選んでいる構成で。D-106）。 */
+  /** 既定のページごとの描き方（選んでいる構成で。D-106）。 */
   routes?: RoutePlanRow[] | undefined;
+  /** 選んだ描き方（選んでいるカードの見取り図に使う。D-107）。 */
+  chosenRoutes?: RouteOverrides | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
-  const pages = pageWireframes(scenario, id, comments);
+  // 選んでいるカードは選んだ描き方で描く（D-107）
+  const pages = pageWireframes(
+    scenario,
+    id,
+    comments,
+    selected ? chosenRoutes : undefined,
+  );
   const lines = t?.pages ?? [];
   /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
   const linesOf = (label: string) =>
@@ -269,11 +279,13 @@ function FrameworkCard({
         ))}
         {routes && routes.length > 0 && (
           <section
-            aria-label="ページごとの描き方"
+            aria-label="既定の描き方"
             className="border-t border-base-300 pt-3"
           >
-            <h5 className="mb-1 font-semibold">ページごとの描き方</h5>
-            <RoutePlanTable rows={routes} caption={ROUTE_PLAN_NOTE} />
+            <h5 className="mb-1 font-semibold">
+              既定の描き方（下の「ページの描き方」で直せる）
+            </h5>
+            <RoutePresetChips rows={routes} />
           </section>
         )}
         {pages.length > 0 && (
@@ -302,6 +314,7 @@ export function FrameworkField({
   onChange,
   comments,
   routePlan,
+  routes,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
@@ -309,8 +322,10 @@ export function FrameworkField({
   onChange: (id: FrameworkId) => void;
   /** 設定「コメントの描き方」（始める画面で選べるときだけ。見取り図のコメント欄が変わる。D-82）。 */
   comments?: number | undefined;
-  /** フレームワークごとの、ページごとの描き方（選んでいる構成・設定・部品で。D-106）。 */
+  /** フレームワークごとの、既定のページごとの描き方（選んでいる構成で。D-106）。 */
   routePlan?: (id: FrameworkId) => RoutePlanRow[];
+  /** 選んだ描き方（D-107）。 */
+  routes?: RouteOverrides | undefined;
 }) {
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
@@ -351,6 +366,7 @@ export function FrameworkField({
             selected={selected}
             noteId={`${idPrefix}-${id}`}
             routes={routePlan?.(id)}
+            chosenRoutes={routes}
           />
         )}
       />

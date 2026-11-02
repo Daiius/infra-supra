@@ -131,12 +131,34 @@ export const ROUTE_STRATEGY_ORDER: readonly RouteStrategyId[] = [
 ];
 
 /**
+ * ページ（ルート）の性質（D-107・RS-17）。描き方の選択肢はルートの id でなくこの性質で絞る。テンプレートのデータに置く
+ * （estimator の Workload には入れない）。
+ */
+export type RouteTraits = {
+  /** 全員に同じ中身（public）か、人ごとに違う中身（personal）か。 */
+  audience: RouteAudience;
+  /** HTML に記事ごとのメタタグ（SNS のカード・検索）が要るか。 */
+  needsOgp: boolean;
+  /** 鮮度の要件（画面の文。判定の値はシナリオの満足度の freshness）。 */
+  freshness: string;
+  /** ページの中の動きのある部品（画面の文）。 */
+  parts: string[];
+};
+
+/**
  * テンプレートのルートの見る人。テンプレートの決まり（ISR・静的のルート = 全員に同じ中身の記事、SSR のルート = 個人化。
  * toSpa・toAstro が前から使ってきた読み方）で決める。性質をテンプレートのデータに書くのは段 3（prd/13 RS-17）。
  */
-export function routeAudience(r: {
-  rendering: WorkloadInput['routes'][number]['rendering'];
-}): RouteAudience {
+export function routeAudience(
+  r: {
+    id?: string;
+    rendering: WorkloadInput['routes'][number]['rendering'];
+  },
+  /** テンプレートのルートの性質（あればこちらを使う。D-107）。 */
+  traits?: Readonly<Record<string, RouteTraits>>,
+): RouteAudience {
+  const t = r.id !== undefined ? traits?.[r.id] : undefined;
+  if (t) return t.audience;
   return r.rendering === 'isr' || r.rendering === 'static'
     ? 'public'
     : 'personal';

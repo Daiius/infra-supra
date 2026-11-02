@@ -4,6 +4,8 @@ import type {
   AstroShape,
   FrameworkId,
   Platform,
+  RouteStrategyId,
+  RouteTraits,
   SlotId,
   SpaShape,
 } from 'catalog';
@@ -200,6 +202,10 @@ export type Strategy = {
   /** 表の見出しに使う短い名前。 */
   short?: string;
   stackIndex: number;
+  /** フレームワーク（省略はシナリオの既定）。 */
+  framework?: FrameworkId;
+  /** 始める画面で選ぶページごとの描き方（ルートの id → 描き方。省略はフレームワークの既定。D-107）。 */
+  routes?: Readonly<Partial<Record<string, RouteStrategyId>>>;
   /** 毎月の行動の固定の列（添字 0 が 1 か月目の終わり）。 */
   actions?: Action[][];
   /** 状態を見て行動を決める（台本の時期がシードで揺れるため。§10.8）。actions より優先。 */
@@ -212,6 +218,8 @@ export type Scenario = {
   months: number;
   /** テンプレート（PV → Workload）。catalog のものを見積モードと共有する。 */
   template: (pv: number) => WorkloadInput;
+  /** テンプレートのルートの性質（見る人・SNS のカード・鮮度の要件・部品。catalog のテンプレートのデータ。D-107）。 */
+  routeTraits: Readonly<Record<string, RouteTraits>>;
   /** ためていく量の増え方。null なら増えない（テンプレートの値のまま）。 */
   stock: StockRule | null;
   scale: { startPV: number };

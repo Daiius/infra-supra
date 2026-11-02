@@ -190,6 +190,8 @@ export function composeNetlify(
     framework: FrameworkId;
     prerender: boolean;
     apiCache: string;
+    /** 静的にビルドし直すページがあるか（省略はフレームワークで決める。D-107）。 */
+    staticBuild?: boolean;
   },
 ): ArchitectureInput {
   const bill = (meters: Record<string, string>) => ({
@@ -289,7 +291,7 @@ export function composeNetlify(
             : { 'egress-gb': 'egress' },
       },
     },
-    ...(rebuildsStaticPages(opts.framework)
+    ...((opts.staticBuild ?? rebuildsStaticPages(opts.framework))
       ? [
           {
             id: 'build',

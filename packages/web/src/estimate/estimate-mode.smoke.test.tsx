@@ -140,6 +140,22 @@ describe('見積モードの画面', () => {
         /^記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える$/,
       ),
     ).toBeDefined();
+    // ページごとの描き方（D-107）: 個人向けを枠 + API にすると URL に残り、その行は CPU の制限に当たらない
+    const routes = within(card('ページごとの描き方'));
+    fireEvent.click(
+      routes.getByRole('button', { name: /^個人向けのページを S5/ }),
+    );
+    expect(window.location.search).toContain('rp.personal=shell-api');
+    const row = within(card('ページごとの描き方'))
+      .getByRole('table', { name: 'ページごとの描き方' })
+      .querySelector('tr[data-route="personal"]')!;
+    expect(
+      row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
+    ).toBe('shell-api');
+    expect(
+      row.querySelector('[data-check="cpu"]')!.getAttribute('data-ok'),
+    ).toBe('true');
+    expectEstimate();
   });
 
   it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', () => {

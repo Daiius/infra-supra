@@ -24,6 +24,7 @@ import {
   rebuildsStaticPages,
   applyRouteStrategies,
   defaultStrategy,
+  FRAMEWORK_PRESETS,
   routeAudience,
   ROUTE_STRATEGIES,
   ROUTE_STRATEGY_ORDER,
@@ -31,6 +32,7 @@ import {
   withAstroAssets,
   type RouteAudience,
   type RoutePlan,
+  type RouteTraits,
   type RouteStrategyId,
   type Choices,
   type FrameworkId,
@@ -71,6 +73,7 @@ import {
   STAGE_VALUE,
   type EffortBreakdown,
   type Element,
+  type Stage,
   type Stages,
 } from './rules.ts';
 import {
@@ -169,18 +172,90 @@ export const COMMENTS_IN_PAGE = 1;
  */
 export const COMMENT_PAGES_PER_UPDATE = 1;
 
+/** プレイヤーが選んだページごとの描き方（ルートの id → 描き方。フレームワークの既定と分け方が同じものは持たない。D-107）。 */
+export type RouteOverrides = Readonly<Partial<Record<string, RouteStrategyId>>>;
+
+/**
+ * 描き方の分け方（D-107）。S2 と S3 は同じ「キャッシュ」で、期限かオンデマンドかは設定（revalidateSec）で決まる
+ * （今までの ISR の再検証・記事のキャッシュの設定のまま。切り替えの手間も今までどおり）。
+ */
+export type StrategyFamily = 'static' | 'cached' | 'ssr' | 'api' | 'island';
+
+export function strategyFamily(s: RouteStrategyId): StrategyFamily {
+  switch (s) {
+    case 'static-build':
+      return 'static';
+    case 'cached-ttl':
+    case 'cached-purge':
+      return 'cached';
+    case 'ssr':
+      return 'ssr';
+    case 'shell-api':
+      return 'api';
+    case 'server-island':
+      return 'island';
+  }
+}
+
+/** シナリオのルートの見る人（テンプレートのルートの性質。D-107）。 */
+export function routeAudienceOf(
+  sc: Pick<Scenario, 'routeTraits'>,
+  r: { id: string; rendering: WorkloadInput['routes'][number]['rendering'] },
+): RouteAudience {
+  return routeAudience(r, sc.routeTraits);
+}
+
+/** 全員に同じ中身のルート（記事のページ）。無いシナリオ（受託）は undefined。 */
+function publicRoute(sc: Pick<Scenario, 'template' | 'routeTraits'>) {
+  return sc.template(1).routes.find((r) => routeAudienceOf(sc, r) === 'public');
+}
+
+/** ルートの今の描き方の分け方（選んだ描き方があればそれ、無ければフレームワークの既定）。 */
+export function routeFamily(
+  state: {
+    scenario: Pick<Scenario, 'template' | 'routeTraits'>;
+    framework: FrameworkId;
+    routes?: RouteOverrides | undefined;
+  },
+  routeId: string,
+): StrategyFamily | undefined {
+  const r = state.scenario.template(1).routes.find((x) => x.id === routeId);
+  if (!r) return undefined;
+  const chosen = state.routes?.[routeId];
+  return strategyFamily(
+    chosen ??
+      FRAMEWORK_PRESETS[state.framework][routeAudienceOf(state.scenario, r)],
+  );
+}
+
+/**
+ * 記事のページ（全員に同じ中身）の描き方の分け方。設定の意味（再検証・ビルドの間隔・API のキャッシュの期間）・
+ * 鮮度の判定・SNS のカード・コメントの描き方がこれで決まる（D-107）。記事のページが無いシナリオは undefined
+ * （フレームワークで決める今までの判定のまま）。
+ */
+export function articleFamily(state: {
+  scenario: Pick<Scenario, 'template' | 'routeTraits'>;
+  framework: FrameworkId;
+  routes?: RouteOverrides | undefined;
+}): StrategyFamily | undefined {
+  const r = publicRoute(state.scenario);
+  return r ? routeFamily(state, r.id) : undefined;
+}
+
 /**
  * コメントを記事のページに含めるか（D-82）。設定が「記事のページに含める」で、シナリオにコメントがあり、
- * 記事のページがある（SPA はページが無いので含められない）ときだけ。
+ * 記事のページが HTML である（S5 の枠 + API・SPA はページの中身が無いので含められない）ときだけ。
  */
 export function commentsInPage(
   settings: Pick<Settings, 'comments'>,
   framework: FrameworkId,
-  sc: Pick<Scenario, 'comments'>,
+  sc: Pick<Scenario, 'comments' | 'template' | 'routeTraits'>,
+  routes?: RouteOverrides,
 ): boolean {
+  const fam = articleFamily({ scenario: sc, framework, routes });
   return (
     settings.comments === COMMENTS_IN_PAGE &&
-    framework !== 'vite-spa' &&
+    (fam !== undefined ? fam !== 'api' : framework !== 'vite-spa') &&
     sc.comments !== undefined
   );
 }
@@ -413,6 +488,10 @@ export type Action =
   /** アプリを作り直す（フレームワークを替える。大きな手間・数か月。済んだ翌月から新しいフレームワーク。D-81）。 */
   | { type: 'rewrite'; framework: FrameworkId }
   /**
+   * ページの描き方を替える（D-107。翌月から）。期限とオンデマンド（S2 ↔ S3）は今までどおり設定（再検証・記事のキャッシュ）で替える。
+   */
+  | { type: 'route'; route: string; strategy: RouteStrategyId; value?: number }
+  /**
    * 1 年の確約を結ぶ（リザーブドインスタンス・Savings Plans・確約利用割引・年払い。key は provider:planId:id。D-97）。
    * 来月から 12 か月。取り消せず、対象を使わなくなっても支払いは残る。
    */
@@ -604,6 +683,11 @@ export type GameState = {
   framework: FrameworkId;
   /** 進行中のアプリの作り直し（D-81）。 */
   rewrite: Rewrite | null;
+  /**
+   * 選んだページごとの描き方（フレームワークの既定と分け方が違うものだけ。D-107）。古い状態には無い（＝既定のまま）。
+   * 作り直しが済むと空に戻り、乗り換えが済むと、乗り換え先で使えないものは外れる。
+   */
+  routes?: RouteOverrides;
   /** 部品の選択（今の構成の事業者のスロット。D-24）。 */
   components: Choices;
   /** 進行中の DB の差し替え。 */
@@ -757,22 +841,67 @@ export function selfBackupOf(
 }
 
 /**
- * 画面に出さず、選べない設定（シナリオで効かないもの + SPA の ISR の間隔・Next.js の API のキャッシュの期間。
- * prd/10・OCL-8DFFDBEC・D-37）。
+ * 画面に出さず、選べない設定（シナリオで効かないもの + 記事の描き方で意味の無いもの。prd/10・OCL-8DFFDBEC・D-37・D-107）。
+ * revalidateSec は記事の描き方ごとの意味で 1 つだけ出す（S1 はビルドの間隔・S2/S3 は ISR の再検証か Astro の記事のキャッシュ・
+ * SPA の S5 は API のキャッシュの期間。毎回描く S4 と、API の応答のキャッシュの無い S5 では出さない）。
  */
 export function hiddenSettings(
-  state: Pick<GameState, 'framework' | 'scenario'>,
+  state: Pick<GameState, 'framework' | 'scenario'> & {
+    routes?: RouteOverrides | undefined;
+  },
 ): SettingKey[] {
   // コメントの無いシナリオでは、コメントの描き方を出さない（D-82）
   const fromScenario: SettingKey[] = [
     ...(state.scenario.hidden?.settings ?? []),
     ...(state.scenario.comments === undefined ? (['comments'] as const) : []),
   ];
-  const byFramework = FRAMEWORK_HIDDEN_SETTINGS[state.framework];
+  const fam = articleFamily(state);
+  const byFramework =
+    fam === undefined
+      ? FRAMEWORK_HIDDEN_SETTINGS[state.framework]
+      : hiddenByFamily(state.framework, fam);
   return [...new Set([...fromScenario, ...byFramework])];
 }
 
-/** フレームワークで意味の無い設定（revalidateSec をフレームワークごとの意味で 1 つだけ出す。D-37・D-68）。 */
+const REVALIDATE_KEYS: SettingKey[] = [
+  'isr',
+  'apiCacheTtl',
+  'buildInterval',
+  'pageCache',
+];
+
+/** 記事の描き方で意味の無い設定（D-107。フレームワークの既定では FRAMEWORK_HIDDEN_SETTINGS と同じになる）。 */
+function hiddenByFamily(
+  framework: FrameworkId,
+  fam: StrategyFamily,
+): SettingKey[] {
+  const visible = revalidateKeyFor(framework, fam);
+  return [
+    ...REVALIDATE_KEYS.filter((k) => k !== visible),
+    // 枠 + API の記事にはコメントを含める HTML が無い（D-82）
+    ...(fam === 'api' ? (['comments'] as const) : []),
+  ];
+}
+
+/** 記事の描き方での revalidateSec の意味（出さないなら undefined）。 */
+function revalidateKeyFor(
+  framework: FrameworkId,
+  fam: StrategyFamily,
+): SettingKey | undefined {
+  switch (fam) {
+    case 'static':
+      return 'buildInterval';
+    case 'cached':
+      return framework === 'astro' ? 'pageCache' : 'isr';
+    case 'api':
+      // API の応答のキャッシュ（D-37）は SPA の部品だけ
+      return framework === 'vite-spa' ? 'apiCacheTtl' : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/** フレームワークで意味の無い設定（記事のページの無いシナリオ。revalidateSec をフレームワークごとの意味で 1 つだけ出す。D-37・D-68）。 */
 const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
   nextjs: ['apiCacheTtl', 'buildInterval', 'pageCache'],
   // SPA は記事のページが無いので、コメントを含められない（D-82）
@@ -782,10 +911,14 @@ const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
 };
 
 /**
- * revalidateSec をこのフレームワークで何の設定として出すか（ISR の間隔・API のキャッシュの期間・ビルドの間隔・
- * Astro の記事のキャッシュ。D-103）。
+ * revalidateSec を何の設定として出すか（ISR の間隔・API のキャッシュの期間・ビルドの間隔・Astro の記事のキャッシュ。D-103）。
+ * 記事の描き方（fam）を渡すとそれで決める（D-107）。省略はフレームワークの既定。
  */
-export function revalidateSettingOf(framework: FrameworkId): SettingKey {
+export function revalidateSettingOf(
+  framework: FrameworkId,
+  fam?: StrategyFamily,
+): SettingKey {
+  if (fam !== undefined) return revalidateKeyFor(framework, fam) ?? 'isr';
   return framework === 'vite-spa'
     ? 'apiCacheTtl'
     : framework === 'astro'
@@ -796,7 +929,7 @@ export function revalidateSettingOf(framework: FrameworkId): SettingKey {
 }
 
 /**
- * 始めるときの revalidateSec の既定（D-103）。Astro は記事を投稿・編集のときに消す（オンデマンド）が既定で、消せない置き場
+ * 始めるときの revalidateSec の既定（D-103）。Astro の記事のキャッシュは投稿・編集のときに消す（オンデマンド）が既定で、消せない置き場
  * （Google Cloud の Hosting の CDN）では 5 分の期限。ほかは 5 分。
  */
 export function defaultRevalidateSec(
@@ -804,9 +937,13 @@ export function defaultRevalidateSec(
   stackIndex: number,
   /** 設定を出さないシナリオ（受託）では 5 分のまま。 */
   scenario?: Scenario,
+  routes?: RouteOverrides,
 ): number {
   if (framework !== 'astro') return DEFAULT_REVALIDATE_SEC;
-  if (scenario && hiddenSettings({ scenario, framework }).includes('pageCache'))
+  if (
+    scenario &&
+    hiddenSettings({ scenario, framework, routes }).includes('pageCache')
+  )
     return DEFAULT_REVALIDATE_SEC;
   const platform = STACKS[stackIndex]?.provider;
   return platform !== undefined &&
@@ -815,11 +952,26 @@ export function defaultRevalidateSec(
     : DEFAULT_REVALIDATE_SEC;
 }
 
-/** 記事ごとの SNS のカードが出ないか（SPA で OGP の前処理なし。prd/10 F-05）。 */
+/**
+ * 記事ごとの SNS のカードが出ないか（記事のページが枠 + API（S5）で、OGP の前処理なし。prd/10 F-05・D-107）。
+ * OGP の前処理の部品は SPA だけにあるので、Next.js・Astro の記事を S5 にするとカードは出ない。
+ */
 function noSocialCards(
-  state: Pick<GameState, 'framework' | 'components'>,
+  state: Pick<GameState, 'framework' | 'components' | 'scenario'> & {
+    routes?: RouteOverrides | undefined;
+  },
 ): boolean {
-  return state.framework === 'vite-spa' && state.components.ogp !== 'prerender';
+  const r = publicRoute(state.scenario);
+  if (!r)
+    return (
+      state.framework === 'vite-spa' && state.components.ogp !== 'prerender'
+    );
+  const needsOgp = state.scenario.routeTraits[r.id]?.needsOgp ?? true;
+  return (
+    needsOgp &&
+    routeFamily(state, r.id) === 'api' &&
+    state.components.ogp !== 'prerender'
+  );
 }
 
 export function eventDef(sc: Scenario, id: string): EventDef | undefined {
@@ -1055,6 +1207,8 @@ export type WorkloadParts = {
   platform: Platform;
   components: Choices;
   framework: FrameworkId;
+  /** 選んだページごとの描き方（D-107。省略はフレームワークの既定）。 */
+  routes?: RouteOverrides | undefined;
   /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
   peakFactor?: number;
   /** 短い期間に集中する上乗せの PV（話題・Bot。容量の判定だけに効く。D-44）。 */
@@ -1184,7 +1338,7 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   if (p.mods.apiResponseKB !== undefined)
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
   // コメントを記事のページに含める（D-82）: コメントの投稿も記事のページを作り直す更新に数え、記事を開いたときのコメントの取得が無くなる
-  const inPage = commentsInPage(p.settings, p.framework, sc);
+  const inPage = commentsInPage(p.settings, p.framework, sc, p.routes);
   const { updates, pagesPerUpdate } = pageUpdates(sc, p.pv, w, inPage);
   if (inPage) {
     const v = withoutCommentFetch(w);
@@ -1231,27 +1385,25 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // マイページは SPA と同じく Client Component が API で中身を取る（API の CPU は SPA の dataCpuFactor 倍）
   // ページごとの描き方（D-106）: フレームワークの既定と今の設定・部品で決まる描き方を、ルートごとに当てる
   // （SPA の形・Astro の形の無いシナリオでは、そのフレームワークの書き換えをしない。今までと同じ）
+  const plan = routeChoices(sc, w.routes, {
+    framework: p.framework,
+    platform: p.platform,
+    settings: p.settings,
+    components: p.components,
+    routes: p.routes,
+  });
+  const uses = (f: StrategyFamily) =>
+    Object.values(plan).some((c) => strategyFamily(c.strategy) === f);
+  // S5 には SPA の形、S1 にはビルドの時間の式（Astro の形）が要る。無いシナリオではそのフレームワークの書き換えをしない（今までと同じ）
   const ready =
-    p.framework === 'nextjs' ||
-    (p.framework === 'vite-spa' && shape !== undefined) ||
-    (p.framework === 'astro' && astro !== undefined) ||
-    (p.framework === 'nextjs-export' &&
-      shape !== undefined &&
-      astro !== undefined);
+    (!uses('api') || shape !== undefined) &&
+    (!uses('static') || astro !== undefined) &&
+    (p.framework !== 'astro' || astro !== undefined);
   const routed = ready
-    ? applyRouteStrategies(
-        w,
-        routeChoices(w.routes, {
-          framework: p.framework,
-          platform: p.platform,
-          settings: p.settings,
-          components: p.components,
-        }),
-        {
-          ...(shape ? { spa: shape } : {}),
-          ...(astro ? { minutesPerBuild: astro.minutesPerBuild, build } : {}),
-        },
-      )
+    ? applyRouteStrategies(w, plan, {
+        ...(shape ? { spa: shape } : {}),
+        ...(astro ? { minutesPerBuild: astro.minutesPerBuild, build } : {}),
+      })
     : w;
   // Astro の JS・CSS はアイランドの分だけ（描き方でなくフレームワークの性質）
   const app =
@@ -1368,11 +1520,14 @@ function architectureFor(
   components: Choices = {},
   standby: Choices = {},
   storageOption = false,
+  /** 選んだ描き方で構成が変わる分（S1 のビルドのノード・Astro の記事のキャッシュの有無。D-107）。 */
+  routing: RoutingOptions = {},
 ): ArchitectureInput {
   const stack = composeStack(STACK_DEFS[stackIndex]!, components, {
     standby,
     storageOption,
     framework,
+    ...routing,
   });
   if (seats <= 0) return stack;
   const ids = [
@@ -1382,6 +1537,34 @@ function architectureFor(
   ];
   return { ...stack, accounts: ids.map((id) => ({ id, seats: 1 + seats })) };
 }
+
+/**
+ * 選んだ描き方に、静的にビルドし直すページ（S1。静的書き出しの既定の記事は composeStack が足す）があるか（D-107）。
+ * 構成のビルドのノードを足すのに使う。
+ */
+export function staticBuildOf(
+  sc: Pick<Scenario, 'template' | 'routeTraits'>,
+  stackIndex: number,
+  framework: FrameworkId,
+  routes: RouteOverrides | undefined,
+): RoutingOptions {
+  if (!routes) return {};
+  const valid = validRouteOverrides(sc, stackIndex, framework, routes);
+  const staticBuild = Object.values(valid).some(
+    (x) => x !== undefined && strategyFamily(x) === 'static',
+  );
+  // Astro で記事をキャッシュしない（S1・S4・S5）なら、Workers Cache を前に置かない
+  const noCache =
+    framework === 'astro' &&
+    articleFamily({ scenario: sc, framework, routes: valid }) !== 'cached';
+  return {
+    ...(staticBuild ? { staticBuild } : {}),
+    ...(noCache ? { pageCache: false } : {}),
+  };
+}
+
+/** 選んだ描き方で composeStack に渡す分（D-107）。 */
+export type RoutingOptions = { staticBuild?: boolean; pageCache?: boolean };
 
 const toUsd = (totals: Partial<Record<string, number>>) =>
   (totals.USD ?? 0) + (totals.JPY ?? 0) / USD_JPY;
@@ -1641,10 +1824,14 @@ export function meetsRequirement(
   requirement: Requirement,
   components: Choices = {},
   framework: FrameworkId = 'nextjs',
+  /** 記事のページの描き方（D-107。省略はフレームワークの既定）。 */
+  fam?: StrategyFamily,
 ): boolean {
   switch (requirement) {
     case 'on-demand-isr':
-      return onDemandBlocker(stackIndex, components, framework) === undefined;
+      return (
+        onDemandBlocker(stackIndex, components, framework, fam) === undefined
+      );
     case 'db-pitr': {
       const st = dbBackupStatus(stackIndex, components, framework);
       return st.length > 0 && st.every((s) => s.pitrDays >= PITR_REQUIRED_DAYS);
@@ -1680,11 +1867,12 @@ export function requirementReachable(
   stackIndex: number,
   requirement: Requirement,
   framework: FrameworkId = 'nextjs',
+  fam?: StrategyFamily,
 ): boolean {
   return STACKS.some(
     (s) =>
       s.provider === STACKS[stackIndex]!.provider &&
-      (meetsRequirement(s.index, requirement, {}, framework) ||
+      (meetsRequirement(s.index, requirement, {}, framework, fam) ||
         // DB のバックアップは部品で満たせる（D-93）
         (requirement === 'db-pitr' &&
           meetsRequirement(
@@ -1727,11 +1915,15 @@ function onDemandBlocker(
   stackIndex: number,
   components: Choices = {},
   framework: FrameworkId = 'nextjs',
+  /** 記事のページの描き方（D-107）。S2/S3 のときだけ置き場・部品で決まる。省略はフレームワークの既定。 */
+  fam?: StrategyFamily,
 ): { slot: SlotId; label: string; reason: string } | undefined {
+  // 記事を毎回描く（S4）・枠 + API（S5）なら、キャッシュが無いのでいつも即時に反映される（prd/10・D-107）。
+  // 静的にビルドし直す（S1）は記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-80）。
+  // 新しい記事がビルドまで開けない分は、鮮度の判定で別に下げる（D-104）
+  if (fam !== undefined && fam !== 'cached') return undefined;
   // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
   if (framework === 'vite-spa') return undefined;
-  // Next.js の静的書き出しは記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-80）。
-  // 新しい記事がビルドまで開けない分は、鮮度の判定で別に下げる（D-104）
   if (rebuildsStaticPages(framework)) return undefined;
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
@@ -1771,6 +1963,8 @@ export function requirementStatus(
   components: Choices,
   requirement: Requirement,
   framework: FrameworkId = 'nextjs',
+  /** 記事のページの描き方（D-107）。 */
+  fam?: StrategyFamily,
 ): { label: string; ok: boolean; reason: string; current: boolean }[] {
   if (requirement === 'db-pitr') {
     // DB のバックアップの選択肢ごとに、今の DB で何日戻せるか（D-93）
@@ -1790,6 +1984,28 @@ export function requirementStatus(
     );
   }
   if (requirement !== 'on-demand-isr') return [];
+  if (fam === 'ssr' || (fam === 'api' && framework !== 'vite-spa'))
+    return [
+      {
+        label:
+          fam === 'ssr'
+            ? '記事のページを毎回描く'
+            : '記事のページを枠 + API に',
+        ok: true,
+        reason: 'キャッシュが無いので、更新はいつもすぐ見える',
+        current: true,
+      },
+    ];
+  if (fam === 'static' && !rebuildsStaticPages(framework))
+    return [
+      {
+        label: '記事のページを静的にビルドし直す',
+        ok: true,
+        reason:
+          '記事を更新するたびにビルドし直す（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増える',
+        current: true,
+      },
+    ];
   if (framework === 'vite-spa')
     return [
       {
@@ -2539,10 +2755,19 @@ export function settingNote(
  * 間隔の数までしか増えない。どちらもコメントは間隔の分だけ遅れて見え、鮮度の判定に入る（D-85）。
  */
 function commentsNote(state: GameState): string | undefined {
-  if (!commentsInPage(state.settings, state.framework, scenarioOf(state)))
+  if (
+    !commentsInPage(
+      state.settings,
+      state.framework,
+      scenarioOf(state),
+      state.routes,
+    )
+  )
     return undefined;
-  const rebuilds = rebuildsStaticPages(state.framework);
-  if (!rebuilds && isrCacheOf(state) === 'none')
+  const fam = articleFamily(state);
+  const rebuilds =
+    fam !== undefined ? fam === 'static' : rebuildsStaticPages(state.framework);
+  if (fam === 'ssr' || (!rebuilds && isrCacheOf(state) === 'none'))
     return 'ISR のキャッシュを使わない（毎回描く）ので、作り直しは増えない';
   if (isOnDemand(state.settings))
     return rebuilds
@@ -2807,10 +3032,15 @@ function actionRule(state: GameState, action: Action): ActionCheck {
             action.key === 'apiCacheTtl' ||
             action.key === 'buildInterval' ||
             action.key === 'pageCache'
-            ? `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework)].label}」で選ぶ`
+            ? articleFamily(state) === 'ssr' ||
+              (articleFamily(state) === 'api' && state.framework !== 'vite-spa')
+              ? '記事のページをキャッシュしない描き方では効かない'
+              : `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework, articleFamily(state))].label}」で選ぶ`
             : action.key === 'comments' && state.framework === 'vite-spa'
               ? 'SPA には記事のページが無い（コメントはブラウザで読み込む）'
-              : 'このシナリオでは効かない',
+              : action.key === 'comments' && articleFamily(state) === 'api'
+                ? '記事のページが枠 + API なので、コメントを含める HTML が無い（コメントはブラウザで読み込む）'
+                : 'このシナリオでは効かない',
         );
       if (state.settings[def.field] === action.value)
         return ng('same', '今と同じ（または選択済み）');
@@ -2923,6 +3153,54 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         );
       // 申し込むだけで、作業の手間はかからない（仮定）
       return ok(0);
+    }
+    case 'route': {
+      // 作り直しの最中は、済むと描き方が新しいフレームワークの既定に戻るので選べない（D-81・D-107）
+      if (rewriting) return rewriting;
+      const sc = scenarioOf(state);
+      const r = sc.template(1).routes.find((x) => x.id === action.route);
+      if (!r) return ng('invalid', 'このシナリオに無いページ');
+      if (!ROUTE_STRATEGIES[action.strategy])
+        return ng('invalid', '描き方に無い');
+      if (
+        action.value !== undefined &&
+        !Object.values(SETTINGS).some(
+          (d) =>
+            d.field === 'revalidateSec' &&
+            d.options.some((o) => o.value === action.value),
+        )
+      )
+        return ng('invalid', '選択肢に無い値');
+      const platform = STACKS[state.stackIndex]!.provider;
+      const audience = routeAudienceOf(sc, r);
+      const now = routeChoices(sc, [r], {
+        framework: state.framework,
+        platform,
+        settings: state.settings,
+        components: state.components,
+        routes: state.routes,
+      })[r.id]!.strategy;
+      if (strategyFamily(now) === strategyFamily(action.strategy))
+        return ng(
+          'same',
+          strategyFamily(now) === 'cached'
+            ? '期限とオンデマンドは設定で替える'
+            : '今の描き方と同じ',
+        );
+      if (
+        !strategySelectable(
+          state.framework,
+          platform,
+          audience,
+          action.strategy,
+        )
+      )
+        return ng(
+          'unavailable',
+          strategySupport(state.framework, platform, audience, action.strategy)
+            .note,
+        );
+      return ok(routeChangeEffort(now, action.strategy));
     }
     case 'rewrite': {
       if (busy) return busy;
@@ -3212,10 +3490,15 @@ export const DEFAULT_REVALIDATE_SEC = 300;
 export function setupRevalidateOptions(
   scenario: Scenario,
   framework: FrameworkId,
+  /** 選んだページごとの描き方（D-107）。 */
+  routes?: RouteOverrides,
 ): { value: number; label: string; flavor: string }[] {
-  const key = revalidateSettingOf(framework);
+  const key = revalidateSettingOf(
+    framework,
+    articleFamily({ scenario, framework, routes }),
+  );
   if (key === 'apiCacheTtl') return [];
-  if (hiddenSettings({ scenario, framework }).includes(key)) return [];
+  if (hiddenSettings({ scenario, framework, routes }).includes(key)) return [];
   return SETTINGS[key].options.map((o) => ({
     ...o,
     flavor: settingFlavor(key, o.value) ?? '',
@@ -3228,12 +3511,32 @@ export function setupRevalidateOptions(
 export function setupCommentOptions(
   scenario: Scenario,
   framework: FrameworkId,
+  routes?: RouteOverrides,
 ): { value: number; label: string; flavor: string }[] {
-  if (hiddenSettings({ scenario, framework }).includes('comments')) return [];
+  if (hiddenSettings({ scenario, framework, routes }).includes('comments'))
+    return [];
   return SETTINGS.comments.options.map((o) => ({
     ...o,
     flavor: settingFlavor('comments', o.value) ?? '',
   }));
+}
+
+/** 描き方を替えた区画の作られ方（借りる図が無いとき。HTML の本体の区画だけを替え、API・アイランド・画像はそのまま）。 */
+function retagSource(src: RegionSource, s: RouteStrategyId): RegionSource {
+  if (src !== 'build' && src !== 'isr' && src !== 'cached' && src !== 'ssr')
+    return src;
+  switch (strategyFamily(s)) {
+    case 'static':
+      return 'build';
+    case 'cached':
+      return s === 'cached-purge' ? 'cached' : 'isr';
+    case 'ssr':
+      return 'ssr';
+    case 'api':
+      return 'api';
+    default:
+      return src;
+  }
 }
 
 /** 見取り図の区画に、選んだフレームワークでの作られ方を付けたもの（D-102）。 */
@@ -3247,31 +3550,60 @@ export function pageWireframes(
   sc: Scenario,
   framework: FrameworkId,
   comments?: number,
+  /** 選んだページごとの描き方（D-107）。既定と違うページは、その描き方を既定に持つフレームワークの図を借りる。 */
+  routes?: RouteOverrides,
 ): {
   route: string;
   label: string;
   regions: ResolvedRegion[];
   badges: PageBadge[];
 }[] {
-  const routes = sc.template(1).routes;
+  const tpl = sc.template(1).routes;
   const inPage = commentsInPage(
     { comments: comments ?? COMMENTS_IN_BROWSER },
     framework,
     sc,
+    routes,
   );
   return (sc.text?.wireframes ?? []).map((w) => {
+    const r = tpl.find((x) => x.id === w.route);
+    const chosen = routes?.[w.route];
+    const audience = r ? routeAudienceOf(sc, r) : 'public';
+    // 図を借りるフレームワーク: 選んだ描き方を既定に持つもの（記事の S1 は静的書き出し・個人向けの S5 は静的書き出しなど）
+    const donor =
+      chosen === undefined
+        ? framework
+        : // SPA の図（1 つのシェル）より、ページごとの HTML を持つフレームワークの図を先に借りる
+          ([...frameworksOf(sc).allowed]
+            .sort((a, b) => Number(a === 'vite-spa') - Number(b === 'vite-spa'))
+            .find(
+              (f) =>
+                strategyFamily(FRAMEWORK_PRESETS[f][audience]) ===
+                strategyFamily(chosen),
+            ) ?? framework);
+    // 借りる先が無い（記事を毎回描く S4 など）は、作られ方を描き方で置き換える
+    const own = w.byFramework[donor];
+    const base =
+      chosen !== undefined && donor === framework
+        ? Object.fromEntries(
+            Object.entries(own).map(([id, src]) => [
+              id,
+              retagSource(src, chosen),
+            ]),
+          )
+        : own;
     const sources = {
-      ...w.byFramework[framework],
-      ...(inPage ? w.commentsInPage?.[framework] : undefined),
+      ...base,
+      ...(inPage ? w.commentsInPage?.[donor] : undefined),
     };
     return {
       route: w.route,
-      label: routes.find((r) => r.id === w.route)?.label ?? w.route,
+      label: r?.label ?? w.route,
       regions: w.regions.map((r) => ({
         ...r,
         source: sources[r.id] ?? 'ssr',
       })),
-      badges: w.badges?.[framework] ?? [],
+      badges: w.badges?.[donor] ?? [],
     };
   });
 }
@@ -3285,20 +3617,28 @@ export function pageWireframes(
  * workloadFor はこれを applyRouteStrategies に当てる（今までの toSpa・toAstro・toNextExport と同じ Workload。等価のテストで確かめる）。
  */
 export function routeChoices(
+  sc: Pick<Scenario, 'routeTraits'>,
   routes: WorkloadInput['routes'],
   p: {
     framework: FrameworkId;
     platform: Platform;
     settings: Pick<Settings, 'revalidateSec'>;
     components: Choices;
+    /** 選んだ描き方（D-107）。この事業者・フレームワークで使えないものは既定に戻す。 */
+    routes?: RouteOverrides | undefined;
   },
 ): RoutePlan {
   const c = { ...DEFAULT_CHOICES[p.platform], ...p.components };
   const cacheContent = apiCacheActive(p.platform, p.components, p.framework);
   return Object.fromEntries(
     routes.map((r) => {
-      const audience = routeAudience(r);
-      let strategy = defaultStrategy(p.framework, p.platform, audience);
+      const audience = routeAudience(r, sc.routeTraits);
+      const chosen = p.routes?.[r.id];
+      let strategy =
+        chosen !== undefined &&
+        strategySelectable(p.framework, p.platform, audience, chosen)
+          ? chosen
+          : defaultStrategy(p.framework, p.platform, audience);
       if (strategy === 'cached-ttl' || strategy === 'cached-purge')
         strategy =
           p.framework === 'nextjs' && c.isrCache === 'none'
@@ -3317,7 +3657,27 @@ export function routeChoices(
   );
 }
 
-/** 描き方の表の 1 行の、ほかの描き方（D-106）。available: この事業者・今の部品で使えるか。reason は使えない理由か条件。 */
+/**
+ * 描き方をその事業者・フレームワーク・見る人で選べるか（D-107）。対応表で使える（部品で決まるものを含む）・数え方がある（S6 は無い）。
+ * 確かめていない描き方（vinext の S1・S6）は選べない（RS-04・RS-18）。
+ */
+export function strategySelectable(
+  framework: FrameworkId,
+  platform: Platform,
+  audience: RouteAudience,
+  strategy: RouteStrategyId,
+): boolean {
+  const x = strategySupport(framework, platform, audience, strategy);
+  return (
+    ROUTE_STRATEGIES[strategy].modeled &&
+    (x.support === 'yes' || x.support === 'depends')
+  );
+}
+
+/**
+ * 描き方の表の 1 行の、ほかの描き方（D-106・D-107）。available: この事業者・今の部品で選べるか。reason は使えない理由か条件。
+ * value: 選ぶときに一緒に替える revalidateSec（S3 はオンデマンド、S3 から S2 は 5 分。省略は今の値のまま）。
+ */
 export type RouteAlternative = {
   strategy: RouteStrategyId;
   label: string;
@@ -3326,13 +3686,16 @@ export type RouteAlternative = {
   reason: string;
   /** 出典がある（source）か、ゲーム上の仮定（assumption）か。 */
   basis: 'source' | 'assumption';
+  value?: number;
 };
 
-/** 「ページごとの描き方」の表の 1 行（D-106。読むだけ。段 3 で選べるようにする）。 */
+/** 「ページごとの描き方」の表の 1 行（D-106・D-107）。 */
 export type RoutePlanRow = {
   route: string;
   label: string;
   audience: RouteAudience;
+  /** ページの性質（SNS のカード・鮮度の要件・部品。D-107）。 */
+  traits: RouteTraits | undefined;
   /** PV の割合（0〜1。テンプレートの値）。 */
   share: number;
   strategy: RouteStrategyId;
@@ -3343,34 +3706,100 @@ export type RoutePlanRow = {
   detail: string[];
   /** この描き方がこのページの何の要件に応えるか。 */
   why: string;
-  /** フレームワークの既定から外れている理由（今の部品・設定で決まった分）。 */
+  /** フレームワークの既定から外れている理由（選んだ描き方・今の部品で決まった分）。 */
   overriddenBy?: string;
   /** ほかの描き方（確かめていない描き方は出さない。RS-04）。 */
   alternatives: RouteAlternative[];
 };
 
+/** 表の行を組む入力（始める画面・見積モード・ゲームの状態）。 */
+export type RoutePlanInput = {
+  framework: FrameworkId;
+  stackIndex: number;
+  settings: Pick<Settings, 'revalidateSec' | 'comments'>;
+  components: Choices;
+  /** 選んだ描き方（D-107）。 */
+  routes?: RouteOverrides | undefined;
+};
+
 /**
- * ページごとの描き方の表（D-106・段 2。始める画面のフレームワークのカード・見積モード・ゲームの状態から使う）。
+ * 選んだ描き方を足した選択（D-107）。フレームワークの既定と分け方が同じなら持たない（S2 と S3 は設定で替える）。
+ */
+export function withRouteChoice(
+  sc: Pick<Scenario, 'template' | 'routeTraits'>,
+  framework: FrameworkId,
+  routes: RouteOverrides | undefined,
+  routeId: string,
+  strategy: RouteStrategyId,
+): RouteOverrides {
+  const r = sc.template(1).routes.find((x) => x.id === routeId);
+  const out: Partial<Record<string, RouteStrategyId>> = { ...routes };
+  if (!r) return out;
+  const preset = FRAMEWORK_PRESETS[framework][routeAudienceOf(sc, r)];
+  if (strategyFamily(preset) === strategyFamily(strategy)) delete out[routeId];
+  else
+    out[routeId] =
+      strategyFamily(strategy) === 'cached' ? 'cached-ttl' : strategy;
+  return out;
+}
+
+/**
+ * 選んだ描き方のうち、その事業者・フレームワークで選べるものだけを残す（乗り換え・作り直しの後。D-107）。
+ */
+export function validRouteOverrides(
+  sc: Pick<Scenario, 'template' | 'routeTraits'>,
+  stackIndex: number,
+  framework: FrameworkId,
+  routes: RouteOverrides | undefined,
+): RouteOverrides {
+  const platform = STACKS[stackIndex]!.provider;
+  let out: RouteOverrides = {};
+  for (const r of sc.template(1).routes) {
+    const want = routes?.[r.id];
+    if (
+      want !== undefined &&
+      strategySelectable(framework, platform, routeAudienceOf(sc, r), want)
+    )
+      out = withRouteChoice(sc, framework, out, r.id, want);
+  }
+  return out;
+}
+
+/** 今の描き方から別の描き方へ替える手間（ゲーム上の仮定・RS-08・D-107）。S2 ↔ S3 は設定（onDemandSwitch）で替える。 */
+export function routeChangeEffort(
+  from: RouteStrategyId,
+  to: RouteStrategyId,
+): number {
+  const f = strategyFamily(from);
+  const t = strategyFamily(to);
+  if (f === t) return 0;
+  // ページを枠と API に分ける（Client Component・アイランドと API を書く）。SSR の最適化と同じ大きさ
+  if (t === 'api' || t === 'island') return EFFORT.route.toApi;
+  // キャッシュのヘッダ・消す処理・prerender（generateStaticParams）の切り替え
+  return EFFORT.route.other;
+}
+
+/**
+ * ページごとの描き方の表（D-106・D-107。始める画面・見積モード・ゲームの状態から使う）。
  * 行はテンプレートのルート、描き方は routeChoices（workloadFor が当てるものと同じ）。
  */
-export function routePlanRows(
-  sc: Scenario,
-  p: {
-    framework: FrameworkId;
-    stackIndex: number;
-    settings: Pick<Settings, 'revalidateSec' | 'comments'>;
-    components: Choices;
-  },
-): RoutePlanRow[] {
+export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
   const platform = STACKS[p.stackIndex]!.provider;
   const routes = sc.template(1).routes;
-  const plan = routeChoices(routes, { ...p, platform });
-  const hidden = hiddenSettings({ scenario: sc, framework: p.framework });
-  const revalidateKey = revalidateSettingOf(p.framework);
-  const inPage = commentsInPage(p.settings, p.framework, sc);
-  const blocker = onDemandBlocker(p.stackIndex, p.components, p.framework);
+  const plan = routeChoices(sc, routes, { ...p, platform });
+  const state = { scenario: sc, framework: p.framework, routes: p.routes };
+  const hidden = hiddenSettings(state);
+  const fam = articleFamily(state);
+  const revalidateKey = revalidateSettingOf(p.framework, fam);
+  const inPage = commentsInPage(p.settings, p.framework, sc, p.routes);
+  const blocker = onDemandBlocker(
+    p.stackIndex,
+    p.components,
+    p.framework,
+    'cached',
+  );
   return routes.map((r) => {
-    const audience = routeAudience(r);
+    const audience = routeAudienceOf(sc, r);
     const choice = plan[r.id]!;
     const def = ROUTE_STRATEGIES[choice.strategy];
     const preset = defaultStrategy(p.framework, platform, audience);
@@ -3392,14 +3821,15 @@ export function routePlanRows(
           ? 'コメント欄: HTML に含める（投稿でも描き直す）'
           : 'コメント欄: ブラウザが API で読み込む',
       );
+    const chosen = p.routes?.[r.id] !== undefined;
     const overriddenBy =
-      choice.strategy === preset ||
-      (preset === 'cached-ttl' && choice.strategy === 'cached-purge') ||
-      (preset === 'cached-purge' && choice.strategy === 'cached-ttl')
+      strategyFamily(choice.strategy) === strategyFamily(preset)
         ? undefined
-        : choice.strategy === 'ssr'
-          ? `${SLOT_LABELS.isrCache}の部品が「キャッシュしない」`
-          : undefined;
+        : chosen
+          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は ${ROUTE_STRATEGIES[preset].code} ${ROUTE_STRATEGIES[preset].label}）`
+          : choice.strategy === 'ssr'
+            ? `${SLOT_LABELS.isrCache}の部品が「キャッシュしない」`
+            : undefined;
     const alternatives = ROUTE_STRATEGY_ORDER.filter(
       (s) => s !== choice.strategy,
     ).flatMap((s): RouteAlternative[] => {
@@ -3409,14 +3839,23 @@ export function routePlanRows(
       // 部品で決まるもの（Next.js の S3）は、今の部品で消せるか（onDemandBlocker）で判定する
       const blocked =
         x.support === 'depends' && s === 'cached-purge' ? blocker : undefined;
+      const value =
+        s === 'cached-purge'
+          ? ON_DEMAND_REVALIDATE
+          : s === 'cached-ttl' && isOnDemand(p.settings)
+            ? DEFAULT_REVALIDATE_SEC
+            : undefined;
       return [
         {
           strategy: s,
           label: d.label,
           code: d.code,
-          available: x.support !== 'no' && blocked === undefined,
+          available:
+            strategySelectable(p.framework, platform, audience, s) &&
+            blocked === undefined,
           reason: blocked ? `${blocked.label}: ${blocked.reason}` : x.note,
           basis: x.basis,
+          ...(value !== undefined ? { value } : {}),
         },
       ];
     });
@@ -3424,6 +3863,7 @@ export function routePlanRows(
       route: r.id,
       label: r.label ?? r.id,
       audience,
+      traits: sc.routeTraits[r.id],
       share: r.share,
       strategy: choice.strategy,
       strategyLabel: def.label,
@@ -3436,14 +3876,162 @@ export function routePlanRows(
   });
 }
 
-/** ゲームの今の状態のページごとの描き方（D-106。今のフレームワーク・構成・設定・部品から決まる）。 */
+/** ゲームの今の状態のページごとの描き方（D-106。今のフレームワーク・構成・設定・部品・選んだ描き方から決まる）。 */
 export function routePlanOf(
   state: Pick<
     GameState,
-    'scenario' | 'framework' | 'stackIndex' | 'settings' | 'components'
+    | 'scenario'
+    | 'framework'
+    | 'stackIndex'
+    | 'settings'
+    | 'components'
+    | 'routes'
   >,
 ): RoutePlanRow[] {
   return routePlanRows(state.scenario, state);
+}
+
+/** 表の行の要件の判定（D-107。始める画面の 1 か月目の見込みと同じ組み立て）。 */
+export type RouteRowStatus = {
+  route: string;
+  /** 鮮度（全員に同じ中身のページだけ。1 か月目の満足度の判定）。 */
+  freshness?: { stage: Stage; text: string };
+  /** SNS のカード（HTML に記事ごとのメタタグが要るページだけ）。 */
+  ogp?: { ok: boolean; text: string };
+  /** 1 リクエストの CPU の制限（D-99 の causes をこのページで絞ったもの）。 */
+  cpu: { ok: boolean; text?: string };
+  /** ほかの描き方にしたときの 1 か月目の費用の差（USD）と、当たって止まる・遅くなる前提の数の差。 */
+  deltas: Partial<
+    Record<RouteStrategyId, { costUsd: number; blocking: number }>
+  >;
+};
+
+/** 始める画面の選択（表の要件の判定・見込みの入力）。 */
+export type RouteSetup = {
+  framework: FrameworkId;
+  stackIndex: number;
+  components: Choices;
+  revalidateSec?: number | undefined;
+  comments?: number | undefined;
+  routes?: RouteOverrides | undefined;
+};
+
+/**
+ * ページごとの描き方の行の要件の判定と、ほかの描き方にしたときの 1 か月目の差（D-107）。
+ * 1 か月目の基準の PV で、setupMonthOneEstimate（費用・止まる前提）と playMonth の 1 か月目（鮮度）を引く。出来事・乱数は含めない目安。
+ */
+export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
+  const est = (x: RouteSetup) =>
+    setupMonthOneEstimate(
+      sc,
+      x.stackIndex,
+      x.framework,
+      x.components,
+      x.revalidateSec,
+      x.comments,
+      x.routes,
+    );
+  const base = est(p);
+  const state = newGame(
+    p.stackIndex,
+    1,
+    sc,
+    DEFAULT_START_DATE,
+    p.framework,
+    p.components,
+    p.revalidateSec,
+    p.comments,
+    undefined,
+    p.routes,
+  );
+  const month1 = playMonth(state).history[0]!;
+  const rows = routePlanRows(sc, {
+    framework: state.framework,
+    stackIndex: state.stackIndex,
+    settings: state.settings,
+    components: state.components,
+    routes: state.routes,
+  });
+  return rows.map((row) => {
+    const cpuHit = base.blocking.filter(
+      (b) => b.id.startsWith('limit:') && b.routes?.includes(row.route),
+    );
+    const deltas: RouteRowStatus['deltas'] = {};
+    for (const alt of row.alternatives) {
+      if (!alt.available) continue;
+      const e = est({
+        ...p,
+        routes: withRouteChoice(
+          sc,
+          state.framework,
+          state.routes,
+          row.route,
+          alt.strategy,
+        ),
+        revalidateSec: alt.value ?? state.settings.revalidateSec,
+      });
+      deltas[alt.strategy] = {
+        costUsd: e.costUsd - base.costUsd,
+        blocking: e.blocking.length - base.blocking.length,
+      };
+    }
+    const fresh = row.audience === 'public';
+    return {
+      route: row.route,
+      ...(fresh
+        ? {
+            freshness: {
+              stage: month1.satisfaction.stages.freshness,
+              text:
+                month1.satisfaction.reasons.freshness ??
+                '更新はすぐ・間隔の内に見える',
+            },
+          }
+        : {}),
+      ...(row.traits?.needsOgp
+        ? {
+            ogp:
+              row.strategy === 'shell-api' &&
+              state.components.ogp !== 'prerender'
+                ? {
+                    ok: false,
+                    text: 'HTML に中身が無いので、記事ごとの SNS のカードが出ない（話題の伸びが減る）',
+                  }
+                : { ok: true, text: '記事ごとの SNS のカードは HTML に入る' },
+          }
+        : {}),
+      cpu: cpuHit.length
+        ? { ok: false, text: cpuHit.map((b) => b.detail ?? b.text).join('・') }
+        : { ok: true },
+      deltas,
+    };
+  });
+}
+
+/**
+ * 表の行のほかの描き方を選ぶ行動（ゲームの途中。D-107）。S2 ↔ S3 は設定（再検証・記事のキャッシュ）の変更、
+ * それ以外は描き方の変更（value があれば revalidateSec も一緒に替える）。
+ */
+export function routeAlternativeAction(
+  state: Pick<GameState, 'scenario' | 'framework' | 'routes'>,
+  row: Pick<RoutePlanRow, 'route' | 'strategy'>,
+  alt: Pick<RouteAlternative, 'strategy' | 'value'>,
+): Action {
+  if (
+    strategyFamily(row.strategy) === 'cached' &&
+    strategyFamily(alt.strategy) === 'cached'
+  )
+    return {
+      type: 'set',
+      key: revalidateSettingOf(state.framework, 'cached'),
+      value: alt.value ?? DEFAULT_REVALIDATE_SEC,
+    };
+  return {
+    type: 'route',
+    route: row.route,
+    strategy: alt.strategy,
+    ...(alt.value !== undefined ? { value: alt.value } : {}),
+  };
 }
 
 /**
@@ -3622,6 +4210,7 @@ export function componentPreview(
       platform,
       components,
       framework: state.framework,
+      routes: state.routes,
     }),
     architecture: architectureFor(
       state.stackIndex,
@@ -3630,6 +4219,7 @@ export function componentPreview(
       components,
       {},
       state.storageOption,
+      staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
     ),
     books: booksAt(state, state.history.length + 1),
   });
@@ -3727,6 +4317,7 @@ function invalidationLines(
       platform,
       components,
       framework: state.framework,
+      routes: state.routes,
     }),
     architecture: architectureFor(
       state.stackIndex,
@@ -3735,6 +4326,7 @@ function invalidationLines(
       components,
       {},
       state.storageOption,
+      staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
     ),
     books: bk,
   });
@@ -3792,7 +4384,13 @@ export type MonthOneEstimate = {
   short: boolean;
   topLines: { label: string; usd: number }[];
   /** 1 か月目に当たって止まる・遅くなる前提（収益を減らす理由。detail はどのルートが当たるか。D-99）。 */
-  blocking: { id: string; text: string; detail?: string }[];
+  blocking: {
+    id: string;
+    text: string;
+    detail?: string;
+    /** 1 リクエストの CPU の制限に当たったルート（D-99 の causes。D-107 の表の行に出す）。 */
+    routes?: string[];
+  }[];
 };
 
 export function setupMonthOneEstimate(
@@ -3802,6 +4400,8 @@ export function setupMonthOneEstimate(
   components: Choices,
   revalidateSec?: number,
   comments?: number,
+  /** 選んだページごとの描き方（D-107）。 */
+  routes?: RouteOverrides,
 ): MonthOneEstimate {
   const state = newGame(
     stackIndex,
@@ -3812,6 +4412,8 @@ export function setupMonthOneEstimate(
     components,
     revalidateSec,
     comments,
+    undefined,
+    routes,
   );
   const r = estimate({
     workload: workloadFor(scenario, {
@@ -3823,6 +4425,7 @@ export function setupMonthOneEstimate(
       platform: STACKS[state.stackIndex]!.provider,
       components: state.components,
       framework: state.framework,
+      routes: state.routes,
     }),
     architecture: architectureFor(
       state.stackIndex,
@@ -3831,6 +4434,7 @@ export function setupMonthOneEstimate(
       state.components,
       {},
       state.storageOption,
+      staticBuildOf(scenario, state.stackIndex, state.framework, state.routes),
     ),
     books: booksAt(state, 1),
   });
@@ -3868,22 +4472,37 @@ export function setupMonthOneEstimate(
             p.effect === 'upgrade-required' ||
             p.effect === 'throttle'),
       )
-      .map((p) => ({
-        id: p.id,
-        text: p.text,
-        ...(p.detail !== undefined ? { detail: p.detail } : {}),
-      })),
+      .map((p) => {
+        const routes = [
+          ...new Set(
+            (p.causes ?? []).flatMap((c) =>
+              c.routeId !== undefined ? [c.routeId] : [],
+            ),
+          ),
+        ];
+        return {
+          id: p.id,
+          text: p.text,
+          ...(p.detail !== undefined ? { detail: p.detail } : {}),
+          ...(routes.length ? { routes } : {}),
+        };
+      }),
   };
 }
 
 /** 提案を受けられない理由（要件を満たせる構成がプラン変更でも無い）。 */
 export function unavailableReason(
-  state: Pick<GameState, 'stackIndex' | 'framework'>,
+  state: Pick<GameState, 'stackIndex' | 'framework' | 'scenario' | 'routes'>,
   def: EventDef,
 ): string | undefined {
   if (
     !def.requires ||
-    requirementReachable(state.stackIndex, def.requires, state.framework)
+    requirementReachable(
+      state.stackIndex,
+      def.requires,
+      state.framework,
+      articleFamily(state),
+    )
   )
     return undefined;
   return `今の事業者では「${REQUIREMENT_LABEL[def.requires]}」を選べない（セルフサービスのプランに無く、Enterprise などの契約の料金は取得していない）`;
@@ -3904,6 +4523,8 @@ export function newGame(
   comments?: number,
   /** 始める画面で結んだ確約（D-97。setupCommitments にあるものだけ。1 か月目から 12 か月）。 */
   commitments?: readonly { key: string; payment: CommitmentPaymentId }[],
+  /** 始める画面で選んだページごとの描き方（D-107）。選べないものは捨て、省略はフレームワークの既定。 */
+  routes?: RouteOverrides,
 ): GameState {
   const fw = frameworksOf(scenario);
   // 載せられない構成（Astro × AWS など）では既定のフレームワークにする（画面では選べない。D-68）
@@ -3916,8 +4537,13 @@ export function newGame(
   const chosen = components
     ? validSetupChoices(scenario, stackIndex, app, components)
     : {};
+  const chosenRoutes = routes
+    ? validRouteOverrides(scenario, stackIndex, app, routes)
+    : {};
+  const hasRoutes = Object.keys(chosenRoutes).length > 0;
   return {
     startDate,
+    ...(hasRoutes ? { routes: chosenRoutes } : {}),
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
     scenarioId: scenario.id,
     scenario,
@@ -3955,14 +4581,16 @@ export function newGame(
       variants: 3,
       revalidateSec:
         revalidateSec !== undefined &&
-        setupRevalidateOptions(scenario, app).some(
+        setupRevalidateOptions(scenario, app, chosenRoutes).some(
           (o) => o.value === revalidateSec,
         )
           ? revalidateSec
-          : defaultRevalidateSec(app, stackIndex, scenario),
+          : defaultRevalidateSec(app, stackIndex, scenario, chosenRoutes),
       comments:
         comments !== undefined &&
-        setupCommentOptions(scenario, app).some((o) => o.value === comments)
+        setupCommentOptions(scenario, app, chosenRoutes).some(
+          (o) => o.value === comments,
+        )
           ? comments
           : COMMENTS_IN_BROWSER,
       ssrOptimizations: 0,
@@ -4344,6 +4972,7 @@ export function playMonth(input: GameState): GameState {
     platform: platformNow,
     components: state.components,
     framework: state.framework,
+    routes: state.routes,
     ...(peakFactor !== 1 ? { peakFactor } : {}),
     ...(spikes.length ? { spikes } : {}),
   };
@@ -4356,6 +4985,7 @@ export function playMonth(input: GameState): GameState {
     state.components,
     swap ? { [swap.slot]: swap.option } : {},
     state.storageOption,
+    staticBuildOf(sc, stackIndexNow, state.framework, state.routes),
   );
   const monthBooks = booksAt(state, month);
   const r = estimate({ workload, architecture, books: monthBooks });
@@ -4377,7 +5007,15 @@ export function playMonth(input: GameState): GameState {
           }),
           // 同じドメイン（.com 1 つ）の登録料は今の構成で払っているので、乗り換え先では数えない（D-96・OCL-A580D510）
           architecture: withoutDomainRegistration(
-            architectureFor(to, state.seats, state.framework, components),
+            architectureFor(
+              to,
+              state.seats,
+              state.framework,
+              components,
+              {},
+              false,
+              staticBuildOf(sc, to, state.framework, state.routes),
+            ),
           ),
           books: monthBooks,
         });
@@ -4435,6 +5073,7 @@ export function playMonth(input: GameState): GameState {
               state.components,
               def.previewRequirement,
               state.framework,
+              articleFamily(state),
             ),
           }
         : {}),
@@ -4605,6 +5244,7 @@ export function playMonth(input: GameState): GameState {
         c.requires,
         state.components,
         state.framework,
+        articleFamily(state),
       )
     )
       contractRevenue += c.usdPerMonth;
@@ -4660,11 +5300,16 @@ export function playMonth(input: GameState): GameState {
   const redesign = imageRedesignQuality(state, sc, month, imgs);
   // SPA は ISR を持たず、ページの中身を毎回 API で読む（記事は常に新しい。prd/10）。
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
-  const spa = state.framework === 'vite-spa';
+  // 記事のページの描き方（D-107）: 枠 + API（S5）なら SPA と同じ判定、静的（S1）なら静的書き出しと同じ判定、毎回描く（S4）ならキャッシュなし。
+  // 記事のページの無いシナリオ（受託）はフレームワークで決める（今までどおり）
+  const fam = articleFamily(state);
+  const spaFramework = state.framework === 'vite-spa';
+  const spa = fam !== undefined ? fam === 'api' : spaFramework;
   const astro = state.framework === 'astro';
   // Next.js の静的書き出し（D-80）: 記事は静的なページ（鮮度はビルドの間隔）、マイページの中身は SPA と同じく API
   const nextExport = state.framework === 'nextjs-export';
-  const rebuilds = nextExport;
+  const rebuilds = fam !== undefined ? fam === 'static' : nextExport;
+  const ssrArticle = fam === 'ssr';
   // Astro の記事は閲覧のときに描いて事業者の置き場にキャッシュする（D-103）。キャッシュしない形は無く、鮮度は Next.js の ISR と同じ
   // （オンデマンドで消す・期限で取り直す）。置き場は事業者で決まるので、ISR のキャッシュの部品の選択は見ない
   const cacheComps: Choices = astro
@@ -4672,9 +5317,11 @@ export function playMonth(input: GameState): GameState {
     : comps;
   const uncached = spa
     ? !apiCacheActive(platformNow, state.components, state.framework)
-    : !rebuilds && cacheComps.isrCache === 'none';
-  // SPA の API の CPU（速さの「SSR の重さ」の代わりに使う。SSR の CPU × dataCpuFactor）
-  const firstLoad = spa && (sc.frameworks?.spa?.firstLoadHeavy ?? false);
+    : ssrArticle || (!rebuilds && cacheComps.isrCache === 'none');
+  // SPA の API の CPU（速さの「SSR の重さ」の代わりに使う。SSR の CPU × dataCpuFactor）。初回表示の重さと速さの CPU は
+  // フレームワークの性質のまま（Next.js・Astro のページを S5 にしても、静的書き出しのマイページと同じく SSR の値で見る。D-80・D-107）
+  const firstLoad =
+    spaFramework && (sc.frameworks?.spa?.firstLoadHeavy ?? false);
   // Astro の初回表示の軽さ（JS はアイランドの分だけ。速さの重さを 1 つ減らす。ゲーム上の仮定・D-68）
   const firstLoadLight =
     astro && (sc.frameworks?.astro?.firstLoadLight ?? false);
@@ -4683,7 +5330,7 @@ export function playMonth(input: GameState): GameState {
   const coldStart = coldShare >= COLD_START.heavyShare;
   // 静的書き出しのマイページは、サーバーの描画が無い代わりにブラウザが HTML → JS → API の順に待つ。速さ・初回表示は
   // Next.js と同じ扱い（SSR の CPU の値をそのまま重さに使う。ゲーム上の仮定・D-80）
-  const serverCpuMs = spa
+  const serverCpuMs = spaFramework
     ? ssrCpuMs * (sc.frameworks?.spa?.shape.dataCpuFactor ?? 1)
     : ssrCpuMs;
   // API を他の事業者に置いている間は、構成の DB の選択は使われない（DB は API の事業者の部品。OCL-5A7916E6）
@@ -4691,7 +5338,8 @@ export function playMonth(input: GameState): GameState {
   // 更新は最大で間隔の約 2 倍遅れて見える（記事・ページに含めたコメントとも。D-91）。オンデマンドでは、再検証と一緒に
   // CDN のキャッシュを消せる部品（さくらの VPS の Cloudflare は Free の purge の API）なら遅れず、消せない部品
   // （AWS の自前の CloudFront）は古いページが残る（D-31 と同じく 1 段下げ、さらに即時反映を満たさない）
-  const frontHtml = !spa && !rebuilds && htmlCachedAtFront(cacheComps);
+  const frontHtml =
+    !spa && !rebuilds && !ssrArticle && htmlCachedAtFront(cacheComps);
   const frontDelayed = frontHtml && !isOnDemand(viewed);
   const frontUnpurged =
     frontHtml &&
@@ -4719,13 +5367,13 @@ export function playMonth(input: GameState): GameState {
   const onDemandSetting = !spa && isOnDemand(state.settings);
   const onDemand =
     state.requirements.includes('on-demand-isr') || onDemandSetting
-      ? onDemandBlocker(stackIndexNow, state.components, state.framework)
+      ? onDemandBlocker(stackIndexNow, state.components, state.framework, fam)
       : undefined;
   // コメントを記事のページに含め、時間で再検証・ビルドするなら、コメントは間隔の分だけ遅れて見える（D-85）。
   // オンデマンド（コメントのたびに作り直す）・キャッシュしない（毎回 SSR）なら遅れない。ビルドし直す形はオンデマンドでもビルドの時間は遅れる（D-104）
   const commentsDelayed =
     sc.comments !== undefined &&
-    commentsInPage(viewed, state.framework, sc) &&
+    commentsInPage(viewed, state.framework, sc, state.routes) &&
     !uncached &&
     (!isOnDemand(viewed) || buildDelaySec > 0);
   const stages = judgeStages(
@@ -4772,6 +5420,7 @@ export function playMonth(input: GameState): GameState {
     switching: state.switching,
     ssrCpuMs: serverCpuMs,
     spa,
+    spaFramework,
     apiOnly: nextExport,
     rebuilds,
     astro,
@@ -4888,8 +5537,11 @@ export function playMonth(input: GameState): GameState {
   // 作り直しが済んだら、次の月から新しいフレームワークで動かす（事業者はそのまま。D-81）
   let framework = state.framework;
   let settings = state.settings;
+  let routes = state.routes;
   if (rewrite && rewrite.done >= rewrite.required) {
     framework = rewrite.to;
+    // 描き方は新しいフレームワークの既定に戻る（D-107）
+    routes = undefined;
     components = componentsAfterRewrite({ ...state, components }, rewrite.to);
     settings = {
       ...settings,
@@ -5068,8 +5720,15 @@ export function playMonth(input: GameState): GameState {
               month,
             }
           : undefined;
+  // 乗り換え先で使えない描き方は既定に戻す（D-107）
+  if (routes !== undefined) {
+    const valid = validRouteOverrides(sc, stackIndex, framework, routes);
+    routes = Object.keys(valid).length > 0 ? valid : undefined;
+  }
+  const { routes: _routes, ...base } = state;
   return {
-    ...state,
+    ...base,
+    ...(routes !== undefined ? { routes } : {}),
     seed,
     stackIndex,
     framework,
@@ -5253,6 +5912,8 @@ function stageReasons(
     ssrCpuMs: number;
     /** SPA（速さの理由を「API の CPU・初回表示」で書く）。 */
     spa: boolean;
+    /** フレームワークが SPA か（速さの文。記事の描き方の spa と分ける。D-107）。 */
+    spaFramework?: boolean;
     /** Next.js の静的書き出し（速さは Next.js と同じ扱いで、理由を「API を待つブラウザの描画」で書く。D-80）。 */
     apiOnly?: boolean;
     /** 記事をビルドし直す（Next.js の静的書き出し。鮮度の理由を「ビルドの間隔」で書く。D-80）。 */
@@ -5293,7 +5954,7 @@ function stageReasons(
   if (stages.speed !== 'good')
     out.speed = c.throttling.length
       ? `前提に当たった: ${c.throttling[0]!.text}`
-      : c.spa
+      : (c.spaFramework ?? c.spa)
         ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
         : c.apiOnly
           ? `重さ ${c.heaviness}（API を待つブラウザの描画 ${c.ssrCpuMs} ms 相当・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
@@ -5430,6 +6091,29 @@ export function applyAction(state: GameState, action: Action): GameState {
           })(),
         },
       );
+    case 'route': {
+      const sc = scenarioOf(state);
+      const r = sc.template(1).routes.find((x) => x.id === action.route)!;
+      return withNote(
+        `${r.label ?? r.id}を${ROUTE_STRATEGIES[action.strategy].code} ${ROUTE_STRATEGIES[action.strategy].label}に`,
+        {
+          ...state,
+          ...planned,
+          routes: withRouteChoice(
+            sc,
+            state.framework,
+            state.routes,
+            action.route,
+            action.strategy,
+          ),
+          ...(action.value !== undefined
+            ? {
+                settings: { ...state.settings, revalidateSec: action.value },
+              }
+            : {}),
+        },
+      );
+    }
     case 'rewrite':
       return withNote(
         `${FRAMEWORKS[action.framework].label} への作り直しを始めた`,
@@ -6028,7 +6712,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
           next: invalidation
-            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる${commentsInPage(state.settings, state.framework, sc) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなる' : ''}`
+            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる${commentsInPage(state.settings, state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなる' : ''}`
             : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
               : base
@@ -6195,7 +6879,18 @@ export function playStrategy(
   framework?: FrameworkId,
 ): GameState {
   let st = playMonth(
-    newGame(s.stackIndex, seed, scenario, startDate, framework),
+    newGame(
+      s.stackIndex,
+      seed,
+      scenario,
+      startDate,
+      framework ?? s.framework,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      s.routes,
+    ),
   );
   for (let i = 0; st.phase === 'playing'; i++)
     st = playMonth(

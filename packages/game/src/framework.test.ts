@@ -211,6 +211,9 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       'vercel-cf-images': ['1334.03', 'goal', 12],
       'aws-amplify-cdn': ['1787.88', 'won', 12],
       'aws-opennext-images': ['1928.34', 'won', 12],
+      // D-107: SPA はもともと個人向けも枠 + API なので、何もしないと同じ
+      'cf-free-personal-api': ['138.79', 'outages', 3],
+      'cf-paid-personal-api': ['1806.06', 'won', 12],
     });
   });
 });

@@ -1,7 +1,7 @@
 // アプリのテンプレート（prd/README のスコープ・企画書 §4.2）。値はすべてテンプレートの既定値（template-default）で、
 // 実測ではない。コストに効く値は判断ポイント（prd/01 §8）として選択肢にする（D-11）。
 import type { WorkloadInput } from 'estimator';
-import type { AstroShape, SpaShape } from '../frameworks/index.ts';
+import type { AstroShape, RouteTraits, SpaShape } from '../frameworks/index.ts';
 
 /**
  * 記事のコミュニティの 1 日の時間帯の形（0 時〜23 時の重み。D-89）。ゲーム上の仮定（出典なし）: 朝の通勤・昼休みに小さな山、
@@ -17,6 +17,25 @@ export const ARTICLE_HOURLY_PROFILE: readonly number[] = [
  * 記事ページは ISR（60%）、個人化されたページは SSR（40%）。
  * @param monthlyPageViews 月間 PV（MAU からの導出を上書きする）
  */
+/**
+ * 記事コミュニティのページの性質（D-107・RS-17。値はシナリオの満足度の freshness と同じ意味の文。ゲーム上の仮定）。
+ */
+export const ARTICLE_COMMUNITY_ROUTES: Readonly<Record<string, RouteTraits>> = {
+  article: {
+    audience: 'public',
+    needsOgp: true,
+    freshness:
+      '投稿・編集が 5 分以内に見えると良い（1 時間以内なら普通）。新しい記事は投稿した人がすぐ開ける',
+    parts: ['コメント欄', 'いいね', 'ログインの表示'],
+  },
+  personal: {
+    audience: 'personal',
+    needsOgp: false,
+    freshness: '自分の書き込みがすぐ見える',
+    parts: ['記事の投稿・編集', '通知'],
+  },
+};
+
 export function articleCommunity(monthlyPageViews: number): WorkloadInput {
   const page = {
     cpuMs: 15,
@@ -85,6 +104,7 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
 }
 
 export {
+  BUSINESS_APP_ROUTES,
   businessApp,
   BUSINESS_APP_ASTRO,
   BUSINESS_APP_SPA,

@@ -11,6 +11,7 @@ import {
   japanTax,
   normalizeInput,
   normalizeSeats,
+  routeStatusOf,
   runEstimate,
   sortRows,
   toQuery,
@@ -497,5 +498,51 @@ describe('日本から契約するときの消費税（D-76）', () => {
     expect(v.tax.totalJpy).toBeGreaterThanOrEqual(v.totalJpy - 1e-6);
     const row = compareStacks(input).find((r) => r.current)!;
     expect(row.taxInclJpy).toBeCloseTo(v.tax.totalJpy, 6);
+  });
+});
+
+describe('ページごとの描き方（D-107）', () => {
+  it('URL の rp.〜 に残り、読み直すと同じ。使えない描き方（個人向けのキャッシュ・vinext の S1）は捨てる', () => {
+    const input = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-free',
+      routes: { article: 'static-build', personal: 'shell-api' },
+    });
+    expect(input.routes).toEqual({
+      article: 'static-build',
+      personal: 'shell-api',
+    });
+    const q = toQuery(input);
+    expect(q.get('rp.personal')).toBe('shell-api');
+    expect(normalizeInput(fromQuery(`?${q}`))).toEqual(input);
+    expect(
+      normalizeInput({
+        framework: 'nextjs',
+        stack: 'cloudflare-vinext-paid',
+        routes: { article: 'static-build', personal: 'cached-ttl' },
+      }).routes,
+    ).toEqual({});
+  });
+
+  it('構成の比較も選んだ描き方で引く（CF Free の Astro は記事 S1・個人向け S5 で CPU の制限に当たらない）', () => {
+    const base = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-free',
+    });
+    const chosen = normalizeInput({
+      ...base,
+      routes: { article: 'static-build', personal: 'shell-api' },
+    });
+    const free = (i: typeof base) =>
+      compareStacks(i).find((r) => r.stack === 'cloudflare-vinext-free')!;
+    expect(free(chosen).blocking).toBeLessThan(free(base).blocking);
+    const st = routeStatusOf(base);
+    expect(st.find((r) => r.route === 'personal')!.cpu.ok).toBe(false);
+    expect(
+      st.find((r) => r.route === 'personal')!.deltas['shell-api'],
+    ).toBeDefined();
+    expect(
+      routeStatusOf(chosen).find((r) => r.route === 'personal')!.cpu.ok,
+    ).toBe(true);
   });
 });

@@ -2,6 +2,7 @@
 // 料金・制限は catalog のデータをそのまま使う（ここで料金を作らない）。前提の文も catalog のもの（premiseRefs で参照する）。
 import {
   ARTICLE_COMMUNITY_ASTRO,
+  ARTICLE_COMMUNITY_ROUTES,
   ARTICLE_COMMUNITY_SPA,
   articleCommunity,
 } from 'catalog';
@@ -409,6 +410,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
   name: '記事コミュニティ',
   months: 12,
   template: articleCommunity,
+  routeTraits: ARTICLE_COMMUNITY_ROUTES,
   // 1 枚 4 MB は テンプレートの 20 GB / 5,000 枚。DB の増え方は仮定
   stock: { dbGBPerMillionPV: 0.05, gbPerImage: 0.004 },
   scale: { startPV: 300_000 },
@@ -615,6 +617,24 @@ export const ARTICLE_COMMUNITY: Scenario = {
       short: 'OpenNext・画像の最適化',
       stackIndex: AWS_OPENNEXT,
       actions: [[{ type: 'component', slot: 'images', option: 'default' }]],
+    },
+    // ページごとの描き方（D-107・RS-07）: 個人向けのページを枠 + API（S5）で始める。比較の表では遊んだフレームワークで回す
+    // （SPA ではもともと S5）
+    {
+      id: 'cf-free-personal-api',
+      label:
+        'Cloudflare Free・個人向けのページを枠 + ブラウザが API で取る（S5）で始め、何もしない',
+      short: 'CF Free・個人向けを枠 + API',
+      stackIndex: CF_FREE,
+      routes: { personal: 'shell-api' },
+    },
+    {
+      id: 'cf-paid-personal-api',
+      label:
+        'Cloudflare Paid・個人向けのページを枠 + ブラウザが API で取る（S5）で始め、何もしない',
+      short: 'CF Paid・個人向けを枠 + API',
+      stackIndex: CF_PAID,
+      routes: { personal: 'shell-api' },
     },
   ],
 };

@@ -1369,6 +1369,16 @@ export function composeStack(
     storageOption?: boolean;
     /** アプリのフレームワーク（省略は Next.js。prd/10）。 */
     framework?: FrameworkId;
+    /**
+     * 静的にビルドし直すページ（描き方 S1）があるか（D-107）。ビルドのノードを足す。省略は静的書き出しだけ（D-80）。
+     * Next.js・Astro で記事を S1 にしたときに渡す。
+     */
+    staticBuild?: boolean;
+    /**
+     * Astro で記事をキャッシュする（S2・S3）か（D-107）。false なら Cloudflare の Workers Cache を前に置かない
+     * （静的アセットを Workers の料金で数えない）。省略は true（Astro の既定の S3。D-103）。
+     */
+    pageCache?: boolean;
   } = {},
 ): ArchitectureInput {
   const def = typeof stack === 'string' ? stackDef(stack) : stack;
@@ -1414,6 +1424,9 @@ export function composeStack(
       case 'netlify':
         return composeNetlify(def.plan as 'free' | 'personal' | 'pro', c, {
           framework: options.framework ?? 'nextjs',
+          ...(options.staticBuild !== undefined
+            ? { staticBuild: options.staticBuild || nextExport }
+            : {}),
           prerender: !nextExport && c.ogp === 'prerender',
           apiCache: apiCacheActive('netlify', c, options.framework)
             ? c.apiCache!
@@ -1468,12 +1481,21 @@ export function composeStack(
             name: crossed.name.replace('（Vite の SPA）', EXPORT_SUFFIX),
           }
         : crossed;
-  const built =
+  // 静的にビルドし直すページ（静的書き出し・S1 の記事。D-80・D-107）があればビルドのノードを足す（Netlify は composeNetlify の中）
+  const rebuild =
+    nextExport || (options.staticBuild === true && def.platform !== 'netlify');
+  const shapedAstro =
     astro && !shapesAll
-      ? asAstro(shaped, def.platform)
-      : nextExport
-        ? withBuild(shaped, def.platform, def.plan, 'Next.js')
-        : shaped;
+      ? asAstro(shaped, def.platform, options.pageCache ?? true)
+      : shaped;
+  const built = rebuild
+    ? withBuild(
+        shapedAstro,
+        def.platform,
+        def.plan,
+        astro ? 'Astro' : 'Next.js',
+      )
+    : shapedAstro;
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は記事をキャッシュする形に直した後に差す（D-103）
   // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）・メールの送信（D-95）は、部品を差し終えた後にまとめて足す
   // アプリのメールの送信（D-95）も最後に足す（経路を持たない）。ドメインの登録と DNS（D-96）はその後に
@@ -1525,6 +1547,8 @@ export function astroPageCacheChoice(platform: Platform): string {
 function asAstro(
   arch: ArchitectureInput,
   platform: Platform,
+  /** 記事をキャッシュする（S2・S3）か。しないなら Cloudflare の Workers Cache を前に置かない（D-107）。 */
+  pageCache = true,
 ): ArchitectureInput {
   const label: Record<string, string> = {
     worker: 'Worker（Astro）',
@@ -1534,7 +1558,7 @@ function asAstro(
   const worker = arch.nodes.find((n) => n.id === 'worker');
   const nodes = arch.nodes.map((n): ArchNodeIn => {
     const named = label[n.id] ? { ...n, label: label[n.id]! } : n;
-    if (platform === 'cloudflare' && n.id === 'worker')
+    if (platform === 'cloudflare' && n.id === 'worker' && pageCache)
       return {
         ...named,
         label: 'Worker（Astro・前に Workers Cache）',
@@ -1553,7 +1577,12 @@ function asAstro(
         ],
       };
     // Workers Cache を有効にすると、静的アセットへのリクエストも Workers の料金で課金される（workers-cache-front）
-    if (platform === 'cloudflare' && n.id === 'assets' && worker?.billing)
+    if (
+      platform === 'cloudflare' &&
+      n.id === 'assets' &&
+      worker?.billing &&
+      pageCache
+    )
       return {
         ...named,
         label: 'Workers 静的アセット（Workers Cache で課金）',

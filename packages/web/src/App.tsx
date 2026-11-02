@@ -40,6 +40,7 @@ import {
   FRAMEWORKS,
   hiddenSettings,
   type FrameworkId,
+  type RouteOverrides,
   storageOptionText,
   migrationEffort,
   newSave,
@@ -47,7 +48,11 @@ import {
   parseSave,
   replaySave,
   validSetupChoices,
+  validRouteOverrides,
   routePlanRows,
+  routePlanOf,
+  routeAlternativeAction,
+  strategyFamily,
   withTurn,
   playMonth,
   premiseTrends,
@@ -99,6 +104,8 @@ import {
 } from './setup-components.tsx';
 import { EstimateMode } from './estimate/estimate-mode.tsx';
 import { StackField } from './stack-field.tsx';
+import { RoutePlanField } from './route-plan-field.tsx';
+import { Swatch } from './route-plan-table.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
 import { diagramArchitecture } from './system-diagram-model.ts';
 import {
@@ -255,6 +262,12 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワーク・シナリオを替えたら、選べなくなった選択を
   // 状態からも外す（元の組み合わせに戻しても復活しない。OCL-09D12A43）
   const [parts, setParts] = useState<SetupChoices>({});
+  // ページごとの描き方（D-107）。フレームワークを替えると既定に戻す。構成で使えないものは validRouteOverrides で外す
+  const [routeChoice, setRouteChoice] = useState<RouteOverrides>({});
+  const routes = useMemo(
+    () => validRouteOverrides(scenario, stack, framework, routeChoice),
+    [scenario, stack, framework, routeChoice],
+  );
   const change = (next: {
     scenarioId?: string;
     stack?: number;
@@ -271,6 +284,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       : (STACKS.find((s) => stackOffered(s.index, fw))?.index ?? 0);
     if (next.scenarioId !== undefined) setScenarioId(next.scenarioId);
     if (next.framework !== undefined) setFramework(next.framework);
+    if (next.framework !== undefined || next.scenarioId !== undefined)
+      setRouteChoice({});
     if (st !== stack) setStack(st);
     setParts(validSetupChoices(sc, st, fw, parts));
   };
@@ -282,14 +297,17 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   );
   const revalidateSec =
     revalidateChosen !== undefined &&
-    setupRevalidateOptions(scenario, framework).some(
+    setupRevalidateOptions(scenario, framework, routes).some(
       (o) => o.value === revalidateChosen,
     )
       ? revalidateChosen
-      : defaultRevalidateSec(framework, stack, scenario);
+      : defaultRevalidateSec(framework, stack, scenario, routes);
+  const revalidateChoosable =
+    setupRevalidateOptions(scenario, framework, routes).length > 0;
   // コメントの描き方（D-82。記事のページがあり、コメントのあるシナリオだけ。既定はブラウザで読み込む）
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
-  const commentsChoosable = setupCommentOptions(scenario, framework).length > 0;
+  const commentsChoosable =
+    setupCommentOptions(scenario, framework, routes).length > 0;
   // 始めから結ぶ確約（台数の予約・年払いで、前払いが始めの所持金に収まるものだけ。D-97）
   const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
     {},
@@ -318,24 +336,33 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             onChange={(id) => change({ framework: id })}
             // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
             comments={commentsChoosable ? comments : undefined}
-            // ページごとの描き方（D-106）: 選んでいる構成で、各フレームワークの既定と今の設定・部品から
+            // 既定のページごとの描き方（D-106）: 選んでいる構成で、各フレームワークの既定から
             routePlan={(id) =>
               routePlanRows(scenario, {
                 framework: id,
                 stackIndex: stack,
                 settings: {
-                  revalidateSec:
-                    id === framework
-                      ? revalidateSec
-                      : defaultRevalidateSec(id, stack, scenario),
+                  revalidateSec: defaultRevalidateSec(id, stack, scenario),
                   comments,
                 },
-                components:
-                  id === framework
-                    ? parts
-                    : validSetupChoices(scenario, stack, id, parts),
+                components: validSetupChoices(scenario, stack, id, parts),
               })
             }
+            routes={routes}
+          />
+          {/* ③ ページの描き方（D-107）: フレームワークの既定から選び直す。構成（④）を替えると判定も変わる */}
+          <RoutePlanField
+            scenario={scenario}
+            stackIndex={stack}
+            framework={framework}
+            components={parts}
+            revalidateSec={revalidateSec}
+            comments={comments}
+            routes={routes}
+            onChange={(r, v) => {
+              setRouteChoice(r);
+              if (v !== undefined) setRevalidateSec(v);
+            }}
           />
           <div className="mt-2">
             <StackField
@@ -345,6 +372,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               onChange={(i) => change({ stack: i })}
               components={parts}
               comments={commentsChoosable ? comments : undefined}
+              routes={routes}
             />
           </div>
           <SetupComponents
@@ -366,6 +394,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             onChange={setRevalidateSec}
             comments={comments}
             onCommentsChange={setComments}
+            routes={routes}
           />
           {commitOptions.length > 0 && (
             <div className="mt-2">
@@ -410,12 +439,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               stackIndex={stack}
               framework={framework}
               components={parts}
-              revalidateSec={
-                setupRevalidateOptions(scenario, framework).length
-                  ? revalidateSec
-                  : undefined
-              }
+              revalidateSec={revalidateChoosable ? revalidateSec : undefined}
               comments={commentsChoosable ? comments : undefined}
+              routes={routes}
             />
           )}
           <div className="card-actions flex-wrap items-center justify-end">
@@ -453,10 +479,11 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     seed,
                     startDate,
                     components: parts,
-                    ...(setupRevalidateOptions(scenario, framework).length
-                      ? { revalidateSec }
-                      : {}),
+                    ...(revalidateChoosable ? { revalidateSec } : {}),
                     ...(commentsChoosable ? { comments } : {}),
+                    ...(Object.keys(routes).length
+                      ? { routes: { ...routes } }
+                      : {}),
                     ...(chosenCommits.length
                       ? { commitments: chosenCommits }
                       : {}),
@@ -1236,6 +1263,121 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
   );
 }
 
+/** ページの描き方の変更（ルート → 行動。D-107）。 */
+type RouteActs = Partial<Record<string, Extract<Action, { type: 'route' }>>>;
+
+/**
+ * ページの描き方を途中で替える（D-107）。期限 ↔ オンデマンド（S2 ↔ S3）は設定の欄で替えるので、ここは分け方の違う描き方だけ。
+ * 手間はゲーム上の仮定（枠 + API へは 4・それ以外は 3）。来月から効く。
+ */
+function RouteActions({
+  state,
+  value,
+  onChange,
+  blocked,
+}: {
+  state: GameState;
+  value: RouteActs;
+  onChange: (v: RouteActs) => void;
+  blocked: (v: RouteActs) => string | null;
+}) {
+  const rows = routePlanOf(state);
+  const choosable = rows.filter((r) =>
+    r.alternatives.some(
+      (a) =>
+        a.available &&
+        strategyFamily(a.strategy) !== strategyFamily(r.strategy),
+    ),
+  );
+  if (choosable.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      <div className="divider my-1 text-xs">ページの描き方（来月から）</div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {choosable.map((r) => {
+          const alts = r.alternatives.filter(
+            (a) =>
+              a.available &&
+              strategyFamily(a.strategy) !== strategyFamily(r.strategy) &&
+              // S2 と S3 は同じ分け方なので 1 つにまとめる（期限・オンデマンドは設定の欄）
+              !(
+                a.strategy === 'cached-purge' &&
+                r.alternatives.some(
+                  (b) => b.strategy === 'cached-ttl' && b.available,
+                )
+              ),
+          );
+          const chosen = value[r.route]?.strategy ?? r.strategy;
+          return (
+            <div key={r.route} className="form-control" data-route={r.route}>
+              <span className="label-text mb-1 block">
+                <span className="flex items-start gap-1.5 font-semibold">
+                  <Swatch strategy={chosen} />
+                  <NameWithInfo
+                    name={`${r.label}の描き方`}
+                    info={
+                      <Info>
+                        今: {r.code} {r.strategyLabel}。{r.why}
+                      </Info>
+                    }
+                  />
+                </span>
+                <Meta
+                  items={[
+                    `手間 ${EFFORT.route.other}（枠 + API へは ${EFFORT.route.toApi}）`,
+                    '来月から',
+                  ]}
+                />
+              </span>
+              <select
+                aria-label={`${r.label}の描き方`}
+                className="select select-bordered select-sm w-full"
+                value={chosen}
+                onChange={(e) => {
+                  const next = { ...value };
+                  const alt = alts.find((a) => a.strategy === e.target.value);
+                  if (!alt) delete next[r.route];
+                  else
+                    next[r.route] = routeAlternativeAction(
+                      state,
+                      r,
+                      alt,
+                    ) as Extract<Action, { type: 'route' }>;
+                  onChange(next);
+                }}
+              >
+                <option value={r.strategy}>
+                  {r.code} {r.strategyLabel}（今）
+                </option>
+                {alts.map((a) => {
+                  const trial: RouteActs = {
+                    ...value,
+                    [r.route]: routeAlternativeAction(state, r, a) as Extract<
+                      Action,
+                      { type: 'route' }
+                    >,
+                  };
+                  const why = blocked(trial);
+                  return (
+                    <option
+                      key={a.strategy}
+                      value={a.strategy}
+                      disabled={why !== null}
+                    >
+                      {a.code} {a.label}
+                      {why ? `（${why}）` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** 今月の行動。設定はいつでも戻せる。手間のポイントの残りの範囲で、いくつでも選べる。 */
 function Actions({
   state,
@@ -1262,8 +1404,11 @@ function Actions({
   const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
     {},
   );
+  /** ページの描き方の変更（ルートごと。D-107）。 */
+  const [routeActs, setRouteActs] = useState<RouteActs>({});
   const reset = () => {
     setCommits({});
+    setRouteActs({});
     setSettings({});
     setOptimize(false);
     setStackChange(null);
@@ -1285,6 +1430,7 @@ function Actions({
       storage?: boolean;
       parts?: Partial<Record<SlotId, string>>;
       commits?: Record<string, CommitmentPaymentId>;
+      routes?: RouteActs;
     } = {},
   ): Action[] => {
     const st = o.settings ?? settings;
@@ -1314,6 +1460,8 @@ function Actions({
         type: isPlanChange(state.stackIndex, stack) ? 'plan' : 'migrate',
         stackIndex: stack,
       });
+    // 描き方の変更（D-107）は設定の前に当てる（描き方で出す設定が変わる）
+    for (const a of Object.values(o.routes ?? routeActs)) if (a) out.push(a);
     for (const [key, value] of Object.entries(st))
       out.push({ type: 'set', key: key as SettingKey, value: value! });
     if (opt) out.push({ type: 'optimize' });
@@ -1497,6 +1645,12 @@ function Actions({
             );
           })}
         </div>
+        <RouteActions
+          state={state}
+          value={routeActs}
+          onChange={setRouteActs}
+          blocked={(r) => blocked(build({ routes: r }))}
+        />
         <label className="flex cursor-pointer items-start gap-3 py-1">
           <input
             type="checkbox"
@@ -1748,6 +1902,8 @@ function ComponentsSection({
               state.stackIndex,
               state.framework,
               state.components,
+              // 選んだページの描き方（S1 のビルド・Astro の記事のキャッシュの有無。D-107・OCL-C9CD8783）
+              state.routes,
             )}
             caption={DIAGRAM_NOTE}
           />

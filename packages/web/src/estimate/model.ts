@@ -36,6 +36,11 @@ import {
   pageWireframes,
   revalidateSettingOf,
   routePlanRows,
+  articleFamily,
+  staticBuildOf,
+  validRouteOverrides,
+  withRouteChoice,
+  ROUTE_STRATEGIES,
   SCENARIOS,
   SETTINGS,
   stackName,
@@ -43,7 +48,10 @@ import {
   STACKS,
   USD_JPY,
   type FrameworkId,
+  type RouteOverrides,
   type RoutePlanRow,
+  type RouteRowStatus,
+  type RouteStrategyId,
   type Scenario,
 } from 'game';
 import { diagramArchitecture } from '../system-diagram-model.ts';
@@ -96,6 +104,8 @@ export type EstimateInput = {
   seats: number;
   /** 税込の目安（円）を出すか（D-76）。計算には効かない。 */
   showTax: boolean;
+  /** 選んだページごとの描き方（フレームワークの既定と違うものだけ。D-107）。 */
+  routes: RouteOverrides;
 };
 
 export const scenarioOfTemplate = (t: TemplateId): Scenario =>
@@ -104,10 +114,18 @@ export const scenarioOfTemplate = (t: TemplateId): Scenario =>
 const stackIndexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
 
 /** 選べる設定（シナリオ・フレームワークで隠すものは出さない）。 */
-export function settingsOf(template: TemplateId, framework: FrameworkId) {
+export function settingsOf(
+  template: TemplateId,
+  framework: FrameworkId,
+  /** 選んだページごとの描き方（記事の描き方で出す設定が変わる。D-107）。 */
+  routes?: RouteOverrides,
+) {
   const scenario = scenarioOfTemplate(template);
-  const hidden = hiddenSettings({ scenario, framework });
-  const revalidateKey = revalidateSettingOf(framework);
+  const hidden = hiddenSettings({ scenario, framework, routes });
+  const revalidateKey = revalidateSettingOf(
+    framework,
+    articleFamily({ scenario, framework, routes }),
+  );
   return {
     revalidate: hidden.includes(revalidateKey)
       ? null
@@ -159,12 +177,18 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     raw.pv !== undefined && Number.isFinite(raw.pv)
       ? Math.min(PV_MAX, Math.max(PV_MIN, Math.round(raw.pv)))
       : scenario.scale.startPV;
-  const settings = settingsOf(template, framework);
+  const routes = validRouteOverrides(
+    scenario,
+    stackIndex,
+    framework,
+    raw.routes,
+  );
+  const settings = settingsOf(template, framework, routes);
   const revalidateSec =
     settings.revalidate?.options.some((o) => o.value === raw.revalidateSec) ===
     true
       ? raw.revalidateSec!
-      : defaultRevalidateSec(framework, stackIndex, scenario);
+      : defaultRevalidateSec(framework, stackIndex, scenario, routes);
   const comments =
     settings.comments?.options.some((o) => o.value === raw.comments) === true
       ? raw.comments!
@@ -191,6 +215,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     variants,
     seats,
     showTax: raw.showTax ?? true,
+    routes,
   };
 }
 
@@ -208,6 +233,8 @@ export function withStack(
 // ---- URL のクエリ（共有のため。mode=estimate と一緒に置く）----
 
 const PART_PREFIX = 'c.';
+/** ページごとの描き方（ルートの id → 描き方。D-107）。 */
+const ROUTE_PREFIX = 'rp.';
 
 export function toQuery(input: EstimateInput): URLSearchParams {
   const q = new URLSearchParams();
@@ -225,6 +252,8 @@ export function toQuery(input: EstimateInput): URLSearchParams {
   if (!input.showTax) q.set('tax', '0');
   for (const [slot, id] of Object.entries(input.parts))
     if (id !== undefined) q.set(PART_PREFIX + slot, id);
+  for (const [route, s] of Object.entries(input.routes))
+    if (s !== undefined) q.set(ROUTE_PREFIX + route, s);
   return q;
 }
 
@@ -242,7 +271,11 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   for (const [k, v] of q)
     if (k.startsWith(PART_PREFIX) && k.slice(PART_PREFIX.length) in SLOT_LABELS)
       parts[k.slice(PART_PREFIX.length) as SlotId] = v;
-  const out: Partial<EstimateInput> = { parts };
+  const routes: Partial<Record<string, RouteStrategyId>> = {};
+  for (const [k, v] of q)
+    if (k.startsWith(ROUTE_PREFIX) && v in ROUTE_STRATEGIES)
+      routes[k.slice(ROUTE_PREFIX.length)] = v as RouteStrategyId;
+  const out: Partial<EstimateInput> = { parts, routes };
   const set = <K extends keyof EstimateInput>(
     k: K,
     v: EstimateInput[K] | undefined,
@@ -616,12 +649,20 @@ function run(input: EstimateInput, r: Resolved) {
       revalidateSec: input.revalidateSec,
       comments: input.comments,
     },
+    routes: input.routes,
   });
   // アプリがメールを送らないテンプレートでは送信のノードを外す（D-101）
   const architecture = withSeats(
     withoutUnusedEmail(
       composeStack(STACK_DEFS[r.stackIndex]!, r.components, {
         framework: input.framework,
+        // 選んだ描き方（S1 のビルド・Astro の記事のキャッシュの有無。D-107）。構成ごとに使えないものは既定に戻す
+        ...staticBuildOf(
+          r.scenario,
+          r.stackIndex,
+          input.framework,
+          input.routes,
+        ),
       }),
       workload,
     ),
@@ -640,7 +681,8 @@ export function diagramOf(input: EstimateInput): {
   routes: RoutePlanRow[];
 } {
   const r = resolve(input);
-  const comments = settingsOf(input.template, input.framework).comments
+  const comments = settingsOf(input.template, input.framework, input.routes)
+    .comments
     ? input.comments
     : undefined;
   return {
@@ -649,8 +691,9 @@ export function diagramOf(input: EstimateInput): {
       r.stackIndex,
       input.framework,
       r.components,
+      input.routes,
     ),
-    pages: pageWireframes(r.scenario, input.framework, comments),
+    pages: pageWireframes(r.scenario, input.framework, comments, input.routes),
     // 描き方は見積の Workload（run）と同じ設定・部品から
     routes: routePlanRows(r.scenario, {
       framework: input.framework,
@@ -660,8 +703,79 @@ export function diagramOf(input: EstimateInput): {
         comments: input.comments,
       },
       components: r.components,
+      routes: input.routes,
     }),
   };
+}
+
+/**
+ * ページごとの描き方の行の判定（D-107。見積の PV で）: SNS のカード・1 リクエストの CPU の制限（D-99 の causes をその行で絞る）と、
+ * ほかの描き方にしたときの月額の差と止まる前提の数の差。鮮度はゲームの満足度の判定なので、見積モードでは出さない。
+ */
+export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
+  const r = resolve(input);
+  const rows = routePlanRows(r.scenario, {
+    framework: input.framework,
+    stackIndex: r.stackIndex,
+    settings: { revalidateSec: input.revalidateSec, comments: input.comments },
+    components: r.components,
+    routes: input.routes,
+  });
+  const base = run(input, r);
+  const blockingOf = (res: ReturnType<typeof run>) =>
+    res.premises.filter(
+      (p) => p.hit && (p.effect === 'block' || p.effect === 'upgrade-required'),
+    );
+  const baseUsd = toUsd(base.bill.totals);
+  const baseBlocking = blockingOf(base).length;
+  return rows.map((row) => {
+    const cpuHit = base.premises.filter(
+      (p) =>
+        p.hit &&
+        p.id.startsWith('limit:') &&
+        p.causes?.some((c) => c.routeId === row.route),
+    );
+    const deltas: RouteRowStatus['deltas'] = {};
+    for (const alt of row.alternatives) {
+      if (!alt.available) continue;
+      const res = run(
+        {
+          ...input,
+          routes: withRouteChoice(
+            r.scenario,
+            input.framework,
+            input.routes,
+            row.route,
+            alt.strategy,
+          ),
+          revalidateSec: alt.value ?? input.revalidateSec,
+        },
+        r,
+      );
+      deltas[alt.strategy] = {
+        costUsd: toUsd(res.bill.totals) - baseUsd,
+        blocking: blockingOf(res).length - baseBlocking,
+      };
+    }
+    return {
+      route: row.route,
+      ...(row.traits?.needsOgp
+        ? {
+            ogp:
+              row.strategy === 'shell-api' && r.components.ogp !== 'prerender'
+                ? {
+                    ok: false,
+                    text: 'HTML に中身が無いので、記事ごとの SNS のカードが出ない',
+                  }
+                : { ok: true, text: '記事ごとの SNS のカードは HTML に入る' },
+          }
+        : {}),
+      cpu: cpuHit.length
+        ? { ok: false, text: cpuHit.map((p) => p.detail ?? p.text).join('・') }
+        : { ok: true },
+      deltas,
+    };
+  });
 }
 
 /** 選んだ条件の見積（入力は normalizeInput を通したもの）。 */

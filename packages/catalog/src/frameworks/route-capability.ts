@@ -18,6 +18,12 @@ import {
 
 type Source = { url: string; retrievedAt: string };
 
+/** Next.js の generateStaticParams（ビルドのときの静的な生成・dynamicParams = false。2026-10-01 更新・2026-11-03 取得。D-107）。 */
+const NEXT_STATIC_PARAMS: Source = {
+  url: 'https://nextjs.org/docs/app/api-reference/functions/generate-static-params',
+  retrievedAt: '2026-11-03',
+};
+
 /**
  * 描き方がその事業者で使えるか。
  * - yes: 使える。
@@ -99,8 +105,8 @@ function nextjsRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
             'vinext のビルドのときの事前描画（静的な HTML）は確かめていない（RS-15）',
           )
         : yes(
-            'ページをビルドのときに静的な HTML にする（Next.js の静的な描画）。費用の数え方は静的書き出しと同じとみなす',
-            [],
+            'generateStaticParams で記事のページをビルドのときに静的な HTML にし、dynamicParams = false で一覧に無いページは 404 にする（新しい記事はビルドし直すまで開けない）。ビルドの時間の数え方は静的書き出しと同じとみなす',
+            [NEXT_STATIC_PARAMS],
           ),
     'cached-ttl': yes(
       'ISR（revalidate の期限）。キャッシュの置き場は ISR のキャッシュの部品',

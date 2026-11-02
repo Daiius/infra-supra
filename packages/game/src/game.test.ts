@@ -77,6 +77,8 @@ describe('game', () => {
     // D-95: メールの送信（CF Paid は Email Service・ほかは SES）の費用。シード 42 の VPS・SLA とシード 3 の Vercel Pro → CF Paid が won → goal
     // D-96: ドメインの登録（.com の原価 $11.17 / 年の月割り）と DNS（AWS は Route 53・Google Cloud は Cloud DNS）。所持金が $11〜17 減り、
     //       シード 3 の VPS・前段の CDN が won → goal
+    // D-107: ページごとの描き方の基準プレイを 2 本足した（個人向けを枠 + API で始める。既存の行は変わらない）。
+    //       CF Free は記事の ISR の再生成（17 ms）が 10 ms を超えるので変わらず止まる。CF Paid は既定とほぼ同じ
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -98,6 +100,8 @@ describe('game', () => {
       'vercel-cf-images': ['1391.28', 'goal', 12],
       'aws-amplify-cdn': ['1924.46', 'won', 12],
       'aws-opennext-images': ['2218.38', 'won', 12],
+      'cf-free-personal-api': ['138.79', 'outages', 3],
+      'cf-paid-personal-api': ['2084.59', 'won', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2107.12', 'won', 12],
@@ -113,6 +117,8 @@ describe('game', () => {
       'vercel-cf-images': ['1301.21', 'goal', 12],
       'aws-amplify-cdn': ['1905.30', 'won', 12],
       'aws-opennext-images': ['2227.70', 'won', 12],
+      'cf-free-personal-api': ['139.10', 'outages', 3],
+      'cf-paid-personal-api': ['2107.57', 'won', 12],
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2118.78', 'won', 12],
@@ -128,6 +134,8 @@ describe('game', () => {
       'vercel-cf-images': ['1330.10', 'goal', 12],
       'aws-amplify-cdn': ['1880.13', 'won', 12],
       'aws-opennext-images': ['2236.34', 'won', 12],
+      'cf-free-personal-api': ['139.10', 'outages', 3],
+      'cf-paid-personal-api': ['2119.25', 'won', 12],
     });
   });
 
@@ -313,6 +321,8 @@ describe('結果の比較の表', () => {
       'Vercel Pro・画像だけ Cloudflare',
       'Amplify・前段の CloudFront + 定額',
       // 'OpenNext・画像の最適化' は隠した構成なので出さない（D-100）
+      'CF Free・個人向けを枠 + API',
+      'CF Paid・個人向けを枠 + API',
     ]);
     expect(rows[5]!.description).toBe(BASELINES[4]!.label);
   });
