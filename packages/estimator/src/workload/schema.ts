@@ -55,6 +55,14 @@ export const RouteGroupSchema = z.object({
    * ヒット率を閲覧の密度と期間から出す（prd/04 §2）。全員に同じ中身（記事）だけに付ける（個人化された中身はキャッシュできない）。
    */
   cacheSeconds: Pos.optional(),
+  /**
+   * 枠 + サーバーの島（描き方 S6。D-108・prd/13 §8）。人ごとに違う部分だけを閲覧ごとにサーバーが描く。
+   * - request を与える（isr・static のルート。Astro の Server Islands）: 島は枠とは別の GET のリクエスト。閲覧 1 回ごとに
+   *   document-ssr を 1 件足す（処理は request。人ごとに違う応答はキャッシュしない）。ルートの processing は枠の分。
+   * - request を省く（ssr のルート。Next.js の PPR）: 島は枠と同じ応答の中で続けて流す。数え方は ssr のままで、processing が
+   *   島を描く分。どちらも 1 リクエストあたりの CPU の内訳（D-99）で島と分かるようにする。
+   */
+  island: z.object({ request: ProcessingSchema.optional() }).optional(),
 });
 
 export const WorkloadInputSchema = z
@@ -210,6 +218,19 @@ export const WorkloadInputSchema = z
           message:
             'cacheSeconds は SPA のルートだけ（ISR は revalidateSeconds）',
         });
+      }
+      if (r.island) {
+        const ok = r.island.request
+          ? r.rendering === 'isr' || r.rendering === 'static'
+          : r.rendering === 'ssr';
+        if (!ok)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['routes', i, 'island'],
+            message: r.island.request
+              ? '別のリクエストの島（island.request）は isr・static のルートだけ'
+              : '同じ応答の中の島（island.request なし）は ssr のルートだけ',
+          });
       }
       if (r.rendering === 'spa' && r.shellKB === undefined) {
         ctx.addIssue({

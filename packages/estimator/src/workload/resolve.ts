@@ -67,6 +67,10 @@ export type RequestSource = {
   misses?: number;
   /** document-isr だけ: ワイルドカードでまとめた無効化の CDN を miss する件数（cdnFlushMissFlow のルートごとの値。D-79）。 */
   flushMisses?: number;
+  /** document-ssr だけ: サーバーの島（S6。ルートの island。D-108）を描くリクエスト。 */
+  island?: boolean;
+  /** document-isr・isr-revalidate だけ: サーバーの島のページの枠（別のリクエストの島を持つルート。D-108）。 */
+  islandShell?: boolean;
 };
 
 export type ResolvedWorkload = {
@@ -398,7 +402,14 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       source('document-static', r, views, 0);
     } else if (r.rendering === 'ssr') {
       byRendering.ssr.push(flow(views, work));
-      source('document-ssr', r, views, p.cpuMs);
+      // 枠と同じ応答の中の島（Next.js の PPR。D-108）: 数え方は ssr のまま、内訳で島と分かるようにする
+      source(
+        'document-ssr',
+        r,
+        views,
+        p.cpuMs,
+        r.island ? { island: true } : {},
+      );
     } else {
       const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };
       byRendering.isr.push(flow(views, served));
@@ -469,14 +480,17 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           ? peakMisses
           : Math.min(views, flushPart + timedPart(lambdaT * peakRate));
       isrFlushMiss.push(flow(flushCount, served));
+      const shellMark = r.island?.request ? { islandShell: true } : {};
       source('document-isr', r, views, r.cachedServeCpuMs, {
         misses: count,
         flushMisses: flushCount,
+        ...shellMark,
       });
       isrPeakFlushMiss.push(flow(peakFlushCount, served));
       revalidations.push(flow(count, work));
       source('isr-revalidate', r, count, p.cpuMs, {
         withTriggerCpuMs: r.cachedServeCpuMs + p.cpuMs,
+        ...shellMark,
       });
       isrMiss.push(flow(count, served));
       isrViews += views;
@@ -542,6 +556,20 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
               result: count,
             },
       );
+    }
+    // 枠とは別のリクエストの島（Astro の Server Islands。D-108）: 閲覧 1 回ごとにサーバーが島を描く（人ごとに違うのでキャッシュしない）
+    const isl = r.island?.request;
+    if (isl) {
+      byRendering.ssr.push(
+        flow(views, {
+          kb: isl.responseKB,
+          cpuMs: isl.cpuMs,
+          wallMs: isl.cpuMs + isl.ioWaitMs,
+          queries: isl.queries,
+          rowsRead: isl.queries * isl.rowsReadPerQuery,
+        }),
+      );
+      source('document-ssr', r, views, isl.cpuMs, { island: true });
     }
   }
 
