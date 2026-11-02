@@ -220,14 +220,54 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
 }
 
 /**
+ * テンプレート・フレームワーク・構成を替える（始める画面と同じ規則。D-103・D-107）。
+ * 再検証・記事のキャッシュ・ビルドの間隔は、替える前の既定のままなら（選んでいない）替えた先の既定にし、
+ * 選んだ値は替えた先で選べるときだけ残す（選べないものは normalizeInput が既定にする）。
+ * ページごとの描き方（rp.〜）は替えた先で選べるものだけを残す（normalizeInput の validRouteOverrides）。
+ */
+function withContext(
+  input: EstimateInput,
+  next: Partial<EstimateInput>,
+): Partial<EstimateInput> {
+  const followsDefault =
+    input.revalidateSec ===
+    defaultRevalidateSec(
+      input.framework,
+      stackIndexOf(input.stack),
+      scenarioOfTemplate(input.template),
+      input.routes,
+    );
+  if (!followsDefault) return next;
+  // 替えた先の既定（revalidateSec を渡さずに直す）
+  const { revalidateSec: _, ...rest } = { ...input, ...next };
+  return { ...next, revalidateSec: normalizeInput(rest).revalidateSec };
+}
+
+/**
  * 構成を選ぶ（構成の一覧・比較の表）。別の構成に替えるときだけ部品の選択を空にして既定にする。
- * 今の構成を選び直しても部品は保つ（OCL-83383F50）。
+ * 今の構成を選び直しても部品は保つ（OCL-83383F50）。再検証などの値は withContext の規則で付け替える。
  */
 export function withStack(
   input: EstimateInput,
   stack: string,
 ): Partial<EstimateInput> {
-  return stack === input.stack ? {} : { stack, parts: {} };
+  return stack === input.stack ? {} : withContext(input, { stack, parts: {} });
+}
+
+/** フレームワークを選ぶ。再検証などの値・ページごとの描き方は withContext の規則で付け替える。 */
+export function withFramework(
+  input: EstimateInput,
+  framework: FrameworkId,
+): Partial<EstimateInput> {
+  return framework === input.framework ? {} : withContext(input, { framework });
+}
+
+/** テンプレートを選ぶ。再検証などの値は withContext の規則で付け替える。 */
+export function withTemplate(
+  input: EstimateInput,
+  template: TemplateId,
+): Partial<EstimateInput> {
+  return template === input.template ? {} : withContext(input, { template });
 }
 
 // ---- URL のクエリ（共有のため。mode=estimate と一緒に置く）----
