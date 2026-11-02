@@ -207,7 +207,8 @@ W     = T + 1 件の処理の時間（busyMs / 件数）           T: pauseAfter
 L     = 1 回の時間帯の長さ（3,600 秒）
 p_b   = 直前の時間帯の λ_prev × W・a_b = λ_b × W
 
-asleep_b = [ W × (e^(−a_b) − e^(−p_b)) / (p_b − a_b) + (L − W) × e^(−a_b) ] / L      （W < L。W ≥ L なら e^(−a_b)）
+asleep_b = [ W × (e^(−a_b) − e^(−p_b)) / (p_b − a_b) + (L − W) × e^(−a_b) ] / L      （W < L のとき）
+           W ≥ L なら prev を 2 つ以上たどり、窓の積分が線形に変わる区切り（L ごと）で同じ閉じた形を足す（OCL-C6476435）
 awake    = Σ_b (1 − asleep_b) × hours_b / 730
 resume   = Σ_b share_b × asleep_b                       止まっている DB に届いて再開を待つ件数の割合
 

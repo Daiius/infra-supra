@@ -782,20 +782,18 @@ describe('部品の選択で足した振る舞い', () => {
         );
       });
 
-      it('待ちが時間帯の長さ（1 時間）以上なら区間の頭を見ず e^(−λ_b × W)', () => {
-        const buckets = timeBuckets(1, office);
-        const got = pausingDbShares(10_000, 0, 7_200, buckets);
-        let awakeH = 0;
-        let resume = 0;
-        for (const b of buckets) {
-          const asleep = Math.exp(
-            -((10_000 * b.share) / (b.hours * 3600)) * 7_200,
-          );
-          awakeH += (1 - asleep) * b.hours;
-          resume += b.share * asleep;
+      it('待ちが時間帯の長さ（1 時間）以上でも、2 つ以上前の時間帯までたどって窓の到着を数える（総当たりと一致。OCL-C6476435）', () => {
+        for (const t of [3_600, 5_000, 7_200, 30_000, 86_400]) {
+          const got = pausingDbShares(10_000, 0, t, timeBuckets(1, office));
+          const want = brute(10_000, 0, t, office, 1);
+          expect(got.awake).toBeCloseTo(want.awake, 5);
+          expect(got.resume).toBeCloseTo(want.resume, 5);
         }
-        expect(got.awake).toBeCloseTo(awakeH / 730, 12);
-        expect(got.resume).toBeCloseTo(resume, 12);
+        // 12 時台にだけ届く（毎日十分多く）・待ち 7,200 秒: 最後の要求（13 時の直前）から約 2 時間動き、1 日に約 3 時間
+        const spike = Array.from({ length: 24 }, (_, h) => (h === 12 ? 1 : 0));
+        const r = pausingDbShares(1e6, 0, 7_200, timeBuckets(1, spike));
+        expect(r.awake).toBeCloseTo(3 / 24, 3);
+        expect(r.awake).toBeCloseTo(brute(1e6, 0, 7_200, spike, 1).awake, 5);
       });
 
       it('桁あふれしない（直前が濃く今が 0・その逆）', () => {

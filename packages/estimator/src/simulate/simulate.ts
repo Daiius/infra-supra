@@ -598,9 +598,10 @@ export function simulateResources(
  * - 区間が月全体の 1 つ（hourlyProfile なし）: 月の平均の到着率 λ から、止まる割合 1 / (1 + λT)（D-51 の式のまま）。
  *   到着率が時間で揺れる分を指数分布で混ぜた e^(−ΛT) の平均と同じ値で、揺れの形が分からないときの近似とみる。
  * - 区間があるとき: 時間帯の中の到着はポアソンとみて、時刻 t に止まっている確率は「直前の W = T + 1 件の処理の時間に 1 件も
- *   届いていない」= e^(−∫λ)。区間の頭の W 秒は直前の時間帯（prev）の到着率と混ざるので、その分を積分し、残りは e^(−λ_b W)。
- *   W が時間帯の長さ以上なら境目を見ず e^(−λ_b W)。止まっている DB に届く件数の割合は、区間の中の到着率が一定なので
- *   区間の止まっている時間の割合と同じ（件数の割合で重みづけして足す。コンテナの冷えた起動と同じ形）。
+ *   届いていない」= e^(−∫λ)。区間の頭の W 秒の窓は直前の時間帯（prev をたどる。W が 1 時間以上なら 2 つ以上前まで）の到着も含むので、
+ *   窓の積分が線形に変わる区切りごとに閉じた形で積分し、残りは e^(−λ_b W)。止まっている DB に届く件数の割合は、区間の中の到着率が
+ *   一定なので区間の止まっている時間の割合と同じ（件数の割合で重みづけして足す。コンテナの冷えた起動と同じ形）。
+ *   prev が無い区間は境目を見ず e^(−λ_b W)。
  */
 export function pausingDbShares(
   requests: number,
@@ -616,22 +617,44 @@ export function pausingDbShares(
   const rate = buckets.map((b) =>
     b.hours > 0 ? (requests * b.share) / (b.hours * 3600) : 0,
   );
+  /** ∫_{t0}^{t1} e^(−E(τ)) dτ（E は τ について線形。E0 = E(t0)・E1 = E(t1)）。桁あふれしないよう小さい方の指数をくくり出す */
+  const linExp = (len: number, e0: number, e1: number) => {
+    const d = Math.abs(e1 - e0);
+    return (
+      len * Math.exp(-Math.min(e0, e1)) * (d === 0 ? 1 : -Math.expm1(-d) / d)
+    );
+  };
   let awakeHours = 0;
   let resume = 0;
   buckets.forEach((b, i) => {
     if (b.hours <= 0) return;
-    const l = (b.slotHours ?? b.hours) * 3600;
-    const steady = Math.exp(-rate[i]! * w);
+    const lb = rate[i]!;
+    const steady = Math.exp(-lb * w);
     let asleep = steady;
-    if (b.prev !== undefined && w < l) {
-      // 頭の W 秒: 時刻 τ（0〜W）の窓は直前の区間に W − τ、この区間に τ。∫_0^W e^(−(λ_p (W − τ) + λ_b τ)) dτ
-      // = W × (e^(−a) − e^(−p)) / (p − a)（a = λ_b W・p = λ_p W）。桁あふれしないよう小さい方の指数をくくり出す
-      const a = rate[i]! * w;
-      const p = (rate[b.prev] ?? 0) * w;
-      const d = Math.abs(p - a);
-      const head =
-        w * Math.exp(-Math.min(a, p)) * (d === 0 ? 1 : -Math.expm1(-d) / d);
-      asleep = (head + (l - w) * steady) / l;
+    if (b.prev !== undefined) {
+      const l = (b.slotHours ?? b.hours) * 3600;
+      // 時刻 τ（区間の頭から）の窓 [τ − W, τ] の積分 E(τ) = λ_b × min(τ, W) + （区間の前の W − τ 秒の積分）。
+      // 区間の前は prev をたどり、各区間の長さ l ごとに傾きが変わる。τ が W − (k+1)l〜W − kl の間は k 個前の区間の先（k+1 個前）に窓の端がある
+      let integral = 0;
+      let before = 0; // それまでにたどった区間の積分（k 個ぶん）
+      let p = b.prev;
+      const head = Math.min(w, l);
+      for (let k = 0; ; k++) {
+        // 窓の端が k+1 個前の区間 p にある τ の範囲
+        const lo = Math.max(0, w - (k + 1) * l);
+        const hi = Math.min(head, w - k * l);
+        if (hi > lo) {
+          const e = (tau: number) =>
+            lb * tau + before + rate[p]! * (w - tau - k * l);
+          integral += linExp(hi - lo, e(lo), e(hi));
+        }
+        if (lo <= 0) break;
+        before += rate[p]! * l;
+        // 窓の積分が十分大きければ、それより前は e^(−E) ≒ 0 なので打ち切る
+        if (before > 745) break;
+        p = buckets[p]!.prev ?? p;
+      }
+      asleep = (integral + Math.max(0, l - w) * steady) / l;
     }
     awakeHours += (1 - asleep) * b.hours;
     resume += b.share * asleep;
