@@ -1038,9 +1038,9 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 | Google Cloud Logging | Cloud Run の要求ログは自動で作られ、コンテナの stdout・stderr も自動で送る。Cloud Run の側で要求ログの量は変えられず、除外のフィルタで減らす（[Cloud Run の文書](https://cloud.google.com/run/docs/logging)） | ログバケットへの保存 $0.50 / GiB（30 日の保存を含む・1 回きり）。月 50 GiB / プロジェクトまで無料（[料金ページ](https://cloud.google.com/stackdriver/pricing)） | _Default は 30 日（変えられる）。30 日を超えると $0.01 / GiB 月。_Required（監査ログ）は 400 日で無料 |
 | Vercel | Runtime Logs は課金なし | Observability Plus は 100 万 event $1.20。**2026-04-03 以降に作った・上げた Pro のチームでは既定で有効**（外せる）。1 件の要求で 1 つ以上の event ができるとあるが、数え方は書かれていない（[Observability Plus](https://vercel.com/docs/observability/observability-plus)・[料金](https://vercel.com/docs/observability/limits-and-pricing)・[使用量](https://vercel.com/docs/pricing/observability)） | Runtime Logs は Hobby 1 時間・Pro 1 日・Observability Plus 30 日（[Runtime Logs](https://vercel.com/docs/logs/runtime)） |
 | Netlify | 関数のログ（起動ごとの行と console.log）を出す | 課金の項目に無い | 少なくとも 24 時間・一部のプランは 7 日（[関数のログ](https://docs.netlify.com/build/functions/logs/)） |
-| Cloudflare Workers Logs | 新しく作る Worker は既定で有効（observability）。呼び出しのログ 1 件と console.log 1 行ずつが 1 件 | Free は 1 日 20 万件まで（課金なし）。Paid は月 2,000 万件まで込み、超えた分は 100 万件 $0.60。**2026-12-01 から Cloudflare Observability の料金に移る**（新しい料金は未取得）（[Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)） | Free 3 日・Paid 7 日 |
+| Cloudflare Workers Logs | 新しく作る Worker は既定で有効（observability）。呼び出しのログ 1 件と console.log 1 行ずつが 1 件 | Free は 1 日 20 万件まで（課金なし）。Paid は月 2,000 万件まで込み、超えた分は 100 万件 $0.60。**2026-12-01 から Cloudflare Observability の料金に移る**（§18.5。D-94）（[Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)） | Free 3 日・Paid 7 日 |
 
-確かめられなかったこと: CloudWatch Logs の保存が圧縮後の量で課金されること（料金ページは明記せず、AWS の re:Post の回答と第三者の記事が引く計算機の仮定 15%）・Amplify の SSR のログが vended logs の段階料金に入るか（10 TB までは同じ単価で、このモデルでは差が出ない）・Vercel の Observability Plus の 1 要求あたりの event の数・Workers Logs の 2026-12-01 以降の料金。
+確かめられなかったこと: CloudWatch Logs の保存が圧縮後の量で課金されること（料金ページは明記せず、AWS の re:Post の回答と第三者の記事が引く計算機の仮定 15%）・Amplify の SSR のログが vended logs の段階料金に入るか（10 TB までは同じ単価で、このモデルでは差が出ない）・Vercel の Observability Plus の 1 要求あたりの event の数。~~Workers Logs の 2026-12-01 以降の料金~~ → §18.5（D-94）。
 
 ### 18.2 入れた形
 
@@ -1078,8 +1078,44 @@ AWS・Google Cloud では他の費用に比べて 1% 前後だが、**Workers Pa
 ### 18.4 残した点
 
 - Workers Logs の標本化（`head_sampling_rate`）・呼び出しのログを切る設定、CloudWatch Logs の保持・Infrequent Access のログクラスを部品にすること（基準プレイの規模では差が出ないので入れていない）。
-- Vercel の Observability Plus（既定で有効な Pro のチーム）の event の数え方・Workers Logs の 2026-12-01 以降の料金。
+- Vercel の Observability Plus（既定で有効な Pro のチーム）の event の数え方。~~Workers Logs の 2026-12-01 以降の料金~~ → §18.5（D-94）。
 - アプリのログの量をシナリオ・フレームワークで変えること（今はどこでもアクセスログ 1 行）。エラーの急増・デバッグのログの出し忘れのような出来事。
+
+### 18.5 Workers Logs → Cloudflare Observability（2026-12-01 から。2026-11-02 取得・D-94）
+
+公式で確かめたこと:
+
+| 項目 | 内容 | 出典 |
+|---|---|---|
+| 施行 | 2026-12-01 から Cloudflare のすべてのログ・トレースが同じ料金になる。Workers Logs の文書も「それまでは今の表」と書く。Free・Pro・Business の既存の利用者は 12-01 に自動で移り、それより前の分はさかのぼって課金しない。Enterprise は契約の更新で | [Observability の料金](https://developers.cloudflare.com/observability/pricing/)（最終更新 2026-10-25）・[Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) |
+| 数え方 | 件数でなく量。取り込み（圧縮前。本文・既定の属性・独自の属性を含み、落とした event は含まない）と保存（GB 月 = 各日に問い合わせられる量の最大の和 / 30）の 2 つのメーター。標本化は両方を減らす。込みの分は繰り越さない | 同上・[公式ブログ](https://blog.cloudflare.com/one-observability-platform/)（2026-10-02） |
+| Paid | 請求の期間ごとに取り込み 50 GB・保存 10 GB 月まで込み、超えた分は取り込み $0.25 / GB・保存 $0.10 / GB 月。保持は既定 7 日（30・90・365 日は今後） | 同上 |
+| Free | 取り込み 1 日 0.5 GB まで。超えると 00:00 UTC まで取り込みを止める（追加の購入なし）。保持 7 日 | 同上 |
+| 共有 | Workers Logs・Traces・Containers のログ・R2 のデータアクセスのログ・AI Gateway のログなどがアカウントで 1 つの込みの分を分け合う | [Observability の料金](https://developers.cloudflare.com/observability/pricing/) |
+
+確かめられなかったこと: 表の「Paid」が Workers Paid を指すこと（定義なし。ブログは「Paid and Enterprise」。基本料の記載が無いので Workers Paid と読んだ）・1 件の大きさ（公式に記載なし。仮定）・changelog の告知（2026-10-26〜30 の版に該当の項目なし）。
+
+入れた形:
+
+- 版の仕組みは今の `scheduledChanges`（D-21）のまま。改定 `revision:cloudflare:2026-12-01` に `revisedMeters` を持たせ、`notModeledReason` を外した。
+  `revisedMeters` は料金だけを差し替えるので、Workers Paid に取り込み `observability-ingest`（`log-gb`）と保存 `observability-storage`（新しい資源 `log-gb-month`）のメーターを先に置き（施行の前は $0）、
+  改定で件数の `workers-logs` を $0・取り込み $0.25 / GB・保存 $0.10 / GB 月にする。込みの分はアカウントのプール（`paid-observability-ingest` 50 GB・`paid-observability-storage` 10 GB 月）。
+- どちらの版を使うかは既存の規則のまま: **ゲーム**は始めた日が施行日より前なら、改定の出来事が起きた月（3〜10 か月目）から改定後の料金で数える。施行日の後に始めたゲームは出来事が無く、今の版のまま。
+  **見積モード**は今の版（施行日で切り替える機能は無い。「見積モードの残り」の料金の改定の予告）。
+- 仮定（ゲーム上の仮定・出典なし）: Workers の 1 回の実行のログ 1.5 KB（呼び出しのログ 約 1 KB + console.log 1 行 約 0.5 KB。Cloud Run と同じ大きさ）・保持は既定の 7 日（保存 = 月の取り込み × 7 / 30）。
+- Workers Free は今までどおり数えない（課金なし。1 日 0.5 GB を超えると取り込みが止まるだけ）。
+
+基準プレイ・golden・網羅テスト・**CF Paid × Next.js（目標の根拠）はすべて不変**（最も多い月 1,592 万件 = 約 11.9 GB・保存 約 2.8 GB 月で、込みの分の中）。
+規模を上げたとき（記事のテンプレート・既定の部品。CF Paid × Next.js のログ / 月の合計）:
+
+| 月の PV | 取り込み | 今の版（件数） | 改定の後 |
+|---|---|---|---|
+| 400 万 | 12 GB | $0 / $16.7 | $0 / $16.7 |
+| 1,000 万 | 30 GB | $12.0 / $45.7 | **$0 / $33.7** |
+| 3,000 万 | 90 GB | $60.0 / $138.0 | **$11.1 / $89.1** |
+| 1 億 | 300 GB | $228.1 / $416.4 | **$68.5 / $256.8** |
+
+1 件 1.5 KB の仮定では改定で安くなる（件数の $0.60 / 100 万件は 1 件 0.75 KB で 1 GB $0.80 にあたり、$0.25 の 3 倍）。1 件の大きさが仮定の 3 倍を超えると逆転する。
 
 ## 19. DB のバックアップ・任意の時点への復元（PITR）（2026-11-02・D-93）
 
@@ -1108,7 +1144,7 @@ AWS・Google Cloud では他の費用に比べて 1% 前後だが、**Workers Pa
 - estimator に経路を持たないノードの種類 `db-backup` と資源 `backup-gb-month`（無料の分を除いた残す量）・`backup-hours`（時間で課金するアドオン）を足した（prd/04 §3.9）。
 - catalog の `stacks/backups.ts`（`withBackups`）が、組み終えた構成の経路に載っている DB ごとに、選んだバックアップの費用のノードを足す（課金先は DB と同じプラン。VPS だけさくらのオブジェクトストレージ）。
   戻せる日数と説明は `backupStatus` が返す（要件の判定・カードの説明）。
-- 部品「DB のバックアップ」（スロット `dbBackup`）はどの事業者も `default`・`pitr` の 2 択。今の DB で選んでも変わらない（D1・KV・DSQL・Cloud SQL・Supabase Free・Neon Free）ときはゲームでスロットを出さない。
+- 部品「DB のバックアップ」（スロット `dbBackup`）はどの事業者も `default`・`pitr` の 2 択。今の DB で選んでも変わらない（D1・KV・DSQL・Cloud SQL・Supabase Free・Neon Free）ときはスロットを出さない（ゲームの部品の欄・始める画面・見積モードで同じ判定 `slotIneffective`。URL に残った値は無視して既定にする。D-94）。
 
 | DB | 既定（default） | 延ばす・付ける（pitr） |
 |---|---|---|

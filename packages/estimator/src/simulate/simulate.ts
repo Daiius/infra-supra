@@ -214,6 +214,13 @@ function consume(
         if (c.logs) {
           add(u, 'log-gb', kbToGb(n * c.logs.kbPerInvocation));
           add(u, 'log-events', n * c.logs.eventsPerInvocation);
+          // 保存（D-94）。GB 月 = 各日に問い合わせられる量の最大の和 / 30（Cloudflare Observability の定義）。
+          // 毎日 月の量 / 日数 を取り込み、保持の日数だけ残るので、月の和 / 30 = 月の取り込み × 保持の日数 / 30
+          add(
+            u,
+            'log-gb-month',
+            (kbToGb(n * c.logs.kbPerInvocation) * c.logs.retentionDays) / 30,
+          );
         }
       }
       return missFlow ?? f;

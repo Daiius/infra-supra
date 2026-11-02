@@ -193,6 +193,15 @@ export const cloudflare: PriceBookInput = {
       url: 'https://developers.cloudflare.com/workers/observability/logs/workers-logs/',
       retrievedAt: '2026-11-02',
     },
+    // Cloudflare Observability の 2026-12-01 からの料金（2026-11-02 取得。D-94）
+    observabilityPricing: {
+      url: 'https://developers.cloudflare.com/observability/pricing/',
+      retrievedAt: '2026-11-02',
+    },
+    observabilityBlog: {
+      url: 'https://blog.cloudflare.com/one-observability-platform/',
+      retrievedAt: '2026-11-02',
+    },
     workersLimits: src(
       'https://developers.cloudflare.com/workers/platform/limits/',
     ),
@@ -447,6 +456,27 @@ export const cloudflare: PriceBookInput = {
       premise:
         'Workers Paid は Workers Logs のログが月 2,000 万件まで込み（保持は 7 日）',
       sourceIds: ['workersLogs'],
+    },
+    // Cloudflare Observability（2026-12-01 から。D-94）。Workers Logs・Traces・Containers のログなどとアカウントで共有
+    {
+      id: 'paid-observability-ingest',
+      quantity: 50,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        '2026-12-01 から、Paid は Cloudflare Observability のログ・トレースの取り込みが請求の期間ごとに 50 GB まで込み（圧縮前の量。Workers Logs・Traces・Containers のログなどで共有）',
+      sourceIds: ['observabilityPricing'],
+    },
+    {
+      id: 'paid-observability-storage',
+      quantity: 10,
+      unit: 'gb-month',
+      period: 'month',
+      scope: 'account',
+      premise:
+        '2026-12-01 から、Paid は Cloudflare Observability の保存が請求の期間ごとに 10 GB 月まで込み（GB 月 = 各日に問い合わせられる量の最大の和 / 30）',
+      sourceIds: ['observabilityPricing'],
     },
     {
       id: 'paid-cpu-ms',
@@ -806,10 +836,10 @@ export const cloudflare: PriceBookInput = {
           unit: 'count',
           allowancePool: 'paid-workers-logs',
           premise:
-            '新しく作る Worker は Workers Logs（observability）が既定で有効で、呼び出しのログ 1 件と console.log の 1 行ずつを 1 件と数える。Paid は月 2,000 万件を超えた分が 100 万件 $0.60。2026-12-01 から Cloudflare Observability の料金に移る（新しい料金は未取得）',
+            '新しく作る Worker は Workers Logs（observability）が既定で有効で、呼び出しのログ 1 件と console.log の 1 行ずつを 1 件と数える。Paid は月 2,000 万件を超えた分が 100 万件 $0.60。2026-12-01 から Cloudflare Observability の料金（取り込みの GB と保存の GB 月）に移り、件数では課金しない（scheduledChanges）',
           interpretation: {
             adopted:
-              '既定のまま全件を残す（head_sampling_rate 1）。2026-12-01 以降の料金も今の値で数える',
+              '既定のまま全件を残す（head_sampling_rate 1）。2026-12-01 以降は件数の課金をやめ、取り込み・保存のメーターで数える（ゲームは改定の出来事が起きた月から。見積モードは今の版）',
             rejected: [
               {
                 reading:
@@ -821,6 +851,41 @@ export const cloudflare: PriceBookInput = {
           },
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.6 },
           sourceIds: ['workersLogs'],
+        },
+        // Cloudflare Observability（D-94）。2026-12-01 より前は課金しない（件数の workers-logs で数える）。
+        // 施行の後の料金は scheduledChanges の revisedMeters が差し替える
+        {
+          id: 'observability-ingest',
+          label: 'ログの取り込み（Cloudflare Observability: 2026-12-01 から）',
+          resource: 'log-gb',
+          unit: 'gb',
+          allowancePool: 'paid-observability-ingest',
+          premise:
+            '2026-12-01 から Workers Logs は Cloudflare Observability の料金になり、取り込み（圧縮前・本文と既定の属性を含む）が 50 GB を超えた分は 1 GB $0.25。それより前は課金しない',
+          interpretation: {
+            adopted:
+              '表の「Paid」を Workers Paid と読む。1 件の大きさは公式に記載が無いので、1 回の実行のログ（呼び出しのログ + console.log 1 行）を 1.5 KB と仮定する（ゲーム上の仮定）',
+            rejected: [
+              {
+                reading: '別の Observability の契約（基本料）が要る',
+                reason:
+                  '料金ページに基本料の記載が無く、込みの分と超過の単価だけが書かれている',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['observabilityPricing', 'observabilityBlog'],
+        },
+        {
+          id: 'observability-storage',
+          label: 'ログの保存（Cloudflare Observability: 2026-12-01 から）',
+          resource: 'log-gb-month',
+          unit: 'gb-month',
+          allowancePool: 'paid-observability-storage',
+          premise:
+            '2026-12-01 から、保存が 10 GB 月を超えた分は 1 GB 月 $0.10。既定の保持は 7 日（問い合わせられなくなった分は数えない）。それより前は課金しない',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['observabilityPricing'],
         },
         {
           id: 'd1-rows-read',
@@ -1216,11 +1281,28 @@ export const cloudflare: PriceBookInput = {
     },
     {
       effectiveFrom: '2026-12-01',
-      description: 'Workers Logs が Cloudflare Observability の料金体系へ移行',
+      description:
+        'Workers Logs が Cloudflare Observability の料金体系へ移行（件数でなく、取り込み 50 GB・保存 10 GB 月を超えた分を GB で課金）',
       kind: 'pricing',
-      notModeledReason:
-        '改定後の料金は未取得のため、このゲームの計算には反映していない（Workers Logs はこのモデルの構成にも入っていない）',
-      sourceIds: ['workersPricing'],
+      // 件数の課金をやめ、取り込み $0.25 / GB・保存 $0.10 / GB 月にする（D-94）
+      revisedMeters: [
+        {
+          planId: 'workers-paid',
+          meterId: 'workers-logs',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 0 },
+        },
+        {
+          planId: 'workers-paid',
+          meterId: 'observability-ingest',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.25 },
+        },
+        {
+          planId: 'workers-paid',
+          meterId: 'observability-storage',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.1 },
+        },
+      ],
+      sourceIds: ['workersLogs', 'observabilityPricing', 'observabilityBlog'],
     },
   ],
   notes: [

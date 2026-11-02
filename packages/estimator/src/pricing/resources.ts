@@ -36,6 +36,7 @@ export const RESOURCES = [
   'idle-memory-gb-hours', // 待機しているインスタンスのメモリ × 時間（同じ）
   'log-gb', // 関数・コンテナの実行ごとに出るログの量（CloudWatch Logs・Cloud Logging の取り込み。D-92）
   'log-events', // 同じくログの件数（Workers Logs は 1 行 1 件で数える。D-92）
+  'log-gb-month', // ログを保持の日数だけ残す量（GB 月。Cloudflare Observability の保存。D-94）
   'backup-gb-month', // DB のバックアップ・任意の時点への復元（PITR）のために残す量（GB 月。事業者の無料の分を除いた量。D-93）
   'backup-hours', // 時間で課金するバックアップのアドオン（Supabase の PITR）を付けている時間（D-93）
 ] as const;
@@ -76,6 +77,7 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'idle-memory-gb-hours': 'gb-hour',
   'log-gb': 'gb',
   'log-events': 'count',
+  'log-gb-month': 'gb-month',
   'backup-gb-month': 'gb-month',
   'backup-hours': 'hour',
 };

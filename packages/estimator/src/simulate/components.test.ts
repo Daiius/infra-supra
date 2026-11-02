@@ -1104,6 +1104,27 @@ describe('実行ごとのログ（D-92）', () => {
     expect(u.c!.resources['log-gb']).toBeCloseTo((api * 0.5 * 1000) / 1e9, 12);
     expect(u.plain!.resources['log-gb']).toBeUndefined();
     expect(u.plain!.resources['log-events']).toBeUndefined();
+    // 保持の日数が無ければ保存は出さない
+    expect(u.f!.resources['log-gb-month']).toBeUndefined();
+  });
+
+  it('保持の日数があれば、保存（GB 月）= 月の取り込み × 日数 / 30（D-94）', () => {
+    const u = sim(
+      [
+        {
+          id: 'f',
+          label: 'f',
+          config: {
+            kind: 'function',
+            logs: { kbPerInvocation: 1.5, retentionDays: 7 },
+          },
+        },
+      ],
+      { api: ['f'] },
+    );
+    const gb = u.f!.resources['log-gb']!;
+    expect(gb).toBeGreaterThan(0);
+    expect(u.f!.resources['log-gb-month']).toBeCloseTo((gb * 7) / 30, 12);
   });
 });
 

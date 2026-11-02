@@ -214,7 +214,12 @@ describe('実際に予告されている改定の出来事（D-21）', () => {
       expect(rv.month).toBeGreaterThanOrEqual(3);
       const ev = month(s, rv.month).events.find((e) => e.id === rv.id)!;
       expect(ev.text).toContain('実際に予告されている改定');
-      expect(ev.text).toContain('このモデルの計算への影響: なし');
+      // Workers Logs → Cloudflare Observability は改定後の料金を持つ（D-94）。D1 の上限は計算に入らない
+      expect(ev.text).toContain(
+        rv.id === 'revision:cloudflare:2026-12-01'
+          ? 'このモデルの計算への影響: あり'
+          : 'このモデルの計算への影響: なし',
+      );
       expect(ev.text).not.toContain('料金と制限は変わる');
     }
   });
@@ -226,7 +231,8 @@ describe('実際に予告されている改定の出来事（D-21）', () => {
     ).toEqual(['revision:cloudflare:2026-12-01']);
   });
 
-  it('改定後の料金が無い予告は計算を変えない（施行日の後に始めたゲームと同じ結果）', () => {
+  // Workers Logs の改定（D-94）は改定後の料金を持つが、基準プレイの規模では込みの分（取り込み 50 GB・保存 10 GB 月）に収まる
+  it('改定後の料金が無い予告・込みの分に収まる改定は計算を変えない（施行日の後に始めたゲームと同じ結果）', () => {
     for (const b of BASELINES) {
       const before = playStrategy(b, 42, sc, '2026-10-31');
       const after = playStrategy(b, 42, sc, '2027-01-01');

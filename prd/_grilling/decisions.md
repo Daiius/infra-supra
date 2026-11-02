@@ -857,7 +857,7 @@
 - 公式で確かめたこと（2026-11-02 取得。出典は prd/11 §18.1）: CloudWatch Logs は東京の取り込み $0.76 / GB（Lambda のログは 2025-05 から段階つき・10 TB まで同じ）・保存 $0.033 / GB 月・常時無料 月 5 GB、Lambda・Amplify の SSR は既定で送り、保持は既定で無期限、API Gateway の HTTP API のアクセスログは既定で無効。
   Cloud Logging は $0.50 / GiB（30 日の保存を含む）・月 50 GiB / プロジェクトまで無料・Cloud Run の要求ログは自動、_Default は 30 日。Vercel の Runtime Logs は課金なし（保持 Hobby 1 時間・Pro 1 日）、Observability Plus は 100 万 event $1.20 で 2026-04-03 以降の Pro のチームは既定で有効。
   Netlify の関数のログは課金の項目に無い。Workers Logs は新しい Worker で既定で有効・Free 1 日 20 万件・Paid 月 2,000 万件込みで超過 100 万件 $0.60（2026-12-01 から Cloudflare Observability の料金へ）。
-  確かめられなかったこと: CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし）・Vercel の 1 要求あたりの event の数・Workers Logs の 2026-12-01 以降の料金。
+  確かめられなかったこと: CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし）・Vercel の 1 要求あたりの event の数・Workers Logs の 2026-12-01 以降の料金（→ D-94 で取得）。
 - 決定:
   - estimator に資源 `log-gb`・`log-events` と、`function`・`container` の `logs`（1 回の実行あたりの KB・件数）を足した。前景の実行ごとに数え、裏で走るクラスは数えない。
   - catalog の `stacks/logs.ts`（`withLogs`）が、組み終えた構成の関数・コンテナに課金先のプランごとの値とメーターを差す（部品の組み立てで config を差し替えても落ちない）。課金のある Lambda・Amplify Hosting・Cloud Run・Workers Paid だけ。Vercel・Netlify・Workers Free は注記だけ。
@@ -867,7 +867,7 @@
 - 基準プレイ（AWS・Google Cloud・CF Paid × Next.js・SPA × 記事・受託 × シード 1〜20）: **すべて不変**。月の PV の最大（約 400 万）でもほぼ無料の分に収まる（OpenNext × Next.js の記事で最も多い月だけ $0.7）。
   **CF Paid × Next.js（目標の根拠。記事 20/20・$15.2・受託 20/20・$5.7）・golden・網羅テストも不変**（最も多い月で 1,592 万件 < 2,000 万件）。表は prd/11 §18.3。
   ただし規模を上げると Workers Paid は合計に占める割合が大きい（月 1,000 万 PV で $12 / $46・3,000 万 PV で $60 / $138）。AWS・Google Cloud は 1% 前後。
-- 残した点: Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access を部品にすること・アプリのログの量をフレームワーク・出来事（エラーの急増）で変えること。
+- 残した点: Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access を部品にすること・アプリのログの量をフレームワーク・出来事（エラーの急増）で変えること。~~Workers Logs の 2026-12-01 以降の料金~~ → D-94。
 
 ### D-93 DB のバックアップ・任意の時点への復元（PITR）の費用と、受託の依頼（確定・2026-11-02）
 
@@ -894,6 +894,26 @@
   付けると: Supabase Pro の PITR は月 約 $105（受託 × Vercel Pro $46 → $152）で依頼の $20 を上回る。DynamoDB・Firestore は月 $0.1〜0.5。VPS は月 495 円と手間で、記事 × 2GB の達成が 10/20 → 6/20。表は prd/11 §19.3。
 - 残した点: 保持の日数を細かく選ぶこと・Supabase の Small の接続の上限・Cloud SQL の PITR のログの量・実際に壊れて戻す出来事（戻せない構成で何が失われるか）。
 
+### D-94 見積モードでも選んでも変わらない部品を出さない・Workers Logs の 2026-12-01 からの料金（確定・2026-11-02）
+
+- 依頼: D-93 の残り（見積モードは選んでも変わらない部品を隠さない）と D-92 の残り（Workers Logs の 2026-12-01 からの Cloudflare Observability の料金が未取得）。推奨案で自律に決定。prd/11 §18.5・§19.2・prd/08「見積モードの今の形」・prd/04 §3.3.2・prd/03 §5・prd/07 §10.13。
+- 見積モードの部品:
+  - 確かめたこと: 見積モードの部品の欄は始める画面と同じ `setupSlots` → `componentSlots` → `slotIneffective` を通っていて、main の時点で D1 などの DB のバックアップは既に出ていなかった（全テンプレート × 全構成 × Next.js・SPA で、出るのは延ばせる DB の構成だけ）。URL の値も `normalizeInput` → `estimateComponents` → `validSetupChoices` で落ちる。
+  - 決定: 判定を `slotIneffective` の 1 か所のままにし、構成を渡し忘れると DB のバックアップを効くと判定していた省略可能の引数を必須にした（渡し忘れを型で防ぐ）。web の model.ts は純粋関数のまま。
+  - テスト: 見積の描画テストに W-06（受託 × CF Paid で `c.dbBackup=pitr` の URL を開いても欄が無く、URL からも消える。Supabase Pro に替えると出る）、model.test.ts に URL に残った値（`pitr`・読めない値）を無視して既定と同じ額になることを足した。
+  - 気づいたこと（直していない）: 見積モードの欄の見出しに説明（ⓘ のボタン）があると、`<label>` の中の最初のボタンが名前を取り、select に名前が付かない（支援技術で欄の名前が読まれない）。テストは見出しの文字で探した。
+- 公式で確かめたこと（2026-11-02 取得。出典は prd/11 §18.5）: 2026-12-01 から Cloudflare のログ・トレースは件数でなく量で課金する。Paid は請求の期間ごとに取り込み 50 GB（圧縮前）・保存 10 GB 月（各日の問い合わせられる量の最大の和 / 30）まで込み、超えた分は $0.25 / GB・$0.10 / GB 月。既定の保持 7 日。
+  Free は 1 日 0.5 GB で、超えると取り込みを止める。Workers Logs・Traces・Containers などがアカウントで込みの分を共有。それより前の分はさかのぼらない。developers.cloudflare.com の observability/pricing（最終更新 2026-10-25）・workers/observability/logs/workers-logs・blog.cloudflare.com の one-observability-platform（2026-10-02）。
+  確かめられなかったこと: 表の「Paid」が Workers Paid を指すこと（定義なし。基本料の記載も無いので Workers Paid と読んだ）・1 件の大きさ（記載なし）・changelog の告知（2026-10-26〜30 の版に見当たらない）。
+- 決定（料金）:
+  - 版の仕組みは今の `scheduledChanges`（D-21）のまま。改定 `revision:cloudflare:2026-12-01` に `revisedMeters` を持たせた（実データで最初の改定後の料金）。`revisedMeters` は料金だけを差し替えるので、Workers Paid に取り込み `observability-ingest`・保存 `observability-storage` のメーターとプールを施行の前から $0 で置き、改定で件数の `workers-logs` を $0 にして量の 2 つに単価を付ける。
+  - estimator に資源 `log-gb-month` と `logs.retentionDays` を足した（保存 = 月の取り込み × 保持の日数 / 30）。
+  - どちらの版を使うかは既存の規則に従う: ゲームは始めた日が施行日より前なら改定の出来事の月（3〜10 か月目）から改定後で数え、施行日の後に始めたゲームは今の版のまま。見積モードは今の版（施行日で切り替える機能は無い）。
+  - 仮定（ゲーム上の仮定・出典なし）: Workers の 1 回の実行のログ 1.5 KB（呼び出しのログ 約 1 KB + console.log 約 0.5 KB）・保持は既定の 7 日。Workers Free は今までどおり数えない。
+- 結果: **基準プレイ・golden・網羅テスト・CF Paid × Next.js（目標の根拠）はすべて不変**（最も多い月 1,592 万件 = 約 11.9 GB・保存 約 2.8 GB 月で込みの分の中。施行日の前と後に始めたゲームの一致のテストも基準プレイで通る）。
+  改定の出来事の文だけ「このモデルの計算への影響: あり」に変わった。規模を上げると改定の後は安い（CF Paid × Next.js の記事のログ / 月: 1,000 万 PV $12.0 → $0・3,000 万 PV $60.0 → $11.1・1 億 PV $228 → $69）。1 件の大きさが仮定の 3 倍を超えると逆転する。
+- 残した点: 施行日の後に始めたゲームと見積モードで改定後の版を使うこと（今は今の版のまま。施行日を過ぎたら catalog の版を上げる）・1 件の大きさの確かめ・Workers Free の 1 日 0.5 GB で取り込みが止まること・Workers Logs の標本化（D-92 から）・見積モードの欄の select の名前。
+
 ### 論点（ユーザーの判断が要るもの）
 
 | # | 論点 | 参照 |
@@ -919,7 +939,7 @@
 | Google Cloud | Cloud Run・Firebase Hosting の SLA（未取得）・Cloud Run → Firebase Hosting の応答の転送の課金（書かれていない。数えない）・Cloud SQL の最小の割り当ての量 | D-88・prd/11 §16.3 |
 | Cloudflare の CDN（Free） | 転送量の上限（第三者の記事 1 件だけ・公式に見当たらない。課金なしのまま）・規約の「不釣り合いな割合の画像」の境目（数値なし） | D-91・prd/11 §17.1 |
 | バックアップ（D-93） | Cloud SQL の PITR のログ（ディスクに置く）の量の課金（料金ページに記載なし。数えていない）・RDS の PITR に別の課金が無いこと（課金の項目が無いことからの読み） | D-93・prd/11 §19 |
-| ログ（D-92） | CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし。数えていない）・Vercel の Observability Plus の 1 要求あたりの event の数（数えていない）・Workers Logs の 2026-12-01 以降の料金（今の値で数えている） | D-92・prd/11 §18 |
+| ログ（D-92） | CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし。数えていない）・Vercel の Observability Plus の 1 要求あたりの event の数（数えていない）・~~Workers Logs の 2026-12-01 以降の料金~~ → D-94（取得。1 件の大きさは仮定・「Paid」を Workers Paid と読んだ） | D-92・D-94・prd/11 §18 |
 | ~~Cloudflare Images Paid~~ | ~~基本料~~ → D-84（基本料なしとみる。公式の例の合計に入っていない。値は不変） | D-84・prd/11 §2 |
 
 ### 残した点（直す方針はあるが、今は入れていないもの）
@@ -936,7 +956,8 @@
 | D-90 | 受託 × Neon の釣り合いの見直し・金曜 → 土曜の境目・メンテナンスで起こされる分・接続を開いたままにする作り |
 | D-91 | 前段の CDN のパージの連携の作り込みの手間・Cloudflare の静的 + VPS の API で api もプロキシしてキャッシュする形・画像の割合の規約の判定 |
 | D-92 | Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access の部品・アプリのログの量をフレームワーク・出来事で変えること |
-| D-93 | 保持の日数を 2 択より細かく選ぶこと・Supabase の Small の pooler の接続 400・Cloud SQL の PITR のログの量・Firestore の日次のバックアップ・実際に壊れて戻す出来事 |
+| D-93 | ~~見積モードで選んでも変わらない部品を出さないこと~~ → D-94（すでに同じ判定を通っていた。引数を必須にしてテストで固定）・保持の日数を 2 択より細かく選ぶこと・Supabase の Small の pooler の接続 400・Cloud SQL の PITR のログの量・Firestore の日次のバックアップ・実際に壊れて戻す出来事 |
+| D-94 | 施行日の後に始めたゲームと見積モードで改定後の版を使うこと・Workers の 1 件の大きさ・Workers Free の 1 日 0.5 GB の止まり・見積モードの欄の select の名前 |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 

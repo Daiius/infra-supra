@@ -17,6 +17,11 @@ const LogsSchema = z
   .object({
     kbPerInvocation: NonNeg.default(0),
     eventsPerInvocation: NonNeg.default(0),
+    /**
+     * 保存を課金する事業者の保持の日数（D-94）。0 なら保存（log-gb-month）を出さない。
+     * 毎日同じ量を取り込み、保持の日数だけ残る定常の形で、保存の量 = 月の取り込み × 日数 / 30（GB 月）。
+     */
+    retentionDays: NonNeg.default(0),
   })
   .optional();
 

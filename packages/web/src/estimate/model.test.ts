@@ -98,6 +98,26 @@ describe('URL のクエリ', () => {
     expect(usd(1)).toBeLessThan(usd(0));
   });
 
+  it('選んでも変わらない部品（D1 の DB のバックアップ）の値が URL に残っていても無視して既定で見積もる（D-94）', () => {
+    const d1 = (q: string) =>
+      normalizeInput(fromQuery(`?t=business&s=cloudflare-vinext-paid${q}`));
+    for (const v of ['pitr', 'nope']) {
+      const i = d1(`&c.dbBackup=${v}`);
+      expect(i.parts.dbBackup).toBeUndefined();
+      expect(runEstimate(i).totalUsd).toBe(runEstimate(d1('')).totalUsd);
+      expect(toQuery(i).has('c.dbBackup')).toBe(false);
+    }
+    // 選べば変わる DB（Supabase Pro）では残り、見積に効く
+    const pro = (v: string) =>
+      normalizeInput(
+        fromQuery(`?t=business&s=vercel-supabase-pro&c.dbBackup=${v}`),
+      );
+    expect(pro('pitr').parts.dbBackup).toBe('pitr');
+    expect(runEstimate(pro('pitr')).totalUsd).toBeGreaterThan(
+      runEstimate(pro('default')).totalUsd,
+    );
+  });
+
   it('読めない値は捨てる', () => {
     const q = fromQuery('?pv=abc&c.nope=x&c.images=none');
     expect(q.pv).toBeUndefined();

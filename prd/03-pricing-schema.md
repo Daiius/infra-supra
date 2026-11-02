@@ -114,6 +114,8 @@ type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unit
   ノードの課金先は 1 つのプランなので、ログを出す計算のプラン（Lambda・Amplify Hosting・Cloud Run・Workers Paid）にメーター `logs`・`workers-logs` を置く。
   無料の量は事業者のアカウントのプール（`cloudwatch-free-logs` 5 GB・`logging-free` 50 GiB・`paid-workers-logs` 2,000 万件）で、同じアカウントの Lambda と Amplify で分け合う。
   保持の費用は数えず、理由をメーターの `interpretation` に残す。課金の無い事業者（Vercel・Netlify・Workers Free）はメーターを置かず、注記に書く。
+  Workers Paid は 2026-12-01 から Cloudflare Observability の量の課金に移る（D-94）。`revisedMeters` は料金だけを差し替えるので、取り込み（`log-gb`）と保存（`log-gb-month`）のメーターを
+  施行の前から $0 で置き、改定で件数の `workers-logs` を $0 にして量の 2 つに単価を付ける。
 - **DB のバックアップ（D-93）**: 汎用リソース `backup-gb-month`（無料の分を除いた残す量）と `backup-hours`（時間で課金するアドオン）で受ける。メーターは DB のプランに置く
   （RDS・Aurora `backup`・DynamoDB・Firestore `pitr`・Cloud SQL `backup`・Neon Launch `history`・Supabase Pro `pitr`）。「DB の大きさまで無料」（RDS・Aurora）は量が DB で変わり
   プールの固定の量で書けないので、ノードの値（`freeUpToDbSize`・`minFreeGB`）で引いてからメーターに渡す。さくらのオブジェクトストレージ（VPS の自前のバックアップの置き場）は
