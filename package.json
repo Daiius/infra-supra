@@ -6,6 +6,8 @@
     "dev": "pnpm --filter web dev",
     "dev:remote": "pnpm --filter web dev:remote",
     "test": "pnpm -r test",
+    "test:fast": "pnpm -r test --exclude '**/combo-sweep.test.ts'",
+    "test:sweep": "pnpm --filter game exec vitest run src/combo-sweep.test.ts",
     "typecheck": "pnpm -r typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

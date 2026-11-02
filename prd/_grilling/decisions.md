@@ -784,6 +784,7 @@
 
 - 背景: CI は秘密の検査（secret-scan.yml）だけで、`pnpm test` は手元でしか走っていなかった（D-86 の残した点）。
 - 推奨案で決定（autonomous-log B-41）: `.github/workflows/test.yml` を足し、全ブランチの push と PR で `pnpm install --frozen-lockfile`・`pnpm typecheck`・`pnpm test`・`pnpm format:check` を回す。Node 24、pnpm は packageManager の版。Action は secret-scan.yml と同じく commit の SHA で固定（checkout v7.0.1・pnpm/action-setup v6.1.0・setup-node v7.1.0）。権限は contents: read だけ。
+- 追記（2026-11-03）: テスト（約 117 秒）の大半が combo-sweep.test.ts（約 100 秒）なので、CI ではそれだけを別の job（`combo-sweep`・`pnpm test:sweep`）に分け、`test` の job は `pnpm test:fast`（それを除く全部）を回して並べる。範囲は変えない。
 
 ### D-88 Google Cloud（Cloud Run + Firebase Hosting）を足す（確定・2026-11-02）
 

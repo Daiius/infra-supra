@@ -2,6 +2,8 @@ name: Test
 
 # 型検査・テスト・整形の確認を、全ブランチの push と PR で回す（D-87）。
 # 秘密の検査は secret-scan.yml が別に持つ。
+# テストの時間のほとんどは組み合わせの総当たり（game の combo-sweep.test.ts）なので、
+# それだけを別の job に分けて並べて回す。2 つの job を合わせると `pnpm test` と同じ範囲になる。
 
 on:
   push:
@@ -27,5 +29,21 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
+      # combo-sweep.test.ts を除く全部（それは下の combo-sweep の job が回す）
+      - run: pnpm test:fast
       - run: pnpm format:check
+
+  combo-sweep:
+    runs-on: ubuntu-latest
+    steps:
+      # 上の test の job と同じ固定
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:sweep
