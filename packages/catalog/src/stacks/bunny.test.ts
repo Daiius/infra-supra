@@ -60,6 +60,34 @@ describe('画像を Bunny で配る', () => {
     expect(r.nodes.some((n) => n.id === 'bunny-optimizer')).toBe(false);
   });
 
+  it('Amplify（Next.js）: 画像は Amplify の CDN・CloudFront・S3 を通らない（二重に数えない）。投稿は SSR から（外への転送は数えない）', () => {
+    const a = composeStack('aws-amplify', { images: 'bunny-resize' });
+    expect(a.nodes.some((n) => ['image', 'cf', 's3'].includes(n.id))).toBe(
+      false,
+    );
+    expect(a.routes['image-read']).toEqual(['bunny-img', 'bunny-storage']);
+    expect(a.routes['image-write']).toEqual(['ssr', 'bunny-storage']);
+    const r = estimate({
+      workload: articleCommunity(1_000_000),
+      architecture: a,
+      books,
+    });
+    // Amplify の配信の転送は Bunny なしの構成と同じ（画像を含まない）。CloudFront の転送の行は無く、画像の転送は Bunny の bandwidth だけ
+    const amplifyOut = (x: ReturnType<typeof estimate>) =>
+      x.bill.lines.find((l) => l.priceRef.meterId === 'amplify-transfer-out')!
+        .amount;
+    const base = estimate({
+      workload: articleCommunity(1_000_000),
+      architecture: composeStack('aws-amplify', { images: 'resize' }),
+      books,
+    });
+    expect(amplifyOut(r)).toBeCloseTo(amplifyOut(base)!, 9);
+    expect(
+      r.bill.lines.filter((l) => l.priceRef.meterId?.includes('transfer'))
+        .length,
+    ).toBe(1);
+  });
+
   it('AWS（SPA）・Google Cloud: 投稿の Storage への書き込みは土台の外への転送で数える', () => {
     const spa = composeStack(
       'aws-amplify',
