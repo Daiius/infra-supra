@@ -84,24 +84,24 @@ describe('ⓘ の当たり判定', () => {
     expect(screen.getByRole('spinbutton', { name: '月の PV' })).toBeDefined();
   });
 
-  it('W-11 始める画面のラジオは、ⓘ を押しても選ばれず、文字を押すと選ばれる', () => {
+  it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', () => {
     renderApp();
-    // 選ばれていないフレームワークのカード（ⓘ のあるもの）
+    // 選ばれていないフレームワークのカード（ⓘ のあるもの。D-102 でタブ + カードにした）
     const radio = screen
       .getAllByRole<HTMLInputElement>('radio')
-      .find(
-        (r) =>
-          r.name === 'framework' &&
-          !r.checked &&
-          r.closest('label')!.querySelector('button'),
-      )!;
-    const card = radio.closest('label')!;
+      .find((r) => r.name === 'framework' && !r.checked)!;
+    const name = radio.closest('label')!.textContent!.replace(/^export/, '');
+    const card = screen.getByRole('region', { name: `${name} の説明` });
     fireEvent.click(within(card).getByRole('button', { name: /説明$/ }));
     expect(tooltip()).not.toBeNull();
     expect(radio.checked).toBe(false);
+    // 説明の中（ポータル）を押しても選ばれない（OCL-A1FCD9AC）
+    fireEvent.click(tooltip()!);
+    fireEvent.click(tooltip()!.querySelector('*') ?? tooltip()!);
+    expect(radio.checked).toBe(false);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(tooltip()).toBeNull();
-    fireEvent.click(card.querySelector('span')!);
+    fireEvent.click(card.querySelector('p, li')!);
     expect(radio.checked).toBe(true);
     expect(tooltip()).toBeNull();
   });

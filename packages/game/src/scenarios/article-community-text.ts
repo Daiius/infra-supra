@@ -1,5 +1,145 @@
 // 記事コミュニティの始める画面の文言（D-33・prd/09 E-6。画面に固定で書いていたものをシナリオのデータへ移した）。
-import type { ScenarioText } from '../scenario.ts';
+import type { PageWireframe, ScenarioText } from '../scenario.ts';
+
+/**
+ * ページの見取り図（D-102。ゲーム上の仮定の図）。区画の作られ方は今の計算のモデルに合わせる:
+ * Next.js は記事 ISR・個人 SSR、コメント・いいね・ログインの表示はブラウザが API で取る（D-70）。
+ * Astro は記事をビルドで静的・個人をアダプターで SSR、動きのある部品はアイランド。静的書き出しは記事を静的・個人を静的な枠 + API（D-80）。
+ * SPA はシェル + API。設定「コメントの描き方」で記事のページに含めると、コメント欄は記事の HTML の一部になる（D-82）。
+ */
+const ARTICLE_WIREFRAMES: PageWireframe[] = [
+  {
+    route: 'article',
+    regions: [
+      { id: 'header', label: 'ヘッダー・ナビ', width: 'half' },
+      { id: 'login', label: 'ログインの表示', width: 'half' },
+      { id: 'title', label: '記事のタイトル・著者' },
+      { id: 'body', label: '本文', height: 'lg' },
+      { id: 'images', label: '画像（5 枚）', height: 'md' },
+      { id: 'likes', label: 'いいね' },
+      { id: 'comments', label: 'コメント欄（読む・書く）', height: 'md' },
+      { id: 'footer', label: '関連記事・フッター' },
+    ],
+    byFramework: {
+      nextjs: {
+        header: 'isr',
+        login: 'api',
+        title: 'isr',
+        body: 'isr',
+        images: 'image',
+        likes: 'api',
+        comments: 'api',
+        footer: 'isr',
+      },
+      astro: {
+        header: 'build',
+        login: 'island',
+        title: 'build',
+        body: 'build',
+        images: 'image',
+        likes: 'island',
+        comments: 'island',
+        footer: 'build',
+      },
+      'nextjs-export': {
+        header: 'build',
+        login: 'api',
+        title: 'build',
+        body: 'build',
+        images: 'image',
+        likes: 'api',
+        comments: 'api',
+        footer: 'build',
+      },
+      'vite-spa': {
+        header: 'shell',
+        login: 'api',
+        title: 'api',
+        body: 'api',
+        images: 'image',
+        likes: 'api',
+        comments: 'api',
+        footer: 'api',
+      },
+    },
+    // SPA は記事のページが無いので含められない（D-82）
+    commentsInPage: {
+      nextjs: { comments: 'isr' },
+      astro: { comments: 'build' },
+      'nextjs-export': { comments: 'build' },
+    },
+    badges: {
+      nextjs: [
+        { kind: 'freshness', text: '鮮度: 再検証で載る' },
+        { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
+      ],
+      astro: [
+        { kind: 'freshness', text: '鮮度: ビルドし直しで載る' },
+        { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
+      ],
+      'nextjs-export': [
+        { kind: 'freshness', text: '鮮度: ビルドし直しで載る' },
+        { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
+      ],
+      'vite-spa': [
+        { kind: 'freshness', text: '鮮度: 常に新しい' },
+        { kind: 'ogp', text: 'SNS のカード: 前処理の部品が要る' },
+        { kind: 'api', text: 'API: 1 PV あたり 1 回増える' },
+      ],
+    },
+  },
+  {
+    route: 'personal',
+    regions: [
+      { id: 'header', label: 'ヘッダー・ナビ' },
+      { id: 'profile', label: 'プロフィール', width: 'half', height: 'md' },
+      { id: 'notifications', label: '通知', width: 'half', height: 'md' },
+      { id: 'mine', label: '自分の下書き・記事の一覧', height: 'lg' },
+      { id: 'editor', label: '投稿・編集の画面へ（送信は API）' },
+    ],
+    byFramework: {
+      nextjs: {
+        header: 'ssr',
+        profile: 'ssr',
+        notifications: 'ssr',
+        mine: 'ssr',
+        editor: 'ssr',
+      },
+      astro: {
+        header: 'ssr',
+        profile: 'ssr',
+        notifications: 'ssr',
+        mine: 'ssr',
+        editor: 'ssr',
+      },
+      'nextjs-export': {
+        header: 'build',
+        profile: 'api',
+        notifications: 'api',
+        mine: 'api',
+        editor: 'build',
+      },
+      'vite-spa': {
+        header: 'shell',
+        profile: 'api',
+        notifications: 'api',
+        mine: 'api',
+        editor: 'shell',
+      },
+    },
+    badges: {
+      nextjs: [{ kind: 'cpu', text: 'CPU: 閲覧ごとにサーバーが描く' }],
+      astro: [
+        {
+          kind: 'cpu',
+          text: 'CPU: 閲覧ごとにサーバーが描く（Workers は 1 リクエストの上限に注意）',
+        },
+      ],
+      'nextjs-export': [{ kind: 'api', text: 'API: 1 PV あたり 1 回増える' }],
+      'vite-spa': [{ kind: 'api', text: 'API: 1 PV あたり 1 回増える' }],
+    },
+  },
+];
 
 export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
   intro:
@@ -78,4 +218,5 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
       ],
     },
   },
+  wireframes: ARTICLE_WIREFRAMES,
 };

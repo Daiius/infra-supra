@@ -18,6 +18,7 @@ import {
   type Scenario,
 } from 'game';
 import { useMemo } from 'react';
+import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
 
@@ -94,7 +95,14 @@ export function SetupComponents({
                         onChange={() => onChange({ ...value, [x.slot]: o.id })}
                       />
                       <span className="block min-w-0">
-                        <span className="block text-sm">
+                        <span className="flex items-center gap-1 text-sm">
+                          {/* 構成と別の事業者の部品だけロゴを添える（D-102） */}
+                          {o.platform !== STACKS[stackIndex]!.provider && (
+                            <BrandMark
+                              brand={COMPONENT_BRAND[o.platform]}
+                              size={14}
+                            />
+                          )}
                           <NameWithInfo
                             name={o.label}
                             info={

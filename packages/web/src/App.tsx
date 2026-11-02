@@ -99,6 +99,7 @@ import {
   type SetupChoices,
 } from './setup-components.tsx';
 import { EstimateMode } from './estimate/estimate-mode.tsx';
+import { PlatformMarks } from './brand-logos.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -304,6 +305,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             allowed={frameworks.allowed}
             value={framework}
             onChange={(id) => change({ framework: id })}
+            // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
+            comments={commentsChoosable ? comments : undefined}
           />
           <h3 className="mt-2 font-bold">インフラの構成</h3>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -319,7 +322,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   onChange={() => change({ stack: s.index })}
                 />
                 <span className="block min-w-0">
-                  <span className="block">
+                  <span className="flex items-center gap-1.5">
+                    <PlatformMarks platform={s.provider} />
                     {stackName(s.index, framework, false)}
                   </span>
                   {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}

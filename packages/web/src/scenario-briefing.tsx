@@ -6,14 +6,22 @@ import {
   EFFORT,
   FRAMEWORKS,
   growthFromReputation,
+  pageWireframes,
   SCENARIOS,
   selfHostedOf,
   type FrameworkId,
   type Scenario,
   upkeepOf,
 } from 'game';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
 import { Meta, NameWithInfo } from './option-text.tsx';
+import {
+  PageBadges,
+  PageWireframe,
+  WireframeLegend,
+} from './page-wireframes.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -169,81 +177,249 @@ function FrameworkDetail({
 }
 
 /**
+ * フレームワークのカード: 名前・要約・ページごとの見取り図と描き方（D-102）。選んでいるものは枠とブランドの色で目立たせ、
+ * 選んでいないものも同じ中身を読める大きさで出す（薄く・彩度を落とし・少し小さく）。
+ */
+function FrameworkCard({
+  scenario,
+  id,
+  comments,
+  info,
+  selected,
+  noteId,
+}: {
+  scenario: Scenario;
+  id: FrameworkId;
+  comments: number | undefined;
+  info: ReactNode;
+  selected: boolean;
+  /** 要約の要素の id（タブのラジオの aria-describedby に使う）。 */
+  noteId: string;
+}) {
+  const t = scenario.text?.byFramework?.[id];
+  const pages = pageWireframes(scenario, id, comments);
+  const lines = t?.pages ?? [];
+  /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
+  const linesOf = (label: string) =>
+    lines
+      .filter((l) => l.startsWith(`${label}:`))
+      .map((l) => l.slice(label.length + 1).trim());
+  const rest = lines.filter(
+    (l) => !pages.some((p) => l.startsWith(`${p.label}:`)),
+  );
+  const brand = FRAMEWORK_BRAND[id];
+  return (
+    <section
+      aria-label={`${FRAMEWORKS[id].label} の説明`}
+      aria-current={selected ? 'true' : undefined}
+      className={`card w-full border border-t-4 bg-base-100 motion-safe:transition ${
+        selected
+          ? 'border-primary shadow-md ring-2 ring-primary/30'
+          : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80'
+      }`}
+      // ブランドの色は選んでいるカードの上の縁だけ（黒一色のロゴは文字の色）
+      style={
+        selected
+          ? { borderTopColor: brandColor(brand.brand) ?? 'currentColor' }
+          : undefined
+      }
+    >
+      <div className="card-body gap-3 p-4">
+        <h4 className="card-title text-lg">
+          <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
+          <NameWithInfo name={FRAMEWORKS[id].label} info={info} />
+        </h4>
+        {t?.note && (
+          <p id={noteId} className="text-sm opacity-80">
+            {t.note}
+          </p>
+        )}
+        {rest.length > 0 && (
+          <ul className="list-disc pl-5 text-sm">
+            {rest.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        )}
+        {pages.map((p) => (
+          <section
+            key={p.route}
+            aria-label={p.label}
+            className="flex flex-col gap-2 border-t border-base-300 pt-3 lg:flex-row lg:gap-4"
+          >
+            <PageWireframe page={p} />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <h5 className="font-semibold">{p.label}</h5>
+              <PageBadges badges={p.badges} />
+              {linesOf(p.label).length > 0 && (
+                <ul className="list-disc space-y-0.5 pl-5 text-sm">
+                  {linesOf(p.label).map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        ))}
+        {pages.length > 0 && (
+          <div className="border-t border-base-300 pt-2">
+            <WireframeLegend pages={pages} />
+            <p className="mt-1 text-xs opacity-60">
+              見取り図はゲーム上の仮定。設定「コメントの描き方」を変えると、コメント欄の札も変わる。
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
  * アプリのフレームワーク（構成のカードの中で、インフラの構成と同列に選ぶ。D-35・prd/10 F-04）。
- * どちらにも推奨・既定の印を付けない。選んだものだけ短い注記を出し、長い説明は ⓘ に畳む。
- * シナリオで選べるものが 1 つだけのときは選択肢を出さず、そのフレームワークの説明だけを出す。
+ * どれにも推奨・既定の印を付けない。名前とロゴのタブ（ラジオ）で選び、選んだものを中央の大きいカードに出す（D-102）。
+ * 前後のボタン・タブの ←/→・カードを押して切り替える。前後のカードも同じ中身で両脇に見える（daisyUI の carousel）。
+ * 選んでいる＝中央のカード（「これにする」のボタンは置かない）。シナリオで選べるものが 1 つだけのときはカードだけを出す。
  */
 export function FrameworkField({
   scenario,
   allowed,
   value,
   onChange,
+  comments,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
   value: FrameworkId;
   onChange: (id: FrameworkId) => void;
+  /** 設定「コメントの描き方」（始める画面で選べるときだけ。見取り図のコメント欄が変わる。D-82）。 */
+  comments?: number | undefined;
 }) {
-  const note = (id: FrameworkId) => scenario.text?.byFramework?.[id]?.note;
-  /** ページごとの描き方（D-101）。選んでいない方にも出して見比べられるようにする。 */
-  const pages = (id: FrameworkId, className: string) => {
-    const lines = scenario.text?.byFramework?.[id]?.pages ?? [];
-    // ラベルの中に置くので、ブロックの要素（ul）でなく span を縦に積む
-    return lines.length > 0 ? (
-      <span className={`block space-y-0.5 ${className}`}>
-        {lines.map((line) => (
-          <span key={line} className="block">
-            {line}
-          </span>
-        ))}
-      </span>
-    ) : null;
-  };
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
       <FrameworkDetail scenario={scenario} id={id} />
     </Info>
   );
+  const track = useRef<HTMLDivElement>(null);
+  const items = useRef<Partial<Record<FrameworkId, HTMLDivElement | null>>>({});
+  // 選んだカードを中央へ。scrollLeft なので動きは CSS に任せる（daisyUI の carousel は reduced-motion では滑らかにしない）
+  useEffect(() => {
+    const t = track.current;
+    const el = items.current[value];
+    if (!t || !el) return;
+    t.scrollLeft = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
+  }, [value, allowed]);
+  const headingId = useId();
   if (allowed.length < 2) {
     const id = allowed[0] ?? value;
     return (
-      <div className="space-y-1">
+      <div className="space-y-2">
         <h3 className="font-bold">アプリのフレームワーク</h3>
-        <p>
-          <NameWithInfo name={FRAMEWORKS[id].label} info={info(id)} />
-        </p>
-        {pages(id, 'text-sm opacity-70')}
-        {note(id) && <p className="text-sm opacity-70">{note(id)}</p>}
+        <FrameworkCard
+          scenario={scenario}
+          id={id}
+          comments={comments}
+          info={info(id)}
+          selected
+          noteId={`${headingId}-${id}`}
+        />
       </div>
     );
   }
+  const i = Math.max(0, allowed.indexOf(value));
+  const at = (d: number) => allowed[(i + d + allowed.length) % allowed.length]!;
   return (
     <div className="space-y-2">
-      <h3 className="font-bold">アプリを何で作りましたか？</h3>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <h3 id={headingId} className="font-bold">
+        アプリを何で作りましたか？
+      </h3>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className="btn btn-circle btn-ghost btn-sm shrink-0"
+          aria-label={`前の選択肢（${FRAMEWORKS[at(-1)].label}）`}
+          onClick={() => onChange(at(-1))}
+        >
+          ‹
+        </button>
+        {/* 名前とロゴのタブ。ラジオなので ←/→ で選べる。狭い画面では横にスクロールする */}
+        <div
+          role="radiogroup"
+          aria-labelledby={headingId}
+          className="tabs tabs-box tabs-sm min-w-0 flex-1 flex-nowrap overflow-x-auto"
+        >
+          {allowed.map((id) => (
+            // ロゴを添えるので input でなく label をタブにする（daisyUI の label:has(:checked)）。名前は文字で出す
+            <label
+              key={id}
+              className="tab shrink-0 gap-1 whitespace-nowrap has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary"
+            >
+              <input
+                type="radio"
+                name="framework"
+                className="sr-only"
+                // 要約だけを説明にする（カード全体は長いので、カードは下に領域として読める）
+                aria-describedby={
+                  scenario.text?.byFramework?.[id]?.note
+                    ? `${headingId}-${id}`
+                    : undefined
+                }
+                checked={value === id}
+                onChange={() => onChange(id)}
+              />
+              <BrandMark
+                brand={FRAMEWORK_BRAND[id].brand}
+                size={14}
+                tag={FRAMEWORK_BRAND[id].tag}
+              />
+              {FRAMEWORKS[id].label}
+            </label>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="btn btn-circle btn-ghost btn-sm shrink-0"
+          aria-label={`次の選択肢（${FRAMEWORKS[at(1)].label}）`}
+          onClick={() => onChange(at(1))}
+        >
+          ›
+        </button>
+      </div>
+      {/* 全部のカードを同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（狭い画面は 88%）を
+          使う。前後のカードは両脇の端だけ薄く見え、押すと選ぶ。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
+          指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
+      <div
+        ref={track}
+        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-2"
+      >
         {allowed.map((id) => (
-          <label
+          <div
             key={id}
-            className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${value === id ? 'border-primary bg-primary/5' : 'border-base-300'}`}
+            ref={(el) => {
+              items.current[id] = el;
+            }}
+            className={`carousel-item w-[88%] lg:w-[85%] ${id === value ? '' : 'cursor-pointer'}`}
+            // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
+            onClick={
+              id === value
+                ? undefined
+                : (e) => {
+                    // ⓘ の説明はポータルで描くので、その中の操作も React の木を伝ってここへ届く。DOM でカードの中の操作だけを選ぶ
+                    const target = e.target as Element;
+                    if (!e.currentTarget.contains(target)) return;
+                    if (target.closest('button')) return;
+                    onChange(id);
+                  }
+            }
           >
-            <input
-              type="radio"
-              name="framework"
-              className="radio radio-primary mt-0.5 shrink-0"
-              checked={value === id}
-              onChange={() => onChange(id)}
+            <FrameworkCard
+              scenario={scenario}
+              id={id}
+              comments={comments}
+              info={info(id)}
+              selected={id === value}
+              noteId={`${headingId}-${id}`}
             />
-            <span className="block min-w-0">
-              <span className="block">
-                <NameWithInfo name={FRAMEWORKS[id].label} info={info(id)} />
-              </span>
-              {/* 選んでいない方にも同じ注記を出す（見比べられるように。カードの高さは grid で揃う。D-45） */}
-              {pages(id, 'mt-0.5 text-xs opacity-70')}
-              {note(id) && (
-                <span className="block text-xs opacity-70">{note(id)}</span>
-              )}
-            </span>
-          </label>
+          </div>
         ))}
       </div>
       <p className="text-sm opacity-60">

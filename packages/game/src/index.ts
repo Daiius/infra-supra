@@ -75,8 +75,11 @@ import {
   type EventTier,
   type Scenario,
   type Scheduled,
+  type PageBadge,
+  type RegionSource,
   type Stock,
   type Strategy,
+  type WireframeRegion,
   type WorkloadMods,
 } from './scenario.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
@@ -3107,6 +3110,46 @@ export function setupCommentOptions(
     ...o,
     flavor: settingFlavor('comments', o.value) ?? '',
   }));
+}
+
+/** 見取り図の区画に、選んだフレームワークでの作られ方を付けたもの（D-102）。 */
+export type ResolvedRegion = WireframeRegion & { source: RegionSource };
+
+/**
+ * 始める画面のページの見取り図（D-102）。シナリオの wireframes を、選んだフレームワークとコメントの描き方（D-82）で解く。
+ * ページの名前はテンプレートのルートの label。comments は始める画面で選べるときだけ渡す（省略はブラウザで読み込む）。
+ */
+export function pageWireframes(
+  sc: Scenario,
+  framework: FrameworkId,
+  comments?: number,
+): {
+  route: string;
+  label: string;
+  regions: ResolvedRegion[];
+  badges: PageBadge[];
+}[] {
+  const routes = sc.template(1).routes;
+  const inPage = commentsInPage(
+    { comments: comments ?? COMMENTS_IN_BROWSER },
+    framework,
+    sc,
+  );
+  return (sc.text?.wireframes ?? []).map((w) => {
+    const sources = {
+      ...w.byFramework[framework],
+      ...(inPage ? w.commentsInPage?.[framework] : undefined),
+    };
+    return {
+      route: w.route,
+      label: routes.find((r) => r.id === w.route)?.label ?? w.route,
+      regions: w.regions.map((r) => ({
+        ...r,
+        source: sources[r.id] ?? 'ssr',
+      })),
+      badges: w.badges?.[framework] ?? [],
+    };
+  });
 }
 
 /**
