@@ -8,6 +8,7 @@ import {
   checkAction,
   commitmentOffers,
   COMMITMENTS,
+  commitmentLines,
   newGame,
   newSave,
   playMonth,
@@ -246,6 +247,93 @@ describe('確約（D-97）', () => {
     const hint = retryHintsOf(s).find((h) => h.kind === 'commitment');
     expect(hint?.what).toContain('リザーブドインスタンス');
     expect(hint?.next).toContain('取り消せず');
+  });
+
+  it('同じ月に年額を結んでスケールアップすると、払っていない 2GB の年額は差し引かず、4GB の年額を残りの月数の分だけ払う（OCL-17D1B88E）', () => {
+    let s = playMonth(newGame(VPS2, 1, sc, undefined, 'nextjs', {}));
+    while (s.phase === 'playing' && s.cash < 400) s = playMonth(s);
+    expect(s.phase).toBe('playing');
+    s = applyAction(s, {
+      type: 'commit',
+      key: ANNUAL2,
+      payment: 'all-upfront',
+    });
+    s = applyAction(s, { type: 'plan', stackIndex: VPS4 });
+    expect(s.stackIndex).toBe(VPS4);
+    const def4 = COMMITMENTS.find((d) => d.key === ANNUAL4)!;
+    const left = Math.min(12, sc.months - s.history.length);
+    expect(activeCommitments(s).map((c) => [c.key, c.upfront])).toEqual([
+      [ANNUAL4, (def4.commitment.payments[0]!.upfront! * left) / 12],
+    ]);
+    s = playMonth(s);
+    const paid = s.history[s.history.length - 1]!.lines.filter(
+      (l) => l.kind === 'commitment' && l.amount > 0,
+    );
+    expect(paid.map((l) => l.label)).toEqual([expect.stringContaining('4GB')]);
+  });
+
+  it('所持金の検査は、同じ月に選んだ前払いと年額のままのスケールアップの差額を合わせて見る（OCL-C32E39AF）', () => {
+    let s = playMonth(newGame(AWS, 2, sc, undefined, 'nextjs', { db: 'rds' }));
+    const au = {
+      type: 'commit',
+      key: RDS_KEY,
+      payment: 'all-upfront',
+    } as const;
+    while (s.phase === 'playing' && !checkAction(s, au).ok) s = playMonth(s);
+    expect(s.phase).toBe('playing');
+    // 来月に払う前払いがすでに所持金を使っていれば、単独なら選べる前払いも選べない
+    const reserved: GameState = {
+      ...s,
+      commitments: [
+        {
+          key: ANNUAL2,
+          label: '年額',
+          currency: 'USD',
+          payment: 'all-upfront',
+          startMonth: s.history.length + 1,
+          endMonth: s.history.length + 12,
+          covers: 1,
+          monthly: 0,
+          upfront: s.cash,
+          months: 12,
+        },
+      ],
+    };
+    expect(checkAction(reserved, au)).toMatchObject({
+      ok: false,
+      reason: 'limit',
+    });
+    // 年額のまま 4GB へ: 差額が所持金より多いとプラン変更を選べない
+    let v = playMonth(newGame(VPS2, 1, sc, undefined, 'nextjs', {}));
+    const annual = {
+      type: 'commit',
+      key: ANNUAL2,
+      payment: 'all-upfront',
+    } as const;
+    while (v.phase === 'playing' && !checkAction(v, annual).ok)
+      v = playMonth(v);
+    v = applyAction(v, annual);
+    const poor: GameState = { ...v, cash: 1 };
+    expect(checkAction(poor, { type: 'plan', stackIndex: VPS4 })).toMatchObject(
+      { ok: false, reason: 'limit' },
+    );
+  });
+
+  it('同じ対象に確約が 2 つあっても、割引の合計は対象の明細の額まで（OCL-A2DA7939）', () => {
+    const c = {
+      key: ANNUAL4,
+      label: '年額',
+      currency: 'JPY' as const,
+      payment: 'all-upfront' as const,
+      startMonth: 1,
+      endMonth: 12,
+      covers: 3_960,
+      monthly: 0,
+      upfront: 0,
+      months: 12,
+    };
+    const lines = commitmentLines([c, { ...c }], { [ANNUAL4]: 3_960 }, 2);
+    expect(lines.reduce((a, l) => a + l.amount, 0)).toBe(-3_960);
   });
 
   it('保存: 始める画面の確約と月の確約の行動を再生すると同じ状態になる', () => {

@@ -1432,6 +1432,17 @@ function prepayDefOf(stackIndex: number): CommitmentDef | undefined {
  * 12 か月一括のままのスケールアップ（さくらの VPS 2GB → 4GB）: 上位のプランの 1 年分から今のプランの使っていない分を引いた額を払い、
  * 来月から上位のプランの 12 か月一括になる（公式は日割り。ここは月の単位。D-97）。年払いでなければそのまま。
  */
+/** 来月の請求に乗る前払い（来月から始まる確約の前払いの合計。ドル）。所持金の検査で予約済みの額として引く（OCL-C32E39AF）。 */
+function pendingUpfrontUsd(
+  state: Pick<GameState, 'commitments' | 'history'>,
+  commitments = state.commitments ?? [],
+): number {
+  const next = state.history.length + 1;
+  return commitments
+    .filter((c) => c.startMonth === next && c.endMonth >= next)
+    .reduce((a, c) => a + usdOf(c.upfront, c.currency), 0);
+}
+
 function carryPrepay(
   state: GameState,
   from: number,
@@ -1451,10 +1462,13 @@ function carryPrepay(
     scenarioOf(state).months - month,
   );
   if (!offer) return undefined;
-  // 使っていない分（ゲームの中で効く月のうち、来月から先の分）
+  // 使っていない分（払った年額のうち、来月から先の分）。まだ始まっていない（前払いを払っていない）確約は
+  // 置き換えるだけで、控除はしない（払っていない額を差し引かない。OCL-17D1B88E）
   const inGameEnd = cur.startMonth + (cur.months ?? 12) - 1;
-  const left = Math.max(0, inGameEnd - Math.max(month, cur.startMonth - 1));
-  const unused = (cur.upfront * left) / (cur.months ?? 12);
+  const paid = cur.startMonth <= month;
+  const unused = paid
+    ? (cur.upfront * Math.max(0, inGameEnd - month)) / (cur.months ?? 12)
+    : 0;
   return [
     ...(state.commitments ?? []).map((c) =>
       c === cur ? { ...c, endMonth: month } : c,
@@ -2673,6 +2687,18 @@ function actionRule(state: GameState, action: Action): ActionCheck {
               ? '今よりディスク容量が少ないプランへは変更できないので契約し直し'
               : '別の事業者なので乗り換え',
         );
+      // 年額のままのスケールアップは差額を来月に前払いするので、所持金に収まるときだけ（D-97・OCL-C32E39AF）
+      const carried = plan
+        ? carryPrepay(state, state.stackIndex, action.stackIndex)
+        : undefined;
+      if (carried) {
+        const due = pendingUpfrontUsd(state, carried);
+        if (due > state.cash)
+          return ng(
+            'limit',
+            `年額のままの変更の前払い $${due.toFixed(2)} が所持金より多い`,
+          );
+      }
       // 乗り換えの手間は進行中の月ごとに取る（effortAvailable が減る）
       return ok(plan ? planChangeEffort(state.stackIndex) : 0);
     }
@@ -2718,10 +2744,12 @@ function actionRule(state: GameState, action: Action): ActionCheck {
           'unavailable',
           '今月は対象の使用が無い（対象のサービスを使っている構成で結べる）',
         );
-      if (offer.usd.upfront > state.cash)
+      // 同じ月に選んだほかの前払い（確約・年額のスケールアップの差額）も来月に払うので、合わせて所持金と比べる
+      const reserved = pendingUpfrontUsd(state);
+      if (offer.usd.upfront + reserved > state.cash)
         return ng(
           'limit',
-          `前払い $${offer.usd.upfront.toFixed(2)} が所持金より多い`,
+          `前払い $${offer.usd.upfront.toFixed(2)}${reserved > 0 ? `（今月選んだ前払い $${reserved.toFixed(2)} と合わせて）` : ''} が所持金より多い`,
         );
       // 申し込むだけで、作業の手間はかからない（仮定）
       return ok(0);

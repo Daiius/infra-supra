@@ -160,10 +160,13 @@ export function commitmentLines(
   month: number,
 ): CommitmentLine[] {
   const out: CommitmentLine[] = [];
+  // 同じ対象に確約が複数あっても、割引の合計は対象の明細の額まで（OCL-A2DA7939）
+  const left: Record<string, number> = { ...eligible };
   for (const c of active) {
     if (!isActive(c, month)) continue;
     const base = { key: c.key, currency: c.currency };
-    const covered = Math.min(eligible[c.key] ?? 0, c.covers);
+    const covered = Math.min(left[c.key] ?? 0, c.covers);
+    left[c.key] = (left[c.key] ?? 0) - covered;
     if (month === c.startMonth && c.upfront > 0)
       out.push({
         ...base,
