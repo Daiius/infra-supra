@@ -898,14 +898,24 @@ export type ComparisonRow = {
 };
 
 /**
+ * その構成を選んだときの入力（比較の表の行を押したときと同じ withStack + normalizeInput）。他の構成の月額は、
+ * 選んだ後の部品（既定）・再検証などの値（替えた先の既定。withContext）・描き方で数え、選んだ後の見積と一致させる（OCL-417D9CCA）。
+ */
+const selectedInput = (input: EstimateInput, stack: string): EstimateInput =>
+  stack === input.stack
+    ? input
+    : normalizeInput({ ...input, ...withStack(input, stack) });
+
+/**
  * 選んだ条件（テンプレート・PV・フレームワーク・設定）で、そのフレームワークを載せられる全構成の月額。
- * 部品は選んだ構成だけ選んだもの、他の構成は既定。
+ * 他の構成は、その構成を選んだときの入力で数える（部品は既定。selectedInput）。
  */
 export function compareStacks(input: EstimateInput): ComparisonRow[] {
   return STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
     (s) => {
-      const r = resolve(input, s.id);
-      const res = run(input, r);
+      const sel = selectedInput(input, s.id);
+      const r = resolve(sel);
+      const res = run(sel, r);
       const hit = res.premises.filter((p) => p.hit);
       const top = res.premises
         .filter((p) => p.kind === 'threshold')
@@ -961,7 +971,7 @@ export type CurveSeries = {
 
 /**
  * 今の条件（テンプレート・フレームワーク・設定）のまま PV だけを振った、構成ごとの月額。
- * 部品は今の構成だけ今の選択、他の構成は既定（構成で選べる部品が違うため。compareStacks と同じ）。
+ * 他の構成は、その構成を選んだときの入力で数える（部品は既定・再検証などは替えた先の既定。compareStacks と同じ）。
  * 載せられない構成の id は捨てる。
  */
 export function costCurves(
@@ -972,10 +982,11 @@ export function costCurves(
   return stacks.flatMap((id) => {
     const index = stackIndexOf(id);
     if (index < 0 || !stackOffered(index, input.framework)) return [];
-    const r = resolve(input, id);
+    const sel = selectedInput(input, id);
+    const r = resolve(sel);
     const provider = STACKS[index]!.provider;
     const points = pvs.map((pv): CurvePoint => {
-      const res = run({ ...input, pv }, r);
+      const res = run({ ...sel, pv }, r);
       return {
         pv,
         totalUsd: toUsd(res.bill.totals),

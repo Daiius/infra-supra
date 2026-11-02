@@ -367,6 +367,24 @@ describe('フレームワーク・構成を替えたときの再検証の値（�
     expect(toQuery(next).has('rp.article')).toBe(false);
   });
 
+  it('比較の表・費用の曲線の他の構成の月額は、その構成を選んだ後の見積と同じ（既定の違う構成の間で。OCL-417D9CCA）', () => {
+    for (const from of ['gcp-cloud-run', 'cloudflare-vinext-paid']) {
+      const i = normalizeInput({ framework: 'astro', stack: from });
+      for (const row of compareStacks(i)) {
+        const picked = apply(i, withStack(i, row.stack));
+        const pickedTotal = compareStacks(picked).find((r) => r.current)!;
+        expect(row.totalUsd).toBeCloseTo(pickedTotal.totalUsd, 9);
+        const [curve] = costCurves(i, [row.stack], [i.pv]);
+        expect(curve!.points[0]!.totalUsd).toBeCloseTo(pickedTotal.totalUsd, 9);
+      }
+    }
+    // 既定の違う構成（Google Cloud は 5 分・Cloudflare はオンデマンド）を含む
+    const gcp = normalizeInput({ framework: 'astro', stack: 'gcp-cloud-run' });
+    expect(
+      apply(gcp, withStack(gcp, 'cloudflare-vinext-paid')).revalidateSec,
+    ).not.toBe(gcp.revalidateSec);
+  });
+
   it('同じ値を選び直しても何も変えない', () => {
     const i = normalizeInput({ framework: 'astro' });
     expect(withFramework(i, 'astro')).toEqual({});
