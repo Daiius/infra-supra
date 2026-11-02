@@ -65,6 +65,12 @@ export const EFFORT = {
   setting: { format: 1, variants: 1, isr: 0, comments: 2 },
   /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */
   onDemandSwitch: 2,
+  /**
+   * ページの描き方を替える手間（D-107・RS-08。仮定）。枠 + API にする（ページを Client Component・アイランドと API に分ける）は
+   * SSR の最適化と同じ 4、それ以外（毎回描く ↔ キャッシュ・静的 ↔ キャッシュ: キャッシュのヘッダ・消す処理・prerender の切り替え）は 3。
+   * 期限 ↔ オンデマンド（S2 ↔ S3）は onDemandSwitch・期限の値だけは設定の手間（0）。フレームワークを替えるのは作り直し（D-81）。
+   */
+  route: { toApi: 4, other: 3 },
   optimize: 4,
   /** SSR の最適化 1 段で減る CPU と下限。 */
   optimizeStepMs: 5,

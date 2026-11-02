@@ -9,7 +9,12 @@ import {
   type CommitmentPaymentId,
   type GameState,
 } from './index.ts';
-import type { Choices, FrameworkId } from 'catalog';
+import {
+  ROUTE_STRATEGIES,
+  type Choices,
+  type FrameworkId,
+  type RouteStrategyId,
+} from 'catalog';
 
 const FRAMEWORK_IDS: readonly FrameworkId[] = [
   'nextjs',
@@ -18,7 +23,14 @@ const FRAMEWORK_IDS: readonly FrameworkId[] = [
   'nextjs-export',
 ];
 
-export const SAVE_VERSION = 1;
+/**
+ * 保存の版。2 でページごとの描き方（routes。D-107）を足した。1 の保存も読み、描き方はフレームワークの既定
+ * （今の routeChoices で決まるもの。描き方を選べるようになる前の結果と同じ）として再生する。
+ */
+export const SAVE_VERSION = 2;
+
+/** 読める古い版。 */
+const READABLE_VERSIONS: readonly number[] = [1, 2];
 
 export type SaveData = {
   version: typeof SAVE_VERSION;
@@ -42,6 +54,8 @@ export type SaveData = {
   comments?: number;
   /** 始める画面で結んだ確約（D-97）。無い保存は確約なしで読む（版は上げない）。 */
   commitments?: { key: string; payment: CommitmentPaymentId }[];
+  /** 始める画面で選んだページごとの描き方（版 2・D-107）。無い保存はフレームワークの既定で読む。 */
+  routes?: Partial<Record<string, RouteStrategyId>>;
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
 };
@@ -107,7 +121,23 @@ const isObject = (x: unknown): x is Record<string, unknown> =>
  * （選べない行動は applyAction が状態を変えずに返すので、再生の結果の月数で食い違いを見つける）。
  */
 export function parseSave(raw: unknown): SaveData | null {
-  if (!isObject(raw) || raw.version !== SAVE_VERSION) return null;
+  if (
+    !isObject(raw) ||
+    typeof raw.version !== 'number' ||
+    !READABLE_VERSIONS.includes(raw.version)
+  )
+    return null;
+  const routes = raw.routes;
+  if (
+    routes !== undefined &&
+    !(
+      isObject(routes) &&
+      Object.values(routes).every(
+        (v) => typeof v === 'string' && v in ROUTE_STRATEGIES,
+      )
+    )
+  )
+    return null;
   const { scenarioId, stackIndex, seed, startDate, turns } = raw;
   const framework = raw.framework ?? 'nextjs';
   const components = raw.components;
@@ -172,6 +202,9 @@ export function parseSave(raw: unknown): SaveData | null {
           commitments: commitments as NonNullable<SaveData['commitments']>,
         }
       : {}),
+    ...(routes !== undefined
+      ? { routes: routes as NonNullable<SaveData['routes']> }
+      : {}),
     turns: (turns as Action[][]).map((t) => t.map(migrateAction)),
   };
 }
@@ -194,6 +227,7 @@ export function replaySave(save: SaveData): GameState {
       save.revalidateSec,
       save.comments,
       save.commitments,
+      save.routes,
     ),
   );
   for (const actions of save.turns) {

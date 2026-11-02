@@ -1,7 +1,12 @@
 // シナリオ: 受託先の業務アプリを運用する（prd/09・D-33）。受託は設定（フレーバー）だけで、お金の流れは記事コミュニティと同じ
 // （収益 − インフラの費用 = 所持金。人件費は入れない）。値はすべてゲーム上の仮定で、実在の値でも相場でもない。
 // 料金・制限は catalog のデータをそのまま使い（ここで料金を作らない）、前提の文も catalog のもの（premiseRefs で参照する）。
-import { BUSINESS_APP_ASTRO, BUSINESS_APP_SPA, businessApp } from 'catalog';
+import {
+  BUSINESS_APP_ASTRO,
+  BUSINESS_APP_ROUTES,
+  BUSINESS_APP_SPA,
+  businessApp,
+} from 'catalog';
 import type { Action, GameState } from '../index.ts';
 import type { EventDef, PageWireframe, Scenario } from '../scenario.ts';
 
@@ -377,6 +382,7 @@ export const CONTRACT_OPERATIONS: Scenario = {
   name: '受託先の業務アプリの運用',
   months: 12,
   template: businessApp,
+  routeTraits: BUSINESS_APP_ROUTES,
   // 添付ファイル 1 件 2 MB は テンプレートの 6 GB / 3,000 件。DB の増え方は仮定（業務の記録が多い）
   stock: { dbGBPerMillionPV: 0.5, gbPerImage: 0.002 },
   // 30 万 PV ≒ 利用者 1,500 人（テンプレートの 1 人 月 200 PV）

@@ -3,8 +3,10 @@
 // すべてのシナリオ × フレームワーク × 構成で確かめる。
 import { describe, expect, it } from 'vitest';
 import {
+  ARTICLE_COMMUNITY_ROUTES,
   ARTICLE_COMMUNITY_SPA,
   articleCommunity,
+  BUSINESS_APP_ROUTES,
   businessApp,
 } from '../templates/index.ts';
 import { DEPLOY_TARGETS, type FrameworkId } from './index.ts';
@@ -45,7 +47,9 @@ describe('描き方のメニュー', () => {
       ['article', 'public'],
       ['personal', 'personal'],
     ]);
-    expect(businessApp(1000).routes.map(routeAudience)).toEqual(['personal']);
+    expect(businessApp(1000).routes.map((r) => routeAudience(r))).toEqual([
+      'personal',
+    ]);
   });
 
   it('プリセット: Next.js は S2/S4・Astro は S3/S4・静的書き出しは S1/S5・SPA は S5/S5', () => {
@@ -97,6 +101,27 @@ describe('対応表（フレームワーク × 事業者）', () => {
       'yes',
     );
     expect(capabilityRow('nextjs', 'gcp')['cached-purge'].support).toBe('no');
+  });
+
+  it('Next.js の S1 は generateStaticParams の公式の文書を出典にする（vinext 以外。D-107）', () => {
+    const v = capabilityRow('nextjs', 'vercel')['static-build'];
+    expect(v.support).toBe('yes');
+    expect(v.basis).toBe('source');
+    expect(v.sources[0]!.url).toContain('generate-static-params');
+  });
+
+  it('テンプレートのルートの性質（D-107・RS-17）がルートと 1 対 1 で、見る人が今までの読み方と同じ', () => {
+    for (const [w, traits] of [
+      [articleCommunity(1000), ARTICLE_COMMUNITY_ROUTES],
+      [businessApp(1000), BUSINESS_APP_ROUTES],
+    ] as const) {
+      expect(Object.keys(traits).sort()).toEqual(
+        w.routes.map((r) => r.id).sort(),
+      );
+      for (const r of w.routes)
+        expect(routeAudience(r, traits)).toBe(routeAudience(r));
+    }
+    expect(ARTICLE_COMMUNITY_ROUTES.article!.needsOgp).toBe(true);
   });
 
   it('vinext の S1 と S6 は確かめるまで出さない（RS-15・段 5）', () => {
