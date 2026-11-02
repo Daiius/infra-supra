@@ -15,6 +15,7 @@ import {
   setupSlots,
   STACKS,
   type FrameworkId,
+  type RouteOverrides,
   type Scenario,
 } from 'game';
 import { useMemo } from 'react';
@@ -140,6 +141,7 @@ export function SetupRevalidate({
   onChange,
   comments,
   onCommentsChange,
+  routes,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -151,9 +153,11 @@ export function SetupRevalidate({
   /** コメントの描き方（記事のページに含めると、オンデマンドの無効化の見込みも増える。D-82）。 */
   comments: number;
   onCommentsChange: (v: number) => void;
+  /** 選んだページごとの描き方（記事の描き方で出す設定が変わる。D-107）。 */
+  routes?: RouteOverrides | undefined;
 }) {
-  const options = setupRevalidateOptions(scenario, framework);
-  const commentOptions = setupCommentOptions(scenario, framework);
+  const options = setupRevalidateOptions(scenario, framework, routes);
+  const commentOptions = setupCommentOptions(scenario, framework, routes);
   // OpenNext で ISR を CloudFront にキャッシュするとき、オンデマンドの無効化の見込み（1 か月目の規模。D-66）
   const invalidation = useMemo(() => {
     if (options.length === 0) return undefined;
@@ -262,6 +266,7 @@ export function SetupCostPreview({
   components,
   revalidateSec,
   comments,
+  routes,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -271,6 +276,8 @@ export function SetupCostPreview({
   revalidateSec: number | undefined;
   /** コメントの描き方（選べないシナリオ・フレームワークでは undefined。D-82）。 */
   comments: number | undefined;
+  /** 選んだページごとの描き方（D-107）。 */
+  routes?: RouteOverrides | undefined;
 }) {
   const e = useMemo(() => {
     const chosen = Object.fromEntries(
@@ -285,8 +292,17 @@ export function SetupCostPreview({
       chosen,
       revalidateSec,
       comments,
+      routes,
     );
-  }, [scenario, stackIndex, framework, components, revalidateSec, comments]);
+  }, [
+    scenario,
+    stackIndex,
+    framework,
+    components,
+    revalidateSec,
+    comments,
+    routes,
+  ]);
   return (
     <div
       role="status"

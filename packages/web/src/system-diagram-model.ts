@@ -16,7 +16,9 @@ import type { ArchitectureInput, RequestClass } from 'estimator';
 import {
   frameworkDefaults,
   STACKS,
+  staticBuildOf,
   type RegionSource,
+  type RouteOverrides,
   type Scenario,
 } from 'game';
 import type { BrandId } from './brand-logos.tsx';
@@ -48,12 +50,17 @@ export function diagramArchitecture(
   stackIndex: number,
   framework: FrameworkId,
   components: Partial<Record<string, string>> = {},
+  /** 選んだページごとの描き方（S1 のビルド・Astro の記事のキャッシュの有無が構成に効く。D-107）。 */
+  routes?: RouteOverrides,
 ): ArchitectureInput {
   return withoutUnusedEmail(
     composeStack(
       STACK_DEFS[stackIndex]!,
       diagramComponents(scenario, stackIndex, framework, components),
-      { framework },
+      {
+        framework,
+        ...staticBuildOf(scenario, stackIndex, framework, routes),
+      },
     ),
     scenario.template(1),
   );

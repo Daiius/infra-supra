@@ -19,6 +19,7 @@ import {
   stackName,
   stackOffered,
   STACKS,
+  withRouteChoice,
   type FrameworkId,
 } from 'game';
 import {
@@ -35,6 +36,7 @@ import {
   compareStacks,
   costCurves,
   diagramOf,
+  routeStatusOf,
   CURVE_MAX,
   CURVE_PVS,
   curveColorSlot,
@@ -104,6 +106,7 @@ export function EstimateMode() {
   const view = useMemo(() => runEstimate(input), [input]);
   const rows = useMemo(() => compareStacks(input), [input]);
   const diagram = useMemo(() => diagramOf(input), [input]);
+  const routeStatus = useMemo(() => routeStatusOf(input), [input]);
 
   return (
     <div className="space-y-4">
@@ -159,7 +162,24 @@ export function EstimateMode() {
         />
       </Card>
       <Card title="ページごとの描き方">
-        <RoutePlanTable rows={diagram.routes} caption={ROUTE_PLAN_NOTE} />
+        <RoutePlanTable
+          rows={diagram.routes}
+          status={routeStatus}
+          // ほかの描き方を選ぶ（URL の rp.〜 に残る。構成の比較・費用の曲線もこの描き方で引く。D-107）
+          onSelect={(row, alt) =>
+            setInput({
+              routes: withRouteChoice(
+                scenarioOfTemplate(input.template),
+                input.framework,
+                input.routes,
+                row.route,
+                alt.strategy,
+              ),
+              ...(alt.value !== undefined ? { revalidateSec: alt.value } : {}),
+            })
+          }
+          caption={`${ROUTE_PLAN_NOTE} 差は今の PV での月額。構成の比較・費用の曲線もこの描き方で引く。`}
+        />
       </Card>
       <Card title="明細（事業者・メーターごと）">
         <p className="text-xs opacity-70">
@@ -275,7 +295,7 @@ function Conditions({
   const stackIndex = STACKS.findIndex((s) => s.id === input.stack);
   const platform = STACKS[stackIndex]!.provider;
   const slots = setupSlots(scenario, stackIndex, input.framework, input.parts);
-  const settings = settingsOf(input.template, input.framework);
+  const settings = settingsOf(input.template, input.framework, input.routes);
   const [pvText, setPvText] = useState(String(input.pv));
   useEffect(() => setPvText(String(input.pv)), [input.pv]);
   const select = 'select select-bordered select-sm w-full';

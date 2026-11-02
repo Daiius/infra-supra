@@ -10,6 +10,7 @@ import {
   stackOffered,
   STACKS,
   type FrameworkId,
+  type RouteOverrides,
   type Scenario,
 } from 'game';
 import { useMemo } from 'react';
@@ -28,6 +29,7 @@ function StackCard({
   framework,
   components,
   comments,
+  routes,
   selected,
   noteId,
 }: {
@@ -36,18 +38,26 @@ function StackCard({
   framework: FrameworkId;
   components: Partial<Record<string, string>> | undefined;
   comments: number | undefined;
+  /** 選んだページごとの描き方（図と流れの凡例に効く。D-107）。 */
+  routes: RouteOverrides | undefined;
   selected: boolean;
   noteId: string;
 }) {
   const name = stackName(stackIndex, framework, false);
   const pages = useMemo(
-    () => pageWireframes(scenario, framework, comments),
-    [scenario, framework, comments],
+    () => pageWireframes(scenario, framework, comments, routes),
+    [scenario, framework, comments, routes],
   );
   const arch = useMemo(
     () =>
-      diagramArchitecture(scenario, stackIndex, framework, components ?? {}),
-    [scenario, stackIndex, framework, components],
+      diagramArchitecture(
+        scenario,
+        stackIndex,
+        framework,
+        components ?? {},
+        routes,
+      ),
+    [scenario, stackIndex, framework, components, routes],
   );
   const premises = [...slaOf(stackIndex), ...membersOf(stackIndex)];
   return (
@@ -115,6 +125,7 @@ export function StackField({
   onChange,
   components,
   comments,
+  routes,
 }: {
   scenario: Scenario;
   framework: FrameworkId;
@@ -124,6 +135,8 @@ export function StackField({
   components: Partial<Record<string, string>>;
   /** コメントの描き方（流れの凡例のページの名前に使う。D-82）。 */
   comments?: number | undefined;
+  /** 選んだページごとの描き方（D-107）。 */
+  routes?: RouteOverrides | undefined;
 }) {
   const offered = STACKS.filter((s) => stackOffered(s.index, framework));
   const indexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
@@ -150,6 +163,7 @@ export function StackField({
           framework={framework}
           components={selected ? components : undefined}
           comments={comments}
+          routes={routes}
           selected={selected}
           noteId={`${idPrefix}-${id}`}
         />

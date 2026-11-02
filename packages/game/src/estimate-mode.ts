@@ -11,6 +11,7 @@ import {
   STACKS,
   validSetupChoices,
   workloadFor,
+  type RouteOverrides,
   type Settings,
 } from './index.ts';
 import type { Scenario } from './scenario.ts';
@@ -67,6 +68,8 @@ export function estimateWorkload(
     settings: Omit<Settings, 'ssrOptimizations' | 'comments'> & {
       comments?: number;
     };
+    /** 選んだページごとの描き方（D-107）。 */
+    routes?: RouteOverrides | undefined;
   },
 ): WorkloadInput {
   return workloadFor(sc, {
@@ -82,5 +85,6 @@ export function estimateWorkload(
     platform: STACKS[p.stackIndex]!.provider,
     components: p.components,
     framework: p.framework,
+    routes: p.routes,
   });
 }

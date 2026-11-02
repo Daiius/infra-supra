@@ -270,14 +270,17 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
   });
 
-  it('W-13 始める画面: フレームワークのカードに、選んでいる構成でのページごとの描き方が出る（D-106）', () => {
+  it('W-13 始める画面: ページの描き方を選び、行ごとの要件の判定・見取り図・カードの既定が変わる（D-106・D-107）', () => {
     renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
     const current = () =>
       document.querySelector<HTMLElement>('section[aria-current="true"]')!;
     const table = () =>
-      within(current()).getByRole('table', { name: 'ページごとの描き方' });
+      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
+        'table',
+        { name: 'ページごとの描き方' },
+      );
     const row = (route: string) =>
       table().querySelector<HTMLElement>(`tr[data-route="${route}"]`)!;
     const strategy = (route: string) =>
@@ -286,33 +289,85 @@ describe('ゲームモードの画面', () => {
         .getAttribute('data-strategy');
     const alternative = (route: string, s: string) =>
       row(route).querySelector(`[data-alternative="${s}"]`);
+    const check = (route: string, c: string) =>
+      row(route).querySelector(`[data-check="${c}"]`)?.getAttribute('data-ok');
     pick(/^記事コミュニティ/);
     pick(/^Astro/);
     pick(/^Cloudflare Free/);
     expect(strategy('article')).toBe('cached-purge');
     expect(strategy('personal')).toBe('ssr');
-    expect(within(row('article')).getByText(/^S3/)).toBeDefined();
+    expect(within(row('article')).getAllByText(/^S3/).length).toBeGreaterThan(
+      0,
+    );
+    // カードには既定の描き方が短く出る
+    expect(
+      within(current()).getByRole('list', { name: '既定のページの描き方' }),
+    ).toBeDefined();
+    // 要件の判定: CF Free は 1 リクエスト 10 ms に、記事（再生成）も個人向けも当たる
+    expect(check('article', 'cpu')).toBe('false');
+    expect(check('personal', 'cpu')).toBe('false');
+    expect(check('article', 'ogp')).toBe('true');
     // 個人向けのページに使い回す描き方は灰色（理由は ⓘ）、枠 + API は選べる
     expect(
       alternative('personal', 'cached-purge')?.getAttribute('data-available'),
     ).toBe('false');
-    expect(
-      alternative('personal', 'shell-api')?.getAttribute('data-available'),
-    ).toBe('true');
     // 確かめていない描き方（S6）は出さない
     expect(alternative('personal', 'server-island')).toBeNull();
-    // Google Cloud（Hosting の CDN）では消せないので、記事は期限で取り直す
+    // 個人向けを枠 + API（S5）にすると、その行は CPU の制限に当たらない
+    fireEvent.click(
+      within(row('personal')).getByRole('button', {
+        name: /^個人向けのページを S5/,
+      }),
+    );
+    expect(strategy('personal')).toBe('shell-api');
+    expect(check('personal', 'cpu')).toBe('true');
+    expect(
+      within(row('personal')).getByText(/既定から変わっている/),
+    ).toBeDefined();
+    // 選んでいるカードの見取り図も枠 + API になる
+    const list = within(current()).getByRole('list', {
+      name: '個人向けのページの見取り図',
+    });
+    expect(
+      [...list.querySelectorAll('[data-source]')].some(
+        (x) => x.getAttribute('data-source') === 'api',
+      ),
+    ).toBe(true);
+    // Google Cloud（Hosting の CDN）では消せないので、記事は期限で取り直す（選んだ個人向けの S5 は残る）
     pick(/^Google Cloud/);
     expect(strategy('article')).toBe('cached-ttl');
+    expect(strategy('personal')).toBe('shell-api');
     expect(
       alternative('article', 'cached-purge')?.getAttribute('data-available'),
     ).toBe('false');
-    // 静的書き出しは S1/S5、SPA は S5/S5
+    // フレームワークを替えると既定に戻る。静的書き出しは S1/S5、SPA は S5/S5
     pick(/^Next\.js（静的書き出し）/);
     expect(strategy('article')).toBe('static-build');
     expect(strategy('personal')).toBe('shell-api');
     pick(/^Vite（SPA）/);
     expect(strategy('article')).toBe('shell-api');
+  });
+
+  it('W-14 ゲームの途中で個人向けのページの描き方を替える（手間 4・来月から。D-107）', () => {
+    renderApp();
+    startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    const select = () =>
+      screen.getByRole<HTMLSelectElement>('combobox', {
+        name: '個人向けのページの描き方',
+      });
+    expect(select().value).toBe('ssr');
+    fireEvent.change(select(), { target: { value: 'shell-api' } });
+    expect(select().value).toBe('shell-api');
+    advance(1);
+    // 次の月の欄では、替えた描き方が「今」
+    expect(select().value).toBe('shell-api');
+    expect(
+      within(select()).getByRole('option', { name: /（今）$/ }).textContent,
+    ).toContain('S5');
   });
 
   it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', () => {
