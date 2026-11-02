@@ -437,6 +437,42 @@ describe('ゲームモードの画面', () => {
     );
   });
 
+  it('W-17 選んでいない構成のカードは、その構成で選べない描き方を既定に戻して描く（流れの凡例のページ。D-107 の補足）', () => {
+    renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
+    );
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^Vercel Pro \+ Supabase Pro/ }),
+    );
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
+        'button',
+        { name: /^記事のページを S1/ },
+      ),
+    );
+    const lane = (stackId: string, label: string) =>
+      within(
+        document.querySelector<HTMLElement>(
+          `section[data-stack="${stackId}"]`,
+        )!,
+      )
+        .getAllByRole('button')
+        .find((b) => b.textContent?.startsWith(label))?.textContent ?? '';
+    // 選べる構成（Vercel）は S1 のまま: 記事のページは静的なページの流れ
+    expect(lane('vercel-supabase-pro', '静的なページ')).toContain(
+      '記事のページ',
+    );
+    // vinext では S1 を確かめていないので、CF のカードは既定（ISR）で描く
+    expect(lane('cloudflare-vinext-paid', 'ISR のページ')).toContain(
+      '記事のページ',
+    );
+    expect(lane('cloudflare-vinext-paid', '静的なページ')).not.toContain(
+      '記事のページ',
+    );
+  });
+
   it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', () => {
     renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));

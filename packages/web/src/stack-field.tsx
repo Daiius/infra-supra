@@ -9,6 +9,7 @@ import {
   stackName,
   stackOffered,
   STACKS,
+  validRouteOverrides,
   type FrameworkId,
   type RouteOverrides,
   type Scenario,
@@ -47,9 +48,16 @@ function StackCard({
   routeNotice?: string | null | undefined;
 }) {
   const name = stackName(stackIndex, framework, false);
+  // この構成で選べない描き方は既定に戻して描く（構成図の staticBuildOf と同じ。D-107 の補足）
   const pages = useMemo(
-    () => pageWireframes(scenario, framework, comments, routes),
-    [scenario, framework, comments, routes],
+    () =>
+      pageWireframes(
+        scenario,
+        framework,
+        comments,
+        routes && validRouteOverrides(scenario, stackIndex, framework, routes),
+      ),
+    [scenario, stackIndex, framework, comments, routes],
   );
   const arch = useMemo(
     () =>
