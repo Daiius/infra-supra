@@ -2,7 +2,10 @@
 // ゲームモードの画面の描画テスト（D-86・prd/05 §7）。画面を描いて操作し、例外が出ない・描ける・選択肢と結果が出ることだけを見る。
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
 import { cleanup, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// 画面を何度も描き直すので、CI の遅い実行環境では既定の 5 秒を超えることがある（D-87）。
+vi.setConfig({ testTimeout: 30_000 });
 import {
   advance,
   expectGameScreen,

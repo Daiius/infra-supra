@@ -1,7 +1,7 @@
 // 部品の選択（D-24・prd/07 §11）で足した振る舞い。値はすべて架空。
 import { describe, expect, it } from 'vitest';
 import type { ArchitectureInput } from '../architecture/schema.ts';
-import { resolveWorkload } from '../workload/resolve.ts';
+import { resolveWorkload, timeBuckets } from '../workload/resolve.ts';
 import type { WorkloadInput } from '../workload/schema.ts';
 import { simulateResources } from './simulate.ts';
 
@@ -516,6 +516,139 @@ describe('部品の選択で足した振る舞い', () => {
     expect(heavy.activeInstanceShare).toBeGreaterThanOrEqual(
       (n * 5) / S / 0.25 - 1e-12,
     );
+  });
+
+  describe('1 日の時間帯の形（D-89）', () => {
+    const node = (extra: Record<string, unknown> = {}) => ({
+      id: 'r',
+      label: 'r',
+      config: {
+        kind: 'container' as const,
+        vcpu: 1,
+        memoryGB: 0.5,
+        concurrency: 80,
+        ...extra,
+      },
+    });
+    const withProfile = (
+      hourlyProfile: number[] | undefined,
+      weekdayToWeekend = 1,
+      mau = 1000,
+    ) => {
+      const base = workload();
+      return resolveWorkload({
+        ...base,
+        traffic: {
+          ...base.traffic,
+          mau,
+          weekdayToWeekend,
+          ...(hourlyProfile ? { hourlyProfile } : {}),
+        },
+      });
+    };
+    const run = (rw: ReturnType<typeof resolveWorkload>, extra = {}) =>
+      simulateResources(rw, {
+        id: 'x',
+        name: 'x',
+        nodes: [node(extra)],
+        routes: { api: ['r'] },
+      }).nodes.r!;
+    const office = Array.from({ length: 24 }, (_, h) =>
+      h >= 9 && h < 18 ? 3 : h >= 7 && h < 21 ? 0.5 : 0,
+    );
+
+    it('区間の割合の和は 1・時間の和は 730。形が無ければ月全体の 1 区間', () => {
+      for (const r of [1, 1.3, 8]) {
+        const b = timeBuckets(r, office);
+        expect(b).toHaveLength(48);
+        expect(b.reduce((a, x) => a + x.share, 0)).toBeCloseTo(1, 12);
+        expect(b.reduce((a, x) => a + x.hours, 0)).toBeCloseTo(730, 9);
+        // 平日 5 日の量 / 休日 2 日の量 = 5r / 2（1 日あたりの比が r）
+        const wd = b.slice(0, 24).reduce((a, x) => a + x.share, 0);
+        expect(wd / (1 - wd)).toBeCloseTo((5 * r) / 2, 12);
+      }
+      expect(timeBuckets(8, undefined)).toEqual([{ share: 1, hours: 730 }]);
+      // 重みの大きさは問わない（比だけ）
+      expect(
+        timeBuckets(
+          2,
+          office.map((v) => v * 7),
+        ),
+      ).toEqual(
+        timeBuckets(2, office).map((x) => ({
+          share: expect.closeTo(x.share, 12),
+          hours: x.hours,
+        })),
+      );
+    });
+
+    it('平らな形・平日と休日が同じなら、月の平均の式（D-88）と一致する', () => {
+      const flat = Array.from({ length: 24 }, () => 1);
+      for (const extra of [{}, { minInstances: 1 }]) {
+        const a = run(withProfile(undefined), extra);
+        const b = run(withProfile(flat), extra);
+        expect(b.coldStartShare).toBeCloseTo(a.coldStartShare!, 12);
+        expect(b.activeInstanceShare).toBeCloseTo(a.activeInstanceShare!, 12);
+        for (const k of [
+          'cpu-hours',
+          'memory-gb-hours',
+          'idle-cpu-hours',
+          'idle-memory-gb-hours',
+        ] as const)
+          expect(b.resources[k] ?? 0).toBeCloseTo(a.resources[k] ?? 0, 9);
+      }
+    });
+
+    it('冷えた起動は区間ごとの e^(−λ_h × 900) を件数の割合で重みづけして足す。夜間 0 の偏りで月の平均より増える', () => {
+      const rw = withProfile(office, 8);
+      const u = run(rw);
+      const n = rw.classes.api.count;
+      const expected = timeBuckets(8, office).reduce(
+        (a, b) =>
+          a + b.share * Math.exp(-((n * b.share) / (b.hours * 3600)) * 900),
+        0,
+      );
+      expect(u.coldStartShare).toBeCloseTo(expected, 12);
+      const flat = run(withProfile(undefined, 8));
+      expect(u.coldStartShare!).toBeGreaterThan(flat.coldStartShare!);
+      // 重み 0 の時間帯（深夜）は件数が無いので、冷えた起動の割合に入らない（1 を超えない）
+      expect(u.coldStartShare!).toBeLessThanOrEqual(1);
+      // 最小インスタンス 1 なら時間帯によらず 0
+      expect(run(rw, { minInstances: 1 }).coldStartShare).toBe(0);
+    });
+
+    it('冷えた起動の境目: 到着率が下がるほど増え、薄いと 1 に近づき、濃いと 0 に近づく', () => {
+      const shares = [1, 100, 1_000, 10_000, 1_000_000].map(
+        (mau) => run(withProfile(office, 8, mau)).coldStartShare!,
+      );
+      for (let i = 1; i < shares.length; i++)
+        expect(shares[i]!).toBeLessThan(shares[i - 1]!);
+      expect(shares[0]!).toBeGreaterThan(0.9);
+      expect(shares[4]!).toBeLessThan(1e-6);
+    });
+
+    it('アクティブな時間・待機は区間ごとに積む（1 − e^(−x) が凹なので月の平均より少なく、待機はその分多い）', () => {
+      const rw = withProfile(office, 8, 200_000);
+      const u = run(rw, { minInstances: 1 });
+      const flat = run(withProfile(undefined, 8, 200_000), { minInstances: 1 });
+      expect(u.resources['cpu-hours']!).toBeLessThan(
+        flat.resources['cpu-hours']!,
+      );
+      const busy = u.busyMs / 1000;
+      const cpu = u.resources['cpu-ms']! / 1000;
+      let active = 0;
+      let idle = 0;
+      for (const b of timeBuckets(8, office)) {
+        const s = b.hours * 3600;
+        const x = (busy * b.share) / s;
+        const a = Math.max(-Math.expm1(-x), x / 80, (cpu * b.share) / s);
+        active += a * b.hours;
+        idle += Math.max(0, 1 - a) * b.hours;
+      }
+      expect(u.resources['cpu-hours']).toBeCloseTo(active, 9);
+      expect(u.resources['idle-cpu-hours']).toBeCloseTo(idle, 9);
+      expect(u.activeInstanceShare).toBeCloseTo(active / 730, 12);
+    });
   });
 
   it('処理の量で課金する DB: 届いた 1 件を決まった単位で数える', () => {

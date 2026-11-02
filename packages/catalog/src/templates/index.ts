@@ -4,6 +4,15 @@ import type { WorkloadInput } from 'estimator';
 import type { AstroShape, SpaShape } from '../frameworks/index.ts';
 
 /**
+ * 記事のコミュニティの 1 日の時間帯の形（0 時〜23 時の重み。D-89）。ゲーム上の仮定（出典なし）: 朝の通勤・昼休みに小さな山、
+ * 夜（20〜22 時）に最も多く、深夜 2〜5 時は少ない。平日の最も多い時間は平均の約 2.2 倍で、peakHourFactor（2.5。短い山も含む）を超えない。
+ */
+export const ARTICLE_HOURLY_PROFILE: readonly number[] = [
+  4, 2.5, 1.5, 1, 0.8, 1, 2, 3.5, 4, 4, 4, 4.5, 6, 5, 4.5, 4.5, 5, 5.5, 6, 7,
+  8.5, 9.5, 9, 6.5,
+];
+
+/**
  * 記事 + コメントのコミュニティ（Next.js 製を想定）。スパイク（spikes/concept-2026-10-31）と同じ仮定。
  * 記事ページは ISR（60%）、個人化されたページは SSR（40%）。
  * @param monthlyPageViews 月間 PV（MAU からの導出を上書きする）
@@ -26,6 +35,7 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
       pagesPerSession: 2,
       weekdayToWeekend: 1.3,
       peakHourFactor: 2.5,
+      hourlyProfile: [...ARTICLE_HOURLY_PROFILE],
       monthlyPageViewsOverride: monthlyPageViews,
     },
     routes: [

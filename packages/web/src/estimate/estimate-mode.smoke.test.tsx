@@ -2,7 +2,10 @@
 // 見積モードの画面の描画テスト（D-86・prd/05 §7）。構成・フレームワーク・テンプレート・PV を切り替えても例外が無く、
 // 月の費用・比較表・費用の曲線が出ることだけを見る（金額は model.test.ts と game のテストが持つ）。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// 画面を何度も描き直すので、CI の遅い実行環境では既定の 5 秒を超えることがある（D-87）。
+vi.setConfig({ testTimeout: 30_000 });
 import { renderApp, useSmokeEnv } from '../smoke.test-helpers.tsx';
 
 useSmokeEnv();

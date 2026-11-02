@@ -73,6 +73,16 @@ export const WorkloadInputSchema = z
        * 課金（月の総量）は変えない。省略は 1。
        */
       peakDayFactor: Pos.optional(),
+      /**
+       * 1 日の時間帯の形（0 時〜23 時の 24 個の重み。大きさは問わず、比だけを使う。D-89）。平日・休日は同じ形で、
+       * 量は weekdayToWeekend で割り振る。コンテナのサービスの、時間帯ごとのアクティブな時間・待機・冷えた起動の割合だけに使い、
+       * 容量の判定（peakHourFactor）・課金の総量は変えない（二重に数えない）。省略は月の平均の 1 つの時間帯（D-88 の式）。
+       */
+      hourlyProfile: z
+        .array(NonNeg)
+        .length(24)
+        .refine((a) => a.some((v) => v > 0), '重みのどれかが正')
+        .optional(),
       /** 月間 PV を直接与える上書き（与えたら MAU からの導出より優先し、上書きしたことを残す）。 */
       monthlyPageViewsOverride: NonNeg.optional(),
     }),
