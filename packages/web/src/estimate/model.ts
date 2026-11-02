@@ -9,6 +9,7 @@ import {
   loadPriceBooks,
   SLOT_LABELS,
   STACK_DEFS,
+  withoutUnusedEmail,
   type Choices,
   type JapanTaxTreatment,
   type SlotId,
@@ -36,7 +37,7 @@ import {
   SCENARIOS,
   SETTINGS,
   stackName,
-  stackSupports,
+  stackOffered,
   STACKS,
   USD_JPY,
   type FrameworkId,
@@ -146,9 +147,10 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
       : fws.default;
   const wanted = raw.stack !== undefined ? stackIndexOf(raw.stack) : -1;
   const stackIndex =
-    wanted >= 0 && stackSupports(wanted, framework)
+    // 隠した構成（D-100）の URL は、一覧の最初の構成にする
+    wanted >= 0 && stackOffered(wanted, framework)
       ? wanted
-      : STACKS.find((s) => stackSupports(s.index, framework))!.index;
+      : STACKS.find((s) => stackOffered(s.index, framework))!.index;
   const pv =
     raw.pv !== undefined && Number.isFinite(raw.pv)
       ? Math.min(PV_MAX, Math.max(PV_MIN, Math.round(raw.pv)))
@@ -611,10 +613,14 @@ function run(input: EstimateInput, r: Resolved) {
       comments: input.comments,
     },
   });
+  // アプリがメールを送らないテンプレートでは送信のノードを外す（D-101）
   const architecture = withSeats(
-    composeStack(STACK_DEFS[r.stackIndex]!, r.components, {
-      framework: input.framework,
-    }),
+    withoutUnusedEmail(
+      composeStack(STACK_DEFS[r.stackIndex]!, r.components, {
+        framework: input.framework,
+      }),
+      workload,
+    ),
     input.seats,
   );
   return estimate({ workload, architecture, books: BOOKS });
@@ -704,7 +710,7 @@ export type ComparisonRow = {
  * 部品は選んだ構成だけ選んだもの、他の構成は既定。
  */
 export function compareStacks(input: EstimateInput): ComparisonRow[] {
-  return STACKS.filter((s) => stackSupports(s.index, input.framework)).map(
+  return STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
     (s) => {
       const r = resolve(input, s.id);
       const res = run(input, r);
@@ -773,7 +779,7 @@ export function costCurves(
 ): CurveSeries[] {
   return stacks.flatMap((id) => {
     const index = stackIndexOf(id);
-    if (index < 0 || !stackSupports(index, input.framework)) return [];
+    if (index < 0 || !stackOffered(index, input.framework)) return [];
     const r = resolve(input, id);
     const provider = STACKS[index]!.provider;
     const points = pvs.map((pv): CurvePoint => {

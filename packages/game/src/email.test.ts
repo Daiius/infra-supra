@@ -2,6 +2,13 @@
 // Resend Free は 1 日 100 通で止まる。アカウントの手間（D-52）は構成の既定より増えた分だけ。
 import { describe, expect, it } from 'vitest';
 import {
+  composeStack,
+  loadPriceBooks,
+  STACK_DEFS,
+  withoutUnusedEmail,
+} from 'catalog';
+import { estimate, type WorkloadInput } from 'estimator';
+import {
   addedAccounts,
   ARTICLE_COMMUNITY,
   checkAction,
@@ -12,9 +19,13 @@ import {
   newGame,
   playMonth,
   SCENARIOS,
+  estimateComponents,
+  estimateWorkload,
+  scenarioSendsEmail,
   setupSlots,
   STACKS,
 } from './index.ts';
+import type { Scenario } from './scenario.ts';
 
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const CF_PAID = idx('cloudflare-vinext-paid');
@@ -81,5 +92,84 @@ describe('メール送信（D-95）', () => {
     expect(
       first(CF_PAID).lines.some((l) => l.meterId === 'email-sending'),
     ).toBe(true);
+  });
+});
+
+// D-101: メールを送らないシナリオ（テンプレートに email が無い）では、部品「メール送信」も送信の費用・前提も出さない
+describe('メールを送らないシナリオ（D-101）', () => {
+  const noEmail = (sc: Scenario): Scenario => ({
+    ...sc,
+    id: `${sc.id}-no-email`,
+    template: (pv: number) => {
+      const { email: _, ...w } = sc.template(pv);
+      return w as WorkloadInput;
+    },
+  });
+  const mailLine = (l: { label: string; provider?: string }) =>
+    l.label.startsWith('メールの送信') || l.provider === 'resend';
+
+  it('今の 2 つのシナリオはメールを送る（部品も明細も出る）', () => {
+    for (const sc of [ARTICLE_COMMUNITY, contract]) {
+      expect(scenarioSendsEmail(sc)).toBe(true);
+      const m = playMonth(newGame(CF_PAID, 1, sc, DEFAULT_START_DATE))
+        .history[0]!;
+      expect(m.lines.some(mailLine)).toBe(true);
+    }
+  });
+
+  it('始める画面・ゲームの部品にメール送信が出ず、月の明細・前提にも出ない（Resend を指定しても）', () => {
+    for (const base of [ARTICLE_COMMUNITY, contract]) {
+      const sc = noEmail(base);
+      expect(scenarioSendsEmail(sc)).toBe(false);
+      for (const i of [CF_PAID, GCP, VPS_4GB]) {
+        expect(
+          setupSlots(sc, i, 'nextjs').some((x) => x.slot === 'email'),
+          STACKS[i]!.id,
+        ).toBe(false);
+        const s = playMonth(
+          newGame(i, 1, sc, DEFAULT_START_DATE, 'nextjs', {
+            email: 'resend-pro',
+          }),
+        );
+        expect(s.components.email).not.toBe('resend-pro');
+        const m = s.history[0]!;
+        expect(m.lines.some(mailLine), STACKS[i]!.id).toBe(false);
+        expect(
+          m.premises.some((p) => /email|resend/.test(p.id)),
+          STACKS[i]!.id,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('見積モードの組み立て（部品・構成）でも出ない', () => {
+    const sc = noEmail(ARTICLE_COMMUNITY);
+    const { components } = estimateComponents(sc, GCP, 'nextjs', {
+      email: 'resend-pro',
+    });
+    expect(components.email).not.toBe('resend-pro');
+    const workload = estimateWorkload(sc, {
+      pv: sc.scale.startPV,
+      stackIndex: GCP,
+      framework: 'nextjs',
+      components,
+      settings: { imageKB: 150, variants: 3, revalidateSec: 300 },
+    });
+    // 見積モードの画面（web の model.ts）と同じ組み立て: 構成を組んでから送信のノードを外す
+    const forced = composeStack(STACK_DEFS[GCP]!, { email: 'resend-pro' });
+    const architecture = withoutUnusedEmail(forced, workload);
+    expect(
+      architecture.nodes.some((n) => n.config.kind === 'email-sender'),
+    ).toBe(false);
+    const r = estimate({ workload, architecture, books: loadPriceBooks() });
+    expect(
+      r.bill.lines.some(
+        (l) => l.nodeIds.includes('email') || l.accountId === 'resend',
+      ),
+    ).toBe(false);
+    // 送るシナリオではノードを外さない
+    expect(
+      withoutUnusedEmail(forced, ARTICLE_COMMUNITY.template(1)).nodes,
+    ).toEqual(forced.nodes);
   });
 });

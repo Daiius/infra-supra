@@ -18,6 +18,7 @@ import {
   stackSupports,
   STACKS,
   type GameState,
+  offeredBaselines,
 } from './index.ts';
 import { speedHeaviness } from './rules.ts';
 
@@ -170,7 +171,8 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
     it(`${sc.name}: シード 1〜50 のどれでも、基準プレイのどれか 1 本は合格する`, () => {
       const failing: number[] = [];
       for (let seed = 1; seed <= 50; seed++) {
-        const any = sc.baselines.some(
+        // 選べない構成（隠した構成。D-100）の基準プレイは数えない
+        const any = offeredBaselines(sc).some(
           (b) =>
             playStrategy(b, seed, sc, DEFAULT_START_DATE, 'vite-spa').end
               ?.reason === 'won',

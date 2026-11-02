@@ -321,6 +321,11 @@ export type Scenario = {
 export type ScenarioText = {
   /** 何のアプリで、どう収益を得るか。 */
   intro: string;
+  /**
+   * ページの一覧（ページ → 見る人・要件の順。1 ページ 1 行。D-101）。描き方はフレームワークで変わるので byFramework.pages に書く。
+   * テンプレートのルート（label）と同じ単位にする。
+   */
+  pages?: string[];
   /** 規模の補足（誰が使うか）。 */
   scale?: string;
   /** 成長の言い方（満足度が高い / 低いとき）。画面が「満足度 0.9 で毎月約 N%」を挟む。 */
@@ -333,9 +338,19 @@ export type ScenarioText = {
   app: string[];
   /**
    * フレームワークごとの文（D-35。シナリオの説明には入れず、始める画面の構成のカードのフレームワーク欄に出す）。
-   * note: 選んだときだけ出す短い注記。app: ⓘ に畳む長い説明（SSR / API の CPU の行は画面がテンプレートから足す）。
+   * note: 短い注記（カードに出す）。pages: ページごとの描き方（カードに出す）。app: ⓘ に畳む長い説明（SSR / API の CPU の行は画面がテンプレートから足す）。
    */
-  byFramework?: Partial<Record<FrameworkId, { note?: string; app?: string[] }>>;
+  byFramework?: Partial<
+    Record<
+      FrameworkId,
+      {
+        note?: string;
+        /** ページごとの描き方と、その帰結（1 ページ 1 行。選ぶ前に構成のカードに出す。D-101）。 */
+        pages?: string[];
+        app?: string[];
+      }
+    >
+  >;
   /** 収益の文（ゲーム上の仮定であることを含める）。 */
   revenue?: string;
 };

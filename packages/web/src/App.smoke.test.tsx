@@ -64,11 +64,12 @@ describe('ゲームモードの画面', () => {
       },
     ],
     [
-      '静的書き出し × Netlify Personal',
+      // Netlify は隠した（D-100）ので Cloudflare Paid で回す
+      '静的書き出し × Cloudflare Paid',
       {
         scenario: ARTICLE,
         framework: 'Next.js（静的書き出し）',
-        stack: 'Netlify Personal + Supabase Free',
+        stack: 'Cloudflare Paid',
       },
     ],
     [
@@ -88,16 +89,16 @@ describe('ゲームモードの画面', () => {
     expectGameScreen(2);
   });
 
-  it('W-03 所持金が尽きる組（Astro × Netlify Personal）で結果の画面とヒントが出る', () => {
+  // 前は Astro × Netlify Personal（3 か月目に尽きる）。Netlify は隠した（D-100）ので、1 か月目に尽きる組にした
+  it('W-03 所持金が尽きる組（静的書き出し × Vercel Pro・画像を最適化しない）で結果の画面とヒントが出る', () => {
     renderApp();
     startGame({
       scenario: ARTICLE,
-      framework: 'Astro',
-      stack: 'Netlify Personal + Supabase Free',
+      framework: 'Next.js（静的書き出し）',
+      stack: 'Vercel Pro + Supabase Pro',
     });
-    advance(2);
     expect(screen.getByText('所持金が尽きた')).toBeDefined();
-    expect(screen.getByText(/3 か月目で終了/)).toBeDefined();
+    expect(screen.getByText(/1 か月目で終了/)).toBeDefined();
     const hints = screen
       .getByRole('heading', { name: '次のプレイへのヒント' })
       .closest('section')!;
@@ -122,6 +123,22 @@ describe('ゲームモードの画面', () => {
     expect(document.body.textContent).toMatch(
       /個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない/,
     );
+  });
+
+  it('W-06 始める画面: 記事コミュニティの前提・ページの一覧と、フレームワークごとのページの描き方が出る（D-101）', () => {
+    renderApp();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('別の CMS は無い');
+    expect(text).toContain('一覧・トップのページは記事のページに含めて数える');
+    // 選ぶ前に、どのフレームワークのページの描き方も並ぶ
+    expect(text).toContain(
+      '個人向けのページ: アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）',
+    );
+    expect(text).toContain('記事のページ: ISR');
+    // 隠した構成（D-100）は構成の一覧に出ない
+    expect(
+      screen.queryByRole('radio', { name: /^Netlify|^AWS（OpenNext）/ }),
+    ).toBeNull();
   });
 
   it('W-04 保存して読み込み直すと同じ月から再開する', () => {

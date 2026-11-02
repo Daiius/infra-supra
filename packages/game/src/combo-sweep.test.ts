@@ -1,4 +1,4 @@
-// 組み合わせの総当たり（性質ベース。prd/05）: 2 シナリオ × フレームワーク × 構成 × 始める画面で選べる部品のすべての組み合わせで、
+// 組み合わせの総当たり（性質ベース。prd/05）: 2 シナリオ × フレームワーク × 構成（隠した構成を除く。D-100） × 始める画面で選べる部品のすべての組み合わせで、
 // 何もしないで最後まで（終わるまで）回し、壊れていないことを確かめる。金額そのものは期待値に書かない（実在の料金のため）。
 // 組み合わせは全部で約 2,000（全部回して数秒）。増えて遅くなったら、各スロットの各選択肢が 1 回は出る組（pairwise）に絞る。
 import type { Choices, SlotId } from 'catalog';
@@ -22,6 +22,7 @@ import {
   setupRevalidateOptions,
   setupSlots,
   STACKS,
+  stackOffered,
   stackSupports,
   USD_JPY,
   validSetupChoices,
@@ -98,7 +99,8 @@ const commentAt = (
 type Group = { sc: Scenario; fw: FrameworkId; stackIndex: number };
 const GROUPS: Group[] = Object.values(SCENARIOS).flatMap((sc) =>
   frameworksOf(sc).allowed.flatMap((fw) =>
-    STACKS.filter((s) => stackSupports(s.index, fw)).map((s) => ({
+    // 隠した構成（D-100）は始める画面に出ないので回さない
+    STACKS.filter((s) => stackOffered(s.index, fw)).map((s) => ({
       sc,
       fw,
       stackIndex: s.index,

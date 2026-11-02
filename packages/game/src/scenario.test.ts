@@ -19,6 +19,7 @@ import {
   type Action,
   type GameState,
   EFFORT,
+  offeredBaselines,
 } from './index.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 
@@ -80,7 +81,10 @@ describe('シナリオのデータ', () => {
 
   it('詰まない: シード 1〜50 のどれでも、基準プレイの少なくとも 1 本が合格する', () => {
     for (let seed = 1; seed <= 50; seed++) {
-      const won = BASELINES.some((b) => playStrategy(b, seed).phase === 'won');
+      // 選べない構成（隠した構成。D-100）の基準プレイは数えない
+      const won = offeredBaselines(sc).some(
+        (b) => playStrategy(b, seed).phase === 'won',
+      );
       expect(won, `seed ${seed}`).toBe(true);
     }
   });

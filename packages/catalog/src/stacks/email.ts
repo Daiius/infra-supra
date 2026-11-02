@@ -4,7 +4,7 @@
 //   （いちばん安い従量・止まる上限が無い）。Cloudflare Free は Email Service の送信が使えず、Resend Free は基準プレイの規模で
 //   1 日 100 通に当たって止まるので、既定にしない。Supabase Auth の組み込みのメールはチームのメンバーにしか送れないので使わない。
 // - 他の事業者の送信（CROSS_PAIRS で許した組）: Resend Free・Pro（どの事業者からも）・SES（Cloudflare から）。
-import type { ArchitectureInput } from 'estimator';
+import type { ArchitectureInput, WorkloadInput } from 'estimator';
 import type { ComponentOption, Platform } from './index.ts';
 
 type ArchNodeIn = ArchitectureInput['nodes'][number];
@@ -77,6 +77,33 @@ export function withEmail(
     },
   };
   return { ...arch, nodes: [...arch.nodes, node] };
+}
+
+/** アプリがメールを送るか（Workload に email がある。D-101）。送らないシナリオでは、部品「メール送信」も送信の費用も出さない。 */
+export const sendsEmail = (workload: Pick<WorkloadInput, 'email'>): boolean =>
+  workload.email !== undefined;
+
+/**
+ * アプリがメールを送らない（Workload に email が無い）ときに、送信のノードを外す（D-101）。外したノードだけが使っていた
+ * アカウント（席）も外す。送るときはそのまま返す（composeStack はシナリオを知らないので、見積の直前にここで外す）。
+ */
+export function withoutUnusedEmail(
+  arch: ArchitectureInput,
+  workload: Pick<WorkloadInput, 'email'>,
+): ArchitectureInput {
+  if (sendsEmail(workload)) return arch;
+  const nodes = arch.nodes.filter((n) => n.config.kind !== 'email-sender');
+  if (nodes.length === arch.nodes.length) return arch;
+  const used = new Set(
+    nodes.flatMap((n) => (n.billing ? [n.billing.accountId] : [])),
+  );
+  return {
+    ...arch,
+    nodes,
+    ...(arch.accounts
+      ? { accounts: arch.accounts.filter((a) => used.has(a.id)) }
+      : {}),
+  };
 }
 
 const SES_NOTE =
