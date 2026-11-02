@@ -53,6 +53,8 @@ describe('許した組（CROSS_PAIRS）', () => {
       expect(cross(host, 'images').map((c) => c.id)).toEqual([
         'cf-images',
         'cf-resize',
+        'bunny-images',
+        'bunny-resize',
       ]);
     for (const p of PLATFORMS)
       for (const slot of ['isrCache', 'realtime', 'apiCache'] as const)
@@ -91,6 +93,7 @@ describe('許した組（CROSS_PAIRS）', () => {
       aws: 'AWS',
       sakura: 'さくらの VPS',
       neon: 'Neon',
+      bunny: 'Bunny',
     } as const;
     for (const c of CROSS_COMPONENTS)
       expect(

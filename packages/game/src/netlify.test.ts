@@ -65,7 +65,15 @@ describe('Netlify の構成', () => {
     ]);
     expect(
       slots.find((x) => x.slot === 'images')!.options.map((o) => o.id),
-    ).toEqual(['default', 'none', 'resize', 'cf-images', 'cf-resize']);
+    ).toEqual([
+      'default',
+      'none',
+      'resize',
+      'cf-images',
+      'cf-resize',
+      'bunny-images',
+      'bunny-resize',
+    ]);
     expect(
       slots.find((x) => x.slot === 'api')!.options.map((o) => o.id),
     ).toEqual(['same', 'cf-workers-server']);

@@ -253,13 +253,18 @@ describe('稼働率の SLA（D-24）', () => {
     }
   });
 
-  it('セルフサービスのプランで SLA があるのはさくらの VPS 4GB だけ', () => {
+  // Bunny（D-98）は部品だけの事業者で、セルフサービスのまま SLA（99.99%）がある
+  it('セルフサービスのプランで SLA があるのはさくらの VPS 4GB と Bunny だけ', () => {
     const offered = loadPriceBooks().flatMap((b) =>
       b.plans
         .filter((p) => p.uptimeSla?.status === 'offered')
         .map((p) => `${b.provider}/${p.id}`),
     );
-    expect(offered).toEqual(['sakura-vps/4gb-tokyo']);
+    expect(offered).toEqual([
+      'sakura-vps/4gb-tokyo',
+      'bunny/standard',
+      'bunny/optimizer',
+    ]);
   });
 });
 

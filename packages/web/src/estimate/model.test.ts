@@ -167,6 +167,25 @@ describe('URL のクエリ', () => {
     ).toMatchObject({ hit: true });
   });
 
+  it('Bunny（D-98）: 画像・前段の CDN を Bunny にすると Bunny の請求と出典が増え、明細は料金データの表示名', () => {
+    const at = (s: string, q = '') =>
+      runEstimate(normalizeInput(fromQuery(`?t=article&s=${s}${q}`)));
+    const gcp = at('gcp-cloud-run', '&c.images=bunny-images');
+    const bunny = gcp.providers.find((p) => p.provider === 'bunny')!;
+    expect(bunny.lines.map((l) => l.label)).toEqual(
+      expect.arrayContaining([
+        'CDN の転送（Bunny CDN: Standard network・Asia & Oceania）',
+        '基本料（Bunny Optimizer: per website）',
+      ]),
+    );
+    expect(gcp.sources.map((s) => s.provider)).toContain('bunny');
+    const vps = at('sakura-vps-2gb', '&c.frontCdn=bunny');
+    expect(vps.providers.map((p) => p.provider)).toContain('bunny');
+    expect(vps.totalUsd).toBeGreaterThan(
+      at('sakura-vps-2gb', '&c.frontCdn=static').totalUsd,
+    );
+  });
+
   it('読めない値は捨てる', () => {
     const q = fromQuery('?pv=abc&c.nope=x&c.images=none');
     expect(q.pv).toBeUndefined();

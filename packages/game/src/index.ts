@@ -2047,6 +2047,7 @@ const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
   supabase: 'Supabase',
   netlify: 'Netlify',
   neon: 'Neon',
+  bunny: 'Bunny',
   resend: 'Resend',
   sakura: 'さくらのクラウド',
   gcp: 'Google Cloud',
@@ -2531,15 +2532,15 @@ export function componentConflict(
   if (platform === 'aws' || platform === 'aws-opennext')
     return cdnPlanConflict(platform, slot, option, choices, framework);
   if (platform !== 'sakura') return null;
-  if (
-    slot === 'apiCache' &&
-    option !== 'none' &&
-    (choices.frontCdn ?? 'none') === 'none'
-  )
-    return '前段の CDN が要る（先に前段の CDN を選ぶ）';
+  // API の応答のキャッシュは Cloudflare の前段（Cache Rules）だけ。Bunny の前段（D-98）では扱わない
+  const cfFront = (v: string | undefined) => v === 'static' || v === 'html';
+  if (slot === 'apiCache' && option !== 'none' && !cfFront(choices.frontCdn))
+    return (choices.frontCdn ?? 'none') === 'none'
+      ? '前段の CDN が要る（先に前段の CDN を選ぶ）'
+      : 'API の応答のキャッシュは Cloudflare の前段だけで扱う（先に前段を Cloudflare にする）';
   if (
     slot === 'frontCdn' &&
-    option === 'none' &&
+    !cfFront(option) &&
     (choices.apiCache ?? 'none') !== 'none'
   )
     return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';

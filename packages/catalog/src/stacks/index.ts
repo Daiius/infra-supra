@@ -31,6 +31,7 @@ import { withBackups } from './backups.ts';
 import { withDomain } from './domain.ts';
 import { EMAIL_COMPONENTS, withEmail } from './email.ts';
 import { withLogs } from './logs.ts';
+import { bunnyCdnNode } from './bunny.ts';
 import { vpsNode } from './sakura.ts';
 import {
   apiPlacedElsewhere,
@@ -51,8 +52,11 @@ export type Platform =
   | 'aws-opennext'
   | 'netlify'
   | 'gcp';
-/** 部品の事業者（土台の事業者に加えて、部品だけを出す事業者。Neon は DB の部品だけ・D-77、Resend はメール送信の部品だけ・D-95）。 */
-export type ComponentProvider = Platform | 'neon' | 'resend';
+/**
+ * 部品の事業者（土台の事業者に加えて、部品だけを出す事業者。Neon は DB の部品だけ・D-77、Resend はメール送信の部品だけ・D-95、
+ * Bunny は画像の配信と前段の CDN の部品だけ・D-98）。
+ */
+export type ComponentProvider = Platform | 'neon' | 'resend' | 'bunny';
 export type SlotId =
   | 'isrCache'
   | 'images'
@@ -821,7 +825,10 @@ export function apiCacheActive(
   if (!c.apiCache || c.apiCache === 'none') return false;
   // API を他の事業者に置くと、この事業者の API の応答のキャッシュは効かない（選べない。D-65）
   if (apiPlacedElsewhere(c)) return false;
-  return platform !== 'sakura' || (c.frontCdn ?? 'none') !== 'none';
+  // VPS の API の応答のキャッシュは Cloudflare の前段だけ（Bunny の前段では扱わない。D-98）
+  return (
+    platform !== 'sakura' || c.frontCdn === 'static' || c.frontCdn === 'html'
+  );
 }
 
 /**
@@ -1249,6 +1256,15 @@ function composeSakura(
     id: `sakura-vps-${plan}`,
     name: `さくらの VPS ${plan === '2gb' ? '2GB' : '4GB'}（東京）`,
     nodes: [
+      // Bunny CDN の前段（D-98）。Cloudflare の「静的と画像だけ」と同じヒット率で、転送を Bunny の単価で課金する
+      ...(frontCdn === 'bunny'
+        ? [
+            bunnyCdnNode('bunny-cdn', 'Bunny CDN（VPS の前段）', {
+              asset: 1,
+              'image-read': 0.9,
+            }),
+          ]
+        : []),
       ...(frontCdn === 'static' || frontCdn === 'html'
         ? [
             {
@@ -1296,19 +1312,22 @@ function composeSakura(
     ],
     // キャッシュしない・最適化しないは Workload の側で変わる（経路は同じ VPS）
     routes:
-      frontCdn === 'static' || frontCdn === 'html'
-        ? {
+      frontCdn === 'static' || frontCdn === 'html' || frontCdn === 'bunny'
+        ? (() => {
             // 前段の CDN を通り、miss だけが VPS に届く（再生成と画像の変換は VPS の中）
-            'document-static': ['cf-cdn', 'vps'],
-            asset: ['cf-cdn', 'vps'],
-            'document-ssr': ['cf-cdn', 'vps'],
-            'document-isr': ['cf-cdn', 'vps'],
-            'isr-revalidate': ['vps'],
-            api: ['cf-cdn', 'vps'],
-            'image-read': ['cf-cdn', 'vps'],
-            'image-write': ['cf-cdn', 'vps'],
-            'image-transform': ['vps'],
-          }
+            const edge = frontCdn === 'bunny' ? 'bunny-cdn' : 'cf-cdn';
+            return {
+              'document-static': [edge, 'vps'],
+              asset: [edge, 'vps'],
+              'document-ssr': [edge, 'vps'],
+              'document-isr': [edge, 'vps'],
+              'isr-revalidate': ['vps'],
+              api: [edge, 'vps'],
+              'image-read': [edge, 'vps'],
+              'image-write': [edge, 'vps'],
+              'image-transform': ['vps'],
+            };
+          })()
         : {
             'document-static': ['vps'],
             asset: ['vps'],

@@ -3,6 +3,7 @@
 // index.ts とは型だけを共有し、値は読まない（index.ts がこのファイルを読み込んで登録するので、循環しても初期化の順に依らない）。
 import type { ArchitectureInput, RequestClass } from 'estimator';
 import type { Choices, ComponentOption, StackDef } from './index.ts';
+import { bunnyCdnNode } from './bunny.ts';
 
 type ArchNodeIn = ArchitectureInput['nodes'][number];
 
@@ -410,30 +411,41 @@ function composeAmplify(
   const optimize = choices.images === 'default';
   // 自前の CloudFront を Amplify の前に置く（static: 静的と画像だけ・html: ISR のページも）。
   // キャッシュは前段の 1 層で数え、Amplify の CDN は前段が持つクラスを素通しにする（二重に当てない）
-  const front = choices.frontCdn === 'static' || choices.frontCdn === 'html';
+  // Bunny CDN（D-98）も同じ形の前段（静的と画像だけ）で、課金先だけが Bunny
+  const bunnyFront = choices.frontCdn === 'bunny';
+  const front =
+    bunnyFront || choices.frontCdn === 'static' || choices.frontCdn === 'html';
   const frontIsr = isr && choices.frontCdn === 'html';
   const amplify = (meters: Record<string, string>) =>
     bill('amplify-hosting', meters);
-  const frontNodes: ArchNodeIn[] = front
+  const frontNodes: ArchNodeIn[] = bunnyFront
     ? [
-        {
-          id: 'front',
-          label: '自前の CloudFront（Amplify の前段）',
-          config: {
-            kind: 'cdn',
-            hitRate: {
-              asset: 1,
-              'document-static': 1,
-              ...(optimize ? { 'image-read': IMAGE_CDN_HIT_RATE } : {}),
-            },
-            ...(frontIsr
-              ? { ttlClasses: ['document-isr'] as RequestClass[] }
-              : {}),
-          },
-          ...cdnBilling(choices, true),
-        },
+        bunnyCdnNode('front', 'Bunny CDN（Amplify の前段）', {
+          asset: 1,
+          'document-static': 1,
+          ...(optimize ? { 'image-read': IMAGE_CDN_HIT_RATE } : {}),
+        }),
       ]
-    : [];
+    : front
+      ? [
+          {
+            id: 'front',
+            label: '自前の CloudFront（Amplify の前段）',
+            config: {
+              kind: 'cdn',
+              hitRate: {
+                asset: 1,
+                'document-static': 1,
+                ...(optimize ? { 'image-read': IMAGE_CDN_HIT_RATE } : {}),
+              },
+              ...(frontIsr
+                ? { ttlClasses: ['document-isr'] as RequestClass[] }
+                : {}),
+            },
+            ...cdnBilling(choices, true),
+          },
+        ]
+      : [];
   const nodes: ArchNodeIn[] = [
     ...frontNodes,
     {

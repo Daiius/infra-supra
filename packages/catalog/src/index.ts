@@ -2,6 +2,7 @@
 // ここはデータだけを持つ（prd/03-pricing-schema.md）。架空の料金は src/fictional/ に分け、ここからは export しない（`catalog/fictional`）。
 import { parsePriceBook, type PriceBook, type PriceBookInput } from 'estimator';
 import { aws } from './providers/aws.ts';
+import { bunny } from './providers/bunny.ts';
 import { cloudflare } from './providers/cloudflare.ts';
 import { gcp } from './providers/gcp.ts';
 import { neon } from './providers/neon.ts';
@@ -23,6 +24,7 @@ export const RAW_PRICE_BOOKS: readonly PriceBookInput[] = [
   gcp,
   resend,
   registrar,
+  bunny,
 ];
 
 /** 検証済みの料金データ。本番の読み込みなので架空の料金は拒否される。 */
