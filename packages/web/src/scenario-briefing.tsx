@@ -176,17 +176,25 @@ function FrameworkDetail({
   );
 }
 
-/** 選んでいるフレームワークの大きいカード: 名前・要約・ページごとの見取り図と描き方（D-102）。 */
+/**
+ * フレームワークのカード: 名前・要約・ページごとの見取り図と描き方（D-102）。選んでいるものは枠とブランドの色で目立たせ、
+ * 選んでいないものも同じ中身を読める大きさで出す（薄く・彩度を落とし・少し小さく）。
+ */
 function FrameworkCard({
   scenario,
   id,
   comments,
   info,
+  selected,
+  noteId,
 }: {
   scenario: Scenario;
   id: FrameworkId;
   comments: number | undefined;
   info: ReactNode;
+  selected: boolean;
+  /** 要約の要素の id（タブのラジオの aria-describedby に使う）。 */
+  noteId: string;
 }) {
   const t = scenario.text?.byFramework?.[id];
   const pages = pageWireframes(scenario, id, comments);
@@ -203,16 +211,29 @@ function FrameworkCard({
   return (
     <section
       aria-label={`${FRAMEWORKS[id].label} の説明`}
-      className="card w-full border border-t-4 border-primary bg-base-100 shadow-sm"
-      // ブランドの色は上の縁だけ（黒一色のロゴは文字の色）
-      style={{ borderTopColor: brandColor(brand.brand) ?? 'currentColor' }}
+      aria-current={selected ? 'true' : undefined}
+      className={`card w-full border border-t-4 bg-base-100 motion-safe:transition ${
+        selected
+          ? 'border-primary shadow-md ring-2 ring-primary/30'
+          : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80'
+      }`}
+      // ブランドの色は選んでいるカードの上の縁だけ（黒一色のロゴは文字の色）
+      style={
+        selected
+          ? { borderTopColor: brandColor(brand.brand) ?? 'currentColor' }
+          : undefined
+      }
     >
       <div className="card-body gap-3 p-4">
         <h4 className="card-title text-lg">
           <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
           <NameWithInfo name={FRAMEWORKS[id].label} info={info} />
         </h4>
-        {t?.note && <p className="text-sm opacity-80">{t.note}</p>}
+        {t?.note && (
+          <p id={noteId} className="text-sm opacity-80">
+            {t.note}
+          </p>
+        )}
         {rest.length > 0 && (
           <ul className="list-disc pl-5 text-sm">
             {rest.map((l) => (
@@ -256,7 +277,7 @@ function FrameworkCard({
 /**
  * アプリのフレームワーク（構成のカードの中で、インフラの構成と同列に選ぶ。D-35・prd/10 F-04）。
  * どれにも推奨・既定の印を付けない。名前とロゴのタブ（ラジオ）で選び、選んだものを中央の大きいカードに出す（D-102）。
- * 前後のボタン・タブの ←/→ で切り替える。広い画面では前後の選択肢が両脇に小さく見える（daisyUI の carousel）。
+ * 前後のボタン・タブの ←/→・カードを押して切り替える。前後のカードも同じ中身で両脇に見える（daisyUI の carousel）。
  * 選んでいる＝中央のカード（「これにする」のボタンは置かない）。シナリオで選べるものが 1 つだけのときはカードだけを出す。
  */
 export function FrameworkField({
@@ -298,6 +319,8 @@ export function FrameworkField({
           id={id}
           comments={comments}
           info={info(id)}
+          selected
+          noteId={`${headingId}-${id}`}
         />
       </div>
     );
@@ -334,6 +357,12 @@ export function FrameworkField({
                 type="radio"
                 name="framework"
                 className="sr-only"
+                // 要約だけを説明にする（カード全体は長いので、カードは下に領域として読める）
+                aria-describedby={
+                  scenario.text?.byFramework?.[id]?.note
+                    ? `${headingId}-${id}`
+                    : undefined
+                }
                 checked={value === id}
                 onChange={() => onChange(id)}
               />
@@ -355,10 +384,12 @@ export function FrameworkField({
           ›
         </button>
       </div>
-      {/* 指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・両脇のカード）。overflow を隠し、位置は scrollLeft で動かす */}
+      {/* 全部のカードを同じ中身で並べ、選んでいるものを中央へ。広い画面では前後のカードが両脇に読める大きさで見え、
+          狭い画面でも隣の端が見える。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
+          指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
       <div
         ref={track}
-        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-1"
+        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-2"
       >
         {allowed.map((id) => (
           <div
@@ -366,55 +397,18 @@ export function FrameworkField({
             ref={(el) => {
               items.current[id] = el;
             }}
-            className={
-              id === value
-                ? 'carousel-item w-full lg:w-3/5'
-                : 'carousel-item hidden w-1/5 lg:flex'
-            }
+            className={`carousel-item w-[88%] lg:w-[70%] ${id === value ? '' : 'cursor-pointer'}`}
+            // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）
+            onClick={id === value ? undefined : () => onChange(id)}
           >
-            {id === value ? (
-              // すべてのカードを同じ 1 マスに重ね、マスの高さを最も高いカードに揃える（切り替えてもページが跳ねない）。
-              // 選んでいないカードは見えなくし（invisible）、支援技術・フォーカスからも外す（aria-hidden・inert）
-              <div className="grid w-full">
-                {allowed.map((other) => (
-                  <div
-                    key={other}
-                    className={`col-start-1 row-start-1 flex ${other === id ? '' : 'invisible'}`}
-                    {...(other === id
-                      ? {}
-                      : { 'aria-hidden': true, inert: true })}
-                  >
-                    <FrameworkCard
-                      scenario={scenario}
-                      id={other}
-                      comments={comments}
-                      info={info(other)}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              // 両脇に小さく見える前後の選択肢（タブと同じ選択なので、支援技術には出さず、マウスで選べるだけ）
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-hidden
-                className="card w-full self-start border border-base-300 bg-base-100 p-3 text-left text-sm opacity-50 hover:opacity-80"
-                onClick={() => onChange(id)}
-              >
-                <span className="flex items-center gap-1 font-semibold">
-                  <BrandMark
-                    brand={FRAMEWORK_BRAND[id].brand}
-                    size={14}
-                    tag={FRAMEWORK_BRAND[id].tag}
-                  />
-                  {FRAMEWORKS[id].label}
-                </span>
-                <span className="mt-1 block text-xs">
-                  {scenario.text?.byFramework?.[id]?.note}
-                </span>
-              </button>
-            )}
+            <FrameworkCard
+              scenario={scenario}
+              id={id}
+              comments={comments}
+              info={info(id)}
+              selected={id === value}
+              noteId={`${headingId}-${id}`}
+            />
           </div>
         ))}
       </div>

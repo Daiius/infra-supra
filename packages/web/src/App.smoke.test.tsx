@@ -150,8 +150,13 @@ describe('ゲームモードの画面', () => {
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
     /** 見取り図の区画の札（区画の名前 → 作られ方の札の文字）。 */
+    /** 選んでいるカード（前後のカードも同じ中身で並ぶので、選んでいるものに絞る）。 */
+    const current = () =>
+      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
     const tag = (page: string, region: string) => {
-      const list = screen.getByRole('list', { name: `${page}の見取り図` });
+      const list = within(current()).getByRole('list', {
+        name: `${page}の見取り図`,
+      });
       const cell = within(list).getByText(region).closest('li');
       return cell?.textContent?.replace(region, '').replace(/^: /, '');
     };
@@ -178,11 +183,16 @@ describe('ゲームモードの画面', () => {
         '[data-brand="sakura"][data-fallback="monogram"]',
       ),
     ).not.toBeNull();
-    // 選んでいる 1 つだけが中央の大きいカード
+    // 選んでいるカードが印つきで、前後のカードも同じ中身で読める
+    expect(current().getAttribute('aria-label')).toBe(
+      'Next.js（App Router） の説明',
+    );
     expect(
-      screen.getByRole('region', { name: 'Next.js（App Router） の説明' }),
+      within(screen.getByRole('region', { name: 'Astro の説明' })).getByRole(
+        'list',
+        { name: '記事のページの見取り図' },
+      ),
     ).toBeDefined();
-    expect(screen.queryByRole('region', { name: 'Astro の説明' })).toBeNull();
     expect(tag('記事のページ', '本文')).toBe('ISR（キャッシュ）');
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
       'ブラウザが API で取る',
@@ -220,9 +230,9 @@ describe('ゲームモードの画面', () => {
     );
     // 凡例は文字で出る
     expect(
-      within(screen.getByRole('list', { name: '見取り図の凡例' })).getByText(
-        'シェル + JS',
-      ),
+      within(
+        within(current()).getByRole('list', { name: '見取り図の凡例' }),
+      ).getByText('シェル + JS'),
     ).toBeDefined();
 
     // 前後のボタンでも選ぶ（並びは Next.js・SPA・Astro・静的書き出し）
@@ -231,10 +241,20 @@ describe('ゲームモードの画面', () => {
       (screen.getByRole('radio', { name: /^Astro/ }) as HTMLInputElement)
         .checked,
     ).toBe(true);
+    // 選んでいないカードを押しても選ぶ
+    fireEvent.click(
+      within(
+        screen.getByRole('region', { name: 'Next.js（静的書き出し） の説明' }),
+      ).getByRole('heading', { level: 4 }),
+    );
+    expect(current().getAttribute('aria-label')).toBe(
+      'Next.js（静的書き出し） の説明',
+    );
+    pick(/^Astro/);
     // ページの札（CPU の注意）
     expect(
       within(
-        screen.getByRole('region', { name: '個人向けのページ' }),
+        within(current()).getByRole('region', { name: '個人向けのページ' }),
       ).getByText(/^CPU: 閲覧ごとにサーバーが描く/),
     ).toBeDefined();
 
