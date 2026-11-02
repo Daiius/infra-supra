@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ArchitectureInput } from '../architecture/schema.ts';
 import { resolveWorkload, timeBuckets } from '../workload/resolve.ts';
 import type { WorkloadInput } from '../workload/schema.ts';
-import { simulateResources } from './simulate.ts';
+import { pausingDbShares, simulateResources } from './simulate.ts';
 
 const processing = {
   cpuMs: 10,
@@ -454,6 +454,8 @@ describe('部品の選択で足した振る舞い', () => {
     const paused = sim([node(300)], { api: ['a'] }).a!;
     const lt = (w.classes.api.count / (730 * 3600)) * 300;
     expect(paused.awakeShare).toBeCloseTo(lt / (1 + lt), 12);
+    expect(paused.resumeShare).toBeCloseTo(1 / (1 + lt), 12);
+    expect(always.resumeShare).toBeUndefined();
     expect(paused.resources['instance-hours']).toBeCloseTo(
       730 * 0.5 * (lt / (1 + lt)),
       9,
@@ -576,8 +578,8 @@ describe('部品の選択で足した振る舞い', () => {
         ),
       ).toEqual(
         timeBuckets(2, office).map((x) => ({
+          ...x,
           share: expect.closeTo(x.share, 12),
-          hours: x.hours,
         })),
       );
     });
@@ -648,6 +650,165 @@ describe('部品の選択で足した振る舞い', () => {
       expect(u.resources['cpu-hours']).toBeCloseTo(active, 9);
       expect(u.resources['idle-cpu-hours']).toBeCloseTo(idle, 9);
       expect(u.activeInstanceShare).toBeCloseTo(active / 730, 12);
+    });
+
+    describe('止まる DB を時間帯で数える（D-90）', () => {
+      const db = (pauseAfterIdleSeconds = 300) => ({
+        id: 'a',
+        label: 'a',
+        config: {
+          kind: 'managed-db' as const,
+          capacityUnits: 0.5,
+          pauseAfterIdleSeconds,
+        },
+      });
+      const runDb = (rw: ReturnType<typeof resolveWorkload>, t = 300) =>
+        simulateResources(rw, {
+          id: 'x',
+          name: 'x',
+          nodes: [db(t)],
+          routes: { api: ['a'] },
+        }).nodes.a!;
+
+      /**
+       * 総当たり: 平日・休日の 1 日をそれぞれ 24 時間の繰り返しとみて、時刻 t に止まっている確率 e^(−∫_{t−W}^{t} λ) を
+       * 1 秒ごとに平均する（区間の頭の混ざりを式でなく数値で出す）。
+       */
+      const brute = (
+        n: number,
+        busyMs: number,
+        t: number,
+        profile: number[],
+        r: number,
+      ) => {
+        const w = t + busyMs / 1000 / n;
+        const b = timeBuckets(r, profile);
+        let awakeH = 0;
+        let resume = 0;
+        for (let d = 0; d < 2; d++) {
+          const rate = (h: number) => {
+            const x = b[d * 24 + (((h % 24) + 24) % 24)]!;
+            return (n * x.share) / (x.hours * 3600);
+          };
+          // ∫_{s}^{e} λ（区間の中は一定）
+          const integral = (s: number, e: number) => {
+            let acc = 0;
+            for (let x = s; x < e;) {
+              const h = Math.floor(x / 3600);
+              const next = Math.min(e, (h + 1) * 3600);
+              acc += rate(h) * (next - x);
+              x = next;
+            }
+            return acc;
+          };
+          let asleepSum = 0;
+          let resumeSum = 0;
+          let rateSum = 0;
+          for (let x = 0.5; x < 86400; x += 1) {
+            const asleep = Math.exp(-integral(x - w, x));
+            const l = rate(Math.floor(x / 3600));
+            asleepSum += asleep;
+            resumeSum += l * asleep;
+            rateSum += l;
+          }
+          const hours = b
+            .slice(d * 24, d * 24 + 24)
+            .reduce((a, x) => a + x.hours, 0);
+          const share = b
+            .slice(d * 24, d * 24 + 24)
+            .reduce((a, x) => a + x.share, 0);
+          awakeH += (1 - asleepSum / 86400) * hours;
+          resume += rateSum > 0 ? (share * resumeSum) / rateSum : 0;
+        }
+        return { awake: awakeH / 730, resume };
+      };
+
+      it('形が無ければ月の平均の式（D-51 の λT / (1 + λT)）のまま', () => {
+        const rw = withProfile(undefined, 8, 3_000);
+        const u = runDb(rw);
+        const lt = (rw.classes.api.count / (730 * 3600)) * 300;
+        expect(u.awakeShare).toBeCloseTo(lt / (1 + lt), 12);
+        expect(u.resumeShare).toBeCloseTo(1 / (1 + lt), 12);
+        expect(u.resources['instance-hours']).toBeCloseTo(
+          730 * 0.5 * (lt / (1 + lt)),
+          9,
+        );
+      });
+
+      it('形があれば区間ごとに e^(−λ_b × W)（W = 待ち + 1 件の処理の時間）を積み、区間の頭は直前の時間帯と混ぜる（総当たりと一致）', () => {
+        for (const [mau, r] of [
+          [30, 8],
+          [3_000, 8],
+          [300_000, 1.3],
+        ] as const) {
+          const rw = withProfile(office, r, mau);
+          const u = runDb(rw);
+          const n = rw.classes.api.count;
+          const want = brute(n, u.busyMs, 300, office, r);
+          expect(u.awakeShare!).toBeCloseTo(want.awake, 5);
+          expect(u.resumeShare!).toBeCloseTo(want.resume, 5);
+          expect(u.resources['instance-hours']).toBeCloseTo(
+            730 * 0.5 * u.awakeShare!,
+            9,
+          );
+        }
+      });
+
+      it('深夜に届かない形では、その時間帯は（頭の待ちの分を除いて）止まり、月の平均の式より安い', () => {
+        // 9〜18 時だけ届く業務の形・閲覧が多く日中は止まらない
+        const rw = withProfile(office, 8, 300_000);
+        const u = runDb(rw);
+        const flat = runDb(withProfile(undefined, 8, 300_000));
+        expect(flat.awakeShare!).toBeGreaterThan(0.99);
+        // 届く時間帯は平日 7〜21 時の 14 時間・休日も同じ形。止まらない時間は 14 / 24 + 区間の頭の待ち（1 日に 1 回・最大 300 秒）
+        expect(u.awakeShare!).toBeGreaterThan(14 / 24);
+        expect(u.awakeShare!).toBeLessThan(14 / 24 + 300 / 86400 + 1e-3);
+        // 夜間に止まった DB を朝の 1 件目が起こす。件数の割合はごく小さい
+        expect(u.resumeShare!).toBeGreaterThan(0);
+        expect(u.resumeShare!).toBeLessThan(1e-3);
+      });
+
+      it('到着率が上がるほど動いている割合は増え、待ちが長いほど増える（0〜1）', () => {
+        const awake = [1, 30, 1_000, 30_000, 1_000_000].map(
+          (mau) => runDb(withProfile(office, 8, mau)).awakeShare!,
+        );
+        for (let i = 1; i < awake.length; i++)
+          expect(awake[i]!).toBeGreaterThan(awake[i - 1]!);
+        expect(awake[0]!).toBeGreaterThanOrEqual(0);
+        expect(awake[4]!).toBeLessThanOrEqual(1);
+        const rw = withProfile(office, 8, 3_000);
+        expect(runDb(rw, 900).awakeShare!).toBeGreaterThan(
+          runDb(rw, 300).awakeShare!,
+        );
+      });
+
+      it('待ちが時間帯の長さ（1 時間）以上なら区間の頭を見ず e^(−λ_b × W)', () => {
+        const buckets = timeBuckets(1, office);
+        const got = pausingDbShares(10_000, 0, 7_200, buckets);
+        let awakeH = 0;
+        let resume = 0;
+        for (const b of buckets) {
+          const asleep = Math.exp(
+            -((10_000 * b.share) / (b.hours * 3600)) * 7_200,
+          );
+          awakeH += (1 - asleep) * b.hours;
+          resume += b.share * asleep;
+        }
+        expect(got.awake).toBeCloseTo(awakeH / 730, 12);
+        expect(got.resume).toBeCloseTo(resume, 12);
+      });
+
+      it('桁あふれしない（直前が濃く今が 0・その逆）', () => {
+        const spike = Array.from({ length: 24 }, (_, h) => (h === 12 ? 1 : 0));
+        for (const n of [1e3, 1e9, 1e12]) {
+          const r = pausingDbShares(n, 0, 300, timeBuckets(1, spike));
+          expect(Number.isFinite(r.awake)).toBe(true);
+          expect(r.awake).toBeGreaterThan(0);
+          expect(r.awake).toBeLessThanOrEqual(1);
+          expect(r.resume).toBeGreaterThanOrEqual(0);
+          expect(r.resume).toBeLessThanOrEqual(1);
+        }
+      });
     });
   });
 

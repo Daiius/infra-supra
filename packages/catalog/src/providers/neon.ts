@@ -26,7 +26,7 @@ const FACTS = [
       'Neon の DB は問い合わせが 5 分無いと止まり（scale to zero）、数百 ms で再開する。止まっている間は CU 時間に数えない。Free は止める設定を外せず、Launch は外せる',
     interpretation: {
       adopted:
-        '止める設定のまま運営し、動いている割合は DB に届く件数の到着率から出す（Aurora Serverless v2 の 0 ACU と同じ式。夜間に減る分は入れない）',
+        '止める設定のまま運営し、動いている割合は DB に届く件数の到着率から時間帯ごとに出す（Aurora Serverless v2 の 0 ACU と同じ式。夜間・休日に問い合わせが途切れる時間は止まる）',
       rejected: [
         {
           reading: '常に動かしておく（止める設定を外す）',

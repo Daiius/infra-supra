@@ -124,8 +124,9 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
   }),
   /**
    * コンピュートを時間で買うマネージド DB（Supabase 型）。capacityUnits は時間課金の単位の数（Aurora の ACU。既定 1）。
-   * pauseAfterIdleSeconds: 接続がこの秒数ないと止まり、止まっている間は課金されない（Aurora Serverless v2 の 0 ACU）。
-   * 動いている時間の割合は、DB に届く件数の到着率 λ と待ちの秒数 T から λT / (1 + λT)（キャッシュのヒット率と同じ近似。prd/04 §2）。
+   * pauseAfterIdleSeconds: 接続がこの秒数ないと止まり、止まっている間は課金されない（Aurora Serverless v2 の 0 ACU・Neon）。
+   * 動いている時間の割合は、時間帯の区間（timeBuckets）ごとに DB に届く件数の到着率 λ_b と待ち T から 1 − e^(−λ_b × (T + 処理の時間))、
+   * 区間が無ければ月の平均から λT / (1 + λT)（prd/04 §3.5.1・D-90）。
    */
   z.object({
     kind: z.literal('managed-db'),
