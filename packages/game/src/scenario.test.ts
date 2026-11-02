@@ -1,5 +1,5 @@
 // 記事コミュニティのシナリオと出来事の性質（prd/07 §10.3〜10.8・D-20）。
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { parsePriceBook, type PriceBook } from 'estimator';
 import {
   applyRevisions,
@@ -22,9 +22,6 @@ import {
   offeredBaselines,
 } from './index.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
-
-// 基準プレイ（シード × 構成）を何本も回すので、全パッケージを並べて回すと既定の 5 秒を超えうる（単独では 1 秒未満。gcp.test と同じ）
-vi.setConfig({ testTimeout: 30_000 });
 
 const CF_PAID = 1;
 const VERCEL_PRO = 3;

@@ -3,10 +3,7 @@
 // 2 シナリオ × 選べるフレームワーク × 載せられる構成（隠した構成も。古い保存の再生に使う。D-100）× 部品の選択肢（1 つずつ替える）
 // × 再検証・コメントの描き方 × 個人向けのページの割合・在庫の有無で、workloadFor の出力を正規化した JSON のハッシュにまとめる。
 import type { Choices, SlotId } from 'catalog';
-import { describe, expect, it, vi } from 'vitest';
-
-// 約 2 万の Workload を組むので、並列で回すと既定の 5 秒を超えることがある
-vi.setConfig({ testTimeout: 60_000 });
+import { describe, expect, it } from 'vitest';
 import {
   COMMENTS_IN_BROWSER,
   COMMENTS_IN_PAGE,

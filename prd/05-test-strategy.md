@@ -112,6 +112,7 @@ PV を 1 万・10 万・100 万・1000 万と振り、**規模によって最安
   描画の例外や選択肢の出し忘れを機械で拾えなかった。jsdom は happy-dom より標準に忠実で、Testing Library の標準の組み合わせ。
   `user-event`・`jest-dom` は入れない（`fireEvent` と素の `expect` で足りる）。
 - 設定: テストのファイルの先頭の `// @vitest-environment jsdom` で、描画テストだけ jsdom にする（`model.test.ts` は node のまま。vitest の設定ファイルは足さない）。
+  1 本の時間の上限は `vite.config.ts` の `test.testTimeout`（30 秒）で、ファイルごとには上げない。
   jsdom に無い API は [`smoke.test-helpers.tsx`](../packages/web/src/smoke.test-helpers.tsx) で最小限に補う:
   matchMedia（常に「動きを減らす」にして花火の canvas・数え上げを止める）・dialog の `showModal` と `<form method="dialog">` の送信・ResizeObserver と要素の大きさ（幅 640。グラフは幅 0 だと描かない）・scrollTo。
 - 決定論: 乱数のシード 42・始めた日 2026-11-02 を画面の入力で与える（既定の「今日」に頼らない）。保存（localStorage）と URL はテストごとに消す。
