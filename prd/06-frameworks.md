@@ -2,7 +2,8 @@
 
 > 状態: **設計中（最小の形は実装済み。下の ⚠）**。各フレームワーク・ホストの対応状況（どの機能がどのホストで動くか）は、
 > 料金データと同じく公式ドキュメントを出典にして catalog に入れる（[03](./03-pricing-schema.md) §1 と同じ規律）。
-> 今は Next.js・Vite の SPA・Astro × Cloudflare・Vercel・さくらの VPS・AWS（Amplify・S3 + CloudFront・OpenNext）・Netlify・Google Cloud（Cloud Run + Firebase Hosting。D-88）を、出典つきで `packages/catalog/src/frameworks` の DeployTarget の表に入れた（Astro × AWS は unsupported）。
+> 今は Next.js・Vite の SPA・Astro × Cloudflare・Vercel・さくらの VPS・AWS（Amplify・S3 + CloudFront・OpenNext）・Netlify・Google Cloud（Cloud Run + Firebase Hosting。D-88）を、出典つきで `packages/catalog/src/frameworks` の DeployTarget の表に入れた（Astro × AWS は unsupported。OpenNext・Netlify は D-100 で一時的に隠している）。
+> ⚠ **ページ（ルート）ごとの描き方 S1〜S6 と、フレームワーク × 事業者の対応表・フレームワークの既定（プリセット）は [13](./13-route-strategies.md)**（D-106・D-107）。この文書のフレームワークごとの「記事は〜・マイページは〜」は、そのフレームワークの既定の描き方で、始める画面・見積モードでページごとに選び直せる。
 > ⚠ **一部実装済み**（Next.js と Vite の SPA の 2 つだけの最小の形。BuildOutput は Workload の routes で代用）→ [10](./10-framework-branch.md) §7・「D-34」（2026-11-01）
 > ⚠ **Next.js の静的書き出し（`output: 'export'`）を 4 つ目の選択肢として実装**（§7・D-80・2026-11-02）。Astro と SPA の仕組みの組み合わせで足せた（新しい型・エンジンの拡張なし）。
 > ⚠ **Astro を実装**（§6・D-68・2026-11-02）。BuildOutput の型は作らず、SPA と同じく「テンプレートの書き換え（`toAstro`）+ DeployTarget の表 + `composeStack` の分岐」で足せた（§3 の「データ追加だけで足せるか」の検証の答えは §6.6）
@@ -68,6 +69,8 @@ type FrameworkProfile = {
 };
 ```
 
+- 実装では `renderingModes` を残しているが、ページごとに使える描き方は [13](./13-route-strategies.md) §3 の対応表（`capabilityRow`・`strategySupport`）で決める。`renderingModes` は対応表に置き換えて消す予定（13 §6 の「段 3 でしなかったこと」）。
+
 ### 2.3 DeployTarget（データ・catalog）
 
 「フレームワーク × ホスト」の組み合わせごとに、どの機能がどのノード・メーターに写るかを持つ。
@@ -93,7 +96,7 @@ type DeployTarget = {
 | MVP | Vite（SPA） | 静的ファイル + 別立ての API | 静的配信の比較。API を別のホストに置く構成 |
 | MVP | Next.js（App Router） | static / SSR / ISR / ミドルウェア / 画像最適化 | 同じアプリを Vercel（ネイティブ）・VPS（`next start` で自前運用）に載せたときの差。Cloudflare へは vinext で載せる（下の行） |
 | MVP | vinext | Next.js の API を Vite の上で実装し、Workers へ載せる | Next.js と同じアプリを別の実装で Cloudflare に載せたときの差（§5） |
-| MVP 直後 | Astro | 静的出力が基本。SSR はアダプターで Vercel・Cloudflare・Node へ | 静的出力なら静的ホストの比較に帰着する。SSR アダプターで Vercel に載せたときの課金 |
+| MVP 直後 | Astro | 静的出力が基本。SSR はアダプターで Vercel・Cloudflare・Node へ | 静的出力なら静的ホストの比較に帰着する。SSR アダプターで Vercel に載せたときの課金（実装では、記事コミュニティの記事を閲覧時に描いてキャッシュする形を既定にした。§6・D-103） |
 | 拡張 | Remix / React Router、Nuxt、SvelteKit など | — | FrameworkProfile と DeployTarget のデータ追加だけで足せることを目標にする |
 
 - Astro の静的出力は BuildOutput 上で Vite SPA とほぼ同じ形になるので、追加の費用は小さい見込み。
@@ -225,13 +228,14 @@ D-103 の前後（記事コミュニティ。始めの既定: Next.js・静的�
 - 個人向けのページ: 「アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）」
 
 見取り図（D-102）の記事のページの区画（ヘッダー・タイトル・本文・フッター）の札は「**閲覧時に SSR + キャッシュ（投稿で消す）**」（新しい作られ方 `cached`）。ページの札は「鮮度: 投稿・編集でキャッシュを消す」「SNS のカード: HTML に入る」「CPU: 消した後の閲覧が描くのを待つ（Workers は 1 リクエストの上限に注意）」。
-Astro を選ぶと構成の一覧から AWS の 2 つが消え、ゲーム中の乗り換え先では「Astro を載せる公式のアダプターが無い」で選べない。設定の欄は「記事のキャッシュ」（ISR の再検証・ビルドの間隔の代わり。D-103）。
+Astro を選ぶと構成の一覧から AWS の 2 つが消え、ゲーム中の乗り換え先では「Astro を載せる公式のアダプターが無い」で選べない。設定の欄は「記事のキャッシュ」（ISR の再検証・ビルドの間隔の代わり。D-103）。記事の描き方を替えると設定の意味も替わる（S1 はビルドの間隔・S4 と S5 は出さない。D-107・[13](./13-route-strategies.md) §5b）。
+D-107 の後は、カードには既定の描き方を短く出し、ページごとの描き方は次の「③ ページの描き方」の表で選び直す（記事を S1・S4・S5、個人向けを S5 に。Cloudflare で記事をキャッシュしないなら Workers Cache を前に置かない）。
 
 ### 6.6 残した点・「データ追加だけで足せるか」の答え
 
 - データだけでは足りなかったのは 2 つ: **ビルドし直しの費用**（estimator の資源・Workload の `build`・ノード `ci-build`）と、**載せられない組の検証**（`unsupported` の DeployTarget を始める画面・乗り換えで弾く）。それ以外（ルートの書き換え・構成の分岐・部品の出し分け・設定の意味）は SPA と同じ仕組みで足りた。06 §2.1 の BuildOutput の型は、まだ作らなくてよい。
 - API の置き場（D-69・prd/10 §9.7）: Vercel・VPS の Astro + Cloudflare Workers・D1、Cloudflare の Astro + さくらの VPS の API を許した。
-- 後の段: ページごとに描き方を選ぶ形（RS の段 2〜3。Astro の記事を静的・毎回描くにも戻せるようにする）、Server Islands、Astro × AWS（コミュニティのアダプター・SST）、フレームワークごとの描画の CPU の倍率（RS-06。計測してから）、Workers Cache が拠点ごとに分かれてヒット率が下がる分（数えていない）、上限の内訳の文の「ISR の閲覧と再生成」を Astro では「キャッシュの描き直し」と書くこと（estimator の文は描き方の名前を知らない）。Next.js の `output: 'export'`（F-03）は §7（D-80）で入れた。Vercel の `isr` で記事を描く形は D-103 で入れた。
+- 後の段: ~~ページごとに描き方を選ぶ形（RS の段 2〜3。Astro の記事を静的・毎回描くにも戻せるようにする）~~ → D-106・D-107（[13](./13-route-strategies.md)）、Server Islands（13 の段 5・S6）、Astro × AWS（コミュニティのアダプター・SST）、フレームワークごとの描画の CPU の倍率（RS-06。計測してから）、Workers Cache が拠点ごとに分かれてヒット率が下がる分（数えていない）、上限の内訳の文の「ISR の閲覧と再生成」を Astro では「キャッシュの描き直し」と書くこと（estimator の文は描き方の名前を知らない）。Next.js の `output: 'export'`（F-03）は §7（D-80）で入れた。Vercel の `isr` で記事を描く形は D-103 で入れた。
 
 ## 7. Next.js の静的書き出し（`output: 'export'`。実装・2026-11-02・D-80）
 
