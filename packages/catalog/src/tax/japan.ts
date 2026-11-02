@@ -109,6 +109,13 @@ export const JAPAN_TAX: readonly JapanTaxTreatment[] = [
     ],
   },
   {
+    provider: 'resend',
+    status: 'unconfirmed',
+    premise:
+      'Resend の料金ページ・送信の上限の文書に、税・日本の消費税の記載が無い（消費税の扱いは未確認。税抜のまま。D-95）',
+    sources: [{ url: 'https://resend.com/pricing', retrievedAt: '2026-11-02' }],
+  },
+  {
     provider: 'gcp',
     status: 'added',
     premise:

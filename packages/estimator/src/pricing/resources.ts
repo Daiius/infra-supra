@@ -39,6 +39,7 @@ export const RESOURCES = [
   'log-gb-month', // ログを保持の日数だけ残す量（GB 月。Cloudflare Observability の保存。D-94）
   'backup-gb-month', // DB のバックアップ・任意の時点への復元（PITR）のために残す量（GB 月。事業者の無料の分を除いた量。D-93）
   'backup-hours', // 時間で課金するバックアップのアドオン（Supabase の PITR）を付けている時間（D-93）
+  'emails', // アプリが送るメール（パスワードの再設定・通知など）の通数（D-95）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -80,4 +81,5 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'log-gb-month': 'gb-month',
   'backup-gb-month': 'gb-month',
   'backup-hours': 'hour',
+  emails: 'count',
 };

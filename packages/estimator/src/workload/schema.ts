@@ -140,6 +140,18 @@ export const WorkloadInputSchema = z
         minutesPerBuild: Pos,
       })
       .optional(),
+    /**
+     * アプリが送るメール（パスワードの再設定・登録の確認・通知。D-95）。月の通数 = MAU × perMau + 書き込みの回数 × perWrite
+     * （書き込みの回数 = PV × ページあたりの API × 1 回あたりの書き込み）。値はテンプレート・シナリオの仮定。省略は送らない。
+     */
+    email: z
+      .object({
+        /** 利用者 1 人の月の通数（アカウントの操作・業務の通知など、利用者に比例する分）。 */
+        perMau: NonNeg,
+        /** 書き込み 1 回あたりの通数（コメントの通知など、書き込みに比例する分）。 */
+        perWrite: NonNeg,
+      })
+      .optional(),
     /** リアルタイム（チャットなどの WebSocket）。値はテンプレート・シナリオの仮定（D-24）。 */
     realtime: z
       .object({

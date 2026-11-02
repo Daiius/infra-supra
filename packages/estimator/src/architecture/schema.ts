@@ -224,6 +224,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     minFreeGB: NonNeg.default(0),
     addonHours: z.boolean().default(false),
   }),
+  /**
+   * メールの送信（D-95・prd/04 §3.10）。経路を持たず、Workload の月のメールの通数（resolve の emails）をそのまま数える（emails）。
+   * 送る先のサービス（Resend・Amazon SES・Cloudflare の Email Service）は課金先のプランで決まる。
+   */
+  z.object({ kind: z.literal('email-sender') }),
   /** VPS などのホスト。課金は固定費で、使用量は容量の判定（P1-8）に使う。 */
   z.object({
     kind: z.literal('host'),

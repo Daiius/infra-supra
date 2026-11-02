@@ -107,6 +107,18 @@ export const GD3_STACKS: unknown[] = [
           },
         },
       },
+      // メールの送信（D-95）
+      {
+        id: 'email',
+        label: 'Resend Free（メールの送信）',
+        config: { kind: 'email-sender' },
+        billing: {
+          accountId: 'resend',
+          provider: 'resend',
+          planId: 'free',
+          meters: { emails: 'emails' },
+        },
+      },
     ],
     routes: {
       'document-static': ['assets'],
@@ -235,6 +247,18 @@ export const GD3_STACKS: unknown[] = [
           meters: {
             'image-transformations': 'transformations',
           },
+        },
+      },
+      // メールの送信（D-95）
+      {
+        id: 'email',
+        label: 'Email Service（メールの送信）',
+        config: { kind: 'email-sender' },
+        billing: {
+          accountId: 'cloudflare',
+          provider: 'cloudflare',
+          planId: 'workers-paid',
+          meters: { emails: 'email-sending' },
         },
       },
     ],
@@ -371,6 +395,18 @@ export const GD3_STACKS: unknown[] = [
           meters: {
             'egress-gb': 'egress',
           },
+        },
+      },
+      // メールの送信（D-95）
+      {
+        id: 'email',
+        label: 'Resend Free（メールの送信）',
+        config: { kind: 'email-sender' },
+        billing: {
+          accountId: 'resend',
+          provider: 'resend',
+          planId: 'free',
+          meters: { emails: 'emails' },
         },
       },
     ],
@@ -511,6 +547,18 @@ export const GD3_STACKS: unknown[] = [
           },
         },
       },
+      // メールの送信（D-95）
+      {
+        id: 'email',
+        label: 'Resend Pro（メールの送信）',
+        config: { kind: 'email-sender' },
+        billing: {
+          accountId: 'resend',
+          provider: 'resend',
+          planId: 'pro',
+          meters: { emails: 'emails' },
+        },
+      },
     ],
     routes: {
       'document-static': ['cdn'],
@@ -551,6 +599,18 @@ export const GD3_STACKS: unknown[] = [
           meters: {
             'egress-gb': 'transfer',
           },
+        },
+      },
+      // メールの送信（D-95）
+      {
+        id: 'email',
+        label: 'Resend Pro（メールの送信）',
+        config: { kind: 'email-sender' },
+        billing: {
+          accountId: 'resend',
+          provider: 'resend',
+          planId: 'pro',
+          meters: { emails: 'emails' },
         },
       },
     ],

@@ -217,6 +217,7 @@ describe('部品の組み合わせ', () => {
         'cdnPlan',
         'db',
         'dbBackup',
+        'email',
         'frontCdn',
         'images',
         'isrCache',

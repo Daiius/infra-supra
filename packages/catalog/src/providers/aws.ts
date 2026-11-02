@@ -246,6 +246,15 @@ export const aws: PriceBookInput = {
     },
     rdsFree: src('https://aws.amazon.com/rds/free/'),
     freeTier: src('https://aws.amazon.com/free/'),
+    // Amazon SES（2026-11-02 取得。D-95）。Price List API の AmazonSES の版 2026-10-27
+    sesPrices: {
+      url: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSES/current/ap-northeast-1/index.json',
+      retrievedAt: '2026-11-02',
+    },
+    sesPricing: {
+      url: 'https://aws.amazon.com/ses/pricing/',
+      retrievedAt: '2026-11-02',
+    },
     // データ転送の常時無料（2026-11-01 に原文で確認。D-52）
     ec2DataTransfer: src('https://aws.amazon.com/ec2/pricing/on-demand/'),
   },
@@ -1156,6 +1165,30 @@ export const aws: PriceBookInput = {
             ],
           },
           sourceIds: ['sqsPrices'],
+        },
+      ],
+    },
+    // Amazon SES（アプリのメールの送信。D-95・prd/11 §20）
+    {
+      id: 'ses',
+      service: 'ses',
+      ...common,
+      name: 'Amazon SES（東京）',
+      sourceIds: ['sesPrices', 'sesPricing'],
+      notes: [
+        '添付ファイルは送ったデータ 1 GB $0.12 が別にかかる（通知のメールは添付なしとみなし、数えない）',
+        'SES の常時無料の通数は無い（Price List API の無料の行はメールボックスのシミュレーターだけ）。新しいアカウントの Free Tier のクレジットは数えない（AX-06）',
+      ],
+      meters: [
+        {
+          id: 'outbound',
+          label: 'メールの送信（Amazon SES: outbound email）',
+          resource: 'emails',
+          unit: 'count',
+          premise:
+            'Amazon SES の送信は受け取る人 1 人ごとに 1,000 通 $0.10（東京も同じ）。月の通数による割引・無料の分は無い',
+          pricing: { model: 'flat', per: 1_000, unitPrice: 0.1 },
+          sourceIds: ['sesPrices', 'sesPricing'],
         },
       ],
     },

@@ -8,7 +8,15 @@ const ids = (a: ReturnType<typeof composeStack>) => a.nodes.map((n) => n.id);
 describe('Netlify の構成', () => {
   it('Next.js: ISR は CDN の期限つきのキャッシュ、miss と作り直しは関数。画像は Image CDN、原本は Blobs', () => {
     const a = composeStack('netlify-supabase-pro');
-    expect(ids(a)).toEqual(['cdn', 'fn', 'image', 'upload', 'blob', 'db']);
+    expect(ids(a)).toEqual([
+      'cdn',
+      'fn',
+      'image',
+      'upload',
+      'blob',
+      'db',
+      'email',
+    ]);
     expect(a.routes['document-isr']).toEqual(['cdn', 'fn']);
     expect(a.routes['isr-revalidate']).toEqual(['fn', 'db']);
     expect(a.routes['image-read']).toEqual(['cdn', 'image']);

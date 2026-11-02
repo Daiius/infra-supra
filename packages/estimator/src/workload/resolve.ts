@@ -121,6 +121,8 @@ export type ResolvedWorkload = {
    * （1 回ごとに分へ切り上げる）。build が無ければ 0。
    */
   builds: { count: number; minutes: number };
+  /** 月に送るメールの通数（Workload の email。省略は 0。D-95）。 */
+  emails: number;
   derivations: Derivation[];
 };
 
@@ -533,6 +535,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   };
 
   const builds = resolveBuilds(w, derivations);
+  const emails = resolveEmails(w, t.mau, pv, derivations);
   const r = t.weekdayToWeekend;
   return {
     input: w,
@@ -584,8 +587,38 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     onDemandPageRevalidations,
     onDemandUpdates,
     builds,
+    emails,
     derivations,
   };
+}
+
+/**
+ * 月に送るメールの通数（D-95）。利用者に比例する分（アカウントの操作・業務の通知）と、書き込みに比例する分（コメントの通知）。
+ * 書き込みの回数は PV × ページあたりの API × 1 回あたりの書き込み（ゲームの内容の更新の数え方と同じ）。
+ */
+function resolveEmails(
+  w: ParsedWorkload,
+  mau: number,
+  pv: number,
+  derivations: Derivation[],
+): number {
+  const e = w.email;
+  if (!e) return 0;
+  const writes = pv * w.perPage.apiCalls * w.api.writesPerCall;
+  const emails = mau * e.perMau + writes * e.perWrite;
+  derivations.push({
+    id: 'emails',
+    label: 'メールの送信',
+    expression: 'MAU × 利用者あたりの通数 + 書き込み × 書き込みあたりの通数',
+    inputs: [
+      { name: 'MAU', value: mau, basis: 'user-input' },
+      { name: '利用者あたりの通数', value: e.perMau, basis: 'user-input' },
+      { name: '書き込み', value: writes, basis: 'derived' },
+      { name: '書き込みあたりの通数', value: e.perWrite, basis: 'user-input' },
+    ],
+    result: emails,
+  });
+  return emails;
 }
 
 /**

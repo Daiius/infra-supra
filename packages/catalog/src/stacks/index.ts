@@ -28,6 +28,7 @@ import {
   GCP_STACK_DEFS,
 } from './gcp.ts';
 import { withBackups } from './backups.ts';
+import { EMAIL_COMPONENTS, withEmail } from './email.ts';
 import { withLogs } from './logs.ts';
 import { vpsNode } from './sakura.ts';
 import {
@@ -49,8 +50,8 @@ export type Platform =
   | 'aws-opennext'
   | 'netlify'
   | 'gcp';
-/** 部品の事業者（土台の事業者に加えて、部品だけを出す事業者。Neon は DB の部品だけ。D-77）。 */
-export type ComponentProvider = Platform | 'neon';
+/** 部品の事業者（土台の事業者に加えて、部品だけを出す事業者。Neon は DB の部品だけ・D-77、Resend はメール送信の部品だけ・D-95）。 */
+export type ComponentProvider = Platform | 'neon' | 'resend';
 export type SlotId =
   | 'isrCache'
   | 'images'
@@ -63,7 +64,8 @@ export type SlotId =
   | 'cdnPlan'
   | 'cdnInvalidation'
   | 'minInstances'
-  | 'dbBackup';
+  | 'dbBackup'
+  | 'email';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -163,6 +165,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   cdnInvalidation: 'CDN の無効化のまとめ方',
   minInstances: '最小インスタンス数',
   dbBackup: 'DB のバックアップ',
+  email: 'メール送信',
 };
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [
@@ -750,10 +753,11 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...GCP_COMPONENTS,
   ...CROSS_COMPONENTS,
   ...BACKUP_COMPONENTS,
+  ...EMAIL_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
-// DB のバックアップの既定はどの事業者も「事業者の既定のまま」（D-93）
+// DB のバックアップの既定はどの事業者も「事業者の既定のまま」（D-93）。メール送信の既定は構成の既定の送り先（D-95）
 export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   cloudflare: {
     isrCache: 'kv',
@@ -761,23 +765,42 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
     db: 'd1',
     realtime: 'none',
     dbBackup: 'default',
+    email: 'default',
   },
   vercel: {
     isrCache: 'default',
     images: 'default',
     db: 'supabase',
     dbBackup: 'default',
+    email: 'default',
   },
   sakura: {
     isrCache: 'default',
     images: 'default',
     frontCdn: 'none',
     dbBackup: 'default',
+    email: 'default',
   },
-  aws: { ...AWS_DEFAULT_CHOICES, dbBackup: 'default' },
-  'aws-opennext': { ...OPENNEXT_DEFAULT_CHOICES, dbBackup: 'default' },
-  netlify: { ...NETLIFY_DEFAULT_CHOICES, dbBackup: 'default' },
-  gcp: { ...GCP_DEFAULT_CHOICES, dbBackup: 'default' },
+  aws: {
+    ...AWS_DEFAULT_CHOICES,
+    dbBackup: 'default',
+    email: 'default',
+  },
+  'aws-opennext': {
+    ...OPENNEXT_DEFAULT_CHOICES,
+    dbBackup: 'default',
+    email: 'default',
+  },
+  netlify: {
+    ...NETLIFY_DEFAULT_CHOICES,
+    dbBackup: 'default',
+    email: 'default',
+  },
+  gcp: {
+    ...GCP_DEFAULT_CHOICES,
+    dbBackup: 'default',
+    email: 'default',
+  },
 };
 
 /**
@@ -1416,19 +1439,25 @@ export function composeStack(
         ? withBuild(shaped, def.platform, def.plan, 'Next.js')
         : shaped;
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
-  // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）は、部品を差し終えた後にまとめて足す
-  return withBackups(
-    withLogs(
-      applyCrossApi(
-        built,
-        def.platform,
-        def.plan,
-        c,
-        standby,
-        options.framework ?? 'nextjs',
+  // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）・メールの送信（D-95）は、部品を差し終えた後にまとめて足す
+  // アプリのメールの送信（D-95）も最後に足す（経路を持たない）
+  return withEmail(
+    withBackups(
+      withLogs(
+        applyCrossApi(
+          built,
+          def.platform,
+          def.plan,
+          c,
+          standby,
+          options.framework ?? 'nextjs',
+        ),
       ),
+      c.dbBackup,
     ),
-    c.dbBackup,
+    def.platform,
+    def.plan,
+    c.email,
   );
 }
 

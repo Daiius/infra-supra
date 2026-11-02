@@ -1253,10 +1253,15 @@ export function meetsRequirement(
       return st.length > 0 && st.every((s) => s.pitrDays >= PITR_REQUIRED_DAYS);
     }
     case 'uptime-sla': {
-      // バックアップの置き場（VPS の自前のバックアップのオブジェクトストレージ）はアプリの稼働に関わらないので見ない（D-93）
+      // バックアップの置き場（VPS の自前のバックアップのオブジェクトストレージ。D-93）とメールの送信（D-95）は
+      // アプリの稼働に関わらないので見ない
       const plans = composeStack(STACK_DEFS[stackIndex]!, components)
         .nodes.flatMap((n) =>
-          n.billing && n.config.kind !== 'db-backup' ? [n.billing] : [],
+          n.billing &&
+          n.config.kind !== 'db-backup' &&
+          n.config.kind !== 'email-sender'
+            ? [n.billing]
+            : [],
         )
         .map((b) =>
           books
@@ -1776,6 +1781,7 @@ const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
   supabase: 'Supabase',
   netlify: 'Netlify',
   neon: 'Neon',
+  resend: 'Resend',
   sakura: 'さくらのクラウド',
   gcp: 'Google Cloud',
 };

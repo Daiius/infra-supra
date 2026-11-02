@@ -305,4 +305,23 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
       ],
     ]),
   ),
+  // メール送信（D-95）。構成の既定は事業者ごとに送り先が違う
+  'cloudflare:email:default':
+    '同じアカウントの中で送れ、設定が少ない。新しい機能なので、上限は使い方で決まる',
+  'aws:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い',
+  'aws-opennext:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い',
+  'vercel:email:default':
+    '開発者に人気の送信のサービス。無料の構成では無料の枠で始められる',
+  'netlify:email:default':
+    '開発者に人気の送信のサービス。無料の構成では無料の枠で始められる',
+  'gcp:email:default':
+    '開発者に人気の送信のサービスの有料プラン。月額で通数がたっぷり込み',
+  'sakura:email:default':
+    '開発者に人気の送信のサービスの有料プラン。月額で通数がたっぷり込み',
+  'aws:email:ses':
+    '大手のクラウドの送信のサービス。送った通数だけの支払いで、月額は無い',
+  'resend:email:resend-pro':
+    '開発者に人気の送信のサービスの有料プラン。月額で通数がたっぷり込み',
 };
