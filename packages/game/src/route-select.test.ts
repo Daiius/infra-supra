@@ -109,14 +109,20 @@ describe('始める画面で選ぶ（D-107）', () => {
     expect(playMonth(s).phase).toBe('playing');
   });
 
-  it('使えない描き方は捨てる（個人向けのキャッシュ・S6）。vinext の S1 は選べる（RS-15 の解除）', () => {
+  it('使えない描き方は捨てる（個人向けのキャッシュ・vinext の S6）。vinext の S1・Astro の S6 は選べる（RS-15 の解除・D-108）', () => {
     expect(
       start(CF_PAID, 'nextjs', { article: 'static-build' }).routes,
     ).toEqual({ article: 'static-build' });
     expect(start(CF_PAID, 'astro', { personal: 'cached-ttl' }).routes).toBe(
       undefined,
     );
-    expect(start(CF_PAID, 'astro', { personal: 'server-island' }).routes).toBe(
+    expect(
+      start(CF_PAID, 'astro', { personal: 'server-island' }).routes,
+    ).toEqual({ personal: 'server-island' });
+    expect(start(CF_PAID, 'nextjs', { personal: 'server-island' }).routes).toBe(
+      undefined,
+    );
+    expect(start(CF_PAID, 'astro', { article: 'server-island' }).routes).toBe(
       undefined,
     );
     // フレームワークの既定と分け方が同じなら持たない

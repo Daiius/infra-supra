@@ -236,7 +236,7 @@ D-107 の後は、カードには既定の描き方を短く出し、ページ�
 
 - データだけでは足りなかったのは 2 つ: **ビルドし直しの費用**（estimator の資源・Workload の `build`・ノード `ci-build`）と、**載せられない組の検証**（`unsupported` の DeployTarget を始める画面・乗り換えで弾く）。それ以外（ルートの書き換え・構成の分岐・部品の出し分け・設定の意味）は SPA と同じ仕組みで足りた。06 §2.1 の BuildOutput の型は、まだ作らなくてよい。
 - API の置き場（D-69・prd/10 §9.7）: Vercel・VPS の Astro + Cloudflare Workers・D1、Cloudflare の Astro + さくらの VPS の API を許した。
-- 後の段: ~~ページごとに描き方を選ぶ形（RS の段 2〜3。Astro の記事を静的・毎回描くにも戻せるようにする）~~ → D-106・D-107（[13](./13-route-strategies.md)）、Server Islands（13 の段 5・S6）、Astro × AWS（コミュニティのアダプター・SST）、フレームワークごとの描画の CPU の倍率（RS-06。計測してから）、Workers Cache が拠点ごとに分かれてヒット率が下がる分（数えていない）、上限の内訳の文の「ISR の閲覧と再生成」を Astro では「キャッシュの描き直し」と書くこと（estimator の文は描き方の名前を知らない）。Next.js の `output: 'export'`（F-03）は §7（D-80）で入れた。Vercel の `isr` で記事を描く形は D-103 で入れた。
+- 後の段: ~~ページごとに描き方を選ぶ形（RS の段 2〜3。Astro の記事を静的・毎回描くにも戻せるようにする）~~ → D-106・D-107（[13](./13-route-strategies.md)）、~~Server Islands（13 の段 5・S6）~~ → D-108、Astro × AWS（コミュニティのアダプター・SST）、フレームワークごとの描画の CPU の倍率（RS-06。計測してから）、Workers Cache が拠点ごとに分かれてヒット率が下がる分（数えていない）、上限の内訳の文の「ISR の閲覧と再生成」を Astro では「キャッシュの描き直し」と書くこと（estimator の文は描き方の名前を知らない）。Next.js の `output: 'export'`（F-03）は §7（D-80）で入れた。Vercel の `isr` で記事を描く形は D-103 で入れた。
 
 ## 7. Next.js の静的書き出し（`output: 'export'`。実装・2026-11-02・D-80）
 

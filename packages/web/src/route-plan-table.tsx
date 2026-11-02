@@ -19,7 +19,7 @@ const STRATEGY_SOURCE: Record<RouteStrategyId, RegionSource> = {
   'cached-purge': 'cached',
   ssr: 'ssr',
   'shell-api': 'api',
-  'server-island': 'island',
+  'server-island': 'server-island',
 };
 
 export function Swatch({ strategy }: { strategy: RouteStrategyId }) {
@@ -263,4 +263,4 @@ export function RoutePresetChips({ rows }: { rows: RoutePlanRow[] }) {
 
 /** 表の下の注記（始める画面・見積モードで同じ文）。 */
 export const ROUTE_PLAN_NOTE =
-  '描き方はフレームワークの既定から、ページごとに選び直せる（人ごとに違うページは使い回す描き方を選べない）。期限・オンデマンドは設定（再検証・記事のキャッシュ）で決まる。費用の差は 1 か月目の基準の規模での目安。確かめていない描き方（vinext の事前描画・Server Islands・PPR）は出していない。';
+  '描き方はフレームワークの既定から、ページごとに選び直せる（人ごとに違うページは使い回す描き方を選べない）。期限・オンデマンドは設定（再検証・記事のキャッシュ）で決まる。費用の差は 1 か月目の基準の規模での目安。公式の文書で確かめていない組み合わせ（Next.js × Netlify・OpenNext の PPR など）は出していない。';

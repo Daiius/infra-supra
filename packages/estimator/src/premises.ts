@@ -89,11 +89,17 @@ export function cpuSourceText(s: CpuSource): string {
   const mode =
     s.routeId === undefined
       ? undefined
-      : s.requestClass === 'api' && s.rendering === 'spa'
-        ? 'ブラウザが API で中身を取る'
-        : s.requestClass === 'isr-revalidate' && !s.background
-          ? 'ISR の再生成'
-          : SOURCE_MODE[s.requestClass];
+      : s.island
+        ? 'サーバーの島'
+        : s.islandShell
+          ? s.requestClass === 'document-isr'
+            ? '島の枠をキャッシュから返す'
+            : '島の枠の閲覧と描き直し'
+          : s.requestClass === 'api' && s.rendering === 'spa'
+            ? 'ブラウザが API で中身を取る'
+            : s.requestClass === 'isr-revalidate' && !s.background
+              ? 'ISR の再生成'
+              : SOURCE_MODE[s.requestClass];
   return `${name}（${mode ? `${mode}・` : ''}CPU ${ms(s.cpuMs)} ms）`;
 }
 
@@ -112,10 +118,11 @@ function cpuCauses(
 ): Pick<PlatformPremise, 'causes' | 'detail'> {
   const all = sim.nodes[node.id]!.cpuSources;
   if (all.length === 0) return {};
-  // 同じルートが閲覧と再生成の両方で出るときは重いほうだけ（並びは重い順）
+  // 同じルートが閲覧と再生成の両方で出るときは重いほうだけ（並びは重い順）。サーバーの島（S6）は枠と別に出す（D-108）
   const seen = new Set<string>();
   const uniq = all.filter((s) => {
-    const key = s.routeId ?? `class:${s.requestClass}`;
+    const key =
+      (s.routeId ?? `class:${s.requestClass}`) + (s.island ? ':island' : '');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

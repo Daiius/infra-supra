@@ -23,6 +23,7 @@ import {
   browserCallsApi,
   rebuildsStaticPages,
   applyRouteStrategies,
+  serverIslandDelivery,
   defaultStrategy,
   FRAMEWORK_PRESETS,
   routeAudience,
@@ -1395,14 +1396,18 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   const uses = (f: StrategyFamily) =>
     Object.values(plan).some((c) => strategyFamily(c.strategy) === f);
   // S5 には SPA の形、S1 にはビルドの時間の式（Astro の形）が要る。無いシナリオではそのフレームワークの書き換えをしない（今までと同じ）
+  // S6 の島の届け方（Astro は別のリクエスト・Next.js の PPR は同じ応答の中。D-108）
+  const island = serverIslandDelivery(p.framework);
   const ready =
     (!uses('api') || shape !== undefined) &&
     (!uses('static') || astro !== undefined) &&
+    (!uses('island') || island !== undefined) &&
     (p.framework !== 'astro' || astro !== undefined);
   const routed = ready
     ? applyRouteStrategies(w, plan, {
         ...(shape ? { spa: shape } : {}),
         ...(astro ? { minutesPerBuild: astro.minutesPerBuild, build } : {}),
+        ...(island ? { island } : {}),
       })
     : w;
   // Astro の JS・CSS はアイランドの分だけ（描き方でなくフレームワークの性質）
@@ -1553,9 +1558,14 @@ export function staticBuildOf(
   const staticBuild = Object.values(valid).some(
     (x) => x !== undefined && strategyFamily(x) === 'static',
   );
-  // Astro で記事をキャッシュしない（S1・S4・S5）なら、Workers Cache を前に置かない
+  // Astro で記事をキャッシュしない（S1・S4・S5）なら、Workers Cache を前に置かない。
+  // S6 のページがあれば、その枠をキャッシュするので置く（D-108）
+  const island = Object.values(valid).some(
+    (x) => x !== undefined && strategyFamily(x) === 'island',
+  );
   const noCache =
     framework === 'astro' &&
+    !island &&
     articleFamily({ scenario: sc, framework, routes: valid }) !== 'cached';
   return {
     ...(staticBuild ? { staticBuild } : {}),
@@ -3521,6 +3531,9 @@ export function setupCommentOptions(
   }));
 }
 
+/** サーバーが HTML の一部として作る区画の作られ方（S6 では枠になる。D-108）。 */
+const HTML_SOURCES: readonly RegionSource[] = ['build', 'isr', 'cached', 'ssr'];
+
 /** 描き方を替えた区画の作られ方（借りる図が無いとき。HTML の本体の区画だけを替え、API・アイランド・画像はそのまま）。 */
 function retagSource(src: RegionSource, s: RouteStrategyId): RegionSource {
   if (src !== 'build' && src !== 'isr' && src !== 'cached' && src !== 'ssr')
@@ -3596,14 +3609,35 @@ export function pageWireframes(
       ...base,
       ...(inPage ? w.commentsInPage?.[donor] : undefined),
     };
+    // 枠 + サーバーの島（S6。D-108）: 人ごとに違う区画は島、ほかの HTML の区画は枠（API・画像の区画はそのまま）
+    const islands =
+      chosen !== undefined && strategyFamily(chosen) === 'island'
+        ? new Set(w.islandRegions ?? [])
+        : undefined;
+    const sourceOf = (id: string): RegionSource => {
+      const src = sources[id] ?? 'ssr';
+      if (!islands) return src;
+      if (islands.has(id)) return 'server-island';
+      return HTML_SOURCES.includes(src) ? 'island-shell' : src;
+    };
     return {
       route: w.route,
       label: r?.label ?? w.route,
       regions: w.regions.map((r) => ({
         ...r,
-        source: sources[r.id] ?? 'ssr',
+        source: sourceOf(r.id),
       })),
-      badges: w.badges?.[donor] ?? [],
+      badges: islands
+        ? [
+            {
+              kind: 'cpu' as const,
+              text:
+                framework === 'astro'
+                  ? 'CPU: 島の分だけ閲覧ごとに描く（島は別のリクエスト・枠はキャッシュ）'
+                  : 'CPU: 島の分だけ閲覧ごとに描く（同じ応答の中で続けて流す）',
+            },
+          ]
+        : (w.badges?.[donor] ?? []),
     };
   });
 }
@@ -3658,8 +3692,8 @@ export function routeChoices(
 }
 
 /**
- * 描き方をその事業者・フレームワーク・見る人で選べるか（D-107）。対応表で使える（部品で決まるものを含む）・数え方がある（S6 は無い）。
- * 確かめていない描き方（vinext の S1・S6）は選べない（RS-04・RS-18）。
+ * 描き方をその事業者・フレームワーク・見る人で選べるか（D-107）。対応表で使える（部品で決まるものを含む）・数え方がある。
+ * 確かめていない描き方（Next.js × Netlify・OpenNext の S6）は選べない（RS-04・RS-18）。S6 は人ごとに違うページだけ（D-108）。
  */
 export function strategySelectable(
   framework: FrameworkId,
@@ -4004,8 +4038,9 @@ export function routeChangeEffort(
   const t = strategyFamily(to);
   if (f === t) return 0;
   // ページを枠と API に分ける（Client Component・アイランドと API を書く）。SSR の最適化と同じ大きさ
-  if (t === 'api' || t === 'island') return EFFORT.route.toApi;
-  // キャッシュのヘッダ・消す処理・prerender（generateStaticParams）の切り替え
+  if (t === 'api') return EFFORT.route.toApi;
+  // キャッシュのヘッダ・消す処理・prerender（generateStaticParams）の切り替え。
+  // サーバーの島（S6）も 3: 人ごとに違う部品に server:defer（Astro）・Suspense（Next.js の PPR）を付け、API は書かない（D-108）
   return EFFORT.route.other;
 }
 

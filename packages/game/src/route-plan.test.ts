@@ -106,10 +106,18 @@ describe('ページごとの描き方の表（D-106）', () => {
     expect(
       personal.alternatives.find((a) => a.strategy === 'shell-api')!.available,
     ).toBe(true);
-    // 確かめていない S6 は出さない（RS-04）
-    expect(
-      personal.alternatives.some((a) => a.strategy === 'server-island'),
-    ).toBe(false);
+    // S6（Server Islands）は Cloudflare で選べる（D-108）。記事（全員に同じ）では数え方が無いので灰色
+    const s6 = personal.alternatives.find(
+      (a) => a.strategy === 'server-island',
+    )!;
+    expect(s6.available).toBe(true);
+    expect(s6.basis).toBe('source');
+    const article = r.find((x) => x.route === 'article')!;
+    const a6 = article.alternatives.find(
+      (a) => a.strategy === 'server-island',
+    )!;
+    expect(a6.available).toBe(false);
+    expect(a6.reason).toContain('人ごとに違うページだけ');
   });
 
   it('Astro × Google Cloud: 記事は S2（期限）で、S3 は Hosting の CDN で消せない理由つきの灰色', () => {

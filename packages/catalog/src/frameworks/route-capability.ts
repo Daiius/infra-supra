@@ -84,9 +84,112 @@ const SHELL_API_ANY = yes(
   'HTML は枠にして、中身をブラウザが API で取る（どのフレームワークでも作れる一般的な形。API の置き場は部品で選ぶ）',
   [],
 );
-const SERVER_ISLAND = unverified(
-  'Astro の Server Islands・Next.js の PPR。対応は公式の文書で確かめた（prd/13 §8）が、島のリクエストとキャッシュの数え方がまだ無いので出さない（段 5）',
+/** S6 の対応を確かめた公式の文書（2026-11-03 取得。prd/13 §8・D-108）。 */
+const ASTRO_ISLANDS: Source = {
+  url: 'https://docs.astro.build/en/guides/server-islands/',
+  retrievedAt: '2026-11-03',
+};
+const astroAdapter = (name: string): Source => ({
+  url: `https://docs.astro.build/en/guides/integrations-guide/${name}/`,
+  retrievedAt: '2026-11-03',
+});
+const NEXT_PPR: Source[] = [
+  {
+    url: 'https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents',
+    retrievedAt: '2026-11-03',
+  },
+  {
+    url: 'https://nextjs.org/docs/app/guides/deploying-to-platforms',
+    retrievedAt: '2026-11-03',
+  },
+  {
+    url: 'https://nextjs.org/docs/app/guides/self-hosting',
+    retrievedAt: '2026-11-03',
+  },
+];
+const AMPLIFY_NEXT: Source = {
+  url: 'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
+  retrievedAt: '2026-11-03',
+};
+
+/** S6 の数え方の要約（どの組でも同じ。D-108・ゲーム上の仮定）。 */
+const ISLAND_COUNT =
+  '島の CPU はページ全体の SSR の 4 割とみなす（ゲーム上の仮定）';
+
+/** S6 を全員に同じページに使う数え方はまだ無い（記事の動く部品はコメントの描き方・アイランドで数える。段 4）。 */
+const ISLAND_PUBLIC = no(
+  'このゲームでは、枠 + サーバーの島は人ごとに違うページだけに使う（記事の動く部品はブラウザが API で取る形で数える。段 4）',
 );
+
+/** Astro の Server Islands（D-108）。Cloudflare・Node（VPS）・Netlify はアダプターの頁に明記、Vercel・Cloud Run は仮。 */
+function astroIsland(d: DeployTarget): StrategySupport {
+  const how =
+    '`server:defer` の島を、枠とは別の GET のリクエストでサーバーが描く。枠は人ごとに違わないので 1 日の期限でキャッシュし、島は人ごとに違うのでキャッシュしない（props が 2,048 バイトを超えると POST になり、どのみちキャッシュされない）。' +
+    ISLAND_COUNT;
+  switch (d.platform) {
+    case 'cloudflare':
+      return yes(
+        `${how}。@astrojs/cloudflare の頁が server islands を含めて配れると書く`,
+        [ASTRO_ISLANDS, astroAdapter('cloudflare')],
+      );
+    case 'sakura':
+      return yes(`${how}。@astrojs/node の頁が server islands に対応と書く`, [
+        ASTRO_ISLANDS,
+        astroAdapter('node'),
+      ]);
+    case 'netlify':
+      return yes(
+        `${how}。@astrojs/netlify の頁が server islands の skew protection を設定すると書く`,
+        [ASTRO_ISLANDS, astroAdapter('netlify')],
+      );
+    case 'vercel':
+      return {
+        ...yes(
+          `${how}。@astrojs/vercel の頁は機能の一つとして触れるだけで、Server Islands の頁の「どのホストでも動く」から使えるとみなす（ゲーム上の仮定）`,
+          [ASTRO_ISLANDS, astroAdapter('vercel')],
+        ),
+        basis: 'assumption',
+      };
+    case 'gcp':
+      return {
+        ...yes(
+          `${how}。Cloud Run の Node のアダプターは VPS と同じとみなす（Cloud Run の頁は取得していない。ゲーム上の仮定）`,
+          [ASTRO_ISLANDS, astroAdapter('node')],
+        ),
+        basis: 'assumption',
+      };
+    default:
+      return unverified('Astro の Server Islands をこの事業者で確かめていない');
+  }
+}
+
+/** Next.js の PPR（16 の cacheComponents。D-108）。Vercel・Node の standalone・Cloud Run は ✓、vinext・Amplify は ✗。 */
+function nextIsland(d: DeployTarget): StrategySupport {
+  const how =
+    'Partial Prerendering（Next.js 16 の cacheComponents の既定）。静的な枠を先に流し、人ごとに違う部分を同じ応答の中で続けて描く。枠を CDN から配るかはアダプターしだいなので、閲覧ごとに処理を通して島の分だけ描くとみなす（origin だけの形）。' +
+    ISLAND_COUNT;
+  switch (d.platform) {
+    case 'vercel':
+    case 'sakura':
+    case 'gcp':
+      return yes(
+        `${how}。next start（Node）が PPR・Cache Components を扱う（Node のランタイムが要る）`,
+        NEXT_PPR,
+      );
+    case 'cloudflare':
+      return no(
+        'vinext は cacheComponents の挙動がまだ不完全（README: partial shells・resume behavior が Next.js と合わない）',
+        VINEXT_PRERENDER.slice(0, 1),
+      );
+    case 'aws':
+      return no(
+        'Amplify は Next.js 15 まで（PPR を既定にした cacheComponents は 16）',
+        [AMPLIFY_NEXT],
+      );
+    default:
+      return unverified('Next.js の PPR をこの事業者で確かめていない');
+  }
+}
 
 /** Next.js の S3: ISR のキャッシュの部品の onDemandIsr から（消せる部品・消せない部品）。 */
 function nextPurge(d: DeployTarget): StrategySupport {
@@ -134,7 +237,7 @@ function nextjsRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     'cached-purge': nextPurge(d),
     ssr: yes('Server Components を閲覧のたびに描く（動的な描画）', d.sources),
     'shell-api': SHELL_API_ANY,
-    'server-island': SERVER_ISLAND,
+    'server-island': nextIsland(d),
   };
 }
 
@@ -154,7 +257,7 @@ function astroRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
         : no(c ? c.reason : '記事をキャッシュする置き場が無い', d.sources),
     ssr: yes('アダプターが閲覧のたびに描く（on-demand rendering）', d.sources),
     'shell-api': SHELL_API_ANY,
-    'server-island': SERVER_ISLAND,
+    'server-island': astroIsland(d),
   };
 }
 
@@ -240,7 +343,16 @@ export function strategySupport(
 ): StrategySupport {
   const def = ROUTE_STRATEGIES[strategy];
   if (audience === 'personal' && !def.personalOk) return no(def.why.personal);
-  return capabilityRow(framework, platform)[strategy];
+  const row = capabilityRow(framework, platform)[strategy];
+  // 全員に同じページの S6 は数え方が無い（D-108）。載せられない組・確かめていない組はその理由のまま
+  if (
+    audience === 'public' &&
+    strategy === 'server-island' &&
+    row.support !== 'no' &&
+    row.support !== 'unverified'
+  )
+    return ISLAND_PUBLIC;
+  return row;
 }
 
 /**

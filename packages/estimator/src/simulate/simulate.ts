@@ -41,6 +41,10 @@ export type CpuSource = {
   cpuMs: number;
   /** 裏で走るクラス（ISR の再生成）を、起こした閲覧の実行に足した値。 */
   background?: boolean;
+  /** サーバーの島（S6）を描くリクエスト（RequestSource の island。D-108）。 */
+  island?: boolean;
+  /** サーバーの島のページの枠（RequestSource の islandShell。D-108）。 */
+  islandShell?: boolean;
 };
 
 export type NodeUsage = {
@@ -251,6 +255,8 @@ function consume(
               ...(s.routeId !== undefined ? { routeId: s.routeId } : {}),
               ...(s.label !== undefined ? { label: s.label } : {}),
               ...(s.rendering !== undefined ? { rendering: s.rendering } : {}),
+              ...(s.island ? { island: true } : {}),
+              ...(s.islandShell ? { islandShell: true } : {}),
               cpuMs: Math.max(m > 0 ? s.cpuMs : 0, h > 0 ? hitCpu : 0),
             },
           ];

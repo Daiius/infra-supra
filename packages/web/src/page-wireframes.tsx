@@ -19,16 +19,21 @@ export const SOURCE_CLASS: Record<RegionSource, string> = {
   ssr: 'border-warning bg-warning/15',
   api: 'border-dashed border-secondary bg-secondary/10',
   island: 'border-dashed border-secondary bg-secondary/10',
+  // 枠 + サーバーの島（S6。D-108）: 枠はキャッシュの色、島は閲覧ごとに描く色（斜線つき）を破線で
+  'island-shell': 'border-info bg-info/10',
+  'server-island': 'border-dashed border-warning bg-warning/15',
   shell: 'border-base-content/40 bg-base-200',
   image: 'border-dotted border-accent bg-accent/10',
 };
 
 /** 閲覧ごとにサーバーが描く区画は斜線も重ねる（色に頼らない手がかり）。 */
+const PER_VIEW_STRIPES: CSSProperties = {
+  backgroundImage:
+    'repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--color-warning) 30%, transparent) 6px 8px)',
+};
 export const SOURCE_STYLE: Partial<Record<RegionSource, CSSProperties>> = {
-  ssr: {
-    backgroundImage:
-      'repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--color-warning) 30%, transparent) 6px 8px)',
-  },
+  ssr: PER_VIEW_STRIPES,
+  'server-island': PER_VIEW_STRIPES,
 };
 
 const HEIGHT = { sm: 'min-h-9', md: 'min-h-14', lg: 'min-h-20' } as const;

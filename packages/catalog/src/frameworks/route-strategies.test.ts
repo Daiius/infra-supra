@@ -22,6 +22,8 @@ import {
   ROUTE_STRATEGIES,
   ROUTE_STRATEGY_ORDER,
   routeAudience,
+  SERVER_ISLAND,
+  serverIslandDelivery,
 } from './route-strategies.ts';
 
 const FRAMEWORK_IDS = Object.keys(FRAMEWORK_PRESETS) as FrameworkId[];
@@ -145,11 +147,56 @@ describe('対応表（フレームワーク × 事業者）', () => {
     ).not.toContain('ゲーム上の仮定');
   });
 
-  it('S6 は確かめるまで出さない（段 5。事実は prd/13 §8）', () => {
-    for (const f of ['nextjs', 'astro'] as const)
-      expect(capabilityRow(f, 'vercel')['server-island'].support).toBe(
-        'unverified',
+  it('S6 の対応（prd/13 §8・D-108）: Astro は CF・VPS・Netlify が出典・Vercel と Cloud Run は仮、Next.js の PPR は Vercel・VPS・Cloud Run', () => {
+    const at = (f: FrameworkId, p: Parameters<typeof capabilityRow>[1]) =>
+      capabilityRow(f, p)['server-island'];
+    for (const p of ['cloudflare', 'sakura', 'netlify'] as const) {
+      expect(at('astro', p).support, p).toBe('yes');
+      expect(at('astro', p).basis, p).toBe('source');
+      expect(at('astro', p).sources.map((s) => s.url)).toContain(
+        'https://docs.astro.build/en/guides/server-islands/',
       );
+    }
+    for (const p of ['vercel', 'gcp'] as const) {
+      expect(at('astro', p).support, p).toBe('yes');
+      expect(at('astro', p).basis, p).toBe('assumption');
+      expect(at('astro', p).note).toContain('ゲーム上の仮定');
+    }
+    for (const p of ['vercel', 'sakura', 'gcp'] as const) {
+      expect(at('nextjs', p).support, p).toBe('yes');
+      expect(at('nextjs', p).basis, p).toBe('source');
+      expect(at('nextjs', p).note).toContain('cacheComponents');
+    }
+    // vinext は cacheComponents が未完成・Amplify は Next.js 15 まで
+    expect(at('nextjs', 'cloudflare').support).toBe('no');
+    expect(at('nextjs', 'cloudflare').note).toContain('vinext');
+    expect(at('nextjs', 'aws').support).toBe('no');
+    expect(at('nextjs', 'aws').note).toContain('15');
+    // 一次情報を取っていない組は出さない
+    expect(at('nextjs', 'netlify').support).toBe('unverified');
+    expect(at('nextjs', 'aws-opennext').support).toBe('unverified');
+    // サーバーの無いフレームワークは使えない
+    for (const f of ['nextjs-export', 'vite-spa'] as const)
+      expect(at(f, 'vercel').support).toBe('no');
+  });
+
+  it('S6 は人ごとに違うページだけ（全員に同じページは数え方が無いので灰色。D-108）', () => {
+    expect(
+      strategySupport('astro', 'cloudflare', 'personal', 'server-island')
+        .support,
+    ).toBe('yes');
+    const pub = strategySupport(
+      'astro',
+      'cloudflare',
+      'public',
+      'server-island',
+    );
+    expect(pub.support).toBe('no');
+    expect(pub.note).toContain('人ごとに違うページだけ');
+    // 使えない組の理由はそのまま
+    expect(
+      strategySupport('nextjs', 'cloudflare', 'public', 'server-island').note,
+    ).toContain('vinext');
   });
 
   it('静的書き出しは S1・S5 だけ、SPA は S5 だけ', () => {
@@ -205,7 +252,15 @@ describe('applyRouteStrategies', () => {
       ),
     ).toThrow();
     expect(() =>
-      applyRouteStrategies(w, { article: { strategy: 'server-island' } }),
+      applyRouteStrategies(
+        w,
+        { article: { strategy: 'server-island' } },
+        { island: 'request' },
+      ),
+    ).toThrow();
+    // 島の届け方が無いと数えられない
+    expect(() =>
+      applyRouteStrategies(w, { personal: { strategy: 'server-island' } }),
     ).toThrow();
     expect(() =>
       applyRouteStrategies(w, { article: { strategy: 'shell-api' } }),
@@ -222,5 +277,59 @@ describe('applyRouteStrategies', () => {
     expect(article).toMatchObject({ rendering: 'spa', cacheSeconds: 300 });
     expect(personal!.rendering).toBe('spa');
     expect(personal).not.toHaveProperty('cacheSeconds');
+  });
+
+  it('S6（Astro）: 個人向けのページを、1 日の期限でキャッシュする枠と、閲覧ごとの島のリクエスト（SSR の 4 割の CPU）に分ける（D-108）', () => {
+    const out = applyRouteStrategies(
+      w,
+      { personal: { strategy: 'server-island' } },
+      { island: 'request' },
+    );
+    const before = w.routes[1]!;
+    const shell = out.routes[1]!;
+    expect(out.routes[0]).toEqual(w.routes[0]);
+    expect(shell).toMatchObject({
+      id: 'personal',
+      label: before.label,
+      rendering: 'isr',
+      share: before.share,
+      revalidateSeconds: SERVER_ISLAND.shellRevalidateSeconds,
+      cachedServeCpuMs: SERVER_ISLAND.shellCachedServeCpuMs,
+    });
+    expect(shell.processing.queries).toBe(0);
+    expect(shell.processing.cpuMs).toBeCloseTo(before.processing.cpuMs * 0.6);
+    expect(shell.island!.request).toEqual({
+      ...before.processing,
+      cpuMs: before.processing.cpuMs * 0.4,
+      responseKB: before.processing.responseKB * 0.4,
+    });
+    // 枠と島の CPU の合計は、ページ全体の SSR と同じ
+    expect(shell.processing.cpuMs + shell.island!.request!.cpuMs).toBeCloseTo(
+      before.processing.cpuMs,
+    );
+  });
+
+  it('S6（Next.js の PPR）: 毎回描く（ssr）のまま、CPU を島の分にして島の印を付ける（D-108）', () => {
+    const out = applyRouteStrategies(
+      w,
+      { personal: { strategy: 'server-island' } },
+      { island: 'stream' },
+    );
+    const before = w.routes[1]!;
+    expect(out.routes[1]).toEqual({
+      ...before,
+      processing: {
+        ...before.processing,
+        cpuMs: before.processing.cpuMs * SERVER_ISLAND.islandShare,
+      },
+      island: {},
+    });
+  });
+
+  it('S6 の島の届け方: Astro は別のリクエスト・Next.js は同じ応答・静的書き出しと SPA は無い', () => {
+    expect(serverIslandDelivery('astro')).toBe('request');
+    expect(serverIslandDelivery('nextjs')).toBe('stream');
+    expect(serverIslandDelivery('nextjs-export')).toBeUndefined();
+    expect(serverIslandDelivery('vite-spa')).toBeUndefined();
   });
 });

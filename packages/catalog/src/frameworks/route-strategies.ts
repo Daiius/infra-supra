@@ -28,7 +28,7 @@ export type RouteStrategyDef = {
   personalOk: boolean;
   /** その見る人のページで、この描き方が何の要件に応えるか（画面の「なぜ」の列）。 */
   why: Record<RouteAudience, string>;
-  /** 今のモデルで Workload に当てられるか（S6 は段 5。それまでは表に出すだけ）。 */
+  /** 今のモデルで Workload に当てられるか（S6 は段 5・D-108 で数え方を足した）。 */
   modeled: boolean;
 };
 
@@ -114,9 +114,9 @@ export const ROUTE_STRATEGIES: Readonly<
       public:
         '全員に同じ部分は使い回し、動く部分だけをサーバーが描く。SNS のカードは HTML に入る',
       personal:
-        '枠は使い回し、人ごとに違う部分だけをサーバーが描く（描く量が減る）',
+        '枠は使い回し、人ごとに違う部分（島）だけを閲覧ごとにサーバーが描く。1 リクエストの CPU は島の分だけで、枠の HTML（メタタグ）はそのまま返る',
     },
-    modeled: false,
+    modeled: true,
   },
 };
 
@@ -206,8 +206,39 @@ export function presetPlan(
   );
 }
 
-/** 描き方を Workload に当てるときに要る形（テンプレートの既定値。S1 のビルド・S5 の API）。 */
+/**
+ * S6（枠 + サーバーの島）の数え方の値（D-108・prd/13 §8。**ゲーム上の仮定**・出典なし）。
+ * - islandShare: 島を描く CPU（と、Astro の島の応答の大きさ）の、ページ全体の SSR に対する割合。人ごとに違う部分（通知・一覧など）
+ *   だけを描く。DB の問い合わせ・I/O 待ちはすべて島の側。フレームワークごとの描画の倍率は 1 のまま（RS-06）。
+ * - 枠（Astro）: 島を除いた残り（1 − islandShare）を描き、人ごとに違わないので事業者の置き場にキャッシュする（S2 の経路）。
+ *   枠はデプロイでしか変わらないので 1 日の期限で取り直す。キャッシュから返す CPU は記事のページの cachedServeCpuMs と同じ 2 ms。
+ */
+export const SERVER_ISLAND = {
+  islandShare: 0.4,
+  shellRevalidateSeconds: 86_400,
+  shellCachedServeCpuMs: 2,
+} as const;
+
+/**
+ * 島の届け方（D-108・prd/13 §8.2）。request: 枠とは別のリクエスト（Astro の Server Islands は島を GET で取る）。
+ * stream: 枠と同じ応答の中（Next.js の PPR は静的な枠を先に流し、動的な部分を同じ応答で続けて流す）。
+ * PPR の枠を CDN から配るのはアダプター・CDN の実装しだいなので仮定せず、閲覧ごとに処理を通して島の分だけ描く（origin だけの形）。
+ * S6 の無いフレームワークは undefined。
+ */
+export function serverIslandDelivery(
+  framework: FrameworkId,
+): 'request' | 'stream' | undefined {
+  return framework === 'astro'
+    ? 'request'
+    : framework === 'nextjs'
+      ? 'stream'
+      : undefined;
+}
+
+/** 描き方を Workload に当てるときに要る形（テンプレートの既定値。S1 のビルド・S5 の API・S6 の島の届け方）。 */
 export type RouteStrategyContext = {
+  /** S6（枠 + サーバーの島）の届け方（serverIslandDelivery）。 */
+  island?: 'request' | 'stream';
   /** S5（枠 + API）の形。 */
   spa?: SpaShape;
   /** S1（静的）の 1 回のビルドの時間の式。 */
@@ -224,7 +255,9 @@ type Route = WorkloadInput['routes'][number];
  * - S2・S3: isr のまま（数え方は ISR と同じ。期限かオンデマンドかはルートの値で、呼ぶ側が先に付ける。RS-05）。
  * - S4: ssr のまま。isr なら ssr に（ISR のキャッシュの部品「なし」と同じ書き換え）。
  * - S5: isr・ssr → spa（中身はデータの API。CPU は SSR の dataCpuFactor 倍）。静的・spa のルートはそのまま。
- * まだ数え方の無い組（個人化のルートをキャッシュ・静的にする、S6）は例外にする（段 3・段 5）。
+ * - S6: ssr のルート（人ごとに違うページ）だけ（D-108）。Astro（request）は ssr → isr の枠（期限 1 日）+ 閲覧ごとの島のリクエスト
+ *   （island.request）。Next.js の PPR（stream）は ssr のまま、CPU を島の分（islandShare 倍）にして island を付ける。
+ * まだ数え方の無い組（個人化のルートをキャッシュ・静的にする、全員に同じページの S6）は例外にする。
  */
 export function applyRouteStrategies(
   w: WorkloadInput,
@@ -283,8 +316,44 @@ export function applyRouteStrategies(
           },
         };
       }
-      case 'server-island':
-        throw unsupported();
+      case 'server-island': {
+        if (r.rendering !== 'ssr') throw unsupported();
+        const delivery = ctx.island;
+        if (!delivery)
+          throw new Error('S6（サーバーの島）には島の届け方（island）が要る');
+        const p = r.processing;
+        const k = SERVER_ISLAND.islandShare;
+        if (delivery === 'stream')
+          return {
+            ...r,
+            processing: { ...p, cpuMs: p.cpuMs * k },
+            island: {},
+          };
+        return {
+          id: r.id,
+          ...(r.label !== undefined ? { label: r.label } : {}),
+          rendering: 'isr' as const,
+          share: r.share,
+          pages: r.pages,
+          revalidateSeconds: SERVER_ISLAND.shellRevalidateSeconds,
+          cachedServeCpuMs: SERVER_ISLAND.shellCachedServeCpuMs,
+          // 枠: 島を除いた残りを描く（DB は読まない）
+          processing: {
+            cpuMs: p.cpuMs * (1 - k),
+            ioWaitMs: 0,
+            queries: 0,
+            rowsReadPerQuery: 0,
+            responseKB: p.responseKB * (1 - k),
+          },
+          island: {
+            request: {
+              ...p,
+              cpuMs: p.cpuMs * k,
+              responseKB: p.responseKB * k,
+            },
+          },
+        };
+      }
     }
   });
   if (staticPages === 0) return { ...w, routes };

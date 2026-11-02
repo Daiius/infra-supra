@@ -1,6 +1,6 @@
 # 13. ページごとの描き方（ルートの描き方 S1〜S6）
 
-> 状態: **段 0〜3 は実装済み**（段 0 = D-99〜D-101、段 1 = D-103、段 2 = D-106、段 3 = D-107）。**段 4・5 は未実装**で、§7 の残りの論点は推奨案つき。
+> 状態: **段 0〜3・5 は実装済み**（段 0 = D-99〜D-101、段 1 = D-103、段 2 = D-106、段 3 = D-107、段 5 = D-108）。**段 4 は未実装**で、§7 の残りの論点は推奨案つき。
 > 2026-11-03 の公式の文書の調べで、vinext の S1 を出し（RS-15）、Workers Cache が Free でも使えることを事実にし（D-103）、S6 の対応を §8 に記録した（D-106・D-107 の補足）。
 > 出発点（2026-11-03）: 記事コミュニティ × Astro × Cloudflare Free で、Workers Free の 1 リクエスト CPU 10 ms に当たって止まった。原因は記事ではなく、個人向けのページ（SSR・CPU 15 ms）だった。
 > 「Astro = 静的 = 軽い」と思って選ぶと、個人向けのページが SSR のまま残る。ページの描き方がフレームワークで暗に決まり、選ぶ前に見えないことが混乱の元だった。
@@ -37,7 +37,7 @@ catalog の `ROUTE_STRATEGIES`（`packages/catalog/src/frameworks/route-strategi
 | S3 | `cached-purge` | サーバーで描いてキャッシュ（更新で消す） | 投稿・編集のときに、そのページのキャッシュを消す | 使えない |
 | S4 | `ssr` | 毎回描く | リクエストのたびに描く | 使える |
 | S5 | `shell-api` | 枠 + ブラウザが API で取る | HTML は静的な枠で、中身はブラウザが API で取る | 使える |
-| S6 | `server-island` | 枠 + サーバーの島 | 枠は使い回し、個人化した部分だけをサーバーが描く（Server Islands・PPR） | 使える（**未実装・要確認**） |
+| S6 | `server-island` | 枠 + サーバーの島 | 枠は使い回し、個人化した部分だけをサーバーが描く（Server Islands・PPR） | 使える（**人ごとに違うページだけに出す**。§5c・D-108） |
 
 - 個人化のページ（人ごとに違う中身）に S1〜S3 を入れると、ある人の中身が他の人に見える。対応表とプリセットで弾き、画面では灰色にして理由を添える。
 - 各描き方には、見る人ごとの「なぜ」（何の要件に応えるか）を持たせ、表の「なぜ」の列に出す。
@@ -46,6 +46,7 @@ catalog の `ROUTE_STRATEGIES`（`packages/catalog/src/frameworks/route-strategi
   - S2・S3 → `isr`（期限か、オンデマンドの値）
   - S4 → `ssr`
   - S5 → `spa`
+  - S6 → Astro は `isr` の枠（期限 1 日）+ 閲覧ごとの島のリクエスト（ルートの `island.request`）。Next.js の PPR は `ssr` のまま CPU を島の分にして `island: {}`（§5c）。種類は足さず、ルートに任意の欄 `island` を足した（D-108）
 
 ## 3. 対応表（フレームワーク × 事業者）
 
@@ -62,11 +63,11 @@ catalog の `capabilityRow`・`strategySupport`（`route-capability.ts`）。今
 
 | | S1 | S2 | S3 | S4 | S5 | S6 |
 |---|---|---|---|---|---|---|
-| Next.js × Cloudflare（vinext） | ✓（開発中・Worker を通る。RS-15） | ✓ | 部（R2・Workers Cache は消せる、KV は消せない） | ✓ | ✓仮 | ?（§8: ✗） |
-| Next.js × Vercel・VPS・Netlify・OpenNext | ✓ | ✓ | ✓ | ✓ | ✓仮 | ? |
-| Next.js × AWS（Amplify）・Google Cloud | ✓（処理を通さないのは仮） | ✓ | ✗（Amplify の ISR・Hosting の CDN は消して全体に届けられない） | ✓ | ✓仮 | ? |
-| Astro × Cloudflare・Vercel・VPS・Netlify | ✓ | ✓ | ✓ | ✓ | ✓仮 | ? |
-| Astro × Google Cloud | ✓ | ✓ | ✗（Hosting の CDN はデプロイでしか消えない） | ✓ | ✓仮 | ? |
+| Next.js × Cloudflare（vinext） | ✓（開発中・Worker を通る。RS-15） | ✓ | 部（R2・Workers Cache は消せる、KV は消せない） | ✓ | ✓仮 | ✗（cacheComponents が未完成） |
+| Next.js × Vercel・VPS・Netlify・OpenNext | ✓ | ✓ | ✓ | ✓ | ✓仮 | ✓（Vercel・VPS）／?（Netlify・OpenNext） |
+| Next.js × AWS（Amplify）・Google Cloud | ✓（処理を通さないのは仮） | ✓ | ✗（Amplify の ISR・Hosting の CDN は消して全体に届けられない） | ✓ | ✓仮 | ✗（Amplify は 15 まで）／✓（Google Cloud） |
+| Astro × Cloudflare・Vercel・VPS・Netlify | ✓ | ✓ | ✓ | ✓ | ✓仮 | ✓（Vercel は仮） |
+| Astro × Google Cloud | ✓ | ✓ | ✗（Hosting の CDN はデプロイでしか消えない） | ✓ | ✓仮 | ✓仮 |
 | Next.js 静的書き出し（どこでも） | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ |
 | Vite SPA（どこでも） | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
 
@@ -76,7 +77,7 @@ catalog の `capabilityRow`・`strategySupport`（`route-capability.ts`）。今
   - Worker を通ることは README の設計の文からの読みで、課金の明記は無い（`output: 'export'` の「served as assets only」は別の経路で、静的書き出しが使う）。
   - 選択肢の ⓘ に「vinext は開発中（README）」を出す。
 - **Amplify・Google Cloud の S1**: 静的なページを CDN が返し、処理（Amplify の compute・Cloud Run）を通さないとみなすのは**ゲーム上の仮定**（対応表の文に書いた）。Amplify の公式の文書は Next.js 15 までの「Static pages・SSG に対応」までで配り方・課金の記載が無い。Firebase App Hosting は「CDN に載った応答は Cloud Run に届かない」と書くが、キャッシュの外れ・期限切れは Cloud Run を呼ぶ（[About App Hosting](https://firebase.google.com/docs/app-hosting/about-app-hosting)・[Optimize caching](https://firebase.google.com/docs/app-hosting/optimize-cache)。2026-11-03 取得）。
-- S6 の列は画面に出さない（?）。確かめた対応は §8。
+- S6 の列の根拠は §8（D-108 で画面に出した）。S6 は人ごとに違うページだけに出し、全員に同じページ（記事）では「このゲームでは人ごとに違うページだけ」の理由つきの灰色にする（記事の動く部品はコメントの描き方・ブラウザの API で数える。段 4）。
 - 載せられない組（Astro × AWS など）は、すべて ✗ になる。理由は DeployTarget の文。
 - 「部」のセルは、今の部品で判定する。ゲームの `onDemandBlocker` を使い、前段の CDN の選択も見る。
 - AWS（Amplify・OpenNext）・Netlify の構成は隠している（D-100）が、古い保存の再生に使うので表には入れてある。
@@ -144,6 +145,23 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 - **保存**: `SAVE_VERSION` 2（始めた描き方 `routes`）。版 1 の保存は描き方を既定として読む（今の `routeChoices` で決まるもの。描き方を選べる前と同じ結果）。D-103 の行動の読み替えもそのまま効く。
 - **見積モード**: 描き方は URL の `rp.<ルート>=<描き方>` に残る。表から選べ、行ごとに SNS のカード・CPU の制限と、今の PV での月額の差を出す（鮮度はゲームの満足度の判定なので出さない）。構成の比較・費用の曲線も、選んだ描き方（構成ごとに使えないものは既定）で引く。
 
+## 5c. 実装（段 5・D-108）
+
+- **数え方**（catalog の `SERVER_ISLAND`・`serverIslandDelivery`・`applyRouteStrategies`。値は**ゲーム上の仮定**）:
+  - 島を描く CPU = ページ全体の SSR の **0.4 倍**（`islandShare`）。DB の問い合わせ・I/O 待ちはすべて島の側。フレームワークごとの描画の倍率は 1 のまま（RS-06）。
+  - **Astro（Server Islands。`request`）**: 島は枠とは別の GET のリクエスト。ルートを `isr` の枠に書き換え、閲覧 1 回ごとに `document-ssr` を 1 件足す（estimator のルートの `island.request`）。
+    - 枠: 島を除いた残り（CPU・応答の 0.6 倍・DB を読まない）。人ごとに違わないので事業者の置き場（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）に**期限 1 日**でキャッシュする（S2 の経路。枠はデプロイでしか変わらない）。キャッシュから返す CPU は記事と同じ 2 ms。
+    - 島の応答: 人ごとに違うのでキャッシュしない（`Cache-Control: private` の読み）。props が 2,048 バイトを超えると POST になりキャッシュされないことは文書の注だけ（どのみちキャッシュしない）。
+  - **Next.js（PPR。`stream`）**: 静的な枠を先に流し、動的な部分を同じ応答で続けて流す。枠を CDN から配るかはアダプター・CDN の実装しだい（§8.2）なので仮定せず、**閲覧ごとに処理を通して島の分だけ描く**（origin だけの形）。ルートは `ssr` のままで CPU を 0.4 倍にし、`island: {}` を付ける。応答の大きさはページ全体のまま。
+- **1 リクエストの CPU の内訳（D-99）**: 島は「個人向けのページ（サーバーの島・CPU 6 ms）」、Astro の枠の描き直しは「個人向けのページ（島の枠の閲覧と描き直し・CPU 11 ms）」と分けて出す（estimator の `RequestSource.island`・`islandShell`）。表の行の CPU の判定は、そのページのどちらかが当たれば ✗。
+- **要件**: 人ごとに違うページに使える（S1〜S3 と違い、島はキャッシュしない）。枠の HTML（メタタグ）はそのまま返る（SNS のカードの判定は S5 だけが ✗）。鮮度の判定は全員に同じページだけなので S6 は関わらない。
+- **選べる組**（§3・§8）: Astro × Cloudflare・VPS・Netlify（隠している）は出典、Vercel・Google Cloud は仮。Next.js × Vercel・VPS・Google Cloud は出典。vinext・Amplify は ✗、Next.js × Netlify・OpenNext は ?（出さない）。
+- **構成**: Astro で S6 のページがあれば、記事をキャッシュしなくても Cloudflare の Workers Cache を前に置く（枠をキャッシュするため。game の `staticBuildOf`）。
+- **途中の変更の手間**: S6 へも S6 からも 3（RS-08。人ごとに違う部品に `server:defer`・Suspense を付けるだけで API は書かない）。
+- **画面**: 始める画面の ③・見積モードの表（`rp.<ルート>=server-island`）・途中の行動。見取り図は、人ごとに違う区画（シナリオの `islandRegions`）を「サーバーの島（閲覧ごとに一部だけ描く）」、ほかの HTML の区画を「枠（使い回す）」にする。構成図は、島の区画のあるページがあれば閲覧ごとに描く経路（`document-ssr`）の線に「サーバーの島」の流れ（破線）を載せる。
+- **既定・基準プレイは変えない**: どのフレームワークの既定にも S6 は無いので、等価のスナップショット・golden は不変。
+- 速さの判定（RS-10）は今までどおりフレームワークの SSR の CPU で見る（S6 の島の CPU を速さに入れるのは RS-10 の残り）。
+
 ## 6. 段取り
 
 | 段 | 中身 | 状態 |
@@ -153,7 +171,7 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 | 2 | 描き方のモデル・対応表・プリセット・`applyRouteStrategies`（Workload は不変）・読むだけの表（D-106） | 済 |
 | 3 | 始める画面・見積モードで、ページごとに描き方を選べるようにする（S1〜S5）。要件の判定・保存 v2・途中の行動と手間（D-107） | 済 |
 | 4 | 記事の S5（毎ページの枠）・コメント欄をルートの部品に（D-82 を移す） | 未 |
-| 5 | S6（Server Islands・PPR）。対応の事実は §8 に記録した（2026-11-03）。数え方は未 | 未 |
+| 5 | S6（Server Islands・PPR）。対応の事実は §8、数え方・画面は §5c（D-108） | 済 |
 
 段 3 でしなかったこと: 速さの判定の重み付き CPU（RS-10）・乗り換え先で描き方が使えなくなるときの「描き方も替える（手間 +n）」の表示（RS-04 の残り。既定に戻ることの注意だけは出す）・ISR のキャッシュの部品「キャッシュしない」を S4 にまとめること・`FrameworkProfile.renderingModes` を消すこと・`revalidateSec` をルートごとの値に分けること（記事のルートは 1 つなので値は 1 つのまま）。
 
@@ -163,7 +181,7 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 
 | # | 論点 | 推奨・状態 |
 |---|---|---|
-| RS-01 | 出す選択肢の広さ | **段 3 で採用**（D-107）: ルートはシナリオの 2 つ（業務は 1 つ）。描き方は対応表と見る人で絞る。期限・間隔は設定の欄のまま。S6 は出さない |
+| RS-01 | 出す選択肢の広さ | **段 3 で採用**（D-107）: ルートはシナリオの 2 つ（業務は 1 つ）。描き方は対応表と見る人で絞る。期限・間隔は設定の欄のまま。S6 は段 5 で人ごとに違うページに出した（D-108） |
 | RS-02 | アイランドの API の数え方 | S5 のデータの API は、ルートの閲覧 × 1 回（CPU = SSR × `dataCpuFactor` 0.5。今の仮定）。コメント欄は段 4 まで今の `perPage.apiCalls: 1` のまま（二重に数えない） |
 | RS-03 | フレームワークごとの既定 | **決定（D-103・D-106）**: §4 の表。消せない事業者は S2 に落とす |
 | RS-04 | 載せられない組の扱い | **段 2 で採用**: 個人化の禁止と事業者の ✗ は、灰色 + ⓘ の理由。? は出さない。段 3: 乗り換え先で使えない描き方は、乗り換えが済むと既定に戻す（D-107）。「描き方も替える（手間 +n）」と見せるのは残り |
@@ -172,7 +190,7 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 | RS-07 | バランスへの影響 | **基準プレイを 2 本足した**（D-107。「CF Free・個人向けを枠 + API」「CF Paid・個人向けを枠 + API」）。CF Free は記事の ISR の再生成・画像の変換・日次のリクエストで止まり、描き方だけでは勝てない（D-107 の表）。**目標（記事 $1,730・受託 $1,700）は変えない**（ユーザーの判断待ち） |
 | RS-08 | 描き方の変更の手間（ゲーム上の仮定） | **段 3 で採用**（D-107）: S2 ↔ S3 は 2（今までの設定）、分け方が変わるものは 3、枠 + API へは 4、値だけは 0、フレームワークを替えるのは 24（D-81）。翌月から |
 | RS-09 | CF の前段の Workers Cache（Astro S2・S3） | **Free でも使える（事実・2026-11-03）**: 公式のブログ（2026-07-06）「available today to every Worker on any plan」。ヒットも Worker のリクエストとして数える（料金の頁）。D-103 の解釈を事実に替えた（数え方は D-103 のまま。D-103 の補足）。拠点ごとのヒット率は計算に入れていない |
-| RS-10 | 速さの判定（`heavySsrCpuMs` 12） | 今の 1 つの `ssrCpuMs` を、「描く閲覧の重み付きの CPU」に替える。描く閲覧は S4 の全部・S2 / S3 の取り直し・S6 の島。**段 3 ではしなかった**: 速さの CPU・初回表示はフレームワークの性質のまま（Next.js・Astro のページを S5 にしても、静的書き出しのマイページと同じく SSR の値で見る。D-80 の仮定に合わせた）|
+| RS-10 | 速さの判定（`heavySsrCpuMs` 12） | 今の 1 つの `ssrCpuMs` を、「描く閲覧の重み付きの CPU」に替える。描く閲覧は S4 の全部・S2 / S3 の取り直し・S6 の島。**段 3・段 5 ではしなかった**: 速さの CPU・初回表示はフレームワークの性質のまま（Next.js・Astro のページを S5 にしても、静的書き出しのマイページと同じく SSR の値で見る。D-80 の仮定に合わせた）|
 | RS-11 | OGP の判定 | **段 3 で採用**（D-107）: `needsOgp` のルートが S5 で前処理の部品なし、のときだけ `socialCardFactor` を掛ける。前処理の部品は SPA だけにあるので、Next.js・Astro の記事を S5 にするとカードは出ない |
 | RS-12 | 消す呼び出しの制限 | URL で消す前提にし、前提の行に出す（CF Free の purge は URL なら毎秒 800 件。コメントを HTML に含めても 1 日 約 490 回で当たらない） |
 | RS-13 | 見積モードの費用の差 | **段 3 で採用**（D-107）: 選択肢ごとに反実仮想で回す。構成の比較・費用の曲線は今の描き方で引く（「描き方を替えた案」の列は残り） |
@@ -180,11 +198,11 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 | RS-15 | vinext の S1 | **解除（2026-11-03・D-107 の補足）**: README で `prerender: true` + `staticAssetsAdapter()` を確かめて出す。閲覧ごとに Worker のリクエスト・CPU はキャッシュから返すのと同じ（ゲーム上の仮定）。「vinext は開発中（README）」の注を添える。前は「確かめるまで出さない」（段 2） |
 | RS-16 | 選ぶ順番 | **案 B を採用**（§1・D-107）: ① ページと要件 → ② フレームワーク → ③ ページの描き方 → ④ 構成 |
 | RS-17 | ルートの性質（見る人・`needsOgp`・鮮度・部品）の置き場 | 段 2 では、テンプレートの `rendering` から見る人を読んでいる（ISR・静的 = 全員に同じ、SSR = 人ごと）。toSpa・toAstro が前から使っていた読み方。**決定（C-13・D-107）**: テンプレートのデータに書く（`RouteTraits`）。estimator の Workload には入れない |
-| RS-18 | 出典の無い「使える」（Next.js の S1・S5 全般） | ゲーム上の仮定として出し、ⓘ に「ゲーム上の仮定」と書く（段 2 で採用）。**決定（C-13・D-107）**: S5 はゲーム上の仮定のまま出す。Next.js の S1 は公式の文書（`generateStaticParams`）で確かめて出典を付けた。vinext の S1 は README で確かめて出した（RS-15 の解除）。Amplify・Google Cloud の S1 で静的なページに処理を通さないのはゲーム上の仮定と書いた。S6 は出さない（§8） |
+| RS-18 | 出典の無い「使える」（Next.js の S1・S5 全般） | ゲーム上の仮定として出し、ⓘ に「ゲーム上の仮定」と書く（段 2 で採用）。**決定（C-13・D-107）**: S5 はゲーム上の仮定のまま出す。Next.js の S1 は公式の文書（`generateStaticParams`）で確かめて出典を付けた。vinext の S1 は README で確かめて出した（RS-15 の解除）。Amplify・Google Cloud の S1 で静的なページに処理を通さないのはゲーム上の仮定と書いた。S6 は §8 の文書で出し、Astro × Vercel・Google Cloud は仮と書いた（D-108） |
 
-## 8. S6（Server Islands・PPR）の確かめた事実（2026-11-03 取得。画面には出さない）
+## 8. S6（Server Islands・PPR）の確かめた事実（2026-11-03 取得）
 
-段 5 の前に、どの組で S6 が作れるかを公式の文書で確かめた（D-106・D-107 の補足）。**対応表・画面は変えていない**（S6 は `unverified` のまま。数え方が無いので選べない）。
+段 5 の前に、どの組で S6 が作れるかを公式の文書で確かめた（D-106・D-107 の補足）。D-108 でこの表のとおりに対応表・画面へ出した（数え方は §5c）。
 
 ### 8.1 対応
 
@@ -217,5 +235,6 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
   - Cloudflare は Workers Cache を有効にしたときだけ前段で効く（ヒットも Worker のリクエストに数える。RS-09）。
   - 個人化した島は使い回せない（S6 を個人向けのページに使うときは島を毎回描く。このモデルの読み）。
 - **PPR の費用**: 静的な枠を CDN から配るのはアダプター・CDN の実装しだい（「These are available building blocks, not finished integrations.」）。`next start` の既定は origin だけで描く形で、毎回処理を通る（費用は S4 に近い）。公式の文と合わせるなら、枠を CDN で配ることを仮定せず、origin だけを既定の数え方にする。
-- 速さの判定（RS-10）では、S6 の島を「描く閲覧」に数える。
+- 速さの判定（RS-10）では、S6 の島を「描く閲覧」に数える（RS-10 の残り）。
+- D-108 で採った形: 個人化した島は毎回描きキャッシュしない。PPR は origin だけの形（閲覧ごとに処理を通る）にして、CPU だけを島の分にした（§5c）。
 

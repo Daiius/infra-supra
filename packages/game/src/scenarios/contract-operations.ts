@@ -24,6 +24,8 @@ const BUSINESS_WIREFRAMES: PageWireframe[] = [
       { id: 'table', label: '一覧の表（申請・記録）', height: 'lg' },
       { id: 'form', label: '登録・申請のフォーム（送信は API）', height: 'md' },
     ],
+    // S6 で島になるのは人ごとに違う部分（ログイン中の名前・一覧の表。D-108）。メニュー・検索の条件・フォームは枠
+    islandRegions: ['header', 'table'],
     byFramework: {
       nextjs: {
         header: 'ssr',

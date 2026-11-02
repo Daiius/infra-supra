@@ -310,8 +310,10 @@ describe('ゲームモードの画面', () => {
     expect(
       alternative('personal', 'cached-purge')?.getAttribute('data-available'),
     ).toBe('false');
-    // 確かめていない描き方（S6）は出さない
-    expect(alternative('personal', 'server-island')).toBeNull();
+    // 枠 + サーバーの島（S6）は Cloudflare の Astro で選べる（D-108）
+    expect(
+      alternative('personal', 'server-island')?.getAttribute('data-available'),
+    ).toBe('true');
     // 個人向けを枠 + API（S5）にすると、その行は CPU の制限に当たらない
     fireEvent.click(
       within(row('personal')).getByRole('button', {
@@ -345,6 +347,57 @@ describe('ゲームモードの画面', () => {
     expect(strategy('personal')).toBe('shell-api');
     pick(/^Vite（SPA）/);
     expect(strategy('article')).toBe('shell-api');
+  });
+
+  it('W-24 始める画面: 個人向けのページを S6（枠 + サーバーの島）にすると、見取り図に島・構成図に島の流れが出る（D-108）', () => {
+    renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    const current = () =>
+      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
+    const table = () =>
+      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
+        'table',
+        { name: 'ページごとの描き方' },
+      );
+    const row = (route: string) =>
+      table().querySelector<HTMLElement>(`tr[data-route="${route}"]`)!;
+    pick(/^記事コミュニティ/);
+    pick(/^Astro/);
+    pick(/^Cloudflare Paid/);
+    fireEvent.click(
+      within(row('personal')).getByRole('button', {
+        name: /^個人向けのページを S6/,
+      }),
+    );
+    expect(
+      row('personal')
+        .querySelector('[data-strategy]')!
+        .getAttribute('data-strategy'),
+    ).toBe('server-island');
+    // 見取り図: 人ごとに違う区画は島、ほかは枠
+    const list = within(current()).getByRole('list', {
+      name: '個人向けのページの見取り図',
+    });
+    const sources = [...list.querySelectorAll('[data-source]')].map((x) =>
+      x.getAttribute('data-source'),
+    );
+    expect(sources).toContain('server-island');
+    expect(sources).toContain('island-shell');
+    expect(sources).not.toContain('ssr');
+    expect(
+      within(list).getAllByText('サーバーの島（閲覧ごとに一部だけ描く）')
+        .length,
+    ).toBeGreaterThan(0);
+    // 構成図の凡例に島の流れ（個人向けのページ）が出る
+    const legends = screen.getAllByRole('list', {
+      name: '構成図の流れの凡例',
+    });
+    expect(
+      legends.some((l) =>
+        within(l).queryByText(/^サーバーの島（閲覧ごとに一部だけ描く）/),
+      ),
+    ).toBe(true);
   });
 
   it('W-14 ゲームの途中で個人向けのページの描き方を替える（手間 4・来月から。D-107）', () => {
