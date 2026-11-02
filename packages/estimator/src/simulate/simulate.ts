@@ -333,7 +333,9 @@ function consume(
     case 'ci-build':
     case 'db-backup':
     case 'email-sender':
-      // 経路を持たない（ビルドの時間・バックアップの量・メールの通数は staticUsage で数える。D-68・D-93・D-95）
+    case 'dns-zone':
+    case 'domain-registration':
+      // 経路を持たない（ビルドの時間・バックアップの量・メールの通数・DNS の問い合わせは staticUsage で数える。D-68・D-93・D-95・D-96）
       return f;
     case 'host': {
       // 他のサーバーから API として呼ばれるクラスは、描画でなく API の 1 回の CPU と応答の大きさ（D-69・OCL-4D1F5201）
@@ -402,6 +404,16 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
     case 'email-sender':
       // メールの送信（D-95）。経路を持たない。通数は Workload の解決で出す（利用者あたり + 書き込みあたり）
       add(u, 'emails', w.emails);
+      break;
+    case 'dns-zone':
+      // DNS のゾーン（D-96）。経路を持たない。問い合わせは閲覧に比例（TTL とリゾルバのキャッシュで大きく減る。値は仮定）
+      add(
+        u,
+        'dns-queries',
+        w.monthlyPageViews *
+          node.config.queriesPerPageView *
+          (1 - node.config.freeQueryShare),
+      );
       break;
     case 'ci-build':
       // 静的なページのビルドし直し（D-68）。経路を持たない

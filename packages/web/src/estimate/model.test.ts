@@ -162,9 +162,9 @@ describe('runEstimate', () => {
 
   it('出典は使った事業者だけで、URL と取得日を持つ', () => {
     const v = runEstimate(normalizeInput({ stack: 'vercel-supabase-pro' }));
-    // メール送信（D-95）の既定の Amazon SES の分、AWS も入る
+    // メール送信（D-95）の既定の Amazon SES の分、AWS も入る。ドメインの登録（D-96）の registrar も入る
     expect(v.sources.map((s) => s.provider).sort()).toEqual(
-      ['aws', 'supabase', 'vercel'].sort(),
+      ['aws', 'registrar', 'supabase', 'vercel'].sort(),
     );
     for (const s of v.sources) {
       expect(s.links.length).toBeGreaterThan(0);

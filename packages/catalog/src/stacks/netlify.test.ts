@@ -16,6 +16,8 @@ describe('Netlify の構成', () => {
       'blob',
       'db',
       'email',
+      // ドメインの登録（D-96。Netlify DNS は料金の項目が無いので DNS のノードは無い）
+      'domain',
     ]);
     expect(a.routes['document-isr']).toEqual(['cdn', 'fn']);
     expect(a.routes['isr-revalidate']).toEqual(['fn', 'db']);

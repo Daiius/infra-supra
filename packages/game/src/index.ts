@@ -1254,12 +1254,14 @@ export function meetsRequirement(
     }
     case 'uptime-sla': {
       // バックアップの置き場（VPS の自前のバックアップのオブジェクトストレージ。D-93）とメールの送信（D-95）は
-      // アプリの稼働に関わらないので見ない
+      // アプリの稼働に関わらないので見ない。ドメインの登録と DNS（D-96）も構成の既定のまま見ない（残した点）
       const plans = composeStack(STACK_DEFS[stackIndex]!, components)
         .nodes.flatMap((n) =>
           n.billing &&
           n.config.kind !== 'db-backup' &&
-          n.config.kind !== 'email-sender'
+          n.config.kind !== 'email-sender' &&
+          n.config.kind !== 'dns-zone' &&
+          n.config.kind !== 'domain-registration'
             ? [n.billing]
             : [],
         )

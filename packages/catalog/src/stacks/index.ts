@@ -28,6 +28,7 @@ import {
   GCP_STACK_DEFS,
 } from './gcp.ts';
 import { withBackups } from './backups.ts';
+import { withDomain } from './domain.ts';
 import { EMAIL_COMPONENTS, withEmail } from './email.ts';
 import { withLogs } from './logs.ts';
 import { vpsNode } from './sakura.ts';
@@ -1440,24 +1441,27 @@ export function composeStack(
         : shaped;
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
   // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）・メールの送信（D-95）は、部品を差し終えた後にまとめて足す
-  // アプリのメールの送信（D-95）も最後に足す（経路を持たない）
-  return withEmail(
-    withBackups(
-      withLogs(
-        applyCrossApi(
-          built,
-          def.platform,
-          def.plan,
-          c,
-          standby,
-          options.framework ?? 'nextjs',
+  // アプリのメールの送信（D-95）も最後に足す（経路を持たない）。ドメインの登録と DNS（D-96）はその後に
+  return withDomain(
+    withEmail(
+      withBackups(
+        withLogs(
+          applyCrossApi(
+            built,
+            def.platform,
+            def.plan,
+            c,
+            standby,
+            options.framework ?? 'nextjs',
+          ),
         ),
+        c.dbBackup,
       ),
-      c.dbBackup,
+      def.platform,
+      def.plan,
+      c.email,
     ),
     def.platform,
-    def.plan,
-    c.email,
   );
 }
 

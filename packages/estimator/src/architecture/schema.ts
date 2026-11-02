@@ -229,6 +229,19 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
    * 送る先のサービス（Resend・Amazon SES・Cloudflare の Email Service）は課金先のプランで決まる。
    */
   z.object({ kind: z.literal('email-sender') }),
+  /**
+   * DNS のゾーン（D-96・prd/04 §3.11）。経路を持たず、月の閲覧（PV）に比例する問い合わせを数える（dns-queries）。
+   *   問い合わせ = PV × queriesPerPageView × (1 − freeQueryShare)
+   * queriesPerPageView は TTL とリゾルバのキャッシュで 1 よりずっと小さい（ゲーム上の仮定）。freeQueryShare は課金されない問い合わせの割合
+   * （Route 53 のエイリアスのレコード → CloudFront は無料）。ゾーンの月額は課金先のプランの基本料（ノードごと）。
+   */
+  z.object({
+    kind: z.literal('dns-zone'),
+    queriesPerPageView: NonNeg,
+    freeQueryShare: Ratio.default(0),
+  }),
+  /** ドメインの登録（D-96）。経路も使用量も持たず、課金先のプランの基本料（年額の月割り）だけ。 */
+  z.object({ kind: z.literal('domain-registration') }),
   /** VPS などのホスト。課金は固定費で、使用量は容量の判定（P1-8）に使う。 */
   z.object({
     kind: z.literal('host'),

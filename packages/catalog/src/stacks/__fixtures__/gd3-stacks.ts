@@ -119,6 +119,19 @@ export const GD3_STACKS: unknown[] = [
           meters: { emails: 'outbound' },
         },
       },
+      // ドメインの登録（D-96。この構成の DNS は無料なので DNS のノードは無い）
+      {
+        id: 'domain',
+        label: 'ドメインの登録（.com）',
+        config: { kind: 'domain-registration' },
+        facts: ['at-cost'],
+        billing: {
+          accountId: 'cloudflare',
+          provider: 'registrar',
+          planId: 'com',
+          meters: {},
+        },
+      },
     ],
     routes: {
       'document-static': ['assets'],
@@ -259,6 +272,19 @@ export const GD3_STACKS: unknown[] = [
           provider: 'cloudflare',
           planId: 'workers-paid',
           meters: { emails: 'email-sending' },
+        },
+      },
+      // ドメインの登録（D-96。この構成の DNS は無料なので DNS のノードは無い）
+      {
+        id: 'domain',
+        label: 'ドメインの登録（.com）',
+        config: { kind: 'domain-registration' },
+        facts: ['at-cost'],
+        billing: {
+          accountId: 'cloudflare',
+          provider: 'registrar',
+          planId: 'com',
+          meters: {},
         },
       },
     ],
@@ -407,6 +433,19 @@ export const GD3_STACKS: unknown[] = [
           provider: 'aws',
           planId: 'ses',
           meters: { emails: 'outbound' },
+        },
+      },
+      // ドメインの登録（D-96。この構成の DNS は無料なので DNS のノードは無い）
+      {
+        id: 'domain',
+        label: 'ドメインの登録（.com）',
+        config: { kind: 'domain-registration' },
+        facts: ['at-cost'],
+        billing: {
+          accountId: 'vercel',
+          provider: 'registrar',
+          planId: 'com',
+          meters: {},
         },
       },
     ],
@@ -559,6 +598,19 @@ export const GD3_STACKS: unknown[] = [
           meters: { emails: 'outbound' },
         },
       },
+      // ドメインの登録（D-96。この構成の DNS は無料なので DNS のノードは無い）
+      {
+        id: 'domain',
+        label: 'ドメインの登録（.com）',
+        config: { kind: 'domain-registration' },
+        facts: ['at-cost'],
+        billing: {
+          accountId: 'vercel',
+          provider: 'registrar',
+          planId: 'com',
+          meters: {},
+        },
+      },
     ],
     routes: {
       'document-static': ['cdn'],
@@ -611,6 +663,19 @@ export const GD3_STACKS: unknown[] = [
           provider: 'aws',
           planId: 'ses',
           meters: { emails: 'outbound' },
+        },
+      },
+      // ドメインの登録（D-96。この構成の DNS は無料なので DNS のノードは無い）
+      {
+        id: 'domain',
+        label: 'ドメインの登録（.com）',
+        config: { kind: 'domain-registration' },
+        facts: ['at-cost'],
+        billing: {
+          accountId: 'sakura',
+          provider: 'registrar',
+          planId: 'com',
+          meters: {},
         },
       },
     ],

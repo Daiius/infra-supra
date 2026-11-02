@@ -116,6 +116,18 @@ export const JAPAN_TAX: readonly JapanTaxTreatment[] = [
     sources: [{ url: 'https://resend.com/pricing', retrievedAt: '2026-11-02' }],
   },
   {
+    provider: 'registrar',
+    status: 'unconfirmed',
+    premise:
+      'ドメインの登録は登録業者によって消費税の扱いが違う（原価の額は登録所の卸値と ICANN の手数料で、税を含まない）。消費税の扱いは未確認。税抜のまま（D-96）',
+    sources: [
+      {
+        url: 'https://developers.cloudflare.com/registrar/faq/',
+        retrievedAt: '2026-11-02',
+      },
+    ],
+  },
+  {
     provider: 'gcp',
     status: 'added',
     premise:

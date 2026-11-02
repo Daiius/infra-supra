@@ -12,7 +12,16 @@ describe('Google Cloud の構成', () => {
   it('Next.js: ISR は Hosting の CDN の期限つきのキャッシュ、外れと作り直しは Cloud Run（作り直しは裏でリクエストに数えない）', () => {
     const a = composeStack('gcp-cloud-run');
     expect(() => ArchitectureSchema.parse(a)).not.toThrow();
-    expect(ids(a)).toEqual(['cdn', 'run', 'gcs', 'firestore', 'email']);
+    expect(ids(a)).toEqual([
+      'cdn',
+      'run',
+      'gcs',
+      'firestore',
+      'email',
+      // DNS（Cloud DNS）とドメインの登録（D-96）
+      'dns',
+      'domain',
+    ]);
     expect(a.routes['document-isr']).toEqual(['cdn', 'run']);
     expect(a.routes['isr-revalidate']).toEqual(['run', 'firestore']);
     expect(a.routes['image-read']).toEqual(['cdn', 'run', 'gcs']);
@@ -50,6 +59,8 @@ describe('Google Cloud の構成', () => {
       'firestore',
       'cloud-sql',
       'email',
+      'dns',
+      'domain',
     ]);
     expect(Object.values(swap.routes).flat()).not.toContain('cloud-sql');
   });

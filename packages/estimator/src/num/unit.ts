@@ -61,6 +61,9 @@ export const SECONDS_PER_HOUR = 3_600;
 /** 課金の基本単位の 1 か月 = 730 時間（prd/01 §3.3。月による日数の差は捨てる仮定）。 */
 export const HOURS_PER_MONTH = 730;
 
+/** 年額の基本料（ドメインの登録など）を月に割るときの月の数（D-96。月割り）。 */
+export const MONTHS_PER_YEAR = 12;
+
 export class UnitConversionError extends Error {
   constructor(from: Unit, to: Unit) {
     super(`単位を換算できない: ${from} → ${to}`);

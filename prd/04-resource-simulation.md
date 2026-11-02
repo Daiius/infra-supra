@@ -330,6 +330,19 @@ emails   = MAU × perMau + 書き込み × perWrite
 - 送り先（Email Service・SES・Resend）は課金先のプランで決まり、catalog の `stacks/email.ts` が構成の最後に 1 つ足す。Resend Free の 1 日 100 通は日次のプール（平日・休日・最も多い日）で判定する。
 - 料金の値と表は prd/11 §20。
 
+### 3.11 ドメインと DNS（`dns-zone`・`domain-registration`。D-96・2026-11-02）
+
+経路を持たないノード。DNS のゾーンは閲覧に比例する問い合わせを資源 `dns-queries` に数え、ゾーンの月額は課金先のプランの基本料（ノードごと）。ドメインの登録は使用量を持たず、基本料（年額の月割り）だけ。
+
+```
+dns-queries = PV × queriesPerPageView × (1 − freeQueryShare)
+```
+
+- `queriesPerPageView` は 0.1（ゲーム上の仮定。TTL とブラウザ・OS・リゾルバのキャッシュで、権威サーバーに届く問い合わせは閲覧よりずっと少ない）。
+- `freeQueryShare` は課金されない問い合わせの割合。Route 53 のエイリアス（CloudFront へ）は無料なので AWS の構成は 1、Cloud DNS は 0。
+- 課金のある DNS（Route 53・Cloud DNS）だけノードを足す。無料の DNS（Cloudflare・Vercel・Netlify・さくらの VPS）はノードを持たない。catalog の `stacks/domain.ts` が構成の最後に足す。
+- 料金の値と表は prd/11 §21。
+
 ## 4. 二重計上の点検（テストで確かめる性質）
 
 - CDN の `hits + misses = 入力件数`（各クラス）。

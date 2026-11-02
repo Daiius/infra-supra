@@ -1252,3 +1252,76 @@ Resend に替えると: Free はどの構成も 1 日 100 通に当たって止�
 - メールの通数の仮定（利用者・書き込みあたり）の確かめ・出来事（大量の通知・送信の失敗・迷惑メールの扱いで届かない）。
 - Resend Pro の上の段（10 万通 $35）・Scale、SES の専用 IP・Virtual Deliverability Manager、添付ファイルの量。
 - Cloudflare Email Service の 1 日の上限（数値の記載なし・数えていない）とベータが終わったときの料金の見直し。VPS から自前のメールサーバーで送る形。
+
+## 21. ドメインと DNS（2026-11-02・D-96）
+
+> どの構成でも実際に払うドメインの登録料と DNS の費用を、数え方をそろえて入れる。部品にはせず、構成の既定の DNS だけを持つ（差は月 $0〜0.5 で、選ぶほどの差ではない）。
+> 数え方は prd/04 §3.11、年額の基本料は prd/03 §3。
+
+### 21.1 確かめた公式の事実（2026-11-02 取得）
+
+| 対象 | 料金・条件 | 出典 |
+|---|---|---|
+| Amazon Route 53 | パブリックのホストゾーンは月 $0.50（最初の 25 ゾーン）。標準の問い合わせは 100 万件 $0.40（月 10 億件まで）、その先 $0.20。CloudFront の distribution・ELB・S3 のウェブサイトのエンドポイントへのエイリアスの問い合わせは無料 | [料金](https://aws.amazon.com/route53/pricing/) |
+| Google Cloud DNS | 無料の分は無い。ゾーンは 1 時間 $0.000273973（25 ゾーンまで。月 約 $0.20）で、使っていなくても課金。問い合わせは 100 万件 $0.40（月 10 億件まで）、その先 $0.20 | [料金](https://cloud.google.com/dns/pricing) |
+| Firebase Hosting | DNS を持たない。独自のドメインは使っている DNS の事業者に A・TXT のレコードを足す | [custom-domain](https://firebase.google.com/docs/hosting/custom-domain) |
+| Cloudflare DNS | プランの表で「Fast, Easy-to-use DNS」が Free から全プランにある。製品ページは「our DNS is free」 | [プラン](https://www.cloudflare.com/plans/)・[DNS](https://www.cloudflare.com/application-services/products/dns/) |
+| Cloudflare Registrar | 登録所と ICANN の価格を上乗せなしで払う（at cost）。Registrar のドメインは Cloudflare のネームサーバーを使う（他社のネームサーバーは不可）。.com の額は公式の文書に無い（検索の画面に出る） | [FAQ](https://developers.cloudflare.com/registrar/faq/) |
+| .com の原価 | Verisign は .com の登録所の卸値を 2026-11-01 から $10.26 → $10.97 に上げた。ICANN の手数料は 1 件 1 年 $0.20（2025-07-01 から）。合計 $11.17 / 年 | [Verisign の 2026 年 1〜3 月期の発表（SEC）](https://www.sec.gov/Archives/edgar/data/1014473/000101447326000019/q12026earningsrelease.htm)・[ICANN](https://www.icann.org/en/announcements/details/icann-accredited-registrars-approve-registrar-level-fees-for-fiscal-year-2026-21-07-2025-en) |
+| さくらの VPS | ネームサーバーが標準の機能で、2GB 以下は 5 ゾーン・4GB 以上は 10 ゾーンまで無料 | [仕様](https://vps.sakura.ad.jp/specification/) |
+| さくらのクラウドの DNS | 1 ゾーン月 44 円（税込）。問い合わせ・転送の従量課金なし（VPS の構成では使わない。記録だけ） | [DNS](https://cloud.sakura.ad.jp/products/dns/) |
+| さくらのドメイン | .com 3,220 円 / 年（税込。記録だけ。原価より高い） | [さくらのドメイン](https://domain.sakura.ad.jp/) |
+
+確かめられなかったこと: Vercel・Netlify の DNS が無料であること（文書に料金の記載が無く、料金表にも DNS の項目が見当たらない。課金の項目が無いことからの読みで $0 とした）・
+Route 53 Domains・Vercel・Netlify の .com の登録の額（入れていない。原価に揃えた）・ICANN の手数料の 2026-07 以降の年度の額（告知の PDF を読めなかった。同じ $0.20 とみた）・
+登録業者ごとの日本の消費税の扱い（未確認。税抜のまま）。cfdomainpricing.com（第三者）は .com を $10.46 と出していたが、2026-11-01 の値上げ前の額とみて使わない。
+
+### 21.2 入れた形
+
+- **ドメインの登録**: どの構成でも同じ .com を 1 つ持つ。額は登録業者の上乗せの無い原価 $11.17 / 年（新しい料金データ `registrar` のプラン `com`）を **12 で割って毎月の費用に入れる**（$0.93 / 月）。
+  年額の扱いは今まで無かったので、基本料に `per: 'year'` を足した（prd/03 §3）。月割りにしたのは、ゲーム・見積モードが月の費用を積む作りで、年に 1 回の前払いを特定の月に置くと
+  その月だけ所持金が跳ね、構成の比較（月額）にも出ないため。登録業者の上乗せ（Route 53・さくらのドメインなどは原価より高い）と初年度の割引は数えない（構成の比較の差にはしない）。
+- 登録の課金のアカウントは土台の事業者のアカウントに含める（Cloudflare Registrar・Route 53 Domains・Vercel・Netlify・さくらはどれも自前で登録を売る。Google Cloud は Cloud Domains が終わっているので外の登録業者だが、
+  同じ扱いにした）。アカウントが増えないので D-52 の維持の手間は数えない。
+- **構成の既定の DNS**:
+
+| 構成 | DNS | 費用 | ノード |
+|---|---|---|---|
+| Cloudflare（Free・Paid） | Cloudflare の DNS | 無料 | なし |
+| Vercel（Hobby・Pro） | Vercel の DNS | 料金の項目なし | なし |
+| Netlify（Free・Personal・Pro） | Netlify DNS | 料金の項目なし | なし |
+| さくらの VPS | VPS に付くネームサーバー | 無料（5・10 ゾーン） | なし |
+| AWS（Amplify・OpenNext） | Route 53 | ゾーン $0.50 / 月。サイトの名前は CloudFront へのエイリアスで、問い合わせは無料 | `dns`（`aws/route53`） |
+| Google Cloud | Cloud DNS（Firebase Hosting に DNS が無い。同じアカウントで持てる） | ゾーン 約 $0.20 / 月 + 問い合わせ 100 万件 $0.40 | `dns`（`gcp/cloud-dns`） |
+
+- DNS の問い合わせは閲覧に比例する（`dns-queries` = PV × 0.1 × 課金される割合）。**1 閲覧あたり 0.1 件はゲーム上の仮定**（名前を引くのは訪問の初めだけで、ブラウザ・OS・リゾルバが TTL の間キャッシュする）。
+  Cloud DNS で 30 万 PV なら月 3 万件・$0.012 で、仮定が 10 倍ずれても月 $0.1 程度。
+- 稼働率の SLA の要件（D-24）はドメインと DNS を見ない（メール・バックアップの置き場と同じ。DNS が止まればサイトに届かないので、本来は見るべき。残した点）。
+
+### 21.3 基準プレイ（何もしない・シード 1〜20。達成数・12 か月の費用の平均 / 月）
+
+**CF Paid × Next.js（目標の根拠）は達成が不変で、登録料の分だけ費用が上がった**（記事 20/20 $17.95 → $18.88・受託 20/20 $13.43 → $14.36）。目標の額は据え置いた（D-96）。
+どの構成も $0.93 上がり、AWS は Route 53 のゾーンで $1.43、Google Cloud は Cloud DNS で $1.16〜1.17 上がった。
+
+| 達成が変わった行 | 前 → 後 |
+|---|---|
+| 記事 × さくらの VPS 2GB × Next.js（静的書き出しも同じ） | 9/20 $13.94 → 8/20 $14.87 |
+| 記事 × Amplify × Next.js | 10/20 $52.98 → 9/20 $54.41 |
+| 記事 × Amplify × SPA・OpenNext × SPA | 19/20 $16.26 → 18/20 $17.69 |
+| 記事 × OpenNext × Next.js | 17/20 $37.75 → 15/20 $39.18 |
+| 受託 × さくらの VPS 4GB × Next.js・Astro・静的書き出し | 4/20 $28.58 → 3/20 $29.51 |
+| 受託 × さくらの VPS 4GB × SPA | 8/20 $28.69 → 6/20 $29.62 |
+| 受託 × Vercel Pro の Next.js・Astro で API（と DB）を Workers に置く | 20/20 → 19/20 |
+| 受託 × Netlify Pro × Neon（Next.js・SPA） | 6/20 → 0/20・16/20 → 14/20 |
+| 受託 × Netlify Personal × Neon × Next.js | 14/20 → 8/20 |
+| 記事 × Netlify Pro × Neon + 画像だけ Cloudflare × Next.js | 3/20 → 1/20 |
+
+golden: 記事のシード 3 の「VPS・前段の CDN」が $1,730.88・won → $1,719.71・goal。ほかの golden は所持金が $2〜17 減るだけで結果は不変。網羅テストは通る。
+
+### 21.4 残した点
+
+- 登録業者ごとの額（Route 53 Domains・Vercel・Netlify・さくらのドメイン）と、登録業者を選ぶ部品。Cloudflare Registrar が Cloudflare の DNS を前提にすることの扱い（今は額だけを使う）。
+- 稼働率の SLA の要件で DNS を見ること（Route 53・Cloud DNS の SLA は未取得）。
+- メールの送信の認証（SPF・DKIM）の TXT の問い合わせ（Route 53 ではエイリアスでなく標準の問い合わせ）。1 閲覧あたりの問い合わせの仮定の確かめ。
+- 見積モード・ゲームの画面で、無料の DNS（Cloudflare・Vercel・Netlify・さくら）を注記として出すこと（今は明細に出ない）。
+- Vercel・Netlify の DNS が無料であることの確かめ。.com の卸値の次の値上げ（施行日つきの予告として持つ）。
