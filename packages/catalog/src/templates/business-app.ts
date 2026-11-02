@@ -4,6 +4,16 @@ import type { WorkloadInput } from 'estimator';
 import type { AstroShape, SpaShape } from '../frameworks/index.ts';
 
 /**
+ * 業務アプリの 1 日の時間帯の形（0 時〜23 時の重み。D-89）。ゲーム上の仮定（出典なし）: 9〜17 時の業務時間に集中し（昼休みは半分）、
+ * 夜は残業の分が少しだけ、深夜 0〜5 時は 0。休日も同じ形で、量は weekdayToWeekend（8）で 1/8。
+ * 平日の最も多い時間は平均の約 3.3 倍で、peakHourFactor（4）を超えない。
+ */
+export const BUSINESS_HOURLY_PROFILE: readonly number[] = [
+  0, 0, 0, 0, 0, 0, 0.1, 0.3, 1.5, 3, 3, 3, 1.5, 3, 3, 3, 3, 2.5, 1.2, 0.5, 0.3,
+  0.2, 0.1, 0,
+];
+
+/**
  * 社内・取引先の利用者がログインして使う業務アプリ（申請・一覧・検索・登録）。
  * - ログインが要るので、ページはすべて SSR（ISR・静的なページを持たない）。
  * - 利用者は平日の日中に集中する（平日と休日の比・ピークの係数が大きい）。
@@ -22,6 +32,7 @@ export function businessApp(monthlyPageViews: number): WorkloadInput {
       pagesPerSession: 7,
       weekdayToWeekend: 8,
       peakHourFactor: 4,
+      hourlyProfile: [...BUSINESS_HOURLY_PROFILE],
       monthlyPageViewsOverride: monthlyPageViews,
     },
     routes: [

@@ -493,35 +493,40 @@ export function simulateResources(
       HOURS_PER_MONTH * c.capacityUnits * awake;
   }
 
-  // コンテナのサービス（Cloud Run の型。D-88）: 月のアクティブなインスタンスの秒数と、最小インスタンスの待機・冷えた起動の割合
+  // コンテナのサービス（Cloud Run の型。D-88）: 月のアクティブなインスタンスの秒数と、最小インスタンスの待機・冷えた起動の割合。
+  // 時間帯の区間（D-89）ごとに到着率を出して積む。区間が 1 つ（hourlyProfile なし）なら月の平均の式（D-88）と同じ
   for (const n of architecture.nodes) {
     const c = n.config;
     if (c.kind !== 'container') continue;
     const u = nodes[n.id]!;
     const acc = hostAcc.get(n.id)!;
-    const s = SECONDS_PER_MONTH;
-    const x = u.busyMs / 1000 / s; // 同時に処理している件数の平均（Σ λ × 壁時計時間）
-    // 1 件以上を処理しているインスタンスの数の平均（1 を超えうる）。到着がポアソンなら 1 件以上を処理している時間の割合は
-    // 1 − e^(−x)。同時実行の上限（x / concurrency）と、CPU を使い切る分（CPU 秒 / vCPU）より少なくはならない
-    const activeShare = Math.max(
-      -Math.expm1(-x),
-      x / c.concurrency,
-      acc.cpuMs / 1000 / s / c.vcpu,
-    );
-    const activeHours = (activeShare * s) / 3600;
+    let activeHours = 0;
+    let idleHours = 0;
+    let cold = 0;
+    for (const b of workload.timeBuckets) {
+      if (b.hours <= 0) continue;
+      const s = b.hours * 3600;
+      // 同時に処理している件数の平均（Σ λ × 壁時計時間）。区間の流れは月の流れ × share
+      const x = (u.busyMs * b.share) / 1000 / s;
+      // 1 件以上を処理しているインスタンスの数の平均（1 を超えうる）。到着がポアソンなら 1 件以上を処理している時間の割合は
+      // 1 − e^(−x)。同時実行の上限（x / concurrency）と、CPU を使い切る分（CPU 秒 / vCPU）より少なくはならない
+      const active = Math.max(
+        -Math.expm1(-x),
+        x / c.concurrency,
+        (acc.cpuMs * b.share) / 1000 / s / c.vcpu,
+      );
+      activeHours += active * b.hours;
+      idleHours += Math.max(0, c.minInstances - active) * b.hours;
+      // 届いたリクエストのうち、直前の idleKeepSeconds に 1 件も届いていない（インスタンスが無い）割合。区間の件数の割合で重みづけ
+      cold +=
+        b.share * Math.exp(-((acc.requests * b.share) / s) * c.idleKeepSeconds);
+    }
     add(u, 'cpu-hours', activeHours * c.vcpu);
     add(u, 'memory-gb-hours', activeHours * c.memoryGB);
-    const idleHours = Math.max(
-      0,
-      c.minInstances * HOURS_PER_MONTH - activeHours,
-    );
     add(u, 'idle-cpu-hours', idleHours * c.vcpu);
     add(u, 'idle-memory-gb-hours', idleHours * c.memoryGB);
-    u.activeInstanceShare = activeShare;
-    u.coldStartShare =
-      c.minInstances > 0 || acc.requests <= 0
-        ? 0
-        : Math.exp(-(acc.requests / s) * c.idleKeepSeconds);
+    u.activeInstanceShare = activeHours / HOURS_PER_MONTH;
+    u.coldStartShare = c.minInstances > 0 || acc.requests <= 0 ? 0 : cold;
   }
 
   // 関数の 1 回の実行の CPU の最大: 前景のクラスはそのまま、裏のクラスは起こした閲覧の CPU に足す

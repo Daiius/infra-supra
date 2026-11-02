@@ -22,6 +22,12 @@
 > `月の総量 / 月の秒数 × peakHourFactor`（× 話題・Bot の集中の倍率。§3.8）の 1 つの係数で表し、時間より短い山もこの係数に含める
 > （記事コミュニティ 2.5・受託の業務アプリ 4。どちらもテンプレートの仮定で、出典のある値ではない）。下の式の `max_h(… × burst)` は
 > `… × peakHourFactor` と読む。
+>
+> 時間帯の形（D-89・2026-11-02）: 代表週の重みは「1 日 24 時間の重み `hourlyProfile` × 平日 5 日・休日 2 日（量の比は `weekdayToWeekend`）」の
+> 48 区間（`ResolvedWorkload.timeBuckets`。区間ごとに月の流れの割合 share と月の時間 hours を持つ）で表す。使うのは**コンテナのサービスだけ**（§3.3.1）で、
+> 容量の判定は引き続き `peakHourFactor`、課金の総量は月の総量のまま。形の山を `peakHourFactor` に掛けない（二重に数えない）。
+> テンプレートの形は「平日の最も多い時間 / 平均 ≤ peakHourFactor」になるように置いている（`peakHourFactor` は時間より短い山を含む）。
+> 形を与えなければ月全体の 1 区間で、D-88 の式に戻る。
 
 ## 2. リクエストクラスの件数
 
@@ -151,15 +157,26 @@ peak-concurrency = max_h（h の RPS × burst × 平均 wall-ms / 1000）   … 
 コンテナのサービスをリクエストで課金する型。件ごとの CPU・壁時計時間の数え方は §3.3 と同じで、課金はインスタンスが 1 件以上を処理している時間（アクティブ）に掛かる。
 
 ```
-x                  = Σ N_in(k) × wall(k) / S              S: 月の秒数（730 時間）。同時に処理している件数の平均
-active-instances   = max(1 − e^(−x), x / concurrency, cpu-ms / 1000 / S / vCPU)
-cpu-hours          = active-instances × 730 × vCPU        memory-gb-hours = active-instances × 730 × メモリ(GB)
-idle-cpu-hours     = max(0, minInstances × 730 − active-instances × 730) × vCPU   （メモリも同じ）
-cold-start-share   = minInstances = 0 なら e^(−λ × idleKeepSeconds)、1 以上なら 0      λ: 前景のリクエストの月の平均の到着率
+区間 b（時間帯。§1 の timeBuckets。share_b: 月の流れの割合・S_b: 区間の秒数）ごとに:
+x_b                = share_b × Σ N_in(k) × wall(k) / S_b     同時に処理している件数の平均
+active_b           = max(1 − e^(−x_b), x_b / concurrency, share_b × cpu-ms / 1000 / S_b / vCPU)
+λ_b                = share_b × 前景のリクエストの件数 / S_b
+
+cpu-hours          = Σ_b active_b × hours_b × vCPU         memory-gb-hours も同じ（× メモリ(GB)）
+idle-cpu-hours     = Σ_b max(0, minInstances − active_b) × hours_b × vCPU   （メモリも同じ）
+cold-start-share   = minInstances = 0 なら Σ_b share_b × e^(−λ_b × idleKeepSeconds)、1 以上なら 0
 ```
 
 - 1 − e^(−x) は到着をポアソンとみたときに 1 件以上を処理している時間の割合（M/G/∞ の空でない確率）。閲覧が薄いと重ならず ≒ 壁時計時間の合計、
-  濃いと同時実行の上限で割った値（x / concurrency）と CPU を使い切る分が下限になる。月の平均で出すので、時間帯の偏り（夜間）は入れていない（凹なので高めの側）。
+  濃いと同時実行の上限で割った値（x / concurrency）と CPU を使い切る分が下限になる。
+- 時間帯（D-89）: 冷えた起動は届いたリクエストの割合なので、区間の件数の割合 share_b で重みづけする（重み 0 の時間帯は件数が無いので入らない）。
+  e^(−λT) は凸なので、偏りがあると月の平均の到着率で出すより増える。
+- アクティブな時間・待機も同じ区間で積む（月の平均で十分とはしない）。理由: 冷えた起動と同じ区間で数えないと、「夜間はインスタンスが無い」と
+  「夜間もアクティブの時間を平均の密度で数える」が食い違う。1 − e^(−x) は凹なので月の平均は高めの側に出る（区間で積むと少し下がり、最小インスタンスの待機はその分増える）。
+  max の中の同時実行・CPU の項は線形なので、区間に分けても上回るのは山の時間帯だけ。今のシナリオでは月 $0.1 未満の差（D-89 の表）。
+- 区間の中は一定の到着率とみる（区間の境目、たとえば深夜 0 件から朝の最初の 1 件が必ず冷えた起動になる分は数えない。1 日に数件で、閲覧の割合としては無視できる）。
+- 時間帯は他のノードに効かせない。容量の判定（VPS の回線・CPU のピーク、DB の同時接続など）は `peakHourFactor` が山を表しているので二重になる。
+  止まる DB（Aurora Serverless v2 の 0 ACU・Neon の自動の停止。D-51・D-77）は同じ形の式で夜間に効くはずだが、AWS・Neon の構成の結果が変わるので入れていない（D-89 の残した点）。
 - 裏で走るクラス（ISR の作り直し・一意な変換）はリクエストの件数に数えず、時間には数える。インスタンスの時間の 100 ms の切り上げは数えない。
 
 ### 3.4 `serverless-sql`（D1 型）

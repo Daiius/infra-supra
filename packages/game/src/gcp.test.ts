@@ -131,7 +131,7 @@ describe('Google Cloud の構成', () => {
       contractSpaSql: run(contract, GCP, 'vite-spa', { db: 'cloud-sql' }),
     };
     expect(table).toEqual({
-      articleNext: { won: 0, monthly: 62.1 },
+      articleNext: { won: 0, monthly: 62 },
       articleNextMin1: { won: 0, monthly: 71.4 },
       articleNextSql: { won: 0, monthly: 69 },
       articleNextCfResize: { won: 20, monthly: 26 },
@@ -140,7 +140,7 @@ describe('Google Cloud の構成', () => {
       contractNext: { won: 20, monthly: 12.2 },
       contractNextMin1: { won: 20, monthly: 21.6 },
       contractNextSql: { won: 20, monthly: 16.7 },
-      contractSpa: { won: 20, monthly: 8.7 },
+      contractSpa: { won: 20, monthly: 8.6 },
       contractSpaSql: { won: 20, monthly: 12.7 },
     });
     // 目標の根拠（CF Paid × Next.js）は不変
@@ -203,7 +203,7 @@ describe('Google Cloud の構成', () => {
       expect(coldStartViewShare(r)).toBeCloseTo(expected, 12);
       return coldStartViewShare(r);
     };
-    // 到着率の低い入力では効き、PV を増やすと効かなくなる（境目は月 3,000〜1 万 PV の間。3,000 PV で約 10%・1 万 PV で約 0.04%）
+    // 到着率の低い入力では効き、PV を増やすと効かなくなる（境目は月 3,000〜1 万 PV の間。D-89 の時間帯の形を入れても同じ）
     const pvs = [100, 1_000, 3_000, 10_000, 300_000];
     const shares = pvs.map((pv) => at(pv));
     for (let i = 1; i < shares.length; i++)
@@ -214,6 +214,38 @@ describe('Google Cloud の構成', () => {
     expect(pvs[edge]).toBe(10_000);
     // 最小インスタンス 1 なら低い PV でも 0
     expect(at(100, { minInstances: '1' })).toBe(0);
+  });
+
+  it('1 日の時間帯の形（D-89）: 受託は夜間と休日が薄く、冷えた起動の境目が上がる。基準プレイの PV（30 万〜）ではどちらも 5% に届かない', () => {
+    const share = (sc: Scenario, pv: number, flat: boolean) => {
+      const g = newGame(GCP, 1, sc, DEFAULT_START_DATE, 'nextjs', {});
+      const w = workloadFor(sc, {
+        pv,
+        settings: g.settings,
+        ssrCpuMs: 15,
+        mods: g.mods,
+        stock: null,
+        platform: 'gcp',
+        components: g.components,
+        framework: 'nextjs',
+      });
+      const { hourlyProfile: _, ...traffic } = w.traffic;
+      return coldStartViewShare(
+        estimate({
+          workload: flat ? { ...w, traffic } : w,
+          architecture: composeStack(STACKS[GCP]!.id, g.components),
+          books: loadPriceBooks(),
+        }),
+      );
+    };
+    // 受託の月 3,000 PV: 月の平均では 6.5%、時間帯で見ると約 10.5%。1 万 PV では月の平均でほぼ 0、時間帯で約 1.6%
+    expect(share(contract, 3_000, true)).toBeCloseTo(0.065, 2);
+    expect(share(contract, 3_000, false)).toBeCloseTo(0.105, 2);
+    expect(share(contract, 10_000, true)).toBeLessThan(0.001);
+    expect(share(contract, 10_000, false)).toBeGreaterThan(0.01);
+    for (const sc of [article, contract])
+      for (const pv of [10_000, 300_000])
+        expect(share(sc, pv, false)).toBeLessThan(COLD_START.heavyShare);
   });
 
   it('閲覧 1 件から複数の要求が届くと、要求の割合より大きくなり 5% の判定が変わる。1 で頭打ち（OCL-151B35E0）', () => {

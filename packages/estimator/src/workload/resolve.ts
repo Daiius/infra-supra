@@ -91,6 +91,11 @@ export type ResolvedWorkload = {
   /** 平日 1 日・休日 1 日が月の平均日の何倍か（合計が保存されるように割り振る）。 */
   dayFactors: { weekday: number; weekend: number };
   peakHourFactor: number;
+  /**
+   * 月を時間帯で分けた区間（D-89）。share は月の流れのうちその区間に入る割合（合計 1）、hours はその区間の月の時間（合計 730）。
+   * hourlyProfile が無ければ月全体の 1 区間（share 1・730 時間）。
+   */
+  timeBuckets: TimeBucket[];
   /** 月のうち最も多い日 / 平均の日（話題・Bot の集中。日次の無料枠の判定だけ。D-60）。 */
   peakDayFactor: number;
   /**
@@ -120,6 +125,32 @@ export type ResolvedWorkload = {
 };
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
+
+/** 月の時間帯の区間（D-89）。 */
+export type TimeBucket = { share: number; hours: number };
+
+/**
+ * 時間帯の区間: 平日 5 日・休日 2 日 × 24 時間（D-89）。平日と休日の量の比は weekdayToWeekend、1 日の中の割り振りは
+ * hourlyProfile の重みの比。profile が無ければ月全体の 1 区間（月の平均。D-88 の式に戻る）。
+ */
+export function timeBuckets(
+  weekdayToWeekend: number,
+  hourlyProfile: readonly number[] | undefined,
+): TimeBucket[] {
+  if (!hourlyProfile) return [{ share: 1, hours: HOURS_PER_MONTH }];
+  const r = weekdayToWeekend;
+  const sum = hourlyProfile.reduce((a, v) => a + v, 0);
+  const days = [
+    { share: (5 * r) / (5 * r + 2), hours: (HOURS_PER_MONTH * 5) / 7 },
+    { share: 2 / (5 * r + 2), hours: (HOURS_PER_MONTH * 2) / 7 },
+  ];
+  return days.flatMap((d) =>
+    hourlyProfile.map((v) => ({
+      share: (d.share * v) / sum,
+      hours: d.hours / 24,
+    })),
+  );
+}
 const DAYS_PER_MONTH = HOURS_PER_MONTH / 24;
 
 const flow = (
@@ -527,6 +558,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       isrViews > 0 ? { 'document-isr': merge(isrPeakFlushMiss) } : {},
     dayFactors: { weekday: (7 * r) / (5 * r + 2), weekend: 7 / (5 * r + 2) },
     peakHourFactor: t.peakHourFactor,
+    timeBuckets: timeBuckets(r, t.hourlyProfile),
     peakDayFactor: t.peakDayFactor ?? 1,
     storage: {
       dbGB: w.db.sizeGB,
