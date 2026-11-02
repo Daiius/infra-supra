@@ -14,6 +14,7 @@ import {
   upkeepOf,
 } from 'game';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
 import { Meta, NameWithInfo } from './option-text.tsx';
 import {
@@ -198,13 +199,17 @@ function FrameworkCard({
   const rest = lines.filter(
     (l) => !pages.some((p) => l.startsWith(`${p.label}:`)),
   );
+  const brand = FRAMEWORK_BRAND[id];
   return (
     <section
       aria-label={`${FRAMEWORKS[id].label} の説明`}
-      className="card w-full border border-primary bg-base-100 shadow-sm"
+      className="card w-full border border-t-4 border-primary bg-base-100 shadow-sm"
+      // ブランドの色は上の縁だけ（黒一色のロゴは文字の色）
+      style={{ borderTopColor: brandColor(brand.brand) ?? 'currentColor' }}
     >
       <div className="card-body gap-3 p-4">
         <h4 className="card-title text-lg">
+          <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
           <NameWithInfo name={FRAMEWORKS[id].label} info={info} />
         </h4>
         {t?.note && <p className="text-sm opacity-80">{t.note}</p>}
@@ -250,7 +255,7 @@ function FrameworkCard({
 
 /**
  * アプリのフレームワーク（構成のカードの中で、インフラの構成と同列に選ぶ。D-35・prd/10 F-04）。
- * どれにも推奨・既定の印を付けない。名前だけのタブ（ラジオ）で選び、選んだものを中央の大きいカードに出す（D-102）。
+ * どれにも推奨・既定の印を付けない。名前とロゴのタブ（ラジオ）で選び、選んだものを中央の大きいカードに出す（D-102）。
  * 前後のボタン・タブの ←/→ で切り替える。広い画面では前後の選択肢が両脇に小さく見える（daisyUI の carousel）。
  * 選んでいる＝中央のカード（「これにする」のボタンは置かない）。シナリオで選べるものが 1 つだけのときはカードだけを出す。
  */
@@ -313,22 +318,32 @@ export function FrameworkField({
         >
           ‹
         </button>
-        {/* 名前だけのタブ。ラジオなので ←/→ で選べる。狭い画面では横にスクロールする */}
+        {/* 名前とロゴのタブ。ラジオなので ←/→ で選べる。狭い画面では横にスクロールする */}
         <div
           role="radiogroup"
           aria-labelledby={headingId}
           className="tabs tabs-box tabs-sm min-w-0 flex-1 flex-nowrap overflow-x-auto"
         >
           {allowed.map((id) => (
-            <input
+            // ロゴを添えるので input でなく label をタブにする（daisyUI の label:has(:checked)）。名前は文字で出す
+            <label
               key={id}
-              type="radio"
-              name="framework"
-              className="tab shrink-0 whitespace-nowrap"
-              aria-label={FRAMEWORKS[id].label}
-              checked={value === id}
-              onChange={() => onChange(id)}
-            />
+              className="tab shrink-0 gap-1 whitespace-nowrap has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary"
+            >
+              <input
+                type="radio"
+                name="framework"
+                className="sr-only"
+                checked={value === id}
+                onChange={() => onChange(id)}
+              />
+              <BrandMark
+                brand={FRAMEWORK_BRAND[id].brand}
+                size={14}
+                tag={FRAMEWORK_BRAND[id].tag}
+              />
+              {FRAMEWORKS[id].label}
+            </label>
           ))}
         </div>
         <button
@@ -373,7 +388,12 @@ export function FrameworkField({
                 className="card w-full self-start border border-base-300 bg-base-100 p-3 text-left text-sm opacity-50 hover:opacity-80"
                 onClick={() => onChange(id)}
               >
-                <span className="block font-semibold">
+                <span className="flex items-center gap-1 font-semibold">
+                  <BrandMark
+                    brand={FRAMEWORK_BRAND[id].brand}
+                    size={14}
+                    tag={FRAMEWORK_BRAND[id].tag}
+                  />
                   {FRAMEWORKS[id].label}
                 </span>
                 <span className="mt-1 block text-xs">

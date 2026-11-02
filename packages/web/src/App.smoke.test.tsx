@@ -157,6 +157,27 @@ describe('ゲームモードの画面', () => {
     };
     pick(/^記事コミュニティ/);
     pick(/^Next\.js（App Router）/);
+    // ロゴ（D-102）: simple-icons にあるものは SVG、無いもの（AWS・さくら）は頭文字のバッジ
+    const labelOf = (name: RegExp) =>
+      screen.getByRole('radio', { name }).closest('label')!;
+    expect(
+      labelOf(/^Next\.js（App Router）/).querySelector(
+        'svg[data-brand="nextjs"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      labelOf(/^Cloudflare Paid/).querySelector('svg[data-brand="cloudflare"]'),
+    ).not.toBeNull();
+    const aws = labelOf(/^AWS（Amplify Hosting）/).querySelector(
+      '[data-brand="aws"]',
+    );
+    expect(aws?.getAttribute('data-fallback')).toBe('monogram');
+    expect(aws?.textContent).toBe('AWS');
+    expect(
+      labelOf(/^さくらの VPS 2GB/).querySelector(
+        '[data-brand="sakura"][data-fallback="monogram"]',
+      ),
+    ).not.toBeNull();
     // 選んでいる 1 つだけが中央の大きいカード
     expect(
       screen.getByRole('region', { name: 'Next.js（App Router） の説明' }),
