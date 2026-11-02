@@ -68,6 +68,25 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
       astro: { comments: 'build' },
       'nextjs-export': { comments: 'build' },
     },
+    badges: {
+      nextjs: [
+        { kind: 'freshness', text: '鮮度: 再検証で載る' },
+        { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
+      ],
+      astro: [
+        { kind: 'freshness', text: '鮮度: ビルドし直しで載る' },
+        { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
+      ],
+      'nextjs-export': [
+        { kind: 'freshness', text: '鮮度: ビルドし直しで載る' },
+        { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
+      ],
+      'vite-spa': [
+        { kind: 'freshness', text: '鮮度: 常に新しい' },
+        { kind: 'ogp', text: 'SNS のカード: 前処理の部品が要る' },
+        { kind: 'api', text: 'API: 1 PV あたり 1 回増える' },
+      ],
+    },
   },
   {
     route: 'personal',
@@ -107,6 +126,17 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
         mine: 'api',
         editor: 'shell',
       },
+    },
+    badges: {
+      nextjs: [{ kind: 'cpu', text: 'CPU: 閲覧ごとにサーバーが描く' }],
+      astro: [
+        {
+          kind: 'cpu',
+          text: 'CPU: 閲覧ごとにサーバーが描く（Workers は 1 リクエストの上限に注意）',
+        },
+      ],
+      'nextjs-export': [{ kind: 'api', text: 'API: 1 PV あたり 1 回増える' }],
+      'vite-spa': [{ kind: 'api', text: 'API: 1 PV あたり 1 回増える' }],
     },
   },
 ];

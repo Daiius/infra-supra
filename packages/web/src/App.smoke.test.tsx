@@ -130,11 +130,15 @@ describe('ゲームモードの画面', () => {
     const text = document.body.textContent ?? '';
     expect(text).toContain('別の CMS は無い');
     expect(text).toContain('一覧・トップのページは記事のページに含めて数える');
-    // 選ぶ前に、どのフレームワークのページの描き方も並ぶ
-    expect(text).toContain(
-      '個人向けのページ: アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）',
+    // 中央のカードに、選んでいるフレームワークのページごとの描き方が出る（D-102 でカルーセルにした）
+    const card = (fw: string) =>
+      screen.getByRole('region', { name: `${fw} の説明` }).textContent ?? '';
+    expect(card('Next.js（App Router）')).toContain('ISR（最初の閲覧で描いて');
+    fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Astro/ }));
+    expect(card('Astro')).toContain(
+      'アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）',
     );
-    expect(text).toContain('記事のページ: ISR');
     // 隠した構成（D-100）は構成の一覧に出ない
     expect(
       screen.queryByRole('radio', { name: /^Netlify|^AWS（OpenNext）/ }),
@@ -153,11 +157,11 @@ describe('ゲームモードの画面', () => {
     };
     pick(/^記事コミュニティ/);
     pick(/^Next\.js（App Router）/);
+    // 選んでいる 1 つだけが中央の大きいカード
     expect(
-      screen.getByRole('heading', {
-        name: 'ページの見取り図（Next.js（App Router））',
-      }),
+      screen.getByRole('region', { name: 'Next.js（App Router） の説明' }),
     ).toBeDefined();
+    expect(screen.queryByRole('region', { name: 'Astro の説明' })).toBeNull();
     expect(tag('記事のページ', '本文')).toBe('ISR（キャッシュ）');
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
       'ブラウザが API で取る',
@@ -198,6 +202,19 @@ describe('ゲームモードの画面', () => {
       within(screen.getByRole('list', { name: '見取り図の凡例' })).getByText(
         'シェル + JS',
       ),
+    ).toBeDefined();
+
+    // 前後のボタンでも選ぶ（並びは Next.js・SPA・Astro・静的書き出し）
+    fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
+    expect(
+      (screen.getByRole('radio', { name: /^Astro/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    // ページの札（CPU の注意）
+    expect(
+      within(
+        screen.getByRole('region', { name: '個人向けのページ' }),
+      ).getByText(/^CPU: 閲覧ごとにサーバーが描く/),
     ).toBeDefined();
 
     // 受託: 業務の画面の 1 枚

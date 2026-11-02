@@ -75,6 +75,7 @@ import {
   type EventTier,
   type Scenario,
   type Scheduled,
+  type PageBadge,
   type RegionSource,
   type Stock,
   type Strategy,
@@ -3122,7 +3123,12 @@ export function pageWireframes(
   sc: Scenario,
   framework: FrameworkId,
   comments?: number,
-): { route: string; label: string; regions: ResolvedRegion[] }[] {
+): {
+  route: string;
+  label: string;
+  regions: ResolvedRegion[];
+  badges: PageBadge[];
+}[] {
   const routes = sc.template(1).routes;
   const inPage = commentsInPage(
     { comments: comments ?? COMMENTS_IN_BROWSER },
@@ -3141,6 +3147,7 @@ export function pageWireframes(
         ...r,
         source: sources[r.id] ?? 'ssr',
       })),
+      badges: w.badges?.[framework] ?? [],
     };
   });
 }

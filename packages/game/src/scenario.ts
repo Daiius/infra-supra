@@ -418,6 +418,14 @@ export type PageWireframe = {
   byFramework: Record<FrameworkId, Record<string, RegionSource>>;
   /** 設定「コメントの描き方」で記事のページに含めたときに上書きする区画（D-82）。 */
   commentsInPage?: Partial<Record<FrameworkId, Record<string, RegionSource>>>;
+  /** フレームワークごとの、ページの短い札（鮮度・SNS のカード・CPU の注意・API の増え方。文字で出す）。 */
+  badges?: Partial<Record<FrameworkId, PageBadge[]>>;
+};
+
+/** ページの短い札（D-102）。kind は見た目の補助で、意味は text に書く。 */
+export type PageBadge = {
+  kind: 'freshness' | 'ogp' | 'cpu' | 'api';
+  text: string;
 };
 
 /** 台本の表の 1 行（newGame で一度に作る。プレイヤーの選択に依存しない）。 */

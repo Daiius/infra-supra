@@ -99,7 +99,6 @@ import {
   type SetupChoices,
 } from './setup-components.tsx';
 import { EstimateMode } from './estimate/estimate-mode.tsx';
-import { PageWireframes } from './page-wireframes.tsx';
 import {
   CountUp,
   FireworksCanvas,
@@ -305,11 +304,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             allowed={frameworks.allowed}
             value={framework}
             onChange={(id) => change({ framework: id })}
-          />
-          {/* ページの見取り図（D-102）。フレームワークの直下に置き、切り替えると札が変わるのを見せる */}
-          <PageWireframes
-            scenario={scenario}
-            framework={framework}
+            // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
             comments={commentsChoosable ? comments : undefined}
           />
           <h3 className="mt-2 font-bold">インフラの構成</h3>

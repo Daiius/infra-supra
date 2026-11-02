@@ -49,6 +49,12 @@ const BUSINESS_WIREFRAMES: PageWireframe[] = [
         form: 'shell',
       },
     },
+    badges: {
+      nextjs: [{ kind: 'cpu', text: 'CPU: 閲覧ごとにサーバーが描く' }],
+      astro: [{ kind: 'cpu', text: 'CPU: 閲覧ごとにサーバーが描く' }],
+      'nextjs-export': [{ kind: 'api', text: 'API: 1 PV あたり 1 回増える' }],
+      'vite-spa': [{ kind: 'api', text: 'API: 1 PV あたり 1 回増える' }],
+    },
   },
 ];
 
