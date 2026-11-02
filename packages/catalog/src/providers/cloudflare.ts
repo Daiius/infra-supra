@@ -225,14 +225,48 @@ export const cloudflare: PriceBookInput = {
     workersSla: src(
       'https://www.cloudflare.com/workers-service-level-agreement/',
     ),
-    // 前段の CDN（さくらの VPS の前に置く。2026-11-01 に原文で確認。D-31）
+    // 前段の CDN（さくらの VPS の前に置く。D-31。2026-11-02 に原文で確かめ直した。D-91）
     defaultCache: {
+      // 2026-09-14 更新
       url: 'https://developers.cloudflare.com/cache/concepts/default-cache-behavior/',
-      retrievedAt: '2026-11-01',
+      retrievedAt: '2026-11-02',
     },
     cdnTerms: {
+      // 2026-09-28 更新
       url: 'https://www.cloudflare.com/service-specific-terms-application-services/',
-      retrievedAt: '2026-11-01',
+      retrievedAt: '2026-11-02',
+    },
+    // 2023-05-16 の規約の改訂（Self-Serve Subscription Agreement の 2.8 を CDN の Service-Specific Terms へ移した）
+    tosUpdate2023: {
+      url: 'https://blog.cloudflare.com/updated-tos/',
+      retrievedAt: '2026-11-02',
+    },
+    // Cache Rules（2026-08-14 更新。Free は 10 個）・設定（2026-10-15 更新）・Cache Everything の例（2025-10-13 更新）
+    cacheRules: {
+      url: 'https://developers.cloudflare.com/cache/how-to/cache-rules/',
+      retrievedAt: '2026-11-02',
+    },
+    cacheRulesSettings: {
+      url: 'https://developers.cloudflare.com/cache/how-to/cache-rules/settings/',
+      retrievedAt: '2026-11-02',
+    },
+    cacheEverything: {
+      url: 'https://developers.cloudflare.com/cache/how-to/cache-rules/examples/cache-everything/',
+      retrievedAt: '2026-11-02',
+    },
+    // キャッシュの消し方（purge。2026-09-29 更新）
+    purgeCache: {
+      url: 'https://developers.cloudflare.com/cache/how-to/purge-cache/',
+      retrievedAt: '2026-11-02',
+    },
+    // Free の転送量（「unmetered bandwidth on the Free plan」。2024-09-27 の公式ブログ）・プランの表（Free $0）
+    freeCommitment: {
+      url: 'https://blog.cloudflare.com/cloudflares-commitment-to-free/',
+      retrievedAt: '2026-11-02',
+    },
+    plansNetworkCdn: {
+      url: 'https://www.cloudflare.com/plans/network-cdn.md',
+      retrievedAt: '2026-11-02',
     },
     // オンデマンド ISR（2026-11-01 に原文で確認。D-32）
     cacheApi: {
@@ -267,8 +301,9 @@ export const cloudflare: PriceBookInput = {
     },
     // Next.js の CDN の扱い（Cloudflare の文書ではないが、前段の CDN の前提として一緒に持つ）
     nextjsCdn: {
+      // 2026-08-25 更新（2026-11-02 に確かめ直した。D-91）
       url: 'https://nextjs.org/docs/app/guides/cdn-caching',
-      retrievedAt: '2026-11-01',
+      retrievedAt: '2026-11-02',
     },
     // 他の事業者（Vercel）のサイトの画像だけを R2 + Images で配る（2026-11-01 に原文で確認。D-52・prd/11 §2）
     r2PublicBuckets: {
@@ -914,11 +949,11 @@ export const cloudflare: PriceBookInput = {
       ],
     },
     {
-      // 前段の CDN（Free プラン）。従量のメーターは持たない（このモデルでは課金なし）
+      // 前段の CDN（Free プラン）。従量のメーターは持たない（Free は転送量で課金しない。D-91）
       id: 'cdn-free',
       service: 'cdn',
       name: 'CDN（Free）',
-      sourceIds: ['plans', 'defaultCache'],
+      sourceIds: ['plans', 'plansNetworkCdn', 'defaultCache'],
       uptimeSla: {
         status: 'none',
         premise:
@@ -930,19 +965,43 @@ export const cloudflare: PriceBookInput = {
         {
           id: 'html-not-cached',
           premise:
-            'Cloudflare の CDN は既定では HTML と JSON をキャッシュしない（拡張子で判定する）',
+            'Cloudflare の CDN は既定では HTML と JSON をキャッシュしない。既定でキャッシュするのは拡張子で決めた一覧（JS・CSS・JPG・PNG・WEBP・AVIF・SVG・ICO・WOFF2・PDF・MP4 など）だけ',
           sourceIds: ['defaultCache'],
+        },
+        {
+          id: 'cache-rules-html',
+          premise:
+            'Cache Rules の「Eligible for cache」で既定の外（HTML・拡張子の無い URL）もキャッシュの対象にでき、Edge TTL は「Cache-Control があれば従う」を選べる。Free の Cache Rules は 10 個まで。動的な中身も区別せずキャッシュするので、ログインの要るページは条件で外す',
+          sourceIds: ['cacheRules', 'cacheRulesSettings', 'cacheEverything'],
+        },
+        {
+          id: 'purge-free',
+          premise:
+            'Free でも URL・ホスト名・タグ・prefix・すべてのキャッシュを API で消せる。URL は毎秒 800 件、ホスト名・タグ・prefix・すべては 1 分 5 回（貯めて 25 回）・1 回 100 件まで',
+          sourceIds: ['purgeCache'],
+        },
+        {
+          id: 'free-bandwidth',
+          premise:
+            'Free プランは $0 / 月で、転送量に上限や課金を設けない（公式ブログ「unmetered bandwidth on the Free plan」2024-09-27。プランの表に転送量の行は無い）',
+          sourceIds: ['freeCommitment', 'plansNetworkCdn'],
         },
         {
           id: 'pictures-terms',
           premise:
-            'Cloudflare の CDN（Free・Pro・Business）はウェブページとサイトのためのもので、動画や、不釣り合いな割合の画像などの大きなファイルを配るには Images などの有料サービスを使う（規約）',
-          sourceIds: ['cdnTerms'],
+            'Enterprise 以外は、動画などの大きなファイルを CDN で配るには Developer Platform・Images・Stream などの有料サービスを使う。それなしに動画や不釣り合いな割合の画像・音声などの大きなファイルを配ると制限されうる（2023-05 に Self-Serve Subscription Agreement の 2.8 から CDN の Service-Specific Terms へ移した規約）',
+          sourceIds: ['cdnTerms', 'tosUpdate2023'],
         },
         {
           id: 'next-on-demand',
           premise:
-            'Next.js のオンデマンドの再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返す（CDN のパージを一緒に呼ぶ必要がある）',
+            'Next.js のオンデマンドの再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返す（再検証と一緒に CDN のパージを呼ぶ必要がある。HTML と RSC の変種の両方）',
+          sourceIds: ['nextjsCdn'],
+        },
+        {
+          id: 'next-isr-headers',
+          premise:
+            'Next.js は ISR のページに s-maxage = 再検証の間隔・stale-while-revalidate を付ける。CDN が従うと、サーバーで作り直した後も CDN の写しが最大で間隔の分だけ残り、更新は最大で間隔の約 2 倍遅れて見える（2 倍はこのモデルの読み）',
           sourceIds: ['nextjsCdn'],
         },
       ],

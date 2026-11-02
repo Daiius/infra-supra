@@ -1256,6 +1256,12 @@ function factByRef(ref: string) {
 }
 
 /** 即時反映を妨げている部品（無ければ undefined）。理由は catalog の事実の文（D-32）。 */
+/**
+ * HTML も前段の CDN でキャッシュし、時間で再検証するときの、更新が見えるまでの遅れの倍率（D-91）。CDN の写しは s-maxage（= 間隔）まで
+ * 残り、その間にサーバーで作り直したページは次に CDN が取りに来るまで見えないので、最大で間隔の約 2 倍（ゲーム上の読み）。
+ */
+export const FRONT_CDN_DELAY_FACTOR = 2;
+
 /** 前段の CDN が ISR のページ（HTML）を実際にキャッシュするか（HTML もキャッシュ × ISR のキャッシュが有効）。 */
 function htmlCachedAtFront(c: Choices): boolean {
   return c.frontCdn === 'html' && c.isrCache !== 'none';
@@ -3818,11 +3824,23 @@ export function playMonth(input: GameState): GameState {
   const serverCpuMs = spa
     ? ssrCpuMs * (sc.frameworks?.spa?.shape.dataCpuFactor ?? 1)
     : ssrCpuMs;
-  // HTML を前段の CDN でキャッシュすると、オンデマンドの再検証が届かず古いページが出る（D-31。同じく鮮度を 1 段下げる）
   // API を他の事業者に置いている間は、構成の DB の選択は使われない（DB は API の事業者の部品。OCL-5A7916E6）
+  // ISR のページを前段の CDN でもキャッシュし、時間で再検証するなら、CDN は s-maxage（= 間隔）まで写しを返すので、
+  // 更新は最大で間隔の約 2 倍遅れて見える（記事・ページに含めたコメントとも。D-91）。オンデマンドでは、再検証と一緒に
+  // CDN のキャッシュを消せる部品（さくらの VPS の Cloudflare は Free の purge の API）なら遅れず、消せない部品
+  // （AWS の自前の CloudFront）は古いページが残る（D-31 と同じく 1 段下げ、さらに即時反映を満たさない）
+  const frontHtml = !spa && !rebuilds && htmlCachedAtFront(comps);
+  const frontDelayed = frontHtml && !isOnDemand(viewed);
+  const frontUnpurged =
+    frontHtml &&
+    isOnDemand(viewed) &&
+    componentsOf(platformNow, 'frontCdn').find((o) => o.id === comps.frontCdn)
+      ?.onDemandIsr?.ok === false;
   const eventuallyConsistent =
-    (comps.db === 'kv' && !apiPlacedElsewhere(comps)) ||
-    (!spa && htmlCachedAtFront(comps));
+    (comps.db === 'kv' && !apiPlacedElsewhere(comps)) || frontUnpurged;
+  const judgedDelaySec = frontDelayed
+    ? viewed.revalidateSec * FRONT_CDN_DELAY_FACTOR
+    : viewed.revalidateSec;
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
   // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
   const onDemandSetting = !spa && isOnDemand(state.settings);
@@ -3847,7 +3865,7 @@ export function playMonth(input: GameState): GameState {
       coldStart,
       imageKB: viewed.imageKB,
       variants: viewed.variants,
-      revalidateSec: viewed.revalidateSec,
+      revalidateSec: judgedDelaySec,
       qualityImageKB,
       qualityDown: redesign !== undefined,
       featurePoints,
@@ -3859,7 +3877,7 @@ export function playMonth(input: GameState): GameState {
       ...(commentsDelayed
         ? {
             commentFreshness: {
-              delaySec: viewed.revalidateSec,
+              delaySec: judgedDelaySec,
               ...sc.comments!.freshness,
             },
           }
@@ -3909,10 +3927,11 @@ export function playMonth(input: GameState): GameState {
     ),
     qualityReason: redesign,
     eventuallyConsistent,
+    frontDelayed,
     uncached,
     // 遅れがコメントの「良い」の境目を超えたときだけ理由に出す
     commentsDelayed:
-      commentsDelayed && viewed.revalidateSec > sc.comments!.freshness.good,
+      commentsDelayed && judgedDelaySec > sc.comments!.freshness.good,
     onDemandReason: onDemand
       ? state.requirements.includes('on-demand-isr')
         ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
@@ -4357,6 +4376,8 @@ function stageReasons(
     /** 画質を下げた理由（記事のデザインの刷新。D-47）。 */
     qualityReason?: string | undefined;
     eventuallyConsistent: boolean;
+    /** HTML を前段の CDN でもキャッシュし、時間で再検証している（更新は最大で間隔の約 2 倍遅れる。D-91）。 */
+    frontDelayed?: boolean;
     uncached: boolean;
     /** コメントを記事のページに含め、時間で再検証・ビルドしている（コメントが間隔の分だけ遅れて見える。D-85）。 */
     commentsDelayed?: boolean;
@@ -4398,7 +4419,9 @@ function stageReasons(
             ? `ビルドの間隔 ${optionLabel('buildInterval', c.settings.revalidateSec)}`
             : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
       c.eventuallyConsistent &&
-        'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて、更新がすぐ見えない',
+        'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて（キャッシュを消せない）、更新がすぐ見えない',
+      c.frontDelayed &&
+        'HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見える（オンデマンドの再検証でキャッシュを消せば遅れない）',
       c.commentsDelayed &&
         'コメントを記事のページに含めているので、コメントも間隔の分だけ遅れて見える',
       c.onDemandReason,

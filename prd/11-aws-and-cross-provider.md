@@ -955,3 +955,72 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 - Cloud SQL は月 約 $8.9 + 保存の固定で、Firestore（従量）より受託でも記事でも高い。
 - （参考）記事 × Astro は既定で 20/20・$59.5（記事が静的で速さが「良い」）、記事 × 静的書き出しは画像が「縮めて置く」の既定で 0/20・$152.5。
 - 既存の golden・基準プレイ（CF Paid × Next.js を含む）はすべて不変。シナリオの `baselines` には足していない。
+
+## 17. さくらの VPS の前の Cloudflare のプロキシ（2026-11-02・D-91）
+
+小さな VPS で記事サイトを運営するときのよくある費用の抑え方: DNS を Cloudflare のプロキシ（オレンジ雲・Free プラン）にして、
+静的なファイル・画像（・設定によっては HTML）を Cloudflare の CDN でキャッシュし、VPS の回線（100 Mbps の共有）と CPU を空ける。
+部品はすでに D-31 の「前段の CDN」（さくらの VPS のスロット `frontCdn`）としてあったので、**新しい部品は足さず、同じ id（`none`・`static`・`html`）のまま**
+出典を確かめ直し、「HTML も」をパージの連携まで含めた選べる形にした（保存は行動の履歴を再生するので id は変えない。D-26）。
+
+### 17.1 確かめた公式の事実（2026-11-02 取得）
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| 既定のキャッシュ | 拡張子で決めた一覧だけをキャッシュする（JS・CSS・JPG・JPEG・PNG・GIF・WEBP・AVIF・SVG・ICO・WOFF・WOFF2・TTF・OTF・PDF・MP4・WEBM・ZIP など 50 余り）。「The Cloudflare CDN does not cache HTML or JSON by default.」（2026-09-14 更新） | [default-cache-behavior](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/) |
+| HTML を対象にする | Cache Rules の「Eligible for cache」で既定の外もキャッシュの対象にでき、Edge TTL は「Use cache-control header if present …」「Ignore cache-control header and use this TTL」を選べる。Cache Everything の例は「This option caches all HTML regardless of the presence of dynamic content」と注意し、Cookie やパスでログインの要るページを外すよう書く | [cache-rules](https://developers.cloudflare.com/cache/how-to/cache-rules/)（2026-08-14 更新）・[settings](https://developers.cloudflare.com/cache/how-to/cache-rules/settings/)（2026-10-15 更新）・[cache-everything](https://developers.cloudflare.com/cache/how-to/cache-rules/examples/cache-everything/) |
+| Free の Cache Rules の数 | 10 個（Pro 25・Business 50・Enterprise 300）。静的・画像・`/_next/image`・HTML・API の応答を分けても足りる | 同上 |
+| キャッシュの消し方（purge） | Free でも URL・ホスト名・タグ・prefix・すべてを API で消せる。URL は毎秒 800 件、ホスト名・タグ・prefix・すべては 1 分 5 回（貯めて 25 回）・1 回 100 件まで（2026-09-29 更新）。課金の記載は無い | [purge-cache](https://developers.cloudflare.com/cache/how-to/purge-cache/) |
+| Free の転送量 | プランの表は Free を「$0 /month」とし、転送量の行が無い。公式ブログ（2024-09-27）は「we're able to continue to offer unmetered bandwidth on the Free plan」 | [plans/network-cdn](https://www.cloudflare.com/plans/network-cdn.md)・[commitment-to-free](https://blog.cloudflare.com/cloudflares-commitment-to-free/) |
+| 利用規約（大きなファイル） | 2023-05-16 の改訂で、Self-Serve Subscription Agreement の 2.8（CDN をウェブページに限る・「HTML か否か」の区別）を CDN の Service-Specific Terms へ移した。今の文（2026-09-28 更新）は「Unless you are an Enterprise customer, Cloudflare offers specific Paid Services (e.g., the Developer Platform, Images, and Stream) that you must use in order to serve video and other large files via the CDN」、有料のサービスなしに「video or a disproportionate percentage of pictures, audio files, or other large files」を配ると制限されうる | [service-specific-terms](https://www.cloudflare.com/service-specific-terms-application-services/)・[updated-tos](https://blog.cloudflare.com/updated-tos/) |
+| Next.js のヘッダー | ISR のページに `s-maxage={revalidate}, stale-while-revalidate=…`。「CDN-level caching alone does not support on-demand revalidation」「trigger CDN purges alongside your revalidation call … (including both HTML and RSC variants)」（2026-08-25 更新） | [cdn-caching](https://nextjs.org/docs/app/guides/cdn-caching) |
+
+- **未確認**: Free の転送量に上限が入ったという第三者の記事（2026-06 の発表とする）が 1 件あったが、出典の Cloudflare の文書が示されておらず、公式の文書・ブログには見当たらない。課金なしのまま扱う。
+- 画像の割合の「不釣り合い」の境目は規約に数値が無い。記事コミュニティの転送の大半は画像なので、事実（`pictures-terms`）として出すだけで制限は計算しない（D-31 と同じ）。
+
+### 17.2 入れた形
+
+- **静的と画像だけ**（`static`）: 変えていない（ヒット率は静的 1・画像 0.9 の仮定）。説明に Free の転送量の事実を足し、`/_next/image` を Cache Rules で対象にする前提を「推測」から公式の機能に直した。
+- **HTML も（Cache Rules）**（`html`）: 「不適切」の印（D-45 で表示はやめていた）を外し、すべてのフレームワークで選べるようにした。
+  - Next.js: ISR のページを s-maxage（= 再検証の間隔）で CDN が持つ（ヒット率は D-37 の λT/(1+λT)。再生成は CDN を外れて VPS に届いた閲覧だけ。D-55）。
+    - **時間の再検証**: CDN の写しは間隔まで残るので、更新は最大で間隔の約 2 倍遅れて見える（`FRONT_CDN_DELAY_FACTOR = 2`。ゲーム上の読み）。
+      鮮度の判定は記事・記事のページに含めたコメント（D-82・D-85）とも、遅れ = 間隔 × 2 で境目と比べる。5 分は 10 分になって「普通」（今までの一律 1 段下げと同じ）、1 分は 2 分で「良い」のまま。
+    - **オンデマンドの再検証**: `revalidatePath` と一緒に Free の purge の API で、そのページを prefix（HTML と RSC の変種をまとめて）で 1 回消す前提。即時反映の要件を満たし、鮮度は下げない。
+      消す回数はノードの `invalidationPathsPerPage: 1` で使用量（`invalidation-paths`）に出す（課金なし）。記事コミュニティの更新は月 300 回、コメントを記事のページに含めても約 1.5 万回で、
+      prefix の上限（1 分 5 回・1 回 100 件 = 月 約 2,000 万件）に遠い。
+  - SPA: シェル（`document-static`）を CDN が返す。Astro・静的書き出し: 記事の静的なページを CDN が返す（ビルドの後に変わったページだけ消す前提で、ヒット率は静的と同じ 1）。鮮度は変わらない。
+  - AWS の「自前の CloudFront（ISR のページも）」も同じ 2 倍の読みで判定する（時間の再検証）。オンデマンドで CloudFront を消さない形は、今までどおり 1 段下げて即時反映も満たさない。
+- アカウントの手間は D-52 のとおり（Cloudflare のアカウントが増え、差すときに 1・維持 0.5 / 月）。切り替えの手間は D-31 の 2 のまま（パージの連携の作り込みの手間は分けていない）。
+- `CROSS_PAIRS` には載せなかった。前段の CDN は土台（さくらの VPS）のスロットの部品で、課金先のアカウントだけが Cloudflare（`accountsOf` で数える）。
+  `CROSS_PAIRS` は他の事業者にもある役割（画像・API・DB）の部品を差す表で、前段の CDN はさくらの VPS にしか無い（AWS は自前の CloudFront で別の部品）。
+- Cloudflare の静的 + VPS の API（D-67）の api のサブドメインは DNS だけ（プロキシしない）のまま。API をプロキシして応答をキャッシュする形は入れていない（残した点）。
+
+### 17.3 基準プレイ（何もしない・シード 1〜20。達成数・12 か月の費用の平均 / 月・VPS の回線 / CPU の使用率の最大の中央値）
+
+再検証は既定の 5 分（SPA は API のキャッシュの期間の既定）。費用は VPS の定額だけで、プロキシで変わらない。
+
+| シナリオ × VPS × フレームワーク | なし | 静的と画像だけ | HTML も（5 分） | HTML も（1 分） | HTML も（オンデマンド） |
+|---|---|---|---|---|---|
+| 記事 × 2GB × Next.js | 10/20・$13.1・回線 132%・CPU 24% | **16/20**・34%・23% | 4/20・21%・16%（鮮度「普通」） | **16/20**・31%・21% | **16/20**・16%・12% |
+| 記事 × 4GB × Next.js | 0/20・$26.4・132%・18% | 4/20・34%・17% | 0/20・21%・12%（「普通」） | 4/20・31%・16% | 4/20・16%・9% |
+| 記事 × 2GB × SPA | 0/20・$13.1・66%・9% | 0/20・8%・8% | 0/20・8%・8% | — | — |
+| 記事 × 4GB × SPA | 0/20・$26.4・66%・7% | 0/20・8%・6% | 0/20・8%・6% | — | — |
+| 受託 × 2GB × Next.js | 0/20・$13.1・4%・5% | 0/20・2%・5% | 0/20・2%・5% | 0/20 | 0/20 |
+| 受託 × 4GB × Next.js | 8/20・$26.4・4%・4% | 8/20・2%・4% | 8/20・2%・4% | 8/20 | 8/20 |
+| 受託 × 2GB × SPA | 1/20・$13.1・2%・4% | 1/20・1%・4% | 1/20・1%・4% | — | — |
+| 受託 × 4GB × SPA | 12/20・$26.4・2%・3% | 12/20・1%・3% | 12/20・1%・3% | — | — |
+
+- **前（D-31 の形）との差**: 変わったのは「HTML も」だけ。Next.js × 5 分は同じ（一律 1 段下げ → 10 分の遅れで「普通」）。SPA は「HTML も」が選べず「なし」に戻されていたので、66% → 8% に（静的と画像だけと同じ。シェルは 5 KB で回線への効きは小さい）。
+  受託 × Next.js は鮮度の段が「普通」→「良い」（受託の鮮度の境目は実質無制限で、2 倍でも「良い」。今までは一律の 1 段下げで「普通」になっていた）が、
+  受託は鮮度の重みが 0 なので達成数は変わらない（受託は VPS の手間・ディスク・SLA で決まる。prd/09 §9.3）。
+- 記事 × Next.js は回線が詰まる（なし 132%）ので前段の CDN で 10 → 16/20。HTML までキャッシュすると回線・CPU はさらに下がるが、5 分の再検証のままでは鮮度の損が大きい（16 → 4/20）。
+  **1 分かオンデマンド（purge の連携）にすれば損が消えて 16/20**。残る 4 本は前段の CDN と関係なく落ちる（静的と画像だけでも同じ）。
+- 記事のページにコメントを含める（D-82）と、HTML も × 5 分は 0/20（コメントの遅れ 10 分が「悪い」）、1 分は 4/20（2 分で「普通」）、オンデマンドは 16/20。静的と画像だけ × 5 分は 4/20（D-85 のまま）。
+- （参考）記事 × 2GB × Astro: なし 17/20・回線 115%、静的と画像だけ 17/20・29%、HTML も 17/20・18%。
+- **CF Paid × Next.js（目標の根拠）は記事 20/20・$15.2・受託 20/20・$5.7 で不変**。golden（GD-2・GD-4・SPA・受託）・網羅テスト（combo-sweep）も不変。シナリオの `baselines` は変えていない。
+
+### 17.4 残した点
+
+- パージの連携の作り込み（再検証のハンドラーから Cloudflare の API を呼ぶ）の手間を、部品の切り替えの手間と分けて数えること。
+- Cloudflare の静的 + VPS の API（D-67）で、api のサブドメインもプロキシして API の応答をキャッシュする形。
+- 画像の割合が規約の「不釣り合い」に当たるかの判定（数値の境目が規約に無い）。Free の転送量の上限の噂（17.1 の未確認）。
