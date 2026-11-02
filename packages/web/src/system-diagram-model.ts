@@ -82,7 +82,8 @@ export const LANES: Readonly<
     classes: ['realtime-connect', 'realtime-message'],
   },
   revalidate: {
-    label: 'ISR の再生成（裏で動く）',
+    // Astro の Cloudflare では、消した後の閲覧が描き終わるのを待つ（裏ではない。D-103）
+    label: 'ISR の再生成・キャッシュの描き直し',
     classes: ['isr-revalidate'],
   },
 };
@@ -99,6 +100,8 @@ const SOURCE_LANE: Readonly<Record<RegionSource, LaneId>> = {
   build: 'static',
   shell: 'static',
   isr: 'isr',
+  // Astro の記事（閲覧時に描いてキャッシュし、投稿で消す。D-103）は ISR と同じ経路（document-isr・isr-revalidate）
+  cached: 'isr',
   ssr: 'ssr',
   api: 'api',
   island: 'api',
