@@ -136,25 +136,30 @@ describe('Google Cloud の構成', () => {
       contractSpa: run(contract, GCP, 'vite-spa'),
       contractSpaSql: run(contract, GCP, 'vite-spa', { db: 'cloud-sql' }),
     };
+    // ドメインの登録（$0.93 / 月）と Cloud DNS（ゾーン 約 $0.20 + 問い合わせ）の分だけ $1.1〜1.2 上がった（D-96。達成は不変）
     expect(table).toEqual({
-      articleNext: { won: 0, monthly: 63.1 },
-      articleNextMin1: { won: 0, monthly: 72.5 },
-      articleNextSql: { won: 0, monthly: 70.1 },
-      articleNextCfResize: { won: 20, monthly: 27 },
-      articleSpa: { won: 0, monthly: 55.1 },
-      articleSpaCfResize: { won: 20, monthly: 10.6 },
-      contractNext: { won: 20, monthly: 14.8 },
-      contractNextMin1: { won: 20, monthly: 24.2 },
+      articleNext: { won: 0, monthly: 64.3 },
+      articleNextMin1: { won: 0, monthly: 73.6 },
+      articleNextSql: { won: 0, monthly: 71.3 },
+      articleNextCfResize: { won: 20, monthly: 28.2 },
+      articleSpa: { won: 0, monthly: 56.3 },
+      articleSpaCfResize: { won: 20, monthly: 11.8 },
+      contractNext: { won: 20, monthly: 15.9 },
+      contractNextMin1: { won: 20, monthly: 25.4 },
       // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）
-      contractNextSql: { won: 20, monthly: 19.6 },
-      contractSpa: { won: 20, monthly: 11.4 },
-      contractSpaSql: { won: 20, monthly: 15.8 },
+      contractNextSql: { won: 20, monthly: 20.7 },
+      contractSpa: { won: 20, monthly: 12.6 },
+      contractSpaSql: { won: 20, monthly: 16.9 },
     });
     // 目標の根拠（CF Paid × Next.js）: 達成は不変。メールの送信（D-95・Email Service）の分だけ費用が上がった（前は $15.2・$5.7）
-    expect(run(article, CF_PAID, 'nextjs')).toEqual({ won: 20, monthly: 18 });
+    // ドメインの登録（D-96。$0.93 / 月）の分も上がった（前は $18.0・$13.4）
+    expect(run(article, CF_PAID, 'nextjs')).toEqual({
+      won: 20,
+      monthly: 18.9,
+    });
     expect(run(contract, CF_PAID, 'nextjs')).toEqual({
       won: 20,
-      monthly: 13.4,
+      monthly: 14.4,
     });
   });
 

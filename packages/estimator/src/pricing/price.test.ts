@@ -449,3 +449,27 @@ describe('表示名（D-75）', () => {
     );
   });
 });
+
+describe('年額の基本料（D-96）', () => {
+  it('年額は 12 で割った月割りで、明細に月割りの前提を残す', () => {
+    const yearly = parsePriceBook(
+      {
+        ...FICTIONAL_CLOUD,
+        plans: FICTIONAL_CLOUD.plans.map((p) =>
+          p.id === 'basic'
+            ? { ...p, baseFee: { amount: 12.6, per: 'year', scope: 'node' } }
+            : p,
+        ),
+      },
+      { allowFictional: true },
+    );
+    const b = priceUsage({
+      books: [yearly],
+      subscriptions: [sub('basic', { nodeIds: ['n1', 'n2'] })],
+      usage: [],
+    });
+    const fee = b.lines.find((l) => l.kind === 'base-fee')!;
+    expect(fee.amount).toBeCloseTo((12.6 / 12) * 2, 12);
+    expect(fee.assumptions).toEqual(['年額を 12 で割った月割り']);
+  });
+});

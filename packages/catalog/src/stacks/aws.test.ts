@@ -60,6 +60,9 @@ describe('AWS の構成（Next.js・Amplify Hosting）', () => {
       'dynamodb',
       // メールの送信（D-95。既定は同じアカウントの SES）
       'email',
+      // DNS（Route 53）とドメインの登録（D-96。同じアカウント）
+      'dns',
+      'domain',
     ]);
     expect(a.routes['image-read']).toEqual(['cf', 's3']);
     expect(a.routes['document-isr']).toEqual(['cdn', 'ssr']);

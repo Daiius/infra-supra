@@ -1191,6 +1191,19 @@ export function initialStock(sc: Scenario): Stock {
 }
 
 /** 部品の選択と席を足した構成（席課金のプランだけ費用が変わる）。standby は差し替えの途中の新しい部品。 */
+/**
+ * ドメインの登録のノードを外した構成（D-96）。乗り換え中の新しい構成は同じドメインを使うので、登録料を二重に数えない
+ * （DNS のゾーンは並行して動かす間それぞれにあるので残す）。
+ */
+export function withoutDomainRegistration(
+  arch: ArchitectureInput,
+): ArchitectureInput {
+  return {
+    ...arch,
+    nodes: arch.nodes.filter((n) => n.config.kind !== 'domain-registration'),
+  };
+}
+
 function architectureFor(
   stackIndex: number,
   seats: number,
@@ -1254,12 +1267,14 @@ export function meetsRequirement(
     }
     case 'uptime-sla': {
       // バックアップの置き場（VPS の自前のバックアップのオブジェクトストレージ。D-93）とメールの送信（D-95）は
-      // アプリの稼働に関わらないので見ない
+      // アプリの稼働に関わらないので見ない。ドメインの登録と DNS（D-96）も構成の既定のまま見ない（残した点）
       const plans = composeStack(STACK_DEFS[stackIndex]!, components)
         .nodes.flatMap((n) =>
           n.billing &&
           n.config.kind !== 'db-backup' &&
-          n.config.kind !== 'email-sender'
+          n.config.kind !== 'email-sender' &&
+          n.config.kind !== 'dns-zone' &&
+          n.config.kind !== 'domain-registration'
             ? [n.billing]
             : [],
         )
@@ -3648,11 +3663,9 @@ export function playMonth(input: GameState): GameState {
             platform: STACKS[to]!.provider,
             components,
           }),
-          architecture: architectureFor(
-            to,
-            state.seats,
-            state.framework,
-            components,
+          // 同じドメイン（.com 1 つ）の登録料は今の構成で払っているので、乗り換え先では数えない（D-96・OCL-A580D510）
+          architecture: withoutDomainRegistration(
+            architectureFor(to, state.seats, state.framework, components),
           ),
           books: monthBooks,
         });

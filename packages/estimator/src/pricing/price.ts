@@ -5,7 +5,7 @@
 //       → クレジット → 固定費
 import { ceilUnits, overage, sum } from '../num/arith.ts';
 import type { Currency } from '../num/money.ts';
-import { HOURS_PER_MONTH } from '../num/unit.ts';
+import { HOURS_PER_MONTH, MONTHS_PER_YEAR } from '../num/unit.ts';
 import { OVERAGE_BEHAVIORS } from './schema.ts';
 import type { Meter, Plan, PriceBook, Pricing } from './schema.ts';
 
@@ -487,7 +487,11 @@ export function priceUsage(input: {
     const fee = plan.baseFee;
     if (!fee) continue;
     let perUnit =
-      fee.per === 'hour' ? fee.amount * HOURS_PER_MONTH : fee.amount;
+      fee.per === 'hour'
+        ? fee.amount * HOURS_PER_MONTH
+        : fee.per === 'year'
+          ? fee.amount / MONTHS_PER_YEAR
+          : fee.amount;
     if (fee.monthlyCap !== undefined)
       perUnit = Math.min(perUnit, fee.monthlyCap);
     const count = fee.scope === 'node' ? sub.nodeIds.length : 1;
@@ -506,7 +510,12 @@ export function priceUsage(input: {
       },
       ...(fee.label ? { label: fee.label } : {}),
       quantity: count * seats,
-      assumptions: fee.per === 'hour' ? ['1 か月 = 730 時間'] : [],
+      assumptions:
+        fee.per === 'hour'
+          ? ['1 か月 = 730 時間']
+          : fee.per === 'year'
+            ? ['年額を 12 で割った月割り']
+            : [],
     });
   }
 

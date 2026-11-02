@@ -48,7 +48,7 @@ type Plan = {
 ```ts
 type BaseFee = {
   amount: number;
-  per: 'month' | 'hour';
+  per: 'month' | 'hour' | 'year';    // year は年額（ドメインの登録）。月の費用は 1 / 12（月割り。D-96）
   monthlyCap?: number;               // 時間課金に月額上限がある場合（VPS に多い）
   scope: 'account' | 'node';         // アカウントに 1 回（チームプラン）か、ノードごと（インスタンス）か
   perSeat?: boolean;                 // 席課金（Vercel Pro など）。席数は Architecture の BillingAccount に持つ
@@ -122,6 +122,10 @@ type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unit
   `sakura-vps` の料金データにプラン `object-storage`（月額 495 円・100 GiB 込みのプール）として持つ。課金の無いもの（D1 の Time Travel・Neon Free の 6 時間・Supabase Pro の日次）は注記に書く。
 - **メールの送信（D-95）**: 汎用リソース `emails`（通数）で受ける。Workers Paid の `email-sending`（プール `paid-email-sending` 3,000 通 / 月）・AWS のプラン `ses` の `outbound`・
   新しい事業者 `resend`（Free は日次のプール `free-daily` 100 通で `block`。月 3,000 通は日 100 通 × 30 日とほぼ同じなので日次で判定する。Pro は基本料 $20 とプール `pro-emails` 5 万通。超過は込みの 5 倍の 25 万通で止まるので、制限の測り方 `emails-per-month`（`monthly-cap`・`block`）で判定し、単価は込みの後の 20 万通までの段にして、その先は課金しない。OCL-F37D88E8）。
+- **ドメインと DNS（D-96）**: 汎用リソース `dns-queries`（課金される問い合わせ）で受ける。AWS のプラン `route53`（基本料 $0.50 / 月・ノードごと + `queries`）・
+  Google Cloud のプラン `cloud-dns`（基本料 1 時間 $0.000273973・ノードごと + `queries`）。ドメインの登録は新しい料金データ `registrar` のプラン `com`
+  （基本料 $11.17 / 年。`per: 'year'` で、計算は 12 で割った月割り。明細の前提に「年額を 12 で割った月割り」を残す）。年に 1 回の前払いを特定の月に置かないのは、
+  月の費用を積む作りで所持金と構成の比較（月額）がその月だけ跳ねるため。
 - **表示名（`label`。D-75）**: 明細の行に出す名前。メーター・基本料（`baseFee.label`）・クレジット・一度だけの手数料（`addons[].label`）に付け、
   計算には使わない（明細の行の `LineItem.label` に写すだけ）。形は「何の費用かを日本語で（公式の名称）」で、括弧の中に事業者の画面・料金表の呼び方を残す
   （例:「画像の変換（Images: unique transformations）」「CDN の転送（CloudFront: data transfer out）」「関数の実行時間（Vercel: Active CPU）」）。

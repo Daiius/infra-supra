@@ -24,7 +24,7 @@
 | [prd/08-roadmap.md](./prd/08-roadmap.md) | フェーズの状態（済み・残り）・見積モードの今の形・Phase 1 のタスク分解 |
 | [prd/09-scenario-contract.md](./prd/09-scenario-contract.md) | 2 本目のシナリオ: 受託先の業務アプリの運用（受託は設定だけ・運用費に集中。D-33） |
 | [prd/10-framework-branch.md](./prd/10-framework-branch.md) | フレームワークの分岐（Vite の SPA か Next.js か）と API の置き場（確定 D-34。段 1〜3・API の応答のキャッシュ・Astro の API の置き場まで実装済み。D-37・D-65・D-67・D-69） |
-| [prd/11-aws-and-cross-provider.md](./prd/11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext）・事業者をまたぐ構成（画像だけ Cloudflare など）・CloudFront の定額・Netlify・Neon・さくらの VPS の前の Cloudflare のプロキシ（§17）・実行ごとのログの費用（§18）・DB のバックアップと PITR（§19）・メールの送信（§20）（論点 AX-01〜14 は D-50 で決定し、実装済み。D-51・D-52・D-61・D-63・D-66・D-71・D-77・D-91・D-92・D-93・D-95） |
+| [prd/11-aws-and-cross-provider.md](./prd/11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext）・事業者をまたぐ構成（画像だけ Cloudflare など）・CloudFront の定額・Netlify・Neon・さくらの VPS の前の Cloudflare のプロキシ（§17）・実行ごとのログの費用（§18）・DB のバックアップと PITR（§19）・メールの送信（§20）・ドメインと DNS（§21）（論点 AX-01〜14 は D-50 で決定し、実装済み。D-51・D-52・D-61・D-63・D-66・D-71・D-77・D-91・D-92・D-93・D-95・D-96） |
 | [prd/12-external-scenarios-and-ranking.md](./prd/12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod・ファイル / URL の読み込み）と、再生による検証のランキング（**下書き・未実装・未決 ES-01〜16**） |
 
 > 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)（未決の一覧は末尾の「未決」の節）
@@ -40,7 +40,7 @@
 | パッケージ | 役割 |
 |---|---|
 | [`packages/estimator`](./packages/estimator) | 見積エンジン（workload / architecture / resource / pricing / performance）と zod スキーマ。**環境非依存**（`lib: esnext` / `types: []`）。他パッケージに依存しない |
-| [`packages/catalog`](./packages/catalog) | 料金データ（`src/providers/`: Cloudflare・Vercel・Supabase・さくらの VPS・AWS・Netlify・Neon・Google Cloud・Resend。出典つき・版付き）・フレームワーク（Next.js・Vite の SPA・Astro・Next.js の静的書き出し）・テンプレート・構成スタック（`src/stacks/`。事業者をまたぐ部品は `cross.ts`）・日本の消費税（`src/tax/`）。estimator の型だけに依存 |
+| [`packages/catalog`](./packages/catalog) | 料金データ（`src/providers/`: Cloudflare・Vercel・Supabase・さくらの VPS・AWS・Netlify・Neon・Google Cloud・Resend・ドメインの登録の原価（registrar）。出典つき・版付き）・フレームワーク（Next.js・Vite の SPA・Astro・Next.js の静的書き出し）・テンプレート・構成スタック（`src/stacks/`。事業者をまたぐ部品は `cross.ts`）・日本の消費税（`src/tax/`）。estimator の型だけに依存 |
 | [`packages/game`](./packages/game) | ゲームエンジン。純粋関数・シード付き乱数。ゲームのバランスの値と出来事はシナリオのデータ `src/scenarios/`（記事コミュニティ・受託の業務アプリ。ゲーム上の仮定。prd/07 §10・prd/09）。見積モードと数え方をそろえる口（`estimate-mode.ts`） |
 | [`packages/web`](./packages/web) | 画面（Vite + React + Tailwind v4 + daisyUI）。ゲームモード（始める画面・月の報告・推移・ヒント）と見積モード（`?mode=estimate`。明細・構成の比較・費用の曲線・席・税込の目安。`src/estimate/`。D-73〜D-76。今の形は [prd/08](./prd/08-roadmap.md)「見積モードの今の形」） |
 

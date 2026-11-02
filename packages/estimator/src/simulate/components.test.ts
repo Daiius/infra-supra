@@ -1207,3 +1207,39 @@ describe('メールの送信（D-95）', () => {
     expect(sim(sender, {}).m!.resources.emails).toBeUndefined();
   });
 });
+
+describe('ドメインと DNS（D-96）', () => {
+  it('DNS の問い合わせは PV × 1 閲覧あたり × 課金される割合で、経路を持たない。登録は使用量を持たない', () => {
+    const r = sim(
+      [
+        {
+          id: 'z',
+          label: 'z',
+          config: {
+            kind: 'dns-zone',
+            queriesPerPageView: 0.1,
+            freeQueryShare: 0.25,
+          },
+        },
+        {
+          id: 'a',
+          label: 'a',
+          config: {
+            kind: 'dns-zone',
+            queriesPerPageView: 0.1,
+            freeQueryShare: 1,
+          },
+        },
+        { id: 'd', label: 'd', config: { kind: 'domain-registration' } },
+      ],
+      {},
+    );
+    expect(r.z!.resources['dns-queries']).toBeCloseTo(
+      w.monthlyPageViews * 0.1 * 0.75,
+      9,
+    );
+    // エイリアス（Route 53 → CloudFront）は無料なので数えない
+    expect(r.a!.resources['dns-queries']).toBeUndefined();
+    expect(r.d!.resources).toEqual({});
+  });
+});

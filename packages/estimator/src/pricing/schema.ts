@@ -133,7 +133,8 @@ export const BaseFeeSchema = z.object({
   /** 表示名（明細の行の名前。D-75）。日本語の説明に公式の名称を括弧で残す。計算には使わない。 */
   label: z.string().min(1).optional(),
   amount: NonNegative,
-  per: z.enum(['month', 'hour']),
+  /** year は年額（ドメインの登録など）。月の費用は 1 / 12 にする（月割り。D-96）。 */
+  per: z.enum(['month', 'hour', 'year']),
   monthlyCap: NonNegative.optional(),
   scope: z.enum(['account', 'node']),
   perSeat: z.boolean().default(false),

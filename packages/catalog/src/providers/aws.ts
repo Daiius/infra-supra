@@ -255,6 +255,11 @@ export const aws: PriceBookInput = {
       url: 'https://aws.amazon.com/ses/pricing/',
       retrievedAt: '2026-11-02',
     },
+    // Route 53（2026-11-02 取得。D-96）
+    route53Pricing: {
+      url: 'https://aws.amazon.com/route53/pricing/',
+      retrievedAt: '2026-11-02',
+    },
     // データ転送の常時無料（2026-11-01 に原文で確認。D-52）
     ec2DataTransfer: src('https://aws.amazon.com/ec2/pricing/on-demand/'),
   },
@@ -1189,6 +1194,47 @@ export const aws: PriceBookInput = {
             'Amazon SES の送信は受け取る人 1 人ごとに 1,000 通 $0.10（東京も同じ）。月の通数による割引・無料の分は無い',
           pricing: { model: 'flat', per: 1_000, unitPrice: 0.1 },
           sourceIds: ['sesPrices', 'sesPricing'],
+        },
+      ],
+    },
+    // Amazon Route 53（構成の DNS。D-96・prd/11 §21）。グローバルのサービスで、リージョンの差は無い
+    {
+      id: 'route53',
+      service: 'route53',
+      ...common,
+      name: 'Amazon Route 53（パブリックのホストゾーン）',
+      sourceIds: ['route53Pricing'],
+      baseFee: {
+        label: 'DNS のゾーン（Route 53: hosted zone）',
+        amount: 0.5,
+        per: 'month',
+        scope: 'node',
+      },
+      facts: [
+        {
+          id: 'alias-free',
+          premise:
+            'Route 53 のエイリアスのレコード（CloudFront の distribution・ELB・S3 のウェブサイトのエンドポイントなどを指す）への問い合わせは無料。このモデルはサイトの名前をエイリアスで CloudFront に向けるとみて、問い合わせを数えない',
+          sourceIds: ['route53Pricing'],
+        },
+      ],
+      meters: [
+        {
+          id: 'queries',
+          label: 'DNS の問い合わせ（Route 53: standard queries）',
+          resource: 'dns-queries',
+          unit: 'count',
+          premise:
+            'Route 53 の標準の問い合わせは 100 万件 $0.40（月 10 億件まで）、それを超えた分は 100 万件 $0.20',
+          pricing: {
+            model: 'tiered',
+            per: 1_000_000,
+            tiers: [
+              { upTo: 1_000_000_000, unitPrice: 0.4 },
+              { upTo: null, unitPrice: 0.2 },
+            ],
+          },
+          sourceIds: ['route53Pricing'],
         },
       ],
     },

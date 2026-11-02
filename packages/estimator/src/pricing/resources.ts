@@ -40,6 +40,7 @@ export const RESOURCES = [
   'backup-gb-month', // DB のバックアップ・任意の時点への復元（PITR）のために残す量（GB 月。事業者の無料の分を除いた量。D-93）
   'backup-hours', // 時間で課金するバックアップのアドオン（Supabase の PITR）を付けている時間（D-93）
   'emails', // アプリが送るメール（パスワードの再設定・通知など）の通数（D-95）
+  'dns-queries', // DNS のゾーンへの問い合わせ（課金されるものだけ。Route 53・Cloud DNS。D-96）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -82,4 +83,5 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'backup-gb-month': 'gb-month',
   'backup-hours': 'hour',
   emails: 'count',
+  'dns-queries': 'count',
 };

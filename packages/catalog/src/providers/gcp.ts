@@ -73,6 +73,11 @@ export const gcp: PriceBookInput = {
       'https://cloud.google.com/sql/docs/postgres/backup-recovery/configure-pitr',
     ),
     firestorePitr: src('https://cloud.google.com/firestore/docs/pitr'),
+    // Cloud DNS（2026-11-02 取得。D-96）
+    dnsPricing: src('https://cloud.google.com/dns/pricing'),
+    hostingDomain: src(
+      'https://firebase.google.com/docs/hosting/custom-domain',
+    ),
   },
   allowancePools: [
     {
@@ -605,6 +610,53 @@ export const gcp: PriceBookInput = {
       ],
       notes: [
         '送り先はアジア（Cloudflare の東京の拠点）とみる。北米への 1 GiB の無料の分は当たらない',
+      ],
+    },
+    // Cloud DNS（構成の DNS。D-96・prd/11 §21）
+    {
+      id: 'cloud-dns',
+      service: 'cloud-dns',
+      ...common,
+      name: 'Cloud DNS',
+      sourceIds: ['dnsPricing'],
+      baseFee: {
+        label: 'DNS のゾーン（Cloud DNS: managed zone）',
+        amount: 0.000273973,
+        per: 'hour',
+        scope: 'node',
+      },
+      facts: [
+        {
+          id: 'no-free-tier',
+          premise:
+            'Cloud DNS に無料の分は無い。ゾーンは使っていなくても時間で課金される（1 アカウントで 25 ゾーンまで 1 時間 $0.000273973 = 月 約 $0.20）',
+          sourceIds: ['dnsPricing'],
+        },
+        {
+          id: 'hosting-no-dns',
+          premise:
+            'Firebase Hosting は DNS を持たない。独自のドメインは、使っている DNS の事業者に A・TXT のレコードを足してつなぐ',
+          sourceIds: ['hostingDomain'],
+        },
+      ],
+      meters: [
+        {
+          id: 'queries',
+          label: 'DNS の問い合わせ（Cloud DNS: regular queries）',
+          resource: 'dns-queries',
+          unit: 'count',
+          premise:
+            'Cloud DNS の問い合わせは 100 万件 $0.40（月 10 億件まで）、それを超えた分は 100 万件 $0.20',
+          pricing: {
+            model: 'tiered',
+            per: 1_000_000,
+            tiers: [
+              { upTo: 1_000_000_000, unitPrice: 0.4 },
+              { upTo: null, unitPrice: 0.2 },
+            ],
+          },
+          sourceIds: ['dnsPricing'],
+        },
       ],
     },
   ],
