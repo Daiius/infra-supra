@@ -408,7 +408,14 @@ export type MonthEvent = {
   /** 効果の要約（PV × 3・手間 +10 / 月 など）。 */
   effects: string[];
   /** 当たりうる前提（今の構成で出ているもの。文は catalog のまま）。 */
-  premises: { id: string; text: string; ratio?: number; hit: boolean }[];
+  premises: {
+    id: string;
+    text: string;
+    ratio?: number;
+    hit: boolean;
+    /** どのルートが当たるか（1 リクエストあたりの制限。D-99）。 */
+    detail?: string;
+  }[];
   /** 席（メンバー）の料金（catalog の members）。 */
   members?: string[];
   /**
@@ -3403,6 +3410,8 @@ export type MonthOneEstimate = {
   startCash: number;
   short: boolean;
   topLines: { label: string; usd: number }[];
+  /** 1 か月目に当たって止まる・遅くなる前提（収益を減らす理由。detail はどのルートが当たるか。D-99）。 */
+  blocking: { id: string; text: string; detail?: string }[];
 };
 
 export function setupMonthOneEstimate(
@@ -3470,6 +3479,19 @@ export function setupMonthOneEstimate(
     startCash: scenario.startCash,
     short: costUsd > scenario.startCash + revenueUsd,
     topLines,
+    blocking: r.premises
+      .filter(
+        (p) =>
+          p.hit &&
+          (p.effect === 'block' ||
+            p.effect === 'upgrade-required' ||
+            p.effect === 'throttle'),
+      )
+      .map((p) => ({
+        id: p.id,
+        text: p.text,
+        ...(p.detail !== undefined ? { detail: p.detail } : {}),
+      })),
   };
 }
 
@@ -3774,6 +3796,7 @@ function premiseRefsOf(
       id: p.id,
       text: p.text,
       hit: p.hit,
+      ...(p.detail !== undefined ? { detail: p.detail } : {}),
       ...(p.ratio !== undefined && Number.isFinite(p.ratio)
         ? { ratio: p.ratio }
         : {}),
@@ -5424,7 +5447,13 @@ export function retryHintsOf(state: GameState): RetryHint[] {
   // ① 前提（上限）に当たって止まった月
   const limits = new Map<
     string,
-    { text: string; months: number[]; ratio: number; accumulates: boolean }
+    {
+      text: string;
+      detail?: string;
+      months: number[];
+      ratio: number;
+      accumulates: boolean;
+    }
   >();
   for (const r of h) {
     if (r.status !== 'down') continue;
@@ -5433,6 +5462,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         continue;
       const cur = limits.get(p.id) ?? {
         text: p.text,
+        ...(p.detail !== undefined ? { detail: p.detail } : {}),
         months: [],
         ratio: 0,
         accumulates: p.accumulates ?? false,
@@ -5447,7 +5477,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     string,
     {
       months: Set<number>;
-      items: { text: string; ratio: number }[];
+      items: { text: string; ratio: number; detail?: string }[];
       cause?: string;
     }
   >();
@@ -5474,7 +5504,11 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           : '込みの量・無料枠の上限に当たると止まる。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らす';
     const g = groups.get(next) ?? { months: new Set<number>(), items: [] };
     l.months.forEach((m) => g.months.add(m));
-    g.items.push({ text: l.text, ratio: l.ratio });
+    g.items.push({
+      text: l.text,
+      ratio: l.ratio,
+      ...(l.detail !== undefined ? { detail: l.detail } : {}),
+    });
     if (cause && !g.cause) g.cause = cause.title;
     groups.set(next, g);
   }
@@ -5487,12 +5521,12 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const by = g.cause ? `。「${g.cause}」が無ければ越えなかった` : '';
     const what =
       items.length === 1
-        ? `${monthsText(months)}に「${top.text}」に当たって止まった${times(top.ratio) ? `。使用量は上限の ${times(top.ratio)}` : ''}${by}`
+        ? `${monthsText(months)}に「${top.text}」に当たって止まった${times(top.ratio) ? `。使用量は上限の ${times(top.ratio)}` : ''}${top.detail ? `。${top.detail}` : ''}${by}`
         : `${monthsText(months)}に止まった。当たった上限: ${items
             .slice(0, 2)
             .map(
               (x) =>
-                `「${x.text}」${times(x.ratio) ? `（${times(x.ratio)}）` : ''}`,
+                `「${x.text}」${times(x.ratio) ? `（${times(x.ratio)}）` : ''}${x.detail ? `（${x.detail}）` : ''}`,
             )
             .join(
               '・',

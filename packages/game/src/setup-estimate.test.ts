@@ -22,3 +22,24 @@ describe('1 か月目の費用の見込み（D-72）', () => {
     expect(v.every((x) => x > 0)).toBe(true);
   });
 });
+
+describe('1 か月目に当たる上限と、当たるルート（D-99）', () => {
+  const CF_FREE = 0;
+  const cpu = (fw: 'astro' | 'nextjs') =>
+    setupMonthOneEstimate(sc, CF_FREE, fw, {}).blocking.find((b) =>
+      b.id.startsWith('limit:cloudflare:workers-free:cpu-ms-per-request'),
+    );
+
+  it('Astro × CF Free: 個人向けのページ（SSR）だけが当たり、記事のページは静的で Worker を通らない', () => {
+    expect(cpu('astro')?.detail).toBe(
+      '個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない',
+    );
+  });
+
+  it('Next.js × CF Free: 記事のページ（ISR の再生成）も当たり、静的なページの添え書きは無い', () => {
+    const d = cpu('nextjs')?.detail ?? '';
+    expect(d).toContain('記事のページ（ISR の閲覧と再生成・CPU 17 ms）');
+    expect(d).toContain('個人向けのページ（SSR・CPU 15 ms）');
+    expect(d).not.toContain('静的なので');
+  });
+});

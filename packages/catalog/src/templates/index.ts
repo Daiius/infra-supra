@@ -41,6 +41,7 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
     routes: [
       {
         id: 'article',
+        label: '記事のページ',
         rendering: 'isr',
         share: 0.6,
         pages: 2_000,
@@ -50,6 +51,7 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
       },
       {
         id: 'personal',
+        label: '個人向けのページ',
         rendering: 'ssr',
         share: 0.4,
         pages: 1,

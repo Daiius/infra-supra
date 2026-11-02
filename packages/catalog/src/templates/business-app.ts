@@ -38,6 +38,7 @@ export function businessApp(monthlyPageViews: number): WorkloadInput {
     routes: [
       {
         id: 'app',
+        label: '業務の画面',
         rendering: 'ssr',
         share: 1,
         pages: 1,

@@ -443,6 +443,7 @@ export function toSpa(
       if (r.rendering === 'static' || r.rendering === 'spa') return r;
       return {
         id: r.id,
+        ...(r.label !== undefined ? { label: r.label } : {}),
         rendering: 'spa' as const,
         share: r.share,
         pages: r.pages,
@@ -489,6 +490,7 @@ export function toAstro(
     staticPages += r.pages;
     return {
       id: r.id,
+      ...(r.label !== undefined ? { label: r.label } : {}),
       rendering: 'static' as const,
       share: r.share,
       pages: r.pages,

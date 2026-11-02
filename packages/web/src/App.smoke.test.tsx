@@ -106,6 +106,24 @@ describe('ゲームモードの画面', () => {
     expect(screen.queryByRole('button', { name: '次の月へ' })).toBeNull();
   });
 
+  it('W-05 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99）', () => {
+    const detail =
+      '個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない';
+    renderApp();
+    startGame({
+      scenario: ARTICLE,
+      framework: 'Astro',
+      stack: 'Cloudflare Free',
+      // 始める画面の 1 か月目の見込みに、当たる上限とルートが出る
+      beforeStart: () => expect(document.body.textContent).toContain(detail),
+    });
+    advance(1);
+    // 月の報告の前提（SSR の CPU は開発が進むと重くなるので、数値は見ない）
+    expect(document.body.textContent).toMatch(
+      /個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない/,
+    );
+  });
+
   it('W-04 保存して読み込み直すと同じ月から再開する', () => {
     renderApp();
     startGame({

@@ -45,10 +45,36 @@ export type ClassFlow = {
   };
 };
 
+/**
+ * クラスにまとめたルート 1 つ（D-99）。1 リクエストあたりの制限に当たったとき、どのルートが重いかを示すのに使う
+ * （課金・使用量はクラスの流れ ClassFlow で数え、これは使わない）。
+ */
+export type RequestSource = {
+  /** Workload のルートの id。ページから呼ぶ API（perPage.apiCalls）は持たない。 */
+  routeId?: string;
+  /** ルートの画面に出す名前（RouteGroup の label）。 */
+  label?: string;
+  rendering?: 'static' | 'ssr' | 'isr' | 'spa';
+  count: number;
+  /** 1 件の CPU（ms）。 */
+  cpuMs: number;
+  /** isr-revalidate のみ: 再生成を起こした閲覧の CPU（cachedServeCpuMs）を足した値（backgroundCpuMs のルートごとの値）。 */
+  withTriggerCpuMs?: number;
+  /**
+   * 期間つきのキャッシュの対象（document-isr・api-content）だけ: そのキャッシュを miss する件数（月。cacheMissFlow のルートごとの値）。
+   * 完全にキャッシュから返るルート（更新 0 回の ISR など）を、キャッシュの後ろのノードの内訳に入れないために使う（OCL-E219321B）。
+   */
+  misses?: number;
+  /** document-isr だけ: ワイルドカードでまとめた無効化の CDN を miss する件数（cdnFlushMissFlow のルートごとの値。D-79）。 */
+  flushMisses?: number;
+};
+
 export type ResolvedWorkload = {
   input: ParsedWorkload;
   monthlyPageViews: number;
   classes: Record<RequestClass, ClassFlow>;
+  /** クラスごとの、まとめたルートの内訳（件数が正のものだけ。D-99）。ルートを持たないクラスは持たない。 */
+  sources: Partial<Record<RequestClass, RequestSource[]>>;
   /**
    * 裏で走るクラスを、それを起こした閲覧と 1 回の実行にまとめたときの CPU の最大（ms）。
    * ルートごとに「閲覧 + 再生成」を足してから最大を取る（別のルートの閲覧と再生成を足さない）。
@@ -282,6 +308,28 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   let onDemandPageRevalidations = 0;
   let onDemandUpdates = 0;
   let isrPagesKB = 0;
+  const sources: Partial<Record<RequestClass, RequestSource[]>> = {};
+  const source = (
+    cls: RequestClass,
+    r: (typeof w.routes)[number] | undefined,
+    count: number,
+    cpuMs: number,
+    extra: Partial<RequestSource> = {},
+  ) => {
+    if (count <= 0) return;
+    (sources[cls] ??= []).push({
+      ...(r
+        ? {
+            routeId: r.id,
+            ...(r.label !== undefined ? { label: r.label } : {}),
+            rendering: r.rendering,
+          }
+        : {}),
+      count,
+      cpuMs,
+      ...extra,
+    });
+  };
   for (const r of w.routes) {
     const views = pv * r.share;
     const p = r.processing;
@@ -298,11 +346,14 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       spaViews += views;
       spaEntries += entries;
       byRendering.static.push(flow(entries, { kb: r.shellKB! }));
+      source('document-static', r, entries, 0);
+      if (r.cacheSeconds === undefined) source('api', r, views, p.cpuMs);
       if (r.cacheSeconds !== undefined) {
         // ISR の再生成と同じ形: 期間 T あたり 1 ページ高々 1 回だけ取り直す（miss）→ 閲覧 / (1 + λT)
         const lambdaT =
           (views / r.pages) * (r.cacheSeconds / SECONDS_PER_MONTH);
         const misses = views / (1 + lambdaT);
+        source('api-content', r, views, p.cpuMs, { misses });
         spaContent.push(flow(views, work));
         spaContentMiss.push(flow(misses, work));
         spaContentHits += views - misses;
@@ -344,8 +395,10 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       });
     } else if (r.rendering === 'static') {
       byRendering.static.push(flow(views, { kb: p.responseKB }));
+      source('document-static', r, views, 0);
     } else if (r.rendering === 'ssr') {
       byRendering.ssr.push(flow(views, work));
+      source('document-ssr', r, views, p.cpuMs);
     } else {
       const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };
       byRendering.isr.push(flow(views, served));
@@ -416,8 +469,15 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           ? peakMisses
           : Math.min(views, flushPart + timedPart(lambdaT * peakRate));
       isrFlushMiss.push(flow(flushCount, served));
+      source('document-isr', r, views, r.cachedServeCpuMs, {
+        misses: count,
+        flushMisses: flushCount,
+      });
       isrPeakFlushMiss.push(flow(peakFlushCount, served));
       revalidations.push(flow(count, work));
+      source('isr-revalidate', r, count, p.cpuMs, {
+        withTriggerCpuMs: r.cachedServeCpuMs + p.cpuMs,
+      });
       isrMiss.push(flow(count, served));
       isrViews += views;
       isrMisses += count;
@@ -497,6 +557,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     rowsRead: a.queries * a.rowsReadPerQuery,
     rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
   });
+  source('api', undefined, apiFlow.count, a.cpuMs);
   const images = pv * w.perPage.images * (1 - w.images.browserReuse);
   const classes: Record<RequestClass, ClassFlow> = {
     'document-static': merge(byRendering.static),
@@ -541,6 +602,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     input: w,
     monthlyPageViews: pv,
     classes,
+    sources,
     backgroundCpuMs: { 'isr-revalidate': isrWithRevalidate },
     cacheHitRate: {
       ...(isrViews > 0 ? { 'document-isr': 1 - isrMisses / isrViews } : {}),

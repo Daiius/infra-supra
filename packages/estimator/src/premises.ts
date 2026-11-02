@@ -4,7 +4,8 @@ import type { Currency } from './num/money.ts';
 import { HOURS_PER_MONTH, type Unit } from './num/unit.ts';
 import type { Bill, MeterUsage, OverageBehavior } from './pricing/price.ts';
 import type { PriceBook } from './pricing/schema.ts';
-import type { Simulation } from './simulate/simulate.ts';
+import type { ArchNode } from './architecture/schema.ts';
+import type { CpuSource, Simulation } from './simulate/simulate.ts';
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
 
@@ -50,7 +51,92 @@ export type PlatformPremise = {
   accumulates?: boolean;
   /** 仮定に基づく判定か（ホストの容量など）。 */
   assumption?: string;
+  /**
+   * 1 リクエストあたりの制限で、どのルートが値を決めているか（D-99）。当たっていれば制限を超えるものすべて、
+   * 当たっていなければ最も重いもの 1 つ（重い順）。
+   */
+  causes?: CpuSource[];
+  /** causes を文にしたもの（「個人向けのページ（SSR・CPU 15 ms）が …を超える」）。text に続けて表示する。 */
+  detail?: string;
 };
+
+/** ルートの描き方の表示名（D-99）。クラスで描き方が決まるもの（ISR の閲覧と再生成）はクラスを優先する。 */
+const SOURCE_MODE: Partial<Record<CpuSource['requestClass'], string>> = {
+  'document-static': '静的',
+  'document-ssr': 'SSR',
+  'document-isr': 'ISR のキャッシュから返す',
+  'isr-revalidate': 'ISR の閲覧と再生成',
+  'api-content': 'ブラウザが API で中身を取る・キャッシュの取り直し',
+};
+
+/** ルートを持たないクラスの表示名。 */
+const CLASS_LABEL: Partial<Record<CpuSource['requestClass'], string>> = {
+  api: 'ページから呼ぶ API',
+  'image-read': '画像の配信',
+  'image-write': '画像の投稿',
+  'image-transform': '画像の変換',
+  'realtime-connect': 'リアルタイムの接続',
+  'realtime-message': 'リアルタイムのメッセージ',
+};
+
+/** 表示のための丸め（小数 1 桁）。 */
+const ms = (v: number) => `${Math.round(v * 10) / 10}`;
+
+/** 内訳 1 つの表示（「個人向けのページ（SSR・CPU 15 ms）」）。 */
+export function cpuSourceText(s: CpuSource): string {
+  const name =
+    s.label ?? s.routeId ?? CLASS_LABEL[s.requestClass] ?? s.requestClass;
+  const mode =
+    s.routeId === undefined
+      ? undefined
+      : s.requestClass === 'api' && s.rendering === 'spa'
+        ? 'ブラウザが API で中身を取る'
+        : s.requestClass === 'isr-revalidate' && !s.background
+          ? 'ISR の再生成'
+          : SOURCE_MODE[s.requestClass];
+  return `${name}（${mode ? `${mode}・` : ''}CPU ${ms(s.cpuMs)} ms）`;
+}
+
+/** ノードの名前の短い形（「Worker（vinext）」→「Worker」）。 */
+const shortLabel = (n: ArchNode) => n.label.replace(/（.*$/, '');
+
+/**
+ * 1 リクエストあたりの CPU の制限の内訳と文（D-99）。静的なルートがこのノードを通らないなら、それも添える
+ * （「静的な配置なのに？」と迷わないように）。
+ */
+function cpuCauses(
+  sim: Simulation,
+  node: ArchNode,
+  planName: string,
+  limit: number,
+): Pick<PlatformPremise, 'causes' | 'detail'> {
+  const all = sim.nodes[node.id]!.cpuSources;
+  if (all.length === 0) return {};
+  // 同じルートが閲覧と再生成の両方で出るときは重いほうだけ（並びは重い順）
+  const seen = new Set<string>();
+  const uniq = all.filter((s) => {
+    const key = s.routeId ?? `class:${s.requestClass}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const over = uniq.filter((s) => s.cpuMs > limit);
+  const causes = over.length ? over : uniq.slice(0, 1);
+  const what = causes.map(cpuSourceText).join('・');
+  const head = over.length
+    ? `${what}が ${planName} の 1 リクエスト ${ms(limit)} ms を超える`
+    : `最も重いのは${what}で、${planName} の 1 リクエスト ${ms(limit)} ms の ${Math.round((causes[0]!.cpuMs / limit) * 100)}%`;
+  const viaNode = new Set(sim.architecture.routes['document-static'] ?? []);
+  const bypass = viaNode.has(node.id)
+    ? []
+    : sim.workload.input.routes
+        .filter((r) => r.rendering === 'static' && r.share > 0)
+        .map((r) => r.label ?? r.id);
+  const tail = bypass.length
+    ? `。${bypass.join('・')}は静的なので ${shortLabel(node)} を起動しない`
+    : '';
+  return { causes, detail: head + tail };
+}
 
 function threshold(
   p: Omit<PlatformPremise, 'kind' | 'ratio' | 'hit'> & {
@@ -305,6 +391,9 @@ export function assessPremises(input: {
           limit: limit.value,
           unit: limit.unit,
           accumulates: limit.measure === 'storage-gb',
+          ...(limit.measure === 'cpu-ms-per-request'
+            ? cpuCauses(sim, node, plan!.name, limit.value)
+            : {}),
         }),
       );
     }

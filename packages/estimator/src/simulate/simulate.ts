@@ -13,6 +13,7 @@ import {
   kbMixOf,
   type ClassFlow,
   type RequestClass,
+  type RequestSource,
   type ResolvedWorkload,
   type TimeBucket,
 } from '../workload/resolve.ts';
@@ -28,6 +29,20 @@ export type HostLoad = {
   diskGB: number;
 };
 
+/**
+ * 1 回の実行の CPU の内訳（D-99）。関数・コンテナのノードに届いたクラス・ルートごとの 1 件の CPU（ms）。
+ * 最大は NodeUsage.maxCpuMsPerRequest と同じ。ルートを持たないクラス（画像の変換など）は routeId を持たない。
+ */
+export type CpuSource = {
+  requestClass: RequestClass;
+  routeId?: string;
+  label?: string;
+  rendering?: RequestSource['rendering'];
+  cpuMs: number;
+  /** 裏で走るクラス（ISR の再生成）を、起こした閲覧の実行に足した値。 */
+  background?: boolean;
+};
+
 export type NodeUsage = {
   nodeId: string;
   resources: Partial<Record<ResourceKey, number>>;
@@ -35,6 +50,8 @@ export type NodeUsage = {
   events: number;
   /** 通ったリクエストの 1 件あたり CPU の最大（ms。制限 cpu-ms-per-request の判定用）。 */
   maxCpuMsPerRequest: number;
+  /** maxCpuMsPerRequest の内訳（関数・コンテナだけ。重い順。D-99）。 */
+  cpuSources: CpuSource[];
   /** 接続・実行を保持している時間の合計（ms・月。ピークの同時数の判定用）。 */
   busyMs: number;
   /**
@@ -76,6 +93,8 @@ type NodeAcc = {
   requests: number;
   /** クラスごとの 1 件あたり CPU の最大（件数が正のものだけ）。 */
   maxCpuByClass: Partial<Record<RequestClass, number>>;
+  /** クラスごとの、ルートごとの 1 件あたり CPU（D-99。maxCpuByClass の内訳）。 */
+  cpuByClassSource: Partial<Record<RequestClass, CpuSource[]>>;
 };
 
 /**
@@ -110,7 +129,28 @@ function ttlMiss(
   return { count: f.count * (miss.count / total), perRequest: miss.perRequest };
 }
 
-/** 1 ノードがクラスの流れを受け取ったときの使用量と、次のノードへ渡す流れ。 */
+/**
+ * ttlMiss のルートごとの件数（D-99・OCL-E219321B）。ttlMiss と同じく、届いた件数の割合で縮める。
+ * 完全にキャッシュから返るルート（miss 0）は 0 になり、キャッシュの後ろのノードの内訳に入らない。
+ */
+function ttlMissBySource(
+  w: ResolvedWorkload,
+  cls: RequestClass,
+  n: number,
+  flush = false,
+): number[] {
+  const total = w.classes[cls].count;
+  return (w.sources[cls] ?? []).map(
+    (s) =>
+      ((flush ? s.flushMisses : s.misses) ?? s.count) *
+      (total > 0 ? n / total : 0),
+  );
+}
+
+/**
+ * 1 ノードがクラスの流れを受け取ったときの使用量と、次のノードへ渡す流れ。
+ * src はクラスのルートの内訳（w.sources）ごとの、このノードに届く件数。次のノードへ届く件数に書き換える（D-99）。
+ */
 function consume(
   node: ArchNode,
   cls: RequestClass,
@@ -118,21 +158,19 @@ function consume(
   u: NodeUsage,
   w: ResolvedWorkload,
   hostAcc: NodeAcc,
+  src: number[],
 ): ClassFlow {
   const c = node.config;
   const n = f.count;
   const p = f.perRequest;
   switch (c.kind) {
     case 'cdn': {
+      // 更新のたびに消えるのは ISR のページだけ（API の応答のキャッシュは消さない。OCL-62E7477C）
+      const flush =
+        cls === 'document-isr' &&
+        c.invalidationWildcardPathsPerUpdate !== undefined;
       const ttl = c.ttlClasses?.includes(cls)
-        ? ttlMiss(
-            w,
-            cls,
-            f,
-            // 更新のたびに消えるのは ISR のページだけ（API の応答のキャッシュは消さない。OCL-62E7477C）
-            cls === 'document-isr' &&
-              c.invalidationWildcardPathsPerUpdate !== undefined,
-          )
+        ? ttlMiss(w, cls, f, flush)
         : undefined;
       add(
         u,
@@ -158,6 +196,11 @@ function consume(
       if (!c.originClasses || c.originClasses.includes(cls)) {
         add(u, 'origin-transfer-gb', kbToGb(out.count * out.perRequest.kb));
       }
+      // ルートごとの届く件数: 期間つきのキャッシュはルートごとの miss、ヒット率はどのルートにも同じ割合
+      const after = ttl
+        ? ttlMissBySource(w, cls, n, flush)
+        : src.map((x) => (n > 0 ? x * (out.count / n) : 0));
+      after.forEach((x, i) => (src[i] = x));
       return out;
     }
     case 'function':
@@ -167,6 +210,8 @@ function consume(
       const missFlow = cache?.classes.includes(cls)
         ? ttlMiss(w, cls, f)
         : undefined;
+      // ルートごとの miss（コードの中のキャッシュの対象でなければ届いた件数のまま）
+      const srcMiss = missFlow ? ttlMissBySource(w, cls, n) : [...src];
       const miss = missFlow?.count ?? n;
       // 画像のクラスの変換の時間は、画像の形式による重さの倍率を掛ける（OCL-ECDEF8A1）
       const fixedCpu =
@@ -188,11 +233,33 @@ function consume(
         miss > 0 ? mp.maxCpuMs : 0,
         hits > 0 ? hitCpu : 0,
       );
-      if (n > 0)
+      if (n > 0) {
         hostAcc.maxCpuByClass[cls] = Math.max(
           hostAcc.maxCpuByClass[cls] ?? 0,
           maxCpu,
         );
+        // ルートごとの内訳（D-99）。このノードに届くルートだけで、miss・ヒットもルートごと（OCL-E219321B）。
+        // クラスで決まった CPU（画像の変換など）はルートに分けない
+        const srcs = fixedCpu === undefined ? (w.sources[cls] ?? []) : [];
+        const bySource = srcs.flatMap((s, i) => {
+          const m = srcMiss[i]!;
+          const h = src[i]! - m;
+          if (src[i]! <= 0) return [];
+          return [
+            {
+              requestClass: cls,
+              ...(s.routeId !== undefined ? { routeId: s.routeId } : {}),
+              ...(s.label !== undefined ? { label: s.label } : {}),
+              ...(s.rendering !== undefined ? { rendering: s.rendering } : {}),
+              cpuMs: Math.max(m > 0 ? s.cpuMs : 0, h > 0 ? hitCpu : 0),
+            },
+          ];
+        });
+        hostAcc.cpuByClassSource[cls] = bySource.length
+          ? bySource
+          : [{ requestClass: cls, cpuMs: maxCpu }];
+      }
+      srcMiss.forEach((x, i) => (src[i] = x));
       const wallMs = hits * hitCpu + miss * mp.wallMs;
       u.busyMs += wallMs;
       const cpuMs = hits * hitCpu + miss * mp.cpuMs;
@@ -464,6 +531,7 @@ export function simulateResources(
         resources: {},
         events: 0,
         maxCpuMsPerRequest: 0,
+        cpuSources: [],
         busyMs: 0,
         peakBusyMs: 0,
       };
@@ -474,6 +542,7 @@ export function simulateResources(
         transforms: 0,
         requests: 0,
         maxCpuByClass: {},
+        cpuByClassSource: {},
       });
       staticUsage(n, nodes[n.id]!, w);
     }
@@ -493,6 +562,8 @@ export function simulateResources(
         cls === 'isr-revalidate' && isrBehindTtlCache && peak
           ? w.peakRevalidateFlow
           : f;
+      // ルートごとの届く件数（内訳だけに使う。ピークの流し直しでは使わない）
+      const src = (w.sources[cls] ?? []).map((s) => s.count);
       for (const id of path) {
         current = consume(
           byId.get(id)!,
@@ -501,6 +572,7 @@ export function simulateResources(
           nodes[id]!,
           w,
           hostAcc.get(id)!,
+          src,
         );
       }
     }
@@ -592,6 +664,8 @@ export function simulateResources(
     const fg = byClass.filter(([cls]) => !bg.has(cls));
     const fgMax = Math.max(0, ...fg.map(([, v]) => v));
     let max = fgMax;
+    const bySource = hostAcc.get(n.id)!.cpuByClassSource;
+    const cpuSources: CpuSource[] = fg.flatMap(([cls]) => bySource[cls] ?? []);
     for (const [cls, v] of byClass) {
       if (!bg.has(cls)) continue;
       const trigger = BACKGROUND_TRIGGER[cls];
@@ -606,8 +680,23 @@ export function simulateResources(
           ? fgMax + v
           : v;
       max = Math.max(max, combined);
+      // 内訳: 起こした閲覧と足すときは、ルートごとの閲覧 + 再生成（backgroundCpuMs と同じ数え方）
+      const srcs = workload.sources[cls] ?? [];
+      for (const s of bySource[cls] ?? []) {
+        const route = srcs.find((x) => x.routeId === s.routeId);
+        cpuSources.push({
+          ...s,
+          background: true,
+          cpuMs: triggered
+            ? (route?.withTriggerCpuMs ?? fgMax + s.cpuMs)
+            : trigger === undefined
+              ? fgMax + s.cpuMs
+              : s.cpuMs,
+        });
+      }
     }
     nodes[n.id]!.maxCpuMsPerRequest = max;
+    nodes[n.id]!.cpuSources = cpuSources.sort((a, b) => b.cpuMs - a.cpuMs);
   }
 
   for (const n of architecture.nodes) {

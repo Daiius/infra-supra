@@ -116,6 +116,21 @@ describe('見積モードの画面', () => {
     expect(partSelect('DB のバックアップ')?.value).toBe('default');
   });
 
+  it('W-08 Astro × CF Free: 1 リクエストの CPU の上限の前提に、当たるルートと Worker を通らない静的なページを添える（D-99）', () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-free',
+    );
+    renderApp();
+    expectEstimate();
+    expect(
+      screen.getByText(
+        /^個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない$/,
+      ),
+    ).toBeDefined();
+  });
+
   it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', () => {
     window.history.replaceState(
       null,
