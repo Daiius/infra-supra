@@ -353,6 +353,71 @@ export type ScenarioText = {
   >;
   /** 収益の文（ゲーム上の仮定であることを含める）。 */
   revenue?: string;
+  /**
+   * ページの見取り図（D-102。始める画面で、選んだフレームワークでページのどの区画をどう作るかを出す）。
+   * テンプレートのルート 1 つに 1 枚。区画の作られ方は今の計算のモデル（D-68・D-70・D-80・D-82）に合わせた、ゲーム上の仮定の図。
+   */
+  wireframes?: PageWireframe[];
+};
+
+/**
+ * 見取り図の区画の作られ方（D-102）。画面は札の文字（REGION_SOURCES の short）を必ず出し、色・模様は補助にする。
+ */
+export type RegionSource =
+  'build' | 'isr' | 'ssr' | 'api' | 'island' | 'shell' | 'image';
+
+/** 区画の作られ方の札（short）と凡例の説明（long）。 */
+export const REGION_SOURCES: Readonly<
+  Record<RegionSource, { short: string; long: string }>
+> = {
+  build: {
+    short: 'ビルドで静的',
+    long: 'ビルドのときに HTML を作り、静的な配信から返す（変えるにはビルドし直す）',
+  },
+  isr: {
+    short: 'ISR（キャッシュ）',
+    long: '最初の閲覧でサーバーが描いてキャッシュし、再検証で描き直す',
+  },
+  ssr: {
+    short: '閲覧ごとに SSR',
+    long: '閲覧のたびにサーバーが描く（1 回ごとに CPU を使う）',
+  },
+  api: {
+    short: 'ブラウザが API で取る',
+    long: 'ページを開いてから、ブラウザの JS が API で中身を取って描く',
+  },
+  island: {
+    short: 'アイランドが API で取る',
+    long: '静的な HTML の中の動きのある部品（アイランド）だけ、ブラウザが API で取る',
+  },
+  shell: {
+    short: 'シェル + JS',
+    long: 'どのページも同じ 1 つのシェル（静的）を返し、ブラウザの JS が描く',
+  },
+  image: {
+    short: '画像の配信',
+    long: 'HTML とは別のリクエストで、画像の部品（変換・CDN）から届く',
+  },
+};
+
+/** 見取り図の区画（D-102）。幅は横いっぱい（full）か半分（half）、高さは目安の 3 段。 */
+export type WireframeRegion = {
+  id: string;
+  /** 区画の名前（画面に文字で出す）。 */
+  label: string;
+  width?: 'full' | 'half';
+  height?: 'sm' | 'md' | 'lg';
+};
+
+/** ページの見取り図 1 枚（D-102）。 */
+export type PageWireframe = {
+  /** テンプレートのルートの id（ページの名前はルートの label を使う）。 */
+  route: string;
+  regions: WireframeRegion[];
+  /** フレームワークごとの、区画の id → 作られ方。すべての区画を書く（テストで確かめる）。 */
+  byFramework: Record<FrameworkId, Record<string, RegionSource>>;
+  /** 設定「コメントの描き方」で記事のページに含めたときに上書きする区画（D-82）。 */
+  commentsInPage?: Partial<Record<FrameworkId, Record<string, RegionSource>>>;
 };
 
 /** 台本の表の 1 行（newGame で一度に作る。プレイヤーの選択に依存しない）。 */

@@ -3,7 +3,54 @@
 // 料金・制限は catalog のデータをそのまま使い（ここで料金を作らない）、前提の文も catalog のもの（premiseRefs で参照する）。
 import { BUSINESS_APP_ASTRO, BUSINESS_APP_SPA, businessApp } from 'catalog';
 import type { Action, GameState } from '../index.ts';
-import type { EventDef, Scenario } from '../scenario.ts';
+import type { EventDef, PageWireframe, Scenario } from '../scenario.ts';
+
+/**
+ * 業務の画面の見取り図（D-102。ゲーム上の仮定の図）。Next.js・Astro は画面全体を SSR（ログインが要る）、
+ * 静的書き出しは画面ごとの静的な枠 + API、SPA はシェル + API（D-68・D-80）。どれでも登録・申請の送信は API で書き込む。
+ */
+const BUSINESS_WIREFRAMES: PageWireframe[] = [
+  {
+    route: 'app',
+    regions: [
+      { id: 'header', label: 'ヘッダー（ログイン中）' },
+      { id: 'menu', label: 'メニュー', width: 'half', height: 'md' },
+      { id: 'search', label: '検索の条件', width: 'half', height: 'md' },
+      { id: 'table', label: '一覧の表（申請・記録）', height: 'lg' },
+      { id: 'form', label: '登録・申請のフォーム（送信は API）', height: 'md' },
+    ],
+    byFramework: {
+      nextjs: {
+        header: 'ssr',
+        menu: 'ssr',
+        search: 'ssr',
+        table: 'ssr',
+        form: 'ssr',
+      },
+      astro: {
+        header: 'ssr',
+        menu: 'ssr',
+        search: 'ssr',
+        table: 'ssr',
+        form: 'ssr',
+      },
+      'nextjs-export': {
+        header: 'build',
+        menu: 'build',
+        search: 'build',
+        table: 'api',
+        form: 'build',
+      },
+      'vite-spa': {
+        header: 'shell',
+        menu: 'shell',
+        search: 'shell',
+        table: 'api',
+        form: 'shell',
+      },
+    },
+  },
+];
 
 // 構成の番号（catalog の MVP_STACKS の順）
 const CF_FREE = 0;
@@ -401,6 +448,9 @@ export const CONTRACT_OPERATIONS: Scenario = {
   text: {
     intro:
       '自社が受託で作った、顧客の業務アプリ（申請・一覧・検索・登録。ログインして使う）の運用を受け持っている。インフラは自社のアカウントで持ち、費用は自社が払う（運用費に込み）。',
+    pages: [
+      '業務の画面（PV のすべて）: 申請・一覧・検索・登録。ログインした顧客の社員と取引先が使い、人ごとに中身が違う',
+    ],
     scale: '利用者は顧客の社員と取引先で、平日の日中に集中する。',
     growth: {
       up: '顧客の満足度が高ければ社内で利用が広がり',
@@ -445,6 +495,7 @@ export const CONTRACT_OPERATIONS: Scenario = {
     },
     revenue:
       '収益は顧客から受け取る運用費: 固定 $120 / 月 + 1,000 PV あたり $0.1（ゲーム上の仮定。相場ではない）。止まった月は減額される。人件費は入れない。',
+    wireframes: BUSINESS_WIREFRAMES,
   },
   baselines: [
     {

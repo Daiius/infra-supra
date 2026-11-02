@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ゲームモードの画面の描画テスト（D-86・prd/05 §7）。画面を描いて操作し、例外が出ない・描ける・選択肢と結果が出ることだけを見る。
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 // 画面を何度も描き直すので、CI の遅い実行環境では既定の 5 秒を超えることがある（D-87）。
@@ -138,6 +138,74 @@ describe('ゲームモードの画面', () => {
     // 隠した構成（D-100）は構成の一覧に出ない
     expect(
       screen.queryByRole('radio', { name: /^Netlify|^AWS（OpenNext）/ }),
+    ).toBeNull();
+  });
+
+  it('W-07 始める画面: ページの見取り図の札が、フレームワークとコメントの描き方で変わる（D-102）', () => {
+    renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    /** 見取り図の区画の札（区画の名前 → 作られ方の札の文字）。 */
+    const tag = (page: string, region: string) => {
+      const list = screen.getByRole('list', { name: `${page}の見取り図` });
+      const cell = within(list).getByText(region).closest('li');
+      return cell?.textContent?.replace(region, '').replace(/^: /, '');
+    };
+    pick(/^記事コミュニティ/);
+    pick(/^Next\.js（App Router）/);
+    expect(
+      screen.getByRole('heading', {
+        name: 'ページの見取り図（Next.js（App Router））',
+      }),
+    ).toBeDefined();
+    expect(tag('記事のページ', '本文')).toBe('ISR（キャッシュ）');
+    expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
+      'ブラウザが API で取る',
+    );
+    expect(tag('個人向けのページ', '自分の下書き・記事の一覧')).toBe(
+      '閲覧ごとに SSR',
+    );
+    // コメントを記事のページに含めると、コメント欄は ISR のページの一部になる（D-82）
+    pick(/^記事のページに含める/);
+    expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
+      'ISR（キャッシュ）',
+    );
+    pick(/^ブラウザで読み込む/);
+
+    pick(/^Astro/);
+    expect(tag('記事のページ', '本文')).toBe('ビルドで静的');
+    expect(tag('記事のページ', 'いいね')).toBe('アイランドが API で取る');
+    expect(tag('個人向けのページ', '自分の下書き・記事の一覧')).toBe(
+      '閲覧ごとに SSR',
+    );
+    pick(/^記事のページに含める/);
+    expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
+      'ビルドで静的',
+    );
+
+    pick(/^Next\.js（静的書き出し）/);
+    expect(tag('個人向けのページ', 'ヘッダー・ナビ')).toBe('ビルドで静的');
+    expect(tag('個人向けのページ', '通知')).toBe('ブラウザが API で取る');
+
+    // SPA はコメントを含められない（設定が出ない）ので、コメント欄は API のまま
+    pick(/^Vite（SPA）/);
+    expect(tag('記事のページ', 'ヘッダー・ナビ')).toBe('シェル + JS');
+    expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
+      'ブラウザが API で取る',
+    );
+    // 凡例は文字で出る
+    expect(
+      within(screen.getByRole('list', { name: '見取り図の凡例' })).getByText(
+        'シェル + JS',
+      ),
+    ).toBeDefined();
+
+    // 受託: 業務の画面の 1 枚
+    pick(/^受託先の業務アプリの運用/);
+    pick(/^Next\.js（App Router）/);
+    expect(tag('業務の画面', '一覧の表（申請・記録）')).toBe('閲覧ごとに SSR');
+    expect(
+      screen.queryByRole('list', { name: '記事のページの見取り図' }),
     ).toBeNull();
   });
 
