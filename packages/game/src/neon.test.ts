@@ -1,6 +1,6 @@
 // DB だけ Neon（従量の Postgres。D-77・prd/11 §15）: Vercel・Netlify の DB のスロットで Supabase の代わりに選べ、
 // Neon のアカウントの手間がかかり、基本料の代わりに動いている時間の分だけ払う。基準プレイ（何もしない・シード 1〜20）。
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   addedAccounts,
   applyActions,
@@ -17,9 +17,6 @@ import {
 } from './index.ts';
 import type { Choices } from 'catalog';
 import type { Scenario } from './scenario.ts';
-
-// 基準プレイ（シード 1〜20 × 構成）を何本も回すので、CI の遅い実行環境では既定の 5 秒を超えうる
-vi.setConfig({ testTimeout: 30_000 });
 
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const VERCEL_PRO = idx('vercel-supabase-pro');

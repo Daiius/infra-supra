@@ -1,6 +1,6 @@
 // 確約（D-97・prd/07 §11.12）: 1 年の確約の割引・支払い・取り消せないこと・前払い・スケールアップの引き継ぎ。
 // 金額そのものは期待値に書かず（実在の料金のため。prd/05 §1）、確約なしの同じプレイとの差で確かめる。
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   activeCommitments,
   applyAction,
@@ -21,8 +21,6 @@ import {
   withTurn,
   type GameState,
 } from './index.ts';
-
-vi.setConfig({ testTimeout: 60_000 });
 
 const sc = SCENARIOS['article-community']!;
 const idx = (id: string) => STACKS.find((s) => s.id === id)!.index;

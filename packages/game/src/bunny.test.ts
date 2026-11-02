@@ -1,6 +1,6 @@
 // Bunny（転送の安い従量の CDN。D-98・prd/11 §23）: 画像を Bunny で配る・前段の CDN を Bunny にする部品を、始める画面と
 // ゲーム中に選べ、Bunny のアカウントの手間がかかる。基準プレイ（何もしない・シード 1〜20）。
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { Choices } from 'catalog';
 import {
   addedAccounts,
@@ -17,9 +17,6 @@ import {
   type FrameworkId,
 } from './index.ts';
 import type { Scenario } from './scenario.ts';
-
-// 基準プレイ（シード 1〜20 × 構成）を何本も回すので、CI の遅い実行環境では既定の 5 秒を超えうる
-vi.setConfig({ testTimeout: 60_000 });
 
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const AMPLIFY = idx('aws-amplify');

@@ -2,9 +2,7 @@
 // ⓘ の当たり判定（画面の描画テスト。D-86）。select の欄を label で包むと、label の中で最初の操作できる要素が ⓘ のボタンになり、
 // 欄のどこを押しても説明が開いていた。欄の見出し・余白を押しても開かず、ⓘ を押したときだけ開き、select は選べることを見る。
 import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-
-vi.setConfig({ testTimeout: 30_000 });
+import { describe, expect, it } from 'vitest';
 import { renderApp, startGame, useSmokeEnv } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();

@@ -4,7 +4,7 @@
 import type { Choices, SlotId } from 'catalog';
 import { describe, expect, it, vi } from 'vitest';
 
-// 1 群で数百の組を 12 か月回すので、CI の遅い実行環境では既定の 5 秒を超えることがある（D-87）。Bunny の部品（D-98）で組が増えたので 120 秒に
+// 1 群で数百の組を 12 か月回し、1 本で十数秒かかるので、パッケージの 30 秒（vitest.config.ts）より上げる（D-87・D-98）
 vi.setConfig({ testTimeout: 120_000 });
 import {
   applyAction,

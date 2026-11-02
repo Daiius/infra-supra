@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 // ローカルと remote（Cloudflare Tunnel 越し）で設定を分けず、差分は env（リポジトリ直下の .env.remote）だけに集約する。
 //   pnpm dev          → 127.0.0.1:5173
 //   pnpm dev:remote   → vite --mode remote が .env.remote を読む（WEB_BIND・DEV_ALLOWED_HOST）
@@ -36,6 +37,8 @@ export default defineConfig(({ mode }) => {
   const publicHost = env.DEV_ALLOWED_HOST;
   return {
     envDir: repoRoot,
+    // 描画テストは画面を何度も描き直すので、CI の遅い実行環境では既定の 5 秒を超えうる（D-87）
+    test: { testTimeout: 30_000 },
     plugins: [react(), tailwindcss(), watchWorkspacePackages()],
     server: {
       host: bindHost,

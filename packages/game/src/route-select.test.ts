@@ -1,8 +1,5 @@
 // ページごとの描き方を選ぶ（D-107・段 3）: 始める画面の選択・途中の行動と手間・設定の意味・保存・構成・見取り図・要件の判定。
-import { describe, expect, it, vi } from 'vitest';
-
-// 1 か月目の見込みをほかの描き方ごとに引くので、遅い実行環境では既定の 5 秒を超えることがある
-vi.setConfig({ testTimeout: 60_000 });
+import { describe, expect, it } from 'vitest';
 import { composeStack, STACK_DEFS } from 'catalog';
 import {
   applyAction,

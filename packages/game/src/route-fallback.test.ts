@@ -1,9 +1,7 @@
 // 構成・フレームワークを替える前に、既定に戻るページの描き方を見せる（D-107 の補足）。
 // 予測（routeFallbacks）が、乗り換え・プラン変更・作り直しの後に実際に起きることと一致するかを、
 // 始める画面で選べる構成 × フレームワーク × 選んだ描き方の組の全部で確かめる。
-import { describe, expect, it, vi } from 'vitest';
-
-vi.setConfig({ testTimeout: 120_000 });
+import { describe, expect, it } from 'vitest';
 import {
   applyAction,
   ARTICLE_COMMUNITY,
