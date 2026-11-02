@@ -26,6 +26,7 @@
 | [prd/10-framework-branch.md](./prd/10-framework-branch.md) | フレームワークの分岐（Vite の SPA か Next.js か）と API の置き場（確定 D-34。段 1〜3・API の応答のキャッシュ・Astro の API の置き場まで実装済み。D-37・D-65・D-67・D-69） |
 | [prd/11-aws-and-cross-provider.md](./prd/11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext）・事業者をまたぐ構成（画像だけ Cloudflare など）・CloudFront の定額・Netlify・Neon・さくらの VPS の前の Cloudflare のプロキシ（§17）・実行ごとのログの費用（§18）・DB のバックアップと PITR（§19）・メールの送信（§20）・ドメインと DNS（§21）・長期の利用の確約（§22）・転送の安い従量の CDN の Bunny（§23）（論点 AX-01〜14 は D-50 で決定し、実装済み。D-51・D-52・D-61・D-63・D-66・D-71・D-77・D-91・D-92・D-93・D-95・D-96・D-97・D-98） |
 | [prd/12-external-scenarios-and-ranking.md](./prd/12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod・ファイル / URL の読み込み）と、再生による検証のランキング（**下書き・未実装・未決 ES-01〜16**） |
+| [prd/13-route-strategies.md](./prd/13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット・`applyRouteStrategies`（段 0〜2 は実装済み。D-106。段 3 以降は未決 RS-01〜18） |
 
 > 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)（未決の一覧は末尾の「未決」の節）
 
