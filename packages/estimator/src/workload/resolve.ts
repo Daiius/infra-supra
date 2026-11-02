@@ -126,8 +126,16 @@ export type ResolvedWorkload = {
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
 
-/** 月の時間帯の区間（D-89）。 */
-export type TimeBucket = { share: number; hours: number };
+/**
+ * 月の時間帯の区間（D-89）。slotHours は 1 回の時間帯の長さ（1 時間）、prev は直前の時間帯の区間の添字（同じ日の種類の中で
+ * 0 時の前は 23 時）。止まる DB の区間の境目に使う（D-90）。月全体の 1 区間には持たない。
+ */
+export type TimeBucket = {
+  share: number;
+  hours: number;
+  slotHours?: number;
+  prev?: number;
+};
 
 /**
  * 時間帯の区間: 平日 5 日・休日 2 日 × 24 時間（D-89）。平日と休日の量の比は weekdayToWeekend、1 日の中の割り振りは
@@ -144,10 +152,12 @@ export function timeBuckets(
     { share: (5 * r) / (5 * r + 2), hours: (HOURS_PER_MONTH * 5) / 7 },
     { share: 2 / (5 * r + 2), hours: (HOURS_PER_MONTH * 2) / 7 },
   ];
-  return days.flatMap((d) =>
-    hourlyProfile.map((v) => ({
+  return days.flatMap((d, di) =>
+    hourlyProfile.map((v, h) => ({
       share: (d.share * v) / sum,
       hours: d.hours / 24,
+      slotHours: 1,
+      prev: di * 24 + ((h + 23) % 24),
     })),
   );
 }

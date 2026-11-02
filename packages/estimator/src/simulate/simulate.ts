@@ -14,6 +14,7 @@ import {
   type ClassFlow,
   type RequestClass,
   type ResolvedWorkload,
+  type TimeBucket,
 } from '../workload/resolve.ts';
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
@@ -43,6 +44,8 @@ export type NodeUsage = {
   peakBusyMs: number;
   /** 止まる DB の動いている時間の割合（0〜1。止まらない DB では持たない）。 */
   awakeShare?: number;
+  /** 止まる DB に届いた件数のうち、止まっている DB に届いて再開を待つ割合（0〜1。D-90。止まらない DB では持たない）。 */
+  resumeShare?: number;
   /** コンテナのサービスの、1 件以上を処理しているインスタンスの数の月の平均（D-88。コンテナのサービスだけ）。 */
   activeInstanceShare?: number;
   /**
@@ -478,19 +481,23 @@ export function simulateResources(
   for (const n of architecture.nodes)
     nodes[n.id]!.peakBusyMs = peakAcc.nodes[n.id]!.busyMs;
 
-  // 止まる DB（Aurora Serverless v2 の 0 ACU）: 待ちの秒数 T の間に 1 件も届かない時間だけ止まる。
-  // 動いている割合は λT / (1 + λT)（月の平均の到着率。夜間に減る分は入れない）
+  // 止まる DB（Aurora Serverless v2 の 0 ACU・Neon の scale to zero）: 待ちの秒数 T の間に 1 件も届かない時間だけ止まる。
+  // 時間帯の区間が無ければ月の平均の到着率から λT / (1 + λT)（D-51）。区間があれば区間ごとに e^(−λ_b × W) で止まっている
+  // 割合を出して積む（D-90。コンテナの冷えた起動と同じ形）。W は T + 1 件の処理の時間、区間の頭の W 秒は直前の区間の到着も数える
   for (const n of architecture.nodes) {
     const c = n.config;
     if (c.kind !== 'managed-db' || c.pauseAfterIdleSeconds === undefined)
       continue;
-    const lt =
-      (hostAcc.get(n.id)!.requests / SECONDS_PER_MONTH) *
-      c.pauseAfterIdleSeconds;
-    const awake = lt / (1 + lt);
-    nodes[n.id]!.awakeShare = awake;
-    nodes[n.id]!.resources['instance-hours'] =
-      HOURS_PER_MONTH * c.capacityUnits * awake;
+    const u = nodes[n.id]!;
+    const { awake, resume } = pausingDbShares(
+      hostAcc.get(n.id)!.requests,
+      u.busyMs,
+      c.pauseAfterIdleSeconds,
+      workload.timeBuckets,
+    );
+    u.awakeShare = awake;
+    u.resumeShare = resume;
+    u.resources['instance-hours'] = HOURS_PER_MONTH * c.capacityUnits * awake;
   }
 
   // コンテナのサービス（Cloud Run の型。D-88）: 月のアクティブなインスタンスの秒数と、最小インスタンスの待機・冷えた起動の割合。
@@ -582,4 +589,75 @@ export function simulateResources(
     };
   }
   return { architecture, workload, nodes, unroutedClasses };
+}
+
+/**
+ * 止まる DB の動いている時間の割合と、再開を待つ件数の割合（D-90）。requests は月に DB に届く件数、busyMs は接続を保持している
+ * 時間の合計（ms・月）、pauseSeconds は止まるまでの待ち T。
+ *
+ * - 区間が月全体の 1 つ（hourlyProfile なし）: 月の平均の到着率 λ から、止まる割合 1 / (1 + λT)（D-51 の式のまま）。
+ *   到着率が時間で揺れる分を指数分布で混ぜた e^(−ΛT) の平均と同じ値で、揺れの形が分からないときの近似とみる。
+ * - 区間があるとき: 時間帯の中の到着はポアソンとみて、時刻 t に止まっている確率は「直前の W = T + 1 件の処理の時間に 1 件も
+ *   届いていない」= e^(−∫λ)。区間の頭の W 秒の窓は直前の時間帯（prev をたどる。W が 1 時間以上なら 2 つ以上前まで）の到着も含むので、
+ *   窓の積分が線形に変わる区切りごとに閉じた形で積分し、残りは e^(−λ_b W)。止まっている DB に届く件数の割合は、区間の中の到着率が
+ *   一定なので区間の止まっている時間の割合と同じ（件数の割合で重みづけして足す。コンテナの冷えた起動と同じ形）。
+ *   prev が無い区間は境目を見ず e^(−λ_b W)。
+ */
+export function pausingDbShares(
+  requests: number,
+  busyMs: number,
+  pauseSeconds: number,
+  buckets: readonly TimeBucket[],
+): { awake: number; resume: number } {
+  if (buckets.length <= 1 || requests <= 0) {
+    const lt = (requests / SECONDS_PER_MONTH) * pauseSeconds;
+    return { awake: lt / (1 + lt), resume: 1 / (1 + lt) };
+  }
+  const w = pauseSeconds + busyMs / 1000 / requests;
+  const rate = buckets.map((b) =>
+    b.hours > 0 ? (requests * b.share) / (b.hours * 3600) : 0,
+  );
+  /** ∫_{t0}^{t1} e^(−E(τ)) dτ（E は τ について線形。E0 = E(t0)・E1 = E(t1)）。桁あふれしないよう小さい方の指数をくくり出す */
+  const linExp = (len: number, e0: number, e1: number) => {
+    const d = Math.abs(e1 - e0);
+    return (
+      len * Math.exp(-Math.min(e0, e1)) * (d === 0 ? 1 : -Math.expm1(-d) / d)
+    );
+  };
+  let awakeHours = 0;
+  let resume = 0;
+  buckets.forEach((b, i) => {
+    if (b.hours <= 0) return;
+    const lb = rate[i]!;
+    const steady = Math.exp(-lb * w);
+    let asleep = steady;
+    if (b.prev !== undefined) {
+      const l = (b.slotHours ?? b.hours) * 3600;
+      // 時刻 τ（区間の頭から）の窓 [τ − W, τ] の積分 E(τ) = λ_b × min(τ, W) + （区間の前の W − τ 秒の積分）。
+      // 区間の前は prev をたどり、各区間の長さ l ごとに傾きが変わる。τ が W − (k+1)l〜W − kl の間は k 個前の区間の先（k+1 個前）に窓の端がある
+      let integral = 0;
+      let before = 0; // それまでにたどった区間の積分（k 個ぶん）
+      let p = b.prev;
+      const head = Math.min(w, l);
+      for (let k = 0; ; k++) {
+        // 窓の端が k+1 個前の区間 p にある τ の範囲
+        const lo = Math.max(0, w - (k + 1) * l);
+        const hi = Math.min(head, w - k * l);
+        if (hi > lo) {
+          const e = (tau: number) =>
+            lb * tau + before + rate[p]! * (w - tau - k * l);
+          integral += linExp(hi - lo, e(lo), e(hi));
+        }
+        if (lo <= 0) break;
+        before += rate[p]! * l;
+        // 窓の積分が十分大きければ、それより前は e^(−E) ≒ 0 なので打ち切る
+        if (before > 745) break;
+        p = buckets[p]!.prev ?? p;
+      }
+      asleep = (integral + Math.max(0, l - w) * steady) / l;
+    }
+    awakeHours += (1 - asleep) * b.hours;
+    resume += b.share * asleep;
+  });
+  return { awake: awakeHours / HOURS_PER_MONTH, resume };
 }

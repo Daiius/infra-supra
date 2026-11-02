@@ -1,6 +1,6 @@
 // DB だけ Neon（従量の Postgres。D-77・prd/11 §15）: Vercel・Netlify の DB のスロットで Supabase の代わりに選べ、
 // Neon のアカウントの手間がかかり、基本料の代わりに動いている時間の分だけ払う。基準プレイ（何もしない・シード 1〜20）。
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   addedAccounts,
   applyActions,
@@ -17,6 +17,9 @@ import {
 } from './index.ts';
 import type { Choices } from 'catalog';
 import type { Scenario } from './scenario.ts';
+
+// 基準プレイ（シード 1〜20 × 構成）を何本も回すので、CI の遅い実行環境では既定の 5 秒を超えうる
+vi.setConfig({ testTimeout: 30_000 });
 
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const VERCEL_PRO = idx('vercel-supabase-pro');
@@ -156,12 +159,78 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     ).toBe(7);
   });
 
-  it('受託: SPA は Neon で一部が届き、Netlify Personal（Neon Launch）では全シードが届く', () => {
+  it('受託: 夜間・休日に止まる分（D-90）で Neon の SPA は多くのシードが届き、Netlify Personal（Neon Launch）では全シードが届く', () => {
     expect(run(contract, VERCEL_PRO, 'vite-spa').won).toBe(0);
-    expect(run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }).won).toBe(7);
-    expect(run(contract, VERCEL_PRO, 'nextjs', { db: 'neon' }).won).toBe(0);
+    expect(run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }).won).toBe(18);
+    expect(run(contract, VERCEL_PRO, 'nextjs', { db: 'neon' }).won).toBe(6);
     expect(
       run(contract, NETLIFY_PERSONAL, 'vite-spa', { db: 'neon' }).won,
     ).toBe(20);
+  });
+
+  it('止まる DB を時間帯で数える（D-90）: 受託は深夜・休日に止まって安くなり、記事は止まらない（12 か月の費用の平均 / 月）', () => {
+    const AWS = idx('aws-amplify');
+    const OPENNEXT = idx('aws-opennext');
+    const fmt = (x: { won: number; monthly: number }) =>
+      `${x.won}/20 $${x.monthly.toFixed(1)}`;
+    const table = {
+      contractAwsSpaAurora: fmt(
+        run(contract, AWS, 'vite-spa', { db: 'aurora' }),
+      ),
+      contractAwsSpaPause: fmt(
+        run(contract, AWS, 'vite-spa', { db: 'aurora-pause' }),
+      ),
+      contractOpenNextPause: fmt(
+        run(contract, OPENNEXT, 'nextjs', { db: 'aurora-pause' }),
+      ),
+      articleAwsSpaAurora: fmt(run(article, AWS, 'vite-spa', { db: 'aurora' })),
+      articleAwsSpaPause: fmt(
+        run(article, AWS, 'vite-spa', { db: 'aurora-pause' }),
+      ),
+      contractVercelNext: fmt(
+        run(contract, VERCEL_PRO, 'nextjs', { db: 'neon' }),
+      ),
+      contractVercelSpa: fmt(
+        run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }),
+      ),
+      contractNetlifyNext: fmt(
+        run(contract, NETLIFY_PRO, 'nextjs', { db: 'neon' }),
+      ),
+      contractNetlifySpa: fmt(
+        run(contract, NETLIFY_PRO, 'vite-spa', { db: 'neon' }),
+      ),
+      contractPersonalNext: fmt(
+        run(contract, NETLIFY_PERSONAL, 'nextjs', { db: 'neon' }),
+      ),
+      contractPersonalSpa: fmt(
+        run(contract, NETLIFY_PERSONAL, 'vite-spa', { db: 'neon' }),
+      ),
+      articleVercelNext: fmt(
+        run(article, VERCEL_PRO, 'nextjs', { db: 'neon' }),
+      ),
+      articleNetlifyNextCf: fmt(
+        run(article, NETLIFY_PRO, 'nextjs', {
+          db: 'neon',
+          images: 'cf-resize',
+        }),
+      ),
+    };
+    // 前（D-89 まで。月の平均の到着率）: 受託 × AWS × SPA の 0 ACU $76.1・OpenNext $73.7、受託 × Neon は Vercel Next 0/20・SPA 7/20・
+    // Netlify Pro Next 0/20・SPA 7/20・Personal Next 0/20・SPA 20/20 $32.6、記事は Aurora の 0 ACU で $0.6 安かった
+    expect(table).toEqual({
+      contractAwsSpaAurora: '0/20 $76.5',
+      contractAwsSpaPause: '0/20 $55.3',
+      contractOpenNextPause: '0/20 $52.9',
+      articleAwsSpaAurora: '0/20 $88.1',
+      articleAwsSpaPause: '0/20 $88.1',
+      contractVercelNext: '6/20 $36.2',
+      contractVercelSpa: '18/20 $34.7',
+      contractNetlifyNext: '14/20 $34.6',
+      contractNetlifySpa: '18/20 $34.5',
+      contractPersonalNext: '19/20 $31.8',
+      contractPersonalSpa: '20/20 $27.1',
+      articleVercelNext: '0/20 $118.1',
+      articleNetlifyNextCf: '7/20 $52.4',
+    });
   });
 });

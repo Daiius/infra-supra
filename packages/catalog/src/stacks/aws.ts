@@ -30,7 +30,7 @@ export const IMAGE_CDN_HIT_RATE = 0.9;
 export const COMPUTE_MEMORY_GB = 1;
 /** Aurora Serverless v2 の最小の容量（ACU。0.5 が 0 以外の最小。負荷で伸びる分は数えない仮定）。 */
 const AURORA_MIN_ACU = 0.5;
-/** 0 ACU まで縮めるときの、止まるまでの接続の無い時間（秒。公式の最短の値）。 */
+/** 0 ACU まで縮めるときの、止まるまでの接続の無い時間（秒。公式の最短の値で既定の値。2026-11-02 に再確認）。 */
 const AURORA_PAUSE_SECONDS = 300;
 /** Aurora DSQL の DB に届く 1 件あたりの DPU（仮定。料金ページの例 10 万 DPU ≈ 70 万トランザクションから）。 */
 const DSQL_DPU_PER_REQUEST = 0.14;
