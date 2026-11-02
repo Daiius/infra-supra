@@ -555,10 +555,11 @@ describe('ゲームモードの画面', () => {
     const tabs = [
       ...group.querySelectorAll<HTMLElement>('[data-tab-group]'),
     ].map((g) => {
+      // 1 つだけの事業者は枠で囲まず、チップ（label）そのものが組（枠とチップの線が二重にならない）
+      if (g.tagName === 'LABEL') return [text(g), []];
       const chips = [...g.querySelectorAll('label')].map(text);
-      return g.hasAttribute('aria-label')
-        ? [g.getAttribute('aria-label'), chips]
-        : [chips.join(), []];
+      expect(g.getAttribute('aria-label')).not.toBe(null);
+      return [g.getAttribute('aria-label'), chips];
     });
     expect(tabs).toEqual([
       ['Cloudflare', ['Free', 'Paid']],

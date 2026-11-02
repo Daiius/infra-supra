@@ -155,6 +155,48 @@ describe('見積モードの画面', () => {
     expectEstimate();
   });
 
+  it('W-22 フレームワーク・構成を替えると、選んでいない再検証・記事のキャッシュは替えた先の既定になり、選べない描き方は URL から消える（D-103・D-107）', () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-paid&r=300',
+    );
+    renderApp();
+    expectEstimate();
+    expect((combo('ISR の再検証') as HTMLSelectElement).value).toBe('300');
+    // Astro の既定は、消せる置き場（Cloudflare）ではオンデマンド
+    fireEvent.change(combo('フレームワーク'), { target: { value: 'astro' } });
+    expectEstimate();
+    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('0');
+    expect(new URLSearchParams(window.location.search).get('r')).toBe('0');
+    // 消せない置き場（Google Cloud）では 5 分
+    fireEvent.change(combo('構成'), { target: { value: 'gcp-cloud-run' } });
+    expectEstimate();
+    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('300');
+    // 選んだ値は、替えた先で選べるなら残る
+    fireEvent.change(combo('記事のキャッシュ'), { target: { value: '3600' } });
+    fireEvent.change(combo('構成'), {
+      target: { value: 'cloudflare-vinext-paid' },
+    });
+    expectEstimate();
+    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('3600');
+
+    // 記事を S1 にしてから vinext（S1 を確かめていない）に替えると、rp.article は消える
+    cleanup();
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-free&rp.article=static-build&rp.personal=shell-api',
+    );
+    renderApp();
+    expectEstimate();
+    expect(window.location.search).toContain('rp.article=static-build');
+    fireEvent.change(combo('フレームワーク'), { target: { value: 'nextjs' } });
+    expectEstimate();
+    expect(window.location.search).not.toContain('rp.article');
+    expect(window.location.search).toContain('rp.personal=shell-api');
+  });
+
   it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', () => {
     window.history.replaceState(
       null,

@@ -15,7 +15,10 @@ import {
   runEstimate,
   sortRows,
   toQuery,
+  withFramework,
   withStack,
+  withTemplate,
+  type EstimateInput,
 } from './model.ts';
 
 describe('normalizeInput', () => {
@@ -289,6 +292,103 @@ describe('withStack', () => {
     });
     expect(other.stack).toBe('cloudflare-vinext-free');
     expect(other.parts.isrCache).toBe('kv');
+  });
+});
+
+describe('フレームワーク・構成を替えたときの再検証の値（始める画面と同じ規則。D-103・D-107）', () => {
+  const apply = (i: EstimateInput, p: Partial<EstimateInput>) =>
+    normalizeInput({ ...i, ...p });
+  // URL から読み直しても同じ（r= は毎回書かれる）
+  const viaUrl = (i: EstimateInput) =>
+    normalizeInput(fromQuery(`?${toQuery(i)}`));
+
+  it('既定のまま Next.js から Astro に替えると、Astro の既定（消せる置き場はオンデマンド）にする', () => {
+    const next = viaUrl(normalizeInput({ stack: 'cloudflare-vinext-paid' }));
+    expect(next.revalidateSec).toBe(300);
+    const astro = apply(next, withFramework(next, 'astro'));
+    expect(astro.framework).toBe('astro');
+    expect(astro.revalidateSec).toBe(0);
+    // 戻すと Next.js の既定
+    expect(apply(astro, withFramework(astro, 'nextjs')).revalidateSec).toBe(
+      300,
+    );
+  });
+
+  it('既定のまま消せない置き場（Google Cloud）へ替えると 5 分、消せる置き場へ戻すとオンデマンド', () => {
+    const cf = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-paid',
+    });
+    expect(cf.revalidateSec).toBe(0);
+    const gcp = apply(cf, withStack(cf, 'gcp-cloud-run'));
+    expect(gcp.stack).toBe('gcp-cloud-run');
+    expect(gcp.revalidateSec).toBe(300);
+    expect(
+      apply(gcp, withStack(gcp, 'vercel-supabase-pro')).revalidateSec,
+    ).toBe(0);
+  });
+
+  it('選んだ値（既定と違う）は替えた先で選べるなら残す', () => {
+    const chosen = normalizeInput({
+      framework: 'nextjs',
+      stack: 'cloudflare-vinext-paid',
+      revalidateSec: 3600,
+    });
+    const astro = apply(chosen, withFramework(chosen, 'astro'));
+    expect(astro.revalidateSec).toBe(3600);
+    const gcp = apply(astro, withStack(astro, 'gcp-cloud-run'));
+    expect(gcp.revalidateSec).toBe(3600);
+  });
+
+  it('業務アプリ（設定を出さない）から記事に替えると、替えた先の既定', () => {
+    const biz = normalizeInput({
+      template: 'business',
+      framework: 'astro',
+      stack: 'cloudflare-vinext-paid',
+    });
+    expect(biz.revalidateSec).toBe(300);
+    const art = apply(biz, withTemplate(biz, 'article'));
+    expect(art.template).toBe('article');
+    expect(art.revalidateSec).toBe(
+      normalizeInput({ framework: art.framework, stack: art.stack })
+        .revalidateSec,
+    );
+  });
+
+  it('替えた先で選べないページの描き方（rp.〜）は捨て、選べるものは残す', () => {
+    const astro = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-free',
+      routes: { article: 'static-build', personal: 'shell-api' },
+    });
+    // vinext（Cloudflare の Next.js）の S1 は確かめていないので捨てる。個人向けの S5 は残る
+    const next = apply(astro, withFramework(astro, 'nextjs'));
+    expect(next.routes).toEqual({ personal: 'shell-api' });
+    expect(toQuery(next).has('rp.article')).toBe(false);
+  });
+
+  it('比較の表・費用の曲線の他の構成の月額は、その構成を選んだ後の見積と同じ（既定の違う構成の間で。OCL-417D9CCA）', () => {
+    for (const from of ['gcp-cloud-run', 'cloudflare-vinext-paid']) {
+      const i = normalizeInput({ framework: 'astro', stack: from });
+      for (const row of compareStacks(i)) {
+        const picked = apply(i, withStack(i, row.stack));
+        const pickedTotal = compareStacks(picked).find((r) => r.current)!;
+        expect(row.totalUsd).toBeCloseTo(pickedTotal.totalUsd, 9);
+        const [curve] = costCurves(i, [row.stack], [i.pv]);
+        expect(curve!.points[0]!.totalUsd).toBeCloseTo(pickedTotal.totalUsd, 9);
+      }
+    }
+    // 既定の違う構成（Google Cloud は 5 分・Cloudflare はオンデマンド）を含む
+    const gcp = normalizeInput({ framework: 'astro', stack: 'gcp-cloud-run' });
+    expect(
+      apply(gcp, withStack(gcp, 'cloudflare-vinext-paid')).revalidateSec,
+    ).not.toBe(gcp.revalidateSec);
+  });
+
+  it('同じ値を選び直しても何も変えない', () => {
+    const i = normalizeInput({ framework: 'astro' });
+    expect(withFramework(i, 'astro')).toEqual({});
+    expect(withTemplate(i, i.template)).toEqual({});
   });
 });
 

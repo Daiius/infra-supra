@@ -58,7 +58,7 @@ export function ChoiceCarousel<T extends string>({
   /** カード。idPrefix はタブの aria-describedby に結ぶ要素の id の頭。 */
   renderCard: (id: T, o: { selected: boolean; idPrefix: string }) => ReactNode;
   /**
-   * タブの組（並びを flat にしたものが items と同じ順）。1 つだけの組は組の名前のタブ、2 つ以上の組は組の名前の後ろに
+   * タブの組（並びを flat にしたものが items と同じ順）。1 つだけの組は組の名前のチップ（枠で囲まない）、2 つ以上の組は組の名前の後ろに
    * 選択肢のチップ（chip。join の btn-xs）を並べる。ラジオの名前は label（チップの短い文字でなく、選択肢の名前で読む）。
    */
   groups?: readonly ChoiceGroup<T>[] | undefined;
@@ -143,15 +143,21 @@ export function ChoiceCarousel<T extends string>({
                 on ? 'border-primary' : 'border-base-300'
               }`;
               const only = g.items.length === 1 ? g.items[0] : undefined;
+              // 1 つだけの組は枠で囲まず、チップ 1 つにする（枠とチップの線が二重にならない）。高さは組の枠
+              // （チップ + 上下の py-0.5 + 線 1px）にそろえ、選んでいないときの線も組の枠の色にする
               if (only !== undefined)
                 return (
-                  <div key={g.key} data-tab-group={g.key} className={box}>
-                    <label className={chipClass(only)}>
-                      {radio(only, label(only))}
-                      {g.mark}
-                      {g.label}
-                    </label>
-                  </div>
+                  <label
+                    key={g.key}
+                    data-tab-group={g.key}
+                    className={`${chipClass(only)} h-[calc(var(--size)+0.25rem+2px)] ${
+                      on ? '' : 'border-base-300'
+                    }`}
+                  >
+                    {radio(only, label(only))}
+                    {g.mark}
+                    {g.label}
+                  </label>
                 );
               return (
                 <div

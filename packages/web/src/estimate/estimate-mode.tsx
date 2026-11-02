@@ -56,7 +56,9 @@ import {
   toQuery,
   USD_JPY,
   VARIANTS,
+  withFramework,
   withStack,
+  withTemplate,
   type EstimateInput,
   type LineView,
   type MemberView,
@@ -307,7 +309,7 @@ function Conditions({
             className={select}
             value={input.template}
             onChange={(e) =>
-              setInput({ template: e.target.value as TemplateId })
+              setInput(withTemplate(input, e.target.value as TemplateId))
             }
           >
             {TEMPLATES.map((t) => (
@@ -363,7 +365,7 @@ function Conditions({
             className={select}
             value={input.framework}
             onChange={(e) =>
-              setInput({ framework: e.target.value as FrameworkId })
+              setInput(withFramework(input, e.target.value as FrameworkId))
             }
           >
             {fws.map((f) => (
