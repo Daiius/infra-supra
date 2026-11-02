@@ -35,7 +35,6 @@ import {
   stackChangeText,
   rewriteTargets,
   rewriteText,
-  stackFlavor,
   stackName,
   frameworksOf,
   FRAMEWORKS,
@@ -85,7 +84,6 @@ import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
 import {
-  EffortBar,
   FrameworkField,
   ScenarioDescription,
   ScenarioPicker,
@@ -99,7 +97,9 @@ import {
   type SetupChoices,
 } from './setup-components.tsx';
 import { EstimateMode } from './estimate/estimate-mode.tsx';
-import { PlatformMarks } from './brand-logos.tsx';
+import { StackField } from './stack-field.tsx';
+import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
+import { diagramArchitecture } from './system-diagram-model.ts';
 import {
   CountUp,
   FireworksCanvas,
@@ -308,39 +308,15 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
             comments={commentsChoosable ? comments : undefined}
           />
-          <h3 className="mt-2 font-bold">インフラの構成</h3>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {STACKS.filter((s) => stackOffered(s.index, framework)).map((s) => (
-              <label
-                key={s.id}
-                className={`flex cursor-pointer items-start gap-3 rounded-box border p-3 ${stack === s.index ? 'border-primary bg-primary/5' : 'border-base-300'}`}
-              >
-                <input
-                  type="radio"
-                  className="radio radio-primary mt-0.5 shrink-0"
-                  checked={stack === s.index}
-                  onChange={() => change({ stack: s.index })}
-                />
-                <span className="block min-w-0">
-                  <span className="flex items-center gap-1.5">
-                    <PlatformMarks platform={s.provider} />
-                    {stackName(s.index, framework, false)}
-                  </span>
-                  {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
-                  <span className="mt-0.5 block text-xs opacity-70">
-                    {stackFlavor(s.index)}
-                  </span>
-                  <EffortBar
-                    scenario={scenario}
-                    stackIndex={s.index}
-                    // 選んでいる構成は、選んだ部品で増える他の事業者の管理も出す（D-52）
-                    {...(stack === s.index
-                      ? { components: parts, framework }
-                      : {})}
-                  />
-                </span>
-              </label>
-            ))}
+          <div className="mt-2">
+            <StackField
+              scenario={scenario}
+              framework={framework}
+              value={stack}
+              onChange={(i) => change({ stack: i })}
+              components={parts}
+              comments={commentsChoosable ? comments : undefined}
+            />
           </div>
           <SetupComponents
             scenario={scenario}
@@ -1731,6 +1707,21 @@ function ComponentsSection({
       <div className="divider my-1 text-xs">
         部品（同じ事業者の中で差し替える）
       </div>
+      {/* 今の構成図（D-105）。畳んでおく */}
+      <details className="text-sm">
+        <summary className="cursor-pointer">今の構成図</summary>
+        <div className="mt-2">
+          <SystemDiagram
+            architecture={diagramArchitecture(
+              state.scenario,
+              state.stackIndex,
+              state.framework,
+              state.components,
+            )}
+            caption={DIAGRAM_NOTE}
+          />
+        </div>
+      </details>
       {busy ? (
         <div className="text-sm">
           {state.componentSwap
