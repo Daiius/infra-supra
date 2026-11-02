@@ -373,12 +373,26 @@ export function FrameworkField({
             }
           >
             {id === value ? (
-              <FrameworkCard
-                scenario={scenario}
-                id={id}
-                comments={comments}
-                info={info(id)}
-              />
+              // すべてのカードを同じ 1 マスに重ね、マスの高さを最も高いカードに揃える（切り替えてもページが跳ねない）。
+              // 選んでいないカードは見えなくし（invisible）、支援技術・フォーカスからも外す（aria-hidden・inert）
+              <div className="grid w-full">
+                {allowed.map((other) => (
+                  <div
+                    key={other}
+                    className={`col-start-1 row-start-1 flex ${other === id ? '' : 'invisible'}`}
+                    {...(other === id
+                      ? {}
+                      : { 'aria-hidden': true, inert: true })}
+                  >
+                    <FrameworkCard
+                      scenario={scenario}
+                      id={other}
+                      comments={comments}
+                      info={info(other)}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
               // 両脇に小さく見える前後の選択肢（タブと同じ選択なので、支援技術には出さず、マウスで選べるだけ）
               <button
