@@ -9,6 +9,7 @@ import {
   loadPriceBooks,
   SLOT_LABELS,
   STACK_DEFS,
+  withoutUnusedEmail,
   type Choices,
   type JapanTaxTreatment,
   type SlotId,
@@ -612,10 +613,14 @@ function run(input: EstimateInput, r: Resolved) {
       comments: input.comments,
     },
   });
+  // アプリがメールを送らないテンプレートでは送信のノードを外す（D-101）
   const architecture = withSeats(
-    composeStack(STACK_DEFS[r.stackIndex]!, r.components, {
-      framework: input.framework,
-    }),
+    withoutUnusedEmail(
+      composeStack(STACK_DEFS[r.stackIndex]!, r.components, {
+        framework: input.framework,
+      }),
+      workload,
+    ),
     input.seats,
   );
   return estimate({ workload, architecture, books: BOOKS });

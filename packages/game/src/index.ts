@@ -31,9 +31,11 @@ import {
   type SlotId,
   backupStatus,
   PITR_REQUIRED_DAYS,
+  sendsEmail,
+  withoutUnusedEmail,
 } from 'catalog';
 import {
-  estimate,
+  estimate as estimateArch,
   type EstimateResult,
   type ArchitectureInput,
   type LineItem,
@@ -90,6 +92,20 @@ import {
   type CommitmentDef,
   type CommitmentPaymentId,
 } from './commitments.ts';
+
+/**
+ * 見積（estimator の estimate）。アプリがメールを送らないシナリオ（Workload に email が無い）では、送信のノードを外してから回す
+ * （部品「メール送信」も出さない。D-101）。ゲームの見積はすべてこれを通す。
+ */
+const estimate: typeof estimateArch = (input) =>
+  estimateArch({
+    ...input,
+    architecture: withoutUnusedEmail(input.architecture, input.workload),
+  });
+
+/** アプリがメールを送るシナリオか（テンプレートに email がある。D-101）。 */
+export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>
+  sendsEmail(sc.template(1));
 
 /** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
 export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
@@ -2958,8 +2974,9 @@ export function componentSlots(state: GameState): {
     .filter(
       (x) =>
         x.options.length > 1 &&
-        // このシナリオで効かないスロットは出さない（D-33・prd/09 E-6）
+        // このシナリオで効かないスロットは出さない（D-33・prd/09 E-6）。メールを送らないシナリオのメール送信も（D-101）
         !scenarioOf(state).hidden?.slots?.includes(x.slot) &&
+        (x.slot !== 'email' || scenarioSendsEmail(scenarioOf(state))) &&
         // 今の選択で効かないスロット（API を他の事業者に置いたときの DB。D-65）
         !slotIneffective(x.slot, current, {
           stackIndex: state.stackIndex,
