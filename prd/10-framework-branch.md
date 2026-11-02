@@ -489,7 +489,7 @@ D-67 と D-68 が並行で入ったので、Astro では「同じ事業者のみ
 
 | 土台（Astro のアダプター） | API と DB（部品） | 経路と課金 | 根拠（公式・2026-11-02 取得） |
 |---|---|---|---|
-| Vercel（Hobby・Pro。`@astrojs/vercel`）・さくらの VPS（`@astrojs/node` standalone） | **Cloudflare: Workers + D1（Astro のサーバーから呼ぶ）**（`cf-workers-astro`） | D-67 の `cf-workers-server` と同じ形。ブラウザは今の事業者の Astro だけを呼び（CORS は要らない）、マイページの SSR・API の経路の DB を Worker → D1 に差し替える。記事は静的なビルドのまま今の場所から配る。Vercel の関数から外への通信は数えず（前提の文 `function-outbound`）、VPS は転送量が無制限なので数えない。**VPS は MySQL を動かさない**（常駐メモリ 1.35 → 0.75 GB・DB の CPU 0・ディスクに DB を置かない。エンジンに `host` の `storesDb`） | [Data fetching](https://docs.astro.build/en/guides/data-fetching/)（「If SSR mode is enabled, any fetch calls will be executed at runtime」）・[@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)・[@astrojs/node](https://docs.astro.build/en/guides/integrations-guide/node/)・[さくらの VPS の仕様](https://vps.sakura.ad.jp/specification/)（データ転送量 無制限）・§9.1 の Workers・D1 |
+| Vercel（Hobby・Pro。`@astrojs/vercel`）・さくらの VPS（`@astrojs/node` standalone） | **Cloudflare: Workers + D1（Astro のサーバーから呼ぶ）**（`cf-workers-astro`） | D-67 の `cf-workers-server` と同じ形。ブラウザは今の事業者の Astro だけを呼び（CORS は要らない）、マイページの SSR・API の経路の DB を Worker → D1 に差し替える。記事は静的なビルドのまま今の場所から配る（D-69 の時点。D-103 で記事は閲覧時に描いてキャッシュする形に替えた）。Vercel の関数から外への通信は数えず（前提の文 `function-outbound`）、VPS は転送量が無制限なので数えない。**VPS は MySQL を動かさない**（常駐メモリ 1.35 → 0.75 GB・DB の CPU 0・ディスクに DB を置かない。エンジンに `host` の `storesDb`） | [Data fetching](https://docs.astro.build/en/guides/data-fetching/)（「If SSR mode is enabled, any fetch calls will be executed at runtime」）・[@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)・[@astrojs/node](https://docs.astro.build/en/guides/integrations-guide/node/)・[さくらの VPS の仕様](https://vps.sakura.ad.jp/specification/)（データ転送量 無制限）・§9.1 の Workers・D1 |
 | Cloudflare（Free・Paid。`@astrojs/cloudflare`） | **さくらの VPS 2GB / 4GB: API と MySQL**（`sakura-vps-2gb`・`sakura-vps-4gb`。SPA と同じ部品） | D-67 の VPS の API と同じ形（api のサブドメインを DNS だけのレコードで VPS へ。ブラウザの API・投稿は VPS に直接、画像は R2）。加えて、**マイページを描く Worker が VPS の API を fetch で呼ぶ**（経路 `document-ssr` = Worker → VPS）。D1 は外れ、Worker・Images（binding）・ビルドは残る。Worker から外への fetch は課金されず転送の料金も無く、待つ時間は CPU 時間に数えない（前提の文 `worker-outbound`） | [Workers の料金](https://developers.cloudflare.com/workers/platform/pricing/)（「There are no additional charges for data transfer (egress) or throughput (bandwidth)」・「Cloudflare does not bill for subrequests you make from your Worker」）・[Workers の制限](https://developers.cloudflare.com/workers/platform/limits/)（「Waiting on network requests (such as fetch() calls …) does not count toward CPU time」・サブリクエスト Free 50 / Paid 10,000）・[@astrojs/cloudflare](https://docs.astro.build/en/guides/integrations-guide/cloudflare/)・§9.5 の DNS・VPS |
 
 - 出さない組: Astro × AWS（D-68 で載せない）。Cloudflare の Astro + AWS の API（`aws-lambda`）は、Worker の SSR から API Gateway を呼ぶ転送の扱い（Lambda の応答が Worker に返る分）を確かめていないので出さない。VPS の Astro + 他の事業者の画像も今までどおり出さない。
@@ -531,7 +531,7 @@ D-67 と D-68 が並行で入ったので、Astro では「同じ事業者のみ
 - Astro は「記事は閲覧のときに描いて前段にキャッシュし、投稿・編集で消す（D-103。前は静的にビルドし直し・D-68）+ マイページは SSR（アダプター）+ JS はアイランドだけ」。SNS のカードは Next.js と同じく HTML に入る（`noSocialCards` は SPA だけ）。
 - 始める画面のフレームワーク欄（F-04・D-35）に 3 つ目として出る。§7 の `framework` の保存は id だけで、古い保存は今のまま読める（`astro` を許す id に足しただけ）。
 - 載せられない組（§2.2 の E-3）を初めて入れた: Astro × AWS（公式のアダプターが無い）は始める画面の一覧に出さず、乗り換えもできない（`stackSupports`）。
-- revalidateSec の意味はフレームワークごと: Next.js は ISR の間隔・SPA は API のキャッシュの期間（§8）・Astro は記事のキャッシュ（D-103。前はビルドの間隔）・静的書き出しはビルドの間隔（`revalidateSettingOf`・`hiddenSettings`）。
+- revalidateSec の意味はフレームワークごと: Next.js は ISR の間隔・SPA は API のキャッシュの期間（§8）・Astro は記事のキャッシュ（D-103。前はビルドの間隔）・静的書き出しはビルドの間隔（`revalidateSettingOf`・`hiddenSettings`）。D-107 の後は、記事の描き方で決まる（S1 はビルドの間隔・S2 / S3 は ISR か記事のキャッシュ・SPA の S5 は API のキャッシュの期間。[13](./13-route-strategies.md) §5b）。
 
 ## 11. Next.js の静的書き出し（F-03・2026-11-02・D-80）
 
@@ -554,7 +554,7 @@ D-67 と D-68 が並行で入ったので、Astro では「同じ事業者のみ
 | 行動 | 「アプリを作り直す（フレームワークを替える）」`{ type: 'rewrite', framework }`。Next.js・Vite の SPA・Astro・Next.js の静的書き出しの間で、シナリオが選べるもの（`frameworks.allowed`） |
 | 手間 | 月あたり最大 8 × 3 か月 = **24**（`EFFORT.rewrite`）。乗り換え（12〜18）より重く、§4.2 の目安（乗り換えの 1.5〜2 倍）に入る。月の手間 10 のうち、維持・出来事への対応・機能の追加の作業・予定した行動の**残りをすべて**（最大 8）取る。VPS（維持 3）では毎月 7 で約 4 か月、マネージドでは 8 で 3 か月 |
 | 期間中 | 旧アプリのまま動く（費用・満足度・前提は今のフレームワーク）。新旧両方の費用は払わない（同じ事業者の中で、新しいアプリは本番の流量を受けない。乗り換えの U-5 と違う点）。切り替えの月の収益の減りも無い。機能開発がほぼ止まる（累積の機能ポイントの比で「機能」が下がり、伸びにも効く） |
-| 済んだ翌月 | 新しいフレームワークの Workload・満足度の効き（SNS のカード・初回表示・鮮度）・設定の意味（ISR の間隔・API のキャッシュの期間・ビルドの間隔）。事業者・プランはそのまま |
+| 済んだ翌月 | 新しいフレームワークの Workload・満足度の効き（SNS のカード・初回表示・鮮度）・設定の意味（ISR の間隔・API のキャッシュの期間・ビルドの間隔）。事業者・プランはそのまま。ページの描き方は新しいフレームワークの既定に戻る（D-107。行動の欄で、選ぶ前に戻るページを知らせる・[13](./13-route-strategies.md) §5b） |
 | 部品 | 新しいフレームワークの始める画面で選べる部品はそのまま（`validSetupChoices` と同じ規則）、選べない部品は既定に戻す（例: Vercel の Next.js の画像の最適化 → 静的書き出しでは投稿のときに縮める。SPA の OGP の前処理 → Next.js では無い）。提案で付いた部品（チャットの Durable Objects）は選べれば残す |
 | API の置き場 | 同じ選択肢が無ければ、**同じ事業者に置く**選択肢に替えて維持する（Next.js の Workers・D1 → SPA の Workers・D1）。無ければ同居（既定）に戻る（Cloudflare の SPA の VPS の API → Next.js）。データの移し替えは作り直しの手間に含める |
 | 再検証の値 | 新しいフレームワークの設定に無い値は既定の 5 分に戻す（例: Next.js のオンデマンド → SPA の API のキャッシュの期間） |

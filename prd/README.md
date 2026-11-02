@@ -33,14 +33,14 @@
 
 ## スコープ
 
-> 今の状態（2026-11-02・D-79 まで）。フェーズごとの済み・残りは [08](./08-roadmap.md)。
+> 今の状態（2026-11-03・D-107 まで）。フェーズごとの済み・残りは [08](./08-roadmap.md)。
 
 - **実装済み**:
   - 見積エンジン（estimator）: 数値の基盤・料金スキーマと料金計算・Workload・構成・資源シミュレーション・前提（使用率と止まる / 遅くなる / 課金が増える）の判定・`estimate`（P1-2〜P1-8）。
   - 料金データ（catalog）: 下の事業者の公式の料金表から、出典 URL と取得日つき（P1-10）。明細の表示名（D-75）・日本の消費税の扱い（D-76）。
-  - ゲームモード（game・web）: GD-1〜GD-5（[07](./07-game-design.md) §8）。シナリオは記事コミュニティと受託の業務アプリ（[09](./09-scenario-contract.md)）。始める画面で構成・フレームワーク・部品・設定を選び、1 か月目の費用の見込みを出す（D-45・D-72）。
-  - 見積モード（web の `?mode=estimate`）: 明細・前提・構成の比較・費用の曲線・席・税込の目安（D-73〜D-76。今の形は [08](./08-roadmap.md)「見積モードの今の形」）。
-- **計画中**: 見積の JSON の保存・料金の改定の予告・判断ポイントの境目の値（D-73・D-74 の残し）、見積のスナップショットと golden（P1-9 の残り）、外部のシナリオとランキング（[12](./12-external-scenarios-and-ranking.md)・未決）、アーキテクチャエディタ（Phase 5）。
+  - ゲームモード（game・web）: GD-1〜GD-5（[07](./07-game-design.md) §8）。シナリオは記事コミュニティと受託の業務アプリ（[09](./09-scenario-contract.md)）。始める画面は ① ページと要件 → ② フレームワーク → ③ ページの描き方 → ④ インフラの構成（構成図つきのカルーセル）→ 部品・設定の順に選び、1 か月目の費用の見込みを出す（D-45・D-72・D-102・D-105・D-107。[13](./13-route-strategies.md) §5b）。
+  - 見積モード（web の `?mode=estimate`）: 明細・前提・構成の比較・費用の曲線・席・税込の目安・構成図・ページの描き方（D-73〜D-76・D-105・D-107。今の形は [08](./08-roadmap.md)「見積モードの今の形」）。
+- **計画中**: ページごとの描き方の段 4・5（[13](./13-route-strategies.md)・RS の残りは未決）、見積の JSON の保存・料金の改定の予告・判断ポイントの境目の値（D-73・D-74 の残し）、見積のスナップショットと golden（P1-9 の残り）、外部のシナリオとランキング（[12](./12-external-scenarios-and-ranking.md)・未決）、アーキテクチャエディタ（Phase 5）。
 - **対象の事業者と構成**（catalog の `src/providers/`・`src/stacks/`）:
 
   | 事業者 | 構成・役割 | 決定 |
@@ -49,13 +49,14 @@
   | Vercel | Hobby・Pro（+ Supabase）。Pro は $20 のクレジットがすべての従量に当たる（D-48） | MVP |
   | Supabase | Vercel・Netlify の構成の DB（Free・Pro）。Cloudflare からは Hyperdrive 経由の部品 | MVP |
   | さくらの VPS | 2GB・4GB（東京）。Docker Compose + MySQL + Nginx の自前運用 | D-13・D-24 |
-  | AWS（東京・常時無料だけ） | Amplify Hosting（Next.js）・S3 + CloudFront + Lambda（SPA）・OpenNext（Next.js を自分で組む）。DB は DynamoDB・RDS・Aurora・DSQL。CloudFront の定額のプラン | D-51・D-61・D-63・D-66 |
-  | Netlify | Free・Personal・Pro（+ Supabase）。クレジット制 | D-71 |
+  | AWS（東京・常時無料だけ） | Amplify Hosting（Next.js）・S3 + CloudFront + Lambda（SPA）・OpenNext（Next.js を自分で組む。**一時的に隠している**・D-100）。DB は DynamoDB・RDS・Aurora・DSQL。CloudFront の定額のプラン | D-51・D-61・D-63・D-66・D-100 |
+  | Netlify | Free・Personal・Pro（+ Supabase）。クレジット制。**一時的に隠している**（料金と計算は残す） | D-71・D-100 |
   | Neon | Vercel・Netlify の DB の他の事業者の部品（従量の Postgres） | D-77 |
   | Google Cloud | Cloud Run + Firebase Hosting（東京）。DB は Firestore・Cloud SQL | D-88 |
 
-  事業者をまたぐ部品（画像だけ Cloudflare・API を Workers + D1 に・Cloudflare の静的 + AWS / VPS の API・DB だけ Neon）は、公式で確かめた組だけを catalog の `CROSS_PAIRS` で許す（D-52・D-65・D-67・D-69・D-77。[11](./11-aws-and-cross-provider.md) §2・[10](./10-framework-branch.md) §9）。
-- **対象のフレームワーク**: Next.js（App Router）・Vite（SPA）+ API・Astro・Next.js の静的書き出し（`output: 'export'`）（[06](./06-frameworks.md)・[10](./10-framework-branch.md)・D-34・D-68・D-80）。vinext はフレームワークではなく、Next.js を Cloudflare に載せる経路（D-08）。Astro × AWS は公式のアダプターが無いので対象外。
+  隠した構成は選ぶ場所（始める画面・乗り換え先・見積モード・結果の比較）に出さず、古い保存の再生だけに使う（catalog の `HIDDEN_PLATFORMS`。D-100・[11](./11-aws-and-cross-provider.md) 冒頭）。
+  事業者をまたぐ部品（画像だけ Cloudflare・API を Workers + D1 に・Cloudflare の静的 + AWS / VPS の API・DB だけ Neon・転送の安い CDN の Bunny）は、公式で確かめた組だけを catalog の `CROSS_PAIRS` で許す（D-52・D-65・D-67・D-69・D-77・D-98。[11](./11-aws-and-cross-provider.md) §2・[10](./10-framework-branch.md) §9）。
+- **対象のフレームワーク**: Next.js（App Router）・Vite（SPA）+ API・Astro・Next.js の静的書き出し（`output: 'export'`）（[06](./06-frameworks.md)・[10](./10-framework-branch.md)・D-34・D-68・D-80）。ページ（ルート）ごとの描き方（S1〜S6）はフレームワークの既定（プリセット）から選び直せる（[13](./13-route-strategies.md)・D-106・D-107）。vinext はフレームワークではなく、Next.js を Cloudflare に載せる経路（D-08）。Astro × AWS は公式のアダプターが無いので対象外。
 - **対象外**: 企画書 §8 のとおり（WebRTC の詳細・動画エンコード・マルチリージョン・障害伝播・認証など）。遅延は計算しない（AX-13）。AWS の新規アカウントの 1 回きりのクレジットは入れない（AX-06）。
 
 ## 文書
@@ -68,16 +69,16 @@
 | [03-pricing-schema.md](./03-pricing-schema.md) | 料金データのスキーマ（メーター・無料枠プール・段階料金・クレジット・上限超過時の挙動・出典） |
 | [04-resource-simulation.md](./04-resource-simulation.md) | Workload からリソース消費量への変換仕様（MVP のコンポーネント種別ごと） |
 | [05-test-strategy.md](./05-test-strategy.md) | 料金計算のテストケース設計（架空料金データの扱いを含む） |
-| [06-frameworks.md](./06-frameworks.md) | フレームワークとビルド出力（FrameworkProfile・BuildOutput・DeployTarget。ISR・ミドルウェア・画像最適化の写し方） |
+| [06-frameworks.md](./06-frameworks.md) | フレームワークとビルド出力（FrameworkProfile・BuildOutput・DeployTarget。ISR・ミドルウェア・画像最適化の写し方）・Astro（§6。記事は閲覧時に描いてキャッシュ・D-103）・Next.js の静的書き出し（§7） |
 | [07-game-design.md](./07-game-design.md) | ゲームデザイン（満足度・開発の手間・出来事・部品の選択・推移と見込み・評価）と実装の順序 |
 | [08-roadmap.md](./08-roadmap.md) | フェーズの状態（済み・残り）・見積モードの今の形・Phase 1 のタスク分解 |
 | [09-scenario-contract.md](./09-scenario-contract.md) | 2 本目のシナリオ: 受託先の業務アプリの運用（テンプレート・出来事・確定した値と基準プレイ） |
 | [10-framework-branch.md](./10-framework-branch.md) | フレームワークの分岐（Vite の SPA か Next.js か）・API の応答のキャッシュ・API の置き場（段 1〜3）・Astro の API の置き場・Next.js の静的書き出し（§11）。確定・実装済み |
-| [11-aws-and-cross-provider.md](./11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext・Aurora 系・CloudFront の定額）・事業者をまたぐ構成・Netlify・Neon・Google Cloud。論点 AX-01〜14 は D-50 で決定・実装済み |
+| [11-aws-and-cross-provider.md](./11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext・Aurora 系・CloudFront の定額）・事業者をまたぐ構成・Netlify・Neon・Google Cloud・VPS の前の Cloudflare・ログ・バックアップ・メール・DNS・確約・Bunny。論点 AX-01〜14 は D-50 で決定・実装済み（OpenNext・Netlify は一時的に隠している。D-100） |
 | [12-external-scenarios-and-ranking.md](./12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod）と再生による検証のランキング。**下書き・未実装・未決 ES-01〜16** |
 | [13-route-strategies.md](./13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット。段 0〜3 は実装済み（D-106・D-107）、段 4・5 と RS の残りは未決 |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |
-| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-79）と、末尾に未決の論点の一覧 |
+| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-107）と、末尾に未決の論点の一覧 |
 
 ## 用語
 
@@ -97,7 +98,8 @@
 | 前提（Premise） | 「このプラットフォームはこういう前提で動く」を、使用率・境目・超えたときの効き方（止まる・遅くなる・課金が増える・調整される）つきで出す 1 文（`assessPremises`。D-12） |
 | 構成（スタック） | 事業者とプランの組（例: Cloudflare Paid + vinext）。catalog の `STACK_DEFS` と `composeStack` |
 | 部品・スロット | 構成の役割（画像・DB・ISR の置き場・API の置き場・前段の CDN など）ごとに選ぶ選択肢。他の事業者の部品は `CROSS_PAIRS` で許した組だけ（D-24・D-52） |
-| 設定 | 再検証の間隔（オンデマンドを含む）・API のキャッシュの期間・ビルドの間隔・画像の形式（JPEG / WebP / AVIF。D-58）・サイズ違いの数 |
+| 描き方（ルートの描き方） | ページ（ルート）ごとの描き方 S1〜S6（静的・キャッシュ（時間 / 更新で消す）・毎回描く・枠 + API・サーバーの島）。フレームワークの既定（プリセット）から、対応表で使えるものを選び直せる（[13](./13-route-strategies.md)） |
+| 設定 | 再検証の間隔（オンデマンドを含む）・API のキャッシュの期間・ビルドの間隔・記事のキャッシュ（Astro。D-103）・画像の形式（JPEG / WebP / AVIF。D-58）・サイズ違いの数 |
 | シナリオ / テンプレート | ゲームのシナリオ（記事コミュニティ・受託の業務アプリ）と、その元になるアプリの形。見積モードではテンプレートとして選ぶ |
 | 基準プレイ | 構成 × 方針を決まったシードで自動で回した結果。所持金の目標の根拠と golden に使う（[07](./07-game-design.md) §10.8・D-64） |
 | ゲーム上の仮定 | 手間・倍率・確率・満足度への効き方など、出典の無いゲームのための値。実在の値のように扱わない |
