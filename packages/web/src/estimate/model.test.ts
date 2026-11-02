@@ -60,6 +60,31 @@ describe('明細の行の名前（D-75）', () => {
   });
 });
 
+describe('確約したときの月額（D-97）', () => {
+  it('RDS・さくらの VPS は確約の形ごとに安くなった月額を出し、確約の無い構成では出さない', () => {
+    const rds = runEstimate(
+      normalizeInput({ stack: 'aws-amplify', parts: { db: 'rds' } }),
+    );
+    expect(rds.commitments.map((c) => c.payment)).toEqual([
+      '前払いなし',
+      '全額前払い',
+    ]);
+    for (const c of rds.commitments) {
+      expect(c.label).toContain('リザーブドインスタンス');
+      expect(c.totalUsd).toBeLessThan(rds.totalUsd);
+    }
+    const vps = runEstimate(normalizeInput({ stack: 'sakura-vps-2gb' }));
+    expect(vps.commitments.map((c) => c.label)).toEqual([
+      expect.stringContaining('年額'),
+    ]);
+    expect(vps.commitments[0]!.totalUsd).toBeLessThan(vps.totalUsd);
+    expect(
+      runEstimate(normalizeInput({ stack: 'cloudflare-vinext-paid' }))
+        .commitments,
+    ).toEqual([]);
+  });
+});
+
 describe('URL のクエリ', () => {
   it('書いて読むと同じ入力に戻る', () => {
     const i = normalizeInput({

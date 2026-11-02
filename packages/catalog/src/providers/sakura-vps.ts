@@ -23,6 +23,31 @@ const TRANSFER: PlanInput['meters'][number] = {
   sourceIds: ['spec'],
 };
 
+/** 年額（12 か月一括。月額の 11 か月分）の支払い（D-97）。 */
+const annual = (
+  plan: string,
+  upfront: number,
+): NonNullable<PlanInput['commitments']>[number] => ({
+  id: 'annual',
+  label: `年額（さくらの VPS ${plan}・12 か月一括）`,
+  kind: 'prepay',
+  termMonths: 12,
+  payments: [{ payment: 'all-upfront', upfront }],
+  premise: `さくらの VPS ${plan} は 12 か月一括で払うと年額 ${upfront.toLocaleString('en-US')} 円（税込。月額の約 11 か月分）。12 か月一括のままスケールアップすると、上位のプランの 1 年分から今のプランの使っていない分を引いた額を払う`,
+  interpretation: {
+    adopted:
+      '途中で解約・乗り換えても払った年額は戻らないとみる。スケールアップは月の単位で使っていない分を引く（公式は日割り・税抜の年額 / 契約日数）',
+    rejected: [
+      {
+        reading: '解約すると使っていない月の分が戻る',
+        reason:
+          '仕様・マニュアルに返金の記載が無い（確かめられない分は戻らない側に置いた）',
+      },
+    ],
+  },
+  sourceIds: ['specAnnual', 'scaleupAnnual'],
+});
+
 export const sakuraVps: PriceBookInput = {
   schemaVersion: 1,
   provider: 'sakura-vps',
@@ -61,6 +86,15 @@ export const sakuraVps: PriceBookInput = {
     // バックアップ（2026-11-02 取得。D-93）。VPS にバックアップの機能は無く、自前でオブジェクトストレージに送る
     vpsBackupFaq: {
       url: 'https://manual.sakura.ad.jp/vps/support/others.html',
+      retrievedAt: '2026-11-02',
+    },
+    // 年額（12 か月一括）の料金と、12 か月一括のスケールアップの差額（2026-11-02 に原文で確認。D-97）
+    specAnnual: {
+      url: 'https://vps.sakura.ad.jp/specification/',
+      retrievedAt: '2026-11-02',
+    },
+    scaleupAnnual: {
+      url: 'https://manual.sakura.ad.jp/vps/server/scaleup.html',
       retrievedAt: '2026-11-02',
     },
     objectStorage: {
@@ -127,6 +161,7 @@ export const sakuraVps: PriceBookInput = {
         scope: 'node',
       },
       sourceIds: ['spec'],
+      commitments: [annual('2GB', 21_538)],
       members: MEMBERS,
       uptimeSla: {
         status: 'none',
@@ -187,6 +222,7 @@ export const sakuraVps: PriceBookInput = {
         scope: 'node',
       },
       sourceIds: ['spec'],
+      commitments: [annual('4GB', 43_560)],
       members: MEMBERS,
       uptimeSla: {
         status: 'offered',

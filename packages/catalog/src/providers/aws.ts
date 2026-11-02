@@ -11,6 +11,9 @@ const src = (url: string) => ({ url, retrievedAt: R });
 /** DB のバックアップ・PITR を確かめた日（D-93）。 */
 const BACKUP_R = '2026-11-02';
 const backupSrc = (url: string) => ({ url, retrievedAt: BACKUP_R });
+/** 確約の割引（リザーブドインスタンス・Savings Plans）を確かめた日（D-97）。 */
+const COMMIT_R = '2026-11-02';
+const commitSrc = (url: string) => ({ url, retrievedAt: COMMIT_R });
 /** Price List API の東京の料金表（版の日付はコメントに残す）。 */
 const priceList = (offer: string) =>
   src(
@@ -176,6 +179,20 @@ export const aws: PriceBookInput = {
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
     rdsPrices: priceList('AmazonRDS'),
+    // 確約の割引（2026-11-02 取得。D-97）。版（publicationDate）: AmazonRDS 2026-10-29・AWSComputeSavingsPlan 2026-10-29
+    rdsReservedPrices: { ...priceList('AmazonRDS'), retrievedAt: COMMIT_R },
+    rdsReserved: commitSrc(
+      'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithReservedDBInstances.html',
+    ),
+    savingsPlanPrices: commitSrc(
+      'https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/current/ap-northeast-1/index.json',
+    ),
+    savingsPlans: commitSrc(
+      'https://docs.aws.amazon.com/savingsplans/latest/userguide/what-is-savings-plans.html',
+    ),
+    savingsPlansApplying: commitSrc(
+      'https://docs.aws.amazon.com/savingsplans/latest/userguide/sp-applying.html',
+    ),
     // DB のバックアップ・PITR（2026-11-02 取得。D-93）。版（publicationDate）: AmazonRDS 2026-10-29・AmazonDynamoDB 2026-09-11
     rdsBackupPrices: { ...priceList('AmazonRDS'), retrievedAt: BACKUP_R },
     dynamodbBackupPrices: {
@@ -579,6 +596,40 @@ export const aws: PriceBookInput = {
           sourceIds: ['lambdaPrices', 'lambdaUrls'],
         },
       ],
+      commitments: [
+        {
+          id: 'compute-savings-plan',
+          label: 'Compute Savings Plans（Lambda: duration・1 年）',
+          kind: 'spend',
+          termMonths: 12,
+          meterIds: ['compute'],
+          // 東京の x86 の duration の Savings Plans の単価（Price List: APN1-Lambda-GB-Second）と、オンデマンド $0.0000166667 の比
+          payments: [
+            // 1 年・前払いなし $0.000015 / GB 秒 → 1 − 0.000015 / 0.0000166667 = 10.0%
+            { payment: 'no-upfront', discount: 0.1 },
+            // 1 年・全額前払い $0.0000142 / GB 秒 → 1 − 0.0000142 / 0.0000166667 = 14.8%
+            { payment: 'all-upfront', discount: 0.148 },
+          ],
+          premise:
+            'Compute Savings Plans は 1 時間あたりの額を 1 年（または 3 年）確約し、確約の額までの Lambda の実行時間（duration）を割り引く（東京の x86: 前払いなし $0.000015・全額前払い $0.0000142 / GB 秒。オンデマンド $0.0000166667）。リクエストの料金は割り引かない（$0.20 / 100 万のまま）。確約を超えた分はオンデマンドの単価、使わなかった確約も払う（その時間の確約は持ち越せない）',
+          interpretation: {
+            adopted:
+              '確約の額は月の平均の使用（無料枠を引いた後のオンデマンドの額）で比べ、時間ごとの使用の揺れ（ピークの時間帯は確約を超え、夜は余る）は数えない',
+            rejected: [
+              {
+                reading: '時間帯ごとの使用に確約を当てる',
+                reason:
+                  '明細の金額は月の合計だけで、時間帯ごとの内訳を持たない。月の平均で当てると、時間ごとの余りの分だけ割引を大きく見る（残した点）',
+              },
+            ],
+          },
+          sourceIds: [
+            'savingsPlanPrices',
+            'savingsPlans',
+            'savingsPlansApplying',
+          ],
+        },
+      ],
       meters: [
         {
           id: 'requests',
@@ -849,6 +900,22 @@ export const aws: PriceBookInput = {
       ...common,
       name: 'RDS for PostgreSQL（db.t4g.micro・Single-AZ）',
       sourceIds: ['rdsPrices', 'rdsStorage'],
+      commitments: [
+        {
+          id: 'reserved-instance',
+          label: 'リザーブドインスタンス（RDS: db.t4g.micro・1 年）',
+          kind: 'instance',
+          termMonths: 12,
+          meterIds: ['instance'],
+          payments: [
+            { payment: 'no-upfront', hourly: 0.0197 },
+            { payment: 'all-upfront', upfront: 161 },
+          ],
+          premise:
+            'RDS のリザーブドインスタンス（db.t4g.micro・PostgreSQL・Single-AZ・東京・1 年）は、前払いなしで 1 時間 $0.0197（オンデマンド $0.025）、全額前払いで $161（期間中の時間の料金なし）。同じ種類のインスタンスの時間の料金だけを割り引き、ストレージ・バックアップには効かない。取り消せず、使わなくても期間中は課金される',
+          sourceIds: ['rdsReservedPrices', 'rdsReserved'],
+        },
+      ],
       notes: [
         'ストレージ（gp3）は割り当てた容量で課金され、PostgreSQL の gp3 は 20 GiB から（RDS の利用者ガイド）。このモデルは DB の大きさで近似し、20 GiB に満たない DB は 20 GiB で数える（最小の課金量。D-85）。20 GiB を超えた分は割り当てを DB の大きさに合わせて増やすとみなす',
         'アプリ（Amplify・Lambda）と RDS の間の転送の料金は未確認なので数えない',

@@ -263,6 +263,63 @@ export const ScheduledChangeSchema = z.object({
 });
 export type ScheduledChange = z.infer<typeof ScheduledChangeSchema>;
 
+/**
+ * 長期の利用を約束して受ける割引（確約・予約・年払い。D-97・prd/03 §11）。見積の計算（estimate）には使わず、
+ * ゲームの行動「確約する」と見積モードの注記が使う。期間は 1 年だけ（3 年は 12 か月のゲームで扱いにくいので持たない）。
+ * - instance: 台数の予約（RDS のリザーブドインスタンス）。1 台の月 730 時間の分を割り引く。no-upfront は hourly、all-upfront は upfront（1 台・1 年分）。
+ * - spend: 時間あたりの額の確約（Savings Plans・CUD）。確約の額までの使用を discount だけ割り引く（額は使う側が決める）。
+ * - prepay: 基本料の前払い（年払い）。upfront を一度に払い、基本料の 12 か月分に当てる。
+ */
+export const CommitmentPaymentSchema = z.object({
+  payment: z.enum(['no-upfront', 'all-upfront']),
+  /** spend の割引の率（オンデマンドの額に対する割合）。 */
+  discount: z.number().finite().gt(0).lt(1).optional(),
+  /** instance の no-upfront の 1 時間の額。 */
+  hourly: NonNegative.optional(),
+  /** instance・prepay の all-upfront の前払いの額（1 年分）。 */
+  upfront: Positive.optional(),
+});
+export type CommitmentPayment = z.infer<typeof CommitmentPaymentSchema>;
+
+export const CommitmentSchema = z
+  .object({
+    id: Id,
+    /** 表示名（明細の行の名前に使う）。 */
+    label: z.string().min(1),
+    kind: z.enum(['instance', 'spend', 'prepay']),
+    termMonths: z.literal(12),
+    /** 割り引く先のメーター（instance・spend）。prepay は基本料に当てるので空。 */
+    meterIds: z.array(Id).default([]),
+    payments: z.array(CommitmentPaymentSchema).min(1),
+    premise: Premise,
+    interpretation: InterpretationSchema.optional(),
+    sourceIds: SourceIds,
+  })
+  .superRefine((c, ctx) => {
+    if ((c.kind === 'prepay') !== (c.meterIds.length === 0))
+      ctx.addIssue({
+        code: 'custom',
+        message: 'meterIds は instance・spend だけが持つ（prepay は空）',
+      });
+    c.payments.forEach((p, i) => {
+      const need =
+        c.kind === 'spend'
+          ? p.discount !== undefined
+          : p.payment === 'no-upfront'
+            ? c.kind === 'instance' && p.hourly !== undefined
+            : p.upfront !== undefined;
+      if (!need)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['payments', i],
+          message: `${c.kind} の ${p.payment} に要る値が無い（spend は discount・instance の no-upfront は hourly・ほかは upfront。prepay は all-upfront だけ）`,
+        });
+    });
+    if (new Set(c.payments.map((p) => p.payment)).size !== c.payments.length)
+      ctx.addIssue({ code: 'custom', message: '支払いの形が重なっている' });
+  });
+export type Commitment = z.infer<typeof CommitmentSchema>;
+
 export const PlanSchema = z.object({
   id: Id,
   service: Id,
@@ -270,6 +327,8 @@ export const PlanSchema = z.object({
   baseFee: BaseFeeSchema.optional(),
   meters: z.array(MeterSchema),
   credits: z.array(CreditSchema).default([]),
+  /** 長期の利用の確約で受ける割引（D-97）。 */
+  commitments: z.array(CommitmentSchema).default([]),
   limits: z.array(LimitSchema).default([]),
   eligibility: z.array(EligibilitySchema).default([]),
   members: MembersSchema.optional(),
@@ -417,6 +476,23 @@ export const PriceBookSchema = z
             }
           }
         }
+      });
+      plan.commitments.forEach((c, ci) => {
+        const path = ['plans', pi, 'commitments', ci];
+        requireSources(c.sourceIds, [...path, 'sourceIds']);
+        for (const id of c.meterIds)
+          if (!seenMeters.has(id))
+            ctx.addIssue({
+              code: 'custom',
+              path,
+              message: `確約の対象メーター ${id} がない`,
+            });
+        if (c.kind === 'prepay' && !plan.baseFee)
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: '基本料の前払い（prepay）は基本料のあるプランだけ',
+          });
       });
       plan.limits.forEach((l, li) =>
         requireSources(l.sourceIds, ['plans', pi, 'limits', li, 'sourceIds']),

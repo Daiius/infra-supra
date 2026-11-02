@@ -79,6 +79,16 @@ import {
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 import { premiseTrends, type PremiseSnapshot } from './trends.ts';
+import {
+  commitmentDefs,
+  commitmentEligible,
+  commitmentLines,
+  commitmentTerms,
+  PAYMENT_LABEL,
+  type ActiveCommitment,
+  type CommitmentDef,
+  type CommitmentPaymentId,
+} from './commitments.ts';
 
 /** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
 export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
@@ -351,7 +361,12 @@ export type Action =
   /** さくらの VPS のストレージ変更オプションを付ける（ディスク 2 倍・手数料一度だけ・戻せない。D-30）。 */
   | { type: 'storage-option' }
   /** アプリを作り直す（フレームワークを替える。大きな手間・数か月。済んだ翌月から新しいフレームワーク。D-81）。 */
-  | { type: 'rewrite'; framework: FrameworkId };
+  | { type: 'rewrite'; framework: FrameworkId }
+  /**
+   * 1 年の確約を結ぶ（リザーブドインスタンス・Savings Plans・確約利用割引・年払い。key は provider:planId:id。D-97）。
+   * 来月から 12 か月。取り消せず、対象を使わなくなっても支払いは残る。
+   */
+  | { type: 'commit'; key: string; payment: CommitmentPaymentId };
 
 /** DB の差し替えの進行（データの移行。期間中は新旧の両方の DB の費用）。 */
 export type ComponentSwap = {
@@ -460,7 +475,7 @@ export type MonthReport = {
     label: string;
     /** 事業者・行の種類・メーター（名前の文字列から読み取らないためのもの。fee は一度だけの手数料）。 */
     provider: string;
-    kind: LineItem['kind'] | 'fee';
+    kind: LineItem['kind'] | 'fee' | 'commitment';
     meterId?: string;
     amount: number;
     currency: string;
@@ -498,6 +513,13 @@ export type MonthReport = {
   componentSwap?: { label: string; done: number; required: number };
   /** 契約の収益（SLA の出来事。収益 revenue に含む）。 */
   contractRevenue: number;
+  /**
+   * 確約の対象になる今月の額（オンデマンド。provider:planId:id ごと・料金データの通貨。D-97）。
+   * 来月の「確約する」の可否と、時間あたりの額の確約（Savings Plans・CUD）の額に使う。
+   */
+  commitmentEligible?: Record<string, number>;
+  /** 確約で今月減った額（ドル。割引 − 毎月の支払い − 前払い。前払いの月は負になりうる。D-97）。 */
+  commitmentNet?: number;
   action?: string;
 };
 
@@ -529,6 +551,8 @@ export type GameState = {
   components: Choices;
   /** 進行中の DB の差し替え。 */
   componentSwap: ComponentSwap | null;
+  /** 結んだ確約（D-97）。古い状態には無いことがある（無ければ確約なし）。 */
+  commitments?: ActiveCommitment[];
   /** 受けた契約（毎月の収益。要件を満たす月だけ入る）。 */
   contracts: { eventId: string; usdPerMonth: number; requires: Requirement }[];
   /** 受けた提案で以後ずっと求められる要件（D-32）。 */
@@ -1228,6 +1252,233 @@ function architectureFor(
 
 const toUsd = (totals: Partial<Record<string, number>>) =>
   (totals.USD ?? 0) + (totals.JPY ?? 0) / USD_JPY;
+
+// ---- 確約（D-97・prd/07 §11.12）----
+
+/** 料金データの確約（1 年。RDS のリザーブドインスタンス・Lambda の Savings Plans・Cloud Run の CUD・さくらの VPS の年額）。 */
+export const COMMITMENTS: readonly CommitmentDef[] = commitmentDefs(books);
+export const commitmentDef = (key: string) =>
+  COMMITMENTS.find((d) => d.key === key);
+const usdOf = (amount: number, currency: string) =>
+  currency === 'JPY' ? amount / USD_JPY : amount;
+
+/** 結べる確約の 1 つの形（画面に出す。金額は料金データの通貨と、ドルに直した値）。 */
+export type CommitmentOffer = {
+  key: string;
+  label: string;
+  payment: CommitmentPaymentId;
+  currency: string;
+  covers: number;
+  monthly: number;
+  upfront: number;
+  /** 1 年の割引の率（オンデマンドの 12 か月分に対して）。 */
+  discount: number;
+  /**
+   * ゲームの中で効く月数（12 か月か、ゲームの残りの月数）。全額前払いの upfront はこの月数の分に割った額
+   * （1 年の契約のうちゲームの後の月の分は、ゲームの後に使うとみて数えない。D-97）。
+   */
+  months: number;
+  /** 1 年分の前払いの額（割る前。全額前払いのときだけ 0 より大きい）。 */
+  upfrontYear: number;
+  premise: string;
+  usd: { covers: number; monthly: number; upfront: number };
+};
+
+function offerOf(
+  d: CommitmentDef,
+  payment: CommitmentPaymentId,
+  spend: number | undefined,
+  monthsLeft: number,
+): CommitmentOffer | null {
+  const t = commitmentTerms(d, payment, spend);
+  if (!t) return null;
+  const year = t.covers * 12;
+  const months = Math.min(d.commitment.termMonths, monthsLeft);
+  const upfront = (t.upfront * months) / d.commitment.termMonths;
+  return {
+    key: d.key,
+    label: d.commitment.label,
+    payment,
+    currency: d.currency,
+    covers: t.covers,
+    monthly: t.monthly,
+    upfront,
+    upfrontYear: t.upfront,
+    discount: year > 0 ? 1 - (t.monthly * 12 + t.upfront) / year : 0,
+    months,
+    premise: d.commitment.premise,
+    usd: {
+      covers: usdOf(t.covers, d.currency),
+      monthly: usdOf(t.monthly, d.currency),
+      upfront: usdOf(upfront, d.currency),
+    },
+  };
+}
+
+const offersFor = (
+  defs: readonly CommitmentDef[],
+  spendOf: (d: CommitmentDef) => number | undefined,
+  monthsLeft: number,
+) =>
+  defs.flatMap((d) =>
+    d.commitment.payments.flatMap(
+      (p) => offerOf(d, p.payment, spendOf(d), monthsLeft) ?? [],
+    ),
+  );
+
+/** 始める画面で選んだ部品を重ねた、1 か月目の部品（newGame と同じ重ね方）。 */
+function initialComponents(
+  sc: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  components?: Choices,
+): Choices {
+  return {
+    ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider],
+    ...frameworkDefaults(framework, STACKS[stackIndex]!.provider, sc),
+    ...(components
+      ? validSetupChoices(sc, stackIndex, framework, components)
+      : {}),
+  };
+}
+
+/**
+ * 始める画面で結べる確約: 台数の予約（RDS のリザーブドインスタンス）と年払い（さくらの VPS）だけ。
+ * 時間あたりの額の確約（Savings Plans・CUD）は額を使用から決めるので、1 か月動かしてから。
+ * 前払いが始めの所持金を超える形（さくらの年額・RDS の全額前払い）は出さない（D-97）。
+ */
+export function setupCommitments(
+  sc: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  components?: Choices,
+): CommitmentOffer[] {
+  const arch = architectureFor(
+    stackIndex,
+    0,
+    framework,
+    initialComponents(sc, stackIndex, framework, components),
+  );
+  const billed = new Set(
+    arch.nodes.flatMap((n) =>
+      n.billing ? [`${n.billing.provider}:${n.billing.planId}`] : [],
+    ),
+  );
+  return offersFor(
+    COMMITMENTS.filter(
+      (d) =>
+        d.commitment.kind !== 'spend' &&
+        billed.has(`${d.provider}:${d.planId}`),
+    ),
+    () => undefined,
+    sc.months,
+  ).filter((o) => o.usd.upfront <= sc.startCash);
+}
+
+/** 今の確約（終わっていないもの）。 */
+export function activeCommitments(
+  state: Pick<GameState, 'commitments' | 'history'>,
+): ActiveCommitment[] {
+  const next = state.history.length + 1;
+  return (state.commitments ?? []).filter((c) => c.endMonth >= next);
+}
+
+/**
+ * 来月から結べる確約（今月の明細に対象の使用があるもの）。時間あたりの額の確約は今月の対象の額（オンデマンド）で結ぶ。
+ * すでに結んでいる確約も含む（選べるかは checkAction が決める）。
+ */
+export function commitmentOffers(state: GameState): CommitmentOffer[] {
+  const eligible =
+    state.history[state.history.length - 1]?.commitmentEligible ?? {};
+  return offersFor(
+    COMMITMENTS.filter((d) => (eligible[d.key] ?? 0) > 0),
+    (d) => eligible[d.key],
+    scenarioOf(state).months - state.history.length,
+  );
+}
+
+function newCommitment(
+  offer: CommitmentOffer,
+  startMonth: number,
+): ActiveCommitment {
+  return {
+    key: offer.key,
+    label: offer.label,
+    currency: offer.currency as ActiveCommitment['currency'],
+    payment: offer.payment,
+    startMonth,
+    endMonth: startMonth + 11,
+    covers: offer.covers,
+    monthly: offer.monthly,
+    upfront: offer.upfront,
+    months: offer.months,
+  };
+}
+
+/** 構成の土台のプランの年払い（さくらの VPS。スケールアップで引き継ぐ。D-97）。 */
+function prepayDefOf(stackIndex: number): CommitmentDef | undefined {
+  const plans = new Set(
+    MVP_STACKS[stackIndex]!.nodes.flatMap((n) =>
+      n.billing ? [`${n.billing.provider}:${n.billing.planId}`] : [],
+    ),
+  );
+  return COMMITMENTS.find(
+    (d) =>
+      d.commitment.kind === 'prepay' && plans.has(`${d.provider}:${d.planId}`),
+  );
+}
+
+/**
+ * 12 か月一括のままのスケールアップ（さくらの VPS 2GB → 4GB）: 上位のプランの 1 年分から今のプランの使っていない分を引いた額を払い、
+ * 来月から上位のプランの 12 か月一括になる（公式は日割り。ここは月の単位。D-97）。年払いでなければそのまま。
+ */
+/** 来月の請求に乗る前払い（来月から始まる確約の前払いの合計。ドル）。所持金の検査で予約済みの額として引く（OCL-C32E39AF）。 */
+function pendingUpfrontUsd(
+  state: Pick<GameState, 'commitments' | 'history'>,
+  commitments = state.commitments ?? [],
+): number {
+  const next = state.history.length + 1;
+  return commitments
+    .filter((c) => c.startMonth === next && c.endMonth >= next)
+    .reduce((a, c) => a + usdOf(c.upfront, c.currency), 0);
+}
+
+function carryPrepay(
+  state: GameState,
+  from: number,
+  to: number,
+): ActiveCommitment[] | undefined {
+  const fromDef = prepayDefOf(from);
+  const toDef = prepayDefOf(to);
+  const month = state.history.length;
+  const cur = (state.commitments ?? []).find(
+    (c) => c.key === fromDef?.key && c.endMonth > month,
+  );
+  if (!cur || !toDef) return undefined;
+  const offer = offerOf(
+    toDef,
+    'all-upfront',
+    undefined,
+    scenarioOf(state).months - month,
+  );
+  if (!offer) return undefined;
+  // 使っていない分（払った年額のうち、来月から先の分）。まだ始まっていない（前払いを払っていない）確約は
+  // 置き換えるだけで、控除はしない（払っていない額を差し引かない。OCL-17D1B88E）
+  const inGameEnd = cur.startMonth + (cur.months ?? 12) - 1;
+  const paid = cur.startMonth <= month;
+  const unused = paid
+    ? (cur.upfront * Math.max(0, inGameEnd - month)) / (cur.months ?? 12)
+    : 0;
+  return [
+    ...(state.commitments ?? []).map((c) =>
+      c === cur ? { ...c, endMonth: month } : c,
+    ),
+    newCommitment(
+      { ...offer, upfront: Math.max(0, offer.upfront - unused) },
+      month + 1,
+    ),
+  ];
+}
 
 /** 明細の行の名前。料金データの label があればそれ（D-75）、無ければ ID から作る（架空の料金など）。 */
 function lineLabel(l: LineItem): string {
@@ -2436,6 +2687,18 @@ function actionRule(state: GameState, action: Action): ActionCheck {
               ? '今よりディスク容量が少ないプランへは変更できないので契約し直し'
               : '別の事業者なので乗り換え',
         );
+      // 年額のままのスケールアップは差額を来月に前払いするので、所持金に収まるときだけ（D-97・OCL-C32E39AF）
+      const carried = plan
+        ? carryPrepay(state, state.stackIndex, action.stackIndex)
+        : undefined;
+      if (carried) {
+        const due = pendingUpfrontUsd(state, carried);
+        if (due > state.cash)
+          return ng(
+            'limit',
+            `年額のままの変更の前払い $${due.toFixed(2)} が所持金より多い`,
+          );
+      }
       // 乗り換えの手間は進行中の月ごとに取る（effortAvailable が減る）
       return ok(plan ? planChangeEffort(state.stackIndex) : 0);
     }
@@ -2462,6 +2725,35 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       return state.botBlocked
         ? ng('same', 'すでに入れている')
         : ok(BOT_BLOCK.effort);
+    case 'commit': {
+      const def = commitmentDef(action.key);
+      if (!def) return ng('invalid', '確約が無い');
+      if (!def.commitment.payments.some((p) => p.payment === action.payment))
+        return ng('invalid', 'この確約に無い支払いの形');
+      const cur = activeCommitments(state).find((c) => c.key === action.key);
+      if (cur)
+        return ng(
+          'same',
+          `すでに結んでいる（${cur.endMonth} か月目まで・取り消せない）`,
+        );
+      const offer = commitmentOffers(state).find(
+        (o) => o.key === action.key && o.payment === action.payment,
+      );
+      if (!offer)
+        return ng(
+          'unavailable',
+          '今月は対象の使用が無い（対象のサービスを使っている構成で結べる）',
+        );
+      // 同じ月に選んだほかの前払い（確約・年額のスケールアップの差額）も来月に払うので、合わせて所持金と比べる
+      const reserved = pendingUpfrontUsd(state);
+      if (offer.usd.upfront + reserved > state.cash)
+        return ng(
+          'limit',
+          `前払い $${offer.usd.upfront.toFixed(2)}${reserved > 0 ? `（今月選んだ前払い $${reserved.toFixed(2)} と合わせて）` : ''} が所持金より多い`,
+        );
+      // 申し込むだけで、作業の手間はかからない（仮定）
+      return ok(0);
+    }
     case 'rewrite': {
       if (busy) return busy;
       if (rewriting) return rewriting;
@@ -3206,6 +3498,8 @@ export function newGame(
   revalidateSec?: number,
   /** 始める画面で選んだコメントの描き方（D-82）。選べないもの・省略は既定（ブラウザで読み込む）。 */
   comments?: number,
+  /** 始める画面で結んだ確約（D-97。setupCommitments にあるものだけ。1 か月目から 12 か月）。 */
+  commitments?: readonly { key: string; payment: CommitmentPaymentId }[],
 ): GameState {
   const fw = frameworksOf(scenario);
   // 載せられない構成（Astro × AWS など）では既定のフレームワークにする（画面では選べない。D-68）
@@ -3237,6 +3531,19 @@ export function newGame(
     storageOption: false,
     storageOptionFeeDue: null,
     componentSwap: null,
+    commitments: (() => {
+      if (!commitments?.length) return [];
+      const offers = setupCommitments(scenario, stackIndex, app, components);
+      const out: ActiveCommitment[] = [];
+      for (const want of commitments) {
+        const o = offers.find(
+          (x) => x.key === want.key && x.payment === want.payment,
+        );
+        if (o && !out.some((c) => c.key === o.key))
+          out.push(newCommitment(o, 1));
+      }
+      return out;
+    })(),
     contracts: [],
     requirements: [],
     settings: {
@@ -3676,7 +3983,22 @@ export function playMonth(input: GameState): GameState {
   // 申し込んだときのプランの金額を一度だけ払う（同じ月に上位へ変更しても変わらない）
   const fee = state.storageOptionFeeDue;
   const feeUsd = fee ? fee.amount / USD_JPY : 0;
-  const infraCost = toUsd(r.bill.totals) + parallelInfraCost + feeUsd;
+  // 確約（D-97）: 今と乗り換え先の明細の対象の額に、結んだ確約を当てる（対象を使わなくなっても支払いは残る）
+  const eligibleNow = commitmentEligible(
+    [...r.bill.lines, ...(target?.bill.lines ?? [])],
+    COMMITMENTS,
+  );
+  const commitLines = commitmentLines(
+    state.commitments ?? [],
+    eligibleNow,
+    month,
+  );
+  const commitUsd = commitLines.reduce(
+    (a, l) => a + usdOf(l.amount, l.currency),
+    0,
+  );
+  const infraCost =
+    toUsd(r.bill.totals) + parallelInfraCost + feeUsd + commitUsd;
 
   // 出来事の通知（起きた・予告・提案）
   for (const x of due) {
@@ -4230,6 +4552,13 @@ export function playMonth(input: GameState): GameState {
             },
           ]
         : []),
+      ...commitLines.map((l) => ({
+        label: l.label,
+        provider: l.key.split(':')[0]!,
+        kind: 'commitment' as const,
+        amount: l.amount,
+        currency: l.currency,
+      })),
     ],
     unpricedLines: r.bill.unpricedLines + (target?.bill.unpricedLines ?? 0),
     settings: state.settings,
@@ -4264,6 +4593,10 @@ export function playMonth(input: GameState): GameState {
       )
       .join('・'),
     contractRevenue,
+    ...(Object.keys(eligibleNow).length
+      ? { commitmentEligible: eligibleNow }
+      : {}),
+    ...(commitLines.length ? { commitmentNet: -commitUsd } : {}),
     ...(swap
       ? {
           componentSwap: {
@@ -4652,6 +4985,15 @@ export function applyAction(state: GameState, action: Action): GameState {
           ...state,
           ...planned,
           stackIndex: action.stackIndex,
+          // 12 か月一括のままのスケールアップは、差額を払って上位のプランの 12 か月一括に（D-97）
+          ...(() => {
+            const commitments = carryPrepay(
+              state,
+              state.stackIndex,
+              action.stackIndex,
+            );
+            return commitments ? { commitments } : {};
+          })(),
         },
       );
     case 'rewrite':
@@ -4705,6 +5047,21 @@ export function applyAction(state: GameState, action: Action): GameState {
           amount: addon.oneTimeFee,
         },
       });
+    }
+    case 'commit': {
+      const offer = commitmentOffers(state).find(
+        (o) => o.key === action.key && o.payment === action.payment,
+      )!;
+      return withNote(
+        `確約: ${offer.label}（${PAYMENT_LABEL[offer.payment]}）`,
+        {
+          ...state,
+          commitments: [
+            ...(state.commitments ?? []),
+            newCommitment(offer, state.history.length + 1),
+          ],
+        },
+      );
     }
     case 'block-bots':
       return withNote('Bot を遮断するルールを入れた', {
@@ -4956,7 +5313,8 @@ export type RetryHint = {
     | 'overage'
     | 'element'
     | 'ogp'
-    | 'slow';
+    | 'slow'
+    | 'commitment';
   /** 何が起きたか（何か月目に・数値）。 */
   what: string;
   /** 次に試せる方向。正解の構成名は出さない（事業者の制限・プラン名など事実の名前は出してよい。D-40）。 */
@@ -5243,6 +5601,35 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         cur.months.push(r.month);
         over.set(p.id, cur);
       }
+    // 確約できた使用（D-97）: 対象の使用が半分以上の月で続き、確約を結ばなかった（補足。費用の差は小さいことが多い）
+    const committed = new Set((state.commitments ?? []).map((c) => c.key));
+    for (const d of COMMITMENTS) {
+      if (committed.has(d.key)) continue;
+      const ms = h.filter((r) => (r.commitmentEligible?.[d.key] ?? 0) > 0);
+      if (ms.length < Math.ceil(n / 2)) continue;
+      const offers = d.commitment.payments.flatMap(
+        (p) => offerOf(d, p.payment, undefined, 12) ?? [],
+      );
+      const rate =
+        d.commitment.kind === 'spend'
+          ? Math.max(...d.commitment.payments.map((p) => p.discount ?? 0))
+          : Math.max(0, ...offers.map((o) => o.discount));
+      const sum = ms.reduce(
+        (a, r) => a + usdOf(r.commitmentEligible![d.key]!, d.currency),
+        0,
+      );
+      const saving = sum * rate;
+      if (saving < 1) continue;
+      out.push({
+        hint: {
+          kind: 'commitment',
+          what: `${d.commitment.label}の対象の使用が ${ms.length} か月あった（オンデマンドで ${usd(sum)}）`,
+          next: `1 年の確約で最大 ${Math.round(100 * rate)}% 安くなる（この ${ms.length} か月なら約 ${usd(saving)}）。確約は取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残る。全額前払いは所持金から一度に引く`,
+        },
+        // 差は月に数ドルのことが多いので、ほかの補足（100 台）より下に置く（ほかに出すものが少ないときだけ出る）
+        score: Math.min(99, saving),
+      });
+    }
     for (const o of over.values())
       out.push({
         hint: {
@@ -5411,6 +5798,7 @@ export * from './trends.ts';
 export * from './scenario.ts';
 export * from './save.ts';
 export * from './estimate-mode.ts';
+export * from './commitments.ts';
 export { ARTICLE_COMMUNITY };
 export { FRAMEWORKS, type FrameworkId } from 'catalog';
 
