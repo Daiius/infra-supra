@@ -280,4 +280,29 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'まとめて消すので、無効化の数が更新するページの数に比例しない。処理は自分で書く',
   'aws-opennext:images:default':
     'Next.js の画像の部品がそのまま使え、変換は自分の関数で行う。使った分だけの支払い',
+  // DB のバックアップ（D-93）。どの事業者も同じ 2 択
+  ...Object.fromEntries(
+    [
+      'cloudflare',
+      'vercel',
+      'sakura',
+      'aws',
+      'aws-opennext',
+      'netlify',
+      'gcp',
+    ].flatMap((p) => [
+      [
+        `${p}:dbBackup:default`,
+        p === 'sakura'
+          ? '何も足さないので、費用も手間も増えない'
+          : '事業者が既定で残す分だけで、設定も追加の費用も要らない',
+      ],
+      [
+        `${p}:dbBackup:pitr`,
+        p === 'sakura'
+          ? '自分の手で毎日の写しを外に残し、壊れても直近の時点に戻せる'
+          : '誤操作や不具合でデータが壊れても、直前の時点に戻せる',
+      ],
+    ]),
+  ),
 };

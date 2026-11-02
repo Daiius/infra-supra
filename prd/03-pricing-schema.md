@@ -114,6 +114,10 @@ type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unit
   ノードの課金先は 1 つのプランなので、ログを出す計算のプラン（Lambda・Amplify Hosting・Cloud Run・Workers Paid）にメーター `logs`・`workers-logs` を置く。
   無料の量は事業者のアカウントのプール（`cloudwatch-free-logs` 5 GB・`logging-free` 50 GiB・`paid-workers-logs` 2,000 万件）で、同じアカウントの Lambda と Amplify で分け合う。
   保持の費用は数えず、理由をメーターの `interpretation` に残す。課金の無い事業者（Vercel・Netlify・Workers Free）はメーターを置かず、注記に書く。
+- **DB のバックアップ（D-93）**: 汎用リソース `backup-gb-month`（無料の分を除いた残す量）と `backup-hours`（時間で課金するアドオン）で受ける。メーターは DB のプランに置く
+  （RDS・Aurora `backup`・DynamoDB・Firestore `pitr`・Cloud SQL `backup`・Neon Launch `history`・Supabase Pro `pitr`）。「DB の大きさまで無料」（RDS・Aurora）は量が DB で変わり
+  プールの固定の量で書けないので、ノードの値（`freeUpToDbSize`・`minFreeGB`）で引いてからメーターに渡す。さくらのオブジェクトストレージ（VPS の自前のバックアップの置き場）は
+  `sakura-vps` の料金データにプラン `object-storage`（月額 495 円・100 GiB 込みのプール）として持つ。課金の無いもの（D1 の Time Travel・Neon Free の 6 時間・Supabase Pro の日次）は注記に書く。
 - **表示名（`label`。D-75）**: 明細の行に出す名前。メーター・基本料（`baseFee.label`）・クレジット・一度だけの手数料（`addons[].label`）に付け、
   計算には使わない（明細の行の `LineItem.label` に写すだけ）。形は「何の費用かを日本語で（公式の名称）」で、括弧の中に事業者の画面・料金表の呼び方を残す
   （例:「画像の変換（Images: unique transformations）」「CDN の転送（CloudFront: data transfer out）」「関数の実行時間（Vercel: Active CPU）」）。

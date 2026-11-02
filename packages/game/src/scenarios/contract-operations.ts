@@ -229,6 +229,27 @@ const EVENTS: EventDef[] = [
     },
   },
   {
+    // DB のバックアップ（D-93）。D1 の Time Travel・RDS・Cloud SQL は既定で満たし、DynamoDB・Firestore・Aurora・Neon Launch・
+    // Supabase Pro は部品（保持を延ばす・PITR を付ける）で、VPS は自前で取れば満たす。KV・Aurora DSQL・Supabase Free・Neon Free は満たせない。
+    // 起きる確率（窓の中で 1 / 2）と上乗せの $20 / 月はゲーム上の仮定（相場ではない）。窓の出来事なので、他の出来事の月は変わらない
+    id: 'c-p-backup',
+    kind: 'proposal',
+    tier: 'occasional',
+    title: '直近 7 日の任意の時点に戻せることを契約に入れたい',
+    text: '顧客から、誤操作や不具合でデータが壊れたときに、直近 7 日の任意の時点に戻せること（PITR）を運用の契約に入れたいという依頼。応じれば運用費が上がる。戻せる構成で運用している月だけ、上乗せが入る',
+    when: { type: 'window', from: 3, to: 10, chance: 0.5 },
+    premiseRefs: [],
+    requires: 'db-pitr',
+    previewRequirement: 'db-pitr',
+    accept: {
+      label: '受ける（契約の対応に手間 1）',
+      effects: [
+        { type: 'contract', usdPerMonth: 20, requires: 'db-pitr' },
+        { type: 'interrupt', points: 1, months: 1 },
+      ],
+    },
+  },
+  {
     id: 'c-p-rollout',
     kind: 'proposal',
     tier: 'rare',
@@ -386,7 +407,7 @@ export const CONTRACT_OPERATIONS: Scenario = {
       down: '低ければ利用が減る',
     },
     events:
-      '運営中に顧客から依頼が来る（帳票の出力・ファイルの添付・監査ログ・旧システムの記録の取り込み・担当者をメンバーに入れる。受けるか断るかを選ぶ）。繁忙期（前の月に予告）や、他の部署での利用の広がりもある。まれに、SLA の打診や全社への展開の打診が来る（1 か月前に予告）。',
+      '運営中に顧客から依頼が来る（帳票の出力・ファイルの添付・監査ログ・旧システムの記録の取り込み・担当者をメンバーに入れる・直近 7 日の任意の時点に戻せることを契約に入れる。受けるか断るかを選ぶ）。繁忙期（前の月に予告）や、他の部署での利用の広がりもある。まれに、SLA の打診や全社への展開の打診が来る（1 か月前に予告）。',
     satisfaction:
       '満足度（顧客の満足）は可用性・速さ・機能で決まる（画質・鮮度はこのシナリオでは効かない）。',
     app: [

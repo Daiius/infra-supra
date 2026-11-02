@@ -298,6 +298,23 @@ peakHourFactor(その月) = ピーク係数 × 倍率
   その日で判定した前提には「話題・Bot の日は、上乗せの量が短い期間に集中すると仮定」を添える（画面は ⓘ）。料金計算（日次の超過の課金・停止の明細）は
   平日・休日のまま（課金は変えない）。資源はどれも PV に比例すると仮定（ISR の再生成など、PV に比例しないものもまとめて倍率を掛ける）。
 
+### 3.9 DB のバックアップ・PITR（`db-backup`。D-93・2026-11-02）
+
+経路を持たないノード。DB の大きさ（`storage.dbGB`）と、月に DB に書く行の数（全クラスの `count × rowsWritten`）から、保持の間に残す量を数える。
+
+```
+変更（GB / 月） = 月に書く行 × changeKBPerRow × 1000 / 10^9
+残す量          = fullCopies × DB の大きさ + 変更 × retentionDays / 30
+backup-gb-month = max(0, 残す量 − 無料の分)     無料の分 = freeUpToDbSize ? max(DB の大きさ, minFreeGB) : 0
+backup-hours    = addonHours ? 730 : 0          （時間で課金するアドオン。Supabase の PITR）
+```
+
+- 値は catalog の `stacks/backups.ts` が DB ごと・選択（既定 / 延ばす・付ける）ごとに持つ（保持の日数・課金の形は事業者の文書、`changeKBPerRow` 2 KB はゲーム上の仮定）。
+  組み終えた構成の経路に載っている DB ごとに 1 つ足す（差し替えの途中の移す先は数えない）。
+- 形の例: RDS は全体 1 + 7 日分の差分から割り当て（20 GiB から）を引く。Aurora は保持 7 日でクラスターの大きさを引く。DynamoDB・Firestore の PITR は DB の大きさ（全体 1・差分 0）。
+  Neon は窓の間の変更だけ。Cloud SQL は全体 1 + 7 日分の差分（無料の分なし）。VPS の自前は日次のダンプ 7 つ + 7 日分のバイナリログ。
+- 料金の値と表は prd/11 §19。
+
 ## 4. 二重計上の点検（テストで確かめる性質）
 
 - CDN の `hits + misses = 入力件数`（各クラス）。

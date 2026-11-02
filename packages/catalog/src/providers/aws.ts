@@ -8,6 +8,9 @@ const R = '2026-11-01';
 /** ログ（CloudWatch Logs）を確かめた日（D-92）。 */
 const LOGS_R = '2026-11-02';
 const src = (url: string) => ({ url, retrievedAt: R });
+/** DB のバックアップ・PITR を確かめた日（D-93）。 */
+const BACKUP_R = '2026-11-02';
+const backupSrc = (url: string) => ({ url, retrievedAt: BACKUP_R });
 /** Price List API の東京の料金表（版の日付はコメントに残す）。 */
 const priceList = (offer: string) =>
   src(
@@ -173,6 +176,30 @@ export const aws: PriceBookInput = {
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
     rdsPrices: priceList('AmazonRDS'),
+    // DB のバックアップ・PITR（2026-11-02 取得。D-93）。版（publicationDate）: AmazonRDS 2026-10-29・AmazonDynamoDB 2026-09-11
+    rdsBackupPrices: { ...priceList('AmazonRDS'), retrievedAt: BACKUP_R },
+    dynamodbBackupPrices: {
+      ...priceList('AmazonDynamoDB'),
+      retrievedAt: BACKUP_R,
+    },
+    rdsBackups: backupSrc(
+      'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.html',
+    ),
+    rdsBackupRetention: backupSrc(
+      'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.BackupRetention.html',
+    ),
+    auroraBackupStorage: backupSrc(
+      'https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-storage-backup.html',
+    ),
+    auroraBackups: backupSrc(
+      'https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Aurora.Managing.Backups.html',
+    ),
+    dynamodbPitr: backupSrc(
+      'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/PointInTimeRecovery_Howitworks.html',
+    ),
+    dsqlBackup: backupSrc(
+      'https://docs.aws.amazon.com/aurora-dsql/latest/userguide/backup-aurora-dsql.html',
+    ),
     // gp3 の割り当ての範囲（2026-11-02 取得）
     rdsStorage: {
       url: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Storage.html',
@@ -790,6 +817,16 @@ export const aws: PriceBookInput = {
           pricing: { model: 'flat', per: 1, unitPrice: 0.285 },
           sourceIds: ['dynamodbPrices'],
         },
+        {
+          id: 'pitr',
+          label: 'PITR（DynamoDB: continuous backups）',
+          resource: 'backup-gb-month',
+          unit: 'gb-month',
+          premise:
+            'DynamoDB の PITR（任意の時点への復元）は既定で無効。有効にすると、復元の期間（1〜35 日。既定 35 日）によらず、テーブルの大きさ（GB 月）に $0.228 で課金する（東京）',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.228 },
+          sourceIds: ['dynamodbBackupPrices', 'dynamodbPitr'],
+        },
       ],
     },
     {
@@ -824,6 +861,27 @@ export const aws: PriceBookInput = {
             'RDS for PostgreSQL の gp3 は 20 GiB から割り当てるので、DB が小さくても 20 GiB 分の保存が課金される',
           pricing: { model: 'flat', per: 1, unitPrice: 0.138 },
           sourceIds: ['rdsPrices', 'rdsStorage'],
+        },
+        {
+          id: 'backup',
+          label: 'バックアップの保存（RDS: backup storage）',
+          resource: 'backup-gb-month',
+          unit: 'gb-month',
+          premise:
+            'RDS の自動バックアップは、リージョンの割り当てた DB の容量の合計と同じ量まで無料で、超えた分が $0.095 / GB 月（東京）。最初のスナップショットは DB 全体、以降は差分で、保持の期間（0〜35 日。コンソールの既定 7 日・API の既定 1 日）の任意の時点に戻せる',
+          interpretation: {
+            adopted:
+              'コンソールで作った既定の 7 日とみる。無料の分（割り当て = max(DB の大きさ, 20 GiB)）を引いた量だけをこのメーターに渡す',
+            rejected: [
+              {
+                reading: 'API・CLI の既定の 1 日とみる',
+                reason:
+                  '自分で 1 台を立てるならコンソールで作ることが多いとみた（1 日でも無料の分に収まり、費用は同じ 0）',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0.095 },
+          sourceIds: ['rdsBackupPrices', 'rdsBackups', 'rdsBackupRetention'],
         },
       ],
     },
@@ -870,6 +928,20 @@ export const aws: PriceBookInput = {
           pricing: { model: 'flat', per: 1, unitPrice: 0.27 },
           sourceIds: ['rdsPrices'],
         },
+        {
+          id: 'backup',
+          label: 'バックアップの保存（Aurora: backup storage）',
+          resource: 'backup-gb-month',
+          unit: 'gb-month',
+          premise:
+            'Aurora の自動バックアップは常に有効（止められない）で、保持の既定は 1 日（1〜35 日）。保持 1 日なら課金されず、延ばすとクラスターの大きさまでは無料、超えた分が $0.023 / GB 月（東京）。保持の期間の任意の時点に戻せる',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.023 },
+          sourceIds: [
+            'rdsBackupPrices',
+            'auroraBackupStorage',
+            'auroraBackups',
+          ],
+        },
       ],
     },
     {
@@ -877,9 +949,10 @@ export const aws: PriceBookInput = {
       id: 'aurora-dsql',
       service: 'aurora-dsql',
       name: 'Aurora DSQL',
-      sourceIds: ['dsqlPrices', 'dsqlPricing'],
+      sourceIds: ['dsqlPrices', 'dsqlPricing', 'dsqlBackup'],
       notes: [
         'DPU は SQL の処理（ComputeDPU）と保存の読み書き（ReadDPU・WriteDPU）の量。1 件あたりの DPU は公式に書かれていない',
+        'バックアップは AWS Backup の全体のバックアップ（$0.12 / GB 月）として文書にあり、任意の時点への復元（PITR）の記載は見当たらない（2026-11-02 確認。PITR の要件は満たさないとみて、バックアップの部品は作らない。D-93）',
       ],
       facts: [
         {

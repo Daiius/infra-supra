@@ -1080,3 +1080,74 @@ AWS・Google Cloud では他の費用に比べて 1% 前後だが、**Workers Pa
 - Workers Logs の標本化（`head_sampling_rate`）・呼び出しのログを切る設定、CloudWatch Logs の保持・Infrequent Access のログクラスを部品にすること（基準プレイの規模では差が出ないので入れていない）。
 - Vercel の Observability Plus（既定で有効な Pro のチーム）の event の数え方・Workers Logs の 2026-12-01 以降の料金。
 - アプリのログの量をシナリオ・フレームワークで変えること（今はどこでもアクセスログ 1 行）。エラーの急増・デバッグのログの出し忘れのような出来事。
+
+## 19. DB のバックアップ・任意の時点への復元（PITR）（2026-11-02・D-93）
+
+> 業務アプリの運用で見落とされやすい現実の費用として、DB のバックアップと PITR を数える。DB の部品に「DB のバックアップ: 事業者の既定のまま / 保持を延ばす・PITR を付ける」の 2 択を足し、
+> 受託のシナリオ（prd/09 §3.2）に依頼「直近 7 日の任意の時点に戻せることを契約に入れたい」を足した。数え方は prd/04 §3.9、スキーマの置き方は prd/03 §5。
+
+### 19.1 確かめた公式の事実（2026-11-02 取得・東京）
+
+| DB | 既定 | 延ばす・付ける | 料金 | 出典 |
+|---|---|---|---|---|
+| RDS for PostgreSQL | 自動バックアップ。保持はコンソールの既定 7 日（API・CLI は 1 日。0〜35 日）。保持の間の任意の時点に戻せる。最初は全体・以降は差分 | 35 日まで | リージョンの割り当てた容量の合計まで無料、超えた分 $0.095 / GB 月 | [自動バックアップ](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.html)・[保持](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.BackupRetention.html)・Price List API（AmazonRDS 2026-10-29） |
+| Aurora（Serverless v2 も） | 常に有効・保持の既定 1 日（1〜35 日）。保持 1 日は課金なし | 7 日など | クラスターの大きさまで無料、超えた分 $0.023 / GB 月 | [バックアップの保存](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-storage-backup.html)・[バックアップ](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Aurora.Managing.Backups.html)・Price List API |
+| DynamoDB | PITR は既定で無効 | 有効にすると 1〜35 日（既定 35 日） | テーブルの大きさに $0.228 / GB 月（期間によらない） | [PITR](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/PointInTimeRecovery_Howitworks.html)・Price List API（AmazonDynamoDB 2026-09-11） |
+| Aurora DSQL | AWS Backup の全体のバックアップだけ（$0.12 / GB 月）。PITR の記載は見当たらない | — | — | [バックアップ](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/backup-aurora-dsql.html) |
+| Supabase | Pro は日次のバックアップ 7 日分（込み）。Free はバックアップなし | PITR（7 日）のアドオン。Small 以上の compute が前提。付けると日次のバックアップは取らない | 1 時間 $0.137（月 約 $100）。Small は 1 時間 $0.0206（Micro $0.01344） | [バックアップ](https://supabase.com/docs/guides/platform/backups)・[PITR](https://supabase.com/docs/guides/platform/manage-your-usage/point-in-time-recovery)・[compute](https://supabase.com/docs/guides/platform/compute-and-disk) |
+| Neon | 履歴の窓: Free 6 時間（延ばせない・課金なし）、Launch 既定 1 日 | Launch は最長 7 日（Scale 30 日） | 窓の間の変更の履歴に $0.20 / GB 月 | [restore window](https://neon.com/docs/introduction/restore-window)・[プラン](https://neon.com/docs/introduction/plans) |
+| Cloud SQL | 自動バックアップ 7 つ（1〜365）。最初の 1 つ以外は差分。Enterprise はコンソールで作ると PITR も既定で有効（ログ 7 日） | — | 使った量に $0.000142466 / GiB 時（月 約 $0.104） | [料金](https://cloud.google.com/sql/pricing)・[バックアップ](https://cloud.google.com/sql/docs/postgres/backup-recovery/backups)・[PITR](https://cloud.google.com/sql/docs/postgres/backup-recovery/configure-pitr) |
+| Firestore | PITR は既定で無効 | 有効にすると直近 7 日 | DB の大きさに $0.000267123 / GiB 時（月 約 $0.195） | [料金](https://cloud.google.com/firestore/pricing)・[PITR](https://cloud.google.com/firestore/docs/pitr) |
+| D1 | Time Travel は常に有効。Paid は 30 日・Free は 7 日 | — | 履歴と復元に追加の費用なし | [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) |
+| さくらの VPS | バックアップの機能は標準・オプションとも無い | 自前でさくらのオブジェクトストレージへ | 標準プラン 月 495 円（税込）に 100 GiB 込み、超えると 10 GiB 49.5 円 | [VPS の FAQ](https://manual.sakura.ad.jp/vps/support/others.html)・[オブジェクトストレージ](https://cloud.sakura.ad.jp/products/object-storage/) |
+
+確かめられなかったこと: Cloud SQL の PITR のログ（ディスクに置く）の量の課金（料金ページに記載なし・数えない）・RDS の PITR に別の課金が無いこと（課金の項目が無いことからの読み）・Aurora Serverless v2 に別の規則が無いこと・Acronis（さくらの FAQ が案内する外部のバックアップ）の料金。
+
+### 19.2 入れた形
+
+- estimator に経路を持たないノードの種類 `db-backup` と資源 `backup-gb-month`（無料の分を除いた残す量）・`backup-hours`（時間で課金するアドオン）を足した（prd/04 §3.9）。
+- catalog の `stacks/backups.ts`（`withBackups`）が、組み終えた構成の経路に載っている DB ごとに、選んだバックアップの費用のノードを足す（課金先は DB と同じプラン。VPS だけさくらのオブジェクトストレージ）。
+  戻せる日数と説明は `backupStatus` が返す（要件の判定・カードの説明）。
+- 部品「DB のバックアップ」（スロット `dbBackup`）はどの事業者も `default`・`pitr` の 2 択。今の DB で選んでも変わらない（D1・KV・DSQL・Cloud SQL・Supabase Free・Neon Free）ときはゲームでスロットを出さない。
+
+| DB | 既定（default） | 延ばす・付ける（pitr） |
+|---|---|---|
+| D1 | 30 日（Free 7 日）・費用なし | （出さない） |
+| RDS | 7 日・割り当て（20 GiB から）の中は無料 | 35 日 |
+| Aurora | 1 日・費用なし | 7 日・クラスターの大きさを超えた分 |
+| DynamoDB・Firestore | 戻せない | PITR（DB の大きさに課金） |
+| Cloud SQL | 7 日・全体 1 つ + 7 日分の差分に課金（前は数えていなかった） | （出さない） |
+| Supabase Pro | 戻せない（日次 7 日分） | PITR 7 日（1 時間 $0.137 + Small との差額 $0.00716。計 月 約 $105） |
+| Neon Launch | 1 日・変更の履歴に課金（前は数えていなかった） | 7 日 |
+| さくらの VPS | 戻せない（何も残らない） | 自前: 日次のダンプ 7 つ + 7 日分のバイナリログをオブジェクトストレージへ（月 495 円）。手間: 作る 3・毎月 0.5 |
+
+- ゲーム上の仮定: 1 行の書き込みが変える量 2 KB（差分・WAL・バイナリログ。索引とログの見出しを含む）・VPS のダンプは DB と同じ大きさ（圧縮を数えない）・手間の値（マネージドは設定で 1、VPS は作る 3・毎月 0.5）。
+- 受託の依頼 `c-p-backup`（窓 3〜10 か月目に 1 / 2 の確率・受けると上乗せ $20 / 月を満たす月だけ。確率と額はゲーム上の仮定）。要件 `db-pitr` = 経路の DB がすべて 7 日以上戻せる。
+
+### 19.3 基準プレイ（何もしない・シード 1〜20。達成数・12 か月の費用の平均 / 月）
+
+**既定のまま（default）はどの構成も不変**（前後で同じ値。D1・Supabase Pro・DynamoDB・Firestore・VPS の既定は費用が無い）。**CF Paid × Next.js（目標の根拠。記事 20/20・$15.25・受託 20/20・$5.67）・記事の golden は不変**。
+変わったのは、既定で費用を数え始めた部品の DB と、新しい依頼を受ける基準プレイだけ。
+
+| 構成 × フレームワーク | 記事 前 → 後 | 受託 前 → 後 | pitr を選ぶと（記事 / 受託） |
+|---|---|---|---|
+| Vercel Pro × Next.js | 0/20・$123.6（不変） | 0/20・$46.4（不変） | $160.4 / **$151.7**（Supabase の PITR） |
+| Netlify Pro × Next.js | 0/20・$89.3（不変） | 0/20・$45.0（不変） | $151.8 / $150.3 |
+| CF Paid + Hyperdrive の Supabase × Next.js | 20/20・$40.3（不変） | 19/20・$30.7（不変） | 0/20・$140.4 / 0/20・$135.9 |
+| さくらの VPS 2GB × Next.js | 10/20・$13.1（不変） | 0/20・$13.1（不変） | 6/20・$16.4 / 0/20・$16.4（手間で達成が減る） |
+| さくらの VPS 4GB × Next.js | 0/20・$26.4（不変） | 8/20・$26.4（不変） | 0/20・$29.7 / 3/20・$29.7 |
+| Amplify × Next.js（DynamoDB） | 10/20・$51.9（不変） | 20/20・$15.0（不変） | $52.0 / $15.5 |
+| Google Cloud × Next.js（Firestore） | 0/20・$62.1（不変） | 20/20・$12.2（不変） | $62.1 / $12.7 |
+| Google Cloud × Next.js（Cloud SQL） | 0/20・$69.0 → $69.0 | 20/20・$16.7 → **$17.0** | （出さない） |
+| Vercel Pro × Next.js（Neon） | 0/20・$118.1（不変） | 6/20・$36.2 → **$36.3** | $118.2 / $36.4 |
+| Amplify × Next.js（RDS） | 0/20・$72.5（不変） | 0/20・$34.8（不変） | 不変（35 日でも 20 GiB の中） |
+| Amplify × Next.js（Aurora） | 0/20・$124.6（不変） | 0/20・$87.3（不変） | 不変（差分は月 1 セント未満） |
+
+受託の基準プレイ（シード 1〜20）: **CF Paid・依頼を受ける（cf-paid-accept）だけが変わる**。依頼の来たシードで D1 の Time Travel が要件を満たして上乗せが入り、9/20 → **11/20**（golden のシード 42 は $1,589.92・goal → $1,769.92・won）。
+乗り換えた先の Vercel Pro + Supabase（既定）は満たさないので、乗り換えた後は「契約の収益が入らなかった」になる。ほかの基準プレイ（依頼を断る・SLA だけ受ける）は不変（窓の出来事は出来事ごとの乱数の列なので、他の出来事の月は動かない）。
+
+### 19.4 残した点
+
+- 保持の日数を 2 択より細かく選ぶこと（Supabase の 14・28 日、RDS の 1 日など）・Supabase の Small の pooler の接続 400 を判定に使うこと（今は Micro の 200）。
+- Cloud SQL の PITR のログの量・Enterprise Plus（ログ 14 日）・Firestore の日次 / 週次のバックアップ（$0.038 / GiB 月）・DynamoDB のオンデマンドのバックアップ。
+- 実際に壊れて戻す出来事（誤操作・不具合）と、戻せない構成で起きること（データの損失・満足度）。今は依頼の要件のカードだけで、新しい障害の出来事は足していない。

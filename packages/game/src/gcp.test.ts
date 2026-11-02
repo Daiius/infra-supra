@@ -72,6 +72,8 @@ describe('Google Cloud の構成', () => {
       ['images', ['default', 'none', 'resize', 'cf-images', 'cf-resize']],
       ['db', ['firestore', 'cloud-sql']],
       ['minInstances', ['0', '1']],
+      // DB のバックアップ（D-93）: 既定の Firestore は PITR を付けられる
+      ['dbBackup', ['default', 'pitr']],
       ['files', ['gcs']],
     ]);
     // 静的書き出しは next/image の既定のローダーが使えないので、変換の部品が無い
@@ -83,6 +85,7 @@ describe('Google Cloud の構成', () => {
     expect(slotsOf(contract, 'nextjs').map(([slot]) => slot)).toEqual([
       'db',
       'minInstances',
+      'dbBackup',
       'files',
     ]);
     for (const fw of ['nextjs', 'vite-spa', 'astro'] as const)
@@ -139,9 +142,10 @@ describe('Google Cloud の構成', () => {
       articleSpaCfResize: { won: 20, monthly: 9.7 },
       contractNext: { won: 20, monthly: 12.2 },
       contractNextMin1: { won: 20, monthly: 21.6 },
-      contractNextSql: { won: 20, monthly: 16.7 },
+      // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）
+      contractNextSql: { won: 20, monthly: 17 },
       contractSpa: { won: 20, monthly: 8.6 },
-      contractSpaSql: { won: 20, monthly: 12.7 },
+      contractSpaSql: { won: 20, monthly: 13 },
     });
     // 目標の根拠（CF Paid × Next.js）は不変
     expect(run(article, CF_PAID, 'nextjs')).toEqual({ won: 20, monthly: 15.2 });

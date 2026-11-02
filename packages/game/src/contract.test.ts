@@ -37,7 +37,8 @@ describe('受託先の業務アプリの運用', () => {
       );
     expect(r(42)).toEqual({
       'cf-paid': ['1988.27', 'won', 12],
-      'cf-paid-accept': ['1589.92', 'goal', 12],
+      // D-93: PITR の依頼（D1 の Time Travel で満たす）を受け、乗り換えるまで上乗せ $20 / 月が入る（前は $1,589.92・goal）
+      'cf-paid-accept': ['1769.92', 'won', 12],
       vps: ['1737.44', 'goal', 12],
       'vps-care': ['1844.57', 'won', 12],
       'vps-sla': ['1844.57', 'won', 12],

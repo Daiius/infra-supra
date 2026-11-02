@@ -216,6 +216,7 @@ describe('部品の組み合わせ', () => {
         'cdnInvalidation',
         'cdnPlan',
         'db',
+        'dbBackup',
         'frontCdn',
         'images',
         'isrCache',

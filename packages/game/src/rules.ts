@@ -98,7 +98,14 @@ export const EFFORT = {
     cdnInvalidation: 1,
     // Cloud Run の最小インスタンス数（D-88）。設定の 1 行を変えて再デプロイするだけなので 1（仮定）
     minInstances: 1,
+    // DB のバックアップ（D-93）。マネージドの DB は設定を変えるだけなので 1（仮定）。VPS の自前のバックアップは selfBackup.setup
+    dbBackup: 1,
   },
+  /**
+   * VPS の DB の自前のバックアップ（日次のダンプとバイナリログをオブジェクトストレージへ送る。D-93）。仕組みを作る一度きりの手間と、
+   * ジョブの失敗の見張り・復元の確かめの毎月の手間（ゲーム上の仮定）。
+   */
+  selfBackup: { setup: 3, upkeep: 0.5 },
   // DB の差し替えと API の置き場の移し替え（API と DB を一緒に移す。D-65）で共通の大きさ（仮定）
   dbSwap: { perMonth: 6, months: 1 },
   /**

@@ -198,6 +198,11 @@ export const cloudflare: PriceBookInput = {
     ),
     d1Pricing: src('https://developers.cloudflare.com/d1/platform/pricing/'),
     d1Limits: src('https://developers.cloudflare.com/d1/platform/limits/'),
+    // D1 の Time Travel（2026-11-02 取得。D-93）
+    d1TimeTravel: {
+      url: 'https://developers.cloudflare.com/d1/reference/time-travel/',
+      retrievedAt: '2026-11-02',
+    },
     members: src(
       'https://developers.cloudflare.com/fundamentals/setup/manage-members/',
     ),
@@ -623,6 +628,7 @@ export const cloudflare: PriceBookInput = {
       },
       notes: [
         'Workers Logs は Free で 1 日 20 万件まで（保持 3 日）。課金は無く、ログの費用は数えない（D-92）',
+        'D1 の Time Travel（任意の時点への復元）は常に有効で、Free は直近 7 日。履歴と復元に追加の費用はかからない（D-93）',
       ],
       meters: [
         {
@@ -760,6 +766,9 @@ export const cloudflare: PriceBookInput = {
           'Cloudflare のアカウントのメンバーの料金は、メンバーの管理と Workers の料金のページに記載なし（Workers Paid の最低料金はアカウントあたり）',
         sourceIds: ['members', 'workersPricing'],
       },
+      notes: [
+        'D1 の Time Travel（任意の時点への復元）は常に有効で、Paid は直近 30 日。履歴と復元に追加の費用はかからない（D-93）',
+      ],
       meters: [
         {
           id: 'build-minutes',

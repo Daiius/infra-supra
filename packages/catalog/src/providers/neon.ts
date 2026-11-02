@@ -85,6 +85,8 @@ export const neon: PriceBookInput = {
     computes: src('https://neon.com/docs/manage/computes'),
     driver: src('https://neon.com/docs/serverless/serverless-driver'),
     pooling: src('https://neon.com/docs/connect/connection-pooling'),
+    // 履歴の窓（instant restore。D-93）
+    restoreWindow: src('https://neon.com/docs/introduction/restore-window'),
   },
   allowancePools: [
     {
@@ -131,6 +133,7 @@ export const neon: PriceBookInput = {
         '保存は 1 プロジェクト 1 GB・アカウント全体で 20 GB まで（超えると保存を増やす書き込みが失敗する）',
         'DB は 5 分使われないと止まり、止める設定は外せない',
         'プロジェクトは 100 まで。上限に当たってもデータは消えず、Launch に上げるとすぐ外れる',
+        '過去の時点に戻す履歴の窓（instant restore）は 6 時間（1 GB まで）で延ばせず、課金なし（D-93）',
       ],
       meters: [
         {
@@ -181,7 +184,6 @@ export const neon: PriceBookInput = {
       notes: [
         '月の最低額は無く、使った分だけの請求（$0.50 未満の請求は取り立てない）',
         '支出の上限は無く、設定した額の 80%・100% でメールが届くだけ',
-        '過去の時点に戻す履歴（instant restore。最長 7 日）は $0.20/GB 月だが、変更の量に依るので数えていない',
       ],
       meters: [
         {
@@ -201,6 +203,16 @@ export const neon: PriceBookInput = {
           unit: 'gb-month',
           pricing: { model: 'flat', per: 1, unitPrice: 0.35 },
           sourceIds: ['pricing', 'plans'],
+        },
+        {
+          id: 'history',
+          label: '過去の時点に戻す履歴（Neon: instant restore storage）',
+          resource: 'backup-gb-month',
+          unit: 'gb-month',
+          premise:
+            'Neon Launch は履歴の窓（既定 1 日・最長 7 日）の間の変更の履歴を残し、その量に $0.20 / GB 月で課金する。窓の中の任意の時点に戻せる',
+          pricing: { model: 'flat', per: 1, unitPrice: 0.2 },
+          sourceIds: ['pricing', 'plans', 'restoreWindow'],
         },
         {
           id: 'transfer',

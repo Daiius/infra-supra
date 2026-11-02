@@ -27,6 +27,7 @@ import {
   GCP_DEFAULT_CHOICES,
   GCP_STACK_DEFS,
 } from './gcp.ts';
+import { withBackups } from './backups.ts';
 import { withLogs } from './logs.ts';
 import { vpsNode } from './sakura.ts';
 import {
@@ -61,7 +62,8 @@ export type SlotId =
   | 'apiCache'
   | 'cdnPlan'
   | 'cdnInvalidation'
-  | 'minInstances';
+  | 'minInstances'
+  | 'dbBackup';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -160,6 +162,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   cdnPlan: 'CDN の料金のプラン',
   cdnInvalidation: 'CDN の無効化のまとめ方',
   minInstances: '最小インスタンス数',
+  dbBackup: 'DB のバックアップ',
 };
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [
@@ -670,6 +673,69 @@ const ASTRO_API_SAME: ComponentOption[] = (
   premiseRefs: [],
 }));
 
+/**
+ * DB のバックアップ（D-93・stacks/backups.ts）。どの事業者でも 2 択で、何が残り何に払うかは今の DB で決まる
+ * （DB ごとの説明は backupStatus）。D1 のように既定で足りる・延ばせない DB では、ゲームはこのスロットを出さない。
+ */
+const BACKUP_NOTES: Record<Platform, { default: string; pitr: string }> = {
+  cloudflare: {
+    default:
+      'D1 は Time Travel（Paid は 30 日・Free は 7 日）で任意の時点に戻せる（追加の費用なし）。Hyperdrive の先の Supabase Pro は日次のバックアップ 7 日分。API を AWS に置いたときの DynamoDB は PITR が無効',
+    pitr: 'Hyperdrive の先の Supabase Pro に PITR（7 日）を付ける（月 約 $105。compute を Small に上げる）。API を AWS に置いたときの DynamoDB は PITR を有効にする（テーブルの大きさに $0.228 / GB 月）',
+  },
+  vercel: {
+    default:
+      'Supabase Pro は日次のバックアップ 7 日分（Free は無し）。Neon は履歴の窓 1 日（Free は 6 時間）',
+    pitr: 'Supabase Pro に PITR（7 日・月 約 $105。compute を Small に上げる）、Neon Launch は履歴の窓を 7 日に（変更の量に $0.20 / GB 月）',
+  },
+  netlify: {
+    default:
+      'Supabase Pro は日次のバックアップ 7 日分（Free は無し）。Neon は履歴の窓 1 日（Free は 6 時間）',
+    pitr: 'Supabase Pro に PITR（7 日・月 約 $105。compute を Small に上げる）、Neon Launch は履歴の窓を 7 日に（変更の量に $0.20 / GB 月）',
+  },
+  aws: {
+    default:
+      'DynamoDB の PITR は無効、Aurora は保持 1 日、RDS は保持 7 日（DB の容量までは無料）',
+    pitr: 'DynamoDB の PITR を有効に（テーブルの大きさに $0.228 / GB 月）、Aurora は保持 7 日・RDS は 35 日に延ばす（DB の大きさを超えた分に課金）',
+  },
+  'aws-opennext': {
+    default:
+      'DynamoDB の PITR は無効、Aurora は保持 1 日、RDS は保持 7 日（DB の容量までは無料）',
+    pitr: 'DynamoDB の PITR を有効に（テーブルの大きさに $0.228 / GB 月）、Aurora は保持 7 日・RDS は 35 日に延ばす（DB の大きさを超えた分に課金）',
+  },
+  gcp: {
+    default:
+      'Firestore の PITR は無効。Cloud SQL は自動バックアップ 7 つと PITR が既定で有効（使った量に $0.104 / GiB 月）',
+    pitr: 'Firestore の PITR を有効に（7 日・DB の大きさに 約 $0.195 / GiB 月）',
+  },
+  sakura: {
+    default:
+      'さくらの VPS にバックアップの機能は無い。自分で取らなければ、壊れたときに戻せるものが無い',
+    pitr: '日次のダンプとバイナリログを、さくらのオブジェクトストレージに自分で送る（7 日分・月 495 円から）。仕組みを作り、毎月見張る手間がかかる',
+  },
+};
+
+const BACKUP_COMPONENTS: ComponentOption[] = (
+  Object.keys(BACKUP_NOTES) as Platform[]
+).flatMap((platform) => [
+  {
+    id: 'default',
+    slot: 'dbBackup' as const,
+    platform,
+    label: '事業者の既定のまま',
+    note: BACKUP_NOTES[platform].default,
+    premiseRefs: [],
+  },
+  {
+    id: 'pitr',
+    slot: 'dbBackup' as const,
+    platform,
+    label: '保持を延ばす・PITR を付ける',
+    note: BACKUP_NOTES[platform].pitr,
+    premiseRefs: [],
+  },
+]);
+
 export const COMPONENTS: readonly ComponentOption[] = [
   ...BASE_COMPONENTS,
   ...SAKURA_FRONT_CDN,
@@ -683,17 +749,35 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...NETLIFY_COMPONENTS,
   ...GCP_COMPONENTS,
   ...CROSS_COMPONENTS,
+  ...BACKUP_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
+// DB のバックアップの既定はどの事業者も「事業者の既定のまま」（D-93）
 export const DEFAULT_CHOICES: Record<Platform, Choices> = {
-  cloudflare: { isrCache: 'kv', images: 'images', db: 'd1', realtime: 'none' },
-  vercel: { isrCache: 'default', images: 'default', db: 'supabase' },
-  sakura: { isrCache: 'default', images: 'default', frontCdn: 'none' },
-  aws: AWS_DEFAULT_CHOICES,
-  'aws-opennext': OPENNEXT_DEFAULT_CHOICES,
-  netlify: NETLIFY_DEFAULT_CHOICES,
-  gcp: GCP_DEFAULT_CHOICES,
+  cloudflare: {
+    isrCache: 'kv',
+    images: 'images',
+    db: 'd1',
+    realtime: 'none',
+    dbBackup: 'default',
+  },
+  vercel: {
+    isrCache: 'default',
+    images: 'default',
+    db: 'supabase',
+    dbBackup: 'default',
+  },
+  sakura: {
+    isrCache: 'default',
+    images: 'default',
+    frontCdn: 'none',
+    dbBackup: 'default',
+  },
+  aws: { ...AWS_DEFAULT_CHOICES, dbBackup: 'default' },
+  'aws-opennext': { ...OPENNEXT_DEFAULT_CHOICES, dbBackup: 'default' },
+  netlify: { ...NETLIFY_DEFAULT_CHOICES, dbBackup: 'default' },
+  gcp: { ...GCP_DEFAULT_CHOICES, dbBackup: 'default' },
 };
 
 /**
@@ -1332,16 +1416,19 @@ export function composeStack(
         ? withBuild(shaped, def.platform, def.plan, 'Next.js')
         : shaped;
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
-  // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）は、部品を差し終えた後にまとめて足す
-  return withLogs(
-    applyCrossApi(
-      built,
-      def.platform,
-      def.plan,
-      c,
-      standby,
-      options.framework ?? 'nextjs',
+  // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）は、部品を差し終えた後にまとめて足す
+  return withBackups(
+    withLogs(
+      applyCrossApi(
+        built,
+        def.platform,
+        def.plan,
+        c,
+        standby,
+        options.framework ?? 'nextjs',
+      ),
     ),
+    c.dbBackup,
   );
 }
 
