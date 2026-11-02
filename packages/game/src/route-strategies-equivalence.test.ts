@@ -2,7 +2,14 @@
 // スナップショットは main（20901a9。プリセットに置き換える前）で記録した。置き換えの後も 1 文字も変わらないこと（バランスを変えない）。
 // 2 シナリオ × 選べるフレームワーク × 載せられる構成（隠した構成も。古い保存の再生に使う。D-100）× 部品の選択肢（1 つずつ替える）
 // × 再検証・コメントの描き方 × 個人向けのページの割合・在庫の有無で、workloadFor の出力を正規化した JSON のハッシュにまとめる。
-import type { Choices, SlotId } from 'catalog';
+import {
+  composeStack,
+  loadPriceBooks,
+  STACK_DEFS,
+  type Choices,
+  type SlotId,
+} from 'catalog';
+import { estimate, type WorkloadInput } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
   COMMENTS_IN_BROWSER,
@@ -61,33 +68,79 @@ const STOCKS = [
   { dbGB: 3, imagesGB: 40, images: 12_000, articlePages: 3_500 },
 ];
 
-function digest(sc: Scenario, fw: FrameworkId, stackIndex: number): string {
-  const parts: string[] = [];
+/** 格子の 1 つの Workload と、構成に渡す部品。 */
+function* grid(
+  sc: Scenario,
+  fw: FrameworkId,
+  stackIndex: number,
+): Generator<{ w: WorkloadInput; components: Choices }> {
   for (const components of componentVariants(sc, stackIndex, fw))
     for (const revalidateSec of REVALIDATE)
       for (const comments of COMMENTS)
         for (const mods of MODS)
           for (const stock of STOCKS)
-            parts.push(
-              canonical(
-                workloadFor(sc, {
-                  pv: 300_000,
-                  settings: {
-                    imageKB: 150,
-                    variants: 3,
-                    revalidateSec,
-                    comments,
-                    ssrOptimizations: 0,
-                  },
-                  ssrCpuMs: 15,
-                  mods,
-                  stock,
-                  platform: STACKS[stackIndex]!.provider,
-                  components,
-                  framework: fw,
-                }),
-              ),
-            );
+            yield {
+              components,
+              w: workloadFor(sc, {
+                pv: 300_000,
+                settings: {
+                  imageKB: 150,
+                  variants: 3,
+                  revalidateSec,
+                  comments,
+                  ssrOptimizations: 0,
+                },
+                ssrCpuMs: 15,
+                mods,
+                stock,
+                platform: STACKS[stackIndex]!.provider,
+                components,
+                framework: fw,
+              }),
+            };
+}
+
+function digest(sc: Scenario, fw: FrameworkId, stackIndex: number): string {
+  const parts: string[] = [];
+  for (const { w } of grid(sc, fw, stackIndex)) parts.push(canonical(w));
+  return `${parts.length}:${hash(parts.join('\n'))}`;
+}
+
+const books = loadPriceBooks();
+/** 有効数字 10 桁（足し算の順の違いによる浮動小数の誤差を見ないため）。 */
+const sig = (v: number) => Number(v.toPrecision(10));
+
+/**
+ * 費用と制限の判定のハッシュ（D-109）。Workload の形（ルートの API の数え方）を替えても、費用・使用量・前提の当たりが
+ * 変わらないことを確かめる。前提の文（D-99 の原因のルートの内訳）は表示なので含めない。
+ */
+function costDigest(sc: Scenario, fw: FrameworkId, stackIndex: number): string {
+  const parts: string[] = [];
+  for (const { w, components } of grid(sc, fw, stackIndex)) {
+    // 個人向けのページの割合を替える出来事（ssrShare）はルートが 1 つの受託では起きない（合計が 1 にならない）ので除く
+    if (Math.abs(w.routes.reduce((a, r) => a + r.share, 0) - 1) > 1e-9)
+      continue;
+    const r = estimate({
+      workload: w,
+      architecture: composeStack(STACK_DEFS[stackIndex]!, components, {
+        framework: fw,
+      }),
+      books,
+    });
+    parts.push(
+      canonical({
+        totals: Object.fromEntries(
+          Object.entries(r.bill.totals).map(([k, v]) => [k, sig(v ?? 0)]),
+        ),
+        usage: r.usage.map((u) => [u.nodeId, u.meterId, sig(u.quantity)]),
+        premises: r.premises.map((p) => [
+          p.id,
+          p.hit,
+          p.ratio === undefined ? null : sig(p.ratio),
+        ]),
+      }),
+    );
+  }
   return `${parts.length}:${hash(parts.join('\n'))}`;
 }
 
@@ -102,4 +155,14 @@ describe('描き方のプリセットは今までの書き換えと同じ Worklo
     expect(Object.keys(out).length).toBeGreaterThan(40);
     expect(out).toMatchSnapshot();
   });
+
+  it('費用・使用量・前提の当たりも記録と同じ（D-109。段 4 の前の main で記録）', () => {
+    const out: Record<string, string> = {};
+    for (const sc of Object.values(SCENARIOS))
+      for (const fw of frameworksOf(sc).allowed)
+        for (const s of STACKS)
+          if (stackSupports(s.index, fw))
+            out[`${sc.id} × ${fw} × ${s.id}`] = costDigest(sc, fw, s.index);
+    expect(out).toMatchSnapshot();
+  }, 300_000);
 });
