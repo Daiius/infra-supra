@@ -381,7 +381,16 @@ export type ScenarioText = {
  * 見取り図の区画の作られ方（D-102）。画面は札の文字（REGION_SOURCES の short）を必ず出し、色・模様は補助にする。
  */
 export type RegionSource =
-  'build' | 'isr' | 'cached' | 'ssr' | 'api' | 'island' | 'shell' | 'image';
+  | 'build'
+  | 'isr'
+  | 'cached'
+  | 'ssr'
+  | 'api'
+  | 'island'
+  | 'island-shell'
+  | 'server-island'
+  | 'shell'
+  | 'image';
 
 /** 区画の作られ方の札（short）と凡例の説明（long）。 */
 export const REGION_SOURCES: Readonly<
@@ -412,6 +421,15 @@ export const REGION_SOURCES: Readonly<
     short: 'アイランドが API で取る',
     long: '静的な HTML の中の動きのある部品（アイランド）だけ、ブラウザが API で取る',
   },
+  // 枠 + サーバーの島（S6。D-108）
+  'island-shell': {
+    short: '枠（使い回す）',
+    long: '人ごとに違わない枠。Astro は最初の閲覧で描いてキャッシュし 1 日の期限で取り直す。Next.js の PPR はビルドで作った枠を島と同じ応答の先頭で流す（費用は閲覧ごとに島を描く分で数える）',
+  },
+  'server-island': {
+    short: 'サーバーの島（閲覧ごとに一部だけ描く）',
+    long: '人ごとに違う部分だけを閲覧のたびにサーバーが描く（Astro は枠とは別のリクエスト・Next.js の PPR は同じ応答の中）。キャッシュしない',
+  },
   shell: {
     short: 'シェル + JS',
     long: 'どのページも同じ 1 つのシェル（静的）を返し、ブラウザの JS が描く',
@@ -438,6 +456,11 @@ export type PageWireframe = {
   regions: WireframeRegion[];
   /** フレームワークごとの、区画の id → 作られ方。すべての区画を書く（テストで確かめる）。 */
   byFramework: Record<FrameworkId, Record<string, RegionSource>>;
+  /**
+   * 描き方 S6（枠 + サーバーの島）にしたときに島になる区画（人ごとに違う部分。D-108）。ほかの HTML の区画は枠
+   * （island-shell）になる。S6 を選べるページ（人ごとに違うページ）だけに書く。
+   */
+  islandRegions?: string[];
   /** 設定「コメントの描き方」で記事のページに含めたときに上書きする区画（D-82）。 */
   commentsInPage?: Partial<Record<FrameworkId, Record<string, RegionSource>>>;
   /** フレームワークごとの、ページの短い札（鮮度・SNS のカード・CPU の注意・API の増え方。文字で出す）。 */

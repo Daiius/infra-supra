@@ -68,7 +68,14 @@ export function diagramArchitecture(
 
 /** 流れ（リクエストクラスのまとまり）。色は見取り図の作られ方の色にそろえる（ISR は info・SSR は warning など）。 */
 export type LaneId =
-  'static' | 'isr' | 'ssr' | 'api' | 'image' | 'realtime' | 'revalidate';
+  | 'static'
+  | 'isr'
+  | 'ssr'
+  | 'island'
+  | 'api'
+  | 'image'
+  | 'realtime'
+  | 'revalidate';
 
 export const LANES: Readonly<
   Record<LaneId, { label: string; classes: readonly RequestClass[] }>
@@ -79,6 +86,12 @@ export const LANES: Readonly<
   },
   isr: { label: 'ISR のページ（キャッシュ）', classes: ['document-isr'] },
   ssr: { label: '閲覧ごとに描くページ', classes: ['document-ssr'] },
+  // 枠 + サーバーの島（S6。D-108）。島のリクエストは document-ssr で数えるので、クラスでなく見取り図の島の区画で分ける
+  // （islandLanes。島の区画のあるページがあれば document-ssr の線に載せる）
+  island: {
+    label: 'サーバーの島（閲覧ごとに一部だけ描く）',
+    classes: [],
+  },
   api: { label: 'API', classes: ['api', 'api-content'] },
   image: {
     label: '画像（表示・投稿・変換）',
@@ -112,6 +125,8 @@ const SOURCE_LANE: Readonly<Record<RegionSource, LaneId>> = {
   ssr: 'ssr',
   api: 'api',
   island: 'api',
+  'island-shell': 'island',
+  'server-island': 'island',
   image: 'image',
 };
 
@@ -229,6 +244,17 @@ export function diagramModel(
     (e): e is [RequestClass, string[]] => (e[1]?.length ?? 0) > 0,
   );
   const byId = new Map(arch.nodes.map((n) => [n.id, n]));
+  // 閲覧ごとに描く経路（document-ssr）の流れ: サーバーの島（S6）のページがあれば島、毎回描くページがあれば（または
+  // 見取り図が無ければ）SSR。両方あれば両方の線を並べる（D-108）
+  const sources = new Set(pages.flatMap((p) => p.regions.map((r) => r.source)));
+  const ssrLanes: LaneId[] = [
+    ...(sources.has('ssr') || !sources.has('server-island')
+      ? (['ssr'] as const)
+      : []),
+    ...(sources.has('server-island') ? (['island'] as const) : []),
+  ];
+  const lanesOf = (cls: RequestClass): LaneId[] =>
+    cls === 'document-ssr' ? ssrLanes : [laneOf(cls)];
 
   // --- 線（経路の隣り合う組 + 閲覧者から入口）
   const edgeMap = new Map<string, DiagramEdge>();
@@ -236,8 +262,8 @@ export function diagramModel(
     const key = `${from}>${to}`;
     const e = edgeMap.get(key) ?? { from, to, lanes: [], classes: [] };
     if (!e.classes.includes(cls)) e.classes.push(cls);
-    const lane = laneOf(cls);
-    if (!e.lanes.includes(lane)) e.lanes.push(lane);
+    for (const lane of lanesOf(cls))
+      if (!e.lanes.includes(lane)) e.lanes.push(lane);
     edgeMap.set(key, e);
   };
   for (const [cls, path] of routes) {

@@ -202,6 +202,48 @@ describe('見積モードの画面', () => {
     expect(window.location.search).not.toContain('rp.article');
   });
 
+  it('W-23 個人向けのページを S6（枠 + サーバーの島）にすると URL に残り、構成図に島の流れが出る。使えない構成（vinext）に替えると消える（D-108）', () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+    );
+    renderApp();
+    expectEstimate();
+    const routes = within(card('ページごとの描き方'));
+    fireEvent.click(
+      routes.getByRole('button', { name: /^個人向けのページを S6/ }),
+    );
+    expect(window.location.search).toContain('rp.personal=server-island');
+    const row = within(card('ページごとの描き方'))
+      .getByRole('table', { name: 'ページごとの描き方' })
+      .querySelector('tr[data-route="personal"]')!;
+    expect(
+      row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
+    ).toBe('server-island');
+    expectEstimate();
+    expect(
+      within(card(/^構成図: /)).getByRole('list', {
+        name: '構成図の流れの凡例',
+      }).textContent,
+    ).toContain('サーバーの島（閲覧ごとに一部だけ描く）');
+    // URL から開いても同じ。vinext（PPR が未完成）に替えると選べないので消える
+    cleanup();
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro&rp.personal=server-island',
+    );
+    renderApp();
+    expectEstimate();
+    expect(window.location.search).toContain('rp.personal=server-island');
+    fireEvent.change(combo('構成'), {
+      target: { value: 'cloudflare-vinext-paid' },
+    });
+    expectEstimate();
+    expect(window.location.search).not.toContain('rp.personal');
+  });
+
   it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', () => {
     window.history.replaceState(
       null,

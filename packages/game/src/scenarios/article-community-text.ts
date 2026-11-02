@@ -105,6 +105,8 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
       { id: 'mine', label: '自分の下書き・記事の一覧', height: 'lg' },
       { id: 'editor', label: '投稿・編集の画面へ（送信は API）' },
     ],
+    // S6 で島になるのは人ごとに違う部分（D-108）。ヘッダー・投稿の画面への入口は枠
+    islandRegions: ['profile', 'notifications', 'mine'],
     byFramework: {
       nextjs: {
         header: 'ssr',

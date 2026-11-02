@@ -28,13 +28,19 @@ const LANE_COLOR: Readonly<Record<LaneId, string>> = {
   static: 'var(--color-success)',
   isr: 'var(--color-info)',
   ssr: 'var(--color-warning)',
+  island:
+    'color-mix(in oklab, var(--color-warning) 70%, var(--color-base-content))',
   api: 'var(--color-secondary)',
   image: 'var(--color-accent)',
   realtime: 'var(--color-primary)',
   revalidate: 'color-mix(in oklab, var(--color-base-content) 55%, transparent)',
 };
 /** 裏で動く流れは破線（色に頼らない手がかり）。 */
-const LANE_DASH: Partial<Record<LaneId, string>> = { revalidate: '4 3' };
+const LANE_DASH: Partial<Record<LaneId, string>> = {
+  revalidate: '4 3',
+  // サーバーの島（S6）は閲覧ごとに描く SSR と同じ色の系統で、破線で分ける
+  island: '7 3',
+};
 
 const groupTitle = (account: string, brand?: BrandId) =>
   brand ? BRANDS[brand].title : account;

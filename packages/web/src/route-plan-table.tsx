@@ -19,7 +19,7 @@ const STRATEGY_SOURCE: Record<RouteStrategyId, RegionSource> = {
   'cached-purge': 'cached',
   ssr: 'ssr',
   'shell-api': 'api',
-  'server-island': 'island',
+  'server-island': 'server-island',
 };
 
 export function Swatch({ strategy }: { strategy: RouteStrategyId }) {
