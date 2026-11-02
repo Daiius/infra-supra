@@ -65,11 +65,13 @@ describe('Google Cloud の構成', () => {
     expect(Object.values(swap.routes).flat()).not.toContain('cloud-sql');
   });
 
-  it('SPA・静的書き出し・Astro: Hosting から静的に配り、API（Astro はマイページも）を Cloud Run。ビルドの費用は数えない', () => {
+  it('SPA・静的書き出し・Astro: Hosting から静的に配り、API（Astro はマイページも）を Cloud Run。ビルドの費用は数えない。Astro の記事は Hosting の CDN（s-maxage）でキャッシュ（D-103）', () => {
     for (const framework of ['vite-spa', 'nextjs-export', 'astro'] as const) {
       const a = composeStack('gcp-cloud-run', {}, { framework });
       expect(() => ArchitectureSchema.parse(a)).not.toThrow();
-      expect(a.routes['document-isr']).toBeUndefined();
+      expect(a.routes['document-isr']).toEqual(
+        framework === 'astro' ? ['cdn', 'run'] : undefined,
+      );
       expect(a.routes['document-static']).toEqual(['cdn']);
       expect(a.routes.api).toEqual(['cdn', 'run', 'firestore']);
       expect(ids(a)).not.toContain('build');

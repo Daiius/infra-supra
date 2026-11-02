@@ -1376,13 +1376,15 @@ export function composeStack(
   const spa = browserCallsApi(options.framework);
   const nextExport = options.framework === 'nextjs-export';
   const astro = options.framework === 'astro';
-  // SPA・Astro・静的書き出しには ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品は
-  // さくらの VPS ではシェル・静的なページを CDN が返す形になる（D-91）。AWS の前段の CloudFront の「HTML も」は Next.js だけ
+  // SPA・静的書き出しには ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品は
+  // さくらの VPS ではシェル・静的なページを CDN が返す形になる（D-91）。AWS の前段の CloudFront の「HTML も」は Next.js だけ。
+  // Astro の記事は閲覧のときに描いて事業者の置き場にキャッシュする（D-103）。ISR のキャッシュの部品は選ばせず、事業者ごとに決まる
+  // 置き場（Cloudflare は Worker の前の Workers Cache・それ以外は事業者の既定）の経路にする
   const c =
     spa || astro
       ? {
           ...withDefaults(def.platform, choices),
-          isrCache: 'none',
+          isrCache: astro ? astroPageCacheChoice(def.platform) : 'none',
           ...(choices.frontCdn === 'html' && def.platform !== 'sakura'
             ? { frontCdn: 'static' }
             : {}),
@@ -1468,11 +1470,11 @@ export function composeStack(
         : crossed;
   const built =
     astro && !shapesAll
-      ? asAstro(shaped, def.platform, def.plan)
+      ? asAstro(shaped, def.platform)
       : nextExport
         ? withBuild(shaped, def.platform, def.plan, 'Next.js')
         : shaped;
-  // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
+  // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は記事をキャッシュする形に直した後に差す（D-103）
   // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）・メールの送信（D-95）は、部品を差し終えた後にまとめて足す
   // アプリのメールの送信（D-95）も最後に足す（経路を持たない）。ドメインの登録と DNS（D-96）はその後に
   return withDomain(
@@ -1505,42 +1507,79 @@ const EXPORT_SUFFIX = '（Next.js の静的書き出し）';
 const VERCEL_BUILD_CPUS = 4;
 
 /**
- * Next.js の構成を Astro の形に直す（D-68・prd/06 §6）。記事（ISR だったルート）は静的なページとして事業者の静的な配信から返し、
- * ログインの要るページ（SSR）はアダプター（Cloudflare は Worker・Vercel は Functions・VPS は Node）が描く。
- * 静的なページの更新はビルドし直しで、ビルドの時間を事業者のビルド（Workers Builds・Vercel のビルド）で数える。
- * VPS はビルドも同じホストで行う（ビルドの CPU は数えない・仮定）。
+ * Astro の記事のキャッシュの置き場（ISR のキャッシュのスロットの値。D-103）。Cloudflare は Worker の前の Workers Cache
+ * （経路は vinext の Workers Cache と同じ。asAstro が Worker の前のキャッシュに直す）、それ以外は事業者の既定（Vercel の ISR・
+ * VPS は Node のメモリ・Google Cloud は Hosting の CDN・Netlify の durable cache）。
+ */
+export function astroPageCacheChoice(platform: Platform): string {
+  return platform === 'cloudflare' ? 'workers-cache' : 'default';
+}
+
+/**
+ * Next.js の構成を Astro の形に直す（D-68・D-103・prd/06 §6）。記事（ISR だったルート）はアダプターが閲覧のときに描き、
+ * 事業者の置き場にキャッシュして投稿・編集のときに消す（経路は Next.js の ISR と同じ）。ログインの要るページ（SSR）は毎回描く。
+ * Cloudflare は Worker の前の Workers Cache: ヒットは Worker を動かさない（CPU なし）が、静的アセットも含めてすべてのリクエストを
+ * Workers の料金で数える。消した後の閲覧は Worker が描くのを待つ（同じリクエストの中。CPU は描画の全部）。
+ * 記事のためのビルドし直しは無い（ビルドはデプロイのときだけで数えない）。
  */
 function asAstro(
   arch: ArchitectureInput,
   platform: Platform,
-  plan: string,
 ): ArchitectureInput {
-  const routes = { ...arch.routes };
-  delete routes['document-isr'];
-  delete routes['isr-revalidate'];
   const label: Record<string, string> = {
     worker: 'Worker（Astro）',
     fn: 'Vercel Functions（Astro）',
     vps: 'VPS（nginx + Astro の Node + MySQL）',
   };
-  const nodes = arch.nodes.map((n): ArchNodeIn =>
-    label[n.id] ? { ...n, label: label[n.id]! } : n,
-  );
-  return withBuild(
-    {
-      ...arch,
-      name: arch.name.replace(' + vinext', '') + '（Astro）',
-      nodes,
-      routes,
-    },
-    platform,
-    plan,
-    'Astro',
-  );
+  const worker = arch.nodes.find((n) => n.id === 'worker');
+  const nodes = arch.nodes.map((n): ArchNodeIn => {
+    const named = label[n.id] ? { ...n, label: label[n.id]! } : n;
+    if (platform === 'cloudflare' && n.id === 'worker')
+      return {
+        ...named,
+        label: 'Worker（Astro・前に Workers Cache）',
+        config: {
+          kind: 'function',
+          // 消した後の閲覧が描き終わるのを待つ（同じリクエストの中で描く。リクエストの件数は閲覧のまま）
+          backgroundClasses: ['isr-revalidate'],
+          // ヒットは Worker の前のキャッシュが返す（CPU なし）
+          cache: { classes: ['document-isr'], hitCpuMs: 0 },
+        },
+        facts: [
+          ...(n.facts ?? []).filter((f) => f !== 'workers-cache'),
+          'astro-route-cache',
+          'workers-cache-front',
+          'workers-cache-purge',
+        ],
+      };
+    // Workers Cache を有効にすると、静的アセットへのリクエストも Workers の料金で課金される（workers-cache-front）
+    if (platform === 'cloudflare' && n.id === 'assets' && worker?.billing)
+      return {
+        ...named,
+        label: 'Workers 静的アセット（Workers Cache で課金）',
+        billing: { ...worker.billing, meters: { requests: 'requests' } },
+      };
+    if (platform === 'vercel' && n.id === 'fn')
+      return { ...named, facts: [...(n.facts ?? []), 'astro-isr'] };
+    if (platform === 'sakura' && n.id === 'vps')
+      return {
+        ...named,
+        facts: [
+          ...(n.facts ?? []).filter((f) => f !== 'next-fs-cache'),
+          'astro-memory-cache',
+        ],
+      };
+    return named;
+  });
+  return {
+    ...arch,
+    name: arch.name.replace(' + vinext', '') + '（Astro）',
+    nodes,
+  };
 }
 
 /**
- * 静的なページのビルドし直しのノード（経路を持たない）を足す（Astro は D-68・Next.js の静的書き出しは D-80）。
+ * 静的なページのビルドし直しのノード（経路を持たない）を足す（Next.js の静的書き出し。D-80。Astro は D-103 で使わなくなった）。
  * Cloudflare は Workers Builds、Vercel はビルドの CPU minute（Pro）・込み（Hobby）。VPS は同じホストでビルドし（CPU は数えない・仮定）、
  * AWS（S3 + CloudFront）・Google Cloud（Firebase Hosting）は手元か CI でビルドする前提で数えない（仮定）。Netlify は stacks/netlify.ts（デプロイの回数）。
  */

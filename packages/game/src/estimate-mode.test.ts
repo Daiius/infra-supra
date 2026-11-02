@@ -3,7 +3,7 @@ import { composeStack, loadPriceBooks, STACK_DEFS } from 'catalog';
 import { estimate } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_REVALIDATE_SEC,
+  defaultRevalidateSec,
   DEFAULT_START_DATE,
   estimateComponents,
   estimateWorkload,
@@ -93,7 +93,8 @@ describe('estimateWorkload', () => {
               settings: {
                 imageKB: 150,
                 variants: 3,
-                revalidateSec: DEFAULT_REVALIDATE_SEC,
+                // ゲームの始めの既定（Astro は記事のキャッシュをオンデマンドで消す。D-103）
+                revalidateSec: defaultRevalidateSec(fw, i, sc),
               },
             }),
             architecture: composeStack(STACK_DEFS[i]!, components, {

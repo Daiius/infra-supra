@@ -598,7 +598,7 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       'Cloudflare: Workers に API を置き、DB は D1（Astro のサーバーから呼ぶ）',
     note:
       'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。Astro のサーバー（マイページの SSR・エンドポイント）は DB を直接読まず、' +
-      'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。記事は今までどおり静的にビルドして今の場所から配る。' +
+      'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。記事は今の事業者で描いてキャッシュする（描き直すときも API を呼ぶ。D-103）。' +
       'ブラウザは今の事業者の Astro だけを呼ぶので CORS の設定は要らない（サーバーどうしの認証は要る）。API を呼ぶたびに Worker のリクエストとして数える。' +
       '今の DB（Supabase・VPS の MySQL）は使わなくなる。Vercel の関数・VPS から外への通信は数えない（Vercel は料金の文書に項目が無く、VPS は転送量が無制限）。Netlify の関数から送る問い合わせは Netlify の転送量で数える。' +
       'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
@@ -635,14 +635,14 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'api',
     platform: 'sakura',
     hosts: ['cloudflare'],
-    // Astro（D-69）: 記事は静的アセット、マイページを描く Worker が VPS の API を呼ぶ
+    // Astro（D-69・D-103）: 記事は Workers Cache、マイページと記事を描く Worker が VPS の API を呼ぶ
     // Next.js の静的書き出し（D-80）: SPA と同じく、ブラウザ（Client Component）が VPS の API を呼ぶ
     frameworks: ['vite-spa', 'astro', 'nextjs-export'],
     link: { via: 'http', as: 'same' },
     label: `さくらの VPS: ${plan.toUpperCase()} に API と MySQL を置く（自前運用）`,
     note:
       `API を さくらの VPS ${plan.toUpperCase()}（東京）の Node に置き、DB は同じ VPS の MySQL。api のサブドメインは Cloudflare の DNS で VPS に直接向ける（プロキシしない DNS だけのレコードで、CDN を通らない）。` +
-      '静的なファイル（SPA のシェル・Astro と Next.js の静的書き出しの記事のページ）・JS・CSS と画像は Cloudflare から配る。Astro のマイページは Worker が描き、その中から VPS の API を呼ぶ。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
+      '静的なファイル（SPA のシェル・Next.js の静的書き出しの記事のページ）・JS・CSS と画像は Cloudflare から配る。Astro のページ（マイページ・キャッシュを描き直す記事）は Worker が描き、その中から VPS の API を呼ぶ。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
       '自前運用の維持の手間と偶発的な障害（1 台構成）が加わる。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要る。' +
       'さくらのアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
     premiseRefs: [
@@ -1301,7 +1301,12 @@ export function applyCrossApi(
       routes['image-write'] = [...cur.write, target];
   } else if (cur && host === 'sakura') {
     // VPS の Astro（D-69）: DB は VPS の中（ノードが無い）ので、DB を読む経路（マイページ・API）の VPS の後に API を足す
-    for (const cls of ['document-ssr', 'api', 'api-content'] as const)
+    for (const cls of [
+      'document-ssr',
+      'isr-revalidate',
+      'api',
+      'api-content',
+    ] as const)
       if (routes[cls]?.includes('vps'))
         routes[cls] = routes[cls]!.flatMap((id) =>
           id === 'vps' ? ['vps', ...cur.api] : [id],
@@ -1354,7 +1359,11 @@ export function applyCrossApi(
       n.config.kind === 'host' && cur.nodes.some((x) => x.id === n.id)
         ? {
             ...n,
-            config: { ...n.config, serverApiClasses: ['document-ssr'] },
+            // 記事のキャッシュを描き直す閲覧（D-103）も Worker から VPS の API を呼ぶ
+            config: {
+              ...n.config,
+              serverApiClasses: ['document-ssr', 'isr-revalidate'],
+            },
           }
         : n.id === 'worker'
           ? {

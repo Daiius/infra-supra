@@ -249,7 +249,9 @@ export function gcpDbNode(opt: string | undefined): ArchNodeIn {
  *   （Cloud Run に直接届く形にし、投稿の大きさを転送に入れない）。
  * - Cloud Run はコンテナのサービス（estimator の container）。アクティブな時間・待機（最小インスタンス）・リクエストを数える。
  * - 画像の原本は Cloud Storage。配信は Hosting の CDN の後ろの Cloud Run が返す（変換するなら next/image）。
- * - Astro・静的書き出しの記事の更新は CI でビルドして Hosting にデプロイする前提で、ビルドの費用は数えない（AWS と同じ仮定）。
+ * - 静的書き出しの記事の更新は CI でビルドして Hosting にデプロイする前提で、ビルドの費用は数えない（AWS と同じ仮定）。
+ * - Astro の記事は Cloud Run の Node が描き、Cache-Control（public・s-maxage）で Hosting の CDN にキャッシュさせる（D-103）。
+ *   CDN の外れは Node が描き直す（経路は Next.js の ISR と同じ形で数える）。
  */
 export function composeGcp(
   choices: Choices,
@@ -259,7 +261,8 @@ export function composeGcp(
   const spa = browserCallsApi(opts.framework);
   const nextExport = opts.framework === 'nextjs-export';
   const astro = opts.framework === 'astro';
-  const isr = !spa && !astro && choices.isrCache !== 'none';
+  // Astro の記事も Hosting の CDN（s-maxage）でキャッシュする（D-103。消せないので期限で取り直す）
+  const isr = !spa && (astro || choices.isrCache !== 'none');
   const optimize = choices.images !== 'none' && choices.images !== 'resize';
   const cachedApi = spa && opts.apiCache === 'cdn';
   const prerender = spa && opts.prerender;
@@ -327,7 +330,7 @@ export function composeGcp(
         'request-billing',
         'idle-timeout',
         ...(minInstances > 0 ? ['min-instances'] : []),
-        ...(isr ? ['next-local-cache', 'cpu-outside-requests'] : []),
+        ...(isr && !astro ? ['next-local-cache', 'cpu-outside-requests'] : []),
         ...(optimize && !spa && !astro ? ['next-image'] : []),
       ],
       billing: bill('cloud-run', {

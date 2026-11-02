@@ -73,10 +73,10 @@ describe('pageWireframes（今の計算のモデルどおり）', () => {
     expect(s.personal).toMatchObject({ mine: 'ssr' });
   });
 
-  it('Astro: 記事はビルドで静的・個人は SSR・コメントはアイランド', () => {
+  it('Astro: 記事は閲覧時に SSR + キャッシュ（投稿で消す。D-103）・個人は SSR・コメントはアイランド', () => {
     const s = sources(sc, 'astro');
     expect(s.article).toMatchObject({
-      body: 'build',
+      body: 'cached',
       comments: 'island',
       likes: 'island',
       login: 'island',
@@ -100,7 +100,7 @@ describe('pageWireframes（今の計算のモデルどおり）', () => {
       'isr',
     );
     expect(sources(sc, 'astro', COMMENTS_IN_PAGE).article!.comments).toBe(
-      'build',
+      'cached',
     );
     expect(sources(sc, 'astro', COMMENTS_IN_BROWSER).article!.comments).toBe(
       'island',

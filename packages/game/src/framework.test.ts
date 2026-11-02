@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   applyActions,
   checkAction,
+  defaultRevalidateSec,
+  EFFORT,
   hiddenSettings,
+  ON_DEMAND_REVALIDATE,
+  revalidateSettingOf,
   componentPreview,
   componentSlots,
   DEFAULT_START_DATE,
@@ -245,43 +249,78 @@ describe('Astro（D-68）', () => {
     expect(stackName(CF_PAID, 'astro', false)).toBe('Cloudflare Paid');
   });
 
-  it('revalidateSec は「ビルドの間隔」として出し、ISR の間隔・API のキャッシュの期間は出さない（受託では出さない）', () => {
+  it('revalidateSec は「記事のキャッシュ」として出し、ISR の間隔・API のキャッシュの期間・ビルドの間隔は出さない（受託では出さない。D-103）', () => {
     const s = astro();
     expect(hiddenSettings(s)).toEqual(
-      expect.arrayContaining(['isr', 'apiCacheTtl']),
+      expect.arrayContaining(['isr', 'apiCacheTtl', 'buildInterval']),
     );
-    expect(hiddenSettings(s)).not.toContain('buildInterval');
+    expect(hiddenSettings(s)).not.toContain('pageCache');
+    expect(revalidateSettingOf('astro')).toBe('pageCache');
     expect(checkAction(s, { type: 'set', key: 'isr', value: 3600 }).ok).toBe(
       false,
     );
     expect(
       checkAction(s, { type: 'set', key: 'buildInterval', value: 3600 }).ok,
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      checkAction(s, { type: 'set', key: 'pageCache', value: 3600 }),
+    ).toEqual({ ok: true, cost: EFFORT.setting.isr });
     expect(hiddenSettings(playMonth(newGame(1, 42, article)))).toContain(
-      'buildInterval',
+      'pageCache',
     );
-    expect(hiddenSettings(astro(CF_PAID, contract))).toContain('buildInterval');
+    expect(hiddenSettings(astro(CF_PAID, contract))).toContain('pageCache');
     expect(setupRevalidateOptions(article, 'astro').length).toBe(5);
     expect(setupRevalidateOptions(contract, 'astro')).toEqual([]);
   });
 
-  it('ビルドの間隔を延ばすと鮮度が下がる（理由は「ビルドの間隔」）', () => {
+  it('始めの既定は「オンデマンド（投稿・編集で消す）」。消せない Google Cloud の Hosting の CDN では 5 分（D-103）', () => {
+    const GCP = STACKS.findIndex((x) => x.id === 'gcp-cloud-run');
+    expect(astro().settings.revalidateSec).toBe(ON_DEMAND_REVALIDATE);
+    expect(astro(VERCEL_PRO).settings.revalidateSec).toBe(ON_DEMAND_REVALIDATE);
+    expect(astro(GCP).settings.revalidateSec).toBe(300);
+    expect(defaultRevalidateSec('nextjs', CF_PAID)).toBe(300);
+    // Google Cloud でオンデマンドにすると、消せないので届かない（理由は Hosting の CDN）
+    let g = applyActions(astro(GCP), [
+      { type: 'set', key: 'pageCache', value: ON_DEMAND_REVALIDATE },
+    ]);
+    g = playMonth(g);
+    const r = g.history.at(-1)!;
+    expect(r.satisfaction.reasons.freshness).toContain('Hosting の CDN');
+  });
+
+  it('記事のキャッシュの期限を延ばすと鮮度が下がる（理由は「記事のキャッシュの期限」）', () => {
     let s = applyActions(astro(), [
-      { type: 'set', key: 'buildInterval', value: 21600 },
+      { type: 'set', key: 'pageCache', value: 21600 },
     ]);
     s = playMonth(s);
     const r = s.history[s.history.length - 1]!;
     expect(r.satisfaction.stages.freshness).toBe('bad');
-    expect(r.satisfaction.reasons.freshness).toContain('ビルドの間隔');
+    expect(r.satisfaction.reasons.freshness).toContain(
+      '記事のキャッシュの期限',
+    );
   });
 
-  it('Vercel Pro ではビルドの時間が請求に出る。即時反映の要件は記事の更新ごとのビルドで満たす（仮定）', () => {
+  it('Vercel Pro は記事を ISR でキャッシュする（ビルドの時間は請求に出ない）。即時反映の要件は記事のキャッシュの置き場で決まる', () => {
     const s = astro(VERCEL_PRO);
     const ids = s.history[0]!.lines.map((l) => l.meterId);
-    expect(ids).toContain('build-cpu-minutes');
-    expect(requirementStatus(1, {}, 'on-demand-isr', 'astro')[0]?.ok).toBe(
-      true,
-    );
+    expect(ids).not.toContain('build-cpu-minutes');
+    expect(ids).toContain('isr-writes');
+    for (const stack of [CF_PAID, VERCEL_PRO])
+      expect(
+        requirementStatus(stack, {}, 'on-demand-isr', 'astro').find((x) =>
+          x.label.startsWith('記事のキャッシュ'),
+        )?.ok,
+      ).toBe(true);
+    const GCP = STACKS.findIndex((x) => x.id === 'gcp-cloud-run');
+    expect(
+      requirementStatus(GCP, {}, 'on-demand-isr', 'astro')[0],
+    ).toMatchObject({ ok: false, current: true });
+    // Cloudflare の既定の ISR のキャッシュ（KV）は Next.js の部品なので、Astro の判定に出さない
+    expect(
+      requirementStatus(CF_PAID, {}, 'on-demand-isr', 'astro').some((x) =>
+        x.label.includes('KV'),
+      ),
+    ).toBe(false);
   });
 
   it('初回表示の軽さ（ゲーム上の仮定）は速さの重さを 1 つ減らす（0 より下げない）', () => {

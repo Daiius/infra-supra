@@ -917,6 +917,7 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
   - Next.js: `output: 'standalone'` のコンテナを Cloud Run（1 vCPU・512 MiB・同時 80。大きさは仮定）。ISR は Hosting の CDN（`s-maxage`）とインスタンスごとのローカルのキャッシュ（**共有しない**。部品の文と前提に出す）。
     オンデマンドの再検証は CDN に届かない（デプロイでしか消えない）ので `onDemandIsr: false`。共有のキャッシュ（自作の cacheHandler + Memorystore・Cloud Storage）は料金・接続を確かめていないので部品にしていない。
   - SPA・静的書き出し・Astro: Hosting から静的に配り、API（Astro はマイページも。@astrojs/node）を Cloud Run。ビルドし直しは CI でビルドして deploy する前提で数えない（AWS と同じ仮定）。
+    Astro の記事は D-103 で、Cloud Run の Node が描いて Hosting の CDN に `s-maxage` でキャッシュする形にした（Next.js の ISR と同じ経路。消せないので期限で取り直す・始めの既定は 5 分）。
 - **estimator**: 新しいノードの種類 `container`（Cloud Run 型。prd/04 §3.3.1）と資源 `idle-cpu-hours`・`idle-memory-gb-hours`。アクティブな時間は
   `S × max(1 − e^(−x), x / 同時実行, CPU 秒 / (S × vCPU))`（x = 同時に処理している件数の平均）。閲覧が薄いと重ならず 1 件ずつインスタンスの時間が数えられ、濃いと同時実行でまとまる。
   最小インスタンス m は `max(0, m × 730 − アクティブな時間)` を待機で課金する。冷えた起動の割合は `m = 0` のとき `e^(−λ × 900 秒)`。D-89 で、到着率・アクティブな時間・待機を 1 日の時間帯 × 平日 / 休日の 48 区間で出して積む形にした（`hourlyProfile`。prd/04 §3.3.1）。
@@ -994,7 +995,8 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
     - **オンデマンドの再検証**: `revalidatePath` と一緒に Free の purge の API で、そのページを prefix（HTML と RSC の変種をまとめて）で 1 回消す前提。即時反映の要件を満たし、鮮度は下げない。
       消す回数はノードの `invalidationPathsPerPage: 1` で使用量（`invalidation-paths`）に出す（課金なし）。記事コミュニティの更新は月 300 回、コメントを記事のページに含めても約 1.5 万回で、
       prefix の上限（1 分 5 回・1 回 100 件 = 月 約 2,000 万件）に遠い。
-  - SPA: シェル（`document-static`）を CDN が返す。Astro・静的書き出し: 記事の静的なページを CDN が返す（ビルドの後に変わったページだけ消す前提で、ヒット率は静的と同じ 1）。鮮度は変わらない。
+  - SPA: シェル（`document-static`）を CDN が返す。静的書き出し: 記事の静的なページを CDN が返す（ビルドの後に変わったページだけ消す前提で、ヒット率は静的と同じ 1）。鮮度は変わらない。
+    Astro（D-103）: 記事は Node のメモリ（`memoryCache()`）にキャッシュし、「HTML も」では Next.js の ISR と同じく CDN の期間つきのキャッシュ + 投稿・編集のときの Free の purge で数える。
   - AWS の「自前の CloudFront（ISR のページも）」も同じ 2 倍の読みで判定する（時間の再検証）。オンデマンドで CloudFront を消さない形は、今までどおり 1 段下げて即時反映も満たさない。
 - アカウントの手間は D-52 のとおり（Cloudflare のアカウントが増え、差すときに 1・維持 0.5 / 月）。切り替えの手間は D-31 の 2 のまま（パージの連携の作り込みの手間は分けていない）。
 - `CROSS_PAIRS` には載せなかった。前段の CDN は土台（さくらの VPS）のスロットの部品で、課金先のアカウントだけが Cloudflare（`accountsOf` で数える）。

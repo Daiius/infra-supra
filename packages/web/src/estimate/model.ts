@@ -27,7 +27,7 @@ import {
   commitmentTerms,
   PAYMENT_LABEL,
   COMMENTS_IN_BROWSER,
-  DEFAULT_REVALIDATE_SEC,
+  defaultRevalidateSec,
   estimateComponents,
   estimateWorkload,
   frameworksOf,
@@ -160,7 +160,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     settings.revalidate?.options.some((o) => o.value === raw.revalidateSec) ===
     true
       ? raw.revalidateSec!
-      : DEFAULT_REVALIDATE_SEC;
+      : defaultRevalidateSec(framework, stackIndex, scenario);
   const comments =
     settings.comments?.options.some((o) => o.value === raw.comments) === true
       ? raw.comments!

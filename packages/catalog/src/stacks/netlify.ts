@@ -202,7 +202,8 @@ export function composeNetlify(
   const spa = browserCallsApi(opts.framework);
   const nextExport = opts.framework === 'nextjs-export';
   const astro = opts.framework === 'astro';
-  const isr = !spa && !astro && choices.isrCache !== 'none';
+  // Astro の記事も CDN（durable cache）にキャッシュし、投稿・編集でタグを消す（D-103）
+  const isr = !spa && (astro || choices.isrCache !== 'none');
   const optimize = choices.images !== 'none' && choices.images !== 'resize';
   const cachedApi = spa && opts.apiCache === 'cdn';
   const prerender = spa && opts.prerender;

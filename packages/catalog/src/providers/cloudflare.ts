@@ -125,6 +125,30 @@ const WORKERS_FACTS = [
       'Astro のアダプターで描くページ（SSR）は DB を直接読まず、外の API を fetch で呼ぶ。リクエストのたびに描くページの fetch は実行時に走り、応答を待ってページを描く（「If SSR mode is enabled, any fetch calls will be executed at runtime」）。事業者をまたぐ往復の遅延はこのゲームでは計算しない',
     sourceIds: ['astroDataFetching', 'workersCustomDomains'],
   },
+  // Astro の記事を閲覧のときに描き、Worker の前（Workers Cache）にキャッシュする形（D-103。2026-11-03 に原文で確認）
+  {
+    id: 'astro-route-cache',
+    premise:
+      'Astro の route caching（astro@7.0.0）の cacheCloudflare() は Cloudflare-CDN-Cache-Control と Cache-Tag を付け、アダプター（@astrojs/cloudflare@14.0.0 以降）が Workers Cache を既定の設定で有効にする。ヒットは Worker を動かさずに返す。CDN の provider は実験の段階で、手で有効にする',
+    sourceIds: ['astroCaching', 'workersCacheFront'],
+  },
+  {
+    id: 'workers-cache-purge',
+    premise:
+      'Workers Cache は Worker の中から ctx.cache.purge でタグ・パスの prefix・すべてを消せ、Instant Purge の仕組みでゾーンの purge と同じ保証で全体に伝わる。消す呼び出しはアカウント・ゾーンのプランによらず Free の制限（タグ・prefix は 1 分 5 回・貯めて 25 回）。消した後の最初の閲覧は Worker が描き終わるのを待つので、その閲覧の CPU に描画の全部が乗る（このモデルの読み）',
+    interpretation: {
+      adopted:
+        'Workers の Free でも使えるとみなす（料金のページの Free・Paid の表の注に Workers Cache のリクエストの数え方があり、purge の制限は「常に Free の制限」と書く）',
+      rejected: [
+        {
+          reading: 'Workers Cache は Paid だけ',
+          reason:
+            'Workers Cache・purge のページにプランの制限の記載が無く、料金の注は両方のプランの表に付いている',
+        },
+      ],
+    },
+    sourceIds: ['workersCachePurge', 'workersPricingCache'],
+  },
   {
     id: 'worker-outbound',
     premise:
@@ -377,6 +401,19 @@ export const cloudflare: PriceBookInput = {
     astroDataFetching: {
       url: 'https://docs.astro.build/en/guides/data-fetching/',
       retrievedAt: '2026-11-02',
+    },
+    // Astro の記事を Workers Cache でキャッシュし、投稿・編集で消す形（2026-11-03 に原文で確認。D-103）
+    astroCaching: {
+      url: 'https://docs.astro.build/en/guides/caching/',
+      retrievedAt: '2026-11-03',
+    },
+    workersCachePurge: {
+      url: 'https://developers.cloudflare.com/workers/cache/purge/',
+      retrievedAt: '2026-11-03',
+    },
+    workersPricingCache: {
+      url: 'https://developers.cloudflare.com/workers/platform/pricing/',
+      retrievedAt: '2026-11-03',
     },
     workersPricingOutbound: {
       url: 'https://developers.cloudflare.com/workers/platform/pricing/',

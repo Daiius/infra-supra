@@ -107,9 +107,9 @@ describe('ゲームモードの画面', () => {
     expect(screen.queryByRole('button', { name: '次の月へ' })).toBeNull();
   });
 
-  it('W-05 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99）', () => {
+  it('W-05 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', () => {
     const detail =
-      '個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない';
+      '記事のページ（ISR の閲覧と再生成・CPU 17 ms）・個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える';
     renderApp();
     startGame({
       scenario: ARTICLE,
@@ -121,7 +121,7 @@ describe('ゲームモードの画面', () => {
     advance(1);
     // 月の報告の前提（SSR の CPU は開発が進むと重くなるので、数値は見ない）
     expect(document.body.textContent).toMatch(
-      /個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない/,
+      /記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える/,
     );
   });
 
@@ -207,15 +207,18 @@ describe('ゲームモードの画面', () => {
     );
     pick(/^ブラウザで読み込む/);
 
+    // Astro の記事は閲覧時に SSR + キャッシュ（投稿で消す。D-103）
     pick(/^Astro/);
-    expect(tag('記事のページ', '本文')).toBe('ビルドで静的');
+    expect(tag('記事のページ', '本文')).toBe(
+      '閲覧時に SSR + キャッシュ（投稿で消す）',
+    );
     expect(tag('記事のページ', 'いいね')).toBe('アイランドが API で取る');
     expect(tag('個人向けのページ', '自分の下書き・記事の一覧')).toBe(
       '閲覧ごとに SSR',
     );
     pick(/^記事のページに含める/);
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
-      'ビルドで静的',
+      '閲覧時に SSR + キャッシュ（投稿で消す）',
     );
 
     pick(/^Next\.js（静的書き出し）/);

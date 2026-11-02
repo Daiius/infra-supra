@@ -63,7 +63,7 @@ import {
   COMMENTS_IN_BROWSER,
   offeredBaselines,
   stackOffered,
-  DEFAULT_REVALIDATE_SEC,
+  defaultRevalidateSec,
   invalidationNote,
   onDemandInvalidationEstimate,
   settingFlavor,
@@ -274,8 +274,18 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     setParts(validSetupChoices(sc, st, fw, parts));
   };
   const problem = setupProblem(scenario, stack, framework, parts);
-  // ISR の再検証（D-49。Next.js のときだけ出る。既定は 5 分）
-  const [revalidateSec, setRevalidateSec] = useState(DEFAULT_REVALIDATE_SEC);
+  // ISR の再検証（D-49）・Astro の記事のキャッシュ（D-103）など。選ぶまでは、フレームワークと構成の既定
+  // （Astro は消せる置き場ならオンデマンド、それ以外は 5 分）
+  const [revalidateChosen, setRevalidateSec] = useState<number | undefined>(
+    undefined,
+  );
+  const revalidateSec =
+    revalidateChosen !== undefined &&
+    setupRevalidateOptions(scenario, framework).some(
+      (o) => o.value === revalidateChosen,
+    )
+      ? revalidateChosen
+      : defaultRevalidateSec(framework, stack, scenario);
   // コメントの描き方（D-82。記事のページがあり、コメントのあるシナリオだけ。既定はブラウザで読み込む）
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
   const commentsChoosable = setupCommentOptions(scenario, framework).length > 0;
@@ -1423,7 +1433,9 @@ function Actions({
                   <Meta
                     items={[
                       // 時間 → オンデマンドだけ実装の手間がかかる（D-49）
-                      key === 'isr' || key === 'buildInterval'
+                      key === 'isr' ||
+                      key === 'buildInterval' ||
+                      key === 'pageCache'
                         ? `手間 ${def.effort}（オンデマンドへは ${EFFORT.onDemandSwitch}）`
                         : `手間 ${def.effort}`,
                       '来月から',
