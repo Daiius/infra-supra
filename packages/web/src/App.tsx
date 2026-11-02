@@ -1289,6 +1289,7 @@ function Actions({
                   )}
                 </span>
                 <select
+                  aria-label={def.label}
                   className="select select-bordered select-sm w-full"
                   disabled={
                     settingInactiveReason(draft, key) !== undefined &&
@@ -1631,6 +1632,7 @@ function ComponentsSection({
                   <Meta items={componentEffortLabel(x.slot, state, chosen)} />
                 </span>
                 <select
+                  aria-label={x.label}
                   className="select select-bordered select-sm w-full"
                   value={chosen}
                   onChange={(e) => {

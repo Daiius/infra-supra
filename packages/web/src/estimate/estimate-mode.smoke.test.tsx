@@ -95,11 +95,8 @@ describe('見積モードの画面', () => {
   });
 
   it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', () => {
-    // 部品の欄は見出しの横に説明（ⓘ のボタン）があり select の名前にならないので、欄の見出しの文字で探す
     const partSelect = (label: string) =>
-      [...card('条件').querySelectorAll('label')]
-        .find((l) => l.firstElementChild?.textContent?.startsWith(label))
-        ?.querySelector('select') ?? null;
+      screen.queryByRole<HTMLSelectElement>('combobox', { name: label });
     window.history.replaceState(
       null,
       '',
@@ -117,5 +114,21 @@ describe('見積モードの画面', () => {
     });
     expectEstimate();
     expect(partSelect('DB のバックアップ')?.value).toBe('default');
+  });
+
+  it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=business&s=vercel-supabase-pro',
+    );
+    renderApp();
+    expectEstimate();
+    // 部品の欄（DB のバックアップ）と、ⓘ のある条件の欄（構成）を、見出しの文字そのもので取れる
+    const backup = screen.getByRole('combobox', { name: 'DB のバックアップ' });
+    expect(backup.tagName).toBe('SELECT');
+    expect(screen.getByRole('combobox', { name: '構成' }).tagName).toBe(
+      'SELECT',
+    );
   });
 });
