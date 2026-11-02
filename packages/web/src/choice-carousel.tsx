@@ -1,7 +1,32 @@
 // 選択のカルーセル（D-102 のフレームワークの欄から切り出した。D-105 でインフラの構成にも使う）。
 // 名前とロゴのタブ（ラジオ）で選び、選んだものを中央の大きいカードに出す。前後のボタン・タブの ←/→・カードを押して切り替える。
 // 前後のカードも同じ中身で両脇に見える（daisyUI の carousel）。選んでいる＝中央のカード（「これにする」のボタンは置かない）。
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+// groups を渡すと、タブを事業者などの組にまとめ、組の中の選択肢を小さいチップで出す（インフラの構成。D-105 の補足）。
+import {
+  useEffect,
+  useId,
+  useRef,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
+
+/** タブの組（事業者など）。chip は組の中の選択肢の短い文字（「Free」「2GB」）。 */
+export type ChoiceGroup<T extends string> = {
+  key: string;
+  /** 組の名前（文字で出す）。 */
+  label: string;
+  /** 組のロゴ（装飾）。 */
+  mark: ReactNode;
+  items: readonly T[];
+  chip: (id: T) => ReactNode;
+};
+
+const ARROW: Readonly<Partial<Record<string, number>>> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+};
 
 export function ChoiceCarousel<T extends string>({
   heading,
@@ -14,6 +39,7 @@ export function ChoiceCarousel<T extends string>({
   tab,
   describedBy,
   renderCard,
+  groups,
 }: {
   heading: ReactNode;
   /** タブのラジオの name。 */
@@ -31,8 +57,14 @@ export function ChoiceCarousel<T extends string>({
   describedBy?: (id: T) => boolean;
   /** カード。idPrefix はタブの aria-describedby に結ぶ要素の id の頭。 */
   renderCard: (id: T, o: { selected: boolean; idPrefix: string }) => ReactNode;
+  /**
+   * タブの組（並びを flat にしたものが items と同じ順）。1 つだけの組は組の名前のタブ、2 つ以上の組は組の名前の後ろに
+   * 選択肢のチップ（chip。join の btn-xs）を並べる。ラジオの名前は label（チップの短い文字でなく、選択肢の名前で読む）。
+   */
+  groups?: readonly ChoiceGroup<T>[] | undefined;
 }) {
   const track = useRef<HTMLDivElement>(null);
+  const inputs = useRef<Partial<Record<string, HTMLInputElement | null>>>({});
   const els = useRef<Partial<Record<string, HTMLDivElement | null>>>({});
   // 選んだカードを中央へ。scrollLeft なので動きは CSS に任せる（daisyUI の carousel は reduced-motion では滑らかにしない）
   useEffect(() => {
@@ -53,6 +85,36 @@ export function ChoiceCarousel<T extends string>({
   }
   const i = Math.max(0, items.indexOf(value));
   const at = (d: number) => items[(i + d + items.length) % items.length]!;
+  // ←/→（↑/↓）で全部の選択肢を items の順に移る（組をまたいでも同じ。ブラウザのラジオの動きを、組にまとめても崩れないよう自前で持つ）
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const d = ARROW[e.key];
+    if (!d || !(e.target instanceof HTMLInputElement)) return;
+    e.preventDefault();
+    const next = at(d);
+    onChange(next);
+    inputs.current[next]?.focus();
+  };
+  const radio = (id: T, ariaLabel?: string) => (
+    <input
+      ref={(el) => {
+        inputs.current[id] = el;
+      }}
+      type="radio"
+      name={name}
+      className="sr-only"
+      aria-label={ariaLabel}
+      // 要約だけを説明にする（カード全体は長いので、カードは下に領域として読める）
+      aria-describedby={describedBy?.(id) ? `${headingId}-${id}` : undefined}
+      checked={value === id}
+      onChange={() => onChange(id)}
+    />
+  );
+  const focusRing =
+    'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-primary';
+  const chipClass = (id: T) =>
+    `btn btn-xs gap-1 whitespace-nowrap ${focusRing} ${
+      value === id ? 'btn-primary' : 'btn-ghost bg-base-100'
+    }`;
   return (
     <div className="space-y-2">
       <h3 id={headingId} className="font-bold">
@@ -67,33 +129,77 @@ export function ChoiceCarousel<T extends string>({
         >
           ‹
         </button>
-        {/* 名前とロゴのタブ。ラジオなので ←/→ で選べる。狭い画面では横にスクロールする */}
-        <div
-          role="radiogroup"
-          aria-labelledby={headingId}
-          className="tabs-box tabs min-w-0 flex-1 flex-nowrap overflow-x-auto tabs-sm"
-        >
-          {items.map((id) => (
-            // ロゴを添えるので input でなく label をタブにする（daisyUI の label:has(:checked)）。名前は文字で出す
-            <label
-              key={id}
-              className="tab shrink-0 gap-1 whitespace-nowrap has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary"
-            >
-              <input
-                type="radio"
-                name={name}
-                className="sr-only"
-                // 要約だけを説明にする（カード全体は長いので、カードは下に領域として読める）
-                aria-describedby={
-                  describedBy?.(id) ? `${headingId}-${id}` : undefined
-                }
-                checked={value === id}
-                onChange={() => onChange(id)}
-              />
-              {tab(id)}
-            </label>
-          ))}
-        </div>
+        {groups ? (
+          // 組ごとの枠（ロゴと名前）に、選択肢のチップを並べる。狭い画面では枠ごと折り返す（横にスクロールしない）
+          <div
+            role="radiogroup"
+            aria-labelledby={headingId}
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-box bg-base-200 p-1.5"
+            onKeyDown={onKeyDown}
+          >
+            {groups.map((g) => {
+              const on = g.items.includes(value);
+              const box = `inline-flex items-center gap-1 rounded-field border px-1 py-0.5 ${
+                on ? 'border-primary' : 'border-base-300'
+              }`;
+              const only = g.items.length === 1 ? g.items[0] : undefined;
+              if (only !== undefined)
+                return (
+                  <div key={g.key} data-tab-group={g.key} className={box}>
+                    <label className={chipClass(only)}>
+                      {radio(only, label(only))}
+                      {g.mark}
+                      {g.label}
+                    </label>
+                  </div>
+                );
+              return (
+                <div
+                  key={g.key}
+                  role="group"
+                  aria-label={g.label}
+                  data-tab-group={g.key}
+                  className={box}
+                >
+                  <span
+                    aria-hidden
+                    className="inline-flex items-center gap-1 px-1 text-xs font-semibold whitespace-nowrap"
+                  >
+                    {g.mark}
+                    {g.label}
+                  </span>
+                  <div className="join">
+                    {g.items.map((id) => (
+                      <label key={id} className={`join-item ${chipClass(id)}`}>
+                        {radio(id, label(id))}
+                        {g.chip(id)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          // 名前とロゴのタブ。ラジオなので ←/→ で選べる。狭い画面では横にスクロールする
+          <div
+            role="radiogroup"
+            aria-labelledby={headingId}
+            className="tabs-box tabs min-w-0 flex-1 flex-nowrap overflow-x-auto tabs-sm"
+            onKeyDown={onKeyDown}
+          >
+            {items.map((id) => (
+              // ロゴを添えるので input でなく label をタブにする（daisyUI の label:has(:checked)）。名前は文字で出す
+              <label
+                key={id}
+                className={`tab shrink-0 gap-1 whitespace-nowrap ${focusRing}`}
+              >
+                {radio(id)}
+                {tab(id)}
+              </label>
+            ))}
+          </div>
+        )}
         <button
           type="button"
           className="btn btn-circle shrink-0 btn-ghost btn-sm"

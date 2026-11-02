@@ -159,9 +159,11 @@ describe('ゲームモードの画面', () => {
     };
     pick(/^記事コミュニティ/);
     pick(/^Next\.js（App Router）/);
-    // ロゴ（D-102）: simple-icons にあるものは SVG、無いもの（AWS・さくら）は頭文字のバッジ
-    const labelOf = (name: RegExp) =>
-      screen.getByRole('radio', { name }).closest('label')!;
+    // ロゴ（D-102）: simple-icons にあるものは SVG、無いもの（AWS・さくら）は頭文字のバッジ。構成は事業者の組の頭に出す（D-105 の補足）
+    const labelOf = (name: RegExp) => {
+      const r = screen.getByRole('radio', { name });
+      return (r.closest('[data-tab-group]') ?? r.closest('label'))!;
+    };
     expect(
       labelOf(/^Next\.js（App Router）/).querySelector(
         'svg[data-brand="nextjs"]',
@@ -489,7 +491,7 @@ describe('ゲームモードの画面', () => {
     expect(stackRadios().length).toBeGreaterThan(5);
     // タブで選ぶ
     fireEvent.click(screen.getByRole('radio', { name: /^Vercel Pro/ }));
-    expect(checked().closest('label')!.textContent).toMatch(/^Vercel Pro/);
+    expect(checked().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
     expect(current().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
     // 選んでいるカードに構成図（要約つきの図・凡例・読み上げ用の一覧）。Vercel と Supabase の枠に分かれる
     const diagram = within(current()).getByRole('img', { name: /^構成図: / });
@@ -507,9 +509,9 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(isr);
     expect(isr.getAttribute('aria-pressed')).toBe('true');
     // 前後のボタンで選ぶ（フレームワークの欄の前後のボタンとは名前で分かれる）
-    const before = checked().closest('label')!.textContent;
+    const before = checked().getAttribute('aria-label');
     fireEvent.click(screen.getByRole('button', { name: /^次の構成/ }));
-    expect(checked().closest('label')!.textContent).not.toBe(before);
+    expect(checked().getAttribute('aria-label')).not.toBe(before);
     fireEvent.click(screen.getByRole('button', { name: /^前の構成/ }));
     // 選んでいないカード: ⓘ・凡例を押しても選ばれない
     const other = document.querySelector<HTMLElement>(
@@ -517,7 +519,7 @@ describe('ゲームモードの画面', () => {
     )!;
     const otherName = other.getAttribute('aria-label')!.replace(/ の構成$/, '');
     const otherRadio = () =>
-      stackRadios().find((r) => r.closest('label')!.textContent === otherName)!;
+      stackRadios().find((r) => r.getAttribute('aria-label') === otherName)!;
     expect(otherRadio().checked).toBe(false);
     fireEvent.click(within(other).getByRole('button', { name: /説明$/ }));
     expect(screen.queryByRole('tooltip')).not.toBeNull();
@@ -534,6 +536,73 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(other.querySelector('p')!);
     expect(otherRadio().checked).toBe(true);
     expect(current()).toBe(other);
+  });
+
+  it('W-21 始める画面のインフラの構成のタブは事業者ごとにまとまり、←/→ は組をまたいで全部の構成を順に移る（D-105 の補足）', () => {
+    renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
+    );
+    const group = screen.getByRole('radiogroup', { name: 'インフラの構成' });
+    // 組ごとに、組の名前とプランのチップ（並びは構成の一覧の順）。1 つだけの事業者は事業者の名前だけ
+    // ロゴ（aria-hidden）を除いた文字
+    const text = (el: Element) => {
+      const c = el.cloneNode(true) as Element;
+      c.querySelectorAll('[aria-hidden]').forEach((h) => h.remove());
+      return c.textContent;
+    };
+    const tabs = [
+      ...group.querySelectorAll<HTMLElement>('[data-tab-group]'),
+    ].map((g) => {
+      const chips = [...g.querySelectorAll('label')].map(text);
+      return g.hasAttribute('aria-label')
+        ? [g.getAttribute('aria-label'), chips]
+        : [chips.join(), []];
+    });
+    expect(tabs).toEqual([
+      ['Cloudflare', ['Free', 'Paid']],
+      ['Vercel', ['Hobby', 'Pro']],
+      ['さくらインターネット', ['2GB', '4GB']],
+      ['AWS', []],
+      ['Google Cloud', []],
+    ]);
+    // 組の中の 2 つ以上のチップは名前つきの組で、ラジオは構成の名前で読める
+    expect(
+      within(screen.getByRole('group', { name: 'Vercel' }))
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('aria-label')),
+    ).toEqual(['Vercel Hobby + Supabase Free', 'Vercel Pro + Supabase Pro']);
+    const radios = within(group).getAllByRole<HTMLInputElement>('radio');
+    const order = radios.map((r) => r.getAttribute('aria-label'));
+    const checked = () =>
+      radios.find((r) => r.checked)?.getAttribute('aria-label');
+    const press = (key: string) => {
+      fireEvent.keyDown(document.activeElement!, { key });
+      // 選んだ構成にフォーカスが移り、中央のカードも替わる
+      expect(document.activeElement?.getAttribute('aria-label')).toBe(
+        checked(),
+      );
+      expect(
+        document
+          .querySelector('section[data-stack][aria-current="true"]')!
+          .getAttribute('aria-label'),
+      ).toBe(`${checked()} の構成`);
+    };
+    // Cloudflare Paid → → は組をまたいで Vercel Hobby、← で戻る
+    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Paid/ }));
+    radios[1]!.focus();
+    press('ArrowRight');
+    expect(checked()).toBe('Vercel Hobby + Supabase Free');
+    press('ArrowLeft');
+    expect(checked()).toBe(order[1]);
+    // 全部を → で順に移り、最後から最初に戻る
+    const seen = [checked()];
+    for (let i = 1; i < order.length; i++) {
+      press('ArrowRight');
+      seen.push(checked());
+    }
+    expect(seen).toEqual([...order.slice(1), order[0]]);
   });
 
   it('W-04 保存して読み込み直すと同じ月から再開する', () => {

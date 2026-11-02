@@ -1,6 +1,7 @@
 // 始める画面のインフラの構成（D-105）。フレームワークの欄（D-102）と同じカルーセルで、カードに構成図を出す
 // （選んだフレームワークと部品で描く。どんなアプリをどこに載せるのかを図で分かるように）。
 // どれにも推奨・既定の印を付けない（D-41）。並びは今までの一覧の順（隠した構成は出さない。D-100）。
+// タブは土台の事業者（課金のアカウント）ごとの枠にまとめ、プランをチップで出す（1 つだけの事業者は事業者の名前だけ。D-105 の補足）。
 import {
   membersOf,
   pageWireframes,
@@ -15,8 +16,8 @@ import {
   type Scenario,
 } from 'game';
 import { useMemo } from 'react';
-import { PlatformMarks } from './brand-logos.tsx';
-import { ChoiceCarousel } from './choice-carousel.tsx';
+import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
+import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
 import { EffortBar } from './scenario-briefing.tsx';
@@ -133,6 +134,49 @@ function StackCard({
   );
 }
 
+/** プランの短い名前（STACKS の plan。「free」→「Free」・「2gb」→「2GB」）。 */
+const planLabel = (plan: string): string =>
+  /^\d+gb$/i.test(plan)
+    ? plan.toUpperCase()
+    : plan.charAt(0).toUpperCase() + plan.slice(1);
+
+/**
+ * 構成のタブの組: 土台の事業者（STACKS の provider）ごとに、並びの順で最初に出た位置にまとめる。組の名前は事業者の最初のブランド。
+ * チップはプランの短い名前（組の中でプランが重なるときは構成の名前）。1 つだけの組の名前が他の組と重なるときは構成の名前にする。
+ */
+export function stackTabGroups(
+  stackIndices: readonly number[],
+  framework: FrameworkId,
+): ChoiceGroup<string>[] {
+  const by = new Map<string, number[]>();
+  for (const i of stackIndices) {
+    const p = STACKS[i]!.provider;
+    by.set(p, [...(by.get(p) ?? []), i]);
+  }
+  const title = (p: string) =>
+    BRANDS[PLATFORM_BRANDS[p as keyof typeof PLATFORM_BRANDS][0]!].title;
+  const titles = [...by.keys()].map(title);
+  return [...by].map(([p, idx]) => {
+    const plans = idx.map((i) => STACKS[i]!.plan);
+    const distinct = new Set(plans).size === plans.length;
+    const name = (i: number) => stackName(i, framework, false);
+    const label =
+      idx.length === 1 && titles.filter((t) => t === title(p)).length > 1
+        ? name(idx[0]!)
+        : title(p);
+    return {
+      key: p,
+      label,
+      mark: <PlatformMarks platform={STACKS[idx[0]!]!.provider} />,
+      items: idx.map((i) => STACKS[i]!.id),
+      chip: (id: string) => {
+        const i = STACKS.findIndex((s) => s.id === id);
+        return distinct ? planLabel(STACKS[i]!.plan) : name(i);
+      },
+    };
+  });
+}
+
 /** インフラの構成を選ぶ（カルーセル）。value は STACKS の index。 */
 export function StackField({
   scenario,
@@ -157,14 +201,25 @@ export function StackField({
   /** その構成にすると既定に戻る描き方の注意（D-107 の補足）。 */
   routeNotice?: (stackIndex: number) => string | null;
 }) {
-  const offered = STACKS.filter((s) => stackOffered(s.index, framework));
+  const groups = useMemo(
+    () =>
+      stackTabGroups(
+        STACKS.filter((s) => stackOffered(s.index, framework)).map(
+          (s) => s.index,
+        ),
+        framework,
+      ),
+    [framework],
+  );
   const indexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
   return (
     <ChoiceCarousel
       heading="インフラの構成"
       name="stack"
       noun="構成"
-      items={offered.map((s) => s.id)}
+      // 並びは組の順（←/→ は組をまたいでこの順に移る）
+      items={groups.flatMap((g) => g.items)}
+      groups={groups}
       value={STACKS[value]!.id}
       onChange={(id) => onChange(indexOf(id))}
       label={(id) => stackName(indexOf(id), framework, false)}
