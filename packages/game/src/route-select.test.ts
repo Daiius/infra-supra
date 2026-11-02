@@ -6,6 +6,7 @@ vi.setConfig({ testTimeout: 60_000 });
 import { composeStack, STACK_DEFS } from 'catalog';
 import {
   applyAction,
+  applyActions,
   ARTICLE_COMMUNITY,
   checkAction,
   COMMENTS_IN_BROWSER,
@@ -233,6 +234,45 @@ describe('保存（SAVE_VERSION 2・D-107）', () => {
     const s = replaySave(parsed);
     expect(strategies(s)).toEqual({ article: 'ssr', personal: 'shell-api' });
     expect(s).toEqual(replaySave(save));
+  });
+
+  it('Astro の記事を S1 にした保存の「ビルドの間隔」の行動は読み替えず、ふだんの遊びと再生が同じ（OCL-AC6E1C9E）', () => {
+    const turns: Action[][] = [
+      [{ type: 'set', key: 'buildInterval', value: 3600 }],
+      [],
+    ];
+    let save = newSave({
+      scenarioId: ARTICLE_COMMUNITY.id,
+      stackIndex: VERCEL_PRO,
+      framework: 'astro',
+      seed: 9,
+      startDate: DEFAULT_START_DATE,
+      routes: { article: 'static-build' },
+    });
+    // ふだんの遊び（画面と同じ順: 月を進め、行動を当てる）
+    let played = playMonth(
+      newGame(
+        VERCEL_PRO,
+        9,
+        ARTICLE_COMMUNITY,
+        DEFAULT_START_DATE,
+        'astro',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { article: 'static-build' },
+      ),
+    );
+    for (const t of turns) {
+      for (const a of t) expect(checkAction(played, a).ok).toBe(true);
+      played = playMonth(applyActions(played, t));
+      save = withTurn(save, t);
+    }
+    expect(played.settings.revalidateSec).toBe(3600);
+    expect(replaySave(parseSave(JSON.parse(JSON.stringify(save)))!)).toEqual(
+      played,
+    );
   });
 
   it('版 1 の保存は描き方を既定として読む（描き方を選べる前と同じ結果）', () => {

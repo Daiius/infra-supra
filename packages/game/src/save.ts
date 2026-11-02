@@ -2,6 +2,7 @@
 // ゲームは決定論なので、同じ選択と行動を同じ順に再生すれば同じ状態に戻る。ここは純粋関数だけ（保存・読み込みの I/O は web）。
 import {
   applyActions,
+  articleFamily,
   newGame,
   playMonth,
   SCENARIOS,
@@ -101,13 +102,15 @@ function migrateAction(a: Action): Action {
  * Next.js の静的書き出しの buildInterval はそのまま）。
  */
 export function migrateActionFor(
-  state: Pick<GameState, 'framework'>,
+  state: Pick<GameState, 'framework' | 'scenario' | 'routes'>,
   a: Action,
 ): Action {
+  // 記事を静的にビルドし直す（S1）を選んでいる Astro では、buildInterval は今の正しい行動なので読み替えない（D-107・OCL-AC6E1C9E）
   if (
     a.type === 'set' &&
     a.key === 'buildInterval' &&
-    state.framework === 'astro'
+    state.framework === 'astro' &&
+    articleFamily(state) !== 'static'
   )
     return { ...a, key: 'pageCache' };
   return a;
