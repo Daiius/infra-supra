@@ -110,13 +110,13 @@ export const GD3_STACKS: unknown[] = [
       // メールの送信（D-95）
       {
         id: 'email',
-        label: 'Resend Free（メールの送信）',
+        label: 'Amazon SES（メールの送信）',
         config: { kind: 'email-sender' },
         billing: {
-          accountId: 'resend',
-          provider: 'resend',
-          planId: 'free',
-          meters: { emails: 'emails' },
+          accountId: 'aws',
+          provider: 'aws',
+          planId: 'ses',
+          meters: { emails: 'outbound' },
         },
       },
     ],
@@ -400,13 +400,13 @@ export const GD3_STACKS: unknown[] = [
       // メールの送信（D-95）
       {
         id: 'email',
-        label: 'Resend Free（メールの送信）',
+        label: 'Amazon SES（メールの送信）',
         config: { kind: 'email-sender' },
         billing: {
-          accountId: 'resend',
-          provider: 'resend',
-          planId: 'free',
-          meters: { emails: 'emails' },
+          accountId: 'aws',
+          provider: 'aws',
+          planId: 'ses',
+          meters: { emails: 'outbound' },
         },
       },
     ],
@@ -550,13 +550,13 @@ export const GD3_STACKS: unknown[] = [
       // メールの送信（D-95）
       {
         id: 'email',
-        label: 'Resend Pro（メールの送信）',
+        label: 'Amazon SES（メールの送信）',
         config: { kind: 'email-sender' },
         billing: {
-          accountId: 'resend',
-          provider: 'resend',
-          planId: 'pro',
-          meters: { emails: 'emails' },
+          accountId: 'aws',
+          provider: 'aws',
+          planId: 'ses',
+          meters: { emails: 'outbound' },
         },
       },
     ],
@@ -604,13 +604,13 @@ export const GD3_STACKS: unknown[] = [
       // メールの送信（D-95）
       {
         id: 'email',
-        label: 'Resend Pro（メールの送信）',
+        label: 'Amazon SES（メールの送信）',
         config: { kind: 'email-sender' },
         billing: {
-          accountId: 'resend',
-          provider: 'resend',
-          planId: 'pro',
-          meters: { emails: 'emails' },
+          accountId: 'aws',
+          provider: 'aws',
+          planId: 'ses',
+          meters: { emails: 'outbound' },
         },
       },
     ],

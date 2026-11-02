@@ -47,6 +47,7 @@ describe('部品の差し替え', () => {
       db: 'd1',
       realtime: 'none',
       dbBackup: 'default',
+      email: 'default',
       api: 'same',
     });
     expect(actionEffort(s, comp('db', 'd1'))).toBeNull();
@@ -145,6 +146,7 @@ describe('部品の差し替え', () => {
       images: 'default',
       db: 'supabase',
       dbBackup: 'default',
+      email: 'default',
       api: 'same',
     });
   });

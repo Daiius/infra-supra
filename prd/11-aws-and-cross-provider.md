@@ -1187,3 +1187,67 @@ AWS・Google Cloud では他の費用に比べて 1% 前後だが、**Workers Pa
 - 保持の日数を 2 択より細かく選ぶこと（Supabase の 14・28 日、RDS の 1 日など）・Supabase の Small の pooler の接続 400 を判定に使うこと（今は Micro の 200）。
 - Cloud SQL の PITR のログの量・Enterprise Plus（ログ 14 日）・Firestore の日次 / 週次のバックアップ（$0.038 / GiB 月）・DynamoDB のオンデマンドのバックアップ。
 - 実際に壊れて戻す出来事（誤操作・不具合）と、戻せない構成で起きること（データの損失・満足度）。今は依頼の要件のカードだけで、新しい障害の出来事は足していない。
+
+## 20. アプリのメールの送信（2026-11-02・D-95）
+
+> 業務アプリ・コミュニティで要るメール（登録の確認・パスワードの再設定・業務の通知・コメントの通知）の費用を数える。部品「メール送信」（スロット `email`）を足し、
+> Workload にメールの通数（利用者あたり + 書き込みあたり）を足した。数え方は prd/04 §3.10、スキーマの置き方は prd/03 §5。
+
+### 20.1 確かめた公式の事実（2026-11-02 取得）
+
+| サービス | 料金・上限 | 出典 |
+|---|---|---|
+| Amazon SES（東京） | 送信は受け取る人 1 人ごとに 1,000 通 $0.10。常時無料の通数は無い（無料の行はメールボックスのシミュレーターだけ）。添付は 1 GB $0.12。SMTP か API（HTTP）で、AWS の外のアプリからも送れる | Price List API（AmazonSES・版 2026-10-27）・[料金](https://aws.amazon.com/ses/pricing/)・[送信の設定](https://docs.aws.amazon.com/ses/latest/dg/send-email.html) |
+| Resend | Free: 月 3,000 通・1 日 100 通（UTC の暦日）、超過の料金なし。Pro: 月 $20 で 5 万通込み、超過 1,000 通 $0.90（込みの 5 倍で止まる）。SLA は Enterprise だけ | [料金](https://resend.com/pricing)・[上限](https://resend.com/docs/knowledge-base/account-quotas-and-limits)・[Node.js の送り方](https://resend.com/docs/send-with-nodejs) |
+| Cloudflare Email Service（送信） | ベータ（「Email Sending Beta」）。Workers Paid で月 3,000 通込み、超過 1,000 通 $0.35。Workers Free では使えない（確かめた宛先だけ）。新しいアカウントは控えめな 1 日の上限から（数値の記載なし） | [料金](https://developers.cloudflare.com/email-service/platform/pricing/)（最終更新 2026-06-09）・[概要](https://developers.cloudflare.com/email-service/)・[上限](https://developers.cloudflare.com/email-service/platform/limits/)（2026-10-30） |
+| Supabase Auth の組み込みのメール | チームのメンバーにしか送れず（他は「Email address not authorized」）、1 時間 2 通。本番では自前の SMTP を設定するよう求めている | [auth-smtp](https://supabase.com/docs/guides/auth/auth-smtp) |
+
+確かめられなかったこと: SendGrid の料金（公式の料金ページがリダイレクトを繰り返して読めない。第三者の記事は無料のプランの廃止を伝える。入れていない）・Resend の日本の消費税の扱い（記載なし。税抜のまま）・Resend Free の上限に当たったときの振る舞い（FAQ は知らせて上のプランを勧めるとだけ。送れないとみる）。
+
+### 20.2 入れた形
+
+- estimator: Workload の `email`（`perMau`・`perWrite`）・経路を持たないノード `email-sender`・資源 `emails`（prd/04 §3.10）。
+- catalog: 料金データに Workers Paid の `email-sending`（プール 3,000 通）・AWS のプラン `ses`・新しい事業者 `resend`（Free は 1 日 100 通の日次のプールで `block`・Pro は基本料 $20 + 5 万通のプール）。`stacks/email.ts`（`withEmail`）が構成の最後にノードを 1 つ足す。
+- 部品「メール送信」（`email`）:
+
+| 構成 | 構成の既定（`default`） | 選べる別の送り先 |
+|---|---|---|
+| Cloudflare Paid | 自前の Email Service | AWS: SES・Resend: Free・Resend: Pro |
+| Cloudflare Free | Amazon SES（Email Service は Free で使えず、Resend Free は日次の上限で止まる） | 同じ（SES は既定と同じ） |
+| AWS（Amplify・OpenNext） | Amazon SES（同じアカウント） | Resend: Free・Resend: Pro |
+| Vercel・Netlify・Google Cloud・さくらの VPS | Amazon SES（自前の送信が無く、いちばん安い従量・止まる上限が無い） | Resend: Free・Resend: Pro |
+
+- 既定の送り先のアカウント（SES の AWS など）は構成の既定に含めるので、D-52 の維持の手間は数えない（Vercel + Supabase の Supabase と同じ規則）。替えて増えたアカウント（Resend・Cloudflare Paid からの AWS）は数える。
+- 稼働率の SLA の要件（D-24）はメールの送り先を見ない（アプリの稼働に関わらない。D-93 のバックアップの置き場と同じ）。
+- 差し替えの手間は 1（API のキーと送る元のドメインの認証を設定し直す。ゲーム上の仮定）。
+- 仮定（ゲーム上の仮定・出典なし）: 記事は利用者の 2% / 月（登録の確認・パスワードの再設定）+ 書き込み 10 回に 1 通（コメントの通知）。受託は利用者 1 人に月 10 通（申請・承認・催促の通知）。
+
+### 20.3 基準プレイ（何もしない・シード 1〜20。達成数・12 か月の費用の平均 / 月）
+
+**CF Paid × Next.js（目標の根拠）は達成が不変で、費用が上がった**（記事 20/20 $15.25 → $17.95・受託 20/20 $5.67 → $13.43）。目標の額は据え置いた（D-95）。
+Email Service は込みの 3,000 通を超えると 1,000 通 $0.35 で SES（$0.10）より高く、通数が伸びる受託ほど差が開く（SES に替えると記事 $16.32・受託 $8.25）。
+
+| 構成 × フレームワーク | 記事 前 → 後 | 受託 前 → 後 |
+|---|---|---|
+| CF Paid × Next.js | 20/20 $15.25 → 20/20 $17.95 | 20/20 $5.67 → 20/20 $13.43 |
+| CF Paid × SPA | 20/20 $14.53 → 20/20 $16.75 | 20/20 $5.69 → 20/20 $14.35 |
+| さくらの VPS 2GB × Next.js | **10/20** $13.05 → **9/20** $13.94 | 0/20 $13.05 → 0/20 $15.22 |
+| さくらの VPS 2GB × SPA | 0/20 → 0/20 | **1/20** → **0/20** $15.32 |
+| さくらの VPS 4GB × Next.js | 0/20 → 0/20 $27.29 | **8/20** $26.40 → **4/20** $28.58 |
+| さくらの VPS 4GB × SPA | 0/20 → 0/20 | **12/20** $26.40 → **8/20** $28.69 |
+| Amplify × Next.js | 10/20 $51.91 → $52.98 | 20/20 $15.03 → $17.33 |
+| OpenNext × Next.js | 17/20 $36.68 → $37.75 | 20/20 $1.81 → $4.11 |
+| Google Cloud × Next.js | 0/20 $62.05 → $63.12 | 20/20 $12.22 → $14.79 |
+| Vercel Pro × Next.js | 0/20 $123.63 → $124.70 | 0/20 $46.44 → $48.96 |
+| Netlify Pro × Next.js | 0/20 $89.30 → $90.37 | 0/20 $45.04 → $47.55 |
+
+ほかに達成が変わったもの: 受託 × Vercel Pro × Neon（Next.js 6/20 → 0/20・SPA 18/20 → 14/20）・Netlify Pro × Neon（Next.js 14/20 → 6/20・SPA 18/20 → 16/20）・Netlify Personal × Neon × Next.js 19/20 → 14/20・
+受託 × CF Paid の Astro + VPS 2GB の API 12/20 → 9/20、記事 × Netlify Pro × Neon + 画像だけ Cloudflare 7/20 → 3/20・VPS 2GB の SPA → Next.js の作り直しの比較で始めから Next.js 10/20 → 9/20。
+golden: 受託のシード 42 の「CF Paid・依頼を受ける」$1,769.92・won → $1,680.24・goal、シード 3 の同じ基準プレイ $1,726.18・won → $1,543.64・goal。記事のシード 42 の VPS・SLA と、シード 3 の Vercel Pro → CF Paid が won → goal。
+Resend に替えると: Free はどの構成も 1 日 100 通に当たって止まる（受託は 1 か月目から）。Pro は月 $20 で、Google Cloud × 受託は 20/20 → 18/20。
+
+### 20.4 残した点
+
+- メールの通数の仮定（利用者・書き込みあたり）の確かめ・出来事（大量の通知・送信の失敗・迷惑メールの扱いで届かない）。
+- Resend Pro の上の段（10 万通 $35）・Scale、SES の専用 IP・Virtual Deliverability Manager、添付ファイルの量。
+- Cloudflare Email Service の 1 日の上限（数値の記載なし・数えていない）とベータが終わったときの料金の見直し。VPS から自前のメールサーバーで送る形。

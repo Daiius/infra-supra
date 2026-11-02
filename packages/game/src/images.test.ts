@@ -239,8 +239,19 @@ describe('速さが「悪い」月は PV の伸びが下がる（D-47）', () =>
   });
 
   it('CF Paid でも原本を配り続けると目標に届かず、ヒントに出る', () => {
+    // メールは SES で送る（Email Service の込みの分を超えた請求のヒントが並ばないように。D-95）
     const st = playStrategy(
-      { id: 'x', label: 'x', stackIndex: CF_PAID, actions: [images('none')] },
+      {
+        id: 'x',
+        label: 'x',
+        stackIndex: CF_PAID,
+        actions: [
+          [
+            ...images('none'),
+            { type: 'component', slot: 'email', option: 'ses' },
+          ],
+        ],
+      },
       42,
       article,
     );

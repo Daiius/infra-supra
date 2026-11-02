@@ -317,6 +317,19 @@ backup-hours    = addonHours ? 730 : 0          （時間で課金するアド�
   Neon は窓の間の変更だけ。Cloud SQL は全体 1 + 7 日分の差分（無料の分なし）。VPS の自前は日次のダンプ 7 つ + 7 日分のバイナリログ。
 - 料金の値と表は prd/11 §19。
 
+### 3.10 メールの送信（`email-sender`。D-95・2026-11-02）
+
+経路を持たないノード。Workload の `email`（省略は送らない）から月の通数を出し、資源 `emails` に数える。
+
+```
+書き込み = PV × ページあたりの API × 1 回あたりの書き込み       （ゲームの内容の更新の数え方と同じ）
+emails   = MAU × perMau + 書き込み × perWrite
+```
+
+- 値はテンプレートの仮定（記事 `perMau` 0.02・`perWrite` 0.1、受託 `perMau` 10・`perWrite` 0）。SPA・Astro・静的書き出しへの書き換えは書き込みの数を変えない。
+- 送り先（Email Service・SES・Resend）は課金先のプランで決まり、catalog の `stacks/email.ts` が構成の最後に 1 つ足す。Resend Free の 1 日 100 通は日次のプール（平日・休日・最も多い日）で判定する。
+- 料金の値と表は prd/11 §20。
+
 ## 4. 二重計上の点検（テストで確かめる性質）
 
 - CDN の `hits + misses = 入力件数`（各クラス）。

@@ -914,6 +914,26 @@
   改定の出来事の文だけ「このモデルの計算への影響: あり」に変わった。規模を上げると改定の後は安い（CF Paid × Next.js の記事のログ / 月: 1,000 万 PV $12.0 → $0・3,000 万 PV $60.0 → $11.1・1 億 PV $228 → $69）。1 件の大きさが仮定の 3 倍を超えると逆転する。
 - 残した点: 施行日の後に始めたゲームと見積モードで改定後の版を使うこと（今は今の版のまま。施行日を過ぎたら catalog の版を上げる）・1 件の大きさの確かめ・Workers Free の 1 日 0.5 GB で取り込みが止まること・Workers Logs の標本化（D-92 から）。~~見積モードの欄の select の名前~~ → 決定済み（見出しの ⓘ のボタンが label の名前に混ざらないよう、select に見出しの文字を `aria-label` で付けた。見積モードの `Field`・ゲーム中の設定と部品の欄。見た目は変えない。描画テスト W-07）。
 
+### D-95 アプリのメールの送信の費用（確定・2026-11-02）
+
+- 依頼: 業務アプリ・コミュニティで要るメール（パスワードの再設定・通知・コメントの通知）の費用を入れる。推奨案で自律に決め、既定の送り先は supervisor の推奨案（ユーザーの確認待ち）。prd/11 §20・prd/04 §3.10・prd/03 §5。
+- 公式で確かめたこと（2026-11-02 取得。出典は prd/11 §20.1）: Amazon SES（東京）は 1,000 通 $0.10・常時無料の通数なし。Resend Free は月 3,000 通・1 日 100 通（超過の料金なし）、Pro は月 $20 で 5 万通・超過 1,000 通 $0.90。
+  Cloudflare Email Service の送信はベータで、Workers Paid で月 3,000 通込み・超過 1,000 通 $0.35、Workers Free では使えない。Supabase Auth の組み込みのメールはチームのメンバーにしか送れず 1 時間 2 通（本番は自前の SMTP を求める）。
+  確かめられなかったこと: SendGrid（公式の料金ページが読めない。入れていない）・Resend の日本の消費税・Resend Free の上限での振る舞い（送れないとみる）。
+- 決定:
+  - estimator に Workload の `email`（`perMau`・`perWrite`）・ノード `email-sender`・資源 `emails` を足した。catalog に Resend の料金データ・Workers Paid の Email Service・AWS の SES・`stacks/email.ts`・部品「メール送信」（`email`）。
+  - 構成の既定: Cloudflare Paid は自前の Email Service、ほかはどれも Amazon SES（いちばん安い従量・止まる上限が無い）。Cloudflare Free・Vercel Hobby・Netlify Free も、Resend Free が基準プレイの規模で 1 日 100 通を超えて止まるので SES（block で落ちる既定は避ける）。
+    Supabase の組み込みのメールは本番で使えないので既定にしない（注記に書く）。Resend Free・Pro はどの構成でも、SES は Cloudflare で選べる（CROSS_PAIRS）。
+  - アカウント（D-52）は今の規則のまま: 既定の送り先（SES の AWS）は構成の既定に含めて手間を数えず、替えて増えた分（Resend など）は数える。稼働率の SLA の要件はメールの送り先を見ない。差し替えの手間 1。
+  - 仮定（ゲーム上の仮定・出典なし）: 記事は利用者の 2% / 月 + 書き込み 10 回に 1 通（30 万 PV で月 約 3,600 通）、受託は利用者 1 人に月 10 通（月 約 1.5 万通）。
+- 基準プレイ（記事・受託 × 全構成 × Next.js・SPA × シード 1〜20。表は prd/11 §20.3）:
+  - **目標の根拠（CF Paid × Next.js）の構成の費用が上がったが、達成は不変（20/20）。目標の額は据え置き**（記事 $15.25 → $17.95・受託 $5.67 → $13.43。Email Service は込みの分の後 $0.35 / 1,000 通で SES より高い）。
+  - 達成が変わった行: 記事 × VPS 2GB × Next.js 10 → 9、受託 × VPS 4GB 8 → 4（SPA 12 → 8）・VPS 2GB × SPA 1 → 0、受託 × Neon（Vercel Pro Next 6 → 0・SPA 18 → 14、Netlify Pro Next 14 → 6・SPA 18 → 16、Personal Next 19 → 14）、
+    受託 × CF Paid の Astro + VPS 2GB の API 12 → 9、記事 × Netlify Pro × Neon + 画像だけ Cloudflare 7 → 3。
+  - golden: 受託の「CF Paid・依頼を受ける」がシード 42（$1,769.92 → $1,680.24）・3（$1,726.18 → $1,543.64）で won → goal。記事のシード 42 の VPS・SLA、シード 3 の Vercel Pro → CF Paid が won → goal。網羅テストは通る。
+  - 直したテスト: CF Paid で原本を配り続ける例は、Email Service の超過のヒントが並んで速さのヒントが 3 つに入らなくなったので、メールを SES にして確かめる。
+- 残した点: 通数の仮定の確かめ・メールの出来事（大量の通知・届かない）・Resend Pro の上の段・SES の専用 IP・添付の量・Email Service の 1 日の上限とベータ後の料金・VPS の自前のメールサーバー。
+
 ### 論点（ユーザーの判断が要るもの）
 
 | # | 論点 | 参照 |
@@ -940,6 +960,7 @@
 | Cloudflare の CDN（Free） | 転送量の上限（第三者の記事 1 件だけ・公式に見当たらない。課金なしのまま）・規約の「不釣り合いな割合の画像」の境目（数値なし） | D-91・prd/11 §17.1 |
 | バックアップ（D-93） | Cloud SQL の PITR のログ（ディスクに置く）の量の課金（料金ページに記載なし。数えていない）・RDS の PITR に別の課金が無いこと（課金の項目が無いことからの読み） | D-93・prd/11 §19 |
 | ログ（D-92） | CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし。数えていない）・Vercel の Observability Plus の 1 要求あたりの event の数（数えていない）・~~Workers Logs の 2026-12-01 以降の料金~~ → D-94（取得。1 件の大きさは仮定・「Paid」を Workers Paid と読んだ） | D-92・D-94・prd/11 §18 |
+| メール（D-95） | SendGrid の料金（公式のページが読めない）・Resend の日本の消費税・Resend Free の上限での振る舞い・Cloudflare Email Service の 1 日の上限（数値なし） | D-95・prd/11 §20 |
 | ~~Cloudflare Images Paid~~ | ~~基本料~~ → D-84（基本料なしとみる。公式の例の合計に入っていない。値は不変） | D-84・prd/11 §2 |
 
 ### 残した点（直す方針はあるが、今は入れていないもの）
@@ -958,6 +979,7 @@
 | D-92 | Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access の部品・アプリのログの量をフレームワーク・出来事で変えること |
 | D-93 | ~~見積モードで選んでも変わらない部品を出さないこと~~ → D-94（すでに同じ判定を通っていた。引数を必須にしてテストで固定）・保持の日数を 2 択より細かく選ぶこと・Supabase の Small の pooler の接続 400・Cloud SQL の PITR のログの量・Firestore の日次のバックアップ・実際に壊れて戻す出来事 |
 | D-94 | 施行日の後に始めたゲームと見積モードで改定後の版を使うこと・Workers の 1 件の大きさ・Workers Free の 1 日 0.5 GB の止まり・見積モードの欄の select の名前 |
+| D-95 | 通数の仮定の確かめ・メールの出来事・Resend Pro の上の段・SES の専用 IP・添付の量・Email Service のベータ後の料金・VPS の自前のメールサーバー・目標の根拠の費用が上がったことのユーザーの確認 |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 
