@@ -69,7 +69,18 @@ describe('Google Cloud の構成', () => {
   it('始める画面: ISR・画像（Cloudflare の部品も）・DB・最小インスタンス数を選び、ファイルの置き場（Cloud Storage）は固定', () => {
     expect(slotsOf(article, 'nextjs')).toEqual([
       ['isrCache', ['default', 'none']],
-      ['images', ['default', 'none', 'resize', 'cf-images', 'cf-resize']],
+      [
+        'images',
+        [
+          'default',
+          'none',
+          'resize',
+          'cf-images',
+          'cf-resize',
+          'bunny-images',
+          'bunny-resize',
+        ],
+      ],
       ['db', ['firestore', 'cloud-sql']],
       ['minInstances', ['0', '1']],
       // DB のバックアップ（D-93）: 既定の Firestore は PITR を付けられる
@@ -81,7 +92,14 @@ describe('Google Cloud の構成', () => {
     // 静的書き出しは next/image の既定のローダーが使えないので、変換の部品が無い
     expect(slotsOf(article, 'nextjs-export')[0]).toEqual([
       'images',
-      ['none', 'resize', 'cf-images', 'cf-resize'],
+      [
+        'none',
+        'resize',
+        'cf-images',
+        'cf-resize',
+        'bunny-images',
+        'bunny-resize',
+      ],
     ]);
     // 受託は画像のスロットを出さない
     expect(slotsOf(contract, 'nextjs').map(([slot]) => slot)).toEqual([

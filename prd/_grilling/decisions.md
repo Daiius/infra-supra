@@ -980,6 +980,27 @@
 - 追記（レビュー OCL-17D1B88E・OCL-C32E39AF・OCL-A2DA7939）: 同じ月に結んだまだ払っていない年額はスケールアップの差額から引かない。所持金の検査は同じ月に選んだ前払い（確約・年額のままの変更の差額）を合わせて見る。同じ対象に確約が複数あっても割引の合計は対象の明細の額まで。
 - 残した点: 時間ごとの使用で当てること・Savings Plans の額を選ぶこと・Database Savings Plans・一部前払い・3 年・ゲームの後の月の支払い（使わなくなった確約）を評価に入れること・見積モードの比較の表と曲線・1 か月目の費用の見込みに確約を含めること。
 
+### D-98 転送の安い従量の CDN（Bunny）を事業者をまたぐ選択肢に（確定・2026-11-02）
+
+- 依頼: 「費用を抑えるより複雑な構成も可能にしたい」「作者のスタックに寄せない」の方針で、転送の安い従量の CDN（Bunny）を画像の配信・前段の CDN の選択肢として足す（以前の「AWS は output transfer が多いと厳しい」は D-52 の画像だけ Cloudflare で対応済み）。推奨案で自律に決定。prd/11 §23。
+- 公式で確かめたこと（2026-11-02 取得。出典は prd/11 §23.1）: CDN の Standard network の転送は Asia & Oceania $0.03/GB（Europe & North America $0.01）・段の割引なし・要求の課金なし・月の最低額 $1。
+  Volume network は最初の 500 TB $0.005/GB（アジアに「Tokyo (Volume)」）。Storage の Standard は 1 地域 $0.01/GB（東京あり）・CDN への転送と API は無料。Optimizer はサイトごと月 $9.50・変換は無制限。
+  Storage を Pull Zone のオリジンにでき、Dynamic Image API は `?width=` で変換。SLA 99.99%。
+  確かめられなかったこと: 日本がどの地域の単価か・日本の閲覧を Volume network の単価で配れるか・日本の消費税・Storage から CDN 以外への転送。next/image のローダーの公式の例に Bunny は無い。
+- 決定:
+  - 料金データ `bunny`（プラン `standard`・`optimizer`）。転送は Asia & Oceania の $0.03/GB（解釈。Volume network は入れない）。月の最低額は D-85 の最小の課金量（メーターごとの量）でなく、
+    基本料 $1 + 同じ額のクレジット（従量すべて）で max($1, 従量) を表す。Optimizer の月額は最低額に当てない（最大 $1 高め）。SLA は `offered`。
+  - 部品（`platform: 'bunny'`・`ComponentProvider` に `bunny`）: 画像 `bunny-images`（振る舞い `images`）・`bunny-resize`（`resize`）を Vercel・AWS・OpenNext・Netlify・Google Cloud に（画像だけ Cloudflare と同じ `hostImageShape`。
+    投稿の Storage への書き込みは土台の外への転送で数える）。前段の CDN `bunny`（静的と画像だけ）を Amplify の Next.js・さくらの VPS に（課金だけが Bunny、形は自前の CloudFront の前段・Cloudflare の静的と画像だけと同じ）。
+  - `CROSS_PAIRS` に 7 行。D-91 の「前段は表に載せない」は土台の事業者の部品の話で、部品だけの事業者（Bunny）の前段は表で許す。
+  - VPS の API の応答のキャッシュは Cloudflare の前段だけ（Bunny の前段では選べない）。アカウントの手間は D-52 のとおり。キャッシュのヒット率は画像 0.9（他の CDN と同じ仮定）。
+- 基準プレイ（記事・受託 × Amplify Next・SPA・OpenNext・Google Cloud・Vercel Pro・Netlify Pro・VPS × Bunny あり / なし / 画像だけ Cloudflare × シード 1〜20。表は prd/11 §23.3）:
+  - **既定の結果・CF Paid × Next.js（記事 20/20 $18.88・受託 20/20 $14.36）・golden・網羅テストは不変**。
+  - 画像の配信はどの規模でも Cloudflare（R2 の転送が無料）のほうが安い。Bunny は土台の転送（CloudFront の 1 TB の後 $0.114・Amplify $0.15・Cloud Run）より安く、
+    記事 × Amplify の前段 9 → 14/20・OpenNext の画像 15 → 20/20・Google Cloud の画像 0 → 20/20。Amplify の既定の画像（CloudFront の常時無料に収まる）を Bunny に替えるとかえって高い（9 → 0/20）。
+  - さくらの VPS の前段は効きが Cloudflare と同じで、転送の分だけ高い（記事 × 2GB 13 → 6/20）。
+- 残した点: Volume network・Storage の複製・HTML もキャッシュする Bunny の前段・Vercel・Netlify・Google Cloud・OpenNext の前の Bunny・Optimizer の月額を最低額に含めること・日本の消費税・往復の遅延。
+
 ### 論点（ユーザーの判断が要るもの）
 
 | # | 論点 | 参照 |
@@ -1009,6 +1030,7 @@
 | メール（D-95） | SendGrid の料金（公式のページが読めない）・Resend の日本の消費税・Resend Free の上限での振る舞い・Cloudflare Email Service の 1 日の上限（数値なし） | D-95・prd/11 §20 |
 | ドメインと DNS（D-96） | Vercel・Netlify の DNS が無料であること（料金の項目が無いことからの読み）・Route 53 Domains・Vercel・Netlify の .com の額・ICANN の手数料の 2026-07 以降の額・登録業者の日本の消費税・Route 53・Cloud DNS の SLA | D-96・prd/11 §21 |
 | 確約（D-97） | さくらの VPS の年額の途中解約の返金（記載なし。戻らない側）・Cloud Run の CUD がリクエストの料金に効くか（例に無い。効かない側）・確約と無料枠の当てる順 | D-97・prd/11 §22 |
+| Bunny（D-98） | 日本がどの地域の単価か（Asia & Oceania とみた）・日本の閲覧を Volume network の単価で配れるか・日本の消費税・Storage から CDN 以外への転送 | D-98・prd/11 §23 |
 | ~~Cloudflare Images Paid~~ | ~~基本料~~ → D-84（基本料なしとみる。公式の例の合計に入っていない。値は不変） | D-84・prd/11 §2 |
 
 ### 残した点（直す方針はあるが、今は入れていないもの）
@@ -1030,6 +1052,7 @@
 | D-95 | 通数の仮定の確かめ・メールの出来事・Resend Pro の上の段・SES の専用 IP・添付の量・Email Service のベータ後の料金・VPS の自前のメールサーバー・目標の根拠の費用が上がったことのユーザーの確認 |
 | D-96 | 登録業者ごとの額と登録業者の部品・SLA の要件で DNS を見ること・メールの認証（SPF・DKIM）の TXT の問い合わせ・1 閲覧あたりの問い合わせ 0.1 の確かめ・無料の DNS を画面の注記に出すこと・.com の卸値の次の値上げ・目標の根拠の費用が上がったことのユーザーの確認 |
 | D-97 | 時間ごとの使用で確約を当てること・Savings Plans の額を選ぶこと・Database Savings Plans・一部前払い・3 年・ゲームの後の月の支払いを評価に入れること・見積モードの比較の表と曲線・1 か月目の費用の見込みに確約を含めること |
+| D-98 | Volume network・Storage の複製・HTML もキャッシュする Bunny の前段・Vercel・Netlify・Google Cloud・OpenNext の前の Bunny・Optimizer の月額を最低額に含めること・往復の遅延 |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 

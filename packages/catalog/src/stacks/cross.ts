@@ -4,6 +4,7 @@
 // SPA の API の置き場（Vercel・AWS の静的 + Cloudflare Workers の API + D1／Cloudflare の静的 + AWS の API Gateway + Lambda + DynamoDB。D-65）、
 // Next.js のサーバーから呼ぶ Cloudflare Workers の API + D1（Vercel・Amplify・OpenNext）と、Cloudflare の静的 + さくらの VPS の API（D-67）、
 // Astro のサーバー（Vercel・VPS）から呼ぶ Cloudflare Workers の API + D1 と、Cloudflare の Astro + さくらの VPS の API（D-69）。
+// 転送の安い従量の CDN の Bunny で画像を配る組と、Amplify・さくらの VPS の前段の CDN を Bunny にする組（D-98）。
 // 既存の Cloudflare + Hyperdrive（Supabase）・さくらの VPS + 前段の CDN（Cloudflare）は、土台の事業者の部品として
 // 先に入っていたもの（D-24 X-6・D-31）で、この表の外にある（アカウントの数は accountsOf で同じく数える）。
 import type { ArchitectureInput, RequestClass } from 'estimator';
@@ -13,6 +14,7 @@ import {
   dbNode as awsDbNode,
 } from './aws.ts';
 import { vpsNode } from './sakura.ts';
+import { BUNNY_IMAGE_HIT_RATE, bunnyBill, bunnyCdnNode } from './bunny.ts';
 import { browserCallsApi, type FrameworkId } from '../frameworks/index.ts';
 import type {
   Choices,
@@ -45,6 +47,23 @@ export type CrossPair = {
   basis: string;
   sources: { url: string; retrievedAt: string }[];
 };
+
+/** Bunny の画像（Storage + CDN）を差せる土台（D-98。画像だけ Cloudflare と同じ土台）。 */
+const BUNNY_IMAGE_HOSTS = [
+  'vercel',
+  'aws',
+  'aws-opennext',
+  'netlify',
+  'gcp',
+] as const satisfies readonly Platform[];
+/**
+ * Bunny の前段の CDN を差せる土台（D-98）。前段の CDN のスロット（frontCdn）を持つ土台だけ（Amplify の Next.js・さくらの VPS）。
+ * OpenNext・SPA は最初から CloudFront、Vercel・Netlify・Google Cloud は前段のスロットが無い（画像だけ Bunny で配る）。
+ */
+const BUNNY_FRONT_HOSTS = [
+  'aws',
+  'sakura',
+] as const satisfies readonly Platform[];
 
 export const CROSS_PAIRS: readonly CrossPair[] = [
   {
@@ -342,6 +361,44 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://resend.com/docs/knowledge-base/account-quotas-and-limits',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   })),
+  // Bunny（転送の安い従量の CDN。D-98・2026-11-02 に原文で確かめた）。画像を Bunny Storage に置き Bunny CDN で配る組と、
+  // 土台の前に Bunny CDN の Pull Zone を置く組（前段の CDN）。オリジンから Bunny への転送は土台の外への転送として数える
+  ...BUNNY_IMAGE_HOSTS.map((host): CrossPair => ({
+    host,
+    slot: 'images',
+    provider: 'bunny',
+    basis:
+      'Bunny Storage の Storage Zone を Pull Zone のオリジンにでき、Storage から CDN への転送は無料。アップロードは HTTP API の PUT（API の要求・転送は無料）。' +
+      'Optimizer の Dynamic Image API を有効にすると URL の引数（?width=）で変換でき、結果は拠点でキャッシュされる（Optimizer はサイトごとに月 $9.50・変換は無制限）。' +
+      'CDN の転送は Asia & Oceania で $0.03/GB・要求の課金なし・月の最低額 $1。' +
+      'next/image は loaderFile で ?width= の URL を返す関数に替えられる（公式の例に Bunny は無い）。投稿はサーバーが受けて Storage に書き、その送るデータは土台の外への転送の料金で数える',
+    sources: [
+      'https://bunny.net/pricing/cdn/',
+      'https://bunny.net/pricing/storage/',
+      'https://bunny.net/pricing/optimizer/',
+      'https://bunny.net/docs/storage/quickstart.md',
+      'https://bunny.net/docs/optimizer/dynamic-images/overview.md',
+      'https://nextjs.org/docs/app/api-reference/config/next-config-js/images',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  })),
+  ...BUNNY_FRONT_HOSTS.map((host): CrossPair => ({
+    host,
+    slot: 'frontCdn',
+    provider: 'bunny',
+    basis:
+      'Bunny CDN の Pull Zone は自分のサーバー（オリジン）につなぎ、キャッシュに無ければオリジンから取ってキャッシュして返す。' +
+      'CDN の転送は Asia & Oceania で $0.03/GB・要求の課金なし・月の最低額 $1。' +
+      (host === 'aws'
+        ? 'Amplify の既定のドメインをオリジンにする（自前の CloudFront の前段と同じ形。D-51 の §9.2）。Bunny が取りに来る分は Amplify の配信（$0.15/GB）として課金されるとみなす'
+        : 'VPS の nginx をオリジンにする（Cloudflare のプロキシの前段と同じ形。D-31・D-91）。VPS の転送量は無制限なので、Bunny が取りに来る分に転送の料金はかからない'),
+    sources: [
+      'https://bunny.net/docs/cdn.md',
+      'https://bunny.net/pricing/cdn/',
+      ...(host === 'aws'
+        ? ['https://aws.amazon.com/amplify/pricing/']
+        : ['https://vps.sakura.ad.jp/specification/']),
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  })),
 ];
 
 const VERCEL_TO_CF_IMAGES_REFS = [
@@ -381,6 +438,81 @@ export const CROSS_COMPONENTS: readonly ComponentOption[] = [
       '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS・Netlify・Google Cloud）の転送の料金にならない（R2 の転送は無料）。' +
       '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: [...VERCEL_TO_CF_IMAGES_REFS],
+  },
+  // Bunny の画像（D-98）。Cloudflare の cf-images・cf-resize と同じ振る舞いで、置き場・配信・変換を Bunny にする
+  {
+    id: 'bunny-images',
+    slot: 'images',
+    platform: 'bunny',
+    hosts: [...BUNNY_IMAGE_HOSTS],
+    link: { via: 'http', as: 'images' },
+    label: 'Bunny: Storage に置き、閲覧のときに Optimizer で変換',
+    note:
+      '画像の原本を Bunny Storage（東京の 1 地域）に置き、Bunny CDN の URL の引数（?width=）で Optimizer が変換して配る。土台の CDN を通らないので、' +
+      '画像の転送は土台の転送の料金にならず、Bunny の $0.03/GB（アジア）になる。Optimizer は月 $9.50 で変換は無制限（一意な変換の数で課金されない）。' +
+      'next/image のローダーは自分で書く（公式の例に無い）。月の最低額は $1。Bunny のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+    premiseRefs: [
+      'fact:bunny:standard:asia-rate',
+      'fact:bunny:standard:monthly-minimum',
+      'fact:bunny:standard:storage-origin',
+      'fact:bunny:optimizer:dynamic-images',
+      'fact:bunny:optimizer:optimizer-flat',
+    ],
+  },
+  {
+    id: 'bunny-resize',
+    slot: 'images',
+    platform: 'bunny',
+    hosts: [...BUNNY_IMAGE_HOSTS],
+    link: { via: 'http', as: 'resize' },
+    label: 'Bunny: 投稿のときに一律で縮めて Storage に置く',
+    note:
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて Bunny Storage に置き、原本は残さない。' +
+      'Bunny CDN から配るので、画像の転送は土台の転送の料金にならず、Bunny の $0.03/GB（アジア）になる。Optimizer は使わない（月額なし）。' +
+      'サイズ違いが無いので、スマホにも同じ大きさを配る。月の最低額は $1。Bunny のアカウントが 1 つ増え、請求が 2 つになる',
+    premiseRefs: [
+      'fact:bunny:standard:asia-rate',
+      'fact:bunny:standard:monthly-minimum',
+      'fact:bunny:standard:storage-origin',
+    ],
+  },
+  // Bunny の前段の CDN（D-98）。土台ごとにフレームワークの条件が違う（Amplify は Next.js だけ・VPS はすべて）ので部品を分ける
+  {
+    id: 'bunny',
+    slot: 'frontCdn',
+    platform: 'bunny',
+    hosts: ['aws'],
+    frameworks: ['nextjs'],
+    link: { via: 'http', as: 'static' },
+    label: 'Bunny: CDN を前段に置く（静的と画像だけ）',
+    note:
+      'Bunny CDN の Pull Zone の後ろに Amplify を置き、静的なファイルと Amplify で最適化した画像を Bunny が返す（$0.03/GB・要求の課金なし・月の最低額 $1）。' +
+      '外れた分と HTML・API は Amplify の配信としても課金される（二重になる）とみなす（自前の CloudFront の前段と同じ読み）。CloudFront の常時無料（月 1 TB）は使えない。' +
+      'Bunny のアカウントが 1 つ増え、請求が 2 つになる',
+    premiseRefs: [
+      'fact:bunny:standard:pull-zone-origin',
+      'fact:bunny:standard:asia-rate',
+      'fact:bunny:standard:monthly-minimum',
+      'fact:aws:amplify-hosting:front-cloudfront',
+    ],
+  },
+  {
+    id: 'bunny',
+    slot: 'frontCdn',
+    platform: 'bunny',
+    hosts: ['sakura'],
+    link: { via: 'http', as: 'static' },
+    label: 'Bunny: CDN を前段に置く（静的と画像だけ）',
+    note:
+      'Bunny CDN の Pull Zone の後ろに VPS（nginx）を置き、静的なファイルと変換済みの画像の大部分を Bunny が返す（VPS の回線と CPU が減る）。' +
+      'Cloudflare の Free と違い転送に $0.03/GB（アジア）かかるが、画像の割合についての規約の制限は無い。HTML は VPS のまま。' +
+      'API の応答のキャッシュは扱わない（Cloudflare の前段だけ）。月の最低額は $1。Bunny のアカウントが 1 つ増え、請求が 2 つになる',
+    premiseRefs: [
+      'fact:bunny:standard:pull-zone-origin',
+      'fact:bunny:standard:asia-rate',
+      'fact:bunny:standard:monthly-minimum',
+      'host:',
+    ],
   },
   // SPA の API の置き場（D-65）。label・note の方針は画像と同じ（事業者の名前を前に付け、損は note で分かるようにする）
   {
@@ -684,6 +816,8 @@ export function applyCross(
   const shape = opt ? hostImageShape(host, arch) : undefined;
   if (!opt || !shape) return arch;
   const transform = opt.link!.as === 'images';
+  if (opt.platform === 'bunny')
+    return applyBunnyImages(arch, shape, transform, framework);
   const bill = (planId: string, meters: Record<string, string>) => ({
     accountId: 'cloudflare',
     provider: 'cloudflare',
@@ -740,6 +874,72 @@ export function applyCross(
     'image-write': [...shape.write, 'cf-r2'],
   };
   if (transform) routes['image-transform'] = ['cf-images'];
+  else delete routes['image-transform'];
+  return { ...arch, nodes, routes };
+}
+
+// ---- 画像を Bunny で配る（D-98・prd/11 §23）----
+
+/**
+ * 画像の配信・保存・変換を、土台から Bunny（Storage・CDN・Optimizer）に移す。土台のノードの外し方と投稿の経路は
+ * Cloudflare の画像と同じ hostImageShape（投稿はサーバーが受けて Storage に PUT し、送るデータは土台の外への転送で数える）。
+ * Storage から CDN への転送・API の要求は無料なので、Storage のノードは保存だけを課金する。
+ */
+function applyBunnyImages(
+  arch: ArchitectureInput,
+  shape: { remove: string[]; write: string[]; out?: ArchNodeIn },
+  transform: boolean,
+  framework: FrameworkId | undefined,
+): ArchitectureInput {
+  const nextLoader =
+    framework === undefined ||
+    framework === 'nextjs' ||
+    framework === 'nextjs-export';
+  const nodes: ArchNodeIn[] = [
+    ...arch.nodes.filter((n) => !shape.remove.includes(n.id)),
+    // 外への転送のノードの名前は R2 の書き込み向けなので、書き先を Bunny Storage に替える
+    ...(shape.out
+      ? [
+          {
+            ...shape.out,
+            label: shape.out.label.replace('R2', 'Bunny Storage'),
+          },
+        ]
+      : []),
+    bunnyCdnNode('bunny-img', 'Bunny CDN（画像）', {
+      'image-read': BUNNY_IMAGE_HIT_RATE,
+    }),
+    {
+      id: 'bunny-storage',
+      label: 'Bunny Storage（画像）',
+      config: { kind: 'object-storage' },
+      facts: ['storage-origin'],
+      billing: bunnyBill('standard', { 'storage-gb-month': 'storage' }),
+    },
+    ...(transform
+      ? [
+          {
+            id: 'bunny-optimizer',
+            label: 'Bunny Optimizer（URL で変換）',
+            config: { kind: 'image-optimizer' },
+            facts: [
+              'dynamic-images',
+              'optimizer-flat',
+              ...(nextLoader ? ['no-next-loader'] : []),
+            ],
+            billing: bunnyBill('optimizer', {
+              'image-transformations': 'transformations',
+            }),
+          } as ArchNodeIn,
+        ]
+      : []),
+  ];
+  const routes: Partial<Record<RequestClass, string[]>> = {
+    ...arch.routes,
+    'image-read': ['bunny-img', 'bunny-storage'],
+    'image-write': [...shape.write, 'bunny-storage'],
+  };
+  if (transform) routes['image-transform'] = ['bunny-optimizer'];
   else delete routes['image-transform'];
   return { ...arch, nodes, routes };
 }

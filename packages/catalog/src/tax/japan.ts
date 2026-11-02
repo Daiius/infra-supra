@@ -116,6 +116,16 @@ export const JAPAN_TAX: readonly JapanTaxTreatment[] = [
     sources: [{ url: 'https://resend.com/pricing', retrievedAt: '2026-11-02' }],
   },
   {
+    provider: 'bunny',
+    status: 'unconfirmed',
+    premise:
+      'Bunny の料金ページ・SLA・利用規約に、VAT・日本の消費税の記載が無い（利用規約は前払いで返金しないと書くだけ。消費税の扱いは未確認。税抜のまま。D-98）',
+    sources: [
+      { url: 'https://bunny.net/pricing/', retrievedAt: '2026-11-02' },
+      { url: 'https://bunny.net/tos/', retrievedAt: '2026-11-02' },
+    ],
+  },
+  {
     provider: 'registrar',
     status: 'unconfirmed',
     premise:

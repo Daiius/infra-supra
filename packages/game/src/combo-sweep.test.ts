@@ -4,8 +4,8 @@
 import type { Choices, SlotId } from 'catalog';
 import { describe, expect, it, vi } from 'vitest';
 
-// 1 群で数百の組を 12 か月回すので、CI の遅い実行環境では既定の 5 秒を超えることがある（D-87）。
-vi.setConfig({ testTimeout: 60_000 });
+// 1 群で数百の組を 12 か月回すので、CI の遅い実行環境では既定の 5 秒を超えることがある（D-87）。Bunny の部品（D-98）で組が増えたので 120 秒に
+vi.setConfig({ testTimeout: 120_000 });
 import {
   applyAction,
   checkAction,

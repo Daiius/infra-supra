@@ -1,7 +1,7 @@
-# 11. AWS の追加と、事業者をまたぐ構成（Netlify・Neon・Google Cloud を含む）
+# 11. AWS の追加と、事業者をまたぐ構成（Netlify・Neon・Google Cloud・Bunny を含む）
 
 > 状態: **論点は決定済み（2026-11-01・D-50）・段 1（AWS・D-51）と段 2 の最初の組（Vercel・AWS + 画像だけ Cloudflare・D-52・§2.5・§3.6）を実装した**。
-> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）・Google Cloud（§16・D-88）・さくらの VPS の前の Cloudflare のプロキシ（§17・D-91）・実行ごとのログの費用（§18・D-92）も実装した。§0〜§8 は草案のときの文で、今の形は §9 以降。
+> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）・Google Cloud（§16・D-88）・さくらの VPS の前の Cloudflare のプロキシ（§17・D-91）・実行ごとのログの費用（§18・D-92）・転送の安い従量の CDN の Bunny（§23・D-98）も実装した。§0〜§8 は草案のときの文で、今の形は §9 以降。
 > 未取得・未決の残りは [decisions](./_grilling/decisions.md) 末尾の「未決」に集めた。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
 > （DB だけ Cloudflare だが Vercel + Next.js など）も入れてみたい」に対し、今までの積み重ね（prd/06・07 §11・10 §3、D-20・D-24・D-31・D-37・D-44〜D-48）の上に載せるならどうするかの案。
 > 料金・制限の数値は §1.5・§2.1 に**公式で確かめたものだけ**を出典 URL と取得日（2026-11-01）つきで書く。確かめていないことは「未確認」「推測」と書く。
@@ -1389,3 +1389,90 @@ golden: 記事のシード 3 の「VPS・前段の CDN」が $1,730.88・won →
 - ゲームの終わりの後の月の支払い（前払いなしで、乗り換えで使わなくなった確約の残りの月）を評価に入れること。
 - さくらの年額の途中解約の返金の確かめ・Cloud Run の CUD がリクエストに効くかの確かめ。
 - 見積モードの構成の比較の表・費用の曲線に確約の月額を出すこと（今は明細の下の注記だけ）。始める画面の 1 か月目の費用の見込みに確約を含めること。
+
+## 23. 転送の安い従量の CDN: Bunny（2026-11-02・D-98）
+
+以前の指摘「AWS だと output transfer の量が多くなると厳しい」には画像だけ Cloudflare（D-52）で対応した。ここでは Cloudflare に寄せない別の選択肢として、
+**転送の単価が安い従量の CDN の Bunny（bunny.net）**を、画像の配信と前段の CDN に差せるようにした。料金は `providers/bunny.ts`、組み合わせは `stacks/cross.ts`（`CROSS_PAIRS`）、
+ノードは `stacks/bunny.ts`。
+
+### 23.1 確かめた公式の事実（2026-11-02 取得）
+
+| 項目 | 事実 | 出典 |
+|---|---|---|
+| CDN の転送（Standard network・119 拠点） | 地域ごとの単価: Europe & North America $0.01/GB・Asia & Oceania $0.03/GB・South America $0.045/GB・Middle East & Africa $0.06/GB。段の割引は無い | [CDN の料金](https://bunny.net/pricing/cdn/)・[料金](https://bunny.net/pricing/) |
+| CDN の転送（Volume network・10 拠点） | First 500 TB $0.005/GB・500 TB〜1 PB $0.004・1〜2 PB $0.002・2 PB〜は問い合わせ。アジアの拠点の一覧に「Tokyo (Volume)」がある | 同上・[アジアの拠点](https://bunny.net/cdn/content-delivery-asia/) |
+| 要求の課金 | 「No Request Fees」「Only pay for the bandwidth you actually use」 | [CDN の料金](https://bunny.net/pricing/cdn/) |
+| 月の最低額 | 「$1 monthly minimum」（CDN・Storage のページとも） | [料金](https://bunny.net/pricing/)・[Storage の料金](https://bunny.net/pricing/storage/) |
+| Bunny Storage | Standard（HDD）は 1 地域 $0.01/GB・2 地域 $0.02・3 地域 $0.025（追加 1 地域ごと +$0.005、9 地域まで）。Edge（SSD）は 1 地域 $0.02/GB。「Free traffic to Bunny CDN」「No API fees」「Free API egress」。地域に東京がある | [Storage の料金](https://bunny.net/pricing/storage/) |
+| Storage を CDN のオリジンに | Pull Zone の Origin Type を「Bunny Storage Zone」に。アップロードは HTTP API の PUT（`storage.bunnycdn.com`） | [Storage の手順](https://bunny.net/docs/storage/quickstart.md) |
+| Pull Zone | 「A Pull Zone connects your origin server to the Bunny CDN network」「If not cached, the edge fetches from your origin, caches the response, and delivers it」 | [CDN の文書](https://bunny.net/docs/cdn.md) |
+| Bunny Optimizer | 「$9.50/website」・「Unlimited requests / optimizations / transformations FREE」・「Fixed monthly price, regardless of your traffic and scale」・時間ごとの課金 | [Optimizer の料金](https://bunny.net/pricing/optimizer/) |
+| 画像の変換 | Pull Zone で Optimizer を有効にし、Dynamic Image API を有効にすると `?width=500`・`?quality=75&format=webp` で変換。結果は拠点でキャッシュ | [Dynamic Images](https://bunny.net/docs/optimizer/dynamic-images/overview.md) |
+| SLA | 「99.99% Uptime Guarantee」。下回った月は利用に応じたクレジット（10〜59 分で 12 時間分 … 7 時間以上で 240 時間分）。利用規約は CDN の目標を 99.995% と書く | [SLA](https://bunny.net/sla/)・[利用規約](https://bunny.net/tos/) |
+| 試用・支払い | 14 日の無料の試用（カードなし）。「All payments are paid in advance and are not refundable」。月の転送の上限で超える請求を止められる（Overcharge Protection） | [利用規約](https://bunny.net/tos/)・[CDN の料金](https://bunny.net/pricing/cdn/) |
+| Next.js | next/image の loaderFile の公式の例（Akamai・CloudFront・Cloudinary・Cloudflare など 16）に Bunny は無い | [next.config.js の images](https://nextjs.org/docs/app/api-reference/config/next-config-js/images) |
+
+- **未確認**: 日本がどの地域の単価か（料金ページは地域の名前だけ）・日本の閲覧を Volume network の単価で配れるか・日本の消費税（料金ページ・SLA・利用規約に記載なし。`tax/japan.ts` は `unconfirmed`）・Storage から CDN 以外への転送の単価。
+
+### 23.2 入れた形
+
+- **料金データ**（`bunny`。USD・税抜）: プラン `standard`（CDN の転送 $0.03/GB・Storage $0.01/GB 月。要求・Storage の API・Storage → CDN の転送は課金なし）と `optimizer`（基本料 $9.50 / 月・ノードごと・変換は $0）。
+  - 転送は **Asia & Oceania の $0.03/GB**（解釈: 日本の閲覧者は東京などアジアの拠点から配られる。退けた読み: Europe & North America の $0.01・Volume network の $0.005）。Volume network は入れていない。
+  - **月の最低額**は、D-85 の最小の課金量（メーターごとの量の最小）でなく、**基本料 $1 + 同じ額のクレジット（従量すべてに当たる）**で表す（請求 = max($1, 従量)。Vercel Pro の $20 と同じ形）。
+    Optimizer の月額は別のプランの明細なので最低額のクレジットに当たらず、従量が $1 未満の月は最大 $1 高めに出る（高めの側）。
+  - SLA は `offered`（99.99%）。部品だけの事業者で、セルフサービスのまま SLA がある（catalog のテストを直した）。
+- **部品**（`CROSS_COMPONENTS`。`platform: 'bunny'`。アカウントの手間は D-52 のとおり Bunny のアカウントが 1 つ増える）:
+  - 画像: `bunny-images`（Storage に置き Optimizer で変換。振る舞いは `images`）・`bunny-resize`（投稿のときに縮めて Storage に置く。振る舞いは `resize`）。
+    差せる土台は画像だけ Cloudflare と同じ Vercel・AWS（Amplify・S3 + CloudFront の SPA）・OpenNext・Netlify・Google Cloud。外すノード・投稿の経路は `hostImageShape` をそのまま使い、
+    投稿はサーバーが受けて Storage に PUT し、**送るデータは土台の外への転送**（Lambda・OpenNext → AWS のインターネットへの転送、Cloud Run → Premium Tier、Netlify の関数 → Netlify の転送量。Vercel・Amplify は料金の文書に項目が無く数えない）。
+    経路は `image-read: bunny-img → bunny-storage`・`image-write: … → bunny-storage`・`image-transform: bunny-optimizer`。CDN のヒット率は画像の他の CDN と同じ 0.9（仮定）。
+  - 前段の CDN（`frontCdn` の `bunny`。静的と画像だけ）: **Amplify の Next.js**（自前の CloudFront の前段と同じ形。外れた分と HTML・API は Amplify の配信としても課金される読み）と
+    **さくらの VPS**（Cloudflare の「静的と画像だけ」と同じヒット率。VPS に届く量も同じ）。課金だけが Bunny。HTML もキャッシュする形は入れていない（パージの API の確かめが要る）。
+    VPS の API の応答のキャッシュは Cloudflare の前段（Cache Rules）だけで、Bunny の前段では選べない（`componentConflict`）。
+  - `CROSS_PAIRS` に 7 行（画像 × 5 土台・前段 × Amplify・VPS）。D-91 では「前段は土台のスロットの部品なので表に載せない」としたが、Bunny は部品だけの事業者なので、前段の部品も表で許す。
+  - OpenNext・SPA は最初から CloudFront があり、Vercel・Netlify・Google Cloud には前段のスロットが無いので、Bunny の前段は入れていない（画像だけ Bunny で配る）。
+- **説明文**（`COMPONENT_FLAVOR`）: `bunny:images:*`・`bunny:frontCdn:bunny`。始める画面・ゲーム中の差し替え・見積モードは選択肢の一覧（`componentsOf`）から自動で出る。網羅テスト（combo-sweep）にも自動で入る。
+
+### 23.3 基準プレイ（何もしない・シード 1〜20。達成数・12 か月の費用の平均 / 月）
+
+**既定の結果・CF Paid × Next.js（記事 20/20 $18.9・受託 20/20 $14.4）・golden・網羅テストは不変**（Bunny は選んだときだけ効く）。
+
+| 構成 × 画像 / 前段 | 記事 | 受託 |
+|---|---|---|
+| Amplify Next・既定（縮めて S3 + CloudFront） | 9/20 $54.4 | 20/20 $18.8 |
+| 〃 画像だけ Cloudflare（縮める / 変換） | 20/20 $34.7 / 20/20 $44.6 | 20/20 $18.8 |
+| 〃 Bunny（縮める / 変換） | 0/20 $61.6 / 8/20 $51.4 | 20/20 $18.8 |
+| 〃 既定 + 前段 自前の CloudFront / **Bunny** | 10/20 $50.9 / **14/20 $43.3** | 20/20 $16.6 / $17.9 |
+| 〃 Amplify の最適化 + 前段 CloudFront / Bunny | 20/20 $25.2 / 20/20 $34.8 | 20/20 $16.6 / $17.9 |
+| 〃 Cloudflare で縮める + 前段 Bunny | **20/20 $23.6** | 20/20 $17.9 |
+| Amplify SPA・既定 / Cloudflare で縮める / Bunny（縮める / 変換） | 18/20 $17.7 / 20/20 $5.1 / 4/20 $28.5 / 20/20 $20.8 | 20/20 $7.9 |
+| OpenNext・既定 / Cloudflare で縮める / Bunny（縮める / 変換） | 15/20 $39.2 / 20/20 $7.2 / **20/20 $34.0 / 20/20 $23.9** | 20/20 $5.5 |
+| Google Cloud・既定 / Cloudflare で変換 / Bunny（縮める / 変換） | 0/20 $64.3 / 20/20 $38.0 / 1/20 $55.0 / **20/20 $44.9** | 20/20 $15.9 |
+| Vercel Pro・既定 / Cloudflare で変換 / Bunny で変換 | 0/20 $125.6 / $92.3 / $99.2 | 0/20 $49.9 |
+| Netlify Pro・既定 / Cloudflare で変換 / Bunny で変換 | 0/20 $91.3 / $69.7 / $76.5 | 0/20 $48.5 |
+| さくらの VPS 2GB・前段なし / Cloudflare / Bunny | 8/20 $14.9 / 13/20 $14.9 / 6/20 $25.0 | 0/20 $16.1 / $16.1 / $17.4 |
+| さくらの VPS 4GB・前段なし / Cloudflare / Bunny | 0/20 $28.2 / 4/20 $28.2 / 0/20 $38.4 | 3/20 $29.5 / 3/20 $29.5 / 0/20 $30.8 |
+
+- **Cloudflare との比較**: 画像の配信は、どの規模でも **R2（転送が無料）のほうが安い**。Vercel Pro に差した画像のアカウントの月額（記事・Next.js）:
+
+  | 月の PV | 3 万 | 10 万 | 30 万 | 100 万 | 300 万 | 1,000 万 |
+  |---|---|---|---|---|---|---|
+  | Cloudflare（R2 + Images で変換） | $5.15 | $5.15 | $5.15 | $5.15 | $5.15 | $5.15 |
+  | Bunny（Storage + Optimizer） | $10.50 | $10.82 | $13.07 | $20.95 | $43.45 | $122.20 |
+  | Cloudflare（R2 に縮めて置く） | $0.15 | $0.15 | $0.15 | $0.15 | $0.15 | $0.15 |
+  | Bunny（Storage に縮めて置く） | $1.00（最低額） | $1.33 | $3.58 | $11.45 | $33.95 | $112.70 |
+
+  Bunny が Cloudflare より得になるのは費用ではなく、**Cloudflare に寄せない構成**（DNS・ゾーンを Cloudflare に置かない）・変換を一意な変換の数でなく月額で払うこと（Images Paid の
+  一意な変換 $0.50 / 1,000 の 5,000 の後と比べ、変換だけなら月 約 2.4 万を超えると Optimizer の $9.50 が安い。転送の分は別）・VPS の前で画像の割合の規約（D-91）を気にしないこと・SLA があること。
+- **土台の転送との比較**: Bunny の $0.03/GB は土台の転送より安い（CloudFront の従量は常時無料 1 TB の後 $0.114/GB → **月 約 1.36 TB を超えると Bunny が安い**、Amplify の配信 $0.15/GB は最初から）。
+  そのため Amplify の既定（縮めて S3 + CloudFront）の画像を Bunny に替えると、記事の規模（画像の多くが常時無料の 1 TB に収まる）では**かえって高い**（9 → 0/20）。一方で、Amplify の静的なファイル・
+  OpenNext・Google Cloud の画像のように土台の転送の単価がそのままかかる分は Bunny で下がる（Amplify の前段 9 → 14/20・OpenNext の画像 15 → 20/20・Google Cloud の画像 0 → 20/20）。
+- さくらの VPS では、前段の効き（VPS の回線・CPU）は Cloudflare と同じで、転送の分（月 約 $10）だけ高く達成も下がる。受託 × VPS 4GB の Bunny の前段は SLA の要件を満たしたまま置けるが、費用で 3 → 0/20。
+
+### 23.4 残した点
+
+- Volume network（日本の閲覧がその単価で配られるかの確かめ）・Storage の複数の地域の複製・Edge（SSD）。
+- Bunny の前段で HTML もキャッシュする形（パージの API の確かめ・Next.js の s-maxage との関係）・VPS の API の応答のキャッシュ。
+- Vercel・Netlify・Google Cloud の前に Bunny を置く形（各事業者が前段のプロキシを勧めるかの確かめ）・OpenNext の CloudFront を Bunny に替える形。
+- Optimizer の月額を最低額に含めること（今は最大 $1 高め）・日本の消費税・往復の遅延。

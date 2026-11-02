@@ -161,7 +161,7 @@ describe('前段の CDN', () => {
         setupSlots(ARTICLE_COMMUNITY, VPS, fw)
           .find((x) => x.slot === 'frontCdn')
           ?.options.map((o) => o.id),
-      ).toEqual(['none', 'static', 'html']);
+      ).toEqual(['none', 'static', 'html', 'bunny']);
   });
 
   it('CDN（Free）に SLA は無いので、前に置くと SLA の要件を満たさない', () => {
@@ -169,5 +169,9 @@ describe('前段の CDN', () => {
     expect(
       meetsRequirement(VPS_4GB, 'uptime-sla', { frontCdn: 'static' }),
     ).toBe(false);
+    // Bunny の前段（D-98）はセルフサービスのまま SLA（99.99%）があるので、要件を満たしたまま前に置ける
+    expect(meetsRequirement(VPS_4GB, 'uptime-sla', { frontCdn: 'bunny' })).toBe(
+      true,
+    );
   });
 });
