@@ -389,6 +389,90 @@ describe('ゲームモードの画面', () => {
     expect(details.querySelector('[data-side-node="build"]')).not.toBeNull();
   });
 
+  it('W-16 構成・フレームワークを替える前に、既定に戻るページの描き方を知らせる（D-107 の補足）', () => {
+    renderApp();
+    const vinextS1 =
+      '記事のページは S1 → S2（既定）に戻る: vinext のビルドのときの事前描画（静的な HTML）は確かめていない（RS-15）';
+    startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Vercel Pro + Supabase Pro',
+      beforeStart: () => {
+        fireEvent.click(
+          within(
+            screen.getByRole('region', { name: 'ページの描き方' }),
+          ).getByRole('button', { name: /^記事のページを S1/ }),
+        );
+        // 始める画面: 選んでいないカードに、替えると戻る描き方を出す
+        const cf = document.querySelector<HTMLElement>(
+          'section[data-stack="cloudflare-vinext-paid"]',
+        )!;
+        expect(within(cf).getByRole('note').textContent).toBe(
+          `この構成にすると、${vinextS1}`,
+        );
+        // 選べる構成（さくらの VPS）には出さない
+        const vps = document.querySelector<HTMLElement>(
+          'section[data-stack="sakura-vps-2gb"]',
+        )!;
+        expect(within(vps).queryByRole('note')).toBeNull();
+        const astro = screen.getByRole('region', { name: 'Astro の説明' });
+        expect(within(astro).getByRole('note').textContent).toMatch(
+          /^このフレームワークにすると、記事のページは S1 → S3（既定）に戻る: /,
+        );
+      },
+    });
+    // ゲームの途中: 乗り換え・作り直しの選択肢に、替える前に出す。手間の表示は今までどおり
+    const option = (re: RegExp) =>
+      [...document.querySelectorAll('label')].find((l) =>
+        re.test(l.textContent ?? ''),
+      )!;
+    const migrate = option(/^Cloudflare Paid \+ vinext.*へ乗り換える/);
+    expect(within(migrate).getByRole('note').textContent).toBe(
+      `乗り換えると、${vinextS1}`,
+    );
+    expect(migrate.textContent).toContain('か月');
+    const rewrite = option(/^Astro に作り直す/);
+    expect(within(rewrite).getByRole('note').textContent).toMatch(
+      /^作り直すと、記事のページは S1 → S\d（既定）に戻る: 済んだ翌月から、描き方は新しいフレームワークの既定で始まる/,
+    );
+  });
+
+  it('W-17 選んでいない構成のカードは、その構成で選べない描き方を既定に戻して描く（流れの凡例のページ。D-107 の補足）', () => {
+    renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
+    );
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^Vercel Pro \+ Supabase Pro/ }),
+    );
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
+        'button',
+        { name: /^記事のページを S1/ },
+      ),
+    );
+    const lane = (stackId: string, label: string) =>
+      within(
+        document.querySelector<HTMLElement>(
+          `section[data-stack="${stackId}"]`,
+        )!,
+      )
+        .getAllByRole('button')
+        .find((b) => b.textContent?.startsWith(label))?.textContent ?? '';
+    // 選べる構成（Vercel）は S1 のまま: 記事のページは静的なページの流れ
+    expect(lane('vercel-supabase-pro', '静的なページ')).toContain(
+      '記事のページ',
+    );
+    // vinext では S1 を確かめていないので、CF のカードは既定（ISR）で描く
+    expect(lane('cloudflare-vinext-paid', 'ISR のページ')).toContain(
+      '記事のページ',
+    );
+    expect(lane('cloudflare-vinext-paid', '静的なページ')).not.toContain(
+      '記事のページ',
+    );
+  });
+
   it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', () => {
     renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));

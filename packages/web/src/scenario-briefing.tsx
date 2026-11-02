@@ -193,6 +193,7 @@ function FrameworkCard({
   noteId,
   routes,
   chosenRoutes,
+  routeNotice,
 }: {
   scenario: Scenario;
   id: FrameworkId;
@@ -205,6 +206,8 @@ function FrameworkCard({
   routes?: RoutePlanRow[] | undefined;
   /** 選んだ描き方（選んでいるカードの見取り図に使う。D-107）。 */
   chosenRoutes?: RouteOverrides | undefined;
+  /** このフレームワークにすると既定に戻る描き方の注意（選んでいないカードだけ。D-107 の補足）。 */
+  routeNotice?: string | null | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
   // 選んでいるカードは選んだ描き方で描く（D-107）
@@ -248,6 +251,11 @@ function FrameworkCard({
         {t?.note && (
           <p id={noteId} className="text-sm opacity-80">
             {t.note}
+          </p>
+        )}
+        {!selected && routeNotice && (
+          <p className="text-xs text-warning" role="note">
+            {routeNotice}
           </p>
         )}
         {rest.length > 0 && (
@@ -315,6 +323,7 @@ export function FrameworkField({
   comments,
   routePlan,
   routes,
+  routeNotice,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
@@ -326,6 +335,8 @@ export function FrameworkField({
   routePlan?: (id: FrameworkId) => RoutePlanRow[];
   /** 選んだ描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
+  /** そのフレームワークにすると既定に戻る描き方の注意（D-107 の補足）。 */
+  routeNotice?: (id: FrameworkId) => string | null;
 }) {
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
@@ -367,6 +378,7 @@ export function FrameworkField({
             noteId={`${idPrefix}-${id}`}
             routes={routePlan?.(id)}
             chosenRoutes={routes}
+            routeNotice={selected ? null : routeNotice?.(id)}
           />
         )}
       />

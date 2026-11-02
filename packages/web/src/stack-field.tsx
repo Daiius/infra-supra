@@ -9,6 +9,7 @@ import {
   stackName,
   stackOffered,
   STACKS,
+  validRouteOverrides,
   type FrameworkId,
   type RouteOverrides,
   type Scenario,
@@ -32,6 +33,7 @@ function StackCard({
   routes,
   selected,
   noteId,
+  routeNotice,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -42,11 +44,20 @@ function StackCard({
   routes: RouteOverrides | undefined;
   selected: boolean;
   noteId: string;
+  /** この構成にすると既定に戻る描き方の注意（選んでいないカードだけ。D-107 の補足）。 */
+  routeNotice?: string | null | undefined;
 }) {
   const name = stackName(stackIndex, framework, false);
+  // この構成で選べない描き方は既定に戻して描く（構成図の staticBuildOf と同じ。D-107 の補足）
   const pages = useMemo(
-    () => pageWireframes(scenario, framework, comments, routes),
-    [scenario, framework, comments, routes],
+    () =>
+      pageWireframes(
+        scenario,
+        framework,
+        comments,
+        routes && validRouteOverrides(scenario, stackIndex, framework, routes),
+      ),
+    [scenario, stackIndex, framework, comments, routes],
   );
   const arch = useMemo(
     () =>
@@ -97,6 +108,11 @@ function StackCard({
         <p id={noteId} className="text-sm opacity-80">
           {stackFlavor(stackIndex)}
         </p>
+        {!selected && routeNotice && (
+          <p className="text-xs text-warning" role="note">
+            {routeNotice}
+          </p>
+        )}
         <EffortBar
           scenario={scenario}
           stackIndex={stackIndex}
@@ -126,6 +142,7 @@ export function StackField({
   components,
   comments,
   routes,
+  routeNotice,
 }: {
   scenario: Scenario;
   framework: FrameworkId;
@@ -137,6 +154,8 @@ export function StackField({
   comments?: number | undefined;
   /** 選んだページごとの描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
+  /** その構成にすると既定に戻る描き方の注意（D-107 の補足）。 */
+  routeNotice?: (stackIndex: number) => string | null;
 }) {
   const offered = STACKS.filter((s) => stackOffered(s.index, framework));
   const indexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
@@ -166,6 +185,7 @@ export function StackField({
           routes={routes}
           selected={selected}
           noteId={`${idPrefix}-${id}`}
+          routeNotice={selected ? null : routeNotice?.(indexOf(id))}
         />
       )}
     />
