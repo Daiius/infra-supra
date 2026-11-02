@@ -452,7 +452,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
       veryHeavyImageKB: 1_000,
     },
     quality: { good: 150, fair: 100 },
-    freshness: { good: 300, fair: 3600 },
+    // 投稿した人は投稿の直後に自分の記事を開く（1 分まで待てる。ゲーム上の仮定・D-104）。静的書き出しの新しい記事はビルドまで開けない
+    freshness: { good: 300, fair: 3600, newPostVisibleSec: 60 },
     feature: { expectedPerMonth: 8, good: 1, fair: 0.6 },
   },
   effort: { perMonth: 10, selfHostedUpkeep: 3 },

@@ -83,7 +83,10 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
         },
       ],
       'nextjs-export': [
-        { kind: 'freshness', text: '鮮度: ビルドし直しで載る' },
+        {
+          kind: 'freshness',
+          text: '鮮度: ビルドし直しで載る（新しい記事はビルドまで開けない）',
+        },
         { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
       ],
       'vite-spa': [
@@ -203,8 +206,8 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
       app: [
         '記事のページ（2,000 ページ）はビルドのときに静的な HTML にし、事業者の静的な配信から返す。サーバーを持たない（ISR・SSR・Cookie・Server Actions・Proxy は使えない）',
         '個人向けのページは静的な HTML の上で、ブラウザ（Client Component）が API で中身を取る（SPA と同じく、中身の API が 1 PV あたり 1 回増える。API の置き場は SPA と同じく選べる）',
-        '利用者が投稿するたびにサイトをビルドし直す形なので、記事が増えるほど 1 回のビルドが長くなる（ゲーム上の仮定）',
-        '記事の投稿・編集はビルドし直しで反映する（間隔は設定「ビルドの間隔」。1 回のビルドの時間: 記事 1,000 ページあたり 0.5 分 + 1 分）。ビルドの時間は Workers Builds・Vercel のビルドの料金、Netlify はデプロイの回数で数える（VPS は同じホスト、AWS は手元か CI でビルドし、数えない）',
+        '利用者が投稿するたびにサイトをビルドし直す形なので、記事が増えるほど 1 回のビルドが長くなる（ゲーム上の仮定）。新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさず、鮮度を 1 段下げる。ゲーム上の仮定）',
+        '記事の投稿・編集はビルドし直しで反映する（間隔は設定「ビルドの間隔」。載るまで間隔 + ビルドの時間。1 回のビルドの時間: 記事 1,000 ページあたり 0.5 分 + 1 分）。ビルドの時間は Workers Builds・Vercel のビルドの料金、Netlify はデプロイの回数で数える（VPS は同じホスト、AWS は手元か CI でビルドし、数えない）',
         '画像の部品（next/image）は既定のローダーが使えない。Cloudflare Images・Netlify Image CDN は変換の URL を返すローダーで使え、Vercel の画像の最適化・VPS のホストでの変換は選べない（既定は投稿のときに縮める）',
         '初回表示・JS の量は Next.js と同じとみなす。記事ごとの SNS のカード（OGP）は HTML に入る',
       ],

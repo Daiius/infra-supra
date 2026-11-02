@@ -41,7 +41,15 @@ export type SatisfactionRules = {
     veryHeavyImageKB?: number;
   };
   quality: { good: number; fair: number };
-  freshness: { good: number; fair: number };
+  freshness: {
+    good: number;
+    fair: number;
+    /**
+     * 利用者が投稿した記事が、投稿した人に開けるまでの許容（秒。D-104・ゲーム上の仮定）。記事をビルドし直す形（静的書き出し）では、
+     * 新しい記事のページはビルドが終わるまで無い。遅れ（間隔 + ビルドの時間）がこれを超えると、鮮度を 1 段下げる。省略は判定しない。
+     */
+    newPostVisibleSec?: number;
+  };
   feature: { expectedPerMonth: number; good: number; fair: number };
 };
 

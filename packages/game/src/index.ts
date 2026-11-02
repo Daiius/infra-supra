@@ -324,7 +324,7 @@ export const SETTINGS = {
     label: 'ビルドの間隔',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。記事の更新は間隔だけ遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
+    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、鮮度（満足度）が下がる。新しく投稿された記事は、ビルドが終わるまでページが無い（投稿した人がすぐ開けない）。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
     options: [
       {
         value: ON_DEMAND_REVALIDATE,
@@ -1704,7 +1704,8 @@ function onDemandBlocker(
 ): { slot: SlotId; label: string; reason: string } | undefined {
   // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
   if (framework === 'vite-spa') return undefined;
-  // Next.js の静的書き出しは記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-80）
+  // Next.js の静的書き出しは記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-80）。
+  // 新しい記事がビルドまで開けない分は、鮮度の判定で別に下げる（D-104）
   if (rebuildsStaticPages(framework)) return undefined;
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
@@ -2519,12 +2520,12 @@ function commentsNote(state: GameState): string | undefined {
     return 'ISR のキャッシュを使わない（毎回描く）ので、作り直しは増えない';
   if (isOnDemand(state.settings))
     return rebuilds
-      ? 'コメントの投稿のたびにビルドし直す'
+      ? 'コメントの投稿のたびにビルドし直す（コメントはビルドの時間の分だけ遅れて見える）'
       : state.framework === 'astro'
         ? 'コメントの投稿のたびに記事のページのキャッシュを消す（描き直しが増える）'
         : 'コメントの投稿のたびに記事のページを再検証する（再生成・CDN の無効化が増える）';
   return rebuilds
-    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントはその分遅れて見え、鮮度が下がる`
+    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントは間隔とビルドの時間の分だけ遅れて見え、鮮度が下がる`
     : state.framework === 'astro'
       ? `記事のキャッシュが時間（${optionLabel('pageCache', state.settings.revalidateSec)}）なので、描き直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`
       : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`;
@@ -4503,9 +4504,20 @@ export function playMonth(input: GameState): GameState {
       ?.onDemandIsr?.ok === false;
   const eventuallyConsistent =
     (comps.db === 'kv' && !apiPlacedElsewhere(comps)) || frontUnpurged;
-  const judgedDelaySec = frontDelayed
-    ? viewed.revalidateSec * FRONT_CDN_DELAY_FACTOR
-    : viewed.revalidateSec;
+  // 記事をビルドし直す形（静的書き出し）は、更新が載るまで間隔にビルドの時間を足した分だけ遅れる（オンデマンドでもビルドの時間は待つ。D-104）
+  const buildDelaySec = rebuilds
+    ? (r.simulation.workload.input.build?.minutesPerBuild ?? 0) * 60
+    : 0;
+  const judgedDelaySec =
+    (frontDelayed
+      ? viewed.revalidateSec * FRONT_CDN_DELAY_FACTOR
+      : viewed.revalidateSec) + buildDelaySec;
+  // 新しい記事は、ビルドが終わるまでページが無い。投稿した人が開けるまでの許容を超えたら、コミュニティの要件を満たさない（D-104）
+  const newPostLimit = sat.freshness.newPostVisibleSec;
+  const newPostDelayed =
+    buildDelaySec > 0 &&
+    newPostLimit !== undefined &&
+    judgedDelaySec > newPostLimit;
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
   // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
   const onDemandSetting = !spa && isOnDemand(state.settings);
@@ -4514,12 +4526,12 @@ export function playMonth(input: GameState): GameState {
       ? onDemandBlocker(stackIndexNow, state.components, state.framework)
       : undefined;
   // コメントを記事のページに含め、時間で再検証・ビルドするなら、コメントは間隔の分だけ遅れて見える（D-85）。
-  // オンデマンド（コメントのたびに作り直す）・キャッシュしない（毎回 SSR）なら遅れない
+  // オンデマンド（コメントのたびに作り直す）・キャッシュしない（毎回 SSR）なら遅れない。ビルドし直す形はオンデマンドでもビルドの時間は遅れる（D-104）
   const commentsDelayed =
     sc.comments !== undefined &&
     commentsInPage(viewed, state.framework, sc) &&
     !uncached &&
-    !isOnDemand(viewed);
+    (!isOnDemand(viewed) || buildDelaySec > 0);
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
@@ -4539,6 +4551,7 @@ export function playMonth(input: GameState): GameState {
       uncached,
       eventuallyConsistent,
       onDemandUnmet: onDemand !== undefined,
+      newPostDelayed,
       ...(commentsDelayed
         ? {
             commentFreshness: {
@@ -4595,6 +4608,8 @@ export function playMonth(input: GameState): GameState {
     eventuallyConsistent,
     frontDelayed,
     uncached,
+    buildDelaySec,
+    newPostDelayed,
     // 遅れがコメントの「良い」の境目を超えたときだけ理由に出す
     commentsDelayed:
       commentsDelayed && judgedDelaySec > sc.comments!.freshness.good,
@@ -5061,6 +5076,10 @@ function stageReasons(
     /** HTML を前段の CDN でもキャッシュし、時間で再検証している（更新は最大で間隔の約 2 倍遅れる。D-91）。 */
     frontDelayed?: boolean;
     uncached: boolean;
+    /** ビルドし直す形の 1 回のビルドの時間（秒。鮮度の遅れに足す。D-104）。 */
+    buildDelaySec?: number;
+    /** 新しい記事がビルドまで開けず、投稿した人の許容を超える（D-104）。 */
+    newPostDelayed?: boolean;
     /** コメントを記事のページに含め、時間で再検証・ビルドしている（コメントが間隔の分だけ遅れて見える。D-85）。 */
     commentsDelayed?: boolean;
     onDemandReason?: string | undefined;
@@ -5094,11 +5113,11 @@ function stageReasons(
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
-        (c.spa || !isOnDemand(c.settings)) &&
+        (c.spa || c.rebuilds || !isOnDemand(c.settings)) &&
         (c.spa
           ? `API のキャッシュの期間 ${optionLabel('apiCacheTtl', c.settings.revalidateSec)}`
           : c.rebuilds
-            ? `ビルドの間隔 ${optionLabel('buildInterval', c.settings.revalidateSec)}`
+            ? `ビルドの間隔 ${optionLabel('buildInterval', c.settings.revalidateSec)} + ビルドの時間 約 ${Math.round((c.buildDelaySec ?? 0) / 60)} 分`
             : c.astro
               ? `記事のキャッシュの期限 ${optionLabel('pageCache', c.settings.revalidateSec)}`
               : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
@@ -5106,6 +5125,8 @@ function stageReasons(
         'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて（キャッシュを消せない）、更新がすぐ見えない',
       c.frontDelayed &&
         'HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見える（オンデマンドの再検証でキャッシュを消せば遅れない）',
+      c.newPostDelayed &&
+        '新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさない）',
       c.commentsDelayed &&
         'コメントを記事のページに含めているので、コメントも間隔の分だけ遅れて見える',
       c.onDemandReason,
