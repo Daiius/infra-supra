@@ -152,17 +152,18 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
       run(article, VERCEL_PRO, 'nextjs', { db: 'neon', images: 'cf-resize' })
         .won,
     ).toBe(0);
-    // Netlify Pro × Next.js は Neon と画像だけ Cloudflare の組で一部のシードが届く
+    // Netlify Pro × Next.js は Neon と画像だけ Cloudflare の組で一部のシードが届く（メールの送信の費用で 7 → 3。D-95）
     expect(
       run(article, NETLIFY_PRO, 'nextjs', { db: 'neon', images: 'cf-resize' })
         .won,
-    ).toBe(7);
+    ).toBe(3);
   });
 
   it('受託: 夜間・休日に止まる分（D-90）で Neon の SPA は多くのシードが届き、Netlify Personal（Neon Launch）では全シードが届く', () => {
     expect(run(contract, VERCEL_PRO, 'vite-spa').won).toBe(0);
-    expect(run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }).won).toBe(18);
-    expect(run(contract, VERCEL_PRO, 'nextjs', { db: 'neon' }).won).toBe(6);
+    // メールの送信（D-95）の費用で 18 → 14・6 → 0
+    expect(run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }).won).toBe(14);
+    expect(run(contract, VERCEL_PRO, 'nextjs', { db: 'neon' }).won).toBe(0);
     expect(
       run(contract, NETLIFY_PERSONAL, 'vite-spa', { db: 'neon' }).won,
     ).toBe(20);
@@ -217,21 +218,22 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     };
     // 前（D-89 まで。月の平均の到着率）: 受託 × AWS × SPA の 0 ACU $76.1・OpenNext $73.7、受託 × Neon は Vercel Next 0/20・SPA 7/20・
     // Netlify Pro Next 0/20・SPA 7/20・Personal Next 0/20・SPA 20/20 $32.6、記事は Aurora の 0 ACU で $0.6 安かった
+    // Neon Launch の履歴の窓（既定 1 日。D-93）。メールの送信の既定の SES（D-95）を数えた分（前は上から $76.5・$55.3・$52.9・$88.1・$88.1・
+    // 6/20 $36.3・18/20 $34.7・14/20 $34.6・18/20 $34.5・19/20 $31.8・20/20 $27.1・$118.1・7/20 $52.4）
     expect(table).toEqual({
-      contractAwsSpaAurora: '0/20 $76.5',
-      contractAwsSpaPause: '0/20 $55.3',
-      contractOpenNextPause: '0/20 $52.9',
-      articleAwsSpaAurora: '0/20 $88.1',
-      articleAwsSpaPause: '0/20 $88.1',
-      // Neon Launch の履歴の窓（既定 1 日）を数えた分（D-93。前は $36.2）
-      contractVercelNext: '6/20 $36.3',
-      contractVercelSpa: '18/20 $34.7',
-      contractNetlifyNext: '14/20 $34.6',
-      contractNetlifySpa: '18/20 $34.5',
-      contractPersonalNext: '19/20 $31.8',
-      contractPersonalSpa: '20/20 $27.1',
-      articleVercelNext: '0/20 $118.1',
-      articleNetlifyNextCf: '7/20 $52.4',
+      contractAwsSpaAurora: '0/20 $78.8',
+      contractAwsSpaPause: '0/20 $57.6',
+      contractOpenNextPause: '0/20 $55.2',
+      articleAwsSpaAurora: '0/20 $89.0',
+      articleAwsSpaPause: '0/20 $89.0',
+      contractVercelNext: '0/20 $38.8',
+      contractVercelSpa: '14/20 $37.5',
+      contractNetlifyNext: '6/20 $37.2',
+      contractNetlifySpa: '16/20 $37.3',
+      contractPersonalNext: '14/20 $34.4',
+      contractPersonalSpa: '20/20 $29.9',
+      articleVercelNext: '0/20 $119.2',
+      articleNetlifyNextCf: '3/20 $53.5',
     });
   });
 });

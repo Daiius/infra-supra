@@ -108,14 +108,17 @@ describe('Vercel + 画像だけ Cloudflare', () => {
     );
 
   it('課金のアカウントに Cloudflare が加わる（既定は Vercel と Supabase）', () => {
+    // メールの送信（D-95）の既定の Amazon SES の AWS も構成の既定のアカウント
     expect(accountsOf(composeStack('vercel-supabase-pro'))).toEqual([
       'vercel',
       'supabase',
+      'aws',
     ]);
     expect(accountsOf(pro('cf-images'))).toEqual([
       'vercel',
       'supabase',
       'cloudflare',
+      'aws',
     ]);
     expect(accountsOf(pro('cf-resize', 'vite-spa'))).toContain('cloudflare');
   });
@@ -305,7 +308,7 @@ describe('SPA の API の置き場（D-65）', () => {
 
   it('Vercel + Workers の API + D1: Supabase が外れ、API は Worker → D1。Blob への投稿は Vercel の関数に残る', () => {
     const a = spa('vercel-supabase-pro', { api: 'cf-workers' });
-    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare', 'aws']);
     expect(ids(a)).not.toContain('db');
     expect(a.routes.api).toEqual(['cf-worker', 'cf-d1']);
     expect(a.routes['api-content']).toEqual(['cf-worker', 'cf-d1']);
@@ -419,7 +422,7 @@ describe('Next.js のサーバーから別の事業者の API を呼ぶ（F-14�
 
   it('Vercel: Supabase が外れ、SSR・ISR の作り直し・API の経路の DB が Worker → D1 になる（CDN と関数は残る）', () => {
     const a = next('vercel-supabase-pro', api);
-    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare', 'aws']);
     expect(ids(a)).not.toContain('db');
     expect(a.routes['document-ssr']).toEqual([
       'cdn',
@@ -581,7 +584,7 @@ describe('Astro の API の置き場（D-69）', () => {
 
   it('Vercel: Supabase が外れ、マイページ・API の DB が Worker → D1 になる（記事は静的・ビルドは残る）', () => {
     const a = astro('vercel-supabase-pro', { api: 'cf-workers-astro' });
-    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare', 'aws']);
     expect(ids(a)).not.toContain('db');
     expect(ids(a)).toContain('build');
     expect(a.routes['document-ssr']).toEqual([
@@ -607,7 +610,7 @@ describe('Astro の API の置き場（D-69）', () => {
 
   it('VPS: マイページ・API の VPS の後に Worker → D1。VPS は MySQL を動かさず、ディスクに DB を置かない', () => {
     const a = astro('sakura-vps-2gb', { api: 'cf-workers-astro' });
-    expect(accountsOf(a)).toEqual(['sakura', 'cloudflare']);
+    expect(accountsOf(a)).toEqual(['sakura', 'cloudflare', 'aws']);
     expect(a.routes['document-ssr']).toEqual(['vps', 'cf-worker', 'cf-d1']);
     expect(a.routes.api).toEqual(['vps', 'cf-worker', 'cf-d1']);
     expect(a.routes['document-static']).toEqual(['vps']);
@@ -811,6 +814,6 @@ describe('DB だけ Neon（D-77）', () => {
       { api: 'cf-workers' },
       { framework: 'vite-spa' },
     );
-    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare']);
+    expect(accountsOf(a)).toEqual(['vercel', 'cloudflare', 'aws']);
   });
 });

@@ -84,6 +84,8 @@ describe('選べる範囲', () => {
       apiCache: 'none',
       // API の先の DynamoDB の PITR（D-93）
       dbBackup: 'default',
+      // メール送信（D-95）
+      email: 'default',
     };
     const valid = validSetupChoices(article, CF_PAID, 'vite-spa', chosen);
     expect(valid).not.toHaveProperty('db');

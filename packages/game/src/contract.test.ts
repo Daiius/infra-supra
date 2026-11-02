@@ -36,45 +36,46 @@ describe('受託先の業務アプリの運用', () => {
         }),
       );
     expect(r(42)).toEqual({
-      'cf-paid': ['1988.27', 'won', 12],
+      'cf-paid': ['1903.68', 'won', 12],
       // D-93: PITR の依頼（D1 の Time Travel で満たす）を受け、乗り換えるまで上乗せ $20 / 月が入る（前は $1,589.92・goal）
-      'cf-paid-accept': ['1769.92', 'won', 12],
-      vps: ['1737.44', 'goal', 12],
-      'vps-care': ['1844.57', 'won', 12],
-      'vps-sla': ['1844.57', 'won', 12],
-      'vercel-pro': ['1507.07', 'goal', 12],
-      'vercel-to-cf': ['1800.47', 'won', 12],
-      'vercel-hobby': ['179.19', 'policy', 2],
-      'cf-free': ['237.47', 'outages', 3],
-      'aws-amplify': ['1842.60', 'won', 12],
-      'aws-opennext': ['1988.68', 'won', 12],
+      // D-95: メールの送信（CF Paid は Email Service・乗り換えた先は SES）の費用で $1,769.92・won → goal
+      'cf-paid-accept': ['1680.24', 'goal', 12],
+      vps: ['1712.63', 'goal', 12],
+      'vps-care': ['1818.78', 'won', 12],
+      'vps-sla': ['1818.78', 'won', 12],
+      'vercel-pro': ['1479.30', 'goal', 12],
+      'vercel-to-cf': ['1721.51', 'won', 12],
+      'vercel-hobby': ['176.29', 'policy', 2],
+      'cf-free': ['233.27', 'outages', 3],
+      'aws-amplify': ['1817.17', 'won', 12],
+      'aws-opennext': ['1963.25', 'won', 12],
     });
     expect(r(11)).toEqual({
-      'cf-paid': ['2069.97', 'won', 12],
-      'cf-paid-accept': ['1581.77', 'goal', 12],
-      vps: ['1603.33', 'outages', 12],
-      'vps-care': ['1921.04', 'won', 12],
-      'vps-sla': ['2028.98', 'won', 12],
-      'vercel-pro': ['1578.94', 'goal', 12],
-      'vercel-to-cf': ['1874.23', 'won', 12],
-      'vercel-hobby': ['179.19', 'policy', 2],
-      'cf-free': ['237.47', 'outages', 3],
-      'aws-amplify': ['1893.60', 'won', 12],
-      'aws-opennext': ['2060.99', 'won', 12],
+      'cf-paid': ['1970.81', 'won', 12],
+      'cf-paid-accept': ['1506.80', 'goal', 12],
+      vps: ['1575.36', 'outages', 12],
+      'vps-care': ['1891.43', 'won', 12],
+      'vps-sla': ['1999.36', 'won', 12],
+      'vercel-pro': ['1547.01', 'goal', 12],
+      'vercel-to-cf': ['1781.69', 'won', 12],
+      'vercel-hobby': ['176.29', 'policy', 2],
+      'cf-free': ['233.27', 'outages', 3],
+      'aws-amplify': ['1864.40', 'won', 12],
+      'aws-opennext': ['2031.79', 'won', 12],
     });
     expect(r(3)).toEqual({
-      'cf-paid': ['2036.76', 'won', 12],
+      'cf-paid': ['1943.58', 'won', 12],
       // D-46: 乗り換え先の Vercel で添付が Vercel Blob の課金になる
-      'cf-paid-accept': ['1726.18', 'won', 12],
-      vps: ['1715.59', 'outages', 12],
-      'vps-care': ['1821.02', 'won', 12],
-      'vps-sla': ['1821.02', 'won', 12],
-      'vercel-pro': ['1545.47', 'goal', 12],
-      'vercel-to-cf': ['1845.17', 'won', 12],
-      'vercel-hobby': ['179.19', 'policy', 2],
-      'cf-free': ['237.47', 'outages', 3],
-      'aws-amplify': ['1872.68', 'won', 12],
-      'aws-opennext': ['2031.30', 'won', 12],
+      'cf-paid-accept': ['1543.64', 'goal', 12],
+      vps: ['1690.49', 'outages', 12],
+      'vps-care': ['1794.90', 'won', 12],
+      'vps-sla': ['1794.90', 'won', 12],
+      'vercel-pro': ['1515.24', 'goal', 12],
+      'vercel-to-cf': ['1758.31', 'won', 12],
+      'vercel-hobby': ['176.29', 'policy', 2],
+      'cf-free': ['233.27', 'outages', 3],
+      'aws-amplify': ['1845.04', 'won', 12],
+      'aws-opennext': ['2003.66', 'won', 12],
     });
   });
 
@@ -120,7 +121,7 @@ describe('受託先の業務アプリの運用', () => {
 
   it('このシナリオで効かない部品のスロットは出さない', () => {
     const s = playMonth(newGame(CF_PAID, 42, sc, DEFAULT_START_DATE));
-    expect(componentSlots(s).map((x) => x.slot)).toEqual(['db']);
+    expect(componentSlots(s).map((x) => x.slot)).toEqual(['db', 'email']);
   });
 
   it('帳票の依頼の効果の要約', () => {

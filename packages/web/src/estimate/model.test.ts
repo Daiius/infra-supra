@@ -118,6 +118,30 @@ describe('URL のクエリ', () => {
     );
   });
 
+  it('メール送信（D-95）: 既定は CF Paid が Email Service・ほかは SES で、Resend に替えると Resend の請求が増える', () => {
+    const at = (s: string, q = '') =>
+      runEstimate(normalizeInput(fromQuery(`?t=business&s=${s}${q}`)));
+    const providers = (v: ReturnType<typeof at>) =>
+      v.providers.map((p) => p.provider);
+    const cf = at('cloudflare-vinext-paid');
+    expect(
+      cf.providers
+        .find((p) => p.provider === 'cloudflare')!
+        .lines.some((l) => l.label.startsWith('メールの送信')),
+    ).toBe(true);
+    expect(providers(at('gcp-cloud-run'))).toContain('aws');
+    const pro = at('gcp-cloud-run', '&c.email=resend-pro');
+    expect(providers(pro)).toContain('resend');
+    expect(providers(pro)).not.toContain('aws');
+    expect(pro.totalUsd).toBeGreaterThan(at('gcp-cloud-run').totalUsd);
+    // Resend Free は受託の規模で 1 日 100 通を超え、止まる前提に当たる
+    expect(
+      at('gcp-cloud-run', '&c.email=resend-free').thresholds.find(
+        (p) => p.id === 'pool:resend:free:free-daily',
+      ),
+    ).toMatchObject({ hit: true });
+  });
+
   it('読めない値は捨てる', () => {
     const q = fromQuery('?pv=abc&c.nope=x&c.images=none');
     expect(q.pv).toBeUndefined();
@@ -138,8 +162,9 @@ describe('runEstimate', () => {
 
   it('出典は使った事業者だけで、URL と取得日を持つ', () => {
     const v = runEstimate(normalizeInput({ stack: 'vercel-supabase-pro' }));
+    // メール送信（D-95）の既定の Amazon SES の分、AWS も入る
     expect(v.sources.map((s) => s.provider).sort()).toEqual(
-      ['supabase', 'vercel'].sort(),
+      ['aws', 'supabase', 'vercel'].sort(),
     );
     for (const s of v.sources) {
       expect(s.links.length).toBeGreaterThan(0);

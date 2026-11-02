@@ -1181,3 +1181,29 @@ describe('DB のバックアップ（D-93）', () => {
     });
   });
 });
+
+describe('メールの送信（D-95）', () => {
+  const sender: ArchitectureInput['nodes'] = [
+    { id: 'm', label: 'm', config: { kind: 'email-sender' } },
+  ];
+
+  it('通数は MAU × 利用者あたり + 書き込み × 書き込みあたりで、経路を持たない', () => {
+    const we = resolveWorkload(
+      workload({ email: { perMau: 0.5, perWrite: 0.2 } }),
+    );
+    const writes = we.monthlyPageViews * 1 * 0.5;
+    expect(we.emails).toBeCloseTo(1000 * 0.5 + writes * 0.2, 9);
+    const u = simulateResources(we, {
+      id: 'x',
+      name: 'x',
+      nodes: sender,
+      routes: {},
+    });
+    expect(u.nodes.m!.resources).toEqual({ emails: we.emails });
+  });
+
+  it('email が無ければ送らない（0 は資源に載せない）', () => {
+    expect(w.emails).toBe(0);
+    expect(sim(sender, {}).m!.resources.emails).toBeUndefined();
+  });
+});

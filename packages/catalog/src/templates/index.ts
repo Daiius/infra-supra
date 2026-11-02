@@ -76,6 +76,9 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
       uploadsPerMau: 0.01,
     },
     db: { sizeGB: 0.3, responseKBPerQuery: 2 },
+    // メール（D-95。ゲーム上の仮定・出典なし）: 登録の確認・パスワードの再設定などを利用者の 2%（月）、
+    // コメント・返信の通知を書き込み 10 回に 1 通（書き込みにはいいね・下書きも含み、通知を受ける設定の人だけに送る）
+    email: { perMau: 0.02, perWrite: 0.1 },
   };
 }
 

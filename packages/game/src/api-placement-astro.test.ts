@@ -152,6 +152,7 @@ describe('Astro の API の置き場（D-69）', () => {
     expect(run(article, CF_PAID, VPS2).won).toBe(17);
     expect(run(article, VERCEL_PRO, WORKERS).won).toBe(0);
     expect(run(contract, VERCEL_PRO, WORKERS).won).toBe(20);
-    expect(run(contract, CF_PAID, VPS2).won).toBe(12);
+    // メールの送信（D-95）の費用で 12 → 9
+    expect(run(contract, CF_PAID, VPS2).won).toBe(9);
   });
 });

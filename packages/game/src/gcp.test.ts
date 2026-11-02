@@ -74,6 +74,8 @@ describe('Google Cloud の構成', () => {
       ['minInstances', ['0', '1']],
       // DB のバックアップ（D-93）: 既定の Firestore は PITR を付けられる
       ['dbBackup', ['default', 'pitr']],
+      // メール送信（D-95）: 既定は SES、Resend も選べる
+      ['email', ['default', 'resend-free', 'resend-pro']],
       ['files', ['gcs']],
     ]);
     // 静的書き出しは next/image の既定のローダーが使えないので、変換の部品が無い
@@ -86,6 +88,7 @@ describe('Google Cloud の構成', () => {
       'db',
       'minInstances',
       'dbBackup',
+      'email',
       'files',
     ]);
     for (const fw of ['nextjs', 'vite-spa', 'astro'] as const)
@@ -134,22 +137,25 @@ describe('Google Cloud の構成', () => {
       contractSpaSql: run(contract, GCP, 'vite-spa', { db: 'cloud-sql' }),
     };
     expect(table).toEqual({
-      articleNext: { won: 0, monthly: 62 },
-      articleNextMin1: { won: 0, monthly: 71.4 },
-      articleNextSql: { won: 0, monthly: 69 },
-      articleNextCfResize: { won: 20, monthly: 26 },
-      articleSpa: { won: 0, monthly: 54.2 },
-      articleSpaCfResize: { won: 20, monthly: 9.7 },
-      contractNext: { won: 20, monthly: 12.2 },
-      contractNextMin1: { won: 20, monthly: 21.6 },
+      articleNext: { won: 0, monthly: 63.1 },
+      articleNextMin1: { won: 0, monthly: 72.5 },
+      articleNextSql: { won: 0, monthly: 70.1 },
+      articleNextCfResize: { won: 20, monthly: 27 },
+      articleSpa: { won: 0, monthly: 55.1 },
+      articleSpaCfResize: { won: 20, monthly: 10.6 },
+      contractNext: { won: 20, monthly: 14.8 },
+      contractNextMin1: { won: 20, monthly: 24.2 },
       // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）
-      contractNextSql: { won: 20, monthly: 17 },
-      contractSpa: { won: 20, monthly: 8.6 },
-      contractSpaSql: { won: 20, monthly: 13 },
+      contractNextSql: { won: 20, monthly: 19.6 },
+      contractSpa: { won: 20, monthly: 11.4 },
+      contractSpaSql: { won: 20, monthly: 15.8 },
     });
-    // 目標の根拠（CF Paid × Next.js）は不変
-    expect(run(article, CF_PAID, 'nextjs')).toEqual({ won: 20, monthly: 15.2 });
-    expect(run(contract, CF_PAID, 'nextjs')).toEqual({ won: 20, monthly: 5.7 });
+    // 目標の根拠（CF Paid × Next.js）: 達成は不変。メールの送信（D-95・Email Service）の分だけ費用が上がった（前は $15.2・$5.7）
+    expect(run(article, CF_PAID, 'nextjs')).toEqual({ won: 20, monthly: 18 });
+    expect(run(contract, CF_PAID, 'nextjs')).toEqual({
+      won: 20,
+      monthly: 13.4,
+    });
   });
 
   /** 1 か月目の部品・設定で、PV と画像の大きさだけを替えた見積（Cloud Run の構成）。 */

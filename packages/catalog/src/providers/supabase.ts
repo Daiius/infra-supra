@@ -14,6 +14,11 @@ export const supabase: PriceBookInput = {
   retrievedAt: R,
   sources: {
     pricing: src('https://supabase.com/pricing'),
+    // Auth の組み込みのメール（2026-11-02 取得。D-95）
+    authSmtp: {
+      url: 'https://supabase.com/docs/guides/auth/auth-smtp',
+      retrievedAt: '2026-11-02',
+    },
     billing: src(
       'https://supabase.com/docs/guides/platform/billing-on-supabase',
     ),
@@ -71,7 +76,7 @@ export const supabase: PriceBookInput = {
       id: 'free',
       service: 'database',
       name: 'Free',
-      sourceIds: ['pricing', 'billing'],
+      sourceIds: ['pricing', 'billing', 'authSmtp'],
       uptimeSla: {
         status: 'none',
         premise:
@@ -87,6 +92,7 @@ export const supabase: PriceBookInput = {
       notes: [
         '1 週間使われないとプロジェクトが一時停止する',
         '有効な無料プロジェクトは 2 つまで',
+        'Auth の組み込みのメールはプロジェクトのチームのメンバーにしか送れず（他の宛先は「Email address not authorized」）、1 時間 2 通まで。公式は本番では自前の SMTP を設定するよう求めている。構成のメールは外の送信のサービス（Resend など）で数える（D-95）',
       ],
       meters: [
         {
@@ -124,7 +130,7 @@ export const supabase: PriceBookInput = {
         per: 'month',
         scope: 'account',
       },
-      sourceIds: ['pricing', 'compute'],
+      sourceIds: ['pricing', 'compute', 'authSmtp'],
       uptimeSla: {
         status: 'none',
         premise:
@@ -150,6 +156,7 @@ export const supabase: PriceBookInput = {
         'Pro は支出上限が既定で有効。ただし Compute は上限の対象外',
         'Compute は 1 時間単位で切り上げ',
         '日次のバックアップは 7 日分を残す（Pro に込み）。任意の時点への復元（PITR）はアドオン（D-93）',
+        'Auth の組み込みのメールはプロジェクトのチームのメンバーにしか送れず（他の宛先は「Email address not authorized」）、1 時間 2 通まで。公式は本番では自前の SMTP を設定するよう求めている。構成のメールは外の送信のサービス（Resend など）で数える（D-95）',
       ],
       meters: [
         {

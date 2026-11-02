@@ -213,6 +213,7 @@ describe('基準プレイ（何もしない・シード 1〜20・prd/10 §9.6）
     const r = run(contract, CF_FREE, 'vite-spa', VPS2);
     expect(r.won).toBe(17);
     expect(r.incidents).toBeGreaterThan(0);
-    expect(run(contract, idx('sakura-vps-2gb'), 'vite-spa', {}).won).toBe(1);
+    // メールの送信（D-95）の費用で 1 → 0
+    expect(run(contract, idx('sakura-vps-2gb'), 'vite-spa', {}).won).toBe(0);
   });
 });

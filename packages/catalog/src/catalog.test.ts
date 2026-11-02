@@ -225,7 +225,8 @@ describe('プラットフォームの前提（金額ではなく、当たった�
       books,
     });
     expect(r.premises.filter((x) => x.hit)).toEqual([]);
-    expect(r.bill.lines.filter((l) => l.amount)).toHaveLength(1);
+    // VPS の固定費と、メールの送信（D-95）の既定の Amazon SES の従量
+    expect(r.bill.lines.filter((l) => l.amount)).toHaveLength(2);
   });
 
   it('止まる前提が先、次に近い順に並ぶ', () => {

@@ -182,6 +182,7 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
 
   // D-47: 記事のデザインの刷新の提案（7 か月目）を断る基準プレイは、2 か月画質が下がって所持金が少し下がる
   it('記事コミュニティの SPA の基準プレイ（golden。シード 42）', () => {
+    // D-95: メールの送信（CF Paid は Email Service・ほかは SES）の費用で所持金が $9〜40 減る（結果は変わらない）
     // D-48: Vercel Pro の込み分をやめ、クレジットがすべての従量に当たる形に（Vercel Pro・何もしないは所持金が約 $550 減る）
     const r = Object.fromEntries(
       article.baselines.map((b) => {
@@ -190,19 +191,19 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       }),
     );
     expect(r).toEqual({
-      'cf-paid': ['1840.83', 'won', 12],
-      'cf-paid-accept': ['1936.66', 'won', 12],
-      'vps-images': ['1641.36', 'goal', 12],
-      'vercel-pro': ['829.40', 'goal', 12],
-      'vercel-to-cf': ['1408.57', 'goal', 12],
-      'cf-free': ['142.89', 'outages', 3],
-      'cf-paid-kvdb': ['1695.56', 'goal', 12],
-      'cf-paid-chat': ['1867.32', 'won', 12],
-      'vps-sla': ['1593.41', 'goal', 12],
-      'vps-cdn': ['1575.57', 'goal', 12],
-      'vercel-cf-images': ['1355.55', 'goal', 12],
-      'aws-amplify-cdn': ['1815.39', 'won', 12],
-      'aws-opennext-images': ['1955.85', 'won', 12],
+      'cf-paid': ['1817.23', 'won', 12],
+      'cf-paid-accept': ['1896.83', 'won', 12],
+      'vps-images': ['1632.12', 'goal', 12],
+      'vercel-pro': ['819.06', 'goal', 12],
+      'vercel-to-cf': ['1387.49', 'goal', 12],
+      'cf-free': ['141.58', 'outages', 3],
+      'cf-paid-kvdb': ['1674.52', 'goal', 12],
+      'cf-paid-chat': ['1843.27', 'won', 12],
+      'vps-sla': ['1584.41', 'goal', 12],
+      'vps-cdn': ['1566.65', 'goal', 12],
+      'vercel-cf-images': ['1345.20', 'goal', 12],
+      'aws-amplify-cdn': ['1805.05', 'won', 12],
+      'aws-opennext-images': ['1945.51', 'won', 12],
     });
   });
 });

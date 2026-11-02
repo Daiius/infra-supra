@@ -305,4 +305,25 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
       ],
     ]),
   ),
+  // メール送信（D-95）。構成の既定は Cloudflare Paid が自前の Email Service、ほかは Amazon SES
+  'cloudflare:email:default':
+    '同じアカウントの中で送れ、設定が少ない。新しい機能なので、上限は使い方で決まる',
+  'aws:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い。月額は無い',
+  'aws-opennext:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い。月額は無い',
+  'vercel:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い。月額は無い',
+  'netlify:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い。月額は無い',
+  'gcp:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い。月額は無い',
+  'sakura:email:default':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い。月額は無い',
+  'aws:email:ses':
+    '大手のクラウドの送信のサービスで、送った通数だけの支払い。月額は無い',
+  'resend:email:resend-free':
+    '開発者に人気の送信のサービスの無料プラン。小さく始めるなら費用がかからない',
+  'resend:email:resend-pro':
+    '開発者に人気の送信のサービスの有料プラン。月額で通数がたっぷり込み',
 };

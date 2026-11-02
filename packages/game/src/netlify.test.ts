@@ -59,6 +59,8 @@ describe('Netlify の構成', () => {
       ['db', false],
       // DB のバックアップ（D-93）: Supabase Pro に PITR を付けられる
       ['dbBackup', false],
+      // メール送信（D-95）
+      ['email', false],
       ['files', true],
     ]);
     expect(
@@ -79,7 +81,14 @@ describe('Netlify の構成', () => {
   it('Free は記事コミュニティで 1 か月目にクレジットを使い切って止まる（請求は 0）', () => {
     const s = doNothing(FREE, 1);
     expect(s.history[0]!.status).toBe('down');
-    expect(s.history[0]!.infraCost).toBe(0);
+    // Netlify・Supabase の請求は 0（メールの送信の既定の SES の従量だけ。D-95）
+    expect(s.history[0]!.infraCost).toBeCloseTo(
+      s.history[0]!.lines.filter((l) => l.meterId === 'outbound').reduce(
+        (a, l) => a + l.amount,
+        0,
+      ),
+      9,
+    );
     expect(
       s.history[0]!.premises.find(
         (p) => p.id === 'credit:netlify:free:monthly-credits',
@@ -114,7 +123,8 @@ describe('Netlify の構成', () => {
 
   it('受託: Pro は月 $45（Netlify $20 + Supabase $25）のまま、クレジットに収まる', () => {
     const s = doNothing(PRO, 1, 'nextjs', SCENARIOS['contract-operations']!);
-    expect(s.history[0]!.infraCost).toBeCloseTo(45, 6);
+    // メールの送信の既定の SES（利用者 1,500 人 × 月 10 通 = 1.5 万通 × $0.10 / 1,000。D-95）
+    expect(s.history[0]!.infraCost).toBeCloseTo(45 + 1.5, 6);
     expect(s.history.every((h) => h.status === 'ok')).toBe(true);
   });
 

@@ -193,6 +193,19 @@ export const cloudflare: PriceBookInput = {
       url: 'https://developers.cloudflare.com/workers/observability/logs/workers-logs/',
       retrievedAt: '2026-11-02',
     },
+    // Email Service の送信（Email Sending。2026-11-02 取得。D-95）。料金ページの最終更新 2026-06-09・制限 2026-10-30
+    emailPricing: {
+      url: 'https://developers.cloudflare.com/email-service/platform/pricing/',
+      retrievedAt: '2026-11-02',
+    },
+    emailService: {
+      url: 'https://developers.cloudflare.com/email-service/',
+      retrievedAt: '2026-11-02',
+    },
+    emailLimits: {
+      url: 'https://developers.cloudflare.com/email-service/platform/limits/',
+      retrievedAt: '2026-11-02',
+    },
     // Cloudflare Observability の 2026-12-01 からの料金（2026-11-02 取得。D-94）
     observabilityPricing: {
       url: 'https://developers.cloudflare.com/observability/pricing/',
@@ -457,6 +470,16 @@ export const cloudflare: PriceBookInput = {
         'Workers Paid は Workers Logs のログが月 2,000 万件まで込み（保持は 7 日）',
       sourceIds: ['workersLogs'],
     },
+    {
+      id: 'paid-email-sending',
+      quantity: 3_000,
+      unit: 'count',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'Workers Paid は Email Service の送信（Email Sending）が月 3,000 通まで込み（アカウントごと・請求の期間ごと。跳ね返ったメールも数える）',
+      sourceIds: ['emailPricing'],
+    },
     // Cloudflare Observability（2026-12-01 から。D-94）。Workers Logs・Traces・Containers のログなどとアカウントで共有
     {
       id: 'paid-observability-ingest',
@@ -659,6 +682,7 @@ export const cloudflare: PriceBookInput = {
       notes: [
         'Workers Logs は Free で 1 日 20 万件まで（保持 3 日）。課金は無く、ログの費用は数えない（D-92）',
         'D1 の Time Travel（任意の時点への復元）は常に有効で、Free は直近 7 日。履歴と復元に追加の費用はかからない（D-93）',
+        'Email Service の送信（Email Sending）は Free では使えない（アカウントで確かめた宛先にだけ送れる）。Free の構成のメールは Resend Free で数える（D-95）',
       ],
       meters: [
         {
@@ -800,6 +824,17 @@ export const cloudflare: PriceBookInput = {
         'D1 の Time Travel（任意の時点への復元）は常に有効で、Paid は直近 30 日。履歴と復元に追加の費用はかからない（D-93）',
       ],
       meters: [
+        {
+          id: 'email-sending',
+          label: 'メールの送信（Email Service: Email Sending）',
+          resource: 'emails',
+          unit: 'count',
+          allowancePool: 'paid-email-sending',
+          premise:
+            'Email Service の送信は Workers Paid で月 3,000 通を超えた分が 1,000 通 $0.35（Worker の binding・REST API・SMTP のどれで送っても同じ）',
+          pricing: { model: 'flat', per: 1_000, unitPrice: 0.35 },
+          sourceIds: ['emailPricing'],
+        },
         {
           id: 'build-minutes',
           label: 'ビルドの時間（Workers Builds: build minutes）',
@@ -946,7 +981,15 @@ export const cloudflare: PriceBookInput = {
         },
         KV_SAME_KEY,
       ],
-      facts: WORKERS_FACTS,
+      facts: [
+        ...WORKERS_FACTS,
+        {
+          id: 'email-beta',
+          premise:
+            'Cloudflare の Email Service の送信は 2026-11 時点でベータ（Email Sending Beta）。新しいアカウントは控えめな 1 日の上限から始まり、送り方と評判で自動で上がる（数値の記載なし）',
+          sourceIds: ['emailService', 'emailLimits'],
+        },
+      ],
       uptimeSla: NO_SELF_SERVE_SLA,
     },
     {

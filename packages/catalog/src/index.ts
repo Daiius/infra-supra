@@ -5,6 +5,7 @@ import { aws } from './providers/aws.ts';
 import { cloudflare } from './providers/cloudflare.ts';
 import { gcp } from './providers/gcp.ts';
 import { neon } from './providers/neon.ts';
+import { resend } from './providers/resend.ts';
 import { netlify } from './providers/netlify.ts';
 import { sakuraVps } from './providers/sakura-vps.ts';
 import { supabase } from './providers/supabase.ts';
@@ -19,6 +20,7 @@ export const RAW_PRICE_BOOKS: readonly PriceBookInput[] = [
   netlify,
   neon,
   gcp,
+  resend,
 ];
 
 /** 検証済みの料金データ。本番の読み込みなので架空の料金は拒否される。 */
@@ -32,6 +34,7 @@ export * from './frameworks/index.ts';
 export * from './stacks/index.ts';
 export * from './stacks/cross.ts';
 export * from './stacks/backups.ts';
+export * from './stacks/email.ts';
 export * from './stacks/flavor.ts';
 export * from './stacks/files.ts';
 export * from './templates/index.ts';

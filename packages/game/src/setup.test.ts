@@ -28,11 +28,16 @@ describe('setupSlots', () => {
       ['images', false],
       ['db', false],
       ['realtime', true],
+      // メール送信（D-95）
+      ['email', false],
       ['files', true],
     ]);
     expect(
       slots.find((x) => x.slot === 'db')!.options.map((o) => o.id),
     ).toEqual(['d1', 'kv', 'hyperdrive']);
+    expect(
+      slots.find((x) => x.slot === 'email')!.options.map((o) => o.id),
+    ).toEqual(['default', 'ses', 'resend-free', 'resend-pro']);
     expect(slots.find((x) => x.slot === 'realtime')!.options).toHaveLength(1);
     expect(slots.find((x) => x.slot === 'files')!.options[0]).toMatchObject({
       id: 'r2',
@@ -86,12 +91,13 @@ it('画面に出る文（シナリオの文・出来事・基準プレイの名�
 describe('setupProblem・validSetupChoices', () => {
   it('未選択のスロットがあると始められず、理由にスロットの名前が出る', () => {
     expect(setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {})).toBe(
-      '部品をまだ選んでいない: ISR のキャッシュ・画像・DB',
+      '部品をまだ選んでいない: ISR のキャッシュ・画像・DB・メール送信',
     );
     expect(
       setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {
         isrCache: 'kv',
         images: 'images',
+        email: 'default',
       }),
     ).toBe('部品をまだ選んでいない: DB');
     expect(
@@ -99,6 +105,7 @@ describe('setupProblem・validSetupChoices', () => {
         isrCache: 'kv',
         images: 'images',
         db: 'd1',
+        email: 'default',
       }),
     ).toBeNull();
   });
@@ -174,6 +181,7 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
       frontCdn: 'static',
       apiCache: 'cdn',
       dbBackup: 'default',
+      email: 'default',
     };
     expect(
       validSetupChoices(ARTICLE_COMMUNITY, VPS_2GB, 'vite-spa', ok),
@@ -199,6 +207,7 @@ describe('初期の部品', () => {
       ...chosen,
       realtime: 'none',
       dbBackup: 'default',
+      email: 'default',
       api: 'same',
     });
     expect(newGame(CF_PAID, 42).components).toEqual({
@@ -207,6 +216,7 @@ describe('初期の部品', () => {
       db: 'd1',
       realtime: 'none',
       dbBackup: 'default',
+      email: 'default',
       api: 'same',
     });
   });

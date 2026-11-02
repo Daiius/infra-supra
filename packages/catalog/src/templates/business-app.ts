@@ -72,6 +72,9 @@ export function businessApp(monthlyPageViews: number): WorkloadInput {
       transformAt: 'none',
     },
     db: { sizeGB: 1, responseKBPerQuery: 2 },
+    // メール（D-95。ゲーム上の仮定・出典なし）: 業務の通知（申請・承認・差し戻し・期限の催促）とパスワードの再設定で、
+    // 利用者 1 人に月 10 通（平日 1 日に 約 0.5 通）。書き込みごとの分は通知にまとめて数える（0）
+    email: { perMau: 10, perWrite: 0 },
   };
 }
 

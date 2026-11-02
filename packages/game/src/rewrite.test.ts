@@ -250,7 +250,8 @@ describe('基準プレイの観点: VPS 2GB × SPA → Next.js に作り直す�
     const spa = wins('vite-spa');
     const rewritten = wins('vite-spa', [[rewrite('nextjs')]]);
     const next = wins('nextjs');
-    expect([spa, rewritten, next]).toEqual([0, 2, 10]);
+    // 始めから Next.js はメールの送信（D-95）の費用で 10 → 9
+    expect([spa, rewritten, next]).toEqual([0, 2, 9]);
   });
 });
 

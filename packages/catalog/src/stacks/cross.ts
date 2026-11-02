@@ -306,6 +306,42 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
       'https://docs.netlify.com/build/data-and-storage/netlify-db/',
     ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
   },
+  // アプリのメールの送信（D-95・2026-11-02 に原文で確かめた）。送信のサービスはインターネットの API・SMTP で呼ぶので、どの土台からも同じ形
+  ...(['cloudflare'] as const).map((host): CrossPair => ({
+    host,
+    slot: 'email',
+    provider: 'aws',
+    basis:
+      'Amazon SES は SMTP のインターフェースか API（HTTP の要求）で送れ、SMTP に対応したアプリ・言語からも使える（公式の文書）。' +
+      '送信は受け取る人 1 人ごとに 1,000 通 $0.10（東京）。送る元のドメインは SES で確かめる',
+    sources: [
+      'https://docs.aws.amazon.com/ses/latest/dg/send-email.html',
+      'https://aws.amazon.com/ses/pricing/',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  })),
+  ...(
+    [
+      'cloudflare',
+      'vercel',
+      'sakura',
+      'aws',
+      'aws-opennext',
+      'netlify',
+      'gcp',
+    ] as const
+  ).map((host): CrossPair => ({
+    host,
+    slot: 'email',
+    provider: 'resend',
+    basis:
+      'Resend は API キーと確かめた送る元のドメインで、サーバーの SDK（resend.emails.send）から送る（公式の Node.js の手順）。' +
+      'Free は 1 日 100 通・月 3,000 通まで（超過の料金なし）、Pro は月 $20 で 5 万通まで込み、超えた分は 1,000 通 $0.90',
+    sources: [
+      'https://resend.com/docs/send-with-nodejs',
+      'https://resend.com/pricing',
+      'https://resend.com/docs/knowledge-base/account-quotas-and-limits',
+    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+  })),
 ];
 
 const VERCEL_TO_CF_IMAGES_REFS = [
