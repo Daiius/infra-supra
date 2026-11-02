@@ -61,9 +61,10 @@ describe('Vite の SPA の構成', () => {
     expect(
       componentsOf('cloudflare', 'ogp', 'vite-spa').map((c) => c.id),
     ).toEqual(['none', 'prerender']);
+    // さくらの VPS の前段の CDN の「HTML も」は SPA ではシェルをキャッシュする（D-91）
     expect(
       componentsOf('sakura', 'frontCdn', 'vite-spa').map((c) => c.id),
-    ).not.toContain('html');
+    ).toContain('html');
   });
 
   it('Cloudflare: シェルは静的アセット（Worker を起動しない）。OGP の前処理を付けると Worker を通る', () => {

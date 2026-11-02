@@ -85,7 +85,7 @@ describe('オンデマンドの再検証（D-49）', () => {
     expect(kv.reasons.freshness).toMatch(
       /^オンデマンドの再検証が届かない（ISR のキャッシュ: KV。/,
     );
-    // VPS の前段の CDN で HTML もキャッシュすると届かない
+    // VPS の前段の CDN で HTML もキャッシュしても、再検証のたびに Free の purge の API で消すので届く（D-91）
     const html = playMonth(
       start(VPS_2GB, 0, {
         isrCache: 'default',
@@ -93,7 +93,7 @@ describe('オンデマンドの再検証（D-49）', () => {
         frontCdn: 'html',
       }),
     ).history[0]!.satisfaction;
-    expect(html.reasons.freshness).toContain('オンデマンドの再検証が届かない');
+    expect(html.stages.freshness).toBe('good');
   });
 
   it('ゲーム中の切り替え: 時間 → オンデマンドは手間 2、オンデマンド → 時間は 0', () => {

@@ -416,7 +416,8 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
   },
 ];
 
-// さくらの VPS の前段の CDN（D-31）。Cloudflare の CDN（Free）を前に置く（事業者をまたぐ構成の最初の事例・D-20）
+// さくらの VPS の前段の CDN（D-31・D-91）。Cloudflare のプロキシ（オレンジ雲・Free）を前に置く（事業者をまたぐ構成の最初の事例・D-20）。
+// Free は転送量で課金せず、ヒットした分だけ VPS の回線（100 Mbps）と nginx の CPU に届かなくなる
 const SAKURA_FRONT_CDN: ComponentOption[] = [
   {
     id: 'none',
@@ -431,9 +432,10 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
     slot: 'frontCdn',
     platform: 'sakura',
     label: 'Cloudflare（静的と画像だけ）',
-    note: '静的なファイルと変換済みの画像の大部分を CDN が返し、VPS の回線と CPU が減る。HTML は既定でキャッシュされないので VPS のまま。/_next/image（拡張子を持たない URL）は Cache Rules で対象にする前提（推測）',
+    note: 'DNS をプロキシ（オレンジ雲）にし、静的なファイルと変換済みの画像の大部分を CDN が返す（VPS の回線と CPU が減り、Free は転送量で課金しない）。HTML は既定でキャッシュされないので VPS のまま。/_next/image（拡張子を持たない URL）は Cache Rules で対象にする',
     premiseRefs: [
       'fact:cloudflare:cdn-free:html-not-cached',
+      'fact:cloudflare:cdn-free:free-bandwidth',
       'fact:cloudflare:cdn-free:pictures-terms',
       'host:',
     ],
@@ -441,14 +443,15 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
   {
     id: 'html',
     slot: 'frontCdn',
-    frameworks: ['nextjs'],
     platform: 'sakura',
-    label: 'Cloudflare（HTML もキャッシュ）',
-    note: 'ISR のページも CDN が返す。オンデマンドの再検証は CDN に届かず、s-maxage が切れるまで古いページが出る（パージの連携が要る）',
-    inappropriate: true,
-    onDemandIsr: { ok: false, fact: 'cloudflare:cdn-free:next-on-demand' },
+    label: 'Cloudflare（HTML も。Cache Rules）',
+    note: 'Cache Rules で HTML もキャッシュの対象にし、記事のページも CDN が返す（ログインの要るページは条件で外す）。CDN は Next.js の s-maxage（再検証の間隔）に従うので、時間の再検証では更新が最大で間隔の約 2 倍遅れて見える。オンデマンドの再検証・ビルドでは、更新のたびに Free の API でそのページのキャッシュを消す（prefix・タグは 1 分 5 回・1 回 100 件まで）ので遅れない',
+    onDemandIsr: { ok: true, fact: 'cloudflare:cdn-free:purge-free' },
     premiseRefs: [
-      'fact:cloudflare:cdn-free:next-on-demand',
+      'fact:cloudflare:cdn-free:cache-rules-html',
+      'fact:cloudflare:cdn-free:next-isr-headers',
+      'fact:cloudflare:cdn-free:purge-free',
+      'fact:cloudflare:cdn-free:free-bandwidth',
       'fact:cloudflare:cdn-free:pictures-terms',
       'host:',
     ],
@@ -1144,21 +1147,33 @@ function composeSakura(
               label: 'Cloudflare CDN（Free）',
               config: {
                 kind: 'cdn' as const,
-                // ヒット率は仮定（Vercel の CDN と同じ値を使う）。HTML もキャッシュするときだけ ISR のページを返す
-                // （ISR のページのヒット率は再生成の数と同じ式から出す。D-37）
+                // ヒット率は仮定（Vercel の CDN と同じ値を使う）。HTML もキャッシュするときだけ、静的なページ（SPA のシェル・
+                // Astro と静的書き出しの記事。ビルドの後に変わったページだけ消す前提）と ISR のページを返す
+                // （ISR のページのヒット率は再生成の数と同じ式から出す。D-37。D-91）
                 hitRate: {
                   asset: 1,
                   'document-static': frontCdn === 'html' ? 1 : 0,
                   'image-read': 0.9,
                 },
                 ...(frontCdn === 'html'
-                  ? { ttlClasses: ['document-isr' as const] }
+                  ? {
+                      ttlClasses: ['document-isr' as const],
+                      // オンデマンドの再検証のたびに、Free の purge の API でそのページを prefix で 1 回消す
+                      // （HTML と RSC の変種をまとめて。課金は無い。D-91）
+                      invalidationPathsPerPage: 1,
+                    }
                   : {}),
               },
               facts:
                 frontCdn === 'html'
-                  ? ['next-on-demand', 'pictures-terms']
-                  : ['html-not-cached', 'pictures-terms'],
+                  ? [
+                      'cache-rules-html',
+                      'next-isr-headers',
+                      'purge-free',
+                      'free-bandwidth',
+                      'pictures-terms',
+                    ]
+                  : ['html-not-cached', 'free-bandwidth', 'pictures-terms'],
               billing: {
                 accountId: 'cloudflare',
                 provider: 'cloudflare',
@@ -1219,13 +1234,16 @@ export function composeStack(
   const spa = browserCallsApi(options.framework);
   const nextExport = options.framework === 'nextjs-export';
   const astro = options.framework === 'astro';
-  // SPA・Astro・静的書き出しには ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品も Next.js だけ
+  // SPA・Astro・静的書き出しには ISR が無い（キャッシュの部品を作らない）。HTML を前段の CDN でキャッシュする部品は
+  // さくらの VPS ではシェル・静的なページを CDN が返す形になる（D-91）。AWS の前段の CloudFront の「HTML も」は Next.js だけ
   const c =
     spa || astro
       ? {
           ...withDefaults(def.platform, choices),
           isrCache: 'none',
-          ...(choices.frontCdn === 'html' ? { frontCdn: 'static' } : {}),
+          ...(choices.frontCdn === 'html' && def.platform !== 'sakura'
+            ? { frontCdn: 'static' }
+            : {}),
         }
       : withDefaults(def.platform, choices);
   const standby = options.standby ?? {};

@@ -34,8 +34,9 @@ describe('即時反映の要件', () => {
     expect(meetsRequirement(VPS, 'on-demand-isr', { frontCdn: 'static' })).toBe(
       true,
     );
+    // HTML もキャッシュしても、再検証と一緒に CDN の purge の API を呼べば満たせる（D-91）
     expect(meetsRequirement(VPS, 'on-demand-isr', { frontCdn: 'html' })).toBe(
-      false,
+      true,
     );
   });
 

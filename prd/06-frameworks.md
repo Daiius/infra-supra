@@ -239,7 +239,7 @@ MVP の比較対象は「フレームワーク × ホスト」の組み合わせ
 | AWS の OpenNext | **unsupported**（サーバーが無いので OpenNext は使わない） | — | — |
 
 - **API の置き場**: SPA と同じ部品・同じ組（D-65・D-67）。Vercel・AWS・Netlify の静的 + Cloudflare Workers・D1、Cloudflare の静的 + AWS Lambda・DynamoDB／さくらの VPS。ブラウザ（Client Component）が別のサブドメインの API を呼ぶ（CORS・Cookie の前提は F-13 と同じ）。
-- **部品**: ISR のキャッシュ・HTML を前段の CDN でキャッシュする部品・OGP の前処理・API の応答のキャッシュは出さない（記事は静的、マイページは個人化）。
+- **部品**: ISR のキャッシュ・OGP の前処理・API の応答のキャッシュは出さない（記事は静的、マイページは個人化）。さくらの VPS の前段の CDN の「HTML も」は、記事の静的なページを CDN が返す形で選べる（D-91）。
 - **満足度**: 初回表示・JS の量は Next.js と同じ扱い（`firstLoadHeavy`・`firstLoadLight` なし。速さの重さには SSR の CPU の値をそのまま使う: マイページはサーバーの描画が無い代わりにブラウザが HTML → JS → API を待つ、という仮定）。記事ごとの SNS のカードは HTML に入る（`noSocialCards` は SPA だけ）。鮮度・即時反映は Astro と同じ（設定「ビルドの間隔」・オンデマンドは更新のたびにビルド）。
 - **仮定**（ゲーム上）: 1 回のビルドの時間は Astro と同じ式（1 分 + 記事 1,000 ページあたり 0.5 分）。マイページの中身の API の CPU は SPA の `dataCpuFactor`（0.5）倍。受託は画像のスロットを出さないので、画像の既定は替えない（添付ファイルを縮めない）。
 

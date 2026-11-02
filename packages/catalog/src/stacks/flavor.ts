@@ -117,9 +117,9 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   'sakura:frontCdn:none':
     '間に何も挟まないので構成が単純で、問題の切り分けもしやすい',
   'sakura:frontCdn:static':
-    '静的なファイルと画像を CDN から返す。HTML はサーバーが返すまま',
+    '静的なファイルと画像を無料の CDN から返し、小さな VPS の回線を空ける。HTML はサーバーが返すまま',
   'sakura:frontCdn:html':
-    'ページまで CDN から返すので、サーバーの負荷がいちばん下がる',
+    'ページまで CDN から返すので、サーバーの負荷がいちばん下がる。更新のたびにキャッシュを消せば古いページも残らない',
   // SPA の API の応答のキャッシュ（D-37）
   'cloudflare:apiCache:none':
     'API を毎回処理するので、ページの中身はいつも最新。キャッシュの消し忘れも起きない',
