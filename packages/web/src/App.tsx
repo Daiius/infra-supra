@@ -1157,6 +1157,9 @@ function EventCard({ event: e }: { event: MonthEvent }) {
                   （今 {(p.ratio * 100).toFixed(0)}%）
                 </span>
               )}
+              {p.detail && (
+                <span className="basis-full opacity-80">{p.detail}</span>
+              )}
             </li>
           ))}
         </ul>
@@ -1204,6 +1207,9 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
     <li className="flex flex-wrap items-center gap-2">
       <span className={`badge badge-sm ${badge}`}>{label}</span>
       <span>{p.text}</span>
+      {p.detail && (
+        <span className="basis-full text-xs opacity-80">{p.detail}</span>
+      )}
       {ratio !== null && (
         <span className="flex items-center gap-1 text-xs opacity-70">
           <progress

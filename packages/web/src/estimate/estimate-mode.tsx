@@ -698,6 +698,11 @@ function Premises({
                 aria-label={`${p.text} ${pct(r)}`}
               />
               <span className="block break-words">{p.text}</span>
+              {p.detail && (
+                <span className="block break-words text-xs opacity-80">
+                  {p.detail}
+                </span>
+              )}
             </li>
           );
         })}

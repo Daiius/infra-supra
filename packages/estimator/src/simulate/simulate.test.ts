@@ -397,6 +397,125 @@ describe('simulateResources', () => {
   });
 });
 
+describe('1 リクエストあたりの CPU の内訳（D-99）', () => {
+  it('内訳はルートごとで、最大は maxCpuMsPerRequest と一致する', () => {
+    const w = workload(10_000);
+    w.routes = [
+      { ...w.routes[0]!, label: '記事' },
+      {
+        ...w.routes[1]!,
+        label: 'マイページ',
+        processing: { ...processing, cpuMs: 30 },
+      },
+      w.routes[2]!,
+    ];
+    const n = simulateResources(resolveWorkload(w), arch).nodes.fn!;
+    expect(n.cpuSources[0]).toMatchObject({
+      requestClass: 'document-ssr',
+      routeId: 'mypage',
+      label: 'マイページ',
+      rendering: 'ssr',
+      cpuMs: 30,
+    });
+    expect(n.cpuSources[0]!.cpuMs).toBe(n.maxCpuMsPerRequest);
+    // 静的なルートは関数を通らないので内訳に出ない
+    expect(n.cpuSources.some((s) => s.routeId === 'about')).toBe(false);
+    // ページから呼ぶ API はルートを持たない
+    expect(
+      n.cpuSources.some((s) => s.requestClass === 'api' && !s.routeId),
+    ).toBe(true);
+  });
+
+  it('裏で走る再生成は、ルートごとに起こした閲覧の CPU を足す', () => {
+    const bg: ArchitectureInput = {
+      ...arch,
+      nodes: arch.nodes.map((n) =>
+        n.id === 'fn'
+          ? {
+              ...n,
+              config: {
+                kind: 'function',
+                memoryGB: 1,
+                concurrency: 1,
+                backgroundClasses: ['isr-revalidate'],
+              },
+            }
+          : n,
+      ),
+    };
+    const n = simulateResources(resolveWorkload(workload(10_000)), bg).nodes
+      .fn!;
+    expect(n.cpuSources[0]).toMatchObject({
+      requestClass: 'isr-revalidate',
+      routeId: 'article',
+      background: true,
+      cpuMs: 11,
+    });
+    expect(n.maxCpuMsPerRequest).toBe(11);
+  });
+
+  it('制限の前提に、超えるルートと関数を通らない静的なルートを添える', () => {
+    const input = parsePriceBook(FICTIONAL_CLOUD, { allowFictional: true });
+    const book = {
+      ...input,
+      plans: input.plans.map((p) =>
+        p.id === 'basic'
+          ? {
+              ...p,
+              limits: [
+                {
+                  id: 'cpu',
+                  measure: 'cpu-ms-per-request' as const,
+                  value: 12,
+                  unit: 'ms' as const,
+                  scope: 'request' as const,
+                  onExceed: 'block' as const,
+                  premise: 'Basic は 1 リクエスト CPU 12 ms まで',
+                  sourceIds: [],
+                },
+              ],
+            }
+          : p,
+      ),
+    };
+    const w = workload(10_000);
+    w.routes = [
+      { ...w.routes[0]!, label: '記事のページ' },
+      {
+        ...w.routes[1]!,
+        label: 'マイページ',
+        processing: { ...processing, cpuMs: 15 },
+      },
+      { ...w.routes[2]!, label: '紹介のページ' },
+    ];
+    const hit = estimate({
+      workload: w,
+      architecture: arch,
+      books: [book],
+    }).premises.find((p) =>
+      p.id.startsWith('limit:fictional-cloud:basic:cpu'),
+    )!;
+    expect(hit.hit).toBe(true);
+    expect(hit.causes?.map((c) => c.routeId)).toEqual(['mypage']);
+    expect(hit.detail).toBe(
+      'マイページ（SSR・CPU 15 ms）が Basic の 1 リクエスト 12 ms を超える。紹介のページは静的なので 関数 を起動しない',
+    );
+    // 当たっていなければ、最も重いもの 1 つと使用率
+    const near = estimate({
+      workload: workload(10_000),
+      architecture: arch,
+      books: [book],
+    }).premises.find((p) =>
+      p.id.startsWith('limit:fictional-cloud:basic:cpu'),
+    )!;
+    expect(near.hit).toBe(false);
+    expect(near.causes).toHaveLength(1);
+    expect(near.detail).toMatch(
+      /^最も重いのは.*で、Basic の 1 リクエスト 12 ms の 83%/,
+    );
+  });
+});
+
 describe('estimate（端から端まで・架空の料金）', () => {
   const book = parsePriceBook(FICTIONAL_CLOUD, { allowFictional: true });
 

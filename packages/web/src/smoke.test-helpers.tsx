@@ -124,6 +124,8 @@ export type Setup = {
   stack: string;
   /** スロットの見出し → 選ぶ選択肢（無いスロットは選べる最初の選択肢）。 */
   parts?: Record<string, string>;
+  /** 選び終えて「運営を始める」を押す前に、始める画面を確かめる。 */
+  beforeStart?: () => void;
 };
 
 /**
@@ -157,6 +159,7 @@ export function startGame(s: Setup) {
   fireEvent.change(screen.getByLabelText(/乱数のシード/), {
     target: { value: String(SEED) },
   });
+  s.beforeStart?.();
   const start = screen.getByRole('button', { name: '運営を始める' });
   expect(
     (start as HTMLButtonElement).disabled,

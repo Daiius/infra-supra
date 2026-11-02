@@ -289,6 +289,22 @@ export function SetupCostPreview({
         （開始の所持金 ${Math.round(e.startCash).toLocaleString('en-US')}・1
         か月目の収益の見込み {aboutUsd(e.revenueUsd)}）
       </p>
+      {e.blocking.length > 0 && (
+        <div className="mt-1">
+          <p className="font-bold">
+            1
+            か月目に当たる上限（止まる・遅くなる分、収益の見込みを減らしている）
+          </p>
+          <ul className="mt-1 list-disc pl-5 text-xs">
+            {e.blocking.map((b) => (
+              <li key={b.id} className="break-words">
+                {b.text}
+                {b.detail && <span className="block">{b.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {e.short && (
         <>
           <p className="mt-1 font-bold">

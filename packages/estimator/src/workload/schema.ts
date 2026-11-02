@@ -18,6 +18,8 @@ export const ProcessingSchema = z.object({
 
 export const RouteGroupSchema = z.object({
   id: z.string(),
+  /** 画面に出す名前（「記事のページ」など）。制限に当たったルートを示すときに使う（D-99）。省略は id。 */
+  label: z.string().optional(),
   /**
    * spa: 1 つの静的なシェルとブラウザの JS で描く（prd/10 F-01）。シェルは訪問の入口だけ（PV ÷ ページ/セッション）、
    * ページごとの中身はデータの API（processing）で取る。

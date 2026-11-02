@@ -13,6 +13,7 @@ import {
   kbMixOf,
   type ClassFlow,
   type RequestClass,
+  type RequestSource,
   type ResolvedWorkload,
   type TimeBucket,
 } from '../workload/resolve.ts';
@@ -28,6 +29,20 @@ export type HostLoad = {
   diskGB: number;
 };
 
+/**
+ * 1 回の実行の CPU の内訳（D-99）。関数・コンテナのノードに届いたクラス・ルートごとの 1 件の CPU（ms）。
+ * 最大は NodeUsage.maxCpuMsPerRequest と同じ。ルートを持たないクラス（画像の変換など）は routeId を持たない。
+ */
+export type CpuSource = {
+  requestClass: RequestClass;
+  routeId?: string;
+  label?: string;
+  rendering?: RequestSource['rendering'];
+  cpuMs: number;
+  /** 裏で走るクラス（ISR の再生成）を、起こした閲覧の実行に足した値。 */
+  background?: boolean;
+};
+
 export type NodeUsage = {
   nodeId: string;
   resources: Partial<Record<ResourceKey, number>>;
@@ -35,6 +50,8 @@ export type NodeUsage = {
   events: number;
   /** 通ったリクエストの 1 件あたり CPU の最大（ms。制限 cpu-ms-per-request の判定用）。 */
   maxCpuMsPerRequest: number;
+  /** maxCpuMsPerRequest の内訳（関数・コンテナだけ。重い順。D-99）。 */
+  cpuSources: CpuSource[];
   /** 接続・実行を保持している時間の合計（ms・月。ピークの同時数の判定用）。 */
   busyMs: number;
   /**
@@ -76,6 +93,8 @@ type NodeAcc = {
   requests: number;
   /** クラスごとの 1 件あたり CPU の最大（件数が正のものだけ）。 */
   maxCpuByClass: Partial<Record<RequestClass, number>>;
+  /** クラスごとの、ルートごとの 1 件あたり CPU（D-99。maxCpuByClass の内訳）。 */
+  cpuByClassSource: Partial<Record<RequestClass, CpuSource[]>>;
 };
 
 /**
@@ -188,11 +207,25 @@ function consume(
         miss > 0 ? mp.maxCpuMs : 0,
         hits > 0 ? hitCpu : 0,
       );
-      if (n > 0)
+      if (n > 0) {
         hostAcc.maxCpuByClass[cls] = Math.max(
           hostAcc.maxCpuByClass[cls] ?? 0,
           maxCpu,
         );
+        // ルートごとの内訳（D-99）。クラスで決まった CPU（画像の変換など）はルートに分けない
+        const srcs = fixedCpu === undefined ? (w.sources[cls] ?? []) : [];
+        const perSource = (cpu: number) =>
+          Math.max(miss > 0 ? cpu : 0, hits > 0 ? hitCpu : 0);
+        hostAcc.cpuByClassSource[cls] = srcs.length
+          ? srcs.map((s) => ({
+              requestClass: cls,
+              ...(s.routeId !== undefined ? { routeId: s.routeId } : {}),
+              ...(s.label !== undefined ? { label: s.label } : {}),
+              ...(s.rendering !== undefined ? { rendering: s.rendering } : {}),
+              cpuMs: perSource(s.cpuMs),
+            }))
+          : [{ requestClass: cls, cpuMs: maxCpu }];
+      }
       const wallMs = hits * hitCpu + miss * mp.wallMs;
       u.busyMs += wallMs;
       const cpuMs = hits * hitCpu + miss * mp.cpuMs;
@@ -464,6 +497,7 @@ export function simulateResources(
         resources: {},
         events: 0,
         maxCpuMsPerRequest: 0,
+        cpuSources: [],
         busyMs: 0,
         peakBusyMs: 0,
       };
@@ -474,6 +508,7 @@ export function simulateResources(
         transforms: 0,
         requests: 0,
         maxCpuByClass: {},
+        cpuByClassSource: {},
       });
       staticUsage(n, nodes[n.id]!, w);
     }
@@ -592,6 +627,8 @@ export function simulateResources(
     const fg = byClass.filter(([cls]) => !bg.has(cls));
     const fgMax = Math.max(0, ...fg.map(([, v]) => v));
     let max = fgMax;
+    const bySource = hostAcc.get(n.id)!.cpuByClassSource;
+    const cpuSources: CpuSource[] = fg.flatMap(([cls]) => bySource[cls] ?? []);
     for (const [cls, v] of byClass) {
       if (!bg.has(cls)) continue;
       const trigger = BACKGROUND_TRIGGER[cls];
@@ -606,8 +643,23 @@ export function simulateResources(
           ? fgMax + v
           : v;
       max = Math.max(max, combined);
+      // 内訳: 起こした閲覧と足すときは、ルートごとの閲覧 + 再生成（backgroundCpuMs と同じ数え方）
+      const srcs = workload.sources[cls] ?? [];
+      for (const s of bySource[cls] ?? []) {
+        const route = srcs.find((x) => x.routeId === s.routeId);
+        cpuSources.push({
+          ...s,
+          background: true,
+          cpuMs: triggered
+            ? (route?.withTriggerCpuMs ?? fgMax + s.cpuMs)
+            : trigger === undefined
+              ? fgMax + s.cpuMs
+              : s.cpuMs,
+        });
+      }
     }
     nodes[n.id]!.maxCpuMsPerRequest = max;
+    nodes[n.id]!.cpuSources = cpuSources.sort((a, b) => b.cpuMs - a.cpuMs);
   }
 
   for (const n of architecture.nodes) {
