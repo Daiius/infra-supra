@@ -29,6 +29,7 @@ import {
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from '../system-diagram.tsx';
+import { ROUTE_PLAN_NOTE, RoutePlanTable } from '../route-plan-table.tsx';
 import {
   type EstimateView,
   compareStacks,
@@ -156,6 +157,9 @@ export function EstimateMode() {
           pages={diagram.pages}
           caption={DIAGRAM_NOTE}
         />
+      </Card>
+      <Card title="ページごとの描き方">
+        <RoutePlanTable rows={diagram.routes} caption={ROUTE_PLAN_NOTE} />
       </Card>
       <Card title="明細（事業者・メーターごと）">
         <p className="text-xs opacity-70">

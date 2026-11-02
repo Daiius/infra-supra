@@ -12,7 +12,7 @@ import type { CSSProperties } from 'react';
 export type ResolvedPage = ReturnType<typeof pageWireframes>[number];
 
 /** 作られ方ごとの見た目（補助。必ず札の文字を添える）。 */
-const SOURCE_CLASS: Record<RegionSource, string> = {
+export const SOURCE_CLASS: Record<RegionSource, string> = {
   build: 'border-success bg-success/15',
   isr: 'border-info bg-info/15',
   cached: 'border-info bg-info/15',
@@ -24,7 +24,7 @@ const SOURCE_CLASS: Record<RegionSource, string> = {
 };
 
 /** 閲覧ごとにサーバーが描く区画は斜線も重ねる（色に頼らない手がかり）。 */
-const SOURCE_STYLE: Partial<Record<RegionSource, CSSProperties>> = {
+export const SOURCE_STYLE: Partial<Record<RegionSource, CSSProperties>> = {
   ssr: {
     backgroundImage:
       'repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--color-warning) 30%, transparent) 6px 8px)',

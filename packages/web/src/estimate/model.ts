@@ -35,6 +35,7 @@ import {
   IMAGE_FORMAT_KB,
   pageWireframes,
   revalidateSettingOf,
+  routePlanRows,
   SCENARIOS,
   SETTINGS,
   stackName,
@@ -42,6 +43,7 @@ import {
   STACKS,
   USD_JPY,
   type FrameworkId,
+  type RoutePlanRow,
   type Scenario,
 } from 'game';
 import { diagramArchitecture } from '../system-diagram-model.ts';
@@ -629,12 +631,13 @@ function run(input: EstimateInput, r: Resolved) {
 }
 
 /**
- * 構成図（D-105）に描く構成とページの見取り図。費用の計算と同じ部品の選択・composeStack から組む（メールを送らないテンプレートは
- * 送信のノードを外す。D-101）。ページの名前は流れの凡例に添える。
+ * 構成図（D-105）に描く構成とページの見取り図、ページごとの描き方（D-106）。費用の計算と同じ部品の選択・設定・composeStack から
+ * 組む（メールを送らないテンプレートは送信のノードを外す。D-101）。ページの名前は流れの凡例に添える。
  */
 export function diagramOf(input: EstimateInput): {
   architecture: ArchitectureInput;
   pages: ReturnType<typeof pageWireframes>;
+  routes: RoutePlanRow[];
 } {
   const r = resolve(input);
   const comments = settingsOf(input.template, input.framework).comments
@@ -648,6 +651,16 @@ export function diagramOf(input: EstimateInput): {
       r.components,
     ),
     pages: pageWireframes(r.scenario, input.framework, comments),
+    // 描き方は見積の Workload（run）と同じ設定・部品から
+    routes: routePlanRows(r.scenario, {
+      framework: input.framework,
+      stackIndex: r.stackIndex,
+      settings: {
+        revalidateSec: input.revalidateSec,
+        comments: input.comments,
+      },
+      components: r.components,
+    }),
   };
 }
 
