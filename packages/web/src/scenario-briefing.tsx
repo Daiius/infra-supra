@@ -403,7 +403,10 @@ export function FrameworkField({
               id === value
                 ? undefined
                 : (e) => {
-                    if ((e.target as HTMLElement).closest('button')) return;
+                    // ⓘ の説明はポータルで描くので、その中の操作も React の木を伝ってここへ届く。DOM でカードの中の操作だけを選ぶ
+                    const target = e.target as Element;
+                    if (!e.currentTarget.contains(target)) return;
+                    if (target.closest('button')) return;
                     onChange(id);
                   }
             }

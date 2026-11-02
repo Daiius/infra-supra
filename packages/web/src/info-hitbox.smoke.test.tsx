@@ -95,6 +95,10 @@ describe('ⓘ の当たり判定', () => {
     fireEvent.click(within(card).getByRole('button', { name: /説明$/ }));
     expect(tooltip()).not.toBeNull();
     expect(radio.checked).toBe(false);
+    // 説明の中（ポータル）を押しても選ばれない（OCL-A1FCD9AC）
+    fireEvent.click(tooltip()!);
+    fireEvent.click(tooltip()!.querySelector('*') ?? tooltip()!);
+    expect(radio.checked).toBe(false);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(tooltip()).toBeNull();
     fireEvent.click(card.querySelector('p, li')!);
