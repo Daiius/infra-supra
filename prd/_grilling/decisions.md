@@ -851,6 +851,24 @@
   **CF Paid × Next.js（目標の根拠）・golden・網羅テストは不変**。表は prd/11 §17.3。
 - 残した点: パージの連携の作り込みの手間を分けて数えること・Cloudflare の静的 + VPS の API（D-67）で api もプロキシしてキャッシュする形・画像の割合の規約の判定。
 
+### D-92 実行ごとのログの費用を数える（確定・2026-11-02）
+
+- 依頼: 見落とされやすい現実の費用として、関数・コンテナの実行ごとに出るログ（アクセスに比例して増える）を入れる。推奨案で自律に決定。prd/04 §3.3.2・prd/11 §18・prd/03 §5。
+- 公式で確かめたこと（2026-11-02 取得。出典は prd/11 §18.1）: CloudWatch Logs は東京の取り込み $0.76 / GB（Lambda のログは 2025-05 から段階つき・10 TB まで同じ）・保存 $0.033 / GB 月・常時無料 月 5 GB、Lambda・Amplify の SSR は既定で送り、保持は既定で無期限、API Gateway の HTTP API のアクセスログは既定で無効。
+  Cloud Logging は $0.50 / GiB（30 日の保存を含む）・月 50 GiB / プロジェクトまで無料・Cloud Run の要求ログは自動、_Default は 30 日。Vercel の Runtime Logs は課金なし（保持 Hobby 1 時間・Pro 1 日）、Observability Plus は 100 万 event $1.20 で 2026-04-03 以降の Pro のチームは既定で有効。
+  Netlify の関数のログは課金の項目に無い。Workers Logs は新しい Worker で既定で有効・Free 1 日 20 万件・Paid 月 2,000 万件込みで超過 100 万件 $0.60（2026-12-01 から Cloudflare Observability の料金へ）。
+  確かめられなかったこと: CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし）・Vercel の 1 要求あたりの event の数・Workers Logs の 2026-12-01 以降の料金。
+- 決定:
+  - estimator に資源 `log-gb`・`log-events` と、`function`・`container` の `logs`（1 回の実行あたりの KB・件数）を足した。前景の実行ごとに数え、裏で走るクラスは数えない。
+  - catalog の `stacks/logs.ts`（`withLogs`）が、組み終えた構成の関数・コンテナに課金先のプランごとの値とメーターを差す（部品の組み立てで config を差し替えても落ちない）。課金のある Lambda・Amplify Hosting・Cloud Run・Workers Paid だけ。Vercel・Netlify・Workers Free は注記だけ。
+  - 仮定の値（ゲーム上の仮定）: Lambda・Amplify の SSR 0.5 KB / 回（START・END・REPORT 約 0.3 KB + アクセスログ 1 行 約 0.2 KB）・Cloud Run 1.5 KB / 件（要求ログの LogEntry 約 1 KB + アクセスログの LogEntry 約 0.5 KB）・Workers 2 件 / 回（呼び出しのログ + console.log 1 行。公式の料金の例と同じ）。
+  - 保持は部品にしない（前提の文だけ）: CloudWatch Logs の無期限の保存は 12 か月ためても 1 か月の取り込みの約 8%（圧縮後の量とみる）、Cloud Logging の既定 30 日は無料。Workers Logs の標本化も部品にしない。
+  - Vercel の Observability Plus は数え方が分からないので数えない（外した前提。確かめ待ちに載せた）。
+- 基準プレイ（AWS・Google Cloud・CF Paid × Next.js・SPA × 記事・受託 × シード 1〜20）: **すべて不変**。月の PV の最大（約 400 万）でもほぼ無料の分に収まる（OpenNext × Next.js の記事で最も多い月だけ $0.7）。
+  **CF Paid × Next.js（目標の根拠。記事 20/20・$15.2・受託 20/20・$5.7）・golden・網羅テストも不変**（最も多い月で 1,592 万件 < 2,000 万件）。表は prd/11 §18.3。
+  ただし規模を上げると Workers Paid は合計に占める割合が大きい（月 1,000 万 PV で $12 / $46・3,000 万 PV で $60 / $138）。AWS・Google Cloud は 1% 前後。
+- 残した点: Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access を部品にすること・アプリのログの量をフレームワーク・出来事（エラーの急増）で変えること。
+
 ### 論点（ユーザーの判断が要るもの）
 
 | # | 論点 | 参照 |
@@ -875,6 +893,7 @@
 | 事業者の間の通信 | Vercel・Amplify の関数から外への通信の課金（数えていない。D-84 で再確認しても課金の項目に無い） | D-52・D-67・D-84・prd/11 §2 |
 | Google Cloud | Cloud Run・Firebase Hosting の SLA（未取得）・Cloud Run → Firebase Hosting の応答の転送の課金（書かれていない。数えない）・Cloud SQL の最小の割り当ての量 | D-88・prd/11 §16.3 |
 | Cloudflare の CDN（Free） | 転送量の上限（第三者の記事 1 件だけ・公式に見当たらない。課金なしのまま）・規約の「不釣り合いな割合の画像」の境目（数値なし） | D-91・prd/11 §17.1 |
+| ログ（D-92） | CloudWatch Logs の保存が圧縮後の量で課金されること（公式の料金表に明記なし。数えていない）・Vercel の Observability Plus の 1 要求あたりの event の数（数えていない）・Workers Logs の 2026-12-01 以降の料金（今の値で数えている） | D-92・prd/11 §18 |
 | ~~Cloudflare Images Paid~~ | ~~基本料~~ → D-84（基本料なしとみる。公式の例の合計に入っていない。値は不変） | D-84・prd/11 §2 |
 
 ### 残した点（直す方針はあるが、今は入れていないもの）
@@ -890,6 +909,7 @@
 | D-89 | ~~止まる DB（Aurora の 0 ACU・Neon）を時間帯で数える~~ → D-90・休日の形を分ける・区間の境目と増やすインスタンスの冷えた起動・最小インスタンスが速さに効く規模のシナリオ |
 | D-90 | 受託 × Neon の釣り合いの見直し・金曜 → 土曜の境目・メンテナンスで起こされる分・接続を開いたままにする作り |
 | D-91 | 前段の CDN のパージの連携の作り込みの手間・Cloudflare の静的 + VPS の API で api もプロキシしてキャッシュする形・画像の割合の規約の判定 |
+| D-92 | Workers Logs の標本化・CloudWatch Logs の保持と Infrequent Access の部品・アプリのログの量をフレームワーク・出来事で変えること |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 

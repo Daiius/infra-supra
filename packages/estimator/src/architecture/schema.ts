@@ -8,6 +8,18 @@ const Ratio = z.number().finite().min(0).max(1);
 const Pos = z.number().finite().positive();
 const NonNeg = z.number().finite().nonnegative();
 
+/**
+ * 実行ごとに出るログ（D-92・prd/04 §3.3.2）。1 回の実行（invocations に数える件数）あたりの量（KB）と件数（行）。
+ * 事業者の起動・終了の行や要求ログと、アプリが書くアクセスログ 1 行を合わせた仮定の値（catalog の構成が持つ）。
+ * 裏で走るクラス（backgroundClasses）は同じ実行の中なので数えない。
+ */
+const LogsSchema = z
+  .object({
+    kbPerInvocation: NonNeg.default(0),
+    eventsPerInvocation: NonNeg.default(0),
+  })
+  .optional();
+
 /** ComponentKind ごとの設定。振る舞いはコード（simulate/kinds.ts）、値はデータ。 */
 export const NodeKindSchema = z.discriminatedUnion('kind', [
   /** CDN・静的配信。クラスごとのヒット率。列挙しないクラスはキャッシュしない（ヒット率 0）。 */
@@ -74,6 +86,7 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * クラスの 1 件の処理の時間（CPU と壁時計時間・ms）をこの関数で決める（画像の変換の関数など、Workload が処理を持たないクラス。仮定）。
      */
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
+    logs: LogsSchema,
   }),
   /**
    * コンテナのサービス（Cloud Run のリクエストで課金する型。D-88・prd/04 §3.3.1）。1 インスタンスが同時に concurrency 件までさばき、
@@ -94,6 +107,7 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     idleKeepSeconds: Pos.default(900),
     backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
+    logs: LogsSchema,
   }),
   /**
    * KV。cache: ISR のキャッシュ（閲覧で読み、再生成で書く）。db: DB の代わり（問い合わせ 1 回を読み取り 1 回、

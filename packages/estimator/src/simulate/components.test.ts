@@ -1068,3 +1068,41 @@ describe('サーバーから外の API への問い合わせ・API だけを置�
     );
   });
 });
+
+describe('実行ごとのログ（D-92）', () => {
+  it('関数・コンテナは前景の実行 1 回ごとに KB と件数を数え、裏で走るクラスは数えない。logs が無ければ 0', () => {
+    const logs = { kbPerInvocation: 0.5, eventsPerInvocation: 2 };
+    const u = sim(
+      [
+        {
+          id: 'f',
+          label: 'f',
+          config: {
+            kind: 'function',
+            backgroundClasses: ['isr-revalidate'],
+            logs,
+          },
+        },
+        {
+          id: 'c',
+          label: 'c',
+          config: { kind: 'container', vcpu: 1, memoryGB: 1, logs },
+        },
+        { id: 'plain', label: 'plain', config: { kind: 'function' } },
+      ],
+      {
+        'document-isr': ['f'],
+        'isr-revalidate': ['f'],
+        api: ['c', 'plain'],
+      },
+    );
+    const isr = w.classes['document-isr'].count;
+    expect(w.classes['isr-revalidate'].count).toBeGreaterThan(0);
+    expect(u.f!.resources['log-gb']).toBeCloseTo((isr * 0.5 * 1000) / 1e9, 12);
+    expect(u.f!.resources['log-events']).toBeCloseTo(isr * 2, 6);
+    const api = w.classes.api.count;
+    expect(u.c!.resources['log-gb']).toBeCloseTo((api * 0.5 * 1000) / 1e9, 12);
+    expect(u.plain!.resources['log-gb']).toBeUndefined();
+    expect(u.plain!.resources['log-events']).toBeUndefined();
+  });
+});

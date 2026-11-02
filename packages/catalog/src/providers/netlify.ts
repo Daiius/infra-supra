@@ -221,6 +221,8 @@ export const netlify: PriceBookInput = {
   retrievedAt: R,
   sources: {
     pricing: src('https://www.netlify.com/pricing/'),
+    // 関数のログ（D-92）
+    functionLogs: src('https://docs.netlify.com/build/functions/logs/'),
     // 契約の本体（PDF。2025-10 版。§5.4 税・§6 Free Usage Tier）
     agreement: src(
       'https://www.netlify.com/legal/self-serve-subscription-agreement/',
@@ -370,5 +372,6 @@ export const netlify: PriceBookInput = {
     '2025-09-04 以降に作ったアカウントはクレジット制（旧来の Starter・Pro は既存のアカウントだけで、扱わない）',
     'メーターの金額はクレジットを補充の単価で直したもの（Personal 1 クレジット $0.01・Pro $0.00667）。Free は使用率の判定のための換算',
     'フォームの送信はクレジット制のすべてのプランで無料。AI の推論（1 USD あたり 180 クレジット）は扱わない',
+    '関数のログは課金の項目に無い（クレジットを使わない）。保持は少なくとも 24 時間で、一部のプランは 7 日（D-92）',
   ],
 };

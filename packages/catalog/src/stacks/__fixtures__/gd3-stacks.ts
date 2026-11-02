@@ -141,6 +141,8 @@ export const GD3_STACKS: unknown[] = [
         config: {
           kind: 'function',
           backgroundClasses: ['isr-revalidate'],
+          // Workers Logs（D-92）
+          logs: { eventsPerInvocation: 2 },
         },
         billing: {
           accountId: 'cloudflare',
@@ -149,6 +151,7 @@ export const GD3_STACKS: unknown[] = [
           meters: {
             requests: 'requests',
             'cpu-ms': 'cpu-ms',
+            'log-events': 'workers-logs',
           },
         },
       },

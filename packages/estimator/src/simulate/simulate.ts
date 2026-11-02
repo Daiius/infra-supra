@@ -210,6 +210,11 @@ function consume(
         add(u, 'invocations', n);
         u.events += n;
         hostAcc.requests += n;
+        // 実行ごとのログ（D-92）。裏のクラスは同じ実行の中なので数えない
+        if (c.logs) {
+          add(u, 'log-gb', kbToGb(n * c.logs.kbPerInvocation));
+          add(u, 'log-events', n * c.logs.eventsPerInvocation);
+        }
       }
       return missFlow ?? f;
     }

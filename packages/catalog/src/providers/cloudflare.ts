@@ -188,6 +188,11 @@ export const cloudflare: PriceBookInput = {
     workersPricing: src(
       'https://developers.cloudflare.com/workers/platform/pricing/',
     ),
+    // Workers Logs（2026-11-02 取得。D-92）
+    workersLogs: {
+      url: 'https://developers.cloudflare.com/workers/observability/logs/workers-logs/',
+      retrievedAt: '2026-11-02',
+    },
     workersLimits: src(
       'https://developers.cloudflare.com/workers/platform/limits/',
     ),
@@ -429,6 +434,16 @@ export const cloudflare: PriceBookInput = {
       sourceIds: ['workersPricing'],
     },
     {
+      id: 'paid-workers-logs',
+      quantity: 20_000_000,
+      unit: 'count',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'Workers Paid は Workers Logs のログが月 2,000 万件まで込み（保持は 7 日）',
+      sourceIds: ['workersLogs'],
+    },
+    {
       id: 'paid-cpu-ms',
       quantity: 30_000_000,
       unit: 'ms',
@@ -606,6 +621,9 @@ export const cloudflare: PriceBookInput = {
           'Cloudflare のアカウントのメンバーの料金は、メンバーの管理と Workers の料金のページに記載なし（Workers Paid の最低料金はアカウントあたり）',
         sourceIds: ['members', 'workersPricing'],
       },
+      notes: [
+        'Workers Logs は Free で 1 日 20 万件まで（保持 3 日）。課金は無く、ログの費用は数えない（D-92）',
+      ],
       meters: [
         {
           id: 'build-minutes',
@@ -771,6 +789,29 @@ export const cloudflare: PriceBookInput = {
           rounding: 'not-stated',
           pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.02 },
           sourceIds: ['workersPricing'],
+        },
+        {
+          id: 'workers-logs',
+          label: 'ログ（Workers Logs: log events）',
+          resource: 'log-events',
+          unit: 'count',
+          allowancePool: 'paid-workers-logs',
+          premise:
+            '新しく作る Worker は Workers Logs（observability）が既定で有効で、呼び出しのログ 1 件と console.log の 1 行ずつを 1 件と数える。Paid は月 2,000 万件を超えた分が 100 万件 $0.60。2026-12-01 から Cloudflare Observability の料金に移る（新しい料金は未取得）',
+          interpretation: {
+            adopted:
+              '既定のまま全件を残す（head_sampling_rate 1）。2026-12-01 以降の料金も今の値で数える',
+            rejected: [
+              {
+                reading:
+                  '標本化（head_sampling_rate）・呼び出しのログを切る設定を部品にする',
+                reason:
+                  '既定の振る舞いの費用を見せるのが目的。基準プレイの規模では込みの 2,000 万件に収まる月が多い',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.6 },
+          sourceIds: ['workersLogs'],
         },
         {
           id: 'd1-rows-read',

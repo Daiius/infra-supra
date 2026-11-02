@@ -59,6 +59,9 @@ export const gcp: PriceBookInput = {
     firestorePricing: src('https://cloud.google.com/firestore/pricing'),
     sqlPricing: src('https://cloud.google.com/sql/pricing'),
     networkPricing: src('https://cloud.google.com/vpc/network-pricing'),
+    // Cloud Logging（2026-11-02 取得。D-92）
+    loggingPricing: src('https://cloud.google.com/stackdriver/pricing'),
+    runLogging: src('https://cloud.google.com/run/docs/logging'),
   },
   allowancePools: [
     {
@@ -88,6 +91,16 @@ export const gcp: PriceBookInput = {
       scope: 'account',
       premise: 'Cloud Run（リクエストで課金）は月 200 万リクエストまで無料',
       sourceIds: ['runPricing'],
+    },
+    {
+      id: 'logging-free',
+      quantity: 50,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'Cloud Logging はログの取り込み（ログバケットへの保存）が月 50 GiB まで無料（プロジェクトごと）',
+      sourceIds: ['loggingPricing'],
     },
     {
       id: 'hosting-free-transfer',
@@ -272,6 +285,28 @@ export const gcp: PriceBookInput = {
             unitPrice: RUN.idleMemoryPerGiBSecond,
           },
           sourceIds: ['runPricing'],
+        },
+        {
+          id: 'logs',
+          label: 'ログの取り込み（Cloud Logging: Cloud Run のログ）',
+          resource: 'log-gb',
+          unit: 'gb',
+          allowancePool: 'logging-free',
+          premise:
+            'Cloud Run は要求ごとの要求ログ（request log）を自動で作り、コンテナの stdout・stderr と一緒に Cloud Logging に送る（Cloud Run の側では止められず、除外のフィルタで減らす）。取り込みは月 50 GiB を超えた分が $0.50 / GiB で、30 日の保存を含む。_Default のログバケットの保持は既定で 30 日なので、保持の費用はかからない（30 日を超えて残すと $0.01 / GiB 月）',
+          interpretation: {
+            adopted:
+              'GiB の単価を GB（10^9 バイト）の量に当てる（量は 2 進より約 7% 多く数え、高めの側）',
+            rejected: [
+              {
+                reading: '保持の設定を部品の選択肢にする',
+                reason:
+                  '既定の 30 日は無料で、延ばすのは利用者の判断（$0.01 / GiB 月は取り込みの 2%）。部品にするほどの差にならない',
+              },
+            ],
+          },
+          pricing: { model: 'flat', per: 1, unitPrice: 0.5 },
+          sourceIds: ['loggingPricing', 'runLogging'],
         },
       ],
       notes: [

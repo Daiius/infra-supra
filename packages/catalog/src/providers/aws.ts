@@ -5,6 +5,8 @@
 import type { PriceBookInput } from 'estimator';
 
 const R = '2026-11-01';
+/** ログ（CloudWatch Logs）を確かめた日（D-92）。 */
+const LOGS_R = '2026-11-02';
 const src = (url: string) => ({ url, retrievedAt: R });
 /** Price List API の東京の料金表（版の日付はコメントに残す）。 */
 const priceList = (offer: string) =>
@@ -78,6 +80,23 @@ const FLAT_INVALIDATION: PriceBookInput['plans'][number]['meters'][number] = {
   },
   pricing: { model: 'flat', per: 1, unitPrice: 0 },
   sourceIds: ['cloudfrontFlatDocs'],
+};
+
+/**
+ * CloudWatch Logs の取り込み（東京・Standard。D-92）。Lambda・Amplify の SSR は既定でログを CloudWatch Logs に送り、ロググループの保持は
+ * 既定で無期限。保存（$0.033 / GB 月・圧縮後）は数えない: 取り込みの $0.76 / GB に比べて、無期限のまま 12 か月ためても圧縮（AWS の
+ * 計算機の仮定は 15%）で 1 か月の取り込みの 1 割に届かないため、保持の部品は作らず前提の文だけにする。
+ */
+const CLOUDWATCH_LOGS_INTERPRETATION = {
+  adopted:
+    '取り込み（$0.76 / GB）だけを数え、保存（$0.033 / GB 月）は数えない。保持は既定で無期限だが、保存は圧縮後の量で、12 か月ためても取り込みの 1 割に届かない（高めに見ても小さい）',
+  rejected: [
+    {
+      reading: '保持の設定（1 か月 / 無期限）を部品の選択肢にする',
+      reason:
+        '効きが小さく、部品を増やすほどの差にならない（無期限で 12 か月目に取り込みの約 8%）',
+    },
+  ],
 };
 
 export const aws: PriceBookInput = {
@@ -172,6 +191,32 @@ export const aws: PriceBookInput = {
     dsqlCompat: src(
       'https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-unsupported-features.html',
     ),
+    // CloudWatch Logs（2026-11-02 取得。D-92）。版（publicationDate）: AmazonCloudWatch 2026-10-07
+    cloudwatchPrices: { ...priceList('AmazonCloudWatch'), retrievedAt: LOGS_R },
+    cloudwatchPricing: {
+      url: 'https://aws.amazon.com/cloudwatch/pricing/',
+      retrievedAt: LOGS_R,
+    },
+    lambdaLogs: {
+      url: 'https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs.html',
+      retrievedAt: LOGS_R,
+    },
+    lambdaLogsTiered: {
+      url: 'https://aws.amazon.com/about-aws/whats-new/2025/05/amazon-cloudwatch-tiered-pricing-additional-destinations-aws-lambda-logs',
+      retrievedAt: LOGS_R,
+    },
+    amplifySsrLogs: {
+      url: 'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-supported-features.html',
+      retrievedAt: LOGS_R,
+    },
+    cloudwatchRetention: {
+      url: 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/Working-with-log-groups-and-streams.html',
+      retrievedAt: LOGS_R,
+    },
+    apiGatewayLogs: {
+      url: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-logging.html',
+      retrievedAt: LOGS_R,
+    },
     rdsFree: src('https://aws.amazon.com/rds/free/'),
     freeTier: src('https://aws.amazon.com/free/'),
     // データ転送の常時無料（2026-11-01 に原文で確認。D-52）
@@ -323,6 +368,16 @@ export const aws: PriceBookInput = {
         'CloudFront の定額 Business（月 $200）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
+    {
+      id: 'cloudwatch-free-logs',
+      quantity: 5,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudWatch Logs は月 5 GB まで常時無料（取り込み・保存・Logs Insights の走査の合計。このモデルは取り込みだけに当てる）',
+      sourceIds: ['cloudwatchPricing', 'cloudwatchPrices'],
+    },
     // インターネットへの転送の常時無料（全サービス・全リージョンの合計。CloudFront の 1 TB とは別）。
     // 他の事業者（Cloudflare R2）へ書き込む転送に使う（D-52）
     {
@@ -434,6 +489,22 @@ export const aws: PriceBookInput = {
           },
           sourceIds: ['amplifyPrices', 'amplifyPricing', 'amplifySpec'],
         },
+        {
+          id: 'logs',
+          label: 'ログの取り込み（CloudWatch Logs: SSR のログ）',
+          resource: 'log-gb',
+          unit: 'gb',
+          allowancePool: 'cloudwatch-free-logs',
+          premise:
+            'Amplify は SSR の実行の情報を自分のアカウントの CloudWatch Logs に送る（自動で作るサービスロールに権限が入っている）。取り込みは $0.76 / GB（東京・Standard）。保持は既定で無期限',
+          interpretation: CLOUDWATCH_LOGS_INTERPRETATION,
+          pricing: { model: 'flat', per: 1, unitPrice: 0.76 },
+          sourceIds: [
+            'cloudwatchPrices',
+            'amplifySsrLogs',
+            'cloudwatchRetention',
+          ],
+        },
       ],
     },
     {
@@ -494,6 +565,32 @@ export const aws: PriceBookInput = {
           },
           sourceIds: ['lambdaPrices'],
         },
+        {
+          id: 'logs',
+          label: 'ログの取り込み（CloudWatch Logs: Lambda のログ）',
+          resource: 'log-gb',
+          unit: 'gb',
+          allowancePool: 'cloudwatch-free-logs',
+          premise:
+            'Lambda は既定で実行ごとのログ（START・END・REPORT の行とアプリの出力）を CloudWatch Logs に送り、取り込みは $0.76 / GB（東京・Lambda のログは量の段階つき。10 TB まで同じ単価）。ロググループの保持は既定で無期限',
+          interpretation: CLOUDWATCH_LOGS_INTERPRETATION,
+          pricing: {
+            model: 'tiered',
+            per: 1,
+            tiers: [
+              { upTo: 10_240, unitPrice: 0.76 },
+              { upTo: 30_720, unitPrice: 0.38 },
+              { upTo: 51_200, unitPrice: 0.152 },
+              { upTo: null, unitPrice: 0.076 },
+            ],
+          },
+          sourceIds: [
+            'cloudwatchPrices',
+            'lambdaLogs',
+            'lambdaLogsTiered',
+            'cloudwatchRetention',
+          ],
+        },
       ],
     },
     {
@@ -501,9 +598,10 @@ export const aws: PriceBookInput = {
       service: 'api-gateway',
       ...common,
       name: 'API Gateway（HTTP API）',
-      sourceIds: ['apiGatewayPrices', 'apiGatewayPricing'],
+      sourceIds: ['apiGatewayPrices', 'apiGatewayPricing', 'apiGatewayLogs'],
       notes: [
         'HTTP API は 512 KB ごとに 1 リクエストとして数える（料金ページの例 2 が 4.5 MB のペイロードを 512 KB で割っている）',
+        'HTTP API のアクセスログは既定で無効（ステージごとに CloudWatch Logs のロググループを指定して有効にする）ので、ログの取り込みは数えない（D-92）',
       ],
       meters: [
         {

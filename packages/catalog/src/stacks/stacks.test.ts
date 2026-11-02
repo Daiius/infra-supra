@@ -226,3 +226,79 @@ describe('部品の組み合わせ', () => {
     );
   });
 });
+
+describe('実行ごとのログ（D-92）', () => {
+  const LOGGED = new Set([
+    'aws:lambda',
+    'aws:amplify-hosting',
+    'gcp:cloud-run',
+    'cloudflare:workers-paid',
+  ]);
+  const frameworks = ['nextjs', 'vite-spa', 'astro', 'nextjs-export'] as const;
+
+  it.each(
+    STACK_DEFS.flatMap((d) => frameworks.map((f) => [d.id, f, d] as const)),
+  )(
+    '%s × %s: 課金のある事業者の関数・コンテナだけがログを数え、数えたログはメーターに載る',
+    (_, framework, def) => {
+      const arch = ArchitectureSchema.parse(
+        composeStack(def, {}, { framework }),
+      );
+      for (const n of arch.nodes) {
+        if (n.config.kind !== 'function' && n.config.kind !== 'container')
+          continue;
+        const key = n.billing && `${n.billing.provider}:${n.billing.planId}`;
+        expect(!!n.config.logs, `${n.id}（${key}）`).toBe(
+          !!key && LOGGED.has(key),
+        );
+      }
+      const r = estimate({
+        workload: articleCommunity(1_000_000),
+        architecture: arch,
+        books,
+      });
+      expect(r.unmetered.filter((u) => u.resource.startsWith('log-'))).toEqual(
+        [],
+      );
+    },
+  );
+
+  it('無料の分（CloudWatch Logs 5 GB・Cloud Logging 50 GiB・Workers Logs 2,000 万件）を超えた分だけ課金する', () => {
+    const logCost = (id: string, pv: number) => {
+      const r = estimate({
+        workload: articleCommunity(pv),
+        architecture: composeStack(id),
+        books,
+      });
+      const lines = r.bill.lines.filter((l) =>
+        ['logs', 'workers-logs'].includes(l.priceRef.meterId ?? ''),
+      );
+      const sum = (k: 'log-gb' | 'log-events') =>
+        Object.values(r.simulation.nodes).reduce(
+          (a, n) => a + (n.resources[k] ?? 0),
+          0,
+        );
+      return {
+        gb: sum('log-gb'),
+        events: sum('log-events'),
+        amount: lines.reduce((a, l) => a + (l.amount ?? 0), 0),
+      };
+    };
+    for (const pv of [1_000_000, 20_000_000]) {
+      const aws = logCost('aws-opennext', pv);
+      expect(aws.amount).toBeCloseTo(Math.max(0, aws.gb - 5) * 0.76, 6);
+      const gcp = logCost('gcp-cloud-run', pv);
+      expect(gcp.amount).toBeCloseTo(Math.max(0, gcp.gb - 50) * 0.5, 6);
+      const cf = logCost('cloudflare-vinext-paid', pv);
+      expect(cf.amount).toBeCloseTo(
+        (Math.max(0, cf.events - 20_000_000) / 1_000_000) * 0.6,
+        6,
+      );
+    }
+    // 2,000 万 PV では AWS・Cloudflare は無料の分を超える
+    expect(logCost('aws-opennext', 20_000_000).amount).toBeGreaterThan(0);
+    expect(
+      logCost('cloudflare-vinext-paid', 20_000_000).amount,
+    ).toBeGreaterThan(0);
+  });
+});
