@@ -245,7 +245,7 @@ function FrameworkCard({
           <section
             key={p.route}
             aria-label={p.label}
-            className="flex flex-col gap-2 border-t border-base-300 pt-3 sm:flex-row"
+            className="flex flex-col gap-2 border-t border-base-300 pt-3"
           >
             <PageWireframe page={p} />
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -386,10 +386,12 @@ export function FrameworkField({
       </div>
       {/* 全部のカードを同じ中身で並べ、選んでいるものを中央へ。広い画面では前後のカードが両脇に読める大きさで見え、
           狭い画面でも隣の端が見える。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
-          指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
+          指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす。
+          lg 以上は本文の列をはみ出して画面の幅いっぱいに広げ（スクロールバーの分 2rem を残す）、カードは 340〜440px にして、
+          1280px で選んだカードと前後の 2 枚が全部見える */}
       <div
         ref={track}
-        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-2"
+        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-2 lg:left-1/2 lg:w-[calc(100vw-2rem)] lg:-translate-x-1/2 lg:px-4"
       >
         {allowed.map((id) => (
           <div
@@ -397,7 +399,7 @@ export function FrameworkField({
             ref={(el) => {
               items.current[id] = el;
             }}
-            className={`carousel-item w-[88%] lg:w-[70%] ${id === value ? '' : 'cursor-pointer'}`}
+            className={`carousel-item w-[88%] lg:w-[clamp(340px,31vw,440px)] ${id === value ? '' : 'cursor-pointer'}`}
             // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）
             onClick={id === value ? undefined : () => onChange(id)}
           >
