@@ -37,6 +37,12 @@ function expectEstimate(): string {
     name: /^構成図: /,
   });
   expect(diagram.querySelectorAll('[data-node]').length).toBeGreaterThan(1);
+  // ページごとの描き方（D-106）: テンプレートのページごとに 1 行
+  expect(
+    within(card('ページごとの描き方'))
+      .getByRole('table', { name: 'ページごとの描き方' })
+      .querySelectorAll('tr[data-route]').length,
+  ).toBeGreaterThan(0);
   const curve = within(card('費用の曲線（月の PV を振る）'));
   const chart = curve.getByRole('img', {
     name: '月の PV ごとの月額（構成ごと）',

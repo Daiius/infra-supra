@@ -47,6 +47,7 @@ import {
   parseSave,
   replaySave,
   validSetupChoices,
+  routePlanRows,
   withTurn,
   playMonth,
   premiseTrends,
@@ -317,6 +318,24 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             onChange={(id) => change({ framework: id })}
             // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
             comments={commentsChoosable ? comments : undefined}
+            // ページごとの描き方（D-106）: 選んでいる構成で、各フレームワークの既定と今の設定・部品から
+            routePlan={(id) =>
+              routePlanRows(scenario, {
+                framework: id,
+                stackIndex: stack,
+                settings: {
+                  revalidateSec:
+                    id === framework
+                      ? revalidateSec
+                      : defaultRevalidateSec(id, stack, scenario),
+                  comments,
+                },
+                components:
+                  id === framework
+                    ? parts
+                    : validSetupChoices(scenario, stack, id, parts),
+              })
+            }
           />
           <div className="mt-2">
             <StackField

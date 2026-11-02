@@ -270,6 +270,51 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
   });
 
+  it('W-13 始める画面: フレームワークのカードに、選んでいる構成でのページごとの描き方が出る（D-106）', () => {
+    renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    const current = () =>
+      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
+    const table = () =>
+      within(current()).getByRole('table', { name: 'ページごとの描き方' });
+    const row = (route: string) =>
+      table().querySelector<HTMLElement>(`tr[data-route="${route}"]`)!;
+    const strategy = (route: string) =>
+      row(route)
+        .querySelector('[data-strategy]')!
+        .getAttribute('data-strategy');
+    const alternative = (route: string, s: string) =>
+      row(route).querySelector(`[data-alternative="${s}"]`);
+    pick(/^記事コミュニティ/);
+    pick(/^Astro/);
+    pick(/^Cloudflare Free/);
+    expect(strategy('article')).toBe('cached-purge');
+    expect(strategy('personal')).toBe('ssr');
+    expect(within(row('article')).getByText(/^S3/)).toBeDefined();
+    // 個人向けのページに使い回す描き方は灰色（理由は ⓘ）、枠 + API は選べる
+    expect(
+      alternative('personal', 'cached-purge')?.getAttribute('data-available'),
+    ).toBe('false');
+    expect(
+      alternative('personal', 'shell-api')?.getAttribute('data-available'),
+    ).toBe('true');
+    // 確かめていない描き方（S6）は出さない
+    expect(alternative('personal', 'server-island')).toBeNull();
+    // Google Cloud（Hosting の CDN）では消せないので、記事は期限で取り直す
+    pick(/^Google Cloud/);
+    expect(strategy('article')).toBe('cached-ttl');
+    expect(
+      alternative('article', 'cached-purge')?.getAttribute('data-available'),
+    ).toBe('false');
+    // 静的書き出しは S1/S5、SPA は S5/S5
+    pick(/^Next\.js（静的書き出し）/);
+    expect(strategy('article')).toBe('static-build');
+    expect(strategy('personal')).toBe('shell-api');
+    pick(/^Vite（SPA）/);
+    expect(strategy('article')).toBe('shell-api');
+  });
+
   it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', () => {
     renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));

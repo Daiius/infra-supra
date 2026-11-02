@@ -22,9 +22,16 @@ import {
   stackHidden,
   browserCallsApi,
   rebuildsStaticPages,
-  toAstro,
-  toNextExport,
-  toSpa,
+  applyRouteStrategies,
+  defaultStrategy,
+  routeAudience,
+  ROUTE_STRATEGIES,
+  ROUTE_STRATEGY_ORDER,
+  strategySupport,
+  withAstroAssets,
+  type RouteAudience,
+  type RoutePlan,
+  type RouteStrategyId,
   type Choices,
   type FrameworkId,
   type ComponentProvider,
@@ -1222,14 +1229,33 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   };
   // Next.js の静的書き出し（D-80）: 記事は静的にビルドし直し（1 回のビルドの時間は Astro の形の式・仮定）、
   // マイページは SPA と同じく Client Component が API で中身を取る（API の CPU は SPA の dataCpuFactor 倍）
+  // ページごとの描き方（D-106）: フレームワークの既定と今の設定・部品で決まる描き方を、ルートごとに当てる
+  // （SPA の形・Astro の形の無いシナリオでは、そのフレームワークの書き換えをしない。今までと同じ）
+  const ready =
+    p.framework === 'nextjs' ||
+    (p.framework === 'vite-spa' && shape !== undefined) ||
+    (p.framework === 'astro' && astro !== undefined) ||
+    (p.framework === 'nextjs-export' &&
+      shape !== undefined &&
+      astro !== undefined);
+  const routed = ready
+    ? applyRouteStrategies(
+        w,
+        routeChoices(w.routes, {
+          framework: p.framework,
+          platform: p.platform,
+          settings: p.settings,
+          components: p.components,
+        }),
+        {
+          ...(shape ? { spa: shape } : {}),
+          ...(astro ? { minutesPerBuild: astro.minutesPerBuild, build } : {}),
+        },
+      )
+    : w;
+  // Astro の JS・CSS はアイランドの分だけ（描き方でなくフレームワークの性質）
   const app =
-    p.framework === 'vite-spa' && shape
-      ? toSpa(w, shape, cache ? { cacheContent: true } : {})
-      : p.framework === 'astro' && astro
-        ? toAstro(w, astro)
-        : p.framework === 'nextjs-export' && shape && astro
-          ? toNextExport(w, shape, astro.minutesPerBuild, build)
-          : w;
+    p.framework === 'astro' && astro ? withAstroAssets(routed, astro) : routed;
   // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）。
   // Astro は ISR のキャッシュの部品を選ばない（置き場は事業者で決まる。D-103）ので、Next.js のときの「キャッシュしない」を引き継がない
   const out = applyComponentsToWorkload(
@@ -3248,6 +3274,176 @@ export function pageWireframes(
       badges: w.badges?.[framework] ?? [],
     };
   });
+}
+
+/**
+ * ルートごとの描き方（D-106・段 2）。今はプレイヤーが直接選ばず、フレームワークの既定（catalog の FRAMEWORK_PRESETS を
+ * 事業者の対応表で落としたもの）と、今の設定・部品から決まる:
+ * - 全員に同じ中身のルートがキャッシュの描き方なら、再検証・記事のキャッシュが「オンデマンド」で S3、時間で S2。
+ *   Next.js で ISR のキャッシュの部品が「キャッシュしない」なら S4（applyComponentsToWorkload の書き換えと同じ）。
+ * - S5 は、SPA の API の応答のキャッシュが効くとき（D-37）だけ、全員に同じ中身の API の応答をキャッシュする。
+ * workloadFor はこれを applyRouteStrategies に当てる（今までの toSpa・toAstro・toNextExport と同じ Workload。等価のテストで確かめる）。
+ */
+export function routeChoices(
+  routes: WorkloadInput['routes'],
+  p: {
+    framework: FrameworkId;
+    platform: Platform;
+    settings: Pick<Settings, 'revalidateSec'>;
+    components: Choices;
+  },
+): RoutePlan {
+  const c = { ...DEFAULT_CHOICES[p.platform], ...p.components };
+  const cacheContent = apiCacheActive(p.platform, p.components, p.framework);
+  return Object.fromEntries(
+    routes.map((r) => {
+      const audience = routeAudience(r);
+      let strategy = defaultStrategy(p.framework, p.platform, audience);
+      if (strategy === 'cached-ttl' || strategy === 'cached-purge')
+        strategy =
+          p.framework === 'nextjs' && c.isrCache === 'none'
+            ? 'ssr'
+            : isOnDemand(p.settings)
+              ? 'cached-purge'
+              : 'cached-ttl';
+      return [
+        r.id,
+        // 個人化した中身の応答はキャッシュしない（D-37）
+        strategy === 'shell-api' && cacheContent && audience === 'public'
+          ? { strategy, cacheContent: true }
+          : { strategy },
+      ];
+    }),
+  );
+}
+
+/** 描き方の表の 1 行の、ほかの描き方（D-106）。available: この事業者・今の部品で使えるか。reason は使えない理由か条件。 */
+export type RouteAlternative = {
+  strategy: RouteStrategyId;
+  label: string;
+  code: string;
+  available: boolean;
+  reason: string;
+  /** 出典がある（source）か、ゲーム上の仮定（assumption）か。 */
+  basis: 'source' | 'assumption';
+};
+
+/** 「ページごとの描き方」の表の 1 行（D-106。読むだけ。段 3 で選べるようにする）。 */
+export type RoutePlanRow = {
+  route: string;
+  label: string;
+  audience: RouteAudience;
+  /** PV の割合（0〜1。テンプレートの値）。 */
+  share: number;
+  strategy: RouteStrategyId;
+  /** 描き方の名前（S 番号つき）。 */
+  strategyLabel: string;
+  code: string;
+  /** 描き方の値（期限・更新のたび・API の応答のキャッシュの期間・コメントの扱い）。 */
+  detail: string[];
+  /** この描き方がこのページの何の要件に応えるか。 */
+  why: string;
+  /** フレームワークの既定から外れている理由（今の部品・設定で決まった分）。 */
+  overriddenBy?: string;
+  /** ほかの描き方（確かめていない描き方は出さない。RS-04）。 */
+  alternatives: RouteAlternative[];
+};
+
+/**
+ * ページごとの描き方の表（D-106・段 2。始める画面のフレームワークのカード・見積モード・ゲームの状態から使う）。
+ * 行はテンプレートのルート、描き方は routeChoices（workloadFor が当てるものと同じ）。
+ */
+export function routePlanRows(
+  sc: Scenario,
+  p: {
+    framework: FrameworkId;
+    stackIndex: number;
+    settings: Pick<Settings, 'revalidateSec' | 'comments'>;
+    components: Choices;
+  },
+): RoutePlanRow[] {
+  const platform = STACKS[p.stackIndex]!.provider;
+  const routes = sc.template(1).routes;
+  const plan = routeChoices(routes, { ...p, platform });
+  const hidden = hiddenSettings({ scenario: sc, framework: p.framework });
+  const revalidateKey = revalidateSettingOf(p.framework);
+  const inPage = commentsInPage(p.settings, p.framework, sc);
+  const blocker = onDemandBlocker(p.stackIndex, p.components, p.framework);
+  return routes.map((r) => {
+    const audience = routeAudience(r);
+    const choice = plan[r.id]!;
+    const def = ROUTE_STRATEGIES[choice.strategy];
+    const preset = defaultStrategy(p.framework, platform, audience);
+    const detail: string[] = [];
+    const value = optionLabel(revalidateKey, p.settings.revalidateSec);
+    if (choice.strategy === 'cached-ttl' && !hidden.includes(revalidateKey))
+      detail.push(`期限 ${value}`);
+    if (choice.strategy === 'static-build' && !hidden.includes(revalidateKey))
+      detail.push(
+        isOnDemand(p.settings)
+          ? 'ビルドし直し: 更新のたび'
+          : `ビルドし直し: 間隔 ${value}`,
+      );
+    if (choice.cacheContent)
+      detail.push(`中身の API の応答をキャッシュ（期間 ${value}）`);
+    if (audience === 'public' && !hidden.includes('comments'))
+      detail.push(
+        inPage
+          ? 'コメント欄: HTML に含める（投稿でも描き直す）'
+          : 'コメント欄: ブラウザが API で読み込む',
+      );
+    const overriddenBy =
+      choice.strategy === preset ||
+      (preset === 'cached-ttl' && choice.strategy === 'cached-purge') ||
+      (preset === 'cached-purge' && choice.strategy === 'cached-ttl')
+        ? undefined
+        : choice.strategy === 'ssr'
+          ? `${SLOT_LABELS.isrCache}の部品が「キャッシュしない」`
+          : undefined;
+    const alternatives = ROUTE_STRATEGY_ORDER.filter(
+      (s) => s !== choice.strategy,
+    ).flatMap((s): RouteAlternative[] => {
+      const x = strategySupport(p.framework, platform, audience, s);
+      if (x.support === 'unverified') return [];
+      const d = ROUTE_STRATEGIES[s];
+      // 部品で決まるもの（Next.js の S3）は、今の部品で消せるか（onDemandBlocker）で判定する
+      const blocked =
+        x.support === 'depends' && s === 'cached-purge' ? blocker : undefined;
+      return [
+        {
+          strategy: s,
+          label: d.label,
+          code: d.code,
+          available: x.support !== 'no' && blocked === undefined,
+          reason: blocked ? `${blocked.label}: ${blocked.reason}` : x.note,
+          basis: x.basis,
+        },
+      ];
+    });
+    return {
+      route: r.id,
+      label: r.label ?? r.id,
+      audience,
+      share: r.share,
+      strategy: choice.strategy,
+      strategyLabel: def.label,
+      code: def.code,
+      detail,
+      why: def.why[audience],
+      ...(overriddenBy ? { overriddenBy } : {}),
+      alternatives,
+    };
+  });
+}
+
+/** ゲームの今の状態のページごとの描き方（D-106。今のフレームワーク・構成・設定・部品から決まる）。 */
+export function routePlanOf(
+  state: Pick<
+    GameState,
+    'scenario' | 'framework' | 'stackIndex' | 'settings' | 'components'
+  >,
+): RoutePlanRow[] {
+  return routePlanRows(state.scenario, state);
 }
 
 /**
@@ -6049,7 +6245,12 @@ export * from './save.ts';
 export * from './estimate-mode.ts';
 export * from './commitments.ts';
 export { ARTICLE_COMMUNITY };
-export { FRAMEWORKS, type FrameworkId } from 'catalog';
+export {
+  FRAMEWORKS,
+  ROUTE_STRATEGIES,
+  type FrameworkId,
+  type RouteStrategyId,
+} from 'catalog';
 
 // フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
 import {

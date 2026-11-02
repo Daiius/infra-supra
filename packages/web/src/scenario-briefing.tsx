@@ -10,6 +10,7 @@ import {
   SCENARIOS,
   selfHostedOf,
   type FrameworkId,
+  type RoutePlanRow,
   type Scenario,
   upkeepOf,
 } from 'game';
@@ -23,6 +24,7 @@ import {
   PageWireframe,
   WireframeLegend,
 } from './page-wireframes.tsx';
+import { ROUTE_PLAN_NOTE, RoutePlanTable } from './route-plan-table.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -188,6 +190,7 @@ function FrameworkCard({
   info,
   selected,
   noteId,
+  routes,
 }: {
   scenario: Scenario;
   id: FrameworkId;
@@ -196,6 +199,8 @@ function FrameworkCard({
   selected: boolean;
   /** 要約の要素の id（タブのラジオの aria-describedby に使う）。 */
   noteId: string;
+  /** ページごとの描き方（選んでいる構成で。D-106）。 */
+  routes?: RoutePlanRow[] | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
   const pages = pageWireframes(scenario, id, comments);
@@ -262,6 +267,15 @@ function FrameworkCard({
             </div>
           </section>
         ))}
+        {routes && routes.length > 0 && (
+          <section
+            aria-label="ページごとの描き方"
+            className="border-t border-base-300 pt-3"
+          >
+            <h5 className="mb-1 font-semibold">ページごとの描き方</h5>
+            <RoutePlanTable rows={routes} caption={ROUTE_PLAN_NOTE} />
+          </section>
+        )}
         {pages.length > 0 && (
           <div className="border-t border-base-300 pt-2">
             <WireframeLegend pages={pages} />
@@ -287,6 +301,7 @@ export function FrameworkField({
   value,
   onChange,
   comments,
+  routePlan,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
@@ -294,6 +309,8 @@ export function FrameworkField({
   onChange: (id: FrameworkId) => void;
   /** 設定「コメントの描き方」（始める画面で選べるときだけ。見取り図のコメント欄が変わる。D-82）。 */
   comments?: number | undefined;
+  /** フレームワークごとの、ページごとの描き方（選んでいる構成・設定・部品で。D-106）。 */
+  routePlan?: (id: FrameworkId) => RoutePlanRow[];
 }) {
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
@@ -333,6 +350,7 @@ export function FrameworkField({
             info={info(id)}
             selected={selected}
             noteId={`${idPrefix}-${id}`}
+            routes={routePlan?.(id)}
           />
         )}
       />
