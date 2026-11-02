@@ -51,17 +51,20 @@ export function Meta({
   );
 }
 
-/** 選択肢の 2 行の文（名前 + ⓘ / メタ情報）と、選べない理由（あれば 3 行目）。 */
+/** 選択肢の 2 行の文（名前 + ⓘ / メタ情報）と、選べない理由（あれば 3 行目）・選ぶ前に知らせる注意（あれば最後）。 */
 export function OptionText({
   name,
   meta = [],
   info,
   why,
+  notice,
 }: {
   name: string;
   meta?: string[];
   info?: ReactNode;
   why?: string | null;
+  /** 選ぶと起きること（乗り換えで既定に戻る描き方など。D-107 の補足）。 */
+  notice?: string | null;
 }) {
   return (
     <span className="block">
@@ -70,6 +73,11 @@ export function OptionText({
       </span>
       {meta.length > 0 && <Meta items={meta} />}
       {why && <span className="block text-xs">{why}</span>}
+      {notice && (
+        <span className="block text-xs text-warning" role="note">
+          {notice}
+        </span>
+      )}
     </span>
   );
 }

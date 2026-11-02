@@ -32,7 +32,9 @@ import {
   eventDef,
   goalChecks,
   isPlanChange,
+  stackChangeRouteNotice,
   stackChangeText,
+  rewriteRouteNotice,
   rewriteTargets,
   rewriteText,
   stackName,
@@ -64,6 +66,7 @@ import {
   selectTrends,
   setupProblem,
   setupRevalidateOptions,
+  setupRouteNotice,
   setupCommentOptions,
   COMMENTS_IN_BROWSER,
   offeredBaselines,
@@ -308,6 +311,23 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
   const commentsChoosable =
     setupCommentOptions(scenario, framework, routes).length > 0;
+  // 構成・フレームワークを替えると既定に戻る描き方（カードに添える。D-107 の補足）
+  const routeNotice = (next: {
+    stackIndex?: number;
+    framework?: FrameworkId;
+  }) =>
+    setupRouteNotice(
+      scenario,
+      {
+        stackIndex: stack,
+        framework,
+        components: parts,
+        revalidateSec,
+        comments,
+        routes,
+      },
+      next,
+    );
   // 始めから結ぶ確約（台数の予約・年払いで、前払いが始めの所持金に収まるものだけ。D-97）
   const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
     {},
@@ -349,6 +369,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               })
             }
             routes={routes}
+            routeNotice={(id) => routeNotice({ framework: id })}
           />
           {/* ③ ページの描き方（D-107）: フレームワークの既定から選び直す。構成（④）を替えると判定も変わる */}
           <RoutePlanField
@@ -373,6 +394,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               components={parts}
               comments={commentsChoosable ? comments : undefined}
               routes={routes}
+              routeNotice={(i) => routeNotice({ stackIndex: i })}
             />
           </div>
           <SetupComponents
@@ -1770,6 +1792,9 @@ function Actions({
                       state.framework,
                       state.components,
                     );
+              // 乗り換え先で使えない描き方は既定に戻る。替える前に見せる（D-107 の補足）
+              const notice =
+                idx === null ? null : stackChangeRouteNotice(state, idx);
               return (
                 <label
                   key={idx ?? 'keep'}
@@ -1788,6 +1813,7 @@ function Actions({
                       meta={text.meta}
                       info={<Info>{text.detail}</Info>}
                       why={why}
+                      notice={notice}
                     />
                   ) : (
                     <span>構成はこのまま</span>
@@ -1812,6 +1838,8 @@ function Actions({
               const why = fw === null ? null : blocked(build({ rewrite: fw }));
               const ok = why === null;
               const text = fw === null ? null : rewriteText(state, fw);
+              // 作り直しが済むと描き方は既定に戻る。替える前に見せる（D-107 の補足）
+              const notice = fw === null ? null : rewriteRouteNotice(state, fw);
               return (
                 <label
                   key={fw ?? 'keep'}
@@ -1830,6 +1858,7 @@ function Actions({
                       meta={text.meta}
                       info={<Info>{text.detail}</Info>}
                       why={why}
+                      notice={notice}
                     />
                   ) : (
                     <span>{FRAMEWORKS[state.framework].label} のまま</span>
