@@ -60,6 +60,13 @@ export type RequestSource = {
   cpuMs: number;
   /** isr-revalidate のみ: 再生成を起こした閲覧の CPU（cachedServeCpuMs）を足した値（backgroundCpuMs のルートごとの値）。 */
   withTriggerCpuMs?: number;
+  /**
+   * 期間つきのキャッシュの対象（document-isr・api-content）だけ: そのキャッシュを miss する件数（月。cacheMissFlow のルートごとの値）。
+   * 完全にキャッシュから返るルート（更新 0 回の ISR など）を、キャッシュの後ろのノードの内訳に入れないために使う（OCL-E219321B）。
+   */
+  misses?: number;
+  /** document-isr だけ: ワイルドカードでまとめた無効化の CDN を miss する件数（cdnFlushMissFlow のルートごとの値。D-79）。 */
+  flushMisses?: number;
 };
 
 export type ResolvedWorkload = {
@@ -340,17 +347,13 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       spaEntries += entries;
       byRendering.static.push(flow(entries, { kb: r.shellKB! }));
       source('document-static', r, entries, 0);
-      source(
-        r.cacheSeconds !== undefined ? 'api-content' : 'api',
-        r,
-        views,
-        p.cpuMs,
-      );
+      if (r.cacheSeconds === undefined) source('api', r, views, p.cpuMs);
       if (r.cacheSeconds !== undefined) {
         // ISR の再生成と同じ形: 期間 T あたり 1 ページ高々 1 回だけ取り直す（miss）→ 閲覧 / (1 + λT)
         const lambdaT =
           (views / r.pages) * (r.cacheSeconds / SECONDS_PER_MONTH);
         const misses = views / (1 + lambdaT);
+        source('api-content', r, views, p.cpuMs, { misses });
         spaContent.push(flow(views, work));
         spaContentMiss.push(flow(misses, work));
         spaContentHits += views - misses;
@@ -399,7 +402,6 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     } else {
       const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };
       byRendering.isr.push(flow(views, served));
-      source('document-isr', r, views, r.cachedServeCpuMs);
       isrPagesKB += r.pages * p.responseKB;
       const updates = r.onDemandUpdatesPerMonth;
       if (updates !== undefined) {
@@ -467,6 +469,10 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           ? peakMisses
           : Math.min(views, flushPart + timedPart(lambdaT * peakRate));
       isrFlushMiss.push(flow(flushCount, served));
+      source('document-isr', r, views, r.cachedServeCpuMs, {
+        misses: count,
+        flushMisses: flushCount,
+      });
       isrPeakFlushMiss.push(flow(peakFlushCount, served));
       revalidations.push(flow(count, work));
       source('isr-revalidate', r, count, p.cpuMs, {
