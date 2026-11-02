@@ -33,6 +33,7 @@ import {
   frameworksOf,
   hiddenSettings,
   IMAGE_FORMAT_KB,
+  pageWireframes,
   revalidateSettingOf,
   SCENARIOS,
   SETTINGS,
@@ -43,6 +44,7 @@ import {
   type FrameworkId,
   type Scenario,
 } from 'game';
+import { diagramArchitecture } from '../system-diagram-model.ts';
 
 export const BOOKS: readonly PriceBook[] = loadPriceBooks();
 
@@ -624,6 +626,29 @@ function run(input: EstimateInput, r: Resolved) {
     input.seats,
   );
   return estimate({ workload, architecture, books: BOOKS });
+}
+
+/**
+ * 構成図（D-105）に描く構成とページの見取り図。費用の計算と同じ部品の選択・composeStack から組む（メールを送らないテンプレートは
+ * 送信のノードを外す。D-101）。ページの名前は流れの凡例に添える。
+ */
+export function diagramOf(input: EstimateInput): {
+  architecture: ArchitectureInput;
+  pages: ReturnType<typeof pageWireframes>;
+} {
+  const r = resolve(input);
+  const comments = settingsOf(input.template, input.framework).comments
+    ? input.comments
+    : undefined;
+  return {
+    architecture: diagramArchitecture(
+      r.scenario,
+      r.stackIndex,
+      input.framework,
+      r.components,
+    ),
+    pages: pageWireframes(r.scenario, input.framework, comments),
+  };
 }
 
 /** 選んだ条件の見積（入力は normalizeInput を通したもの）。 */

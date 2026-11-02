@@ -28,10 +28,12 @@ import {
   type MarkShape,
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
+import { DIAGRAM_NOTE, SystemDiagram } from '../system-diagram.tsx';
 import {
   type EstimateView,
   compareStacks,
   costCurves,
+  diagramOf,
   CURVE_MAX,
   CURVE_PVS,
   curveColorSlot,
@@ -100,6 +102,7 @@ export function EstimateMode() {
 
   const view = useMemo(() => runEstimate(input), [input]);
   const rows = useMemo(() => compareStacks(input), [input]);
+  const diagram = useMemo(() => diagramOf(input), [input]);
 
   return (
     <div className="space-y-4">
@@ -145,6 +148,13 @@ export function EstimateMode() {
           thresholds={view.thresholds}
           facts={view.facts}
           unpriced={view.unpricedLines}
+        />
+      </Card>
+      <Card title={`構成図: ${view.name}`}>
+        <SystemDiagram
+          architecture={diagram.architecture}
+          pages={diagram.pages}
+          caption={DIAGRAM_NOTE}
         />
       </Card>
       <Card title="明細（事業者・メーターごと）">

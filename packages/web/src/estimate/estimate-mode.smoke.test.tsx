@@ -32,6 +32,11 @@ function expectEstimate(): string {
       .getAllByRole('button')
       .filter((b) => b.getAttribute('aria-current') === 'true'),
   ).toHaveLength(1);
+  // 構成図（D-105）: 今の構成の図が出る
+  const diagram = within(card(/^構成図: /)).getByRole('img', {
+    name: /^構成図: /,
+  });
+  expect(diagram.querySelectorAll('[data-node]').length).toBeGreaterThan(1);
   const curve = within(card('費用の曲線（月の PV を振る）'));
   const chart = curve.getByRole('img', {
     name: '月の PV ごとの月額（構成ごと）',

@@ -13,7 +13,8 @@ import {
   type Scenario,
   upkeepOf,
 } from 'game';
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { ChoiceCarousel } from './choice-carousel.tsx';
 import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
 import { Meta, NameWithInfo } from './option-text.tsx';
@@ -224,7 +225,7 @@ function FrameworkCard({
           : undefined
       }
     >
-      <div className="card-body gap-3 p-4">
+      <div className="card-body justify-start gap-3 p-4 *:grow-0">
         <h4 className="card-title text-lg">
           <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
           <NameWithInfo name={FRAMEWORKS[id].label} info={info} />
@@ -299,130 +300,48 @@ export function FrameworkField({
       <FrameworkDetail scenario={scenario} id={id} />
     </Info>
   );
-  const track = useRef<HTMLDivElement>(null);
-  const items = useRef<Partial<Record<FrameworkId, HTMLDivElement | null>>>({});
-  // 選んだカードを中央へ。scrollLeft なので動きは CSS に任せる（daisyUI の carousel は reduced-motion では滑らかにしない）
-  useEffect(() => {
-    const t = track.current;
-    const el = items.current[value];
-    if (!t || !el) return;
-    t.scrollLeft = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
-  }, [value, allowed]);
-  const headingId = useId();
-  if (allowed.length < 2) {
-    const id = allowed[0] ?? value;
-    return (
-      <div className="space-y-2">
-        <h3 className="font-bold">アプリのフレームワーク</h3>
-        <FrameworkCard
-          scenario={scenario}
-          id={id}
-          comments={comments}
-          info={info(id)}
-          selected
-          noteId={`${headingId}-${id}`}
-        />
-      </div>
-    );
-  }
-  const i = Math.max(0, allowed.indexOf(value));
-  const at = (d: number) => allowed[(i + d + allowed.length) % allowed.length]!;
   return (
     <div className="space-y-2">
-      <h3 id={headingId} className="font-bold">
-        アプリを何で作りましたか？
-      </h3>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          className="btn btn-circle btn-ghost btn-sm shrink-0"
-          aria-label={`前の選択肢（${FRAMEWORKS[at(-1)].label}）`}
-          onClick={() => onChange(at(-1))}
-        >
-          ‹
-        </button>
-        {/* 名前とロゴのタブ。ラジオなので ←/→ で選べる。狭い画面では横にスクロールする */}
-        <div
-          role="radiogroup"
-          aria-labelledby={headingId}
-          className="tabs tabs-box tabs-sm min-w-0 flex-1 flex-nowrap overflow-x-auto"
-        >
-          {allowed.map((id) => (
-            // ロゴを添えるので input でなく label をタブにする（daisyUI の label:has(:checked)）。名前は文字で出す
-            <label
-              key={id}
-              className="tab shrink-0 gap-1 whitespace-nowrap has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary"
-            >
-              <input
-                type="radio"
-                name="framework"
-                className="sr-only"
-                // 要約だけを説明にする（カード全体は長いので、カードは下に領域として読める）
-                aria-describedby={
-                  scenario.text?.byFramework?.[id]?.note
-                    ? `${headingId}-${id}`
-                    : undefined
-                }
-                checked={value === id}
-                onChange={() => onChange(id)}
-              />
-              <BrandMark
-                brand={FRAMEWORK_BRAND[id].brand}
-                size={14}
-                tag={FRAMEWORK_BRAND[id].tag}
-              />
-              {FRAMEWORKS[id].label}
-            </label>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="btn btn-circle btn-ghost btn-sm shrink-0"
-          aria-label={`次の選択肢（${FRAMEWORKS[at(1)].label}）`}
-          onClick={() => onChange(at(1))}
-        >
-          ›
-        </button>
-      </div>
-      {/* 全部のカードを同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（狭い画面は 88%）を
-          使う。前後のカードは両脇の端だけ薄く見え、押すと選ぶ。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
-          指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
-      <div
-        ref={track}
-        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-2"
-      >
-        {allowed.map((id) => (
-          <div
-            key={id}
-            ref={(el) => {
-              items.current[id] = el;
-            }}
-            className={`carousel-item w-[88%] lg:w-[85%] ${id === value ? '' : 'cursor-pointer'}`}
-            // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
-            onClick={
-              id === value
-                ? undefined
-                : (e) => {
-                    if ((e.target as HTMLElement).closest('button')) return;
-                    onChange(id);
-                  }
-            }
-          >
-            <FrameworkCard
-              scenario={scenario}
-              id={id}
-              comments={comments}
-              info={info(id)}
-              selected={id === value}
-              noteId={`${headingId}-${id}`}
+      <ChoiceCarousel
+        heading={
+          allowed.length < 2
+            ? 'アプリのフレームワーク'
+            : 'アプリを何で作りましたか？'
+        }
+        name="framework"
+        noun="選択肢"
+        items={allowed}
+        value={value}
+        onChange={onChange}
+        label={(id) => FRAMEWORKS[id].label}
+        tab={(id) => (
+          <>
+            <BrandMark
+              brand={FRAMEWORK_BRAND[id].brand}
+              size={14}
+              tag={FRAMEWORK_BRAND[id].tag}
             />
-          </div>
-        ))}
-      </div>
-      <p className="text-sm opacity-60">
-        乗り換えても同じアプリのまま。途中で別のフレームワークに作り直せるが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかる。SNS
-        のカード・初回表示への効き方と作り直しの手間はゲーム上の仮定。
-      </p>
+            {FRAMEWORKS[id].label}
+          </>
+        )}
+        describedBy={(id) => Boolean(scenario.text?.byFramework?.[id]?.note)}
+        renderCard={(id, { selected, idPrefix }) => (
+          <FrameworkCard
+            scenario={scenario}
+            id={id}
+            comments={comments}
+            info={info(id)}
+            selected={selected}
+            noteId={`${idPrefix}-${id}`}
+          />
+        )}
+      />
+      {allowed.length >= 2 && (
+        <p className="text-sm opacity-60">
+          乗り換えても同じアプリのまま。途中で別のフレームワークに作り直せるが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかる。SNS
+          のカード・初回表示への効き方と作り直しの手間はゲーム上の仮定。
+        </p>
+      )}
     </div>
   );
 }

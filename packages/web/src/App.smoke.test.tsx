@@ -270,6 +270,72 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
   });
 
+  it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', () => {
+    renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
+    );
+    const stackRadios = () =>
+      screen
+        .getAllByRole<HTMLInputElement>('radio')
+        .filter((r) => r.name === 'stack');
+    const checked = () => stackRadios().find((r) => r.checked)!;
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    // 隠した構成（D-100）は出ず、どれにも推奨の印は無い
+    expect(stackRadios().length).toBeGreaterThan(5);
+    // タブで選ぶ
+    fireEvent.click(screen.getByRole('radio', { name: /^Vercel Pro/ }));
+    expect(checked().closest('label')!.textContent).toMatch(/^Vercel Pro/);
+    expect(current().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
+    // 選んでいるカードに構成図（要約つきの図・凡例・読み上げ用の一覧）。Vercel と Supabase の枠に分かれる
+    const diagram = within(current()).getByRole('img', { name: /^構成図: / });
+    expect(diagram.querySelector('[data-group="vercel"]')).not.toBeNull();
+    expect(diagram.querySelector('[data-group="supabase"]')).not.toBeNull();
+    expect(
+      within(current()).getByRole('list', { name: '構成図のつながり' })
+        .textContent,
+    ).toContain('閲覧者（ブラウザ） → Vercel CDN');
+    const legend = within(current()).getByRole('list', {
+      name: '構成図の流れの凡例',
+    });
+    const isr = within(legend).getByRole('button', { name: /^ISR のページ/ });
+    expect(isr.textContent).toContain('記事のページ');
+    fireEvent.click(isr);
+    expect(isr.getAttribute('aria-pressed')).toBe('true');
+    // 前後のボタンで選ぶ（フレームワークの欄の前後のボタンとは名前で分かれる）
+    const before = checked().closest('label')!.textContent;
+    fireEvent.click(screen.getByRole('button', { name: /^次の構成/ }));
+    expect(checked().closest('label')!.textContent).not.toBe(before);
+    fireEvent.click(screen.getByRole('button', { name: /^前の構成/ }));
+    // 選んでいないカード: ⓘ・凡例を押しても選ばれない
+    const other = document.querySelector<HTMLElement>(
+      'section[data-stack]:not([aria-current="true"])',
+    )!;
+    const otherName = other.getAttribute('aria-label')!.replace(/ の構成$/, '');
+    const otherRadio = () =>
+      stackRadios().find((r) => r.closest('label')!.textContent === otherName)!;
+    expect(otherRadio().checked).toBe(false);
+    fireEvent.click(within(other).getByRole('button', { name: /説明$/ }));
+    expect(screen.queryByRole('tooltip')).not.toBeNull();
+    fireEvent.click(screen.queryByRole('tooltip')!);
+    expect(otherRadio().checked).toBe(false);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(
+      within(
+        within(other).getByRole('list', { name: '構成図の流れの凡例' }),
+      ).getAllByRole('button')[0]!,
+    );
+    expect(otherRadio().checked).toBe(false);
+    // カードの文字を押すと選ぶ
+    fireEvent.click(other.querySelector('p')!);
+    expect(otherRadio().checked).toBe(true);
+    expect(current()).toBe(other);
+  });
+
   it('W-04 保存して読み込み直すと同じ月から再開する', () => {
     renderApp();
     startGame({
