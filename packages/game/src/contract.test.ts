@@ -1,5 +1,5 @@
 // 受託先の業務アプリの運用のシナリオ（prd/09・D-33）。基準プレイの golden と、データで足した仕組みの性質。
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   applyActions,
   componentSlots,
@@ -12,6 +12,9 @@ import {
 } from './index.ts';
 import { parseSave, newSave, replaySave } from './save.ts';
 import { CONTRACT_OPERATIONS as sc } from './scenarios/contract-operations.ts';
+
+// 基準プレイ（シード × 構成）を何本も回すので、全パッケージを並べて回すと既定の 5 秒を超えうる（単独では 1 秒未満。gcp.test と同じ）
+vi.setConfig({ testTimeout: 30_000 });
 
 const CF_PAID = 1;
 const VPS = 4;
