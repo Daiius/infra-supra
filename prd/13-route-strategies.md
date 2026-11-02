@@ -1,6 +1,7 @@
 # 13. ページごとの描き方（ルートの描き方 S1〜S6）
 
 > 状態: **段 0〜3 は実装済み**（段 0 = D-99〜D-101、段 1 = D-103、段 2 = D-106、段 3 = D-107）。**段 4・5 は未実装**で、§7 の残りの論点は推奨案つき。
+> 2026-11-03 の公式の文書の調べで、vinext の S1 を出し（RS-15）、Workers Cache が Free でも使えることを事実にし（D-103）、S6 の対応を §8 に記録した（D-106・D-107 の補足）。
 > 出発点（2026-11-03）: 記事コミュニティ × Astro × Cloudflare Free で、Workers Free の 1 リクエスト CPU 10 ms に当たって止まった。原因は記事ではなく、個人向けのページ（SSR・CPU 15 ms）だった。
 > 「Astro = 静的 = 軽い」と思って選ぶと、個人向けのページが SSR のまま残る。ページの描き方がフレームワークで暗に決まり、選ぶ前に見えないことが混乱の元だった。
 > 料金の新しい数値は書いていない。値の根拠の無いものは**ゲーム上の仮定**、事実の確認が要るものは**要確認**と書く。
@@ -48,11 +49,12 @@ catalog の `ROUTE_STRATEGIES`（`packages/catalog/src/frameworks/route-strategi
 
 ## 3. 対応表（フレームワーク × 事業者）
 
-catalog の `capabilityRow`・`strategySupport`（`route-capability.ts`）。**新しい事実は書かず、今の catalog のデータから組み立てる。**
+catalog の `capabilityRow`・`strategySupport`（`route-capability.ts`）。今の catalog のデータから組み立てる。
 
 - DeployTarget の出典
 - Astro の記事の置き場 `pageCache`（D-103）
 - Next.js の ISR のキャッシュの部品の `onDemandIsr`（D-32）
+- 描き方ごとに確かめた公式の文書（Next.js の `generateStaticParams`・vinext の README と caching の文書。D-107 とその補足）
 
 各セルには、使えるか・理由の文・出典かゲーム上の仮定か（`basis`）・出典を持たせる。
 使えるか: ✓ 使える、部 = 部品で決まる、✗ 使えない、? = 確かめていない（画面に出さない。RS-04）。
@@ -60,15 +62,21 @@ catalog の `capabilityRow`・`strategySupport`（`route-capability.ts`）。**�
 
 | | S1 | S2 | S3 | S4 | S5 | S6 |
 |---|---|---|---|---|---|---|
-| Next.js × Cloudflare（vinext） | ?（RS-15） | ✓ | 部（R2・Workers Cache は消せる、KV は消せない） | ✓ | ✓仮 | ? |
+| Next.js × Cloudflare（vinext） | ✓（開発中・Worker を通る。RS-15） | ✓ | 部（R2・Workers Cache は消せる、KV は消せない） | ✓ | ✓仮 | ?（§8: ✗） |
 | Next.js × Vercel・VPS・Netlify・OpenNext | ✓ | ✓ | ✓ | ✓ | ✓仮 | ? |
-| Next.js × AWS（Amplify）・Google Cloud | ✓ | ✓ | ✗（Amplify の ISR・Hosting の CDN は消して全体に届けられない） | ✓ | ✓仮 | ? |
+| Next.js × AWS（Amplify）・Google Cloud | ✓（処理を通さないのは仮） | ✓ | ✗（Amplify の ISR・Hosting の CDN は消して全体に届けられない） | ✓ | ✓仮 | ? |
 | Astro × Cloudflare・Vercel・VPS・Netlify | ✓ | ✓ | ✓ | ✓ | ✓仮 | ? |
 | Astro × Google Cloud | ✓ | ✓ | ✗（Hosting の CDN はデプロイでしか消えない） | ✓ | ✓仮 | ? |
 | Next.js 静的書き出し（どこでも） | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ |
 | Vite SPA（どこでも） | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
 
-- Next.js の S1 は `generateStaticParams` と `dynamicParams = false`（一覧に無いページは 404。新しい記事はビルドし直すまで開けない）。公式の文書（2026-10-01 更新・2026-11-03 取得）を出典にした（D-107・RS-18）。vinext の S1 は確かめていないので出さない（RS-15）。
+- Next.js の S1 は `generateStaticParams` と `dynamicParams = false`（一覧に無いページは 404。新しい記事はビルドし直すまで開けない）。公式の文書（2026-10-01 更新・2026-11-03 取得）を出典にした（D-107・RS-18）。
+- **vinext の S1**（RS-15・2026-11-03 取得の [README](https://github.com/cloudflare/vinext)・[docs/caching.mdx](https://github.com/cloudflare/vinext/blob/main/docs/caching.mdx)）: `prerender: true` と `cache: { cdn: staticAssetsAdapter() }` で、事前描画した HTML・RSC をアセットに写し、**実行時に Worker が `ASSETS` の binding から読んで返す**（「reads them from the `ASSETS` binding at runtime」。Worker-first）。書き込み・無効化は何もせず、次のデプロイで置き換わる。
+  - 数え方（catalog の `vinext-prerender` の解釈・`composeStack` の `vinextPrerender`）: 記事の閲覧（`document-static`）を Worker に通し、**1 回ごとに Worker のリクエストに数える**（Free では 1 日 10 万件に入る）。描画はせず、1 回の CPU はキャッシュから返すのと同じ 2 ms（テンプレートの `cachedServeCpuMs` と同じ値・**ゲーム上の仮定**）。JS・CSS は今までどおり静的アセット（Worker を通さない）。ビルドし直しはほかの S1 と同じく Workers Builds の分。
+  - Worker を通ることは README の設計の文からの読みで、課金の明記は無い（`output: 'export'` の「served as assets only」は別の経路で、静的書き出しが使う）。
+  - 選択肢の ⓘ に「vinext は開発中（README）」を出す。
+- **Amplify・Google Cloud の S1**: 静的なページを CDN が返し、処理（Amplify の compute・Cloud Run）を通さないとみなすのは**ゲーム上の仮定**（対応表の文に書いた）。Amplify の公式の文書は Next.js 15 までの「Static pages・SSG に対応」までで配り方・課金の記載が無い。Firebase App Hosting は「CDN に載った応答は Cloud Run に届かない」と書くが、キャッシュの外れ・期限切れは Cloud Run を呼ぶ（[About App Hosting](https://firebase.google.com/docs/app-hosting/about-app-hosting)・[Optimize caching](https://firebase.google.com/docs/app-hosting/optimize-cache)。2026-11-03 取得）。
+- S6 の列は画面に出さない（?）。確かめた対応は §8。
 - 載せられない組（Astro × AWS など）は、すべて ✗ になる。理由は DeployTarget の文。
 - 「部」のセルは、今の部品で判定する。ゲームの `onDemandBlocker` を使い、前段の CDN の選択も見る。
 - AWS（Amplify・OpenNext）・Netlify の構成は隠している（D-100）が、古い保存の再生に使うので表には入れてある。
@@ -145,7 +153,7 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 | 2 | 描き方のモデル・対応表・プリセット・`applyRouteStrategies`（Workload は不変）・読むだけの表（D-106） | 済 |
 | 3 | 始める画面・見積モードで、ページごとに描き方を選べるようにする（S1〜S5）。要件の判定・保存 v2・途中の行動と手間（D-107） | 済 |
 | 4 | 記事の S5（毎ページの枠）・コメント欄をルートの部品に（D-82 を移す） | 未 |
-| 5 | S6（Server Islands・PPR）。事実を確かめてから | 未 |
+| 5 | S6（Server Islands・PPR）。対応の事実は §8 に記録した（2026-11-03）。数え方は未 | 未 |
 
 段 3 でしなかったこと: 速さの判定の重み付き CPU（RS-10）・乗り換え先で描き方が使えなくなるときの「描き方も替える（手間 +n）」の表示（RS-04 の残り。既定に戻ることの注意だけは出す）・ISR のキャッシュの部品「キャッシュしない」を S4 にまとめること・`FrameworkProfile.renderingModes` を消すこと・`revalidateSec` をルートごとの値に分けること（記事のルートは 1 つなので値は 1 つのまま）。
 
@@ -163,13 +171,51 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 | RS-06 | 計測が要る値 | **1 のまま**（C-13・D-107）。フレームワークごとの描画の CPU の倍率と、HTML の大きさの倍率。Workers の `CPUTimeMs` で測るまで 1 のまま。Astro が 0.4 倍なら個人向けの SSR が Free に収まり、バランスが大きく動く |
 | RS-07 | バランスへの影響 | **基準プレイを 2 本足した**（D-107。「CF Free・個人向けを枠 + API」「CF Paid・個人向けを枠 + API」）。CF Free は記事の ISR の再生成・画像の変換・日次のリクエストで止まり、描き方だけでは勝てない（D-107 の表）。**目標（記事 $1,730・受託 $1,700）は変えない**（ユーザーの判断待ち） |
 | RS-08 | 描き方の変更の手間（ゲーム上の仮定） | **段 3 で採用**（D-107）: S2 ↔ S3 は 2（今までの設定）、分け方が変わるものは 3、枠 + API へは 4、値だけは 0、フレームワークを替えるのは 24（D-81）。翌月から |
-| RS-09 | CF の前段の Workers Cache（Astro S2・S3） | D-103 で文書から読んだ（料金の注が Free・Paid の両方の表に付く）。拠点ごとのヒット率は計算に入れていない |
+| RS-09 | CF の前段の Workers Cache（Astro S2・S3） | **Free でも使える（事実・2026-11-03）**: 公式のブログ（2026-07-06）「available today to every Worker on any plan」。ヒットも Worker のリクエストとして数える（料金の頁）。D-103 の解釈を事実に替えた（数え方は D-103 のまま。D-103 の補足）。拠点ごとのヒット率は計算に入れていない |
 | RS-10 | 速さの判定（`heavySsrCpuMs` 12） | 今の 1 つの `ssrCpuMs` を、「描く閲覧の重み付きの CPU」に替える。描く閲覧は S4 の全部・S2 / S3 の取り直し・S6 の島。**段 3 ではしなかった**: 速さの CPU・初回表示はフレームワークの性質のまま（Next.js・Astro のページを S5 にしても、静的書き出しのマイページと同じく SSR の値で見る。D-80 の仮定に合わせた）|
 | RS-11 | OGP の判定 | **段 3 で採用**（D-107）: `needsOgp` のルートが S5 で前処理の部品なし、のときだけ `socialCardFactor` を掛ける。前処理の部品は SPA だけにあるので、Next.js・Astro の記事を S5 にするとカードは出ない |
 | RS-12 | 消す呼び出しの制限 | URL で消す前提にし、前提の行に出す（CF Free の purge は URL なら毎秒 800 件。コメントを HTML に含めても 1 日 約 490 回で当たらない） |
 | RS-13 | 見積モードの費用の差 | **段 3 で採用**（D-107）: 選択肢ごとに反実仮想で回す。構成の比較・費用の曲線は今の描き方で引く（「描き方を替えた案」の列は残り） |
 | RS-14 | ページの一覧の欠け | 一覧・トップは記事のルートに含めたままにする。検索・ログインの画面は足さない |
-| RS-15 | vinext の S1 | 確かめるまで、CF の Next.js では S1 を出さない（**段 2 で採用**） |
+| RS-15 | vinext の S1 | **解除（2026-11-03・D-107 の補足）**: README で `prerender: true` + `staticAssetsAdapter()` を確かめて出す。閲覧ごとに Worker のリクエスト・CPU はキャッシュから返すのと同じ（ゲーム上の仮定）。「vinext は開発中（README）」の注を添える。前は「確かめるまで出さない」（段 2） |
 | RS-16 | 選ぶ順番 | **案 B を採用**（§1・D-107）: ① ページと要件 → ② フレームワーク → ③ ページの描き方 → ④ 構成 |
 | RS-17 | ルートの性質（見る人・`needsOgp`・鮮度・部品）の置き場 | 段 2 では、テンプレートの `rendering` から見る人を読んでいる（ISR・静的 = 全員に同じ、SSR = 人ごと）。toSpa・toAstro が前から使っていた読み方。**決定（C-13・D-107）**: テンプレートのデータに書く（`RouteTraits`）。estimator の Workload には入れない |
-| RS-18 | 出典の無い「使える」（Next.js の S1・S5 全般） | ゲーム上の仮定として出し、ⓘ に「ゲーム上の仮定」と書く（段 2 で採用）。**決定（C-13・D-107）**: S5 はゲーム上の仮定のまま出す。Next.js の S1 は公式の文書（`generateStaticParams`）で確かめて出典を付けた。vinext の S1 と S6 は出さない |
+| RS-18 | 出典の無い「使える」（Next.js の S1・S5 全般） | ゲーム上の仮定として出し、ⓘ に「ゲーム上の仮定」と書く（段 2 で採用）。**決定（C-13・D-107）**: S5 はゲーム上の仮定のまま出す。Next.js の S1 は公式の文書（`generateStaticParams`）で確かめて出典を付けた。vinext の S1 は README で確かめて出した（RS-15 の解除）。Amplify・Google Cloud の S1 で静的なページに処理を通さないのはゲーム上の仮定と書いた。S6 は出さない（§8） |
+
+## 8. S6（Server Islands・PPR）の確かめた事実（2026-11-03 取得。画面には出さない）
+
+段 5 の前に、どの組で S6 が作れるかを公式の文書で確かめた（D-106・D-107 の補足）。**対応表・画面は変えていない**（S6 は `unverified` のまま。数え方が無いので選べない）。
+
+### 8.1 対応
+
+| フレームワーク × 事業者 | S6 | 根拠 |
+|---|---|---|
+| Astro × Cloudflare | ✓ | `@astrojs/cloudflare` の頁「deploy your on-demand rendered routes and features to Cloudflare, including server islands」（取得時の要約で逐語ではない） |
+| Astro × VPS（Node） | ✓ | `@astrojs/node` の頁「including server islands, actions, and sessions」 |
+| Astro × Netlify | ✓ | `@astrojs/netlify` の頁「automatically configures skew protection for Astro features like actions, server islands, …」 |
+| Astro × Vercel | ✓仮 | `@astrojs/vercel` の頁は機能の一つとして触れるだけ。Server Islands の頁は「it will work with any host you have」 |
+| Astro × Google Cloud（Cloud Run の Node） | ✓仮 | Node のアダプターと同じ（Cloud Run の頁は今回取得していない） |
+| Next.js × Vercel・VPS（Node の standalone）・Google Cloud（Cloud Run） | ✓ | Next.js 16.0.0 で `cacheComponents` が安定し、PPR はその既定の挙動になった（`experimental.ppr` は廃止）。「A single `next start` process handles every Next.js feature correctly: … PPR, Cache Components …」。Node のランタイムが要る（`runtime = 'edge'` は使えない） |
+| Next.js × Cloudflare（vinext） | ✗ | README「full `cacheComponents` behavior is still incomplete. … partial shells, resume behavior … do not yet match Next.js」 |
+| Next.js × AWS（Amplify） | ✗ | Amplify は Next.js 15 まで（「You can deploy apps built with Next.js versions up through Next.js 15」）。`cacheComponents` は 16 |
+| Next.js × Netlify | ? | 今回は一次情報を取っていない |
+| Next.js 静的書き出し・Vite の SPA | ✗ | サーバーが無い・ページごとの HTML を作らない（今の対応表のまま） |
+
+出典（2026-11-03 取得）:
+
+- Astro: [Server Islands](https://docs.astro.build/en/guides/server-islands/)・[@astrojs/cloudflare](https://docs.astro.build/en/guides/integrations-guide/cloudflare/)・[@astrojs/node](https://docs.astro.build/en/guides/integrations-guide/node/)・[@astrojs/netlify](https://docs.astro.build/en/guides/integrations-guide/netlify/)・[@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)（いずれも更新日の表示なし）
+- Next.js: [cacheComponents](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents)（2026-10-15 更新）・[Caching](https://nextjs.org/docs/app/getting-started/caching)（2026-10-06 更新）・[Deploying to platforms](https://nextjs.org/docs/app/guides/deploying-to-platforms)（2026-03-30 更新）・[PPR platform guide](https://nextjs.org/docs/app/guides/ppr-platform-guide)（2026-03-30 更新）・[Self-hosting](https://nextjs.org/docs/app/guides/self-hosting)（2026-10-15 更新）
+- vinext: [README](https://github.com/cloudflare/vinext)（更新日の表示なし）
+- Amplify: [Next.js の SSR の対応](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html)（更新日の表示なし）
+
+### 8.2 S6 を数えるのに要るもの（段 5）
+
+- **島は別のリクエスト**: Astro の島は「retrieved via a GET request, passing props as an encrypted string in the URL query」。ページの閲覧 1 回に、枠（S1〜S3 の数え方）と島のリクエスト（島の数だけ・SSR の CPU の一部）が乗る。Next.js の PPR は 1 つの応答の中で静的な枠を先に流し、動的な部分を続けて流す（ストリーミング）。
+- **島のキャッシュ**: GET なので「caching data with the Cache-Control HTTP header」ができる。ただし:
+  - URL が 2,048 バイトを超えると POST になり（「Astro will instead send a POST request that contains all props in the body」）、キャッシュされない。
+  - Vercel の ISR の経路では Cache-Control が無視される（`@astrojs/vercel`「routes use Vercel's cache shielding and any Cache-Control headers are ignored」）。
+  - Cloudflare は Workers Cache を有効にしたときだけ前段で効く（ヒットも Worker のリクエストに数える。RS-09）。
+  - 個人化した島は使い回せない（S6 を個人向けのページに使うときは島を毎回描く。このモデルの読み）。
+- **PPR の費用**: 静的な枠を CDN から配るのはアダプター・CDN の実装しだい（「These are available building blocks, not finished integrations.」）。`next start` の既定は origin だけで描く形で、毎回処理を通る（費用は S4 に近い）。公式の文と合わせるなら、枠を CDN で配ることを仮定せず、origin だけを既定の数え方にする。
+- 速さの判定（RS-10）では、S6 の島を「描く閲覧」に数える。
+

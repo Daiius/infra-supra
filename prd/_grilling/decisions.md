@@ -1061,6 +1061,7 @@
 - 結果（基準プレイ・prd/06 §6.4）: **目標の根拠（CF Paid × Next.js）は変わらない。** CF Paid・VPS の Astro も変わらない。Vercel Pro の Astro は 12 か月の費用が $1,739 → $1,412（ビルドの CPU minute が無くなる）。Google Cloud の Astro は $744 → $769（記事の CDN の外れを Cloud Run が描く）。Vercel Pro × Astro + Workers の API は 0 → 1 / 20。CF Free の Astro は記事のページも 10 ms に当たる（前の D-99 の例の文「記事のページは静的なので Worker を起動しない」は出なくなった）。
 - 残した点: ページごとに描き方を選ぶ形（RS の段 2〜3）・Workers Cache の拠点ごとのヒット率の低下・上限の内訳の文の「ISR の閲覧と再生成」を Astro で言い換えること。見積モードでフレームワークを替えたときの既定の付け替えは下の補足で済んだ。
 - 補足（2026-11-03・見積モードの既定の付け替え）: 見積モードでテンプレート・フレームワーク・構成を替えると、URL の `r` がそのまま残り、替えた先の既定（Astro の消せる置き場のオンデマンド・Google Cloud の 5 分）にならなかった。始める画面と同じ規則にした: 替える前の既定のままなら（選んでいない）替えた先の既定、選んだ値は替えた先で選べるときだけ残す（web の `withContext`・`withFramework`・`withStack`・`withTemplate`）。ページごとの描き方（`rp.〜`）は今までどおり `validRouteOverrides` で選べるものだけ残る。**値・バランスは変えない**。テストは model.test.ts と W-22。
+- 補足（2026-11-03・Workers Cache が Free で使えることを事実に）: 「Workers Cache が Free で使えるか」は解釈（料金の注が両方の表に付く）だったが、公式のブログ（[Workers Cache](https://blog.cloudflare.com/workers-cache/)・2026-07-06 公開・2026-11-03 取得）の「Workers Cache is available today to every Worker on any plan, enabled in Wrangler.」で事実として確かめた。ヒットの数え方は [Workers Cache](https://developers.cloudflare.com/workers/cache/)（2026-10-30 更新）の「all requests to your Worker are billed at the standard Workers request rate」と料金の頁の「requests served from the Worker's cache are billed at the same per-request rate as requests that invoke the Worker」。catalog の `workers-cache-purge` から解釈を外して事実と出典にした。今の計算がヒットを Worker のリクエストに数えている（Free では 1 日 10 万件の枠に入る）ことを確かめた: Worker の `cache`（ヒットも件数は変わらず CPU だけ 0）と、静的アセットを Worker の料金の `requests` で数える形（`frameworks.test.ts` の Astro × Cloudflare の検査）。**値・バランスは変えない**。ヒットが Free の日 10 万件に数えられることは制限の頁に明記が無く、料金の頁からの読みのまま。
 
 ### D-104 Next.js の静的書き出しの新しい記事はビルドまで開けない（鮮度を下げる）（確定・2026-11-03）
 
@@ -1104,6 +1105,7 @@
   - `FrameworkProfile.renderingModes` は残した。
   - 始める画面の並べ替え（① ページと要件 → ② フレームワーク）は段 3 に回した。
 - 残した点: 段 3（ページごとに選ぶ・要件の判定・保存 v2・途中の変更の手間）・RS-17・RS-18（出典の無い「使える」を確かめる）。
+- 補足（2026-11-03・S6 の事実）: 段 5 の前に、S6 の対応を公式の文書で確かめて prd/13 §8 に記録した（Astro の Server Islands は Cloudflare・Node・Netlify ✓、Vercel ✓仮。Next.js の PPR は 16 の `cacheComponents` で安定し Vercel・Node の standalone・Cloud Run ✓、vinext ✗、Amplify ✗）。島は別のリクエスト・GET + Cache-Control でキャッシュでき、2,048 バイトを超える props は POST でキャッシュされない・Vercel の ISR の経路は Cache-Control を無視する、など数え方に要るものも書いた。**画面・対応表は変えない**（S6 は `unverified` のまま出さない）。
 
 ### D-107 ページごとの描き方を選べるように（段 3）（確定・2026-11-03）
 
@@ -1138,6 +1140,11 @@
 
 - 補足（2026-11-03・既定に戻る描き方を替える前に見せる）: 乗り換え・プラン変更・作り直しの選択肢（行動の欄）と、始める画面の構成・フレームワークのカード（選んでいないもの）に、替えると既定に戻るページを出す（例: 「乗り換えると、記事のページは S1 → S2（既定）に戻る: vinext の…確かめていない（RS-15）」）。理由は乗り換え先の対応表の文、使えても戻る作り直し・始める画面のフレームワークの変更はその旨の文。予測は game の `routeFallbacks`（`stackChangeRouteNotice`・`rewriteRouteNotice`・`setupRouteNotice`）で、選べる構成 × フレームワーク × 選んだ描き方の全部で、乗り換え・作り直しの後に実際に起きることと一致するのをテストで確かめた。**規則・値・手間は変えない**（乗り換えの手間の表示も同じ。golden は不変）。描き方を一緒に替える「手間 +n」はまだ出さない。
 - 残した点: RS-10（速さの重み付き CPU）・乗り換えの「描き方も替える（手間 +n）」の表示・ISR のキャッシュの部品「キャッシュしない」を S4 にまとめること・`renderingModes` を消すこと・段 4（記事の毎ページの枠・コメント欄をルートの部品に）・段 5（S6）。
+- 補足（2026-11-03・vinext の S1 を出す。RS-15 の解除）: vinext の [README](https://github.com/cloudflare/vinext)・[docs/caching.mdx](https://github.com/cloudflare/vinext/blob/main/docs/caching.mdx)（2026-11-03 取得）で、`prerender: true` + `cache: { cdn: staticAssetsAdapter() }` が事前描画した HTML・RSC をアセットに写し「reads them from the `ASSETS` binding at runtime」（Worker-first）と確かめ、Next.js × Cloudflare の S1 を出典つきで出した。
+  - 数え方: 記事の閲覧（`document-static`）を Worker に通し、閲覧ごとに Worker のリクエストに数える。1 回の CPU はキャッシュから返すのと同じ 2 ms（`cachedServeCpuMs` と同じ値・ゲーム上の仮定。描画はしない）。JS・CSS は静的アセットのまま。ビルドし直しはほかの S1 と同じ（Workers Builds の分・鮮度は D-104）。catalog の事実 `vinext-prerender`（Worker を通る読みは解釈。課金の明記は無い）と `composeStack` の `vinextPrerender`。
+  - 選択肢の文に「vinext は開発中（README）」を添えた。
+  - Amplify・Google Cloud の S1 で静的なページに処理（compute・Cloud Run）を通さないのは、対応表の文に**ゲーム上の仮定**と明記した（公式の文書は「SSG に対応」・「CDN に載った応答は Cloud Run に届かない」まで）。
+  - **既定・バランスは変えない**（既定の描き方は S2 のまま。golden・等価のスナップショットは不変）。乗り換えで既定に戻る描き方の例（Vercel の S1 → CF）は無くなり、今のデータでは乗り換えで戻る組は無い（予測と実際の一致の検査は残した。作り直し・始める画面のフレームワークの変更で戻る注意は今までどおり）。テストは `frameworks.test.ts`（費用の部品・Worker のリクエスト・SSR の CPU が乗らない）と、vinext の S1 を「選べない例」に使っていた game・web のテストの書き換え（W-16・W-17・W-22）。
 
 ## 未決（grill で詰める）
 

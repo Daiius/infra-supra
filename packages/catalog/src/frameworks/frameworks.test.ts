@@ -24,6 +24,7 @@ import {
   toNextExport,
   toSpa,
 } from './index.ts';
+import { applyRouteStrategies } from './route-strategies.ts';
 
 const books = loadPriceBooks();
 
@@ -556,5 +557,88 @@ describe('Next.js の静的書き出し（D-80）', () => {
         (u) => u.nodeId === 'build' && u.meterId === 'build-cpu-minutes',
       )?.quantity,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('Next.js × Cloudflare（vinext）の記事を S1 に（RS-15・D-107 の補足）', () => {
+  const base = articleCommunity(300_000);
+  const s1 = applyRouteStrategies(
+    base,
+    { article: { strategy: 'static-build' } },
+    {
+      minutesPerBuild: ARTICLE_COMMUNITY_ASTRO.minutesPerBuild,
+      build: { updatesPerMonth: 300 },
+    },
+  );
+  const arch = composeStack(
+    'cloudflare-vinext-paid',
+    {},
+    { framework: 'nextjs', staticBuild: true },
+  );
+  const result = estimate({ workload: s1, architecture: arch, books });
+  const isr = estimate({
+    workload: base,
+    architecture: composeStack('cloudflare-vinext-paid', {}),
+    books,
+  });
+  const usage = (r: typeof result, node: string, meter: string) =>
+    r.usage.find((u) => u.nodeId === node && u.meterId === meter)?.quantity ??
+    0;
+
+  it('事前描画したページは Worker を通り（Worker-first）、JS・CSS は静的アセットのまま。ビルドは Workers Builds', () => {
+    expect(() => ArchitectureSchema.parse(arch)).not.toThrow();
+    expect(arch.routes['document-static']).toEqual(['worker']);
+    expect(arch.routes.asset).toEqual(['assets']);
+    expect(arch.nodes.find((n) => n.id === 'worker')!.facts).toContain(
+      'vinext-prerender',
+    );
+    expect(usage(result, 'build', 'build-minutes')).toBeGreaterThan(0);
+    expect(result.premises.map((p) => p.id)).toContain(
+      'fact:cloudflare:workers-paid:vinext-prerender',
+    );
+  });
+
+  it('記事の閲覧はすべて Worker のリクエストに数える（ISR のときと同じ件数）', () => {
+    expect(usage(result, 'worker', 'requests')).toBeGreaterThan(0);
+    // ISR でも記事の閲覧は毎回 Worker を起動する（KV の読み）。S1 でも件数は変わらない
+    expect(usage(result, 'worker', 'requests')).toBeCloseTo(
+      usage(isr, 'worker', 'requests'),
+      -2,
+    );
+  });
+
+  it('記事の閲覧に描画の CPU は乗らない（キャッシュから返すのと同じ 2 ms）。描画は個人向けの SSR だけ', () => {
+    const node = result.simulation.nodes.worker!;
+    expect(
+      node.cpuSources
+        .filter((s) => s.requestClass === 'document-static')
+        .map((s) => s.cpuMs),
+    ).toEqual([2]);
+    expect(
+      node.cpuSources.some(
+        (s) =>
+          s.routeId === 'article' &&
+          (s.requestClass === 'document-ssr' ||
+            s.requestClass === 'isr-revalidate'),
+      ),
+    ).toBe(false);
+    // 記事の再生成が無いので、CPU の合計は ISR より少ない
+    expect(usage(result, 'worker', 'cpu-ms')).toBeLessThan(
+      usage(isr, 'worker', 'cpu-ms'),
+    );
+  });
+
+  it('記事を S1 にしない構成・ほかのフレームワークは今までどおり静的アセットから返す', () => {
+    const doc = (framework: 'nextjs' | 'nextjs-export' | 'astro') =>
+      composeStack(
+        'cloudflare-vinext-paid',
+        {},
+        framework === 'nextjs'
+          ? { framework }
+          : { framework, staticBuild: true, pageCache: false },
+      ).routes['document-static'];
+    expect(doc('nextjs')).toEqual(['assets']);
+    expect(doc('nextjs-export')).toEqual(['assets']);
+    expect(doc('astro')).toEqual(['assets']);
   });
 });

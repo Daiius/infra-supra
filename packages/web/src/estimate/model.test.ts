@@ -361,10 +361,16 @@ describe('フレームワーク・構成を替えたときの再検証の値（�
       stack: 'cloudflare-vinext-free',
       routes: { article: 'static-build', personal: 'shell-api' },
     });
-    // vinext（Cloudflare の Next.js）の S1 は確かめていないので捨てる。個人向けの S5 は残る
+    // vinext（Cloudflare の Next.js）の S1 も選べるので両方残る（RS-15 の解除）
     const next = apply(astro, withFramework(astro, 'nextjs'));
-    expect(next.routes).toEqual({ personal: 'shell-api' });
-    expect(toQuery(next).has('rp.article')).toBe(false);
+    expect(next.routes).toEqual({
+      article: 'static-build',
+      personal: 'shell-api',
+    });
+    // Vite の SPA には S1 が無いので捨てる（個人向けの S5 は SPA の既定なので持たない）
+    const spa = apply(astro, withFramework(astro, 'vite-spa'));
+    expect(spa.routes).toEqual({});
+    expect(toQuery(spa).has('rp.article')).toBe(false);
   });
 
   it('比較の表・費用の曲線の他の構成の月額は、その構成を選んだ後の見積と同じ（既定の違う構成の間で。OCL-417D9CCA）', () => {
@@ -602,7 +608,7 @@ describe('日本から契約するときの消費税（D-76）', () => {
 });
 
 describe('ページごとの描き方（D-107）', () => {
-  it('URL の rp.〜 に残り、読み直すと同じ。使えない描き方（個人向けのキャッシュ・vinext の S1）は捨てる', () => {
+  it('URL の rp.〜 に残り、読み直すと同じ。使えない描き方（個人向けのキャッシュ）は捨てる', () => {
     const input = normalizeInput({
       framework: 'astro',
       stack: 'cloudflare-vinext-free',
@@ -621,7 +627,7 @@ describe('ページごとの描き方（D-107）', () => {
         stack: 'cloudflare-vinext-paid',
         routes: { article: 'static-build', personal: 'cached-ttl' },
       }).routes,
-    ).toEqual({});
+    ).toEqual({ article: 'static-build' });
   });
 
   it('構成の比較も選んだ描き方で引く（CF Free の Astro は記事 S1・個人向け S5 で CPU の制限に当たらない）', () => {

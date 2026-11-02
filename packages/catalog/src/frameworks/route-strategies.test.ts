@@ -124,10 +124,28 @@ describe('対応表（フレームワーク × 事業者）', () => {
     expect(ARTICLE_COMMUNITY_ROUTES.article!.needsOgp).toBe(true);
   });
 
-  it('vinext の S1 と S6 は確かめるまで出さない（RS-15・段 5）', () => {
-    expect(capabilityRow('nextjs', 'cloudflare')['static-build'].support).toBe(
-      'unverified',
+  it('vinext の S1 は README を出典に出し、開発中の注を添える（RS-15・D-107 の補足）', () => {
+    const v = capabilityRow('nextjs', 'cloudflare')['static-build'];
+    expect(v.support).toBe('yes');
+    expect(v.basis).toBe('source');
+    expect(v.sources.map((x) => x.url)).toContain(
+      'https://github.com/cloudflare/vinext',
     );
+    expect(v.note).toContain('vinext は開発中（README）');
+    expect(v.note).toContain('Worker のリクエストに数え');
+  });
+
+  it('Amplify・Google Cloud の Next.js の S1 は、静的なページに処理を通さないことをゲーム上の仮定と書く', () => {
+    for (const p of ['aws', 'gcp'] as const)
+      expect(capabilityRow('nextjs', p)['static-build'].note).toContain(
+        'ゲーム上の仮定',
+      );
+    expect(
+      capabilityRow('nextjs', 'vercel')['static-build'].note,
+    ).not.toContain('ゲーム上の仮定');
+  });
+
+  it('S6 は確かめるまで出さない（段 5。事実は prd/13 §8）', () => {
     for (const f of ['nextjs', 'astro'] as const)
       expect(capabilityRow(f, 'vercel')['server-island'].support).toBe(
         'unverified',

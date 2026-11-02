@@ -129,10 +129,11 @@ describe('ページごとの描き方の表（D-106）', () => {
     const s3 = a.alternatives.find((x) => x.strategy === 'cached-purge')!;
     expect(s3.available).toBe(false);
     expect(s3.reason).toContain('KV');
-    // vinext の S1 は確かめていないので出さない（RS-15）
-    expect(a.alternatives.some((x) => x.strategy === 'static-build')).toBe(
-      false,
-    );
+    // vinext の S1 は README を出典に出す（開発中の注つき。RS-15 の解除）
+    const s1 = a.alternatives.find((x) => x.strategy === 'static-build')!;
+    expect(s1.available).toBe(true);
+    expect(s1.basis).toBe('source');
+    expect(s1.reason).toContain('vinext は開発中（README）');
     const r2 = rows('nextjs', 'cloudflare-vinext-paid', settings(), {
       isrCache: 'r2',
     });
