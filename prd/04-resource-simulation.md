@@ -197,10 +197,12 @@ log-events = 前景の実行の件数 × eventsPerInvocation
 |---|---|---|
 | Lambda・Amplify の SSR | 0.5 KB | START・END・REPORT の 3 行（RequestId の UUID・実行時間・メモリ。約 0.3 KB）+ アプリのアクセスログ 1 行（約 0.2 KB） |
 | Cloud Run | 1.5 KB | 自動の要求ログ（LogEntry の JSON。httpRequest・インスタンスの ID・trace・リソースのラベルで約 1 KB）+ アクセスログ 1 行（stdout の 1 行も LogEntry になり同じラベルが付く。約 0.5 KB）。Cloud Logging は索引の前の LogEntry の大きさで数える |
-| Workers Paid | 2 件 | 呼び出しのログ 1 件 + console.log 1 件（Workers Logs は行の数で数える。公式の料金の例も 1 リクエスト 2 件） |
+| Workers Paid | 2 件・1.5 KB | 呼び出しのログ 1 件 + console.log 1 件（Workers Logs は行の数で数える。公式の料金の例も 1 リクエスト 2 件）。2026-12-01 からの Cloudflare Observability は量で数えるので、呼び出しのログ 約 1 KB + console.log 約 0.5 KB とみる（D-94。公式に 1 件の大きさの記載なし） |
 
 - アプリが書くのはどの事業者でも 1 回の実行にアクセスログ 1 行とそろえた（事業者の差は事業者が自動で書く行の差だけにする）。
 - 保持（保存）の費用は数えない。CloudWatch Logs は既定で無期限だが保存は圧縮後の量で、12 か月ためても取り込みの 1 割に届かない。Cloud Logging の既定の 30 日は無料（prd/11 §18）。
+  例外は Cloudflare Observability（D-94）: 保存を GB 月（各日に問い合わせられる量の最大の和 / 30）で課金するので、`logs.retentionDays` を持つノードは
+  `log-gb-month` = 月の取り込み × 保持の日数 / 30 を出す（毎日同じ量を取り込み、保持の日数だけ残る定常の形）。
 
 ### 3.4 `serverless-sql`（D1 型）
 

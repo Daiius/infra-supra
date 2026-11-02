@@ -141,8 +141,12 @@ export const GD3_STACKS: unknown[] = [
         config: {
           kind: 'function',
           backgroundClasses: ['isr-revalidate'],
-          // Workers Logs（D-92）
-          logs: { eventsPerInvocation: 2 },
+          // Workers Logs（D-92）・Cloudflare Observability の量と保存（D-94）
+          logs: {
+            eventsPerInvocation: 2,
+            kbPerInvocation: 1.5,
+            retentionDays: 7,
+          },
         },
         billing: {
           accountId: 'cloudflare',
@@ -152,6 +156,8 @@ export const GD3_STACKS: unknown[] = [
             requests: 'requests',
             'cpu-ms': 'cpu-ms',
             'log-events': 'workers-logs',
+            'log-gb': 'observability-ingest',
+            'log-gb-month': 'observability-storage',
           },
         },
       },

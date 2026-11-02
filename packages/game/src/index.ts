@@ -632,23 +632,21 @@ export const swapLabel = (slot: SlotId): string =>
     : 'DB の差し替え（データの移行）';
 
 /**
- * 今の選択で効かないスロット（出さない）。API を他の事業者に置くと、DB はその事業者の部品になるので、
+ * 今の選択で効かない（選んでも変わらない）スロット（出さない）。API を他の事業者に置くと、DB はその事業者の部品になるので、
  * 構成の DB のスロットは出さない（D-65）。ISR をキャッシュしない部品では CDN の無効化が起きないので、
  * 無効化のまとめ方も出さない（D-79）。
+ * 判定はここ 1 か所に置き、ゲームの部品の欄（componentSlots）・始める画面と見積モード（setupSlots）・月の報告の部品の要約が使う（D-94）。
  */
 export function slotIneffective(
   slot: SlotId,
   choices: Choices,
-  /** DB のバックアップは今の DB で決まる（D1 のように既定で足りる・延ばせない DB では出さない。D-93）。 */
-  stack?: { stackIndex: number; framework: FrameworkId },
+  /** DB のバックアップは今の DB で決まる（D1 のように既定で足りる・延ばせない DB では出さない。D-93）。必須にして渡し忘れを防ぐ（D-94）。 */
+  stack: { stackIndex: number; framework: FrameworkId },
 ): boolean {
   if (slot === 'cdnInvalidation') return choices.isrCache === 'none';
   if (slot === 'dbBackup')
-    return (
-      stack !== undefined &&
-      !dbBackupStatus(stack.stackIndex, choices, stack.framework).some(
-        (s) => s.extendable,
-      )
+    return !dbBackupStatus(stack.stackIndex, choices, stack.framework).some(
+      (s) => s.extendable,
     );
   return slot === 'db' && apiPlacedElsewhere(choices);
 }

@@ -302,4 +302,77 @@ describe('実行ごとのログ（D-92）', () => {
       logCost('cloudflare-vinext-paid', 20_000_000).amount,
     ).toBeGreaterThan(0);
   });
+
+  it('Workers Logs は 2026-12-01 の改定で Cloudflare Observability（取り込み 50 GB・保存 10 GB 月を超えた分）に替わる（D-94）', () => {
+    const cf = books.find((b) => b.provider === 'cloudflare')!;
+    const change = cf.scheduledChanges.find(
+      (c) => c.effectiveFrom === '2026-12-01',
+    )!;
+    expect(change.revisedMeters.length).toBeGreaterThan(0);
+    // 改定の後の料金データ（ゲームの applyRevisions と同じ差し替え）
+    const revised = books.map((b) =>
+      b !== cf
+        ? b
+        : {
+            ...b,
+            plans: b.plans.map((p) => ({
+              ...p,
+              meters: p.meters.map((m) => {
+                const r = change.revisedMeters.find(
+                  (x) => x.planId === p.id && x.meterId === m.id,
+                );
+                return r ? { ...m, pricing: r.pricing } : m;
+              }),
+            })),
+          },
+    );
+    const meters = [
+      'workers-logs',
+      'observability-ingest',
+      'observability-storage',
+    ];
+    const run = (bs: typeof books, pv: number) => {
+      const r = estimate({
+        workload: articleCommunity(pv),
+        architecture: composeStack('cloudflare-vinext-paid'),
+        books: bs,
+      });
+      const sum = (k: 'log-gb' | 'log-gb-month' | 'log-events') =>
+        Object.values(r.simulation.nodes).reduce(
+          (a, n) => a + (n.resources[k] ?? 0),
+          0,
+        );
+      const amount = (id: string) =>
+        r.bill.lines
+          .filter((l) => l.priceRef.meterId === id)
+          .reduce((a, l) => a + (l.amount ?? 0), 0);
+      return {
+        gb: sum('log-gb'),
+        gbMonth: sum('log-gb-month'),
+        events: sum('log-events'),
+        amount: Object.fromEntries(meters.map((m) => [m, amount(m)])),
+      };
+    };
+    for (const pv of [1_000_000, 20_000_000, 100_000_000]) {
+      const before = run(books, pv);
+      // 改定の前は件数だけ課金し、量と保存は $0
+      expect(before.amount['observability-ingest']).toBe(0);
+      expect(before.amount['observability-storage']).toBe(0);
+      const after = run(revised, pv);
+      expect(after.gbMonth).toBeCloseTo((after.gb * 7) / 30, 9);
+      expect(after.amount['workers-logs']).toBe(0);
+      expect(after.amount['observability-ingest']).toBeCloseTo(
+        Math.max(0, after.gb - 50) * 0.25,
+        6,
+      );
+      expect(after.amount['observability-storage']).toBeCloseTo(
+        Math.max(0, after.gbMonth - 10) * 0.1,
+        6,
+      );
+    }
+    // 1 億 PV では込みの分を超える
+    expect(
+      run(revised, 100_000_000).amount['observability-ingest'],
+    ).toBeGreaterThan(0);
+  });
 });

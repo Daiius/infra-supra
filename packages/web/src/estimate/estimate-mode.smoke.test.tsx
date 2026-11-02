@@ -93,4 +93,29 @@ describe('見積モードの画面', () => {
     expect((combo('テンプレート') as HTMLSelectElement).value).toBe('business');
     expect(expectEstimate()).toBe(name);
   });
+
+  it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', () => {
+    // 部品の欄は見出しの横に説明（ⓘ のボタン）があり select の名前にならないので、欄の見出しの文字で探す
+    const partSelect = (label: string) =>
+      [...card('条件').querySelectorAll('label')]
+        .find((l) => l.firstElementChild?.textContent?.startsWith(label))
+        ?.querySelector('select') ?? null;
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=business&s=cloudflare-vinext-paid&c.dbBackup=pitr',
+    );
+    renderApp();
+    expectEstimate();
+    expect(partSelect('DB のバックアップ')).toBe(null);
+    // URL に残っていた値は無視して既定にする（URL からも消える）
+    expect(window.location.search).not.toContain('dbBackup');
+
+    // 選べば変わる DB（Supabase Pro）に替えると出る
+    fireEvent.change(combo('構成'), {
+      target: { value: 'vercel-supabase-pro' },
+    });
+    expectEstimate();
+    expect(partSelect('DB のバックアップ')?.value).toBe('default');
+  });
 });

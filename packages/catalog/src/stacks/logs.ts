@@ -18,12 +18,23 @@ export const LAMBDA_LOG_KB_PER_INVOCATION = 0.5;
 export const CLOUD_RUN_LOG_KB_PER_REQUEST = 1.5;
 /** Workers Logs の 1 回の実行の件数。呼び出しのログ 1 件 + console.log 1 件（公式の料金の例も 1 リクエスト 2 件）。 */
 export const WORKERS_LOG_EVENTS_PER_INVOCATION = 2;
+/**
+ * Workers Logs の 1 回の実行のログの量（KB。2026-12-01 からの Cloudflare Observability の取り込み。D-94）。公式に 1 件の大きさの記載は無い。
+ * 呼び出しのログ（要求の URL・メソッド・結果・Worker の名前などの既定の属性で約 1 KB）+ console.log 1 行（属性つきで約 0.5 KB）とみる。
+ */
+export const WORKERS_LOG_KB_PER_INVOCATION = 1.5;
+/** Cloudflare Observability の既定の保持（日。保存の GB 月に効く。D-94）。 */
+export const WORKERS_LOG_RETENTION_DAYS = 7;
 
 /** 課金先のプラン → その部品のログの量と、メーター。挙げないプランはログを数えない（課金が無い・料金未取得）。 */
 const LOG_PROFILES: Record<
   string,
   {
-    logs: { kbPerInvocation?: number; eventsPerInvocation?: number };
+    logs: {
+      kbPerInvocation?: number;
+      eventsPerInvocation?: number;
+      retentionDays?: number;
+    };
     meters: Record<string, string>;
   }
 > = {
@@ -40,8 +51,17 @@ const LOG_PROFILES: Record<
     meters: { 'log-gb': 'logs' },
   },
   'cloudflare:workers-paid': {
-    logs: { eventsPerInvocation: WORKERS_LOG_EVENTS_PER_INVOCATION },
-    meters: { 'log-events': 'workers-logs' },
+    // 件数は 2026-12-01 までの Workers Logs、量と保存はその後の Cloudflare Observability のメーター（D-94）
+    logs: {
+      eventsPerInvocation: WORKERS_LOG_EVENTS_PER_INVOCATION,
+      kbPerInvocation: WORKERS_LOG_KB_PER_INVOCATION,
+      retentionDays: WORKERS_LOG_RETENTION_DAYS,
+    },
+    meters: {
+      'log-events': 'workers-logs',
+      'log-gb': 'observability-ingest',
+      'log-gb-month': 'observability-storage',
+    },
   },
 };
 
