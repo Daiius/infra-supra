@@ -144,22 +144,17 @@ describe('乗り換え・プラン変更で既定に戻る描き方の予測（D
             if (plan) expect(predicted).toEqual([]);
             found += predicted.length;
           }
-        // 記事の Next.js は、Vercel などの S1 が CF（vinext）で戻る組がある
-        if (sc === ARTICLE && fw === 'nextjs') expect(found).toBeGreaterThan(0);
+        // vinext の S1 を出した（RS-15 の解除）ので、今のデータでは乗り換えで戻る組は無い。予測と実際が一致することだけを見る
+        expect(found).toBeGreaterThanOrEqual(0);
       });
 
-  it('戻る組がある（Vercel の Next.js の記事 S1 → CF は vinext で確かめていない）', () => {
+  it('Vercel の Next.js の記事 S1 → CF（vinext）は S1 のまま（vinext の S1 を出した。RS-15 の解除）', () => {
     const s0 = start(ARTICLE, VERCEL_PRO, 'nextjs', {
       article: 'static-build',
       personal: 'shell-api',
     });
-    expect(stackChangeRouteNotice(s0, CF_PAID)).toBe(
-      '乗り換えると、記事のページは S1 → S2（既定）に戻る: vinext のビルドのときの事前描画（静的な HTML）は確かめていない（RS-15）',
-    );
-    // 選べるもの（個人向けの S5）は残る
-    expect(stackChangeRouteFallbacks(s0, CF_PAID).map((f) => f.route)).toEqual([
-      'article',
-    ]);
+    expect(stackChangeRouteNotice(s0, CF_PAID)).toBeNull();
+    expect(stackChangeRouteFallbacks(s0, CF_PAID)).toEqual([]);
   });
 
   it('乗り換え・プラン変更の手間は描き方を選んでいても変わらない', () => {
@@ -235,10 +230,8 @@ describe('始める画面のカードの注意（D-107 の補足）', () => {
     routes: { article: 'static-build', personal: 'shell-api' } as const,
   };
 
-  it('構成を替えると、その構成で選べない描き方だけが戻る', () => {
-    expect(setupRouteNotice(ARTICLE, cur, { stackIndex: CF_PAID })).toBe(
-      'この構成にすると、記事のページは S1 → S2（既定）に戻る: vinext のビルドのときの事前描画（静的な HTML）は確かめていない（RS-15）',
-    );
+  it('構成を替えても、その構成で選べる描き方は戻らない（vinext の S1 も選べる。RS-15 の解除）', () => {
+    expect(setupRouteNotice(ARTICLE, cur, { stackIndex: CF_PAID })).toBeNull();
     expect(
       setupRouteNotice(ARTICLE, cur, { stackIndex: stack('sakura-vps-2gb') }),
     ).toBeNull();

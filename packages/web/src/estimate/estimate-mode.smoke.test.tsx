@@ -181,7 +181,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('3600');
 
-    // 記事を S1 にしてから vinext（S1 を確かめていない）に替えると、rp.article は消える
+    // 記事を S1 にしてから vinext に替えても、rp.article は残る（vinext の S1 を出した。RS-15 の解除）。SPA（S1 が無い）に替えると消える
     cleanup();
     window.history.replaceState(
       null,
@@ -193,8 +193,13 @@ describe('見積モードの画面', () => {
     expect(window.location.search).toContain('rp.article=static-build');
     fireEvent.change(combo('フレームワーク'), { target: { value: 'nextjs' } });
     expectEstimate();
-    expect(window.location.search).not.toContain('rp.article');
+    expect(window.location.search).toContain('rp.article=static-build');
     expect(window.location.search).toContain('rp.personal=shell-api');
+    fireEvent.change(combo('フレームワーク'), {
+      target: { value: 'vite-spa' },
+    });
+    expectEstimate();
+    expect(window.location.search).not.toContain('rp.article');
   });
 
   it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', () => {

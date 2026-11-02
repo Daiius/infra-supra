@@ -24,6 +24,24 @@ const NEXT_STATIC_PARAMS: Source = {
   retrievedAt: '2026-11-03',
 };
 
+/** vinext の README（prerender: true + staticAssetsAdapter()）と caching の文書（2026-11-03 取得。RS-15・D-107 の補足）。 */
+const VINEXT_PRERENDER: Source[] = [
+  { url: 'https://github.com/cloudflare/vinext', retrievedAt: '2026-11-03' },
+  {
+    url: 'https://github.com/cloudflare/vinext/blob/main/docs/caching.mdx',
+    retrievedAt: '2026-11-03',
+  },
+];
+
+/**
+ * Next.js の S1 の静的なページを、事業者の CDN が処理（compute）を通さずに返すとみなす事業者の注（RS-18 の補足）。
+ * 公式の文書は「静的なページ・SSG に対応」までで、compute を呼ばない・課金しないとは書いていない（2026-11-03 の調べ）。
+ */
+const STATIC_NO_COMPUTE_ASSUMED: Partial<Record<Platform, string>> = {
+  aws: '。Amplify が静的なページを処理（compute）を通さずに配るとみなすのはゲーム上の仮定（公式の文書は Next.js 15 までの「SSG に対応」までで、配り方・課金の記載は無い）',
+  gcp: '。静的なページを Hosting の CDN が返し Cloud Run を呼ばないとみなすのはゲーム上の仮定（公式の文書は CDN に載った応答は Cloud Run に届かないと書くが、キャッシュの外れ・期限切れは Cloud Run を呼ぶ）',
+};
+
 /**
  * 描き方がその事業者で使えるか。
  * - yes: 使える。
@@ -67,7 +85,7 @@ const SHELL_API_ANY = yes(
   [],
 );
 const SERVER_ISLAND = unverified(
-  'Astro の Server Islands・Next.js の PPR。事業者ごとのキャッシュと数え方を確かめるまで出さない（段 5）',
+  'Astro の Server Islands・Next.js の PPR。対応は公式の文書で確かめた（prd/13 §8）が、島のリクエストとキャッシュの数え方がまだ無いので出さない（段 5）',
 );
 
 /** Next.js の S3: ISR のキャッシュの部品の onDemandIsr から（消せる部品・消せない部品）。 */
@@ -98,14 +116,15 @@ function nextPurge(d: DeployTarget): StrategySupport {
 
 function nextjsRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
   return {
-    // vinext のビルドのときの事前描画は確かめていない（RS-15）
     'static-build':
       d.platform === 'cloudflare'
-        ? unverified(
-            'vinext のビルドのときの事前描画（静的な HTML）は確かめていない（RS-15）',
+        ? yes(
+            'vinext は開発中（README）。prerender: true と staticAssetsAdapter() で記事のページをビルドのときに事前描画し、Worker が静的アセット（ASSETS の binding）から返す（閲覧ごとに Worker のリクエストに数え、CPU はキャッシュから返すのと同じとみなす。ゲーム上の仮定）。新しい記事はビルドし直すまで開けない',
+            VINEXT_PRERENDER,
           )
         : yes(
-            'generateStaticParams で記事のページをビルドのときに静的な HTML にし、dynamicParams = false で一覧に無いページは 404 にする（新しい記事はビルドし直すまで開けない）。ビルドの時間の数え方は静的書き出しと同じとみなす',
+            'generateStaticParams で記事のページをビルドのときに静的な HTML にし、dynamicParams = false で一覧に無いページは 404 にする（新しい記事はビルドし直すまで開けない）。ビルドの時間の数え方は静的書き出しと同じとみなす' +
+              (STATIC_NO_COMPUTE_ASSUMED[d.platform] ?? ''),
             [NEXT_STATIC_PARAMS],
           ),
     'cached-ttl': yes(

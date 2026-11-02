@@ -390,8 +390,6 @@ describe('ゲームモードの画面', () => {
 
   it('W-16 構成・フレームワークを替える前に、既定に戻るページの描き方を知らせる（D-107 の補足）', () => {
     renderApp();
-    const vinextS1 =
-      '記事のページは S1 → S2（既定）に戻る: vinext のビルドのときの事前描画（静的な HTML）は確かめていない（RS-15）';
     startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
@@ -402,18 +400,14 @@ describe('ゲームモードの画面', () => {
             screen.getByRole('region', { name: 'ページの描き方' }),
           ).getByRole('button', { name: /^記事のページを S1/ }),
         );
-        // 始める画面: 選んでいないカードに、替えると戻る描き方を出す
-        const cf = document.querySelector<HTMLElement>(
-          'section[data-stack="cloudflare-vinext-paid"]',
-        )!;
-        expect(within(cf).getByRole('note').textContent).toBe(
-          `この構成にすると、${vinextS1}`,
-        );
-        // 選べる構成（さくらの VPS）には出さない
-        const vps = document.querySelector<HTMLElement>(
-          'section[data-stack="sakura-vps-2gb"]',
-        )!;
-        expect(within(vps).queryByRole('note')).toBeNull();
+        // 始める画面: 選べる構成（さくらの VPS・vinext の S1 も出した CF。RS-15 の解除）のカードには出さない
+        for (const id of ['sakura-vps-2gb', 'cloudflare-vinext-paid']) {
+          const card = document.querySelector<HTMLElement>(
+            `section[data-stack="${id}"]`,
+          )!;
+          expect(within(card).queryByRole('note')).toBeNull();
+        }
+        // フレームワークを替えると、選んだ描き方は既定に戻る
         const astro = screen.getByRole('region', { name: 'Astro の説明' });
         expect(within(astro).getByRole('note').textContent).toMatch(
           /^このフレームワークにすると、記事のページは S1 → S3（既定）に戻る: /,
@@ -426,9 +420,7 @@ describe('ゲームモードの画面', () => {
         re.test(l.textContent ?? ''),
       )!;
     const migrate = option(/^Cloudflare Paid \+ vinext.*へ乗り換える/);
-    expect(within(migrate).getByRole('note').textContent).toBe(
-      `乗り換えると、${vinextS1}`,
-    );
+    expect(within(migrate).queryByRole('note')).toBeNull();
     expect(migrate.textContent).toContain('か月');
     const rewrite = option(/^Astro に作り直す/);
     expect(within(rewrite).getByRole('note').textContent).toMatch(
@@ -436,7 +428,7 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-17 選んでいない構成のカードは、その構成で選べない描き方を既定に戻して描く（流れの凡例のページ。D-107 の補足）', () => {
+  it('W-17 選んでいない構成のカードも、その構成で選べる描き方で描く（流れの凡例のページ。D-107 の補足・RS-15 の解除）', () => {
     renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
     fireEvent.click(
@@ -463,11 +455,11 @@ describe('ゲームモードの画面', () => {
     expect(lane('vercel-supabase-pro', '静的なページ')).toContain(
       '記事のページ',
     );
-    // vinext では S1 を確かめていないので、CF のカードは既定（ISR）で描く
-    expect(lane('cloudflare-vinext-paid', 'ISR のページ')).toContain(
+    // vinext でも S1 を選べるので、CF のカードも記事のページを静的なページの流れで描く（Worker を通る）
+    expect(lane('cloudflare-vinext-paid', '静的なページ')).toContain(
       '記事のページ',
     );
-    expect(lane('cloudflare-vinext-paid', '静的なページ')).not.toContain(
+    expect(lane('cloudflare-vinext-paid', 'ISR のページ')).not.toContain(
       '記事のページ',
     );
   });

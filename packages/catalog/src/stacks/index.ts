@@ -1490,7 +1490,12 @@ export function composeStack(
       : shaped;
   const built = rebuild
     ? withBuild(
-        shapedAstro,
+        vinextPrerender(
+          shapedAstro,
+          def.platform,
+          options.framework ?? 'nextjs',
+          options.staticBuild === true,
+        ),
         def.platform,
         def.plan,
         astro ? 'Astro' : 'Next.js',
@@ -1604,6 +1609,46 @@ function asAstro(
     ...arch,
     name: arch.name.replace(' + vinext', '') + '（Astro）',
     nodes,
+  };
+}
+
+/**
+ * vinext の事前描画したページを Worker が静的アセットから返すときの CPU（ms）。記事の ISR のページをキャッシュから返す CPU
+ * （テンプレートの cachedServeCpuMs）と同じ値（ゲーム上の仮定。RS-15・D-107 の補足）。
+ */
+const VINEXT_PRERENDER_SERVE_CPU_MS = 2;
+
+/**
+ * Next.js × Cloudflare（vinext）の記事を S1 にした形（RS-15・D-107 の補足）。vinext の prerender: true + staticAssetsAdapter() は
+ * 事前描画した HTML を Worker が ASSETS の binding から読んで返す（Worker-first。output: 'export' の「アセットだけ」とは別の経路）。
+ * 静的なページの閲覧（document-static）を Worker に通し、1 回ごとに Worker のリクエストに数える。描画はせず、CPU は
+ * キャッシュから返すのと同じ値（vinext-prerender の解釈）。JS・CSS などのアセットは今までどおり Worker を通さない。
+ */
+function vinextPrerender(
+  arch: ArchitectureInput,
+  platform: Platform,
+  framework: FrameworkId,
+  staticBuild: boolean,
+): ArchitectureInput {
+  if (platform !== 'cloudflare' || framework !== 'nextjs' || !staticBuild)
+    return arch;
+  return {
+    ...arch,
+    nodes: arch.nodes.map((n): ArchNodeIn => {
+      if (n.id !== 'worker' || n.config.kind !== 'function') return n;
+      return {
+        ...n,
+        config: {
+          ...n.config,
+          classCpuMs: {
+            ...n.config.classCpuMs,
+            'document-static': VINEXT_PRERENDER_SERVE_CPU_MS,
+          },
+        },
+        facts: [...(n.facts ?? []), 'vinext-prerender'],
+      };
+    }),
+    routes: { ...arch.routes, 'document-static': ['worker'] },
   };
 }
 

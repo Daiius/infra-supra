@@ -87,10 +87,32 @@ describe('始める画面で選ぶ（D-107）', () => {
     expect(hiddenSettings(s)).not.toContain('buildInterval');
   });
 
-  it('使えない描き方は捨てる（vinext の S1・個人向けのキャッシュ・S6）', () => {
-    expect(start(CF_PAID, 'nextjs', { article: 'static-build' }).routes).toBe(
-      undefined,
+  it('CF Paid × Next.js（vinext）の記事を S1 に: Workers Builds のビルドを数え、記事のページは Worker を通す（RS-15 の解除）', () => {
+    const s = start(CF_PAID, 'nextjs', { article: 'static-build' });
+    expect(strategies(s).article).toBe('static-build');
+    const routing = staticBuildOf(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {
+      article: 'static-build',
+    });
+    const arch = composeStack(
+      STACK_DEFS[CF_PAID]!,
+      {},
+      {
+        framework: 'nextjs',
+        ...routing,
+      },
     );
+    expect(arch.routes['document-static']).toEqual(['worker']);
+    // ビルドは Workers Builds（月 6,000 分の込みの中なので 1 か月目の明細には出ない）
+    expect(arch.nodes.find((n) => n.id === 'build')?.config.kind).toBe(
+      'ci-build',
+    );
+    expect(playMonth(s).phase).toBe('playing');
+  });
+
+  it('使えない描き方は捨てる（個人向けのキャッシュ・S6）。vinext の S1 は選べる（RS-15 の解除）', () => {
+    expect(
+      start(CF_PAID, 'nextjs', { article: 'static-build' }).routes,
+    ).toEqual({ article: 'static-build' });
     expect(start(CF_PAID, 'astro', { personal: 'cached-ttl' }).routes).toBe(
       undefined,
     );
@@ -164,11 +186,10 @@ describe('途中で描き方を替える（D-107・RS-08）', () => {
     expect(cost(route('article', 'cached-purge'))).toBe('same');
     expect(cost(route('personal', 'cached-ttl'))).toBe('unavailable');
     expect(cost(route('nope', 'ssr'))).toBe('invalid');
-    // CF の Next.js（vinext）の S1 は確かめていないので選べない
+    // CF の Next.js（vinext）の S1 も同じ手間で選べる（RS-15 の解除）
     expect(
-      checkAction(start(CF_PAID, 'nextjs'), route('article', 'static-build'))
-        .ok,
-    ).toBe(false);
+      checkAction(start(CF_PAID, 'nextjs'), route('article', 'static-build')),
+    ).toMatchObject({ ok: true, cost: 3 });
   });
 
   it('表のほかの描き方から行動を作る（S2 → S3 は設定の変更・それ以外は描き方の変更）', () => {
@@ -203,15 +224,15 @@ describe('途中で描き方を替える（D-107・RS-08）', () => {
     expect(u.routes).toBeUndefined();
   });
 
-  it('乗り換え先で使えない描き方は既定に戻る（Vercel の Next.js の S1 → CF は vinext で確かめていない）', () => {
+  it('Vercel の Next.js の S1 は CF（vinext）へ乗り換えても S1 のまま（RS-15 の解除）', () => {
     let s = applyAction(
       start(VERCEL_PRO, 'nextjs'),
       route('article', 'static-build'),
     );
     s = applyAction(playMonth(s), { type: 'migrate', stackIndex: CF_PAID });
     while (s.stackIndex !== CF_PAID && s.phase === 'playing') s = playMonth(s);
-    expect(s.routes).toBeUndefined();
-    expect(strategies(s).article).toBe('cached-ttl');
+    expect(s.routes).toEqual({ article: 'static-build' });
+    expect(strategies(s).article).toBe('static-build');
   });
 });
 

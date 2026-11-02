@@ -135,19 +135,32 @@ const WORKERS_FACTS = [
   {
     id: 'workers-cache-purge',
     premise:
-      'Workers Cache は Worker の中から ctx.cache.purge でタグ・パスの prefix・すべてを消せ、Instant Purge の仕組みでゾーンの purge と同じ保証で全体に伝わる。消す呼び出しはアカウント・ゾーンのプランによらず Free の制限（タグ・prefix は 1 分 5 回・貯めて 25 回）。消した後の最初の閲覧は Worker が描き終わるのを待つので、その閲覧の CPU に描画の全部が乗る（このモデルの読み）',
+      'Workers Cache は Workers の Free・Paid のどちらのプランでも使える（公式のブログ「available today to every Worker on any plan」・2026-07-06）。ヒットも Worker のリクエストとして通常の単価で数え（Free では 1 日 10 万件に数える）、CPU 時間はミス・バイパスのときだけ。Worker の中から ctx.cache.purge でタグ・パスの prefix・すべてを消せ、Instant Purge の仕組みでゾーンの purge と同じ保証で全体に伝わる。消す呼び出しはアカウント・ゾーンのプランによらず Free の制限（タグ・prefix は 1 分 5 回・貯めて 25 回）。消した後の最初の閲覧は Worker が描き終わるのを待つので、その閲覧の CPU に描画の全部が乗る（このモデルの読み）',
+    sourceIds: [
+      'workersCacheBlog',
+      'workersCacheBilling',
+      'workersCachePurge',
+      'workersPricingCache',
+    ],
+  },
+  // vinext の事前描画を静的アセットに置いて Worker が返す形（記事の S1。2026-11-03 に原文で確認。RS-15・D-107 の補足）
+  {
+    id: 'vinext-prerender',
+    premise:
+      'vinext は prerender: true と staticAssetsAdapter() で、ビルドのときに事前描画した HTML・RSC をクライアントのアセットに写し、実行時に Worker が ASSETS の binding から読んで返す。書き込み・無効化は何もせず、次のデプロイで置き換わる（期限の revalidate でも取り直さない）。vinext は開発中（README「Under active development」）',
     interpretation: {
       adopted:
-        'Workers の Free でも使えるとみなす（料金のページの Free・Paid の表の注に Workers Cache のリクエストの数え方があり、purge の制限は「常に Free の制限」と書く）',
+        '事前描画したページの閲覧は 1 回ごとに Worker のリクエストとして数え、CPU はキャッシュから返すのと同じ 2 ms とみなす（ゲーム上の仮定。描画はしない）',
       rejected: [
         {
-          reading: 'Workers Cache は Paid だけ',
+          reading:
+            '静的アセットと同じく Worker を起動せず、リクエストに数えない',
           reason:
-            'Workers Cache・purge のページにプランの制限の記載が無く、料金の注は両方のプランの表に付いている',
+            'README は Worker が ASSETS の binding から読むと書く（output: "export" の「served as assets only」とは別の経路）。課金の明記は無いので、Worker を通る読みを採った',
         },
       ],
     },
-    sourceIds: ['workersCachePurge', 'workersPricingCache'],
+    sourceIds: ['vinextReadmePrerender', 'vinextCaching'],
   },
   {
     id: 'worker-outbound',
@@ -413,6 +426,24 @@ export const cloudflare: PriceBookInput = {
     },
     workersPricingCache: {
       url: 'https://developers.cloudflare.com/workers/platform/pricing/',
+      retrievedAt: '2026-11-03',
+    },
+    // Workers Cache が Free でも使えること・ヒットの数え方（2026-11-03 に原文で確認。D-103 の補足）
+    workersCacheBlog: {
+      url: 'https://blog.cloudflare.com/workers-cache/',
+      retrievedAt: '2026-11-03',
+    },
+    workersCacheBilling: {
+      url: 'https://developers.cloudflare.com/workers/cache/',
+      retrievedAt: '2026-11-03',
+    },
+    // vinext の事前描画（prerender + staticAssetsAdapter。2026-11-03 に原文で確認。RS-15）
+    vinextReadmePrerender: {
+      url: 'https://github.com/cloudflare/vinext',
+      retrievedAt: '2026-11-03',
+    },
+    vinextCaching: {
+      url: 'https://github.com/cloudflare/vinext/blob/main/docs/caching.mdx',
       retrievedAt: '2026-11-03',
     },
     workersPricingOutbound: {
