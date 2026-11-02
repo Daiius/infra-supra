@@ -46,7 +46,7 @@ export function PageWireframe({ page }: { page: ResolvedPage }) {
   return (
     <ul
       aria-label={`${page.label}の見取り図`}
-      className="grid w-full grid-cols-2 gap-1 rounded-box border border-base-300 bg-base-100 p-1.5"
+      className="grid w-full grid-cols-2 gap-1 rounded-box border border-base-300 bg-base-100 p-1.5 lg:w-64 lg:shrink-0"
     >
       {page.regions.map((r) => (
         <li

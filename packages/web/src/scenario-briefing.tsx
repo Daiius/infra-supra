@@ -245,7 +245,7 @@ function FrameworkCard({
           <section
             key={p.route}
             aria-label={p.label}
-            className="flex flex-col gap-2 border-t border-base-300 pt-3"
+            className="flex flex-col gap-2 border-t border-base-300 pt-3 lg:flex-row lg:gap-4"
           >
             <PageWireframe page={p} />
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -384,15 +384,12 @@ export function FrameworkField({
           ›
         </button>
       </div>
-      {/* 全部のカードを同じ中身で並べ、選んでいるものを中央へ。広い画面では前後のカードが両脇に読める大きさで見え、
-          狭い画面でも隣の端が見える。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
-          指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす。
-          lg 以上は本文の列をはみ出して画面の幅いっぱいに広げる（左右の負の margin で、レイアウトの箱ごと広げる。translate は描く位置だけ動かし
-          箱が右にはみ出して横スクロールが出たので使わない。両端に 1rem ずつ残し、スクロールバーの分を吸収する）。カードは 340〜440px にして、
-          1280px で選んだカードと前後の 2 枚が全部見える */}
+      {/* 全部のカードを同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（狭い画面は 88%）を
+          使う。前後のカードは両脇の端だけ薄く見え、押すと選ぶ。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
+          指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
       <div
         ref={track}
-        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-2 lg:mx-[calc(50%-50vw+1rem)] lg:w-[calc(100vw-2rem)] lg:flex lg:px-4"
+        className="relative carousel carousel-center w-full gap-3 overflow-x-hidden py-2"
       >
         {allowed.map((id) => (
           <div
@@ -400,9 +397,16 @@ export function FrameworkField({
             ref={(el) => {
               items.current[id] = el;
             }}
-            className={`carousel-item w-[88%] lg:w-[clamp(340px,31vw,440px)] ${id === value ? '' : 'cursor-pointer'}`}
-            // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）
-            onClick={id === value ? undefined : () => onChange(id)}
+            className={`carousel-item w-[88%] lg:w-[85%] ${id === value ? '' : 'cursor-pointer'}`}
+            // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
+            onClick={
+              id === value
+                ? undefined
+                : (e) => {
+                    if ((e.target as HTMLElement).closest('button')) return;
+                    onChange(id);
+                  }
+            }
           >
             <FrameworkCard
               scenario={scenario}
