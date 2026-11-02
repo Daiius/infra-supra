@@ -180,6 +180,28 @@ cold-start-share   = minInstances = 0 なら Σ_b share_b × e^(−λ_b × idleK
   止まる DB（Aurora Serverless v2 の 0 ACU・Neon の自動の停止）は D-90 で同じ区間に乗せた（§3.5.1）。
 - 裏で走るクラス（ISR の作り直し・一意な変換）はリクエストの件数に数えず、時間には数える。インスタンスの時間の 100 ms の切り上げは数えない。
 
+### 3.3.2 実行ごとのログ（`function`・`container` の `logs`。D-92・2026-11-02）
+
+関数・コンテナは実行のたびに事業者の行（起動・終了・要求ログ）とアプリの出力を書き、ログの取り込みに課金する事業者ではアクセスに比例した費用になる。
+
+```
+log-gb     = 前景の実行の件数 × kbPerInvocation × 1000 / 10^9
+log-events = 前景の実行の件数 × eventsPerInvocation
+```
+
+- 前景の実行の件数は `invocations` と同じ（裏で走るクラスは同じ実行の中なので数えない。コードの中のキャッシュのヒットも関数は起動するので数える）。
+- 値は catalog の `stacks/logs.ts` が課金先のプランごとに持つ（ゲーム上の仮定・出典なし）。構成を組み終えた後に関数・コンテナのノードへまとめて差す
+  （部品ごとの組み立てで config を差し替えても落ちない）。挙げないプラン（Vercel・Netlify・Workers Free・VPS）はログを数えない（課金が無い）。
+
+| 課金先 | 1 回の実行あたり | 理由 |
+|---|---|---|
+| Lambda・Amplify の SSR | 0.5 KB | START・END・REPORT の 3 行（RequestId の UUID・実行時間・メモリ。約 0.3 KB）+ アプリのアクセスログ 1 行（約 0.2 KB） |
+| Cloud Run | 1.5 KB | 自動の要求ログ（LogEntry の JSON。httpRequest・インスタンスの ID・trace・リソースのラベルで約 1 KB）+ アクセスログ 1 行（stdout の 1 行も LogEntry になり同じラベルが付く。約 0.5 KB）。Cloud Logging は索引の前の LogEntry の大きさで数える |
+| Workers Paid | 2 件 | 呼び出しのログ 1 件 + console.log 1 件（Workers Logs は行の数で数える。公式の料金の例も 1 リクエスト 2 件） |
+
+- アプリが書くのはどの事業者でも 1 回の実行にアクセスログ 1 行とそろえた（事業者の差は事業者が自動で書く行の差だけにする）。
+- 保持（保存）の費用は数えない。CloudWatch Logs は既定で無期限だが保存は圧縮後の量で、12 か月ためても取り込みの 1 割に届かない。Cloud Logging の既定の 30 日は無料（prd/11 §18）。
+
 ### 3.4 `serverless-sql`（D1 型）
 
 ```

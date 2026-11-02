@@ -34,6 +34,8 @@ export const RESOURCES = [
   'deploys', // 本番へのデプロイの回数（Netlify のクレジットは 1 回ごと。ビルドし直しの回数。D-71）
   'idle-cpu-hours', // 待機しているインスタンスの vCPU 時間（Cloud Run の最小インスタンスの idle。D-88）
   'idle-memory-gb-hours', // 待機しているインスタンスのメモリ × 時間（同じ）
+  'log-gb', // 関数・コンテナの実行ごとに出るログの量（CloudWatch Logs・Cloud Logging の取り込み。D-92）
+  'log-events', // 同じくログの件数（Workers Logs は 1 行 1 件で数える。D-92）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -70,4 +72,6 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   deploys: 'count',
   'idle-cpu-hours': 'cpu-hour',
   'idle-memory-gb-hours': 'gb-hour',
+  'log-gb': 'gb',
+  'log-events': 'count',
 };

@@ -27,6 +27,7 @@ import {
   GCP_DEFAULT_CHOICES,
   GCP_STACK_DEFS,
 } from './gcp.ts';
+import { withLogs } from './logs.ts';
 import { vpsNode } from './sakura.ts';
 import {
   apiPlacedElsewhere,
@@ -1331,13 +1332,16 @@ export function composeStack(
         ? withBuild(shaped, def.platform, def.plan, 'Next.js')
         : shaped;
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は静的なページのビルドし直しを足した形に差す（D-68）
-  return applyCrossApi(
-    built,
-    def.platform,
-    def.plan,
-    c,
-    standby,
-    options.framework ?? 'nextjs',
+  // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）は、部品を差し終えた後にまとめて足す
+  return withLogs(
+    applyCrossApi(
+      built,
+      def.platform,
+      def.plan,
+      c,
+      standby,
+      options.framework ?? 'nextjs',
+    ),
   );
 }
 

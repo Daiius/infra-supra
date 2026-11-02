@@ -1,7 +1,7 @@
 # 11. AWS の追加と、事業者をまたぐ構成（Netlify・Neon・Google Cloud を含む）
 
 > 状態: **論点は決定済み（2026-11-01・D-50）・段 1（AWS・D-51）と段 2 の最初の組（Vercel・AWS + 画像だけ Cloudflare・D-52・§2.5・§3.6）を実装した**。
-> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）・Google Cloud（§16・D-88）も実装した。§0〜§8 は草案のときの文で、今の形は §9 以降。
+> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）・Google Cloud（§16・D-88）・さくらの VPS の前の Cloudflare のプロキシ（§17・D-91）・実行ごとのログの費用（§18・D-92）も実装した。§0〜§8 は草案のときの文で、今の形は §9 以降。
 > 未取得・未決の残りは [decisions](./_grilling/decisions.md) 末尾の「未決」に集めた。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
 > （DB だけ Cloudflare だが Vercel + Next.js など）も入れてみたい」に対し、今までの積み重ね（prd/06・07 §11・10 §3、D-20・D-24・D-31・D-37・D-44〜D-48）の上に載せるならどうするかの案。
 > 料金・制限の数値は §1.5・§2.1 に**公式で確かめたものだけ**を出典 URL と取得日（2026-11-01）つきで書く。確かめていないことは「未確認」「推測」と書く。
@@ -1024,3 +1024,59 @@ Astro の公式アダプターの 1 つで、Next.js（OpenNext のアダプタ�
 - パージの連携の作り込み（再検証のハンドラーから Cloudflare の API を呼ぶ）の手間を、部品の切り替えの手間と分けて数えること。
 - Cloudflare の静的 + VPS の API（D-67）で、api のサブドメインもプロキシして API の応答をキャッシュする形。
 - 画像の割合が規約の「不釣り合い」に当たるかの判定（数値の境目が規約に無い）。Free の転送量の上限の噂（17.1 の未確認）。
+
+## 18. 実行ごとのログの費用（2026-11-02・D-92）
+
+> 見落とされやすい現実の費用として、関数・コンテナの実行ごとに出るログを数える。アクセスに比例して増え、取り込みに課金する事業者では明細に出る。
+> 数え方は prd/04 §3.3.2、スキーマの置き方は prd/03 §5。1 回の実行あたりの量はゲーム上の仮定。
+
+### 18.1 確かめた公式の事実（2026-11-02 取得）
+
+| 事業者 | 既定で送られるか | 料金・無料の分 | 保持 |
+|---|---|---|---|
+| AWS CloudWatch Logs（東京） | Lambda は実行ロールに権限があれば既定でロググループ `/aws/lambda/<関数>` に送る（[Lambda の文書](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs.html)）。Amplify は SSR の実行の情報を自分のアカウントの CloudWatch Logs に送り、自動で作るサービスロールに権限が入る（[Amplify の文書](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-supported-features.html)）。API Gateway の HTTP API のアクセスログは既定で無効（[文書](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-logging.html)） | 取り込み $0.76 / GB（Standard。Lambda のログは 2025-05 から vended logs の段階つきで 10 TB まで $0.76・次の 20 TB $0.38…）・保存 $0.033 / GB 月。常時無料は月 5 GB（取り込み・保存・Logs Insights の合計）。[Price List API の東京](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/ap-northeast-1/index.json)（版 2026-10-07）・[料金ページ](https://aws.amazon.com/cloudwatch/pricing/)・[Lambda のログの段階料金の告知](https://aws.amazon.com/about-aws/whats-new/2025/05/amazon-cloudwatch-tiered-pricing-additional-destinations-aws-lambda-logs) | 既定で無期限（[文書](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/Working-with-log-groups-and-streams.html)） |
+| Google Cloud Logging | Cloud Run の要求ログは自動で作られ、コンテナの stdout・stderr も自動で送る。Cloud Run の側で要求ログの量は変えられず、除外のフィルタで減らす（[Cloud Run の文書](https://cloud.google.com/run/docs/logging)） | ログバケットへの保存 $0.50 / GiB（30 日の保存を含む・1 回きり）。月 50 GiB / プロジェクトまで無料（[料金ページ](https://cloud.google.com/stackdriver/pricing)） | _Default は 30 日（変えられる）。30 日を超えると $0.01 / GiB 月。_Required（監査ログ）は 400 日で無料 |
+| Vercel | Runtime Logs は課金なし | Observability Plus は 100 万 event $1.20。**2026-04-03 以降に作った・上げた Pro のチームでは既定で有効**（外せる）。1 件の要求で 1 つ以上の event ができるとあるが、数え方は書かれていない（[Observability Plus](https://vercel.com/docs/observability/observability-plus)・[料金](https://vercel.com/docs/observability/limits-and-pricing)・[使用量](https://vercel.com/docs/pricing/observability)） | Runtime Logs は Hobby 1 時間・Pro 1 日・Observability Plus 30 日（[Runtime Logs](https://vercel.com/docs/logs/runtime)） |
+| Netlify | 関数のログ（起動ごとの行と console.log）を出す | 課金の項目に無い | 少なくとも 24 時間・一部のプランは 7 日（[関数のログ](https://docs.netlify.com/build/functions/logs/)） |
+| Cloudflare Workers Logs | 新しく作る Worker は既定で有効（observability）。呼び出しのログ 1 件と console.log 1 行ずつが 1 件 | Free は 1 日 20 万件まで（課金なし）。Paid は月 2,000 万件まで込み、超えた分は 100 万件 $0.60。**2026-12-01 から Cloudflare Observability の料金に移る**（新しい料金は未取得）（[Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)） | Free 3 日・Paid 7 日 |
+
+確かめられなかったこと: CloudWatch Logs の保存が圧縮後の量で課金されること（料金ページは明記せず、AWS の re:Post の回答と第三者の記事が引く計算機の仮定 15%）・Amplify の SSR のログが vended logs の段階料金に入るか（10 TB までは同じ単価で、このモデルでは差が出ない）・Vercel の Observability Plus の 1 要求あたりの event の数・Workers Logs の 2026-12-01 以降の料金。
+
+### 18.2 入れた形
+
+- estimator: 汎用リソース `log-gb`・`log-events` と、`function`・`container` の `logs`（1 回の実行あたりの KB・件数）。前景の実行ごとに数える（prd/04 §3.3.2）。
+- catalog: `stacks/logs.ts` の `withLogs` が、組み終えた構成の関数・コンテナに、課金先のプランごとの値とメーターを差す。
+  メーターは Lambda・Amplify Hosting の `logs`（CloudWatch Logs。Lambda は段階つき）・Cloud Run の `logs`（Cloud Logging）・Workers Paid の `workers-logs`。
+  Vercel・Netlify・Workers Free は課金が無いので数えず、注記に書いた。Vercel の Observability Plus は数え方が分からないので数えない（外した前提。料金未取得として「確かめ待ち」に載せた）。
+- 仮定の値: Lambda・Amplify の SSR 0.5 KB / 回・Cloud Run 1.5 KB / 件・Workers 2 件 / 回（理由は prd/04 §3.3.2）。
+- 保持は部品にしない: CloudWatch Logs の既定の無期限は保存の費用を積むが、保存は圧縮後の量（約 15%）× $0.033 で、12 か月ためても 1 か月の取り込みの約 8%（圧縮しないと読んでも約 52%）。
+  Cloud Logging の既定 30 日は無料。どちらも部品の選択肢にするほどの差にならないので、メーターの前提の文（`interpretation`）に残した。
+
+### 18.3 基準プレイ（何もしない・シード 1〜20。達成数・12 か月の費用の平均 / 月）
+
+**すべて不変**（前後で同じ値）。月の PV の最大（約 400 万）でも、ほとんどの月が無料の分に収まる。
+
+| 構成 × フレームワーク | 記事 | 受託 | 最も多い月のログ |
+|---|---|---|---|
+| Amplify × Next.js | 10/20・$51.9 | 20/20・$15.0 | 4.9 GB（5 GB の中） |
+| Amplify（S3 + CloudFront + Lambda）× SPA | 19/20・$15.3 | 20/20・$4.2 | 2.7 GB |
+| OpenNext × Next.js | 17/20・$36.7 | 20/20・$1.8 | 5.9 GB（その月だけ $0.7） |
+| Google Cloud × Next.js | 0/20・$62.0 | 20/20・$12.2 | 13.0 GB（50 GiB の中） |
+| Google Cloud × SPA | 0/20・$54.2 | 20/20・$8.6 | 9.0 GB |
+| CF Paid × Next.js（目標の根拠） | 20/20・$15.2 | 20/20・$5.7 | 1,592 万件（2,000 万件の中） |
+| CF Paid × SPA | 20/20・$14.5 | 20/20・$5.7 | 1,062 万件 |
+
+規模を上げたとき（記事のテンプレート・既定の部品。ログ / 月の合計）:
+
+| 月の PV | Amplify × Next.js | OpenNext × Next.js | Google Cloud × Next.js | CF Paid × Next.js |
+|---|---|---|---|---|
+| 1,000 万 | $4.9 / $685 | $6.6 / $668 | $0 / $898 | **$12.0 / $46** |
+| 3,000 万 | $18.9 / $2,290 | $22.3 / $2,089 | $18.8 / $2,687 | **$60.0 / $138** |
+
+AWS・Google Cloud では他の費用に比べて 1% 前後だが、**Workers Paid は他の費用が安いので、月 1,000 万 PV で合計の 26%・3,000 万 PV で 43% になる**（込みの 2,000 万件を 1 か月目に超える規模のシナリオなら、目標の根拠の構成の額も変わる）。
+
+### 18.4 残した点
+
+- Workers Logs の標本化（`head_sampling_rate`）・呼び出しのログを切る設定、CloudWatch Logs の保持・Infrequent Access のログクラスを部品にすること（基準プレイの規模では差が出ないので入れていない）。
+- Vercel の Observability Plus（既定で有効な Pro のチーム）の event の数え方・Workers Logs の 2026-12-01 以降の料金。
+- アプリのログの量をシナリオ・フレームワークで変えること（今はどこでもアクセスログ 1 行）。エラーの急増・デバッグのログの出し忘れのような出来事。

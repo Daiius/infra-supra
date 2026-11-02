@@ -76,6 +76,19 @@ export const vercel: PriceBookInput = {
       url: 'https://vercel.com/docs/limits',
       retrievedAt: '2026-11-02',
     },
+    // ログ・Observability（2026-11-02 取得。D-92）
+    runtimeLogs: {
+      url: 'https://vercel.com/docs/logs/runtime',
+      retrievedAt: '2026-11-02',
+    },
+    observabilityPricing: {
+      url: 'https://vercel.com/docs/observability/limits-and-pricing',
+      retrievedAt: '2026-11-02',
+    },
+    observabilityUsage: {
+      url: 'https://vercel.com/docs/pricing/observability',
+      retrievedAt: '2026-11-02',
+    },
     cdnUsage: {
       url: 'https://vercel.com/docs/manage-cdn-usage',
       retrievedAt: '2026-11-01',
@@ -685,5 +698,7 @@ export const vercel: PriceBookInput = {
     'Pro の CDN（CDN Requests・Fast Data Transfer・Blob Data Transfer）は既定の On-demand CDN で計算する。申し込み制の Flat Rate CDN（Pro は最下段の月 100 万リクエスト・1 TB を追加料金なしで選べ、超えると翌月から上の段）は扱わない（D-48）',
     'CDN・FDT・ISR・画像の単価は地域で変わる（地域別の表は未取得。pricing ページの「starting at」を使っている）',
     'Active CPU・メモリの既定の単価は iad1（最安の地域）。hnd1・kix1 は地域料金として持つ',
+    '関数のログ（Runtime Logs）は課金されない。保持は Hobby 1 時間・Pro 1 日（D-92。2026-11-02 確認）',
+    'Observability Plus（保持 30 日など）は 100 万 event $1.20 で、2026-04-03 以降に作った・上げた Pro のチームでは既定で有効（外せる）。1 件の要求で 1 つ以上の event ができるとあるが数え方が書かれていないので、数えない（外した前提。料金未取得。D-92）',
   ],
 };
