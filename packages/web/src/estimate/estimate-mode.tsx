@@ -1,5 +1,13 @@
 // 見積モードの画面（D-73）。計算は model.ts（純粋関数）、ここは入力と表示だけ。入力は URL のクエリに残す（共有のため）。
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import type { PlatformPremise } from 'estimator';
 import {
   componentConflict,
@@ -211,6 +219,13 @@ function Field({
   info?: string | undefined;
   children: ReactNode;
 }) {
+  // ⓘ のボタンが label の名前に混ざらないよう、見出しの文字だけを aria-label で渡す（D-94）
+  const control =
+    info && isValidElement(children)
+      ? cloneElement(children as ReactElement<{ 'aria-label'?: string }>, {
+          'aria-label': label,
+        })
+      : children;
   return (
     <label className="block min-w-0">
       <span className="mb-1 block text-sm font-semibold">
@@ -222,7 +237,7 @@ function Field({
           </>
         )}
       </span>
-      {children}
+      {control}
     </label>
   );
 }
