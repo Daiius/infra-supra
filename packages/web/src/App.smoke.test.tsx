@@ -125,6 +125,22 @@ describe('ゲームモードの画面', () => {
     );
   });
 
+  it('W-06 始める画面: 記事コミュニティの前提・ページの一覧と、フレームワークごとのページの描き方が出る（D-101）', () => {
+    renderApp();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('別の CMS は無い');
+    expect(text).toContain('一覧・トップのページは記事のページに含めて数える');
+    // 選ぶ前に、どのフレームワークのページの描き方も並ぶ
+    expect(text).toContain(
+      '個人向けのページ: アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）',
+    );
+    expect(text).toContain('記事のページ: ISR');
+    // 隠した構成（D-100）は構成の一覧に出ない
+    expect(
+      screen.queryByRole('radio', { name: /^Netlify|^AWS（OpenNext）/ }),
+    ).toBeNull();
+  });
+
   it('W-04 保存して読み込み直すと同じ月から再開する', () => {
     renderApp();
     startGame({

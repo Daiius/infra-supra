@@ -185,6 +185,20 @@ export function FrameworkField({
   onChange: (id: FrameworkId) => void;
 }) {
   const note = (id: FrameworkId) => scenario.text?.byFramework?.[id]?.note;
+  /** ページごとの描き方（D-101）。選んでいない方にも出して見比べられるようにする。 */
+  const pages = (id: FrameworkId, className: string) => {
+    const lines = scenario.text?.byFramework?.[id]?.pages ?? [];
+    // ラベルの中に置くので、ブロックの要素（ul）でなく span を縦に積む
+    return lines.length > 0 ? (
+      <span className={`block space-y-0.5 ${className}`}>
+        {lines.map((line) => (
+          <span key={line} className="block">
+            {line}
+          </span>
+        ))}
+      </span>
+    ) : null;
+  };
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
       <FrameworkDetail scenario={scenario} id={id} />
@@ -198,6 +212,7 @@ export function FrameworkField({
         <p>
           <NameWithInfo name={FRAMEWORKS[id].label} info={info(id)} />
         </p>
+        {pages(id, 'text-sm opacity-70')}
         {note(id) && <p className="text-sm opacity-70">{note(id)}</p>}
       </div>
     );
@@ -223,6 +238,7 @@ export function FrameworkField({
                 <NameWithInfo name={FRAMEWORKS[id].label} info={info(id)} />
               </span>
               {/* 選んでいない方にも同じ注記を出す（見比べられるように。カードの高さは grid で揃う。D-45） */}
+              {pages(id, 'mt-0.5 text-xs opacity-70')}
               {note(id) && (
                 <span className="block text-xs opacity-70">{note(id)}</span>
               )}
@@ -264,6 +280,17 @@ export function ScenarioDescription({
           {t?.growth.up ?? '満足度が高ければ伸び'}（満足度 0.9 で毎月約 {growth}
           %）、{t?.growth.down ?? '低ければ減る'}。
         </p>
+        {/* ページの一覧（ページ → 見る人・要件。描き方はフレームワークのカードに出す。D-101） */}
+        {t?.pages && (
+          <div>
+            <div className="font-semibold">ページ</div>
+            <ul className="list-disc space-y-0.5 pl-6">
+              {t.pages.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {t?.revenue && <p>{t.revenue}</p>}
         <p>
           {t?.events}
