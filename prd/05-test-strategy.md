@@ -133,4 +133,4 @@ PV を 1 万・10 万・100 万・1000 万と振り、**規模によって最安
 番号はファイルをまたいで重ねない。`App.smoke.test.tsx` の当たったルート（D-99）・前提とページの一覧（D-101）・見取り図（D-102）は、前は見積モードと同じ W-05〜W-07 だったので W-18〜W-20 に振り直した。
 
 時間: web のテスト全体で約 4 秒（目安 30 秒以内）。
-**CI**: `.github/workflows/test.yml`（D-87）が全ブランチの push と PR で `pnpm typecheck`・`pnpm test`（この描画テストを含む）・`pnpm format:check` を回す。
+**CI**: `.github/workflows/test.yml`（D-87）が全ブランチの push と PR で `pnpm typecheck`・`pnpm test`（この描画テストを含む）・`pnpm format:check` を回す。テストは 2 つの job に分けて並べる: `test` の job が `pnpm test:fast`（combo-sweep.test.ts を除く全部）を、`combo-sweep` の job が `pnpm test:sweep`（その 1 本だけ。テストの時間の大半）を回す。合わせた範囲は `pnpm test` と同じで、手元の `pnpm test` は全部を回す。
