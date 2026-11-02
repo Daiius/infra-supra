@@ -104,7 +104,7 @@ describe('ゲームモードの画面', () => {
     expect(screen.queryByRole('button', { name: '次の月へ' })).toBeNull();
   });
 
-  it('W-05 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', () => {
+  it('W-18 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', () => {
     const detail =
       '記事のページ（ISR の閲覧と再生成・CPU 17 ms）・個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える';
     renderApp();
@@ -122,7 +122,7 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-06 始める画面: 記事コミュニティの前提・ページの一覧と、フレームワークごとのページの描き方が出る（D-101）', () => {
+  it('W-19 始める画面: 記事コミュニティの前提・ページの一覧と、フレームワークごとのページの描き方が出る（D-101）', () => {
     renderApp();
     const text = document.body.textContent ?? '';
     expect(text).toContain('別の CMS は無い');
@@ -142,7 +142,7 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
   });
 
-  it('W-07 始める画面: ページの見取り図の札が、フレームワークとコメントの描き方で変わる（D-102）', () => {
+  it('W-20 始める画面: ページの見取り図の札が、フレームワークとコメントの描き方で変わる（D-102）', () => {
     renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
