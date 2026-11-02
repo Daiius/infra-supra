@@ -4,6 +4,9 @@
 // 対応の状況は公式の文書を出典にし、取得日を付ける（prd/03 §1 と同じ規律）。
 import type { WorkloadInput } from 'estimator';
 import type { Platform } from '../stacks/index.ts';
+import { applyRouteStrategies, presetPlan } from './route-strategies.ts';
+
+export * from './route-strategies.ts';
 
 export type FrameworkId = 'nextjs' | 'vite-spa' | 'astro' | 'nextjs-export';
 
@@ -478,36 +481,16 @@ export type SpaShape = {
  * ページの中身はデータの API で取り、処理は SSR の値から作る（CPU は dataCpuFactor 倍・DB の往復は同じ）。
  * cacheContent: 記事（ISR だったルート＝全員に同じ中身）の API の応答をキャッシュする。期間は ISR の間隔
  * （revalidateSeconds）をそのまま使う。SSR だったルートは個人化された中身なのでキャッシュしない（D-37）。
+ * Vite の SPA の描き方のプリセット（どのルートも S5。D-106）の呼び出し。
  */
 export function toSpa(
   w: WorkloadInput,
   shape: SpaShape,
   options: { cacheContent?: boolean } = {},
 ): WorkloadInput {
-  return {
-    ...w,
-    routes: w.routes.map((r) => {
-      if (r.rendering === 'static' || r.rendering === 'spa') return r;
-      return {
-        id: r.id,
-        ...(r.label !== undefined ? { label: r.label } : {}),
-        rendering: 'spa' as const,
-        share: r.share,
-        pages: r.pages,
-        shellKB: shape.shellKB,
-        ...(options.cacheContent &&
-        r.rendering === 'isr' &&
-        r.revalidateSeconds !== undefined
-          ? { cacheSeconds: r.revalidateSeconds }
-          : {}),
-        processing: {
-          ...r.processing,
-          cpuMs: r.processing.cpuMs * shape.dataCpuFactor,
-          responseKB: shape.dataResponseKB,
-        },
-      };
-    }),
-  };
+  return applyRouteStrategies(w, presetPlan(w.routes, 'vite-spa', options), {
+    spa: shape,
+  });
 }
 
 /**
@@ -523,11 +506,23 @@ export type AstroShape = {
 
 /**
  * テンプレートの Workload を Astro の形に書き換える（D-68・D-103）。ISR だったルート（全員に同じ中身の記事）は、アダプターが
- * 閲覧のときに描いて前段でキャッシュし、投稿・編集で消す（Astro の route caching）。数え方は ISR と同じ（時間の期限・オンデマンドの
+ * 閲覧のときに描いて前段でキャッシュし、投稿・編集で消す（Astro の route caching。S3）。数え方は ISR と同じ（時間の期限・オンデマンドの
  * 式がそのまま使える。新しい種類は足さない。RS-05）ので、ルートは isr のまま残す。消した後の閲覧が描くのを待つか裏で描くかは
- * 構成のノードで決まる。SSR のルート（個人化）は毎回描く。JS・CSS はアイランドの分だけ（assetsFactor）。
+ * 構成のノードで決まる。SSR のルート（個人化）は毎回描く（S4）。JS・CSS はアイランドの分だけ（assetsFactor。描き方でなく
+ * フレームワークの性質）。
  */
 export function toAstro(w: WorkloadInput, shape: AstroShape): WorkloadInput {
+  return withAstroAssets(
+    applyRouteStrategies(w, presetPlan(w.routes, 'astro')),
+    shape,
+  );
+}
+
+/** Astro の JS・CSS はアイランドの分だけ（フレームワークの性質。描き方に依らない。D-68）。 */
+export function withAstroAssets(
+  w: WorkloadInput,
+  shape: AstroShape,
+): WorkloadInput {
   return {
     ...w,
     perPage: { ...w.perPage, assets: w.perPage.assets * shape.assetsFactor },
@@ -535,7 +530,7 @@ export function toAstro(w: WorkloadInput, shape: AstroShape): WorkloadInput {
 }
 
 /**
- * ISR だったルート（全員に同じ中身の記事）をビルドのときに HTML にし、更新をビルドし直しで反映する（Next.js の静的書き出し。D-80）。
+ * ISR だったルート（全員に同じ中身の記事）をビルドのときに HTML にし、更新をビルドし直しで反映する（S1。D-80）。
  * 内容の更新（updatesPerMonth。記事の投稿・編集。コメントを記事のページに含めるとコメントの投稿も）を、間隔（省略は更新のたび）で
  * まとめてビルドする。
  */
@@ -544,48 +539,18 @@ export function toStaticBuild(
   minutesPerBuild: AstroShape['minutesPerBuild'],
   build: { updatesPerMonth: number; intervalSeconds?: number },
 ): WorkloadInput {
-  let staticPages = 0;
-  const routes = w.routes.map((r) => {
-    if (r.rendering !== 'isr') return r;
-    staticPages += r.pages;
-    return {
-      id: r.id,
-      ...(r.label !== undefined ? { label: r.label } : {}),
-      rendering: 'static' as const,
-      share: r.share,
-      pages: r.pages,
-      processing: r.processing,
-    };
-  });
-  return {
-    ...w,
-    routes,
-    ...(staticPages > 0
-      ? {
-          build: {
-            updatesPerMonth: build.updatesPerMonth,
-            ...(build.intervalSeconds !== undefined
-              ? { intervalSeconds: build.intervalSeconds }
-              : {}),
-            minutesPerBuild: buildMinutes(minutesPerBuild, staticPages),
-          },
-        }
-      : {}),
-  };
-}
-
-/** 1 回のビルドの時間（分）= base + 静的なページ 1,000 あたり perThousandPages（ゲーム上の仮定。D-68）。 */
-export function buildMinutes(
-  m: AstroShape['minutesPerBuild'],
-  staticPages: number,
-): number {
-  return m.base + (staticPages / 1000) * m.perThousandPages;
+  const plan = Object.fromEntries(
+    w.routes
+      .filter((r) => r.rendering === 'isr')
+      .map((r) => [r.id, { strategy: 'static-build' as const }]),
+  );
+  return applyRouteStrategies(w, plan, { minutesPerBuild, build });
 }
 
 /**
  * テンプレートの Workload を Next.js の静的書き出しの形に書き換える（D-80）。ISR だったルート（全員に同じ中身の記事）は
- * ビルドのときに HTML にし（更新はビルドし直し）、SSR だったルート（個人化）はビルドした HTML の上で
- * Client Component が API で中身を取る（SPA と同じく、ページの中身はデータの API）。JS・CSS は Next.js のまま。
+ * ビルドのときに HTML にし（S1。更新はビルドし直し）、SSR だったルート（個人化）はビルドした HTML の上で
+ * Client Component が API で中身を取る（S5。SPA と同じく、ページの中身はデータの API）。JS・CSS は Next.js のまま。
  * 1 回のビルドの時間は buildMinutes（ゲーム上の仮定）。
  */
 export function toNextExport(
@@ -594,5 +559,9 @@ export function toNextExport(
   minutesPerBuild: AstroShape['minutesPerBuild'],
   build: { updatesPerMonth: number; intervalSeconds?: number },
 ): WorkloadInput {
-  return toSpa(toStaticBuild(w, minutesPerBuild, build), spa);
+  return applyRouteStrategies(w, presetPlan(w.routes, 'nextjs-export'), {
+    spa,
+    minutesPerBuild,
+    build,
+  });
 }
