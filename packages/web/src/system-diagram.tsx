@@ -8,6 +8,7 @@ import { BrandMark, BRANDS, brandColor, type BrandId } from './brand-logos.tsx';
 import {
   diagramModel,
   diagramSummary,
+  activeLane,
   labelOf,
   BACK_LOOP,
   LAYOUT,
@@ -53,7 +54,9 @@ export function SystemDiagram({
     () => diagramModel(architecture, pages ?? []),
     [architecture, pages],
   );
-  const [active, setActive] = useState<LaneId | null>(null);
+  const [chosen, setActive] = useState<LaneId | null>(null);
+  // 構成・部品を替えて選んでいた流れが図から消えたら、強調をやめる（凡例に無い流れで全部の線が薄くならないように）
+  const active = activeLane(chosen, model);
   const markerId = useId().replace(/:/g, '');
   const title = (account: string) =>
     groupTitle(account, model.groups.find((g) => g.account === account)?.brand);

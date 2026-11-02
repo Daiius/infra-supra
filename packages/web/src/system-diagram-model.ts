@@ -7,26 +7,54 @@
 // 純粋関数。描画（system-diagram.tsx）は位置をそのまま使う。
 import {
   composeStack,
+  DEFAULT_CHOICES,
   STACK_DEFS,
   withoutUnusedEmail,
   type FrameworkId,
 } from 'catalog';
 import type { ArchitectureInput, RequestClass } from 'estimator';
-import type { RegionSource, Scenario } from 'game';
+import {
+  frameworkDefaults,
+  STACKS,
+  type RegionSource,
+  type Scenario,
+} from 'game';
 import type { BrandId } from './brand-logos.tsx';
 
 /**
+ * 図に描く部品の選択。ゲームの始まり（newGame）と同じ重ね方: catalog の既定 → フレームワーク・シナリオの既定
+ * （静的書き出しの Vercel の画像は投稿時の縮小など）→ 選んだ部品。始める画面で選ぶ前のスロットも、始めたときと同じ部品で描く。
+ */
+export function diagramComponents(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  components: Partial<Record<string, string>> = {},
+): Partial<Record<string, string>> {
+  const platform = STACKS[stackIndex]!.provider;
+  return {
+    ...DEFAULT_CHOICES[platform],
+    ...frameworkDefaults(framework, platform, scenario),
+    ...components,
+  };
+}
+
+/**
  * 図に描く構成（費用の計算と同じ composeStack。アプリがメールを送らないシナリオでは、見積と同じく送信のノードを外す。D-101）。
- * components は部品の選択（選んでいないスロットは composeStack が既定で埋める）。
+ * components は部品の選択（選んでいないスロットは diagramComponents の既定）。
  */
 export function diagramArchitecture(
-  scenario: Pick<Scenario, 'template'>,
+  scenario: Scenario,
   stackIndex: number,
   framework: FrameworkId,
   components: Partial<Record<string, string>> = {},
 ): ArchitectureInput {
   return withoutUnusedEmail(
-    composeStack(STACK_DEFS[stackIndex]!, components, { framework }),
+    composeStack(
+      STACK_DEFS[stackIndex]!,
+      diagramComponents(scenario, stackIndex, framework, components),
+      { framework },
+    ),
     scenario.template(1),
   );
 }
@@ -429,4 +457,14 @@ export function diagramSummary(
     ...new Set([...model.groups.map((g) => groupTitle(g.account))]),
   ];
   return `構成図: 閲覧者のリクエストは ${first.join('・')} に届く。部品 ${model.nodes.length + model.side.reduce((a, s) => a + s.nodes.length, 0)} 個、事業者は ${providers.join('・')}`;
+}
+
+/** 強調する流れ（選んでいた流れが今の図に無ければ強調しない）。 */
+export function activeLane(
+  chosen: LaneId | null,
+  model: Pick<DiagramModel, 'lanes'>,
+): LaneId | null {
+  return chosen !== null && model.lanes.some((l) => l.id === chosen)
+    ? chosen
+    : null;
 }

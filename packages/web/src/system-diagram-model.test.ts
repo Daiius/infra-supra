@@ -1,6 +1,8 @@
 // 構成図のモデル（D-105）。選べる構成 × フレームワーク × 部品の選択で、費用の計算と同じ構成から図が描けることを見る。
 import {
+  DEFAULT_START_DATE,
   frameworksOf,
+  newGame,
   pageWireframes,
   SCENARIOS,
   setupSlots,
@@ -11,7 +13,9 @@ import {
 import type { RequestClass } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
+  activeLane,
   diagramArchitecture,
+  diagramComponents,
   diagramModel,
   LANES,
   LAYOUT,
@@ -200,5 +204,42 @@ describe('diagramModel', () => {
     expect(m.side.flatMap((s) => s.nodes.map((n) => n.kind)).sort()).toEqual(
       ['domain-registration', 'email-sender'].sort(),
     );
+  });
+
+  it('選ぶ前の部品は、ゲームを始めたときと同じ既定で描く（静的書き出し × Vercel の画像は投稿時の縮小。OCL-144712AB）', () => {
+    for (const sc of Object.values(SCENARIOS))
+      for (const fw of frameworksOf(sc).allowed as FrameworkId[])
+        for (const s of STACKS) {
+          if (!stackOffered(s.index, fw)) continue;
+          expect(
+            diagramComponents(sc, s.index, fw),
+            `${sc.id} ${s.id} ${fw}`,
+          ).toEqual(newGame(s.index, 0, sc, DEFAULT_START_DATE, fw).components);
+        }
+    const sc = SCENARIOS['article-community']!;
+    const vercel = STACKS.findIndex((s) => s.id === 'vercel-supabase-pro');
+    expect(diagramComponents(sc, vercel, 'nextjs-export').images).toBe(
+      'resize',
+    );
+    const kinds = diagramArchitecture(sc, vercel, 'nextjs-export').nodes.map(
+      (n) => n.config.kind,
+    );
+    expect(kinds).not.toContain('image-optimizer');
+    // 選んだ部品はその上に重なる
+    expect(
+      diagramComponents(sc, vercel, 'nextjs-export', { images: 'default' })
+        .images,
+    ).toBe('default');
+  });
+
+  it('強調していた流れが図から消えたら、強調をやめる（OCL-FD14A04C）', () => {
+    const sc = SCENARIOS['article-community']!;
+    const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
+    const next = diagramModel(diagramArchitecture(sc, cf, 'nextjs'));
+    const spa = diagramModel(diagramArchitecture(sc, cf, 'vite-spa'));
+    expect(activeLane('isr', next)).toBe('isr');
+    expect(spa.lanes.some((l) => l.id === 'isr')).toBe(false);
+    expect(activeLane('isr', spa)).toBeNull();
+    expect(activeLane(null, next)).toBeNull();
   });
 });
