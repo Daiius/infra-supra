@@ -1,0 +1,14 @@
+---
+import type { FeedPage } from "../../../shared/feed";
+interface Props {
+  links: FeedPage["footerLinks"];
+}
+const { links } = Astro.props;
+---
+
+<footer class="site-footer">
+  <nav aria-label="Footer">
+    {links.map((l) => <a href={l.href}>{l.label}</a>)}
+  </nav>
+  <p>© 2026 InfraSupra Social (measurement spike)</p>
+</footer>

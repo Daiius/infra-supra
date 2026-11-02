@@ -1,0 +1,17 @@
+{
+  "name": "ssr-cpu-astro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "preview": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "14.4.4",
+    "astro": "7.4.5"
+  },
+  "devDependencies": {
+    "wrangler": "4.156.2"
+  }
+}

@@ -4,3 +4,9 @@
 pnpm-lock.yaml
 # drizzle-kit が生成する migration（packages/stats/drizzle。手で整形しない）
 packages/stats/drizzle/
+# スパイクのアプリが生成する物（各スパイクの .gitignore 対象。ルートの .gitignore には無いので明示する）
+.astro/
+.wrangler/
+.next/
+next-env.d.ts
+spikes/*/runs/

@@ -1,0 +1,23 @@
+---
+import type { FeedPage } from "../../../shared/feed";
+interface Props {
+  trendingTags: FeedPage["trendingTags"];
+  suggested: FeedPage["suggested"];
+}
+const { trendingTags, suggested } = Astro.props;
+---
+
+<aside class="sidebar">
+  <section class="card">
+    <h3>Trending</h3>
+    <ol>
+      {trendingTags.map((t) => <li><a href={`/t/${t.tag}`}>#{t.tag}</a> <span class="meta">{t.count} posts</span></li>)}
+    </ol>
+  </section>
+  <section class="card">
+    <h3>Who to follow</h3>
+    <ul>
+      {suggested.map((s) => <li><a href={`/u/${s.handle}`}>{s.name}</a> <span class="meta">@{s.handle}</span></li>)}
+    </ul>
+  </section>
+</aside>

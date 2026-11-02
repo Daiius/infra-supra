@@ -1,0 +1,17 @@
+# このディレクトリを独立した pnpm のルートにする（リポジトリ直下の workspace に入れない）。
+packages: []
+allowBuilds:
+  esbuild: true
+  workerd: true
+# 計測の時点（2026-11-03）の最新版を固定するため、公開から日の浅い版を許す（pnpm install が自動で追記）。
+minimumReleaseAgeExclude:
+  - '@astrojs/cloudflare@14.4.4'
+  - '@cloudflare/workerd-darwin-64@1.20261102.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20261102.1'
+  - '@cloudflare/workerd-linux-64@1.20261102.1'
+  - '@cloudflare/workerd-linux-arm64@1.20261102.1'
+  - '@cloudflare/workerd-windows-64@1.20261102.1'
+  - astro@7.4.5
+  - miniflare@5.20261102.0-beta
+  - workerd@1.20261102.1
+  - wrangler@4.156.2

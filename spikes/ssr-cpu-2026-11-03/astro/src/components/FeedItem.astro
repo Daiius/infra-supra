@@ -1,0 +1,47 @@
+---
+import type { FeedItem } from "../../../shared/feed";
+interface Props {
+  item: FeedItem;
+}
+const { item } = Astro.props;
+const actions = [
+  { kind: "like", label: "Like", icon: "♥", count: item.likes },
+  { kind: "comment", label: "Comment on", icon: "💬", count: item.comments },
+  { kind: "repost", label: "Repost", icon: "↻", count: item.reposts },
+  { kind: "bookmark", label: "Bookmark", icon: "☆", count: null },
+  { kind: "share", label: "Share", icon: "↗", count: null },
+];
+---
+
+<article class="card feed-item" id={item.id} data-author={item.author.handle}>
+  <header class="feed-item-header">
+    <span class="avatar" aria-hidden="true">{item.author.name.slice(0, 1)}</span>
+    <p class="meta">
+      by <a href={`/u/${item.author.handle}`}>{item.author.name}</a>
+      <span class="handle">@{item.author.handle}</span> ·
+      <time datetime={item.date}>{item.date}</time>
+    </p>
+  </header>
+  <h2><a href={`/p/${item.id}`}>{item.title}</a></h2>
+  <p class="excerpt">{item.excerpt}</p>
+  <ul class="tags">
+    {item.tags.map((t) => <li class="tag"><a href={`/t/${t}`}>#{t}</a></li>)}
+  </ul>
+  <div class="counts">
+    <span class="likes">{item.likes} likes</span>
+    <span class="comments">{item.comments} comments</span>
+  </div>
+  <div class="actions" role="group" aria-label="Post actions">
+    {
+      actions.map((a) => (
+        <button type="button" class={`action action-${a.kind}`} aria-label={`${a.label} this post by ${item.author.name}`}>
+          {a.icon} {a.count !== null && <span class="count">{a.count}</span>}
+        </button>
+      ))
+    }
+  </div>
+  <blockquote class="top-comment">
+    <a href={`/u/${item.topComment.handle}`}>{item.topComment.name}</a>
+    <p>{item.topComment.text}</p>
+  </blockquote>
+</article>

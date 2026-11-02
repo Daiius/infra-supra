@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ssr-cpu-astro",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-11-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "binding": "ASSETS" },
+  // Workers Logs に CPU time / Wall time を残す（Free でも可。1 日 20 万件・保持 3 日）。
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+}
