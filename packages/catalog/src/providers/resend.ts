@@ -128,11 +128,31 @@ export const resend: PriceBookInput = {
               },
             ],
           },
-          pricing: { model: 'flat', per: 1_000, unitPrice: 0.9 },
+          // 込みの 5 倍（25 万通）で送信が止まるので、込みの後の 20 万通まで課金し、その先は送れない（課金しない。上限は limits）
+          pricing: {
+            model: 'tiered',
+            per: 1_000,
+            tiers: [
+              { upTo: 200_000, unitPrice: 0.9 },
+              { upTo: null, unitPrice: 0 },
+            ],
+          },
           sourceIds: ['pricing', 'quotas'],
         },
       ],
-      limits: [],
+      limits: [
+        {
+          id: 'monthly-cap',
+          measure: 'emails-per-month',
+          value: 250_000,
+          unit: 'count',
+          scope: 'month',
+          onExceed: 'block',
+          premise:
+            'Resend Pro の超過は込みの通数の 5 倍（25 万通）までで、そこで次の請求の期間まで送信が止まる',
+          sourceIds: ['quotas'],
+        },
+      ],
     },
   ],
   notes: ['税抜の USD（料金ページに税の記載は無い）'],

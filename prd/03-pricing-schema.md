@@ -121,7 +121,7 @@ type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unit
   プールの固定の量で書けないので、ノードの値（`freeUpToDbSize`・`minFreeGB`）で引いてからメーターに渡す。さくらのオブジェクトストレージ（VPS の自前のバックアップの置き場）は
   `sakura-vps` の料金データにプラン `object-storage`（月額 495 円・100 GiB 込みのプール）として持つ。課金の無いもの（D1 の Time Travel・Neon Free の 6 時間・Supabase Pro の日次）は注記に書く。
 - **メールの送信（D-95）**: 汎用リソース `emails`（通数）で受ける。Workers Paid の `email-sending`（プール `paid-email-sending` 3,000 通 / 月）・AWS のプラン `ses` の `outbound`・
-  新しい事業者 `resend`（Free は日次のプール `free-daily` 100 通で `block`。月 3,000 通は日 100 通 × 30 日とほぼ同じなので日次で判定する。Pro は基本料 $20 とプール `pro-emails` 5 万通）。
+  新しい事業者 `resend`（Free は日次のプール `free-daily` 100 通で `block`。月 3,000 通は日 100 通 × 30 日とほぼ同じなので日次で判定する。Pro は基本料 $20 とプール `pro-emails` 5 万通。超過は込みの 5 倍の 25 万通で止まるので、制限の測り方 `emails-per-month`（`monthly-cap`・`block`）で判定し、単価は込みの後の 20 万通までの段にして、その先は課金しない。OCL-F37D88E8）。
 - **表示名（`label`。D-75）**: 明細の行に出す名前。メーター・基本料（`baseFee.label`）・クレジット・一度だけの手数料（`addons[].label`）に付け、
   計算には使わない（明細の行の `LineItem.label` に写すだけ）。形は「何の費用かを日本語で（公式の名称）」で、括弧の中に事業者の画面・料金表の呼び方を残す
   （例:「画像の変換（Images: unique transformations）」「CDN の転送（CloudFront: data transfer out）」「関数の実行時間（Vercel: Active CPU）」）。

@@ -931,6 +931,7 @@
   - 達成が変わった行: 記事 × VPS 2GB × Next.js 10 → 9、受託 × VPS 4GB 8 → 4（SPA 12 → 8）・VPS 2GB × SPA 1 → 0、受託 × Neon（Vercel Pro Next 6 → 0・SPA 18 → 14、Netlify Pro Next 14 → 6・SPA 18 → 16、Personal Next 19 → 14）、
     受託 × CF Paid の Astro + VPS 2GB の API 12 → 9、記事 × Netlify Pro × Neon + 画像だけ Cloudflare 7 → 3。
   - golden: 受託の「CF Paid・依頼を受ける」がシード 42（$1,769.92 → $1,680.24）・3（$1,726.18 → $1,543.64）で won → goal。記事のシード 42 の VPS・SLA、シード 3 の Vercel Pro → CF Paid が won → goal。網羅テストは通る。
+  - 追記（レビュー OCL-F37D88E8）: Resend Pro の送信の停止（込みの 5 倍・25 万通）を制限 `emails-per-month` で判定し（止まる前提）、上限を超えた分は課金しない。基準プレイの規模（受託の最大 月 約 3 万通）では当たらず、表は不変。
   - 直したテスト: CF Paid で原本を配り続ける例は、Email Service の超過のヒントが並んで速さのヒントが 3 つに入らなくなったので、メールを SES にして確かめる。
 - 残した点: 通数の仮定の確かめ・メールの出来事（大量の通知・届かない）・Resend Pro の上の段・SES の専用 IP・添付の量・Email Service の 1 日の上限とベータ後の料金・VPS の自前のメールサーバー。
 

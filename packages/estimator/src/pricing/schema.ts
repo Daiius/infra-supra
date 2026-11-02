@@ -170,6 +170,7 @@ export const LIMIT_MEASURES = [
   'storage-gb', // ノードの保存量
   'peak-concurrency', // ピーク時間帯の同時接続・同時実行
   'writes-per-second-per-key', // 同じキーへの書き込みの頻度（ピーク時間帯・1 秒あたり。KV など）
+  'emails-per-month', // 月に送るメールの通数（送信のサービスの月の上限。Resend Pro の込みの 5 倍。D-95）
 ] as const;
 
 export const LimitSchema = z.object({

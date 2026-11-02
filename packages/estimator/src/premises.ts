@@ -271,6 +271,12 @@ export function assessPremises(input: {
       ) {
         used =
           (nu.resources['kv-writes'] ?? 0) * node.config.hotKeyShare * peak;
+      } else if (
+        limit.measure === 'emails-per-month' &&
+        node.config.kind === 'email-sender'
+      ) {
+        // 送信のサービスの月の上限（D-95）。超えた分はその月は送れない
+        used = nu.resources.emails ?? 0;
       }
       if (used === undefined) continue;
       // 同じキーへの書き込みは、超えた書き込みが失敗する（料金データの onExceed）が、サイト全体は止まらない。

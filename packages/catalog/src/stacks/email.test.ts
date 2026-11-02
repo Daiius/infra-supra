@@ -87,4 +87,29 @@ describe('メール送信（D-95）', () => {
       free.premises.find((p) => p.id === 'pool:resend:free:free-daily'),
     ).toMatchObject({ hit: true, effect: 'block' });
   });
+
+  it('Resend Pro は込みの 5 倍（25 万通）で止まり、超えた分は送れないので課金しない（OCL-F37D88E8）', () => {
+    const at = (pv: number) => {
+      const r = estimate({
+        workload: businessApp(pv),
+        architecture: composeStack('gcp-cloud-run', { email: 'resend-pro' }),
+        books,
+      });
+      const meter = r.bill.lines.find(
+        (l) => l.priceRef.meterId === 'emails' && l.kind !== 'base-fee',
+      )!;
+      const cap = r.premises.find(
+        (p) => p.id === 'limit:resend:pro:monthly-cap:email',
+      )!;
+      return { amount: meter.amount, cap };
+    };
+    // 1,000 万 PV: 利用者 5 万人 × 月 10 通 = 50 万通。込み 5 万 + 課金 20 万 × $0.90 / 1,000 で頭打ち
+    const big = at(10_000_000);
+    expect(big.amount).toBeCloseTo((200_000 * 0.9) / 1000, 9);
+    expect(big.cap).toMatchObject({ hit: true, effect: 'block' });
+    // 400 万 PV（20 万通）: 上限の中で、込みを超えた 15 万通を課金する
+    const mid = at(4_000_000);
+    expect(mid.amount).toBeCloseTo((150_000 * 0.9) / 1000, 9);
+    expect(mid.cap).toMatchObject({ hit: false, effect: 'block' });
+  });
 });
