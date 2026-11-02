@@ -140,3 +140,48 @@ describe('保存と再生', () => {
     expect(() => replaySave(save)).toThrow();
   });
 });
+
+describe('古い保存の Astro の「ビルドの間隔」を「記事のキャッシュ」に読み替える（D-103・OCL-99FE28E7）', () => {
+  const legacy = (framework: 'astro' | 'nextjs-export') =>
+    newSave({
+      scenarioId: 'article-community',
+      stackIndex: 1,
+      framework,
+      seed: 7,
+      startDate: '2026-10-31',
+      revalidateSec: 300,
+    });
+
+  it('Astro の buildInterval は pageCache として当たり、値と手間が戻る', () => {
+    const save = withTurn(legacy('astro'), [
+      { type: 'set', key: 'buildInterval', value: 21600 },
+    ]);
+    const s = replaySave(parseSave(JSON.parse(JSON.stringify(save)))!);
+    expect(s.settings.revalidateSec).toBe(21600);
+    // 今の行動（pageCache）で遊んだのと同じ状態（手間も同じ）
+    const now = replaySave(
+      withTurn(legacy('astro'), [
+        { type: 'set', key: 'pageCache', value: 21600 },
+      ]),
+    );
+    expect(s).toEqual(now);
+  });
+
+  it('途中で作り直した保存は、行動のときのフレームワークで読み替える（静的書き出しの buildInterval はそのまま）', () => {
+    let save = withTurn(legacy('nextjs-export'), [
+      { type: 'set', key: 'buildInterval', value: 3600 },
+      { type: 'rewrite', framework: 'astro' },
+    ]);
+    // 作り直しが終わるまで何もしない
+    while (replaySave(save).rewrite) save = withTurn(save, []);
+    const before = replaySave(save);
+    expect(before.framework).toBe('astro');
+    expect(before.settings.revalidateSec).toBe(3600);
+    save = withTurn(save, [
+      { type: 'set', key: 'buildInterval', value: 21600 },
+    ]);
+    const s = replaySave(save);
+    expect(s.framework).toBe('astro');
+    expect(s.settings.revalidateSec).toBe(21600);
+  });
+});

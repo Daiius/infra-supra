@@ -4,7 +4,8 @@ import type { PageWireframe, ScenarioText } from '../scenario.ts';
 /**
  * ページの見取り図（D-102。ゲーム上の仮定の図）。区画の作られ方は今の計算のモデルに合わせる:
  * Next.js は記事 ISR・個人 SSR、コメント・いいね・ログインの表示はブラウザが API で取る（D-70）。
- * Astro は記事をビルドで静的・個人をアダプターで SSR、動きのある部品はアイランド。静的書き出しは記事を静的・個人を静的な枠 + API（D-80）。
+ * Astro は記事を閲覧のときに描いてキャッシュし投稿・編集で消す（D-103）・個人をアダプターで SSR、動きのある部品はアイランド。
+ * 静的書き出しは記事を静的・個人を静的な枠 + API（D-80）。
  * SPA はシェル + API。設定「コメントの描き方」で記事のページに含めると、コメント欄は記事の HTML の一部になる（D-82）。
  */
 const ARTICLE_WIREFRAMES: PageWireframe[] = [
@@ -32,14 +33,14 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
         footer: 'isr',
       },
       astro: {
-        header: 'build',
+        header: 'cached',
         login: 'island',
-        title: 'build',
-        body: 'build',
+        title: 'cached',
+        body: 'cached',
         images: 'image',
         likes: 'island',
         comments: 'island',
-        footer: 'build',
+        footer: 'cached',
       },
       'nextjs-export': {
         header: 'build',
@@ -65,7 +66,7 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
     // SPA は記事のページが無いので含められない（D-82）
     commentsInPage: {
       nextjs: { comments: 'isr' },
-      astro: { comments: 'build' },
+      astro: { comments: 'cached' },
       'nextjs-export': { comments: 'build' },
     },
     badges: {
@@ -74,11 +75,18 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
         { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
       ],
       astro: [
-        { kind: 'freshness', text: '鮮度: ビルドし直しで載る' },
+        { kind: 'freshness', text: '鮮度: 投稿・編集でキャッシュを消す' },
         { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
+        {
+          kind: 'cpu',
+          text: 'CPU: 消した後の閲覧が描くのを待つ（Workers は 1 リクエストの上限に注意）',
+        },
       ],
       'nextjs-export': [
-        { kind: 'freshness', text: '鮮度: ビルドし直しで載る' },
+        {
+          kind: 'freshness',
+          text: '鮮度: ビルドし直しで載る（新しい記事はビルドまで開けない）',
+        },
         { kind: 'ogp', text: 'SNS のカード: HTML に入る' },
       ],
       'vite-spa': [
@@ -178,13 +186,13 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
     astro: {
       note: '記事ごとの SNS のカード（OGP）は HTML に入る。コメント欄はアイランドが API で読む',
       pages: [
-        '記事のページ: ビルドのときに静的な HTML（投稿・編集はビルドし直しで載る。既定は 5 分ごとにまとめるので、載るまで間隔 + ビルドの数分）',
+        '記事のページ: 閲覧時に SSR + キャッシュ（最初の閲覧でアダプターが描いて前段にキャッシュし、投稿・編集でそのページのキャッシュを消す。消した後の最初の閲覧は描き終わるのを待つ）',
         '個人向けのページ: アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）',
       ],
       app: [
-        '記事のページ（2,000 ページ）はビルドのときに静的な HTML にし、事業者の静的な配信から返す。個人向けのページはアダプターで SSR',
-        '利用者が投稿するたびにサイトをビルドし直す形なので、記事が増えるほど 1 回のビルドが長くなる（2,000 ページで約 2 分。ゲーム上の仮定）',
-        '記事の投稿・編集はビルドし直しで反映する（間隔は設定「ビルドの間隔」。記事の本文を変える更新は 30 万 PV で月 300 回ほど、1 回のビルドは記事 1,000 ページあたり 0.5 分 + 1 分と仮定）。ビルドの時間は Workers Builds・Vercel のビルドの料金で数える（VPS は同じホストでビルドし、数えない）',
+        '記事のページ（2,000 ページ）は Astro の route caching でキャッシュする。置き場は事業者で決まる: Cloudflare は Worker の前の Workers Cache（静的なファイルも含めて全リクエストを Workers の料金で数える）、Vercel は ISR、VPS は Node のメモリ、Google Cloud は Hosting の CDN（消せないので期限で取り直す）。個人向けのページはアダプターで SSR',
+        '記事の投稿・編集では、そのページのキャッシュを消す（設定「記事のキャッシュ」。既定はオンデマンド、時間の期限も選べる）。記事のためにサイトをビルドし直さない（ビルドはデプロイのときだけ）',
+        '消した後の最初の閲覧は、サーバーが描き終わるのを待つ。Cloudflare では、その閲覧の CPU（記事の描画）が Workers の 1 リクエストの上限に数えられる',
         'ブラウザの JS は動きのある部品（アイランド）の分だけ（ゲーム上の仮定: JS・CSS は Next.js の 0.3 倍、初回表示が軽く速さの重さを 1 つ減らす）',
         '記事ごとの SNS のカード（OGP）は HTML に入る。コメントはアイランドが API で読む',
       ],
@@ -198,8 +206,8 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
       app: [
         '記事のページ（2,000 ページ）はビルドのときに静的な HTML にし、事業者の静的な配信から返す。サーバーを持たない（ISR・SSR・Cookie・Server Actions・Proxy は使えない）',
         '個人向けのページは静的な HTML の上で、ブラウザ（Client Component）が API で中身を取る（SPA と同じく、中身の API が 1 PV あたり 1 回増える。API の置き場は SPA と同じく選べる）',
-        '利用者が投稿するたびにサイトをビルドし直す形なので、記事が増えるほど 1 回のビルドが長くなる（Astro と同じ仮定）',
-        '記事の投稿・編集はビルドし直しで反映する（間隔は設定「ビルドの間隔」。1 回のビルドの時間は Astro と同じとみなす: 記事 1,000 ページあたり 0.5 分 + 1 分）。ビルドの時間は Workers Builds・Vercel のビルドの料金、Netlify はデプロイの回数で数える（VPS は同じホスト、AWS は手元か CI でビルドし、数えない）',
+        '利用者が投稿するたびにサイトをビルドし直す形なので、記事が増えるほど 1 回のビルドが長くなる（ゲーム上の仮定）。新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさず、鮮度を 1 段下げる。ゲーム上の仮定）',
+        '記事の投稿・編集はビルドし直しで反映する（間隔は設定「ビルドの間隔」。載るまで間隔 + ビルドの時間。1 回のビルドの時間: 記事 1,000 ページあたり 0.5 分 + 1 分）。ビルドの時間は Workers Builds・Vercel のビルドの料金、Netlify はデプロイの回数で数える（VPS は同じホスト、AWS は手元か CI でビルドし、数えない）',
         '画像の部品（next/image）は既定のローダーが使えない。Cloudflare Images・Netlify Image CDN は変換の URL を返すローダーで使え、Vercel の画像の最適化・VPS のホストでの変換は選べない（既定は投稿のときに縮める）',
         '初回表示・JS の量は Next.js と同じとみなす。記事ごとの SNS のカード（OGP）は HTML に入る',
       ],

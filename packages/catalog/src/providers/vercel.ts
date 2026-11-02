@@ -117,6 +117,11 @@ export const vercel: PriceBookInput = {
       url: 'https://vercel.com/docs/incremental-static-regeneration',
       retrievedAt: '2026-11-01',
     },
+    // Astro の記事を Vercel の ISR でキャッシュする形（2026-11-03 に原文で確認。D-103）
+    astroVercel: {
+      url: 'https://docs.astro.build/en/guides/integrations-guide/vercel/',
+      retrievedAt: '2026-11-03',
+    },
     // API の応答のキャッシュ（Vite の SPA の部品。2026-09-14 更新・2026-11-01 取得。D-37）
     cdnCache: {
       url: 'https://vercel.com/docs/caching/cdn-cache',
@@ -268,6 +273,12 @@ export const vercel: PriceBookInput = {
           premise:
             'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
           sourceIds: ['isrDocs'],
+        },
+        {
+          id: 'astro-isr',
+          premise:
+            '@astrojs/vercel の isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後に（Vercel の ISR として）キャッシュする。期限は expiration、取り直しは bypassToken を x-prerender-revalidate のヘッダーに付けたリクエスト。exclude に挙げたページは毎回描く。Vercel の ISR の文書は Astro を対応するフレームワークに挙げる',
+          sourceIds: ['astroVercel', 'isrDocs'],
         },
         {
           id: 'cdn-cache-functions',
@@ -461,6 +472,12 @@ export const vercel: PriceBookInput = {
           premise:
             'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
           sourceIds: ['isrDocs'],
+        },
+        {
+          id: 'astro-isr',
+          premise:
+            '@astrojs/vercel の isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後に（Vercel の ISR として）キャッシュする。期限は expiration、取り直しは bypassToken を x-prerender-revalidate のヘッダーに付けたリクエスト。exclude に挙げたページは毎回描く。Vercel の ISR の文書は Astro を対応するフレームワークに挙げる',
+          sourceIds: ['astroVercel', 'isrDocs'],
         },
         {
           id: 'cdn-cache-functions',

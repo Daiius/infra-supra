@@ -1,4 +1,4 @@
-// Next.js の静的書き出し（output: 'export'。D-80・prd/06 §7）: 記事は静的にビルドし直し（Astro と同じ）、
+// Next.js の静的書き出し（output: 'export'。D-80・prd/06 §7）: 記事は静的にビルドし直し（D-68 の Astro と同じ仕組み）、
 // マイページの中身はブラウザが API で取る（SPA と同じ。API の置き場も SPA の組）。初回表示・JS の量は Next.js と同じ扱い。
 import { describe, expect, it } from 'vitest';
 import {
@@ -8,6 +8,7 @@ import {
   DEFAULT_START_DATE,
   hiddenSettings,
   newGame,
+  ON_DEMAND_REVALIDATE,
   playMonth,
   requirementStatus,
   SCENARIOS,
@@ -114,17 +115,41 @@ describe('Next.js の静的書き出し（D-80）', () => {
     expect(ids).toContain('build-cpu-minutes');
   });
 
-  it('CF Paid は何もしないでシード 1〜20 のすべてで合格する（記事・受託）。初回表示は Next.js と同じ扱いで、所持金は Next.js に近い', () => {
-    for (const sc of [article, contract]) {
-      const failing: number[] = [];
+  it('CF Paid は何もしないで、受託はシード 1〜20 のすべてで合格する。記事は新しい記事がビルドまで開けない分（D-104）だけ鮮度が下がり、20 → 17 / 20', () => {
+    const failing = (sc: typeof article) => {
+      const out: number[] = [];
       for (let seed = 1; seed <= 20; seed++)
         if (endCash('nextjs-export', CF_PAID, seed, sc).end?.reason !== 'won')
-          failing.push(seed);
-      expect(failing).toEqual([]);
-    }
-    const diff =
-      endCash('nextjs-export', CF_PAID, 1).cash -
-      endCash('nextjs', CF_PAID, 1).cash;
-    expect(Math.abs(diff)).toBeLessThan(100);
+          out.push(seed);
+      return out;
+    };
+    expect(failing(contract)).toEqual([]);
+    expect(failing(article).length).toBe(3);
+  });
+
+  it('記事: 鮮度の遅れは間隔 + ビルドの時間（記事 2,000 ページで 2 分）。新しい記事はビルドまで開けないので、投稿した人の許容（1 分）を超えて 1 段下げる（D-104）', () => {
+    expect(article.satisfaction.freshness.newPostVisibleSec).toBe(60);
+    // 既定の 5 分: 遅れ 5 分 + 2 分 = 7 分で「普通」、さらに 1 段下げて「悪い」
+    const r = ex().history[0]!;
+    expect(r.satisfaction.stages.freshness).toBe('bad');
+    expect(r.satisfaction.reasons.freshness).toContain(
+      'ビルドの間隔 5 分 + ビルドの時間 約 2 分',
+    );
+    expect(r.satisfaction.reasons.freshness).toContain(
+      '投稿した人がすぐ開けない',
+    );
+    // 更新のたびのビルド: 遅れはビルドの時間だけ（2 分で「良い」）だが、許容の 1 分を超えるので「普通」
+    const o = playMonth(
+      applyActions(ex(), [
+        { type: 'set', key: 'buildInterval', value: ON_DEMAND_REVALIDATE },
+      ]),
+    ).history.at(-1)!;
+    expect(o.satisfaction.stages.freshness).toBe('fair');
+    // Next.js の ISR・Astro のキャッシュは新しい記事を閲覧のときに描くので下げない
+    for (const fw of ['nextjs', 'astro'] as const)
+      expect(
+        playMonth(newGame(CF_PAID, 42, article, DEFAULT_START_DATE, fw))
+          .history[0]!.satisfaction.stages.freshness,
+      ).toBe('good');
   });
 });

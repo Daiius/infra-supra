@@ -14,15 +14,22 @@ export type FrameworkId = 'nextjs' | 'vite-spa' | 'astro' | 'nextjs-export';
 export const browserCallsApi = (f: FrameworkId | undefined): boolean =>
   f === 'vite-spa' || f === 'nextjs-export';
 
-/** 記事を静的なページにし、更新をビルドし直しで反映するか（Astro・Next.js の静的書き出し。D-68・D-80）。 */
+/**
+ * 記事を静的なページにし、更新をビルドし直しで反映するか（Next.js の静的書き出し。D-80）。
+ * Astro は D-103 で、記事を閲覧のときに描いて前段でキャッシュする形（ISR と同じ経路）に替えた。
+ */
 export const rebuildsStaticPages = (f: FrameworkId | undefined): boolean =>
-  f === 'astro' || f === 'nextjs-export';
+  f === 'nextjs-export';
 
 type Source = { url: string; retrievedAt: string };
 const R = '2026-11-01';
 const src = (url: string): Source => ({ url, retrievedAt: R });
 /** Astro の調査の取得日（D-68）。Next.js の静的書き出し（D-80）も同じ日。 */
 const src2 = (url: string): Source => ({ url, retrievedAt: '2026-11-02' });
+/** Astro の記事をキャッシュする形の調査の取得日（D-103）。 */
+const src3 = (url: string): Source => ({ url, retrievedAt: '2026-11-03' });
+/** Astro の route caching（astro@7.0.0。Astro.cache.set・cache.invalidate・事業者ごとの provider。D-103）。 */
+const ASTRO_CACHING_DOC = 'https://docs.astro.build/en/guides/caching/';
 /** Next.js の静的書き出しの公式の文書（2026-08-09 更新・2026-11-02 取得。D-80）。 */
 const NEXT_EXPORT_DOC = 'https://nextjs.org/docs/app/guides/static-exports';
 
@@ -59,11 +66,12 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
   astro: {
     id: 'astro',
     label: 'Astro',
-    renderingModes: ['static', 'ssr'],
-    note: '既定ではページをビルドのときに HTML にしておき（静的）、ログインの要るページだけをアダプターでリクエストのたびに描く。ブラウザの JS は動きのある部品（アイランド）の分だけ。記事ごとの SNS のカード（OGP）は HTML に入る。静的なページの更新はビルドし直しで反映する（ISR は使わない）',
+    renderingModes: ['static', 'ssr', 'isr'],
+    note: '記事のページはアダプターで閲覧のときに描き、前段（事業者の CDN・Workers Cache・Node のメモリ）にキャッシュして、記事の投稿・編集のときにそのページのキャッシュを消す（Astro の route caching。消せない事業者は期限で取り直す）。ログインの要るページは毎回描く。ブラウザの JS は動きのある部品（アイランド）の分だけ。記事ごとの SNS のカード（OGP）は HTML に入る。記事のためにビルドし直さない（ビルドはデプロイのときだけ）',
     sources: [
       src2('https://docs.astro.build/en/guides/on-demand-rendering/'),
       src2('https://docs.astro.build/en/concepts/islands/'),
+      src3(ASTRO_CACHING_DOC),
     ],
   },
   'nextjs-export': {
@@ -87,6 +95,11 @@ export type DeployTarget = {
   support: 'native' | 'emulated' | 'unsupported';
   note: string;
   sources: Source[];
+  /**
+   * 記事（全員に同じ中身）を閲覧のときに描いてキャッシュする置き場（Astro。D-103）。onDemand は、記事の投稿・編集のときに
+   * そのページのキャッシュを全体から消せるか（消せなければ期限で取り直す）。
+   */
+  pageCache?: { label: string; onDemand: boolean; reason: string };
 };
 
 export const DEPLOY_TARGETS: readonly DeployTarget[] = [
@@ -154,36 +167,57 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
   {
     framework: 'astro',
     platform: 'cloudflare',
-    adapter: '@astrojs/cloudflare（Workers）',
+    adapter: '@astrojs/cloudflare（Workers）+ Workers Cache',
     support: 'native',
-    note: '静的なページ・JS・CSS は Workers の静的アセット（Worker を起動しない）、それ以外は Worker が描く。Pages はアダプターの対象外になった。ISR に当たる機能は無い。画像は Images の binding（imageService: cloudflare-binding）。ビルドは Workers Builds',
+    note: 'JS・CSS は Workers の静的アセット、ページは Worker が描く。Pages はアダプターの対象外になった。記事は route caching の cacheCloudflare()（アダプターが Workers Cache を有効にし、Cache-Tag を付ける）で Worker の前にキャッシュし、投稿・編集のときに ctx.cache.purge でタグ・パスごと消す（Instant Purge で全体に伝わる）。ヒットは Worker を動かさない（CPU なし）が、Workers Cache を有効にすると静的アセットも含めてすべてのリクエストが Workers の料金で数えられる。消した後の最初の閲覧は Worker が描き終わるのを待つ（その閲覧の CPU に描画の全部が乗る）。画像は Images の binding（imageService: cloudflare-binding）',
     sources: [
       src2('https://docs.astro.build/en/guides/integrations-guide/cloudflare/'),
-      src2(
-        'https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/',
-      ),
+      src3(ASTRO_CACHING_DOC),
+      src3('https://developers.cloudflare.com/workers/cache/'),
+      src3('https://developers.cloudflare.com/workers/cache/purge/'),
+      src3('https://developers.cloudflare.com/workers/platform/pricing/'),
     ],
+    pageCache: {
+      label: 'Workers Cache（cacheCloudflare）',
+      onDemand: true,
+      reason:
+        '投稿・編集のときに ctx.cache.purge でそのページのタグを消す（Instant Purge で全体に伝わる。消す呼び出しは Free の制限: タグ・prefix は 1 分 5 回・貯めて 25 回）',
+    },
   },
   {
     framework: 'astro',
     platform: 'vercel',
-    adapter: '@astrojs/vercel',
+    adapter: '@astrojs/vercel（isr）',
     support: 'native',
-    note: '静的なページは CDN、それ以外は Vercel Functions。アダプターの isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後にキャッシュする（期限・bypassToken での無効化。このモデルでは使わず、記事は静的にビルドする）。画像は imageService で Vercel の画像の最適化',
+    note: 'ページは Vercel Functions が描く。アダプターの isr で記事を最初の閲覧の後にキャッシュし（Next.js の ISR と同じ CDN と ISR の永続ストレージ・同じ料金）、投稿・編集のときに bypassToken（x-prerender-revalidate のヘッダー）でそのページを取り直す（全リージョンで 300ms 以内）。期限（expiration）で取り直すこともできる。exclude に挙げたページ（ログインの要るページ）は毎回描く。画像は imageService で Vercel の画像の最適化',
     sources: [
       src2('https://docs.astro.build/en/guides/integrations-guide/vercel/'),
+      src3('https://vercel.com/docs/incremental-static-regeneration'),
       src2('https://vercel.com/docs/pricing'),
     ],
+    pageCache: {
+      label: 'ISR（@astrojs/vercel の isr）',
+      onDemand: true,
+      reason:
+        'bypassToken を付けたリクエストでそのページを取り直す（Vercel の ISR の全リージョンの更新）',
+    },
   },
   {
     framework: 'astro',
     platform: 'sakura',
-    adapter: '@astrojs/node（standalone）',
+    adapter: '@astrojs/node（standalone）+ memoryCache',
     support: 'native',
-    note: 'nginx が静的なページを配り、それ以外は同じ VPS の Node（standalone は静的なファイルも配れる）。ビルドも VPS の上（ビルドの CPU は数えていない・仮定）',
+    note: 'nginx の後ろの同じ VPS の Node がページを描く。記事は route caching の memoryCache()（Node のメモリ。1 台なので共有の問題は無い）にキャッシュし、投稿・編集のときに cache.invalidate でタグ・パスごと消す。nginx の proxy_cache で持つ形は、消す仕組み（proxy_cache_purge）がオープンソース版の標準に無いので採らない。前段の Cloudflare で HTML もキャッシュするときは、Free の purge の API で同じページを消す（D-91）',
     sources: [
       src2('https://docs.astro.build/en/guides/integrations-guide/node/'),
+      src3(ASTRO_CACHING_DOC),
     ],
+    pageCache: {
+      label: 'Node のメモリ（memoryCache）',
+      onDemand: true,
+      reason:
+        '投稿・編集のときに cache.invalidate でそのページのタグ・パスを消す（1 台の Node の中）',
+    },
   },
   {
     framework: 'astro',
@@ -340,13 +374,19 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     platform: 'netlify',
     adapter: '@astrojs/netlify',
     support: 'native',
-    note: '静的なページは CDN、リクエストのたびに描くページは Netlify Functions。画像は既定で Netlify Image CDN。cacheOnDemandPages で描いたページを CDN にキャッシュできる（このモデルでは使わず、記事は静的にビルドする）。ビルドし直しは本番のデプロイ 1 回ごとにクレジットを使う',
+    note: 'ページは Netlify Functions が描く。記事は route caching の cacheNetlify()（Netlify-CDN-Cache-Control・Netlify-Cache-Tag。全エッジで共有する durable cache）でキャッシュし、投稿・編集のときにタグで消す。画像は既定で Netlify Image CDN',
     sources: [
       src2('https://docs.astro.build/en/guides/integrations-guide/netlify/'),
       src2(
         'https://docs.netlify.com/build/frameworks/framework-setup-guides/astro/',
       ),
+      src3(ASTRO_CACHING_DOC),
     ],
+    pageCache: {
+      label: 'Netlify の durable cache（cacheNetlify）',
+      onDemand: true,
+      reason: '投稿・編集のときにそのページのタグを消す',
+    },
   },
   // Google Cloud（D-88・prd/11 §16。2026-11-02 に公式の文書で確かめた）
   {
@@ -389,11 +429,18 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     adapter:
       '@astrojs/node（standalone のコンテナを Cloud Run）+ Firebase Hosting',
     support: 'native',
-    note: '静的なページは Firebase Hosting から配り、リクエストのたびに描くページは @astrojs/node のサーバーを Cloud Run で動かして書き換えで渡す。ビルドし直しは CI で行い firebase deploy する前提で、ビルドの費用は数えない（仮定）',
+    note: 'ページは @astrojs/node のサーバーを Cloud Run で動かし、Firebase Hosting の書き換えで渡す。記事は Cache-Control に public・s-maxage を付けて Hosting の CDN にキャッシュさせる。Hosting の CDN はデプロイのときしか消えず、パスやタグで消す方法が無いので、期限（s-maxage）で取り直す（Next.js の ISR と同じ）',
     sources: [
       src2('https://docs.astro.build/en/guides/integrations-guide/node/'),
       src2('https://firebase.google.com/docs/hosting/cloud-run'),
+      src2('https://firebase.google.com/docs/hosting/manage-cache'),
     ],
+    pageCache: {
+      label: 'Hosting の CDN（s-maxage）',
+      onDemand: false,
+      reason:
+        'Firebase Hosting の CDN のキャッシュはデプロイのときにしか消えない（パスやタグを指定して消す方法が文書に無い）ので、記事の投稿・編集で消せない',
+    },
   },
 ];
 
@@ -466,7 +513,8 @@ export function toSpa(
 /**
  * Astro にしたときのアプリの形（テンプレートの既定値。template-default・実測ではない。D-68）。
  * assetsFactor: ページあたりの JS・CSS のファイル数を Next.js の何倍とみなすか（アイランドの分だけ）。
- * minutesPerBuild: 1 回のビルドの時間（分）= base + 静的なページ 1,000 あたり perThousandPages。
+ * minutesPerBuild: 1 回のビルドの時間（分）= base + 静的なページ 1,000 あたり perThousandPages。Astro の記事はビルドし直さなく
+ * なった（D-103）ので、今は Next.js の静的書き出しのビルドの時間の式として使う（ゲーム上の仮定。D-80）。
  */
 export type AstroShape = {
   assetsFactor: number;
@@ -474,14 +522,26 @@ export type AstroShape = {
 };
 
 /**
- * テンプレートの Workload を Astro の形に書き換える（D-68）。ISR だったルート（全員に同じ中身の記事）は静的にビルドし、
- * SSR のルート（個人化）はアダプターでリクエストのたびに描く。JS・CSS はアイランドの分だけ（assetsFactor）。
- * 静的なページの更新はビルドし直し: 内容の更新（updatesPerMonth。記事のページを作り直す更新 = 記事の投稿・編集。
- * コメントはアイランドが API で読むのでビルドしない。D-70）を、間隔（省略は更新のたび）でまとめてビルドする。
+ * テンプレートの Workload を Astro の形に書き換える（D-68・D-103）。ISR だったルート（全員に同じ中身の記事）は、アダプターが
+ * 閲覧のときに描いて前段でキャッシュし、投稿・編集で消す（Astro の route caching）。数え方は ISR と同じ（時間の期限・オンデマンドの
+ * 式がそのまま使える。新しい種類は足さない。RS-05）ので、ルートは isr のまま残す。消した後の閲覧が描くのを待つか裏で描くかは
+ * 構成のノードで決まる。SSR のルート（個人化）は毎回描く。JS・CSS はアイランドの分だけ（assetsFactor）。
  */
-export function toAstro(
+export function toAstro(w: WorkloadInput, shape: AstroShape): WorkloadInput {
+  return {
+    ...w,
+    perPage: { ...w.perPage, assets: w.perPage.assets * shape.assetsFactor },
+  };
+}
+
+/**
+ * ISR だったルート（全員に同じ中身の記事）をビルドのときに HTML にし、更新をビルドし直しで反映する（Next.js の静的書き出し。D-80）。
+ * 内容の更新（updatesPerMonth。記事の投稿・編集。コメントを記事のページに含めるとコメントの投稿も）を、間隔（省略は更新のたび）で
+ * まとめてビルドする。
+ */
+export function toStaticBuild(
   w: WorkloadInput,
-  shape: AstroShape,
+  minutesPerBuild: AstroShape['minutesPerBuild'],
   build: { updatesPerMonth: number; intervalSeconds?: number },
 ): WorkloadInput {
   let staticPages = 0;
@@ -500,7 +560,6 @@ export function toAstro(
   return {
     ...w,
     routes,
-    perPage: { ...w.perPage, assets: w.perPage.assets * shape.assetsFactor },
     ...(staticPages > 0
       ? {
           build: {
@@ -508,20 +567,26 @@ export function toAstro(
             ...(build.intervalSeconds !== undefined
               ? { intervalSeconds: build.intervalSeconds }
               : {}),
-            minutesPerBuild:
-              shape.minutesPerBuild.base +
-              (staticPages / 1000) * shape.minutesPerBuild.perThousandPages,
+            minutesPerBuild: buildMinutes(minutesPerBuild, staticPages),
           },
         }
       : {}),
   };
 }
 
+/** 1 回のビルドの時間（分）= base + 静的なページ 1,000 あたり perThousandPages（ゲーム上の仮定。D-68）。 */
+export function buildMinutes(
+  m: AstroShape['minutesPerBuild'],
+  staticPages: number,
+): number {
+  return m.base + (staticPages / 1000) * m.perThousandPages;
+}
+
 /**
  * テンプレートの Workload を Next.js の静的書き出しの形に書き換える（D-80）。ISR だったルート（全員に同じ中身の記事）は
- * ビルドのときに HTML にし（Astro と同じく更新はビルドし直し）、SSR だったルート（個人化）はビルドした HTML の上で
+ * ビルドのときに HTML にし（更新はビルドし直し）、SSR だったルート（個人化）はビルドした HTML の上で
  * Client Component が API で中身を取る（SPA と同じく、ページの中身はデータの API）。JS・CSS は Next.js のまま。
- * 1 回のビルドの時間は Astro と同じ式（minutesPerBuild）を使う（ゲーム上の仮定）。
+ * 1 回のビルドの時間は buildMinutes（ゲーム上の仮定）。
  */
 export function toNextExport(
   w: WorkloadInput,
@@ -529,5 +594,5 @@ export function toNextExport(
   minutesPerBuild: AstroShape['minutesPerBuild'],
   build: { updatesPerMonth: number; intervalSeconds?: number },
 ): WorkloadInput {
-  return toSpa(toAstro(w, { assetsFactor: 1, minutesPerBuild }, build), spa);
+  return toSpa(toStaticBuild(w, minutesPerBuild, build), spa);
 }

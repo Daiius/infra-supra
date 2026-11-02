@@ -80,6 +80,25 @@ function migrateAction(a: Action): Action {
   };
 }
 
+/**
+ * その時点の状態に合わせて古い行動を読み替える（D-103。版は上げない）。Astro の記事は「ビルドの間隔」（buildInterval）を
+ * 「記事のキャッシュ」（pageCache）に替えた。値は同じ revalidateSec なので、その時点のフレームワークが Astro の
+ * buildInterval だけを pageCache に読み替える（途中で作り直した保存は、行動のときのフレームワークで判断する。
+ * Next.js の静的書き出しの buildInterval はそのまま）。
+ */
+export function migrateActionFor(
+  state: Pick<GameState, 'framework'>,
+  a: Action,
+): Action {
+  if (
+    a.type === 'set' &&
+    a.key === 'buildInterval' &&
+    state.framework === 'astro'
+  )
+    return { ...a, key: 'pageCache' };
+  return a;
+}
+
 const isObject = (x: unknown): x is Record<string, unknown> =>
   typeof x === 'object' && x !== null && !Array.isArray(x);
 
@@ -180,7 +199,10 @@ export function replaySave(save: SaveData): GameState {
   for (const actions of save.turns) {
     if (s.phase !== 'playing')
       throw new Error('保存の行動の途中でゲームが終わっている');
-    s = playMonth(applyActions(s, actions));
+    // 行動は 1 つずつ、その時点の状態で読み替えて当てる（applyActions と同じ順・同じ結果）
+    let t = s;
+    for (const a of actions) t = applyActions(t, [migrateActionFor(t, a)]);
+    s = playMonth(t);
   }
   if (s.history.length !== save.turns.length + 1)
     throw new Error('再生した月数が保存と合わない');

@@ -58,6 +58,11 @@ export const sakuraVps: PriceBookInput = {
   retrievedAt: R,
   sources: {
     spec: src('https://vps.sakura.ad.jp/specification/'),
+    // Astro の記事を Node のメモリにキャッシュする形（2026-11-03 に原文で確認。D-103）
+    astroCaching: {
+      url: 'https://docs.astro.build/en/guides/caching/',
+      retrievedAt: '2026-11-03',
+    },
     flow: src('https://vps.sakura.ad.jp/flow/'),
     sla: src('https://vps.sakura.ad.jp/sla/'),
     // プランの変更（2026-11-01 に原文で確認。D-27）
@@ -178,6 +183,12 @@ export const sakuraVps: PriceBookInput = {
           sourceIds: ['nextSelfHosting'],
         },
         {
+          id: 'astro-memory-cache',
+          premise:
+            'Astro の route caching（astro@7.0.0）は Node 向けにメモリのキャッシュ（memoryCache()）を組み込みで持ち、cache.invalidate でタグ・パス（完全一致）を消せる。1 台の Node のメモリなので、再起動で消える',
+          sourceIds: ['astroCaching'],
+        },
+        {
           id: 'scale-up',
           premise:
             'さくらの VPS の上位プランへの変更（スケールアップ）はサーバーを停止して行い、増えたディスクを OS に認識させる作業は利用者が行う（growpart・resize2fs など）',
@@ -238,6 +249,12 @@ export const sakuraVps: PriceBookInput = {
           premise:
             'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動く（CDN を前に置くときや複数台では設定が要る）',
           sourceIds: ['nextSelfHosting'],
+        },
+        {
+          id: 'astro-memory-cache',
+          premise:
+            'Astro の route caching（astro@7.0.0）は Node 向けにメモリのキャッシュ（memoryCache()）を組み込みで持ち、cache.invalidate でタグ・パス（完全一致）を消せる。1 台の Node のメモリなので、再起動で消える',
+          sourceIds: ['astroCaching'],
         },
         {
           id: 'no-smaller-disk',

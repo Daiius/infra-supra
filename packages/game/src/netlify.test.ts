@@ -119,15 +119,19 @@ describe('Netlify の構成', () => {
     );
   });
 
-  it('Astro: 記事のビルドし直しが本番のデプロイ（クレジット）になり、Next.js より高くつく', () => {
+  it('静的書き出し: 記事のビルドし直しが本番のデプロイ（クレジット）になり、Next.js より高くつく。Astro は記事をキャッシュし、デプロイを数えない（D-103）', () => {
+    const exp = doNothing(PRO, 1, 'nextjs-export');
+    expect(
+      exp.history[0]!.lines.some((l) => l.meterId === 'production-deploys'),
+    ).toBe(true);
+    const next = doNothing(PRO, 1, 'nextjs');
+    expect(exp.history[0]!.infraCost).toBeGreaterThan(
+      next.history[0]!.infraCost,
+    );
     const astro = doNothing(PRO, 1, 'astro');
     expect(
       astro.history[0]!.lines.some((l) => l.meterId === 'production-deploys'),
-    ).toBe(true);
-    const next = doNothing(PRO, 1, 'nextjs');
-    expect(astro.history[0]!.infraCost).toBeGreaterThan(
-      next.history[0]!.infraCost,
-    );
+    ).toBe(false);
   });
 
   it('受託: Pro は月 $45（Netlify $20 + Supabase $25）のまま、クレジットに収まる', () => {

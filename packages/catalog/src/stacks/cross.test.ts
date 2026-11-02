@@ -551,9 +551,7 @@ describe('Astro の API の置き場（D-69）', () => {
   const ids = (a: ReturnType<typeof astro>) => a.nodes.map((n) => n.id);
   const w = () =>
     resolveWorkload(
-      toAstro(articleCommunity(100_000), ARTICLE_COMMUNITY_ASTRO, {
-        updatesPerMonth: 5_000,
-      }),
+      toAstro(articleCommunity(100_000), ARTICLE_COMMUNITY_ASTRO),
     );
 
   it('選べる組は Vercel・VPS の Astro + Workers・D1 と、Cloudflare の Astro + VPS の API だけ（AWS には Astro を載せない）', () => {
@@ -585,11 +583,17 @@ describe('Astro の API の置き場（D-69）', () => {
     }
   });
 
-  it('Vercel: Supabase が外れ、マイページ・API の DB が Worker → D1 になる（記事は静的・ビルドは残る）', () => {
+  it('Vercel: Supabase が外れ、マイページ・記事の描き直し・API の DB が Worker → D1 になる（D-103: 記事は ISR でキャッシュ・ビルドは無い）', () => {
     const a = astro('vercel-supabase-pro', { api: 'cf-workers-astro' });
     expect(accountsOf(a)).toEqual(['vercel', 'cloudflare', 'aws']);
     expect(ids(a)).not.toContain('db');
-    expect(ids(a)).toContain('build');
+    expect(ids(a)).not.toContain('build');
+    expect(a.routes['isr-revalidate']).toEqual([
+      'fn',
+      'isr',
+      'cf-worker',
+      'cf-d1',
+    ]);
     expect(a.routes['document-ssr']).toEqual([
       'cdn',
       'fn',
@@ -653,13 +657,14 @@ describe('Astro の API の置き場（D-69）', () => {
     });
   });
 
-  it('Cloudflare: D1 が外れ、ブラウザの API・投稿は VPS に直接。マイページを描く Worker は残り、VPS の API を呼ぶ', () => {
+  it('Cloudflare: D1 が外れ、ブラウザの API・投稿は VPS に直接。マイページと記事を描く Worker は残り、VPS の API を呼ぶ', () => {
     const a = astro('cloudflare-vinext-paid', { api: 'sakura-vps-2gb' });
     expect(accountsOf(a)).toEqual(['cloudflare', 'sakura']);
     expect(ids(a)).not.toContain('d1');
     expect(ids(a)).toContain('worker');
-    expect(ids(a)).toContain('build');
+    expect(ids(a)).not.toContain('build');
     expect(a.routes['document-ssr']).toEqual(['worker', 'vps']);
+    expect(a.routes['isr-revalidate']).toEqual(['worker', 'vps']);
     expect(a.routes.api).toEqual(['vps']);
     expect(a.routes['image-write']).toEqual(['vps', 'r2']);
     expect(a.routes['document-static']).toEqual(['assets']);
@@ -709,21 +714,25 @@ describe('Astro の API の置き場（D-69）', () => {
     const ssr = r.classes['document-ssr'];
     const apiCls = r.classes.api;
     const vps = a.nodes.find((n) => n.id === 'vps')!;
-    expect(vps.config).toMatchObject({ serverApiClasses: ['document-ssr'] });
+    expect(vps.config).toMatchObject({
+      serverApiClasses: ['document-ssr', 'isr-revalidate'],
+    });
+    const rev = r.classes['isr-revalidate'].count;
     expect(sim.nodes.vps!.resources['egress-gb']).toBeCloseTo(
-      ((ssr.count + apiCls.count) * apiCls.perRequest.kb +
+      ((ssr.count + rev + apiCls.count) * apiCls.perRequest.kb +
         r.classes['image-write'].count *
           r.classes['image-write'].perRequest.kb) /
         1e6,
     );
   });
 
-  it('Cloudflare + VPS の API: VPS に届くのはマイページの描画の問い合わせ・API・投稿だけ', () => {
+  it('Cloudflare + VPS の API: VPS に届くのはマイページ・記事の描き直しの問い合わせ・API・投稿だけ', () => {
     const a = astro('cloudflare-vinext-paid', { api: 'sakura-vps-2gb' });
     const r = w();
     const sim = simulateResources(r, a);
     expect(sim.nodes.vps!.resources.requests).toBeCloseTo(
       r.classes['document-ssr'].count +
+        r.classes['isr-revalidate'].count +
         r.classes.api.count +
         r.classes['image-write'].count,
     );

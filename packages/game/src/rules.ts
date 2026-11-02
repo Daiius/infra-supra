@@ -183,6 +183,11 @@ export type JudgeInput = {
   /** 即時反映（オンデマンド ISR）の要件を満たさない。さらに 1 段下げる（仮定・D-32）。 */
   onDemandUnmet?: boolean;
   /**
+   * 新しく投稿された記事が、投稿した人に開けるまでの許容を超える（記事をビルドし直す形。ビルドまでページが無い）。
+   * さらに 1 段下げる（コミュニティの要件を満たさない。仮定・D-104）。
+   */
+  newPostDelayed?: boolean;
+  /**
    * コメントが遅れて見える時間と、コメントの鮮度の段階の境目（D-85）。コメントを記事のページに含め、時間で再検証・ビルドするときだけ
    * （遅れ = 間隔）。省略はコメントがすぐ見える（ブラウザで読み込む・オンデマンド・キャッシュしない）。鮮度は記事とコメントの悪い方。
    */
@@ -250,7 +255,8 @@ export function judgeStages(
             ? 'fair'
             : 'bad';
       const a = i.eventuallyConsistent ? STAGE_DOWN[base] : base;
-      const article = i.onDemandUnmet ? STAGE_DOWN[a] : a;
+      const unmet = i.onDemandUnmet ? STAGE_DOWN[a] : a;
+      const article = i.newPostDelayed ? STAGE_DOWN[unmet] : unmet;
       const c = i.commentFreshness;
       if (!c) return article;
       const comment: Stage =

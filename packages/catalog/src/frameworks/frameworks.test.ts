@@ -241,23 +241,33 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
   });
 });
 
-describe('Astro（D-68）', () => {
+describe('Astro（D-68・D-103: 記事は閲覧のときに描いてキャッシュし、投稿・編集で消す）', () => {
   const pv = 300_000;
   // 内容の更新（ゲームの記事コミュニティと同じ数え方: PV × API × 書き込み × 記事の投稿・編集 0.01 = 月 300 回。D-70）
   const updates = pv * 0.1 * 0.01;
-  const w = (intervalSeconds?: number) =>
-    toAstro(articleCommunity(pv), ARTICLE_COMMUNITY_ASTRO, {
-      updatesPerMonth: updates,
-      ...(intervalSeconds ? { intervalSeconds } : {}),
-    });
-  const est = (id: string, intervalSeconds?: number) =>
+  /** オンデマンド（投稿・編集で消す）の記事のルート。 */
+  const w = () => {
+    const a = toAstro(articleCommunity(pv), ARTICLE_COMMUNITY_ASTRO);
+    return {
+      ...a,
+      routes: a.routes.map((r) => {
+        if (r.rendering !== 'isr') return r;
+        const { revalidateSeconds: _, ...rest } = r;
+        return {
+          ...rest,
+          onDemandUpdatesPerMonth: updates,
+          onDemandMaxAgeSeconds: 86_400,
+          onDemandPagesPerUpdate: 2,
+        };
+      }),
+    };
+  };
+  const est = (id: string) =>
     estimate({
-      workload: w(intervalSeconds),
+      workload: w(),
       architecture: composeStack(id, {}, { framework: 'astro' }),
       books,
     });
-  const build = (e: ReturnType<typeof est>) =>
-    e.usage.find((u) => u.nodeId === 'build');
 
   it('載せ方: Cloudflare・Vercel・VPS はアダプターで載り、AWS は公式のアダプターが無いので載せない', () => {
     for (const p of ['cloudflare', 'vercel', 'sakura'] as const)
@@ -269,95 +279,138 @@ describe('Astro（D-68）', () => {
     expect(frameworkSupported('nextjs', 'aws')).toBe(true);
   });
 
-  it('記事（ISR）は静的なページに、個人化（SSR）はそのまま。JS・CSS はアイランドの分だけ。ビルドは記事のページ数で長くなる', () => {
-    const a = w(300);
-    expect(a.routes.map((r) => r.rendering)).toEqual(['static', 'ssr']);
+  it('記事のキャッシュの置き場: 投稿・編集で消せるのは Cloudflare・Vercel・VPS・Netlify。Google Cloud の Hosting の CDN は消せない。出典は Astro の route caching ほか', () => {
+    for (const p of ['cloudflare', 'vercel', 'sakura', 'netlify'] as const)
+      expect(deployTarget('astro', p)?.pageCache?.onDemand).toBe(true);
+    expect(deployTarget('astro', 'gcp')?.pageCache?.onDemand).toBe(false);
+    for (const p of ['cloudflare', 'sakura', 'netlify'] as const)
+      expect(deployTarget('astro', p)?.sources.map((x) => x.url)).toContain(
+        'https://docs.astro.build/en/guides/caching/',
+      );
+    expect(
+      deployTarget('astro', 'vercel')?.sources.map((x) => x.url),
+    ).toContain('https://vercel.com/docs/incremental-static-regeneration');
+    expect(FRAMEWORKS.astro.renderingModes).toContain('isr');
+  });
+
+  it('記事（ISR）はそのまま（新しい種類は足さない・RS-05）、個人化（SSR）もそのまま。JS・CSS はアイランドの分だけ。記事のためのビルドは無い', () => {
+    const a = toAstro(articleCommunity(pv), ARTICLE_COMMUNITY_ASTRO);
+    expect(a.routes.map((r) => r.rendering)).toEqual(['isr', 'ssr']);
     expect(a.perPage.assets).toBeCloseTo(10 * 0.3, 12);
-    expect(a.build).toEqual({
-      updatesPerMonth: updates,
-      intervalSeconds: 300,
-      minutesPerBuild: 2,
-    });
-    // 業務アプリは静的なページが無いのでビルドし直しが無い
-    const b = toAstro(businessApp(100_000), BUSINESS_APP_ASTRO, {
-      updatesPerMonth: 1000,
-    });
+    expect(a.build).toBeUndefined();
+    const b = toAstro(businessApp(100_000), BUSINESS_APP_ASTRO);
     expect(b.build).toBeUndefined();
   });
 
-  it('構成: ISR の経路とキャッシュを持たず、Cloudflare・Vercel・Netlify はビルドのノードを持つ（VPS は同じホストでビルド・Google Cloud は CI でビルドして数えない）', () => {
+  it('構成: どの事業者も記事の ISR の経路（閲覧・描き直し）を持ち、ビルドのノードは無い', () => {
     for (const d of STACK_DEFS) {
       if (!frameworkSupported('astro', d.platform)) continue;
       const a = composeStack(d, {}, { framework: 'astro' });
       expect(() => ArchitectureSchema.parse(a)).not.toThrow();
-      expect(a.routes['document-isr']).toBeUndefined();
+      expect(a.routes['document-isr']).toBeDefined();
+      expect(a.routes['isr-revalidate']).toBeDefined();
       expect(a.routes['document-ssr']).toBeDefined();
-      expect(a.nodes.some((n) => n.id === 'kv' || n.id === 'isr')).toBe(false);
-      expect(a.nodes.some((n) => n.id === 'build')).toBe(
-        d.platform !== 'sakura' && d.platform !== 'gcp',
-      );
+      expect(a.nodes.some((n) => n.id === 'build')).toBe(false);
+      // KV の ISR のキャッシュ（vinext）は使わない
+      expect(a.nodes.some((n) => n.id === 'kv')).toBe(false);
       expect(a.name).toContain('（Astro）');
       expect(a.name).not.toContain('vinext');
     }
-  });
-
-  it('Cloudflare: 記事は静的アセット（Worker を起動しない）。Next.js より記事の閲覧の分（PV × 0.6）だけ Worker のリクエストが減る', () => {
-    const astro = est('cloudflare-vinext-paid', 300);
-    const next = estimate({
-      workload: articleCommunity(pv),
-      architecture: composeStack('cloudflare-vinext-paid'),
-      books,
-    });
-    const req = (e: typeof astro) =>
-      e.usage.find((u) => u.nodeId === 'worker' && u.meterId === 'requests')
-        ?.quantity ?? 0;
-    expect(req(next) - req(astro)).toBeCloseTo(pv * 0.6, -1);
-  });
-
-  it('ビルドの時間: Workers Paid は月 6,000 分まで込み・以降 $0.005、Free は 3,000 分を超えると上位のプランが要る', () => {
-    // 更新のたび（1 回 2 分の枠）。1,000 万 PV で記事の更新は月 1 万回
-    const big = (id: string, intervalSeconds?: number) =>
-      estimate({
-        workload: toAstro(
-          articleCommunity(10_000_000),
-          ARTICLE_COMMUNITY_ASTRO,
-          {
-            updatesPerMonth: 10_000_000 * 0.1 * 0.01,
-            ...(intervalSeconds ? { intervalSeconds } : {}),
-          },
-        ),
-        architecture: composeStack(id, {}, { framework: 'astro' }),
-        books,
-      });
-    const paid = big('cloudflare-vinext-paid');
-    const minutes = build(paid)!.quantity;
-    const slots = (730 * 3600) / 120;
-    expect(minutes).toBeCloseTo(slots * (1 - Math.exp(-10_000 / slots)) * 2, 6);
-    const line = paid.bill.lines.find(
-      (l) => l.priceRef.meterId === 'build-minutes',
+    // Next.js で選んでいた「キャッシュしない」も Astro には効かない（置き場は事業者で決まる）
+    const none = composeStack(
+      'vercel-supabase-pro',
+      { isrCache: 'none' },
+      { framework: 'astro' },
     );
-    expect(line?.amount).toBeCloseTo((minutes - 6000) * 0.005, 6);
-    const hit = (e: ReturnType<typeof big>) =>
-      e.premises.find(
-        (x) => x.id === 'pool:cloudflare:workers-free:free-build-minutes',
-      );
-    expect(hit(big('cloudflare-vinext-free'))?.hit).toBe(true);
-    expect(hit(big('cloudflare-vinext-free'))?.effect).toBe('upgrade-required');
-    // 1 時間ごとにまとめると Free の 3,000 分に収まる（730 回 × 2 分）
-    expect(hit(big('cloudflare-vinext-free', 3600))?.hit).toBe(false);
-    // 30 万 PV・5 分ごと（記事の更新は月 300 回）なら Free にも収まる
-    expect(hit(est('cloudflare-vinext-free', 300))?.hit).toBe(false);
+    expect(none.nodes.some((n) => n.id === 'isr')).toBe(true);
   });
 
-  it('Vercel Pro はビルドの分 × 4 vCPU の CPU minute を $0.0035 で数え、Hobby は込み', () => {
-    const pro = est('vercel-supabase-pro', 3600);
-    const u = pro.usage.find(
-      (x) => x.nodeId === 'build' && x.meterId === 'build-cpu-minutes',
-    )!;
-    const minutes = pro.simulation.workload.builds.minutes;
-    expect(u.quantity).toBeCloseTo(minutes * 4, 6);
-    const hobby = est('vercel-supabase-hobby', 3600);
-    expect(hobby.usage.some((x) => x.nodeId === 'build')).toBe(false);
+  it('Cloudflare: 記事は Worker の前の Workers Cache。ヒットは CPU 0、すべての閲覧と静的アセットを Workers のリクエストで数え、消した後の閲覧は描画の全部を待つ', () => {
+    const a = composeStack(
+      'cloudflare-vinext-paid',
+      {},
+      { framework: 'astro' },
+    );
+    const worker = a.nodes.find((n) => n.id === 'worker')!;
+    expect(worker.config).toMatchObject({
+      kind: 'function',
+      backgroundClasses: ['isr-revalidate'],
+      cache: { classes: ['document-isr'], hitCpuMs: 0 },
+    });
+    expect(worker.facts).toEqual(
+      expect.arrayContaining([
+        'astro-route-cache',
+        'workers-cache-front',
+        'workers-cache-purge',
+      ]),
+    );
+    expect(worker.facts).not.toContain('workers-cache');
+    expect(a.routes['document-isr']).toEqual(['worker']);
+    const assets = a.nodes.find((n) => n.id === 'assets')!;
+    expect(assets.billing?.meters).toEqual({ requests: 'requests' });
+
+    const e = est('cloudflare-vinext-paid');
+    const u = (node: string, meter: string) =>
+      e.usage.find((x) => x.nodeId === node && x.meterId === meter)?.quantity ??
+      0;
+    const cls = e.simulation.workload.classes;
+    // Worker のリクエスト = 記事の閲覧（ヒットも）+ マイページ + API（描き直しは同じリクエストの中）
+    expect(u('worker', 'requests')).toBeCloseTo(
+      cls['document-isr'].count +
+        cls['document-ssr'].count +
+        cls.api.count +
+        (cls['image-write']?.count ?? 0),
+      3,
+    );
+    expect(u('assets', 'requests')).toBeGreaterThan(0);
+    // 1 リクエストの CPU の最大は、消した後の閲覧（キャッシュから返す CPU + 描画）。Free の 10 ms を超える
+    const free = est('cloudflare-vinext-free');
+    expect(
+      free.premises.some(
+        (p) =>
+          p.id.startsWith('limit:cloudflare:workers-free:cpu-ms-per-request') &&
+          p.hit,
+      ),
+    ).toBe(true);
+    expect(
+      free.simulation.nodes.worker!.cpuSources.some(
+        (s) => s.requestClass === 'isr-revalidate' && s.cpuMs >= 15,
+      ),
+    ).toBe(true);
+  });
+
+  it('Vercel: @astrojs/vercel の isr で Next.js と同じ CDN と ISR の永続ストレージを通る', () => {
+    const a = composeStack('vercel-supabase-pro', {}, { framework: 'astro' });
+    expect(a.routes['document-isr']).toEqual(['cdn', 'isr']);
+    expect(a.routes['isr-revalidate']).toEqual(['fn', 'isr', 'db']);
+    expect(a.nodes.find((n) => n.id === 'fn')?.facts).toContain('astro-isr');
+    const e = est('vercel-supabase-pro');
+    expect(e.usage.some((x) => x.meterId === 'isr-writes')).toBe(true);
+  });
+
+  it('VPS: Node のメモリにキャッシュ（前段の Cloudflare で HTML もキャッシュできる）。Google Cloud: Hosting の CDN（s-maxage）', () => {
+    const vps = composeStack('sakura-vps-2gb', {}, { framework: 'astro' });
+    expect(vps.routes['document-isr']).toEqual(['vps']);
+    expect(vps.nodes.find((n) => n.id === 'vps')?.facts).toContain(
+      'astro-memory-cache',
+    );
+    const front = composeStack(
+      'sakura-vps-2gb',
+      { frontCdn: 'html' },
+      { framework: 'astro' },
+    );
+    const cf = front.nodes.find((n) => n.id === 'cf-cdn')!;
+    expect(cf.config.kind === 'cdn' && cf.config.ttlClasses).toEqual([
+      'document-isr',
+    ]);
+    const gcp = composeStack('gcp-cloud-run', {}, { framework: 'astro' });
+    const cdn = gcp.nodes.find((n) => n.id === 'cdn')!;
+    expect(cdn.config.kind === 'cdn' && cdn.config.ttlClasses).toEqual([
+      'document-isr',
+    ]);
+    expect(gcp.nodes.find((n) => n.id === 'run')?.facts).not.toContain(
+      'next-local-cache',
+    );
   });
 });
 

@@ -41,7 +41,15 @@ export type SatisfactionRules = {
     veryHeavyImageKB?: number;
   };
   quality: { good: number; fair: number };
-  freshness: { good: number; fair: number };
+  freshness: {
+    good: number;
+    fair: number;
+    /**
+     * 利用者が投稿した記事が、投稿した人に開けるまでの許容（秒。D-104・ゲーム上の仮定）。記事をビルドし直す形（静的書き出し）では、
+     * 新しい記事のページはビルドが終わるまで無い。遅れ（間隔 + ビルドの時間）がこれを超えると、鮮度を 1 段下げる。省略は判定しない。
+     */
+    newPostVisibleSec?: number;
+  };
   feature: { expectedPerMonth: number; good: number; fair: number };
 };
 
@@ -232,9 +240,9 @@ export type Scenario = {
   };
   incidents: { selfHostedChancePerMonth: number };
   /**
-   * API の書き込みのうち、記事のページ（ISR・Astro の静的なページ）の HTML を作り直す更新の割合（記事の投稿・編集）。
+   * API の書き込みのうち、記事のページ（ISR・Astro のキャッシュ・静的書き出しの静的なページ）の HTML を作り直す更新の割合（記事の投稿・編集）。
    * 月の内容の更新 = PV × 1 PV あたりの API × 書き込みの割合 × この値。オンデマンドの再検証の再生成・CDN の無効化と、
-   * Astro のビルドし直しの数のもと。コメント・いいねは別のデータとして読み込み、ページを作り直さないとみなす（既定。設定「コメントの描き方」で含めると comments を足す）
+   * Astro のキャッシュを消す数・静的書き出しのビルドし直しの数のもと。コメント・いいねは別のデータとして読み込み、ページを作り直さないとみなす（既定。設定「コメントの描き方」で含めると comments を足す）
    * （一般的な作り方の仮定。D-49・D-70・prd/04 §2）。
    */
   pageUpdateShare: number;
@@ -310,6 +318,7 @@ export type Scenario = {
       | 'isr'
       | 'apiCacheTtl'
       | 'buildInterval'
+      | 'pageCache'
       | 'comments'
     )[];
     slots?: SlotId[];
@@ -364,7 +373,7 @@ export type ScenarioText = {
  * 見取り図の区画の作られ方（D-102）。画面は札の文字（REGION_SOURCES の short）を必ず出し、色・模様は補助にする。
  */
 export type RegionSource =
-  'build' | 'isr' | 'ssr' | 'api' | 'island' | 'shell' | 'image';
+  'build' | 'isr' | 'cached' | 'ssr' | 'api' | 'island' | 'shell' | 'image';
 
 /** 区画の作られ方の札（short）と凡例の説明（long）。 */
 export const REGION_SOURCES: Readonly<
@@ -377,6 +386,11 @@ export const REGION_SOURCES: Readonly<
   isr: {
     short: 'ISR（キャッシュ）',
     long: '最初の閲覧でサーバーが描いてキャッシュし、再検証で描き直す',
+  },
+  // Astro の記事（D-103）
+  cached: {
+    short: '閲覧時に SSR + キャッシュ（投稿で消す）',
+    long: '最初の閲覧でサーバーが描き、前段（CDN・Workers Cache・Node のメモリ）にキャッシュする。記事の投稿・編集でそのページのキャッシュを消す（消せない事業者では期限で取り直す）',
   },
   ssr: {
     short: '閲覧ごとに SSR',

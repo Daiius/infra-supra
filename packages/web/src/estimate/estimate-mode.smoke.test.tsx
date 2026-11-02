@@ -121,7 +121,7 @@ describe('見積モードの画面', () => {
     expect(partSelect('DB のバックアップ')?.value).toBe('default');
   });
 
-  it('W-08 Astro × CF Free: 1 リクエストの CPU の上限の前提に、当たるルートと Worker を通らない静的なページを添える（D-99）', () => {
+  it('W-08 Astro × CF Free: 1 リクエストの CPU の上限の前提に、当たるルートを添える（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', () => {
     window.history.replaceState(
       null,
       '',
@@ -131,7 +131,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     expect(
       screen.getByText(
-        /^個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える。記事のページは静的なので Worker を起動しない$/,
+        /^記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える$/,
       ),
     ).toBeDefined();
   });

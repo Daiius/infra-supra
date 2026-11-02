@@ -1,6 +1,6 @@
 // Google Cloud（Cloud Run + Firebase Hosting。D-88・prd/11 §16）をゲームで選べること。最小インスタンス数・DB（Firestore・Cloud SQL）・
 // 画像だけ Cloudflare を選べ、コンテナの維持の手間が少しかかる。基準プレイ（何もしない・シード 1〜20）。
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { composeStack, loadPriceBooks, type Choices } from 'catalog';
 import { estimate } from 'estimator';
 import {
@@ -24,7 +24,11 @@ import {
   upkeepOf,
   type FrameworkId,
 } from './index.ts';
+
 import type { Scenario } from './scenario.ts';
+
+// 基準プレイ（シード 1〜20 × 構成）を何本も回すので、全パッケージを並べて回すと既定の 5 秒を超えうる（neon.test と同じ）
+vi.setConfig({ testTimeout: 30_000 });
 
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const GCP = idx('gcp-cloud-run');

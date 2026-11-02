@@ -422,7 +422,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
   incidents: { selfHostedChancePerMonth: 0.08 },
   // 記事のページを作り直すのは記事の投稿・編集だけ（書き込みの 1%。30 万 PV で月 300 回 ≒ 1 日 10 回）。
   // コメント・いいねは別のデータとして読み込み（クライアントで取得・Suspense で後から流す）、記事のページを再生成しない
-  // （一般的な作り方の仮定。D-70・prd/04 §2）。Astro のビルドし直しも同じ回数（D-68）
+  // （一般的な作り方の仮定。D-70・prd/04 §2）。Astro の記事のキャッシュを消す回数・静的書き出しのビルドし直しも同じ回数（D-68・D-80・D-103）
   pageUpdateShare: 0.01,
   // 設定「コメントの描き方」で記事のページに含めると、コメントの投稿も記事のページを作り直す（D-82）。コメントの投稿の割合は
   // 出典が無く、D-49 の旧仮定（書き込みの半分がページを変える）に合うよう、記事の投稿・編集と合わせて 0.5 になる 0.49 とする
@@ -452,7 +452,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
       veryHeavyImageKB: 1_000,
     },
     quality: { good: 150, fair: 100 },
-    freshness: { good: 300, fair: 3600 },
+    // 投稿した人は投稿の直後に自分の記事を開く（1 分まで待てる。ゲーム上の仮定・D-104）。静的書き出しの新しい記事はビルドまで開けない
+    freshness: { good: 300, fair: 3600, newPostVisibleSec: 60 },
     feature: { expectedPerMonth: 8, good: 1, fair: 0.6 },
   },
   effort: { perMonth: 10, selfHostedUpkeep: 3 },
@@ -473,7 +474,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
   frameworks: {
     allowed: ['nextjs', 'vite-spa', 'astro', 'nextjs-export'],
     default: 'nextjs',
-    // Astro（D-68）: 記事は静的にビルドし、JS はアイランドの分だけ。記事は検索・SNS から初めて来る読者が多いので、
+    // Astro（D-68・D-103）: 記事は閲覧のときに描いてキャッシュし、JS はアイランドの分だけ。記事は検索・SNS から初めて来る読者が多いので、
     // 初回表示の軽さが効く（仮定: 速さの重さを 1 つ減らす）
     astro: { shape: ARTICLE_COMMUNITY_ASTRO, firstLoadLight: true },
     spa: {

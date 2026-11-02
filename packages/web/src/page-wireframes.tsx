@@ -15,6 +15,7 @@ export type ResolvedPage = ReturnType<typeof pageWireframes>[number];
 const SOURCE_CLASS: Record<RegionSource, string> = {
   build: 'border-success bg-success/15',
   isr: 'border-info bg-info/15',
+  cached: 'border-info bg-info/15',
   ssr: 'border-warning bg-warning/15',
   api: 'border-dashed border-secondary bg-secondary/10',
   island: 'border-dashed border-secondary bg-secondary/10',

@@ -145,12 +145,21 @@ describe('コメントの描き方（D-82）', () => {
     expect(est(1).usd).toBeCloseTo((30_600 - 1_000) * 0.005, 6);
   });
 
-  it('Astro・静的書き出しでは、コメントの投稿のたびのビルドし直しが増える', () => {
-    for (const fw of ['astro', 'nextjs-export'] as const) {
-      const a = resolved(start(CF_PAID, 0, 0, fw));
-      const b = resolved(start(CF_PAID, 0, 1, fw));
-      expect(b.builds.count).toBeGreaterThan(a.builds.count * 10);
-    }
+  it('静的書き出しでは、コメントの投稿のたびのビルドし直しが増える。Astro はビルドせず、記事のキャッシュを消す回数が増える（D-103）', () => {
+    const a = resolved(start(CF_PAID, 0, 0, 'nextjs-export'));
+    const b = resolved(start(CF_PAID, 0, 1, 'nextjs-export'));
+    expect(b.builds.count).toBeGreaterThan(a.builds.count * 10);
+    const x = resolved(start(CF_PAID, 0, 0, 'astro'));
+    const y = resolved(start(CF_PAID, 0, 1, 'astro'));
+    expect(x.builds.count).toBe(0);
+    expect(y.builds.count).toBe(0);
+    expect(y.onDemandUpdates).toBeCloseTo(15_000, 6);
+    expect(y.classes['isr-revalidate'].count).toBeGreaterThan(
+      x.classes['isr-revalidate'].count,
+    );
+    expect(settingNote(start(CF_PAID, 0, 1, 'astro'), 'comments')).toContain(
+      'キャッシュを消す',
+    );
   });
 
   it('切り替えは手間 2（どちらの向きも）。SPA では選べない', () => {

@@ -44,11 +44,17 @@ describe('Netlify の構成', () => {
     expect(cdn.config).toMatchObject({ ttlClasses: ['api-content'] });
   });
 
-  it('Astro: ビルドし直しを本番のデプロイ（クレジット）で数える', () => {
+  it('Astro: 記事は CDN の durable cache（cacheNetlify）。記事のためのビルドし直しは無い（D-103）。静的書き出しはデプロイのクレジットで数える', () => {
     const a = composeStack('netlify-supabase-free', {}, { framework: 'astro' });
-    const build = a.nodes.find((n) => n.id === 'build')!;
+    expect(a.nodes.some((n) => n.id === 'build')).toBe(false);
+    expect(a.routes['document-isr']).toEqual(['cdn', 'fn']);
+    const x = composeStack(
+      'netlify-supabase-free',
+      {},
+      { framework: 'nextjs-export' },
+    );
+    const build = x.nodes.find((n) => n.id === 'build')!;
     expect(build.billing?.meters).toEqual({ deploys: 'production-deploys' });
-    expect(a.routes['document-isr']).toBeUndefined();
   });
 
   it('画像だけ Cloudflare: Image CDN・Blobs を外し、R2 への書き込みを Netlify の転送量で数える', () => {

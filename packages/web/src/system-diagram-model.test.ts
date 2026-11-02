@@ -196,6 +196,18 @@ describe('diagramModel', () => {
     );
   });
 
+  it('Astro の記事のページ（閲覧時に描いてキャッシュ。D-103）も ISR の流れに載り、Cloudflare では Worker を通る', () => {
+    const sc = SCENARIOS['article-community']!;
+    const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
+    const arch = diagramArchitecture(sc, cf, 'astro');
+    expect(arch.routes['document-isr']).toEqual(['worker']);
+    const m = diagramModel(arch, pageWireframes(sc, 'astro'));
+    expect(m.lanes.find((l) => l.id === 'isr')!.pages).toContain(
+      '記事のページ',
+    );
+    expect(m.lanes.some((l) => l.id === 'revalidate')).toBe(true);
+  });
+
   it('VPS の構成は 1 台に全部の経路が集まり、メールの送信・ドメインは経路の外に出る', () => {
     const sc = SCENARIOS['article-community']!;
     const vps = STACKS.findIndex((s) => s.id === 'sakura-vps-2gb');

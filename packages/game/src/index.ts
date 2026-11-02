@@ -7,6 +7,7 @@ import {
   apiCacheActive,
   apiPlacedElsewhere,
   applyComponentsToWorkload,
+  astroPageCacheChoice,
   componentsOf,
   composeStack,
   DEFAULT_CHOICES,
@@ -316,18 +317,40 @@ export const SETTINGS = {
     ],
   },
   /**
-   * Astro の静的なページ（記事）をビルドし直す間隔（D-68）。ISR の間隔と同じ値（revalidateSec）を使う
-   * （Astro には ISR が無いので、同じ値をこちらの意味で選ぶ）。オンデマンドは記事を更新するたびにビルドする。
+   * Next.js の静的書き出しの静的なページ（記事）をビルドし直す間隔（D-80。Astro は D-103 でキャッシュに替えた）。ISR の間隔と
+   * 同じ値（revalidateSec）を使う（ISR が無いので、同じ値をこちらの意味で選ぶ）。オンデマンドは記事を更新するたびにビルドする。
    */
   buildInterval: {
     label: 'ビルドの間隔',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
+    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、鮮度（満足度）が下がる。新しく投稿された記事は、ビルドが終わるまでページが無い（投稿した人がすぐ開けない）。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
     options: [
       {
         value: ON_DEMAND_REVALIDATE,
         label: 'オンデマンド（記事の更新のたび）',
+      },
+      { value: 60, label: '1 分' },
+      { value: 300, label: '5 分' },
+      { value: 3600, label: '1 時間' },
+      { value: 21600, label: '6 時間' },
+    ],
+  },
+  /**
+   * Astro の記事のキャッシュの取り直し（D-103）。ISR の間隔と同じ値（revalidateSec）をこの意味で選ぶ。オンデマンドは記事の投稿・編集の
+   * ときにそのページのキャッシュを消す（Astro の route caching の cache.invalidate・Vercel の bypassToken）。時間は期限（s-maxage・expiration）。
+   */
+  pageCache: {
+    label: '記事のキャッシュ',
+    field: 'revalidateSec',
+    effort: EFFORT.setting.isr,
+    note:
+      '記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュする。オンデマンドは記事の投稿・編集のときにそのページのキャッシュを消す（Astro の route caching。消せない置き場では届かず、古いページが出る）。時間はキャッシュの期限で、延ばすと描き直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗る（Workers の 1 リクエストの CPU の上限に効く）。' +
+      ON_DEMAND_MAX_AGE_NOTE,
+    options: [
+      {
+        value: ON_DEMAND_REVALIDATE,
+        label: 'オンデマンド（記事の投稿・編集で消す）',
       },
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
@@ -343,7 +366,7 @@ export const SETTINGS = {
     label: 'コメントの描き方',
     field: 'comments',
     effort: EFFORT.setting.comments,
-    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro・静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見え、鮮度（満足度）が下がる（コメントは記事より厳しく、1 分までなら「良い」・5 分までなら「普通」とみなす。ゲーム上の仮定）。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
+    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro では記事のキャッシュを消して描き直す回数が、静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見え、鮮度（満足度）が下がる（コメントは記事より厳しく、1 分までなら「良い」・5 分までなら「普通」とみなす。ゲーム上の仮定）。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
     options: [
       { value: COMMENTS_IN_BROWSER, label: 'ブラウザで読み込む' },
       { value: COMMENTS_IN_PAGE, label: '記事のページに含める' },
@@ -744,20 +767,45 @@ export function hiddenSettings(
 
 /** フレームワークで意味の無い設定（revalidateSec をフレームワークごとの意味で 1 つだけ出す。D-37・D-68）。 */
 const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
-  nextjs: ['apiCacheTtl', 'buildInterval'],
+  nextjs: ['apiCacheTtl', 'buildInterval', 'pageCache'],
   // SPA は記事のページが無いので、コメントを含められない（D-82）
-  'vite-spa': ['isr', 'buildInterval', 'comments'],
-  astro: ['isr', 'apiCacheTtl'],
-  'nextjs-export': ['isr', 'apiCacheTtl'],
+  'vite-spa': ['isr', 'buildInterval', 'pageCache', 'comments'],
+  astro: ['isr', 'apiCacheTtl', 'buildInterval'],
+  'nextjs-export': ['isr', 'apiCacheTtl', 'pageCache'],
 };
 
-/** revalidateSec をこのフレームワークで何の設定として出すか（ISR の間隔・API のキャッシュの期間・ビルドの間隔）。 */
+/**
+ * revalidateSec をこのフレームワークで何の設定として出すか（ISR の間隔・API のキャッシュの期間・ビルドの間隔・
+ * Astro の記事のキャッシュ。D-103）。
+ */
 export function revalidateSettingOf(framework: FrameworkId): SettingKey {
   return framework === 'vite-spa'
     ? 'apiCacheTtl'
-    : rebuildsStaticPages(framework)
-      ? 'buildInterval'
-      : 'isr';
+    : framework === 'astro'
+      ? 'pageCache'
+      : rebuildsStaticPages(framework)
+        ? 'buildInterval'
+        : 'isr';
+}
+
+/**
+ * 始めるときの revalidateSec の既定（D-103）。Astro は記事を投稿・編集のときに消す（オンデマンド）が既定で、消せない置き場
+ * （Google Cloud の Hosting の CDN）では 5 分の期限。ほかは 5 分。
+ */
+export function defaultRevalidateSec(
+  framework: FrameworkId,
+  stackIndex: number,
+  /** 設定を出さないシナリオ（受託）では 5 分のまま。 */
+  scenario?: Scenario,
+): number {
+  if (framework !== 'astro') return DEFAULT_REVALIDATE_SEC;
+  if (scenario && hiddenSettings({ scenario, framework }).includes('pageCache'))
+    return DEFAULT_REVALIDATE_SEC;
+  const platform = STACKS[stackIndex]?.provider;
+  return platform !== undefined &&
+    deployTarget('astro', platform)?.pageCache?.onDemand === true
+    ? ON_DEMAND_REVALIDATE
+    : DEFAULT_REVALIDATE_SEC;
 }
 
 /** 記事ごとの SNS のカードが出ないか（SPA で OGP の前処理なし。prd/10 F-05）。 */
@@ -1043,7 +1091,7 @@ export const ON_DEMAND_PAGES_PER_UPDATE = 2;
 
 /**
  * 月の内容の更新の回数（記事のページを作り直す更新。API の書き込み × シナリオの pageUpdateShare。D-49・D-70）と、
- * 1 回の更新で再検証するページの数。オンデマンドの再検証の再生成・無効化と、Astro のビルドし直しの数のもと。
+ * 1 回の更新で再検証するページの数。オンデマンドの再検証の再生成・無効化（Astro のキャッシュを消す数も同じ）と、静的書き出しのビルドし直しの数のもと。
  * コメントを記事のページに含めると、コメントの投稿（comments.pageUpdateShare）も足し、そのページの数は記事だけ（D-82）。
  */
 function pageUpdates(
@@ -1162,8 +1210,9 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
   const shape = sc.frameworks?.spa?.shape;
   const cache = apiCacheActive(p.platform, p.components, p.framework);
-  // Astro は記事（ISR だったルート）を静的なページにし、更新をビルドし直しで反映する（D-68）。ビルドを起こす更新は
-  // オンデマンドの再検証と同じ数え方の内容の更新、間隔は revalidateSec（オンデマンドは更新のたび）
+  // Astro の記事（ISR だったルート）は閲覧のときに描いてキャッシュし、投稿・編集で消す（D-103）。数え方は ISR と同じなので
+  // ルートは isr のまま（期限・オンデマンドは上で付けた）。JS・CSS はアイランドの分だけ。
+  // Next.js の静的書き出しのビルドを起こす更新は、オンデマンドの再検証と同じ数え方の内容の更新、間隔は revalidateSec（オンデマンドは更新のたび）
   const astro = sc.frameworks?.astro?.shape;
   const build = {
     updatesPerMonth: updates,
@@ -1171,22 +1220,35 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? {}
       : { intervalSeconds: p.settings.revalidateSec }),
   };
-  // Next.js の静的書き出し（D-80）: 記事は Astro と同じく静的にビルドし直し（1 回のビルドの時間は Astro と同じ式・仮定）、
+  // Next.js の静的書き出し（D-80）: 記事は静的にビルドし直し（1 回のビルドの時間は Astro の形の式・仮定）、
   // マイページは SPA と同じく Client Component が API で中身を取る（API の CPU は SPA の dataCpuFactor 倍）
   const app =
     p.framework === 'vite-spa' && shape
       ? toSpa(w, shape, cache ? { cacheContent: true } : {})
       : p.framework === 'astro' && astro
-        ? toAstro(w, astro, build)
+        ? toAstro(w, astro)
         : p.framework === 'nextjs-export' && shape && astro
           ? toNextExport(w, shape, astro.minutesPerBuild, build)
           : w;
-  // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）
-  const out = applyComponentsToWorkload(app, p.platform, p.components, {
-    originalImageKB: sc.unoptimizedImageKB,
-    resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
-  });
+  // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）。
+  // Astro は ISR のキャッシュの部品を選ばない（置き場は事業者で決まる。D-103）ので、Next.js のときの「キャッシュしない」を引き継がない
+  const out = applyComponentsToWorkload(
+    app,
+    p.platform,
+    componentsForWorkload(p),
+    {
+      originalImageKB: sc.unoptimizedImageKB,
+      resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
+    },
+  );
   return withImageFormat(out, p);
+}
+
+/** Workload を変える部品の選択（Astro は ISR のキャッシュのスロットを使わない。D-103）。 */
+function componentsForWorkload(p: WorkloadParts): Choices {
+  if (p.framework !== 'astro') return p.components;
+  const { isrCache: _, ...rest } = p.components;
+  return rest;
 }
 
 /**
@@ -1642,11 +1704,25 @@ function onDemandBlocker(
 ): { slot: SlotId; label: string; reason: string } | undefined {
   // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
   if (framework === 'vite-spa') return undefined;
-  // Astro・Next.js の静的書き出しは記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-68・D-80）
+  // Next.js の静的書き出しは記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-80）。
+  // 新しい記事がビルドまで開けない分は、鮮度の判定で別に下げる（D-104）
   if (rebuildsStaticPages(framework)) return undefined;
   const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
+  // Astro は記事のキャッシュの置き場が事業者で決まる（D-103）。消せない置き場（Hosting の CDN）なら届かない
+  const astroCache =
+    framework === 'astro'
+      ? deployTarget('astro', platform)?.pageCache
+      : undefined;
+  if (astroCache && !astroCache.onDemand)
+    return {
+      slot: 'isrCache',
+      label: `記事のキャッシュ: ${astroCache.label}`,
+      reason: astroCache.reason,
+    };
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
+    // Astro は ISR のキャッシュの部品を使わない（D-103）
+    if (framework === 'astro' && slot === 'isrCache') continue;
     // ISR をキャッシュしない（毎回 SSR）なら、前段の CDN に HTML のキャッシュは載らない（OCL-490F1874）
     if (slot === 'frontCdn' && !htmlCachedAtFront(c)) continue;
     const opt = componentsOf(platform, slot).find((o) => o.id === c[slot]);
@@ -1715,9 +1791,22 @@ export function requirementStatus(
     reason: string;
     current: boolean;
   }[] = [];
+  // Astro の記事のキャッシュの置き場は事業者で決まる（D-103）
+  const astroCache =
+    framework === 'astro'
+      ? deployTarget('astro', platform)?.pageCache
+      : undefined;
+  if (astroCache)
+    out.push({
+      label: `記事のキャッシュ: ${astroCache.label}`,
+      ok: astroCache.onDemand,
+      reason: astroCache.reason,
+      current: true,
+    });
   for (const slot of Object.keys(SLOT_LABELS) as SlotId[])
     for (const opt of componentsOf(platform, slot)) {
       if (!opt.onDemandIsr) continue;
+      if (framework === 'astro' && slot === 'isrCache') continue;
       out.push({
         label: `${SLOT_LABELS[slot]}: ${opt.label}`,
         ok: opt.onDemandIsr.ok,
@@ -2431,16 +2520,21 @@ function commentsNote(state: GameState): string | undefined {
     return 'ISR のキャッシュを使わない（毎回描く）ので、作り直しは増えない';
   if (isOnDemand(state.settings))
     return rebuilds
-      ? 'コメントの投稿のたびにビルドし直す'
-      : 'コメントの投稿のたびに記事のページを再検証する（再生成・CDN の無効化が増える）';
+      ? 'コメントの投稿のたびにビルドし直す（コメントはビルドの時間の分だけ遅れて見える）'
+      : state.framework === 'astro'
+        ? 'コメントの投稿のたびに記事のページのキャッシュを消す（描き直しが増える）'
+        : 'コメントの投稿のたびに記事のページを再検証する（再生成・CDN の無効化が増える）';
   return rebuilds
-    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントはその分遅れて見え、鮮度が下がる`
-    : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`;
+    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントは間隔とビルドの時間の分だけ遅れて見え、鮮度が下がる`
+    : state.framework === 'astro'
+      ? `記事のキャッシュが時間（${optionLabel('pageCache', state.settings.revalidateSec)}）なので、描き直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`
+      : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`;
 }
 
-/** ISR のキャッシュの部品（Next.js）。 */
+/** ISR のキャッシュの部品（Next.js）。Astro は事業者で決まる置き場で、キャッシュしない形は無い（D-103）。 */
 function isrCacheOf(state: GameState): string | undefined {
   const platform = STACKS[state.stackIndex]!.provider;
+  if (state.framework === 'astro') return astroPageCacheChoice(platform);
   return { ...DEFAULT_CHOICES[platform], ...state.components }.isrCache;
 }
 
@@ -2685,7 +2779,8 @@ function actionRule(state: GameState, action: Action): ActionCheck {
           'unavailable',
           action.key === 'isr' ||
             action.key === 'apiCacheTtl' ||
-            action.key === 'buildInterval'
+            action.key === 'buildInterval' ||
+            action.key === 'pageCache'
             ? `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework)].label}」で選ぶ`
             : action.key === 'comments' && state.framework === 'vite-spa'
               ? 'SPA には記事のページが無い（コメントはブラウザで読み込む）'
@@ -2696,9 +2791,12 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       const inactive = settingInactiveReason(state, action.key);
       if (inactive) return ng('unavailable', inactive);
       // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の手間がかかる（D-49）
-      // Astro の更新のたびのビルドも、更新からビルドを起こす仕組み（デプロイの hook）の実装が要る（同じ手間・仮定。D-68）
+      // 静的書き出しの更新のたびのビルドも、更新からビルドを起こす仕組み（デプロイの hook）の実装が要る（同じ手間・仮定。D-68）。
+      // Astro の投稿・編集でキャッシュを消すのも、消す呼び出し（cache.invalidate・bypassToken）の実装が要る（同じ手間・仮定。D-103）
       if (
-        (action.key === 'isr' || action.key === 'buildInterval') &&
+        (action.key === 'isr' ||
+          action.key === 'buildInterval' ||
+          action.key === 'pageCache') &&
         action.value === ON_DEMAND_REVALIDATE
       )
         return ok(EFFORT.onDemandSwitch);
@@ -3176,6 +3274,14 @@ export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
     '更新の反映とビルドの回数の釣り合いを取った、ほどほどの間隔',
   'buildInterval:3600': '間隔が長いほど、ビルドの回数はまとまって減る',
   'buildInterval:21600': '更新はゆっくり見えるが、ビルドは一日に数回まで',
+  'pageCache:0':
+    '記事を投稿・編集したときだけそのページを消すので、無駄な描き直しがなく、いつも最新',
+  'pageCache:60': '少し待てば更新が見える。消す呼び出しを書かなくてよい',
+  'pageCache:300':
+    '更新の反映と描き直しの回数の釣り合いを取った、ほどほどの期限',
+  'pageCache:3600': '期限が長いほど、同じページを描き直すまでの間があく',
+  'pageCache:21600':
+    '更新はゆっくり見えるが、同じページを描き直すのは一日に数回まで',
   [`comments:${COMMENTS_IN_BROWSER}`]:
     '記事のページはコメントが付いても変わらないので、作り直すのは記事を更新したときだけ',
   [`comments:${COMMENTS_IN_PAGE}`]:
@@ -3596,7 +3702,7 @@ export function newGame(
   framework?: FrameworkId,
   /** 始める画面で選んだ部品（D-45）。選べないものは捨て、省略したスロットは既定の部品。 */
   components?: Choices,
-  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（5 分）。 */
+  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（defaultRevalidateSec。Astro はオンデマンド）。 */
   revalidateSec?: number,
   /** 始める画面で選んだコメントの描き方（D-82）。選べないもの・省略は既定（ブラウザで読み込む）。 */
   comments?: number,
@@ -3657,7 +3763,7 @@ export function newGame(
           (o) => o.value === revalidateSec,
         )
           ? revalidateSec
-          : DEFAULT_REVALIDATE_SEC,
+          : defaultRevalidateSec(app, stackIndex, scenario),
       comments:
         comments !== undefined &&
         setupCommentOptions(scenario, app).some((o) => o.value === comments)
@@ -4360,13 +4466,17 @@ export function playMonth(input: GameState): GameState {
   // API の応答をキャッシュすると、記事はキャッシュの期間だけ古く見える（ISR の間隔と同じ判定。D-37）
   const spa = state.framework === 'vite-spa';
   const astro = state.framework === 'astro';
-  // Next.js の静的書き出し（D-80）: 記事は Astro と同じく静的なページ（鮮度はビルドの間隔）、マイページの中身は SPA と同じく API
+  // Next.js の静的書き出し（D-80）: 記事は静的なページ（鮮度はビルドの間隔）、マイページの中身は SPA と同じく API
   const nextExport = state.framework === 'nextjs-export';
-  const rebuilds = astro || nextExport;
-  // Astro の記事は静的なページで、鮮度はビルドの間隔で決まる（ISR のキャッシュの部品は無い。D-68）
+  const rebuilds = nextExport;
+  // Astro の記事は閲覧のときに描いて事業者の置き場にキャッシュする（D-103）。キャッシュしない形は無く、鮮度は Next.js の ISR と同じ
+  // （オンデマンドで消す・期限で取り直す）。置き場は事業者で決まるので、ISR のキャッシュの部品の選択は見ない
+  const cacheComps: Choices = astro
+    ? { ...comps, isrCache: astroPageCacheChoice(platformNow) }
+    : comps;
   const uncached = spa
     ? !apiCacheActive(platformNow, state.components, state.framework)
-    : !rebuilds && comps.isrCache === 'none';
+    : !rebuilds && cacheComps.isrCache === 'none';
   // SPA の API の CPU（速さの「SSR の重さ」の代わりに使う。SSR の CPU × dataCpuFactor）
   const firstLoad = spa && (sc.frameworks?.spa?.firstLoadHeavy ?? false);
   // Astro の初回表示の軽さ（JS はアイランドの分だけ。速さの重さを 1 つ減らす。ゲーム上の仮定・D-68）
@@ -4385,7 +4495,7 @@ export function playMonth(input: GameState): GameState {
   // 更新は最大で間隔の約 2 倍遅れて見える（記事・ページに含めたコメントとも。D-91）。オンデマンドでは、再検証と一緒に
   // CDN のキャッシュを消せる部品（さくらの VPS の Cloudflare は Free の purge の API）なら遅れず、消せない部品
   // （AWS の自前の CloudFront）は古いページが残る（D-31 と同じく 1 段下げ、さらに即時反映を満たさない）
-  const frontHtml = !spa && !rebuilds && htmlCachedAtFront(comps);
+  const frontHtml = !spa && !rebuilds && htmlCachedAtFront(cacheComps);
   const frontDelayed = frontHtml && !isOnDemand(viewed);
   const frontUnpurged =
     frontHtml &&
@@ -4394,9 +4504,20 @@ export function playMonth(input: GameState): GameState {
       ?.onDemandIsr?.ok === false;
   const eventuallyConsistent =
     (comps.db === 'kv' && !apiPlacedElsewhere(comps)) || frontUnpurged;
-  const judgedDelaySec = frontDelayed
-    ? viewed.revalidateSec * FRONT_CDN_DELAY_FACTOR
-    : viewed.revalidateSec;
+  // 記事をビルドし直す形（静的書き出し）は、更新が載るまで間隔にビルドの時間を足した分だけ遅れる（オンデマンドでもビルドの時間は待つ。D-104）
+  const buildDelaySec = rebuilds
+    ? (r.simulation.workload.input.build?.minutesPerBuild ?? 0) * 60
+    : 0;
+  const judgedDelaySec =
+    (frontDelayed
+      ? viewed.revalidateSec * FRONT_CDN_DELAY_FACTOR
+      : viewed.revalidateSec) + buildDelaySec;
+  // 新しい記事は、ビルドが終わるまでページが無い。投稿した人が開けるまでの許容を超えたら、コミュニティの要件を満たさない（D-104）
+  const newPostLimit = sat.freshness.newPostVisibleSec;
+  const newPostDelayed =
+    buildDelaySec > 0 &&
+    newPostLimit !== undefined &&
+    judgedDelaySec > newPostLimit;
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
   // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
   const onDemandSetting = !spa && isOnDemand(state.settings);
@@ -4405,12 +4526,12 @@ export function playMonth(input: GameState): GameState {
       ? onDemandBlocker(stackIndexNow, state.components, state.framework)
       : undefined;
   // コメントを記事のページに含め、時間で再検証・ビルドするなら、コメントは間隔の分だけ遅れて見える（D-85）。
-  // オンデマンド（コメントのたびに作り直す）・キャッシュしない（毎回 SSR）なら遅れない
+  // オンデマンド（コメントのたびに作り直す）・キャッシュしない（毎回 SSR）なら遅れない。ビルドし直す形はオンデマンドでもビルドの時間は遅れる（D-104）
   const commentsDelayed =
     sc.comments !== undefined &&
     commentsInPage(viewed, state.framework, sc) &&
     !uncached &&
-    !isOnDemand(viewed);
+    (!isOnDemand(viewed) || buildDelaySec > 0);
   const stages = judgeStages(
     {
       blocked: blocking.length > 0,
@@ -4430,6 +4551,7 @@ export function playMonth(input: GameState): GameState {
       uncached,
       eventuallyConsistent,
       onDemandUnmet: onDemand !== undefined,
+      newPostDelayed,
       ...(commentsDelayed
         ? {
             commentFreshness: {
@@ -4455,7 +4577,8 @@ export function playMonth(input: GameState): GameState {
     ssrCpuMs: serverCpuMs,
     spa,
     apiOnly: nextExport,
-    astro: rebuilds,
+    rebuilds,
+    astro,
     settings: viewed,
     heaviness: speedHeaviness(
       {
@@ -4485,6 +4608,8 @@ export function playMonth(input: GameState): GameState {
     eventuallyConsistent,
     frontDelayed,
     uncached,
+    buildDelaySec,
+    newPostDelayed,
     // 遅れがコメントの「良い」の境目を超えたときだけ理由に出す
     commentsDelayed:
       commentsDelayed && judgedDelaySec > sc.comments!.freshness.good,
@@ -4934,7 +5059,9 @@ function stageReasons(
     spa: boolean;
     /** Next.js の静的書き出し（速さは Next.js と同じ扱いで、理由を「API を待つブラウザの描画」で書く。D-80）。 */
     apiOnly?: boolean;
-    /** 記事をビルドし直す（Astro・Next.js の静的書き出し。鮮度の理由を「ビルドの間隔」で書く。D-68・D-80）。 */
+    /** 記事をビルドし直す（Next.js の静的書き出し。鮮度の理由を「ビルドの間隔」で書く。D-80）。 */
+    rebuilds?: boolean;
+    /** Astro（鮮度の理由を「記事のキャッシュの期限」で書く。D-103）。 */
     astro?: boolean;
     settings: Settings;
     heaviness: number;
@@ -4949,6 +5076,10 @@ function stageReasons(
     /** HTML を前段の CDN でもキャッシュし、時間で再検証している（更新は最大で間隔の約 2 倍遅れる。D-91）。 */
     frontDelayed?: boolean;
     uncached: boolean;
+    /** ビルドし直す形の 1 回のビルドの時間（秒。鮮度の遅れに足す。D-104）。 */
+    buildDelaySec?: number;
+    /** 新しい記事がビルドまで開けず、投稿した人の許容を超える（D-104）。 */
+    newPostDelayed?: boolean;
     /** コメントを記事のページに含め、時間で再検証・ビルドしている（コメントが間隔の分だけ遅れて見える。D-85）。 */
     commentsDelayed?: boolean;
     onDemandReason?: string | undefined;
@@ -4982,16 +5113,20 @@ function stageReasons(
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
-        (c.spa || !isOnDemand(c.settings)) &&
+        (c.spa || c.rebuilds || !isOnDemand(c.settings)) &&
         (c.spa
           ? `API のキャッシュの期間 ${optionLabel('apiCacheTtl', c.settings.revalidateSec)}`
-          : c.astro
-            ? `ビルドの間隔 ${optionLabel('buildInterval', c.settings.revalidateSec)}`
-            : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
+          : c.rebuilds
+            ? `ビルドの間隔 ${optionLabel('buildInterval', c.settings.revalidateSec)} + ビルドの時間 約 ${Math.round((c.buildDelaySec ?? 0) / 60)} 分`
+            : c.astro
+              ? `記事のキャッシュの期限 ${optionLabel('pageCache', c.settings.revalidateSec)}`
+              : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
       c.eventuallyConsistent &&
         'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて（キャッシュを消せない）、更新がすぐ見えない',
       c.frontDelayed &&
         'HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見える（オンデマンドの再検証でキャッシュを消せば遅れない）',
+      c.newPostDelayed &&
+        '新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさない）',
       c.commentsDelayed &&
         'コメントを記事のページに含めているので、コメントも間隔の分だけ遅れて見える',
       c.onDemandReason,
