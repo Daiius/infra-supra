@@ -19,13 +19,13 @@ const ARTICLE = '記事コミュニティ';
 const CONTRACT = '受託先の業務アプリの運用';
 
 describe('ゲームモードの画面', () => {
-  it('W-01 記事コミュニティ × Next.js × CF Paid で始めて 3 か月進める', () => {
-    renderApp();
+  it('W-01 記事コミュニティ × Next.js × CF Paid で始めて 3 か月進める', async () => {
+    await renderApp();
     // 始める画面: シナリオ・フレームワーク・構成・部品の選択肢が出る
     expect(screen.getAllByRole('radio', { name: /^Cloudflare/ }).length).toBe(
       2,
     );
-    startGame({
+    await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
@@ -78,18 +78,18 @@ describe('ゲームモードの画面', () => {
       },
     ],
   ];
-  it.each(combos)('W-02 %s で始めて 1 か月進める', (_, setup) => {
-    renderApp();
-    startGame(setup);
+  it.each(combos)('W-02 %s で始めて 1 か月進める', async (_, setup) => {
+    await renderApp();
+    await startGame(setup);
     expectGameScreen(1);
     advance(1);
     expectGameScreen(2);
   });
 
   // 前は Astro × Netlify Personal（3 か月目に尽きる）。Netlify は隠した（D-100）ので、1 か月目に尽きる組にした
-  it('W-03 所持金が尽きる組（静的書き出し × Vercel Pro・画像を最適化しない）で結果の画面とヒントが出る', () => {
-    renderApp();
-    startGame({
+  it('W-03 所持金が尽きる組（静的書き出し × Vercel Pro・画像を最適化しない）で結果の画面とヒントが出る', async () => {
+    await renderApp();
+    await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（静的書き出し）',
       stack: 'Vercel Pro + Supabase Pro',
@@ -104,11 +104,11 @@ describe('ゲームモードの画面', () => {
     expect(screen.queryByRole('button', { name: '次の月へ' })).toBeNull();
   });
 
-  it('W-18 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', () => {
+  it('W-18 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', async () => {
     const detail =
       '記事のページ（ISR の閲覧と再生成・CPU 17 ms）・個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える';
-    renderApp();
-    startGame({
+    await renderApp();
+    await startGame({
       scenario: ARTICLE,
       framework: 'Astro',
       stack: 'Cloudflare Free',
@@ -122,8 +122,8 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-19 始める画面: 記事コミュニティの前提・ページの一覧と、フレームワークごとのページの描き方が出る（D-101）', () => {
-    renderApp();
+  it('W-19 始める画面: 記事コミュニティの前提・ページの一覧と、フレームワークごとのページの描き方が出る（D-101）', async () => {
+    await renderApp();
     const text = document.body.textContent ?? '';
     expect(text).toContain('別の CMS は無い');
     expect(text).toContain('一覧・トップのページは記事のページに含めて数える');
@@ -142,8 +142,8 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
   });
 
-  it('W-20 始める画面: ページの見取り図の札が、フレームワークとコメントの描き方で変わる（D-102）', () => {
-    renderApp();
+  it('W-20 始める画面: ページの見取り図の札が、フレームワークとコメントの描き方で変わる（D-102）', async () => {
+    await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
     /** 見取り図の区画の札（区画の名前 → 作られ方の札の文字）。 */
@@ -275,8 +275,8 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
   });
 
-  it('W-13 始める画面: ページの描き方を選び、行ごとの要件の判定・見取り図・カードの既定が変わる（D-106・D-107）', () => {
-    renderApp();
+  it('W-13 始める画面: ページの描き方を選び、行ごとの要件の判定・見取り図・カードの既定が変わる（D-106・D-107）', async () => {
+    await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
     const current = () =>
@@ -355,8 +355,8 @@ describe('ゲームモードの画面', () => {
     expect(strategy('article')).toBe('shell-api');
   });
 
-  it('W-24 始める画面: 個人向けのページを S6（枠 + サーバーの島）にすると、見取り図に島・構成図に島の流れが出る（D-108）', () => {
-    renderApp();
+  it('W-24 始める画面: 個人向けのページを S6（枠 + サーバーの島）にすると、見取り図に島・構成図に島の流れが出る（D-108）', async () => {
+    await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
     const current = () =>
@@ -406,9 +406,9 @@ describe('ゲームモードの画面', () => {
     ).toBe(true);
   });
 
-  it('W-14 ゲームの途中で個人向けのページの描き方を替える（手間 4・来月から。D-107）', () => {
-    renderApp();
-    startGame({
+  it('W-14 ゲームの途中で個人向けのページの描き方を替える（手間 4・来月から。D-107）', async () => {
+    await renderApp();
+    await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
@@ -428,9 +428,9 @@ describe('ゲームモードの画面', () => {
     ).toContain('S5');
   });
 
-  it('W-25 ゲームの途中で記事のページのコメント欄を替える（記事の行の部品・手間 2・来月から。D-109）', () => {
-    renderApp();
-    startGame({
+  it('W-25 ゲームの途中で記事のページのコメント欄を替える（記事の行の部品・手間 2・来月から。D-109）', async () => {
+    await renderApp();
+    await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
@@ -457,9 +457,9 @@ describe('ゲームモードの画面', () => {
     ).toBeDefined();
   });
 
-  it('W-15 ゲーム中の「今の構成図」も選んだ描き方で描く（記事 S1 のビルドのノード。OCL-C9CD8783）', () => {
-    renderApp();
-    startGame({
+  it('W-15 ゲーム中の「今の構成図」も選んだ描き方で描く（記事 S1 のビルドのノード。OCL-C9CD8783）', async () => {
+    await renderApp();
+    await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
@@ -476,9 +476,9 @@ describe('ゲームモードの画面', () => {
     expect(details.querySelector('[data-side-node="build"]')).not.toBeNull();
   });
 
-  it('W-16 構成・フレームワークを替える前に、既定に戻るページの描き方を知らせる（D-107 の補足）', () => {
-    renderApp();
-    startGame({
+  it('W-16 構成・フレームワークを替える前に、既定に戻るページの描き方を知らせる（D-107 の補足）', async () => {
+    await renderApp();
+    await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
@@ -516,8 +516,8 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-17 選んでいない構成のカードも、その構成で選べる描き方で描く（流れの凡例のページ。D-107 の補足・RS-15 の解除）', () => {
-    renderApp();
+  it('W-17 選んでいない構成のカードも、その構成で選べる描き方で描く（流れの凡例のページ。D-107 の補足・RS-15 の解除）', async () => {
+    await renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
     fireEvent.click(
       screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
@@ -552,8 +552,8 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', () => {
-    renderApp();
+  it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', async () => {
+    await renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
     fireEvent.click(
       screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
@@ -618,8 +618,8 @@ describe('ゲームモードの画面', () => {
     expect(current()).toBe(other);
   });
 
-  it('W-21 始める画面のインフラの構成のタブは事業者ごとにまとまり、←/→ は組をまたいで全部の構成を順に移る（D-105 の補足）', () => {
-    renderApp();
+  it('W-21 始める画面のインフラの構成のタブは事業者ごとにまとまり、←/→ は組をまたいで全部の構成を順に移る（D-105 の補足）', async () => {
+    await renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
     fireEvent.click(
       screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
@@ -686,9 +686,9 @@ describe('ゲームモードの画面', () => {
     expect(seen).toEqual([...order.slice(1), order[0]]);
   });
 
-  it('W-04 保存して読み込み直すと同じ月から再開する', () => {
-    renderApp();
-    startGame({
+  it('W-04 保存して読み込み直すと同じ月から再開する', async () => {
+    await renderApp();
+    await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
@@ -698,7 +698,7 @@ describe('ゲームモードの画面', () => {
     const before = historyText();
     // 画面を閉じて開き直す（保存は localStorage に残る）
     cleanup();
-    renderApp();
+    await renderApp();
     expectGameScreen(3);
     expect(monthHeading(3)).toBeDefined();
     expect(historyText()).toEqual(before);

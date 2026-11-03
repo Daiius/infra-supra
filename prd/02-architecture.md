@@ -58,6 +58,14 @@ estimator・catalog・game は `lib: ["esnext"]` / `types: []` でビルドし�
 
 Vite を選んだ判断は [_grilling/decisions.md](./_grilling/decisions.md) D-01。
 
+**JS の分け方（code splitting）**: 開いた画面に要るものだけを最初に読む。
+
+- 見積の画面（`estimate/estimate-mode.tsx`）と運営中の画面（`game-screen.tsx`）は `App.tsx` の `React.lazy` + `Suspense` で分けて読む。最初に読むのは、タブ・始める画面・保存の読み書きまで。
+  始める画面と運営中の画面の両方が使う小物は `commitment-meta.ts` に置く（`App.tsx` から運営中の画面を静的に読まないため）。
+- 依存（react・zod）と料金データ（catalog）・エンジン（estimator・game）は `vite.config.ts` の `build.rolldownOptions.output.codeSplitting.groups` で別の chunk にする。
+  どれも最初の画面に要るので初回の量は減らないが、画面だけを直したときに変わらない chunk をキャッシュから読める。1 つの chunk が 500 KB を超える警告も消える。
+- 描画テストは分けた画面の読み込みを待つ（`smoke.test-helpers.tsx` の `waitLoaded`。`renderApp`・`startGame` は async）。
+
 ## 5. 永続化
 
 - MVP は**ローカル保存**（localStorage / IndexedDB）と **JSON の書き出し・読み込み**。

@@ -41,9 +41,9 @@ function checkField(select: HTMLSelectElement): boolean {
 }
 
 describe('ⓘ の当たり判定', () => {
-  it('W-09 今月の行動の設定・部品の欄は、ⓘ を押したときだけ説明が開く', () => {
-    renderApp();
-    startGame({
+  it('W-09 今月の行動の設定・部品の欄は、ⓘ を押したときだけ説明が開く', async () => {
+    await renderApp();
+    await startGame({
       scenario: '記事コミュニティ',
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
@@ -61,14 +61,14 @@ describe('ⓘ の当たり判定', () => {
     expect(changed).toBeGreaterThan(0);
   });
 
-  it('W-10 見積モードの欄は、見出しで select に結ばれ、ⓘ を押したときだけ説明が開く', () => {
+  it('W-10 見積モードの欄は、見出しで select に結ばれ、ⓘ を押したときだけ説明が開く', async () => {
     // ⓘ のある部品の欄（DB のバックアップ）が出る構成
     window.history.replaceState(
       null,
       '',
       '/?mode=estimate&t=business&s=vercel-supabase-pro',
     );
-    renderApp();
+    await renderApp();
     const backup = screen.getByRole<HTMLSelectElement>('combobox', {
       name: 'DB のバックアップ',
     });
@@ -82,8 +82,8 @@ describe('ⓘ の当たり判定', () => {
     expect(screen.getByRole('spinbutton', { name: '月の PV' })).toBeDefined();
   });
 
-  it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', () => {
-    renderApp();
+  it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', async () => {
+    await renderApp();
     // 選ばれていないフレームワークのカード（ⓘ のあるもの。D-102 でタブ + カードにした）
     const radio = screen
       .getAllByRole<HTMLInputElement>('radio')

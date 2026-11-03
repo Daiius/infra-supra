@@ -40,6 +40,28 @@ export default defineConfig(({ mode }) => {
     // 描画テストは画面を何度も描き直すので、CI の遅い実行環境では既定の 5 秒を超えうる（D-87）
     test: { testTimeout: 30_000 },
     plugins: [react(), tailwindcss(), watchWorkspacePackages()],
+    build: {
+      rolldownOptions: {
+        output: {
+          // 依存・料金データ・エンジンを画面と別の chunk にする（画面だけを直したとき、変わらない chunk をキャッシュから読める）。
+          // 見積の画面と運営中の画面は App.tsx の lazy で分けて読む（prd/02 §4）。
+          codeSplitting: {
+            groups: [
+              {
+                name: 'react',
+                test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+              },
+              { name: 'zod', test: /[\\/]node_modules[\\/]zod[\\/]/ },
+              { name: 'catalog', test: /[\\/]packages[\\/]catalog[\\/]/ },
+              {
+                name: 'engine',
+                test: /[\\/]packages[\\/](estimator|game)[\\/]/,
+              },
+            ],
+          },
+        },
+      },
+    },
     server: {
       host: bindHost,
       port: Number(bindPort),

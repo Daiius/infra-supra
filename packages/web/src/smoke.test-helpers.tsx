@@ -5,10 +5,11 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, beforeEach, expect, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import { App } from './App.tsx';
 
 /** 始めた日・乱数のシード（画面の入力で固定する。既定の「今日」に頼らない）。 */
@@ -84,6 +85,13 @@ function installDomShims() {
 export function useSmokeEnv() {
   installDomShims();
   let errors: unknown[][] = [];
+  // 分けて読む画面のモジュールを先に読んでおく（各テストの waitLoaded を短くする。CI では初回の変換が 1 秒を超える）
+  beforeAll(async () => {
+    await Promise.all([
+      import('./game-screen.tsx'),
+      import('./estimate/estimate-mode.tsx'),
+    ]);
+  }, 30_000);
   beforeEach(() => {
     localStorage.clear();
     window.history.replaceState(null, '', '/');
@@ -99,13 +107,22 @@ export function useSmokeEnv() {
   });
 }
 
+/** 分けて読む画面（見積・運営中。App.tsx の lazy）の読み込みを待つ。 */
+export async function waitLoaded(): Promise<void> {
+  // waitFor の既定（1 秒）では CI の遅い実行環境で足りない（testTimeout の 30 秒の内に収める）
+  await waitFor(() => expect(screen.queryByText('読み込み中…')).toBeNull(), {
+    timeout: 15_000,
+  });
+}
+
 /** 本番（main.tsx）と同じく StrictMode で描く。 */
-export function renderApp(): void {
+export async function renderApp(): Promise<void> {
   render(
     <StrictMode>
       <App />
     </StrictMode>,
   );
+  await waitLoaded();
 }
 
 /** ラベルの先頭で radio を選ぶ（説明・手間の棒の文字が後ろに続くので前方一致）。 */
@@ -132,7 +149,7 @@ export type Setup = {
  * 始める画面で選んで「運営を始める」を押す。部品は指定のものを選び、残りの未選択のスロットは選べる最初の選択肢にする
  * （部品の依存で選べないもの・1 択のものは飛ばす）。
  */
-export function startGame(s: Setup) {
+export async function startGame(s: Setup) {
   pickRadio(s.scenario);
   pickRadio(s.framework);
   pickRadio(s.stack);
@@ -166,6 +183,7 @@ export function startGame(s: Setup) {
     screen.queryByRole('status')?.textContent ?? '',
   ).toBe(false);
   fireEvent.click(start);
+  await waitLoaded();
   // 選んだ構成で始まっている（月のカードの見出しに構成の名前が出る）
   expect(
     screen.getByRole('heading', { level: 2, name: /^1 か月目/ }).textContent,
