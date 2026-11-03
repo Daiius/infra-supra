@@ -1,6 +1,7 @@
 # 14. 部品を事業者をまたいで組む（役割と接続の口）
 
-> 状態: **下書き・未実装・未決**（論点 CP-01〜CP-17。§8）。D 番号はまだ無い。決めるのはユーザーで、grilling で一問ずつ聞く前提。
+> 状態: **設計（決定 D-114）・未実装**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
+> 後で検討する候補として残したのは、リージョンの要素（CP-08）と接続の数の上限（CP-09）。
 > 出発点（2026-11-03・ユーザー）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？ 根本的に少し変えるところがあるかもしれませんが...」
 > 料金・制限の数値は、§2 で公式の文書から取ったもの（URL と取得日つき）か、catalog に既にあるもの（出典は catalog の料金データ）だけを書く。
 > 確かめられなかったものは**未確認**、値の根拠の無いものは**ゲーム上の仮定**、文書からの読みは**推測**と書く。
@@ -9,10 +10,12 @@
 
 - 今は、土台（Platform）と別の事業者の部品を、`CROSS_PAIRS` で**組（土台 × スロット × 部品の事業者）ごとに手で許し**、差し方を `applyCross`・`applyCrossDb`・`applyCrossApi` に**土台ごとに手で書いている**（prd/11 §2.5）。
   組が増えるほど、根拠と差し方の重複が増え、選べない現実の組（Vercel × S3・Vercel × RDS / DynamoDB・Cloudflare × Neon など）が残る。
-- 案は 3 つ（§3）。**推奨は案 C**: 土台の中身（`composeVercel` など、確かめた事実が詰まった組み立て）は今のまま残し、
+- 案は 3 つ（§3）。**採るのは案 C（D-114）**: 土台の中身（`composeVercel` など、確かめた事実が詰まった組み立て）は今のまま残し、
   **差し替える側の部品だけ**を「役割（オブジェクトストレージ・DB…）」と「接続の口（公開の URL・認証つきの HTTPS・TCP・binding だけ）」で表し、
   **接続の規則**（どの口からどの口へつなげるか・要る中継・転送をどちらで数えるか・根拠）で組の可否と経路を決める。
-  案 B（土台の中まで全部を役割と口で組み直す）は効果が大きいが、golden と基準プレイの作り直しが全部に及ぶので、案 C で規則が育ってから判断する（CP-01）。
+  案 B（土台の中まで全部を役割と口で組み直す）は効果が大きいが、golden と基準プレイの作り直しが全部に及ぶので、段 5 で改めて判断する（CP-01）。
+- 転送は、事業者ごとの料金データの**送り出し（egress）と受け取り（ingress）の項目をそれぞれ数えて足す**。料金表に項目が無い側は課金なし（前提の文で「未確認」。CP-06）。
+- 段 2 で足すのは **Vercel × DynamoDB / Aurora（DB）だけ**（CP-15）。
 - 調べて分かった、費用に効く点（§2.4）: 転送は**送り出す側**で課金されることが多い（AWS・Google Cloud・Supabase）。R2・Workers・Hyperdrive は転送に課金しない。
   Vercel の関数から外への通信は通常は課金の項目に無いが、**IP の許可が要る相手には Static IPs（Pro で $100 / 月 / プロジェクト + Private Data Transfer）**が要る。
   AWS の VPC の中の DB へは、Vercel からは Secure Compute（Enterprise）か PrivateLink が要り、個人の規模では**公開の口（公開の RDS・Marketplace の Aurora・DynamoDB の HTTPS）で組む**のが現実の形になる。
@@ -134,14 +137,14 @@
 
 ### 2.4 費用に効く点（まとめ）
 
-1. **転送は送り出す側で課金**される事業者が多い（AWS・Google Cloud・Supabase・Neon）。受ける側は無料（S3・DynamoDB・Google Cloud・R2 は受信の項目が無い）。prd/11 §2.3 の決めごとがそのまま一般化できる。
+1. **転送は送り出す側で課金**される事業者が多い（AWS・Google Cloud・Supabase・Neon）。受ける側は無料か、受信の項目が無い（S3・DynamoDB・Google Cloud・R2）。ただし規則は「どちらか一方で数える」ではなく、両側の料金データの項目をそれぞれ数えて足す（CP-06・D-114）。
 2. **課金しない送り手**: R2・Workers・Hyperdrive・S3 → CloudFront。**記載が無い送り手**: Vercel の関数（通常）・Amplify の SSR → 未確認として数えない（今と同じ）。
 3. **中継の部品が費用の本体になりうる**: Static IPs $100 / 月・NAT ゲートウェイ（時間課金）・RDS Proxy（vCPU 時間）・Workers Paid $5。小さな構成では DB の単価より大きい。
 4. **公開の口で組むと中継が要らない**（Vercel × DynamoDB・公開の RDS・Neon・Supabase のプール）。私設の網で組むと中継か Enterprise の機能が要る。
 5. **binding だけの部品**（D1・KV・DO・Hyperdrive）は、使う側が同じ事業者の実行環境（Worker）に限られる → 「Worker の API を挟む」が中継になる。
 6. **接続の数の上限**: Workers は同時 6、Cloud Run は 1 インスタンス 100（Cloud SQL）、Neon のプール 10,000・0.25 CU の `max_connections` 104。サーバーレス × 接続を張る DB は**プールが前提**。
 7. **リージョン**: Neon に東京が無い・Vercel の関数の既定は iad1（prd/10 §3.3）。往復の遅延は今も計算していない（prd/11 §2.3）。
-8. **アカウントが増える手間**は今の規則（増えたアカウント 1 つにつき毎月 0.5・一度きり 1。D-52）で数えられる。
+8. **アカウントが増える手間**: 今は増えたアカウント 1 つにつき毎月 0.5・一度きり 1（D-52）。D-114 で、事業者が増えるほど重くする（k 個目は毎月 0.5 × k。CP-11）。
 
 ### 2.5 未確認（見積に入れない・前提の文で出すだけ）
 
@@ -191,20 +194,19 @@ type ConnectionRule = {
   to: { port: Port; provider?: ComponentProvider };
   verdict: 'ok' | 'needs-relay' | 'blocked';
   relay?: PartRef[];             // 例: Hyperdrive・Worker の API・Static IPs
-  /** 境界の転送をどのノードで数えるか（送り出す側の egress。§2.4 の 1）。 */
-  egress: 'sender' | 'none' | 'unverified';
+  // 転送の課金は規則に書かない。両側の部品の事業者の料金データの egress・ingress の項目をそれぞれ数えて足す（CP-06・D-114）
   reason?: string;               // blocked・needs-relay のときに画面に出す
   sources: { url: string; retrievedAt: string }[];
 };
 ```
 
 - 経路の一般化: `RouteTemplate = Record<RequestClass, Role[]>`（例: `image-read: ['edge-cdn', 'object-store']`）をフレームワーク × 描き方（prd/13）ごとに持ち、役割に当てた部品のノードを並べる。
-  隣り合う 2 つの部品の事業者が違えば規則を引き、`egress: 'sender'` なら送り手の事業者の外への転送のノード（今の `awsOut`・`gcpOut`・`netlifyOut` を一般化した `egressNode(provider)`）を間に入れる。
+  隣り合う 2 つの部品の事業者が違えば規則を引き、送り手の事業者の料金データに外への転送の項目があれば送り出しのノード（今の `awsOut`・`gcpOut`・`netlifyOut` を一般化した `egressNode(provider)`）を、受け手の事業者に受け取りの項目があれば受け取りのノード（`ingressNode(provider)`）を間に入れる（両方あれば両方。CP-06）。
 - 影響: catalog は全面の作り直し（`composeCloudflare` 等を部品の集まりに分解）。estimator は変えない（ノードと経路の形は同じ）。game・web は部品の選び方が変わる。golden・基準プレイは全部取り直し。
 - 良い点: L1〜L5 がすべて解ける。任意の組を規則で判定し、弾く理由を出せる。
 - 悪い点: 土台の組み立てに詰まった事実（Amplify の画像の最適化の課金・OpenNext の関数の分け方・vinext の Workers Cache・Netlify の durable cache など）を役割に分解し直す必要があり、**同じ金額が出ることを確かめるだけで大仕事**。釣り合い（prd/07 §10）を取り直す範囲が全シナリオに及ぶ。
 
-### 3.3 案 C（推奨）: 土台は今のまま、差し替える部品だけを役割と口で
+### 3.3 案 C（採用・D-114）: 土台は今のまま、差し替える部品だけを役割と口で
 
 - 土台（`composeStack` が組む構成）は今のまま。土台の構成のノードに**役割の印**（`role`）を付ける（`image`・`blob` は `object-store`、`db` は `sql-db`、`fn` は `compute`…）。
 - 他の事業者の部品は `PartDef`（案 B と同じ形）で書き、**役割で差し替える**: 「土台の `object-store` の役割のノードを外し、部品のノードを入れ、土台の `compute` の役割のノードから部品の口へ規則を引く」。
@@ -212,18 +214,18 @@ type ConnectionRule = {
 - 組の可否は `CROSS_PAIRS` でなく**規則**で決める: `allowed(host, part) = 土台の compute（または呼ぶ側）から part.accepts への規則が 'ok' か 'needs-relay'`。
   `CROSS_PAIRS` は規則に移し替え、**移す前後で選べる組と金額が変わらない**ことをテストで確かめてから消す（段 1）。
 - 中継（`relay`）は部品として自動で足し、明細と構成図に出す（Hyperdrive・Worker の API・Static IPs）。選べる中継（Worker の API を「API の置き場」で選ぶなど）は今のスロットの依存（`componentConflict`）に寄せる。
-- 転送: 規則の `egress` が `'sender'` なら、送り手の事業者の `egressNode(provider)` を経路に入れる。`'unverified'` は数えず、前提の文で「未確認」を出す（今の Vercel・Amplify と同じ）。
+- 転送: 境界ごとに、送り手の事業者の送り出し（egress）と受け手の事業者の受け取り（ingress）の項目を、それぞれの料金データから数えて足す（両方に課金があれば両方）。料金表に項目が無い側は課金なしとし、前提の文で「未確認」を出す（今の Vercel の関数・Amplify の SSR と同じ）。今は受け取りに課金する事業者はほぼ無いが、規則は両側を見る形にする（CP-06）。
 - 影響:
   - **catalog**: `stacks/cross.ts` を `stacks/parts/`（部品）と `stacks/connections.ts`（規則・出典）に分ける。土台の組み立て（index.ts・aws.ts など）はノードに `role` を足すだけ。
   - **estimator**: 変えない（任意で `links` を出す。§6・CP-17）。
-  - **game**: `componentConflict` に規則の `blocked`・`needs-relay` を足す。アカウントの手間（`accounts.ts`）は今のまま効く。中継の部品の一度きりの手間を足すか（CP-11）。
+  - **game**: `componentConflict` に規則の `blocked`・`needs-relay` を足す。アカウントの手間（`accounts.ts`）は k 個目を 0.5 × k に重くする（CP-11）。中継の部品の一度きりの手間は足さない（中継で増える事業者のアカウントで数える）。
   - **web**: 部品の選び方（スロットごとに「同じ事業者 / 他の事業者」・事業者で絞る・弾く理由）。構成図は §6。
 - 良い点: 土台の検査（golden・基準プレイ）を壊さずに、§1.4 の組を規則と部品の追加で足せる。弾く理由を出せる。後で案 B へ進むときも、部品と規則はそのまま使える。
 - 悪い点: 土台の側は今の作りが残る（土台を足す手間は変わらない）。役割の印を付け忘れると差し替えが効かない（テストで「役割の印の無いノードが経路にあれば失敗」とする）。
 
 ### 3.4 比べた表
 
-| 観点 | 案 A | 案 B | 案 C（推奨） |
+| 観点 | 案 A | 案 B | 案 C（採用） |
 |---|---|---|---|
 | 組を足す手間 | 組の数に比例 | 部品・規則の数に比例 | 部品・規則の数に比例（土台の追加は今と同じ） |
 | 弾く理由を出せるか | 出せない（出ないだけ） | 出せる | 出せる |
@@ -236,7 +238,7 @@ type ConnectionRule = {
 
 ### 3.5 接続の規則の初めの表（案 C・案 B 共通。値は §2 の出典から）
 
-| 呼ぶ側（役割・事業者） | 受ける口 | 判定 | 中継 | 転送を数える側 |
+| 呼ぶ側（役割・事業者） | 受ける口 | 判定 | 中継 | 転送の課金（両側の料金データの項目を足す。CP-06） |
 |---|---|---|---|---|
 | どれでも | `public-url`（画像の配信） | ok | — | 配る側（R2 は無料・CloudFront・Bunny） |
 | `compute`・Vercel | `https-api`（S3・DynamoDB・R2） | ok（OIDC か鍵） | — | 応答は AWS の外への転送（送り手）・書き込みは無料 |
@@ -257,7 +259,7 @@ type ConnectionRule = {
   - 画像は既に R2（転送無料）・Bunny があり、費用の床はもう低い。Vercel × S3 + CloudFront（CloudFront の常時無料 1 TB は catalog）は**新しい床を作らず、選択肢を増やすだけ**の見込み。
   - Vercel × DynamoDB・Neon は Supabase Pro の $25 / 月を下げるが、prd/11 §3.4 のとおり**単独では届かない**見込み。
   - Cloudflare × Neon（Hyperdrive）は D1 より高く、勝ち筋を増やさない見込み（学びの選択肢）。
-  - 気になるのは「**役割ごとに最安を寄せ集めた構成**」。アカウント 1 つにつき毎月 0.5 の手間（D-52）と、中継の部品の費用（Static IPs $100 / 月など）が抑えになる。寄せ集めが全シードで届くなら、中継・アカウントの手間を見直す（CP-11）。
+  - 気になるのは「**役割ごとに最安を寄せ集めた構成**」。D-114 で、他の事業者のアカウントの k 個目を毎月 0.5 × k にする（1 個で 0.5・2 個で計 1.5・3 個で計 3.0。ゲーム上の仮定・実装後に基準プレイで調整）。中継の部品の費用（Static IPs $100 / 月など）も抑えになる（CP-11）。
 - 新しい組を足す段ごとに、既存の構成の基準プレイが**変わらない**ことと、新しい組の達成数を記録する（prd/11 の各節と同じ形）。
 
 ### 3.7 画面
@@ -276,7 +278,7 @@ type ConnectionRule = {
 ### 3.9 テスト（組み合わせの爆発を抑える）
 
 - 今の総当たり（`combo-sweep.test.ts`）は約 2,000 組・約 100 秒。部品が土台をまたいで選べると、スロットごとの選択肢が増え、直積が桁で増える。
-- 抑え方（推奨。CP-14）:
+- 抑え方（CP-14・D-114）:
   1. **規則の単体テスト**: 架空の事業者（`fictional-` で始まる id。AGENTS.md）で、口の組ごとに判定・中継・転送のノードを確かめる。実在の料金を使わない。
   2. **移し替えのテスト**（段 1）: 規則から導いた「選べる組」が今の `CROSS_PAIRS` と一致し、全構成の金額が変わらない（golden）。
   3. **規則ごとに 1 つ以上の実在の組の golden**（規則が実在の料金で動くことの確かめ）。
@@ -289,7 +291,7 @@ type ConnectionRule = {
 |---|---|---|
 | 段 0 | この文書の論点を決める（CP-01〜） | — |
 | 段 1 | 土台のノードに `role` の印。`ConnectionRule`・`PartDef` の型と、今の組を規則に移し替え（`CROSS_PAIRS` を規則から導く）。差し方を役割から導く（`hostImageShape` 等を置き換え） | **不変**（golden・基準プレイ・保存） |
-| 段 2 | 公開の口の組を足す: Vercel × S3 + CloudFront（画像）・Vercel × DynamoDB / Aurora（DB。Marketplace）・Cloudflare × Neon（Hyperdrive の接続先違い）・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
+| 段 2 | 公開の口の組を足す: **Vercel × DynamoDB / Aurora（DB。Marketplace）だけ**（CP-15）。後の段の候補: Vercel × S3 + CloudFront（画像）・Cloudflare × Neon（Hyperdrive の接続先違い）・Google Cloud × R2 の広げ方の見直し・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
 | 段 3 | 中継を部品として自動で足す（Static IPs・NAT・RDS Proxy・Tunnel）。単価を取ってから。`blocked` の理由を画面に出す | 新しい組だけ |
 | 段 4 | 画面: 事業者で絞る・構成図の `links`（§6） | — |
 | 段 5 | （任意）案 B へ: 土台も部品の集まりにする。段 1〜4 の規則と部品はそのまま使う | 全部の取り直し |
@@ -299,7 +301,7 @@ type ConnectionRule = {
 - 今: 組ごとに `basis` と `sources`（L1 の重複）。
 - 案 C・B: **規則ごと**に `sources`（つなげるか・中継・転送の課金の根拠）、**部品ごと**に `premiseRefs`（料金・制限は provider の facts）。組の根拠は「規則の根拠 + 両側の部品の facts」から自動で作り、前提の文に出す。
 - AGENTS.md の「出典を確認していない数値を実在の料金のように書かない」を守る形:
-  - 規則の `egress: 'unverified'` は**数えない**（金額に入れず、前提の文に「未確認」を出す）。
+  - 料金表に送り出し・受け取りの項目が見つからない側は**課金なし**とし（金額に入れない）、前提の文に「未確認」を出す。
   - 単価が未取得の中継（NAT・RDS Proxy・Advanced Networking）は、その規則を `needs-relay` のまま**選べなくする**か「見積の対象外」と出す（CP-05）。値を仮に置かない。
   - 架空の規則・部品は `fictional-` の事業者で、テストにだけ使う（`catalog/fictional`）。
 
@@ -307,10 +309,10 @@ type ConnectionRule = {
 
 - prd/01: `ArchEdge.boundary`（`same-provider`・`cross-provider`・`internet`）は辺を持たない形で保留していた（prd/11 §2.3）。規則が境界を決めるので、ここで初めて辺の情報が生まれる（§6）。
 - prd/03: 料金のスキーマは変えない。中継の部品は普通のプラン・メーターとして足す。
-- prd/04: リソースの変換は変えない（経路の上のノードの種類で決まる）。接続の数の上限を扱うなら `limit` を足す（CP-09）。
+- prd/04: リソースの変換は変えない（経路の上のノードの種類で決まる）。接続の数の上限は後で検討する候補（CP-09）。扱うと決めたら `limit` を足す。
 - prd/07: アカウントの手間（D-52）・目標の決め方（D-64）をそのまま使う。
 - prd/10: API の置き場（D-65・D-67・D-69）は「Worker の API を中継として足す」規則の特別な形として読める。今のスロット `api` は残す（CP-05）。
-- prd/11: §2.2 の `via: 'binding' | 'tcp' | 'http' | 'proxy-binding'` と `requires` の案を、この文書の口と規則で置き換える。§2.3 の「送り出す側の egress で数える」はそのまま規則の既定にする。
+- prd/11: §2.2 の `via: 'binding' | 'tcp' | 'http' | 'proxy-binding'` と `requires` の案を、この文書の口と規則で置き換える。§2.3 の「送り出す側の egress で数える（受け取る側は数えない）」は、両側の項目をそれぞれ数えて足す形に改める（CP-06・D-114）。
 - prd/13: 経路のテンプレート（案 B）は、ページの描き方ごとの経路と掛け合わさる。案 C は土台の経路を使うので影響しない。
 
 ## 6. 構成図との整合（ハブ型）
@@ -328,27 +330,35 @@ type ConnectionRule = {
 - 可用性（片方の事業者の障害）。prd/11 §2.4 と同じく段 2 以降の出来事の候補。
 - Enterprise の機能（Secure Compute）。個人・小さなチームの見積の対象外にする案（CP-07）。
 
-## 8. 未決の論点（CP-01〜CP-17）
+## 8. 決めた論点（CP-01〜CP-17。2026-11-03・D-114）
 
-| # | 問い | 推奨 |
+> 実装の内部の形（CP-02・03・10・13・14・16・17）は、supervisor が推奨案で決めた。そのほかはユーザーが決めた。
+> 下書きの推奨から変えたのは CP-06・CP-11・CP-15。
+
+| # | 問い | 決定 |
 |---|---|---|
-| CP-01 | どの案で進めるか（A: 組を足し続ける / B: 全部を役割と口で / C: 差し替える部品だけ役割と口で） | **C**。土台の事実と検査を壊さずに §1.4 の組を足せる。B は段 5 で、C が育ってから判断 |
-| CP-02 | 役割の一覧と粒度 | `edge-cdn`・`static-host`・`compute`・`image-transform`・`object-store`・`sql-db`・`kv`・`db-proxy`・`email`・`dns` の 10。今のスロット（`images`・`db`・`api`…）は役割の上の「選ぶ単位」として残す |
-| CP-03 | 接続の口の種類 | `public-url`・`https-api`・`tcp-sql`・`binding`・`private-net` の 5。プロキシ（Hyperdrive・Supavisor・RDS Proxy）は口ではなく `db-proxy` の役割の部品にする |
-| CP-04 | 規則で弾かれる組を画面に出すか | **出して無効にし、理由を出す**（D-45 と同じ）。見積モードの比較からは外し、外した理由を添える |
-| CP-05 | 中継の部品をどう足すか | 規則が要る中継は**自動で足して明細・構成図に出す**。選べる中継（Worker の API）は今の `api` のスロットに従う。単価が未取得の中継（NAT・RDS Proxy・Advanced Networking）を要する組は、取得まで選べなくする |
-| CP-06 | 事業者の間の転送をどちらで数えるか | **送り出す側の egress**（prd/11 §2.3 のまま）。送り手の課金が文書に無いもの（Vercel の関数・Amplify の SSR）は数えず、前提の文で「未確認」 |
-| CP-07 | Vercel から AWS の DB へつなぐ形をどこまで扱うか | 公開の口（公開の RDS + 認証・DynamoDB・Marketplace の Aurora）を扱う。IP を絞る形は Static IPs（Pro $100 / 月）を中継として段 3 で。Secure Compute（Enterprise）・PrivateLink（Advanced Networking の料金未確認）は扱わない |
-| CP-08 | リージョン・往復の遅延 | 計算しない（今と同じ）。規則・部品に地域の注意（Neon に東京が無い・Vercel の関数の既定は iad1）を前提の文として持つ |
-| CP-09 | 接続の数の上限を数えるか | 段 2 は前提の文だけ（プールを前提にする）。段 3 以降で `limit`（Workers 同時 6・Cloud Run 100・Neon `max_connections`）を検討 |
-| CP-10 | 出典の持ち方 | **規則ごとに sources・部品ごとに premiseRefs**。組の根拠は合成。`CROSS_PAIRS` は段 1 で規則に移し、選べる組が一致するテストの後で消す |
-| CP-11 | 釣り合い（手間） | 目標は動かさない（D-64）。アカウントの手間（毎月 0.5・一度きり 1）は今のまま。中継の部品 1 つにつき一度きり +1（ゲーム上の仮定）。寄せ集めの構成が全シードで届くなら見直す |
+| CP-01 | どの案で進めるか（A: 組を足し続ける / B: 全部を役割と口で / C: 差し替える部品だけ役割と口で） | **C**。土台は今のまま、差し替える部品だけを役割 + 接続の口と接続の規則で組む。B は段 5 で改めて判断 |
+| CP-02 | 役割の一覧と粒度 | 推奨どおり（supervisor）: `edge-cdn`・`static-host`・`compute`・`image-transform`・`object-store`・`sql-db`・`kv`・`db-proxy`・`email`・`dns` の 10。今のスロット（`images`・`db`・`api`…）は役割の上の「選ぶ単位」として残す |
+| CP-03 | 接続の口の種類 | 推奨どおり（supervisor）: `public-url`・`https-api`・`tcp-sql`・`binding`・`private-net` の 5。プロキシ（Hyperdrive・Supavisor・RDS Proxy）は口ではなく `db-proxy` の役割の部品にする |
+| CP-04 | 規則で弾かれる組を画面に出すか | **灰色で出し、理由を添える**（D-45 と同じ見せ方）。見積モードの比較からは外し、外した理由を添える |
+| CP-05 | 中継の部品をどう足すか | 規則が要る中継は**自動で足して明細・構成図に出す**。選べる中継（Worker の API）は今の `api` のスロットに従う。単価が未取得の中継（NAT・RDS Proxy・Advanced Networking）が要る組は、取得まで選べない |
+| CP-06 | 事業者の間の転送をどう数えるか | **推奨から変更**。「どちらか一方の側で数える」規則にせず、**各事業者の料金データの送り出し（egress）と受け取り（ingress）の項目をそれぞれ数えて足す**（A → B の転送で A の egress と B の ingress の両方に課金があれば両方）。料金表に項目が見つからない側は課金なし（前提の文で「未確認」。Vercel の関数・Amplify の SSR など）。今は受け取りに課金する事業者はほぼ無いが、規則は両側を見る形にする |
+| CP-07 | Vercel から AWS の DB へつなぐ形をどこまで扱うか | 公開の口（公開の RDS + 認証・DynamoDB・Marketplace の Aurora）を扱う。IP を絞る形は段 3 で Static IPs（Pro $100 / 月）を中継として。VPC の中（Secure Compute・PrivateLink）は扱わない |
+| CP-08 | リージョン・往復の遅延 | 遅延は計算しない。地域の注意（Neon に東京が無い・Vercel の関数の既定は iad1）は前提の文だけ。**リージョンの要素は後で検討する候補**（未決の候補に残す） |
+| CP-09 | 接続の数の上限を数えるか | 段 2 は前提の文だけ（プールを前提にする）。ユーザーの感覚: 普通の負荷なら接続の数が問題になることは少なく、プール（pooler）などで管理される。**後で検討する候補**（未決の候補に残す。Workers 同時 6・Cloud Run 100・Neon `max_connections` は §2.2 の事実として持つ） |
+| CP-10 | 出典の持ち方 | 推奨どおり（supervisor）: **規則ごとに sources・部品ごとに premiseRefs**。組の根拠は合成。`CROSS_PAIRS` は段 1 で規則に移し、選べる組が一致するテストの後で消す |
+| CP-11 | 釣り合い（手間） | **推奨から変更**。事業者が増えるほど手間を重くする: 他の事業者のアカウントの k 個目は毎月 0.5 × k（1 個で 0.5・2 個で計 1.5・3 個で計 3.0。今は 1 つにつき一律 0.5）。ゲーム上の仮定で、実装後に基準プレイで調整する。中継の部品の一度きり +1 は入れない（中継で増える事業者のアカウントで数える）。目標の額は動かさない（D-64） |
 | CP-12 | 選択肢が増えた画面の選び方 | スロットごとに「同じ事業者 / 他の事業者」の小見出し。他の事業者は畳んでおき、開いたら事業者で絞れる |
-| CP-13 | 保存の互換 | 部品の id を変えない。`SAVE_VERSION` は 4 のまま。中継は保存に書かない |
-| CP-14 | 総当たりのテスト | 規則の単体（架空の事業者）+ 規則ごとの実在の golden + 総当たりは pairwise へ（土台の既定の総当たりは残す） |
-| CP-15 | 段 2 で最初に足す組 | Vercel × S3 + CloudFront（画像）・Vercel × DynamoDB / Aurora（DB）・Cloudflare × Neon（Hyperdrive）。どれも中継が要らず、§2 で根拠が揃っている |
-| CP-16 | Workers から外の Postgres へ、Hyperdrive を通さず TCP（`connect()`）で直接つなぐ形を出すか | 出さない（公式が Hyperdrive を勧める。Hyperdrive は転送無料・Free で 1 日 10 万クエリ）。学びの「不適切な選択」にするかは後で |
-| CP-17 | 構成図の線を規則から作るか | catalog が `links` を添え、構成図（ハブ型）はそれを描く。estimator は読まない |
+| CP-13 | 保存の互換 | 推奨どおり（supervisor）: 部品の id を変えない。`SAVE_VERSION` は 4 のまま。中継は保存に書かない |
+| CP-14 | 総当たりのテスト | 推奨どおり（supervisor）: 規則の単体（架空の事業者）+ 規則ごとの実在の golden + 総当たりは pairwise へ（土台の既定の総当たりは残す） |
+| CP-15 | 段 2 で足す組 | **推奨から変更**。段 2 は **Vercel × DynamoDB / Aurora（DB）だけ**。Vercel × S3 + CloudFront・Cloudflare × Neon（Hyperdrive）・Google Cloud × R2 は後の段の候補 |
+| CP-16 | Workers から外の Postgres へ、Hyperdrive を通さず TCP（`connect()`）で直接つなぐ形を出すか | 推奨どおり（supervisor）: 出さない（公式が Hyperdrive を勧める）。学びの「不適切な選択」にするかは後で |
+| CP-17 | 構成図の線を規則から作るか | 推奨どおり（supervisor）: catalog が `links` を添え、構成図（ハブ型）はそれを描く。estimator は読まない |
+
+### 8.1 後で検討する候補（未決）
+
+- リージョンの要素（CP-08）: 関数と DB の地域の違い・地域料金を費用や速さに効かせるか。
+- 接続の数の上限（CP-09）: `limit` として数えるか。
 
 ## 9. 出典（2026-11-03 取得。catalog・prd/11 に既にあるものは各所を参照）
 
