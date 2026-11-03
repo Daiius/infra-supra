@@ -326,6 +326,8 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '開発者に人気の送信のサービスの無料プラン。小さく始めるなら費用がかからない',
   'resend:email:resend-pro':
     '開発者に人気の送信のサービスの有料プラン。月額で通数がたっぷり込み',
+  'resend:email:resend-pro-100k':
+    '同じ有料プランの込みの通数が倍の段。送る通数が多いなら超過より安い',
   // Bunny（D-98）。転送の安い従量の CDN を、画像の配信と前段に差す
   'bunny:images:bunny-images':
     '転送の安い CDN から配り、変換は月額で使い放題。大きな画像の多いサイトに向く',
