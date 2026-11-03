@@ -222,6 +222,24 @@ describe('見積モードの画面', () => {
     expect(
       row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
     ).toBe('server-island');
+    // 描き方の列は選んでいるもの（S6）も含めて S1〜S6 の順に並び、S6 が選択中になる
+    const chips = [...row.querySelectorAll('[data-alternative]')];
+    const order = chips.map((x) => x.getAttribute('data-alternative'));
+    expect(order).toContain('server-island');
+    expect(order).toContain('ssr');
+    expect(order.indexOf('ssr')).toBeLessThan(order.indexOf('server-island'));
+    expect(
+      chips
+        .filter((x) => x.getAttribute('data-selected') === 'true')
+        .map((x) => x.getAttribute('data-alternative')),
+    ).toEqual(['server-island']);
+    expect(
+      within(row as HTMLElement)
+        .getByRole('button', {
+          name: '個人向けのページは S6 枠 + サーバーの島（選択中）',
+        })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
     expectEstimate();
     expect(
       within(card(/^構成図: /)).getByRole('list', {

@@ -1,5 +1,5 @@
 // ページごとの描き方の表（D-106・D-107）。始める画面・見積モード・フレームワークのカードで共有する。
-// 行は game の routePlanRows（workloadFor が当てる描き方と同じ）。onSelect を渡すと、ほかの描き方をボタンで選べる。
+// 行は game の routePlanRows（workloadFor が当てる描き方と同じ）。onSelect を渡すと、描き方の一覧（選んでいるものも含む）からボタンで選べる。
 // status を渡すと、行ごとに要件の判定（鮮度・SNS のカード・1 リクエストの CPU の制限）とほかの描き方の 1 か月目の差を出す。
 // 色は見取り図の作られ方の色を流用し、必ず文字を添える。
 import type {
@@ -11,6 +11,7 @@ import type {
   RouteRowStatus,
   RouteStrategyId,
 } from 'game';
+import { ROUTE_STRATEGY_ORDER } from 'catalog';
 import { Info } from './info.tsx';
 import { SOURCE_CLASS, SOURCE_STYLE } from './page-wireframes.tsx';
 
@@ -40,6 +41,35 @@ const signedUsd = (n: number) =>
   `${n >= 0 ? '+' : '−'}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 
 const MARK = { good: '✓', fair: '△', bad: '✗' } as const;
+
+/** 描き方の列に並べる一覧（選んでいるもの + ほかの描き方を S1〜S6 の順に）。 */
+type Choice =
+  | { kind: 'selected'; strategy: RouteStrategyId }
+  | { kind: 'other'; strategy: RouteStrategyId; alt: RouteAlternative };
+function choicesOf(r: RoutePlanRow): Choice[] {
+  const all: Choice[] = [
+    { kind: 'selected', strategy: r.strategy },
+    ...r.alternatives.map((alt): Choice => ({
+      kind: 'other',
+      strategy: alt.strategy,
+      alt,
+    })),
+  ];
+  const rank = (s: RouteStrategyId) => ROUTE_STRATEGY_ORDER.indexOf(s);
+  return all.sort((x, y) => rank(x.strategy) - rank(y.strategy));
+}
+
+/** 選んでいる描き方のチップの中身（差は出さない）。 */
+function SelectedBody({ r }: { r: RoutePlanRow }) {
+  return (
+    <>
+      <span aria-hidden>✓</span>
+      <span className="opacity-60">{r.code}</span>
+      {r.strategyLabel}
+      <span className="badge badge-primary badge-xs">選択中</span>
+    </>
+  );
+}
 
 /** 行の要件の判定（鮮度・SNS のカード・CPU の制限）。文は ⓘ に畳む。 */
 function RowStatus({ s }: { s: RouteRowStatus }) {
@@ -154,7 +184,7 @@ function RowParts({
 }
 
 /**
- * ページ → 描き方 → なぜ → この構成でほかに選べる描き方（使えないものは灰色と理由の ⓘ）。
+ * ページ → 描き方 → なぜ → この構成の描き方の一覧（S1〜S6 の順。選んでいるものは枠で強調し、使えないものは灰色と理由の ⓘ）。
  * caption: 表の下の注記（どこで決まっているか）。
  */
 export function RoutePlanTable({
@@ -196,7 +226,7 @@ export function RoutePlanTable({
               <th>ページ</th>
               <th>描き方</th>
               <th>なぜ</th>
-              <th>ほかの描き方（この構成で）</th>
+              <th>描き方（この構成で選べるもの）</th>
             </tr>
           </thead>
           <tbody>
@@ -242,8 +272,41 @@ export function RoutePlanTable({
                   </td>
                   <td className="min-w-48 text-xs opacity-80">{r.why}</td>
                   <td className="min-w-48">
-                    <ul className="flex flex-wrap gap-1">
-                      {r.alternatives.map((a) => {
+                    <ul
+                      role="group"
+                      aria-label={`${r.label}の描き方`}
+                      className="flex flex-wrap gap-1"
+                    >
+                      {choicesOf(r).map((c) => {
+                        if (c.kind === 'selected')
+                          return (
+                            <li
+                              key={c.strategy}
+                              data-alternative={c.strategy}
+                              data-available="true"
+                              data-selected="true"
+                              className="inline-flex items-center gap-1 rounded border border-primary bg-primary/10 text-[11px] ring-1 ring-primary"
+                            >
+                              {onSelect ? (
+                                <button
+                                  type="button"
+                                  aria-pressed="true"
+                                  className="btn h-auto min-h-0 cursor-default gap-1 px-1 py-0.5 text-[11px] font-normal btn-ghost btn-xs"
+                                  aria-label={`${r.label}は ${r.code} ${r.strategyLabel}（選択中）`}
+                                >
+                                  <SelectedBody r={r} />
+                                </button>
+                              ) : (
+                                <span
+                                  aria-current="true"
+                                  className="inline-flex items-center gap-1 px-1 py-0.5"
+                                >
+                                  <SelectedBody r={r} />
+                                </span>
+                              )}
+                            </li>
+                          );
+                        const a = c.alt;
                         const why = a.available
                           ? disabledReason?.(r, a)
                           : undefined;
@@ -270,6 +333,7 @@ export function RoutePlanTable({
                             key={a.strategy}
                             data-alternative={a.strategy}
                             data-available={a.available}
+                            data-selected="false"
                             className={`inline-flex items-center gap-1 rounded border border-base-300 text-[11px] ${
                               a.available
                                 ? ''
@@ -279,6 +343,7 @@ export function RoutePlanTable({
                             {pick ? (
                               <button
                                 type="button"
+                                aria-pressed="false"
                                 className="btn h-auto min-h-0 gap-1 px-1 py-0.5 text-[11px] font-normal btn-ghost btn-xs"
                                 onClick={() => onSelect(r, a)}
                                 aria-label={`${r.label}を ${a.code} ${a.label}にする`}
