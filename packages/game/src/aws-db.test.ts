@@ -93,20 +93,22 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/14 §3.12�
     expect(won(contract, VERCEL_PRO, 'nextjs', { db: 'aurora-pause' })).toBe(0);
   });
 
-  it('記事 × Vercel Pro: DynamoDB は Astro だけ届き（画像を Cloudflare に出すと全シード）、Next.js は届かない', () => {
+  it('記事 × Vercel Pro: DynamoDB は Astro だけ届き（画像を Cloudflare に出すと全シード）、Next.js はほとんど届かない', () => {
     // D-118: Astro の記事のキャッシュは既定でオンデマンドなので、即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で 6 → 9
-    expect(won(article, VERCEL_PRO, 'astro', { db: 'dynamodb' })).toBe(9);
+    // D-121: サムネイル（関連記事 4 枚）を足して Vercel の画像の転送・最適化が少し増え、9 → 6
+    expect(won(article, VERCEL_PRO, 'astro', { db: 'dynamodb' })).toBe(6);
     expect(
       won(article, VERCEL_PRO, 'astro', {
         db: 'dynamodb',
         images: 'cf-resize',
       }),
     ).toBe(20);
+    // D-121: 記事の閲覧の偏り（Zipf）で ISR の再生成が減り、0 → 1（シード 1〜20 のうち 1 本だけ）
     expect(
       won(article, VERCEL_PRO, 'nextjs', {
         db: 'dynamodb',
         images: 'cf-resize',
       }),
-    ).toBe(0);
+    ).toBe(1);
   });
 });

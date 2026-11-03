@@ -1858,24 +1858,32 @@ export function applyComponentsToWorkload(
     out.routes = w.routes.map((r) =>
       r.rendering === 'isr' ? { ...r, rendering: 'ssr' } : r,
     );
+  // サイズ違いを作らない部品では、サムネイルも本文の画像と同じファイルを配る（小さく作り分けない。D-121）
+  const sameForThumbnails = (images: WorkloadInput['images']) =>
+    images.thumbnails
+      ? {
+          ...images,
+          thumbnails: { ...images.thumbnails, sizeKB: images.sizeKB },
+        }
+      : images;
   if (c.images === 'none')
-    out.images = {
+    out.images = sameForThumbnails({
       ...w.images,
       transformAt: 'none',
       ...(options.originalImageKB !== undefined
         ? { sizeKB: options.originalImageKB }
         : {}),
-    };
+    });
   else if (c.images === 'resize')
     // 投稿のときに 1 回だけ縮めて置く: 変換のサービスは使わず、サイズ違いは 1 種（スマホにも同じ大きさ）
-    out.images = {
+    out.images = sameForThumbnails({
       ...w.images,
       transformAt: 'none',
       variants: 1,
       ...(options.resizedImageKB !== undefined
         ? { sizeKB: options.resizedImageKB }
         : {}),
-    };
+    });
   else if (c.images === 'r2-variants')
     out.images = { ...w.images, transformAt: 'upload' };
   return out;

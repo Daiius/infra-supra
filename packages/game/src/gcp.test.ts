@@ -162,12 +162,14 @@ describe('Google Cloud の構成', () => {
     // ドメインの登録（$0.93 / 月）と Cloud DNS（ゾーン 約 $0.20 + 問い合わせ）の分だけ $1.1〜1.2 上がった（D-96。達成は不変）
     // 記事はメールの通数から Bot の PV を除いて $0.1〜0.2 下がった（D-117。達成は不変）
     // D-118: 記事 × SPA は即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で PV が伸びた分、費用が上がった（前は $56.2・$11.6。達成は不変）
+    // D-121: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分け、記事の閲覧を Zipf で偏らせた（記事の Next.js は描き直しが減って
+    //        $0.1〜0.5 下がり、SPA は 1 枚ずつのサムネイルの分 $0.4 上がる。達成は不変）
     expect(table).toEqual({
-      articleNext: { won: 0, monthly: 64.1 },
-      articleNextMin1: { won: 0, monthly: 73.5 },
-      articleNextSql: { won: 0, monthly: 71.1 },
-      articleNextCfResize: { won: 20, monthly: 28 },
-      articleSpa: { won: 0, monthly: 57.4 },
+      articleNext: { won: 0, monthly: 64 },
+      articleNextMin1: { won: 0, monthly: 73.4 },
+      articleNextSql: { won: 0, monthly: 71.4 },
+      articleNextCfResize: { won: 20, monthly: 27.5 },
+      articleSpa: { won: 0, monthly: 57.8 },
       articleSpaCfResize: { won: 20, monthly: 11.9 },
       contractNext: { won: 20, monthly: 15.9 },
       contractNextMin1: { won: 20, monthly: 25.4 },
@@ -179,9 +181,10 @@ describe('Google Cloud の構成', () => {
     // 目標の根拠（CF Paid × Next.js）: 達成は不変。メールの送信（D-95・Email Service）の分だけ費用が上がった（前は $15.2・$5.7）
     // ドメインの登録（D-96。$0.93 / 月）の分も上がった（前は $18.0・$13.4）
     // 記事はメールの通数から Bot の PV を除き、Bot の月の Email Service の超過が減った（D-117。前は $18.9）
+    // 記事の閲覧の偏り（Zipf）で ISR の再生成（KV の書き込み）が減った（D-121。前は $18.3）
     expect(run(article, CF_PAID, 'nextjs')).toEqual({
       won: 20,
-      monthly: 18.3,
+      monthly: 18.2,
     });
     expect(run(contract, CF_PAID, 'nextjs')).toEqual({
       won: 20,

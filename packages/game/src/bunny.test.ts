@@ -114,11 +114,12 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §23.3�
     expect(run(contract, CF_PAID, 'nextjs').won).toBe(20);
   });
 
-  it('記事 × Amplify: 前段を Bunny にすると、自前の CloudFront の前段より安く、達成も増える（静的なファイルが常時無料の 1 TB を超える分）', () => {
+  it('記事 × Amplify: 前段を Bunny にすると、自前の CloudFront の前段より安く、達成は減らない（静的なファイルが常時無料の 1 TB を超える分）', () => {
     const cf = run(article, AMPLIFY, 'nextjs', { frontCdn: 'static' });
     const bn = run(article, AMPLIFY, 'nextjs', { frontCdn: 'bunny' });
     expect(bn.monthly).toBeLessThan(cf.monthly);
-    expect(bn.won).toBeGreaterThan(cf.won);
+    // D-121 の前は達成も増えた（10 → 14）。一律で縮める画像はサムネイルにも 400 KB を配るので、どちらも届かなくなった（0 / 20）
+    expect(bn.won).toBeGreaterThanOrEqual(cf.won);
   });
 
   it('記事 × OpenNext・Google Cloud: 画像を Bunny で配ると全シード達成（画像だけ Cloudflare よりは高い）', () => {

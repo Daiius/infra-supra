@@ -240,8 +240,31 @@ export function deliveredImageKB(
 }
 
 /**
- * 1 ページの通信量（KB）: HTML（SPA はデータの API）+ JS・CSS + 画像。ブラウザのキャッシュが無い最初の 1 ページ（D-47）。
- * 画像の枚数は提案で変わる（mods.imagesPerPage）。
+ * サムネイル 1 枚（関連記事・一覧）あたり配る大きさ（KB。D-121）。サイズ違いを作るなら、本文の 1 枚にテンプレートの比
+ * （サムネイル / 本文の大きさ）を掛ける。サイズ違いが 1 種・一律で縮める・原本のままなら、本文と同じファイルを配る。
+ */
+export function deliveredThumbnailKB(
+  sc: Scenario,
+  settings: Settings,
+  images: string | undefined,
+  nextImage = false,
+): number {
+  const body = deliveredImageKB(sc, settings, images, nextImage);
+  const t = sc.template(1).images;
+  if (
+    !t.thumbnails ||
+    t.sizeKB <= 0 ||
+    images === 'none' ||
+    images === 'resize' ||
+    settings.variants <= 1
+  )
+    return body;
+  return body * (t.thumbnails.sizeKB / t.sizeKB);
+}
+
+/**
+ * 1 ページの通信量（KB）: HTML（SPA はデータの API）+ JS・CSS + 画像（本文とサムネイル。D-121）。ブラウザのキャッシュが無い最初の
+ * 1 ページ（D-47）。ページはテンプレートの最初のルート（記事のページ）。本文の画像の枚数は提案で変わる（mods.imagesPerPage）。
  */
 export function pageWeightKB(
   sc: Scenario,
@@ -251,12 +274,15 @@ export function pageWeightKB(
   nextImage = false,
 ): number {
   const w = sc.template(1);
-  const html = w.routes[0]!.processing.responseKB;
+  const page = w.routes[0]!;
+  const html = page.processing.responseKB;
   const perImage = deliveredImageKB(sc, settings, images, nextImage);
+  const perThumb = deliveredThumbnailKB(sc, settings, images, nextImage);
   return (
     html +
     w.perPage.assets * w.assets.sizeKB +
-    (mods.imagesPerPage ?? w.perPage.images) * perImage
+    (mods.imagesPerPage ?? page.images ?? w.perPage.images) * perImage +
+    (page.thumbnails ?? w.perPage.thumbnails ?? 0) * perThumb
   );
 }
 

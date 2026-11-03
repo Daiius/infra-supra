@@ -152,7 +152,8 @@ describe('Astro の API の置き場（D-69）', () => {
     expect(run(article, CF_PAID, VPS2).won).toBe(17);
     // 記事を Vercel の ISR でキャッシュする形（D-103）にしてビルドの CPU minute が無くなり、0 → 1
     // D-118: Astro の記事のキャッシュは既定でオンデマンドなので、即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で 1 → 4
-    expect(run(article, VERCEL_PRO, WORKERS).won).toBe(4);
+    // D-121: サムネイル（関連記事 4 枚）を足して Vercel の画像の転送・最適化が少し増え、4 → 2
+    expect(run(article, VERCEL_PRO, WORKERS).won).toBe(2);
     // ドメインの登録（D-96）の費用で 20 → 19
     expect(run(contract, VERCEL_PRO, WORKERS).won).toBe(19);
     // メールの送信（D-95）の費用で 12 → 9

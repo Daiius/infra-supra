@@ -31,6 +31,7 @@ import {
   autoImageFormat,
   COMMENT_PAGES_PER_UPDATE,
   deliveredImageKB,
+  deliveredThumbnailKB,
   imageFormatOf,
   isOnDemand,
   type Settings,
@@ -172,14 +173,30 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   w.images = {
     ...w.images,
     sizeKB: deliveredImageKB(sc, p.settings, undefined, nextImage),
+    ...(w.images.thumbnails
+      ? {
+          thumbnails: {
+            ...w.images.thumbnails,
+            sizeKB: deliveredThumbnailKB(sc, p.settings, undefined, nextImage),
+          },
+        }
+      : {}),
     variants: p.settings.variants,
     uploadsPerMau: w.images.uploadsPerMau * (p.mods.uploadsFactor ?? 1),
     ...(p.stock
       ? { storedGB: p.stock.imagesGB, distinct: Math.round(p.stock.images) }
       : {}),
   };
-  if (p.mods.imagesPerPage !== undefined)
-    w.perPage = { ...w.perPage, images: p.mods.imagesPerPage };
+  // 記事に画像を多く載せる（提案）: 本文の画像を持つルート（記事のページ）の枚数を替える。ルートが持たなければ 1 PV の枚数（D-121）
+  const imagesPerPage = p.mods.imagesPerPage;
+  if (imagesPerPage !== undefined) {
+    const hasBody = (r: (typeof w.routes)[number]) => (r.images ?? 0) > 0;
+    if (w.routes.some(hasBody))
+      w.routes = w.routes.map((r) =>
+        hasBody(r) ? { ...r, images: imagesPerPage } : r,
+      );
+    else w.perPage = { ...w.perPage, images: imagesPerPage };
+  }
   if (p.mods.writesPerCall !== undefined)
     w.api = { ...w.api, writesPerCall: p.mods.writesPerCall };
   if (p.stock) w.db = { ...w.db, sizeGB: p.stock.dbGB };
