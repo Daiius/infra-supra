@@ -57,7 +57,7 @@ export type SatisfactionRules = {
 
 /** 提案を受けたときの Workload の変化（以降ずっと）。 */
 export type WorkloadMods = {
-  /** 1 PV あたりの画像の枚数。 */
+  /** 記事のページの本文の画像の枚数（本文の画像を持つルート。持たないテンプレートは 1 PV あたりの枚数。D-121）。 */
   imagesPerPage?: number;
   /** MAU あたりの画像の投稿の倍率。 */
   uploadsFactor?: number;

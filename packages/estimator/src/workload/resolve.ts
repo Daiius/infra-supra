@@ -2,6 +2,7 @@
 import { ceilUnits } from '../num/arith.ts';
 import { HOURS_PER_MONTH } from '../num/unit.ts';
 import type { Derivation } from '../provenance.ts';
+import { sumOverPages } from './popularity.ts';
 import {
   WorkloadInputSchema,
   type ParsedWorkload,
@@ -91,7 +92,8 @@ export type ResolvedWorkload = {
   backgroundCpuMs: Partial<Record<RequestClass, number>>;
   /**
    * 期間つきのキャッシュ（ISR の再検証の間隔・API の応答の s-maxage）のヒット率（件数で重み付け）。
-   * 1 ページへの閲覧の到着率 λ と期間 T から λT / (1 + λT)（= 1 − 再生成・取り直しの数 / 閲覧。人気が一様と仮定。prd/04 §2）。
+   * 1 ページへの閲覧の到着率 λ と期間 T から、ページごとの λT / (1 + λT) を閲覧の重みで平均した値（= 1 − 再生成・取り直しの数 / 閲覧。
+   * 閲覧の偏りはルートの zipfExponent・省略は一様。prd/04 §2・D-121）。
    * document-isr と api-content だけ。構成の cdn（ttlClasses）と function（cache）が使う。
    */
   cacheHitRate: Partial<Record<RequestClass, number>>;
@@ -163,6 +165,42 @@ export type ResolvedWorkload = {
 };
 
 const SECONDS_PER_MONTH = HOURS_PER_MONTH * 3600;
+
+type Route = ParsedWorkload['routes'][number];
+
+/**
+ * 期間 T のキャッシュ（ISR の再検証・API の応答の s-maxage・最大寿命）を miss する閲覧の数（月）。1 ページへの閲覧の到着率 λ に対し、
+ * 期間 T あたり高々 1 回取り直すので、ページごとに 閲覧 / (1 + λT) を、閲覧の偏り（ルートの zipfExponent）で散らして足す（D-121）。
+ * rate はピークの時間帯の到着率の倍率（peakHourFactor。月の平均は 1）。
+ */
+function timedMisses(
+  views: number,
+  r: Route,
+  seconds: number,
+  rate: number,
+): number {
+  const k = (seconds / SECONDS_PER_MONTH) * rate;
+  return sumOverPages(views, r.pages, r.zipfExponent, (v) => v / (1 + v * k));
+}
+
+/** 内訳の式に添える、閲覧の偏りの前提。 */
+function popularityNote(r: Route): string {
+  return r.zipfExponent
+    ? `ページの閲覧は人気の順に偏る（Zipf・指数 ${r.zipfExponent}）と仮定`
+    : '人気が一様と仮定';
+}
+
+function popularityInputs(r: Route): Derivation['inputs'] {
+  return r.zipfExponent
+    ? [
+        {
+          name: '閲覧の偏り（Zipf の指数）',
+          value: r.zipfExponent,
+          basis: 'assumption',
+        },
+      ]
+    : [];
+}
 
 /**
  * 月の時間帯の区間（D-89）。slotHours は 1 回の時間帯の長さ（1 時間）、prev は直前の時間帯の区間の添字（同じ日の種類の中で
@@ -360,22 +398,20 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       source('document-static', r, entries, 0);
       if (r.cacheSeconds === undefined) source('api', r, views, p.cpuMs);
       if (r.cacheSeconds !== undefined) {
-        // ISR の再生成と同じ形: 期間 T あたり 1 ページ高々 1 回だけ取り直す（miss）→ 閲覧 / (1 + λT)
-        const lambdaT =
-          (views / r.pages) * (r.cacheSeconds / SECONDS_PER_MONTH);
-        const misses = views / (1 + lambdaT);
+        // ISR の再生成と同じ形: 期間 T あたり 1 ページ高々 1 回だけ取り直す（miss）→ ページごとに 閲覧 / (1 + λT) を足す（D-121）
+        const misses = timedMisses(views, r, r.cacheSeconds, 1);
+        const peakMisses = timedMisses(views, r, r.cacheSeconds, peakRate);
         source('api-content', r, views, p.cpuMs, { misses });
         spaContent.push(flow(views, work));
         spaContentMiss.push(flow(misses, work));
         spaContentHits += views - misses;
         spaContentViews += views;
-        spaContentPeakMisses += views / (1 + lambdaT * peakRate);
-        spaContentPeakMiss.push(flow(views / (1 + lambdaT * peakRate), work));
+        spaContentPeakMisses += peakMisses;
+        spaContentPeakMiss.push(flow(peakMisses, work));
         derivations.push({
           id: `api-cache-misses:${r.id}`,
           label: `API の応答のキャッシュの取り直し（${r.id}）`,
-          expression:
-            '閲覧 / (1 + ページあたりの閲覧 × キャッシュの期間 / 1 か月)（人気が一様と仮定。ISR の再生成と同じ形）',
+          expression: `Σ ページ (ページの閲覧 / (1 + ページの閲覧 × キャッシュの期間 / 1 か月))（${popularityNote(r)}。ISR の再生成と同じ形）`,
           inputs: [
             { name: '閲覧', value: views, basis: 'derived' },
             { name: 'ページ数', value: r.pages, basis: 'user-input' },
@@ -385,6 +421,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
               unit: 'second',
               basis: 'user-input',
             },
+            ...popularityInputs(r),
           ],
           result: misses,
         });
@@ -453,47 +490,47 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           result: updates * pagesPerUpdate,
         });
       }
-      // 時間: 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → 閲覧 / (1 + λT)（人気が一様と仮定。prd/04 §2）
+      // 時間: 1 ページへの閲覧の到着率 λ に対し、間隔 T あたり高々 1 回 → ページごとに 閲覧 / (1 + λT)（prd/04 §2）
       // オンデマンド: 更新のあとの最初の閲覧で 1 回 → 更新 × 閲覧 / (更新 + 閲覧)（更新と閲覧がページに一様に散ると仮定。
       // 更新が閲覧よりずっと少なければ更新の回数、閲覧が少なければ閲覧の回数に近づく）。ピークでも外れる割合は同じとみなす。
       // オンデマンドに最大寿命（保険の時間の再検証）を併せるときは、その分（時間の式）を足す。閲覧の回数を超えない（D-56）
+      // 閲覧の偏り（D-121）: 時間の分・まとめた無効化の分はページごとの閲覧で出して足す（ルートの zipfExponent。省略は一様）。
+      // オンデマンドの更新の分は、更新も閲覧と同じ偏りで散る（コメント・編集は読まれる記事に付く）と仮定すると、ページごとに足しても
+      // 更新 × 閲覧 / (更新 + 閲覧) のまま（偏りに依らない）
       const maxAge =
         updates === undefined ? undefined : r.onDemandMaxAgeSeconds;
       const T = updates === undefined ? r.revalidateSeconds : maxAge;
-      const lambdaT =
-        T === undefined ? 0 : (views / r.pages) * (T / SECONDS_PER_MONTH);
       const onDemandPart =
         updates === undefined
           ? 0
           : updates + views > 0
             ? (updates * views) / (updates + views)
             : 0;
-      const timedPart = (lt: number) =>
-        T === undefined ? 0 : views / (1 + lt);
+      const timedPart = (rate: number) =>
+        T === undefined ? 0 : timedMisses(views, r, T, rate);
+      const timed = timedPart(1);
+      const peakTimed = timedPart(peakRate);
       const count =
-        updates === undefined
-          ? timedPart(lambdaT)
-          : Math.min(views, onDemandPart + timedPart(lambdaT));
+        updates === undefined ? timed : Math.min(views, onDemandPart + timed);
       const peakMisses =
         updates === undefined
-          ? timedPart(lambdaT * peakRate)
-          : Math.min(views, onDemandPart + timedPart(lambdaT * peakRate));
+          ? peakTimed
+          : Math.min(views, onDemandPart + peakTimed);
       // ワイルドカードでまとめた無効化（D-79）: 1 回の更新でルートの全ページの CDN のキャッシュが消える。
-      // ページあたりの更新は U（ページごとの U / ページ数でなく）なので、合計は U × 閲覧 / (U + 閲覧 / ページ数)
+      // ページあたりの更新は U（ページごとの U / ページ数でなく）なので、ページごとに U × ページの閲覧 / (U + ページの閲覧) を足す
+      // （一様なら U × 閲覧 / (U + 閲覧 / ページ数)）
       const flushPart =
         updates === undefined
           ? 0
-          : updates + views / r.pages > 0
-            ? (updates * views) / (updates + views / r.pages)
-            : 0;
+          : sumOverPages(views, r.pages, r.zipfExponent, (v) =>
+              updates + v > 0 ? (updates * v) / (updates + v) : 0,
+            );
       const flushCount =
-        updates === undefined
-          ? count
-          : Math.min(views, flushPart + timedPart(lambdaT));
+        updates === undefined ? count : Math.min(views, flushPart + timed);
       const peakFlushCount =
         updates === undefined
           ? peakMisses
-          : Math.min(views, flushPart + timedPart(lambdaT * peakRate));
+          : Math.min(views, flushPart + peakTimed);
       isrFlushMiss.push(flow(flushCount, served));
       const shellMark = r.island?.request ? { islandShell: true } : {};
       source('document-isr', r, views, r.cachedServeCpuMs, {
@@ -524,8 +561,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           ? {
               id: `isr-revalidations:${r.id}`,
               label: `ISR の再生成（${r.id}）`,
-              expression:
-                '閲覧 / (1 + ページあたりの閲覧 × 再検証の間隔 / 1 か月)（人気が一様と仮定）',
+              expression: `Σ ページ (ページの閲覧 / (1 + ページの閲覧 × 再検証の間隔 / 1 か月))（${popularityNote(r)}）`,
               inputs: [
                 { name: '閲覧', value: views, basis: 'derived' },
                 { name: 'ページ数', value: r.pages, basis: 'user-input' },
@@ -535,6 +571,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
                   unit: 'second',
                   basis: 'user-input',
                 },
+                ...popularityInputs(r),
               ],
               result: count,
             }
@@ -544,7 +581,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
               expression:
                 maxAge === undefined
                   ? '更新 × 閲覧 / (更新 + 閲覧)（更新のあとの最初の閲覧で 1 回。更新と閲覧がページに一様に散ると仮定）'
-                  : 'min(閲覧, 更新 × 閲覧 / (更新 + 閲覧) + 閲覧 / (1 + ページあたりの閲覧 × 最大寿命 / 1 か月))（オンデマンドに最大寿命の時間の再検証を足す）',
+                  : `min(閲覧, 更新 × 閲覧 / (更新 + 閲覧) + Σ ページ (ページの閲覧 / (1 + ページの閲覧 × 最大寿命 / 1 か月)))（オンデマンドに最大寿命の時間の再検証を足す。${popularityNote(r)}）`,
               inputs: [
                 { name: '閲覧', value: views, basis: 'derived' },
                 {
@@ -565,6 +602,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
                         unit: 'second' as const,
                         basis: 'user-input' as const,
                       },
+                      ...popularityInputs(r),
                     ]
                   : []),
               ],
@@ -613,7 +651,23 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
   });
   source('api', undefined, unrouted, a.cpuMs);
-  const images = pv * w.perPage.images * (1 - w.images.browserReuse);
+  // 画像の閲覧（D-121）: 本文の画像とサムネイルを、ルートごとの枚数（省略は perPage）で数え、ブラウザのキャッシュの分を引く
+  const thumb = w.images.thumbnails ?? {
+    sizeKB: w.images.sizeKB,
+    browserReuse: w.images.browserReuse,
+  };
+  const bodyImages =
+    imagesShownPerMonth(w, pv, 'images') * (1 - w.images.browserReuse);
+  const thumbImages =
+    imagesShownPerMonth(w, pv, 'thumbnails') * (1 - thumb.browserReuse);
+  const images = bodyImages + thumbImages;
+  const imageRead =
+    thumbImages > 0
+      ? merge([
+          flow(bodyImages, { kb: w.images.sizeKB }),
+          flow(thumbImages, { kb: thumb.sizeKB }),
+        ])
+      : flow(images, { kb: w.images.sizeKB });
   const classes: Record<RequestClass, ClassFlow> = {
     'document-static': merge(byRendering.static),
     'document-ssr': merge(byRendering.ssr),
@@ -624,7 +678,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     }),
     api: spaData.length ? merge([apiFlow, ...spaData]) : apiFlow,
     'api-content': merge(spaContent),
-    'image-read': flow(images, { kb: w.images.sizeKB }),
+    'image-read': imageRead,
     'image-write': flow(t.mau * w.images.uploadsPerMau, {
       kb: w.images.sizeKB,
     }),
@@ -694,12 +748,9 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     storage: {
       dbGB: w.db.sizeGB,
       imagesGB: w.images.storedGB,
-      // サイズ違い 1 枚は配る大きさ（sizeKB）とする（仮定）
-      variantsGB:
-        w.images.transformAt === 'upload'
-          ? (w.images.distinct * w.images.variants * w.images.sizeKB) /
-            1_000_000
-          : 0,
+      // サイズ違い 1 枚は配る大きさ（sizeKB）とする（仮定）。サムネイルの大きさを持てば、形式ごとにサイズ違いの 1 つはその大きさ
+      // （D-121。形式のフォールバックの分も、形式ごとにサムネイルを 1 枚として数える。OCL-E2492C36）
+      variantsGB: variantsStoredGB(w.images),
       isrPagesGB: isrPagesKB / 1_000_000,
     },
     onDemandPageRevalidations,
@@ -724,6 +775,37 @@ export function apiCallsPerMonth(
       r.apiCalls !== undefined ? s + pv * r.share * (r.apiCalls - base) : s,
     pv * base,
   );
+}
+
+/**
+ * 投稿のときに作って置くサイズ違いの保存量（GB。transformAt: upload のときだけ）。variants はサイズ違い × 形式の数（formatCopies）で、
+ * 形式ごとにサイズ違いの 1 つがサムネイルの大きさ（D-121・OCL-E2492C36）。
+ */
+function variantsStoredGB(images: ParsedWorkload['images']): number {
+  if (images.transformAt !== 'upload' || images.variants <= 0) return 0;
+  const copies = images.formatCopies ?? 1;
+  const sizes = images.variants / copies;
+  const thumbKB = images.thumbnails?.sizeKB ?? images.sizeKB;
+  return (
+    (images.distinct * copies * ((sizes - 1) * images.sizeKB + thumbKB)) /
+    1_000_000
+  );
+}
+
+/**
+ * 月にページに出す画像の枚数（ブラウザのキャッシュを引く前。D-121）。kind は本文の画像（images）かサムネイル（thumbnails）。
+ * ルートが枚数を持てばその閲覧はそれ、持たなければ perPage の枚数（apiCallsPerMonth と同じ重ね方）。
+ */
+export function imagesShownPerMonth(
+  w: Pick<WorkloadInput, 'perPage' | 'routes'>,
+  pv: number,
+  kind: 'images' | 'thumbnails',
+): number {
+  const base = w.perPage[kind] ?? 0;
+  return w.routes.reduce((s, r) => {
+    const n = r[kind];
+    return n !== undefined ? s + pv * r.share * (n - base) : s;
+  }, pv * base);
 }
 
 /**

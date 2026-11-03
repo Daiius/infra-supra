@@ -314,9 +314,16 @@ export type RouteStrategyContext = {
 
 type Route = WorkloadInput['routes'][number];
 
-/** ルートの部品が呼ぶ API（apiCalls。D-109）を、書き換えた後のルートに引き継ぐ。 */
-const parts = (r: Route) =>
-  r.apiCalls !== undefined ? { apiCalls: r.apiCalls } : {};
+/**
+ * ルートの部品が呼ぶ API（apiCalls。D-109）・画像とサムネイルの枚数・閲覧の偏り（D-121）を、書き換えた後のルートに引き継ぐ
+ * （描き方を変えても、ページに載る物と読まれ方は変わらない）。
+ */
+const parts = (r: Route) => ({
+  ...(r.apiCalls !== undefined ? { apiCalls: r.apiCalls } : {}),
+  ...(r.images !== undefined ? { images: r.images } : {}),
+  ...(r.thumbnails !== undefined ? { thumbnails: r.thumbnails } : {}),
+  ...(r.zipfExponent !== undefined ? { zipfExponent: r.zipfExponent } : {}),
+});
 
 /**
  * ルートごとの描き方を Workload に当てる（D-106）。テンプレートのルート（isr = 全員に同じ中身・ssr = 個人化）から書き換える。

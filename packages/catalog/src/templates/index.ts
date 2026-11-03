@@ -36,6 +36,28 @@ export const ARTICLE_COMMUNITY_ROUTES: Readonly<Record<string, RouteTraits>> = {
   },
 };
 
+/**
+ * 記事のページの画像（D-121。ゲーム上の仮定・出典なし）。D-83 までは 1 PV に 5 枚・全部同じ大きさ（サイズ違いを混ぜた平均）・
+ * ブラウザでの再利用 0.5 で、個人向けのページにも同じ枚数を数えていた。見取り図の区画に合わせて分けた:
+ * - 本文の画像: 記事 1 本に 5 枚（見取り図の「本文の画像（5 枚）」）。大きさは画像の形式で決まる 1 枚（本文の幅のサイズ違い。
+ *   JPEG 150 KB・WebP 105 KB。D-58）。個人向けのページ（プロフィール・通知・自分の記事の一覧）には載せない。
+ * - 関連記事のサムネイル: 記事のページの下に 4 枚（関連記事 2・人気の記事 2）。サイズ違いの「サムネイル」（D-83 の 3 種の 1 つ）で、
+ *   幅が本文の約 1/4・面積が約 1/16 だが、小さい画像は圧縮が効きにくいので本文の 1 枚の 0.1 倍とする。
+ *   サイズ違いを作らない（1 種・一律で縮める・原本のまま）と、本文と同じファイルを配る。
+ */
+export const ARTICLE_BODY_IMAGES = 5;
+export const ARTICLE_THUMBNAILS = 4;
+export const ARTICLE_THUMBNAIL_SIZE_RATIO = 0.1;
+/**
+ * ブラウザのキャッシュから出す割合（D-121。ゲーム上の仮定・出典なし）。シナリオの仮定から次のように置く:
+ * - 本文の画像: 同じ人が同じ記事を開き直す割合（戻る・コメントの返信を見に来る）。記事の閲覧の 5 回に 1 回とみなし 0.2。
+ * - サムネイル: 人気の記事の 2 枚はどの記事のページにも同じものが並び、1 人が月に開く記事のページ（10 PV × 記事 0.6 = 約 6）の
+ *   最初の 1 回だけ取りに行く（1 − 1/6 ≈ 0.83）。関連記事の 2 枚は記事ごとに違い、本文と同じ 0.2。平均して 0.5。
+ */
+export const ARTICLE_IMAGE_REUSE = { body: 0.2, thumbnails: 0.5 } as const;
+/** 記事の閲覧の偏り（Zipf の指数 s。順位 k の記事の閲覧 ∝ k^(−s)。ゲーム上の仮定・出典なし。D-121）。 */
+export const ARTICLE_ZIPF_EXPONENT = 1;
+
 export function articleCommunity(monthlyPageViews: number): WorkloadInput {
   const page = {
     cpuMs: 15,
@@ -70,6 +92,11 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
         // 記事のページの部品（コメント欄・いいね）がブラウザから呼ぶ API: 閲覧 1 回に 1 回（読み込みと投稿。perPage.apiCalls と
         // 同じ値を記事のルートに付けた。記事のページをどう描いても同じで、コメントを HTML に含めると読み込みの分が無くなる。D-109・RS-02）
         apiCalls: 1,
+        // 記事の閲覧は人気の記事に偏る（Zipf・指数 1。ゲーム上の仮定・出典なし。D-121）。ISR・記事のキャッシュのヒット率に効く
+        zipfExponent: ARTICLE_ZIPF_EXPONENT,
+        // 記事のページに載る画像（見取り図の「本文の画像」「関連記事のサムネイル」。D-121）
+        images: ARTICLE_BODY_IMAGES,
+        thumbnails: ARTICLE_THUMBNAILS,
       },
       {
         id: 'personal',
@@ -80,7 +107,8 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
         processing: page,
       },
     ],
-    perPage: { apiCalls: 1, assets: 10, images: 5 },
+    // 画像は記事のページだけに載る（ルートの images・thumbnails）。個人向けのページ（プロフィール・通知・自分の記事の一覧）には載せない（D-121）
+    perPage: { apiCalls: 1, assets: 10, images: 0, thumbnails: 0 },
     api: {
       cpuMs: 5,
       ioWaitMs: 35,
@@ -93,7 +121,11 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
     assets: { sizeKB: 40, browserReuse: 0.7 },
     images: {
       sizeKB: 150,
-      browserReuse: 0.5,
+      browserReuse: ARTICLE_IMAGE_REUSE.body,
+      thumbnails: {
+        sizeKB: 150 * ARTICLE_THUMBNAIL_SIZE_RATIO,
+        browserReuse: ARTICLE_IMAGE_REUSE.thumbnails,
+      },
       distinct: 5_000,
       variants: 3,
       storedGB: 20,
