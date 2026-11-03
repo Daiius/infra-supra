@@ -7,6 +7,7 @@ import {
   componentsOf,
   composeStack,
   DEFAULT_CHOICES,
+  deployTarget,
   type FrameworkId,
   frameworkSupported,
   imagesBehavior,
@@ -20,7 +21,7 @@ import {
 import type { Scenario, Strategy, WorkloadMods } from './scenario.ts';
 import type { ArchitectureInput } from 'estimator';
 import { EFFORT } from './rules.ts';
-import { books, frameworkDefaults } from './core.ts';
+import { books, frameworkDefaults, frameworksOf } from './core.ts';
 import type { GameState } from './state.ts';
 
 /**
@@ -111,6 +112,33 @@ export function stackSupports(
 ): boolean {
   const s = STACKS[stackIndex];
   return s !== undefined && frameworkSupported(framework, s.provider);
+}
+
+/**
+ * 構成にフレームワークを載せられない理由（載せられるなら undefined）。DeployTarget の説明（note）を添える。
+ * 始める画面で、インフラの構成を先に選んだときのフレームワークのカード・構成のカードの注意に使う（D-113）。
+ */
+export function stackUnsupportedReason(
+  stackIndex: number,
+  framework: FrameworkId,
+): string | undefined {
+  if (stackSupports(stackIndex, framework)) return undefined;
+  const note = deployTarget(framework, STACKS[stackIndex]!.provider)?.note;
+  return `公式のアダプターが無く載せられない${note ? `（${note}）` : ''}`;
+}
+
+/**
+ * その構成で使うフレームワーク（D-113）: 望むもの（シナリオで選べて、構成に載せられる）か、載せられなければシナリオの並びで
+ * 最初の載せられるもの。始める画面でインフラの構成を先に選んだとき、載せられないフレームワークから戻す先。
+ */
+export function frameworkOnStack(
+  sc: Scenario,
+  stackIndex: number,
+  want: FrameworkId,
+): FrameworkId {
+  const { allowed, default: def } = frameworksOf(sc);
+  if (allowed.includes(want) && stackSupports(stackIndex, want)) return want;
+  return allowed.find((f) => stackSupports(stackIndex, f)) ?? def;
 }
 
 /**

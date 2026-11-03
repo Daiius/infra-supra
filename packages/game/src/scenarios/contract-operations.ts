@@ -18,11 +18,33 @@ const BUSINESS_WIREFRAMES: PageWireframe[] = [
   {
     route: 'app',
     regions: [
-      { id: 'header', label: 'ヘッダー（ログイン中）' },
-      { id: 'menu', label: 'メニュー', width: 'half', height: 'md' },
-      { id: 'search', label: '検索の条件', width: 'half', height: 'md' },
-      { id: 'table', label: '一覧の表（申請・記録）', height: 'lg' },
-      { id: 'form', label: '登録・申請のフォーム（送信は API）', height: 'md' },
+      { id: 'header', label: 'ヘッダー（ログイン中）', needs: ['personal'] },
+      {
+        id: 'menu',
+        label: 'メニュー',
+        width: 'half',
+        height: 'md',
+        needs: ['same'],
+      },
+      {
+        id: 'search',
+        label: '検索の条件',
+        width: 'half',
+        height: 'md',
+        needs: ['same'],
+      },
+      {
+        id: 'table',
+        label: '一覧の表（申請・記録）',
+        height: 'lg',
+        needs: ['personal', 'fresh'],
+      },
+      {
+        id: 'form',
+        label: '登録・申請のフォーム（送信は API）',
+        height: 'md',
+        needs: ['input'],
+      },
     ],
     // S6 で島になるのは人ごとに違う部分（ログイン中の名前・一覧の表。D-108）。メニュー・検索の条件・フォームは枠
     islandRegions: ['header', 'table'],

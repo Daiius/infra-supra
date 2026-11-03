@@ -150,10 +150,11 @@ export type Setup = {
  * （部品の依存で選べないもの・1 択のものは飛ばす）。
  */
 export async function startGame(s: Setup) {
+  // 始める画面の順（D-113）: シナリオ → ① インフラの構成 → ② フレームワーク
   pickRadio(s.scenario);
-  pickRadio(s.framework);
   pickRadio(s.stack);
-  const partsHeading = screen.queryByRole('heading', { name: '部品' });
+  pickRadio(s.framework);
+  const partsHeading = screen.queryByRole('heading', { name: '③ 部品' });
   for (const [slot, option] of Object.entries(s.parts ?? {}))
     pickRadio(option, slotGroup(slot));
   // 選ぶと別のスロットが出ることがある（API を他の事業者に置いたときの DB など）ので、未選択が無くなるまで回す

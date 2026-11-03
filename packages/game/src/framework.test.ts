@@ -20,6 +20,8 @@ import {
   setupRevalidateOptions,
   stackName,
   stackSupports,
+  stackUnsupportedReason,
+  frameworkOnStack,
   STACKS,
   type GameState,
   offeredBaselines,
@@ -350,5 +352,21 @@ describe('Astro（D-68）', () => {
       }
       expect(failing).toEqual([]);
     }
+  });
+});
+
+describe('インフラの構成を先に選んだときのフレームワーク（D-113）', () => {
+  const amplify = STACKS.findIndex((s) => s.id === 'aws-amplify');
+  it('載せられるならそのまま、載せられなければシナリオの並びで最初の載せられるもの', () => {
+    expect(frameworkOnStack(article, 0, 'astro')).toBe('astro');
+    expect(stackSupports(amplify, 'astro')).toBe(false);
+    expect(frameworkOnStack(article, amplify, 'astro')).toBe('nextjs');
+    expect(frameworkOnStack(article, amplify, 'vite-spa')).toBe('vite-spa');
+  });
+  it('載せられない理由は DeployTarget の説明を添える', () => {
+    expect(stackUnsupportedReason(amplify, 'nextjs')).toBeUndefined();
+    expect(stackUnsupportedReason(amplify, 'astro')).toMatch(
+      /^公式のアダプターが無く載せられない（Astro の AWS の手順は/,
+    );
   });
 });

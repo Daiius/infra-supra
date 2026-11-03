@@ -1,6 +1,7 @@
 // ページの見取り図（描き方ごとの領域の出どころ）。
 import type {
   PageBadge,
+  RegionNeed,
   RegionSource,
   Scenario,
   WireframeRegion,
@@ -68,6 +69,35 @@ function strategyBadges(
     default:
       return undefined;
   }
+}
+
+/**
+ * シナリオの説明の見取り図（D-113）。フレームワークに依らず、ページの区画が何で、何が要るか（区画の要件）と、
+ * ページの性質（見る人・SNS のカード・鮮度の要件・動きのある部品。テンプレートの routeTraits。RS-17）を返す。作られ方は持たない。
+ */
+export function scenarioWireframes(sc: Scenario): {
+  route: string;
+  label: string;
+  audience: 'public' | 'personal';
+  needsOgp: boolean;
+  freshness: string | undefined;
+  parts: string[];
+  regions: (WireframeRegion & { needs: RegionNeed[] })[];
+}[] {
+  const tpl = sc.template(1).routes;
+  return (sc.text?.wireframes ?? []).map((w) => {
+    const r = tpl.find((x) => x.id === w.route);
+    const traits = sc.routeTraits[w.route];
+    return {
+      route: w.route,
+      label: r?.label ?? w.route,
+      audience: r ? routeAudienceOf(sc, r) : 'public',
+      needsOgp: traits?.needsOgp ?? false,
+      freshness: traits?.freshness,
+      parts: traits?.parts ?? [],
+      regions: w.regions.map((x) => ({ ...x, needs: x.needs ?? [] })),
+    };
+  });
 }
 
 /** 見取り図の区画に、選んだフレームワークでの作られ方を付けたもの（D-102）。 */

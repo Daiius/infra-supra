@@ -12,14 +12,33 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
   {
     route: 'article',
     regions: [
-      { id: 'header', label: 'ヘッダー・ナビ', width: 'half' },
-      { id: 'login', label: 'ログインの表示', width: 'half' },
-      { id: 'title', label: '記事のタイトル・著者' },
-      { id: 'body', label: '本文', height: 'lg' },
-      { id: 'images', label: '画像（5 枚）', height: 'md' },
-      { id: 'likes', label: 'いいね' },
-      { id: 'comments', label: 'コメント欄（読む・書く）', height: 'md' },
-      { id: 'footer', label: '関連記事・フッター' },
+      { id: 'header', label: 'ヘッダー・ナビ', width: 'half', needs: ['same'] },
+      {
+        id: 'login',
+        label: 'ログインの表示',
+        width: 'half',
+        needs: ['personal'],
+      },
+      {
+        id: 'title',
+        label: '記事のタイトル・著者',
+        needs: ['same', 'fresh', 'ogp'],
+      },
+      { id: 'body', label: '本文', height: 'lg', needs: ['same', 'fresh'] },
+      {
+        id: 'images',
+        label: '画像（5 枚）',
+        height: 'md',
+        needs: ['same', 'media'],
+      },
+      { id: 'likes', label: 'いいね', needs: ['live'] },
+      {
+        id: 'comments',
+        label: 'コメント欄（読む・書く）',
+        height: 'md',
+        needs: ['live', 'input'],
+      },
+      { id: 'footer', label: '関連記事・フッター', needs: ['same'] },
     ],
     byFramework: {
       nextjs: {
@@ -120,11 +139,32 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
   {
     route: 'personal',
     regions: [
-      { id: 'header', label: 'ヘッダー・ナビ' },
-      { id: 'profile', label: 'プロフィール', width: 'half', height: 'md' },
-      { id: 'notifications', label: '通知', width: 'half', height: 'md' },
-      { id: 'mine', label: '自分の下書き・記事の一覧', height: 'lg' },
-      { id: 'editor', label: '投稿・編集の画面へ（送信は API）' },
+      { id: 'header', label: 'ヘッダー・ナビ', needs: ['same'] },
+      {
+        id: 'profile',
+        label: 'プロフィール',
+        width: 'half',
+        height: 'md',
+        needs: ['personal'],
+      },
+      {
+        id: 'notifications',
+        label: '通知',
+        width: 'half',
+        height: 'md',
+        needs: ['personal', 'live'],
+      },
+      {
+        id: 'mine',
+        label: '自分の下書き・記事の一覧',
+        height: 'lg',
+        needs: ['personal', 'fresh'],
+      },
+      {
+        id: 'editor',
+        label: '投稿・編集の画面へ（送信は API）',
+        needs: ['input'],
+      },
     ],
     // S6 で島になるのは人ごとに違う部分（D-108）。ヘッダー・投稿の画面への入口は枠
     islandRegions: ['profile', 'notifications', 'mine'],

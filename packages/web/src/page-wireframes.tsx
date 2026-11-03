@@ -2,10 +2,13 @@
 // 選んだフレームワークと記事のページの部品「コメント欄」（D-82・D-109）で game の pageWireframes が解く。ここはフレームワークを知らない。
 // 区画は daisyUI の skeleton を使わない（読み込み中の印で、光る動きと塗りが作られ方の色を消すため）。札は badge。
 import {
+  REGION_NEEDS,
   REGION_SOURCES,
   type PageBadge,
   type pageWireframes,
+  type RegionNeed,
   type RegionSource,
+  type scenarioWireframes,
 } from 'game';
 import type { CSSProperties } from 'react';
 
@@ -115,5 +118,109 @@ export function WireframeLegend({ pages }: { pages: ResolvedPage[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+export type ScenarioPage = ReturnType<typeof scenarioWireframes>[number];
+
+const NEED_ORDER = Object.keys(REGION_NEEDS) as RegionNeed[];
+const THUMB_HEIGHT = { sm: 'min-h-7', md: 'min-h-10', lg: 'min-h-14' } as const;
+
+/** 区画の要件の札（中立の枠線。作られ方の札・色と見分けられるよう塗らない。D-113）。 */
+function NeedTag({ need }: { need: RegionNeed }) {
+  return (
+    <span className="inline-block rounded-full border border-base-content/40 px-1 text-[10px] leading-tight whitespace-nowrap">
+      {REGION_NEEDS[need].short}
+    </span>
+  );
+}
+
+/**
+ * シナリオの説明のページの見取り図（D-113）。フレームワークに依らず、区画が何で、何が要るかを札で出す（作られ方は出さない）。
+ * 選択のカードの見取り図（作られ方の色）と見分けるため、塗らずに破線の枠と灰色の文字だけで描く。小さく、広い画面では横に並べる。
+ */
+export function ScenarioWireframes({
+  pages,
+  captionOf,
+}: {
+  pages: ScenarioPage[];
+  /** ページの説明の行（シナリオのページの一覧の文。D-101）。 */
+  captionOf?: (p: ScenarioPage) => string | undefined;
+}) {
+  if (pages.length === 0) return null;
+  const used = new Set(pages.flatMap((p) => p.regions.flatMap((r) => r.needs)));
+  return (
+    <div className="space-y-2">
+      <div className={`grid gap-3 ${pages.length > 1 ? 'md:grid-cols-2' : ''}`}>
+        {pages.map((p) => {
+          const caption = captionOf?.(p);
+          const traits = [
+            p.audience === 'public' ? '全員に同じ中身' : '人ごとに違う中身',
+            p.needsOgp ? 'SNS のカードが要る' : 'SNS のカードは要らない',
+          ];
+          return (
+            <section
+              key={p.route}
+              aria-label={`${p.label}（シナリオ）`}
+              data-scenario-page={p.route}
+              className="space-y-1.5 rounded-box border border-dashed border-base-content/30 p-2"
+            >
+              <h4 className="text-sm font-semibold">{p.label}</h4>
+              {caption && <p className="text-xs opacity-80">{caption}</p>}
+              <ul
+                aria-label={`${p.label}の見取り図（要件）`}
+                className="grid max-w-sm grid-cols-2 gap-1 rounded border border-base-content/20 bg-base-100 p-1"
+              >
+                {p.regions.map((r) => (
+                  <li
+                    key={r.id}
+                    data-region={r.id}
+                    className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} ${THUMB_HEIGHT[r.height ?? 'sm']} rounded border border-dashed border-base-content/30 px-1 py-0.5`}
+                  >
+                    <span className="block text-[11px] leading-tight opacity-80">
+                      {r.label}
+                    </span>
+                    <span className="sr-only">: </span>
+                    <span className="mt-0.5 flex flex-wrap gap-0.5">
+                      {r.needs.map((n, i) => (
+                        <span key={n}>
+                          {i > 0 && <span className="sr-only">・</span>}
+                          <NeedTag need={n} />
+                        </span>
+                      ))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <ul
+                aria-label={`${p.label}の性質`}
+                className="space-y-0.5 text-xs opacity-80"
+              >
+                <li>{traits.join('・')}</li>
+                {p.freshness && <li>鮮度: {p.freshness}</li>}
+                {p.parts.length > 0 && (
+                  <li>動きのある部品: {p.parts.join('・')}</li>
+                )}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+      <ul
+        aria-label="要件の札の凡例"
+        className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs"
+      >
+        {NEED_ORDER.filter((n) => used.has(n)).map((n) => (
+          <li key={n} className="flex items-center gap-1">
+            <NeedTag need={n} />
+            <span className="opacity-70">{REGION_NEEDS[n].long}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs opacity-60">
+        見取り図はゲーム上の仮定。作り方（ビルド・キャッシュ・閲覧ごとに描く・ブラウザが取る）は、下の
+        ② でフレームワークと描き方を選ぶと出る。
+      </p>
+    </div>
   );
 }

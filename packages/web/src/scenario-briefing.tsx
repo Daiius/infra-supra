@@ -8,6 +8,7 @@ import {
   growthFromReputation,
   pageWireframes,
   SCENARIOS,
+  scenarioWireframes,
   selfHostedOf,
   type FrameworkId,
   type RouteOverrides,
@@ -25,6 +26,7 @@ import { Meta, NameWithInfo } from './option-text.tsx';
 import {
   PageBadges,
   PageWireframe,
+  ScenarioWireframes,
   WireframeLegend,
 } from './page-wireframes.tsx';
 import { RouteChips, RowParts, RowStatus } from './route-plan-table.tsx';
@@ -201,6 +203,7 @@ function FrameworkCard({
   routeNotice,
   resolved,
   editor,
+  unsupported,
 }: {
   scenario: Scenario;
   id: FrameworkId;
@@ -219,6 +222,8 @@ function FrameworkCard({
   resolved?: Partial<Record<string, RouteStrategyId>> | undefined;
   /** 描き方を選ぶ（選んでいるカードだけ。D-112）。 */
   editor?: RoutePlanEditor | undefined;
+  /** 選んでいる構成に載せられない理由（D-113。あれば灰色にして選べない。描き方のチップは出さない）。 */
+  unsupported?: string | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
   // 選んでいるカードは選んだ描き方で描く（D-107）。表・計算と同じ実際の描き方（resolved。事業者で決まる既定・部品の
@@ -249,11 +254,15 @@ function FrameworkCard({
     <section
       aria-label={`${FRAMEWORKS[id].label} の説明`}
       aria-current={selected ? 'true' : undefined}
+      data-framework={id}
       className={`card w-full border border-t-4 bg-base-100 motion-safe:transition ${
         selected
           ? 'border-primary shadow-md ring-2 ring-primary/30'
-          : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80'
+          : unsupported
+            ? 'scale-[0.97] border-base-300 opacity-50 grayscale'
+            : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80'
       }`}
+      aria-disabled={unsupported ? 'true' : undefined}
       // ブランドの色は選んでいるカードの上の縁だけ（黒一色のロゴは文字の色）
       style={
         selected
@@ -271,7 +280,12 @@ function FrameworkCard({
             {t.note}
           </p>
         )}
-        {!selected && routeNotice && (
+        {unsupported && (
+          <p className="text-xs text-warning" role="note">
+            選んでいる構成では選べない: {unsupported}
+          </p>
+        )}
+        {!selected && !unsupported && routeNotice && (
           <p className="text-xs text-warning" role="note">
             {routeNotice}
           </p>
@@ -373,6 +387,8 @@ export function FrameworkField({
   routeNotice,
   resolvedRoutes,
   editor,
+  unsupported,
+  notice,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
@@ -393,6 +409,10 @@ export function FrameworkField({
   ) => Partial<Record<string, RouteStrategyId>>;
   /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップと「詳しく比べる」。D-112）。 */
   editor?: RoutePlanEditor | undefined;
+  /** 選んでいる構成に載せられない理由（D-113。あるフレームワークは選べない）。 */
+  unsupported?: (id: FrameworkId) => string | undefined;
+  /** 構成を替えて、載せられるフレームワークに戻したときの知らせ（D-113）。 */
+  notice?: string | null | undefined;
 }) {
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
@@ -401,11 +421,19 @@ export function FrameworkField({
   );
   return (
     <div className="space-y-2">
+      {/* 構成を替えて戻したときの知らせ（D-113）。読み上げに届くよう、知らせの無いときも枠は置く */}
+      <div aria-live="polite">
+        {notice && (
+          <p className="text-sm text-warning" role="note">
+            {notice}
+          </p>
+        )}
+      </div>
       <ChoiceCarousel
         heading={
           allowed.length < 2
-            ? 'アプリのフレームワーク'
-            : 'アプリを何で作りましたか？'
+            ? '② アプリのフレームワークとページの描き方'
+            : '② アプリを何で作りましたか？（フレームワークとページの描き方）'
         }
         name="framework"
         noun="選択肢"
@@ -424,22 +452,29 @@ export function FrameworkField({
           </>
         )}
         describedBy={(id) => Boolean(scenario.text?.byFramework?.[id]?.note)}
-        renderCard={(id, { selected, idPrefix }) => (
-          <FrameworkCard
-            scenario={scenario}
-            id={id}
-            comments={comments}
-            info={info(id)}
-            selected={selected}
-            noteId={`${idPrefix}-${id}`}
-            routes={routePlan?.(id)}
-            chosenRoutes={routes}
-            routeNotice={selected ? null : routeNotice?.(id)}
-            resolved={resolvedRoutes?.(id, selected)}
-            editor={selected ? editor : undefined}
-          />
-        )}
+        disabled={(id) => unsupported?.(id) !== undefined}
+        renderCard={(id, { selected, idPrefix }) => {
+          // 載せられないフレームワークは、構成で決まる描き方を引かない（その組の行・図は無い。D-113）
+          const off = selected ? undefined : unsupported?.(id);
+          return (
+            <FrameworkCard
+              scenario={scenario}
+              id={id}
+              comments={comments}
+              info={info(id)}
+              selected={selected}
+              noteId={`${idPrefix}-${id}`}
+              routes={off ? undefined : routePlan?.(id)}
+              chosenRoutes={routes}
+              routeNotice={selected || off ? null : routeNotice?.(id)}
+              resolved={off ? undefined : resolvedRoutes?.(id, selected)}
+              editor={selected ? editor : undefined}
+              unsupported={off}
+            />
+          );
+        }}
       />
+
       {allowed.length >= 2 && (
         <p className="text-sm opacity-60">
           乗り換えても同じアプリのまま。途中で別のフレームワークに作り直せるが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかる。SNS
@@ -464,6 +499,13 @@ export function ScenarioDescription({
   const growth = (
     growthFromReputation(0.9, false, sc.growth).net * 100
   ).toFixed(0);
+  const wireframes = scenarioWireframes(sc);
+  const pageLines = t?.pages ?? [];
+  // ページの一覧の行のうち、見取り図のページの行は見取り図の説明にし、残り（「一覧・トップは…」など）は下に並べる
+  const lineOf = (label: string) => pageLines.find((l) => l.startsWith(label));
+  const otherLines = pageLines.filter(
+    (l) => !wireframes.some((p) => l.startsWith(p.label)),
+  );
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body">
@@ -476,15 +518,22 @@ export function ScenarioDescription({
           {t?.growth.up ?? '満足度が高ければ伸び'}（満足度 0.9 で毎月約 {growth}
           %）、{t?.growth.down ?? '低ければ減る'}。
         </p>
-        {/* ページの一覧（ページ → 見る人・要件。描き方はフレームワークのカードに出す。D-101） */}
+        {/* ページの一覧（ページ → 見る人・要件。D-101）と、フレームワークに依らない見取り図（区画の要件。D-113）。
+            描き方はフレームワークのカードに出す */}
         {t?.pages && (
-          <div>
-            <div className="font-semibold">ページ</div>
-            <ul className="list-disc space-y-0.5 pl-6">
-              {t.pages.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
+          <div className="space-y-2">
+            <h3 className="font-semibold">ページ</h3>
+            <ScenarioWireframes
+              pages={wireframes}
+              captionOf={(p) => lineOf(p.label)}
+            />
+            {otherLines.length > 0 && (
+              <ul className="list-disc space-y-0.5 pl-6 text-sm">
+                {otherLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
         {t?.revenue && <p>{t.revenue}</p>}
@@ -540,7 +589,7 @@ export function ScenarioDescription({
         </h3>
         <p className="text-sm opacity-70">
           フレームワークで変わる点（ページの描き方・SNS のカード・CPU
-          の重さ）は、下の構成のカードで選ぶときに出る。
+          の重さ）は、下の ② フレームワークと描き方で選ぶときに出る。
         </p>
         <ul className="list-disc space-y-1 pl-6">
           {app.map((line) => (
