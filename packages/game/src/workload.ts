@@ -376,9 +376,17 @@ function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
         : format === 'avif' && p.platform === 'sakura' && images === 'default'
           ? 1.5
           : 1;
+  // 投稿のときに作って置く（r2-variants）なら、倍にした分は形式のフォールバック（保存量はサムネイルを形式ごとに 1 枚。OCL-E2492C36）
   return factor === 1
     ? w
-    : { ...w, images: { ...w.images, variants: w.images.variants * factor } };
+    : {
+        ...w,
+        images: {
+          ...w.images,
+          variants: w.images.variants * factor,
+          ...(images === 'r2-variants' ? { formatCopies: factor } : {}),
+        },
+      };
 }
 
 /**

@@ -171,6 +171,12 @@ export const WorkloadInputSchema = z
        * 構成の関数が変換の時間（classCpuMs）を持つときだけ、その時間に掛ける（OCL-ECDEF8A1）。
        */
       transformWorkFactor: z.number().finite().positive().default(1),
+      /**
+       * variants のうち、形式のフォールバックで同じサイズ違いを何形式ぶん持つか（WebP・AVIF に JPEG も置くと 2。D-58）。
+       * variants は「サイズ違い × 形式の数」のままで、保存量だけが形式ごとにサムネイルを 1 枚として数えるのに使う（D-121・OCL-E2492C36）。
+       * 省略は 1。
+       */
+      formatCopies: z.number().finite().positive().optional(),
     }),
     db: z.object({
       sizeGB: NonNeg,

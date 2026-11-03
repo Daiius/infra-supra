@@ -201,4 +201,17 @@ describe('画像の本文とサムネイル（D-121）', () => {
     const w = resolveWorkload(workload({ images: 5, thumbnails: 4 }));
     expect(w.storage.variantsGB).toBeCloseTo((100 * (2 * 100 + 10)) / 1e6, 12);
   });
+
+  it('形式のフォールバックも置くなら、形式ごとにサムネイルを 1 枚として数える（OCL-E2492C36）', () => {
+    const w0 = workload({ images: 5, thumbnails: 4 });
+    const w = resolveWorkload({
+      ...w0,
+      images: { ...w0.images, variants: 6, formatCopies: 2 },
+    });
+    // 3 サイズ × 2 形式: 2 × (2 × 100 + 10)
+    expect(w.storage.variantsGB).toBeCloseTo(
+      (100 * 2 * (2 * 100 + 10)) / 1e6,
+      12,
+    );
+  });
 });

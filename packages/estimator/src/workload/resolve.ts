@@ -748,14 +748,9 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     storage: {
       dbGB: w.db.sizeGB,
       imagesGB: w.images.storedGB,
-      // サイズ違い 1 枚は配る大きさ（sizeKB）とする（仮定）。サムネイルの大きさを持てば、サイズ違いの 1 つはその大きさ（D-121）
-      variantsGB:
-        w.images.transformAt === 'upload' && w.images.variants > 0
-          ? (w.images.distinct *
-              ((w.images.variants - 1) * w.images.sizeKB +
-                (w.images.thumbnails?.sizeKB ?? w.images.sizeKB))) /
-            1_000_000
-          : 0,
+      // サイズ違い 1 枚は配る大きさ（sizeKB）とする（仮定）。サムネイルの大きさを持てば、形式ごとにサイズ違いの 1 つはその大きさ
+      // （D-121。形式のフォールバックの分も、形式ごとにサムネイルを 1 枚として数える。OCL-E2492C36）
+      variantsGB: variantsStoredGB(w.images),
       isrPagesGB: isrPagesKB / 1_000_000,
     },
     onDemandPageRevalidations,
@@ -779,6 +774,21 @@ export function apiCallsPerMonth(
     (s, r) =>
       r.apiCalls !== undefined ? s + pv * r.share * (r.apiCalls - base) : s,
     pv * base,
+  );
+}
+
+/**
+ * 投稿のときに作って置くサイズ違いの保存量（GB。transformAt: upload のときだけ）。variants はサイズ違い × 形式の数（formatCopies）で、
+ * 形式ごとにサイズ違いの 1 つがサムネイルの大きさ（D-121・OCL-E2492C36）。
+ */
+function variantsStoredGB(images: ParsedWorkload['images']): number {
+  if (images.transformAt !== 'upload' || images.variants <= 0) return 0;
+  const copies = images.formatCopies ?? 1;
+  const sizes = images.variants / copies;
+  const thumbKB = images.thumbnails?.sizeKB ?? images.sizeKB;
+  return (
+    (images.distinct * copies * ((sizes - 1) * images.sizeKB + thumbKB)) /
+    1_000_000
   );
 }
 
