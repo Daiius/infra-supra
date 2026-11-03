@@ -4,19 +4,34 @@
 import { Fragment, type ReactNode } from 'react';
 
 /** 名前の最後の語と ⓘ をくっつける。 */
-/** ⓘ と一緒に折り返さない末尾の長さ（文字。これより長い最後の語は、末尾のこの文字数だけを ⓘ に付ける）。 */
-export const INFO_TAIL_CHARS = 4;
+/** ⓘ と離さない末尾の最大の長さ（文字）。これより長いまとまりは nowrap にしない（幅 360 ではみ出さないように）。 */
+export const INFO_TAIL_MAX_CHARS = 12;
+
+const segmenter = new Intl.Segmenter('ja', { granularity: 'word' });
+
+/** 文の最後の語（Intl.Segmenter の語の区切り。空白は含めない）。 */
+function lastWord(text: string): string {
+  const words = [...segmenter.segment(text)].filter(
+    (s) => s.segment.trim() !== '',
+  );
+  const last = words[words.length - 1];
+  return last ? text.slice(last.index) : '';
+}
 
 /**
- * 名前を「折り返してよい頭」と「ⓘ と離さない末尾」に分ける。末尾は最後の空白の後の語で、長ければ（日本語の続く文など）
- * 最後の INFO_TAIL_CHARS 文字だけにする（長い語を nowrap にすると狭い幅ではみ出すため）。
+ * 名前を「折り返してよい頭」と「ⓘ と離さない末尾」に分ける。末尾は最後の語（括弧で終わるなら「（オンデマンド）」のような
+ * 括弧のまとまり全体。長すぎれば括弧の中の最後の語 + 閉じ括弧）。語の途中で分けない（日本語は文字の間で折れるので、
+ * 分けた所で「オンデ／マンド」のように切れる）。長すぎるまとまり（INFO_TAIL_MAX_CHARS 超）は nowrap にしない（末尾は空）。
  */
 export function splitForInfo(name: string): [string, string] {
-  const i = name.lastIndexOf(' ');
-  const chars = [...name.slice(i + 1)];
-  const cut =
-    chars.length > INFO_TAIL_CHARS ? chars.length - INFO_TAIL_CHARS : 0;
-  const tail = chars.slice(cut).join('');
+  const fits = (t: string) => t !== '' && [...t].length <= INFO_TAIL_MAX_CHARS;
+  let tail = '';
+  if (name.endsWith('）')) {
+    const open = name.lastIndexOf('（');
+    const group = open >= 0 ? name.slice(open) : '';
+    tail = fits(group) ? group : lastWord(name.slice(0, -1)) + '）';
+  } else tail = lastWord(name);
+  if (!fits(tail)) tail = '';
   return [name.slice(0, name.length - tail.length), tail];
 }
 
