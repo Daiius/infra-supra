@@ -1,6 +1,8 @@
 // 始める画面の部品の選択（D-45）。構成とフレームワークの組み合わせで選べるスロットを game の setupSlots から引き、
 // スロットごとにラジオで選ぶ（既定は未選択）。選択肢には短い説明（フレーバー）を添え、事実の説明（note）は ⓘ に置く。
 // 「不適切」の印は出さない（説明だけで正解が分からないようにする）。
+// ③ 部品・④ 設定の欄は見積モードと共用（D-115）。状態と整合（ゲームの validSetupChoices・見積の normalizeInput）は各画面が持ち、
+// ここは値・変更・注記を受けて描くだけ。
 import {
   componentConflict,
   componentFlavor,
@@ -17,7 +19,7 @@ import {
   type RouteOverrides,
   type Scenario,
 } from 'game';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
@@ -30,6 +32,7 @@ export function SetupComponents({
   framework,
   value,
   onChange,
+  note = '構成の中の役割ごとに選ぶ（始める前なので手間はかからない）',
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -37,15 +40,15 @@ export function SetupComponents({
   /** 選んだ部品（選べなくなったものは呼び出し側で外してある）。 */
   value: SetupChoices;
   onChange: (v: SetupChoices) => void;
+  /** 見出しの下の注記（画面ごと。D-115）。 */
+  note?: ReactNode;
 }) {
   const slots = setupSlots(scenario, stackIndex, framework, value);
   if (slots.length === 0) return null;
   return (
     <div className="space-y-2">
       <h3 className="mt-2 font-bold">③ 部品</h3>
-      <p className="text-sm opacity-70">
-        構成の中の役割ごとに選ぶ（始める前なので手間はかからない）
-      </p>
+      <p className="text-sm opacity-70">{note}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {slots.map((x) => {
           // 1 択のスロット（固定）は選択済み・変更不可で出す（未選択の判定に含めない。D-45）
@@ -89,6 +92,7 @@ export function SetupComponents({
                       <input
                         type="radio"
                         name={`setup-${x.slot}`}
+                        value={o.id}
                         className="radio radio-primary radio-sm mt-0.5 shrink-0"
                         checked={picked === o.id}
                         disabled={x.fixed || why !== null}
@@ -176,42 +180,90 @@ export function SetupRevalidate({
   // Next.js は ISR の再検証、静的書き出しはビルドの間隔、Astro は記事のキャッシュ（同じ値をフレームワークの意味で選ぶ。D-80・D-103）
   const def = SETTINGS[revalidateSettingOf(framework)];
   return (
+    <SetupSettings>
+      <SettingRadios
+        name="setup-revalidate"
+        label={def.label}
+        note={def.note}
+        options={options}
+        value={value}
+        onChange={onChange}
+        extra={(v) =>
+          v === ON_DEMAND_REVALIDATE && invalidation ? (
+            <span className="block text-xs text-warning">{invalidation}</span>
+          ) : null
+        }
+      />
+    </SetupSettings>
+  );
+}
+
+/** ④ 設定の欄（見出しと、設定ごとの SettingRadios を並べる枠。見積モードと共用。D-115）。 */
+export function SetupSettings({ children }: { children: ReactNode }) {
+  return (
     <div className="space-y-2">
       <h3 className="mt-2 font-bold">④ 設定</h3>
-      <fieldset className="min-w-0 rounded-box border border-base-300 p-3">
-        <legend className="px-1 font-semibold">
-          <NameWithInfo
-            name={def.label}
-            info={<Info label={`${def.label} の説明`}>{def.note}</Info>}
-          />
-        </legend>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {options.map((o) => (
-            <label
-              key={o.value}
-              className="flex cursor-pointer items-start gap-2"
-            >
-              <input
-                type="radio"
-                name="setup-revalidate"
-                className="radio radio-primary radio-sm mt-0.5 shrink-0"
-                checked={value === o.value}
-                onChange={() => onChange(o.value)}
-              />
-              <span className="block min-w-0">
-                <span className="block text-sm">{o.label}</span>
-                <span className="block text-xs opacity-70">{o.flavor}</span>
-                {o.value === ON_DEMAND_REVALIDATE && invalidation && (
-                  <span className="block text-xs text-warning">
-                    {invalidation}
-                  </span>
-                )}
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      {children}
     </div>
+  );
+}
+
+/** 設定 1 つをラジオで選ぶ枠（見出しの ⓘ に説明。選択肢に短い説明 flavor と、値ごとの注記 extra を添えられる）。 */
+export function SettingRadios<V extends string | number>({
+  name,
+  label,
+  note,
+  options,
+  value,
+  onChange,
+  extra,
+}: {
+  /** ラジオの name。 */
+  name: string;
+  label: string;
+  note?: string | undefined;
+  options: readonly { value: V; label: string; flavor?: string | undefined }[];
+  value: V;
+  onChange: (v: V) => void;
+  extra?: (v: V) => ReactNode;
+}) {
+  return (
+    <fieldset className="min-w-0 rounded-box border border-base-300 p-3">
+      <legend className="px-1 font-semibold">
+        {note ? (
+          <NameWithInfo
+            name={label}
+            info={<Info label={`${label} の説明`}>{note}</Info>}
+          />
+        ) : (
+          label
+        )}
+      </legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((o) => (
+          <label
+            key={o.value}
+            className="flex cursor-pointer items-start gap-2"
+          >
+            <input
+              type="radio"
+              name={name}
+              value={String(o.value)}
+              className="radio radio-primary radio-sm mt-0.5 shrink-0"
+              checked={value === o.value}
+              onChange={() => onChange(o.value)}
+            />
+            <span className="block min-w-0">
+              <span className="block text-sm">{o.label}</span>
+              {o.flavor && (
+                <span className="block text-xs opacity-70">{o.flavor}</span>
+              )}
+              {extra?.(o.value)}
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 

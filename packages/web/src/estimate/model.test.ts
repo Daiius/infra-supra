@@ -15,6 +15,7 @@ import {
   routeStatusOf,
   runEstimate,
   sortRows,
+  stackCardTotals,
   toQuery,
   withFramework,
   withStack,
@@ -97,6 +98,75 @@ describe('確約したときの月額（D-97）', () => {
       runEstimate(normalizeInput({ stack: 'cloudflare-vinext-paid' }))
         .commitments,
     ).toEqual([]);
+  });
+});
+
+describe('URL の互換（D-115。選択の UI をゲームと共用にしても、前の共有 URL は同じ入力で読む）', () => {
+  const read = (url: string) => normalizeInput(fromQuery(url));
+  it('Astro × CF Paid・部品・描き方・画像の設定・席', () => {
+    const i = read(
+      '?mode=estimate&t=article&pv=1000000&fw=astro&s=cloudflare-vinext-paid&r=0&img=webp&v=2&seats=3&c.images=images&rp.article=static-build',
+    );
+    expect(i).toEqual({
+      template: 'article',
+      pv: 1_000_000,
+      framework: 'astro',
+      stack: 'cloudflare-vinext-paid',
+      parts: { images: 'images', api: 'same', db: 'd1', email: 'default' },
+      revalidateSec: 0,
+      comments: 0,
+      imageFormat: 'webp',
+      variants: 2,
+      seats: 3,
+      showTax: true,
+      routes: { article: 'static-build' },
+    });
+    expect(toQuery(i).toString()).toBe(
+      'mode=estimate&t=article&pv=1000000&fw=astro&s=cloudflare-vinext-paid&r=0&img=webp&v=2&seats=3&c.images=images&c.api=same&c.db=d1&c.email=default&rp.article=static-build',
+    );
+  });
+
+  it('Next.js × Vercel Pro・記事のコメント欄・税込を出さない（選べない部品の値は捨てる）', () => {
+    const i = read(
+      '?mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&tax=0&c.ogp=prerender',
+    );
+    expect(i).toMatchObject({
+      framework: 'nextjs',
+      stack: 'vercel-supabase-pro',
+      comments: 1,
+      showTax: false,
+      routes: {},
+    });
+    expect(toQuery(i).toString()).toBe(
+      'mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&img=jpeg&v=3&seats=1&tax=0&c.isrCache=default&c.images=default&c.api=same&c.db=supabase&c.dbBackup=default&c.email=default',
+    );
+  });
+
+  it('Vite の SPA × さくらの VPS・業務アプリ × Amplify（前の cm は業務アプリでは既定）', () => {
+    expect(
+      toQuery(
+        read(
+          '?mode=estimate&t=article&pv=30000&fw=vite-spa&s=sakura-vps-2gb&r=60&img=jpeg&v=3&seats=1',
+        ),
+      ).toString(),
+    ).toBe(
+      'mode=estimate&t=article&pv=30000&fw=vite-spa&s=sakura-vps-2gb&r=60&img=jpeg&v=3&seats=1&c.images=default&c.frontCdn=none&c.ogp=none&c.apiCache=none&c.dbBackup=default&c.email=default',
+    );
+    expect(
+      toQuery(
+        read(
+          '?mode=estimate&t=business&pv=50000&fw=nextjs&s=aws-amplify&r=300&cm=1',
+        ),
+      ).toString(),
+    ).toBe(
+      'mode=estimate&t=business&pv=50000&fw=nextjs&s=aws-amplify&r=300&img=jpeg&v=3&seats=1&c.api=same&c.db=dynamodb&c.frontCdn=none&c.cdnPlan=payg&c.dbBackup=default&c.email=default',
+    );
+  });
+
+  it('載せられない組（Astro × AWS）の URL は今までどおり構成を直す（フレームワークは URL のまま）', () => {
+    const i = read('?mode=estimate&t=article&fw=astro&s=aws-amplify');
+    expect(i.framework).toBe('astro');
+    expect(i.stack).toBe('cloudflare-vinext-free');
   });
 });
 
@@ -325,6 +395,40 @@ describe('withStack', () => {
     });
     expect(other.stack).toBe('cloudflare-vinext-free');
     expect(other.parts.isrCache).toBe('kv');
+  });
+});
+
+describe('構成が先（D-115。始める画面と同じ D-113 の規則）', () => {
+  it('今のフレームワークを載せられない構成（Astro × AWS）を選ぶと、載せられる最初のフレームワークに替える', () => {
+    const i = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-paid',
+    });
+    const next = normalizeInput({ ...i, ...withStack(i, 'aws-amplify') });
+    expect(next.stack).toBe('aws-amplify');
+    expect(next.framework).toBe('nextjs');
+    // 載せられる構成ではフレームワークは替えない
+    const vps = normalizeInput({ ...i, ...withStack(i, 'sakura-vps-2gb') });
+    expect(vps.framework).toBe('astro');
+  });
+
+  it('構成のカードの月額は、その構成を選んだ後の見積と同じ（載せられない構成は替わる先のフレームワークで）', () => {
+    const i = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-paid',
+    });
+    const totals = stackCardTotals(i, compareStacks(i));
+    for (const id of [
+      'cloudflare-vinext-paid',
+      'sakura-vps-2gb',
+      'aws-amplify',
+    ]) {
+      const sel = normalizeInput({ ...i, ...withStack(i, id) });
+      expect(totals[id]?.totalUsd).toBeCloseTo(runEstimate(sel).totalUsd, 6);
+      expect(totals[id]?.framework).toBe(sel.framework);
+    }
+    // 隠した構成（D-100）は出さない
+    expect(totals['aws-opennext']).toBeUndefined();
   });
 });
 

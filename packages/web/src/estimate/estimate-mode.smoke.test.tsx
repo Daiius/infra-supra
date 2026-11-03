@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { renderApp, useSmokeEnv, waitLoaded } from '../smoke.test-helpers.tsx';
+import { fromQuery, normalizeInput, withStack } from './model.ts';
 
 useSmokeEnv();
 
@@ -11,6 +12,69 @@ const card = (title: string | RegExp) =>
   screen.getByRole('heading', { level: 2, name: title }).closest('section')!;
 const combo = (label: string) =>
   screen.getByRole('combobox', { name: new RegExp(`^${label}`) });
+/** ③ 部品・④ 設定の欄（ゲームと共用のラジオの枠。D-115）。名前は見出しの文字で始まる。 */
+const group = (label: string) =>
+  screen.getByRole('group', { name: new RegExp(`^${label}`) });
+const queryGroup = (label: string) =>
+  screen.queryByRole('group', { name: new RegExp(`^${label}`) });
+/** ① 構成・② フレームワークのカルーセルのラジオ（ゲームと共用。D-115）。 */
+const pickerRadios = (name: 'stack' | 'framework') => [
+  ...document.querySelectorAll<HTMLInputElement>(
+    `input[type="radio"][name="${name}"]`,
+  ),
+];
+const pickerRadio = (name: 'stack' | 'framework', value: string) =>
+  pickerRadios(name).find((r) => r.value === value)!;
+/** 構成・フレームワークを選ぶ（タブのラジオを押す）。 */
+const pick = (name: 'stack' | 'framework', value: string) => {
+  const r = pickerRadio(name, value);
+  expect(r.disabled).toBe(false);
+  fireEvent.click(r);
+  expect(r.checked).toBe(true);
+};
+/** 枠の中で選んでいるラジオの値。 */
+const checked = (label: string) =>
+  within(group(label))
+    .getAllByRole<HTMLInputElement>('radio')
+    .find((r) => r.checked)?.value;
+/** 枠の中で値のラジオを選ぶ。 */
+const choose = (label: string, value: string) =>
+  fireEvent.click(
+    within(group(label))
+      .getAllByRole<HTMLInputElement>('radio')
+      .find((r) => r.value === value)!,
+  );
+
+/** ① の選んでいる構成のカード。 */
+const stackCard = () =>
+  document.querySelector<HTMLElement>(
+    'section[data-stack][aria-current="true"]',
+  )!;
+/** ② の選んでいるフレームワークのカード。 */
+const fwCard = () =>
+  document.querySelector<HTMLElement>(
+    'section[data-framework][aria-current="true"]',
+  )!;
+/** ② のカードの「詳しく比べる」のダイアログ（閉じていれば開く。D-115 で下の表のカードの代わり）。 */
+const routesDialog = () => {
+  if (!screen.queryByRole('dialog'))
+    fireEvent.click(
+      within(fwCard()).getByRole('button', { name: '詳しく比べる' }),
+    );
+  const dialog = screen.getByRole('dialog', {
+    name: /^ページの描き方を比べる/,
+  });
+  // 表の注記は見積用の文（ゲームの「1 か月目の基準の規模」を出さない。D-115）
+  expect(dialog.textContent).toContain('費用の差は今の条件（月の PV）での目安');
+  expect(dialog.textContent).not.toContain('1 か月目の基準の規模');
+  return dialog;
+};
+const routesTable = () =>
+  within(routesDialog()).getByRole('table', { name: 'ページごとの描き方' });
+/** 構成図の流れの凡例（① の選んでいる構成のカード）。 */
+const flowLegend = () =>
+  within(stackCard()).getByRole('list', { name: '構成図の流れの凡例' })
+    .textContent;
 
 /** 月の費用・明細・比較表・費用の曲線が出ていることを見て、今の構成の名前を返す。 */
 function expectEstimate(): string {
@@ -29,16 +93,11 @@ function expectEstimate(): string {
       .getAllByRole('button')
       .filter((b) => b.getAttribute('aria-current') === 'true'),
   ).toHaveLength(1);
-  // 構成図（D-105）: 今の構成の図が出る
-  const diagram = within(card(/^構成図: /)).getByRole('img', {
-    name: /^構成図: /,
-  });
-  expect(diagram.querySelectorAll('[data-node]').length).toBeGreaterThan(1);
-  // ページごとの描き方（D-106）: テンプレートのページごとに 1 行
+  // 構成図（D-105）: ① の選んでいる構成のカードに今の構成の図が出る（下の構成図のカードは重複なので消した。D-115）
+  expect(stackCard().querySelectorAll('[data-node]').length).toBeGreaterThan(1);
+  // ページごとの描き方（D-106）: ② の選んでいるカードにテンプレートのページごとの欄（下の表のカードは消した。D-115）
   expect(
-    within(card('ページごとの描き方'))
-      .getByRole('table', { name: 'ページごとの描き方' })
-      .querySelectorAll('tr[data-route]').length,
+    fwCard().querySelectorAll('section[data-route]').length,
   ).toBeGreaterThan(0);
   const curve = within(card('費用の曲線（月の PV を振る）'));
   const chart = curve.getByRole('img', {
@@ -55,19 +114,21 @@ describe('見積モードの画面', () => {
     await waitLoaded();
     const first = expectEstimate();
 
-    // 構成を切り替える（選べる構成をすべて回す）
-    const stacks = within(combo('構成')).getAllByRole('option');
+    // 構成を切り替える（ゲームと同じカルーセル。選べる構成をすべて回す。D-115）
+    const stacks = pickerRadios('stack').map((r) => r.value);
     expect(stacks.length).toBeGreaterThan(5);
     const names = new Set([first]);
-    for (const o of stacks) {
-      fireEvent.change(combo('構成'), {
-        target: { value: (o as HTMLOptionElement).value },
-      });
+    for (const id of stacks) {
+      pick('stack', id);
       names.add(expectEstimate());
+      // 構成のカードに、その構成の月額が出る
+      expect(
+        document.querySelector(`[data-stack-total="${id}"]`)?.textContent,
+      ).toMatch(/月 \$[\d,]+\.\d\d/);
     }
     expect(names.size).toBe(stacks.length);
 
-    // 比較表の行を押すと、その構成の見積になる
+    // 比較表の行を押すと、その構成の見積になり、カルーセルもその構成へ移る
     const compare = within(card('構成を比べる'));
     const other = compare
       .getAllByRole('button')
@@ -81,12 +142,14 @@ describe('見積モードの画面', () => {
       .getAllByRole('button')
       .find((b) => b.getAttribute('aria-current') === 'true')!;
     expect(current.textContent).toBe(picked);
+    const stackId = new URLSearchParams(window.location.search).get('s')!;
+    expect(pickerRadio('stack', stackId).checked).toBe(true);
 
     // フレームワーク・テンプレート・PV を切り替える
-    for (const o of within(combo('フレームワーク')).getAllByRole('option')) {
-      fireEvent.change(combo('フレームワーク'), {
-        target: { value: (o as HTMLOptionElement).value },
-      });
+    for (const id of pickerRadios('framework')
+      .filter((r) => !r.disabled)
+      .map((r) => r.value)) {
+      pick('framework', id);
       expectEstimate();
     }
     fireEvent.change(combo('テンプレート'), { target: { value: 'business' } });
@@ -104,8 +167,6 @@ describe('見積モードの画面', () => {
   });
 
   it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', async () => {
-    const partSelect = (label: string) =>
-      screen.queryByRole<HTMLSelectElement>('combobox', { name: label });
     window.history.replaceState(
       null,
       '',
@@ -113,16 +174,14 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    expect(partSelect('DB のバックアップ')).toBe(null);
+    expect(queryGroup('DB のバックアップ')).toBe(null);
     // URL に残っていた値は無視して既定にする（URL からも消える）
     expect(window.location.search).not.toContain('dbBackup');
 
     // 選べば変わる DB（Supabase Pro）に替えると出る
-    fireEvent.change(combo('構成'), {
-      target: { value: 'vercel-supabase-pro' },
-    });
+    pick('stack', 'vercel-supabase-pro');
     expectEstimate();
-    expect(partSelect('DB のバックアップ')?.value).toBe('default');
+    expect(checked('DB のバックアップ')).toBe('default');
   });
 
   it('W-08 Astro × CF Free: 1 リクエストの CPU の上限の前提に、当たるルートを添える（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', async () => {
@@ -139,16 +198,14 @@ describe('見積モードの画面', () => {
       ),
     ).toBeDefined();
     // ページごとの描き方（D-107）: 個人向けを枠 + API にすると URL に残り、その行は CPU の制限に当たらない
-    const routes = within(card('ページごとの描き方'));
+    const routes = within(routesDialog());
     fireEvent.click(
       routes.getByRole('button', {
         name: /^個人向けのページを 枠 \+ ブラウザが API で取る/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=shell-api');
-    const row = within(card('ページごとの描き方'))
-      .getByRole('table', { name: 'ページごとの描き方' })
-      .querySelector('tr[data-route="personal"]')!;
+    const row = routesTable().querySelector('tr[data-route="personal"]')!;
     expect(
       row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
     ).toBe('shell-api');
@@ -166,23 +223,21 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    expect((combo('ISR の再検証') as HTMLSelectElement).value).toBe('300');
+    expect(checked('ISR の再検証')).toBe('300');
     // Astro の既定は、消せる置き場（Cloudflare）ではオンデマンド
-    fireEvent.change(combo('フレームワーク'), { target: { value: 'astro' } });
+    pick('framework', 'astro');
     expectEstimate();
-    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('0');
+    expect(checked('記事のキャッシュ')).toBe('0');
     expect(new URLSearchParams(window.location.search).get('r')).toBe('0');
     // 消せない置き場（Google Cloud）では 5 分
-    fireEvent.change(combo('構成'), { target: { value: 'gcp-cloud-run' } });
+    pick('stack', 'gcp-cloud-run');
     expectEstimate();
-    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('300');
+    expect(checked('記事のキャッシュ')).toBe('300');
     // 選んだ値は、替えた先で選べるなら残る
-    fireEvent.change(combo('記事のキャッシュ'), { target: { value: '3600' } });
-    fireEvent.change(combo('構成'), {
-      target: { value: 'cloudflare-vinext-paid' },
-    });
+    choose('記事のキャッシュ', '3600');
+    pick('stack', 'cloudflare-vinext-paid');
     expectEstimate();
-    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('3600');
+    expect(checked('記事のキャッシュ')).toBe('3600');
 
     // 記事を S1 にしてから vinext に替えても、rp.article は残る（vinext の S1 を出した。RS-15 の解除）。SPA（S1 が無い）に替えると消える
     cleanup();
@@ -194,13 +249,11 @@ describe('見積モードの画面', () => {
     await renderApp();
     expectEstimate();
     expect(window.location.search).toContain('rp.article=static-build');
-    fireEvent.change(combo('フレームワーク'), { target: { value: 'nextjs' } });
+    pick('framework', 'nextjs');
     expectEstimate();
     expect(window.location.search).toContain('rp.article=static-build');
     expect(window.location.search).toContain('rp.personal=shell-api');
-    fireEvent.change(combo('フレームワーク'), {
-      target: { value: 'vite-spa' },
-    });
+    pick('framework', 'vite-spa');
     expectEstimate();
     expect(window.location.search).not.toContain('rp.article');
   });
@@ -213,16 +266,14 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    const routes = within(card('ページごとの描き方'));
+    const routes = within(routesDialog());
     fireEvent.click(
       routes.getByRole('button', {
         name: /^個人向けのページを 枠 \+ サーバーの島/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=server-island');
-    const row = within(card('ページごとの描き方'))
-      .getByRole('table', { name: 'ページごとの描き方' })
-      .querySelector('tr[data-route="personal"]')!;
+    const row = routesTable().querySelector('tr[data-route="personal"]')!;
     expect(
       row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
     ).toBe('server-island');
@@ -245,11 +296,7 @@ describe('見積モードの画面', () => {
         .getAttribute('aria-pressed'),
     ).toBe('true');
     expectEstimate();
-    expect(
-      within(card(/^構成図: /)).getByRole('list', {
-        name: '構成図の流れの凡例',
-      }).textContent,
-    ).toContain('サーバーの島（閲覧ごとに一部だけ描く）');
+    expect(flowLegend()).toContain('サーバーの島（閲覧ごとに一部だけ描く）');
     // URL から開いても同じ。vinext（PPR が未完成）に替えると選べないので消える
     cleanup();
     window.history.replaceState(
@@ -260,9 +307,7 @@ describe('見積モードの画面', () => {
     await renderApp();
     expectEstimate();
     expect(window.location.search).toContain('rp.personal=server-island');
-    fireEvent.change(combo('構成'), {
-      target: { value: 'cloudflare-vinext-paid' },
-    });
+    pick('stack', 'cloudflare-vinext-paid');
     expectEstimate();
     expect(window.location.search).not.toContain('rp.personal');
   });
@@ -275,10 +320,7 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    const table = () =>
-      within(card('ページごとの描き方')).getByRole('table', {
-        name: 'ページごとの描き方',
-      });
+    const table = () => routesTable();
     const strategyOf = (route: string) =>
       table()
         .querySelector(`tr[data-route="${route}"] [data-strategy]`)!
@@ -291,13 +333,9 @@ describe('見積モードの画面', () => {
     // 描き方の番号（S1〜S6・文書の S7）は画面に出さない（D-112）
     expect(table().textContent).not.toMatch(/\bS[1-7]\b/);
     expect(window.location.search).not.toContain('rp.');
-    expect(
-      within(card(/^構成図: /)).getByRole('list', {
-        name: '構成図の流れの凡例',
-      }).textContent,
-    ).toContain('動的な穴');
+    expect(flowLegend()).toContain('動的な穴');
     fireEvent.click(
-      within(card('ページごとの描き方')).getByRole('button', {
+      within(routesDialog()).getByRole('button', {
         name: /^個人向けのページを 毎回描く/,
       }),
     );
@@ -305,18 +343,115 @@ describe('見積モードの画面', () => {
     expect(window.location.search).toContain('rp.personal=ssr');
     expect(strategyOf('personal')).toBe('ssr');
     // VPS に替えると既定（毎回描く）と同じなので URL から消え、部品ごとにキャッシュは選べる側に並ぶ
-    fireEvent.change(combo('構成'), { target: { value: 'sakura-vps-2gb' } });
+    pick('stack', 'sakura-vps-2gb');
     expectEstimate();
     expect(window.location.search).not.toContain('rp.personal');
     expect(strategyOf('personal')).toBe('ssr');
     expect(
-      within(card('ページごとの描き方')).getByRole('button', {
+      within(routesDialog()).getByRole('button', {
         name: /^個人向けのページを 部品ごとにキャッシュ（Cache Components）にする/,
       }),
     ).toBeTruthy();
   });
 
-  it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
+  it('W-35 選択の欄はゲームと共用（D-115）: 構成が先で、載せられないフレームワークは灰色と理由。Astro で AWS を選ぶと Next.js に替えて知らせる', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-paid',
+    );
+    await renderApp();
+    expectEstimate();
+    // 順: ① インフラの構成 → ② フレームワーク → ③ 部品 → ④ 設定
+    const stackGroup = screen.getByRole('radiogroup', {
+      name: '① インフラの構成',
+    });
+    const fwGroup = screen.getByRole('radiogroup', {
+      name: '② アプリのフレームワークとページの描き方',
+    });
+    expect(
+      stackGroup.compareDocumentPosition(fwGroup) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Astro を載せられない構成も隠さず選べる。カードの月額は替わる先のフレームワークで数える
+    expect(pickerRadio('stack', 'aws-amplify').disabled).toBe(false);
+    expect(
+      document.querySelector('[data-stack-total="aws-amplify"]')?.textContent,
+    ).toContain('Next.js（App Router） にしたとき');
+    pick('stack', 'aws-amplify');
+    expectEstimate();
+    expect(pickerRadio('framework', 'nextjs').checked).toBe(true);
+    expect(new URLSearchParams(window.location.search).get('fw')).toBe(
+      'nextjs',
+    );
+    expect(document.body.textContent).toMatch(
+      /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にした/,
+    );
+    // Astro は灰色で選べず、カードに理由が出る
+    expect(pickerRadio('framework', 'astro').disabled).toBe(true);
+    const astroCard = screen.getByRole('region', { name: 'Astro の説明' });
+    expect(astroCard.getAttribute('aria-disabled')).toBe('true');
+    expect(within(astroCard).getByRole('note').textContent).toMatch(
+      /^選んでいる構成では選べない: 公式のアダプターが無く載せられない/,
+    );
+    // 選んでいるフレームワークのカードに、ページの見取り図が出る
+    const nextCard = screen.getByRole('region', {
+      name: 'Next.js（App Router） の説明',
+    });
+    expect(
+      nextCard.querySelectorAll('section[data-route]').length,
+    ).toBeGreaterThan(0);
+    // 載せられる構成へ戻すと Astro はまた選べ、知らせは消える
+    pick('stack', 'cloudflare-vinext-paid');
+    expect(pickerRadio('framework', 'astro').disabled).toBe(false);
+    expect(document.body.textContent).not.toMatch(
+      /公式のアダプターが無いので、フレームワークを/,
+    );
+    // 選んでいるカードのチップで描き方を選ぶと、URL と下の表にも残る（同じ書き換え。D-112・D-115）
+    fireEvent.click(
+      within(
+        screen.getByRole('region', { name: 'Next.js（App Router） の説明' }),
+      ).getByRole('button', {
+        name: /^個人向けのページを 枠 \+ ブラウザが API で取る/,
+      }),
+    );
+    expectEstimate();
+    expect(window.location.search).toContain('rp.personal=shell-api');
+    expect(
+      routesTable()
+        .querySelector('tr[data-route="personal"] [data-strategy]')!
+        .getAttribute('data-strategy'),
+    ).toBe('shell-api');
+  });
+
+  it('W-36 載せられない構成のカードは、選んだ後に残る描き方で注意を出す（見積は替えた先で選べる描き方を残す。OCL-00BB1F11）', async () => {
+    const url =
+      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-paid&rp.article=static-build&rp.personal=shell-api';
+    window.history.replaceState(null, '', url);
+    await renderApp();
+    expectEstimate();
+    const cur = normalizeInput(fromQuery(url.slice(url.indexOf('?'))));
+    const after = normalizeInput({ ...cur, ...withStack(cur, 'aws-amplify') });
+    const chosen = Object.keys(cur.routes);
+    expect(chosen.length).toBe(2);
+    const dropped = chosen.filter((r) => after.routes[r] === undefined).length;
+    const note = within(
+      document.querySelector<HTMLElement>('section[data-stack="aws-amplify"]')!,
+    ).getByRole('note').textContent!;
+    if (dropped === 0) expect(note).not.toContain('既定に戻る');
+    else if (dropped === chosen.length)
+      expect(note).toContain('（選んだページの描き方は既定に戻る）');
+    else expect(note).toContain('替えた先で選べないものは既定に戻る');
+    // 選ぶと、カードの注意のとおりの描き方が URL に残る
+    pick('stack', 'aws-amplify');
+    expectEstimate();
+    for (const r of chosen)
+      expect(window.location.search.includes(`rp.${r}=`)).toBe(
+        after.routes[r] !== undefined,
+      );
+  });
+
+  it('W-07 見出しに ⓘ のある欄の入力は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
     window.history.replaceState(
       null,
       '',
@@ -324,11 +459,18 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    // 部品の欄（DB のバックアップ）と、ⓘ のある条件の欄（構成）を、見出しの文字そのもので取れる
-    const backup = screen.getByRole('combobox', { name: 'DB のバックアップ' });
-    expect(backup.tagName).toBe('SELECT');
-    expect(screen.getByRole('combobox', { name: '構成' }).tagName).toBe(
-      'SELECT',
+    // ⓘ のある条件の欄（月の PV・チームの人数）を、見出しの文字そのもので取れる
+    expect(screen.getByRole('spinbutton', { name: '月の PV' }).tagName).toBe(
+      'INPUT',
     );
+    expect(
+      screen.getByRole('spinbutton', {
+        name: 'チームの人数（管理画面を使う人）',
+      }).tagName,
+    ).toBe('INPUT');
+    // 部品の欄（DB のバックアップ）はゲームと同じラジオの枠（D-115）
+    expect(
+      within(group('DB のバックアップ')).getAllByRole('radio').length,
+    ).toBeGreaterThan(1);
   });
 });

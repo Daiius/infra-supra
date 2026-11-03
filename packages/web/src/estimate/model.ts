@@ -30,6 +30,7 @@ import {
   defaultRevalidateSec,
   estimateComponents,
   estimateWorkload,
+  frameworkOnStack,
   frameworksOf,
   hiddenSettings,
   IMAGE_FORMAT_KB,
@@ -254,14 +255,31 @@ function withContext(
 }
 
 /**
- * 構成を選ぶ（構成の一覧・比較の表）。別の構成に替えるときだけ部品の選択を空にして既定にする。
+ * 構成を選ぶ（構成のカルーセル・比較の表）。別の構成に替えるときだけ部品の選択を空にして既定にする。
  * 今の構成を選び直しても部品は保つ（OCL-83383F50）。再検証などの値は withContext の規則で付け替える。
+ * 構成が先（D-113・D-115）なので、今のフレームワークを載せられない構成（Astro × AWS など）を選ぶと、フレームワークを
+ * シナリオの並びで最初の載せられるもの（game の frameworkOnStack。始める画面と同じ）に替える。
  */
 export function withStack(
   input: EstimateInput,
   stack: string,
 ): Partial<EstimateInput> {
-  return stack === input.stack ? {} : withContext(input, { stack, parts: {} });
+  if (stack === input.stack) return {};
+  const i = stackIndexOf(stack);
+  const framework =
+    i < 0
+      ? input.framework
+      : frameworkOnStack(
+          scenarioOfTemplate(input.template),
+          i,
+          input.framework,
+        );
+  return withContext(
+    input,
+    framework === input.framework
+      ? { stack, parts: {} }
+      : { stack, framework, parts: {} },
+  );
 }
 
 /** フレームワークを選ぶ。再検証などの値・ページごとの描き方は withContext の規則で付け替える。 */
@@ -774,6 +792,21 @@ export function diagramOf(input: EstimateInput): {
 }
 
 /**
+ * フレームワークのカルーセルのカードに出すページごとの描き方（D-115）: そのフレームワークを選んだときの入力（withFramework。
+ * 替えた先で選べる描き方は残す）の行。選んでいるフレームワークは今の行（diagramOf と同じ）。
+ */
+export function frameworkCardRoutes(
+  input: EstimateInput,
+  framework: FrameworkId,
+): RoutePlanRow[] {
+  return diagramOf(
+    framework === input.framework
+      ? input
+      : normalizeInput({ ...input, ...withFramework(input, framework) }),
+  ).routes;
+}
+
+/**
  * ページごとの描き方の行の判定（D-107。見積の PV で）: SNS のカード・1 リクエストの CPU の制限（D-99 の causes をその行で絞る）と、
  * ほかの描き方にしたときの月額の差と止まる前提の数の差。鮮度はゲームの満足度の判定なので、見積モードでは出さない。
  */
@@ -971,6 +1004,49 @@ export function compareStacks(input: EstimateInput): ComparisonRow[] {
       };
     },
   );
+}
+
+/** 構成のカードに出す月額（D-115）。 */
+export type StackCardTotal = {
+  totalUsd: number;
+  /** その構成を選んだときのフレームワーク（今のものを載せられなければ替わる先）。 */
+  framework: FrameworkId;
+  /** 当たっている前提のうち、止まる・プランの変更が要るもの。 */
+  blocking: number;
+};
+
+/**
+ * 構成のカルーセルのカードに出す月額（D-115）: 隠した構成（D-100）以外の全構成を、その構成を選んだときの入力（selectedInput。
+ * 載せられないフレームワークは替わる先）で数える。比較の表にある構成は表の行をそのまま使う（同じ値を数え直さない）。
+ */
+export function stackCardTotals(
+  input: EstimateInput,
+  rows: readonly ComparisonRow[],
+): Partial<Record<string, StackCardTotal>> {
+  const out: Partial<Record<string, StackCardTotal>> = {};
+  for (const s of STACKS) {
+    if (s.hidden) continue;
+    const row = rows.find((r) => r.stack === s.id);
+    if (row) {
+      out[s.id] = {
+        totalUsd: row.totalUsd,
+        framework: input.framework,
+        blocking: row.blocking,
+      };
+      continue;
+    }
+    const sel = selectedInput(input, s.id);
+    const res = run(sel, resolve(sel));
+    out[s.id] = {
+      totalUsd: toUsd(res.bill.totals),
+      framework: sel.framework,
+      blocking: res.premises.filter(
+        (p) =>
+          p.hit && (p.effect === 'block' || p.effect === 'upgrade-required'),
+      ).length,
+    };
+  }
+  return out;
 }
 
 // ---- 費用の曲線（D-74）----
