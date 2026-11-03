@@ -2,6 +2,7 @@
 // 名前とロゴのタブ（ラジオ）で選び、選んだものを中央の大きいカードに出す。前後のボタン・タブの ←/→・カードを押して切り替える。
 // 前後のカードも同じ中身で両脇に見える（daisyUI の carousel）。選んでいる＝中央のカード（「これにする」のボタンは置かない）。
 // groups を渡すと、タブを事業者などの組にまとめ、組の中の選択肢を小さいチップで出す（インフラの構成。D-105 の補足）。
+// カードは組ごとに 1 枚で、チップで組の中の選択肢を替えるとカードは動かず中身だけが替わる（D-105 の補足）。
 import {
   useEffect,
   useId,
@@ -66,13 +67,31 @@ export function ChoiceCarousel<T extends string>({
   const track = useRef<HTMLDivElement>(null);
   const inputs = useRef<Partial<Record<string, HTMLInputElement | null>>>({});
   const els = useRef<Partial<Record<string, HTMLDivElement | null>>>({});
-  // 選んだカードを中央へ。scrollLeft なので動きは CSS に任せる（daisyUI の carousel は reduced-motion では滑らかにしない）
+  // カード: 組があれば組ごとに 1 枚、無ければ選択肢ごとに 1 枚
+  const cards: readonly { key: string; items: readonly T[] }[] = groups
+    ? groups.map((g) => ({ key: g.key, items: g.items }))
+    : items.map((id) => ({ key: id, items: [id] }));
+  const current = cards.find((c) => c.items.includes(value)) ?? cards[0];
+  const cardKeys = cards.map((c) => c.key).join('\n');
+  // 組ごとに最後に選んだ選択肢（この画面を開いている間だけ）。選んでいない組のカード・組の名前・前後のボタンはこれを出す（無ければ組の最初）
+  const last = useRef<Partial<Record<string, T>>>({});
+  useEffect(() => {
+    if (current) last.current[current.key] = value;
+  }, [current, value]);
+  const shown = (c: { key: string; items: readonly T[] }): T => {
+    if (c.items.includes(value)) return value;
+    const l = last.current[c.key];
+    return l !== undefined && c.items.includes(l) ? l : c.items[0]!;
+  };
+  // 選んだカードを中央へ。scrollLeft なので動きは CSS に任せる（daisyUI の carousel は reduced-motion では滑らかにしない）。
+  // カードが替わったときだけ動かす（組の中で選択肢を替えてもカードは同じなので動かさない）
+  const currentKey = current?.key;
   useEffect(() => {
     const t = track.current;
-    const el = els.current[value];
+    const el = currentKey === undefined ? undefined : els.current[currentKey];
     if (!t || !el) return;
     t.scrollLeft = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
-  }, [value, items]);
+  }, [currentKey, cardKeys]);
   const headingId = useId();
   if (items.length < 2) {
     const id = items[0] ?? value;
@@ -85,6 +104,12 @@ export function ChoiceCarousel<T extends string>({
   }
   const i = Math.max(0, items.indexOf(value));
   const at = (d: number) => items[(i + d + items.length) % items.length]!;
+  // 前後のボタンはカード（組）ごとに移り、移った先のカードに出ている選択肢を選ぶ（組が無ければ選択肢ごと）
+  const ci = current ? cards.indexOf(current) : 0;
+  const cardAt = (d: number) =>
+    shown(cards[(ci + d + cards.length) % cards.length]!);
+  // 説明に結ぶ要約はカードに出ている選択肢だけにある
+  const shownIds = new Set(cards.map(shown));
   // ←/→（↑/↓）で全部の選択肢を items の順に移る（組をまたいでも同じ。ブラウザのラジオの動きを、組にまとめても崩れないよう自前で持つ）
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const d = ARROW[e.key];
@@ -104,7 +129,9 @@ export function ChoiceCarousel<T extends string>({
       className="sr-only"
       aria-label={ariaLabel}
       // 要約だけを説明にする（カード全体は長いので、カードは下に領域として読める）
-      aria-describedby={describedBy?.(id) ? `${headingId}-${id}` : undefined}
+      aria-describedby={
+        describedBy?.(id) && shownIds.has(id) ? `${headingId}-${id}` : undefined
+      }
       checked={value === id}
       onChange={() => onChange(id)}
     />
@@ -124,8 +151,8 @@ export function ChoiceCarousel<T extends string>({
         <button
           type="button"
           className="btn btn-circle shrink-0 btn-ghost btn-sm"
-          aria-label={`前の${noun}（${label(at(-1))}）`}
-          onClick={() => onChange(at(-1))}
+          aria-label={`前の${noun}（${label(cardAt(-1))}）`}
+          onClick={() => onChange(cardAt(-1))}
         >
           ‹
         </button>
@@ -167,9 +194,18 @@ export function ChoiceCarousel<T extends string>({
                   data-tab-group={g.key}
                   className={box}
                 >
+                  {/* 組の名前を押すと、その組のカード（最後に選んだ選択肢・無ければ最初）を選ぶ。キーボード・読み上げはチップのラジオで選ぶ */}
                   <span
                     aria-hidden
-                    className="inline-flex items-center gap-1 px-1 text-xs font-semibold whitespace-nowrap"
+                    className={`inline-flex items-center gap-1 px-1 text-xs font-semibold whitespace-nowrap ${
+                      on ? '' : 'cursor-pointer'
+                    }`}
+                    onClick={
+                      on
+                        ? undefined
+                        : () =>
+                            onChange(shown(cards.find((c) => c.key === g.key)!))
+                    }
                   >
                     {g.mark}
                     {g.label}
@@ -209,13 +245,13 @@ export function ChoiceCarousel<T extends string>({
         <button
           type="button"
           className="btn btn-circle shrink-0 btn-ghost btn-sm"
-          aria-label={`次の${noun}（${label(at(1))}）`}
-          onClick={() => onChange(at(1))}
+          aria-label={`次の${noun}（${label(cardAt(1))}）`}
+          onClick={() => onChange(cardAt(1))}
         >
           ›
         </button>
       </div>
-      {/* 全部のカードを同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（狭い画面は 88%）を
+      {/* 全部のカード（組があれば組ごとに 1 枚。組の中で選んでいない組は最後に選んだ・無ければ最初の選択肢）を同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（狭い画面は 88%）を
           使う。前後のカードは両脇の端だけ薄く見え、押すと選ぶ。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
           指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
       <div
@@ -227,29 +263,35 @@ export function ChoiceCarousel<T extends string>({
           aria-hidden
           className="w-[calc(6%-0.75rem)] shrink-0 lg:w-[calc(7.5%-0.75rem)]"
         />
-        {items.map((id) => (
-          <div
-            key={id}
-            ref={(el) => {
-              els.current[id] = el;
-            }}
-            className={`carousel-item w-[88%] lg:w-[85%] ${id === value ? '' : 'cursor-pointer'}`}
-            // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
-            onClick={
-              id === value
-                ? undefined
-                : (e) => {
-                    // ⓘ の説明はポータルで描くので、その中の操作も React の木を伝ってここへ届く。DOM でカードの中の操作だけを選ぶ
-                    const target = e.target as Element;
-                    if (!e.currentTarget.contains(target)) return;
-                    if (target.closest('button')) return;
-                    onChange(id);
-                  }
-            }
-          >
-            {renderCard(id, { selected: id === value, idPrefix: headingId })}
-          </div>
-        ))}
+        {cards.map((c) => {
+          const id = shown(c);
+          const selected = c === current;
+          return (
+            // key は組なので、組の中で選択肢を替えてもカード（と構成図）は作り直さず、中身だけを描き直す
+            <div
+              key={c.key}
+              data-card={c.key}
+              ref={(el) => {
+                els.current[c.key] = el;
+              }}
+              className={`carousel-item w-[88%] lg:w-[85%] ${selected ? '' : 'cursor-pointer'}`}
+              // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
+              onClick={
+                selected
+                  ? undefined
+                  : (e) => {
+                      // ⓘ の説明はポータルで描くので、その中の操作も React の木を伝ってここへ届く。DOM でカードの中の操作だけを選ぶ
+                      const target = e.target as Element;
+                      if (!e.currentTarget.contains(target)) return;
+                      if (target.closest('button')) return;
+                      onChange(id);
+                    }
+              }
+            >
+              {renderCard(id, { selected, idPrefix: headingId })}
+            </div>
+          );
+        })}
         <div
           aria-hidden
           className="w-[calc(6%-0.75rem)] shrink-0 lg:w-[calc(7.5%-0.75rem)]"

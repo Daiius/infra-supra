@@ -507,8 +507,9 @@ describe('ゲームモードの画面', () => {
             screen.getByRole('region', { name: 'ページの描き方' }),
           ).getByRole('button', { name: /^記事のページを S1/ }),
         );
-        // 始める画面: 選べる構成（さくらの VPS・vinext の S1 も出した CF。RS-15 の解除）のカードには出さない
-        for (const id of ['sakura-vps-2gb', 'cloudflare-vinext-paid']) {
+        // 始める画面: 選べる構成（さくらの VPS・vinext の S1 も出した CF。RS-15 の解除）のカードには出さない。
+        // 選んでいない事業者のカードは、その事業者の最初のプランを出す（事業者ごとに 1 枚。D-105 の補足）
+        for (const id of ['sakura-vps-2gb', 'cloudflare-vinext-free']) {
           const card = document.querySelector<HTMLElement>(
             `section[data-stack="${id}"]`,
           )!;
@@ -541,6 +542,8 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(
       screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
     );
+    // CF は Paid を選んでから離れる（選んでいない事業者のカードは最後に選んだプランを出す。D-105 の補足）
+    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Paid/ }));
     fireEvent.click(
       screen.getByRole('radio', { name: /^Vercel Pro \+ Supabase Pro/ }),
     );
@@ -588,6 +591,8 @@ describe('ゲームモードの画面', () => {
       )!;
     // 隠した構成（D-100）は出ず、どれにも推奨の印は無い
     expect(stackRadios().length).toBeGreaterThan(5);
+    // カードは事業者ごとに 1 枚（D-105 の補足）
+    expect(document.querySelectorAll('section[data-stack]').length).toBe(5);
     // タブで選ぶ
     fireEvent.click(screen.getByRole('radio', { name: /^Vercel Pro/ }));
     expect(checked().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
@@ -607,10 +612,9 @@ describe('ゲームモードの画面', () => {
     expect(isr.textContent).toContain('記事のページ');
     fireEvent.click(isr);
     expect(isr.getAttribute('aria-pressed')).toBe('true');
-    // 前後のボタンで選ぶ（フレームワークの欄の前後のボタンとは名前で分かれる）
-    const before = checked().getAttribute('aria-label');
+    // 前後のボタンで選ぶ（フレームワークの欄の前後のボタンとは名前で分かれる）。カード（事業者）ごとに移る
     fireEvent.click(screen.getByRole('button', { name: /^次の構成/ }));
-    expect(checked().getAttribute('aria-label')).not.toBe(before);
+    expect(checked().getAttribute('aria-label')).toMatch(/^さくらの VPS 2GB/);
     fireEvent.click(screen.getByRole('button', { name: /^前の構成/ }));
     // 選んでいないカード: ⓘ・凡例を押しても選ばれない
     const other = document.querySelector<HTMLElement>(
@@ -703,6 +707,71 @@ describe('ゲームモードの画面', () => {
       seen.push(checked());
     }
     expect(seen).toEqual([...order.slice(1), order[0]]);
+  });
+
+  it('W-26 始める画面のインフラの構成: プランのチップはカードを動かさず中身を替え、事業者は最後に選んだプランで出る（D-105 の補足）', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
+    );
+    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Free/ }));
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    const card = current();
+    const item = card.closest<HTMLElement>('[data-card]')!;
+    expect(item.dataset.card).toBe('cloudflare');
+    const diagram = within(card).getByRole('img', { name: /^構成図: / });
+    // カルーセルの位置を動かしたかを数える（jsdom はレイアウトしないので scrollLeft の代入を見る）
+    const track = item.closest<HTMLElement>('.carousel')!;
+    let scrolls = 0;
+    Object.defineProperty(track, 'scrollLeft', {
+      configurable: true,
+      get: () => 0,
+      set: () => {
+        scrolls++;
+      },
+    });
+    const flavor = card.querySelector('p')!.textContent;
+    // Free → Paid: 同じカード・同じ図の要素のまま、名前・説明・構成が替わる。カルーセルは動かさない
+    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Paid/ }));
+    expect(current()).toBe(card);
+    expect(card.closest('[data-card]')).toBe(item);
+    expect(card.dataset.stack).toBe('cloudflare-vinext-paid');
+    expect(card.getAttribute('aria-label')).toMatch(/^Cloudflare Paid/);
+    expect(card.querySelector('p')!.textContent).not.toBe(flavor);
+    expect(within(card).getByRole('img', { name: /^構成図: / })).toBe(diagram);
+    expect(scrolls).toBe(0);
+    // ほかの事業者へ移るとカルーセルが動き、CF のカードは最後に選んだ Paid のまま薄く出る
+    fireEvent.click(screen.getByRole('radio', { name: /^Vercel Hobby/ }));
+    expect(scrolls).toBe(1);
+    expect(card.getAttribute('aria-current')).toBeNull();
+    expect(card.dataset.stack).toBe('cloudflare-vinext-paid');
+    // 選んでいない事業者のカードを押すと、そのカードに出ているプランを選ぶ
+    fireEvent.click(card.querySelector('p')!);
+    expect(
+      screen.getByRole<HTMLInputElement>('radio', { name: /^Cloudflare Paid/ })
+        .checked,
+    ).toBe(true);
+    // 前後のボタンは事業者ごとに移り、移った先の最後に選んだプランを選ぶ
+    expect(
+      screen
+        .getByRole('button', { name: /^次の構成/ })
+        .getAttribute('aria-label'),
+    ).toMatch(/^次の構成（Vercel Hobby/);
+    // 組の名前を押しても、その事業者の最後に選んだプランを選ぶ
+    const sakura = screen.getByRole('group', { name: 'さくらインターネット' });
+    fireEvent.click(sakura.querySelector('span[aria-hidden]')!);
+    expect(current().dataset.stack).toBe('sakura-vps-2gb');
+    // 説明（要約）に結ぶのは、カードに出ているプランのラジオだけ（出ていない要約の id を指さない）
+    for (const r of screen
+      .getAllByRole<HTMLInputElement>('radio')
+      .filter((x) => x.name === 'stack')) {
+      const d = r.getAttribute('aria-describedby');
+      if (d) expect(document.getElementById(d)).not.toBeNull();
+    }
   });
 
   it('W-04 保存して読み込み直すと同じ月から再開する', async () => {
