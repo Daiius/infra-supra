@@ -5,6 +5,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react';
 import { StrictMode } from 'react';
@@ -99,13 +100,19 @@ export function useSmokeEnv() {
   });
 }
 
+/** 分けて読む画面（見積・運営中。App.tsx の lazy）の読み込みを待つ。 */
+export async function waitLoaded(): Promise<void> {
+  await waitFor(() => expect(screen.queryByText('読み込み中…')).toBeNull());
+}
+
 /** 本番（main.tsx）と同じく StrictMode で描く。 */
-export function renderApp(): void {
+export async function renderApp(): Promise<void> {
   render(
     <StrictMode>
       <App />
     </StrictMode>,
   );
+  await waitLoaded();
 }
 
 /** ラベルの先頭で radio を選ぶ（説明・手間の棒の文字が後ろに続くので前方一致）。 */
@@ -132,7 +139,7 @@ export type Setup = {
  * 始める画面で選んで「運営を始める」を押す。部品は指定のものを選び、残りの未選択のスロットは選べる最初の選択肢にする
  * （部品の依存で選べないもの・1 択のものは飛ばす）。
  */
-export function startGame(s: Setup) {
+export async function startGame(s: Setup) {
   pickRadio(s.scenario);
   pickRadio(s.framework);
   pickRadio(s.stack);
@@ -166,6 +173,7 @@ export function startGame(s: Setup) {
     screen.queryByRole('status')?.textContent ?? '',
   ).toBe(false);
   fireEvent.click(start);
+  await waitLoaded();
   // 選んだ構成で始まっている（月のカードの見出しに構成の名前が出る）
   expect(
     screen.getByRole('heading', { level: 2, name: /^1 か月目/ }).textContent,

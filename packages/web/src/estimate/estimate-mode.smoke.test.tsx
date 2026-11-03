@@ -3,7 +3,7 @@
 // 月の費用・比較表・費用の曲線が出ることだけを見る（金額は model.test.ts と game のテストが持つ）。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderApp, useSmokeEnv } from '../smoke.test-helpers.tsx';
+import { renderApp, useSmokeEnv, waitLoaded } from '../smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -49,9 +49,10 @@ function expectEstimate(): string {
 }
 
 describe('見積モードの画面', () => {
-  it('W-05 見積を描き、構成・フレームワーク・テンプレート・PV を切り替える', () => {
-    renderApp();
+  it('W-05 見積を描き、構成・フレームワーク・テンプレート・PV を切り替える', async () => {
+    await renderApp();
     fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    await waitLoaded();
     const first = expectEstimate();
 
     // 構成を切り替える（選べる構成をすべて回す）
@@ -97,12 +98,12 @@ describe('見積モードの画面', () => {
     expect(window.location.search).toContain('t=business');
     const name = expectEstimate();
     cleanup();
-    renderApp();
+    await renderApp();
     expect((combo('テンプレート') as HTMLSelectElement).value).toBe('business');
     expect(expectEstimate()).toBe(name);
   });
 
-  it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', () => {
+  it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', async () => {
     const partSelect = (label: string) =>
       screen.queryByRole<HTMLSelectElement>('combobox', { name: label });
     window.history.replaceState(
@@ -110,7 +111,7 @@ describe('見積モードの画面', () => {
       '',
       '/?mode=estimate&t=business&s=cloudflare-vinext-paid&c.dbBackup=pitr',
     );
-    renderApp();
+    await renderApp();
     expectEstimate();
     expect(partSelect('DB のバックアップ')).toBe(null);
     // URL に残っていた値は無視して既定にする（URL からも消える）
@@ -124,13 +125,13 @@ describe('見積モードの画面', () => {
     expect(partSelect('DB のバックアップ')?.value).toBe('default');
   });
 
-  it('W-08 Astro × CF Free: 1 リクエストの CPU の上限の前提に、当たるルートを添える（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', () => {
+  it('W-08 Astro × CF Free: 1 リクエストの CPU の上限の前提に、当たるルートを添える（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', async () => {
     window.history.replaceState(
       null,
       '',
       '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-free',
     );
-    renderApp();
+    await renderApp();
     expectEstimate();
     expect(
       screen.getByText(
@@ -155,13 +156,13 @@ describe('見積モードの画面', () => {
     expectEstimate();
   });
 
-  it('W-22 フレームワーク・構成を替えると、選んでいない再検証・記事のキャッシュは替えた先の既定になり、選べない描き方は URL から消える（D-103・D-107）', () => {
+  it('W-22 フレームワーク・構成を替えると、選んでいない再検証・記事のキャッシュは替えた先の既定になり、選べない描き方は URL から消える（D-103・D-107）', async () => {
     window.history.replaceState(
       null,
       '',
       '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-paid&r=300',
     );
-    renderApp();
+    await renderApp();
     expectEstimate();
     expect((combo('ISR の再検証') as HTMLSelectElement).value).toBe('300');
     // Astro の既定は、消せる置き場（Cloudflare）ではオンデマンド
@@ -188,7 +189,7 @@ describe('見積モードの画面', () => {
       '',
       '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-free&rp.article=static-build&rp.personal=shell-api',
     );
-    renderApp();
+    await renderApp();
     expectEstimate();
     expect(window.location.search).toContain('rp.article=static-build');
     fireEvent.change(combo('フレームワーク'), { target: { value: 'nextjs' } });
@@ -202,13 +203,13 @@ describe('見積モードの画面', () => {
     expect(window.location.search).not.toContain('rp.article');
   });
 
-  it('W-23 個人向けのページを S6（枠 + サーバーの島）にすると URL に残り、構成図に島の流れが出る。使えない構成（vinext）に替えると消える（D-108）', () => {
+  it('W-23 個人向けのページを S6（枠 + サーバーの島）にすると URL に残り、構成図に島の流れが出る。使えない構成（vinext）に替えると消える（D-108）', async () => {
     window.history.replaceState(
       null,
       '',
       '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
     );
-    renderApp();
+    await renderApp();
     expectEstimate();
     const routes = within(card('ページごとの描き方'));
     fireEvent.click(
@@ -234,7 +235,7 @@ describe('見積モードの画面', () => {
       '',
       '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro&rp.personal=server-island',
     );
-    renderApp();
+    await renderApp();
     expectEstimate();
     expect(window.location.search).toContain('rp.personal=server-island');
     fireEvent.change(combo('構成'), {
@@ -244,13 +245,13 @@ describe('見積モードの画面', () => {
     expect(window.location.search).not.toContain('rp.personal');
   });
 
-  it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', () => {
+  it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
     window.history.replaceState(
       null,
       '',
       '/?mode=estimate&t=business&s=vercel-supabase-pro',
     );
-    renderApp();
+    await renderApp();
     expectEstimate();
     // 部品の欄（DB のバックアップ）と、ⓘ のある条件の欄（構成）を、見出しの文字そのもので取れる
     const backup = screen.getByRole('combobox', { name: 'DB のバックアップ' });
