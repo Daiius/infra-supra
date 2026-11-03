@@ -1208,6 +1208,37 @@
   - 記事ごとの枠は「SNS のカード（伸び）を取り戻す代わりに、新しい記事が枠のビルドまで開けない（鮮度 1 段）とビルドの費用」の損得になる。Vercel ではビルドの CPU minute が効いて下がる。新しく目標に届く構成は無い（目標の値は変えない。RS-07 はユーザーの判断待ちのまま）。
 - 残した点: 枠のビルドを新しい記事だけにする（編集はメタタグが変わらないとみなす）読み・枠を閲覧のときに描いてキャッシュする読み・RS-10（速さの判定の重み付き CPU）・全員に同じページの S6。
 
+### D-111 部品ごとにキャッシュ（Next.js 16 の Cache Components）を足し、Vercel × Next.js の既定にする（確定・2026-11-03）
+
+- 依頼（ユーザーの決定 C-14・C-16。supervisor 経由・2026-11-03）: Cache Components（`cacheComponents: true`・`'use cache'` と `cacheLife`・`cacheTag`・描き方としての PPR）を、ISR（S2・S3）・S6 に**足す**描き方にする。Vercel × Next.js では既定、使えない組（vinext・Amplify）は ISR のまま、VPS（standalone）と Cloud Run は選べるが既定は ISR のまま。画面の S 番号は分かりにくいので出さない（後で S1〜S6 も外す）。正典は [prd/13](../13-route-strategies.md) §5e（数え方・画面・保存）と §9（確かめた事実）。
+- 確かめた事実（2026-11-03 取得。引用と URL は prd/13 §9）:
+  - `'use cache'` の既定はプロセスごとのメモリの LRU。Serverless では要求をまたいで残らないことが多く、自前の Node では残る。インスタンスの間で共有せず、`revalidateTag` もそのインスタンスだけに効く。共有するには `cacheHandlers`（Redis など）か `'use cache: remote'`。
+  - 静的な枠（キャッシュした部品を含む）はビルドで事前描画する。Vercel は枠を全体の ISR のキャッシュに置いて地域の CDN から返し、穴は関数で描く（「most PPR requests incur a function invocation」）。自前の Node は `next start` がディスクから返す。
+  - `updateTag` は Server Action だけで、すぐ期限切れにする（次の要求は新しいデータを待つ）。`revalidateTag(tag, 'max')` は古いものを返しつつ裏で取り直す。
+  - Vercel の PPR の課金は ISR の読み書き・関数の呼び出し・Fast Origin Transfer。Runtime Cache（`'use cache: remote'`）は読み書きの単位で別に課金されるが、この読みでは使わない。
+- 決定（D-10 の 1 つの読み。値は**ゲーム上の仮定**）:
+  - **記事（全員に同じ）**: キャッシュした部品だけで穴は無い。数え方は ISR と同じ（ルートは `isr` のまま）、期限かタグかは今までの再検証の設定。判定は「キャッシュ」として扱う。依頼の「S3（更新で消す）のように振る舞う」は、再検証をオンデマンドにしたときの形として満たす（既定の設定は変えない。期限のままなら S2 と同じ）。
+  - **人ごとに違うページ**: `ssr` のまま、CPU = SSR の 0.4 倍（S6 の島と同じ）、DB の問い合わせと I/O 待ちは全員に同じ部品の分 3 分の 1 を除いた残り。応答はページ全体。内訳の文は「動的な穴」（estimator のルートの任意の欄 `island.label`）。
+  - **事業者ごとの効き**: Vercel（ISR + CDN）と VPS（1 プロセス）は全員で共有。Cloud Run はインスタンスごとのメモリだが、全員に同じ部品は事前描画した枠に入るので、インスタンスごとの取り直しは小さいとみなして数えない。Cloud Run の記事をタグで消す形は Hosting の CDN が消せないので S3 と同じく灰色。共有の `cacheHandlers` は扱わない。
+  - 対応表: Next.js × Vercel・VPS・Google Cloud ✓（出典）、vinext・Amplify ✗、Netlify・OpenNext ?、Next.js 以外は無い。ISR のキャッシュの部品「キャッシュしない」なら毎回描く。
+  - 既定は事業者で変わるので、選んだ描き方（既定と分け方が違うものだけを持つ）の判定 `withRouteChoice`・`validRouteOverrides` は事業者を見るようにした。
+  - 画面: 名前は「部品ごとにキャッシュ（Cache Components）」（番号なし）。表・見取り図（キャッシュした部品 / 動的な穴）・構成図の「動的な穴」の流れ・途中の変更（手間 3。RS-08）・見積モードの `rp.<ルート>=cache-components`。
+  - **保存**: `SAVE_VERSION` 4。版 3 までの保存は `legacyRouteDefaults` を付けて今までの既定で再生する（途中で Vercel へ乗り換えても同じ）。
+- 結果（何もしない・シード 1〜20 の合格数 / シード 42 の 12 か月後の所持金。前 = 今までの既定・後 = 新しい既定。選べる 62 行のうち変わったのは 2 行だけ）:
+
+  | シナリオ・構成 | 前 | 後 |
+  |---|---|---|
+  | **記事・CF Paid × Next.js（目標の根拠）** | 20/20・$2,084 | 20/20・$2,084（変わらない） |
+  | 記事・Vercel Pro × Next.js | 0/20・$925 | 0/20・$927 |
+  | 受託・Vercel Pro × Next.js | 0/20・$1,468 | 0/20・$1,470 |
+  | 記事・受託の Vercel Hobby × Next.js | 0/20・$115 / $174 | 変わらない（商用で使えず 1 か月目で止まる） |
+  | ほかの 58 行（VPS・Cloud Run・Amplify・vinext・ほかのフレームワーク） | — | 変わらない |
+
+  - Vercel の関数は I/O 待ちが CPU より大きく、個人向けのページの CPU を 0.4 倍・問い合わせを 3 分の 2 にしても 12 か月で $2 ほどしか増えない（S6 の D-108 と同じ傾向）。新しく目標に届く構成は無い。**目標の値は変えない**。
+  - 部品を選んだ基準: 受託 × Vercel Pro × Next.js で API と DB を Workers・D1 に出す形（prd/10 §9.6）は 19/20 → 20/20。
+- golden（意図した変更だけ）: GD-4 の基準プレイ（記事。`vercel-pro`・`vercel-cf-images`・1 か月目だけ Vercel の `vercel-to-cf`・Vercel へ乗り換える `cf-paid-accept` のシード 31 が $0.2〜4 増える）、受託の基準プレイ（`vercel-pro`・Vercel へ乗り換える `cf-paid-accept` が $1〜6 増える）、Neon の表の Vercel × Next.js の 2 行（$39.8 → $39.5・$120.1 → $119.9）、上の 19 → 20。`cf-paid`（目標の根拠）は変わらない。等価のスナップショット 2 つは今までの既定（`legacyRouteDefaults`）で引いて記録を替えずに通る。
+- 残した点: 共有の `cacheHandlers`（Redis）の部品・`'use cache: remote'` と Vercel の Runtime Cache の課金・記事の部品の粒度の作り直し・Cloud Run のインスタンスの数で取り直しが増える分・穴の割合（0.4）と全員に同じ部品の問い合わせの割合（3 分の 1）の計測・Vercel では同じ応答の中の枠を CDN から返す分の転送の内訳（今は応答をすべて関数の出力に数える）・画面の S1〜S6 の番号を外すこと（後の UI の作業）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
@@ -1271,6 +1302,7 @@
 | D-103 | ~~ページごとに描き方を選ぶ形~~ → D-106・D-107・Workers Cache の拠点ごとのヒット率の低下（RS-09）・上限の内訳の文の「ISR の閲覧と再生成」を Astro で言い換えること・見積モードでフレームワークを替えたときの既定の付け替え |
 | D-106・D-107 | ISR のキャッシュの部品「キャッシュしない」を S4 にまとめること・`FrameworkProfile.renderingModes` を消すこと・`revalidateSec` をルートごとの値に分けること（prd/13 §6。RS の論点は上の「論点」の表） |
 | D-108 | 速さの判定に S6 の島の CPU を入れる（RS-10）・全員に同じページの S6・Next.js × Netlify・OpenNext の PPR の一次情報・PPR の枠を CDN から配る形・島の割合（0.4）と枠の期限（1 日）の計測 |
+| D-111 | 共有の `cacheHandlers`（Redis）・`'use cache: remote'` と Runtime Cache の課金・記事の部品の粒度の作り直し・Cloud Run のインスタンスごとの取り直し・穴の割合と全員に同じ部品の問い合わせの割合の計測・画面の S 番号を外すこと（prd/13 §5e） |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 
