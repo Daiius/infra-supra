@@ -15,6 +15,7 @@ import {
   type Scenario,
   upkeepOf,
 } from 'game';
+import { ROUTE_STRATEGIES } from 'catalog';
 import type { ReactNode } from 'react';
 import { ChoiceCarousel } from './choice-carousel.tsx';
 import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
@@ -229,7 +230,7 @@ function FrameworkCard({
   });
   const lines = t?.pages ?? [];
   /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
-  const linesOf = (label: string) =>
+  const frameworkLinesOf = (label: string) =>
     lines
       .filter((l) => l.startsWith(`${label}:`))
       .map((l) => l.slice(label.length + 1).trim());
@@ -283,6 +284,13 @@ function FrameworkCard({
         {pages.map((p) => {
           const row = rowOf(p.route);
           const st = statusOf(p.route);
+          // フレームワークの既定と違う描き方なら、フレームワークの説明の行でなく描き方の説明を出す（D-112）
+          const pageLines = p.strategy
+            ? [
+                ROUTE_STRATEGIES[p.strategy].long,
+                ...(row?.strategy === p.strategy ? [row.why] : []),
+              ]
+            : frameworkLinesOf(p.label);
           return (
             <section
               key={p.route}
@@ -308,9 +316,12 @@ function FrameworkCard({
                 )}
                 {st && <RowStatus s={st} variant="badges" />}
                 <PageBadges badges={p.badges} />
-                {linesOf(p.label).length > 0 && (
-                  <ul className="list-disc space-y-0.5 pl-5 text-sm">
-                    {linesOf(p.label).map((l) => (
+                {pageLines.length > 0 && (
+                  <ul
+                    aria-label={`${p.label}の説明`}
+                    className="list-disc space-y-0.5 pl-5 text-sm"
+                  >
+                    {pageLines.map((l) => (
                       <li key={l}>{l}</li>
                     ))}
                   </ul>

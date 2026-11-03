@@ -40,6 +40,38 @@ function retagSource(src: RegionSource, s: RouteStrategyId): RegionSource {
   }
 }
 
+/** 借りる図が無い描き方の札（D-112。図を借りるときは借りたフレームワークの札。島・部品ごとのキャッシュは別に出す）。 */
+function strategyBadges(
+  s: RouteStrategyId,
+  audience: 'public' | 'personal',
+): PageBadge[] | undefined {
+  const pub = audience === 'public';
+  switch (strategyFamily(s)) {
+    case 'ssr':
+      return [
+        ...(pub
+          ? [
+              {
+                kind: 'freshness' as const,
+                text: '鮮度: 常に新しい（閲覧ごとに描く）',
+              },
+              { kind: 'ogp' as const, text: 'SNS のカード: HTML に入る' },
+            ]
+          : []),
+        { kind: 'cpu' as const, text: 'CPU: 閲覧ごとにサーバーが描く' },
+      ];
+    case 'api':
+      return [{ kind: 'api' as const, text: 'API: 1 PV あたり 1 回増える' }];
+    case 'static':
+      return [
+        { kind: 'freshness' as const, text: '鮮度: ビルドし直しで載る' },
+        { kind: 'ogp' as const, text: 'SNS のカード: HTML に入る' },
+      ];
+    default:
+      return undefined;
+  }
+}
+
 /** 見取り図の区画に、選んだフレームワークでの作られ方を付けたもの（D-102）。 */
 export type ResolvedRegion = WireframeRegion & { source: RegionSource };
 
@@ -63,6 +95,11 @@ export function pageWireframes(
   label: string;
   regions: ResolvedRegion[];
   badges: PageBadge[];
+  /**
+   * フレームワークの既定と違う描き方で描いたとき、その描き方（選んだもの・事業者で決まる既定。D-112）。
+   * 画面はこのときフレームワークの説明の行の代わりに描き方の説明を出す。既定のままなら持たない。
+   */
+  strategy?: RouteStrategyId;
 }[] {
   const tpl = sc.template(1).routes;
   const inPage = commentsInPage(
@@ -138,9 +175,15 @@ export function pageWireframes(
       if (islands.has(id)) return 'server-island';
       return HTML_SOURCES.includes(src) ? 'island-shell' : src;
     };
+    // 借りる図が無い描き方（記事を毎回描くなど）は、フレームワークの札でなく描き方の札にする（D-112）
+    const retagged =
+      chosen !== undefined && donor === framework && !perPage
+        ? strategyBadges(chosen, audience)
+        : undefined;
     return {
       route: w.route,
       label: r?.label ?? w.route,
+      ...(chosen !== undefined ? { strategy: chosen } : {}),
       regions: w.regions.map((r) => ({
         ...r,
         source: sourceOf(r.id),
@@ -170,7 +213,7 @@ export function pageWireframes(
                     : 'CPU: 島の分だけ閲覧ごとに描く（同じ応答の中で続けて流す）',
               },
             ]
-          : (perPage?.badges ?? w.badges?.[donor] ?? []),
+          : (perPage?.badges ?? retagged ?? w.badges?.[donor] ?? []),
     };
   });
 }

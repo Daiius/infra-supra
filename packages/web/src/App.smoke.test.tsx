@@ -357,6 +357,16 @@ describe('ゲームモードの画面', () => {
     expect(
       alternative('personal', 'server-island')?.getAttribute('data-available'),
     ).toBe('true');
+    /** ページの欄の説明の行と札（描き方に合わせる。D-112）。 */
+    const lines = (route: string, label: string) =>
+      within(pageOf(route)).getByRole('list', { name: `${label}の説明` })
+        .textContent ?? '';
+    const badges = (route: string) =>
+      within(pageOf(route)).getByRole('list', { name: 'ページの札' })
+        .textContent ?? '';
+    // 既定のままはフレームワークの説明
+    expect(lines('personal', '個人向けのページ')).toContain('アダプターで SSR');
+    expect(badges('personal')).toContain('CPU: 閲覧ごとにサーバーが描く');
     // 個人向けを枠 + API にすると、隣の見取り図が枠 + API になり、その行は CPU の制限に当たらない
     expect(sources('personal', '個人向けのページ')).toContain('ssr');
     pickStrategy('個人向けのページ', '枠 + ブラウザが API で取る');
@@ -364,6 +374,13 @@ describe('ゲームモードの画面', () => {
     expect(sources('personal', '個人向けのページ')).toContain('api');
     expect(sources('personal', '個人向けのページ')).not.toContain('ssr');
     expect(check('personal', 'cpu')).toBe('true');
+    // 説明の行と札も選んだ描き方のものになる
+    expect(lines('personal', '個人向けのページ')).not.toContain(
+      'アダプターで SSR',
+    );
+    expect(lines('personal', '個人向けのページ')).toContain('HTML は静的な枠');
+    expect(badges('personal')).not.toContain('CPU:');
+    expect(badges('personal')).toContain('API: 1 PV あたり 1 回増える');
     // もとの描き方は選び直せるボタンとして残る
     expect(
       within(pageOf('personal'))
@@ -386,6 +403,40 @@ describe('ゲームモードの画面', () => {
     expect(chosenOf('personal')).toBe('shell-api');
     pick(/^Vite（SPA）/);
     expect(chosenOf('article')).toBe('shell-api');
+  });
+
+  it('W-28 始める画面: ページの欄の説明の行と札は、選んだ描き方に合わせる（借りる図の無い記事の毎回描くも。D-112）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    const lines = (route: string, label: string) =>
+      within(pageOf(route)).getByRole('list', { name: `${label}の説明` })
+        .textContent ?? '';
+    const badges = (route: string) =>
+      within(pageOf(route)).getByRole('list', { name: 'ページの札' })
+        .textContent ?? '';
+    pick(/^記事コミュニティ/);
+    pick(/^Astro/);
+    pick(/^Cloudflare Paid/);
+    // 記事を毎回描くにすると（借りる図の無い描き方）、記事の説明と札も毎回描くものになる。戻すとフレームワークの説明
+    expect(lines('article', '記事のページ')).toContain(
+      '閲覧時に SSR + キャッシュ',
+    );
+    pickStrategy('記事のページ', '毎回描く');
+    expect(chosenOf('article')).toBe('ssr');
+    expect(lines('article', '記事のページ')).toContain(
+      'リクエストのたびにサーバーが描く',
+    );
+    expect(lines('article', '記事のページ')).not.toContain(
+      '閲覧時に SSR + キャッシュ',
+    );
+    expect(badges('article')).toContain('CPU: 閲覧ごとにサーバーが描く');
+    expect(badges('article')).not.toContain('投稿・編集でキャッシュを消す');
+    pickStrategy('記事のページ', 'サーバーで描いてキャッシュ（更新で消す）');
+    expect(chosenOf('article')).toBe('cached-purge');
+    expect(lines('article', '記事のページ')).toContain(
+      '閲覧時に SSR + キャッシュ',
+    );
   });
 
   it('W-27 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
