@@ -304,6 +304,18 @@ describe('ゲームモードの画面', () => {
     expect(within(row('article')).getAllByText(/^S3/).length).toBeGreaterThan(
       0,
     );
+    // 描き方の列は選んでいるものも含めて S1〜S6 の順に並び、選んでいるものが強調される
+    const selected = (route: string) =>
+      [...row(route).querySelectorAll('[data-selected="true"]')].map((x) =>
+        x.getAttribute('data-alternative'),
+      );
+    expect(selected('article')).toEqual(['cached-purge']);
+    expect(selected('personal')).toEqual(['ssr']);
+    expect(
+      within(table()).getByRole('columnheader', {
+        name: '描き方（この構成で選べるもの）',
+      }),
+    ).toBeDefined();
     // カードには既定の描き方が短く出る
     expect(
       within(current()).getByRole('list', { name: '既定のページの描き方' }),
@@ -328,6 +340,13 @@ describe('ゲームモードの画面', () => {
     );
     expect(strategy('personal')).toBe('shell-api');
     expect(check('personal', 'cpu')).toBe('true');
+    // 選択中が S5 に移り、もとの S4 は選び直せるボタンとして残る
+    expect(selected('personal')).toEqual(['shell-api']);
+    expect(
+      within(row('personal'))
+        .getByRole('button', { name: /^個人向けのページを S4/ })
+        .getAttribute('aria-pressed'),
+    ).toBe('false');
     expect(
       within(row('personal')).getByText(/既定から変わっている/),
     ).toBeDefined();
