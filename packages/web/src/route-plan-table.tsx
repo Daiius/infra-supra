@@ -15,6 +15,10 @@ import { ROUTE_STRATEGY_ORDER } from 'catalog';
 import { Info } from './info.tsx';
 import { SOURCE_CLASS, SOURCE_STYLE } from './page-wireframes.tsx';
 
+/** 描き方の番号と名前（番号の無い描き方は名前だけ。部品ごとにキャッシュ。D-111）。 */
+const named = (code: string, label: string) =>
+  code ? `${code} ${label}` : label;
+
 /** 描き方 → 見取り図の作られ方（色だけに使う）。 */
 const STRATEGY_SOURCE: Record<RouteStrategyId, RegionSource> = {
   'static-build': 'build',
@@ -23,6 +27,7 @@ const STRATEGY_SOURCE: Record<RouteStrategyId, RegionSource> = {
   ssr: 'ssr',
   'shell-api': 'api',
   'server-island': 'server-island',
+  'cache-components': 'cc-cached',
 };
 
 export function Swatch({ strategy }: { strategy: RouteStrategyId }) {
@@ -64,7 +69,7 @@ function SelectedBody({ r }: { r: RoutePlanRow }) {
   return (
     <>
       <span aria-hidden>✓</span>
-      <span className="opacity-60">{r.code}</span>
+      {r.code && <span className="opacity-60">{r.code}</span>}
       {r.strategyLabel}
       <span className="badge badge-primary badge-xs">選択中</span>
     </>
@@ -245,7 +250,9 @@ export function RoutePlanTable({
                     <span className="flex items-start gap-1.5">
                       <Swatch strategy={r.strategy} />
                       <span>
-                        <span className="opacity-60">{r.code}</span>{' '}
+                        {r.code && (
+                          <span className="opacity-60">{r.code} </span>
+                        )}
                         {r.strategyLabel}
                       </span>
                     </span>
@@ -292,7 +299,7 @@ export function RoutePlanTable({
                                   type="button"
                                   aria-pressed="true"
                                   className="btn h-auto min-h-0 cursor-default gap-1 px-1 py-0.5 text-[11px] font-normal btn-ghost btn-xs"
-                                  aria-label={`${r.label}は ${r.code} ${r.strategyLabel}（選択中）`}
+                                  aria-label={`${r.label}は ${named(r.code, r.strategyLabel)}（選択中）`}
                                 >
                                   <SelectedBody r={r} />
                                 </button>
@@ -314,7 +321,9 @@ export function RoutePlanTable({
                         const pick = onSelect && a.available && !why;
                         const body = (
                           <>
-                            <span className="opacity-60">{a.code}</span>
+                            {a.code && (
+                              <span className="opacity-60">{a.code}</span>
+                            )}
                             {a.label}
                             {delta && (
                               <span
@@ -346,7 +355,7 @@ export function RoutePlanTable({
                                 aria-pressed="false"
                                 className="btn h-auto min-h-0 gap-1 px-1 py-0.5 text-[11px] font-normal btn-ghost btn-xs"
                                 onClick={() => onSelect(r, a)}
-                                aria-label={`${r.label}を ${a.code} ${a.label}にする`}
+                                aria-label={`${r.label}を ${named(a.code, a.label)}にする`}
                               >
                                 {body}
                               </button>
@@ -402,7 +411,7 @@ export function RoutePresetChips({ rows }: { rows: RoutePlanRow[] }) {
         >
           <Swatch strategy={r.strategy} />
           <span>
-            {r.label}: <span className="opacity-60">{r.code}</span>{' '}
+            {r.label}: {r.code && <span className="opacity-60">{r.code} </span>}
             {r.strategyLabel}
           </span>
         </li>

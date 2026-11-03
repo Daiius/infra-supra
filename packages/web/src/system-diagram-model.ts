@@ -72,6 +72,7 @@ export type LaneId =
   | 'isr'
   | 'ssr'
   | 'island'
+  | 'holes'
   | 'api'
   | 'image'
   | 'realtime'
@@ -90,6 +91,11 @@ export const LANES: Readonly<
   // （islandLanes。島の区画のあるページがあれば document-ssr の線に載せる）
   island: {
     label: 'サーバーの島（閲覧ごとに一部だけ描く）',
+    classes: [],
+  },
+  // 部品ごとにキャッシュ（Cache Components。D-111）の人ごとに違う部分。島と同じく document-ssr を見取り図の区画で分ける
+  holes: {
+    label: '動的な穴（部品ごとにキャッシュ・閲覧ごとに一部だけ描く）',
     classes: [],
   },
   api: { label: 'API', classes: ['api', 'api-content'] },
@@ -127,6 +133,9 @@ const SOURCE_LANE: Readonly<Record<RegionSource, LaneId>> = {
   island: 'api',
   'island-shell': 'island',
   'server-island': 'island',
+  // キャッシュした部品は ISR と同じ置き場（Vercel は枠を全体の ISR のキャッシュに置く。D-111）
+  'cc-cached': 'isr',
+  'cc-dynamic': 'holes',
   image: 'image',
 };
 
@@ -248,10 +257,12 @@ export function diagramModel(
   // 見取り図が無ければ）SSR。両方あれば両方の線を並べる（D-108）
   const sources = new Set(pages.flatMap((p) => p.regions.map((r) => r.source)));
   const ssrLanes: LaneId[] = [
-    ...(sources.has('ssr') || !sources.has('server-island')
+    ...(sources.has('ssr') ||
+    (!sources.has('server-island') && !sources.has('cc-dynamic'))
       ? (['ssr'] as const)
       : []),
     ...(sources.has('server-island') ? (['island'] as const) : []),
+    ...(sources.has('cc-dynamic') ? (['holes'] as const) : []),
   ];
   const lanesOf = (cls: RequestClass): LaneId[] =>
     cls === 'document-ssr' ? ssrLanes : [laneOf(cls)];

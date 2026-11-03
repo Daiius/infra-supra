@@ -199,8 +199,9 @@ describe('基準プレイ（何もしない・シード 1〜20・prd/10 §9.6）
 
   it('受託: Vercel Pro の Next.js は API と DB を Workers・D1 に出すと Supabase Pro の固定費が消えて届く', () => {
     expect(run(contract, VERCEL_PRO, 'nextjs', {}).won).toBe(0);
-    // ドメインの登録（D-96）の費用で 20 → 19（届く・届かないの境目のすぐ上）
-    expect(run(contract, VERCEL_PRO, 'nextjs', NEXT_API).won).toBe(19);
+    // ドメインの登録（D-96）の費用で 20 → 19（届く・届かないの境目のすぐ上）。
+    // Vercel × Next.js の既定を部品ごとにキャッシュにして（D-111）業務の画面の CPU・I/O 待ちが減り 19 → 20
+    expect(run(contract, VERCEL_PRO, 'nextjs', NEXT_API).won).toBe(20);
   });
 
   it('記事コミュニティ: Vercel Pro の Next.js は API を出しても席と転送が残り届かない', () => {

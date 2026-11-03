@@ -210,13 +210,17 @@ function FrameworkCard({
   routeNotice?: string | null | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
-  // 選んでいるカードは選んだ描き方で描く（D-107）
-  const pages = pageWireframes(
-    scenario,
-    id,
-    comments,
-    selected ? chosenRoutes : undefined,
+  // 選んでいるカードは選んだ描き方で描く（D-107）。事業者で決まる既定（Vercel × Next.js の部品ごとにキャッシュ。D-111）は
+  // 表の行（選んでいる構成で引いた描き方）から足す
+  const byPlatform = Object.fromEntries(
+    (routes ?? [])
+      .filter((r) => r.strategy === 'cache-components')
+      .map((r) => [r.route, r.strategy] as const),
   );
+  const pages = pageWireframes(scenario, id, comments, {
+    ...byPlatform,
+    ...(selected ? chosenRoutes : undefined),
+  });
   const lines = t?.pages ?? [];
   /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
   const linesOf = (label: string) =>

@@ -2,8 +2,8 @@
 import {
   type Choices,
   type FrameworkId,
-  ROUTE_STRATEGIES,
   type RouteStrategyId,
+  strategyShortName,
   strategySupport,
 } from 'catalog';
 import type { Scenario } from '../scenario.ts';
@@ -58,12 +58,19 @@ export function routeFallbacks(
   const kept =
     reset !== undefined
       ? undefined
-      : validRouteOverrides(sc, to.stackIndex, to.framework, chosen);
+      : validRouteOverrides(
+          sc,
+          to.stackIndex,
+          to.framework,
+          chosen,
+          from.legacyRouteDefaults,
+        );
   const before = routeChoices(sc, tpl, { ...from, platform: fromPlatform });
   const after = routeChoices(sc, tpl, {
     ...to,
     platform: toPlatform,
     routes: kept,
+    legacyRouteDefaults: from.legacyRouteDefaults,
   });
   const out: RouteFallback[] = [];
   for (const r of tpl) {
@@ -96,7 +103,7 @@ export function routeFallbackNotice(
           .filter((f) => f.reason === why)
           .map(
             (f) =>
-              `${f.label}は ${ROUTE_STRATEGIES[f.from].code} → ${ROUTE_STRATEGIES[f.to].code}（既定）`,
+              `${f.label}は ${strategyShortName(f.from)} → ${strategyShortName(f.to)}（既定）`,
           )
           .join('・')}に戻る${why ? `: ${why.replace(/。$/, '')}` : ''}`,
     )
@@ -118,6 +125,7 @@ const planInputOf = (
     | 'components'
     | 'routes'
     | 'routeParts'
+    | 'legacyRouteDefaults'
   >,
 ): RoutePlanInput => ({
   framework: state.framework,
@@ -125,6 +133,7 @@ const planInputOf = (
   settings: state.settings,
   components: state.components,
   routes: state.routes,
+  legacyRouteDefaults: state.legacyRouteDefaults,
   routeParts: state.routeParts,
 });
 

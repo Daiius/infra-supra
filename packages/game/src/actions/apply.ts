@@ -1,5 +1,5 @@
 // 行動の適用と、まとめての検査。
-import { FRAMEWORKS, ROUTE_STRATEGIES, SLOT_LABELS } from 'catalog';
+import { FRAMEWORKS, SLOT_LABELS, strategyTitle } from 'catalog';
 import { PAYMENT_LABEL } from '../commitments.ts';
 import { EFFORT } from '../rules.ts';
 import { componentProposal } from '../components.ts';
@@ -114,13 +114,17 @@ export function applyAction(state: GameState, action: Action): GameState {
       const sc = scenarioOf(state);
       const r = sc.template(1).routes.find((x) => x.id === action.route)!;
       return withNote(
-        `${r.label ?? r.id}を${ROUTE_STRATEGIES[action.strategy].code} ${ROUTE_STRATEGIES[action.strategy].label}に`,
+        `${r.label ?? r.id}を${strategyTitle(action.strategy)}に`,
         {
           ...state,
           ...planned,
           routes: withRouteChoice(
             sc,
-            state.framework,
+            {
+              framework: state.framework,
+              platform: STACKS[state.stackIndex]!.provider,
+              legacyRouteDefaults: state.legacyRouteDefaults,
+            },
             state.routes,
             action.route,
             action.strategy,

@@ -27,11 +27,16 @@ const FRAMEWORK_IDS: readonly FrameworkId[] = [
  * （今の routeChoices で決まるもの。描き方を選べるようになる前の結果と同じ）として再生する。
  * 3 でコメントの描き方を記事のページの部品に移した（routeParts と行動 route-part。D-109）。2 以前の保存の comments と
  * 行動 { type: 'set', key: 'comments' } は、記事のページの部品として読み替える（同じ結果になる）。
+ * 4 で Vercel × Next.js の既定の描き方を部品ごとにキャッシュ（Cache Components）にした（D-111）。3 以前の保存は ISR・毎回描くの
+ * 既定で遊んだので、legacyRouteDefaults を付けて今までの既定で再生する（途中の乗り換え・作り直しの後も同じ。同じ結果になる）。
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** 読める古い版。 */
-const READABLE_VERSIONS: readonly number[] = [1, 2, 3];
+const READABLE_VERSIONS: readonly number[] = [1, 2, 3, 4];
+
+/** 部品ごとにキャッシュを既定にした版（D-111）。これより前の保存は今までの既定で再生する。 */
+const CACHE_COMPONENTS_DEFAULT_VERSION = 4;
 
 export type SaveData = {
   version: typeof SAVE_VERSION;
@@ -62,6 +67,10 @@ export type SaveData = {
   commitments?: { key: string; payment: CommitmentPaymentId }[];
   /** 始める画面で選んだページごとの描き方（版 2・D-107）。無い保存はフレームワークの既定で読む。 */
   routes?: Partial<Record<string, RouteStrategyId>>;
+  /**
+   * 部品ごとにキャッシュを既定にする前の既定で再生する（D-111）。版 3 以前の保存を読むと付き、付いたまま保存し直す。
+   */
+  legacyRouteDefaults?: true;
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
 };
@@ -239,6 +248,10 @@ export function parseSave(raw: unknown): SaveData | null {
     ...(routes !== undefined
       ? { routes: routes as NonNullable<SaveData['routes']> }
       : {}),
+    ...(raw.version < CACHE_COMPONENTS_DEFAULT_VERSION ||
+    raw.legacyRouteDefaults === true
+      ? { legacyRouteDefaults: true as const }
+      : {}),
     turns: (turns as Action[][]).map((t) => t.map(migrateAction)),
   };
 }
@@ -262,6 +275,7 @@ export function replaySave(save: SaveData): GameState {
       save.routeParts ?? partsOfComments(scenario, save.comments),
       save.commitments,
       save.routes,
+      save.legacyRouteDefaults === true,
     ),
   );
   for (const actions of save.turns) {

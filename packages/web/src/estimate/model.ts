@@ -753,7 +753,13 @@ export function diagramOf(input: EstimateInput): {
       r.components,
       input.routes,
     ),
-    pages: pageWireframes(r.scenario, input.framework, comments, input.routes),
+    pages: pageWireframes(
+      r.scenario,
+      input.framework,
+      comments,
+      input.routes,
+      STACKS[r.stackIndex]!.provider,
+    ),
     // 描き方は見積の Workload（run）と同じ設定・部品から
     routes: routePlanRows(r.scenario, {
       framework: input.framework,
@@ -802,7 +808,10 @@ export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
           ...input,
           routes: withRouteChoice(
             r.scenario,
-            input.framework,
+            {
+              framework: input.framework,
+              platform: STACKS[stackIndexOf(input.stack)]!.provider,
+            },
             input.routes,
             row.route,
             alt.strategy,

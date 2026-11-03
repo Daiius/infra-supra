@@ -151,7 +151,9 @@ describe('Workload と構成（D-108）', () => {
   });
 
   it('Next.js の PPR: 毎回描く（ssr）のまま CPU を島の分に（閲覧ごとに処理を通す。枠を CDN から配ることは仮定しない）', () => {
-    const before = workload(VERCEL_PRO, 'nextjs').routes[1]!;
+    // Vercel × Next.js の既定は部品ごとにキャッシュ（D-111）なので、比べる前は毎回描くを選ぶ
+    const before = workload(VERCEL_PRO, 'nextjs', { personal: 'ssr' })
+      .routes[1]!;
     const after = workload(VERCEL_PRO, 'nextjs', ISLAND).routes[1]!;
     expect(after.rendering).toBe('ssr');
     expect(after.island).toEqual({});
@@ -210,7 +212,7 @@ describe('費用と制限（D-108）', () => {
 
   it('Vercel Pro × Next.js の PPR: 個人向けの CPU が減る分だけ安い（I/O 待ちは同じ）', () => {
     expect(m1(VERCEL_PRO, 'nextjs', ISLAND).costUsd).toBeLessThan(
-      m1(VERCEL_PRO, 'nextjs').costUsd,
+      m1(VERCEL_PRO, 'nextjs', { personal: 'ssr' }).costUsd,
     );
   });
 

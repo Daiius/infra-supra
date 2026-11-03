@@ -7,6 +7,7 @@ import { playMonth } from '../month/play.ts';
 import { setupMonthOneEstimate } from '../setup/estimates.ts';
 import { newGame } from '../setup/new-game.ts';
 import type { RouteOverrides } from '../state.ts';
+import { STACKS } from '../stacks.ts';
 import { partsOfComments } from './comments.ts';
 import { routePlanRows } from './plan.ts';
 import { articleShellPerPage, withRouteChoice } from './strategy.ts';
@@ -84,7 +85,10 @@ export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
         ...p,
         routes: withRouteChoice(
           sc,
-          state.framework,
+          {
+            framework: state.framework,
+            platform: STACKS[state.stackIndex]!.provider,
+          },
           state.routes,
           row.route,
           alt.strategy,

@@ -6,9 +6,11 @@ import type {
   WireframeRegion,
 } from './scenario.ts';
 import {
+  defaultStrategy,
   FRAMEWORK_PRESETS,
   type FrameworkId,
   perPageShellFramework,
+  type Platform,
   type RouteStrategyId,
 } from 'catalog';
 import { frameworksOf } from './core.ts';
@@ -51,6 +53,11 @@ export function pageWireframes(
   comments?: number,
   /** 選んだページごとの描き方（D-107）。既定と違うページは、その描き方を既定に持つフレームワークの図を借りる。 */
   routes?: RouteOverrides,
+  /**
+   * 構成の事業者（D-111）。渡すと、事業者で決まる既定（Vercel × Next.js の部品ごとにキャッシュ）も図に出す。
+   * 省略はフレームワークの既定（事業者を見ない今までの図）。
+   */
+  platform?: Platform,
 ): {
   route: string;
   label: string;
@@ -66,8 +73,14 @@ export function pageWireframes(
   );
   return (sc.text?.wireframes ?? []).map((w) => {
     const r = tpl.find((x) => x.id === w.route);
-    const chosen = routes?.[w.route];
     const audience = r ? routeAudienceOf(sc, r) : 'public';
+    const byPlatform =
+      platform !== undefined
+        ? defaultStrategy(framework, platform, audience)
+        : undefined;
+    const chosen =
+      routes?.[w.route] ??
+      (byPlatform === 'cache-components' ? byPlatform : undefined);
     // 図を借りるフレームワーク: 選んだ描き方を既定に持つもの（記事の S1 は静的書き出し・個人向けの S5 は静的書き出しなど）
     const donor =
       chosen === undefined
@@ -109,8 +122,18 @@ export function pageWireframes(
       chosen !== undefined && strategyFamily(chosen) === 'island'
         ? new Set(w.islandRegions ?? [])
         : undefined;
+    // 部品ごとにキャッシュ（D-111）: 人ごとに違うページの人ごとに違う区画は動的な穴、ほかの HTML の区画はキャッシュした部品
+    const components =
+      chosen !== undefined && strategyFamily(chosen) === 'components';
+    const holes = components
+      ? new Set(audience === 'personal' ? (w.islandRegions ?? []) : [])
+      : undefined;
     const sourceOf = (id: string): RegionSource => {
       const src = sources[id] ?? 'ssr';
+      if (holes) {
+        if (holes.has(id)) return 'cc-dynamic';
+        return HTML_SOURCES.includes(src) ? 'cc-cached' : src;
+      }
       if (!islands) return src;
       if (islands.has(id)) return 'server-island';
       return HTML_SOURCES.includes(src) ? 'island-shell' : src;
@@ -122,17 +145,32 @@ export function pageWireframes(
         ...r,
         source: sourceOf(r.id),
       })),
-      badges: islands
-        ? [
-            {
-              kind: 'cpu' as const,
-              text:
-                framework === 'astro'
-                  ? 'CPU: 島の分だけ閲覧ごとに描く（島は別のリクエスト・枠はキャッシュ）'
-                  : 'CPU: 島の分だけ閲覧ごとに描く（同じ応答の中で続けて流す）',
-            },
-          ]
-        : (perPage?.badges ?? w.badges?.[donor] ?? []),
+      badges: components
+        ? audience === 'personal'
+          ? [
+              {
+                kind: 'cpu' as const,
+                text: 'CPU: 人ごとに違う部分だけ閲覧ごとに描く（全員に同じ部品はキャッシュした枠に入る）',
+              },
+            ]
+          : [
+              {
+                kind: 'freshness' as const,
+                text: '鮮度: 期限（cacheLife）かタグ（投稿・編集で updateTag）で作り直す',
+              },
+              { kind: 'ogp' as const, text: 'SNS のカード: HTML に入る' },
+            ]
+        : islands
+          ? [
+              {
+                kind: 'cpu' as const,
+                text:
+                  framework === 'astro'
+                    ? 'CPU: 島の分だけ閲覧ごとに描く（島は別のリクエスト・枠はキャッシュ）'
+                    : 'CPU: 島の分だけ閲覧ごとに描く（同じ応答の中で続けて流す）',
+              },
+            ]
+          : (perPage?.badges ?? w.badges?.[donor] ?? []),
     };
   });
 }

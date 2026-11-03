@@ -11,6 +11,7 @@ import {
   type RouteTraits,
   SLOT_LABELS,
   strategySupport,
+  strategyTitle,
 } from 'catalog';
 import type { Scenario } from '../scenario.ts';
 import { onDemandBlocker } from '../requirements.ts';
@@ -102,6 +103,8 @@ export type RoutePlanInput = {
   components: Choices;
   /** 選んだ描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
+  /** 部品ごとにキャッシュを既定にする前の既定で決める（保存の版 3 まで。D-111）。 */
+  legacyRouteDefaults?: boolean | undefined;
   /** ページの部品の選択（記事のページのコメント欄。D-109）。 */
   routeParts?: RouteParts | undefined;
 };
@@ -130,7 +133,9 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
     const audience = routeAudienceOf(sc, r);
     const choice = plan[r.id]!;
     const def = ROUTE_STRATEGIES[choice.strategy];
-    const preset = defaultStrategy(p.framework, platform, audience);
+    const preset = defaultStrategy(p.framework, platform, audience, {
+      legacy: p.legacyRouteDefaults === true,
+    });
     const detail: string[] = [];
     const value = optionLabel(revalidateKey, p.settings.revalidateSec);
     if (choice.strategy === 'cached-ttl' && !hidden.includes(revalidateKey))
@@ -140,6 +145,15 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
         isOnDemand(p.settings)
           ? 'ビルドし直し: 更新のたび'
           : `ビルドし直し: 間隔 ${value}`,
+      );
+    // 部品ごとにキャッシュ（D-111）: 記事は期限（cacheLife）かタグ（cacheTag・updateTag）、個人向けは動的な穴
+    if (choice.strategy === 'cache-components')
+      detail.push(
+        audience === 'personal'
+          ? '人ごとに違う部分だけ閲覧ごとに描く（全員に同じ部品は枠に入る）'
+          : isOnDemand(p.settings)
+            ? '部品をタグで作り直す（投稿・編集で updateTag）'
+            : `部品の期限 ${value}（cacheLife）`,
       );
     if (choice.shellPerPage)
       detail.push(
@@ -152,7 +166,7 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       strategyFamily(choice.strategy) === strategyFamily(preset)
         ? undefined
         : chosen
-          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は ${ROUTE_STRATEGIES[preset].code} ${ROUTE_STRATEGIES[preset].label}）`
+          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は ${strategyTitle(preset)}）`
           : choice.strategy === 'ssr'
             ? `${SLOT_LABELS.isrCache}の部品が「キャッシュしない」`
             : undefined;
@@ -230,6 +244,7 @@ export function routePlanOf(
     | 'settings'
     | 'components'
     | 'routes'
+    | 'legacyRouteDefaults'
   >,
 ): RoutePlanRow[] {
   return routePlanRows(state.scenario, state);

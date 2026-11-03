@@ -263,6 +263,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         settings: state.settings,
         components: state.components,
         routes: state.routes,
+        legacyRouteDefaults: state.legacyRouteDefaults,
       })[r.id]!.strategy;
       if (strategyFamily(now) === strategyFamily(action.strategy))
         return ng(

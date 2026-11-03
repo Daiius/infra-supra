@@ -30,6 +30,7 @@ const LANE_COLOR: Readonly<Record<LaneId, string>> = {
   ssr: 'var(--color-warning)',
   island:
     'color-mix(in oklab, var(--color-warning) 70%, var(--color-base-content))',
+  holes: 'color-mix(in oklab, var(--color-warning) 55%, var(--color-info))',
   api: 'var(--color-secondary)',
   image: 'var(--color-accent)',
   realtime: 'var(--color-primary)',
@@ -40,6 +41,8 @@ const LANE_DASH: Partial<Record<LaneId, string>> = {
   revalidate: '4 3',
   // サーバーの島（S6）は閲覧ごとに描く SSR と同じ色の系統で、破線で分ける
   island: '7 3',
+  // 部品ごとにキャッシュの動的な穴（D-111）は点線
+  holes: '2 3',
 };
 
 const groupTitle = (account: string, brand?: BrandId) =>

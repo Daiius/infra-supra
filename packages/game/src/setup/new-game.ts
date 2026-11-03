@@ -243,6 +243,8 @@ export function newGame(
   commitments?: readonly { key: string; payment: CommitmentPaymentId }[],
   /** 始める画面で選んだページごとの描き方（D-107）。選べないものは捨て、省略はフレームワークの既定。 */
   routes?: RouteOverrides,
+  /** 部品ごとにキャッシュを既定にする前の既定で描き方を決める（保存の版 3 までの再生だけ。D-111）。 */
+  legacyRouteDefaults?: boolean,
 ): GameState {
   const fw = frameworksOf(scenario);
   // 載せられない構成（Astro × AWS など）では既定のフレームワークにする（画面では選べない。D-68）
@@ -256,7 +258,13 @@ export function newGame(
     ? validSetupChoices(scenario, stackIndex, app, components)
     : {};
   const chosenRoutes = routes
-    ? validRouteOverrides(scenario, stackIndex, app, routes)
+    ? validRouteOverrides(
+        scenario,
+        stackIndex,
+        app,
+        routes,
+        legacyRouteDefaults,
+      )
     : {};
   const hasRoutes = Object.keys(chosenRoutes).length > 0;
   const comments = commentsOf(scenario, routeParts);
@@ -268,6 +276,7 @@ export function newGame(
   return {
     startDate,
     ...(hasRoutes ? { routes: chosenRoutes } : {}),
+    ...(legacyRouteDefaults ? { legacyRouteDefaults: true } : {}),
     ...(Object.keys(chosenParts).length > 0 ? { routeParts: chosenParts } : {}),
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
     scenarioId: scenario.id,

@@ -5,6 +5,8 @@
 // 段 4（D-109）で記事のページの部品の API を記事のルートに付けた（テンプレートの apiCalls: 1。コメントを含めると書き込みの分だけ）ので、
 // 記事コミュニティの Workload のハッシュは記録し直した（受託は不変）。費用・使用量・前提の当たりは段 4 の前の main（177965e の上）で
 // 記録した 2 つ目のスナップショットと同じで、変わったのは Workload の形（API の件数をルートに分けた内訳）だけであることを確かめる。
+// D-111 で Vercel × Next.js の既定を部品ごとにキャッシュにした。ここは今までの既定（legacyRouteDefaults。保存の版 3 までの再生と同じ）で
+// 引き、記録を替えずに通ることで、古い保存が同じ結果で再生されることも確かめる（新しい既定の分は基準プレイの golden で見る）。
 import {
   composeStack,
   loadPriceBooks,
@@ -100,6 +102,7 @@ function* grid(
                 platform: STACKS[stackIndex]!.provider,
                 components,
                 framework: fw,
+                legacyRouteDefaults: true,
               }),
             };
 }

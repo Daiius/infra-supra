@@ -60,6 +60,7 @@ export function estimateMonth(
     components: state.components,
     framework: state.framework,
     routes: state.routes,
+    legacyRouteDefaults: state.legacyRouteDefaults,
     routeParts: state.routeParts,
     ...(peakFactor !== 1 ? { peakFactor } : {}),
     ...(spikes.length ? { spikes } : {}),
@@ -73,7 +74,13 @@ export function estimateMonth(
     state.components,
     swap ? { [swap.slot]: swap.option } : {},
     state.storageOption,
-    staticBuildOf(sc, stackIndexNow, state.framework, state.routes),
+    staticBuildOf(
+      sc,
+      stackIndexNow,
+      state.framework,
+      state.routes,
+      state.legacyRouteDefaults,
+    ),
   );
   const books = booksAt(state, month);
   const r = estimate({ workload, architecture, books });
@@ -102,7 +109,13 @@ export function estimateMonth(
               components,
               {},
               false,
-              staticBuildOf(sc, to, state.framework, state.routes),
+              staticBuildOf(
+                sc,
+                to,
+                state.framework,
+                state.routes,
+                state.legacyRouteDefaults,
+              ),
             ),
           ),
           books,

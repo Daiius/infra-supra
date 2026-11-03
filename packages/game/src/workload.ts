@@ -49,6 +49,8 @@ export type WorkloadParts = {
   framework: FrameworkId;
   /** 選んだページごとの描き方（D-107。省略はフレームワークの既定）。 */
   routes?: RouteOverrides | undefined;
+  /** 部品ごとにキャッシュを既定にする前の既定で描き方を決める（保存の版 3 まで。D-111）。 */
+  legacyRouteDefaults?: boolean | undefined;
   /** ページの部品の選択（記事のページのコメント欄。D-109。省略はブラウザで読み込む）。 */
   routeParts?: RouteParts | undefined;
   /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
@@ -241,6 +243,7 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     settings: p.settings,
     components: p.components,
     routes: p.routes,
+    legacyRouteDefaults: p.legacyRouteDefaults,
   });
   const uses = (f: StrategyFamily) =>
     Object.values(plan).some((c) => strategyFamily(c.strategy) === f);
@@ -396,9 +399,16 @@ export function staticBuildOf(
   stackIndex: number,
   framework: FrameworkId,
   routes: RouteOverrides | undefined,
+  legacyRouteDefaults?: boolean,
 ): RoutingOptions {
   if (!routes) return {};
-  const valid = validRouteOverrides(sc, stackIndex, framework, routes);
+  const valid = validRouteOverrides(
+    sc,
+    stackIndex,
+    framework,
+    routes,
+    legacyRouteDefaults,
+  );
   // 記事ごとの枠（S5。D-109）も S1 と同じくビルドで書き出す
   const staticBuild =
     Object.values(valid).some(

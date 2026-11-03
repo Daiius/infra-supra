@@ -901,7 +901,8 @@ function RouteActions({
                       name={`${r.label}の描き方`}
                       info={
                         <Info>
-                          今: {r.code} {r.strategyLabel}。{r.why}
+                          今: {r.code ? `${r.code} ` : ''}
+                          {r.strategyLabel}。{r.why}
                         </Info>
                       }
                     />
@@ -931,7 +932,8 @@ function RouteActions({
                   }}
                 >
                   <option value={r.strategy}>
-                    {r.code} {r.strategyLabel}（今）
+                    {r.code ? `${r.code} ` : ''}
+                    {r.strategyLabel}（今）
                   </option>
                   {alts.map((a) => {
                     const trial: RouteActs = {
@@ -948,7 +950,8 @@ function RouteActions({
                         value={a.strategy}
                         disabled={why !== null}
                       >
-                        {a.code} {a.label}
+                        {a.code ? `${a.code} ` : ''}
+                        {a.label}
                         {why ? `（${why}）` : ''}
                       </option>
                     );

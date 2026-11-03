@@ -388,6 +388,8 @@ export type RegionSource =
   | 'island'
   | 'island-shell'
   | 'server-island'
+  | 'cc-cached'
+  | 'cc-dynamic'
   | 'shell'
   | 'image';
 
@@ -428,6 +430,15 @@ export const REGION_SOURCES: Readonly<
   'server-island': {
     short: 'サーバーの島（閲覧ごとに一部だけ描く）',
     long: '人ごとに違う部分だけを閲覧のたびにサーバーが描く（Astro は枠とは別のリクエスト・Next.js の PPR は同じ応答の中）。キャッシュしない',
+  },
+  // 部品ごとにキャッシュ（Cache Components。D-111）
+  'cc-cached': {
+    short: "部品をキャッシュ（'use cache'）",
+    long: "全員に同じ部品。'use cache' でキャッシュして静的な枠に入れ、期限（cacheLife）かタグ（cacheTag・updateTag）で作り直す（Vercel は全体の ISR のキャッシュと CDN、自前の Node はインスタンスのディスク・メモリ）",
+  },
+  'cc-dynamic': {
+    short: '動的な穴（閲覧ごとに描く）',
+    long: '人ごとに違う部分。Suspense の中で閲覧のたびにサーバーが描き、枠と同じ応答で続けて流す。キャッシュしない',
   },
   shell: {
     short: 'シェル + JS',

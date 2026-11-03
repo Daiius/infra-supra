@@ -57,6 +57,7 @@ function StackCard({
         framework,
         comments,
         routes && validRouteOverrides(scenario, stackIndex, framework, routes),
+        STACKS[stackIndex]!.provider,
       ),
     [scenario, stackIndex, framework, comments, routes],
   );

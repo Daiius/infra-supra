@@ -79,9 +79,17 @@ describe('ページごとの描き方の表（D-106）', () => {
               for (const row of plan) {
                 const r = w.routes.find((x) => x.id === row.route)!;
                 const key = `${sc.id} × ${fw} × ${s.id} × ${row.route}`;
-                expect(r.rendering, key).toBe(
-                  RENDERING[row.strategy as keyof typeof RENDERING],
-                );
+                // 部品ごとにキャッシュ（D-111）は記事を isr・個人向けを ssr（穴の分。同じ応答の中の島）のまま
+                if (row.strategy === 'cache-components') {
+                  expect(r.rendering, key).toBe(
+                    row.audience === 'public' ? 'isr' : 'ssr',
+                  );
+                  if (row.audience === 'personal')
+                    expect(r.island, key).toEqual({ label: '動的な穴' });
+                } else
+                  expect(r.rendering, key).toBe(
+                    RENDERING[row.strategy as keyof typeof RENDERING],
+                  );
                 // 期限かオンデマンドか（S2 / S3）は、ルートの値と一致する
                 if (row.strategy === 'cached-purge')
                   expect(r, key).toHaveProperty('onDemandUpdatesPerMonth');
@@ -199,8 +207,9 @@ describe('ページごとの描き方の表（D-106）', () => {
       settings: settings(),
       components: {},
     });
+    // Vercel × Next.js の既定は部品ごとにキャッシュ（D-111）
     expect(r.map((x) => [x.route, x.audience, x.strategy])).toEqual([
-      ['app', 'personal', 'ssr'],
+      ['app', 'personal', 'cache-components'],
     ]);
   });
 
