@@ -31,6 +31,7 @@ import {
   VIEWER_LABEL,
   type DiagramModel,
   type DiagramNode,
+  type GhostSlot,
   type LaneId,
 } from './system-diagram-model.ts';
 import type { ResolvedPage } from './page-wireframes.tsx';
@@ -91,6 +92,28 @@ function SwapMark({ compact = false }: { compact?: boolean }) {
 const SWAP_STROKE =
   'color-mix(in oklab, var(--color-primary) 70%, transparent)';
 
+/**
+ * 幽霊の箱（D-116 の補足）の見た目: 点線の枠・半透明（今の選択は図に箱を持たない。線は引かない）。
+ * 差し替えの印（⇄）は薄くしない（押せることは同じに見せる）。
+ */
+const GHOST_DASH = '4 3';
+const GHOST_OPACITY = 0.5;
+/** 幽霊の箱の吹き出しの説明。 */
+const GHOST_NOTE =
+  '今の選択は、課金される部品を図に持たない（別の部品の中で働くか、使わない）。箱だけを点線で残し、経路の線は引かない。';
+
+/** 幽霊の箱の吹き出しの中身（スロットの名前・今の選択・説明）。 */
+function GhostDetail({ n }: { n: DiagramNode }) {
+  return (
+    <>
+      <div className="text-xs opacity-80">{GHOST_NOTE}</div>
+      {n.ghost?.note && (
+        <div className="text-xs opacity-70">{n.ghost.note}</div>
+      )}
+    </>
+  );
+}
+
 const groupTitle = (account: string, brand?: BrandId) =>
   brand ? BRANDS[brand].title : account;
 
@@ -100,6 +123,7 @@ export function SystemDiagram({
   caption,
   parts,
   below,
+  ghosts,
 }: {
   architecture: ArchitectureInput;
   /** ページの見取り図（流れの凡例にページの名前を添える。省略可）。 */
@@ -110,6 +134,8 @@ export function SystemDiagram({
   parts?: DiagramParts | undefined;
   /** 図のすぐ下（凡例・経路に載らない部品より上）に置く中身（部品のチップ。D-116）。 */
   below?: ReactNode;
+  /** 今の選択が箱を持たないスロットの幽霊の箱（slotBoxes。D-116 の補足）。 */
+  ghosts?: readonly GhostSlot[] | undefined;
 }) {
   // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。カルーセルのカード・畳んだ欄の中でも同じ判定）
   const wrap = useRef<HTMLDivElement>(null);
@@ -125,15 +151,26 @@ export function SystemDiagram({
     return () => ro.disconnect();
   }, []);
   const wide = useMemo(
-    () => diagramModel(architecture, pages ?? []),
-    [architecture, pages],
+    () => diagramModel(architecture, pages ?? [], 'horizontal', ghosts),
+    [architecture, pages, ghosts],
   );
   const narrow = isNarrow(boxWidth, wide.width);
   const tall = useMemo(
-    () => (narrow ? diagramModel(architecture, pages ?? [], 'vertical') : null),
-    [narrow, architecture, pages],
+    () =>
+      narrow
+        ? diagramModel(architecture, pages ?? [], 'vertical', ghosts)
+        : null,
+    [narrow, architecture, pages, ghosts],
   );
   const model = tall ?? wide;
+  // 幽霊の箱は、そのスロットの差し替えを出す（D-116 の補足）
+  const nodeParts: DiagramParts | undefined = parts && {
+    render: parts.render,
+    slotsOf: (id) => {
+      const n = model.nodes.find((x) => x.id === id);
+      return n?.ghost ? [n.ghost.slot] : parts.slotsOf(id);
+    },
+  };
   const [chosen, setActive] = useState<LaneId | null>(null);
   // 構成・部品を替えて選んでいた流れが図から消えたら、強調をやめる（凡例に無い流れで全部の線が薄くならないように）
   const active = activeLane(chosen, model);
@@ -208,30 +245,36 @@ export function SystemDiagram({
                 model={model}
                 title={title(n.group)}
                 brand={model.groups.find((g) => g.account === n.group)?.brand}
-                parts={parts}
+                parts={nodeParts}
               />
-            ) : parts && parts.slotsOf(n.id).length > 0 ? (
+            ) : nodeParts && nodeParts.slotsOf(n.id).length > 0 ? (
               <SwappableNode
                 key={n.id}
                 n={n}
                 model={model}
                 title={title(n.group)}
-                parts={parts}
+                parts={nodeParts}
               />
             ) : (
-              <g key={n.id} data-node={n.id}>
+              <g
+                key={n.id}
+                data-node={n.id}
+                data-ghost={n.ghost ? 'true' : undefined}
+              >
                 <rect
                   x={n.x}
                   y={n.y}
                   width={model.node.w}
                   height={model.node.h}
                   rx={6}
+                  strokeDasharray={n.ghost ? GHOST_DASH : undefined}
                   style={{
                     fill: 'var(--color-base-100)',
                     stroke: n.compute
                       ? 'var(--color-base-content)'
                       : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)',
                     strokeWidth: n.compute ? 1.75 : 1,
+                    ...(n.ghost ? { opacity: GHOST_OPACITY } : {}),
                   }}
                 />
                 <foreignObject
@@ -241,8 +284,13 @@ export function SystemDiagram({
                   height={model.node.h - 4}
                 >
                   <div
-                    title={n.label}
+                    title={
+                      n.ghost
+                        ? `${n.caption}: ${n.label}（${GHOST_NOTE}）`
+                        : n.label
+                    }
                     className="flex h-full flex-col justify-center leading-tight"
+                    style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
                   >
                     <span className="text-[10px] opacity-60">{n.caption}</span>
                     <span
@@ -279,23 +327,95 @@ export function SystemDiagram({
           </div>
           <ul className="mt-1 flex flex-wrap gap-1.5">
             {model.side.flatMap((s) =>
-              s.nodes.map((n) => (
-                <li
-                  key={n.id}
-                  data-side-node={n.id}
-                  className="badge h-auto max-w-full gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal"
-                >
-                  {s.brand && <BrandMark brand={s.brand} size={12} />}
-                  <span className="sr-only">{title(s.group)}: </span>
-                  {n.label}
-                </li>
-              )),
+              s.nodes.map((n) =>
+                n.ghost ? (
+                  <SideGhost
+                    key={n.id}
+                    n={n}
+                    brand={s.brand}
+                    title={title(s.group)}
+                    parts={parts}
+                  />
+                ) : (
+                  <li
+                    key={n.id}
+                    data-side-node={n.id}
+                    className="badge h-auto max-w-full gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal"
+                  >
+                    {s.brand && <BrandMark brand={s.brand} size={12} />}
+                    <span className="sr-only">{title(s.group)}: </span>
+                    {n.label}
+                  </li>
+                ),
+              ),
             )}
           </ul>
         </div>
       )}
       <ConnectionList model={model} title={title} />
     </div>
+  );
+}
+
+/**
+ * 経路に載らない部品の幽霊の箱（バックアップを既定のままにしたときなど。D-116 の補足）: 点線・半透明のバッジ。
+ * 部品を選べる図（parts）では押すとそのスロットの差し替えを出す。
+ */
+function SideGhost({
+  n,
+  brand,
+  title,
+  parts,
+}: {
+  n: DiagramNode;
+  brand: BrandId | undefined;
+  title: string;
+  parts: DiagramParts | undefined;
+}) {
+  const slot = n.ghost!.slot;
+  const body = (
+    <>
+      <span
+        className="inline-flex items-center gap-1"
+        style={{ opacity: GHOST_OPACITY }}
+      >
+        {brand && <BrandMark brand={brand} size={12} />}
+        <span className="sr-only">{title}: </span>
+        {n.caption}: {n.label}
+      </span>
+      {parts && <span aria-hidden>⇄</span>}
+    </>
+  );
+  const cls =
+    'badge h-auto max-w-full gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal';
+  return (
+    <li data-side-node={n.id} data-ghost="true">
+      {parts ? (
+        <Info
+          label={`${title}: ${n.caption}（${n.label}）を替える`}
+          interactive
+          className={`${cls} cursor-pointer border-primary/70 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary`}
+          trigger={body}
+        >
+          {(close) => (
+            <div className="space-y-1.5" data-node-detail={n.id}>
+              <div className="text-xs opacity-70">
+                {title}・{n.caption}
+              </div>
+              <div className="font-semibold">{n.label}</div>
+              <GhostDetail n={n} />
+              <div className="border-t border-base-300 pt-1.5">
+                {parts.render(slot, close)}
+              </div>
+            </div>
+          )}
+        </Info>
+      ) : (
+        <span className={cls} title={GHOST_NOTE}>
+          {body}
+        </span>
+      )}
+    </li>
   );
 }
 
@@ -556,7 +676,11 @@ function ConnectionList({
               ...model.nodes.filter((n) => n.group === g.account),
               ...(model.side.find((s) => s.group === g.account)?.nodes ?? []),
             ]
-              .map((n) => n.label)
+              .map((n) =>
+                n.ghost
+                  ? `${n.caption}: ${n.label}（図に部品の箱なし）`
+                  : n.label,
+              )
               .join('、')}
           </li>
         ))}
@@ -592,13 +716,16 @@ function CompactNode({
   const laneLabel = (l: LaneId) =>
     model.lanes.find((x) => x.id === l)?.label ?? l;
   return (
-    <g data-node={n.id}>
+    <g data-node={n.id} data-ghost={n.ghost ? 'true' : undefined}>
       <foreignObject x={n.x} y={n.y} width={model.node.w} height={model.node.h}>
         <Info
           label={`${title}: ${n.label}（${n.caption}）の${slots.length > 0 ? '説明と差し替え' : '説明'}`}
           interactive={slots.length > 0}
-          className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md bg-base-100 px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+          className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
             n.compute ? 'border-[1.75px] font-semibold' : 'border'
+          } ${
+            // 幽霊の箱は点線の枠・半透明の地（D-116 の補足）
+            n.ghost ? 'border-dashed bg-base-100/50' : 'bg-base-100'
           } ${
             // 差し替えられる箱は primary の枠で、ホバーで太くする（D-116）
             slots.length > 0
@@ -609,7 +736,10 @@ function CompactNode({
           }`}
           trigger={
             <>
-              <span className="line-clamp-3 [overflow-wrap:anywhere]">
+              <span
+                className="line-clamp-3 [overflow-wrap:anywhere]"
+                style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
+              >
                 {n.short}
               </span>
               {slots.length > 0 && <SwapMark compact />}
@@ -623,6 +753,7 @@ function CompactNode({
                 {title}・{n.caption}
               </div>
               <div className="font-semibold">{n.label}</div>
+              {n.ghost && <GhostDetail n={n} />}
               {n.compute && (
                 <div className="text-xs opacity-70">
                   処理を動かす部品（太い枠）
@@ -678,17 +809,23 @@ function SwappableNode({
   parts: DiagramParts;
 }) {
   return (
-    <g data-node={n.id} data-swappable="true">
+    <g
+      data-node={n.id}
+      data-swappable="true"
+      data-ghost={n.ghost ? 'true' : undefined}
+    >
       <rect
         x={n.x}
         y={n.y}
         width={model.node.w}
         height={model.node.h}
         rx={6}
+        strokeDasharray={n.ghost ? GHOST_DASH : undefined}
         style={{
           fill: 'var(--color-base-100)',
           stroke: SWAP_STROKE,
           strokeWidth: n.compute ? 2 : 1.5,
+          ...(n.ghost ? { opacity: GHOST_OPACITY } : {}),
         }}
       />
       <foreignObject
@@ -704,9 +841,15 @@ function SwappableNode({
           className="relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
           trigger={
             <>
-              <span className="text-[10px] opacity-60">{n.caption}</span>
+              <span
+                className="text-[10px] opacity-60"
+                style={n.ghost ? { opacity: 0.6 * GHOST_OPACITY } : undefined}
+              >
+                {n.caption}
+              </span>
               <span
                 className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
+                style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
               >
                 {n.label}
               </span>
@@ -720,6 +863,7 @@ function SwappableNode({
                 {title}・{n.caption}
               </div>
               <div className="font-semibold">{n.label}</div>
+              {n.ghost && <GhostDetail n={n} />}
               {parts.slotsOf(n.id).map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
                   {parts.render(slot, close)}

@@ -27,15 +27,19 @@ import {
   LAYOUT,
   LAYOUT_VERTICAL,
   shortLabel,
+  slotBoxes,
   swappableSlots,
   VIEWER,
   type DiagramModel,
+  type GhostSlot,
 } from './system-diagram-model.ts';
 
 type Combo = {
   name: string;
   arch: ReturnType<typeof diagramArchitecture>;
   pages: ReturnType<typeof pageWireframes>;
+  /** 今の選択が箱を持たないスロットの幽霊の箱（D-116 の補足）。 */
+  ghosts: GhostSlot[];
 };
 
 /** シナリオ × 選べる構成 × フレームワーク × （既定 + 部品のスロットの選択肢を 1 つずつ）。 */
@@ -51,12 +55,20 @@ function combos(): Combo[] {
           if (slot.slot !== 'files')
             for (const o of slot.options)
               variants.push([`${slot.slot}=${o.id}`, { [slot.slot]: o.id }]);
-        for (const [v, choices] of variants)
+        for (const [v, choices] of variants) {
+          const build = (c: Partial<Record<string, string>>) =>
+            diagramArchitecture(sc, s.index, fw, c);
           out.push({
             name: `${sc.id} ${s.id} ${fw} ${v}`,
-            arch: diagramArchitecture(sc, s.index, fw, choices),
+            arch: build(choices),
             pages,
+            ghosts: slotBoxes(
+              build,
+              diagramComponents(sc, s.index, fw, choices),
+              setupSlots(sc, s.index, fw, choices),
+            ).ghosts,
           });
+        }
       }
   return out;
 }
@@ -152,9 +164,9 @@ describe('diagramModel', () => {
     }
   });
 
-  it('箱どうし・事業者の枠どうしが重ならず、図の中に収まる', () => {
-    for (const { name, arch } of all) {
-      const m = diagramModel(arch);
+  it('箱どうし・事業者の枠どうしが重ならず、図の中に収まる（幽霊の箱も）', () => {
+    for (const { name, arch, ghosts } of all) {
+      const m = diagramModel(arch, [], 'horizontal', ghosts);
       for (const [i, a] of m.nodes.entries()) {
         expect(a.x + LAYOUT.nodeW, name).toBeLessThanOrEqual(m.width);
         expect(a.y + LAYOUT.nodeH, name).toBeLessThanOrEqual(m.height);
@@ -390,9 +402,9 @@ describe('diagramModel', () => {
 
   it('縦の図（狭い幅）: 段が上→下に積まれ、箱は小さく、箱どうし・枠どうしが重ならず、図の中に収まる', () => {
     let widest = 0;
-    for (const { name, arch, pages } of all) {
-      const h = diagramModel(arch, pages);
-      const m = diagramModel(arch, pages, 'vertical');
+    for (const { name, arch, pages, ghosts } of all) {
+      const h = diagramModel(arch, pages, 'horizontal', ghosts);
+      const m = diagramModel(arch, pages, 'vertical', ghosts);
       expect(m.orientation, name).toBe('vertical');
       expect(m.node, name).toEqual({
         w: LAYOUT_VERTICAL.nodeW,
@@ -631,5 +643,169 @@ describe('swappableSlots（箱 → 差し替えられるスロット。D-116）'
         for (const id of ['hyperdrive', 'aws-db-out'])
           expect(m.get(id), `${stack} ${db} ${fw} ${id}`).toBeUndefined();
       }
+  });
+});
+
+describe('slotBoxes（どのスロットにも箱。今の選択が箱を持たなければ幽霊の箱。D-116 の補足）', () => {
+  /** シナリオ × 構成 × フレームワーク × （既定 + スロットの選択肢を 1 つずつ）。 */
+  function cases() {
+    const out: {
+      name: string;
+      build: (
+        c: Partial<Record<string, string>>,
+      ) => ReturnType<typeof diagramArchitecture>;
+      comps: Partial<Record<string, string>>;
+      slots: ReturnType<typeof setupSlots>;
+    }[] = [];
+    for (const sc of Object.values(SCENARIOS))
+      for (const fw of frameworksOf(sc).allowed as FrameworkId[])
+        for (const s of STACKS) {
+          if (!stackOffered(s.index, fw)) continue;
+          const build = (c: Partial<Record<string, string>>) =>
+            diagramArchitecture(sc, s.index, fw, c);
+          const variants: Record<string, string>[] = [{}];
+          for (const x of setupSlots(sc, s.index, fw))
+            if (x.slot !== 'files')
+              for (const o of x.options) variants.push({ [x.slot]: o.id });
+          for (const v of variants)
+            out.push({
+              name: `${sc.id} ${s.id} ${fw} ${JSON.stringify(v)}`,
+              build,
+              comps: diagramComponents(sc, s.index, fw, v),
+              slots: setupSlots(sc, s.index, fw, v),
+            });
+        }
+    return out;
+  }
+  const all = cases();
+  const find = (stack: string, fw: FrameworkId, c: Record<string, string>) => {
+    const sc = SCENARIOS['article-community']!;
+    const i = STACKS.findIndex((s) => s.id === stack);
+    const build = (x: Partial<Record<string, string>>) =>
+      diagramArchitecture(sc, i, fw, x);
+    const comps = diagramComponents(sc, i, fw, c);
+    const slots = setupSlots(sc, i, fw, c);
+    const { swap, ghosts } = slotBoxes(build, comps, slots);
+    return {
+      swap,
+      ghosts,
+      model: diagramModel(build(comps), [], 'horizontal', ghosts),
+    };
+  };
+
+  it('差し替えられるスロット 1 つにつき箱が 1 つ以上ある（今の箱か幽霊の箱。替えても図の形が大きく跳ねない）', () => {
+    expect(all.length).toBeGreaterThan(100);
+    for (const { name, build, comps, slots } of all) {
+      const { swap, ghosts } = slotBoxes(build, comps, slots);
+      const arch = build(comps);
+      const swappable = slots.filter(
+        (x) => !x.fixed && x.slot !== 'files' && x.options.length >= 2,
+      );
+      for (const x of swappable) {
+        const boxes = [...swap].filter(([, v]) => v.includes(x.slot)).length;
+        const ghost = ghosts.filter((g) => g.slot === x.slot).length;
+        expect(boxes + ghost, `${name} ${x.slot}`).toBeGreaterThan(0);
+        // 幽霊の箱は、今の箱の無いスロットに 1 つだけ
+        expect(ghost, `${name} ${x.slot}`).toBe(boxes > 0 ? 0 : 1);
+      }
+      // 幽霊の箱は今の選択の名前で、線は引かず、図か経路に載らない部品の並びのどちらか一方に 1 つだけ出る
+      for (const o of ['horizontal', 'vertical'] as const) {
+        const m = diagramModel(arch, [], o, ghosts);
+        for (const g of ghosts) {
+          const x = slots.find((y) => y.slot === g.slot)!;
+          expect(g.label, `${name} ${g.slot}`).toBe(
+            x.options.find((op) => op.id === comps[g.slot])?.label ??
+              x.options[0]!.label,
+          );
+          const id = `ghost:${g.slot}`;
+          const placed = m.nodes.filter((n) => n.id === id);
+          const side = m.side
+            .flatMap((s) => s.nodes)
+            .filter((n) => n.id === id);
+          expect(placed.length + side.length, `${name} ${o} ${id}`).toBe(1);
+          expect(placed.length, `${name} ${o} ${id}`).toBe(
+            g.depth === undefined ? 0 : 1,
+          );
+          expect(
+            m.edges.some((e) => e.from === id || e.to === id),
+            `${name} ${o} ${id}`,
+          ).toBe(false);
+        }
+        // 線・流れの凡例は幽霊の箱で変わらない
+        const plain = diagramModel(arch, [], o);
+        expect(m.edges, name).toEqual(plain.edges);
+        expect(m.lanes, name).toEqual(plain.lanes);
+      }
+    }
+  });
+
+  it('Cloudflare × Next.js の ISR のキャッシュ: Workers Cache・キャッシュしないは、KV の箱があった帯・段に幽霊の箱を残す', () => {
+    for (const stack of ['cloudflare-vinext-free', 'cloudflare-vinext-paid']) {
+      const kv = find(stack, 'nextjs', { isrCache: 'kv' });
+      const kvNode = kv.model.nodes.find((n) =>
+        (kv.swap.get(n.id) ?? []).includes('isrCache'),
+      )!;
+      expect(kvNode.ghost, stack).toBeUndefined();
+      expect(
+        kv.ghosts.some((g) => g.slot === 'isrCache'),
+        stack,
+      ).toBe(false);
+      for (const choice of ['workers-cache', 'none']) {
+        const { ghosts, model, swap } = find(stack, 'nextjs', {
+          isrCache: choice,
+        });
+        expect(
+          [...swap.values()].some((v) => v.includes('isrCache')),
+          `${stack} ${choice}`,
+        ).toBe(false);
+        const g = model.nodes.find((n) => n.id === 'ghost:isrCache')!;
+        expect(g.ghost?.slot, `${stack} ${choice}`).toBe('isrCache');
+        expect(g.caption).toBe('ISR のキャッシュ');
+        expect(g.label, `${stack} ${choice}`).toBe(
+          ghosts.find((x) => x.slot === 'isrCache')!.label,
+        );
+        expect([g.group, g.depth], `${stack} ${choice}`).toEqual([
+          kvNode.group,
+          kvNode.depth,
+        ]);
+        expect(g.billed).toBe(false);
+      }
+    }
+  });
+
+  it('さくらの VPS: 前段の CDN なし・画像の変換は VPS の帯に幽霊の箱、バックアップの既定は経路に載らない部品の並び', () => {
+    const { model } = find('sakura-vps-2gb', 'nextjs', {
+      frontCdn: 'none',
+      dbBackup: 'default',
+    });
+    const front = model.nodes.find((n) => n.id === 'ghost:frontCdn')!;
+    expect(front.group).toBe('sakura');
+    expect(front.label).toBe('なし');
+    expect(model.nodes.some((n) => n.id === 'ghost:images')).toBe(true);
+    // Cloudflare の帯を幽霊の箱だけのために作らない
+    expect(model.groups.some((g) => g.account === 'cloudflare')).toBe(false);
+    expect(
+      model.side.flatMap((s) => s.nodes).some((n) => n.id === 'ghost:dbBackup'),
+    ).toBe(true);
+  });
+
+  it('値だけが替わるスロットは、役割の合う今の箱に当てる（Amplify の CloudFront の料金のプラン・Cloud Run の最小のインスタンス数）', () => {
+    const amplify = find('aws-amplify', 'vite-spa', {});
+    expect(amplify.swap.get('cf')).toContain('cdnPlan');
+    expect(amplify.ghosts.some((g) => g.slot === 'cdnPlan')).toBe(false);
+    const run = find('gcp-cloud-run', 'nextjs', {});
+    expect(run.swap.get('run')).toContain('minInstances');
+  });
+
+  it('ISR のキャッシュを R2 にしたとき（画像と共用の R2 の箱）は R2 の箱に当て、Workers Cache のときは当てない', () => {
+    const { swap, ghosts } = find('cloudflare-vinext-paid', 'nextjs', {
+      isrCache: 'r2',
+    });
+    expect(swap.get('r2')).toContain('isrCache');
+    expect(ghosts.some((g) => g.slot === 'isrCache')).toBe(false);
+    const wc = find('cloudflare-vinext-paid', 'nextjs', {
+      isrCache: 'workers-cache',
+    });
+    expect(wc.swap.get('r2') ?? []).not.toContain('isrCache');
   });
 });
