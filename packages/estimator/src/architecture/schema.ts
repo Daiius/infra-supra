@@ -64,6 +64,12 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * 応答の受信は課金されない向き。仮定の値はデータの側が持つ）。次へ渡す流れは変わらない。
      */
     egressKBPerRequest: NonNeg.optional(),
+    /**
+     * 1 件あたりの転送（egress-gb）を、問い合わせの数 × DB の応答の大きさ（Workload の db.responseKBPerQuery）で数える
+     * （DB から別の事業者の処理へ返す応答。managed-db の egress と同じ式。D-114 段 2）。egressKBPerRequest より優先する。
+     * 次へ渡す流れは変わらない。
+     */
+    egressPerQuery: z.boolean().optional(),
   }),
   /** サーバーレス関数・Worker。メモリ × 生存時間（memory-gb-hours）は同時処理数で割る。 */
   z.object({
