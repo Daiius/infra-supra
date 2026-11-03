@@ -16,6 +16,7 @@ import {
 import { nextSsrCpuMs } from '../effort.ts';
 import { premiseRefsOf } from '../events.ts';
 import { commas, lineLabel, toUsd, usd } from '../format.ts';
+import { emailOnlyPremise } from '../month/outcome.ts';
 import { partsOfComments } from '../routes/comments.ts';
 import { ON_DEMAND_REVALIDATE } from '../settings.ts';
 import { STACKS } from '../stacks.ts';
@@ -234,6 +235,10 @@ export type MonthOneEstimate = {
     /** 1 リクエストの CPU の制限に当たったルート（D-99 の causes。D-107 の表の行に出す）。 */
     routes?: string[];
   }[];
+  /**
+   * 1 か月目に当たるメールの送信の上限（サイトは止まらず、メールが届かない日がある。収益は減らさず、機能を 1 段下げる。D-117）。
+   */
+  undelivered: { id: string; text: string }[];
 };
 
 export function setupMonthOneEstimate(
@@ -285,8 +290,11 @@ export function setupMonthOneEstimate(
   });
   const costUsd = toUsd(r.bill.totals);
   const loss = scenario.revenue.loss;
+  // メールの送信の上限はサイトを止めない（収益を減らさない。D-117）
   const hit = (e: string[]) =>
-    r.premises.some((p) => p.hit && e.includes(p.effect));
+    r.premises.some(
+      (p) => p.hit && e.includes(p.effect) && !emailOnlyPremise(p),
+    );
   let revenueUsd =
     (scenario.revenue.fixedUsdPerMonth ?? 0) +
     (state.basePV / 1000) * scenario.revenue.adsUsdPer1000PV;
@@ -309,13 +317,22 @@ export function setupMonthOneEstimate(
     startCash: scenario.startCash,
     short: costUsd > scenario.startCash + revenueUsd,
     topLines,
+    undelivered: r.premises
+      .filter(
+        (p) =>
+          p.hit &&
+          (p.effect === 'block' || p.effect === 'upgrade-required') &&
+          emailOnlyPremise(p),
+      )
+      .map((p) => ({ id: p.id, text: p.text })),
     blocking: r.premises
       .filter(
         (p) =>
           p.hit &&
           (p.effect === 'block' ||
             p.effect === 'upgrade-required' ||
-            p.effect === 'throttle'),
+            p.effect === 'throttle') &&
+          !emailOnlyPremise(p),
       )
       .map((p) => {
         const routes = [

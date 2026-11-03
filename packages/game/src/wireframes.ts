@@ -1,5 +1,6 @@
 // ページの見取り図（描き方ごとの領域の出どころ）。
 import type {
+  OffscreenElement,
   PageBadge,
   RegionNeed,
   RegionSource,
@@ -12,7 +13,7 @@ import {
   perPageShellFramework,
   type RouteStrategyId,
 } from 'catalog';
-import { frameworksOf } from './core.ts';
+import { frameworksOf, scenarioSendsEmail } from './core.ts';
 import { commentsInPage } from './routes/comments.ts';
 import { routeAudienceOf, strategyFamily } from './routes/strategy.ts';
 import { COMMENTS_IN_BROWSER } from './settings.ts';
@@ -69,6 +70,15 @@ function strategyBadges(
     default:
       return undefined;
   }
+}
+
+/**
+ * シナリオの説明の見取り図の脇に出す、ページの外の要素（D-117）。メールはシナリオが送るとき（Workload に email がある）だけ。
+ */
+export function scenarioOffscreen(sc: Scenario): OffscreenElement[] {
+  return (sc.text?.offscreen ?? []).filter(
+    (e) => e.kind !== 'email' || scenarioSendsEmail(sc),
+  );
 }
 
 /**

@@ -8,6 +8,7 @@ import {
 } from './rules.ts';
 import { eventDef, scenarioOf, USD_JPY } from './core.ts';
 import { commas, fmtFactor, usd, usdOf } from './format.ts';
+import { emailOnlyPremise } from './month/outcome.ts';
 import { averageSatisfaction } from './month/satisfaction.ts';
 import { COMMITMENTS, offerOf } from './offers.ts';
 import { reflectionOf } from './review.ts';
@@ -29,7 +30,8 @@ export type RetryHint = {
     | 'element'
     | 'ogp'
     | 'slow'
-    | 'commitment';
+    | 'commitment'
+    | 'email';
   /** 何が起きたか（何か月目に・数値）。 */
   what: string;
   /** 次に試せる方向。正解の構成名は出さない（事業者の制限・プラン名など事実の名前は出してよい。D-40）。 */
@@ -143,6 +145,8 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     for (const p of r.premises) {
       if (!p.hit || (p.effect !== 'block' && p.effect !== 'upgrade-required'))
         continue;
+      // メールの送信の上限はサイトを止めない（⑧ で扱う。D-117）
+      if (emailOnlyPremise(p)) continue;
       const cur = limits.get(p.id) ?? {
         text: p.text,
         ...(p.detail !== undefined ? { detail: p.detail } : {}),
@@ -445,6 +449,38 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         score: satShort
           ? tier(false, 100 * loss)
           : 100 + Math.min(99, 100 * loss),
+      });
+    }
+  }
+
+  // ⑧ メールの送信の上限に当たり、メールが届かなかった月（機能が 1 段下がる。D-117）
+  if (satShort || cashShort) {
+    const mails = h.flatMap((r) => {
+      const p = r.premises.find(
+        (x) =>
+          x.hit &&
+          (x.effect === 'block' || x.effect === 'upgrade-required') &&
+          emailOnlyPremise(x),
+      );
+      return p ? [{ month: r.month, p }] : [];
+    });
+    if (mails.length) {
+      const top = mails.reduce((a, b) =>
+        (b.p.ratio ?? 0) > (a.p.ratio ?? 0) ? b : a,
+      );
+      const ratio =
+        top.p.ratio !== undefined && Number.isFinite(top.p.ratio)
+          ? `。最も多い月は上限の ${top.p.ratio.toFixed(1)} 倍（${top.month} か月目）`
+          : '';
+      out.push({
+        hint: {
+          kind: 'email',
+          what: `${monthsText(mails.map((x) => x.month))}に「${top.p.text}」に当たり、登録の確認・パスワードの再設定・通知のメールが届かない日があった（機能が 1 段下がった）${ratio}`,
+          next: 'メールの通数は利用者と書き込みに比例し、話題で登録が増える日は 1 日の通数も跳ねる。1 日・月の上限に余裕のある送信の仕組みに替える',
+        },
+        score: satShort
+          ? tier(false, (100 * w.feature * mails.length) / n)
+          : 100 + Math.min(99, (100 * w.feature * mails.length) / n),
       });
     }
   }

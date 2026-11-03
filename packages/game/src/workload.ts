@@ -58,10 +58,12 @@ export type WorkloadParts = {
   peakFactor?: number;
   /** 短い期間に集中する上乗せの PV（話題・Bot。容量の判定だけに効く。D-44）。 */
   spikes?: Spike[];
+  /** pv のうち Bot の PV（メールの通数から除く。D-117）。省略は 0。 */
+  botPV?: number;
 };
 
-/** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。 */
-export type Spike = { id: string; extraPV: number; days: number };
+/** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。bot は Bot の上乗せ（D-117）。 */
+export type Spike = { id: string; extraPV: number; days: number; bot?: true };
 
 const DAYS_PER_MONTH = 730 / 24;
 
@@ -238,6 +240,22 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       peakHourFactor: w.traffic.peakHourFactor * peak,
     };
   if (spikeDay > 1) w.traffic = { ...w.traffic, peakDayFactor: spikeDay };
+  // メールは人の動き（登録・書き込み）にだけ比例する（D-117）。通数は MAU・書き込みとも PV に比例するので、Bot の PV の分を
+  // 割合で除き、最も多い日も人の上乗せの集中だけで数える（Bot が登録の確認・通知のメールを増やさない）
+  const botPV = Math.min(Math.max(0, p.botPV ?? 0), p.pv);
+  if (w.email && botPV > 0 && p.pv > 0) {
+    const humanPV = p.pv - botPV;
+    const human = humanPV / p.pv;
+    w.email = {
+      ...w.email,
+      perMau: w.email.perMau * human,
+      perWrite: w.email.perWrite * human,
+      peakDayFactor: spikePeakFactor(
+        humanPV,
+        (p.spikes ?? []).filter((x) => !x.bot),
+      ),
+    };
+  }
   // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
   const shape = sc.frameworks?.spa?.shape;

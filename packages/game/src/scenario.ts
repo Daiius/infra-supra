@@ -374,6 +374,22 @@ export type ScenarioText = {
    * テンプレートのルート 1 つに 1 枚。区画の作られ方は今の計算のモデル（D-68・D-70・D-80・D-82）に合わせた、ゲーム上の仮定の図。
    */
   wireframes?: PageWireframe[];
+  /**
+   * ページの外の要素（D-117）。見取り図の脇に小さなカードで出す（今はメールだけ）。ページの区画ではないので、要件の札・
+   * 描き方の色は付けない。シナリオが使う（Workload に email がある）ときだけ出す。
+   */
+  offscreen?: OffscreenElement[];
+};
+
+/** ページの外の要素（D-117）。kind は見た目（アイコン）の種類で、意味は label・items・note に書く。 */
+export type OffscreenElement = {
+  kind: 'email';
+  /** カードの題（「メール（ページの外）」など）。 */
+  label: string;
+  /** 何を送るか（1 行 1 つ）。 */
+  items: string[];
+  /** 何が効くか（送信の仕組みの選び方・出来事）。 */
+  note?: string;
 };
 
 /**
