@@ -3,1039 +3,368 @@
 // 料金・前提は estimator と catalog（実データ）をそのまま使い、ゲームのために料金を作らない（企画書 §11.1）。
 // シナリオの値（収益・成長・手間・満足度・障害の影響・出来事・目標）はゲーム上の仮定で、実在の値ではない（prd/07 §10）。
 import {
-  accountsOf,
+  type Effect,
+  type EventDef,
+  type PageBadge,
+  type RegionSource,
+  rollRevisions,
+  rollSchedule,
+  type Scenario,
+  type Scheduled,
+  type Stock,
+  type Strategy,
+  type WireframeRegion,
+  type WorkloadMods,
+} from './scenario.ts';
+import {
   apiCacheActive,
   apiPlacedElsewhere,
-  applyComponentsToWorkload,
   astroPageCacheChoice,
+  type Choices,
+  type ComponentProvider,
   componentsOf,
-  composeStack,
   DEFAULT_CHOICES,
+  defaultStrategy,
+  deployTarget,
+  FILE_STORAGE_LABEL,
+  fileStorageOf,
+  FRAMEWORK_PRESETS,
+  type FrameworkId,
   FRAMEWORKS,
   imagesBehavior,
-  loadPriceBooks,
   MVP_STACKS,
-  SLOT_LABELS,
-  frameworkSupported,
-  deployTarget,
-  STACK_DEFS,
-  stackHidden,
-  browserCallsApi,
-  rebuildsStaticPages,
-  applyRouteStrategies,
-  serverIslandDelivery,
   perPageShellFramework,
-  defaultStrategy,
-  FRAMEWORK_PRESETS,
-  routeAudience,
+  rebuildsStaticPages,
   ROUTE_STRATEGIES,
   ROUTE_STRATEGY_ORDER,
-  strategySupport,
-  withAstroAssets,
   type RouteAudience,
-  type RoutePlan,
-  type RouteTraits,
   type RouteStrategyId,
-  type Choices,
-  type FrameworkId,
-  type ComponentProvider,
-  type Platform,
+  type RouteTraits,
+  SLOT_LABELS,
   type SlotId,
-  backupStatus,
-  PITR_REQUIRED_DAYS,
-  sendsEmail,
-  withoutUnusedEmail,
+  strategySupport,
 } from 'catalog';
-import {
-  apiCallsPerMonth,
-  estimate as estimateArch,
-  type EstimateResult,
-  type ArchitectureInput,
-  type LineItem,
-  type PlatformPremise,
-  type PriceBook,
-  type ScheduledChange,
-  type WorkloadInput,
-} from 'estimator';
-import { nextRandom } from './random.ts';
 import {
   allocateEffort,
   buzzLasting,
   COLD_START,
-  EFFORT,
-  FLAT_PLAN_ADJUST,
   effectiveSsrCpuMs,
+  EFFORT,
+  type EffortBreakdown,
+  type Element,
   ELEMENT_LABEL,
   ELEMENTS,
+  FLAT_PLAN_ADJUST,
   growthFromReputation,
   judgeStages,
   policyStep,
   reputation,
   satisfactionScore,
   speedHeaviness,
-  STAGE_VALUE,
-  type EffortBreakdown,
-  type Element,
   type Stage,
+  STAGE_VALUE,
   type Stages,
 } from './rules.ts';
-import {
-  rollRevisions,
-  rollSchedule,
-  type Effect,
-  type EventDef,
-  type Requirement,
-  type EventKind,
-  type EventTier,
-  type Scenario,
-  type Scheduled,
-  type PageBadge,
-  type RegionSource,
-  type Stock,
-  type Strategy,
-  type WireframeRegion,
-  type WorkloadMods,
-} from './scenario.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
-import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
-import { premiseTrends, type PremiseSnapshot } from './trends.ts';
 import {
-  commitmentDefs,
+  type ActiveCommitment,
   commitmentEligible,
   commitmentLines,
-  commitmentTerms,
-  PAYMENT_LABEL,
-  type ActiveCommitment,
-  type CommitmentDef,
   type CommitmentPaymentId,
+  PAYMENT_LABEL,
 } from './commitments.ts';
-
-/**
- * 見積（estimator の estimate）。アプリがメールを送らないシナリオ（Workload に email が無い）では、送信のノードを外してから回す
- * （部品「メール送信」も出さない。D-101）。ゲームの見積はすべてこれを通す。
- */
-const estimate: typeof estimateArch = (input) =>
-  estimateArch({
-    ...input,
-    architecture: withoutUnusedEmail(input.architecture, input.workload),
-  });
-
-/** アプリがメールを送るシナリオか（テンプレートに email がある。D-101）。 */
-export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>
-  sendsEmail(sc.template(1));
-
-/** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
-export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
-  [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
-  [CONTRACT_OPERATIONS.id]: CONTRACT_OPERATIONS,
-});
-
-/** ⚠ 為替は取得していない（仮定）。シナリオによらない共通の仮定。 */
-export const USD_JPY = 150;
-
-/** テンプレートの SSR 1 回の CPU（シナリオのテンプレートから読む）。 */
-export function baseSsrCpuMsOf(sc: Scenario): number {
-  return sc.template(1).routes[0]!.processing.cpuMs;
-}
-
-/** 記事コミュニティの値の見え方（画面とテストの互換のため。正はシナリオのデータ）。 */
-export const GAME = {
-  months: ARTICLE_COMMUNITY.months,
-  startPV: ARTICLE_COMMUNITY.scale.startPV,
-  startCash: ARTICLE_COMMUNITY.startCash,
-  usdJpy: USD_JPY,
-  baseSsrCpuMs: baseSsrCpuMsOf(ARTICLE_COMMUNITY),
-  goal: ARTICLE_COMMUNITY.goal,
-} as const;
-
-export type Settings = {
-  /**
-   * 画像 1 枚（サイズ違い 1 種）の大きさ（KB）。画像の形式で決まる（JPEG 150・WebP 105・AVIF 84。同じ見た目の画質での比較。D-58）。
-   */
-  imageKB: number;
-  variants: number;
-  revalidateSec: number;
-  /** SSR の最適化の段数。 */
-  ssrOptimizations: number;
-};
-
-/** ISR の再検証の設定の「オンデマンド」（revalidateSec の値。時間の間隔はすべて正。D-49）。 */
-export const ON_DEMAND_REVALIDATE = 0;
-
-/** コメントの描き方: ブラウザで読み込む（既定。記事のページはコメントを含まない。D-70）。 */
-export const COMMENTS_IN_BROWSER = 0;
-/** コメントの描き方: 記事のページに含める（ISR・静的なページの HTML にコメントも入れる。D-82）。 */
-export const COMMENTS_IN_PAGE = 1;
-
-/**
- * コメントの投稿で再検証するページの数（その記事のページだけ。一覧にはコメントを出さないとみなす。ゲーム上の仮定・D-82）。
- * 記事の投稿・編集は ON_DEMAND_PAGES_PER_UPDATE（記事と一覧の 2）。
- */
-export const COMMENT_PAGES_PER_UPDATE = 1;
-
-/** プレイヤーが選んだページごとの描き方（ルートの id → 描き方。フレームワークの既定と分け方が同じものは持たない。D-107）。 */
-export type RouteOverrides = Readonly<Partial<Record<string, RouteStrategyId>>>;
-
-/**
- * ページの部品の選択（段 4・D-109）。今は記事のページのコメント欄の描き方だけ（COMMENTS_IN_BROWSER・COMMENTS_IN_PAGE。D-82 の設定を
- * ルートの部品に移した）。既定（ブラウザで読み込む）は持たない。
- */
-export type RoutePartChoice = { comments?: number };
-
-/** ルートの id → ページの部品の選択（D-109）。 */
-export type RouteParts = Readonly<Partial<Record<string, RoutePartChoice>>>;
-
-/** ページの部品の種類（行動 route-part の part）。 */
-export type RoutePartKey = 'comments';
-
-/**
- * 記事のページ（全員に同じ中身）のコメント欄の描き方（D-109）。選んでいなければブラウザで読み込む。
- * コメントの無いシナリオ・記事のページの無いシナリオもブラウザで読み込む（値は効かない）。
- */
-export function commentsOf(
-  sc: Pick<Scenario, 'template' | 'routeTraits'>,
-  parts: RouteParts | undefined,
-): number {
-  const r = publicRoute(sc);
-  return (r && parts?.[r.id]?.comments) ?? COMMENTS_IN_BROWSER;
-}
-
-/** 始める画面・見積モードのコメント欄の値（数）を、ページの部品にする（省略・ブラウザで読み込むは空。D-109）。 */
-export function partsOfComments(
-  sc: Pick<Scenario, 'template' | 'routeTraits'>,
-  comments: number | undefined,
-): RouteParts | undefined {
-  return comments === undefined || comments === COMMENTS_IN_BROWSER
-    ? undefined
-    : withComments(sc, undefined, comments);
-}
-
-/** コメント欄の描き方を替えたページの部品（既定のブラウザで読み込むは持たない。D-109）。 */
-export function withComments(
-  sc: Pick<Scenario, 'template' | 'routeTraits'>,
-  parts: RouteParts | undefined,
-  comments: number,
-): RouteParts {
-  const r = publicRoute(sc);
-  const out: Partial<Record<string, RoutePartChoice>> = { ...parts };
-  if (!r) return out;
-  if (comments === COMMENTS_IN_BROWSER) delete out[r.id];
-  else out[r.id] = { ...out[r.id], comments };
-  return out;
-}
-
-/**
- * 描き方の分け方（D-107）。S2 と S3 は同じ「キャッシュ」で、期限かオンデマンドかは設定（revalidateSec）で決まる
- * （今までの ISR の再検証・記事のキャッシュの設定のまま。切り替えの手間も今までどおり）。
- */
-export type StrategyFamily = 'static' | 'cached' | 'ssr' | 'api' | 'island';
-
-export function strategyFamily(s: RouteStrategyId): StrategyFamily {
-  switch (s) {
-    case 'static-build':
-      return 'static';
-    case 'cached-ttl':
-    case 'cached-purge':
-      return 'cached';
-    case 'ssr':
-      return 'ssr';
-    case 'shell-api':
-      return 'api';
-    case 'server-island':
-      return 'island';
-  }
-}
-
-/** シナリオのルートの見る人（テンプレートのルートの性質。D-107）。 */
-export function routeAudienceOf(
-  sc: Pick<Scenario, 'routeTraits'>,
-  r: { id: string; rendering: WorkloadInput['routes'][number]['rendering'] },
-): RouteAudience {
-  return routeAudience(r, sc.routeTraits);
-}
-
-/** 全員に同じ中身のルート（記事のページ）。無いシナリオ（受託）は undefined。 */
-function publicRoute(sc: Pick<Scenario, 'template' | 'routeTraits'>) {
-  return sc.template(1).routes.find((r) => routeAudienceOf(sc, r) === 'public');
-}
-
-/** 全員に同じ中身のルート（記事のページ）の id。無いシナリオ（受託）は undefined。 */
-export function publicRouteId(
-  sc: Pick<Scenario, 'template' | 'routeTraits'>,
-): string | undefined {
-  return publicRoute(sc)?.id;
-}
-
-/** ルートの今の描き方の分け方（選んだ描き方があればそれ、無ければフレームワークの既定）。 */
-export function routeFamily(
-  state: {
-    scenario: Pick<Scenario, 'template' | 'routeTraits'>;
-    framework: FrameworkId;
-    routes?: RouteOverrides | undefined;
-  },
-  routeId: string,
-): StrategyFamily | undefined {
-  const r = state.scenario.template(1).routes.find((x) => x.id === routeId);
-  if (!r) return undefined;
-  const chosen = state.routes?.[routeId];
-  return strategyFamily(
-    chosen ??
-      FRAMEWORK_PRESETS[state.framework][routeAudienceOf(state.scenario, r)],
-  );
-}
-
-/**
- * 記事のページ（全員に同じ中身）の描き方の分け方。設定の意味（再検証・ビルドの間隔・API のキャッシュの期間）・
- * 鮮度の判定・SNS のカード・コメントの描き方がこれで決まる（D-107）。記事のページが無いシナリオは undefined
- * （フレームワークで決める今までの判定のまま）。
- */
-export function articleFamily(state: {
-  scenario: Pick<Scenario, 'template' | 'routeTraits'>;
-  framework: FrameworkId;
-  routes?: RouteOverrides | undefined;
-}): StrategyFamily | undefined {
-  const r = publicRoute(state.scenario);
-  return r ? routeFamily(state, r.id) : undefined;
-}
-
-/**
- * 記事のページのコメント欄の描き方を選べるか（D-82・D-109）。シナリオにコメントがあり、記事のページが HTML である
- * （S5 の枠 + API・SPA はページの中身が無いので含められない）ときだけ。
- */
-export function commentsChoosable(
-  framework: FrameworkId,
-  sc: Pick<Scenario, 'comments' | 'template' | 'routeTraits'>,
-  routes?: RouteOverrides,
-): boolean {
-  const fam = articleFamily({ scenario: sc, framework, routes });
-  return (
-    (fam !== undefined ? fam !== 'api' : framework !== 'vite-spa') &&
-    sc.comments !== undefined
-  );
-}
-
-/**
- * コメントを記事のページに含めるか（D-82）。記事のページの部品が「記事のページに含める」（D-109）で、選べるときだけ。
- */
-export function commentsInPage(
-  comments: number,
-  framework: FrameworkId,
-  sc: Pick<Scenario, 'comments' | 'template' | 'routeTraits'>,
-  routes?: RouteOverrides,
-): boolean {
-  return (
-    comments === COMMENTS_IN_PAGE && commentsChoosable(framework, sc, routes)
-  );
-}
-
-/** 再検証がオンデマンドか（Next.js の ISR の設定。SPA では revalidateSec は API のキャッシュの期間で、0 にならない）。 */
-export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
-  return settings.revalidateSec === ON_DEMAND_REVALIDATE;
-}
-
-/**
- * オンデマンドの最大寿命の説明（設定の ⓘ に出す。D-56）。Next.js の文書（ISR のガイド・2026-10-15 更新）で確かめたのは、
- * タグで再検証するデータに revalidate: 3600 を併せて付けた例（unstable_cache）があることまで。
- */
-export const ON_DEMAND_MAX_AGE_NOTE =
-  '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多い（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがある）。このゲームでは 1 日とみなし、その分の再生成も数える';
-
-/**
- * 画像の形式ごとの 1 枚の大きさ（KB。同じ見た目の画質。D-58）。JPEG はテンプレートの 150 KB。
- * WebP: 同等の SSIM の JPEG より 25〜34% 小さい（https://developers.google.com/speed/webp/docs/webp_study ・2025-08-07 更新・
- * 2026-11-01 取得）の中ほどの 30% とする。AVIF: WebP より約 20% 小さい（https://nextjs.org/docs/app/api-reference/components/image
- * の formats・2026-09-28 更新・2026-11-01 取得）。範囲の取り方はゲーム上の仮定。
- */
-export const IMAGE_FORMAT_KB = { jpeg: 150, webp: 105, avif: 84 } as const;
-
-/** 画像の形式（設定の値から）。 */
-export function imageFormatOf(imageKB: number): 'jpeg' | 'webp' | 'avif' {
-  return imageKB <= IMAGE_FORMAT_KB.avif
-    ? 'avif'
-    : imageKB <= IMAGE_FORMAT_KB.webp
-      ? 'webp'
-      : 'jpeg';
-}
-
-/**
- * Next.js の画像の部品（next/image）で閲覧のときに変換する構成か（Vercel の画像の最適化・VPS の next start）。
- * next/image の formats の既定は WebP で、ブラウザの Accept を見て形式を選ぶ（JPEG は選べない。D-58）。
- */
-export function usesNextImage(
-  platform: Platform,
-  framework: FrameworkId,
-  images: string | undefined,
-): boolean {
-  return (
-    framework === 'nextjs' &&
-    platform !== 'cloudflare' &&
-    (images ?? 'default') === 'default'
-  );
-}
-
-/**
- * 閲覧のときに、ブラウザに合わせた形式（WebP）で配る構成か（D-62）。next/image（usesNextImage）に加えて、
- * Cloudflare Images の閲覧のときの変換（Cloudflare の構成の Images・他の事業者の部品 cf-images）。
- * Cloudflare Images の format=auto は「Automatically serves the most efficient format that the requesting browser supports」
- * （URL の変換。Workers・バインディングでは Accept を見て形式を選ぶ公式の例がある）。AVIF も選びうるが、next/image と揃えて
- * WebP とみなす（AVIF の設定を選べばそちら。推奨案）。images は部品の id（他の事業者の部品は振る舞いで見る）。
- */
-export function autoImageFormat(
-  platform: Platform,
-  framework: FrameworkId,
-  images: string | undefined,
-): boolean {
-  return (
-    usesNextImage(platform, framework, images) ||
-    astroImage(platform, framework, images) ||
-    imagesBehavior(platform, images) === 'images'
-  );
-}
-
-/**
- * Astro の画像の部品（astro:assets の <Image />）で閲覧のときに変換する構成か（Vercel の画像の最適化・VPS の Node）。
- * <Image /> は既定で WebP を作る（「By default, the <Image /> component will produce a .webp file」。D-68）。
- */
-function astroImage(
-  platform: Platform,
-  framework: FrameworkId,
-  images: string | undefined,
-): boolean {
-  return (
-    framework === 'astro' &&
-    platform !== 'cloudflare' &&
-    (images ?? 'default') === 'default'
-  );
-}
-
-/** 戻せる設定（prd/07 §9.5）。値はゲーム上の仮定。 */
-export const SETTINGS = {
-  format: {
-    label: '画像の形式',
-    field: 'imageKB',
-    effort: EFFORT.setting.format,
-    note: '同じ見た目の画質のまま、画像を小さくする形式（転送量・保存量・速さに効き、画質は下がらない）。WebP は同等の SSIM の JPEG より 25〜34% 小さい（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいが、変換に約 50% 長くかかる（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存する。閲覧のときに変換するサービスはブラウザに合わせて形式を選ぶ（Cloudflare Images の変換の数は形式で増えない・Vercel は形式ごとにキャッシュする）',
-    options: [
-      { value: IMAGE_FORMAT_KB.jpeg, label: 'JPEG（そのまま）' },
-      { value: IMAGE_FORMAT_KB.webp, label: 'WebP' },
-      { value: IMAGE_FORMAT_KB.avif, label: 'AVIF' },
-    ],
-  },
-  variants: {
-    label: '画像のサイズ違い',
-    field: 'variants',
-    effort: EFFORT.setting.variants,
-    note: '画像変換の件数に効く。1 種だと大きい画像を全端末に配るので遅くなる',
-    options: [
-      { value: 3, label: '3 種' },
-      { value: 2, label: '2 種' },
-      { value: 1, label: '1 種' },
-    ],
-  },
-  isr: {
-    label: 'ISR の再検証',
-    field: 'revalidateSec',
-    effort: EFFORT.setting.isr,
-    note:
-      '再生成の回数に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事の更新のときに再検証する（再生成はおもに更新の回数。ISR のキャッシュの置き場所によっては再検証が届かない。時間からの切り替えは実装の手間がかかる）。' +
-      ON_DEMAND_MAX_AGE_NOTE,
-    options: [
-      {
-        value: ON_DEMAND_REVALIDATE,
-        label: 'オンデマンド（記事の更新のとき）',
-      },
-      { value: 60, label: '1 分' },
-      { value: 300, label: '5 分' },
-      { value: 3600, label: '1 時間' },
-      { value: 21600, label: '6 時間' },
-    ],
-  },
-  /**
-   * SPA の記事の中身の API の応答のキャッシュの期間（s-maxage。D-37）。ISR の間隔と同じ値（revalidateSec）を使う
-   * （SPA には ISR が無いので、同じ値をこちらの意味で選ぶ）。
-   */
-  apiCacheTtl: {
-    label: 'API のキャッシュの期間',
-    field: 'revalidateSec',
-    effort: EFFORT.setting.isr,
-    note: 'API の応答のキャッシュを使うときだけ効く。延ばすとヒットが増えて取り直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる',
-    options: [
-      { value: 60, label: '1 分' },
-      { value: 300, label: '5 分' },
-      { value: 3600, label: '1 時間' },
-      { value: 21600, label: '6 時間' },
-    ],
-  },
-  /**
-   * Next.js の静的書き出しの静的なページ（記事）をビルドし直す間隔（D-80。Astro は D-103 でキャッシュに替えた）。ISR の間隔と
-   * 同じ値（revalidateSec）を使う（ISR が無いので、同じ値をこちらの意味で選ぶ）。オンデマンドは記事を更新するたびにビルドする。
-   */
-  buildInterval: {
-    label: 'ビルドの間隔',
-    field: 'revalidateSec',
-    effort: EFFORT.setting.isr,
-    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、鮮度（満足度）が下がる。新しく投稿された記事は、ビルドが終わるまでページが無い（投稿した人がすぐ開けない）。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
-    options: [
-      {
-        value: ON_DEMAND_REVALIDATE,
-        label: 'オンデマンド（記事の更新のたび）',
-      },
-      { value: 60, label: '1 分' },
-      { value: 300, label: '5 分' },
-      { value: 3600, label: '1 時間' },
-      { value: 21600, label: '6 時間' },
-    ],
-  },
-  /**
-   * Astro の記事のキャッシュの取り直し（D-103）。ISR の間隔と同じ値（revalidateSec）をこの意味で選ぶ。オンデマンドは記事の投稿・編集の
-   * ときにそのページのキャッシュを消す（Astro の route caching の cache.invalidate・Vercel の bypassToken）。時間は期限（s-maxage・expiration）。
-   */
-  pageCache: {
-    label: '記事のキャッシュ',
-    field: 'revalidateSec',
-    effort: EFFORT.setting.isr,
-    note:
-      '記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュする。オンデマンドは記事の投稿・編集のときにそのページのキャッシュを消す（Astro の route caching。消せない置き場では届かず、古いページが出る）。時間はキャッシュの期限で、延ばすと描き直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗る（Workers の 1 リクエストの CPU の上限に効く）。' +
-      ON_DEMAND_MAX_AGE_NOTE,
-    options: [
-      {
-        value: ON_DEMAND_REVALIDATE,
-        label: 'オンデマンド（記事の投稿・編集で消す）',
-      },
-      { value: 60, label: '1 分' },
-      { value: 300, label: '5 分' },
-      { value: 3600, label: '1 時間' },
-      { value: 21600, label: '6 時間' },
-    ],
-  },
-} as const satisfies Record<
-  string,
-  {
-    label: string;
-    field: Exclude<keyof Settings, 'ssrOptimizations'>;
-    effort: number;
-    note: string;
-    options: readonly { value: number; label: string }[];
-  }
->;
-export type SettingKey = keyof typeof SETTINGS;
-
-/**
- * ページの部品の選択肢（段 4・D-109）。今は記事のページのコメント欄だけ。始める画面・ゲームの途中・見積モードで、
- * 描き方の表の記事の行に出す（前は全体の設定「コメントの描き方」。D-82）。手間は今までの設定と同じ（どちらの向きも 2）。
- */
-export const ROUTE_PARTS = {
-  /**
-   * コメント欄の描き方（D-82。段 4 で記事のページの部品に移した。D-109）。記事のページに含めると、コメントの投稿も記事のページを作り直す更新に数え（シナリオの
-   * comments.pageUpdateShare）、記事のページの API の読み込み（コメントの取得）が無くなる。SPA・コメントの無いシナリオでは出さない。
-   */
-  comments: {
-    label: 'コメント欄',
-    effort: EFFORT.route.comments,
-    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro では記事のキャッシュを消して描き直す回数が、静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見え、鮮度（満足度）が下がる（コメントは記事より厳しく、1 分までなら「良い」・5 分までなら「普通」とみなす。ゲーム上の仮定）。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
-    options: [
-      { value: COMMENTS_IN_BROWSER, label: 'ブラウザで読み込む' },
-      { value: COMMENTS_IN_PAGE, label: '記事のページに含める' },
-    ],
-  },
-} as const satisfies Record<
+import type { ArchitectureInput, PlatformPremise, PriceBook } from 'estimator';
+import { nextRandom } from './random.ts';
+import { premiseTrends } from './trends.ts';
+import { accountLabel, accountUpkeepOf, newAccountsBy } from './accounts.ts';
+import {
+  componentConflict,
+  componentProposal,
+  proposalOnlyComponent,
+} from './components.ts';
+import {
+  baseSsrCpuMsOf,
+  booksAt,
+  DEFAULT_START_DATE,
+  estimate,
+  eventDef,
+  frameworkDefaults,
+  frameworksOf,
+  revisionText,
+  scenarioOf,
+  scenarioSendsEmail,
+  SCHEDULED_CHANGES,
+  USD_JPY,
+} from './core.ts';
+import { commas, fmtFactor, lineLabel, toUsd, usd, usdOf } from './format.ts';
+import {
+  activeCommitments,
+  carryPrepay,
+  commitmentDef,
+  type CommitmentOffer,
+  commitmentOffers,
+  COMMITMENTS,
+  newCommitment,
+  offerOf,
+  offersFor,
+  pendingUpfrontUsd,
+} from './offers.ts';
+import {
+  FRONT_CDN_DELAY_FACTOR,
+  htmlCachedAtFront,
+  meetsRequirement,
+  onDemandBlocker,
+  REQUIREMENT_LABEL,
+  requirementStatus,
+  unavailableReason,
+} from './requirements.ts';
+import {
+  commentsChoosable,
+  commentsInPage,
+  commentsOf,
+  partsOfComments,
+  ROUTE_PARTS,
+  withComments,
+} from './routes/comments.ts';
+import {
+  defaultRevalidateSec,
+  hiddenSettings,
+  revalidateSettingOf,
+} from './routes/hidden-settings.ts';
+import {
+  articleFamily,
+  articleShellPerPage,
+  publicRoute,
+  routeAudienceOf,
+  routeChangeEffort,
+  routeChoices,
+  routeFamily,
+  SHELL_PER_PAGE_NOTE,
+  SHELL_PER_PAGE_WHY,
+  shellPerPage,
+  strategyFamily,
+  strategySelectable,
+  validRouteOverrides,
+  withRouteChoice,
+} from './routes/strategy.ts';
+import {
+  astroImage,
+  autoImageFormat,
+  COMMENTS_IN_BROWSER,
+  DEFAULT_REVALIDATE_SEC,
+  deliveredImageKB,
+  IMAGE_FORMAT_KB,
+  imageFormatOf,
+  isOnDemand,
+  ON_DEMAND_REVALIDATE,
+  optionLabel,
+  pageWeightKB,
+  pageWeightLabel,
+  type SettingKey,
+  type Settings,
+  SETTINGS,
+  usesNextImage,
+} from './settings.ts';
+import {
+  setupCommentOptions,
+  setupRevalidateOptions,
+} from './setup/options.ts';
+import {
+  componentLabel,
+  componentsAfterMigration,
+  imagesOf,
+  isDataSwap,
+  isPlanChange,
+  isRecontract,
+  membersOf,
+  migrationEffort,
+  offeredBaselines,
+  planChangeEffort,
+  realtimeSupported,
+  selfBackupOf,
+  selfHostedOf,
+  slaOf,
+  slotIneffective,
+  stackName,
+  STACKS,
+  stackSupports,
+  storageOptionAddon,
+  swapLabel,
+  withoutDomainRegistration,
+  withoutRealtime,
+} from './stacks.ts';
+import type {
+  Action,
+  ComponentSwap,
+  Crossing,
+  EndReason,
+  GameState,
+  Migration,
+  MonthEvent,
+  MonthReport,
+  Rewrite,
+  RouteOverrides,
   RoutePartKey,
-  {
-    label: string;
-    effort: number;
-    note: string;
-    options: readonly { value: number; label: string }[];
-  }
->;
+  RouteParts,
+} from './state.ts';
+import {
+  architectureFor,
+  coldStartViewShare,
+  initialStock,
+  type Spike,
+  staticBuildOf,
+  workloadFor,
+  type WorkloadParts,
+} from './workload.ts';
+export {
+  scenarioSendsEmail,
+  SCENARIOS,
+  USD_JPY,
+  baseSsrCpuMsOf,
+  GAME,
+  scenarioOf,
+  frameworksOf,
+  frameworkDefaults,
+  eventDef,
+  DEFAULT_START_DATE,
+  SCHEDULED_CHANGES,
+  applyRevisions,
+  revisionText,
+} from './core.ts';
+export {
+  type Settings,
+  ON_DEMAND_REVALIDATE,
+  COMMENTS_IN_BROWSER,
+  COMMENTS_IN_PAGE,
+  COMMENT_PAGES_PER_UPDATE,
+  isOnDemand,
+  ON_DEMAND_MAX_AGE_NOTE,
+  IMAGE_FORMAT_KB,
+  imageFormatOf,
+  usesNextImage,
+  autoImageFormat,
+  SETTINGS,
+  type SettingKey,
+  deliveredImageKB,
+  pageWeightKB,
+  pageWeightLabel,
+  DEFAULT_REVALIDATE_SEC,
+  SETTING_FLAVOR,
+  settingFlavor,
+} from './settings.ts';
+export {
+  type RouteOverrides,
+  type RoutePartChoice,
+  type RouteParts,
+  type RoutePartKey,
+  type StrategyFamily,
+  type Action,
+  type ComponentSwap,
+  type Migration,
+  type Rewrite,
+  type EndReason,
+  type MonthEvent,
+  type Crossing,
+  type MonthReport,
+  type GameState,
+} from './state.ts';
+export {
+  isDataSwap,
+  swapLabel,
+  slotIneffective,
+  dbBackupStatus,
+  selfBackupOf,
+  STACKS,
+  stackSupports,
+  stackOffered,
+  offeredBaselines,
+  selfHostedOf,
+  stackName,
+  withoutDomainRegistration,
+  membersOf,
+  slaOf,
+  componentLabel,
+  storageOptionAddon,
+  storageOptionText,
+  isPlanChange,
+  isRecontract,
+  planChangeEffort,
+  migrationEffort,
+  stackChangeText,
+  stackFlavor,
+} from './stacks.ts';
+export {
+  componentProposal,
+  componentConflict,
+  componentFlavor,
+} from './components.ts';
+export {
+  accountLabel,
+  accountsFor,
+  addedAccounts,
+  accountUpkeepOf,
+  newAccountsBy,
+} from './accounts.ts';
+export {
+  strategyFamily,
+  routeAudienceOf,
+  publicRouteId,
+  routeFamily,
+  articleFamily,
+  routeChoices,
+  shellPerPage,
+  articleShellPerPage,
+  strategySelectable,
+  withRouteChoice,
+  validRouteOverrides,
+  routeChangeEffort,
+} from './routes/strategy.ts';
+export {
+  commentsOf,
+  partsOfComments,
+  withComments,
+  commentsChoosable,
+  commentsInPage,
+  ROUTE_PARTS,
+} from './routes/comments.ts';
+export {
+  hiddenSettings,
+  revalidateSettingOf,
+  defaultRevalidateSec,
+} from './routes/hidden-settings.ts';
+export {
+  setupRevalidateOptions,
+  setupCommentOptions,
+} from './setup/options.ts';
+export {
+  type WorkloadParts,
+  type Spike,
+  spikePeakFactor,
+  ON_DEMAND_MAX_AGE_SEC,
+  ON_DEMAND_PAGES_PER_UPDATE,
+  workloadFor,
+  coldStartViewShare,
+  initialStock,
+  staticBuildOf,
+  type RoutingOptions,
+} from './workload.ts';
+export {
+  meetsRequirement,
+  requirementReachable,
+  FRONT_CDN_DELAY_FACTOR,
+  requirementStatus,
+  unavailableReason,
+} from './requirements.ts';
+export {
+  COMMITMENTS,
+  commitmentDef,
+  type CommitmentOffer,
+  activeCommitments,
+  commitmentOffers,
+} from './offers.ts';
 
 /** Bot を遮断するルールの手間と効き方（ゲーム上の仮定。製品の料金は未取得。D-20 V-9）。 */
 export const BOT_BLOCK = { effort: 2, remaining: 0.5 } as const;
-
-export type Action =
-  | { type: 'none' }
-  | { type: 'set'; key: SettingKey; value: number }
-  | { type: 'optimize' }
-  /** 同じ事業者のプランの変更（ほぼ即時・手間なし）。 */
-  | { type: 'plan'; stackIndex: number }
-  /** 別の事業者への乗り換え（手間・数か月・期間中は新旧両方の費用）。 */
-  | { type: 'migrate'; stackIndex: number }
-  /** 提案への返事（受ける / 断る）。返事をしなければ断ったことになる。 */
-  | { type: 'respond'; eventId: string; accept: boolean }
-  /** Bot を遮断するルールを入れる（一度入れれば続く）。 */
-  | { type: 'block-bots' }
-  /** スロットの部品を差し替える（同じ事業者の中。D-24・prd/07 §11.3）。 */
-  | { type: 'component'; slot: SlotId; option: string }
-  /** さくらの VPS のストレージ変更オプションを付ける（ディスク 2 倍・手数料一度だけ・戻せない。D-30）。 */
-  | { type: 'storage-option' }
-  /** アプリを作り直す（フレームワークを替える。大きな手間・数か月。済んだ翌月から新しいフレームワーク。D-81）。 */
-  | { type: 'rewrite'; framework: FrameworkId }
-  /**
-   * ページの描き方を替える（D-107。翌月から）。期限とオンデマンド（S2 ↔ S3）は今までどおり設定（再検証・記事のキャッシュ）で替える。
-   */
-  | { type: 'route'; route: string; strategy: RouteStrategyId; value?: number }
-  /**
-   * ページの部品を替える（D-109。翌月から）。今は記事のページのコメント欄の描き方（ブラウザで読み込む / 記事のページに含める）だけ。
-   * 前の設定「コメントの描き方」（{ type: 'set', key: 'comments' }）は、保存の読み込みでこれに読み替える。
-   */
-  | { type: 'route-part'; route: string; part: RoutePartKey; value: number }
-  /**
-   * 1 年の確約を結ぶ（リザーブドインスタンス・Savings Plans・確約利用割引・年払い。key は provider:planId:id。D-97）。
-   * 来月から 12 か月。取り消せず、対象を使わなくなっても支払いは残る。
-   */
-  | { type: 'commit'; key: string; payment: CommitmentPaymentId };
-
-/** DB の差し替えの進行（データの移行。期間中は新旧の両方の DB の費用）。 */
-export type ComponentSwap = {
-  slot: SlotId;
-  option: string;
-  required: number;
-  done: number;
-};
-
-export type Migration = {
-  from: number;
-  to: number;
-  /** 必要な手間の合計と、入れた手間。 */
-  required: number;
-  done: number;
-};
-
-/**
- * アプリの作り直しの進行（D-81・prd/10 F-06）。作業の間は旧アプリのまま動き（費用・満足度は今のフレームワーク）、
- * 手間を入れ終えた翌月から新しいフレームワークになる。事業者は変わらない。
- */
-export type Rewrite = {
-  from: FrameworkId;
-  to: FrameworkId;
-  required: number;
-  done: number;
-};
-
-export type EndReason = 'won' | 'goal' | 'cash' | 'outages' | 'policy';
-
-/** 月の報告に出す出来事（予告・起きた・提案）。 */
-export type MonthEvent = {
-  id: string;
-  kind: EventKind;
-  tier: EventTier;
-  phase: 'notice' | 'occurred' | 'proposal';
-  title: string;
-  text: string;
-  /** 効果の要約（PV × 3・手間 +10 / 月 など）。 */
-  effects: string[];
-  /** 当たりうる前提（今の構成で出ているもの。文は catalog のまま）。 */
-  premises: {
-    id: string;
-    text: string;
-    ratio?: number;
-    hit: boolean;
-    /** どのルートが当たるか（1 リクエストあたりの制限。D-99）。 */
-    detail?: string;
-  }[];
-  /** 席（メンバー）の料金（catalog の members）。 */
-  members?: string[];
-  /**
-   * 予告を持ちうる台本が起きた月: true は予告どおり、false は予告なしで今月起きた（対処は来月から。D-28）。
-   */
-  announced?: boolean;
-  /** 提案の「受ける」の説明。unavailable は受けられない理由（要件を満たせる構成が無い）。 */
-  accept?: {
-    label: string;
-    effects: string[];
-    effort: number;
-    unavailable?: string;
-  };
-  /** 今の構成の SLA の扱い（catalog の uptimeSla）。 */
-  sla?: string[];
-  /** 要件を満たせるか（部品ごと。受ける前に出す。D-32）。 */
-  requirementStatus?: {
-    label: string;
-    ok: boolean;
-    reason: string;
-    current: boolean;
-  }[];
-};
-
-/** 前提が境目を初めて越えた月の記録（見込みが外れた理由の材料。prd/07 §10.7）。 */
-export type Crossing = {
-  premiseId: string;
-  text: string;
-  /** この出来事が無ければ、今月は越えなかった（反実仮想の見積で確かめた）。 */
-  causes: { eventId: string; title: string; ratioWithout: number }[];
-};
-
-export type MonthReport = {
-  month: number;
-  stackName: string;
-  buzz: boolean;
-  /** 一時的に流量が増えた月の理由（話題・前兆・Bot）。見込みを出さない（§10.7）。 */
-  trafficNote?: string;
-  /** 見積に入れた PV（Bot を含む）。 */
-  pv: number;
-  /** 人の PV（収益が付く）と Bot の PV。 */
-  humanPV: number;
-  botPV: number;
-  /** 出来事の倍率を掛ける前の基準の PV。 */
-  basePV: number;
-  revenue: number;
-  /** 動かしている構成のインフラ費用（乗り換え中は新しい構成の分も含む）。 */
-  infraCost: number;
-  /** うち乗り換え先の構成の費用（乗り換え中だけ）。 */
-  parallelInfraCost: number;
-  cash: number;
-  status: 'ok' | 'down' | 'incident' | 'slow';
-  notes: string[];
-  events: MonthEvent[];
-  crossings: Crossing[];
-  /** 規約違反の指摘を受けた月（翌月も違反したままならアカウント停止。D-19）。 */
-  policyWarning: boolean;
-  /** 当たった前提と、境目の 70% を超えた前提。 */
-  premises: PlatformPremise[];
-  /** 量の境目がある前提すべての記録（推移と見込みに使う。prd/07 §5）。 */
-  snapshots: PremiseSnapshot[];
-  lines: {
-    /** 行の名前（料金データの label。D-75）。 */
-    label: string;
-    /** 事業者・行の種類・メーター（名前の文字列から読み取らないためのもの。fee は一度だけの手数料）。 */
-    provider: string;
-    kind: LineItem['kind'] | 'fee' | 'commitment';
-    meterId?: string;
-    amount: number;
-    currency: string;
-    /** 使用量（CloudFront の無効化のパスだけ。次のプレイへのヒントに使う。D-66）。 */
-    quantity?: number;
-  }[];
-  unpricedLines: number;
-  settings: Settings;
-  ssrCpuMs: number;
-  stock: Stock;
-  seats: number;
-  satisfaction: {
-    stages: Stages;
-    /** 段階ごとの理由（悪い・普通のときだけ）。 */
-    reasons: Partial<Record<Element, string>>;
-    score: number;
-    reputation: number;
-    acquisition: number;
-    churn: number;
-    growth: number;
-    /** 速さが「悪い」で PV の伸びから引いた分（D-47）。 */
-    slowPenalty?: number;
-  };
-  effort: EffortBreakdown;
-  /** 今月までの累積の機能ポイント。 */
-  featurePoints: number;
-  migration?: { toName: string; done: number; required: number };
-  /** 作り直しの進行（D-81）。toLabel は新しいフレームワークの名前。 */
-  rewrite?: { toLabel: string; done: number; required: number };
-  /** その月に動いていたアプリのフレームワーク（作り直しで変わる。D-81）。古い保存の再生でも入る。 */
-  framework?: FrameworkId;
-  /** その月の部品の選択（D-24）と、画面に出す要約（選べるスロットだけ）。 */
-  components: Choices;
-  componentSummary: string;
-  componentSwap?: { label: string; done: number; required: number };
-  /** 契約の収益（SLA の出来事。収益 revenue に含む）。 */
-  contractRevenue: number;
-  /**
-   * 確約の対象になる今月の額（オンデマンド。provider:planId:id ごと・料金データの通貨。D-97）。
-   * 来月の「確約する」の可否と、時間あたりの額の確約（Savings Plans・CUD）の額に使う。
-   */
-  commitmentEligible?: Record<string, number>;
-  /** 確約で今月減った額（ドル。割引 − 毎月の支払い − 前払い。前払いの月は負になりうる。D-97）。 */
-  commitmentNet?: number;
-  action?: string;
-};
-
-export type GameState = {
-  scenarioId: string;
-  /**
-   * 遊んでいるシナリオ（newGame に渡した不変の入力）。月の計算はこれだけを読む。
-   * 保存するときは scenarioId だけを書き、読み込みで SCENARIOS から引き直す（prd/07 §10.1）。
-   */
-  scenario: Scenario;
-  seed: number; // 偶発的な障害の乱数の内部状態（保存すれば同じ続きになる）
-  /** 始めたときのシード（台本の表・基準プレイを同じシードで回すため）。 */
-  startSeed: number;
-  /** 台本の表（newGame で一度に作る。プレイヤーの選択に依存しない）。 */
-  schedule: Scheduled[];
-  /** 始めた日（YYYY-MM-DD・画面が渡す。エンジンは時刻に触れない）。改定の出来事の条件に使う（D-21）。 */
-  startDate: string;
-  /** 実際に予告されている改定の出来事（始めた日が施行日より前のものだけ）と、起きる月。 */
-  revisions: { id: string; month: number }[];
-  stackIndex: number;
-  /**
-   * アプリのフレームワーク（始める画面で選ぶ。乗り換えでは変わらない。prd/10 F-04）。
-   * 作り直し（D-81）が済むと替わる。
-   */
-  framework: FrameworkId;
-  /** 進行中のアプリの作り直し（D-81）。 */
-  rewrite: Rewrite | null;
-  /**
-   * 選んだページごとの描き方（フレームワークの既定と分け方が違うものだけ。D-107）。古い状態には無い（＝既定のまま）。
-   * 作り直しが済むと空に戻り、乗り換えが済むと、乗り換え先で使えないものは外れる。
-   */
-  routes?: RouteOverrides;
-  /**
-   * ページの部品の選択（記事のページのコメント欄。既定と違うものだけ。D-109）。古い状態には無い（＝ブラウザで読み込む）。
-   * 描き方と違い、作り直し・乗り換えでは戻さない（前の設定「コメントの描き方」と同じ。含められない描き方では効かない）。
-   */
-  routeParts?: RouteParts;
-  /** 部品の選択（今の構成の事業者のスロット。D-24）。 */
-  components: Choices;
-  /** 進行中の DB の差し替え。 */
-  componentSwap: ComponentSwap | null;
-  /** 結んだ確約（D-97）。古い状態には無いことがある（無ければ確約なし）。 */
-  commitments?: ActiveCommitment[];
-  /** 受けた契約（毎月の収益。要件を満たす月だけ入る）。 */
-  contracts: { eventId: string; usdPerMonth: number; requires: Requirement }[];
-  /** 受けた提案で以後ずっと求められる要件（D-32）。 */
-  requirements: Requirement[];
-  /** 投稿のときに一律で縮めて置いた（原本の無い）画像の枚数（D-47）。 */
-  coarseImages?: number;
-  /** 記事のデザインの刷新を受けた（そのときの粗い画像の枚数。以後の投稿は大きく置く。D-47）。 */
-  imageRedesign?: { coarseImages: number };
-  settings: Settings;
-  cash: number;
-  basePV: number;
-  outages: number;
-  featurePoints: number;
-  migration: Migration | null;
-  /** 次の月が乗り換えの切り替えの月か。 */
-  switching: boolean;
-  /** 次の月に使う行動の手間。 */
-  plannedEffort: number;
-  /** 規約違反の指摘を受けた月。 */
-  policyWarnedMonth: number | null;
-  /** 月の手間の総量（チームが増えると増える）。 */
-  effortPerMonth: number;
-  /** 足した席（メンバー）の数。 */
-  seats: number;
-  /** 提案を受けて変わった Workload（以降ずっと）。 */
-  mods: WorkloadMods;
-  stock: Stock;
-  botBlocked: boolean;
-  /** さくらの VPS のストレージ変更オプション（付けたら戻せない）と、手数料をまだ払っていないか（D-30）。 */
-  storageOption: boolean;
-  /** 申し込んだときのプランの手数料（まだ払っていない。払ったら null。OCL-91E46AC4）。 */
-  /** label は明細の行の名前（料金データの addon の label。D-75）。 */
-  storageOptionFeeDue: { name: string; label?: string; amount: number } | null;
-  /** 返事を待っている提案。 */
-  pendingProposals: string[];
-  responses: Record<string, 'accepted' | 'declined'>;
-  /** 一度起きた状態の出来事。 */
-  fired: string[];
-  /** 出来事への対応の手間（毎月 points を months か月）。 */
-  interrupts: {
-    points: number;
-    months: number;
-    eventId: string;
-    /** 機能の追加の作業（機能開発に数える）と、毎月の加点（D-29）。 */
-    featureWork?: boolean;
-    bonus?: number;
-  }[];
-  /** 成長率への上乗せ（毎月 add を months か月）。 */
-  growthBonus: { add: number; months: number }[];
-  history: MonthReport[];
-  phase: 'playing' | 'won' | 'lost';
-  end?: { reason: EndReason; month: number };
-};
-
-export function scenarioOf(state: Pick<GameState, 'scenario'>): Scenario {
-  return state.scenario;
-}
-
-/** シナリオで選べるフレームワーク（省略は Next.js だけ）と既定。 */
-export function frameworksOf(sc: Scenario): {
-  allowed: FrameworkId[];
-  default: FrameworkId;
-} {
-  return sc.frameworks ?? { allowed: ['nextjs'], default: 'nextjs' };
-}
-
-/**
- * フレームワークの既定の部品（SPA は OGP の前処理なし・API の応答のキャッシュなし。prd/10 F-07・D-37）。
- * Next.js の静的書き出し（D-80）は next/image の既定のローダーが使えないので、閲覧のときに変換する事業者の画像の部品
- * （Vercel の画像の最適化・VPS のホスト・Cloud Run で変換）が無い。platform を渡すと、その事業者では投稿のときに縮める部品を既定にする。
- * シナリオが画像のスロットを隠しているとき（受託の添付ファイル）は、画像の部品は効かせないので替えない。
- */
-export function frameworkDefaults(
-  framework: FrameworkId,
-  platform?: Platform,
-  scenario?: Pick<Scenario, 'hidden'>,
-): Choices {
-  // API の置き場の既定は同じ事業者（SPA は D-65・Next.js は D-67）
-  if (framework === 'vite-spa')
-    return { ogp: 'none', apiCache: 'none', api: 'same' };
-  if (
-    framework === 'nextjs-export' &&
-    (platform === 'vercel' || platform === 'sakura' || platform === 'gcp') &&
-    !scenario?.hidden?.slots?.includes('images')
-  )
-    return { api: 'same', images: 'resize' };
-  return { api: 'same' };
-}
-
-/**
- * データの移行を伴う差し替え（DB・API の置き場）。乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える
- * （期間中は新旧の両方の費用）。API の置き場は DB も一緒に移す（API と DB は同じ事業者。D-65）。
- */
-export const isDataSwap = (slot: SlotId): slot is 'db' | 'api' =>
-  slot === 'db' || slot === 'api';
-
-/** 差し替えの進行の名前（画面・通知）。 */
-export const swapLabel = (slot: SlotId): string =>
-  slot === 'api'
-    ? 'API の置き場の移し替え（API と DB のデータの移行）'
-    : 'DB の差し替え（データの移行）';
-
-/**
- * 今の選択で効かない（選んでも変わらない）スロット（出さない）。API を他の事業者に置くと、DB はその事業者の部品になるので、
- * 構成の DB のスロットは出さない（D-65）。ISR をキャッシュしない部品では CDN の無効化が起きないので、
- * 無効化のまとめ方も出さない（D-79）。
- * 判定はここ 1 か所に置き、ゲームの部品の欄（componentSlots）・始める画面と見積モード（setupSlots）・月の報告の部品の要約が使う（D-94）。
- */
-export function slotIneffective(
-  slot: SlotId,
-  choices: Choices,
-  /** DB のバックアップは今の DB で決まる（D1 のように既定で足りる・延ばせない DB では出さない。D-93）。必須にして渡し忘れを防ぐ（D-94）。 */
-  stack: { stackIndex: number; framework: FrameworkId },
-): boolean {
-  if (slot === 'cdnInvalidation') return choices.isrCache === 'none';
-  if (slot === 'dbBackup')
-    return !dbBackupStatus(stack.stackIndex, choices, stack.framework).some(
-      (s) => s.extendable,
-    );
-  return slot === 'db' && apiPlacedElsewhere(choices);
-}
-
-/** 構成の DB ごとのバックアップの状態（D-93。catalog の backupStatus）。 */
-export function dbBackupStatus(
-  stackIndex: number,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-) {
-  const c = { ...DEFAULT_CHOICES[STACKS[stackIndex]!.provider], ...components };
-  return backupStatus(
-    composeStack(STACK_DEFS[stackIndex]!, c, { framework }),
-    c.dbBackup,
-  );
-}
-
-/** 自前で取るバックアップ（VPS）を選んでいるか（毎月の維持の手間。D-93）。 */
-export function selfBackupOf(
-  stackIndex: number,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-): boolean {
-  return dbBackupStatus(stackIndex, components, framework).some(
-    (s) => s.selfManaged,
-  );
-}
-
-/**
- * 画面に出さず、選べない設定（シナリオで効かないもの + 記事の描き方で意味の無いもの。prd/10・OCL-8DFFDBEC・D-37・D-107）。
- * revalidateSec は記事の描き方ごとの意味で 1 つだけ出す（S1 はビルドの間隔・S2/S3 は ISR の再検証か Astro の記事のキャッシュ・
- * SPA の S5 は API のキャッシュの期間。毎回描く S4 と、API の応答のキャッシュの無い S5 では出さない）。
- */
-export function hiddenSettings(
-  state: Pick<GameState, 'framework' | 'scenario'> & {
-    routes?: RouteOverrides | undefined;
-  },
-): SettingKey[] {
-  const fromScenario: SettingKey[] = [
-    ...(state.scenario.hidden?.settings ?? []),
-  ];
-  const fam = articleFamily(state);
-  const byFramework =
-    fam === undefined
-      ? FRAMEWORK_HIDDEN_SETTINGS[state.framework]
-      : hiddenByFamily(state.framework, fam);
-  return [...new Set([...fromScenario, ...byFramework])];
-}
-
-const REVALIDATE_KEYS: SettingKey[] = [
-  'isr',
-  'apiCacheTtl',
-  'buildInterval',
-  'pageCache',
-];
-
-/** 記事の描き方で意味の無い設定（D-107。フレームワークの既定では FRAMEWORK_HIDDEN_SETTINGS と同じになる）。 */
-function hiddenByFamily(
-  framework: FrameworkId,
-  fam: StrategyFamily,
-): SettingKey[] {
-  const visible = revalidateKeyFor(framework, fam);
-  return REVALIDATE_KEYS.filter((k) => k !== visible);
-}
-
-/** 記事の描き方での revalidateSec の意味（出さないなら undefined）。 */
-function revalidateKeyFor(
-  framework: FrameworkId,
-  fam: StrategyFamily,
-): SettingKey | undefined {
-  switch (fam) {
-    case 'static':
-      return 'buildInterval';
-    case 'cached':
-      return framework === 'astro' ? 'pageCache' : 'isr';
-    case 'api':
-      // API の応答のキャッシュ（D-37）は SPA の部品だけ
-      return framework === 'vite-spa' ? 'apiCacheTtl' : undefined;
-    default:
-      return undefined;
-  }
-}
-
-/** フレームワークで意味の無い設定（記事のページの無いシナリオ。revalidateSec をフレームワークごとの意味で 1 つだけ出す。D-37・D-68）。 */
-const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
-  nextjs: ['apiCacheTtl', 'buildInterval', 'pageCache'],
-  'vite-spa': ['isr', 'buildInterval', 'pageCache'],
-  astro: ['isr', 'apiCacheTtl', 'buildInterval'],
-  'nextjs-export': ['isr', 'apiCacheTtl', 'pageCache'],
-};
-
-/**
- * revalidateSec を何の設定として出すか（ISR の間隔・API のキャッシュの期間・ビルドの間隔・Astro の記事のキャッシュ。D-103）。
- * 記事の描き方（fam）を渡すとそれで決める（D-107）。省略はフレームワークの既定。
- */
-export function revalidateSettingOf(
-  framework: FrameworkId,
-  fam?: StrategyFamily,
-): SettingKey {
-  if (fam !== undefined) return revalidateKeyFor(framework, fam) ?? 'isr';
-  return framework === 'vite-spa'
-    ? 'apiCacheTtl'
-    : framework === 'astro'
-      ? 'pageCache'
-      : rebuildsStaticPages(framework)
-        ? 'buildInterval'
-        : 'isr';
-}
-
-/**
- * 始めるときの revalidateSec の既定（D-103）。Astro の記事のキャッシュは投稿・編集のときに消す（オンデマンド）が既定で、消せない置き場
- * （Google Cloud の Hosting の CDN）では 5 分の期限。ほかは 5 分。
- */
-export function defaultRevalidateSec(
-  framework: FrameworkId,
-  stackIndex: number,
-  /** 設定を出さないシナリオ（受託）では 5 分のまま。 */
-  scenario?: Scenario,
-  routes?: RouteOverrides,
-): number {
-  if (framework !== 'astro') return DEFAULT_REVALIDATE_SEC;
-  if (
-    scenario &&
-    hiddenSettings({ scenario, framework, routes }).includes('pageCache')
-  )
-    return DEFAULT_REVALIDATE_SEC;
-  const platform = STACKS[stackIndex]?.provider;
-  return platform !== undefined &&
-    deployTarget('astro', platform)?.pageCache?.onDemand === true
-    ? ON_DEMAND_REVALIDATE
-    : DEFAULT_REVALIDATE_SEC;
-}
 
 /**
  * 記事ごとの SNS のカードが出ないか（記事のページが枠 + API（S5）で、OGP の前処理なし。prd/10 F-05・D-107）。
@@ -1062,706 +391,6 @@ function noSocialCards(
     state.components.ogp !== 'prerender'
   );
 }
-
-export function eventDef(sc: Scenario, id: string): EventDef | undefined {
-  return sc.events.find((e) => e.id === id);
-}
-
-export const STACKS = MVP_STACKS.map((s, i) => ({
-  index: i,
-  id: s.id,
-  name: s.name,
-  /** 事業者（同じ事業者のあいだはプラン変更。さくらの VPS 2GB ↔ 4GB も含む。D-24）。 */
-  provider: STACK_DEFS[i]!.platform as Platform,
-  plan: STACK_DEFS[i]!.plan,
-  selfHosted: s.nodes.some((n) => n.config.kind === 'host'),
-  /** 自分で組む構成（OpenNext など。維持の手間がかかる。D-63）。 */
-  assembled: STACK_DEFS[i]!.assembled ?? false,
-  /** コンテナで動かすマネージドの構成（Cloud Run。維持の手間が少しかかる。D-88）。 */
-  containerized: STACK_DEFS[i]!.containerized ?? false,
-  /** 一時的に隠している構成（catalog の HIDDEN_PLATFORMS。選ぶ場所に出さない。計算はそのまま。D-100）。 */
-  hidden: stackHidden(STACK_DEFS[i]!),
-  /** ホストのディスク（VPS だけ。下位のプランへ変更できるかの判定に使う）。 */
-  diskGB: s.nodes.reduce(
-    (a, n) => (n.config.kind === 'host' ? n.config.diskGB : a),
-    0,
-  ),
-}));
-
-/**
- * その構成にフレームワークを載せられるか（catalog の DeployTarget が unsupported でない。Astro は AWS に公式のアダプターが無い。D-68）。
- * 始める画面の構成の一覧と乗り換え先に使う。
- */
-export function stackSupports(
-  stackIndex: number,
-  framework: FrameworkId,
-): boolean {
-  const s = STACKS[stackIndex];
-  return s !== undefined && frameworkSupported(framework, s.provider);
-}
-
-/**
- * 選ぶ場所に出す構成か（載せられて、隠していない。D-100）。始める画面の一覧・乗り換え先・見積モードの構成と比較・総当たりに使う。
- * 隠した構成でも、保存の再生・newGame・行動の検査（rules）は今までどおり通す（古い保存を同じ結果で開けるように）。
- */
-export function stackOffered(
-  stackIndex: number,
-  framework: FrameworkId,
-): boolean {
-  return stackSupports(stackIndex, framework) && !STACKS[stackIndex]!.hidden;
-}
-
-/** 結果の比較に出す基準プレイ（隠した構成で始めるものを除く。D-100）。 */
-export function offeredBaselines(sc: Scenario): Strategy[] {
-  return sc.baselines.filter((b) => !STACKS[b.stackIndex]!.hidden);
-}
-
-/** API を他の事業者に置いたときの、API と DB の名前（D-65・D-67）。 */
-const API_PLACEMENT_NAME: Readonly<Record<string, string>> = {
-  'cf-workers': 'Cloudflare Workers・D1',
-  'aws-lambda': 'AWS Lambda・DynamoDB',
-  'cf-workers-server': 'Cloudflare Workers・D1',
-  'cf-workers-astro': 'Cloudflare Workers・D1',
-  'sakura-vps-2gb': 'さくらの VPS 2GB（API・MySQL）',
-  'sakura-vps-4gb': 'さくらの VPS 4GB（API・MySQL）',
-};
-
-/** Next.js の構成で API を他の事業者に置いたときの、Next.js を載せている側の名前（D-67）。 */
-const NEXT_HOST_NAME: Readonly<Record<string, string>> = {
-  'aws-amplify': 'AWS Amplify の Next.js',
-  'aws-opennext': 'AWS の OpenNext',
-};
-
-/**
- * 構成に自前運用のサーバー（VPS のホスト）があるか。構成そのもの（さくらの VPS）に加えて、部品で VPS を使うとき
- * （Cloudflare の静的 + VPS の API。D-67）も含む。standby（差し替えの途中で新旧の両方を動かしている部品）も数える。
- * serving が true なら、経路に載っている（リクエストを受けている）ホストだけ。
- */
-export function selfHostedOf(
-  stackIndex: number,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-  standby: Choices = {},
-  serving = false,
-): boolean {
-  if (STACKS[stackIndex]!.selfHosted) return true;
-  const arch = composeStack(STACK_DEFS[stackIndex]!, components, {
-    framework,
-    standby,
-  });
-  const routed = new Set(Object.values(arch.routes).flat());
-  return arch.nodes.some(
-    (n) => n.config.kind === 'host' && (!serving || routed.has(n.id)),
-  );
-}
-
-/**
- * 構成の名前（SPA では vinext を使わないので外し、フレームワークを添える。prd/10）。
- * components を渡すと、SPA の API を他の事業者に置いているときは実際の組で出す（例「Vercel Pro の静的 + Cloudflare Workers・D1」。
- * 構成の既定の DB の名前を出さない。D-65）。始める画面の構成の一覧は渡さない（構成の名前のまま）。
- */
-/**
- * DB を Neon にした Vercel・Netlify の構成の名前（D-77）。「Supabase Pro」を実際の組「Neon（Launch）」に替える
- * （土台が Hobby・Free なら Neon（Free））。API を他の事業者に置くと DB の名前は使わないので、そのまま。
- */
-function withDbName<T extends { name: string; id: string }>(
-  s: T,
-  components: Choices,
-): T {
-  if (components.db !== 'neon') return s;
-  const free = /-(hobby|free)$/.test(s.id);
-  return {
-    ...s,
-    name: s.name.replace(
-      /Supabase (Free|Pro)/,
-      `Neon（${free ? 'Free' : 'Launch'}）`,
-    ),
-  };
-}
-
-export function stackName(
-  stackIndex: number,
-  framework: FrameworkId = 'nextjs',
-  /** false なら「（Vite の SPA）」を添えない（フレームワークをすぐ隣で選んでいる始める画面。D-35）。 */
-  withFramework = true,
-  components: Choices = {},
-): string {
-  const s = withDbName(STACKS[stackIndex]!, components);
-  const api = apiPlacedElsewhere(components)
-    ? API_PLACEMENT_NAME[components.api!]
-    : undefined;
-  // Astro は vinext を使わないので外し、フレームワークを添える（D-68）。API を他の事業者に置くと、Astro を載せている側 + API と DB（D-69）
-  if (framework === 'astro') {
-    const base = api
-      ? `${s.name.split(' + ')[0]} + ${api}`
-      : s.name.replace(' + vinext', '');
-    return withFramework ? `${base}（Astro）` : base;
-  }
-  // Next.js のサーバーから別の事業者の API を呼ぶ（D-67）: Next.js を載せている側 + API と DB
-  if (!browserCallsApi(framework))
-    return api
-      ? `${NEXT_HOST_NAME[s.id] ?? s.name.split(' + ')[0]} + ${api}`
-      : s.name;
-  const base = api
-    ? `${s.provider === 'aws' ? 'AWS の S3 + CloudFront' : s.name.split(' + ')[0]} の静的 + ${api}`
-    : s.name.replace(' + vinext', '');
-  // Next.js の静的書き出し（D-80）は SPA と同じ形（静的 + API）で、添える名前だけ違う
-  const label =
-    framework === 'nextjs-export'
-      ? '（Next.js の静的書き出し）'
-      : '（Vite の SPA）';
-  return withFramework ? `${base}${label}` : base;
-}
-
-const books = loadPriceBooks();
-
-/** 既定の始めた日（料金データの取得日）。テストと基準プレイの golden はこの日で固定する。 */
-export const DEFAULT_START_DATE = '2026-10-31';
-
-/** catalog の施行日つきの予告（id は事業者と施行日）。 */
-export const SCHEDULED_CHANGES: (ScheduledChange & {
-  id: string;
-  provider: string;
-})[] = books.flatMap((b) =>
-  b.scheduledChanges.map((c) => ({
-    ...c,
-    id: `revision:${b.provider}:${c.effectiveFrom}`,
-    provider: b.provider,
-  })),
-);
-
-/**
- * その月の料金データ（D-21）。起きた改定のうち、改定後の料金を持つものだけメーターの料金を差し替える。
- * 改定後の料金が無い予告は計算を変えない。同じメーターの改定が複数起きていれば、後に起きたほうを使う。
- */
-export function applyRevisions(
-  base: readonly PriceBook[],
-  changes: readonly (ScheduledChange & { id: string; provider: string })[],
-  revisions: readonly { id: string; month: number }[],
-  month: number,
-): PriceBook[] {
-  const occurred = (c: { id: string }) =>
-    revisions.find((r) => r.id === c.id && r.month <= month)?.month;
-  // 起きた月の順（同じ月なら施行日の順）。後ろの改定が前の改定を上書きする
-  const due = changes
-    .filter((c) => c.revisedMeters.length > 0 && occurred(c) !== undefined)
-    .sort(
-      (a, b) =>
-        occurred(a)! - occurred(b)! ||
-        a.effectiveFrom.localeCompare(b.effectiveFrom),
-    );
-  if (!due.length) return [...base];
-  return base.map((b) => {
-    const mine = due.filter((c) => c.provider === b.provider);
-    if (!mine.length) return b;
-    return {
-      ...b,
-      plans: b.plans.map((p) => ({
-        ...p,
-        meters: p.meters.map((m) => {
-          const rv = mine
-            .flatMap((c) => c.revisedMeters)
-            .findLast((x) => x.planId === p.id && x.meterId === m.id);
-          return rv ? { ...m, pricing: rv.pricing } : m;
-        }),
-      })),
-    };
-  });
-}
-
-const booksAt = (state: Pick<GameState, 'revisions'>, month: number) =>
-  applyRevisions(books, SCHEDULED_CHANGES, state.revisions, month);
-
-/** 改定の出来事の文（D-21）。計算への影響を正確に書く。 */
-export function revisionText(
-  c: (typeof SCHEDULED_CHANGES)[number],
-  usedByStack: boolean,
-): string {
-  const effect =
-    c.revisedMeters.length > 0
-      ? 'あり（改定後の料金を公式の出典つきで持っているので、今月から改定後の料金で計算する）'
-      : `なし（${c.notModeledReason}）`;
-  return `実際に予告されている改定（${c.provider}・施行日 ${c.effectiveFrom}）: ${c.description}。${usedByStack ? '' : '今の構成では使っていない事業者。'}このモデルの計算への影響: ${effect}`;
-}
-
-export { nextRandom };
-
-/** Workload を組み立てる入力（反実仮想の見積でも同じ関数を使う）。 */
-export type WorkloadParts = {
-  pv: number;
-  settings: Settings;
-  ssrCpuMs: number;
-  mods: WorkloadMods;
-  stock: Stock | null;
-  platform: Platform;
-  components: Choices;
-  framework: FrameworkId;
-  /** 選んだページごとの描き方（D-107。省略はフレームワークの既定）。 */
-  routes?: RouteOverrides | undefined;
-  /** ページの部品の選択（記事のページのコメント欄。D-109。省略はブラウザで読み込む）。 */
-  routeParts?: RouteParts | undefined;
-  /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
-  peakFactor?: number;
-  /** 短い期間に集中する上乗せの PV（話題・Bot。容量の判定だけに効く。D-44）。 */
-  spikes?: Spike[];
-};
-
-/** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。 */
-export type Spike = { id: string; extraPV: number; days: number };
-
-const DAYS_PER_MONTH = 730 / 24;
-
-/**
- * 集中する上乗せがあるときのピークの係数の倍率（D-44・prd/04 §5）。上乗せ分 E_i が D_i 日に集中し、その日の時間帯の形
- * （ピーク / 平均）はふだんと同じと仮定すると、ピークの時間帯の量は (N + Σ E_i × 30.4 / D_i) / 30.4 日 × ピーク係数
- * （N は集中しない分の PV）。月の PV で割った倍率を返す（課金は月の総量のまま）。
- */
-export function spikePeakFactor(pv: number, spikes: readonly Spike[]): number {
-  if (pv <= 0 || spikes.length === 0) return 1;
-  const extra = spikes.reduce((a, s) => a + s.extraPV, 0);
-  const steady = Math.max(0, pv - extra);
-  const peakDay = spikes.reduce(
-    (a, s) =>
-      a + s.extraPV * (DAYS_PER_MONTH / Math.min(s.days, DAYS_PER_MONTH)),
-    0,
-  );
-  return Math.max(1, (steady + peakDay) / pv);
-}
-
-/**
- * オンデマンドの再検証に併せて持つとみなす最大寿命（保険の時間の再検証・秒）。再検証の呼び出しの取りこぼし
- * （webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証を併せて設定することが多い（1 時間〜1 日など）。
- * 選択肢にはせず、長い側の 1 日とみなす（ゲーム上の仮定。D-56）。
- */
-export const ON_DEMAND_MAX_AGE_SEC = 86_400;
-
-/**
- * オンデマンドの再検証で、1 回の内容の更新ごとに再検証を呼ぶページの数（その記事のページと、記事が並ぶ一覧）。
- * CDN のキャッシュの無効化の数に効く（OpenNext の CloudFront。再生成の回数には効かない）。ゲーム上の仮定（D-66）。
- */
-export const ON_DEMAND_PAGES_PER_UPDATE = 2;
-
-/**
- * 月の内容の更新の回数（記事のページを作り直す更新。API の書き込み × シナリオの pageUpdateShare。D-49・D-70）と、
- * 1 回の更新で再検証するページの数。オンデマンドの再検証の再生成・無効化（Astro のキャッシュを消す数も同じ）と、静的書き出しのビルドし直しの数のもと。
- * コメントを記事のページに含めると、コメントの投稿（comments.pageUpdateShare）も足し、そのページの数は記事だけ（D-82）。
- */
-function pageUpdates(
-  sc: Scenario,
-  pv: number,
-  w: WorkloadInput,
-  inPage: boolean,
-): { updates: number; pagesPerUpdate: number } {
-  const writes = apiCallsPerMonth(w, pv) * w.api.writesPerCall;
-  const articles = writes * sc.pageUpdateShare;
-  const comments =
-    inPage && sc.comments ? writes * sc.comments.pageUpdateShare : 0;
-  const updates = articles + comments;
-  return {
-    updates,
-    pagesPerUpdate:
-      updates > 0
-        ? (articles * ON_DEMAND_PAGES_PER_UPDATE +
-            comments * COMMENT_PAGES_PER_UPDATE) /
-          updates
-        : ON_DEMAND_PAGES_PER_UPDATE,
-  };
-}
-
-/**
- * コメントを記事のページに含めたときの API（D-82）: 記事のページ（ISR だったルート）を開いたときのコメントの取得
- * （API の読み込み）が無くなる。記事のページの部品の API（ルートの apiCalls。D-109・RS-02）の読み込みはコメントの取得とみなし
- * （ゲーム上の仮定）、残るのは書き込み（コメントの投稿など）の分だけ。書き込みの回数は変えない（呼び出しが減った分、
- * 1 回あたりの書き込みの割合を上げる。書き込みの割合は API 全体で 1 つなので、全体の書き込みが同じになるように直す）。
- */
-function withoutCommentFetch(w: WorkloadInput): WorkloadInput {
-  const wpc = w.api.writesPerCall;
-  if (wpc >= 1) return w;
-  const before = apiCallsPerMonth(w, 1);
-  const routes = w.routes.map((r) =>
-    r.rendering === 'isr'
-      ? { ...r, apiCalls: (r.apiCalls ?? w.perPage.apiCalls) * wpc }
-      : r,
-  );
-  const after = apiCallsPerMonth({ ...w, routes }, 1);
-  if (after <= 0 || after >= before) return w;
-  return {
-    ...w,
-    routes,
-    api: { ...w.api, writesPerCall: (before * wpc) / after },
-  };
-}
-
-export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
-  const w = sc.template(Math.round(p.pv));
-  const ssr = p.mods.ssrShare;
-  w.routes = w.routes.map((r) => ({
-    ...r,
-    processing: { ...r.processing, cpuMs: p.ssrCpuMs },
-    ...(r.rendering === 'isr'
-      ? { revalidateSeconds: p.settings.revalidateSec }
-      : {}),
-    ...(ssr !== undefined
-      ? { share: r.rendering === 'ssr' ? ssr : 1 - ssr }
-      : {}),
-    ...(p.stock && r.rendering === 'isr'
-      ? { pages: p.stock.articlePages }
-      : {}),
-  }));
-  const nextImage = autoImageFormat(
-    p.platform,
-    p.framework,
-    { ...DEFAULT_CHOICES[p.platform], ...p.components }.images,
-  );
-  w.images = {
-    ...w.images,
-    sizeKB: deliveredImageKB(sc, p.settings, undefined, nextImage),
-    variants: p.settings.variants,
-    uploadsPerMau: w.images.uploadsPerMau * (p.mods.uploadsFactor ?? 1),
-    ...(p.stock
-      ? { storedGB: p.stock.imagesGB, distinct: Math.round(p.stock.images) }
-      : {}),
-  };
-  if (p.mods.imagesPerPage !== undefined)
-    w.perPage = { ...w.perPage, images: p.mods.imagesPerPage };
-  if (p.mods.writesPerCall !== undefined)
-    w.api = { ...w.api, writesPerCall: p.mods.writesPerCall };
-  if (p.stock) w.db = { ...w.db, sizeGB: p.stock.dbGB };
-  if (p.mods.realtime) w.realtime = p.mods.realtime;
-  if (p.mods.apiCpuMs !== undefined)
-    w.api = { ...w.api, cpuMs: p.mods.apiCpuMs };
-  if (p.mods.apiResponseKB !== undefined)
-    w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
-  // コメントを記事のページに含める（D-82）: コメントの投稿も記事のページを作り直す更新に数え、記事を開いたときのコメントの取得が無くなる
-  const inPage = commentsInPage(
-    commentsOf(sc, p.routeParts),
-    p.framework,
-    sc,
-    p.routes,
-  );
-  const { updates, pagesPerUpdate } = pageUpdates(sc, p.pv, w, inPage);
-  if (inPage) {
-    const v = withoutCommentFetch(w);
-    w.routes = v.routes;
-    w.api = v.api;
-  }
-  // オンデマンドの再検証（D-49）: 再生成の回数は、時間でなく内容の更新の回数から出す
-  if (isOnDemand(p.settings)) {
-    w.routes = w.routes.map((r) => {
-      if (r.rendering !== 'isr') return r;
-      const { revalidateSeconds: _, ...rest } = r;
-      return {
-        ...rest,
-        onDemandUpdatesPerMonth: updates,
-        onDemandMaxAgeSeconds: ON_DEMAND_MAX_AGE_SEC,
-        onDemandPagesPerUpdate: pagesPerUpdate,
-      };
-    });
-  }
-  // 話題・Bot の上乗せが短い期間に集中する月: その日の量はピークの時間帯（容量。D-44）と、日次の無料枠の判定（D-60）に効く
-  const spikeDay = spikePeakFactor(p.pv, p.spikes ?? []);
-  const peak = (p.peakFactor ?? 1) * spikeDay;
-  if (peak !== 1)
-    w.traffic = {
-      ...w.traffic,
-      peakHourFactor: w.traffic.peakHourFactor * peak,
-    };
-  if (spikeDay > 1) w.traffic = { ...w.traffic, peakDayFactor: spikeDay };
-  // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
-  // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
-  const shape = sc.frameworks?.spa?.shape;
-  const cache = apiCacheActive(p.platform, p.components, p.framework);
-  // Astro の記事（ISR だったルート）は閲覧のときに描いてキャッシュし、投稿・編集で消す（D-103）。数え方は ISR と同じなので
-  // ルートは isr のまま（期限・オンデマンドは上で付けた）。JS・CSS はアイランドの分だけ。
-  // Next.js の静的書き出しのビルドを起こす更新は、オンデマンドの再検証と同じ数え方の内容の更新、間隔は revalidateSec（オンデマンドは更新のたび）
-  const astro = sc.frameworks?.astro?.shape;
-  const build = {
-    updatesPerMonth: updates,
-    ...(isOnDemand(p.settings)
-      ? {}
-      : { intervalSeconds: p.settings.revalidateSec }),
-  };
-  // Next.js の静的書き出し（D-80）: 記事は静的にビルドし直し（1 回のビルドの時間は Astro の形の式・仮定）、
-  // マイページは SPA と同じく Client Component が API で中身を取る（API の CPU は SPA の dataCpuFactor 倍）
-  // ページごとの描き方（D-106）: フレームワークの既定と今の設定・部品で決まる描き方を、ルートごとに当てる
-  // （SPA の形・Astro の形の無いシナリオでは、そのフレームワークの書き換えをしない。今までと同じ）
-  const plan = routeChoices(sc, w.routes, {
-    framework: p.framework,
-    platform: p.platform,
-    settings: p.settings,
-    components: p.components,
-    routes: p.routes,
-  });
-  const uses = (f: StrategyFamily) =>
-    Object.values(plan).some((c) => strategyFamily(c.strategy) === f);
-  // S5 には SPA の形、S1 にはビルドの時間の式（Astro の形）が要る。無いシナリオではそのフレームワークの書き換えをしない（今までと同じ）
-  // S6 の島の届け方（Astro は別のリクエスト・Next.js の PPR は同じ応答の中。D-108）
-  const island = serverIslandDelivery(p.framework);
-  // 記事ごとの枠（S5。D-109）も S1 と同じくビルドで作る。枠に載るのは記事のメタタグで、中身はブラウザが API で取るので、
-  // 間隔でまとめず記事の投稿・編集のたびにビルドする（設定の revalidateSec は API の応答のキャッシュの期間の意味のまま）
-  const shellPages = Object.values(plan).some((c) => c.shellPerPage);
-  const ready =
-    (!uses('api') || shape !== undefined) &&
-    (!uses('static') || astro !== undefined) &&
-    (!shellPages || astro !== undefined) &&
-    (!uses('island') || island !== undefined) &&
-    (p.framework !== 'astro' || astro !== undefined);
-  const routed = ready
-    ? applyRouteStrategies(w, plan, {
-        ...(shape ? { spa: shape } : {}),
-        ...(astro
-          ? {
-              minutesPerBuild: astro.minutesPerBuild,
-              build: shellPages ? { updatesPerMonth: updates } : build,
-            }
-          : {}),
-        ...(island ? { island } : {}),
-      })
-    : w;
-  // Astro の JS・CSS はアイランドの分だけ（描き方でなくフレームワークの性質）
-  const app =
-    p.framework === 'astro' && astro ? withAstroAssets(routed, astro) : routed;
-  // 部品が Workload の側を変えるもの（キャッシュしない・サイズ違いを作る時・最適化しない。D-24）。
-  // Astro は ISR のキャッシュの部品を選ばない（置き場は事業者で決まる。D-103）ので、Next.js のときの「キャッシュしない」を引き継がない
-  const out = applyComponentsToWorkload(
-    app,
-    p.platform,
-    componentsForWorkload(p),
-    {
-      originalImageKB: sc.unoptimizedImageKB,
-      resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
-    },
-  );
-  return withImageFormat(out, p);
-}
-
-/** Workload を変える部品の選択（Astro は ISR のキャッシュのスロットを使わない。D-103）。 */
-function componentsForWorkload(p: WorkloadParts): Choices {
-  if (p.framework !== 'astro') return p.components;
-  const { isrCache: _, ...rest } = p.components;
-  return rest;
-}
-
-/**
- * 画像の形式の損の側（D-58）。変換の件数（サイズ違いの数）で表す。値の倍率は出典の文から取ったゲーム上の近似。
- * - Vercel の next/image で AVIF: AVIF と WebP を形式ごとにキャッシュする（Next.js の文書）→ 変換を 2 倍に数える
- *   （ほぼすべてのブラウザが AVIF を受けるが、WebP の版も一度は作られると読む）。
- * - VPS のホストで変換して AVIF: 変換に約 50% 長くかかる（Next.js の文書）→ 変換の件数を 1.5 倍（CPU の重さとして）。
- * - 投稿のときにサイズ違いを作る（R2）で WebP・AVIF: JPEG のフォールバックも作って置く（MDN）→ 変換と保存を 2 倍
- *   （フォールバックの大きさは同じとみなす近似）。
- * - Cloudflare Images（閲覧のときに変換）は形式で変換の数が増えない（料金の文書: format は一意の判定から除く）。
- */
-function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
-  const format = imageFormatOf(p.settings.imageKB);
-  if (format === 'jpeg') return w;
-  const images = { ...DEFAULT_CHOICES[p.platform], ...p.components }.images;
-  // OpenNext の画像の最適化（Lambda）・Cloud Run の next/image: CDN の外れた分ごとに変換するので、変換 1 回の時間を 1.5 倍にする
-  // （OCL-ECDEF8A1・D-63・OCL-CDDD26AB）
-  if (
-    format === 'avif' &&
-    (p.platform === 'aws-opennext' || p.platform === 'gcp') &&
-    usesNextImage(p.platform, p.framework, images)
-  )
-    return { ...w, images: { ...w.images, transformWorkFactor: 1.5 } };
-  const factor =
-    images === 'r2-variants'
-      ? 2
-      : format === 'avif' && usesNextImage(p.platform, p.framework, images)
-        ? p.platform === 'vercel'
-          ? 2
-          : 1.5
-        : format === 'avif' && p.platform === 'sakura' && images === 'default'
-          ? 1.5
-          : 1;
-  return factor === 1
-    ? w
-    : { ...w, images: { ...w.images, variants: w.images.variants * factor } };
-}
-
-/**
- * 冷えた起動を待つ閲覧の割合（D-88・OCL-554477DF・OCL-151B35E0）。コンテナに届いた要求のうち起動を待つ割合（coldStartShare）に、
- * 閲覧 1 件あたりコンテナに届く要求の数（1 を超えうる）を掛けて閲覧全体の割合に直し、掛けた後に 1 を上限にする。画像の投稿（image-write）は閲覧に
- * 関係しないので数えない。コンテナが複数あれば最大。
- */
-export function coldStartViewShare(r: EstimateResult): number {
-  const sim = r.simulation;
-  const pv = sim.workload.monthlyPageViews;
-  if (pv <= 0) return 0;
-  return Math.max(
-    0,
-    ...sim.architecture.nodes.map((n) => {
-      const u = sim.nodes[n.id]!;
-      if (!u.coldStartShare) return 0;
-      const nonView = sim.architecture.routes['image-write']?.includes(n.id)
-        ? sim.workload.classes['image-write'].count
-        : 0;
-      const viewRequests = Math.max(0, (u.resources.requests ?? 0) - nonView);
-      return Math.min(1, (u.coldStartShare * viewRequests) / pv);
-    }),
-  );
-}
-
-/** テンプレートの値から在庫の初期値を作る。 */
-export function initialStock(sc: Scenario): Stock {
-  const w = sc.template(sc.scale.startPV);
-  return {
-    dbGB: w.db.sizeGB,
-    imagesGB: w.images.storedGB,
-    images: w.images.distinct,
-    articlePages: w.routes.find((r) => r.rendering === 'isr')?.pages ?? 0,
-  };
-}
-
-/** 部品の選択と席を足した構成（席課金のプランだけ費用が変わる）。standby は差し替えの途中の新しい部品。 */
-/**
- * ドメインの登録のノードを外した構成（D-96）。乗り換え中の新しい構成は同じドメインを使うので、登録料を二重に数えない
- * （DNS のゾーンは並行して動かす間それぞれにあるので残す）。
- */
-export function withoutDomainRegistration(
-  arch: ArchitectureInput,
-): ArchitectureInput {
-  return {
-    ...arch,
-    nodes: arch.nodes.filter((n) => n.config.kind !== 'domain-registration'),
-  };
-}
-
-function architectureFor(
-  stackIndex: number,
-  seats: number,
-  framework: FrameworkId,
-  components: Choices = {},
-  standby: Choices = {},
-  storageOption = false,
-  /** 選んだ描き方で構成が変わる分（S1 のビルドのノード・Astro の記事のキャッシュの有無。D-107）。 */
-  routing: RoutingOptions = {},
-): ArchitectureInput {
-  const stack = composeStack(STACK_DEFS[stackIndex]!, components, {
-    standby,
-    storageOption,
-    framework,
-    ...routing,
-  });
-  if (seats <= 0) return stack;
-  const ids = [
-    ...new Set(
-      stack.nodes.flatMap((n) => (n.billing ? [n.billing.accountId] : [])),
-    ),
-  ];
-  return { ...stack, accounts: ids.map((id) => ({ id, seats: 1 + seats })) };
-}
-
-/**
- * 選んだ描き方に、静的にビルドし直すページ（S1。静的書き出しの既定の記事は composeStack が足す）があるか（D-107）。
- * 構成のビルドのノードを足すのに使う。
- */
-export function staticBuildOf(
-  sc: Pick<Scenario, 'template' | 'routeTraits'>,
-  stackIndex: number,
-  framework: FrameworkId,
-  routes: RouteOverrides | undefined,
-): RoutingOptions {
-  if (!routes) return {};
-  const valid = validRouteOverrides(sc, stackIndex, framework, routes);
-  // 記事ごとの枠（S5。D-109）も S1 と同じくビルドで書き出す
-  const staticBuild =
-    Object.values(valid).some(
-      (x) => x !== undefined && strategyFamily(x) === 'static',
-    ) ||
-    articleShellPerPage({ scenario: sc, framework, stackIndex, routes: valid });
-  // Astro で記事をキャッシュしない（S1・S4・S5）なら、Workers Cache を前に置かない。
-  // S6 のページがあれば、その枠をキャッシュするので置く（D-108）
-  const island = Object.values(valid).some(
-    (x) => x !== undefined && strategyFamily(x) === 'island',
-  );
-  const noCache =
-    framework === 'astro' &&
-    !island &&
-    articleFamily({ scenario: sc, framework, routes: valid }) !== 'cached';
-  return {
-    ...(staticBuild ? { staticBuild } : {}),
-    ...(noCache ? { pageCache: false } : {}),
-  };
-}
-
-/** 選んだ描き方で composeStack に渡す分（D-107）。 */
-export type RoutingOptions = { staticBuild?: boolean; pageCache?: boolean };
-
-const toUsd = (totals: Partial<Record<string, number>>) =>
-  (totals.USD ?? 0) + (totals.JPY ?? 0) / USD_JPY;
-
-// ---- 確約（D-97・prd/07 §11.12）----
-
-/** 料金データの確約（1 年。RDS のリザーブドインスタンス・Lambda の Savings Plans・Cloud Run の CUD・さくらの VPS の年額）。 */
-export const COMMITMENTS: readonly CommitmentDef[] = commitmentDefs(books);
-export const commitmentDef = (key: string) =>
-  COMMITMENTS.find((d) => d.key === key);
-const usdOf = (amount: number, currency: string) =>
-  currency === 'JPY' ? amount / USD_JPY : amount;
-
-/** 結べる確約の 1 つの形（画面に出す。金額は料金データの通貨と、ドルに直した値）。 */
-export type CommitmentOffer = {
-  key: string;
-  label: string;
-  payment: CommitmentPaymentId;
-  currency: string;
-  covers: number;
-  monthly: number;
-  upfront: number;
-  /** 1 年の割引の率（オンデマンドの 12 か月分に対して）。 */
-  discount: number;
-  /**
-   * ゲームの中で効く月数（12 か月か、ゲームの残りの月数）。全額前払いの upfront はこの月数の分に割った額
-   * （1 年の契約のうちゲームの後の月の分は、ゲームの後に使うとみて数えない。D-97）。
-   */
-  months: number;
-  /** 1 年分の前払いの額（割る前。全額前払いのときだけ 0 より大きい）。 */
-  upfrontYear: number;
-  premise: string;
-  usd: { covers: number; monthly: number; upfront: number };
-};
-
-function offerOf(
-  d: CommitmentDef,
-  payment: CommitmentPaymentId,
-  spend: number | undefined,
-  monthsLeft: number,
-): CommitmentOffer | null {
-  const t = commitmentTerms(d, payment, spend);
-  if (!t) return null;
-  const year = t.covers * 12;
-  const months = Math.min(d.commitment.termMonths, monthsLeft);
-  const upfront = (t.upfront * months) / d.commitment.termMonths;
-  return {
-    key: d.key,
-    label: d.commitment.label,
-    payment,
-    currency: d.currency,
-    covers: t.covers,
-    monthly: t.monthly,
-    upfront,
-    upfrontYear: t.upfront,
-    discount: year > 0 ? 1 - (t.monthly * 12 + t.upfront) / year : 0,
-    months,
-    premise: d.commitment.premise,
-    usd: {
-      covers: usdOf(t.covers, d.currency),
-      monthly: usdOf(t.monthly, d.currency),
-      upfront: usdOf(upfront, d.currency),
-    },
-  };
-}
-
-const offersFor = (
-  defs: readonly CommitmentDef[],
-  spendOf: (d: CommitmentDef) => number | undefined,
-  monthsLeft: number,
-) =>
-  defs.flatMap((d) =>
-    d.commitment.payments.flatMap(
-      (p) => offerOf(d, p.payment, spendOf(d), monthsLeft) ?? [],
-    ),
-  );
 
 /** 始める画面で選んだ部品を重ねた、1 か月目の部品（newGame と同じ重ね方）。 */
 function initialComponents(
@@ -1810,573 +439,6 @@ export function setupCommitments(
     () => undefined,
     sc.months,
   ).filter((o) => o.usd.upfront <= sc.startCash);
-}
-
-/** 今の確約（終わっていないもの）。 */
-export function activeCommitments(
-  state: Pick<GameState, 'commitments' | 'history'>,
-): ActiveCommitment[] {
-  const next = state.history.length + 1;
-  return (state.commitments ?? []).filter((c) => c.endMonth >= next);
-}
-
-/**
- * 来月から結べる確約（今月の明細に対象の使用があるもの）。時間あたりの額の確約は今月の対象の額（オンデマンド）で結ぶ。
- * すでに結んでいる確約も含む（選べるかは checkAction が決める）。
- */
-export function commitmentOffers(state: GameState): CommitmentOffer[] {
-  const eligible =
-    state.history[state.history.length - 1]?.commitmentEligible ?? {};
-  return offersFor(
-    COMMITMENTS.filter((d) => (eligible[d.key] ?? 0) > 0),
-    (d) => eligible[d.key],
-    scenarioOf(state).months - state.history.length,
-  );
-}
-
-function newCommitment(
-  offer: CommitmentOffer,
-  startMonth: number,
-): ActiveCommitment {
-  return {
-    key: offer.key,
-    label: offer.label,
-    currency: offer.currency as ActiveCommitment['currency'],
-    payment: offer.payment,
-    startMonth,
-    endMonth: startMonth + 11,
-    covers: offer.covers,
-    monthly: offer.monthly,
-    upfront: offer.upfront,
-    months: offer.months,
-  };
-}
-
-/** 構成の土台のプランの年払い（さくらの VPS。スケールアップで引き継ぐ。D-97）。 */
-function prepayDefOf(stackIndex: number): CommitmentDef | undefined {
-  const plans = new Set(
-    MVP_STACKS[stackIndex]!.nodes.flatMap((n) =>
-      n.billing ? [`${n.billing.provider}:${n.billing.planId}`] : [],
-    ),
-  );
-  return COMMITMENTS.find(
-    (d) =>
-      d.commitment.kind === 'prepay' && plans.has(`${d.provider}:${d.planId}`),
-  );
-}
-
-/**
- * 12 か月一括のままのスケールアップ（さくらの VPS 2GB → 4GB）: 上位のプランの 1 年分から今のプランの使っていない分を引いた額を払い、
- * 来月から上位のプランの 12 か月一括になる（公式は日割り。ここは月の単位。D-97）。年払いでなければそのまま。
- */
-/** 来月の請求に乗る前払い（来月から始まる確約の前払いの合計。ドル）。所持金の検査で予約済みの額として引く（OCL-C32E39AF）。 */
-function pendingUpfrontUsd(
-  state: Pick<GameState, 'commitments' | 'history'>,
-  commitments = state.commitments ?? [],
-): number {
-  const next = state.history.length + 1;
-  return commitments
-    .filter((c) => c.startMonth === next && c.endMonth >= next)
-    .reduce((a, c) => a + usdOf(c.upfront, c.currency), 0);
-}
-
-function carryPrepay(
-  state: GameState,
-  from: number,
-  to: number,
-): ActiveCommitment[] | undefined {
-  const fromDef = prepayDefOf(from);
-  const toDef = prepayDefOf(to);
-  const month = state.history.length;
-  const cur = (state.commitments ?? []).find(
-    (c) => c.key === fromDef?.key && c.endMonth > month,
-  );
-  if (!cur || !toDef) return undefined;
-  const offer = offerOf(
-    toDef,
-    'all-upfront',
-    undefined,
-    scenarioOf(state).months - month,
-  );
-  if (!offer) return undefined;
-  // 使っていない分（払った年額のうち、来月から先の分）。まだ始まっていない（前払いを払っていない）確約は
-  // 置き換えるだけで、控除はしない（払っていない額を差し引かない。OCL-17D1B88E）
-  const inGameEnd = cur.startMonth + (cur.months ?? 12) - 1;
-  const paid = cur.startMonth <= month;
-  const unused = paid
-    ? (cur.upfront * Math.max(0, inGameEnd - month)) / (cur.months ?? 12)
-    : 0;
-  return [
-    ...(state.commitments ?? []).map((c) =>
-      c === cur ? { ...c, endMonth: month } : c,
-    ),
-    newCommitment(
-      { ...offer, upfront: Math.max(0, offer.upfront - unused) },
-      month + 1,
-    ),
-  ];
-}
-
-/** 明細の行の名前。料金データの label があればそれ（D-75）、無ければ ID から作る（架空の料金など）。 */
-function lineLabel(l: LineItem): string {
-  if (l.label) return l.label;
-  if (l.kind === 'base-fee')
-    return `${l.priceRef.provider} ${l.priceRef.planId} 基本料`;
-  if (l.kind === 'credit') return `${l.priceRef.provider} クレジット`;
-  return `${l.priceRef.provider} ${l.priceRef.meterId}`;
-}
-
-/** 構成が使うプランのメンバー（席）の料金の文（catalog の members）。 */
-export function membersOf(stackIndex: number): string[] {
-  const out = new Set<string>();
-  for (const n of MVP_STACKS[stackIndex]!.nodes) {
-    if (!n.billing) continue;
-    const plan = books
-      .find((b) => b.provider === n.billing!.provider)
-      ?.plans.find((p) => p.id === n.billing!.planId);
-    if (plan?.members) out.add(plan.members.premise);
-  }
-  return [...out];
-}
-
-/** 構成が要件を満たすか。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
-export function meetsRequirement(
-  stackIndex: number,
-  requirement: Requirement,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-  /** 記事のページの描き方（D-107。省略はフレームワークの既定）。 */
-  fam?: StrategyFamily,
-): boolean {
-  switch (requirement) {
-    case 'on-demand-isr':
-      return (
-        onDemandBlocker(stackIndex, components, framework, fam) === undefined
-      );
-    case 'db-pitr': {
-      const st = dbBackupStatus(stackIndex, components, framework);
-      return st.length > 0 && st.every((s) => s.pitrDays >= PITR_REQUIRED_DAYS);
-    }
-    case 'uptime-sla': {
-      // バックアップの置き場（VPS の自前のバックアップのオブジェクトストレージ。D-93）とメールの送信（D-95）は
-      // アプリの稼働に関わらないので見ない。ドメインの登録と DNS（D-96）も構成の既定のまま見ない（残した点）
-      const plans = composeStack(STACK_DEFS[stackIndex]!, components)
-        .nodes.flatMap((n) =>
-          n.billing &&
-          n.config.kind !== 'db-backup' &&
-          n.config.kind !== 'email-sender' &&
-          n.config.kind !== 'dns-zone' &&
-          n.config.kind !== 'domain-registration'
-            ? [n.billing]
-            : [],
-        )
-        .map((b) =>
-          books
-            .find((x) => x.provider === b.provider)
-            ?.plans.find((p) => p.id === b.planId),
-        );
-      return (
-        plans.length > 0 &&
-        plans.every((p) => p?.uptimeSla?.status === 'offered')
-      );
-    }
-  }
-}
-
-/** 今の構成のプラン変更で要件を満たせるか（受けられない提案の判定）。 */
-export function requirementReachable(
-  stackIndex: number,
-  requirement: Requirement,
-  framework: FrameworkId = 'nextjs',
-  fam?: StrategyFamily,
-): boolean {
-  return STACKS.some(
-    (s) =>
-      s.provider === STACKS[stackIndex]!.provider &&
-      (meetsRequirement(s.index, requirement, {}, framework, fam) ||
-        // DB のバックアップは部品で満たせる（D-93）
-        (requirement === 'db-pitr' &&
-          meetsRequirement(
-            s.index,
-            requirement,
-            { dbBackup: 'pitr' },
-            framework,
-          ))),
-  );
-}
-
-const REQUIREMENT_LABEL: Record<Requirement, string> = {
-  'uptime-sla': '稼働率の SLA があるプラン',
-  'on-demand-isr': '即時反映（オンデマンド ISR）',
-  'db-pitr': `DB を直近 ${PITR_REQUIRED_DAYS} 日の任意の時点に戻せる構成`,
-};
-
-/** catalog の事実を「provider:planId:factId」で引く。 */
-function factByRef(ref: string) {
-  const [provider, planId, factId] = ref.split(':');
-  return books
-    .find((b) => b.provider === provider)
-    ?.plans.find((p) => p.id === planId)
-    ?.facts.find((f) => f.id === factId);
-}
-
-/** 即時反映を妨げている部品（無ければ undefined）。理由は catalog の事実の文（D-32）。 */
-/**
- * HTML も前段の CDN でキャッシュし、時間で再検証するときの、更新が見えるまでの遅れの倍率（D-91）。CDN の写しは s-maxage（= 間隔）まで
- * 残り、その間にサーバーで作り直したページは次に CDN が取りに来るまで見えないので、最大で間隔の約 2 倍（ゲーム上の読み）。
- */
-export const FRONT_CDN_DELAY_FACTOR = 2;
-
-/** 前段の CDN が ISR のページ（HTML）を実際にキャッシュするか（HTML もキャッシュ × ISR のキャッシュが有効）。 */
-function htmlCachedAtFront(c: Choices): boolean {
-  return c.frontCdn === 'html' && c.isrCache !== 'none';
-}
-
-function onDemandBlocker(
-  stackIndex: number,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-  /** 記事のページの描き方（D-107）。S2/S3 のときだけ置き場・部品で決まる。省略はフレームワークの既定。 */
-  fam?: StrategyFamily,
-): { slot: SlotId; label: string; reason: string } | undefined {
-  // 記事を毎回描く（S4）・枠 + API（S5）なら、キャッシュが無いのでいつも即時に反映される（prd/10・D-107）。
-  // 静的にビルドし直す（S1）は記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-80）。
-  // 新しい記事がビルドまで開けない分は、鮮度の判定で別に下げる（D-104）
-  if (fam !== undefined && fam !== 'cached') return undefined;
-  // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
-  if (framework === 'vite-spa') return undefined;
-  if (rebuildsStaticPages(framework)) return undefined;
-  const platform = STACKS[stackIndex]!.provider;
-  const c = { ...DEFAULT_CHOICES[platform], ...components };
-  // Astro は記事のキャッシュの置き場が事業者で決まる（D-103）。消せない置き場（Hosting の CDN）なら届かない
-  const astroCache =
-    framework === 'astro'
-      ? deployTarget('astro', platform)?.pageCache
-      : undefined;
-  if (astroCache && !astroCache.onDemand)
-    return {
-      slot: 'isrCache',
-      label: `記事のキャッシュ: ${astroCache.label}`,
-      reason: astroCache.reason,
-    };
-  for (const slot of Object.keys(SLOT_LABELS) as SlotId[]) {
-    // Astro は ISR のキャッシュの部品を使わない（D-103）
-    if (framework === 'astro' && slot === 'isrCache') continue;
-    // ISR をキャッシュしない（毎回 SSR）なら、前段の CDN に HTML のキャッシュは載らない（OCL-490F1874）
-    if (slot === 'frontCdn' && !htmlCachedAtFront(c)) continue;
-    const opt = componentsOf(platform, slot).find((o) => o.id === c[slot]);
-    if (opt?.onDemandIsr && !opt.onDemandIsr.ok)
-      return {
-        slot,
-        label: `${SLOT_LABELS[slot]}: ${opt.label}`,
-        reason: factByRef(opt.onDemandIsr.fact)?.premise ?? '',
-      };
-  }
-  return undefined;
-}
-
-/**
- * 要件を満たせるかを、今の事業者の部品ごとに並べる（受ける前のカードに出す。D-32）。
- * 今の部品の組み合わせと、要件にかかわるスロットの選択肢それぞれ。
- */
-export function requirementStatus(
-  stackIndex: number,
-  components: Choices,
-  requirement: Requirement,
-  framework: FrameworkId = 'nextjs',
-  /** 記事のページの描き方（D-107）。 */
-  fam?: StrategyFamily,
-): { label: string; ok: boolean; reason: string; current: boolean }[] {
-  if (requirement === 'db-pitr') {
-    // DB のバックアップの選択肢ごとに、今の DB で何日戻せるか（D-93）
-    const platform = STACKS[stackIndex]!.provider;
-    const c = { ...DEFAULT_CHOICES[platform], ...components };
-    return componentsOf(platform, 'dbBackup').flatMap((opt) =>
-      dbBackupStatus(
-        stackIndex,
-        { ...components, dbBackup: opt.id },
-        framework,
-      ).map((s) => ({
-        label: `${SLOT_LABELS.dbBackup}: ${opt.label}（${s.dbLabel}）`,
-        ok: s.pitrDays >= PITR_REQUIRED_DAYS,
-        reason: s.text,
-        current: c.dbBackup === opt.id,
-      })),
-    );
-  }
-  if (requirement !== 'on-demand-isr') return [];
-  if (fam === 'ssr' || (fam === 'api' && framework !== 'vite-spa'))
-    return [
-      {
-        label:
-          fam === 'ssr'
-            ? '記事のページを毎回描く'
-            : '記事のページを枠 + API に',
-        ok: true,
-        reason: 'キャッシュが無いので、更新はいつもすぐ見える',
-        current: true,
-      },
-    ];
-  if (fam === 'static' && !rebuildsStaticPages(framework))
-    return [
-      {
-        label: '記事のページを静的にビルドし直す',
-        ok: true,
-        reason:
-          '記事を更新するたびにビルドし直す（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増える',
-        current: true,
-      },
-    ];
-  if (framework === 'vite-spa')
-    return [
-      {
-        label: 'Vite の SPA',
-        ok: true,
-        reason: 'ISR を持たず、ページの中身を毎回 API で読む',
-        current: true,
-      },
-    ];
-  if (rebuildsStaticPages(framework))
-    return [
-      {
-        label: FRAMEWORKS[framework].label,
-        ok: true,
-        reason:
-          '記事を更新するたびにビルドし直す（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増える',
-        current: true,
-      },
-    ];
-  const platform = STACKS[stackIndex]!.provider;
-  const c = { ...DEFAULT_CHOICES[platform], ...components };
-  const out: {
-    label: string;
-    ok: boolean;
-    reason: string;
-    current: boolean;
-  }[] = [];
-  // Astro の記事のキャッシュの置き場は事業者で決まる（D-103）
-  const astroCache =
-    framework === 'astro'
-      ? deployTarget('astro', platform)?.pageCache
-      : undefined;
-  if (astroCache)
-    out.push({
-      label: `記事のキャッシュ: ${astroCache.label}`,
-      ok: astroCache.onDemand,
-      reason: astroCache.reason,
-      current: true,
-    });
-  for (const slot of Object.keys(SLOT_LABELS) as SlotId[])
-    for (const opt of componentsOf(platform, slot)) {
-      if (!opt.onDemandIsr) continue;
-      if (framework === 'astro' && slot === 'isrCache') continue;
-      out.push({
-        label: `${SLOT_LABELS[slot]}: ${opt.label}`,
-        ok: opt.onDemandIsr.ok,
-        reason: factByRef(opt.onDemandIsr.fact)?.premise ?? '',
-        current: c[slot] === opt.id,
-      });
-    }
-  return out;
-}
-
-/** 構成が使うプランの SLA の扱いの文（catalog の uptimeSla）。 */
-export function slaOf(stackIndex: number): string[] {
-  const out = new Set<string>();
-  for (const n of MVP_STACKS[stackIndex]!.nodes) {
-    if (!n.billing) continue;
-    const plan = books
-      .find((b) => b.provider === n.billing!.provider)
-      ?.plans.find((p) => p.id === n.billing!.planId);
-    if (plan?.uptimeSla) out.add(plan.uptimeSla.premise);
-  }
-  return [...out];
-}
-
-/** 乗り換えた先の部品の選択（既定。チャットを持っていれば Durable Objects を付ける。D-24 X-9）。 */
-function componentsAfterMigration(
-  to: number,
-  mods: WorkloadMods,
-  framework: FrameworkId,
-  scenario: Scenario,
-): Choices {
-  const platform = STACKS[to]!.provider;
-  const base = {
-    ...DEFAULT_CHOICES[platform],
-    ...frameworkDefaults(framework, platform, scenario),
-  };
-  if (mods.realtime && platform === 'cloudflare')
-    base.realtime = 'durable-objects';
-  return base;
-}
-
-function withoutRealtime(mods: WorkloadMods): WorkloadMods {
-  const out = { ...mods };
-  delete out.realtime;
-  return out;
-}
-
-/** その事業者で、今の部品の選択がリアルタイムを持てるか（チャットを受けたあと）。 */
-function realtimeSupported(platform: Platform): boolean {
-  return componentsOf(platform, 'realtime').length > 0;
-}
-
-export function componentLabel(
-  platform: Platform,
-  slot: SlotId,
-  option: string | undefined,
-): string {
-  return (
-    componentsOf(platform, slot).find((c) => c.id === option)?.label ??
-    option ??
-    '—'
-  );
-}
-
-/** 今の構成のプランのストレージ変更オプション（さくらの VPS だけ。catalog の addons。D-30）。 */
-export function storageOptionAddon(stackIndex: number) {
-  for (const n of MVP_STACKS[stackIndex]!.nodes) {
-    if (!n.billing) continue;
-    const a = books
-      .find((b) => b.provider === n.billing!.provider)
-      ?.plans.find((p) => p.id === n.billing!.planId)
-      ?.addons.find((x) => x.id === 'storage-change');
-    if (a) return a;
-  }
-  return undefined;
-}
-
-/** ストレージ変更オプションの選択肢の文（名前・メタ情報・説明）。VPS でなければ undefined。 */
-export function storageOptionText(
-  stackIndex: number,
-): { name: string; meta: string[]; detail: string } | undefined {
-  const addon = storageOptionAddon(stackIndex);
-  if (!addon) return undefined;
-  const disk = (option: boolean) =>
-    composeStack(
-      STACK_DEFS[stackIndex]!,
-      {},
-      { storageOption: option },
-    ).nodes.reduce(
-      (a, n) => (n.config.kind === 'host' ? n.config.diskGB : a),
-      0,
-    );
-  const scaleUp = STACKS.filter(
-    (x) => x.provider === STACKS[stackIndex]!.provider,
-  )
-    .map((x) => stackFact(x.index, 'scale-up'))
-    .find((f) => f !== undefined);
-  return {
-    name: 'ストレージ変更オプションを付ける',
-    meta: [
-      `ディスク ${disk(false)} → ${disk(true)} GB`,
-      `手数料 ${addon.oneTimeFee.toLocaleString('ja-JP')} 円（一度だけ）`,
-      `手間 ${EFFORT.storageOption}`,
-      '来月から',
-    ],
-    detail: `${addon.premise}。申し込みはスケールアップと同じ手順で、${scaleUp?.premise ?? 'サーバーを停止して行う'}。計画的な短い停止なので、止まった月には数えない。戻せない（${addon.interpretation?.adopted ?? ''}）。性能差はこの計算に入れていない。上位のプランへ変更してもオプションは残るとみなす（公式に記載なし）。乗り換え・契約し直しでは外れる。`,
-  };
-}
-
-/** 同じ事業者のプランの変更か（Cloudflare Free ↔ Paid・Vercel Hobby ↔ Pro）。 */
-export function isPlanChange(from: number, to: number): boolean {
-  return (
-    from !== to &&
-    STACKS[from]!.provider === STACKS[to]!.provider &&
-    !isRecontract(from, to)
-  );
-}
-
-/** 構成のプランが持つ事実（catalog の Plan の facts）。 */
-function stackFact(stackIndex: number, factId: string) {
-  for (const n of MVP_STACKS[stackIndex]!.nodes) {
-    if (!n.billing) continue;
-    const f = books
-      .find((b) => b.provider === n.billing!.provider)
-      ?.plans.find((p) => p.id === n.billing!.planId)
-      ?.facts.find((x) => x.id === factId);
-    if (f) return f;
-  }
-  return undefined;
-}
-
-/**
- * 同じ事業者でも、下位のプランへは変更できず契約し直す（さくらの VPS は今よりディスクが少ないプランへ変更できない。D-27）。
- * 乗り換えと同じ仕組み（手間・期間・新旧両方の費用）で扱う。
- */
-export function isRecontract(from: number, to: number): boolean {
-  return (
-    from !== to &&
-    STACKS[from]!.provider === STACKS[to]!.provider &&
-    STACKS[to]!.diskGB < STACKS[from]!.diskGB &&
-    stackFact(from, 'no-smaller-disk') !== undefined
-  );
-}
-
-/** プラン変更の手間（さくらの VPS の上位への変更は停止とディスクの拡張の作業がある。D-27）。 */
-export function planChangeEffort(from: number): number {
-  return stackFact(from, 'scale-up') ? EFFORT.scaleUp : EFFORT.plan;
-}
-
-/** 乗り換えに必要な手間の合計（VPS が絡むと長い。下位のプランへの契約し直しは別の値）。 */
-export function migrationEffort(from: number, to: number): number {
-  const m = EFFORT.migrationMonths;
-  const months = isRecontract(from, to)
-    ? m.recontract
-    : STACKS[from]!.selfHosted || STACKS[to]!.selfHosted
-      ? m.selfHosted
-      : m.serverless;
-  return months * EFFORT.migrationPerMonth;
-}
-
-/**
- * 構成を変える選択肢（プラン変更・契約し直し・乗り換え）。label は判断に直接効く数だけの短い文、
- * detail は理由・事実の説明（画面の ⓘ に出す。前提の文は catalog の facts）。
- */
-export function stackChangeText(
-  from: number,
-  to: number,
-  framework: FrameworkId = 'nextjs',
-  /** 今の部品（プラン変更は部品を引き継ぐので、API の置き場を名前に出す。乗り換えは既定の部品に戻る。D-65）。 */
-  components: Choices = {},
-): { name: string; meta: string[]; detail: string } {
-  const target = stackName(
-    to,
-    framework,
-    true,
-    isPlanChange(from, to) ? components : {},
-  );
-  const months = migrationEffort(from, to) / EFFORT.migrationPerMonth;
-  const per = EFFORT.migrationPerMonth;
-  const both = '期間中は新旧両方の費用';
-  if (isPlanChange(from, to)) {
-    const effort = planChangeEffort(from);
-    const fact = stackFact(from, 'scale-up');
-    return effort === 0
-      ? {
-          name: `${target} にプラン変更`,
-          meta: ['手間なし', '来月から'],
-          detail:
-            '同じ事業者のプランの変更。上限と込み分が変わり、来月から効く。',
-        }
-      : {
-          name: `${target} にプラン変更`,
-          meta: [`手間 ${effort}`, '来月から'],
-          detail: `${fact?.premise ?? ''}。計画的な短い停止なので、止まった月には数えない。`,
-        };
-  }
-  if (isRecontract(from, to))
-    return {
-      name: `${target} へ契約し直す`,
-      meta: [`${per} × ${months} か月`, both],
-      detail: `${stackFact(from, 'no-smaller-disk')!.premise}。新しく契約してデータを移す間は、新旧両方を動かして両方の費用を払う。`,
-    };
-  return {
-    name: `${target} へ乗り換える`,
-    meta: [`${per} × ${months} か月`, both],
-    detail:
-      '別の事業者へ移す。作業の間は新旧両方の構成を動かして両方の費用を払い、済んだ翌月に切り替わる（その月は収益が少し減る）。部品は乗り換え先の既定の選択から始まる。',
-  };
 }
 
 /**
@@ -2536,88 +598,9 @@ export function upkeepOf(
   );
 }
 
-/** 課金のアカウントの画面の名前（D-52）。 */
-const ACCOUNT_LABEL: Readonly<Record<string, string>> = {
-  cloudflare: 'Cloudflare',
-  vercel: 'Vercel',
-  aws: 'AWS',
-  supabase: 'Supabase',
-  netlify: 'Netlify',
-  neon: 'Neon',
-  bunny: 'Bunny',
-  resend: 'Resend',
-  sakura: 'さくらのクラウド',
-  gcp: 'Google Cloud',
-};
-export const accountLabel = (id: string) => ACCOUNT_LABEL[id] ?? id;
-
-/** 構成の課金のアカウント（部品の選択で増える。D-52）。 */
-export function accountsFor(
-  stackIndex: number,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-): string[] {
-  return accountsOf(
-    composeStack(STACK_DEFS[stackIndex]!, components, { framework }),
-  );
-}
-
-/**
- * 部品の選択で、構成の既定より増えた事業者のアカウント（D-52・AX-11）。Vercel Pro + Supabase Pro の Supabase のように
- * 構成の既定に含まれるアカウントは数えない。Cloudflare + Hyperdrive の Supabase・VPS の前段の CDN の Cloudflare・
- * Vercel の画像の Cloudflare は数える。
- */
-export function addedAccounts(
-  stackIndex: number,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-): string[] {
-  const base = accountsFor(stackIndex, {}, framework);
-  return accountsFor(stackIndex, components, framework).filter(
-    (a) => !base.includes(a),
-  );
-}
-
-/** 他の事業者の管理の毎月の手間（増えたアカウント 1 つにつき EFFORT.accountUpkeep。ゲーム上の仮定・D-52）。 */
-export function accountUpkeepOf(
-  stackIndex: number,
-  components: Choices = {},
-  framework: FrameworkId = 'nextjs',
-): number {
-  return (
-    addedAccounts(stackIndex, components, framework).length *
-    EFFORT.accountUpkeep
-  );
-}
-
 const accountUpkeepFor = (
   state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
 ) => accountUpkeepOf(state.stackIndex, state.components, state.framework);
-
-/** その部品に替えると新しく増えるアカウント（差すときの一度きりの手間が付く。D-52）。 */
-export function newAccountsBy(
-  state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
-  slot: SlotId,
-  option: string,
-): string[] {
-  const now = accountsFor(state.stackIndex, state.components, state.framework);
-  return accountsFor(
-    state.stackIndex,
-    { ...state.components, [slot]: option },
-    state.framework,
-  ).filter((a) => !now.includes(a));
-}
-
-/** 画像の部品の振る舞い（他の事業者の部品は同じ振る舞いの部品の id。D-52）。 */
-function imagesOf(
-  state: Pick<GameState, 'stackIndex' | 'components'>,
-): string | undefined {
-  const platform = STACKS[state.stackIndex]!.provider;
-  return imagesBehavior(
-    platform,
-    { ...DEFAULT_CHOICES[platform], ...state.components }.images,
-  );
-}
 
 /**
  * 動いている構成（乗り換え中は新旧両方）の維持の手間。両方が自前運用でも 1 回分。今の構成は部品（差し替えの途中の新しい部品を含む）
@@ -2920,51 +903,6 @@ function isrCacheOf(state: GameState): string | undefined {
   return { ...DEFAULT_CHOICES[platform], ...state.components }.isrCache;
 }
 
-/** 1 枚あたり配る画像の大きさ（KB）。画像の部品と画像の形式の設定から（D-47・D-58）。 */
-export function deliveredImageKB(
-  sc: Scenario,
-  settings: Settings,
-  images: string | undefined,
-  /** 閲覧のときにブラウザに合わせた形式で配る（JPEG を選んでも WebP。autoImageFormat。D-58・D-62）。 */
-  nextImage = false,
-): number {
-  if (images === 'none') return sc.unoptimizedImageKB;
-  const kb = nextImage
-    ? Math.min(settings.imageKB, IMAGE_FORMAT_KB.webp)
-    : settings.imageKB;
-  if (images === 'resize')
-    return sc.resizedImageKB * (kb / IMAGE_FORMAT_KB.jpeg);
-  return kb;
-}
-
-/**
- * 1 ページの通信量（KB）: HTML（SPA はデータの API）+ JS・CSS + 画像。ブラウザのキャッシュが無い最初の 1 ページ（D-47）。
- * 画像の枚数は提案で変わる（mods.imagesPerPage）。
- */
-export function pageWeightKB(
-  sc: Scenario,
-  settings: Settings,
-  mods: WorkloadMods,
-  images: string | undefined,
-  nextImage = false,
-): number {
-  const w = sc.template(1);
-  const html = w.routes[0]!.processing.responseKB;
-  const perImage = deliveredImageKB(sc, settings, images, nextImage);
-  return (
-    html +
-    w.perPage.assets * w.assets.sizeKB +
-    (mods.imagesPerPage ?? w.perPage.images) * perImage
-  );
-}
-
-/** 1 ページの通信量の表示（例: 「1 ページ約 20.5 MB」）。 */
-export function pageWeightLabel(kb: number): string {
-  return kb >= 1000
-    ? `1 ページ約 ${Number((kb / 1000).toFixed(1))} MB`
-    : `1 ページ約 ${Math.round(kb)} KB`;
-}
-
 /** 状態の画像の部品で、1 ページの通信量の表示（画像の部品の ⓘ に使う）。 */
 export function pageWeightOf(state: GameState, images?: string): string {
   const platform = STACKS[state.stackIndex]!.provider;
@@ -3003,134 +941,6 @@ const ng = (reason: ActionBlockReason, message: string): ActionCheck => ({
   reason,
   message,
 });
-
-/**
- * その部品を付ける提案が届いているか（部品の欄で選ぶのは、その提案を受けるのと同じ。D-24 の画面確認）。
- * 届いている提案の「受ける」の効果に、同じスロット・同じ部品を付ける効果があればその id。
- */
-export function componentProposal(
-  state: Pick<GameState, 'pendingProposals' | 'scenario'>,
-  slot: SlotId,
-  option: string,
-): string | undefined {
-  const sc = scenarioOf(state);
-  return state.pendingProposals.find((id) =>
-    eventDef(sc, id)?.accept?.effects.some(
-      (e) => e.type === 'component' && e.slot === slot && e.option === option,
-    ),
-  );
-}
-
-/** 提案で付く部品か（どの提案の「受ける」にも、この部品を付ける効果がある）。 */
-function proposalOnlyComponent(
-  sc: Scenario,
-  slot: SlotId,
-  option: string,
-): EventDef | undefined {
-  return sc.events.find((d) =>
-    d.accept?.effects.some(
-      (e) => e.type === 'component' && e.slot === slot && e.option === option,
-    ),
-  );
-}
-
-/**
- * 部品どうしの依存で選べない理由（ゲーム中の差し替えと始める画面で共有。D-37・D-45）。
- * さくらの VPS の API の応答のキャッシュは前段の CDN の上で効くので、前段の CDN なしでは選べず、
- * キャッシュしている間は前段の CDN を外せない。choices はスロットごとの今の選択（始める画面では未選択もある）。
- */
-export function componentConflict(
-  platform: Platform,
-  slot: SlotId,
-  option: string,
-  choices: Choices,
-  /** フレームワーク（AWS の CDN の料金のプランの判定に使う。省略は Next.js）。 */
-  framework: FrameworkId = 'nextjs',
-): string | null {
-  const api = apiConflict(platform, slot, option, choices);
-  if (api) return api;
-  // OpenNext は 1 つの CloudFront がページを返すので、画像を R2 に出しても CloudFront は残る（同じ規則で衝突しない。D-63）
-  if (platform === 'aws' || platform === 'aws-opennext')
-    return cdnPlanConflict(platform, slot, option, choices, framework);
-  if (platform !== 'sakura') return null;
-  // API の応答のキャッシュは Cloudflare の前段（Cache Rules）だけ。Bunny の前段（D-98）では扱わない
-  const cfFront = (v: string | undefined) => v === 'static' || v === 'html';
-  if (slot === 'apiCache' && option !== 'none' && !cfFront(choices.frontCdn))
-    return (choices.frontCdn ?? 'none') === 'none'
-      ? '前段の CDN が要る（先に前段の CDN を選ぶ）'
-      : 'API の応答のキャッシュは Cloudflare の前段だけで扱う（先に前段を Cloudflare にする）';
-  if (
-    slot === 'frontCdn' &&
-    !cfFront(option) &&
-    (choices.apiCache ?? 'none') !== 'none'
-  )
-    return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';
-  return null;
-}
-
-/**
- * SPA の API の置き場の依存（D-65）。他の事業者に置くと、DB はその事業者の部品になり（構成の DB は選べない）、
- * この事業者の API の応答のキャッシュは効かず、D1 に置いた画像を読む Worker の API も無くなる。頼る側を先に戻す（D-37 と同じ向き）。
- */
-function apiConflict(
-  platform: Platform,
-  slot: SlotId,
-  option: string,
-  choices: Choices,
-): string | null {
-  const elsewhere = apiPlacedElsewhere(choices);
-  if (slot === 'db' && elsewhere)
-    return 'API を他の事業者に置いているので、DB はその事業者の部品になる（構成の DB は選べない）';
-  if (slot === 'apiCache' && option !== 'none' && elsewhere)
-    return 'API を他の事業者に置いているので、この事業者の API の応答のキャッシュは効かない';
-  if (slot === 'images' && option === 'd1' && elsewhere)
-    return 'API を他の事業者に置いているので、画像を読み出す Worker の API が無い';
-  if (slot === 'api' && option !== 'same') {
-    if ((choices.apiCache ?? 'none') !== 'none')
-      return 'API の応答のキャッシュを使っている（先にキャッシュを外す）';
-    if (platform === 'cloudflare' && choices.images === 'd1')
-      return '画像を D1 に置いている（読み出す Worker の API が無くなる。先に画像の置き場を替える）';
-  }
-  return null;
-}
-
-/** AWS の構成に CloudFront（課金されるノード）があるか。 */
-function hasCloudFront(
-  platform: Platform,
-  choices: Choices,
-  framework: FrameworkId,
-): boolean {
-  const def = STACK_DEFS.find((d) => d.platform === platform);
-  if (!def) return false;
-  return composeStack(def, choices, { framework }).nodes.some((n) =>
-    n.billing?.planId.startsWith('cloudfront'),
-  );
-}
-
-/**
- * CDN の料金のプラン（D-61）は CloudFront があるときだけ効く。前段の CloudFront が無い Amplify で画像を他の事業者（R2）に出すと
- * CloudFront が無くなるので、定額のプランは選べない（B-11・D-62。効かない設定の扱い D-47 と同じ形で理由を出す）。
- * 定額のプランを選んでいる間は、CloudFront が無くなる選択（画像を R2 に出す・前段を外す）も選べない（頼る側を先に戻す。D-37 と同じ）。
- */
-function cdnPlanConflict(
-  platform: Platform,
-  slot: SlotId,
-  option: string,
-  choices: Choices,
-  framework: FrameworkId,
-): string | null {
-  const flat = (v: string | undefined) => v !== undefined && v !== 'payg';
-  if (slot === 'cdnPlan')
-    return flat(option) && !hasCloudFront(platform, choices, framework)
-      ? 'この構成には CloudFront が無い（前段の CloudFront が無く、画像も他の事業者から配る）ので、CDN の料金のプランは効かない'
-      : null;
-  if (!flat(choices.cdnPlan)) return null;
-  const next = { ...choices, [slot]: option };
-  return hasCloudFront(platform, choices, framework) &&
-    !hasCloudFront(platform, next, framework)
-    ? 'CloudFront が無くなり、定額のプランが効かなくなる（先に CDN の料金のプランを従量に戻す）'
-    : null;
-}
 
 /** 行動の規則（手間の残りは見ない）。選べない理由を区別して返す。 */
 function actionRule(state: GameState, action: Action): ActionCheck {
@@ -3627,47 +1437,6 @@ export function validSetupChoices(
   return out;
 }
 
-/** ISR の再検証の既定（5 分）。 */
-export const DEFAULT_REVALIDATE_SEC = 300;
-
-/**
- * 始める画面で選べる ISR の再検証（D-49）。ISR のある構成（Next.js）で、シナリオが隠していないときだけ。
- * 各選択肢に短い説明（フレーバー）を添える。
- */
-export function setupRevalidateOptions(
-  scenario: Scenario,
-  framework: FrameworkId,
-  /** 選んだページごとの描き方（D-107）。 */
-  routes?: RouteOverrides,
-): { value: number; label: string; flavor: string }[] {
-  const key = revalidateSettingOf(
-    framework,
-    articleFamily({ scenario, framework, routes }),
-  );
-  if (key === 'apiCacheTtl') return [];
-  if (hiddenSettings({ scenario, framework, routes }).includes(key)) return [];
-  return SETTINGS[key].options.map((o) => ({
-    ...o,
-    flavor: settingFlavor(key, o.value) ?? '',
-  }));
-}
-
-/**
- * 選べるコメント欄の描き方（記事のページの部品。D-82・D-109）。コメントのあるシナリオで、記事のページが HTML のとき
- * （SPA・枠 + API の記事以外）だけ。始める画面・見積モード・ゲームの途中の表の記事の行に出す。
- */
-export function setupCommentOptions(
-  scenario: Scenario,
-  framework: FrameworkId,
-  routes?: RouteOverrides,
-): { value: number; label: string; flavor: string }[] {
-  if (!commentsChoosable(framework, scenario, routes)) return [];
-  return ROUTE_PARTS.comments.options.map((o) => ({
-    ...o,
-    flavor: SETTING_FLAVOR[`comments:${o.value}`] ?? '',
-  }));
-}
-
 /** サーバーが HTML の一部として作る区画の作られ方（S6 では枠になる。D-108）。 */
 const HTML_SOURCES: readonly RegionSource[] = ['build', 'isr', 'cached', 'ssr'];
 
@@ -3789,118 +1558,6 @@ export function pageWireframes(
 }
 
 /**
- * ルートごとの描き方（D-106・段 2）。今はプレイヤーが直接選ばず、フレームワークの既定（catalog の FRAMEWORK_PRESETS を
- * 事業者の対応表で落としたもの）と、今の設定・部品から決まる:
- * - 全員に同じ中身のルートがキャッシュの描き方なら、再検証・記事のキャッシュが「オンデマンド」で S3、時間で S2。
- *   Next.js で ISR のキャッシュの部品が「キャッシュしない」なら S4（applyComponentsToWorkload の書き換えと同じ）。
- * - S5 は、SPA の API の応答のキャッシュが効くとき（D-37）だけ、全員に同じ中身の API の応答をキャッシュする。
- * workloadFor はこれを applyRouteStrategies に当てる（今までの toSpa・toAstro・toNextExport と同じ Workload。等価のテストで確かめる）。
- */
-export function routeChoices(
-  sc: Pick<Scenario, 'routeTraits'>,
-  routes: WorkloadInput['routes'],
-  p: {
-    framework: FrameworkId;
-    platform: Platform;
-    settings: Pick<Settings, 'revalidateSec'>;
-    components: Choices;
-    /** 選んだ描き方（D-107）。この事業者・フレームワークで使えないものは既定に戻す。 */
-    routes?: RouteOverrides | undefined;
-  },
-): RoutePlan {
-  const c = { ...DEFAULT_CHOICES[p.platform], ...p.components };
-  const cacheContent = apiCacheActive(p.platform, p.components, p.framework);
-  return Object.fromEntries(
-    routes.map((r) => {
-      const audience = routeAudience(r, sc.routeTraits);
-      const chosen = p.routes?.[r.id];
-      let strategy =
-        chosen !== undefined &&
-        strategySelectable(p.framework, p.platform, audience, chosen)
-          ? chosen
-          : defaultStrategy(p.framework, p.platform, audience);
-      if (strategy === 'cached-ttl' || strategy === 'cached-purge')
-        strategy =
-          p.framework === 'nextjs' && c.isrCache === 'none'
-            ? 'ssr'
-            : isOnDemand(p.settings)
-              ? 'cached-purge'
-              : 'cached-ttl';
-      // 全員に同じ中身のページの S5 は、ページごとの枠を書き出せるフレームワークなら記事ごとの枠にする（D-109）
-      const perPage =
-        strategy === 'shell-api' &&
-        audience === 'public' &&
-        shellPerPage(p.framework, p.platform);
-      return [
-        r.id,
-        {
-          strategy,
-          // 個人化した中身の応答はキャッシュしない（D-37）
-          ...(strategy === 'shell-api' && cacheContent && audience === 'public'
-            ? { cacheContent: true }
-            : {}),
-          ...(perPage ? { shellPerPage: true } : {}),
-        },
-      ];
-    }),
-  );
-}
-
-/** 記事ごとの枠（S5）の説明（表の選択肢の文。D-109）。 */
-const SHELL_PER_PAGE_NOTE =
-  'このフレームワークでは記事ごとの枠（メタタグ入り）をビルドで書き出し、SNS のカードは枠に入る。新しい記事は枠のビルドが終わるまで開けない';
-
-/** 記事ごとの枠（S5）の「なぜ」（D-109）。 */
-const SHELL_PER_PAGE_WHY =
-  '記事ごとの枠（タイトル・メタタグ）をビルドで書き出し、本文はブラウザが API で取る。サーバーは HTML を描かず、SNS のカードは枠に入る。新しい記事・編集のたびに枠をビルドし直し、新しい記事はビルドが終わるまで開けない';
-
-/**
- * 全員に同じ中身のページ（記事）の S5 を、記事ごとの枠にするか（D-109・ゲーム上の読み 1 つ。D-10）。ページごとの HTML を書き出せる
- * フレームワーク（Next.js・Astro・静的書き出し）で、その事業者で S1（静的に書き出す）を選べるときは、記事ごとに書き出す枠
- * （メタタグ入り。SNS のカードが出る）+ ブラウザが API で中身を取る形が標準の作り方とみなす。枠は S1 と同じくビルドで作り、
- * 新しい記事・編集のたびにビルドし直す（新しい記事はビルドまで開けない。D-104）。Vite の SPA は 1 つのシェルのまま。
- */
-export function shellPerPage(
-  framework: FrameworkId,
-  platform: Platform,
-): boolean {
-  return (
-    perPageShellFramework(framework) &&
-    strategySelectable(framework, platform, 'public', 'static-build')
-  );
-}
-
-/** ゲームの状態・始める画面の選択で、記事のページが記事ごとの枠（S5）か（D-109）。 */
-export function articleShellPerPage(state: {
-  scenario: Pick<Scenario, 'template' | 'routeTraits'>;
-  framework: FrameworkId;
-  stackIndex: number;
-  routes?: RouteOverrides | undefined;
-}): boolean {
-  return (
-    articleFamily(state) === 'api' &&
-    shellPerPage(state.framework, STACKS[state.stackIndex]!.provider)
-  );
-}
-
-/**
- * 描き方をその事業者・フレームワーク・見る人で選べるか（D-107）。対応表で使える（部品で決まるものを含む）・数え方がある。
- * 確かめていない描き方（Next.js × Netlify・OpenNext の S6）は選べない（RS-04・RS-18）。S6 は人ごとに違うページだけ（D-108）。
- */
-export function strategySelectable(
-  framework: FrameworkId,
-  platform: Platform,
-  audience: RouteAudience,
-  strategy: RouteStrategyId,
-): boolean {
-  const x = strategySupport(framework, platform, audience, strategy);
-  return (
-    ROUTE_STRATEGIES[strategy].modeled &&
-    (x.support === 'yes' || x.support === 'depends')
-  );
-}
-
-/**
  * 描き方の表の 1 行の、ほかの描き方（D-106・D-107）。available: この事業者・今の部品で選べるか。reason は使えない理由か条件。
  * value: 選ぶときに一緒に替える revalidateSec（S3 はオンデマンド、S3 から S2 は 5 分。省略は今の値のまま）。
  */
@@ -3962,49 +1619,6 @@ export type RoutePlanInput = {
   /** ページの部品の選択（記事のページのコメント欄。D-109）。 */
   routeParts?: RouteParts | undefined;
 };
-
-/**
- * 選んだ描き方を足した選択（D-107）。フレームワークの既定と分け方が同じなら持たない（S2 と S3 は設定で替える）。
- */
-export function withRouteChoice(
-  sc: Pick<Scenario, 'template' | 'routeTraits'>,
-  framework: FrameworkId,
-  routes: RouteOverrides | undefined,
-  routeId: string,
-  strategy: RouteStrategyId,
-): RouteOverrides {
-  const r = sc.template(1).routes.find((x) => x.id === routeId);
-  const out: Partial<Record<string, RouteStrategyId>> = { ...routes };
-  if (!r) return out;
-  const preset = FRAMEWORK_PRESETS[framework][routeAudienceOf(sc, r)];
-  if (strategyFamily(preset) === strategyFamily(strategy)) delete out[routeId];
-  else
-    out[routeId] =
-      strategyFamily(strategy) === 'cached' ? 'cached-ttl' : strategy;
-  return out;
-}
-
-/**
- * 選んだ描き方のうち、その事業者・フレームワークで選べるものだけを残す（乗り換え・作り直しの後。D-107）。
- */
-export function validRouteOverrides(
-  sc: Pick<Scenario, 'template' | 'routeTraits'>,
-  stackIndex: number,
-  framework: FrameworkId,
-  routes: RouteOverrides | undefined,
-): RouteOverrides {
-  const platform = STACKS[stackIndex]!.provider;
-  let out: RouteOverrides = {};
-  for (const r of sc.template(1).routes) {
-    const want = routes?.[r.id];
-    if (
-      want !== undefined &&
-      strategySelectable(framework, platform, routeAudienceOf(sc, r), want)
-    )
-      out = withRouteChoice(sc, framework, out, r.id, want);
-  }
-  return out;
-}
 
 /** 構成・フレームワークを替えると既定に戻るページの描き方（D-107 の補足）。from・to は描き方の番号つきの id。 */
 export type RouteFallback = {
@@ -4239,21 +1853,6 @@ export function setupRouteFallbacks(
     },
     fwChanged ? SETUP_FRAMEWORK_RESETS_ROUTES : undefined,
   );
-}
-
-/** 今の描き方から別の描き方へ替える手間（ゲーム上の仮定・RS-08・D-107）。S2 ↔ S3 は設定（onDemandSwitch）で替える。 */
-export function routeChangeEffort(
-  from: RouteStrategyId,
-  to: RouteStrategyId,
-): number {
-  const f = strategyFamily(from);
-  const t = strategyFamily(to);
-  if (f === t) return 0;
-  // ページを枠と API に分ける（Client Component・アイランドと API を書く）。SSR の最適化と同じ大きさ
-  if (t === 'api') return EFFORT.route.toApi;
-  // キャッシュのヘッダ・消す処理・prerender（generateStaticParams）の切り替え。
-  // サーバーの島（S6）も 3: 人ごとに違う部品に server:defer（Astro）・Suspense（Next.js の PPR）を付け、API は書かない（D-108）
-  return EFFORT.route.other;
 }
 
 /**
@@ -4530,51 +2129,6 @@ export function routeAlternativeAction(
   };
 }
 
-/**
- * 設定の選択肢の短い説明（部品の説明 COMPONENT_FLAVOR と同じ方針: 事実だが、それだけで選ぶと外れうる文。数値は書かない。D-49）。
- * 「設定:値」で引く。
- */
-export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
-  [`format:${IMAGE_FORMAT_KB.jpeg}`]:
-    'どのブラウザでも表示でき、作るのも速い。仕組みがいちばん単純',
-  [`format:${IMAGE_FORMAT_KB.webp}`]:
-    '見た目の画質を保ったまま小さくなり、今の主なブラウザで表示できる',
-  [`format:${IMAGE_FORMAT_KB.avif}`]:
-    'いちばん小さくなる新しい形式。画質を保ったまま転送量を大きく減らせる',
-  'isr:0': '記事を更新したときだけ作り直すので、無駄な再生成がなく、いつも最新',
-  'isr:60': '少し待てば更新が見える。設定を書くだけで、追加の実装は要らない',
-  'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔',
-  'isr:3600': '間隔が長いほど、同じページを作り直すまでの間があく',
-  'isr:21600': '更新はゆっくり見えるが、同じページを作り直すのは一日に数回まで',
-  'buildInterval:0':
-    '記事を更新するたびにビルドするので、待つのはビルドの間だけ。仕組みもいちばん素直',
-  'buildInterval:60':
-    '少し待てば更新が見える。間隔の間の更新はまとめて 1 回でビルドする',
-  'buildInterval:300':
-    '更新の反映とビルドの回数の釣り合いを取った、ほどほどの間隔',
-  'buildInterval:3600': '間隔が長いほど、ビルドの回数はまとまって減る',
-  'buildInterval:21600': '更新はゆっくり見えるが、ビルドは一日に数回まで',
-  'pageCache:0':
-    '記事を投稿・編集したときだけそのページを消すので、無駄な描き直しがなく、いつも最新',
-  'pageCache:60': '少し待てば更新が見える。消す呼び出しを書かなくてよい',
-  'pageCache:300':
-    '更新の反映と描き直しの回数の釣り合いを取った、ほどほどの期限',
-  'pageCache:3600': '期限が長いほど、同じページを描き直すまでの間があく',
-  'pageCache:21600':
-    '更新はゆっくり見えるが、同じページを描き直すのは一日に数回まで',
-  [`comments:${COMMENTS_IN_BROWSER}`]:
-    '記事のページはコメントが付いても変わらないので、作り直すのは記事を更新したときだけ',
-  [`comments:${COMMENTS_IN_PAGE}`]:
-    'コメントも記事と一緒に HTML で届き、ページを開いてからコメントを取りに行く通信が要らない',
-};
-
-export function settingFlavor(
-  key: SettingKey,
-  value: number,
-): string | undefined {
-  return SETTING_FLAVOR[`${key}:${value}`];
-}
-
 /** 始められない理由（まだ選んでいないスロット）。選び終えていれば null。 */
 export function setupProblem(
   scenario: Scenario,
@@ -4588,15 +2142,6 @@ export function setupProblem(
   return missing.length
     ? `部品をまだ選んでいない: ${missing.map((x) => x.label).join('・')}`
     : null;
-}
-
-/** 部品の選択肢の短い説明（フレーバー。catalog の COMPONENT_FLAVOR。D-45）。 */
-export function componentFlavor(o: {
-  platform: ComponentProvider;
-  slot: SlotId | 'files';
-  id: string;
-}): string | undefined {
-  return COMPONENT_FLAVOR[`${o.platform}:${o.slot}:${o.id}`];
 }
 
 /**
@@ -4989,24 +2534,6 @@ export function setupMonthOneEstimate(
   };
 }
 
-/** 提案を受けられない理由（要件を満たせる構成がプラン変更でも無い）。 */
-export function unavailableReason(
-  state: Pick<GameState, 'stackIndex' | 'framework' | 'scenario' | 'routes'>,
-  def: EventDef,
-): string | undefined {
-  if (
-    !def.requires ||
-    requirementReachable(
-      state.stackIndex,
-      def.requires,
-      state.framework,
-      articleFamily(state),
-    )
-  )
-    return undefined;
-  return `今の事業者では「${REQUIREMENT_LABEL[def.requires]}」を選べない（セルフサービスのプランに無く、Enterprise などの契約の料金は取得していない）`;
-}
-
 export function newGame(
   stackIndex: number,
   seed = 42,
@@ -5118,11 +2645,6 @@ export function newGame(
     phase: 'playing',
   };
 }
-
-const optionLabel = (key: SettingKey, value: number) =>
-  SETTINGS[key].options.find((o) => o.value === value)?.label ?? String(value);
-
-const fmtFactor = (f: number) => `× ${Number(f.toFixed(2))}`;
 
 /** 効果の要約（画面の通知に出す）。 */
 export function describeEffect(e: Effect): string {
@@ -6971,14 +4493,6 @@ export type RetryHint = {
   next: string;
 };
 
-/** 整数に丸めて 3 桁ごとにカンマを入れる。 */
-const commas = (x: number) =>
-  Math.round(x)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-const usd = (x: number) => `$${commas(x)}`;
-
 /** 月の並び（1 つなら「3 か月目」、続くなら「3〜5 か月目」、飛ぶなら「3・7 か月目」）。 */
 function monthsText(ms: readonly number[]): string {
   if (ms.length === 1) return `${ms[0]} か月目`;
@@ -7464,30 +4978,17 @@ export function comparisonRows(state: GameState): ComparisonRow[] {
     })),
   ];
 }
-
+export { nextRandom } from './random.ts';
 export * from './rules.ts';
 export * from './trends.ts';
 export * from './scenario.ts';
 export * from './save.ts';
 export * from './estimate-mode.ts';
 export * from './commitments.ts';
-export { ARTICLE_COMMUNITY };
+export { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 export {
   FRAMEWORKS,
   ROUTE_STRATEGIES,
   type FrameworkId,
   type RouteStrategyId,
 } from 'catalog';
-
-// フレーバーは計算に使わない表示用のデータなので、使うこの節でだけ読む
-import {
-  COMPONENT_FLAVOR,
-  FILE_STORAGE_LABEL,
-  fileStorageOf,
-  STACK_FLAVOR,
-} from 'catalog';
-
-/** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
-export function stackFlavor(stackIndex: number): string | undefined {
-  return STACK_FLAVOR[STACKS[stackIndex]!.id];
-}
