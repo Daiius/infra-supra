@@ -6,7 +6,7 @@
 // カードは事業者ごとに 1 枚で、プランのチップはカードを動かさず中身（名前・説明・手間・注意・構成図）を替える（D-105 の補足）。
 // 見積モードと共用（D-115）。値は STACKS の index（見積の構成の id との変換は見積の画面の境目で 1 回）。カードに添える注記
 // （見積はその構成の月額）は cardExtra、手間の棒（ゲームだけ）は effort で切り替える。
-// 部品の選択は選んでいるカードの中（構成図の下のチップ）で行う（D-116。前の ③ 部品の欄を移した）。
+// 部品の選択は選んでいるカードの中（構成図の下のチップと、図の箱の差し替え）で行う（D-116。前の ③ 部品の欄を移した）。
 import {
   FRAMEWORKS,
   frameworkOnStack,
@@ -31,25 +31,33 @@ import { NameWithInfo } from './option-text.tsx';
 import { EffortBar } from './scenario-briefing.tsx';
 import {
   PartChips,
+  PartOptions,
   usePartSlots,
   type SetupChoices,
 } from './setup-components.tsx';
-import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
+import {
+  DIAGRAM_NOTE,
+  SystemDiagram,
+  type DiagramParts,
+} from './system-diagram.tsx';
 import type { ResolvedPage } from './page-wireframes.tsx';
-import { diagramArchitecture } from './system-diagram-model.ts';
+import { diagramArchitecture, swappableSlots } from './system-diagram-model.ts';
 
-/** 部品の選択（選んでいるカードの、構成図の下のチップ。D-116）。 */
+/** 部品の選択（選んでいるカードの、構成図の下のチップと図の箱。D-116）。 */
 type PartsEditor = {
   onChange: (v: SetupChoices) => void;
   note?: ReactNode;
 };
 
-/** 選んでいるカードの構成図と部品のチップ（D-116）。 */
+/**
+ * 選んでいるカードの構成図と部品のチップ（D-116）。箱を押すと、その箱に当たるスロットの部品を選べる（swappableSlots）。
+ */
 function EditableDiagram({
   scenario,
   stackIndex,
   framework,
   components,
+  routes,
   arch,
   pages,
   caption,
@@ -59,15 +67,48 @@ function EditableDiagram({
   stackIndex: number;
   framework: FrameworkId;
   components: SetupChoices;
+  routes: RouteOverrides | undefined;
   arch: ReturnType<typeof diagramArchitecture>;
   pages: readonly ResolvedPage[];
   caption: string;
   editor: PartsEditor;
 }) {
   const slots = usePartSlots(scenario, stackIndex, framework, components);
+  const bySlot = useMemo(
+    () =>
+      new Map<string, (typeof slots)[number]>(slots.map((x) => [x.slot, x])),
+    [slots],
+  );
+  const swap = useMemo(
+    () =>
+      swappableSlots(
+        (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
+        components,
+        slots,
+      ),
+    [scenario, stackIndex, framework, routes, components, slots],
+  );
+  const parts: DiagramParts = {
+    slotsOf: (id) => swap.get(id) ?? [],
+    render: (slot, close) => (
+      <PartOptions
+        slot={bySlot.get(slot)!}
+        stackIndex={stackIndex}
+        framework={framework}
+        value={components}
+        onChange={editor.onChange}
+        close={close}
+      />
+    ),
+  };
   return (
     <>
-      <SystemDiagram architecture={arch} pages={pages} caption={caption} />
+      <SystemDiagram
+        architecture={arch}
+        pages={pages}
+        caption={caption}
+        parts={swap.size > 0 ? parts : undefined}
+      />
       <PartChips
         stackIndex={stackIndex}
         framework={framework}
@@ -220,6 +261,7 @@ function StackCard({
             stackIndex={stackIndex}
             framework={framework}
             components={components ?? {}}
+            routes={routes}
             arch={arch}
             pages={pages}
             caption={caption}

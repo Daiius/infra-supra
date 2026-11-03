@@ -4,6 +4,7 @@
 // SVG は role="img" で要約を名前にし、箱とつながりの一覧を読み上げ用に別に置く（色だけに頼らない）。
 // 入れ物が狭い（sm 未満で、横の図が縮めずには収まらない）ときは縦の図にする: 段を上→下・事業者の枠を左→右に並べ、
 // 箱は短い名前だけにし、箱を押す（キーボードは Enter・Space）と詳しい説明（事業者・種類・名前・通る流れ）を出す（D-105 の補足）。
+// 部品を差し替えられる箱（parts。始める画面・見積の選んでいる構成のカード）は、横の図でも押せて、そのスロットの選択肢を出す（D-116）。
 import type { ArchitectureInput } from 'estimator';
 import {
   useId,
@@ -12,6 +13,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from 'react';
 import { BrandMark, BRANDS, brandColor, type BrandId } from './brand-logos.tsx';
 import { Info } from './info.tsx';
@@ -59,6 +61,24 @@ const LANE_DASH: Partial<Record<LaneId, string>> = {
   holes: '2 3',
 };
 
+/** 箱から部品を差し替える（D-116）。slotsOf は箱に当たるスロット（無ければ空）、render はスロットの選択肢（選ぶと close を呼ぶ）。 */
+export type DiagramParts = {
+  slotsOf: (nodeId: string) => readonly string[];
+  render: (slot: string, close: () => void) => ReactNode;
+};
+
+/** 差し替えられる箱の印（角の ⇄。色だけに頼らない）。 */
+function SwapMark() {
+  return (
+    <span
+      aria-hidden
+      className="absolute top-0 right-0.5 text-[10px] leading-none text-primary"
+    >
+      ⇄
+    </span>
+  );
+}
+
 const groupTitle = (account: string, brand?: BrandId) =>
   brand ? BRANDS[brand].title : account;
 
@@ -66,12 +86,15 @@ export function SystemDiagram({
   architecture,
   pages,
   caption,
+  parts,
 }: {
   architecture: ArchitectureInput;
   /** ページの見取り図（流れの凡例にページの名前を添える。省略可）。 */
   pages?: readonly ResolvedPage[] | undefined;
   /** 図の下の注記。 */
   caption?: string;
+  /** 箱から部品を差し替える（選んでいる構成のカードだけ。D-116）。 */
+  parts?: DiagramParts | undefined;
 }) {
   // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。カルーセルのカード・畳んだ欄の中でも同じ判定）
   const wrap = useRef<HTMLDivElement>(null);
@@ -113,7 +136,8 @@ export function SystemDiagram({
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200/40">
         <svg
           // 縦の図は箱が押せるボタンなので img にしない（img の中のボタンは読み上げに出ない）
-          role={tall ? 'group' : 'img'}
+          // 差し替えられる箱（ボタン）があるときも同じ
+          role={tall || parts ? 'group' : 'img'}
           aria-label={diagramSummary(model, title)}
           // 中身の大きさの viewBox で、カードの幅に合わせて縮める（横の図は広げない。狭い画面では最小の幅を保ち、枠の中で横にスクロールする）。
           // 縦の図は最小の幅を持たず（横にスクロールしない）、字が読めるよう 1.5 倍まで広げて真ん中に置く
@@ -169,6 +193,15 @@ export function SystemDiagram({
                 model={model}
                 title={title(n.group)}
                 brand={model.groups.find((g) => g.account === n.group)?.brand}
+                parts={parts}
+              />
+            ) : parts && parts.slotsOf(n.id).length > 0 ? (
+              <SwappableNode
+                key={n.id}
+                n={n}
+                model={model}
+                title={title(n.group)}
+                parts={parts}
               />
             ) : (
               <g key={n.id} data-node={n.id}>
@@ -213,6 +246,12 @@ export function SystemDiagram({
       {tall && (
         <p className="text-xs opacity-60">
           狭い幅なので縦に並べた。箱を押すと、事業者・種類・通る流れが出る。
+          {parts && '⇄ の箱では部品も替えられる。'}
+        </p>
+      )}
+      {!tall && parts && (
+        <p className="text-xs opacity-60">
+          ⇄ の付いた箱を押すと、その部品を替えられる。
         </p>
       )}
       <Legend model={model} active={active} onToggle={setActive} />
@@ -523,12 +562,15 @@ function CompactNode({
   model,
   title,
   brand,
+  parts,
 }: {
   n: DiagramNode;
   model: DiagramModel;
   title: string;
   brand: BrandId | undefined;
+  parts: DiagramParts | undefined;
 }) {
+  const slots = parts?.slotsOf(n.id) ?? [];
   const lanes = lanesThrough(model, n.id);
   const laneLabel = (l: LaneId) =>
     model.lanes.find((x) => x.id === l)?.label ?? l;
@@ -536,49 +578,134 @@ function CompactNode({
     <g data-node={n.id}>
       <foreignObject x={n.x} y={n.y} width={model.node.w} height={model.node.h}>
         <Info
-          label={`${title}: ${n.label}（${n.caption}）の説明`}
-          className={`flex h-full w-full cursor-pointer items-center justify-center rounded-md bg-base-100 px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+          label={`${title}: ${n.label}（${n.caption}）の${slots.length > 0 ? '説明と差し替え' : '説明'}`}
+          interactive={slots.length > 0}
+          className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md bg-base-100 px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
             n.compute
               ? 'border-[1.75px] border-base-content font-semibold'
               : 'border border-base-content/35'
           }`}
           trigger={
-            <span className="line-clamp-3 [overflow-wrap:anywhere]">
-              {n.short}
-            </span>
+            <>
+              <span className="line-clamp-3 [overflow-wrap:anywhere]">
+                {n.short}
+              </span>
+              {slots.length > 0 && <SwapMark />}
+            </>
           }
         >
-          <div className="space-y-1.5" data-node-detail={n.id}>
-            <div className="flex items-center gap-1 text-xs opacity-70">
-              {brand && <BrandMark brand={brand} size={12} />}
-              {title}・{n.caption}
-            </div>
-            <div className="font-semibold">{n.label}</div>
-            {n.compute && (
-              <div className="text-xs opacity-70">
-                処理を動かす部品（太い枠）
+          {(close) => (
+            <div className="space-y-1.5" data-node-detail={n.id}>
+              <div className="flex items-center gap-1 text-xs opacity-70">
+                {brand && <BrandMark brand={brand} size={12} />}
+                {title}・{n.caption}
               </div>
-            )}
-            {lanes.length > 0 && (
-              <ul className="space-y-0.5 text-xs" aria-label="通る流れ">
-                {lanes.map((l) => (
-                  <li key={l} className="flex items-center gap-1.5">
-                    <svg aria-hidden width="14" height="6" className="shrink-0">
-                      <line
-                        x1="0"
-                        x2="14"
-                        y1="3"
-                        y2="3"
-                        style={{ stroke: LANE_COLOR[l], strokeWidth: 2.5 }}
-                        strokeDasharray={LANE_DASH[l]}
-                      />
-                    </svg>
-                    {laneLabel(l)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+              <div className="font-semibold">{n.label}</div>
+              {n.compute && (
+                <div className="text-xs opacity-70">
+                  処理を動かす部品（太い枠）
+                </div>
+              )}
+              {lanes.length > 0 && (
+                <ul className="space-y-0.5 text-xs" aria-label="通る流れ">
+                  {lanes.map((l) => (
+                    <li key={l} className="flex items-center gap-1.5">
+                      <svg
+                        aria-hidden
+                        width="14"
+                        height="6"
+                        className="shrink-0"
+                      >
+                        <line
+                          x1="0"
+                          x2="14"
+                          y1="3"
+                          y2="3"
+                          style={{ stroke: LANE_COLOR[l], strokeWidth: 2.5 }}
+                          strokeDasharray={LANE_DASH[l]}
+                        />
+                      </svg>
+                      {laneLabel(l)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {slots.map((slot) => (
+                <div key={slot} className="border-t border-base-300 pt-1.5">
+                  {parts!.render(slot, close)}
+                </div>
+              ))}
+            </div>
+          )}
+        </Info>
+      </foreignObject>
+    </g>
+  );
+}
+
+/** 横の図の、部品を差し替えられる箱: 箱そのものがボタンで、押すとそのスロットの選択肢を出す（D-116）。 */
+function SwappableNode({
+  n,
+  model,
+  title,
+  parts,
+}: {
+  n: DiagramNode;
+  model: DiagramModel;
+  title: string;
+  parts: DiagramParts;
+}) {
+  return (
+    <g data-node={n.id} data-swappable="true">
+      <rect
+        x={n.x}
+        y={n.y}
+        width={model.node.w}
+        height={model.node.h}
+        rx={6}
+        style={{
+          fill: 'var(--color-base-100)',
+          stroke: n.compute
+            ? 'var(--color-base-content)'
+            : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)',
+          strokeWidth: n.compute ? 1.75 : 1,
+        }}
+      />
+      <foreignObject
+        x={n.x + 2}
+        y={n.y + 2}
+        width={model.node.w - 4}
+        height={model.node.h - 4}
+      >
+        <Info
+          label={`${title}: ${n.label}（${n.caption}）を替える`}
+          interactive
+          className="relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md px-0.5 text-left leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+          trigger={
+            <>
+              <span className="text-[10px] opacity-60">{n.caption}</span>
+              <span
+                className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
+              >
+                {n.label}
+              </span>
+              <SwapMark />
+            </>
+          }
+        >
+          {(close) => (
+            <div className="space-y-1.5" data-node-detail={n.id}>
+              <div className="text-xs opacity-70">
+                {title}・{n.caption}
+              </div>
+              <div className="font-semibold">{n.label}</div>
+              {parts.slotsOf(n.id).map((slot) => (
+                <div key={slot} className="border-t border-base-300 pt-1.5">
+                  {parts.render(slot, close)}
+                </div>
+              ))}
+            </div>
+          )}
         </Info>
       </foreignObject>
     </g>

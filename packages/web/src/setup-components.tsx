@@ -1,7 +1,7 @@
 // 始める画面の部品の選択（D-45）。構成とフレームワークの組み合わせで選べるスロットを game の setupSlots から引き、
 // スロットごとにチップで選ぶ（既定は未選択）。チップは ① インフラの構成の選んでいるカードの、構成図の下に並べる（D-116）。
 // 事実の説明（note）と短い説明（フレーバー）はチップの ⓘ に置く。「不適切」の印は出さない（説明だけで正解が分からないようにする）。
-// ③ 設定の欄は見積モードと共用（D-115）。
+// 構成図の箱を押したときの差し替え（PartOptions）も同じ判定で描く。③ 設定の欄は見積モードと共用（D-115）。
 // 状態と整合（ゲームの validSetupChoices・見積の normalizeInput）は各画面が持ち、ここは値・変更・注記を受けて描くだけ。
 import {
   componentConflict,
@@ -29,7 +29,7 @@ import { NameWithInfo } from './option-text.tsx';
 export type SetupChoices = Partial<Record<string, string>>;
 
 /**
- * スロットの並び（チップの行の順。D-116）。構成で選びたくなる DB・画像・API の置き場を先に、
+ * スロットの並び（チップの行の順・図の箱に複数のスロットが当たるときの順。D-116）。構成で選びたくなる DB・画像・API の置き場を先に、
  * 料金のプラン・バックアップ・メールなどを後に。ここに無いスロットは setupSlots の順で最後に足す。
  */
 const PART_ORDER: readonly string[] = [
@@ -139,7 +139,7 @@ export function PartChips({
 }: {
   stackIndex: number;
   framework: FrameworkId;
-  /** usePartSlots の結果。 */
+  /** usePartSlots の結果（図の箱の差し替えと同じもの）。 */
   slots: readonly SetupSlot[];
   /** 選んだ部品（選べなくなったものは呼び出し側で外してある）。 */
   value: SetupChoices;
@@ -153,7 +153,7 @@ export function PartChips({
   return (
     <section aria-label="部品" data-parts className="min-w-0 space-y-1.5">
       <p className="text-xs opacity-70">
-        部品（押すと替わる）
+        部品（押すと替わる。構成図の箱からも選べる）
         {note && <span className="block">{note}</span>}
       </p>
       <div className="space-y-1">
@@ -243,6 +243,83 @@ export function PartChips({
         })}
       </div>
     </section>
+  );
+}
+
+/**
+ * 構成図の箱を押したときの差し替え（D-116）: そのスロットの選択肢を縦に並べたボタン（名前・短い説明。吹き出しの中なので ⓘ は重ねない）。
+ * 選ぶと吹き出しを閉じる（close）。
+ */
+export function PartOptions({
+  slot: x,
+  stackIndex,
+  framework,
+  value,
+  onChange,
+  close,
+}: {
+  slot: SetupSlot;
+  stackIndex: number;
+  framework: FrameworkId;
+  value: SetupChoices;
+  onChange: (v: SetupChoices) => void;
+  close: () => void;
+}) {
+  const { picked, options } = slotView(x, stackIndex, framework, value);
+  return (
+    <div role="group" aria-label={`${x.label}を替える`} data-swap={x.slot}>
+      <div className="mb-1 text-xs font-semibold">
+        {x.label}を替える
+        {!picked && (
+          <span className="ml-1 badge badge-xs badge-warning">未選択</span>
+        )}
+      </div>
+      <ul className="space-y-1">
+        {options.map(({ o, other, selected, why }) => {
+          const flavor = componentFlavor(o);
+          return (
+            <li key={o.id} data-option={o.id}>
+              <button
+                type="button"
+                aria-pressed={selected}
+                disabled={why !== null}
+                aria-label={`${o.label}${why ? `（${why}）` : ''}`}
+                className={`flex w-full min-w-0 items-start gap-1.5 rounded-field px-2 py-1 text-left text-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                  selected
+                    ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
+                    : why
+                      ? 'cursor-default opacity-50'
+                      : 'cursor-pointer hover:bg-base-200'
+                }`}
+                onClick={() => {
+                  if (selected || why !== null) return;
+                  close();
+                  onChange({ ...value, [x.slot]: o.id });
+                }}
+              >
+                {other && <OtherMark o={o} size={12} />}
+                <span className="block min-w-0">
+                  <span className="block">
+                    {o.label}
+                    {selected && (
+                      <span className="ml-1 badge h-4 badge-xs px-1 badge-primary">
+                        選択中
+                      </span>
+                    )}
+                  </span>
+                  {flavor && (
+                    <span className="block font-normal opacity-70">
+                      {flavor}
+                    </span>
+                  )}
+                  {why && <span className="block font-normal">{why}</span>}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

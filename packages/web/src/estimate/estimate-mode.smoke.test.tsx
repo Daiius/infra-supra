@@ -505,7 +505,7 @@ describe('見積モードの画面', () => {
       cleanup();
     }
   });
-  it('W-39 部品は構成のカードのチップで選び、URL・月の費用・カードの題が替わる（D-116）', async () => {
+  it('W-39 部品は構成のカードのチップと構成図の箱で選び、URL・月の費用・カードの題が替わる（D-116）', async () => {
     window.history.replaceState(
       null,
       '',
@@ -530,6 +530,24 @@ describe('見積モードの画面', () => {
     expect(expectEstimate()).toContain('Vercel Pro + Neon（Launch）');
     expect(stackCard().getAttribute('aria-label')).toBe(
       'Vercel Pro + Neon（Launch） の構成',
+    );
+    // 図の Neon の箱を押して、吹き出しから DynamoDB に替える
+    fireEvent.click(
+      within(stackCard()).getByRole('button', { name: /Neon.*を替える$/ }),
+    );
+    const popover = screen.getByRole('dialog', { name: /Neon.*を替える$/ });
+    fireEvent.click(
+      within(
+        within(popover).getByRole('group', { name: 'DBを替える' }),
+      ).getByRole('button', { name: /^AWS: DynamoDB/, pressed: false }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(checked(DB)).toBe('dynamodb');
+    expect(new URLSearchParams(window.location.search).get('c.db')).toBe(
+      'dynamodb',
+    );
+    expect(stackCard().getAttribute('aria-label')).toBe(
+      'Vercel Pro + AWS DynamoDB の構成',
     );
   });
 });

@@ -715,8 +715,9 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(screen.getByRole('radio', { name: /^Vercel Pro/ }));
     expect(checked().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
     expect(current().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
-    // 選んでいるカードに構成図（要約つきの図・凡例・読み上げ用の一覧）。Vercel と Supabase の枠に分かれる
-    const diagram = within(current()).getByRole('img', { name: /^構成図: / });
+    // 選んでいるカードに構成図（要約つきの図・凡例・読み上げ用の一覧）。Vercel と Supabase の枠に分かれる。
+    // 箱から部品を差し替えられるので、図は img でなく group（D-116）
+    const diagram = within(current()).getByRole('group', { name: /^構成図: / });
     expect(diagram.querySelector('[data-group="vercel"]')).not.toBeNull();
     expect(diagram.querySelector('[data-group="supabase"]')).not.toBeNull();
     expect(
@@ -841,7 +842,7 @@ describe('ゲームモードの画面', () => {
     const card = current();
     const item = card.closest<HTMLElement>('[data-card]')!;
     expect(item.dataset.card).toBe('cloudflare');
-    const diagram = within(card).getByRole('img', { name: /^構成図: / });
+    const diagram = within(card).getByRole('group', { name: /^構成図: / });
     // カルーセルの位置を動かしたかを数える（jsdom はレイアウトしないので scrollLeft の代入を見る）
     const track = item.closest<HTMLElement>('.carousel')!;
     let scrolls = 0;
@@ -860,7 +861,9 @@ describe('ゲームモードの画面', () => {
     expect(card.dataset.stack).toBe('cloudflare-vinext-paid');
     expect(card.getAttribute('aria-label')).toMatch(/^Cloudflare Paid/);
     expect(card.querySelector('p')!.textContent).not.toBe(flavor);
-    expect(within(card).getByRole('img', { name: /^構成図: / })).toBe(diagram);
+    expect(within(card).getByRole('group', { name: /^構成図: / })).toBe(
+      diagram,
+    );
     expect(scrolls).toBe(0);
     // ほかの事業者へ移るとカルーセルが動き、CF のカードは最後に選んだ Paid のまま薄く出る
     fireEvent.click(screen.getByRole('radio', { name: /^Vercel Hobby/ }));
@@ -1057,7 +1060,7 @@ describe('ゲームモードの画面', () => {
     expect(document.body.textContent).not.toMatch(/公式のアダプターが無いので/);
   });
 
-  it('W-39 始める画面: 部品は構成のカードのチップで選び、未選択・他の事業者の部品も見分けられる（D-116）', async () => {
+  it('W-39 始める画面: 部品は構成のカードのチップと構成図の箱で選び、未選択・他の事業者の部品も見分けられる（D-116）', async () => {
     await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
@@ -1106,6 +1109,33 @@ describe('ゲームモードの画面', () => {
     expect(
       within(current()).getByRole('list', { name: '構成図の部品' }).textContent,
     ).toContain('DynamoDB');
+    // 図の箱から差し替える: DB の箱（⇄）を押すと選択肢の吹き出しが出て、focus が移る（キーボードで続けて選べる）
+    const box = within(current()).getByRole('button', {
+      name: /DynamoDB.*を替える$/,
+    });
+    expect(box.closest('[data-swappable="true"]')).not.toBeNull();
+    // Esc で閉じると箱に focus が戻る
+    fireEvent.click(box);
+    expect(screen.getByRole('dialog')).toBeDefined();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(box);
+    fireEvent.click(box);
+    const popover = screen.getByRole('dialog', { name: /DynamoDB.*を替える$/ });
+    expect(document.activeElement).toBe(popover);
+    const swap = within(popover).getByRole('group', { name: 'DBを替える' });
+    expect(
+      within(swap).getByRole('button', { pressed: true }).textContent,
+    ).toMatch(/AWS: DynamoDB/);
+    fireEvent.click(
+      within(swap).getByRole('button', { name: /^Supabase/, pressed: false }),
+    );
+    // 選ぶと吹き出しは閉じ、チップ・題も同じ値になる
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(current().getAttribute('aria-label')).toBe(
+      'Vercel Pro + Supabase Pro の構成',
+    );
+    within(db()).getByRole('button', { name: /^Supabase/, pressed: true });
   });
 
   it('W-40 始める画面: 部品どうしの依存で選べない部品のチップは灰色で、理由をツールチップと ⓘ に出す（D-116）', async () => {
