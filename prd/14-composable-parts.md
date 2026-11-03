@@ -1,6 +1,6 @@
 # 14. 部品を事業者をまたいで組む（役割と接続の口）
 
-> 状態: **設計（決定 D-114）・未実装**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
+> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
 > 後で検討する候補として残したのは、リージョンの要素（CP-08）と接続の数の上限（CP-09）。
 > 出発点（2026-11-03・ユーザー）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？ 根本的に少し変えるところがあるかもしれませんが...」
 > 料金・制限の数値は、§2 で公式の文書から取ったもの（URL と取得日つき）か、catalog に既にあるもの（出典は catalog の料金データ）だけを書く。
@@ -290,11 +290,32 @@ type ConnectionRule = {
 | 段 | 中身 | 金額・保存 |
 |---|---|---|
 | 段 0 | この文書の論点を決める（CP-01〜） | — |
-| 段 1 | 土台のノードに `role` の印。`ConnectionRule`・`PartDef` の型と、今の組を規則に移し替え（`CROSS_PAIRS` を規則から導く）。差し方を役割から導く（`hostImageShape` 等を置き換え） | **不変**（golden・基準プレイ・保存） |
+| 段 1（済み・§3.11） | 土台のノードに `role` の印。`ConnectionRule`・`PartDef` の型と、今の組を規則に移し替え（`CROSS_PAIRS` を規則から導く）。差し方を役割から導く（`hostImageShape` 等を置き換え） | **不変**（golden・基準プレイ・保存） |
 | 段 2 | 公開の口の組を足す: **Vercel × DynamoDB / Aurora（DB。Marketplace）だけ**（CP-15）。後の段の候補: Vercel × S3 + CloudFront（画像）・Cloudflare × Neon（Hyperdrive の接続先違い）・Google Cloud × R2 の広げ方の見直し・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
 | 段 3 | 中継を部品として自動で足す（Static IPs・NAT・RDS Proxy・Tunnel）。単価を取ってから。`blocked` の理由を画面に出す | 新しい組だけ |
 | 段 4 | 画面: 事業者で絞る・構成図の `links`（§6） | — |
 | 段 5 | （任意）案 B へ: 土台も部品の集まりにする。段 1〜4 の規則と部品はそのまま使う | 全部の取り直し |
+
+### 3.11 段 1 の実装（2026-11-03）
+
+- **役割の印**: estimator の `ArchNodeSchema` に任意の `role`（`ROLES` の 10。計算は読まない）を足し、土台の構成の経路にあるノードに付けた。
+  `sql-db` は**アプリの DB の役割**として使う（DynamoDB・Firestore・KV を DB に使う形（`kv-db`）も含む。ISR のキャッシュの KV・OpenNext のタグの DynamoDB は `kv`）。
+  API Gateway は Lambda の前の HTTP の口として `compute`。OpenNext の SQS（再生成の列）は 10 の役割に当てはまらないので印を付けず、テストで例外として明示した。
+  転送を数えるだけのノード（`aws-out` など）は部品ではないので印を持たない（`isTransferNode`）。
+- **型と規則**（`packages/catalog/src/stacks/connections.ts`）: `Port`（5）・`ConnectionRule`（呼ぶ側の事業者・役割 → 受ける側の事業者・役割・口、フレームワーク、判定、根拠、出典）・`PartDef`（部品の役割・受ける口・土台の側でつながる役割 `attachesTo`・振る舞い `as`）。
+  `CONNECTION_RULES` は今の組をつながり方ごとにまとめた 15 の規則（閲覧者 → R2・Bunny の公開の URL、土台の処理 → R2・Bunny への書き込み、Bunny の Pull Zone → Amplify・VPS、ブラウザ → Workers・AWS・VPS の API、Next.js・Astro のサーバー → Workers の API、Worker → VPS の API、土台の処理 → Neon・SES・Resend）。
+  出典は移し替える前の `CROSS_PAIRS` の URL と取得日をそのまま引き継いだ（増減なし。同じ URL を別の日に確かめたものは両方の日を残す）。
+- **部品**（`stacks/parts.ts`・メールは `stacks/email.ts` の `EMAIL_PARTS`）: 差せる土台（`hosts`）とフレームワークは `partOptions` が規則から導く。部品の id・名前・説明は変えていない（CP-13）。
+  Bunny の前段の CDN は同じ id で 2 つの部品（Amplify の配信をオリジンにする `attachesTo: edge-cdn`・VPS をオリジンにする `attachesTo: compute`）。
+- **転送（CP-06）**: `OUTBOUND`（送り出し）と `INBOUND`（受け取り）の項目を課金先の事業者（とプラン）で引き、項目のある側だけノードを作る（`transferNodes`）。
+  送り出しで数えるのは Lambda（東京 → インターネット）・Netlify の関数（転送量）・Cloud Run（Premium Tier）で、Vercel の関数・Amplify の SSR は項目が無い（未確認・数えない）。受け取りは今の受け手（R2・Workers・S3・Bunny・Neon・VPS）のどれにも項目が無い。
+- **差し方**（`stacks/cross.ts`）: 画像は役割から外すノード（画像の経路の置き場・変換と、画像を配るだけの CDN）と投稿の経路を導く（`imageShape`）。
+  API の置き場は、土台の API を動かす処理（api の経路の `compute`）・DB（`sql-db`・`db-proxy`）を役割で見つけ、使わなくなった処理・DB・転送のノードを外す。Blob のように土台の関数からだけ書ける置き場は、口（`binding` だけ）で見分ける。
+- **一致の確かめ**: 移し替える前と後で、全構成（隠した構成を含む）× フレームワーク × 部品（画像・API・DB・前段の CDN の直積と、全スロットの無作為の組を合わせて約 43 万）× 差し替えの途中の組の構成（`role` を除く）と Workload、
+  ゲームの始める画面のスロット・選択肢・依存・1 か月目の見込み・総当たりの最後の状態（約 3.7 万）を突き合わせた。違ったのは隠した Netlify の 1 点だけ（下）。`cross.test.ts` は選べる組と部品ごとの土台・フレームワークを移し替える前の一覧と突き合わせる。
+- **変わった 1 点**: Netlify（隠した構成）の SPA・静的書き出しで、画像を Cloudflare・Bunny に置き、API を Workers に置いた組。今までは使わなくなった `netlify-out`（R2 への書き込みの転送）が経路の外に残っていた（AWS の `aws-out` は外していた）。
+  使わなくなった転送のノードを一律に外すようにしたので、このノードが無くなった。経路の外で使用量 0 なので、明細と金額は変わらない（5,810 の組で明細の行・金額の一致を確かめた）。
+- **段 1 で入れていないもの**: 構成図の `links`（CP-17）は段 4。灰色で理由を出す（CP-04）・同じ事業者 / 他の事業者（CP-12）・手間の段階化（CP-11）・Vercel × DynamoDB / Aurora（CP-15）は後の段。
 
 ## 4. 出典の扱い
 
