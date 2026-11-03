@@ -12,7 +12,7 @@ const card = (title: string | RegExp) =>
   screen.getByRole('heading', { level: 2, name: title }).closest('section')!;
 const combo = (label: string) =>
   screen.getByRole('combobox', { name: new RegExp(`^${label}`) });
-/** ③ 部品・④ 設定の欄（ゲームと共用のラジオの枠。D-115）。名前は見出しの文字で始まる。 */
+/** 部品の行（構成のカードのチップ。D-116）・③ 設定の欄（ゲームと共用のラジオの枠。D-115）。名前は見出しの文字で始まる。 */
 const group = (label: string) =>
   screen.getByRole('group', { name: new RegExp(`^${label}`) });
 const queryGroup = (label: string) =>
@@ -32,18 +32,32 @@ const pick = (name: 'stack' | 'framework', value: string) => {
   fireEvent.click(r);
   expect(r.checked).toBe(true);
 };
-/** 枠の中で選んでいるラジオの値。 */
-const checked = (label: string) =>
-  within(group(label))
+/** 枠の中で選んでいる値（部品の行は選択中のチップの部品、設定の欄はラジオの値）。 */
+const checked = (label: string) => {
+  const g = group(label);
+  if (g.hasAttribute('data-slot'))
+    return (
+      g.querySelector('[data-selected="true"]')?.getAttribute('data-option') ??
+      undefined
+    );
+  return within(g)
     .getAllByRole<HTMLInputElement>('radio')
     .find((r) => r.checked)?.value;
-/** 枠の中で値のラジオを選ぶ。 */
-const choose = (label: string, value: string) =>
+};
+/** 枠の中で値を選ぶ（部品の行はチップ、設定の欄はラジオ）。 */
+const choose = (label: string, value: string) => {
+  const g = group(label);
+  if (g.hasAttribute('data-slot')) {
+    const chip = g.querySelector<HTMLElement>(`[data-option="${value}"]`)!;
+    fireEvent.click(within(chip).getByRole('button', { pressed: false }));
+    return;
+  }
   fireEvent.click(
-    within(group(label))
+    within(g)
       .getAllByRole<HTMLInputElement>('radio')
       .find((r) => r.value === value)!,
   );
+};
 
 /** ① の選んでいる構成のカード。 */
 const stackCard = () =>
@@ -362,7 +376,7 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    // 順: ① インフラの構成 → ② フレームワーク → ③ 部品 → ④ 設定
+    // 順: ① インフラの構成（部品のチップはカードの中。D-116） → ② フレームワーク → ③ 設定
     const stackGroup = screen.getByRole('radiogroup', {
       name: '① インフラの構成',
     });
@@ -468,10 +482,12 @@ describe('見積モードの画面', () => {
         name: 'チームの人数（管理画面を使う人）',
       }).tagName,
     ).toBe('INPUT');
-    // 部品の欄（DB のバックアップ）はゲームと同じラジオの枠（D-115）
+    // 部品（DB のバックアップ）はゲームと同じ、構成のカードのチップの行（D-115・D-116）
     expect(
-      within(group('DB のバックアップ')).getAllByRole('radio').length,
-    ).toBeGreaterThan(1);
+      within(group('DB のバックアップ')).getAllByRole('button', {
+        pressed: false,
+      }).length,
+    ).toBeGreaterThan(0);
   });
   it('W-38 DB を他の事業者に替えると、構成のカードの題・月の費用の見出しが実際の組になる（Neon は D-77・AWS は D-114 段 2）', async () => {
     for (const [db, name] of [
@@ -488,5 +504,32 @@ describe('見積モードの画面', () => {
       expect(stackCard().getAttribute('aria-label')).toBe(`${name} の構成`);
       cleanup();
     }
+  });
+  it('W-39 部品は構成のカードのチップで選び、URL・月の費用・カードの題が替わる（D-116）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    // 前の ③ 部品の欄は無く、チップは選んでいる構成のカードの中（見積は全部のスロットが埋まっていて未選択は無い）
+    expect(screen.queryByRole('heading', { name: '③ 部品' })).toBeNull();
+    const parts = stackCard().querySelector('section[data-parts]')!;
+    expect(parts).not.toBeNull();
+    expect(parts.querySelector('[data-unselected]')).toBeNull();
+    // 名前は正規表現の頭（「DB のバックアップ」の行に当てない）
+    const DB = 'DB(?! のバックアップ)';
+    expect(checked(DB)).toBe('supabase');
+    // チップで Neon にする
+    choose(DB, 'neon');
+    expect(checked(DB)).toBe('neon');
+    expect(new URLSearchParams(window.location.search).get('c.db')).toBe(
+      'neon',
+    );
+    expect(expectEstimate()).toContain('Vercel Pro + Neon（Launch）');
+    expect(stackCard().getAttribute('aria-label')).toBe(
+      'Vercel Pro + Neon（Launch） の構成',
+    );
   });
 });

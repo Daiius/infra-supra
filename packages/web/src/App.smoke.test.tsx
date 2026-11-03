@@ -7,7 +7,9 @@ import {
   advance,
   expectGameScreen,
   monthHeading,
+  pickPart,
   renderApp,
+  slotGroup,
   startGame,
   useSmokeEnv,
   type Setup,
@@ -548,11 +550,7 @@ describe('ゲームモードの画面', () => {
     expect(chosenOf('personal')).toBe('cache-components');
     expect(sources()).toContain('cc-dynamic');
     // ISR のキャッシュを「キャッシュしない」に: 行（チップ）は毎回描く、見取り図も同じ
-    fireEvent.click(
-      within(
-        screen.getByRole('group', { name: /^ISR のキャッシュ/ }),
-      ).getByRole('radio', { name: /^キャッシュしない/ }),
-    );
+    pickPart('キャッシュしない', slotGroup('ISR のキャッシュ'));
     expect(chosenOf('personal')).toBe('ssr');
     expect(sources()).not.toContain('cc-dynamic');
     expect(sources()).not.toContain('cc-cached');
@@ -1059,6 +1057,88 @@ describe('ゲームモードの画面', () => {
     expect(document.body.textContent).not.toMatch(/公式のアダプターが無いので/);
   });
 
+  it('W-39 始める画面: 部品は構成のカードのチップで選び、未選択・他の事業者の部品も見分けられる（D-116）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    pick(/^受託先の業務アプリの運用/);
+    pick(/^Vercel Pro/);
+    pick(/^Next\.js（App Router）/);
+    // 前の ③ 部品の欄は無く、部品のチップは選んでいる構成のカードの中（構成図の下）
+    expect(screen.queryByRole('heading', { name: '③ 部品' })).toBeNull();
+    const parts = current().querySelector('section[data-parts]')!;
+    expect(parts).not.toBeNull();
+    expect(
+      document.querySelectorAll('section[data-parts]').length,
+      '選んでいないカードにはチップを出さない',
+    ).toBe(1);
+    expect(
+      current()
+        .querySelector('[data-diagram="system"]')!
+        .compareDocumentPosition(parts) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // 選ぶ前のスロットは「未選択」（D-45）。始めるボタンは押せないまま
+    const db = () => slotGroup('DB');
+    expect(db().getAttribute('aria-label')).toBe('DB（未選択）');
+    expect(db().hasAttribute('data-unselected')).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' })
+        .disabled,
+    ).toBe(true);
+    // 同じ事業者の部品が先、他の事業者の部品はロゴ付き
+    const chips = [...db().querySelectorAll<HTMLElement>('li[data-option]')];
+    expect(chips[0]!.textContent).toMatch(/^Supabase/);
+    expect(
+      chips
+        .find((c) => /AWS: DynamoDB/.test(c.textContent ?? ''))!
+        .querySelector('[data-brand="aws"]'),
+    ).not.toBeNull();
+    // チップを押すと、その部品に替わり、カードの題（実際の組）と図が替わる
+    pickPart('AWS: DynamoDB（オンデマンド）', db());
+    expect(db().getAttribute('aria-label')).toBe('DB');
+    expect(current().getAttribute('aria-label')).toBe(
+      'Vercel Pro + AWS DynamoDB の構成',
+    );
+    expect(
+      within(current()).getByRole('list', { name: '構成図の部品' }).textContent,
+    ).toContain('DynamoDB');
+  });
+
+  it('W-40 始める画面: 部品どうしの依存で選べない部品のチップは灰色で、理由をツールチップと ⓘ に出す（D-116）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    pick(/^記事コミュニティ/);
+    pick(/^さくらの VPS 2GB/);
+    pick(/^Vite（SPA）/);
+    const apiCache = () => slotGroup('API の応答のキャッシュ');
+    const chip = () =>
+      [...apiCache().querySelectorAll<HTMLElement>('li[data-option]')].find(
+        (c) => /^前段の CDN でキャッシュ/.test(c.textContent ?? ''),
+      )!;
+    expect(chip().getAttribute('data-available')).toBe('false');
+    expect(chip().getAttribute('title')).toMatch(
+      /^前段の CDN でキャッシュ.*（.+）$/,
+    );
+    expect(
+      within(chip()).getByRole<HTMLButtonElement>('button', {
+        name: /^前段の CDN でキャッシュ/,
+        pressed: false,
+      }).disabled,
+    ).toBe(true);
+    fireEvent.click(
+      within(chip()).getByRole('button', { name: /が選べない理由$/ }),
+    );
+    expect(screen.getByRole('tooltip').textContent).not.toBe('');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // 前段の CDN を置くと選べる
+    pickPart('Cloudflare（静的と画像だけ）', slotGroup('前段の CDN'));
+    expect(chip().getAttribute('data-available')).toBe('true');
+  });
   it('W-37 始める画面: Vercel の DB に AWS の部品が短い名前で出て、選ぶと構成のカードの題が実際の組になる（D-114 段 2）', async () => {
     await renderApp();
     await startGame({
@@ -1066,12 +1146,10 @@ describe('ゲームモードの画面', () => {
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
       beforeStart: () => {
-        const db = screen.getByRole('group', {
-          name: /^DB(?! のバックアップ)/,
-        });
-        const names = within(db)
-          .getAllByRole('radio')
-          .map((r) => r.closest('label')!.textContent ?? '');
+        const db = slotGroup('DB');
+        const names = [...db.querySelectorAll('li[data-option]')].map(
+          (li) => li.textContent ?? '',
+        );
         for (const n of [
           'AWS: DynamoDB（オンデマンド）',
           'AWS: Aurora Serverless v2（最小 0.5 ACU）',
@@ -1082,11 +1160,7 @@ describe('ゲームモードの画面', () => {
         expect(names.some((x) => x.includes('Vercel の Marketplace）'))).toBe(
           false,
         );
-        fireEvent.click(
-          within(db).getByRole('radio', {
-            name: /^AWS: DynamoDB（オンデマンド）/,
-          }),
-        );
+        pickPart('AWS: DynamoDB（オンデマンド）', db);
         expect(
           document
             .querySelector<HTMLElement>(

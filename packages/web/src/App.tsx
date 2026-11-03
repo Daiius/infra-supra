@@ -39,7 +39,6 @@ import {
 import { OptionText } from './option-text.tsx';
 import { commitmentMeta } from './commitment-meta.ts';
 import {
-  SetupComponents,
   SetupCostPreview,
   SetupRevalidate,
   type SetupChoices,
@@ -330,6 +329,11 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               comments={commentsChoosable ? comments : undefined}
               routes={routes}
               routeNotice={(i) => routeNotice({ stackIndex: i })}
+              // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
+              onComponentsChange={(v) =>
+                setParts(validSetupChoices(scenario, stack, framework, v))
+              }
+              partsNote="構成の中の役割ごとに選ぶ（始める前なので手間はかからない）"
             />
           </div>
           {/* ② フレームワークと描き方（構成と同列の判断。D-35）。選んでいる構成に載せられないものは選べない（D-113） */}
@@ -370,16 +374,6 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               notice={fallbackNotice}
             />
           </div>
-          <SetupComponents
-            scenario={scenario}
-            stackIndex={stack}
-            framework={framework}
-            value={parts}
-            // 選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
-            onChange={(v) =>
-              setParts(validSetupChoices(scenario, stack, framework, v))
-            }
-          />
           <SetupRevalidate
             scenario={scenario}
             stackIndex={stack}
