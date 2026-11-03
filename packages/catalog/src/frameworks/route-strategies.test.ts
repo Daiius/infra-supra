@@ -18,6 +18,7 @@ import {
 import {
   applyRouteStrategies,
   FRAMEWORK_PRESETS,
+  perPageShellFramework,
   presetPlan,
   ROUTE_STRATEGIES,
   ROUTE_STRATEGY_ORDER,
@@ -277,6 +278,60 @@ describe('applyRouteStrategies', () => {
     expect(article).toMatchObject({ rendering: 'spa', cacheSeconds: 300 });
     expect(personal!.rendering).toBe('spa');
     expect(personal).not.toHaveProperty('cacheSeconds');
+  });
+
+  it('ページの部品が呼ぶ API（記事の apiCalls。D-109）は、どの描き方に書き換えても記事のルートに残る', () => {
+    expect(w.routes[0]!.apiCalls).toBe(1);
+    const ctx = {
+      spa: ARTICLE_COMMUNITY_SPA,
+      minutesPerBuild: { base: 1, perThousandPages: 0.5 },
+      build: { updatesPerMonth: 10 },
+    };
+    for (const strategy of [
+      'static-build',
+      'cached-ttl',
+      'ssr',
+      'shell-api',
+    ] as const)
+      expect(
+        applyRouteStrategies(w, { article: { strategy } }, ctx).routes[0]!
+          .apiCalls,
+      ).toBe(1);
+  });
+
+  it('記事ごとの枠（S5 の shellPerPage。D-109）: 枠を閲覧のたびに読み、記事のページの数だけビルドする（S1 と同じ式）', () => {
+    const ctx = {
+      spa: ARTICLE_COMMUNITY_SPA,
+      minutesPerBuild: { base: 1, perThousandPages: 0.5 },
+      build: { updatesPerMonth: 10 },
+    };
+    const out = applyRouteStrategies(
+      w,
+      { article: { strategy: 'shell-api', shellPerPage: true } },
+      ctx,
+    );
+    expect(out.routes[0]).toMatchObject({
+      rendering: 'spa',
+      shellPerView: true,
+      shellKB: ARTICLE_COMMUNITY_SPA.shellKB,
+    });
+    const s1 = applyRouteStrategies(
+      w,
+      { article: { strategy: 'static-build' } },
+      ctx,
+    );
+    expect(out.build).toEqual(s1.build);
+    // 入口だけの S5 はビルドしない
+    const single = applyRouteStrategies(
+      w,
+      { article: { strategy: 'shell-api' } },
+      ctx,
+    );
+    expect(single.build).toBeUndefined();
+    expect(single.routes[0]).not.toHaveProperty('shellPerView');
+    expect(perPageShellFramework('vite-spa')).toBe(false);
+    for (const fw of ['nextjs', 'astro', 'nextjs-export'] as const)
+      expect(perPageShellFramework(fw)).toBe(true);
   });
 
   it('S6（Astro）: 個人向けのページを、1 日の期限でキャッシュする枠と、閲覧ごとの島のリクエスト（SSR の 4 割の CPU）に分ける（D-108）', () => {

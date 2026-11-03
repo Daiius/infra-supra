@@ -67,6 +67,9 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
         revalidateSeconds: 300,
         processing: page,
         cachedServeCpuMs: 2,
+        // 記事のページの部品（コメント欄・いいね）がブラウザから呼ぶ API: 閲覧 1 回に 1 回（読み込みと投稿。perPage.apiCalls と
+        // 同じ値を記事のルートに付けた。記事のページをどう描いても同じで、コメントを HTML に含めると読み込みの分が無くなる。D-109・RS-02）
+        apiCalls: 1,
       },
       {
         id: 'personal',

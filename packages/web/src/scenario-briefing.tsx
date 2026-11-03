@@ -300,7 +300,8 @@ function FrameworkCard({
           <div className="border-t border-base-300 pt-2">
             <WireframeLegend pages={pages} />
             <p className="mt-1 text-xs opacity-60">
-              見取り図はゲーム上の仮定。設定「コメントの描き方」を変えると、コメント欄の札も変わる。
+              見取り図はゲーム上の仮定。記事のページのコメント欄（③
+              ページの描き方の記事の行）を変えると、コメント欄の札も変わる。
             </p>
           </div>
         )}
@@ -329,7 +330,7 @@ export function FrameworkField({
   allowed: FrameworkId[];
   value: FrameworkId;
   onChange: (id: FrameworkId) => void;
-  /** 設定「コメントの描き方」（始める画面で選べるときだけ。見取り図のコメント欄が変わる。D-82）。 */
+  /** 記事のページの部品「コメント欄」（始める画面で選べるときだけ。見取り図のコメント欄が変わる。D-82）。 */
   comments?: number | undefined;
   /** フレームワークごとの、既定のページごとの描き方（選んでいる構成で。D-106）。 */
   routePlan?: (id: FrameworkId) => RoutePlanRow[];

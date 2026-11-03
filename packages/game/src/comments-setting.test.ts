@@ -1,6 +1,6 @@
-// 設定「コメントの描き方」（D-82）: 記事のページに含めると、コメントの投稿も記事のページを作り直す更新に数え
-// （オンデマンドの再生成・CloudFront の無効化・ビルドし直しが増える）、記事を開いたときのコメントの取得（API）が無くなる。
-// 時間の再検証では作り直しの回数は変わらない。SPA・受託では出さない。
+// 記事のページの部品「コメント欄」（D-82。段 4 で全体の設定からルートの部品に移した。D-109）: 記事のページに含めると、
+// コメントの投稿も記事のページを作り直す更新に数え（オンデマンドの再生成・CloudFront の無効化・ビルドし直しが増える）、
+// 記事を開いたときのコメントの取得（API）が無くなる。時間の再検証では作り直しの回数は変わらない。SPA・受託では出さない。
 import { resolveWorkload, WorkloadInputSchema } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
@@ -10,19 +10,20 @@ import {
   checkAction,
   COMMENTS_IN_BROWSER,
   COMMENTS_IN_PAGE,
+  commentsOf,
   DEFAULT_START_DATE,
   EFFORT,
-  hiddenSettings,
   newGame,
   newSave,
   parseSave,
   playMonth,
   replaySave,
+  partsOfComments,
   retryHintsOf,
+  routePartNote,
+  routePlanOf,
   setupCommentOptions,
   setupInvalidationEstimate,
-  settingFlavor,
-  settingNote,
   STACKS,
   withTurn,
   workloadFor,
@@ -49,8 +50,11 @@ const start = (
     framework,
     components,
     revalidateSec,
-    comments,
+    partsOfComments(sc, comments),
   );
+
+/** ゲームの状態のコメント欄の描き方。 */
+const commentsNow = (st: GameState) => commentsOf(sc, st.routeParts);
 
 /** 1 か月目の基準の PV の Workload（解決済み）。 */
 const resolved = (st: GameState) =>
@@ -65,11 +69,12 @@ const resolved = (st: GameState) =>
         platform: STACKS[st.stackIndex]!.provider,
         components: st.components,
         framework: st.framework,
+        routeParts: st.routeParts,
       }),
     ),
   );
 
-describe('コメントの描き方（D-82）', () => {
+describe('記事のページの部品「コメント欄」（D-82・D-109）', () => {
   it('記事のページがあるフレームワークでだけ選べる（SPA・受託では出さない）。既定はブラウザで読み込む', () => {
     for (const fw of ['nextjs', 'astro', 'nextjs-export'] as const) {
       const o = setupCommentOptions(sc, fw);
@@ -81,20 +86,47 @@ describe('コメントの描き方（D-82）', () => {
     }
     expect(setupCommentOptions(sc, 'vite-spa')).toEqual([]);
     expect(setupCommentOptions(CONTRACT_OPERATIONS, 'nextjs')).toEqual([]);
-    expect(
-      hiddenSettings({ scenario: CONTRACT_OPERATIONS, framework: 'astro' }),
-    ).toContain('comments');
-    expect(newGame(CF_PAID).settings.comments).toBe(COMMENTS_IN_BROWSER);
-    expect(start(CF_PAID, 300, 1).settings.comments).toBe(COMMENTS_IN_PAGE);
-    expect(start(CF_PAID, 300, 1, 'vite-spa').settings.comments).toBe(
-      COMMENTS_IN_BROWSER,
+    expect(setupCommentOptions(CONTRACT_OPERATIONS, 'astro')).toEqual([]);
+    expect(commentsNow(newGame(CF_PAID))).toBe(COMMENTS_IN_BROWSER);
+    expect(newGame(CF_PAID).routeParts).toBeUndefined();
+    expect(start(CF_PAID, 300, 1).routeParts).toEqual({
+      article: { comments: COMMENTS_IN_PAGE },
+    });
+    expect(start(CF_PAID, 300, 1, 'vite-spa').routeParts).toBeUndefined();
+    // 枠 + API の記事（S5）にも含める HTML が無い
+    expect(setupCommentOptions(sc, 'nextjs', { article: 'shell-api' })).toEqual(
+      [],
     );
-    expect(settingFlavor('comments', COMMENTS_IN_PAGE)).toBeTruthy();
+  });
+
+  it('描き方の表の記事の行に部品として出る（個人向けのページ・SPA には出ない）', () => {
+    const rows = routePlanOf(start(CF_PAID, 300, 1));
+    const article = rows.find((r) => r.route === 'article')!;
+    expect(article.parts).toEqual([
+      expect.objectContaining({
+        part: 'comments',
+        value: COMMENTS_IN_PAGE,
+        options: [
+          expect.objectContaining({ value: COMMENTS_IN_BROWSER }),
+          expect.objectContaining({ value: COMMENTS_IN_PAGE }),
+        ],
+      }),
+    ]);
+    expect(rows.find((r) => r.route === 'personal')!.parts).toEqual([]);
+    expect(
+      routePlanOf(start(CF_PAID, 300, 0, 'vite-spa')).every(
+        (r) => r.parts.length === 0,
+      ),
+    ).toBe(true);
   });
 
   it('記事のページに含めると、記事を開いたときのコメントの取得（API）が無くなり、書き込みの回数は変わらない', () => {
     const browser = resolved(start(CF_PAID, 300, 0));
     const inPage = resolved(start(CF_PAID, 300, 1));
+    // コメント欄の API は記事のページの部品として、記事のルートに数える（RS-02）
+    expect(
+      browser.sources.api?.find((x) => x.routeId === 'article')?.count,
+    ).toBeCloseTo(180_000, 6);
     // 30 万 PV × 1 回 → 記事（60%）の読み込み（書き込みでない 90%）が無くなる: 300,000 × (1 − 0.6 × 0.9) = 138,000
     expect(browser.classes.api.count).toBeCloseTo(300_000, 6);
     expect(inPage.classes.api.count).toBeCloseTo(138_000, 6);
@@ -110,10 +142,10 @@ describe('コメントの描き方（D-82）', () => {
       a.classes['isr-revalidate'].count,
       6,
     );
-    expect(settingNote(start(CF_PAID, 300, 1), 'comments')).toContain(
+    expect(routePartNote(start(CF_PAID, 300, 1), 'comments')).toContain(
       '作り直しの回数は増えない',
     );
-    expect(settingNote(start(CF_PAID, 300, 0), 'comments')).toBeUndefined();
+    expect(routePartNote(start(CF_PAID, 300, 0), 'comments')).toBeUndefined();
   });
 
   it('オンデマンドでは、コメントの投稿も記事のページを再検証する（更新 300 → 15,000 回・コメントは記事のページだけ）', () => {
@@ -126,7 +158,7 @@ describe('コメントの描き方（D-82）', () => {
     expect(b.classes['isr-revalidate'].count).toBeGreaterThan(
       a.classes['isr-revalidate'].count,
     );
-    expect(settingNote(start(CF_PAID, 0, 1), 'comments')).toContain(
+    expect(routePartNote(start(CF_PAID, 0, 1), 'comments')).toContain(
       'コメントの投稿のたびに',
     );
   });
@@ -157,25 +189,47 @@ describe('コメントの描き方（D-82）', () => {
     expect(y.classes['isr-revalidate'].count).toBeGreaterThan(
       x.classes['isr-revalidate'].count,
     );
-    expect(settingNote(start(CF_PAID, 0, 1, 'astro'), 'comments')).toContain(
+    expect(routePartNote(start(CF_PAID, 0, 1, 'astro'), 'comments')).toContain(
       'キャッシュを消す',
     );
   });
 
-  it('切り替えは手間 2（どちらの向きも）。SPA では選べない', () => {
-    expect(EFFORT.setting.comments).toBe(2);
+  it('切り替えは記事のページの部品の行動で、手間 2（どちらの向きも）。SPA・枠 + API・ほかのページでは選べない', () => {
+    expect(EFFORT.route.comments).toBe(2);
     const st = playMonth(start(CF_PAID, 300, 0));
-    const on = { type: 'set', key: 'comments', value: 1 } as const;
+    const on = {
+      type: 'route-part',
+      route: 'article',
+      part: 'comments',
+      value: 1,
+    } as const;
     expect(checkAction(st, on)).toEqual({ ok: true, cost: 2 });
     const back = playMonth(applyActions(st, [on]));
-    expect(back.settings.comments).toBe(COMMENTS_IN_PAGE);
-    expect(
-      checkAction(back, { type: 'set', key: 'comments', value: 0 }),
-    ).toEqual({ ok: true, cost: 2 });
+    expect(commentsNow(back)).toBe(COMMENTS_IN_PAGE);
+    expect(checkAction(back, on)).toMatchObject({ ok: false, reason: 'same' });
+    const off = { ...on, value: 0 };
+    expect(checkAction(back, off)).toEqual({ ok: true, cost: 2 });
+    expect(playMonth(applyActions(back, [off])).routeParts).toBeUndefined();
+    expect(checkAction(st, { ...on, route: 'personal' }).ok).toBe(false);
     const spa = playMonth(start(CF_PAID, 300, 0, 'vite-spa'));
     const r = checkAction(spa, on);
     expect(r.ok).toBe(false);
     expect(!r.ok && r.message).toContain('SPA');
+    const api = playMonth(
+      newGame(
+        CF_PAID,
+        1,
+        sc,
+        DEFAULT_START_DATE,
+        'nextjs',
+        undefined,
+        300,
+        undefined,
+        undefined,
+        { article: 'shell-api' },
+      ),
+    );
+    expect(checkAction(api, on)).toMatchObject({ ok: false });
   });
 
   it('保存の再生で同じになり、無い保存は既定（ブラウザで読み込む）で読む', () => {
@@ -187,17 +241,67 @@ describe('コメントの描き方（D-82）', () => {
         seed: 1,
         startDate: DEFAULT_START_DATE,
         revalidateSec: 0,
-        comments: 1,
+        routeParts: { article: { comments: 1 } },
       }),
       [],
     );
     const st = replaySave(parseSave(JSON.parse(JSON.stringify(save)))!);
-    expect(st.settings.comments).toBe(COMMENTS_IN_PAGE);
-    const { comments: _, ...old } = save;
-    expect(replaySave(parseSave(old)!).settings.comments).toBe(
-      COMMENTS_IN_BROWSER,
-    );
+    expect(commentsNow(st)).toBe(COMMENTS_IN_PAGE);
+    const { routeParts: _, ...old } = save;
+    expect(commentsNow(replaySave(parseSave(old)!))).toBe(COMMENTS_IN_BROWSER);
+    expect(parseSave({ ...save, routeParts: { article: 'x' } })).toBeNull();
     expect(parseSave({ ...save, comments: 'x' })).toBeNull();
+  });
+
+  it('版 2 の保存（始めたときの comments と、行動 set comments）は、記事のページの部品として読んで同じ結果になる（D-109）', () => {
+    const turns = [
+      [{ type: 'set', key: 'comments', value: 0 }],
+      [],
+      [{ type: 'set', key: 'comments', value: 1 }],
+      [{ type: 'set', key: 'isr', value: 60 }],
+    ];
+    const v2 = {
+      version: 2,
+      scenarioId: sc.id,
+      stackIndex: CF_PAID,
+      framework: 'nextjs',
+      seed: 7,
+      startDate: DEFAULT_START_DATE,
+      revalidateSec: 300,
+      comments: 1,
+      turns,
+    };
+    const v3 = {
+      ...v2,
+      version: 3,
+      comments: undefined,
+      routeParts: { article: { comments: 1 } },
+      turns: turns.map((t) =>
+        t.map((a) =>
+          a.key === 'comments'
+            ? {
+                type: 'route-part',
+                route: 'article',
+                part: 'comments',
+                value: a.value,
+              }
+            : a,
+        ),
+      ),
+    };
+    const a = replaySave(parseSave(v2)!);
+    const b = replaySave(parseSave(JSON.parse(JSON.stringify(v3)))!);
+    expect(a.history.length).toBe(5);
+    expect(a.cash).toBe(b.cash);
+    expect(a.routeParts).toEqual(b.routeParts);
+    expect(commentsNow(a)).toBe(COMMENTS_IN_PAGE);
+    expect(a.history.map((h) => h.infraCost)).toEqual(
+      b.history.map((h) => h.infraCost),
+    );
+    // 手間も同じ（2 か月目に外す・4 か月目に含める）
+    expect(a.history.map((h) => h.effort)).toEqual(
+      b.history.map((h) => h.effort),
+    );
   });
 
   it('OpenNext × オンデマンド × 従量で含めると無効化で所持金が尽き、ヒントがブラウザで読み込む形に戻す方向を出す', () => {

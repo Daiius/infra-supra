@@ -24,6 +24,7 @@ import {
   rebuildsStaticPages,
   applyRouteStrategies,
   serverIslandDelivery,
+  perPageShellFramework,
   defaultStrategy,
   FRAMEWORK_PRESETS,
   routeAudience,
@@ -46,6 +47,7 @@ import {
   withoutUnusedEmail,
 } from 'catalog';
 import {
+  apiCallsPerMonth,
   estimate as estimateArch,
   type EstimateResult,
   type ArchitectureInput,
@@ -153,8 +155,6 @@ export type Settings = {
   imageKB: number;
   variants: number;
   revalidateSec: number;
-  /** コメントの描き方（COMMENTS_IN_BROWSER・COMMENTS_IN_PAGE。D-82）。 */
-  comments: number;
   /** SSR の最適化の段数。 */
   ssrOptimizations: number;
 };
@@ -175,6 +175,54 @@ export const COMMENT_PAGES_PER_UPDATE = 1;
 
 /** プレイヤーが選んだページごとの描き方（ルートの id → 描き方。フレームワークの既定と分け方が同じものは持たない。D-107）。 */
 export type RouteOverrides = Readonly<Partial<Record<string, RouteStrategyId>>>;
+
+/**
+ * ページの部品の選択（段 4・D-109）。今は記事のページのコメント欄の描き方だけ（COMMENTS_IN_BROWSER・COMMENTS_IN_PAGE。D-82 の設定を
+ * ルートの部品に移した）。既定（ブラウザで読み込む）は持たない。
+ */
+export type RoutePartChoice = { comments?: number };
+
+/** ルートの id → ページの部品の選択（D-109）。 */
+export type RouteParts = Readonly<Partial<Record<string, RoutePartChoice>>>;
+
+/** ページの部品の種類（行動 route-part の part）。 */
+export type RoutePartKey = 'comments';
+
+/**
+ * 記事のページ（全員に同じ中身）のコメント欄の描き方（D-109）。選んでいなければブラウザで読み込む。
+ * コメントの無いシナリオ・記事のページの無いシナリオもブラウザで読み込む（値は効かない）。
+ */
+export function commentsOf(
+  sc: Pick<Scenario, 'template' | 'routeTraits'>,
+  parts: RouteParts | undefined,
+): number {
+  const r = publicRoute(sc);
+  return (r && parts?.[r.id]?.comments) ?? COMMENTS_IN_BROWSER;
+}
+
+/** 始める画面・見積モードのコメント欄の値（数）を、ページの部品にする（省略・ブラウザで読み込むは空。D-109）。 */
+export function partsOfComments(
+  sc: Pick<Scenario, 'template' | 'routeTraits'>,
+  comments: number | undefined,
+): RouteParts | undefined {
+  return comments === undefined || comments === COMMENTS_IN_BROWSER
+    ? undefined
+    : withComments(sc, undefined, comments);
+}
+
+/** コメント欄の描き方を替えたページの部品（既定のブラウザで読み込むは持たない。D-109）。 */
+export function withComments(
+  sc: Pick<Scenario, 'template' | 'routeTraits'>,
+  parts: RouteParts | undefined,
+  comments: number,
+): RouteParts {
+  const r = publicRoute(sc);
+  const out: Partial<Record<string, RoutePartChoice>> = { ...parts };
+  if (!r) return out;
+  if (comments === COMMENTS_IN_BROWSER) delete out[r.id];
+  else out[r.id] = { ...out[r.id], comments };
+  return out;
+}
 
 /**
  * 描き方の分け方（D-107）。S2 と S3 は同じ「キャッシュ」で、期限かオンデマンドかは設定（revalidateSec）で決まる
@@ -211,6 +259,13 @@ function publicRoute(sc: Pick<Scenario, 'template' | 'routeTraits'>) {
   return sc.template(1).routes.find((r) => routeAudienceOf(sc, r) === 'public');
 }
 
+/** 全員に同じ中身のルート（記事のページ）の id。無いシナリオ（受託）は undefined。 */
+export function publicRouteId(
+  sc: Pick<Scenario, 'template' | 'routeTraits'>,
+): string | undefined {
+  return publicRoute(sc)?.id;
+}
+
 /** ルートの今の描き方の分け方（選んだ描き方があればそれ、無ければフレームワークの既定）。 */
 export function routeFamily(
   state: {
@@ -244,20 +299,32 @@ export function articleFamily(state: {
 }
 
 /**
- * コメントを記事のページに含めるか（D-82）。設定が「記事のページに含める」で、シナリオにコメントがあり、
- * 記事のページが HTML である（S5 の枠 + API・SPA はページの中身が無いので含められない）ときだけ。
+ * 記事のページのコメント欄の描き方を選べるか（D-82・D-109）。シナリオにコメントがあり、記事のページが HTML である
+ * （S5 の枠 + API・SPA はページの中身が無いので含められない）ときだけ。
  */
-export function commentsInPage(
-  settings: Pick<Settings, 'comments'>,
+export function commentsChoosable(
   framework: FrameworkId,
   sc: Pick<Scenario, 'comments' | 'template' | 'routeTraits'>,
   routes?: RouteOverrides,
 ): boolean {
   const fam = articleFamily({ scenario: sc, framework, routes });
   return (
-    settings.comments === COMMENTS_IN_PAGE &&
     (fam !== undefined ? fam !== 'api' : framework !== 'vite-spa') &&
     sc.comments !== undefined
+  );
+}
+
+/**
+ * コメントを記事のページに含めるか（D-82）。記事のページの部品が「記事のページに含める」（D-109）で、選べるときだけ。
+ */
+export function commentsInPage(
+  comments: number,
+  framework: FrameworkId,
+  sc: Pick<Scenario, 'comments' | 'template' | 'routeTraits'>,
+  routes?: RouteOverrides,
+): boolean {
+  return (
+    comments === COMMENTS_IN_PAGE && commentsChoosable(framework, sc, routes)
   );
 }
 
@@ -441,20 +508,6 @@ export const SETTINGS = {
       { value: 21600, label: '6 時間' },
     ],
   },
-  /**
-   * コメントの描き方（D-82）。記事のページに含めると、コメントの投稿も記事のページを作り直す更新に数え（シナリオの
-   * comments.pageUpdateShare）、記事のページの API の読み込み（コメントの取得）が無くなる。SPA・コメントの無いシナリオでは出さない。
-   */
-  comments: {
-    label: 'コメントの描き方',
-    field: 'comments',
-    effort: EFFORT.setting.comments,
-    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro では記事のキャッシュを消して描き直す回数が、静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見え、鮮度（満足度）が下がる（コメントは記事より厳しく、1 分までなら「良い」・5 分までなら「普通」とみなす。ゲーム上の仮定）。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
-    options: [
-      { value: COMMENTS_IN_BROWSER, label: 'ブラウザで読み込む' },
-      { value: COMMENTS_IN_PAGE, label: '記事のページに含める' },
-    ],
-  },
 } as const satisfies Record<
   string,
   {
@@ -466,6 +519,34 @@ export const SETTINGS = {
   }
 >;
 export type SettingKey = keyof typeof SETTINGS;
+
+/**
+ * ページの部品の選択肢（段 4・D-109）。今は記事のページのコメント欄だけ。始める画面・ゲームの途中・見積モードで、
+ * 描き方の表の記事の行に出す（前は全体の設定「コメントの描き方」。D-82）。手間は今までの設定と同じ（どちらの向きも 2）。
+ */
+export const ROUTE_PARTS = {
+  /**
+   * コメント欄の描き方（D-82。段 4 で記事のページの部品に移した。D-109）。記事のページに含めると、コメントの投稿も記事のページを作り直す更新に数え（シナリオの
+   * comments.pageUpdateShare）、記事のページの API の読み込み（コメントの取得）が無くなる。SPA・コメントの無いシナリオでは出さない。
+   */
+  comments: {
+    label: 'コメント欄',
+    effort: EFFORT.route.comments,
+    note: 'コメント欄を、ブラウザが記事を開いてから API で読み込むか、記事のページ（HTML）に含めるか。含めると、記事を開いたときのコメントの取得（API の呼び出し）が無くなり、コメントも HTML で届く。代わりにコメントの投稿のたびに記事のページが変わるので、オンデマンドの再検証では再生成（OpenNext では CloudFront の無効化も）が、Astro では記事のキャッシュを消して描き直す回数が、静的書き出しではビルドし直しが増える。時間の再検証・間隔でまとめるビルドでは、作り直しの回数は更新の数にほぼ依らないので増えにくいが、コメントはその間隔の分だけ遅れて見え、鮮度（満足度）が下がる（コメントは記事より厳しく、1 分までなら「良い」・5 分までなら「普通」とみなす。ゲーム上の仮定）。ブラウザで読み込むのは、Next.js の文書（Suspense で後から流す）・Astro のアイランドの形に近い一般的な作り方（D-70）',
+    options: [
+      { value: COMMENTS_IN_BROWSER, label: 'ブラウザで読み込む' },
+      { value: COMMENTS_IN_PAGE, label: '記事のページに含める' },
+    ],
+  },
+} as const satisfies Record<
+  RoutePartKey,
+  {
+    label: string;
+    effort: number;
+    note: string;
+    options: readonly { value: number; label: string }[];
+  }
+>;
 
 /** Bot を遮断するルールの手間と効き方（ゲーム上の仮定。製品の料金は未取得。D-20 V-9）。 */
 export const BOT_BLOCK = { effort: 2, remaining: 0.5 } as const;
@@ -492,6 +573,11 @@ export type Action =
    * ページの描き方を替える（D-107。翌月から）。期限とオンデマンド（S2 ↔ S3）は今までどおり設定（再検証・記事のキャッシュ）で替える。
    */
   | { type: 'route'; route: string; strategy: RouteStrategyId; value?: number }
+  /**
+   * ページの部品を替える（D-109。翌月から）。今は記事のページのコメント欄の描き方（ブラウザで読み込む / 記事のページに含める）だけ。
+   * 前の設定「コメントの描き方」（{ type: 'set', key: 'comments' }）は、保存の読み込みでこれに読み替える。
+   */
+  | { type: 'route-part'; route: string; part: RoutePartKey; value: number }
   /**
    * 1 年の確約を結ぶ（リザーブドインスタンス・Savings Plans・確約利用割引・年払い。key は provider:planId:id。D-97）。
    * 来月から 12 か月。取り消せず、対象を使わなくなっても支払いは残る。
@@ -689,6 +775,11 @@ export type GameState = {
    * 作り直しが済むと空に戻り、乗り換えが済むと、乗り換え先で使えないものは外れる。
    */
   routes?: RouteOverrides;
+  /**
+   * ページの部品の選択（記事のページのコメント欄。既定と違うものだけ。D-109）。古い状態には無い（＝ブラウザで読み込む）。
+   * 描き方と違い、作り直し・乗り換えでは戻さない（前の設定「コメントの描き方」と同じ。含められない描き方では効かない）。
+   */
+  routeParts?: RouteParts;
   /** 部品の選択（今の構成の事業者のスロット。D-24）。 */
   components: Choices;
   /** 進行中の DB の差し替え。 */
@@ -851,10 +942,8 @@ export function hiddenSettings(
     routes?: RouteOverrides | undefined;
   },
 ): SettingKey[] {
-  // コメントの無いシナリオでは、コメントの描き方を出さない（D-82）
   const fromScenario: SettingKey[] = [
     ...(state.scenario.hidden?.settings ?? []),
-    ...(state.scenario.comments === undefined ? (['comments'] as const) : []),
   ];
   const fam = articleFamily(state);
   const byFramework =
@@ -877,11 +966,7 @@ function hiddenByFamily(
   fam: StrategyFamily,
 ): SettingKey[] {
   const visible = revalidateKeyFor(framework, fam);
-  return [
-    ...REVALIDATE_KEYS.filter((k) => k !== visible),
-    // 枠 + API の記事にはコメントを含める HTML が無い（D-82）
-    ...(fam === 'api' ? (['comments'] as const) : []),
-  ];
+  return REVALIDATE_KEYS.filter((k) => k !== visible);
 }
 
 /** 記事の描き方での revalidateSec の意味（出さないなら undefined）。 */
@@ -905,8 +990,7 @@ function revalidateKeyFor(
 /** フレームワークで意味の無い設定（記事のページの無いシナリオ。revalidateSec をフレームワークごとの意味で 1 つだけ出す。D-37・D-68）。 */
 const FRAMEWORK_HIDDEN_SETTINGS: Record<FrameworkId, SettingKey[]> = {
   nextjs: ['apiCacheTtl', 'buildInterval', 'pageCache'],
-  // SPA は記事のページが無いので、コメントを含められない（D-82）
-  'vite-spa': ['isr', 'buildInterval', 'pageCache', 'comments'],
+  'vite-spa': ['isr', 'buildInterval', 'pageCache'],
   astro: ['isr', 'apiCacheTtl', 'buildInterval'],
   'nextjs-export': ['isr', 'apiCacheTtl', 'pageCache'],
 };
@@ -955,10 +1039,13 @@ export function defaultRevalidateSec(
 
 /**
  * 記事ごとの SNS のカードが出ないか（記事のページが枠 + API（S5）で、OGP の前処理なし。prd/10 F-05・D-107）。
- * OGP の前処理の部品は SPA だけにあるので、Next.js・Astro の記事を S5 にするとカードは出ない。
+ * OGP の前処理の部品は SPA だけにある。Next.js・Astro・静的書き出しの記事の S5 は記事ごとの枠（メタタグ入り）なのでカードは出る（D-109）。
  */
 function noSocialCards(
-  state: Pick<GameState, 'framework' | 'components' | 'scenario'> & {
+  state: Pick<
+    GameState,
+    'framework' | 'components' | 'scenario' | 'stackIndex'
+  > & {
     routes?: RouteOverrides | undefined;
   },
 ): boolean {
@@ -971,6 +1058,7 @@ function noSocialCards(
   return (
     needsOgp &&
     routeFamily(state, r.id) === 'api' &&
+    !articleShellPerPage(state) &&
     state.components.ogp !== 'prerender'
   );
 }
@@ -1210,6 +1298,8 @@ export type WorkloadParts = {
   framework: FrameworkId;
   /** 選んだページごとの描き方（D-107。省略はフレームワークの既定）。 */
   routes?: RouteOverrides | undefined;
+  /** ページの部品の選択（記事のページのコメント欄。D-109。省略はブラウザで読み込む）。 */
+  routeParts?: RouteParts | undefined;
   /** その月のピークの係数の倍率（繁忙期。D-33）。省略は 1。 */
   peakFactor?: number;
   /** 短い期間に集中する上乗せの PV（話題・Bot。容量の判定だけに効く。D-44）。 */
@@ -1262,7 +1352,7 @@ function pageUpdates(
   w: WorkloadInput,
   inPage: boolean,
 ): { updates: number; pagesPerUpdate: number } {
-  const writes = pv * w.perPage.apiCalls * w.api.writesPerCall;
+  const writes = apiCallsPerMonth(w, pv) * w.api.writesPerCall;
   const articles = writes * sc.pageUpdateShare;
   const comments =
     inPage && sc.comments ? writes * sc.comments.pageUpdateShare : 0;
@@ -1280,21 +1370,25 @@ function pageUpdates(
 
 /**
  * コメントを記事のページに含めたときの API（D-82）: 記事のページ（ISR だったルート）を開いたときのコメントの取得
- * （API の読み込み）が無くなる。記事のページの API の読み込みはコメントの取得とみなし（ゲーム上の仮定）、書き込み
- * （コメントの投稿など）の回数は変えない（呼び出しが減った分、1 回あたりの書き込みの割合を上げる）。
+ * （API の読み込み）が無くなる。記事のページの部品の API（ルートの apiCalls。D-109・RS-02）の読み込みはコメントの取得とみなし
+ * （ゲーム上の仮定）、残るのは書き込み（コメントの投稿など）の分だけ。書き込みの回数は変えない（呼び出しが減った分、
+ * 1 回あたりの書き込みの割合を上げる。書き込みの割合は API 全体で 1 つなので、全体の書き込みが同じになるように直す）。
  */
 function withoutCommentFetch(w: WorkloadInput): WorkloadInput {
-  const articleShare = w.routes
-    .filter((r) => r.rendering === 'isr')
-    .reduce((a, r) => a + r.share, 0);
-  const calls = w.perPage.apiCalls;
   const wpc = w.api.writesPerCall;
-  const after = calls - calls * articleShare * Math.max(0, 1 - wpc);
-  if (after <= 0 || after >= calls) return w;
+  if (wpc >= 1) return w;
+  const before = apiCallsPerMonth(w, 1);
+  const routes = w.routes.map((r) =>
+    r.rendering === 'isr'
+      ? { ...r, apiCalls: (r.apiCalls ?? w.perPage.apiCalls) * wpc }
+      : r,
+  );
+  const after = apiCallsPerMonth({ ...w, routes }, 1);
+  if (after <= 0 || after >= before) return w;
   return {
     ...w,
-    perPage: { ...w.perPage, apiCalls: after },
-    api: { ...w.api, writesPerCall: (calls * wpc) / after },
+    routes,
+    api: { ...w.api, writesPerCall: (before * wpc) / after },
   };
 }
 
@@ -1339,11 +1433,16 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   if (p.mods.apiResponseKB !== undefined)
     w.api = { ...w.api, responseKB: p.mods.apiResponseKB };
   // コメントを記事のページに含める（D-82）: コメントの投稿も記事のページを作り直す更新に数え、記事を開いたときのコメントの取得が無くなる
-  const inPage = commentsInPage(p.settings, p.framework, sc, p.routes);
+  const inPage = commentsInPage(
+    commentsOf(sc, p.routeParts),
+    p.framework,
+    sc,
+    p.routes,
+  );
   const { updates, pagesPerUpdate } = pageUpdates(sc, p.pv, w, inPage);
   if (inPage) {
     const v = withoutCommentFetch(w);
-    w.perPage = v.perPage;
+    w.routes = v.routes;
     w.api = v.api;
   }
   // オンデマンドの再検証（D-49）: 再生成の回数は、時間でなく内容の更新の回数から出す
@@ -1398,15 +1497,24 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // S5 には SPA の形、S1 にはビルドの時間の式（Astro の形）が要る。無いシナリオではそのフレームワークの書き換えをしない（今までと同じ）
   // S6 の島の届け方（Astro は別のリクエスト・Next.js の PPR は同じ応答の中。D-108）
   const island = serverIslandDelivery(p.framework);
+  // 記事ごとの枠（S5。D-109）も S1 と同じくビルドで作る。枠に載るのは記事のメタタグで、中身はブラウザが API で取るので、
+  // 間隔でまとめず記事の投稿・編集のたびにビルドする（設定の revalidateSec は API の応答のキャッシュの期間の意味のまま）
+  const shellPages = Object.values(plan).some((c) => c.shellPerPage);
   const ready =
     (!uses('api') || shape !== undefined) &&
     (!uses('static') || astro !== undefined) &&
+    (!shellPages || astro !== undefined) &&
     (!uses('island') || island !== undefined) &&
     (p.framework !== 'astro' || astro !== undefined);
   const routed = ready
     ? applyRouteStrategies(w, plan, {
         ...(shape ? { spa: shape } : {}),
-        ...(astro ? { minutesPerBuild: astro.minutesPerBuild, build } : {}),
+        ...(astro
+          ? {
+              minutesPerBuild: astro.minutesPerBuild,
+              build: shellPages ? { updatesPerMonth: updates } : build,
+            }
+          : {}),
         ...(island ? { island } : {}),
       })
     : w;
@@ -1555,9 +1663,12 @@ export function staticBuildOf(
 ): RoutingOptions {
   if (!routes) return {};
   const valid = validRouteOverrides(sc, stackIndex, framework, routes);
-  const staticBuild = Object.values(valid).some(
-    (x) => x !== undefined && strategyFamily(x) === 'static',
-  );
+  // 記事ごとの枠（S5。D-109）も S1 と同じくビルドで書き出す
+  const staticBuild =
+    Object.values(valid).some(
+      (x) => x !== undefined && strategyFamily(x) === 'static',
+    ) ||
+    articleShellPerPage({ scenario: sc, framework, stackIndex, routes: valid });
   // Astro で記事をキャッシュしない（S1・S4・S5）なら、Workers Cache を前に置かない。
   // S6 のページがあれば、その枠をキャッシュするので置く（D-108）
   const island = Object.values(valid).some(
@@ -2746,7 +2857,6 @@ export function settingNote(
   state: GameState,
   key: SettingKey,
 ): string | undefined {
-  if (key === 'comments') return commentsNote(state);
   if (key !== 'format') return undefined;
   const platform = STACKS[state.stackIndex]!.provider;
   const images = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
@@ -2760,16 +2870,27 @@ export function settingNote(
 }
 
 /**
+ * ページの部品の今の効き方の注記（D-109）。コメント欄を記事のページに含めているときだけ（commentsNote）。
+ */
+export function routePartNote(
+  state: GameState,
+  part: RoutePartKey,
+): string | undefined {
+  return part === 'comments' ? commentsNote(state) : undefined;
+}
+
+/**
  * コメントを記事のページに含めているときの効き方の注記（D-82）。作り直しが増えるのは、更新のたびに作り直すとき
  * （オンデマンドの再検証・更新のたびのビルド）。時間の再検証は更新の数に依らないので増えず、間隔でまとめるビルドも
  * 間隔の数までしか増えない。どちらもコメントは間隔の分だけ遅れて見え、鮮度の判定に入る（D-85）。
  */
 function commentsNote(state: GameState): string | undefined {
+  const sc = scenarioOf(state);
   if (
     !commentsInPage(
-      state.settings,
+      commentsOf(sc, state.routeParts),
       state.framework,
-      scenarioOf(state),
+      sc,
       state.routes,
     )
   )
@@ -3046,11 +3167,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
               (articleFamily(state) === 'api' && state.framework !== 'vite-spa')
               ? '記事のページをキャッシュしない描き方では効かない'
               : `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework, articleFamily(state))].label}」で選ぶ`
-            : action.key === 'comments' && state.framework === 'vite-spa'
-              ? 'SPA には記事のページが無い（コメントはブラウザで読み込む）'
-              : action.key === 'comments' && articleFamily(state) === 'api'
-                ? '記事のページが枠 + API なので、コメントを含める HTML が無い（コメントはブラウザで読み込む）'
-                : 'このシナリオでは効かない',
+            : 'このシナリオでは効かない',
         );
       if (state.settings[def.field] === action.value)
         return ng('same', '今と同じ（または選択済み）');
@@ -3211,6 +3328,26 @@ function actionRule(state: GameState, action: Action): ActionCheck {
             .note,
         );
       return ok(routeChangeEffort(now, action.strategy));
+    }
+    case 'route-part': {
+      // ページの部品（記事のページのコメント欄。D-109）。手間は前の設定「コメントの描き方」と同じ（D-82）
+      const sc = scenarioOf(state);
+      const def = ROUTE_PARTS[action.part];
+      if (!def || !def.options.some((o) => o.value === action.value))
+        return ng('invalid', '選択肢に無い');
+      const r = publicRoute(sc);
+      if (!r || r.id !== action.route || sc.comments === undefined)
+        return ng('unavailable', 'このページには無い部品');
+      if (!commentsChoosable(state.framework, sc, state.routes))
+        return ng(
+          'unavailable',
+          state.framework === 'vite-spa'
+            ? 'SPA には記事のページが無い（コメントはブラウザで読み込む）'
+            : '記事のページが枠 + API なので、コメントを含める HTML が無い（コメントはブラウザで読み込む）',
+        );
+      if (commentsOf(sc, state.routeParts) === action.value)
+        return ng('same', '今と同じ（または選択済み）');
+      return ok(def.effort);
     }
     case 'rewrite': {
       if (busy) return busy;
@@ -3516,18 +3653,18 @@ export function setupRevalidateOptions(
 }
 
 /**
- * 始める画面で選べるコメントの描き方（D-82）。コメントのあるシナリオで、記事のページがあるフレームワーク（SPA 以外）だけ。
+ * 選べるコメント欄の描き方（記事のページの部品。D-82・D-109）。コメントのあるシナリオで、記事のページが HTML のとき
+ * （SPA・枠 + API の記事以外）だけ。始める画面・見積モード・ゲームの途中の表の記事の行に出す。
  */
 export function setupCommentOptions(
   scenario: Scenario,
   framework: FrameworkId,
   routes?: RouteOverrides,
 ): { value: number; label: string; flavor: string }[] {
-  if (hiddenSettings({ scenario, framework, routes }).includes('comments'))
-    return [];
-  return SETTINGS.comments.options.map((o) => ({
+  if (!commentsChoosable(framework, scenario, routes)) return [];
+  return ROUTE_PARTS.comments.options.map((o) => ({
     ...o,
-    flavor: settingFlavor('comments', o.value) ?? '',
+    flavor: SETTING_FLAVOR[`comments:${o.value}`] ?? '',
   }));
 }
 
@@ -3573,7 +3710,7 @@ export function pageWireframes(
 }[] {
   const tpl = sc.template(1).routes;
   const inPage = commentsInPage(
-    { comments: comments ?? COMMENTS_IN_BROWSER },
+    comments ?? COMMENTS_IN_BROWSER,
     framework,
     sc,
     routes,
@@ -3596,8 +3733,17 @@ export function pageWireframes(
             ) ?? framework);
     // 借りる先が無い（記事を毎回描く S4 など）は、作られ方を描き方で置き換える
     const own = w.byFramework[donor];
-    const base =
-      chosen !== undefined && donor === framework
+    // 記事ごとの枠（全員に同じ中身のページの S5。D-109）は、枠（ビルド）と API の中身に分けた図
+    const perPage =
+      chosen !== undefined &&
+      audience === 'public' &&
+      strategyFamily(chosen) === 'api' &&
+      perPageShellFramework(framework)
+        ? w.shellPerPage
+        : undefined;
+    const base = perPage
+      ? perPage.sources
+      : chosen !== undefined && donor === framework
         ? Object.fromEntries(
             Object.entries(own).map(([id, src]) => [
               id,
@@ -3637,7 +3783,7 @@ export function pageWireframes(
                   : 'CPU: 島の分だけ閲覧ごとに描く（同じ応答の中で続けて流す）',
             },
           ]
-        : (w.badges?.[donor] ?? []),
+        : (perPage?.badges ?? w.badges?.[donor] ?? []),
     };
   });
 }
@@ -3680,14 +3826,60 @@ export function routeChoices(
             : isOnDemand(p.settings)
               ? 'cached-purge'
               : 'cached-ttl';
+      // 全員に同じ中身のページの S5 は、ページごとの枠を書き出せるフレームワークなら記事ごとの枠にする（D-109）
+      const perPage =
+        strategy === 'shell-api' &&
+        audience === 'public' &&
+        shellPerPage(p.framework, p.platform);
       return [
         r.id,
-        // 個人化した中身の応答はキャッシュしない（D-37）
-        strategy === 'shell-api' && cacheContent && audience === 'public'
-          ? { strategy, cacheContent: true }
-          : { strategy },
+        {
+          strategy,
+          // 個人化した中身の応答はキャッシュしない（D-37）
+          ...(strategy === 'shell-api' && cacheContent && audience === 'public'
+            ? { cacheContent: true }
+            : {}),
+          ...(perPage ? { shellPerPage: true } : {}),
+        },
       ];
     }),
+  );
+}
+
+/** 記事ごとの枠（S5）の説明（表の選択肢の文。D-109）。 */
+const SHELL_PER_PAGE_NOTE =
+  'このフレームワークでは記事ごとの枠（メタタグ入り）をビルドで書き出し、SNS のカードは枠に入る。新しい記事は枠のビルドが終わるまで開けない';
+
+/** 記事ごとの枠（S5）の「なぜ」（D-109）。 */
+const SHELL_PER_PAGE_WHY =
+  '記事ごとの枠（タイトル・メタタグ）をビルドで書き出し、本文はブラウザが API で取る。サーバーは HTML を描かず、SNS のカードは枠に入る。新しい記事・編集のたびに枠をビルドし直し、新しい記事はビルドが終わるまで開けない';
+
+/**
+ * 全員に同じ中身のページ（記事）の S5 を、記事ごとの枠にするか（D-109・ゲーム上の読み 1 つ。D-10）。ページごとの HTML を書き出せる
+ * フレームワーク（Next.js・Astro・静的書き出し）で、その事業者で S1（静的に書き出す）を選べるときは、記事ごとに書き出す枠
+ * （メタタグ入り。SNS のカードが出る）+ ブラウザが API で中身を取る形が標準の作り方とみなす。枠は S1 と同じくビルドで作り、
+ * 新しい記事・編集のたびにビルドし直す（新しい記事はビルドまで開けない。D-104）。Vite の SPA は 1 つのシェルのまま。
+ */
+export function shellPerPage(
+  framework: FrameworkId,
+  platform: Platform,
+): boolean {
+  return (
+    perPageShellFramework(framework) &&
+    strategySelectable(framework, platform, 'public', 'static-build')
+  );
+}
+
+/** ゲームの状態・始める画面の選択で、記事のページが記事ごとの枠（S5）か（D-109）。 */
+export function articleShellPerPage(state: {
+  scenario: Pick<Scenario, 'template' | 'routeTraits'>;
+  framework: FrameworkId;
+  stackIndex: number;
+  routes?: RouteOverrides | undefined;
+}): boolean {
+  return (
+    articleFamily(state) === 'api' &&
+    shellPerPage(state.framework, STACKS[state.stackIndex]!.provider)
   );
 }
 
@@ -3736,7 +3928,7 @@ export type RoutePlanRow = {
   /** 描き方の名前（S 番号つき）。 */
   strategyLabel: string;
   code: string;
-  /** 描き方の値（期限・更新のたび・API の応答のキャッシュの期間・コメントの扱い）。 */
+  /** 描き方の値（期限・更新のたび・API の応答のキャッシュの期間・記事ごとの枠）。コメント欄は parts（D-109）。 */
   detail: string[];
   /** この描き方がこのページの何の要件に応えるか。 */
   why: string;
@@ -3744,16 +3936,31 @@ export type RoutePlanRow = {
   overriddenBy?: string;
   /** ほかの描き方（確かめていない描き方は出さない。RS-04）。 */
   alternatives: RouteAlternative[];
+  /** このページの部品で選べるもの（記事のページのコメント欄。D-109）。選べない描き方・シナリオでは空。 */
+  parts: RoutePartRow[];
+};
+
+/** 表の行の部品の選択（D-109。記事のページのコメント欄）。 */
+export type RoutePartRow = {
+  part: RoutePartKey;
+  label: string;
+  /** 部品の説明（ⓘ）。 */
+  note: string;
+  /** 今の選択。 */
+  value: number;
+  options: { value: number; label: string; flavor: string }[];
 };
 
 /** 表の行を組む入力（始める画面・見積モード・ゲームの状態）。 */
 export type RoutePlanInput = {
   framework: FrameworkId;
   stackIndex: number;
-  settings: Pick<Settings, 'revalidateSec' | 'comments'>;
+  settings: Pick<Settings, 'revalidateSec'>;
   components: Choices;
   /** 選んだ描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
+  /** ページの部品の選択（記事のページのコメント欄。D-109）。 */
+  routeParts?: RouteParts | undefined;
 };
 
 /**
@@ -3883,7 +4090,12 @@ const SETUP_FRAMEWORK_RESETS_ROUTES =
 const planInputOf = (
   state: Pick<
     GameState,
-    'framework' | 'stackIndex' | 'settings' | 'components' | 'routes'
+    | 'framework'
+    | 'stackIndex'
+    | 'settings'
+    | 'components'
+    | 'routes'
+    | 'routeParts'
   >,
 ): RoutePlanInput => ({
   framework: state.framework,
@@ -3891,6 +4103,7 @@ const planInputOf = (
   settings: state.settings,
   components: state.components,
   routes: state.routes,
+  routeParts: state.routeParts,
 });
 
 /** 途中のプラン変更・乗り換えで既定に戻る描き方（D-107 の補足）。乗り換えは乗り換え先の既定の部品で見る。 */
@@ -3984,7 +4197,6 @@ export type SetupRouteState = {
   revalidateSec: number;
   /** 始める画面で選んだ再検証（選んでいなければ undefined）。替えた先でも選べれば残る。 */
   revalidateChosen?: number | undefined;
-  comments: number;
   routes: RouteOverrides | undefined;
 };
 
@@ -4015,14 +4227,14 @@ export function setupRouteFallbacks(
     {
       framework: cur.framework,
       stackIndex: cur.stackIndex,
-      settings: { revalidateSec: cur.revalidateSec, comments: cur.comments },
+      settings: { revalidateSec: cur.revalidateSec },
       components: cur.components,
       routes: cur.routes,
     },
     {
       framework,
       stackIndex,
-      settings: { revalidateSec, comments: cur.comments },
+      settings: { revalidateSec },
       components: validSetupChoices(sc, stackIndex, framework, cur.components),
     },
     fwChanged ? SETUP_FRAMEWORK_RESETS_ROUTES : undefined,
@@ -4056,7 +4268,8 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
   const hidden = hiddenSettings(state);
   const fam = articleFamily(state);
   const revalidateKey = revalidateSettingOf(p.framework, fam);
-  const inPage = commentsInPage(p.settings, p.framework, sc, p.routes);
+  const comments = commentsOf(sc, p.routeParts);
+  const commentOptions = setupCommentOptions(sc, p.framework, p.routes);
   const blocker = onDemandBlocker(
     p.stackIndex,
     p.components,
@@ -4078,14 +4291,12 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
           ? 'ビルドし直し: 更新のたび'
           : `ビルドし直し: 間隔 ${value}`,
       );
+    if (choice.shellPerPage)
+      detail.push(
+        '枠: 記事ごとに書き出す（メタタグ入り・新しい記事と編集でビルドし直し）',
+      );
     if (choice.cacheContent)
       detail.push(`中身の API の応答をキャッシュ（期間 ${value}）`);
-    if (audience === 'public' && !hidden.includes('comments'))
-      detail.push(
-        inPage
-          ? 'コメント欄: HTML に含める（投稿でも描き直す）'
-          : 'コメント欄: ブラウザが API で読み込む',
-      );
     const chosen = p.routes?.[r.id] !== undefined;
     const overriddenBy =
       strategyFamily(choice.strategy) === strategyFamily(preset)
@@ -4118,7 +4329,13 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
           available:
             strategySelectable(p.framework, platform, audience, s) &&
             blocked === undefined,
-          reason: blocked ? `${blocked.label}: ${blocked.reason}` : x.note,
+          reason: blocked
+            ? `${blocked.label}: ${blocked.reason}`
+            : s === 'shell-api' &&
+                audience === 'public' &&
+                shellPerPage(p.framework, platform)
+              ? `${x.note}。${SHELL_PER_PAGE_NOTE}`
+              : x.note,
           basis: x.basis,
           ...(value !== undefined ? { value } : {}),
         },
@@ -4134,9 +4351,21 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       strategyLabel: def.label,
       code: def.code,
       detail,
-      why: def.why[audience],
+      why: choice.shellPerPage ? SHELL_PER_PAGE_WHY : def.why[audience],
       ...(overriddenBy ? { overriddenBy } : {}),
       alternatives,
+      parts:
+        audience === 'public' && commentOptions.length > 0
+          ? [
+              {
+                part: 'comments' as const,
+                label: ROUTE_PARTS.comments.label,
+                note: ROUTE_PARTS.comments.note,
+                value: comments,
+                options: commentOptions,
+              },
+            ]
+          : [],
     };
   });
 }
@@ -4205,7 +4434,7 @@ export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
     p.framework,
     p.components,
     p.revalidateSec,
-    p.comments,
+    partsOfComments(sc, p.comments),
     undefined,
     p.routes,
   );
@@ -4216,6 +4445,7 @@ export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
     settings: state.settings,
     components: state.components,
     routes: state.routes,
+    routeParts: state.routeParts,
   });
   return rows.map((row) => {
     const cpuHit = base.blocking.filter(
@@ -4257,6 +4487,7 @@ export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
         ? {
             ogp:
               row.strategy === 'shell-api' &&
+              !articleShellPerPage(state) &&
               state.components.ogp !== 'prerender'
                 ? {
                     ok: false,
@@ -4476,6 +4707,7 @@ export function componentPreview(
       components,
       framework: state.framework,
       routes: state.routes,
+      routeParts: state.routeParts,
     }),
     architecture: architectureFor(
       state.stackIndex,
@@ -4583,6 +4815,7 @@ function invalidationLines(
       components,
       framework: state.framework,
       routes: state.routes,
+      routeParts: state.routeParts,
     }),
     architecture: architectureFor(
       state.stackIndex,
@@ -4620,7 +4853,7 @@ export function setupInvalidationEstimate(
       framework,
       components,
       ON_DEMAND_REVALIDATE,
-      comments,
+      partsOfComments(scenario, comments),
     ),
   );
 }
@@ -4676,7 +4909,7 @@ export function setupMonthOneEstimate(
     framework,
     components,
     revalidateSec,
-    comments,
+    partsOfComments(scenario, comments),
     undefined,
     routes,
   );
@@ -4691,6 +4924,7 @@ export function setupMonthOneEstimate(
       components: state.components,
       framework: state.framework,
       routes: state.routes,
+      routeParts: state.routeParts,
     }),
     architecture: architectureFor(
       state.stackIndex,
@@ -4784,8 +5018,10 @@ export function newGame(
   components?: Choices,
   /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（defaultRevalidateSec。Astro はオンデマンド）。 */
   revalidateSec?: number,
-  /** 始める画面で選んだコメントの描き方（D-82）。選べないもの・省略は既定（ブラウザで読み込む）。 */
-  comments?: number,
+  /**
+   * 始める画面で選んだページの部品（記事のページのコメント欄。D-82・D-109）。選べないもの・省略は既定（ブラウザで読み込む）。
+   */
+  routeParts?: RouteParts,
   /** 始める画面で結んだ確約（D-97。setupCommitments にあるものだけ。1 か月目から 12 か月）。 */
   commitments?: readonly { key: string; payment: CommitmentPaymentId }[],
   /** 始める画面で選んだページごとの描き方（D-107）。選べないものは捨て、省略はフレームワークの既定。 */
@@ -4806,9 +5042,16 @@ export function newGame(
     ? validRouteOverrides(scenario, stackIndex, app, routes)
     : {};
   const hasRoutes = Object.keys(chosenRoutes).length > 0;
+  const comments = commentsOf(scenario, routeParts);
+  const chosenParts = setupCommentOptions(scenario, app, chosenRoutes).some(
+    (o) => o.value === comments,
+  )
+    ? withComments(scenario, undefined, comments)
+    : {};
   return {
     startDate,
     ...(hasRoutes ? { routes: chosenRoutes } : {}),
+    ...(Object.keys(chosenParts).length > 0 ? { routeParts: chosenParts } : {}),
     revisions: rollRevisions(scenario, seed, startDate, SCHEDULED_CHANGES),
     scenarioId: scenario.id,
     scenario,
@@ -4851,13 +5094,6 @@ export function newGame(
         )
           ? revalidateSec
           : defaultRevalidateSec(app, stackIndex, scenario, chosenRoutes),
-      comments:
-        comments !== undefined &&
-        setupCommentOptions(scenario, app, chosenRoutes).some(
-          (o) => o.value === comments,
-        )
-          ? comments
-          : COMMENTS_IN_BROWSER,
       ssrOptimizations: 0,
     },
     cash: scenario.startCash,
@@ -5238,6 +5474,7 @@ export function playMonth(input: GameState): GameState {
     components: state.components,
     framework: state.framework,
     routes: state.routes,
+    routeParts: state.routeParts,
     ...(peakFactor !== 1 ? { peakFactor } : {}),
     ...(spikes.length ? { spikes } : {}),
   };
@@ -5621,12 +5858,17 @@ export function playMonth(input: GameState): GameState {
     (frontDelayed
       ? viewed.revalidateSec * FRONT_CDN_DELAY_FACTOR
       : viewed.revalidateSec) + buildDelaySec;
-  // 新しい記事は、ビルドが終わるまでページが無い。投稿した人が開けるまでの許容を超えたら、コミュニティの要件を満たさない（D-104）
+  // 新しい記事は、ビルドが終わるまでページが無い。投稿した人が開けるまでの許容を超えたら、コミュニティの要件を満たさない（D-104）。
+  // 記事ごとの枠（S5。D-109）も枠をビルドで書き出すので、中身は API で常に新しくても、新しい記事は枠のビルドが終わるまで開けない
+  const shellBuildSec =
+    spa && articleShellPerPage(state)
+      ? (r.simulation.workload.input.build?.minutesPerBuild ?? 0) * 60
+      : 0;
   const newPostLimit = sat.freshness.newPostVisibleSec;
   const newPostDelayed =
-    buildDelaySec > 0 &&
     newPostLimit !== undefined &&
-    judgedDelaySec > newPostLimit;
+    ((buildDelaySec > 0 && judgedDelaySec > newPostLimit) ||
+      shellBuildSec > newPostLimit);
   // 即時反映（オンデマンド ISR）の要件を満たさない構成（D-32）。再検証の設定をオンデマンドにしたときも、
   // 対応しない部品があると再検証が届かず古いページが出る（同じ判定・同じ理由の文。D-49）
   const onDemandSetting = !spa && isOnDemand(state.settings);
@@ -5638,7 +5880,12 @@ export function playMonth(input: GameState): GameState {
   // オンデマンド（コメントのたびに作り直す）・キャッシュしない（毎回 SSR）なら遅れない。ビルドし直す形はオンデマンドでもビルドの時間は遅れる（D-104）
   const commentsDelayed =
     sc.comments !== undefined &&
-    commentsInPage(viewed, state.framework, sc, state.routes) &&
+    commentsInPage(
+      commentsOf(sc, state.routeParts),
+      state.framework,
+      sc,
+      state.routes,
+    ) &&
     !uncached &&
     (!isOnDemand(viewed) || buildDelaySec > 0);
   const stages = judgeStages(
@@ -5720,6 +5967,7 @@ export function playMonth(input: GameState): GameState {
     uncached,
     buildDelaySec,
     newPostDelayed,
+    shellBuilds: shellBuildSec > 0,
     // 遅れがコメントの「良い」の境目を超えたときだけ理由に出す
     commentsDelayed:
       commentsDelayed && judgedDelaySec > sc.comments!.freshness.good,
@@ -6200,6 +6448,8 @@ function stageReasons(
     uncached: boolean;
     /** ビルドし直す形の 1 回のビルドの時間（秒。鮮度の遅れに足す。D-104）。 */
     buildDelaySec?: number;
+    /** 記事ごとの枠（S5）をビルドで書き出す（新しい記事の理由を「枠のビルド」で書く。D-109）。 */
+    shellBuilds?: boolean;
     /** 新しい記事がビルドまで開けず、投稿した人の許容を超える（D-104）。 */
     newPostDelayed?: boolean;
     /** コメントを記事のページに含め、時間で再検証・ビルドしている（コメントが間隔の分だけ遅れて見える。D-85）。 */
@@ -6248,7 +6498,9 @@ function stageReasons(
       c.frontDelayed &&
         'HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見える（オンデマンドの再検証でキャッシュを消せば遅れない）',
       c.newPostDelayed &&
-        '新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさない）',
+        (c.shellBuilds
+          ? '新しく投稿された記事は、記事ごとの枠のビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさない）'
+          : '新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさない）'),
       c.commentsDelayed &&
         'コメントを記事のページに含めているので、コメントも間隔の分だけ遅れて見える',
       c.onDemandReason,
@@ -6376,6 +6628,21 @@ export function applyAction(state: GameState, action: Action): GameState {
                 settings: { ...state.settings, revalidateSec: action.value },
               }
             : {}),
+        },
+      );
+    }
+    case 'route-part': {
+      const sc = scenarioOf(state);
+      const r = sc.template(1).routes.find((x) => x.id === action.route)!;
+      const def = ROUTE_PARTS[action.part];
+      const routeParts = withComments(sc, state.routeParts, action.value);
+      const { routeParts: _, ...rest } = state;
+      return withNote(
+        `${r.label ?? r.id}の${def.label}: ${def.options.find((o) => o.value === action.value)!.label}`,
+        {
+          ...rest,
+          ...planned,
+          ...(Object.keys(routeParts).length > 0 ? { routeParts } : {}),
         },
       );
     }
@@ -6977,7 +7244,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
           next: invalidation
-            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる${commentsInPage(state.settings, state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなる' : ''}`
+            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる${commentsInPage(commentsOf(sc, state.routeParts), state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなる' : ''}`
             : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
               : base

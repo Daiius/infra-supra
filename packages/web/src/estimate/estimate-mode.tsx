@@ -180,6 +180,10 @@ export function EstimateMode() {
               ...(alt.value !== undefined ? { revalidateSec: alt.value } : {}),
             })
           }
+          // 記事の行のコメント欄（ページの部品。URL の rp.<ルート>.comments に残る。D-109）
+          onPart={(_, part, v) => {
+            if (part === 'comments') setInput({ comments: v });
+          }}
           caption={`${ROUTE_PLAN_NOTE} 差は今の PV での月額。構成の比較・費用の曲線もこの描き方で引く。`}
         />
       </Card>
@@ -438,10 +442,7 @@ function Conditions({
           );
         })}
       </div>
-      {(settings.revalidate ||
-        settings.comments ||
-        settings.format ||
-        settings.variants) && (
+      {(settings.revalidate || settings.format || settings.variants) && (
         <>
           <h3 className="font-semibold">設定</h3>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -458,26 +459,6 @@ function Conditions({
                   }
                 >
                   {settings.revalidate.options.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {settings.comments && (
-              <Field
-                label={settings.comments.label}
-                info={settings.comments.note}
-              >
-                <select
-                  className={select}
-                  value={input.comments}
-                  onChange={(e) =>
-                    setInput({ comments: Number(e.target.value) })
-                  }
-                >
-                  {settings.comments.options.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>

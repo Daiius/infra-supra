@@ -1,5 +1,5 @@
 // ページの見取り図（D-102）。区画と作られ方はシナリオのデータ（ScenarioText.wireframes）から読み、
-// 選んだフレームワークと設定「コメントの描き方」（D-82）で game の pageWireframes が解く。ここはフレームワークを知らない。
+// 選んだフレームワークと記事のページの部品「コメント欄」（D-82・D-109）で game の pageWireframes が解く。ここはフレームワークを知らない。
 // 区画は daisyUI の skeleton を使わない（読み込み中の印で、光る動きと塗りが作られ方の色を消すため）。札は badge。
 import {
   REGION_SOURCES,

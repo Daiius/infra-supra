@@ -45,6 +45,8 @@ export type CpuSource = {
   island?: boolean;
   /** サーバーの島のページの枠（RequestSource の islandShell。D-108）。 */
   islandShell?: boolean;
+  /** ルートのページの部品が呼ぶ API（RequestSource の part。D-109）。 */
+  part?: boolean;
 };
 
 export type NodeUsage = {
@@ -257,6 +259,7 @@ function consume(
               ...(s.rendering !== undefined ? { rendering: s.rendering } : {}),
               ...(s.island ? { island: true } : {}),
               ...(s.islandShell ? { islandShell: true } : {}),
+              ...(s.part ? { part: true } : {}),
               cpuMs: Math.max(m > 0 ? s.cpuMs : 0, h > 0 ? hitCpu : 0),
             },
           ];

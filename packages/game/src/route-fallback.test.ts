@@ -6,7 +6,6 @@ import {
   applyAction,
   ARTICLE_COMMUNITY,
   checkAction,
-  COMMENTS_IN_BROWSER,
   defaultRevalidateSec,
   DEFAULT_START_DATE,
   frameworksOf,
@@ -278,7 +277,7 @@ describe('始める画面のカードの注意（D-107 の補足）', () => {
       fw,
       {},
       revalidateOn(st, fw, routes, chosen),
-      COMMENTS_IN_BROWSER,
+      undefined,
       undefined,
       routes,
     );
@@ -318,7 +317,6 @@ describe('始める画面のカードの注意（D-107 の補足）', () => {
             components: {},
             revalidateSec: before.settings.revalidateSec,
             revalidateChosen: chosen,
-            comments: COMMENTS_IN_BROWSER,
             routes,
           };
           for (const next of nexts) {

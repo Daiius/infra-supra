@@ -4,11 +4,14 @@ import {
   applyActions,
   articleFamily,
   newGame,
+  partsOfComments,
   playMonth,
+  publicRouteId,
   SCENARIOS,
   type Action,
   type CommitmentPaymentId,
   type GameState,
+  type RouteParts,
 } from './index.ts';
 import {
   ROUTE_STRATEGIES,
@@ -27,11 +30,13 @@ const FRAMEWORK_IDS: readonly FrameworkId[] = [
 /**
  * 保存の版。2 でページごとの描き方（routes。D-107）を足した。1 の保存も読み、描き方はフレームワークの既定
  * （今の routeChoices で決まるもの。描き方を選べるようになる前の結果と同じ）として再生する。
+ * 3 でコメントの描き方を記事のページの部品に移した（routeParts と行動 route-part。D-109）。2 以前の保存の comments と
+ * 行動 { type: 'set', key: 'comments' } は、記事のページの部品として読み替える（同じ結果になる）。
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** 読める古い版。 */
-const READABLE_VERSIONS: readonly number[] = [1, 2];
+const READABLE_VERSIONS: readonly number[] = [1, 2, 3];
 
 export type SaveData = {
   version: typeof SAVE_VERSION;
@@ -51,8 +56,13 @@ export type SaveData = {
   components?: Choices;
   /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。無い保存は今の既定（5 分）で読む。 */
   revalidateSec?: number;
-  /** 始める画面で選んだコメントの描き方（D-82。0 ブラウザ・1 記事のページ）。無い保存は既定（ブラウザで読み込む）で読む。 */
+  /**
+   * 版 2 までの、始める画面で選んだコメントの描き方（D-82。0 ブラウザ・1 記事のページ）。版 3 からは routeParts に書く。
+   * 読み込みでは routeParts が無ければこれを記事のページの部品として読む。
+   */
   comments?: number;
+  /** 始める画面で選んだページの部品（版 3・D-109。記事のページのコメント欄）。無い保存は comments か既定で読む。 */
+  routeParts?: RouteParts;
   /** 始める画面で結んだ確約（D-97）。無い保存は確約なしで読む（版は上げない）。 */
   commitments?: { key: string; payment: CommitmentPaymentId }[];
   /** 始める画面で選んだページごとの描き方（版 2・D-107）。無い保存はフレームワークの既定で読む。 */
@@ -105,6 +115,15 @@ export function migrateActionFor(
   state: Pick<GameState, 'framework' | 'scenario' | 'routes'>,
   a: Action,
 ): Action {
+  // 設定「コメントの描き方」は記事のページの部品に移した（D-109）。同じ値・同じ手間の行動 route-part に読み替える
+  const old = a as { type: string; key?: string; value?: number };
+  if (old.type === 'set' && old.key === 'comments')
+    return {
+      type: 'route-part',
+      route: publicRouteId(state.scenario) ?? '',
+      part: 'comments',
+      value: old.value ?? 0,
+    };
   // 記事を静的にビルドし直す（S1）を選んでいる Astro では、buildInterval は今の正しい行動なので読み替えない（D-107・OCL-AC6E1C9E）
   if (
     a.type === 'set' &&
@@ -146,6 +165,20 @@ export function parseSave(raw: unknown): SaveData | null {
   const components = raw.components;
   const revalidateSec = raw.revalidateSec;
   const comments = raw.comments;
+  const routeParts = raw.routeParts;
+  if (
+    routeParts !== undefined &&
+    !(
+      isObject(routeParts) &&
+      Object.values(routeParts).every(
+        (v) =>
+          isObject(v) &&
+          (v.comments === undefined ||
+            (typeof v.comments === 'number' && Number.isFinite(v.comments))),
+      )
+    )
+  )
+    return null;
   const commitments = raw.commitments;
   if (
     commitments !== undefined &&
@@ -200,6 +233,9 @@ export function parseSave(raw: unknown): SaveData | null {
       ? { revalidateSec: revalidateSec as number }
       : {}),
     ...(comments !== undefined ? { comments: comments as number } : {}),
+    ...(routeParts !== undefined
+      ? { routeParts: routeParts as RouteParts }
+      : {}),
     ...(commitments !== undefined
       ? {
           commitments: commitments as NonNullable<SaveData['commitments']>,
@@ -228,7 +264,7 @@ export function replaySave(save: SaveData): GameState {
       save.framework,
       save.components,
       save.revalidateSec,
-      save.comments,
+      save.routeParts ?? partsOfComments(scenario, save.comments),
       save.commitments,
       save.routes,
     ),

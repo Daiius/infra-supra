@@ -250,12 +250,12 @@ export type Scenario = {
   /**
    * API の書き込みのうち、記事のページ（ISR・Astro のキャッシュ・静的書き出しの静的なページ）の HTML を作り直す更新の割合（記事の投稿・編集）。
    * 月の内容の更新 = PV × 1 PV あたりの API × 書き込みの割合 × この値。オンデマンドの再検証の再生成・CDN の無効化と、
-   * Astro のキャッシュを消す数・静的書き出しのビルドし直しの数のもと。コメント・いいねは別のデータとして読み込み、ページを作り直さないとみなす（既定。設定「コメントの描き方」で含めると comments を足す）
+   * Astro のキャッシュを消す数・静的書き出しのビルドし直しの数のもと。コメント・いいねは別のデータとして読み込み、ページを作り直さないとみなす（既定。記事のページの部品「コメント欄」で含めると comments を足す。D-109）
    * （一般的な作り方の仮定。D-49・D-70・prd/04 §2）。
    */
   pageUpdateShare: number;
   /**
-   * 設定「コメントの描き方」（D-82）。記事のページに含める（ISR・静的なページの HTML にコメントも入れる）と、
+   * 記事のページの部品「コメント欄」（D-82。段 4 で設定から移した。D-109）。記事のページに含める（ISR・静的なページの HTML にコメントも入れる）と、
    * API の書き込みのうちこの割合（コメントの投稿）も記事のページを作り直す（pageUpdateShare に足す）。
    * 省略したシナリオでは設定を出さない（受託など、コメントの無いアプリ）。値はゲーム上の仮定。
    */
@@ -327,7 +327,6 @@ export type Scenario = {
       | 'apiCacheTtl'
       | 'buildInterval'
       | 'pageCache'
-      | 'comments'
     )[];
     slots?: SlotId[];
     blockBots?: boolean;
@@ -461,8 +460,13 @@ export type PageWireframe = {
    * （island-shell）になる。S6 を選べるページ（人ごとに違うページ）だけに書く。
    */
   islandRegions?: string[];
-  /** 設定「コメントの描き方」で記事のページに含めたときに上書きする区画（D-82）。 */
+  /** 記事のページの部品「コメント欄」で記事のページに含めたときに上書きする区画（D-82・D-109）。 */
   commentsInPage?: Partial<Record<FrameworkId, Record<string, RegionSource>>>;
+  /**
+   * 記事ごとの枠（全員に同じ中身のページの S5。Next.js・Astro・静的書き出し。D-109）にしたときの区画の作られ方と札。
+   * 枠（ビルドで書き出す・メタタグ入り）と、ブラウザが API で取る中身に分ける。
+   */
+  shellPerPage?: { sources: Record<string, RegionSource>; badges: PageBadge[] };
   /** フレームワークごとの、ページの短い札（鮮度・SNS のカード・CPU の注意・API の増え方。文字で出す）。 */
   badges?: Partial<Record<FrameworkId, PageBadge[]>>;
 };

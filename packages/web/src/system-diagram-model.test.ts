@@ -208,6 +208,34 @@ describe('diagramModel', () => {
     expect(m.lanes.some((l) => l.id === 'revalidate')).toBe(true);
   });
 
+  it('記事を記事ごとの枠（S5。D-109）にすると、記事のページは静的な流れ（枠）と API（中身）に載り、ビルドのノードが増える', () => {
+    const sc = SCENARIOS['article-community']!;
+    const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
+    const routes = { article: 'shell-api' } as const;
+    const arch = diagramArchitecture(sc, cf, 'astro', {}, routes);
+    expect(arch.nodes.some((n) => n.config.kind === 'ci-build')).toBe(true);
+    const m = diagramModel(
+      arch,
+      pageWireframes(sc, 'astro', undefined, routes),
+    );
+    expect(m.lanes.find((l) => l.id === 'static')!.pages).toContain(
+      '記事のページ',
+    );
+    expect(m.lanes.find((l) => l.id === 'api')!.pages).toContain(
+      '記事のページ',
+    );
+  });
+
+  it('コメント欄を記事のページに含めると（D-109）、記事のページの見取り図のコメント欄は記事と同じ作られ方になる', () => {
+    const sc = SCENARIOS['article-community']!;
+    const comments = (cm?: number) =>
+      pageWireframes(sc, 'nextjs', cm)
+        .find((p) => p.route === 'article')!
+        .regions.find((r) => r.id === 'comments')!.source;
+    expect(comments()).toBe('api');
+    expect(comments(1)).toBe('isr');
+  });
+
   it('VPS の構成は 1 台に全部の経路が集まり、メールの送信・ドメインは経路の外に出る', () => {
     const sc = SCENARIOS['article-community']!;
     const vps = STACKS.findIndex((s) => s.id === 'sakura-vps-2gb');

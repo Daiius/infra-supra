@@ -37,6 +37,11 @@ import {
   revalidateSettingOf,
   routePlanRows,
   articleFamily,
+  articleShellPerPage,
+  partsOfComments,
+  publicRouteId,
+  ROUTE_PARTS,
+  setupCommentOptions,
   staticBuildOf,
   validRouteOverrides,
   withRouteChoice,
@@ -96,7 +101,10 @@ export type EstimateInput = {
   parts: Choices;
   /** 再検証の間隔・API のキャッシュの期間・ビルドの間隔（秒。オンデマンドは 0）。フレームワークで意味が替わる。 */
   revalidateSec: number;
-  /** コメントの描き方（D-82。0 ブラウザで読み込む・1 記事のページに含める）。選べないテンプレート・SPA では 0。 */
+  /**
+   * 記事のページのコメント欄（ページの部品。D-82・D-109。0 ブラウザで読み込む・1 記事のページに含める）。
+   * 選べないテンプレート・SPA・枠 + API の記事では 0。
+   */
   comments: number;
   imageFormat: ImageFormat;
   variants: number;
@@ -135,13 +143,15 @@ export function settingsOf(
           note: SETTINGS[revalidateKey].note,
           options: SETTINGS[revalidateKey].options,
         },
-    comments: hidden.includes('comments')
-      ? null
-      : {
-          label: SETTINGS.comments.label,
-          note: SETTINGS.comments.note,
-          options: SETTINGS.comments.options,
-        },
+    // コメント欄は記事のページの部品（D-109）。選べるのは記事のページが HTML のときだけ
+    comments:
+      setupCommentOptions(scenario, framework, routes).length === 0
+        ? null
+        : {
+            label: ROUTE_PARTS.comments.label,
+            note: ROUTE_PARTS.comments.note,
+            options: ROUTE_PARTS.comments.options,
+          },
     format: !hidden.includes('format'),
     variants: !hidden.includes('variants'),
   };
@@ -275,6 +285,8 @@ export function withTemplate(
 const PART_PREFIX = 'c.';
 /** ページごとの描き方（ルートの id → 描き方。D-107）。 */
 const ROUTE_PREFIX = 'rp.';
+/** ページの部品のコメント欄（rp.<ルート>.comments。D-109）。前の版の URL の cm も読む。 */
+const COMMENTS_PART = 'comments';
 
 export function toQuery(input: EstimateInput): URLSearchParams {
   const q = new URLSearchParams();
@@ -284,8 +296,10 @@ export function toQuery(input: EstimateInput): URLSearchParams {
   q.set('fw', input.framework);
   q.set('s', input.stack);
   q.set('r', String(input.revalidateSec));
-  if (input.comments !== COMMENTS_IN_BROWSER)
-    q.set('cm', String(input.comments));
+  // 記事のページの部品（コメント欄。D-109）は rp.<ルート>.comments（前の cm も読む）
+  const article = publicRouteId(scenarioOfTemplate(input.template));
+  if (input.comments !== COMMENTS_IN_BROWSER && article !== undefined)
+    q.set(`${ROUTE_PREFIX}${article}.${COMMENTS_PART}`, String(input.comments));
   q.set('img', input.imageFormat);
   q.set('v', String(input.variants));
   q.set('seats', String(input.seats));
@@ -312,9 +326,15 @@ export function fromQuery(search: string): Partial<EstimateInput> {
     if (k.startsWith(PART_PREFIX) && k.slice(PART_PREFIX.length) in SLOT_LABELS)
       parts[k.slice(PART_PREFIX.length) as SlotId] = v;
   const routes: Partial<Record<string, RouteStrategyId>> = {};
-  for (const [k, v] of q)
-    if (k.startsWith(ROUTE_PREFIX) && v in ROUTE_STRATEGIES)
+  let comments: number | undefined;
+  for (const [k, v] of q) {
+    if (!k.startsWith(ROUTE_PREFIX)) continue;
+    if (k.endsWith(`.${COMMENTS_PART}`)) {
+      const n = v.trim() === '' ? NaN : Number(v);
+      if (Number.isFinite(n)) comments = n;
+    } else if (v in ROUTE_STRATEGIES)
       routes[k.slice(ROUTE_PREFIX.length)] = v as RouteStrategyId;
+  }
   const out: Partial<EstimateInput> = { parts, routes };
   const set = <K extends keyof EstimateInput>(
     k: K,
@@ -327,7 +347,7 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   set('framework', str('fw') as FrameworkId | undefined);
   set('stack', str('s'));
   set('revalidateSec', num('r'));
-  set('comments', num('cm'));
+  set('comments', comments ?? num('cm'));
   set('imageFormat', str('img') as ImageFormat | undefined);
   set('variants', num('v'));
   set('seats', num('seats'));
@@ -687,9 +707,9 @@ function run(input: EstimateInput, r: Resolved) {
       imageKB: IMAGE_FORMAT_KB[input.imageFormat],
       variants: input.variants,
       revalidateSec: input.revalidateSec,
-      comments: input.comments,
     },
     routes: input.routes,
+    routeParts: partsOfComments(r.scenario, input.comments),
   });
   // アプリがメールを送らないテンプレートでは送信のノードを外す（D-101）
   const architecture = withSeats(
@@ -738,12 +758,10 @@ export function diagramOf(input: EstimateInput): {
     routes: routePlanRows(r.scenario, {
       framework: input.framework,
       stackIndex: r.stackIndex,
-      settings: {
-        revalidateSec: input.revalidateSec,
-        comments: input.comments,
-      },
+      settings: { revalidateSec: input.revalidateSec },
       components: r.components,
       routes: input.routes,
+      routeParts: partsOfComments(r.scenario, input.comments),
     }),
   };
 }
@@ -757,9 +775,10 @@ export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
   const rows = routePlanRows(r.scenario, {
     framework: input.framework,
     stackIndex: r.stackIndex,
-    settings: { revalidateSec: input.revalidateSec, comments: input.comments },
+    settings: { revalidateSec: input.revalidateSec },
     components: r.components,
     routes: input.routes,
+    routeParts: partsOfComments(r.scenario, input.comments),
   });
   const base = run(input, r);
   const blockingOf = (res: ReturnType<typeof run>) =>
@@ -802,7 +821,14 @@ export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
       ...(row.traits?.needsOgp
         ? {
             ogp:
-              row.strategy === 'shell-api' && r.components.ogp !== 'prerender'
+              row.strategy === 'shell-api' &&
+              !articleShellPerPage({
+                scenario: r.scenario,
+                framework: input.framework,
+                stackIndex: r.stackIndex,
+                routes: input.routes,
+              }) &&
+              r.components.ogp !== 'prerender'
                 ? {
                     ok: false,
                     text: 'HTML に中身が無いので、記事ごとの SNS のカードが出ない',
