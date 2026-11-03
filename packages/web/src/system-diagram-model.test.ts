@@ -14,12 +14,20 @@ import type { RequestClass } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
   activeLane,
+  ARROW,
   diagramArchitecture,
   diagramComponents,
   diagramModel,
+  EDGE_TAIL,
+  edgeGeometry,
+  isNarrow,
+  lanesThrough,
   LANES,
   LAYOUT,
+  LAYOUT_VERTICAL,
+  shortLabel,
   VIEWER,
+  type DiagramModel,
 } from './system-diagram-model.ts';
 
 type Combo = {
@@ -281,5 +289,158 @@ describe('diagramModel', () => {
     expect(spa.lanes.some((l) => l.id === 'isr')).toBe(false);
     expect(activeLane('isr', spa)).toBeNull();
     expect(activeLane(null, next)).toBeNull();
+  });
+
+  it('縦の図（狭い幅）: 段が上→下に積まれ、箱は小さく、箱どうし・枠どうしが重ならず、図の中に収まる', () => {
+    let widest = 0;
+    for (const { name, arch, pages } of all) {
+      const h = diagramModel(arch, pages);
+      const m = diagramModel(arch, pages, 'vertical');
+      expect(m.orientation, name).toBe('vertical');
+      expect(m.node, name).toEqual({
+        w: LAYOUT_VERTICAL.nodeW,
+        h: LAYOUT_VERTICAL.nodeH,
+      });
+      // 同じ箱・線・流れで、置き方だけが違う
+      expect(
+        m.nodes.map((n) => [n.id, n.depth]),
+        name,
+      ).toEqual(h.nodes.map((n) => [n.id, n.depth]));
+      expect(m.edges, name).toEqual(h.edges);
+      expect(m.lanes, name).toEqual(h.lanes);
+      // 深い段ほど下。閲覧者は一番上
+      for (const a of m.nodes) {
+        expect(a.y, name).toBeGreaterThan(m.viewer.y + m.viewer.h);
+        for (const b of m.nodes)
+          if (a.depth! < b.depth!)
+            expect(a.y + m.node.h, `${name} ${a.id} / ${b.id}`).toBeLessThan(
+              b.y,
+            );
+      }
+      for (const [i, a] of m.nodes.entries()) {
+        expect(a.x, name).toBeGreaterThanOrEqual(0);
+        expect(a.x + m.node.w, name).toBeLessThanOrEqual(m.width);
+        expect(a.y + m.node.h, name).toBeLessThanOrEqual(m.height);
+        for (const b of m.nodes.slice(i + 1))
+          expect(
+            a.x + m.node.w <= b.x ||
+              b.x + m.node.w <= a.x ||
+              a.y + m.node.h <= b.y ||
+              b.y + m.node.h <= a.y,
+            `${name} ${a.id} / ${b.id}`,
+          ).toBe(true);
+        const box = m.groups.find((g) => g.account === a.group)!.box!;
+        expect(a.x >= box.x && a.x + m.node.w <= box.x + box.w, name).toBe(
+          true,
+        );
+        expect(a.y >= box.y && a.y + m.node.h <= box.y + box.h, name).toBe(
+          true,
+        );
+      }
+      // 事業者の枠は左→右に並ぶ（横には重ならない）
+      const boxes = m.groups.flatMap((g) => (g.box ? [g.box] : []));
+      for (const [i, a] of boxes.entries())
+        for (const b of boxes.slice(i + 1))
+          expect(a.x + a.w <= b.x || b.x + b.w <= a.x, name).toBe(true);
+      expect(m.viewer.x, name).toBeGreaterThanOrEqual(0);
+      expect(m.viewer.x + m.viewer.w, name).toBeLessThanOrEqual(m.width);
+      widest = Math.max(widest, m.width);
+    }
+    // 幅 360px の画面のカードの中でも、縮めすぎずに収まる大きさ（横の図は最小 560px だった）
+    expect(widest).toBeLessThanOrEqual(360);
+  });
+
+  it('横の図の置き方は向きを渡しても変わらない', () => {
+    for (const { name, arch, pages } of all.slice(0, 40)) {
+      const m = diagramModel(arch, pages);
+      expect(diagramModel(arch, pages, 'horizontal'), name).toEqual(m);
+      expect(m.orientation).toBe('horizontal');
+      expect(m.node).toEqual({ w: LAYOUT.nodeW, h: LAYOUT.nodeH });
+    }
+  });
+
+  it('線の終わりは矢印より長いまっすぐな線で、箱に入る向きにそろい、曲線の終わりの接線とも一致する（矢印の先端の向き）', () => {
+    const dirOf = (m: DiagramModel, back: boolean | undefined) =>
+      m.orientation === 'horizontal'
+        ? back
+          ? { x: 0, y: -1 }
+          : { x: 1, y: 0 }
+        : back
+          ? { x: -1, y: 0 }
+          : { x: 0, y: 1 };
+    for (const { name, arch, pages } of all)
+      for (const m of [
+        diagramModel(arch, pages),
+        diagramModel(arch, pages, 'vertical'),
+      ])
+        for (const e of m.edges)
+          for (const off of [-6, 0, 6]) {
+            const at = `${name} ${m.orientation} ${e.from}>${e.to} ${off}`;
+            const g = edgeGeometry(m, e, off)!;
+            expect(g, at).toBeDefined();
+            const want = dirOf(m, e.back);
+            // mid → end: 入る向きにまっすぐ、矢印の先端より長い
+            const tail = { x: g.end.x - g.mid.x, y: g.end.y - g.mid.y };
+            const len = Math.hypot(tail.x, tail.y);
+            expect(len, at).toBeGreaterThanOrEqual(ARROW);
+            expect(tail.x / len, at).toBeCloseTo(want.x);
+            expect(tail.y / len, at).toBeCloseTo(want.y);
+            // c2 → mid（ベジェの終わりの接線）も同じ向き（つなぎ目で折れない）
+            const t = { x: g.mid.x - g.c2.x, y: g.mid.y - g.c2.y };
+            const tl = Math.hypot(t.x, t.y);
+            expect(tl, at).toBeGreaterThan(0);
+            expect(t.x / tl, at).toBeCloseTo(want.x);
+            expect(t.y / tl, at).toBeCloseTo(want.y);
+            // 終わりは行き先の箱の縁（1 px 手前）
+            const n =
+              e.to === VIEWER
+                ? { ...m.viewer }
+                : {
+                    ...m.nodes.find((x) => x.id === e.to)!,
+                    w: m.node.w,
+                    h: m.node.h,
+                  };
+            const edgeAt =
+              m.orientation === 'horizontal'
+                ? e.back
+                  ? g.end.y - (n.y + n.h)
+                  : n.x - g.end.x
+                : e.back
+                  ? g.end.x - (n.x + n.w)
+                  : n.y - g.end.y;
+            expect(Math.abs(edgeAt), at).toBeLessThanOrEqual(1);
+            expect(g.d.startsWith('M'), at).toBe(true);
+          }
+    expect(EDGE_TAIL).toBeGreaterThan(ARROW);
+  });
+
+  it('入れ物が sm より狭く、横の図が収まらないときだけ縦の図にする（測れていない 0 は横）', () => {
+    expect(isNarrow(0, 852)).toBe(false);
+    expect(isNarrow(320, 852)).toBe(true);
+    expect(isNarrow(639, 852)).toBe(true);
+    expect(isNarrow(640, 852)).toBe(false);
+    expect(isNarrow(900, 852)).toBe(false);
+    // 小さい図（VPS 1 台）は収まるうちは横のまま
+    expect(isNarrow(300, 276)).toBe(false);
+    expect(isNarrow(260, 276)).toBe(true);
+  });
+
+  it('縦の図の箱に出す短い名前は括弧の補足を外す・箱を通る流れ', () => {
+    expect(shortLabel('Worker（vinext）')).toBe('Worker');
+    expect(shortLabel('KV（ISR のキャッシュ）')).toBe('KV');
+    expect(shortLabel('Workers 静的アセット')).toBe('Workers 静的アセット');
+    expect(shortLabel('（だけ）')).toBe('（だけ）');
+    const sc = SCENARIOS['article-community']!;
+    const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
+    const m = diagramModel(
+      diagramArchitecture(sc, cf, 'nextjs'),
+      pageWireframes(sc, 'nextjs'),
+      'vertical',
+    );
+    const worker = m.nodes.find((n) => n.kind === 'function')!;
+    expect(worker.short).toBe(shortLabel(worker.label));
+    const through = lanesThrough(m, worker.id);
+    expect(through).toContain('ssr');
+    expect(through).toContain('api');
   });
 });

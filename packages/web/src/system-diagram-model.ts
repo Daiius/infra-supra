@@ -1,9 +1,10 @@
 // 構成図のモデル（D-105）。費用の計算に使う構成（catalog の composeStack が組む Architecture のノードと経路）から、
-// 閲覧者から左→右へ流れる図の箱と線を作る。構成ごとに手で描かない（計算と図がずれないように）。
+// 閲覧者から左→右（狭い幅では上→下）へ流れる図の箱と線を作る。構成ごとに手で描かない（計算と図がずれないように）。
 //   - 列: 経路の中での位置（閲覧者から何段目か。経路をまたいで最も深い段）
 //   - 行: 課金のアカウント（事業者）ごとの帯。課金の無いノード（Workers の静的アセットなど）は経路で隣のノードの事業者に入れる
 //   - 線: 経路の隣り合うノードの組。リクエストクラスを「流れ」（ページの描き方・API・画像など）にまとめて線に載せる
 //   - 経路に載らないノード（メールの送信・DNS・ドメイン・ビルド・バックアップ）は図の下に事業者ごとに並べる
+//   - 向き: 横（列を左→右・帯を上→下）と縦（狭い幅。段を上→下・帯を左→右に並べ、箱を小さくする）。D-105 の補足
 // 純粋関数。描画（system-diagram.tsx）は位置をそのまま使う。
 import {
   composeStack,
@@ -185,6 +186,8 @@ export const VIEWER_LABEL = '閲覧者（ブラウザ）';
 export type DiagramNode = {
   id: string;
   label: string;
+  /** 短い名前（縦の図の小さい箱に出す。括弧の補足を外したもの）。 */
+  short: string;
   kind: string;
   caption: string;
   compute: boolean;
@@ -211,7 +214,12 @@ export type DiagramGroup = {
   box?: { x: number; y: number; w: number; h: number };
 };
 export type DiagramLane = { id: LaneId; label: string; pages: string[] };
+/** 図の向き。横は列を左→右、縦（狭い幅）は段を上→下に積む。 */
+export type Orientation = 'horizontal' | 'vertical';
 export type DiagramModel = {
+  orientation: Orientation;
+  /** 箱の大きさ（向きで違う）。 */
+  node: { w: number; h: number };
   width: number;
   height: number;
   viewer: { x: number; y: number; w: number; h: number };
@@ -223,9 +231,24 @@ export type DiagramModel = {
   lanes: DiagramLane[];
 };
 
-/** 戻る線が箱の下を回る深さ。 */
+/** 戻る線が箱の下（縦の図では右）を回る深さ。 */
 export const BACK_LOOP = 24;
+/** 線の終わりの、入る向きにまっすぐな部分の長さ（矢印の先端の長さより長く。矢印の向きと線の向きをそろえる）。 */
+export const EDGE_TAIL = 10;
+/** 矢印の先端の長さ（図の座標。描画の marker と同じ）。 */
+export const ARROW = 8;
 
+/** 入れ物がこの幅（sm）より狭く、横の図が縮めずには収まらないときは、縦の図にする。 */
+export const NARROW_BELOW = 640;
+/**
+ * 縦の図にするか。入れ物の幅（ResizeObserver で測る。0 = まだ測れていない・畳まれている）と横の図の幅で決める。
+ * 入れ物が sm 以上か、横の図がそのまま収まるなら横の図（広い幅の見た目は変えない）。
+ */
+export const isNarrow = (containerWidth: number, horizontalWidth: number) =>
+  containerWidth > 0 &&
+  containerWidth < Math.min(NARROW_BELOW, horizontalWidth);
+
+/** 横の図の寸法（列 = colGap で左→右、同じ列の箱 = rowGap で上→下）。 */
 export const LAYOUT = {
   viewerW: 64,
   viewerH: 64,
@@ -240,6 +263,23 @@ export const LAYOUT = {
 } as const;
 
 /**
+ * 縦の図（狭い幅）の寸法。段 = colGap で上→下、同じ段の箱 = rowGap で左→右。箱は短い名前だけの小さい箱で、
+ * 詳しい説明は箱を押して出す。帯の頭（bandHeader）は帯の上の左端にロゴだけを置く（線は箱の真ん中から入るので重ならない）。
+ */
+export const LAYOUT_VERTICAL = {
+  viewerW: 84,
+  viewerH: 28,
+  nodeW: 56,
+  nodeH: 40,
+  colGap: 30,
+  rowGap: 4,
+  bandHeader: 16,
+  bandGap: 8,
+  bandPad: 4,
+  pad: 4,
+} as const satisfies Record<keyof typeof LAYOUT, number>;
+
+/**
  * 構成図のモデルを作る。pages はページの見取り図（D-102）で、流れごとに通るページの名前を添える（省略可）。
  */
 export function diagramModel(
@@ -248,6 +288,7 @@ export function diagramModel(
     label: string;
     regions: readonly { source: RegionSource }[];
   }[] = [],
+  orientation: Orientation = 'horizontal',
 ): DiagramModel {
   const routes = Object.entries(arch.routes).filter(
     (e): e is [RequestClass, string[]] => (e[1]?.length ?? 0) > 0,
@@ -354,9 +395,14 @@ export function diagramModel(
     return fallback;
   };
 
-  const L = LAYOUT;
+  const vertical = orientation === 'vertical';
+  const L = vertical ? LAYOUT_VERTICAL : LAYOUT;
+  // 段（閲覧者からの深さ）の位置。横の図は x、縦の図は y
   const colX = (d: number) =>
-    L.pad + L.viewerW + L.colGap + (d - 1) * (L.nodeW + L.colGap);
+    L.pad +
+    (vertical ? L.viewerH : L.viewerW) +
+    L.colGap +
+    (d - 1) * ((vertical ? L.nodeH : L.nodeW) + L.colGap);
   const routed = arch.nodes.filter((n) => depth.has(n.id));
   const groupOrder: string[] = [];
   for (const n of [...routed].sort(
@@ -368,6 +414,7 @@ export function diagramModel(
 
   const nodes: DiagramNode[] = [];
   const groups: DiagramGroup[] = [];
+  // 帯を積む位置（横の図は y を上→下、縦の図は x を左→右）
   let y = L.pad;
   for (const g of groupOrder) {
     const members = routed.filter((n) => accountOf(n.id) === g);
@@ -375,7 +422,7 @@ export function diagramModel(
     let rows = 0;
     let minD = Infinity;
     let maxD = 0;
-    const top = y + L.bandHeader;
+    const top = y + (vertical ? L.bandPad : L.bandHeader);
     for (const n of members) {
       const d = depth.get(n.id)!;
       const row = cells.get(d) ?? 0;
@@ -383,33 +430,48 @@ export function diagramModel(
       rows = Math.max(rows, row + 1);
       minD = Math.min(minD, d);
       maxD = Math.max(maxD, d);
+      const across = top + row * ((vertical ? L.nodeW : L.nodeH) + L.rowGap);
       nodes.push({
         ...nodeView(n, g),
         depth: d,
-        x: colX(d),
-        y: top + row * (L.nodeH + L.rowGap),
+        ...(vertical ? { x: across, y: colX(d) } : { x: colX(d), y: across }),
       });
     }
-    const h = L.bandHeader + rows * (L.nodeH + L.rowGap) - L.rowGap + L.bandPad;
     const brand = ACCOUNT_BRAND[g];
-    groups.push({
-      account: g,
-      ...(brand ? { brand } : {}),
-      box: {
+    let box: NonNullable<DiagramGroup['box']>;
+    if (vertical) {
+      const w = 2 * L.bandPad + rows * (L.nodeW + L.rowGap) - L.rowGap;
+      box = {
+        x: y,
+        y: colX(minD) - L.bandHeader,
+        w,
+        h: colX(maxD) - colX(minD) + L.nodeH + L.bandHeader + L.bandPad,
+      };
+      y += w + L.bandGap;
+    } else {
+      const h =
+        L.bandHeader + rows * (L.nodeH + L.rowGap) - L.rowGap + L.bandPad;
+      box = {
         x: colX(minD) - L.bandPad,
         y,
         w: colX(maxD) - colX(minD) + L.nodeW + 2 * L.bandPad,
         h,
-      },
-    });
-    y += h + L.bandGap;
+      };
+      y += h + L.bandGap;
+    }
+    groups.push({ account: g, ...(brand ? { brand } : {}), box });
   }
   const maxDepth = Math.max(1, ...depth.values());
-  // 戻る線は箱の下を回るので、その分だけ下を空ける
-  const height =
-    Math.max(y - L.bandGap + L.pad, L.viewerH + 2 * L.pad) +
-    (back.size > 0 ? BACK_LOOP : 0);
-  const width = colX(maxDepth) + L.nodeW + L.bandPad + L.pad;
+  // 戻る線は箱の下（縦の図では右）を回るので、その分だけ空ける
+  const loop = back.size > 0 ? BACK_LOOP : 0;
+  const across = Math.max(
+    y - L.bandGap + L.pad,
+    (vertical ? L.viewerW : L.viewerH) + 2 * L.pad,
+  );
+  const along =
+    colX(maxDepth) + (vertical ? L.nodeH : L.nodeW) + L.bandPad + L.pad;
+  const width = vertical ? across + loop : along;
+  const height = vertical ? along : across + loop;
 
   // --- 経路に載らないノード（事業者ごと。経路の帯の順、その後に新しい事業者）
   const side: DiagramModel['side'] = [];
@@ -445,14 +507,14 @@ export function diagramModel(
   }));
 
   return {
+    orientation,
+    node: { w: L.nodeW, h: L.nodeH },
     width,
     height,
-    viewer: {
-      x: L.pad,
-      y: height / 2 - L.viewerH / 2,
-      w: L.viewerW,
-      h: L.viewerH,
-    },
+    // 閲覧者は流れの始まりの端の真ん中（横の図は左、縦の図は上）
+    viewer: vertical
+      ? { x: across / 2 - L.viewerW / 2, y: L.pad, w: L.viewerW, h: L.viewerH }
+      : { x: L.pad, y: height / 2 - L.viewerH / 2, w: L.viewerW, h: L.viewerH },
     nodes,
     side,
     edges: edges.map((e) => (back.has(e) ? { ...e, back: true } : e)),
@@ -474,6 +536,7 @@ function nodeView(
   return {
     id: n.id,
     label: n.label,
+    short: shortLabel(n.label),
     kind,
     caption: KIND_CAPTION[kind] ?? kind,
     compute: isComputeKind(kind),
@@ -514,4 +577,98 @@ export function activeLane(
   return chosen !== null && model.lanes.some((l) => l.id === chosen)
     ? chosen
     : null;
+}
+
+/** 短い名前: 括弧の補足（「Worker（vinext）」の「（vinext）」）を外す。外すと何も残らないときは元の名前。 */
+export function shortLabel(label: string): string {
+  const s = label.replace(/（[^）]*）/g, '').trim();
+  return s === '' ? label : s;
+}
+
+/** ノードを通る流れ（入る線と出る線の流れ。LANE_ORDER の順）。 */
+export function lanesThrough(model: DiagramModel, id: string): LaneId[] {
+  const set = new Set(
+    model.edges
+      .filter((e) => e.from === id || e.to === id)
+      .flatMap((e) => e.lanes),
+  );
+  return LANE_ORDER.filter((l) => set.has(l));
+}
+
+type Pt = { x: number; y: number };
+export type EdgeGeometry = {
+  start: Pt;
+  c1: Pt;
+  c2: Pt;
+  mid: Pt;
+  end: Pt;
+  /** SVG の path（M start C c1 c2 mid L end）。 */
+  d: string;
+};
+
+/**
+ * 線の形: start から 3 次ベジェ（c1・c2）で mid まで曲がり、mid から end へ、箱に入る向きにまっすぐ進む（長さ EDGE_TAIL）。
+ * 曲がりが強いと、ベジェの終わりのわずかな区間で向きが急に変わり、終わりの接線に付く矢印の先端（marker の orient="auto"）が、
+ * 見えている線の向きとずれる。終わりを矢印より長いまっすぐな線にし、c2 → mid もその向きにそろえて（つなぎ目でも折れない）、
+ * 矢印の向き・線の終わりの向き・曲線の終わりの接線を一致させる。off は同じ組の中で流れを並べるずれ（流れと直交する向き）。
+ *   - 横の図: 箱の右から出て、次の箱の左へ右向きに入る（戻る線は箱の下から出て下を回り、戻り先の箱の下へ上向きに入る）
+ *   - 縦の図: 箱の下から出て、次の箱の上へ下向きに入る（戻る線は箱の右から出て右を回り、戻り先の箱の右へ左向きに入る）
+ */
+export function edgeGeometry(
+  model: DiagramModel,
+  e: Pick<DiagramEdge, 'from' | 'to' | 'back'>,
+  off: number,
+): EdgeGeometry | undefined {
+  const rect = (id: string) => {
+    if (id === VIEWER) return model.viewer;
+    const n = model.nodes.find((x) => x.id === id);
+    return n && { x: n.x, y: n.y, w: model.node.w, h: model.node.h };
+  };
+  const a = rect(e.from);
+  const b = rect(e.to);
+  if (!a || !b) return undefined;
+  const vertical = model.orientation === 'vertical';
+  // 流れの軸（横の図は x、縦の図は y）と、それに直交する軸で書き、点にするときに入れ替える
+  const P = (along: number, across: number): Pt =>
+    vertical ? { x: across, y: along } : { x: along, y: across };
+  const axes = (r: { x: number; y: number; w: number; h: number }) =>
+    vertical
+      ? { s: r.y, len: r.h, c: r.x, wid: r.w }
+      : { s: r.x, len: r.w, c: r.y, wid: r.h };
+  const A = axes(a);
+  const B = axes(b);
+  let g: Omit<EdgeGeometry, 'd'>;
+  if (e.back) {
+    // 流れと直交する向きの向こう側（横の図は下・縦の図は右）を回る
+    const aSide = A.c + A.wid;
+    const bSide = B.c + B.wid;
+    const aMid = A.s + A.len / 2 + off;
+    const bMid = B.s + B.len / 2 + off;
+    g = {
+      start: P(aMid, aSide),
+      c1: P(aMid, aSide + BACK_LOOP),
+      c2: P(bMid, bSide + BACK_LOOP),
+      mid: P(bMid, bSide + EDGE_TAIL),
+      end: P(bMid, bSide + 1),
+    };
+  } else {
+    const aOut = A.s + A.len;
+    const bIn = B.s;
+    const aMid = A.c + A.wid / 2 + off;
+    const bMid = B.c + B.wid / 2 + off;
+    const m = bIn - EDGE_TAIL;
+    const k = Math.max(8, (m - aOut) / 2);
+    g = {
+      start: P(aOut, aMid),
+      c1: P(aOut + k, aMid),
+      c2: P(m - k, bMid),
+      mid: P(m, bMid),
+      end: P(bIn - 1, bMid),
+    };
+  }
+  const f = (p: Pt) => `${p.x},${p.y}`;
+  return {
+    ...g,
+    d: `M${f(g.start)} C${f(g.c1)} ${f(g.c2)} ${f(g.mid)} L${f(g.end)}`,
+  };
 }

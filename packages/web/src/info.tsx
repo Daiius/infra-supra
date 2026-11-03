@@ -31,10 +31,16 @@ type Pos = { left: number; maxHeight: number } & (
 export function Info({
   children,
   label = '説明',
+  trigger,
+  className = 'btn btn-ghost btn-xs btn-circle align-middle',
 }: {
   children: ReactNode;
   /** ボタンの読み上げ（既定「説明」）。 */
   label?: string;
+  /** ボタンの中身（既定は ⓘ。構成図の縦の図では箱そのものを押して説明を出す）。 */
+  trigger?: ReactNode;
+  /** ボタンの class（既定は丸い小さいボタン）。 */
+  className?: string;
 }) {
   const [pos, setPos] = useState<Pos | null>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -100,7 +106,7 @@ export function Info({
       <button
         ref={button}
         type="button"
-        className="btn btn-ghost btn-xs btn-circle align-middle"
+        className={className}
         aria-label={label}
         aria-expanded={open}
         aria-controls={id}
@@ -113,25 +119,27 @@ export function Info({
           else show();
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-          <circle
-            cx="8"
-            cy="8"
-            r="7"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.4"
-          />
-          <circle cx="8" cy="4.8" r="1" fill="currentColor" />
-          <rect
-            x="7.2"
-            y="6.8"
-            width="1.6"
-            height="5"
-            rx="0.8"
-            fill="currentColor"
-          />
-        </svg>
+        {trigger ?? (
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+            <circle
+              cx="8"
+              cy="8"
+              r="7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+            />
+            <circle cx="8" cy="4.8" r="1" fill="currentColor" />
+            <rect
+              x="7.2"
+              y="6.8"
+              width="1.6"
+              height="5"
+              rx="0.8"
+              fill="currentColor"
+            />
+          </svg>
+        )}
       </button>
       {open &&
         // body に出す（label の中に置かれても、吹き出しのクリックで選択肢が切り替わらないように）

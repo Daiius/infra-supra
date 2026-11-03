@@ -2,19 +2,33 @@
 // 箱と線は費用の計算に使う構成から作る（system-diagram-model.ts）。事業者ごとに薄い色の枠で囲み、ロゴと名前を添える。
 // 線は流れ（ページの描き方・API・画像）ごとに色の違う細い線を並べ（路線図の形）、凡例を押すとその流れだけを目立たせる。
 // SVG は role="img" で要約を名前にし、箱とつながりの一覧を読み上げ用に別に置く（色だけに頼らない）。
+// 入れ物が狭い（sm 未満で、横の図が縮めずには収まらない）ときは縦の図にする: 段を上→下・事業者の枠を左→右に並べ、
+// 箱は短い名前だけにし、箱を押す（キーボードは Enter・Space）と詳しい説明（事業者・種類・名前・通る流れ）を出す（D-105 の補足）。
 import type { ArchitectureInput } from 'estimator';
-import { useId, useMemo, useState, type CSSProperties } from 'react';
+import {
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { BrandMark, BRANDS, brandColor, type BrandId } from './brand-logos.tsx';
+import { Info } from './info.tsx';
 import {
   diagramModel,
   diagramSummary,
   activeLane,
+  edgeGeometry,
+  isNarrow,
   labelOf,
-  BACK_LOOP,
+  lanesThrough,
+  ARROW,
   LAYOUT,
   VIEWER,
   VIEWER_LABEL,
   type DiagramModel,
+  type DiagramNode,
   type LaneId,
 } from './system-diagram-model.ts';
 import type { ResolvedPage } from './page-wireframes.tsx';
@@ -59,10 +73,29 @@ export function SystemDiagram({
   /** 図の下の注記。 */
   caption?: string;
 }) {
-  const model = useMemo(
+  // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。カルーセルのカード・畳んだ欄の中でも同じ判定）
+  const wrap = useRef<HTMLDivElement>(null);
+  const [boxWidth, setBoxWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const measure = () => setBoxWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const wide = useMemo(
     () => diagramModel(architecture, pages ?? []),
     [architecture, pages],
   );
+  const narrow = isNarrow(boxWidth, wide.width);
+  const tall = useMemo(
+    () => (narrow ? diagramModel(architecture, pages ?? [], 'vertical') : null),
+    [narrow, architecture, pages],
+  );
+  const model = tall ?? wide;
   const [chosen, setActive] = useState<LaneId | null>(null);
   // 構成・部品を替えて選んでいた流れが図から消えたら、強調をやめる（凡例に無い流れで全部の線が薄くならないように）
   const active = activeLane(chosen, model);
@@ -71,79 +104,113 @@ export function SystemDiagram({
     groupTitle(account, model.groups.find((g) => g.account === account)?.brand);
   return (
     // figure にしない（daisyUI は .card の中の figure を横並びの flex にし、図が細く潰れる）
-    <div className="w-full min-w-0 space-y-2" data-diagram="system">
+    <div
+      ref={wrap}
+      className="w-full min-w-0 space-y-2"
+      data-diagram="system"
+      data-orientation={model.orientation}
+    >
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200/40">
         <svg
-          role="img"
+          // 縦の図は箱が押せるボタンなので img にしない（img の中のボタンは読み上げに出ない）
+          role={tall ? 'group' : 'img'}
           aria-label={diagramSummary(model, title)}
-          // 中身の大きさの viewBox で、カードの幅に合わせて縮める（広げない）。狭い画面では最小の幅を保ち、枠の中で横にスクロールする
+          // 中身の大きさの viewBox で、カードの幅に合わせて縮める（横の図は広げない。狭い画面では最小の幅を保ち、枠の中で横にスクロールする）。
+          // 縦の図は最小の幅を持たず（横にスクロールしない）、字が読めるよう 1.5 倍まで広げて真ん中に置く
           width="100%"
           viewBox={`0 0 ${model.width} ${model.height}`}
-          className="block h-auto"
-          style={{
-            maxWidth: model.width,
-            minWidth: Math.min(model.width, MIN_WIDTH),
-          }}
+          className={tall ? 'mx-auto block h-auto' : 'block h-auto'}
+          style={
+            tall
+              ? { maxWidth: model.width * 1.5 }
+              : {
+                  maxWidth: model.width,
+                  minWidth: Math.min(model.width, MIN_WIDTH),
+                }
+          }
         >
           <defs>
+            {/* 矢印の先端は線の終わりの向き（orient="auto"）。線の終わりは矢印より長いまっすぐな線にしてある（edgeGeometry）。
+                大きさは線の太さに依らず図の座標で決める（強調した線でも先端がまっすぐな部分からはみ出さない） */}
             <marker
               id={markerId}
               viewBox="0 0 6 6"
               refX="5"
               refY="3"
-              markerWidth="5"
-              markerHeight="5"
-              orient="auto-start-reverse"
+              markerUnits="userSpaceOnUse"
+              markerWidth={ARROW}
+              markerHeight={ARROW}
+              orient="auto"
             >
               <path d="M0,0 L6,3 L0,6 z" fill="context-stroke" />
             </marker>
           </defs>
           {model.groups.map((g) =>
             g.box ? (
-              <GroupBox key={g.account} g={g} title={title(g.account)} />
+              <GroupBox
+                key={g.account}
+                g={g}
+                title={title(g.account)}
+                compact={tall !== null}
+              />
             ) : null,
           )}
           <Edges model={model} active={active} markerId={markerId} />
           <Viewer model={model} />
-          {model.nodes.map((n) => (
-            <g key={n.id} data-node={n.id}>
-              <rect
-                x={n.x}
-                y={n.y}
-                width={LAYOUT.nodeW}
-                height={LAYOUT.nodeH}
-                rx={6}
-                style={{
-                  fill: 'var(--color-base-100)',
-                  stroke: n.compute
-                    ? 'var(--color-base-content)'
-                    : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)',
-                  strokeWidth: n.compute ? 1.75 : 1,
-                }}
+          {model.nodes.map((n) =>
+            tall ? (
+              <CompactNode
+                key={n.id}
+                n={n}
+                model={model}
+                title={title(n.group)}
+                brand={model.groups.find((g) => g.account === n.group)?.brand}
               />
-              <foreignObject
-                x={n.x + 4}
-                y={n.y + 2}
-                width={LAYOUT.nodeW - 8}
-                height={LAYOUT.nodeH - 4}
-              >
-                <div
-                  title={n.label}
-                  className="flex h-full flex-col justify-center leading-tight"
+            ) : (
+              <g key={n.id} data-node={n.id}>
+                <rect
+                  x={n.x}
+                  y={n.y}
+                  width={model.node.w}
+                  height={model.node.h}
+                  rx={6}
+                  style={{
+                    fill: 'var(--color-base-100)',
+                    stroke: n.compute
+                      ? 'var(--color-base-content)'
+                      : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)',
+                    strokeWidth: n.compute ? 1.75 : 1,
+                  }}
+                />
+                <foreignObject
+                  x={n.x + 4}
+                  y={n.y + 2}
+                  width={model.node.w - 8}
+                  height={model.node.h - 4}
                 >
-                  <span className="text-[10px] opacity-60">{n.caption}</span>
-                  <span
-                    className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
+                  <div
+                    title={n.label}
+                    className="flex h-full flex-col justify-center leading-tight"
                   >
-                    {n.label}
-                  </span>
-                </div>
-              </foreignObject>
-            </g>
-          ))}
+                    <span className="text-[10px] opacity-60">{n.caption}</span>
+                    <span
+                      className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
+                    >
+                      {n.label}
+                    </span>
+                  </div>
+                </foreignObject>
+              </g>
+            ),
+          )}
         </svg>
       </div>
       {caption && <p className="text-xs opacity-60">{caption}</p>}
+      {tall && (
+        <p className="text-xs opacity-60">
+          狭い幅なので縦に並べた。箱を押すと、事業者・種類・通る流れが出る。
+        </p>
+      )}
       <Legend model={model} active={active} onToggle={setActive} />
       {model.side.length > 0 && (
         <div className="text-xs">
@@ -156,7 +223,7 @@ export function SystemDiagram({
                 <li
                   key={n.id}
                   data-side-node={n.id}
-                  className="badge h-auto gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal"
+                  className="badge h-auto max-w-full gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal"
                 >
                   {s.brand && <BrandMark brand={s.brand} size={12} />}
                   <span className="sr-only">{title(s.group)}: </span>
@@ -175,9 +242,12 @@ export function SystemDiagram({
 function GroupBox({
   g,
   title,
+  compact,
 }: {
   g: DiagramModel['groups'][number];
   title: string;
+  /** 縦の図: 枠の上の左端にロゴだけ（名前は箱の説明と読み上げに出す）。 */
+  compact: boolean;
 }) {
   const b = g.box!;
   const color = (g.brand && brandColor(g.brand)) ?? 'var(--color-base-content)';
@@ -197,23 +267,74 @@ function GroupBox({
           strokeDasharray: '5 3',
         }}
       />
-      <foreignObject
-        x={b.x + 6}
-        y={b.y + 2}
-        width={Math.max(40, b.w - 12)}
-        height={LAYOUT.bandHeader - 2}
-      >
-        <div className="flex items-center gap-1 text-[11px] font-semibold whitespace-nowrap opacity-80">
-          {g.brand && <BrandMark brand={g.brand} size={12} />}
-          {title}
-        </div>
-      </foreignObject>
+      {compact ? (
+        <g>
+          <title>{title}</title>
+          <foreignObject x={b.x + 3} y={b.y + 2} width={b.w - 6} height={13}>
+            <div className="flex h-full items-center overflow-hidden text-[9px] font-semibold whitespace-nowrap opacity-80">
+              {g.brand ? <BrandMark brand={g.brand} size={12} /> : title}
+            </div>
+          </foreignObject>
+        </g>
+      ) : (
+        <foreignObject
+          x={b.x + 6}
+          y={b.y + 2}
+          width={Math.max(40, b.w - 12)}
+          height={LAYOUT.bandHeader - 2}
+        >
+          <div className="flex items-center gap-1 text-[11px] font-semibold whitespace-nowrap opacity-80">
+            {g.brand && <BrandMark brand={g.brand} size={12} />}
+            {title}
+          </div>
+        </foreignObject>
+      )}
     </g>
   );
 }
 
 function Viewer({ model }: { model: DiagramModel }) {
   const v = model.viewer;
+  if (model.orientation === 'vertical')
+    // 縦の図: 上の真ん中の横長の箱（画面の形 + 閲覧者）
+    return (
+      <g data-node={VIEWER}>
+        <rect
+          x={v.x}
+          y={v.y}
+          width={v.w}
+          height={v.h}
+          rx={8}
+          style={{
+            fill: 'var(--color-base-100)',
+            stroke: 'var(--color-base-content)',
+            strokeWidth: 1.25,
+          }}
+        />
+        <rect
+          x={v.x + 10}
+          y={v.y + v.h / 2 - 6}
+          width={16}
+          height={12}
+          rx={1.5}
+          style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.25 }}
+        />
+        <line
+          x1={v.x + 10}
+          x2={v.x + 26}
+          y1={v.y + v.h / 2 - 2.5}
+          y2={v.y + v.h / 2 - 2.5}
+          style={{ stroke: 'currentColor', strokeWidth: 1.25 }}
+        />
+        <text
+          x={v.x + 32}
+          y={v.y + v.h / 2 + 4}
+          className="fill-current text-[11px] font-semibold"
+        >
+          閲覧者
+        </text>
+      </g>
+    );
   return (
     <g data-node={VIEWER}>
       <rect
@@ -277,30 +398,10 @@ function Edges({
   active: LaneId | null;
   markerId: string;
 }) {
-  const at = (id: string, side: 'out' | 'in') => {
-    if (id === VIEWER) {
-      const v = model.viewer;
-      return { x: v.x + v.w, y: v.y + v.h / 2 };
-    }
-    const n = model.nodes.find((x) => x.id === id);
-    if (!n) return undefined;
-    return {
-      x: side === 'out' ? n.x + LAYOUT.nodeW : n.x,
-      y: n.y + LAYOUT.nodeH / 2,
-    };
-  };
   return (
     <g fill="none">
       {model.edges.map((e) => {
-        const a = at(e.from, 'out');
-        const b = at(e.to, 'in');
-        if (!a || !b) return null;
-        const dx = Math.max(16, (b.x - a.x) / 2);
-        // 左へ戻る線（経路の輪）は、箱の下から出て下を回り、戻り先の箱の下へ入る
-        const d = (off: number) =>
-          e.back
-            ? `M${a.x - LAYOUT.nodeW / 2 + off},${a.y + LAYOUT.nodeH / 2} C${a.x - LAYOUT.nodeW / 2 + off},${a.y + LAYOUT.nodeH / 2 + BACK_LOOP} ${b.x + LAYOUT.nodeW / 2 + off},${b.y + LAYOUT.nodeH / 2 + BACK_LOOP} ${b.x + LAYOUT.nodeW / 2 + off},${b.y + LAYOUT.nodeH / 2 + 1}`
-            : `M${a.x},${a.y + off} C${a.x + dx},${a.y + off} ${b.x - dx},${b.y + off} ${b.x - 1},${b.y + off}`;
+        if (!edgeGeometry(model, e, 0)) return null;
         return (
           <g key={`${e.from}>${e.to}`} data-edge={`${e.from}>${e.to}`}>
             {e.lanes.map((l, k) => {
@@ -315,7 +416,7 @@ function Edges({
                 <path
                   key={l}
                   data-lane={l}
-                  d={d(off)}
+                  d={edgeGeometry(model, e, off)!.d}
                   style={style}
                   strokeDasharray={LANE_DASH[l]}
                   markerEnd={
@@ -345,11 +446,11 @@ function Legend({
   return (
     <ul aria-label="構成図の流れの凡例" className="flex flex-wrap gap-1">
       {model.lanes.map((l) => (
-        <li key={l.id}>
+        <li key={l.id} className="max-w-full min-w-0">
           <button
             type="button"
             aria-pressed={active === l.id}
-            className={`btn h-auto min-h-0 gap-1.5 btn-ghost px-2 py-1 text-left text-xs font-normal btn-xs ${active === l.id ? 'btn-active' : ''}`}
+            className={`btn h-auto min-h-0 max-w-full shrink gap-1.5 btn-ghost px-2 py-1 text-left text-xs font-normal btn-xs ${active === l.id ? 'btn-active' : ''}`}
             onClick={() => onToggle(active === l.id ? null : l.id)}
           >
             <svg aria-hidden width="18" height="6" className="shrink-0">
@@ -362,7 +463,7 @@ function Legend({
                 strokeDasharray={LANE_DASH[l.id]}
               />
             </svg>
-            <span>
+            <span className="min-w-0 break-words">
               {l.label}
               {l.pages.length > 0 && (
                 <span className="opacity-70">（{l.pages.join('・')}）</span>
@@ -409,5 +510,73 @@ function ConnectionList({
         ))}
       </ul>
     </div>
+  );
+}
+
+/** 縦の図の箱: 短い名前だけの小さい箱で、押すと詳しい説明を出す（info.tsx の吹き出し。ダイアログの中では PortalContainer に描く）。 */
+function CompactNode({
+  n,
+  model,
+  title,
+  brand,
+}: {
+  n: DiagramNode;
+  model: DiagramModel;
+  title: string;
+  brand: BrandId | undefined;
+}) {
+  const lanes = lanesThrough(model, n.id);
+  const laneLabel = (l: LaneId) =>
+    model.lanes.find((x) => x.id === l)?.label ?? l;
+  return (
+    <g data-node={n.id}>
+      <foreignObject x={n.x} y={n.y} width={model.node.w} height={model.node.h}>
+        <Info
+          label={`${title}: ${n.label}（${n.caption}）の説明`}
+          className={`flex h-full w-full cursor-pointer items-center justify-center rounded-md bg-base-100 px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+            n.compute
+              ? 'border-[1.75px] border-base-content font-semibold'
+              : 'border border-base-content/35'
+          }`}
+          trigger={
+            <span className="line-clamp-3 [overflow-wrap:anywhere]">
+              {n.short}
+            </span>
+          }
+        >
+          <div className="space-y-1.5" data-node-detail={n.id}>
+            <div className="flex items-center gap-1 text-xs opacity-70">
+              {brand && <BrandMark brand={brand} size={12} />}
+              {title}・{n.caption}
+            </div>
+            <div className="font-semibold">{n.label}</div>
+            {n.compute && (
+              <div className="text-xs opacity-70">
+                処理を動かす部品（太い枠）
+              </div>
+            )}
+            {lanes.length > 0 && (
+              <ul className="space-y-0.5 text-xs" aria-label="通る流れ">
+                {lanes.map((l) => (
+                  <li key={l} className="flex items-center gap-1.5">
+                    <svg aria-hidden width="14" height="6" className="shrink-0">
+                      <line
+                        x1="0"
+                        x2="14"
+                        y1="3"
+                        y2="3"
+                        style={{ stroke: LANE_COLOR[l], strokeWidth: 2.5 }}
+                        strokeDasharray={LANE_DASH[l]}
+                      />
+                    </svg>
+                    {laneLabel(l)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Info>
+      </foreignObject>
+    </g>
   );
 }
