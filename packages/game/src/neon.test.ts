@@ -234,13 +234,14 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     // 6/20 $37.2・16/20 $37.3・14/20 $34.4・20/20 $29.9・$119.2・3/20 $53.5）
     // Vercel × Next.js の既定を部品ごとにキャッシュにした分（D-111。前は受託 $39.8・記事 $120.1）
     // 記事はメールの通数から Bot の PV を除いた分（D-117。前は $90.4・$90.4・$119.9・1/20 $54.4）
+    // 記事 × AWS × SPA は即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で PV が伸びた分（D-118。前は $90.3）
     // Vercel Pro の既定の Flat Rate CDN と東京の単価（D-120。前は受託 0/20 $39.5・14/20 $38.4、記事 $119.8）
     expect(table).toEqual({
       contractAwsSpaAurora: '0/20 $80.2',
       contractAwsSpaPause: '0/20 $59.0',
       contractOpenNextPause: '0/20 $56.6',
-      articleAwsSpaAurora: '0/20 $90.3',
-      articleAwsSpaPause: '0/20 $90.3',
+      articleAwsSpaAurora: '0/20 $91.8',
+      articleAwsSpaPause: '0/20 $91.8',
       contractVercelNext: '0/20 $56.4',
       contractVercelSpa: '0/20 $56.6',
       contractNetlifyNext: '0/20 $38.1',

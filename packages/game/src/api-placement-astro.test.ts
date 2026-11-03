@@ -150,8 +150,9 @@ describe('Astro の API の置き場（D-69）', () => {
     })();
     expect(next).toBe(20);
     expect(run(article, CF_PAID, VPS2).won).toBe(17);
-    // 記事を Vercel の ISR でキャッシュする形（D-103）にしてビルドの CPU minute が無くなり、0 → 1。
-    // 既定の Flat Rate CDN（D-120）で CDN の転送が段に込みになり 1 → 20
+    // 記事を Vercel の ISR でキャッシュする形（D-103）にしてビルドの CPU minute が無くなり、0 → 1
+    // D-118: Astro の記事のキャッシュは既定でオンデマンドなので、即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で 1 → 4。
+    // 既定の Flat Rate CDN（D-120）で CDN の転送が段に込みになり 4 → 20
     expect(run(article, VERCEL_PRO, WORKERS).won).toBe(20);
     // ドメインの登録（D-96）の費用で 20 → 19。受託の量では従量の CDN がクレジットに収まっていたので、
     // 既定の Flat Rate CDN の $20 の段（2 か月目から）と東京の単価（D-120）で 19 → 0

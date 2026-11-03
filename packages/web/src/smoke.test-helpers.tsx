@@ -126,7 +126,7 @@ export async function renderApp(): Promise<void> {
 }
 
 /** ラベルの先頭で radio を選ぶ（説明・手間の棒の文字が後ろに続くので前方一致）。 */
-const pickRadio = (name: string, scope: HTMLElement = document.body) => {
+export const pickRadio = (name: string, scope: HTMLElement = document.body) => {
   const r = within(scope).getByRole('radio', {
     name: new RegExp(`^${escape(name)}`),
   });

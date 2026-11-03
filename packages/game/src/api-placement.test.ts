@@ -226,11 +226,14 @@ describe('基準プレイ（何もしない・シード 1〜20・prd/10 §9）',
     expect(run(contract, CF_PAID, {}).won).toBe(20);
   });
 
-  it('記事コミュニティ: Vercel Pro は API と画像を Cloudflare に出しても席と静的の転送が残り届かない', () => {
+  it('記事コミュニティ: Vercel Pro は API と画像を Cloudflare に出しても席と静的の転送が残り、ほぼ届かない', () => {
     const r = run(article, VERCEL_PRO, {
       api: 'cf-workers',
       images: 'cf-resize',
     });
+    // D-118: SPA は記事を毎回 API で読むので即時反映の苦情が来ず好評の知らせ（口コミの上乗せ）になり、
+    // メールの通数から Bot を除いた分（D-117）と合わせて 0 → 1 / 20（D-118 だけ・D-117 だけでは 0 のまま）。
+    // 画像を出すと Vercel の CDN の量が小さく、従量ならクレジットに収まった分が Flat Rate CDN の $20 の段になり 1 → 0（D-120。従量を選んでも東京の単価で 0）
     expect(r.won).toBe(0);
     expect(r.median).toBeGreaterThan(run(article, VERCEL_PRO, {}).median);
   });

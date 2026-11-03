@@ -1,18 +1,13 @@
 // 始める画面の部品の選択（D-45）。構成とフレームワークの組み合わせで選べるスロットを game の setupSlots から引き、
 // スロットごとにチップで選ぶ（既定は未選択）。チップは ① インフラの構成の選んでいるカードの、構成図の下に並べる（D-116）。
 // 事実の説明（note）と短い説明（フレーバー）はチップの ⓘ に置く。「不適切」の印は出さない（説明だけで正解が分からないようにする）。
-// 構成図の箱を押したときの差し替え（PartOptions）も同じ判定で描く。③ 設定の欄は見積モードと共用（D-115）。
+// 構成図の箱を押したときの差し替え（PartOptions）も同じ判定で描く。設定の小さなチップ（SettingChips）は ② のカードの記事のページの行
+// （描き方の設定。D-119）と、見積モードの画像の部品の行（画像の形式・サイズ違い）で使う。
 // 状態と整合（ゲームの validSetupChoices・見積の normalizeInput）は各画面が持ち、ここは値・変更・注記を受けて描くだけ。
 import {
   componentConflict,
   componentFlavor,
-  invalidationNote,
-  ON_DEMAND_REVALIDATE,
-  SETTINGS,
-  setupInvalidationEstimate,
   setupMonthOneEstimate,
-  revalidateSettingOf,
-  setupRevalidateOptions,
   setupSlots,
   STACKS,
   type FrameworkId,
@@ -138,6 +133,7 @@ export function PartChips({
   note,
   focusSlot,
   onFocused,
+  slotExtra,
 }: {
   stackIndex: number;
   framework: FrameworkId;
@@ -154,6 +150,8 @@ export function PartChips({
    */
   focusSlot?: string | null | undefined;
   onFocused?: () => void;
+  /** スロットの行のチップの下に添えるもの（見積モードの画像の形式・サイズ違い。D-119）。 */
+  slotExtra?: Partial<Record<string, ReactNode>> | undefined;
 }) {
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -265,6 +263,11 @@ export function PartChips({
                   );
                 })}
               </ul>
+              {slotExtra?.[x.slot] && (
+                <div className="min-w-0 sm:col-start-2">
+                  {slotExtra[x.slot]}
+                </div>
+              )}
             </div>
           );
         })}
@@ -350,139 +353,122 @@ export function PartOptions({
   );
 }
 
+/** 設定のチップの選択肢（why: 選べない理由。flavor: 短い説明。ツールチップと見出しの ⓘ に出す）。 */
+export type SettingChipOption<V extends string | number> = {
+  value: V;
+  label: string;
+  flavor?: string | undefined;
+  why?: string | null | undefined;
+};
+
 /**
- * 始める画面の ISR の再検証（D-49）・Next.js の静的書き出しのビルドの間隔（D-80）・Astro の記事のキャッシュ（D-103）。
- * SPA 以外。始める前なので手間はかからない（ゲーム中に切り替えるときだけ実装の手間がかかる）。既定は 5 分。
- * コメント欄の描き方（D-82）はフレームワークのカードの記事のページの欄で選ぶ（D-109・D-112）。ここでは無効化の見込みに使うだけ。
+ * 設定 1 つを小さなチップで選ぶ（② のカードの記事のページの行の描き方の設定・見積モードの画像の部品の行。D-119）。
+ * 部品・描き方のチップと同じ見せ方（同じ高さ・選択中は塗りと内側の枠と「選択中」・選べないものは灰色で理由は ⓘ）。
+ * 設定の説明と選択肢ごとの短い説明は見出しの ⓘ にまとめる（チップごとに ⓘ を並べない）。
  */
-export function SetupRevalidate({
-  scenario,
-  stackIndex,
-  framework,
-  components,
+export function SettingChips<V extends string | number>({
+  label,
+  note,
+  options,
   value,
   onChange,
-  comments,
-  routes,
+  setting,
+  children,
 }: {
-  scenario: Scenario;
-  stackIndex: number;
-  framework: FrameworkId;
-  /** 選んだ部品（オンデマンドの CloudFront の無効化の見込みに使う。D-66）。 */
-  components: SetupChoices;
-  value: number;
-  onChange: (v: number) => void;
-  /** 記事のページのコメント欄（含めると、オンデマンドの無効化の見込みも増える。D-82・D-109）。 */
-  comments: number;
-  /** 選んだページごとの描き方（記事の描き方で出す設定が変わる。D-107）。 */
-  routes?: RouteOverrides | undefined;
+  label: string;
+  note?: ReactNode;
+  options: readonly SettingChipOption<V>[];
+  value: V;
+  onChange: (v: V) => void;
+  /** data-setting（テストと見分けに使う）。 */
+  setting: string;
+  /** チップの下の注記。 */
+  children?: ReactNode;
 }) {
-  const options = setupRevalidateOptions(scenario, framework, routes);
-  // OpenNext で ISR を CloudFront にキャッシュするとき、オンデマンドの無効化の見込み（1 か月目の規模。D-66）
-  const invalidation = useMemo(() => {
-    if (options.length === 0) return undefined;
-    const chosen = Object.fromEntries(
-      Object.entries(components).filter(
-        (e): e is [string, string] => e[1] !== undefined,
-      ),
-    );
-    const e = setupInvalidationEstimate(
-      scenario,
-      stackIndex,
-      framework,
-      chosen,
-      comments,
-    );
-    return e && invalidationNote(e);
-  }, [scenario, stackIndex, framework, components, options.length, comments]);
-  if (options.length === 0) return null;
-  // Next.js は ISR の再検証、静的書き出しはビルドの間隔、Astro は記事のキャッシュ（同じ値をフレームワークの意味で選ぶ。D-80・D-103）
-  const def = SETTINGS[revalidateSettingOf(framework)];
+  const box =
+    'inline-flex h-7 max-w-full min-w-0 items-center gap-1 rounded-field text-xs';
+  const flavors = options.filter((o) => o.flavor);
+  const info =
+    note || flavors.length > 0 ? (
+      <Info label={`${label}の説明`}>
+        <span className="block space-y-1">
+          {note && <span className="block">{note}</span>}
+          {flavors.length > 0 && (
+            <ul className="list-disc pl-4">
+              {flavors.map((o) => (
+                <li key={o.value}>
+                  <span className="font-semibold">{o.label}</span>: {o.flavor}
+                </li>
+              ))}
+            </ul>
+          )}
+        </span>
+      </Info>
+    ) : undefined;
   return (
-    <SetupSettings>
-      <SettingRadios
-        name="setup-revalidate"
-        label={def.label}
-        note={def.note}
-        options={options}
-        value={value}
-        onChange={onChange}
-        extra={(v) =>
-          v === ON_DEMAND_REVALIDATE && invalidation ? (
-            <span className="block text-xs text-warning">{invalidation}</span>
-          ) : null
-        }
-      />
-    </SetupSettings>
+    <div
+      role="group"
+      aria-label={label}
+      data-setting={setting}
+      className="min-w-0 space-y-1"
+    >
+      <span className="block text-xs font-semibold">
+        <NameWithInfo name={label} info={info} />
+      </span>
+      <ul className="flex min-w-0 flex-wrap gap-1">
+        {options.map((o) => {
+          const selected = o.value === value;
+          const why = selected ? null : (o.why ?? null);
+          const pick = !selected && why === null;
+          return (
+            <li
+              key={o.value}
+              data-option={o.value}
+              data-selected={selected ? 'true' : 'false'}
+              data-available={why === null ? 'true' : 'false'}
+              title={why ? `${o.label}（${why}）` : (o.flavor ?? o.label)}
+              className={`${box} ${selected || why ? 'pr-0.5' : 'pr-2'} pl-2 ${
+                selected
+                  ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
+                  : pick
+                    ? 'bg-base-100 ring-1 ring-base-300 ring-inset hover:bg-base-200'
+                    : 'bg-base-200 opacity-50 ring-1 ring-base-300 ring-inset'
+              }`}
+            >
+              <button
+                type="button"
+                aria-pressed={selected}
+                disabled={why !== null}
+                aria-label={`${label}を${o.label}にする${why ? `（${why}）` : ''}`}
+                className={`inline-flex h-full min-w-0 items-center gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                  pick ? 'cursor-pointer' : 'cursor-default'
+                }`}
+                onClick={pick ? () => onChange(o.value) : undefined}
+              >
+                <span className="truncate">{o.label}</span>
+                {selected && (
+                  <span className="badge h-4 shrink-0 badge-xs px-1 badge-primary">
+                    選択中
+                  </span>
+                )}
+              </button>
+              {why && <Info label={`${o.label}が選べない理由`}>{why}</Info>}
+            </li>
+          );
+        })}
+      </ul>
+      {children}
+    </div>
   );
 }
 
-/** ③ 設定の欄（見出しと、設定ごとの SettingRadios を並べる枠。見積モードと共用。D-115）。 */
+/** ③ 設定の欄（見出しと、設定を並べる枠）。描き方の設定は ② のカード、画像の設定は ① の画像の行に移した（D-119）。今は見積モードで画像の行の無い構成のときだけ使う。 */
 export function SetupSettings({ children }: { children: ReactNode }) {
   return (
     <div className="space-y-2">
       <h3 className="mt-2 font-bold">③ 設定</h3>
       {children}
     </div>
-  );
-}
-
-/** 設定 1 つをラジオで選ぶ枠（見出しの ⓘ に説明。選択肢に短い説明 flavor と、値ごとの注記 extra を添えられる）。 */
-export function SettingRadios<V extends string | number>({
-  name,
-  label,
-  note,
-  options,
-  value,
-  onChange,
-  extra,
-}: {
-  /** ラジオの name。 */
-  name: string;
-  label: string;
-  note?: string | undefined;
-  options: readonly { value: V; label: string; flavor?: string | undefined }[];
-  value: V;
-  onChange: (v: V) => void;
-  extra?: (v: V) => ReactNode;
-}) {
-  return (
-    <fieldset className="min-w-0 rounded-box border border-base-300 p-3">
-      <legend className="px-1 font-semibold">
-        {note ? (
-          <NameWithInfo
-            name={label}
-            info={<Info label={`${label} の説明`}>{note}</Info>}
-          />
-        ) : (
-          label
-        )}
-      </legend>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {options.map((o) => (
-          <label
-            key={o.value}
-            className="flex cursor-pointer items-start gap-2"
-          >
-            <input
-              type="radio"
-              name={name}
-              value={String(o.value)}
-              className="radio radio-primary radio-sm mt-0.5 shrink-0"
-              checked={value === o.value}
-              onChange={() => onChange(o.value)}
-            />
-            <span className="block min-w-0">
-              <span className="block text-sm">{o.label}</span>
-              {o.flavor && (
-                <span className="block text-xs opacity-70">{o.flavor}</span>
-              )}
-              {extra?.(o.value)}
-            </span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
   );
 }
 

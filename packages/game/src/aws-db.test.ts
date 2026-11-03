@@ -98,15 +98,16 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/14 §3.12�
   });
 
   it('記事 × Vercel Pro: DynamoDB は Astro だけ届き、Next.js は届かない', () => {
-    // 既定の Flat Rate CDN（D-120）で CDN の転送が段に込みになり 6 → 20。画像を Cloudflare に出すと Vercel の CDN の量が減り、
-    // 従量ならクレジットに収まった分が段の月額になって 20 → 11
+    // D-118: Astro の記事のキャッシュは既定でオンデマンドなので、即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で 6 → 9。
+    // 既定の Flat Rate CDN（D-120）で CDN の転送が段に込みになり 9 → 20。画像を Cloudflare に出すと Vercel の CDN の量が減り、
+    // 従量ならクレジットに収まった分が段の月額になって 20 → 18
     expect(won(article, VERCEL_PRO, 'astro', { db: 'dynamodb' })).toBe(20);
     expect(
       won(article, VERCEL_PRO, 'astro', {
         db: 'dynamodb',
         images: 'cf-resize',
       }),
-    ).toBe(11);
+    ).toBe(18);
     expect(
       won(article, VERCEL_PRO, 'nextjs', {
         db: 'dynamodb',
