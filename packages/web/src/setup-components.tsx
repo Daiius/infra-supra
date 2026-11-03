@@ -499,30 +499,20 @@ export function SetupCostPreview({
   /** 選んだページごとの描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
 }) {
-  const e = useMemo(() => {
-    const chosen = Object.fromEntries(
-      Object.entries(components).filter(
-        (x): x is [string, string] => x[1] !== undefined,
-      ),
-    );
-    return setupMonthOneEstimate(
-      scenario,
-      stackIndex,
-      framework,
-      chosen,
-      revalidateSec,
-      comments,
-      routes,
-    );
-  }, [
+  const chosen = Object.fromEntries(
+    Object.entries(components).filter(
+      (x): x is [string, string] => x[1] !== undefined,
+    ),
+  );
+  const e = setupMonthOneEstimate(
     scenario,
     stackIndex,
     framework,
-    components,
+    chosen,
     revalidateSec,
     comments,
     routes,
-  ]);
+  );
   return (
     <div
       role="status"

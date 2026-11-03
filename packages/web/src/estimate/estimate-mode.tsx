@@ -5,7 +5,6 @@ import {
   isValidElement,
   useEffect,
   useId,
-  useMemo,
   useState,
   type ReactElement,
   type ReactNode,
@@ -136,10 +135,10 @@ export function EstimateMode() {
     setNotice(null);
     setInput(withFramework(input, framework));
   };
-  const view = useMemo(() => runEstimate(input), [input]);
-  const rows = useMemo(() => compareStacks(input), [input]);
-  const diagram = useMemo(() => diagramOf(input), [input]);
-  const routeStatus = useMemo(() => routeStatusOf(input), [input]);
+  const view = runEstimate(input);
+  const rows = compareStacks(input);
+  const diagram = diagramOf(input);
+  const routeStatus = routeStatusOf(input);
   // 再検証の間隔などの描き方の設定は、記事のページの行で選ぶ（D-119。ゲームの始める画面と同じ部品）
   const revalidate = settingsOf(
     input.template,
@@ -373,35 +372,30 @@ function Conditions({
   const stackIndex = STACKS.findIndex((s) => s.id === input.stack);
   const settings = settingsOf(input.template, input.framework, input.routes);
   const comments = settings.comments ? input.comments : undefined;
-  const cardTotals = useMemo(() => stackCardTotals(input, rows), [input, rows]);
+  const cardTotals = stackCardTotals(input, rows);
   const allowed = frameworksOf(scenario).allowed;
   // フレームワークのカードの描き方（そのフレームワークを選んだときの行）。載せられないものは引かない（D-113）
-  const fwRoutes = useMemo(
-    () =>
-      new Map(
-        frameworksOf(scenarioOfTemplate(input.template))
-          .allowed.filter(
-            (id) =>
-              stackUnsupportedReason(
-                STACKS.findIndex((s) => s.id === input.stack),
-                id,
-              ) === undefined,
-          )
-          .map((id) => [id, frameworkCardRoutes(input, id)] as const),
-      ),
-    [input],
+  const fwRoutes = new Map(
+    frameworksOf(scenarioOfTemplate(input.template))
+      .allowed.filter(
+        (id) =>
+          stackUnsupportedReason(
+            STACKS.findIndex((s) => s.id === input.stack),
+            id,
+          ) === undefined,
+      )
+      .map((id) => [id, frameworkCardRoutes(input, id)] as const),
   );
   const [pvText, setPvText] = useState(String(input.pv));
   useEffect(() => setPvText(String(input.pv)), [input.pv]);
   const select = 'select select-bordered select-sm w-full';
   // 画像の形式・サイズ違い（画像の部品の行のチップの下。D-119）
-  const imagesRow = useMemo(
-    () =>
-      setupSlots(scenario, stackIndex, input.framework, input.parts).some(
-        (x) => x.slot === 'images',
-      ),
-    [scenario, stackIndex, input.framework, input.parts],
-  );
+  const imagesRow = setupSlots(
+    scenario,
+    stackIndex,
+    input.framework,
+    input.parts,
+  ).some((x) => x.slot === 'images');
   const imageSettings =
     settings.format || settings.variants ? (
       <div className="space-y-1.5">
@@ -1030,14 +1024,11 @@ function CostCurve({
 }) {
   // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
   const [picked, setPicked] = useState<string[] | null>(null);
-  const stacks = useMemo(
-    () =>
-      picked === null
-        ? defaultCurveStacks(rows)
-        : pickedCurveStacks(picked, rows),
-    [picked, rows],
-  );
-  const curves = useMemo(() => costCurves(input, stacks), [input, stacks]);
+  const stacks =
+    picked === null
+      ? defaultCurveStacks(rows)
+      : pickedCurveStacks(picked, rows);
+  const curves = costCurves(input, stacks);
   const series: CurveChartSeries[] = curves.map((c) => ({
     id: c.stack,
     label: c.current ? `${c.name}（今の構成）` : c.name,

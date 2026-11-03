@@ -9,7 +9,6 @@ import type { ArchitectureInput } from 'estimator';
 import {
   useId,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -150,18 +149,11 @@ export function SystemDiagram({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const wide = useMemo(
-    () => diagramModel(architecture, pages ?? [], 'horizontal', ghosts),
-    [architecture, pages, ghosts],
-  );
+  const wide = diagramModel(architecture, pages ?? [], 'horizontal', ghosts);
   const narrow = isNarrow(boxWidth, wide.width);
-  const tall = useMemo(
-    () =>
-      narrow
-        ? diagramModel(architecture, pages ?? [], 'vertical', ghosts)
-        : null,
-    [narrow, architecture, pages, ghosts],
-  );
+  const tall = narrow
+    ? diagramModel(architecture, pages ?? [], 'vertical', ghosts)
+    : null;
   const model = tall ?? wide;
   // 幽霊の箱は、そのスロットの差し替えを出す（D-116 の補足）
   const nodeParts: DiagramParts | undefined = parts && {
