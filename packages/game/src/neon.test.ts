@@ -226,12 +226,13 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     // ドメインの登録（D-96。AWS は Route 53 も）を数えた分（前は上から $78.8・$57.6・$55.2・$89.0・$89.0・0/20 $38.8・14/20 $37.5・
     // 6/20 $37.2・16/20 $37.3・14/20 $34.4・20/20 $29.9・$119.2・3/20 $53.5）
     // Vercel × Next.js の既定を部品ごとにキャッシュにした分（D-111。前は受託 $39.8・記事 $120.1）
+    // 記事 × AWS × SPA は即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で PV が伸びた分（D-118。前は $90.4）
     expect(table).toEqual({
       contractAwsSpaAurora: '0/20 $80.2',
       contractAwsSpaPause: '0/20 $59.0',
       contractOpenNextPause: '0/20 $56.6',
-      articleAwsSpaAurora: '0/20 $90.4',
-      articleAwsSpaPause: '0/20 $90.4',
+      articleAwsSpaAurora: '0/20 $91.9',
+      articleAwsSpaPause: '0/20 $91.9',
       contractVercelNext: '0/20 $39.5',
       contractVercelSpa: '14/20 $38.4',
       contractNetlifyNext: '0/20 $38.1',

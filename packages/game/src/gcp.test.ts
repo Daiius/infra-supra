@@ -156,13 +156,14 @@ describe('Google Cloud の構成', () => {
       contractSpaSql: run(contract, GCP, 'vite-spa', { db: 'cloud-sql' }),
     };
     // ドメインの登録（$0.93 / 月）と Cloud DNS（ゾーン 約 $0.20 + 問い合わせ）の分だけ $1.1〜1.2 上がった（D-96。達成は不変）
+    // D-118: 記事 × SPA は即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で PV が伸びた分、費用が上がった（前は $56.3・$11.8。達成は不変）
     expect(table).toEqual({
       articleNext: { won: 0, monthly: 64.3 },
       articleNextMin1: { won: 0, monthly: 73.6 },
       articleNextSql: { won: 0, monthly: 71.3 },
       articleNextCfResize: { won: 20, monthly: 28.2 },
-      articleSpa: { won: 0, monthly: 56.3 },
-      articleSpaCfResize: { won: 20, monthly: 11.8 },
+      articleSpa: { won: 0, monthly: 57.5 },
+      articleSpaCfResize: { won: 20, monthly: 12 },
       contractNext: { won: 20, monthly: 15.9 },
       contractNextMin1: { won: 20, monthly: 25.4 },
       // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）

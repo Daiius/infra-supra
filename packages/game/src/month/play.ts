@@ -135,7 +135,10 @@ export function playMonth(input: GameState): GameState {
   });
 
   // 今月届いた提案は、月の終わりに返事を待つ
-  const proposals = due.filter((x) => eventDef(sc, x.id)!.kind === 'proposal');
+  // 先に手を打っていた提案は知らせにしたので、返事を待たない（D-118）
+  const proposals = due.filter(
+    (x) => !x.preempted && eventDef(sc, x.id)!.kind === 'proposal',
+  );
 
   const history = [...state.history, report];
   const end = endOf(sc, month, { accountSuspended, outages, cash, history });

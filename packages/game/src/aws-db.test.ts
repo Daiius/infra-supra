@@ -94,7 +94,8 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/14 §3.12�
   });
 
   it('記事 × Vercel Pro: DynamoDB は Astro だけ届き（画像を Cloudflare に出すと全シード）、Next.js は届かない', () => {
-    expect(won(article, VERCEL_PRO, 'astro', { db: 'dynamodb' })).toBe(6);
+    // D-118: Astro の記事のキャッシュは既定でオンデマンドなので、即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で 6 → 9
+    expect(won(article, VERCEL_PRO, 'astro', { db: 'dynamodb' })).toBe(9);
     expect(
       won(article, VERCEL_PRO, 'astro', {
         db: 'dynamodb',
