@@ -75,7 +75,11 @@ import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { Swatch } from './route-plan-table.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
-import { diagramArchitecture } from './system-diagram-model.ts';
+import {
+  diagramArchitecture,
+  diagramComponents,
+  slotBoxes,
+} from './system-diagram-model.ts';
 import {
   CountUp,
   FireworksCanvas,
@@ -1569,6 +1573,26 @@ function ComponentsSection({
               state.routes,
             )}
             caption={DIAGRAM_NOTE}
+            // 今の部品が箱を持たないスロットは幽霊の箱で残す（D-116 の補足）
+            ghosts={
+              slotBoxes(
+                (c) =>
+                  diagramArchitecture(
+                    state.scenario,
+                    state.stackIndex,
+                    state.framework,
+                    c,
+                    state.routes,
+                  ),
+                diagramComponents(
+                  state.scenario,
+                  state.stackIndex,
+                  state.framework,
+                  state.components,
+                ),
+                slots,
+              ).ghosts
+            }
           />
         </div>
       </details>
