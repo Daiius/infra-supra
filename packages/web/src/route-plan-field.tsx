@@ -1,6 +1,7 @@
 // 始める画面のページごとの描き方（D-107・D-112）。フレームワークの既定から、ページごとに描き方を選び直す。
 // 選ぶ場所はフレームワークのカードのページの欄（見取り図の隣のチップ。D-112）。ここは行・要件の判定・選んだときの書き換えをまとめる
-// フック（useRoutePlanEditor）と、表で比べるダイアログ（RoutePlanCompare）を持つ。
+// フック（useRoutePlanEditor）と、表で比べるダイアログ（RoutePlanCompare）を持つ。見積モードは行と判定を自分の PV で引き、
+// 選んだときの書き換え（routeChoiceOf）だけを共用する（D-115）。
 // 始める前なので手間はかからない（途中で替えるときは手間がかかる。RS-08）。
 import {
   partsOfComments,
@@ -26,6 +27,30 @@ import {
 } from 'react';
 import { PortalContainer } from './info.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from './route-plan-table.tsx';
+
+/**
+ * ページの描き方を選んだときの書き換え（始める画面と見積モードで共用。D-115）: 選んだ描き方（フレームワークの既定と違うものだけ
+ * 残す。game の withRouteChoice）と、一緒に替える revalidateSec（S3 はオンデマンドなど。undefined は今のまま）。
+ */
+export function routeChoiceOf(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  routes: RouteOverrides,
+  row: RoutePlanRow,
+  alt: RouteAlternative,
+): { routes: RouteOverrides; revalidateSec: number | undefined } {
+  return {
+    routes: withRouteChoice(
+      scenario,
+      { framework, platform: STACKS[stackIndex]!.provider },
+      routes,
+      row.route,
+      alt.strategy,
+    ),
+    revalidateSec: alt.value,
+  };
+}
 
 /** 選んでいるフレームワークのページごとの描き方を選ぶのに要るもの（カードのチップと比べる表で共有する）。 */
 export type RoutePlanEditor = {
@@ -95,17 +120,17 @@ export function useRoutePlanEditor({
   return {
     rows,
     status,
-    onSelect: (row, alt) =>
-      onChange(
-        withRouteChoice(
-          scenario,
-          { framework, platform: STACKS[stackIndex]!.provider },
-          routes,
-          row.route,
-          alt.strategy,
-        ),
-        alt.value,
-      ),
+    onSelect: (row, alt) => {
+      const next = routeChoiceOf(
+        scenario,
+        stackIndex,
+        framework,
+        routes,
+        row,
+        alt,
+      );
+      onChange(next.routes, next.revalidateSec);
+    },
     onPart: (_, part, v) => {
       if (part === 'comments') onCommentsChange(v);
     },

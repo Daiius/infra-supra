@@ -395,6 +395,22 @@ describe('見積モードの画面', () => {
     expect(document.body.textContent).not.toMatch(
       /公式のアダプターが無いので、フレームワークを/,
     );
+    // 選んでいるカードのチップで描き方を選ぶと、URL と下の表にも残る（同じ書き換え。D-112・D-115）
+    fireEvent.click(
+      within(
+        screen.getByRole('region', { name: 'Next.js（App Router） の説明' }),
+      ).getByRole('button', {
+        name: /^個人向けのページを 枠 \+ ブラウザが API で取る/,
+      }),
+    );
+    expectEstimate();
+    expect(window.location.search).toContain('rp.personal=shell-api');
+    expect(
+      within(card('ページごとの描き方'))
+        .getByRole('table', { name: 'ページごとの描き方' })
+        .querySelector('tr[data-route="personal"] [data-strategy]')!
+        .getAttribute('data-strategy'),
+    ).toBe('shell-api');
   });
 
   it('W-07 見出しに ⓘ のある欄の入力は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {

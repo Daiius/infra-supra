@@ -18,7 +18,6 @@ import {
   SETTINGS,
   stackUnsupportedReason,
   STACKS,
-  withRouteChoice,
   type FrameworkId,
 } from 'game';
 import {
@@ -31,6 +30,7 @@ import { Info } from '../info.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from '../system-diagram.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from '../route-plan-table.tsx';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
+import { routeChoiceOf, type RoutePlanEditor } from '../route-plan-field.tsx';
 import { FrameworkField } from '../scenario-briefing.tsx';
 import {
   SettingRadios,
@@ -138,6 +138,30 @@ export function EstimateMode() {
   const rows = useMemo(() => compareStacks(input), [input]);
   const diagram = useMemo(() => diagramOf(input), [input]);
   const routeStatus = useMemo(() => routeStatusOf(input), [input]);
+  // ページの描き方を選ぶ（フレームワークのカードのチップと下の表で共有する。行と判定は見積の PV で。D-115）
+  const editor: RoutePlanEditor = {
+    rows: diagram.routes,
+    status: routeStatus,
+    onSelect: (row, alt) => {
+      const next = routeChoiceOf(
+        scenarioOfTemplate(input.template),
+        STACKS.findIndex((s) => s.id === input.stack),
+        input.framework,
+        input.routes,
+        row,
+        alt,
+      );
+      setInput({
+        routes: next.routes,
+        ...(next.revalidateSec !== undefined
+          ? { revalidateSec: next.revalidateSec }
+          : {}),
+      });
+    },
+    onPart: (_, part, v) => {
+      if (part === 'comments') setInput({ comments: v });
+    },
+  };
 
   return (
     <div className="space-y-4">
@@ -155,6 +179,7 @@ export function EstimateMode() {
         notice={notice}
         onPickStack={pickStack}
         onPickFramework={pickFramework}
+        editor={editor}
       />
       <Card title={`月の費用: ${view.name}`}>
         <div className="flex flex-wrap items-baseline gap-x-3">
@@ -205,30 +230,12 @@ export function EstimateMode() {
       </Card>
       <Card title="ページごとの描き方">
         <RoutePlanTable
-          rows={diagram.routes}
-          status={routeStatus}
-          // ほかの描き方を選ぶ（URL の rp.〜 に残る。構成の比較・費用の曲線もこの描き方で引く。D-107）
-          onSelect={(row, alt) =>
-            setInput({
-              routes: withRouteChoice(
-                scenarioOfTemplate(input.template),
-                {
-                  framework: input.framework,
-                  platform:
-                    STACKS.find((s) => s.id === input.stack)?.provider ??
-                    STACKS[0]!.provider,
-                },
-                input.routes,
-                row.route,
-                alt.strategy,
-              ),
-              ...(alt.value !== undefined ? { revalidateSec: alt.value } : {}),
-            })
-          }
+          rows={editor.rows}
+          status={editor.status}
+          // フレームワークのカードのチップと同じ書き換え（URL の rp.〜 に残る。構成の比較・費用の曲線もこの描き方で引く。D-107・D-115）
+          onSelect={editor.onSelect}
           // 記事の行のコメント欄（ページの部品。URL の rp.<ルート>.comments に残る。D-109）
-          onPart={(_, part, v) => {
-            if (part === 'comments') setInput({ comments: v });
-          }}
+          onPart={editor.onPart}
           caption={`${ROUTE_PLAN_NOTE} 差は今の PV での月額。構成の比較・費用の曲線もこの描き方で引く。`}
         />
       </Card>
@@ -341,6 +348,7 @@ function Conditions({
   notice,
   onPickStack,
   onPickFramework,
+  editor,
 }: {
   input: EstimateInput;
   setInput: (p: Partial<EstimateInput>) => void;
@@ -351,6 +359,8 @@ function Conditions({
   notice: string | null;
   onPickStack: (stack: string) => void;
   onPickFramework: (framework: FrameworkId) => void;
+  /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップ。D-112・D-115）。 */
+  editor: RoutePlanEditor;
 }) {
   const scenario = scenarioOfTemplate(input.template);
   // 構成の id ↔ STACKS の index の変換はここで 1 回（共用の欄は index で持つ）
@@ -487,11 +497,12 @@ function Conditions({
         }
         unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
         notice={notice}
+        editor={editor}
         text={{
           heading: '② アプリのフレームワークとページの描き方',
           footnote: null,
           wireframeNote:
-            '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+            '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。ほかの描き方にしたときの月額の差は下の「ページごとの描き方」の表で比べる。',
           compareHint: null,
         }}
       />
