@@ -194,6 +194,16 @@ export type EventDef = {
   requires?: Requirement;
   /** 受ける前に、構成・部品ごとにこの要件を満たせるかを出す（D-32）。 */
   previewRequirement?: Requirement;
+  /**
+   * 起きる月の構成が先に手を打っていれば、提案（苦情）の代わりに出す知らせ（D-118）。効果は起きた月から当てる。
+   * edits-immediate: 記事の投稿・編集がすぐ見える構成（editsReflectImmediately）。時期の乱数は変えない（台本はそのまま）。
+   */
+  preempted?: {
+    by: 'edits-immediate';
+    title: string;
+    text: string;
+    effects: Effect[];
+  };
 };
 
 export type Strategy = {

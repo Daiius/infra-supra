@@ -1,6 +1,8 @@
 // 出来事の要件（満たしているか・届くか・状態の表示）と、オンデマンドの無効化を妨げる理由。
 import type { EventDef, Requirement } from './scenario.ts';
 import {
+  apiCacheActive,
+  apiPlacedElsewhere,
   type Choices,
   componentsOf,
   composeStack,
@@ -17,6 +19,7 @@ import {
 } from 'catalog';
 import { books } from './core.ts';
 import { articleFamily } from './routes/strategy.ts';
+import { isOnDemand } from './settings.ts';
 import { dbBackupStatus, STACKS } from './stacks.ts';
 import type { GameState, StrategyFamily } from './state.ts';
 
@@ -273,6 +276,46 @@ export function requirementStatus(
       });
     }
   return out;
+}
+
+/**
+ * 記事の投稿・編集が、読者にすぐ見える構成か（D-118）。「記事を直してもすぐ反映されない」の苦情（p-ondemand）は、
+ * これを満たす構成では起きず、代わりに好評の知らせになる。満足度の鮮度の判定（month/judge.ts）と同じ見方:
+ * - 記事を毎回描く（S4・Next.js で ISR のキャッシュの部品が「キャッシュしない」）: キャッシュが無いので、いつもすぐ見える
+ * - 枠 + API（S5）・Vite の SPA: API の応答をキャッシュしていなければすぐ見える（キャッシュの期間は時間の期限）
+ * - キャッシュ（S2/S3・部品ごとにキャッシュ・Astro）・静的にビルドし直す（S1・静的書き出し）: 設定がオンデマンド
+ *   （投稿・編集で消す・更新のたびにビルド）で、消す呼び出しが届く（onDemandBlocker が無い）とき。S1 のビルドの数分は
+ *   即時反映とみなす（D-80 と同じゲーム上の仮定）
+ * - KV を DB の代わりにしている（書き込みが他の拠点にすぐ反映されない。D-24）なら満たさない
+ */
+export function editsReflectImmediately(
+  state: Pick<
+    GameState,
+    'stackIndex' | 'components' | 'framework' | 'settings' | 'scenario'
+  > & { routes?: GameState['routes'] },
+): boolean {
+  const platform = STACKS[state.stackIndex]!.provider;
+  const comps = { ...DEFAULT_CHOICES[platform], ...state.components };
+  if (comps.db === 'kv' && !apiPlacedElsewhere(comps)) return false;
+  const fam = articleFamily(state);
+  const spa =
+    fam !== undefined ? fam === 'api' : state.framework === 'vite-spa';
+  if (spa) return !apiCacheActive(platform, state.components, state.framework);
+  if (fam === 'ssr') return true;
+  const rebuilds =
+    fam !== undefined ? fam === 'static' : rebuildsStaticPages(state.framework);
+  // Next.js の ISR のキャッシュの部品が「キャッシュしない」なら毎回描く（Astro はこの部品を使わない。D-103）
+  if (!rebuilds && state.framework !== 'astro' && comps.isrCache === 'none')
+    return true;
+  return (
+    isOnDemand(state.settings) &&
+    onDemandBlocker(
+      state.stackIndex,
+      state.components,
+      state.framework,
+      fam,
+    ) === undefined
+  );
 }
 
 /** 提案を受けられない理由（要件を満たせる構成がプラン変更でも無い）。 */

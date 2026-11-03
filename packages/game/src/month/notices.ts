@@ -8,6 +8,7 @@ import { articleFamily } from '../routes/strategy.ts';
 import type { Scenario, Scheduled } from '../scenario.ts';
 import { membersOf, slaOf } from '../stacks.ts';
 import type { GameState, MonthEvent, MonthReport } from '../state.ts';
+import type { Due } from './traffic.ts';
 
 /**
  * 今月の出来事の通知を並べる（台本の起きた・予告 → 前提の境目を越えた → 料金の改定の予告の順）。
@@ -20,7 +21,7 @@ export function monthEventsOf(
     month: number;
     prev: MonthReport | undefined;
     premises: readonly PlatformPremise[];
-    due: readonly Scheduled[];
+    due: readonly Due[];
     noticed: readonly Scheduled[];
   },
 ): { events: MonthEvent[]; fired: GameState['fired'] } {
@@ -30,6 +31,21 @@ export function monthEventsOf(
   // 出来事の通知（起きた・予告・提案）
   for (const x of due) {
     const def = eventDef(sc, x.id)!;
+    // 先に手を打っていた提案は、苦情の代わりに知らせを出す（受ける・断るは無い。D-118）
+    if (x.preempted) {
+      const p = def.preempted!;
+      events.push({
+        id: def.id,
+        kind: def.kind,
+        tier: def.tier,
+        phase: 'occurred',
+        title: p.title,
+        text: p.text,
+        effects: p.effects.map(describeEffect),
+        premises: [],
+      });
+      continue;
+    }
     // 予告を持ちうる台本は、予告どおり起きたか、予告なしで起きたか（D-28）
     const announced =
       def.notice && def.kind !== 'proposal'

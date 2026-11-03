@@ -194,6 +194,8 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
     // D-96: ドメインの登録と DNS の費用で所持金が $3〜17 減る（結果は変わらない）
     // D-117: メールの通数から Bot の PV を除いた（所持金が $0.3〜4 増える。結果は変わらない）
     // D-48: Vercel Pro の込み分をやめ、クレジットがすべての従量に当たる形に（Vercel Pro・何もしないは所持金が約 $550 減る）
+    // D-118: SPA は記事を毎回 API で読む（応答をキャッシュしない）ので、即時反映の苦情の代わりに好評の知らせ（口コミ +2 × 3 か月）。
+    //        KV を DB の代わりにする構成を除き所持金が $13〜26 増える（結果は変わらない）
     const r = Object.fromEntries(
       article.baselines.map((b) => {
         const s = playStrategy(b, 42, article, DEFAULT_START_DATE, 'vite-spa');
@@ -201,22 +203,23 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       }),
     );
     expect(r).toEqual({
-      'cf-paid': ['1809.41', 'won', 12],
-      'cf-paid-accept': ['1889.01', 'won', 12],
-      'vps-images': ['1621.85', 'goal', 12],
-      'vercel-pro': ['808.85', 'goal', 12],
-      'vercel-to-cf': ['1380.03', 'goal', 12],
+      // D-107: SPA はもともと個人向けも枠 + API なので、何もしないと同じ
+      // D-107: SPA はもともと個人向けも枠 + API なので、何もしないと同じ
+      'cf-paid': ['1835.45', 'won', 12],
+      'cf-paid-accept': ['1902.30', 'won', 12],
+      'vps-images': ['1644.92', 'goal', 12],
+      'vercel-pro': ['826.12', 'goal', 12],
+      'vercel-to-cf': ['1402.26', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1666.62', 'goal', 12],
-      'cf-paid-chat': ['1835.45', 'won', 12],
-      'vps-sla': ['1574.13', 'goal', 12],
-      'vps-cdn': ['1556.37', 'goal', 12],
-      'vercel-cf-images': ['1334.99', 'goal', 12],
-      'aws-amplify-cdn': ['1788.83', 'won', 12],
-      'aws-opennext-images': ['1929.30', 'won', 12],
-      // D-107: SPA はもともと個人向けも枠 + API なので、何もしないと同じ
+      'cf-paid-chat': ['1862.14', 'won', 12],
+      'vps-sla': ['1595.98', 'goal', 12],
+      'vps-cdn': ['1577.77', 'goal', 12],
+      'vercel-cf-images': ['1359.35', 'goal', 12],
+      'aws-amplify-cdn': ['1814.91', 'won', 12],
+      'aws-opennext-images': ['1946.51', 'won', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],
-      'cf-paid-personal-api': ['1809.41', 'won', 12],
+      'cf-paid-personal-api': ['1835.45', 'won', 12],
     });
   });
 });

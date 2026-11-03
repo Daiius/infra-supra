@@ -161,13 +161,14 @@ describe('Google Cloud の構成', () => {
     };
     // ドメインの登録（$0.93 / 月）と Cloud DNS（ゾーン 約 $0.20 + 問い合わせ）の分だけ $1.1〜1.2 上がった（D-96。達成は不変）
     // 記事はメールの通数から Bot の PV を除いて $0.1〜0.2 下がった（D-117。達成は不変）
+    // D-118: 記事 × SPA は即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で PV が伸びた分、費用が上がった（前は $56.2・$11.6。達成は不変）
     expect(table).toEqual({
       articleNext: { won: 0, monthly: 64.1 },
       articleNextMin1: { won: 0, monthly: 73.5 },
       articleNextSql: { won: 0, monthly: 71.1 },
       articleNextCfResize: { won: 20, monthly: 28 },
-      articleSpa: { won: 0, monthly: 56.2 },
-      articleSpaCfResize: { won: 20, monthly: 11.6 },
+      articleSpa: { won: 0, monthly: 57.4 },
+      articleSpaCfResize: { won: 20, monthly: 11.9 },
       contractNext: { won: 20, monthly: 15.9 },
       contractNextMin1: { won: 20, monthly: 25.4 },
       // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）
