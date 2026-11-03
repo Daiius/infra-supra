@@ -1,11 +1,13 @@
-// 組み合わせの総当たり（性質ベース。prd/05）: 2 シナリオ × フレームワーク × 構成（隠した構成を除く。D-100） × 始める画面で選べる部品のすべての組み合わせで、
+// 組み合わせの総当たり（性質ベース。prd/05）: 2 シナリオ × フレームワーク × 構成（隠した構成を除く。D-100）のすべてと、
+// 始める画面で選べる部品の pairwise の組み合わせ（どの 2 つのスロットの選択肢の組も、少なくとも 1 つの組み合わせに出る。D-114 CP-14）で、
 // 何もしないで最後まで（終わるまで）回し、壊れていないことを確かめる。金額そのものは期待値に書かない（実在の料金のため）。
-// 組み合わせは全部で約 2,000（全部回して数秒）。増えて遅くなったら、各スロットの各選択肢が 1 回は出る組（pairwise）に絞る。
+// 部品の直積は事業者をまたぐ部品（D-114）で桁で増えるので、2026-11-04 に直積から pairwise に切り替えた。構成ごとの既定の部品の組み合わせは必ず回す。
 import type { Choices, SlotId } from 'catalog';
 import { describe, expect, it, vi } from 'vitest';
 
 // 1 群で数百の組を 12 か月回し、1 本で十数秒かかるので、パッケージの 30 秒（vitest.config.ts）より上げる（D-87・D-98）
 vi.setConfig({ testTimeout: 120_000 });
+import { pairwise, seedOf, type Combo } from './pairwise.test-helpers.ts';
 import {
   applyAction,
   checkAction,
@@ -45,48 +47,80 @@ const choosable = (
     (x): x is typeof x & { slot: SlotId } => !x.fixed && x.slot !== 'files',
   );
 
-/**
- * 始める画面で選べる部品の組み合わせ（すべて）。各スロットの選択肢の直積から、今の選択で出ないスロット（API を他の事業者に
- * 置いたときの DB）を落とし、どの選択も部品どうしの依存（componentConflict。画面で選べなくなる理由）に当たらないものだけを残す。
- */
-function selectableCombos(
+/** 始める画面で選べる形に直す（今の選択で出るスロットだけ・どれも選択肢にあり・依存に当たらない）。選べなければ null。 */
+function normalizeChoices(
   sc: Scenario,
   stackIndex: number,
   fw: FrameworkId,
-): Choices[] {
+  c: Choices,
+): Choices | null {
   const platform = STACKS[stackIndex]!.provider;
-  let raw: Choices[] = [{}];
-  for (const x of choosable(sc, stackIndex, fw))
-    raw = raw.flatMap((c) => x.options.map((o) => ({ ...c, [x.slot]: o.id })));
-  // 選択で現れるスロット（DB で決まる DB のバックアップ。D-93）も、現れた組の中で選択肢ごとに広げる
-  raw = raw.flatMap((c) => {
-    let cs: Choices[] = [c];
-    for (const x of choosable(sc, stackIndex, fw, c))
-      if (c[x.slot] === undefined)
-        cs = cs.flatMap((d) =>
-          x.options.map((o) => ({ ...d, [x.slot]: o.id })),
-        );
-    return cs;
-  });
-  const out = new Map<string, Choices>();
-  for (const c of raw) {
-    const visible = choosable(sc, stackIndex, fw, c);
-    const d: Choices = {};
-    for (const x of visible) {
-      const v = c[x.slot];
-      if (v !== undefined) d[x.slot] = v;
-    }
-    if (
-      visible.every(
-        (x) =>
-          x.options.some((o) => o.id === d[x.slot]) &&
-          componentConflict(platform, x.slot, d[x.slot]!, d, fw) === null,
-      )
-    )
-      out.set(JSON.stringify(d), d);
+  const visible = choosable(sc, stackIndex, fw, c);
+  const d: Choices = {};
+  for (const x of visible) {
+    const v = c[x.slot];
+    if (v === undefined || !x.options.some((o) => o.id === v)) return null;
+    d[x.slot] = v;
   }
-  return [...out.values()];
+  return visible.every(
+    (x) => componentConflict(platform, x.slot, d[x.slot]!, d, fw) === null,
+  )
+    ? d
+    : null;
 }
+
+/**
+ * スロットと選択肢の和（既定の選択で出るスロットと、1 つの選択で現れるスロット（DB で決まる DB のバックアップ。D-93））。
+ */
+function domainOf(sc: Scenario, stackIndex: number, fw: FrameworkId) {
+  const slots = new Map<SlotId, string[]>();
+  const addAll = (xs: ReturnType<typeof choosable>) => {
+    for (const x of xs) {
+      const os = slots.get(x.slot) ?? [];
+      for (const o of x.options) if (!os.includes(o.id)) os.push(o.id);
+      slots.set(x.slot, os);
+    }
+  };
+  const base = choosable(sc, stackIndex, fw);
+  addAll(base);
+  for (const x of base)
+    for (const o of x.options)
+      addAll(choosable(sc, stackIndex, fw, { [x.slot]: o.id }));
+  return [...slots].map(([slot, options]) => ({ slot, options }));
+}
+
+const pairwiseCache = new Map<string, ReturnType<typeof pairwise>>();
+
+/**
+ * 始める画面で選べる部品の組み合わせ（pairwise。D-114 CP-14）。どの 2 つのスロットの選択肢の組も、選べる組み合わせのどれかに出る
+ * （選択で消えるスロットとの組・部品どうしの依存（componentConflict。画面で選べなくなる理由）に当たる組は作れないので除く）。
+ * 先頭は構成の既定の部品。乱数のシードはグループの名前で決まる（決定論）。
+ */
+function pairwiseOf(sc: Scenario, stackIndex: number, fw: FrameworkId) {
+  const key = `${sc.id}|${fw}|${STACKS[stackIndex]!.id}`;
+  const hit = pairwiseCache.get(key);
+  if (hit) return hit;
+  const platform = STACKS[stackIndex]!.provider;
+  const defaults = newGame(stackIndex, 0, sc, undefined, fw).components;
+  const r = pairwise(
+    domainOf(sc, stackIndex, fw),
+    (c) => normalizeChoices(sc, stackIndex, fw, c) as Combo | null,
+    seedOf(key),
+    {
+      base: [defaults as Combo],
+      allowed: (slot, o, partial) =>
+        componentConflict(platform, slot as SlotId, o, partial, fw) === null,
+    },
+  );
+  pairwiseCache.set(key, r);
+  return r;
+}
+
+const selectableCombos = (
+  sc: Scenario,
+  stackIndex: number,
+  fw: FrameworkId,
+): Choices[] => pairwiseOf(sc, stackIndex, fw).combos as Choices[];
 
 /** 組み合わせ i のコメントの描き方（再検証の一巡ごとに替える。選べないなら undefined。D-82）。 */
 const commentAt = (
@@ -154,7 +188,7 @@ function violations(s: GameState): string[] {
   return out;
 }
 
-describe('組み合わせの総当たり（2 シナリオ × フレームワーク × 構成 × 部品）', () => {
+describe('組み合わせの総当たり（2 シナリオ × フレームワーク × 構成 × 部品の pairwise）', () => {
   it('組み合わせは十分にある（列挙が空振りしていない）', () => {
     const n = GROUPS.reduce(
       (a, g) => a + selectableCombos(g.sc, g.stackIndex, g.fw).length,
@@ -162,6 +196,44 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
     );
     expect(GROUPS.length).toBeGreaterThan(20);
     expect(n).toBeGreaterThan(500);
+  });
+
+  it('pairwise の組み合わせは、作れる 2 つの組をすべて覆い、作れない組には直接の理由がある（選択で消える・依存に当たる）', () => {
+    const problems: string[] = [];
+    for (const g of GROUPS) {
+      const r = pairwiseOf(g.sc, g.stackIndex, g.fw);
+      const platform = STACKS[g.stackIndex]!.provider;
+      const id = `${g.sc.id} × ${g.fw} × ${STACKS[g.stackIndex]!.id}`;
+      // 先頭は構成の既定の部品（土台の既定の総当たり）
+      expect(r.combos[0]).toEqual(
+        normalizeChoices(
+          g.sc,
+          g.stackIndex,
+          g.fw,
+          newGame(g.stackIndex, 0, g.sc, undefined, g.fw).components,
+        ),
+      );
+      for (const p of r.infeasible) {
+        const [[x, a], [y, b]] = p
+          .split('&')
+          .map((s) => s.split('=') as [SlotId, string]) as [
+          [SlotId, string],
+          [SlotId, string],
+        ];
+        const both: Choices = { [x]: a, [y]: b };
+        const visible = choosable(g.sc, g.stackIndex, g.fw, both).map(
+          (s) => s.slot,
+        );
+        const direct =
+          !visible.includes(x) ||
+          !visible.includes(y) ||
+          componentConflict(platform, x, a, both, g.fw) !== null ||
+          componentConflict(platform, y, b, both, g.fw) !== null;
+        if (!direct)
+          problems.push(`${id}: ${p} が作れない（直接の理由が無い）`);
+      }
+    }
+    expect(problems).toEqual([]);
   });
 
   it.each(
@@ -335,7 +407,7 @@ describe('作り直しの総当たり（2 シナリオ × 構成 × 元と先の
 
 // 始める画面の 1 か月目の見込み（D-72）: 出来事の無い 1 か月目の実際の費用と一致し、所持金が尽きる組で警告が出る
 describe('1 か月目の費用の見込み（D-72）', () => {
-  it('出来事の無い 1 か月目の実際の費用・所持金切れと一致する（全組み合わせ）', () => {
+  it('出来事の無い 1 か月目の実際の費用・所持金切れと一致する（pairwise の全組み合わせ）', () => {
     const problems: string[] = [];
     let checked = 0;
     let short = 0;

@@ -2,8 +2,8 @@ name: Test
 
 # 型検査・テスト・整形の確認を、全ブランチの push と PR で回す（D-87）。
 # 秘密の検査は secret-scan.yml が別に持つ。
-# テストの時間のほとんどは組み合わせの総当たり（game の combo-sweep.test.ts）なので、
-# それだけを別の job に分けて並べて回す。2 つの job を合わせると `pnpm test` と同じ範囲になる。
+# 組み合わせの総当たり（game の combo-sweep.test.ts）は重いので、それだけを別の job に分けて並べて回す
+# （部品は 2026-11-04 から pairwise に絞った。D-114 CP-14）。2 つの job を合わせると `pnpm test` と同じ範囲になる。
 
 on:
   push:
