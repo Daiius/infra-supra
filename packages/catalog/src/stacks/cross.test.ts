@@ -78,6 +78,9 @@ const PAIRS_BEFORE_RULES = [
   'vercel × images × cloudflare',
 ];
 
+/** 段 2（D-114・CP-15）で足した組。移し替える前の組にこれだけが加わる。 */
+const PAIRS_ADDED_STAGE2 = ['vercel × db × aws'];
+
 /** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
 const COMPONENTS_BEFORE_RULES = [
   'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
@@ -91,6 +94,10 @@ const COMPONENTS_BEFORE_RULES = [
   'api cloudflare:cf-workers-server → aws,aws-opennext,netlify,vercel [nextjs]',
   'api cloudflare:cf-workers-astro → netlify,sakura,vercel [astro]',
   'db neon:neon → netlify,vercel',
+  // 段 2（D-114）で足した部品
+  'db aws:dynamodb → vercel',
+  'db aws:aurora → vercel',
+  'db aws:aurora-pause → vercel',
   'api sakura:sakura-vps-2gb → cloudflare [vite-spa,astro,nextjs-export]',
   'api sakura:sakura-vps-4gb → cloudflare [vite-spa,astro,nextjs-export]',
   'email aws:ses → cloudflare',
@@ -104,7 +111,7 @@ const crossOptions = () =>
   COMPONENTS.filter((c) => hostsOf(c).some((h) => h !== c.platform));
 
 describe('許した組（接続の規則から導く。D-114）', () => {
-  it('規則から導いた組は、移し替える前の組（CROSS_PAIRS）と一致する', () => {
+  it('規則から導いた組は、移し替える前の組（CROSS_PAIRS）と段 2 で足した組に一致する', () => {
     const pairs = new Set(
       crossOptions().flatMap((c) =>
         hostsOf(c)
@@ -112,10 +119,12 @@ describe('許した組（接続の規則から導く。D-114）', () => {
           .map((h) => `${h} × ${c.slot} × ${c.platform}`),
       ),
     );
-    expect([...pairs].sort()).toEqual(PAIRS_BEFORE_RULES);
+    expect([...pairs].sort()).toEqual(
+      [...PAIRS_BEFORE_RULES, ...PAIRS_ADDED_STAGE2].sort(),
+    );
   });
 
-  it('部品ごとの差せる土台とフレームワークも、移し替える前と一致する', () => {
+  it('部品ごとの差せる土台とフレームワークも、移し替える前（と段 2 で足した部品）と一致する', () => {
     expect(
       crossOptions().map(
         (c) =>
@@ -150,10 +159,14 @@ describe('許した組（接続の規則から導く。D-114）', () => {
     for (const p of PLATFORMS)
       for (const slot of ['isrCache', 'realtime', 'apiCache'] as const)
         expect(cross(p, slot)).toEqual([]);
-    // DB に他の事業者の部品を差せるのは Vercel・Netlify の Neon だけ（D-77）
+    // DB に他の事業者の部品を差せるのは Vercel・Netlify の Neon（D-77）と、Vercel の AWS の DynamoDB・Aurora（D-114 段 2）だけ
     for (const p of [...PLATFORMS, 'aws-opennext', 'netlify'] as const)
       expect(cross(p, 'db').map((c) => c.id)).toEqual(
-        p === 'vercel' || p === 'netlify' ? ['neon'] : [],
+        p === 'vercel'
+          ? ['neon', 'dynamodb', 'aurora', 'aurora-pause']
+          : p === 'netlify'
+            ? ['neon']
+            : [],
       );
     expect(cross('cloudflare', 'images')).toEqual([]);
     expect(cross('sakura', 'images')).toEqual([]);
@@ -1141,5 +1154,121 @@ describe('DB だけ Neon（D-77）', () => {
       { framework: 'vite-spa' },
     );
     expect(accountsOf(a)).toEqual(['vercel', 'cloudflare', 'aws']);
+  });
+});
+
+describe('DB だけ AWS（Vercel × DynamoDB・Aurora。D-114 段 2）', () => {
+  const withDb = (db: string, stack = 'vercel-supabase-pro', options = {}) =>
+    composeStack(stack, { db }, options);
+  const node = (a: ReturnType<typeof withDb>, id: string) =>
+    a.nodes.find((n) => n.id === id);
+
+  it('Supabase のノードを AWS の DB に差し替え（id は db のまま）、経路の DB の手前に応答の転送を置く', () => {
+    for (const fw of ['nextjs', 'vite-spa', 'astro'] as const)
+      for (const [db, planId] of [
+        ['dynamodb', 'dynamodb-on-demand'],
+        ['aurora', 'aurora-serverless-v2-io'],
+        ['aurora-pause', 'aurora-serverless-v2-io'],
+      ] as const) {
+        const base = composeStack('vercel-supabase-pro', {}, { framework: fw });
+        const a = withDb(db, 'vercel-supabase-pro', { framework: fw });
+        expect(node(a, 'db')).toMatchObject({
+          role: 'sql-db',
+          billing: { accountId: 'aws', provider: 'aws', planId },
+        });
+        expect(accountsOf(a)).not.toContain('supabase');
+        // AWS のアカウントは既定のメールの送信（SES）で既にある（増えない）
+        expect(accountsOf(base)).toContain('aws');
+        // 経路は DB の手前に転送のノードが入るだけ
+        const strip = (r: typeof a.routes) =>
+          Object.fromEntries(
+            Object.entries(r).map(([k, p]) => [
+              k,
+              p!.filter((id) => id !== 'aws-db-out'),
+            ]),
+          );
+        expect(strip(a.routes)).toEqual(base.routes);
+        for (const p of Object.values(a.routes))
+          p!.forEach((id, i) => {
+            if (id === 'db') expect(p![i - 1]).toBe('aws-db-out');
+          });
+        expect(isTransferNode(node(a, 'aws-db-out')!)).toBe(true);
+        expect(node(a, 'aws-db-out')).toMatchObject({
+          config: { kind: 'cdn', egressPerQuery: true },
+          facts: [db === 'dynamodb' ? 'dynamodb-out' : 'aurora-out'],
+          billing: {
+            provider: 'aws',
+            planId: 'data-transfer-out',
+            meters: { 'egress-gb': 'internet-out' },
+          },
+        });
+        // 受け手（Vercel の関数）には受け取りの項目が無い根拠を添える
+        expect(node(a, 'fn')!.facts).toContain('function-inbound');
+      }
+    expect(withDb('dynamodb').name).toBe('Vercel Pro + AWS DynamoDB');
+    expect(withDb('aurora', 'vercel-supabase-hobby').name).toBe(
+      'Vercel Hobby + AWS Aurora Serverless v2',
+    );
+    expect(node(withDb('aurora-pause'), 'db')!.config).toMatchObject({
+      kind: 'managed-db',
+      pauseAfterIdleSeconds: 300,
+    });
+  });
+
+  it('応答の転送は問い合わせの数 × 応答の大きさ（Supabase の egress と同じ量）', () => {
+    const w = resolveWorkload(articleCommunity(300_000));
+    const supa = simulateResources(w, composeStack('vercel-supabase-pro')).nodes
+      .db!.resources['egress-gb']!;
+    expect(supa).toBeGreaterThan(0);
+    for (const db of ['dynamodb', 'aurora']) {
+      const u = simulateResources(w, withDb(db)).nodes['aws-db-out']!;
+      expect(u.resources['egress-gb']).toBeCloseTo(supa, 9);
+    }
+  });
+
+  it('Netlify・他の構成には差さない（規則が Vercel だけ）', () => {
+    const a = composeStack('netlify-supabase-pro', { db: 'dynamodb' });
+    expect(node(a, 'db')!.billing!.provider).toBe('supabase');
+    expect(node(a, 'aws-db-out')).toBeUndefined();
+  });
+
+  it('差し替えの途中は移す先の DB を経路に載せずに足し、転送のノードは今の DB の分だけ', () => {
+    const to = composeStack(
+      'vercel-supabase-pro',
+      {},
+      { standby: { db: 'dynamodb' } },
+    );
+    expect(node(to, 'db')!.billing!.provider).toBe('supabase');
+    expect(node(to, 'db-next')!.billing!.planId).toBe('dynamodb-on-demand');
+    expect(node(to, 'aws-db-out')).toBeUndefined();
+    expect(Object.values(to.routes).flat()).not.toContain('db-next');
+    const back = composeStack(
+      'vercel-supabase-pro',
+      { db: 'aurora' },
+      { standby: { db: 'supabase' } },
+    );
+    expect(node(back, 'db')!.billing!.provider).toBe('aws');
+    expect(node(back, 'db-next')!.billing!.provider).toBe('supabase');
+    expect(node(back, 'aws-db-out')).toBeDefined();
+  });
+
+  it('DB のバックアップは AWS の DB の既定・PITR になる', () => {
+    const pitr = composeStack('vercel-supabase-pro', {
+      db: 'dynamodb',
+      dbBackup: 'pitr',
+    });
+    expect(
+      pitr.nodes.find((n) => n.config.kind === 'db-backup')!.billing,
+    ).toMatchObject({ provider: 'aws', planId: 'dynamodb-on-demand' });
+  });
+
+  it('API を他の事業者に置くと、DB のノードと応答の転送は外れる', () => {
+    const a = composeStack(
+      'vercel-supabase-pro',
+      { db: 'dynamodb', api: 'cf-workers-server' },
+      { framework: 'nextjs' },
+    );
+    expect(node(a, 'db')).toBeUndefined();
+    expect(node(a, 'aws-db-out')).toBeUndefined();
   });
 });

@@ -350,6 +350,46 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'https://docs.netlify.com/build/data-and-storage/netlify-db/',
     ]),
   },
+  // ---- DB だけ AWS（D-114 段 2・CP-15）。Vercel の Marketplace にある DynamoDB・Aurora を、公開の口でつなぐ（CP-07）----
+  {
+    id: 'vercel-compute-dynamodb',
+    slot: 'db',
+    from: { providers: ['vercel'], role: 'compute' },
+    to: { providers: ['aws'], role: 'sql-db', port: 'https-api' },
+    verdict: 'ok',
+    basis:
+      'DynamoDB は認証つきの HTTPS の API（SDK）で呼ぶ。Vercel の関数は OIDC で AWS の一時的な認証を得られ（全プラン）、Marketplace の DynamoDB の雛形も OIDC でつなぐ。' +
+      'Vercel の Marketplace に DynamoDB があり、請求は AWS（「All billing is handled directly through AWS」。料金は AWS の料金表）。中継（Static IPs・NAT）は要らない。' +
+      '関数の地域と DB の地域の違い（Vercel の関数の既定は iad1）による遅延は計算しない（CP-08）',
+    sources: at('2026-11-03', [
+      'https://vercel.com/marketplace/aws',
+      'https://vercel.com/docs/oidc/aws',
+      'https://vercel.com/docs/marketplace-storage',
+      'https://aws.amazon.com/dynamodb/pricing/on-demand/',
+    ]),
+  },
+  {
+    id: 'vercel-compute-aurora',
+    slot: 'db',
+    from: { providers: ['vercel'], role: 'compute' },
+    to: { providers: ['aws'], role: 'sql-db', port: 'tcp-sql' },
+    verdict: 'ok',
+    basis:
+      'Vercel の Marketplace の Aurora PostgreSQL は、設定の手順で DB を作り、セキュリティグループ・IAM のロール・OIDC の信頼を Marketplace が設定する。' +
+      '関数は OIDC で得た一時的な認証で RDS の IAM 認証のトークンを作り、クラスターのエンドポイント（PGHOST）に Postgres（TCP）でつなぐ（接続のプールを使う）。請求は AWS。' +
+      'Vercel の Pro では VPC の中へつなぐ手段（Secure Compute）が無いので、公開の口（公開のエンドポイント + IAM 認証）とみなす（推測。Marketplace の文書に公開の設定の記載は無い）。' +
+      'IP を絞る形（Static IPs）は段 3。関数の地域と DB の地域の違いによる遅延は計算しない（CP-08）',
+    sources: [
+      ...at('2026-11-03', [
+        'https://vercel.com/marketplace/aws',
+        'https://vercel.com/kb/guide/connect-next-js-to-amazon-aurora-postgresql-using-vercel-marketplace',
+        'https://vercel.com/docs/oidc/aws',
+        'https://vercel.com/docs/networking/secure-compute',
+        'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html',
+        'https://aws.amazon.com/rds/aurora/pricing/',
+      ]),
+    ],
+  },
   // ---- アプリのメールの送信（D-95・D-110）。インターネットの API・SMTP で呼ぶので、どの土台からも同じ形 ----
   {
     id: 'host-compute-ses',
@@ -493,9 +533,23 @@ export type TransferItem = {
   };
   /** サーバーから外の API を呼ぶときに、送り手の処理のノードに足す事実（料金の文書に項目が無いことの根拠。D-67）。 */
   senderFacts?: readonly string[];
+  /** 受け手の処理のノードに足す事実（受け取りの項目が無いことの根拠。D-114 段 2）。 */
+  receiverFacts?: readonly string[];
   basis: string;
   sources: readonly Source[];
 };
+
+/**
+ * AWS の DB から別の事業者の関数への応答を、インターネットへの転送として数えるか（D-114 段 2・2026-11-03 のユーザーの決定）。
+ * 同じリージョンの AWS のサービス間（$0）に当たると公式に確かめられたら false にする。
+ */
+export const AWS_DB_OUT_TO_INTERNET = true;
+
+/** 応答の転送を数える AWS の DB のプランと、その根拠の事実（catalog の data-transfer-out の facts）。 */
+const AWS_DB_OUT = [
+  { planId: 'dynamodb-on-demand', fact: 'dynamodb-out' },
+  { planId: 'aurora-serverless-v2-io', fact: 'aurora-out' },
+] as const;
 
 /** 送り出し（egress）の項目。送り手の処理（role: compute）の課金先で引く。 */
 export const OUTBOUND: readonly TransferItem[] = [
@@ -539,6 +593,35 @@ export const OUTBOUND: readonly TransferItem[] = [
       ...at('2026-11-02', ['https://aws.amazon.com/lambda/pricing/']),
     ],
   },
+  // AWS の DB（DynamoDB・Aurora）から別の事業者の関数（Vercel）へ返す応答（D-114 段 2）。ユーザーの決定（2026-11-03）で
+  // インターネットへの転送（Data Transfer Out）として数える。Vercel の関数と同じリージョンの扱い（AWS のサービス間は $0）が
+  // 公式に確かめられたら、AWS_DB_OUT_TO_INTERNET を false にすれば課金なし（ノードを作らない）に切り替わる（扱いはここ 1 か所）
+  ...AWS_DB_OUT.map(({ planId, fact }): TransferItem => ({
+    provider: 'aws',
+    planIds: [planId],
+    ...(AWS_DB_OUT_TO_INTERNET
+      ? {
+          meter: {
+            idPrefix: 'aws-db',
+            name: 'AWS',
+            facts: [fact],
+            billing: () =>
+              awsBill('data-transfer-out', { 'egress-gb': 'internet-out' }),
+          },
+        }
+      : {}),
+    basis:
+      'DynamoDB・Aurora の料金ページに外への転送の単価の表は無く、AWS 共通の Data Transfer Out（東京 → インターネット $0.114/GB・全サービス・全リージョン合わせて月 100 GB は無料）の適用と読んだ。' +
+      'Vercel の関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載が無い（未確認）',
+    sources: at('2026-11-03', [
+      'https://aws.amazon.com/dynamodb/pricing/on-demand/',
+      'https://aws.amazon.com/rds/aurora/pricing/',
+      'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-northeast-1/index.json',
+      'https://aws.amazon.com/ec2/pricing/on-demand/',
+      'https://vercel.com/docs/regions',
+      'https://vercel.com/docs/marketplace-storage',
+    ]),
+  })),
   {
     provider: 'netlify',
     senderFacts: ['function-outbound'],
@@ -612,8 +695,23 @@ export const INBOUND: readonly TransferItem[] = [
   },
   {
     provider: 'aws',
-    basis: 'S3 はインターネットからの受信に課金しない',
-    sources: at('2026-11-02', ['https://aws.amazon.com/s3/pricing/']),
+    basis:
+      'S3 はインターネットからの受信に課金しない。DynamoDB も受信に課金しない（「DynamoDB does not charge for inbound data transfer」）。' +
+      'Aurora の受信の課金は料金ページに記載が無い（未確認・数えない）',
+    sources: [
+      ...at('2026-11-02', ['https://aws.amazon.com/s3/pricing/']),
+      ...at('2026-11-03', [
+        'https://aws.amazon.com/dynamodb/pricing/on-demand/',
+        'https://aws.amazon.com/rds/aurora/pricing/',
+      ]),
+    ],
+  },
+  {
+    provider: 'vercel',
+    receiverFacts: ['function-inbound'],
+    basis:
+      'Vercel の料金の文書の課金の項目に、関数が外（DB など）から受け取る通信は無い（未確認・数えない）',
+    sources: at('2026-11-03', ['https://vercel.com/docs/pricing']),
   },
   {
     provider: 'bunny',
@@ -664,12 +762,13 @@ const billingProviderOf = (p: string): string =>
  * 送り手の処理のノードから、別の事業者（receiver。部品の事業者）へ送るデータを数えるノード（CP-06）。
  * 送り手の送り出しの項目と、受け手の受け取りの項目をそれぞれ見て、項目があるほうだけノードを作る（両方あれば両方）。
  * what はノードの名前に添える行き先（「R2 への書き込み」など）。requestKB を渡すと、1 回の大きさをそれにする（外の API への問い合わせ）。
+ * 'per-query' は問い合わせの数 × DB の応答の大きさで数える（DB が送り手。D-114 段 2）。
  */
 export function transferNodes(
   sender: ArchNodeIn,
   receiver: string,
   what: string,
-  requestKB?: number,
+  requestKB?: number | 'per-query',
   items: {
     outbound: readonly TransferItem[];
     inbound: readonly TransferItem[];
@@ -687,7 +786,7 @@ export function transferNodes(
     const m = item.meter;
     return [
       {
-        id: `${m.idPrefix}-${dir}${requestKB === undefined ? '' : '-api'}`,
+        id: `${m.idPrefix}-${dir}${typeof requestKB === 'number' ? '-api' : ''}`,
         label:
           dir === 'out'
             ? `${m.name} → インターネット（${what}）`
@@ -695,7 +794,11 @@ export function transferNodes(
         config: {
           kind: 'cdn',
           hitRate: {},
-          ...(requestKB !== undefined ? { egressKBPerRequest: requestKB } : {}),
+          ...(typeof requestKB === 'number'
+            ? { egressKBPerRequest: requestKB }
+            : requestKB === 'per-query'
+              ? { egressPerQuery: true }
+              : {}),
         },
         facts: [...m.facts],
         billing: m.billing(planId),

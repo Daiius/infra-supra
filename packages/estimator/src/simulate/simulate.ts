@@ -195,7 +195,15 @@ function consume(
                 0,
               ),
       );
-      add(u, 'egress-gb', kbToGb(n * (c.egressKBPerRequest ?? p.kb)));
+      add(
+        u,
+        'egress-gb',
+        kbToGb(
+          c.egressPerQuery
+            ? n * p.queries * w.input.db.responseKBPerQuery
+            : n * (c.egressKBPerRequest ?? p.kb),
+        ),
+      );
       const out = ttl ?? {
         count:
           n * (1 - (c.ttlClasses?.includes(cls) ? 0 : (c.hitRate[cls] ?? 0))),

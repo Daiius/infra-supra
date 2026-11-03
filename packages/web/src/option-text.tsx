@@ -4,6 +4,37 @@
 import { Fragment, type ReactNode } from 'react';
 
 /** 名前の最後の語と ⓘ をくっつける。 */
+/** ⓘ と離さない末尾の最大の長さ（文字）。これより長いまとまりは nowrap にしない（幅 360 ではみ出さないように）。 */
+export const INFO_TAIL_MAX_CHARS = 12;
+
+const segmenter = new Intl.Segmenter('ja', { granularity: 'word' });
+
+/** 文の最後の語（Intl.Segmenter の語の区切り。空白は含めない）。 */
+function lastWord(text: string): string {
+  const words = [...segmenter.segment(text)].filter(
+    (s) => s.segment.trim() !== '',
+  );
+  const last = words[words.length - 1];
+  return last ? text.slice(last.index) : '';
+}
+
+/**
+ * 名前を「折り返してよい頭」と「ⓘ と離さない末尾」に分ける。末尾は最後の語（括弧で終わるなら「（オンデマンド）」のような
+ * 括弧のまとまり全体。長すぎれば括弧の中の最後の語 + 閉じ括弧）。語の途中で分けない（日本語は文字の間で折れるので、
+ * 分けた所で「オンデ／マンド」のように切れる）。長すぎるまとまり（INFO_TAIL_MAX_CHARS 超）は nowrap にしない（末尾は空）。
+ */
+export function splitForInfo(name: string): [string, string] {
+  const fits = (t: string) => t !== '' && [...t].length <= INFO_TAIL_MAX_CHARS;
+  let tail = '';
+  if (name.endsWith('）')) {
+    const open = name.lastIndexOf('（');
+    const group = open >= 0 ? name.slice(open) : '';
+    tail = fits(group) ? group : lastWord(name.slice(0, -1)) + '）';
+  } else tail = lastWord(name);
+  if (!fits(tail)) tail = '';
+  return [name.slice(0, name.length - tail.length), tail];
+}
+
 export function NameWithInfo({
   name,
   info,
@@ -12,18 +43,17 @@ export function NameWithInfo({
   info?: ReactNode;
 }) {
   if (!info) return <>{name}</>;
-  const i = name.lastIndexOf(' ');
-  const head = i >= 0 ? name.slice(0, i + 1) : '';
-  const last = i >= 0 ? name.slice(i + 1) : name;
+  const [head, last] = splitForInfo(name);
+  // 1 つのインラインの箱にまとめる（flex の行の中でも、頭と末尾 + ⓘ が別の列に分かれず、普通の文の行として折れる）
   return (
-    <>
+    <span className="min-w-0">
       {head}
       <span className="whitespace-nowrap">
         {last}
         {' '}
         {info}
       </span>
-    </>
+    </span>
   );
 }
 

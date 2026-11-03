@@ -1302,7 +1302,7 @@
   - 出来事の詳細と開発の手間の内訳をダイアログに畳み、本文には 1 行の要約とボタンだけ残した。目標・所持金・規模・収益・満足度・アプリの形・料金の出典は本文に残す。
   - 見取り図を灰色の帯に載せ、ページ名を見出しにした。区画の地を種類の系統ごとの淡い色（blue・yellow・orange・purple・lime。破線の枠）にし、中の画像（orange）・人（purple）の部品にも色を付けた（ユーザーの追加の要望「全体的に薄めの色を」）。描き方の色（daisyUI のテーマの色のはっきりした地と実線の枠）と重ならないよう、テーマの色は使わず、info・secondary に近い色相は避けた。要件の札は neutral で塗り、区画の名前の行へ移した（札が中身に重なっていた）。テスト: web の W-32。
 
-### D-114 部品を事業者をまたいで組む: 役割と接続の口・接続の規則（確定・2026-11-03・未実装）
+### D-114 部品を事業者をまたいで組む: 役割と接続の口・接続の規則（確定・2026-11-03・段 1・段 2 を実装）
 
 - 依頼（ユーザー・2026-11-03）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？」→ 設計の下書き（[prd/14](../14-composable-parts.md)）を書き、論点 CP-01〜CP-17 を grilling で決めた（supervisor 経由）。
 - 決定（正典は prd/14 §8。実装の内部の形 CP-02・03・10・13・14・16・17 は supervisor が推奨案で決めた）:
@@ -1316,6 +1316,10 @@
   - **段 2 で足すのは Vercel × DynamoDB / Aurora（DB）だけ**（CP-15・推奨から変更）。Vercel × S3 + CloudFront・Cloudflare × Neon（Hyperdrive）・Google Cloud × R2 は後の段の候補。
 - 調査（2026-11-03 取得・出典は prd/14 §2・§9）: Static IPs（Pro $100 / 月 / プロジェクト + Private Data Transfer）・Secure Compute は Enterprise のみ・D1 の REST は管理用・Workers から Postgres は Hyperdrive を勧める・Lambda を VPC に入れると外へ NAT が要る・東京の NAT・RDS Proxy の単価は未取得。
 - 段 1 を実装（2026-11-03）: ノードに役割の印（`role`）・接続の規則（`stacks/connections.ts`）・部品（`stacks/parts.ts`）に移し替え、`CROSS_PAIRS` を消した。選べる組・金額・保存は不変（隠した Netlify の経路の外の 0 円のノードが 1 つ減っただけ）。詳細は prd/14 §3.11。
+- 段 2 を実装（2026-11-03・補足）: Vercel × DynamoDB / Aurora（DB）。AWS の DB の部品（`dynamodb`・`aurora`・`aurora-pause`。id は AWS の構成と同じ）と規則 2 つ（DynamoDB は `https-api`・Marketplace の Aurora は `tcp-sql` で公開のエンドポイント + IAM 認証とみなす。推測）。`applyCrossDb` を部品ごとにノードを作る形にし、DB が送り手の応答の転送（`aws-db-out`。問い合わせの数 × 応答の大きさ。estimator の CDN に任意の `egressPerQuery`）を足した。
+  - **転送（ユーザーの決定・2026-11-03）**: Vercel の関数 ↔ AWS の DB の転送は、インターネットへの転送（AWSDataTransfer の Data Transfer Out・$0.114/GB・アカウント全体の月 100 GB の無料を既存の Lambda・API Gateway の転送と共有）で数える。前提の文に「Vercel の公式文書は関数の地域を AWS の地域名で示すが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の『同じリージョン内の AWS サービス間は $0』に当たるかは公式に記載が無い（未確認）。同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性がある。Vercel の関数の既定の地域は iad1」と出す。出典は Vercel の地域・Marketplace のストレージ・DynamoDB と Aurora の料金ページ（いずれも 2026-11-03）。扱いは `connections.ts` の `AWS_DB_OUT_TO_INTERNET` の 1 か所で切り替えられる。
+  - AWS のアカウントは既定のメールの送信（SES）で既にあるので増えない。CP-11（手間の段階化）は既存の組の手間を変えるので段 2 の範囲に入れていない。画面（CP-04・CP-12）は段 3・4。
+  - 既存の組は不変（段 1 と同じ突き合わせで、共通の約 39 万の組・約 3.7 万のプレイが一致）。基準プレイで、受託 × Vercel Pro × DynamoDB が全フレームワークで 20/20、記事 × Vercel Pro × Astro × DynamoDB + `cf-resize` が 20/20（Aurora はどれも 0/20）。**釣り合いはそのまま入れる（2026-11-03・ユーザーが受け入れ）**: 料金どおりの結果として受け入れ、目標の額・手間は動かさない（受託の床は既存の Amplify $18.8 のまま）。詳細は prd/14 §3.12。
 
 ### D-115 始める画面の選択の欄（① 構成 ② フレームワークと描き方 ③ 部品 ④ 設定）を見積モードと共用にする（確定・2026-11-03）
 

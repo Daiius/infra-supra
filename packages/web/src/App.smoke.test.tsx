@@ -1059,6 +1059,45 @@ describe('ゲームモードの画面', () => {
     expect(document.body.textContent).not.toMatch(/公式のアダプターが無いので/);
   });
 
+  it('W-37 始める画面: Vercel の DB に AWS の部品が短い名前で出て、選ぶと構成のカードの題が実際の組になる（D-114 段 2）', async () => {
+    await renderApp();
+    await startGame({
+      scenario: CONTRACT,
+      framework: 'Next.js（App Router）',
+      stack: 'Vercel Pro + Supabase Pro',
+      beforeStart: () => {
+        const db = screen.getByRole('group', {
+          name: /^DB(?! のバックアップ)/,
+        });
+        const names = within(db)
+          .getAllByRole('radio')
+          .map((r) => r.closest('label')!.textContent ?? '');
+        for (const n of [
+          'AWS: DynamoDB（オンデマンド）',
+          'AWS: Aurora Serverless v2（最小 0.5 ACU）',
+          'AWS: Aurora Serverless v2（0 ACU まで縮める）',
+        ])
+          expect(names.some((x) => x.includes(n))).toBe(true);
+        // 名前に Marketplace を入れない（説明文の側。折り返しで右端に離れないように）
+        expect(names.some((x) => x.includes('Vercel の Marketplace）'))).toBe(
+          false,
+        );
+        fireEvent.click(
+          within(db).getByRole('radio', {
+            name: /^AWS: DynamoDB（オンデマンド）/,
+          }),
+        );
+        expect(
+          document
+            .querySelector<HTMLElement>(
+              'section[data-stack][aria-current="true"]',
+            )!
+            .getAttribute('aria-label'),
+        ).toBe('Vercel Pro + AWS DynamoDB の構成');
+      },
+    });
+  });
+
   it('W-04 保存して読み込み直すと同じ月から再開する', async () => {
     await renderApp();
     await startGame({

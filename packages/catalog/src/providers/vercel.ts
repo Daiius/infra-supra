@@ -63,6 +63,11 @@ export const vercel: PriceBookInput = {
       url: 'https://vercel.com/docs/pricing',
       retrievedAt: '2026-11-01',
     },
+    // 関数が外（AWS の DB）から受け取る通信の項目が無いことの確認（2026-11-03。D-114 段 2）
+    pricingDocsInbound: {
+      url: 'https://vercel.com/docs/pricing',
+      retrievedAt: '2026-11-03',
+    },
     // ビルドの料金・マシン・1 日のデプロイの上限（Astro の静的出力のビルドし直し。D-68）
     builds: {
       url: 'https://vercel.com/docs/builds/managing-builds',
@@ -261,6 +266,12 @@ export const vercel: PriceBookInput = {
           premise:
             'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送は無い（Static IPs の Private Data Transfer を除く）。このゲームでは数えない',
           sourceIds: ['pricingDocs'],
+        },
+        {
+          id: 'function-inbound',
+          premise:
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数が外（DB など）から受け取る通信の転送は無い（未確認・数えない）',
+          sourceIds: ['pricingDocsInbound'],
         },
         {
           id: 'builds-hobby',
@@ -466,6 +477,12 @@ export const vercel: PriceBookInput = {
           premise:
             'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送は無い（Static IPs の Private Data Transfer を除く）。このゲームでは数えない',
           sourceIds: ['pricingDocs'],
+        },
+        {
+          id: 'function-inbound',
+          premise:
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数が外（DB など）から受け取る通信の転送は無い（未確認・数えない）',
+          sourceIds: ['pricingDocsInbound'],
         },
         {
           id: 'isr-purge',

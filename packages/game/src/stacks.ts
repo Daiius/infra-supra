@@ -5,6 +5,7 @@ import {
   browserCallsApi,
   type Choices,
   componentsOf,
+  crossDbName,
   composeStack,
   DEFAULT_CHOICES,
   deployTarget,
@@ -202,22 +203,17 @@ export function selfHostedOf(
  * 構成の既定の DB の名前を出さない。D-65）。始める画面の構成の一覧は渡さない（構成の名前のまま）。
  */
 /**
- * DB を Neon にした Vercel・Netlify の構成の名前（D-77）。「Supabase Pro」を実際の組「Neon（Launch）」に替える
- * （土台が Hobby・Free なら Neon（Free））。API を他の事業者に置くと DB の名前は使わないので、そのまま。
+ * DB を他の事業者に替えた Vercel・Netlify の構成の名前（Neon は D-77・AWS の DynamoDB・Aurora は D-114 段 2）。
+ * 「Supabase Pro」を実際の組（「Neon（Launch）」「AWS DynamoDB」など）に替える（Neon は土台が Hobby・Free なら Neon（Free））。
+ * API を他の事業者に置くと DB の名前は使わないので、そのまま。
  */
 function withDbName<T extends { name: string; id: string }>(
   s: T,
   components: Choices,
 ): T {
-  if (components.db !== 'neon') return s;
-  const free = /-(hobby|free)$/.test(s.id);
-  return {
-    ...s,
-    name: s.name.replace(
-      /Supabase (Free|Pro)/,
-      `Neon（${free ? 'Free' : 'Launch'}）`,
-    ),
-  };
+  const name = crossDbName(components.db, /-(hobby|free)$/.test(s.id));
+  if (name === undefined) return s;
+  return { ...s, name: s.name.replace(/Supabase (Free|Pro)/, name) };
 }
 
 export function stackName(

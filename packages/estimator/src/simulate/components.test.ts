@@ -1039,6 +1039,31 @@ describe('サーバーから外の API への問い合わせ・API だけを置�
     expect(n.fn!.resources.requests).toBeCloseTo(count);
   });
 
+  it('egressPerQuery: 転送は問い合わせの数 × DB の応答の大きさで数え（managed-db の egress と同じ）、流れはそのまま次へ渡す（D-114 段 2）', () => {
+    const n = sim(
+      [
+        {
+          id: 'out',
+          label: 'out',
+          config: {
+            kind: 'cdn',
+            hitRate: {},
+            egressKBPerRequest: 1,
+            egressPerQuery: true,
+          },
+        },
+        { id: 'db', label: 'db', config: { kind: 'managed-db' } },
+      ],
+      { 'document-ssr': ['out', 'db'] },
+    );
+    // 同じ流れを受けた managed-db の egress と一致する（egressKBPerRequest より優先）
+    expect(n.out!.resources['egress-gb']).toBeGreaterThan(0);
+    expect(n.out!.resources['egress-gb']).toBeCloseTo(
+      n.db!.resources['egress-gb']!,
+      12,
+    );
+  });
+
   it('storesImages: false のホストはディスクに画像を数えない（DB と他だけ）', () => {
     const host = (storesImages: boolean) =>
       sim(

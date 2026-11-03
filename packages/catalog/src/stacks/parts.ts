@@ -257,6 +257,63 @@ export const CROSS_PARTS: readonly PartDef[] = [
       '関数から serverless driver（HTTP）で問い合わせる。東京のリージョンが無く、最寄りはシンガポール（往復の遅延は計算しない）。Neon のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: ['fact:neon:', 'pool:neon:', 'limit:neon:'],
   },
+  // DB だけ AWS（D-114 段 2・CP-15）。Vercel の Supabase の代わり。Vercel の Marketplace にある DynamoDB・Aurora を公開の口でつなぐ（CP-07）。
+  // id は AWS の構成の DB の部品と同じ（料金・ノードは stacks/aws.ts の dbNode）。差せる土台は規則（vercel-compute-dynamodb・vercel-compute-aurora）
+  {
+    id: 'dynamodb',
+    slot: 'db',
+    platform: 'aws',
+    role: 'sql-db',
+    accepts: ['https-api'],
+    attachesTo: ['compute'],
+    as: 'dynamodb',
+    label: 'AWS: DynamoDB（オンデマンド）',
+    note:
+      'DB を Supabase から AWS の DynamoDB（東京・オンデマンド）に替える（Vercel の Marketplace で作る）。読み書きの単位で課金し、時間課金のコンピュートが無い（保存は 25 GB 月まで無料）。' +
+      '関数から OIDC の一時的な認証で SDK（HTTPS）を呼ぶ。DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える' +
+      '（Vercel の関数と同じリージョンなら安くなる可能性があるが、公式に記載が無く未確認）。請求は AWS（既定のメールの送信の Amazon SES と同じアカウントなので、アカウントは増えない）。往復の遅延は計算しない',
+    premiseRefs: [
+      'fact:aws:dynamodb-on-demand:request-units',
+      'pool:aws:dynamodb-on-demand:dynamodb-free-storage',
+      'fact:aws:data-transfer-out:dynamodb-out',
+      'pool:aws:data-transfer-out:internet-free-transfer',
+    ],
+  },
+  ...(
+    [
+      {
+        id: 'aurora',
+        label: 'Aurora Serverless v2（最小 0.5 ACU）',
+        size: '最小の 0.5 ACU の分は常にかかる（負荷で伸びた分はこのモデルでは数えない）',
+        refs: ['fact:aws:aurora-serverless-v2-io:io-optimized'],
+      },
+      {
+        id: 'aurora-pause',
+        label: 'Aurora Serverless v2（0 ACU まで縮める）',
+        size: '接続が 300 秒ないと止まり、止まっている間は ACU の料金がかからない（再開の待ちは速さに入れていない）',
+        refs: ['fact:aws:aurora-serverless-v2-io:auto-pause'],
+      },
+    ] as const
+  ).map((a): PartDef => ({
+    id: a.id,
+    slot: 'db',
+    platform: 'aws',
+    role: 'sql-db',
+    accepts: ['tcp-sql'],
+    attachesTo: ['compute'],
+    as: a.id,
+    label: `AWS: ${a.label}`,
+    note:
+      `DB を Supabase から AWS の Aurora PostgreSQL（東京・Serverless v2・I/O-Optimized）に替える（Vercel の Marketplace で作る）。ACU の時間で課金し、${a.size}。` +
+      '関数は OIDC の一時的な認証で IAM 認証のトークンを作り、公開のエンドポイントに接続のプールでつなぐ（公開の設定は推測）。' +
+      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える（Vercel の関数と同じリージョンなら安くなる可能性があるが、公式に記載が無く未確認）。' +
+      '請求は AWS（既定のメールの送信の Amazon SES と同じアカウントなので、アカウントは増えない）。往復の遅延は計算しない',
+    premiseRefs: [
+      ...a.refs,
+      'fact:aws:data-transfer-out:aurora-out',
+      'pool:aws:data-transfer-out:internet-free-transfer',
+    ],
+  })),
   // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の手間・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
   // プランは 2GB と 4GB（ディスクが 2 倍）。プランの間の移し替えも API と DB のデータの移行として扱う（仮定）
   ...(['2gb', '4gb'] as const).map((plan): PartDef => ({
