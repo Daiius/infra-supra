@@ -440,6 +440,11 @@ function Conditions({
         comments={comments}
         routes={input.routes}
         effort={false}
+        // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
+        routesOnFallback={(i) =>
+          normalizeInput({ ...input, ...withStack(input, STACKS[i]!.id) })
+            .routes
+        }
         diagramCaption={(selected) =>
           selected
             ? '選んだ部品で描く。'

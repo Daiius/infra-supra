@@ -215,6 +215,7 @@ export function StackField({
   routes,
   routeNotice,
   cardExtra,
+  routesOnFallback,
   effort = true,
   diagramCaption = (selected) =>
     selected
@@ -235,6 +236,11 @@ export function StackField({
   routeNotice?: (stackIndex: number) => string | null;
   /** カードの説明の下に添える注記（見積モードはその構成の月額。D-115）。 */
   cardExtra?: (stackIndex: number, selected: boolean) => ReactNode;
+  /**
+   * 今のフレームワークを載せられない構成を選んだとき、付け替えた後に残る描き方（そのカードの図と注意に使う）。
+   * 省略は全部を既定に戻す（ゲームの始める画面の規則）。見積モードは替えた先で選べるものを残す（OCL-00BB1F11）。
+   */
+  routesOnFallback?: (stackIndex: number) => RouteOverrides | undefined;
   /** 毎月の手間の棒を出すか（ゲームの仮定なので、見積モードでは出さない。D-115）。 */
   effort?: boolean;
   /** 構成図の説明（選んでいるカードか）。 */
@@ -256,10 +262,16 @@ export function StackField({
   const fallbackOf = (i: number) => {
     if (stackSupports(i, framework)) return undefined;
     const to = FRAMEWORKS[fwOf(i)].label;
+    // 選んだ描き方のうち、付け替えた後に残らないもの（ゲームは全部。見積は替えた先で選べないものだけ。OCL-00BB1F11）
+    const kept = routesOnFallback?.(i);
+    const chosen = Object.keys(routes ?? {});
+    const dropped = chosen.filter((r) => kept?.[r] === undefined).length;
     return `${fwLabel} はこの構成に載せられない（公式のアダプターが無い）。選ぶとフレームワークは ${to} になる${
-      routes && Object.keys(routes).length > 0
-        ? '（選んだページの描き方は既定に戻る）'
-        : ''
+      dropped === 0
+        ? ''
+        : dropped === chosen.length
+          ? '（選んだページの描き方は既定に戻る）'
+          : '（選んだページの描き方のうち、替えた先で選べないものは既定に戻る）'
     }。構成図は ${to} で描く`;
   };
   return (
@@ -292,8 +304,10 @@ export function StackField({
           framework={fwOf(indexOf(id))}
           components={selected ? components : undefined}
           comments={comments}
-          // 替わる先のフレームワークでは描き方は既定に戻る
-          routes={fallbackOf(indexOf(id)) ? undefined : routes}
+          // 替わる先のフレームワークでは、付け替えた後の描き方で描く（ゲームは既定に戻る）
+          routes={
+            fallbackOf(indexOf(id)) ? routesOnFallback?.(indexOf(id)) : routes
+          }
           selected={selected}
           noteId={`${idPrefix}-${id}`}
           routeNotice={

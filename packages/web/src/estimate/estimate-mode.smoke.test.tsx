@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { renderApp, useSmokeEnv, waitLoaded } from '../smoke.test-helpers.tsx';
+import { fromQuery, normalizeInput, withStack } from './model.ts';
 
 useSmokeEnv();
 
@@ -421,6 +422,33 @@ describe('見積モードの画面', () => {
         .querySelector('tr[data-route="personal"] [data-strategy]')!
         .getAttribute('data-strategy'),
     ).toBe('shell-api');
+  });
+
+  it('W-36 載せられない構成のカードは、選んだ後に残る描き方で注意を出す（見積は替えた先で選べる描き方を残す。OCL-00BB1F11）', async () => {
+    const url =
+      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-paid&rp.article=static-build&rp.personal=shell-api';
+    window.history.replaceState(null, '', url);
+    await renderApp();
+    expectEstimate();
+    const cur = normalizeInput(fromQuery(url.slice(url.indexOf('?'))));
+    const after = normalizeInput({ ...cur, ...withStack(cur, 'aws-amplify') });
+    const chosen = Object.keys(cur.routes);
+    expect(chosen.length).toBe(2);
+    const dropped = chosen.filter((r) => after.routes[r] === undefined).length;
+    const note = within(
+      document.querySelector<HTMLElement>('section[data-stack="aws-amplify"]')!,
+    ).getByRole('note').textContent!;
+    if (dropped === 0) expect(note).not.toContain('既定に戻る');
+    else if (dropped === chosen.length)
+      expect(note).toContain('（選んだページの描き方は既定に戻る）');
+    else expect(note).toContain('替えた先で選べないものは既定に戻る');
+    // 選ぶと、カードの注意のとおりの描き方が URL に残る
+    pick('stack', 'aws-amplify');
+    expectEstimate();
+    for (const r of chosen)
+      expect(window.location.search.includes(`rp.${r}=`)).toBe(
+        after.routes[r] !== undefined,
+      );
   });
 
   it('W-07 見出しに ⓘ のある欄の入力は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
