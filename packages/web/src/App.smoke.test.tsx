@@ -18,6 +18,25 @@ useSmokeEnv();
 const ARTICLE = '記事コミュニティ';
 const CONTRACT = '受託先の業務アプリの運用';
 
+/** 選んでいるフレームワークのカード（前後のカードも同じ中身で並ぶ。構成のカードより前にある）。 */
+const fwCard = () =>
+  document.querySelector<HTMLElement>('section[aria-current="true"]')!;
+/** 選んでいるフレームワークのカードの、ページの欄（見取り図・描き方のチップ・札。D-112）。 */
+const pageOf = (route: string) =>
+  fwCard().querySelector<HTMLElement>(`section[data-route="${route}"]`)!;
+/** ページの欄で選んでいる描き方。 */
+const chosenOf = (route: string) =>
+  pageOf(route)
+    .querySelector('[data-selected="true"]')!
+    .getAttribute('data-alternative');
+/** ページの欄の描き方のチップを押す（名前は描き方の名前の前方一致。番号は出さない。D-112）。 */
+const pickStrategy = (page: string, strategy: string) =>
+  fireEvent.click(
+    within(fwCard()).getByRole('button', {
+      name: (n) => n.startsWith(`${page}を ${strategy}`),
+    }),
+  );
+
 describe('ゲームモードの画面', () => {
   it('W-01 記事コミュニティ × Next.js × CF Paid で始めて 3 か月進める', async () => {
     await renderApp();
@@ -200,12 +219,12 @@ describe('ゲームモードの画面', () => {
       '閲覧ごとに SSR',
     );
     // コメントを記事のページに含めると、コメント欄は ISR のページの一部になる（D-82）。
-    // 選ぶのは ③ ページの描き方の表の記事の行（ページの部品。D-109）
+    // 選ぶのはフレームワークのカードの記事のページの欄（ページの部品。D-109・D-112）
     const inPage = screen.getByRole('radio', { name: /^記事のページに含める/ });
-    expect(inPage.closest('tr')?.getAttribute('data-route')).toBe('article');
-    expect(inPage.closest('section')?.getAttribute('aria-label')).toBe(
-      'ページの描き方',
-    );
+    expect(
+      inPage.closest('section[data-route]')?.getAttribute('data-route'),
+    ).toBe('article');
+    expect(current().contains(inPage)).toBe(true);
     pick(/^記事のページに含める/);
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
       'ISR（キャッシュ）',
@@ -275,133 +294,215 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
   });
 
-  it('W-13 始める画面: ページの描き方を選び、行ごとの要件の判定・見取り図・カードの既定が変わる（D-106・D-107）', async () => {
+  it('W-13 始める画面: フレームワークのカードのページの欄で描き方を選び、要件の札・隣の見取り図が変わる（D-106・D-107・D-112）', async () => {
     await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
-    const current = () =>
-      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
-    const table = () =>
-      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
-        'table',
-        { name: 'ページごとの描き方' },
-      );
-    const row = (route: string) =>
-      table().querySelector<HTMLElement>(`tr[data-route="${route}"]`)!;
-    const strategy = (route: string) =>
-      row(route)
-        .querySelector('[data-strategy]')!
-        .getAttribute('data-strategy');
     const alternative = (route: string, s: string) =>
-      row(route).querySelector(`[data-alternative="${s}"]`);
+      pageOf(route).querySelector(`[data-alternative="${s}"]`);
     const check = (route: string, c: string) =>
-      row(route).querySelector(`[data-check="${c}"]`)?.getAttribute('data-ok');
+      pageOf(route)
+        .querySelector(`[data-check="${c}"]`)
+        ?.getAttribute('data-ok');
+    /** ページの欄の見取り図の作られ方。 */
+    const sources = (route: string, label: string) =>
+      [
+        ...within(pageOf(route))
+          .getByRole('list', { name: `${label}の見取り図` })
+          .querySelectorAll('[data-source]'),
+      ].map((x) => x.getAttribute('data-source'));
     pick(/^記事コミュニティ/);
     pick(/^Astro/);
     pick(/^Cloudflare Free/);
-    expect(strategy('article')).toBe('cached-purge');
-    expect(strategy('personal')).toBe('ssr');
-    expect(within(row('article')).getAllByText(/^S3/).length).toBeGreaterThan(
-      0,
-    );
-    // 描き方の列は選んでいるものも含めて S1〜S6 の順に並び、選んでいるものが強調される
-    const selected = (route: string) =>
-      [...row(route).querySelectorAll('[data-selected="true"]')].map((x) =>
-        x.getAttribute('data-alternative'),
-      );
-    expect(selected('article')).toEqual(['cached-purge']);
-    expect(selected('personal')).toEqual(['ssr']);
+    // 始める画面には別の「ページの描き方」の欄（表）を置かない（D-112）
+    expect(screen.queryByRole('region', { name: 'ページの描き方' })).toBeNull();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(chosenOf('article')).toBe('cached-purge');
+    expect(chosenOf('personal')).toBe('ssr');
+    // ページごとの組（名前つき）に、選んでいるものも含めて並び、選んでいるものは aria-pressed
+    const group = within(pageOf('personal')).getByRole('group', {
+      name: '個人向けのページの描き方',
+    });
     expect(
-      within(table()).getByRole('columnheader', {
-        name: '描き方（この構成で選べるもの）',
-      }),
-    ).toBeDefined();
-    // カードには既定の描き方が短く出る
+      within(group)
+        .getByRole('button', { name: '個人向けのページは 毎回描く（選択中）' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    // 描き方の番号（S1〜S6）は出さない（D-112）
+    expect(fwCard().textContent).not.toMatch(/\bS[1-7]\b/);
+    // 選んでいないカードは既定の描き方を読むだけ（押して選ぶボタンは無い）
+    const next = screen.getByRole('region', {
+      name: 'Next.js（App Router） の説明',
+    });
+    const nextGroup = within(next).getByRole('group', {
+      name: '個人向けのページの描き方',
+    });
     expect(
-      within(current()).getByRole('list', { name: '既定のページの描き方' }),
-    ).toBeDefined();
-    // 要件の判定: CF Free は 1 リクエスト 10 ms に、記事（再生成）も個人向けも当たる
+      within(nextGroup).queryAllByRole('button', { pressed: false }),
+    ).toEqual([]);
+    expect(nextGroup.querySelectorAll('[data-alternative]').length).toBe(1);
+    // 要件の札: CF Free は 1 リクエスト 10 ms に、記事（再生成）も個人向けも当たる
     expect(check('article', 'cpu')).toBe('false');
     expect(check('personal', 'cpu')).toBe('false');
     expect(check('article', 'ogp')).toBe('true');
-    // 個人向けのページに使い回す描き方は灰色（理由は ⓘ）、枠 + API は選べる
+    // 個人向けのページに使い回す描き方は灰色（理由は ⓘ）、枠 + API・枠 + サーバーの島は選べる（D-108）
     expect(
       alternative('personal', 'cached-purge')?.getAttribute('data-available'),
     ).toBe('false');
-    // 枠 + サーバーの島（S6）は Cloudflare の Astro で選べる（D-108）
+    expect(
+      within(pageOf('personal')).getByRole('button', {
+        name: 'サーバーで描いてキャッシュ（更新で消す）が使えない理由',
+      }),
+    ).toBeDefined();
     expect(
       alternative('personal', 'server-island')?.getAttribute('data-available'),
     ).toBe('true');
-    // 個人向けを枠 + API（S5）にすると、その行は CPU の制限に当たらない
-    fireEvent.click(
-      within(row('personal')).getByRole('button', {
-        name: /^個人向けのページを S5/,
-      }),
-    );
-    expect(strategy('personal')).toBe('shell-api');
+    /** ページの欄の説明の行と札（描き方に合わせる。D-112）。 */
+    const lines = (route: string, label: string) =>
+      within(pageOf(route)).getByRole('list', { name: `${label}の説明` })
+        .textContent ?? '';
+    const badges = (route: string) =>
+      within(pageOf(route)).getByRole('list', { name: 'ページの札' })
+        .textContent ?? '';
+    // 既定のままはフレームワークの説明
+    expect(lines('personal', '個人向けのページ')).toContain('アダプターで SSR');
+    expect(badges('personal')).toContain('CPU: 閲覧ごとにサーバーが描く');
+    // 個人向けを枠 + API にすると、隣の見取り図が枠 + API になり、その行は CPU の制限に当たらない
+    expect(sources('personal', '個人向けのページ')).toContain('ssr');
+    pickStrategy('個人向けのページ', '枠 + ブラウザが API で取る');
+    expect(chosenOf('personal')).toBe('shell-api');
+    expect(sources('personal', '個人向けのページ')).toContain('api');
+    expect(sources('personal', '個人向けのページ')).not.toContain('ssr');
     expect(check('personal', 'cpu')).toBe('true');
-    // 選択中が S5 に移り、もとの S4 は選び直せるボタンとして残る
-    expect(selected('personal')).toEqual(['shell-api']);
+    // 説明の行と札も選んだ描き方のものになる
+    expect(lines('personal', '個人向けのページ')).not.toContain(
+      'アダプターで SSR',
+    );
+    expect(lines('personal', '個人向けのページ')).toContain('HTML は静的な枠');
+    expect(badges('personal')).not.toContain('CPU:');
+    expect(badges('personal')).toContain('API: 1 PV あたり 1 回増える');
+    // もとの描き方は選び直せるボタンとして残る
     expect(
-      within(row('personal'))
-        .getByRole('button', { name: /^個人向けのページを S4/ })
+      within(pageOf('personal'))
+        .getByRole('button', { name: /^個人向けのページを 毎回描く/ })
         .getAttribute('aria-pressed'),
     ).toBe('false');
     expect(
-      within(row('personal')).getByText(/既定から変わっている/),
+      within(pageOf('personal')).getByText(/既定から変わっている/),
     ).toBeDefined();
-    // 選んでいるカードの見取り図も枠 + API になる
-    const list = within(current()).getByRole('list', {
-      name: '個人向けのページの見取り図',
-    });
-    expect(
-      [...list.querySelectorAll('[data-source]')].some(
-        (x) => x.getAttribute('data-source') === 'api',
-      ),
-    ).toBe(true);
-    // Google Cloud（Hosting の CDN）では消せないので、記事は期限で取り直す（選んだ個人向けの S5 は残る）
+    // Google Cloud（Hosting の CDN）では消せないので、記事は期限で取り直す（選んだ個人向けの枠 + API は残る）
     pick(/^Google Cloud/);
-    expect(strategy('article')).toBe('cached-ttl');
-    expect(strategy('personal')).toBe('shell-api');
+    expect(chosenOf('article')).toBe('cached-ttl');
+    expect(chosenOf('personal')).toBe('shell-api');
     expect(
       alternative('article', 'cached-purge')?.getAttribute('data-available'),
     ).toBe('false');
-    // フレームワークを替えると既定に戻る。静的書き出しは S1/S5、SPA は S5/S5
+    // フレームワークを替えると既定に戻る。静的書き出しは静的 / 枠 + API、SPA は枠 + API
     pick(/^Next\.js（静的書き出し）/);
-    expect(strategy('article')).toBe('static-build');
-    expect(strategy('personal')).toBe('shell-api');
+    expect(chosenOf('article')).toBe('static-build');
+    expect(chosenOf('personal')).toBe('shell-api');
     pick(/^Vite（SPA）/);
-    expect(strategy('article')).toBe('shell-api');
+    expect(chosenOf('article')).toBe('shell-api');
   });
 
-  it('W-24 始める画面: 個人向けのページを S6（枠 + サーバーの島）にすると、見取り図に島・構成図に島の流れが出る（D-108）', async () => {
+  it('W-28 始める画面: ページの欄の説明の行と札は、選んだ描き方に合わせる（借りる図の無い記事の毎回描くも。D-112）', async () => {
     await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
-    const current = () =>
-      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
-    const table = () =>
-      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
-        'table',
-        { name: 'ページごとの描き方' },
-      );
-    const row = (route: string) =>
-      table().querySelector<HTMLElement>(`tr[data-route="${route}"]`)!;
+    const lines = (route: string, label: string) =>
+      within(pageOf(route)).getByRole('list', { name: `${label}の説明` })
+        .textContent ?? '';
+    const badges = (route: string) =>
+      within(pageOf(route)).getByRole('list', { name: 'ページの札' })
+        .textContent ?? '';
     pick(/^記事コミュニティ/);
     pick(/^Astro/);
     pick(/^Cloudflare Paid/);
-    fireEvent.click(
-      within(row('personal')).getByRole('button', {
-        name: /^個人向けのページを S6/,
-      }),
+    // 記事を毎回描くにすると（借りる図の無い描き方）、記事の説明と札も毎回描くものになる。戻すとフレームワークの説明
+    expect(lines('article', '記事のページ')).toContain(
+      '閲覧時に SSR + キャッシュ',
     );
+    pickStrategy('記事のページ', '毎回描く');
+    expect(chosenOf('article')).toBe('ssr');
+    expect(lines('article', '記事のページ')).toContain(
+      'リクエストのたびにサーバーが描く',
+    );
+    expect(lines('article', '記事のページ')).not.toContain(
+      '閲覧時に SSR + キャッシュ',
+    );
+    expect(badges('article')).toContain('CPU: 閲覧ごとにサーバーが描く');
+    expect(badges('article')).not.toContain('投稿・編集でキャッシュを消す');
+    pickStrategy('記事のページ', 'サーバーで描いてキャッシュ（更新で消す）');
+    expect(chosenOf('article')).toBe('cached-purge');
+    expect(lines('article', '記事のページ')).toContain(
+      '閲覧時に SSR + キャッシュ',
+    );
+  });
+
+  it('W-29 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    pick(/^記事コミュニティ/);
+    pick(/^Astro/);
+    pick(/^Cloudflare Free/);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const open = within(fwCard()).getByRole('button', { name: '詳しく比べる' });
+    fireEvent.click(open);
+    const dialog = screen.getByRole('dialog', {
+      name: 'ページの描き方を比べる（Astro）',
+    });
+    const table = within(dialog).getByRole('table', {
+      name: 'ページごとの描き方',
+    });
     expect(
-      row('personal')
-        .querySelector('[data-strategy]')!
-        .getAttribute('data-strategy'),
-    ).toBe('server-island');
+      within(table).getByRole('columnheader', {
+        name: '描き方（この構成で選べるもの）',
+      }),
+    ).toBeDefined();
+    // 表には 1 か月目の費用の差が出る。番号は出さない
+    expect(table.textContent).toMatch(/[+−]\$\d/);
+    expect(table.textContent).not.toMatch(/\bS[1-7]\b/);
+    // 表の ⓘ の吹き出しはダイアログの中に描く（body だと top layer のダイアログの後ろに隠れる。OCL-8E844E7C）
+    fireEvent.click(
+      within(
+        table.querySelector<HTMLElement>('tr[data-route="personal"]')!,
+      ).getAllByRole('button', { name: /の判定$/ })[0]!,
+    );
+    const tip = document.querySelector('[role="tooltip"]');
+    expect(tip).not.toBeNull();
+    expect(dialog.contains(tip)).toBe(true);
+    // Esc はまず吹き出しだけを閉じる
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    expect(screen.getByRole('dialog')).toBe(dialog);
+    // 表で選んでも、カードのチップと見取り図に効く（ダイアログは開いたまま）
+    fireEvent.click(
+      within(
+        table.querySelector<HTMLElement>('tr[data-route="personal"]')!,
+      ).getByRole('button', { name: /^個人向けのページを 枠 \+ サーバーの島/ }),
+    );
+    expect(chosenOf('personal')).toBe('server-island');
+    expect(screen.getByRole('dialog')).toBe(dialog);
+    // 閉じる（Esc は showModal のブラウザの動き。jsdom では閉じるのボタンで確かめる）
+    fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(
+      within(fwCard()).getByRole('button', { name: '詳しく比べる' }),
+    );
+  });
+
+  it('W-24 始める画面: 個人向けのページを枠 + サーバーの島にすると、見取り図に島・構成図に島の流れが出る（D-108）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    pick(/^記事コミュニティ/);
+    pick(/^Astro/);
+    pick(/^Cloudflare Paid/);
+    pickStrategy('個人向けのページ', '枠 + サーバーの島');
+    expect(chosenOf('personal')).toBe('server-island');
     // 見取り図: 人ごとに違う区画は島、ほかは枠
-    const list = within(current()).getByRole('list', {
+    const list = within(pageOf('personal')).getByRole('list', {
       name: '個人向けのページの見取り図',
     });
     const sources = [...list.querySelectorAll('[data-source]')].map((x) =>
@@ -429,46 +530,26 @@ describe('ゲームモードの画面', () => {
     await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
-    const current = () =>
-      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
-    const table = () =>
-      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
-        'table',
-        { name: 'ページごとの描き方' },
-      );
-    const row = (route: string) =>
-      table().querySelector<HTMLElement>(`tr[data-route="${route}"]`)!;
     const sources = () =>
       [
-        ...within(current())
+        ...within(pageOf('personal'))
           .getByRole('list', { name: '個人向けのページの見取り図' })
           .querySelectorAll('[data-source]'),
       ].map((x) => x.getAttribute('data-source'));
     pick(/^記事コミュニティ/);
     pick(/^Next\.js（App Router）/);
     pick(/^Google Cloud/);
-    fireEvent.click(
-      within(row('personal')).getByRole('button', {
-        name: /^個人向けのページを 部品ごとにキャッシュ/,
-      }),
-    );
-    expect(
-      row('personal')
-        .querySelector('[data-strategy]')!
-        .getAttribute('data-strategy'),
-    ).toBe('cache-components');
+    // 描き方はカードのページの欄のチップで選ぶ（D-112）
+    pickStrategy('個人向けのページ', '部品ごとにキャッシュ');
+    expect(chosenOf('personal')).toBe('cache-components');
     expect(sources()).toContain('cc-dynamic');
-    // ISR のキャッシュを「キャッシュしない」に: 表は毎回描く、見取り図も同じ
+    // ISR のキャッシュを「キャッシュしない」に: 行（チップ）は毎回描く、見取り図も同じ
     fireEvent.click(
       within(
         screen.getByRole('group', { name: /^ISR のキャッシュ/ }),
       ).getByRole('radio', { name: /^キャッシュしない/ }),
     );
-    expect(
-      row('personal')
-        .querySelector('[data-strategy]')!
-        .getAttribute('data-strategy'),
-    ).toBe('ssr');
+    expect(chosenOf('personal')).toBe('ssr');
     expect(sources()).not.toContain('cc-dynamic');
     expect(sources()).not.toContain('cc-cached');
     expect(sources()).toContain('ssr');
@@ -493,7 +574,7 @@ describe('ゲームモードの画面', () => {
     expect(select().value).toBe('shell-api');
     expect(
       within(select()).getByRole('option', { name: /（今）$/ }).textContent,
-    ).toContain('S5');
+    ).toBe('枠 + ブラウザが API で取る（今）');
   });
 
   it('W-25 ゲームの途中で記事のページのコメント欄を替える（記事の行の部品・手間 2・来月から。D-109）', async () => {
@@ -525,18 +606,13 @@ describe('ゲームモードの画面', () => {
     ).toBeDefined();
   });
 
-  it('W-15 ゲーム中の「今の構成図」も選んだ描き方で描く（記事 S1 のビルドのノード。OCL-C9CD8783）', async () => {
+  it('W-15 ゲーム中の「今の構成図」も選んだ描き方で描く（記事を静的にしたビルドのノード。OCL-C9CD8783）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
-      beforeStart: () =>
-        fireEvent.click(
-          within(
-            screen.getByRole('region', { name: 'ページの描き方' }),
-          ).getByRole('button', { name: /^記事のページを S1/ }),
-        ),
+      beforeStart: () => pickStrategy('記事のページ', '静的（ビルドし直し）'),
     });
     const summary = screen.getByText('今の構成図');
     fireEvent.click(summary);
@@ -551,11 +627,7 @@ describe('ゲームモードの画面', () => {
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
       beforeStart: () => {
-        fireEvent.click(
-          within(
-            screen.getByRole('region', { name: 'ページの描き方' }),
-          ).getByRole('button', { name: /^記事のページを S1/ }),
-        );
+        pickStrategy('記事のページ', '静的（ビルドし直し）');
         // 始める画面: 選べる構成（さくらの VPS・vinext の S1 も出した CF。RS-15 の解除）のカードには出さない。
         // 選んでいない事業者のカードは、その事業者の最初のプランを出す（事業者ごとに 1 枚。D-105 の補足）
         for (const id of ['sakura-vps-2gb', 'cloudflare-vinext-free']) {
@@ -567,7 +639,7 @@ describe('ゲームモードの画面', () => {
         // フレームワークを替えると、選んだ描き方は既定に戻る
         const astro = screen.getByRole('region', { name: 'Astro の説明' });
         expect(within(astro).getByRole('note').textContent).toMatch(
-          /^このフレームワークにすると、記事のページは S1 → S3（既定）に戻る: /,
+          /^このフレームワークにすると、記事のページは「静的（ビルドし直し）」→「サーバーで描いてキャッシュ（更新で消す）」（既定）に戻る: /,
         );
       },
     });
@@ -581,7 +653,7 @@ describe('ゲームモードの画面', () => {
     expect(migrate.textContent).toContain('か月');
     const rewrite = option(/^Astro に作り直す/);
     expect(within(rewrite).getByRole('note').textContent).toMatch(
-      /^作り直すと、記事のページは S1 → S\d（既定）に戻る: 済んだ翌月から、描き方は新しいフレームワークの既定で始まる/,
+      /^作り直すと、記事のページは「静的（ビルドし直し）」→「[^」]+」（既定）に戻る: 済んだ翌月から、描き方は新しいフレームワークの既定で始まる/,
     );
   });
 
@@ -596,12 +668,7 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(
       screen.getByRole('radio', { name: /^Vercel Pro \+ Supabase Pro/ }),
     );
-    fireEvent.click(
-      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
-        'button',
-        { name: /^記事のページを S1/ },
-      ),
-    );
+    pickStrategy('記事のページ', '静的（ビルドし直し）');
     const lane = (stackId: string, label: string) =>
       within(
         document.querySelector<HTMLElement>(

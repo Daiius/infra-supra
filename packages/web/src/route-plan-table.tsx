@@ -1,7 +1,8 @@
 // ページごとの描き方の表（D-106・D-107）。始める画面・見積モード・フレームワークのカードで共有する。
 // 行は game の routePlanRows（workloadFor が当てる描き方と同じ）。onSelect を渡すと、描き方の一覧（選んでいるものも含む）からボタンで選べる。
 // status を渡すと、行ごとに要件の判定（鮮度・SNS のカード・1 リクエストの CPU の制限）とほかの描き方の 1 か月目の差を出す。
-// 色は見取り図の作られ方の色を流用し、必ず文字を添える。
+// 色は見取り図の作られ方の色を流用し、必ず文字を添える。描き方の番号（S1〜S6）は画面に出さず、名前だけにする（D-112）。
+// 始める画面ではフレームワークのカードのページごとにチップ（RouteChips）で選び、表は「詳しく比べる」のダイアログに出す（D-112）。
 import type {
   RegionSource,
   RouteAlternative,
@@ -15,10 +16,6 @@ import { ROUTE_STRATEGY_ORDER } from 'catalog';
 import { Info } from './info.tsx';
 import { SOURCE_CLASS, SOURCE_STYLE } from './page-wireframes.tsx';
 
-/** 描き方の番号と名前（番号の無い描き方は名前だけ。部品ごとにキャッシュ。D-111）。 */
-const named = (code: string, label: string) =>
-  code ? `${code} ${label}` : label;
-
 /** 描き方 → 見取り図の作られ方（色だけに使う）。 */
 const STRATEGY_SOURCE: Record<RouteStrategyId, RegionSource> = {
   'static-build': 'build',
@@ -30,12 +27,18 @@ const STRATEGY_SOURCE: Record<RouteStrategyId, RegionSource> = {
   'cache-components': 'cc-cached',
 };
 
-export function Swatch({ strategy }: { strategy: RouteStrategyId }) {
+export function Swatch({
+  strategy,
+  className = 'mt-0.5',
+}: {
+  strategy: RouteStrategyId;
+  className?: string;
+}) {
   const s = STRATEGY_SOURCE[strategy];
   return (
     <span
       aria-hidden
-      className={`mt-0.5 inline-block h-3 w-4 shrink-0 rounded-sm border ${SOURCE_CLASS[s]}`}
+      className={`${className} inline-block h-3 w-4 shrink-0 rounded-sm border ${SOURCE_CLASS[s]}`}
       style={SOURCE_STYLE[s]}
     />
   );
@@ -47,7 +50,7 @@ const signedUsd = (n: number) =>
 
 const MARK = { good: '✓', fair: '△', bad: '✗' } as const;
 
-/** 描き方の列に並べる一覧（選んでいるもの + ほかの描き方を S1〜S6 の順に）。 */
+/** 描き方の列に並べる一覧（選んでいるもの + ほかの描き方を ROUTE_STRATEGY_ORDER の順に）。 */
 type Choice =
   | { kind: 'selected'; strategy: RouteStrategyId }
   | { kind: 'other'; strategy: RouteStrategyId; alt: RouteAlternative };
@@ -69,15 +72,23 @@ function SelectedBody({ r }: { r: RoutePlanRow }) {
   return (
     <>
       <span aria-hidden>✓</span>
-      {r.code && <span className="opacity-60">{r.code}</span>}
       {r.strategyLabel}
       <span className="badge badge-primary badge-xs">選択中</span>
     </>
   );
 }
 
-/** 行の要件の判定（鮮度・SNS のカード・CPU の制限）。文は ⓘ に畳む。 */
-function RowStatus({ s }: { s: RouteRowStatus }) {
+/**
+ * 行の要件の判定（鮮度・SNS のカード・CPU の制限）。文は ⓘ に畳む。
+ * badges: フレームワークのカードのページの欄に出す小さい札（D-112）。表の中は文字の列。
+ */
+export function RowStatus({
+  s,
+  variant = 'inline',
+}: {
+  s: RouteRowStatus;
+  variant?: 'inline' | 'badges';
+}) {
   const items: { key: string; mark: string; label: string; text?: string }[] =
     [];
   if (s.freshness)
@@ -100,10 +111,27 @@ function RowStatus({ s }: { s: RouteRowStatus }) {
     label: '1 リクエストの CPU',
     ...(s.cpu.text ? { text: s.cpu.text } : {}),
   });
+  const badges = variant === 'badges';
+  const tone = (mark: string) =>
+    badges
+      ? mark === '✗'
+        ? 'badge-error'
+        : mark === '△'
+          ? 'badge-warning'
+          : 'badge-success'
+      : mark === '✗'
+        ? 'text-error'
+        : mark === '△'
+          ? 'text-warning'
+          : '';
   return (
     <ul
       aria-label="要件の判定"
-      className="mt-1 flex flex-wrap gap-x-2 text-[11px]"
+      className={
+        badges
+          ? 'flex flex-wrap gap-1'
+          : 'mt-1 flex flex-wrap gap-x-2 text-[11px]'
+      }
     >
       {items.map((i) => (
         <li
@@ -111,7 +139,9 @@ function RowStatus({ s }: { s: RouteRowStatus }) {
           data-check={i.key}
           data-ok={i.mark === '✓'}
           className={
-            i.mark === '✗' ? 'text-error' : i.mark === '△' ? 'text-warning' : ''
+            badges
+              ? `badge h-6 gap-0.5 badge-outline badge-sm pr-0 whitespace-nowrap ${i.text ? '' : 'pr-2'} ${tone(i.mark)}`
+              : tone(i.mark)
           }
         >
           {i.mark} {i.label}
@@ -125,12 +155,15 @@ function RowStatus({ s }: { s: RouteRowStatus }) {
 /**
  * 行のページの部品（記事のページのコメント欄。D-109）。onChange を渡すとラジオで選べ、渡さなければ今の選択を文字で出す。
  */
-function RowParts({
+export function RowParts({
   row,
   onChange,
   disabledReason,
+  namePrefix = 'part',
 }: {
   row: RoutePlanRow;
+  /** ラジオの name の頭（同じ画面に表とカードの両方が出るときに組を分ける）。 */
+  namePrefix?: string;
   onChange?: (row: RoutePlanRow, part: RoutePartKey, value: number) => void;
   disabledReason?: (
     row: RoutePlanRow,
@@ -164,7 +197,7 @@ function RowParts({
                     <input
                       type="radio"
                       className="radio radio-xs"
-                      name={`part-${row.route}-${p.part}`}
+                      name={`${namePrefix}-${row.route}-${p.part}`}
                       checked={o.value === p.value}
                       disabled={Boolean(why)}
                       onChange={() => onChange(row, p.part, o.value)}
@@ -189,7 +222,7 @@ function RowParts({
 }
 
 /**
- * ページ → 描き方 → なぜ → この構成の描き方の一覧（S1〜S6 の順。選んでいるものは枠で強調し、使えないものは灰色と理由の ⓘ）。
+ * ページ → 描き方 → なぜ → この構成の描き方の一覧（ROUTE_STRATEGY_ORDER の順。選んでいるものは枠で強調し、使えないものは灰色と理由の ⓘ）。
  * caption: 表の下の注記（どこで決まっているか）。
  */
 export function RoutePlanTable({
@@ -249,12 +282,7 @@ export function RoutePlanTable({
                   <td className="min-w-40" data-strategy={r.strategy}>
                     <span className="flex items-start gap-1.5">
                       <Swatch strategy={r.strategy} />
-                      <span>
-                        {r.code && (
-                          <span className="opacity-60">{r.code} </span>
-                        )}
-                        {r.strategyLabel}
-                      </span>
+                      <span>{r.strategyLabel}</span>
                     </span>
                     {r.detail.length > 0 && (
                       <ul className="mt-0.5 text-[11px] opacity-70">
@@ -299,7 +327,7 @@ export function RoutePlanTable({
                                   type="button"
                                   aria-pressed="true"
                                   className="btn h-auto min-h-0 cursor-default gap-1 px-1 py-0.5 text-[11px] font-normal btn-ghost btn-xs"
-                                  aria-label={`${r.label}は ${named(r.code, r.strategyLabel)}（選択中）`}
+                                  aria-label={`${r.label}は ${r.strategyLabel}（選択中）`}
                                 >
                                   <SelectedBody r={r} />
                                 </button>
@@ -321,9 +349,6 @@ export function RoutePlanTable({
                         const pick = onSelect && a.available && !why;
                         const body = (
                           <>
-                            {a.code && (
-                              <span className="opacity-60">{a.code}</span>
-                            )}
                             {a.label}
                             {delta && (
                               <span
@@ -355,7 +380,7 @@ export function RoutePlanTable({
                                 aria-pressed="false"
                                 className="btn h-auto min-h-0 gap-1 px-1 py-0.5 text-[11px] font-normal btn-ghost btn-xs"
                                 onClick={() => onSelect(r, a)}
-                                aria-label={`${r.label}を ${named(a.code, a.label)}にする`}
+                                aria-label={`${r.label}を ${a.label}にする`}
                               >
                                 {body}
                               </button>
@@ -394,28 +419,135 @@ export function RoutePlanTable({
   );
 }
 
-/** 既定の描き方の短い列（フレームワークのカードに出す。D-107）。 */
-export function RoutePresetChips({ rows }: { rows: RoutePlanRow[] }) {
-  if (rows.length === 0) return null;
+/**
+ * ページの描き方のチップ（フレームワークのカードのページの欄。D-112）。表の描き方の列と同じ並び（ROUTE_STRATEGY_ORDER）で、
+ * 選んでいるものは塗りと内側の枠で強調し、使えないものは灰色と理由の ⓘ。長い説明はチップの ⓘ、費用の差は「詳しく比べる」の表に出す。
+ * どのチップも同じ高さ（h-7・1 行・長い名前は省略して aria-label と title に全文）。枠は inset の ring で、選んでも箱の大きさは変わらない。
+ * onSelect を渡さなければ、選んでいる描き方のチップだけを読むだけで出す（選んでいないフレームワークのカード）。
+ */
+export function RouteChips({
+  row: r,
+  onSelect,
+  disabledReason,
+}: {
+  row: RoutePlanRow;
+  onSelect?: ((row: RoutePlanRow, alt: RouteAlternative) => void) | undefined;
+  disabledReason?:
+    | ((row: RoutePlanRow, alt: RouteAlternative) => string | null | undefined)
+    | undefined;
+}) {
+  const box =
+    'inline-flex h-7 max-w-full min-w-0 items-center gap-1 rounded-field text-xs';
+  const choices = onSelect
+    ? choicesOf(r)
+    : choicesOf(r).filter((c) => c.kind === 'selected');
   return (
     <ul
-      aria-label="既定のページの描き方"
-      className="flex flex-wrap gap-x-3 gap-y-1 text-xs"
+      role="group"
+      aria-label={`${r.label}の描き方`}
+      className="flex flex-wrap gap-1"
     >
-      {rows.map((r) => (
-        <li
-          key={r.route}
-          data-route={r.route}
-          data-strategy={r.strategy}
-          className="inline-flex items-start gap-1"
-        >
-          <Swatch strategy={r.strategy} />
-          <span>
-            {r.label}: {r.code && <span className="opacity-60">{r.code} </span>}
-            {r.strategyLabel}
-          </span>
-        </li>
-      ))}
+      {choices.map((c) => {
+        if (c.kind === 'selected') {
+          const body = (
+            <>
+              <Swatch strategy={r.strategy} className="" />
+              <span className="truncate" title={r.strategyLabel}>
+                {r.strategyLabel}
+              </span>
+              <span className="badge h-4 shrink-0 badge-xs px-1 badge-primary">
+                {onSelect ? '選択中' : '既定'}
+              </span>
+            </>
+          );
+          return (
+            <li
+              key={c.strategy}
+              data-alternative={c.strategy}
+              data-available="true"
+              data-selected="true"
+              className={`${box} bg-primary/10 pr-0.5 pl-2 font-medium ring-2 ring-primary ring-inset`}
+            >
+              {onSelect ? (
+                <button
+                  type="button"
+                  aria-pressed="true"
+                  className="inline-flex h-full min-w-0 cursor-default items-center gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  aria-label={`${r.label}は ${r.strategyLabel}（選択中）`}
+                >
+                  {body}
+                </button>
+              ) : (
+                <span
+                  aria-current="true"
+                  className="inline-flex h-full min-w-0 items-center gap-1"
+                >
+                  {body}
+                </span>
+              )}
+              <Info label={`${r.strategyLabel}の説明`}>
+                {r.why}
+                {r.detail.length > 0 && (
+                  <ul className="mt-1 list-disc pl-4">
+                    {r.detail.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                )}
+              </Info>
+            </li>
+          );
+        }
+        const a = c.alt;
+        const why = a.available ? disabledReason?.(r, a) : undefined;
+        const pick = onSelect && a.available && !why;
+        return (
+          <li
+            key={a.strategy}
+            data-alternative={a.strategy}
+            data-available={a.available}
+            data-selected="false"
+            className={`${box} pr-0.5 pl-2 ring-1 ring-base-300 ring-inset ${
+              pick ? 'bg-base-100 hover:bg-base-200' : 'bg-base-200 opacity-50'
+            }`}
+          >
+            {pick ? (
+              <button
+                type="button"
+                aria-pressed="false"
+                className="inline-flex h-full min-w-0 cursor-pointer items-center gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                onClick={() => onSelect(r, a)}
+                aria-label={`${r.label}を ${a.label}にする`}
+              >
+                <Swatch strategy={a.strategy} className="" />
+                <span className="truncate" title={a.label}>
+                  {a.label}
+                </span>
+              </button>
+            ) : (
+              <span className="inline-flex h-full min-w-0 items-center gap-1">
+                <Swatch strategy={a.strategy} className="" />
+                <span
+                  className="truncate"
+                  title={why ? `${a.label}（${why}）` : a.label}
+                >
+                  {a.label}
+                </span>
+                <span className="sr-only">
+                  {a.available ? `（${why}）` : '（使えない）'}
+                </span>
+              </span>
+            )}
+            <Info
+              label={`${a.label}${a.available ? 'の説明' : 'が使えない理由'}`}
+            >
+              {why && <span className="block font-semibold">{why}</span>}
+              {a.reason}
+              {a.basis === 'assumption' && '（ゲーム上の仮定）'}
+            </Info>
+          </li>
+        );
+      })}
     </ul>
   );
 }

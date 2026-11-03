@@ -90,7 +90,9 @@ describe('ⓘ の当たり判定', () => {
       .find((r) => r.name === 'framework' && !r.checked)!;
     const name = radio.closest('label')!.textContent!.replace(/^export/, '');
     const card = screen.getByRole('region', { name: `${name} の説明` });
-    fireEvent.click(within(card).getByRole('button', { name: /説明$/ }));
+    fireEvent.click(
+      within(card).getByRole('button', { name: `${name} の説明` }),
+    );
     expect(tooltip()).not.toBeNull();
     expect(radio.checked).toBe(false);
     // 説明の中（ポータル）を押しても選ばれない（OCL-A1FCD9AC）

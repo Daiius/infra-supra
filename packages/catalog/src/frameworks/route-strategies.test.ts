@@ -48,7 +48,8 @@ describe('描き方のメニュー', () => {
     expect(strategyTitle('cache-components')).toBe(
       '部品ごとにキャッシュ（Cache Components）',
     );
-    expect(strategyTitle('ssr')).toBe('S4 毎回描く');
+    // 番号（S1〜S6）は画面に出さない（D-112）
+    expect(strategyTitle('ssr')).toBe('毎回描く');
   });
 
   it('テンプレートのルートの見る人: 記事は全員に同じ・個人向けと業務の画面は人ごと', () => {

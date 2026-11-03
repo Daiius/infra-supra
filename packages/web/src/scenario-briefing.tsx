@@ -16,6 +16,7 @@ import {
   type Scenario,
   upkeepOf,
 } from 'game';
+import { ROUTE_STRATEGIES } from 'catalog';
 import type { ReactNode } from 'react';
 import { ChoiceCarousel } from './choice-carousel.tsx';
 import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
@@ -26,7 +27,8 @@ import {
   PageWireframe,
   WireframeLegend,
 } from './page-wireframes.tsx';
-import { RoutePresetChips } from './route-plan-table.tsx';
+import { RouteChips, RowParts, RowStatus } from './route-plan-table.tsx';
+import { RoutePlanCompare, type RoutePlanEditor } from './route-plan-field.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -184,6 +186,8 @@ function FrameworkDetail({
 /**
  * フレームワークのカード: 名前・要約・ページごとの見取り図と描き方（D-102）。選んでいるものは枠とブランドの色で目立たせ、
  * 選んでいないものも同じ中身を読める大きさで出す（薄く・彩度を落とし・少し小さく）。
+ * ページの欄は見取り図を左・描き方のチップと札を右に置き、選んでいるカードではチップで描き方を選ぶと隣の見取り図がすぐ替わる（D-112）。
+ * 選んでいないカードは既定の描き方を読むだけで出す（押すとそのフレームワークを選ぶ）。
  */
 function FrameworkCard({
   scenario,
@@ -196,6 +200,7 @@ function FrameworkCard({
   chosenRoutes,
   routeNotice,
   resolved,
+  editor,
 }: {
   scenario: Scenario;
   id: FrameworkId;
@@ -212,6 +217,8 @@ function FrameworkCard({
   routeNotice?: string | null | undefined;
   /** 実際の描き方（routeChoices。表・計算と同じ。見取り図に使う。D-111）。 */
   resolved?: Partial<Record<string, RouteStrategyId>> | undefined;
+  /** 描き方を選ぶ（選んでいるカードだけ。D-112）。 */
+  editor?: RoutePlanEditor | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
   // 選んでいるカードは選んだ描き方で描く（D-107）。表・計算と同じ実際の描き方（resolved。事業者で決まる既定・部品の
@@ -225,7 +232,7 @@ function FrameworkCard({
   );
   const lines = t?.pages ?? [];
   /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
-  const linesOf = (label: string) =>
+  const frameworkLinesOf = (label: string) =>
     lines
       .filter((l) => l.startsWith(`${label}:`))
       .map((l) => l.slice(label.length + 1).trim());
@@ -233,6 +240,11 @@ function FrameworkCard({
     (l) => !pages.some((p) => l.startsWith(`${p.label}:`)),
   );
   const brand = FRAMEWORK_BRAND[id];
+  // ページの行: 選んでいるカードは選んだ描き方の行（要件の判定つき）、選んでいないカードは既定の行
+  const rowOf = (route: string) =>
+    (editor?.rows ?? routes)?.find((r) => r.route === route);
+  const statusOf = (route: string) =>
+    editor?.status.find((x) => x.route === route);
   return (
     <section
       aria-label={`${FRAMEWORKS[id].label} の説明`}
@@ -271,43 +283,71 @@ function FrameworkCard({
             ))}
           </ul>
         )}
-        {pages.map((p) => (
-          <section
-            key={p.route}
-            aria-label={p.label}
-            className="flex flex-col gap-2 border-t border-base-300 pt-3 lg:flex-row lg:gap-4"
-          >
-            <PageWireframe page={p} />
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <h5 className="font-semibold">{p.label}</h5>
-              <PageBadges badges={p.badges} />
-              {linesOf(p.label).length > 0 && (
-                <ul className="list-disc space-y-0.5 pl-5 text-sm">
-                  {linesOf(p.label).map((l) => (
-                    <li key={l}>{l}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-        ))}
-        {routes && routes.length > 0 && (
-          <section
-            aria-label="既定の描き方"
-            className="border-t border-base-300 pt-3"
-          >
-            <h5 className="mb-1 font-semibold">
-              既定の描き方（下の「ページの描き方」で直せる）
-            </h5>
-            <RoutePresetChips rows={routes} />
-          </section>
+        {pages.map((p) => {
+          const row = rowOf(p.route);
+          const st = statusOf(p.route);
+          // フレームワークの既定と違う描き方なら、フレームワークの説明の行でなく描き方の説明を出す（D-112）
+          const pageLines = p.strategy
+            ? [
+                ROUTE_STRATEGIES[p.strategy].long,
+                ...(row?.strategy === p.strategy ? [row.why] : []),
+              ]
+            : frameworkLinesOf(p.label);
+          return (
+            <section
+              key={p.route}
+              aria-label={p.label}
+              data-route={p.route}
+              className="flex flex-col gap-2 border-t border-base-300 pt-3 lg:flex-row lg:gap-4"
+            >
+              <PageWireframe page={p} />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <h5 className="font-semibold">{p.label}</h5>
+                {row && <RouteChips row={row} onSelect={editor?.onSelect} />}
+                {editor && row?.overriddenBy && (
+                  <p className="text-[11px] text-warning">
+                    既定から変わっている: {row.overriddenBy}
+                  </p>
+                )}
+                {editor && row && (
+                  <RowParts
+                    row={row}
+                    onChange={editor.onPart}
+                    namePrefix="card-part"
+                  />
+                )}
+                {st && <RowStatus s={st} variant="badges" />}
+                <PageBadges badges={p.badges} />
+                {pageLines.length > 0 && (
+                  <ul
+                    aria-label={`${p.label}の説明`}
+                    className="list-disc space-y-0.5 pl-5 text-sm"
+                  >
+                    {pageLines.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          );
+        })}
+        {editor && editor.rows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-base-300 pt-3">
+            <RoutePlanCompare
+              editor={editor}
+              frameworkLabel={FRAMEWORKS[id].label}
+            />
+            <span className="text-xs opacity-70">
+              なぜ・要件の判定・ほかの描き方の 1 か月目の費用の差を表で並べる
+            </span>
+          </div>
         )}
         {pages.length > 0 && (
           <div className="border-t border-base-300 pt-2">
             <WireframeLegend pages={pages} />
             <p className="mt-1 text-xs opacity-60">
-              見取り図はゲーム上の仮定。記事のページのコメント欄（③
-              ページの描き方の記事の行）を変えると、コメント欄の札も変わる。
+              見取り図はゲーム上の仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。
             </p>
           </div>
         )}
@@ -332,6 +372,7 @@ export function FrameworkField({
   routes,
   routeNotice,
   resolvedRoutes,
+  editor,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
@@ -350,6 +391,8 @@ export function FrameworkField({
     id: FrameworkId,
     selected: boolean,
   ) => Partial<Record<string, RouteStrategyId>>;
+  /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップと「詳しく比べる」。D-112）。 */
+  editor?: RoutePlanEditor | undefined;
 }) {
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
@@ -393,6 +436,7 @@ export function FrameworkField({
             chosenRoutes={routes}
             routeNotice={selected ? null : routeNotice?.(id)}
             resolved={resolvedRoutes?.(id, selected)}
+            editor={selected ? editor : undefined}
           />
         )}
       />
