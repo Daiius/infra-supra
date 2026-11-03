@@ -63,6 +63,17 @@ export const RouteGroupSchema = z.object({
    *   島を描く分。どちらも 1 リクエストあたりの CPU の内訳（D-99）で島と分かるようにする。
    */
   island: z.object({ request: ProcessingSchema.optional() }).optional(),
+  /**
+   * このルートの閲覧 1 回あたりに、ページの部品（コメント欄・いいねなどのアイランド）がブラウザから呼ぶ API の回数（D-109・RS-02）。
+   * 与えると、このルートの閲覧には perPage.apiCalls の代わりにこれを使う（二重に数えない）。処理は api と同じ。
+   * spa のルートの中身のデータの API（processing）とは別に数える（枠 + API の記事は中身とコメント欄で 2 回）。
+   */
+  apiCalls: NonNeg.optional(),
+  /**
+   * spa のみ: 枠（HTML）を閲覧のたびに読む（ページごとの枠。D-109）。省略・false は入口だけ（1 つのシェルとブラウザの中の遷移）。
+   * true なら枠と JS・CSS は閲覧の数だけ読み、中身はデータの API で取る（Astro・Next.js が記事ごとに書き出す枠）。
+   */
+  shellPerView: z.boolean().optional(),
 });
 
 export const WorkloadInputSchema = z
@@ -231,6 +242,13 @@ export const WorkloadInputSchema = z
               ? '別のリクエストの島（island.request）は isr・static のルートだけ'
               : '同じ応答の中の島（island.request なし）は ssr のルートだけ',
           });
+      }
+      if (r.rendering !== 'spa' && r.shellPerView !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['routes', i, 'shellPerView'],
+          message: 'shellPerView は SPA のルートだけ',
+        });
       }
       if (r.rendering === 'spa' && r.shellKB === undefined) {
         ctx.addIssue({

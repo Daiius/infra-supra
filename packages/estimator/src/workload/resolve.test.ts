@@ -1,7 +1,7 @@
 // SPA のルートの件数（prd/10 F-01・prd/04 §2）。値はすべて架空。
 import { describe, expect, it } from 'vitest';
 import { simulateResources } from '../simulate/simulate.ts';
-import { resolveWorkload } from './resolve.ts';
+import { apiCallsPerMonth, resolveWorkload } from './resolve.ts';
 import type { WorkloadInput } from './schema.ts';
 
 const processing = {
@@ -178,6 +178,39 @@ describe('SPA のルート', () => {
     expect(ssr.classes.asset.count).toBeCloseTo(100_000 * 10 * 0.5);
     expect(ssr.classes.api.count).toBeCloseTo(100_000);
     expect(ssr.classes['document-ssr'].count).toBeCloseTo(100_000);
+  });
+
+  it('ページごとの枠（shellPerView）は、枠と JS・CSS を閲覧のたびに読む（D-109）', () => {
+    const per = resolveWorkload(
+      base([
+        {
+          id: 'app',
+          rendering: 'spa',
+          share: 1,
+          pages: 1,
+          processing,
+          shellKB: 3,
+          shellPerView: true,
+        },
+      ]),
+    );
+    expect(per.classes['document-static'].count).toBeCloseTo(100_000);
+    expect(per.classes.asset.count).toBeCloseTo(100_000 * 10 * 0.5);
+    expect(per.classes.api.count).toBeCloseTo(200_000);
+    expect(() =>
+      resolveWorkload(
+        base([
+          {
+            id: 'app',
+            rendering: 'ssr',
+            share: 1,
+            pages: 1,
+            processing,
+            shellPerView: true,
+          },
+        ]),
+      ),
+    ).toThrow();
   });
 
   it('SPA のルートには shellKB が要る', () => {
@@ -471,5 +504,60 @@ describe('静的なページのビルドし直し（D-68）', () => {
       routes: {},
     }).nodes.ci!;
     expect(u.resources['build-minutes']).toBeCloseTo(r.builds.minutes * 4, 9);
+  });
+});
+
+describe('ルートのページの部品が呼ぶ API（apiCalls。D-109・RS-02）', () => {
+  const two = (apiCalls?: number) =>
+    base([
+      {
+        id: 'article',
+        rendering: 'ssr',
+        share: 0.6,
+        pages: 10,
+        processing,
+        ...(apiCalls !== undefined ? { apiCalls } : {}),
+      },
+      { id: 'me', rendering: 'ssr', share: 0.4, pages: 1, processing },
+    ]);
+
+  it('perPage.apiCalls と同じ値なら件数・流れは持たないときと同じで、内訳だけがルートに付く', () => {
+    const a = resolveWorkload(two());
+    const b = resolveWorkload(two(1));
+    expect(b.classes.api).toEqual(a.classes.api);
+    expect(a.sources.api).toEqual([{ count: 100_000, cpuMs: 2 }]);
+    expect(b.sources.api).toEqual([
+      {
+        routeId: 'article',
+        rendering: 'ssr',
+        count: 60_000,
+        cpuMs: 2,
+        part: true,
+      },
+      { count: 40_000, cpuMs: 2 },
+    ]);
+  });
+
+  it('ルートの値はそのルートの閲覧に perPage.apiCalls の代わりに使う（二重に数えない）', () => {
+    const r = resolveWorkload(two(0.25));
+    expect(r.classes.api.count).toBeCloseTo(60_000 * 0.25 + 40_000);
+    expect(apiCallsPerMonth(two(0.25), 100_000)).toBeCloseTo(55_000);
+  });
+
+  it('枠 + API（spa）のルートは中身のデータの API とページの部品の API を別に数える（記事は 2 回）', () => {
+    const r = resolveWorkload(
+      base([
+        {
+          id: 'article',
+          rendering: 'spa',
+          share: 1,
+          pages: 10,
+          processing,
+          shellKB: 3,
+          apiCalls: 1,
+        },
+      ]),
+    );
+    expect(r.classes.api.count).toBeCloseTo(200_000);
   });
 });

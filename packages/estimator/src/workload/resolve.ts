@@ -50,7 +50,7 @@ export type ClassFlow = {
  * （課金・使用量はクラスの流れ ClassFlow で数え、これは使わない）。
  */
 export type RequestSource = {
-  /** Workload のルートの id。ページから呼ぶ API（perPage.apiCalls）は持たない。 */
+  /** Workload のルートの id。ページから呼ぶ API（perPage.apiCalls）は持たない（ルートの apiCalls の分は持つ。D-109）。 */
   routeId?: string;
   /** ルートの画面に出す名前（RouteGroup の label）。 */
   label?: string;
@@ -71,6 +71,8 @@ export type RequestSource = {
   island?: boolean;
   /** document-isr・isr-revalidate だけ: サーバーの島のページの枠（別のリクエストの島を持つルート。D-108）。 */
   islandShell?: boolean;
+  /** api だけ: ルートのページの部品（コメント欄などのアイランド）が呼ぶ API（ルートの apiCalls。D-109）。 */
+  part?: boolean;
 };
 
 export type ResolvedWorkload = {
@@ -345,8 +347,9 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       rowsRead: p.queries * p.rowsReadPerQuery,
     };
     if (r.rendering === 'spa') {
-      // シェルは入口だけ（遷移はブラウザの中）。中身はページごとにデータの API で取る（prd/04 §2・prd/10 F-01）
-      const entries = views / pagesPerVisit;
+      // シェルは入口だけ（遷移はブラウザの中）。中身はページごとにデータの API で取る（prd/04 §2・prd/10 F-01）。
+      // ページごとの枠（shellPerView）は閲覧のたびに枠を読む（D-109）
+      const entries = r.shellPerView ? views : views / pagesPerVisit;
       spaViews += views;
       spaEntries += entries;
       byRendering.static.push(flow(entries, { kb: r.shellKB! }));
@@ -382,21 +385,22 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           result: misses,
         });
       } else spaData.push(flow(views, work));
-      derivations.push({
-        id: `spa-entries:${r.id}`,
-        label: `SPA のシェルの読み込み（${r.id}）`,
-        expression:
-          '閲覧 / 1 セッションあたりのページ数（遷移はブラウザの中で、中身はデータの API）',
-        inputs: [
-          { name: '閲覧', value: views, basis: 'derived' },
-          {
-            name: 'ページ/セッション',
-            value: t.pagesPerSession,
-            basis: 'user-input',
-          },
-        ],
-        result: entries,
-      });
+      if (!r.shellPerView)
+        derivations.push({
+          id: `spa-entries:${r.id}`,
+          label: `SPA のシェルの読み込み（${r.id}）`,
+          expression:
+            '閲覧 / 1 セッションあたりのページ数（遷移はブラウザの中で、中身はデータの API）',
+          inputs: [
+            { name: '閲覧', value: views, basis: 'derived' },
+            {
+              name: 'ページ/セッション',
+              value: t.pagesPerSession,
+              basis: 'user-input',
+            },
+          ],
+          result: entries,
+        });
     } else if (r.rendering === 'static') {
       byRendering.static.push(flow(views, { kb: p.responseKB }));
       source('document-static', r, views, 0);
@@ -577,7 +581,19 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   const rt = w.realtime;
   // JS・CSS は SPA のルートでは入口だけ読む（遷移では読み直さない）
   const assetViews = pv - spaViews + spaEntries;
-  const apiFlow = flow(pv * w.perPage.apiCalls, {
+  // ページの部品が呼ぶ API（D-109・RS-02）: ルートが apiCalls を持てばその閲覧はそれ、持たなければ perPage.apiCalls。
+  // ルートの分は内訳（sources）でルートに付ける
+  const apiCount = apiCallsPerMonth(w, pv);
+  for (const r of w.routes)
+    if (r.apiCalls !== undefined)
+      source('api', r, pv * r.share * r.apiCalls, a.cpuMs, { part: true });
+  const unrouted =
+    apiCount -
+    w.routes.reduce(
+      (s, r) => s + (r.apiCalls !== undefined ? pv * r.share * r.apiCalls : 0),
+      0,
+    );
+  const apiFlow = flow(apiCount, {
     kb: a.responseKB,
     cpuMs: a.cpuMs,
     wallMs: a.cpuMs + a.ioWaitMs,
@@ -585,7 +601,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     rowsRead: a.queries * a.rowsReadPerQuery,
     rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
   });
-  source('api', undefined, apiFlow.count, a.cpuMs);
+  source('api', undefined, unrouted, a.cpuMs);
   const images = pv * w.perPage.images * (1 - w.images.browserReuse);
   const classes: Record<RequestClass, ClassFlow> = {
     'document-static': merge(byRendering.static),
@@ -683,6 +699,22 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
 }
 
 /**
+ * 月のページから呼ぶ API の回数（D-109・RS-02）。PV × perPage.apiCalls に、apiCalls を持つルートの差（その閲覧 × (apiCalls − perPage.apiCalls)）を
+ * 足す（持たないルートだけなら今までの PV × perPage.apiCalls と同じ値）。書き込みの回数（× writesPerCall）のもと。
+ */
+export function apiCallsPerMonth(
+  w: Pick<WorkloadInput, 'perPage' | 'routes'>,
+  pv: number,
+): number {
+  const base = w.perPage.apiCalls;
+  return w.routes.reduce(
+    (s, r) =>
+      r.apiCalls !== undefined ? s + pv * r.share * (r.apiCalls - base) : s,
+    pv * base,
+  );
+}
+
+/**
  * 月に送るメールの通数（D-95）。利用者に比例する分（アカウントの操作・業務の通知）と、書き込みに比例する分（コメントの通知）。
  * 書き込みの回数は PV × ページあたりの API × 1 回あたりの書き込み（ゲームの内容の更新の数え方と同じ）。
  */
@@ -694,7 +726,7 @@ function resolveEmails(
 ): number {
   const e = w.email;
   if (!e) return 0;
-  const writes = pv * w.perPage.apiCalls * w.api.writesPerCall;
+  const writes = apiCallsPerMonth(w, pv) * w.api.writesPerCall;
   const emails = mau * e.perMau + writes * e.perWrite;
   derivations.push({
     id: 'emails',

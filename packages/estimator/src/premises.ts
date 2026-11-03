@@ -95,11 +95,13 @@ export function cpuSourceText(s: CpuSource): string {
           ? s.requestClass === 'document-isr'
             ? '島の枠をキャッシュから返す'
             : '島の枠の閲覧と描き直し'
-          : s.requestClass === 'api' && s.rendering === 'spa'
-            ? 'ブラウザが API で中身を取る'
-            : s.requestClass === 'isr-revalidate' && !s.background
-              ? 'ISR の再生成'
-              : SOURCE_MODE[s.requestClass];
+          : s.part
+            ? 'ページの部品が呼ぶ API'
+            : s.requestClass === 'api' && s.rendering === 'spa'
+              ? 'ブラウザが API で中身を取る'
+              : s.requestClass === 'isr-revalidate' && !s.background
+                ? 'ISR の再生成'
+                : SOURCE_MODE[s.requestClass];
   return `${name}（${mode ? `${mode}・` : ''}CPU ${ms(s.cpuMs)} ms）`;
 }
 
@@ -122,7 +124,9 @@ function cpuCauses(
   const seen = new Set<string>();
   const uniq = all.filter((s) => {
     const key =
-      (s.routeId ?? `class:${s.requestClass}`) + (s.island ? ':island' : '');
+      (s.routeId ?? `class:${s.requestClass}`) +
+      (s.island ? ':island' : '') +
+      (s.part ? ':part' : '');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
