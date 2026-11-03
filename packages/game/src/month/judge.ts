@@ -40,7 +40,11 @@ import {
 import type { GameState, MonthReport } from '../state.ts';
 import { coldStartViewShare } from '../workload.ts';
 import type { MonthEstimate } from './bill.ts';
-import { stageReasons } from './satisfaction.ts';
+import {
+  EMAIL_UNDELIVERED_REASON,
+  stageReasons,
+  undeliveredShare,
+} from './satisfaction.ts';
 
 export type Reasons = ReturnType<typeof stageReasons>;
 
@@ -65,6 +69,8 @@ export function judgeMonth(
     ssrCpuMs: number;
     featurePoints: number;
     blocking: PlatformPremise[];
+    /** 当たって送れなくなったメールの送信の前提（D-117）。省略は無し。 */
+    undelivered?: PlatformPremise[];
     throttling: PlatformPremise[];
     adjusted: PlatformPremise[];
     incident: boolean;
@@ -72,6 +78,7 @@ export function judgeMonth(
 ): Judged {
   const { month, r, ssrCpuMs, featurePoints, blocking, throttling, adjusted } =
     c;
+  const undelivered = c.undelivered ?? [];
   const platformNow = c.platform;
   const incident = c.incident;
   const stackIndexNow = state.stackIndex;
@@ -216,15 +223,21 @@ export function judgeMonth(
           }
         : {}),
       speedDown: adjusted.length > 0,
+      emailUndeliveredShare: undeliveredShare(undelivered),
     },
     sat,
   );
+  if (undelivered.length)
+    notes.push(
+      `${EMAIL_UNDELIVERED_REASON}（${undelivered[0]!.text}）。サイトは動いている`,
+    );
   if (adjusted.length)
     notes.push(
       'CDN の定額のプランの込みを超え続け、配信の性能が調整された（請求は増えない。ゲーム上の仮定）',
     );
   const reasons = stageReasons(sc, stages, {
     blocking,
+    undelivered,
     throttling,
     adjusted,
     incident,

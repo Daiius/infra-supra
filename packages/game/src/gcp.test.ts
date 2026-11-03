@@ -156,13 +156,14 @@ describe('Google Cloud の構成', () => {
       contractSpaSql: run(contract, GCP, 'vite-spa', { db: 'cloud-sql' }),
     };
     // ドメインの登録（$0.93 / 月）と Cloud DNS（ゾーン 約 $0.20 + 問い合わせ）の分だけ $1.1〜1.2 上がった（D-96。達成は不変）
+    // 記事はメールの通数から Bot の PV を除いて $0.1〜0.2 下がった（D-117。達成は不変）
     expect(table).toEqual({
-      articleNext: { won: 0, monthly: 64.3 },
-      articleNextMin1: { won: 0, monthly: 73.6 },
-      articleNextSql: { won: 0, monthly: 71.3 },
-      articleNextCfResize: { won: 20, monthly: 28.2 },
-      articleSpa: { won: 0, monthly: 56.3 },
-      articleSpaCfResize: { won: 20, monthly: 11.8 },
+      articleNext: { won: 0, monthly: 64.1 },
+      articleNextMin1: { won: 0, monthly: 73.5 },
+      articleNextSql: { won: 0, monthly: 71.1 },
+      articleNextCfResize: { won: 20, monthly: 28 },
+      articleSpa: { won: 0, monthly: 56.2 },
+      articleSpaCfResize: { won: 20, monthly: 11.6 },
       contractNext: { won: 20, monthly: 15.9 },
       contractNextMin1: { won: 20, monthly: 25.4 },
       // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）
@@ -172,9 +173,10 @@ describe('Google Cloud の構成', () => {
     });
     // 目標の根拠（CF Paid × Next.js）: 達成は不変。メールの送信（D-95・Email Service）の分だけ費用が上がった（前は $15.2・$5.7）
     // ドメインの登録（D-96。$0.93 / 月）の分も上がった（前は $18.0・$13.4）
+    // 記事はメールの通数から Bot の PV を除き、Bot の月の Email Service の超過が減った（D-117。前は $18.9）
     expect(run(article, CF_PAID, 'nextjs')).toEqual({
       won: 20,
-      monthly: 18.9,
+      monthly: 18.3,
     });
     expect(run(contract, CF_PAID, 'nextjs')).toEqual({
       won: 20,

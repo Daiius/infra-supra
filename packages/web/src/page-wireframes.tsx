@@ -4,6 +4,7 @@
 import {
   REGION_NEEDS,
   REGION_SOURCES,
+  type OffscreenElement,
   type PageBadge,
   type pageWireframes,
   type RegionNeed,
@@ -148,10 +149,13 @@ function NeedTag({ need }: { need: RegionNeed }) {
 export function ScenarioWireframes({
   pages,
   captionOf,
+  offscreen = [],
 }: {
   pages: ScenarioPage[];
   /** ページの説明の行（シナリオのページの一覧の文。D-101）。 */
   captionOf?: (p: ScenarioPage) => string | undefined;
+  /** ページの外の要素（メールなど。見取り図の下に小さなカードで出す。D-117）。 */
+  offscreen?: OffscreenElement[];
 }) {
   if (pages.length === 0) return null;
   const used = new Set(pages.flatMap((p) => p.regions.flatMap((r) => r.needs)));
@@ -232,6 +236,9 @@ export function ScenarioWireframes({
           );
         })}
       </div>
+      {offscreen.map((e) => (
+        <OffscreenCard key={e.label} element={e} />
+      ))}
       <ul
         aria-label="要件の札の凡例"
         className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs"
@@ -248,5 +255,48 @@ export function ScenarioWireframes({
         ② でフレームワークと描き方を選ぶと出る。
       </p>
     </div>
+  );
+}
+
+/** 封筒のアイコン（飾り）。 */
+function EnvelopeIcon() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className="h-5 w-5 shrink-0 text-base-content/60"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="5.5" width="18" height="13" rx="1.5" />
+      <path d="M3.5 6.5 12 13l8.5-6.5" />
+    </svg>
+  );
+}
+
+/**
+ * ページの外の要素のカード（D-117。今はメールだけ）。ページの区画ではないので、ブラウザの窓の外に置き、要件の札・作られ方の色・
+ * 区画の淡い地は使わない（base 系の色と破線の枠だけ）。描き方の選択（②）とは関係しない。
+ */
+function OffscreenCard({ element: e }: { element: OffscreenElement }) {
+  return (
+    <section
+      aria-label={e.label}
+      data-offscreen={e.kind}
+      className="flex w-full max-w-xl gap-2 rounded-lg border border-dashed border-base-content/30 bg-base-100 px-2.5 py-2 text-xs"
+    >
+      {e.kind === 'email' && <EnvelopeIcon />}
+      <div className="min-w-0 space-y-0.5">
+        <h4 className="text-sm font-bold">{e.label}</h4>
+        <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
+          {e.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+        {e.note && <p className="opacity-70">{e.note}</p>}
+      </div>
+    </section>
   );
 }

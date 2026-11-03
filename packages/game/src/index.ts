@@ -184,6 +184,7 @@ export {
 export {
   type ResolvedRegion,
   pageWireframes,
+  scenarioOffscreen,
   scenarioWireframes,
 } from './wireframes.ts';
 export {

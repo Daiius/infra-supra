@@ -44,7 +44,7 @@ export function estimateMonth(
   state: GameState,
   month: number,
   platform: Platform,
-  volume: Pick<Volume, 'pv' | 'spikes'>,
+  volume: Pick<Volume, 'pv' | 'spikes'> & Partial<Pick<Volume, 'botPV'>>,
   peakFactor: number,
 ): Estimated {
   const stackIndexNow = state.stackIndex;
@@ -64,6 +64,7 @@ export function estimateMonth(
     routeParts: state.routeParts,
     ...(peakFactor !== 1 ? { peakFactor } : {}),
     ...(spikes.length ? { spikes } : {}),
+    ...(volume.botPV ? { botPV: volume.botPV } : {}),
   };
   const workload = workloadFor(sc, parts);
   const swap = state.componentSwap;

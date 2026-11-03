@@ -956,6 +956,12 @@ describe('ゲームモードの画面', () => {
       profile: 'profile',
       notifications: 'notifications',
     });
+    // メールはページの外の要素として、見取り図の脇に封筒のカードで出す（区画・要件の札・作られ方の色ではない。D-117）
+    const mail = screen.getByRole('region', { name: 'メール（ページの外）' });
+    expect(mail.getAttribute('data-offscreen')).toBe('email');
+    expect(mail.textContent).toContain('登録の確認');
+    expect(mail.textContent).toContain('メール送信');
+    expect(mail.closest('li[data-region]')).toBeNull();
     // 受託のシナリオも同じ形で出る
     fireEvent.click(
       screen.getByRole('radio', { name: /^受託先の業務アプリの運用/ }),
@@ -983,6 +989,8 @@ describe('ゲームモードの画面', () => {
     const dialog = screen.getByRole('dialog', { name: '運営中の出来事' });
     expect(dialog.textContent).toContain('Bot が大量に来る');
     expect(dialog.textContent).toContain('実際に予告されている料金');
+    // 話題の出来事で登録の確認のメールが集中する（D-117）
+    expect(dialog.textContent).toContain('登録の確認のメール');
     fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(open);
