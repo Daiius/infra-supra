@@ -3,17 +3,12 @@
 // テンプレートを PV・設定・部品で替えた Workload（ゲームの 1 か月目と同じ組み立て。workloadFor）。
 import { DEFAULT_CHOICES, type Choices, type FrameworkId } from 'catalog';
 import type { WorkloadInput } from 'estimator';
-import {
-  baseSsrCpuMsOf,
-  frameworkDefaults,
-  setupSlots,
-  STACKS,
-  validSetupChoices,
-  workloadFor,
-  type RouteOverrides,
-  type RouteParts,
-  type Settings,
-} from './index.ts';
+import { baseSsrCpuMsOf, frameworkDefaults } from './core.ts';
+import type { Settings } from './settings.ts';
+import { setupSlots, validSetupChoices } from './setup/new-game.ts';
+import { STACKS } from './stacks.ts';
+import type { RouteOverrides, RouteParts } from './state.ts';
+import { workloadFor } from './workload.ts';
 import type { Scenario } from './scenario.ts';
 
 /**

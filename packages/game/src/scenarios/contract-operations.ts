@@ -7,7 +7,7 @@ import {
   BUSINESS_APP_SPA,
   businessApp,
 } from 'catalog';
-import type { Action, GameState } from '../index.ts';
+import type { Action, GameState } from '../state.ts';
 import type { EventDef, PageWireframe, Scenario } from '../scenario.ts';
 
 /**

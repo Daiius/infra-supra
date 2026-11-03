@@ -1,0 +1,317 @@
+// 設定（Settings・SETTINGS の選択肢）と、設定から決まる値（オンデマンドの再検証・画像の形式と重さ・設定のフレーバー）。
+import { type FrameworkId, imagesBehavior, type Platform } from 'catalog';
+import { EFFORT } from './rules.ts';
+import type { Scenario, WorkloadMods } from './scenario.ts';
+
+export type Settings = {
+  /**
+   * 画像 1 枚（サイズ違い 1 種）の大きさ（KB）。画像の形式で決まる（JPEG 150・WebP 105・AVIF 84。同じ見た目の画質での比較。D-58）。
+   */
+  imageKB: number;
+  variants: number;
+  revalidateSec: number;
+  /** SSR の最適化の段数。 */
+  ssrOptimizations: number;
+};
+
+/** ISR の再検証の設定の「オンデマンド」（revalidateSec の値。時間の間隔はすべて正。D-49）。 */
+export const ON_DEMAND_REVALIDATE = 0;
+
+/** コメントの描き方: ブラウザで読み込む（既定。記事のページはコメントを含まない。D-70）。 */
+export const COMMENTS_IN_BROWSER = 0;
+/** コメントの描き方: 記事のページに含める（ISR・静的なページの HTML にコメントも入れる。D-82）。 */
+export const COMMENTS_IN_PAGE = 1;
+
+/**
+ * コメントの投稿で再検証するページの数（その記事のページだけ。一覧にはコメントを出さないとみなす。ゲーム上の仮定・D-82）。
+ * 記事の投稿・編集は ON_DEMAND_PAGES_PER_UPDATE（記事と一覧の 2）。
+ */
+export const COMMENT_PAGES_PER_UPDATE = 1;
+
+/** 再検証がオンデマンドか（Next.js の ISR の設定。SPA では revalidateSec は API のキャッシュの期間で、0 にならない）。 */
+export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
+  return settings.revalidateSec === ON_DEMAND_REVALIDATE;
+}
+
+/**
+ * オンデマンドの最大寿命の説明（設定の ⓘ に出す。D-56）。Next.js の文書（ISR のガイド・2026-10-15 更新）で確かめたのは、
+ * タグで再検証するデータに revalidate: 3600 を併せて付けた例（unstable_cache）があることまで。
+ */
+export const ON_DEMAND_MAX_AGE_NOTE =
+  '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多い（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがある）。このゲームでは 1 日とみなし、その分の再生成も数える';
+
+/**
+ * 画像の形式ごとの 1 枚の大きさ（KB。同じ見た目の画質。D-58）。JPEG はテンプレートの 150 KB。
+ * WebP: 同等の SSIM の JPEG より 25〜34% 小さい（https://developers.google.com/speed/webp/docs/webp_study ・2025-08-07 更新・
+ * 2026-11-01 取得）の中ほどの 30% とする。AVIF: WebP より約 20% 小さい（https://nextjs.org/docs/app/api-reference/components/image
+ * の formats・2026-09-28 更新・2026-11-01 取得）。範囲の取り方はゲーム上の仮定。
+ */
+export const IMAGE_FORMAT_KB = { jpeg: 150, webp: 105, avif: 84 } as const;
+
+/** 画像の形式（設定の値から）。 */
+export function imageFormatOf(imageKB: number): 'jpeg' | 'webp' | 'avif' {
+  return imageKB <= IMAGE_FORMAT_KB.avif
+    ? 'avif'
+    : imageKB <= IMAGE_FORMAT_KB.webp
+      ? 'webp'
+      : 'jpeg';
+}
+
+/**
+ * Next.js の画像の部品（next/image）で閲覧のときに変換する構成か（Vercel の画像の最適化・VPS の next start）。
+ * next/image の formats の既定は WebP で、ブラウザの Accept を見て形式を選ぶ（JPEG は選べない。D-58）。
+ */
+export function usesNextImage(
+  platform: Platform,
+  framework: FrameworkId,
+  images: string | undefined,
+): boolean {
+  return (
+    framework === 'nextjs' &&
+    platform !== 'cloudflare' &&
+    (images ?? 'default') === 'default'
+  );
+}
+
+/**
+ * 閲覧のときに、ブラウザに合わせた形式（WebP）で配る構成か（D-62）。next/image（usesNextImage）に加えて、
+ * Cloudflare Images の閲覧のときの変換（Cloudflare の構成の Images・他の事業者の部品 cf-images）。
+ * Cloudflare Images の format=auto は「Automatically serves the most efficient format that the requesting browser supports」
+ * （URL の変換。Workers・バインディングでは Accept を見て形式を選ぶ公式の例がある）。AVIF も選びうるが、next/image と揃えて
+ * WebP とみなす（AVIF の設定を選べばそちら。推奨案）。images は部品の id（他の事業者の部品は振る舞いで見る）。
+ */
+export function autoImageFormat(
+  platform: Platform,
+  framework: FrameworkId,
+  images: string | undefined,
+): boolean {
+  return (
+    usesNextImage(platform, framework, images) ||
+    astroImage(platform, framework, images) ||
+    imagesBehavior(platform, images) === 'images'
+  );
+}
+
+/**
+ * Astro の画像の部品（astro:assets の <Image />）で閲覧のときに変換する構成か（Vercel の画像の最適化・VPS の Node）。
+ * <Image /> は既定で WebP を作る（「By default, the <Image /> component will produce a .webp file」。D-68）。
+ */
+export function astroImage(
+  platform: Platform,
+  framework: FrameworkId,
+  images: string | undefined,
+): boolean {
+  return (
+    framework === 'astro' &&
+    platform !== 'cloudflare' &&
+    (images ?? 'default') === 'default'
+  );
+}
+
+/** 戻せる設定（prd/07 §9.5）。値はゲーム上の仮定。 */
+export const SETTINGS = {
+  format: {
+    label: '画像の形式',
+    field: 'imageKB',
+    effort: EFFORT.setting.format,
+    note: '同じ見た目の画質のまま、画像を小さくする形式（転送量・保存量・速さに効き、画質は下がらない）。WebP は同等の SSIM の JPEG より 25〜34% 小さい（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいが、変換に約 50% 長くかかる（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存する。閲覧のときに変換するサービスはブラウザに合わせて形式を選ぶ（Cloudflare Images の変換の数は形式で増えない・Vercel は形式ごとにキャッシュする）',
+    options: [
+      { value: IMAGE_FORMAT_KB.jpeg, label: 'JPEG（そのまま）' },
+      { value: IMAGE_FORMAT_KB.webp, label: 'WebP' },
+      { value: IMAGE_FORMAT_KB.avif, label: 'AVIF' },
+    ],
+  },
+  variants: {
+    label: '画像のサイズ違い',
+    field: 'variants',
+    effort: EFFORT.setting.variants,
+    note: '画像変換の件数に効く。1 種だと大きい画像を全端末に配るので遅くなる',
+    options: [
+      { value: 3, label: '3 種' },
+      { value: 2, label: '2 種' },
+      { value: 1, label: '1 種' },
+    ],
+  },
+  isr: {
+    label: 'ISR の再検証',
+    field: 'revalidateSec',
+    effort: EFFORT.setting.isr,
+    note:
+      '再生成の回数に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事の更新のときに再検証する（再生成はおもに更新の回数。ISR のキャッシュの置き場所によっては再検証が届かない。時間からの切り替えは実装の手間がかかる）。' +
+      ON_DEMAND_MAX_AGE_NOTE,
+    options: [
+      {
+        value: ON_DEMAND_REVALIDATE,
+        label: 'オンデマンド（記事の更新のとき）',
+      },
+      { value: 60, label: '1 分' },
+      { value: 300, label: '5 分' },
+      { value: 3600, label: '1 時間' },
+      { value: 21600, label: '6 時間' },
+    ],
+  },
+  /**
+   * SPA の記事の中身の API の応答のキャッシュの期間（s-maxage。D-37）。ISR の間隔と同じ値（revalidateSec）を使う
+   * （SPA には ISR が無いので、同じ値をこちらの意味で選ぶ）。
+   */
+  apiCacheTtl: {
+    label: 'API のキャッシュの期間',
+    field: 'revalidateSec',
+    effort: EFFORT.setting.isr,
+    note: 'API の応答のキャッシュを使うときだけ効く。延ばすとヒットが増えて取り直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる',
+    options: [
+      { value: 60, label: '1 分' },
+      { value: 300, label: '5 分' },
+      { value: 3600, label: '1 時間' },
+      { value: 21600, label: '6 時間' },
+    ],
+  },
+  /**
+   * Next.js の静的書き出しの静的なページ（記事）をビルドし直す間隔（D-80。Astro は D-103 でキャッシュに替えた）。ISR の間隔と
+   * 同じ値（revalidateSec）を使う（ISR が無いので、同じ値をこちらの意味で選ぶ）。オンデマンドは記事を更新するたびにビルドする。
+   */
+  buildInterval: {
+    label: 'ビルドの間隔',
+    field: 'revalidateSec',
+    effort: EFFORT.setting.isr,
+    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、鮮度（満足度）が下がる。新しく投稿された記事は、ビルドが終わるまでページが無い（投稿した人がすぐ開けない）。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
+    options: [
+      {
+        value: ON_DEMAND_REVALIDATE,
+        label: 'オンデマンド（記事の更新のたび）',
+      },
+      { value: 60, label: '1 分' },
+      { value: 300, label: '5 分' },
+      { value: 3600, label: '1 時間' },
+      { value: 21600, label: '6 時間' },
+    ],
+  },
+  /**
+   * Astro の記事のキャッシュの取り直し（D-103）。ISR の間隔と同じ値（revalidateSec）をこの意味で選ぶ。オンデマンドは記事の投稿・編集の
+   * ときにそのページのキャッシュを消す（Astro の route caching の cache.invalidate・Vercel の bypassToken）。時間は期限（s-maxage・expiration）。
+   */
+  pageCache: {
+    label: '記事のキャッシュ',
+    field: 'revalidateSec',
+    effort: EFFORT.setting.isr,
+    note:
+      '記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュする。オンデマンドは記事の投稿・編集のときにそのページのキャッシュを消す（Astro の route caching。消せない置き場では届かず、古いページが出る）。時間はキャッシュの期限で、延ばすと描き直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗る（Workers の 1 リクエストの CPU の上限に効く）。' +
+      ON_DEMAND_MAX_AGE_NOTE,
+    options: [
+      {
+        value: ON_DEMAND_REVALIDATE,
+        label: 'オンデマンド（記事の投稿・編集で消す）',
+      },
+      { value: 60, label: '1 分' },
+      { value: 300, label: '5 分' },
+      { value: 3600, label: '1 時間' },
+      { value: 21600, label: '6 時間' },
+    ],
+  },
+} as const satisfies Record<
+  string,
+  {
+    label: string;
+    field: Exclude<keyof Settings, 'ssrOptimizations'>;
+    effort: number;
+    note: string;
+    options: readonly { value: number; label: string }[];
+  }
+>;
+export type SettingKey = keyof typeof SETTINGS;
+
+/** 1 枚あたり配る画像の大きさ（KB）。画像の部品と画像の形式の設定から（D-47・D-58）。 */
+export function deliveredImageKB(
+  sc: Scenario,
+  settings: Settings,
+  images: string | undefined,
+  /** 閲覧のときにブラウザに合わせた形式で配る（JPEG を選んでも WebP。autoImageFormat。D-58・D-62）。 */
+  nextImage = false,
+): number {
+  if (images === 'none') return sc.unoptimizedImageKB;
+  const kb = nextImage
+    ? Math.min(settings.imageKB, IMAGE_FORMAT_KB.webp)
+    : settings.imageKB;
+  if (images === 'resize')
+    return sc.resizedImageKB * (kb / IMAGE_FORMAT_KB.jpeg);
+  return kb;
+}
+
+/**
+ * 1 ページの通信量（KB）: HTML（SPA はデータの API）+ JS・CSS + 画像。ブラウザのキャッシュが無い最初の 1 ページ（D-47）。
+ * 画像の枚数は提案で変わる（mods.imagesPerPage）。
+ */
+export function pageWeightKB(
+  sc: Scenario,
+  settings: Settings,
+  mods: WorkloadMods,
+  images: string | undefined,
+  nextImage = false,
+): number {
+  const w = sc.template(1);
+  const html = w.routes[0]!.processing.responseKB;
+  const perImage = deliveredImageKB(sc, settings, images, nextImage);
+  return (
+    html +
+    w.perPage.assets * w.assets.sizeKB +
+    (mods.imagesPerPage ?? w.perPage.images) * perImage
+  );
+}
+
+/** 1 ページの通信量の表示（例: 「1 ページ約 20.5 MB」）。 */
+export function pageWeightLabel(kb: number): string {
+  return kb >= 1000
+    ? `1 ページ約 ${Number((kb / 1000).toFixed(1))} MB`
+    : `1 ページ約 ${Math.round(kb)} KB`;
+}
+
+/** ISR の再検証の既定（5 分）。 */
+export const DEFAULT_REVALIDATE_SEC = 300;
+
+/**
+ * 設定の選択肢の短い説明（部品の説明 COMPONENT_FLAVOR と同じ方針: 事実だが、それだけで選ぶと外れうる文。数値は書かない。D-49）。
+ * 「設定:値」で引く。
+ */
+export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
+  [`format:${IMAGE_FORMAT_KB.jpeg}`]:
+    'どのブラウザでも表示でき、作るのも速い。仕組みがいちばん単純',
+  [`format:${IMAGE_FORMAT_KB.webp}`]:
+    '見た目の画質を保ったまま小さくなり、今の主なブラウザで表示できる',
+  [`format:${IMAGE_FORMAT_KB.avif}`]:
+    'いちばん小さくなる新しい形式。画質を保ったまま転送量を大きく減らせる',
+  'isr:0': '記事を更新したときだけ作り直すので、無駄な再生成がなく、いつも最新',
+  'isr:60': '少し待てば更新が見える。設定を書くだけで、追加の実装は要らない',
+  'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔',
+  'isr:3600': '間隔が長いほど、同じページを作り直すまでの間があく',
+  'isr:21600': '更新はゆっくり見えるが、同じページを作り直すのは一日に数回まで',
+  'buildInterval:0':
+    '記事を更新するたびにビルドするので、待つのはビルドの間だけ。仕組みもいちばん素直',
+  'buildInterval:60':
+    '少し待てば更新が見える。間隔の間の更新はまとめて 1 回でビルドする',
+  'buildInterval:300':
+    '更新の反映とビルドの回数の釣り合いを取った、ほどほどの間隔',
+  'buildInterval:3600': '間隔が長いほど、ビルドの回数はまとまって減る',
+  'buildInterval:21600': '更新はゆっくり見えるが、ビルドは一日に数回まで',
+  'pageCache:0':
+    '記事を投稿・編集したときだけそのページを消すので、無駄な描き直しがなく、いつも最新',
+  'pageCache:60': '少し待てば更新が見える。消す呼び出しを書かなくてよい',
+  'pageCache:300':
+    '更新の反映と描き直しの回数の釣り合いを取った、ほどほどの期限',
+  'pageCache:3600': '期限が長いほど、同じページを描き直すまでの間があく',
+  'pageCache:21600':
+    '更新はゆっくり見えるが、同じページを描き直すのは一日に数回まで',
+  [`comments:${COMMENTS_IN_BROWSER}`]:
+    '記事のページはコメントが付いても変わらないので、作り直すのは記事を更新したときだけ',
+  [`comments:${COMMENTS_IN_PAGE}`]:
+    'コメントも記事と一緒に HTML で届き、ページを開いてからコメントを取りに行く通信が要らない',
+};
+
+export function settingFlavor(
+  key: SettingKey,
+  value: number,
+): string | undefined {
+  return SETTING_FLAVOR[`${key}:${value}`];
+}
+
+export const optionLabel = (key: SettingKey, value: number) =>
+  SETTINGS[key].options.find((o) => o.value === value)?.label ?? String(value);
