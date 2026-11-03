@@ -1,6 +1,6 @@
 # 14. 部品を事業者をまたいで組む（役割と接続の口）
 
-> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）・段 2 を実装（2026-11-03。§3.12）・段 2b（Cloudflare の DB に Neon・AWS）を実装（2026-11-04。§3.13）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
+> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）・段 2 を実装（2026-11-03。§3.12）・段 2b（Cloudflare の DB に Neon・AWS）を実装（2026-11-04。§3.13）・段 2c（画像の原本だけ R2・画像だけ S3 + CloudFront）を実装（2026-11-04。§3.14）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
 > 後で検討する候補として残したのは、リージョンの要素（CP-08）と接続の数の上限（CP-09）。
 > 出発点（2026-11-03・ユーザー）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？ 根本的に少し変えるところがあるかもしれませんが...」
 > 料金・制限の数値は、§2 で公式の文書から取ったもの（URL と取得日つき）か、catalog に既にあるもの（出典は catalog の料金データ）だけを書く。
@@ -293,6 +293,7 @@ type ConnectionRule = {
 | 段 1（済み・§3.11） | 土台のノードに `role` の印。`ConnectionRule`・`PartDef` の型と、今の組を規則に移し替え（`CROSS_PAIRS` を規則から導く）。差し方を役割から導く（`hostImageShape` 等を置き換え） | **不変**（golden・基準プレイ・保存） |
 | 段 2（済み・§3.12） | 公開の口の組を足す: **Vercel × DynamoDB / Aurora（DB。Marketplace）だけ**（CP-15）。後の段の候補: Vercel × S3 + CloudFront（画像）・Cloudflare × Neon（Hyperdrive の接続先違い）・Google Cloud × R2 の広げ方の見直し・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
 | 段 2b（済み・§3.13） | Cloudflare の DB に Neon・AWS（RDS・Aurora は Hyperdrive を中継に自動で足す・DynamoDB は直接）。DB の部品の説明・中継・構成の名前を規則と部品のデータで決める形に寄せた | 新しい組だけ。基準プレイで既存は不変 |
+| 段 2c（済み・§3.14） | 画像の置き場: 原本だけ R2 に置き変換は Vercel の画像の最適化（`cf-r2-origin`）・画像だけ S3 + CloudFront（`aws-s3-resize`。Vercel・Netlify・Google Cloud） | 新しい組だけ。基準プレイで既存は不変 |
 | 段 3 | 中継を部品として自動で足す（Static IPs・NAT・RDS Proxy・Tunnel）。単価を取ってから。`blocked` の理由を画面に出す | 新しい組だけ |
 | 段 4 | 画面: 事業者で絞る・構成図の `links`（§6） | — |
 | 段 5 | （任意）案 B へ: 土台も部品の集まりにする。段 1〜4 の規則と部品はそのまま使う | 全部の取り直し |
@@ -406,6 +407,61 @@ type ConnectionRule = {
   | 受託 × 静的書き出し | 20/20 $14.4 | 0/20 $39.6 | **20/20 $29.1** | **20/20 $15.9** | 0/20 $88.1 | 0/20 $66.9 | 8/20 $35.6 |
 
   Cloudflare Free はどの DB・フレームワークでも 0/20（D1 と同じ）。新しい組は、全シードで届くものが多い（DynamoDB は D1 と同じ並び・Neon は受託の全部と記事の Next.js・Astro・RDS は記事の Next.js・Astro）が、**どれも同じ構成の D1（既定）より高く、既存の最安より安い床は作らない**（DynamoDB は D1 より月 $0.3〜1.6 高い）。目標の額・手間は動かしていない（2026-11-04 にユーザーがこの釣り合いをそのまま受け入れた。Vercel × DynamoDB と同じ考え方）。
+
+### 3.14 段 2c の実装（2026-11-04）: 画像の原本だけ R2・画像だけ S3 + CloudFront
+
+- **依頼（ユーザー・2026-11-04）**: Vercel の画像の原本の置き場（Blob が普通か・他の仕組みに置くか）の説明のあと、「現在もまだ選べない構成として例示してもらったようなものも選べるようにできますか？」→ 2 つを足した。
+  途中でユーザーの疑問「外部にある画像の image optimization ってできなかったような...?」が出たので、実装の前に公式の文書で確かめた（下の「確かめた事実」）。
+- **確かめた事実**（2026-11-04 取得。原文の短い引用）:
+  - Vercel の画像の最適化は外の画像を変換する: 「You can set up patterns for both local images (stored as static assets in your `public` folder) and remote images (stored externally)」、外の画像のキャッシュの鍵は「Remote images use an absolute url」（[Image Optimization](https://vercel.com/docs/image-optimization)・2026-08-13 更新）。
+  - プラン: 「Image Optimization is available on all plans」（同）。Hobby は月 5K の変換・30 万のキャッシュの読み取り・10 万の書き込みまで込みで、超えると新しい画像の変換が 402 になる（既存の Vercel の料金データと同じ）。
+  - 課金の数え方は外の画像でも同じ: 「Image transformations are billed for every cache MISS and STALE. The cache key is based on several inputs and differs for local images cache key vs the remote images cache key」、キャッシュの読み書きは 8 KB 単位（[Limits and Pricing](https://vercel.com/docs/image-optimization/limits-and-pricing)・2026-08-11 更新）。source images で数えるのは 2025-02-18 より前の Enterprise の旧料金だけ（同）。
+  - Next.js: 外の画像の src は「An absolute external URL (must be configured with remotePatterns)」、`remotePatterns` は「allow images from specific external paths and block all others」（[Image Component](https://nextjs.org/docs/app/api-reference/components/image)・2026-09-28 更新）。静的書き出しは「Image Optimization with the default `loader`」が使えない（[Static Exports](https://nextjs.org/docs/app/guides/static-exports)・2026-08-09 更新）ので、`nextjs-export` では選べない（D-80 と同じ）。
+  - Next.js 以外: Build Output API の `images` に `remotePatterns` があり、「When the `images` property is defined, the Image Optimization API will be available by visiting the `/_vercel/image` path」「Absolute URLs must match a pattern defined in the `remotePatterns` configuration」（[Build Output Configuration](https://vercel.com/docs/build-output-api/configuration)・2026-07-27 更新）。Astro は @astrojs/vercel の `imageService` が本番で Vercel の画像の最適化を使い、`domains`・`remotePatterns` は Astro の画像の設定から「automatically be filled」（[@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)）。SPA（Vite）は土台の「画像の最適化」（`/_vercel/image`）と同じ扱い。
+  - S3: 「Data transferred in from the internet」と「Data transferred out to Amazon CloudFront」は課金の例外（[S3 の料金](https://aws.amazon.com/s3/pricing/)）。CloudFront は S3 をオリジンにし、オリジンのアクセス制御（OAC）で CloudFront からだけ読ませる（[Restrict access to an Amazon S3 origin](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html)）。
+- **部品と規則**（`stacks/parts.ts`・`stacks/connections.ts`）:
+  - `cf-r2-origin`（「Cloudflare: R2 に原本を置き、閲覧のときに Vercel の画像の最適化で変換」）: 役割 `object-store`・口 `public-url` と `https-api`・土台の側でつながる役割 `image-transform`（土台の変換が原本を取りに来る）・振る舞い `default`（土台の「画像の最適化」と同じ Workload）。規則 `vercel-image-r2-origin`（Vercel の `image-transform` → Cloudflare の `object-store`・`public-url`。フレームワークは Next.js・SPA・Astro）。
+  - `aws-s3-resize`（「AWS: 投稿のときに一律で縮めて S3 に置き、CloudFront で配る」）: 役割 `object-store`・土台の側 `compute`・振る舞い `resize`。規則 `vercel-compute-s3-write`（Vercel の関数は OIDC）と `host-compute-s3-write`（Netlify・Google Cloud はアクセスキー）。AWS の構成（Amplify）・OpenNext は自分の S3 を持つので規則に入れない。
+- **差し方**（`stacks/cross.ts`）: 部品の `attachesTo` に `image-transform` があれば、`imageShape` は置き場（Blob）だけを外し、変換（`image`）と CDN は残す（`applyR2Origin`。R2 のノードは既存の `cf-r2` と同じ組み立て `r2ImageNode`）。
+  AWS の部品は `applyAwsImages` が、AWS の構成の S3 と CloudFront（`stacks/aws.ts` の `s3`・`cloudfront`。従量のプラン）を id `aws-s3`・`aws-img-cf` で足す。投稿の転送は既存どおり `imageShape` が送り手の送り出しの項目で数える（Vercel は項目なし・Netlify は転送量・Cloud Run は Premium Tier）。
+  game の `usesNextImage`・`astroImage`（閲覧のときに WebP で配るか）は、部品の id でなく振る舞いで見るようにした（既存の部品の結果は同じ）。
+- **数えないもの（前提の文に書いた）**: 画像の最適化が原本を R2 から取る読み取り（Class B。外れた変換 1 回あたり 1 回・月 1,000 万回まで無料）。土台の Blob から原本を取る分も今は数えていないのと同じ扱い（estimator の置き場は `image-transform` の経路を書き込みとして数えるので、経路に載せない）。そのため構成図に「画像の最適化 → R2」の線は無く、R2 の箱は投稿の線（関数 → R2）だけでつながる。
+- **足さなかった組と理由**:
+  - CloudFront + Lambda@Edge などで閲覧のときに変換する形: Lambda@Edge の単価が catalog に無く、AWS の画像の変換のソリューションは API Gateway・Lambda・S3・CloudFront の組み合わせで、取り直す料金が多い。
+  - S3 の原本を Vercel の画像の最適化で変換する形: 規則の形は同じだが、原本を取る転送が S3（インターネットへ $0.114/GB）か CloudFront の送り出しになり、estimator が原本を取る量を数えないので過小になる。
+  - Netlify Image CDN × R2 の原本: Netlify は隠した構成（D-100）で、remote images の設定と課金を確かめていない。Google Cloud × R2 の原本（Cloud Run の next/image）: 原本の取り方と転送を確かめていない。
+  - さくらの VPS・Cloudflare の画像に他の事業者: 今の画像の規則の外（土台の置き場の形が違う）。Google Cloud × R2・Amplify × R2 は既にある（D-88・D-52）。
+- **アカウント**: `cf-r2-origin` は Cloudflare が 1 つ増える。`aws-s3-resize` は既定のメールの送信（Amazon SES）の AWS と同じなので増えない（メールを Resend にすると、AWS は S3 のために残る）。
+- **画面**: web は変えていない（部品の名前・説明・ⓘ は catalog のデータ）。構成の名前は画像の部品で変えない（既存の画像の部品と同じ）。構成図は R2 の箱が Cloudflare の枠、S3・CloudFront の箱が AWS の枠に入り、差し替えの吹き出し（`swappableSlots`）は新しい箱と、R2 の原本で残る画像の最適化の箱に画像のスロットを出す（`system-diagram-images.test.ts`）。
+- **不変の確かめ**: 段 2b と同じ突き合わせ（全構成 × フレームワーク × 部品の直積と無作為の組 × 差し替えの途中の構成と Workload、ゲームの始める画面のスロット・1 か月目の見込み・総当たりの最後の状態）を main（段 2b のマージ後）と比べた。
+  共通の約 45 万の組と約 5.5 万のゲームのキー（約 2.7 万のプレイ）がすべて一致し、違いは Vercel・Netlify・Google Cloud の画像の選択肢の一覧（とその組み合わせ）だけ。`route-strategies-equivalence.test.ts` の記録は、足した部品を除いて取り直さずに通る。
+- **費用の例**（記事コミュニティ・月 30 万 PV・見積モードの既定の設定・税抜。受託は画像のスロットが無いので選べない）:
+
+  | 構成 × フレームワーク | 画像の最適化（Blob） | Cloudflare R2 + Images | R2 に一律で縮める | **R2 の原本 + Vercel の画像の最適化** | **S3 + CloudFront に一律で縮める** | Bunny に一律で縮める |
+  |---|---|---|---|---|---|---|
+  | Vercel Pro × Next.js | $56.43 | $51.44 | $46.44 | $56.11 | $46.82 | $55.49 |
+  | Vercel Pro × SPA | $54.44 | $51.44 | $46.44 | $54.13 | $46.82 | $55.49 |
+  | Vercel Pro × Astro | $49.91 | $51.44 | $46.44 | $49.60 | $46.82 | $55.49 |
+  | Vercel Pro × 静的書き出し | —（縮める $63.11） | $51.44 | $46.44 | — | $46.82 | $55.49 |
+  | Vercel Hobby × Next.js | $1.29 | $1.44 | $1.44 | $1.44 | $1.82 | $10.49 |
+  | Google Cloud × Next.js | $20.96 | $13.81 | $8.82 | — | $9.20 | $17.87 |
+
+  R2 の原本は、Blob の保存（$0.46）・アップロードが R2 の保存（10 GB を超えた分 $0.15）・書き込み（無料の中）に替わるだけ。S3 + CloudFront は、R2 の `cf-resize` との差が S3 の保存（$0.50）・GET（$0.03）で、CloudFront の転送は月 1 TB の常時無料の中。
+- **基準プレイ**（記事コミュニティ・何もしない・シード 1〜20。12 か月の費用の平均 / 月。目標の額は動かさない・D-64）:
+
+  | 構成 × フレームワーク × DB | 画像の最適化（Blob） | R2 に一律で縮める | **R2 の原本 + Vercel の画像の最適化** | **S3 + CloudFront** |
+  |---|---|---|---|---|
+  | Vercel Pro × Next.js × Supabase | 0/20 $125.4 | 0/20 $82.3 | 0/20 $125.0 | 0/20 $102.0 |
+  | Vercel Pro × SPA × Supabase | 0/20 $109.0 | 0/20 $61.4 | 0/20 $108.6 | 0/20 $70.8 |
+  | Vercel Pro × Astro × Supabase | 0/20 $118.1 | 0/20 $65.1 | 0/20 $117.7 | 0/20 $84.8 |
+  | Vercel Pro × Astro × DynamoDB | 6/20 $93.5 | 20/20 $40.5 | 6/20 $93.1 | 8/20 $60.1 |
+  | Vercel Pro × 静的書き出し × Supabase | 0/20 $128.4（縮める） | 0/20 $82.7 | — | 0/20 $94.5 |
+  | Google Cloud × Next.js | 0/20 $64.3 | 20/20 $28.2 | — | 10/20 $47.9 |
+  | Google Cloud × SPA | 0/20 $56.3 | 20/20 $11.8 | — | 14/20 $21.2 |
+  | Google Cloud × Astro | 20/20 $64.1 | 20/20 $16.9 | — | 18/20 $36.6 |
+  | Google Cloud × 静的書き出し | 0/20 $130.0（縮める） | 17/20 $17.4 | — | 0/20 $29.2 |
+
+  Vercel Hobby はどの画像の部品でも 0/20（今までどおり）。新しい組に全シードで届くものは無く、**既存の最安より安い床は作らない**: R2 の原本は Blob の既定より月 $0.4 ほど安いだけ、S3 + CloudFront は R2 の `cf-resize` より高い（閲覧が伸びて月 1 TB を超えると CloudFront の転送がかかる。R2 は転送が無料）。目標の額・手間は動かしていない。
 
 ## 4. 出典の扱い
 

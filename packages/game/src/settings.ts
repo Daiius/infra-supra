@@ -69,7 +69,8 @@ export function usesNextImage(
   return (
     framework === 'nextjs' &&
     platform !== 'cloudflare' &&
-    (images ?? 'default') === 'default'
+    // 他の事業者の部品は振る舞いで見る（R2 に原本を置き、変換は土台の画像の最適化。D-114 段 2c）
+    (imagesBehavior(platform, images) ?? 'default') === 'default'
   );
 }
 
@@ -104,7 +105,8 @@ export function astroImage(
   return (
     framework === 'astro' &&
     platform !== 'cloudflare' &&
-    (images ?? 'default') === 'default'
+    // 他の事業者の部品は振る舞いで見る（R2 に原本を置き、変換は土台の画像の最適化。D-114 段 2c）
+    (imagesBehavior(platform, images) ?? 'default') === 'default'
   );
 }
 

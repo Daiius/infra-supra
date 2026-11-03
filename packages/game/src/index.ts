@@ -139,6 +139,7 @@ export {
   type RoutingOptions,
 } from './workload.ts';
 export {
+  editsReflectImmediately,
   meetsRequirement,
   onDemandBlocker,
   requirementReachable,

@@ -246,12 +246,14 @@ describe('基準プレイの観点: VPS 2GB × SPA → Next.js に作り直す�
         n++;
     return n;
   };
-  it('何もしない SPA より達成が多く、始めから Next.js より少ない', () => {
+  it('始めから Next.js より少ない（D-118 からは何もしない SPA の方が多い）', () => {
     const spa = wins('vite-spa');
     const rewritten = wins('vite-spa', [[rewrite('nextjs')]]);
     const next = wins('nextjs');
     // 始めから Next.js はメールの送信（D-95）の費用で 10 → 9、ドメインの登録（D-96）の費用で 9 → 8
-    expect([spa, rewritten, next]).toEqual([0, 2, 8]);
+    // D-118: SPA は記事を毎回 API で読むので即時反映の苦情が来ず、好評の知らせ（口コミの上乗せ）になる。何もしない SPA は 0 → 2。
+    // 作り直しは苦情が作り直しの最中（まだ SPA）に来たシードで口コミが伸び、話題の月に VPS の回線の前提に当たって 2 → 1（シード 11）
+    expect([spa, rewritten, next]).toEqual([2, 1, 8]);
   });
 });
 

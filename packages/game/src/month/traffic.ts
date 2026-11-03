@@ -5,6 +5,7 @@ import { BOT_BLOCK } from '../actions/check.ts';
 import { eventDef } from '../core.ts';
 import { applyEffects } from '../events.ts';
 import { fmtFactor } from '../format.ts';
+import { editsReflectImmediately } from '../requirements.ts';
 import { STACKS } from '../stacks.ts';
 import type { GameState } from '../state.ts';
 import type { Spike } from '../workload.ts';
@@ -36,18 +37,38 @@ export function declineUnanswered(input: GameState): GameState {
     : input;
 }
 
+/**
+ * 今月起きる出来事。preempted: 構成が先に手を打っていたので、提案の代わりに知らせを出す（EventDef.preempted。D-118）。
+ */
+export type Due = Scheduled & { preempted?: true };
+
+/** 出来事の preempted の条件を、起きる月の構成が満たすか（D-118）。 */
+function preempts(sc: Scenario, state: GameState, id: string): boolean {
+  const p = eventDef(sc, id)!.preempted;
+  if (!p) return false;
+  switch (p.by) {
+    case 'edits-immediate':
+      return editsReflectImmediately(state);
+  }
+}
+
 /** 台本: 今月起きる出来事と予告（事業者を限った出来事は、その事業者の構成のときだけ。D-24 X-5）。 */
 export function scriptOf(
   sc: Scenario,
   state: GameState,
   month: number,
-): { platform: Platform; due: Scheduled[]; noticed: Scheduled[] } {
+): { platform: Platform; due: Due[]; noticed: Scheduled[] } {
   const platform = STACKS[state.stackIndex]!.provider;
   const forPlatform = (x: Scheduled) => {
     const ps = eventDef(sc, x.id)!.platforms;
     return !ps || ps.includes(platform);
   };
-  const due = state.schedule.filter((x) => x.month === month && forPlatform(x));
+  // 台本（時期）はそのままで、起きる月の構成で中身だけ替える（乱数を引かない。D-118）
+  const due = state.schedule
+    .filter((x) => x.month === month && forPlatform(x))
+    .map((x): Due =>
+      preempts(sc, state, x.id) ? { ...x, preempted: true } : x,
+    );
   const noticed = state.schedule.filter(
     (x) => x.noticeMonth === month && forPlatform(x),
   );
@@ -58,11 +79,16 @@ export function scriptOf(
 export function applyDueEffects(
   sc: Scenario,
   state: GameState,
-  due: readonly Scheduled[],
+  due: readonly Due[],
 ): GameState {
   let next = state;
   for (const x of due) {
     const def = eventDef(sc, x.id)!;
+    // 先に手を打っていた提案は、返事を待たずに知らせの効果を当てる（D-118）
+    if (x.preempted) {
+      next = applyEffects(next, def.preempted!.effects, def.id);
+      continue;
+    }
     if (def.kind === 'proposal') continue;
     next = applyEffects(next, def.effects ?? [], def.id);
   }

@@ -8,8 +8,11 @@
 import type { ArchitectureInput, RequestClass } from 'estimator';
 import {
   COMPUTE_MEMORY_GB,
+  IMAGE_CDN_HIT_RATE as AWS_IMAGE_CDN_HIT_RATE,
   bill as awsBill,
+  cloudfront as awsCloudfront,
   dbNode as awsDbNode,
+  s3 as awsS3,
 } from './aws.ts';
 import { vpsNode } from './sakura.ts';
 import { BUNNY_IMAGE_HIT_RATE, bunnyBill, bunnyCdnNode } from './bunny.ts';
@@ -89,12 +92,14 @@ type ImageShape = { remove: string[]; write: string[]; out: ArchNodeIn[] };
  *   送り手の送り出し・受け手の受け取りの項目で数える（transferNodes。CP-06）。
  *   例: Vercel の関数・Amplify の SSR は料金の文書に項目が無いので数えない。Lambda（OpenNext・SPA）は東京 → インターネット、
  *   Netlify Functions は Netlify の転送量、Cloud Run は Premium Tier のインターネットへの転送で数える。R2・Bunny は受け取りに課金しない。
+ * keepTransform は、土台の変換が部品の置き場から原本を取る形（cf-r2-origin。D-114 段 2c）で、置き場だけを外し、変換と配信は残す。
  * 投稿を受ける処理が無い土台では差さない（undefined）。
  */
 function imageShape(
   arch: ArchitectureInput,
   provider: ComponentProvider,
   target: string,
+  keepTransform = false,
 ): ImageShape | undefined {
   const routes = arch.routes;
   const onImage = new Set(IMAGE_CLASSES.flatMap((c) => routes[c] ?? []));
@@ -109,8 +114,11 @@ function imageShape(
       (n) =>
         onImage.has(n.id) &&
         (n.role === 'object-store' ||
-          n.role === 'image-transform' ||
-          (n.role === 'edge-cdn' && read.has(n.id) && !onOther.has(n.id))),
+          (!keepTransform &&
+            (n.role === 'image-transform' ||
+              (n.role === 'edge-cdn' &&
+                read.has(n.id) &&
+                !onOther.has(n.id))))),
     )
     .map((n) => n.id);
   const write = (routes['image-write'] ?? []).filter(
@@ -144,17 +152,24 @@ export function applyCross(
       c.id === choices.images &&
       hostsOf(c).includes(host),
   );
+  // 部品が土台の変換に呼ばれる（土台の画像の最適化が原本を取りに来る。D-114 段 2c）なら、置き場だけを替える
+  const hostTransform =
+    opt !== undefined &&
+    (partDefOf(opt)?.attachesTo.includes('image-transform') ?? false);
   const shape = opt
     ? imageShape(
         arch,
         opt.platform,
-        opt.platform === 'bunny' ? 'Bunny Storage' : 'R2',
+        IMAGE_TARGET[opt.platform] ?? 'R2',
+        hostTransform,
       )
     : undefined;
   if (!opt || !shape) return arch;
   const transform = opt.link!.as === 'images';
+  if (hostTransform) return applyR2Origin(arch, shape);
   if (opt.platform === 'bunny')
     return applyBunnyImages(arch, shape, transform, framework);
+  if (opt.platform === 'aws') return applyAwsImages(arch, shape);
   const bill = (planId: string, meters: Record<string, string>) => ({
     accountId: 'cloudflare',
     provider: 'cloudflare',
@@ -172,19 +187,7 @@ export function applyCross(
       role: 'edge-cdn',
       config: { kind: 'cdn', hitRate: { 'image-read': CF_IMAGE_HIT_RATE } },
     },
-    {
-      id: 'cf-r2',
-      label: 'Cloudflare R2（画像）',
-      role: 'object-store',
-      config: { kind: 'object-storage' },
-      facts: ['custom-domain', 'egress-other-services'],
-      billing: bill('r2-standard', {
-        'storage-gb-month': 'storage',
-        'object-writes': 'class-a',
-        'object-reads': 'class-b',
-        'egress-gb': 'egress',
-      }),
-    },
+    r2ImageNode('Cloudflare R2（画像）'),
     ...(transform
       ? [
           {
@@ -215,6 +218,85 @@ export function applyCross(
   };
   if (transform) routes['image-transform'] = ['cf-images'];
   else delete routes['image-transform'];
+  return { ...arch, nodes, routes };
+}
+
+/** 投稿の書き先の名前（転送のノードの名前に使う）。 */
+const IMAGE_TARGET: Partial<Record<ComponentProvider, string>> = {
+  cloudflare: 'R2',
+  bunny: 'Bunny Storage',
+  aws: 'S3',
+};
+
+/** 画像の置き場の R2（Cloudflare の画像の部品で共通。公開バケット・カスタムドメイン）。 */
+const r2ImageNode = (label: string): ArchNodeIn => ({
+  id: 'cf-r2',
+  label,
+  role: 'object-store',
+  config: { kind: 'object-storage' },
+  facts: ['custom-domain', 'egress-other-services'],
+  billing: {
+    accountId: 'cloudflare',
+    provider: 'cloudflare',
+    planId: 'r2-standard',
+    meters: {
+      'storage-gb-month': 'storage',
+      'object-writes': 'class-a',
+      'object-reads': 'class-b',
+      'egress-gb': 'egress',
+    },
+  },
+});
+
+// ---- 原本だけ R2、変換は土台の画像の最適化（D-114 段 2c）----
+
+/**
+ * 土台の置き場（Vercel Blob）を R2 に替え、閲覧のときの変換と配信（CDN → 画像の最適化）は土台のまま残す。
+ * 投稿は土台の関数が R2 に書く（imageShape の経路と転送）。画像の最適化が原本を R2 から取る読み取りは、
+ * 土台の置き場から取る分と同じく数えない（経路の image-transform に置き場を載せると、投稿のときの書き込みに数えるため）。
+ */
+function applyR2Origin(
+  arch: ArchitectureInput,
+  shape: ImageShape,
+): ArchitectureInput {
+  const nodes: ArchNodeIn[] = [
+    ...arch.nodes.filter((n) => !shape.remove.includes(n.id)),
+    ...shape.out,
+    r2ImageNode('Cloudflare R2（画像の原本）'),
+  ];
+  return {
+    ...arch,
+    nodes,
+    routes: { ...arch.routes, 'image-write': [...shape.write, 'cf-r2'] },
+  };
+}
+
+// ---- 画像を AWS の S3 + CloudFront で配る（D-114 段 2c）----
+
+/**
+ * 画像の配信・保存を、土台から AWS の CloudFront と S3 に移す（AWS の構成の「投稿のときに一律で縮めて置く」と同じ S3 と CloudFront。
+ * 料金のプランは従量（CloudFront の常時無料つき）。S3 から CloudFront への転送は無料）。投稿は土台の処理が S3 に書く。
+ */
+function applyAwsImages(
+  arch: ArchitectureInput,
+  shape: ImageShape,
+): ArchitectureInput {
+  const nodes: ArchNodeIn[] = [
+    ...arch.nodes.filter((n) => !shape.remove.includes(n.id)),
+    ...shape.out,
+    {
+      ...awsCloudfront({}, { 'image-read': AWS_IMAGE_CDN_HIT_RATE }),
+      id: 'aws-img-cf',
+      label: 'CloudFront（画像）',
+    },
+    { ...awsS3, id: 'aws-s3', label: 'S3（画像）' },
+  ];
+  const routes: Partial<Record<RequestClass, string[]>> = {
+    ...arch.routes,
+    'image-read': ['aws-img-cf', 'aws-s3'],
+    'image-write': [...shape.write, 'aws-s3'],
+  };
+  delete routes['image-transform'];
   return { ...arch, nodes, routes };
 }
 
