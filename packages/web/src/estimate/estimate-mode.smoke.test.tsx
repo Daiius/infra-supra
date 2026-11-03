@@ -576,5 +576,16 @@ describe('見積モードの画面', () => {
     expect(within(row).queryByText('超過')).toBeNull();
     expect(row.querySelector('.badge-error, .progress-error')).toBeNull();
     expect(heading.textContent).not.toMatch(/超過 [1-9]\d* 件/);
+    // バー全体が使った額: クレジットの分（青）と超えた分（淡い色）の幅が比のとおり
+    const w = (part: string) =>
+      parseFloat(
+        row.querySelector<HTMLElement>(`[data-part="${part}"]`)!.style.width,
+      );
+    const [limit, used] = [...use.textContent!.matchAll(/\$([\d.,]+)/g)].map(
+      (m) => parseFloat(m[1]!.replace(/,/g, '')),
+    ) as [number, number];
+    expect(w('credit') + w('over')).toBeCloseTo(100, 5);
+    expect(w('over')).toBeGreaterThan(w('credit'));
+    expect(w('credit')).toBeCloseTo((limit / used) * 100, 1);
   });
 });

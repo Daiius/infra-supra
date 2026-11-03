@@ -73,6 +73,7 @@ import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
+import { CreditBar } from './credit-bar.tsx';
 import { creditUseText, isCreditUse } from './premise-view.ts';
 import { Swatch } from './route-plan-table.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
@@ -824,11 +825,19 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
       )}
       {ratio !== null && (
         <span className="flex items-center gap-1 text-xs opacity-70">
-          <progress
-            className={`progress w-20 ${blocked ? 'progress-error' : credit ? 'progress-info' : p.hit ? 'progress-warning' : 'progress-info'}`}
-            value={ratio}
-            max={1}
-          />
+          {credit ? (
+            <CreditBar
+              ratio={p.ratio!}
+              label={`${p.text} ${(p.ratio! * 100).toFixed(0)}%`}
+              className="w-20"
+            />
+          ) : (
+            <progress
+              className={`progress w-20 ${blocked ? 'progress-error' : p.hit ? 'progress-warning' : 'progress-info'}`}
+              value={ratio}
+              max={1}
+            />
+          )}
           {(p.ratio! * 100).toFixed(0)}%
         </span>
       )}

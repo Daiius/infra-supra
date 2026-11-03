@@ -27,6 +27,7 @@ import {
   type MarkShape,
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
+import { CreditBar } from '../credit-bar.tsx';
 import { creditUseText, isCreditUse, isStopping } from '../premise-view.ts';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
 import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
@@ -739,8 +740,6 @@ function Premises({
         {thresholds.map((p) => {
           const r = p.ratio ?? 0;
           if (isCreditUse(p)) {
-            const over = r > 1;
-            const within = Math.min(1, Number.isFinite(r) ? r : 1) * 100;
             return (
               <li key={p.id} className="min-w-0 text-sm">
                 <div className="flex flex-wrap items-center gap-x-2">
@@ -752,14 +751,7 @@ function Premises({
                     超えた分は従量で請求（止まらない）
                   </span>
                 </div>
-                <div
-                  className="flex h-2 w-full overflow-hidden rounded-full bg-base-300"
-                  role="img"
-                  aria-label={`${p.text} ${pct(r)}`}
-                >
-                  <div className="bg-info" style={{ width: `${within}%` }} />
-                  {over && <div className="flex-1 bg-warning/40" />}
-                </div>
+                <CreditBar ratio={r} label={`${p.text} ${pct(r)}`} />
                 <span className="block break-words">
                   {creditUseText(p, (n) => money(n, p.currency!))}
                 </span>
