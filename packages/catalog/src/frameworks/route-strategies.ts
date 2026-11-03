@@ -11,7 +11,8 @@ export type RouteStrategyId =
   | 'cached-purge'
   | 'ssr'
   | 'shell-api'
-  | 'server-island';
+  | 'server-island'
+  | 'cache-components';
 
 /** ルートの見る人: 全員に同じ中身（public）か、人ごとに違う中身（personal）か。 */
 export type RouteAudience = 'public' | 'personal';
@@ -118,9 +119,37 @@ export const ROUTE_STRATEGIES: Readonly<
     },
     modeled: true,
   },
+  // 部品ごとにキャッシュ（Next.js 16 の Cache Components。D-111・prd/13 §5e）。文書の中では S7 と呼ぶが、画面には番号を出さない
+  // （S 番号は分かりにくいので画面から外す方針。code は空にする）
+  'cache-components': {
+    id: 'cache-components',
+    code: '',
+    label: '部品ごとにキャッシュ（Cache Components）',
+    long: "Next.js 16 の Cache Components（cacheComponents: true）。全員に同じ部品は 'use cache'（cacheLife・cacheTag）でキャッシュして静的な枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流す（PPR）",
+    personalOk: true,
+    why: {
+      public:
+        "全員に同じ部品を 'use cache' でキャッシュし、静的な枠に入れて使い回す。期限（cacheLife）か、投稿・編集のときのタグ（cacheTag・updateTag）で取り直す。数え方は ISR と同じ。SNS のカードは HTML に入る",
+      personal:
+        '全員に同じ部品（おすすめ・ヘッダーなど）はキャッシュした枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流す。1 リクエストの CPU と DB の問い合わせは人ごとに違う部分の分だけ',
+    },
+    modeled: true,
+  },
 };
 
-/** 画面に並べる順（S1〜S6）。 */
+/** 描き方の名前（番号があれば番号つき。部品ごとにキャッシュは番号を出さない。D-111）。 */
+export function strategyTitle(id: RouteStrategyId): string {
+  const d = ROUTE_STRATEGIES[id];
+  return d.code ? `${d.code} ${d.label}` : d.label;
+}
+
+/** 描き方の短い名前（番号。番号の無いものは名前）。 */
+export function strategyShortName(id: RouteStrategyId): string {
+  const d = ROUTE_STRATEGIES[id];
+  return d.code || d.label;
+}
+
+/** 画面に並べる順（S1〜S6、部品ごとにキャッシュ）。 */
 export const ROUTE_STRATEGY_ORDER: readonly RouteStrategyId[] = [
   'static-build',
   'cached-ttl',
@@ -128,6 +157,7 @@ export const ROUTE_STRATEGY_ORDER: readonly RouteStrategyId[] = [
   'ssr',
   'shell-api',
   'server-island',
+  'cache-components',
 ];
 
 /**
@@ -244,6 +274,26 @@ export function serverIslandDelivery(
 }
 
 /**
+ * 部品ごとにキャッシュ（Cache Components）の数え方の値（D-111・prd/13 §5e）。
+ * - 人ごとに違うページ: 静的な枠（全員に同じ部品は 'use cache' で枠に入る）を返し、人ごとに違う部分（動的な穴）だけを閲覧ごとに描く。
+ *   - dynamicShare: 穴を描く CPU のページ全体の SSR に対する割合（**ゲーム上の仮定**。S6 の島と同じ 0.4。RS-06 の倍率は 1 のまま）。
+ *   - cachedQueryShare: ページの DB の問い合わせ（と I/O 待ち）のうち、全員に同じ部品（おすすめ・ヘッダーなど）が読む分
+ *     （**ゲーム上の仮定**: 記事コミュニティの個人向けのページの 3 問い合わせのうち 1 つ）。この分は枠に入り、閲覧ごとには読まない。
+ *   - 枠の置き場: Vercel は全体の ISR のキャッシュ + 地域の CDN（Vercel の PPR の文書）。自前の Node（VPS・Cloud Run）は
+ *     ビルドのときに事前描画した枠をインスタンスのディスク・メモリに持つ（Next.js の caching の文書）。どちらも閲覧ごとに処理は通る
+ *     （穴を描く。Vercel の文書「most PPR requests incur a function invocation」）ので、ルートは ssr のまま CPU と問い合わせを穴の分にする。
+ *   - インスタンスごとのキャッシュ（自前の Node の 'use cache' の既定は各プロセスのメモリの LRU）で枠の部品の取り直しが
+ *     インスタンスの数だけ増える分は、閲覧ごとの穴に比べて小さいので数えない（期限 1 時間 × インスタンス）。
+ * - 全員に同じページ（記事）: ほぼすべてがキャッシュした部品で穴が無い。数え方は ISR と同じ（S2・S3。期限かタグかは再検証の設定）。
+ */
+export const CACHE_COMPONENTS = {
+  dynamicShare: 0.4,
+  cachedQueryShare: 1 / 3,
+  /** 1 リクエストの CPU の内訳（D-99）の文での呼び名。 */
+  holeLabel: '動的な穴',
+} as const;
+
+/**
  * 全員に同じ中身のページの S5 を、ページごとの枠（記事ごとに静的に書き出す枠 + ブラウザが API で中身を取る）にするフレームワークか
  * （D-109）。Next.js（generateStaticParams で書き出すページに、中身を取る Client Component を置く）・Astro（getStaticPaths で書き出す
  * ページに、中身を取るアイランドを置く）・Next.js の静的書き出し（output: 'export'）は、ページごとの HTML を書き出せる。
@@ -281,6 +331,9 @@ const parts = (r: Route) =>
  *   ページごとの枠（shellPerPage。isr のルートだけ）は枠を閲覧のたびに読み（shellPerView）、S1 と同じくビルドを足す（D-109）。
  * - S6: ssr のルート（人ごとに違うページ）だけ（D-108）。Astro（request）は ssr → isr の枠（期限 1 日）+ 閲覧ごとの島のリクエスト
  *   （island.request）。Next.js の PPR（stream）は ssr のまま、CPU を島の分（islandShare 倍）にして island を付ける。
+ * - 部品ごとにキャッシュ（Cache Components。D-111）: isr のルート（全員に同じページ）はそのまま（ISR と同じ数え方）。ssr のルート
+ *   （人ごとに違うページ）は ssr のまま、CPU を穴の分（dynamicShare 倍）、DB の問い合わせ・I/O 待ちを全員に同じ部品の分を除いた
+ *   残り（1 − cachedQueryShare 倍）にし、同じ応答の中の島（island）として内訳に出す。
  * まだ数え方の無い組（個人化のルートをキャッシュ・静的にする、全員に同じページの S6）は例外にする。
  */
 export function applyRouteStrategies(
@@ -346,6 +399,22 @@ export function applyRouteStrategies(
             cpuMs: r.processing.cpuMs * shape.dataCpuFactor,
             responseKB: shape.dataResponseKB,
           },
+        };
+      }
+      case 'cache-components': {
+        if (r.rendering === 'isr') return r;
+        if (r.rendering !== 'ssr') throw unsupported();
+        const p = r.processing;
+        const q = 1 - CACHE_COMPONENTS.cachedQueryShare;
+        return {
+          ...r,
+          processing: {
+            ...p,
+            cpuMs: p.cpuMs * CACHE_COMPONENTS.dynamicShare,
+            ioWaitMs: p.ioWaitMs * q,
+            queries: p.queries * q,
+          },
+          island: { label: CACHE_COMPONENTS.holeLabel },
         };
       }
       case 'server-island': {
