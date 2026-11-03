@@ -3,9 +3,10 @@
 // - 構成の既定（default）: Cloudflare Paid は自前の Email Service（Workers Paid）。それ以外はどの構成も Amazon SES
 //   （いちばん安い従量・止まる上限が無い）。Cloudflare Free は Email Service の送信が使えず、Resend Free は基準プレイの規模で
 //   1 日 100 通に当たって止まるので、既定にしない。Supabase Auth の組み込みのメールはチームのメンバーにしか送れないので使わない。
-// - 他の事業者の送信（CROSS_PAIRS で許した組）: Resend Free・Pro 5 万通・Pro 10 万通（どの事業者からも。D-110）・SES（Cloudflare から）。
+// - 他の事業者の送信（接続の規則 connections.ts で許した組。D-114）: Resend Free・Pro 5 万通・Pro 10 万通（どの事業者からも。D-110）・SES（Cloudflare から）。
 import type { ArchitectureInput, WorkloadInput } from 'estimator';
 import type { ComponentOption, Platform } from './index.ts';
+import { partOptions, type PartDef } from './connections.ts';
 
 type ArchNodeIn = ArchitectureInput['nodes'][number];
 
@@ -73,6 +74,7 @@ export function withEmail(
   const s = emailSenderOf(platform, plan, choice);
   const node: ArchNodeIn = {
     id: 'email',
+    role: 'email',
     label: s.label,
     config: { kind: 'email-sender' },
     billing: {
@@ -165,32 +167,16 @@ const DEFAULT_REFS: Record<Platform, string[]> = {
   sakura: [],
 };
 
-const ALL_HOSTS: Platform[] = [
-  'cloudflare',
-  'vercel',
-  'sakura',
-  'aws',
-  'aws-opennext',
-  'netlify',
-  'gcp',
-];
-
-/** 部品「メール送信」（D-95）。構成の既定と、他の事業者の送信（CROSS_PAIRS）。 */
-export const EMAIL_COMPONENTS: readonly ComponentOption[] = [
-  ...(Object.keys(DEFAULT_EMAIL) as Platform[]).map((platform) => ({
-    id: 'default',
-    slot: 'email' as const,
-    platform,
-    label: DEFAULT_EMAIL[platform].label,
-    note: DEFAULT_EMAIL[platform].note,
-    premiseRefs: DEFAULT_REFS[platform],
-  })),
+/** 他の事業者の送信の部品（D-95・D-110）。差せる土台は接続の規則（connections.ts）から導く。 */
+export const EMAIL_PARTS: readonly PartDef[] = [
   {
     id: 'ses',
     slot: 'email',
     platform: 'aws',
-    hosts: ['cloudflare'],
-    link: { via: 'http', as: 'ses' },
+    role: 'email',
+    accepts: ['https-api'],
+    attachesTo: ['compute'],
+    as: 'ses',
     label: 'AWS: Amazon SES で送る',
     note:
       `${SES_NOTE}。AWS のアカウントが 1 つ増え（すでにあれば増えない）、請求が 2 つになる。` +
@@ -201,8 +187,10 @@ export const EMAIL_COMPONENTS: readonly ComponentOption[] = [
     id: 'resend-free',
     slot: 'email',
     platform: 'resend',
-    hosts: ALL_HOSTS,
-    link: { via: 'http', as: 'resend-free' },
+    role: 'email',
+    accepts: ['https-api'],
+    attachesTo: ['compute'],
+    as: 'resend-free',
     label: 'Resend: Free で送る',
     note:
       'Resend の API で送る。費用はかからないが、1 日 100 通・月 3,000 通まで。超えるとその日はそれ以上送れない（登録の確認・パスワードの再設定も届かない）。' +
@@ -213,8 +201,10 @@ export const EMAIL_COMPONENTS: readonly ComponentOption[] = [
     id: 'resend-pro',
     slot: 'email',
     platform: 'resend',
-    hosts: ALL_HOSTS,
-    link: { via: 'http', as: 'resend-pro' },
+    role: 'email',
+    accepts: ['https-api'],
+    attachesTo: ['compute'],
+    as: 'resend-pro',
     label: 'Resend: Pro で送る',
     note:
       'Resend の API で送る。月 $20 で 5 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い。' +
@@ -225,12 +215,27 @@ export const EMAIL_COMPONENTS: readonly ComponentOption[] = [
     id: 'resend-pro-100k',
     slot: 'email',
     platform: 'resend',
-    hosts: ALL_HOSTS,
-    link: { via: 'http', as: 'resend-pro-100k' },
+    role: 'email',
+    accepts: ['https-api'],
+    attachesTo: ['compute'],
+    as: 'resend-pro-100k',
     label: 'Resend: Pro（10 万通）で送る',
     note:
       'Resend の API で送る。月 $35 で 10 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い。' +
       '月 約 6.7 万通を超えると、5 万通の段（$20）より安い。Resend のアカウントが 1 つ増え、請求が 1 つ増える',
     premiseRefs: ['pool:resend:pro-100k:pro-100k-emails'],
   },
+];
+
+/** 部品「メール送信」（D-95）。構成の既定と、他の事業者の送信（EMAIL_PARTS。差せる土台は規則から導く）。 */
+export const EMAIL_COMPONENTS: readonly ComponentOption[] = [
+  ...(Object.keys(DEFAULT_EMAIL) as Platform[]).map((platform) => ({
+    id: 'default',
+    slot: 'email' as const,
+    platform,
+    label: DEFAULT_EMAIL[platform].label,
+    note: DEFAULT_EMAIL[platform].note,
+    premiseRefs: DEFAULT_REFS[platform],
+  })),
+  ...EMAIL_PARTS.flatMap((p) => partOptions(p)),
 ];

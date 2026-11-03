@@ -27,6 +27,7 @@ export function bunnyCdnNode(
   return {
     id,
     label,
+    role: 'edge-cdn',
     config: { kind: 'cdn', hitRate },
     facts: ['pull-zone-origin', 'asia-rate', 'monthly-minimum'],
     billing: bunnyBill('standard', { 'egress-gb': 'bandwidth' }),

@@ -268,6 +268,7 @@ export function dbNode(opt: string | undefined): ArchNodeIn {
     const pause = opt === 'aurora-pause';
     return {
       id: pause ? 'aurora-pause' : 'aurora',
+      role: 'sql-db',
       label: pause
         ? 'Aurora Serverless v2（0 ACU まで縮める）'
         : 'Aurora Serverless v2（最小 0.5 ACU）',
@@ -286,6 +287,7 @@ export function dbNode(opt: string | undefined): ArchNodeIn {
   if (opt === 'dsql')
     return {
       id: 'dsql',
+      role: 'sql-db',
       label: 'Aurora DSQL',
       config: { kind: 'processing-db', unitsPerRequest: DSQL_DPU_PER_REQUEST },
       facts: ['dpu', 'compat'],
@@ -297,6 +299,7 @@ export function dbNode(opt: string | undefined): ArchNodeIn {
   return opt === 'rds'
     ? {
         id: 'rds',
+        role: 'sql-db',
         label: 'RDS for PostgreSQL（db.t4g.micro）',
         config: { kind: 'managed-db' },
         billing: bill('rds-postgres-t4g-micro', {
@@ -306,6 +309,7 @@ export function dbNode(opt: string | undefined): ArchNodeIn {
       }
     : {
         id: 'dynamodb',
+        role: 'sql-db',
         label: 'DynamoDB（オンデマンド）',
         config: {
           kind: 'request-db',
@@ -325,6 +329,7 @@ export function dbNode(opt: string | undefined): ArchNodeIn {
 
 export const s3: ArchNodeIn = {
   id: 's3',
+  role: 'object-store',
   label: 'S3（画像の原本）',
   config: { kind: 'object-storage' },
   billing: bill('s3-standard', {
@@ -374,6 +379,7 @@ export const cloudfront = (
   ttlClasses: RequestClass[] = [],
 ): ArchNodeIn => ({
   id: 'cf',
+  role: 'edge-cdn',
   label: 'CloudFront',
   config: {
     kind: 'cdn',
@@ -430,6 +436,7 @@ function composeAmplify(
       ? [
           {
             id: 'front',
+            role: 'edge-cdn',
             label: '自前の CloudFront（Amplify の前段）',
             config: {
               kind: 'cdn',
@@ -450,6 +457,7 @@ function composeAmplify(
     ...frontNodes,
     {
       id: 'cdn',
+      role: 'edge-cdn',
       label: 'Amplify の CDN',
       config: {
         kind: 'cdn',
@@ -474,6 +482,7 @@ function composeAmplify(
     },
     {
       id: 'ssr',
+      role: 'compute',
       label: 'Amplify の SSR（Next.js）',
       config: { kind: 'function', memoryGB: COMPUTE_MEMORY_GB, concurrency: 1 },
       facts: ['next-versions', ...(isr ? ['no-on-demand-isr'] : [])],
@@ -486,6 +495,7 @@ function composeAmplify(
       ? [
           {
             id: 'image',
+            role: 'image-transform',
             label: 'Amplify の画像の最適化（料金未取得）',
             config: { kind: 'image-optimizer' },
             billing: amplify({ 'image-transformations': 'image-optimization' }),
@@ -539,6 +549,7 @@ export function composeSpa(
     {
       // 振る舞いは「リクエストを数えて次へ渡す」ので cdn の種類で表す（ヒットは無い）。課金はリクエストだけ
       id: 'apigw',
+      role: 'compute',
       label: 'API Gateway（HTTP API）',
       // HTTP API は 512 KB ごとに 1 リクエストとして数える（料金ページの例 2: 4.5 MB / 512 KB）
       config: { kind: 'cdn', hitRate: {}, requestUnitKB: 512 },
@@ -546,6 +557,7 @@ export function composeSpa(
     },
     {
       id: 'lambda',
+      role: 'compute',
       label: 'Lambda（API）',
       config: { kind: 'function', memoryGB: COMPUTE_MEMORY_GB, concurrency: 1 },
       billing: bill('lambda', {

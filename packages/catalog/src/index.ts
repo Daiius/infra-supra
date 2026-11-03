@@ -38,6 +38,7 @@ export * from './frameworks/index.ts';
 export * from './frameworks/route-capability.ts';
 export * from './stacks/index.ts';
 export * from './stacks/cross.ts';
+export * from './stacks/connections.ts';
 export * from './stacks/backups.ts';
 export * from './stacks/email.ts';
 export * from './stacks/domain.ts';

@@ -87,6 +87,7 @@ export function withDomain(
     ? [
         {
           id: 'dns',
+          role: 'dns',
           label: d.label,
           facts: d.facts,
           config: {

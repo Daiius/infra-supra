@@ -21,6 +21,7 @@ export function vpsNode(
   const { storageOptionDiskGB, ...spec } = SAKURA_HOST[plan];
   return {
     id: 'vps',
+    role: 'compute',
     label,
     config: {
       kind: 'host',

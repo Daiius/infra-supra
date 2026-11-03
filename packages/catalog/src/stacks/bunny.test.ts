@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { estimate } from 'estimator';
 import { loadPriceBooks } from '../index.ts';
 import { articleCommunity, businessApp } from '../templates/index.ts';
-import { accountsOf, CROSS_PAIRS } from './cross.ts';
+import { accountsOf, CROSS_COMPONENTS, hostsOf } from './cross.ts';
 import { componentsOf, composeStack, imagesBehavior } from './index.ts';
 
 const books = loadPriceBooks();
@@ -14,12 +14,16 @@ const bunnyTotal = (r: ReturnType<typeof estimate>) =>
     .filter((l) => l.accountId === 'bunny')
     .reduce((a, l) => a + (l.amount ?? 0), 0);
 
-describe('Bunny の組（CROSS_PAIRS）', () => {
+describe('Bunny の組（接続の規則から導く。D-114）', () => {
   it('画像は Vercel・AWS・OpenNext・Netlify・Google Cloud、前段の CDN は Amplify・VPS', () => {
     const hosts = (slot: string) =>
-      CROSS_PAIRS.filter((p) => p.provider === 'bunny' && p.slot === slot)
-        .map((p) => p.host)
-        .sort();
+      [
+        ...new Set(
+          CROSS_COMPONENTS.filter(
+            (c) => c.platform === 'bunny' && c.slot === slot,
+          ).flatMap((c) => hostsOf(c)),
+        ),
+      ].sort();
     expect(hosts('images')).toEqual(
       ['aws', 'aws-opennext', 'gcp', 'netlify', 'vercel'].sort(),
     );

@@ -216,6 +216,7 @@ export function composeNetlify(
   const nodes: ArchNodeIn[] = [
     {
       id: 'cdn',
+      role: 'edge-cdn',
       label: 'Netlify CDN',
       config: {
         kind: 'cdn',
@@ -232,6 +233,7 @@ export function composeNetlify(
     },
     {
       id: 'fn',
+      role: 'compute',
       label: spa
         ? prerender
           ? 'Netlify Functions（API・OGP の前処理）'
@@ -251,6 +253,7 @@ export function composeNetlify(
       ? [
           {
             id: 'image',
+            role: 'image-transform',
             label: 'Netlify Image CDN',
             config: { kind: 'image-optimizer' },
             facts: ['image-cdn'],
@@ -262,12 +265,14 @@ export function composeNetlify(
     // リクエストだけを数えるノードを前に置く（受け取るデータは転送に数えない。OCL-0FA096BD）
     {
       id: 'upload',
+      role: 'edge-cdn',
       label: 'Netlify（画像の投稿のリクエスト）',
       config: { kind: 'cdn', hitRate: {} },
       billing: bill({ requests: 'web-requests' }),
     },
     {
       id: 'blob',
+      role: 'object-store',
       label: 'Netlify Blobs（画像の原本）',
       config: { kind: 'object-storage' },
       facts: ['blobs'],
@@ -275,6 +280,7 @@ export function composeNetlify(
     },
     {
       id: 'db',
+      role: 'sql-db',
       label: plan === 'pro' ? 'Supabase Pro（Micro）' : 'Supabase Free',
       config: { kind: 'managed-db' },
       billing: {
