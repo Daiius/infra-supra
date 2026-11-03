@@ -80,6 +80,11 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '転送量に課金されないストレージから画像を配り、閲覧のときに必要なサイズへ変換する',
   'cloudflare:images:cf-resize':
     '投稿のときに一度だけ縮め、転送量に課金されないストレージから配る',
+  // 原本だけ R2・変換は Vercel の画像の最適化、画像だけ S3 + CloudFront（D-114 段 2c）
+  'cloudflare:images:cf-r2-origin':
+    '原本を転送量に課金されないストレージに置き、変換と配信は今の画像の最適化のまま',
+  'aws:images:aws-s3-resize':
+    '投稿のときに一度だけ縮め、常時無料の枠が大きい CloudFront から配る',
   // Netlify（D-71）
   'netlify:isrCache:default':
     'ページは CDN から返し、更新したページだけをすぐ作り直せる。設定なしで動く',

@@ -40,9 +40,11 @@ describe('既定の選択', () => {
 });
 
 describe('部品の組み合わせ', () => {
-  // 事業者ごとに、スロットごとの部品を 1 つずつ差し替えた構成すべて
+  // 事業者ごとに、スロットごとの部品を 1 つずつ差し替えた構成すべて（他の事業者の部品は、差せる土台で。D-114）
   const cases = STACK_DEFS.flatMap((d) =>
-    COMPONENTS.filter((c) => c.platform === d.platform).map(
+    COMPONENTS.filter((c) =>
+      (c.hosts ?? [c.platform]).includes(d.platform),
+    ).map(
       (c) =>
         [
           `${d.id} ${c.slot}=${c.id}`,
