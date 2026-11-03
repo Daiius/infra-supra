@@ -313,6 +313,20 @@ describe('メールの送信の上限とメールが届かない月（D-117）',
     const hint = retryHintsOf(s).find((h) => h.kind === 'email');
     expect(hint?.what).toContain('Resend Free');
     expect(retryHintsOf(s).some((h) => h.kind === 'limit')).toBe(false);
+    // 機能開発は期待に届いているので、手間の不足のヒントは出さない（OCL-7F0F6051）
+    expect(
+      s.history.every(
+        (r) =>
+          r.featurePoints /
+            (contract.satisfaction.feature.expectedPerMonth * r.month) >=
+          contract.satisfaction.feature.good,
+      ),
+    ).toBe(true);
+    expect(
+      retryHintsOf(s).some(
+        (h) => h.kind === 'element' && h.what.startsWith('機能'),
+      ),
+    ).toBe(false);
   });
 
   it('見取り図の脇のメールのカードは、メールを送るシナリオだけに出る', () => {

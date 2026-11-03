@@ -415,10 +415,18 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const eff = reflectionOf(state).effort;
     for (const e of ELEMENTS) {
       if (e === 'availability' || !w[e]) continue;
-      const months = h.filter((r) => r.satisfaction.stages[e] !== 'good');
+      // 機能は、機能開発が期待に届かなかった月だけを数える（メールが届かないだけで下がった月は ⑧ で扱う。D-117・OCL-7F0F6051）
+      const ft = sc.satisfaction.feature;
+      const devShort = (r: MonthReport) =>
+        r.featurePoints / (ft.expectedPerMonth * r.month) < ft.good;
+      const months = h.filter(
+        (r) =>
+          r.satisfaction.stages[e] !== 'good' &&
+          (e !== 'feature' || devShort(r)),
+      );
       if (!months.length) continue;
       const loss =
-        h.reduce(
+        months.reduce(
           (a, r) => a + w[e] * (1 - STAGE_VALUE[r.satisfaction.stages[e]]),
           0,
         ) / n;
