@@ -191,4 +191,18 @@ describe('ゲームの記録', () => {
     expect(tierFee(m2)).toBeGreaterThan(0);
     expect(s.capacityTiers?.vercel?.['flat-rate-cdn']).toBeDefined();
   });
+
+  it('乗り換え中の Vercel Pro（乗り換え先）も、前の月の量で決まった段を払う（最初の月だけ込みの段。D-120）', () => {
+    let s = playMonth(newGame(1, 42));
+    s = playMonth(applyAction(s, { type: 'migrate', stackIndex: 3 }));
+    expect(s.migration).not.toBeNull();
+    s = playMonth(s);
+    const [, first, second] = s.history;
+    const tierFee = (m: typeof first) =>
+      m!.lines
+        .filter((l) => l.label.includes('Flat Rate CDN'))
+        .reduce((a, l) => a + l.amount, 0);
+    expect(tierFee(first)).toBe(0);
+    expect(tierFee(second)).toBeGreaterThan(0);
+  });
 });

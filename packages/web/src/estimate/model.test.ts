@@ -1,6 +1,8 @@
 // 見積モードの計算と入力の扱い（D-73）。
 import { describe, expect, it } from 'vitest';
+import { composeStack } from 'catalog';
 import {
+  withSeats,
   compareStacks,
   costCurves,
   CURVE_PVS,
@@ -787,5 +789,22 @@ describe('ページごとの描き方（D-107）', () => {
     expect(
       routeStatusOf(chosen).find((r) => r.route === 'personal')!.cpu.ok,
     ).toBe(true);
+  });
+});
+
+describe('席の数（D-120）', () => {
+  it('2 席以上でも構成の契約の地域・CDN の料金（On-demand）を残して席を重ねる', () => {
+    const arch = withSeats(
+      composeStack('vercel-supabase-pro', { cdnPlan: 'on-demand' }),
+      3,
+    );
+    expect(arch.accounts).toContainEqual({
+      id: 'vercel',
+      region: 'iad1',
+      viewerRegion: 'hnd1',
+      capacityTiers: { 'flat-rate-cdn': 'off' },
+      seats: 3,
+    });
+    expect(arch.accounts).toContainEqual({ id: 'supabase', seats: 3 });
   });
 });

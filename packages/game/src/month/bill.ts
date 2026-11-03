@@ -118,8 +118,8 @@ export function estimateMonth(
                 state.routes,
                 state.legacyRouteDefaults,
               ),
-              // 乗り換え先は新しい契約（容量の段は最小の段から。D-120）
-              { tiers: {} },
+              // 乗り換え先の契約も前の月の量で決まった段（記録の無い最初の月だけ最小の段。D-120）
+              { tiers: state.capacityTiers },
             ),
           ),
           books,

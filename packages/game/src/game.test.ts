@@ -85,7 +85,7 @@ describe('game', () => {
     // D-117: メールの通数から Bot の PV を除いた（Bot の月のメールの費用が減り、所持金が $0.3〜7 増える。結果は変わらない）
     // D-120: Vercel Pro の CDN を既定の Flat Rate CDN（段の定額・翌月から上の段）に、CDN・FOT・画像を東京（hnd1）の単価に。
     //       Vercel Pro・何もしないは $237〜335 増える（CDN の転送が段に込み）、Vercel の画像を Cloudflare に出す行は −$4〜+$4。Vercel で始めて乗り換える行は $0.9〜34 増（乗り換えるまでの月）、
-    //       途中で Vercel へ乗り換える cf-paid-accept のシード 31 は $1,073 増えて goal → won。CF・VPS・AWS の行は変わらない
+    //       途中で Vercel へ乗り換える cf-paid-accept のシード 31 は $1,053 増えて goal → won（乗り換え中も乗り換え先が前の月の段を払う）。CF・VPS・AWS の行は変わらない
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -129,7 +129,7 @@ describe('game', () => {
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2126.46', 'won', 12],
-      'cf-paid-accept': ['2129.24', 'won', 12],
+      'cf-paid-accept': ['2109.24', 'won', 12],
       'vps-images': ['1673.38', 'goal', 12],
       'vercel-pro': ['1056.34', 'goal', 12],
       'vercel-to-cf': ['1668.60', 'goal', 12],
