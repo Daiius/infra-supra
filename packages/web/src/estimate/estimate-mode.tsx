@@ -27,6 +27,7 @@ import {
   type MarkShape,
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
+import { creditUseText, isCreditUse, isStopping } from '../premise-view.ts';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
 import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
 import { routeChoiceOf, type RoutePlanEditor } from '../route-plan-field.tsx';
@@ -709,7 +710,7 @@ function Tax({ tax }: { tax: TaxView }) {
   );
 }
 
-/** 当たる前提（量の境目の使用率と、超過の印）。 */
+/** 当たる前提（量の境目の使用率と、超過の印）。止まる前提と、費用が増えるだけの前提・クレジットの消費は見た目を分ける。 */
 function Premises({
   thresholds,
   facts,
@@ -719,24 +720,66 @@ function Premises({
   facts: PlatformPremise[];
   unpriced: number;
 }) {
-  const hits = thresholds.filter((p) => p.hit).length;
+  // 「超過」に数えるのは止まる・プランの変更が要るもの（① のカードの数え方と同じ）。クレジットの消費は数えない
+  const stops = thresholds.filter(isStopping).length;
+  const costs = thresholds.filter(
+    (p) => p.hit && p.effect === 'cost' && !isCreditUse(p),
+  ).length;
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">
         前提（無料枠・込み分・上限）
         <span className="ml-2 text-sm font-normal opacity-70">
-          超過 {hits} 件・{thresholds.length} 件中
+          超過 {stops} 件{costs > 0 ? `・従量に回る ${costs} 件` : ''}・
+          {thresholds.length} 件中
           {unpriced > 0 ? `・料金未取得 ${unpriced} 件` : ''}
         </span>
       </h3>
       <ul className="space-y-2">
         {thresholds.map((p) => {
           const r = p.ratio ?? 0;
+          if (isCreditUse(p)) {
+            const over = r > 1;
+            const within = Math.min(1, Number.isFinite(r) ? r : 1) * 100;
+            return (
+              <li key={p.id} className="min-w-0 text-sm">
+                <div className="flex flex-wrap items-center gap-x-2">
+                  <span className="badge badge-info badge-sm">
+                    クレジット消費
+                  </span>
+                  <span className="tabular-nums font-semibold">{pct(r)}</span>
+                  <span className="text-xs opacity-70">
+                    超えた分は従量で請求（止まらない）
+                  </span>
+                </div>
+                <div
+                  className="flex h-2 w-full overflow-hidden rounded-full bg-base-300"
+                  role="img"
+                  aria-label={`${p.text} ${pct(r)}`}
+                >
+                  <div className="bg-info" style={{ width: `${within}%` }} />
+                  {over && <div className="flex-1 bg-warning/40" />}
+                </div>
+                <span className="block break-words">
+                  {creditUseText(p, (n) => money(n, p.currency!))}
+                </span>
+                <span className="block break-words text-xs opacity-80">
+                  {p.text}
+                </span>
+              </li>
+            );
+          }
+          const stopped = isStopping(p);
+          const costOnly = p.hit && !stopped;
           return (
             <li key={p.id} className="min-w-0 text-sm">
               <div className="flex flex-wrap items-center gap-x-2">
-                {p.hit ? (
+                {stopped ? (
                   <span className="badge badge-error badge-sm">超過</span>
+                ) : costOnly ? (
+                  <span className="badge badge-warning badge-sm">
+                    超過（従量）
+                  </span>
                 ) : r >= 0.7 ? (
                   <span className="badge badge-warning badge-sm">近い</span>
                 ) : null}
@@ -746,7 +789,7 @@ function Premises({
                 </span>
               </div>
               <progress
-                className={`progress w-full ${p.hit ? 'progress-error' : r >= 0.7 ? 'progress-warning' : 'progress-success'}`}
+                className={`progress w-full ${stopped ? 'progress-error' : costOnly || r >= 0.7 ? 'progress-warning' : 'progress-success'}`}
                 value={Math.min(1, Number.isFinite(r) ? r : 1) * 100}
                 max={100}
                 aria-label={`${p.text} ${pct(r)}`}

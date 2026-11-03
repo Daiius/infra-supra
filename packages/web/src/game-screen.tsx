@@ -73,6 +73,7 @@ import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
+import { creditUseText, isCreditUse } from './premise-view.ts';
 import { Swatch } from './route-plan-table.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
 import { diagramArchitecture } from './system-diagram-model.ts';
@@ -787,6 +788,8 @@ function surpriseReason(x: Surprise): string {
 
 function PremiseRow({ p }: { p: PlatformPremise }) {
   const blocked = p.hit && p.effect !== 'cost';
+  // 込みのクレジットの消費は異常ではない（超えた分は従量で請求）。超過の印にせず消費として見せる
+  const credit = isCreditUse(p);
   const badge =
     p.kind === 'fact'
       ? p.hit
@@ -794,9 +797,11 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
         : 'badge-ghost'
       : blocked
         ? 'badge-error'
-        : p.hit
-          ? 'badge-warning'
-          : 'badge-info';
+        : credit
+          ? 'badge-info'
+          : p.hit
+            ? 'badge-warning'
+            : 'badge-info';
   const label =
     p.kind === 'fact'
       ? p.hit
@@ -804,21 +809,23 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
         : '事実'
       : blocked
         ? '当たった'
-        : p.hit
-          ? '超過（課金）'
-          : 'あと少し';
+        : credit
+          ? 'クレジット消費'
+          : p.hit
+            ? '超過（課金）'
+            : 'あと少し';
   const ratio = p.ratio === undefined ? null : Math.min(p.ratio, 1);
   return (
     <li className="flex flex-wrap items-center gap-2">
       <span className={`badge badge-sm ${badge}`}>{label}</span>
-      <span>{p.text}</span>
+      <span>{credit ? creditUseText(p, usd) : p.text}</span>
       {p.detail && (
         <span className="basis-full text-xs opacity-80">{p.detail}</span>
       )}
       {ratio !== null && (
         <span className="flex items-center gap-1 text-xs opacity-70">
           <progress
-            className={`progress w-20 ${blocked ? 'progress-error' : p.hit ? 'progress-warning' : 'progress-info'}`}
+            className={`progress w-20 ${blocked ? 'progress-error' : credit ? 'progress-info' : p.hit ? 'progress-warning' : 'progress-info'}`}
             value={ratio}
             max={1}
           />
