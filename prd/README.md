@@ -76,7 +76,7 @@
 | [10-framework-branch.md](./10-framework-branch.md) | フレームワークの分岐（Vite の SPA か Next.js か）・API の応答のキャッシュ・API の置き場（段 1〜3）・Astro の API の置き場・Next.js の静的書き出し（§11）。確定・実装済み |
 | [11-aws-and-cross-provider.md](./11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext・Aurora 系・CloudFront の定額）・事業者をまたぐ構成・Netlify・Neon・Google Cloud・VPS の前の Cloudflare・ログ・バックアップ・メール・DNS・確約・Bunny。論点 AX-01〜14 は D-50 で決定・実装済み（OpenNext・Netlify は一時的に隠している。D-100） |
 | [12-external-scenarios-and-ranking.md](./12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod）と再生による検証のランキング。**下書き・未実装・未決 ES-01〜16** |
-| [13-route-strategies.md](./13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット。段 0〜3・5 は実装済み（D-106・D-107・D-108）、段 4 と RS の残りは未決 |
+| [13-route-strategies.md](./13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット。段 0〜5 は実装済み（D-106〜D-109）、RS の残りは未決 |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |
 | [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-107）と、末尾に未決の論点の一覧 |
 
