@@ -6,6 +6,7 @@ import {
   COMMENTS_IN_PAGE,
   frameworksOf,
   pageWireframes,
+  REGION_KINDS,
   REGION_NEEDS,
   REGION_SOURCES,
   SCENARIOS,
@@ -77,6 +78,12 @@ describe('ページの見取り図のデータ', () => {
             expect(all, p.route).toContain('personal');
           expect(p.freshness, p.route).toBeDefined();
         }
+      });
+
+      it('すべての区画に見た目の種類（スケルトン）がある（D-113 の追記）', () => {
+        for (const p of scenarioWireframes(sc))
+          for (const r of p.regions)
+            expect(REGION_KINDS, `${p.route}.${r.id}`).toContain(r.kind);
       });
     });
   }

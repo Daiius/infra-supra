@@ -488,6 +488,31 @@ export const REGION_NEEDS: Readonly<
   },
 };
 
+/**
+ * 見取り図の区画の見た目の種類（D-113 の追記）。シナリオの説明の見取り図で、区画を本物のページに近い
+ * スケルトン（ロゴ・文の行・画像・アイコンなどの灰色の塊）で描くのに使う。ゲーム上の仮定（計算には使わない）。
+ */
+export const REGION_KINDS = [
+  'header',
+  'login',
+  'title',
+  'body',
+  'image',
+  'likes',
+  'comments',
+  'related',
+  'footer',
+  'profile',
+  'notifications',
+  'list',
+  'form',
+  'post-button',
+  'table',
+  'search',
+  'menu',
+] as const;
+export type RegionKind = (typeof REGION_KINDS)[number];
+
 /** 見取り図の区画（D-102）。幅は横いっぱい（full）か半分（half）、高さは目安の 3 段。 */
 export type WireframeRegion = {
   id: string;
@@ -497,6 +522,8 @@ export type WireframeRegion = {
   height?: 'sm' | 'md' | 'lg';
   /** 区画の要件（フレームワークに依らない。シナリオの説明の見取り図に出す。D-113）。すべての区画に書く（テストで確かめる）。 */
   needs?: RegionNeed[];
+  /** 区画の見た目の種類（シナリオの説明の見取り図のスケルトン。D-113 の追記）。すべての区画に書く（テストで確かめる）。 */
+  kind?: RegionKind;
 };
 
 /** ページの見取り図 1 枚（D-102）。 */

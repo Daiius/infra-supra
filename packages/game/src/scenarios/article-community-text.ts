@@ -12,33 +12,54 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
   {
     route: 'article',
     regions: [
-      { id: 'header', label: 'ヘッダー・ナビ', width: 'half', needs: ['same'] },
+      {
+        id: 'header',
+        kind: 'header',
+        label: 'ヘッダー・ナビ',
+        width: 'half',
+        needs: ['same'],
+      },
       {
         id: 'login',
+        kind: 'login',
         label: 'ログインの表示',
         width: 'half',
         needs: ['personal'],
       },
       {
         id: 'title',
+        kind: 'title',
         label: '記事のタイトル・著者',
         needs: ['same', 'fresh', 'ogp'],
       },
-      { id: 'body', label: '本文', height: 'lg', needs: ['same', 'fresh'] },
+      {
+        id: 'body',
+        kind: 'body',
+        label: '本文',
+        height: 'lg',
+        needs: ['same', 'fresh'],
+      },
       {
         id: 'images',
+        kind: 'image',
         label: '画像（5 枚）',
         height: 'md',
         needs: ['same', 'media'],
       },
-      { id: 'likes', label: 'いいね', needs: ['live'] },
+      { id: 'likes', kind: 'likes', label: 'いいね', needs: ['live'] },
       {
         id: 'comments',
+        kind: 'comments',
         label: 'コメント欄（読む・書く）',
         height: 'md',
         needs: ['live', 'input'],
       },
-      { id: 'footer', label: '関連記事・フッター', needs: ['same'] },
+      {
+        id: 'footer',
+        kind: 'related',
+        label: '関連記事・フッター',
+        needs: ['same'],
+      },
     ],
     byFramework: {
       nextjs: {
@@ -139,9 +160,15 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
   {
     route: 'personal',
     regions: [
-      { id: 'header', label: 'ヘッダー・ナビ', needs: ['same'] },
+      {
+        id: 'header',
+        kind: 'header',
+        label: 'ヘッダー・ナビ',
+        needs: ['same'],
+      },
       {
         id: 'profile',
+        kind: 'profile',
         label: 'プロフィール',
         width: 'half',
         height: 'md',
@@ -149,6 +176,7 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
       },
       {
         id: 'notifications',
+        kind: 'notifications',
         label: '通知',
         width: 'half',
         height: 'md',
@@ -156,12 +184,14 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
       },
       {
         id: 'mine',
+        kind: 'list',
         label: '自分の下書き・記事の一覧',
         height: 'lg',
         needs: ['personal', 'fresh'],
       },
       {
         id: 'editor',
+        kind: 'post-button',
         label: '投稿・編集の画面へ（送信は API）',
         needs: ['input'],
       },
