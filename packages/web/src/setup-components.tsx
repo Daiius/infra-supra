@@ -21,7 +21,7 @@ import {
   type SetupOption,
   type SetupSlot,
 } from 'game';
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
@@ -136,6 +136,8 @@ export function PartChips({
   value,
   onChange,
   note,
+  focusSlot,
+  onFocused,
 }: {
   stackIndex: number;
   framework: FrameworkId;
@@ -146,12 +148,37 @@ export function PartChips({
   onChange: (v: SetupChoices) => void;
   /** 注記（画面ごと。D-115）。 */
   note?: ReactNode;
+  /**
+   * 描いた後に focus を移すスロット（図の箱の吹き出しで選んだ直後。元の箱は差し替えで消えうるので、常に残る選択中のチップへ移す。
+   * OCL-131BD89D）。移したら onFocused を呼ぶ。
+   */
+  focusSlot?: string | null | undefined;
+  onFocused?: () => void;
 }) {
+  const root = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!focusSlot) return;
+    const row = root.current?.querySelector<HTMLElement>(
+      `[data-slot="${focusSlot}"]`,
+    );
+    // 選択中のチップ。スロットの行が消えた（API の置き場で DB の行が消えるなど）ときは部品の欄の頭
+    (
+      row?.querySelector<HTMLElement>('button[aria-pressed="true"]') ??
+      root.current
+    )?.focus();
+    onFocused?.();
+  }, [focusSlot, value, onFocused]);
   if (slots.length === 0) return null;
   const box =
     'inline-flex h-7 max-w-full min-w-0 items-center gap-1 rounded-field text-xs';
   return (
-    <section aria-label="部品" data-parts className="min-w-0 space-y-1.5">
+    <section
+      ref={root}
+      tabIndex={-1}
+      aria-label="部品"
+      data-parts
+      className="min-w-0 space-y-1.5 focus:outline-none"
+    >
       <p className="text-xs opacity-70">
         部品（押すと替わる。構成図の箱からも選べる）
         {note && <span className="block">{note}</span>}

@@ -23,7 +23,7 @@ import {
   type RouteOverrides,
   type Scenario,
 } from 'game';
-import { useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
 import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
@@ -74,6 +74,9 @@ function EditableDiagram({
   editor: PartsEditor;
 }) {
   const slots = usePartSlots(scenario, stackIndex, framework, components);
+  // 箱の吹き出しで選んだスロット（描き直した後に、そのスロットの選択中のチップへ focus を移す。OCL-131BD89D）
+  const [focusSlot, setFocusSlot] = useState<string | null>(null);
+  const clearFocus = useCallback(() => setFocusSlot(null), []);
   const bySlot = useMemo(
     () =>
       new Map<string, (typeof slots)[number]>(slots.map((x) => [x.slot, x])),
@@ -96,7 +99,10 @@ function EditableDiagram({
         stackIndex={stackIndex}
         framework={framework}
         value={components}
-        onChange={editor.onChange}
+        onChange={(v) => {
+          editor.onChange(v);
+          setFocusSlot(slot);
+        }}
         close={close}
       />
     ),
@@ -115,6 +121,8 @@ function EditableDiagram({
           value={components}
           onChange={editor.onChange}
           note={editor.note}
+          focusSlot={focusSlot}
+          onFocused={clearFocus}
         />
       }
     />

@@ -1148,7 +1148,10 @@ describe('ゲームモードの画面', () => {
     expect(current().getAttribute('aria-label')).toBe(
       'Vercel Pro + Supabase Pro の構成',
     );
-    within(db()).getByRole('button', { name: /^Supabase/, pressed: true });
+    // 元の箱は差し替えで消えるので、focus は選択中のチップへ移る（OCL-131BD89D）
+    expect(document.activeElement).toBe(
+      within(db()).getByRole('button', { name: /^Supabase/, pressed: true }),
+    );
   });
 
   it('W-40 始める画面: 部品どうしの依存で選べない部品のチップは灰色で、理由をツールチップと ⓘ に出す（D-116）', async () => {

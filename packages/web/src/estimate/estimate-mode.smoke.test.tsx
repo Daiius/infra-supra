@@ -543,6 +543,10 @@ describe('見積モードの画面', () => {
     );
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(checked(DB)).toBe('dynamodb');
+    // focus は DB の選択中のチップへ（元の Neon の箱は消える。OCL-131BD89D）
+    expect(document.activeElement).toBe(
+      within(group(DB)).getByRole('button', { pressed: true }),
+    );
     expect(new URLSearchParams(window.location.search).get('c.db')).toBe(
       'dynamodb',
     );
