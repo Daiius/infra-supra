@@ -18,6 +18,7 @@ import {
   STACK_DEFS,
   STACK_FLAVOR,
   stackHidden,
+  withCrossDbName,
 } from 'catalog';
 import type { Scenario, Strategy, WorkloadMods } from './scenario.ts';
 import type { ArchitectureInput } from 'estimator';
@@ -203,17 +204,22 @@ export function selfHostedOf(
  * 構成の既定の DB の名前を出さない。D-65）。始める画面の構成の一覧は渡さない（構成の名前のまま）。
  */
 /**
- * DB を他の事業者に替えた Vercel・Netlify の構成の名前（Neon は D-77・AWS の DynamoDB・Aurora は D-114 段 2）。
- * 「Supabase Pro」を実際の組（「Neon（Launch）」「AWS DynamoDB」など）に替える（Neon は土台が Hobby・Free なら Neon（Free））。
+ * DB を他の事業者に替えた構成の名前（Neon は D-77・AWS の DynamoDB・Aurora は D-114 段 2・Cloudflare は段 2b）。
+ * 「Supabase Pro」を実際の組（「Neon（Launch）」「AWS DynamoDB」など）に替え、名前に DB の無い構成（Cloudflare）は後ろに足す
+ * （「Cloudflare Paid + vinext + Hyperdrive + Neon（Launch）」。Neon は土台が Hobby・Free なら Neon（Free））。
  * API を他の事業者に置くと DB の名前は使わないので、そのまま。
  */
-function withDbName<T extends { name: string; id: string }>(
+function withDbName<T extends { name: string; id: string; provider: Platform }>(
   s: T,
   components: Choices,
 ): T {
-  const name = crossDbName(components.db, /-(hobby|free)$/.test(s.id));
+  const name = crossDbName(
+    components.db,
+    /-(hobby|free)$/.test(s.id),
+    s.provider,
+  );
   if (name === undefined) return s;
-  return { ...s, name: s.name.replace(/Supabase (Free|Pro)/, name) };
+  return { ...s, name: withCrossDbName(s.name, name) };
 }
 
 export function stackName(

@@ -1,6 +1,6 @@
 # 14. 部品を事業者をまたいで組む（役割と接続の口）
 
-> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）・段 2 を実装（2026-11-03。§3.12）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
+> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）・段 2 を実装（2026-11-03。§3.12）・段 2b（Cloudflare の DB に Neon・AWS）を実装（2026-11-04。§3.13）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
 > 後で検討する候補として残したのは、リージョンの要素（CP-08）と接続の数の上限（CP-09）。
 > 出発点（2026-11-03・ユーザー）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？ 根本的に少し変えるところがあるかもしれませんが...」
 > 料金・制限の数値は、§2 で公式の文書から取ったもの（URL と取得日つき）か、catalog に既にあるもの（出典は catalog の料金データ）だけを書く。
@@ -292,6 +292,7 @@ type ConnectionRule = {
 | 段 0 | この文書の論点を決める（CP-01〜） | — |
 | 段 1（済み・§3.11） | 土台のノードに `role` の印。`ConnectionRule`・`PartDef` の型と、今の組を規則に移し替え（`CROSS_PAIRS` を規則から導く）。差し方を役割から導く（`hostImageShape` 等を置き換え） | **不変**（golden・基準プレイ・保存） |
 | 段 2（済み・§3.12） | 公開の口の組を足す: **Vercel × DynamoDB / Aurora（DB。Marketplace）だけ**（CP-15）。後の段の候補: Vercel × S3 + CloudFront（画像）・Cloudflare × Neon（Hyperdrive の接続先違い）・Google Cloud × R2 の広げ方の見直し・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
+| 段 2b（済み・§3.13） | Cloudflare の DB に Neon・AWS（RDS・Aurora は Hyperdrive を中継に自動で足す・DynamoDB は直接）。DB の部品の説明・中継・構成の名前を規則と部品のデータで決める形に寄せた | 新しい組だけ。基準プレイで既存は不変 |
 | 段 3 | 中継を部品として自動で足す（Static IPs・NAT・RDS Proxy・Tunnel）。単価を取ってから。`blocked` の理由を画面に出す | 新しい組だけ |
 | 段 4 | 画面: 事業者で絞る・構成図の `links`（§6） | — |
 | 段 5 | （任意）案 B へ: 土台も部品の集まりにする。段 1〜4 の規則と部品はそのまま使う | 全部の取り直し |
@@ -357,6 +358,54 @@ type ConnectionRule = {
   Vercel Hobby はどの DB・フレームワークでも 0/20。受託 × DynamoDB でメールを Resend にすると 0/20（$21.7）。
   受託は既存の AWS（Amplify 20/20 $18.8・OpenNext 20/20 $5.5）・Netlify Personal + Neon（20/20 $30.8）が既に全シードで届くので、Vercel × DynamoDB の 20/20 はそれと同じ並び。
   記事 × Astro + `cf-resize` + DynamoDB の 20/20 は Netlify Pro × Astro + Neon + `cf-resize`（20/20 $44.6）と同じ程度。**釣り合いはそのまま入れる（2026-11-03・ユーザーが受け入れ）**: 全シードで届く組は料金どおりの結果として受け入れ、目標の額・手間は動かさない（受託の床は既存の Amplify $18.8 のままで、それより安い床は作らない）。
+
+### 3.13 段 2b の実装（2026-11-04）: Cloudflare の DB に Neon・AWS
+
+- **依頼（ユーザー・2026-11-04）**: 「Cloudflare の DB 選択も他の事業者をまたげたりします？hyperdrive 必要ですとか色々条件はありそうですが... 別に不可能なので外したわけではない...ですよね？」→ 3 つとも足すと決めた: Neon（Hyperdrive 経由）・AWS の RDS / Aurora（Hyperdrive 経由・公開の口）・AWS の DynamoDB（HTTPS で直接）。
+- **中継の一般化（CP-05）**: 規則に `verdict: 'needs-relay'`・`relay: ['hyperdrive']` を書くと、差し方（`applyCrossDb`）が中継のノードを経路の DB の手前に自動で足す（`relaysFor`・`RELAY_NODES`）。中継なしでつなげる規則が同じ組にあれば中継は使わない。
+  Hyperdrive のノードは、既存の「Hyperdrive 経由で Supabase」（id `hyperdrive`・Cloudflare の部品のまま・保存の版 4 のまま）と同じ組み立て（`hyperdriveNode`）を使う。既存の組の Hyperdrive のノードには、中継の事実（下）を添えない（前提の文・費用を変えない）。
+  既存の「Hyperdrive 経由で Supabase」を Supabase の部品 + 中継に作り直すことはしていない（Supabase を部品の事業者にすると、Vercel・Netlify の既定の DB まで部品に移すことになり、段 5 の案 B の範囲になるため）。
+- **規則**（`stacks/connections.ts`）: `cf-compute-hyperdrive-neon`（Cloudflare の処理 → Neon の `tcp-sql`・Hyperdrive）、`cf-compute-hyperdrive-aws`（→ AWS の `tcp-sql`。部品を Aurora・0 ACU の Aurora・RDS に絞る）、`cf-compute-dynamodb`（→ AWS の `https-api`・中継なし）。
+  Worker から直接の TCP（`connect()`）は出さない（CP-16）。規則に、受ける部品を絞る `to.parts` を足した（Vercel の Marketplace の規則は Aurora だけ。公開の RDS を Vercel に出さない）。
+- **部品**（`stacks/parts.ts`）: Neon の部品は口を `https-api`（serverless driver）と `tcp-sql`（Hyperdrive）の 2 つにした。AWS の RDS for PostgreSQL（db.t4g.micro。料金は catalog の `rds-postgres-t4g-micro`・id は AWS の構成と同じ `rds`）を足した（Cloudflare だけ）。
+  部品の説明（ⓘ）は**土台によらない文**にし、土台ごとのつなぎ方（Vercel の OIDC・Marketplace、Cloudflare の Hyperdrive・アクセスキー）は**規則の `partNote`**、土台ごとに効く前提は**規則の `partRefs`** に移した（`partOptions` が足す）。Vercel の Neon・DynamoDB・Aurora の説明は文の順が変わっただけで中身は同じ。
+  構成の名前に出す DB の名前は部品の `title`（`crossDbName`）。中継が要る土台では中継の名前を前に足す。
+- **ノード**（`stacks/cross.ts`）: DB の部品のノードは事業者ごとの `DB_PART_NODES`（Neon は `neonNode`。Hyperdrive を通すときは serverless driver の事実を出さない。AWS は `stacks/aws.ts` の `dbNode`）。
+  Cloudflare の組み立ては、他の事業者の DB を選ぶと仮の DB（id `db`）を置き、`applyCrossDb` が部品の DB と中継に差し替える（Vercel・Netlify の Supabase と同じ流れ）。差し替えの途中（standby）の部品の DB と中継は `applyCrossDb` が足し、D1・KV・Supabase へ戻すときは Cloudflare の組み立てが足す。
+  API を他の事業者に置くと、中継・応答の転送・DB はまとめて外れる（`replaceDb` が連続した DB・転送のノードを 1 回の API の列にする）。
+- **転送（CP-06）**: Neon の応答は Neon の公開の転送の項目（既存の Neon のノードのメーター）で数える。AWS の DB（DynamoDB・Aurora・RDS）の応答は `aws-db-out`（インターネットへの転送・$0.114/GB・AWS 全体の月 100 GB の無料のプールを共有）。
+  Cloudflare の Worker・Hyperdrive は AWS の外なので、同じリージョンの扱い（段 2 の未確認）は関係なく、いつもインターネットへの転送で数える（事実 `db-out-internet`）。段 2 の切り替え `AWS_DB_OUT_TO_INTERNET` は Vercel の受け手だけに効く形にした（送り出しの項目の `freeTo`・受け手ごとの事実 `factsTo`）。
+  Hyperdrive は転送に課金しない（受け取りの項目なし）。RDS for PostgreSQL の料金ページは転送を「in」と「out」で数えると書くが、単価の表は畳まれていて取得した文に無く、Aurora と同じく AWS 共通の単価の適用と読んだ（推測）。
+- **前提の文**: Hyperdrive の事実 2 つ（`origin-db`: 接続文字列で設定・Neon は接続のプールを外した文字列・RDS / Aurora は公開のアクセスと Cloudflare の IP の許可・IAM 認証の記載なし、`idle-connections`: 使っていない接続を最大 10 分保つ・接続先への接続は約 20（Free）/ 約 100（Paid））。
+  **未確認として計算に入れていないもの**: Hyperdrive が接続を保つ間、問い合わせが途切れると止まる DB（Neon・0 ACU の Aurora）が止まらない可能性／Hyperdrive の問い合わせのキャッシュ（既存の組と同じく数えない）／Worker のサブリクエストの上限（1 回の呼び出しで Free 50・Paid 10,000。DynamoDB の問い合わせ 1 回が 1 つ）／公開の IPv4 のアドレスの時間課金。
+- **アカウント**: Neon は 1 つ増える。AWS は、Cloudflare Free は既定のメール（Amazon SES）で既にあるので増えず、Cloudflare Paid（既定のメールは Cloudflare の Email Service）は 1 つ増える（`accountsOf` が数える）。
+- **画面**: web は変えていない。始める画面・見積モード・ゲーム中の乗り換えの Cloudflare の DB の欄に「Neon」「AWS: DynamoDB」「AWS: Aurora Serverless v2（2 つ）」「AWS: RDS for PostgreSQL」が出る（部品の名前・説明・前提は catalog のデータ）。構成の名前は「Cloudflare Paid + vinext + Hyperdrive + Neon（Launch）」「Cloudflare Paid + vinext + AWS DynamoDB」（Astro・SPA は vinext を外す）。
+- **不変の確かめ**: 段 1・段 2 と同じ突き合わせ（全構成 × フレームワーク × 部品の直積と無作為の組 × 差し替えの途中の構成と Workload・ゲームの始める画面のスロット・1 か月目の見込み・総当たりの最後の状態）を main（段 2 のマージ後）と比べた。
+  共通の約 41 万の組と約 4.3 万のゲームのキー（約 2.1 万のプレイ）がすべて一致し、違いは Cloudflare の DB の選択肢が 5 つ増えたこと（とその組み合わせの一覧）だけ。
+- **費用の例**（月 30 万 PV・Next.js・1 か月目の見積・税抜）:
+
+  | シナリオ | D1（既定） | Hyperdrive + Supabase | Neon | DynamoDB | Aurora（0.5 ACU） | Aurora（0 ACU まで） | RDS |
+  |---|---|---|---|---|---|---|---|
+  | 記事 × Cloudflare Paid | $11.3 | $36.3 | $30.7 | $11.4 | $84.4 | $84.4 | $32.3 |
+  | 受託 × Cloudflare Paid | $10.1 | $35.1 | $24.2 | $11.0 | $83.4 | $62.0 | $31.1 |
+  | 記事 × Cloudflare Free | $1.4 | $1.4 | $1.4 | $1.6 | $74.5 | $74.5 | $22.5 |
+  | 受託 × Cloudflare Free | $2.4 | $2.4 | $2.4 | $3.3 | $75.7 | $54.3 | $23.4 |
+
+  Cloudflare Free はどの DB でも Workers Free の CPU の制限で止まる前提が当たる（D1 と同じ）。Neon Free は計算・転送の枠、Hyperdrive Free は 1 日 10 万クエリに当たる。DynamoDB の応答の転送は月 100 GB の無料の中。
+- **基準プレイ**（何もしない・シード 1〜20。12 か月の費用の平均 / 月。目標の額は動かさない・D-64）:
+
+  | シナリオ × Cloudflare Paid | D1 | Hyperdrive + Supabase | Neon | DynamoDB | Aurora（0.5 ACU） | Aurora（0 ACU まで） | RDS |
+  |---|---|---|---|---|---|---|---|
+  | 記事 × Next.js | 20/20 $18.9 | 20/20 $43.9 | **20/20 $38.4** | **20/20 $19.3** | 0/20 $92.0 | 0/20 $92.0 | **20/20 $39.9** |
+  | 記事 × SPA | 20/20 $17.7 | 0/20 $42.7 | 0/20 $37.2 | **20/20 $18.1** | 0/20 $90.8 | 0/20 $90.8 | 0/20 $38.7 |
+  | 記事 × Astro | 20/20 $20.1 | 20/20 $45.1 | **20/20 $39.6** | **20/20 $20.5** | 2/20 $93.2 | 2/20 $93.2 | **20/20 $41.1** |
+  | 記事 × 静的書き出し | 17/20 $17.5 | 0/20 $42.5 | 0/20 $37.0 | 17/20 $17.8 | 0/20 $90.6 | 0/20 $90.6 | 0/20 $38.5 |
+  | 受託 × Next.js | 20/20 $14.4 | 0/20 $39.6 | **20/20 $29.1** | **20/20 $16.0** | 0/20 $88.2 | 0/20 $66.9 | 8/20 $35.6 |
+  | 受託 × SPA | 20/20 $15.3 | 6/20 $40.3 | **20/20 $29.8** | **20/20 $16.8** | 0/20 $88.9 | 0/20 $67.7 | 17/20 $36.3 |
+  | 受託 × Astro | 20/20 $14.4 | 0/20 $39.6 | **20/20 $29.1** | **20/20 $16.0** | 0/20 $88.2 | 0/20 $66.9 | 8/20 $35.6 |
+  | 受託 × 静的書き出し | 20/20 $14.4 | 0/20 $39.6 | **20/20 $29.1** | **20/20 $15.9** | 0/20 $88.1 | 0/20 $66.9 | 8/20 $35.6 |
+
+  Cloudflare Free はどの DB・フレームワークでも 0/20（D1 と同じ）。新しい組は、全シードで届くものが多い（DynamoDB は D1 と同じ並び・Neon は受託の全部と記事の Next.js・Astro・RDS は記事の Next.js・Astro）が、**どれも同じ構成の D1（既定）より高く、既存の最安より安い床は作らない**（DynamoDB は D1 より月 $0.3〜1.6 高い）。目標の額・手間は動かしていない（釣り合いの受け入れはユーザーの判断。報告に書いた）。
 
 ## 4. 出典の扱い
 
@@ -430,3 +479,4 @@ type ConnectionRule = {
 - Supabase: [Postgres への接続](https://supabase.com/docs/guides/database/connecting-to-postgres)・[egress](https://supabase.com/docs/guides/platform/manage-your-usage/egress)
 - Neon: [接続のプール](https://neon.com/docs/connect/connection-pooling)
 - Google Cloud: [Cloud Run から Cloud SQL](https://docs.cloud.google.com/sql/docs/postgres/connect-run)
+- 段 2b（2026-11-04 取得）: [Hyperdrive × Neon](https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/neon/)・[Hyperdrive × AWS RDS / Aurora](https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/aws-rds-aurora/)・[Hyperdrive の料金](https://developers.cloudflare.com/hyperdrive/platform/pricing/)・[Hyperdrive の制限](https://developers.cloudflare.com/hyperdrive/platform/limits/)・[Hyperdrive の仕組み](https://developers.cloudflare.com/hyperdrive/concepts/how-hyperdrive-works/)・[Workers の制限](https://developers.cloudflare.com/workers/platform/limits/)・[DynamoDB の低レベル API](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.LowLevelAPI.html)・[RDS for PostgreSQL の料金](https://aws.amazon.com/rds/postgresql/pricing/)

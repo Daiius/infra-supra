@@ -1,9 +1,10 @@
 // 事業者をまたぐ構成の差し方（prd/11 §2・D-52・D-114）。他の事業者の部品（parts.ts）を、土台の構成のノードの役割（role）から
 // 外すノードと経路を導いて差す。差せる組は接続の規則（connections.ts）で決まり、事業者の間の転送は送り手の送り出しと
 // 受け手の受け取りの項目をそれぞれ数える（CP-06）。今の組は「画像だけ Cloudflare（R2 + 変換）・Bunny」と、API の置き場
-// （SPA は D-65・Next.js と VPS は D-67・Astro は D-69）、DB だけ Neon（D-77）、メールの送信（D-95）、Bunny の前段の CDN（D-98）。
+// （SPA は D-65・Next.js と VPS は D-67・Astro は D-69）、DB だけ Neon・AWS（D-77・D-114 段 2・段 2b）、メールの送信（D-95）、Bunny の前段の CDN（D-98）。
+// DB の部品は、規則が要る中継（Cloudflare の Hyperdrive。CP-05）を自動で足す（applyCrossDb）。
 // 既存の Cloudflare + Hyperdrive（Supabase）・さくらの VPS + 前段の CDN（Cloudflare）は、土台の事業者の部品として
-// 先に入っていたもの（D-24 X-6・D-31）で、規則の外にある（アカウントの数は accountsOf で同じく数える）。
+// 先に入っていたもの（D-24 X-6・D-31）で、規則の外にある（アカウントの数は accountsOf で同じく数える。Hyperdrive のノードは中継と共通の hyperdriveNode）。
 import type { ArchitectureInput, RequestClass } from 'estimator';
 import {
   COMPUTE_MEMORY_GB,
@@ -17,10 +18,13 @@ import {
   inboundOf,
   isTransferNode,
   outboundOf,
+  RELAYS,
+  relaysFor,
   storeAcceptsFromOutside,
   transferNodes,
+  type RelayId,
 } from './connections.ts';
-import { CROSS_COMPONENTS } from './parts.ts';
+import { CROSS_COMPONENTS, CROSS_PARTS } from './parts.ts';
 import type {
   Choices,
   ComponentOption,
@@ -280,9 +284,16 @@ export const NEON_MIN_CU = 0.25;
 /** Neon が止まるまでの、問い合わせの無い時間（秒。既定の 5 分）。 */
 export const NEON_SUSPEND_SECONDS = 300;
 
-/** Neon の DB のノード。土台が無料のプラン（Vercel Hobby・Netlify Free）なら Neon Free、それ以外は Neon Launch。 */
-function neonNode(id: string, hostPlan: string): ArchNodeIn {
-  const free = hostPlan === 'hobby' || hostPlan === 'free';
+/** 土台が無料のプラン（Vercel Hobby・Netlify Free・Cloudflare Free）か（DB の部品のプランと名前を分ける）。 */
+const freeHostPlan = (plan: string): boolean =>
+  plan === 'hobby' || plan === 'free';
+
+/**
+ * Neon の DB のノード。土台が無料のプランなら Neon Free、それ以外は Neon Launch。
+ * relayed は中継（Hyperdrive）を通してワイヤプロトコルでつなぐ形（serverless driver を使わない）。
+ */
+function neonNode(id: string, hostPlan: string, relayed = false): ArchNodeIn {
+  const free = freeHostPlan(hostPlan);
   return {
     id,
     label: free ? 'Neon Free（Postgres）' : 'Neon Launch（Postgres）',
@@ -292,7 +303,9 @@ function neonNode(id: string, hostPlan: string): ArchNodeIn {
       capacityUnits: NEON_MIN_CU,
       pauseAfterIdleSeconds: NEON_SUSPEND_SECONDS,
     },
-    facts: ['region', 'serverless-driver', 'scale-to-zero', 'compute-size'],
+    facts: relayed
+      ? ['region', 'scale-to-zero', 'compute-size']
+      : ['region', 'serverless-driver', 'scale-to-zero', 'compute-size'],
     billing: {
       accountId: 'neon',
       provider: 'neon',
@@ -308,29 +321,112 @@ function neonNode(id: string, hostPlan: string): ArchNodeIn {
   };
 }
 
-/** 構成の名前で、土台の DB（Supabase）に替えて出す DB の名前（D-77・D-114 段 2）。free は土台が無料のプラン。替えなければ undefined。 */
+// ---- 中継と DB の部品のノード（D-114 段 2b）----
+
+/**
+ * Hyperdrive（Cloudflare の DB の接続のプール）のノード。Cloudflare の既存の「Hyperdrive 経由で Supabase」と、
+ * 規則が自動で足す中継（CP-05）で同じノード。facts は中継として他の事業者の Postgres につなぐときだけ添える（既存の組は添えない）。
+ */
+export function hyperdriveNode(
+  plan: string,
+  facts?: readonly string[],
+): ArchNodeIn {
+  return {
+    id: 'hyperdrive',
+    role: 'db-proxy',
+    label: 'Hyperdrive',
+    config: { kind: 'db-proxy' },
+    ...(facts ? { facts: [...facts] } : {}),
+    billing: {
+      accountId: 'cloudflare',
+      provider: 'cloudflare',
+      planId: plan === 'free' ? 'hyperdrive-free' : 'hyperdrive-paid',
+      meters: { queries: 'queries' },
+    },
+  };
+}
+
+/** 規則が自動で足す中継のノード（RELAYS の id ごと。プランは土台のプラン）。 */
+const RELAY_NODES: Record<RelayId, (plan: string) => ArchNodeIn> = {
+  hyperdrive: (plan) => hyperdriveNode(plan, ['origin-db', 'idle-connections']),
+};
+
+/**
+ * DB の部品のノード（部品の事業者ごと）。id は土台の DB のノードの id（経路を変えない）。relayed は中継を通すか。
+ * 部品の事業者を足すときは、ここにノードの作り方を足す。
+ */
+const DB_PART_NODES: Partial<
+  Record<
+    ComponentProvider,
+    (opt: string, id: string, plan: string, relayed: boolean) => ArchNodeIn
+  >
+> = {
+  neon: (_opt, id, plan, relayed) => neonNode(id, plan, relayed),
+  aws: (opt, id) => ({ ...awsDbNode(opt), id }),
+};
+
+/** 土台 host の DB のスロットで、他の事業者の DB の部品（規則で許したもの）。 */
+const dbPartOn = (
+  host: Platform,
+  opt: string | undefined,
+): ComponentOption | undefined =>
+  opt === undefined
+    ? undefined
+    : CROSS_COMPONENTS.find(
+        (c) => c.slot === 'db' && c.id === opt && hostsOf(c).includes(host),
+      );
+
+/** 選んだ DB が他の事業者の部品か（土台の組み立てが自分の DB を置かず、applyCrossDb に任せる。D-114 段 2b）。 */
+export const isCrossDb = (host: Platform, opt: string | undefined): boolean =>
+  dbPartOn(host, opt) !== undefined;
+
+const partDefOf = (o: ComponentOption) =>
+  CROSS_PARTS.find(
+    (p) => p.slot === o.slot && p.id === o.id && p.platform === o.platform,
+  );
+
+/** 土台 host から DB の部品へつなぐ中継（規則から。CP-05）。 */
+const dbRelaysOn = (host: Platform, o: ComponentOption): readonly RelayId[] => {
+  const def = partDefOf(o);
+  return def ? relaysFor(host, def) : [];
+};
+
+/**
+ * 構成の名前に出す DB の名前（D-77・D-114 段 2・段 2b）。部品の title と、規則が足す中継の名前から作る
+ * （「Neon（Launch）」「AWS DynamoDB」「Hyperdrive + Neon（Launch）」）。free は土台が無料のプラン。
+ * host を渡すと、その土台に差せる部品だけ（土台の事業者自身の DB は undefined）。替えなければ undefined。
+ */
 export function crossDbName(
   db: string | undefined,
   free: boolean,
+  host?: Platform,
 ): string | undefined {
-  switch (db) {
-    case 'neon':
-      return free ? 'Neon（Free）' : 'Neon（Launch）';
-    case 'dynamodb':
-      return 'AWS DynamoDB';
-    case 'aurora':
-    case 'aurora-pause':
-      return 'AWS Aurora Serverless v2';
-    default:
-      return undefined;
-  }
+  const o =
+    host !== undefined
+      ? dbPartOn(host, db)
+      : CROSS_COMPONENTS.find((c) => c.slot === 'db' && c.id === db);
+  const t = o && partDefOf(o)?.title;
+  if (!o || t === undefined) return undefined;
+  const name = typeof t === 'string' ? t : free ? t.free : t.paid;
+  const relays = host !== undefined ? dbRelaysOn(host, o) : [];
+  return [...relays.map((r) => RELAYS[r].name), name].join(' + ');
 }
 
 /**
- * 土台の DB（役割 sql-db のノード。Vercel・Netlify の Supabase）を他の事業者の DB の部品（Neon・AWS の DynamoDB・Aurora）に
- * 差し替える（composeStack から、画像・API の前に呼ぶ）。差せる土台は規則（connections.ts）で決まる。ノードの id は変えない（経路はそのまま）。
- * 部品が送り手になる応答の転送（AWS の DB → 土台の関数。D-114 段 2）は、部品の送り出しと土台の受け取りの項目で数え（transferNodes。CP-06）、
+ * 構成の名前に DB の名前を入れる。名前に土台の DB（Supabase）があれば替え、無ければ（Cloudflare の「+ vinext」など）後ろに足す。
+ */
+export const withCrossDbName = (name: string, db: string): string =>
+  /Supabase (Free|Pro)/.test(name)
+    ? name.replace(/Supabase (Free|Pro)/, db)
+    : `${name} + ${db}`;
+
+/**
+ * 土台の DB（役割 sql-db のノード。Vercel・Netlify の Supabase、Cloudflare は組み立てが置く仮の DB）を他の事業者の DB の部品
+ * （Neon・AWS の DynamoDB・Aurora・RDS）に差し替える（composeStack から、画像・API の前に呼ぶ）。差せる土台・要る中継は規則（connections.ts）で決まる。
+ * ノードの id は変えない（経路はそのまま）。中継（Hyperdrive。CP-05）は経路の DB の手前に自動で足す。
+ * 部品が送り手になる応答の転送（AWS の DB → 土台の関数・中継。D-114 段 2）は、部品の送り出しと土台の受け取りの項目で数え（transferNodes。CP-06）、
  * 経路の DB の手前に置く。standby.db（差し替えの途中）が今と違えば、移す先の DB を `db-next` で経路に載せずに足す（新旧の両方の費用）。
+ * 移す先が土台の DB のときは、土台の組み立てが置いていなければ（Vercel・Netlify の Supabase）土台の DB を写して足す。
  */
 export function applyCrossDb(
   arch: ArchitectureInput,
@@ -339,43 +435,43 @@ export function applyCrossDb(
   choices: Choices,
   standby: Choices,
 ): ArchitectureInput {
-  const parts = CROSS_COMPONENTS.filter(
-    (c) => c.slot === 'db' && hostsOf(c).includes(host),
-  );
-  if (!parts.length) return arch;
+  if (
+    !CROSS_COMPONENTS.some((c) => c.slot === 'db' && hostsOf(c).includes(host))
+  )
+    return arch;
   const base = arch.nodes.find((n) => n.role === 'sql-db');
   if (!base) return arch;
-  const current = choices.db ?? 'supabase';
+  const current = choices.db;
   const next = standby.db;
-  const of = (opt: string, id: string): ArchNodeIn | undefined => {
-    if (opt === 'supabase') return { ...base, id };
-    const part = parts.find((c) => c.id === opt);
-    if (!part) return undefined;
-    if (part.platform === 'neon') return neonNode(id, plan);
-    if (part.platform === 'aws') return { ...awsDbNode(opt), id };
-    return undefined;
+  /** 部品の DB のノードと中継（部品でなければ undefined）。 */
+  const build = (opt: string | undefined, id: string) => {
+    const part = dbPartOn(host, opt);
+    const make = part && DB_PART_NODES[part.platform];
+    if (!part || !make) return undefined;
+    const relays = dbRelaysOn(host, part).map((r) => RELAY_NODES[r](plan));
+    return { db: make(part.id, id, plan, relays.length > 0), relays };
   };
-  const curNode = of(current, base.id);
-  let nodes = arch.nodes.map((n) => (n.id === base.id ? (curNode ?? n) : n));
-  const standbyNode =
-    next !== undefined && next !== current
-      ? of(next, `${base.id}-next`)
-      : undefined;
-  if (standbyNode) nodes = [...nodes, standbyNode];
-  const name = crossDbName(
-    curNode && current !== 'supabase' ? current : undefined,
-    plan === 'hobby' || plan === 'free',
-  );
-  if (!curNode || name === undefined) return { ...arch, nodes };
-  // DB が送り手の応答の転送（受け手は土台の処理。項目のある側だけノードを作る）。経路の DB の手前に置く
-  const out = transferNodes(curNode, host, 'DB の応答', 'per-query');
-  const routes = out.length
+  const cur = build(current, base.id);
+  let nodes = arch.nodes.map((n) => (n.id === base.id && cur ? cur.db : n));
+  const addNew = (ns: readonly ArchNodeIn[]) => {
+    for (const n of ns) if (!nodes.some((x) => x.id === n.id)) nodes.push(n);
+  };
+  if (next !== undefined && next !== current) {
+    const nxt = build(next, `${base.id}-next`);
+    if (nxt) addNew([...nxt.relays, nxt.db]);
+    // 土台の DB へ戻す途中: 土台の組み立てが移す先を置いていない（課金のある土台の DB が経路の上にある）ときだけ写す
+    else if (cur && base.billing) addNew([{ ...base, id: `${base.id}-next` }]);
+  }
+  const name = cur ? crossDbName(current, freeHostPlan(plan), host) : undefined;
+  if (!cur || name === undefined) return { ...arch, nodes };
+  // DB が送り手の応答の転送（受け手は土台の処理・中継。項目のある側だけノードを作る）。中継と転送を経路の DB の手前に置く
+  const out = transferNodes(cur.db, host, 'DB の応答', 'per-query');
+  const before = [...cur.relays, ...out].map((n) => n.id);
+  const routes = before.length
     ? Object.fromEntries(
         Object.entries(arch.routes).map(([cls, path]) => [
           cls,
-          path!.flatMap((id) =>
-            id === base.id ? [...out.map((n) => n.id), id] : [id],
-          ),
+          path!.flatMap((id) => (id === base.id ? [...before, id] : [id])),
         ]),
       )
     : arch.routes;
@@ -392,10 +488,12 @@ export function applyCrossDb(
         ? { ...n, facts: [...(n.facts ?? []), ...receiverFacts] }
         : n,
     );
+  // 中継は、差し替えの途中で土台の組み立てが同じ id のノードを置いていれば（Cloudflare の Hyperdrive 経由で Supabase）それを使う
+  const relays = cur.relays.filter((r) => !nodes.some((n) => n.id === r.id));
   return {
     ...arch,
-    name: arch.name.replace(/Supabase (Free|Pro)/, name),
-    nodes: [...nodes, ...out],
+    name: withCrossDbName(arch.name, name),
+    nodes: [...nodes, ...relays, ...out],
     routes,
   };
 }
@@ -658,17 +756,13 @@ export function applyCrossApi(
           ),
         ),
     );
+    // 連続した DB・転送のノード（中継 → 転送 → DB。D-114 段 2b）は 1 回だけ API の列にする
+    const gone = (id: string) => db.includes(id) || dbOut.has(id);
     routes = Object.fromEntries(
       Object.entries(routes).map(([cls, path]) => [
         cls,
         path!.flatMap((id, i) =>
-          dbOut.has(id)
-            ? []
-            : !db.includes(id)
-              ? [id]
-              : i > 0 && db.includes(path![i - 1]!)
-                ? []
-                : api,
+          !gone(id) ? [id] : i > 0 && gone(path![i - 1]!) ? [] : api,
         ),
       ]),
     );

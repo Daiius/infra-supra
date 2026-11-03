@@ -241,24 +241,27 @@ export const CROSS_PARTS: readonly PartDef[] = [
       'limit:cloudflare:workers-free:cpu-ms-per-request',
     ],
   },
-  // DB だけ Neon（D-77）。Vercel・Netlify の Supabase の代わり。API の置き場が同居のときだけ効く（他の事業者に置くと DB はその事業者の部品）
+  // ---- DB の部品（D-77・D-114 段 2・段 2b）。土台の DB（Vercel・Netlify の Supabase、Cloudflare の D1 など）の代わりに置く。----
+  // 説明（note）は土台によらない文にし、土台ごとのつなぎ方（認証・作り方・中継）は接続の規則の partNote に置く（土台を足すときは規則を足すだけ）。
+  // ノードは cross.ts の DB_PART_NODES（事業者ごと）、構成の名前は title（crossDbName）。API の置き場が同居のときだけ効く（他の事業者に置くと DB はその事業者の部品）
   {
     id: 'neon',
     slot: 'db',
     platform: 'neon',
     role: 'sql-db',
-    accepts: ['https-api'],
+    // serverless driver（HTTP。Vercel・Netlify の関数）と、Postgres のワイヤプロトコル（Cloudflare の Hyperdrive）
+    accepts: ['https-api', 'tcp-sql'],
     attachesTo: ['compute'],
     as: 'neon',
+    title: { free: 'Neon（Free）', paid: 'Neon（Launch）' },
     label: 'Neon: 従量の Postgres（閲覧が途切れると止まる）',
     note:
-      'DB を Supabase から Neon に替える。基本料が無く、動いている時間（最小の 0.25 CU）・保存・転送（月 500 GB の後）の分だけ払う。問い合わせが 5 分無いと止まり、止まっている間は計算に払わない（動いている割合は DB に届く件数から出す。ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。' +
-      '土台が無料のプラン（Vercel Hobby・Netlify Free）なら Neon Free（月 100 CU 時間・転送 5 GB・1 GB まで。超えると止まる）、それ以外は Neon Launch。' +
-      '関数から serverless driver（HTTP）で問い合わせる。東京のリージョンが無く、最寄りはシンガポール（往復の遅延は計算しない）。Neon のアカウントが 1 つ増え、請求が 2 つになる',
+      'DB を Neon に替える。基本料が無く、動いている時間（最小の 0.25 CU）・保存・転送（月 500 GB の後）の分だけ払う。問い合わせが 5 分無いと止まり、止まっている間は計算に払わない（動いている割合は DB に届く件数から出す。ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。' +
+      '土台が無料のプラン（Vercel Hobby・Netlify Free・Cloudflare Free）なら Neon Free（月 100 CU 時間・転送 5 GB・1 GB まで。超えると止まる）、それ以外は Neon Launch。' +
+      '東京のリージョンが無く、最寄りはシンガポール（往復の遅延は計算しない）。Neon のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: ['fact:neon:', 'pool:neon:', 'limit:neon:'],
   },
-  // DB だけ AWS（D-114 段 2・CP-15）。Vercel の Supabase の代わり。Vercel の Marketplace にある DynamoDB・Aurora を公開の口でつなぐ（CP-07）。
-  // id は AWS の構成の DB の部品と同じ（料金・ノードは stacks/aws.ts の dbNode）。差せる土台は規則（vercel-compute-dynamodb・vercel-compute-aurora）
+  // AWS の DB（D-114 段 2・段 2b）。公開の口でつなぐ（CP-07）。id は AWS の構成の DB の部品と同じ（料金・ノードは stacks/aws.ts の dbNode）
   {
     id: 'dynamodb',
     slot: 'db',
@@ -267,15 +270,14 @@ export const CROSS_PARTS: readonly PartDef[] = [
     accepts: ['https-api'],
     attachesTo: ['compute'],
     as: 'dynamodb',
+    title: 'AWS DynamoDB',
     label: 'AWS: DynamoDB（オンデマンド）',
     note:
-      'DB を Supabase から AWS の DynamoDB（東京・オンデマンド）に替える（Vercel の Marketplace で作る）。読み書きの単位で課金し、時間課金のコンピュートが無い（保存は 25 GB 月まで無料）。' +
-      '関数から OIDC の一時的な認証で SDK（HTTPS）を呼ぶ。DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える' +
-      '（Vercel の関数と同じリージョンなら安くなる可能性があるが、公式に記載が無く未確認）。請求は AWS（既定のメールの送信の Amazon SES と同じアカウントなので、アカウントは増えない）。往復の遅延は計算しない',
+      'DB を AWS の DynamoDB（東京・オンデマンド）に替える。読み書きの単位で課金し、時間課金のコンピュートが無い（保存は 25 GB 月まで無料）。' +
+      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える。請求は AWS。往復の遅延は計算しない',
     premiseRefs: [
       'fact:aws:dynamodb-on-demand:request-units',
       'pool:aws:dynamodb-on-demand:dynamodb-free-storage',
-      'fact:aws:data-transfer-out:dynamodb-out',
       'pool:aws:data-transfer-out:internet-free-transfer',
     ],
   },
@@ -302,18 +304,32 @@ export const CROSS_PARTS: readonly PartDef[] = [
     accepts: ['tcp-sql'],
     attachesTo: ['compute'],
     as: a.id,
+    title: 'AWS Aurora Serverless v2',
     label: `AWS: ${a.label}`,
     note:
-      `DB を Supabase から AWS の Aurora PostgreSQL（東京・Serverless v2・I/O-Optimized）に替える（Vercel の Marketplace で作る）。ACU の時間で課金し、${a.size}。` +
-      '関数は OIDC の一時的な認証で IAM 認証のトークンを作り、公開のエンドポイントに接続のプールでつなぐ（公開の設定は推測）。' +
-      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える（Vercel の関数と同じリージョンなら安くなる可能性があるが、公式に記載が無く未確認）。' +
-      '請求は AWS（既定のメールの送信の Amazon SES と同じアカウントなので、アカウントは増えない）。往復の遅延は計算しない',
+      `DB を AWS の Aurora PostgreSQL（東京・Serverless v2・I/O-Optimized）に替える。ACU の時間で課金し、${a.size}。` +
+      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える。公開の IPv4 のアドレスの時間課金は未確認で数えない。請求は AWS。往復の遅延は計算しない',
     premiseRefs: [
       ...a.refs,
-      'fact:aws:data-transfer-out:aurora-out',
       'pool:aws:data-transfer-out:internet-free-transfer',
     ],
   })),
+  // 公開の RDS（D-114 段 2b）。今は Cloudflare（Hyperdrive）からだけ（Vercel の Marketplace には無い）
+  {
+    id: 'rds',
+    slot: 'db',
+    platform: 'aws',
+    role: 'sql-db',
+    accepts: ['tcp-sql'],
+    attachesTo: ['compute'],
+    as: 'rds',
+    title: 'AWS RDS for PostgreSQL',
+    label: 'AWS: RDS for PostgreSQL（db.t4g.micro）',
+    note:
+      'DB を AWS の RDS for PostgreSQL（東京・db.t4g.micro・Single-AZ）に替える。時間課金で、使われていなくても毎月かかる（ディスクは 20 GiB から）。' +
+      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える。公開の IPv4 のアドレスの時間課金は未確認で数えない。請求は AWS。往復の遅延は計算しない',
+    premiseRefs: ['pool:aws:data-transfer-out:internet-free-transfer'],
+  },
   // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の手間・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
   // プランは 2GB と 4GB（ディスクが 2 倍）。プランの間の移し替えも API と DB のデータの移行として扱う（仮定）
   ...(['2gb', '4gb'] as const).map((plan): PartDef => ({

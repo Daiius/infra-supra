@@ -41,17 +41,39 @@ export type ConnectionRule = {
   /** 選ぶ単位（スロット）。役割の上の選ぶ単位として残す（CP-02）。 */
   slot: SlotId;
   from: { providers: readonly Endpoint[]; role?: Role };
-  to: { providers: readonly Endpoint[]; role: Role; port: Port };
+  to: {
+    providers: readonly Endpoint[];
+    role: Role;
+    port: Port;
+    /** 受ける部品の id（省略は、事業者・役割・口が合う部品すべて）。 */
+    parts?: readonly string[];
+  };
   /** この接続が成り立つフレームワーク（省略はすべて）。 */
   frameworks?: readonly FrameworkId[];
-  /** ok: そのまま・needs-relay: 中継（relay）が要る・blocked: つなげない（reason を出す）。段 1 は ok だけ。 */
+  /**
+   * ok: そのまま・needs-relay: 中継（relay。RELAYS の id）が要る・blocked: つなげない（reason を出す）。
+   * 中継は差し方（cross.ts）が自動で足し、明細・構成図に出す（CP-05）。
+   */
   verdict: 'ok' | 'needs-relay' | 'blocked';
-  relay?: readonly string[];
+  relay?: readonly RelayId[];
   reason?: string;
   /** 根拠の要約（転送の課金は書かない。OUTBOUND・INBOUND の項目で数える）。 */
   basis: string;
+  /**
+   * 部品の説明（ⓘ）に添える、この土台からのつなぎ方の文（土台ごとに違う認証・作り方・中継。D-114 段 2b）。
+   * 部品の説明は土台によらない文にし、土台ごとの文はここに置く（土台を足すときは規則を足すだけで済む）。
+   */
+  partNote?: string;
+  /** 部品の前提に添える参照（この土台からつなぐときだけ効く事実。partNote と同じ考え方）。 */
+  partRefs?: readonly string[];
   sources: readonly Source[];
 };
+
+/** 規則が自動で足す中継（CP-05）。名前は構成の名前・部品の説明に使う。ノードは cross.ts の RELAY_NODES。 */
+export const RELAYS = {
+  hyperdrive: { name: 'Hyperdrive', provider: 'cloudflare' },
+} as const satisfies Record<string, { name: string; provider: Endpoint }>;
+export type RelayId = keyof typeof RELAYS;
 
 /** 部品と土台の接続の形（ComponentOption.link。部品の側の役割と口）。 */
 export type CrossLink = {
@@ -73,6 +95,11 @@ export type PartDef = Omit<ComponentOption, 'hosts' | 'link'> & {
   attachesTo: readonly Role[];
   /** 振る舞いが同じ部品の id（CrossLink.as）。 */
   as: string;
+  /**
+   * 構成の名前に出す部品の名前（DB の部品。crossDbName）。free は土台が無料のプランのとき（Neon は Free になる）。
+   * 中継（Hyperdrive）が要る土台では、その名前を前に足す（「Hyperdrive + Neon（Launch）」）。
+   */
+  title?: string | { free: string; paid: string };
 };
 
 const at = (retrievedAt: string, urls: readonly string[]): Source[] =>
@@ -96,6 +123,16 @@ const ALL_PLATFORMS = [
   'netlify',
   'gcp',
 ] as const satisfies readonly Platform[];
+
+/** Vercel から AWS の DB へつなぐときの部品の説明の文（D-114 段 2。how は認証とつなぎ方）。 */
+const VERCEL_AWS_DB_NOTE = (how: string) =>
+  `Vercel の Marketplace で作る。${how}。Vercel の関数と同じリージョンなら DB の応答の転送が安くなる可能性があるが、公式に記載が無く未確認。` +
+  'AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えない';
+
+/** Hyperdrive を中継にするときの部品の説明の文（D-114 段 2b）。 */
+const HYPERDRIVE_NOTE =
+  'Worker から Hyperdrive（Cloudflare の DB の接続のプール。Free は 1 日 10 万クエリまで・Paid は無制限・転送の課金なし）を通し、node-postgres などのドライバーで DB のユーザーとパスワードでつなぐ（自動で足す中継）。' +
+  'Hyperdrive は使っていない接続を最大 10 分保つので、問い合わせが途切れると止まる DB は止まりにくい可能性がある（未確認・計算に入れない）。Hyperdrive の問い合わせのキャッシュは計算に入れていない';
 
 /**
  * 接続の規則。今の組（D-52・D-65・D-67・D-69・D-71・D-77・D-88・D-95・D-98）を、つながり方ごとにまとめ直したもの。
@@ -341,6 +378,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'TCP でつなぐなら serverless の関数には接続のプール（PgBouncer）が推奨。Vercel の Marketplace に Neon があり、新しく作ると請求は Vercel にまとまる（ここでは Neon に直接払う形で数える）。' +
       'Netlify Functions からも同じ（Netlify 自身の Postgres（Netlify Database・クレジットで課金）は扱っていない）。' +
       'Neon の AWS のリージョンに東京は無く、近いのはシンガポール（往復の遅延は計算しない。AX-13・AX-14）',
+    partNote: '関数から serverless driver（HTTP）で問い合わせる',
     sources: at('2026-11-02', [
       'https://neon.com/docs/serverless/serverless-driver',
       'https://neon.com/docs/connect/connection-pooling',
@@ -361,6 +399,10 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'DynamoDB は認証つきの HTTPS の API（SDK）で呼ぶ。Vercel の関数は OIDC で AWS の一時的な認証を得られ（全プラン）、Marketplace の DynamoDB の雛形も OIDC でつなぐ。' +
       'Vercel の Marketplace に DynamoDB があり、請求は AWS（「All billing is handled directly through AWS」。料金は AWS の料金表）。中継（Static IPs・NAT）は要らない。' +
       '関数の地域と DB の地域の違い（Vercel の関数の既定は iad1）による遅延は計算しない（CP-08）',
+    partNote: VERCEL_AWS_DB_NOTE(
+      '関数から OIDC の一時的な認証で SDK（HTTPS）を呼ぶ',
+    ),
+    partRefs: ['fact:aws:data-transfer-out:dynamodb-out'],
     sources: at('2026-11-03', [
       'https://vercel.com/marketplace/aws',
       'https://vercel.com/docs/oidc/aws',
@@ -372,8 +414,18 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
     id: 'vercel-compute-aurora',
     slot: 'db',
     from: { providers: ['vercel'], role: 'compute' },
-    to: { providers: ['aws'], role: 'sql-db', port: 'tcp-sql' },
+    // Marketplace にあるのは Aurora だけ（公開の RDS は後の段の候補）
+    to: {
+      providers: ['aws'],
+      role: 'sql-db',
+      port: 'tcp-sql',
+      parts: ['aurora', 'aurora-pause'],
+    },
     verdict: 'ok',
+    partNote: VERCEL_AWS_DB_NOTE(
+      '関数は OIDC の一時的な認証で IAM 認証のトークンを作り、公開のエンドポイントに接続のプールでつなぐ（公開の設定は推測）',
+    ),
+    partRefs: ['fact:aws:data-transfer-out:aurora-out'],
     basis:
       'Vercel の Marketplace の Aurora PostgreSQL は、設定の手順で DB を作り、セキュリティグループ・IAM のロール・OIDC の信頼を Marketplace が設定する。' +
       '関数は OIDC で得た一時的な認証で RDS の IAM 認証のトークンを作り、クラスターのエンドポイント（PGHOST）に Postgres（TCP）でつなぐ（接続のプールを使う）。請求は AWS。' +
@@ -387,6 +439,95 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
         'https://vercel.com/docs/networking/secure-compute',
         'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html',
         'https://aws.amazon.com/rds/aurora/pricing/',
+      ]),
+    ],
+  },
+  // ---- Cloudflare の Worker から他の事業者の DB（D-114 段 2b・2026-11-04 のユーザーの決定）----
+  // Postgres（Neon・AWS の RDS / Aurora）は Hyperdrive を中継にする（CP-16: Worker から直接の TCP は出さない）。
+  // DynamoDB は認証つきの HTTPS の API なので中継なし
+  {
+    id: 'cf-compute-hyperdrive-neon',
+    slot: 'db',
+    from: { providers: ['cloudflare'], role: 'compute' },
+    to: { providers: ['neon'], role: 'sql-db', port: 'tcp-sql' },
+    verdict: 'needs-relay',
+    relay: ['hyperdrive'],
+    basis:
+      'Workers から外の Postgres へは Hyperdrive を勧める（接続のプールを Cloudflare の側に持つ）。Hyperdrive の接続先に Neon の接続文字列（接続のプールを外したもの）を設定し、Worker は node-postgres などのドライバーで Hyperdrive の binding につなぐ（Neon の serverless driver は使わない）。' +
+      'Hyperdrive は Workers の Free・Paid に含まれ（Free は 1 日 10 万クエリ・Paid は無制限）、転送に課金しない。Neon の転送は Neon の公開の転送の項目で数える。' +
+      'Neon に東京のリージョンは無い（往復の遅延は計算しない。CP-08）',
+    partNote: HYPERDRIVE_NOTE,
+    partRefs: [
+      'fact:cloudflare:hyperdrive-paid:',
+      'fact:cloudflare:hyperdrive-free:',
+    ],
+    sources: [
+      ...at('2026-11-04', [
+        'https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/neon/',
+        'https://developers.cloudflare.com/hyperdrive/platform/pricing/',
+        'https://developers.cloudflare.com/hyperdrive/platform/limits/',
+        'https://developers.cloudflare.com/hyperdrive/concepts/how-hyperdrive-works/',
+      ]),
+      ...at('2026-11-02', ['https://neon.com/pricing']),
+    ],
+  },
+  {
+    id: 'cf-compute-hyperdrive-aws',
+    slot: 'db',
+    from: { providers: ['cloudflare'], role: 'compute' },
+    to: {
+      providers: ['aws'],
+      role: 'sql-db',
+      port: 'tcp-sql',
+      parts: ['aurora', 'aurora-pause', 'rds'],
+    },
+    verdict: 'needs-relay',
+    relay: ['hyperdrive'],
+    basis:
+      'Hyperdrive の公式の手順（AWS RDS and Aurora）: DB の公開のアクセスを有効にし、セキュリティグループで Cloudflare の IP からの接続を許し、DB のユーザーとパスワードの接続文字列を Hyperdrive に設定する（IAM 認証の記載は無い。私設の網へは Cloudflare Tunnel でもつなげるが扱わない）。' +
+      'Hyperdrive は転送に課金しない。DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）。公開の IPv4 のアドレスの時間課金は未確認として数えない（段 2 の Aurora と同じ）',
+    partNote: `${HYPERDRIVE_NOTE}。DB は公開のアクセスを有効にし、Cloudflare の IP からの接続を許す（IAM 認証でなく DB のユーザーとパスワード）`,
+    partRefs: [
+      'fact:cloudflare:hyperdrive-paid:',
+      'fact:cloudflare:hyperdrive-free:',
+      'fact:aws:data-transfer-out:db-out-internet',
+    ],
+    sources: [
+      ...at('2026-11-04', [
+        'https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/aws-rds-aurora/',
+        'https://developers.cloudflare.com/hyperdrive/platform/pricing/',
+        'https://developers.cloudflare.com/hyperdrive/platform/limits/',
+        'https://aws.amazon.com/rds/postgresql/pricing/',
+      ]),
+      ...at('2026-11-03', [
+        'https://aws.amazon.com/rds/aurora/pricing/',
+        'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-northeast-1/index.json',
+      ]),
+    ],
+  },
+  {
+    id: 'cf-compute-dynamodb',
+    slot: 'db',
+    from: { providers: ['cloudflare'], role: 'compute' },
+    to: { providers: ['aws'], role: 'sql-db', port: 'https-api' },
+    verdict: 'ok',
+    basis:
+      'DynamoDB の API は署名（Signature Version 4）した HTTP(S) の POST で、Worker の fetch（サブリクエスト）から呼べる。Worker から外への fetch は課金されず、応答を待つ時間は CPU 時間に数えない。' +
+      '認証は IAM のアクセスキー（Worker の Secret に置く。Cloudflare から AWS の一時的な認証を得る仕組みは扱わない）。DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）',
+    partNote:
+      'Worker から IAM のアクセスキー（Secret に置く）で署名した HTTPS の要求（SDK など）を呼ぶ。中継は要らない。' +
+      '問い合わせ 1 回が Worker のサブリクエスト 1 回になる（1 回の呼び出しで Free は 50・Paid は 10,000 まで。このモデルでは上限に当たるかを見ていない）',
+    partRefs: ['fact:aws:data-transfer-out:db-out-internet'],
+    sources: [
+      ...at('2026-11-04', [
+        'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.LowLevelAPI.html',
+        'https://developers.cloudflare.com/workers/platform/limits/',
+      ]),
+      ...at('2026-11-03', [
+        'https://aws.amazon.com/dynamodb/pricing/on-demand/',
+      ]),
+      ...at('2026-11-02', [
+        'https://developers.cloudflare.com/workers/platform/pricing/',
       ]),
     ],
   },
@@ -427,10 +568,16 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
 // ---- 部品を差せる土台（規則から導く）----
 
 /** 規則が「土台 host と部品 part」の組を許すか（フレームワークの条件は返す。undefined はすべて）。許さないなら null。 */
+/** 規則に当てる部品の形（id は規則が部品を絞るとき（to.parts）だけ見る）。 */
+type PartKey = Pick<
+  PartDef,
+  'slot' | 'platform' | 'role' | 'accepts' | 'attachesTo'
+> & { id?: string };
+
 function ruleMatch(
   r: ConnectionRule,
   host: Platform,
-  part: Pick<PartDef, 'slot' | 'platform' | 'role' | 'accepts' | 'attachesTo'>,
+  part: PartKey,
 ): readonly FrameworkId[] | undefined | null {
   if (r.slot !== part.slot || r.verdict === 'blocked') return null;
   // 土台が呼ぶ側（部品の口へつなぐ）
@@ -440,7 +587,9 @@ function ruleMatch(
     part.attachesTo.includes(r.from.role) &&
     r.to.providers.includes(part.platform) &&
     r.to.role === part.role &&
-    part.accepts.includes(r.to.port);
+    part.accepts.includes(r.to.port) &&
+    (r.to.parts === undefined ||
+      (part.id !== undefined && r.to.parts.includes(part.id)));
   // 部品が呼ぶ側（土台をオリジンにする前段の CDN など）
   const partCalls =
     r.from.providers.includes(part.platform) &&
@@ -453,10 +602,7 @@ function ruleMatch(
 
 /** 部品を土台 host に差せるフレームワーク（undefined はすべて・null は差せない）。規則の和と部品の条件の積。 */
 export function partFrameworksOn(
-  part: Pick<
-    PartDef,
-    'slot' | 'platform' | 'role' | 'accepts' | 'attachesTo' | 'frameworks'
-  >,
+  part: PartKey & Pick<PartDef, 'frameworks'>,
   host: Platform,
   rules: readonly ConnectionRule[] = CONNECTION_RULES,
 ): readonly FrameworkId[] | undefined | null {
@@ -481,24 +627,44 @@ export function partOptions(
   part: PartDef,
   rules: readonly ConnectionRule[] = CONNECTION_RULES,
 ): ComponentOption[] {
+  // 差せるフレームワークと、土台ごとの文（規則の partNote・partRefs）が同じ土台をまとめる
   const groups = new Map<
     string,
-    { hosts: Platform[]; frameworks: readonly FrameworkId[] | undefined }
+    {
+      hosts: Platform[];
+      frameworks: readonly FrameworkId[] | undefined;
+      notes: string[];
+      refs: string[];
+    }
   >();
   for (const host of ALL_PLATFORMS) {
     if (host === part.platform) continue;
     const fws = partFrameworksOn(part, host, rules);
     if (fws === null) continue;
-    const key = JSON.stringify(fws ?? null);
+    const matched = rulesFor(host, part, rules);
+    const notes = matched.flatMap((r) => (r.partNote ? [r.partNote] : []));
+    const refs = matched.flatMap((r) => r.partRefs ?? []);
+    const key = JSON.stringify([fws ?? null, notes, refs]);
     const g = groups.get(key);
     if (g) g.hosts.push(host);
-    else groups.set(key, { hosts: [host], frameworks: fws });
+    else groups.set(key, { hosts: [host], frameworks: fws, notes, refs });
   }
-  const { role, accepts, attachesTo, as, frameworks: _f, ...rest } = part;
+  const {
+    role,
+    accepts,
+    attachesTo,
+    as,
+    frameworks: _f,
+    title: _t,
+    ...rest
+  } = part;
   void attachesTo;
   void _f;
+  void _t;
   return [...groups.values()].map((g) => ({
     ...rest,
+    note: [rest.note, ...g.notes].join('。'),
+    premiseRefs: [...rest.premiseRefs, ...g.refs],
     ...(g.frameworks ? { frameworks: [...g.frameworks] } : {}),
     hosts: g.hosts,
     link: { as, role, accepts },
@@ -508,10 +674,24 @@ export function partOptions(
 /** 土台 host と部品の組を許す規則（根拠の合成・前提の文に使う）。 */
 export function rulesFor(
   host: Platform,
-  part: Pick<PartDef, 'slot' | 'platform' | 'role' | 'accepts' | 'attachesTo'>,
+  part: PartKey,
   rules: readonly ConnectionRule[] = CONNECTION_RULES,
 ): ConnectionRule[] {
   return rules.filter((r) => ruleMatch(r, host, part) !== null);
+}
+
+/**
+ * 土台 host から部品へつなぐのに自動で足す中継（CP-05）。中継なしでつなげる規則があればそれを使う（中継は要らない）。
+ * 無ければ、中継が要る規則の中継（最初の規則）。
+ */
+export function relaysFor(
+  host: Platform,
+  part: PartKey,
+  rules: readonly ConnectionRule[] = CONNECTION_RULES,
+): readonly RelayId[] {
+  const matched = rulesFor(host, part, rules);
+  if (matched.some((r) => r.verdict === 'ok')) return [];
+  return matched.find((r) => r.verdict === 'needs-relay')?.relay ?? [];
 }
 
 // ---- 事業者の間の転送（CP-06）----
@@ -528,6 +708,10 @@ export type TransferItem = {
     /** ノードの名前の事業者の名前。 */
     name: string;
     facts: readonly string[];
+    /** 受け手の事業者ごとの事実（省略の受け手は facts）。 */
+    factsTo?: Readonly<Partial<Record<string, readonly string[]>>>;
+    /** 数えない受け手の事業者（同じリージョンの扱いなど、受け手で課金が変わるとき）。 */
+    freeTo?: readonly string[];
     /** 課金先（プランは送り手の処理のプランを受ける）。 */
     billing: (planId: string) => NonNullable<ArchNodeIn['billing']>;
   };
@@ -540,15 +724,20 @@ export type TransferItem = {
 };
 
 /**
- * AWS の DB から別の事業者の関数への応答を、インターネットへの転送として数えるか（D-114 段 2・2026-11-03 のユーザーの決定）。
+ * AWS の DB から Vercel の関数への応答を、インターネットへの転送として数えるか（D-114 段 2・2026-11-03 のユーザーの決定）。
  * 同じリージョンの AWS のサービス間（$0）に当たると公式に確かめられたら false にする。
+ * AWS の外で動く受け手（Cloudflare の Worker・Hyperdrive。D-114 段 2b）は、この切り替えによらずインターネットへの転送で数える。
  */
 export const AWS_DB_OUT_TO_INTERNET = true;
 
-/** 応答の転送を数える AWS の DB のプランと、その根拠の事実（catalog の data-transfer-out の facts）。 */
+/**
+ * 応答の転送を数える AWS の DB のプランと、Vercel が受け手のときの根拠の事実（catalog の data-transfer-out の facts）。
+ * それ以外の受け手は db-out-internet。
+ */
 const AWS_DB_OUT = [
-  { planId: 'dynamodb-on-demand', fact: 'dynamodb-out' },
-  { planId: 'aurora-serverless-v2-io', fact: 'aurora-out' },
+  { planId: 'dynamodb-on-demand', vercelFact: 'dynamodb-out' },
+  { planId: 'aurora-serverless-v2-io', vercelFact: 'aurora-out' },
+  { planId: 'rds-postgres-t4g-micro', vercelFact: undefined },
 ] as const;
 
 /** 送り出し（egress）の項目。送り手の処理（role: compute）の課金先で引く。 */
@@ -593,34 +782,37 @@ export const OUTBOUND: readonly TransferItem[] = [
       ...at('2026-11-02', ['https://aws.amazon.com/lambda/pricing/']),
     ],
   },
-  // AWS の DB（DynamoDB・Aurora）から別の事業者の関数（Vercel）へ返す応答（D-114 段 2）。ユーザーの決定（2026-11-03）で
-  // インターネットへの転送（Data Transfer Out）として数える。Vercel の関数と同じリージョンの扱い（AWS のサービス間は $0）が
-  // 公式に確かめられたら、AWS_DB_OUT_TO_INTERNET を false にすれば課金なし（ノードを作らない）に切り替わる（扱いはここ 1 か所）
-  ...AWS_DB_OUT.map(({ planId, fact }): TransferItem => ({
+  // AWS の DB（DynamoDB・Aurora・RDS）から別の事業者（Vercel の関数・Cloudflare の Worker と Hyperdrive）へ返す応答（D-114 段 2・段 2b）。
+  // ユーザーの決定（2026-11-03）でインターネットへの転送（Data Transfer Out）として数える。Vercel の関数と同じリージョンの扱い
+  // （AWS のサービス間は $0）が公式に確かめられたら、AWS_DB_OUT_TO_INTERNET を false にすれば Vercel だけ課金なし（ノードを作らない）に
+  // 切り替わる（扱いはここ 1 か所）。Cloudflare は AWS の外なので、いつもインターネットへの転送
+  ...AWS_DB_OUT.map(({ planId, vercelFact }): TransferItem => ({
     provider: 'aws',
     planIds: [planId],
-    ...(AWS_DB_OUT_TO_INTERNET
-      ? {
-          meter: {
-            idPrefix: 'aws-db',
-            name: 'AWS',
-            facts: [fact],
-            billing: () =>
-              awsBill('data-transfer-out', { 'egress-gb': 'internet-out' }),
-          },
-        }
-      : {}),
+    meter: {
+      idPrefix: 'aws-db',
+      name: 'AWS',
+      facts: ['db-out-internet'],
+      ...(vercelFact ? { factsTo: { vercel: [vercelFact] } } : {}),
+      ...(AWS_DB_OUT_TO_INTERNET ? {} : { freeTo: ['vercel'] }),
+      billing: () =>
+        awsBill('data-transfer-out', { 'egress-gb': 'internet-out' }),
+    },
     basis:
-      'DynamoDB・Aurora の料金ページに外への転送の単価の表は無く、AWS 共通の Data Transfer Out（東京 → インターネット $0.114/GB・全サービス・全リージョン合わせて月 100 GB は無料）の適用と読んだ。' +
-      'Vercel の関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載が無い（未確認）',
-    sources: at('2026-11-03', [
-      'https://aws.amazon.com/dynamodb/pricing/on-demand/',
-      'https://aws.amazon.com/rds/aurora/pricing/',
-      'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-northeast-1/index.json',
-      'https://aws.amazon.com/ec2/pricing/on-demand/',
-      'https://vercel.com/docs/regions',
-      'https://vercel.com/docs/marketplace-storage',
-    ]),
+      'DynamoDB・Aurora・RDS の料金ページに外への転送の単価の表は無く（取れず）、AWS 共通の Data Transfer Out（東京 → インターネット $0.114/GB・全サービス・全リージョン合わせて月 100 GB は無料）の適用と読んだ。' +
+      'Vercel の関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載が無い（未確認）。' +
+      'Cloudflare の Worker・Hyperdrive は AWS の外なので、インターネットへの転送',
+    sources: [
+      ...at('2026-11-03', [
+        'https://aws.amazon.com/dynamodb/pricing/on-demand/',
+        'https://aws.amazon.com/rds/aurora/pricing/',
+        'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-northeast-1/index.json',
+        'https://aws.amazon.com/ec2/pricing/on-demand/',
+        'https://vercel.com/docs/regions',
+        'https://vercel.com/docs/marketplace-storage',
+      ]),
+      ...at('2026-11-04', ['https://aws.amazon.com/rds/postgresql/pricing/']),
+    ],
   })),
   {
     provider: 'netlify',
@@ -784,6 +976,9 @@ export function transferNodes(
   ) => {
     if (!item?.meter) return [];
     const m = item.meter;
+    // 受け手で課金しない（送り出しの項目の受け手の条件。同じリージョンの扱いなど）
+    if (dir === 'out' && m.freeTo?.includes(to)) return [];
+    const facts = (dir === 'out' ? m.factsTo?.[to] : undefined) ?? m.facts;
     return [
       {
         id: `${m.idPrefix}-${dir}${typeof requestKB === 'number' ? '-api' : ''}`,
@@ -800,7 +995,7 @@ export function transferNodes(
               ? { egressPerQuery: true }
               : {}),
         },
-        facts: [...m.facts],
+        facts: [...facts],
         billing: m.billing(planId),
       } as ArchNodeIn,
     ];

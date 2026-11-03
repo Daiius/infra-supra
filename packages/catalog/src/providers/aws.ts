@@ -315,6 +315,15 @@ export const aws: PriceBookInput = {
       url: 'https://aws.amazon.com/ec2/pricing/on-demand/',
       retrievedAt: '2026-11-03',
     },
+    // AWS の外の事業者（Cloudflare の Worker・Hyperdrive）から AWS の DB を使う形（2026-11-04 取得。D-114 段 2b）
+    rdsTransfer: {
+      url: 'https://aws.amazon.com/rds/postgresql/pricing/',
+      retrievedAt: '2026-11-04',
+    },
+    dynamodbApi: {
+      url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.LowLevelAPI.html',
+      retrievedAt: '2026-11-04',
+    },
   },
   allowancePools: [
     {
@@ -1478,6 +1487,21 @@ export const aws: PriceBookInput = {
             'dataTransferPricesDb',
             'vercelRegions',
             'vercelMarketplaceStorage',
+          ],
+        },
+        {
+          // AWS の外の事業者（Cloudflare）から DynamoDB・Aurora・RDS を使う形（D-114 段 2b）。2026-11-04 に原文で確認
+          id: 'db-out-internet',
+          premise:
+            'AWS の外の事業者（Cloudflare の Worker・Hyperdrive）へ DB（DynamoDB・Aurora・RDS）が返す応答は、インターネットへの転送（Data Transfer Out。東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料）で数える。' +
+            'DynamoDB は受信に課金しない。Aurora・RDS for PostgreSQL の料金ページは転送を「in」と「out」で数えると書くが、インターネットへの単価の表は取れず（RDS は畳まれた表で、取得した文に無い）、AWS 共通の単価の適用と読んだ。受信の課金は記載が無い（未確認・数えない）。' +
+            'DynamoDB の API は署名した HTTP(S) の POST で、AWS の外からも呼べる',
+          sourceIds: [
+            'dynamodbTransfer',
+            'auroraTransfer',
+            'rdsTransfer',
+            'dynamodbApi',
+            'dataTransferPricesDb',
           ],
         },
       ],

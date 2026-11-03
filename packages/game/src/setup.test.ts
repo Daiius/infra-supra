@@ -34,7 +34,17 @@ describe('setupSlots', () => {
     ]);
     expect(
       slots.find((x) => x.slot === 'db')!.options.map((o) => o.id),
-    ).toEqual(['d1', 'kv', 'hyperdrive']);
+    ).toEqual([
+      'd1',
+      'kv',
+      'hyperdrive',
+      // 他の事業者の DB（D-114 段 2b）
+      'neon',
+      'dynamodb',
+      'aurora',
+      'aurora-pause',
+      'rds',
+    ]);
     expect(
       slots.find((x) => x.slot === 'email')!.options.map((o) => o.id),
     ).toEqual([
