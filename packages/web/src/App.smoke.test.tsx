@@ -439,7 +439,7 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-27 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
+  it('W-29 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
     await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
@@ -511,6 +511,35 @@ describe('ゲームモードの画面', () => {
         within(l).queryByText(/^サーバーの島（閲覧ごとに一部だけ描く）/),
       ),
     ).toBe(true);
+  });
+
+  it('W-27 始める画面: Google Cloud × Next.js で部品ごとにキャッシュを選び ISR のキャッシュを「キャッシュしない」にすると、表と同じく見取り図も毎回描くになる（D-111・OCL-CD192A98）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    const sources = () =>
+      [
+        ...within(pageOf('personal'))
+          .getByRole('list', { name: '個人向けのページの見取り図' })
+          .querySelectorAll('[data-source]'),
+      ].map((x) => x.getAttribute('data-source'));
+    pick(/^記事コミュニティ/);
+    pick(/^Next\.js（App Router）/);
+    pick(/^Google Cloud/);
+    // 描き方はカードのページの欄のチップで選ぶ（D-112）
+    pickStrategy('個人向けのページ', '部品ごとにキャッシュ');
+    expect(chosenOf('personal')).toBe('cache-components');
+    expect(sources()).toContain('cc-dynamic');
+    // ISR のキャッシュを「キャッシュしない」に: 行（チップ）は毎回描く、見取り図も同じ
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: /^ISR のキャッシュ/ }),
+      ).getByRole('radio', { name: /^キャッシュしない/ }),
+    );
+    expect(chosenOf('personal')).toBe('ssr');
+    expect(sources()).not.toContain('cc-dynamic');
+    expect(sources()).not.toContain('cc-cached');
+    expect(sources()).toContain('ssr');
   });
 
   it('W-14 ゲームの途中で個人向けのページの描き方を替える（手間 4・来月から。D-107）', async () => {
