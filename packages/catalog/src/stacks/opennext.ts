@@ -170,6 +170,7 @@ export function composeOpenNext(
     ),
     {
       id: 'server',
+      role: 'compute',
       label: 'Lambda（OpenNext のサーバーの関数）',
       config: {
         kind: 'function',
@@ -187,6 +188,7 @@ export function composeOpenNext(
       ? [
           {
             id: 'image-fn',
+            role: 'image-transform',
             label: 'Lambda（OpenNext の画像の最適化）',
             config: {
               kind: 'function',
@@ -209,6 +211,7 @@ export function composeOpenNext(
           {
             // SQS から起動し、HEAD でサーバーの関数を呼んで作り直す。応答を待つ間も課金される（壁時計時間はサーバーの再生成と同じ）
             id: 'revalidator',
+            role: 'compute',
             label: 'Lambda（OpenNext の再検証の関数）',
             config: {
               kind: 'function',
@@ -219,6 +222,7 @@ export function composeOpenNext(
           } as ArchNodeIn,
           {
             id: 's3-cache',
+            role: 'object-store',
             label: 'S3（ISR のキャッシュ）',
             config: {
               kind: 'object-storage',
@@ -234,6 +238,7 @@ export function composeOpenNext(
           {
             // タグの表: 閲覧で読み、再生成で書く（1 回 1 単位と仮定）
             id: 'tags',
+            role: 'kv',
             label: 'DynamoDB（タグのキャッシュ）',
             config: { kind: 'kv', mode: 'cache' },
             billing: bill('dynamodb-on-demand', {

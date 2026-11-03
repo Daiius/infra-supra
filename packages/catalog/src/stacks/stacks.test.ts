@@ -19,7 +19,12 @@ const books = loadPriceBooks();
 
 describe('既定の選択', () => {
   it('組み立てた構成は GD-3 までの完成品と同じ', () => {
-    GD3_STACKS.forEach((s, i) => expect(MVP_STACKS[i]).toStrictEqual(s));
+    // 役割の印（role。D-114）は計算に使わない印なので、比べる前に外す（GD-3 までの完成品に印は無い）
+    const withoutRoles = (x: unknown) =>
+      JSON.parse(JSON.stringify(x, (k, v) => (k === 'role' ? undefined : v)));
+    GD3_STACKS.forEach((s, i) =>
+      expect(withoutRoles(MVP_STACKS[i])).toStrictEqual(s),
+    );
   });
 
   it('既定の部品はどれも部品の一覧にある', () => {

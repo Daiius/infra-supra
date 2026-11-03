@@ -41,8 +41,8 @@ import {
   behaviorOf,
   CROSS_COMPONENTS,
   hostsOf,
-  type CrossLink,
 } from './cross.ts';
+import type { CrossLink } from './connections.ts';
 
 export type Platform =
   | 'cloudflare'
@@ -165,9 +165,9 @@ export type ComponentOption = {
   onDemandIsr?: { ok: boolean; fact: string };
   /** この部品を選べるフレームワーク（省略はすべて。ISR のキャッシュは Next.js だけ・OGP の前処理は SPA だけ。prd/10）。 */
   frameworks?: FrameworkId[];
-  /** この部品を差せる土台の事業者（省略は platform だけ）。他の事業者の部品は cross.ts の CROSS_PAIRS で許した組だけ（D-52）。 */
+  /** この部品を差せる土台の事業者（省略は platform だけ）。他の事業者の部品は接続の規則（connections.ts）で許した組だけ（D-52・D-114）。 */
   hosts?: Platform[];
-  /** 土台と別の事業者のときの接続の形（D-52・prd/11 §2.2）。 */
+  /** 土台と別の事業者のときの接続の形（部品の役割と口。D-52・D-114）。 */
   link?: CrossLink;
 };
 
@@ -607,7 +607,7 @@ const SPA_API_CACHE: ComponentOption[] = [
 
 /**
  * SPA の API の置き場（prd/10 §3・F-10〜F-13・D-65）。既定は同じ事業者に同居（段 1 の形）。他の事業者に置く部品は
- * cross.ts の CROSS_COMPONENTS（CROSS_PAIRS で許した組だけ）。DB は API と同じ事業者に置く（またぐ往復を API と DB の間に作らない）。
+ * parts.ts の CROSS_COMPONENTS（接続の規則で許した組だけ）。DB は API と同じ事業者に置く（またぐ往復を API と DB の間に作らない）。
  * さくらの VPS の構成は API を他の事業者に置く組を入れていないので、スロットを出さない（同居だけ。VPS を API の置き場として
  * 他の構成に差す組は cross.ts。D-67）。
  */
@@ -907,11 +907,13 @@ function composeCloudflare(
   b.add(
     {
       id: 'assets',
+      role: 'static-host',
       label: 'Workers 静的アセット',
       config: { kind: 'cdn', hitRate: { asset: 1, 'document-static': 1 } },
     },
     {
       id: 'worker',
+      role: 'compute',
       label: 'Worker（vinext）',
       config: {
         kind: 'function',
@@ -926,6 +928,7 @@ function composeCloudflare(
   );
   const r2 = (storesImages: boolean): ArchNodeIn => ({
     id: 'r2',
+    role: 'object-store',
     label: 'R2',
     config: {
       kind: 'object-storage',
@@ -940,6 +943,7 @@ function composeCloudflare(
   });
   const d1 = (storesImages: boolean): ArchNodeIn => ({
     id: 'd1',
+    role: 'sql-db',
     label: storesImages ? 'D1（画像も置く）' : 'D1',
     config: {
       kind: 'sql-db',
@@ -966,6 +970,7 @@ function composeCloudflare(
       ? [
           {
             id: 'kv',
+            role: 'kv',
             label: 'KV（ISR のキャッシュ）',
             config: { kind: 'kv' },
             billing: bill(workers, {
@@ -983,6 +988,7 @@ function composeCloudflare(
       ? [
           {
             id: 'kv-db',
+            role: 'sql-db',
             label: 'KV（DB の代わり）',
             // 記事ごとのコメント数・いいね数など、同じキーに集中する書き込みの割合（仮定）
             config: { kind: 'kv', mode: 'db', hotKeyShare: 0.2 },
@@ -997,6 +1003,7 @@ function composeCloudflare(
         ? [
             {
               id: 'hyperdrive',
+              role: 'db-proxy',
               label: 'Hyperdrive',
               config: { kind: 'db-proxy' },
               billing: bill(
@@ -1006,6 +1013,7 @@ function composeCloudflare(
             },
             {
               id: 'supabase',
+              role: 'sql-db',
               label:
                 plan === 'free' ? 'Supabase Free' : 'Supabase Pro（Micro）',
               config: { kind: 'managed-db' },
@@ -1034,6 +1042,7 @@ function composeCloudflare(
     b.add(
       {
         id: 'r2-cache',
+        role: 'edge-cdn',
         label: 'R2 公開バケットのキャッシュ',
         config: { kind: 'cdn', hitRate: { 'image-read': 0.9 } },
       },
@@ -1043,6 +1052,7 @@ function composeCloudflare(
   if (transformsImages(choices))
     b.add({
       id: 'images',
+      role: 'image-transform',
       label: 'Images（バインディング）',
       config: { kind: 'image-optimizer' },
       billing: bill(plan === 'free' ? 'images-free' : 'images-paid', {
@@ -1053,6 +1063,7 @@ function composeCloudflare(
   if (choices.realtime === 'durable-objects')
     b.add({
       id: 'do',
+      role: 'compute',
       label: 'Durable Objects',
       // 受信メッセージ 20 件で 1 リクエスト・128 MB として数える（doPricing）
       config: {
@@ -1141,6 +1152,7 @@ function composeVercel(
   const nodes: ArchNodeIn[] = [
     {
       id: 'cdn',
+      role: 'edge-cdn',
       label: 'Vercel CDN',
       config: {
         kind: 'cdn',
@@ -1162,6 +1174,7 @@ function composeVercel(
     },
     {
       id: 'fn',
+      role: 'compute',
       label: 'Vercel Functions（Fluid）',
       config: { kind: 'function', memoryGB: 2, concurrency: 1 },
       billing: v({
@@ -1174,6 +1187,7 @@ function composeVercel(
       ? [
           {
             id: 'isr',
+            role: 'kv',
             label: 'ISR の永続ストレージ',
             config: { kind: 'isr-store', unitKB: 8, changedRate: 0.1 },
             billing: v({
@@ -1187,6 +1201,7 @@ function composeVercel(
       ? [
           {
             id: 'image',
+            role: 'image-transform',
             label: '画像の最適化',
             // CDN の miss だけが届くので、届いた読み取りはすべて共有キャッシュまで行く
             config: { kind: 'image-optimizer', unitKB: 8, cacheMissRate: 1 },
@@ -1204,6 +1219,7 @@ function composeVercel(
     // （公式の料金の例どおり。Fast Data Transfer にはならない。OCL-2AE853BD）。ヒット率は画像の CDN のヒット率と同じ
     {
       id: 'blob',
+      role: 'object-store',
       label: 'Vercel Blob（画像の原本）',
       config: { kind: 'object-storage', cdnHitRate: IMAGE_CDN_HIT_RATE },
       billing: v({
@@ -1217,6 +1233,7 @@ function composeVercel(
     },
     {
       id: 'db',
+      role: 'sql-db',
       label: plan === 'hobby' ? 'Supabase Free' : 'Supabase Pro（Micro）',
       config: { kind: 'managed-db' },
       billing: {
@@ -1283,6 +1300,7 @@ function composeSakura(
         ? [
             {
               id: 'cf-cdn',
+              role: 'edge-cdn',
               label: 'Cloudflare CDN（Free）',
               config: {
                 kind: 'cdn' as const,

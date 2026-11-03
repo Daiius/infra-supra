@@ -1315,7 +1315,7 @@
   - 画面は「同じ事業者 / 他の事業者（畳む・事業者で絞れる）」（CP-12）。保存の版は 4 のまま（CP-13）。構成図は catalog の `links` を描く（CP-17）。
   - **段 2 で足すのは Vercel × DynamoDB / Aurora（DB）だけ**（CP-15・推奨から変更）。Vercel × S3 + CloudFront・Cloudflare × Neon（Hyperdrive）・Google Cloud × R2 は後の段の候補。
 - 調査（2026-11-03 取得・出典は prd/14 §2・§9）: Static IPs（Pro $100 / 月 / プロジェクト + Private Data Transfer）・Secure Compute は Enterprise のみ・D1 の REST は管理用・Workers から Postgres は Hyperdrive を勧める・Lambda を VPC に入れると外へ NAT が要る・東京の NAT・RDS Proxy の単価は未取得。
-- 実装はまだ（コードは変えていない）。
+- 段 1 を実装（2026-11-03）: ノードに役割の印（`role`）・接続の規則（`stacks/connections.ts`）・部品（`stacks/parts.ts`）に移し替え、`CROSS_PAIRS` を消した。選べる組・金額・保存は不変（隠した Netlify の経路の外の 0 円のノードが 1 つ減っただけ）。詳細は prd/14 §3.11。
 
 ## 未決（grill で詰める）
 

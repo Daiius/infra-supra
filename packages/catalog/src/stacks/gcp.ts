@@ -216,6 +216,7 @@ export function gcpDbNode(opt: string | undefined): ArchNodeIn {
   return opt === 'cloud-sql'
     ? {
         id: 'cloud-sql',
+        role: 'sql-db',
         label: 'Cloud SQL for PostgreSQL（db-f1-micro）',
         config: { kind: 'managed-db' },
         facts: ['shared-core'],
@@ -226,6 +227,7 @@ export function gcpDbNode(opt: string | undefined): ArchNodeIn {
       }
     : {
         id: 'firestore',
+        role: 'sql-db',
         label: 'Firestore（Standard）',
         config: {
           kind: 'request-db',
@@ -285,6 +287,7 @@ export function composeGcp(
   const nodes: ArchNodeIn[] = [
     {
       id: 'cdn',
+      role: 'edge-cdn',
       label: 'Firebase Hosting（CDN）',
       config: {
         kind: 'cdn',
@@ -305,6 +308,7 @@ export function composeGcp(
     },
     {
       id: 'run',
+      role: 'compute',
       label: spa
         ? prerender
           ? 'Cloud Run（API・OGP の前処理）'
@@ -343,6 +347,7 @@ export function composeGcp(
     },
     {
       id: 'gcs',
+      role: 'object-store',
       label: 'Cloud Storage（画像の原本）',
       config: { kind: 'object-storage' },
       billing: bill('cloud-storage-standard', {

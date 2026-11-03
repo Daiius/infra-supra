@@ -10,7 +10,7 @@ import {
 import {
   accountsOf,
   CROSS_COMPONENTS,
-  CROSS_PAIRS,
+  CROSS_PARTS,
   hostsOf,
   NEON_MIN_CU,
   NEON_SUSPEND_SECONDS,
@@ -24,29 +24,120 @@ import {
   componentsOf,
   composeStack,
   imagesBehavior,
+  STACK_DEFS,
+  type Choices,
   type Platform,
   type SlotId,
 } from './index.ts';
+import {
+  CONNECTION_RULES,
+  INBOUND,
+  isTransferNode,
+  OUTBOUND,
+  outboundOf,
+  partFrameworksOn,
+  partOptions,
+  rulesFor,
+  transferNodes,
+  type ConnectionRule,
+} from './connections.ts';
+import { EMAIL_PARTS } from './email.ts';
 
 const PLATFORMS: Platform[] = ['cloudflare', 'vercel', 'sakura', 'aws'];
 
-describe('許した組（CROSS_PAIRS）', () => {
-  it('他の事業者に差せる部品は、表で許した組だけ', () => {
-    for (const c of COMPONENTS)
-      for (const host of hostsOf(c)) {
-        if (host === c.platform) continue;
-        expect(
-          CROSS_PAIRS.some(
-            (p) =>
-              p.host === host && p.slot === c.slot && p.provider === c.platform,
-          ),
-          `${host} × ${c.slot} × ${c.platform}:${c.id}`,
-        ).toBe(true);
-        expect(c.link, `${c.platform}:${c.id} の接続の形`).toBeDefined();
-      }
+/** 移し替える前（CROSS_PAIRS・2026-11-03）に許していた組。規則から導く組がこれと一致する（D-114 の段 1）。 */
+const PAIRS_BEFORE_RULES = [
+  'aws × api × cloudflare',
+  'aws × email × resend',
+  'aws × frontCdn × bunny',
+  'aws × images × bunny',
+  'aws × images × cloudflare',
+  'aws-opennext × api × cloudflare',
+  'aws-opennext × email × resend',
+  'aws-opennext × images × bunny',
+  'aws-opennext × images × cloudflare',
+  'cloudflare × api × aws',
+  'cloudflare × api × sakura',
+  'cloudflare × email × aws',
+  'cloudflare × email × resend',
+  'gcp × email × resend',
+  'gcp × images × bunny',
+  'gcp × images × cloudflare',
+  'netlify × api × cloudflare',
+  'netlify × db × neon',
+  'netlify × email × resend',
+  'netlify × images × bunny',
+  'netlify × images × cloudflare',
+  'sakura × api × cloudflare',
+  'sakura × email × resend',
+  'sakura × frontCdn × bunny',
+  'vercel × api × cloudflare',
+  'vercel × db × neon',
+  'vercel × email × resend',
+  'vercel × images × bunny',
+  'vercel × images × cloudflare',
+];
+
+/** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
+const COMPONENTS_BEFORE_RULES = [
+  'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
+  'images cloudflare:cf-resize → aws,aws-opennext,gcp,netlify,vercel',
+  'images bunny:bunny-images → aws,aws-opennext,gcp,netlify,vercel',
+  'images bunny:bunny-resize → aws,aws-opennext,gcp,netlify,vercel',
+  'frontCdn bunny:bunny → aws [nextjs]',
+  'frontCdn bunny:bunny → sakura',
+  'api cloudflare:cf-workers → aws,netlify,vercel [vite-spa,nextjs-export]',
+  'api aws:aws-lambda → cloudflare [vite-spa,nextjs-export]',
+  'api cloudflare:cf-workers-server → aws,aws-opennext,netlify,vercel [nextjs]',
+  'api cloudflare:cf-workers-astro → netlify,sakura,vercel [astro]',
+  'db neon:neon → netlify,vercel',
+  'api sakura:sakura-vps-2gb → cloudflare [vite-spa,astro,nextjs-export]',
+  'api sakura:sakura-vps-4gb → cloudflare [vite-spa,astro,nextjs-export]',
+  'email aws:ses → cloudflare',
+  'email resend:resend-free → aws,aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
+  'email resend:resend-pro → aws,aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
+  'email resend:resend-pro-100k → aws,aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
+];
+
+/** 他の事業者の部品（土台の事業者と違う土台に差せるもの）。 */
+const crossOptions = () =>
+  COMPONENTS.filter((c) => hostsOf(c).some((h) => h !== c.platform));
+
+describe('許した組（接続の規則から導く。D-114）', () => {
+  it('規則から導いた組は、移し替える前の組（CROSS_PAIRS）と一致する', () => {
+    const pairs = new Set(
+      crossOptions().flatMap((c) =>
+        hostsOf(c)
+          .filter((h) => h !== c.platform)
+          .map((h) => `${h} × ${c.slot} × ${c.platform}`),
+      ),
+    );
+    expect([...pairs].sort()).toEqual(PAIRS_BEFORE_RULES);
   });
 
-  it('表に無い組は選択肢に出ない（Cloudflare・VPS の画像に他の事業者の部品は出ない）', () => {
+  it('部品ごとの差せる土台とフレームワークも、移し替える前と一致する', () => {
+    expect(
+      crossOptions().map(
+        (c) =>
+          `${c.slot} ${c.platform}:${c.id} → ${[...hostsOf(c)].sort().join(',')}` +
+          (c.frameworks ? ` [${c.frameworks.join(',')}]` : ''),
+      ),
+    ).toEqual(COMPONENTS_BEFORE_RULES);
+  });
+
+  it('他の事業者に差せる部品は、規則で許した組だけで、部品の役割と口を持つ', () => {
+    for (const c of crossOptions())
+      expect(c.link, `${c.platform}:${c.id} の接続の形`).toBeDefined();
+    for (const part of [...CROSS_PARTS, ...EMAIL_PARTS])
+      for (const o of partOptions(part))
+        for (const host of hostsOf(o) as Platform[])
+          expect(
+            rulesFor(host, part).length,
+            `${host} × ${part.slot} × ${part.platform}:${part.id}`,
+          ).toBeGreaterThan(0);
+  });
+
+  it('規則に無い組は選択肢に出ない（Cloudflare・VPS の画像に他の事業者の部品は出ない）', () => {
     const cross = (host: Platform, slot: SlotId) =>
       componentsOf(host, slot).filter((c) => c.platform !== host);
     for (const host of ['vercel', 'aws'] as const)
@@ -77,16 +168,19 @@ describe('許した組（CROSS_PAIRS）', () => {
         }
   });
 
-  it('根拠の出典は URL と取得日を持つ', () => {
-    for (const p of CROSS_PAIRS) {
-      expect(p.sources.length).toBeGreaterThan(0);
-      for (const s of p.sources) {
+  it('規則・送り出し・受け取りの項目の出典は URL と取得日を持つ（移し替える前の取得日のまま）', () => {
+    for (const x of [...CONNECTION_RULES, ...OUTBOUND, ...INBOUND]) {
+      expect(x.sources.length).toBeGreaterThan(0);
+      for (const s of x.sources) {
         expect(s.url).toMatch(/^https:\/\//);
         expect(['2026-11-01', '2026-11-02', '2026-11-03']).toContain(
           s.retrievedAt,
         );
       }
     }
+    expect(new Set(CONNECTION_RULES.map((r) => r.id)).size).toBe(
+      CONNECTION_RULES.length,
+    );
   });
 
   it('他の事業者の部品の名前は事業者の名前で始まる', () => {
@@ -101,6 +195,224 @@ describe('許した組（CROSS_PAIRS）', () => {
       expect(
         c.label.startsWith(`${NAMES[c.platform as keyof typeof NAMES]}: `),
       ).toBe(true);
+  });
+});
+
+// 規則の単体（CP-14。架空の事業者で、口の組ごとの判定を確かめる。実在の料金を使わない）
+describe('接続の規則の判定（架空の事業者）', () => {
+  const host = 'fictional-host' as Platform;
+  const other = 'fictional-other' as Platform;
+  const part = {
+    slot: 'images' as const,
+    platform: 'fictional-store' as Platform,
+    role: 'object-store' as const,
+    accepts: ['https-api'] as const,
+    attachesTo: ['compute'] as const,
+  };
+  const rule = (over: Partial<ConnectionRule> = {}): ConnectionRule => ({
+    id: 'fictional',
+    slot: 'images',
+    from: { providers: [host], role: 'compute' },
+    to: {
+      providers: [part.platform],
+      role: 'object-store',
+      port: 'https-api',
+    },
+    verdict: 'ok',
+    basis: '架空',
+    sources: [],
+    ...over,
+  });
+
+  it('呼ぶ側の土台・役割と、受ける側の事業者・役割・口がそろえば差せる', () => {
+    expect(partFrameworksOn(part, host, [rule()])).toBeUndefined();
+    expect(partFrameworksOn(part, other, [rule()])).toBeNull();
+    // 口が合わない・役割が合わない・スロットが違う・blocked は差せない
+    expect(
+      partFrameworksOn(part, host, [
+        rule({ to: { ...rule().to, port: 'tcp-sql' } }),
+      ]),
+    ).toBeNull();
+    expect(
+      partFrameworksOn(part, host, [
+        rule({ from: { providers: [host], role: 'static-host' } }),
+      ]),
+    ).toBeNull();
+    expect(partFrameworksOn(part, host, [rule({ slot: 'db' })])).toBeNull();
+    expect(
+      partFrameworksOn(part, host, [rule({ verdict: 'blocked' })]),
+    ).toBeNull();
+    // 中継が要る組（needs-relay）は差せる（中継は段 3 で自動で足す）
+    expect(
+      partFrameworksOn(part, host, [rule({ verdict: 'needs-relay' })]),
+    ).toBeUndefined();
+  });
+
+  it('部品が土台を呼ぶ規則（前段の CDN が土台をオリジンにする）でも差せる', () => {
+    const cdn = {
+      ...part,
+      role: 'edge-cdn' as const,
+      accepts: ['public-url'] as const,
+      attachesTo: ['edge-cdn'] as const,
+    };
+    const pull = rule({
+      from: { providers: [part.platform], role: 'edge-cdn' },
+      to: { providers: [host], role: 'edge-cdn', port: 'public-url' },
+    });
+    expect(partFrameworksOn(cdn, host, [pull])).toBeUndefined();
+    // 土台の側の役割が部品のつながる役割と違えば差せない
+    expect(
+      partFrameworksOn({ ...cdn, attachesTo: ['compute'] }, host, [pull]),
+    ).toBeNull();
+  });
+
+  it('フレームワークは規則の和と部品の条件の積', () => {
+    const rules = [
+      rule({ id: 'a', frameworks: ['nextjs'] }),
+      rule({ id: 'b', frameworks: ['astro'] }),
+    ];
+    expect(partFrameworksOn(part, host, rules)).toEqual(['nextjs', 'astro']);
+    expect(
+      partFrameworksOn(
+        { ...part, frameworks: ['astro', 'vite-spa'] },
+        host,
+        rules,
+      ),
+    ).toEqual(['astro']);
+    expect(
+      partFrameworksOn({ ...part, frameworks: ['vite-spa'] }, host, rules),
+    ).toBeNull();
+  });
+
+  it('転送は送り手の送り出しと受け手の受け取りの項目をそれぞれ数え、項目が無い側は課金しない（CP-06）', () => {
+    const meter = (idPrefix: string, provider: string) => ({
+      idPrefix,
+      name: idPrefix,
+      facts: [],
+      billing: (planId: string) => ({
+        accountId: provider,
+        provider,
+        planId,
+        meters: { 'egress-gb': 'transfer' },
+      }),
+    });
+    const sender = {
+      id: 'fn',
+      label: '処理',
+      role: 'compute' as const,
+      config: { kind: 'function' as const },
+      billing: {
+        accountId: 'fictional-host',
+        provider: 'fictional-host',
+        planId: 'p',
+        meters: {},
+      },
+    };
+    const outbound = [
+      {
+        provider: 'fictional-host',
+        meter: meter('fh', 'fictional-host'),
+        basis: '架空',
+        sources: [],
+      },
+    ];
+    const inbound = [
+      {
+        provider: 'fictional-store',
+        planIds: ['q'],
+        meter: meter('fs', 'fictional-store'),
+        basis: '架空',
+        sources: [],
+      },
+    ];
+    const both = transferNodes(
+      sender,
+      'fictional-store',
+      '書き込み',
+      undefined,
+      {
+        outbound,
+        inbound,
+      },
+    );
+    expect(both.map((n) => [n.id, n.billing?.planId])).toEqual([
+      ['fh-out', 'p'],
+      ['fs-in', 'q'],
+    ]);
+    expect(both.every(isTransferNode)).toBe(true);
+    // 受け手に項目が無い・送り手に項目が無い・同じ事業者の中は、その側のノードを作らない
+    expect(
+      transferNodes(sender, 'fictional-store', '書き込み', undefined, {
+        outbound,
+        inbound: [],
+      }).map((n) => n.id),
+    ).toEqual(['fh-out']);
+    expect(
+      transferNodes(sender, 'fictional-store', '書き込み', undefined, {
+        outbound: [],
+        inbound,
+      }).map((n) => n.id),
+    ).toEqual(['fs-in']);
+    expect(
+      transferNodes(sender, 'fictional-host', '書き込み', undefined, {
+        outbound,
+        inbound,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('役割の印（D-114）', () => {
+  /** 役割を持たない、経路の上のノード（転送を数えるだけのノードと、10 の役割に当てはまらない OpenNext の SQS）。 */
+  const exempt = (n: { billing?: { planId: string } | undefined }) =>
+    n.billing?.planId === 'sqs-fifo';
+
+  it('経路にあるノードは役割の印を持つ（転送を数えるだけのノードを除く）', () => {
+    const missing = new Set<string>();
+    for (const def of STACK_DEFS)
+      for (const fw of [
+        'nextjs',
+        'vite-spa',
+        'astro',
+        'nextjs-export',
+      ] as const) {
+        const variants: Choices[] = [{}];
+        for (const slot of new Set(COMPONENTS.map((c) => c.slot)))
+          for (const c of componentsOf(def.platform, slot, fw))
+            variants.push({ [slot]: c.id });
+        for (const choices of variants) {
+          const a = composeStack(def, choices, { framework: fw });
+          const used = new Set(Object.values(a.routes).flat());
+          for (const n of a.nodes)
+            if (
+              used.has(n.id) &&
+              n.role === undefined &&
+              !isTransferNode(n) &&
+              !exempt(n)
+            )
+              missing.add(`${def.id}:${n.id}`);
+        }
+      }
+    expect([...missing]).toEqual([]);
+  });
+
+  it('転送を数えるだけのノードは、送り出しの項目のある処理の後ろにだけある', () => {
+    for (const def of STACK_DEFS)
+      for (const images of ['cf-images', 'bunny-resize'])
+        for (const fw of ['nextjs', 'vite-spa'] as const) {
+          const a = composeStack(def, { images }, { framework: fw });
+          const path = a.routes['image-write'] ?? [];
+          path.forEach((id, i) => {
+            const n = a.nodes.find((x) => x.id === id)!;
+            if (!isTransferNode(n)) return;
+            const prev = a.nodes.find((x) => x.id === path[i - 1])!;
+            expect(prev.role, `${def.id}:${id}`).toBe('compute');
+            expect(
+              outboundOf(prev)?.meter,
+              `${def.id}:${prev.id}`,
+            ).toBeDefined();
+          });
+        }
   });
 });
 

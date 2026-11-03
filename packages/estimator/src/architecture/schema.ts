@@ -273,10 +273,30 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;
 
+/**
+ * 部品の役割（D-114・prd/14 CP-02）。catalog が他の事業者の部品を役割で差し替えるための印で、estimator の計算は読まない。
+ * sql-db はアプリの DB の役割（問い合わせの形を問わない。DynamoDB・Firestore・KV を DB に使う形も含む）。
+ */
+export const ROLES = [
+  'edge-cdn',
+  'static-host',
+  'compute',
+  'image-transform',
+  'object-store',
+  'sql-db',
+  'kv',
+  'db-proxy',
+  'email',
+  'dns',
+] as const;
+export type Role = (typeof ROLES)[number];
+
 export const ArchNodeSchema = z.object({
   id: z.string(),
   label: z.string(),
   config: NodeKindSchema,
+  /** 部品の役割（ROLES）。計算には使わない。事業者の間の転送を数えるだけのノードは持たない。 */
+  role: z.enum(ROLES).optional(),
   /** このノードで効く料金データの事実（Plan の facts の id）。挙げたものだけ前提に出す（D-24）。 */
   facts: z.array(z.string()).default([]),
   /** 課金先。無いノード（VPS 上のプロセスなど）は課金されない。 */
