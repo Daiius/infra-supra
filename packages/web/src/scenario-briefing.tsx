@@ -8,6 +8,7 @@ import {
   growthFromReputation,
   pageWireframes,
   SCENARIOS,
+  scenarioOffscreen,
   scenarioWireframes,
   selfHostedOf,
   type FrameworkId,
@@ -644,6 +645,7 @@ export function ScenarioDescription({
             <ScenarioWireframes
               pages={wireframes}
               captionOf={(p) => lineOf(p.label)}
+              offscreen={scenarioOffscreen(sc)}
             />
             {otherLines.length > 0 && (
               <ul className="list-disc space-y-0.5 pl-6 text-sm">

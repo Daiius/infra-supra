@@ -23,22 +23,40 @@ export function incidentOf(
   return { seed, incident, apiOnlyHost };
 }
 
+/**
+ * メールの送信のノード（catalog の withEmail が足す id）。送信のサービスの上限に当たってもサイトは止まらず、
+ * その分のメールが届かない（D-117）。
+ */
+const EMAIL_NODE_ID = 'email';
+
+/** メールの送信だけに効く前提か（送信のノードだけが当たる。D-117）。 */
+export const emailOnlyPremise = (p: Pick<PlatformPremise, 'nodeIds'>) =>
+  p.nodeIds.length > 0 && p.nodeIds.every((id) => id === EMAIL_NODE_ID);
+
 export type PremiseOutcomes = {
   blocking: PlatformPremise[];
+  /**
+   * 当たって送れなくなったメールの送信の前提（Resend Free の 1 日 100 通・Resend Pro の込みの 5 倍など）。サイトは止まらず、
+   * 登録の確認・パスワードの再設定・通知のメールが届かない（機能の満足度を 1 段下げる。D-117）。
+   */
+  undelivered: PlatformPremise[];
   policy: PlatformPremise[];
   throttling: PlatformPremise[];
   adjusted: PlatformPremise[];
 };
 
-/** 当たった前提を、止まる・規約違反・遅くなる・性能が調整される（CDN の定額）に分ける。 */
+/** 当たった前提を、止まる・メールが届かない・規約違反・遅くなる・性能が調整される（CDN の定額）に分ける。 */
 export function premiseOutcomesOf(
   state: GameState,
   premises: readonly PlatformPremise[],
 ): PremiseOutcomes {
   // 規約違反（policy）はすぐには止めず、指摘 → 翌月にアカウント停止の流れで扱う（D-19）
-  const blocking = premises.filter(
+  const stops = premises.filter(
     (p) => p.hit && (p.effect === 'block' || p.effect === 'upgrade-required'),
   );
+  // メールの送信の上限はサイトを止めない（送れない分のメールが届かない。D-117）
+  const blocking = stops.filter((p) => !emailOnlyPremise(p));
+  const undelivered = stops.filter(emailOnlyPremise);
   const policy = premises.filter((p) => p.hit && p.effect === 'policy');
   const throttling = premises.filter((p) => p.hit && p.effect === 'throttle');
   // CDN の定額のプランの込みを超えた前提（請求は増えない）。急増が大きいか、続けて超えると性能が調整される（D-61）
@@ -55,7 +73,7 @@ export function premiseOutcomesOf(
         // 続けて超えた: 前の月も同じ前提で超えていた（sustainedMonths = 2 か月）
         prevAdjust.has(p.id)),
   );
-  return { blocking, policy, throttling, adjusted };
+  return { blocking, undelivered, policy, throttling, adjusted };
 }
 
 export type Revenue = {

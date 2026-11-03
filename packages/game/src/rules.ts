@@ -209,7 +209,19 @@ export type JudgeInput = {
   qualityDown?: boolean;
   /** 速さを 1 段下げる（CDN の定額のプランの込みを超え続け、配信の性能が調整された。仮定・D-61）。 */
   speedDown?: boolean;
+  /**
+   * メールの送信の上限に当たり、判定の日（平日・休日・話題の日のうち最も多い日）に届かなかったメールの割合（0〜1。D-117）。
+   * 0 より大きければ機能を 1 段下げ、EMAIL_UNDELIVERED.badShare 以上なら「悪い」にする。サイトは動いているので、
+   * 可用性ではなく機能で数える（登録の確認・パスワードの再設定・通知が届かない。ゲーム上の仮定）。
+   */
+  emailUndeliveredShare?: number;
 };
+
+/**
+ * メールが届かない月の機能の段階（D-117・ゲーム上の仮定・出典なし）。判定の日のメールの半分以上が届かない
+ * （通数が上限の 2 倍以上）なら、登録の確認を待つ新しい会員の多くが登録を終えられないとみて「悪い」にする。
+ */
+export const EMAIL_UNDELIVERED = { badShare: 0.5 } as const;
 
 /**
  * CDN の定額のプランの込みを超えたときの性能の調整（ゲーム上の仮定・D-61）。公式は「最初の月の 3 倍までの急増は影響しない」
@@ -245,12 +257,17 @@ export function judgeStages(
   return {
     availability: i.blocked ? 'bad' : i.degraded ? 'fair' : 'good',
     speed: i.speedDown ? STAGE_DOWN[speed] : speed,
-    feature:
-      featureRatio >= ft.good
-        ? 'good'
-        : featureRatio >= ft.fair
-          ? 'fair'
-          : 'bad',
+    feature: ((): Stage => {
+      const base: Stage =
+        featureRatio >= ft.good
+          ? 'good'
+          : featureRatio >= ft.fair
+            ? 'fair'
+            : 'bad';
+      const share = i.emailUndeliveredShare ?? 0;
+      if (share >= EMAIL_UNDELIVERED.badShare) return 'bad';
+      return share > 0 ? STAGE_DOWN[base] : base;
+    })(),
     freshness: ((): Stage => {
       const base: Stage = i.uncached
         ? 'good'

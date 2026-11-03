@@ -563,6 +563,21 @@ export function SetupCostPreview({
           </ul>
         </div>
       )}
+      {e.undelivered.length > 0 && (
+        <div className="mt-1">
+          <p className="font-bold">
+            1
+            か月目に当たるメールの送信の上限（サイトは止まらないが、超えた日のメールが届かず、機能の満足度が下がる）
+          </p>
+          <ul className="mt-1 list-disc pl-5 text-xs">
+            {e.undelivered.map((b) => (
+              <li key={b.id} className="break-words">
+                {b.text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {e.short && (
         <>
           <p className="mt-1 font-bold">

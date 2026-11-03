@@ -47,10 +47,26 @@ export function crossingsOf(
     const spikes = (c.parts.spikes ?? [])
       .filter((s) => s.id !== t.id)
       .map((s) => (t.bot ? s : { ...s, extraPV: s.extraPV / t.factor }));
+    // Bot の PV（メールの通数から除く分。D-117）: Bot の出来事を外せばその分を、人の出来事を外せば同じ割合で小さくする
+    const botPV =
+      c.parts.botPV !== undefined
+        ? Math.max(
+            0,
+            t.bot
+              ? c.parts.botPV - c.humanPV * (t.factor - 1)
+              : c.parts.botPV / t.factor,
+          )
+        : undefined;
     variants.push({
       eventId: t.id,
       title: t.title,
-      parts: { ...c.parts, pv, peakFactor, spikes },
+      parts: {
+        ...c.parts,
+        pv,
+        peakFactor,
+        spikes,
+        ...(botPV !== undefined ? { botPV } : {}),
+      },
     });
   }
   for (const [id, res] of Object.entries(c.state.responses)) {
@@ -87,7 +103,16 @@ export function crossingsOf(
     variants.push({
       eventId: id,
       title: def.title,
-      parts: { ...c.parts, mods, stock, pv, spikes },
+      parts: {
+        ...c.parts,
+        mods,
+        stock,
+        pv,
+        spikes,
+        ...(c.parts.botPV !== undefined
+          ? { botPV: c.parts.botPV / baseFactor }
+          : {}),
+      },
     });
   }
   const ratios = variants.map((v) => {

@@ -180,6 +180,11 @@ export const WorkloadInputSchema = z
         perMau: NonNeg,
         /** 書き込み 1 回あたりの通数（コメントの通知など、書き込みに比例する分）。 */
         perWrite: NonNeg,
+        /**
+         * メールの最も多い日 / 平均の日（日次の上限の判定だけ。省略は traffic.peakDayFactor）。メールは人の動き（登録・書き込み）に
+         * 比例し、Bot の集中には従わないので、流量の集中と分けて渡す（D-117）。
+         */
+        peakDayFactor: Pos.optional(),
       })
       .optional(),
     /** リアルタイム（チャットなどの WebSocket）。値はテンプレート・シナリオの仮定（D-24）。 */

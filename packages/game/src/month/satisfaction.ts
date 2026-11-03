@@ -36,11 +36,32 @@ export function noSocialCards(
   );
 }
 
+/** メールが届かない月の機能の理由と注記の書き出し（D-117）。 */
+export const EMAIL_UNDELIVERED_REASON =
+  'メールの送信の上限に当たり、登録の確認・パスワードの再設定・通知のメールが届かない日があった';
+
+/**
+ * 当たったメールの送信の前提から、判定の日に届かなかったメールの割合（上限を超えた分 = 1 − 上限 / 通数。最も大きいもの。D-117）。
+ * 割合の分からない前提（ratio が無い）は全部届かないとみる。
+ */
+export function undeliveredShare(
+  undelivered: readonly Pick<PlatformPremise, 'ratio'>[],
+): number {
+  return undelivered.reduce((a, p) => {
+    const r = p.ratio;
+    const share =
+      r === undefined || !Number.isFinite(r) ? 1 : r > 1 ? 1 - 1 / r : 0;
+    return Math.max(a, share);
+  }, 0);
+}
+
 export function stageReasons(
   sc: Scenario,
   stages: Stages,
   c: {
     blocking: PlatformPremise[];
+    /** 当たって送れなくなったメールの送信の前提（機能の理由に出す。D-117）。 */
+    undelivered?: PlatformPremise[];
     throttling: PlatformPremise[];
     /** 定額のプランの込みを超えて性能が調整された前提（D-61）。 */
     adjusted: PlatformPremise[];
@@ -136,8 +157,18 @@ export function stageReasons(
   if (c.imagesUnoptimized && out.speed && !c.throttling.length)
     out.speed += '（画像を最適化していない）';
   if (stages.feature !== 'good') {
-    const expected = sc.satisfaction.feature.expectedPerMonth * c.month;
-    out.feature = `機能開発 ${c.featurePoints} / 期待 ${expected}`;
+    const ft = sc.satisfaction.feature;
+    const expected = ft.expectedPerMonth * c.month;
+    const mail = c.undelivered?.[0];
+    out.feature = [
+      // メールが届かないだけで下がった月は、機能開発の行を出さない（D-117）
+      (!mail || c.featurePoints / expected < ft.good) &&
+        `機能開発 ${c.featurePoints} / 期待 ${expected}`,
+      mail &&
+        `${EMAIL_UNDELIVERED_REASON}（その日の約 ${Math.round(undeliveredShare(c.undelivered ?? []) * 100)}% が届かない。${mail.text}）`,
+    ]
+      .filter(Boolean)
+      .join('・');
   }
   return out;
 }

@@ -232,6 +232,26 @@ export type DiagramNode = {
   depth?: number;
   x: number;
   y: number;
+  /**
+   * 幽霊の箱（D-116 の補足）: 差し替えられるスロットの今の選択が図に箱を持たない（Workers Cache・キャッシュしない・前段の CDN なし
+   * など）ので、そのスロットの箱を点線・半透明で残したもの。線は引かない（経路に載らない）。押すとそのスロットの部品を選べる。
+   */
+  ghost?: { slot: string; note?: string };
+};
+/**
+ * 幽霊の箱の中身と置き場所の手がかり（slotBoxes が作る）。group・depth は、他の選択肢にしたときにそのスロットの箱が出る
+ * 事業者の帯と段（今の図にその帯が無ければ、入口の帯に置く）。depth が無いものは経路に載らない部品の並びに置く。
+ */
+export type GhostSlot = {
+  slot: string;
+  /** スロットの名前（箱の上の小さい字）。 */
+  slotLabel: string;
+  /** 今の選択の名前。 */
+  label: string;
+  /** 今の選択の説明（吹き出しに出す）。 */
+  note?: string;
+  group?: string;
+  depth?: number;
 };
 export type DiagramEdge = {
   from: string;
@@ -324,6 +344,8 @@ export function diagramModel(
     regions: readonly { source: RegionSource }[];
   }[] = [],
   orientation: Orientation = 'horizontal',
+  /** 幽霊の箱（slotBoxes。D-116 の補足）。線は引かず、手がかりの帯・段に置く。 */
+  ghosts: readonly GhostSlot[] = [],
 ): DiagramModel {
   const routes = Object.entries(arch.routes).filter(
     (e): e is [RequestClass, string[]] => (e[1]?.length ?? 0) > 0,
@@ -448,20 +470,46 @@ export function diagramModel(
     const g = accountOf(n.id);
     if (!groupOrder.includes(g)) groupOrder.push(g);
   }
+  // 幽霊の箱（D-116 の補足）: 手がかりの帯が今の図に無ければ入口の帯（他の事業者の帯を幽霊の箱だけのために作らない）。
+  // 段は 1 から、今の図の最も深い段の 1 つ先まで
+  const lastDepth = Math.max(0, ...depth.values());
+  const ghostIn = (gh: GhostSlot) =>
+    gh.group !== undefined && groupOrder.includes(gh.group)
+      ? gh.group
+      : (groupOrder[0] ?? gh.group ?? fallback);
+  const routedGhosts = ghosts
+    .filter((gh) => gh.depth !== undefined)
+    .map((gh) => ({
+      gh,
+      group: ghostIn(gh),
+      depth: Math.min(Math.max(1, gh.depth!), lastDepth + 1),
+    }));
+  for (const r of routedGhosts)
+    if (!groupOrder.includes(r.group)) groupOrder.push(r.group);
 
   const nodes: DiagramNode[] = [];
   const groups: DiagramGroup[] = [];
   // 帯を積む位置（横の図は y を上→下、縦の図は x を左→右）
   let y = L.pad;
   for (const g of groupOrder) {
-    const members = routed.filter((n) => accountOf(n.id) === g);
+    // 帯の箱: 経路のノード、その後に幽霊の箱（同じ段では実際の箱の後ろの行）
+    const members: {
+      view: Omit<DiagramNode, 'x' | 'y' | 'depth'>;
+      d: number;
+    }[] = [
+      ...routed
+        .filter((n) => accountOf(n.id) === g)
+        .map((n) => ({ view: nodeView(n, g), d: depth.get(n.id)! })),
+      ...routedGhosts
+        .filter((r) => r.group === g)
+        .map((r) => ({ view: ghostView(r.gh, g), d: r.depth })),
+    ];
     const cells = new Map<number, number>();
     let rows = 0;
     let minD = Infinity;
     let maxD = 0;
     const top = y + (vertical ? L.bandPad : L.bandHeader);
-    for (const n of members) {
-      const d = depth.get(n.id)!;
+    for (const { view, d } of members) {
       const row = cells.get(d) ?? 0;
       cells.set(d, row + 1);
       rows = Math.max(rows, row + 1);
@@ -469,7 +517,7 @@ export function diagramModel(
       maxD = Math.max(maxD, d);
       const across = top + row * ((vertical ? L.nodeW : L.nodeH) + L.rowGap);
       nodes.push({
-        ...nodeView(n, g),
+        ...view,
         depth: d,
         ...(vertical ? { x: across, y: colX(d) } : { x: colX(d), y: across }),
       });
@@ -498,7 +546,11 @@ export function diagramModel(
     }
     groups.push({ account: g, ...(brand ? { brand } : {}), box });
   }
-  const maxDepth = Math.max(1, ...depth.values());
+  const maxDepth = Math.max(
+    1,
+    ...depth.values(),
+    ...routedGhosts.map((r) => r.depth),
+  );
   // 戻る線は箱の下（縦の図では右）を回るので、その分だけ空ける
   const loop = back.size > 0 ? BACK_LOOP : 0;
   const across = Math.max(
@@ -522,6 +574,25 @@ export function diagramModel(
       side.push(s);
     }
     s.nodes.push({ ...nodeView(n, g), x: 0, y: 0 });
+    if (!groups.some((x) => x.account === g)) {
+      const brand = ACCOUNT_BRAND[g];
+      groups.push({ account: g, ...(brand ? { brand } : {}) });
+    }
+  }
+  // 経路に載らない部品の幽霊の箱（バックアップを既定のままにしたときなど）は、手がかりの事業者の並びに置く（無ければ入口の事業者）
+  for (const gh of ghosts) {
+    if (gh.depth !== undefined) continue;
+    const g =
+      gh.group !== undefined && groups.some((x) => x.account === gh.group)
+        ? gh.group
+        : (groups[0]?.account ?? fallback);
+    let s = side.find((x) => x.group === g);
+    if (!s) {
+      const brand = ACCOUNT_BRAND[g];
+      s = { group: g, ...(brand ? { brand } : {}), nodes: [] };
+      side.push(s);
+    }
+    s.nodes.push({ ...ghostView(gh, g), x: 0, y: 0 });
     if (!groups.some((x) => x.account === g)) {
       const brand = ACCOUNT_BRAND[g];
       groups.push({ account: g, ...(brand ? { brand } : {}) });
@@ -582,6 +653,26 @@ function nodeView(
   };
 }
 
+/** 幽霊の箱の id（スロットごとに 1 つ）。 */
+export const ghostId = (slot: string) => `ghost:${slot}`;
+
+function ghostView(
+  gh: GhostSlot,
+  group: string,
+): Omit<DiagramNode, 'x' | 'y' | 'depth'> {
+  return {
+    id: ghostId(gh.slot),
+    label: gh.label,
+    short: shortLabel(gh.label),
+    kind: 'ghost',
+    caption: gh.slotLabel,
+    compute: false,
+    billed: false,
+    group,
+    ghost: { slot: gh.slot, ...(gh.note ? { note: gh.note } : {}) },
+  };
+}
+
 /** ノードの名前（閲覧者を含む）。 */
 export function labelOf(model: DiagramModel, id: string): string {
   if (id === VIEWER) return VIEWER_LABEL;
@@ -603,7 +694,10 @@ export function diagramSummary(
   const providers = [
     ...new Set([...model.groups.map((g) => groupTitle(g.account))]),
   ];
-  return `構成図: 閲覧者のリクエストは ${first.join('・')} に届く。部品 ${model.nodes.length + model.side.reduce((a, s) => a + s.nodes.length, 0)} 個、事業者は ${providers.join('・')}`;
+  const parts = [...model.nodes, ...model.side.flatMap((s) => s.nodes)].filter(
+    (n) => !n.ghost,
+  ).length;
+  return `構成図: 閲覧者のリクエストは ${first.join('・')} に届く。部品 ${parts} 個、事業者は ${providers.join('・')}`;
 }
 
 /** 強調する流れ（選んでいた流れが今の図に無ければ強調しない）。 */
@@ -634,7 +728,8 @@ const SLOT_ROLES: Readonly<Partial<Record<string, readonly Role[]>>> = {
   frontCdn: ['edge-cdn'],
   cdnPlan: ['edge-cdn'],
   cdnInvalidation: ['edge-cdn'],
-  apiCache: ['edge-cdn'],
+  // Cloudflare の SPA の Workers Cache は静的アセットの箱で課金する（箱の名前が替わる）
+  apiCache: ['edge-cdn', 'static-host'],
   email: ['email'],
 };
 
@@ -659,7 +754,7 @@ export function swappableSlots(
   const base = build(components).nodes;
   const out = new Map<string, string[]>();
   for (const x of slots) {
-    if (x.fixed || x.slot === 'files' || x.options.length < 2) continue;
+    if (!isSwappable(x)) continue;
     const nodes = new Set<string>();
     for (const o of x.options) {
       if (components[x.slot] === o.id) continue;
@@ -674,6 +769,141 @@ export function swappableSlots(
     for (const id of nodes) out.set(id, [...(out.get(id) ?? []), x.slot]);
   }
   return out;
+}
+
+/** 差し替えられるスロット（固定・ファイルの置き場・1 択を除く）。 */
+const isSwappable = (x: {
+  slot: string;
+  fixed?: boolean;
+  options: readonly unknown[];
+}) => !x.fixed && x.slot !== 'files' && x.options.length >= 2;
+
+/**
+ * 差し替えられるスロットごとの箱（D-116 とその補足）。どのスロットにも、図に箱が 1 つ以上あるようにする（替えても図の形が大きく跳ねない）:
+ *   1. 今の構成の箱で、替えると消える・名前が変わるもの（swappableSlots）
+ *   2. 箱は替わらないが、役割の合う今の箱を通る経路が、他の選択肢では外れるもの（ISR のキャッシュを R2 にしたときの、画像と
+ *      共用の R2 の箱）。その箱に当てる
+ *   3. どの選択肢でも箱も経路も替わらない（値だけが替わる。CloudFront の料金のプラン・Cloud Run の最小のインスタンス数など）:
+ *      役割の合う今の箱（SLOT_ROLES）に当てる
+ *   4. 残り（ISR のキャッシュの Workers Cache・キャッシュしない、前段の CDN のなし、API の置き場の同じ事業者、バックアップの既定など）:
+ *      今の選択は図に箱を持たないので、幽霊の箱（ghosts）を残す。置き場所は、他の選択肢（選択肢の順で最初のもの）にすると
+ *      役割の合う箱が出る帯・段。箱が出ず経路が増えるだけなら、その経路が通る今の箱の帯・段。どちらも無ければ入口の帯の 1 段目。
+ *      前に選んでいた部品に依らず、いつも同じ位置
+ * components は図に描く部品の選択（diagramComponents。選ぶ前のスロットも既定の部品で名前を出す）。
+ * 箱のスロットの並びは slots の順。
+ */
+export function slotBoxes(
+  build: (components: Partial<Record<string, string>>) => ArchitectureInput,
+  components: Partial<Record<string, string>>,
+  slots: readonly {
+    slot: string;
+    label: string;
+    fixed?: boolean;
+    options: readonly { id: string; label: string; note?: string }[];
+  }[],
+): { swap: Map<string, string[]>; ghosts: GhostSlot[] } {
+  const swap = swappableSlots(build, components, slots);
+  const covered = new Set([...swap.values()].flat());
+  const key = (n: { id: string; label: string }) => `${n.id}\u0000${n.label}`;
+  const baseArch = build(components);
+  const base = new Set(baseArch.nodes.map(key));
+  const fits = (slot: string, role: Role | undefined) =>
+    role === undefined || (SLOT_ROLES[slot]?.includes(role) ?? true);
+  const through = (arch: ArchitectureInput, id: string) =>
+    Object.entries(arch.routes)
+      .filter(([, path]) => path?.includes(id))
+      .map(([cls]) => cls);
+  let baseModel: DiagramModel | undefined;
+  const attach = (ids: readonly string[], slot: string) => {
+    for (const id of ids) swap.set(id, [...(swap.get(id) ?? []), slot]);
+  };
+  const ghosts: GhostSlot[] = [];
+  for (const x of slots) {
+    if (!isSwappable(x) || covered.has(x.slot)) continue;
+    const cur = components[x.slot];
+    const option = x.options.find((o) => o.id === cur) ?? x.options[0]!;
+    const roles = SLOT_ROLES[x.slot];
+    const own = baseArch.nodes.filter(
+      (n) =>
+        !isTransferNode(n) && n.role !== undefined && roles?.includes(n.role),
+    );
+    const alts = x.options
+      .filter((o) => o.id !== option.id)
+      .map((o) => build({ ...components, [x.slot]: o.id }));
+    // 2. 役割の合う今の箱を通る経路が、他の選択肢で外れる
+    const lost = own.filter((n) => {
+      const now = through(baseArch, n.id);
+      return alts.some((a) => {
+        const then = new Set(through(a, n.id));
+        return now.some((cls) => !then.has(cls));
+      });
+    });
+    if (lost.length > 0) {
+      attach(
+        lost.map((n) => n.id),
+        x.slot,
+      );
+      continue;
+    }
+    // 4. 他の選択肢で出る、役割の合う箱の帯・段
+    let hint: Pick<GhostSlot, 'group' | 'depth'> | undefined;
+    for (const alt of alts) {
+      const added = alt.nodes.filter(
+        (n) => !base.has(key(n)) && !isTransferNode(n) && fits(x.slot, n.role),
+      );
+      if (added.length === 0) continue;
+      const m = diagramModel(alt);
+      const routed = added
+        .map((n) => m.nodes.find((v) => v.id === n.id))
+        .find((v) => v !== undefined);
+      if (routed) hint = { group: routed.group, depth: routed.depth! };
+      else {
+        const sideNode = m.side
+          .flatMap((s) => s.nodes)
+          .find((v) => added.some((n) => n.id === v.id));
+        hint = sideNode ? { group: sideNode.group } : {};
+      }
+      break;
+    }
+    // 他の選択肢で経路が増える今の箱（Amplify の ISR のキャッシュをしないとき、ISR にすると ISR の経路が通る CDN など）
+    const gained = own.filter((n) => {
+      const now = new Set(through(baseArch, n.id));
+      return alts.some((a) => through(a, n.id).some((cls) => !now.has(cls)));
+    });
+    if (!hint && gained.length > 0) {
+      baseModel ??= diagramModel(baseArch);
+      const v = gained
+        .map((n) => baseModel!.nodes.find((m) => m.id === n.id))
+        .find((m) => m !== undefined);
+      if (v) hint = { group: v.group, depth: v.depth! };
+    }
+    if (!hint) {
+      // 3. 値だけが替わるスロット: 役割の合う今の箱に当てる
+      if (own.length > 0) {
+        attach(
+          own.map((n) => n.id),
+          x.slot,
+        );
+        continue;
+      }
+      hint = { depth: 1 };
+    }
+    ghosts.push({
+      slot: x.slot,
+      slotLabel: x.label,
+      label: option.label,
+      ...(option.note ? { note: option.note } : {}),
+      ...hint,
+    });
+  }
+  // 箱のスロットの並びは slots の順（3 で後から足したものも）
+  const order = new Map(slots.map((x, i) => [x.slot, i]));
+  for (const [id, list] of swap)
+    swap.set(
+      id,
+      [...list].sort((a, b) => order.get(a)! - order.get(b)!),
+    );
+  return { swap, ghosts };
 }
 
 /** 短い名前: 括弧の補足（「Worker（vinext）」の「（vinext）」）を外す。外すと何も残らないときは元の名前。 */

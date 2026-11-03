@@ -329,7 +329,7 @@ const EVENTS: EventDef[] = [
     kind: 'script',
     tier: 'common',
     title: 'SNS で話題になった！',
-    text: '記事が SNS で広まり、今月だけ PV が大きく増えた。満足度が高ければ、その後も伸びが残る',
+    text: '記事が SNS で広まり、今月だけ PV が大きく増えた。会員の登録も増え、登録の確認のメールが話題の日に集中する（1 日・月の通数に上限がある送信の仕組みでは、超えた分が届かない）。満足度が高ければ、その後も伸びが残る',
     when: { type: 'window', from: 6, to: 9 },
     notice: {
       monthsAhead: 1,
@@ -340,12 +340,15 @@ const EVENTS: EventDef[] = [
       chance: 0.5,
     },
     surpriseText:
-      '記事が突然 SNS で広まり、今月だけ PV が大きく増えた（前兆はなかった）。今月の費用と満足度に効いている。満足度が高ければ、その後も伸びが残る',
+      '記事が突然 SNS で広まり、今月だけ PV が大きく増えた（前兆はなかった）。会員の登録も増え、登録の確認のメールが話題の日に集中する。今月の費用と満足度に効いている。満足度が高ければ、その後も伸びが残る',
     premiseRefs: [
       'pool:vercel:pro:',
       'pool:cloudflare:workers-paid:',
       'host:line:',
       'limit:supabase:pro-micro:pooler-connections',
+      // メールの送信の上限（Resend。D-117）。Email Service の込みの通数は上の workers-paid に含まれる
+      'pool:resend:',
+      'limit:resend:',
     ],
     effects: [
       {

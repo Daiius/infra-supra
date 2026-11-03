@@ -45,7 +45,7 @@ export function toMeterUsage(
   const usage: MeterUsage[] = [];
   const unmetered: UnmeteredResource[] = [];
   const subs = new Map<string, Subscription>();
-  const { dayFactors, peakDayFactor } = sim.workload;
+  const { dayFactors, emailPeakDayFactor } = sim.workload;
 
   for (const node of sim.architecture.nodes) {
     const nu = sim.nodes[node.id]!;
@@ -94,6 +94,9 @@ export function toMeterUsage(
       }
       const quantity = convertUnit(q, RESOURCE_UNITS[r], meter.unit);
       const perDay = quantity / DAYS_PER_MONTH;
+      // メールは人の動きの集中だけに従う（Bot の集中を含めない。D-117）
+      const peakDayFactor =
+        r === 'emails' ? emailPeakDayFactor : sim.workload.peakDayFactor;
       usage.push({
         accountId: billing.accountId,
         nodeId: node.id,

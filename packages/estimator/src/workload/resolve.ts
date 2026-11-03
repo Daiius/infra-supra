@@ -132,6 +132,8 @@ export type ResolvedWorkload = {
   timeBuckets: TimeBucket[];
   /** 月のうち最も多い日 / 平均の日（話題・Bot の集中。日次の無料枠の判定だけ。D-60）。 */
   peakDayFactor: number;
+  /** メールの最も多い日 / 平均の日（Workload の email.peakDayFactor。省略は peakDayFactor。D-117）。 */
+  emailPeakDayFactor: number;
   /**
    * 保存量。imagesGB は原本（images.storedGB）。variantsGB は投稿のときに作って保存するサイズ違い
    * （transformAt: upload のときだけ。閲覧のときに変換する構成では保存しないので 0。OCL-F3098083）。
@@ -688,6 +690,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     peakHourFactor: t.peakHourFactor,
     timeBuckets: timeBuckets(r, t.hourlyProfile),
     peakDayFactor: t.peakDayFactor ?? 1,
+    emailPeakDayFactor: w.email?.peakDayFactor ?? t.peakDayFactor ?? 1,
     storage: {
       dbGB: w.db.sizeGB,
       imagesGB: w.images.storedGB,

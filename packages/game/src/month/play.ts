@@ -60,10 +60,8 @@ export function playMonth(input: GameState): GameState {
   const progress = progressOf(state);
   const { effort, featurePoints } = progress;
   const { seed, incident, apiOnlyHost } = incidentOf(sc, state);
-  const { blocking, policy, throttling, adjusted } = premiseOutcomesOf(
-    state,
-    r.premises,
-  );
+  const { blocking, undelivered, policy, throttling, adjusted } =
+    premiseOutcomesOf(state, r.premises);
   const revenue = revenueOf(sc, state, {
     humanPV,
     blocking,
@@ -83,6 +81,7 @@ export function playMonth(input: GameState): GameState {
     ssrCpuMs,
     featurePoints,
     blocking,
+    undelivered,
     throttling,
     adjusted,
     incident,

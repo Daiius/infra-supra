@@ -230,6 +230,7 @@ export function volumeOf(basePV: number, t: Traffic): Volume {
               ? humanPV * (e.factor - 1)
               : humanPV * (1 - 1 / e.factor),
             days: e.spikeDays,
+            ...(e.bot ? { bot: true as const } : {}),
           },
         ]
       : [],
