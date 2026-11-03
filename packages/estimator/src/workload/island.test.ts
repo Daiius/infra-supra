@@ -178,3 +178,30 @@ describe('サーバーの島（S6。D-108）', () => {
     expect(sim.nodes.fn!.resources.requests).toBeCloseTo(200_000, 6);
   });
 });
+
+describe('島の呼び名（D-111）', () => {
+  it('同じ応答の中の島に label を付けると、内訳の文はその名前で出る（部品ごとにキャッシュの「動的な穴」）', () => {
+    const w = base([
+      {
+        id: 'mine',
+        label: '個人向けのページ',
+        rendering: 'ssr',
+        share: 1,
+        pages: 1,
+        processing: island,
+        island: { label: '動的な穴' },
+      },
+    ]);
+    const sim = simulateResources(resolveWorkload(w), {
+      id: 'a',
+      name: 'a',
+      nodes: [
+        { id: 'fn', label: 'fn', config: { kind: 'function' } },
+        { id: 'db', label: 'db', config: { kind: 'sql-db' } },
+      ],
+      routes: { 'document-ssr': ['fn', 'db'] },
+    });
+    const src = sim.nodes.fn!.cpuSources.find((s) => s.island)!;
+    expect(cpuSourceText(src)).toBe('個人向けのページ（動的な穴・CPU 4 ms）');
+  });
+});

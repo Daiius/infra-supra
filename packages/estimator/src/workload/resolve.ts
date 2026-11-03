@@ -69,6 +69,8 @@ export type RequestSource = {
   flushMisses?: number;
   /** document-ssr だけ: サーバーの島（S6。ルートの island。D-108）を描くリクエスト。 */
   island?: boolean;
+  /** island だけ: 内訳の文で島を何と呼ぶか（ルートの island.label。D-111）。 */
+  islandLabel?: string;
   /** document-isr・isr-revalidate だけ: サーバーの島のページの枠（別のリクエストの島を持つルート。D-108）。 */
   islandShell?: boolean;
   /** api だけ: ルートのページの部品（コメント欄などのアイランド）が呼ぶ API（ルートの apiCalls。D-109）。 */
@@ -412,7 +414,14 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         r,
         views,
         p.cpuMs,
-        r.island ? { island: true } : {},
+        r.island
+          ? {
+              island: true,
+              ...(r.island.label !== undefined
+                ? { islandLabel: r.island.label }
+                : {}),
+            }
+          : {},
       );
     } else {
       const served = { kb: p.responseKB, cpuMs: r.cachedServeCpuMs };

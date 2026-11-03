@@ -43,6 +43,8 @@ export type CpuSource = {
   background?: boolean;
   /** サーバーの島（S6）を描くリクエスト（RequestSource の island。D-108）。 */
   island?: boolean;
+  /** 内訳の文で島を何と呼ぶか（RequestSource の islandLabel。D-111）。 */
+  islandLabel?: string;
   /** サーバーの島のページの枠（RequestSource の islandShell。D-108）。 */
   islandShell?: boolean;
   /** ルートのページの部品が呼ぶ API（RequestSource の part。D-109）。 */
@@ -258,6 +260,9 @@ function consume(
               ...(s.label !== undefined ? { label: s.label } : {}),
               ...(s.rendering !== undefined ? { rendering: s.rendering } : {}),
               ...(s.island ? { island: true } : {}),
+              ...(s.islandLabel !== undefined
+                ? { islandLabel: s.islandLabel }
+                : {}),
               ...(s.islandShell ? { islandShell: true } : {}),
               ...(s.part ? { part: true } : {}),
               cpuMs: Math.max(m > 0 ? s.cpuMs : 0, h > 0 ? hitCpu : 0),

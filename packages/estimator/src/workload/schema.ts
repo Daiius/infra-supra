@@ -62,7 +62,16 @@ export const RouteGroupSchema = z.object({
    * - request を省く（ssr のルート。Next.js の PPR）: 島は枠と同じ応答の中で続けて流す。数え方は ssr のままで、processing が
    *   島を描く分。どちらも 1 リクエストあたりの CPU の内訳（D-99）で島と分かるようにする。
    */
-  island: z.object({ request: ProcessingSchema.optional() }).optional(),
+  island: z
+    .object({
+      request: ProcessingSchema.optional(),
+      /**
+       * 内訳（D-99）の文で島を何と呼ぶか（省略は「サーバーの島」）。部品ごとにキャッシュ（Cache Components。D-111）の
+       * 人ごとに違う部分は「動的な穴」と呼ぶ。数え方は変えない。
+       */
+      label: z.string().optional(),
+    })
+    .optional(),
   /**
    * このルートの閲覧 1 回あたりに、ページの部品（コメント欄・いいねなどのアイランド）がブラウザから呼ぶ API の回数（D-109・RS-02）。
    * 与えると、このルートの閲覧には perPage.apiCalls の代わりにこれを使う（二重に数えない）。処理は api と同じ。

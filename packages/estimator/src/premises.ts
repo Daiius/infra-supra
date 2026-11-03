@@ -90,7 +90,7 @@ export function cpuSourceText(s: CpuSource): string {
     s.routeId === undefined
       ? undefined
       : s.island
-        ? 'サーバーの島'
+        ? (s.islandLabel ?? 'サーバーの島')
         : s.islandShell
           ? s.requestClass === 'document-isr'
             ? '島の枠をキャッシュから返す'
