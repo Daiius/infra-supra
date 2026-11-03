@@ -68,7 +68,13 @@ function StackCard({
   /** 構成図の説明。 */
   caption: string;
 }) {
-  const name = stackName(stackIndex, framework, false);
+  // 選んでいるカードは、DB を他の事業者に替えた実際の組の名前（「Vercel Pro + AWS DynamoDB」。D-77・D-114 段 2）
+  const name = stackName(
+    stackIndex,
+    framework,
+    false,
+    components?.db ? { db: components.db } : {},
+  );
   // この構成で選べない描き方は既定に戻して描く（構成図の staticBuildOf と同じ。D-107 の補足）
   const pages = useMemo(
     () =>

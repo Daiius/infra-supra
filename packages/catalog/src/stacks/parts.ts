@@ -267,9 +267,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     accepts: ['https-api'],
     attachesTo: ['compute'],
     as: 'dynamodb',
-    label: 'AWS: DynamoDB（オンデマンド・Vercel の Marketplace）',
+    label: 'AWS: DynamoDB（オンデマンド）',
     note:
-      'DB を Supabase から AWS の DynamoDB（東京・オンデマンド）に替える。読み書きの単位で課金し、時間課金のコンピュートが無い（保存は 25 GB 月まで無料）。' +
+      'DB を Supabase から AWS の DynamoDB（東京・オンデマンド）に替える（Vercel の Marketplace で作る）。読み書きの単位で課金し、時間課金のコンピュートが無い（保存は 25 GB 月まで無料）。' +
       '関数から OIDC の一時的な認証で SDK（HTTPS）を呼ぶ。DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える' +
       '（Vercel の関数と同じリージョンなら安くなる可能性があるが、公式に記載が無く未確認）。請求は AWS（既定のメールの送信の Amazon SES と同じアカウントなので、アカウントは増えない）。往復の遅延は計算しない',
     premiseRefs: [
@@ -283,14 +283,13 @@ export const CROSS_PARTS: readonly PartDef[] = [
     [
       {
         id: 'aurora',
-        label: 'Aurora Serverless v2（最小 0.5 ACU・Vercel の Marketplace）',
+        label: 'Aurora Serverless v2（最小 0.5 ACU）',
         size: '最小の 0.5 ACU の分は常にかかる（負荷で伸びた分はこのモデルでは数えない）',
         refs: ['fact:aws:aurora-serverless-v2-io:io-optimized'],
       },
       {
         id: 'aurora-pause',
-        label:
-          'Aurora Serverless v2（0 ACU まで縮める・Vercel の Marketplace）',
+        label: 'Aurora Serverless v2（0 ACU まで縮める）',
         size: '接続が 300 秒ないと止まり、止まっている間は ACU の料金がかからない（再開の待ちは速さに入れていない）',
         refs: ['fact:aws:aurora-serverless-v2-io:auto-pause'],
       },
@@ -305,7 +304,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: a.id,
     label: `AWS: ${a.label}`,
     note:
-      `DB を Supabase から AWS の Aurora PostgreSQL（東京・Serverless v2・I/O-Optimized）に替える。ACU の時間で課金し、${a.size}。` +
+      `DB を Supabase から AWS の Aurora PostgreSQL（東京・Serverless v2・I/O-Optimized）に替える（Vercel の Marketplace で作る）。ACU の時間で課金し、${a.size}。` +
       '関数は OIDC の一時的な認証で IAM 認証のトークンを作り、公開のエンドポイントに接続のプールでつなぐ（公開の設定は推測）。' +
       'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える（Vercel の関数と同じリージョンなら安くなる可能性があるが、公式に記載が無く未確認）。' +
       '請求は AWS（既定のメールの送信の Amazon SES と同じアカウントなので、アカウントは増えない）。往復の遅延は計算しない',

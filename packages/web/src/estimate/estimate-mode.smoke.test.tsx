@@ -473,4 +473,20 @@ describe('見積モードの画面', () => {
       within(group('DB のバックアップ')).getAllByRole('radio').length,
     ).toBeGreaterThan(1);
   });
+  it('W-38 DB を他の事業者に替えると、構成のカードの題・月の費用の見出しが実際の組になる（Neon は D-77・AWS は D-114 段 2）', async () => {
+    for (const [db, name] of [
+      ['dynamodb', 'Vercel Pro + AWS DynamoDB'],
+      ['neon', 'Vercel Pro + Neon（Launch）'],
+    ] as const) {
+      window.history.replaceState(
+        null,
+        '',
+        `/?mode=estimate&t=article&s=vercel-supabase-pro&c.db=${db}`,
+      );
+      await renderApp();
+      expect(expectEstimate()).toContain(name);
+      expect(stackCard().getAttribute('aria-label')).toBe(`${name} の構成`);
+      cleanup();
+    }
+  });
 });
