@@ -354,9 +354,9 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
 /** 区画の種類の系統ごとの淡い地と破線の枠の色（シナリオの見取り図の区画）。 */
 const TONE = {
   /** ナビ・枠（ヘッダー・ログイン・メニュー・フッター） */
-  nav: 'bg-slate-400/12 border-slate-500/35',
+  nav: 'bg-blue-400/15 border-blue-500/35',
   /** 文字（タイトル・本文・一覧・表） */
-  text: 'bg-stone-400/10 border-stone-500/35',
+  text: 'bg-yellow-500/15 border-yellow-600/40',
   /** 画像 */
   media: 'bg-orange-400/12 border-orange-500/40',
   /** 人ごと・反応（プロフィール・通知・いいね・コメント） */
