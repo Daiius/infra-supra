@@ -40,7 +40,7 @@
   - 料金データ（catalog）: 下の事業者の公式の料金表から、出典 URL と取得日つき（P1-10）。明細の表示名（D-75）・日本の消費税の扱い（D-76）。
   - ゲームモード（game・web）: GD-1〜GD-5（[07](./07-game-design.md) §8）。シナリオは記事コミュニティと受託の業務アプリ（[09](./09-scenario-contract.md)）。始める画面は シナリオ（ページと要件の見取り図）→ ① インフラの構成（構成図つきのカルーセル）→ ② フレームワーク（カードのページの欄でページの描き方も選ぶ。構成に載せられないものは選べない）→ ③ 部品・④ 設定の順に選び、1 か月目の費用の見込みを出す（D-45・D-72・D-102・D-105・D-107・D-112・D-113。[13](./13-route-strategies.md) §5b・§5f）。
   - 見積モード（web の `?mode=estimate`）: 明細・前提・構成の比較・費用の曲線・席・税込の目安・構成図・ページの描き方（D-73〜D-76・D-105・D-107。今の形は [08](./08-roadmap.md)「見積モードの今の形」）。
-- **計画中**: ページごとの描き方の段 4・5（[13](./13-route-strategies.md)・RS の残りは未決）、見積の JSON の保存・料金の改定の予告・判断ポイントの境目の値（D-73・D-74 の残し）、見積のスナップショットと golden（P1-9 の残り）、外部のシナリオとランキング（[12](./12-external-scenarios-and-ranking.md)・未決）、アーキテクチャエディタ（Phase 5）。
+- **計画中**: ページごとの描き方の段 4・5（[13](./13-route-strategies.md)・RS の残りは未決）、見積の JSON の保存・料金の改定の予告・判断ポイントの境目の値（D-73・D-74 の残し）、見積のスナップショットと golden（P1-9 の残り）、外部のシナリオとランキング（[12](./12-external-scenarios-and-ranking.md)・未決）、部品を事業者をまたいで組む（[14](./14-composable-parts.md)・下書き・未決）、アーキテクチャエディタ（Phase 5）。
 - **対象の事業者と構成**（catalog の `src/providers/`・`src/stacks/`）:
 
   | 事業者 | 構成・役割 | 決定 |
@@ -77,6 +77,7 @@
 | [11-aws-and-cross-provider.md](./11-aws-and-cross-provider.md) | AWS（Amplify・OpenNext・Aurora 系・CloudFront の定額）・事業者をまたぐ構成・Netlify・Neon・Google Cloud・VPS の前の Cloudflare・ログ・バックアップ・メール・DNS・確約・Bunny。論点 AX-01〜14 は D-50 で決定・実装済み（OpenNext・Netlify は一時的に隠している。D-100） |
 | [12-external-scenarios-and-ranking.md](./12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod）と再生による検証のランキング。**下書き・未実装・未決 ES-01〜16** |
 | [13-route-strategies.md](./13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット。段 0〜5 は実装済み（D-106〜D-109）、RS の残りは未決 |
+| [14-composable-parts.md](./14-composable-parts.md) | 部品を事業者をまたいで組む（役割と接続の口・接続の規則）。下書き・未実装・未決（CP-01〜17） |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |
 | [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-107）と、末尾に未決の論点の一覧 |
 
