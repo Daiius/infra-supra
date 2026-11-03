@@ -4,6 +4,22 @@
 import { Fragment, type ReactNode } from 'react';
 
 /** 名前の最後の語と ⓘ をくっつける。 */
+/** ⓘ と一緒に折り返さない末尾の長さ（文字。これより長い最後の語は、末尾のこの文字数だけを ⓘ に付ける）。 */
+export const INFO_TAIL_CHARS = 4;
+
+/**
+ * 名前を「折り返してよい頭」と「ⓘ と離さない末尾」に分ける。末尾は最後の空白の後の語で、長ければ（日本語の続く文など）
+ * 最後の INFO_TAIL_CHARS 文字だけにする（長い語を nowrap にすると狭い幅ではみ出すため）。
+ */
+export function splitForInfo(name: string): [string, string] {
+  const i = name.lastIndexOf(' ');
+  const chars = [...name.slice(i + 1)];
+  const cut =
+    chars.length > INFO_TAIL_CHARS ? chars.length - INFO_TAIL_CHARS : 0;
+  const tail = chars.slice(cut).join('');
+  return [name.slice(0, name.length - tail.length), tail];
+}
+
 export function NameWithInfo({
   name,
   info,
@@ -12,9 +28,7 @@ export function NameWithInfo({
   info?: ReactNode;
 }) {
   if (!info) return <>{name}</>;
-  const i = name.lastIndexOf(' ');
-  const head = i >= 0 ? name.slice(0, i + 1) : '';
-  const last = i >= 0 ? name.slice(i + 1) : name;
+  const [head, last] = splitForInfo(name);
   return (
     <>
       {head}
