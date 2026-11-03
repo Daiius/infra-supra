@@ -14,6 +14,8 @@ import {
   parseSave,
   playMonth,
   replaySave,
+  resolvedRouteStrategies,
+  routeAlternativeAction,
   routePlanOf,
   SCENARIOS,
   setupMonthOneEstimate,
@@ -178,14 +180,26 @@ describe('数え方（D-111）', () => {
 });
 
 describe('見取り図（D-111）', () => {
-  it('Vercel の既定は、人ごとに違う区画を動的な穴、ほかの HTML をキャッシュした部品にする', () => {
-    const pages = pageWireframes(
+  const resolved = (
+    stackIndex: number,
+    components: Record<string, string> = {},
+  ) =>
+    resolvedRouteStrategies(ARTICLE_COMMUNITY, {
+      framework: 'nextjs',
+      stackIndex,
+      components,
+    });
+  const sources = (stackIndex: number, components?: Record<string, string>) =>
+    pageWireframes(
       ARTICLE_COMMUNITY,
       'nextjs',
       undefined,
       undefined,
-      'vercel',
+      resolved(stackIndex, components),
     );
+
+  it('Vercel の既定は、人ごとに違う区画を動的な穴、ほかの HTML をキャッシュした部品にする', () => {
+    const pages = sources(VERCEL_PRO);
     const personal = pages.find((p) => p.route === 'personal')!;
     const src = Object.fromEntries(
       personal.regions.map((r) => [r.id, r.source]),
@@ -196,13 +210,140 @@ describe('見取り図（D-111）', () => {
     const article = pages.find((p) => p.route === 'article')!;
     expect(article.regions.some((r) => r.source === 'cc-cached')).toBe(true);
     expect(article.regions.some((r) => r.source === 'cc-dynamic')).toBe(false);
-    // 事業者を渡さない・VPS は今までの図
-    for (const p of [undefined, 'sakura'] as const)
+    // 実際の描き方を渡さない・VPS は今までの図
+    for (const pages of [
+      pageWireframes(ARTICLE_COMMUNITY, 'nextjs'),
+      sources(VPS),
+    ])
       expect(
-        pageWireframes(ARTICLE_COMMUNITY, 'nextjs', undefined, undefined, p)
-          .flatMap((x) => x.regions)
-          .some((r) => r.source === 'cc-cached'),
+        pages.flatMap((x) => x.regions).some((r) => r.source === 'cc-cached'),
       ).toBe(false);
+  });
+
+  it('ISR のキャッシュが「キャッシュしない」なら、表・計算と同じく毎回描くで描く（OCL-CD192A98）', () => {
+    const r = resolved(VERCEL_PRO, { isrCache: 'none' });
+    expect(r).toEqual({ article: 'ssr', personal: 'ssr' });
+    const regions = sources(VERCEL_PRO, { isrCache: 'none' }).flatMap(
+      (x) => x.regions,
+    );
+    expect(
+      regions.some(
+        (x) => x.source === 'cc-cached' || x.source === 'cc-dynamic',
+      ),
+    ).toBe(false);
+    // 記事の HTML の区画も毎回描く
+    const article = sources(VERCEL_PRO, { isrCache: 'none' }).find(
+      (p) => p.route === 'article',
+    )!;
+    expect(article.regions.some((x) => x.source === 'ssr')).toBe(true);
+    expect(article.regions.some((x) => x.source === 'isr')).toBe(false);
+  });
+});
+
+describe('タグで消せない構成（D-111・OCL-FC4A03B7）', () => {
+  const ON_DEMAND = 0;
+  const gcpOnDemand = () =>
+    newGame(
+      GCP,
+      42,
+      ARTICLE_COMMUNITY,
+      DEFAULT_START_DATE,
+      'nextjs',
+      undefined,
+      ON_DEMAND,
+    );
+
+  it('Google Cloud でオンデマンドなら、記事の部品ごとにキャッシュを選ぶと期限（5 分）に戻す', () => {
+    const s = gcpOnDemand();
+    expect(s.settings.revalidateSec).toBe(ON_DEMAND);
+    const row = routePlanOf(s).find((r) => r.route === 'article')!;
+    const alt = row.alternatives.find(
+      (a) => a.strategy === 'cache-components',
+    )!;
+    expect(alt.available).toBe(true);
+    expect(alt.value).toBe(300);
+    expect(alt.reason).toContain('タグで消せない');
+    const action = routeAlternativeAction(s, row, alt);
+    const t = applyAction(s, action);
+    expect(t.settings.revalidateSec).toBe(300);
+    // Vercel（消せる）では値を替えない
+    const v = newGame(
+      VERCEL_PRO,
+      42,
+      ARTICLE_COMMUNITY,
+      DEFAULT_START_DATE,
+      'nextjs',
+      undefined,
+      ON_DEMAND,
+      undefined,
+      undefined,
+      { article: 'cached-ttl' },
+    );
+    const valt = routePlanOf(v)
+      .find((r) => r.route === 'article')!
+      .alternatives.find((a) => a.strategy === 'cache-components')!;
+    expect(valt.value).toBeUndefined();
+  });
+
+  it('部品ごとにキャッシュの記事を Google Cloud でオンデマンドにはできない（行動）', () => {
+    const s = applyAction(
+      newGame(
+        GCP,
+        42,
+        ARTICLE_COMMUNITY,
+        DEFAULT_START_DATE,
+        'nextjs',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { article: 'cache-components' },
+      ),
+      { type: 'set', key: 'isr', value: ON_DEMAND },
+    );
+    expect(
+      checkAction(
+        newGame(
+          GCP,
+          42,
+          ARTICLE_COMMUNITY,
+          DEFAULT_START_DATE,
+          'nextjs',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { article: 'cache-components' },
+        ),
+        { type: 'set', key: 'isr', value: ON_DEMAND },
+      ),
+    ).toMatchObject({ ok: false, reason: 'unavailable' });
+    expect(s.settings.revalidateSec).not.toBe(ON_DEMAND);
+  });
+
+  it('始める画面などで組み合わさっても、計算はタグを数えず保険の期限で作り直す（表と同じ判定）', () => {
+    const w = (stackIndex: number) =>
+      workloadFor(ARTICLE_COMMUNITY, {
+        pv: 100_000,
+        settings: {
+          revalidateSec: ON_DEMAND,
+          imageKB: 150,
+          variants: 3,
+          ssrOptimizations: 0,
+        },
+        ssrCpuMs: 15,
+        mods: {},
+        stock: null,
+        platform: STACKS[stackIndex]!.provider,
+        components: {},
+        framework: 'nextjs',
+        routes: { article: 'cache-components' },
+      }).routes[0]!;
+    const gcp = w(GCP);
+    expect(gcp.onDemandUpdatesPerMonth).toBeUndefined();
+    expect(gcp.revalidateSeconds).toBe(86_400);
+    // Vercel はタグで消せるのでオンデマンドのまま
+    expect(w(VERCEL_PRO).onDemandUpdatesPerMonth).toBeDefined();
   });
 });
 
