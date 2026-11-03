@@ -68,3 +68,17 @@ describe('構成図の向き', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
 });
+
+describe('構成図の矢印の先端', () => {
+  it('先端は線と同じ流れの色の marker を参照する（context-stroke を使わない）', () => {
+    const { container } = renderAt(900);
+    const path = container.querySelector('path[data-lane][marker-end]')!;
+    const lane = path.getAttribute('data-lane')!;
+    const id = /url\(#(.+)\)/.exec(path.getAttribute('marker-end')!)![1]!;
+    const marker = container.querySelector(`marker[id="${id}"]`)!;
+    expect(id.endsWith(`-${lane}`)).toBe(true);
+    const fill = marker.querySelector('path')!.getAttribute('fill');
+    expect(fill).not.toBe('context-stroke');
+    expect((path as SVGElement).style.stroke).toBe(fill);
+  });
+});

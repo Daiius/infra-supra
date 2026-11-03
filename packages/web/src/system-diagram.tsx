@@ -132,18 +132,22 @@ export function SystemDiagram({
           <defs>
             {/* 矢印の先端は線の終わりの向き（orient="auto"）。線の終わりは矢印より長いまっすぐな線にしてある（edgeGeometry）。
                 大きさは線の太さに依らず図の座標で決める（強調した線でも先端がまっすぐな部分からはみ出さない） */}
-            <marker
-              id={markerId}
-              viewBox="0 0 6 6"
-              refX="5"
-              refY="3"
-              markerUnits="userSpaceOnUse"
-              markerWidth={ARROW}
-              markerHeight={ARROW}
-              orient="auto"
-            >
-              <path d="M0,0 L6,3 L0,6 z" fill="context-stroke" />
-            </marker>
+            {/* Chromium は context-stroke に対応していないので、流れごとに先端の色を持つ marker を作る */}
+            {(Object.keys(LANE_COLOR) as LaneId[]).map((l) => (
+              <marker
+                key={l}
+                id={`${markerId}-${l}`}
+                viewBox="0 0 6 6"
+                refX="5"
+                refY="3"
+                markerUnits="userSpaceOnUse"
+                markerWidth={ARROW}
+                markerHeight={ARROW}
+                orient="auto"
+              >
+                <path d="M0,0 L6,3 L0,6 z" fill={LANE_COLOR[l]} />
+              </marker>
+            ))}
           </defs>
           {model.groups.map((g) =>
             g.box ? (
@@ -421,7 +425,7 @@ function Edges({
                   strokeDasharray={LANE_DASH[l]}
                   markerEnd={
                     k === e.lanes.length - 1 || active === l
-                      ? `url(#${markerId})`
+                      ? `url(#${markerId}-${l})`
                       : undefined
                   }
                 />
