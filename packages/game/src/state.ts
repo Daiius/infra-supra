@@ -34,7 +34,8 @@ export type RoutePartKey = 'comments';
  * 描き方の分け方（D-107）。S2 と S3 は同じ「キャッシュ」で、期限かオンデマンドかは設定（revalidateSec）で決まる
  * （今までの ISR の再検証・記事のキャッシュの設定のまま。切り替えの手間も今までどおり）。
  */
-export type StrategyFamily = 'static' | 'cached' | 'ssr' | 'api' | 'island';
+export type StrategyFamily =
+  'static' | 'cached' | 'ssr' | 'api' | 'island' | 'components';
 
 export type Action =
   | { type: 'none' }
@@ -260,6 +261,11 @@ export type GameState = {
    * 作り直しが済むと空に戻り、乗り換えが済むと、乗り換え先で使えないものは外れる。
    */
   routes?: RouteOverrides;
+  /**
+   * 部品ごとにキャッシュ（Cache Components）を既定にする前の既定で描き方を決める（D-111）。保存の版 3 までの保存を再生するとき
+   * だけ true（Vercel × Next.js の既定が ISR・毎回描くだった頃の保存を、同じ結果で再生する）。新しいゲームには無い。
+   */
+  legacyRouteDefaults?: boolean;
   /**
    * ページの部品の選択（記事のページのコメント欄。既定と違うものだけ。D-109）。古い状態には無い（＝ブラウザで読み込む）。
    * 描き方と違い、作り直し・乗り換えでは戻さない（前の設定「コメントの描き方」と同じ。含められない描き方では効かない）。

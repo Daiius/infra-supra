@@ -11,6 +11,7 @@ import {
   type RouteTraits,
   SLOT_LABELS,
   strategySupport,
+  strategyTitle,
 } from 'catalog';
 import type { Scenario } from '../scenario.ts';
 import { onDemandBlocker } from '../requirements.ts';
@@ -102,6 +103,8 @@ export type RoutePlanInput = {
   components: Choices;
   /** 選んだ描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
+  /** 部品ごとにキャッシュを既定にする前の既定で決める（保存の版 3 まで。D-111）。 */
+  legacyRouteDefaults?: boolean | undefined;
   /** ページの部品の選択（記事のページのコメント欄。D-109）。 */
   routeParts?: RouteParts | undefined;
 };
@@ -130,7 +133,9 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
     const audience = routeAudienceOf(sc, r);
     const choice = plan[r.id]!;
     const def = ROUTE_STRATEGIES[choice.strategy];
-    const preset = defaultStrategy(p.framework, platform, audience);
+    const preset = defaultStrategy(p.framework, platform, audience, {
+      legacy: p.legacyRouteDefaults === true,
+    });
     const detail: string[] = [];
     const value = optionLabel(revalidateKey, p.settings.revalidateSec);
     if (choice.strategy === 'cached-ttl' && !hidden.includes(revalidateKey))
@@ -140,6 +145,15 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
         isOnDemand(p.settings)
           ? 'ビルドし直し: 更新のたび'
           : `ビルドし直し: 間隔 ${value}`,
+      );
+    // 部品ごとにキャッシュ（D-111）: 記事は期限（cacheLife）かタグ（cacheTag・updateTag）、個人向けは動的な穴
+    if (choice.strategy === 'cache-components')
+      detail.push(
+        audience === 'personal'
+          ? '人ごとに違う部分だけ閲覧ごとに描く（全員に同じ部品は枠に入る）'
+          : isOnDemand(p.settings)
+            ? '部品をタグで作り直す（投稿・編集で updateTag）'
+            : `部品の期限 ${value}（cacheLife）`,
       );
     if (choice.shellPerPage)
       detail.push(
@@ -152,7 +166,7 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       strategyFamily(choice.strategy) === strategyFamily(preset)
         ? undefined
         : chosen
-          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は ${ROUTE_STRATEGIES[preset].code} ${ROUTE_STRATEGIES[preset].label}）`
+          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は ${strategyTitle(preset)}）`
           : choice.strategy === 'ssr'
             ? `${SLOT_LABELS.isrCache}の部品が「キャッシュしない」`
             : undefined;
@@ -165,10 +179,17 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       // 部品で決まるもの（Next.js の S3）は、今の部品で消せるか（onDemandBlocker）で判定する
       const blocked =
         x.support === 'depends' && s === 'cached-purge' ? blocker : undefined;
+      // 部品ごとにキャッシュの記事は、今の部品でタグが届かない（S3 と同じ onDemandBlocker）のにオンデマンドなら、
+      // 選ぶときに期限（5 分）へ戻す（D-111・OCL-FC4A03B7）
+      const ccTagBlocked =
+        s === 'cache-components' &&
+        audience === 'public' &&
+        isOnDemand(p.settings) &&
+        blocker !== undefined;
       const value =
         s === 'cached-purge'
           ? ON_DEMAND_REVALIDATE
-          : s === 'cached-ttl' && isOnDemand(p.settings)
+          : (s === 'cached-ttl' && isOnDemand(p.settings)) || ccTagBlocked
             ? DEFAULT_REVALIDATE_SEC
             : undefined;
       return [
@@ -181,11 +202,13 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
             blocked === undefined,
           reason: blocked
             ? `${blocked.label}: ${blocked.reason}`
-            : s === 'shell-api' &&
-                audience === 'public' &&
-                shellPerPage(p.framework, platform)
-              ? `${x.note}。${SHELL_PER_PAGE_NOTE}`
-              : x.note,
+            : ccTagBlocked
+              ? `${x.note}。この部品ではタグで消せない（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）ので、選ぶと期限 ${optionLabel(revalidateKey, DEFAULT_REVALIDATE_SEC)} に戻す`
+              : s === 'shell-api' &&
+                  audience === 'public' &&
+                  shellPerPage(p.framework, platform)
+                ? `${x.note}。${SHELL_PER_PAGE_NOTE}`
+                : x.note,
           basis: x.basis,
           ...(value !== undefined ? { value } : {}),
         },
@@ -220,6 +243,25 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
   });
 }
 
+/**
+ * ルートごとの実際の描き方（routeChoices。表・計算と同じ）。見取り図・構成図に渡す（D-111・OCL-CD192A98）。
+ */
+export function resolvedRouteStrategies(
+  sc: Scenario,
+  p: Omit<RoutePlanInput, 'settings'> & {
+    settings?: Pick<Settings, 'revalidateSec'>;
+  },
+): Partial<Record<string, RouteStrategyId>> {
+  const plan = routeChoices(sc, sc.template(1).routes, {
+    ...p,
+    settings: p.settings ?? { revalidateSec: DEFAULT_REVALIDATE_SEC },
+    platform: STACKS[p.stackIndex]!.provider,
+  });
+  return Object.fromEntries(
+    Object.entries(plan).map(([id, c]) => [id, c.strategy]),
+  );
+}
+
 /** ゲームの今の状態のページごとの描き方（D-106。今のフレームワーク・構成・設定・部品・選んだ描き方から決まる）。 */
 export function routePlanOf(
   state: Pick<
@@ -230,6 +272,7 @@ export function routePlanOf(
     | 'settings'
     | 'components'
     | 'routes'
+    | 'legacyRouteDefaults'
   >,
 ): RoutePlanRow[] {
   return routePlanRows(state.scenario, state);

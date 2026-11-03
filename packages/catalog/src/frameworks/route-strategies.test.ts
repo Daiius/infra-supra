@@ -25,12 +25,14 @@ import {
   routeAudience,
   SERVER_ISLAND,
   serverIslandDelivery,
+  strategyTitle,
+  CACHE_COMPONENTS,
 } from './route-strategies.ts';
 
 const FRAMEWORK_IDS = Object.keys(FRAMEWORK_PRESETS) as FrameworkId[];
 
 describe('描き方のメニュー', () => {
-  it('S1〜S6 が順に並び、個人化のページに使えるのは S4〜S6 だけ', () => {
+  it('S1〜S6 と部品ごとにキャッシュ（番号を出さない）が順に並び、個人化のページに使えるのは S4〜S6 と部品ごとにキャッシュ', () => {
     expect(ROUTE_STRATEGY_ORDER.map((s) => ROUTE_STRATEGIES[s].code)).toEqual([
       'S1',
       'S2',
@@ -38,10 +40,15 @@ describe('描き方のメニュー', () => {
       'S4',
       'S5',
       'S6',
+      '',
     ]);
     expect(
       ROUTE_STRATEGY_ORDER.filter((s) => ROUTE_STRATEGIES[s].personalOk),
-    ).toEqual(['ssr', 'shell-api', 'server-island']);
+    ).toEqual(['ssr', 'shell-api', 'server-island', 'cache-components']);
+    expect(strategyTitle('cache-components')).toBe(
+      '部品ごとにキャッシュ（Cache Components）',
+    );
+    expect(strategyTitle('ssr')).toBe('S4 毎回描く');
   });
 
   it('テンプレートのルートの見る人: 記事は全員に同じ・個人向けと業務の画面は人ごと', () => {
@@ -386,5 +393,82 @@ describe('applyRouteStrategies', () => {
     expect(serverIslandDelivery('nextjs')).toBe('stream');
     expect(serverIslandDelivery('nextjs-export')).toBeUndefined();
     expect(serverIslandDelivery('vite-spa')).toBeUndefined();
+  });
+});
+
+describe('部品ごとにキャッシュ（Cache Components。D-111）', () => {
+  it('対応: Next.js × Vercel・VPS・Google Cloud は出典つきで使える、vinext・Amplify は使えない、Astro・静的書き出し・SPA には無い', () => {
+    for (const p of ['vercel', 'sakura', 'gcp'] as const) {
+      const x = capabilityRow('nextjs', p)['cache-components'];
+      expect(x.support, p).toBe('yes');
+      expect(x.basis, p).toBe('source');
+      expect(
+        x.sources.some((s) => s.url.includes('nextjs.org/docs')),
+        p,
+      ).toBe(true);
+    }
+    expect(
+      capabilityRow('nextjs', 'cloudflare')['cache-components'].support,
+    ).toBe('no');
+    expect(capabilityRow('nextjs', 'aws')['cache-components'].support).toBe(
+      'no',
+    );
+    for (const f of ['astro', 'nextjs-export', 'vite-spa'] as const)
+      expect(capabilityRow(f, 'vercel')['cache-components'].support, f).toBe(
+        'no',
+      );
+    // 全員に同じページ（記事）にも人ごとに違うページにも使える
+    expect(
+      strategySupport('nextjs', 'vercel', 'public', 'cache-components').support,
+    ).toBe('yes');
+    expect(
+      strategySupport('nextjs', 'vercel', 'personal', 'cache-components')
+        .support,
+    ).toBe('yes');
+  });
+
+  it('既定: Vercel × Next.js だけ部品ごとにキャッシュ。legacy（保存の版 3 まで）は今までの既定', () => {
+    expect(defaultStrategy('nextjs', 'vercel', 'public')).toBe(
+      'cache-components',
+    );
+    expect(defaultStrategy('nextjs', 'vercel', 'personal')).toBe(
+      'cache-components',
+    );
+    expect(
+      defaultStrategy('nextjs', 'vercel', 'public', { legacy: true }),
+    ).toBe('cached-ttl');
+    expect(
+      defaultStrategy('nextjs', 'vercel', 'personal', { legacy: true }),
+    ).toBe('ssr');
+    for (const p of ['sakura', 'gcp', 'cloudflare', 'aws'] as const) {
+      expect(defaultStrategy('nextjs', p, 'public'), p).not.toBe(
+        'cache-components',
+      );
+      expect(defaultStrategy('nextjs', p, 'personal'), p).toBe('ssr');
+    }
+    expect(defaultStrategy('astro', 'vercel', 'personal')).toBe('ssr');
+  });
+
+  it('Workload: 記事は ISR のまま、個人向けは ssr のまま CPU を穴の分・DB を全員に同じ部品の分を除いた残りにする', () => {
+    const w = articleCommunity(10_000);
+    const out = applyRouteStrategies(w, {
+      article: { strategy: 'cache-components' },
+      personal: { strategy: 'cache-components' },
+    });
+    expect(out.routes[0]).toEqual(w.routes[0]);
+    const before = w.routes[1]!;
+    const after = out.routes[1]!;
+    expect(after.rendering).toBe('ssr');
+    expect(after.island).toEqual({ label: CACHE_COMPONENTS.holeLabel });
+    expect(after.processing.cpuMs).toBeCloseTo(
+      before.processing.cpuMs * CACHE_COMPONENTS.dynamicShare,
+    );
+    expect(after.processing.queries).toBeCloseTo(
+      before.processing.queries * (1 - CACHE_COMPONENTS.cachedQueryShare),
+    );
+    expect(after.processing.ioWaitMs).toBeCloseTo(
+      before.processing.ioWaitMs * (1 - CACHE_COMPONENTS.cachedQueryShare),
+    );
+    expect(after.processing.responseKB).toBe(before.processing.responseKB);
   });
 });

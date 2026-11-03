@@ -172,7 +172,12 @@ export function EstimateMode() {
             setInput({
               routes: withRouteChoice(
                 scenarioOfTemplate(input.template),
-                input.framework,
+                {
+                  framework: input.framework,
+                  platform:
+                    STACKS.find((s) => s.id === input.stack)?.provider ??
+                    STACKS[0]!.provider,
+                },
                 input.routes,
                 row.route,
                 alt.strategy,

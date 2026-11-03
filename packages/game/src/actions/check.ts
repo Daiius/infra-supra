@@ -29,7 +29,7 @@ import {
   commitmentOffers,
   pendingUpfrontUsd,
 } from '../offers.ts';
-import { unavailableReason } from '../requirements.ts';
+import { onDemandBlocker, unavailableReason } from '../requirements.ts';
 import { newRewrite, rewriteUnsupported } from '../rewrite.ts';
 import {
   commentsChoosable,
@@ -130,6 +130,33 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         return ng('same', '今と同じ（または選択済み）');
       const inactive = settingInactiveReason(state, action.key);
       if (inactive) return ng('unavailable', inactive);
+      // 部品ごとにキャッシュの記事は、タグで消せない部品ではオンデマンドにできない（表の選択肢・計算と同じ判定。D-111・OCL-FC4A03B7）
+      if (action.key === 'isr' && action.value === ON_DEMAND_REVALIDATE) {
+        const sc = scenarioOf(state);
+        const pr = publicRoute(sc);
+        const blocker = onDemandBlocker(
+          state.stackIndex,
+          state.components,
+          state.framework,
+          'cached',
+        );
+        if (
+          pr &&
+          blocker &&
+          routeChoices(sc, [pr], {
+            framework: state.framework,
+            platform: STACKS[state.stackIndex]!.provider,
+            settings: state.settings,
+            components: state.components,
+            routes: state.routes,
+            legacyRouteDefaults: state.legacyRouteDefaults,
+          })[pr.id]?.strategy === 'cache-components'
+        )
+          return ng(
+            'unavailable',
+            `部品ごとにキャッシュの記事をタグで消せない（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）`,
+          );
+      }
       // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の手間がかかる（D-49）
       // 静的書き出しの更新のたびのビルドも、更新からビルドを起こす仕組み（デプロイの hook）の実装が要る（同じ手間・仮定。D-68）。
       // Astro の投稿・編集でキャッシュを消すのも、消す呼び出し（cache.invalidate・bypassToken）の実装が要る（同じ手間・仮定。D-103）
@@ -263,6 +290,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         settings: state.settings,
         components: state.components,
         routes: state.routes,
+        legacyRouteDefaults: state.legacyRouteDefaults,
       })[r.id]!.strategy;
       if (strategyFamily(now) === strategyFamily(action.strategy))
         return ng(

@@ -12,6 +12,7 @@ import {
   type FrameworkId,
   type RouteOverrides,
   type RoutePlanRow,
+  type RouteStrategyId,
   type Scenario,
   upkeepOf,
 } from 'game';
@@ -194,6 +195,7 @@ function FrameworkCard({
   routes,
   chosenRoutes,
   routeNotice,
+  resolved,
 }: {
   scenario: Scenario;
   id: FrameworkId;
@@ -208,14 +210,18 @@ function FrameworkCard({
   chosenRoutes?: RouteOverrides | undefined;
   /** このフレームワークにすると既定に戻る描き方の注意（選んでいないカードだけ。D-107 の補足）。 */
   routeNotice?: string | null | undefined;
+  /** 実際の描き方（routeChoices。表・計算と同じ。見取り図に使う。D-111）。 */
+  resolved?: Partial<Record<string, RouteStrategyId>> | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
-  // 選んでいるカードは選んだ描き方で描く（D-107）
+  // 選んでいるカードは選んだ描き方で描く（D-107）。表・計算と同じ実際の描き方（resolved。事業者で決まる既定・部品の
+  // 「キャッシュしない」も効く。D-111・OCL-CD192A98）があればそれで描く
   const pages = pageWireframes(
     scenario,
     id,
     comments,
     selected ? chosenRoutes : undefined,
+    resolved,
   );
   const lines = t?.pages ?? [];
   /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
@@ -325,6 +331,7 @@ export function FrameworkField({
   routePlan,
   routes,
   routeNotice,
+  resolvedRoutes,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
@@ -338,6 +345,11 @@ export function FrameworkField({
   routes?: RouteOverrides | undefined;
   /** そのフレームワークにすると既定に戻る描き方の注意（D-107 の補足）。 */
   routeNotice?: (id: FrameworkId) => string | null;
+  /** フレームワークごとの実際の描き方（選んでいるカードは選んだ描き方込み。見取り図に使う。D-111・OCL-CD192A98）。 */
+  resolvedRoutes?: (
+    id: FrameworkId,
+    selected: boolean,
+  ) => Partial<Record<string, RouteStrategyId>>;
 }) {
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
@@ -380,6 +392,7 @@ export function FrameworkField({
             routes={routePlan?.(id)}
             chosenRoutes={routes}
             routeNotice={selected ? null : routeNotice?.(id)}
+            resolved={resolvedRoutes?.(id, selected)}
           />
         )}
       />

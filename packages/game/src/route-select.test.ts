@@ -184,7 +184,8 @@ describe('始める画面で選ぶ（D-107）', () => {
 
 describe('途中で描き方を替える（D-107・RS-08）', () => {
   it('手間: 枠 + API へは 4・それ以外は 3。期限 ↔ オンデマンドは設定で替える', () => {
-    const s = start(VERCEL_PRO, 'nextjs');
+    // Vercel × Next.js の既定は部品ごとにキャッシュ（D-111）なので、ISR が既定の VPS で見る
+    const s = start(VPS, 'nextjs');
     const cost = (a: Action) => {
       const r = checkAction(s, a);
       return r.ok ? r.cost : r.reason;
@@ -195,6 +196,14 @@ describe('途中で描き方を替える（D-107・RS-08）', () => {
     expect(cost(route('article', 'cached-purge'))).toBe('same');
     expect(cost(route('personal', 'cached-ttl'))).toBe('unavailable');
     expect(cost(route('nope', 'ssr'))).toBe('invalid');
+    // 部品ごとにキャッシュへも、そこから ISR へも 3（RS-08・D-111）
+    expect(cost(route('personal', 'cache-components'))).toBe(3);
+    expect(
+      checkAction(
+        start(VERCEL_PRO, 'nextjs'),
+        route('article', 'cached-purge'),
+      ),
+    ).toMatchObject({ ok: true, cost: 3 });
     // CF の Next.js（vinext）の S1 も同じ手間で選べる（RS-15 の解除）
     expect(
       checkAction(start(CF_PAID, 'nextjs'), route('article', 'static-build')),
@@ -202,7 +211,7 @@ describe('途中で描き方を替える（D-107・RS-08）', () => {
   });
 
   it('表のほかの描き方から行動を作る（S2 → S3 は設定の変更・それ以外は描き方の変更）', () => {
-    const s = start(VERCEL_PRO, 'nextjs');
+    const s = start(VPS, 'nextjs');
     const row = routePlanOf(s).find((r) => r.route === 'article')!;
     const s3 = row.alternatives.find((a) => a.strategy === 'cached-purge')!;
     expect(routeAlternativeAction(s, row, s3)).toEqual({
@@ -255,7 +264,7 @@ describe('保存（SAVE_VERSION 2 から・D-107）', () => {
       startDate: DEFAULT_START_DATE,
       routes: { personal: 'shell-api' },
     });
-    expect(save.version).toBe(3);
+    expect(save.version).toBe(4);
     save = withTurn(save, [route('article', 'ssr')]);
     const parsed = parseSave(JSON.parse(JSON.stringify(save)))!;
     const s = replaySave(parsed);
@@ -316,7 +325,7 @@ describe('保存（SAVE_VERSION 2 から・D-107）', () => {
     expect(s.routes).toBeUndefined();
     // D-103 の読み替え（Astro の buildInterval → pageCache）も効く
     expect(s.settings.revalidateSec).toBe(21600);
-    expect(parseSave({ ...v1, version: 4 })).toBeNull();
+    expect(parseSave({ ...v1, version: 5 })).toBeNull();
     expect(
       parseSave({ ...v1, version: 2, routes: { article: 'x' } }),
     ).toBeNull();

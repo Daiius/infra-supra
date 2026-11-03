@@ -191,6 +191,72 @@ function nextIsland(d: DeployTarget): StrategySupport {
   }
 }
 
+/** 部品ごとにキャッシュ（Cache Components）を確かめた公式の文書（2026-11-03 取得。prd/13 §9・D-111）。 */
+const NEXT_CACHE_COMPONENTS: Source[] = [
+  {
+    url: 'https://nextjs.org/docs/app/api-reference/directives/use-cache',
+    retrievedAt: '2026-11-03',
+  },
+  {
+    url: 'https://nextjs.org/docs/app/getting-started/caching',
+    retrievedAt: '2026-11-03',
+  },
+  {
+    url: 'https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheHandlers',
+    retrievedAt: '2026-11-03',
+  },
+];
+const VERCEL_PPR: Source = {
+  url: 'https://vercel.com/docs/partial-prerendering',
+  retrievedAt: '2026-11-03',
+};
+const NEXT_SELF_HOSTING: Source = {
+  url: 'https://nextjs.org/docs/app/guides/self-hosting',
+  retrievedAt: '2026-11-03',
+};
+
+/** 部品ごとにキャッシュの数え方の要約（D-111・ゲーム上の仮定）。 */
+const CACHE_COMPONENTS_COUNT =
+  '人ごとに違うページは、穴を描く CPU をページ全体の SSR の 4 割、DB の問い合わせを全員に同じ部品の分（3 分の 1）を除いた残りとみなす。全員に同じページは ISR と同じ数え方（期限かタグかは再検証の設定）（ゲーム上の仮定）';
+
+/**
+ * 部品ごとにキャッシュ（Next.js 16 の Cache Components。D-111）。Vercel は枠を全体の ISR のキャッシュと地域の CDN に置き、
+ * 穴を関数で描く（Vercel の PPR の文書）。自前の Node（VPS・Cloud Run）は next start が扱い、'use cache' の既定は各プロセスの
+ * メモリ（インスタンスの間で共有しない。共有するには cacheHandlers で Redis などを足す＝このゲームでは扱わない）。vinext・Amplify は ✗。
+ */
+function nextCacheComponents(d: DeployTarget): StrategySupport {
+  switch (d.platform) {
+    case 'vercel':
+      return yes(
+        `Vercel は静的な枠（キャッシュした部品を含む）を全体の ISR のキャッシュに置いて地域の CDN から返し、人ごとに違う部分を関数で描いて同じ応答で流す（閲覧ごとに関数を呼ぶ）。タグ（revalidateTag・updateTag）で枠を作り直す。${CACHE_COMPONENTS_COUNT}`,
+        [...NEXT_CACHE_COMPONENTS, VERCEL_PPR],
+      );
+    case 'sakura':
+      return yes(
+        `next start（1 つの Node のプロセス）が枠をディスクに、'use cache' をメモリに持つ（1 台なのでキャッシュは全員で共有される）。${CACHE_COMPONENTS_COUNT}`,
+        [...NEXT_CACHE_COMPONENTS, NEXT_SELF_HOSTING],
+      );
+    case 'gcp':
+      return yes(
+        `Cloud Run の next start が扱う。'use cache' の既定はインスタンスごとのメモリで共有されず、タグで消してもほかのインスタンスには届かない（共有の cacheHandlers は扱わない）。全員に同じページをタグで消す形は Hosting の CDN が消せないのと同じく使えない（期限で取り直す）。${CACHE_COMPONENTS_COUNT}`,
+        [...NEXT_CACHE_COMPONENTS, NEXT_SELF_HOSTING],
+      );
+    case 'cloudflare':
+      return no(
+        "vinext は cacheComponents の挙動がまだ不完全（README: 'use cache' は一部だけ・cache profiles・tags・partial shells が Next.js と合わない）",
+        VINEXT_PRERENDER.slice(0, 1),
+      );
+    case 'aws':
+      return no('Amplify は Next.js 15 まで（Cache Components は 16）', [
+        AMPLIFY_NEXT,
+      ]);
+    default:
+      return unverified(
+        'Next.js の Cache Components をこの事業者で確かめていない',
+      );
+  }
+}
+
 /** Next.js の S3: ISR のキャッシュの部品の onDemandIsr から（消せる部品・消せない部品）。 */
 function nextPurge(d: DeployTarget): StrategySupport {
   const opts = componentsOf(d.platform, 'isrCache', 'nextjs').filter(
@@ -238,6 +304,7 @@ function nextjsRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     ssr: yes('Server Components を閲覧のたびに描く（動的な描画）', d.sources),
     'shell-api': SHELL_API_ANY,
     'server-island': nextIsland(d),
+    'cache-components': nextCacheComponents(d),
   };
 }
 
@@ -258,6 +325,10 @@ function astroRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     ssr: yes('アダプターが閲覧のたびに描く（on-demand rendering）', d.sources),
     'shell-api': SHELL_API_ANY,
     'server-island': astroIsland(d),
+    'cache-components': no(
+      'Cache Components は Next.js 16 の機能（Astro には無い。Astro で近いのは枠 + サーバーの島）',
+      FRAMEWORKS.astro.sources,
+    ),
   };
 }
 
@@ -281,6 +352,7 @@ function nextExportRow(
       FRAMEWORKS['nextjs-export'].sources,
     ),
     'server-island': noServer,
+    'cache-components': noServer,
   };
 }
 
@@ -299,6 +371,7 @@ function spaRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
       d.sources,
     ),
     'server-island': noHtml,
+    'cache-components': noHtml,
   };
 }
 
@@ -356,14 +429,32 @@ export function strategySupport(
 }
 
 /**
+ * 既定を部品ごとにキャッシュ（Cache Components）にする組（D-111・C-14/C-16）。Vercel × Next.js だけ。使えない組（vinext・Amplify）と、
+ * 選べるが既定にしない組（VPS・Cloud Run）は今までの ISR・毎回描くのまま。
+ */
+export function cacheComponentsByDefault(
+  framework: FrameworkId,
+  platform: Platform,
+): boolean {
+  return framework === 'nextjs' && platform === 'vercel';
+}
+
+/** 既定の決め方の選択。legacy: 部品ごとにキャッシュを既定にする前（保存の版 3 まで）の既定で読む（D-111）。 */
+export type DefaultStrategyOptions = { legacy?: boolean };
+
+/**
  * フレームワークの既定の描き方をその事業者で使える形に落とす（D-106）。Astro の記事は消せない置き場（Google Cloud の
  * Hosting の CDN）では期限で取り直す（D-103 の実装。下書きの RS-03 は S1 に落とす案だったが、main の実装に合わせた）。
+ * Vercel × Next.js は部品ごとにキャッシュ（D-111。legacy なら今までの既定）。
  */
 export function defaultStrategy(
   framework: FrameworkId,
   platform: Platform,
   audience: RouteAudience,
+  options: DefaultStrategyOptions = {},
 ): RouteStrategyId {
+  if (!options.legacy && cacheComponentsByDefault(framework, platform))
+    return 'cache-components';
   const s = FRAMEWORK_PRESETS[framework][audience];
   if (
     s === 'cached-purge' &&

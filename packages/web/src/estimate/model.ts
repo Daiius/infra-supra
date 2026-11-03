@@ -745,6 +745,15 @@ export function diagramOf(input: EstimateInput): {
     .comments
     ? input.comments
     : undefined;
+  // 描き方は見積の Workload（run）と同じ設定・部品から。見取り図・構成図も表と同じ実際の描き方で描く（OCL-CD192A98）
+  const rows = routePlanRows(r.scenario, {
+    framework: input.framework,
+    stackIndex: r.stackIndex,
+    settings: { revalidateSec: input.revalidateSec },
+    components: r.components,
+    routes: input.routes,
+    routeParts: partsOfComments(r.scenario, input.comments),
+  });
   return {
     architecture: diagramArchitecture(
       r.scenario,
@@ -753,16 +762,14 @@ export function diagramOf(input: EstimateInput): {
       r.components,
       input.routes,
     ),
-    pages: pageWireframes(r.scenario, input.framework, comments, input.routes),
-    // 描き方は見積の Workload（run）と同じ設定・部品から
-    routes: routePlanRows(r.scenario, {
-      framework: input.framework,
-      stackIndex: r.stackIndex,
-      settings: { revalidateSec: input.revalidateSec },
-      components: r.components,
-      routes: input.routes,
-      routeParts: partsOfComments(r.scenario, input.comments),
-    }),
+    pages: pageWireframes(
+      r.scenario,
+      input.framework,
+      comments,
+      input.routes,
+      Object.fromEntries(rows.map((x) => [x.route, x.strategy])),
+    ),
+    routes: rows,
   };
 }
 
@@ -802,7 +809,10 @@ export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
           ...input,
           routes: withRouteChoice(
             r.scenario,
-            input.framework,
+            {
+              framework: input.framework,
+              platform: STACKS[stackIndexOf(input.stack)]!.provider,
+            },
             input.routes,
             row.route,
             alt.strategy,

@@ -35,7 +35,17 @@ export function strategyFamily(s: RouteStrategyId): StrategyFamily {
       return 'api';
     case 'server-island':
       return 'island';
+    case 'cache-components':
+      return 'components';
   }
+}
+
+/**
+ * 記事のページ（全員に同じ中身）の判定に使う分け方（D-111）。部品ごとにキャッシュの記事はキャッシュした部品だけで穴が無く、
+ * 数え方・設定の意味（期限かタグか）・鮮度・SNS のカードは S2・S3 と同じなので「キャッシュ」として扱う。
+ */
+export function articleJudgeFamily(f: StrategyFamily): StrategyFamily {
+  return f === 'components' ? 'cached' : f;
 }
 
 /** シナリオのルートの見る人（テンプレートのルートの性質。D-107）。 */
@@ -58,7 +68,11 @@ export function publicRouteId(
   return publicRoute(sc)?.id;
 }
 
-/** ルートの今の描き方の分け方（選んだ描き方があればそれ、無ければフレームワークの既定）。 */
+/**
+ * ルートの今の描き方の分け方（選んだ描き方があればそれ、無ければフレームワークの既定）。事業者を見ないので、Vercel × Next.js の
+ * 既定（部品ごとにキャッシュ。D-111）は今までの既定（記事はキャッシュ・個人向けは毎回描く）として返す。呼ぶ側は記事の判定
+ * （articleFamily。部品ごとにキャッシュは「キャッシュ」として判定する）と、枠 + API かどうかだけに使う（どちらも結果が同じ）。
+ */
 export function routeFamily(
   state: {
     scenario: Pick<Scenario, 'template' | 'routeTraits'>;
@@ -87,7 +101,8 @@ export function articleFamily(state: {
   routes?: RouteOverrides | undefined;
 }): StrategyFamily | undefined {
   const r = publicRoute(state.scenario);
-  return r ? routeFamily(state, r.id) : undefined;
+  const f = r ? routeFamily(state, r.id) : undefined;
+  return f === undefined ? undefined : articleJudgeFamily(f);
 }
 
 /**
@@ -108,6 +123,8 @@ export function routeChoices(
     components: Choices;
     /** 選んだ描き方（D-107）。この事業者・フレームワークで使えないものは既定に戻す。 */
     routes?: RouteOverrides | undefined;
+    /** 部品ごとにキャッシュを既定にする前の既定で決める（保存の版 3 まで。D-111）。 */
+    legacyRouteDefaults?: boolean | undefined;
   },
 ): RoutePlan {
   const c = { ...DEFAULT_CHOICES[p.platform], ...p.components };
@@ -120,7 +137,16 @@ export function routeChoices(
         chosen !== undefined &&
         strategySelectable(p.framework, p.platform, audience, chosen)
           ? chosen
-          : defaultStrategy(p.framework, p.platform, audience);
+          : defaultStrategy(p.framework, p.platform, audience, {
+              legacy: p.legacyRouteDefaults === true,
+            });
+      // 部品ごとにキャッシュは ISR のキャッシュ（枠の置き場）を使う。「キャッシュしない」なら毎回描く（ISR と同じ書き換え。D-111）
+      if (
+        strategy === 'cache-components' &&
+        p.framework === 'nextjs' &&
+        c.isrCache === 'none'
+      )
+        strategy = 'ssr';
       if (strategy === 'cached-ttl' || strategy === 'cached-purge')
         strategy =
           p.framework === 'nextjs' && c.isrCache === 'none'
@@ -202,12 +228,31 @@ export function strategySelectable(
   );
 }
 
+/** 既定の描き方を決める先（フレームワーク・事業者・古い既定で読むか。D-111）。 */
+export type RouteDefaultsOf = {
+  framework: FrameworkId;
+  platform: Platform;
+  legacyRouteDefaults?: boolean | undefined;
+};
+
+/** そのルートの既定の描き方（事業者で落とした後。Vercel × Next.js は部品ごとにキャッシュ。D-111）。 */
+export function presetStrategy(
+  sc: Pick<Scenario, 'routeTraits'>,
+  d: RouteDefaultsOf,
+  r: { id: string; rendering: WorkloadInput['routes'][number]['rendering'] },
+): RouteStrategyId {
+  return defaultStrategy(d.framework, d.platform, routeAudienceOf(sc, r), {
+    legacy: d.legacyRouteDefaults === true,
+  });
+}
+
 /**
- * 選んだ描き方を足した選択（D-107）。フレームワークの既定と分け方が同じなら持たない（S2 と S3 は設定で替える）。
+ * 選んだ描き方を足した選択（D-107）。既定と分け方が同じなら持たない（S2 と S3 は設定で替える）。既定は事業者で変わる
+ * （Vercel × Next.js は部品ごとにキャッシュ。D-111）ので、事業者も渡す。
  */
 export function withRouteChoice(
   sc: Pick<Scenario, 'template' | 'routeTraits'>,
-  framework: FrameworkId,
+  d: RouteDefaultsOf,
   routes: RouteOverrides | undefined,
   routeId: string,
   strategy: RouteStrategyId,
@@ -215,7 +260,7 @@ export function withRouteChoice(
   const r = sc.template(1).routes.find((x) => x.id === routeId);
   const out: Partial<Record<string, RouteStrategyId>> = { ...routes };
   if (!r) return out;
-  const preset = FRAMEWORK_PRESETS[framework][routeAudienceOf(sc, r)];
+  const preset = presetStrategy(sc, d, r);
   if (strategyFamily(preset) === strategyFamily(strategy)) delete out[routeId];
   else
     out[routeId] =
@@ -231,6 +276,8 @@ export function validRouteOverrides(
   stackIndex: number,
   framework: FrameworkId,
   routes: RouteOverrides | undefined,
+  /** 部品ごとにキャッシュを既定にする前の既定で読む（保存の版 3 まで。D-111）。 */
+  legacyRouteDefaults?: boolean,
 ): RouteOverrides {
   const platform = STACKS[stackIndex]!.provider;
   let out: RouteOverrides = {};
@@ -240,7 +287,13 @@ export function validRouteOverrides(
       want !== undefined &&
       strategySelectable(framework, platform, routeAudienceOf(sc, r), want)
     )
-      out = withRouteChoice(sc, framework, out, r.id, want);
+      out = withRouteChoice(
+        sc,
+        { framework, platform, legacyRouteDefaults },
+        out,
+        r.id,
+        want,
+      );
   }
   return out;
 }

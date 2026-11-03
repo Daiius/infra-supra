@@ -263,6 +263,54 @@ describe('見積モードの画面', () => {
     expect(window.location.search).not.toContain('rp.personal');
   });
 
+  it('W-24 Vercel × Next.js の既定は部品ごとにキャッシュ（番号を出さない）。構成図に動的な穴の流れが出て、毎回描くを選ぶと URL に残る（D-111）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const table = () =>
+      within(card('ページごとの描き方')).getByRole('table', {
+        name: 'ページごとの描き方',
+      });
+    const strategyOf = (route: string) =>
+      table()
+        .querySelector(`tr[data-route="${route}"] [data-strategy]`)!
+        .getAttribute('data-strategy');
+    expect(strategyOf('article')).toBe('cache-components');
+    expect(strategyOf('personal')).toBe('cache-components');
+    expect(table().textContent).toContain(
+      '部品ごとにキャッシュ（Cache Components）',
+    );
+    expect(table().textContent).not.toContain('S7');
+    expect(window.location.search).not.toContain('rp.');
+    expect(
+      within(card(/^構成図: /)).getByRole('list', {
+        name: '構成図の流れの凡例',
+      }).textContent,
+    ).toContain('動的な穴');
+    fireEvent.click(
+      within(card('ページごとの描き方')).getByRole('button', {
+        name: /^個人向けのページを S4 毎回描く/,
+      }),
+    );
+    expectEstimate();
+    expect(window.location.search).toContain('rp.personal=ssr');
+    expect(strategyOf('personal')).toBe('ssr');
+    // VPS に替えると既定（毎回描く）と同じなので URL から消え、部品ごとにキャッシュは選べる側に並ぶ
+    fireEvent.change(combo('構成'), { target: { value: 'sakura-vps-2gb' } });
+    expectEstimate();
+    expect(window.location.search).not.toContain('rp.personal');
+    expect(strategyOf('personal')).toBe('ssr');
+    expect(
+      within(card('ページごとの描き方')).getByRole('button', {
+        name: /^個人向けのページを 部品ごとにキャッシュ（Cache Components）にする/,
+      }),
+    ).toBeTruthy();
+  });
+
   it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
     window.history.replaceState(
       null,

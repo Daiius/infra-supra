@@ -79,6 +79,9 @@ describe('game', () => {
     //       シード 3 の VPS・前段の CDN が won → goal
     // D-107: ページごとの描き方の基準プレイを 2 本足した（個人向けを枠 + API で始める。既存の行は変わらない）。
     //       CF Free は記事の ISR の再生成（17 ms）が 10 ms を超えるので変わらず止まる。CF Paid は既定とほぼ同じ
+    // D-111: Vercel × Next.js の既定を部品ごとにキャッシュに（個人向けのページの CPU・DB の問い合わせが穴の分だけに）。
+    //       Vercel で遊ぶ行（vercel-pro・vercel-cf-images・1 か月目だけ Vercel の vercel-to-cf・途中で Vercel へ乗り換える
+    //       cf-paid-accept のシード 31）だけが $0.2〜4 増える。目標の根拠の cf-paid は変わらない
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -90,14 +93,14 @@ describe('game', () => {
       'cf-paid': ['2084.45', 'won', 12],
       'cf-paid-accept': ['2165.93', 'won', 12],
       'vps-images': ['1761.16', 'won', 12],
-      'vercel-pro': ['924.82', 'goal', 12],
-      'vercel-to-cf': ['1598.79', 'goal', 12],
+      'vercel-pro': ['927.20', 'goal', 12],
+      'vercel-to-cf': ['1599.07', 'goal', 12],
       'cf-free': ['138.79', 'outages', 3],
       'cf-paid-kvdb': ['1910.77', 'won', 12],
       'cf-paid-chat': ['2113.86', 'won', 12],
       'vps-sla': ['1710.81', 'goal', 12],
       'vps-cdn': ['1786.53', 'won', 12],
-      'vercel-cf-images': ['1391.28', 'goal', 12],
+      'vercel-cf-images': ['1393.54', 'goal', 12],
       'aws-amplify-cdn': ['1924.46', 'won', 12],
       'aws-opennext-images': ['2218.38', 'won', 12],
       'cf-free-personal-api': ['138.79', 'outages', 3],
@@ -107,14 +110,14 @@ describe('game', () => {
       'cf-paid': ['2107.12', 'won', 12],
       'cf-paid-accept': ['2121.61', 'won', 12],
       'vps-images': ['1667.67', 'goal', 12],
-      'vercel-pro': ['784.92', 'goal', 12],
-      'vercel-to-cf': ['1690.01', 'goal', 12],
+      'vercel-pro': ['787.60', 'goal', 12],
+      'vercel-to-cf': ['1690.22', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1923.92', 'won', 12],
       'cf-paid-chat': ['2136.78', 'won', 12],
       'vps-sla': ['1780.00', 'won', 12],
       'vps-cdn': ['1719.71', 'goal', 12],
-      'vercel-cf-images': ['1301.21', 'goal', 12],
+      'vercel-cf-images': ['1303.72', 'goal', 12],
       'aws-amplify-cdn': ['1905.30', 'won', 12],
       'aws-opennext-images': ['2227.70', 'won', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],
@@ -122,16 +125,16 @@ describe('game', () => {
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2118.78', 'won', 12],
-      'cf-paid-accept': ['1047.38', 'goal', 12],
+      'cf-paid-accept': ['1051.52', 'goal', 12],
       'vps-images': ['1671.74', 'goal', 12],
-      'vercel-pro': ['812.23', 'goal', 12],
-      'vercel-to-cf': ['1661.03', 'goal', 12],
+      'vercel-pro': ['814.92', 'goal', 12],
+      'vercel-to-cf': ['1661.24', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1839.37', 'won', 12],
       'cf-paid-chat': ['2143.01', 'won', 12],
       'vps-sla': ['1644.26', 'goal', 12],
       'vps-cdn': ['1691.93', 'goal', 12],
-      'vercel-cf-images': ['1330.10', 'goal', 12],
+      'vercel-cf-images': ['1332.62', 'goal', 12],
       'aws-amplify-cdn': ['1880.13', 'won', 12],
       'aws-opennext-images': ['2236.34', 'won', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],

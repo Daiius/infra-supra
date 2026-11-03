@@ -22,6 +22,9 @@ export const SOURCE_CLASS: Record<RegionSource, string> = {
   // 枠 + サーバーの島（S6。D-108）: 枠はキャッシュの色、島は閲覧ごとに描く色（斜線つき）を破線で
   'island-shell': 'border-info bg-info/10',
   'server-island': 'border-dashed border-warning bg-warning/15',
+  // 部品ごとにキャッシュ（D-111）: キャッシュした部品はキャッシュの色、動的な穴は閲覧ごとに描く色（斜線つき）を点線で
+  'cc-cached': 'border-info bg-info/20',
+  'cc-dynamic': 'border-dotted border-warning bg-warning/15',
   shell: 'border-base-content/40 bg-base-200',
   image: 'border-dotted border-accent bg-accent/10',
 };
@@ -34,6 +37,7 @@ const PER_VIEW_STRIPES: CSSProperties = {
 export const SOURCE_STYLE: Partial<Record<RegionSource, CSSProperties>> = {
   ssr: PER_VIEW_STRIPES,
   'server-island': PER_VIEW_STRIPES,
+  'cc-dynamic': PER_VIEW_STRIPES,
 };
 
 const HEIGHT = { sm: 'min-h-9', md: 'min-h-14', lg: 'min-h-20' } as const;

@@ -188,6 +188,7 @@ export {
   routePlanRows,
   routePlanOf,
   routeAlternativeAction,
+  resolvedRouteStrategies,
 } from './routes/plan.ts';
 export {
   type RouteFallback,

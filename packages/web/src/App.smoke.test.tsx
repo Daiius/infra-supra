@@ -425,6 +425,55 @@ describe('ゲームモードの画面', () => {
     ).toBe(true);
   });
 
+  it('W-27 始める画面: Google Cloud × Next.js で部品ごとにキャッシュを選び ISR のキャッシュを「キャッシュしない」にすると、表と同じく見取り図も毎回描くになる（D-111・OCL-CD192A98）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    const current = () =>
+      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
+    const table = () =>
+      within(screen.getByRole('region', { name: 'ページの描き方' })).getByRole(
+        'table',
+        { name: 'ページごとの描き方' },
+      );
+    const row = (route: string) =>
+      table().querySelector<HTMLElement>(`tr[data-route="${route}"]`)!;
+    const sources = () =>
+      [
+        ...within(current())
+          .getByRole('list', { name: '個人向けのページの見取り図' })
+          .querySelectorAll('[data-source]'),
+      ].map((x) => x.getAttribute('data-source'));
+    pick(/^記事コミュニティ/);
+    pick(/^Next\.js（App Router）/);
+    pick(/^Google Cloud/);
+    fireEvent.click(
+      within(row('personal')).getByRole('button', {
+        name: /^個人向けのページを 部品ごとにキャッシュ/,
+      }),
+    );
+    expect(
+      row('personal')
+        .querySelector('[data-strategy]')!
+        .getAttribute('data-strategy'),
+    ).toBe('cache-components');
+    expect(sources()).toContain('cc-dynamic');
+    // ISR のキャッシュを「キャッシュしない」に: 表は毎回描く、見取り図も同じ
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: /^ISR のキャッシュ/ }),
+      ).getByRole('radio', { name: /^キャッシュしない/ }),
+    );
+    expect(
+      row('personal')
+        .querySelector('[data-strategy]')!
+        .getAttribute('data-strategy'),
+    ).toBe('ssr');
+    expect(sources()).not.toContain('cc-dynamic');
+    expect(sources()).not.toContain('cc-cached');
+    expect(sources()).toContain('ssr');
+  });
+
   it('W-14 ゲームの途中で個人向けのページの描き方を替える（手間 4・来月から。D-107）', async () => {
     await renderApp();
     await startGame({

@@ -50,6 +50,7 @@ export function componentPreview(
       components,
       framework: state.framework,
       routes: state.routes,
+      legacyRouteDefaults: state.legacyRouteDefaults,
       routeParts: state.routeParts,
     }),
     architecture: architectureFor(
@@ -158,6 +159,7 @@ function invalidationLines(
       components,
       framework: state.framework,
       routes: state.routes,
+      legacyRouteDefaults: state.legacyRouteDefaults,
       routeParts: state.routeParts,
     }),
     architecture: architectureFor(
@@ -267,6 +269,7 @@ export function setupMonthOneEstimate(
       components: state.components,
       framework: state.framework,
       routes: state.routes,
+      legacyRouteDefaults: state.legacyRouteDefaults,
       routeParts: state.routeParts,
     }),
     architecture: architectureFor(

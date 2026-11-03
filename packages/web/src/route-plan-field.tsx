@@ -5,6 +5,7 @@ import {
   partsOfComments,
   routePlanRows,
   routePlanStatus,
+  STACKS,
   withRouteChoice,
   type FrameworkId,
   type RouteAlternative,
@@ -74,7 +75,13 @@ export function RoutePlanField({
   );
   const pick = (row: RoutePlanRow, alt: RouteAlternative) =>
     onChange(
-      withRouteChoice(scenario, framework, routes, row.route, alt.strategy),
+      withRouteChoice(
+        scenario,
+        { framework, platform: STACKS[stackIndex]!.provider },
+        routes,
+        row.route,
+        alt.strategy,
+      ),
       alt.value,
     );
   return (

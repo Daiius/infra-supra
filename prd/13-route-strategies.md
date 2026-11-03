@@ -1,6 +1,7 @@
 # 13. ページごとの描き方（ルートの描き方 S1〜S6）
 
 > 状態: **段 0〜5 は実装済み**（段 0 = D-99〜D-101、段 1 = D-103、段 2 = D-106、段 3 = D-107、段 4 = D-109、段 5 = D-108）。§7 の残りの論点は推奨案つき。
+> 2026-11-03: 7 つ目の描き方「部品ごとにキャッシュ（Cache Components）」を足し、Vercel × Next.js の既定にした（D-111。数え方は §5e、確かめた事実は §9）。
 > 2026-11-03 の公式の文書の調べで、vinext の S1 を出し（RS-15）、Workers Cache が Free でも使えることを事実にし（D-103）、S6 の対応を §8 に記録した（D-106・D-107 の補足）。
 > 出発点（2026-11-03）: 記事コミュニティ × Astro × Cloudflare Free で、Workers Free の 1 リクエスト CPU 10 ms に当たって止まった。原因は記事ではなく、個人向けのページ（SSR・CPU 15 ms）だった。
 > 「Astro = 静的 = 軽い」と思って選ぶと、個人向けのページが SSR のまま残る。ページの描き方がフレームワークで暗に決まり、選ぶ前に見えないことが混乱の元だった。
@@ -38,6 +39,7 @@ catalog の `ROUTE_STRATEGIES`（`packages/catalog/src/frameworks/route-strategi
 | S4 | `ssr` | 毎回描く | リクエストのたびに描く | 使える |
 | S5 | `shell-api` | 枠 + ブラウザが API で取る | HTML は静的な枠で、中身はブラウザが API で取る | 使える |
 | S6 | `server-island` | 枠 + サーバーの島 | 枠は使い回し、個人化した部分だけをサーバーが描く（Server Islands・PPR） | 使える（**人ごとに違うページだけに出す**。§5c・D-108） |
+| S7（画面では番号を出さない） | `cache-components` | 部品ごとにキャッシュ（Cache Components） | Next.js 16 の `cacheComponents`。全員に同じ部品は `'use cache'`（`cacheLife`・`cacheTag`）で静的な枠に入れ、人ごとに違う部分（動的な穴）だけを閲覧ごとに描いて同じ応答で流す（PPR） | 使える（記事にも人ごとに違うページにも。§5e・D-111） |
 
 - 個人化のページ（人ごとに違う中身）に S1〜S3 を入れると、ある人の中身が他の人に見える。対応表とプリセットで弾き、画面では灰色にして理由を添える。
 - 各描き方には、見る人ごとの「なぜ」（何の要件に応えるか）を持たせ、表の「なぜ」の列に出す。
@@ -47,6 +49,8 @@ catalog の `ROUTE_STRATEGIES`（`packages/catalog/src/frameworks/route-strategi
   - S4 → `ssr`
   - S5 → `spa`。全員に同じ中身のページ（記事）を Next.js・Astro・静的書き出しで S5 にすると、記事ごとの枠（`shellPerView`・S1 と同じビルド）にする（段 4・D-109。§5d）
   - S6 → Astro は `isr` の枠（期限 1 日）+ 閲覧ごとの島のリクエスト（ルートの `island.request`）。Next.js の PPR は `ssr` のまま CPU を島の分にして `island: {}`（§5c）。種類は足さず、ルートに任意の欄 `island` を足した（D-108）
+  - 部品ごとにキャッシュ → 記事は `isr` のまま（S2・S3 と同じ）。人ごとに違うページは `ssr` のまま CPU・DB の問い合わせを動的な穴の分にして `island: { label: '動的な穴' }`（§5e・D-111）
+- 画面の S 番号は分かりにくいので外す方針（後の UI の作業）。部品ごとにキャッシュは最初から番号を出さない（`code` は空。文書の中だけ S7 と呼ぶ）。
 
 ## 3. 対応表（フレームワーク × 事業者）
 
@@ -66,6 +70,8 @@ catalog の `capabilityRow`・`strategySupport`（`route-capability.ts`）。今
 | Next.js × Cloudflare（vinext） | ✓（開発中・Worker を通る。RS-15） | ✓ | 部（R2・Workers Cache は消せる、KV は消せない） | ✓ | ✓仮 | ✗（cacheComponents が未完成） |
 | Next.js × Vercel・VPS・Netlify・OpenNext | ✓ | ✓ | ✓ | ✓ | ✓仮 | ✓（Vercel・VPS）／?（Netlify・OpenNext） |
 | Next.js × AWS（Amplify）・Google Cloud | ✓（処理を通さないのは仮） | ✓ | ✗（Amplify の ISR・Hosting の CDN は消して全体に届けられない） | ✓ | ✓仮 | ✗（Amplify は 15 まで）／✓（Google Cloud） |
+
+部品ごとにキャッシュ（D-111・§9）: Next.js × Vercel（**既定**）・VPS・Google Cloud は ✓（出典）、vinext・Amplify は ✗、Netlify・OpenNext は ?（出さない）。Astro・静的書き出し・Vite の SPA には無い（✗）。Google Cloud の記事をタグで消す形は S3 と同じく部品の判定（Hosting の CDN が消せない）で灰色になる。
 | Astro × Cloudflare・Vercel・VPS・Netlify | ✓ | ✓ | ✓ | ✓ | ✓仮 | ✓（Vercel は仮） |
 | Astro × Google Cloud | ✓ | ✓ | ✗（Hosting の CDN はデプロイでしか消えない） | ✓ | ✓仮 | ✓仮 |
 | Next.js 静的書き出し（どこでも） | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ |
@@ -88,7 +94,7 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 
 | フレームワーク | 記事（public） | 個人向け・業務の画面（personal） |
 |---|---|---|
-| Next.js | S2（再検証がオンデマンドなら S3） | S4 |
+| Next.js | S2（再検証がオンデマンドなら S3）。**Vercel では部品ごとにキャッシュ**（D-111） | S4。**Vercel では部品ごとにキャッシュ**（D-111） |
 | Astro | S3（消せない事業者では S2） | S4 |
 | Next.js 静的書き出し | S1 | S5 |
 | Vite SPA | S5 | S5 |
@@ -199,6 +205,49 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 - **画面**: 表の S5 の選択肢の文・行の「なぜ」・値（「枠: 記事ごとに書き出す」）、見取り図（ヘッダー・タイトルは「ビルドで静的」、本文などは「ブラウザが API で取る」。札「SNS のカード: 記事ごとの枠に入る」）、構成図（記事のページが静的な流れと API の流れに載り、ビルドのノード）。
 - **既定は変えない**: どのフレームワークの既定にも全員に同じページの S5 を記事ごとの枠にするものは無い（SPA は 1 つのシェルのまま）。費用・使用量・前提の当たりの等価のスナップショット（段 4 の前の main で記録）・golden は不変。
 
+## 5e. 部品ごとにキャッシュ（Cache Components。D-111）
+
+ユーザーの決定（C-14・C-16・2026-11-03）: Next.js 16 の Cache Components（`cacheComponents: true`・`'use cache'` と `cacheLife`・`cacheTag`・描き方としての PPR）を、今の ISR（S2・S3）・S6 に**足す**描き方にする。**Vercel × Next.js では既定**にし、使えない組（vinext・Amplify）は今までの ISR のまま、自前の Node（さくらの VPS の standalone）と Cloud Run は選べるが既定は今までのまま。
+
+### 数え方（D-10 の 1 つの読み。値は**ゲーム上の仮定**。catalog の `CACHE_COMPONENTS`）
+
+ページは「静的な枠（ビルドで事前描画）+ キャッシュした部品（`'use cache'`・全員で共有・更新はタグか期限）+ 動的な穴（人ごとに違う・閲覧ごとに描いて同じ応答で流す）」でできているとみなす。
+
+- **全員に同じページ（記事）**: ほぼすべてがキャッシュした部品で、穴は無いとみなす（ログインの表示はブラウザの API のまま）。数え方は ISR と同じ（ルートは `isr` のまま）で、期限（`cacheLife`）かタグ（`cacheTag` + 投稿・編集で `updateTag`）かは今までの再検証の設定で決める（オンデマンドなら S3、時間なら S2 と同じ費用・鮮度）。
+  - Vercel の文書は PPR の枠を「ISR で返す」と書く（§9.2）ので、費用は ISR と同じになる。部品の粒度で作り直す範囲が狭くなる効果は数えていない。
+  - 判定（設定の意味・鮮度・SNS のカード・コメント欄・即時反映の要件）は「キャッシュ」として扱う（game の `articleJudgeFamily`）。
+- **人ごとに違うページ**: ルートは `ssr` のまま（閲覧ごとに処理を通る。Vercel の文書「most PPR requests incur a function invocation」）。
+  - 穴を描く CPU = ページ全体の SSR の **0.4 倍**（`dynamicShare`。S6 の島と同じ）。
+  - DB の問い合わせと I/O 待ち = 全員に同じ部品（おすすめ・ヘッダーなど）の分 **3 分の 1** を除いた残り（`cachedQueryShare`。記事コミュニティの個人向けのページの 3 問い合わせのうち 1 つ）。この分は枠に入り、閲覧ごとには読まない。
+  - 応答の大きさはページ全体のまま（枠も同じ応答で返る）。内訳（D-99）の文は「動的な穴」（estimator のルートの `island.label`）。
+  - S6（Next.js の PPR・origin だけの形）との違いは、全員に同じ部品の問い合わせが枠に入ること。
+- **事業者ごとのキャッシュの効き**（§9.1）:
+  - Vercel: 枠（キャッシュした部品を含む）は全体の ISR のキャッシュ + 地域の CDN。全員で共有される。
+  - さくらの VPS（1 つの `next start`）: 枠はディスク、`'use cache'` はプロセスのメモリ（LRU）。1 台なので全員で共有される（Vercel と同じ数え方）。
+  - Cloud Run: `'use cache'` の既定はインスタンスごとのメモリで共有されず、タグの無効化もほかのインスタンスに届かない（Next.js の文書）。人ごとに違うページの全員に同じ部品は**ビルドで事前描画した枠**に入るので、インスタンスごとに取り直しが増えるのは期限ごと × インスタンスの数で、閲覧ごとの穴に比べて小さいとみなして数えない。記事をタグで消す形は、Hosting の CDN が消せないのと同じく使えない。判定は S3 と同じ `onDemandBlocker` で、表では選ぶと期限（5 分）に戻し、途中でオンデマンドにする行動は選べず、それでも組み合わさった計算はタグを数えず保険の期限（1 日）でだけ作り直す（OCL-FC4A03B7）。
+  - 共有の `cacheHandlers`（Redis など）を足す形はこのゲームでは扱わない（部品にしない）。
+- **ISR のキャッシュの部品「キャッシュしない」**: 枠の置き場が無いので毎回描く（S4）に書き換える（今までの「キャッシュしない」と同じ）。
+- 速さの判定（RS-10）は今までどおりフレームワークの SSR の CPU で見る。
+
+### 対応と既定
+
+- 対応表（catalog の `nextCacheComponents`）: Vercel・VPS・Google Cloud ✓（出典）、vinext ✗（README: `'use cache'` は一部だけ）、Amplify ✗（Next.js 15 まで）、Netlify・OpenNext ?。Next.js 以外には無い。
+- 既定（catalog の `defaultStrategy`・`cacheComponentsByDefault`）: Vercel × Next.js だけ、記事・人ごとに違うページ（受託の業務の画面も）とも部品ごとにキャッシュ。
+- 選んだ描き方（`GameState.routes`）は「既定と分け方が違うものだけ」を持つので、既定が事業者で変わる。`withRouteChoice`・`validRouteOverrides` は事業者を見る（Vercel で ISR を選ぶと選んだ描き方として残り、VPS へ乗り換えると既定に溶ける）。
+
+### 画面
+
+- 名前は「部品ごとにキャッシュ（Cache Components）」。S 番号は出さない（`code` は空。表・行動・注意の文は `strategyTitle`・`strategyShortName`）。
+- 表（始める画面の ③・ゲームの途中・見積モード）: 行の値は、記事なら「部品の期限 〜（cacheLife）」か「部品をタグで作り直す（投稿・編集で updateTag）」、人ごとに違うページなら「人ごとに違う部分だけ閲覧ごとに描く」。
+- 見取り図: 人ごとに違うページの `islandRegions` を「動的な穴（閲覧ごとに描く）」、ほかの HTML の区画を「部品をキャッシュ（'use cache'）」に。記事は HTML の区画がすべて「部品をキャッシュ」。表・計算と同じ実際の描き方（`resolvedRouteStrategies` = `routeChoices`）を渡して描くので、Vercel × Next.js の既定も、ISR のキャッシュ「キャッシュしない」で毎回描くになる分も図・構成図に出る（`pageWireframes` の `resolved`。OCL-CD192A98）。
+- 構成図: 動的な穴の区画のあるページがあれば、閲覧ごとに描く経路（`document-ssr`）の線に「動的な穴」の流れ（点線）を載せる。キャッシュした部品は ISR の流れに載せる。
+- 途中の変更の手間: どちらの向きも 3（RS-08）。見積モードの URL は `rp.<ルート>=cache-components`（Vercel では既定なので書かない。毎回描く・ISR を選ぶと `rp.personal=ssr` などが残る）。
+
+### 保存
+
+- `SAVE_VERSION` 4。版 3 までの保存は Vercel × Next.js の既定が ISR・毎回描くだったので、読むと `legacyRouteDefaults` を付け、今までの既定で再生する（途中で Vercel へ乗り換えた後も今までの既定。保存し直しても印は残る）。
+- 等価のスナップショット（`route-strategies-equivalence.test.ts`）は `legacyRouteDefaults` で引いて記録を替えずに通る（古い保存が同じ結果で再生されることの確かめも兼ねる）。新しい既定の分は基準プレイの golden で見る。
+
 ## 6. 段取り
 
 | 段 | 中身 | 状態 |
@@ -209,6 +258,7 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 | 3 | 始める画面・見積モードで、ページごとに描き方を選べるようにする（S1〜S5）。要件の判定・保存 v2・途中の行動と手間（D-107） | 済 |
 | 4 | 記事の S5（記事ごとの枠）・コメント欄をルートの部品に（D-82 を移す。§5d・D-109） | 済 |
 | 5 | S6（Server Islands・PPR）。対応の事実は §8、数え方・画面は §5c（D-108） | 済 |
+| 6 | 部品ごとにキャッシュ（Next.js 16 の Cache Components）を足し、Vercel × Next.js の既定にする。事実は §9、数え方・画面・保存は §5e（D-111） | 済 |
 
 段 3 でしなかったこと: 速さの判定の重み付き CPU（RS-10）・乗り換え先で描き方が使えなくなるときの「描き方も替える（手間 +n）」の表示（RS-04 の残り。既定に戻ることの注意だけは出す）・ISR のキャッシュの部品「キャッシュしない」を S4 にまとめること・`FrameworkProfile.renderingModes` を消すこと・`revalidateSec` をルートごとの値に分けること（記事のルートは 1 つなので値は 1 つのまま）。
 
@@ -274,4 +324,37 @@ catalog の `FRAMEWORK_PRESETS`。見る人（`public` = 全員に同じ・`pers
 - **PPR の費用**: 静的な枠を CDN から配るのはアダプター・CDN の実装しだい（「These are available building blocks, not finished integrations.」）。`next start` の既定は origin だけで描く形で、毎回処理を通る（費用は S4 に近い）。公式の文と合わせるなら、枠を CDN で配ることを仮定せず、origin だけを既定の数え方にする。
 - 速さの判定（RS-10）では、S6 の島を「描く閲覧」に数える（RS-10 の残り）。
 - D-108 で採った形: 個人化した島は毎回描きキャッシュしない。PPR は origin だけの形（閲覧ごとに処理を通る）にして、CPU だけを島の分にした（§5c）。
+
+## 9. 部品ごとにキャッシュ（Cache Components）の確かめた事実（2026-11-03 取得）
+
+D-111 の前に、公式の文書で確かめた。引用は取得時の原文。更新日は頁の表示（lastUpdated・last_updated）。
+
+### 9.1 `'use cache'` のキャッシュの置き場
+
+- **既定はプロセスごとのメモリ**: 「Outputs are stored by a cache handler, in memory by default」・「it can also cache data at runtime using in-memory LRU (Least Recently Used) storage」（[use cache](https://nextjs.org/docs/app/api-reference/directives/use-cache)。2026-09-29 更新）。
+  - 環境ごと: Serverless は「Cache entries typically don't persist across requests (each request can be a different instance), or during revalidation. Build-time caching works normally.」、Self-hosted は「Cache entries persist across requests.」（同じ頁の表）。
+  - 「The default in-memory cache is isolated to each Next.js process. If you're running multiple servers or containers, each instance will have its own cache that isn't shared with others and is lost on restart.」（[cacheHandlers](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheHandlers)。2026-10-15 更新）。
+- **共有は `cacheHandlers` か `'use cache: remote'`**: 「Custom handlers let you integrate with shared storage systems (like Redis, Memcached, or DynamoDB) that all your Next.js instances can access.」・「If you don't configure `cacheHandlers`, Next.js uses an in-memory LRU (Least Recently Used) cache for both `default` and `remote`.」・「The default in-memory handler only tracks tags locally, so calling `revalidateTag()` on one instance does not affect others.」（cacheHandlers）。
+  - `'use cache: remote'` は「providing durable caching shared across all server instances. This comes with tradeoffs: infrastructure cost and network latency during cache lookups.」（[use cache: remote](https://nextjs.org/docs/app/api-reference/directives/use-cache-remote)。2026-08-18 更新）。
+  - 自前の Node: 「By default, Next.js uses an in-memory cache that is not shared across instances. For consistent caching behavior, use `'use cache: remote'` with a custom cache handler that stores data in external storage.」・「By default, calling `revalidateTag()` on one instance only invalidates the cache on that instance.」（[Self-hosting](https://nextjs.org/docs/app/guides/self-hosting)。2026-10-15 更新）。
+- **Vercel**: 枠は「At deployment time, Vercel writes the shell to the global ISR cache. On the first request in each region, Vercel pulls the shell into the regional CDN cache. The shell persists in the global ISR cache until you revalidate it.」（[Vercel の Partial Prerendering](https://vercel.com/docs/partial-prerendering)。2026-09-22 更新）。`'use cache'` そのものは Vercel でも関数のインスタンスのメモリで、`'use cache: remote'` が Vercel の Runtime Cache（「a regional, ephemeral cache」）に入る（「`use cache` is in-memory by default. This means that it is ephemeral, and disappears when the instance that served the request is shut down. `use cache: remote` is a declarative way telling the system to store the cached output in a remote cache such Vercel runtime cache.」。[Runtime Cache](https://vercel.com/docs/caching/runtime-cache)。2026-08-28 更新）。
+
+### 9.2 静的な枠の配り方
+
+- 事前描画: 「During prerendering, the header (static) and blog posts (cached with `use cache`) become part of the static shell」・「This rendering approach is called **Partial Prerendering (PPR)**, the default behavior with Cache Components.」・「Every produced static shell can be served directly from a CDN, without going through to the upstream server.」（[Caching](https://nextjs.org/docs/app/getting-started/caching)。2026-10-06 更新）。
+- 置き場: 「The payload is rendered to HTML and stored on disk when self-hosting, or in your platform's durable storage behind a CDN.」（Caching の「Where cached content is stored」）。
+- Vercel: 「PPR uses Incremental Static Regeneration (ISR) for the static shell of the page, and Vercel Functions to render the dynamic parts of the page.」・「even when the shell is served from the CDN cache, your function still runs to render the dynamic holes. It is possible to have a fully cached page, but most PPR requests incur a function invocation.」（Vercel の PPR）。
+- 自前の Node: 「Cache Components works by default with Next.js and is not a CDN-only feature. This includes deployment as a Node.js server (through `next start`) and when used with a Docker container.」（Self-hosting）。枠を CDN で配るのは任意（§8.2）。
+
+### 9.3 オンデマンドの無効化
+
+- `updateTag`: 「can **only** be called from within Server Actions」・「`updateTag` immediately expires the cached data for the specified tag. The next request will wait to fetch fresh data rather than serving stale content from the cache」（[updateTag](https://nextjs.org/docs/app/api-reference/functions/updateTag)。2026-08-18 更新）。
+- `revalidateTag`: 「can be called in Server Functions and Route Handlers」・「Calling `revalidateTag` marks the tagged data as stale. The next request for that data kicks off a revalidation and is served stale content while it runs, using stale-while-revalidate semantics.」・推奨は `profile="max"`、単一引数の形は非推奨（[revalidateTag](https://nextjs.org/docs/app/api-reference/functions/revalidateTag)。2026-08-25 更新）。
+- `cacheLife` の既定のプロファイル: `default`（stale 5 分・revalidate 15 分・expire なし）・`hours`（5 分・1 時間・1 日）・`days`（5 分・1 日・1 週）・`max`（5 分・30 日・1 年）など。「`revalidate` of `0`, or `expire` under 5 minutes: excluded from prerenders, becoming a "dynamic hole" resolved at request time.」（[cacheLife](https://nextjs.org/docs/app/api-reference/functions/cacheLife)。2026-09-29 更新）。
+- Vercel: 「when you revalidate content, all caches across all regions update within 300 milliseconds」（Vercel の PPR）。タグの無効化の呼び出しは Pro で 1 秒あたり「200 per team」（Runtime Cache の頁）。
+
+### 9.4 Vercel の課金
+
+- PPR: 「When you use PPR with a framework on Vercel, you incur usage for: ISR reads and writes … Function invocations: your function runs to render the dynamic holes on most requests, plus any background revalidations. Fast Origin Transfer」（Vercel の PPR）。このゲームは今の ISR・関数の料金の数え方のまま（新しい料金の行は足していない）。
+- Runtime Cache（`'use cache: remote'` の置き場）: 「billed as **Runtime Cache Reads** and **Runtime Cache Writes**」、Hobby は月 1M reads・200K writes が込み、Pro は「$0.40 - $0.64 per 1M read units」「$4.00 - $6.40 per 1M write units」（1 単位 8 KB）（Runtime Cache の頁）。**このゲームの読みは `'use cache'`（既定のメモリ）と枠の ISR だけで、`remote` は使わないので数えない**（料金データにも入れていない）。
 

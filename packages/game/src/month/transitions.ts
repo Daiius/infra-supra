@@ -156,7 +156,13 @@ export function transitionsOf(
   }
   // 乗り換え先で使えない描き方は既定に戻す（D-107）
   if (routes !== undefined) {
-    const valid = validRouteOverrides(sc, stackIndex, framework, routes);
+    const valid = validRouteOverrides(
+      sc,
+      stackIndex,
+      framework,
+      routes,
+      state.legacyRouteDefaults,
+    );
     routes = Object.keys(valid).length > 0 ? valid : undefined;
   }
   return {
