@@ -18,9 +18,11 @@ useSmokeEnv();
 const ARTICLE = '記事コミュニティ';
 const CONTRACT = '受託先の業務アプリの運用';
 
-/** 選んでいるフレームワークのカード（前後のカードも同じ中身で並ぶ。構成のカードより前にある）。 */
+/** 選んでいるフレームワークのカード（前後のカードも同じ中身で並ぶ。D-113 で構成のカードの後ろに移した）。 */
 const fwCard = () =>
-  document.querySelector<HTMLElement>('section[aria-current="true"]')!;
+  document.querySelector<HTMLElement>(
+    'section[data-framework][aria-current="true"]',
+  )!;
 /** 選んでいるフレームワークのカードの、ページの欄（見取り図・描き方のチップ・札。D-112）。 */
 const pageOf = (route: string) =>
   fwCard().querySelector<HTMLElement>(`section[data-route="${route}"]`)!;
@@ -168,7 +170,9 @@ describe('ゲームモードの画面', () => {
     /** 見取り図の区画の札（区画の名前 → 作られ方の札の文字）。 */
     /** 選んでいるカード（前後のカードも同じ中身で並ぶので、選んでいるものに絞る）。 */
     const current = () =>
-      document.querySelector<HTMLElement>('section[aria-current="true"]')!;
+      document.querySelector<HTMLElement>(
+        'section[data-framework][aria-current="true"]',
+      )!;
     const tag = (page: string, region: string) => {
       const list = within(current()).getByRole('list', {
         name: `${page}の見取り図`,
@@ -763,7 +767,7 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(
       screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
     );
-    const group = screen.getByRole('radiogroup', { name: 'インフラの構成' });
+    const group = screen.getByRole('radiogroup', { name: '① インフラの構成' });
     // 組ごとに、組の名前とプランのチップ（並びは構成の一覧の順）。1 つだけの事業者は事業者の名前だけ
     // ロゴ（aria-hidden）を除いた文字
     const text = (el: Element) => {
@@ -888,6 +892,114 @@ describe('ゲームモードの画面', () => {
       const d = r.getAttribute('aria-describedby');
       if (d) expect(document.getElementById(d)).not.toBeNull();
     }
+  });
+
+  it('W-30 始める画面: シナリオの説明に、フレームワークに依らない見取り図（区画の要件の札）が出る（D-113）', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    /** シナリオの見取り図の区画の札（区画の名前 → 要件の札の文字）。 */
+    const needs = (page: string, region: string) => {
+      const list = screen.getByRole('list', {
+        name: `${page}の見取り図（要件）`,
+      });
+      return (
+        within(list).getByText(region).closest('li')?.textContent ?? ''
+      ).replace(region, '');
+    };
+    expect(needs('記事のページ', '本文')).toContain('全員に同じ');
+    expect(needs('記事のページ', '本文')).toContain('すぐ見えてほしい');
+    expect(needs('記事のページ', '記事のタイトル・著者')).toContain(
+      'SNS のカードが要る',
+    );
+    expect(needs('記事のページ', 'いいね')).toContain('閲覧ごとに変わる');
+    expect(needs('個人向けのページ', 'プロフィール')).toContain('人ごとに違う');
+    // 作られ方（フレームワークで変わる札）は出さない
+    const scenarioPage = screen.getByRole('region', {
+      name: '記事のページ（シナリオ）',
+    });
+    expect(scenarioPage.textContent).not.toMatch(/ISR|SSR|ビルドで静的/);
+    // ページの性質（RS-17）と凡例
+    expect(
+      within(scenarioPage).getByRole('list', { name: '記事のページの性質' })
+        .textContent,
+    ).toContain('SNS のカードが要る');
+    expect(
+      screen.getByRole('list', { name: '要件の札の凡例' }).textContent,
+    ).toContain('誰が見ても同じ中身');
+    // 受託のシナリオも同じ形で出る
+    fireEvent.click(
+      screen.getByRole('radio', { name: /^受託先の業務アプリの運用/ }),
+    );
+    expect(needs('業務の画面', '一覧の表（申請・記録）')).toContain(
+      '人ごとに違う',
+    );
+  });
+
+  it('W-31 始める画面: インフラの構成を先に選び、載せられないフレームワークは選べない。選んでいたら載せられるものに戻して知らせる（D-113）', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    // 順: ① インフラの構成 → ② フレームワーク
+    const stackGroup = screen.getByRole('radiogroup', {
+      name: '① インフラの構成',
+    });
+    const fwGroup = screen.getByRole('radiogroup', {
+      name: /^② アプリを何で作りましたか/,
+    });
+    expect(
+      stackGroup.compareDocumentPosition(fwGroup) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /^Astro/ }));
+    // Astro を載せられない構成も隠さず、印を添える（選べる）
+    const amplify = screen.getByRole('radio', {
+      name: /^AWS（Amplify Hosting）/,
+    }) as HTMLInputElement;
+    expect(amplify.disabled).toBe(false);
+    expect(amplify.closest('label')?.textContent).toContain(
+      'Astro を載せられない構成',
+    );
+    expect(
+      within(
+        document.querySelector<HTMLElement>(
+          'section[data-stack="aws-amplify"]',
+        )!,
+      ).getByRole('note').textContent,
+    ).toMatch(
+      /^Astro はこの構成に載せられない.*選ぶとフレームワークは Next\.js（App Router） になる/,
+    );
+    fireEvent.click(amplify);
+    // Astro を選んでいたので、載せられる最初のフレームワークに戻して知らせる
+    expect(
+      (
+        screen.getByRole('radio', {
+          name: /^Next\.js（App Router）/,
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    expect(document.body.textContent).toMatch(
+      /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にした/,
+    );
+    // Astro は灰色で選べず、カードに理由が出る
+    const astro = screen.getByRole('radio', {
+      name: /^Astro/,
+    }) as HTMLInputElement;
+    expect(astro.disabled).toBe(true);
+    const astroCard = screen.getByRole('region', { name: 'Astro の説明' });
+    expect(astroCard.getAttribute('aria-disabled')).toBe('true');
+    expect(within(astroCard).getByRole('note').textContent).toMatch(
+      /^選んでいる構成では選べない: 公式のアダプターが無く載せられない（Astro の AWS の手順は/,
+    );
+    // 前後のボタン・カードを押しても Astro は選ばない
+    fireEvent.click(astroCard);
+    expect(astro.checked).toBe(false);
+    for (let k = 0; k < 4; k++) {
+      fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
+      expect(astro.checked).toBe(false);
+    }
+    // 載せられる構成に戻すと、また選べる（知らせは消える）
+    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Free/ }));
+    expect(astro.disabled).toBe(false);
+    expect(document.body.textContent).not.toMatch(/公式のアダプターが無いので/);
   });
 
   it('W-04 保存して読み込み直すと同じ月から再開する', async () => {

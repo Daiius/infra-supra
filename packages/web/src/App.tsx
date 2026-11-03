@@ -23,9 +23,11 @@ import {
   setupCommentOptions,
   COMMENTS_IN_BROWSER,
   partsOfComments,
-  stackOffered,
   defaultRevalidateSec,
-  STACKS,
+  FRAMEWORKS,
+  frameworkOnStack,
+  stackName,
+  stackUnsupportedReason,
   type GameState,
   type SaveData,
 } from 'game';
@@ -197,15 +199,19 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [scenarioId, setScenarioId] = useState(SCENARIO_LIST[0]!.id);
   const scenario = SCENARIOS[scenarioId]!;
   const frameworks = frameworksOf(scenario);
+  // 既定は一覧の 1 番目（正解になりやすい構成を既定にしない。D-41）
+  const [stack, setStack] = useState(0);
   const [frameworkChoice, setFramework] = useState<FrameworkId>(
     frameworks.default,
   );
-  // シナリオを替えたときに選べないフレームワークなら既定にする
-  const framework = frameworks.allowed.includes(frameworkChoice)
-    ? frameworkChoice
-    : frameworks.default;
-  // 既定は一覧の 1 番目（正解になりやすい構成を既定にしない。D-41）
-  const [stack, setStack] = useState(0);
+  // シナリオを替えたときに選べないフレームワークなら既定にする（構成に載せられなければ載せられるもの。D-113）
+  const framework = frameworkOnStack(
+    scenario,
+    stack,
+    frameworks.allowed.includes(frameworkChoice)
+      ? frameworkChoice
+      : frameworks.default,
+  );
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
   // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワーク・シナリオを替えたら、選べなくなった選択を
@@ -217,6 +223,10 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     () => validRouteOverrides(scenario, stack, framework, routeChoice),
     [scenario, stack, framework, routeChoice],
   );
+  // 構成を替えて、載せられるフレームワークに戻したときの知らせ（D-113）
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+  // インフラの構成を先に選ぶ（D-113）。構成は替えず、載せられないフレームワーク（Astro × AWS など。D-68）を選んでいたら、
+  // シナリオの並びで最初の載せられるフレームワークに戻して知らせる（フレームワークの欄では載せられないものは選べない）
   const change = (next: {
     scenarioId?: string;
     stack?: number;
@@ -225,16 +235,21 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     const sc = SCENARIOS[next.scenarioId ?? scenarioId]!;
     const fws = frameworksOf(sc);
     const fwChoice = next.framework ?? frameworkChoice;
-    const fw = fws.allowed.includes(fwChoice) ? fwChoice : fws.default;
-    // 載せられない構成（Astro × AWS など。D-68）を選んでいたら、一覧の最初の載せられる構成にする
-    const want = next.stack ?? stack;
-    const st = stackOffered(want, fw)
-      ? want
-      : (STACKS.find((s) => stackOffered(s.index, fw))?.index ?? 0);
+    const want = fws.allowed.includes(fwChoice) ? fwChoice : fws.default;
+    const st = next.stack ?? stack;
+    const fw = frameworkOnStack(sc, st, want);
+    setFallbackNotice(
+      fw === want
+        ? null
+        : `${stackName(st, fw, false)} には ${FRAMEWORKS[want].label} を載せる公式のアダプターが無いので、フレームワークを ${FRAMEWORKS[fw].label} にした${
+            Object.keys(routes).length > 0
+              ? '（選んだページの描き方は既定に戻した）'
+              : ''
+          }。`,
+    );
     if (next.scenarioId !== undefined) setScenarioId(next.scenarioId);
-    if (next.framework !== undefined) setFramework(next.framework);
-    if (next.framework !== undefined || next.scenarioId !== undefined)
-      setRouteChoice({});
+    if (fw !== frameworkChoice) setFramework(fw);
+    if (fw !== framework || next.scenarioId !== undefined) setRouteChoice({});
     if (st !== stack) setStack(st);
     setParts(validSetupChoices(sc, st, fw, parts));
   };
@@ -310,40 +325,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       <div className="card bg-base-100 shadow">
         <div className="card-body">
           <h2 className="card-title">どの構成で始めますか？</h2>
-          {/* フレームワークは構成と同列の判断（D-35）。シナリオの属性として先に選ばせない */}
-          <FrameworkField
-            scenario={scenario}
-            allowed={frameworks.allowed}
-            value={framework}
-            onChange={(id) => change({ framework: id })}
-            // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
-            comments={commentsChoosable ? comments : undefined}
-            // 既定のページごとの描き方（D-106）: 選んでいる構成で、各フレームワークの既定から
-            routePlan={(id) =>
-              routePlanRows(scenario, {
-                framework: id,
-                stackIndex: stack,
-                settings: {
-                  revalidateSec: defaultRevalidateSec(id, stack, scenario),
-                },
-                components: validSetupChoices(scenario, stack, id, parts),
-                routeParts: partsOfComments(scenario, comments),
-              })
-            }
-            routes={routes}
-            // 見取り図は表・計算と同じ実際の描き方で描く（選んでいるカードは選んだ描き方、ほかは既定。OCL-CD192A98）
-            resolvedRoutes={(id, selected) =>
-              resolvedRouteStrategies(scenario, {
-                framework: id,
-                stackIndex: stack,
-                components: validSetupChoices(scenario, stack, id, parts),
-                ...(selected ? { routes } : {}),
-              })
-            }
-            routeNotice={(id) => routeNotice({ framework: id })}
-            // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）
-            editor={routeEditor}
-          />
+          {/* ① インフラの構成を先に選ぶ（D-113）。カードの構成図は今のフレームワークで描く */}
           <div className="mt-2">
             <StackField
               scenario={scenario}
@@ -354,6 +336,44 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               comments={commentsChoosable ? comments : undefined}
               routes={routes}
               routeNotice={(i) => routeNotice({ stackIndex: i })}
+            />
+          </div>
+          {/* ② フレームワークと描き方（構成と同列の判断。D-35）。選んでいる構成に載せられないものは選べない（D-113） */}
+          <div className="mt-2">
+            <FrameworkField
+              scenario={scenario}
+              allowed={frameworks.allowed}
+              value={framework}
+              onChange={(id) => change({ framework: id })}
+              // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
+              comments={commentsChoosable ? comments : undefined}
+              // 既定のページごとの描き方（D-106）: 選んでいる構成で、各フレームワークの既定から
+              routePlan={(id) =>
+                routePlanRows(scenario, {
+                  framework: id,
+                  stackIndex: stack,
+                  settings: {
+                    revalidateSec: defaultRevalidateSec(id, stack, scenario),
+                  },
+                  components: validSetupChoices(scenario, stack, id, parts),
+                  routeParts: partsOfComments(scenario, comments),
+                })
+              }
+              routes={routes}
+              // 見取り図は表・計算と同じ実際の描き方で描く（選んでいるカードは選んだ描き方、ほかは既定。OCL-CD192A98）
+              resolvedRoutes={(id, selected) =>
+                resolvedRouteStrategies(scenario, {
+                  framework: id,
+                  stackIndex: stack,
+                  components: validSetupChoices(scenario, stack, id, parts),
+                  ...(selected ? { routes } : {}),
+                })
+              }
+              routeNotice={(id) => routeNotice({ framework: id })}
+              // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）
+              editor={routeEditor}
+              unsupported={(id) => stackUnsupportedReason(stack, id)}
+              notice={fallbackNotice}
             />
           </div>
           <SetupComponents

@@ -41,6 +41,8 @@ export function ChoiceCarousel<T extends string>({
   describedBy,
   renderCard,
   groups,
+  disabled,
+  flag,
 }: {
   heading: ReactNode;
   /** タブのラジオの name。 */
@@ -63,6 +65,15 @@ export function ChoiceCarousel<T extends string>({
    * 選択肢のチップ（chip。join の btn-xs）を並べる。ラジオの名前は label（チップの短い文字でなく、選択肢の名前で読む）。
    */
   groups?: readonly ChoiceGroup<T>[] | undefined;
+  /**
+   * 選べない選択肢（D-113。今の構成に載せられないフレームワーク）。タブは薄くしてラジオを無効にし、←/→・前後のボタンは飛ばし、
+   * カードを押しても選ばない（カードには理由を出す）。今選んでいるものは選べる前提。
+   */
+  disabled?: ((id: T) => boolean) | undefined;
+  /**
+   * 選べるが注意のある選択肢の印（D-113。今のフレームワークを載せられない構成）。タブ・チップに「※」を添え、文は読み上げ・title に出す。
+   */
+  flag?: ((id: T) => string | undefined) | undefined;
 }) {
   const track = useRef<HTMLDivElement>(null);
   const inputs = useRef<Partial<Record<string, HTMLInputElement | null>>>({});
@@ -103,11 +114,24 @@ export function ChoiceCarousel<T extends string>({
     );
   }
   const i = Math.max(0, items.indexOf(value));
-  const at = (d: number) => items[(i + d + items.length) % items.length]!;
+  const off = (id: T) => disabled?.(id) ?? false;
+  // d の向きに、選べる選択肢まで進む（全部選べなければ今のもの）
+  const at = (d: number) => {
+    for (let k = 1; k <= items.length; k++) {
+      const id = items[(i + d * k + items.length * k) % items.length]!;
+      if (!off(id)) return id;
+    }
+    return value;
+  };
   // 前後のボタンはカード（組）ごとに移り、移った先のカードに出ている選択肢を選ぶ（組が無ければ選択肢ごと）
   const ci = current ? cards.indexOf(current) : 0;
-  const cardAt = (d: number) =>
-    shown(cards[(ci + d + cards.length) % cards.length]!);
+  const cardAt = (d: number) => {
+    for (let k = 1; k <= cards.length; k++) {
+      const id = shown(cards[(ci + d * k + cards.length * k) % cards.length]!);
+      if (!off(id)) return id;
+    }
+    return value;
+  };
   // 説明に結ぶ要約はカードに出ている選択肢だけにある
   const shownIds = new Set(cards.map(shown));
   // ←/→（↑/↓）で全部の選択肢を items の順に移る（組をまたいでも同じ。ブラウザのラジオの動きを、組にまとめても崩れないよう自前で持つ）
@@ -133,9 +157,21 @@ export function ChoiceCarousel<T extends string>({
         describedBy?.(id) && shownIds.has(id) ? `${headingId}-${id}` : undefined
       }
       checked={value === id}
+      disabled={off(id)}
       onChange={() => onChange(id)}
     />
   );
+  /** 注意の印（「※」。文は title と読み上げ）。 */
+  const flagMark = (id: T) => {
+    const f = flag?.(id);
+    return f ? (
+      <span className="text-warning" title={f}>
+        <span aria-hidden>※</span>
+        <span className="sr-only">（{f}）</span>
+      </span>
+    ) : null;
+  };
+  const flagged = flag ? items.filter((id) => flag(id)) : [];
   const focusRing =
     'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-primary';
   const chipClass = (id: T) =>
@@ -184,6 +220,7 @@ export function ChoiceCarousel<T extends string>({
                     {radio(only, label(only))}
                     {g.mark}
                     {g.label}
+                    {flagMark(only)}
                   </label>
                 );
               return (
@@ -215,6 +252,7 @@ export function ChoiceCarousel<T extends string>({
                       <label key={id} className={`join-item ${chipClass(id)}`}>
                         {radio(id, label(id))}
                         {g.chip(id)}
+                        {flagMark(id)}
                       </label>
                     ))}
                   </div>
@@ -234,10 +272,13 @@ export function ChoiceCarousel<T extends string>({
               // ロゴを添えるので input でなく label をタブにする（daisyUI の label:has(:checked)）。名前は文字で出す
               <label
                 key={id}
-                className={`tab shrink-0 gap-1 whitespace-nowrap ${focusRing}`}
+                className={`tab shrink-0 gap-1 whitespace-nowrap ${focusRing} ${
+                  off(id) ? 'tab-disabled cursor-not-allowed opacity-50' : ''
+                }`}
               >
                 {radio(id)}
                 {tab(id)}
+                {flagMark(id)}
               </label>
             ))}
           </div>
@@ -251,6 +292,11 @@ export function ChoiceCarousel<T extends string>({
           ›
         </button>
       </div>
+      {flagged.length > 0 && flag && (
+        <p className="text-xs opacity-70" aria-hidden>
+          <span className="text-warning">※</span> {flag(flagged[0]!)}
+        </p>
+      )}
       {/* 全部のカード（組があれば組ごとに 1 枚。組の中で選んでいない組は最後に選んだ・無ければ最初の選択肢）を同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（狭い画面は 88%）を
           使う。前後のカードは両脇の端だけ薄く見え、押すと選ぶ。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
           指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
@@ -274,10 +320,10 @@ export function ChoiceCarousel<T extends string>({
               ref={(el) => {
                 els.current[c.key] = el;
               }}
-              className={`carousel-item w-[88%] lg:w-[85%] ${selected ? '' : 'cursor-pointer'}`}
+              className={`carousel-item w-[88%] lg:w-[85%] ${selected ? '' : off(id) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
               // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
               onClick={
-                selected
+                selected || off(id)
                   ? undefined
                   : (e) => {
                       // ⓘ の説明はポータルで描くので、その中の操作も React の木を伝ってここへ届く。DOM でカードの中の操作だけを選ぶ

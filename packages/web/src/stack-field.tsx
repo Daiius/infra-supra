@@ -1,15 +1,18 @@
 // 始める画面のインフラの構成（D-105）。フレームワークの欄（D-102）と同じカルーセルで、カードに構成図を出す
 // （選んだフレームワークと部品で描く。どんなアプリをどこに載せるのかを図で分かるように）。
 // どれにも推奨・既定の印を付けない（D-41）。並びは今までの一覧の順（隠した構成は出さない。D-100）。
+// 始める画面では構成を先に選ぶ（D-113）。今のフレームワークを載せられない構成も隠さず、印と注意を添える（選ぶとフレームワークが替わる）。
 // タブは土台の事業者（課金のアカウント）ごとの枠にまとめ、プランをチップで出す（1 つだけの事業者は事業者の名前だけ。D-105 の補足）。
 // カードは事業者ごとに 1 枚で、プランのチップはカードを動かさず中身（名前・説明・手間・注意・構成図）を替える（D-105 の補足）。
 import {
+  FRAMEWORKS,
+  frameworkOnStack,
   membersOf,
   pageWireframes,
   slaOf,
   stackFlavor,
   stackName,
-  stackOffered,
+  stackSupports,
   STACKS,
   resolvedRouteStrategies,
   validRouteOverrides,
@@ -37,9 +40,11 @@ function StackCard({
   selected,
   noteId,
   routeNotice,
+  fallbackNotice,
 }: {
   scenario: Scenario;
   stackIndex: number;
+  /** この構成で描くフレームワーク（今のものを載せられなければ、選ぶと替わる先。D-113）。 */
   framework: FrameworkId;
   components: Partial<Record<string, string>> | undefined;
   comments: number | undefined;
@@ -49,6 +54,8 @@ function StackCard({
   noteId: string;
   /** この構成にすると既定に戻る描き方の注意（選んでいないカードだけ。D-107 の補足）。 */
   routeNotice?: string | null | undefined;
+  /** 今のフレームワークを載せられない構成の注意（選ぶとフレームワークが替わる。D-113）。 */
+  fallbackNotice?: string | undefined;
 }) {
   const name = stackName(stackIndex, framework, false);
   // この構成で選べない描き方は既定に戻して描く（構成図の staticBuildOf と同じ。D-107 の補足）
@@ -118,7 +125,12 @@ function StackCard({
         <p id={noteId} className="text-sm opacity-80">
           {stackFlavor(stackIndex)}
         </p>
-        {!selected && routeNotice && (
+        {fallbackNotice && (
+          <p className="text-xs text-warning" role="note">
+            {fallbackNotice}
+          </p>
+        )}
+        {!selected && !fallbackNotice && routeNotice && (
           <p className="text-xs text-warning" role="note">
             {routeNotice}
           </p>
@@ -210,20 +222,31 @@ export function StackField({
   /** その構成にすると既定に戻る描き方の注意（D-107 の補足）。 */
   routeNotice?: (stackIndex: number) => string | null;
 }) {
+  // 隠した構成（D-100）だけを外す。今のフレームワークを載せられない構成も出す（D-113）
   const groups = useMemo(
     () =>
       stackTabGroups(
-        STACKS.filter((s) => stackOffered(s.index, framework)).map(
-          (s) => s.index,
-        ),
+        STACKS.filter((s) => !s.hidden).map((s) => s.index),
         framework,
       ),
     [framework],
   );
   const indexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
+  const fwLabel = FRAMEWORKS[framework].label;
+  /** その構成で描くフレームワーク（載せられなければ選ぶと替わる先）。 */
+  const fwOf = (i: number) => frameworkOnStack(scenario, i, framework);
+  const fallbackOf = (i: number) => {
+    if (stackSupports(i, framework)) return undefined;
+    const to = FRAMEWORKS[fwOf(i)].label;
+    return `${fwLabel} はこの構成に載せられない（公式のアダプターが無い）。選ぶとフレームワークは ${to} になる${
+      routes && Object.keys(routes).length > 0
+        ? '（選んだページの描き方は既定に戻る）'
+        : ''
+    }。構成図は ${to} で描く`;
+  };
   return (
     <ChoiceCarousel
-      heading="インフラの構成"
+      heading="① インフラの構成"
       name="stack"
       noun="構成"
       // 並びは組の順（←/→ は組をまたいでこの順に移る）
@@ -239,17 +262,28 @@ export function StackField({
         </>
       )}
       describedBy={(id) => stackFlavor(indexOf(id)) !== undefined}
+      flag={(id) =>
+        stackSupports(indexOf(id), framework)
+          ? undefined
+          : `${fwLabel} を載せられない構成（選ぶとフレームワークが替わる）`
+      }
       renderCard={(id, { selected, idPrefix }) => (
         <StackCard
           scenario={scenario}
           stackIndex={indexOf(id)}
-          framework={framework}
+          framework={fwOf(indexOf(id))}
           components={selected ? components : undefined}
           comments={comments}
-          routes={routes}
+          // 替わる先のフレームワークでは描き方は既定に戻る
+          routes={fallbackOf(indexOf(id)) ? undefined : routes}
           selected={selected}
           noteId={`${idPrefix}-${id}`}
-          routeNotice={selected ? null : routeNotice?.(indexOf(id))}
+          routeNotice={
+            selected || fallbackOf(indexOf(id))
+              ? null
+              : routeNotice?.(indexOf(id))
+          }
+          fallbackNotice={selected ? undefined : fallbackOf(indexOf(id))}
         />
       )}
     />

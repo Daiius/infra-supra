@@ -42,7 +42,7 @@ export function SetupComponents({
   if (slots.length === 0) return null;
   return (
     <div className="space-y-2">
-      <h3 className="mt-2 font-bold">部品</h3>
+      <h3 className="mt-2 font-bold">③ 部品</h3>
       <p className="text-sm opacity-70">
         構成の中の役割ごとに選ぶ（始める前なので手間はかからない）
       </p>
@@ -177,7 +177,7 @@ export function SetupRevalidate({
   const def = SETTINGS[revalidateSettingOf(framework)];
   return (
     <div className="space-y-2">
-      <h3 className="mt-2 font-bold">設定</h3>
+      <h3 className="mt-2 font-bold">④ 設定</h3>
       <fieldset className="min-w-0 rounded-box border border-base-300 p-3">
         <legend className="px-1 font-semibold">
           <NameWithInfo
