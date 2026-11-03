@@ -51,6 +51,7 @@ import {
 export type RouteAlternative = {
   strategy: RouteStrategyId;
   label: string;
+  /** 文書の中の番号（S1〜S6。部品ごとにキャッシュは空）。画面には出さない（D-112）。 */
   code: string;
   available: boolean;
   reason: string;
@@ -69,8 +70,9 @@ export type RoutePlanRow = {
   /** PV の割合（0〜1。テンプレートの値）。 */
   share: number;
   strategy: RouteStrategyId;
-  /** 描き方の名前（S 番号つき）。 */
+  /** 描き方の名前（番号なし。D-112）。 */
   strategyLabel: string;
+  /** 文書の中の番号（S1〜S6。部品ごとにキャッシュは空）。画面には出さない（D-112）。 */
   code: string;
   /** 描き方の値（期限・更新のたび・API の応答のキャッシュの期間・記事ごとの枠）。コメント欄は parts（D-109）。 */
   detail: string[];
@@ -166,7 +168,7 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       strategyFamily(choice.strategy) === strategyFamily(preset)
         ? undefined
         : chosen
-          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は ${strategyTitle(preset)}）`
+          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は「${strategyTitle(preset)}」）`
           : choice.strategy === 'ssr'
             ? `${SLOT_LABELS.isrCache}の部品が「キャッシュしない」`
             : undefined;

@@ -137,16 +137,12 @@ export const ROUTE_STRATEGIES: Readonly<
   },
 };
 
-/** 描き方の名前（番号があれば番号つき。部品ごとにキャッシュは番号を出さない。D-111）。 */
+/**
+ * 画面に出す描き方の名前。S1〜S6 の番号（`code`）は分かりにくいので画面には出さず、名前だけにする（D-112）。
+ * 番号は文書・コードの中の呼び名として残す。
+ */
 export function strategyTitle(id: RouteStrategyId): string {
-  const d = ROUTE_STRATEGIES[id];
-  return d.code ? `${d.code} ${d.label}` : d.label;
-}
-
-/** 描き方の短い名前（番号。番号の無いものは名前）。 */
-export function strategyShortName(id: RouteStrategyId): string {
-  const d = ROUTE_STRATEGIES[id];
-  return d.code || d.label;
+  return ROUTE_STRATEGIES[id].label;
 }
 
 /** 画面に並べる順（S1〜S6、部品ごとにキャッシュ）。 */

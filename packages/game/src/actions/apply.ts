@@ -114,7 +114,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       const sc = scenarioOf(state);
       const r = sc.template(1).routes.find((x) => x.id === action.route)!;
       return withNote(
-        `${r.label ?? r.id}を${strategyTitle(action.strategy)}に`,
+        `${r.label ?? r.id}を「${strategyTitle(action.strategy)}」に`,
         {
           ...state,
           ...planned,

@@ -3,8 +3,8 @@ import {
   type Choices,
   type FrameworkId,
   type RouteStrategyId,
-  strategyShortName,
   strategySupport,
+  strategyTitle,
 } from 'catalog';
 import type { Scenario } from '../scenario.ts';
 import { scenarioOf } from '../core.ts';
@@ -103,7 +103,7 @@ export function routeFallbackNotice(
           .filter((f) => f.reason === why)
           .map(
             (f) =>
-              `${f.label}は ${strategyShortName(f.from)} → ${strategyShortName(f.to)}（既定）`,
+              `${f.label}は「${strategyTitle(f.from)}」→「${strategyTitle(f.to)}」（既定）`,
           )
           .join('・')}に戻る${why ? `: ${why.replace(/。$/, '')}` : ''}`,
     )

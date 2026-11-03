@@ -623,7 +623,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
     {
       id: 'cf-free-personal-api',
       label:
-        'Cloudflare Free・個人向けのページを枠 + ブラウザが API で取る（S5）で始め、何もしない',
+        'Cloudflare Free・個人向けのページを「枠 + ブラウザが API で取る」で始め、何もしない',
       short: 'CF Free・個人向けを枠 + API',
       stackIndex: CF_FREE,
       routes: { personal: 'shell-api' },
@@ -631,7 +631,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
     {
       id: 'cf-paid-personal-api',
       label:
-        'Cloudflare Paid・個人向けのページを枠 + ブラウザが API で取る（S5）で始め、何もしない',
+        'Cloudflare Paid・個人向けのページを「枠 + ブラウザが API で取る」で始め、何もしない',
       short: 'CF Paid・個人向けを枠 + API',
       stackIndex: CF_PAID,
       routes: { personal: 'shell-api' },
