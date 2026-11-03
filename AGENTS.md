@@ -44,7 +44,7 @@
 | [`packages/estimator`](./packages/estimator) | 見積エンジン（workload / architecture / resource / pricing / performance）と zod スキーマ。**環境非依存**（`lib: esnext` / `types: []`）。他パッケージに依存しない |
 | [`packages/catalog`](./packages/catalog) | 料金データ（`src/providers/`: Cloudflare・Vercel・Supabase・さくらの VPS・AWS・Netlify・Neon・Google Cloud・Resend・Bunny・ドメインの登録の原価（registrar）。出典つき・版付き）・フレームワーク（Next.js・Vite の SPA・Astro・Next.js の静的書き出し）とページごとの描き方・対応表（`src/frameworks/`。prd/13）・テンプレート・構成スタック（`src/stacks/`。事業者をまたぐ部品は `cross.ts`。隠した構成は `HIDDEN_PLATFORMS`・D-100）・日本の消費税（`src/tax/`）。estimator の型だけに依存 |
 | [`packages/game`](./packages/game) | ゲームエンジン。純粋関数・シード付き乱数。ゲームのバランスの値と出来事はシナリオのデータ `src/scenarios/`（記事コミュニティ・受託の業務アプリ。ゲーム上の仮定。prd/07 §10・prd/09）。見積モードと数え方をそろえる口（`estimate-mode.ts`） |
-| [`packages/web`](./packages/web) | 画面（Vite + React + Tailwind v4 + daisyUI）。ゲームモード（始める画面（ページの見取り図・ページの描き方を選ぶ・構成図。D-102・D-105・D-107）・月の報告・推移・ヒント）と見積モード（`?mode=estimate`。明細・構成の比較・費用の曲線・席・税込の目安・構成図・ページの描き方。`src/estimate/`。D-73〜D-76。今の形は [prd/08](./prd/08-roadmap.md)「見積モードの今の形」）。① 構成・② フレームワークと描き方・③ 部品・④ 設定の欄は両方の画面で共用（`stack-field.tsx`・`scenario-briefing.tsx` の FrameworkField・`setup-components.tsx`。状態と整合は各画面が持つ。D-115） |
+| [`packages/web`](./packages/web) | 画面（Vite + React + Tailwind v4 + daisyUI）。ゲームモード（始める画面（ページの見取り図・ページの描き方を選ぶ・構成図。D-102・D-105・D-107）・月の報告・推移・ヒント）と見積モード（`?mode=estimate`。明細・構成の比較・費用の曲線・席・税込の目安・構成図・ページの描き方。`src/estimate/`。D-73〜D-76。今の形は [prd/08](./prd/08-roadmap.md)「見積モードの今の形」）。① 構成（カードの中で部品も選ぶ: 構成図の下のチップと構成図の箱。D-116）・② フレームワークと描き方・③ 設定の欄は両方の画面で共用（`stack-field.tsx`・`scenario-briefing.tsx` の FrameworkField・`setup-components.tsx`。状態と整合は各画面が持つ。D-115） |
 
 依存の向きは [prd/02](./prd/02-architecture.md) §1（web → game → catalog → estimator。web は catalog・estimator も直接呼ぶ）。
 

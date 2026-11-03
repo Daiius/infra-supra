@@ -82,18 +82,22 @@ describe('ⓘ の当たり判定', () => {
     expect(tooltip()).not.toBeNull();
     fireEvent.click(info);
     expect(tooltip()).toBeNull();
-    // 部品の欄（DB のバックアップ）はゲームと共用のラジオの枠（D-115）。選択肢の ⓘ を押しても選ばない
+    // 部品（DB のバックアップ）はゲームと共用の、構成のカードのチップ（D-115・D-116）。チップの ⓘ を押しても選ばない
     const backup = screen.getByRole('group', { name: /^DB のバックアップ/ });
-    const radios = within(backup).getAllByRole<HTMLInputElement>('radio');
-    const other = radios.find((r) => !r.checked && !r.disabled)!;
-    fireEvent.click(
-      within(other.closest('label')!).getByRole('button', { name: /説明$/ }),
-    );
+    const other = within(backup)
+      .getAllByRole<HTMLButtonElement>('button', { pressed: false })
+      .find((b) => !b.disabled)!;
+    const chip = other.closest('li')!;
+    fireEvent.click(within(chip).getByRole('button', { name: /説明$/ }));
     expect(tooltip()).not.toBeNull();
-    expect(other.checked).toBe(false);
+    expect(other.getAttribute('aria-pressed')).toBe('false');
     fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.click(other);
-    expect(other.checked).toBe(true);
+    expect(
+      within(
+        screen.getByRole('group', { name: /^DB のバックアップ/ }),
+      ).getByRole('button', { pressed: true }).textContent,
+    ).toBe(chip.textContent);
   });
 
   it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', async () => {

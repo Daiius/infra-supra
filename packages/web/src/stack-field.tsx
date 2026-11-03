@@ -6,6 +6,7 @@
 // カードは事業者ごとに 1 枚で、プランのチップはカードを動かさず中身（名前・説明・手間・注意・構成図）を替える（D-105 の補足）。
 // 見積モードと共用（D-115）。値は STACKS の index（見積の構成の id との変換は見積の画面の境目で 1 回）。カードに添える注記
 // （見積はその構成の月額）は cardExtra、手間の棒（ゲームだけ）は effort で切り替える。
+// 部品の選択は選んでいるカードの中（構成図の下のチップと、図の箱の差し替え）で行う（D-116。前の ③ 部品の欄を移した）。
 import {
   FRAMEWORKS,
   frameworkOnStack,
@@ -22,14 +23,111 @@ import {
   type RouteOverrides,
   type Scenario,
 } from 'game';
-import { useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
 import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
 import { EffortBar } from './scenario-briefing.tsx';
-import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
-import { diagramArchitecture } from './system-diagram-model.ts';
+import {
+  PartChips,
+  PartOptions,
+  usePartSlots,
+  type SetupChoices,
+} from './setup-components.tsx';
+import {
+  DIAGRAM_NOTE,
+  SystemDiagram,
+  type DiagramParts,
+} from './system-diagram.tsx';
+import type { ResolvedPage } from './page-wireframes.tsx';
+import { diagramArchitecture, swappableSlots } from './system-diagram-model.ts';
+
+/** 部品の選択（選んでいるカードの、構成図の下のチップと図の箱。D-116）。 */
+type PartsEditor = {
+  onChange: (v: SetupChoices) => void;
+  note?: ReactNode;
+};
+
+/**
+ * 選んでいるカードの構成図と部品のチップ（D-116）。箱を押すと、その箱に当たるスロットの部品を選べる（swappableSlots）。
+ */
+function EditableDiagram({
+  scenario,
+  stackIndex,
+  framework,
+  components,
+  routes,
+  arch,
+  pages,
+  caption,
+  editor,
+}: {
+  scenario: Scenario;
+  stackIndex: number;
+  framework: FrameworkId;
+  components: SetupChoices;
+  routes: RouteOverrides | undefined;
+  arch: ReturnType<typeof diagramArchitecture>;
+  pages: readonly ResolvedPage[];
+  caption: string;
+  editor: PartsEditor;
+}) {
+  const slots = usePartSlots(scenario, stackIndex, framework, components);
+  // 箱の吹き出しで選んだスロット（描き直した後に、そのスロットの選択中のチップへ focus を移す。OCL-131BD89D）
+  const [focusSlot, setFocusSlot] = useState<string | null>(null);
+  const clearFocus = useCallback(() => setFocusSlot(null), []);
+  const bySlot = useMemo(
+    () =>
+      new Map<string, (typeof slots)[number]>(slots.map((x) => [x.slot, x])),
+    [slots],
+  );
+  const swap = useMemo(
+    () =>
+      swappableSlots(
+        (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
+        components,
+        slots,
+      ),
+    [scenario, stackIndex, framework, routes, components, slots],
+  );
+  const parts: DiagramParts = {
+    slotsOf: (id) => swap.get(id) ?? [],
+    render: (slot, close) => (
+      <PartOptions
+        slot={bySlot.get(slot)!}
+        stackIndex={stackIndex}
+        framework={framework}
+        value={components}
+        onChange={(v) => {
+          editor.onChange(v);
+          setFocusSlot(slot);
+        }}
+        close={close}
+      />
+    ),
+  };
+  return (
+    <SystemDiagram
+      architecture={arch}
+      pages={pages}
+      caption={caption}
+      parts={swap.size > 0 ? parts : undefined}
+      below={
+        <PartChips
+          stackIndex={stackIndex}
+          framework={framework}
+          slots={slots}
+          value={components}
+          onChange={editor.onChange}
+          note={editor.note}
+          focusSlot={focusSlot}
+          onFocused={clearFocus}
+        />
+      }
+    />
+  );
+}
 
 /** 構成のカード: 名前・説明・毎月の手間・構成図。 */
 function StackCard({
@@ -46,6 +144,7 @@ function StackCard({
   extra,
   effort,
   caption,
+  parts,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -67,6 +166,8 @@ function StackCard({
   effort: boolean;
   /** 構成図の説明。 */
   caption: string;
+  /** 部品の選択（選んでいるカードだけ。D-116）。 */
+  parts?: PartsEditor | undefined;
 }) {
   // 選んでいるカードは、DB を他の事業者に替えた実際の組の名前（「Vercel Pro + AWS DynamoDB」。D-77・D-114 段 2）
   const name = stackName(
@@ -161,7 +262,22 @@ function StackCard({
             {...(selected ? { components: components ?? {}, framework } : {})}
           />
         )}
-        <SystemDiagram architecture={arch} pages={pages} caption={caption} />
+        {/* 選んでいるカードは構成図の下に部品のチップを並べ、図の箱からも差し替えられる（D-116）。選んでいないカードは図だけ */}
+        {selected && parts ? (
+          <EditableDiagram
+            scenario={scenario}
+            stackIndex={stackIndex}
+            framework={framework}
+            components={components ?? {}}
+            routes={routes}
+            arch={arch}
+            pages={pages}
+            caption={caption}
+            editor={parts}
+          />
+        ) : (
+          <SystemDiagram architecture={arch} pages={pages} caption={caption} />
+        )}
       </div>
     </section>
   );
@@ -223,6 +339,8 @@ export function StackField({
   cardExtra,
   routesOnFallback,
   effort = true,
+  onComponentsChange,
+  partsNote,
   diagramCaption = (selected) =>
     selected
       ? '部品を選ぶ前のスロットは既定の部品で描く。'
@@ -249,6 +367,13 @@ export function StackField({
   routesOnFallback?: (stackIndex: number) => RouteOverrides | undefined;
   /** 毎月の手間の棒を出すか（ゲームの仮定なので、見積モードでは出さない。D-115）。 */
   effort?: boolean;
+  /**
+   * 部品を選び直す（選んでいるカードの構成図の下のチップと、図の箱から。D-116）。整合（ゲームの validSetupChoices・
+   * 見積の normalizeInput）は呼び出し側が持つ。省略は部品を選ばせない。
+   */
+  onComponentsChange?: (components: SetupChoices) => void;
+  /** 部品のチップの注記（画面ごと。D-115）。 */
+  partsNote?: ReactNode;
   /** 構成図の説明（選んでいるカードか）。 */
   diagramCaption?: (selected: boolean) => string;
 }) {
@@ -325,6 +450,11 @@ export function StackField({
           extra={cardExtra?.(indexOf(id), selected)}
           effort={effort}
           caption={diagramCaption(selected)}
+          parts={
+            selected && onComponentsChange
+              ? { onChange: onComponentsChange, note: partsNote }
+              : undefined
+          }
         />
       )}
     />
