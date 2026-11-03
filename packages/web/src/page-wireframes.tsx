@@ -173,11 +173,11 @@ export function ScenarioWireframes({
             >
               <h4 className="text-base font-bold">{p.label}</h4>
               {caption && <p className="text-xs opacity-80">{caption}</p>}
-              <div className="w-full overflow-hidden rounded-lg border border-base-content/15 bg-base-100 shadow-md sm:w-80">
+              <div className="w-full overflow-hidden rounded-lg border border-base-content/30 bg-base-100 shadow-md sm:w-80">
                 {/* ブラウザの窓の上の帯（飾り） */}
                 <div
                   aria-hidden
-                  className="flex items-center gap-1 border-b border-base-content/10 bg-base-300/60 px-2 py-1"
+                  className="flex items-center gap-1 border-b border-base-content/25 bg-base-300/60 px-2 py-1"
                 >
                   {[0, 1, 2].map((i) => (
                     <span

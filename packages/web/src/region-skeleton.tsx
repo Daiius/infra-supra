@@ -354,15 +354,15 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
 /** 区画の種類の系統ごとの淡い地と破線の枠の色（シナリオの見取り図の区画）。 */
 const TONE = {
   /** ナビ・枠（ヘッダー・ログイン・メニュー・フッター） */
-  nav: 'bg-blue-400/15 border-blue-500/35',
+  nav: 'bg-blue-400/15 border-blue-500/55',
   /** 文字（タイトル・本文・一覧・表） */
-  text: 'bg-yellow-500/15 border-yellow-600/40',
+  text: 'bg-yellow-500/15 border-yellow-600/60',
   /** 画像 */
-  media: 'bg-orange-400/12 border-orange-500/40',
+  media: 'bg-orange-400/12 border-orange-500/60',
   /** 人ごと・反応（プロフィール・通知・いいね・コメント） */
-  people: 'bg-purple-400/10 border-purple-500/35',
+  people: 'bg-purple-400/10 border-purple-500/55',
   /** 入力（フォーム・検索・投稿の入口） */
-  input: 'bg-lime-400/15 border-lime-600/40',
+  input: 'bg-lime-400/15 border-lime-600/60',
 } as const;
 
 export const KIND_TONE: Record<RegionKind, string> = {
