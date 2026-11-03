@@ -360,6 +360,8 @@ function FrameworkCard({
             <RoutePlanCompare
               editor={editor}
               frameworkLabel={FRAMEWORKS[id].label}
+              {...(text.compareNote ? { note: text.compareNote } : {})}
+              {...(text.compareCaption ? { caption: text.compareCaption } : {})}
             />
             <span className="text-xs opacity-70">{text.compareHint}</span>
           </div>
@@ -383,8 +385,11 @@ export type FrameworkFieldText = {
   footnote: string | null;
   /** 見取り図の凡例の下の注記。 */
   wireframeNote: string;
-  /** 「詳しく比べる」のボタンの横の文（null はボタンごと出さない。見積モードは同じ表を下のカードに出す）。 */
+  /** 「詳しく比べる」のボタンの横の文（null はボタンごと出さない）。 */
   compareHint: string | null;
+  /** 「詳しく比べる」のダイアログの説明と表の説明（省略は RoutePlanCompare の既定。ゲームの始める画面の文）。 */
+  compareNote?: string | undefined;
+  compareCaption?: string | undefined;
 };
 
 const GAME_FRAMEWORK_TEXT: FrameworkFieldText = {

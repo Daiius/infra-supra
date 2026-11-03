@@ -145,9 +145,15 @@ export function useRoutePlanEditor({
 export function RoutePlanCompare({
   editor,
   frameworkLabel,
+  note = 'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの 1 か月目の費用の差を並べる。ここで選んでも、カードのチップで選んでも同じ（始める前なので手間はかからない。途中で替えると手間がかかる）。',
+  caption = ROUTE_PLAN_NOTE,
 }: {
   editor: RoutePlanEditor;
   frameworkLabel: string;
+  /** ダイアログの見出しの下の説明（画面ごと。D-115）。 */
+  note?: string;
+  /** 表の説明。 */
+  caption?: string;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -200,18 +206,14 @@ export function RoutePlanCompare({
                   </button>
                 </form>
               </div>
-              <p className="mt-1 text-xs opacity-70">
-                ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの
-                1
-                か月目の費用の差を並べる。ここで選んでも、カードのチップで選んでも同じ（始める前なので手間はかからない。途中で替えると手間がかかる）。
-              </p>
+              <p className="mt-1 text-xs opacity-70">{note}</p>
               <div className="mt-2">
                 <RoutePlanTable
                   rows={editor.rows}
                   status={editor.status}
                   onSelect={editor.onSelect}
                   onPart={editor.onPart}
-                  caption={ROUTE_PLAN_NOTE}
+                  caption={caption}
                 />
               </div>
             </div>

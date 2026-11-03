@@ -27,8 +27,6 @@ import {
   type MarkShape,
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
-import { DIAGRAM_NOTE, SystemDiagram } from '../system-diagram.tsx';
-import { ROUTE_PLAN_NOTE, RoutePlanTable } from '../route-plan-table.tsx';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
 import { routeChoiceOf, type RoutePlanEditor } from '../route-plan-field.tsx';
 import { FrameworkField } from '../scenario-briefing.tsx';
@@ -219,24 +217,6 @@ export function EstimateMode() {
           thresholds={view.thresholds}
           facts={view.facts}
           unpriced={view.unpricedLines}
-        />
-      </Card>
-      <Card title={`構成図: ${view.name}`}>
-        <SystemDiagram
-          architecture={diagram.architecture}
-          pages={diagram.pages}
-          caption={DIAGRAM_NOTE}
-        />
-      </Card>
-      <Card title="ページごとの描き方">
-        <RoutePlanTable
-          rows={editor.rows}
-          status={editor.status}
-          // フレームワークのカードのチップと同じ書き換え（URL の rp.〜 に残る。構成の比較・費用の曲線もこの描き方で引く。D-107・D-115）
-          onSelect={editor.onSelect}
-          // 記事の行のコメント欄（ページの部品。URL の rp.<ルート>.comments に残る。D-109）
-          onPart={editor.onPart}
-          caption={`${ROUTE_PLAN_NOTE} 差は今の PV での月額。構成の比較・費用の曲線もこの描き方で引く。`}
         />
       </Card>
       <Card title="明細（事業者・メーターごと）">
@@ -502,8 +482,11 @@ function Conditions({
           heading: '② アプリのフレームワークとページの描き方',
           footnote: null,
           wireframeNote:
-            '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。ほかの描き方にしたときの月額の差は下の「ページごとの描き方」の表で比べる。',
-          compareHint: null,
+            '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+          compareHint:
+            'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べる',
+          compareNote:
+            'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べる。ここで選んでも、カードのチップで選んでも同じ。構成の比較・費用の曲線もこの描き方で引く。',
         }}
       />
       {/* ③ 部品・④ 設定はゲームの始める画面と同じ欄（D-115）。部品は normalizeInput が選べるものに直す */}

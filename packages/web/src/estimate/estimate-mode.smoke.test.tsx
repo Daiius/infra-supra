@@ -44,6 +44,31 @@ const choose = (label: string, value: string) =>
       .find((r) => r.value === value)!,
   );
 
+/** ① の選んでいる構成のカード。 */
+const stackCard = () =>
+  document.querySelector<HTMLElement>(
+    'section[data-stack][aria-current="true"]',
+  )!;
+/** ② の選んでいるフレームワークのカード。 */
+const fwCard = () =>
+  document.querySelector<HTMLElement>(
+    'section[data-framework][aria-current="true"]',
+  )!;
+/** ② のカードの「詳しく比べる」のダイアログ（閉じていれば開く。D-115 で下の表のカードの代わり）。 */
+const routesDialog = () => {
+  if (!screen.queryByRole('dialog'))
+    fireEvent.click(
+      within(fwCard()).getByRole('button', { name: '詳しく比べる' }),
+    );
+  return screen.getByRole('dialog', { name: /^ページの描き方を比べる/ });
+};
+const routesTable = () =>
+  within(routesDialog()).getByRole('table', { name: 'ページごとの描き方' });
+/** 構成図の流れの凡例（① の選んでいる構成のカード）。 */
+const flowLegend = () =>
+  within(stackCard()).getByRole('list', { name: '構成図の流れの凡例' })
+    .textContent;
+
 /** 月の費用・明細・比較表・費用の曲線が出ていることを見て、今の構成の名前を返す。 */
 function expectEstimate(): string {
   const title = screen.getByRole('heading', { level: 2, name: /^月の費用: / });
@@ -61,16 +86,11 @@ function expectEstimate(): string {
       .getAllByRole('button')
       .filter((b) => b.getAttribute('aria-current') === 'true'),
   ).toHaveLength(1);
-  // 構成図（D-105）: 今の構成の図が出る
-  const diagram = within(card(/^構成図: /)).getByRole('img', {
-    name: /^構成図: /,
-  });
-  expect(diagram.querySelectorAll('[data-node]').length).toBeGreaterThan(1);
-  // ページごとの描き方（D-106）: テンプレートのページごとに 1 行
+  // 構成図（D-105）: ① の選んでいる構成のカードに今の構成の図が出る（下の構成図のカードは重複なので消した。D-115）
+  expect(stackCard().querySelectorAll('[data-node]').length).toBeGreaterThan(1);
+  // ページごとの描き方（D-106）: ② の選んでいるカードにテンプレートのページごとの欄（下の表のカードは消した。D-115）
   expect(
-    within(card('ページごとの描き方'))
-      .getByRole('table', { name: 'ページごとの描き方' })
-      .querySelectorAll('tr[data-route]').length,
+    fwCard().querySelectorAll('section[data-route]').length,
   ).toBeGreaterThan(0);
   const curve = within(card('費用の曲線（月の PV を振る）'));
   const chart = curve.getByRole('img', {
@@ -171,16 +191,14 @@ describe('見積モードの画面', () => {
       ),
     ).toBeDefined();
     // ページごとの描き方（D-107）: 個人向けを枠 + API にすると URL に残り、その行は CPU の制限に当たらない
-    const routes = within(card('ページごとの描き方'));
+    const routes = within(routesDialog());
     fireEvent.click(
       routes.getByRole('button', {
         name: /^個人向けのページを 枠 \+ ブラウザが API で取る/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=shell-api');
-    const row = within(card('ページごとの描き方'))
-      .getByRole('table', { name: 'ページごとの描き方' })
-      .querySelector('tr[data-route="personal"]')!;
+    const row = routesTable().querySelector('tr[data-route="personal"]')!;
     expect(
       row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
     ).toBe('shell-api');
@@ -241,16 +259,14 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    const routes = within(card('ページごとの描き方'));
+    const routes = within(routesDialog());
     fireEvent.click(
       routes.getByRole('button', {
         name: /^個人向けのページを 枠 \+ サーバーの島/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=server-island');
-    const row = within(card('ページごとの描き方'))
-      .getByRole('table', { name: 'ページごとの描き方' })
-      .querySelector('tr[data-route="personal"]')!;
+    const row = routesTable().querySelector('tr[data-route="personal"]')!;
     expect(
       row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
     ).toBe('server-island');
@@ -273,11 +289,7 @@ describe('見積モードの画面', () => {
         .getAttribute('aria-pressed'),
     ).toBe('true');
     expectEstimate();
-    expect(
-      within(card(/^構成図: /)).getByRole('list', {
-        name: '構成図の流れの凡例',
-      }).textContent,
-    ).toContain('サーバーの島（閲覧ごとに一部だけ描く）');
+    expect(flowLegend()).toContain('サーバーの島（閲覧ごとに一部だけ描く）');
     // URL から開いても同じ。vinext（PPR が未完成）に替えると選べないので消える
     cleanup();
     window.history.replaceState(
@@ -301,10 +313,7 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    const table = () =>
-      within(card('ページごとの描き方')).getByRole('table', {
-        name: 'ページごとの描き方',
-      });
+    const table = () => routesTable();
     const strategyOf = (route: string) =>
       table()
         .querySelector(`tr[data-route="${route}"] [data-strategy]`)!
@@ -317,13 +326,9 @@ describe('見積モードの画面', () => {
     // 描き方の番号（S1〜S6・文書の S7）は画面に出さない（D-112）
     expect(table().textContent).not.toMatch(/\bS[1-7]\b/);
     expect(window.location.search).not.toContain('rp.');
-    expect(
-      within(card(/^構成図: /)).getByRole('list', {
-        name: '構成図の流れの凡例',
-      }).textContent,
-    ).toContain('動的な穴');
+    expect(flowLegend()).toContain('動的な穴');
     fireEvent.click(
-      within(card('ページごとの描き方')).getByRole('button', {
+      within(routesDialog()).getByRole('button', {
         name: /^個人向けのページを 毎回描く/,
       }),
     );
@@ -336,7 +341,7 @@ describe('見積モードの画面', () => {
     expect(window.location.search).not.toContain('rp.personal');
     expect(strategyOf('personal')).toBe('ssr');
     expect(
-      within(card('ページごとの描き方')).getByRole('button', {
+      within(routesDialog()).getByRole('button', {
         name: /^個人向けのページを 部品ごとにキャッシュ（Cache Components）にする/,
       }),
     ).toBeTruthy();
@@ -406,8 +411,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     expect(window.location.search).toContain('rp.personal=shell-api');
     expect(
-      within(card('ページごとの描き方'))
-        .getByRole('table', { name: 'ページごとの描き方' })
+      routesTable()
         .querySelector('tr[data-route="personal"] [data-strategy]')!
         .getAttribute('data-strategy'),
     ).toBe('shell-api');
