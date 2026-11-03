@@ -60,7 +60,13 @@ const routesDialog = () => {
     fireEvent.click(
       within(fwCard()).getByRole('button', { name: '詳しく比べる' }),
     );
-  return screen.getByRole('dialog', { name: /^ページの描き方を比べる/ });
+  const dialog = screen.getByRole('dialog', {
+    name: /^ページの描き方を比べる/,
+  });
+  // 表の注記は見積用の文（ゲームの「1 か月目の基準の規模」を出さない。D-115）
+  expect(dialog.textContent).toContain('費用の差は今の条件（月の PV）での目安');
+  expect(dialog.textContent).not.toContain('1 か月目の基準の規模');
+  return dialog;
 };
 const routesTable = () =>
   within(routesDialog()).getByRole('table', { name: 'ページごとの描き方' });

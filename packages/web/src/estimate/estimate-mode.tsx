@@ -28,6 +28,7 @@ import {
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
+import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
 import { routeChoiceOf, type RoutePlanEditor } from '../route-plan-field.tsx';
 import { FrameworkField } from '../scenario-briefing.tsx';
 import {
@@ -487,6 +488,11 @@ function Conditions({
             'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べる',
           compareNote:
             'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べる。ここで選んでも、カードのチップで選んでも同じ。構成の比較・費用の曲線もこの描き方で引く。',
+          // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
+          compareCaption: ROUTE_PLAN_NOTE.replace(
+            '費用の差は 1 か月目の基準の規模での目安。',
+            '費用の差は今の条件（月の PV）での目安。',
+          ),
         }}
       />
       {/* ③ 部品・④ 設定はゲームの始める画面と同じ欄（D-115）。部品は normalizeInput が選べるものに直す */}
