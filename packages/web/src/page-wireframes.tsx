@@ -126,10 +126,13 @@ export type ScenarioPage = ReturnType<typeof scenarioWireframes>[number];
 
 const NEED_ORDER = Object.keys(REGION_NEEDS) as RegionNeed[];
 
-/** 区画の要件の札（中立の枠線。作られ方の札・色と見分けられるよう塗らない。D-113）。 */
+/**
+ * 区画の要件の札（墨の色で塗る。D-113）。作られ方・描き方の色（success・info・warning・secondary・accent の枠と淡い塗り、
+ * 選んだものの primary）と見分けられるよう、有彩色を使わず neutral で塗る。
+ */
 function NeedTag({ need }: { need: RegionNeed }) {
   return (
-    <span className="inline-block rounded-full border border-base-content/40 bg-base-100 px-1 text-[10px] leading-tight whitespace-nowrap">
+    <span className="inline-block rounded-full bg-neutral/85 px-1 text-[10px] leading-tight whitespace-nowrap text-neutral-content">
       {REGION_NEEDS[need].short}
     </span>
   );
@@ -137,9 +140,10 @@ function NeedTag({ need }: { need: RegionNeed }) {
 
 /**
  * シナリオの説明のページの見取り図（D-113）。フレームワークに依らず、区画が何で、何が要るかを札で出す（作られ方は出さない）。
- * 選択のカードの見取り図（作られ方の色）と見分けるため、区画は破線の枠と中立の灰色で描く。区画の中は種類（RegionKind）ごとの
- * 静的なスケルトン（本物のページに近い見た目。飾りなので aria-hidden）で、要件の札は右上に重ね、名前は小さい文字で添える（D-113 の追記）。
- * ページはブラウザの窓の形の小さい図（広い画面で 320px 幅）で、広い画面では横に並べる。
+ * 選択のカードの見取り図（区画の枠と塗りが作られ方の色）と見分けるため、区画の枠は破線の灰色・白地のままにし、色は区画の中の
+ * スケルトン（種類 RegionKind ごと。本物のページに近い見た目。飾りなので aria-hidden）の画像・人の部分にだけ付ける（D-113 の追記）。
+ * 区画の名前と要件の札は区画の上の行に並べる（札が中身に重ならないように）。
+ * ページはブラウザの窓の形の小さい図（広い画面で 320px 幅）で、広い画面では横に並べる。呼ぶ側で灰色の帯に載せ、窓を白く浮かせる。
  */
 export function ScenarioWireframes({
   pages,
@@ -165,15 +169,15 @@ export function ScenarioWireframes({
               key={p.route}
               aria-label={`${p.label}（シナリオ）`}
               data-scenario-page={p.route}
-              className="space-y-1.5 rounded-box border border-dashed border-base-content/30 p-2"
+              className="min-w-0 space-y-1.5"
             >
-              <h4 className="text-sm font-semibold">{p.label}</h4>
+              <h4 className="text-base font-bold">{p.label}</h4>
               {caption && <p className="text-xs opacity-80">{caption}</p>}
-              <div className="w-full overflow-hidden rounded-lg border border-base-content/20 bg-base-100 shadow-sm sm:w-80">
+              <div className="w-full overflow-hidden rounded-lg border border-base-content/15 bg-base-100 shadow-md sm:w-80">
                 {/* ブラウザの窓の上の帯（飾り） */}
                 <div
                   aria-hidden
-                  className="flex items-center gap-1 border-b border-base-content/10 bg-base-200 px-2 py-1"
+                  className="flex items-center gap-1 border-b border-base-content/10 bg-base-300/60 px-2 py-1"
                 >
                   {[0, 1, 2].map((i) => (
                     <span
@@ -192,22 +196,24 @@ export function ScenarioWireframes({
                       key={r.id}
                       data-region={r.id}
                       title={`${r.label}: ${r.needs.map((n) => REGION_NEEDS[n].short).join('・')}`}
-                      className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} relative flex flex-col justify-between gap-1 rounded border border-dashed border-base-content/20 px-1.5 pt-1.5 pb-0.5`}
+                      className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} flex min-w-0 flex-col gap-1 rounded border border-dashed border-base-content/20 px-1.5 pt-1 pb-1.5`}
                     >
+                      {/* 区画の名前と要件の札を上の行に並べる（狭い区画では札が次の行へ折り返す） */}
+                      <span className="flex flex-wrap items-center justify-between gap-x-1 gap-y-0.5">
+                        <span className="block text-[10px] leading-tight font-medium opacity-70">
+                          {r.label}
+                        </span>
+                        <span className="sr-only">: </span>
+                        <span className="flex flex-wrap justify-end gap-0.5">
+                          {r.needs.map((n, i) => (
+                            <span key={n}>
+                              {i > 0 && <span className="sr-only">・</span>}
+                              <NeedTag need={n} />
+                            </span>
+                          ))}
+                        </span>
+                      </span>
                       <RegionSkeleton kind={r.kind ?? 'body'} />
-                      <span className="block text-[9px] leading-tight opacity-60">
-                        {r.label}
-                      </span>
-                      <span className="sr-only">: </span>
-                      {/* 要件の札は区画の右上に重ねる */}
-                      <span className="absolute top-0.5 right-0.5 flex max-w-[85%] flex-wrap justify-end gap-0.5">
-                        {r.needs.map((n, i) => (
-                          <span key={n}>
-                            {i > 0 && <span className="sr-only">・</span>}
-                            <NeedTag need={n} />
-                          </span>
-                        ))}
-                      </span>
                     </li>
                   ))}
                 </ul>
