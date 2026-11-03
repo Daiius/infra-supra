@@ -96,7 +96,8 @@ export function describeEffect(e: Effect): string {
     case 'workload': {
       const m = e.mods;
       return [
-        m.imagesPerPage !== undefined && `1 PV の画像 ${m.imagesPerPage} 枚`,
+        m.imagesPerPage !== undefined &&
+          `記事の本文の画像 ${m.imagesPerPage} 枚`,
         m.uploadsFactor !== undefined &&
           `画像の投稿 ${fmtFactor(m.uploadsFactor)}`,
         m.ssrShare !== undefined &&

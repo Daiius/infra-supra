@@ -37,9 +37,19 @@ N(document-static) = PV × share(static)
 N(document-ssr)    = PV × share(ssr)
 N(api)             = PV × n_api                     （SPA のページ遷移は API として数える）
 N(asset)           = PV × n_asset × (1 − r_browser)
-N(image-read)      = PV × n_img   × (1 − r_browser)
+N(image-read)      = Σ_r 閲覧_r × (n_img,r × (1 − r_browser) + n_thumb,r × (1 − r_thumb))
 N(image-write)     = MAU × アップロード数/MAU/月
 ```
+
+**本文の画像とサムネイル**（D-121）: 画像は本文の画像（`perPage.images`・ルートの `images`）とサムネイル（関連記事・一覧。`perPage.thumbnails`・
+ルートの `thumbnails`）に分け、ルートが枚数を持てばその閲覧にはそれを使う（`apiCalls` と同じ重ね方）。1 枚の大きさとブラウザのキャッシュから
+出す割合は本文が `images.sizeKB`・`images.browserReuse`、サムネイルが `images.thumbnails`（省略は本文と同じ値）。`image-read` の 1 件の大きさは
+2 つの件数の重み付き平均で、内訳（`kbMix`）に両方を持つ。サムネイルはサイズ違いの 1 つ（D-83）なので変換の件数は今までと同じで、投稿のときに作る
+サイズ違いの保存は `種類 × ((サイズ違い − 1) × sizeKB + サムネイルの大きさ)`。サイズ違いを作らない部品（一律で縮める・最適化しない）と、
+サイズ違いが 1 種の設定では、サムネイルも本文と同じファイルを配る（ゲームの `deliveredThumbnailKB`・catalog の `applyComponentsToWorkload`）。
+記事コミュニティの値（ゲーム上の仮定・出典なし。`catalog/src/templates/index.ts`）: 画像は記事のページだけに載り、本文 5 枚（JPEG 150 KB・WebP 105 KB）・
+関連記事のサムネイル 4 枚（本文の 1 枚の 0.1 倍）。ブラウザでの再利用は本文 0.2（同じ人が同じ記事を開き直す割合）・サムネイル 0.5
+（人気の記事の 2 枚はどの記事のページにも並び、1 人が月に開く約 6 回の記事のページの最初だけ取りに行く ≈ 0.83、関連記事の 2 枚は本文と同じ 0.2 の平均）。
 
 フレームワーク由来のクラス（[06](./06-frameworks.md) §2.1）:
 
@@ -63,20 +73,32 @@ ISR のルートの閲覧（`document-isr`）自体は CDN・ホストのキャ�
 期間つきのキャッシュ（ISR の再検証の間隔・SPA の記事の中身の API の s-maxage。D-37・[10](./10-framework-branch.md) §8）は、同じ式で miss とヒット率を出す（実装の正。上の `min` の式は古い案）:
 
 ```
-λ_r        = ルート r の月の閲覧 / ページ数            （1 ページへの到着率。人気が一様と仮定）
-miss_r     = 閲覧_r / (1 + λ_r × T_r / 1 か月)         （T: 再検証の間隔・s-maxage）
+p_k        = k^(−s_r) / Σ_{j=1..n_r} j^(−s_r)           （順位 k のページの閲覧の割合。n_r: ページ数・s_r: Zipf の指数 zipfExponent。s = 0 は一様）
+v_{r,k}    = 閲覧_r × p_k                               （ページ k の月の閲覧。λ_{r,k} T = v_{r,k} × T_r / 1 か月）
+miss_r     = Σ_k v_{r,k} / (1 + v_{r,k} × T_r / 1 か月)  （T: 再検証の間隔・s-maxage。ページごとに期間あたり高々 1 回取り直す）
 hit(k)     = 1 − Σ miss_r / Σ 閲覧_r                    （k = document-isr・api-content。ResolvedWorkload.cacheHitRate）
 N(isr-revalidate) = Σ miss_r                           （ISR の再生成 = CDN の miss と同じ数）
 N(api-content)    = Σ 閲覧_r（SPA で cacheSeconds を持つルートだけ。持たない中身は api にまとめる）
 ```
 
+ヒット率は、ページごとの `λT / (1 + λT)` を閲覧の重み（p_k）で平均した値になる（`1 − miss_r / 閲覧_r = Σ_k p_k × λ_k T / (1 + λ_k T)`）。
+一様（s = 0）なら今までの `λ_r T / (1 + λ_r T)`（λ_r = 閲覧_r / ページ数）に戻る。`x / (1 + x)` は凹なので、偏るほどヒット率は上がる。
+
+**閲覧の偏り（Zipf。D-121）**: 記事コミュニティの記事のルートは s = 1（ゲーム上の仮定・出典なし）。計算は決定論の和（乱数なし。
+`estimator/src/workload/popularity.ts` の `sumOverPages`）で、順位 4,096 までは 1 ページずつ、その後ろは順位を 1.02 倍ずつの区間にまとめ、
+区間の重みを `x^(−s)` の積分（端 ± 0.5）で近似する（2,000〜6,000 ページでは厳密な和と相対 10^−7 以内）。ピークの時間帯は v を peakHourFactor 倍する。
+記事コミュニティ（2,000 ページ・5 分）のヒット率: 30 万 PV（記事 18 万閲覧）で一様 1.0% → 20.6%、130 万 PV（78 万閲覧）で 4.3% → 36.7%。
+
 **オンデマンドの再検証**（D-49）: ISR のルートに `onDemandUpdatesPerMonth`（月の内容の更新の回数 U）を与えると、`revalidateSeconds` の代わりに
 更新のあとの最初の閲覧で 1 回作り直すとして数える。
 
 ```
-miss_r = U_r × 閲覧_r / (U_r + 閲覧_r)      （更新と閲覧がページに一様に散ると仮定。U ≪ 閲覧なら U、閲覧 ≪ U なら閲覧に近づく）
+miss_r = U_r × 閲覧_r / (U_r + 閲覧_r)      （更新と閲覧がページに同じ割合で散ると仮定。U ≪ 閲覧なら U、閲覧 ≪ U なら閲覧に近づく）
 ピークの miss の割合は月の平均と同じとみなす（更新も閲覧と同じ時間帯の形と仮定）
 ```
+
+閲覧が偏る（Zipf）ときも、更新が閲覧と同じ偏りで散る（コメント・編集は読まれる記事に付く）と仮定すれば、ページごとに
+`(U p_k)(閲覧 p_k) / (U p_k + 閲覧 p_k)` を足しても `U × 閲覧 / (U + 閲覧)` のまま（偏りに依らない。D-121）。
 
 ゲームでは U = 月の PV × 1 PV あたりの API の呼び出し × 書き込みの割合（`writesPerCall`）× **記事のページを作り直す割合**
 （シナリオの `pageUpdateShare`。記事コミュニティ 0.01・受託 0。D-70）。作り直すのは**記事の投稿・編集だけ**で、
@@ -96,7 +118,7 @@ writesPerCall を直す。D-109）。時間の再検証の再生成は U に依�
 その分を足す（閲覧の回数を超えない）:
 
 ```
-miss_r = min(閲覧_r, U_r × 閲覧_r / (U_r + 閲覧_r) + 閲覧_r / (1 + λ_r × T_max / 1 か月))   （ピークは λ_r を peakHourFactor 倍）
+miss_r = min(閲覧_r, U_r × 閲覧_r / (U_r + 閲覧_r) + Σ_k v_{r,k} / (1 + v_{r,k} × T_max / 1 か月))   （ピークは v を peakHourFactor 倍）
 ```
 
 ゲームでは T_max = 1 日（`ON_DEMAND_MAX_AGE_SEC`。よく使われる 1 時間〜1 日の長い側・仮定。選択肢にはしない）。
@@ -108,7 +130,7 @@ miss_r = min(閲覧_r, U_r × 閲覧_r / (U_r + 閲覧_r) + 閲覧_r / (1 + λ_r
 再生成の回数（miss_r）とは別で、閲覧が無くても更新のたびに呼ぶ。`cdn` が `invalidationPathsPerPage` を持ち、ISR のページを期間つきでキャッシュする（`ttlClasses` に document-isr）ときだけ、
 `invalidation-paths = 再検証を呼ぶページ × invalidationPathsPerPage` を数える（OpenNext の CloudFront。prd/11 §13.1）。
 `cdn` が `invalidationWildcardPathsPerUpdate` を持つ（ワイルドカードでまとめる。D-79）ときは `invalidation-paths = U × その値` とし、更新のたびにルートの全ページがその CDN から消えるとみなす:
-CDN の miss = min(閲覧, U × 閲覧 / (U + 閲覧 / ページ数) + 最大寿命の分)（`cdnFlushMissFlow`）。後ろの ISR のキャッシュは消えないので、再生成（miss_r）は変えない。
+CDN の miss = min(閲覧, Σ_k U × v_k / (U + v_k) + 最大寿命の分)（`cdnFlushMissFlow`。一様なら U × 閲覧 / (U + 閲覧 / ページ数)。D-121）。後ろの ISR のキャッシュは消えないので、再生成（miss_r）は変えない。
 ゲームでは 1 回の更新で記事のページと一覧の 2 ページ（`ON_DEMAND_PAGES_PER_UPDATE`・仮定）。記事コミュニティの 1 か月目で 300 × 2 = 600 ページ（OpenNext の CloudFront で 1,200 パス）。
 
 **ISR のキャッシュの保存量**（D-66）: `object-storage` の `isrCacheSizeFactor` が正なら、ISR のページの大きさ（ページ数 × 応答の大きさ。`storage.isrPagesGB`）× その倍率を保存する。
@@ -376,3 +398,5 @@ dns-queries = PV × queriesPerPageView × (1 − freeQueryShare)
     `transformAt`（D-24）で決まる: 閲覧のとき = min(種類 × サイズ違い, 画像の閲覧)・投稿のとき = 投稿数 × サイズ違い（書き込みにも足す）・
     作らない = 0。形式のフォールバック（D-58: 投稿のときに作る構成で WebP・AVIF なら JPEG も作る）はサイズ違いの数を 2 倍にして表す。
   - 投稿のときに作るサイズ違いの保存量は、1 枚を `sizeKB` とみなす（サムネイルの分は多めに数える近似）。値は変えていない。
+  - → **D-121 で一部を改めた**: サムネイルの配る数と大きさを本文の画像と分けて持つ（§2 の「本文の画像とサムネイル」）。変換の件数は
+    今までどおりサイズ違いの 1 つとして数え、保存量はサムネイルの分をその大きさで数える。画像は記事のページだけに載る（個人向けのページは 0）。

@@ -29,6 +29,18 @@ export const RouteGroupSchema = z.object({
   share: Ratio,
   /** コンテンツの在庫: このルートのページ数（ISR の再生成の見積に使う）。 */
   pages: Pos,
+  /**
+   * ページごとの閲覧の偏り（Zipf の指数 s。順位 k のページの閲覧 ∝ k^(−s)。D-121・prd/04 §2）。期間つきのキャッシュ（ISR の再検証・
+   * API の応答の s-maxage・まとめた無効化）の miss を、ページごとの閲覧で出して足す。省略・0 は一様（人気がページに等しく散る）。
+   */
+  zipfExponent: NonNeg.optional(),
+  /**
+   * このルートの閲覧 1 回あたりの本文の画像の枚数（D-121）。与えると、このルートの閲覧には perPage.images の代わりにこれを使う
+   * （画像の無いページ（個人向けのページなど）に 0 を、記事のページに本文の枚数を持たせる）。
+   */
+  images: NonNeg.optional(),
+  /** このルートの閲覧 1 回あたりのサムネイル（関連記事・一覧）の枚数（perPage.thumbnails の代わり。D-121）。 */
+  thumbnails: NonNeg.optional(),
   revalidateSeconds: Pos.optional(),
   /**
    * isr のみ: オンデマンドの再検証（内容を更新したときに再検証する）。与えると revalidateSeconds の代わりに、
@@ -120,7 +132,10 @@ export const WorkloadInputSchema = z
     perPage: z.object({
       apiCalls: NonNeg,
       assets: NonNeg,
+      /** 本文の画像（大きいサイズ違い）の枚数。ルートの images が上書きする。 */
       images: NonNeg,
+      /** サムネイル（関連記事・一覧の小さいサイズ違い）の枚数（D-121）。ルートの thumbnails が上書きする。省略は 0。 */
+      thumbnails: NonNeg.optional(),
     }),
     api: ProcessingSchema.extend({
       writesPerCall: NonNeg,
@@ -128,11 +143,18 @@ export const WorkloadInputSchema = z
     }),
     assets: z.object({ sizeKB: NonNeg, browserReuse: Ratio }),
     images: z.object({
+      /** 本文の画像 1 枚（配るサイズ違い）の大きさ。 */
       sizeKB: NonNeg,
+      /** 本文の画像のうち、ブラウザのキャッシュから出す割合（同じ人が同じページを開き直す割合）。 */
       browserReuse: Ratio,
       /**
+       * サムネイル 1 枚の大きさと、ブラウザのキャッシュから出す割合（D-121）。サムネイルはサイズ違いの 1 つ（下の variants に含む）で、
+       * 配る数（perPage.thumbnails・ルートの thumbnails）と大きさだけを本文の画像と分けて持つ。省略は本文の画像と同じ値。
+       */
+      thumbnails: z.object({ sizeKB: NonNeg, browserReuse: Ratio }).optional(),
+      /**
        * コンテンツの在庫: 画像の種類数とサイズ違いの数（画像変換の件数は PV でなくこれで頭打ちになる）。
-       * 一覧のサムネイルはサイズ違いの 1 つとして数える（別には数えない。D-83）。
+       * 一覧のサムネイルはサイズ違いの 1 つとして数える（変換の件数は別に数えない。D-83。配る数と大きさは D-121 で分けた）。
        */
       distinct: NonNeg,
       variants: NonNeg,
@@ -149,6 +171,12 @@ export const WorkloadInputSchema = z
        * 構成の関数が変換の時間（classCpuMs）を持つときだけ、その時間に掛ける（OCL-ECDEF8A1）。
        */
       transformWorkFactor: z.number().finite().positive().default(1),
+      /**
+       * variants のうち、形式のフォールバックで同じサイズ違いを何形式ぶん持つか（WebP・AVIF に JPEG も置くと 2。D-58）。
+       * variants は「サイズ違い × 形式の数」のままで、保存量だけが形式ごとにサムネイルを 1 枚として数えるのに使う（D-121・OCL-E2492C36）。
+       * 省略は 1。
+       */
+      formatCopies: z.number().finite().positive().optional(),
     }),
     db: z.object({
       sizeGB: NonNeg,

@@ -186,8 +186,10 @@ describe('部品の組み合わせ', () => {
       s.nodes.r2!.resources['storage-gb-month']!;
     const wi = pre.workload.input.images;
     expect(base.workload.storage.variantsGB).toBe(0);
+    // サイズ違いのうち 1 つはサムネイルの大きさ（D-121）
     expect(pre.workload.storage.variantsGB).toBeCloseTo(
-      (wi.distinct * wi.variants * wi.sizeKB) / 1_000_000,
+      (wi.distinct * ((wi.variants - 1) * wi.sizeKB + wi.thumbnails!.sizeKB)) /
+        1_000_000,
       9,
     );
     expect(storage(pre) - storage(base)).toBeCloseTo(

@@ -107,7 +107,7 @@ describe('Netlify の構成', () => {
     ).toMatchObject({ hit: true, effect: 'block' });
   });
 
-  it('Pro は使い切っても止まらず、補充の分だけ請求が増える（Vercel Pro より安い）', () => {
+  it('Pro は使い切っても止まらず、補充の分だけ請求が増える（Vercel Pro の従量の CDN より安い）', () => {
     const s = doNothing(PRO, 1);
     expect(s.history.every((h) => h.status !== 'down')).toBe(true);
     const credit = s.history[0]!.premises.find(
@@ -116,8 +116,14 @@ describe('Netlify の構成', () => {
     expect(credit).toMatchObject({ effect: 'cost', hit: true });
     const total = (st: ReturnType<typeof doNothing>) =>
       st.history.reduce((a, h) => a + h.infraCost, 0);
+    // D-120 の Flat Rate CDN（既定）に D-121（記事の閲覧の偏りで再生成が減る）が重なり、既定の Vercel Pro は Netlify Pro より
+    // わずかに安くなった（$1,162 < $1,178）。従量の CDN（On-demand）とは今までどおり比べられる
     expect(total(s)).toBeLessThan(
-      total(doNothing(idx('vercel-supabase-pro'), 1)),
+      total(
+        doNothing(idx('vercel-supabase-pro'), 1, 'nextjs', ARTICLE_COMMUNITY, {
+          cdnPlan: 'on-demand',
+        }),
+      ),
     );
   });
 

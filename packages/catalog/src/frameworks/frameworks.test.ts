@@ -164,9 +164,21 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
 
   it('対象は記事の中身だけ（個人化された中身ともともとの API は毎回届く）', () => {
     const hit = resolveWorkload(cachedW).cacheHitRate['api-content']!;
-    // 記事 2,000 ページ・閲覧 18 万/月・1 時間 → λT ≈ 0.123
-    const lambdaT = (180_000 / 2_000) * (3600 / (730 * 3600));
-    expect(hit).toBeCloseTo(lambdaT / (1 + lambdaT), 9);
+    // 記事 2,000 ページ・閲覧 18 万/月・1 時間。記事の閲覧は Zipf（指数 1）で偏る（D-121）ので、ページごとの λT / (1 + λT) を
+    // 閲覧で重み付けした平均（一様なら λT ≈ 0.123 で 11%）
+    const n = 2_000;
+    const H = Array.from({ length: n }, (_, i) => 1 / (i + 1)).reduce(
+      (a, b) => a + b,
+    );
+    const k = 3600 / (730 * 3600);
+    let misses = 0;
+    for (let i = 1; i <= n; i++) {
+      const v = 180_000 / i / H;
+      misses += v / (1 + v * k);
+    }
+    expect(hit).toBeCloseTo(1 - misses / 180_000, 6);
+    const lambdaT = (180_000 / n) * k;
+    expect(hit).toBeGreaterThan(lambdaT / (1 + lambdaT));
     expect(resolveWorkload(cachedW).classes.api.count).toBeCloseTo(
       300_000 + 120_000,
     );

@@ -172,7 +172,10 @@ describe('数え方（D-111）', () => {
         routes,
       ).costUsd;
     const cc = m1();
-    expect(cc).toBeLessThan(m1({ article: 'cached-ttl', personal: 'ssr' }));
+    // D-121（記事の閲覧の偏りで ISR の再生成が減る）で、1 か月目はどちらも月のクレジットに収まり同じ額になった
+    expect(cc).toBeLessThanOrEqual(
+      m1({ article: 'cached-ttl', personal: 'ssr' }),
+    );
     expect(cc).toBeLessThanOrEqual(
       m1({ article: 'cached-ttl', personal: 'server-island' }),
     );

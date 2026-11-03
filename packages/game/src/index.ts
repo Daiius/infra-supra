@@ -34,6 +34,7 @@ export {
   SETTINGS,
   type SettingKey,
   deliveredImageKB,
+  deliveredThumbnailKB,
   pageWeightKB,
   pageWeightLabel,
   DEFAULT_REVALIDATE_SEC,

@@ -186,11 +186,15 @@ describe('AWS の構成', () => {
     expect(storage.amount).toBeCloseTo(20 * unit, 10);
   });
 
-  it('記事コミュニティの SPA・既定の部品は、シード 1〜20 の多くで目標に届く（目盛り。目標の値は決め直す・D-50）', () => {
-    const passed = Array.from({ length: 20 }, (_, i) =>
-      doNothing(i + 1, 'vite-spa'),
-    ).filter((s) => goalChecks(s).every((c) => c.ok)).length;
-    expect(passed).toBeGreaterThanOrEqual(15);
+  it('記事コミュニティの SPA: 既定の部品（一律で縮める）は届かず、画像を Cloudflare Images で配ると全シード届く（目盛り。D-50・D-121）', () => {
+    const passed = (components: Choices = {}) =>
+      Array.from({ length: 20 }, (_, i) =>
+        doNothing(i + 1, 'vite-spa', components),
+      ).filter((s) => goalChecks(s).every((c) => c.ok)).length;
+    // D-121 の前は 19 / 20。一律で縮めるはサイズ違いを作らないので、関連記事のサムネイル（4 枚）にも 400 KB の画像を配り、
+    // Amplify の転送（CloudFront の外への転送）が増えて届かなくなった
+    expect(passed()).toBe(0);
+    expect(passed({ images: 'cf-images' })).toBe(20);
   });
 
   it('OpenNext（D-63）: 別の事業者として足し、維持の手間 1・オンデマンドの即時反映を満たす・Amplify との行き来は乗り換え', () => {
