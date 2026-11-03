@@ -450,6 +450,44 @@ export const REGION_SOURCES: Readonly<
   },
 };
 
+/**
+ * 見取り図の区画の要件（D-113）。作られ方（RegionSource）と違い、フレームワークに依らない「その区画が何で、何が要るか」。
+ * シナリオの説明の見取り図に札で出す。ゲーム上の仮定（計算には使わない）。
+ */
+export type RegionNeed =
+  'same' | 'personal' | 'fresh' | 'live' | 'ogp' | 'media' | 'input';
+
+/** 区画の要件の札（short）と凡例の説明（long）。並びは凡例の順。 */
+export const REGION_NEEDS: Readonly<
+  Record<RegionNeed, { short: string; long: string }>
+> = {
+  same: { short: '全員に同じ', long: '誰が見ても同じ中身' },
+  personal: {
+    short: '人ごとに違う',
+    long: 'ログインした人ごとに中身が違う（使い回せない）',
+  },
+  fresh: {
+    short: 'すぐ見えてほしい',
+    long: '投稿・編集・登録したら、すぐ見えてほしい',
+  },
+  live: {
+    short: '閲覧ごとに変わる',
+    long: '見るたびに数・中身が変わりうる（いいね数・新しいコメント・通知）',
+  },
+  ogp: {
+    short: 'SNS のカードが要る',
+    long: 'SNS・検索に、ページごとのタイトル・画像（OGP）を HTML で見せたい',
+  },
+  media: {
+    short: '画像',
+    long: 'HTML とは別のファイルとして届く（変換・配信の費用がかかる）',
+  },
+  input: {
+    short: '書き込む',
+    long: '人が送信する（投稿・登録。サーバーの API が受ける）',
+  },
+};
+
 /** 見取り図の区画（D-102）。幅は横いっぱい（full）か半分（half）、高さは目安の 3 段。 */
 export type WireframeRegion = {
   id: string;
@@ -457,6 +495,8 @@ export type WireframeRegion = {
   label: string;
   width?: 'full' | 'half';
   height?: 'sm' | 'md' | 'lg';
+  /** 区画の要件（フレームワークに依らない。シナリオの説明の見取り図に出す。D-113）。すべての区画に書く（テストで確かめる）。 */
+  needs?: RegionNeed[];
 };
 
 /** ページの見取り図 1 枚（D-102）。 */

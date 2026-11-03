@@ -6,8 +6,10 @@ import {
   COMMENTS_IN_PAGE,
   frameworksOf,
   pageWireframes,
+  REGION_NEEDS,
   REGION_SOURCES,
   SCENARIOS,
+  scenarioWireframes,
 } from './index.ts';
 
 const sources = (
@@ -58,6 +60,22 @@ describe('ページの見取り図のデータ', () => {
           for (const [fw, over] of Object.entries(w.commentsInPage ?? {}))
             for (const id of Object.keys(over ?? {}))
               expect(ids, `${w.route} × ${fw} の上書き`).toContain(id);
+        }
+      });
+
+      it('すべての区画に要件の札があり、ページの性質（RS-17）と食い違わない（D-113）', () => {
+        for (const p of scenarioWireframes(sc)) {
+          for (const r of p.regions) {
+            expect(r.needs.length, `${p.route}.${r.id}`).toBeGreaterThan(0);
+            for (const n of r.needs) expect(REGION_NEEDS[n]).toBeDefined();
+          }
+          const all = p.regions.flatMap((r) => r.needs);
+          // SNS のカードが要るページだけに、その札の区画がある
+          expect(all.includes('ogp'), p.route).toBe(p.needsOgp);
+          // 人ごとに違うページには、人ごとに違う区画がある
+          if (p.audience === 'personal')
+            expect(all, p.route).toContain('personal');
+          expect(p.freshness, p.route).toBeDefined();
         }
       });
     });

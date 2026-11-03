@@ -64,6 +64,8 @@ export {
   selfBackupOf,
   STACKS,
   stackSupports,
+  stackUnsupportedReason,
+  frameworkOnStack,
   stackOffered,
   offeredBaselines,
   selfHostedOf,
@@ -179,7 +181,11 @@ export {
   routePartNote,
   pageWeightOf,
 } from './notes.ts';
-export { type ResolvedRegion, pageWireframes } from './wireframes.ts';
+export {
+  type ResolvedRegion,
+  pageWireframes,
+  scenarioWireframes,
+} from './wireframes.ts';
 export {
   type RouteAlternative,
   type RoutePlanRow,
