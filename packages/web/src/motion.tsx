@@ -1,6 +1,6 @@
 // 動きの要素（D-25・prd/07 §11.11）。演出だけで、ゲームの状態・ロジックには触れない。
 // prefers-reduced-motion: reduce では動かさない（数字は即時・花火は出さない。CSS の動きは styles.css で止める）。
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 const QUERY = '(prefers-reduced-motion: reduce)';
 
@@ -163,8 +163,8 @@ export function FireworksCanvas({
   onEmpty?: () => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const empty = useRef(onEmpty);
-  empty.current = onEmpty;
+  // 最新の onEmpty を effect から呼ぶ（render 中に ref へ書くと React Compiler が最適化を諦めるので useEffectEvent）
+  const empty = useEffectEvent(() => onEmpty?.());
   useEffect(() => {
     const canvas = ref.current;
     const ctx = canvas?.getContext('2d');
@@ -190,7 +190,7 @@ export function FireworksCanvas({
       engine.step(ctx, alpha);
       if (spawn || engine.particles.length > 0)
         raf = requestAnimationFrame(tick);
-      else empty.current?.();
+      else empty();
     };
     raf = requestAnimationFrame(tick);
     return () => {

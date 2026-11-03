@@ -2,8 +2,9 @@
 // ローカルと remote（Cloudflare Tunnel 越し）で設定を分けず、差分は env（リポジトリ直下の .env.remote）だけに集約する。
 //   pnpm dev          → 127.0.0.1:5173
 //   pnpm dev:remote   → vite --mode remote が .env.remote を読む（WEB_BIND・DEV_ALLOWED_HOST）
+import babel from '@rolldown/plugin-babel';
 import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 
@@ -39,7 +40,14 @@ export default defineConfig(({ mode }) => {
     envDir: repoRoot,
     // 描画テストは画面を何度も描き直すので、CI の遅い実行環境では既定の 5 秒を超えうる（D-87）
     test: { testTimeout: 30_000 },
-    plugins: [react(), tailwindcss(), watchWorkspacePackages()],
+    plugins: [
+      react(),
+      // React Compiler（https://react.dev/learn/react-compiler/installation の Vite の節。plugin-react v6 は Babel を内蔵しないので
+      // @rolldown/plugin-babel に preset を渡す）。対象は client の環境だけ（vitest の jsdom も client として変換される）。
+      babel({ presets: [reactCompilerPreset()] }),
+      tailwindcss(),
+      watchWorkspacePackages(),
+    ],
     build: {
       rolldownOptions: {
         output: {

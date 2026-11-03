@@ -34,7 +34,7 @@
 ## 技術スタック / 構成
 
 - フルスタック TypeScript の **pnpm monorepo**。テストは vitest。
-- **Front**: React 19 + Vite + TailwindCSS v4 + daisyUI。サーバーなし・ローカル保存（[prd/02](./prd/02-architecture.md) §4〜5）。
+- **Front**: React 19（React Compiler）+ Vite + TailwindCSS v4 + daisyUI。サーバーなし・ローカル保存（[prd/02](./prd/02-architecture.md) §4〜5）。
   ルーターはまだ入れていない（画面はゲーム・見積の 2 つで、ヘッダーのタブで切り替える。TanStack Router は画面が増えたら。D-73）。グラフは `packages/web/src/charts.tsx` の自前の SVG。
 
 ### パッケージ
