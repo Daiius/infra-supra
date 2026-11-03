@@ -145,6 +145,8 @@ describe('部品の差し替え', () => {
       isrCache: 'default',
       images: 'default',
       db: 'supabase',
+      // CDN の料金は新しい Pro の既定の Flat Rate CDN（D-120）
+      cdnPlan: 'flat-rate',
       dbBackup: 'default',
       email: 'default',
       api: 'same',

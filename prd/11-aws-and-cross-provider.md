@@ -1523,7 +1523,7 @@ golden: 記事のシード 3 の「VPS・前段の CDN」が $1,730.88・won →
 - 料金データに `cloudfront-flat-premium`（基本料 $1,000・プール `flat-premium-requests` 5 億・`flat-premium-transfer` 50 TB。超えたときは他の段と同じ `adjust`）を足した。既定の段（$1,000）だけを持ち、上の段・Custom は持たない。
 - 部品「CDN の料金のプラン」には出していない（基準プレイの規模の 100 倍以上の量向けで、選ぶ理由が無い。値の網羅のためのデータ）。
 
-### 24.3 Vercel の記録（モデルは変えない。ユーザーの判断待ち）
+### 24.3 Vercel の記録（モデルは変えない。ユーザーの判断待ち → §25・D-120 で既定にした）
 
 - **Flat Rate CDN（2026-09-14 更新の文書を 2026-11-03 に取得）**: 「Flat Rate CDN is available on Pro plans」「Pro includes the lowest tier at no additional cost」。段は Pro に込み（1M リクエスト・1 TB）/ $20（10M・50 TB）/ $100（50M・50 TB）/ $300（150M・50 TB）。
   使うには Billing で「turn on the toggle」して段を選ぶ（既定で有効とは書かれていない）。超えた月の次の請求の期間に上の段に移り、最上の段を超えると On-demand に戻る。
@@ -1543,3 +1543,45 @@ golden: 記事のシード 3 の「VPS・前段の CDN」が $1,730.88・won →
 
 参考（入れていない）: SES を Essentials（$0.16）で数えると、SES を既定にする構成の費用が 12 か月で記事 $5〜$10・受託 $15〜$20 上がり、達成は記事 × VPS 2GB × Next.js 8 → 7、受託 × VPS 4GB（Next.js・Astro・静的書き出し 3 → 0、SPA 6 → 4）が変わる。CF Paid は Email Service なので変わらない。
 
+## 25. Vercel Pro の Flat Rate CDN と読者の地域の単価（2026-11-04・D-120）
+
+ユーザーの決定（2026-11-04）: 新しい Pro の既定の Flat Rate CDN を**既定にし、対象外は前提で示す**。従量（On-demand CDN）は部品として残す。CDN の単価は**読者の地域**（日本の読者なので東京 hnd1）。§24.3 の記録と D-48 の「扱わない」の続き。決定の全体は D-120。
+
+### 25.1 確かめた公式の事実（2026-11-04 取得）
+
+| 項目 | 確かめた事実 | 出典 |
+|---|---|---|
+| 既定 | 「New Pro teams have Flat Rate CDN on by default, and existing teams can switch over in Billing settings」。超えた量は通常どおり配信し請求しない（spike protection・公平な利用の範囲で） | [changelog](https://vercel.com/changelog/flat-rate-cdn-is-now-ga-for-pro-teams)（2026-09-08） |
+| 段 | Pro に込み 1M リクエスト・1 TB / $20 10M・50 TB / $100 50M・50 TB / $300 150M・50 TB。「moves you to a higher tier at the start of the next cycle」「transition you to on-demand pricing if you exceed the highest tier」。段の変更は次の請求の期間から | [Flat Rate CDN](https://vercel.com/docs/pricing/flat-rate-cdn)（2026-09-14 更新）・[Pro](https://vercel.com/docs/plans/pro-plan)（2026-09-15 更新） |
+| 段が覆う資源 | CDN requests・Fast Data Transfer・Blob Data Transfer・Sandbox Data Transfer・CDN の要求の Observability events。Fast Origin Transfer は Pro の込みが「Usage-based」（段の外） | 同上・[CDN の料金と使用量](https://vercel.com/docs/manage-cdn-usage)（2026-09-14 更新） |
+| 対象外 | 「Large-scale delivery of media or files where such delivery constitutes a majority of bandwidth usage」など。Vercel の判断で Flex CDN への移動・別のプラン・制限 | [Flat Rate CDN](https://vercel.com/docs/pricing/flat-rate-cdn) |
+| クレジット | 月 $20 は「managed infrastructure billable resources」の従量に最初から当たる。段の月額に当たるかは**記載なし** | [Pro](https://vercel.com/docs/plans/pro-plan) |
+| CDN の地域 | 「pricing varies by the region where requests originate」「Traffic is routed to the nearest region to the visitor」 | [CDN の料金と使用量](https://vercel.com/docs/manage-cdn-usage) |
+| hnd1 の単価 | 転送 $0.16/GB・リクエスト $2.60/100 万・FOT $0.27/GB・ISR $0.52/$5.20・画像の変換 $0.0661/1,000・キャッシュ $0.52/$5.20・CPU $0.202/時・メモリ $0.0167/GB 時・Blob の転送 $0.053/GB（iad1 は $0.15・$2.00・$0.06・$0.40/$4.00・$0.05・$0.40/$4.00・$0.128・$0.0106・$0.05） | [hnd1](https://vercel.com/docs/pricing/regional-pricing/hnd1)・[iad1](https://vercel.com/docs/pricing/regional-pricing/iad1)（2026-09-14 更新） |
+| 関数・ISR の地域 | 関数は新しいプロジェクトで iad1 が既定。ISR の読み書きは「priced regionally based on the Vercel function region(s)」。画像の最適化は地域の決め方を書かない | [関数の地域](https://vercel.com/docs/functions/configuring-functions/region)・[ISR の料金](https://vercel.com/docs/incremental-static-regeneration/limits-and-pricing)・[画像の最適化の料金](https://vercel.com/docs/image-optimization/limits-and-pricing)（2026-08-11 更新） |
+
+### 25.2 入れた形
+
+- 料金データ: Vercel Pro に容量の段 `flat-rate-cdn`（prd/03 §7b）。次元はリクエスト（CDN Requests）と転送（Fast Data Transfer + Blob Data Transfer。1 TB = 1,000 GB）。対象外の判定は画像の配信が転送の 50% を超えたとき。
+- 地域: 読者の地域で引くメーター（`regionBy: 'viewer'`）は CDN Requests・Fast Data Transfer・Blob Data Transfer・Fast Origin Transfer・画像の最適化（変換・キャッシュの読み・書き）。Fast Origin Transfer は CDN の料金の資源としての書き方から読者の地域と読み（関数の地域の $0.06 は退けた読み）、画像の最適化は決め方が書かれていないので高いほうにした。Active CPU・メモリ・ISR・Blob の保存と操作は関数の地域（iad1）。構成の契約は `region: 'iad1'`・`viewerRegion: 'hnd1'`。
+- 部品: スロット「CDN の料金のプラン」に Flat Rate CDN（既定）と On-demand CDN（従量）。Hobby では出さない。
+- ゲーム: 来月の段は今月の量が収まる最小の段（状態 `capacityTiers`）。1 か月目は Pro に込みの段で、量が超えた月も請求は増えず、翌月から上の段。見積モードは今月の量が収まる段（1 か月の定常の形）。
+- 前提: 段の使用率 `capacity:vercel:pro:flat-rate-cdn`（量 / 今月の段の容量・超えると翌月から上の段）。画像の配信が転送の大半なら事実 `…:media`（割合と、対象外とされて従量で払ったときの額）。
+
+### 25.3 見積モードと基準プレイ
+
+| 見積モード（1 か月・既定の部品・Next.js） | 前（従量・iad1） | 今（Flat Rate CDN・東京） | 従量を選んだとき（東京） |
+|---|---|---|---|
+| 記事 30 万 PV | $56.43 | $66.29（225 万リクエスト・$20 の段） | $63.81 |
+| 記事 130 万 PV | $150.95 | $82.55（975 万リクエスト・$20 の段の 97%） | $180.98 |
+| 受託 30 万 PV | $47.43 | $67.43（144 万リクエスト・$20 の段） | $47.43 |
+| 受託 130 万 PV | $74.68 | $80.95 | $97.15 |
+
+- 量が小さいうちは、従量の CDN が月 $20 のクレジットに収まるので Flat Rate CDN（$20 の段）のほうが高い。記事は約 133 万 PV（1,000 万リクエスト）を超えると $100 の段。
+- 基準プレイ（シード 1〜20・何もしない）: Vercel 以外は全部不変（CF Paid × Next.js は記事・受託とも 20 / 20）。記事 × Vercel Pro は Astro が 0 → 14 / 20（DynamoDB・API を Workers に出すと 20 / 20）、Next.js・SPA・静的書き出しは 0 のまま所持金が $250〜350 増える。受託 × Vercel Pro はどの組も 0 / 20（Neon・DynamoDB・API を Workers の組が 14〜20 → 0。従量にすると DynamoDB は 17〜20、Neon の SPA は 6）。最も所持金が残る組は CF Paid × Astro のまま。
+
+### 25.4 残した点
+
+- 段の月額にクレジットが当たるか・Fast Origin Transfer と画像の最適化の地域は、会社の請求で確かめる。
+- 関数の地域を選ぶ部品（hnd1 に置くと CPU・メモリ・ISR が東京の単価。DB を東京に置く構成の往復の遅延と合わせて）。
+- 対象外とされた後の Flex CDN の料金・CDN Request CPU Duration・Sandbox Data Transfer・Observability events は数えていない。

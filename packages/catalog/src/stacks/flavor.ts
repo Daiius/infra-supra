@@ -69,6 +69,10 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '再検証すると、全リージョンのキャッシュがすぐ更新される',
   'vercel:isrCache:none':
     '毎回関数で描くので、ページはいつも最新。キャッシュの仕組みを気にしなくてよい',
+  'vercel:cdnPlan:flat-rate':
+    '新しい Pro の既定。CDN の配信を段の定額で払い、急な伸びの月も請求が増えない',
+  'vercel:cdnPlan:on-demand':
+    '使った分だけの支払い。月のクレジットが当たり、量の少ない月は安く済む',
   'vercel:images:default':
     '閲覧のときに自動で最適化される。Next.js の画像の部品がそのまま使える',
   'vercel:images:none':

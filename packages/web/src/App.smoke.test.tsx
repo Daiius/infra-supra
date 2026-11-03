@@ -8,6 +8,7 @@ import {
   expectGameScreen,
   monthHeading,
   pickPart,
+  pickRadio,
   renderApp,
   slotGroup,
   startGame,
@@ -42,6 +43,23 @@ const pickStrategy = (page: string, strategy: string) =>
   );
 
 describe('ゲームモードの画面', () => {
+  it('W-46 Vercel Pro の ① の部品に「CDN の料金のプラン」（Flat Rate CDN・On-demand CDN）が出て、Hobby には出ない（D-120）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Vercel Pro + Supabase Pro');
+    const row = slotGroup('CDN の料金のプラン');
+    expect(
+      within(row).getAllByRole('button', {
+        name: /^Flat Rate CDN（段の定額・既定）/,
+      }).length,
+    ).toBeGreaterThan(0);
+    pickPart('On-demand CDN（従量）', row);
+    pickRadio('Vercel Hobby + Supabase Free');
+    expect(
+      document.querySelector('section[data-parts] [data-slot="cdnPlan"]'),
+    ).toBeNull();
+  });
+
   it('W-01 記事コミュニティ × Next.js × CF Paid で始めて 3 か月進める', async () => {
     await renderApp();
     // 始める画面: シナリオ・フレームワーク・構成・部品の選択肢が出る
@@ -116,6 +134,8 @@ describe('ゲームモードの画面', () => {
       scenario: ARTICLE,
       framework: 'Next.js（静的書き出し）',
       stack: 'Vercel Pro + Supabase Pro',
+      // 画像の原本の配信（Blob Data Transfer）を従量で払う（既定の Flat Rate CDN では段に込み。D-120）
+      parts: { 'CDN の料金のプラン': 'On-demand CDN（従量）' },
     });
     expect(screen.getByText('所持金が尽きた')).toBeDefined();
     expect(screen.getByText(/1 か月目で終了/)).toBeDefined();

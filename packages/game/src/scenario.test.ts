@@ -156,10 +156,15 @@ describe('出来事（シード 42。話題の予告はシード 4）', () => {
     const ev = month(v, team.month).events.find((e) => e.id === 'team')!;
     expect(ev.members!.join()).toContain('席');
     expect(ev.members!.join()).toContain('無制限');
-    // 席の分（$20）だけ基本料が増える
+    // 席の分（$20）だけ基本料が増える（Flat Rate CDN の段の月額は量で動くので除く。D-120）
     const fees = (m: number) =>
       month(v, m)
-        .lines.filter((l) => l.provider === 'vercel' && l.kind === 'base-fee')
+        .lines.filter(
+          (l) =>
+            l.provider === 'vercel' &&
+            l.kind === 'base-fee' &&
+            !l.label.includes('Flat Rate CDN'),
+        )
         .reduce((a, l) => a + l.amount, 0);
     expect(fees(team.month) - fees(team.month - 1)).toBeCloseTo(20);
   });
@@ -187,17 +192,20 @@ describe('出来事（シード 42。話題の予告はシード 4）', () => {
     expect(disk.ratio).toBeGreaterThanOrEqual(0.7);
   });
 
-  it('見込みが外れた理由: 受託の Vercel Pro は繁忙期の月に月のクレジットを超え、理由は繁忙期（シード 8。D-48）', () => {
-    const s = playStrategy(
-      CONTRACT_OPERATIONS.baselines.find((b) => b.id === 'vercel-pro')!,
-      8,
-      CONTRACT_OPERATIONS,
+  it('見込みが外れた理由: 受託の Vercel Pro（CDN は従量）は繁忙期の月に月のクレジットを超え、理由は繁忙期（シード 1。D-48）', () => {
+    // 既定の Flat Rate CDN では CDN の転送が段に込みになり、クレジットを超えない（D-120）。従量の CDN で確かめる。
+    // 東京の単価（D-120）で多くのシードは伸びだけで先に超えるので、繁忙期の月に超えるシード 1 で見る（シード 8 は伸び）
+    let s = playMonth(
+      newGame(VERCEL_PRO, 1, CONTRACT_OPERATIONS, undefined, undefined, {
+        cdnPlan: 'on-demand',
+      }),
     );
+    while (s.phase === 'playing') s = playMonth(s);
     const sp = surprisesOf(s);
     expect(sp).toHaveLength(1);
     expect(sp[0]!.premiseId).toBe('credit:vercel:pro:usage-credit');
     expect(sp[0]!.month).toBe(
-      rollSchedule(CONTRACT_OPERATIONS, 8).find((x) => x.id === 'c-busy')!
+      rollSchedule(CONTRACT_OPERATIONS, 1).find((x) => x.id === 'c-busy')!
         .month,
     );
     expect(sp[0]!.cause).toMatchObject({

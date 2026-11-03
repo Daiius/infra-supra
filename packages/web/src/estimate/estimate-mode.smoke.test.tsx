@@ -545,7 +545,8 @@ describe('見積モードの画面', () => {
     window.history.replaceState(
       null,
       '',
-      '/?mode=estimate&t=article&pv=1300000&fw=nextjs&s=vercel-supabase-pro',
+      // CDN の料金は従量（既定の Flat Rate CDN ではクレジットを超えない。D-120）
+      '/?mode=estimate&t=article&pv=1300000&fw=nextjs&s=vercel-supabase-pro&c.cdnPlan=on-demand',
     );
     await renderApp();
     expectEstimate();

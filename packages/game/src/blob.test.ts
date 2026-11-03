@@ -28,6 +28,8 @@ describe('Vercel Blob（D-46）', () => {
         newGame(stack, 42, ARTICLE_COMMUNITY, undefined, 'nextjs', {
           isrCache: 'default',
           images,
+          // CDN の転送の明細を見るので従量（On-demand CDN。既定の Flat Rate CDN では段に込み。D-120）
+          cdnPlan: 'on-demand',
         }),
       ).history[0]!;
     const r = month1(PRO);
@@ -36,7 +38,8 @@ describe('Vercel Blob（D-46）', () => {
       rep.lines.find((l) => `${l.provider} ${l.meterId ?? ''}` === id)
         ?.amount ?? 0;
     const amount = lineOf(r);
-    const transferGB = amount('vercel blob-data-transfer') / 0.05;
+    // Blob Data Transfer は読者の地域（東京 hnd1）の単価、Simple Operations はストアの地域（iad1）の単価（D-120）
+    const transferGB = amount('vercel blob-data-transfer') / 0.053;
     const simpleOps = (amount('vercel blob-simple-operations') / 0.4) * 1e6;
     // 全件の転送 = miss（ヒット率 0.9 の残り）× 10 × 原本の大きさ
     expect(transferGB).toBeCloseTo(

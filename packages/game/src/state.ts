@@ -277,6 +277,11 @@ export type GameState = {
   componentSwap: ComponentSwap | null;
   /** 結んだ確約（D-97）。古い状態には無いことがある（無ければ確約なし）。 */
   commitments?: ActiveCommitment[];
+  /**
+   * 容量の段（D-120。Vercel の Flat Rate CDN）: 今月払う段（契約 → 段の集まり → 段の id・'off'）。前の月の量が収まる最小の段で、
+   * 量が段を超えた月の翌月に上がる。無い契約は最小の段（始めたばかり）。古い状態には無い（＝最小の段）。
+   */
+  capacityTiers?: Record<string, Record<string, string>>;
   /** 受けた契約（毎月の収益。要件を満たす月だけ入る）。 */
   contracts: { eventId: string; usdPerMonth: number; requires: Requirement }[];
   /** 受けた提案で以後ずっと求められる要件（D-32）。 */

@@ -352,6 +352,9 @@ dns-queries = PV × queriesPerPageView × (1 − freeQueryShare)
 - 課金のある DNS（Route 53・Cloud DNS）だけノードを足す。無料の DNS（Cloudflare・Vercel・Netlify・さくらの VPS）はノードを持たない。catalog の `stacks/domain.ts` が構成の最後に足す。
 - 料金の値と表は prd/11 §21。
 
+- **転送のクラスごとの内訳（D-120）**: ノードの `egress-gb` を、経路で流したクラスごとにも足す（`NodeUsage.egressGbByClass`。静的な使用量は含めない）。課金には使わず、
+  容量の段の対象外の判定（画像の配信が転送の大半か。prd/03 §7b）にだけ使う。
+
 ## 4. 二重計上の点検（テストで確かめる性質）
 
 - CDN の `hits + misses = 入力件数`（各クラス）。

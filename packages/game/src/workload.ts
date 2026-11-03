@@ -36,7 +36,12 @@ import {
   type Settings,
   usesNextImage,
 } from './settings.ts';
-import type { RouteOverrides, RouteParts, StrategyFamily } from './state.ts';
+import type {
+  GameState,
+  RouteOverrides,
+  RouteParts,
+  StrategyFamily,
+} from './state.ts';
 
 /** Workload を組み立てる入力（反実仮想の見積でも同じ関数を使う）。 */
 export type WorkloadParts = {
@@ -402,6 +407,11 @@ export function architectureFor(
   storageOption = false,
   /** 選んだ描き方で構成が変わる分（S1 のビルドのノード・Astro の記事のキャッシュの有無。D-107）。 */
   routing: RoutingOptions = {},
+  /**
+   * ゲームの容量の段（D-120。Vercel の Flat Rate CDN）。渡すと、始めたばかりの契約は最小の段で、前の月の量で決まった段
+   * （GameState.capacityTiers）を使う。省略は今月の量が収まる段（見積モードと同じ）。
+   */
+  capacity?: { tiers?: GameState['capacityTiers'] },
 ): ArchitectureInput {
   const stack = composeStack(STACK_DEFS[stackIndex]!, components, {
     standby,
@@ -409,13 +419,33 @@ export function architectureFor(
     framework,
     ...routing,
   });
-  if (seats <= 0) return stack;
+  if (seats <= 0 && !capacity) return stack;
   const ids = [
     ...new Set(
       stack.nodes.flatMap((n) => (n.billing ? [n.billing.accountId] : [])),
     ),
   ];
-  return { ...stack, accounts: ids.map((id) => ({ id, seats: 1 + seats })) };
+  // 構成が決めた契約の値（地域・従量を選んだ CDN の料金。D-120）に、席と容量の段を重ねる
+  const given = new Map((stack.accounts ?? []).map((a) => [a.id, a]));
+  return {
+    ...stack,
+    accounts: ids.map((id) => {
+      const a = given.get(id) ?? { id };
+      return {
+        ...a,
+        ...(seats > 0 ? { seats: 1 + seats } : {}),
+        ...(capacity
+          ? {
+              capacityTierDefault: 'lowest' as const,
+              capacityTiers: {
+                ...capacity.tiers?.[id],
+                ...a.capacityTiers,
+              },
+            }
+          : {}),
+      };
+    }),
+  };
 }
 
 /**

@@ -62,6 +62,7 @@ export function componentPreview(
       {},
       state.storageOption,
       staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
+      { tiers: state.capacityTiers },
     ),
     books: booksAt(state, state.history.length + 1),
   });
@@ -171,6 +172,7 @@ function invalidationLines(
       {},
       state.storageOption,
       staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
+      { tiers: state.capacityTiers },
     ),
     books: bk,
   });
@@ -285,6 +287,8 @@ export function setupMonthOneEstimate(
       {},
       state.storageOption,
       staticBuildOf(scenario, state.stackIndex, state.framework, state.routes),
+      // 1 か月目は始めたばかりの契約（容量の段は最小の段。D-120）
+      { tiers: state.capacityTiers },
     ),
     books: booksAt(state, 1),
   });

@@ -574,15 +574,25 @@ const subtotalsOf = (lines: readonly LineItem[]) =>
     amount: l.amount ?? 0,
   }));
 
-/** 構成のアカウントすべてに席の数を置く（席課金のプランだけ費用が変わる。game の architectureFor と同じ形）。 */
-function withSeats(arch: ArchitectureInput, seats: number): ArchitectureInput {
+/**
+ * 構成のアカウントすべてに席の数を置く（席課金のプランだけ費用が変わる。game の architectureFor と同じ形）。
+ * 構成が決めた契約の値（地域・CDN の料金。D-120）は残して席を重ねる。
+ */
+export function withSeats(
+  arch: ArchitectureInput,
+  seats: number,
+): ArchitectureInput {
   if (seats <= 1) return arch;
   const ids = [
     ...new Set(
       arch.nodes.flatMap((n) => (n.billing ? [n.billing.accountId] : [])),
     ),
   ];
-  return { ...arch, accounts: ids.map((id) => ({ id, seats })) };
+  const given = new Map((arch.accounts ?? []).map((a) => [a.id, a]));
+  return {
+    ...arch,
+    accounts: ids.map((id) => ({ ...(given.get(id) ?? { id }), seats })),
+  };
 }
 
 /** 構成が使うプランの席の料金（料金データの members。無いプランは「席の料金は未取得」）。 */
@@ -602,6 +612,8 @@ function membersOf(
     const fee = lines.find(
       (l) =>
         l.kind === 'base-fee' &&
+        // 容量の段の月額（Flat Rate CDN。D-120）は席の基本料ではない
+        !l.capacityTier &&
         l.priceRef.provider === u.provider &&
         l.priceRef.planId === u.planId,
     );

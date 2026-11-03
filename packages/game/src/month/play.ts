@@ -2,7 +2,7 @@
 import { buzzLasting } from '../rules.ts';
 import { eventDef, scenarioOf } from '../core.ts';
 import type { GameState, MonthReport } from '../state.ts';
-import { billOf, estimateMonth } from './bill.ts';
+import { billOf, estimateMonth, nextCapacityTiers } from './bill.ts';
 import { crossingsOf } from './crossings.ts';
 import { growthOf, judgeMonth } from './judge.ts';
 import { monthEventsOf } from './notices.ts';
@@ -142,7 +142,7 @@ export function playMonth(input: GameState): GameState {
   const history = [...state.history, report];
   const end = endOf(sc, month, { accountSuspended, outages, cash, history });
   const { routes } = next;
-  const { routes: _routes, ...base } = state;
+  const { routes: _routes, capacityTiers: _tiers, ...base } = state;
   return {
     ...base,
     ...(routes !== undefined ? { routes } : {}),
@@ -156,6 +156,11 @@ export function playMonth(input: GameState): GameState {
     mods: next.mods,
     storageOption: next.storageOption,
     storageOptionFeeDue: null,
+    // 容量の段（D-120）: 今月の量で来月の段が決まる。段の集まりを持たない構成では持たない
+    ...(() => {
+      const tiers = nextCapacityTiers(r, target);
+      return Object.keys(tiers).length ? { capacityTiers: tiers } : {};
+    })(),
     cash,
     outages,
     featurePoints,
