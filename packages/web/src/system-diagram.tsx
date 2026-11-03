@@ -67,17 +67,29 @@ export type DiagramParts = {
   render: (slot: string, close: () => void) => ReactNode;
 };
 
-/** 差し替えられる箱の印（角の ⇄。色だけに頼らない）。 */
-function SwapMark() {
+/**
+ * 差し替えられる箱の印（角の丸いバッジに ⇄。primary の地で、押せる箱だと一目で分かるように。色だけに頼らず記号も付ける）。
+ * compact は縦の図の小さい箱。
+ */
+function SwapMark({ compact = false }: { compact?: boolean }) {
   return (
     <span
       aria-hidden
-      className="absolute top-0 right-0.5 text-[10px] leading-none text-primary"
+      data-swap-mark
+      className={`absolute flex items-center justify-center rounded-full bg-primary leading-none font-bold text-primary-content shadow-sm ${
+        compact
+          ? 'top-0 right-0 h-3.5 w-3.5 text-[9px]'
+          : 'top-0.5 right-0.5 h-[18px] w-[18px] text-[12px]'
+      }`}
     >
       ⇄
     </span>
   );
 }
+
+/** 差し替えられる箱の枠（primary の色。押せない箱の灰色の枠と見分ける）。 */
+const SWAP_STROKE =
+  'color-mix(in oklab, var(--color-primary) 70%, transparent)';
 
 const groupTitle = (account: string, brand?: BrandId) =>
   brand ? BRANDS[brand].title : account;
@@ -87,6 +99,7 @@ export function SystemDiagram({
   pages,
   caption,
   parts,
+  below,
 }: {
   architecture: ArchitectureInput;
   /** ページの見取り図（流れの凡例にページの名前を添える。省略可）。 */
@@ -95,6 +108,8 @@ export function SystemDiagram({
   caption?: string;
   /** 箱から部品を差し替える（選んでいる構成のカードだけ。D-116）。 */
   parts?: DiagramParts | undefined;
+  /** 図のすぐ下（凡例・経路に載らない部品より上）に置く中身（部品のチップ。D-116）。 */
+  below?: ReactNode;
 }) {
   // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。カルーセルのカード・畳んだ欄の中でも同じ判定）
   const wrap = useRef<HTMLDivElement>(null);
@@ -242,7 +257,6 @@ export function SystemDiagram({
           )}
         </svg>
       </div>
-      {caption && <p className="text-xs opacity-60">{caption}</p>}
       {tall && (
         <p className="text-xs opacity-60">
           狭い幅なので縦に並べた。箱を押すと、事業者・種類・通る流れが出る。
@@ -254,6 +268,9 @@ export function SystemDiagram({
           ⇄ の付いた箱を押すと、その部品を替えられる。
         </p>
       )}
+      {/* 部品のチップは図のすぐ下（凡例・経路に載らない部品より上。D-116） */}
+      {below}
+      {caption && <p className="text-xs opacity-60">{caption}</p>}
       <Legend model={model} active={active} onToggle={setActive} />
       {model.side.length > 0 && (
         <div className="text-xs">
@@ -581,16 +598,21 @@ function CompactNode({
           label={`${title}: ${n.label}（${n.caption}）の${slots.length > 0 ? '説明と差し替え' : '説明'}`}
           interactive={slots.length > 0}
           className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md bg-base-100 px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
-            n.compute
-              ? 'border-[1.75px] border-base-content font-semibold'
-              : 'border border-base-content/35'
+            n.compute ? 'border-[1.75px] font-semibold' : 'border'
+          } ${
+            // 差し替えられる箱は primary の枠で、ホバーで太くする（D-116）
+            slots.length > 0
+              ? 'border-primary/70 hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset'
+              : n.compute
+                ? 'border-base-content'
+                : 'border-base-content/35'
           }`}
           trigger={
             <>
               <span className="line-clamp-3 [overflow-wrap:anywhere]">
                 {n.short}
               </span>
-              {slots.length > 0 && <SwapMark />}
+              {slots.length > 0 && <SwapMark compact />}
             </>
           }
         >
@@ -665,10 +687,8 @@ function SwappableNode({
         rx={6}
         style={{
           fill: 'var(--color-base-100)',
-          stroke: n.compute
-            ? 'var(--color-base-content)'
-            : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)',
-          strokeWidth: n.compute ? 1.75 : 1,
+          stroke: SWAP_STROKE,
+          strokeWidth: n.compute ? 2 : 1.5,
         }}
       />
       <foreignObject
@@ -680,7 +700,8 @@ function SwappableNode({
         <Info
           label={`${title}: ${n.label}（${n.caption}）を替える`}
           interactive
-          className="relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md px-0.5 text-left leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+          // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）
+          className="relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
           trigger={
             <>
               <span className="text-[10px] opacity-60">{n.caption}</span>

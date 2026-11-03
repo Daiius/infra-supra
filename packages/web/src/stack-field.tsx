@@ -102,22 +102,22 @@ function EditableDiagram({
     ),
   };
   return (
-    <>
-      <SystemDiagram
-        architecture={arch}
-        pages={pages}
-        caption={caption}
-        parts={swap.size > 0 ? parts : undefined}
-      />
-      <PartChips
-        stackIndex={stackIndex}
-        framework={framework}
-        slots={slots}
-        value={components}
-        onChange={editor.onChange}
-        note={editor.note}
-      />
-    </>
+    <SystemDiagram
+      architecture={arch}
+      pages={pages}
+      caption={caption}
+      parts={swap.size > 0 ? parts : undefined}
+      below={
+        <PartChips
+          stackIndex={stackIndex}
+          framework={framework}
+          slots={slots}
+          value={components}
+          onChange={editor.onChange}
+          note={editor.note}
+        />
+      }
+    />
   );
 }
 

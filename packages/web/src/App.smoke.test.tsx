@@ -1079,10 +1079,16 @@ describe('ゲームモードの画面', () => {
       document.querySelectorAll('section[data-parts]').length,
       '選んでいないカードにはチップを出さない',
     ).toBe(1);
+    // チップは構成図のすぐ下で、凡例より上
+    const svg = current().querySelector('[data-diagram="system"] svg')!;
+    const legend = within(current()).getByRole('list', {
+      name: '構成図の流れの凡例',
+    });
     expect(
-      current()
-        .querySelector('[data-diagram="system"]')!
-        .compareDocumentPosition(parts) & Node.DOCUMENT_POSITION_FOLLOWING,
+      svg.compareDocumentPosition(parts) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      parts.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     // 選ぶ前のスロットは「未選択」（D-45）。始めるボタンは押せないまま
     const db = () => slotGroup('DB');
@@ -1114,6 +1120,8 @@ describe('ゲームモードの画面', () => {
       name: /DynamoDB.*を替える$/,
     });
     expect(box.closest('[data-swappable="true"]')).not.toBeNull();
+    expect(box.querySelector('[data-swap-mark]')).not.toBeNull();
+    // 箱の吹き出しには、その箱の役割のスロットだけ（DB の箱に画像・API の置き場は出さない）
     // Esc で閉じると箱に focus が戻る
     fireEvent.click(box);
     expect(screen.getByRole('dialog')).toBeDefined();
@@ -1124,6 +1132,11 @@ describe('ゲームモードの画面', () => {
     const popover = screen.getByRole('dialog', { name: /DynamoDB.*を替える$/ });
     expect(document.activeElement).toBe(popover);
     const swap = within(popover).getByRole('group', { name: 'DBを替える' });
+    expect(
+      within(popover)
+        .getAllByRole('group')
+        .map((g) => g.getAttribute('aria-label')),
+    ).toEqual(['DBを替える']);
     expect(
       within(swap).getByRole('button', { pressed: true }).textContent,
     ).toMatch(/AWS: DynamoDB/);
