@@ -140,6 +140,7 @@ export {
 } from './workload.ts';
 export {
   meetsRequirement,
+  onDemandBlocker,
   requirementReachable,
   FRONT_CDN_DELAY_FACTOR,
   requirementStatus,

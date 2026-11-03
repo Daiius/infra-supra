@@ -38,7 +38,11 @@ import {
   WireframeLegend,
 } from './page-wireframes.tsx';
 import { RouteChips, RowParts, RowStatus } from './route-plan-table.tsx';
-import { RoutePlanCompare, type RoutePlanEditor } from './route-plan-field.tsx';
+import {
+  RoutePlanCompare,
+  RouteSettingChips,
+  type RoutePlanEditor,
+} from './route-plan-field.tsx';
 
 const usd = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -197,6 +201,7 @@ function FrameworkDetail({
  * フレームワークのカード: 名前・要約・ページごとの見取り図と描き方（D-102）。選んでいるものは枠とブランドの色で目立たせ、
  * 選んでいないものも同じ中身を読める大きさで出す（薄く・彩度を落とし・少し小さく）。
  * ページの欄は見取り図を左・描き方のチップと札を右に置き、選んでいるカードではチップで描き方を選ぶと隣の見取り図がすぐ替わる（D-112）。
+ * 描き方の設定（再検証の間隔・オンデマンドなど）は、選んでいるカードの記事のページの行の描き方のチップの下で選ぶ（D-119）。
  * 選んでいないカードは既定の描き方を読むだけで出す（押すとそのフレームワークを選ぶ）。
  */
 function FrameworkCard({
@@ -332,6 +337,10 @@ function FrameworkCard({
                   <p className="text-[11px] text-warning">
                     既定から変わっている: {row.overriddenBy}
                   </p>
+                )}
+                {/* 描き方の設定（再検証の間隔・オンデマンドなど）は記事のページの行で選ぶ（D-119） */}
+                {editor?.setting?.route === p.route && row && (
+                  <RouteSettingChips setting={editor.setting} row={row} />
                 )}
                 {editor && row && (
                   <RowParts

@@ -4,12 +4,24 @@
 // 選んだときの書き換え（routeChoiceOf）だけを共用する（D-115）。
 // 始める前なので手間はかからない（途中で替えるときは手間がかかる。RS-08）。
 import {
+  articleFamily,
+  COMMENTS_IN_BROWSER,
+  invalidationNote,
+  isOnDemand,
+  onDemandBlocker,
   partsOfComments,
+  publicRouteId,
+  revalidateSettingOf,
   routePlanRows,
   routePlanStatus,
+  SETTINGS,
+  setupCommentOptions,
+  setupInvalidationEstimate,
+  setupRevalidateOptions,
   STACKS,
   withRouteChoice,
   type FrameworkId,
+  type SettingKey,
   type RouteAlternative,
   type RouteOverrides,
   type RoutePartKey,
@@ -25,8 +37,10 @@ import {
   useRef,
   useState,
 } from 'react';
+import { ROUTE_STRATEGIES } from 'catalog';
 import { PortalContainer } from './info.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from './route-plan-table.tsx';
+import { SettingChips } from './setup-components.tsx';
 
 /**
  * ページの描き方を選んだときの書き換え（始める画面と見積モードで共用。D-115）: 選んだ描き方（フレームワークの既定と違うものだけ
@@ -58,7 +72,127 @@ export type RoutePlanEditor = {
   status: RouteRowStatus[];
   onSelect: (row: RoutePlanRow, alt: RouteAlternative) => void;
   onPart: (row: RoutePlanRow, part: RoutePartKey, value: number) => void;
+  /** 記事のページの行で選ぶ描き方の設定（再検証の間隔など。選べなければ undefined。D-119）。 */
+  setting?: RouteSettingEditor | undefined;
 };
+
+/**
+ * 描き方の設定（revalidateSec。ISR の再検証・Astro の記事のキャッシュ・静的書き出しのビルドの間隔・SPA の API のキャッシュの期間・
+ * 部品ごとにキャッシュの期限）。記事のページ（全員に同じ中身のページ）の行の描き方のチップの下で選ぶ（D-119）。
+ */
+export type RouteSettingEditor = {
+  /** 設定を出す行（記事のページ）。 */
+  route: string;
+  key: SettingKey;
+  value: number;
+  options: readonly { value: number; label: string; flavor?: string }[];
+  onChange: (v: number) => void;
+  /** オンデマンドを選べない理由（今の部品・置き場では消せない。onDemandBlocker）。 */
+  onDemandBlocked?: string | undefined;
+  /** オンデマンドの注記（CloudFront の無効化の見込み。D-66）。 */
+  onDemandNote?: string | undefined;
+};
+
+/** 描き方の設定の行の組み立て（始める画面と見積モードで共用。選べる選択肢は画面ごとに渡す。D-119）。 */
+export function routeSettingOf(p: {
+  scenario: Scenario;
+  stackIndex: number;
+  framework: FrameworkId;
+  components: Partial<Record<string, string>>;
+  routes: RouteOverrides;
+  value: number;
+  options: readonly { value: number; label: string; flavor?: string }[];
+  onChange: (v: number) => void;
+  onDemandNote?: string | undefined;
+}): RouteSettingEditor | undefined {
+  const route = publicRouteId(p.scenario);
+  if (route === undefined || p.options.length === 0) return undefined;
+  const fam = articleFamily(p);
+  const chosen = Object.fromEntries(
+    Object.entries(p.components).filter(
+      (x): x is [string, string] => x[1] !== undefined,
+    ),
+  );
+  const blocker = onDemandBlocker(p.stackIndex, chosen, p.framework, fam);
+  return {
+    route,
+    key: revalidateSettingOf(p.framework, fam),
+    value: p.value,
+    options: p.options,
+    onChange: p.onChange,
+    ...(blocker
+      ? {
+          onDemandBlocked: `${blocker.label}: ${blocker.reason.replace(/。$/, '')}`,
+        }
+      : {}),
+    ...(p.onDemandNote ? { onDemandNote: p.onDemandNote } : {}),
+  };
+}
+
+/** 描き方の設定を出す描き方（毎回描く・サーバーの島には期限が無い。Next.js の「キャッシュしない」で毎回描くときも出さない）。 */
+const SETTING_STRATEGIES: ReadonlySet<string> = new Set([
+  'static-build',
+  'cached-ttl',
+  'cached-purge',
+  'cache-components',
+  'shell-api',
+]);
+
+/**
+ * 記事のページの行の描き方の設定のチップ（D-119）。時間を先に、オンデマンドを最後に並べる。S2（時間で取り直す）と S3（更新で消す）は
+ * 同じ設定なので、その関係をチップの下に添える。オンデマンドを選べない置き場では灰色にして理由を ⓘ に出す。
+ */
+export function RouteSettingChips({
+  setting: x,
+  row,
+}: {
+  setting: RouteSettingEditor;
+  row: RoutePlanRow;
+}) {
+  if (!SETTING_STRATEGIES.has(row.strategy)) return null;
+  const def = SETTINGS[x.key];
+  const cc = row.strategy === 'cache-components';
+  const cached =
+    row.strategy === 'cached-ttl' || row.strategy === 'cached-purge';
+  const label = cc ? '部品の作り直し（cacheLife・タグ）' : def.label;
+  const onDemand = x.options.find((o) =>
+    isOnDemand({ revalidateSec: o.value }),
+  );
+  const options = [
+    ...x.options.filter((o) => o !== onDemand),
+    ...(onDemand ? [onDemand] : []),
+  ].map((o) => ({
+    ...o,
+    why: o === onDemand ? (x.onDemandBlocked ?? null) : null,
+  }));
+  const relation = cached
+    ? `時間を選ぶと「${ROUTE_STRATEGIES['cached-ttl'].label}」、オンデマンドを選ぶと「${ROUTE_STRATEGIES['cached-purge'].label}」（上の 2 つの描き方は、この設定で切り替わる）`
+    : cc && onDemand
+      ? '時間は部品の期限（cacheLife）、オンデマンドは投稿・編集でタグを消して作り直す（updateTag）'
+      : undefined;
+  return (
+    <SettingChips
+      setting={x.key}
+      label={label}
+      note={def.note}
+      options={options}
+      value={x.value}
+      onChange={x.onChange}
+    >
+      {relation && <p className="text-[11px] opacity-70">{relation}</p>}
+      {onDemand && x.onDemandBlocked && (
+        <p className="text-[11px] opacity-70">
+          オンデマンドは選べない（{x.onDemandBlocked}）
+        </p>
+      )}
+      {onDemand && !x.onDemandBlocked && x.onDemandNote && (
+        <p className="text-[11px] text-warning">
+          オンデマンドにすると: {x.onDemandNote}
+        </p>
+      )}
+    </SettingChips>
+  );
+}
 
 export function useRoutePlanEditor({
   scenario,
@@ -117,9 +251,47 @@ export function useRoutePlanEditor({
       }),
     [scenario, framework, stackIndex, chosen, revalidateSec, comments, routes],
   );
+  const revalidateOptions = useMemo(
+    () => setupRevalidateOptions(scenario, framework, routes),
+    [scenario, framework, routes],
+  );
+  // OpenNext で ISR を CloudFront にキャッシュするとき、オンデマンドの無効化の見込み（1 か月目の規模。D-66）
+  const invalidation = useMemo(() => {
+    if (revalidateOptions.length === 0) return undefined;
+    const e = setupInvalidationEstimate(
+      scenario,
+      stackIndex,
+      framework,
+      chosen,
+      // コメント欄を選べない描き方では、ブラウザで読み込む（無効化の見込みに含めない。D-82・D-109）
+      setupCommentOptions(scenario, framework, routes).length > 0
+        ? comments
+        : COMMENTS_IN_BROWSER,
+    );
+    return e && invalidationNote(e);
+  }, [
+    scenario,
+    stackIndex,
+    framework,
+    chosen,
+    routes,
+    revalidateOptions,
+    comments,
+  ]);
   return {
     rows,
     status,
+    setting: routeSettingOf({
+      scenario,
+      stackIndex,
+      framework,
+      components,
+      routes,
+      value: revalidateSec,
+      options: revalidateOptions,
+      onChange: (v) => onChange(routes, v),
+      onDemandNote: invalidation,
+    }),
     onSelect: (row, alt) => {
       const next = routeChoiceOf(
         scenario,
