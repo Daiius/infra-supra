@@ -9,6 +9,7 @@ import {
   type FrameworkId,
   FRAMEWORKS,
   PITR_REQUIRED_DAYS,
+  type Platform,
   rebuildsStaticPages,
   SLOT_LABELS,
   type SlotId,
@@ -119,6 +120,21 @@ export function onDemandBlocker(
   /** 記事のページの描き方（D-107）。S2/S3 のときだけ置き場・部品で決まる。省略はフレームワークの既定。 */
   fam?: StrategyFamily,
 ): { slot: SlotId; label: string; reason: string } | undefined {
+  return onDemandBlockerOn(
+    STACKS[stackIndex]!.provider,
+    components,
+    framework,
+    fam,
+  );
+}
+
+/** onDemandBlocker を事業者で引く（Workload の組み立てでも同じ判定を使う。D-111・OCL-FC4A03B7）。 */
+export function onDemandBlockerOn(
+  platform: Platform,
+  components: Choices = {},
+  framework: FrameworkId = 'nextjs',
+  fam?: StrategyFamily,
+): { slot: SlotId; label: string; reason: string } | undefined {
   // 記事を毎回描く（S4）・枠 + API（S5）なら、キャッシュが無いのでいつも即時に反映される（prd/10・D-107）。
   // 静的にビルドし直す（S1）は記事を更新するたびにビルドし直せる（ビルドの数分は待つ。即時反映とみなすのはゲーム上の仮定。D-80）。
   // 新しい記事がビルドまで開けない分は、鮮度の判定で別に下げる（D-104）
@@ -126,7 +142,6 @@ export function onDemandBlocker(
   // SPA は ISR を持たず、ページの中身を毎回 API で読むので、いつも即時に反映される（prd/10）
   if (framework === 'vite-spa') return undefined;
   if (rebuildsStaticPages(framework)) return undefined;
-  const platform = STACKS[stackIndex]!.provider;
   const c = { ...DEFAULT_CHOICES[platform], ...components };
   // Astro は記事のキャッシュの置き場が事業者で決まる（D-103）。消せない置き場（Hosting の CDN）なら届かない
   const astroCache =

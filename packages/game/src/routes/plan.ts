@@ -181,10 +181,17 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       // 部品で決まるもの（Next.js の S3）は、今の部品で消せるか（onDemandBlocker）で判定する
       const blocked =
         x.support === 'depends' && s === 'cached-purge' ? blocker : undefined;
+      // 部品ごとにキャッシュの記事は、今の部品でタグが届かない（S3 と同じ onDemandBlocker）のにオンデマンドなら、
+      // 選ぶときに期限（5 分）へ戻す（D-111・OCL-FC4A03B7）
+      const ccTagBlocked =
+        s === 'cache-components' &&
+        audience === 'public' &&
+        isOnDemand(p.settings) &&
+        blocker !== undefined;
       const value =
         s === 'cached-purge'
           ? ON_DEMAND_REVALIDATE
-          : s === 'cached-ttl' && isOnDemand(p.settings)
+          : (s === 'cached-ttl' && isOnDemand(p.settings)) || ccTagBlocked
             ? DEFAULT_REVALIDATE_SEC
             : undefined;
       return [
@@ -197,11 +204,13 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
             blocked === undefined,
           reason: blocked
             ? `${blocked.label}: ${blocked.reason}`
-            : s === 'shell-api' &&
-                audience === 'public' &&
-                shellPerPage(p.framework, platform)
-              ? `${x.note}。${SHELL_PER_PAGE_NOTE}`
-              : x.note,
+            : ccTagBlocked
+              ? `${x.note}。この部品ではタグで消せない（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）ので、選ぶと期限 ${optionLabel(revalidateKey, DEFAULT_REVALIDATE_SEC)} に戻す`
+              : s === 'shell-api' &&
+                  audience === 'public' &&
+                  shellPerPage(p.framework, platform)
+                ? `${x.note}。${SHELL_PER_PAGE_NOTE}`
+                : x.note,
           basis: x.basis,
           ...(value !== undefined ? { value } : {}),
         },
@@ -234,6 +243,25 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
           : [],
     };
   });
+}
+
+/**
+ * ルートごとの実際の描き方（routeChoices。表・計算と同じ）。見取り図・構成図に渡す（D-111・OCL-CD192A98）。
+ */
+export function resolvedRouteStrategies(
+  sc: Scenario,
+  p: Omit<RoutePlanInput, 'settings'> & {
+    settings?: Pick<Settings, 'revalidateSec'>;
+  },
+): Partial<Record<string, RouteStrategyId>> {
+  const plan = routeChoices(sc, sc.template(1).routes, {
+    ...p,
+    settings: p.settings ?? { revalidateSec: DEFAULT_REVALIDATE_SEC },
+    platform: STACKS[p.stackIndex]!.provider,
+  });
+  return Object.fromEntries(
+    Object.entries(plan).map(([id, c]) => [id, c.strategy]),
+  );
 }
 
 /** ゲームの今の状態のページごとの描き方（D-106。今のフレームワーク・構成・設定・部品・選んだ描き方から決まる）。 */

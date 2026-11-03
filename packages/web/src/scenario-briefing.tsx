@@ -217,17 +217,18 @@ function FrameworkCard({
   editor?: RoutePlanEditor | undefined;
 }) {
   const t = scenario.text?.byFramework?.[id];
-  // 選んでいるカードは選んだ描き方で描く（D-107）。事業者で決まる既定（Vercel × Next.js の部品ごとにキャッシュ。D-111）は
-  // 表の行（選んでいる構成で引いた描き方）から足す
-  const byPlatform = Object.fromEntries(
-    (routes ?? [])
-      .filter((r) => r.strategy === 'cache-components')
-      .map((r) => [r.route, r.strategy] as const),
+  // 見取り図は表・計算と同じ実際の描き方（行の描き方。事業者で決まる既定・部品の「キャッシュしない」も効く。OCL-CD192A98）で描く。
+  // 選んでいるカードは選んだ描き方の行、選んでいないカードは既定の行
+  const effRows = (selected ? editor?.rows : undefined) ?? routes;
+  const pages = pageWireframes(
+    scenario,
+    id,
+    comments,
+    selected ? chosenRoutes : undefined,
+    effRows
+      ? Object.fromEntries(effRows.map((r) => [r.route, r.strategy] as const))
+      : undefined,
   );
-  const pages = pageWireframes(scenario, id, comments, {
-    ...byPlatform,
-    ...(selected ? chosenRoutes : undefined),
-  });
   const lines = t?.pages ?? [];
   /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
   const frameworkLinesOf = (label: string) =>

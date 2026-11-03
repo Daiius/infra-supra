@@ -11,6 +11,7 @@ import {
   stackName,
   stackOffered,
   STACKS,
+  resolvedRouteStrategies,
   validRouteOverrides,
   type FrameworkId,
   type RouteOverrides,
@@ -58,9 +59,15 @@ function StackCard({
         framework,
         comments,
         routes && validRouteOverrides(scenario, stackIndex, framework, routes),
-        STACKS[stackIndex]!.provider,
+        // 表・計算と同じ実際の描き方（部品の「キャッシュしない」なども効く。OCL-CD192A98）
+        resolvedRouteStrategies(scenario, {
+          framework,
+          stackIndex,
+          components: components ?? {},
+          routes,
+        }),
       ),
-    [scenario, stackIndex, framework, comments, routes],
+    [scenario, stackIndex, framework, comments, routes, components],
   );
   const arch = useMemo(
     () =>

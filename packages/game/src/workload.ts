@@ -18,6 +18,7 @@ import {
   type EstimateResult,
   type WorkloadInput,
 } from 'estimator';
+import { onDemandBlockerOn } from './requirements.ts';
 import { commentsInPage, commentsOf } from './routes/comments.ts';
 import {
   articleFamily,
@@ -198,10 +199,27 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     w.routes = v.routes;
     w.api = v.api;
   }
+  // ページごとの描き方（D-106）: フレームワークの既定と今の設定・部品で決まる描き方（下で Workload に当てる）
+  const plan = routeChoices(sc, w.routes, {
+    framework: p.framework,
+    platform: p.platform,
+    settings: p.settings,
+    components: p.components,
+    routes: p.routes,
+    legacyRouteDefaults: p.legacyRouteDefaults,
+  });
+  // 部品ごとにキャッシュの記事をタグで消せない構成（Google Cloud の Hosting の CDN など。S3 と同じ onDemandBlocker の判定）では、
+  // タグが届かず、部品は保険の期限（ON_DEMAND_MAX_AGE_SEC）でしか作り直されない（D-111・OCL-FC4A03B7）
+  const tagBlocked =
+    isOnDemand(p.settings) &&
+    onDemandBlockerOn(p.platform, p.components, p.framework, 'cached') !==
+      undefined;
   // オンデマンドの再検証（D-49）: 再生成の回数は、時間でなく内容の更新の回数から出す
   if (isOnDemand(p.settings)) {
     w.routes = w.routes.map((r) => {
       if (r.rendering !== 'isr') return r;
+      if (tagBlocked && plan[r.id]?.strategy === 'cache-components')
+        return { ...r, revalidateSeconds: ON_DEMAND_MAX_AGE_SEC };
       const { revalidateSeconds: _, ...rest } = r;
       return {
         ...rest,
@@ -237,14 +255,6 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // マイページは SPA と同じく Client Component が API で中身を取る（API の CPU は SPA の dataCpuFactor 倍）
   // ページごとの描き方（D-106）: フレームワークの既定と今の設定・部品で決まる描き方を、ルートごとに当てる
   // （SPA の形・Astro の形の無いシナリオでは、そのフレームワークの書き換えをしない。今までと同じ）
-  const plan = routeChoices(sc, w.routes, {
-    framework: p.framework,
-    platform: p.platform,
-    settings: p.settings,
-    components: p.components,
-    routes: p.routes,
-    legacyRouteDefaults: p.legacyRouteDefaults,
-  });
   const uses = (f: StrategyFamily) =>
     Object.values(plan).some((c) => strategyFamily(c.strategy) === f);
   // S5 には SPA の形、S1 にはビルドの時間の式（Astro の形）が要る。無いシナリオではそのフレームワークの書き換えをしない（今までと同じ）

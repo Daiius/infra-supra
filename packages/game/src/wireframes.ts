@@ -6,11 +6,9 @@ import type {
   WireframeRegion,
 } from './scenario.ts';
 import {
-  defaultStrategy,
   FRAMEWORK_PRESETS,
   type FrameworkId,
   perPageShellFramework,
-  type Platform,
   type RouteStrategyId,
 } from 'catalog';
 import { frameworksOf } from './core.ts';
@@ -86,10 +84,11 @@ export function pageWireframes(
   /** 選んだページごとの描き方（D-107）。既定と違うページは、その描き方を既定に持つフレームワークの図を借りる。 */
   routes?: RouteOverrides,
   /**
-   * 構成の事業者（D-111）。渡すと、事業者で決まる既定（Vercel × Next.js の部品ごとにキャッシュ）も図に出す。
-   * 省略はフレームワークの既定（事業者を見ない今までの図）。
+   * ルートごとの実際の描き方（routeChoices で決まったもの。表・計算と同じ。D-111・OCL-CD192A98）。渡すと、事業者で決まる既定
+   * （Vercel × Next.js の部品ごとにキャッシュ）や、部品で決まる書き換え（ISR のキャッシュ「キャッシュしない」→ 毎回描く）も図に出す。
+   * 省略は選んだ描き方（routes）とフレームワークの既定だけで描く（今までの図）。
    */
-  platform?: Platform,
+  resolved?: Readonly<Partial<Record<string, RouteStrategyId>>>,
 ): {
   route: string;
   label: string;
@@ -111,13 +110,15 @@ export function pageWireframes(
   return (sc.text?.wireframes ?? []).map((w) => {
     const r = tpl.find((x) => x.id === w.route);
     const audience = r ? routeAudienceOf(sc, r) : 'public';
-    const byPlatform =
-      platform !== undefined
-        ? defaultStrategy(framework, platform, audience)
-        : undefined;
+    const eff = resolved?.[w.route];
+    // 実際の描き方がフレームワークの既定と分け方が違えば、それで描く（同じなら今までの図）
     const chosen =
-      routes?.[w.route] ??
-      (byPlatform === 'cache-components' ? byPlatform : undefined);
+      eff !== undefined
+        ? strategyFamily(eff) !==
+          strategyFamily(FRAMEWORK_PRESETS[framework][audience])
+          ? eff
+          : undefined
+        : routes?.[w.route];
     // 図を借りるフレームワーク: 選んだ描き方を既定に持つもの（記事の S1 は静的書き出し・個人向けの S5 は静的書き出しなど）
     const donor =
       chosen === undefined
