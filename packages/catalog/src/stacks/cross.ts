@@ -34,6 +34,7 @@ import type {
 } from './index.ts';
 
 export { CROSS_COMPONENTS, CROSS_PARTS } from './parts.ts';
+export { isTransferNode } from './connections.ts';
 
 /** API を他の事業者に置いているか（SPA の API の置き場・D-65。既定・省略は同じ事業者）。 */
 export const apiPlacedElsewhere = (c: Choices): boolean =>

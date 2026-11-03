@@ -606,4 +606,30 @@ describe('swappableSlots（箱 → 差し替えられるスロット。D-116）'
       expect(swappableSlots(build, {}, slots).get(d1.id), fw).toEqual(['db']);
     }
   });
+
+  it('他の事業者の DB（D-114 段 2・段 2b）: 吹き出しは DB の箱だけで、自動で足す中継（Hyperdrive）・応答の転送の箱には出ない', () => {
+    const sc = SCENARIOS['article-community']!;
+    for (const [stack, db] of [
+      ['cloudflare-vinext-paid', 'aurora'],
+      ['cloudflare-vinext-paid', 'neon'],
+      ['cloudflare-vinext-paid', 'dynamodb'],
+      ['cloudflare-vinext-paid', 'hyperdrive'],
+      ['vercel-supabase-pro', 'dynamodb'],
+    ] as const)
+      for (const fw of ['nextjs', 'vite-spa'] as const) {
+        const i = STACKS.findIndex((s) => s.id === stack);
+        const slots = setupSlots(sc, i, fw, { db });
+        const build = (c: Partial<Record<string, string>>) =>
+          diagramArchitecture(sc, i, fw, c);
+        const c = { db };
+        const nodes = build(c).nodes;
+        const m = swappableSlots(build, c, slots);
+        const dbNode = nodes.find(
+          (n) => n.role === 'sql-db' && n.billing?.provider !== 'cloudflare',
+        )!;
+        expect(m.get(dbNode.id), `${stack} ${db} ${fw}`).toContain('db');
+        for (const id of ['hyperdrive', 'aws-db-out'])
+          expect(m.get(id), `${stack} ${db} ${fw} ${id}`).toBeUndefined();
+      }
+  });
 });
