@@ -164,8 +164,15 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
 
   it('受託: 夜間・休日に止まる分（D-90）で Neon の SPA は多くのシードが届き、Netlify Personal（Neon Launch）では全シードが届く', () => {
     expect(run(contract, VERCEL_PRO, 'vite-spa').won).toBe(0);
-    // メールの送信（D-95）の費用で 18 → 14・6 → 0
-    expect(run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }).won).toBe(14);
+    // メールの送信（D-95）の費用で 18 → 14・6 → 0。既定の Flat Rate CDN（2 か月目から $20 の段。D-120）では 14 → 0、
+    // 従量の CDN でも東京の単価（D-120）で 14 → 6
+    expect(run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }).won).toBe(0);
+    expect(
+      run(contract, VERCEL_PRO, 'vite-spa', {
+        db: 'neon',
+        cdnPlan: 'on-demand',
+      }).won,
+    ).toBe(6);
     expect(run(contract, VERCEL_PRO, 'nextjs', { db: 'neon' }).won).toBe(0);
     expect(
       run(contract, NETLIFY_PERSONAL, 'vite-spa', { db: 'neon' }).won,
@@ -228,21 +235,22 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     // Vercel × Next.js の既定を部品ごとにキャッシュにした分（D-111。前は受託 $39.8・記事 $120.1）
     // 記事はメールの通数から Bot の PV を除いた分（D-117。前は $90.4・$90.4・$119.9・1/20 $54.4）
     // 記事 × AWS × SPA は即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で PV が伸びた分（D-118。前は $90.3）
+    // Vercel Pro の既定の Flat Rate CDN と東京の単価（D-120。前は受託 0/20 $39.5・14/20 $38.4、記事 $119.8）
     // D-121: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分けた。AWS × SPA の既定の画像（一律で縮める）はサムネイルにも 400 KB を
-    // 配るので転送が増える（前は $91.8・$91.8）。記事の閲覧の偏り（Zipf）で記事の再生成が減る（前は $54.2・$119.8）
+    // 配るので転送が増える（前は $91.8・$91.8）。記事の閲覧の偏り（Zipf）で記事の再生成が減る（前は $54.2・$90.9）
     expect(table).toEqual({
       contractAwsSpaAurora: '0/20 $80.2',
       contractAwsSpaPause: '0/20 $59.0',
       contractOpenNextPause: '0/20 $56.6',
       articleAwsSpaAurora: '0/20 $118.5',
       articleAwsSpaPause: '0/20 $118.5',
-      contractVercelNext: '0/20 $39.5',
-      contractVercelSpa: '14/20 $38.4',
+      contractVercelNext: '0/20 $56.4',
+      contractVercelSpa: '0/20 $56.6',
       contractNetlifyNext: '0/20 $38.1',
       contractNetlifySpa: '14/20 $38.2',
       contractPersonalNext: '8/20 $35.3',
       contractPersonalSpa: '20/20 $30.8',
-      articleVercelNext: '0/20 $120.1',
+      articleVercelNext: '0/20 $88.5',
       articleNetlifyNextCf: '1/20 $54.0',
     });
   });

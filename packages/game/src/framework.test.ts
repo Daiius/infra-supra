@@ -196,8 +196,10 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
     // D-48: Vercel Pro の込み分をやめ、クレジットがすべての従量に当たる形に（Vercel Pro・何もしないは所持金が約 $550 減る）
     // D-118: SPA は記事を毎回 API で読む（応答をキャッシュしない）ので、即時反映の苦情の代わりに好評の知らせ（口コミ +2 × 3 か月）。
     //        KV を DB の代わりにする構成を除き所持金が $13〜26 増える（結果は変わらない）
-    // D-121: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分けた。一律で縮める画像（OpenNext の SPA の既定）はサムネイルにも
-    //        400 KB を配るので OpenNext・画像の最適化（隠した構成）が $246 減って won → goal。Vercel Pro は $24 減る。ほかは $4 以内
+    // D-120: Vercel Pro の既定の Flat Rate CDN と東京の単価。Vercel Pro・何もしないは $335 増え、画像を Cloudflare に出す行は
+    //        Vercel の CDN の量が小さく従量ならクレジットに収まっていたので $200 減る。乗り換えるまで Vercel の行は $26 増える
+    // D-121（D-120 の上で取り直した）: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分けた。一律で縮める画像（OpenNext の SPA の既定）は
+    //        サムネイルにも 400 KB を配るので OpenNext・画像の最適化（隠した構成）が $246 減って won → goal。ほかは $0.4 以内
     const r = Object.fromEntries(
       article.baselines.map((b) => {
         const s = playStrategy(b, 42, article, DEFAULT_START_DATE, 'vite-spa');
@@ -206,18 +208,17 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
     );
     expect(r).toEqual({
       // D-107: SPA はもともと個人向けも枠 + API なので、何もしないと同じ
-      // D-107: SPA はもともと個人向けも枠 + API なので、何もしないと同じ
       'cf-paid': ['1835.45', 'won', 12],
       'cf-paid-accept': ['1902.30', 'won', 12],
       'vps-images': ['1644.92', 'goal', 12],
-      'vercel-pro': ['801.98', 'goal', 12],
-      'vercel-to-cf': ['1398.45', 'goal', 12],
+      'vercel-pro': ['1161.22', 'goal', 12],
+      'vercel-to-cf': ['1428.31', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1666.62', 'goal', 12],
       'cf-paid-chat': ['1862.14', 'won', 12],
       'vps-sla': ['1595.98', 'goal', 12],
       'vps-cdn': ['1577.77', 'goal', 12],
-      'vercel-cf-images': ['1358.52', 'goal', 12],
+      'vercel-cf-images': ['1159.11', 'goal', 12],
       'aws-amplify-cdn': ['1814.55', 'won', 12],
       'aws-opennext-images': ['1700.86', 'goal', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],

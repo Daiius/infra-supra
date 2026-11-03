@@ -52,6 +52,9 @@ export function slotIneffective(
   stack: { stackIndex: number; framework: FrameworkId },
 ): boolean {
   if (slot === 'cdnInvalidation') return choices.isrCache === 'none';
+  // Vercel の CDN の料金（Flat Rate / On-demand。D-120）は Pro だけ（Hobby は込み分のまま）
+  if (slot === 'cdnPlan' && STACKS[stack.stackIndex]?.provider === 'vercel')
+    return STACKS[stack.stackIndex]!.plan !== 'pro';
   if (slot === 'dbBackup')
     return !dbBackupStatus(stack.stackIndex, choices, stack.framework).some(
       (s) => s.extendable,

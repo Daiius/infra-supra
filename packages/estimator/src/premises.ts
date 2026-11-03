@@ -79,6 +79,15 @@ const CLASS_LABEL: Partial<Record<CpuSource['requestClass'], string>> = {
   'realtime-message': 'リアルタイムのメッセージ',
 };
 
+/** 画像（メディア）の配信のクラス（容量の段の対象外の判定。D-120）。 */
+const MEDIA_CLASSES: ReadonlySet<string> = new Set(['image-read']);
+
+/** 前提の文に入れる金額（表示のための丸め）。 */
+const moneyText = (v: number, cur: Currency) =>
+  cur === 'USD'
+    ? `$${(Math.round(v * 100) / 100).toFixed(2)}`
+    : `${Math.round(v)} 円`;
+
 /** 表示のための丸め（小数 1 桁）。 */
 const ms = (v: number) => `${Math.round(v * 10) / 10}`;
 
@@ -333,6 +342,83 @@ export function assessPremises(input: {
         accumulates: false,
       }),
     );
+  }
+
+  // 1c. 容量の段（D-120。Vercel の Flat Rate CDN）。使用率は今月払う段の容量に対する量（次元のうち最も高いもの）。
+  //     段を超えても今月の請求は増えず、翌月から上の段になる（cost）。流量なので伸び率で見込む。
+  //     従量（'off'）の契約では、量が最上段を超えたときだけ出す（最上段の容量と比べる）
+  for (const c of bill.capacityTiers) {
+    const set = books
+      .get(c.provider)
+      ?.plans.find((p) => p.id === c.planId)
+      ?.capacityTiers.find((s) => s.id === c.set);
+    if (!set) continue;
+    const tier =
+      set.tiers.find((t) => t.id === c.applied) ??
+      (c.fitting === null ? set.tiers[set.tiers.length - 1] : undefined);
+    if (!tier) continue;
+    const dim = set.dimensions.reduce((a, d) =>
+      c.usage[d.id]! / tier.capacity[d.id]! >
+      c.usage[a.id]! / tier.capacity[a.id]!
+        ? d
+        : a,
+    );
+    const cur = books.get(c.provider)!.currency;
+    const base = {
+      nodeIds: c.nodeIds,
+      provider: c.provider,
+      planId: c.planId,
+    };
+    out.push(
+      threshold({
+        ...base,
+        id: `capacity:${c.provider}:${c.planId}:${set.id}`,
+        text: set.premise,
+        effect: 'cost',
+        used: c.usage[dim.id]!,
+        limit: tier.capacity[dim.id]!,
+        unit: dim.unit,
+        accumulates: false,
+        detail: `今月の段: ${tier.label}。${dim.label}は段の容量の ${Math.round((c.usage[dim.id]! / tier.capacity[dim.id]!) * 100)}%`,
+      }),
+    );
+    // 対象外になりうる使い方: 転送のうち画像（メディア）の配信の割合（事業者の判断。費用の計算は段のまま）
+    const oos = set.outOfScope;
+    if (!oos || c.applied === null) continue;
+    const meters = new Set(
+      set.dimensions.find((d) => d.id === oos.dimension)!.meterIds,
+    );
+    const nodes = new Set(
+      usage
+        .filter(
+          (u) =>
+            u.accountId === c.accountId &&
+            u.provider === c.provider &&
+            u.planId === c.planId &&
+            meters.has(u.meterId),
+        )
+        .map((u) => u.nodeId),
+    );
+    let total = 0;
+    let media = 0;
+    for (const id of nodes) {
+      const by = sim.nodes[id]?.egressGbByClass ?? {};
+      for (const [cls, gb] of Object.entries(by) as [string, number][]) {
+        total += gb;
+        if (MEDIA_CLASSES.has(cls)) media += gb;
+      }
+    }
+    const share = total > 0 ? media / total : 0;
+    if (share <= oos.above) continue;
+    out.push({
+      ...base,
+      id: `capacity:${c.provider}:${c.planId}:${set.id}:media`,
+      text: oos.premise,
+      kind: 'fact',
+      effect: 'info',
+      hit: false,
+      detail: `画像の配信が転送の ${Math.round(share * 100)}%。対象外とされて従量で払うと、段に込みの項目は月 ${moneyText(c.onDemand, cur)}（今は段の月額 ${moneyText(tier.fee, cur)}・クレジットの前）`,
+    });
   }
 
   // 2. 制限（Limit）: 資源シミュレーションの値と比べる

@@ -352,13 +352,20 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         score: Math.min(99, saving),
       });
     }
-    for (const o of over.values())
+    for (const [id, o] of over)
       out.push({
-        hint: {
-          kind: 'overage',
-          what: `${o.months[0]} か月目から「${o.text}」を超え、超えた分が請求された`,
-          next: '込みの量・クレジットを超えた分は使った分だけ請求される。設定・部品で量を下げるか、超えたときの単価をプランごとに比べる',
-        },
+        hint: id.startsWith('capacity:')
+          ? {
+              // 容量の段（D-120。Vercel の Flat Rate CDN）: 超えた月は請求が増えず、翌月から上の段の月額になる
+              kind: 'overage',
+              what: `${o.months[0]} か月目から CDN の量が今の段の容量を超え、翌月から上の段の月額になった（${o.text}）`,
+              next: '段は前の月の量で決まる。リクエスト・転送を設定・部品で減らすか、部品「CDN の料金」の従量（On-demand）と月額を比べる（量が少ないうちは従量のほうが安いことがある）',
+            }
+          : {
+              kind: 'overage',
+              what: `${o.months[0]} か月目から「${o.text}」を超え、超えた分が請求された`,
+              next: '込みの量・クレジットを超えた分は使った分だけ請求される。設定・部品で量を下げるか、超えたときの単価をプランごとに比べる',
+            },
         score: tier(false, 20 + o.months.length),
       });
   }

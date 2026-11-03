@@ -5,7 +5,6 @@ import {
   isValidElement,
   useEffect,
   useId,
-  useMemo,
   useState,
   type ReactElement,
   type ReactNode,
@@ -16,6 +15,7 @@ import {
   frameworksOf,
   settingFlavor,
   SETTINGS,
+  setupSlots,
   stackUnsupportedReason,
   STACKS,
   type FrameworkId,
@@ -31,9 +31,13 @@ import { CreditBar } from '../credit-bar.tsx';
 import { creditUseText, isCreditUse, isStopping } from '../premise-view.ts';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
 import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
-import { routeChoiceOf, type RoutePlanEditor } from '../route-plan-field.tsx';
+import {
+  routeChoiceOf,
+  routeSettingOf,
+  type RoutePlanEditor,
+} from '../route-plan-field.tsx';
 import { FrameworkField } from '../scenario-briefing.tsx';
-import { SettingRadios, SetupSettings } from '../setup-components.tsx';
+import { SettingChips, SetupSettings } from '../setup-components.tsx';
 import {
   type EstimateView,
   compareStacks,
@@ -131,10 +135,31 @@ export function EstimateMode() {
     setNotice(null);
     setInput(withFramework(input, framework));
   };
-  const view = useMemo(() => runEstimate(input), [input]);
-  const rows = useMemo(() => compareStacks(input), [input]);
-  const diagram = useMemo(() => diagramOf(input), [input]);
-  const routeStatus = useMemo(() => routeStatusOf(input), [input]);
+  const view = runEstimate(input);
+  const rows = compareStacks(input);
+  const diagram = diagramOf(input);
+  const routeStatus = routeStatusOf(input);
+  // 再検証の間隔などの描き方の設定は、記事のページの行で選ぶ（D-119。ゲームの始める画面と同じ部品）
+  const revalidate = settingsOf(
+    input.template,
+    input.framework,
+    input.routes,
+  ).revalidate;
+  const setting = revalidate
+    ? routeSettingOf({
+        scenario: scenarioOfTemplate(input.template),
+        stackIndex: STACKS.findIndex((s) => s.id === input.stack),
+        framework: input.framework,
+        components: input.parts,
+        routes: input.routes,
+        value: input.revalidateSec,
+        options: revalidate.options.map((o) => ({
+          ...o,
+          flavor: settingFlavor(revalidate.key, o.value) ?? '',
+        })),
+        onChange: (revalidateSec) => setInput({ revalidateSec }),
+      })
+    : undefined;
   // ページの描き方を選ぶ（フレームワークのカードのチップと下の表で共有する。行と判定は見積の PV で。D-115）
   const editor: RoutePlanEditor = {
     rows: diagram.routes,
@@ -158,6 +183,7 @@ export function EstimateMode() {
     onPart: (_, part, v) => {
       if (part === 'comments') setInput({ comments: v });
     },
+    setting,
   };
 
   return (
@@ -346,27 +372,58 @@ function Conditions({
   const stackIndex = STACKS.findIndex((s) => s.id === input.stack);
   const settings = settingsOf(input.template, input.framework, input.routes);
   const comments = settings.comments ? input.comments : undefined;
-  const cardTotals = useMemo(() => stackCardTotals(input, rows), [input, rows]);
+  const cardTotals = stackCardTotals(input, rows);
   const allowed = frameworksOf(scenario).allowed;
   // フレームワークのカードの描き方（そのフレームワークを選んだときの行）。載せられないものは引かない（D-113）
-  const fwRoutes = useMemo(
-    () =>
-      new Map(
-        frameworksOf(scenarioOfTemplate(input.template))
-          .allowed.filter(
-            (id) =>
-              stackUnsupportedReason(
-                STACKS.findIndex((s) => s.id === input.stack),
-                id,
-              ) === undefined,
-          )
-          .map((id) => [id, frameworkCardRoutes(input, id)] as const),
-      ),
-    [input],
+  const fwRoutes = new Map(
+    frameworksOf(scenarioOfTemplate(input.template))
+      .allowed.filter(
+        (id) =>
+          stackUnsupportedReason(
+            STACKS.findIndex((s) => s.id === input.stack),
+            id,
+          ) === undefined,
+      )
+      .map((id) => [id, frameworkCardRoutes(input, id)] as const),
   );
   const [pvText, setPvText] = useState(String(input.pv));
   useEffect(() => setPvText(String(input.pv)), [input.pv]);
   const select = 'select select-bordered select-sm w-full';
+  // 画像の形式・サイズ違い（画像の部品の行のチップの下。D-119）
+  const imagesRow = setupSlots(
+    scenario,
+    stackIndex,
+    input.framework,
+    input.parts,
+  ).some((x) => x.slot === 'images');
+  const imageSettings =
+    settings.format || settings.variants ? (
+      <div className="space-y-1.5">
+        {settings.format && (
+          <SettingChips
+            setting="format"
+            label="画像の形式"
+            note={SETTINGS.format.note}
+            options={IMAGE_FORMATS.map((f) => ({
+              value: f.id,
+              label: f.label,
+            }))}
+            value={input.imageFormat}
+            onChange={(imageFormat) => setInput({ imageFormat })}
+          />
+        )}
+        {settings.variants && (
+          <SettingChips
+            setting="variants"
+            label="画像のサイズ違い"
+            note={SETTINGS.variants.note}
+            options={VARIANTS.map((v) => ({ value: v, label: `${v} 種` }))}
+            value={input.variants}
+            onChange={(variants) => setInput({ variants })}
+          />
+        )}
+      </div>
+    ) : null;
   return (
     <Card title="条件">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -451,6 +508,7 @@ function Conditions({
         // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
         onComponentsChange={(parts) => setInput({ parts })}
         partsNote="選んでいないスロットは既定の部品で見積もる"
+        partsExtra={imageSettings ? { images: imageSettings } : undefined}
         cardExtra={(i, selected) => {
           const t = cardTotals[STACKS[i]!.id];
           if (!t) return null;
@@ -501,46 +559,9 @@ function Conditions({
           ),
         }}
       />
-      {/* ③ 設定はゲームの始める画面と同じ欄（D-115） */}
-      {(settings.revalidate || settings.format || settings.variants) && (
-        <SetupSettings>
-          {settings.revalidate && (
-            <SettingRadios
-              name="estimate-revalidate"
-              label={settings.revalidate.label}
-              note={settings.revalidate.note}
-              options={settings.revalidate.options.map((o) => ({
-                ...o,
-                flavor: settingFlavor(settings.revalidate!.key, o.value),
-              }))}
-              value={input.revalidateSec}
-              onChange={(revalidateSec) => setInput({ revalidateSec })}
-            />
-          )}
-          {settings.format && (
-            <SettingRadios
-              name="estimate-image-format"
-              label="画像の形式"
-              note={SETTINGS.format.note}
-              options={IMAGE_FORMATS.map((f) => ({
-                value: f.id,
-                label: f.label,
-              }))}
-              value={input.imageFormat}
-              onChange={(imageFormat) => setInput({ imageFormat })}
-            />
-          )}
-          {settings.variants && (
-            <SettingRadios
-              name="estimate-variants"
-              label="画像のサイズ違い"
-              note={SETTINGS.variants.note}
-              options={VARIANTS.map((v) => ({ value: v, label: `${v} 種` }))}
-              value={input.variants}
-              onChange={(variants) => setInput({ variants })}
-            />
-          )}
-        </SetupSettings>
+      {/* 画像の形式・サイズ違いは ① の画像の部品の行で選ぶ（D-119）。画像の行が無い構成だけ ③ 設定に出す */}
+      {imageSettings && !imagesRow && (
+        <SetupSettings>{imageSettings}</SetupSettings>
       )}
     </Card>
   );
@@ -1003,14 +1024,11 @@ function CostCurve({
 }) {
   // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
   const [picked, setPicked] = useState<string[] | null>(null);
-  const stacks = useMemo(
-    () =>
-      picked === null
-        ? defaultCurveStacks(rows)
-        : pickedCurveStacks(picked, rows),
-    [picked, rows],
-  );
-  const curves = useMemo(() => costCurves(input, stacks), [input, stacks]);
+  const stacks =
+    picked === null
+      ? defaultCurveStacks(rows)
+      : pickedCurveStacks(picked, rows);
+  const curves = costCurves(input, stacks);
   const series: CurveChartSeries[] = curves.map((c) => ({
     id: c.stack,
     label: c.current ? `${c.name}（今の構成）` : c.name,

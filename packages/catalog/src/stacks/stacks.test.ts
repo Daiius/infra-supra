@@ -19,9 +19,14 @@ const books = loadPriceBooks();
 
 describe('既定の選択', () => {
   it('組み立てた構成は GD-3 までの完成品と同じ', () => {
-    // 役割の印（role。D-114）は計算に使わない印なので、比べる前に外す（GD-3 までの完成品に印は無い）
+    // 役割の印（role。D-114）は計算に使わない印なので、比べる前に外す（GD-3 までの完成品に印は無い）。
+    // 契約の地域・CDN の料金（accounts。D-120）はノードと経路の形を変えないので外す
     const withoutRoles = (x: unknown) =>
-      JSON.parse(JSON.stringify(x, (k, v) => (k === 'role' ? undefined : v)));
+      JSON.parse(
+        JSON.stringify(x, (k, v) =>
+          k === 'role' || k === 'accounts' ? undefined : v,
+        ),
+      );
     GD3_STACKS.forEach((s, i) =>
       expect(withoutRoles(MVP_STACKS[i])).toStrictEqual(s),
     );

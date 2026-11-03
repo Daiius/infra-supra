@@ -30,6 +30,9 @@ describe('受託先の業務アプリの運用', () => {
     // D-48: Vercel Pro のクレジットがすべての従量に当たる形に（込み分なし）。使用量は月 $10〜25 で、9 か月目ごろからクレジットを超える分だけ所持金が減る
     // D-96: ドメインの登録と DNS の費用で所持金が $2〜17 減る（結果は変わらない）
     // D-111: Vercel × Next.js の既定を部品ごとにキャッシュに。Vercel で遊ぶ行（vercel-pro・Vercel へ乗り換える cf-paid-accept）だけが $1〜6 増える
+    // D-120: Vercel Pro の既定の Flat Rate CDN（受託の量は 2 か月目から $20 の段）と東京の単価。従量の CDN はクレジットに収まっていたので、
+    //        Vercel で遊ぶ行は $204〜214 減る（vercel-pro）・$40 減る（乗り換えるまで Vercel の vercel-to-cf。シード 42 は won → goal）・
+    //        $75〜93 減る（Vercel へ乗り換える cf-paid-accept。乗り換え中も前の月の段を払う。シード 42 は $12 減）。CF・VPS・AWS の行は変わらない
     const r = (seed: number) =>
       Object.fromEntries(
         sc.baselines.map((b) => {
@@ -41,12 +44,12 @@ describe('受託先の業務アプリの運用', () => {
       'cf-paid': ['1892.51', 'won', 12],
       // D-93: PITR の依頼（D1 の Time Travel で満たす）を受け、乗り換えるまで上乗せ $20 / 月が入る（前は $1,589.92・goal）
       // D-95: メールの送信（CF Paid は Email Service・乗り換えた先は SES）の費用で $1,769.92・won → goal
-      'cf-paid-accept': ['1669.99', 'goal', 12],
+      'cf-paid-accept': ['1657.78', 'goal', 12],
       vps: ['1701.46', 'goal', 12],
       'vps-care': ['1807.61', 'won', 12],
       'vps-sla': ['1807.61', 'won', 12],
-      'vercel-pro': ['1470.36', 'goal', 12],
-      'vercel-to-cf': ['1710.34', 'won', 12],
+      'vercel-pro': ['1256.46', 'goal', 12],
+      'vercel-to-cf': ['1670.34', 'goal', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
       'aws-amplify': ['1800.00', 'won', 12],
@@ -54,12 +57,12 @@ describe('受託先の業務アプリの運用', () => {
     });
     expect(r(11)).toEqual({
       'cf-paid': ['1959.64', 'won', 12],
-      'cf-paid-accept': ['1498.56', 'goal', 12],
+      'cf-paid-accept': ['1423.40', 'goal', 12],
       vps: ['1564.19', 'outages', 12],
       'vps-care': ['1880.26', 'won', 12],
       'vps-sla': ['1988.19', 'won', 12],
-      'vercel-pro': ['1538.38', 'goal', 12],
-      'vercel-to-cf': ['1770.52', 'won', 12],
+      'vercel-pro': ['1334.49', 'goal', 12],
+      'vercel-to-cf': ['1730.52', 'won', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
       'aws-amplify': ['1847.23', 'won', 12],
@@ -68,12 +71,12 @@ describe('受託先の業務アプリの運用', () => {
     expect(r(3)).toEqual({
       'cf-paid': ['1932.41', 'won', 12],
       // D-46: 乗り換え先の Vercel で添付が Vercel Blob の課金になる
-      'cf-paid-accept': ['1537.99', 'goal', 12],
+      'cf-paid-accept': ['1444.79', 'goal', 12],
       vps: ['1679.32', 'outages', 12],
       'vps-care': ['1783.73', 'won', 12],
       'vps-sla': ['1783.73', 'won', 12],
-      'vercel-pro': ['1506.62', 'goal', 12],
-      'vercel-to-cf': ['1747.14', 'won', 12],
+      'vercel-pro': ['1300.88', 'goal', 12],
+      'vercel-to-cf': ['1707.14', 'won', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
       'aws-amplify': ['1827.87', 'won', 12],

@@ -8,6 +8,7 @@ import {
   expectGameScreen,
   monthHeading,
   pickPart,
+  pickRadio,
   renderApp,
   slotGroup,
   startGame,
@@ -42,6 +43,23 @@ const pickStrategy = (page: string, strategy: string) =>
   );
 
 describe('ゲームモードの画面', () => {
+  it('W-46 Vercel Pro の ① の部品に「CDN の料金のプラン」（Flat Rate CDN・On-demand CDN）が出て、Hobby には出ない（D-120）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Vercel Pro + Supabase Pro');
+    const row = slotGroup('CDN の料金のプラン');
+    expect(
+      within(row).getAllByRole('button', {
+        name: /^Flat Rate CDN（段の定額・既定）/,
+      }).length,
+    ).toBeGreaterThan(0);
+    pickPart('On-demand CDN（従量）', row);
+    pickRadio('Vercel Hobby + Supabase Free');
+    expect(
+      document.querySelector('section[data-parts] [data-slot="cdnPlan"]'),
+    ).toBeNull();
+  });
+
   it('W-01 記事コミュニティ × Next.js × CF Paid で始めて 3 か月進める', async () => {
     await renderApp();
     // 始める画面: シナリオ・フレームワーク・構成・部品の選択肢が出る
@@ -116,6 +134,8 @@ describe('ゲームモードの画面', () => {
       scenario: ARTICLE,
       framework: 'Next.js（静的書き出し）',
       stack: 'Vercel Pro + Supabase Pro',
+      // 画像の原本の配信（Blob Data Transfer）を従量で払う（既定の Flat Rate CDN では段に込み。D-120）
+      parts: { 'CDN の料金のプラン': 'On-demand CDN（従量）' },
     });
     expect(screen.getByText('所持金が尽きた')).toBeDefined();
     expect(screen.getByText(/1 か月目で終了/)).toBeDefined();
@@ -1224,6 +1244,104 @@ describe('ゲームモードの画面', () => {
         ).toBe('Vercel Pro + AWS DynamoDB の構成');
       },
     });
+  });
+
+  it('W-43 始める画面: 再検証の間隔などの描き方の設定は、② のカードの記事のページの行で選ぶ（S2 と S3 は同じ設定。D-119）', async () => {
+    await renderApp();
+    /** 記事のページの行の設定のチップ（名前は設定の見出し）。 */
+    const setting = (label: string) =>
+      within(pageOf('article')).getByRole('group', { name: label });
+    const selectedOf = (label: string) =>
+      setting(label)
+        .querySelector('[data-selected="true"]')
+        ?.getAttribute('data-option');
+    const chip = (label: string, value: string) =>
+      setting(label).querySelector<HTMLElement>(`[data-option="${value}"]`)!;
+    const choose = (label: string, value: string) =>
+      fireEvent.click(
+        within(chip(label, value)).getByRole('button', { pressed: false }),
+      );
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+      parts: { 'ISR のキャッシュ': 'R2', DB: 'D1' },
+      beforeStart: () => {
+        // ③ 設定の欄は無く、記事のページの行（描き方のチップの下）に出る。個人向けのページの行には出ない
+        expect(screen.queryByRole('heading', { name: '③ 設定' })).toBeNull();
+        expect(
+          within(pageOf('personal')).queryByRole('group', {
+            name: 'ISR の再検証',
+          }),
+        ).toBeNull();
+        expect(chosenOf('article')).toBe('cached-ttl');
+        expect(selectedOf('ISR の再検証')).toBe('300');
+        expect(setting('ISR の再検証').textContent).toContain(
+          '上の 2 つの描き方は、この設定で切り替わる',
+        );
+        // 時間を替えても描き方は時間で取り直すのまま。オンデマンドにすると更新で消すになる
+        choose('ISR の再検証', '3600');
+        expect(selectedOf('ISR の再検証')).toBe('3600');
+        expect(chosenOf('article')).toBe('cached-ttl');
+        choose('ISR の再検証', '0');
+        expect(chosenOf('article')).toBe('cached-purge');
+        // 描き方のチップで時間で取り直すに戻すと、設定も 5 分に戻る（同じ設定）
+        pickStrategy(
+          '記事のページ',
+          'サーバーで描いてキャッシュ（時間で取り直す）',
+        );
+        expect(selectedOf('ISR の再検証')).toBe('300');
+        choose('ISR の再検証', '3600');
+        // ISR を KV に置くとオンデマンドは届かないので、灰色で理由を ⓘ に出す
+        pickPart('KV', slotGroup('ISR のキャッシュ'));
+        expect(chip('ISR の再検証', '0').getAttribute('data-available')).toBe(
+          'false',
+        );
+        expect(
+          within(setting('ISR の再検証')).getByRole('button', {
+            name: /が選べない理由$/,
+          }),
+        ).toBeDefined();
+        expect(setting('ISR の再検証').textContent).toContain(
+          'オンデマンドは選べない',
+        );
+        expect(selectedOf('ISR の再検証')).toBe('3600');
+      },
+    });
+    // 選んだ値で始まる
+    const save = JSON.parse(localStorage.getItem('infra-supra:game-save')!);
+    expect(save.revalidateSec).toBe(3600);
+  });
+
+  it('W-44 始める画面: Astro の記事のキャッシュ・静的書き出しのビルドの間隔も記事のページの行で選ぶ（D-119）', async () => {
+    await renderApp();
+    const pick = (name: RegExp) =>
+      fireEvent.click(screen.getByRole('radio', { name }));
+    const setting = (label: string) =>
+      within(pageOf('article')).queryByRole('group', { name: label });
+    pick(/^記事コミュニティ/);
+    pick(/^Cloudflare Free/);
+    pick(/^Astro/);
+    // 消せる置き場（Cloudflare）では既定がオンデマンド
+    expect(
+      setting('記事のキャッシュ')
+        ?.querySelector('[data-selected="true"]')
+        ?.getAttribute('data-option'),
+    ).toBe('0');
+    // 消せない置き場（Google Cloud の Hosting の CDN）ではオンデマンドが灰色
+    pick(/^Google Cloud/);
+    expect(
+      setting('記事のキャッシュ')
+        ?.querySelector('[data-option="0"]')
+        ?.getAttribute('data-available'),
+    ).toBe('false');
+    // 静的書き出しはビルドの間隔
+    pick(/^Next\.js（静的書き出し）/);
+    expect(chosenOf('article')).toBe('static-build');
+    expect(setting('ビルドの間隔')).not.toBeNull();
+    // SPA は始める画面では選ばない（記事は枠 + API で、期限の設定は無い）
+    pick(/^Vite（SPA）/);
+    expect(pageOf('article').querySelector('[data-setting]')).toBeNull();
   });
 
   it('W-04 保存して読み込み直すと同じ月から再開する', async () => {

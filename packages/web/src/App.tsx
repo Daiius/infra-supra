@@ -1,5 +1,5 @@
 // ゲームモードの画面（Phase 2〜4 の前倒しの試作）。ロジックは game パッケージ、ここは表示と操作だけ。
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   setupCommitments,
   type CommitmentPaymentId,
@@ -38,11 +38,7 @@ import {
 } from './scenario-briefing.tsx';
 import { OptionText } from './option-text.tsx';
 import { commitmentMeta } from './commitment-meta.ts';
-import {
-  SetupCostPreview,
-  SetupRevalidate,
-  type SetupChoices,
-} from './setup-components.tsx';
+import { SetupCostPreview, type SetupChoices } from './setup-components.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import { useRoutePlanEditor } from './route-plan-field.tsx';
 
@@ -216,10 +212,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [parts, setParts] = useState<SetupChoices>({});
   // ページごとの描き方（D-107）。フレームワークを替えると既定に戻す。構成で使えないものは validRouteOverrides で外す
   const [routeChoice, setRouteChoice] = useState<RouteOverrides>({});
-  const routes = useMemo(
-    () => validRouteOverrides(scenario, stack, framework, routeChoice),
-    [scenario, stack, framework, routeChoice],
-  );
+  const routes = validRouteOverrides(scenario, stack, framework, routeChoice);
   // 構成を替えて、載せられるフレームワークに戻したときの知らせ（D-113）
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   // インフラの構成を先に選ぶ（D-113）。構成は替えず、載せられないフレームワーク（Astro × AWS など。D-68）を選んでいたら、
@@ -247,8 +240,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     setParts(validSetupChoices(sc, st, fw, parts));
   };
   const problem = setupProblem(scenario, stack, framework, parts);
-  // ISR の再検証（D-49）・Astro の記事のキャッシュ（D-103）など。選ぶまでは、フレームワークと構成の既定
-  // （Astro は消せる置き場ならオンデマンド、それ以外は 5 分）
+  // ISR の再検証（D-49）・Astro の記事のキャッシュ（D-103）など。② のカードの記事のページの行で選ぶ（D-119）。選ぶまでは、
+  // フレームワークと構成の既定（Astro は消せる置き場ならオンデマンド、それ以外は 5 分）
   const [revalidateChosen, setRevalidateSec] = useState<number | undefined>(
     undefined,
   );
@@ -368,22 +361,13 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                 })
               }
               routeNotice={(id) => routeNotice({ framework: id })}
-              // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）
+              // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）。
+              // 再検証の間隔などの描き方の設定も、記事のページの行で選ぶ（D-119）
               editor={routeEditor}
               unsupported={(id) => stackUnsupportedReason(stack, id)}
               notice={fallbackNotice}
             />
           </div>
-          <SetupRevalidate
-            scenario={scenario}
-            stackIndex={stack}
-            framework={framework}
-            components={parts}
-            value={revalidateSec}
-            onChange={setRevalidateSec}
-            comments={commentsChoosable ? comments : COMMENTS_IN_BROWSER}
-            routes={routes}
-          />
           {commitOptions.length > 0 && (
             <div className="mt-2">
               <h3 className="font-bold">長期の確約（1 年）</h3>

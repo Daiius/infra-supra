@@ -8,6 +8,7 @@ import {
 } from 'estimator';
 import {
   applyComponentsToWorkload,
+  composeStack,
   loadPriceBooks,
   MVP_STACKS,
   RAW_PRICE_BOOKS,
@@ -196,10 +197,12 @@ describe('プラットフォームの前提（金額ではなく、当たった�
     ).toBe(true);
   });
 
-  it('Vercel Pro は込み分を持たず、月のクレジットの使用率を前提に出す（D-48）', () => {
+  it('Vercel Pro は込み分を持たず、月のクレジットの使用率を前提に出す（D-48。CDN の料金を On-demand にしたとき。D-120）', () => {
     const r = estimate({
       workload: articleCommunity(10_000),
-      architecture: pro,
+      architecture: composeStack('vercel-supabase-pro', {
+        cdnPlan: 'on-demand',
+      }),
       books,
     });
     // CDN Requests・Fast Data Transfer も最初の 1 単位から課金し、クレジットが当たる
@@ -216,6 +219,108 @@ describe('プラットフォームの前提（金額ではなく、当たった�
     )!;
     expect(p).toMatchObject({ kind: 'threshold', effect: 'cost' });
     expect(p.ratio).toBeGreaterThan(0);
+  });
+
+  it('Vercel Pro の既定は Flat Rate CDN: CDN の 3 項目は段の定額に込み、量が収まる段の使用率を前提に出す（D-120）', () => {
+    const at = (pv: number) =>
+      estimate({ workload: articleCommunity(pv), architecture: pro, books });
+    const small = at(10_000);
+    const covered = small.bill.lines.filter(
+      (l) =>
+        l.kind === 'usage' &&
+        ['cdn-requests', 'fast-data-transfer', 'blob-data-transfer'].includes(
+          l.priceRef.meterId!,
+        ),
+    );
+    expect(covered.length).toBeGreaterThan(0);
+    expect(covered.every((l) => l.amount === 0 && l.capacityTier)).toBe(true);
+    // 小さい量は Pro に込みの段（月額 0）。Fast Origin Transfer は対象外（従量）
+    const fee = small.bill.lines.find(
+      (l) => l.kind === 'base-fee' && l.capacityTier,
+    )!;
+    expect(fee).toMatchObject({
+      amount: 0,
+      capacityTier: { set: 'flat-rate-cdn', tier: 'included' },
+    });
+    expect(
+      small.bill.lines.find(
+        (l) => l.priceRef.meterId === 'fast-origin-transfer',
+      )!.amount,
+    ).toBeGreaterThan(0);
+    const p = small.premises.find(
+      (x) => x.id === 'capacity:vercel:pro:flat-rate-cdn',
+    )!;
+    expect(p).toMatchObject({ kind: 'threshold', effect: 'cost', hit: false });
+    // 量が増えると上の段（見積は今月の量が収まる段）
+    const big = at(1_300_000);
+    expect(big.bill.capacityTiers[0]).toMatchObject({
+      applied: big.bill.capacityTiers[0]!.fitting,
+    });
+    expect(big.bill.capacityTiers[0]!.applied).not.toBe('included');
+    // 記事コミュニティは画像の配信が転送の大半なので、対象外になりうる前提（事実）を出す。費用は段のまま
+    const media = big.premises.find(
+      (x) => x.id === 'capacity:vercel:pro:flat-rate-cdn:media',
+    )!;
+    expect(media).toMatchObject({ kind: 'fact', effect: 'info' });
+    expect(media.detail).toMatch(/^画像の配信が転送の \d+%/);
+    // 画像を最適化しない（原本を Blob から配る）と、Blob Data Transfer も段に込み
+    const blob = estimate({
+      workload: applyComponentsToWorkload(articleCommunity(100_000), 'vercel', {
+        images: 'none',
+      }),
+      architecture: composeStack('vercel-supabase-pro', { images: 'none' }),
+      books,
+    }).bill.lines.find((l) => l.priceRef.meterId === 'blob-data-transfer')!;
+    expect(blob).toMatchObject({ amount: 0 });
+    expect(blob.quantity).toBeGreaterThan(0);
+  });
+
+  it('Vercel Pro の CDN の単価は読者の地域（東京 hnd1）、関数は iad1（D-120）', () => {
+    const arch = composeStack('vercel-supabase-pro', { cdnPlan: 'on-demand' });
+    expect(arch.accounts).toEqual([
+      {
+        id: 'vercel',
+        region: 'iad1',
+        viewerRegion: 'hnd1',
+        capacityTiers: { 'flat-rate-cdn': 'off' },
+      },
+    ]);
+    const vercel = books.find((b) => b.provider === 'vercel')!;
+    const proPlan = vercel.plans.find((p) => p.id === 'pro')!;
+    const by = (id: string) =>
+      proPlan.meters.find((m) => m.id === id)!.regionBy;
+    for (const id of [
+      'cdn-requests',
+      'fast-data-transfer',
+      'fast-origin-transfer',
+      'blob-data-transfer',
+      'image-transformations',
+    ])
+      expect(by(id)).toBe('viewer');
+    for (const id of [
+      'active-cpu',
+      'provisioned-memory',
+      'isr-reads',
+      'blob-storage',
+    ])
+      expect(by(id)).toBe('account');
+    // 地域の単価を当てると、On-demand の CDN の明細は既定（iad1）の単価より高い
+    const r = estimate({
+      workload: articleCommunity(100_000),
+      architecture: arch,
+      books,
+    });
+    const iad = estimate({
+      workload: articleCommunity(100_000),
+      architecture: { ...arch, accounts: [{ id: 'vercel' }] },
+      books,
+    });
+    const amount = (x: typeof r, id: string) =>
+      x.bill.lines.find((l) => l.priceRef.meterId === id)!.amount!;
+    expect(amount(r, 'cdn-requests')).toBeGreaterThan(
+      amount(iad, 'cdn-requests'),
+    );
+    expect(amount(r, 'active-cpu')).toBe(amount(iad, 'active-cpu'));
   });
 
   it('VPS は 100 万 PV では何にも当たらず、固定費だけ', () => {

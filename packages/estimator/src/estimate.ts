@@ -70,6 +70,15 @@ export function toMeterUsage(
       nodeIds: [],
       ...(account?.seats !== undefined ? { seats: account.seats } : {}),
       ...(account?.region !== undefined ? { region: account.region } : {}),
+      ...(account?.viewerRegion !== undefined
+        ? { viewerRegion: account.viewerRegion }
+        : {}),
+      ...(account?.capacityTiers !== undefined
+        ? { capacityTiers: account.capacityTiers }
+        : {}),
+      ...(account?.capacityTierDefault !== undefined
+        ? { capacityTierDefault: account.capacityTierDefault }
+        : {}),
     };
     sub.nodeIds.push(node.id);
     subs.set(key, sub);

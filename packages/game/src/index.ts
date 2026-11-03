@@ -142,6 +142,7 @@ export {
 export {
   editsReflectImmediately,
   meetsRequirement,
+  onDemandBlocker,
   requirementReachable,
   FRONT_CDN_DELAY_FACTOR,
   requirementStatus,

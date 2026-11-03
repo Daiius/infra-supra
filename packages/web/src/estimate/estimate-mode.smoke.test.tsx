@@ -12,7 +12,7 @@ const card = (title: string | RegExp) =>
   screen.getByRole('heading', { level: 2, name: title }).closest('section')!;
 const combo = (label: string) =>
   screen.getByRole('combobox', { name: new RegExp(`^${label}`) });
-/** 部品の行（構成のカードのチップ。D-116）・③ 設定の欄（ゲームと共用のラジオの枠。D-115）。名前は見出しの文字で始まる。 */
+/** 部品の行（構成のカードのチップ。D-116）・設定のチップ（記事のページの行の描き方の設定・画像の行の設定。D-119）。名前は見出しの文字で始まる。 */
 const group = (label: string) =>
   screen.getByRole('group', { name: new RegExp(`^${label}`) });
 const queryGroup = (label: string) =>
@@ -32,31 +32,17 @@ const pick = (name: 'stack' | 'framework', value: string) => {
   fireEvent.click(r);
   expect(r.checked).toBe(true);
 };
-/** 枠の中で選んでいる値（部品の行は選択中のチップの部品、設定の欄はラジオの値）。 */
-const checked = (label: string) => {
-  const g = group(label);
-  if (g.hasAttribute('data-slot'))
-    return (
-      g.querySelector('[data-selected="true"]')?.getAttribute('data-option') ??
-      undefined
-    );
-  return within(g)
-    .getAllByRole<HTMLInputElement>('radio')
-    .find((r) => r.checked)?.value;
-};
-/** 枠の中で値を選ぶ（部品の行はチップ、設定の欄はラジオ）。 */
+/** 枠の中で選んでいる値（選択中のチップの値）。 */
+const checked = (label: string) =>
+  group(label)
+    .querySelector('[data-selected="true"]')
+    ?.getAttribute('data-option') ?? undefined;
+/** 枠の中で値を選ぶ（チップを押す）。 */
 const choose = (label: string, value: string) => {
-  const g = group(label);
-  if (g.hasAttribute('data-slot')) {
-    const chip = g.querySelector<HTMLElement>(`[data-option="${value}"]`)!;
-    fireEvent.click(within(chip).getByRole('button', { pressed: false }));
-    return;
-  }
-  fireEvent.click(
-    within(g)
-      .getAllByRole<HTMLInputElement>('radio')
-      .find((r) => r.value === value)!,
-  );
+  const chip = group(label).querySelector<HTMLElement>(
+    `[data-option="${value}"]`,
+  )!;
+  fireEvent.click(within(chip).getByRole('button', { pressed: false }));
 };
 
 /** ① の選んでいる構成のカード。 */
@@ -376,7 +362,7 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    // 順: ① インフラの構成（部品のチップはカードの中。D-116） → ② フレームワーク → ③ 設定
+    // 順: ① インフラの構成（部品のチップはカードの中。D-116） → ② フレームワーク（描き方の設定は記事のページの行。D-119）
     const stackGroup = screen.getByRole('radiogroup', {
       name: '① インフラの構成',
     });
@@ -559,7 +545,8 @@ describe('見積モードの画面', () => {
     window.history.replaceState(
       null,
       '',
-      '/?mode=estimate&t=article&pv=1300000&fw=nextjs&s=vercel-supabase-pro',
+      // CDN の料金は従量（既定の Flat Rate CDN ではクレジットを超えない。D-120）
+      '/?mode=estimate&t=article&pv=1300000&fw=nextjs&s=vercel-supabase-pro&c.cdnPlan=on-demand',
     );
     await renderApp();
     expectEstimate();
@@ -587,5 +574,53 @@ describe('見積モードの画面', () => {
     expect(w('credit') + w('over')).toBeCloseTo(100, 5);
     expect(w('over')).toBeGreaterThan(w('credit'));
     expect(w('credit')).toBeCloseTo((limit / used) * 100, 1);
+  });
+  it('W-45 描き方の設定は ② のカードの記事のページの行、画像の形式・サイズ違いは ① の画像の行で選び、URL と月の費用が替わる（D-119）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-paid&r=300&c.isrCache=kv',
+    );
+    await renderApp();
+    expectEstimate();
+    const q = () => new URLSearchParams(window.location.search);
+    // ③ 設定の欄は無い（画像の行のある構成では空になる）
+    expect(screen.queryByRole('heading', { name: '③ 設定' })).toBeNull();
+    const article = document.querySelector<HTMLElement>(
+      'section[data-framework][aria-current="true"] section[data-route="article"]',
+    )!;
+    const isr = within(article).getByRole('group', { name: 'ISR の再検証' });
+    expect(isr.getAttribute('data-setting')).toBe('isr');
+    choose('ISR の再検証', '3600');
+    expect(q().get('r')).toBe('3600');
+    expect(checked('ISR の再検証')).toBe('3600');
+    // ISR を KV に置くとオンデマンドは届かないので灰色（理由は ⓘ）。R2 にすると選べる
+    expect(
+      isr.querySelector('[data-option="0"]')!.getAttribute('data-available'),
+    ).toBe('false');
+    choose('ISR のキャッシュ', 'r2');
+    expect(q().get('c.isrCache')).toBe('r2');
+    // オンデマンドにすると記事のページは更新で消すになる（同じ設定）
+    choose('ISR の再検証', '0');
+    expect(q().get('r')).toBe('0');
+    expect(
+      article
+        .querySelector('[data-alternative][data-selected="true"]')
+        ?.getAttribute('data-alternative'),
+    ).toBe('cached-purge');
+    // 画像の形式・サイズ違いは画像の部品の行の中
+    const images = document.querySelector<HTMLElement>(
+      'section[data-parts] [data-slot="images"]',
+    )!;
+    expect(
+      within(images).getByRole('group', { name: '画像の形式' }),
+    ).toBeDefined();
+    const before = card(/^月の費用/).textContent;
+    choose('画像の形式', 'avif');
+    expect(q().get('img')).toBe('avif');
+    choose('画像のサイズ違い', '1');
+    expect(q().get('v')).toBe('1');
+    expectEstimate();
+    expect(card(/^月の費用/).textContent).not.toBe(before);
   });
 });

@@ -111,6 +111,11 @@ export const MeterSchema = z.object({
   regional: z
     .array(z.object({ region: z.string(), pricing: PricingSchema }))
     .optional(),
+  /**
+   * 地域の単価をどの地域で引くか（D-120）。account（既定）は契約の地域（関数の地域）、viewer は読者（閲覧者）の地域
+   * （Vercel の CDN は「the region where requests originate」で単価が決まる）。
+   */
+  regionBy: z.enum(['account', 'viewer']).default('account'),
   interpretation: InterpretationSchema.optional(),
   premise: Premise.optional(),
   sourceIds: SourceIds,
@@ -164,6 +169,57 @@ export const CreditSchema = z.object({
   interpretation: InterpretationSchema.optional(),
   sourceIds: SourceIds,
 });
+
+/**
+ * 容量の段（D-120。Vercel の Flat Rate CDN）: 対象のメーターを従量の代わりに段の定額で払う。段は容量（次元ごとの上限）と月額の組で、
+ * 小さい順に並べる。どの段かは契約（Subscription.capacityTiers）が決める: 'fit' は今月の量が収まる最小の段（見積モードの
+ * 「この量なら何の段」）、段の id はその段（ゲームの前の月の量で決まった段）、'off' は使わない（従量）。段の容量を超えても
+ * その月は請求が増えない（翌月から上の段。決めるのは使う側）。最上段を超える量は従量（beyond: on-demand）。
+ * 段の月額は基本料の明細（kind: base-fee）に出し、クレジットは当てない。
+ */
+export const CapacityTierSetSchema = z.object({
+  id: Id,
+  /** 明細の行の名前の頭（「定額の CDN（Vercel: Flat Rate CDN）」）。 */
+  label: z.string().min(1),
+  /** 容量の次元（リクエスト・転送など）。meterIds の使用量の合計を段の容量と比べる。 */
+  dimensions: z
+    .array(
+      z.object({
+        id: Id,
+        label: z.string().min(1),
+        unit: z.enum(UNITS),
+        meterIds: z.array(Id).min(1),
+      }),
+    )
+    .min(1),
+  tiers: z
+    .array(
+      z.object({
+        id: Id,
+        label: z.string().min(1),
+        fee: NonNegative,
+        capacity: z.record(z.string(), NonNegative),
+      }),
+    )
+    .min(1),
+  /** 段の使用率の前提の 1 文（量の前提。容量を超えると翌月から上の段）。 */
+  premise: Premise,
+  /**
+   * 対象外になりうる使い方（量の境目が事業者の判断のもの）。media-transfer-share は、転送の次元のうち画像（メディア）の配信の
+   * 割合が above を超えると premise を前提として出す（費用の計算は段のまま）。
+   */
+  outOfScope: z
+    .object({
+      measure: z.literal('media-transfer-share'),
+      dimension: Id,
+      above: z.number().finite().gt(0).lt(1),
+      premise: Premise,
+    })
+    .optional(),
+  interpretation: InterpretationSchema.optional(),
+  sourceIds: SourceIds,
+});
+export type CapacityTierSet = z.infer<typeof CapacityTierSetSchema>;
 
 /** 制限が何を測るか（容量の判定で、資源シミュレーションのどの値と比べるか。prd/01 §5.4）。 */
 export const LIMIT_MEASURES = [
@@ -327,6 +383,8 @@ export const PlanSchema = z.object({
   baseFee: BaseFeeSchema.optional(),
   meters: z.array(MeterSchema),
   credits: z.array(CreditSchema).default([]),
+  /** 容量の段（D-120。Vercel の Flat Rate CDN）。 */
+  capacityTiers: z.array(CapacityTierSetSchema).default([]),
   /** 長期の利用の確約で受ける割引（D-97）。 */
   commitments: z.array(CommitmentSchema).default([]),
   limits: z.array(LimitSchema).default([]),
@@ -476,6 +534,56 @@ export const PriceBookSchema = z
             }
           }
         }
+      });
+      plan.capacityTiers.forEach((t, ti) => {
+        const path = ['plans', pi, 'capacityTiers', ti];
+        requireSources(t.sourceIds, [...path, 'sourceIds']);
+        const dims = new Set(t.dimensions.map((d) => d.id));
+        for (const d of t.dimensions) {
+          for (const id of d.meterIds) {
+            const m = plan.meters.find((x) => x.id === id);
+            if (!m)
+              ctx.addIssue({
+                code: 'custom',
+                path,
+                message: `容量の段の対象メーター ${id} がない`,
+              });
+            else if (m.unit !== d.unit)
+              ctx.addIssue({
+                code: 'custom',
+                path,
+                message: `容量の段の次元 ${d.id}（${d.unit}）とメーター ${id}（${m.unit}）の単位が違う`,
+              });
+          }
+        }
+        t.tiers.forEach((tier, i) => {
+          const keys = Object.keys(tier.capacity);
+          if (keys.length !== dims.size || keys.some((k) => !dims.has(k)))
+            ctx.addIssue({
+              code: 'custom',
+              path: [...path, 'tiers', i],
+              message: '段の容量は次元ごとに 1 つずつ',
+            });
+          const prev = t.tiers[i - 1];
+          if (
+            prev &&
+            (tier.fee < prev.fee ||
+              [...dims].some(
+                (d) => (tier.capacity[d] ?? 0) < (prev.capacity[d] ?? 0),
+              ))
+          )
+            ctx.addIssue({
+              code: 'custom',
+              path: [...path, 'tiers', i],
+              message: '段は月額・容量とも小さい順',
+            });
+        });
+        if (t.outOfScope && !dims.has(t.outOfScope.dimension))
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: `対象外の判定の次元 ${t.outOfScope.dimension} がない`,
+          });
       });
       plan.commitments.forEach((c, ci) => {
         const path = ['plans', pi, 'commitments', ci];

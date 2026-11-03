@@ -82,6 +82,7 @@ export function estimateMonth(
       state.routes,
       state.legacyRouteDefaults,
     ),
+    { tiers: state.capacityTiers },
   );
   const books = booksAt(state, month);
   const r = estimate({ workload, architecture, books });
@@ -117,6 +118,8 @@ export function estimateMonth(
                 state.routes,
                 state.legacyRouteDefaults,
               ),
+              // 乗り換え先の契約も前の月の量で決まった段（記録の無い最初の月だけ最小の段。D-120）
+              { tiers: state.capacityTiers },
             ),
           ),
           books,
@@ -124,6 +127,26 @@ export function estimateMonth(
       })()
     : null;
   return { ssrCpuMs, parts, architecture, books, r, target };
+}
+
+/**
+ * 来月払う容量の段（D-120）: 今月の量が収まる最小の段（最上段を超えたら従量 'off'）。従量を選んだ契約（applied も fitting も
+ * 見ない）は構成の側が 'off' にするので、ここでは量だけで決める。乗り換え中は乗り換え先の契約も足す（来月そちらへ移るとき用）。
+ */
+export function nextCapacityTiers(
+  r: MonthEstimate,
+  target: MonthEstimate | null,
+): NonNullable<GameState['capacityTiers']> {
+  const out: NonNullable<GameState['capacityTiers']> = {};
+  for (const c of [
+    ...(target?.bill.capacityTiers ?? []),
+    ...r.bill.capacityTiers,
+  ])
+    out[c.accountId] = {
+      ...out[c.accountId],
+      [c.set]: c.fitting ?? 'off',
+    };
+  return out;
 }
 
 export type Billed = {

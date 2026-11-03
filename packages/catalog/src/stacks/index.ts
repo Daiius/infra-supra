@@ -372,6 +372,23 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
       'fact:vercel:pro:active-cpu',
     ],
   },
+  // CDN の料金（D-120）。新しい Pro の既定は Flat Rate CDN（容量の段）。Hobby は込み分のまま（このスロットは出さない）
+  {
+    id: 'flat-rate',
+    slot: 'cdnPlan',
+    platform: 'vercel',
+    label: 'Flat Rate CDN（段の定額・既定）',
+    note: 'CDN のリクエスト・転送（Fast Data Transfer・Blob Data Transfer）を段の定額で払う。Pro に込みの段は月 100 万リクエスト・1 TB、上は $20・$100・$300。量が段を超えた月は請求が増えず、翌月から上の段になる。画像などのメディアが転送の大半だと対象外とされうる（Vercel の判断）',
+    premiseRefs: ['capacity:vercel:pro:flat-rate-cdn'],
+  },
+  {
+    id: 'on-demand',
+    slot: 'cdnPlan',
+    platform: 'vercel',
+    label: 'On-demand CDN（従量）',
+    note: 'CDN のリクエスト・転送を使った分だけ払う（東京の読者で 100 万リクエスト $2.60・転送 $0.16/GB）。月 $20 のクレジットが当たる',
+    premiseRefs: ['credit:vercel:pro:usage-credit'],
+  },
   // Next.js の静的書き出しでは next/image の既定のローダーが使えない（D-80）ので、閲覧のときの変換は選べない
   {
     id: 'default',
@@ -792,6 +809,7 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
     isrCache: 'default',
     images: 'default',
     db: 'supabase',
+    cdnPlan: 'flat-rate',
     dbBackup: 'default',
     email: 'default',
   },
@@ -1137,6 +1155,11 @@ function composeCloudflare(
   };
 }
 
+/** Vercel の関数の地域（新しいプロジェクトの既定。D-120）。 */
+export const VERCEL_FUNCTION_REGION = 'iad1';
+/** Vercel の CDN の単価を引く読者の地域（シナリオ・テンプレートは日本の読者。東京。D-120）。 */
+export const VERCEL_VIEWER_REGION = 'hnd1';
+
 /** Vercel の CDN の画像のヒット率（仮定。最適化した画像・Blob の画像で同じ値）。 */
 const IMAGE_CDN_HIT_RATE = 0.9;
 
@@ -1261,6 +1284,22 @@ function composeVercel(
       plan === 'hobby'
         ? 'Vercel Hobby + Supabase Free'
         : 'Vercel Pro + Supabase Pro',
+    // Pro の地域（D-120）: 関数は新しいプロジェクトの既定の iad1、CDN の単価は読者（日本）の地域の東京 hnd1。
+    // CDN の料金は既定の Flat Rate CDN（容量の段）、部品で On-demand（従量）を選ぶと段を使わない
+    ...(plan === 'pro'
+      ? {
+          accounts: [
+            {
+              id: 'vercel',
+              region: VERCEL_FUNCTION_REGION,
+              viewerRegion: VERCEL_VIEWER_REGION,
+              ...(choices.cdnPlan === 'on-demand'
+                ? { capacityTiers: { 'flat-rate-cdn': 'off' } }
+                : {}),
+            },
+          ],
+        }
+      : {}),
     nodes,
     routes: {
       'document-static': ['cdn'],

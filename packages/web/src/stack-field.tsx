@@ -24,7 +24,7 @@ import {
   type Scenario,
   type SetupSlot,
 } from 'game';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
 import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
@@ -53,6 +53,8 @@ import {
 type PartsEditor = {
   onChange: (v: SetupChoices) => void;
   note?: ReactNode;
+  /** スロットの行のチップの下に添えるもの（見積モードの画像の形式・サイズ違い。D-119）。 */
+  slotExtra?: Partial<Record<string, ReactNode>> | undefined;
 };
 
 /**
@@ -85,10 +87,8 @@ function EditableDiagram({
   // 箱の吹き出しで選んだスロット（描き直した後に、そのスロットの選択中のチップへ focus を移す。OCL-131BD89D）
   const [focusSlot, setFocusSlot] = useState<string | null>(null);
   const clearFocus = useCallback(() => setFocusSlot(null), []);
-  const bySlot = useMemo(
-    () =>
-      new Map<string, (typeof slots)[number]>(slots.map((x) => [x.slot, x])),
-    [slots],
+  const bySlot = new Map<string, (typeof slots)[number]>(
+    slots.map((x) => [x.slot, x]),
   );
   const parts: DiagramParts = {
     slotsOf: (id) => swap.get(id) ?? [],
@@ -123,6 +123,7 @@ function EditableDiagram({
           note={editor.note}
           focusSlot={focusSlot}
           onFocused={clearFocus}
+          slotExtra={editor.slotExtra}
         />
       }
     />
@@ -177,44 +178,32 @@ function StackCard({
     components?.db ? { db: components.db } : {},
   );
   // この構成で選べない描き方は既定に戻して描く（構成図の staticBuildOf と同じ。D-107 の補足）
-  const pages = useMemo(
-    () =>
-      pageWireframes(
-        scenario,
-        framework,
-        comments,
-        routes && validRouteOverrides(scenario, stackIndex, framework, routes),
-        // 表・計算と同じ実際の描き方（部品の「キャッシュしない」なども効く。OCL-CD192A98）
-        resolvedRouteStrategies(scenario, {
-          framework,
-          stackIndex,
-          components: components ?? {},
-          routes,
-        }),
-      ),
-    [scenario, stackIndex, framework, comments, routes, components],
+  const pages = pageWireframes(
+    scenario,
+    framework,
+    comments,
+    routes && validRouteOverrides(scenario, stackIndex, framework, routes),
+    // 表・計算と同じ実際の描き方（部品の「キャッシュしない」なども効く。OCL-CD192A98）
+    resolvedRouteStrategies(scenario, {
+      framework,
+      stackIndex,
+      components: components ?? {},
+      routes,
+    }),
   );
-  const arch = useMemo(
-    () =>
-      diagramArchitecture(
-        scenario,
-        stackIndex,
-        framework,
-        components ?? {},
-        routes,
-      ),
-    [scenario, stackIndex, framework, components, routes],
+  const arch = diagramArchitecture(
+    scenario,
+    stackIndex,
+    framework,
+    components ?? {},
+    routes,
   );
   // 差し替えられるスロットの箱と幽霊の箱（選んでいないカードも、選んだときと同じ形に。D-116 の補足）
   const slots = usePartSlots(scenario, stackIndex, framework, components ?? {});
-  const boxes = useMemo(
-    () =>
-      slotBoxes(
-        (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
-        diagramComponents(scenario, stackIndex, framework, components),
-        slots,
-      ),
-    [scenario, stackIndex, framework, components, routes, slots],
+  const boxes = slotBoxes(
+    (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
+    diagramComponents(scenario, stackIndex, framework, components),
+    slots,
   );
   const premises = [...slaOf(stackIndex), ...membersOf(stackIndex)];
   return (
@@ -364,6 +353,7 @@ export function StackField({
   effort = true,
   onComponentsChange,
   partsNote,
+  partsExtra,
   diagramCaption = defaultDiagramCaption,
 }: {
   scenario: Scenario;
@@ -394,17 +384,15 @@ export function StackField({
   onComponentsChange?: (components: SetupChoices) => void;
   /** 部品のチップの注記（画面ごと。D-115）。 */
   partsNote?: ReactNode;
+  /** 部品のスロットの行に添えるもの（見積モードの画像の形式・サイズ違いを画像の行に。D-119）。 */
+  partsExtra?: Partial<Record<string, ReactNode>> | undefined;
   /** 構成図の説明（選んでいるカードか）。 */
   diagramCaption?: (selected: boolean) => string;
 }) {
   // 隠した構成（D-100）だけを外す。今のフレームワークを載せられない構成も出す（D-113）
-  const groups = useMemo(
-    () =>
-      stackTabGroups(
-        STACKS.filter((s) => !s.hidden).map((s) => s.index),
-        framework,
-      ),
-    [framework],
+  const groups = stackTabGroups(
+    STACKS.filter((s) => !s.hidden).map((s) => s.index),
+    framework,
   );
   const indexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
   const fwLabel = FRAMEWORKS[framework].label;
@@ -472,7 +460,11 @@ export function StackField({
           caption={diagramCaption(selected)}
           parts={
             selected && onComponentsChange
-              ? { onChange: onComponentsChange, note: partsNote }
+              ? {
+                  onChange: onComponentsChange,
+                  note: partsNote,
+                  slotExtra: partsExtra,
+                }
               : undefined
           }
         />
