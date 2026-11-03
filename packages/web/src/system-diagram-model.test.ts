@@ -27,6 +27,7 @@ import {
   LAYOUT,
   LAYOUT_VERTICAL,
   shortLabel,
+  swappableSlots,
   VIEWER,
   type DiagramModel,
 } from './system-diagram-model.ts';
@@ -538,5 +539,71 @@ describe('diagramModel', () => {
     const through = lanesThrough(m, worker.id);
     expect(through).toContain('ssr');
     expect(through).toContain('api');
+  });
+});
+
+describe('swappableSlots（箱 → 差し替えられるスロット。D-116）', () => {
+  it('当たるのは選べるスロットだけで、箱は今の構成の箱。差し替えると、その箱は消えるか名前が変わる', () => {
+    for (const sc of Object.values(SCENARIOS))
+      for (const fw of frameworksOf(sc).allowed as FrameworkId[])
+        for (const s of STACKS) {
+          if (!stackOffered(s.index, fw)) continue;
+          const slots = setupSlots(sc, s.index, fw);
+          const build = (c: Partial<Record<string, string>>) =>
+            diagramArchitecture(sc, s.index, fw, c);
+          const base = build({});
+          const m = swappableSlots(build, {}, slots);
+          for (const [id, hit] of m) {
+            const node = base.nodes.find((n) => n.id === id);
+            expect(node, `${s.id} ${fw} ${id}`).toBeDefined();
+            for (const slot of hit) {
+              const x = slots.find((y) => y.slot === slot)!;
+              expect(x.fixed, `${s.id} ${fw} ${slot}`).toBe(false);
+              expect(
+                x.options.some((o) => {
+                  const alt = build({ [slot]: o.id }).nodes.find(
+                    (n) => n.id === id,
+                  );
+                  return alt?.label !== node!.label;
+                }),
+                `${s.id} ${fw} ${id} ${slot}`,
+              ).toBe(true);
+            }
+          }
+        }
+  });
+
+  it('Vercel × Next.js: Supabase の箱は DB のスロット・CDN の箱は当たらない・並びは slots の順', () => {
+    const sc = SCENARIOS['article-community']!;
+    const i = STACKS.findIndex((s) => s.id === 'vercel-supabase-pro');
+    const slots = setupSlots(sc, i, 'nextjs');
+    const build = (c: Partial<Record<string, string>>) =>
+      diagramArchitecture(sc, i, 'nextjs', c);
+    const base = build({});
+    const m = swappableSlots(build, {}, slots);
+    const db = base.nodes.find((n) => n.label.startsWith('Supabase'))!;
+    // Supabase の役割は DB だけなので、API の置き場（替えると消える）は出さない（D-116 の補足）
+    expect(m.get(db.id)).toEqual(['db']);
+    // 差し替えのきかない入口（CDN）には当たらない
+    const cdn = base.nodes.find((n) => n.label === 'Vercel CDN')!;
+    expect(m.get(cdn.id)).toBeUndefined();
+    // 並びは slots の順
+    const order = slots.map((x) => x.slot as string);
+    for (const hit of m.values())
+      expect(
+        [...hit].sort((a, b) => order.indexOf(a) - order.indexOf(b)),
+      ).toEqual(hit);
+  });
+
+  it('箱には役割に当たるスロットだけ: D1 の箱は DB だけ（「D1 に BLOB で置く」で名前が変わる画像は出さない）', () => {
+    for (const fw of ['nextjs', 'vite-spa'] as const) {
+      const sc = SCENARIOS['article-community']!;
+      const i = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
+      const slots = setupSlots(sc, i, fw);
+      const build = (c: Partial<Record<string, string>>) =>
+        diagramArchitecture(sc, i, fw, c);
+      const d1 = build({}).nodes.find((n) => n.label === 'D1')!;
+      expect(swappableSlots(build, {}, slots).get(d1.id), fw).toEqual(['db']);
+    }
   });
 });

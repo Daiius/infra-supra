@@ -33,14 +33,21 @@ export function Info({
   label = '説明',
   trigger,
   className = 'btn btn-ghost btn-xs btn-circle align-middle',
+  interactive = false,
 }: {
-  children: ReactNode;
+  /** 中身。関数なら閉じる関数を受ける（中の操作で閉じるとき。interactive と使う）。 */
+  children: ReactNode | ((close: () => void) => ReactNode);
   /** ボタンの読み上げ（既定「説明」）。 */
   label?: string;
   /** ボタンの中身（既定は ⓘ。構成図の縦の図では箱そのものを押して説明を出す）。 */
   trigger?: ReactNode;
   /** ボタンの class（既定は丸い小さいボタン）。 */
   className?: string;
+  /**
+   * 中に操作（部品の差し替えのボタン。D-116）を置く吹き出し。開くと吹き出しに focus を移し（ポータルの先は Tab の順で遠いので）、
+   * focus が吹き出しとボタンの外へ出たら閉じる。読み上げは説明（tooltip）でなく、名前つきの dialog（モーダルでない）。
+   */
+  interactive?: boolean;
 }) {
   const [pos, setPos] = useState<Pos | null>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -48,6 +55,10 @@ export function Info({
   const id = useId();
   const container = useContext(PortalContainer);
   const open = pos !== null;
+  const close = () => {
+    setPos(null);
+    button.current?.focus();
+  };
 
   const show = () => {
     const r = button.current!.getBoundingClientRect();
@@ -89,6 +100,7 @@ export function Info({
       else show();
     };
     const close = () => setPos(null);
+    if (interactive) panel.current?.focus();
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('pointerdown', onDown);
     window.addEventListener('scroll', follow, true);
@@ -99,7 +111,7 @@ export function Info({
       window.removeEventListener('scroll', follow, true);
       window.removeEventListener('resize', close);
     };
-  }, [open]);
+  }, [open, interactive]);
 
   return (
     <>
@@ -109,8 +121,9 @@ export function Info({
         className={className}
         aria-label={label}
         aria-expanded={open}
+        aria-haspopup={interactive ? 'dialog' : undefined}
         aria-controls={id}
-        aria-describedby={open ? id : undefined}
+        aria-describedby={open && !interactive ? id : undefined}
         onClick={(e) => {
           // label の中に置かれても、選択肢を切り替えない
           e.preventDefault();
@@ -147,8 +160,24 @@ export function Info({
           <div
             ref={panel}
             id={id}
-            role="tooltip"
-            className="rounded-box border border-base-300 bg-base-100 p-3 text-left text-sm font-normal shadow-lg"
+            role={interactive ? 'dialog' : 'tooltip'}
+            aria-label={interactive ? label : undefined}
+            tabIndex={interactive ? -1 : undefined}
+            onBlur={
+              interactive
+                ? (e) => {
+                    // focus が吹き出しの外（ボタンを除く）へ出たら閉じる（Tab で抜けたとき）
+                    const to = e.relatedTarget as Node | null;
+                    if (
+                      to &&
+                      !e.currentTarget.contains(to) &&
+                      !button.current?.contains(to)
+                    )
+                      setPos(null);
+                  }
+                : undefined
+            }
+            className="rounded-box border border-base-300 bg-base-100 p-3 text-left text-sm font-normal shadow-lg focus:outline-none"
             style={{
               position: 'fixed',
               top: pos.top,
@@ -161,7 +190,7 @@ export function Info({
               zIndex: 60,
             }}
           >
-            {children}
+            {typeof children === 'function' ? children(close) : children}
           </div>,
           container ?? document.body,
         )}

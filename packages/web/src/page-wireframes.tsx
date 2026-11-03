@@ -127,12 +127,12 @@ export type ScenarioPage = ReturnType<typeof scenarioWireframes>[number];
 const NEED_ORDER = Object.keys(REGION_NEEDS) as RegionNeed[];
 
 /**
- * 区画の要件の札（墨の色で塗る。D-113）。作られ方・描き方の色（success・info・warning・secondary・accent の枠と淡い塗り、
- * 選んだものの primary）と見分けられるよう、有彩色を使わず neutral で塗る。
+ * 区画の要件の札（白っぽい地・細い枠・灰色の字。D-113）。作られ方・描き方の色（success・info・warning・secondary・accent の枠と淡い塗り、
+ * 選んだものの primary）と見分けられるよう、有彩色を使わず base 系の色だけで描く。
  */
 function NeedTag({ need }: { need: RegionNeed }) {
   return (
-    <span className="inline-block rounded-full bg-neutral/85 px-1 text-[10px] leading-tight whitespace-nowrap text-neutral-content">
+    <span className="inline-block rounded-full border border-base-content/25 bg-base-100/90 px-1 text-[10px] leading-tight whitespace-nowrap text-base-content/75">
       {REGION_NEEDS[need].short}
     </span>
   );
