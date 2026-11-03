@@ -354,12 +354,17 @@ export const CROSS_PAIRS: readonly CrossPair[] = [
     provider: 'resend',
     basis:
       'Resend は API キーと確かめた送る元のドメインで、サーバーの SDK（resend.emails.send）から送る（公式の Node.js の手順）。' +
-      'Free は 1 日 100 通・月 3,000 通まで（超過の料金なし）、Pro は月 $20 で 5 万通まで込み、超えた分は 1,000 通 $0.90',
+      'Free は 1 日 100 通・月 3,000 通まで（超過の料金なし）、Pro は月 $20 で 5 万通・月 $35 で 10 万通まで込み、超えた分は 1,000 通 $0.90（D-110）',
     sources: [
-      'https://resend.com/docs/send-with-nodejs',
-      'https://resend.com/pricing',
-      'https://resend.com/docs/knowledge-base/account-quotas-and-limits',
-    ].map((url) => ({ url, retrievedAt: '2026-11-02' })),
+      {
+        url: 'https://resend.com/docs/send-with-nodejs',
+        retrievedAt: '2026-11-02',
+      },
+      ...[
+        'https://resend.com/pricing',
+        'https://resend.com/docs/knowledge-base/account-quotas-and-limits',
+      ].map((url) => ({ url, retrievedAt: '2026-11-03' })),
+    ],
   })),
   // Bunny（転送の安い従量の CDN。D-98・2026-11-02 に原文で確かめた）。画像を Bunny Storage に置き Bunny CDN で配る組と、
   // 土台の前に Bunny CDN の Pull Zone を置く組（前段の CDN）。オリジンから Bunny への転送は土台の外への転送として数える

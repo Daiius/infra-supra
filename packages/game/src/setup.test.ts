@@ -37,7 +37,13 @@ describe('setupSlots', () => {
     ).toEqual(['d1', 'kv', 'hyperdrive']);
     expect(
       slots.find((x) => x.slot === 'email')!.options.map((o) => o.id),
-    ).toEqual(['default', 'ses', 'resend-free', 'resend-pro']);
+    ).toEqual([
+      'default',
+      'ses',
+      'resend-free',
+      'resend-pro',
+      'resend-pro-100k',
+    ]);
     expect(slots.find((x) => x.slot === 'realtime')!.options).toHaveLength(1);
     expect(slots.find((x) => x.slot === 'files')!.options[0]).toMatchObject({
       id: 'r2',

@@ -1,8 +1,9 @@
 // Resend（アプリのメールの送信。Free・Pro）。2026-11-02 に公式ページから取得（D-95・prd/11 §20）。USD・税抜。
-// Pro は月 5 万通の段（$20）だけを持つ（同じ Pro の 10 万通 $35・Scale は基準プレイの規模で要らないので入れない）。
+// Pro は月 5 万通の段（$20）と 10 万通の段（$35）を別のプランとして持つ（段は前もって選ぶ。2026-11-03 に再確認して足した。D-110）。
+// Scale（$90 / 10 万通〜）は同じ通数で Pro より高く、基準プレイの規模で要らないので入れない。
 import type { PriceBookInput } from 'estimator';
 
-const R = '2026-11-02';
+const R = '2026-11-03';
 const src = (url: string) => ({ url, retrievedAt: R });
 
 const UPTIME = {
@@ -50,6 +51,16 @@ export const resend: PriceBookInput = {
       scope: 'account',
       premise:
         'Resend Pro（月 $20）は月 5 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い',
+      sourceIds: ['pricing', 'quotas'],
+    },
+    {
+      id: 'pro-100k-emails',
+      quantity: 100_000,
+      unit: 'count',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'Resend Pro の 10 万通の段（月 $35）は月 10 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い',
       sourceIds: ['pricing', 'quotas'],
     },
   ],
@@ -150,6 +161,70 @@ export const resend: PriceBookInput = {
           onExceed: 'block',
           premise:
             'Resend Pro の超過は込みの通数の 5 倍（25 万通）までで、そこで次の請求の期間まで送信が止まる',
+          sourceIds: ['quotas'],
+        },
+      ],
+    },
+    {
+      id: 'pro-100k',
+      service: 'email',
+      name: 'Pro（月 10 万通）',
+      baseFee: {
+        label: '基本料（Resend Pro 10 万通）',
+        amount: 35,
+        per: 'month',
+        scope: 'account',
+      },
+      sourceIds: ['pricing', 'quotas'],
+      uptimeSla: UPTIME,
+      members: MEMBERS,
+      notes: [
+        '超過は込みの通数の 5 倍（50 万通）までで、そこで次の請求の期間まで送信が止まる',
+        'ドメインは 10 まで・送ったメールの記録は 30 日',
+        '月 5 万通の段（$20）とは、月 約 6.7 万通（$20 + 超過 1.67 万通 × $0.90 / 1,000 = $35）を超えるとこちらが安い',
+      ],
+      meters: [
+        {
+          id: 'emails',
+          label: 'メールの送信（Resend: emails）',
+          resource: 'emails',
+          unit: 'count',
+          allowancePool: 'pro-100k-emails',
+          premise:
+            'Resend Pro の 10 万通の段は月 10 万通を超えた分が 1,000 通 $0.90（従量の超過を有効にした有料のプラン）',
+          interpretation: {
+            adopted:
+              '従量の超過（pay-as-you-go）を有効にして、超えた分を払う（有料のプランの選択肢）',
+            rejected: [
+              {
+                reading: '超えると送れなくなり、上のプランへの変更を求められる',
+                reason:
+                  '有料のプランは従量の超過を選べるので、止める側は運用の選択としては取らない',
+              },
+            ],
+          },
+          // 込みの 5 倍（50 万通）で送信が止まるので、込みの後の 40 万通まで課金し、その先は送れない（課金しない。上限は limits）
+          pricing: {
+            model: 'tiered',
+            per: 1_000,
+            tiers: [
+              { upTo: 400_000, unitPrice: 0.9 },
+              { upTo: null, unitPrice: 0 },
+            ],
+          },
+          sourceIds: ['pricing', 'quotas'],
+        },
+      ],
+      limits: [
+        {
+          id: 'monthly-cap',
+          measure: 'emails-per-month',
+          value: 500_000,
+          unit: 'count',
+          scope: 'month',
+          onExceed: 'block',
+          premise:
+            'Resend Pro の 10 万通の段の超過は込みの通数の 5 倍（50 万通）までで、そこで次の請求の期間まで送信が止まる',
           sourceIds: ['quotas'],
         },
       ],

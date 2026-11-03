@@ -1,7 +1,7 @@
 # 11. AWS の追加と、事業者をまたぐ構成（Netlify・Neon・Google Cloud・Bunny を含む）
 
 > 状態: **論点は決定済み（2026-11-01・D-50）・段 1（AWS・D-51）と段 2 の最初の組（Vercel・AWS + 画像だけ Cloudflare・D-52・§2.5・§3.6）を実装した**。
-> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）・Google Cloud（§16・D-88）・さくらの VPS の前の Cloudflare のプロキシ（§17・D-91）・実行ごとのログの費用（§18・D-92）・転送の安い従量の CDN の Bunny（§23・D-98）も実装した。§0〜§8 は草案のときの文で、今の形は §9 以降。
+> その後、Aurora 系（§11・D-51 の追記）・CloudFront の定額（§12・D-61。AX-07 の改め）・OpenNext（§13・D-63・D-66）・Netlify（§14・D-71）・DB だけ Neon（§15・D-77）・Google Cloud（§16・D-88）・さくらの VPS の前の Cloudflare のプロキシ（§17・D-91）・実行ごとのログの費用（§18・D-92）・転送の安い従量の CDN の Bunny（§23・D-98）も実装した。2026-11-03 の料金の再確認は §24（D-110）。§0〜§8 は草案のときの文で、今の形は §9 以降。
 > 未取得・未決の残りは [decisions](./_grilling/decisions.md) 末尾の「未決」に集めた。ユーザーの依頼「AWS の追加や部品の構成も追加したい。事業者をまたいだリソースの選定
 > （DB だけ Cloudflare だが Vercel + Next.js など）も入れてみたい」に対し、今までの積み重ね（prd/06・07 §11・10 §3、D-20・D-24・D-31・D-37・D-44〜D-48）の上に載せるならどうするかの案。
 > 料金・制限の数値は §1.5・§2.1 に**公式で確かめたものだけ**を出典 URL と取得日（2026-11-01）つきで書く。確かめていないことは「未確認」「推測」と書く。
@@ -590,7 +590,8 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 
 入れた形:
 
-- 部品のスロット「CDN の料金のプラン」（`cdnPlan`。AWS の Next.js・SPA の両方）: 従量（常時無料つき・既定）/ 定額 Free / Pro / Business。ゲーム中の切り替えは手間 1（設定の変更に近い。仮定）。Premium は入れていない（規模に合わない）。
+- 部品のスロット「CDN の料金のプラン」（`cdnPlan`。AWS の Next.js・SPA の両方）: 従量（常時無料つき・既定）/ 定額 Free / Pro / Business。ゲーム中の切り替えは手間 1（設定の変更に近い。仮定）。Premium は部品に出していない（規模に合わない）。
+  → 2026-11-03（D-110）: Premium（月 $1,000・5 億リクエスト・50 TB）を料金データ（`cloudfront-flat-premium`）にだけ足した（§24.2）。部品の選択肢・基準プレイは不変。
   AWS の構成の CloudFront（SPA の配信・画像の S3 + CloudFront・Amplify の前段）を **1 つの distribution にまとめる**とみなし、選んだプランで数える（基本料は 1 回）。
 - 料金データ: 定額のプランは基本料 + 込みの量のプール（リクエスト・転送）。超えたときの挙動に新しい種類 `adjust`（請求は増えず止まりもしないが、続くと性能が調整されうる）を足し、前提の効き方も `adjust` で出す。S3 の保存のクレジットは数えていない（費用は高めの側）。
 - 性能の調整（**ゲーム上の仮定**。`FLAT_PLAN_ADJUST`）: 込みの **3 倍を超えた月**、または **2 か月続けて超えた月**に、速さを 1 段下げる。収益の直接の減り（遅延の `throttle` のような損）は入れない。月の報告と速さの理由に「配信の性能が調整された」を出す。
@@ -1205,8 +1206,8 @@ AWS・Google Cloud では他の費用に比べて 1% 前後だが、**Workers Pa
 
 | サービス | 料金・上限 | 出典 |
 |---|---|---|
-| Amazon SES（東京） | 送信は受け取る人 1 人ごとに 1,000 通 $0.10。常時無料の通数は無い（無料の行はメールボックスのシミュレーターだけ）。添付は 1 GB $0.12。SMTP か API（HTTP）で、AWS の外のアプリからも送れる | Price List API（AmazonSES・版 2026-10-27）・[料金](https://aws.amazon.com/ses/pricing/)・[送信の設定](https://docs.aws.amazon.com/ses/latest/dg/send-email.html) |
-| Resend | Free: 月 3,000 通・1 日 100 通（UTC の暦日）、超過の料金なし。Pro: 月 $20 で 5 万通込み、超過 1,000 通 $0.90（込みの 5 倍で止まる）。SLA は Enterprise だけ | [料金](https://resend.com/pricing)・[上限](https://resend.com/docs/knowledge-base/account-quotas-and-limits)・[Node.js の送り方](https://resend.com/docs/send-with-nodejs) |
+| Amazon SES（東京） | （2026-11-03 にプランの体系を再確認 → §24.1）送信は受け取る人 1 人ごとに 1,000 通 $0.10。常時無料の通数は無い（無料の行はメールボックスのシミュレーターだけ）。添付は 1 GB $0.12。SMTP か API（HTTP）で、AWS の外のアプリからも送れる | Price List API（AmazonSES・版 2026-10-27）・[料金](https://aws.amazon.com/ses/pricing/)・[送信の設定](https://docs.aws.amazon.com/ses/latest/dg/send-email.html) |
+| Resend | Free: 月 3,000 通・1 日 100 通（UTC の暦日）、超過の料金なし。Pro: 月 $20 で 5 万通込み、超過 1,000 通 $0.90（込みの 5 倍で止まる）。（10 万通 $35 の段は §24.1）SLA は Enterprise だけ | [料金](https://resend.com/pricing)・[上限](https://resend.com/docs/knowledge-base/account-quotas-and-limits)・[Node.js の送り方](https://resend.com/docs/send-with-nodejs) |
 | Cloudflare Email Service（送信） | ベータ（「Email Sending Beta」）。Workers Paid で月 3,000 通込み、超過 1,000 通 $0.35。Workers Free では使えない（確かめた宛先だけ）。新しいアカウントは控えめな 1 日の上限から（数値の記載なし） | [料金](https://developers.cloudflare.com/email-service/platform/pricing/)（最終更新 2026-06-09）・[概要](https://developers.cloudflare.com/email-service/)・[上限](https://developers.cloudflare.com/email-service/platform/limits/)（2026-10-30） |
 | Supabase Auth の組み込みのメール | チームのメンバーにしか送れず（他は「Email address not authorized」）、1 時間 2 通。本番では自前の SMTP を設定するよう求めている | [auth-smtp](https://supabase.com/docs/guides/auth/auth-smtp) |
 
@@ -1258,7 +1259,8 @@ Resend に替えると: Free はどの構成も 1 日 100 通に当たって止�
 ### 20.4 残した点
 
 - メールの通数の仮定（利用者・書き込みあたり）の確かめ・出来事（大量の通知・送信の失敗・迷惑メールの扱いで届かない）。
-- Resend Pro の上の段（10 万通 $35）・Scale、SES の専用 IP・Virtual Deliverability Manager、添付ファイルの量。
+- ~~Resend Pro の上の段（10 万通 $35）~~ → D-110（§24.1。部品「Resend: Pro（10 万通）」）・Scale、SES の専用 IP・Virtual Deliverability Manager、添付ファイルの量。
+- SES のプランの体系（2026-07-21 から新しいアカウントは Essentials で始まる）→ D-110（§24.1。à la carte で数える）。
 - Cloudflare Email Service の 1 日の上限（数値の記載なし・数えていない）とベータが終わったときの料金の見直し。VPS から自前のメールサーバーで送る形。
 
 ## 21. ドメインと DNS（2026-11-02・D-96）
@@ -1488,3 +1490,55 @@ golden: 記事のシード 3 の「VPS・前段の CDN」が $1,730.88・won →
 - Bunny の前段で HTML もキャッシュする形（パージの API の確かめ・Next.js の s-maxage との関係）・VPS の API の応答のキャッシュ。
 - Vercel・Netlify・Google Cloud の前に Bunny を置く形（各事業者が前段のプロキシを勧めるかの確かめ）・OpenNext の CloudFront を Bunny に替える形。
 - Optimizer の月額を最低額に含めること（今は最大 $1 高め）・日本の消費税・往復の遅延。
+
+## 24. 料金の再確認（2026-11-03・D-110）
+
+> 公式の料金ページと catalog の値を突き合わせ直し、差があったものを直した。数値は 2026-11-03 に公式のページ（と AWS Price List API）で確かめたものだけを書く。
+> 合っていた項目（Cloudflare・Supabase・Neon・Google Cloud・Bunny・さくらの VPS・AWS の他のサービス）は値を変えていない。
+
+### 24.1 メールの送信（§20 の続き）
+
+| サービス | 確かめた事実（2026-11-03 取得） | 出典 |
+|---|---|---|
+| Amazon SES のプラン | Essentials（1,000 通 $0.16。1,000 万通を超えた分は $0.14・1 億通を超えた分は $0.11。月額なし）・Pro（$0.22 + アカウント・リージョンごとに月 $105）・Enterprise（$0.23 + 月 $500）と、à la carte（1,000 通 $0.10・月額なし）。「New SES accounts and account x region combinations with no metered SES activity since June 1, 2025 will start on the Essentials plan beginning July 21, 2026. You can upgrade or switch to à-la-carte pricing at any time.」「If you did not explicitly choose a plan and were defaulted to the Essentials plan, your first downgrade or cancellation to à la carte pricing also takes effect immediately.」東京の Price List API にも `APN1-Essentials-Outbound-Email` $0.00016 と従来の `APN1-Recipients` $0.0001 の両方がある。無料の分は新しい AWS のお客の Free Tier のクレジット（最大 $200）だけ | [SES の料金](https://aws.amazon.com/ses/pricing/)・Price List API（AmazonSES・ap-northeast-1・版 2026-10-27） |
+| Resend Pro | 「$20/mo」50,000 通・「$35/mo」100,000 通、超過はどちらも 1,000 通 $0.90。超過の上限は「a hard limit of 5x your monthly quota」（段ごとの込みの 5 倍）で、そこで「sending will be paused until the next billing cycle」。Scale は $90 / 10 万通から（同じ通数で Pro より高い） | [料金](https://resend.com/pricing)・[上限](https://resend.com/docs/knowledge-base/account-quotas-and-limits) |
+
+決めたこと:
+
+- **SES は à la carte（1,000 通 $0.10）で数える（値は不変）。** 新しいアカウントは既定で Essentials（$0.16）になるが、料金ページはいつでも à la carte に替えられると書き、既定で Essentials になったアカウントの最初の切り替えはすぐ効く。
+  通知のメールは Essentials の込みの機能（到達率の分析・Mail Manager）を使わないので、替えない理由が無い。
+  再確認の報告の「従来の $0.10 は古いアカウントだけに残る」という読みは原文と違った（à la carte は誰でも選べる）。Essentials で数える読みは退けた読みとしてメーターの `interpretation` に残し、部品の注記に「à la carte に切り替えておく」を足した。
+- **Resend Pro の 10 万通の段を、別のプラン `pro-100k`（基本料 $35・込み 10 万通・超過 $0.90・込みの 5 倍の 50 万通で止まる）と部品「Resend: Pro（10 万通）で送る」（`resend-pro-100k`）として足した。**
+  段は前もって選ぶもので、通数で自動に替わらないので、Free・Pro（5 万通）と並ぶ選択肢にした（CloudFront の定額の段・さくらの VPS の 2GB / 4GB と同じ形）。月 約 6.7 万通（$20 + 1.67 万通 × $0.90 / 1,000 = $35）を超えると 10 万通の段が安い。
+  基準プレイの規模（受託で最大 月 約 3 万通）では 5 万通の段のほうが安く、この部品は選ばれない。
+
+### 24.2 CloudFront の定額 Premium（§12 の続き）
+
+| 項目 | 確かめた事実（2026-11-03 取得） | 出典 |
+|---|---|---|
+| Premium | 「$1,000/month No overage charges」。込みは 500M リクエスト・50 TB（「configurable up to 6B」「up to 600TB for a new flat-rate price」）。段は 50 TB・500M $1,000 / 75 TB・750M $1,450 / 125 TB・1.25B $2,250 / 200 TB・2B $3,500 / 350 TB・3.5B $6,000 / 600 TB・6B $10,000。S3 の保存のクレジット 5 TB。段を選べるのは Premium だけ | [CloudFront の料金](https://aws.amazon.com/cloudfront/pricing/)・[定額のプランの文書](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html) |
+| Custom | 「Connect with a specialist for custom pricing」（6B・600 TB を超えるとき）。公開の価格は無い | 同上 |
+
+- 料金データに `cloudfront-flat-premium`（基本料 $1,000・プール `flat-premium-requests` 5 億・`flat-premium-transfer` 50 TB。超えたときは他の段と同じ `adjust`）を足した。既定の段（$1,000）だけを持ち、上の段・Custom は持たない。
+- 部品「CDN の料金のプラン」には出していない（基準プレイの規模の 100 倍以上の量向けで、選ぶ理由が無い。値の網羅のためのデータ）。
+
+### 24.3 Vercel の記録（モデルは変えない。ユーザーの判断待ち）
+
+- **Flat Rate CDN（2026-09-14 更新の文書を 2026-11-03 に取得）**: 「Flat Rate CDN is available on Pro plans」「Pro includes the lowest tier at no additional cost」。段は Pro に込み（1M リクエスト・1 TB）/ $20（10M・50 TB）/ $100（50M・50 TB）/ $300（150M・50 TB）。
+  使うには Billing で「turn on the toggle」して段を選ぶ（既定で有効とは書かれていない）。超えた月の次の請求の期間に上の段に移り、最上の段を超えると On-demand に戻る。
+  CDN Requests・Fast Data Transfer・Blob Data Transfer などを段が覆う。対象外に「Large-scale delivery of media or files where such delivery constitutes a majority of bandwidth usage」があり、その場合は Flex CDN への移動などがありうる。
+  ([Flat Rate CDN](https://vercel.com/docs/pricing/flat-rate-cdn))
+  - 今のモデル（D-48）は「申し込み制なので扱わず、On-demand で $20 のクレジットから数える」。公式の文と矛盾はしないが、**Pro はトグルを入れるだけで 1M・1 TB を追加の料金なしで覆える**ので、それを使う運用なら Vercel Pro の CDN の費用は下がる。
+    一方で記事コミュニティの Vercel Pro は画像の配信が転送の大半で、対象外の条件に当たりうる。入れるか（部品にするか・既定にするか）は**ユーザーの判断**に残す。
+- **Hobby の ISR の込みの分（reads 100 万・writes 20 万）**: 再確認の報告では「確かめられず」だったが、catalog の出典の [料金ページ](https://vercel.com/pricing) の生の HTML（2026-11-03 取得）に「ISR Reads」「1M / month included」・「ISR Writes」「200k / month included」（Hobby の列）がある。
+  [ISR の料金の文書](https://vercel.com/docs/incremental-static-regeneration/limits-and-pricing)（2026-08-11 更新）・Hobby の文書には込みの分の記載が無い（地域の単価だけ）。値は変えない。
+  D-48 で Pro の CDN の込み分は料金ページの古い表記として退けたが、Hobby の ISR は文書側に打ち消す記述が無いので料金ページの値のまま使う。
+
+### 24.4 基準プレイ（何もしない・既定の部品・シード 1〜20・12 か月）
+
+既定の部品の費用は変わらない（SES は $0.10 のまま、Resend の 10 万通の段・CloudFront の Premium は既定でも基準プレイの部品でもない）。
+2 シナリオ × 4 フレームワーク × 選べる構成（62 行）の達成数・12 か月の費用の中央値・終了時の所持金の中央値は、前後で 1 行も変わらなかった。
+目標の根拠の **CF Paid × Next.js は記事 20/20・$225.61・所持金 $2,109.98、受託 20/20・$172.01・$1,931.57**（前後とも）。目標の額は変えていない。
+
+参考（入れていない）: SES を Essentials（$0.16）で数えると、SES を既定にする構成の費用が 12 か月で記事 $5〜$10・受託 $15〜$20 上がり、達成は記事 × VPS 2GB × Next.js 8 → 7、受託 × VPS 4GB（Next.js・Astro・静的書き出し 3 → 0、SPA 6 → 4）が変わる。CF Paid は Email Service なので変わらない。
+
