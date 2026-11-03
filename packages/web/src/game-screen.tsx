@@ -1,5 +1,5 @@
 // ゲームモードの運営中の画面（月の報告・行動・推移・結果）。App から分けて読む（始める画面の初回の読み込みに含めない）。
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   activeCommitments,
   commitmentOffers,
@@ -252,7 +252,8 @@ function VictoryCelebration({
   auto: boolean;
 }) {
   const reduced = useReducedMotion();
-  const engine = useMemo(() => new FireworksEngine(), []);
+  // 書き換えながら使い、effect の依存にもなるので、参照が変わらない useState で持つ（useMemo は捨てられうる）
+  const [engine] = useState(() => new FireworksEngine());
   const [open, setOpen] = useState(true);
   const [afterglow, setAfterglow] = useState(false);
   const ref = useRef<HTMLDialogElement>(null);
@@ -265,13 +266,11 @@ function VictoryCelebration({
     d.showModal();
   }, [auto]);
   // 合否の 3 つ（所持金・満足度の平均・止まった月）だけを、結果の画面と同じメーターで出す
-  const meters = useMemo(() => {
-    const cfPaid = comparisonRows(state).find((r) => r.id === 'cf-paid')!;
-    return resultMeters(state, goalChecks(state), axesOf(state), {
-      label: cfPaid.name,
-      axes: cfPaid.axes,
-    }).filter((m) => m.status !== 'reference');
-  }, [state]);
+  const cfPaid = comparisonRows(state).find((r) => r.id === 'cf-paid')!;
+  const meters = resultMeters(state, goalChecks(state), axesOf(state), {
+    label: cfPaid.name,
+    axes: cfPaid.axes,
+  }).filter((m) => m.status !== 'reference');
   return (
     <>
       {open && (
@@ -1810,7 +1809,7 @@ function Result({
   const checks = goalChecks(state);
   const axes = axesOf(state);
   // 行の名前（基準プレイは短い名前）は game の comparisonRows で決める（単体テストあり）
-  const table = useMemo(() => comparisonRows(state), [state]);
+  const table = comparisonRows(state);
   const cfPaid = table.find((r) => r.id === 'cf-paid')!;
   /** 短い名前と説明が違う基準プレイだけを注記に出す。 */
   const abbreviated = offeredBaselines(scenarioOf(state)).filter(

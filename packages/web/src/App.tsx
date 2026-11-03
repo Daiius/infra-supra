@@ -1,5 +1,5 @@
 // ゲームモードの画面（Phase 2〜4 の前倒しの試作）。ロジックは game パッケージ、ここは表示と操作だけ。
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   setupCommitments,
   type CommitmentPaymentId,
@@ -212,10 +212,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [parts, setParts] = useState<SetupChoices>({});
   // ページごとの描き方（D-107）。フレームワークを替えると既定に戻す。構成で使えないものは validRouteOverrides で外す
   const [routeChoice, setRouteChoice] = useState<RouteOverrides>({});
-  const routes = useMemo(
-    () => validRouteOverrides(scenario, stack, framework, routeChoice),
-    [scenario, stack, framework, routeChoice],
-  );
+  const routes = validRouteOverrides(scenario, stack, framework, routeChoice);
   // 構成を替えて、載せられるフレームワークに戻したときの知らせ（D-113）
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   // インフラの構成を先に選ぶ（D-113）。構成は替えず、載せられないフレームワーク（Astro × AWS など。D-68）を選んでいたら、
