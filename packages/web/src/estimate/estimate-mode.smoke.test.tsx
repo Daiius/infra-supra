@@ -554,4 +554,38 @@ describe('見積モードの画面', () => {
       'Vercel Pro + AWS DynamoDB の構成',
     );
   });
+
+  it('W-40 Vercel Pro の $20 のクレジットは「超過」に数えず、消費として見せる（超えた分は従量で請求）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&pv=1300000&fw=nextjs&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const heading = screen.getByRole('heading', {
+      level: 3,
+      name: /^前提（無料枠・込み分・上限）/,
+    });
+    // クレジットの消費の行は出る。「超過」の赤い印にはならず、見出しの超過の件数にも入らない
+    const use = screen.getByText(
+      /^\$20\.00 のクレジットのうち \$[\d.,]+ 分を使用（超えた分 \$[\d.,]+ は従量で請求）$/,
+    );
+    const row = use.closest('li')!;
+    expect(within(row).getByText('クレジット消費')).toBeDefined();
+    expect(within(row).queryByText('超過')).toBeNull();
+    expect(row.querySelector('.badge-error, .progress-error')).toBeNull();
+    expect(heading.textContent).not.toMatch(/超過 [1-9]\d* 件/);
+    // バー全体が使った額: クレジットの分（青）と超えた分（淡い色）の幅が比のとおり
+    const w = (part: string) =>
+      parseFloat(
+        row.querySelector<HTMLElement>(`[data-part="${part}"]`)!.style.width,
+      );
+    const [limit, used] = [...use.textContent!.matchAll(/\$([\d.,]+)/g)].map(
+      (m) => parseFloat(m[1]!.replace(/,/g, '')),
+    ) as [number, number];
+    expect(w('credit') + w('over')).toBeCloseTo(100, 5);
+    expect(w('over')).toBeGreaterThan(w('credit'));
+    expect(w('credit')).toBeCloseTo((limit / used) * 100, 1);
+  });
 });
