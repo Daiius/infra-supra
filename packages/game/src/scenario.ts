@@ -12,7 +12,7 @@ import type {
 import type { WorkloadInput } from 'estimator';
 import { draws } from './random.ts';
 import type { Element } from './rules.ts';
-import type { Action, GameState } from './index.ts';
+import type { Action, GameState } from './state.ts';
 
 /** ためていく量（prd/07 §10.4）。 */
 export type Stock = {

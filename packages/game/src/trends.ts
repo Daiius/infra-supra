@@ -1,7 +1,7 @@
 // 推移と見込み（prd/07 §5・GD-1）。毎月記録した前提の使用率から、表示用の推移と「このペースだと N か月後に超える」を出す。
 // 見込みはプレイヤーが見ている推移だけで計算し、ゲームの内部（成長率・台本）は覗かない（G-05）。
 // 表示用でゲームの状態には入らないが、計算は四則演算だけにしておく（prd/02 §3）。
-import type { GameState } from './index.ts';
+import type { GameState } from './state.ts';
 
 /** 1 か月分の前提の記録（量の境目があるものだけ）。 */
 export type PremiseSnapshot = {

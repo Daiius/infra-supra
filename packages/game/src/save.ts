@@ -1,18 +1,13 @@
 // 遊んでいる途中の保存（D-26・prd/02 §5）。GameState そのものは保存せず、始めたときの選択と月ごとの行動の列だけを持つ。
 // ゲームは決定論なので、同じ選択と行動を同じ順に再生すれば同じ状態に戻る。ここは純粋関数だけ（保存・読み込みの I/O は web）。
-import {
-  applyActions,
-  articleFamily,
-  newGame,
-  partsOfComments,
-  playMonth,
-  publicRouteId,
-  SCENARIOS,
-  type Action,
-  type CommitmentPaymentId,
-  type GameState,
-  type RouteParts,
-} from './index.ts';
+import { applyActions } from './actions/apply.ts';
+import type { CommitmentPaymentId } from './commitments.ts';
+import { SCENARIOS } from './core.ts';
+import { playMonth } from './month/play.ts';
+import { partsOfComments } from './routes/comments.ts';
+import { articleFamily, publicRouteId } from './routes/strategy.ts';
+import { newGame } from './setup/new-game.ts';
+import type { Action, GameState, RouteParts } from './state.ts';
 import {
   ROUTE_STRATEGIES,
   type Choices,

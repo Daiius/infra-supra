@@ -6,7 +6,7 @@ import {
   ARTICLE_COMMUNITY_SPA,
   articleCommunity,
 } from 'catalog';
-import type { Action, GameState } from '../index.ts';
+import type { Action, GameState } from '../state.ts';
 import type { EventDef, Scenario } from '../scenario.ts';
 import { ARTICLE_COMMUNITY_TEXT } from './article-community-text.ts';
 
