@@ -99,13 +99,16 @@ export function SetupComponents({
                         onChange={() => onChange({ ...value, [x.slot]: o.id })}
                       />
                       <span className="block min-w-0">
-                        <span className="flex items-center gap-1 text-sm">
+                        {/* ロゴ・名前・末尾 + ⓘ を 1 つの文の行に流す（flex にすると別の列に分かれて細切れに折れる） */}
+                        <span className="block text-sm">
                           {/* 構成と別の事業者の部品だけロゴを添える（D-102） */}
                           {o.platform !== STACKS[stackIndex]!.provider && (
-                            <BrandMark
-                              brand={COMPONENT_BRAND[o.platform]}
-                              size={14}
-                            />
+                            <span className="mr-1 inline-block align-middle leading-none">
+                              <BrandMark
+                                brand={COMPONENT_BRAND[o.platform]}
+                                size={14}
+                              />
+                            </span>
                           )}
                           <NameWithInfo
                             name={o.label}

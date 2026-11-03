@@ -44,15 +44,16 @@ export function NameWithInfo({
 }) {
   if (!info) return <>{name}</>;
   const [head, last] = splitForInfo(name);
+  // 1 つのインラインの箱にまとめる（flex の行の中でも、頭と末尾 + ⓘ が別の列に分かれず、普通の文の行として折れる）
   return (
-    <>
+    <span className="min-w-0">
       {head}
       <span className="whitespace-nowrap">
         {last}
         {' '}
         {info}
       </span>
-    </>
+    </span>
   );
 }
 
