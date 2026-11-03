@@ -1340,8 +1340,8 @@
   - Supabase の DB の部品（事業者 `supabase`）と、さくらの VPS の DB のスロット（既定は同居の MySQL・id `mysql`）を足した。前の保存・共有の URL は既定の MySQL で読む（`SAVE_VERSION` 4 のまま）。土台の組み立ては仮の DB を置き、`applyCrossDb` が差し替える（さくらは VPS から MySQL を外し、DB を読む経路の VPS の後に DB を置く）。
   - 転送: AWS の DB の応答は `aws-db-out`（インターネット・月 100 GB の無料を共有）、Neon・Supabase は DB のノードの転送のメーター（Supabase のプール経由は「Shared Pooler Egress」で同じ枠・同じ単価と読んだ）。土台から DB へ送る問い合わせの転送は数えない（既存の Netlify × Neon とそろえた）。
   - 中継が要る組（VPC の中の DB・IP を絞る形・Cloud SQL の私設 IP）は、今の web に規則の `blocked` を灰色 + 理由で出す画面が無いので、選択肢から外した。Cloud SQL・Firestore・Aurora DSQL を他の土台から・Vercel × 公開の RDS は入れていない。CP-11（k 個目のアカウントの手間）は既存の組の手間を変えるので入れていない。
-  - 既存の組は不変（main の dump のキーを今のコードで計算し直し、catalog 550,407 件・game 63,792 件が一致。game はさくらの部品に既定の `db: 'mysql'` が入ったことを除く）。
-  - **新しい最安の床（ユーザーの判断待ち）**: Google Cloud × AWS DynamoDB が、受託 × Next.js・Astro で 20/20 $12.4（今の最安は Cloudflare Paid の $14.4）、記事 × Astro（画像 `cf-resize`）で 20/20 $15.1（今の最安は Google Cloud × Firestore の $16.8）。目標の根拠の Cloudflare Paid × Next.js の達成は変わらない。目標の額・手間は動かしていない。詳細は prd/14 §3.15。
+  - 既存の組は不変（main の dump のキーを今のコードで計算し直し、catalog 550,407 件・game 63,792 件が一致。game はさくらの部品に既定の `db: 'mysql'` が入ったことを除く。D-121 のマージ後にも同じ件数で一致）。
+  - **新しい最安の床（ユーザーの判断待ち）**: Google Cloud × AWS DynamoDB が、受託 × Next.js・Astro で 20/20 $12.4（今の最安は Cloudflare Paid の $14.4）、記事 × Astro（画像 `cf-resize`）で 20/20 $15.0（今の最安は Google Cloud × Firestore の $16.3。D-121 の後）。目標の根拠の Cloudflare Paid × Next.js の達成は変わらない。目標の額・手間は動かしていない。詳細は prd/14 §3.15。
   - **総当たりを pairwise に（CP-14）**: `combo-sweep.test.ts` の部品を直積（段 2d で 51,704 組）から pairwise（どの 2 つのスロットの選択肢の組も少なくとも 1 つに出る・2,628 組・シードはグループの名前で決定論）にした。グループ（シナリオ × フレームワーク × 構成）と構成の既定の部品は必ず回す。作れない組には直接の理由があることをテストで確かめる。ローカルの `pnpm test:sweep` は 4 分 38 秒（main の直積 31,896 組）→ 約 27 秒。詳細は prd/14 §3.16。
 
 ### D-115 始める画面の選択の欄（① 構成 ② フレームワークと描き方 ③ 部品 ④ 設定）を見積モードと共用にする（確定・2026-11-03）

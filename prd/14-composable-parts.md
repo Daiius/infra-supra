@@ -500,11 +500,11 @@ type ConnectionRule = {
   VPC の中の RDS・Aurora（Lambda・Cloud Run を VPC に入れる形は NAT・Cloud NAT が要り、東京の単価が未取得）・IP を絞る形（固定の IP。Vercel の Static IPs など）・Cloud Run → Cloud SQL の私設 IP・Lambda の RDS Proxy。
   ほかに入れていないもの: Cloud SQL・Firestore を他の土台から（Cloud SQL の connector・Auth Proxy と Firestore のサービスアカウントの手順を確かめていない）・Aurora DSQL を他の土台から・Vercel × 公開の RDS（Vercel の Marketplace に無い。規則は同じ形で足せる）・Supabase を Vercel・Netlify・Cloudflare の部品にすること（既定の DB・Hyperdrive の組がある）。
 - **手間（CP-11）**: §3.10 の段の表で CP-11 は特定の段に割り当てられておらず、この段も「新しい組だけ・既存は不変」なので入れていない（入れると既存の組の手間が変わる。段 2 と同じ判断）。アカウントは今の数え方（D-52）で、Neon・Supabase は 1 つ増え、AWS の DB は既定のメールの送信（SES）の AWS と同じなので増えない。
-- **不変の確かめ**: main（段 2c のマージ後・931b41a）の dump のキーを、そのまま今のコードで計算し直して突き合わせた（scratchpad の一時的なテスト。コミットしない）。
+- **不変の確かめ**: main（段 2c のマージ後・931b41a。D-121 のマージ後の cd8992c でも取り直して同じ件数が一致）の dump のキーを、そのまま今のコードで計算し直して突き合わせた（scratchpad の一時的なテスト。コミットしない）。
   catalog: 全構成（隠した構成を含む）× フレームワーク × 部品（直積と無作為の組）× 差し替えの途中の構成と Workload の **550,407 件がすべて一致**。
   game: 始める画面の 1 か月目の見込みと最後まで回した状態の **63,792 件**を、さくらの VPS の部品に既定の `db: 'mysql'` が入ったこと（と部品の要約の文の「DB: VPS の MySQL（同居）」）を除いて比べ、すべて一致。違いは、DB の選択肢の一覧（とその組み合わせ）が増えたことだけ。`route-strategies-equivalence.test.ts` の記録は、足した部品を除いて取り直さずに通る。
-- **費用の例**（`public-db.test.ts` の規則ごとの golden。記事コミュニティ・月 30 万 PV・既定の部品の 1 か月目の見積・税抜）: さくらの VPS 2GB × Neon $20.74 + ¥1,958・さくらの VPS 2GB × RDS $22.30 + ¥1,958・AWS（Amplify）× Supabase $37.89・Google Cloud × DynamoDB $25.84。
-- **基準プレイ**（何もしない・シード 1〜20。12 か月の費用の平均 / 月。目標の額は動かさない・D-64）。既定の部品（記事は画像を `cf-resize` にした列も）で、DB だけ替えた:
+- **費用の例**（`public-db.test.ts` の規則ごとの golden。記事コミュニティ・月 30 万 PV・既定の部品の 1 か月目の見積・税抜）: さくらの VPS 2GB × Neon $20.74 + ¥1,958・さくらの VPS 2GB × RDS $22.30 + ¥1,958・AWS（Amplify）× Supabase $37.72・Google Cloud × DynamoDB $25.98（D-121 の画像の仮定の後）。
+- **基準プレイ**（何もしない・シード 1〜20。12 か月の費用の平均 / 月。目標の額は動かさない・D-64。D-121 のマージ後に取り直した）。既定の部品（記事は画像を `cf-resize` にした列も）で、DB だけ替えた:
 
   | シナリオ × 構成 × フレームワーク | 土台の既定の DB | Neon | Supabase | DynamoDB | Aurora（0.5 / 0 ACU） | RDS |
   |---|---|---|---|---|---|---|
@@ -514,16 +514,16 @@ type ConnectionRule = {
   | 受託 × Amplify × SPA・静的書き出し | DynamoDB 20/20 $7.9 | 20/20 $21.1 | 2/20 $31.7 | — | 0/20 | 16/20 $27.7 |
   | 受託 × Amplify × Next.js | DynamoDB 20/20 $18.8 | 0/20 $32.0 | 0/20 $42.5 | — | 0/20 | 0/20 $38.5 |
   | 受託 × さくらの VPS 2GB（どのフレームワークも） | MySQL 0/20 $16.2 | 0/20 $30.6 | 0/20 $41.2 | 0〜1/20 $17.3 | 0/20 | 0/20 $37.2 |
-  | 記事 × Google Cloud × Astro + `cf-resize` | Firestore 20/20 $16.8 | 20/20 $34.2 | 20/20 $39.7 | **20/20 $15.1** | 0/20 | 20/20 $35.7 |
-  | 記事 × Google Cloud × Next.js + `cf-resize` | Firestore 20/20 $28.0 | 20/20 $45.4 | 9/20 $50.9 | 20/20 $26.4 | 0/20 | 19/20 $47.0 |
+  | 記事 × Google Cloud × Astro + `cf-resize` | Firestore 20/20 $16.3 | 20/20 $34.1 | 20/20 $39.6 | **20/20 $15.0** | 0/20 | 20/20 $35.6 |
+  | 記事 × Google Cloud × Next.js + `cf-resize` | Firestore 20/20 $27.5 | 20/20 $45.3 | 9/20 $50.8 | 20/20 $26.2 | 0/20 | 19/20 $46.8 |
   | 記事 × Amplify × SPA + `cf-resize` | DynamoDB 20/20 $5.0 | 20/20 $24.1 | 12/20 $29.6 | — | 0/20 | 20/20 $25.6 |
   | 記事 × さくらの VPS 2GB × Astro | MySQL 17/20 $14.9 | 16/20 $34.4 | 14/20 $39.9 | 17/20 $15.2 | 0/20 | 16/20 $35.9 |
   | 記事 × さくらの VPS 2GB × Next.js | MySQL 8/20 $14.7 | 0/20 $34.2 | 0/20 $39.7 | 8/20 $15.1 | 0/20 | 0/20 $35.7 |
 
-  さくらの VPS 4GB は 2GB より届く数が少ないか同じ。Cloudflare Paid（目標の根拠の構成）は変わらない（記事 × Next.js 20/20 $18.3・受託 × Next.js 20/20 $14.4。不変の確かめのとおり）。
+  さくらの VPS 4GB は 2GB より届く数が少ないか同じ。Cloudflare Paid（目標の根拠の構成）は変わらない（記事 × Next.js 20/20 $18.2・受託 × Next.js 20/20 $14.4。不変の確かめのとおり）。
   **新しい最安の床ができた（要判断）**: Google Cloud × AWS DynamoDB は Google Cloud の Firestore より月 $1.6〜3.9 安く、
-  受託 × Next.js・Astro では **$12.4 が今の最安（Cloudflare Paid の $14.4）より下**、記事 × Astro（画像 `cf-resize`）では **$15.1 が今の最安（Google Cloud × Firestore の $16.8）より下**になる（どれも全シードで届く）。
-  受託 × SPA・静的書き出しの床（Amplify × DynamoDB $7.9）と記事 × Next.js の床（Cloudflare Paid $18.3）は下がらない。AWS のアカウントは既定のメールの送信（SES）で既にあるので、手間も増えない。
+  受託 × Next.js・Astro では **$12.4 が今の最安（Cloudflare Paid の $14.4）より下**、記事 × Astro（画像 `cf-resize`）では **$15.0 が今の最安（Google Cloud × Firestore の $16.3）より下**になる（どれも全シードで届く）。
+  受託 × SPA・静的書き出しの床（Amplify × DynamoDB $7.9）と記事 × Next.js の床（Cloudflare Paid $18.2）は下がらない。AWS のアカウントは既定のメールの送信（SES）で既にあるので、手間も増えない。
   釣り合い（目標の額・手間）は動かしていない。受け入れるかはユーザーの判断待ち。
 
 ### 3.16 総当たりを pairwise に（CP-14・2026-11-04）
