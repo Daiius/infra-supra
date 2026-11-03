@@ -5,6 +5,8 @@
 import type {
   RegionSource,
   RouteAlternative,
+  RoutePartKey,
+  RoutePartRow,
   RoutePlanRow,
   RouteRowStatus,
   RouteStrategyId,
@@ -86,6 +88,72 @@ function RowStatus({ s }: { s: RouteRowStatus }) {
 }
 
 /**
+ * 行のページの部品（記事のページのコメント欄。D-109）。onChange を渡すとラジオで選べ、渡さなければ今の選択を文字で出す。
+ */
+function RowParts({
+  row,
+  onChange,
+  disabledReason,
+}: {
+  row: RoutePlanRow;
+  onChange?: (row: RoutePlanRow, part: RoutePartKey, value: number) => void;
+  disabledReason?: (
+    row: RoutePlanRow,
+    part: RoutePartKey,
+    value: number,
+  ) => string | null | undefined;
+}) {
+  if (row.parts.length === 0) return null;
+  const label = (p: RoutePartRow) =>
+    p.options.find((o) => o.value === p.value)?.label ?? '';
+  return (
+    <ul aria-label="ページの部品" className="mt-1 space-y-0.5 text-[11px]">
+      {row.parts.map((p) => (
+        <li key={p.part} data-part={p.part} data-value={p.value}>
+          {onChange ? (
+            <fieldset className="flex flex-wrap items-center gap-x-2">
+              <legend className="contents">
+                <span className="opacity-70">└ {p.label}:</span>
+              </legend>
+              {p.options.map((o) => {
+                const why =
+                  o.value === p.value
+                    ? undefined
+                    : disabledReason?.(row, p.part, o.value);
+                return (
+                  <label
+                    key={o.value}
+                    className={`inline-flex items-center gap-1 ${why ? 'opacity-50' : 'cursor-pointer'}`}
+                    title={why ?? o.flavor}
+                  >
+                    <input
+                      type="radio"
+                      className="radio radio-xs"
+                      name={`part-${row.route}-${p.part}`}
+                      checked={o.value === p.value}
+                      disabled={Boolean(why)}
+                      onChange={() => onChange(row, p.part, o.value)}
+                    />
+                    {o.label}
+                    {why && <span className="opacity-60">（{why}）</span>}
+                  </label>
+                );
+              })}
+              <Info label={`${p.label}の説明`}>{p.note}</Info>
+            </fieldset>
+          ) : (
+            <span className="opacity-70">
+              {p.label}: {label(p)}
+              <Info label={`${p.label}の説明`}>{p.note}</Info>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * ページ → 描き方 → なぜ → この構成でほかに選べる描き方（使えないものは灰色と理由の ⓘ）。
  * caption: 表の下の注記（どこで決まっているか）。
  */
@@ -95,6 +163,8 @@ export function RoutePlanTable({
   onSelect,
   status,
   disabledReason,
+  onPart,
+  partDisabledReason,
 }: {
   rows: RoutePlanRow[];
   caption?: string;
@@ -106,6 +176,14 @@ export function RoutePlanTable({
   disabledReason?: (
     row: RoutePlanRow,
     alt: RouteAlternative,
+  ) => string | null | undefined;
+  /** ページの部品（記事のページのコメント欄。D-109）を選ぶ（渡さなければ今の選択を文字で出す）。 */
+  onPart?: (row: RoutePlanRow, part: RoutePartKey, value: number) => void;
+  /** 部品の選択肢を選べない理由（ゲームの途中で手間が足りないなど）。 */
+  partDisabledReason?: (
+    row: RoutePlanRow,
+    part: RoutePartKey,
+    value: number,
   ) => string | null | undefined;
 }) {
   if (rows.length === 0) return null;
@@ -153,6 +231,13 @@ export function RoutePlanTable({
                         既定から変わっている: {r.overriddenBy}
                       </span>
                     )}
+                    <RowParts
+                      row={r}
+                      {...(onPart ? { onChange: onPart } : {})}
+                      {...(partDisabledReason
+                        ? { disabledReason: partDisabledReason }
+                        : {})}
+                    />
                     {st && <RowStatus s={st} />}
                   </td>
                   <td className="min-w-48 text-xs opacity-80">{r.why}</td>

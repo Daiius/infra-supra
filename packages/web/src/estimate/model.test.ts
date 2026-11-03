@@ -6,6 +6,7 @@ import {
   CURVE_PVS,
   curveColorSlot,
   defaultCurveStacks,
+  diagramOf,
   pickedCurveStacks,
   fromQuery,
   japanTax,
@@ -135,6 +136,38 @@ describe('URL のクエリ', () => {
         }),
       ).totalUsd;
     expect(usd(1)).toBeLessThan(usd(0));
+  });
+
+  it('コメント欄は記事のページの部品（D-109）: URL は rp.article.comments に書き、前の cm も読む。枠 + API の記事では既定', () => {
+    const i = normalizeInput({ framework: 'astro', comments: 1 });
+    const q = toQuery(i);
+    expect(q.get('rp.article.comments')).toBe('1');
+    expect(q.has('cm')).toBe(false);
+    expect(normalizeInput(fromQuery('?fw=astro&cm=1')).comments).toBe(1);
+    expect(
+      normalizeInput(fromQuery('?fw=astro&rp.article.comments=1')).comments,
+    ).toBe(1);
+    // 部品のキーは描き方として読まない
+    expect(fromQuery('?rp.article.comments=1').routes).toEqual({});
+    expect(
+      normalizeInput({
+        framework: 'astro',
+        comments: 1,
+        routes: { article: 'shell-api' },
+      }).comments,
+    ).toBe(0);
+    // 表の記事の行に部品として出る
+    const row = diagramOf(i).routes.find((r) => r.route === 'article')!;
+    expect(row.parts.map((p) => [p.part, p.value])).toEqual([['comments', 1]]);
+  });
+
+  it('記事ごとの枠（S5。D-109）: Next.js・Astro の記事の S5 は SNS のカードが出る。SPA は前処理の部品が要る', () => {
+    const ogp = (i: Partial<EstimateInput>) =>
+      routeStatusOf(normalizeInput(i)).find((r) => r.route === 'article')!.ogp;
+    expect(
+      ogp({ framework: 'nextjs', routes: { article: 'shell-api' } })?.ok,
+    ).toBe(true);
+    expect(ogp({ framework: 'vite-spa' })?.ok).toBe(false);
   });
 
   it('選んでも変わらない部品（D1 の DB のバックアップ）の値が URL に残っていても無視して既定で見積もる（D-94）', () => {

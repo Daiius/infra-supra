@@ -6,7 +6,7 @@ import type { PageWireframe, ScenarioText } from '../scenario.ts';
  * Next.js は記事 ISR・個人 SSR、コメント・いいね・ログインの表示はブラウザが API で取る（D-70）。
  * Astro は記事を閲覧のときに描いてキャッシュし投稿・編集で消す（D-103）・個人をアダプターで SSR、動きのある部品はアイランド。
  * 静的書き出しは記事を静的・個人を静的な枠 + API（D-80）。
- * SPA はシェル + API。設定「コメントの描き方」で記事のページに含めると、コメント欄は記事の HTML の一部になる（D-82）。
+ * SPA はシェル + API。記事のページの部品「コメント欄」（D-109）で記事のページに含めると、コメント欄は記事の HTML の一部になる（D-82）。
  */
 const ARTICLE_WIREFRAMES: PageWireframe[] = [
   {
@@ -62,6 +62,27 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
         comments: 'api',
         footer: 'api',
       },
+    },
+    // 記事ごとの枠（S5。D-109）: ヘッダー・タイトル（メタタグ）は記事ごとにビルドで書き出し、本文などはブラウザが API で取る
+    shellPerPage: {
+      sources: {
+        header: 'build',
+        login: 'api',
+        title: 'build',
+        body: 'api',
+        images: 'image',
+        likes: 'api',
+        comments: 'api',
+        footer: 'api',
+      },
+      badges: [
+        {
+          kind: 'freshness',
+          text: '鮮度: 中身は常に新しい（新しい記事は枠のビルドまで開けない）',
+        },
+        { kind: 'ogp', text: 'SNS のカード: 記事ごとの枠に入る' },
+        { kind: 'api', text: 'API: 1 PV あたり 1 回増える' },
+      ],
     },
     // SPA は記事のページが無いので含められない（D-82）
     commentsInPage: {

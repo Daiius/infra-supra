@@ -9,10 +9,12 @@ vi.setConfig({ testTimeout: 120_000 });
 import {
   applyAction,
   checkAction,
+  commentsOf,
   componentConflict,
   frameworksOf,
   newGame,
   newSave,
+  partsOfComments,
   playMonth,
   replaySave,
   SCENARIOS,
@@ -198,11 +200,20 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
             `${id}: setupProblem ${setupProblem(sc, stackIndex, fw, c)}`,
           );
         expect(validSetupChoices(sc, stackIndex, fw, c)).toEqual(c);
-        const g0 = newGame(stackIndex, seed, sc, undefined, fw, c, r, cm);
+        const g0 = newGame(
+          stackIndex,
+          seed,
+          sc,
+          undefined,
+          fw,
+          c,
+          r,
+          partsOfComments(sc, cm),
+        );
         expect(g0.framework).toBe(fw);
         expect(g0.components).toMatchObject(c);
         if (r !== undefined) expect(g0.settings.revalidateSec).toBe(r);
-        if (cm !== undefined) expect(g0.settings.comments).toBe(cm);
+        if (cm !== undefined) expect(commentsOf(sc, g0.routeParts)).toBe(cm);
 
         const end = playToEnd(g0);
         for (const v of violations(end)) problems.push(`${id}: ${v}`);
@@ -217,7 +228,9 @@ describe('組み合わせの総当たり（2 シナリオ × フレームワー�
             startDate: end.startDate,
             components: c,
             ...(r !== undefined ? { revalidateSec: r } : {}),
-            ...(cm !== undefined ? { comments: cm } : {}),
+            ...(cm !== undefined
+              ? { routeParts: partsOfComments(sc, cm) ?? {} }
+              : {}),
           });
           for (let t = 1; t < end.history.length; t++)
             save = withTurn(save, []);
@@ -339,7 +352,16 @@ describe('1 か月目の費用の見込み（D-72）', () => {
         // 出来事も障害も無い 1 か月目になるシードを探す
         for (let seed = 1; seed <= 30; seed++) {
           const s = playMonth(
-            newGame(stackIndex, seed, sc, undefined, fw, c, r, cm),
+            newGame(
+              stackIndex,
+              seed,
+              sc,
+              undefined,
+              fw,
+              c,
+              r,
+              partsOfComments(sc, cm),
+            ),
           );
           const h = s.history[0]!;
           if (h.events.length > 0 || h.status === 'incident') continue;

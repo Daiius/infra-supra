@@ -177,8 +177,16 @@ export const FRAMEWORK_PRESETS: Readonly<
   'vite-spa': { public: 'shell-api', personal: 'shell-api' },
 };
 
-/** 1 つのルートの描き方の選択。cacheContent: S5 で、全員に同じ中身の API の応答をキャッシュする（期間はルートの再検証の間隔。D-37）。 */
-export type RouteChoice = { strategy: RouteStrategyId; cacheContent?: boolean };
+/**
+ * 1 つのルートの描き方の選択。cacheContent: S5 で、全員に同じ中身の API の応答をキャッシュする（期間はルートの再検証の間隔。D-37）。
+ * shellPerPage: S5 で、枠を記事ごとに静的に書き出す（ページごとの枠。D-109・perPageShell）。枠は S1 と同じくビルドで作り、
+ * 閲覧のたびに読む。枠に記事ごとのメタタグが入る（SNS のカードが出る）。中身はブラウザが API で取る。
+ */
+export type RouteChoice = {
+  strategy: RouteStrategyId;
+  cacheContent?: boolean;
+  shellPerPage?: boolean;
+};
 
 /** ルートの id → 描き方。載っていないルートはテンプレートのまま。 */
 export type RoutePlan = Readonly<Record<string, RouteChoice>>;
@@ -235,6 +243,17 @@ export function serverIslandDelivery(
       : undefined;
 }
 
+/**
+ * 全員に同じ中身のページの S5 を、ページごとの枠（記事ごとに静的に書き出す枠 + ブラウザが API で中身を取る）にするフレームワークか
+ * （D-109）。Next.js（generateStaticParams で書き出すページに、中身を取る Client Component を置く）・Astro（getStaticPaths で書き出す
+ * ページに、中身を取るアイランドを置く）・Next.js の静的書き出し（output: 'export'）は、ページごとの HTML を書き出せる。
+ * Vite の SPA は 1 つのシェル（index.html）だけなので入口だけの形のまま（SNS のカードは前処理の部品）。
+ * 書き出しは S1 と同じ仕組みなので、その事業者で S1 を選べることも条件にする（呼ぶ側が対応表で確かめる）。
+ */
+export function perPageShellFramework(framework: FrameworkId): boolean {
+  return framework !== 'vite-spa';
+}
+
 /** 描き方を Workload に当てるときに要る形（テンプレートの既定値。S1 のビルド・S5 の API・S6 の島の届け方）。 */
 export type RouteStrategyContext = {
   /** S6（枠 + サーバーの島）の届け方（serverIslandDelivery）。 */
@@ -249,12 +268,17 @@ export type RouteStrategyContext = {
 
 type Route = WorkloadInput['routes'][number];
 
+/** ルートの部品が呼ぶ API（apiCalls。D-109）を、書き換えた後のルートに引き継ぐ。 */
+const parts = (r: Route) =>
+  r.apiCalls !== undefined ? { apiCalls: r.apiCalls } : {};
+
 /**
  * ルートごとの描き方を Workload に当てる（D-106）。テンプレートのルート（isr = 全員に同じ中身・ssr = 個人化）から書き換える。
  * - S1: isr → static。静的なページがあればビルド（updatesPerMonth・間隔・時間）を足す。
  * - S2・S3: isr のまま（数え方は ISR と同じ。期限かオンデマンドかはルートの値で、呼ぶ側が先に付ける。RS-05）。
  * - S4: ssr のまま。isr なら ssr に（ISR のキャッシュの部品「なし」と同じ書き換え）。
  * - S5: isr・ssr → spa（中身はデータの API。CPU は SSR の dataCpuFactor 倍）。静的・spa のルートはそのまま。
+ *   ページごとの枠（shellPerPage。isr のルートだけ）は枠を閲覧のたびに読み（shellPerView）、S1 と同じくビルドを足す（D-109）。
  * - S6: ssr のルート（人ごとに違うページ）だけ（D-108）。Astro（request）は ssr → isr の枠（期限 1 日）+ 閲覧ごとの島のリクエスト
  *   （island.request）。Next.js の PPR（stream）は ssr のまま、CPU を島の分（islandShare 倍）にして island を付ける。
  * まだ数え方の無い組（個人化のルートをキャッシュ・静的にする、全員に同じページの S6）は例外にする。
@@ -284,6 +308,7 @@ export function applyRouteStrategies(
           share: r.share,
           pages: r.pages,
           processing: r.processing,
+          ...parts(r),
         };
       case 'cached-ttl':
       case 'cached-purge':
@@ -297,6 +322,10 @@ export function applyRouteStrategies(
         if (r.rendering === 'static' || r.rendering === 'spa') return r;
         const shape = ctx.spa;
         if (!shape) throw new Error('S5（枠 + API）には SPA の形（spa）が要る');
+        if (choice.shellPerPage) {
+          if (r.rendering !== 'isr') throw unsupported();
+          staticPages += r.pages;
+        }
         return {
           id: r.id,
           ...(r.label !== undefined ? { label: r.label } : {}),
@@ -304,6 +333,9 @@ export function applyRouteStrategies(
           share: r.share,
           pages: r.pages,
           shellKB: shape.shellKB,
+          ...parts(r),
+          // ページごとの枠（D-109）: 記事ごとの枠を静的に書き出し、閲覧のたびに読む。枠はビルドで作る（S1 と同じビルド）
+          ...(choice.shellPerPage ? { shellPerView: true } : {}),
           ...(choice.cacheContent &&
           r.rendering === 'isr' &&
           r.revalidateSeconds !== undefined
@@ -336,6 +368,7 @@ export function applyRouteStrategies(
           share: r.share,
           pages: r.pages,
           revalidateSeconds: SERVER_ISLAND.shellRevalidateSeconds,
+          ...parts(r),
           cachedServeCpuMs: SERVER_ISLAND.shellCachedServeCpuMs,
           // 枠: 島を除いた残りを描く（DB は読まない）
           processing: {

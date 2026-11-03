@@ -194,7 +194,7 @@ export function StackField({
   onChange: (stackIndex: number) => void;
   /** 選んでいる構成の部品（選んでいる構成の図と手間に使う）。 */
   components: Partial<Record<string, string>>;
-  /** コメントの描き方（流れの凡例のページの名前に使う。D-82）。 */
+  /** 記事のページのコメント欄（流れの凡例のページの名前に使う。D-82・D-109）。 */
   comments?: number | undefined;
   /** 選んだページごとの描き方（D-107）。 */
   routes?: RouteOverrides | undefined;

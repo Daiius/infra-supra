@@ -21,6 +21,7 @@ import {
   routePlanStatus,
   SCENARIOS,
   setupMonthOneEstimate,
+  setupCommentOptions,
   setupRevalidateOptions,
   STACKS,
   staticBuildOf,
@@ -141,7 +142,9 @@ describe('始める画面で選ぶ（D-107）', () => {
     for (const k of ['isr', 'buildInterval', 'pageCache', 'apiCacheTtl'])
       expect(hiddenSettings(ssr)).toContain(k);
     const api = start(VERCEL_PRO, 'astro', { article: 'shell-api' });
-    expect(hiddenSettings(api)).toContain('comments');
+    expect(setupCommentOptions(ARTICLE_COMMUNITY, 'astro', api.routes)).toEqual(
+      [],
+    );
     expect(
       setupRevalidateOptions(ARTICLE_COMMUNITY, 'astro', api.routes),
     ).toEqual([]);
@@ -242,7 +245,7 @@ describe('途中で描き方を替える（D-107・RS-08）', () => {
   });
 });
 
-describe('保存（SAVE_VERSION 2・D-107）', () => {
+describe('保存（SAVE_VERSION 2 から・D-107）', () => {
   it('始めた描き方と途中の行動を保存して、同じ状態に戻る', () => {
     let save = newSave({
       scenarioId: ARTICLE_COMMUNITY.id,
@@ -252,7 +255,7 @@ describe('保存（SAVE_VERSION 2・D-107）', () => {
       startDate: DEFAULT_START_DATE,
       routes: { personal: 'shell-api' },
     });
-    expect(save.version).toBe(2);
+    expect(save.version).toBe(3);
     save = withTurn(save, [route('article', 'ssr')]);
     const parsed = parseSave(JSON.parse(JSON.stringify(save)))!;
     const s = replaySave(parsed);
@@ -313,7 +316,7 @@ describe('保存（SAVE_VERSION 2・D-107）', () => {
     expect(s.routes).toBeUndefined();
     // D-103 の読み替え（Astro の buildInterval → pageCache）も効く
     expect(s.settings.revalidateSec).toBe(21600);
-    expect(parseSave({ ...v1, version: 3 })).toBeNull();
+    expect(parseSave({ ...v1, version: 4 })).toBeNull();
     expect(
       parseSave({ ...v1, version: 2, routes: { article: 'x' } }),
     ).toBeNull();
@@ -354,14 +357,24 @@ describe('見取り図と要件の判定（D-107）', () => {
     // 個人向けを S5 にすると、当たる前提が減る（記事の再生成は残る）
     expect(personal.deltas['shell-api']).toBeDefined();
     expect(personal.deltas['ssr']).toBeUndefined();
-    // 記事を S5 にすると SNS のカードが出ない
+    // Next.js の記事を S5 にすると記事ごとの枠（メタタグ入り）になり、SNS のカードは出る。新しい記事は枠のビルドまで開けない（D-109）
     const api = routePlanStatus(ARTICLE_COMMUNITY, {
       framework: 'nextjs',
       stackIndex: VERCEL_PRO,
       components: {},
       routes: { article: 'shell-api' },
     });
-    expect(api.find((r) => r.route === 'article')!.ogp?.ok).toBe(false);
+    const a = api.find((r) => r.route === 'article')!;
+    expect(a.ogp?.ok).toBe(true);
+    expect(a.freshness?.stage).toBe('fair');
+    expect(a.freshness?.text).toContain('枠のビルド');
+    // SPA の記事（1 つのシェル）は SNS のカードが出ない（前処理の部品が要る）
+    const spa = routePlanStatus(ARTICLE_COMMUNITY, {
+      framework: 'vite-spa',
+      stackIndex: VERCEL_PRO,
+      components: {},
+    });
+    expect(spa.find((r) => r.route === 'article')!.ogp?.ok).toBe(false);
   });
 
   it('受託は業務の画面 1 行（S4 ↔ S5）', () => {

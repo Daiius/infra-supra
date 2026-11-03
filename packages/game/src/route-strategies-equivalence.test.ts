@@ -1,7 +1,10 @@
 // ページごとの描き方のプリセット（D-106・段 2）が、フレームワークの書き換え（toSpa・toAstro・toNextExport）と同じ Workload を作ることの確認。
 // スナップショットは main（20901a9。プリセットに置き換える前）で記録した。置き換えの後も 1 文字も変わらないこと（バランスを変えない）。
 // 2 シナリオ × 選べるフレームワーク × 載せられる構成（隠した構成も。古い保存の再生に使う。D-100）× 部品の選択肢（1 つずつ替える）
-// × 再検証・コメントの描き方 × 個人向けのページの割合・在庫の有無で、workloadFor の出力を正規化した JSON のハッシュにまとめる。
+// × 再検証・コメント欄の描き方 × 個人向けのページの割合・在庫の有無で、workloadFor の出力を正規化した JSON のハッシュにまとめる。
+// 段 4（D-109）で記事のページの部品の API を記事のルートに付けた（テンプレートの apiCalls: 1。コメントを含めると書き込みの分だけ）ので、
+// 記事コミュニティの Workload のハッシュは記録し直した（受託は不変）。費用・使用量・前提の当たりは段 4 の前の main（177965e の上）で
+// 記録した 2 つ目のスナップショットと同じで、変わったのは Workload の形（API の件数をルートに分けた内訳）だけであることを確かめる。
 import {
   composeStack,
   loadPriceBooks,
@@ -15,6 +18,7 @@ import {
   COMMENTS_IN_BROWSER,
   COMMENTS_IN_PAGE,
   frameworksOf,
+  partsOfComments,
   SCENARIOS,
   setupSlots,
   STACKS,
@@ -87,9 +91,9 @@ function* grid(
                   imageKB: 150,
                   variants: 3,
                   revalidateSec,
-                  comments,
                   ssrOptimizations: 0,
                 },
+                routeParts: partsOfComments(sc, comments),
                 ssrCpuMs: 15,
                 mods,
                 stock,

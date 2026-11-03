@@ -199,7 +199,13 @@ describe('ゲームモードの画面', () => {
     expect(tag('個人向けのページ', '自分の下書き・記事の一覧')).toBe(
       '閲覧ごとに SSR',
     );
-    // コメントを記事のページに含めると、コメント欄は ISR のページの一部になる（D-82）
+    // コメントを記事のページに含めると、コメント欄は ISR のページの一部になる（D-82）。
+    // 選ぶのは ③ ページの描き方の表の記事の行（ページの部品。D-109）
+    const inPage = screen.getByRole('radio', { name: /^記事のページに含める/ });
+    expect(inPage.closest('tr')?.getAttribute('data-route')).toBe('article');
+    expect(inPage.closest('section')?.getAttribute('aria-label')).toBe(
+      'ページの描き方',
+    );
     pick(/^記事のページに含める/);
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
       'ISR（キャッシュ）',
@@ -420,6 +426,35 @@ describe('ゲームモードの画面', () => {
     expect(
       within(select()).getByRole('option', { name: /（今）$/ }).textContent,
     ).toContain('S5');
+  });
+
+  it('W-25 ゲームの途中で記事のページのコメント欄を替える（記事の行の部品・手間 2・来月から。D-109）', () => {
+    renderApp();
+    startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    const part = () =>
+      document.querySelector<HTMLElement>(
+        '[data-route="article"] fieldset[data-part="comments"]',
+      )!;
+    const left = () =>
+      screen.getByText(/来月の手間の残り/).textContent!.match(/(\d+) \//)![1];
+    const before = Number(left());
+    expect(
+      within(part()).getByRole('radio', { name: /^ブラウザで読み込む（今）/ }),
+    ).toBeDefined();
+    fireEvent.click(
+      within(part()).getByRole('radio', { name: /^記事のページに含める/ }),
+    );
+    expect(Number(left())).toBe(before - 2);
+    advance(1);
+    expect(
+      within(part()).getByRole('radio', {
+        name: /^記事のページに含める（今）/,
+      }),
+    ).toBeDefined();
   });
 
   it('W-15 ゲーム中の「今の構成図」も選んだ描き方で描く（記事 S1 のビルドのノード。OCL-C9CD8783）', () => {

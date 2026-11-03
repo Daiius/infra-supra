@@ -53,6 +53,8 @@ import {
   validRouteOverrides,
   routePlanRows,
   routePlanOf,
+  routePartNote,
+  ROUTE_PARTS,
   routeAlternativeAction,
   strategyFamily,
   withTurn,
@@ -69,6 +71,7 @@ import {
   setupRouteNotice,
   setupCommentOptions,
   COMMENTS_IN_BROWSER,
+  partsOfComments,
   offeredBaselines,
   stackOffered,
   defaultRevalidateSec,
@@ -307,7 +310,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       : defaultRevalidateSec(framework, stack, scenario, routes);
   const revalidateChoosable =
     setupRevalidateOptions(scenario, framework, routes).length > 0;
-  // コメントの描き方（D-82。記事のページがあり、コメントのあるシナリオだけ。既定はブラウザで読み込む）
+  // 記事のページのコメント欄（D-82。③ の記事の行で選ぶページの部品。D-109。記事のページがあり、コメントのあるシナリオだけ。
+  // 既定はブラウザで読み込む）
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
   const commentsChoosable =
     setupCommentOptions(scenario, framework, routes).length > 0;
@@ -324,7 +328,6 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
         components: parts,
         revalidateSec,
         revalidateChosen,
-        comments,
         routes,
       },
       next,
@@ -364,9 +367,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                 stackIndex: stack,
                 settings: {
                   revalidateSec: defaultRevalidateSec(id, stack, scenario),
-                  comments,
                 },
                 components: validSetupChoices(scenario, stack, id, parts),
+                routeParts: partsOfComments(scenario, comments),
               })
             }
             routes={routes}
@@ -385,6 +388,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               setRouteChoice(r);
               if (v !== undefined) setRevalidateSec(v);
             }}
+            onCommentsChange={setComments}
           />
           <div className="mt-2">
             <StackField
@@ -415,8 +419,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             components={parts}
             value={revalidateSec}
             onChange={setRevalidateSec}
-            comments={comments}
-            onCommentsChange={setComments}
+            comments={commentsChoosable ? comments : COMMENTS_IN_BROWSER}
             routes={routes}
           />
           {commitOptions.length > 0 && (
@@ -503,7 +506,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     startDate,
                     components: parts,
                     ...(revalidateChoosable ? { revalidateSec } : {}),
-                    ...(commentsChoosable ? { comments } : {}),
+                    ...(commentsChoosable && partsOfComments(scenario, comments)
+                      ? { routeParts: partsOfComments(scenario, comments)! }
+                      : {}),
                     ...(Object.keys(routes).length
                       ? { routes: { ...routes } }
                       : {}),
@@ -1288,6 +1293,10 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
 
 /** ページの描き方の変更（ルート → 行動。D-107）。 */
 type RouteActs = Partial<Record<string, Extract<Action, { type: 'route' }>>>;
+/** ページの部品の変更（「ルート:部品」→ 行動。記事のページのコメント欄。D-109）。 */
+type PartActs = Partial<
+  Record<string, Extract<Action, { type: 'route-part' }>>
+>;
 
 /**
  * ページの描き方を途中で替える（D-107）。期限 ↔ オンデマンド（S2 ↔ S3）は設定の欄で替えるので、ここは分け方の違う描き方だけ。
@@ -1298,19 +1307,28 @@ function RouteActions({
   value,
   onChange,
   blocked,
+  parts,
+  onPartsChange,
+  blockedParts,
 }: {
   state: GameState;
   value: RouteActs;
   onChange: (v: RouteActs) => void;
   blocked: (v: RouteActs) => string | null;
+  /** ページの部品（記事のページのコメント欄。D-109）。 */
+  parts: PartActs;
+  onPartsChange: (v: PartActs) => void;
+  blockedParts: (v: PartActs) => string | null;
 }) {
   const rows = routePlanOf(state);
-  const choosable = rows.filter((r) =>
-    r.alternatives.some(
-      (a) =>
-        a.available &&
-        strategyFamily(a.strategy) !== strategyFamily(r.strategy),
-    ),
+  const choosable = rows.filter(
+    (r) =>
+      r.parts.length > 0 ||
+      r.alternatives.some(
+        (a) =>
+          a.available &&
+          strategyFamily(a.strategy) !== strategyFamily(r.strategy),
+      ),
   );
   if (choosable.length === 0) return null;
   return (
@@ -1332,67 +1350,133 @@ function RouteActions({
           );
           const chosen = value[r.route]?.strategy ?? r.strategy;
           return (
-            <div key={r.route} className="form-control" data-route={r.route}>
-              <span className="label-text mb-1 block">
-                <span className="flex items-start gap-1.5 font-semibold">
-                  <Swatch strategy={chosen} />
-                  <NameWithInfo
-                    name={`${r.label}の描き方`}
-                    info={
-                      <Info>
-                        今: {r.code} {r.strategyLabel}。{r.why}
-                      </Info>
-                    }
+            <div key={r.route} data-route={r.route}>
+              <div className="form-control">
+                <span className="label-text mb-1 block">
+                  <span className="flex items-start gap-1.5 font-semibold">
+                    <Swatch strategy={chosen} />
+                    <NameWithInfo
+                      name={`${r.label}の描き方`}
+                      info={
+                        <Info>
+                          今: {r.code} {r.strategyLabel}。{r.why}
+                        </Info>
+                      }
+                    />
+                  </span>
+                  <Meta
+                    items={[
+                      `手間 ${EFFORT.route.other}（枠 + API へは ${EFFORT.route.toApi}）`,
+                      '来月から',
+                    ]}
                   />
                 </span>
-                <Meta
-                  items={[
-                    `手間 ${EFFORT.route.other}（枠 + API へは ${EFFORT.route.toApi}）`,
-                    '来月から',
-                  ]}
-                />
-              </span>
-              <select
-                aria-label={`${r.label}の描き方`}
-                className="select select-bordered select-sm w-full"
-                value={chosen}
-                onChange={(e) => {
-                  const next = { ...value };
-                  const alt = alts.find((a) => a.strategy === e.target.value);
-                  if (!alt) delete next[r.route];
-                  else
-                    next[r.route] = routeAlternativeAction(
-                      state,
-                      r,
-                      alt,
-                    ) as Extract<Action, { type: 'route' }>;
-                  onChange(next);
-                }}
-              >
-                <option value={r.strategy}>
-                  {r.code} {r.strategyLabel}（今）
-                </option>
-                {alts.map((a) => {
-                  const trial: RouteActs = {
-                    ...value,
-                    [r.route]: routeAlternativeAction(state, r, a) as Extract<
-                      Action,
-                      { type: 'route' }
-                    >,
-                  };
-                  const why = blocked(trial);
-                  return (
-                    <option
-                      key={a.strategy}
-                      value={a.strategy}
-                      disabled={why !== null}
-                    >
-                      {a.code} {a.label}
-                      {why ? `（${why}）` : ''}
-                    </option>
-                  );
-                })}
-              </select>
+                <select
+                  aria-label={`${r.label}の描き方`}
+                  className="select select-bordered select-sm w-full"
+                  value={chosen}
+                  onChange={(e) => {
+                    const next = { ...value };
+                    const alt = alts.find((a) => a.strategy === e.target.value);
+                    if (!alt) delete next[r.route];
+                    else
+                      next[r.route] = routeAlternativeAction(
+                        state,
+                        r,
+                        alt,
+                      ) as Extract<Action, { type: 'route' }>;
+                    onChange(next);
+                  }}
+                >
+                  <option value={r.strategy}>
+                    {r.code} {r.strategyLabel}（今）
+                  </option>
+                  {alts.map((a) => {
+                    const trial: RouteActs = {
+                      ...value,
+                      [r.route]: routeAlternativeAction(state, r, a) as Extract<
+                        Action,
+                        { type: 'route' }
+                      >,
+                    };
+                    const why = blocked(trial);
+                    return (
+                      <option
+                        key={a.strategy}
+                        value={a.strategy}
+                        disabled={why !== null}
+                      >
+                        {a.code} {a.label}
+                        {why ? `（${why}）` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              {r.parts.map((p) => {
+                const key = `${r.route}:${p.part}`;
+                const picked = parts[key]?.value ?? p.value;
+                return (
+                  <fieldset
+                    key={p.part}
+                    className="mt-1 text-sm"
+                    data-part={p.part}
+                  >
+                    <legend className="flex flex-wrap items-center gap-1">
+                      <NameWithInfo
+                        name={`└ ${p.label}`}
+                        info={
+                          <Info>
+                            {p.note}
+                            {routePartNote(state, p.part) &&
+                              `（今: ${routePartNote(state, p.part)}）`}
+                          </Info>
+                        }
+                      />
+                      <Meta
+                        items={[
+                          `手間 ${ROUTE_PARTS[p.part].effort}`,
+                          '来月から',
+                        ]}
+                      />
+                    </legend>
+                    <div className="flex flex-wrap gap-x-3">
+                      {p.options.map((o) => {
+                        const next = { ...parts };
+                        if (o.value === p.value) delete next[key];
+                        else
+                          next[key] = {
+                            type: 'route-part',
+                            route: r.route,
+                            part: p.part,
+                            value: o.value,
+                          };
+                        const why =
+                          o.value === picked ? null : blockedParts(next);
+                        return (
+                          <label
+                            key={o.value}
+                            className={`flex items-center gap-1 ${why ? 'opacity-50' : 'cursor-pointer'}`}
+                            title={o.flavor}
+                          >
+                            <input
+                              type="radio"
+                              className="radio radio-xs"
+                              name={`part-${key}`}
+                              checked={o.value === picked}
+                              disabled={why !== null}
+                              onChange={() => onPartsChange(next)}
+                            />
+                            {o.label}
+                            {o.value === p.value && '（今）'}
+                            {why && <span className="text-xs">（{why}）</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                );
+              })}
             </div>
           );
         })}
@@ -1429,9 +1513,12 @@ function Actions({
   );
   /** ページの描き方の変更（ルートごと。D-107）。 */
   const [routeActs, setRouteActs] = useState<RouteActs>({});
+  /** ページの部品の変更（記事のページのコメント欄。D-109）。 */
+  const [partActs, setPartActs] = useState<PartActs>({});
   const reset = () => {
     setCommits({});
     setRouteActs({});
+    setPartActs({});
     setSettings({});
     setOptimize(false);
     setStackChange(null);
@@ -1454,6 +1541,7 @@ function Actions({
       parts?: Partial<Record<SlotId, string>>;
       commits?: Record<string, CommitmentPaymentId>;
       routes?: RouteActs;
+      routeParts?: PartActs;
     } = {},
   ): Action[] => {
     const st = o.settings ?? settings;
@@ -1485,6 +1573,8 @@ function Actions({
       });
     // 描き方の変更（D-107）は設定の前に当てる（描き方で出す設定が変わる）
     for (const a of Object.values(o.routes ?? routeActs)) if (a) out.push(a);
+    // ページの部品（コメント欄。D-109）は描き方の後（枠 + API にすると含められない）
+    for (const a of Object.values(o.routeParts ?? partActs)) if (a) out.push(a);
     for (const [key, value] of Object.entries(st))
       out.push({ type: 'set', key: key as SettingKey, value: value! });
     if (opt) out.push({ type: 'optimize' });
@@ -1673,6 +1763,9 @@ function Actions({
           value={routeActs}
           onChange={setRouteActs}
           blocked={(r) => blocked(build({ routes: r }))}
+          parts={partActs}
+          onPartsChange={setPartActs}
+          blockedParts={(v) => blocked(build({ routeParts: v }))}
         />
         <label className="flex cursor-pointer items-start gap-3 py-1">
           <input

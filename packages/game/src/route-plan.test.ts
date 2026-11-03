@@ -12,26 +12,26 @@ import {
   SCENARIOS,
   STACKS,
   stackSupports,
+  partsOfComments,
   workloadFor,
   type FrameworkId,
 } from './index.ts';
 
 const stack = (id: string) => STACKS.find((s) => s.id === id)!.index;
-const settings = (revalidateSec = 300, comments = COMMENTS_IN_BROWSER) => ({
-  revalidateSec,
-  comments,
-});
+const settings = (revalidateSec = 300) => ({ revalidateSec });
 const rows = (
   fw: FrameworkId,
   stackId: string,
   s = settings(),
   components = {},
+  comments = COMMENTS_IN_BROWSER,
 ) =>
   routePlanRows(ARTICLE_COMMUNITY, {
     framework: fw,
     stackIndex: stack(stackId),
     settings: s,
     components,
+    routeParts: partsOfComments(ARTICLE_COMMUNITY, comments),
   });
 const strategies = (r: ReturnType<typeof rows>) =>
   Object.fromEntries(r.map((x) => [x.route, x.strategy]));
@@ -54,7 +54,7 @@ describe('ページごとの描き方の表（D-106）', () => {
           if (!stackSupports(s.index, fw)) continue;
           for (const revalidateSec of [ON_DEMAND_REVALIDATE, 300])
             for (const components of [{}, { isrCache: 'none' }]) {
-              const st = { revalidateSec, comments: COMMENTS_IN_BROWSER };
+              const st = { revalidateSec };
               const plan = routePlanRows(sc, {
                 framework: fw,
                 stackIndex: s.index,
@@ -174,14 +174,21 @@ describe('ページごとの描き方の表（D-106）', () => {
     expect(spa[1]!.detail.join()).not.toContain('期間');
   });
 
-  it('コメントの描き方を記事の行に出す（D-82）', () => {
+  it('コメント欄の描き方を記事の行に出す（D-82）。記事の行の部品として選べる（D-109）', () => {
     const r = rows(
       'nextjs',
       'vercel-supabase-pro',
-      settings(300, COMMENTS_IN_PAGE),
+      settings(300),
+      {},
+      COMMENTS_IN_PAGE,
     );
-    expect(r[0]!.detail.join()).toContain('HTML に含める');
+    // コメント欄は描き方の値（detail）でなく、行の部品（parts）に出す
+    expect(r[0]!.detail.join()).not.toContain('コメント');
+    expect(r[0]!.parts.map((x) => [x.part, x.value])).toEqual([
+      ['comments', COMMENTS_IN_PAGE],
+    ]);
     expect(r[1]!.detail.join()).not.toContain('コメント');
+    expect(r[1]!.parts).toEqual([]);
   });
 
   it('受託の業務アプリは業務の画面 1 行（人ごとに違う）', () => {

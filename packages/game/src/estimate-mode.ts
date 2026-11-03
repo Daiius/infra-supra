@@ -5,13 +5,13 @@ import { DEFAULT_CHOICES, type Choices, type FrameworkId } from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import {
   baseSsrCpuMsOf,
-  COMMENTS_IN_BROWSER,
   frameworkDefaults,
   setupSlots,
   STACKS,
   validSetupChoices,
   workloadFor,
   type RouteOverrides,
+  type RouteParts,
   type Settings,
 } from './index.ts';
 import type { Scenario } from './scenario.ts';
@@ -64,21 +64,16 @@ export function estimateWorkload(
     stackIndex: number;
     framework: FrameworkId;
     components: Choices;
-    /** コメントの描き方（D-82）は省略するとブラウザで読み込む。 */
-    settings: Omit<Settings, 'ssrOptimizations' | 'comments'> & {
-      comments?: number;
-    };
+    settings: Omit<Settings, 'ssrOptimizations'>;
     /** 選んだページごとの描き方（D-107）。 */
     routes?: RouteOverrides | undefined;
+    /** ページの部品（記事のページのコメント欄。D-109）。省略はブラウザで読み込む。 */
+    routeParts?: RouteParts | undefined;
   },
 ): WorkloadInput {
   return workloadFor(sc, {
     pv: p.pv,
-    settings: {
-      comments: COMMENTS_IN_BROWSER,
-      ...p.settings,
-      ssrOptimizations: 0,
-    },
+    settings: { ...p.settings, ssrOptimizations: 0 },
     ssrCpuMs: baseSsrCpuMsOf(sc),
     mods: {},
     stock: null,
@@ -86,5 +81,6 @@ export function estimateWorkload(
     components: p.components,
     framework: p.framework,
     routes: p.routes,
+    routeParts: p.routeParts,
   });
 }

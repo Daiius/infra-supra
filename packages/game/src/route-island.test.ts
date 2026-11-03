@@ -6,7 +6,6 @@ import {
   applyAction,
   ARTICLE_COMMUNITY,
   checkAction,
-  COMMENTS_IN_BROWSER,
   DEFAULT_START_DATE,
   newGame,
   newSave,
@@ -73,7 +72,6 @@ const workload = (
     pv: 100_000,
     settings: {
       revalidateSec: 300,
-      comments: COMMENTS_IN_BROWSER,
       imageKB: 150,
       variants: 3,
       ssrOptimizations: 0,
