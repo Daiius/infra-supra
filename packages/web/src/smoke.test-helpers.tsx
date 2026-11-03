@@ -9,7 +9,7 @@ import {
   within,
 } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, beforeEach, expect, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import { App } from './App.tsx';
 
 /** 始めた日・乱数のシード（画面の入力で固定する。既定の「今日」に頼らない）。 */
@@ -85,6 +85,13 @@ function installDomShims() {
 export function useSmokeEnv() {
   installDomShims();
   let errors: unknown[][] = [];
+  // 分けて読む画面のモジュールを先に読んでおく（各テストの waitLoaded を短くする。CI では初回の変換が 1 秒を超える）
+  beforeAll(async () => {
+    await Promise.all([
+      import('./game-screen.tsx'),
+      import('./estimate/estimate-mode.tsx'),
+    ]);
+  }, 30_000);
   beforeEach(() => {
     localStorage.clear();
     window.history.replaceState(null, '', '/');
@@ -102,7 +109,10 @@ export function useSmokeEnv() {
 
 /** 分けて読む画面（見積・運営中。App.tsx の lazy）の読み込みを待つ。 */
 export async function waitLoaded(): Promise<void> {
-  await waitFor(() => expect(screen.queryByText('読み込み中…')).toBeNull());
+  // waitFor の既定（1 秒）では CI の遅い実行環境で足りない（testTimeout の 30 秒の内に収める）
+  await waitFor(() => expect(screen.queryByText('読み込み中…')).toBeNull(), {
+    timeout: 15_000,
+  });
 }
 
 /** 本番（main.tsx）と同じく StrictMode で描く。 */
