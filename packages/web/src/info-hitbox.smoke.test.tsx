@@ -61,25 +61,39 @@ describe('ⓘ の当たり判定', () => {
     expect(changed).toBeGreaterThan(0);
   });
 
-  it('W-10 見積モードの欄は、見出しで select に結ばれ、ⓘ を押したときだけ説明が開く', async () => {
-    // ⓘ のある部品の欄（DB のバックアップ）が出る構成
+  it('W-10 見積モードの欄は、見出しで入力に結ばれ、ⓘ を押したときだけ説明が開く', async () => {
     window.history.replaceState(
       null,
       '',
       '/?mode=estimate&t=business&s=vercel-supabase-pro',
     );
     await renderApp();
-    const backup = screen.getByRole<HTMLSelectElement>('combobox', {
-      name: 'DB のバックアップ',
-    });
-    expect(checkField(backup)).toBe(true);
-    // 見出しの文字（label）を押しても説明は開かない
-    fireEvent.click(
-      screen.getByText('DB のバックアップ', { selector: 'label' }),
-    );
+    // ⓘ の付いた input は、見出しの文字だけが名前になる
+    const pv = screen.getByRole('spinbutton', { name: '月の PV' });
+    const field = pv.parentElement!;
+    // 欄の余白と見出しの文字（label）を押しても、説明は開かない
+    fireEvent.click(field);
     expect(tooltip()).toBeNull();
-    // ⓘ の付いた input も、見出しの文字だけが名前になる
-    expect(screen.getByRole('spinbutton', { name: '月の PV' })).toBeDefined();
+    fireEvent.click(screen.getByText('月の PV', { selector: 'label' }));
+    expect(tooltip()).toBeNull();
+    // ⓘ を押すと開き、もう一度押すと閉じる
+    const info = within(field).getByRole('button', { name: /説明$/ });
+    fireEvent.click(info);
+    expect(tooltip()).not.toBeNull();
+    fireEvent.click(info);
+    expect(tooltip()).toBeNull();
+    // 部品の欄（DB のバックアップ）はゲームと共用のラジオの枠（D-115）。選択肢の ⓘ を押しても選ばない
+    const backup = screen.getByRole('group', { name: /^DB のバックアップ/ });
+    const radios = within(backup).getAllByRole<HTMLInputElement>('radio');
+    const other = radios.find((r) => !r.checked && !r.disabled)!;
+    fireEvent.click(
+      within(other.closest('label')!).getByRole('button', { name: /説明$/ }),
+    );
+    expect(tooltip()).not.toBeNull();
+    expect(other.checked).toBe(false);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(other);
+    expect(other.checked).toBe(true);
   });
 
   it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', async () => {

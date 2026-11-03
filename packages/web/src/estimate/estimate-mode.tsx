@@ -12,10 +12,10 @@ import {
 } from 'react';
 import type { PlatformPremise } from 'estimator';
 import {
-  componentConflict,
   FRAMEWORKS,
   frameworksOf,
-  setupSlots,
+  settingFlavor,
+  SETTINGS,
   stackName,
   stackOffered,
   STACKS,
@@ -31,6 +31,11 @@ import {
 import { Info } from '../info.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from '../system-diagram.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from '../route-plan-table.tsx';
+import {
+  SettingRadios,
+  SetupComponents,
+  SetupSettings,
+} from '../setup-components.tsx';
 import {
   type EstimateView,
   compareStacks,
@@ -304,8 +309,6 @@ function Conditions({
   const scenario = scenarioOfTemplate(input.template);
   const fws = frameworksOf(scenario).allowed;
   const stackIndex = STACKS.findIndex((s) => s.id === input.stack);
-  const platform = STACKS[stackIndex]!.provider;
-  const slots = setupSlots(scenario, stackIndex, input.framework, input.parts);
   const settings = settingsOf(input.template, input.framework, input.routes);
   const [pvText, setPvText] = useState(String(input.pv));
   useEffect(() => setPvText(String(input.pv)), [input.pv]);
@@ -401,115 +404,54 @@ function Conditions({
         </Field>
         <Seats seats={input.seats} setInput={setInput} />
       </div>
-      <h3 className="font-semibold">部品</h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {slots.map((x) => {
-          if (x.fixed || x.slot === 'files')
-            return (
-              <div key={x.slot} className="min-w-0 text-sm">
-                <span className="block font-semibold">{x.label}</span>
-                <span className="opacity-70">
-                  {x.options[0]!.label}（この構成では 1 択）
-                </span>
-              </div>
-            );
-          const slot = x.slot;
-          const current = input.parts[slot];
-          const note = x.options.find((o) => o.id === current)?.note;
-          return (
-            <Field key={slot} label={x.label} info={note}>
-              <select
-                className={select}
-                value={current ?? ''}
-                onChange={(e) =>
-                  setInput({
-                    parts: { ...input.parts, [slot]: e.target.value },
-                  })
-                }
-              >
-                {x.options.map((o) => {
-                  const why = componentConflict(
-                    platform,
-                    slot,
-                    o.id,
-                    input.parts,
-                    input.framework,
-                  );
-                  return (
-                    <option key={o.id} value={o.id} disabled={why !== null}>
-                      {o.label}
-                      {why ? '（今の組み合わせでは選べない）' : ''}
-                    </option>
-                  );
-                })}
-              </select>
-            </Field>
-          );
-        })}
-      </div>
+      {/* ③ 部品・④ 設定はゲームの始める画面と同じ欄（D-115）。部品は normalizeInput が選べるものに直す */}
+      <SetupComponents
+        scenario={scenario}
+        stackIndex={stackIndex}
+        framework={input.framework}
+        value={input.parts}
+        onChange={(parts) => setInput({ parts })}
+        note="構成の中の役割ごとに選ぶ（選んでいないスロットは既定の部品で見積もる）"
+      />
       {(settings.revalidate || settings.format || settings.variants) && (
-        <>
-          <h3 className="font-semibold">設定</h3>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {settings.revalidate && (
-              <Field
-                label={settings.revalidate.label}
-                info={settings.revalidate.note}
-              >
-                <select
-                  className={select}
-                  value={input.revalidateSec}
-                  onChange={(e) =>
-                    setInput({ revalidateSec: Number(e.target.value) })
-                  }
-                >
-                  {settings.revalidate.options.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {settings.format && (
-              <Field label="画像の形式">
-                <select
-                  className={select}
-                  value={input.imageFormat}
-                  onChange={(e) =>
-                    setInput({
-                      imageFormat: e.target
-                        .value as EstimateInput['imageFormat'],
-                    })
-                  }
-                >
-                  {IMAGE_FORMATS.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {settings.variants && (
-              <Field label="画像のサイズ違い">
-                <select
-                  className={select}
-                  value={input.variants}
-                  onChange={(e) =>
-                    setInput({ variants: Number(e.target.value) })
-                  }
-                >
-                  {VARIANTS.map((v) => (
-                    <option key={v} value={v}>
-                      {v} 種
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-          </div>
-        </>
+        <SetupSettings>
+          {settings.revalidate && (
+            <SettingRadios
+              name="estimate-revalidate"
+              label={settings.revalidate.label}
+              note={settings.revalidate.note}
+              options={settings.revalidate.options.map((o) => ({
+                ...o,
+                flavor: settingFlavor(settings.revalidate!.key, o.value),
+              }))}
+              value={input.revalidateSec}
+              onChange={(revalidateSec) => setInput({ revalidateSec })}
+            />
+          )}
+          {settings.format && (
+            <SettingRadios
+              name="estimate-image-format"
+              label="画像の形式"
+              note={SETTINGS.format.note}
+              options={IMAGE_FORMATS.map((f) => ({
+                value: f.id,
+                label: f.label,
+              }))}
+              value={input.imageFormat}
+              onChange={(imageFormat) => setInput({ imageFormat })}
+            />
+          )}
+          {settings.variants && (
+            <SettingRadios
+              name="estimate-variants"
+              label="画像のサイズ違い"
+              note={SETTINGS.variants.note}
+              options={VARIANTS.map((v) => ({ value: v, label: `${v} 種` }))}
+              value={input.variants}
+              onChange={(variants) => setInput({ variants })}
+            />
+          )}
+        </SetupSettings>
       )}
     </Card>
   );

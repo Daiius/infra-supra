@@ -11,6 +11,23 @@ const card = (title: string | RegExp) =>
   screen.getByRole('heading', { level: 2, name: title }).closest('section')!;
 const combo = (label: string) =>
   screen.getByRole('combobox', { name: new RegExp(`^${label}`) });
+/** ③ 部品・④ 設定の欄（ゲームと共用のラジオの枠。D-115）。名前は見出しの文字で始まる。 */
+const group = (label: string) =>
+  screen.getByRole('group', { name: new RegExp(`^${label}`) });
+const queryGroup = (label: string) =>
+  screen.queryByRole('group', { name: new RegExp(`^${label}`) });
+/** 枠の中で選んでいるラジオの値。 */
+const checked = (label: string) =>
+  within(group(label))
+    .getAllByRole<HTMLInputElement>('radio')
+    .find((r) => r.checked)?.value;
+/** 枠の中で値のラジオを選ぶ。 */
+const choose = (label: string, value: string) =>
+  fireEvent.click(
+    within(group(label))
+      .getAllByRole<HTMLInputElement>('radio')
+      .find((r) => r.value === value)!,
+  );
 
 /** 月の費用・明細・比較表・費用の曲線が出ていることを見て、今の構成の名前を返す。 */
 function expectEstimate(): string {
@@ -104,8 +121,6 @@ describe('見積モードの画面', () => {
   });
 
   it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', async () => {
-    const partSelect = (label: string) =>
-      screen.queryByRole<HTMLSelectElement>('combobox', { name: label });
     window.history.replaceState(
       null,
       '',
@@ -113,7 +128,7 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    expect(partSelect('DB のバックアップ')).toBe(null);
+    expect(queryGroup('DB のバックアップ')).toBe(null);
     // URL に残っていた値は無視して既定にする（URL からも消える）
     expect(window.location.search).not.toContain('dbBackup');
 
@@ -122,7 +137,7 @@ describe('見積モードの画面', () => {
       target: { value: 'vercel-supabase-pro' },
     });
     expectEstimate();
-    expect(partSelect('DB のバックアップ')?.value).toBe('default');
+    expect(checked('DB のバックアップ')).toBe('default');
   });
 
   it('W-08 Astro × CF Free: 1 リクエストの CPU の上限の前提に、当たるルートを添える（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', async () => {
@@ -166,23 +181,23 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    expect((combo('ISR の再検証') as HTMLSelectElement).value).toBe('300');
+    expect(checked('ISR の再検証')).toBe('300');
     // Astro の既定は、消せる置き場（Cloudflare）ではオンデマンド
     fireEvent.change(combo('フレームワーク'), { target: { value: 'astro' } });
     expectEstimate();
-    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('0');
+    expect(checked('記事のキャッシュ')).toBe('0');
     expect(new URLSearchParams(window.location.search).get('r')).toBe('0');
     // 消せない置き場（Google Cloud）では 5 分
     fireEvent.change(combo('構成'), { target: { value: 'gcp-cloud-run' } });
     expectEstimate();
-    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('300');
+    expect(checked('記事のキャッシュ')).toBe('300');
     // 選んだ値は、替えた先で選べるなら残る
-    fireEvent.change(combo('記事のキャッシュ'), { target: { value: '3600' } });
+    choose('記事のキャッシュ', '3600');
     fireEvent.change(combo('構成'), {
       target: { value: 'cloudflare-vinext-paid' },
     });
     expectEstimate();
-    expect((combo('記事のキャッシュ') as HTMLSelectElement).value).toBe('3600');
+    expect(checked('記事のキャッシュ')).toBe('3600');
 
     // 記事を S1 にしてから vinext に替えても、rp.article は残る（vinext の S1 を出した。RS-15 の解除）。SPA（S1 が無い）に替えると消える
     cleanup();
@@ -316,7 +331,7 @@ describe('見積モードの画面', () => {
     ).toBeTruthy();
   });
 
-  it('W-07 見出しに ⓘ のある欄の select は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
+  it('W-07 見出しに ⓘ のある欄の入力は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
     window.history.replaceState(
       null,
       '',
@@ -324,11 +339,18 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    // 部品の欄（DB のバックアップ）と、ⓘ のある条件の欄（構成）を、見出しの文字そのもので取れる
-    const backup = screen.getByRole('combobox', { name: 'DB のバックアップ' });
-    expect(backup.tagName).toBe('SELECT');
-    expect(screen.getByRole('combobox', { name: '構成' }).tagName).toBe(
-      'SELECT',
+    // ⓘ のある条件の欄（月の PV・チームの人数）を、見出しの文字そのもので取れる
+    expect(screen.getByRole('spinbutton', { name: '月の PV' }).tagName).toBe(
+      'INPUT',
     );
+    expect(
+      screen.getByRole('spinbutton', {
+        name: 'チームの人数（管理画面を使う人）',
+      }).tagName,
+    ).toBe('INPUT');
+    // 部品の欄（DB のバックアップ）はゲームと同じラジオの枠（D-115）
+    expect(
+      within(group('DB のバックアップ')).getAllByRole('radio').length,
+    ).toBeGreaterThan(1);
   });
 });
