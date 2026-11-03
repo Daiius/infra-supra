@@ -106,7 +106,7 @@ function migrateAction(a: Action): Action {
  * buildInterval だけを pageCache に読み替える（途中で作り直した保存は、行動のときのフレームワークで判断する。
  * Next.js の静的書き出しの buildInterval はそのまま）。
  */
-export function migrateActionFor(
+function migrateActionFor(
   state: Pick<GameState, 'framework' | 'scenario' | 'routes'>,
   a: Action,
 ): Action {

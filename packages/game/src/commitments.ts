@@ -132,15 +132,7 @@ export function commitmentTerms(
   }
 }
 
-/** 1 年の確約で、ゲームの外も含めた 1 年の割引の率（オンデマンドの 12 か月分に対して）。 */
-export function commitmentDiscount(
-  t: Pick<ActiveCommitment, 'covers' | 'monthly' | 'upfront'>,
-): number {
-  const year = t.covers * 12;
-  return year > 0 ? 1 - (t.monthly * 12 + t.upfront) / year : 0;
-}
-
-export const isActive = (c: ActiveCommitment, month: number) =>
+const isActive = (c: ActiveCommitment, month: number) =>
   c.startMonth <= month && month <= c.endMonth;
 
 export type CommitmentLine = {

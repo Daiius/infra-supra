@@ -1,7 +1,6 @@
 // Workload の組み立て（テンプレート + 設定 + 部品 + 描き方 + 一時的な増加）と、構成の入力（architectureFor・staticBuildOf）。
 import type { Scenario, Stock, WorkloadMods } from './scenario.ts';
 import {
-  apiCacheActive,
   applyComponentsToWorkload,
   applyRouteStrategies,
   type Choices,
@@ -222,7 +221,6 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
   // SPA は ISR・SSR のページを、シェル + データの API に書き換える（prd/10 F-01）。
   // API の応答をキャッシュするなら、記事（ISR だったルート）の中身の API に期間（ISR の間隔と同じ値）を付ける（D-37）
   const shape = sc.frameworks?.spa?.shape;
-  const cache = apiCacheActive(p.platform, p.components, p.framework);
   // Astro の記事（ISR だったルート）は閲覧のときに描いてキャッシュし、投稿・編集で消す（D-103）。数え方は ISR と同じなので
   // ルートは isr のまま（期限・オンデマンドは上で付けた）。JS・CSS はアイランドの分だけ。
   // Next.js の静的書き出しのビルドを起こす更新は、オンデマンドの再検証と同じ数え方の内容の更新、間隔は revalidateSec（オンデマンドは更新のたび）

@@ -191,11 +191,11 @@ export function selectTrends(
 // 比べた方式と結果は prd/07 §5 と D-42（線形は月の利益の伸びを入れず、伸びている構成で「届かなそう」と誤って出た）。
 
 /** 月の利益の前月比に使う数（直近の比の中央値）と、比のクランプ（外れ値に引っ張られにくくする）。 */
-export const CASH_GROWTH = { ratios: 3, min: 0.8, max: 1.2 } as const;
+const CASH_GROWTH = { ratios: 3, min: 0.8, max: 1.2 } as const;
 /** 目標の前後とみなす幅（見込みが目標の ±5% なら「届きそう / 届かなそう」と言い切らない）。 */
-export const CASH_CLOSE_BAND = 0.05;
+const CASH_CLOSE_BAND = 0.05;
 /** 伸びを入れられないとき（月の利益が 0 以下）に平均する直近の月数。 */
-export const CASH_LINEAR_WINDOW = 3;
+const CASH_LINEAR_WINDOW = 3;
 
 export type CashProjection = {
   /** growth: 月の利益を前月比で伸ばした / linear: 月の利益が 0 以下なので、直近の平均で線形に伸ばした。 */
