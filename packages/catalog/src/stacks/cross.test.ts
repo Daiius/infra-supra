@@ -82,7 +82,9 @@ describe('許した組（CROSS_PAIRS）', () => {
       expect(p.sources.length).toBeGreaterThan(0);
       for (const s of p.sources) {
         expect(s.url).toMatch(/^https:\/\//);
-        expect(['2026-11-01', '2026-11-02']).toContain(s.retrievedAt);
+        expect(['2026-11-01', '2026-11-02', '2026-11-03']).toContain(
+          s.retrievedAt,
+        );
       }
     }
   });

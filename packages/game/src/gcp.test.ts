@@ -87,7 +87,7 @@ describe('Google Cloud の構成', () => {
       // DB のバックアップ（D-93）: 既定の Firestore は PITR を付けられる
       ['dbBackup', ['default', 'pitr']],
       // メール送信（D-95）: 既定は SES、Resend も選べる
-      ['email', ['default', 'resend-free', 'resend-pro']],
+      ['email', ['default', 'resend-free', 'resend-pro', 'resend-pro-100k']],
       ['files', ['gcs']],
     ]);
     // 静的書き出しは next/image の既定のローダーが使えないので、変換の部品が無い

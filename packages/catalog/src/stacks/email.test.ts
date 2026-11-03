@@ -25,7 +25,7 @@ describe('メール送信（D-95）', () => {
     }
   });
 
-  it('選択肢: Resend Free・Pro はどの事業者でも、SES は Cloudflare（既定が SES でない）でだけ別に出す', () => {
+  it('選択肢: Resend Free・Pro（5 万通・10 万通）はどの事業者でも、SES は Cloudflare（既定が SES でない）でだけ別に出す', () => {
     const ids = (p: Parameters<typeof componentsOf>[0]) =>
       componentsOf(p, 'email').map((c) => c.id);
     expect(ids('cloudflare')).toEqual([
@@ -33,6 +33,7 @@ describe('メール送信（D-95）', () => {
       'ses',
       'resend-free',
       'resend-pro',
+      'resend-pro-100k',
     ]);
     for (const p of [
       'vercel',
@@ -42,10 +43,18 @@ describe('メール送信（D-95）', () => {
       'netlify',
       'gcp',
     ] as const)
-      expect(ids(p)).toEqual(['default', 'resend-free', 'resend-pro']);
+      expect(ids(p)).toEqual([
+        'default',
+        'resend-free',
+        'resend-pro',
+        'resend-pro-100k',
+      ]);
     expect(emailSenderOf('gcp', 'pay-as-you-go', 'resend-pro').planId).toBe(
       'pro',
     );
+    expect(
+      emailSenderOf('gcp', 'pay-as-you-go', 'resend-pro-100k').planId,
+    ).toBe('pro-100k');
   });
 
   it('既定の送り先のアカウントは構成のアカウントに入り、Resend に替えると Resend が増える', () => {
@@ -111,5 +120,35 @@ describe('メール送信（D-95）', () => {
     const mid = at(4_000_000);
     expect(mid.amount).toBeCloseTo((150_000 * 0.9) / 1000, 9);
     expect(mid.cap).toMatchObject({ hit: false, effect: 'block' });
+  });
+
+  it('Resend Pro の 10 万通の段（D-110）: $35 + 10 万通の後 $0.90、込みの 5 倍（50 万通）で止まる。約 6.7 万通を超えると 5 万通の段より安い', () => {
+    const total = (pv: number, email: string) =>
+      estimate({
+        workload: businessApp(pv),
+        architecture: composeStack('gcp-cloud-run', { email }),
+        books,
+      })
+        .bill.lines.filter((l) => l.accountId === 'resend')
+        .reduce((a, l) => a + (l.amount ?? 0), 0);
+    // 利用者は PV の 0.5%・月 10 通（30 万 PV で 1.5 万通）
+    // 160 万 PV = 8 万通: 5 万通の段は $20 + 3 万通 × $0.90 / 1,000 = $47、10 万通の段は $35
+    expect(total(1_600_000, 'resend-pro')).toBeCloseTo(47, 9);
+    expect(total(1_600_000, 'resend-pro-100k')).toBeCloseTo(35, 9);
+    // 120 万 PV = 6 万通: 5 万通の段（$29）のほうが安い
+    expect(total(1_200_000, 'resend-pro')).toBeCloseTo(29, 9);
+    expect(total(1_200_000, 'resend-pro-100k')).toBeCloseTo(35, 9);
+    // 1,200 万 PV = 60 万通: 込み 10 万 + 課金 40 万 × $0.90 / 1,000 で頭打ち、上限に当たる
+    const r = estimate({
+      workload: businessApp(12_000_000),
+      architecture: composeStack('gcp-cloud-run', { email: 'resend-pro-100k' }),
+      books,
+    });
+    expect(total(12_000_000, 'resend-pro-100k')).toBeCloseTo(35 + 360, 9);
+    expect(
+      r.premises.find(
+        (p) => p.id === 'limit:resend:pro-100k:monthly-cap:email',
+      ),
+    ).toMatchObject({ hit: true, effect: 'block' });
   });
 });

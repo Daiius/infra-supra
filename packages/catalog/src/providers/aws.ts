@@ -39,7 +39,7 @@ const common = {
 /** CloudFront の定額のプランの共通の注記と事実（D-61・2026-11-01 取得）。 */
 const FLAT_NOTES = [
   'WAF・DDoS の保護・Route 53・TLS 証明書・CloudFront Functions・ログの取り込みが込み。Lambda@Edge は従量',
-  'S3 Standard の保存のクレジット（Free 5 GB・Pro 50 GB・Business 1 TB）は数えていない（費用は高めの側）',
+  'S3 Standard の保存のクレジット（Free 5 GB・Pro 50 GB・Business 1 TB・Premium 5 TB）は数えていない（費用は高めの側）',
   '1 プランは 1 distribution。Free は 1 アカウントで 3 つまで。このモデルは CloudFront を 1 つの distribution にまとめる',
   '東京での違いの記述は見当たらない（未確認）',
 ];
@@ -163,6 +163,15 @@ export const aws: PriceBookInput = {
     cloudfrontFlatDocs: src(
       'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html',
     ),
+    // 定額 Premium（2026-11-03 取得。D-110）
+    cloudfrontFlatPremium: {
+      url: 'https://aws.amazon.com/cloudfront/pricing/',
+      retrievedAt: '2026-11-03',
+    },
+    cloudfrontFlatPremiumDocs: {
+      url: 'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html',
+      retrievedAt: '2026-11-03',
+    },
     cloudfrontFlatBlog: src(
       'https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-flat-rate-pricing-plans-with-no-overages',
     ),
@@ -263,14 +272,14 @@ export const aws: PriceBookInput = {
     },
     rdsFree: src('https://aws.amazon.com/rds/free/'),
     freeTier: src('https://aws.amazon.com/free/'),
-    // Amazon SES（2026-11-02 取得。D-95）。Price List API の AmazonSES の版 2026-10-27
+    // Amazon SES（2026-11-02 取得。D-95。2026-11-03 にプランの体系を再確認。D-110）。Price List API の AmazonSES の版 2026-10-27
     sesPrices: {
       url: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSES/current/ap-northeast-1/index.json',
-      retrievedAt: '2026-11-02',
+      retrievedAt: '2026-11-03',
     },
     sesPricing: {
       url: 'https://aws.amazon.com/ses/pricing/',
-      retrievedAt: '2026-11-02',
+      retrievedAt: '2026-11-03',
     },
     // Route 53（2026-11-02 取得。D-96）
     route53Pricing: {
@@ -425,6 +434,26 @@ export const aws: PriceBookInput = {
       premise:
         'CloudFront の定額 Business（月 $200）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
+    },
+    {
+      id: 'flat-premium-requests',
+      quantity: 500_000_000,
+      unit: 'request',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Premium（月 $1,000）はリクエストが月 5 億 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlatPremium', 'cloudfrontFlatPremiumDocs'],
+    },
+    {
+      id: 'flat-premium-transfer',
+      quantity: 51_200,
+      unit: 'gb',
+      period: 'month',
+      scope: 'account',
+      premise:
+        'CloudFront の定額 Premium（月 $1,000）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+      sourceIds: ['cloudfrontFlatPremium', 'cloudfrontFlatPremiumDocs'],
     },
     {
       id: 'cloudwatch-free-logs',
@@ -1213,6 +1242,56 @@ export const aws: PriceBookInput = {
     },
     {
       ...common,
+      id: 'cloudfront-flat-premium',
+      service: 'cloudfront',
+      name: 'CloudFront 定額 Premium',
+      baseFee: {
+        label: '定額料金（CloudFront flat-rate: Premium）',
+        amount: 1000,
+        per: 'month',
+        scope: 'account',
+      },
+      sourceIds: ['cloudfrontFlatPremium', 'cloudfrontFlatPremiumDocs'],
+      notes: [
+        ...FLAT_NOTES,
+        '込みの量は既定の段（50 TB・5 億リクエスト・月 $1,000）で持つ。Premium だけは段を上げられる（75 TB・7.5 億 $1,450 〜 600 TB・60 億 $10,000）が、ここでは持たない。60 億・600 TB を超える Custom は公開の価格が無いので扱わない（D-110）',
+      ],
+      facts: FLAT_FACTS,
+      meters: [
+        {
+          id: 'https-requests',
+          label: 'CDN のリクエスト（CloudFront: HTTPS requests）',
+          resource: 'requests',
+          unit: 'request',
+          allowancePool: 'flat-premium-requests',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatPremiumDocs'],
+        },
+        {
+          id: 'cloudfront-transfer-out',
+          label: 'CDN の転送（CloudFront: data transfer out）',
+          resource: 'egress-gb',
+          unit: 'gb',
+          allowancePool: 'flat-premium-transfer',
+          onExceed: 'adjust',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatPremiumDocs'],
+        },
+        {
+          id: 'origin-fetch',
+          label:
+            'CDN からオリジンへの転送（CloudFront: data transfer to origin）',
+          resource: 'origin-transfer-gb',
+          unit: 'gb',
+          pricing: { model: 'flat', per: 1, unitPrice: 0 },
+          sourceIds: ['cloudfrontFlatPremiumDocs'],
+        },
+        FLAT_INVALIDATION,
+      ],
+    },
+    {
+      ...common,
       id: 'sqs-fifo',
       service: 'sqs',
       name: 'SQS（FIFO）',
@@ -1250,6 +1329,8 @@ export const aws: PriceBookInput = {
       notes: [
         '添付ファイルは送ったデータ 1 GB $0.12 が別にかかる（通知のメールは添付なしとみなし、数えない）',
         'SES の常時無料の通数は無い（Price List API の無料の行はメールボックスのシミュレーターだけ）。新しいアカウントの Free Tier のクレジットは数えない（AX-06）',
+        '2026-07-21 から、新しいアカウント（と 2025-06-01 から送信の無いアカウント）は Essentials のプラン（1,000 通 $0.16）で始まる。プランを選ばずに Essentials になったアカウントは、最初の à la carte への切り替えがすぐ効く。このモデルは切り替えた後の à la carte で数える（D-110）',
+        'Pro（1,000 通 $0.22 + 月 $105）・Enterprise（$0.23 + 月 $500）は到達率の管理・専用 IP などが込みのプラン。通知のメールには要らないので扱わない',
       ],
       meters: [
         {
@@ -1258,7 +1339,19 @@ export const aws: PriceBookInput = {
           resource: 'emails',
           unit: 'count',
           premise:
-            'Amazon SES の送信は受け取る人 1 人ごとに 1,000 通 $0.10（東京も同じ）。月の通数による割引・無料の分は無い',
+            'Amazon SES の送信は à la carte で受け取る人 1 人ごとに 1,000 通 $0.10（東京も同じ）。月の通数による割引・無料の分は無い',
+          interpretation: {
+            adopted:
+              'à la carte（1,000 通 $0.10・月額なし）で数える。料金ページに「You can upgrade or switch to à-la-carte pricing at any time」とあり、既定で Essentials になったアカウントの最初の切り替えはすぐ効く。通知のメールは Essentials の込みの機能（到達率の分析・Mail Manager）を使わない',
+            rejected: [
+              {
+                reading:
+                  '新しいアカウントの既定の Essentials（1,000 通 $0.16。1,000 万通を超えた分は $0.14）で数える',
+                reason:
+                  '既定のプランは誰でもいつでも à la carte に替えられ、替えても失うものが通知のメールでは無い。切り替えないのは安い選択を見落とした状態で、費用を合わせる理由にならない',
+              },
+            ],
+          },
           pricing: { model: 'flat', per: 1_000, unitPrice: 0.1 },
           sourceIds: ['sesPrices', 'sesPricing'],
         },

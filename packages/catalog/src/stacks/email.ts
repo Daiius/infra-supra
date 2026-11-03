@@ -3,7 +3,7 @@
 // - 構成の既定（default）: Cloudflare Paid は自前の Email Service（Workers Paid）。それ以外はどの構成も Amazon SES
 //   （いちばん安い従量・止まる上限が無い）。Cloudflare Free は Email Service の送信が使えず、Resend Free は基準プレイの規模で
 //   1 日 100 通に当たって止まるので、既定にしない。Supabase Auth の組み込みのメールはチームのメンバーにしか送れないので使わない。
-// - 他の事業者の送信（CROSS_PAIRS で許した組）: Resend Free・Pro（どの事業者からも）・SES（Cloudflare から）。
+// - 他の事業者の送信（CROSS_PAIRS で許した組）: Resend Free・Pro 5 万通・Pro 10 万通（どの事業者からも。D-110）・SES（Cloudflare から）。
 import type { ArchitectureInput, WorkloadInput } from 'estimator';
 import type { ComponentOption, Platform } from './index.ts';
 
@@ -36,6 +36,11 @@ const RESEND_PRO: Sender = {
   label: 'Resend Pro（メールの送信）',
   planId: 'pro',
 };
+const RESEND_PRO_100K: Sender = {
+  ...RESEND_FREE,
+  label: 'Resend Pro 10 万通（メールの送信）',
+  planId: 'pro-100k',
+};
 const CF_EMAIL: Sender = {
   label: 'Email Service（メールの送信）',
   accountId: 'cloudflare',
@@ -53,6 +58,7 @@ export function emailSenderOf(
   if (choice === 'ses') return SES;
   if (choice === 'resend-free') return RESEND_FREE;
   if (choice === 'resend-pro') return RESEND_PRO;
+  if (choice === 'resend-pro-100k') return RESEND_PRO_100K;
   // 構成の既定: Cloudflare Paid だけ自前の Email Service、ほかは SES
   return platform === 'cloudflare' && plan !== 'free' ? CF_EMAIL : SES;
 }
@@ -107,7 +113,8 @@ export function withoutUnusedEmail(
 }
 
 const SES_NOTE =
-  'Amazon SES の API（か SMTP）で送る。1,000 通 $0.10 で、無料の通数も 1 日の上限の料金の段も無い。送る元のドメインの認証（DNS のレコード）を設定する';
+  'Amazon SES の API（か SMTP）で送る。à la carte で 1,000 通 $0.10 で、無料の通数も 1 日の上限の料金の段も無い。' +
+  '新しいアカウントは Essentials（1,000 通 $0.16）で始まるので、à la carte に切り替えておく（すぐ効く）。送る元のドメインの認証（DNS のレコード）を設定する';
 const NO_OWN =
   'Supabase Auth の組み込みのメールはチームのメンバーにしか送れない（1 時間 2 通）ので、本番は外の送信のサービスを使う。';
 
@@ -213,5 +220,17 @@ export const EMAIL_COMPONENTS: readonly ComponentOption[] = [
       'Resend の API で送る。月 $20 で 5 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い。' +
       'Resend のアカウントが 1 つ増え、請求が 1 つ増える',
     premiseRefs: ['pool:resend:pro:pro-emails'],
+  },
+  {
+    id: 'resend-pro-100k',
+    slot: 'email',
+    platform: 'resend',
+    hosts: ALL_HOSTS,
+    link: { via: 'http', as: 'resend-pro-100k' },
+    label: 'Resend: Pro（10 万通）で送る',
+    note:
+      'Resend の API で送る。月 $35 で 10 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い。' +
+      '月 約 6.7 万通を超えると、5 万通の段（$20）より安い。Resend のアカウントが 1 つ増え、請求が 1 つ増える',
+    premiseRefs: ['pool:resend:pro-100k:pro-100k-emails'],
   },
 ];
