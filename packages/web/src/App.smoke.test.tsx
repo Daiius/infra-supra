@@ -116,6 +116,8 @@ describe('ゲームモードの画面', () => {
       scenario: ARTICLE,
       framework: 'Next.js（静的書き出し）',
       stack: 'Vercel Pro + Supabase Pro',
+      // 画像の原本の配信（Blob Data Transfer）を従量で払う（既定の Flat Rate CDN では段に込み。D-120）
+      parts: { 'CDN の料金のプラン': 'On-demand CDN（従量）' },
     });
     expect(screen.getByText('所持金が尽きた')).toBeDefined();
     expect(screen.getByText(/1 か月目で終了/)).toBeDefined();

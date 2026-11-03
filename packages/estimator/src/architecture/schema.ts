@@ -327,7 +327,16 @@ export const ArchitectureSchema = z
         z.object({
           id: z.string(),
           seats: z.number().int().positive().optional(),
+          /** 契約の地域（関数の地域。メーターの regionBy: account の単価を引く）。 */
           region: z.string().optional(),
+          /** 読者（閲覧者）の地域（メーターの regionBy: viewer の単価を引く。D-120）。 */
+          viewerRegion: z.string().optional(),
+          /**
+           * 容量の段の選び方（D-120。料金データの capacityTiers の id → 段の id・'fit'・'off'）。無い段の集まりは
+           * capacityTierDefault（既定は fit: 今月の量が収まる最小の段）。
+           */
+          capacityTiers: z.record(z.string(), z.string()).optional(),
+          capacityTierDefault: z.enum(['fit', 'lowest']).optional(),
         }),
       )
       .default([]),

@@ -142,7 +142,9 @@ describe('オンデマンドの再検証（D-49）', () => {
   });
 
   it('最大寿命の分を足しても、オンデマンドの費用は 5 分以下（Vercel Pro・1 か月目）', () => {
-    const cost = (rv?: number) => playMonth(start(3, rv)).history[0]!.infraCost;
+    // CDN の料金は従量（既定の Flat Rate CDN の 1 か月目はクレジットが従量を覆い、差が出ない。D-120）
+    const cost = (rv?: number) =>
+      playMonth(start(3, rv, { cdnPlan: 'on-demand' })).history[0]!.infraCost;
     expect(cost(0)).toBeLessThanOrEqual(cost());
   });
 });

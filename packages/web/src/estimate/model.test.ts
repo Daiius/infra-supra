@@ -138,7 +138,7 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
       routes: {},
     });
     expect(toQuery(i).toString()).toBe(
-      'mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&img=jpeg&v=3&seats=1&tax=0&c.isrCache=default&c.images=default&c.api=same&c.db=supabase&c.dbBackup=default&c.email=default',
+      'mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&img=jpeg&v=3&seats=1&tax=0&c.isrCache=default&c.images=default&c.api=same&c.db=supabase&c.cdnPlan=flat-rate&c.dbBackup=default&c.email=default',
     );
   });
 

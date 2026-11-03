@@ -136,7 +136,12 @@ describe('アカウントの手間', () => {
 
 describe('課金が 2 つの事業者に分かれる', () => {
   it('Cloudflare の請求が加わり、Vercel の Fast Data Transfer・画像の最適化・Blob が減る', () => {
-    const s = playMonth(newGame(VERCEL_PRO));
+    // 転送の明細を見るので CDN の料金は従量（既定の Flat Rate CDN では段に込み。D-120）
+    const s = playMonth(
+      newGame(VERCEL_PRO, 42, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
+        cdnPlan: 'on-demand',
+      }),
+    );
     const plain = playMonth(playMonth(s));
     const cf = playMonth(playMonth(applyAction(s, swap('cf-images'))));
     expect(costOf(plain, 'cloudflare')).toBe(0);

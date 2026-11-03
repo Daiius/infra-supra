@@ -602,6 +602,8 @@ function membersOf(
     const fee = lines.find(
       (l) =>
         l.kind === 'base-fee' &&
+        // 容量の段の月額（Flat Rate CDN。D-120）は席の基本料ではない
+        !l.capacityTier &&
         l.priceRef.provider === u.provider &&
         l.priceRef.planId === u.planId,
     );

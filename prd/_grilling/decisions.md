@@ -334,6 +334,8 @@
 
 ### D-48 Vercel Pro は込み分なし・$20 のクレジットがすべての従量に当たる（確定・2026-11-01）
 
+> ⚠ **一部改定済み**（Flat Rate CDN を扱わない → 新しい Pro の既定の Flat Rate CDN を既定にし、従量は部品。CDN の単価は読者の地域）→「D-120」（2026-11-04）
+
 - ユーザーの問い: 今の Vercel Pro は $20 のクレジットが一種の無料枠として、すべての課金要素で消費される仕組みではないか。画面には CDN Requests の上限の前提だけが出ていた。
 - ユーザーの決定: 公式の今の版を読み直し、クレジットの使った割合も前提として出す。
 - 公式の記述（2026-11-01 取得）:
@@ -1389,6 +1391,32 @@
 - テスト: game の email.test.ts（止まらない・収益を減らさない・段階の境目・話題の日の集中・Bot を除く・1 か月目の見込み・ヒント・封筒のカード）、web の W-30（封筒のカード）・W-32（出来事のダイアログの文）。
 - 残した点: 迷惑メールの扱い・届きやすさ、Email Service の 1 日の上限（数値が公開されたら）、SES の送信の割り当て、通数の仮定の確かめ（D-95 の残り）。
 
+### D-120 D-48 を改める: Vercel Pro の CDN は既定の Flat Rate CDN（容量の段）、CDN の単価は読者の地域（東京 hnd1）（確定・2026-11-04）
+
+- 依頼（ユーザーの決定。supervisor 経由・2026-11-04）: 「Vercel Pro の Flat Rate CDN（新しい Pro の既定）」→ **既定にし、対象外は前提で示す**。従量（On-demand CDN）は部品として残す。「読者の地域の単価」→ 入れる。D-48 の「Flat Rate CDN は申し込み制なので扱わない」と、prd/11 §24.3 の記録（ユーザーの判断待ち）の続き。
+- 公式の記述（2026-11-04 取得）:
+  - [changelog「Flat Rate CDN is now GA for Pro teams」](https://vercel.com/changelog/flat-rate-cdn-is-now-ga-for-pro-teams)（2026-09-08）: 「New Pro teams have Flat Rate CDN on by default, and existing teams can switch over」。超えた量は「served normally and isn't billed」（spike protection。公平な利用の範囲で）。→ D-48 の「申し込み制」は既存のチームの話で、新しい Pro は既定で有効。
+  - [docs/pricing/flat-rate-cdn](https://vercel.com/docs/pricing/flat-rate-cdn)（2026-09-14 更新）: 段は Pro に込み（1M リクエスト・1 TB）/ $20（10M・50 TB）/ $100（50M・50 TB）/ $300（150M・50 TB）。「If your total usage for a billing cycle exceeds your monthly capacity, Vercel moves you to a higher tier at the start of the next cycle」「Vercel will transition you to on-demand pricing if you exceed the highest tier」。段が覆うのは CDN requests・Fast Data Transfer・Blob Data Transfer・Sandbox Data Transfer・CDN の要求の Observability events。対象外に「Large-scale delivery of media or files where such delivery constitutes a majority of bandwidth usage」、当たると Flex CDN への移動・別のプラン・制限がありうる。段の料金に月のクレジットが当たるかは書かれていない。
+  - [docs/plans/pro-plan](https://vercel.com/docs/plans/pro-plan)（2026-09-15 更新）: 「Pro includes the lowest capacity tier at no extra cost, with a capacity of 1 million CDN requests and 1 TB」。
+  - [docs/manage-cdn-usage](https://vercel.com/docs/manage-cdn-usage)（2026-09-14 更新）: CDN の料金は Fast Data Transfer・Fast Origin Transfer・CDN Requests の 3 つで、「pricing varies by the region where requests originate」。Fast Origin Transfer の Pro の込みは「Usage-based」（段の対象外）。
+  - [地域の料金 hnd1](https://vercel.com/docs/pricing/regional-pricing/hnd1)・[iad1](https://vercel.com/docs/pricing/regional-pricing/iad1)（2026-09-14 更新）: hnd1 は転送 $0.16/GB・リクエスト $2.60/100 万・FOT $0.27/GB・ISR $0.52/$5.20・画像の変換 $0.0661/1,000・キャッシュ $0.52/$5.20・CPU $0.202・メモリ $0.0167・Blob の転送 $0.053。iad1 は今の catalog の値（$0.15・$2.00・$0.06・$0.40/$4.00・$0.05・$0.40/$4.00）と同じ。
+  - [関数の地域](https://vercel.com/docs/functions/configuring-functions/region)（2026-08-11 更新）: 新しいプロジェクトの既定は iad1。[ISR の料金](https://vercel.com/docs/incremental-static-regeneration/limits-and-pricing)（2026-08-11 更新）: ISR の読み書きは「priced regionally based on the Vercel function region(s)」。[画像の最適化の料金](https://vercel.com/docs/image-optimization/limits-and-pricing)（2026-08-11 更新）は地域の決め方を書かない。
+- 決定:
+  - **estimator**: Plan に容量の段 `capacityTiers`（次元ごとの対象のメーター・段の月額と容量・使用率の前提の文・対象外の判定 `outOfScope`）を足した。契約（Subscription・Architecture の account）の `capacityTiers`（段の集まり → 段の id・`fit`・`off`）と `capacityTierDefault`（`fit` / `lowest`）で払う段を決める。`fit` は今月の量が収まる最小の段（見積モード）、段の id はその段（ゲームの前の月の量で決まった段。量が段を超えてもその月は請求が増えない）、`off` は従量。最上段を超えると従量。対象の明細は 0 にして段の月額を基本料の明細（`capacityTier` つき）に出し、**月のクレジットは段の月額に当てない**（記載が無く、当てないほうが高い）。明細の判定は Bill の `capacityTiers`（量・払う段・収まる段・従量で払った額）。前提は `capacity:<provider>:<plan>:<set>`（量 / 今月の段の容量・effect `cost`・流量）。
+  - **地域**: メーターに `regionBy`（`account` は契約の地域＝関数の地域、`viewer` は読者の地域）、契約に `viewerRegion` を足した。Vercel Pro の構成は関数 `iad1`・読者 `hnd1`（シナリオ・テンプレートは日本の読者）。読者の地域で引くのは CDN Requests・Fast Data Transfer・Blob Data Transfer・**Fast Origin Transfer**・**画像の最適化**。前の 3 つは文書のとおり。FOT は「CDN の料金の 3 つの資源」としての書き方から読者の地域と読み、関数の地域（$0.06）は退けた読みとして残した。画像の最適化は地域の決め方が書かれていないので高いほう（読者の地域）で数えた。Active CPU・メモリ・ISR・Blob の保存と操作は関数の地域（iad1）のまま（ISR は hnd1 の単価もデータに持つ）。地域を選ぶ部品は入れていない。
+  - **既定と部品**: Vercel のスロット「CDN の料金のプラン」（`cdnPlan`）に `flat-rate`（既定）と `on-demand` を足した。Hobby では出さない（`slotIneffective`）。On-demand は契約の `capacityTiers: { 'flat-rate-cdn': 'off' }`。
+  - **ゲーム**: 状態 `capacityTiers`（契約 → 段の集まり → 来月の段）を持ち、毎月の終わりに今月の量が収まる段にする（最上段を超えたら `off`）。始めたばかりの契約（1 か月目・乗り換え先）は最小の段（Pro に込みの段）。量が減った月の翌月に下がるのは、利用者が段を選び直すとみなした（上がるのは公式の記述どおり）。始める画面の 1 か月目の見込み・部品の見込みも状態の段で引く。保存は行動の再生なので版は上げない。
+  - **対象外の前提**: 段の対象の転送（Fast Data Transfer・Blob Data Transfer）のうち画像の配信（`image-read`）の割合が 50% を超えると、事実の前提 `capacity:vercel:pro:flat-rate-cdn:media` を出す（割合と、対象外とされて従量で払ったときの段の対象の額を文に添える）。費用は段のまま。estimator の資源シミュレーションに転送のクラスごとの内訳（`egressGbByClass`）を足した。記事コミュニティは Next.js で 59%・Astro 72%・SPA 83%（どれも当たる）、受託は当たらない。
+  - ヒント: 段の前提を超えた月のヒントは「翌月から上の段の月額になった。従量（On-demand）と比べる」にした。出来事「込み分・クレジットの 70% を超えた」の前提は変えていない（段の前提は足していない）。
+- 見積モード（1 か月・既定の部品・Next.js）: 記事 30 万 PV $56.43 → $66.29（225 万リクエスト・$20 の段。従量ならクレジットに収まっていた分より高い）・130 万 PV $150.95 → $82.55（975 万リクエストで $20 の段の容量の 97%。約 133 万 PV を超えると翌月 $100 の段）。受託 30 万 PV $47.43 → $67.43・130 万 PV $74.68 → $80.95。On-demand を選んだときは東京の単価で、記事 $63.81・$180.98、受託 $47.43・$97.15。
+- 基準プレイ（シード 1〜20・何もしない・目標の額は動かさない）: Vercel 以外の組は全部不変（**目標の根拠の CF Paid × Next.js は記事・受託とも 20 / 20 のまま**）。Hobby も不変。
+  - 記事 × Vercel Pro: Next.js 0 → 0 / 20（所持金の平均 $835 → $1,182）・SPA 0 → 0（$745 → $1,083）・**Astro 0 → 14 / 20（$1,386 → $1,754）**・静的書き出し 0 → 0（$418 → $672）。Astro × DynamoDB 6 → 20・Astro × API を Workers 1 → 20、Astro × DynamoDB × 画像だけ Cloudflare 20 → 11。最も所持金が残る組は CF Paid × Astro（$2,568）のままで、新しい最安の床はできていない。
+  - 受託 × Vercel Pro: どのフレームワークも 0 / 20 のまま、所持金は $204〜220 減る（従量の CDN は月 $20 のクレジットに収まっていたが、2 か月目から $20 の段）。Neon の SPA 14 → 0（従量の CDN でも東京の単価で 6）・DynamoDB 20 → 0（従量なら Next.js 17・SPA 20）・Next.js の API を Workers 20 → 0（従量でも 0）・Astro の API を Workers 19 → 0。
+  - 既存の基準プレイ: 記事 vercel-pro 0 → 0（$835 → $1,182）・vercel-to-cf 1 → 2・cf-paid-accept 19 → 20、受託 vercel-pro 0 → 0（$1,508 → $1,302）・vercel-to-cf 19 → 14・cf-paid-accept 7 → 6 / 20。
+  - golden: GD-4（シード 42・3・31）の Vercel の行と、Vercel へ乗り換える cf-paid-accept のシード 31（$1,056 → $2,129・goal → won）、受託（シード 42・11・3）の Vercel の行（vercel-to-cf のシード 42 は won → goal）、SPA（シード 42）の Vercel の行が変わった。
+- テスト: estimator の capacity-tiers.test.ts（段の選び方・クレジットを当てない・最上段の先・読者の地域・スキーマ）、catalog の既定の Flat Rate CDN・地域・対象外の前提、game の 1 か月目と翌月の段・見積モードと 1 か月目（最小の段で比べる）、web の URL の互換と見積モードのクレジットの表示（従量で）。
+- 残した点: 段の月額にクレジットが当たるか・FOT と画像の最適化の地域（会社の請求で確かめる）、関数の地域を選ぶ部品（hnd1 に置くと CPU・メモリ・ISR が東京の単価）、Flex CDN（対象外とされた後の扱い）、CDN Request CPU Duration・Sandbox・Observability events（数えていない）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
@@ -1412,7 +1440,7 @@
 
 | 対象 | 何が未確認か | 参照 |
 |---|---|---|
-| Vercel Pro | 込み分なし・クレジットの読み（D-48）を会社の請求で確かめる | D-10・D-48 |
+| Vercel Pro | 込み分なし・クレジットの読み（D-48）を会社の請求で確かめる。Flat Rate CDN の段の月額にクレジットが当たるか・Fast Origin Transfer と画像の最適化の地域（D-120。当てない・読者の地域で数えている） | D-10・D-48・D-120 |
 | 日本の消費税 | ~~Vercel~~ → D-84（国税庁の公表サイトに登録があり `added`）。Supabase・Netlify・Neon の日本の扱い（文書に記載なし・公表情報にも名前なし。税抜のまま）・事業者として契約する場合。~~Vercel Pro の席の種類~~ → D-84（閲覧の席は無料。計算は今のまま） | D-76・D-77・D-84 |
 | Netlify | Blobs の単価・Pro の上の段の価格・関数の丸め（D-84 で再確認しても記載なし）。~~Free の商用利用の可否~~ → D-84（契約の §6 に禁止なし） | D-71・D-84・prd/11 §14 |
 | Neon | 負荷と CU の関係・~~instant restore の履歴の量~~ → D-93（窓の間の変更の量で数える。1 行 2 KB の仮定）・Vercel の Marketplace 経由の価格（請求が Vercel にまとまることは D-84 で確認）・Netlify Database | D-77・D-84・prd/11 §15 |

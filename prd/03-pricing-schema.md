@@ -170,11 +170,37 @@ type Credit = {
 - Vercel Pro（D-48・2026-11-01 取得）: 資源ごとの込み分はなく、月 $20 のクレジットがすべての従量に最初の 1 単位から当たる。
   - 出典: [docs/plans/pro-plan](https://vercel.com/docs/plans/pro-plan) 「The monthly credit applies to all managed infrastructure billable resources from the first unit you use.」
   - 出典: [docs/pricing](https://vercel.com/docs/pricing) 「Pro teams get a monthly usage credit instead」
-  - pricing ページの「10M / 1TB included」は、2025-09-09 の changelog で置き換えられる前の表記として退けた。申し込み制の Flat Rate CDN は扱わない。
+  - pricing ページの「10M / 1TB included」は、2025-09-09 の changelog で置き換えられる前の表記として退けた。
+  - CDN の 3 項目（CDN Requests・Fast Data Transfer・Blob Data Transfer）は、新しい Pro の既定の Flat Rate CDN（§7b の容量の段）で払う。従量（On-demand）は構成の部品で選ぶ（D-120。D-48 の「扱わない」を改めた）。
 - `onExhausted`（D-71）: 使い切ったときの挙動。`bill`（既定。超えた分を請求）/ `block`（超えると止まり、超えた分は請求しない。前提の effect は `block`、明細の `breaches` に `credit-exhausted`）。
   - Netlify（D-71・2026-11-02 取得）: 消費の単位が金額でなくクレジット（デプロイ 1 回・GB 時間・GB・1 万リクエスト）なので、補充の 1 クレジットの金額（Pro $10/1,500・Personal $5/500）でメーターを金額に直し、込みのクレジットを金額のクレジットにする。Free は補充が無く `block`（金額は使用率の判定のための換算で、請求は 0）。Personal・Pro は自動の補充を有効にする前提で `bill`。prd/11 §14。
   - 本番のデプロイの回数を数える資源 `deploys`（`ci-build` のビルドし直しの回数）を足した。
 この順序はプロバイダーによって異なる可能性がある。異なる場合は PriceBook 側で指定できるようにする（要確認・実データで判断）。
+
+## 7b. 容量の段（D-120）
+
+```ts
+type CapacityTierSet = {
+  id: string;                        // 'flat-rate-cdn'
+  label: string;                     // 明細の行の名前の頭
+  dimensions: { id: string; label: string; unit: Unit; meterIds: MeterId[] }[]; // リクエスト・転送など
+  tiers: { id: string; label: string; fee: number; capacity: Record<DimensionId, number> }[]; // 小さい順
+  premise: string;                   // 使用率の前提の 1 文
+  outOfScope?: { measure: 'media-transfer-share'; dimension: string; above: number; premise: string };
+  interpretation?: Interpretation;
+  sourceIds: SourceId[];
+};
+```
+
+- Plan の `capacityTiers` に持つ。対象のメーターを従量の代わりに段の定額で払う（Vercel の Flat Rate CDN: Pro に込み 100 万リクエスト・1 TB / $20 / $100 / $300）。
+- どの段かは契約（Subscription・Architecture の account）の `capacityTiers`（段の集まり → 段の id・`fit`・`off`）で決まる。無ければ `capacityTierDefault`（既定 `fit`）。
+  - `fit`: 今月の量が収まる最小の段（見積モードの「この量なら何の段」）。
+  - 段の id: その段（ゲームの前の月の量で決まった段）。量が段を超えてもその月の請求は増えない（翌月から上の段にするのは使う側。Vercel の「moves you to a higher tier at the start of the next cycle」）。
+  - `lowest`（`capacityTierDefault`）: 最小の段（始めたばかりの契約）。`off`: 段を使わない（従量）。最上段を超える量は従量。
+- 計算の順: 単価の後・クレジットの前。対象の明細の金額を 0 にし、段の月額を基本料の明細（`kind: 'base-fee'`・`capacityTier`）に出す。**クレジットは段の月額に当てない**（Vercel は記載なし。高いほうに倒した）。
+- 明細の外に Bill の `capacityTiers`（次元ごとの量・払う段・収まる段・従量で払ったときの対象の額）を出す。前提は `capacity:<provider>:<plan>:<set>`（量 / 今月の段の容量の最も高い次元・effect `cost`・流量）。
+- `outOfScope`（`media-transfer-share`）: 次元の対象のメーターを数えるノードの転送のうち、画像の配信（`image-read`）の割合が `above` を超えると事実の前提 `…:media` を出す（費用は段のまま）。割合は資源シミュレーションの `egressGbByClass`（ノードの転送のクラスごとの内訳）から出す。
+- 検証: 次元の対象のメーターがあり単位が一致する、段の容量が次元ごとに 1 つずつ、段は月額・容量とも小さい順、`outOfScope` の次元がある、出典。
 
 ## 8. 為替
 
@@ -197,7 +223,7 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 | メーターの別名 | 名称変更（Edge Requests → CDN Requests）を `aliases` で持つ | 11 |
 | `rounding: 'not-stated'` | 丸めが書かれていない。エンジンは仮定（既定は丸めなし）で計算し、仮定を使ったことを根拠に残す | 12 |
 | 利用者の設定による超過時の挙動 | 予算による一時停止（遅れつき）のように、`onExceed` を構成側で選べるメーター | 10 |
-| 地域料金 | 関数の地域（構成）と閲覧者の地域分布（Workload）で単価を引く | 8 |
+| 地域料金 | 関数の地域（構成）と閲覧者の地域分布（Workload）で単価を引く。**実装（D-120）**: メーターの `regional` と `regionBy`（`account` は契約の地域＝関数の地域・`viewer` は読者の地域）。地域は構成の契約の `region`・`viewerRegion`（Vercel Pro は iad1・hnd1）で、閲覧者の地域の分布は持たない（読者は 1 つの地域） | 8 |
 | 税込かどうか | `taxIncluded`。さくらの VPS は税込の円、他は税抜のドル。見積は方針（税抜で揃えるなど）に合わせて換算する。日本から契約するときに請求へ消費税が足されるかは、料金表とは別の文書（各社の課税・請求の文書）なので PriceBook に持たず catalog の `JAPAN_TAX`（`added` / `included` / `unconfirmed`・出典つき）に持つ。`included` は `taxIncluded` の事業者だけ（テスト。D-76） | 18 |
 | 備考（`notes`） | 前払い・最低利用期間・課金の時間単位など、月額に効かない支払いの条件は**備考として文で残す**だけにする（構造化しない。D-14） | 19 |
 | `premise` | Limit・Meter・DeployTarget の対応に付ける「プラットフォームの前提」の印と、人が読める 1 文。見積の「重要な前提」とゲームの説明が同じ文を使う（01 §8.1） | 1・4・6・7 |
@@ -236,7 +262,7 @@ type ExchangeRate = { base: Currency; quote: Currency; rate: number; asOf: strin
 
 - **Vercel + Supabase の画像の原本の置き場は Vercel Blob**（D-46・2026-11-01 取得）。それまでは料金を取得しておらず、課金先なし（明細に「対応なし」）で残していた。
   - 選んだ理由: アプリは Next.js を Vercel に載せており、画像の最適化（Image Optimization）と同じ Vercel のアカウント・同じ込み分・同じクレジットの中で数えられる。Hobby の込み分を超えると 30 日使えない、という他の Hobby のメーターと同じ止まり方になる。Supabase Storage も構成として自然だが、DB の egress と込み分を共有するので、画像の配信が DB の egress の上限に効く形になる。そうするとアプリの DB の扱い（D-24 の部品）と絡むため、今回は採らない（部品として選べるようにするなら、そのときに料金を取得する）。
-  - 単価: 既定は iad1（$0.023/GB 月・Simple Operations $0.40/100 万・Advanced Operations $5.00/100 万・Blob Data Transfer $0.05/GB）、東京（hnd1）は地域料金（$0.025・$0.37・$4.70・$0.053）。Hobby の込み分は保存量 1 GB・Simple 1 万・Advanced 2,000・転送 10 GB で、超えると使えない（追加の請求はない）。Pro は込み分なしで、月のクレジットに当たる。出典は vercel.com/docs/vercel-blob/usage-and-pricing（2026-09-23 更新）と地域料金のページ（2026-09-14 更新）。
+  - 単価: 既定は iad1（$0.023/GB 月・Simple Operations $0.40/100 万・Advanced Operations $5.00/100 万・Blob Data Transfer $0.05/GB）、東京（hnd1）は地域料金（$0.025・$0.37・$4.70・$0.053）。Hobby の込み分は保存量 1 GB・Simple 1 万・Advanced 2,000・転送 10 GB で、超えると使えない（追加の請求はない）。Pro は込み分なしで、月のクレジットに当たる（Blob Data Transfer は既定の Flat Rate CDN の段に込みで、従量にしたときは読者の地域の単価。D-120）。出典は vercel.com/docs/vercel-blob/usage-and-pricing（2026-09-23 更新）と地域料金のページ（2026-09-14 更新）。
   - 配信の数え方（公式の料金の例どおり。OCL-2AE853BD）: 最適化しない画像は、ブラウザが Blob の URL から直接読む。CDN Requests と Blob Data Transfer はヒットも含む全件で、Simple Operations と Fast Origin Transfer は miss だけになる。Fast Data Transfer にはならない。estimator の `object-storage` に `cdnHitRate`（事業者の CDN が自分で配信するときのヒット率）を足して、Blob のノードがこれを数える。ヒット率は画像の CDN のヒット率と同じ 0.9（仮定）。Hobby は画像の配信だけで Blob Data Transfer の込み分（10 GB）に当たりうる。
   - 残る近似: 画像を最適化する経路では、変換のときに原本を読む分（Simple Operations・転送）を数えていない。
 

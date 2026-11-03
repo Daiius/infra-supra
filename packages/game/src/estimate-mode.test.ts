@@ -1,6 +1,6 @@
 // 見積モードの入力の組み立て（D-73）: 選べる部品の規則が始める画面と同じで、Workload がゲームの 1 か月目と同じ数え方になること。
 import { composeStack, loadPriceBooks, STACK_DEFS } from 'catalog';
-import { estimate } from 'estimator';
+import { estimate, type ArchitectureInput } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
   defaultRevalidateSec,
@@ -66,6 +66,15 @@ describe('estimateComponents', () => {
   });
 });
 
+/** 始めたばかりの契約（容量の段は最小の段。D-120）。 */
+const firstMonth = (a: ArchitectureInput): ArchitectureInput => ({
+  ...a,
+  accounts: (a.accounts ?? []).map((x) => ({
+    ...x,
+    capacityTierDefault: 'lowest' as const,
+  })),
+});
+
 describe('estimateWorkload', () => {
   it('始めた月の PV では、ゲームの 1 か月目のインフラ費用と同じになる（出来事の無い月）', () => {
     let checked = 0;
@@ -97,9 +106,13 @@ describe('estimateWorkload', () => {
                 revalidateSec: defaultRevalidateSec(fw, i, sc),
               },
             }),
-            architecture: composeStack(STACK_DEFS[i]!, components, {
-              framework: fw,
-            }),
+            // 見積モードの容量の段（Vercel の Flat Rate CDN）は今月の量が収まる段、ゲームの 1 か月目は始めたばかりの契約で
+            // 最小の段（量が段を超えても翌月から上の段。D-120）。そろえて比べる
+            architecture: firstMonth(
+              composeStack(STACK_DEFS[i]!, components, {
+                framework: fw,
+              }),
+            ),
             books,
           });
           expect(usdOf(r.bill.totals), `${sc.id} ${fw} ${stackId}`).toBeCloseTo(

@@ -24,7 +24,16 @@ export type Subscription = {
   /** ノード単位の固定費（インスタンスなど）を数えるためのノード。 */
   nodeIds: string[];
   seats?: number;
+  /** 契約の地域（関数の地域）。メーターの regionBy: account の単価を引く。 */
   region?: string;
+  /** 読者（閲覧者）の地域。メーターの regionBy: viewer の単価を引く（D-120）。 */
+  viewerRegion?: string;
+  /**
+   * 容量の段の選び方（D-120。段の集まりの id → 段の id・'fit'・'off'）。'fit' は今月の量が収まる最小の段、'off' は使わない（従量）。
+   * 無い段の集まりは capacityTierDefault（既定 fit。lowest は最小の段＝始めたばかりの契約）。
+   */
+  capacityTiers?: Record<string, string>;
+  capacityTierDefault?: 'fit' | 'lowest';
   /** 利用者が選んだ超過時の挙動（configurableOnExceed の範囲だけ）。 */
   onExceed?: Record<string, OverageBehavior>;
 };
@@ -93,6 +102,24 @@ export type LineItem = {
   note?: string;
   /** kind: 'credit' のとき: どのクレジットを、当てられる従量のいくらに当てたか（使用率の前提に使う。D-48）。 */
   credit?: { id: string; limit: number; eligible: number };
+  /** 容量の段の月額の明細（kind: base-fee）・段に込みにした従量の明細のとき、どの段の集まりか（D-120）。 */
+  capacityTier?: { set: string; tier: string };
+};
+
+/**
+ * 容量の段（D-120）の判定。usage は次元ごとの今月の量、applied はこの月に払う段（null は従量）、fitting は今月の量が収まる
+ * 最小の段（null は最上段を超えた）。onDemand は段に込みにした従量の明細を従量で払ったときの額（クレジットの前）。
+ */
+export type CapacityTierUse = {
+  accountId: string;
+  provider: string;
+  planId: string;
+  set: string;
+  usage: Record<string, number>;
+  applied: string | null;
+  fitting: string | null;
+  onDemand: number;
+  nodeIds: string[];
 };
 
 export type LimitBreach = {
@@ -121,6 +148,8 @@ export type Bill = {
   unpricedLines: number;
   breaches: LimitBreach[];
   eligibilityViolations: EligibilityViolation[];
+  /** 容量の段の判定（D-120）。段の集まりを持つプランの契約ごと（'off' でも量と収まる段を出す）。 */
+  capacityTiers: CapacityTierUse[];
   priceBookVersions: Record<string, string>;
 };
 
@@ -149,7 +178,8 @@ function findMeter(plan: Plan, id: string): Meter | undefined {
   return plan.meters.find((m) => m.id === id || m.aliases?.includes(id));
 }
 
-function pricingFor(meter: Meter, region: string | undefined): Pricing {
+function pricingFor(meter: Meter, sub: Subscription): Pricing {
+  const region = meter.regionBy === 'viewer' ? sub.viewerRegion : sub.region;
   const regional = region
     ? meter.regional?.find((r) => r.region === region)
     : undefined;
@@ -394,7 +424,7 @@ export function priceUsage(input: {
     }
 
     // 6. 単価
-    const pricing = pricingFor(meter, sub.region);
+    const pricing = pricingFor(meter, sub);
     if (pricing.model === 'unpriced') {
       lines.push({
         ...base,
@@ -413,6 +443,98 @@ export function priceUsage(input: {
       billableQuantity: billable,
       ...(tiers ? { tiers } : {}),
     });
+  }
+
+  // 6b. 容量の段（D-120）: 対象のメーターの明細を段の定額に置き換える（段の月額は固定費の明細。クレジットは当てない）
+  const capacityTiers: CapacityTierUse[] = [];
+  for (const sub of input.subscriptions) {
+    const book = books.get(sub.provider)!;
+    const plan = book.plans.find((p) => p.id === sub.planId)!;
+    for (const set of plan.capacityTiers) {
+      const covered = new Set(set.dimensions.flatMap((d) => d.meterIds));
+      const targets = lines.filter(
+        (l) =>
+          l.kind === 'usage' &&
+          l.accountId === sub.accountId &&
+          l.priceRef.provider === book.provider &&
+          l.priceRef.planId === plan.id &&
+          covered.has(l.priceRef.meterId!),
+      );
+      const usage = Object.fromEntries(
+        set.dimensions.map((d) => [
+          d.id,
+          sum(
+            targets
+              .filter((l) => d.meterIds.includes(l.priceRef.meterId!))
+              .map((l) => l.quantity ?? 0),
+          ),
+        ]),
+      );
+      const fitting =
+        set.tiers.find((t) =>
+          set.dimensions.every((d) => usage[d.id]! <= t.capacity[d.id]!),
+        ) ?? null;
+      const mode =
+        sub.capacityTiers?.[set.id] ??
+        (sub.capacityTierDefault === 'lowest' ? set.tiers[0]!.id : 'fit');
+      if (
+        mode !== 'fit' &&
+        mode !== 'off' &&
+        !set.tiers.some((t) => t.id === mode)
+      )
+        throw new PricingInputError(
+          `容量の段 ${set.id} に段 ${mode} がない（fit・off・段の id）`,
+        );
+      const applied =
+        mode === 'off'
+          ? null
+          : mode === 'fit'
+            ? fitting
+            : set.tiers.find((t) => t.id === mode)!;
+      const onDemand = sum(targets.map((l) => l.amount ?? 0));
+      const nodeIds = [...new Set(targets.flatMap((l) => l.nodeIds))];
+      capacityTiers.push({
+        accountId: sub.accountId,
+        provider: book.provider,
+        planId: plan.id,
+        set: set.id,
+        usage,
+        applied: applied?.id ?? null,
+        fitting: fitting?.id ?? null,
+        onDemand,
+        nodeIds,
+      });
+      if (!applied) continue;
+      const tag = { set: set.id, tier: applied.id };
+      for (const l of targets) {
+        l.amount = 0;
+        l.capacityTier = tag;
+        l.assumptions = [
+          ...l.assumptions,
+          `${set.label}の${applied.label}に込み（従量の代わりに段の定額）`,
+        ];
+      }
+      lines.push({
+        kind: 'base-fee',
+        accountId: sub.accountId,
+        nodeIds,
+        currency: book.currency,
+        amount: applied.fee,
+        status: 'priced',
+        priceRef: {
+          provider: book.provider,
+          version: book.version,
+          planId: plan.id,
+        },
+        label: `${set.label}: ${applied.label}`,
+        quantity: 1,
+        assumptions:
+          mode === 'fit'
+            ? ['今月の量が収まる最小の段（量が段を超えた月は、翌月から上の段）']
+            : [],
+        capacityTier: tag,
+      });
+    }
   }
 
   // 7. クレジット: 同じアカウント × プランの従量の明細に当てる。余りは繰り越さない。
@@ -555,6 +677,7 @@ export function priceUsage(input: {
     unpricedLines: lines.filter((l) => l.status === 'unpriced').length,
     breaches,
     eligibilityViolations,
+    capacityTiers,
     priceBookVersions,
   };
 }

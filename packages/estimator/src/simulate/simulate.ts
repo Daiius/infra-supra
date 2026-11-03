@@ -79,6 +79,8 @@ export type NodeUsage = {
    */
   coldStartShare?: number;
   host?: HostLoad;
+  /** 転送（egress-gb）のクラスごとの内訳（GB・月。経路の分だけ。画像の配信の割合の前提に使う。D-120）。 */
+  egressGbByClass: Partial<Record<RequestClass, number>>;
 };
 
 export type Simulation = {
@@ -556,6 +558,7 @@ export function simulateResources(
         cpuSources: [],
         busyMs: 0,
         peakBusyMs: 0,
+        egressGbByClass: {},
       };
       hostAcc.set(n.id, {
         kb: 0,
@@ -587,15 +590,20 @@ export function simulateResources(
       // ルートごとの届く件数（内訳だけに使う。ピークの流し直しでは使わない）
       const src = (w.sources[cls] ?? []).map((s) => s.count);
       for (const id of path) {
+        const u = nodes[id]!;
+        const before = u.resources['egress-gb'] ?? 0;
         current = consume(
           byId.get(id)!,
           cls,
           current,
-          nodes[id]!,
+          u,
           w,
           hostAcc.get(id)!,
           src,
         );
+        const egress = (u.resources['egress-gb'] ?? 0) - before;
+        if (egress !== 0)
+          u.egressGbByClass[cls] = (u.egressGbByClass[cls] ?? 0) + egress;
       }
     }
     return { nodes, hostAcc };

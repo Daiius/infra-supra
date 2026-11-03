@@ -161,13 +161,34 @@ describe('ゲームの記録', () => {
     expect(credit.monthsUntil).not.toBeNull();
   });
 
-  it('記事コミュニティの Vercel Pro は 1 か月目からクレジットを超え、超えた分が請求される（D-48）', () => {
-    const s = playN(1);
+  it('記事コミュニティの Vercel Pro（CDN は従量）は 1 か月目からクレジットを超え、超えた分が請求される（D-48）', () => {
+    const s = playMonth(
+      newGame(3, 42, undefined, undefined, undefined, {
+        cdnPlan: 'on-demand',
+      }),
+    );
     const p = s.history[0]!.snapshots.find(
       (x) => x.id === 'credit:vercel:pro:usage-credit',
     )!;
     expect(p.hit).toBe(true);
     expect(p.effect).toBe('cost');
     expect(s.phase).toBe('playing');
+  });
+
+  it('記事コミュニティの Vercel Pro は 1 か月目に Flat Rate CDN の込みの段を超え、翌月から上の段を払う（D-120）', () => {
+    const s = playN(2);
+    const [m1, m2] = s.history;
+    const p = m1!.snapshots.find(
+      (x) => x.id === 'capacity:vercel:pro:flat-rate-cdn',
+    )!;
+    expect(p).toMatchObject({ hit: true, effect: 'cost', accumulates: false });
+    // 超えた月の請求は増えない（込みの段の月額 0）。翌月は上の段の月額
+    const tierFee = (m: typeof m1) =>
+      m!.lines
+        .filter((l) => l.label.includes('Flat Rate CDN'))
+        .reduce((a, l) => a + l.amount, 0);
+    expect(tierFee(m1)).toBe(0);
+    expect(tierFee(m2)).toBeGreaterThan(0);
+    expect(s.capacityTiers?.vercel?.['flat-rate-cdn']).toBeDefined();
   });
 });

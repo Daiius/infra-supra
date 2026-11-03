@@ -185,12 +185,13 @@ describe('Workload と構成（D-108）', () => {
 });
 
 describe('費用と制限（D-108）', () => {
+  // Vercel の CDN の料金は従量（既定の Flat Rate CDN の 1 か月目はクレジットが従量を覆い、CPU の差が費用に出ない。D-120）
   const m1 = (s: number, fw: FrameworkId, routes?: RouteOverrides) =>
     setupMonthOneEstimate(
       ARTICLE_COMMUNITY,
       s,
       fw,
-      {},
+      { cdnPlan: 'on-demand' },
       undefined,
       undefined,
       routes,
