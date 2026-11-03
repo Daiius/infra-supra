@@ -926,6 +926,35 @@ describe('ゲームモードの画面', () => {
     expect(
       screen.getByRole('list', { name: '要件の札の凡例' }).textContent,
     ).toContain('誰が見ても同じ中身');
+    // 区画は種類ごとのスケルトンで描く（飾りなので aria-hidden。D-113 の追記）
+    /** 見取り図の区画の id → スケルトンの種類。 */
+    const kinds = (page: string) =>
+      Object.fromEntries(
+        [
+          ...screen
+            .getByRole('list', { name: `${page}の見取り図（要件）` })
+            .querySelectorAll('li[data-region]'),
+        ].map((li) => {
+          const sk = li.querySelector('[data-kind]');
+          expect(sk?.getAttribute('aria-hidden')).toBe('true');
+          return [
+            li.getAttribute('data-region'),
+            sk?.getAttribute('data-kind'),
+          ];
+        }),
+      );
+    expect(kinds('記事のページ')).toMatchObject({
+      header: 'header',
+      title: 'title',
+      body: 'body',
+      images: 'image',
+      likes: 'likes',
+      comments: 'comments',
+    });
+    expect(kinds('個人向けのページ')).toMatchObject({
+      profile: 'profile',
+      notifications: 'notifications',
+    });
     // 受託のシナリオも同じ形で出る
     fireEvent.click(
       screen.getByRole('radio', { name: /^受託先の業務アプリの運用/ }),
@@ -933,6 +962,12 @@ describe('ゲームモードの画面', () => {
     expect(needs('業務の画面', '一覧の表（申請・記録）')).toContain(
       '人ごとに違う',
     );
+    expect(kinds('業務の画面')).toMatchObject({
+      menu: 'menu',
+      search: 'search',
+      table: 'table',
+      form: 'form',
+    });
   });
 
   it('W-31 始める画面: インフラの構成を先に選び、載せられないフレームワークは選べない。選んでいたら載せられるものに戻して知らせる（D-113）', async () => {

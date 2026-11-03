@@ -18,9 +18,15 @@ const BUSINESS_WIREFRAMES: PageWireframe[] = [
   {
     route: 'app',
     regions: [
-      { id: 'header', label: 'ヘッダー（ログイン中）', needs: ['personal'] },
+      {
+        id: 'header',
+        kind: 'header',
+        label: 'ヘッダー（ログイン中）',
+        needs: ['personal'],
+      },
       {
         id: 'menu',
+        kind: 'menu',
         label: 'メニュー',
         width: 'half',
         height: 'md',
@@ -28,6 +34,7 @@ const BUSINESS_WIREFRAMES: PageWireframe[] = [
       },
       {
         id: 'search',
+        kind: 'search',
         label: '検索の条件',
         width: 'half',
         height: 'md',
@@ -35,12 +42,14 @@ const BUSINESS_WIREFRAMES: PageWireframe[] = [
       },
       {
         id: 'table',
+        kind: 'table',
         label: '一覧の表（申請・記録）',
         height: 'lg',
         needs: ['personal', 'fresh'],
       },
       {
         id: 'form',
+        kind: 'form',
         label: '登録・申請のフォーム（送信は API）',
         height: 'md',
         needs: ['input'],
