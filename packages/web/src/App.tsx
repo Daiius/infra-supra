@@ -13,6 +13,7 @@ import {
   validSetupChoices,
   validRouteOverrides,
   routePlanRows,
+  resolvedRouteStrategies,
   withTurn,
   playMonth,
   SCENARIOS,
@@ -315,6 +316,15 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               })
             }
             routes={routes}
+            // 見取り図は表・計算と同じ実際の描き方で描く（選んでいるカードは選んだ描き方、ほかは既定。OCL-CD192A98）
+            resolvedRoutes={(id, selected) =>
+              resolvedRouteStrategies(scenario, {
+                framework: id,
+                stackIndex: stack,
+                components: validSetupChoices(scenario, stack, id, parts),
+                ...(selected ? { routes } : {}),
+              })
+            }
             routeNotice={(id) => routeNotice({ framework: id })}
           />
           {/* ③ ページの描き方（D-107）: フレームワークの既定から選び直す。構成（④）を替えると判定も変わる */}
