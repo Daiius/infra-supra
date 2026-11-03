@@ -11,6 +11,7 @@
 import {
   composeStack,
   DEFAULT_CHOICES,
+  isTransferNode,
   STACK_DEFS,
   withoutUnusedEmail,
   type FrameworkId,
@@ -621,7 +622,8 @@ export function activeLane(
  * ここに無いスロットは役割で絞らない。
  */
 const SLOT_ROLES: Readonly<Partial<Record<string, readonly Role[]>>> = {
-  db: ['sql-db', 'kv', 'db-proxy'],
+  // 中継（Hyperdrive。db-proxy）は DB に合わせて自動で足す箱なので、吹き出しは DB の箱に出す（D-114 段 2b）
+  db: ['sql-db', 'kv'],
   dbBackup: ['sql-db'],
   images: ['image-transform', 'object-store', 'edge-cdn'],
   isrCache: ['kv', 'object-store', 'edge-cdn'],
@@ -664,8 +666,10 @@ export function swappableSlots(
       const alt = new Set(
         build({ ...components, [x.slot]: o.id }).nodes.map(key),
       );
+      // 転送を数えるだけの箱（DB の応答の転送など。部品に合わせて自動で足す）には出さない
       for (const n of base)
-        if (!alt.has(key(n)) && fits(x.slot, n.role)) nodes.add(n.id);
+        if (!alt.has(key(n)) && !isTransferNode(n) && fits(x.slot, n.role))
+          nodes.add(n.id);
     }
     for (const id of nodes) out.set(id, [...(out.get(id) ?? []), x.slot]);
   }

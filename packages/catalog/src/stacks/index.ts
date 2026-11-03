@@ -41,6 +41,8 @@ import {
   behaviorOf,
   CROSS_COMPONENTS,
   hostsOf,
+  hyperdriveNode,
+  isCrossDb,
 } from './cross.ts';
 import type { CrossLink } from './connections.ts';
 
@@ -999,40 +1001,41 @@ function composeCloudflare(
             }),
           },
         ]
-      : opt === 'hyperdrive'
-        ? [
+      : isCrossDb('cloudflare', opt)
+        ? // 他の事業者の DB（D-114 段 2b）: 仮の DB を置き、applyCrossDb が部品の DB と中継（Hyperdrive）に差し替える
+          [
             {
-              id: 'hyperdrive',
-              role: 'db-proxy',
-              label: 'Hyperdrive',
-              config: { kind: 'db-proxy' },
-              billing: bill(
-                plan === 'free' ? 'hyperdrive-free' : 'hyperdrive-paid',
-                { queries: 'queries' },
-              ),
-            },
-            {
-              id: 'supabase',
+              id: 'db',
               role: 'sql-db',
-              label:
-                plan === 'free' ? 'Supabase Free' : 'Supabase Pro（Micro）',
+              label: 'DB',
               config: { kind: 'managed-db' },
-              billing: {
-                accountId: 'supabase',
-                provider: 'supabase',
-                planId: plan === 'free' ? 'free' : 'pro-micro',
-                meters:
-                  plan === 'free'
-                    ? { 'egress-gb': 'egress' }
-                    : {
-                        'instance-hours': 'compute',
-                        'egress-gb': 'egress',
-                        'storage-gb-month': 'disk',
-                      },
-              },
             },
           ]
-        : [d1(imagesInD1)];
+        : opt === 'hyperdrive'
+          ? [
+              hyperdriveNode(plan),
+              {
+                id: 'supabase',
+                role: 'sql-db',
+                label:
+                  plan === 'free' ? 'Supabase Free' : 'Supabase Pro（Micro）',
+                config: { kind: 'managed-db' },
+                billing: {
+                  accountId: 'supabase',
+                  provider: 'supabase',
+                  planId: plan === 'free' ? 'free' : 'pro-micro',
+                  meters:
+                    plan === 'free'
+                      ? { 'egress-gb': 'egress' }
+                      : {
+                          'instance-hours': 'compute',
+                          'egress-gb': 'egress',
+                          'storage-gb-month': 'disk',
+                        },
+                },
+              },
+            ]
+          : [d1(imagesInD1)];
   const dbPath = (opt: string | undefined) => dbNodes(opt).map((n) => n.id);
 
   b.add(...cacheNodes(choices.isrCache), ...dbNodes(choices.db));
@@ -1082,8 +1085,9 @@ function composeCloudflare(
       ),
     });
   // 差し替えの途中（新旧の両方を動かしている間）の新しい部品。経路に載せず、保存量・常時動く分だけが課金される
+  // 他の事業者の DB へ移す途中は applyCrossDb が足す
   for (const [slot, opt] of Object.entries(standby) as [SlotId, string][]) {
-    if (slot === 'db') b.add(...dbNodes(opt));
+    if (slot === 'db' && !isCrossDb('cloudflare', opt)) b.add(...dbNodes(opt));
     if (slot === 'isrCache') b.add(...cacheNodes(opt));
   }
 

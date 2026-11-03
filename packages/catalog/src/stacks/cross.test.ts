@@ -81,6 +81,9 @@ const PAIRS_BEFORE_RULES = [
 /** 段 2（D-114・CP-15）で足した組。移し替える前の組にこれだけが加わる。 */
 const PAIRS_ADDED_STAGE2 = ['vercel × db × aws'];
 
+/** 段 2b（D-114・2026-11-04）で足した組: Cloudflare の DB に Neon・AWS（Postgres は Hyperdrive 経由・DynamoDB は直接）。 */
+const PAIRS_ADDED_STAGE3 = ['cloudflare × db × aws', 'cloudflare × db × neon'];
+
 /** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
 const COMPONENTS_BEFORE_RULES = [
   'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
@@ -93,11 +96,17 @@ const COMPONENTS_BEFORE_RULES = [
   'api aws:aws-lambda → cloudflare [vite-spa,nextjs-export]',
   'api cloudflare:cf-workers-server → aws,aws-opennext,netlify,vercel [nextjs]',
   'api cloudflare:cf-workers-astro → netlify,sakura,vercel [astro]',
+  // 段 2b（D-114）で Cloudflare（Hyperdrive 経由）を足した。土台ごとのつなぎ方の文が違うので別の選択肢
+  'db neon:neon → cloudflare',
   'db neon:neon → netlify,vercel',
-  // 段 2（D-114）で足した部品
+  // 段 2（D-114）で足した部品。段 2b で Cloudflare（DynamoDB は直接・Aurora・RDS は Hyperdrive 経由）
+  'db aws:dynamodb → cloudflare',
   'db aws:dynamodb → vercel',
+  'db aws:aurora → cloudflare',
   'db aws:aurora → vercel',
+  'db aws:aurora-pause → cloudflare',
   'db aws:aurora-pause → vercel',
+  'db aws:rds → cloudflare',
   'api sakura:sakura-vps-2gb → cloudflare [vite-spa,astro,nextjs-export]',
   'api sakura:sakura-vps-4gb → cloudflare [vite-spa,astro,nextjs-export]',
   'email aws:ses → cloudflare',
@@ -120,7 +129,11 @@ describe('許した組（接続の規則から導く。D-114）', () => {
       ),
     );
     expect([...pairs].sort()).toEqual(
-      [...PAIRS_BEFORE_RULES, ...PAIRS_ADDED_STAGE2].sort(),
+      [
+        ...PAIRS_BEFORE_RULES,
+        ...PAIRS_ADDED_STAGE2,
+        ...PAIRS_ADDED_STAGE3,
+      ].sort(),
     );
   });
 
@@ -159,14 +172,17 @@ describe('許した組（接続の規則から導く。D-114）', () => {
     for (const p of PLATFORMS)
       for (const slot of ['isrCache', 'realtime', 'apiCache'] as const)
         expect(cross(p, slot)).toEqual([]);
-    // DB に他の事業者の部品を差せるのは Vercel・Netlify の Neon（D-77）と、Vercel の AWS の DynamoDB・Aurora（D-114 段 2）だけ
+    // DB に他の事業者の部品を差せるのは Vercel・Netlify の Neon（D-77）と、Vercel の AWS の DynamoDB・Aurora（D-114 段 2）、
+    // Cloudflare の Neon・AWS の DynamoDB・Aurora・RDS（段 2b）だけ
     for (const p of [...PLATFORMS, 'aws-opennext', 'netlify'] as const)
       expect(cross(p, 'db').map((c) => c.id)).toEqual(
         p === 'vercel'
           ? ['neon', 'dynamodb', 'aurora', 'aurora-pause']
           : p === 'netlify'
             ? ['neon']
-            : [],
+            : p === 'cloudflare'
+              ? ['neon', 'dynamodb', 'aurora', 'aurora-pause', 'rds']
+              : [],
       );
     expect(cross('cloudflare', 'images')).toEqual([]);
     expect(cross('sakura', 'images')).toEqual([]);
@@ -181,14 +197,17 @@ describe('許した組（接続の規則から導く。D-114）', () => {
         }
   });
 
-  it('規則・送り出し・受け取りの項目の出典は URL と取得日を持つ（移し替える前の取得日のまま）', () => {
+  it('規則・送り出し・受け取りの項目の出典は URL と取得日を持つ（移し替える前の取得日のまま。段 2b で足した分は 2026-11-04）', () => {
     for (const x of [...CONNECTION_RULES, ...OUTBOUND, ...INBOUND]) {
       expect(x.sources.length).toBeGreaterThan(0);
       for (const s of x.sources) {
         expect(s.url).toMatch(/^https:\/\//);
-        expect(['2026-11-01', '2026-11-02', '2026-11-03']).toContain(
-          s.retrievedAt,
-        );
+        expect([
+          '2026-11-01',
+          '2026-11-02',
+          '2026-11-03',
+          '2026-11-04',
+        ]).toContain(s.retrievedAt);
       }
     }
     expect(new Set(CONNECTION_RULES.map((r) => r.id)).size).toBe(
@@ -1270,5 +1289,230 @@ describe('DB だけ AWS（Vercel × DynamoDB・Aurora。D-114 段 2）', () => {
     );
     expect(node(a, 'db')).toBeUndefined();
     expect(node(a, 'aws-db-out')).toBeUndefined();
+  });
+});
+
+describe('Cloudflare の DB に他の事業者（Neon・AWS。D-114 段 2b）', () => {
+  const node = (a: ReturnType<typeof composeStack>, id: string) =>
+    a.nodes.find((n) => n.id === id);
+  const POSTGRES = [
+    ['neon', 'neon', 'launch'],
+    ['aurora', 'aws', 'aurora-serverless-v2-io'],
+    ['aurora-pause', 'aws', 'aurora-serverless-v2-io'],
+    ['rds', 'aws', 'rds-postgres-t4g-micro'],
+  ] as const;
+  /** D1 の構成の経路の D1 を、ids に替えたもの。 */
+  const swapD1 = (r: Record<string, string[] | undefined>, ids: string[]) =>
+    Object.fromEntries(
+      Object.entries(r).map(([k, p]) => [
+        k,
+        p!.flatMap((id) => (id === 'd1' ? ids : [id])),
+      ]),
+    );
+
+  it('Postgres（Neon・Aurora・RDS）は Hyperdrive を中継に自動で足し、経路は D1 の位置に Hyperdrive → 転送 → DB', () => {
+    for (const fw of ['nextjs', 'vite-spa', 'astro', 'nextjs-export'] as const)
+      for (const [db, provider, planId] of POSTGRES) {
+        const base = composeStack(
+          'cloudflare-vinext-paid',
+          {},
+          { framework: fw },
+        );
+        const a = composeStack(
+          'cloudflare-vinext-paid',
+          { db },
+          { framework: fw },
+        );
+        const out = provider === 'aws' ? ['aws-db-out'] : [];
+        expect(a.routes).toEqual(
+          swapD1(base.routes, ['hyperdrive', ...out, 'db']),
+        );
+        expect(node(a, 'd1')).toBeUndefined();
+        expect(node(a, 'db')).toMatchObject({
+          role: 'sql-db',
+          billing: { provider, planId },
+        });
+        expect(node(a, 'hyperdrive')).toMatchObject({
+          role: 'db-proxy',
+          config: { kind: 'db-proxy' },
+          facts: ['origin-db', 'idle-connections'],
+          billing: {
+            provider: 'cloudflare',
+            planId: 'hyperdrive-paid',
+            meters: { queries: 'queries' },
+          },
+        });
+        if (provider === 'aws')
+          expect(node(a, 'aws-db-out')).toMatchObject({
+            config: { kind: 'cdn', egressPerQuery: true },
+            facts: ['db-out-internet'],
+            billing: { provider: 'aws', planId: 'data-transfer-out' },
+          });
+        else expect(node(a, 'aws-db-out')).toBeUndefined();
+      }
+  });
+
+  it('Neon は Hyperdrive を通すので serverless driver の事実を出さず、Free の土台なら Neon Free・Hyperdrive Free', () => {
+    const paid = composeStack('cloudflare-vinext-paid', { db: 'neon' });
+    expect(node(paid, 'db')!.facts).not.toContain('serverless-driver');
+    const free = composeStack('cloudflare-vinext-free', { db: 'neon' });
+    expect(node(free, 'db')!.billing!.planId).toBe('free');
+    expect(node(free, 'hyperdrive')!.billing!.planId).toBe('hyperdrive-free');
+    expect(accountsOf(free)).toContain('neon');
+  });
+
+  it('DynamoDB は中継なしで Worker から直接（HTTPS）。応答はインターネットへの転送', () => {
+    const base = composeStack('cloudflare-vinext-paid');
+    const a = composeStack('cloudflare-vinext-paid', { db: 'dynamodb' });
+    expect(a.routes).toEqual(swapD1(base.routes, ['aws-db-out', 'db']));
+    expect(node(a, 'hyperdrive')).toBeUndefined();
+    expect(node(a, 'db')!.billing!.planId).toBe('dynamodb-on-demand');
+    expect(node(a, 'aws-db-out')!.facts).toEqual(['db-out-internet']);
+    // Cloudflare Paid の既定のメールは Cloudflare なので AWS のアカウントが増え、Free は SES で既にある
+    expect(accountsOf(base)).not.toContain('aws');
+    expect(accountsOf(a)).toContain('aws');
+    expect(accountsOf(composeStack('cloudflare-vinext-free'))).toContain('aws');
+  });
+
+  it('応答の転送は問い合わせの数 × 応答の大きさ（Hyperdrive 経由の Supabase の egress と同じ量）', () => {
+    const w = resolveWorkload(articleCommunity(300_000));
+    const supa = simulateResources(
+      w,
+      composeStack('cloudflare-vinext-paid', { db: 'hyperdrive' }),
+    ).nodes.supabase!.resources['egress-gb']!;
+    expect(supa).toBeGreaterThan(0);
+    for (const db of ['dynamodb', 'aurora', 'rds']) {
+      const u = simulateResources(
+        w,
+        composeStack('cloudflare-vinext-paid', { db }),
+      ).nodes['aws-db-out']!;
+      expect(u.resources['egress-gb']).toBeCloseTo(supa, 9);
+    }
+  });
+
+  it('構成の名前は「+ vinext」の後ろに中継と DB（Astro・SPA は vinext を外す）', () => {
+    const name = (id: string, db: string, framework?: 'astro' | 'vite-spa') =>
+      composeStack(id, { db }, framework ? { framework } : {}).name;
+    expect(name('cloudflare-vinext-paid', 'neon')).toBe(
+      'Cloudflare Paid + vinext + Hyperdrive + Neon（Launch）',
+    );
+    expect(name('cloudflare-vinext-free', 'neon')).toBe(
+      'Cloudflare Free + vinext + Hyperdrive + Neon（Free）',
+    );
+    expect(name('cloudflare-vinext-paid', 'dynamodb')).toBe(
+      'Cloudflare Paid + vinext + AWS DynamoDB',
+    );
+    expect(name('cloudflare-vinext-paid', 'rds', 'astro')).toBe(
+      'Cloudflare Paid + Hyperdrive + AWS RDS for PostgreSQL（Astro）',
+    );
+    expect(name('cloudflare-vinext-paid', 'aurora', 'vite-spa')).toBe(
+      'Cloudflare Paid + Hyperdrive + AWS Aurora Serverless v2（Vite の SPA）',
+    );
+    // 既存の Hyperdrive 経由の Supabase と D1 の名前は変えない
+    expect(name('cloudflare-vinext-paid', 'hyperdrive')).toBe(
+      'Cloudflare Paid + vinext',
+    );
+    expect(name('cloudflare-vinext-paid', 'd1')).toBe(
+      'Cloudflare Paid + vinext',
+    );
+  });
+
+  it('既存の「Hyperdrive 経由で Supabase」は中継の事実を添えない（ノードは同じ組み立て）', () => {
+    const a = composeStack('cloudflare-vinext-paid', { db: 'hyperdrive' });
+    expect(node(a, 'hyperdrive')!.facts).toBeUndefined();
+    expect(node(a, 'supabase')!.billing!.planId).toBe('pro-micro');
+    expect(node(a, 'db')).toBeUndefined();
+  });
+
+  it('差し替えの途中: 移す先の DB（と中継）を経路に載せずに足し、D1 へ戻すときは土台の組み立てが D1 を足す', () => {
+    const to = composeStack(
+      'cloudflare-vinext-paid',
+      {},
+      { standby: { db: 'aurora' } },
+    );
+    expect(Object.values(to.routes).flat()).not.toContain('d1-next');
+    expect(node(to, 'd1-next')!.billing!.planId).toBe(
+      'aurora-serverless-v2-io',
+    );
+    expect(node(to, 'hyperdrive')).toBeDefined();
+    expect(Object.values(to.routes).flat()).not.toContain('hyperdrive');
+    expect(node(to, 'aws-db-out')).toBeUndefined();
+    const back = composeStack(
+      'cloudflare-vinext-paid',
+      { db: 'neon' },
+      { standby: { db: 'd1' } },
+    );
+    expect(node(back, 'db')!.billing!.provider).toBe('neon');
+    expect(node(back, 'd1')!.billing!.planId).toBe('workers-paid');
+    expect(node(back, 'db-next')).toBeUndefined();
+    expect(Object.values(back.routes).flat()).not.toContain('d1');
+    // Hyperdrive 経由の Supabase から Neon へ: 中継は 1 つ（同じ Hyperdrive）
+    const swap = composeStack(
+      'cloudflare-vinext-paid',
+      { db: 'hyperdrive' },
+      { standby: { db: 'neon' } },
+    );
+    expect(swap.nodes.filter((n) => n.id === 'hyperdrive')).toHaveLength(1);
+    expect(node(swap, 'supabase-next')!.billing!.provider).toBe('neon');
+  });
+
+  it('画像を D1 に置くと、D1 は画像だけを持ち、DB は部品', () => {
+    const a = composeStack('cloudflare-vinext-paid', {
+      images: 'd1',
+      db: 'neon',
+    });
+    expect(node(a, 'd1')!.config).toMatchObject({
+      storesImages: true,
+      storesDb: false,
+    });
+    expect(node(a, 'db')!.billing!.provider).toBe('neon');
+  });
+
+  it('API を他の事業者に置くと、DB・中継・応答の転送は外れ、API の列は 1 回だけ', () => {
+    for (const api of ['aws-lambda', 'sakura-vps-2gb'])
+      for (const db of ['aurora', 'neon', 'dynamodb']) {
+        const a = composeStack(
+          'cloudflare-vinext-paid',
+          { db, api },
+          { framework: 'vite-spa' },
+        );
+        const ids = Object.values(a.routes).flat();
+        for (const x of ['db', 'hyperdrive', 'aws-db-out'])
+          expect(ids, `${api} ${db} ${x}`).not.toContain(x);
+        const plain = composeStack(
+          'cloudflare-vinext-paid',
+          { api },
+          { framework: 'vite-spa' },
+        );
+        expect(a.routes).toEqual(plain.routes);
+      }
+  });
+
+  it('DB のバックアップは部品の DB の既定・PITR になる', () => {
+    const pitr = composeStack('cloudflare-vinext-paid', {
+      db: 'rds',
+      dbBackup: 'pitr',
+    });
+    expect(
+      pitr.nodes.find((n) => n.config.kind === 'db-backup')!.billing,
+    ).toMatchObject({ provider: 'aws', planId: 'rds-postgres-t4g-micro' });
+  });
+
+  it('部品の説明は土台によらない文に、土台ごとのつなぎ方（規則の partNote）を足す', () => {
+    const on = (host: Platform, id: string) =>
+      componentsOf(host, 'db').find((c) => c.id === id)!;
+    expect(on('cloudflare', 'neon').note).toContain('Hyperdrive');
+    expect(on('cloudflare', 'neon').note).not.toContain('serverless driver');
+    expect(on('vercel', 'neon').note).toContain('serverless driver');
+    expect(on('vercel', 'dynamodb').note).toContain('OIDC');
+    expect(on('cloudflare', 'dynamodb').note).not.toContain('OIDC');
+    expect(on('cloudflare', 'aurora').premiseRefs).toContain(
+      'fact:aws:data-transfer-out:db-out-internet',
+    );
+    expect(on('vercel', 'aurora').premiseRefs).toContain(
+      'fact:aws:data-transfer-out:aurora-out',
+    );
+    // 公開の RDS は Vercel の Marketplace に無いので、Vercel には出さない（規則の to.parts）
+    expect(componentsOf('vercel', 'db').map((c) => c.id)).not.toContain('rds');
   });
 });

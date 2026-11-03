@@ -170,6 +170,28 @@ const WORKERS_FACTS = [
   },
 ];
 
+/**
+ * Hyperdrive の先に他の事業者の Postgres（Neon・AWS の RDS / Aurora）を置く形（D-114 段 2b）。Free・Paid 共通。
+ * 構成のノード（中継の Hyperdrive）が facts で挙げたときだけ前提として出す（Supabase の既存の組は挙げない）。
+ */
+const HYPERDRIVE_FACTS = [
+  {
+    id: 'origin-db',
+    premise:
+      'Hyperdrive は Postgres の接続文字列（ユーザー・パスワード・ホスト）で接続先を設定する。Neon は接続のプールを外した接続文字列を使い、Worker は Neon の serverless driver でなく node-postgres などのドライバーを使う。' +
+      'AWS の RDS / Aurora は公開のアクセスを有効にし、Cloudflare の IP からの接続を許す（公式の手順。私設の網へは Cloudflare Tunnel でもつなげるが、ここでは扱わない）。認証は DB のユーザーとパスワード（IAM 認証の記載は無い）。' +
+      'Hyperdrive は Free・Paid の Workers に含まれ（Free は 1 日 10 万クエリ・Paid は無制限）、転送に課金しない',
+    sourceIds: ['hyperdriveNeon', 'hyperdriveAws', 'hyperdrivePricingDb'],
+  },
+  {
+    id: 'idle-connections',
+    premise:
+      'Hyperdrive は使っていない接続を最大 10 分保ち、接続先への接続は 1 設定あたり約 20（Free）・約 100（Paid）。' +
+      '問い合わせが途切れると止まる DB（Neon・Aurora の 0 ACU）は、Hyperdrive が接続を保つ間は止まらない可能性がある（未確認。止まる時間の計算には入れていない）',
+    sourceIds: ['hyperdriveLimitsDb'],
+  },
+];
+
 /** KV の同じキーへの書き込み（Free・Paid 共通）。超えた書き込みは 429 で失敗する。 */
 const KV_SAME_KEY: LimitInput = {
   id: 'kv-same-key-writes',
@@ -289,6 +311,23 @@ export const cloudflare: PriceBookInput = {
     hyperdriveLimits: src(
       'https://developers.cloudflare.com/hyperdrive/platform/limits/',
     ),
+    // 他の事業者の Postgres（Neon・AWS の RDS / Aurora）を Hyperdrive の先に置く（2026-11-04 取得。D-114 段 2b）
+    hyperdriveLimitsDb: {
+      url: 'https://developers.cloudflare.com/hyperdrive/platform/limits/',
+      retrievedAt: '2026-11-04',
+    },
+    hyperdrivePricingDb: {
+      url: 'https://developers.cloudflare.com/hyperdrive/platform/pricing/',
+      retrievedAt: '2026-11-04',
+    },
+    hyperdriveNeon: {
+      url: 'https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/neon/',
+      retrievedAt: '2026-11-04',
+    },
+    hyperdriveAws: {
+      url: 'https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/aws-rds-aurora/',
+      retrievedAt: '2026-11-04',
+    },
     plans: src('https://www.cloudflare.com/plans/'),
     businessSla: src('https://www.cloudflare.com/business-sla/'),
     workersSla: src(
@@ -1343,6 +1382,7 @@ export const cloudflare: PriceBookInput = {
       name: 'Hyperdrive（Workers Free）',
       sourceIds: ['hyperdrivePricing'],
       uptimeSla: NO_SELF_SERVE_SLA,
+      facts: HYPERDRIVE_FACTS,
       meters: [
         {
           id: 'queries',
@@ -1364,6 +1404,7 @@ export const cloudflare: PriceBookInput = {
       name: 'Hyperdrive（Workers Paid）',
       sourceIds: ['hyperdrivePricing', 'hyperdriveLimits'],
       uptimeSla: NO_SELF_SERVE_SLA,
+      facts: HYPERDRIVE_FACTS,
       meters: [
         {
           id: 'queries',
