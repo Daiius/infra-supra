@@ -18,10 +18,17 @@ import {
   upkeepOf,
 } from 'game';
 import { ROUTE_STRATEGIES } from 'catalog';
-import type { ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { ChoiceCarousel } from './choice-carousel.tsx';
 import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
-import { Info } from './info.tsx';
+import { Info, PortalContainer } from './info.tsx';
 import { Meta, NameWithInfo } from './option-text.tsx';
 import {
   PageBadges,
@@ -485,6 +492,84 @@ export function FrameworkField({
   );
 }
 
+/**
+ * 興味のある人だけ読めばよい説明を畳むボタンとダイアログ（出来事の詳細・開発の手間の内訳）。
+ * 中で ⓘ を使っても吹き出しがダイアログの後ろに隠れないよう、PortalContainer にダイアログを渡す（OCL-8E844E7C）。
+ */
+function DetailsDialog({
+  label,
+  title,
+  children,
+}: {
+  /** 開くボタンの文字。 */
+  label: string;
+  title: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDialogElement | null>(null);
+  const [dialogEl, setDialogEl] = useState<HTMLDialogElement | null>(null);
+  const dialogRef = useCallback((el: HTMLDialogElement | null) => {
+    dialog.current = el;
+    setDialogEl(el);
+  }, []);
+  const titleId = useId();
+  useEffect(() => {
+    const d = dialog.current;
+    if (open && d && !d.open) d.showModal();
+  }, [open]);
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        className="btn btn-ghost btn-xs h-auto min-h-6 px-1.5 py-0.5 font-normal text-base-content/80 underline decoration-dotted underline-offset-2"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+      >
+        {label}
+      </button>
+      {open && (
+        <dialog
+          ref={dialogRef}
+          className="modal"
+          aria-labelledby={titleId}
+          onClose={() => {
+            setOpen(false);
+            trigger.current?.focus();
+          }}
+        >
+          <PortalContainer.Provider value={dialogEl}>
+            <div className="modal-box max-w-xl">
+              <div className="flex items-start justify-between gap-2">
+                <h2 id={titleId} className="text-lg font-bold">
+                  {title}
+                </h2>
+                <form method="dialog">
+                  <button
+                    className="btn btn-circle btn-ghost btn-sm"
+                    aria-label="閉じる"
+                    autoFocus
+                  >
+                    ✕
+                  </button>
+                </form>
+              </div>
+              <div className="mt-2 space-y-2 text-sm">{children}</div>
+            </div>
+          </PortalContainer.Provider>
+          <form method="dialog" className="modal-backdrop">
+            <button aria-label="背景を押して閉じる" tabIndex={-1}>
+              閉じる
+            </button>
+          </form>
+        </dialog>
+      )}
+    </>
+  );
+}
+
 /** シナリオの説明・目標・アプリの形。 */
 export function ScenarioDescription({
   scenario: sc,
@@ -506,6 +591,7 @@ export function ScenarioDescription({
   const otherLines = pageLines.filter(
     (l) => !wireframes.some((p) => l.startsWith(p.label)),
   );
+  const pagesTitleId = useId();
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body">
@@ -519,10 +605,15 @@ export function ScenarioDescription({
           %）、{t?.growth.down ?? '低ければ減る'}。
         </p>
         {/* ページの一覧（ページ → 見る人・要件。D-101）と、フレームワークに依らない見取り図（区画の要件。D-113）。
-            描き方はフレームワークのカードに出す */}
+            描き方はフレームワークのカードに出す。説明文に埋もれないよう、別の面（帯）に載せる */}
         {t?.pages && (
-          <div className="space-y-2">
-            <h3 className="font-semibold">ページ</h3>
+          <section
+            aria-labelledby={pagesTitleId}
+            className="space-y-2 rounded-box bg-base-200 p-2 sm:p-3"
+          >
+            <h3 id={pagesTitleId} className="font-bold">
+              ページ
+            </h3>
             <ScenarioWireframes
               pages={wireframes}
               captionOf={(p) => lineOf(p.label)}
@@ -534,20 +625,32 @@ export function ScenarioDescription({
                 ))}
               </ul>
             )}
-          </div>
+          </section>
         )}
         {t?.revenue && <p>{t.revenue}</p>}
-        <p>
-          {t?.events}
-          時期は乱数のシードで変わる。始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出る（改定後の料金を取得していないものは、計算に反映しない）。
-        </p>
-        <p>
+        <div>
           {t?.satisfaction}開発の手間は毎月 {sc.effort.perMonth}{' '}
-          ポイントで、設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
-          {sc.effort.selfHostedUpkeep} /
-          月）・他の事業者の管理（構成の既定より増えたアカウント 1 つにつき{' '}
-          {EFFORT.accountUpkeep} / 月）に使った残りが機能開発に回る。
-        </p>
+          ポイントで、運用に使った残りが機能開発に回る。
+          <DetailsDialog label="開発の手間の内訳" title="開発の手間の内訳">
+            <p>
+              開発の手間は毎月 {sc.effort.perMonth}{' '}
+              ポイント。設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
+              {sc.effort.selfHostedUpkeep} /
+              月）・他の事業者の管理（構成の既定より増えたアカウント 1 つにつき{' '}
+              {EFFORT.accountUpkeep} / 月）に使った残りが機能開発に回る。
+            </p>
+            <p className="opacity-70">開発の手間はゲーム上の仮定。</p>
+          </DetailsDialog>
+        </div>
+        <div>
+          運営中に出来事が起きる（時期は乱数のシードで変わる）。
+          <DetailsDialog label="出来事の詳しい説明" title="運営中の出来事">
+            {t?.events && <p>{t.events}</p>}
+            <p>
+              時期は乱数のシードで変わる。始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出る（改定後の料金を取得していないものは、計算に反映しない）。
+            </p>
+          </DetailsDialog>
+        </div>
         <p>所持金 {usd(sc.startCash)}。</p>
         {/* daisyUI の alert は子を横の grid に並べるので、中身を 1 つのブロックにして縦に積む */}
         <div className="alert alert-info">

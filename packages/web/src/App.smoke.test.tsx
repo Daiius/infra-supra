@@ -970,6 +970,28 @@ describe('ゲームモードの画面', () => {
     });
   });
 
+  it('W-32 始める画面: シナリオの説明の出来事の詳細と開発の手間の内訳は畳み、ボタンでダイアログに出す', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    // 本文には要約だけ（出来事の一覧・改定の説明は出さない）
+    expect(screen.getByText(/運営中に出来事が起きる/)).toBeDefined();
+    expect(screen.queryByText(/Bot が大量に来る/)).toBeNull();
+    expect(screen.queryByText(/実際に予告されている料金/)).toBeNull();
+    const open = screen.getByRole('button', { name: '出来事の詳しい説明' });
+    fireEvent.click(open);
+    const dialog = screen.getByRole('dialog', { name: '運営中の出来事' });
+    expect(dialog.textContent).toContain('Bot が大量に来る');
+    expect(dialog.textContent).toContain('実際に予告されている料金');
+    fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(open);
+    // 開発の手間の内訳
+    fireEvent.click(screen.getByRole('button', { name: '開発の手間の内訳' }));
+    expect(
+      screen.getByRole('dialog', { name: '開発の手間の内訳' }).textContent,
+    ).toContain('自前運用の維持');
+  });
+
   it('W-31 始める画面: インフラの構成を先に選び、載せられないフレームワークは選べない。選んでいたら載せられるものに戻して知らせる（D-113）', async () => {
     await renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
