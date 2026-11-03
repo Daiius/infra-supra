@@ -16,7 +16,15 @@ import {
   type RouteRowStatus,
   type Scenario,
 } from 'game';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { PortalContainer } from './info.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from './route-plan-table.tsx';
 
 /** 選んでいるフレームワークのページごとの描き方を選ぶのに要るもの（カードのチップと比べる表で共有する）。 */
@@ -118,7 +126,13 @@ export function RoutePlanCompare({
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
+  const dialog = useRef<HTMLDialogElement | null>(null);
+  // ⓘ の吹き出しをダイアログの中に描く（body に描くと top layer のダイアログの後ろに隠れる。OCL-8E844E7C）
+  const [dialogEl, setDialogEl] = useState<HTMLDialogElement | null>(null);
+  const dialogRef = useCallback((el: HTMLDialogElement | null) => {
+    dialog.current = el;
+    setDialogEl(el);
+  }, []);
   const titleId = useId();
   useEffect(() => {
     const d = dialog.current;
@@ -137,7 +151,7 @@ export function RoutePlanCompare({
       </button>
       {open && (
         <dialog
-          ref={dialog}
+          ref={dialogRef}
           className="modal"
           aria-labelledby={titleId}
           onClose={() => {
@@ -145,36 +159,38 @@ export function RoutePlanCompare({
             trigger.current?.focus();
           }}
         >
-          <div className="modal-box w-11/12 max-w-5xl">
-            <div className="flex items-start justify-between gap-2">
-              <h2 id={titleId} className="text-lg font-bold">
-                ページの描き方を比べる（{frameworkLabel}）
-              </h2>
-              <form method="dialog">
-                <button
-                  className="btn btn-circle btn-ghost btn-sm"
-                  aria-label="閉じる"
-                  autoFocus
-                >
-                  ✕
-                </button>
-              </form>
+          <PortalContainer.Provider value={dialogEl}>
+            <div className="modal-box w-11/12 max-w-5xl">
+              <div className="flex items-start justify-between gap-2">
+                <h2 id={titleId} className="text-lg font-bold">
+                  ページの描き方を比べる（{frameworkLabel}）
+                </h2>
+                <form method="dialog">
+                  <button
+                    className="btn btn-circle btn-ghost btn-sm"
+                    aria-label="閉じる"
+                    autoFocus
+                  >
+                    ✕
+                  </button>
+                </form>
+              </div>
+              <p className="mt-1 text-xs opacity-70">
+                ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの
+                1
+                か月目の費用の差を並べる。ここで選んでも、カードのチップで選んでも同じ（始める前なので手間はかからない。途中で替えると手間がかかる）。
+              </p>
+              <div className="mt-2">
+                <RoutePlanTable
+                  rows={editor.rows}
+                  status={editor.status}
+                  onSelect={editor.onSelect}
+                  onPart={editor.onPart}
+                  caption={ROUTE_PLAN_NOTE}
+                />
+              </div>
             </div>
-            <p className="mt-1 text-xs opacity-70">
-              ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの
-              1
-              か月目の費用の差を並べる。ここで選んでも、カードのチップで選んでも同じ（始める前なので手間はかからない。途中で替えると手間がかかる）。
-            </p>
-            <div className="mt-2">
-              <RoutePlanTable
-                rows={editor.rows}
-                status={editor.status}
-                onSelect={editor.onSelect}
-                onPart={editor.onPart}
-                caption={ROUTE_PLAN_NOTE}
-              />
-            </div>
-          </div>
+          </PortalContainer.Provider>
           <form method="dialog" className="modal-backdrop">
             <button aria-label="背景を押して閉じる" tabIndex={-1}>
               閉じる

@@ -463,6 +463,19 @@ describe('ゲームモードの画面', () => {
     // 表には 1 か月目の費用の差が出る。番号は出さない
     expect(table.textContent).toMatch(/[+−]\$\d/);
     expect(table.textContent).not.toMatch(/\bS[1-7]\b/);
+    // 表の ⓘ の吹き出しはダイアログの中に描く（body だと top layer のダイアログの後ろに隠れる。OCL-8E844E7C）
+    fireEvent.click(
+      within(
+        table.querySelector<HTMLElement>('tr[data-route="personal"]')!,
+      ).getAllByRole('button', { name: /の判定$/ })[0]!,
+    );
+    const tip = document.querySelector('[role="tooltip"]');
+    expect(tip).not.toBeNull();
+    expect(dialog.contains(tip)).toBe(true);
+    // Esc はまず吹き出しだけを閉じる
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    expect(screen.getByRole('dialog')).toBe(dialog);
     // 表で選んでも、カードのチップと見取り図に効く（ダイアログは開いたまま）
     fireEvent.click(
       within(

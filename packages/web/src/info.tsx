@@ -1,8 +1,22 @@
 // 説明の ⓘ ボタン（選択肢の長い説明を畳む）。タップ・クリックで開閉し、Esc・外側のクリックで閉じる（hover だけに頼らない）。
 // 吹き出しは画面に固定して置き、画面の端からはみ出さないように横位置を詰める（狭い画面でも読める）。
 // 縦は、ボタンの下（足りなければ上の広い方）に置き、残りの高さを上限にして中でスクロールする（長い説明でも末尾まで読める）。
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
+
+/**
+ * 吹き出しを描く先（既定は body）。モーダルの `<dialog>`（top layer）の中では body に描くとダイアログの後ろに隠れるので、
+ * ダイアログがその要素を渡す（OCL-8E844E7C）。位置は画面に固定なので、描く先が替わっても計算は同じ。
+ */
+export const PortalContainer = createContext<HTMLElement | null>(null);
 
 const WIDTH = 288;
 const MARGIN = 8;
@@ -26,6 +40,7 @@ export function Info({
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const id = useId();
+  const container = useContext(PortalContainer);
   const open = pos !== null;
 
   const show = () => {
@@ -48,6 +63,9 @@ export function Info({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // モーダルの中では、Esc はまず吹き出しだけを閉じる（ダイアログは閉じない）
+        e.preventDefault();
+        e.stopPropagation();
         setPos(null);
         button.current?.focus();
       }
@@ -65,12 +83,12 @@ export function Info({
       else show();
     };
     const close = () => setPos(null);
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
     document.addEventListener('pointerdown', onDown);
     window.addEventListener('scroll', follow, true);
     window.addEventListener('resize', close);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('pointerdown', onDown);
       window.removeEventListener('scroll', follow, true);
       window.removeEventListener('resize', close);
@@ -137,7 +155,7 @@ export function Info({
           >
             {children}
           </div>,
-          document.body,
+          container ?? document.body,
         )}
     </>
   );
