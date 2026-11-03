@@ -326,6 +326,12 @@ export function stackTabGroups(
   });
 }
 
+/** 構成図の注記の既定（引数の既定値に関数を直接書くと React Compiler が最適化を諦めるので外に置く）。 */
+const defaultDiagramCaption = (selected: boolean) =>
+  selected
+    ? '部品を選ぶ前のスロットは既定の部品で描く。'
+    : '既定の部品で描く。';
+
 /** インフラの構成を選ぶ（カルーセル）。value は STACKS の index。 */
 export function StackField({
   scenario,
@@ -341,10 +347,7 @@ export function StackField({
   effort = true,
   onComponentsChange,
   partsNote,
-  diagramCaption = (selected) =>
-    selected
-      ? '部品を選ぶ前のスロットは既定の部品で描く。'
-      : '既定の部品で描く。',
+  diagramCaption = defaultDiagramCaption,
 }: {
   scenario: Scenario;
   framework: FrameworkId;
