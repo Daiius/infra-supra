@@ -8,10 +8,14 @@ import {
   screen,
   within,
 } from '@testing-library/react';
-import { pageWireframes, SCENARIOS, STACKS } from 'game';
+import { pageWireframes, SCENARIOS, setupSlots, STACKS } from 'game';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SystemDiagram } from './system-diagram.tsx';
-import { diagramArchitecture } from './system-diagram-model.ts';
+import {
+  diagramArchitecture,
+  diagramComponents,
+  slotBoxes,
+} from './system-diagram-model.ts';
 
 const sc = SCENARIOS['article-community']!;
 const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
@@ -80,5 +84,89 @@ describe('構成図の矢印の先端', () => {
     const fill = marker.querySelector('path')!.getAttribute('fill');
     expect(fill).not.toBe('context-stroke');
     expect((path as SVGElement).style.stroke).toBe(fill);
+  });
+});
+
+describe('幽霊の箱（D-116 の補足）', () => {
+  // Cloudflare × Next.js で ISR のキャッシュを Workers Cache にすると、KV の箱は無くなり、点線・半透明の箱が残る
+  const comps = diagramComponents(sc, cf, 'nextjs', {
+    isrCache: 'workers-cache',
+  });
+  const wc = diagramArchitecture(sc, cf, 'nextjs', comps);
+  const { ghosts } = slotBoxes(
+    (c) => diagramArchitecture(sc, cf, 'nextjs', c),
+    comps,
+    setupSlots(sc, cf, 'nextjs', comps),
+  );
+  const renderGhost = (width: number, withParts: boolean) => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(
+      width,
+    );
+    const picked = vi.fn();
+    const parts = {
+      slotsOf: () => [],
+      render: (slot: string, close: () => void) => (
+        <button
+          type="button"
+          onClick={() => {
+            close();
+            picked(slot);
+          }}
+        >
+          KV に戻す
+        </button>
+      ),
+    };
+    return {
+      picked,
+      ...render(
+        <SystemDiagram
+          architecture={wc}
+          pages={pages}
+          ghosts={ghosts}
+          parts={withParts ? parts : undefined}
+        />,
+      ),
+    };
+  };
+
+  it('W-41 横の図: 点線・半透明の箱で、線は引かず、押すとそのスロットの差し替えが出る', () => {
+    const { container, picked } = renderGhost(900, true);
+    const g = container.querySelector('[data-ghost="true"]')!;
+    expect(g.getAttribute('data-node')).toBe('ghost:isrCache');
+    expect(g.querySelector('rect')!.getAttribute('stroke-dasharray')).toBe(
+      '4 3',
+    );
+    expect(g.textContent).toContain('ISR のキャッシュ');
+    expect(g.textContent).toContain('Workers Cache');
+    expect(container.querySelector('[data-edge*="ghost:"]')).toBeNull();
+    const box = within(g as HTMLElement).getByRole('button', {
+      name: /ISR のキャッシュ.*を替える$/,
+    });
+    expect(box.querySelector('[data-swap-mark]')).not.toBeNull();
+    fireEvent.click(box);
+    const popover = screen.getByRole('dialog');
+    expect(popover.textContent).toContain('経路の線は引かない');
+    fireEvent.click(within(popover).getByRole('button', { name: 'KV に戻す' }));
+    expect(picked).toHaveBeenCalledWith('isrCache');
+  });
+
+  it('W-42 縦の図・部品を選べない図でも幽霊の箱は残る', () => {
+    const { container } = renderGhost(320, false);
+    expect(
+      container
+        .querySelector('[data-diagram="system"]')!
+        .getAttribute('data-orientation'),
+    ).toBe('vertical');
+    const g = container.querySelector('[data-ghost="true"]')!;
+    expect(g.getAttribute('data-node')).toBe('ghost:isrCache');
+    const box = within(g as HTMLElement).getByRole('button');
+    expect(box.className).toContain('border-dashed');
+    expect(box.querySelector('[data-swap-mark]')).toBeNull();
+    cleanup();
+    vi.restoreAllMocks();
+    const wide = renderGhost(900, false);
+    const h = wide.container.querySelector('[data-ghost="true"]')!;
+    expect(h.querySelector('button')).toBeNull();
   });
 });

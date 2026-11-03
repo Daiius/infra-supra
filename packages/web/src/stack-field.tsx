@@ -22,6 +22,7 @@ import {
   type FrameworkId,
   type RouteOverrides,
   type Scenario,
+  type SetupSlot,
 } from 'game';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
@@ -41,7 +42,12 @@ import {
   type DiagramParts,
 } from './system-diagram.tsx';
 import type { ResolvedPage } from './page-wireframes.tsx';
-import { diagramArchitecture, swappableSlots } from './system-diagram-model.ts';
+import {
+  diagramArchitecture,
+  diagramComponents,
+  slotBoxes,
+  type GhostSlot,
+} from './system-diagram-model.ts';
 
 /** 部品の選択（選んでいるカードの、構成図の下のチップと図の箱。D-116）。 */
 type PartsEditor = {
@@ -50,30 +56,32 @@ type PartsEditor = {
 };
 
 /**
- * 選んでいるカードの構成図と部品のチップ（D-116）。箱を押すと、その箱に当たるスロットの部品を選べる（swappableSlots）。
+ * 選んでいるカードの構成図と部品のチップ（D-116）。箱を押すと、その箱に当たるスロットの部品を選べる（slotBoxes）。
+ * 今の選択が箱を持たないスロットは幽霊の箱で、押して選び直せる（D-116 の補足）。
  */
 function EditableDiagram({
-  scenario,
   stackIndex,
   framework,
   components,
-  routes,
+  slots,
+  swap,
+  ghosts,
   arch,
   pages,
   caption,
   editor,
 }: {
-  scenario: Scenario;
   stackIndex: number;
   framework: FrameworkId;
   components: SetupChoices;
-  routes: RouteOverrides | undefined;
+  slots: SetupSlot[];
+  swap: ReadonlyMap<string, readonly string[]>;
+  ghosts: readonly GhostSlot[];
   arch: ReturnType<typeof diagramArchitecture>;
   pages: readonly ResolvedPage[];
   caption: string;
   editor: PartsEditor;
 }) {
-  const slots = usePartSlots(scenario, stackIndex, framework, components);
   // 箱の吹き出しで選んだスロット（描き直した後に、そのスロットの選択中のチップへ focus を移す。OCL-131BD89D）
   const [focusSlot, setFocusSlot] = useState<string | null>(null);
   const clearFocus = useCallback(() => setFocusSlot(null), []);
@@ -81,15 +89,6 @@ function EditableDiagram({
     () =>
       new Map<string, (typeof slots)[number]>(slots.map((x) => [x.slot, x])),
     [slots],
-  );
-  const swap = useMemo(
-    () =>
-      swappableSlots(
-        (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
-        components,
-        slots,
-      ),
-    [scenario, stackIndex, framework, routes, components, slots],
   );
   const parts: DiagramParts = {
     slotsOf: (id) => swap.get(id) ?? [],
@@ -112,7 +111,8 @@ function EditableDiagram({
       architecture={arch}
       pages={pages}
       caption={caption}
-      parts={swap.size > 0 ? parts : undefined}
+      parts={swap.size > 0 || ghosts.length > 0 ? parts : undefined}
+      ghosts={ghosts}
       below={
         <PartChips
           stackIndex={stackIndex}
@@ -205,6 +205,17 @@ function StackCard({
       ),
     [scenario, stackIndex, framework, components, routes],
   );
+  // 差し替えられるスロットの箱と幽霊の箱（選んでいないカードも、選んだときと同じ形に。D-116 の補足）
+  const slots = usePartSlots(scenario, stackIndex, framework, components ?? {});
+  const boxes = useMemo(
+    () =>
+      slotBoxes(
+        (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
+        diagramComponents(scenario, stackIndex, framework, components),
+        slots,
+      ),
+    [scenario, stackIndex, framework, components, routes, slots],
+  );
   const premises = [...slaOf(stackIndex), ...membersOf(stackIndex)];
   return (
     <section
@@ -265,18 +276,24 @@ function StackCard({
         {/* 選んでいるカードは構成図の下に部品のチップを並べ、図の箱からも差し替えられる（D-116）。選んでいないカードは図だけ */}
         {selected && parts ? (
           <EditableDiagram
-            scenario={scenario}
             stackIndex={stackIndex}
             framework={framework}
             components={components ?? {}}
-            routes={routes}
+            slots={slots}
+            swap={boxes.swap}
+            ghosts={boxes.ghosts}
             arch={arch}
             pages={pages}
             caption={caption}
             editor={parts}
           />
         ) : (
-          <SystemDiagram architecture={arch} pages={pages} caption={caption} />
+          <SystemDiagram
+            architecture={arch}
+            pages={pages}
+            caption={caption}
+            ghosts={boxes.ghosts}
+          />
         )}
       </div>
     </section>
