@@ -20,6 +20,7 @@ import {
   diagramModel,
   EDGE_TAIL,
   edgeGeometry,
+  isCallerKind,
   isNarrow,
   lanesThrough,
   LANES,
@@ -70,9 +71,11 @@ describe('diagramModel', () => {
     expect(all.some((c) => /netlify|opennext/.test(c.name))).toBe(false);
   });
 
-  it('どの経路も閲覧者から辿れ、経路の隣り合う組が線になり、課金されるノードはすべて図に出る', () => {
+  it('どの経路も閲覧者から辿れ、経路の各ノードへ直前の呼ぶ側から線が引かれ、課金されるノードはすべて図に出る', () => {
     for (const { name, arch, pages } of all) {
       const m = diagramModel(arch, pages);
+      const kindOf = (id: string) =>
+        arch.nodes.find((n) => n.id === id)?.config.kind;
       const placed = new Set(m.nodes.map((n) => n.id));
       const side = new Set(m.side.flatMap((s) => s.nodes.map((n) => n.id)));
       const edge = (a: string, b: string) =>
@@ -95,11 +98,19 @@ describe('diagramModel', () => {
           expect(edge(VIEWER, path[0]!)?.classes, `${name} ${cls}`).toContain(
             cls,
           );
-        for (let i = 1; i < path.length; i++)
+        for (let i = 1; i < path.length; i++) {
+          // 直前の呼ぶ側（処理を動かすノード・中継）。無ければ直前のノード
+          let from = path[i - 1]!;
+          for (let j = i - 1; j >= 0; j--)
+            if (isCallerKind(kindOf(path[j]!)!)) {
+              from = path[j]!;
+              break;
+            }
           expect(
-            edge(path[i - 1]!, path[i]!)?.classes,
-            `${name} ${cls} ${path[i - 1]}>${path[i]}`,
+            edge(from, path[i]!)?.classes,
+            `${name} ${cls} ${from}>${path[i]}`,
           ).toContain(cls);
+        }
         for (const id of path) {
           expect(placed.has(id), `${name} ${cls} ${id}`).toBe(true);
           expect(seen.has(id), `${name} ${cls} ${id} に届かない`).toBe(true);
@@ -170,6 +181,91 @@ describe('diagramModel', () => {
         );
       }
     }
+  });
+
+  it('線は呼ぶ側（処理を動かすノード・中継）からだけ出る: KV・DB・ストレージ・ISR のキャッシュから別のノードへの線は無い（横・縦とも）', () => {
+    for (const { name, arch, pages } of all)
+      for (const o of ['horizontal', 'vertical'] as const) {
+        const m = diagramModel(arch, pages, o);
+        for (const e of m.edges) {
+          if (e.from === VIEWER) continue;
+          const kind = arch.nodes.find((n) => n.id === e.from)!.config.kind;
+          expect(isCallerKind(kind), `${name} ${o} ${e.from}>${e.to}`).toBe(
+            true,
+          );
+        }
+      }
+  });
+
+  it('Cloudflare の既定（Next.js）: Worker が KV・D1 に直接つながり、KV → D1 の線は無い。流れは Worker → D1 に載る', () => {
+    const sc = SCENARIOS['article-community']!;
+    for (const id of ['cloudflare-vinext-paid', 'cloudflare-vinext-free']) {
+      const cf = STACKS.findIndex((s) => s.id === id);
+      const arch = diagramArchitecture(sc, cf, 'nextjs');
+      // 費用の計算の経路はそのまま（Worker → KV → D1 の順に通る）
+      expect(arch.routes['isr-revalidate'], id).toEqual(['worker', 'kv', 'd1']);
+      for (const o of ['horizontal', 'vertical'] as const) {
+        const m = diagramModel(arch, pageWireframes(sc, 'nextjs'), o);
+        const edge = (a: string, b: string) =>
+          m.edges.find((e) => e.from === a && e.to === b);
+        expect(edge('kv', 'd1'), `${id} ${o}`).toBeUndefined();
+        expect(edge('worker', 'kv')?.lanes, `${id} ${o}`).toEqual(
+          expect.arrayContaining(['isr', 'revalidate']),
+        );
+        expect(edge('worker', 'd1')?.lanes, `${id} ${o}`).toEqual(
+          expect.arrayContaining(['ssr', 'api', 'revalidate']),
+        );
+        expect(
+          m.edges.filter((e) => e.from === 'kv' || e.from === 'd1'),
+          `${id} ${o}`,
+        ).toEqual([]);
+        // KV と D1 は同じ段（どちらも Worker の次）
+        const depth = (n: string) => m.nodes.find((x) => x.id === n)!.depth;
+        expect(depth('kv'), `${id} ${o}`).toBe(depth('d1'));
+        expect(
+          m.edges.some((e) => e.back),
+          `${id} ${o}`,
+        ).toBe(false);
+        // 流れの凡例のページの名前は今までどおり
+        expect(m.lanes.find((l) => l.id === 'isr')!.pages).toContain(
+          '記事のページ',
+        );
+      }
+    }
+  });
+
+  it('中継の組は隣り合う組のまま: Hyperdrive → 外部の DB、転送 → R2、Vercel の再生成は関数が ISR のキャッシュと DB に直接つながる', () => {
+    const sc = SCENARIOS['article-community']!;
+    const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
+    const hd = diagramArchitecture(sc, cf, 'nextjs', { db: 'hyperdrive' });
+    expect(hd.routes['isr-revalidate']).toEqual([
+      'worker',
+      'kv',
+      'hyperdrive',
+      'supabase',
+    ]);
+    const mh = diagramModel(hd);
+    const has = (m: DiagramModel, a: string, b: string) =>
+      m.edges.some((e) => e.from === a && e.to === b);
+    expect(has(mh, 'worker', 'hyperdrive')).toBe(true);
+    expect(has(mh, 'hyperdrive', 'supabase')).toBe(true);
+    expect(has(mh, 'kv', 'hyperdrive')).toBe(false);
+
+    const spa = diagramModel(
+      diagramArchitecture(sc, cf, 'vite-spa', { api: 'aws-lambda' }),
+    );
+    expect(has(spa, 'lambda', 'aws-out')).toBe(true);
+    expect(has(spa, 'aws-out', 'r2')).toBe(true);
+
+    const vercel = STACKS.findIndex((s) => s.id === 'vercel-supabase-pro');
+    const va = diagramArchitecture(sc, vercel, 'nextjs');
+    expect(va.routes['isr-revalidate']).toEqual(['fn', 'isr', 'db']);
+    const mv = diagramModel(va);
+    expect(has(mv, 'fn', 'isr')).toBe(true);
+    expect(has(mv, 'fn', 'db')).toBe(true);
+    expect(has(mv, 'isr', 'db')).toBe(false);
+    // 閲覧者の ISR のページは CDN が ISR のキャッシュから取る（中継 → キャッシュ）
+    expect(has(mv, 'cdn', 'isr')).toBe(true);
   });
 
   it('事業者をまたぐ部品は別の枠に入る（課金の無い中継は隣の事業者の枠）', () => {

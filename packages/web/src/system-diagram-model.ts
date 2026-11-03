@@ -2,7 +2,9 @@
 // 閲覧者から左→右（狭い幅では上→下）へ流れる図の箱と線を作る。構成ごとに手で描かない（計算と図がずれないように）。
 //   - 列: 経路の中での位置（閲覧者から何段目か。経路をまたいで最も深い段）
 //   - 行: 課金のアカウント（事業者）ごとの帯。課金の無いノード（Workers の静的アセットなど）は経路で隣のノードの事業者に入れる
-//   - 線: 経路の隣り合うノードの組。リクエストクラスを「流れ」（ページの描き方・API・画像など）にまとめて線に載せる
+//   - 線: 経路の各ノードへ、経路の中で直前の「呼ぶ側」（処理を動かす部品・中継）から引く（edgeSources）。経路は費用の計算の
+//     「通る部品の列」で、順序はつながりではない（Worker → KV → D1 の KV と D1 は、どちらも Worker が binding で直接読み書きする）。
+//     リクエストクラスを「流れ」（ページの描き方・API・画像など）にまとめて線に載せる
 //   - 経路に載らないノード（メールの送信・DNS・ドメイン・ビルド・バックアップ）は図の下に事業者ごとに並べる
 //   - 向き: 横（列を左→右・帯を上→下）と縦（狭い幅。段を上→下・帯を左→右に並べ、箱を小さくする）。D-105 の補足
 // 純粋関数。描画（system-diagram.tsx）は位置をそのまま使う。
@@ -165,6 +167,38 @@ const KIND_CAPTION: Readonly<Record<string, string>> = {
 /** 処理を動かすノード（図で太く描く）。 */
 const COMPUTE_KINDS = new Set(['function', 'container', 'host']);
 export const isComputeKind = (kind: string) => COMPUTE_KINDS.has(kind);
+/**
+ * 中継のノード: 処理を動かさないが、受けたリクエストを経路の次のノードへ自分で取りに行く・渡す部品。
+ * CDN・転送（cdn。CDN → オリジン、API Gateway → Lambda、「AWS → インターネット」→ R2 など）、
+ * DB への接続（db-proxy。Hyperdrive → 外部の DB）、画像の変換（image-optimizer。変換が元の画像をストレージから読む）。
+ * KV・DB・ストレージ・ISR のキャッシュは呼ばれるだけで、次のノードを呼ばない。
+ */
+const RELAY_KINDS = new Set(['cdn', 'db-proxy', 'image-optimizer']);
+export const isRelayKind = (kind: string) => RELAY_KINDS.has(kind);
+/** 経路の次のノードを呼ぶ側か（処理を動かすノードか中継）。 */
+export const isCallerKind = (kind: string) =>
+  isComputeKind(kind) || isRelayKind(kind);
+
+/**
+ * 経路の各ノード（2 つ目から）へ線を引く元: 経路の中で直前にある、呼ぶ側（処理を動かすノード・中継）のノード。
+ * 呼ぶ側が前に無ければ直前のノード。処理を動かすノードの後ろに続く KV・DB・ストレージはその処理からの線（ハブ型）になり、
+ * 中継の組（CDN → オリジン・Hyperdrive → DB・転送 → ストレージ）は隣り合う組のまま。
+ * 例: Cloudflare の ISR の再生成 worker → kv → d1 は worker → kv・worker → d1（kv → d1 は引かない）。
+ */
+export function edgeSources(
+  path: readonly string[],
+  kindOf: (id: string) => string | undefined,
+): string[] {
+  const out: string[] = [];
+  let caller: string | undefined;
+  for (let i = 1; i < path.length; i++) {
+    const prev = path[i - 1]!;
+    const k = kindOf(prev);
+    if (k !== undefined && isCallerKind(k)) caller = prev;
+    out.push(caller ?? prev);
+  }
+  return out;
+}
 
 /** 課金のアカウント → ロゴ。無いもの（未知のアカウント）は名前だけ。 */
 const ACCOUNT_BRAND: Readonly<Record<string, BrandId>> = {
@@ -308,7 +342,7 @@ export function diagramModel(
   const lanesOf = (cls: RequestClass): LaneId[] =>
     cls === 'document-ssr' ? ssrLanes : [laneOf(cls)];
 
-  // --- 線（経路の隣り合う組 + 閲覧者から入口）
+  // --- 線（経路の各ノードへ直前の呼ぶ側から（edgeSources）+ 閲覧者から入口）
   const edgeMap = new Map<string, DiagramEdge>();
   const addEdge = (from: string, to: string, cls: RequestClass) => {
     const key = `${from}>${to}`;
@@ -320,7 +354,9 @@ export function diagramModel(
   };
   for (const [cls, path] of routes) {
     if (!INTERNAL.includes(cls)) addEdge(VIEWER, path[0]!, cls);
-    for (let i = 1; i < path.length; i++) addEdge(path[i - 1]!, path[i]!, cls);
+    const from = edgeSources(path, (id) => byId.get(id)?.config.kind);
+    for (let i = 1; i < path.length; i++)
+      if (from[i - 1] !== path[i]) addEdge(from[i - 1]!, path[i]!, cls);
   }
   // 裏で動くクラスの入口が閲覧者から届かないなら、閲覧者から結ぶ（届かない箱を残さない）
   const reached = () => {
