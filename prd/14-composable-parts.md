@@ -1,6 +1,6 @@
 # 14. 部品を事業者をまたいで組む（役割と接続の口）
 
-> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
+> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）・段 2 を実装（2026-11-03。§3.12）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
 > 後で検討する候補として残したのは、リージョンの要素（CP-08）と接続の数の上限（CP-09）。
 > 出発点（2026-11-03・ユーザー）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？ 根本的に少し変えるところがあるかもしれませんが...」
 > 料金・制限の数値は、§2 で公式の文書から取ったもの（URL と取得日つき）か、catalog に既にあるもの（出典は catalog の料金データ）だけを書く。
@@ -150,7 +150,7 @@
 
 - Vercel の Private Data Transfer の東京（hnd1）の単価・Advanced Networking の料金。
 - NAT ゲートウェイ・RDS Proxy の東京の単価。
-- DynamoDB からインターネットへの転送の単価（推測: EC2 のデータ転送の料金と同じ）。
+- DynamoDB からインターネットへの転送の単価（料金ページに記載が無い）。段 2 で、AWS 共通の Data Transfer Out の適用と読んで数えることにした（§3.12。ユーザーの決定）。Vercel の関数と同じリージョンの DB の通信が「同じリージョン内の AWS サービス間は $0」に当たるかは未確認。
 - Amplify の SSR から外への通信の課金（prd/11 §2.5 から変わらず）。
 - Cloudflare Tunnel を動かす計算機の費用（構成による）。
 
@@ -291,7 +291,7 @@ type ConnectionRule = {
 |---|---|---|
 | 段 0 | この文書の論点を決める（CP-01〜） | — |
 | 段 1（済み・§3.11） | 土台のノードに `role` の印。`ConnectionRule`・`PartDef` の型と、今の組を規則に移し替え（`CROSS_PAIRS` を規則から導く）。差し方を役割から導く（`hostImageShape` 等を置き換え） | **不変**（golden・基準プレイ・保存） |
-| 段 2 | 公開の口の組を足す: **Vercel × DynamoDB / Aurora（DB。Marketplace）だけ**（CP-15）。後の段の候補: Vercel × S3 + CloudFront（画像）・Cloudflare × Neon（Hyperdrive の接続先違い）・Google Cloud × R2 の広げ方の見直し・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
+| 段 2（済み・§3.12） | 公開の口の組を足す: **Vercel × DynamoDB / Aurora（DB。Marketplace）だけ**（CP-15）。後の段の候補: Vercel × S3 + CloudFront（画像）・Cloudflare × Neon（Hyperdrive の接続先違い）・Google Cloud × R2 の広げ方の見直し・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
 | 段 3 | 中継を部品として自動で足す（Static IPs・NAT・RDS Proxy・Tunnel）。単価を取ってから。`blocked` の理由を画面に出す | 新しい組だけ |
 | 段 4 | 画面: 事業者で絞る・構成図の `links`（§6） | — |
 | 段 5 | （任意）案 B へ: 土台も部品の集まりにする。段 1〜4 の規則と部品はそのまま使う | 全部の取り直し |
@@ -316,6 +316,47 @@ type ConnectionRule = {
 - **変わった 1 点**: Netlify（隠した構成）の SPA・静的書き出しで、画像を Cloudflare・Bunny に置き、API を Workers に置いた組。今までは使わなくなった `netlify-out`（R2 への書き込みの転送）が経路の外に残っていた（AWS の `aws-out` は外していた）。
   使わなくなった転送のノードを一律に外すようにしたので、このノードが無くなった。経路の外で使用量 0 なので、明細と金額は変わらない（5,810 の組で明細の行・金額の一致を確かめた）。
 - **段 1 で入れていないもの**: 構成図の `links`（CP-17）は段 4。灰色で理由を出す（CP-04）・同じ事業者 / 他の事業者（CP-12）・手間の段階化（CP-11）・Vercel × DynamoDB / Aurora（CP-15）は後の段。
+
+### 3.12 段 2 の実装（2026-11-03）: Vercel × DynamoDB / Aurora
+
+- **部品**（`stacks/parts.ts`）: AWS の DB の部品を 3 つ（`dynamodb`・`aurora`・`aurora-pause`）。役割は `sql-db`、土台の側は `compute`、受ける口は DynamoDB が `https-api`（OIDC の一時的な認証で SDK）、Aurora が `tcp-sql`（OIDC → IAM 認証のトークン → クラスターのエンドポイント）。
+  id は AWS の構成の DB の部品と同じ（保存の互換。CP-13）、料金とノードは `stacks/aws.ts` の `dbNode` をそのまま使う。Aurora DSQL・公開の RDS は入れていない（CP-15 の範囲外。後の段の候補）。
+- **規則**（`stacks/connections.ts`）: `vercel-compute-dynamodb`（Vercel の処理 → AWS の `sql-db`・`https-api`）と `vercel-compute-aurora`（→ `tcp-sql`）。どちらも `ok`（中継なし。CP-07 の公開の口）。
+  Marketplace の Aurora は「公開のエンドポイント + IAM 認証」とみなした。Marketplace の文書に公開の設定の記載は無く、Pro では VPC の中へつなぐ手段（Secure Compute は Enterprise）が無いことからの**推測**。公開の IPv4 のアドレスの時間課金（VPC の料金の $0.005 / 時。地域の明記なし）は**未確認として数えない**。
+  出典（2026-11-03 取得）: [Vercel Marketplace の AWS](https://vercel.com/marketplace/aws)・[Marketplace の Aurora の手引き](https://vercel.com/kb/guide/connect-next-js-to-amazon-aurora-postgresql-using-vercel-marketplace)（2026-09-09 更新）・[OIDC × AWS](https://vercel.com/docs/oidc/aws)・[Marketplace のストレージ](https://vercel.com/docs/marketplace-storage)・[Secure Compute](https://vercel.com/docs/networking/secure-compute)・[VPC の中の DB](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html)・[DynamoDB の料金](https://aws.amazon.com/dynamodb/pricing/on-demand/)・[Aurora の料金](https://aws.amazon.com/rds/aurora/pricing/)。
+- **差し方**（`stacks/cross.ts` の `applyCrossDb`）: Neon 専用だったのを、部品の事業者ごとにノードを作る形にした（Neon は `neonNode`、AWS は `dbNode`）。ノードの id は土台の DB と同じ `db`（経路を変えない）。差し替えの途中（`db-next`）・DB のバックアップ（`withBackups` は課金先のプランで引くので、DynamoDB の PITR・Aurora の保持 7 日がそのまま効く）も同じ形。
+  構成の名前は `crossDbName`（「Vercel Pro + AWS DynamoDB」「Vercel Hobby + AWS Aurora Serverless v2」）。API を他の事業者に置くと、DB と一緒に下の応答の転送のノードも外れる（`replaceDb`）。
+- **転送（CP-06）**: DB の応答は DB が送り手。`transferNodes` に「問い合わせの数 × DB の応答の大きさ」で数える形（`'per-query'`）を足し、送り出しの項目（`OUTBOUND`）に AWS の DB のプラン（`dynamodb-on-demand`・`aurora-serverless-v2-io`）を足した。ノード `aws-db-out` を経路の DB の手前に置く。
+  estimator の CDN の設定に任意の `egressPerQuery` を足した（`managed-db` の転送と同じ式。既定は今のまま）。受け取りは、Vercel の関数（料金の文書に項目が無い・未確認）・AWS（DynamoDB は受信に課金しない・Aurora は記載なし）とも課金なし。
+  - 単価: **インターネットへの転送（AWSDataTransfer の Data Transfer Out。東京 → インターネット $0.114/GB から）として数え、AWS 全体の月 100 GB の無料のプール（`internet-free-transfer`）を共有する**（ユーザーの決定・2026-11-03）。DynamoDB・Aurora の料金ページに外への転送の単価の表は無く、AWS 共通の単価の適用と読んだ（catalog の `data-transfer-out` の facts `dynamodb-out`・`aurora-out`）。
+  - 前提の文: 「Vercel の公式文書は関数の地域を AWS の地域名で示すが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の『同じリージョン内の AWS サービス間は $0』に当たるかは公式に記載が無い（未確認）。同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性がある。Vercel の関数の既定の地域は iad1」（[Vercel の地域](https://vercel.com/docs/regions)・2026-11-03 取得）。
+  - 切り替えの 1 か所: `connections.ts` の `AWS_DB_OUT_TO_INTERNET`。同じリージョンの扱いが公式に確かめられたら `false` にすると、送り出しの項目が課金なしになり、ノードを作らない。
+- **アカウント**: Vercel の構成は既定のメールの送信（SES）で AWS のアカウントを既に数えているので、増えない（D-52 の数え方）。CP-11（k 個目のアカウントの手間を 0.5 × k）は、§3.10 の段 2 の範囲（新しい組だけ・既存は不変）に入らない（既存の組の手間が変わる）ので入れていない。新しい組はアカウントが増えないので、入れても効かない。
+- **画面**: 始める画面・見積モード・ゲーム中の乗り換え（DB のスロット）に、Vercel の構成でだけ「AWS: DynamoDB（オンデマンド・Vercel の Marketplace）」「AWS: Aurora Serverless v2（…）」が出る（部品の一覧から導くので web は変えていない）。灰色で理由（CP-04）・同じ事業者 / 他の事業者（CP-12）は段 3・4。
+- **不変の確かめ**: 段 1 と同じ突き合わせ（全構成 × フレームワーク × 部品の直積と無作為の組 × 差し替えの途中、ゲームの始める画面・1 か月目の見込み・総当たりの最後の状態）を main（段 1 のマージ後）と比べた。共通の約 39 万の組と約 3.7 万のプレイがすべて一致し、違いは Vercel の DB の選択肢に 3 つ増えたことだけ。
+  `route-strategies-equivalence.test.ts` の記録は、足した部品を除いて取り直さずに通る。
+- **費用の例**（月 30 万 PV・1 か月目の見積・税抜）:
+
+  | シナリオ | Supabase（既定） | Neon | DynamoDB | Aurora（0.5 ACU） | Aurora（0 ACU まで） | DB の応答の転送 |
+  |---|---|---|---|---|---|---|
+  | 記事コミュニティ × Vercel Pro | $62.0 | $56.4 | $37.1 | $110.1 | $110.1 | 2.4 GB（無料の中） |
+  | 受託 × Vercel Pro | $47.4 | $36.5 | $23.2 | $95.7 | $74.3 | 6.6 GB（無料の中） |
+
+- **基準プレイ**（何もしない・シード 1〜20。12 か月の費用の平均 / 月。目標の額は動かさない・D-64）:
+
+  | シナリオ × Vercel Pro | Supabase | Neon | DynamoDB | Aurora（0.5 ACU） | Aurora（0 ACU まで） |
+  |---|---|---|---|---|---|
+  | 受託 × Next.js | 0/20 $49.7 | 0/20 $39.5 | **20/20 $26.0** | 0/20 $98.3 | 0/20 $77.0 |
+  | 受託 × SPA | 0/20 $48.9 | 14/20 $38.4 | **20/20 $25.4** | 0/20 $97.5 | 0/20 $76.3 |
+  | 受託 × Astro | 0/20 $49.9 | 0/20 $39.8 | **20/20 $26.3** | 0/20 $98.5 | 0/20 $77.3 |
+  | 受託 × 静的書き出し | 0/20 $48.5 | 0/20 $38.1 | **20/20 $24.8** | 0/20 $97.1 | 0/20 $75.8 |
+  | 記事 × Next.js | 0/20 $125.4 | 0/20 $119.9 | 0/20 $100.8 | 0/20 $110.6 | 0/20 $110.6 |
+  | 記事 × Astro | 0/20 $118.1 | 0/20 $112.6 | 6/20 $93.5 | 0/20 $151.6 | 0/20 $151.6 |
+  | 記事 × Astro + 画像 `cf-resize` | 0/20 $65.1 | 0/20 $59.6 | **20/20 $40.5** | — | 0/20 $113.2 |
+
+  Vercel Hobby はどの DB・フレームワークでも 0/20。受託 × DynamoDB でメールを Resend にすると 0/20（$21.7）。
+  受託は既存の AWS（Amplify 20/20 $18.8・OpenNext 20/20 $5.5）・Netlify Personal + Neon（20/20 $30.8）が既に全シードで届くので、Vercel × DynamoDB の 20/20 はそれと同じ並び。
+  記事 × Astro + `cf-resize` + DynamoDB の 20/20 は Netlify Pro × Astro + Neon + `cf-resize`（20/20 $44.6）と同じ程度。**釣り合いはそのまま入れる（2026-11-03・ユーザーが受け入れ）**: 全シードで届く組は料金どおりの結果として受け入れ、目標の額・手間は動かさない（受託の床は既存の Amplify $18.8 のままで、それより安い床は作らない）。
 
 ## 4. 出典の扱い
 
