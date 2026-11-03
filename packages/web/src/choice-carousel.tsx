@@ -150,6 +150,7 @@ export function ChoiceCarousel<T extends string>({
       }}
       type="radio"
       name={name}
+      value={id}
       className="sr-only"
       aria-label={ariaLabel}
       // 要約だけを説明にする（カード全体は長いので、カードは下に領域として読める）

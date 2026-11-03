@@ -16,6 +16,21 @@ const group = (label: string) =>
   screen.getByRole('group', { name: new RegExp(`^${label}`) });
 const queryGroup = (label: string) =>
   screen.queryByRole('group', { name: new RegExp(`^${label}`) });
+/** ① 構成・② フレームワークのカルーセルのラジオ（ゲームと共用。D-115）。 */
+const pickerRadios = (name: 'stack' | 'framework') => [
+  ...document.querySelectorAll<HTMLInputElement>(
+    `input[type="radio"][name="${name}"]`,
+  ),
+];
+const pickerRadio = (name: 'stack' | 'framework', value: string) =>
+  pickerRadios(name).find((r) => r.value === value)!;
+/** 構成・フレームワークを選ぶ（タブのラジオを押す）。 */
+const pick = (name: 'stack' | 'framework', value: string) => {
+  const r = pickerRadio(name, value);
+  expect(r.disabled).toBe(false);
+  fireEvent.click(r);
+  expect(r.checked).toBe(true);
+};
 /** 枠の中で選んでいるラジオの値。 */
 const checked = (label: string) =>
   within(group(label))
@@ -72,19 +87,21 @@ describe('見積モードの画面', () => {
     await waitLoaded();
     const first = expectEstimate();
 
-    // 構成を切り替える（選べる構成をすべて回す）
-    const stacks = within(combo('構成')).getAllByRole('option');
+    // 構成を切り替える（ゲームと同じカルーセル。選べる構成をすべて回す。D-115）
+    const stacks = pickerRadios('stack').map((r) => r.value);
     expect(stacks.length).toBeGreaterThan(5);
     const names = new Set([first]);
-    for (const o of stacks) {
-      fireEvent.change(combo('構成'), {
-        target: { value: (o as HTMLOptionElement).value },
-      });
+    for (const id of stacks) {
+      pick('stack', id);
       names.add(expectEstimate());
+      // 構成のカードに、その構成の月額が出る
+      expect(
+        document.querySelector(`[data-stack-total="${id}"]`)?.textContent,
+      ).toMatch(/月 \$[\d,]+\.\d\d/);
     }
     expect(names.size).toBe(stacks.length);
 
-    // 比較表の行を押すと、その構成の見積になる
+    // 比較表の行を押すと、その構成の見積になり、カルーセルもその構成へ移る
     const compare = within(card('構成を比べる'));
     const other = compare
       .getAllByRole('button')
@@ -98,12 +115,14 @@ describe('見積モードの画面', () => {
       .getAllByRole('button')
       .find((b) => b.getAttribute('aria-current') === 'true')!;
     expect(current.textContent).toBe(picked);
+    const stackId = new URLSearchParams(window.location.search).get('s')!;
+    expect(pickerRadio('stack', stackId).checked).toBe(true);
 
     // フレームワーク・テンプレート・PV を切り替える
-    for (const o of within(combo('フレームワーク')).getAllByRole('option')) {
-      fireEvent.change(combo('フレームワーク'), {
-        target: { value: (o as HTMLOptionElement).value },
-      });
+    for (const id of pickerRadios('framework')
+      .filter((r) => !r.disabled)
+      .map((r) => r.value)) {
+      pick('framework', id);
       expectEstimate();
     }
     fireEvent.change(combo('テンプレート'), { target: { value: 'business' } });
@@ -133,9 +152,7 @@ describe('見積モードの画面', () => {
     expect(window.location.search).not.toContain('dbBackup');
 
     // 選べば変わる DB（Supabase Pro）に替えると出る
-    fireEvent.change(combo('構成'), {
-      target: { value: 'vercel-supabase-pro' },
-    });
+    pick('stack', 'vercel-supabase-pro');
     expectEstimate();
     expect(checked('DB のバックアップ')).toBe('default');
   });
@@ -183,19 +200,17 @@ describe('見積モードの画面', () => {
     expectEstimate();
     expect(checked('ISR の再検証')).toBe('300');
     // Astro の既定は、消せる置き場（Cloudflare）ではオンデマンド
-    fireEvent.change(combo('フレームワーク'), { target: { value: 'astro' } });
+    pick('framework', 'astro');
     expectEstimate();
     expect(checked('記事のキャッシュ')).toBe('0');
     expect(new URLSearchParams(window.location.search).get('r')).toBe('0');
     // 消せない置き場（Google Cloud）では 5 分
-    fireEvent.change(combo('構成'), { target: { value: 'gcp-cloud-run' } });
+    pick('stack', 'gcp-cloud-run');
     expectEstimate();
     expect(checked('記事のキャッシュ')).toBe('300');
     // 選んだ値は、替えた先で選べるなら残る
     choose('記事のキャッシュ', '3600');
-    fireEvent.change(combo('構成'), {
-      target: { value: 'cloudflare-vinext-paid' },
-    });
+    pick('stack', 'cloudflare-vinext-paid');
     expectEstimate();
     expect(checked('記事のキャッシュ')).toBe('3600');
 
@@ -209,13 +224,11 @@ describe('見積モードの画面', () => {
     await renderApp();
     expectEstimate();
     expect(window.location.search).toContain('rp.article=static-build');
-    fireEvent.change(combo('フレームワーク'), { target: { value: 'nextjs' } });
+    pick('framework', 'nextjs');
     expectEstimate();
     expect(window.location.search).toContain('rp.article=static-build');
     expect(window.location.search).toContain('rp.personal=shell-api');
-    fireEvent.change(combo('フレームワーク'), {
-      target: { value: 'vite-spa' },
-    });
+    pick('framework', 'vite-spa');
     expectEstimate();
     expect(window.location.search).not.toContain('rp.article');
   });
@@ -275,9 +288,7 @@ describe('見積モードの画面', () => {
     await renderApp();
     expectEstimate();
     expect(window.location.search).toContain('rp.personal=server-island');
-    fireEvent.change(combo('構成'), {
-      target: { value: 'cloudflare-vinext-paid' },
-    });
+    pick('stack', 'cloudflare-vinext-paid');
     expectEstimate();
     expect(window.location.search).not.toContain('rp.personal');
   });
@@ -320,7 +331,7 @@ describe('見積モードの画面', () => {
     expect(window.location.search).toContain('rp.personal=ssr');
     expect(strategyOf('personal')).toBe('ssr');
     // VPS に替えると既定（毎回描く）と同じなので URL から消え、部品ごとにキャッシュは選べる側に並ぶ
-    fireEvent.change(combo('構成'), { target: { value: 'sakura-vps-2gb' } });
+    pick('stack', 'sakura-vps-2gb');
     expectEstimate();
     expect(window.location.search).not.toContain('rp.personal');
     expect(strategyOf('personal')).toBe('ssr');
@@ -329,6 +340,61 @@ describe('見積モードの画面', () => {
         name: /^個人向けのページを 部品ごとにキャッシュ（Cache Components）にする/,
       }),
     ).toBeTruthy();
+  });
+
+  it('W-35 選択の欄はゲームと共用（D-115）: 構成が先で、載せられないフレームワークは灰色と理由。Astro で AWS を選ぶと Next.js に替えて知らせる', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-paid',
+    );
+    await renderApp();
+    expectEstimate();
+    // 順: ① インフラの構成 → ② フレームワーク → ③ 部品 → ④ 設定
+    const stackGroup = screen.getByRole('radiogroup', {
+      name: '① インフラの構成',
+    });
+    const fwGroup = screen.getByRole('radiogroup', {
+      name: '② アプリのフレームワークとページの描き方',
+    });
+    expect(
+      stackGroup.compareDocumentPosition(fwGroup) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Astro を載せられない構成も隠さず選べる。カードの月額は替わる先のフレームワークで数える
+    expect(pickerRadio('stack', 'aws-amplify').disabled).toBe(false);
+    expect(
+      document.querySelector('[data-stack-total="aws-amplify"]')?.textContent,
+    ).toContain('Next.js（App Router） にしたとき');
+    pick('stack', 'aws-amplify');
+    expectEstimate();
+    expect(pickerRadio('framework', 'nextjs').checked).toBe(true);
+    expect(new URLSearchParams(window.location.search).get('fw')).toBe(
+      'nextjs',
+    );
+    expect(document.body.textContent).toMatch(
+      /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にした/,
+    );
+    // Astro は灰色で選べず、カードに理由が出る
+    expect(pickerRadio('framework', 'astro').disabled).toBe(true);
+    const astroCard = screen.getByRole('region', { name: 'Astro の説明' });
+    expect(astroCard.getAttribute('aria-disabled')).toBe('true');
+    expect(within(astroCard).getByRole('note').textContent).toMatch(
+      /^選んでいる構成では選べない: 公式のアダプターが無く載せられない/,
+    );
+    // 選んでいるフレームワークのカードに、ページの見取り図が出る
+    const nextCard = screen.getByRole('region', {
+      name: 'Next.js（App Router） の説明',
+    });
+    expect(
+      nextCard.querySelectorAll('section[data-route]').length,
+    ).toBeGreaterThan(0);
+    // 載せられる構成へ戻すと Astro はまた選べ、知らせは消える
+    pick('stack', 'cloudflare-vinext-paid');
+    expect(pickerRadio('framework', 'astro').disabled).toBe(false);
+    expect(document.body.textContent).not.toMatch(
+      /公式のアダプターが無いので、フレームワークを/,
+    );
   });
 
   it('W-07 見出しに ⓘ のある欄の入力は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {

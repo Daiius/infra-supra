@@ -16,8 +16,7 @@ import {
   frameworksOf,
   settingFlavor,
   SETTINGS,
-  stackName,
-  stackOffered,
+  stackUnsupportedReason,
   STACKS,
   withRouteChoice,
   type FrameworkId,
@@ -31,6 +30,8 @@ import {
 import { Info } from '../info.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from '../system-diagram.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from '../route-plan-table.tsx';
+import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
+import { FrameworkField } from '../scenario-briefing.tsx';
 import {
   SettingRadios,
   SetupComponents,
@@ -40,6 +41,9 @@ import {
   type EstimateView,
   compareStacks,
   costCurves,
+  frameworkCardRoutes,
+  stackCardTotals,
+  type ComparisonRow,
   diagramOf,
   routeStatusOf,
   CURVE_MAX,
@@ -110,6 +114,26 @@ export function EstimateMode() {
     );
   }, [input]);
 
+  // 構成を替えて、今のフレームワークを載せられないので付け替えたときの知らせ（D-113・D-115）。構成・フレームワーク・テンプレートを替えると消す
+  const [notice, setNotice] = useState<string | null>(null);
+  const pickStack = (stack: string) => {
+    const next = normalizeInput({ ...input, ...withStack(input, stack) });
+    setNotice(
+      next.framework === input.framework
+        ? null
+        : frameworkFallbackNotice(
+            STACKS.findIndex((s) => s.id === stack),
+            input.framework,
+            next.framework,
+            Object.keys(input.routes).some((r) => next.routes[r] === undefined),
+          ),
+    );
+    setInputState(next);
+  };
+  const pickFramework = (framework: FrameworkId) => {
+    setNotice(null);
+    setInput(withFramework(input, framework));
+  };
   const view = useMemo(() => runEstimate(input), [input]);
   const rows = useMemo(() => compareStacks(input), [input]);
   const diagram = useMemo(() => diagramOf(input), [input]);
@@ -120,7 +144,18 @@ export function EstimateMode() {
       <p className="text-sm opacity-70">
         アプリの形と規模を選ぶと、構成ごとの月の費用と、当たるプラットフォームの前提を出す。料金は各社の公式の料金表（出典と取得日は下）、利用の形はテンプレートの仮定（実測ではない）。
       </p>
-      <Conditions input={input} setInput={setInput} mau={view.mau} />
+      <Conditions
+        input={input}
+        setInput={(p) => {
+          if (p.template !== undefined) setNotice(null);
+          setInput(p);
+        }}
+        mau={view.mau}
+        rows={rows}
+        notice={notice}
+        onPickStack={pickStack}
+        onPickFramework={pickFramework}
+      />
       <Card title={`月の費用: ${view.name}`}>
         <div className="flex flex-wrap items-baseline gap-x-3">
           <span className="text-3xl font-bold tabular-nums">
@@ -215,7 +250,8 @@ export function EstimateMode() {
       <Comparison
         rows={rows}
         showTax={input.showTax}
-        onPick={(stack) => setInput(withStack(input, stack))}
+        // 行を押すとカルーセルもその構成へ移る（値は同じ入力。D-115）
+        onPick={pickStack}
       />
       <CostCurve input={input} rows={rows} />
       <Card title="料金データの出典">
@@ -301,15 +337,44 @@ function Conditions({
   input,
   setInput,
   mau,
+  rows,
+  notice,
+  onPickStack,
+  onPickFramework,
 }: {
   input: EstimateInput;
   setInput: (p: Partial<EstimateInput>) => void;
   mau: number;
+  /** 構成の比較の行（構成のカードの月額に使う）。 */
+  rows: readonly ComparisonRow[];
+  /** 構成を替えてフレームワークを付け替えたときの知らせ（D-113・D-115）。 */
+  notice: string | null;
+  onPickStack: (stack: string) => void;
+  onPickFramework: (framework: FrameworkId) => void;
 }) {
   const scenario = scenarioOfTemplate(input.template);
-  const fws = frameworksOf(scenario).allowed;
+  // 構成の id ↔ STACKS の index の変換はここで 1 回（共用の欄は index で持つ）
   const stackIndex = STACKS.findIndex((s) => s.id === input.stack);
   const settings = settingsOf(input.template, input.framework, input.routes);
+  const comments = settings.comments ? input.comments : undefined;
+  const cardTotals = useMemo(() => stackCardTotals(input, rows), [input, rows]);
+  const allowed = frameworksOf(scenario).allowed;
+  // フレームワークのカードの描き方（そのフレームワークを選んだときの行）。載せられないものは引かない（D-113）
+  const fwRoutes = useMemo(
+    () =>
+      new Map(
+        frameworksOf(scenarioOfTemplate(input.template))
+          .allowed.filter(
+            (id) =>
+              stackUnsupportedReason(
+                STACKS.findIndex((s) => s.id === input.stack),
+                id,
+              ) === undefined,
+          )
+          .map((id) => [id, frameworkCardRoutes(input, id)] as const),
+      ),
+    [input],
+  );
   const [pvText, setPvText] = useState(String(input.pv));
   useEffect(() => setPvText(String(input.pv)), [input.pv]);
   const select = 'select select-bordered select-sm w-full';
@@ -372,38 +437,64 @@ function Conditions({
               `（テンプレートの仮定: 1 人あたり月 ${Math.round(input.pv / mau).toLocaleString('ja-JP')} PV）`}
           </span>
         </Field>
-        <Field label="フレームワーク">
-          <select
-            className={select}
-            value={input.framework}
-            onChange={(e) =>
-              setInput(withFramework(input, e.target.value as FrameworkId))
-            }
-          >
-            {fws.map((f) => (
-              <option key={f} value={f}>
-                {FRAMEWORKS[f].label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="構成">
-          <select
-            className={select}
-            value={input.stack}
-            onChange={(e) => setInput(withStack(input, e.target.value))}
-          >
-            {STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
-              (s) => (
-                <option key={s.id} value={s.id}>
-                  {stackName(s.index, input.framework, false)}
-                </option>
-              ),
-            )}
-          </select>
-        </Field>
         <Seats seats={input.seats} setInput={setInput} />
       </div>
+      {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。構成が先（D-113） */}
+      <StackField
+        scenario={scenario}
+        framework={input.framework}
+        value={stackIndex}
+        onChange={(i) => onPickStack(STACKS[i]!.id)}
+        components={input.parts}
+        comments={comments}
+        routes={input.routes}
+        effort={false}
+        diagramCaption={(selected) =>
+          selected
+            ? '選んだ部品で描く。'
+            : 'この構成を選んだときの既定の部品で描く。'
+        }
+        cardExtra={(i, selected) => {
+          const t = cardTotals[STACKS[i]!.id];
+          if (!t) return null;
+          return (
+            <p className="text-sm" data-stack-total={STACKS[i]!.id}>
+              {selected ? '今の条件で月 ' : 'この構成にすると月 '}
+              <strong className="tabular-nums">{usd(t.totalUsd)}</strong>
+              {t.framework !== input.framework &&
+                `（${FRAMEWORKS[t.framework].label} にしたとき）`}
+              {t.blocking > 0 && (
+                <span className="ml-1 text-xs text-warning">
+                  止まる・プランの変更が要る前提 {t.blocking} 件
+                </span>
+              )}
+            </p>
+          );
+        }}
+      />
+      <FrameworkField
+        scenario={scenario}
+        allowed={allowed}
+        value={input.framework}
+        onChange={onPickFramework}
+        comments={comments}
+        routePlan={(id) => fwRoutes.get(id) ?? []}
+        routes={input.routes}
+        resolvedRoutes={(id) =>
+          Object.fromEntries(
+            (fwRoutes.get(id) ?? []).map((r) => [r.route, r.strategy]),
+          )
+        }
+        unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
+        notice={notice}
+        text={{
+          heading: '② アプリのフレームワークとページの描き方',
+          footnote: null,
+          wireframeNote:
+            '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+          compareHint: null,
+        }}
+      />
       {/* ③ 部品・④ 設定はゲームの始める画面と同じ欄（D-115）。部品は normalizeInput が選べるものに直す */}
       <SetupComponents
         scenario={scenario}

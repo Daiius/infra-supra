@@ -15,6 +15,7 @@ import {
   routeStatusOf,
   runEstimate,
   sortRows,
+  stackCardTotals,
   toQuery,
   withFramework,
   withStack,
@@ -394,6 +395,40 @@ describe('withStack', () => {
     });
     expect(other.stack).toBe('cloudflare-vinext-free');
     expect(other.parts.isrCache).toBe('kv');
+  });
+});
+
+describe('構成が先（D-115。始める画面と同じ D-113 の規則）', () => {
+  it('今のフレームワークを載せられない構成（Astro × AWS）を選ぶと、載せられる最初のフレームワークに替える', () => {
+    const i = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-paid',
+    });
+    const next = normalizeInput({ ...i, ...withStack(i, 'aws-amplify') });
+    expect(next.stack).toBe('aws-amplify');
+    expect(next.framework).toBe('nextjs');
+    // 載せられる構成ではフレームワークは替えない
+    const vps = normalizeInput({ ...i, ...withStack(i, 'sakura-vps-2gb') });
+    expect(vps.framework).toBe('astro');
+  });
+
+  it('構成のカードの月額は、その構成を選んだ後の見積と同じ（載せられない構成は替わる先のフレームワークで）', () => {
+    const i = normalizeInput({
+      framework: 'astro',
+      stack: 'cloudflare-vinext-paid',
+    });
+    const totals = stackCardTotals(i, compareStacks(i));
+    for (const id of [
+      'cloudflare-vinext-paid',
+      'sakura-vps-2gb',
+      'aws-amplify',
+    ]) {
+      const sel = normalizeInput({ ...i, ...withStack(i, id) });
+      expect(totals[id]?.totalUsd).toBeCloseTo(runEstimate(sel).totalUsd, 6);
+      expect(totals[id]?.framework).toBe(sel.framework);
+    }
+    // 隠した構成（D-100）は出さない
+    expect(totals['aws-opennext']).toBeUndefined();
   });
 });
 
