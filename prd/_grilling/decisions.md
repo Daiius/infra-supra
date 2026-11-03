@@ -1335,6 +1335,7 @@
   - **画像だけ AWS（S3 + CloudFront）**（部品 `aws-s3-resize`・規則 `vercel-compute-s3-write`・`host-compute-s3-write`）: AWS の構成の「投稿のときに一律で縮めて置く」と同じ S3 と CloudFront（従量・常時無料つき）のノードを、id を `aws-s3`・`aws-img-cf` にして差す（`applyAwsImages`）。差せる土台は Vercel（OIDC）と、同じ規則で自然に開ける Netlify・Google Cloud（アクセスキー。投稿の転送は土台の送り出しの項目で数える）。AWS・OpenNext は自分の S3 を持つので出さない。S3 から CloudFront への転送・インターネットからの受信は無料（S3 の料金ページ・2026-11-04）。
   - **足さなかったもの**: CloudFront + Lambda@Edge などで閲覧のときに変換する形（Lambda@Edge の単価が catalog に無く、AWS の画像の変換のソリューションは複数のサービスの組み合わせ）・S3 の原本を Vercel の画像の最適化で変換する形（原本を取る転送は S3 / CloudFront の送り出しになるが、estimator が原本を取る量を数えないので過小になる）・Netlify Image CDN × R2（Netlify は隠した構成で、remote images の課金を確かめていない）・Google Cloud × R2 の原本（Cloud Run の next/image の原本の取り方を確かめていない）・さくらの VPS・Cloudflare の画像に他の事業者（今の規則の外）。
   - 既存の組は不変（段 2b と同じ突き合わせ。共通の約 45 万の組と約 5.5 万のゲームのキー（約 2.7 万のプレイ）が一致し、違いは画像の選択肢の一覧だけ）。基準プレイ（記事・シード 1〜20）で、新しい組に全シードで届くものは無く、**既存の最安より安い床も無い**（原本だけ R2 は Blob の既定より月 $0.4 ほど安いだけ・S3 + CloudFront は R2 の `cf-resize` より高い。月 1 TB を超えると CloudFront の転送がかかる）。目標の額・手間は動かしていない。詳細は prd/14 §3.14。
+- 総当たりを pairwise に（CP-14・2026-11-04・補足）: 段 2d（PR #115・判断待ち）と分けて先に入れた。`combo-sweep.test.ts` の部品を直積（31,896 組）から pairwise（どの 2 つのスロットの選択肢の組も少なくとも 1 つに出る・2,131 組・シードはグループの名前で決定論）にした。グループと構成の既定の部品は必ず回し、作れない組には直接の理由があることをテストで確かめる。`pnpm test:sweep` は 4 分 48 秒 → 約 21 秒。詳細は prd/14 §3.16。
 
 ### D-115 始める画面の選択の欄（① 構成 ② フレームワークと描き方 ③ 部品 ④ 設定）を見積モードと共用にする（確定・2026-11-03）
 

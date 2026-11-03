@@ -1,4 +1,4 @@
-// 始める画面の 1 か月目の費用の見込み（D-72）。全組み合わせとの一致は combo-sweep.test.ts。
+// 始める画面の 1 か月目の費用の見込み（D-72）。部品の組み合わせ（pairwise。D-114 CP-14）との一致は combo-sweep.test.ts。
 import { describe, expect, it } from 'vitest';
 import { ARTICLE_COMMUNITY, setupMonthOneEstimate } from './index.ts';
 
