@@ -288,6 +288,33 @@ export const aws: PriceBookInput = {
     },
     // データ転送の常時無料（2026-11-01 に原文で確認。D-52）
     ec2DataTransfer: src('https://aws.amazon.com/ec2/pricing/on-demand/'),
+    // DB（DynamoDB・Aurora）から別の事業者（Vercel の関数）への応答の転送（2026-11-03 に原文で確認。D-114 段 2）。
+    // DynamoDB・Aurora の料金ページに外への転送の単価の表は無く、AWS 共通の Data Transfer Out（AWSDataTransfer の版 2026-09-16）の適用と読む
+    dynamodbTransfer: {
+      url: 'https://aws.amazon.com/dynamodb/pricing/on-demand/',
+      retrievedAt: '2026-11-03',
+    },
+    auroraTransfer: {
+      url: 'https://aws.amazon.com/rds/aurora/pricing/',
+      retrievedAt: '2026-11-03',
+    },
+    dataTransferPricesDb: {
+      url: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/ap-northeast-1/index.json',
+      retrievedAt: '2026-11-03',
+    },
+    // Vercel の関数の地域（既定は iad1）と Marketplace のストレージ（2026-11-03 取得。D-114 段 2。同じリージョンの扱いが未確認であることの根拠）
+    vercelRegions: {
+      url: 'https://vercel.com/docs/regions',
+      retrievedAt: '2026-11-03',
+    },
+    vercelMarketplaceStorage: {
+      url: 'https://vercel.com/docs/marketplace-storage',
+      retrievedAt: '2026-11-03',
+    },
+    ec2DataTransferDb: {
+      url: 'https://aws.amazon.com/ec2/pricing/on-demand/',
+      retrievedAt: '2026-11-03',
+    },
   },
   allowancePools: [
     {
@@ -1419,6 +1446,39 @@ export const aws: PriceBookInput = {
           premise:
             'API Gateway の HTTP API は、受けた呼び出しと送り出したデータの量で課金される（「Pay only for the API calls you receive and the amount of data transferred out」）。外へのデータ転送は EC2 のデータ転送の料金（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
           sourceIds: ['apiGatewayPricing', 'dataTransferPrices'],
+        },
+        {
+          // Vercel の関数から DynamoDB を使う形（D-114 段 2）。2026-11-03 に原文で確認
+          id: 'dynamodb-out',
+          premise:
+            'DynamoDB は受信に課金しない（「DynamoDB does not charge for inbound data transfer」）。外への転送は料金ページに単価の直接の記載が無く、' +
+            'AWS 共通の Data Transfer Out（東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料）の適用と読んだ（EC2 の料金ページの 100 GB 無料の適用サービスに DynamoDB が入っている）。' +
+            '別の事業者の関数（Vercel）へ返す応答（問い合わせの数 × 応答の大きさ）をこれで数える。' +
+            'Vercel の公式文書は関数の地域を AWS の地域名で示すが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載が無い（未確認）。' +
+            '同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性がある。Vercel の関数の既定の地域は iad1',
+          sourceIds: [
+            'dynamodbTransfer',
+            'dataTransferPricesDb',
+            'ec2DataTransferDb',
+            'vercelRegions',
+            'vercelMarketplaceStorage',
+          ],
+        },
+        {
+          // Vercel の関数から Aurora を使う形（D-114 段 2）。2026-11-03 に原文で確認
+          id: 'aurora-out',
+          premise:
+            'Aurora の料金ページは転送を「in」と「out」で数えると書くが、インターネットへの単価の表は無い。AWS 共通の Data Transfer Out' +
+            '（東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料。Aurora の料金ページにも記載）の適用と読んだ。' +
+            '受信の課金は料金ページに記載が無い（未確認・数えない）。別の事業者の関数（Vercel）へ返す応答（問い合わせの数 × 応答の大きさ）をこれで数える。' +
+            'Vercel の公式文書は関数の地域を AWS の地域名で示すが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載が無い（未確認）。' +
+            '同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性がある。Vercel の関数の既定の地域は iad1',
+          sourceIds: [
+            'auroraTransfer',
+            'dataTransferPricesDb',
+            'vercelRegions',
+            'vercelMarketplaceStorage',
+          ],
         },
       ],
       meters: [

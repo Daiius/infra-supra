@@ -14,6 +14,7 @@ import { vpsNode } from './sakura.ts';
 import { BUNNY_IMAGE_HIT_RATE, bunnyBill, bunnyCdnNode } from './bunny.ts';
 import { browserCallsApi, type FrameworkId } from '../frameworks/index.ts';
 import {
+  inboundOf,
   isTransferNode,
   outboundOf,
   storeAcceptsFromOutside,
@@ -307,10 +308,29 @@ function neonNode(id: string, hostPlan: string): ArchNodeIn {
   };
 }
 
+/** 構成の名前で、土台の DB（Supabase）に替えて出す DB の名前（D-77・D-114 段 2）。free は土台が無料のプラン。替えなければ undefined。 */
+export function crossDbName(
+  db: string | undefined,
+  free: boolean,
+): string | undefined {
+  switch (db) {
+    case 'neon':
+      return free ? 'Neon（Free）' : 'Neon（Launch）';
+    case 'dynamodb':
+      return 'AWS DynamoDB';
+    case 'aurora':
+    case 'aurora-pause':
+      return 'AWS Aurora Serverless v2';
+    default:
+      return undefined;
+  }
+}
+
 /**
- * 土台の DB（役割 sql-db のノード。Vercel・Netlify の Supabase）を Neon に差し替える（composeStack から、画像・API の前に呼ぶ）。
- * 差せる土台は規則（connections.ts）で決まる。経路はそのまま（ノードの id を変えない）。standby.db（差し替えの途中）が今と違えば、移す先の DB を `db-next` で経路に載せずに足す
- * （Supabase は常に動く分・Neon は届く件数が無いので止まっている。新旧の両方の費用）。
+ * 土台の DB（役割 sql-db のノード。Vercel・Netlify の Supabase）を他の事業者の DB の部品（Neon・AWS の DynamoDB・Aurora）に
+ * 差し替える（composeStack から、画像・API の前に呼ぶ）。差せる土台は規則（connections.ts）で決まる。ノードの id は変えない（経路はそのまま）。
+ * 部品が送り手になる応答の転送（AWS の DB → 土台の関数。D-114 段 2）は、部品の送り出しと土台の受け取りの項目で数え（transferNodes。CP-06）、
+ * 経路の DB の手前に置く。standby.db（差し替えの途中）が今と違えば、移す先の DB を `db-next` で経路に載せずに足す（新旧の両方の費用）。
  */
 export function applyCrossDb(
   arch: ArchitectureInput,
@@ -319,37 +339,64 @@ export function applyCrossDb(
   choices: Choices,
   standby: Choices,
 ): ArchitectureInput {
-  if (
-    !CROSS_COMPONENTS.some((c) => c.slot === 'db' && hostsOf(c).includes(host))
-  )
-    return arch;
-  const supabase = arch.nodes.find((n) => n.role === 'sql-db');
-  if (!supabase) return arch;
+  const parts = CROSS_COMPONENTS.filter(
+    (c) => c.slot === 'db' && hostsOf(c).includes(host),
+  );
+  if (!parts.length) return arch;
+  const base = arch.nodes.find((n) => n.role === 'sql-db');
+  if (!base) return arch;
   const current = choices.db ?? 'supabase';
   const next = standby.db;
-  const of = (opt: string, id: string): ArchNodeIn | undefined =>
-    opt === 'neon'
-      ? neonNode(id, plan)
-      : opt === 'supabase'
-        ? { ...supabase, id }
-        : undefined;
-  let nodes = arch.nodes.map((n) =>
-    n.id === supabase.id ? (of(current, supabase.id) ?? n) : n,
-  );
+  const of = (opt: string, id: string): ArchNodeIn | undefined => {
+    if (opt === 'supabase') return { ...base, id };
+    const part = parts.find((c) => c.id === opt);
+    if (!part) return undefined;
+    if (part.platform === 'neon') return neonNode(id, plan);
+    if (part.platform === 'aws') return { ...awsDbNode(opt), id };
+    return undefined;
+  };
+  const curNode = of(current, base.id);
+  let nodes = arch.nodes.map((n) => (n.id === base.id ? (curNode ?? n) : n));
   const standbyNode =
     next !== undefined && next !== current
-      ? of(next, `${supabase.id}-next`)
+      ? of(next, `${base.id}-next`)
       : undefined;
   if (standbyNode) nodes = [...nodes, standbyNode];
-  if (current !== 'neon') return { ...arch, nodes };
-  const free = plan === 'hobby' || plan === 'free';
+  const name = crossDbName(
+    curNode && current !== 'supabase' ? current : undefined,
+    plan === 'hobby' || plan === 'free',
+  );
+  if (!curNode || name === undefined) return { ...arch, nodes };
+  // DB が送り手の応答の転送（受け手は土台の処理。項目のある側だけノードを作る）。経路の DB の手前に置く
+  const out = transferNodes(curNode, host, 'DB の応答', 'per-query');
+  const routes = out.length
+    ? Object.fromEntries(
+        Object.entries(arch.routes).map(([cls, path]) => [
+          cls,
+          path!.flatMap((id) =>
+            id === base.id ? [...out.map((n) => n.id), id] : [id],
+          ),
+        ]),
+      )
+    : arch.routes;
+  // 受け手の処理（DB を呼ぶ土台の compute）に、受け取りの項目が無いことの根拠を添える
+  const receiverFacts = out.length ? inboundOf(host)?.receiverFacts : undefined;
+  const callers = new Set(
+    Object.values(arch.routes).flatMap((path) =>
+      (path ?? []).filter((id, i) => path![i + 1] === base.id),
+    ),
+  );
+  if (receiverFacts?.length)
+    nodes = nodes.map((n) =>
+      callers.has(n.id) && n.role === 'compute'
+        ? { ...n, facts: [...(n.facts ?? []), ...receiverFacts] }
+        : n,
+    );
   return {
     ...arch,
-    name: arch.name.replace(
-      /Supabase (Free|Pro)/,
-      free ? 'Neon（Free）' : 'Neon（Launch）',
-    ),
-    nodes,
+    name: arch.name.replace(/Supabase (Free|Pro)/, name),
+    nodes: [...nodes, ...out],
+    routes,
   };
 }
 
@@ -600,15 +647,28 @@ export function applyCrossApi(
   /** 経路の DB のノード（役割 sql-db・db-proxy）を API の列に差し替える（連続した DB のノード（Hyperdrive → Supabase）は 1 回だけ）。 */
   const replaceDb = (api: readonly string[]) => {
     const db = arch.nodes.filter(isDbNode).map((n) => n.id);
+    // DB の応答の転送（DB の手前の転送のノード。D-114 段 2）も DB と一緒に外す
+    const dbOut = new Set(
+      arch.nodes
+        .filter(isTransferNode)
+        .map((n) => n.id)
+        .filter((id) =>
+          Object.values(routes).some((p) =>
+            p!.some((x, i) => x === id && db.includes(p![i + 1] ?? '')),
+          ),
+        ),
+    );
     routes = Object.fromEntries(
       Object.entries(routes).map(([cls, path]) => [
         cls,
         path!.flatMap((id, i) =>
-          !db.includes(id)
-            ? [id]
-            : i > 0 && db.includes(path![i - 1]!)
-              ? []
-              : api,
+          dbOut.has(id)
+            ? []
+            : !db.includes(id)
+              ? [id]
+              : i > 0 && db.includes(path![i - 1]!)
+                ? []
+                : api,
         ),
       ]),
     );

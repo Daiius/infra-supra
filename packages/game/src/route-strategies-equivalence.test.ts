@@ -52,6 +52,19 @@ function hash(s: string): string {
   return h.toString(16).padStart(16, '0');
 }
 
+/**
+ * 記録の後で足した部品（Vercel の DB の AWS。D-114 段 2）。記録は既存の部品の組が変わらないことを見るので、足した部品は除く
+ * （新しい組の費用は catalog の cross.test.ts と game の aws-db.test.ts で見る）。
+ */
+const addedAfterRecord = (
+  stackIndex: number,
+  slot: SlotId,
+  platform: string,
+): boolean =>
+  STACKS[stackIndex]!.provider === 'vercel' &&
+  slot === 'db' &&
+  platform === 'aws';
+
 /** 部品の選択肢を 1 つずつ替えた組（既定 = {} を含む）。 */
 function componentVariants(
   sc: Scenario,
@@ -61,7 +74,9 @@ function componentVariants(
   const out: Choices[] = [{}];
   for (const x of setupSlots(sc, stackIndex, fw)) {
     if (x.fixed || x.slot === 'files') continue;
-    for (const o of x.options) out.push({ [x.slot as SlotId]: o.id });
+    for (const o of x.options)
+      if (!addedAfterRecord(stackIndex, x.slot as SlotId, o.platform))
+        out.push({ [x.slot as SlotId]: o.id });
   }
   return out;
 }
