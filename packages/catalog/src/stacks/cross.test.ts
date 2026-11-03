@@ -94,6 +94,24 @@ const PAIRS_ADDED_STAGE2C = [
   'vercel × images × aws',
 ];
 
+/**
+ * 段 2d（D-114・2026-11-04）で足した組: 公開の口へ出られる土台の処理 → 公開の口を持つ DB を規則で一括に開いた
+ * （さくらの VPS・Google Cloud・AWS・OpenNext に Neon・Supabase、さくらの VPS・Google Cloud・Netlify に AWS の DB）。
+ */
+const PAIRS_ADDED_STAGE2D = [
+  'aws × db × neon',
+  'aws × db × supabase',
+  'aws-opennext × db × neon',
+  'aws-opennext × db × supabase',
+  'gcp × db × aws',
+  'gcp × db × neon',
+  'gcp × db × supabase',
+  'netlify × db × aws',
+  'sakura × db × aws',
+  'sakura × db × neon',
+  'sakura × db × supabase',
+];
+
 /** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
 const COMPONENTS_BEFORE_RULES = [
   'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
@@ -113,14 +131,21 @@ const COMPONENTS_BEFORE_RULES = [
   // 段 2b（D-114）で Cloudflare（Hyperdrive 経由）を足した。土台ごとのつなぎ方の文が違うので別の選択肢
   'db neon:neon → cloudflare',
   'db neon:neon → netlify,vercel',
+  // 段 2d（D-114）: 公開の口の規則で開いた土台（TCP で接続のプールへ）
+  'db neon:neon → aws,aws-opennext,gcp,sakura',
+  'db supabase:supabase → aws,aws-opennext,gcp,sakura',
   // 段 2（D-114）で足した部品。段 2b で Cloudflare（DynamoDB は直接・Aurora・RDS は Hyperdrive 経由）
   'db aws:dynamodb → cloudflare',
   'db aws:dynamodb → vercel',
+  'db aws:dynamodb → gcp,netlify,sakura',
   'db aws:aurora → cloudflare',
   'db aws:aurora → vercel',
+  'db aws:aurora → gcp,netlify,sakura',
   'db aws:aurora-pause → cloudflare',
   'db aws:aurora-pause → vercel',
+  'db aws:aurora-pause → gcp,netlify,sakura',
   'db aws:rds → cloudflare',
+  'db aws:rds → gcp,netlify,sakura',
   'api sakura:sakura-vps-2gb → cloudflare [vite-spa,astro,nextjs-export]',
   'api sakura:sakura-vps-4gb → cloudflare [vite-spa,astro,nextjs-export]',
   'email aws:ses → cloudflare',
@@ -148,6 +173,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
         ...PAIRS_ADDED_STAGE2,
         ...PAIRS_ADDED_STAGE3,
         ...PAIRS_ADDED_STAGE2C,
+        ...PAIRS_ADDED_STAGE2D,
       ].sort(),
     );
   });
@@ -196,16 +222,20 @@ describe('許した組（接続の規則から導く。D-114）', () => {
       for (const slot of ['isrCache', 'realtime', 'apiCache'] as const)
         expect(cross(p, slot)).toEqual([]);
     // DB に他の事業者の部品を差せるのは Vercel・Netlify の Neon（D-77）と、Vercel の AWS の DynamoDB・Aurora（D-114 段 2）、
-    // Cloudflare の Neon・AWS の DynamoDB・Aurora・RDS（段 2b）だけ
+    // Cloudflare の Neon・AWS の DynamoDB・Aurora・RDS（段 2b）、公開の口の規則で開いた土台（段 2d）。
+    // 土台の事業者自身の DB（AWS・OpenNext の AWS の DB・Vercel・Netlify の Supabase）は他の事業者の部品として出ない
+    const awsDbs = ['dynamodb', 'aurora', 'aurora-pause', 'rds'];
     for (const p of [...PLATFORMS, 'aws-opennext', 'netlify'] as const)
       expect(cross(p, 'db').map((c) => c.id)).toEqual(
         p === 'vercel'
           ? ['neon', 'dynamodb', 'aurora', 'aurora-pause']
           : p === 'netlify'
-            ? ['neon']
+            ? ['neon', ...awsDbs]
             : p === 'cloudflare'
-              ? ['neon', 'dynamodb', 'aurora', 'aurora-pause', 'rds']
-              : [],
+              ? ['neon', ...awsDbs]
+              : p === 'aws' || p === 'aws-opennext'
+                ? ['neon', 'supabase']
+                : ['neon', 'supabase', ...awsDbs],
       );
     expect(cross('cloudflare', 'images')).toEqual([]);
     expect(cross('sakura', 'images')).toEqual([]);
@@ -245,6 +275,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
       sakura: 'さくらの VPS',
       neon: 'Neon',
       bunny: 'Bunny',
+      supabase: 'Supabase',
     } as const;
     for (const c of CROSS_COMPONENTS)
       expect(
@@ -1459,10 +1490,13 @@ describe('DB だけ AWS（Vercel × DynamoDB・Aurora。D-114 段 2）', () => {
     }
   });
 
-  it('Netlify・他の構成には差さない（規則が Vercel だけ）', () => {
+  it('Vercel の規則（Marketplace・OIDC）は他の土台に効かない（Netlify は段 2d の公開の口の規則で、同じリージョンの扱いを持たない）', () => {
     const a = composeStack('netlify-supabase-pro', { db: 'dynamodb' });
-    expect(node(a, 'db')!.billing!.provider).toBe('supabase');
-    expect(node(a, 'aws-db-out')).toBeUndefined();
+    expect(node(a, 'db')!.billing!.provider).toBe('aws');
+    expect(node(a, 'aws-db-out')!.facts).toEqual(['db-out-internet']);
+    expect(
+      componentsOf('netlify', 'db').find((c) => c.id === 'dynamodb')!.note,
+    ).not.toContain('OIDC');
   });
 
   it('差し替えの途中は移す先の DB を経路に載せずに足し、転送のノードは今の DB の分だけ', () => {

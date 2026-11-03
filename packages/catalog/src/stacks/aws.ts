@@ -1,6 +1,7 @@
 // AWS の構成（prd/11 段 1・D-50）。Next.js は Amplify Hosting、Vite の SPA は S3 + CloudFront + Lambda（API Gateway の HTTP API）。
 // 東京（ap-northeast-1）・常時無料だけ（AX-06）。料金は providers/aws.ts。
 // index.ts とは型だけを共有し、値は読まない（index.ts がこのファイルを読み込んで登録するので、循環しても初期化の順に依らない）。
+import { CROSS_DB, crossDbPlaceholder } from './cross-db.ts';
 import type { ArchitectureInput, RequestClass } from 'estimator';
 import type { Choices, ComponentOption, StackDef } from './index.ts';
 import { bunnyCdnNode } from './bunny.ts';
@@ -264,6 +265,7 @@ export const bill = (planId: string, meters: Record<string, string>) => ({
 });
 
 export function dbNode(opt: string | undefined): ArchNodeIn {
+  if (opt === CROSS_DB) return crossDbPlaceholder();
   if (opt === 'aurora' || opt === 'aurora-pause') {
     const pause = opt === 'aurora-pause';
     return {

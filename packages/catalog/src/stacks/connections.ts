@@ -124,6 +124,37 @@ const ALL_PLATFORMS = [
   'gcp',
 ] as const satisfies readonly Platform[];
 
+/**
+ * 処理が既定で公開のインターネットへ出られる土台（D-114 段 2d）。さくらの VPS（固定の IP・転送量の課金なし）・Cloud Run（既定で
+ * 共有の動的な IP からインターネットへ）・Lambda（既定で Lambda が管理する VPC からインターネットへ。Amplify の SSR・S3 + CloudFront の
+ * SPA の Lambda・OpenNext のサーバーの関数）・Netlify Functions（隠した構成）。VPC に入れる形（NAT が要る）は扱わない（CP-05）。
+ */
+const PUBLIC_EGRESS_HOSTS = [
+  'sakura',
+  'gcp',
+  'aws',
+  'aws-opennext',
+] as const satisfies readonly Platform[];
+/** AWS の DB を公開の口で開く土台（AWS の構成は自分の DB の部品、Vercel・Cloudflare は専用の規則）。 */
+const PUBLIC_AWS_DB_HOSTS = [
+  'sakura',
+  'gcp',
+  'netlify',
+] as const satisfies readonly Platform[];
+const PUBLIC_EGRESS_BASIS =
+  '土台の処理は既定で公開のインターネットへ出られる: さくらの VPS は固定の IP（転送量は無制限）、Cloud Run は既定で共有の動的な IP の集まりから、Lambda は既定で Lambda が管理する VPC（インターネットに出られる）から。' +
+  'Netlify Functions（隠した構成）から外へつなぐ形は Neon（host-compute-neon）と同じ。VPC に入れた Lambda・Cloud Run の VPC の出口を全部に向ける形は NAT が要り（東京の単価が未取得）、扱わない。往復の遅延は計算しない（CP-08）';
+const PUBLIC_EGRESS_NOTE =
+  '土台の処理から DB へ送る問い合わせの転送は数えない（DB の応答は DB の事業者の転送で数える）';
+const PUBLIC_EGRESS_URLS = [
+  'https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html',
+  'https://docs.cloud.google.com/run/docs/configuring/networking-best-practices',
+];
+/** さくらの VPS の仕様（転送量は無制限。2026-11-02 取得のものを引き継ぐ）。 */
+const SAKURA_SPEC = at('2026-11-02', [
+  'https://vps.sakura.ad.jp/specification/',
+]);
+
 /** Vercel から AWS の DB へつなぐときの部品の説明の文（D-114 段 2。how は認証とつなぎ方）。 */
 const VERCEL_AWS_DB_NOTE = (how: string) =>
   `Vercel の Marketplace で作る。${how}。Vercel の関数と同じリージョンなら DB の応答の転送が安くなる可能性があるが、公式に記載が無く未確認。` +
@@ -601,6 +632,109 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       ...at('2026-11-02', [
         'https://developers.cloudflare.com/workers/platform/pricing/',
       ]),
+    ],
+  },
+  // ---- 公開の口へ出られる土台の処理 → 公開の口を持つ DB（D-114 段 2d・2026-11-04 のユーザーの決定「規則で一括に開く」）----
+  // 土台ごとに手で書かず、土台の処理が既定で公開のインターネットへ出られる（VPC・NAT が要らない）ことと、DB が公開のエンドポイントを
+  // 持つことの 2 つで開く。中継（Static IPs・NAT・RDS Proxy・Tunnel）が要る形（IP を絞る・VPC の中の DB）は扱わない（CP-05・CP-07）。
+  // 土台の既定の DB と同じ事業者の部品（Vercel・Netlify の Supabase・AWS の構成の AWS の DB）と、専用の規則がある土台
+  // （Vercel・Netlify の Neon、Vercel の DynamoDB・Aurora、Cloudflare の Hyperdrive）は、ここに入れない（同じ部品が 2 つ出ないように）
+  {
+    id: 'public-compute-neon',
+    slot: 'db',
+    from: { providers: PUBLIC_EGRESS_HOSTS, role: 'compute' },
+    to: { providers: ['neon'], role: 'sql-db', port: 'tcp-sql' },
+    verdict: 'ok',
+    basis:
+      'Neon は公開のエンドポイントに Postgres（TCP・TLS）でつなぎ、サーバーレスの関数には接続のプール（-pooler の接続文字列。PgBouncer・最大 10,000 の接続）を勧める。' +
+      PUBLIC_EGRESS_BASIS,
+    partNote: `土台の処理から接続のプール（-pooler の接続文字列）に Postgres のドライバーでつなぐ。${PUBLIC_EGRESS_NOTE}`,
+    sources: [
+      ...at('2026-11-04', [
+        'https://neon.com/docs/connect/connection-pooling',
+        ...PUBLIC_EGRESS_URLS,
+      ]),
+      ...SAKURA_SPEC,
+      ...at('2026-11-02', [
+        'https://neon.com/docs/introduction/regions',
+        'https://neon.com/pricing',
+      ]),
+    ],
+  },
+  {
+    id: 'public-compute-supabase',
+    slot: 'db',
+    from: { providers: PUBLIC_EGRESS_HOSTS, role: 'compute' },
+    to: { providers: ['supabase'], role: 'sql-db', port: 'tcp-sql' },
+    verdict: 'ok',
+    basis:
+      'Supabase の直接の接続は IPv6 だけ（IPv4 はアドオン）で、共有のプール（Supavisor）はどのプランでも IPv4。サーバーレスの関数は transaction モード（6543）、VM・常駐のコンテナは直接の接続か、IPv4 だけの網からは session モード（5432）。' +
+      'プール経由の転送は Shared Pooler Egress として数え、DB の転送と二重に数えない（枠はサービスをまたいで共通）。' +
+      PUBLIC_EGRESS_BASIS,
+    partNote: `土台の処理から共有のプール（IPv4。関数は transaction モード・VPS とコンテナは session モード）に Postgres のドライバーでつなぐ。${PUBLIC_EGRESS_NOTE}`,
+    sources: [
+      ...at('2026-11-04', [
+        'https://supabase.com/docs/guides/database/connecting-to-postgres',
+        'https://supabase.com/docs/guides/platform/manage-your-usage/egress',
+        ...PUBLIC_EGRESS_URLS,
+      ]),
+      ...SAKURA_SPEC,
+    ],
+  },
+  {
+    id: 'public-compute-dynamodb',
+    slot: 'db',
+    from: { providers: PUBLIC_AWS_DB_HOSTS, role: 'compute' },
+    to: {
+      providers: ['aws'],
+      role: 'sql-db',
+      port: 'https-api',
+      parts: ['dynamodb'],
+    },
+    verdict: 'ok',
+    basis:
+      'DynamoDB の API は署名（Signature Version 4）した HTTPS の要求で、どこからでも呼べる。土台の処理は IAM のアクセスキー（環境変数・Secret に置く）で SDK を呼ぶ。DynamoDB は受信に課金しない。' +
+      'DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）。' +
+      PUBLIC_EGRESS_BASIS,
+    partNote: `土台の処理から IAM のアクセスキーで署名した HTTPS の要求（SDK）を呼ぶ。中継は要らない。${PUBLIC_EGRESS_NOTE}`,
+    partRefs: ['fact:aws:data-transfer-out:db-out-internet'],
+    sources: [
+      ...at('2026-11-04', [
+        'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.LowLevelAPI.html',
+        ...PUBLIC_EGRESS_URLS,
+      ]),
+      ...SAKURA_SPEC,
+      ...at('2026-11-03', [
+        'https://aws.amazon.com/dynamodb/pricing/on-demand/',
+      ]),
+    ],
+  },
+  {
+    id: 'public-compute-aws-sql',
+    slot: 'db',
+    from: { providers: PUBLIC_AWS_DB_HOSTS, role: 'compute' },
+    to: {
+      providers: ['aws'],
+      role: 'sql-db',
+      port: 'tcp-sql',
+      parts: ['aurora', 'aurora-pause', 'rds'],
+    },
+    verdict: 'ok',
+    basis:
+      'RDS・Aurora を外から使うには、DB の公開のアクセス（Public access）を有効にし、DB のサブネットがインターネットゲートウェイを持ち、セキュリティグループが受け入れを許す必要がある。' +
+      '土台の処理の送り元の IP は決まっていない（固定の IP は中継の部品で、扱わない）ので、セキュリティグループは広く開け、DB のユーザーとパスワード（TLS）で守る前提。' +
+      'DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）。公開の IPv4 のアドレスの時間課金は未確認として数えない。' +
+      PUBLIC_EGRESS_BASIS,
+    partNote: `DB の公開のアクセスを有効にし、セキュリティグループを広く開けて（送り元の IP が決まっていない）、DB のユーザーとパスワードで TLS でつなぐ。${PUBLIC_EGRESS_NOTE}`,
+    partRefs: ['fact:aws:data-transfer-out:db-out-internet'],
+    sources: [
+      ...at('2026-11-04', [
+        'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html',
+        'https://aws.amazon.com/rds/postgresql/pricing/',
+        ...PUBLIC_EGRESS_URLS,
+      ]),
+      ...SAKURA_SPEC,
+      ...at('2026-11-03', ['https://aws.amazon.com/rds/aurora/pricing/']),
     ],
   },
   // ---- アプリのメールの送信（D-95・D-110）。インターネットの API・SMTP で呼ぶので、どの土台からも同じ形 ----

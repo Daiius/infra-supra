@@ -84,6 +84,7 @@ export const COMPONENT_BRAND: Readonly<Record<ComponentProvider, BrandId>> = {
   neon: 'neon',
   resend: 'resend',
   bunny: 'bunny',
+  supabase: 'supabase',
 };
 
 /** ブランドの色（アクセントだけに使う。黒一色のものは undefined = 文字の色）。 */

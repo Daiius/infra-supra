@@ -53,7 +53,8 @@ function hash(s: string): string {
 }
 
 /**
- * 記録の後で足した部品（Vercel の DB の AWS。D-114 段 2・Cloudflare の DB の Neon・AWS。段 2b・画像の原本だけ R2 と S3 + CloudFront。段 2c）。
+ * 記録の後で足した部品（Vercel の DB の AWS。D-114 段 2・Cloudflare の DB の Neon・AWS。段 2b・画像の原本だけ R2 と S3 + CloudFront。段 2c・
+ * 公開の口の DB（さくらの VPS の DB のスロット（既定の MySQL を含む）と、Google Cloud・AWS・OpenNext・Netlify の他の事業者の DB）。段 2d）。
  * 記録は既存の部品の組が変わらないことを見るので、足した部品は除く（新しい組の費用は catalog の cross.test.ts と game の aws-db.test.ts・
  * cross-images.test.ts で見る）。
  */
@@ -67,7 +68,14 @@ const addedAfterRecord = (
   (slot === 'db' &&
     ((STACKS[stackIndex]!.provider === 'vercel' && platform === 'aws') ||
       (STACKS[stackIndex]!.provider === 'cloudflare' &&
-        (platform === 'aws' || platform === 'neon'))));
+        (platform === 'aws' || platform === 'neon')) ||
+      STACKS[stackIndex]!.provider === 'sakura' ||
+      (['gcp', 'aws', 'aws-opennext', 'netlify'].includes(
+        STACKS[stackIndex]!.provider,
+      ) &&
+        ['neon', 'supabase', 'aws'].includes(platform) &&
+        platform !== STACKS[stackIndex]!.provider &&
+        !(STACKS[stackIndex]!.provider === 'netlify' && platform === 'neon'))));
 
 /** 部品の選択肢を 1 つずつ替えた組（既定 = {} を含む）。 */
 function componentVariants(

@@ -152,7 +152,8 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
         ),
       ).toString(),
     ).toBe(
-      'mode=estimate&t=article&pv=30000&fw=vite-spa&s=sakura-vps-2gb&r=60&img=jpeg&v=3&seats=1&c.images=default&c.frontCdn=none&c.ogp=none&c.apiCache=none&c.dbBackup=default&c.email=default',
+      // さくらの VPS の DB のスロット（D-114 段 2d）: 前の URL（DB の指定なし）は既定の VPS の MySQL で読む
+      'mode=estimate&t=article&pv=30000&fw=vite-spa&s=sakura-vps-2gb&r=60&img=jpeg&v=3&seats=1&c.images=default&c.db=mysql&c.frontCdn=none&c.ogp=none&c.apiCache=none&c.dbBackup=default&c.email=default',
     );
     expect(
       toQuery(

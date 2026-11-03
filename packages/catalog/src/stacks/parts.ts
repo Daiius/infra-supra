@@ -304,6 +304,28 @@ export const CROSS_PARTS: readonly PartDef[] = [
       '東京のリージョンが無く、最寄りはシンガポール（往復の遅延は計算しない）。Neon のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: ['fact:neon:', 'pool:neon:', 'limit:neon:'],
   },
+  // Supabase（D-114 段 2d）。Vercel・Netlify は土台の既定の DB、Cloudflare は「Hyperdrive 経由で Supabase」（土台の部品）があるので、
+  // それ以外の土台（さくらの VPS・Google Cloud・AWS）の部品。ノードは Vercel・Netlify の既定の Supabase と同じ組み立て（cross.ts の supabaseNode）
+  {
+    id: 'supabase',
+    slot: 'db',
+    platform: 'supabase',
+    role: 'sql-db',
+    accepts: ['tcp-sql'],
+    attachesTo: ['compute'],
+    as: 'supabase',
+    title: { free: 'Supabase Free', paid: 'Supabase Pro' },
+    label: 'Supabase: Postgres（共有のプールでつなぐ）',
+    note:
+      'DB を Supabase に替える。Pro は月の基本料（$25）と Micro のサーバーの稼働がかかり（Compute のクレジット $10 つき）、転送は月 250 GB の後 $0.09/GB、ディスクは 8 GB の後。' +
+      '土台が無料のプランなら Supabase Free（転送 5 GB・1 週間使われないと一時停止）。共有のプール（Supavisor。IPv4）でつなぎ、プール経由の転送は DB の転送と二重に数えない。' +
+      'Supabase のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+    premiseRefs: [
+      'fact:supabase:pro-micro:compute',
+      'limit:supabase:pro-micro:pooler-connections',
+      'limit:supabase:free:db-size',
+    ],
+  },
   // AWS の DB（D-114 段 2・段 2b）。公開の口でつなぐ（CP-07）。id は AWS の構成の DB の部品と同じ（料金・ノードは stacks/aws.ts の dbNode）
   {
     id: 'dynamodb',
@@ -357,7 +379,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
       'pool:aws:data-transfer-out:internet-free-transfer',
     ],
   })),
-  // 公開の RDS（D-114 段 2b）。今は Cloudflare（Hyperdrive）からだけ（Vercel の Marketplace には無い）
+  // 公開の RDS（D-114 段 2b・段 2d）。Cloudflare は Hyperdrive 経由、ほかの土台は公開のエンドポイントへ直接（Vercel の Marketplace には無い）
   {
     id: 'rds',
     slot: 'db',

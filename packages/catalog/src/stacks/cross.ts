@@ -23,8 +23,10 @@ import {
   outboundOf,
   RELAYS,
   relaysFor,
+  rulesFor,
   storeAcceptsFromOutside,
   transferNodes,
+  type Port,
   type RelayId,
 } from './connections.ts';
 import { CROSS_COMPONENTS, CROSS_PARTS } from './parts.ts';
@@ -373,9 +375,9 @@ const freeHostPlan = (plan: string): boolean =>
 
 /**
  * Neon の DB のノード。土台が無料のプランなら Neon Free、それ以外は Neon Launch。
- * relayed は中継（Hyperdrive）を通してワイヤプロトコルでつなぐ形（serverless driver を使わない）。
+ * driver は serverless driver（HTTP）で問い合わせる形（規則の口が https-api。Hyperdrive・接続のプールへ TCP でつなぐ形は使わない）。
  */
-function neonNode(id: string, hostPlan: string, relayed = false): ArchNodeIn {
+function neonNode(id: string, hostPlan: string, driver = true): ArchNodeIn {
   const free = freeHostPlan(hostPlan);
   return {
     id,
@@ -386,9 +388,9 @@ function neonNode(id: string, hostPlan: string, relayed = false): ArchNodeIn {
       capacityUnits: NEON_MIN_CU,
       pauseAfterIdleSeconds: NEON_SUSPEND_SECONDS,
     },
-    facts: relayed
-      ? ['region', 'scale-to-zero', 'compute-size']
-      : ['region', 'serverless-driver', 'scale-to-zero', 'compute-size'],
+    facts: driver
+      ? ['region', 'serverless-driver', 'scale-to-zero', 'compute-size']
+      : ['region', 'scale-to-zero', 'compute-size'],
     billing: {
       accountId: 'neon',
       provider: 'neon',
@@ -441,12 +443,45 @@ const RELAY_NODES: Record<RelayId, (plan: string) => ArchNodeIn> = {
 const DB_PART_NODES: Partial<
   Record<
     ComponentProvider,
-    (opt: string, id: string, plan: string, relayed: boolean) => ArchNodeIn
+    (
+      opt: string,
+      id: string,
+      plan: string,
+      port: Port | undefined,
+    ) => ArchNodeIn
   >
 > = {
-  neon: (_opt, id, plan, relayed) => neonNode(id, plan, relayed),
+  neon: (_opt, id, plan, port) => neonNode(id, plan, port === 'https-api'),
   aws: (opt, id) => ({ ...awsDbNode(opt), id }),
+  supabase: (_opt, id, plan) => supabaseNode(id, plan),
 };
+
+/**
+ * Supabase の DB のノード（他の土台の DB の部品。D-114 段 2d）。Vercel・Netlify の既定の Supabase と同じ課金（Free は転送だけ・
+ * Pro は Micro の稼働・転送・ディスク）。土台が無料のプランなら Free。共有のプールの事実を添える。
+ */
+function supabaseNode(id: string, hostPlan: string): ArchNodeIn {
+  const free = freeHostPlan(hostPlan);
+  return {
+    id,
+    role: 'sql-db',
+    label: free ? 'Supabase Free' : 'Supabase Pro（Micro）',
+    config: { kind: 'managed-db' },
+    facts: ['shared-pooler', 'pooler-egress'],
+    billing: {
+      accountId: 'supabase',
+      provider: 'supabase',
+      planId: free ? 'free' : 'pro-micro',
+      meters: free
+        ? { 'egress-gb': 'egress' }
+        : {
+            'instance-hours': 'compute',
+            'egress-gb': 'egress',
+            'storage-gb-month': 'disk',
+          },
+    },
+  };
+}
 
 /** 土台 host の DB のスロットで、他の事業者の DB の部品（規則で許したもの）。 */
 const dbPartOn = (
@@ -472,6 +507,12 @@ const partDefOf = (o: ComponentOption) =>
 const dbRelaysOn = (host: Platform, o: ComponentOption): readonly RelayId[] => {
   const def = partDefOf(o);
   return def ? relaysFor(host, def) : [];
+};
+
+/** 土台 host から DB の部品へつなぐ口（最初に当たる規則の受ける口。Neon の serverless driver か TCP かを分ける）。 */
+const dbPortOn = (host: Platform, o: ComponentOption): Port | undefined => {
+  const def = partDefOf(o);
+  return def ? rulesFor(host, def)[0]?.to.port : undefined;
 };
 
 /**
@@ -522,8 +563,14 @@ export function applyCrossDb(
     !CROSS_COMPONENTS.some((c) => c.slot === 'db' && hostsOf(c).includes(host))
   )
     return arch;
-  const base = arch.nodes.find((n) => n.role === 'sql-db');
-  if (!base) return arch;
+  // 土台の DB のノード。さくらの VPS の MySQL は VPS の中でノードが無い（他の事業者の DB を選ぶと組み立てが仮の DB を置く。D-114 段 2d）
+  const found = arch.nodes.find((n) => n.role === 'sql-db');
+  if (!found && host !== 'sakura') return arch;
+  const base: ArchNodeIn = found ?? {
+    id: 'db',
+    label: 'DB',
+    config: { kind: 'managed-db' },
+  };
   const current = choices.db;
   const next = standby.db;
   /** 部品の DB のノードと中継（部品でなければ undefined）。 */
@@ -532,9 +579,9 @@ export function applyCrossDb(
     const make = part && DB_PART_NODES[part.platform];
     if (!part || !make) return undefined;
     const relays = dbRelaysOn(host, part).map((r) => RELAY_NODES[r](plan));
-    return { db: make(part.id, id, plan, relays.length > 0), relays };
+    return { db: make(part.id, id, plan, dbPortOn(host, part)), relays };
   };
-  const cur = build(current, base.id);
+  const cur = found ? build(current, base.id) : undefined;
   let nodes = arch.nodes.map((n) => (n.id === base.id && cur ? cur.db : n));
   const addNew = (ns: readonly ArchNodeIn[]) => {
     for (const n of ns) if (!nodes.some((x) => x.id === n.id)) nodes.push(n);
@@ -861,8 +908,9 @@ export function applyCrossApi(
     const store = arch.nodes.find((n) => n.id === target);
     if (target && (!store || storeAcceptsFromOutside(store)))
       routes['image-write'] = [...cur.write, target];
-  } else if (cur && host === 'sakura') {
-    // VPS の Astro（D-69）: DB は VPS の中（ノードが無い）ので、DB を読む経路（マイページ・API）の VPS の後に API を足す
+  } else if (cur && host === 'sakura' && !arch.nodes.some(isDbNode)) {
+    // VPS の Astro（D-69）: DB は VPS の中（ノードが無い）ので、DB を読む経路（マイページ・API）の VPS の後に API を足す。
+    // DB を他の事業者に置いた VPS（D-114 段 2d）は、ほかの土台と同じく経路の DB を API の列に差し替える（下の replaceDb）
     for (const cls of [
       'document-ssr',
       'isr-revalidate',

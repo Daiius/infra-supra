@@ -4,6 +4,36 @@ import type { PriceBookInput } from 'estimator';
 const R = '2026-10-31';
 const src = (url: string) => ({ url, retrievedAt: R });
 
+/**
+ * Supabase の facts（構成のノードが facts で挙げたときだけ前提として出す。Free・Pro で同じ）。
+ * Vercel・Netlify・Cloudflare の既定の Supabase のノードは挙げない（前提の文を変えない）。他の土台の DB の部品（D-114 段 2d）が挙げる。
+ */
+const FACTS = [
+  {
+    id: 'shared-pooler',
+    premise:
+      'Supabase の直接の接続は IPv6 だけ（IPv4 はアドオン）で、共有のプール（Supavisor）はどのプランでも IPv4。' +
+      'サーバーレスの関数は共有のプールの transaction モード（6543）、VM・常駐のコンテナは直接の接続か、IPv4 だけの網からは共有のプールの session モード（5432）を使う',
+    sourceIds: ['connecting'],
+  },
+  {
+    id: 'pooler-egress',
+    premise:
+      '共有のプールを通した転送は「Shared Pooler Egress」として数え、DB の転送とは二重に数えない。転送の枠（Unified Egress Quota。Free 5 GB・Pro 250 GB）はサービスをまたいで共通',
+    interpretation: {
+      adopted:
+        'プール経由の転送を、DB の転送と同じ枠・同じ単価（uncached $0.09/GB）で数える（料金の文はプールを名指ししていない）',
+      rejected: [
+        {
+          reading: 'プール経由の転送を別の枠・別の単価で数える',
+          reason: '公式の文書に別の枠・単価の記載が無い',
+        },
+      ],
+    },
+    sourceIds: ['egressPooler'],
+  },
+];
+
 export const supabase: PriceBookInput = {
   schemaVersion: 1,
   provider: 'supabase',
@@ -35,6 +65,15 @@ export const supabase: PriceBookInput = {
     pitr: {
       url: 'https://supabase.com/docs/guides/platform/manage-your-usage/point-in-time-recovery',
       retrievedAt: '2026-11-02',
+    },
+    // 接続の口（共有のプール・IPv4）と、プール経由の転送の数え方（2026-11-04 取得。D-114 段 2d）
+    connecting: {
+      url: 'https://supabase.com/docs/guides/database/connecting-to-postgres',
+      retrievedAt: '2026-11-04',
+    },
+    egressPooler: {
+      url: 'https://supabase.com/docs/guides/platform/manage-your-usage/egress',
+      retrievedAt: '2026-11-04',
     },
     computeSmall: {
       url: 'https://supabase.com/docs/guides/platform/compute-and-disk',
@@ -89,6 +128,7 @@ export const supabase: PriceBookInput = {
           'Supabase はチームのメンバーが Free・Pro とも無制限（メンバーごとの料金なし）',
         sourceIds: ['pricing'],
       },
+      facts: FACTS,
       notes: [
         '1 週間使われないとプロジェクトが一時停止する',
         '有効な無料プロジェクトは 2 つまで',
@@ -152,6 +192,7 @@ export const supabase: PriceBookInput = {
           sourceIds: ['compute'],
         },
       ],
+      facts: FACTS,
       notes: [
         'Pro は支出上限が既定で有効。ただし Compute は上限の対象外',
         'Compute は 1 時間単位で切り上げ',
