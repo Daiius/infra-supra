@@ -50,18 +50,19 @@ export function Info({
   interactive?: boolean;
 }) {
   const [pos, setPos] = useState<Pos | null>(null);
-  const button = useRef<HTMLButtonElement>(null);
+  // ボタンの要素は state に持つ（close を children(close) で渡すので、ref だと render 中に読むとみなされ React Compiler が最適化を諦める）
+  const [button, setButton] = useState<HTMLButtonElement | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const id = useId();
   const container = useContext(PortalContainer);
   const open = pos !== null;
   const close = () => {
     setPos(null);
-    button.current?.focus();
+    button?.focus();
   };
 
   const show = () => {
-    const r = button.current!.getBoundingClientRect();
+    const r = button!.getBoundingClientRect();
     const width = Math.min(WIDTH, window.innerWidth - MARGIN * 2);
     const left = Math.min(
       Math.max(MARGIN, r.left - 8),
@@ -84,18 +85,17 @@ export function Info({
         e.preventDefault();
         e.stopPropagation();
         setPos(null);
-        button.current?.focus();
+        button?.focus();
       }
     };
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (!panel.current?.contains(t) && !button.current?.contains(t))
-        setPos(null);
+      if (!panel.current?.contains(t) && !button?.contains(t)) setPos(null);
     };
     // スクロールでは、ボタンに付いて動かす。ボタンが画面の外へ大きく出たときだけ閉じる
     // （開いた直後の慣性スクロールや、数 px のスクロールで閉じないように）
     const follow = () => {
-      const r = button.current?.getBoundingClientRect();
+      const r = button?.getBoundingClientRect();
       if (!r || r.bottom < 0 || r.top > window.innerHeight) setPos(null);
       else show();
     };
@@ -111,12 +111,12 @@ export function Info({
       window.removeEventListener('scroll', follow, true);
       window.removeEventListener('resize', close);
     };
-  }, [open, interactive]);
+  }, [open, interactive, button]);
 
   return (
     <>
       <button
-        ref={button}
+        ref={setButton}
         type="button"
         className={className}
         aria-label={label}
@@ -171,7 +171,7 @@ export function Info({
                     if (
                       to &&
                       !e.currentTarget.contains(to) &&
-                      !button.current?.contains(to)
+                      !button?.contains(to)
                     )
                       setPos(null);
                   }

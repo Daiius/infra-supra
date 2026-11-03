@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
@@ -85,13 +86,14 @@ export function ChoiceCarousel<T extends string>({
   const current = cards.find((c) => c.items.includes(value)) ?? cards[0];
   const cardKeys = cards.map((c) => c.key).join('\n');
   // 組ごとに最後に選んだ選択肢（この画面を開いている間だけ）。選んでいない組のカード・組の名前・前後のボタンはこれを出す（無ければ組の最初）
-  const last = useRef<Partial<Record<string, T>>>({});
-  useEffect(() => {
-    if (current) last.current[current.key] = value;
-  }, [current, value]);
+  // render 中に読むので ref でなく state に持ち、選んだものが替わった render の中で更新する（前の render の値を覚える形。
+  // https://react.dev/reference/react/useState#storing-information-from-previous-renders。ref だと React Compiler が最適化を諦める）
+  const [last, setLast] = useState<Partial<Record<string, T>>>({});
+  if (current && last[current.key] !== value)
+    setLast({ ...last, [current.key]: value });
   const shown = (c: { key: string; items: readonly T[] }): T => {
     if (c.items.includes(value)) return value;
-    const l = last.current[c.key];
+    const l = last[c.key];
     return l !== undefined && c.items.includes(l) ? l : c.items[0]!;
   };
   // 選んだカードを中央へ。scrollLeft なので動きは CSS に任せる（daisyUI の carousel は reduced-motion では滑らかにしない）。
