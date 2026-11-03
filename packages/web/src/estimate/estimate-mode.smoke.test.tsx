@@ -141,7 +141,9 @@ describe('見積モードの画面', () => {
     // ページごとの描き方（D-107）: 個人向けを枠 + API にすると URL に残り、その行は CPU の制限に当たらない
     const routes = within(card('ページごとの描き方'));
     fireEvent.click(
-      routes.getByRole('button', { name: /^個人向けのページを S5/ }),
+      routes.getByRole('button', {
+        name: /^個人向けのページを 枠 \+ ブラウザが API で取る/,
+      }),
     );
     expect(window.location.search).toContain('rp.personal=shell-api');
     const row = within(card('ページごとの描き方'))
@@ -213,7 +215,9 @@ describe('見積モードの画面', () => {
     expectEstimate();
     const routes = within(card('ページごとの描き方'));
     fireEvent.click(
-      routes.getByRole('button', { name: /^個人向けのページを S6/ }),
+      routes.getByRole('button', {
+        name: /^個人向けのページを 枠 \+ サーバーの島/,
+      }),
     );
     expect(window.location.search).toContain('rp.personal=server-island');
     const row = within(card('ページごとの描き方'))
@@ -236,7 +240,7 @@ describe('見積モードの画面', () => {
     expect(
       within(row as HTMLElement)
         .getByRole('button', {
-          name: '個人向けのページは S6 枠 + サーバーの島（選択中）',
+          name: '個人向けのページは 枠 + サーバーの島（選択中）',
         })
         .getAttribute('aria-pressed'),
     ).toBe('true');
@@ -284,7 +288,8 @@ describe('見積モードの画面', () => {
     expect(table().textContent).toContain(
       '部品ごとにキャッシュ（Cache Components）',
     );
-    expect(table().textContent).not.toContain('S7');
+    // 描き方の番号（S1〜S6・文書の S7）は画面に出さない（D-112）
+    expect(table().textContent).not.toMatch(/\bS[1-7]\b/);
     expect(window.location.search).not.toContain('rp.');
     expect(
       within(card(/^構成図: /)).getByRole('list', {
@@ -293,7 +298,7 @@ describe('見積モードの画面', () => {
     ).toContain('動的な穴');
     fireEvent.click(
       within(card('ページごとの描き方')).getByRole('button', {
-        name: /^個人向けのページを S4 毎回描く/,
+        name: /^個人向けのページを 毎回描く/,
       }),
     );
     expectEstimate();

@@ -44,7 +44,7 @@ import {
   type SetupChoices,
 } from './setup-components.tsx';
 import { StackField } from './stack-field.tsx';
-import { RoutePlanField } from './route-plan-field.tsx';
+import { useRoutePlanEditor } from './route-plan-field.tsx';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
 /** 今日の日付（YYYY-MM-DD・端末の現地時刻）。改定の出来事の条件に使う（D-21）。 */
@@ -252,7 +252,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       : defaultRevalidateSec(framework, stack, scenario, routes);
   const revalidateChoosable =
     setupRevalidateOptions(scenario, framework, routes).length > 0;
-  // 記事のページのコメント欄（D-82。③ の記事の行で選ぶページの部品。D-109。記事のページがあり、コメントのあるシナリオだけ。
+  // 記事のページのコメント欄（D-82。フレームワークのカードの記事のページの欄で選ぶページの部品。D-109・D-112。記事のページがあり、コメントのあるシナリオだけ。
   // 既定はブラウザで読み込む）
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
   const commentsChoosable =
@@ -274,6 +274,21 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       },
       next,
     );
+  // ページごとの描き方の行・要件の判定・選んだときの書き換え（フレームワークのカードで選ぶ。D-107・D-112）
+  const routeEditor = useRoutePlanEditor({
+    scenario,
+    stackIndex: stack,
+    framework,
+    components: parts,
+    revalidateSec,
+    comments,
+    routes,
+    onChange: (r, v) => {
+      setRouteChoice(r);
+      if (v !== undefined) setRevalidateSec(v);
+    },
+    onCommentsChange: setComments,
+  });
   // 始めから結ぶ確約（台数の予約・年払いで、前払いが始めの所持金に収まるものだけ。D-97）
   const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
     {},
@@ -316,21 +331,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             }
             routes={routes}
             routeNotice={(id) => routeNotice({ framework: id })}
-          />
-          {/* ③ ページの描き方（D-107）: フレームワークの既定から選び直す。構成（④）を替えると判定も変わる */}
-          <RoutePlanField
-            scenario={scenario}
-            stackIndex={stack}
-            framework={framework}
-            components={parts}
-            revalidateSec={revalidateSec}
-            comments={comments}
-            routes={routes}
-            onChange={(r, v) => {
-              setRouteChoice(r);
-              if (v !== undefined) setRevalidateSec(v);
-            }}
-            onCommentsChange={setComments}
+            // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）
+            editor={routeEditor}
           />
           <div className="mt-2">
             <StackField
