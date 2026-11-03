@@ -11,7 +11,7 @@ import {
   type scenarioWireframes,
 } from 'game';
 import type { CSSProperties } from 'react';
-import { RegionSkeleton } from './region-skeleton.tsx';
+import { KIND_TONE, RegionSkeleton } from './region-skeleton.tsx';
 
 export type ResolvedPage = ReturnType<typeof pageWireframes>[number];
 
@@ -140,8 +140,8 @@ function NeedTag({ need }: { need: RegionNeed }) {
 
 /**
  * シナリオの説明のページの見取り図（D-113）。フレームワークに依らず、区画が何で、何が要るかを札で出す（作られ方は出さない）。
- * 選択のカードの見取り図（区画の枠と塗りが作られ方の色）と見分けるため、区画の枠は破線の灰色・白地のままにし、色は区画の中の
- * スケルトン（種類 RegionKind ごと。本物のページに近い見た目。飾りなので aria-hidden）の画像・人の部分にだけ付ける（D-113 の追記）。
+ * 選択のカードの見取り図（はっきりした地と実線の枠が作られ方の色）と見分けるため、区画は破線の枠と、種類（RegionKind）の系統ごとの
+ * より淡い地（KIND_TONE。テーマの色でない Tailwind の色）で描く。中は種類ごとのスケルトン（本物のページに近い見た目。飾りなので aria-hidden）（D-113 の追記）。
  * 区画の名前と要件の札は区画の上の行に並べる（札が中身に重ならないように）。
  * ページはブラウザの窓の形の小さい図（広い画面で 320px 幅）で、広い画面では横に並べる。呼ぶ側で灰色の帯に載せ、窓を白く浮かせる。
  */
@@ -196,7 +196,7 @@ export function ScenarioWireframes({
                       key={r.id}
                       data-region={r.id}
                       title={`${r.label}: ${r.needs.map((n) => REGION_NEEDS[n].short).join('・')}`}
-                      className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} flex min-w-0 flex-col gap-1 rounded border border-dashed border-base-content/20 px-1.5 pt-1 pb-1.5`}
+                      className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} flex min-w-0 flex-col gap-1 rounded border border-dashed px-1.5 pt-1 pb-1.5 ${KIND_TONE[r.kind ?? 'body']}`}
                     >
                       {/* 区画の名前と要件の札を上の行に並べる（狭い区画では札が次の行へ折り返す） */}
                       <span className="flex flex-wrap items-center justify-between gap-x-1 gap-y-0.5">
