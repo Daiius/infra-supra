@@ -31,11 +31,7 @@ import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
 import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
 import { routeChoiceOf, type RoutePlanEditor } from '../route-plan-field.tsx';
 import { FrameworkField } from '../scenario-briefing.tsx';
-import {
-  SettingRadios,
-  SetupComponents,
-  SetupSettings,
-} from '../setup-components.tsx';
+import { SettingRadios, SetupSettings } from '../setup-components.tsx';
 import {
   type EstimateView,
   compareStacks,
@@ -450,6 +446,9 @@ function Conditions({
             ? '選んだ部品で描く。'
             : 'この構成を選んだときの既定の部品で描く。'
         }
+        // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
+        onComponentsChange={(parts) => setInput({ parts })}
+        partsNote="選んでいないスロットは既定の部品で見積もる"
         cardExtra={(i, selected) => {
           const t = cardTotals[STACKS[i]!.id];
           if (!t) return null;
@@ -500,15 +499,7 @@ function Conditions({
           ),
         }}
       />
-      {/* ③ 部品・④ 設定はゲームの始める画面と同じ欄（D-115）。部品は normalizeInput が選べるものに直す */}
-      <SetupComponents
-        scenario={scenario}
-        stackIndex={stackIndex}
-        framework={input.framework}
-        value={input.parts}
-        onChange={(parts) => setInput({ parts })}
-        note="構成の中の役割ごとに選ぶ（選んでいないスロットは既定の部品で見積もる）"
-      />
+      {/* ③ 設定はゲームの始める画面と同じ欄（D-115） */}
       {(settings.revalidate || settings.format || settings.variants) && (
         <SetupSettings>
           {settings.revalidate && (

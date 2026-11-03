@@ -15,7 +15,7 @@ import {
   withoutUnusedEmail,
   type FrameworkId,
 } from 'catalog';
-import type { ArchitectureInput, RequestClass } from 'estimator';
+import type { ArchitectureInput, RequestClass, Role } from 'estimator';
 import {
   frameworkDefaults,
   STACKS,
@@ -613,6 +613,63 @@ export function activeLane(
   return chosen !== null && model.lanes.some((l) => l.id === chosen)
     ? chosen
     : null;
+}
+
+/**
+ * スロットが差し替える箱の役割（ノードの role。D-114）。箱の吹き出しには、箱の役割がここに入るスロットだけを出す（D-116 の補足）。
+ * 別のスロットの選択で名前が変わるだけの箱（「D1 に BLOB で置く」で名前が変わる D1 の箱の画像など）には出さない。
+ * ここに無いスロットは役割で絞らない。
+ */
+const SLOT_ROLES: Readonly<Partial<Record<string, readonly Role[]>>> = {
+  db: ['sql-db', 'kv', 'db-proxy'],
+  dbBackup: ['sql-db'],
+  images: ['image-transform', 'object-store', 'edge-cdn'],
+  isrCache: ['kv', 'object-store', 'edge-cdn'],
+  api: ['compute'],
+  ogp: ['compute'],
+  minInstances: ['compute'],
+  realtime: ['compute'],
+  frontCdn: ['edge-cdn'],
+  cdnPlan: ['edge-cdn'],
+  cdnInvalidation: ['edge-cdn'],
+  apiCache: ['edge-cdn'],
+  email: ['email'],
+};
+
+/**
+ * 箱 → 差し替えられるスロット（D-116。箱を押すと、そのスロットの部品を選べる）。スロットごとに選択肢を 1 つずつ入れ替えて
+ * 構成を組み直し、今の構成の箱（id と名前）が消える・名前が変わるスロットのうち、箱の役割（role）がそのスロットの役割
+ * （SLOT_ROLES）に入るものを、その箱のスロットとする（構成ごとに手で対応を書かない。役割の無い箱は絞らない）。
+ * 1 つの箱に複数のスロットが当たるときは、slots の順（部品の欄の順）に並べる。固定のスロットは含めない。
+ */
+export function swappableSlots(
+  build: (components: Partial<Record<string, string>>) => ArchitectureInput,
+  components: Partial<Record<string, string>>,
+  slots: readonly {
+    slot: string;
+    fixed?: boolean;
+    options: readonly { id: string }[];
+  }[],
+): Map<string, string[]> {
+  const key = (n: { id: string; label: string }) => `${n.id}\u0000${n.label}`;
+  const fits = (slot: string, role: Role | undefined) =>
+    role === undefined || (SLOT_ROLES[slot]?.includes(role) ?? true);
+  const base = build(components).nodes;
+  const out = new Map<string, string[]>();
+  for (const x of slots) {
+    if (x.fixed || x.slot === 'files' || x.options.length < 2) continue;
+    const nodes = new Set<string>();
+    for (const o of x.options) {
+      if (components[x.slot] === o.id) continue;
+      const alt = new Set(
+        build({ ...components, [x.slot]: o.id }).nodes.map(key),
+      );
+      for (const n of base)
+        if (!alt.has(key(n)) && fits(x.slot, n.role)) nodes.add(n.id);
+    }
+    for (const id of nodes) out.set(id, [...(out.get(id) ?? []), x.slot]);
+  }
+  return out;
 }
 
 /** 短い名前: 括弧の補足（「Worker（vinext）」の「（vinext）」）を外す。外すと何も残らないときは元の名前。 */

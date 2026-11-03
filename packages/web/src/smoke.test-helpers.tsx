@@ -133,6 +133,21 @@ const pickRadio = (name: string, scope: HTMLElement = document.body) => {
   fireEvent.click(r);
   expect((r as HTMLInputElement).checked).toBe(true);
 };
+/**
+ * 部品のチップ（① インフラの構成のカードの構成図の下。D-116）を名前の先頭で押す。押すと選択中（aria-pressed）になる。
+ * scope はスロットの行（slotGroup）。
+ */
+export const pickPart = (name: string, scope: HTMLElement) => {
+  const b = within(scope).getByRole('button', {
+    name: new RegExp(`^${escape(name)}`),
+    pressed: false,
+  });
+  fireEvent.click(b);
+  within(slotGroup(scope.getAttribute('data-slot')!, 'slot')).getByRole(
+    'button',
+    { name: new RegExp(`^${escape(name)}`), pressed: true },
+  );
+};
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export type Setup = {
@@ -154,20 +169,17 @@ export async function startGame(s: Setup) {
   pickRadio(s.scenario);
   pickRadio(s.stack);
   pickRadio(s.framework);
-  const partsHeading = screen.queryByRole('heading', { name: '③ 部品' });
   for (const [slot, option] of Object.entries(s.parts ?? {}))
-    pickRadio(option, slotGroup(slot));
+    pickPart(option, slotGroup(slot));
   // 選ぶと別のスロットが出ることがある（API を他の事業者に置いたときの DB など）ので、未選択が無くなるまで回す
-  for (let i = 0; partsHeading && i < 20; i++) {
-    const open = screen
-      .queryAllByRole('group')
-      .find((g) =>
-        /（未選択）/.test(g.querySelector('legend')?.textContent ?? ''),
-      );
+  for (let i = 0; i < 20; i++) {
+    const open = document.querySelector<HTMLElement>(
+      'section[data-parts] [data-slot][data-unselected]',
+    );
     if (!open) break;
     const first = within(open)
-      .getAllByRole('radio')
-      .find((r) => !(r as HTMLInputElement).disabled);
+      .getAllByRole<HTMLButtonElement>('button', { pressed: false })
+      .find((b) => !b.disabled);
     expect(first, '選べる選択肢が無いスロット').toBeDefined();
     fireEvent.click(first!);
   }
@@ -191,8 +203,27 @@ export async function startGame(s: Setup) {
   ).toContain(s.stack.split(' + ')[0]);
 }
 
-const slotGroup = (label: string) =>
-  screen.getByRole('group', { name: new RegExp(`^${escape(label)}`) });
+/**
+ * 部品のスロットの行（チップの行。D-116）。label は見出しの先頭（「DB」は「DB のバックアップ」に当てない）、
+ * by: 'slot' のときはスロットの id。
+ */
+export const slotGroup = (label: string, by: 'label' | 'slot' = 'label') => {
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>(
+      'section[data-parts] [data-slot]',
+    ),
+  ];
+  const row =
+    by === 'slot'
+      ? rows.find((r) => r.getAttribute('data-slot') === label)
+      : rows.find((r) =>
+          new RegExp(`^${escape(label)}(?![^（])`).test(
+            r.getAttribute('aria-label') ?? '',
+          ),
+        );
+  expect(row, `部品のスロット ${label}`).toBeDefined();
+  return row!;
+};
 
 /**
  * 「次の月へ」を n 回押す（行動は選ばない）。出来事のダイアログが自動で開いたら、中身が描けていることを見て閉じる。
