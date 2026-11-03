@@ -4,7 +4,9 @@ import { setupSlots, SCENARIOS, STACKS, type FrameworkId } from 'game';
 import { describe, expect, it } from 'vitest';
 import {
   diagramArchitecture,
+  diagramComponents,
   diagramModel,
+  slotBoxes,
   swappableSlots,
   type DiagramModel,
 } from './system-diagram-model.ts';
@@ -73,5 +75,65 @@ describe('画像の置き場の他の事業者の部品の箱（D-114 段 2c）'
         // 投稿の転送の箱（Cloud Run → S3）には出さない
         expect(m.get('gcp-out'), `${stack} ${images} ${fw}`).toBeUndefined();
       }
+  });
+
+  it('幽霊の箱（slotBoxes）: 新しい画像の部品を選んでも戻しても、画像のスロットは今の箱に当たり（幽霊の箱は出ない）、箱の数は跳ねない', () => {
+    const view = (stack: string, fw: FrameworkId, images?: string) => {
+      const i = at(stack);
+      const c = images ? { images } : {};
+      const build = (x: Partial<Record<string, string>>) =>
+        diagramArchitecture(sc, i, fw, x);
+      const comps = diagramComponents(sc, i, fw, c);
+      const { swap, ghosts } = slotBoxes(
+        build,
+        comps,
+        setupSlots(sc, i, fw, c),
+      );
+      const m = diagramModel(build(comps), [], 'horizontal', ghosts);
+      return {
+        swap,
+        ghosts,
+        boxes: m.nodes.length + m.side.reduce((a, x) => a + x.nodes.length, 0),
+      };
+    };
+    for (const [stack, fw, images] of [
+      ['vercel-supabase-pro', 'nextjs', 'cf-r2-origin'],
+      ['vercel-supabase-pro', 'vite-spa', 'cf-r2-origin'],
+      ['vercel-supabase-pro', 'astro', 'cf-r2-origin'],
+      ['vercel-supabase-pro', 'nextjs', 'aws-s3-resize'],
+      ['vercel-supabase-pro', 'nextjs-export', 'aws-s3-resize'],
+      ['gcp-cloud-run', 'nextjs', 'aws-s3-resize'],
+    ] as const) {
+      const name = `${stack} ${fw} ${images}`;
+      const before = view(stack, fw);
+      const picked = view(stack, fw, images);
+      // 戻す（既定の部品を選び直す）と元の図と同じ
+      const back = view(
+        stack,
+        fw,
+        diagramComponents(sc, at(stack), fw, {}).images,
+      );
+      for (const v of [before, picked, back]) {
+        expect(
+          v.ghosts.some((g) => g.slot === 'images'),
+          name,
+        ).toBe(false);
+        expect(
+          [...v.swap.values()].some((x) => x.includes('images')),
+          name,
+        ).toBe(true);
+      }
+      expect(back.boxes, name).toBe(before.boxes);
+      expect(back.ghosts, name).toEqual(before.ghosts);
+      // 置き場と配信を替えるだけなので、箱の数の差は 2 つまで（Google Cloud は Cloud Storage が CloudFront・S3 と投稿の転送の箱になる）
+      expect(Math.abs(picked.boxes - before.boxes), name).toBeLessThanOrEqual(
+        2,
+      );
+      // 他のスロットの幽霊の箱は画像の部品で変わらない
+      expect(
+        picked.ghosts.map((g) => g.slot),
+        name,
+      ).toEqual(before.ghosts.map((g) => g.slot));
+    }
   });
 });
