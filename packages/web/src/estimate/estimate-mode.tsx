@@ -12,14 +12,12 @@ import {
 } from 'react';
 import type { PlatformPremise } from 'estimator';
 import {
-  componentConflict,
   FRAMEWORKS,
   frameworksOf,
-  setupSlots,
-  stackName,
-  stackOffered,
+  settingFlavor,
+  SETTINGS,
+  stackUnsupportedReason,
   STACKS,
-  withRouteChoice,
   type FrameworkId,
 } from 'game';
 import {
@@ -29,12 +27,22 @@ import {
   type MarkShape,
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
-import { DIAGRAM_NOTE, SystemDiagram } from '../system-diagram.tsx';
-import { ROUTE_PLAN_NOTE, RoutePlanTable } from '../route-plan-table.tsx';
+import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
+import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
+import { routeChoiceOf, type RoutePlanEditor } from '../route-plan-field.tsx';
+import { FrameworkField } from '../scenario-briefing.tsx';
+import {
+  SettingRadios,
+  SetupComponents,
+  SetupSettings,
+} from '../setup-components.tsx';
 import {
   type EstimateView,
   compareStacks,
   costCurves,
+  frameworkCardRoutes,
+  stackCardTotals,
+  type ComparisonRow,
   diagramOf,
   routeStatusOf,
   CURVE_MAX,
@@ -105,17 +113,73 @@ export function EstimateMode() {
     );
   }, [input]);
 
+  // 構成を替えて、今のフレームワークを載せられないので付け替えたときの知らせ（D-113・D-115）。構成・フレームワーク・テンプレートを替えると消す
+  const [notice, setNotice] = useState<string | null>(null);
+  const pickStack = (stack: string) => {
+    const next = normalizeInput({ ...input, ...withStack(input, stack) });
+    setNotice(
+      next.framework === input.framework
+        ? null
+        : frameworkFallbackNotice(
+            STACKS.findIndex((s) => s.id === stack),
+            input.framework,
+            next.framework,
+            Object.keys(input.routes).some((r) => next.routes[r] === undefined),
+          ),
+    );
+    setInputState(next);
+  };
+  const pickFramework = (framework: FrameworkId) => {
+    setNotice(null);
+    setInput(withFramework(input, framework));
+  };
   const view = useMemo(() => runEstimate(input), [input]);
   const rows = useMemo(() => compareStacks(input), [input]);
   const diagram = useMemo(() => diagramOf(input), [input]);
   const routeStatus = useMemo(() => routeStatusOf(input), [input]);
+  // ページの描き方を選ぶ（フレームワークのカードのチップと下の表で共有する。行と判定は見積の PV で。D-115）
+  const editor: RoutePlanEditor = {
+    rows: diagram.routes,
+    status: routeStatus,
+    onSelect: (row, alt) => {
+      const next = routeChoiceOf(
+        scenarioOfTemplate(input.template),
+        STACKS.findIndex((s) => s.id === input.stack),
+        input.framework,
+        input.routes,
+        row,
+        alt,
+      );
+      setInput({
+        routes: next.routes,
+        ...(next.revalidateSec !== undefined
+          ? { revalidateSec: next.revalidateSec }
+          : {}),
+      });
+    },
+    onPart: (_, part, v) => {
+      if (part === 'comments') setInput({ comments: v });
+    },
+  };
 
   return (
     <div className="space-y-4">
       <p className="text-sm opacity-70">
         アプリの形と規模を選ぶと、構成ごとの月の費用と、当たるプラットフォームの前提を出す。料金は各社の公式の料金表（出典と取得日は下）、利用の形はテンプレートの仮定（実測ではない）。
       </p>
-      <Conditions input={input} setInput={setInput} mau={view.mau} />
+      <Conditions
+        input={input}
+        setInput={(p) => {
+          if (p.template !== undefined) setNotice(null);
+          setInput(p);
+        }}
+        mau={view.mau}
+        rows={rows}
+        notice={notice}
+        onPickStack={pickStack}
+        onPickFramework={pickFramework}
+        editor={editor}
+      />
       <Card title={`月の費用: ${view.name}`}>
         <div className="flex flex-wrap items-baseline gap-x-3">
           <span className="text-3xl font-bold tabular-nums">
@@ -156,42 +220,6 @@ export function EstimateMode() {
           unpriced={view.unpricedLines}
         />
       </Card>
-      <Card title={`構成図: ${view.name}`}>
-        <SystemDiagram
-          architecture={diagram.architecture}
-          pages={diagram.pages}
-          caption={DIAGRAM_NOTE}
-        />
-      </Card>
-      <Card title="ページごとの描き方">
-        <RoutePlanTable
-          rows={diagram.routes}
-          status={routeStatus}
-          // ほかの描き方を選ぶ（URL の rp.〜 に残る。構成の比較・費用の曲線もこの描き方で引く。D-107）
-          onSelect={(row, alt) =>
-            setInput({
-              routes: withRouteChoice(
-                scenarioOfTemplate(input.template),
-                {
-                  framework: input.framework,
-                  platform:
-                    STACKS.find((s) => s.id === input.stack)?.provider ??
-                    STACKS[0]!.provider,
-                },
-                input.routes,
-                row.route,
-                alt.strategy,
-              ),
-              ...(alt.value !== undefined ? { revalidateSec: alt.value } : {}),
-            })
-          }
-          // 記事の行のコメント欄（ページの部品。URL の rp.<ルート>.comments に残る。D-109）
-          onPart={(_, part, v) => {
-            if (part === 'comments') setInput({ comments: v });
-          }}
-          caption={`${ROUTE_PLAN_NOTE} 差は今の PV での月額。構成の比較・費用の曲線もこの描き方で引く。`}
-        />
-      </Card>
       <Card title="明細（事業者・メーターごと）">
         <p className="text-xs opacity-70">
           使用量のうち「込み分」は無料枠・プランに含まれる量で、残りが課金対象。クレジットは従量の金額に当てる（当てられる額
@@ -210,7 +238,8 @@ export function EstimateMode() {
       <Comparison
         rows={rows}
         showTax={input.showTax}
-        onPick={(stack) => setInput(withStack(input, stack))}
+        // 行を押すとカルーセルもその構成へ移る（値は同じ入力。D-115）
+        onPick={pickStack}
       />
       <CostCurve input={input} rows={rows} />
       <Card title="料金データの出典">
@@ -296,17 +325,47 @@ function Conditions({
   input,
   setInput,
   mau,
+  rows,
+  notice,
+  onPickStack,
+  onPickFramework,
+  editor,
 }: {
   input: EstimateInput;
   setInput: (p: Partial<EstimateInput>) => void;
   mau: number;
+  /** 構成の比較の行（構成のカードの月額に使う）。 */
+  rows: readonly ComparisonRow[];
+  /** 構成を替えてフレームワークを付け替えたときの知らせ（D-113・D-115）。 */
+  notice: string | null;
+  onPickStack: (stack: string) => void;
+  onPickFramework: (framework: FrameworkId) => void;
+  /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップ。D-112・D-115）。 */
+  editor: RoutePlanEditor;
 }) {
   const scenario = scenarioOfTemplate(input.template);
-  const fws = frameworksOf(scenario).allowed;
+  // 構成の id ↔ STACKS の index の変換はここで 1 回（共用の欄は index で持つ）
   const stackIndex = STACKS.findIndex((s) => s.id === input.stack);
-  const platform = STACKS[stackIndex]!.provider;
-  const slots = setupSlots(scenario, stackIndex, input.framework, input.parts);
   const settings = settingsOf(input.template, input.framework, input.routes);
+  const comments = settings.comments ? input.comments : undefined;
+  const cardTotals = useMemo(() => stackCardTotals(input, rows), [input, rows]);
+  const allowed = frameworksOf(scenario).allowed;
+  // フレームワークのカードの描き方（そのフレームワークを選んだときの行）。載せられないものは引かない（D-113）
+  const fwRoutes = useMemo(
+    () =>
+      new Map(
+        frameworksOf(scenarioOfTemplate(input.template))
+          .allowed.filter(
+            (id) =>
+              stackUnsupportedReason(
+                STACKS.findIndex((s) => s.id === input.stack),
+                id,
+              ) === undefined,
+          )
+          .map((id) => [id, frameworkCardRoutes(input, id)] as const),
+      ),
+    [input],
+  );
   const [pvText, setPvText] = useState(String(input.pv));
   useEffect(() => setPvText(String(input.pv)), [input.pv]);
   const select = 'select select-bordered select-sm w-full';
@@ -369,147 +428,126 @@ function Conditions({
               `（テンプレートの仮定: 1 人あたり月 ${Math.round(input.pv / mau).toLocaleString('ja-JP')} PV）`}
           </span>
         </Field>
-        <Field label="フレームワーク">
-          <select
-            className={select}
-            value={input.framework}
-            onChange={(e) =>
-              setInput(withFramework(input, e.target.value as FrameworkId))
-            }
-          >
-            {fws.map((f) => (
-              <option key={f} value={f}>
-                {FRAMEWORKS[f].label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="構成">
-          <select
-            className={select}
-            value={input.stack}
-            onChange={(e) => setInput(withStack(input, e.target.value))}
-          >
-            {STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
-              (s) => (
-                <option key={s.id} value={s.id}>
-                  {stackName(s.index, input.framework, false)}
-                </option>
-              ),
-            )}
-          </select>
-        </Field>
         <Seats seats={input.seats} setInput={setInput} />
       </div>
-      <h3 className="font-semibold">部品</h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {slots.map((x) => {
-          if (x.fixed || x.slot === 'files')
-            return (
-              <div key={x.slot} className="min-w-0 text-sm">
-                <span className="block font-semibold">{x.label}</span>
-                <span className="opacity-70">
-                  {x.options[0]!.label}（この構成では 1 択）
-                </span>
-              </div>
-            );
-          const slot = x.slot;
-          const current = input.parts[slot];
-          const note = x.options.find((o) => o.id === current)?.note;
+      {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。構成が先（D-113） */}
+      <StackField
+        scenario={scenario}
+        framework={input.framework}
+        value={stackIndex}
+        onChange={(i) => onPickStack(STACKS[i]!.id)}
+        components={input.parts}
+        comments={comments}
+        routes={input.routes}
+        effort={false}
+        // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
+        routesOnFallback={(i) =>
+          normalizeInput({ ...input, ...withStack(input, STACKS[i]!.id) })
+            .routes
+        }
+        diagramCaption={(selected) =>
+          selected
+            ? '選んだ部品で描く。'
+            : 'この構成を選んだときの既定の部品で描く。'
+        }
+        cardExtra={(i, selected) => {
+          const t = cardTotals[STACKS[i]!.id];
+          if (!t) return null;
           return (
-            <Field key={slot} label={x.label} info={note}>
-              <select
-                className={select}
-                value={current ?? ''}
-                onChange={(e) =>
-                  setInput({
-                    parts: { ...input.parts, [slot]: e.target.value },
-                  })
-                }
-              >
-                {x.options.map((o) => {
-                  const why = componentConflict(
-                    platform,
-                    slot,
-                    o.id,
-                    input.parts,
-                    input.framework,
-                  );
-                  return (
-                    <option key={o.id} value={o.id} disabled={why !== null}>
-                      {o.label}
-                      {why ? '（今の組み合わせでは選べない）' : ''}
-                    </option>
-                  );
-                })}
-              </select>
-            </Field>
+            <p className="text-sm" data-stack-total={STACKS[i]!.id}>
+              {selected ? '今の条件で月 ' : 'この構成にすると月 '}
+              <strong className="tabular-nums">{usd(t.totalUsd)}</strong>
+              {t.framework !== input.framework &&
+                `（${FRAMEWORKS[t.framework].label} にしたとき）`}
+              {t.blocking > 0 && (
+                <span className="ml-1 text-xs text-warning">
+                  止まる・プランの変更が要る前提 {t.blocking} 件
+                </span>
+              )}
+            </p>
           );
-        })}
-      </div>
+        }}
+      />
+      <FrameworkField
+        scenario={scenario}
+        allowed={allowed}
+        value={input.framework}
+        onChange={onPickFramework}
+        comments={comments}
+        routePlan={(id) => fwRoutes.get(id) ?? []}
+        routes={input.routes}
+        resolvedRoutes={(id) =>
+          Object.fromEntries(
+            (fwRoutes.get(id) ?? []).map((r) => [r.route, r.strategy]),
+          )
+        }
+        unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
+        notice={notice}
+        editor={editor}
+        text={{
+          heading: '② アプリのフレームワークとページの描き方',
+          footnote: null,
+          wireframeNote:
+            '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+          compareHint:
+            'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べる',
+          compareNote:
+            'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べる。ここで選んでも、カードのチップで選んでも同じ。構成の比較・費用の曲線もこの描き方で引く。',
+          // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
+          compareCaption: ROUTE_PLAN_NOTE.replace(
+            '費用の差は 1 か月目の基準の規模での目安。',
+            '費用の差は今の条件（月の PV）での目安。',
+          ),
+        }}
+      />
+      {/* ③ 部品・④ 設定はゲームの始める画面と同じ欄（D-115）。部品は normalizeInput が選べるものに直す */}
+      <SetupComponents
+        scenario={scenario}
+        stackIndex={stackIndex}
+        framework={input.framework}
+        value={input.parts}
+        onChange={(parts) => setInput({ parts })}
+        note="構成の中の役割ごとに選ぶ（選んでいないスロットは既定の部品で見積もる）"
+      />
       {(settings.revalidate || settings.format || settings.variants) && (
-        <>
-          <h3 className="font-semibold">設定</h3>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {settings.revalidate && (
-              <Field
-                label={settings.revalidate.label}
-                info={settings.revalidate.note}
-              >
-                <select
-                  className={select}
-                  value={input.revalidateSec}
-                  onChange={(e) =>
-                    setInput({ revalidateSec: Number(e.target.value) })
-                  }
-                >
-                  {settings.revalidate.options.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {settings.format && (
-              <Field label="画像の形式">
-                <select
-                  className={select}
-                  value={input.imageFormat}
-                  onChange={(e) =>
-                    setInput({
-                      imageFormat: e.target
-                        .value as EstimateInput['imageFormat'],
-                    })
-                  }
-                >
-                  {IMAGE_FORMATS.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {settings.variants && (
-              <Field label="画像のサイズ違い">
-                <select
-                  className={select}
-                  value={input.variants}
-                  onChange={(e) =>
-                    setInput({ variants: Number(e.target.value) })
-                  }
-                >
-                  {VARIANTS.map((v) => (
-                    <option key={v} value={v}>
-                      {v} 種
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-          </div>
-        </>
+        <SetupSettings>
+          {settings.revalidate && (
+            <SettingRadios
+              name="estimate-revalidate"
+              label={settings.revalidate.label}
+              note={settings.revalidate.note}
+              options={settings.revalidate.options.map((o) => ({
+                ...o,
+                flavor: settingFlavor(settings.revalidate!.key, o.value),
+              }))}
+              value={input.revalidateSec}
+              onChange={(revalidateSec) => setInput({ revalidateSec })}
+            />
+          )}
+          {settings.format && (
+            <SettingRadios
+              name="estimate-image-format"
+              label="画像の形式"
+              note={SETTINGS.format.note}
+              options={IMAGE_FORMATS.map((f) => ({
+                value: f.id,
+                label: f.label,
+              }))}
+              value={input.imageFormat}
+              onChange={(imageFormat) => setInput({ imageFormat })}
+            />
+          )}
+          {settings.variants && (
+            <SettingRadios
+              name="estimate-variants"
+              label="画像のサイズ違い"
+              note={SETTINGS.variants.note}
+              options={VARIANTS.map((v) => ({ value: v, label: `${v} 種` }))}
+              value={input.variants}
+              onChange={(variants) => setInput({ variants })}
+            />
+          )}
+        </SetupSettings>
       )}
     </Card>
   );

@@ -24,9 +24,7 @@ import {
   COMMENTS_IN_BROWSER,
   partsOfComments,
   defaultRevalidateSec,
-  FRAMEWORKS,
   frameworkOnStack,
-  stackName,
   stackUnsupportedReason,
   type GameState,
   type SaveData,
@@ -46,7 +44,7 @@ import {
   SetupRevalidate,
   type SetupChoices,
 } from './setup-components.tsx';
-import { StackField } from './stack-field.tsx';
+import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import { useRoutePlanEditor } from './route-plan-field.tsx';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
@@ -241,11 +239,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     setFallbackNotice(
       fw === want
         ? null
-        : `${stackName(st, fw, false)} には ${FRAMEWORKS[want].label} を載せる公式のアダプターが無いので、フレームワークを ${FRAMEWORKS[fw].label} にした${
-            Object.keys(routes).length > 0
-              ? '（選んだページの描き方は既定に戻した）'
-              : ''
-          }。`,
+        : frameworkFallbackNotice(st, want, fw, Object.keys(routes).length > 0),
     );
     if (next.scenarioId !== undefined) setScenarioId(next.scenarioId);
     if (fw !== frameworkChoice) setFramework(fw);

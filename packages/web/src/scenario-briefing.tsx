@@ -211,6 +211,7 @@ function FrameworkCard({
   resolved,
   editor,
   unsupported,
+  text,
 }: {
   scenario: Scenario;
   id: FrameworkId;
@@ -231,6 +232,7 @@ function FrameworkCard({
   editor?: RoutePlanEditor | undefined;
   /** 選んでいる構成に載せられない理由（D-113。あれば灰色にして選べない。描き方のチップは出さない）。 */
   unsupported?: string | undefined;
+  text: FrameworkFieldText;
 }) {
   const t = scenario.text?.byFramework?.[id];
   // 選んでいるカードは選んだ描き方で描く（D-107）。表・計算と同じ実際の描き方（resolved。事業者で決まる既定・部品の
@@ -353,29 +355,52 @@ function FrameworkCard({
             </section>
           );
         })}
-        {editor && editor.rows.length > 0 && (
+        {editor && editor.rows.length > 0 && text.compareHint !== null && (
           <div className="flex flex-wrap items-center gap-2 border-t border-base-300 pt-3">
             <RoutePlanCompare
               editor={editor}
               frameworkLabel={FRAMEWORKS[id].label}
+              {...(text.compareNote ? { note: text.compareNote } : {})}
+              {...(text.compareCaption ? { caption: text.compareCaption } : {})}
             />
-            <span className="text-xs opacity-70">
-              なぜ・要件の判定・ほかの描き方の 1 か月目の費用の差を表で並べる
-            </span>
+            <span className="text-xs opacity-70">{text.compareHint}</span>
           </div>
         )}
         {pages.length > 0 && (
           <div className="border-t border-base-300 pt-2">
             <WireframeLegend pages={pages} />
-            <p className="mt-1 text-xs opacity-60">
-              見取り図はゲーム上の仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。
-            </p>
+            <p className="mt-1 text-xs opacity-60">{text.wireframeNote}</p>
           </div>
         )}
       </div>
     </section>
   );
 }
+
+/** フレームワークの欄の画面ごとの文（ゲームの始める画面が既定。見積モードは自分の文を渡す。D-115）。 */
+export type FrameworkFieldText = {
+  /** 見出し（選べるものが 2 つ以上のとき）。 */
+  heading: string;
+  /** カードの下の注記（選べるものが 2 つ以上のとき。null は出さない）。 */
+  footnote: string | null;
+  /** 見取り図の凡例の下の注記。 */
+  wireframeNote: string;
+  /** 「詳しく比べる」のボタンの横の文（null はボタンごと出さない）。 */
+  compareHint: string | null;
+  /** 「詳しく比べる」のダイアログの説明と表の説明（省略は RoutePlanCompare の既定。ゲームの始める画面の文）。 */
+  compareNote?: string | undefined;
+  compareCaption?: string | undefined;
+};
+
+const GAME_FRAMEWORK_TEXT: FrameworkFieldText = {
+  heading: '② アプリを何で作りましたか？（フレームワークとページの描き方）',
+  footnote:
+    '乗り換えても同じアプリのまま。途中で別のフレームワークに作り直せるが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかる。SNS のカード・初回表示への効き方と作り直しの手間はゲーム上の仮定。',
+  wireframeNote:
+    '見取り図はゲーム上の仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+  compareHint:
+    'なぜ・要件の判定・ほかの描き方の 1 か月目の費用の差を表で並べる',
+};
 
 /**
  * アプリのフレームワーク（構成のカードの中で、インフラの構成と同列に選ぶ。D-35・prd/10 F-04）。
@@ -396,6 +421,7 @@ export function FrameworkField({
   editor,
   unsupported,
   notice,
+  text: textOverride,
 }: {
   scenario: Scenario;
   allowed: FrameworkId[];
@@ -420,7 +446,10 @@ export function FrameworkField({
   unsupported?: (id: FrameworkId) => string | undefined;
   /** 構成を替えて、載せられるフレームワークに戻したときの知らせ（D-113）。 */
   notice?: string | null | undefined;
+  /** 画面ごとの文（省略はゲームの始める画面の文。D-115）。 */
+  text?: Partial<FrameworkFieldText> | undefined;
 }) {
+  const text = { ...GAME_FRAMEWORK_TEXT, ...textOverride };
   const info = (id: FrameworkId) => (
     <Info label={`${FRAMEWORKS[id].label} の説明`}>
       <FrameworkDetail scenario={scenario} id={id} />
@@ -440,7 +469,7 @@ export function FrameworkField({
         heading={
           allowed.length < 2
             ? '② アプリのフレームワークとページの描き方'
-            : '② アプリを何で作りましたか？（フレームワークとページの描き方）'
+            : text.heading
         }
         name="framework"
         noun="選択肢"
@@ -477,16 +506,14 @@ export function FrameworkField({
               resolved={off ? undefined : resolvedRoutes?.(id, selected)}
               editor={selected ? editor : undefined}
               unsupported={off}
+              text={text}
             />
           );
         }}
       />
 
-      {allowed.length >= 2 && (
-        <p className="text-sm opacity-60">
-          乗り換えても同じアプリのまま。途中で別のフレームワークに作り直せるが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかる。SNS
-          のカード・初回表示への効き方と作り直しの手間はゲーム上の仮定。
-        </p>
+      {allowed.length >= 2 && text.footnote && (
+        <p className="text-sm opacity-60">{text.footnote}</p>
       )}
     </div>
   );

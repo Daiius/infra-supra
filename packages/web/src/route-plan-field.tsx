@@ -1,6 +1,7 @@
 // 始める画面のページごとの描き方（D-107・D-112）。フレームワークの既定から、ページごとに描き方を選び直す。
 // 選ぶ場所はフレームワークのカードのページの欄（見取り図の隣のチップ。D-112）。ここは行・要件の判定・選んだときの書き換えをまとめる
-// フック（useRoutePlanEditor）と、表で比べるダイアログ（RoutePlanCompare）を持つ。
+// フック（useRoutePlanEditor）と、表で比べるダイアログ（RoutePlanCompare）を持つ。見積モードは行と判定を自分の PV で引き、
+// 選んだときの書き換え（routeChoiceOf）だけを共用する（D-115）。
 // 始める前なので手間はかからない（途中で替えるときは手間がかかる。RS-08）。
 import {
   partsOfComments,
@@ -26,6 +27,30 @@ import {
 } from 'react';
 import { PortalContainer } from './info.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from './route-plan-table.tsx';
+
+/**
+ * ページの描き方を選んだときの書き換え（始める画面と見積モードで共用。D-115）: 選んだ描き方（フレームワークの既定と違うものだけ
+ * 残す。game の withRouteChoice）と、一緒に替える revalidateSec（S3 はオンデマンドなど。undefined は今のまま）。
+ */
+export function routeChoiceOf(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  routes: RouteOverrides,
+  row: RoutePlanRow,
+  alt: RouteAlternative,
+): { routes: RouteOverrides; revalidateSec: number | undefined } {
+  return {
+    routes: withRouteChoice(
+      scenario,
+      { framework, platform: STACKS[stackIndex]!.provider },
+      routes,
+      row.route,
+      alt.strategy,
+    ),
+    revalidateSec: alt.value,
+  };
+}
 
 /** 選んでいるフレームワークのページごとの描き方を選ぶのに要るもの（カードのチップと比べる表で共有する）。 */
 export type RoutePlanEditor = {
@@ -95,17 +120,17 @@ export function useRoutePlanEditor({
   return {
     rows,
     status,
-    onSelect: (row, alt) =>
-      onChange(
-        withRouteChoice(
-          scenario,
-          { framework, platform: STACKS[stackIndex]!.provider },
-          routes,
-          row.route,
-          alt.strategy,
-        ),
-        alt.value,
-      ),
+    onSelect: (row, alt) => {
+      const next = routeChoiceOf(
+        scenario,
+        stackIndex,
+        framework,
+        routes,
+        row,
+        alt,
+      );
+      onChange(next.routes, next.revalidateSec);
+    },
     onPart: (_, part, v) => {
       if (part === 'comments') onCommentsChange(v);
     },
@@ -120,9 +145,15 @@ export function useRoutePlanEditor({
 export function RoutePlanCompare({
   editor,
   frameworkLabel,
+  note = 'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの 1 か月目の費用の差を並べる。ここで選んでも、カードのチップで選んでも同じ（始める前なので手間はかからない。途中で替えると手間がかかる）。',
+  caption = ROUTE_PLAN_NOTE,
 }: {
   editor: RoutePlanEditor;
   frameworkLabel: string;
+  /** ダイアログの見出しの下の説明（画面ごと。D-115）。 */
+  note?: string;
+  /** 表の説明。 */
+  caption?: string;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -175,18 +206,14 @@ export function RoutePlanCompare({
                   </button>
                 </form>
               </div>
-              <p className="mt-1 text-xs opacity-70">
-                ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの
-                1
-                か月目の費用の差を並べる。ここで選んでも、カードのチップで選んでも同じ（始める前なので手間はかからない。途中で替えると手間がかかる）。
-              </p>
+              <p className="mt-1 text-xs opacity-70">{note}</p>
               <div className="mt-2">
                 <RoutePlanTable
                   rows={editor.rows}
                   status={editor.status}
                   onSelect={editor.onSelect}
                   onPart={editor.onPart}
-                  caption={ROUTE_PLAN_NOTE}
+                  caption={caption}
                 />
               </div>
             </div>
