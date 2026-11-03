@@ -1302,7 +1302,7 @@
   - 出来事の詳細と開発の手間の内訳をダイアログに畳み、本文には 1 行の要約とボタンだけ残した。目標・所持金・規模・収益・満足度・アプリの形・料金の出典は本文に残す。
   - 見取り図を灰色の帯に載せ、ページ名を見出しにした。区画の地を種類の系統ごとの淡い色（blue・yellow・orange・purple・lime。破線の枠）にし、中の画像（orange）・人（purple）の部品にも色を付けた（ユーザーの追加の要望「全体的に薄めの色を」）。描き方の色（daisyUI のテーマの色のはっきりした地と実線の枠）と重ならないよう、テーマの色は使わず、info・secondary に近い色相は避けた。要件の札は neutral で塗り、区画の名前の行へ移した（札が中身に重なっていた）。テスト: web の W-32。
 
-### D-114 部品を事業者をまたいで組む: 役割と接続の口・接続の規則（確定・2026-11-03・段 1・段 2・段 2b を実装）
+### D-114 部品を事業者をまたいで組む: 役割と接続の口・接続の規則（確定・2026-11-03・段 1・段 2・段 2b・段 2c を実装）
 
 - 依頼（ユーザー・2026-11-03）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？」→ 設計の下書き（[prd/14](../14-composable-parts.md)）を書き、論点 CP-01〜CP-17 を grilling で決めた（supervisor 経由）。
 - 決定（正典は prd/14 §8。実装の内部の形 CP-02・03・10・13・14・16・17 は supervisor が推奨案で決めた）:
@@ -1326,6 +1326,13 @@
   - **転送**: AWS の DB の応答は、Cloudflare は AWS の外なので同じリージョンの扱いによらずインターネットへの転送（`db-out-internet`）。段 2 の `AWS_DB_OUT_TO_INTERNET` は Vercel の受け手だけに効く形にした。Neon は Neon の公開の転送の項目。Hyperdrive は転送に課金しない。RDS の転送の単価は料金ページの表を取れず、Aurora と同じく AWS 共通の単価の適用と読んだ（推測）。
   - 未確認で計算に入れないもの: Hyperdrive が使っていない接続を最大 10 分保つことで、止まる DB（Neon・0 ACU の Aurora）が止まりにくくなる可能性／Hyperdrive のキャッシュ／Worker のサブリクエストの上限（Free 50・Paid 10,000）／公開の IPv4 の時間課金。出典は prd/14 §3.13・§9（2026-11-04 取得）。
   - 既存の組は不変（段 1・段 2 と同じ突き合わせで、共通の約 41 万の組・約 2.1 万のプレイが一致）。基準プレイ（Cloudflare Paid）で、DynamoDB は D1 と同じ並びで全シードに届き（月 $0.3〜1.6 高い）、Neon は受託の全フレームワークと記事の Next.js・Astro、RDS は記事の Next.js・Astro で 20/20。**どれも同じ構成の D1 より高く、既存の最安より安い床は作らない**。Aurora はほぼ 0/20、Cloudflare Free はどの DB も 0/20。釣り合いの受け入れはユーザーの判断待ち（目標の額・手間は動かしていない）。詳細は prd/14 §3.13。
+- 段 2c を実装（2026-11-04・補足）: 画像の置き場の選択肢。依頼（ユーザー）: Vercel の画像の原本の置き場の説明のあと「現在もまだ選べない構成として例示してもらったようなものも選べるようにできますか？」→ 2 つを足した。
+  - **原本だけ R2・変換は Vercel の画像の最適化**（部品 `cf-r2-origin`・規則 `vercel-image-r2-origin`）: 土台の変換（`image-transform`）が R2 の公開の URL（カスタムドメイン）から原本を取る形。部品の `attachesTo: ['image-transform']` で見分け、差し方は Blob だけを R2 に替えて CDN → 画像の最適化はそのまま（`applyR2Origin`）。振る舞い（`as`）は土台の `default` で、game の `usesNextImage`・`astroImage` を振る舞いで見るように直した（既存の組は不変）。
+    ユーザーの疑問（「外部にある画像の image optimization ってできなかったような...?」）は Vercel・Next.js・Astro の公式文書で確かめた（2026-11-04 取得）: Vercel の文書は「remote images (stored externally)」の設定（remotePatterns）と外の画像のキャッシュの鍵を書き、課金（変換は MISS・STALE ごと・キャッシュの読み書きは 8 KB 単位）は local と remote で同じ。「Image Optimization is available on all plans」。Next.js 以外は Build Output API の `images.remotePatterns`（/_vercel/image）、Astro は @astrojs/vercel の `imageService`。Next.js の静的書き出しは「Image Optimization with the default loader」が使えないので選べない（D-80 と同じ）。
+    画像の最適化が原本を R2 から取る読み取り（Class B）は数えない（Blob の原本を取る分を数えないのと同じ。estimator の置き場は image-transform の経路を書き込みに数えるため、経路に載せない）。構成図にも最適化 → R2 の線は無い。
+  - **画像だけ AWS（S3 + CloudFront）**（部品 `aws-s3-resize`・規則 `vercel-compute-s3-write`・`host-compute-s3-write`）: AWS の構成の「投稿のときに一律で縮めて置く」と同じ S3 と CloudFront（従量・常時無料つき）のノードを、id を `aws-s3`・`aws-img-cf` にして差す（`applyAwsImages`）。差せる土台は Vercel（OIDC）と、同じ規則で自然に開ける Netlify・Google Cloud（アクセスキー。投稿の転送は土台の送り出しの項目で数える）。AWS・OpenNext は自分の S3 を持つので出さない。S3 から CloudFront への転送・インターネットからの受信は無料（S3 の料金ページ・2026-11-04）。
+  - **足さなかったもの**: CloudFront + Lambda@Edge などで閲覧のときに変換する形（Lambda@Edge の単価が catalog に無く、AWS の画像の変換のソリューションは複数のサービスの組み合わせ）・S3 の原本を Vercel の画像の最適化で変換する形（原本を取る転送は S3 / CloudFront の送り出しになるが、estimator が原本を取る量を数えないので過小になる）・Netlify Image CDN × R2（Netlify は隠した構成で、remote images の課金を確かめていない）・Google Cloud × R2 の原本（Cloud Run の next/image の原本の取り方を確かめていない）・さくらの VPS・Cloudflare の画像に他の事業者（今の規則の外）。
+  - 既存の組は不変（段 2b と同じ突き合わせ。共通の約 45 万の組と約 5.5 万のゲームのキー（約 2.7 万のプレイ）が一致し、違いは画像の選択肢の一覧だけ）。基準プレイ（記事・シード 1〜20）で、新しい組に全シードで届くものは無く、**既存の最安より安い床も無い**（原本だけ R2 は Blob の既定より月 $0.4 ほど安いだけ・S3 + CloudFront は R2 の `cf-resize` より高い。月 1 TB を超えると CloudFront の転送がかかる）。目標の額・手間は動かしていない。詳細は prd/14 §3.14。
 
 ### D-115 始める画面の選択の欄（① 構成 ② フレームワークと描き方 ③ 部品 ④ 設定）を見積モードと共用にする（確定・2026-11-03）
 

@@ -80,6 +80,8 @@ describe('Google Cloud の構成', () => {
           'cf-resize',
           'bunny-images',
           'bunny-resize',
+          // 段 2c（D-114）: 画像だけ AWS（S3 + CloudFront）
+          'aws-s3-resize',
         ],
       ],
       ['db', ['firestore', 'cloud-sql']],
@@ -100,6 +102,8 @@ describe('Google Cloud の構成', () => {
         'cf-resize',
         'bunny-images',
         'bunny-resize',
+        // 段 2c（D-114）: 画像だけ AWS（S3 + CloudFront）
+        'aws-s3-resize',
       ],
     ]);
     // 受託は画像のスロットを出さない

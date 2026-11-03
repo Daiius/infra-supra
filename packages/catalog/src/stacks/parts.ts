@@ -87,6 +87,49 @@ export const CROSS_PARTS: readonly PartDef[] = [
       'fact:bunny:standard:storage-origin',
     ],
   },
+  // 原本だけ R2 に置き、変換は土台の画像の最適化（D-114 段 2c）。土台の変換（image-transform）が R2 の公開の URL から原本を取るので、
+  // 土台の変換と配信は残り、置き場だけが替わる（cross.ts の applyCross が attachesTo で見分ける）。振る舞いは土台の「画像の最適化」と同じ
+  {
+    id: 'cf-r2-origin',
+    slot: 'images',
+    platform: 'cloudflare',
+    role: 'object-store',
+    accepts: ['public-url', 'https-api'],
+    attachesTo: ['image-transform'],
+    as: 'default',
+    label:
+      'Cloudflare: R2 に原本を置き、閲覧のときに Vercel の画像の最適化で変換',
+    note:
+      '画像の原本を Cloudflare の R2（公開バケット・Cloudflare のゾーンのカスタムドメイン）に置き、閲覧のときの変換と配信は今の画像の最適化のまま（変換・キャッシュの読み書き・CDN の転送とリクエストは同じに数える）。' +
+      'Vercel Blob の保存・操作・転送の代わりに、R2 の保存と書き込みがかかる（R2 の転送は無料）。' +
+      '画像の最適化が原本を取りに来る R2 の読み取り（Class B。外れた変換 1 回あたり 1 回・月 1,000 万回まで無料）は数えない（Blob の原本を取る分を数えないのと同じ）。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+    premiseRefs: [
+      ...VERCEL_TO_CF_IMAGES_REFS,
+      'pool:cloudflare:r2-standard:r2-class-a',
+      'pool:cloudflare:r2-standard:r2-class-b',
+    ],
+  },
+  // 画像だけ AWS（S3 + CloudFront。D-114 段 2c）。AWS の構成の「投稿のときに一律で縮めて置く」と同じ置き方（S3 と CloudFront のノードは stacks/aws.ts）
+  {
+    id: 'aws-s3-resize',
+    slot: 'images',
+    platform: 'aws',
+    role: 'object-store',
+    accepts: ['public-url', 'https-api'],
+    attachesTo: ['compute'],
+    as: 'resize',
+    label: 'AWS: 投稿のときに一律で縮めて S3 に置き、CloudFront で配る',
+    note:
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて AWS の S3（東京）に置き、原本は残さない。' +
+      '画像は CloudFront（S3 をオリジンにし、OAC で CloudFront からだけ読ませる）から配るので、画像の転送は土台の転送の料金にならず、CloudFront の料金（常時無料の月 1 TB の後）になる。S3 から CloudFront への転送は無料。' +
+      '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。往復の遅延は計算しない',
+    premiseRefs: [
+      'fact:aws:cloudfront:origin-fetch-free',
+      'pool:aws:cloudfront:cloudfront-free-transfer',
+      'pool:aws:cloudfront:cloudfront-free-requests',
+    ],
+  },
   // Bunny の前段の CDN（D-98）。土台ごとにフレームワークの条件が違う（Amplify は Next.js だけ・VPS はすべて）ので部品を分ける
   {
     id: 'bunny',

@@ -1,7 +1,7 @@
 // 事業者をまたぐ構成（D-52・prd/11 §2）: 許した組だけが選択肢に出る・課金が事業者ごとに分かれる。
 import { describe, expect, it } from 'vitest';
 import { resolveWorkload, simulateResources } from 'estimator';
-import { toAstro, toSpa } from '../frameworks/index.ts';
+import { toAstro, toSpa, type FrameworkId } from '../frameworks/index.ts';
 import {
   ARTICLE_COMMUNITY_ASTRO,
   ARTICLE_COMMUNITY_SPA,
@@ -84,12 +84,26 @@ const PAIRS_ADDED_STAGE2 = ['vercel × db × aws'];
 /** 段 2b（D-114・2026-11-04）で足した組: Cloudflare の DB に Neon・AWS（Postgres は Hyperdrive 経由・DynamoDB は直接）。 */
 const PAIRS_ADDED_STAGE3 = ['cloudflare × db × aws', 'cloudflare × db × neon'];
 
+/**
+ * 段 2c（D-114・2026-11-04）で足した組: 画像だけ AWS（S3 + CloudFront）を Vercel・Netlify・Google Cloud に。
+ * 原本だけ R2・変換は Vercel の画像の最適化（cf-r2-origin）は、今の「vercel × images × cloudflare」の組の中の部品。
+ */
+const PAIRS_ADDED_STAGE2C = [
+  'gcp × images × aws',
+  'netlify × images × aws',
+  'vercel × images × aws',
+];
+
 /** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
 const COMPONENTS_BEFORE_RULES = [
   'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
   'images cloudflare:cf-resize → aws,aws-opennext,gcp,netlify,vercel',
   'images bunny:bunny-images → aws,aws-opennext,gcp,netlify,vercel',
   'images bunny:bunny-resize → aws,aws-opennext,gcp,netlify,vercel',
+  // 段 2c（D-114）で足した部品。S3 + CloudFront は土台ごとに書き方（OIDC・アクセスキー）の文が違うので別の選択肢
+  'images cloudflare:cf-r2-origin → vercel [nextjs,vite-spa,astro]',
+  'images aws:aws-s3-resize → vercel',
+  'images aws:aws-s3-resize → gcp,netlify',
   'frontCdn bunny:bunny → aws [nextjs]',
   'frontCdn bunny:bunny → sakura',
   'api cloudflare:cf-workers → aws,netlify,vercel [vite-spa,nextjs-export]',
@@ -133,6 +147,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
         ...PAIRS_BEFORE_RULES,
         ...PAIRS_ADDED_STAGE2,
         ...PAIRS_ADDED_STAGE3,
+        ...PAIRS_ADDED_STAGE2C,
       ].sort(),
     );
   });
@@ -162,13 +177,21 @@ describe('許した組（接続の規則から導く。D-114）', () => {
   it('規則に無い組は選択肢に出ない（Cloudflare・VPS の画像に他の事業者の部品は出ない）', () => {
     const cross = (host: Platform, slot: SlotId) =>
       componentsOf(host, slot).filter((c) => c.platform !== host);
-    for (const host of ['vercel', 'aws'] as const)
-      expect(cross(host, 'images').map((c) => c.id)).toEqual([
-        'cf-images',
-        'cf-resize',
-        'bunny-images',
-        'bunny-resize',
-      ]);
+    expect(cross('aws', 'images').map((c) => c.id)).toEqual([
+      'cf-images',
+      'cf-resize',
+      'bunny-images',
+      'bunny-resize',
+    ]);
+    // 段 2c（D-114）: Vercel に原本だけ R2（変換は Vercel の画像の最適化）と S3 + CloudFront
+    expect(cross('vercel', 'images').map((c) => c.id)).toEqual([
+      'cf-images',
+      'cf-resize',
+      'bunny-images',
+      'bunny-resize',
+      'cf-r2-origin',
+      'aws-s3-resize',
+    ]);
     for (const p of PLATFORMS)
       for (const slot of ['isrCache', 'realtime', 'apiCache'] as const)
         expect(cross(p, slot)).toEqual([]);
@@ -528,6 +551,197 @@ describe('Vercel + 画像だけ Cloudflare', () => {
     expect(
       applyComponentsToWorkload(w, 'vercel', { images: 'cf-images' }).images,
     ).toEqual(w.images);
+  });
+});
+
+describe('Vercel + 原本だけ R2・変換は Vercel の画像の最適化（D-114 段 2c）', () => {
+  const pro = (images: string, framework?: FrameworkId) =>
+    composeStack(
+      'vercel-supabase-pro',
+      { images },
+      framework ? { framework } : {},
+    );
+  const base = composeStack('vercel-supabase-pro');
+
+  it('Blob だけを R2 に替え、CDN → 画像の最適化の配信と変換はそのまま。投稿は関数が R2 に書く', () => {
+    for (const fw of ['nextjs', 'vite-spa', 'astro'] as const) {
+      const a = pro('cf-r2-origin', fw);
+      const b = composeStack('vercel-supabase-pro', {}, { framework: fw });
+      expect(a.routes['image-read'], fw).toEqual(b.routes['image-read']);
+      expect(a.routes['image-read'], fw).toEqual(['cdn', 'image']);
+      expect(a.routes['image-transform'], fw).toEqual(['image']);
+      expect(a.routes['image-write'], fw).toEqual(['fn', 'cf-r2']);
+      expect(
+        a.nodes.some((n) => n.id === 'blob'),
+        fw,
+      ).toBe(false);
+      expect(
+        a.nodes.find((n) => n.id === 'image'),
+        fw,
+      ).toEqual(b.nodes.find((n) => n.id === 'image'));
+      const r2 = a.nodes.find((n) => n.id === 'cf-r2')!;
+      expect(r2.label).toBe('Cloudflare R2（画像の原本）');
+      expect(r2.role).toBe('object-store');
+      expect(r2.billing).toMatchObject({
+        accountId: 'cloudflare',
+        planId: 'r2-standard',
+      });
+      // R2 は受け取りに課金せず、Vercel の関数の送り出しは項目が無い（転送のノードを作らない）
+      expect(a.nodes.filter(isTransferNode), fw).toEqual([]);
+    }
+    expect(accountsOf(pro('cf-r2-origin'))).toEqual([
+      'vercel',
+      'supabase',
+      'cloudflare',
+      'aws',
+    ]);
+    // 構成の名前は画像の部品で変えない（他の画像の部品と同じ）
+    expect(pro('cf-r2-origin').name).toBe(base.name);
+  });
+
+  it('差せるのは Vercel の、画像の最適化を使える形だけ（Next.js の静的書き出しは既定のローダーが使えない）', () => {
+    const on = (host: Platform, fw?: FrameworkId) =>
+      componentsOf(host, 'images', fw).some((c) => c.id === 'cf-r2-origin');
+    for (const fw of ['nextjs', 'vite-spa', 'astro'] as const)
+      expect(on('vercel', fw), fw).toBe(true);
+    expect(on('vercel', 'nextjs-export')).toBe(false);
+    for (const host of [
+      'aws',
+      'aws-opennext',
+      'netlify',
+      'gcp',
+      'cloudflare',
+      'sakura',
+    ] as const)
+      expect(on(host), host).toBe(false);
+    const part = CROSS_PARTS.find((p) => p.id === 'cf-r2-origin')!;
+    expect(rulesFor('vercel', part).map((x) => x.id)).toEqual([
+      'vercel-image-r2-origin',
+    ]);
+  });
+
+  it('振る舞いは土台の画像の最適化と同じ（Workload を変えない）', () => {
+    expect(imagesBehavior('vercel', 'cf-r2-origin')).toBe('default');
+    const w = articleCommunity(300_000);
+    expect(
+      applyComponentsToWorkload(w, 'vercel', { images: 'cf-r2-origin' }),
+    ).toEqual(applyComponentsToWorkload(w, 'vercel', { images: 'default' }));
+  });
+
+  it('変換・キャッシュの読み書き・CDN の配信は既定（Blob）と同じ量で、Blob の保存と書き込みが R2 に替わる', () => {
+    const w = applyComponentsToWorkload(
+      articleCommunity(300_000),
+      'vercel',
+      {},
+    );
+    const usage = (a: ReturnType<typeof pro>) =>
+      simulateResources(resolveWorkload(w), a).nodes;
+    const r = usage(pro('cf-r2-origin'));
+    const b = usage(base);
+    for (const id of ['cdn', 'image', 'fn'])
+      expect(r[id]!.resources, id).toEqual(b[id]!.resources);
+    expect(r['cf-r2']!.resources['storage-gb-month']).toBe(
+      b['blob']!.resources['storage-gb-month'],
+    );
+    expect(r['cf-r2']!.resources['object-writes']).toBe(
+      b['blob']!.resources['object-writes'],
+    );
+  });
+});
+
+describe('画像だけ AWS（S3 + CloudFront。D-114 段 2c）', () => {
+  const on = (stack: string, framework?: FrameworkId) =>
+    composeStack(
+      stack,
+      { images: 'aws-s3-resize' },
+      framework ? { framework } : {},
+    );
+
+  it('Vercel: CDN の画像・Blob・画像の最適化が外れ、CloudFront → S3 から配る。投稿は関数が S3 に書く（転送は数えない）', () => {
+    for (const fw of [
+      'nextjs',
+      'vite-spa',
+      'astro',
+      'nextjs-export',
+    ] as const) {
+      const a = on('vercel-supabase-pro', fw);
+      expect(a.routes['image-read'], fw).toEqual(['aws-img-cf', 'aws-s3']);
+      expect(a.routes['image-write'], fw).toEqual(['fn', 'aws-s3']);
+      expect(a.routes['image-transform'], fw).toBeUndefined();
+      expect(
+        a.nodes.some((n) => n.id === 'blob' || n.id === 'image'),
+        fw,
+      ).toBe(false);
+      expect(a.nodes.filter(isTransferNode), fw).toEqual([]);
+      const cf = a.nodes.find((n) => n.id === 'aws-img-cf')!;
+      expect(cf.label).toBe('CloudFront（画像）');
+      expect(cf.role).toBe('edge-cdn');
+      expect(cf.billing).toMatchObject({
+        accountId: 'aws',
+        planId: 'cloudfront',
+      });
+      const s3 = a.nodes.find((n) => n.id === 'aws-s3')!;
+      expect(s3.role).toBe('object-store');
+      expect(s3.billing).toMatchObject({
+        accountId: 'aws',
+        planId: 's3-standard',
+      });
+    }
+    // AWS のアカウントは既定のメールの送信（SES）と同じ
+    expect(accountsOf(on('vercel-supabase-pro')).sort()).toEqual(
+      accountsOf(composeStack('vercel-supabase-pro')).sort(),
+    );
+  });
+
+  it('Netlify・Google Cloud: 投稿の送るデータは土台の送り出しの項目で数える（Netlify の転送量・Cloud Run の Premium Tier）', () => {
+    for (const [stack, out] of [
+      ['netlify-supabase-pro', 'netlify-out'],
+      ['gcp-cloud-run', 'gcp-out'],
+    ] as const) {
+      const a = on(stack);
+      expect(a.routes['image-read'], stack).toEqual(['aws-img-cf', 'aws-s3']);
+      expect(a.routes['image-write']!.slice(-2), stack).toEqual([
+        out,
+        'aws-s3',
+      ]);
+      expect(a.nodes.find((n) => n.id === out)!.label).toContain(
+        'S3 への書き込み',
+      );
+    }
+  });
+
+  it('差せるのは Vercel・Netlify・Google Cloud（AWS・OpenNext は自分の S3 を持つ）。振る舞いは「投稿のときに一律で縮める」', () => {
+    const offered = (host: Platform) =>
+      componentsOf(host, 'images').some((c) => c.id === 'aws-s3-resize');
+    for (const host of ['vercel', 'netlify', 'gcp'] as const)
+      expect(offered(host), host).toBe(true);
+    for (const host of ['aws', 'aws-opennext', 'cloudflare', 'sakura'] as const)
+      expect(offered(host), host).toBe(false);
+    expect(imagesBehavior('vercel', 'aws-s3-resize')).toBe('resize');
+    const w = articleCommunity(300_000);
+    const wl = (images: string) =>
+      applyComponentsToWorkload(
+        w,
+        'vercel',
+        { images },
+        { resizedImageKB: 400 },
+      );
+    expect(wl('aws-s3-resize')).toEqual(wl('resize'));
+  });
+
+  it('S3 と CloudFront は AWS の構成の「投稿のときに一律で縮めて置く」と同じ課金（id と名前だけ違う）', () => {
+    const own = composeStack('aws-amplify', { images: 'resize' });
+    const a = on('vercel-supabase-pro');
+    const strip = (n: (typeof a.nodes)[number] | undefined) => {
+      const { id: _i, label: _l, ...rest } = n!;
+      return rest;
+    };
+    expect(strip(a.nodes.find((n) => n.id === 'aws-s3'))).toEqual(
+      strip(own.nodes.find((n) => n.id === 's3')),
+    );
+    expect(strip(a.nodes.find((n) => n.id === 'aws-img-cf')).billing).toEqual(
+      strip(own.nodes.find((n) => n.id === 'cf')).billing,
+    );
   });
 });
 

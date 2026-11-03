@@ -53,18 +53,21 @@ function hash(s: string): string {
 }
 
 /**
- * 記録の後で足した部品（Vercel の DB の AWS。D-114 段 2・Cloudflare の DB の Neon・AWS。段 2b）。記録は既存の部品の組が
- * 変わらないことを見るので、足した部品は除く（新しい組の費用は catalog の cross.test.ts と game の aws-db.test.ts で見る）。
+ * 記録の後で足した部品（Vercel の DB の AWS。D-114 段 2・Cloudflare の DB の Neon・AWS。段 2b・画像の原本だけ R2 と S3 + CloudFront。段 2c）。
+ * 記録は既存の部品の組が変わらないことを見るので、足した部品は除く（新しい組の費用は catalog の cross.test.ts と game の aws-db.test.ts・
+ * cross-images.test.ts で見る）。
  */
 const addedAfterRecord = (
   stackIndex: number,
   slot: SlotId,
   platform: string,
+  id: string,
 ): boolean =>
-  slot === 'db' &&
-  ((STACKS[stackIndex]!.provider === 'vercel' && platform === 'aws') ||
-    (STACKS[stackIndex]!.provider === 'cloudflare' &&
-      (platform === 'aws' || platform === 'neon')));
+  (slot === 'images' && (id === 'cf-r2-origin' || id === 'aws-s3-resize')) ||
+  (slot === 'db' &&
+    ((STACKS[stackIndex]!.provider === 'vercel' && platform === 'aws') ||
+      (STACKS[stackIndex]!.provider === 'cloudflare' &&
+        (platform === 'aws' || platform === 'neon'))));
 
 /** 部品の選択肢を 1 つずつ替えた組（既定 = {} を含む）。 */
 function componentVariants(
@@ -76,7 +79,7 @@ function componentVariants(
   for (const x of setupSlots(sc, stackIndex, fw)) {
     if (x.fixed || x.slot === 'files') continue;
     for (const o of x.options)
-      if (!addedAfterRecord(stackIndex, x.slot as SlotId, o.platform))
+      if (!addedAfterRecord(stackIndex, x.slot as SlotId, o.platform, o.id))
         out.push({ [x.slot as SlotId]: o.id });
   }
   return out;

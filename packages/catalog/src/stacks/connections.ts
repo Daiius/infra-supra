@@ -213,6 +213,78 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'https://bunny.net/docs/storage/quickstart.md',
     ]),
   },
+  // ---- 画像の原本だけ R2、変換は土台の画像の最適化（D-114 段 2c・2026-11-04）。土台の変換（image-transform）が R2 の公開の URL から原本を取る ----
+  {
+    id: 'vercel-image-r2-origin',
+    slot: 'images',
+    from: { providers: ['vercel'], role: 'image-transform' },
+    to: {
+      providers: ['cloudflare'],
+      role: 'object-store',
+      port: 'public-url',
+      parts: ['cf-r2-origin'],
+    },
+    // Vercel の画像の最適化を使える形（土台の「画像の最適化」と同じ）。Next.js の静的書き出しは既定のローダーが使えない（D-80）
+    frameworks: ['nextjs', 'vite-spa', 'astro'],
+    verdict: 'ok',
+    basis:
+      'Vercel の画像の最適化は外の画像（remote images）も変換する（「remote images (stored externally)」。next.config の remotePatterns に R2 のカスタムドメインを書く）。' +
+      '課金は外の画像でも同じ数え方（変換は cache の MISS・STALE ごと、キャッシュの読み書きは 8 KB 単位。キャッシュの鍵が外の画像は絶対 URL になるだけ）で、全プランで使える。' +
+      'Astro は @astrojs/vercel の imageService（本番は Vercel の画像の最適化。remotePatterns は Astro の画像の設定から自動で入る）、Next.js 以外は /_vercel/image（Build Output API の images の remotePatterns）。' +
+      'Next.js の静的書き出しは既定のローダーでの最適化が使えない。R2 の公開バケットはカスタムドメインで配れ、R2 の転送は無料。投稿は Vercel の関数が R2 に書く',
+    partNote:
+      'Vercel の関数が投稿を R2 に書き（S3 互換の API とアクセスキー）、閲覧のときは Vercel の画像の最適化が R2 のカスタムドメインの URL から原本を取って変換する（next/image の remotePatterns・@astrojs/vercel の imageService・/_vercel/image）',
+    sources: [
+      ...at('2026-11-04', [
+        'https://vercel.com/docs/image-optimization',
+        'https://vercel.com/docs/image-optimization/limits-and-pricing',
+        'https://vercel.com/docs/build-output-api/configuration',
+        'https://nextjs.org/docs/app/api-reference/components/image',
+        'https://nextjs.org/docs/app/guides/static-exports',
+        'https://docs.astro.build/en/guides/integrations-guide/vercel/',
+      ]),
+      ...at('2026-11-01', [
+        'https://developers.cloudflare.com/r2/buckets/public-buckets/',
+        'https://developers.cloudflare.com/r2/pricing/',
+      ]),
+    ],
+  },
+  // ---- 画像だけ AWS（S3 + CloudFront。D-114 段 2c）。投稿は土台の処理が S3 に書き、閲覧者は CloudFront から読む ----
+  {
+    id: 'vercel-compute-s3-write',
+    slot: 'images',
+    from: { providers: ['vercel'], role: 'compute' },
+    to: { providers: ['aws'], role: 'object-store', port: 'https-api' },
+    verdict: 'ok',
+    basis:
+      'Vercel の関数は OIDC で AWS の一時的な認証を得られ（全プラン）、S3 の API（SDK）で書ける。S3 はインターネットからの受信に課金しない。' +
+      'CloudFront は S3 をオリジンにし、オリジンのアクセス制御（OAC）で CloudFront からだけ読ませる。S3 から CloudFront への転送は無料',
+    partNote:
+      'Vercel の関数が OIDC の一時的な認証で S3 に書く。AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えない',
+    sources: [
+      ...at('2026-11-04', [
+        'https://aws.amazon.com/s3/pricing/',
+        'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html',
+      ]),
+      ...at('2026-11-03', ['https://vercel.com/docs/oidc/aws']),
+    ],
+  },
+  {
+    id: 'host-compute-s3-write',
+    slot: 'images',
+    from: { providers: ['netlify', 'gcp'], role: 'compute' },
+    to: { providers: ['aws'], role: 'object-store', port: 'https-api' },
+    verdict: 'ok',
+    basis:
+      'S3 の API（SDK・署名した HTTPS）はどこからでも呼べ、Netlify Functions・Cloud Run は IAM のアクセスキー（環境変数・Secret に置く）で書く。S3 はインターネットからの受信に課金しない。' +
+      '送るデータは土台の送り出しの項目（Netlify の転送量・Cloud Run の Premium Tier）で数える。CloudFront は S3 をオリジンにし（OAC）、S3 から CloudFront への転送は無料',
+    partNote:
+      '土台の関数が IAM のアクセスキーで S3 に書く。AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えない',
+    sources: at('2026-11-04', [
+      'https://aws.amazon.com/s3/pricing/',
+      'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html',
+    ]),
+  },
   // ---- 前段の CDN（Bunny の Pull Zone。D-98）。部品（Bunny）が土台をオリジンとして呼ぶ ----
   {
     id: 'bunny-pull-amplify',
