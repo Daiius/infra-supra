@@ -364,8 +364,10 @@ function StackCard({
           <EffortBar
             scenario={scenario}
             stackIndex={stackIndex}
-            // 選んでいる構成は、選んだ部品で増える他の事業者の管理も出す（D-52）
-            {...(selected ? { components: components ?? {}, framework } : {})}
+            // 選んでいる構成と覚えている部品のある構成は、その部品で増える他の事業者の管理も出す（D-52・D-116 の補足）
+            {...(selected || components
+              ? { components: components ?? {}, framework }
+              : {})}
           />
         )}
         {/* 選んでいるカードは部品を選べる（構成図の箱か機能ごとのチップ。D-116 とその補足）。選んでいないカードは図だけ */}
@@ -439,10 +441,12 @@ export function stackTabGroups(
 }
 
 /** 構成図の注記の既定（引数の既定値に関数を直接書くと React Compiler が最適化を諦めるので外に置く）。 */
-const defaultDiagramCaption = (selected: boolean) =>
+const defaultDiagramCaption = (selected: boolean, remembered: boolean) =>
   selected
     ? '部品を選ぶ前のスロットは既定の部品で描く。'
-    : '既定の部品で描く。';
+    : remembered
+      ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描く。'
+      : '既定の部品で描く。';
 
 /** インフラの構成を選ぶ（カルーセル）。value は STACKS の index。 */
 export function StackField({
@@ -456,6 +460,7 @@ export function StackField({
   routeNotice,
   cardExtra,
   routesOnFallback,
+  rememberedOf,
   effort = true,
   onComponentsChange,
   partsNote,
@@ -481,6 +486,13 @@ export function StackField({
    * 省略は全部を既定に戻す（ゲームの始める画面の規則）。見積モードは替えた先で選べるものを残す（OCL-00BB1F11）。
    */
   routesOnFallback?: (stackIndex: number) => RouteOverrides | undefined;
+  /**
+   * 選んでいない構成で覚えている部品（前にその構成で選んだもの。D-116 の補足）。そのカードの題・図・手間の棒に使う。
+   * 記憶と整合（今のフレームワークで選べるものだけ）は呼び出し側が持つ。
+   */
+  rememberedOf?: (
+    stackIndex: number,
+  ) => Partial<Record<string, string>> | undefined;
   /** 毎月の手間の棒を出すか（ゲームの仮定なので、見積モードでは出さない。D-115）。 */
   effort?: boolean;
   /**
@@ -492,8 +504,8 @@ export function StackField({
   partsNote?: ReactNode;
   /** 部品のスロットの行に添えるもの（見積モードの画像の形式・サイズ違いを画像の行に。D-119）。 */
   partsExtra?: Partial<Record<string, ReactNode>> | undefined;
-  /** 構成図の説明（選んでいるカードか）。 */
-  diagramCaption?: (selected: boolean) => string;
+  /** 構成図の説明（選んでいるカードか・選んでいないカードで覚えている部品で描くか）。 */
+  diagramCaption?: (selected: boolean, remembered: boolean) => string;
 }) {
   // 隠した構成（D-100）だけを外す。今のフレームワークを載せられない構成も出す（D-113）
   const groups = stackTabGroups(
@@ -542,39 +554,46 @@ export function StackField({
           ? undefined
           : `${fwLabel} を載せられない構成（選ぶとフレームワークが替わる）`
       }
-      renderCard={(id, { selected, idPrefix }) => (
-        <StackCard
-          scenario={scenario}
-          stackIndex={indexOf(id)}
-          framework={fwOf(indexOf(id))}
-          components={selected ? components : undefined}
-          comments={comments}
-          // 替わる先のフレームワークでは、付け替えた後の描き方で描く（ゲームは既定に戻る）
-          routes={
-            fallbackOf(indexOf(id)) ? routesOnFallback?.(indexOf(id)) : routes
-          }
-          selected={selected}
-          noteId={`${idPrefix}-${id}`}
-          routeNotice={
-            selected || fallbackOf(indexOf(id))
-              ? null
-              : routeNotice?.(indexOf(id))
-          }
-          fallbackNotice={selected ? undefined : fallbackOf(indexOf(id))}
-          extra={cardExtra?.(indexOf(id), selected)}
-          effort={effort}
-          caption={diagramCaption(selected)}
-          parts={
-            selected && onComponentsChange
-              ? {
-                  onChange: onComponentsChange,
-                  note: partsNote,
-                  slotExtra: partsExtra,
-                }
-              : undefined
-          }
-        />
-      )}
+      renderCard={(id, { selected, idPrefix }) => {
+        const remembered = selected ? undefined : rememberedOf?.(indexOf(id));
+        const hasRemembered =
+          remembered !== undefined && Object.keys(remembered).length > 0;
+        return (
+          <StackCard
+            scenario={scenario}
+            stackIndex={indexOf(id)}
+            framework={fwOf(indexOf(id))}
+            components={
+              selected ? components : hasRemembered ? remembered : undefined
+            }
+            comments={comments}
+            // 替わる先のフレームワークでは、付け替えた後の描き方で描く（ゲームは既定に戻る）
+            routes={
+              fallbackOf(indexOf(id)) ? routesOnFallback?.(indexOf(id)) : routes
+            }
+            selected={selected}
+            noteId={`${idPrefix}-${id}`}
+            routeNotice={
+              selected || fallbackOf(indexOf(id))
+                ? null
+                : routeNotice?.(indexOf(id))
+            }
+            fallbackNotice={selected ? undefined : fallbackOf(indexOf(id))}
+            extra={cardExtra?.(indexOf(id), selected)}
+            effort={effort}
+            caption={diagramCaption(selected, hasRemembered)}
+            parts={
+              selected && onComponentsChange
+                ? {
+                    onChange: onComponentsChange,
+                    note: partsNote,
+                    slotExtra: partsExtra,
+                  }
+                : undefined
+            }
+          />
+        );
+      }}
     />
   );
 }

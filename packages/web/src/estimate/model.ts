@@ -282,6 +282,50 @@ export function withStack(
   );
 }
 
+/** 他の構成で選んでいた部品（構成の id → 選択）。構成を替えても画面が覚えておき、戻ったら戻す（D-116 の補足）。 */
+export type PartsByStack = Partial<Record<string, Choices>>;
+
+/**
+ * 構成を替えるときの部品の記憶: 替える前の構成の選択を覚え、替えた先の記憶を部品にする（withStack の parts: {} を上書き）。
+ * どの構成の記憶も、替えた後のテンプレート・フレームワークで選べるものだけにする（keptParts）。計算・URL は今の構成の parts だけ。
+ */
+export function withStackRemembered(
+  input: EstimateInput,
+  stack: string,
+  memory: PartsByStack,
+): { input: EstimateInput; memory: PartsByStack } {
+  const saved = { ...memory, [input.stack]: input.parts };
+  const next = normalizeInput({
+    ...input,
+    ...withStack(input, stack),
+    parts: saved[stack] ?? {},
+  });
+  return { input: next, memory: keptParts(saved, next) };
+}
+
+/**
+ * 構成ごとの部品の記憶を、今のテンプレート・フレームワークで選べるものだけにする（今の構成の分は持たない）。
+ * 今のフレームワークを載せられない構成の記憶は、その構成を選んだときに付け替わる先のフレームワーク（frameworkOnStack）で見る。
+ */
+export function keptParts(
+  memory: PartsByStack,
+  input: EstimateInput,
+): PartsByStack {
+  const scenario = scenarioOfTemplate(input.template);
+  const out: PartsByStack = {};
+  for (const [id, parts] of Object.entries(memory)) {
+    const i = stackIndexOf(id);
+    if (id === input.stack || i < 0 || !parts) continue;
+    out[id] = estimateComponents(
+      scenario,
+      i,
+      frameworkOnStack(scenario, i, input.framework),
+      parts,
+    ).chosen;
+  }
+  return out;
+}
+
 /** フレームワークを選ぶ。再検証などの値・ページごとの描き方は withContext の規則で付け替える。 */
 export function withFramework(
   input: EstimateInput,
@@ -979,22 +1023,30 @@ export type ComparisonRow = {
 };
 
 /**
- * その構成を選んだときの入力（比較の表の行を押したときと同じ withStack + normalizeInput）。他の構成の月額は、
- * 選んだ後の部品（既定）・再検証などの値（替えた先の既定。withContext）・描き方で数え、選んだ後の見積と一致させる（OCL-417D9CCA）。
+ * その構成を選んだときの入力（比較の表の行を押したときと同じ withStackRemembered）。他の構成の月額は、
+ * 選んだ後の部品（覚えている構成はその記憶、無ければ既定。D-116 の補足）・再検証などの値（替えた先の既定。withContext）・
+ * 描き方で数え、選んだ後の見積と一致させる（OCL-417D9CCA）。
  */
-const selectedInput = (input: EstimateInput, stack: string): EstimateInput =>
+const selectedInput = (
+  input: EstimateInput,
+  stack: string,
+  memory: PartsByStack,
+): EstimateInput =>
   stack === input.stack
     ? input
-    : normalizeInput({ ...input, ...withStack(input, stack) });
+    : withStackRemembered(input, stack, memory).input;
 
 /**
  * 選んだ条件（テンプレート・PV・フレームワーク・設定）で、そのフレームワークを載せられる全構成の月額。
- * 他の構成は、その構成を選んだときの入力で数える（部品は既定。selectedInput）。
+ * 他の構成は、その構成を選んだときの入力で数える（部品は覚えている構成はその記憶、無ければ既定。selectedInput）。
  */
-export function compareStacks(input: EstimateInput): ComparisonRow[] {
+export function compareStacks(
+  input: EstimateInput,
+  memory: PartsByStack = {},
+): ComparisonRow[] {
   return STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
     (s) => {
-      const sel = selectedInput(input, s.id);
+      const sel = selectedInput(input, s.id, memory);
       const r = resolve(sel);
       const res = run(sel, r);
       const hit = res.premises.filter((p) => p.hit);
@@ -1034,6 +1086,8 @@ export type StackCardTotal = {
 export function stackCardTotals(
   input: EstimateInput,
   rows: readonly ComparisonRow[],
+  /** 構成ごとに覚えている部品（compareStacks に渡したものと同じ）。 */
+  memory: PartsByStack = {},
 ): Partial<Record<string, StackCardTotal>> {
   const out: Partial<Record<string, StackCardTotal>> = {};
   for (const s of STACKS) {
@@ -1047,7 +1101,7 @@ export function stackCardTotals(
       };
       continue;
     }
-    const sel = selectedInput(input, s.id);
+    const sel = selectedInput(input, s.id, memory);
     const res = run(sel, resolve(sel));
     out[s.id] = {
       totalUsd: toUsd(res.bill.totals),
@@ -1095,18 +1149,19 @@ export type CurveSeries = {
 
 /**
  * 今の条件（テンプレート・フレームワーク・設定）のまま PV だけを振った、構成ごとの月額。
- * 他の構成は、その構成を選んだときの入力で数える（部品は既定・再検証などは替えた先の既定。compareStacks と同じ）。
- * 載せられない構成の id は捨てる。
+ * 他の構成は、その構成を選んだときの入力で数える（部品は覚えている構成はその記憶、無ければ既定・再検証などは替えた先の既定。
+ * compareStacks と同じ）。載せられない構成の id は捨てる。
  */
 export function costCurves(
   input: EstimateInput,
   stacks: readonly string[],
   pvs: readonly number[] = CURVE_PVS,
+  memory: PartsByStack = {},
 ): CurveSeries[] {
   return stacks.flatMap((id) => {
     const index = stackIndexOf(id);
     if (index < 0 || !stackOffered(index, input.framework)) return [];
-    const sel = selectedInput(input, id);
+    const sel = selectedInput(input, id, memory);
     const r = resolve(sel);
     const provider = STACKS[index]!.provider;
     const points = pvs.map((pv): CurvePoint => {
