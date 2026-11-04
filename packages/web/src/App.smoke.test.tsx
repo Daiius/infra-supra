@@ -1572,6 +1572,14 @@ describe('ゲームモードの画面', () => {
     expect(fwTab!.textContent).toContain('Next.js（App Router）');
     expect(fwTab!.querySelector('[data-setup-tab-warn]')).not.toBeNull();
     expect(fwTab!.getAttribute('title')).toMatch(/公式のアダプターが無いので/);
+    // ② の欄は隠れているので、知らせはパネルの外の常設の aria-live で読む（OCL-B12E7ACB）。② を開くと欄の中の aria-live に任せる
+    const live = document.querySelector('[data-setup-tab-live]')!;
+    expect(live.getAttribute('aria-live')).toBe('polite');
+    expect(live.closest('[hidden]')).toBeNull();
+    expect(live.textContent).toMatch(/公式のアダプターが無いので/);
+    fireEvent.click(fwTab!);
+    expect(live.textContent).toBe('');
+    fireEvent.click(stackTab!);
     // End / Home でも移る
     fireEvent.keyDown(stackTab!, { key: 'End' });
     expect(fwTab!.getAttribute('aria-selected')).toBe('true');

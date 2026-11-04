@@ -588,6 +588,7 @@ function Conditions({
           label: '② フレームワークと描き方',
           summary: FRAMEWORKS[input.framework].label,
           warn: notice,
+          live: notice,
           panel: (
             <FrameworkField
               scenario={scenario}

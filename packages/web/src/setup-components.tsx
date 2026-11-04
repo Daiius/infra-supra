@@ -604,6 +604,11 @@ export type SetupTabInfo = {
   summary: string;
   /** 注意の文。あればタブに「!」を付け、文は title と読み上げに出す。 */
   warn?: string | null | undefined;
+  /**
+   * 他方の欄の操作で起きた変化の知らせ（② の付け替えの知らせ。D-113）。欄の中の aria-live は隠れている間は読まれないので、
+   * このタブが隠れている間だけ、パネルの外の常設の aria-live で読む（OCL-B12E7ACB）。
+   */
+  live?: string | null | undefined;
   panel: ReactNode;
 };
 
@@ -728,6 +733,12 @@ export function SetupTabs({
             </button>
           );
         })}
+      </div>
+      {/* 隠れたタブの知らせを読む（見えているタブの知らせは欄の中の aria-live が読むので、二重にしない） */}
+      <div aria-live="polite" className="sr-only" data-setup-tab-live>
+        {SETUP_TABS.filter((t) => t !== tab && info[t].live).map((t) => (
+          <p key={t}>{info[t].live}</p>
+        ))}
       </div>
       {SETUP_TABS.map((t) => (
         <div

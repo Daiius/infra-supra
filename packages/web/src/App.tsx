@@ -365,6 +365,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                 label: '② フレームワークと描き方',
                 summary: FRAMEWORKS[framework].label,
                 warn: fallbackNotice,
+                live: fallbackNotice,
                 panel: (
                   <FrameworkField
                     scenario={scenario}

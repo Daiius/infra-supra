@@ -450,6 +450,10 @@ describe('見積モードの画面', () => {
     expect(fwTab.textContent).toContain('Next.js（App Router）');
     expect(fwTab.querySelector('[data-setup-tab-warn]')).not.toBeNull();
     expect(fwTab.getAttribute('title')).toMatch(/公式のアダプターが無いので/);
+    // 隠れた ② の知らせはパネルの外の aria-live で読む（OCL-B12E7ACB）
+    expect(
+      document.querySelector('[data-setup-tab-live]')!.textContent,
+    ).toMatch(/公式のアダプターが無いので/);
     // 載せられる構成へ戻すと知らせも印も消える
     pick('stack', 'cloudflare-vinext-paid');
     expect(fwTab.querySelector('[data-setup-tab-warn]')).toBeNull();
