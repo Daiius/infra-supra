@@ -9,6 +9,7 @@ import {
   SCENARIOS,
   checkAction,
   fixedImageFormat,
+  fixedSettingValue,
   imageFormatInactiveReason,
   pageWeightOf,
   settingInactiveReason,
@@ -173,5 +174,20 @@ describe('画像の形式（D-58）', () => {
       expect(
         settingInactiveReason(applyActions(base, [images(id)]), 'format'),
       ).toBeUndefined();
+  });
+});
+
+describe('固定した形式の表示の値（OCL-CAAEFA7D）', () => {
+  it('固定中は固定の形式の大きさ、選べる構成では undefined。保存した値は替えない', () => {
+    const vercel = playMonth(newGame(VERCEL_PRO, 42, article));
+    expect(fixedSettingValue(vercel, 'format')).toBe(IMAGE_FORMAT_KB.webp);
+    expect(vercel.settings.imageKB).toBe(IMAGE_FORMAT_KB.jpeg);
+    expect(
+      fixedSettingValue(applyActions(vercel, [images('cf-images')]), 'format'),
+    ).toBe(IMAGE_FORMAT_KB.avif);
+    expect(
+      fixedSettingValue(playMonth(newGame(CF_PAID, 42, article)), 'format'),
+    ).toBeUndefined();
+    expect(fixedSettingValue(vercel, 'variants')).toBeUndefined();
   });
 });

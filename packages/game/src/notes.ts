@@ -12,6 +12,7 @@ import { commentsInPage, commentsOf } from './routes/comments.ts';
 import { articleFamily } from './routes/strategy.ts';
 import {
   fixedImageFormat,
+  IMAGE_FORMAT_KB,
   isOnDemand,
   optionLabel,
   pageWeightKB,
@@ -39,6 +40,21 @@ export function settingInactiveReason(
   return images === 'none' || images === 'resize'
     ? `画像の部品が「${componentLabel(platform, 'images', raw)}」なのでサイズ違いは作らない（1 種）`
     : undefined;
+}
+
+/**
+ * 欄を無効にして値を固定しているときの、表示する値（設定の値。固定していなければ undefined）。画像の形式は、閲覧のときに
+ * 変換して形式を自分で選ぶ部品ではその形式の大きさ（D-58 の補足）。保存した設定の値は替えない（部品を戻せば元の値に戻る）。
+ */
+export function fixedSettingValue(
+  state: GameState,
+  key: SettingKey,
+): number | undefined {
+  if (key !== 'format') return undefined;
+  const platform = STACKS[state.stackIndex]!.provider;
+  const raw = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
+  const fixed = fixedImageFormat(platform, state.framework, raw);
+  return fixed ? IMAGE_FORMAT_KB[fixed.format] : undefined;
 }
 
 /**

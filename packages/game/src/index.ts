@@ -182,6 +182,7 @@ export {
 export {
   settingInactiveReason,
   imageFormatInactiveReason,
+  fixedSettingValue,
   settingNote,
   routePartNote,
   pageWeightOf,
