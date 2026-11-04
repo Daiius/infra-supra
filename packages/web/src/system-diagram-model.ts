@@ -733,6 +733,9 @@ const SLOT_ROLES: Readonly<Partial<Record<string, readonly Role[]>>> = {
   email: ['email'],
 };
 
+/** 経路に載らない部品のスロット（図の一番下の段の箱で選ぶ。D-116 の補足）。ほかのスロットは経路の箱か幽霊の箱で選ぶ。 */
+const OFF_ROUTE_SLOTS: ReadonlySet<string> = new Set(['dbBackup', 'email']);
+
 /**
  * 箱 → 差し替えられるスロット（D-116。箱を押すと、そのスロットの部品を選べる）。スロットごとに選択肢を 1 つずつ入れ替えて
  * 構成を組み直し、今の構成の箱（id と名前）が消える・名前が変わるスロットのうち、箱の役割（role）がそのスロットの役割
@@ -803,9 +806,20 @@ export function slotBoxes(
   }[],
 ): { swap: Map<string, string[]>; ghosts: GhostSlot[] } {
   const swap = swappableSlots(build, components, slots);
+  const baseArch = build(components);
+  // 経路に載らない箱（バックアップなど。図の一番下の段に並ぶ）には、経路の外の部品のスロット（OFF_ROUTE_SLOTS）だけを当てる。
+  // DB・API の置き場を替えるとバックアップの箱の名前が替わるだけのとき、そのスロットを段の箱で選ばせない（経路の箱か幽霊の箱にする）
+  const onRoute = new Set(
+    Object.values(baseArch.routes).flatMap((path) => path ?? []),
+  );
+  for (const [id, list] of swap) {
+    if (onRoute.has(id)) continue;
+    const keep = list.filter((slot) => OFF_ROUTE_SLOTS.has(slot));
+    if (keep.length > 0) swap.set(id, keep);
+    else swap.delete(id);
+  }
   const covered = new Set([...swap.values()].flat());
   const key = (n: { id: string; label: string }) => `${n.id}\u0000${n.label}`;
-  const baseArch = build(components);
   const base = new Set(baseArch.nodes.map(key));
   const fits = (slot: string, role: Role | undefined) =>
     role === undefined || (SLOT_ROLES[slot]?.includes(role) ?? true);
@@ -906,7 +920,31 @@ export function slotBoxes(
   return { swap, ghosts };
 }
 
-/** 短い名前: 括弧の補足（「Worker（vinext）」の「（vinext）」）を外す。外すと何も残らないときは元の名前。 */
+/** 箱に当たるスロット（幽霊の箱はそのスロット、ほかは slotBoxes の swap）。 */
+export const nodeSlots = (
+  n: Pick<DiagramNode, 'id' | 'ghost'>,
+  slotsOf: (nodeId: string) => readonly string[],
+): readonly string[] => (n.ghost ? [n.ghost.slot] : slotsOf(n.id));
+
+/**
+ * 構成図の一番下の段に、スロットごとの箱として置くスロット（D-116 の補足・2 つの表示）: 経路の箱（幽霊の箱も）にも、
+ * 経路に載らない部品（段に並ぶ）にも当たらないもの（1 択・ファイルの置き場・メールの送信を使わない構成など）。
+ * どのスロットも図の箱か段のどれかで選べる・見えるように、残りをここで拾う。並びは slots の順。
+ */
+export function looseSlots(
+  model: Pick<DiagramModel, 'nodes' | 'side'>,
+  slotsOf: (nodeId: string) => readonly string[],
+  slots: readonly { slot: string }[],
+): string[] {
+  const covered = new Set(
+    [...model.nodes, ...model.side.flatMap((s) => s.nodes)].flatMap((n) =>
+      nodeSlots(n, slotsOf),
+    ),
+  );
+  return slots.map((x) => x.slot).filter((s) => !covered.has(s));
+}
+
+/** 短い名前:括弧の補足（「Worker（vinext）」の「（vinext）」）を外す。外すと何も残らないときは元の名前。 */
 export function shortLabel(label: string): string {
   const s = label.replace(/（[^）]*）/g, '').trim();
   return s === '' ? label : s;

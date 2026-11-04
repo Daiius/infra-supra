@@ -26,6 +26,8 @@ import {
   LANES,
   LAYOUT,
   LAYOUT_VERTICAL,
+  looseSlots,
+  nodeSlots,
   shortLabel,
   slotBoxes,
   swappableSlots,
@@ -737,6 +739,42 @@ describe('slotBoxes（どのスロットにも箱。今の選択が箱を持た�
         expect(m.lanes, name).toEqual(plain.lanes);
       }
     }
+  });
+
+  it('どのスロットも図の中で選べる・見える: 選べるスロットは経路の箱か一番下の段の部品の箱、1 択は段のスロットの箱（横の図・縦の図。D-116 の補足）', () => {
+    const inBand = new Set<string>();
+    for (const { name, build, comps, slots } of all) {
+      const { swap, ghosts } = slotBoxes(build, comps, slots);
+      const slotsOf = (id: string) => swap.get(id) ?? [];
+      for (const o of ['horizontal', 'vertical'] as const) {
+        const m = diagramModel(build(comps), [], o, ghosts);
+        const routed = new Set(m.nodes.flatMap((n) => nodeSlots(n, slotsOf)));
+        const side = new Set(
+          m.side.flatMap((s) => s.nodes).flatMap((n) => nodeSlots(n, slotsOf)),
+        );
+        const loose = looseSlots(m, slotsOf, slots);
+        for (const x of slots) {
+          const swappable =
+            !x.fixed && x.slot !== 'files' && x.options.length >= 2;
+          const places = [
+            routed.has(x.slot),
+            !routed.has(x.slot) && side.has(x.slot),
+            loose.includes(x.slot),
+          ].filter(Boolean).length;
+          // 経路の箱・段の部品の箱・段のスロットの箱のどれか 1 つの形で出る
+          expect(places, `${name} ${o} ${x.slot}`).toBe(1);
+          // 選べるスロットは押せる箱（経路の箱か、段の部品の箱）に当たる。段のスロットの箱は 1 択だけ
+          expect(loose.includes(x.slot), `${name} ${o} ${x.slot}`).toBe(
+            !swappable,
+          );
+          if (!routed.has(x.slot)) inBand.add(x.slot);
+        }
+      }
+    }
+    // 今の構成で段に出るもの（経路に載らないメールの送信・バックアップ、1 択のリアルタイム・ファイルの置き場）
+    expect([...inBand].sort()).toEqual(
+      ['dbBackup', 'email', 'files', 'realtime'].sort(),
+    );
   });
 
   it('Cloudflare × Next.js の ISR のキャッシュ: Workers Cache・キャッシュしないは、KV の箱があった帯・段に幽霊の箱を残す', () => {

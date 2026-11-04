@@ -150,6 +150,31 @@ export const pickPart = (name: string, scope: HTMLElement) => {
     new RegExp(escape(name)),
   );
 };
+/**
+ * ① の選んでいるカードの部品の表示を切り替える（D-116 の補足。既定は構成図、「機能から選ぶ」はチップの一覧）。
+ * 選んだ表示は localStorage に覚えるので、テストの中では切り替えたまま（テストの前に消える）。
+ */
+export const showPartsView = (view: 'diagram' | 'list') => {
+  const tab = document.querySelector<HTMLElement>(
+    `[data-parts-view-tab="${view}"]`,
+  );
+  expect(tab, `部品の表示のタブ ${view}`).not.toBeNull();
+  if (tab!.getAttribute('aria-pressed') !== 'true') fireEvent.click(tab!);
+  expect(
+    document.querySelector(`[data-parts-view="${view}"]`),
+    `部品の表示 ${view}`,
+  ).not.toBeNull();
+};
+/** 部品のチップの一覧（「機能から選ぶ」）にする（チップの行を押すテスト用）。 */
+export const showPartsList = () => showPartsView('list');
+/** 部品を選べるカードがあれば、チップの一覧にする（見出しで欄を引くテスト用。無ければ何もしない）。 */
+export const ensurePartsList = () => {
+  if (
+    document.querySelector('[data-parts-view-tab]') &&
+    !document.querySelector('section[data-parts]')
+  )
+    showPartsList();
+};
 /** 畳んだ部品の行（D-116 の補足）を開く（開いていればそのまま）。行の要素は開いても同じ。 */
 export const openSlot = (row: HTMLElement) => {
   const toggle = row.querySelector<HTMLElement>('[data-collapsed-toggle]');
@@ -177,6 +202,7 @@ export async function startGame(s: Setup) {
   pickRadio(s.scenario);
   pickRadio(s.stack);
   pickRadio(s.framework);
+  showPartsList();
   for (const [slot, option] of Object.entries(s.parts ?? {}))
     pickPart(option, slotGroup(slot));
   // 選ぶと別のスロットが出ることがある（API を他の事業者に置いたときの DB など）ので、未選択が無くなるまで回す
@@ -212,10 +238,11 @@ export async function startGame(s: Setup) {
 }
 
 /**
- * 部品のスロットの行（チップの行。D-116）。label は見出しの先頭（「DB」は「DB のバックアップ」に当てない）、
+ * 部品のスロットの行（チップの行。D-116）。構成図の表示なら「機能から選ぶ」に切り替えてから引く。label は見出しの先頭（「DB」は「DB のバックアップ」に当てない）、
  * by: 'slot' のときはスロットの id。
  */
 export const slotGroup = (label: string, by: 'label' | 'slot' = 'label') => {
+  if (!document.querySelector('section[data-parts]')) showPartsList();
   const rows = [
     ...document.querySelectorAll<HTMLElement>(
       'section[data-parts] [data-slot]',

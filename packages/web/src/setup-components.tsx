@@ -1,5 +1,6 @@
 // 始める画面の部品の選択（D-45）。構成とフレームワークの組み合わせで選べるスロットを game の setupSlots から引き、
-// スロットごとにチップで選ぶ（既定は未選択）。チップは ① インフラの構成の選んでいるカードの、構成図の下に並べる（D-116）。
+// スロットごとにチップで選ぶ（既定は未選択）。チップは ① インフラの構成の選んでいるカードの「機能から選ぶ」の表示に並べる
+// （構成図の表示と切り替える。D-116 とその補足）。
 // 事実の説明（note）と短い説明（フレーバー）はチップの ⓘ に置く。「不適切」の印は出さない（説明だけで正解が分からないようにする）。
 // 構成図の箱を押したときの差し替え（PartOptions）も同じ判定で描く。設定の小さなチップ（SettingChips）は ② のカードの記事のページの行
 // （描き方の設定。D-119）と、見積モードの画像の部品の行（画像の形式・サイズ違い）で使う。
@@ -126,7 +127,7 @@ function OptionDetail({ o, why }: { o: SetupOption; why: string | null }) {
 }
 
 /**
- * 部品のチップ（① インフラの構成の選んでいるカードの、構成図の下。D-116）。スロットごとに 1 行で、押すとその部品に替わる
+ * 部品のチップ（① インフラの構成の選んでいるカードの「機能から選ぶ」の表示。構成図の表示とタブで切り替える。D-116 とその補足）。スロットごとに 1 行で、押すとその部品に替わる
  * （図と月額がその場で替わる）。選択中は枠と「選択中」（② の描き方のチップと同じ見せ方）。チップの高さはそろえ、長い名前は
  * 切り詰めて全体をツールチップと ⓘ に出す。選べない部品は灰色で、理由はツールチップと ⓘ。
  * まだ選んでいないスロット（ゲームの始める画面。D-45）は行を警告色の枠で囲み「未選択」を添える。
@@ -140,8 +141,6 @@ export function PartChips({
   value,
   onChange,
   note,
-  focusSlot,
-  onFocused,
   slotExtra,
 }: {
   stackIndex: number;
@@ -153,27 +152,14 @@ export function PartChips({
   onChange: (v: SetupChoices) => void;
   /** 注記（画面ごと。D-115）。 */
   note?: ReactNode;
-  /**
-   * 描いた後に focus を移すスロット（図の箱の吹き出しで選んだ直後。元の箱は差し替えで消えうるので、常に残るそのスロットの行へ移す。行は畳み、畳んだボタンへ。
-   * OCL-131BD89D）。移したら onFocused を呼ぶ。
-   */
-  focusSlot?: string | null | undefined;
-  onFocused?: () => void;
   /** スロットの行のチップの下に添えるもの（見積モードの画像の形式・サイズ違い。D-119）。 */
   slotExtra?: Partial<Record<string, ReactNode>> | undefined;
 }) {
   const root = useRef<HTMLElement>(null);
   // 選んだ部品のスロットは畳み、押して開いたものだけ選択肢を出す（未選択の行はいつも開く。D-116 の補足）
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
-  // 描いた後に focus を移すスロット（チップで選んだ直後・図の箱の吹き出しで選んだ直後）
+  // 描いた後に focus を移すスロット（チップで選んだ直後。図の箱の吹き出しで選んだ後は図の側で移す。OCL-131BD89D）
   const [refocus, setRefocus] = useState<string | null>(null);
-  useEffect(() => {
-    if (!focusSlot) return;
-    // 図の箱から選んだときも、チップで選んだときと同じく畳んで、畳んだボタンへ focus を移す
-    setOpen((s) => without(s, focusSlot));
-    setRefocus(focusSlot);
-    onFocused?.();
-  }, [focusSlot, onFocused]);
   useEffect(() => {
     if (!refocus) return;
     const row = root.current?.querySelector<HTMLElement>(
@@ -213,8 +199,8 @@ export function PartChips({
     >
       <p className="text-xs opacity-70">
         {anyCollapsed
-          ? '部品（選んだものは畳んである。押すと選択肢が開く。構成図の箱からも選べる）'
-          : '部品（押すと替わる。構成図の箱からも選べる）'}
+          ? '部品（選んだものは畳んである。押すと選択肢が開く。「構成図から選ぶ」でも選べる）'
+          : '部品（押すと替わる。「構成図から選ぶ」でも選べる）'}
         {note && <span className="block">{note}</span>}
       </p>
       <div className="flex min-w-0 flex-wrap gap-1">

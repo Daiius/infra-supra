@@ -248,3 +248,63 @@ describe('未選択の箱（D-116 の補足）', () => {
     }
   });
 });
+
+describe('箱の吹き出しで選んだ後の focus（OCL-131BD89D・D-116 の補足）', () => {
+  it('W-49 押した箱が残っていればその箱、消えていればそのスロットの最初の箱、それも無ければ図の頭へ移す', () => {
+    // 1 つのスロットが複数の箱に当たる構成（Vercel Pro × Next.js で画像を他の事業者に出したもの）
+    const v = STACKS.findIndex((s) => s.id === 'vercel-supabase-pro');
+    const build = (c: Partial<Record<string, string>>) =>
+      diagramArchitecture(sc, v, 'nextjs', c);
+    const found = setupSlots(sc, v, 'nextjs')
+      .find((x) => x.slot === 'images')!
+      .options.map((o) => {
+        const comps = diagramComponents(sc, v, 'nextjs', { images: o.id });
+        return {
+          comps,
+          ...slotBoxes(build, comps, setupSlots(sc, v, 'nextjs', comps)),
+        };
+      })
+      .find(
+        (b) =>
+          [...b.swap.values()].filter((s) => s.includes('images')).length >= 2,
+      )!;
+    expect(found).toBeDefined();
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
+    const onFocused = vi.fn();
+    const view = (focusTarget: { slot: string; box: string } | null) => (
+      <SystemDiagram
+        architecture={build(found.comps)}
+        pages={pages}
+        ghosts={found.ghosts}
+        parts={{
+          slotsOf: (id) => found.swap.get(id) ?? [],
+          render: () => null,
+        }}
+        focusTarget={focusTarget}
+        onFocused={onFocused}
+      />
+    );
+    const { container, rerender } = render(view(null));
+    const buttons = [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-slots~="images"] button',
+      ),
+    ];
+    expect(buttons.length).toBeGreaterThan(1);
+    const boxOf = (b: HTMLElement) =>
+      b.closest('[data-box]')!.getAttribute('data-box')!;
+    // DOM で最初の箱でなく、押した箱へ
+    const pressed = buttons[buttons.length - 1]!;
+    rerender(view({ slot: 'images', box: boxOf(pressed) }));
+    expect(document.activeElement).toBe(pressed);
+    // 押した箱が差し替えで消えたら、そのスロットの最初の箱へ
+    rerender(view({ slot: 'images', box: 'gone' }));
+    expect(document.activeElement).toBe(buttons[0]);
+    // スロットの箱も無ければ（スロットが消えたなど）図の頭へ
+    rerender(view({ slot: 'gone', box: 'gone' }));
+    expect(document.activeElement).toBe(
+      container.querySelector('[data-diagram="system"]'),
+    );
+    expect(onFocused).toHaveBeenCalledTimes(3);
+  });
+});

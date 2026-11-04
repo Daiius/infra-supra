@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
+  ensurePartsList,
   openSlot,
   renderApp,
   useSmokeEnv,
@@ -18,10 +19,15 @@ const card = (title: string | RegExp) =>
 const combo = (label: string) =>
   screen.getByRole('combobox', { name: new RegExp(`^${label}`) });
 /** 部品の行（構成のカードのチップ。D-116）・設定のチップ（記事のページの行の描き方の設定・画像の行の設定。D-119）。名前は見出しの文字で始まる。 */
-const group = (label: string) =>
-  screen.getByRole('group', { name: new RegExp(`^${label}`) });
-const queryGroup = (label: string) =>
-  screen.queryByRole('group', { name: new RegExp(`^${label}`) });
+// 部品の行は「機能から選ぶ」の表示のチップ（D-116 の補足）なので、引く前にその表示にする
+const group = (label: string) => {
+  ensurePartsList();
+  return screen.getByRole('group', { name: new RegExp(`^${label}`) });
+};
+const queryGroup = (label: string) => {
+  ensurePartsList();
+  return screen.queryByRole('group', { name: new RegExp(`^${label}`) });
+};
 /** ① 構成・② フレームワークのカルーセルのラジオ（ゲームと共用。D-115）。 */
 const pickerRadios = (name: 'stack' | 'framework') => [
   ...document.querySelectorAll<HTMLInputElement>(
@@ -98,8 +104,14 @@ function expectEstimate(): string {
       .getAllByRole('button')
       .filter((b) => b.getAttribute('aria-current') === 'true'),
   ).toHaveLength(1);
-  // 構成図（D-105）: ① の選んでいる構成のカードに今の構成の図が出る（下の構成図のカードは重複なので消した。D-115）
-  expect(stackCard().querySelectorAll('[data-node]').length).toBeGreaterThan(1);
+  // 構成図（D-105）: ① の選んでいる構成のカードに今の構成の図が出る（下の構成図のカードは重複なので消した。D-115）。
+  // 部品の表示を「機能から選ぶ」にしていれば、図の代わりにチップの一覧（D-116 の補足）
+  if (stackCard().querySelector('[data-parts-view="list"]'))
+    expect(stackCard().querySelector('section[data-parts]')).not.toBeNull();
+  else
+    expect(stackCard().querySelectorAll('[data-node]').length).toBeGreaterThan(
+      1,
+    );
   // ページごとの描き方（D-106）: ② の選んでいるカードにテンプレートのページごとの欄（下の表のカードは消した。D-115）
   expect(
     fwCard().querySelectorAll('section[data-route]').length,
@@ -496,7 +508,7 @@ describe('見積モードの画面', () => {
       cleanup();
     }
   });
-  it('W-39 部品は構成のカードのチップと構成図の箱で選び、URL・月の費用・カードの題が替わる（D-116）', async () => {
+  it('W-39 部品は構成図の箱か機能ごとのチップで選び、URL・月の費用・カードの題が替わる（D-116 とその補足）', async () => {
     window.history.replaceState(
       null,
       '',
@@ -504,21 +516,31 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    // 前の ③ 部品の欄は無く、チップは選んでいる構成のカードの中（見積は全部のスロットが埋まっていて未選択は無い）
+    // 前の ③ 部品の欄は無く、部品は選んでいる構成のカードの中。最初は構成図の表示（チップの一覧は出さない）
     expect(screen.queryByRole('heading', { name: '③ 部品' })).toBeNull();
-    const parts = stackCard().querySelector('section[data-parts]')!;
-    expect(parts).not.toBeNull();
-    expect(parts.querySelector('[data-unselected]')).toBeNull();
-    // 構成図の箱にも「未選択」の印は出ない（D-116 の補足）
+    expect(stackCard().querySelector('section[data-parts]')).toBeNull();
+    // 見積は全部のスロットが埋まっていて、図の箱にも段の箱にも「未選択」の印は出ない（D-116 の補足）
     const diagram = stackCard().querySelector('[data-diagram="system"]')!;
     expect(diagram.querySelector('[data-swap-mark]')).not.toBeNull();
     expect(diagram.querySelector('[data-unselected-mark]')).toBeNull();
-    // 名前は正規表現の頭（「DB のバックアップ」の行に当てない）
-    const DB = 'DB(?! のバックアップ)';
-    expect(checked(DB)).toBe('supabase');
-    // チップで Neon にする
-    choose(DB, 'neon');
-    expect(checked(DB)).toBe('neon');
+    // メールの送信は図の一番下の段の箱から選べる
+    expect(
+      diagram.querySelector('[data-diagram-band] [data-slots~="email"] button'),
+    ).not.toBeNull();
+    // 図の DB の箱（Supabase）を押して、吹き出しから Neon に替える
+    const dbBox = () =>
+      stackCard().querySelector<HTMLElement>(
+        '[data-swappable][data-slots~="db"] button',
+      )!;
+    expect(dbBox().getAttribute('aria-label')).toMatch(/Supabase.*を替える$/);
+    fireEvent.click(dbBox());
+    const popover = screen.getByRole('dialog', { name: /を替える$/ });
+    fireEvent.click(
+      within(
+        within(popover).getByRole('group', { name: 'DBを替える' }),
+      ).getByRole('button', { name: /^Neon/, pressed: false }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(new URLSearchParams(window.location.search).get('c.db')).toBe(
       'neon',
     );
@@ -526,19 +548,22 @@ describe('見積モードの画面', () => {
     expect(stackCard().getAttribute('aria-label')).toBe(
       'Vercel Pro + Neon（Launch） の構成',
     );
-    // 図の Neon の箱を押して、吹き出しから DynamoDB に替える
+    // focus は DB の今の箱（Neon）へ（元の Supabase の箱は消える。OCL-131BD89D）
+    expect(document.activeElement).toBe(dbBox());
+    expect(dbBox().getAttribute('aria-label')).toMatch(/Neon.*を替える$/);
+    // 「機能から選ぶ」にすると、図の代わりにチップの一覧（全部の行が畳まれ、未選択は無い）
     fireEvent.click(
-      within(stackCard()).getByRole('button', { name: /Neon.*を替える$/ }),
+      within(stackCard()).getByRole('button', { name: '機能から選ぶ' }),
     );
-    const popover = screen.getByRole('dialog', { name: /Neon.*を替える$/ });
-    fireEvent.click(
-      within(
-        within(popover).getByRole('group', { name: 'DBを替える' }),
-      ).getByRole('button', { name: /^AWS: DynamoDB/, pressed: false }),
-    );
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(stackCard().querySelector('[data-diagram="system"]')).toBeNull();
+    const parts = stackCard().querySelector('section[data-parts]')!;
+    expect(parts.querySelector('[data-unselected]')).toBeNull();
+    // 名前は正規表現の頭（「DB のバックアップ」の行に当てない）
+    const DB = 'DB(?! のバックアップ)';
+    expect(checked(DB)).toBe('neon');
+    // チップで DynamoDB にする
+    choose(DB, 'dynamodb');
     expect(checked(DB)).toBe('dynamodb');
-    // focus は DB の畳んだ行のボタンへ（元の Neon の箱は消える。OCL-131BD89D・D-116 の補足）
     expect(document.activeElement).toBe(
       group(DB).querySelector('[data-collapsed-toggle]'),
     );
@@ -636,5 +661,27 @@ describe('見積モードの画面', () => {
     expect(q().get('v')).toBe('1');
     expectEstimate();
     expect(card(/^月の費用/).textContent).not.toBe(before);
+    // 構成図の表示では、画像の箱の吹き出しの中で選ぶ（D-116 の補足）
+    fireEvent.click(
+      within(stackCard()).getByRole('button', { name: '構成図から選ぶ' }),
+    );
+    fireEvent.click(
+      stackCard().querySelector<HTMLElement>('[data-slots~="images"] button')!,
+    );
+    const popover = screen.getByRole('dialog', { name: /を替える$/ });
+    within(popover).getByRole('group', { name: '画像を替える' });
+    const format = within(popover).getByRole('group', { name: '画像の形式' });
+    expect(
+      format
+        .querySelector('[data-selected="true"]')
+        ?.getAttribute('data-option'),
+    ).toBe('avif');
+    fireEvent.click(
+      within(
+        format.querySelector<HTMLElement>('[data-option="webp"]')!,
+      ).getByRole('button'),
+    );
+    expect(q().get('img')).toBe('webp');
+    expectEstimate();
   });
 });

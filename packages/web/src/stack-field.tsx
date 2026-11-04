@@ -6,7 +6,8 @@
 // カードは事業者ごとに 1 枚で、プランのチップはカードを動かさず中身（名前・説明・手間・注意・構成図）を替える（D-105 の補足）。
 // 見積モードと共用（D-115）。値は STACKS の index（見積の構成の id との変換は見積の画面の境目で 1 回）。カードに添える注記
 // （見積はその構成の月額）は cardExtra、手間の棒（ゲームだけ）は effort で切り替える。
-// 部品の選択は選んでいるカードの中（構成図の下のチップと、図の箱の差し替え）で行う（D-116。前の ③ 部品の欄を移した）。
+// 部品の選択は選んでいるカードの中で行う（D-116。前の ③ 部品の欄を移した）。構成図の箱から選ぶ表示と、機能ごとのチップから選ぶ表示を
+// タブで切り替える（D-116 の補足。どちらの表示でもすべてのスロットを選べる）。
 import {
   FRAMEWORKS,
   frameworkOnStack,
@@ -40,6 +41,8 @@ import {
 import {
   DIAGRAM_NOTE,
   SystemDiagram,
+  type BandSlot,
+  type BoxFocus,
   type DiagramParts,
 } from './system-diagram.tsx';
 import type { ResolvedPage } from './page-wireframes.tsx';
@@ -50,17 +53,61 @@ import {
   type GhostSlot,
 } from './system-diagram-model.ts';
 
-/** 部品の選択（選んでいるカードの、構成図の下のチップと図の箱。D-116）。 */
+/** 部品の選択（選んでいるカードの、構成図の箱か機能ごとのチップ。D-116）。 */
 type PartsEditor = {
   onChange: (v: SetupChoices) => void;
   note?: ReactNode;
-  /** スロットの行のチップの下に添えるもの（見積モードの画像の形式・サイズ違い。D-119）。 */
+  /** スロットに添えるもの（見積モードの画像の形式・サイズ違い。チップの行の下か、図の箱の吹き出しの中。D-119）。 */
   slotExtra?: Partial<Record<string, ReactNode>> | undefined;
 };
 
 /**
- * 選んでいるカードの構成図と部品のチップ（D-116）。箱を押すと、その箱に当たるスロットの部品を選べる（slotBoxes）。
- * 今の選択が箱を持たないスロットは幽霊の箱で、押して選び直せる（D-116 の補足）。
+ * 部品の選び方の表示（D-116 の補足）: 構成図の箱から選ぶ（「インフラ構成から機能を選択」）か、スロットごとのチップから選ぶ
+ * （「機能からインフラを選択」）。既定は構成図。切り替えた表示は、ゲームの始める画面と見積モードで共通の好みとして覚える
+ * （保存データ・URL には入れない）。
+ */
+export type PartsView = 'diagram' | 'list';
+const PARTS_VIEW_KEY = 'infra-supra:parts-view';
+const PARTS_VIEWS: readonly {
+  view: PartsView;
+  label: string;
+  title: string;
+}[] = [
+  {
+    view: 'diagram',
+    label: '構成図から選ぶ',
+    title: 'インフラ構成から機能を選択（構成図の箱を押して部品を替える）',
+  },
+  {
+    view: 'list',
+    label: '機能から選ぶ',
+    title: '機能からインフラを選択（機能ごとの部品のチップ。構成図は出さない）',
+  },
+];
+
+function readPartsView(): PartsView {
+  try {
+    return localStorage.getItem(PARTS_VIEW_KEY) === 'list' ? 'list' : 'diagram';
+  } catch {
+    // 保存領域が使えない環境では既定の構成図
+    return 'diagram';
+  }
+}
+
+function storePartsView(v: PartsView) {
+  try {
+    localStorage.setItem(PARTS_VIEW_KEY, v);
+  } catch {
+    // 覚えられなくても選べる（開き直すと構成図に戻るだけ）
+  }
+}
+
+/**
+ * 選んでいるカードの部品の選択（D-116 とその補足）。タブで 2 つの表示を切り替え、どちらか一方だけを出す:
+ * - 構成図: 箱を押すと、その箱に当たるスロットの部品を選べる（slotBoxes）。今の選択が箱を持たないスロットは幽霊の箱、
+ *   経路に載らない部品・図に箱を持たないスロットは図の一番下の段の箱で選ぶ。
+ * - 機能: スロットごとのチップ（PartChips）だけ。縦の量を減らすため構成図は出さない。
+ * どちらの表示でも、すべてのスロットを選べる。
  */
 function EditableDiagram({
   stackIndex,
@@ -85,9 +132,14 @@ function EditableDiagram({
   caption: string;
   editor: PartsEditor;
 }) {
-  // 箱の吹き出しで選んだスロット（描き直した後に、そのスロットの選択中のチップへ focus を移す。OCL-131BD89D）
-  const [focusSlot, setFocusSlot] = useState<string | null>(null);
-  const clearFocus = useCallback(() => setFocusSlot(null), []);
+  const [view, setViewState] = useState<PartsView>(readPartsView);
+  const setView = (v: PartsView) => {
+    setViewState(v);
+    storePartsView(v);
+  };
+  // 箱の吹き出しで選んだスロットと押した箱（描き直した後に、その箱へ focus を移す。消えていればスロットの最初の箱。OCL-131BD89D）
+  const [focusTarget, setFocusTarget] = useState<BoxFocus | null>(null);
+  const clearFocus = useCallback(() => setFocusTarget(null), []);
   const bySlot = new Map<string, (typeof slots)[number]>(
     slots.map((x) => [x.slot, x]),
   );
@@ -98,41 +150,89 @@ function EditableDiagram({
       const x = bySlot.get(slot);
       return x !== undefined && isUnselected(x, components);
     },
-    render: (slot, close) => (
-      <PartOptions
-        slot={bySlot.get(slot)!}
-        stackIndex={stackIndex}
-        framework={framework}
-        value={components}
-        onChange={(v) => {
-          editor.onChange(v);
-          setFocusSlot(slot);
-        }}
-        close={close}
-      />
-    ),
-  };
-  return (
-    <SystemDiagram
-      architecture={arch}
-      pages={pages}
-      caption={caption}
-      parts={swap.size > 0 || ghosts.length > 0 ? parts : undefined}
-      ghosts={ghosts}
-      below={
-        <PartChips
+    render: (slot, close, box) => (
+      <>
+        <PartOptions
+          slot={bySlot.get(slot)!}
           stackIndex={stackIndex}
           framework={framework}
-          slots={slots}
           value={components}
-          onChange={editor.onChange}
-          note={editor.note}
-          focusSlot={focusSlot}
-          onFocused={clearFocus}
-          slotExtra={editor.slotExtra}
+          onChange={(v) => {
+            editor.onChange(v);
+            setFocusTarget({ slot, box });
+          }}
+          close={close}
         />
-      }
-    />
+        {/* 見積モードの画像の形式・サイズ違いは、画像の箱の吹き出しの中で選ぶ（D-119） */}
+        {editor.slotExtra?.[slot] && (
+          <div className="mt-2 border-t border-base-300 pt-1.5">
+            {editor.slotExtra[slot]}
+          </div>
+        )}
+      </>
+    ),
+  };
+  // 一番下の段に出すスロット（図に箱を持たないもの。1 択は押せない箱）
+  const bandSlots: BandSlot[] = slots.map((x) => {
+    const id = x.fixed ? x.options[0]!.id : components[x.slot];
+    return {
+      slot: x.slot,
+      label: x.label,
+      picked: x.options.find((o) => o.id === id)?.label,
+      fixed: x.fixed,
+      pressable: !x.fixed && x.slot !== 'files' && x.options.length >= 2,
+    };
+  });
+  return (
+    <div className="min-w-0 space-y-2" data-parts-view={view}>
+      {/* 見た目は daisyUI のタブ。矢印キーで移る tablist にはせず、押した状態（aria-pressed）を持つボタンの組にする */}
+      <div
+        role="group"
+        aria-label="部品の選び方"
+        className="tabs-box tabs w-fit max-w-full tabs-xs"
+      >
+        {PARTS_VIEWS.map((t) => (
+          <button
+            key={t.view}
+            type="button"
+            aria-pressed={view === t.view}
+            title={t.title}
+            data-parts-view-tab={t.view}
+            className={`tab ${view === t.view ? 'tab-active' : ''}`}
+            onClick={() => setView(t.view)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="min-w-0">
+        {view === 'diagram' ? (
+          <div className="min-w-0 space-y-1.5">
+            {editor.note && <p className="text-xs opacity-70">{editor.note}</p>}
+            <SystemDiagram
+              architecture={arch}
+              pages={pages}
+              caption={caption}
+              parts={parts}
+              ghosts={ghosts}
+              bandSlots={bandSlots}
+              focusTarget={focusTarget}
+              onFocused={clearFocus}
+            />
+          </div>
+        ) : (
+          <PartChips
+            stackIndex={stackIndex}
+            framework={framework}
+            slots={slots}
+            value={components}
+            onChange={editor.onChange}
+            note={editor.note}
+            slotExtra={editor.slotExtra}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -268,7 +368,7 @@ function StackCard({
             {...(selected ? { components: components ?? {}, framework } : {})}
           />
         )}
-        {/* 選んでいるカードは構成図の下に部品のチップを並べ、図の箱からも差し替えられる（D-116）。選んでいないカードは図だけ */}
+        {/* 選んでいるカードは部品を選べる（構成図の箱か機能ごとのチップ。D-116 とその補足）。選んでいないカードは図だけ */}
         {selected && parts ? (
           <EditableDiagram
             stackIndex={stackIndex}

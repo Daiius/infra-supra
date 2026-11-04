@@ -2,7 +2,7 @@
 // ゲームモードの画面の描画テスト（D-86・prd/05 §7）。画面を描いて操作し、例外が出ない・描ける・選択肢と結果が出ることだけを見る。
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   advance,
   expectGameScreen,
@@ -11,9 +11,11 @@ import {
   pickPart,
   pickRadio,
   renderApp,
+  showPartsView,
   slotGroup,
   startGame,
   useSmokeEnv,
+  waitLoaded,
   type Setup,
 } from './smoke.test-helpers.tsx';
 
@@ -1089,7 +1091,7 @@ describe('ゲームモードの画面', () => {
     expect(document.body.textContent).not.toMatch(/公式のアダプターが無いので/);
   });
 
-  it('W-39 始める画面: 部品は構成のカードのチップと構成図の箱で選び、未選択・他の事業者の部品も見分けられる（D-116）', async () => {
+  it('W-39 始める画面: 部品は構成図の箱か機能ごとのチップで選び、未選択・他の事業者の部品も見分けられる（D-116 とその補足）', async () => {
     await renderApp();
     const pick = (name: RegExp) =>
       fireEvent.click(screen.getByRole('radio', { name }));
@@ -1100,32 +1102,26 @@ describe('ゲームモードの画面', () => {
     pick(/^受託先の業務アプリの運用/);
     pick(/^Vercel Pro/);
     pick(/^Next\.js（App Router）/);
-    // 前の ③ 部品の欄は無く、部品のチップは選んでいる構成のカードの中（構成図の下）
+    // 前の ③ 部品の欄は無く、部品は選んでいる構成のカードの中。最初は構成図の表示で、チップの一覧は出さない
     expect(screen.queryByRole('heading', { name: '③ 部品' })).toBeNull();
-    const parts = current().querySelector('section[data-parts]')!;
-    expect(parts).not.toBeNull();
-    expect(
-      document.querySelectorAll('section[data-parts]').length,
-      '選んでいないカードにはチップを出さない',
-    ).toBe(1);
-    // チップは構成図のすぐ下で、凡例より上
-    const svg = current().querySelector('[data-diagram="system"] svg')!;
-    const legend = within(current()).getByRole('list', {
-      name: '構成図の流れの凡例',
+    const tabs = within(current()).getByRole('group', {
+      name: '部品の選び方',
     });
     expect(
-      svg.compareDocumentPosition(parts) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      within(tabs)
+        .getAllByRole('button')
+        .map((t) => [t.textContent, t.getAttribute('aria-pressed')]),
+    ).toEqual([
+      ['構成図から選ぶ', 'true'],
+      ['機能から選ぶ', 'false'],
+    ]);
     expect(
-      parts.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    // 選ぶ前のスロットは「未選択」（D-45）。始めるボタンは押せないまま
-    const db = () => slotGroup('DB');
-    expect(db().getAttribute('aria-label')).toBe('DB（未選択）');
-    expect(db().hasAttribute('data-unselected')).toBe(true);
-    // 未選択の行は畳まない（選択肢が並んだまま。D-116 の補足）
-    expect(db().hasAttribute('data-collapsed')).toBe(false);
-    // 構成図の DB の箱にも「未選択」の印（既定の部品の名前で描くので、選び済みに見えないように。D-116 の補足）
+      document.querySelectorAll('[role="group"][aria-label="部品の選び方"]')
+        .length,
+      '選んでいないカードには出さない',
+    ).toBe(1);
+    expect(document.querySelector('section[data-parts]')).toBeNull();
+    // 構成図の DB の箱に「未選択」の印（既定の部品の名前で描くので、選び済みに見えないように。D-116 の補足）
     const dbBox = () =>
       within(current()).queryByRole('button', {
         name: /（DB、未選択）を替える$/,
@@ -1136,18 +1132,35 @@ describe('ゲームモードの画面', () => {
       screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' })
         .disabled,
     ).toBe(true);
-    // 同じ事業者の部品が先、他の事業者の部品はロゴ付き
-    const chips = [...db().querySelectorAll<HTMLElement>('li[data-option]')];
-    expect(chips[0]!.textContent).toMatch(/^Supabase/);
+    // 経路に載らないメールの送信は、図の一番下の段の箱から選ぶ（未選択の印も）
+    const band = current().querySelector<HTMLElement>('[data-diagram-band]')!;
+    const email = band.querySelector<HTMLElement>('[data-slots~="email"]')!;
+    expect(email.getAttribute('data-unselected')).toBe('true');
+    // 「! 未選択」は名前と同じ文の流れ（狭い幅で名前が折り返しても、印が別の列に立たない）
+    const mark = email.querySelector('[data-unselected-mark]')!;
+    expect(mark.parentElement!.classList).toContain('text-left');
+    expect(mark.parentElement!.textContent).toMatch(/.+! 未選択$/);
+    // 1 択のファイルの置き場は押せない箱
+    const files = band.querySelector<HTMLElement>('[data-loose-slot="files"]')!;
+    expect(files.textContent).toContain('（1 択）');
+    expect(files.querySelector('button')).toBeNull();
+    // DB の箱を押すと選択肢の吹き出しが出て、focus が移る（キーボードで続けて選べる）。同じ事業者の部品が先、他の事業者はロゴ付き
+    fireEvent.click(dbBox()!);
+    let popover = screen.getByRole('dialog', { name: /を替える$/ });
+    expect(document.activeElement).toBe(popover);
+    let swap = within(popover).getByRole('group', { name: 'DBを替える' });
+    const options = within(swap).getAllByRole('button');
+    expect(options[0]!.textContent).toMatch(/^Supabase/);
     expect(
-      chips
-        .find((c) => /AWS: DynamoDB/.test(c.textContent ?? ''))!
+      options
+        .find((b) => /AWS: DynamoDB/.test(b.textContent ?? ''))!
         .querySelector('[data-brand="aws"]'),
     ).not.toBeNull();
-    // チップを押すと、その部品に替わり、カードの題（実際の組）と図が替わる
-    pickPart('AWS: DynamoDB（オンデマンド）', db());
-    expect(db().getAttribute('aria-label')).toBe('DB');
-    // 選ぶと図の箱の「未選択」の印も消える
+    fireEvent.click(
+      within(swap).getByRole('button', { name: /^AWS: DynamoDB/ }),
+    );
+    // 選ぶと吹き出しは閉じ、カードの題（実際の組）と図が替わる。未選択の印も消える
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(dbBox()).toBeNull();
     expect(current().getAttribute('aria-label')).toBe(
       'Vercel Pro + AWS DynamoDB の構成',
@@ -1155,23 +1168,23 @@ describe('ゲームモードの画面', () => {
     expect(
       within(current()).getByRole('list', { name: '構成図の部品' }).textContent,
     ).toContain('DynamoDB');
-    // 図の箱から差し替える: DB の箱（⇄）を押すと選択肢の吹き出しが出て、focus が移る（キーボードで続けて選べる）
+    // 元の箱は差し替えで消えるので、focus は DB の今の箱（DynamoDB）へ移る（OCL-131BD89D）
     const box = within(current()).getByRole('button', {
       name: /DynamoDB.*を替える$/,
     });
+    expect(document.activeElement).toBe(box);
     expect(box.closest('[data-swappable="true"]')).not.toBeNull();
     expect(box.querySelector('[data-swap-mark]')).not.toBeNull();
-    // 箱の吹き出しには、その箱の役割のスロットだけ（DB の箱に画像・API の置き場は出さない）
     // Esc で閉じると箱に focus が戻る
     fireEvent.click(box);
     expect(screen.getByRole('dialog')).toBeDefined();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(box);
+    // 箱の吹き出しには、その箱の役割のスロットだけ（DB の箱に画像・API の置き場は出さない）
     fireEvent.click(box);
-    const popover = screen.getByRole('dialog', { name: /DynamoDB.*を替える$/ });
-    expect(document.activeElement).toBe(popover);
-    const swap = within(popover).getByRole('group', { name: 'DBを替える' });
+    popover = screen.getByRole('dialog', { name: /DynamoDB.*を替える$/ });
+    swap = within(popover).getByRole('group', { name: 'DBを替える' });
     expect(
       within(popover)
         .getAllByRole('group')
@@ -1183,19 +1196,37 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(
       within(swap).getByRole('button', { name: /^Supabase/, pressed: false }),
     );
-    // 選ぶと吹き出しは閉じ、チップ・題も同じ値になる
-    expect(screen.queryByRole('dialog')).toBeNull();
     expect(current().getAttribute('aria-label')).toBe(
       'Vercel Pro + Supabase Pro の構成',
     );
-    // 元の箱は差し替えで消えるので、focus は DB の畳んだ行のボタンへ移る（OCL-131BD89D・D-116 の補足）
+    // focus は DB のスロットの今の箱（Supabase）へ
+    expect(
+      document
+        .activeElement!.closest('[data-slots]')!
+        .getAttribute('data-slots'),
+    ).toMatch(/\bdb\b/);
+    expect(document.activeElement!.getAttribute('aria-label')).toMatch(
+      /Supabase.*を替える$/,
+    );
+
+    // 「機能から選ぶ」にすると、構成図は出さずにチップの一覧だけ（縦の量を減らす）
+    fireEvent.click(within(tabs).getByRole('button', { name: '機能から選ぶ' }));
+    expect(current().querySelector('[data-diagram="system"]')).toBeNull();
+    const parts = current().querySelector('section[data-parts]')!;
+    expect(parts).not.toBeNull();
+    expect(document.querySelectorAll('section[data-parts]').length).toBe(1);
+    // 図で選んだ DB は畳んだ行（「DB: 選んだ部品」）。まだ選んでいないメール送信の行は警告の枠で開いたまま
+    const db = () => slotGroup('DB');
+    expect(db().getAttribute('aria-label')).toBe('DB');
+    expect(db().getAttribute('data-collapsed')).toBe('true');
+    expect(slotGroup('メール送信').getAttribute('aria-label')).toBe(
+      'メール送信（未選択）',
+    );
     const toggle = () =>
       within(db()).getByRole('button', {
         name: /^DB: Supabase.*（押すと選択肢が開く）$/,
         expanded: false,
       });
-    expect(db().getAttribute('data-collapsed')).toBe('true');
-    expect(document.activeElement).toBe(toggle());
     // 選び済みの行は畳んで「DB: 選んだ部品」のチップだけ。押すとその行だけ開き、見出しを押すとまた畳む
     expect(db().querySelector('li[data-option]')).toBeNull();
     // 名前は切り詰めず折り返し、ⓘ は名前の最後の語と離さない（狭い幅で ⓘ が文字に重ならない）
@@ -1207,25 +1238,149 @@ describe('ゲームモードの画面', () => {
     ).toMatch(/^（Postgres）▾/);
     fireEvent.click(toggle());
     expect(db().hasAttribute('data-collapsed')).toBe(false);
-    expect(db().querySelectorAll('li[data-option]').length).toBeGreaterThan(1);
+    const chips = [...db().querySelectorAll<HTMLElement>('li[data-option]')];
+    expect(chips[0]!.textContent).toMatch(/^Supabase/);
+    expect(
+      chips
+        .find((c) => /AWS: DynamoDB/.test(c.textContent ?? ''))!
+        .querySelector('[data-brand="aws"]'),
+    ).not.toBeNull();
     fireEvent.click(within(db()).getByRole('button', { expanded: true }));
     expect(db().getAttribute('data-collapsed')).toBe('true');
-    // 開いた行でチップを選ぶと畳まれ、focus は畳んだボタンへ
-    fireEvent.click(toggle());
-    fireEvent.click(
-      within(db()).getByRole('button', {
-        name: /^AWS: DynamoDB/,
-        pressed: false,
-      }),
-    );
-    expect(db().getAttribute('data-collapsed')).toBe('true');
+    // 開いた行でチップを選ぶと畳まれ、focus は畳んだボタンへ。カードの題も替わる
+    pickPart('AWS: DynamoDB（オンデマンド）', db());
     expect(document.activeElement).toBe(
       within(db()).getByRole('button', {
         name: /^DB: AWS: DynamoDB.*（押すと選択肢が開く）$/,
       }),
     );
+    expect(current().getAttribute('aria-label')).toBe(
+      'Vercel Pro + AWS DynamoDB の構成',
+    );
     // 畳んだ並びの上に、押すと開く旨の説明
     expect(parts.textContent).toContain('押すと選択肢が開く');
+
+    // 選んだ表示は覚える（開き直しても、見積モードでも「機能から選ぶ」のまま）
+    cleanup();
+    await renderApp();
+    pick(/^受託先の業務アプリの運用/);
+    expect(
+      within(current())
+        .getByRole('button', { name: '機能から選ぶ' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(current().querySelector('[data-diagram="system"]')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    await waitLoaded();
+    expect(current().querySelector('section[data-parts]')).not.toBeNull();
+    // 構成図に戻すと、チップの一覧は消える
+    fireEvent.click(
+      within(current()).getByRole('button', { name: '構成図から選ぶ' }),
+    );
+    expect(current().querySelector('section[data-parts]')).toBeNull();
+    expect(current().querySelector('[data-diagram="system"]')).not.toBeNull();
+  });
+
+  it('W-48 始める画面: どちらの表示でも全部のスロットに届く（構成図は経路の箱か一番下の段の箱、一覧はチップの行。選んだ後の組でも。D-116 の補足）', async () => {
+    await renderApp();
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    let band = 0;
+    /** 一覧の行のスロットが、構成図の箱か段の箱にもれなくあることを確かめ、スロットの一覧を返す。 */
+    const check = (tag: string): string[] => {
+      showPartsView('list');
+      const rows = [
+        ...current().querySelectorAll<HTMLElement>(
+          'section[data-parts] [data-slot]',
+        ),
+      ].map((r) => ({
+        slot: r.getAttribute('data-slot')!,
+        // 1 択の行は押せるボタンを持たない
+        pressable:
+          r.querySelector('button[aria-pressed], [data-collapsed-toggle]') !==
+          null,
+      }));
+      expect(rows.length, tag).toBeGreaterThan(0);
+      showPartsView('diagram');
+      const diagram = current().querySelector<HTMLElement>(
+        '[data-diagram="system"]',
+      )!;
+      for (const { slot, pressable } of rows) {
+        const places = [
+          ...diagram.querySelectorAll<HTMLElement>(`[data-slots~="${slot}"]`),
+        ];
+        expect(places.length, `${tag} ${slot}`).toBeGreaterThan(0);
+        // 選べるスロットは押せる箱（吹き出しで選ぶ）、1 択は押せない段の箱
+        expect(
+          places.some((p) => p.querySelector('button') !== null),
+          `${tag} ${slot}`,
+        ).toBe(pressable);
+        if (places.some((p) => p.closest('[data-diagram-band]'))) band++;
+      }
+      return rows.map((r) => r.slot);
+    };
+    // API の置き場を替えると DB のスロットが出入りする組がある（選んだ後の組でも、もれなく届く）
+    let dbMoved = false;
+    for (const scenario of [ARTICLE, CONTRACT]) {
+      pickRadio(scenario);
+      const stacks = [
+        ...document.querySelectorAll<HTMLInputElement>(
+          'input[type="radio"][name="stack"]',
+        ),
+      ].map((r) => r.value);
+      expect(stacks.length).toBeGreaterThan(4);
+      for (const id of stacks) {
+        fireEvent.click(
+          document.querySelector(
+            `input[type="radio"][name="stack"][value="${id}"]`,
+          )!,
+        );
+        const base = check(`${scenario} ${id}`);
+        if (!base.includes('api')) continue;
+        showPartsView('list');
+        const options = [
+          ...openSlot(slotGroup('api', 'slot')).querySelectorAll<HTMLElement>(
+            'li[data-option]',
+          ),
+        ].map((li) => li.getAttribute('data-option')!);
+        for (const o of options) {
+          showPartsView('list');
+          const b = openSlot(
+            slotGroup('api', 'slot'),
+          ).querySelector<HTMLButtonElement>(
+            `li[data-option="${o}"] button[aria-pressed="false"]`,
+          );
+          if (!b || b.disabled) continue;
+          fireEvent.click(b);
+          const after = check(`${scenario} ${id} api=${o}`);
+          if (after.includes('db') !== base.includes('db')) dbMoved = true;
+        }
+      }
+    }
+    expect(dbMoved).toBe(true);
+    // 経路に載らないメールの送信・1 択のファイルの置き場などは段に出る
+    expect(band).toBeGreaterThan(0);
+  });
+
+  it('W-50 始める画面: localStorage が使えない環境でも、既定の構成図で始まり、表示を切り替えられる（D-116 の補足）', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('使えない');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('使えない');
+    });
+    await renderApp();
+    pickRadio(ARTICLE);
+    const group = screen.getByRole('group', { name: '部品の選び方' });
+    expect(
+      within(group)
+        .getByRole('button', { name: '構成図から選ぶ' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    showPartsView('list');
+    showPartsView('diagram');
   });
 
   it('W-40 始める画面: 部品どうしの依存で選べない部品のチップは灰色で、理由をツールチップと ⓘ に出す（D-116）', async () => {

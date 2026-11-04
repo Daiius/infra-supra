@@ -5,8 +5,11 @@
 // 入れ物が狭い（sm 未満で、横の図が縮めずには収まらない）ときは縦の図にする: 段を上→下・事業者の枠を左→右に並べ、
 // 箱は短い名前だけにし、箱を押す（キーボードは Enter・Space）と詳しい説明（事業者・種類・名前・通る流れ）を出す（D-105 の補足）。
 // 部品を差し替えられる箱（parts。始める画面・見積の選んでいる構成のカード）は、横の図でも押せて、そのスロットの選択肢を出す（D-116）。
+// 図の一番下の段には、経路に載らない部品（メールの送信・バックアップなど）と、図に箱を持たないスロット（1 択など）を並べ、
+// 部品を選べる図ではそこからも選べる（どのスロットも図の中で選べる。D-116 の補足・2 つの表示）。
 import type { ArchitectureInput } from 'estimator';
 import {
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -24,6 +27,8 @@ import {
   isNarrow,
   labelOf,
   lanesThrough,
+  looseSlots,
+  nodeSlots,
   ARROW,
   LAYOUT,
   VIEWER,
@@ -62,12 +67,13 @@ const LANE_DASH: Partial<Record<LaneId, string>> = {
 };
 
 /**
- * 箱から部品を差し替える（D-116）。slotsOf は箱に当たるスロット（無ければ空）、render はスロットの選択肢（選ぶと close を呼ぶ）、
- * unselected はスロットがまだ選ばれていないか（部品のチップの「未選択」と同じ判定。D-45）。
+ * 箱から部品を差し替える（D-116）。slotsOf は箱に当たるスロット（無ければ空）、render はスロットの選択肢（選ぶと close を呼ぶ。
+ * box は押した箱の id（BoxFocus。選んだ後に focus を戻す先））、unselected はスロットがまだ選ばれていないか
+ * （部品のチップの「未選択」と同じ判定。D-45）。
  */
 export type DiagramParts = {
   slotsOf: (nodeId: string) => readonly string[];
-  render: (slot: string, close: () => void) => ReactNode;
+  render: (slot: string, close: () => void, box: string) => ReactNode;
   unselected?: ((slot: string) => boolean) | undefined;
 };
 
@@ -143,16 +149,36 @@ function GhostDetail({ n }: { n: DiagramNode }) {
   );
 }
 
+/** 箱の吹き出しで選んだ後に focus を移す先（スロットと、押した箱の id。data-box）。 */
+export type BoxFocus = { slot: string; box: string };
+
+/** 図の一番下の段の、スロットの箱の id（data-box）。 */
+const looseBox = (slot: string) => `loose:${slot}`;
+
 const groupTitle = (account: string, brand?: BrandId) =>
   brand ? BRANDS[brand].title : account;
+
+/**
+ * 図の一番下の段に出すスロット（部品を選べる図だけ。D-116 の補足）。picked は選んでいる部品の名前（未選択は undefined）、
+ * pressable は選び直せるか（1 択・ファイルの置き場は押せない箱）。経路の箱・経路に載らない部品に当たらないものだけを段に出す（looseSlots）。
+ */
+export type BandSlot = {
+  slot: string;
+  label: string;
+  picked: string | undefined;
+  fixed: boolean;
+  pressable: boolean;
+};
 
 export function SystemDiagram({
   architecture,
   pages,
   caption,
   parts,
-  below,
   ghosts,
+  bandSlots,
+  focusTarget,
+  onFocused,
 }: {
   architecture: ArchitectureInput;
   /** ページの見取り図（流れの凡例にページの名前を添える。省略可）。 */
@@ -161,10 +187,16 @@ export function SystemDiagram({
   caption?: string;
   /** 箱から部品を差し替える（選んでいる構成のカードだけ。D-116）。 */
   parts?: DiagramParts | undefined;
-  /** 図のすぐ下（凡例・経路に載らない部品より上）に置く中身（部品のチップ。D-116）。 */
-  below?: ReactNode;
   /** 今の選択が箱を持たないスロットの幽霊の箱（slotBoxes。D-116 の補足）。 */
   ghosts?: readonly GhostSlot[] | undefined;
+  /** 部品のスロットの一覧（部品を選べる図だけ）。図に箱を持たないものを一番下の段に出す。 */
+  bandSlots?: readonly BandSlot[] | undefined;
+  /**
+   * 描いた後に focus を移す先（箱の吹き出しで選んだ直後。押した箱が残っていればそこへ、差し替えで消えたらそのスロットの最初の箱へ、
+   * それも無ければ図の頭。OCL-131BD89D）。移したら onFocused を呼ぶ。
+   */
+  focusTarget?: BoxFocus | null | undefined;
+  onFocused?: (() => void) | undefined;
 }) {
   // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。カルーセルのカード・畳んだ欄の中でも同じ判定）
   const wrap = useRef<HTMLDivElement>(null);
@@ -191,11 +223,44 @@ export function SystemDiagram({
     unselected: parts.unselected,
     slotsOf: (id) => {
       const n = model.nodes.find((x) => x.id === id);
-      return n?.ghost ? [n.ghost.slot] : parts.slotsOf(id);
+      return n ? nodeSlots(n, parts.slotsOf) : parts.slotsOf(id);
     },
   };
+  // 一番下の段: 経路に載らない部品（幽霊の箱も）と、図に箱を持たないスロット。経路に載らない部品の箱には、経路の箱で選べない
+  // スロットだけを出す（バックアップの箱に DB・API の置き場を重ねて出さない）
+  const routed = new Set(
+    model.nodes.flatMap((n) => (nodeParts ? nodeParts.slotsOf(n.id) : [])),
+  );
+  const sideSlots = (n: DiagramNode) =>
+    nodeParts
+      ? nodeSlots(n, nodeParts.slotsOf).filter((x) => !routed.has(x))
+      : [];
+  const loose = nodeParts
+    ? looseSlots(model, nodeParts.slotsOf, bandSlots ?? []).map((slot) =>
+        bandSlots!.find((x) => x.slot === slot)!,
+      )
+    : [];
+  // 箱の吹き出しで選んだ後、押した箱（無ければそのスロットの最初の箱、それも無ければ図の頭）へ focus を移す
+  useEffect(() => {
+    if (!focusTarget) return;
+    const el = wrap.current;
+    const { slot, box } = focusTarget;
+    (
+      el?.querySelector<HTMLElement>(
+        `[data-box="${box}"][data-slots~="${slot}"] button`,
+      ) ??
+      el?.querySelector<HTMLElement>(`[data-slots~="${slot}"] button`) ??
+      el
+    )?.focus();
+    onFocused?.();
+  }, [focusTarget, onFocused]);
   // 未選択の箱があるときだけ、説明文に印の意味を足す
-  const unselectedAny = model.nodes.some((n) => hasUnselected(nodeParts, n.id));
+  // （どのスロットも図の箱か段の箱に当たるので、選べるスロットのどれかが未選択なら ! の箱がある）
+  const unselectedAny =
+    model.nodes.some((n) => hasUnselected(nodeParts, n.id)) ||
+    (bandSlots ?? []).some(
+      (x) => x.pressable && nodeParts?.unselected?.(x.slot) === true,
+    );
   const [chosen, setActive] = useState<LaneId | null>(null);
   // 構成・部品を替えて選んでいた流れが図から消えたら、強調をやめる（凡例に無い流れで全部の線が薄くならないように）
   const active = activeLane(chosen, model);
@@ -206,129 +271,163 @@ export function SystemDiagram({
     // figure にしない（daisyUI は .card の中の figure を横並びの flex にし、図が細く潰れる）
     <div
       ref={wrap}
-      className="w-full min-w-0 space-y-2"
+      tabIndex={-1}
+      className="w-full min-w-0 space-y-2 focus:outline-none"
       data-diagram="system"
       data-orientation={model.orientation}
     >
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200/40">
-        <svg
-          // 縦の図は箱が押せるボタンなので img にしない（img の中のボタンは読み上げに出ない）
-          // 差し替えられる箱（ボタン）があるときも同じ
-          role={tall || parts ? 'group' : 'img'}
-          aria-label={diagramSummary(model, title)}
-          // 中身の大きさの viewBox で、カードの幅に合わせて縮める（横の図は広げない。狭い画面では最小の幅を保ち、枠の中で横にスクロールする）。
-          // 縦の図は最小の幅を持たず（横にスクロールしない）、字が読めるよう 1.5 倍まで広げて真ん中に置く
-          width="100%"
-          viewBox={`0 0 ${model.width} ${model.height}`}
-          className={tall ? 'mx-auto block h-auto' : 'block h-auto'}
-          style={
-            tall
-              ? { maxWidth: model.width * 1.5 }
-              : {
-                  maxWidth: model.width,
-                  minWidth: Math.min(model.width, MIN_WIDTH),
-                }
-          }
-        >
-          <defs>
-            {/* 矢印の先端は線の終わりの向き（orient="auto"）。線の終わりは矢印より長いまっすぐな線にしてある（edgeGeometry）。
+      <div className="rounded-box border border-base-300 bg-base-200/40">
+        <div className="overflow-x-auto">
+          <svg
+            // 縦の図は箱が押せるボタンなので img にしない（img の中のボタンは読み上げに出ない）
+            // 差し替えられる箱（ボタン）があるときも同じ
+            role={tall || parts ? 'group' : 'img'}
+            aria-label={diagramSummary(model, title)}
+            // 中身の大きさの viewBox で、カードの幅に合わせて縮める（横の図は広げない。狭い画面では最小の幅を保ち、枠の中で横にスクロールする）。
+            // 縦の図は最小の幅を持たず（横にスクロールしない）、字が読めるよう 1.5 倍まで広げて真ん中に置く
+            width="100%"
+            viewBox={`0 0 ${model.width} ${model.height}`}
+            className={tall ? 'mx-auto block h-auto' : 'block h-auto'}
+            style={
+              tall
+                ? { maxWidth: model.width * 1.5 }
+                : {
+                    maxWidth: model.width,
+                    minWidth: Math.min(model.width, MIN_WIDTH),
+                  }
+            }
+          >
+            <defs>
+              {/* 矢印の先端は線の終わりの向き（orient="auto"）。線の終わりは矢印より長いまっすぐな線にしてある（edgeGeometry）。
                 大きさは線の太さに依らず図の座標で決める（強調した線でも先端がまっすぐな部分からはみ出さない） */}
-            {/* Chromium は context-stroke に対応していないので、流れごとに先端の色を持つ marker を作る */}
-            {(Object.keys(LANE_COLOR) as LaneId[]).map((l) => (
-              <marker
-                key={l}
-                id={`${markerId}-${l}`}
-                viewBox="0 0 6 6"
-                refX="5"
-                refY="3"
-                markerUnits="userSpaceOnUse"
-                markerWidth={ARROW}
-                markerHeight={ARROW}
-                orient="auto"
-              >
-                <path d="M0,0 L6,3 L0,6 z" fill={LANE_COLOR[l]} />
-              </marker>
-            ))}
-          </defs>
-          {model.groups.map((g) =>
-            g.box ? (
-              <GroupBox
-                key={g.account}
-                g={g}
-                title={title(g.account)}
-                compact={tall !== null}
-              />
-            ) : null,
-          )}
-          <Edges model={model} active={active} markerId={markerId} />
-          <Viewer model={model} />
-          {model.nodes.map((n) =>
-            tall ? (
-              <CompactNode
-                key={n.id}
-                n={n}
-                model={model}
-                title={title(n.group)}
-                brand={model.groups.find((g) => g.account === n.group)?.brand}
-                parts={nodeParts}
-              />
-            ) : nodeParts && nodeParts.slotsOf(n.id).length > 0 ? (
-              <SwappableNode
-                key={n.id}
-                n={n}
-                model={model}
-                title={title(n.group)}
-                parts={nodeParts}
-              />
-            ) : (
-              <g
-                key={n.id}
-                data-node={n.id}
-                data-ghost={n.ghost ? 'true' : undefined}
-              >
-                <rect
-                  x={n.x}
-                  y={n.y}
-                  width={model.node.w}
-                  height={model.node.h}
-                  rx={6}
-                  strokeDasharray={n.ghost ? GHOST_DASH : undefined}
-                  style={{
-                    fill: 'var(--color-base-100)',
-                    stroke: n.compute
-                      ? 'var(--color-base-content)'
-                      : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)',
-                    strokeWidth: n.compute ? 1.75 : 1,
-                    ...(n.ghost ? { opacity: GHOST_OPACITY } : {}),
-                  }}
-                />
-                <foreignObject
-                  x={n.x + 4}
-                  y={n.y + 2}
-                  width={model.node.w - 8}
-                  height={model.node.h - 4}
+              {/* Chromium は context-stroke に対応していないので、流れごとに先端の色を持つ marker を作る */}
+              {(Object.keys(LANE_COLOR) as LaneId[]).map((l) => (
+                <marker
+                  key={l}
+                  id={`${markerId}-${l}`}
+                  viewBox="0 0 6 6"
+                  refX="5"
+                  refY="3"
+                  markerUnits="userSpaceOnUse"
+                  markerWidth={ARROW}
+                  markerHeight={ARROW}
+                  orient="auto"
                 >
-                  <div
-                    title={
-                      n.ghost
-                        ? `${n.caption}: ${n.label}（${GHOST_NOTE}）`
-                        : n.label
-                    }
-                    className="flex h-full flex-col justify-center leading-tight"
-                    style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
+                  <path d="M0,0 L6,3 L0,6 z" fill={LANE_COLOR[l]} />
+                </marker>
+              ))}
+            </defs>
+            {model.groups.map((g) =>
+              g.box ? (
+                <GroupBox
+                  key={g.account}
+                  g={g}
+                  title={title(g.account)}
+                  compact={tall !== null}
+                />
+              ) : null,
+            )}
+            <Edges model={model} active={active} markerId={markerId} />
+            <Viewer model={model} />
+            {model.nodes.map((n) =>
+              tall ? (
+                <CompactNode
+                  key={n.id}
+                  n={n}
+                  model={model}
+                  title={title(n.group)}
+                  brand={model.groups.find((g) => g.account === n.group)?.brand}
+                  parts={nodeParts}
+                />
+              ) : nodeParts && nodeParts.slotsOf(n.id).length > 0 ? (
+                <SwappableNode
+                  key={n.id}
+                  n={n}
+                  model={model}
+                  title={title(n.group)}
+                  parts={nodeParts}
+                />
+              ) : (
+                <g
+                  key={n.id}
+                  data-node={n.id}
+                  data-ghost={n.ghost ? 'true' : undefined}
+                >
+                  <rect
+                    x={n.x}
+                    y={n.y}
+                    width={model.node.w}
+                    height={model.node.h}
+                    rx={6}
+                    strokeDasharray={n.ghost ? GHOST_DASH : undefined}
+                    style={{
+                      fill: 'var(--color-base-100)',
+                      stroke: n.compute
+                        ? 'var(--color-base-content)'
+                        : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)',
+                      strokeWidth: n.compute ? 1.75 : 1,
+                      ...(n.ghost ? { opacity: GHOST_OPACITY } : {}),
+                    }}
+                  />
+                  <foreignObject
+                    x={n.x + 4}
+                    y={n.y + 2}
+                    width={model.node.w - 8}
+                    height={model.node.h - 4}
                   >
-                    <span className="text-[10px] opacity-60">{n.caption}</span>
-                    <span
-                      className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
+                    <div
+                      title={
+                        n.ghost
+                          ? `${n.caption}: ${n.label}（${GHOST_NOTE}）`
+                          : n.label
+                      }
+                      className="flex h-full flex-col justify-center leading-tight"
+                      style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
                     >
-                      {n.label}
-                    </span>
-                  </div>
-                </foreignObject>
-              </g>
-            ),
-          )}
-        </svg>
+                      <span className="text-[10px] opacity-60">
+                        {n.caption}
+                      </span>
+                      <span
+                        className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
+                      >
+                        {n.label}
+                      </span>
+                    </div>
+                  </foreignObject>
+                </g>
+              ),
+            )}
+          </svg>
+        </div>
+        {(model.side.length > 0 || loose.length > 0) && (
+          // 図の一番下の段（経路に載らない部品と、図に箱を持たないスロット。D-116 の補足）
+          <div
+            data-diagram-band
+            className="border-t border-dashed border-base-300 px-2 py-1.5 text-xs"
+          >
+            <div className="font-semibold opacity-80">
+              経路に載らない部品（毎月かかる・裏で動く）
+              {loose.length > 0 && '・図に箱の無い部品'}
+            </div>
+            <ul className="mt-1 flex flex-wrap gap-1.5">
+              {model.side.flatMap((s) =>
+                s.nodes.map((n) => (
+                  <BandNode
+                    key={n.id}
+                    n={n}
+                    brand={s.brand}
+                    title={title(s.group)}
+                    slots={sideSlots(n)}
+                    parts={nodeParts}
+                  />
+                )),
+              )}
+              {loose.map((x) => (
+                <LooseSlot key={x.slot} x={x} parts={nodeParts} />
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
       {tall && (
         <p className="text-xs opacity-60">
@@ -344,98 +443,119 @@ export function SystemDiagram({
             '! の付いた箱はまだ選んでいない（既定の部品の名前で描いている）。'}
         </p>
       )}
-      {/* 部品のチップは図のすぐ下（凡例・経路に載らない部品より上。D-116） */}
-      {below}
       {caption && <p className="text-xs opacity-60">{caption}</p>}
       <Legend model={model} active={active} onToggle={setActive} />
-      {model.side.length > 0 && (
-        <div className="text-xs">
-          <div className="font-semibold">
-            経路に載らない部品（毎月かかる・裏で動く）
-          </div>
-          <ul className="mt-1 flex flex-wrap gap-1.5">
-            {model.side.flatMap((s) =>
-              s.nodes.map((n) =>
-                n.ghost ? (
-                  <SideGhost
-                    key={n.id}
-                    n={n}
-                    brand={s.brand}
-                    title={title(s.group)}
-                    parts={parts}
-                  />
-                ) : (
-                  <li
-                    key={n.id}
-                    data-side-node={n.id}
-                    className="badge h-auto max-w-full gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal"
-                  >
-                    {s.brand && <BrandMark brand={s.brand} size={12} />}
-                    <span className="sr-only">{title(s.group)}: </span>
-                    {n.label}
-                  </li>
-                ),
-              ),
-            )}
-          </ul>
-        </div>
-      )}
       <ConnectionList model={model} title={title} />
     </div>
   );
 }
 
+const BADGE =
+  'badge h-auto max-w-full gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal';
+/** 段の押せる箱の枠（差し替えられる箱と同じ primary の枠。未選択は警告色の太い枠）。 */
+const pressableBadge = (warn: boolean) =>
+  `${BADGE} cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
+    warn
+      ? 'justify-start border-2 border-warning hover:bg-warning/10'
+      : 'border-primary/70 hover:bg-primary/10'
+  }`;
+
+/** 段の押せる箱の印（⇄ か「! 未選択」。色だけに頼らない）。 */
+function BandMark({ warn }: { warn: boolean }) {
+  return warn ? (
+    <span
+      aria-hidden
+      data-unselected-mark
+      className="font-bold whitespace-nowrap"
+    >
+      ! 未選択
+    </span>
+  ) : (
+    <span aria-hidden data-swap-mark>
+      ⇄
+    </span>
+  );
+}
+
 /**
- * 経路に載らない部品の幽霊の箱（バックアップを既定のままにしたときなど。D-116 の補足）: 点線・半透明のバッジ。
- * 部品を選べる図（parts）では押すとそのスロットの差し替えを出す。
+ * 未選択の段の箱の中身: 名前と「! 未選択」を 1 つの文の流れにして左に寄せる（狭い幅で名前が折り返しても、印は名前の後ろに続く。
+ * 横並びの flex のままだと、名前が中央に寄り、印が右の別の列に立つ）。
  */
-function SideGhost({
+function WarnTrigger({ children }: { children: ReactNode }) {
+  return (
+    <span className="min-w-0 text-left">
+      {children} <BandMark warn />
+    </span>
+  );
+}
+
+/**
+ * 一番下の段の、経路に載らない部品の箱（メールの送信・ドメインの登録・バックアップなど。幽霊の箱は点線・半透明。D-116 の補足）。
+ * 部品を選べる図で、経路の箱で選べないスロットに当たる箱（slots）は、押すとそのスロットの差し替えを出す。
+ */
+function BandNode({
   n,
   brand,
   title,
+  slots,
   parts,
 }: {
   n: DiagramNode;
   brand: BrandId | undefined;
   title: string;
+  slots: readonly string[];
   parts: DiagramParts | undefined;
 }) {
-  const slot = n.ghost!.slot;
-  const warn = parts?.unselected?.(slot) === true;
-  const body = (
+  const warn =
+    parts?.unselected !== undefined && slots.some((x) => parts.unselected!(x));
+  const text = (
     <>
-      <span
-        className="inline-flex items-center gap-1"
-        style={{ opacity: GHOST_OPACITY }}
-      >
-        {brand && <BrandMark brand={brand} size={12} />}
-        <span className="sr-only">{title}: </span>
-        {n.caption}: {n.label}
-      </span>
-      {parts &&
-        (warn ? (
-          <span aria-hidden data-unselected-mark className="font-bold">
-            ! 未選択
-          </span>
-        ) : (
-          <span aria-hidden>⇄</span>
-        ))}
+      <span className="sr-only">{title}: </span>
+      {n.ghost ? `${n.caption}: ${n.label}` : n.label}
     </>
   );
-  const cls =
-    'badge h-auto max-w-full gap-1 badge-sm border-dashed badge-outline py-0.5 whitespace-normal';
+  const name = (
+    <span
+      className="inline-flex items-center gap-1"
+      style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
+    >
+      {brand && <BrandMark brand={brand} size={12} />}
+      {text}
+    </span>
+  );
   return (
-    <li data-side-node={n.id} data-ghost="true">
-      {parts ? (
+    <li
+      data-side-node={n.id}
+      data-box={n.id}
+      data-ghost={n.ghost ? 'true' : undefined}
+      data-slots={slots.length > 0 ? slots.join(' ') : undefined}
+      data-unselected={warn ? 'true' : undefined}
+    >
+      {parts && slots.length > 0 ? (
         <Info
-          label={`${title}: ${n.caption}（${n.label}${warn ? '、未選択' : ''}）を替える`}
+          label={`${title}: ${n.ghost ? `${n.caption}（${n.label}` : `${n.label}（${n.caption}`}${warn ? '、未選択' : ''}）を替える`}
           interactive
-          className={`${cls} cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
-            warn
-              ? 'border-2 border-warning hover:bg-warning/10'
-              : 'border-primary/70 hover:bg-primary/10'
-          }`}
-          trigger={body}
+          className={pressableBadge(warn)}
+          trigger={
+            warn ? (
+              <WarnTrigger>
+                {/* 文の流れに置く（ロゴは行の高さに揃え、名前と一緒に折り返す） */}
+                <span style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}>
+                  {brand && (
+                    <span className="mr-1 inline-block align-middle leading-none">
+                      <BrandMark brand={brand} size={12} />
+                    </span>
+                  )}
+                  {text}
+                </span>
+              </WarnTrigger>
+            ) : (
+              <>
+                {name}
+                <BandMark warn={false} />
+              </>
+            )
+          }
         >
           {(close) => (
             <div className="space-y-1.5" data-node-detail={n.id}>
@@ -443,17 +563,73 @@ function SideGhost({
                 {title}・{n.caption}
               </div>
               <div className="font-semibold">{n.label}</div>
-              <GhostDetail n={n} />
-              <div className="border-t border-base-300 pt-1.5">
-                {parts.render(slot, close)}
-              </div>
+              {n.ghost && <GhostDetail n={n} />}
+              {slots.map((slot) => (
+                <div key={slot} className="border-t border-base-300 pt-1.5">
+                  {parts.render(slot, close, n.id)}
+                </div>
+              ))}
             </div>
           )}
         </Info>
       ) : (
-        <span className={cls} title={GHOST_NOTE}>
-          {body}
+        <span className={BADGE} title={n.ghost ? GHOST_NOTE : undefined}>
+          {name}
         </span>
+      )}
+    </li>
+  );
+}
+
+/**
+ * 一番下の段の、図に箱を持たないスロットの箱（「スロット名: 選んだ部品」。D-116 の補足）。1 択（ファイルの置き場など）は押せない箱、
+ * 選び直せるものは押すとそのスロットの差し替えを出す。
+ */
+function LooseSlot({
+  x,
+  parts,
+}: {
+  x: BandSlot;
+  parts: DiagramParts | undefined;
+}) {
+  const warn = x.pressable && parts?.unselected?.(x.slot) === true;
+  const name = (
+    <span>
+      <span className="font-semibold">{x.label}:</span> {x.picked ?? '未選択'}
+      {x.fixed && <span className="opacity-70">（1 択）</span>}
+    </span>
+  );
+  return (
+    <li
+      data-loose-slot={x.slot}
+      data-box={looseBox(x.slot)}
+      data-slots={x.slot}
+      data-unselected={warn ? 'true' : undefined}
+    >
+      {parts && x.pressable ? (
+        <Info
+          label={`${x.label}（${x.picked ?? '未選択'}）を替える`}
+          interactive
+          className={pressableBadge(warn)}
+          trigger={
+            warn ? (
+              <WarnTrigger>{name}</WarnTrigger>
+            ) : (
+              <>
+                {name}
+                <BandMark warn={false} />
+              </>
+            )
+          }
+        >
+          {(close) => (
+            <div className="space-y-1.5" data-node-detail={x.slot}>
+              {parts.render(x.slot, close, looseBox(x.slot))}
+            </div>
+          )}
+        </Info>
+      ) : (
+        <span className={BADGE}>{name}</span>
       )}
     </li>
   );
@@ -759,6 +935,8 @@ function CompactNode({
   return (
     <g
       data-node={n.id}
+      data-box={n.id}
+      data-slots={slots.length > 0 ? slots.join(' ') : undefined}
       data-unselected={warn ? 'true' : undefined}
       data-ghost={n.ghost ? 'true' : undefined}
     >
@@ -836,7 +1014,7 @@ function CompactNode({
               )}
               {slots.map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
-                  {parts!.render(slot, close)}
+                  {parts!.render(slot, close, n.id)}
                 </div>
               ))}
             </div>
@@ -863,6 +1041,8 @@ function SwappableNode({
   return (
     <g
       data-node={n.id}
+      data-box={n.id}
+      data-slots={parts.slotsOf(n.id).join(' ')}
       data-swappable="true"
       data-unselected={warn ? 'true' : undefined}
       data-ghost={n.ghost ? 'true' : undefined}
@@ -938,7 +1118,7 @@ function SwappableNode({
               {n.ghost && <GhostDetail n={n} />}
               {parts.slotsOf(n.id).map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
-                  {parts.render(slot, close)}
+                  {parts.render(slot, close, n.id)}
                 </div>
               ))}
             </div>
