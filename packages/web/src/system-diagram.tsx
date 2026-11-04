@@ -67,12 +67,13 @@ const LANE_DASH: Partial<Record<LaneId, string>> = {
 };
 
 /**
- * 箱から部品を差し替える（D-116）。slotsOf は箱に当たるスロット（無ければ空）、render はスロットの選択肢（選ぶと close を呼ぶ）、
- * unselected はスロットがまだ選ばれていないか（部品のチップの「未選択」と同じ判定。D-45）。
+ * 箱から部品を差し替える（D-116）。slotsOf は箱に当たるスロット（無ければ空）、render はスロットの選択肢（選ぶと close を呼ぶ。
+ * box は押した箱の id（BoxFocus。選んだ後に focus を戻す先））、unselected はスロットがまだ選ばれていないか
+ * （部品のチップの「未選択」と同じ判定。D-45）。
  */
 export type DiagramParts = {
   slotsOf: (nodeId: string) => readonly string[];
-  render: (slot: string, close: () => void) => ReactNode;
+  render: (slot: string, close: () => void, box: string) => ReactNode;
   unselected?: ((slot: string) => boolean) | undefined;
 };
 
@@ -148,6 +149,12 @@ function GhostDetail({ n }: { n: DiagramNode }) {
   );
 }
 
+/** 箱の吹き出しで選んだ後に focus を移す先（スロットと、押した箱の id。data-box）。 */
+export type BoxFocus = { slot: string; box: string };
+
+/** 図の一番下の段の、スロットの箱の id（data-box）。 */
+const looseBox = (slot: string) => `loose:${slot}`;
+
 const groupTitle = (account: string, brand?: BrandId) =>
   brand ? BRANDS[brand].title : account;
 
@@ -170,7 +177,7 @@ export function SystemDiagram({
   parts,
   ghosts,
   bandSlots,
-  focusSlot,
+  focusTarget,
   onFocused,
 }: {
   architecture: ArchitectureInput;
@@ -185,10 +192,10 @@ export function SystemDiagram({
   /** 部品のスロットの一覧（部品を選べる図だけ）。図に箱を持たないものを一番下の段に出す。 */
   bandSlots?: readonly BandSlot[] | undefined;
   /**
-   * 描いた後に focus を移すスロット（箱の吹き出しで選んだ直後。元の箱は差し替えで消えうるので、そのスロットの今の箱へ移す。
-   * 箱が無ければ図の頭。OCL-131BD89D）。移したら onFocused を呼ぶ。
+   * 描いた後に focus を移す先（箱の吹き出しで選んだ直後。押した箱が残っていればそこへ、差し替えで消えたらそのスロットの最初の箱へ、
+   * それも無ければ図の頭。OCL-131BD89D）。移したら onFocused を呼ぶ。
    */
-  focusSlot?: string | null | undefined;
+  focusTarget?: BoxFocus | null | undefined;
   onFocused?: (() => void) | undefined;
 }) {
   // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。カルーセルのカード・畳んだ欄の中でも同じ判定）
@@ -233,16 +240,20 @@ export function SystemDiagram({
         bandSlots!.find((x) => x.slot === slot)!,
       )
     : [];
-  // 箱の吹き出しで選んだ後、そのスロットの箱（差し替えで描き直したもの）へ focus を移す
+  // 箱の吹き出しで選んだ後、押した箱（無ければそのスロットの最初の箱、それも無ければ図の頭）へ focus を移す
   useEffect(() => {
-    if (!focusSlot) return;
+    if (!focusTarget) return;
     const el = wrap.current;
+    const { slot, box } = focusTarget;
     (
-      el?.querySelector<HTMLElement>(`[data-slots~="${focusSlot}"] button`) ??
+      el?.querySelector<HTMLElement>(
+        `[data-box="${box}"][data-slots~="${slot}"] button`,
+      ) ??
+      el?.querySelector<HTMLElement>(`[data-slots~="${slot}"] button`) ??
       el
     )?.focus();
     onFocused?.();
-  }, [focusSlot, onFocused]);
+  }, [focusTarget, onFocused]);
   // 未選択の箱があるときだけ、説明文に印の意味を足す
   // （どのスロットも図の箱か段の箱に当たるので、選べるスロットのどれかが未選択なら ! の箱がある）
   const unselectedAny =
@@ -515,6 +526,7 @@ function BandNode({
   return (
     <li
       data-side-node={n.id}
+      data-box={n.id}
       data-ghost={n.ghost ? 'true' : undefined}
       data-slots={slots.length > 0 ? slots.join(' ') : undefined}
       data-unselected={warn ? 'true' : undefined}
@@ -554,7 +566,7 @@ function BandNode({
               {n.ghost && <GhostDetail n={n} />}
               {slots.map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
-                  {parts.render(slot, close)}
+                  {parts.render(slot, close, n.id)}
                 </div>
               ))}
             </div>
@@ -590,6 +602,7 @@ function LooseSlot({
   return (
     <li
       data-loose-slot={x.slot}
+      data-box={looseBox(x.slot)}
       data-slots={x.slot}
       data-unselected={warn ? 'true' : undefined}
     >
@@ -611,7 +624,7 @@ function LooseSlot({
         >
           {(close) => (
             <div className="space-y-1.5" data-node-detail={x.slot}>
-              {parts.render(x.slot, close)}
+              {parts.render(x.slot, close, looseBox(x.slot))}
             </div>
           )}
         </Info>
@@ -922,6 +935,7 @@ function CompactNode({
   return (
     <g
       data-node={n.id}
+      data-box={n.id}
       data-slots={slots.length > 0 ? slots.join(' ') : undefined}
       data-unselected={warn ? 'true' : undefined}
       data-ghost={n.ghost ? 'true' : undefined}
@@ -1000,7 +1014,7 @@ function CompactNode({
               )}
               {slots.map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
-                  {parts!.render(slot, close)}
+                  {parts!.render(slot, close, n.id)}
                 </div>
               ))}
             </div>
@@ -1027,6 +1041,7 @@ function SwappableNode({
   return (
     <g
       data-node={n.id}
+      data-box={n.id}
       data-slots={parts.slotsOf(n.id).join(' ')}
       data-swappable="true"
       data-unselected={warn ? 'true' : undefined}
@@ -1103,7 +1118,7 @@ function SwappableNode({
               {n.ghost && <GhostDetail n={n} />}
               {parts.slotsOf(n.id).map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
-                  {parts.render(slot, close)}
+                  {parts.render(slot, close, n.id)}
                 </div>
               ))}
             </div>

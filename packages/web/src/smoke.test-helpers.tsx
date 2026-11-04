@@ -159,7 +159,7 @@ export const showPartsView = (view: 'diagram' | 'list') => {
     `[data-parts-view-tab="${view}"]`,
   );
   expect(tab, `部品の表示のタブ ${view}`).not.toBeNull();
-  if (tab!.getAttribute('aria-selected') !== 'true') fireEvent.click(tab!);
+  if (tab!.getAttribute('aria-pressed') !== 'true') fireEvent.click(tab!);
   expect(
     document.querySelector(`[data-parts-view="${view}"]`),
     `部品の表示 ${view}`,
