@@ -1008,14 +1008,42 @@ describe('ゲームモードの画面', () => {
       name: '記事のページ（シナリオ）',
     });
     expect(scenarioPage.textContent).not.toMatch(/ISR|SSR|ビルドで静的/);
-    // ページの性質（RS-17）と凡例
+    // ページ名の横には見る人の札だけを出す。性質（RS-17）・札の凡例・注記は見出しの横の ⓘ に畳む（D-113 の補足）
+    expect(scenarioPage.querySelector('[data-audience]')?.textContent).toBe(
+      '全員に同じ中身',
+    );
     expect(
-      within(scenarioPage).getByRole('list', { name: '記事のページの性質' })
+      screen
+        .getByRole('region', { name: '個人向けのページ（シナリオ）' })
+        .querySelector('[data-audience]')?.textContent,
+    ).toBe('人ごとに違う中身');
+    expect(
+      screen.queryByRole('list', { name: '記事のページの性質' }),
+    ).toBeNull();
+    expect(screen.queryByRole('list', { name: '要件の札の凡例' })).toBeNull();
+    expect(screen.queryByText(/見取り図はゲーム上の仮定。作り方/)).toBeNull();
+    // 札の意味は凡例を開かなくても、札の読み上げ（sr-only）と title で分かる
+    const bodyTag = within(
+      screen.getByRole('list', { name: '記事のページの見取り図（要件）' }),
+    )
+      .getByText('本文')
+      .closest('li')!
+      .querySelector('[title="誰が見ても同じ中身"]');
+    expect(bodyTag?.textContent).toContain('（誰が見ても同じ中身）');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'ページの見取り図の説明' }),
+    );
+    const info = screen.getByRole('tooltip');
+    expect(
+      within(info).getByRole('list', { name: '記事のページの性質' })
         .textContent,
     ).toContain('SNS のカードが要る');
     expect(
-      screen.getByRole('list', { name: '要件の札の凡例' }).textContent,
+      within(info).getByRole('list', { name: '要件の札の凡例' }).textContent,
     ).toContain('誰が見ても同じ中身');
+    expect(info.textContent).toContain('見取り図はゲーム上の仮定');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
     // 区画は種類ごとのスケルトンで描く（飾りなので aria-hidden。D-113 の追記）
     /** 見取り図の区画の id → スケルトンの種類。 */
     const kinds = (page: string) =>
@@ -1045,12 +1073,18 @@ describe('ゲームモードの画面', () => {
       profile: 'profile',
       notifications: 'notifications',
     });
-    // メールはページの外の要素として、見取り図の脇に封筒のカードで出す（区画・要件の札・作られ方の色ではない。D-117）
+    // メールはページの外の要素として、見取り図の脇に封筒の 1 行で出す（区画・要件の札・作られ方の色ではない。D-117）。
+    // 何が効くか（note）は ⓘ に畳む（D-117 の補足）
     const mail = screen.getByRole('region', { name: 'メール（ページの外）' });
     expect(mail.getAttribute('data-offscreen')).toBe('email');
     expect(mail.textContent).toContain('登録の確認');
-    expect(mail.textContent).toContain('メール送信');
+    expect(mail.textContent).not.toContain('メール送信');
     expect(mail.closest('li[data-region]')).toBeNull();
+    fireEvent.click(
+      within(mail).getByRole('button', { name: 'メール（ページの外）の説明' }),
+    );
+    expect(screen.getByRole('tooltip').textContent).toContain('メール送信');
+    fireEvent.keyDown(document, { key: 'Escape' });
     // 受託のシナリオも同じ形で出る
     fireEvent.click(getRadio({ name: /^受託先の業務アプリの運用/ }));
     expect(needs('業務の画面', '一覧の表（申請・記録）')).toContain(
@@ -1083,9 +1117,26 @@ describe('ゲームモードの画面', () => {
     expect(document.activeElement).toBe(open);
     // 開発の手間の内訳
     fireEvent.click(screen.getByRole('button', { name: '開発の手間の内訳' }));
+    const effort = screen.getByRole('dialog', { name: '開発の手間の内訳' });
+    expect(effort.textContent).toContain('自前運用の維持');
+    fireEvent.click(within(effort).getByRole('button', { name: '閉じる' }));
+    // 満足度は先頭の文だけを本文に出し、残りはダイアログ（2026-11-05）
     expect(
-      screen.getByRole('dialog', { name: '開発の手間の内訳' }).textContent,
-    ).toContain('自前運用の維持');
+      screen.getByText(/満足度は可用性・速さ・機能・鮮度・画質/),
+    ).toBeDefined();
+    expect(screen.queryByText(/離脱や検索からの流入/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '満足度の詳しい説明' }));
+    const sat = screen.getByRole('dialog', { name: '満足度' });
+    expect(sat.textContent).toContain('離脱や検索からの流入');
+    fireEvent.click(within(sat).getByRole('button', { name: '閉じる' }));
+    // アプリの形は見出しの 1 行だけ。箇条書きはダイアログ（2026-11-05）
+    expect(screen.queryByText(/本文の画像 5 枚/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '3 項目を見る' }));
+    const app = screen.getByRole('dialog', {
+      name: 'アプリの形（コストに効く判断ポイント）',
+    });
+    expect(app.textContent).toContain('本文の画像 5 枚');
+    expect(app.textContent).toContain('フレームワークで変わる点');
   });
 
   it('W-31 始める画面: インフラの構成を先に選び、載せられないフレームワークは選べない。選んでいたら載せられるものに戻して知らせる（D-113）', async () => {

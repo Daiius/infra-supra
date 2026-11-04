@@ -12,6 +12,7 @@ import {
   type scenarioWireframes,
 } from 'game';
 import type { CSSProperties } from 'react';
+import { Info } from './info.tsx';
 import { KIND_TONE, RegionSkeleton } from './region-skeleton.tsx';
 
 export type ResolvedPage = ReturnType<typeof pageWireframes>[number];
@@ -130,14 +131,31 @@ const NEED_ORDER = Object.keys(REGION_NEEDS) as RegionNeed[];
 /**
  * 区画の要件の札（白っぽい地・細い枠・灰色の字。D-113）。作られ方・描き方の色（success・info・warning・secondary・accent の枠と淡い塗り、
  * 選んだものの primary）と見分けられるよう、有彩色を使わず base 系の色だけで描く。
+ * 凡例は ⓘ に畳んだので、札そのものに長い説明を持たせる（hover の title と、読み上げ用の sr-only。凡例の中では重ねない）。
  */
-function NeedTag({ need }: { need: RegionNeed }) {
+function NeedTag({
+  need,
+  describe = true,
+}: {
+  need: RegionNeed;
+  describe?: boolean;
+}) {
   return (
-    <span className="inline-block rounded-full border border-base-content/25 bg-base-100/90 px-1 text-[10px] leading-tight whitespace-nowrap text-base-content/75">
+    <span
+      title={describe ? REGION_NEEDS[need].long : undefined}
+      className="inline-block rounded-full border border-base-content/25 bg-base-100/90 px-1 text-[10px] leading-tight whitespace-nowrap text-base-content/75"
+    >
       {REGION_NEEDS[need].short}
+      {describe && (
+        <span className="sr-only">（{REGION_NEEDS[need].long}）</span>
+      )}
     </span>
   );
 }
+
+/** ページの見る人の短い札（全員に同じ中身 / 人ごとに違う中身）。ページ名の横に出す。 */
+const audienceText = (p: ScenarioPage) =>
+  p.audience === 'public' ? '全員に同じ中身' : '人ごとに違う中身';
 
 /**
  * シナリオの説明のページの見取り図（D-113）。フレームワークに依らず、区画が何で、何が要るかを札で出す（作られ方は出さない）。
@@ -145,6 +163,8 @@ function NeedTag({ need }: { need: RegionNeed }) {
  * より淡い地（KIND_TONE。テーマの色でない Tailwind の色）で描く。中は種類ごとのスケルトン（本物のページに近い見た目。飾りなので aria-hidden）（D-113 の追記）。
  * 区画の名前と要件の札は区画の上の行に並べる（札が中身に重ならないように）。
  * ページはブラウザの窓の形の小さい図（広い画面で 320px 幅）で、広い画面では横に並べる。呼ぶ側で灰色の帯に載せ、窓を白く浮かせる。
+ * 札の凡例・ページの性質・注記は、縦の量を減らすため見出しの横の ⓘ（ScenarioWireframesInfo）に畳む。
+ * ページ名の横には見る人の札だけを残す（D-113 の補足・2026-11-05）。
  */
 export function ScenarioWireframes({
   pages,
@@ -154,20 +174,15 @@ export function ScenarioWireframes({
   pages: ScenarioPage[];
   /** ページの説明の行（シナリオのページの一覧の文。D-101）。 */
   captionOf?: (p: ScenarioPage) => string | undefined;
-  /** ページの外の要素（メールなど。見取り図の下に小さなカードで出す。D-117）。 */
+  /** ページの外の要素（メールなど。見取り図の下に 1 行で出す。D-117）。 */
   offscreen?: OffscreenElement[];
 }) {
   if (pages.length === 0) return null;
-  const used = new Set(pages.flatMap((p) => p.regions.flatMap((r) => r.needs)));
   return (
     <div className="space-y-2">
       <div className={`grid gap-3 ${pages.length > 1 ? 'md:grid-cols-2' : ''}`}>
         {pages.map((p) => {
           const caption = captionOf?.(p);
-          const traits = [
-            p.audience === 'public' ? '全員に同じ中身' : '人ごとに違う中身',
-            p.needsOgp ? 'SNS のカードが要る' : 'SNS のカードは要らない',
-          ];
           return (
             <section
               key={p.route}
@@ -175,7 +190,15 @@ export function ScenarioWireframes({
               data-scenario-page={p.route}
               className="min-w-0 space-y-1.5"
             >
-              <h4 className="text-base font-bold">{p.label}</h4>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <h4 className="text-base font-bold">{p.label}</h4>
+                <span
+                  data-audience={p.audience}
+                  className="badge badge-ghost badge-sm"
+                >
+                  {audienceText(p)}
+                </span>
+              </div>
               {caption && <p className="text-xs opacity-80">{caption}</p>}
               <div className="w-full overflow-hidden rounded-lg border border-base-content/30 bg-base-100 shadow-md sm:w-80">
                 {/* ブラウザの窓の上の帯（飾り） */}
@@ -222,39 +245,59 @@ export function ScenarioWireframes({
                   ))}
                 </ul>
               </div>
-              <ul
-                aria-label={`${p.label}の性質`}
-                className="space-y-0.5 text-xs opacity-80"
-              >
-                <li>{traits.join('・')}</li>
-                {p.freshness && <li>鮮度: {p.freshness}</li>}
-                {p.parts.length > 0 && (
-                  <li>動きのある部品: {p.parts.join('・')}</li>
-                )}
-              </ul>
             </section>
           );
         })}
       </div>
       {offscreen.map((e) => (
-        <OffscreenCard key={e.label} element={e} />
+        <OffscreenLine key={e.label} element={e} />
       ))}
-      <ul
-        aria-label="要件の札の凡例"
-        className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs"
-      >
-        {NEED_ORDER.filter((n) => used.has(n)).map((n) => (
-          <li key={n} className="flex items-center gap-1">
-            <NeedTag need={n} />
-            <span className="opacity-70">{REGION_NEEDS[n].long}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs opacity-60">
-        見取り図はゲーム上の仮定。作り方（ビルド・キャッシュ・閲覧ごとに描く・ブラウザが取る）は、下の
-        ② でフレームワークと描き方を選ぶと出る。
-      </p>
     </div>
+  );
+}
+
+/**
+ * 見取り図の見出しの横の ⓘ（D-113 の補足・2026-11-05）。要件の札の凡例・ページごとの性質（RS-17）・注記を畳む。
+ * 呼ぶ側が見出しの横に置く（見出しは呼ぶ側の帯が持つ）。
+ */
+export function ScenarioWireframesInfo({ pages }: { pages: ScenarioPage[] }) {
+  if (pages.length === 0) return null;
+  const used = new Set(pages.flatMap((p) => p.regions.flatMap((r) => r.needs)));
+  return (
+    <Info label="ページの見取り図の説明">
+      <div className="space-y-2 text-xs">
+        <p className="font-semibold">区画の札</p>
+        <ul aria-label="要件の札の凡例" className="space-y-1">
+          {NEED_ORDER.filter((n) => used.has(n)).map((n) => (
+            <li key={n} className="flex items-start gap-1.5">
+              <span className="shrink-0">
+                <NeedTag need={n} describe={false} />
+              </span>
+              <span className="opacity-80">{REGION_NEEDS[n].long}</span>
+            </li>
+          ))}
+        </ul>
+        {pages.map((p) => (
+          <div key={p.route}>
+            <p className="font-semibold">{p.label}</p>
+            <ul aria-label={`${p.label}の性質`} className="opacity-80">
+              <li>
+                {audienceText(p)}・
+                {p.needsOgp ? 'SNS のカードが要る' : 'SNS のカードは要らない'}
+              </li>
+              {p.freshness && <li>鮮度: {p.freshness}</li>}
+              {p.parts.length > 0 && (
+                <li>動きのある部品: {p.parts.join('・')}</li>
+              )}
+            </ul>
+          </div>
+        ))}
+        <p className="opacity-70">
+          見取り図はゲーム上の仮定。作り方（ビルド・キャッシュ・閲覧ごとに描く・ブラウザが取る）は、②
+          でフレームワークと描き方を選ぶと出る。
+        </p>
+      </div>
+    </Info>
   );
 }
 
@@ -264,7 +307,7 @@ function EnvelopeIcon() {
     <svg
       aria-hidden
       viewBox="0 0 24 24"
-      className="h-5 w-5 shrink-0 text-base-content/60"
+      className="h-4 w-4 shrink-0 text-base-content/60"
       fill="none"
       stroke="currentColor"
       strokeWidth={1.6}
@@ -277,26 +320,33 @@ function EnvelopeIcon() {
 }
 
 /**
- * ページの外の要素のカード（D-117。今はメールだけ）。ページの区画ではないので、ブラウザの窓の外に置き、要件の札・作られ方の色・
+ * ページの外の要素の 1 行（D-117。今はメールだけ）。ページの区画ではないので、ブラウザの窓の外に置き、要件の札・作られ方の色・
  * 区画の淡い地は使わない（base 系の色と破線の枠だけ）。描き方の選択（②）とは関係しない。
+ * 縦の量を減らすため、題と送るものを 1 行に詰め（狭い画面では省略し title に全文）、何が効くか（note）は ⓘ に畳む（D-117 の補足・2026-11-05）。
  */
-function OffscreenCard({ element: e }: { element: OffscreenElement }) {
+function OffscreenLine({ element: e }: { element: OffscreenElement }) {
+  const summary = e.items.join('・');
   return (
     <section
       aria-label={e.label}
       data-offscreen={e.kind}
-      className="flex w-full max-w-xl gap-2 rounded-lg border border-dashed border-base-content/30 bg-base-100 px-2.5 py-2 text-xs"
+      className="flex w-full max-w-xl items-center gap-1.5 rounded-lg border border-dashed border-base-content/30 bg-base-100 px-2 py-0.5 text-xs"
     >
       {e.kind === 'email' && <EnvelopeIcon />}
-      <div className="min-w-0 space-y-0.5">
-        <h4 className="text-sm font-bold">{e.label}</h4>
-        <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
-          {e.items.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-        {e.note && <p className="opacity-70">{e.note}</p>}
-      </div>
+      <p className="min-w-0 flex-1 truncate" title={`${e.label}: ${summary}`}>
+        <span className="font-bold">{e.label}</span>: {summary}
+      </p>
+      <Info label={`${e.label}の説明`}>
+        <div className="space-y-1 text-xs">
+          <p className="font-semibold">{e.label}</p>
+          <ul className="list-disc pl-4">
+            {e.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          {e.note && <p className="opacity-80">{e.note}</p>}
+        </div>
+      </Info>
     </section>
   );
 }
