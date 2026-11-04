@@ -631,7 +631,7 @@ function storeSetupTab(key: string, v: SetupTab) {
  * 選んでもよいように）。WAI-ARIA の tabs（←/→・Home/End で移って選ぶ）。選んだタブは画面ごとに storageKey へ覚える。
  * 隠れた側も描いたまま hidden にする（carousel の組ごとに最後に選んだプランなど、欄の中の記憶も保つ）。隠れている間は幅が無いので、
  * carousel は見えたときに選んだカードへ寄せ直す（CarouselVisible）。
- * 見た目は ① の事業者の組のタブに寄せる（地の上の枠。選んでいるタブは primary の枠と塗り）。部品の選び方の「構成図から /
+ * 見た目は ① の事業者の組のタブに寄せる（地の上の枠。選んでいるタブは 2px の primary の枠・淡い地・太字）。部品の選び方の「構成図から /
  * 機能から」（daisyUI の tabs-box）とは区別する。欄の中の見出しはタブと重なるので画面からは隠す（CarouselHeadingHidden。読み上げには残す）。
  */
 export function SetupTabs({
@@ -694,15 +694,18 @@ export function SetupTabs({
               tabIndex={selected ? 0 : -1}
               title={`${x.label}: ${x.summary}${x.warn ? `（${x.warn}）` : ''}`}
               data-setup-tab-button={t}
-              className={`flex min-w-0 flex-1 cursor-pointer flex-col items-start rounded-field border px-2 py-1 text-left motion-safe:transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+              className={`flex min-w-0 flex-1 cursor-pointer flex-col items-start rounded-field text-left motion-safe:transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                // 選んでいるタブは 2px の primary の枠・淡い地・太字、選んでいないタブは 1px の灰色の枠（線の差は余白で埋めて高さを揃える）
                 selected
-                  ? 'border-primary bg-primary font-bold text-primary-content'
-                  : 'border-base-300 bg-base-100 hover:border-primary/60'
+                  ? 'border-2 border-primary bg-primary/10 px-2 py-1 font-bold'
+                  : 'border border-base-300 bg-base-100 px-[calc(0.5rem+1px)] py-[calc(0.25rem+1px)] font-normal hover:border-primary/60'
               }`}
               onClick={() => setTab(t)}
             >
               <span className="flex max-w-full items-center gap-1 text-sm">
-                <span className="truncate">{x.label}</span>
+                <span className={`truncate ${selected ? 'text-primary' : ''}`}>
+                  {x.label}
+                </span>
                 {x.warn && (
                   <span
                     aria-hidden
