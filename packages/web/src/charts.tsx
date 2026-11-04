@@ -114,7 +114,7 @@ function PingRings({
   );
 }
 
-function useWidth<T extends HTMLElement>() {
+export function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
@@ -129,7 +129,7 @@ function useWidth<T extends HTMLElement>() {
 }
 
 /** 目盛りをきりのよい値にする（0 から上限まで 3〜5 本）。 */
-function niceTicks(max: number): number[] {
+export function niceTicks(max: number): number[] {
   if (!(max > 0)) return [0, 1];
   const raw = max / 4;
   const pow = 10 ** Math.floor(Math.log10(raw));

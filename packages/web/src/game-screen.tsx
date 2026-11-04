@@ -76,6 +76,12 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
+import {
+  FeatureVizOutlook,
+  FeatureVizProposal,
+  FeatureVizReport,
+  FeatureVizSwitch,
+} from './feature-viz.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
@@ -207,6 +213,8 @@ export function Game({
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         />
       )}
+      {/* 機能開発のグラフの案の切り替え（?featureViz があるときだけ。一時的。D-122 の補足） */}
+      <FeatureVizSwitch />
       <Trends
         history={state.history}
         scenario={scenarioOf(state)}
@@ -214,6 +222,7 @@ export function Game({
       />
       <MonthCard
         report={report}
+        history={state.history}
         scenario={scenarioOf(state)}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
       />
@@ -423,10 +432,12 @@ const STAGE_CLS: Record<Stage, string> = {
 
 function MonthCard({
   report: r,
+  history,
   scenario: sc,
   onShowEvents,
 }: {
   report: MonthReport;
+  history: readonly MonthReport[];
   scenario: Scenario;
   /** 遊んでいる間だけ渡す。出来事は見出しの一覧に詰め、ダイアログで再表示する（D-23）。 */
   onShowEvents?: (() => void) | undefined;
@@ -524,7 +535,7 @@ function MonthCard({
                 : `口コミ ${pct(s.acquisition)}・解約 ${pct(-s.churn)} → 来月の伸び ${pct(s.growth)}`}
             </div>
           </div>
-          <EffortBreakdownView report={r} scenario={sc} />
+          <EffortBreakdownView report={r} history={history} scenario={sc} />
         </div>
         {r.premises.length > 0 && (
           <div>
@@ -600,9 +611,11 @@ function FeatureProgressLine({
 
 function EffortBreakdownView({
   report: r,
+  history,
   scenario: sc,
 }: {
   report: MonthReport;
+  history: readonly MonthReport[];
   scenario: Scenario;
 }) {
   const e = r.effort;
@@ -703,6 +716,7 @@ function EffortBreakdownView({
           month={r.month}
         />
       </div>
+      <FeatureVizReport scenario={sc} history={history} />
       <div className="mt-1 text-xs opacity-60">
         SSR の CPU {r.ssrCpuMs} ms（機能開発で重くなる）
       </div>
@@ -1270,6 +1284,7 @@ function Actions({
               : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届かない`}
             （来月に新しく起きる出来事の対応の手間は含めない）
           </div>
+          <FeatureVizOutlook state={state} outlook={outlook} />
         </div>
         {state.pendingProposals.length > 0 && (
           <div className="space-y-2">
@@ -1327,6 +1342,15 @@ function Actions({
                       伴うこと: {summary.costs.join('・')}
                     </div>
                   )}
+                  <FeatureVizProposal
+                    state={state}
+                    accept={
+                      acceptOk
+                        ? build({ answers: { ...answers, [id]: true } })
+                        : null
+                    }
+                    decline={build({ answers: { ...answers, [id]: false } })}
+                  />
                 </div>
               );
             })}

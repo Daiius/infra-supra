@@ -178,6 +178,7 @@ export {
   type FeatureProgress,
   featureOutlook,
   featureProgressOf,
+  featureProjection,
   featureRuleText,
 } from './feature-outlook.ts';
 export {
