@@ -31,6 +31,12 @@ export type ChoiceGroup<T extends string> = {
  */
 export const CarouselVisible = createContext(true);
 
+/**
+ * 見出しを画面から隠すか（① ② のタブの中。タブの見出しと重なるので。D-116 の補足）。隠しても sr-only で残し、
+ * radiogroup の名前（aria-labelledby）と見出しの読み上げは変えない。
+ */
+export const CarouselHeadingHidden = createContext(false);
+
 const ARROW: Readonly<Partial<Record<string, number>>> = {
   ArrowRight: 1,
   ArrowDown: 1,
@@ -116,11 +122,14 @@ export function ChoiceCarousel<T extends string>({
     t.scrollLeft = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
   }, [currentKey, cardKeys, visible]);
   const headingId = useId();
+  const headingClass = useContext(CarouselHeadingHidden)
+    ? 'sr-only'
+    : 'font-bold';
   if (items.length < 2) {
     const id = items[0] ?? value;
     return (
       <div className="space-y-2">
-        <h3 className="font-bold">{heading}</h3>
+        <h3 className={headingClass}>{heading}</h3>
         {renderCard(id, { selected: true, idPrefix: headingId })}
       </div>
     );
@@ -212,7 +221,7 @@ export function ChoiceCarousel<T extends string>({
     }`;
   return (
     <div className="space-y-2">
-      <h3 id={headingId} className="font-bold">
+      <h3 id={headingId} className={headingClass}>
         {heading}
       </h3>
       <div className="flex items-center gap-1">

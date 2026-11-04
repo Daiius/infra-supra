@@ -27,7 +27,7 @@ import {
   type ReactNode,
 } from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
-import { CarouselVisible } from './choice-carousel.tsx';
+import { CarouselHeadingHidden, CarouselVisible } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
 
@@ -631,7 +631,8 @@ function storeSetupTab(key: string, v: SetupTab) {
  * 選んでもよいように）。WAI-ARIA の tabs（←/→・Home/End で移って選ぶ）。選んだタブは画面ごとに storageKey へ覚える。
  * 隠れた側も描いたまま hidden にする（carousel の組ごとに最後に選んだプランなど、欄の中の記憶も保つ）。隠れている間は幅が無いので、
  * carousel は見えたときに選んだカードへ寄せ直す（CarouselVisible）。
- * 見た目は下線のタブ（部品の選び方の「構成図から / 機能から」の箱のタブと区別する）。
+ * 見た目は ① の事業者の組のタブに寄せる（地の上の枠。選んでいるタブは primary の枠と塗り）。部品の選び方の「構成図から /
+ * 機能から」（daisyUI の tabs-box）とは区別する。欄の中の見出しはタブと重なるので画面からは隠す（CarouselHeadingHidden。読み上げには残す）。
  */
 export function SetupTabs({
   storageKey,
@@ -673,7 +674,7 @@ export function SetupTabs({
       <div
         role="tablist"
         aria-label="選ぶもの"
-        className="tabs tabs-border flex-nowrap"
+        className="flex min-w-0 gap-1.5 rounded-box bg-base-200 p-1.5"
         onKeyDown={onKeyDown}
       >
         {SETUP_TABS.map((t) => {
@@ -693,8 +694,10 @@ export function SetupTabs({
               tabIndex={selected ? 0 : -1}
               title={`${x.label}: ${x.summary}${x.warn ? `（${x.warn}）` : ''}`}
               data-setup-tab-button={t}
-              className={`tab h-auto min-w-0 flex-1 flex-col items-start gap-0 px-2 py-1 text-left ${
-                selected ? 'tab-active font-bold' : ''
+              className={`flex min-w-0 flex-1 cursor-pointer flex-col items-start rounded-field border px-2 py-1 text-left motion-safe:transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                selected
+                  ? 'border-primary bg-primary font-bold text-primary-content'
+                  : 'border-base-300 bg-base-100 hover:border-primary/60'
               }`}
               onClick={() => setTab(t)}
             >
@@ -710,7 +713,11 @@ export function SetupTabs({
                   </span>
                 )}
               </span>
-              <span className="block w-full truncate text-xs font-normal opacity-70">
+              <span
+                className={`block w-full truncate text-xs font-normal ${
+                  selected ? 'opacity-90' : 'opacity-70'
+                }`}
+              >
                 <span className="sr-only">：</span>
                 {x.summary}
               </span>
@@ -729,7 +736,9 @@ export function SetupTabs({
           className="min-w-0"
         >
           <CarouselVisible.Provider value={tab === t}>
-            {info[t].panel}
+            <CarouselHeadingHidden.Provider value>
+              {info[t].panel}
+            </CarouselHeadingHidden.Provider>
           </CarouselVisible.Provider>
         </div>
       ))}

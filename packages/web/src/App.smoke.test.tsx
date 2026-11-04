@@ -1492,6 +1492,11 @@ describe('ゲームモードの画面', () => {
       screen.queryByRole('radiogroup', { name: /^② アプリを何で作りましたか/ }),
     ).toBeNull();
     expect(fwTab!.textContent).toContain('Next.js（App Router）');
+    // 欄の中の見出しはタブと重なるので画面から隠す（読み上げと radiogroup の名前には残る）
+    expect(
+      screen.getByRole('heading', { name: '① インフラの構成' }).className,
+    ).toContain('sr-only');
+    screen.getByRole('radiogroup', { name: '① インフラの構成' });
     // 部品がまだ選ばれていないので、① に注意の印（文は名前と title）
     expect(stackTab!.querySelector('[data-setup-tab-warn]')).not.toBeNull();
     expect(stackTab!.getAttribute('title')).toContain('部品をまだ選んでいない');

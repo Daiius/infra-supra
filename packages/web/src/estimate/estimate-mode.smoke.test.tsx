@@ -429,6 +429,15 @@ describe('見積モードの画面', () => {
     expect(localStorage.getItem('infra-supra:setup-tab:estimate')).toBe(
       'framework',
     );
+    // 欄の中の見出しは画面から隠し、radiogroup の名前には残す
+    expect(
+      screen.getByRole('heading', {
+        name: '② アプリのフレームワークとページの描き方',
+      }).className,
+    ).toContain('sr-only');
+    screen.getByRole('radiogroup', {
+      name: '② アプリのフレームワークとページの描き方',
+    });
     // ゲームの始める画面とは別に覚える
     expect(localStorage.getItem('infra-supra:setup-tab:game')).toBeNull();
     fireEvent.keyDown(fwTab, { key: 'ArrowRight' });
