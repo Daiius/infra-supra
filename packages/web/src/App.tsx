@@ -146,7 +146,7 @@ export function App() {
           </button>
         )}
       </div>
-      <main className="mx-auto max-w-5xl space-y-4 p-4">
+      <main className="mx-auto max-w-5xl space-y-4 p-2 sm:p-4">
         <Suspense fallback={<Loading />}>
           {mode === 'estimate' ? (
             <EstimateMode />
@@ -323,7 +323,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       />
       <ScenarioDescription scenario={scenario} usdJpy={USD_JPY} />
       <div className="card bg-base-100 shadow">
-        <div className="card-body">
+        <div className="card-body px-3 sm:px-6">
           <h2 className="card-title">どの構成で始めますか？</h2>
           {/* ① インフラの構成を先に選ぶ（D-113）。カードの構成図は今のフレームワークで描く */}
           <div className="mt-2">
