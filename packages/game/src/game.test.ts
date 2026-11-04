@@ -89,6 +89,8 @@ describe('game', () => {
     // D-121（D-120 の上で取り直した）: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分け（ブラウザの再利用 0.2・0.5）、記事の閲覧を
     //        Zipf（指数 1）で偏らせた。所持金は Vercel Pro・何もしないが $36〜41・画像だけ Cloudflare が $20〜40・AWS の行が
     //        $8〜11・CF の行は $0.1〜6 増える。シード 31 の cf-paid-accept（乗り換え先の Vercel）は $38 増える。結果は変わらない
+    // D-58 の補足（2026-11-04）: Cloudflare の構成の Images（バインディング）を「WebP とみなす」のをやめ、選んだ形式（既定は JPEG）で数える。
+    //        KV を DB の代わりにする行だけが、ページが重くなり速さが「悪い」月が増えて所持金が減る（シード 42: $64・3: $56。31 と結果は変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -103,7 +105,7 @@ describe('game', () => {
       'vercel-pro': ['1299.27', 'goal', 12],
       'vercel-to-cf': ['1638.37', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
-      'cf-paid-kvdb': ['1915.65', 'won', 12],
+      'cf-paid-kvdb': ['1851.43', 'won', 12],
       'cf-paid-chat': ['2117.38', 'won', 12],
       'vps-sla': ['1711.71', 'goal', 12],
       'vps-cdn': ['1787.42', 'won', 12],
@@ -120,7 +122,7 @@ describe('game', () => {
       'vercel-pro': ['1067.88', 'goal', 12],
       'vercel-to-cf': ['1698.14', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
-      'cf-paid-kvdb': ['1936.27', 'won', 12],
+      'cf-paid-kvdb': ['1880.35', 'won', 12],
       'cf-paid-chat': ['2145.58', 'won', 12],
       'vps-sla': ['1781.64', 'won', 12],
       'vps-cdn': ['1721.45', 'goal', 12],

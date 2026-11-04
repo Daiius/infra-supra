@@ -436,6 +436,20 @@
 - 設定「画像の圧縮」を「画像の形式」に置き換えた（JPEG 150・WebP 105・AVIF 84 KB。画質は下げない。比は Google の WebP の比較と Next.js の文書・取り方は仮定）。損の側は、Vercel の AVIF は形式ごとのキャッシュで変換 2 倍・VPS の AVIF は変換の CPU 1.5 倍・投稿のときに作って置く構成は JPEG のフォールバックを保存。Cloudflare Images は形式で変換の数が増えない。Next.js の画像の部品は既定で WebP を配る。
 - 画質を落とす強い圧縮は残さない（画質を保って同じくらい小さくできるので、損だけの選択になる）。原本の保存量に圧縮の比を掛けるのもやめた。古い保存は近い大きさの形式に読み替える。
 - golden: Vercel の構成（Next.js の画像の部品が WebP を配る）の所持金が増える。CF Paid・何もしないは変わらない。prd/07 §10.4。
+- 補足（ユーザーの決定・2026-11-04）: **閲覧のときに変換して形式を自分で選ぶ部品では、「画像の形式」の欄を無効にして形式を固定する**（注記だけで JPEG・AVIF を選べたのをやめた）。
+  欄を無効にした理由の文に固定の形式を書き、状態に残った値（JPEG・AVIF）に依らず固定の形式の大きさで数える（`fixedImageFormat`・`imageFormatInactiveReason`。見積モードの画像の行も同じ）。固定の形式は部品のデータ（catalog の `servedFormat`）に持たせ、フレームワークの部品の WebP は game の判定に残した。
+  - next/image（Vercel・VPS の next start・Amplify・OpenNext・Cloud Run）: **WebP**。`images.formats` の既定は `['image/webp']` で、Accept を見て選ぶ（[Image の formats](https://nextjs.org/docs/app/api-reference/components/image)・2026-09-28 更新）。Vercel は Accept をキャッシュのキーに含む（[Image Optimization](https://vercel.com/docs/image-optimization)・2026-08-13 更新）。
+  - Astro の `<Image />`: **WebP**（「By default, the `<Image />` component will produce a `.webp` file」。[astro:assets](https://docs.astro.build/en/reference/modules/astro-assets/)・更新日の記載なし）。Cloudflare の構成（`@astrojs/cloudflare` の既定 `cloudflare-binding`）でも `<Image />` が WebP を頼むとみなす。バインディングがその指定どおりに変換するかは文書（[@astrojs/cloudflare](https://docs.astro.build/en/guides/integrations-guide/cloudflare/)）に記載が無い。
+  - Netlify Image CDN（形式を指定しないとき）: **WebP**（「1. use webp if accepted 2. otherwise, use avif if accepted 3. 原本」。[Image CDN](https://docs.netlify.com/build/image-cdn/overview/)・2026-09-25 更新）。SPA でも同じ。
+  - Bunny Optimizer: **WebP**（設定で WebP を有効にすると「Browsers supporting WebP receive WebP images」。AVIF を自動で選ぶ記載は無い。[Formats](https://bunny.net/docs/optimizer/dynamic-images/formats)・更新日の記載なし）。
+  - Cloudflare Images の URL の変換 `format=auto`（他の事業者の部品 cf-images）: **AVIF**（「Automatically serves the most efficient format that the requesting browser supports」[変換の URL](https://developers.cloudflare.com/images/transform-images/transform-via-url/)・2026-06-16 更新、「If the browser does not support AVIF, Cloudflare Images will fall back to WebP」[アップロードした画像の配信](https://developers.cloudflare.com/images/optimization/hosted-images/serve-uploaded-images/)・2026-04-21 更新）。
+    大きすぎて AVIF に速く変換できない画像は WebP か JPEG に戻るが、閾値の記載が無いので、このゲームでは当たらないとみなす。
+  - **Cloudflare の構成の Images（バインディング。vinext・SPA）は欄を有効のまま、選んだ形式で数える**（D-62 の「WebP とみなす」の読み替えをやめた）。バインディングでは「Your Worker is responsible for automatic format negotiation」（[Workers で変換](https://developers.cloudflare.com/images/transform-images/transform-via-workers/)・2026-11-02 更新）で、vinext の README にも形式の扱いの記載が無い（[vinext](https://github.com/cloudflare/vinext)）。欄の注記は「形式は Worker のコードが決める。ここで選んだ形式で配る」。
+  - 投稿のときに作る（r2-variants）・一律で縮める・原本（none）は今のまま。Vercel・VPS・Cloud Run の SPA（形式を自分で書く）も欄は有効。出典の取得日はすべて 2026-11-04。
+  - next/image の AVIF の損（Vercel の変換 2 倍・Lambda / Cloud Run の変換の時間 1.5 倍）は、AVIF を選べなくなったので当たらない（コードから外した）。
+  - 影響（シード 1〜50・2 シナリオの全部の基準プレイ × 既定・SPA・Astro）: 所持金が変わったのは KV を DB の代わりにする基準プレイ（cf-paid-kvdb）だけ（Next.js は 23 / 50 のシードで −$55〜65、SPA は 12 / 50 のシードで −$29〜52。既定の JPEG で配るのでページが重くなり、速さが「悪い」月が増える）。合否はどれも変わらない。**CF Paid・何もしない（目標の根拠）は変わらない**（R2 の転送は無料・変換の数は形式で増えない）。1 ページの通信量の表示は約 1 MB → 1.3 MB に戻る。
+    golden はシード 42: $1,915.65 → $1,851.43、シード 3: $1,936.27 → $1,880.35（cf-paid-kvdb だけ）。描き方の同等の記録（route-strategies-equivalence）は、この部品を含む組を記録し直した。
+    古い保存で、固定した部品のときに形式を替えた行動は、再生で選べない行動として飛ばす（状態は変わらず、手間も使わない）。
 
 ### D-59 欠番
 
@@ -462,6 +476,7 @@
   OpenNext（PR #26・aws-opennext）の画像は next/image の最適化（Lambda）なので、`usesNextImage` の対象に入る形で揃えれば足りる（この変更の時点では main に無い）。
 - 影響（シード 1〜50・記事コミュニティ・受託 × Next.js・SPA）: **CF Paid・既定（目標の根拠）は所持金・合否とも変わらない**（R2 の転送は無料・変換の数も変わらない。1 ページの通信量の表示だけ約 1.2 MB → 985 KB）。Vercel・AWS の画像だけ Cloudflare の表も変わらない。
   golden で変わったのは KV を DB の代わりにする基準プレイだけ（ページが軽くなり速さが「悪い」月が減る。シード 42: $1,882.01 → $1,947.35・3: $1,907.89 → $1,964.47・31 は同じ）。
+- 補足（2026-11-04）: D-58 の補足で、Cloudflare の構成の Images（バインディング）を「WebP とみなす」のをやめ、選んだ形式で数える（欄は有効）。cf-images（URL の `format=auto`）は欄を無効にして AVIF に固定した。
 - B-11: 前段の CloudFront が無い Amplify で画像を R2 に出すと CloudFront が無くなるので、「CDN の料金のプラン」の定額を選べなくして理由を出す（`componentConflict`。始める画面とゲーム中で共通）。
   定額のプランを選んでいる間は、CloudFront が無くなる選択（画像を R2 に出す）も選べない（先にプランを従量に戻す。D-37 と同じ向き）。始める画面の部品の依存の判定は、部品の事業者でなく構成の事業者で見るように直した。
 

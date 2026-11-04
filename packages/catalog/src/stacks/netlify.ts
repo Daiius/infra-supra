@@ -90,6 +90,12 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     label: 'Netlify Image CDN（閲覧のときに変換）',
     note: '閲覧のときに変換して拠点にキャッシュする。クレジットの表に変換の項目は無く、配信のリクエストと転送量（クレジット）だけを数える。原本は Netlify Blobs（料金は未公開）',
     premiseRefs: ['fact:netlify:pro:image-cdn', ...CREDIT_REFS],
+    // 形式（fm）を指定しないと Accept を見て「1. use webp if accepted 2. otherwise, use avif if accepted 3. 原本」
+    // （https://docs.netlify.com/build/image-cdn/overview/ ・2026-09-25 更新・2026-11-04 取得）
+    servedFormat: {
+      format: 'webp',
+      how: 'ブラウザに合わせて WebP で配る（形式を指定しないと、WebP を受けるブラウザには WebP。Netlify Image CDN の既定）',
+    },
   },
   {
     id: 'none',

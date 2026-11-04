@@ -29,8 +29,8 @@ import { commentsInPage, commentsOf } from '../routes/comments.ts';
 import { articleFamily, articleShellPerPage } from '../routes/strategy.ts';
 import type { Scenario } from '../scenario.ts';
 import {
-  autoImageFormat,
   deliveredImageKB,
+  fixedImageFormat,
   IMAGE_FORMAT_KB,
   isOnDemand,
   pageWeightKB,
@@ -95,7 +95,7 @@ export function judgeMonth(
       sc,
       state.settings,
       imgs,
-      autoImageFormat(platformNow, state.framework, comps.images),
+      fixedImageFormat(platformNow, state.framework, comps.images)?.format,
     ),
     // 最適化しない・一律で縮めて置くは、サイズ違いを作らず 1 種を配る（D-47）
     ...(imgs === 'resize' || imgs === 'none' ? { variants: 1 } : {}),
@@ -270,7 +270,7 @@ export function judgeMonth(
         state.settings,
         state.mods,
         imgs,
-        autoImageFormat(platformNow, state.framework, comps.images),
+        fixedImageFormat(platformNow, state.framework, comps.images)?.format,
       ),
     ),
     qualityReason: redesign,

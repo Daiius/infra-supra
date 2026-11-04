@@ -4,7 +4,7 @@ import {
   accountUpkeepOf,
   addedAccounts,
   applyAction,
-  autoImageFormat,
+  fixedImageFormat,
   checkAction,
   componentConflict,
   deliveredImageKB,
@@ -297,30 +297,41 @@ describe('差し替えで増える維持の手間の余力（OCL-73780314）', (
   });
 });
 
-describe('閲覧のときに変換するサービスの形式（D-62）', () => {
-  it('Cloudflare Images（Cloudflare の構成・cf-images）も next/image と同じくブラウザに合わせて WebP で配る', () => {
-    expect(autoImageFormat('cloudflare', 'nextjs', 'images')).toBe(true);
-    expect(autoImageFormat('cloudflare', 'vite-spa', 'images')).toBe(true);
-    expect(autoImageFormat('vercel', 'vite-spa', 'cf-images')).toBe(true);
-    expect(autoImageFormat('aws', 'nextjs', 'cf-images')).toBe(true);
-    expect(autoImageFormat('vercel', 'nextjs', 'default')).toBe(true);
+describe('閲覧のときに変換するサービスの形式（D-62・D-58 の補足）', () => {
+  it('Cloudflare の構成の Images（バインディング）は Worker のコードが選ぶので設定どおり。URL の format=auto（cf-images）は AVIF に固定', () => {
+    expect(fixedImageFormat('cloudflare', 'nextjs', 'images')).toBeUndefined();
+    expect(
+      fixedImageFormat('cloudflare', 'vite-spa', 'images'),
+    ).toBeUndefined();
+    // Astro の <Image /> は既定で WebP を頼む
+    expect(fixedImageFormat('cloudflare', 'astro', 'images')?.format).toBe(
+      'webp',
+    );
+    expect(fixedImageFormat('vercel', 'vite-spa', 'cf-images')?.format).toBe(
+      'avif',
+    );
+    expect(fixedImageFormat('aws', 'nextjs', 'cf-images')?.format).toBe('avif');
+    expect(fixedImageFormat('vercel', 'nextjs', 'default')?.format).toBe(
+      'webp',
+    );
     // 投稿のときに作る・縮める・原本は設定の形式のまま
     for (const id of ['r2-variants', 'resize', 'none'])
-      expect(autoImageFormat('cloudflare', 'nextjs', id)).toBe(false);
-    expect(autoImageFormat('vercel', 'nextjs', 'cf-resize')).toBe(false);
+      expect(fixedImageFormat('cloudflare', 'nextjs', id)).toBeUndefined();
+    expect(fixedImageFormat('vercel', 'nextjs', 'cf-resize')).toBeUndefined();
     expect(
       deliveredImageKB(
         ARTICLE_COMMUNITY,
         newGame(CF_PAID).settings,
         'images',
-        autoImageFormat('cloudflare', 'nextjs', 'images'),
+        fixedImageFormat('cloudflare', 'nextjs', 'images')?.format,
       ),
-    ).toBe(IMAGE_FORMAT_KB.webp);
+    ).toBe(IMAGE_FORMAT_KB.jpeg);
   });
 
-  it('設定の注記: Cloudflare Images は format=auto で配る', () => {
+  it('設定の注記: Cloudflare の構成の Images は Worker のコードが形式を決め、選んだ形式で配る', () => {
     const s = playMonth(newGame(CF_PAID));
-    expect(settingNote(s, 'format')).toContain('format=auto');
+    expect(settingNote(s, 'format')).toContain('Worker のコード');
+    expect(settingNote(s, 'format')).not.toContain('WebP とみなす');
   });
 });
 

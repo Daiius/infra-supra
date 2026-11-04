@@ -603,6 +603,32 @@ describe('ゲームモードの画面', () => {
     ).toBe('枠 + ブラウザが API で取る（今）');
   });
 
+  it('W-53 ゲームの途中の画像の形式: 最適化の部品（Vercel の next/image）では欄が無効で、固定の WebP を選択中として見せ、理由を出す（D-58 の補足・OCL-CAAEFA7D）', async () => {
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Vercel Pro + Supabase Pro',
+    });
+    const select = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: '画像の形式',
+    });
+    expect(select.disabled).toBe(true);
+    // 保存した設定は JPEG のままだが、数えるのも見せるのも固定の WebP
+    expect(select.value).toBe('105');
+    // 選べない理由は選択肢の後ろに付く。保存した値（JPEG）には「（今）」を付けない
+    expect(select.querySelector('option[value="105"]')!.textContent).toMatch(
+      /^WebP（固定）（/,
+    );
+    expect(select.querySelector('option[value="150"]')!.textContent).toBe(
+      'JPEG（そのまま）',
+    );
+    expect(
+      screen.getByText(/^今は効かない: 画像の部品が「画像の最適化」なので/)
+        .textContent,
+    ).toContain('WebP');
+  });
+
   it('W-25 ゲームの途中で記事のページのコメント欄を替える（記事の行の部品・手間 2・来月から。D-109）', async () => {
     await renderApp();
     await startGame({

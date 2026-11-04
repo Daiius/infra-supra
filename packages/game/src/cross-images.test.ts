@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addedAccounts,
   ARTICLE_COMMUNITY,
-  autoImageFormat,
+  fixedImageFormat,
   newGame,
   playMonth,
   SCENARIOS,
@@ -62,11 +62,13 @@ describe('振る舞い', () => {
   it('原本だけ R2 は Vercel の画像の最適化のまま: next/image・Astro の <Image /> と同じく閲覧のときに WebP で配る', () => {
     expect(usesNextImage('vercel', 'nextjs', 'cf-r2-origin')).toBe(true);
     expect(astroImage('vercel', 'astro', 'cf-r2-origin')).toBe(true);
-    expect(autoImageFormat('vercel', 'vite-spa', 'cf-r2-origin')).toBe(
-      autoImageFormat('vercel', 'vite-spa', 'default'),
+    expect(fixedImageFormat('vercel', 'vite-spa', 'cf-r2-origin')).toEqual(
+      fixedImageFormat('vercel', 'vite-spa', 'default'),
     );
     // S3 + CloudFront は投稿のときに一律で縮めるので、閲覧のときの形式の選択は無い
-    expect(autoImageFormat('vercel', 'nextjs', 'aws-s3-resize')).toBe(false);
+    expect(
+      fixedImageFormat('vercel', 'nextjs', 'aws-s3-resize'),
+    ).toBeUndefined();
   });
 
   it('アカウント: 原本だけ R2 は Cloudflare が増え、S3 + CloudFront は既定のメール（SES）の AWS と同じで増えない', () => {

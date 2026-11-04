@@ -174,6 +174,12 @@ export type ComponentOption = {
   hosts?: Platform[];
   /** 土台と別の事業者のときの接続の形（部品の役割と口。D-52・D-114）。 */
   link?: CrossLink;
+  /**
+   * 画像の部品が閲覧のときに変換し、ブラウザに合わせて自分で形式を選んで配るときの、その形式（D-58 の補足・2026-11-04）。
+   * 設定の「画像の形式」は効かず、この形式で数える。how は配り方の説明（設定の欄を無効にした理由の文に使う）。
+   * 省略は、形式を設定（アプリのコード）で選ぶ部品。フレームワークの部品（next/image・Astro の <Image />）の既定は game の側が持つ。
+   */
+  servedFormat?: { format: 'webp' | 'avif'; how: string };
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
@@ -2031,6 +2037,19 @@ export function imagesBehavior(
   id: string | undefined,
 ): string | undefined {
   return behaviorOf(COMPONENTS, platform, 'images', id);
+}
+
+/**
+ * 画像の部品が自分で選んで配る形式（ComponentOption.servedFormat。省略は設定で選ぶ）。他の事業者の部品も id で見る
+ * （Cloudflare の構成の Images と cf-images は振る舞いが同じだが、変換の仕方（バインディング / URL の format=auto）が違う）。
+ */
+export function imagesServedFormat(
+  platform: Platform,
+  id: string | undefined,
+): ComponentOption['servedFormat'] {
+  return COMPONENTS.find(
+    (x) => x.slot === 'images' && x.id === id && hostsOf(x).includes(platform),
+  )?.servedFormat;
 }
 
 /** Cloudflare Workers + D1 + R2 + KV + Images に vinext で載せる（D-08）。既定の選択。 */
