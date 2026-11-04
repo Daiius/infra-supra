@@ -504,6 +504,10 @@ describe('見積モードの画面', () => {
     const parts = stackCard().querySelector('section[data-parts]')!;
     expect(parts).not.toBeNull();
     expect(parts.querySelector('[data-unselected]')).toBeNull();
+    // 構成図の箱にも「未選択」の印は出ない（D-116 の補足）
+    const diagram = stackCard().querySelector('[data-diagram="system"]')!;
+    expect(diagram.querySelector('[data-swap-mark]')).not.toBeNull();
+    expect(diagram.querySelector('[data-unselected-mark]')).toBeNull();
     // 名前は正規表現の頭（「DB のバックアップ」の行に当てない）
     const DB = 'DB(?! のバックアップ)';
     expect(checked(DB)).toBe('supabase');

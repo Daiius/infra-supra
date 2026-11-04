@@ -61,11 +61,20 @@ const LANE_DASH: Partial<Record<LaneId, string>> = {
   holes: '2 3',
 };
 
-/** 箱から部品を差し替える（D-116）。slotsOf は箱に当たるスロット（無ければ空）、render はスロットの選択肢（選ぶと close を呼ぶ）。 */
+/**
+ * 箱から部品を差し替える（D-116）。slotsOf は箱に当たるスロット（無ければ空）、render はスロットの選択肢（選ぶと close を呼ぶ）、
+ * unselected はスロットがまだ選ばれていないか（部品のチップの「未選択」と同じ判定。D-45）。
+ */
 export type DiagramParts = {
   slotsOf: (nodeId: string) => readonly string[];
   render: (slot: string, close: () => void) => ReactNode;
+  unselected?: ((slot: string) => boolean) | undefined;
 };
+
+/** 箱に当たるスロットのどれかが未選択か（未選択の箱は警告色の枠と「!」の印で、選ぶよう促す。D-116 の補足）。 */
+const hasUnselected = (parts: DiagramParts | undefined, nodeId: string) =>
+  parts?.unselected !== undefined &&
+  parts.slotsOf(nodeId).some((slot) => parts.unselected!(slot));
 
 /**
  * 差し替えられる箱の印（角の丸いバッジに ⇄。primary の地で、押せる箱だと一目で分かるように。色だけに頼らず記号も付ける）。
@@ -83,6 +92,27 @@ function SwapMark({ compact = false }: { compact?: boolean }) {
       }`}
     >
       ⇄
+    </span>
+  );
+}
+
+/**
+ * まだ選んでいない部品の箱の印（⇄ の代わりに warning の地に「!」。D-116 の補足）。色だけに頼らず記号を付け、読み上げは箱の名前の「未選択」。
+ * 箱の名前は既定の部品なので、印が無いと選び済みに見える。
+ */
+function UnselectedMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      data-unselected-mark
+      title="未選択"
+      className={`absolute flex items-center justify-center rounded-full bg-warning leading-none font-bold text-warning-content shadow-sm ${
+        compact
+          ? 'top-0 right-0 h-3.5 w-3.5 text-[9px]'
+          : 'top-0.5 right-0.5 h-[18px] w-[18px] text-[12px]'
+      }`}
+    >
+      !
     </span>
   );
 }
@@ -158,11 +188,14 @@ export function SystemDiagram({
   // 幽霊の箱は、そのスロットの差し替えを出す（D-116 の補足）
   const nodeParts: DiagramParts | undefined = parts && {
     render: parts.render,
+    unselected: parts.unselected,
     slotsOf: (id) => {
       const n = model.nodes.find((x) => x.id === id);
       return n?.ghost ? [n.ghost.slot] : parts.slotsOf(id);
     },
   };
+  // 未選択の箱があるときだけ、説明文に印の意味を足す
+  const unselectedAny = model.nodes.some((n) => hasUnselected(nodeParts, n.id));
   const [chosen, setActive] = useState<LaneId | null>(null);
   // 構成・部品を替えて選んでいた流れが図から消えたら、強調をやめる（凡例に無い流れで全部の線が薄くならないように）
   const active = activeLane(chosen, model);
@@ -301,11 +334,14 @@ export function SystemDiagram({
         <p className="text-xs opacity-60">
           狭い幅なので縦に並べた。箱を押すと、事業者・種類・通る流れが出る。
           {parts && '⇄ の箱では部品も替えられる。'}
+          {unselectedAny && '! の箱はまだ選んでいない。'}
         </p>
       )}
       {!tall && parts && (
         <p className="text-xs opacity-60">
           ⇄ の付いた箱を押すと、その部品を替えられる。
+          {unselectedAny &&
+            '! の付いた箱はまだ選んでいない（既定の部品の名前で描いている）。'}
         </p>
       )}
       {/* 部品のチップは図のすぐ下（凡例・経路に載らない部品より上。D-116） */}
@@ -365,6 +401,7 @@ function SideGhost({
   parts: DiagramParts | undefined;
 }) {
   const slot = n.ghost!.slot;
+  const warn = parts?.unselected?.(slot) === true;
   const body = (
     <>
       <span
@@ -375,7 +412,14 @@ function SideGhost({
         <span className="sr-only">{title}: </span>
         {n.caption}: {n.label}
       </span>
-      {parts && <span aria-hidden>⇄</span>}
+      {parts &&
+        (warn ? (
+          <span aria-hidden data-unselected-mark className="font-bold">
+            ! 未選択
+          </span>
+        ) : (
+          <span aria-hidden>⇄</span>
+        ))}
     </>
   );
   const cls =
@@ -384,9 +428,13 @@ function SideGhost({
     <li data-side-node={n.id} data-ghost="true">
       {parts ? (
         <Info
-          label={`${title}: ${n.caption}（${n.label}）を替える`}
+          label={`${title}: ${n.caption}（${n.label}${warn ? '、未選択' : ''}）を替える`}
           interactive
-          className={`${cls} cursor-pointer border-primary/70 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary`}
+          className={`${cls} cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
+            warn
+              ? 'border-2 border-warning hover:bg-warning/10'
+              : 'border-primary/70 hover:bg-primary/10'
+          }`}
           trigger={body}
         >
           {(close) => (
@@ -704,27 +752,34 @@ function CompactNode({
   parts: DiagramParts | undefined;
 }) {
   const slots = parts?.slotsOf(n.id) ?? [];
+  const warn = hasUnselected(parts, n.id);
   const lanes = lanesThrough(model, n.id);
   const laneLabel = (l: LaneId) =>
     model.lanes.find((x) => x.id === l)?.label ?? l;
   return (
-    <g data-node={n.id} data-ghost={n.ghost ? 'true' : undefined}>
+    <g
+      data-node={n.id}
+      data-unselected={warn ? 'true' : undefined}
+      data-ghost={n.ghost ? 'true' : undefined}
+    >
       <foreignObject x={n.x} y={n.y} width={model.node.w} height={model.node.h}>
         <Info
-          label={`${title}: ${n.label}（${n.caption}）の${slots.length > 0 ? '説明と差し替え' : '説明'}`}
+          label={`${title}: ${n.label}（${n.caption}${warn ? '、未選択' : ''}）の${slots.length > 0 ? '説明と差し替え' : '説明'}`}
           interactive={slots.length > 0}
           className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
-            n.compute ? 'border-[1.75px] font-semibold' : 'border'
-          } ${
+            n.compute ? 'font-semibold' : ''
+          } ${warn ? 'border-2' : n.compute ? 'border-[1.75px]' : 'border'} ${
             // 幽霊の箱は点線の枠・半透明の地（D-116 の補足）
             n.ghost ? 'border-dashed bg-base-100/50' : 'bg-base-100'
           } ${
-            // 差し替えられる箱は primary の枠で、ホバーで太くする（D-116）
-            slots.length > 0
-              ? 'border-primary/70 hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset'
-              : n.compute
-                ? 'border-base-content'
-                : 'border-base-content/35'
+            // 差し替えられる箱は primary の枠で、ホバーで太くする（D-116）。未選択の箱は警告色の太い枠（D-116 の補足）
+            warn
+              ? 'border-warning hover:bg-warning/10 hover:ring-2 hover:ring-warning hover:ring-inset'
+              : slots.length > 0
+                ? 'border-primary/70 hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset'
+                : n.compute
+                  ? 'border-base-content'
+                  : 'border-base-content/35'
           }`}
           trigger={
             <>
@@ -734,7 +789,11 @@ function CompactNode({
               >
                 {n.short}
               </span>
-              {slots.length > 0 && <SwapMark compact />}
+              {warn ? (
+                <UnselectedMark compact />
+              ) : (
+                slots.length > 0 && <SwapMark compact />
+              )}
             </>
           }
         >
@@ -800,10 +859,12 @@ function SwappableNode({
   title: string;
   parts: DiagramParts;
 }) {
+  const warn = hasUnselected(parts, n.id);
   return (
     <g
       data-node={n.id}
       data-swappable="true"
+      data-unselected={warn ? 'true' : undefined}
       data-ghost={n.ghost ? 'true' : undefined}
     >
       <rect
@@ -815,9 +876,14 @@ function SwappableNode({
         strokeDasharray={n.ghost ? GHOST_DASH : undefined}
         style={{
           fill: 'var(--color-base-100)',
-          stroke: SWAP_STROKE,
-          strokeWidth: n.compute ? 2 : 1.5,
-          ...(n.ghost ? { opacity: GHOST_OPACITY } : {}),
+          // 未選択の箱は警告色の太い枠（幽霊の箱でも枠は薄くしない。D-116 の補足）
+          stroke: warn ? 'var(--color-warning)' : SWAP_STROKE,
+          strokeWidth: warn ? 3 : n.compute ? 2 : 1.5,
+          ...(n.ghost
+            ? warn
+              ? { fillOpacity: GHOST_OPACITY }
+              : { opacity: GHOST_OPACITY }
+            : {}),
         }}
       />
       <foreignObject
@@ -827,17 +893,31 @@ function SwappableNode({
         height={model.node.h - 4}
       >
         <Info
-          label={`${title}: ${n.label}（${n.caption}）を替える`}
+          label={`${title}: ${n.label}（${n.caption}${warn ? '、未選択' : ''}）を替える`}
           interactive
-          // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）
-          className="relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+          // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）。未選択の箱は警告色
+          className={`relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:ring-2 hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+            warn
+              ? 'hover:bg-warning/10 hover:ring-warning'
+              : 'hover:bg-primary/10 hover:ring-primary'
+          }`}
           trigger={
             <>
-              <span
-                className="text-[10px] opacity-60"
-                style={n.ghost ? { opacity: 0.6 * GHOST_OPACITY } : undefined}
-              >
-                {n.caption}
+              <span className="flex items-center gap-1">
+                <span
+                  className="text-[10px] opacity-60"
+                  style={n.ghost ? { opacity: 0.6 * GHOST_OPACITY } : undefined}
+                >
+                  {n.caption}
+                </span>
+                {warn && (
+                  <span
+                    aria-hidden
+                    className="badge h-3.5 badge-xs px-1 text-[9px] badge-warning"
+                  >
+                    未選択
+                  </span>
+                )}
               </span>
               <span
                 className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
@@ -845,7 +925,7 @@ function SwappableNode({
               >
                 {n.label}
               </span>
-              <SwapMark />
+              {warn ? <UnselectedMark /> : <SwapMark />}
             </>
           }
         >

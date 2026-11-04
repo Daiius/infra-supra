@@ -1122,6 +1122,13 @@ describe('ゲームモードの画面', () => {
     const db = () => slotGroup('DB');
     expect(db().getAttribute('aria-label')).toBe('DB（未選択）');
     expect(db().hasAttribute('data-unselected')).toBe(true);
+    // 構成図の DB の箱にも「未選択」の印（既定の部品の名前で描くので、選び済みに見えないように。D-116 の補足）
+    const dbBox = () =>
+      within(current()).queryByRole('button', {
+        name: /（DB、未選択）を替える$/,
+      });
+    expect(dbBox()!.querySelector('[data-unselected-mark]')).not.toBeNull();
+    expect(dbBox()!.querySelector('[data-swap-mark]')).toBeNull();
     expect(
       screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' })
         .disabled,
@@ -1137,6 +1144,8 @@ describe('ゲームモードの画面', () => {
     // チップを押すと、その部品に替わり、カードの題（実際の組）と図が替わる
     pickPart('AWS: DynamoDB（オンデマンド）', db());
     expect(db().getAttribute('aria-label')).toBe('DB');
+    // 選ぶと図の箱の「未選択」の印も消える
+    expect(dbBox()).toBeNull();
     expect(current().getAttribute('aria-label')).toBe(
       'Vercel Pro + AWS DynamoDB の構成',
     );

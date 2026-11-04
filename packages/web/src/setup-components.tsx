@@ -65,6 +65,14 @@ export function usePartSlots(
   );
 }
 
+/** スロットで選んでいる部品。1 択のスロット（固定）は選択済み・変更不可で出す（未選択の判定に含めない。D-45）。 */
+const pickedOf = (x: SetupSlot, value: SetupChoices) =>
+  x.fixed ? x.options[0]!.id : value[x.slot];
+
+/** スロットがまだ選ばれていないか（チップの行の警告と、構成図の箱の印で同じ判定を使う。D-45・D-116）。 */
+export const isUnselected = (x: SetupSlot, value: SetupChoices) =>
+  !pickedOf(x, value);
+
 /** チップの見せ方に要る、スロットの選択肢ごとの状態（選択中・選べない理由）。同じ事業者の部品を先に並べる（D-116）。 */
 function slotView(
   x: SetupSlot,
@@ -73,8 +81,7 @@ function slotView(
   value: SetupChoices,
 ) {
   const provider = STACKS[stackIndex]!.provider;
-  // 1 択のスロット（固定）は選択済み・変更不可で出す（未選択の判定に含めない。D-45）
-  const picked = x.fixed ? x.options[0]!.id : value[x.slot];
+  const picked = pickedOf(x, value);
   const options = x.options
     .map((o, i) => ({ o, i }))
     .sort(
@@ -93,7 +100,7 @@ function slotView(
           ? null
           : componentConflict(provider, x.slot, o.id, value, framework),
     }));
-  return { picked, options };
+  return { options };
 }
 
 /** 構成と別の事業者の部品のロゴ（D-102。同じ事業者の部品には付けない）。 */
@@ -183,8 +190,8 @@ export function PartChips({
       </p>
       <div className="space-y-1">
         {slots.map((x) => {
-          const { picked, options } = slotView(x, stackIndex, framework, value);
-          const unselected = !picked;
+          const { options } = slotView(x, stackIndex, framework, value);
+          const unselected = isUnselected(x, value);
           return (
             <div
               key={x.slot}
@@ -295,12 +302,12 @@ export function PartOptions({
   onChange: (v: SetupChoices) => void;
   close: () => void;
 }) {
-  const { picked, options } = slotView(x, stackIndex, framework, value);
+  const { options } = slotView(x, stackIndex, framework, value);
   return (
     <div role="group" aria-label={`${x.label}を替える`} data-swap={x.slot}>
       <div className="mb-1 text-xs font-semibold">
         {x.label}を替える
-        {!picked && (
+        {isUnselected(x, value) && (
           <span className="ml-1 badge badge-xs badge-warning">未選択</span>
         )}
       </div>
