@@ -160,6 +160,115 @@ export function describeEffect(e: Effect): string {
   }
 }
 
+/**
+ * 提案を受けたときの得と、伴うこと（手間・使用量・費用・要件）と、断ったときの損の要約（D-122）。値は提案の効果とシナリオのデータから組む。
+ * 機能の追加の作業は機能開発に数えるので、断ったときより機能開発が増えるのは加点の分（D-29）。代わりにその間、行動に使える手間が減る。
+ * 断ったときの損は、今のデータでは記事のデザインの刷新（D-47 の `imageRedesign.declineMonths`）だけ。無ければ undefined（断っても何も変わらない）。
+ */
+export function acceptSummary(
+  state: GameState,
+  def: EventDef,
+): { gains: string[]; costs: string[]; declineLoss?: string } {
+  const sc = scenarioOf(state);
+  let declineLoss: string | undefined;
+  const effects = effectsFor(state, def.accept?.effects ?? []);
+  const work = effects.find(
+    (e): e is Extract<Effect, { type: 'interrupt' }> =>
+      e.type === 'interrupt' && e.featureWork === true,
+  );
+  const bonus = effects.reduce(
+    (a, e) => a + (e.type === 'feature' ? e.points : 0),
+    0,
+  );
+  const gains: string[] = [];
+  // 手間を先に、使用量・費用・要件を後に並べる
+  const effort: string[] = [];
+  const costs: string[] = [];
+  if (bonus > 0)
+    gains.push(
+      work
+        ? `機能開発 +${bonus}（作業 ${work.points} × ${work.months} か月も機能開発に数える）`
+        : `機能開発 +${bonus}`,
+    );
+  for (const e of effects) {
+    switch (e.type) {
+      case 'feature':
+        break;
+      case 'growth':
+        gains.push(
+          `PV の月の伸び +${Math.round(e.add * 100)} ポイント（${e.months} か月）`,
+        );
+        break;
+      case 'contract':
+        gains.push(describeEffect(e));
+        break;
+      case 'effortPerMonth':
+        (e.add > 0 ? gains : costs).push(describeEffect(e));
+        break;
+      case 'interrupt':
+        effort.push(
+          !e.featureWork
+            ? `対応の手間 ${e.points} × ${e.months} か月（機能開発に数えない）`
+            : e.months === 1
+              ? `来月、行動に使える手間が ${e.points} 減る`
+              : `その間、行動に使える手間が ${e.points} 減る（${e.months} か月）`,
+        );
+        break;
+      case 'imageRedesign': {
+        const points = imageRedesignEffort(state);
+        effort.push(
+          points > 0 ? `来月、行動に使える手間が ${points} 減る` : '手間なし',
+        );
+        const rule = sc.imageRedesign;
+        if (!rule) {
+          gains.push('画像を大きく綺麗に出す');
+          break;
+        }
+        // 断ったときに画質が下がるかは imageRedesignQuality と同じ条件（原本を配っていて粗い画像も少なければ下がらない）
+        const coarse = hasManyCoarseImages(state);
+        const lowers = imagesOf(state) !== 'none' || coarse;
+        if (lowers)
+          declineLoss = `${rule.declineMonths} か月、画質の評価が 1 段下がる`;
+        gains.push(
+          !lowers
+            ? '画像はすでに大きい（断っても画質の評価は下がらない）'
+            : coarse
+              ? `断ったときの画質の低下（${rule.declineMonths} か月）を避ける`
+              : `画質の評価を保つ（断ると ${rule.declineMonths} か月、画質が 1 段下がる）`,
+        );
+        if (coarse)
+          costs.push(
+            `原本の無い粗い画像が在庫の ${Math.round(rule.coarseShare * 100)}% 以上のうちは、受けても画質の評価が 1 段下がる`,
+          );
+        break;
+      }
+      case 'basePV':
+        // 基準の PV が増えると、PV に比例する収益も使用量・費用も増える
+        gains.push(
+          `${describeEffect(e)}・収益は 1,000 PV あたり $${sc.revenue.adsUsdPer1000PV}`,
+        );
+        costs.push('使用量・費用: PV に比例して増える');
+        break;
+      case 'workload':
+      case 'stock':
+      case 'seats':
+      case 'traffic':
+      case 'component':
+        costs.push(`使用量・費用: ${describeEffect(e)}`);
+        break;
+      case 'requirement':
+      case 'on-demand-revalidate':
+        costs.push(describeEffect(e));
+        break;
+    }
+  }
+  return {
+    gains,
+    costs: [...effort, ...costs],
+    ...(declineLoss ? { declineLoss } : {}),
+  };
+}
+
 /** 効果を状態に当てる（traffic はその月の計算で扱うのでここでは何もしない）。 */
 export function applyEffects(
   state: GameState,

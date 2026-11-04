@@ -173,7 +173,14 @@ export {
   nextSsrCpuMs,
   componentEffortLabel,
 } from './effort.ts';
-export { IMAGE_REDESIGN_ID, describeEffect } from './events.ts';
+export { IMAGE_REDESIGN_ID, acceptSummary, describeEffect } from './events.ts';
+export {
+  type FeatureOutlook,
+  type FeatureProgress,
+  featureOutlook,
+  featureProgressOf,
+  featureRuleText,
+} from './feature-outlook.ts';
 export {
   componentsAfterRewrite,
   rewriteTargets,
