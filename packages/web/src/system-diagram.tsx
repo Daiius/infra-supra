@@ -445,19 +445,35 @@ const BADGE =
 const pressableBadge = (warn: boolean) =>
   `${BADGE} cursor-pointer focus-visible:outline-2 focus-visible:outline-primary ${
     warn
-      ? 'border-2 border-warning hover:bg-warning/10'
+      ? 'justify-start border-2 border-warning hover:bg-warning/10'
       : 'border-primary/70 hover:bg-primary/10'
   }`;
 
 /** 段の押せる箱の印（⇄ か「! 未選択」。色だけに頼らない）。 */
 function BandMark({ warn }: { warn: boolean }) {
   return warn ? (
-    <span aria-hidden data-unselected-mark className="font-bold">
+    <span
+      aria-hidden
+      data-unselected-mark
+      className="font-bold whitespace-nowrap"
+    >
       ! 未選択
     </span>
   ) : (
     <span aria-hidden data-swap-mark>
       ⇄
+    </span>
+  );
+}
+
+/**
+ * 未選択の段の箱の中身: 名前と「! 未選択」を 1 つの文の流れにして左に寄せる（狭い幅で名前が折り返しても、印は名前の後ろに続く。
+ * 横並びの flex のままだと、名前が中央に寄り、印が右の別の列に立つ）。
+ */
+function WarnTrigger({ children }: { children: ReactNode }) {
+  return (
+    <span className="min-w-0 text-left">
+      {children} <BandMark warn />
     </span>
   );
 }
@@ -481,14 +497,19 @@ function BandNode({
 }) {
   const warn =
     parts?.unselected !== undefined && slots.some((x) => parts.unselected!(x));
+  const text = (
+    <>
+      <span className="sr-only">{title}: </span>
+      {n.ghost ? `${n.caption}: ${n.label}` : n.label}
+    </>
+  );
   const name = (
     <span
       className="inline-flex items-center gap-1"
       style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
     >
       {brand && <BrandMark brand={brand} size={12} />}
-      <span className="sr-only">{title}: </span>
-      {n.ghost ? `${n.caption}: ${n.label}` : n.label}
+      {text}
     </span>
   );
   return (
@@ -504,10 +525,24 @@ function BandNode({
           interactive
           className={pressableBadge(warn)}
           trigger={
-            <>
-              {name}
-              <BandMark warn={warn} />
-            </>
+            warn ? (
+              <WarnTrigger>
+                {/* 文の流れに置く（ロゴは行の高さに揃え、名前と一緒に折り返す） */}
+                <span style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}>
+                  {brand && (
+                    <span className="mr-1 inline-block align-middle leading-none">
+                      <BrandMark brand={brand} size={12} />
+                    </span>
+                  )}
+                  {text}
+                </span>
+              </WarnTrigger>
+            ) : (
+              <>
+                {name}
+                <BandMark warn={false} />
+              </>
+            )
           }
         >
           {(close) => (
@@ -564,10 +599,14 @@ function LooseSlot({
           interactive
           className={pressableBadge(warn)}
           trigger={
-            <>
-              {name}
-              <BandMark warn={warn} />
-            </>
+            warn ? (
+              <WarnTrigger>{name}</WarnTrigger>
+            ) : (
+              <>
+                {name}
+                <BandMark warn={false} />
+              </>
+            )
           }
         >
           {(close) => (

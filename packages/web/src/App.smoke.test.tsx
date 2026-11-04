@@ -1136,6 +1136,10 @@ describe('ゲームモードの画面', () => {
     const band = current().querySelector<HTMLElement>('[data-diagram-band]')!;
     const email = band.querySelector<HTMLElement>('[data-slots~="email"]')!;
     expect(email.getAttribute('data-unselected')).toBe('true');
+    // 「! 未選択」は名前と同じ文の流れ（狭い幅で名前が折り返しても、印が別の列に立たない）
+    const mark = email.querySelector('[data-unselected-mark]')!;
+    expect(mark.parentElement!.classList).toContain('text-left');
+    expect(mark.parentElement!.textContent).toMatch(/.+! 未選択$/);
     // 1 択のファイルの置き場は押せない箱
     const files = band.querySelector<HTMLElement>('[data-loose-slot="files"]')!;
     expect(files.textContent).toContain('（1 択）');
