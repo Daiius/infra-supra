@@ -170,3 +170,81 @@ describe('幽霊の箱（D-116 の補足）', () => {
     expect(h.querySelector('button')).toBeNull();
   });
 });
+
+describe('未選択の箱（D-116 の補足）', () => {
+  // 幽霊の箱（ISR のキャッシュ）と、箱を持つスロットの 1 つを未選択とみなす
+  const comps = diagramComponents(sc, cf, 'nextjs', {
+    isrCache: 'workers-cache',
+  });
+  const wc = diagramArchitecture(sc, cf, 'nextjs', comps);
+  const { swap, ghosts } = slotBoxes(
+    (c) => diagramArchitecture(sc, cf, 'nextjs', c),
+    comps,
+    setupSlots(sc, cf, 'nextjs', comps),
+  );
+  const [nodeId, nodeSlots] = [...swap.entries()][0]!;
+  const targets = [`ghost:isrCache`, nodeId];
+  const view = (unselected: boolean) => (
+    <SystemDiagram
+      architecture={wc}
+      pages={pages}
+      ghosts={ghosts}
+      parts={{
+        slotsOf: (id) => swap.get(id) ?? [],
+        render: () => null,
+        unselected: (slot) =>
+          unselected && (slot === 'isrCache' || slot === nodeSlots[0]),
+      }}
+    />
+  );
+
+  it('W-47 未選択の箱は警告色の枠と ! の印・読み上げの「未選択」で、選ぶと ⇄ に戻る（横の図・縦の図・幽霊の箱）', () => {
+    for (const w of [900, 320]) {
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(w);
+      const { container, rerender } = render(view(true));
+      const box = (id: string) =>
+        container.querySelector<HTMLElement>(`[data-node="${id}"]`)!;
+      for (const id of targets) {
+        expect(box(id).getAttribute('data-unselected'), id).toBe('true');
+        const button = within(box(id)).getByRole('button', { name: /未選択/ });
+        expect(button.querySelector('[data-unselected-mark]')).not.toBeNull();
+        expect(button.querySelector('[data-swap-mark]')).toBeNull();
+      }
+      if (w === 900) {
+        // 横の図の箱の枠は警告色
+        expect(
+          box(nodeId).querySelector<SVGRectElement>('rect')!.style.stroke,
+        ).toBe('var(--color-warning)');
+      }
+      // 未選択でない箱には印を付けない（同じスロットに当たる箱が複数あれば、どれにも付ける）
+      const expected = [
+        'ghost:isrCache',
+        ...[...swap.entries()]
+          .filter(([, s]) => s.includes(nodeSlots[0]!))
+          .map(([id]) => id),
+      ].sort();
+      expect(
+        [...container.querySelectorAll('[data-node][data-unselected]')]
+          .map((g) => g.getAttribute('data-node'))
+          .sort(),
+      ).toEqual(expected);
+      expect(
+        container.querySelectorAll('[data-node] [data-unselected-mark]'),
+      ).toHaveLength(expected.length);
+      expect(container.textContent).toMatch(
+        /! の(付いた)?箱はまだ選んでいない/,
+      );
+      rerender(view(false));
+      for (const id of targets) {
+        expect(box(id).hasAttribute('data-unselected')).toBe(false);
+        const button = within(box(id)).getByRole('button');
+        expect(button.getAttribute('aria-label')).not.toMatch(/未選択/);
+        expect(button.querySelector('[data-unselected-mark]')).toBeNull();
+        expect(button.querySelector('[data-swap-mark]')).not.toBeNull();
+      }
+      expect(container.textContent).not.toMatch(/まだ選んでいない/);
+      cleanup();
+      vi.restoreAllMocks();
+    }
+  });
+});

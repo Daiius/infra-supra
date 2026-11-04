@@ -3,7 +3,12 @@
 // 欄のどこを押しても説明が開いていた。欄の見出し・余白を押しても開かず、ⓘ を押したときだけ開き、select は選べることを見る。
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderApp, startGame, useSmokeEnv } from './smoke.test-helpers.tsx';
+import {
+  openSlot,
+  renderApp,
+  startGame,
+  useSmokeEnv,
+} from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -83,7 +88,9 @@ describe('ⓘ の当たり判定', () => {
     fireEvent.click(info);
     expect(tooltip()).toBeNull();
     // 部品（DB のバックアップ）はゲームと共用の、構成のカードのチップ（D-115・D-116）。チップの ⓘ を押しても選ばない
-    const backup = screen.getByRole('group', { name: /^DB のバックアップ/ });
+    const backup = openSlot(
+      screen.getByRole('group', { name: /^DB のバックアップ/ }),
+    );
     const other = within(backup)
       .getAllByRole<HTMLButtonElement>('button', { pressed: false })
       .find((b) => !b.disabled)!;
@@ -92,12 +99,14 @@ describe('ⓘ の当たり判定', () => {
     expect(tooltip()).not.toBeNull();
     expect(other.getAttribute('aria-pressed')).toBe('false');
     fireEvent.keyDown(document, { key: 'Escape' });
+    const label = other.textContent!;
     fireEvent.click(other);
+    // 選ぶと行は畳まれ、選んだ部品の名前が残る（D-116 の補足）
     expect(
-      within(
-        screen.getByRole('group', { name: /^DB のバックアップ/ }),
-      ).getByRole('button', { pressed: true }).textContent,
-    ).toBe(chip.textContent);
+      screen
+        .getByRole('group', { name: /^DB のバックアップ/ })
+        .querySelector('[data-selected="true"]')!.textContent,
+    ).toContain(label);
   });
 
   it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', async () => {

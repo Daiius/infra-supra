@@ -31,6 +31,7 @@ import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
 import { EffortBar } from './scenario-briefing.tsx';
 import {
+  isUnselected,
   PartChips,
   PartOptions,
   usePartSlots,
@@ -92,6 +93,11 @@ function EditableDiagram({
   );
   const parts: DiagramParts = {
     slotsOf: (id) => swap.get(id) ?? [],
+    // チップの行の「未選択」と同じ判定（D-45。見積モードは全部のスロットが埋まっていて出ない）
+    unselected: (slot) => {
+      const x = bySlot.get(slot);
+      return x !== undefined && isUnselected(x, components);
+    },
     render: (slot, close) => (
       <PartOptions
         slot={bySlot.get(slot)!}

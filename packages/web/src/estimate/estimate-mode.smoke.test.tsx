@@ -3,7 +3,12 @@
 // 月の費用・比較表・費用の曲線が出ることだけを見る（金額は model.test.ts と game のテストが持つ）。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderApp, useSmokeEnv, waitLoaded } from '../smoke.test-helpers.tsx';
+import {
+  openSlot,
+  renderApp,
+  useSmokeEnv,
+  waitLoaded,
+} from '../smoke.test-helpers.tsx';
 import { fromQuery, normalizeInput, withStack } from './model.ts';
 
 useSmokeEnv();
@@ -37,9 +42,9 @@ const checked = (label: string) =>
   group(label)
     .querySelector('[data-selected="true"]')
     ?.getAttribute('data-option') ?? undefined;
-/** 枠の中で値を選ぶ（チップを押す）。 */
+/** 枠の中で値を選ぶ（チップを押す）。畳んだ部品の行は開いてから押す（D-116 の補足）。 */
 const choose = (label: string, value: string) => {
-  const chip = group(label).querySelector<HTMLElement>(
+  const chip = openSlot(group(label)).querySelector<HTMLElement>(
     `[data-option="${value}"]`,
   )!;
   fireEvent.click(within(chip).getByRole('button', { pressed: false }));
@@ -470,7 +475,7 @@ describe('見積モードの画面', () => {
     ).toBe('INPUT');
     // 部品（DB のバックアップ）はゲームと同じ、構成のカードのチップの行（D-115・D-116）
     expect(
-      within(group('DB のバックアップ')).getAllByRole('button', {
+      within(openSlot(group('DB のバックアップ'))).getAllByRole('button', {
         pressed: false,
       }).length,
     ).toBeGreaterThan(0);
@@ -504,6 +509,10 @@ describe('見積モードの画面', () => {
     const parts = stackCard().querySelector('section[data-parts]')!;
     expect(parts).not.toBeNull();
     expect(parts.querySelector('[data-unselected]')).toBeNull();
+    // 構成図の箱にも「未選択」の印は出ない（D-116 の補足）
+    const diagram = stackCard().querySelector('[data-diagram="system"]')!;
+    expect(diagram.querySelector('[data-swap-mark]')).not.toBeNull();
+    expect(diagram.querySelector('[data-unselected-mark]')).toBeNull();
     // 名前は正規表現の頭（「DB のバックアップ」の行に当てない）
     const DB = 'DB(?! のバックアップ)';
     expect(checked(DB)).toBe('supabase');
@@ -529,9 +538,9 @@ describe('見積モードの画面', () => {
     );
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(checked(DB)).toBe('dynamodb');
-    // focus は DB の選択中のチップへ（元の Neon の箱は消える。OCL-131BD89D）
+    // focus は DB の畳んだ行のボタンへ（元の Neon の箱は消える。OCL-131BD89D・D-116 の補足）
     expect(document.activeElement).toBe(
-      within(group(DB)).getByRole('button', { pressed: true }),
+      group(DB).querySelector('[data-collapsed-toggle]'),
     );
     expect(new URLSearchParams(window.location.search).get('c.db')).toBe(
       'dynamodb',
@@ -608,10 +617,15 @@ describe('見積モードの画面', () => {
         .querySelector('[data-alternative][data-selected="true"]')
         ?.getAttribute('data-alternative'),
     ).toBe('cached-purge');
-    // 画像の形式・サイズ違いは画像の部品の行の中
+    // 画像の形式・サイズ違いは画像の部品の行の中（畳んだ行を開くと出る。D-116 の補足）
     const images = document.querySelector<HTMLElement>(
       'section[data-parts] [data-slot="images"]',
     )!;
+    expect(images.getAttribute('data-collapsed')).toBe('true');
+    expect(
+      within(images).queryByRole('group', { name: '画像の形式' }),
+    ).toBeNull();
+    openSlot(images);
     expect(
       within(images).getByRole('group', { name: '画像の形式' }),
     ).toBeDefined();
