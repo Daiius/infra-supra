@@ -707,6 +707,23 @@ describe('見積モードの画面', () => {
     expect(checked(DB)).toBe('dynamodb');
     expect(checked('ISR のキャッシュ')).toBe('r2');
     expect(q().get('c.db')).toBe('dynamodb');
+    // 選んでいない B のカードは覚えている部品（Neon）で題・月額を出し、比較の表の行も同じ（D-116 の補足）
+    const bCard = document.querySelector<HTMLElement>(
+      'section[data-stack="vercel-supabase-pro"]',
+    )!;
+    expect(bCard.getAttribute('aria-label')).toBe(
+      'Vercel Pro + Neon（Launch） の構成',
+    );
+    expect(bCard.textContent).toContain('前にこの構成で選んだ部品');
+    const bRow = within(card('構成を比べる')).getByRole('row', {
+      name: /Vercel Pro \+ Neon/,
+    });
+    const rowText = bRow.textContent;
+    pick('stack', 'vercel-supabase-pro');
+    expect(rowText).toContain(
+      within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent,
+    );
+    pick('stack', 'cloudflare-vinext-paid');
     // B に戻ると B の選択が戻る
     pick('stack', 'vercel-supabase-pro');
     expect(checked(DB)).toBe('neon');

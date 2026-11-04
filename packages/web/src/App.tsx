@@ -333,6 +333,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               value={stack}
               onChange={(i) => change({ stack: i })}
               components={parts}
+              // 選んでいないカードの題・図・手間の棒は、前にその構成で選んだ部品で描く（D-116 の補足）
+              rememberedOf={(i) => partsByStack[i]}
               comments={commentsChoosable ? comments : undefined}
               routes={routes}
               routeNotice={(i) => routeNotice({ stackIndex: i })}

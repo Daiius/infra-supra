@@ -1023,22 +1023,30 @@ export type ComparisonRow = {
 };
 
 /**
- * その構成を選んだときの入力（比較の表の行を押したときと同じ withStack + normalizeInput）。他の構成の月額は、
- * 選んだ後の部品（既定）・再検証などの値（替えた先の既定。withContext）・描き方で数え、選んだ後の見積と一致させる（OCL-417D9CCA）。
+ * その構成を選んだときの入力（比較の表の行を押したときと同じ withStackRemembered）。他の構成の月額は、
+ * 選んだ後の部品（覚えている構成はその記憶、無ければ既定。D-116 の補足）・再検証などの値（替えた先の既定。withContext）・
+ * 描き方で数え、選んだ後の見積と一致させる（OCL-417D9CCA）。
  */
-const selectedInput = (input: EstimateInput, stack: string): EstimateInput =>
+const selectedInput = (
+  input: EstimateInput,
+  stack: string,
+  memory: PartsByStack,
+): EstimateInput =>
   stack === input.stack
     ? input
-    : normalizeInput({ ...input, ...withStack(input, stack) });
+    : withStackRemembered(input, stack, memory).input;
 
 /**
  * 選んだ条件（テンプレート・PV・フレームワーク・設定）で、そのフレームワークを載せられる全構成の月額。
- * 他の構成は、その構成を選んだときの入力で数える（部品は既定。selectedInput）。
+ * 他の構成は、その構成を選んだときの入力で数える（部品は覚えている構成はその記憶、無ければ既定。selectedInput）。
  */
-export function compareStacks(input: EstimateInput): ComparisonRow[] {
+export function compareStacks(
+  input: EstimateInput,
+  memory: PartsByStack = {},
+): ComparisonRow[] {
   return STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
     (s) => {
-      const sel = selectedInput(input, s.id);
+      const sel = selectedInput(input, s.id, memory);
       const r = resolve(sel);
       const res = run(sel, r);
       const hit = res.premises.filter((p) => p.hit);
@@ -1078,6 +1086,8 @@ export type StackCardTotal = {
 export function stackCardTotals(
   input: EstimateInput,
   rows: readonly ComparisonRow[],
+  /** 構成ごとに覚えている部品（compareStacks に渡したものと同じ）。 */
+  memory: PartsByStack = {},
 ): Partial<Record<string, StackCardTotal>> {
   const out: Partial<Record<string, StackCardTotal>> = {};
   for (const s of STACKS) {
@@ -1091,7 +1101,7 @@ export function stackCardTotals(
       };
       continue;
     }
-    const sel = selectedInput(input, s.id);
+    const sel = selectedInput(input, s.id, memory);
     const res = run(sel, resolve(sel));
     out[s.id] = {
       totalUsd: toUsd(res.bill.totals),
@@ -1139,18 +1149,19 @@ export type CurveSeries = {
 
 /**
  * 今の条件（テンプレート・フレームワーク・設定）のまま PV だけを振った、構成ごとの月額。
- * 他の構成は、その構成を選んだときの入力で数える（部品は既定・再検証などは替えた先の既定。compareStacks と同じ）。
- * 載せられない構成の id は捨てる。
+ * 他の構成は、その構成を選んだときの入力で数える（部品は覚えている構成はその記憶、無ければ既定・再検証などは替えた先の既定。
+ * compareStacks と同じ）。載せられない構成の id は捨てる。
  */
 export function costCurves(
   input: EstimateInput,
   stacks: readonly string[],
   pvs: readonly number[] = CURVE_PVS,
+  memory: PartsByStack = {},
 ): CurveSeries[] {
   return stacks.flatMap((id) => {
     const index = stackIndexOf(id);
     if (index < 0 || !stackOffered(index, input.framework)) return [];
-    const sel = selectedInput(input, id);
+    const sel = selectedInput(input, id, memory);
     const r = resolve(sel);
     const provider = STACKS[index]!.provider;
     const points = pvs.map((pv): CurvePoint => {

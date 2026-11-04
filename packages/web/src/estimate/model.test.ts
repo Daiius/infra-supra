@@ -23,6 +23,7 @@ import {
   withStack,
   withTemplate,
   type EstimateInput,
+  withStackRemembered,
 } from './model.ts';
 
 describe('normalizeInput', () => {
@@ -432,6 +433,33 @@ describe('構成が先（D-115。始める画面と同じ D-113 の規則）', (
     }
     // 隠した構成（D-100）は出さない
     expect(totals['aws-opennext']).toBeUndefined();
+  });
+
+  it('覚えている構成は、比較の表・カードの月額・費用の曲線をその記憶の部品で数え、戻った後の見積と同じ。触っていない構成は既定のまま（D-116 の補足）', () => {
+    const i = normalizeInput({ stack: 'cloudflare-vinext-paid' });
+    const memory = { 'vercel-supabase-pro': { db: 'neon' } };
+    const plain = compareStacks(i);
+    const rows = compareStacks(i, memory);
+    const totals = stackCardTotals(i, rows, memory);
+    const back = withStackRemembered(i, 'vercel-supabase-pro', memory).input;
+    expect(back.parts.db).toBe('neon');
+    const after = runEstimate(back);
+    const row = rows.find((r) => r.stack === 'vercel-supabase-pro')!;
+    expect(row.totalUsd).toBeCloseTo(after.totalUsd, 6);
+    expect(row.name).toContain('Neon');
+    expect(row).not.toEqual(
+      plain.find((r) => r.stack === 'vercel-supabase-pro'),
+    );
+    expect(totals['vercel-supabase-pro']?.totalUsd).toBeCloseTo(
+      after.totalUsd,
+      6,
+    );
+    const [curve] = costCurves(i, ['vercel-supabase-pro'], [i.pv], memory);
+    expect(curve!.points[0]!.totalUsd).toBeCloseTo(after.totalUsd, 6);
+    // 触っていない構成・今の構成は記憶なしと同じ
+    for (const r of rows)
+      if (r.stack !== 'vercel-supabase-pro')
+        expect(r).toEqual(plain.find((p) => p.stack === r.stack));
   });
 });
 

@@ -152,7 +152,8 @@ export function EstimateMode() {
     setInputState(next);
   };
   const view = runEstimate(input);
-  const rows = compareStacks(input);
+  // 他の構成は覚えている部品（無ければ既定）で数える（D-116 の補足）。構成のカードの月額・費用の曲線も同じ
+  const rows = compareStacks(input, partsByStack);
   const diagram = diagramOf(input);
   const routeStatus = routeStatusOf(input);
   // 再検証の間隔などの描き方の設定は、記事のページの行で選ぶ（D-119。ゲームの始める画面と同じ部品）
@@ -219,6 +220,7 @@ export function EstimateMode() {
         }}
         mau={view.mau}
         rows={rows}
+        memory={partsByStack}
         notice={notice}
         onPickStack={pickStack}
         onPickFramework={pickFramework}
@@ -285,7 +287,7 @@ export function EstimateMode() {
         // 行を押すとカルーセルもその構成へ移る（値は同じ入力。D-115）
         onPick={pickStack}
       />
-      <CostCurve input={input} rows={rows} />
+      <CostCurve input={input} rows={rows} memory={partsByStack} />
       <Card title="料金データの出典">
         <ul className="space-y-2 text-sm">
           {view.sources.map((s) => (
@@ -370,6 +372,7 @@ function Conditions({
   setInput,
   mau,
   rows,
+  memory,
   notice,
   onPickStack,
   onPickFramework,
@@ -380,6 +383,8 @@ function Conditions({
   mau: number;
   /** 構成の比較の行（構成のカードの月額に使う）。 */
   rows: readonly ComparisonRow[];
+  /** 構成ごとに覚えている部品（選んでいないカードの月額・図に使う。D-116 の補足）。 */
+  memory: PartsByStack;
   /** 構成を替えてフレームワークを付け替えたときの知らせ（D-113・D-115）。 */
   notice: string | null;
   onPickStack: (stack: string) => void;
@@ -392,7 +397,7 @@ function Conditions({
   const stackIndex = STACKS.findIndex((s) => s.id === input.stack);
   const settings = settingsOf(input.template, input.framework, input.routes);
   const comments = settings.comments ? input.comments : undefined;
-  const cardTotals = stackCardTotals(input, rows);
+  const cardTotals = stackCardTotals(input, rows, memory);
   const allowed = frameworksOf(scenario).allowed;
   // フレームワークのカードの描き方（そのフレームワークを選んだときの行）。載せられないものは引かない（D-113）
   const fwRoutes = new Map(
@@ -520,10 +525,14 @@ function Conditions({
           normalizeInput({ ...input, ...withStack(input, STACKS[i]!.id) })
             .routes
         }
-        diagramCaption={(selected) =>
+        // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
+        rememberedOf={(i) => memory[STACKS[i]!.id]}
+        diagramCaption={(selected, remembered) =>
           selected
             ? '選んだ部品で描く。'
-            : 'この構成を選んだときの既定の部品で描く。'
+            : remembered
+              ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描く。'
+              : 'この構成を選んだときの既定の部品で描く。'
         }
         // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
         onComponentsChange={(parts) => setInput({ parts })}
@@ -1038,9 +1047,12 @@ const usdShort = (n: number) =>
 function CostCurve({
   input,
   rows,
+  memory,
 }: {
   input: EstimateInput;
   rows: ReturnType<typeof compareStacks>;
+  /** 構成ごとに覚えている部品（比較の表と同じ部品で数える。D-116 の補足）。 */
+  memory: PartsByStack;
 }) {
   // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
   const [picked, setPicked] = useState<string[] | null>(null);
@@ -1048,7 +1060,7 @@ function CostCurve({
     picked === null
       ? defaultCurveStacks(rows)
       : pickedCurveStacks(picked, rows);
-  const curves = costCurves(input, stacks);
+  const curves = costCurves(input, stacks, CURVE_PVS, memory);
   const series: CurveChartSeries[] = curves.map((c) => ({
     id: c.stack,
     label: c.current ? `${c.name}（今の構成）` : c.name,

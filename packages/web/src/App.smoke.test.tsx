@@ -1308,6 +1308,12 @@ describe('ゲームモードの画面', () => {
     expect(chosen('DB')).toMatch(/^D1/);
     expect(chosen('画像')).toMatch(/^最適化しない/);
     expect(chosen('ISR のキャッシュ')).toMatch(/^R2/);
+    // 選んでいない B のカードは覚えている部品で描く（題も実際の組。D-116 の補足）
+    expect(
+      document
+        .querySelector('section[data-stack="vercel-supabase-pro"]')!
+        .getAttribute('aria-label'),
+    ).toBe('Vercel Pro + AWS DynamoDB の構成');
     // B に戻ると B の選択が戻る
     pickRadio(VERCEL);
     expect(chosen('DB')).toMatch(/DynamoDB/);
