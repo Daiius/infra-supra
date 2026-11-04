@@ -208,8 +208,13 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
   // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワーク・シナリオを替えたら、選べなくなった選択を
-  // 状態からも外す（元の組み合わせに戻しても復活しない。OCL-09D12A43）
+  // 状態からも外す（元の組み合わせに戻しても復活しない。OCL-09D12A43）。構成ごとの記憶は partsByStack
   const [parts, setParts] = useState<SetupChoices>({});
+  // 他の構成で選んでいた部品（構成の index → 選択）。構成を替えるときに覚え、戻ったら戻す。計算・始めるのに使うのは今の構成の
+  // parts だけ。ページを開いている間だけ持つ（D-116 の補足）
+  const [partsByStack, setPartsByStack] = useState<
+    Record<number, SetupChoices>
+  >({});
   // ページごとの描き方（D-107）。フレームワークを替えると既定に戻す。構成で使えないものは validRouteOverrides で外す
   const [routeChoice, setRouteChoice] = useState<RouteOverrides>({});
   const routes = validRouteOverrides(scenario, stack, framework, routeChoice);
@@ -237,7 +242,16 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     if (fw !== frameworkChoice) setFramework(fw);
     if (fw !== framework || next.scenarioId !== undefined) setRouteChoice({});
     if (st !== stack) setStack(st);
-    setParts(validSetupChoices(sc, st, fw, parts));
+    // 今の構成の選択も覚えてから、どの構成の記憶も今のシナリオ・フレームワークで選べるものだけにする（その構成に
+    // 載せられないフレームワークなら、選んだときに付け替わる先で見る）
+    const kept: Record<number, SetupChoices> = {};
+    for (const [k, v] of Object.entries({ ...partsByStack, [stack]: parts })) {
+      const i = Number(k);
+      kept[i] = validSetupChoices(sc, i, frameworkOnStack(sc, i, fw), v);
+    }
+    setParts(kept[st] ?? {});
+    delete kept[st];
+    setPartsByStack(kept);
   };
   const problem = setupProblem(scenario, stack, framework, parts);
   // ISR の再検証（D-49）・Astro の記事のキャッシュ（D-103）など。② のカードの記事のページの行で選ぶ（D-119）。選ぶまでは、

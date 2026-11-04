@@ -54,7 +54,9 @@ import {
   pickedCurveStacks,
   fromQuery,
   IMAGE_FORMATS,
+  keptParts,
   normalizeInput,
+  type PartsByStack,
   normalizeSeats,
   PV_PRESETS,
   runEstimate,
@@ -68,6 +70,7 @@ import {
   VARIANTS,
   withFramework,
   withStack,
+  withStackRemembered,
   withTemplate,
   type EstimateInput,
   type LineView,
@@ -117,8 +120,15 @@ export function EstimateMode() {
 
   // 構成を替えて、今のフレームワークを載せられないので付け替えたときの知らせ（D-113・D-115）。構成・フレームワーク・テンプレートを替えると消す
   const [notice, setNotice] = useState<string | null>(null);
+  // 他の構成で選んでいた部品（D-116 の補足）。構成を替えても覚えておき、戻ったら戻す。見積・URL は今の構成の parts だけ
+  const [partsByStack, setPartsByStack] = useState<PartsByStack>({});
   const pickStack = (stack: string) => {
-    const next = normalizeInput({ ...input, ...withStack(input, stack) });
+    const { input: next, memory } = withStackRemembered(
+      input,
+      stack,
+      partsByStack,
+    );
+    setPartsByStack(memory);
     setNotice(
       next.framework === input.framework
         ? null
@@ -133,7 +143,13 @@ export function EstimateMode() {
   };
   const pickFramework = (framework: FrameworkId) => {
     setNotice(null);
-    setInput(withFramework(input, framework));
+    // 構成ごとの記憶からも、替えた先のフレームワークで選べなくなった部品を落とす
+    const next = normalizeInput({
+      ...input,
+      ...withFramework(input, framework),
+    });
+    setPartsByStack(keptParts(partsByStack, next));
+    setInputState(next);
   };
   const view = runEstimate(input);
   const rows = compareStacks(input);
@@ -194,8 +210,12 @@ export function EstimateMode() {
       <Conditions
         input={input}
         setInput={(p) => {
-          if (p.template !== undefined) setNotice(null);
-          setInput(p);
+          if (p.template === undefined) return setInput(p);
+          setNotice(null);
+          // テンプレートを替えたときも、構成ごとの記憶は替えた先で選べるものだけを残す
+          const next = normalizeInput({ ...input, ...p });
+          setPartsByStack(keptParts(partsByStack, next));
+          setInputState(next);
         }}
         mau={view.mau}
         rows={rows}

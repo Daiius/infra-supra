@@ -282,6 +282,50 @@ export function withStack(
   );
 }
 
+/** 他の構成で選んでいた部品（構成の id → 選択）。構成を替えても画面が覚えておき、戻ったら戻す（D-116 の補足）。 */
+export type PartsByStack = Partial<Record<string, Choices>>;
+
+/**
+ * 構成を替えるときの部品の記憶: 替える前の構成の選択を覚え、替えた先の記憶を部品にする（withStack の parts: {} を上書き）。
+ * どの構成の記憶も、替えた後のテンプレート・フレームワークで選べるものだけにする（keptParts）。計算・URL は今の構成の parts だけ。
+ */
+export function withStackRemembered(
+  input: EstimateInput,
+  stack: string,
+  memory: PartsByStack,
+): { input: EstimateInput; memory: PartsByStack } {
+  const saved = { ...memory, [input.stack]: input.parts };
+  const next = normalizeInput({
+    ...input,
+    ...withStack(input, stack),
+    parts: saved[stack] ?? {},
+  });
+  return { input: next, memory: keptParts(saved, next) };
+}
+
+/**
+ * 構成ごとの部品の記憶を、今のテンプレート・フレームワークで選べるものだけにする（今の構成の分は持たない）。
+ * 今のフレームワークを載せられない構成の記憶は、その構成を選んだときに付け替わる先のフレームワーク（frameworkOnStack）で見る。
+ */
+export function keptParts(
+  memory: PartsByStack,
+  input: EstimateInput,
+): PartsByStack {
+  const scenario = scenarioOfTemplate(input.template);
+  const out: PartsByStack = {};
+  for (const [id, parts] of Object.entries(memory)) {
+    const i = stackIndexOf(id);
+    if (id === input.stack || i < 0 || !parts) continue;
+    out[id] = estimateComponents(
+      scenario,
+      i,
+      frameworkOnStack(scenario, i, input.framework),
+      parts,
+    ).chosen;
+  }
+  return out;
+}
+
 /** フレームワークを選ぶ。再検証などの値・ページごとの描き方は withContext の規則で付け替える。 */
 export function withFramework(
   input: EstimateInput,

@@ -684,4 +684,42 @@ describe('見積モードの画面', () => {
     expect(q().get('img')).toBe('webp');
     expectEstimate();
   });
+
+  it('W-49 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。URL は今の構成の分だけ・フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-paid',
+    );
+    await renderApp();
+    const q = () => new URLSearchParams(window.location.search);
+    const DB = 'DB(?! のバックアップ)';
+    choose(DB, 'dynamodb');
+    choose('ISR のキャッシュ', 'r2');
+    expect(q().get('c.db')).toBe('dynamodb');
+    // 構成 B は既定の部品から（A の選択は混ざらず、URL も B の部品）
+    pick('stack', 'vercel-supabase-pro');
+    expect(checked(DB)).toBe('supabase');
+    expect(q().get('c.db')).toBe('supabase');
+    choose(DB, 'neon');
+    // A に戻ると A の選択が戻る（B の Neon は混ざらない）
+    pick('stack', 'cloudflare-vinext-paid');
+    expect(checked(DB)).toBe('dynamodb');
+    expect(checked('ISR のキャッシュ')).toBe('r2');
+    expect(q().get('c.db')).toBe('dynamodb');
+    // B に戻ると B の選択が戻る
+    pick('stack', 'vercel-supabase-pro');
+    expect(checked(DB)).toBe('neon');
+    expect(q().get('c.db')).toBe('neon');
+    // B の上でフレームワークを Vite（ISR が無い）にしてから A に戻ると、A の ISR のキャッシュだけが落ち、DB は残る
+    pick('framework', 'vite-spa');
+    pick('stack', 'cloudflare-vinext-paid');
+    expect(checked(DB)).toBe('dynamodb');
+    expect(queryGroup('ISR のキャッシュ')).toBeNull();
+    // Next.js に戻しても落ちた ISR のキャッシュは復活しない（既定の KV）
+    pick('framework', 'nextjs');
+    expect(checked('ISR のキャッシュ')).toBe('kv');
+    expect(checked(DB)).toBe('dynamodb');
+    expectEstimate();
+  });
 });

@@ -1281,6 +1281,50 @@ describe('ゲームモードの画面', () => {
     expect(current().querySelector('[data-diagram="system"]')).not.toBeNull();
   });
 
+  it('W-49 始める画面: 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
+    await renderApp();
+    const CF = 'Cloudflare Paid';
+    const VERCEL = 'Vercel Pro + Supabase Pro';
+    /** 行で選んでいる部品の名前（畳んだチップの「スロット名:」の後ろ。未選択なら null）。 */
+    const chosen = (slot: string) =>
+      slotGroup(slot)
+        .querySelector('[data-selected="true"]')
+        ?.textContent?.replace(/^[^:]*:/, '') ?? null;
+    const isrRow = () =>
+      document.querySelector('section[data-parts] [data-slot="isrCache"]');
+    pickRadio(ARTICLE);
+    pickRadio(CF);
+    pickRadio('Next.js（App Router）');
+    pickPart('D1', slotGroup('DB'));
+    pickPart('最適化しない', slotGroup('画像'));
+    pickPart('R2', slotGroup('ISR のキャッシュ'));
+    // 構成 B では A の選択が混ざらず、B で選んだものは B だけに残る
+    pickRadio(VERCEL);
+    expect(slotGroup('DB').hasAttribute('data-unselected')).toBe(true);
+    expect(slotGroup('画像').hasAttribute('data-unselected')).toBe(true);
+    pickPart('AWS: DynamoDB', slotGroup('DB'));
+    // A に戻ると A の選択が戻る（B の DynamoDB は混ざらない）
+    pickRadio(CF);
+    expect(chosen('DB')).toMatch(/^D1/);
+    expect(chosen('画像')).toMatch(/^最適化しない/);
+    expect(chosen('ISR のキャッシュ')).toMatch(/^R2/);
+    // B に戻ると B の選択が戻る
+    pickRadio(VERCEL);
+    expect(chosen('DB')).toMatch(/DynamoDB/);
+    // B の上でフレームワークを Vite（ISR が無い）にしてから A に戻ると、A の ISR のキャッシュだけが落ち、DB・画像は残る
+    pickRadio('Vite（SPA）+ API');
+    pickRadio(CF);
+    expect(chosen('DB')).toMatch(/^D1/);
+    expect(chosen('画像')).toMatch(/^最適化しない/);
+    expect(isrRow()).toBeNull();
+    // Next.js に戻しても落ちた ISR のキャッシュは復活しない（OCL-09D12A43）
+    pickRadio('Next.js（App Router）');
+    expect(slotGroup('ISR のキャッシュ').hasAttribute('data-unselected')).toBe(
+      true,
+    );
+    expect(chosen('DB')).toMatch(/^D1/);
+  });
+
   it('W-48 始める画面: どちらの表示でも全部のスロットに届く（構成図は経路の箱か一番下の段の箱、一覧はチップの行。D-116 の補足）', async () => {
     await renderApp();
     const current = () =>
