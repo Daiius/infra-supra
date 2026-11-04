@@ -115,10 +115,10 @@ export function stageReasons(
     out.speed = c.throttling.length
       ? `前提に当たった: ${c.throttling[0]!.text}`
       : (c.spaFramework ?? c.spa)
-        ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
+        ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} kB・${c.pageWeight}）`
         : c.apiOnly
-          ? `重さ ${c.heaviness}（API を待つブラウザの描画 ${c.ssrCpuMs} ms 相当・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`
-          : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} KB × ${c.settings.variants} 種・${c.pageWeight}）`;
+          ? `重さ ${c.heaviness}（API を待つブラウザの描画 ${c.ssrCpuMs} ms 相当・画像 ${c.settings.imageKB} kB・${c.pageWeight}）`
+          : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} kB・${c.pageWeight}）`;
   if (
     stages.speed !== 'good' &&
     c.coldShare !== undefined &&
@@ -126,7 +126,7 @@ export function stageReasons(
   )
     out.speed = `${out.speed}・閲覧の ${Math.round(c.coldShare * 100)}% がコンテナの冷えた起動を待つ（最小インスタンス 0）`;
   if (stages.quality !== 'good')
-    out.quality = c.qualityReason ?? `画像 ${c.settings.imageKB} KB`;
+    out.quality = c.qualityReason ?? `画像 ${c.settings.imageKB} kB`;
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&

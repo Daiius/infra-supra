@@ -132,7 +132,7 @@ describe('受託先の業務アプリの運用', () => {
   it('帳票の依頼の効果の要約', () => {
     const def = sc.events.find((e) => e.id === 'c-p-report')!;
     expect(def.accept!.effects.map(describeEffect)[0]).toBe(
-      'API 1 回の CPU 15 ms・API 1 回の応答 30 KB',
+      'API 1 回の CPU 15 ms・API 1 回の応答 30 kB',
     );
   });
 

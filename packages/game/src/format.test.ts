@@ -50,7 +50,7 @@ describe('画像の形式（D-58）', () => {
     for (const kb of [IMAGE_FORMAT_KB.webp, IMAGE_FORMAT_KB.avif]) {
       const r = month2(CF_PAID, [format(kb)]).history[1]!;
       expect(r.satisfaction.stages.quality).toBe('good');
-      expect(r.satisfaction.reasons.speed ?? '').not.toContain('画像 150 KB');
+      expect(r.satisfaction.reasons.speed ?? '').not.toContain('画像 150 kB');
     }
     expect(IMAGE_FORMAT_KB.webp / IMAGE_FORMAT_KB.jpeg).toBeCloseTo(0.7, 9);
     expect(IMAGE_FORMAT_KB.avif / IMAGE_FORMAT_KB.webp).toBeCloseTo(0.8, 9);
@@ -59,8 +59,8 @@ describe('画像の形式（D-58）', () => {
   it('Next.js の画像の部品（Vercel）は JPEG を選んでも WebP で配り、注記を出す。SPA は JPEG のまま', () => {
     const next = month2(VERCEL_PRO, []);
     expect(
-      next.history[1]!.satisfaction.reasons.speed ?? '画像 105 KB',
-    ).toContain('画像 105 KB');
+      next.history[1]!.satisfaction.reasons.speed ?? '画像 105 kB',
+    ).toContain('画像 105 kB');
     expect(settingNote(next, 'format')).toContain('WebP');
     const spa = month2(VERCEL_PRO, [], 'vite-spa');
     expect(settingNote(spa, 'format')).toBeUndefined();

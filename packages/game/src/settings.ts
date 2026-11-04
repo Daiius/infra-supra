@@ -290,7 +290,7 @@ export function pageWeightKB(
 export function pageWeightLabel(kb: number): string {
   return kb >= 1000
     ? `1 ページ約 ${Number((kb / 1000).toFixed(1))} MB`
-    : `1 ページ約 ${Math.round(kb)} KB`;
+    : `1 ページ約 ${Math.round(kb)} kB`;
 }
 
 /** ISR の再検証の既定（5 分）。 */
