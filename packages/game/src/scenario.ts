@@ -146,6 +146,11 @@ export type EventDef = {
   tier: EventTier;
   title: string;
   text: string;
+  /**
+   * Bot を遮断済みの月に出す本文（省略は text）。遮断の効き方（BOT_BLOCK）と合わせて書く。
+   * 判定は起きた月の状態（流量の計算が上乗せを半分にする条件と同じ）。2026-11-04
+   */
+  blockedText?: string;
   when:
     /** 時期をシードで決める（台本・提案）。 */
     | {
@@ -165,6 +170,8 @@ export type EventDef = {
     /** 予告の見出し（起きたように読めない言い方にする。例: 「SNS で話題になりそう」）。 */
     title: string;
     text: string;
+    /** Bot を遮断済みの月に出す予告の文（省略は text。判定は予告を出した月の状態）。 */
+    blockedText?: string;
     pvFactor?: number;
     /** 前兆の流量が Bot か（収益にならない。Bot の遮断が効く）。 */
     bot?: boolean;
@@ -178,6 +185,8 @@ export type EventDef = {
   };
   /** 予告なしで起きたときの文（D-28）。 */
   surpriseText?: string;
+  /** 予告なしで起きた月に Bot を遮断済みなら出す文（省略は surpriseText）。 */
+  blockedSurpriseText?: string;
   /** 当たりうる前提の id の前方一致。通知に catalog の前提の文をそのまま出す（D-12）。 */
   premiseRefs: string[];
   /** 提案の「受ける」の効果（断ると何も起きない。D-20 V-11）。 */

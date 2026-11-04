@@ -2,6 +2,7 @@
 // ゲームモードの画面の描画テスト（D-86・prd/05 §7）。画面を描いて操作し、例外が出ない・描ける・選択肢と結果が出ることだけを見る。
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { ARTICLE_COMMUNITY, rollSchedule } from 'game';
 import { describe, expect, it, vi } from 'vitest';
 import {
   advance,
@@ -1655,6 +1656,54 @@ describe('ゲームモードの画面', () => {
     expect(historyText()).toEqual(before);
     advance(1);
     expectGameScreen(4);
+  });
+
+  it('W-53 Bot を遮断してから Bot が来ると、出来事の欄に遮断済みの文が出る（2026-11-04）', async () => {
+    // 既定のシード 42 は Bot が予告なしで来る
+    const bot = ARTICLE_COMMUNITY.events.find((e) => e.id === 'bot')!;
+    const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
+      (x) => x.id === 'bot',
+    )!.month;
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
+    );
+    // 始めた時点で 1 か月目の報告が出ている。m - 1 か月目まで進めてから次の月へ
+    advance(m - 2);
+    expectGameScreen(m - 1);
+    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+    const dialog = screen.getByRole('dialog');
+    within(dialog).getByRole('heading', {
+      name: new RegExp(`^${m} か月目の出来事`),
+    });
+    expect(dialog.textContent).toContain(bot.blockedSurpriseText);
+    expect(dialog.textContent).not.toContain(bot.surpriseText);
+    // 効果の行は実際の倍率、予告なしの印の説明も遮断済みの文
+    expect(dialog.textContent).toContain(
+      '効果: Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
+    );
+    expect(dialog.textContent).toContain(
+      '今月の費用・満足度に効いている（遮断済みで半分）',
+    );
+    expect(dialog.textContent).not.toContain('対処は来月から');
+    // 緑の印（文字つき）を添える。閉じた後の月の報告の一覧にも出る
+    expect(
+      within(dialog)
+        .getByText('🛡 対策済み')
+        .classList.contains('badge-success'),
+    ).toBe(true);
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '閉じて今月の行動へ' }),
+    );
+    expect(screen.getAllByText('🛡 対策済み').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/🛡 対策済み）: Bot・クローラーの大量アクセス/),
+    ).toBeDefined();
   });
 });
 
