@@ -20,6 +20,7 @@ import {
   componentSlots,
   swapLabel,
   pageWeightOf,
+  fixedSettingValue,
   settingInactiveReason,
   settingNote,
   EFFORT,
@@ -1355,7 +1356,9 @@ function Actions({
           {settingKeys.map((key) => {
             const def = SETTINGS[key];
             const current = state.settings[def.field];
-            const chosen = settings[key] ?? current;
+            // 欄を無効にして固定しているなら、選んだ値でなく固定の値を見せる（数えるのもその値。D-58 の補足）
+            const fixed = fixedSettingValue(draft, key);
+            const chosen = settings[key] ?? fixed ?? current;
             return (
               // 外側を label にしない: label の中で最初の操作できる要素は ⓘ のボタンなので、欄のどこを押しても説明が開く。
               // ⓘ を含む見出しは label にできない（他の操作できる要素を含めない）ので、名前は select の aria-label で付ける
@@ -1419,7 +1422,13 @@ function Actions({
                         disabled={why !== null}
                       >
                         {o.label}
-                        {o.value === current ? '（今）' : ''}
+                        {fixed !== undefined
+                          ? o.value === fixed
+                            ? '（固定）'
+                            : ''
+                          : o.value === current
+                            ? '（今）'
+                            : ''}
                         {why ? `（${why}）` : ''}
                       </option>
                     );

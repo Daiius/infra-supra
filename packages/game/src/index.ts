@@ -30,7 +30,8 @@ export {
   IMAGE_FORMAT_KB,
   imageFormatOf,
   usesNextImage,
-  autoImageFormat,
+  fixedImageFormat,
+  type FixedImageFormat,
   SETTINGS,
   type SettingKey,
   deliveredImageKB,
@@ -187,6 +188,8 @@ export {
 } from './rewrite.ts';
 export {
   settingInactiveReason,
+  imageFormatInactiveReason,
+  fixedSettingValue,
   settingNote,
   routePartNote,
   pageWeightOf,
