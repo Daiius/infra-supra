@@ -47,7 +47,27 @@ export type Series = {
   values: (number | null)[];
   /** 見込みの線（月・値）。破線で描く。 */
   projection?: { month: number; value: number }[];
+  /** 線を区切る月の添字（部品を差し替えた月など。前の月から線をつながず、縦の破線の印を付ける）。 */
+  breaks?: number[];
 };
+
+/** 系列を記録のない月と区切りの月で区間に分ける（添字 0 が 1 か月目）。 */
+function runsOf(s: Series): { m: number; v: number }[][] {
+  const runs: { m: number; v: number }[][] = [];
+  let current: { m: number; v: number }[] | null = null;
+  s.values.forEach((v, i) => {
+    if (v === null) {
+      current = null;
+      return;
+    }
+    if (!current || s.breaks?.includes(i)) {
+      current = [];
+      runs.push(current);
+    }
+    current.push({ m: i + 1, v });
+  });
+  return runs;
+}
 
 /**
  * ping（輪と点の脈打ち）の位相を全グラフで揃える（D-25）。CSS のアニメーションは要素が現れた時刻から始まるので、
@@ -256,19 +276,18 @@ export function LineChart({
           aria-label={typeof title === 'string' ? title : '推移のグラフ'}
         >
           {/*
-            点が 1 つだけの区間（1 か月目・乗り換えの後など）は、点だけで光ると不自然なので、左へ 1 か月分の水平線を
+            点が 1 つだけの区間（1 か月目・乗り換えや部品の差し替えの後など）は、点だけで光ると不自然なので、左へ 1 か月分の水平線を
             最も薄い色で描く（表示だけ。データ・軸・ツールチップ・見込みには入れない）。1 か月目は内側の余白（lead）の分まで描き、
             目盛りの数字の手前で止める
           */}
           {series.flatMap((s) =>
-            s.values.flatMap((v, i) => {
-              const single =
-                v !== null &&
-                (s.values[i - 1] ?? null) === null &&
-                (s.values[i + 1] ?? null) === null;
-              if (!single) return [];
-              const step = x(2) - x(1);
-              const x2 = x(i + 1);
+            runsOf(s).flatMap((run) => {
+              if (run.length !== 1) return [];
+              const { m, v } = run[0]!;
+              const i = m - 1;
+              // 区切りの直後は区切りの印（前の月との中ほど）まで
+              const step = (x(2) - x(1)) / (s.breaks?.includes(i) ? 2 : 1);
+              const x2 = x(m);
               return [
                 <line
                   key={`stub-${s.id}-${i}`}
@@ -348,21 +367,25 @@ export function LineChart({
               strokeWidth="1"
             />
           )}
+          {series.flatMap((s) =>
+            // 区切りの印（部品を差し替えた月）: 前の月との間に縦の破線
+            (s.breaks ?? []).map((i) => (
+              <line
+                key={`break-${s.id}-${i}`}
+                x1={(x(i) + x(i + 1)) / 2}
+                x2={(x(i) + x(i + 1)) / 2}
+                y1={pad.top}
+                y2={pad.top + h}
+                stroke="var(--axis)"
+                strokeWidth="1"
+                strokeDasharray="2 3"
+                pointerEvents="none"
+              />
+            )),
+          )}
           {series.map((s) => {
-            // 記録のない月で線を切る（構成を乗り換えて前提が途切れたとき）
-            const runs: { m: number; v: number }[][] = [];
-            let current: { m: number; v: number }[] | null = null;
-            s.values.forEach((v, i) => {
-              if (v === null) {
-                current = null;
-                return;
-              }
-              if (!current) {
-                current = [];
-                runs.push(current);
-              }
-              current.push({ m: i + 1, v });
-            });
+            // 記録のない月（構成を乗り換えて前提が途切れたとき）と区切りの月（部品の差し替え）で線を切る
+            const runs = runsOf(s);
             const li = lastIndex(s);
             const fi = s.values.findIndex((v) => v !== null);
             // 最新の点に近いほど濃い線（見込みの破線・凡例は系列の色のまま）

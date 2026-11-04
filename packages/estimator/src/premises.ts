@@ -197,6 +197,7 @@ export function assessPremises(input: {
     plans: Map<string, { meterIds: Set<string>; nodeIds: Set<string> }>;
   };
   const pools = new Map<string, PoolAgg>();
+  const nodeById = new Map(sim.architecture.nodes.map((n) => [n.id, n]));
   const factMeters = new Map<
     string,
     { provider: string; planId: string; meterId: string; nodeIds: Set<string> }
@@ -274,7 +275,14 @@ export function assessPremises(input: {
           ? m
           : a,
       );
-      const text = meter.premise ?? pool.premise;
+      // 枠を使うノードが文の変種を挙げていれば、枠の文の代わりにそれを使う（投稿のときに作るサイズ違いなど）
+      const variant = [...pu.nodeIds]
+        .map((id) => nodeById.get(id)?.premiseVariant)
+        .find((v) => v !== undefined && pool.premiseVariants?.[v]);
+      const text =
+        meter.premise ??
+        (variant !== undefined ? pool.premiseVariants![variant] : undefined) ??
+        pool.premise;
       if (!text) continue;
       out.push(
         threshold({

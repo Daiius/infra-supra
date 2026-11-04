@@ -130,6 +130,11 @@ export const AllowancePoolSchema = z.object({
   /** 共有の単位。MVP の計算は account と node を扱う（project は gap）。 */
   scope: z.enum(['account', 'project', 'node']),
   premise: Premise.optional(),
+  /**
+   * 部品の使い方で数え方の読み方が変わるときの前提の文（変種の名前 → 文）。枠を使うノードが premiseVariant で
+   * 名前を挙げたときに premise の代わりに使う（メーターの premise があればそちらが先）。出典は sourceIds のまま。
+   */
+  premiseVariants: z.record(z.string(), Premise).optional(),
   sourceIds: SourceIds,
 });
 export type AllowancePool = z.infer<typeof AllowancePoolSchema>;

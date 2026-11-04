@@ -771,6 +771,11 @@ export const cloudflare: PriceBookInput = {
       scope: 'account',
       premise:
         'Images は月 5,000 の一意な変換まで込み（画像の種類 × サイズ違い）',
+      // 投稿のときにサイズ違いを作って R2 に置く部品（r2-variants）では、閲覧のときに変換しない。数え方は同じ
+      premiseVariants: {
+        'transform-at-upload':
+          'Images は月 5,000 の一意な変換まで込み（投稿のときに作るサイズ違い: 投稿数 × サイズ違い × 形式）',
+      },
       sourceIds: ['imagesPricing'],
     },
   ],

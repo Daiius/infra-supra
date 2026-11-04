@@ -2488,6 +2488,11 @@ function TrendCard({
       {t.projectionNote && (
         <div className="mb-1 text-xs opacity-70">{t.projectionNote}</div>
       )}
+      {t.breaks.length > 0 && (
+        <div className="mb-1 text-xs opacity-70">
+          {`${t.breaks.map((i) => i + 1).join('・')} か月目に効く部品を替えたので、線（縦の破線）と見込みはそこで区切った`}
+        </div>
+      )}
       <LineChart
         months={months}
         height={120}
@@ -2500,6 +2505,7 @@ function TrendCard({
             label: '使用率',
             color: 'var(--series-1)',
             values: t.ratios,
+            breaks: t.breaks,
             projection: t.projection.map((p) => ({
               month: p.month,
               value: p.ratio,

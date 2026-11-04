@@ -305,6 +305,8 @@ export const ArchNodeSchema = z.object({
   role: z.enum(ROLES).optional(),
   /** このノードで効く料金データの事実（Plan の facts の id）。挙げたものだけ前提に出す（D-24）。 */
   facts: z.array(z.string()).default([]),
+  /** このノードが使う無料枠・込み分の前提の文の変種（AllowancePool の premiseVariants の名前）。 */
+  premiseVariant: z.string().optional(),
   /** 課金先。無いノード（VPS 上のプロセスなど）は課金されない。 */
   billing: z
     .object({
