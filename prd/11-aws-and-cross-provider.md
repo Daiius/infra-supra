@@ -340,7 +340,7 @@ D-41・D-45 と同じ: **事実として間違っていないが、それだけ�
 | SPA | **Cloudflare: R2 に一律で縮める** | **20 / 20** | $33 | $31 / $2 | $2,012 |
 
 - D-58 との整合（形式を WebP・AVIF に替えて 3 か月回して確かめた）: Cloudflare: R2 + Images は形式で変換の数が増えない（変換の請求は同じ）。Cloudflare: R2 に一律で縮めるは JPEG のフォールバックも R2 に置く（Vercel・VPS の一律で縮めると同じ扱い・保存量が増える）。
-  Cloudflare の変換の URL（`format=auto`）も next/image と同じくブラウザに合わせて WebP・AVIF を返すが、Cloudflare の構成の Images と同じく設定の形式で配る扱いにしている（D-58 の Cloudflare と揃えた。既定の JPEG では Vercel の next/image より大きく配る）。
+  Cloudflare の変換の URL（`format=auto`）は、ブラウザに合わせて AVIF（対応しなければ WebP）を返す。「画像の形式」の欄を無効にして AVIF に固定し、その大きさで数える（D-58 の補足・2026-11-04。前は設定の形式で配る扱いだった）。
 - AWS の Next.js は既定で半分のシードが所持金で落ちる（Amplify の転送 $0.15/GB）。画像を R2 に出すと AWS の請求が $238 減り、**全シードで合格**する。**AWS では「画像だけ Cloudflare」が勝ち筋を作る**（Vercel Pro では作らない。席の基本料と Supabase Pro の固定費の差）。
 - SPA は既定でも CloudFront の常時無料 1 TB にほぼ収まっている。画像を出すと残りの 1 シードも合格する。Lambda から R2 への転送は月 100 GB の無料の内（費用 0）。
 - **CloudFront の定額のプラン（D-61）との組み合わせ**（記事コミュニティ・シード 1〜20・始める画面で選んで 12 か月）: 画像を R2 に出すと CloudFront に残るのは HTML・JS・API だけになり、壊れる組は無い。

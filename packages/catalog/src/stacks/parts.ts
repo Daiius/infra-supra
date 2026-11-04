@@ -30,6 +30,15 @@ export const CROSS_PARTS: readonly PartDef[] = [
       'fact:cloudflare:images-free:transform-url',
       'pool:cloudflare:images-transformations',
     ],
+    // URL の format=auto は「Automatically serves the most efficient format that the requesting browser supports」
+    // （https://developers.cloudflare.com/images/transform-images/transform-via-url/ ・2026-06-16 更新）。AVIF に対応しない
+    // ブラウザには WebP（https://developers.cloudflare.com/images/optimization/hosted-images/serve-uploaded-images/ ・
+    // 2026-04-21 更新）。どちらも 2026-11-04 取得。大きすぎて AVIF に速く変換できない画像は WebP か JPEG に戻るが、
+    // 閾値の記載が無いので、このゲームでは当たらないとみなす（D-58 の補足）
+    servedFormat: {
+      format: 'avif',
+      how: 'ブラウザに合わせた形式（format=auto: 対応していれば AVIF、なければ WebP）で配る',
+    },
   },
   {
     id: 'cf-resize',
@@ -67,6 +76,12 @@ export const CROSS_PARTS: readonly PartDef[] = [
       'fact:bunny:optimizer:dynamic-images',
       'fact:bunny:optimizer:optimizer-flat',
     ],
+    // Optimizer の設定で WebP を有効にすると形式を自動で選ぶ（「Browsers supporting WebP receive WebP images」・古いブラウザは
+    // JPEG・PNG）。AVIF を自動で選ぶ記載は無い（https://bunny.net/docs/optimizer/dynamic-images/formats ・2026-11-04 取得）
+    servedFormat: {
+      format: 'webp',
+      how: 'ブラウザに合わせて WebP で配る（Optimizer の WebP の自動の選択。AVIF は自動では選ばない）',
+    },
   },
   {
     id: 'bunny-resize',

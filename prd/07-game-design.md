@@ -538,6 +538,7 @@ type StockRule = {
   URL の変換の `format=auto` は「Automatically serves the most efficient format that the requesting browser supports」（[変換の URL](https://developers.cloudflare.com/images/transform-images/transform-via-url/)・[最適化の機能](https://developers.cloudflare.com/images/optimization/features/)）、
   Workers・バインディングでは「Your Worker is responsible for automatic format negotiation. Check the Accept header.」で、Accept を見て AVIF・WebP を選ぶ例がある（[Workers で変換](https://developers.cloudflare.com/images/transform-images/transform-via-workers/)。コードを書く前提）。
   AVIF も選びうるが next/image と揃えて WebP とみなす（AVIF の設定を選べばそちら）。SPA は next/image を使わないが、Cloudflare Images の変換は SPA でも同じ。投稿のときに作る・一律で縮めるは設定どおり。最適化しない（原本）では形式は効かない。
+  **D-58 の補足（2026-11-04）で改めた**: 閲覧のときに変換して形式を自分で選ぶ部品では欄を無効にして固定する（next/image・Astro の `<Image />`・Netlify Image CDN・Bunny Optimizer は WebP、cf-images の `format=auto` は AVIF）。Cloudflare の構成の Images（バインディング）は Worker のコードが選ぶので欄は有効のまま、選んだ形式で数える。
 - **在庫の原本**は形式に依らずそのまま置く（今までの「圧縮の比で原本の保存量も減る」をやめた）。
 - **画質を落とす強い圧縮は残さない**: WebP・AVIF で画質を保ったまま同じくらい小さくなるので、画質を下げる選択肢は「損だけがある」選択になる。画質の満足度の要素は、原本の有無（デザインの刷新）で効く。
 - 古い保存の「画像の圧縮」は近い大きさの形式に読み替える（150 → JPEG・100 → WebP・70 → AVIF）。

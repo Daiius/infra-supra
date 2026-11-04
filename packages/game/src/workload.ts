@@ -28,14 +28,13 @@ import {
   validRouteOverrides,
 } from './routes/strategy.ts';
 import {
-  autoImageFormat,
   COMMENT_PAGES_PER_UPDATE,
   deliveredImageKB,
+  fixedImageFormat,
   deliveredThumbnailKB,
   imageFormatOf,
   isOnDemand,
   type Settings,
-  usesNextImage,
 } from './settings.ts';
 import type {
   GameState,
@@ -170,19 +169,19 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
       ? { pages: p.stock.articlePages }
       : {}),
   }));
-  const nextImage = autoImageFormat(
+  const fixed = fixedImageFormat(
     p.platform,
     p.framework,
     { ...DEFAULT_CHOICES[p.platform], ...p.components }.images,
-  );
+  )?.format;
   w.images = {
     ...w.images,
-    sizeKB: deliveredImageKB(sc, p.settings, undefined, nextImage),
+    sizeKB: deliveredImageKB(sc, p.settings, undefined, fixed),
     ...(w.images.thumbnails
       ? {
           thumbnails: {
             ...w.images.thumbnails,
-            sizeKB: deliveredThumbnailKB(sc, p.settings, undefined, nextImage),
+            sizeKB: deliveredThumbnailKB(sc, p.settings, undefined, fixed),
           },
         }
       : {}),
@@ -347,35 +346,26 @@ function componentsForWorkload(p: WorkloadParts): Choices {
 
 /**
  * 画像の形式の損の側（D-58）。変換の件数（サイズ違いの数）で表す。値の倍率は出典の文から取ったゲーム上の近似。
- * - Vercel の next/image で AVIF: AVIF と WebP を形式ごとにキャッシュする（Next.js の文書）→ 変換を 2 倍に数える
- *   （ほぼすべてのブラウザが AVIF を受けるが、WebP の版も一度は作られると読む）。
- * - VPS のホストで変換して AVIF: 変換に約 50% 長くかかる（Next.js の文書）→ 変換の件数を 1.5 倍（CPU の重さとして）。
+ * - VPS のホストで変換して AVIF（SPA の自前の変換）: 変換に約 50% 長くかかる（Next.js の文書）→ 変換の件数を 1.5 倍（CPU の重さとして）。
  * - 投稿のときにサイズ違いを作る（R2）で WebP・AVIF: JPEG のフォールバックも作って置く（MDN）→ 変換と保存を 2 倍
  *   （フォールバックの大きさは同じとみなす近似）。
  * - Cloudflare Images（閲覧のときに変換）は形式で変換の数が増えない（料金の文書: format は一意の判定から除く）。
+ * 部品が自分で形式を選ぶ構成（fixedImageFormat）はその形式で見る。next/image・Astro の <Image /> は WebP に固定したので、
+ * 前にあった「next/image で AVIF」の損（Vercel の形式ごとのキャッシュで変換 2 倍・Lambda / Cloud Run の変換の時間 1.5 倍）は当たらない
+ * （D-58 の補足・2026-11-04）。
  */
 function withImageFormat(w: WorkloadInput, p: WorkloadParts): WorkloadInput {
-  const format = imageFormatOf(p.settings.imageKB);
-  if (format === 'jpeg') return w;
   const images = { ...DEFAULT_CHOICES[p.platform], ...p.components }.images;
-  // OpenNext の画像の最適化（Lambda）・Cloud Run の next/image: CDN の外れた分ごとに変換するので、変換 1 回の時間を 1.5 倍にする
-  // （OCL-ECDEF8A1・D-63・OCL-CDDD26AB）
-  if (
-    format === 'avif' &&
-    (p.platform === 'aws-opennext' || p.platform === 'gcp') &&
-    usesNextImage(p.platform, p.framework, images)
-  )
-    return { ...w, images: { ...w.images, transformWorkFactor: 1.5 } };
+  const format =
+    fixedImageFormat(p.platform, p.framework, images)?.format ??
+    imageFormatOf(p.settings.imageKB);
+  if (format === 'jpeg') return w;
   const factor =
     images === 'r2-variants'
       ? 2
-      : format === 'avif' && usesNextImage(p.platform, p.framework, images)
-        ? p.platform === 'vercel'
-          ? 2
-          : 1.5
-        : format === 'avif' && p.platform === 'sakura' && images === 'default'
-          ? 1.5
-          : 1;
+      : format === 'avif' && p.platform === 'sakura' && images === 'default'
+        ? 1.5
+        : 1;
   // 投稿のときに作って置く（r2-variants）なら、倍にした分は形式のフォールバック（保存量はサムネイルを形式ごとに 1 枚。OCL-E2492C36）
   return factor === 1
     ? w
