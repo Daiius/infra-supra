@@ -2,7 +2,7 @@
 // ゲームモードの画面の描画テスト（D-86・prd/05 §7）。画面を描いて操作し、例外が出ない・描ける・選択肢と結果が出ることだけを見る。
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   advance,
   expectGameScreen,
@@ -1104,19 +1104,19 @@ describe('ゲームモードの画面', () => {
     pick(/^Next\.js（App Router）/);
     // 前の ③ 部品の欄は無く、部品は選んでいる構成のカードの中。最初は構成図の表示で、チップの一覧は出さない
     expect(screen.queryByRole('heading', { name: '③ 部品' })).toBeNull();
-    const tabs = within(current()).getByRole('tablist', {
+    const tabs = within(current()).getByRole('group', {
       name: '部品の選び方',
     });
     expect(
       within(tabs)
-        .getAllByRole('tab')
-        .map((t) => [t.textContent, t.getAttribute('aria-selected')]),
+        .getAllByRole('button')
+        .map((t) => [t.textContent, t.getAttribute('aria-pressed')]),
     ).toEqual([
       ['構成図から選ぶ', 'true'],
       ['機能から選ぶ', 'false'],
     ]);
     expect(
-      document.querySelectorAll('[role="tablist"][aria-label="部品の選び方"]')
+      document.querySelectorAll('[role="group"][aria-label="部品の選び方"]')
         .length,
       '選んでいないカードには出さない',
     ).toBe(1);
@@ -1210,7 +1210,7 @@ describe('ゲームモードの画面', () => {
     );
 
     // 「機能から選ぶ」にすると、構成図は出さずにチップの一覧だけ（縦の量を減らす）
-    fireEvent.click(within(tabs).getByRole('tab', { name: '機能から選ぶ' }));
+    fireEvent.click(within(tabs).getByRole('button', { name: '機能から選ぶ' }));
     expect(current().querySelector('[data-diagram="system"]')).toBeNull();
     const parts = current().querySelector('section[data-parts]')!;
     expect(parts).not.toBeNull();
@@ -1266,8 +1266,8 @@ describe('ゲームモードの画面', () => {
     pick(/^受託先の業務アプリの運用/);
     expect(
       within(current())
-        .getByRole('tab', { name: '機能から選ぶ' })
-        .getAttribute('aria-selected'),
+        .getByRole('button', { name: '機能から選ぶ' })
+        .getAttribute('aria-pressed'),
     ).toBe('true');
     expect(current().querySelector('[data-diagram="system"]')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: '見積' }));
@@ -1275,13 +1275,13 @@ describe('ゲームモードの画面', () => {
     expect(current().querySelector('section[data-parts]')).not.toBeNull();
     // 構成図に戻すと、チップの一覧は消える
     fireEvent.click(
-      within(current()).getByRole('tab', { name: '構成図から選ぶ' }),
+      within(current()).getByRole('button', { name: '構成図から選ぶ' }),
     );
     expect(current().querySelector('section[data-parts]')).toBeNull();
     expect(current().querySelector('[data-diagram="system"]')).not.toBeNull();
   });
 
-  it('W-49 始める画面: 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
+  it('W-51 始める画面: 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
     await renderApp();
     const CF = 'Cloudflare Paid';
     const VERCEL = 'Vercel Pro + Supabase Pro';
@@ -1325,13 +1325,48 @@ describe('ゲームモードの画面', () => {
     expect(chosen('DB')).toMatch(/^D1/);
   });
 
-  it('W-48 始める画面: どちらの表示でも全部のスロットに届く（構成図は経路の箱か一番下の段の箱、一覧はチップの行。D-116 の補足）', async () => {
+  it('W-48 始める画面: どちらの表示でも全部のスロットに届く（構成図は経路の箱か一番下の段の箱、一覧はチップの行。選んだ後の組でも。D-116 の補足）', async () => {
     await renderApp();
     const current = () =>
       document.querySelector<HTMLElement>(
         'section[data-stack][aria-current="true"]',
       )!;
     let band = 0;
+    /** 一覧の行のスロットが、構成図の箱か段の箱にもれなくあることを確かめ、スロットの一覧を返す。 */
+    const check = (tag: string): string[] => {
+      showPartsView('list');
+      const rows = [
+        ...current().querySelectorAll<HTMLElement>(
+          'section[data-parts] [data-slot]',
+        ),
+      ].map((r) => ({
+        slot: r.getAttribute('data-slot')!,
+        // 1 択の行は押せるボタンを持たない
+        pressable:
+          r.querySelector('button[aria-pressed], [data-collapsed-toggle]') !==
+          null,
+      }));
+      expect(rows.length, tag).toBeGreaterThan(0);
+      showPartsView('diagram');
+      const diagram = current().querySelector<HTMLElement>(
+        '[data-diagram="system"]',
+      )!;
+      for (const { slot, pressable } of rows) {
+        const places = [
+          ...diagram.querySelectorAll<HTMLElement>(`[data-slots~="${slot}"]`),
+        ];
+        expect(places.length, `${tag} ${slot}`).toBeGreaterThan(0);
+        // 選べるスロットは押せる箱（吹き出しで選ぶ）、1 択は押せない段の箱
+        expect(
+          places.some((p) => p.querySelector('button') !== null),
+          `${tag} ${slot}`,
+        ).toBe(pressable);
+        if (places.some((p) => p.closest('[data-diagram-band]'))) band++;
+      }
+      return rows.map((r) => r.slot);
+    };
+    // API の置き場を替えると DB のスロットが出入りする組がある（選んだ後の組でも、もれなく届く）
+    let dbMoved = false;
     for (const scenario of [ARTICLE, CONTRACT]) {
       pickRadio(scenario);
       const stacks = [
@@ -1346,39 +1381,50 @@ describe('ゲームモードの画面', () => {
             `input[type="radio"][name="stack"][value="${id}"]`,
           )!,
         );
+        const base = check(`${scenario} ${id}`);
+        if (!base.includes('api')) continue;
         showPartsView('list');
-        const rows = [
-          ...current().querySelectorAll<HTMLElement>(
-            'section[data-parts] [data-slot]',
+        const options = [
+          ...openSlot(slotGroup('api', 'slot')).querySelectorAll<HTMLElement>(
+            'li[data-option]',
           ),
-        ].map((r) => ({
-          slot: r.getAttribute('data-slot')!,
-          // 1 択の行は押せるボタンを持たない
-          pressable:
-            r.querySelector('button[aria-pressed], [data-collapsed-toggle]') !==
-            null,
-        }));
-        expect(rows.length, id).toBeGreaterThan(0);
-        showPartsView('diagram');
-        const diagram = current().querySelector<HTMLElement>(
-          '[data-diagram="system"]',
-        )!;
-        for (const { slot, pressable } of rows) {
-          const places = [
-            ...diagram.querySelectorAll<HTMLElement>(`[data-slots~="${slot}"]`),
-          ];
-          expect(places.length, `${scenario} ${id} ${slot}`).toBeGreaterThan(0);
-          // 選べるスロットは押せる箱（吹き出しで選ぶ）、1 択は押せない段の箱
-          expect(
-            places.some((p) => p.querySelector('button') !== null),
-            `${scenario} ${id} ${slot}`,
-          ).toBe(pressable);
-          if (places.some((p) => p.closest('[data-diagram-band]'))) band++;
+        ].map((li) => li.getAttribute('data-option')!);
+        for (const o of options) {
+          showPartsView('list');
+          const b = openSlot(
+            slotGroup('api', 'slot'),
+          ).querySelector<HTMLButtonElement>(
+            `li[data-option="${o}"] button[aria-pressed="false"]`,
+          );
+          if (!b || b.disabled) continue;
+          fireEvent.click(b);
+          const after = check(`${scenario} ${id} api=${o}`);
+          if (after.includes('db') !== base.includes('db')) dbMoved = true;
         }
       }
     }
+    expect(dbMoved).toBe(true);
     // 経路に載らないメールの送信・1 択のファイルの置き場などは段に出る
     expect(band).toBeGreaterThan(0);
+  });
+
+  it('W-50 始める画面: localStorage が使えない環境でも、既定の構成図で始まり、表示を切り替えられる（D-116 の補足）', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('使えない');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('使えない');
+    });
+    await renderApp();
+    pickRadio(ARTICLE);
+    const group = screen.getByRole('group', { name: '部品の選び方' });
+    expect(
+      within(group)
+        .getByRole('button', { name: '構成図から選ぶ' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    showPartsView('list');
+    showPartsView('diagram');
   });
 
   it('W-40 始める画面: 部品どうしの依存で選べない部品のチップは灰色で、理由をツールチップと ⓘ に出す（D-116）', async () => {

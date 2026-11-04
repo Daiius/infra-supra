@@ -336,7 +336,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               comments={commentsChoosable ? comments : undefined}
               routes={routes}
               routeNotice={(i) => routeNotice({ stackIndex: i })}
-              // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
+              // 部品は構成のカードの構成図の箱か、機能ごとのチップで選ぶ（タブで切り替える。D-116 とその補足）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
               onComponentsChange={(v) =>
                 setParts(validSetupChoices(scenario, stack, framework, v))
               }

@@ -25,7 +25,7 @@ import {
   type Scenario,
   type SetupSlot,
 } from 'game';
-import { useCallback, useId, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
 import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
@@ -42,6 +42,7 @@ import {
   DIAGRAM_NOTE,
   SystemDiagram,
   type BandSlot,
+  type BoxFocus,
   type DiagramParts,
 } from './system-diagram.tsx';
 import type { ResolvedPage } from './page-wireframes.tsx';
@@ -136,10 +137,9 @@ function EditableDiagram({
     setViewState(v);
     storePartsView(v);
   };
-  const tabId = useId();
-  // 箱の吹き出しで選んだスロット（描き直した後に、そのスロットの箱へ focus を移す。OCL-131BD89D）
-  const [focusSlot, setFocusSlot] = useState<string | null>(null);
-  const clearFocus = useCallback(() => setFocusSlot(null), []);
+  // 箱の吹き出しで選んだスロットと押した箱（描き直した後に、その箱へ focus を移す。消えていればスロットの最初の箱。OCL-131BD89D）
+  const [focusTarget, setFocusTarget] = useState<BoxFocus | null>(null);
+  const clearFocus = useCallback(() => setFocusTarget(null), []);
   const bySlot = new Map<string, (typeof slots)[number]>(
     slots.map((x) => [x.slot, x]),
   );
@@ -150,7 +150,7 @@ function EditableDiagram({
       const x = bySlot.get(slot);
       return x !== undefined && isUnselected(x, components);
     },
-    render: (slot, close) => (
+    render: (slot, close, box) => (
       <>
         <PartOptions
           slot={bySlot.get(slot)!}
@@ -159,7 +159,7 @@ function EditableDiagram({
           value={components}
           onChange={(v) => {
             editor.onChange(v);
-            setFocusSlot(slot);
+            setFocusTarget({ slot, box });
           }}
           close={close}
         />
@@ -185,8 +185,9 @@ function EditableDiagram({
   });
   return (
     <div className="min-w-0 space-y-2" data-parts-view={view}>
+      {/* 見た目は daisyUI のタブ。矢印キーで移る tablist にはせず、押した状態（aria-pressed）を持つボタンの組にする */}
       <div
-        role="tablist"
+        role="group"
         aria-label="部品の選び方"
         className="tabs-box tabs w-fit max-w-full tabs-xs"
       >
@@ -194,10 +195,7 @@ function EditableDiagram({
           <button
             key={t.view}
             type="button"
-            role="tab"
-            id={`${tabId}-${t.view}`}
-            aria-selected={view === t.view}
-            aria-controls={`${tabId}-panel`}
+            aria-pressed={view === t.view}
             title={t.title}
             data-parts-view-tab={t.view}
             className={`tab ${view === t.view ? 'tab-active' : ''}`}
@@ -207,12 +205,7 @@ function EditableDiagram({
           </button>
         ))}
       </div>
-      <div
-        role="tabpanel"
-        id={`${tabId}-panel`}
-        aria-labelledby={`${tabId}-${view}`}
-        className="min-w-0"
-      >
+      <div className="min-w-0">
         {view === 'diagram' ? (
           <div className="min-w-0 space-y-1.5">
             {editor.note && <p className="text-xs opacity-70">{editor.note}</p>}
@@ -223,7 +216,7 @@ function EditableDiagram({
               parts={parts}
               ghosts={ghosts}
               bandSlots={bandSlots}
-              focusSlot={focusSlot}
+              focusTarget={focusTarget}
               onFocused={clearFocus}
             />
           </div>

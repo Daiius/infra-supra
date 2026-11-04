@@ -553,7 +553,7 @@ describe('見積モードの画面', () => {
     expect(dbBox().getAttribute('aria-label')).toMatch(/Neon.*を替える$/);
     // 「機能から選ぶ」にすると、図の代わりにチップの一覧（全部の行が畳まれ、未選択は無い）
     fireEvent.click(
-      within(stackCard()).getByRole('tab', { name: '機能から選ぶ' }),
+      within(stackCard()).getByRole('button', { name: '機能から選ぶ' }),
     );
     expect(stackCard().querySelector('[data-diagram="system"]')).toBeNull();
     const parts = stackCard().querySelector('section[data-parts]')!;
@@ -663,7 +663,7 @@ describe('見積モードの画面', () => {
     expect(card(/^月の費用/).textContent).not.toBe(before);
     // 構成図の表示では、画像の箱の吹き出しの中で選ぶ（D-116 の補足）
     fireEvent.click(
-      within(stackCard()).getByRole('tab', { name: '構成図から選ぶ' }),
+      within(stackCard()).getByRole('button', { name: '構成図から選ぶ' }),
     );
     fireEvent.click(
       stackCard().querySelector<HTMLElement>('[data-slots~="images"] button')!,
@@ -685,7 +685,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
   });
 
-  it('W-49 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。URL は今の構成の分だけ・フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
+  it('W-51 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。URL は今の構成の分だけ・フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
     window.history.replaceState(
       null,
       '',
