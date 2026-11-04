@@ -28,6 +28,7 @@ import {
   GCP_STACK_DEFS,
 } from './gcp.ts';
 import { withBackups } from './backups.ts';
+import { CROSS_DB } from './cross-db.ts';
 import { withDomain } from './domain.ts';
 import { EMAIL_COMPONENTS, withEmail } from './email.ts';
 import { withLogs } from './logs.ts';
@@ -43,6 +44,7 @@ import {
   hostsOf,
   hyperdriveNode,
   isCrossDb,
+  VPS_RESIDENT_WITHOUT_DB_GB,
 } from './cross.ts';
 import type { CrossLink } from './connections.ts';
 
@@ -56,9 +58,10 @@ export type Platform =
   | 'gcp';
 /**
  * 部品の事業者（土台の事業者に加えて、部品だけを出す事業者。Neon は DB の部品だけ・D-77、Resend はメール送信の部品だけ・D-95、
- * Bunny は画像の配信と前段の CDN の部品だけ・D-98）。
+ * Bunny は画像の配信と前段の CDN の部品だけ・D-98、Supabase は Vercel・Netlify・Cloudflare 以外の土台の DB の部品・D-114 段 2d）。
  */
-export type ComponentProvider = Platform | 'neon' | 'resend' | 'bunny';
+export type ComponentProvider =
+  Platform | 'neon' | 'resend' | 'bunny' | 'supabase';
 export type SlotId =
   | 'isrCache'
   | 'images'
@@ -414,6 +417,15 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     label: '投稿のときに一律で縮めて置く',
     note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
     premiseRefs: [],
+  },
+  // さくらの VPS の DB（D-114 段 2d）。既定は同じ VPS の MySQL（今までの構成）。他の事業者の DB（Neon・Supabase・AWS）は cross.ts の部品
+  {
+    id: 'mysql',
+    slot: 'db',
+    platform: 'sakura',
+    label: 'VPS の MySQL（同居）',
+    note: 'DB を同じ VPS の MySQL に置く（月額の中。VPS のメモリ・CPU・ディスクを使う）。バックアップは自分で取る',
+    premiseRefs: ['host:'],
   },
   {
     id: 'default',
@@ -816,6 +828,7 @@ export const DEFAULT_CHOICES: Record<Platform, Choices> = {
   sakura: {
     isrCache: 'default',
     images: 'default',
+    db: 'mysql',
     frontCdn: 'none',
     dbBackup: 'default',
     email: 'default',
@@ -1325,6 +1338,61 @@ function composeSakura(
   plan: '2gb' | '4gb',
   storageOption: boolean,
   frontCdn: string | undefined,
+  db?: string,
+  standbyDb?: string,
+): ArchitectureInput {
+  // 他の事業者の DB（D-114 段 2d）: VPS は MySQL を動かさず、仮の DB を DB を読む経路（SSR・再生成・API）の VPS の後に置き、
+  // applyCrossDb が部品の DB に差し替える。MySQL へ戻す途中（standby）は、移す先の MySQL のメモリ・ディスクを VPS に残す
+  const crossDb = isCrossDb('sakura', db);
+  const keepMysql = crossDb && standbyDb === 'mysql';
+  const base = composeSakuraVps(plan, storageOption, frontCdn);
+  if (!crossDb) return base;
+  const routes = Object.fromEntries(
+    Object.entries(base.routes).map(([cls, path]) => [
+      cls,
+      SAKURA_DB_CLASSES.includes(cls as RequestClass)
+        ? path!.flatMap((id) => (id === 'vps' ? [id, 'db'] : [id]))
+        : path,
+    ]),
+  );
+  return {
+    ...base,
+    nodes: [
+      ...base.nodes.map((n): ArchNodeIn =>
+        n.id === 'vps' && n.config.kind === 'host'
+          ? {
+              ...n,
+              label: 'VPS（nginx + next start）',
+              config: {
+                ...n.config,
+                dbCpuMsPerQuery: 0,
+                ...(keepMysql
+                  ? {}
+                  : {
+                      residentMemoryGB: VPS_RESIDENT_WITHOUT_DB_GB,
+                      storesDb: false,
+                    }),
+              },
+            }
+          : n,
+      ),
+      { id: 'db', role: 'sql-db', label: 'DB', config: { kind: 'managed-db' } },
+    ],
+    routes,
+  };
+}
+
+/** さくらの VPS で DB を読む経路（DB を他の事業者に置くとき、VPS の後に DB を足す。D-114 段 2d）。 */
+const SAKURA_DB_CLASSES: readonly RequestClass[] = [
+  'document-ssr',
+  'isr-revalidate',
+  'api',
+];
+
+function composeSakuraVps(
+  plan: '2gb' | '4gb',
+  storageOption: boolean,
+  frontCdn: string | undefined,
 ): ArchitectureInput {
   return {
     id: `sakura-vps-${plan}`,
@@ -1462,6 +1530,16 @@ export function composeStack(
         }
       : withDefaults(def.platform, choices);
   const standby = options.standby ?? {};
+  // AWS・OpenNext・Google Cloud の組み立ては、他の事業者の DB（D-114 段 2d）を仮の DB（CROSS_DB）として置き、
+  // 移す先が他の事業者の DB なら置かない（applyCrossDb が部品の DB を足す）
+  const hostDb = (x: Choices): Choices =>
+    isCrossDb(def.platform, x.db) ? { ...x, db: CROSS_DB } : x;
+  const hostStandby = (x: Choices): Choices => {
+    if (!isCrossDb(def.platform, x.db)) return x;
+    const { db: _db, ...rest } = x;
+    void _db;
+    return rest;
+  };
   const arch = (() => {
     switch (def.platform) {
       case 'cloudflare':
@@ -1469,14 +1547,14 @@ export function composeStack(
       case 'vercel':
         return composeVercel(def.plan as 'hobby' | 'pro', c);
       case 'aws':
-        return composeAws(c, standby, {
+        return composeAws(hostDb(c), hostStandby(standby), {
           spa,
           apiCache: apiCacheActive('aws', c, options.framework)
             ? c.apiCache!
             : 'none',
         });
       case 'aws-opennext':
-        return composeOpenNext(c, standby, {
+        return composeOpenNext(hostDb(c), hostStandby(standby), {
           spa,
           apiCache: apiCacheActive('aws-opennext', c, options.framework)
             ? c.apiCache!
@@ -1494,7 +1572,7 @@ export function composeStack(
             : 'none',
         });
       case 'gcp':
-        return composeGcp(c, standby, {
+        return composeGcp(hostDb(c), hostStandby(standby), {
           framework: options.framework ?? 'nextjs',
           prerender: !nextExport && c.ogp === 'prerender',
           apiCache: apiCacheActive('gcp', c, options.framework)
@@ -1506,6 +1584,8 @@ export function composeStack(
           def.plan as '2gb' | '4gb',
           options.storageOption ?? false,
           c.frontCdn,
+          c.db,
+          standby.db,
         );
     }
   })();
@@ -1623,7 +1703,12 @@ function asAstro(
   };
   const worker = arch.nodes.find((n) => n.id === 'worker');
   const nodes = arch.nodes.map((n): ArchNodeIn => {
-    const named = label[n.id] ? { ...n, label: label[n.id]! } : n;
+    // DB を他の事業者に置いた VPS（D-114 段 2d）は MySQL を名前に出さない
+    const l =
+      n.id === 'vps' && !n.label.includes('MySQL')
+        ? label[n.id]?.replace(' + MySQL', '')
+        : label[n.id];
+    const named = l ? { ...n, label: l } : n;
     if (platform === 'cloudflare' && n.id === 'worker' && pageCache)
       return {
         ...named,
@@ -1861,7 +1946,12 @@ function asSpa(
           : 'Vercel Functions（API）',
       };
     if (platform === 'sakura' && n.id === 'vps')
-      return { ...n, label: 'VPS（nginx + Node の API + MySQL）' };
+      return {
+        ...n,
+        label: n.label.includes('MySQL')
+          ? 'VPS（nginx + Node の API + MySQL）'
+          : 'VPS（nginx + Node の API）',
+      };
     return n;
   });
   if (prerender && platform === 'cloudflare')

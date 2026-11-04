@@ -196,6 +196,8 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
       ...fixed,
       frontCdn: 'static',
       apiCache: 'cdn',
+      // DB のスロット（D-114 段 2d。既定は VPS の MySQL）
+      db: 'mysql',
       dbBackup: 'default',
       email: 'default',
     };

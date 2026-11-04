@@ -1,6 +1,6 @@
 # 14. 部品を事業者をまたいで組む（役割と接続の口）
 
-> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）・段 2 を実装（2026-11-03。§3.12）・段 2b（Cloudflare の DB に Neon・AWS）を実装（2026-11-04。§3.13）・段 2c（画像の原本だけ R2・画像だけ S3 + CloudFront）を実装（2026-11-04。§3.14）・総当たりを pairwise に（2026-11-04。§3.16）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
+> 状態: **設計（決定 D-114）・段 1 を実装（2026-11-03。§3.11）・段 2 を実装（2026-11-03。§3.12）・段 2b（Cloudflare の DB に Neon・AWS）を実装（2026-11-04。§3.13）・段 2c（画像の原本だけ R2・画像だけ S3 + CloudFront）を実装（2026-11-04。§3.14）・段 2d（公開の口の DB を全土台に規則で一括に開く）を実装（2026-11-04。§3.15）・総当たりを pairwise に（2026-11-04。§3.16）**。論点 CP-01〜CP-17 は 2026-11-03 に決めた（§8）。CP-06（転送の数え方）・CP-11（アカウントの手間）・CP-15（段 2 の組）は下書きの推奨から変えた。
 > 後で検討する候補として残したのは、リージョンの要素（CP-08）と接続の数の上限（CP-09）。
 > 出発点（2026-11-03・ユーザー）: 「vercel と aws のストレージという組み合わせもありそうですね...この辺りの組み合わせ方をもっと柔軟に選べるようにできたりしますか？ 根本的に少し変えるところがあるかもしれませんが...」
 > 料金・制限の数値は、§2 で公式の文書から取ったもの（URL と取得日つき）か、catalog に既にあるもの（出典は catalog の料金データ）だけを書く。
@@ -277,7 +277,7 @@ type ConnectionRule = {
 
 ### 3.9 テスト（組み合わせの爆発を抑える）
 
-- 総当たり（`combo-sweep.test.ts`）は、段 2c の後で直積が約 3.2 万組・約 4 分 50 秒だった。部品が土台をまたいで選べると、スロットごとの選択肢が増え、直積が桁で増える（pairwise に切り替えた。§3.16）。
+- 総当たり（`combo-sweep.test.ts`）は、段 2c の後で直積が約 3.2 万組・約 4 分 40 秒だった。部品が土台をまたいで選べると、スロットごとの選択肢が増え、直積が桁で増える（段 2d で pairwise に切り替えた。§3.16）。
 - 抑え方（CP-14・D-114）:
   1. **規則の単体テスト**: 架空の事業者（`fictional-` で始まる id。AGENTS.md）で、口の組ごとに判定・中継・転送のノードを確かめる。実在の料金を使わない。
   2. **移し替えのテスト**（段 1）: 規則から導いた「選べる組」が今の `CROSS_PAIRS` と一致し、全構成の金額が変わらない（golden）。
@@ -294,6 +294,7 @@ type ConnectionRule = {
 | 段 2（済み・§3.12） | 公開の口の組を足す: **Vercel × DynamoDB / Aurora（DB。Marketplace）だけ**（CP-15）。後の段の候補: Vercel × S3 + CloudFront（画像）・Cloudflare × Neon（Hyperdrive の接続先違い）・Google Cloud × R2 の広げ方の見直し・AWS / Google Cloud × Neon・Supabase | 新しい組だけ。基準プレイで既存は不変 |
 | 段 2b（済み・§3.13） | Cloudflare の DB に Neon・AWS（RDS・Aurora は Hyperdrive を中継に自動で足す・DynamoDB は直接）。DB の部品の説明・中継・構成の名前を規則と部品のデータで決める形に寄せた | 新しい組だけ。基準プレイで既存は不変 |
 | 段 2c（済み・§3.14） | 画像の置き場: 原本だけ R2 に置き変換は Vercel の画像の最適化（`cf-r2-origin`）・画像だけ S3 + CloudFront（`aws-s3-resize`。Vercel・Netlify・Google Cloud） | 新しい組だけ。基準プレイで既存は不変 |
+| 段 2d（済み・§3.15） | 公開の口へ出られる土台の処理 → 公開の口を持つ DB（Neon・Supabase・AWS の DB）を、さくらの VPS・Google Cloud・AWS・OpenNext・Netlify に規則で一括に開いた。さくらの VPS に DB のスロット（既定は同居の MySQL） | 新しい組だけ。既存は不変（突き合わせ）。新しい最安の床あり（§3.15） |
 | 段 3 | 中継を部品として自動で足す（Static IPs・NAT・RDS Proxy・Tunnel）。単価を取ってから。`blocked` の理由を画面に出す | 新しい組だけ |
 | 段 4 | 画面: 事業者で絞る・構成図の `links`（§6） | — |
 | 段 5 | （任意）案 B へ: 土台も部品の集まりにする。段 1〜4 の規則と部品はそのまま使う | 全部の取り直し |
@@ -463,17 +464,79 @@ type ConnectionRule = {
 
   Vercel Hobby はどの画像の部品でも 0/20（今までどおり）。新しい組に全シードで届くものは無く、**既存の最安より安い床は作らない**: R2 の原本は Blob の既定より月 $0.4 ほど安いだけ、S3 + CloudFront は R2 の `cf-resize` より高い（閲覧が伸びて月 1 TB を超えると CloudFront の転送がかかる。R2 は転送が無料）。目標の額・手間は動かしていない。
 
+### 3.15 段 2d の実装（2026-11-04）: 公開の口の DB を全土台に規則で一括に開く
+
+- **依頼と決定（ユーザー・2026-11-04）**: 「さくらの VPS と他の DB 事業者…一応選べても」→「規則で一括に開く + 総当たりを pairwise に（推奨）」に決まった。
+  土台ごとに手で書かず、「公開の口へ出られる土台の処理 → 公開の口を持つ DB」を `CONNECTION_RULES` と `DB_PART_NODES` のデータで開く（段 2b の申し送り）。総当たりの pairwise は §3.16。
+- **規則**（`stacks/connections.ts`。どれも `ok`・中継なし）:
+
+  | 規則 | 呼ぶ側（土台の処理） | 受ける側 | 口 |
+  |---|---|---|---|
+  | `public-compute-neon` | さくらの VPS・Google Cloud（Cloud Run）・AWS（Amplify の SSR・S3 + CloudFront の SPA の Lambda）・OpenNext | Neon | `tcp-sql`（`-pooler` の接続文字列） |
+  | `public-compute-supabase` | 同上 | Supabase（新しい部品） | `tcp-sql`（共有のプール Supavisor・IPv4） |
+  | `public-compute-dynamodb` | さくらの VPS・Google Cloud・Netlify（隠した構成） | AWS の DynamoDB | `https-api`（IAM のアクセスキーで署名） |
+  | `public-compute-aws-sql` | 同上 | AWS の Aurora（2 つ）・RDS for PostgreSQL | `tcp-sql`（公開のアクセス + セキュリティグループ + DB のユーザーとパスワード） |
+
+  土台の既定の DB と同じ事業者の部品（Vercel・Netlify の Supabase・AWS の構成の AWS の DB）と、専用の規則がある組（Vercel・Netlify の Neon・Vercel の DynamoDB・Aurora・Cloudflare の Hyperdrive）は入れていない（同じ部品が 2 つ出ないように。1 つの土台 × 部品に当たる規則は 1 つ。`public-db.test.ts`）。
+- **確かめた事実**（2026-11-04 取得。原文の短い引用）:
+  - Lambda: 「By default, Lambda functions run in a Lambda-managed VPC that has internet access」。VPC に入れると「Connecting a function to a public subnet doesn't give it internet access」で NAT が要る（[VPC の Lambda のインターネット](https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html)）。
+  - Cloud Run: 「By default, Cloud Run sends outbound internet traffic through a regional pool of dynamic IP addresses shared across serverless workloads」。VPC の出口を全部に向けると「you must set up Cloud NAT to reach the public internet」（[ネットワークの手引き](https://docs.cloud.google.com/run/docs/configuring/networking-best-practices)）。
+  - RDS: 「You can use the Public access option to designate whether the DB instance also has a public IP address」「That public access is not permitted if the security group … doesn't include inbound rules that permit it」、サブネットにインターネットゲートウェイが要る（[VPC の中の DB](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html)）。
+  - Supabase: 「Direct connections are on IPv6, or on IPv4 if the project has the IPv4 add-on」「The shared pooler is IPv4-only on every plan, in both session and transaction mode」。transaction モードは「serverless and edge functions」向け、直接の接続は「persistent backends, such as virtual machines (VMs) and long-running containers」向け、session モードは「when you connect from an IPv4-only network」（[Postgres への接続](https://supabase.com/docs/guides/database/connecting-to-postgres)）。
+    プール経由の転送は「When using the shared connection pooler, we do not count database egress, as this would otherwise count double」で「Shared Pooler Egress」として数え、枠は「Unified Egress Quota」（Free 5 GB・Pro 250 GB・超過 $0.09/GB）（[egress](https://supabase.com/docs/guides/platform/manage-your-usage/egress)）。料金の文はプールを名指ししていないので、DB の転送と同じ枠・同じ単価で数える（解釈。catalog の Supabase の fact `pooler-egress`）。
+  - Neon: 「Use the pooled connection string (hostname with -pooler suffix) for serverless functions」・PgBouncer で「up to 10,000 concurrent connections」（[接続のプール](https://neon.com/docs/connect/connection-pooling)・2026-10-19 更新）。
+  - さくらの VPS は転送量が無制限（catalog の既存の扱い・2026-11-02 取得の仕様のページ）。DynamoDB の API は署名した HTTPS（段 2b と同じ出典）。
+- **部品**（`stacks/parts.ts`・`stacks/index.ts`）: Supabase の DB の部品（id `supabase`・事業者 `supabase`。Vercel・Netlify・Cloudflare 以外の土台）を足した。ノードは Vercel・Netlify の既定の Supabase と同じ課金（土台が有料のプランなので Pro（Micro））で、共有のプールの事実 2 つ（`shared-pooler`・`pooler-egress`）を添える。
+  さくらの VPS の DB のスロットに既定の「VPS の MySQL（同居）」（id `mysql`・`DEFAULT_CHOICES` の `db`）を足した。前の保存・共有の URL（DB の指定なし）は既定の MySQL で読む（`SAVE_VERSION` は 4 のまま）。
+- **仮の DB（土台ごとに 1 か所）**: 段 2b の Cloudflare と同じく、他の事業者の DB を選ぶと土台の組み立てが仮の DB（id `db`・課金なし）を置き、`applyCrossDb` が部品の DB に差し替える。
+  - さくらの VPS（`composeSakura`）: VPS は MySQL を動かさず（常駐メモリ 0.75 GB・DB の CPU 0・ディスクに DB を置かない。Astro の API を Workers に置く形（D-69）と同じ値）、DB を読む経路（SSR・再生成・API）の VPS の後に DB を置く。MySQL へ戻す途中は、VPS に MySQL のメモリとディスクを残す。MySQL から他の事業者へ移す途中は、`applyCrossDb` が移す先（`db-next`）を経路に載せずに足す（土台の DB のノードが無い土台の扱いを足した）。
+  - Google Cloud・AWS・OpenNext: `composeStack` が他の事業者の DB を印（`CROSS_DB`。`stacks/cross-db.ts`）に替えて組み立てに渡し、`dbNode`・`gcpDbNode` が仮の DB を返す。移す先が他の事業者の DB なら、組み立てには渡さない。
+  - Netlify は既定の Supabase のノードを差し替える（Vercel と同じ。変えていない）。
+  - 構成の名前は `withCrossDbName` の「Supabase があれば替え、無ければ後ろに足す」のままで足りた（「さくらの VPS 2GB（東京） + Neon（Launch）」「AWS（Amplify Hosting） + Supabase Pro」「Google Cloud（Cloud Run + Firebase Hosting） + AWS DynamoDB」。SPA・Astro は後ろに「（Vite の SPA）」「（Astro）」が付く）。VPS のノードの名前は MySQL を外す。
+  - Neon のノードは、規則の口が `https-api`（serverless driver）のときだけ serverless driver の事実を出す（段 2b の「中継のとき出さない」を口で決める形にした。既存の組は不変）。
+- **転送（CP-06）**: DB の応答は DB が送り手。AWS の DB は `aws-db-out`（インターネットへの転送 $0.114/GB・AWS 全体の月 100 GB の無料を共有。土台は AWS の外なので同じリージョンの扱いによらず事実 `db-out-internet`）。Neon・Supabase は DB のノードの転送のメーター。受け手（VPS・Cloud Run・Lambda・Netlify）は受け取りの項目が無い（課金なし）。
+  **数えないもの**: 土台の処理から DB へ送る問い合わせの転送（Cloud Run の Premium Tier・Lambda の送り出し・Netlify の転送量の項目はあるが、問い合わせの大きさの仮定が無く、既存の Netlify × Neon も数えていないのでそろえた。部品の説明に書いた）。公開の IPv4 のアドレスの時間課金（段 2 と同じく未確認）。
+- **灰色・除外した組（CP-04・CP-05）**: 今の web は、規則の `blocked` を灰色 + 理由で出す画面を持たない（灰色 + 理由は部品どうしの依存（`componentConflict`）だけ）。そのため、中継が要る組は選択肢から外した:
+  VPC の中の RDS・Aurora（Lambda・Cloud Run を VPC に入れる形は NAT・Cloud NAT が要り、東京の単価が未取得）・IP を絞る形（固定の IP。Vercel の Static IPs など）・Cloud Run → Cloud SQL の私設 IP・Lambda の RDS Proxy。
+  ほかに入れていないもの: Cloud SQL・Firestore を他の土台から（Cloud SQL の connector・Auth Proxy と Firestore のサービスアカウントの手順を確かめていない）・Aurora DSQL を他の土台から・Vercel × 公開の RDS（Vercel の Marketplace に無い。規則は同じ形で足せる）・Supabase を Vercel・Netlify・Cloudflare の部品にすること（既定の DB・Hyperdrive の組がある）。
+- **手間（CP-11）**: §3.10 の段の表で CP-11 は特定の段に割り当てられておらず、この段も「新しい組だけ・既存は不変」なので入れていない（入れると既存の組の手間が変わる。段 2 と同じ判断）。アカウントは今の数え方（D-52）で、Neon・Supabase は 1 つ増え、AWS の DB は既定のメールの送信（SES）の AWS と同じなので増えない。
+- **不変の確かめ**: main（段 2c のマージ後・931b41a。D-121 のマージ後の cd8992c でも取り直して同じ件数が一致）の dump のキーを、そのまま今のコードで計算し直して突き合わせた（scratchpad の一時的なテスト。コミットしない）。
+  catalog: 全構成（隠した構成を含む）× フレームワーク × 部品（直積と無作為の組）× 差し替えの途中の構成と Workload の **550,407 件がすべて一致**。
+  game: 始める画面の 1 か月目の見込みと最後まで回した状態の **63,792 件**を、さくらの VPS の部品に既定の `db: 'mysql'` が入ったこと（と部品の要約の文の「DB: VPS の MySQL（同居）」）を除いて比べ、すべて一致。違いは、DB の選択肢の一覧（とその組み合わせ）が増えたことだけ。`route-strategies-equivalence.test.ts` の記録は、足した部品を除いて取り直さずに通る。
+- **費用の例**（`public-db.test.ts` の規則ごとの golden。記事コミュニティ・月 30 万 PV・既定の部品の 1 か月目の見積・税抜）: さくらの VPS 2GB × Neon $20.74 + ¥1,958・さくらの VPS 2GB × RDS $22.30 + ¥1,958・AWS（Amplify）× Supabase $37.72・Google Cloud × DynamoDB $25.98（D-121 の画像の仮定の後）。
+- **基準プレイ**（何もしない・シード 1〜20。12 か月の費用の平均 / 月。目標の額は動かさない・D-64。D-121 のマージ後に取り直した）。既定の部品（記事は画像を `cf-resize` にした列も）で、DB だけ替えた:
+
+  | シナリオ × 構成 × フレームワーク | 土台の既定の DB | Neon | Supabase | DynamoDB | Aurora（0.5 / 0 ACU） | RDS |
+  |---|---|---|---|---|---|---|
+  | 受託 × Google Cloud × Next.js・Astro | Firestore 20/20 $15.9 | 20/20 $25.6 | 6/20 $36.1 | **20/20 $12.4** | 0/20 $84.6 / $63.4 | 18/20 $32.1 |
+  | 受託 × Google Cloud × SPA | Firestore 20/20 $12.6 | 20/20 $21.7 | 20/20 $32.2 | **20/20 $8.7** | 0/20 | 20/20 $28.2 |
+  | 受託 × Google Cloud × 静的書き出し | Firestore 20/20 $11.6 | 20/20 $21.2 | 18/20 $31.7 | **20/20 $8.1** | 0/20 | 20/20 $27.7 |
+  | 受託 × Amplify × SPA・静的書き出し | DynamoDB 20/20 $7.9 | 20/20 $21.1 | 2/20 $31.7 | — | 0/20 | 16/20 $27.7 |
+  | 受託 × Amplify × Next.js | DynamoDB 20/20 $18.8 | 0/20 $32.0 | 0/20 $42.5 | — | 0/20 | 0/20 $38.5 |
+  | 受託 × さくらの VPS 2GB（どのフレームワークも） | MySQL 0/20 $16.2 | 0/20 $30.6 | 0/20 $41.2 | 0〜1/20 $17.3 | 0/20 | 0/20 $37.2 |
+  | 記事 × Google Cloud × Astro + `cf-resize` | Firestore 20/20 $16.3 | 20/20 $34.1 | 20/20 $39.6 | **20/20 $15.0** | 0/20 | 20/20 $35.6 |
+  | 記事 × Google Cloud × Next.js + `cf-resize` | Firestore 20/20 $27.5 | 20/20 $45.3 | 9/20 $50.8 | 20/20 $26.2 | 0/20 | 19/20 $46.8 |
+  | 記事 × Amplify × SPA + `cf-resize` | DynamoDB 20/20 $5.0 | 20/20 $24.1 | 12/20 $29.6 | — | 0/20 | 20/20 $25.6 |
+  | 記事 × さくらの VPS 2GB × Astro | MySQL 17/20 $14.9 | 16/20 $34.4 | 14/20 $39.9 | 17/20 $15.2 | 0/20 | 16/20 $35.9 |
+  | 記事 × さくらの VPS 2GB × Next.js | MySQL 8/20 $14.7 | 0/20 $34.2 | 0/20 $39.7 | 8/20 $15.1 | 0/20 | 0/20 $35.7 |
+
+  さくらの VPS 4GB は 2GB より届く数が少ないか同じ。Cloudflare Paid（目標の根拠の構成）は変わらない（記事 × Next.js 20/20 $18.2・受託 × Next.js 20/20 $14.4。不変の確かめのとおり）。
+  **新しい最安の床ができた（2026-11-05 にユーザーが受け入れた）**: Google Cloud × AWS DynamoDB は Google Cloud の Firestore より月 $1.6〜3.9 安く、
+  受託 × Next.js・Astro では **$12.4 が今の最安（Cloudflare Paid の $14.4）より下**、記事 × Astro（画像 `cf-resize`）では **$15.0 が今の最安（Google Cloud × Firestore の $16.3）より下**になる（どれも全シードで届く）。
+  受託 × SPA・静的書き出しの床（Amplify × DynamoDB $7.9）と記事 × Next.js の床（Cloudflare Paid $18.2）は下がらない。AWS のアカウントは既定のメールの送信（SES）で既にあるので、手間も増えない。
+  釣り合い（目標の額・手間）は動かしていない。ユーザーはこの床を受け入れてマージした（2026-11-05）。
+
 ### 3.16 総当たりを pairwise に（CP-14・2026-11-04）
 
-- **なぜ**: `combo-sweep.test.ts` の部品の直積は、段 2c の後（main）で 31,896 組（どのグループも始める画面で選べる組だけを数えた値）・ローカルの `pnpm test:sweep` で 4 分 48 秒。部品が土台をまたいで選べるようになり、選択肢が増えるたびに桁で増えるので、CP-14 の決定どおり pairwise に切り替えた。段 2d（公開の口の DB を全土台に。判断待ち）とは分けて先に入れた。
+- **なぜ**: 段 2d で DB の選択肢が全土台に増え、`combo-sweep.test.ts` の部品の直積は 31,896 組（main・段 2c のマージ後。ローカルの `pnpm test:sweep` で 4 分 38 秒）から 51,704 組に増える（どのグループも始める画面で選べる組だけを数えた値）。選択肢が増えるたびに桁で増えるので、CP-14 の決定どおり pairwise に切り替えた。
 - **形**（`packages/game/src/pairwise.test-helpers.ts`・`combo-sweep.test.ts`）:
   - グループ（シナリオ × フレームワーク × 構成。隠した構成を除く 62）はすべて回し、各グループの先頭は構成の既定の部品の組み合わせ（土台の既定の総当たりを残す）。
   - 部品は、始める画面のスロットと選択肢の和（1 つの選択で現れるスロット（DB のバックアップ）を含む）について、どの 2 つのスロットの選択肢の組も、少なくとも 1 つの組み合わせに出るようにする（貪欲法。覆っていない組を 1 つずつ固定し、既定の部品に当てた候補・貪欲の候補・無作為の候補を 12 個作り、始める画面で選べる形に直したうちで最も多く覆うものを足す）。
   - 乱数はグループの名前から作るシード（決定論）。始める画面で選べる形に直す（今の選択で出るスロットだけ・依存（`componentConflict`）に当たらない）のは前と同じ判定。
   - 作れない組（選択で消えるスロットとの組。例: API を他の事業者に置いたときの DB）は除き、**除いた組には直接の理由がある（片方を選ぶともう片方が出ない・依存に当たる）ことをテストで確かめる**（貪欲が作れる組を作れないと見誤っていないこと）。
-- **数**（main の選択肢）: 2,131 組（直積の 31,896 の約 7%・1 グループで最大 70）。覆う対象の組 8,201 のうち 7,591 を覆い、作れない組 610 はすべて直接の理由がある。
+- **数**: 2,628 組（直積の 51,704 の約 5%・1 グループで最大 70）。覆う対象の組 10,427 のうち 9,778 を覆い、作れない組 649 はすべて直接の理由がある。
 - **確かめる性質**（前と同じ）: 例外が出ない・状態の数が有限・費用・満足度・PV が範囲の中・明細の合計 = 費用・事業者ごとの金額が負にならない・始められる（`setupProblem` が null・`validSetupChoices` が同じ組を返す）・始める画面の選択肢がどれも少なくとも 1 つの組み合わせに出る・保存 → 再生で同じ最終状態（10 組に 1 つ）・作り直し（3 組に 1 つ）・1 か月目の見込みと実際の費用の一致（すべての組）。
-- **時間**: ローカルの `pnpm test:sweep` が 4 分 48 秒（main・直積 31,896 組）→ **約 21 秒**（pairwise 2,131 組）。
+- **時間**: ローカルの `pnpm test:sweep` が 4 分 38 秒（main・直積 31,896 組）→ **約 27 秒**（pairwise 2,628 組）。
 - pairwise の作り方そのものは `pairwise.test.ts`（架空のスロットで、依存が無ければ 2 つの組をすべて覆う・決定論・作れない組の扱い）。
 
 ## 4. 出典の扱い
@@ -548,4 +611,5 @@ type ConnectionRule = {
 - Supabase: [Postgres への接続](https://supabase.com/docs/guides/database/connecting-to-postgres)・[egress](https://supabase.com/docs/guides/platform/manage-your-usage/egress)
 - Neon: [接続のプール](https://neon.com/docs/connect/connection-pooling)
 - Google Cloud: [Cloud Run から Cloud SQL](https://docs.cloud.google.com/sql/docs/postgres/connect-run)
+- 段 2d（2026-11-04 取得）: [VPC の Lambda のインターネット](https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html)・[Cloud Run のネットワークの手引き](https://docs.cloud.google.com/run/docs/configuring/networking-best-practices)・[VPC の中の RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html)・[Supabase の Postgres への接続](https://supabase.com/docs/guides/database/connecting-to-postgres)・[Supabase の egress](https://supabase.com/docs/guides/platform/manage-your-usage/egress)・[Neon の接続のプール](https://neon.com/docs/connect/connection-pooling)
 - 段 2b（2026-11-04 取得）: [Hyperdrive × Neon](https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/neon/)・[Hyperdrive × AWS RDS / Aurora](https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/aws-rds-aurora/)・[Hyperdrive の料金](https://developers.cloudflare.com/hyperdrive/platform/pricing/)・[Hyperdrive の制限](https://developers.cloudflare.com/hyperdrive/platform/limits/)・[Hyperdrive の仕組み](https://developers.cloudflare.com/hyperdrive/concepts/how-hyperdrive-works/)・[Workers の制限](https://developers.cloudflare.com/workers/platform/limits/)・[DynamoDB の低レベル API](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.LowLevelAPI.html)・[RDS for PostgreSQL の料金](https://aws.amazon.com/rds/postgresql/pricing/)

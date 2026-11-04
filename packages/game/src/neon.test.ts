@@ -54,11 +54,11 @@ describe('DB だけ Neon', () => {
     for (const stack of [VERCEL_PRO, NETLIFY_PRO])
       for (const fw of ['nextjs', 'vite-spa', 'astro'] as const) {
         const db = setupSlots(article, stack, fw).find((x) => x.slot === 'db')!;
-        // Vercel には AWS の DynamoDB・Aurora も出る（D-114 段 2）
+        // Vercel には AWS の DynamoDB・Aurora も出る（D-114 段 2）。Netlify には公開の口の AWS の DB（段 2d）
         expect(db.options.map((o) => o.id)).toEqual(
           stack === VERCEL_PRO
             ? ['supabase', 'neon', 'dynamodb', 'aurora', 'aurora-pause']
-            : ['supabase', 'neon'],
+            : ['supabase', 'neon', 'dynamodb', 'aurora', 'aurora-pause', 'rds'],
         );
         for (const o of db.options) expect(componentFlavor(o)).toBeDefined();
       }

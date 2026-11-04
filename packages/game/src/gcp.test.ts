@@ -84,7 +84,20 @@ describe('Google Cloud の構成', () => {
           'aws-s3-resize',
         ],
       ],
-      ['db', ['firestore', 'cloud-sql']],
+      // 段 2d（D-114）: 公開の口の DB（Neon・Supabase・AWS）
+      [
+        'db',
+        [
+          'firestore',
+          'cloud-sql',
+          'neon',
+          'supabase',
+          'dynamodb',
+          'aurora',
+          'aurora-pause',
+          'rds',
+        ],
+      ],
       ['minInstances', ['0', '1']],
       // DB のバックアップ（D-93）: 既定の Firestore は PITR を付けられる
       ['dbBackup', ['default', 'pitr']],

@@ -234,6 +234,11 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '認証やストレージまで揃う人気の Postgres。決まった月額で、サーバーが常に動いている',
   'netlify:db:supabase':
     '認証やストレージまで揃う人気の Postgres。決まった月額で、サーバーが常に動いている',
+  // さくらの VPS の DB と、他の土台の Supabase の部品（D-114 段 2d）
+  'sakura:db:mysql':
+    '同じ VPS の MySQL を使うので、月額の中に収まり、部品も請求もひとまとめ',
+  'supabase:db:supabase':
+    '認証やストレージまで揃う人気の Postgres。決まった月額で、サーバーが常に動いている',
   'neon:db:neon':
     '使われていない間は止まる従量の Postgres。基本料が無く、小さく始めるのに向く',
   // Google Cloud（D-88）

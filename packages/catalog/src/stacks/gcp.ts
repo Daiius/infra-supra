@@ -3,6 +3,7 @@
 // SPA・Next.js の静的書き出し・Astro は Hosting から静的に配り、API（Astro はマイページも）を Cloud Run に置く。
 // 料金は providers/gcp.ts。SPA と Astro の形もここで直接組む（index.ts の asSpa・asAstro は通さない。Netlify と同じ）。
 // ノードの id は cdn・run・gcs と DB（firestore・cloud-sql）。他の事業者の部品（cross.ts）はこの id に頼る。
+import { CROSS_DB, crossDbPlaceholder } from './cross-db.ts';
 import type { ArchitectureInput, RequestClass } from 'estimator';
 import { browserCallsApi, type FrameworkId } from '../frameworks/index.ts';
 import type { Choices, ComponentOption, StackDef } from './index.ts';
@@ -207,6 +208,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
 
 /** DB のノード（Firestore は件数で課金・Cloud SQL は時間で課金）。 */
 export function gcpDbNode(opt: string | undefined): ArchNodeIn {
+  if (opt === CROSS_DB) return crossDbPlaceholder();
   const bill = (planId: string, meters: Record<string, string>) => ({
     accountId: 'gcp',
     provider: 'gcp',
