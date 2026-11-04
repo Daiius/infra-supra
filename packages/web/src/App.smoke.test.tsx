@@ -783,6 +783,48 @@ describe('ゲームモードの画面', () => {
     expect(current()).toBe(other);
   });
 
+  it('W-52 始める画面: 狭い画面の前後のカードの帯の三角を押すと前後の構成を選び、帯の無い端では出ない。三角は読み上げに出ない', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    const carousel = () =>
+      current().closest('[data-card]')!.parentElement!.parentElement!;
+    const arrow = (d: 'prev' | 'next') =>
+      carousel().querySelector<HTMLElement>(`[data-edge-arrow="${d}"]`);
+    const cards = [...carousel().querySelectorAll<HTMLElement>('[data-card]')];
+    const stackOf = (card: HTMLElement) =>
+      card.querySelector<HTMLElement>('section[data-stack]')!.dataset.stack!;
+    // 最初のカードを選ぶと、前の帯が無いので左の三角は出ない
+    fireEvent.click(
+      document.querySelector(
+        `input[name="stack"][value="${stackOf(cards[0]!)}"]`,
+      )!,
+    );
+    expect(arrow('prev')).toBeNull();
+    expect(arrow('next')).not.toBeNull();
+    // 三角は読み上げに出ず、フォーカスも受けない（前後のボタンが担う）
+    expect(arrow('next')!.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(arrow('next')!.tabIndex).toBe(-1);
+    expect(screen.getAllByRole('button', { name: /^次の構成/ }).length).toBe(1);
+    // 押すと次のカードを選び、前の三角も出る
+    fireEvent.click(arrow('next')!);
+    expect(current().closest('[data-card]')).toBe(cards[1]);
+    expect(arrow('prev')).not.toBeNull();
+    fireEvent.click(arrow('prev')!);
+    expect(current().closest('[data-card]')).toBe(cards[0]);
+    // 最後のカードでは右の三角は出ない
+    fireEvent.click(
+      document.querySelector(
+        `input[name="stack"][value="${stackOf(cards.at(-1)!)}"]`,
+      )!,
+    );
+    expect(arrow('next')).toBeNull();
+    expect(arrow('prev')).not.toBeNull();
+  });
+
   it('W-21 始める画面のインフラの構成のタブは事業者ごとにまとまり、←/→ は組をまたいで全部の構成を順に移る（D-105 の補足）', async () => {
     await renderApp();
     fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));

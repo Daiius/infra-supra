@@ -326,7 +326,7 @@ export function EstimateMode() {
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="card bg-base-100 shadow">
-      <div className="card-body min-w-0 gap-3 p-4 sm:p-6">
+      <div className="card-body min-w-0 gap-3 px-3 py-4 sm:p-6">
         <h2 className="card-title text-base sm:text-lg">{title}</h2>
         {children}
       </div>

@@ -61,7 +61,7 @@ export function ScenarioPicker({
   if (SCENARIO_LIST.length < 2) return null;
   return (
     <div className="card bg-base-100 shadow">
-      <div className="card-body">
+      <div className="card-body px-3 sm:px-6">
         <h2 className="card-title">どのシナリオで遊びますか？</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           {SCENARIO_LIST.map((s) => (
@@ -285,7 +285,7 @@ function FrameworkCard({
           : undefined
       }
     >
-      <div className="card-body justify-start gap-3 p-4 *:grow-0">
+      <div className="card-body justify-start gap-3 p-3 *:grow-0 sm:p-4">
         <h4 className="card-title text-lg">
           <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
           <NameWithInfo name={FRAMEWORKS[id].label} info={info} />
@@ -631,7 +631,7 @@ export function ScenarioDescription({
   const pagesTitleId = useId();
   return (
     <div className="card bg-base-100 shadow">
-      <div className="card-body">
+      <div className="card-body px-3 sm:px-6">
         <h2 className="card-title">
           シナリオ: {sc.name}を {sc.months} か月運営する
         </h2>

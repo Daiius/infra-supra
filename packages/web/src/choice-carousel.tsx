@@ -175,6 +175,25 @@ export function ChoiceCarousel<T extends string>({
     ) : null;
   };
   const flagged = flag ? items.filter((id) => flag(id)) : [];
+  /** 狭い画面の前後のカードの帯に重ねる三角（d = -1 は左・前、1 は右・次）。 */
+  const edgeArrow = (d: -1 | 1) => (
+    <div
+      aria-hidden
+      className={`pointer-events-none absolute inset-y-2 w-5 pt-2 sm:hidden ${
+        d < 0 ? 'left-0' : 'right-0'
+      }`}
+    >
+      <button
+        type="button"
+        tabIndex={-1}
+        data-edge-arrow={d < 0 ? 'prev' : 'next'}
+        className="pointer-events-auto sticky top-[45vh] flex h-10 w-5 cursor-pointer items-center justify-center rounded-field bg-base-100/80 text-[10px] leading-none shadow-sm"
+        onClick={() => onChange(cardAt(d))}
+      >
+        {d < 0 ? '◀' : '▶'}
+      </button>
+    </div>
+  );
   const focusRing =
     'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-primary';
   const chipClass = (id: T) =>
@@ -300,51 +319,59 @@ export function ChoiceCarousel<T extends string>({
           <span className="text-warning">※</span> {flag(flagged[0]!)}
         </p>
       )}
-      {/* 全部のカード（組があれば組ごとに 1 枚。組の中で選んでいない組は最後に選んだ・無ければ最初の選択肢）を同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（狭い画面は 88%）を
-          使う。前後のカードは両脇の端だけ薄く見え、押すと選ぶ。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
+      {/* 全部のカード（組があれば組ごとに 1 枚。組の中で選んでいない組は最後に選んだ・無ければ最初の選択肢）を同じ中身で並べ、選んでいるものを本文の列の中央へ。読むのは選んでいる 1 枚で、本文の列の 85%（sm 以上 lg 未満は 88%）を
+          使う（sm 未満の狭い画面は 92% で間隔も詰め、前後のカードは細い帯にする）。前後のカードは両脇の端だけ薄く見え、押すと選ぶ。カードの高さは carousel の行で最も高いものに揃う（切り替えてもページが跳ねない）。
           指でのスクロールでは選ばない（選ぶのはタブ・前後のボタン・カードを押す）。overflow を隠し、位置は scrollLeft で動かす */}
-      <div
-        ref={track}
-        className="relative carousel w-full carousel-center gap-3 overflow-x-hidden py-2"
-      >
-        {/* 最初と最後のカードも中央に来るように、両端に空きを置く（カードの幅の残りの半分 − 間隔） */}
+      <div className="relative">
         <div
-          aria-hidden
-          className="w-[calc(6%-0.75rem)] shrink-0 lg:w-[calc(7.5%-0.75rem)]"
-        />
-        {cards.map((c) => {
-          const id = shown(c);
-          const selected = c === current;
-          return (
-            // key は組なので、組の中で選択肢を替えてもカード（と構成図）は作り直さず、中身だけを描き直す
-            <div
-              key={c.key}
-              data-card={c.key}
-              ref={(el) => {
-                els.current[c.key] = el;
-              }}
-              className={`carousel-item w-[88%] lg:w-[85%] ${selected ? '' : off(id) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-              // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
-              onClick={
-                selected || off(id)
-                  ? undefined
-                  : (e) => {
-                      // ⓘ の説明はポータルで描くので、その中の操作も React の木を伝ってここへ届く。DOM でカードの中の操作だけを選ぶ
-                      const target = e.target as Element;
-                      if (!e.currentTarget.contains(target)) return;
-                      if (target.closest('button')) return;
-                      onChange(id);
-                    }
-              }
-            >
-              {renderCard(id, { selected, idPrefix: headingId })}
-            </div>
-          );
-        })}
-        <div
-          aria-hidden
-          className="w-[calc(6%-0.75rem)] shrink-0 lg:w-[calc(7.5%-0.75rem)]"
-        />
+          ref={track}
+          className="relative carousel w-full carousel-center gap-1.5 overflow-x-hidden py-2 sm:gap-3"
+        >
+          {/* 最初と最後のカードも中央に来るように、両端に空きを置く（カードの幅の残りの半分 − 間隔。狭い画面は (100% − 92%) / 2 − gap-1.5） */}
+          <div
+            aria-hidden
+            className="w-[calc(4%-0.375rem)] shrink-0 sm:w-[calc(6%-0.75rem)] lg:w-[calc(7.5%-0.75rem)]"
+          />
+          {cards.map((c) => {
+            const id = shown(c);
+            const selected = c === current;
+            return (
+              // key は組なので、組の中で選択肢を替えてもカード（と構成図）は作り直さず、中身だけを描き直す
+              <div
+                key={c.key}
+                data-card={c.key}
+                ref={(el) => {
+                  els.current[c.key] = el;
+                }}
+                className={`carousel-item w-[92%] sm:w-[88%] lg:w-[85%] ${selected ? '' : off(id) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
+                onClick={
+                  selected || off(id)
+                    ? undefined
+                    : (e) => {
+                        // ⓘ の説明はポータルで描くので、その中の操作も React の木を伝ってここへ届く。DOM でカードの中の操作だけを選ぶ
+                        const target = e.target as Element;
+                        if (!e.currentTarget.contains(target)) return;
+                        if (target.closest('button')) return;
+                        onChange(id);
+                      }
+                }
+              >
+                {renderCard(id, { selected, idPrefix: headingId })}
+              </div>
+            );
+          })}
+          <div
+            aria-hidden
+            className="w-[calc(4%-0.375rem)] shrink-0 sm:w-[calc(6%-0.75rem)] lg:w-[calc(7.5%-0.75rem)]"
+          />
+        </div>
+        {/* 狭い画面では前後のカードが細い帯になり押せると気づきにくいので、帯に小さい横向きの三角を重ねる（押すと前後のボタンと同じく選ぶ）。
+          カードは縦に長く、帯の上の方だけに置くと読み進めると見えなくなるので、帯と同じ高さの列の中で sticky にし、
+          最初はカードの見出しのあたり（列の上の余白）、下へ読み進めると画面の真ん中あたり（45vh）に留まる。前後のボタンが読み上げ・キーボードを担うので、
+          三角は読み上げに出さずフォーカスも受けない。前後は輪で回るが、帯が無い端（最初・最後のカード）では出さない */}
+        {ci > 0 && edgeArrow(-1)}
+        {ci < cards.length - 1 && edgeArrow(1)}
       </div>
     </div>
   );

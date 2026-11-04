@@ -324,7 +324,7 @@ function StackCard({
       }`}
     >
       {/* 中身は上に詰める（carousel で高さを揃えたときの余りは下に回す） */}
-      <div className="card-body min-w-0 justify-start gap-3 p-4 *:grow-0">
+      <div className="card-body min-w-0 justify-start gap-3 p-3 *:grow-0 sm:p-4">
         <h4 className="card-title text-lg">
           <PlatformMarks platform={STACKS[stackIndex]!.provider} />
           <NameWithInfo
