@@ -5,8 +5,10 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
   ensurePartsList,
+  inSetupTabs,
   openSlot,
   renderApp,
+  showSetupTab,
   useSmokeEnv,
   waitLoaded,
 } from '../smoke.test-helpers.tsx';
@@ -20,20 +22,24 @@ const combo = (label: string) =>
   screen.getByRole('combobox', { name: new RegExp(`^${label}`) });
 /** 部品の行（構成のカードのチップ。D-116）・設定のチップ（記事のページの行の描き方の設定・画像の行の設定。D-119）。名前は見出しの文字で始まる。 */
 // 部品の行は「機能から選ぶ」の表示のチップ（D-116 の補足）なので、引く前にその表示にする
-const group = (label: string) => {
-  ensurePartsList();
-  return screen.getByRole('group', { name: new RegExp(`^${label}`) });
+// ① ② はタブで片方だけ出す（D-116 の補足）ので、今の表示に無ければもう一方のタブを開いて引く
+const queryGroup = (label: string) =>
+  inSetupTabs(() => {
+    ensurePartsList();
+    return screen.queryByRole('group', { name: new RegExp(`^${label}`) });
+  });
+const group = (label: string) =>
+  queryGroup(label) ??
+  screen.getByRole('group', { name: new RegExp(`^${label}`) });
+/** ① 構成・② フレームワークのカルーセルのラジオ（ゲームと共用。D-115）。その欄のタブを開いて引く。 */
+const pickerRadios = (name: 'stack' | 'framework') => {
+  showSetupTab(name);
+  return [
+    ...document.querySelectorAll<HTMLInputElement>(
+      `input[type="radio"][name="${name}"]`,
+    ),
+  ];
 };
-const queryGroup = (label: string) => {
-  ensurePartsList();
-  return screen.queryByRole('group', { name: new RegExp(`^${label}`) });
-};
-/** ① 構成・② フレームワークのカルーセルのラジオ（ゲームと共用。D-115）。 */
-const pickerRadios = (name: 'stack' | 'framework') => [
-  ...document.querySelectorAll<HTMLInputElement>(
-    `input[type="radio"][name="${name}"]`,
-  ),
-];
 const pickerRadio = (name: 'stack' | 'framework', value: string) =>
   pickerRadios(name).find((r) => r.value === value)!;
 /** 構成・フレームワークを選ぶ（タブのラジオを押す）。 */
@@ -56,16 +62,20 @@ const choose = (label: string, value: string) => {
   fireEvent.click(within(chip).getByRole('button', { pressed: false }));
 };
 
-/** ① の選んでいる構成のカード。 */
-const stackCard = () =>
-  document.querySelector<HTMLElement>(
+/** ① の選んでいる構成のカード（① のタブを開いて引く）。 */
+const stackCard = () => {
+  showSetupTab('stack');
+  return document.querySelector<HTMLElement>(
     'section[data-stack][aria-current="true"]',
   )!;
-/** ② の選んでいるフレームワークのカード。 */
-const fwCard = () =>
-  document.querySelector<HTMLElement>(
+};
+/** ② の選んでいるフレームワークのカード（② のタブを開いて引く）。 */
+const fwCard = () => {
+  showSetupTab('framework');
+  return document.querySelector<HTMLElement>(
     'section[data-framework][aria-current="true"]',
   )!;
+};
 /** ② のカードの「詳しく比べる」のダイアログ（閉じていれば開く。D-115 で下の表のカードの代わり）。 */
 const routesDialog = () => {
   if (!screen.queryByRole('dialog'))
@@ -371,6 +381,84 @@ describe('見積モードの画面', () => {
     ).toBeTruthy();
   });
 
+  it('W-56 ① 構成と ② フレームワークはタブで切り替え、見出しに今の選択と付け替えの印が出て、替えても選択は残る（D-116 の補足）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-paid',
+    );
+    await renderApp();
+    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const fwTab = screen.getByRole('tab', {
+      name: /^② フレームワークと描き方/,
+    });
+    // 既定は ①。② のタブに今のフレームワーク、① のタブに今の構成
+    expect(stackTab.getAttribute('aria-selected')).toBe('true');
+    expect(fwTab.textContent).toContain('Astro');
+    expect(stackTab.textContent).toContain('Cloudflare Paid');
+    expect(
+      screen.queryByRole('radiogroup', {
+        name: '② アプリのフレームワークとページの描き方',
+      }),
+    ).toBeNull();
+    // 部品を選んでから ② を開き、① に戻っても残る（URL にも残る）
+    ensurePartsList();
+    const row = document.querySelector<HTMLElement>(
+      'section[data-parts] [data-slot]',
+    )!;
+    const slot = row.getAttribute('data-slot')!;
+    const picked = () =>
+      document
+        .querySelector(
+          `section[data-parts] [data-slot="${slot}"] [data-selected="true"]`,
+        )
+        ?.getAttribute('data-option');
+    const other = [
+      ...openSlot(row).querySelectorAll<HTMLElement>('[data-option]'),
+    ].find((c) => c.getAttribute('data-selected') !== 'true')!;
+    const chosen = other.getAttribute('data-option')!;
+    fireEvent.click(within(other).getByRole('button', { pressed: false }));
+    expect(picked()).toBe(chosen);
+    expect(new URLSearchParams(window.location.search).get(`c.${slot}`)).toBe(
+      chosen,
+    );
+    fireEvent.click(fwTab);
+    expect(
+      screen.queryByRole('radiogroup', { name: '① インフラの構成' }),
+    ).toBeNull();
+    expect(localStorage.getItem('infra-supra:setup-tab:estimate')).toBe(
+      'framework',
+    );
+    // 欄の中の見出しは画面から隠し、radiogroup の名前には残す
+    expect(
+      screen.getByRole('heading', {
+        name: '② アプリのフレームワークとページの描き方',
+      }).className,
+    ).toContain('sr-only');
+    screen.getByRole('radiogroup', {
+      name: '② アプリのフレームワークとページの描き方',
+    });
+    // ゲームの始める画面とは別に覚える
+    expect(localStorage.getItem('infra-supra:setup-tab:game')).toBeNull();
+    fireEvent.keyDown(fwTab, { key: 'ArrowRight' });
+    expect(stackTab.getAttribute('aria-selected')).toBe('true');
+    expect(picked()).toBe(chosen);
+    // Astro を載せられない構成を選ぶと、② のタブに付け替えの印（① を開いたまま）
+    expect(fwTab.querySelector('[data-setup-tab-warn]')).toBeNull();
+    pick('stack', 'aws-amplify');
+    expect(stackTab.getAttribute('aria-selected')).toBe('true');
+    expect(fwTab.textContent).toContain('Next.js（App Router）');
+    expect(fwTab.querySelector('[data-setup-tab-warn]')).not.toBeNull();
+    expect(fwTab.getAttribute('title')).toMatch(/公式のアダプターが無いので/);
+    // 隠れた ② の知らせはパネルの外の aria-live で読む（OCL-B12E7ACB）
+    expect(
+      document.querySelector('[data-setup-tab-live]')!.textContent,
+    ).toMatch(/公式のアダプターが無いので/);
+    // 載せられる構成へ戻すと知らせも印も消える
+    pick('stack', 'cloudflare-vinext-paid');
+    expect(fwTab.querySelector('[data-setup-tab-warn]')).toBeNull();
+  });
+
   it('W-35 選択の欄はゲームと共用（D-115）: 構成が先で、載せられないフレームワークは灰色と理由。Astro で AWS を選ぶと Next.js に替えて知らせる', async () => {
     window.history.replaceState(
       null,
@@ -379,17 +467,22 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    // 順: ① インフラの構成（部品のチップはカードの中。D-116） → ② フレームワーク（描き方の設定は記事のページの行。D-119）
-    const stackGroup = screen.getByRole('radiogroup', {
-      name: '① インフラの構成',
-    });
-    const fwGroup = screen.getByRole('radiogroup', {
-      name: '② アプリのフレームワークとページの描き方',
+    // 順: ① インフラの構成（部品のチップはカードの中。D-116） → ② フレームワーク（描き方の設定は記事のページの行。D-119）。
+    // タブで切り替え、タブの並びもこの順（D-116 の補足）
+    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const fwTab = screen.getByRole('tab', {
+      name: /^② フレームワークと描き方/,
     });
     expect(
-      stackGroup.compareDocumentPosition(fwGroup) &
+      stackTab.compareDocumentPosition(fwTab) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    showSetupTab('stack');
+    screen.getByRole('radiogroup', { name: '① インフラの構成' });
+    showSetupTab('framework');
+    screen.getByRole('radiogroup', {
+      name: '② アプリのフレームワークとページの描き方',
+    });
     // Astro を載せられない構成も隠さず選べる。カードの月額は替わる先のフレームワークで数える
     expect(pickerRadio('stack', 'aws-amplify').disabled).toBe(false);
     expect(
@@ -452,6 +545,7 @@ describe('見積モードの画面', () => {
     const chosen = Object.keys(cur.routes);
     expect(chosen.length).toBe(2);
     const dropped = chosen.filter((r) => after.routes[r] === undefined).length;
+    showSetupTab('stack');
     const note = within(
       document.querySelector<HTMLElement>('section[data-stack="aws-amplify"]')!,
     ).getByRole('note').textContent!;
@@ -643,6 +737,7 @@ describe('見積モードの画面', () => {
         ?.getAttribute('data-alternative'),
     ).toBe('cached-purge');
     // 画像の形式・サイズ違いは画像の部品の行の中（畳んだ行を開くと出る。D-116 の補足）
+    showSetupTab('stack');
     const images = document.querySelector<HTMLElement>(
       'section[data-parts] [data-slot="images"]',
     )!;

@@ -17,8 +17,17 @@ import {
   type SetupOption,
   type SetupSlot,
 } from 'game';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
+import { CarouselHeadingHidden, CarouselVisible } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
 
@@ -582,6 +591,171 @@ export function SettingChips<V extends string | number>({
         })}
       </ul>
       {children}
+    </div>
+  );
+}
+
+/** ① 構成・② フレームワークのタブ（D-116 の補足）。 */
+export type SetupTab = 'stack' | 'framework';
+
+/** タブの見出し: 欄の名前・その欄の今の選択（隠れていても見えるように）・注意（未選択の部品・付け替えの知らせなど）。 */
+export type SetupTabInfo = {
+  label: string;
+  summary: string;
+  /** 注意の文。あればタブに「!」を付け、文は title と読み上げに出す。 */
+  warn?: string | null | undefined;
+  /**
+   * 他方の欄の操作で起きた変化の知らせ（② の付け替えの知らせ。D-113）。欄の中の aria-live は隠れている間は読まれないので、
+   * このタブが隠れている間だけ、パネルの外の常設の aria-live で読む（OCL-B12E7ACB）。
+   */
+  live?: string | null | undefined;
+  panel: ReactNode;
+};
+
+const SETUP_TABS: readonly SetupTab[] = ['stack', 'framework'];
+
+function readSetupTab(key: string): SetupTab {
+  try {
+    return localStorage.getItem(key) === 'framework' ? 'framework' : 'stack';
+  } catch {
+    // 保存領域が使えない環境では ① から
+    return 'stack';
+  }
+}
+
+function storeSetupTab(key: string, v: SetupTab) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    // 覚えられなくても切り替えられる（開き直すと ① に戻るだけ）
+  }
+}
+
+/**
+ * ① インフラの構成と ② フレームワークと描き方を、タブで切り替えて片方だけ出す（D-116 の補足。縦の情報量を減らし、どちらから
+ * 選んでもよいように）。WAI-ARIA の tabs（←/→・Home/End で移って選ぶ）。選んだタブは画面ごとに storageKey へ覚える。
+ * 隠れた側も描いたまま hidden にする（carousel の組ごとに最後に選んだプランなど、欄の中の記憶も保つ）。隠れている間は幅が無いので、
+ * carousel は見えたときに選んだカードへ寄せ直す（CarouselVisible）。
+ * 見た目は ① の事業者の組のタブに寄せる（地の上の枠。選んでいるタブは 2px の primary の枠・淡い地・太字）。部品の選び方の「構成図から /
+ * 機能から」（daisyUI の tabs-box）とは区別する。欄の中の見出しはタブと重なるので画面からは隠す（CarouselHeadingHidden。読み上げには残す）。
+ */
+export function SetupTabs({
+  storageKey,
+  stack,
+  framework,
+}: {
+  storageKey: string;
+  stack: SetupTabInfo;
+  framework: SetupTabInfo;
+}) {
+  const [tab, setTabState] = useState<SetupTab>(() => readSetupTab(storageKey));
+  const setTab = (v: SetupTab) => {
+    setTabState(v);
+    storeSetupTab(storageKey, v);
+  };
+  const id = useId();
+  const tabs = useRef<Partial<Record<SetupTab, HTMLButtonElement | null>>>({});
+  const info = { stack, framework };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = SETUP_TABS.indexOf(tab);
+    const n = SETUP_TABS.length;
+    const next =
+      e.key === 'ArrowRight'
+        ? SETUP_TABS[(i + 1) % n]
+        : e.key === 'ArrowLeft'
+          ? SETUP_TABS[(i + n - 1) % n]
+          : e.key === 'Home'
+            ? SETUP_TABS[0]
+            : e.key === 'End'
+              ? SETUP_TABS[n - 1]
+              : undefined;
+    if (!next) return;
+    e.preventDefault();
+    setTab(next);
+    tabs.current[next]?.focus();
+  };
+  return (
+    <div className="min-w-0 space-y-2" data-setup-tab={tab}>
+      <div
+        role="tablist"
+        aria-label="選ぶもの"
+        className="flex min-w-0 gap-1.5 rounded-box bg-base-200 p-1.5"
+        onKeyDown={onKeyDown}
+      >
+        {SETUP_TABS.map((t) => {
+          const x = info[t];
+          const selected = tab === t;
+          return (
+            <button
+              key={t}
+              ref={(el) => {
+                tabs.current[t] = el;
+              }}
+              type="button"
+              role="tab"
+              id={`${id}-tab-${t}`}
+              aria-selected={selected}
+              aria-controls={`${id}-panel-${t}`}
+              tabIndex={selected ? 0 : -1}
+              title={`${x.label}: ${x.summary}${x.warn ? `（${x.warn}）` : ''}`}
+              data-setup-tab-button={t}
+              className={`flex min-w-0 flex-1 cursor-pointer flex-col items-start rounded-field text-left motion-safe:transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                // 選んでいるタブは 2px の primary の枠・淡い地・太字、選んでいないタブは 1px の灰色の枠（線の差は余白で埋めて高さを揃える）
+                selected
+                  ? 'border-2 border-primary bg-primary/10 px-2 py-1 font-bold'
+                  : 'border border-base-300 bg-base-100 px-[calc(0.5rem+1px)] py-[calc(0.25rem+1px)] font-normal hover:border-primary/60'
+              }`}
+              onClick={() => setTab(t)}
+            >
+              <span className="flex max-w-full items-center gap-1 text-sm">
+                <span className={`truncate ${selected ? 'text-primary' : ''}`}>
+                  {x.label}
+                </span>
+                {x.warn && (
+                  <span
+                    aria-hidden
+                    className="badge shrink-0 badge-xs font-bold badge-warning"
+                    data-setup-tab-warn
+                  >
+                    !
+                  </span>
+                )}
+              </span>
+              <span
+                className={`block w-full truncate text-xs font-normal ${
+                  selected ? 'opacity-90' : 'opacity-70'
+                }`}
+              >
+                <span className="sr-only">：</span>
+                {x.summary}
+              </span>
+              {x.warn && <span className="sr-only">（{x.warn}）</span>}
+            </button>
+          );
+        })}
+      </div>
+      {/* 隠れたタブの知らせを読む（見えているタブの知らせは欄の中の aria-live が読むので、二重にしない） */}
+      <div aria-live="polite" className="sr-only" data-setup-tab-live>
+        {SETUP_TABS.filter((t) => t !== tab && info[t].live).map((t) => (
+          <p key={t}>{info[t].live}</p>
+        ))}
+      </div>
+      {SETUP_TABS.map((t) => (
+        <div
+          key={t}
+          role="tabpanel"
+          id={`${id}-panel-${t}`}
+          aria-labelledby={`${id}-tab-${t}`}
+          hidden={tab !== t}
+          className="min-w-0"
+        >
+          <CarouselVisible.Provider value={tab === t}>
+            <CarouselHeadingHidden.Provider value>
+              {info[t].panel}
+            </CarouselHeadingHidden.Provider>
+          </CarouselVisible.Provider>
+        </div>
+      ))}
     </div>
   );
 }

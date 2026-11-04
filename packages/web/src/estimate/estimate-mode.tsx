@@ -16,6 +16,7 @@ import {
   settingFlavor,
   SETTINGS,
   setupSlots,
+  stackName,
   stackUnsupportedReason,
   STACKS,
   type FrameworkId,
@@ -37,7 +38,11 @@ import {
   type RoutePlanEditor,
 } from '../route-plan-field.tsx';
 import { FrameworkField } from '../scenario-briefing.tsx';
-import { SettingChips, SetupSettings } from '../setup-components.tsx';
+import {
+  SettingChips,
+  SetupSettings,
+  SetupTabs,
+} from '../setup-components.tsx';
 import {
   type EstimateView,
   compareStacks,
@@ -520,81 +525,103 @@ function Conditions({
         </Field>
         <Seats seats={input.seats} setInput={setInput} />
       </div>
-      {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。構成が先（D-113） */}
-      <StackField
-        scenario={scenario}
-        framework={input.framework}
-        value={stackIndex}
-        onChange={(i) => onPickStack(STACKS[i]!.id)}
-        components={input.parts}
-        comments={comments}
-        routes={input.routes}
-        effort={false}
-        // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
-        routesOnFallback={(i) =>
-          normalizeInput({ ...input, ...withStack(input, STACKS[i]!.id) })
-            .routes
-        }
-        // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
-        rememberedOf={(i) => memory[STACKS[i]!.id]}
-        diagramCaption={(selected, remembered) =>
-          selected
-            ? '選んだ部品で描く。'
-            : remembered
-              ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描く。'
-              : 'この構成を選んだときの既定の部品で描く。'
-        }
-        // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
-        onComponentsChange={(parts) => setInput({ parts })}
-        partsNote="選んでいないスロットは既定の部品で見積もる"
-        partsExtra={imageSettings ? { images: imageSettings } : undefined}
-        cardExtra={(i, selected) => {
-          const t = cardTotals[STACKS[i]!.id];
-          if (!t) return null;
-          return (
-            <p className="text-sm" data-stack-total={STACKS[i]!.id}>
-              {selected ? '今の条件で月 ' : 'この構成にすると月 '}
-              <strong className="tabular-nums">{usd(t.totalUsd)}</strong>
-              {t.framework !== input.framework &&
-                `（${FRAMEWORKS[t.framework].label} にしたとき）`}
-              {t.blocking > 0 && (
-                <span className="ml-1 text-xs text-warning">
-                  止まる・プランの変更が要る前提 {t.blocking} 件
-                </span>
-              )}
-            </p>
-          );
+      {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。タブで切り替え、
+          見出しにそれぞれの今の選択と注意を出す（D-116 の補足） */}
+      <SetupTabs
+        storageKey="infra-supra:setup-tab:estimate"
+        stack={{
+          label: '① インフラの構成',
+          summary: stackName(stackIndex, input.framework, false, input.parts),
+          warn:
+            (cardTotals[input.stack]?.blocking ?? 0) > 0
+              ? `止まる・プランの変更が要る前提 ${cardTotals[input.stack]!.blocking} 件`
+              : undefined,
+          panel: (
+            <StackField
+              scenario={scenario}
+              framework={input.framework}
+              value={stackIndex}
+              onChange={(i) => onPickStack(STACKS[i]!.id)}
+              components={input.parts}
+              comments={comments}
+              routes={input.routes}
+              effort={false}
+              // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
+              routesOnFallback={(i) =>
+                normalizeInput({ ...input, ...withStack(input, STACKS[i]!.id) })
+                  .routes
+              }
+              // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
+              rememberedOf={(i) => memory[STACKS[i]!.id]}
+              diagramCaption={(selected, remembered) =>
+                selected
+                  ? '選んだ部品で描く。'
+                  : remembered
+                    ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描く。'
+                    : 'この構成を選んだときの既定の部品で描く。'
+              }
+              // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
+              onComponentsChange={(parts) => setInput({ parts })}
+              partsNote="選んでいないスロットは既定の部品で見積もる"
+              partsExtra={imageSettings ? { images: imageSettings } : undefined}
+              cardExtra={(i, selected) => {
+                const t = cardTotals[STACKS[i]!.id];
+                if (!t) return null;
+                return (
+                  <p className="text-sm" data-stack-total={STACKS[i]!.id}>
+                    {selected ? '今の条件で月 ' : 'この構成にすると月 '}
+                    <strong className="tabular-nums">{usd(t.totalUsd)}</strong>
+                    {t.framework !== input.framework &&
+                      `（${FRAMEWORKS[t.framework].label} にしたとき）`}
+                    {t.blocking > 0 && (
+                      <span className="ml-1 text-xs text-warning">
+                        止まる・プランの変更が要る前提 {t.blocking} 件
+                      </span>
+                    )}
+                  </p>
+                );
+              }}
+            />
+          ),
         }}
-      />
-      <FrameworkField
-        scenario={scenario}
-        allowed={allowed}
-        value={input.framework}
-        onChange={onPickFramework}
-        comments={comments}
-        routePlan={(id) => fwRoutes.get(id) ?? []}
-        routes={input.routes}
-        resolvedRoutes={(id) =>
-          Object.fromEntries(
-            (fwRoutes.get(id) ?? []).map((r) => [r.route, r.strategy]),
-          )
-        }
-        unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
-        notice={notice}
-        editor={editor}
-        text={{
-          heading: '② アプリのフレームワークとページの描き方',
-          footnote: null,
-          wireframeNote:
-            '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
-          compareHint:
-            'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べる',
-          compareNote:
-            'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べる。ここで選んでも、カードのチップで選んでも同じ。構成の比較・費用の曲線もこの描き方で引く。',
-          // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
-          compareCaption: ROUTE_PLAN_NOTE.replace(
-            '費用の差は 1 か月目の基準の規模での目安。',
-            '費用の差は今の条件（月の PV）での目安。',
+        framework={{
+          label: '② フレームワークと描き方',
+          summary: FRAMEWORKS[input.framework].label,
+          warn: notice,
+          live: notice,
+          panel: (
+            <FrameworkField
+              scenario={scenario}
+              allowed={allowed}
+              value={input.framework}
+              onChange={onPickFramework}
+              comments={comments}
+              routePlan={(id) => fwRoutes.get(id) ?? []}
+              routes={input.routes}
+              resolvedRoutes={(id) =>
+                Object.fromEntries(
+                  (fwRoutes.get(id) ?? []).map((r) => [r.route, r.strategy]),
+                )
+              }
+              unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
+              notice={notice}
+              editor={editor}
+              text={{
+                heading: '② アプリのフレームワークとページの描き方',
+                footnote: null,
+                wireframeNote:
+                  '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+                compareHint:
+                  'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べる',
+                compareNote:
+                  'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べる。ここで選んでも、カードのチップで選んでも同じ。構成の比較・費用の曲線もこの描き方で引く。',
+                // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
+                compareCaption: ROUTE_PLAN_NOTE.replace(
+                  '費用の差は 1 か月目の基準の規模での目安。',
+                  '費用の差は今の条件（月の PV）での目安。',
+                ),
+              }}
+            />
           ),
         }}
       />
