@@ -158,9 +158,9 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
     </Row>
   ),
   title: () => (
-    <Stack gap="gap-1.5">
-      <Bar w={85} h="h-2.5" tone={HEADING} />
-      <Bar w={55} h="h-2.5" tone={HEADING} />
+    <Stack>
+      <Bar w={85} h="h-2" tone={HEADING} />
+      <Bar w={55} h="h-2" tone={HEADING} />
       <Row>
         <Dot tone={PERSON} />
         <Bar w={22} />
@@ -170,7 +170,7 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
   ),
   body: () => (
     <Stack>
-      {[100, 94, 98, 88, 96, 62].map((w, i) => (
+      {[100, 94, 98, 62].map((w, i) => (
         <Bar key={i} w={w} />
       ))}
     </Stack>
@@ -178,7 +178,7 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
   image: () => (
     <span className="grid grid-cols-3 gap-1">
       <span
-        className={`col-span-2 row-span-2 flex aspect-video items-center justify-center rounded ${MEDIA}`}
+        className={`col-span-2 row-span-2 flex h-14 items-center justify-center rounded ${MEDIA}`}
       >
         <ImageIcon />
       </span>
@@ -194,23 +194,21 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
   ),
   likes: () => (
     <Row>
-      <span className="flex items-center gap-1 rounded-full border border-purple-400/50 px-1.5 py-0.5">
+      <span className="flex items-center gap-1 rounded-full border border-purple-400/50 px-1.5">
         <HeartIcon />
         <span className="block h-1.5 w-4 rounded-full bg-base-content/15" />
       </span>
     </Row>
   ),
   comments: () => (
-    <Stack gap="gap-1.5">
-      {[70, 50].map((w, i) => (
-        <span key={i} className="flex gap-1.5">
-          <Dot tone={PERSON} />
-          <span className="flex flex-1 flex-col gap-1 pt-0.5">
-            <Bar w={30} h="h-1" tone={HEADING} />
-            <Bar w={w} />
-          </span>
+    <Stack>
+      <span className="flex gap-1.5">
+        <Dot tone={PERSON} />
+        <span className="flex flex-1 flex-col gap-1 pt-0.5">
+          <Bar w={30} h="h-1" tone={HEADING} />
+          <Bar w={70} />
         </span>
-      ))}
+      </span>
       <Row gap="gap-1">
         <Input />
         <Button w="w-6" />
@@ -218,11 +216,11 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
     </Stack>
   ),
   related: () => (
-    <Stack gap="gap-1.5">
+    <Stack>
       <span className="grid grid-cols-3 gap-1">
         {[0, 1, 2].map((i) => (
           <span key={i} className="flex flex-col gap-0.5">
-            <span className={`block aspect-video rounded ${MEDIA}`} />
+            <span className={`block h-5 rounded ${MEDIA}`} />
             <Bar w={80} h="h-1" />
           </span>
         ))}
