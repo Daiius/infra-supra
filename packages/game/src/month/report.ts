@@ -20,6 +20,25 @@ import { averageSatisfaction } from './satisfaction.ts';
 import type { Traffic, Volume } from './traffic.ts';
 import type { Progress } from './transitions.ts';
 
+/**
+ * その前提に効く部品の今月の値（「images:r2-variants」。推移を部品の差し替えで区切るのに使う。prd/07 §5）。
+ * 効く slot は、その事業者で選べる部品のどれかが premiseRefs でこの前提を挙げている slot。無ければ undefined。
+ */
+export function premiseParts(
+  platform: Platform,
+  comps: Choices,
+  premiseId: string,
+): string | undefined {
+  const slots = (Object.keys(SLOT_LABELS) as SlotId[]).filter((slot) =>
+    componentsOf(platform, slot).some((o) =>
+      o.premiseRefs.some((ref) => premiseId.startsWith(ref)),
+    ),
+  );
+  return slots.length
+    ? slots.map((slot) => `${slot}:${comps[slot] ?? ''}`).join(' ')
+    : undefined;
+}
+
 /** 月の報告を組み立てる（今月の構成・設定は月の初めの状態で見せる）。 */
 export function reportOf(
   state: GameState,
@@ -87,14 +106,18 @@ export function reportOf(
           p.ratio !== undefined &&
           Number.isFinite(p.ratio),
       )
-      .map((p) => ({
-        id: p.id,
-        text: p.text,
-        effect: p.effect,
-        ratio: p.ratio!,
-        hit: p.hit,
-        accumulates: p.accumulates ?? false,
-      })),
+      .map((p) => {
+        const parts = premiseParts(platformNow, comps, p.id);
+        return {
+          id: p.id,
+          text: p.text,
+          effect: p.effect,
+          ratio: p.ratio!,
+          hit: p.hit,
+          accumulates: p.accumulates ?? false,
+          ...(parts ? { parts } : {}),
+        };
+      }),
     lines: [
       ...[r, ...(target ? [target] : [])].flatMap((x) =>
         x.bill.lines

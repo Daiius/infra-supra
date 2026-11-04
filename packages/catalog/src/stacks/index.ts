@@ -1089,6 +1089,10 @@ function composeCloudflare(
       role: 'image-transform',
       label: 'Images（バインディング）',
       config: { kind: 'image-optimizer' },
+      // 投稿のときにだけ変換する（r2-variants）なら、前提の文をその数え方にする（料金データの premiseVariants）
+      ...(choices.images === 'r2-variants'
+        ? { premiseVariant: 'transform-at-upload' }
+        : {}),
       billing: bill(plan === 'free' ? 'images-free' : 'images-paid', {
         'image-transformations': 'transformations',
       }),

@@ -11,6 +11,11 @@ export type PremiseSnapshot = {
   ratio: number;
   hit: boolean;
   accumulates: boolean;
+  /**
+   * その前提に効く部品の値（「images:r2-variants」。month/report.ts の premiseParts）。
+   * 前の月と変わったら、推移はそこで区切る（差し替えの前後で使い方が違うので、続いた系列として見込まない）。
+   */
+  parts?: string;
 };
 
 export type PremiseTrend = {
@@ -20,6 +25,10 @@ export type PremiseTrend = {
   accumulates: boolean;
   /** 月ごとの使用率（その月に前提が無ければ null）。添字 0 が 1 か月目。 */
   ratios: (number | null)[];
+  /** 部品を差し替えて区切った月の添字（前の月にも記録があり、効く部品の値が変わった月）。 */
+  breaks: number[];
+  /** 最後の区間の始まりの添字（記録の途切れか部品の差し替えの後）。見込みと出すかどうかの判定はここからの記録で行う。 */
+  segmentStart: number;
   latest: number;
   hitNow: boolean;
   /** 見込み: このペースで残りの期間内に超える月（何か月後か）。超えない・下がっている・すでに超えているなら null。 */
@@ -104,13 +113,22 @@ export function premiseTrends(
 
   const trends: PremiseTrend[] = [];
   for (const [id, meta] of ids) {
-    const ratios = months.map((m) => m.find((p) => p.id === id)?.ratio ?? null);
+    const found = months.map((m) => m.find((p) => p.id === id));
+    const ratios = found.map((p) => p?.ratio ?? null);
     const latest = ratios[now - 1];
     if (latest === null || latest === undefined) continue;
-    // 見込みは直近の連続した記録だけで計算する（構成を乗り換えると途切れる）
-    const contiguous: number[] = [];
-    for (let i = now - 1; i >= 0 && ratios[i] !== null; i--)
-      contiguous.unshift(ratios[i]!);
+    const breaks = found.flatMap((p, i) =>
+      p && found[i - 1] && found[i - 1]!.parts !== p.parts ? [i] : [],
+    );
+    // 見込みは最後の区間（直近の連続した記録のうち、部品の差し替えの後）だけで計算する（構成を乗り換えると途切れる）
+    let segmentStart = now - 1;
+    while (
+      segmentStart > 0 &&
+      ratios[segmentStart - 1] !== null &&
+      !breaks.includes(segmentStart)
+    )
+      segmentStart--;
+    const contiguous = ratios.slice(segmentStart) as number[];
     const skip = options.skipProjection !== undefined;
     const monthsUntil = skip
       ? null
@@ -137,6 +155,8 @@ export function premiseTrends(
       effect: meta.effect,
       accumulates: meta.accumulates,
       ratios,
+      breaks,
+      segmentStart,
       latest,
       hitNow,
       monthsUntil,
@@ -157,7 +177,7 @@ export function premiseTrends(
 /**
  * 推移のグラフに出す前提を選ぶ（多すぎると読めない。上位 limit 件）。
  * 順: 今当たっている止まる前提 → 見込みで超える（早い順）→ 今当たっている課金の前提 → 境目に近い順。
- * 一度も 50% に届かず、超える見込みもない前提は出さない。
+ * 最後の区間（記録の途切れ・部品の差し替えの後）で一度も 50% に届かず、超える見込みもない前提は出さない。
  */
 export function selectTrends(
   trends: PremiseTrend[],
@@ -176,7 +196,7 @@ export function selectTrends(
       (t) =>
         t.hitNow ||
         t.monthsUntil !== null ||
-        t.ratios.some((r) => (r ?? 0) >= 0.5),
+        t.ratios.slice(t.segmentStart).some((r) => (r ?? 0) >= 0.5),
     )
     .sort(
       (a, b) =>
