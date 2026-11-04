@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   acceptSummary,
+  applyActions,
   ARTICLE_COMMUNITY,
   checkAction,
   eventDef,
@@ -73,6 +74,27 @@ describe('featureOutlook', () => {
       { type: 'respond', eventId: 'p-images', accept: false },
     ]);
     expect(declined.change).toBe(0);
+  });
+
+  it('作業を伴わない提案の加点（受託の c-p-members）も来月の累計と変化に入り、playMonth と一致する（OCL-750B471F）', () => {
+    const contract = SCENARIOS['contract-operations']!;
+    const s = withProposal(
+      playMonth(newGame(CF_PAID, 42, contract, undefined, 'nextjs')),
+      'c-p-members',
+    );
+    const accept: Action[] = [
+      { type: 'respond', eventId: 'c-p-members', accept: true },
+    ];
+    const o = featureOutlook(s, accept);
+    const decline = featureOutlook(s, [
+      { type: 'respond', eventId: 'c-p-members', accept: false },
+    ]);
+    // 加点 +2 は今すぐ、対応の手間 1 は来月の余りから減る
+    expect(o.total - decline.total).toBe(1);
+    expect(o.change).toBe(1);
+    expect(o.feature).toBe(o.effort.feature + 2);
+    const next = playMonth(applyActions(s, accept));
+    expect(next.featurePoints).toBe(o.total);
   });
 
   it('来月の配分の見込み（effort）は、来月の機能開発と同じ配分', () => {

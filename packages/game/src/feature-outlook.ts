@@ -40,7 +40,10 @@ export function featureProgressOf(
 export type FeatureOutlook = FeatureProgress & {
   /** 見込みの月（来月）。 */
   month: number;
-  /** 来月の機能開発（余り + 機能の追加の作業 + 加点）。 */
+  /**
+   * 来月の終わりまでに増える機能開発（来月の余り + 機能の追加の作業 + 加点 + 受けた提案が今すぐ足す加点）。
+   * 来月の配分（effort.feature）と違うのは、作業を伴わない提案の加点（受託の c-p-members など）があるときだけ。
+   */
   feature: number;
   /** 選んだ行動（提案への返事を含む）で来月の機能開発が変わる量（行動を何も選ばないときとの差）。 */
   change: number;
@@ -57,15 +60,13 @@ export function featureOutlook(
   actions: readonly Action[],
 ): FeatureOutlook {
   const month = state.history.length + 1;
-  const effort = progressOf(applyActions(state, actions)).effort;
-  const feature = effort.feature;
+  // 行動を当てた後の状態から配る（作業を伴わない提案の加点は、受けた時点で累計に入る。OCL-750B471F）
+  const progress = progressOf(applyActions(state, actions));
+  const effort = progress.effort;
+  const feature = progress.featurePoints - state.featurePoints;
   const base = progressOf(state).effort.feature;
   return {
-    ...featureProgressOf(
-      scenarioOf(state),
-      state.featurePoints + feature,
-      month,
-    ),
+    ...featureProgressOf(scenarioOf(state), progress.featurePoints, month),
     month,
     feature,
     change: feature - base,

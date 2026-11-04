@@ -77,7 +77,7 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
-import { FeatureRing } from './feature-ring.tsx';
+import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
@@ -578,23 +578,31 @@ function FeatureProgressLine({
   total,
   month,
   prefix = '',
+  actual,
+  note,
 }: {
   scenario: Scenario;
   total: number;
   month: number;
   /** 「来月の」など。 */
   prefix?: string;
+  /** 実際の「機能」の段階（月の報告。メールが届かない分の下げを含む）。 */
+  actual?: Stage;
+  /** 段階に添える断り（来月の見込み）。 */
+  note?: string;
 }) {
   const p = featureProgressOf(sc, total, month);
+  const shown = featureStageView(p.stage, actual, note);
   return (
     <span className="inline-flex flex-wrap items-center gap-x-1">
       <span>
         {prefix}機能開発の累計 {Math.round(p.total)} / 期待 {p.expected} →
         「機能」は
       </span>
-      <span className={`badge badge-sm ${STAGE_CLS[p.stage]}`}>
-        {STAGE_LABEL[p.stage]}
+      <span className={`badge badge-sm ${STAGE_CLS[shown.stage]}`}>
+        {STAGE_LABEL[shown.stage]}
       </span>
+      {shown.note && <span className="text-xs opacity-70">{shown.note}</span>}
       <Info label="余った手間の効き目">{featureRuleText(sc)}</Info>
     </span>
   );
@@ -703,6 +711,7 @@ function EffortBreakdownView({
           scenario={sc}
           total={r.featurePoints}
           month={r.month}
+          actual={r.satisfaction.stages.feature}
         />
       </div>
       <div className="mt-2">
@@ -711,6 +720,7 @@ function EffortBreakdownView({
           month={r.month}
           total={r.featurePoints}
           effort={r.effort}
+          actual={r.satisfaction.stages.feature}
         />
       </div>
       <div className="mt-1 text-xs opacity-60">
@@ -1234,6 +1244,18 @@ function Actions({
   const left = effortAvailable(draft);
   // 来月の機能開発の見込み（選んだ行動・提案への返事を当てた配分。D-122）
   const outlook = featureOutlook(state, actions);
+  // 今月の「機能」がメールが届かない分で下がっていれば、来月の見込みの段階は機能開発の比だけで見たものと断る（OCL-7D797D79）
+  const lastReport = state.history[state.history.length - 1];
+  const stageNote =
+    lastReport &&
+    lastReport.satisfaction.stages.feature !==
+      featureProgressOf(
+        scenarioOf(state),
+        lastReport.featurePoints,
+        lastReport.month,
+      ).stage
+      ? '（機能開発の分だけで見た段階。メールが届かないと下がる）'
+      : '';
   const sc = scenarioOf(state);
   // このシナリオで効かない行動は出さない（D-33・prd/09 E-6）
   const hidden = scenarioOf(state).hidden;
@@ -1273,6 +1295,7 @@ function Actions({
             total={outlook.total}
             month={outlook.month}
             prefix="来月の"
+            note={stageNote}
           />
           <div className="text-xs opacity-70">
             {outlook.total >= outlook.expected
@@ -1286,8 +1309,10 @@ function Actions({
               month={outlook.month}
               total={outlook.total}
               effort={outlook.effort}
+              feature={outlook.feature}
               change={outlook.change}
               next
+              note={stageNote}
             />
           </div>
         </div>

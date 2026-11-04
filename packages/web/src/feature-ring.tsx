@@ -125,13 +125,33 @@ function Tick({ frac, r, width }: { frac: number; r: number; width: number }) {
   );
 }
 
+/**
+ * 表示する「機能」の段階。月の報告では実際の段階（メールが届かない分の下げを含む。D-117）を渡し、機能開発の比だけの段階と違えば理由を添える。
+ * 来月の見込みは実際の段階を予想できないので、機能開発の比だけで見た段階に note で断りを添える（OCL-7D797D79）。
+ */
+export function featureStageView(
+  ratioStage: Stage,
+  actual?: Stage,
+  note?: string,
+): { stage: Stage; note: string } {
+  if (actual && actual !== ratioStage)
+    return {
+      stage: actual,
+      note: `（メールが届かない分で下がった。機能開発だけなら${STAGE_LABEL[ratioStage]}）`,
+    };
+  return { stage: actual ?? ratioStage, note: note ?? '' };
+}
+
 export function FeatureRing({
   scenario: sc,
   month,
   total,
   effort,
+  feature = effort.feature,
   change,
   next,
+  actual,
+  note,
 }: {
   scenario: Scenario;
   /** 累計と期待を見る月。 */
@@ -140,12 +160,19 @@ export function FeatureRing({
   total: number;
   /** その月の手間の配分。 */
   effort: EffortBreakdown;
+  /** その月に増える機能開発（省略は effort.feature。受けた提案の今すぐの加点を含めるときに渡す）。 */
+  feature?: number;
   /** 選んだ行動で機能開発が変わる量（行動の欄だけ）。 */
   change?: number;
+  /** 実際の「機能」の段階（月の報告）。 */
+  actual?: Stage;
+  /** 段階に添える断り（来月の見込み）。 */
+  note?: string;
   /** 来月の見込み（行動の欄）。 */
   next?: boolean;
 }) {
   const p = featureProgressOf(sc, total, month);
+  const shown = featureStageView(p.stage, actual, note);
   const perMonth = featureProgressOf(sc, 0, 1).expected;
   const ratio = p.expected > 0 ? p.total / p.expected : 1;
   const parts = SEGMENTS.map((s) => ({ s, v: Math.max(0, s.of(effort)) }));
@@ -156,7 +183,7 @@ export function FeatureRing({
     acc += x.v;
     return { ...x, from, to: acc / T };
   });
-  const head = `${next ? '来月' : `${month} か月目`}の機能開発 ${fmt(effort.feature)} / 期待 ${perMonth}`;
+  const head = `${next ? '来月' : `${month} か月目`}の機能開発 ${fmt(feature)} / 期待 ${perMonth}`;
   const progressText = `累計 ${fmt(p.total)} / 期待 ${fmt(p.expected)}（${Math.round(ratio * 100)}%）`;
   return (
     <div
@@ -167,7 +194,7 @@ export function FeatureRing({
         width={SIZE}
         height={SIZE}
         role="img"
-        aria-label={`${head}・${progressText}・「機能」は${STAGE_LABEL[p.stage]}`}
+        aria-label={`${head}・${progressText}・「機能」は${STAGE_LABEL[shown.stage]}${shown.note}`}
         className="shrink-0"
       >
         {/* 外側: 累計 / 期待（下地 + 段階の色の進み。100% を超えた分は中の文字で） */}
@@ -184,7 +211,7 @@ export function FeatureRing({
           width={OUTER.w}
           from={0}
           to={Math.min(ratio, 1)}
-          color={STAGE_COLOR[p.stage]}
+          color={STAGE_COLOR[shown.stage]}
           label={progressText}
         />
         <Tick
@@ -225,7 +252,7 @@ export function FeatureRing({
           textAnchor="middle"
           className="fill-[var(--text-primary)] text-[20px] font-bold tabular-nums"
         >
-          {fmt(effort.feature)} / {perMonth}
+          {fmt(feature)} / {perMonth}
         </text>
         <text
           x={C}
@@ -265,17 +292,18 @@ export function FeatureRing({
                 </span>
               </li>
             ))}
-          {effort.featureBonus > 0 && (
-            <li>（ほかに提案の加点 +{fmt(effort.featureBonus)}）</li>
+          {feature - parts[0]!.v > 0 && (
+            <li>（ほかに提案の加点 +{fmt(feature - parts[0]!.v)}）</li>
           )}
         </ul>
         <div className="flex items-center gap-1">
           <span
             aria-hidden
             className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{ background: STAGE_COLOR[p.stage] }}
+            style={{ background: STAGE_COLOR[shown.stage] }}
           />
-          外側の輪: {progressText} →「機能」は{STAGE_LABEL[p.stage]}
+          外側の輪: {progressText} →「機能」は{STAGE_LABEL[shown.stage]}
+          {shown.note}
         </div>
         <div>
           目盛り: 普通 {fmt(p.fairAt)}・良い {fmt(p.goodAt)}
