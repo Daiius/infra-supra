@@ -521,10 +521,10 @@ type ConnectionRule = {
   | 記事 × さくらの VPS 2GB × Next.js | MySQL 8/20 $14.7 | 0/20 $34.2 | 0/20 $39.7 | 8/20 $15.1 | 0/20 | 0/20 $35.7 |
 
   さくらの VPS 4GB は 2GB より届く数が少ないか同じ。Cloudflare Paid（目標の根拠の構成）は変わらない（記事 × Next.js 20/20 $18.2・受託 × Next.js 20/20 $14.4。不変の確かめのとおり）。
-  **新しい最安の床ができた（要判断）**: Google Cloud × AWS DynamoDB は Google Cloud の Firestore より月 $1.6〜3.9 安く、
+  **新しい最安の床ができた（2026-11-05 にユーザーが受け入れた）**: Google Cloud × AWS DynamoDB は Google Cloud の Firestore より月 $1.6〜3.9 安く、
   受託 × Next.js・Astro では **$12.4 が今の最安（Cloudflare Paid の $14.4）より下**、記事 × Astro（画像 `cf-resize`）では **$15.0 が今の最安（Google Cloud × Firestore の $16.3）より下**になる（どれも全シードで届く）。
   受託 × SPA・静的書き出しの床（Amplify × DynamoDB $7.9）と記事 × Next.js の床（Cloudflare Paid $18.2）は下がらない。AWS のアカウントは既定のメールの送信（SES）で既にあるので、手間も増えない。
-  釣り合い（目標の額・手間）は動かしていない。受け入れるかはユーザーの判断待ち。
+  釣り合い（目標の額・手間）は動かしていない。ユーザーはこの床を受け入れてマージした（2026-11-05）。
 
 ### 3.16 総当たりを pairwise に（CP-14・2026-11-04）
 
