@@ -7,7 +7,6 @@ import {
   eventDef,
   featureOutlook,
   featureProgressOf,
-  featureProjection,
   IMAGE_REDESIGN_ID,
   newGame,
   playMonth,
@@ -80,30 +79,6 @@ describe('featureOutlook', () => {
     const o = featureOutlook(start(), [{ type: 'block-bots' }]);
     expect(o.effort.feature).toBe(o.feature);
     expect(o.effort.actions).toBeGreaterThan(0);
-  });
-});
-
-describe('featureProjection', () => {
-  it('1 か月目は featureOutlook の累計と同じで、累計は減らない', () => {
-    const s = start();
-    const p = featureProjection(s, [], 3);
-    expect(p).toHaveLength(3);
-    expect(p[0]).toBe(featureOutlook(s, []).total);
-    expect(p[1]!).toBeGreaterThanOrEqual(p[0]!);
-    expect(p[2]!).toBeGreaterThanOrEqual(p[1]!);
-  });
-
-  it('提案を受けると、作業の月が終わった後の累計は断ったときより加点の分だけ多い', () => {
-    const s = withProposal(start(), 'p-images');
-    const respond = (accept: boolean): Action[] => [
-      { type: 'respond', eventId: 'p-images', accept },
-    ];
-    const acc = featureProjection(s, respond(true), 3);
-    const dec = featureProjection(s, respond(false), 3);
-    // 作業 3 × 2 か月は機能開発に数え、加点 8 を 2 か月に按分（D-29）
-    expect(acc[0]! - dec[0]!).toBe(4);
-    expect(acc[1]! - dec[1]!).toBe(8);
-    expect(acc[2]! - dec[2]!).toBe(8);
   });
 });
 

@@ -1708,71 +1708,60 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-55 機能開発のグラフの案: 既定では出さず、?featureViz で切り替えを出して A〜D・なしを切り替える（D-122 の補足・一時的）', async () => {
-    const vizOf = (k: string) =>
-      document.querySelectorAll(`[data-feature-viz="${k}"]`).length;
-    const anyViz = () => document.querySelectorAll('[data-feature-viz]').length;
-    const group = () =>
-      screen.queryByRole('group', { name: '機能開発のグラフの案（一時的）' });
-    const pick = (name: RegExp) =>
-      fireEvent.click(within(group()!).getByRole('button', { name }));
-    const start = () =>
-      startGame({
-        scenario: ARTICLE,
-        framework: 'Next.js（App Router）',
-        stack: 'Cloudflare Paid + vinext',
-      });
-    // 既定（URL に無い）: 切り替えもグラフも出さない
+  it('W-55 機能開発の累計と期待の折れ線を、月の報告の手間の棒の下と行動の欄の 2 か所に常に出し、行動を選ぶと見込みの点が動く（D-122）', async () => {
     await renderApp();
-    await start();
-    expect(group()).toBeNull();
-    expect(anyViz()).toBe(0);
-    cleanup();
-    localStorage.clear();
-
-    window.history.replaceState(null, '', '/?featureViz=A');
-    await renderApp();
-    await start();
-    expect(group()).not.toBeNull();
-    // 月の報告の手間の棒の下と、行動の欄の 2 か所
-    expect(vizOf('A')).toBe(2);
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    const charts = () =>
+      document.querySelectorAll<HTMLElement>('[data-feature-chart="lines"]');
+    expect(charts()).toHaveLength(2);
     expect(
       screen.getAllByRole('img', { name: '機能開発の累計と期待' }),
     ).toHaveLength(2);
-    pick(/^B /);
-    expect(vizOf('A')).toBe(0);
-    expect(vizOf('B')).toBe(2);
-    expect(window.location.search).toBe('?featureViz=B');
-    // 行動の欄の目盛りは、行動を選ぶと来月の見込みが変わる
-    const bullet = () =>
-      document
-        .querySelectorAll('[data-feature-viz="B"] [role="img"]')[1]!
-        .getAttribute('aria-label')!;
-    const before = bullet();
-    expect(before).toMatch(/来月 \+/);
+    // 来月の見込みの凡例は行動の欄の方だけ
+    expect(charts()[0]!.textContent).not.toContain('来月の見込み');
+    expect(charts()[1]!.textContent).toContain('来月の見込み');
+    // 見込みの端の点（中抜きの丸）の高さは、手間を使う行動を選ぶと変わる
+    const nextDot = () =>
+      charts()[1]!
+        .querySelector('circle[fill="var(--surface-1)"]')!
+        .getAttribute('cy');
+    const before = nextDot();
     fireEvent.click(
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
-    expect(bullet()).not.toBe(before);
-    pick(/^C /);
-    expect(vizOf('C')).toBe(2);
+    expect(nextDot()).not.toBe(before);
+  });
+
+  it('W-56 手間の輪（案 E・一時的）: ?featureViz=E のときだけ折れ線の代わりに 2 か所に出し、行動を選ぶと中央の数と区分が変わる（D-122 の補足 3）', async () => {
+    window.history.replaceState(null, '', '/?featureViz=E');
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
     expect(
-      screen.getAllByRole('img', { name: '月ごとの手間の使い道' }),
+      document.querySelectorAll('[data-feature-chart="ring"]'),
     ).toHaveLength(2);
-    // D は提案のカードの中だけ（シード 42 は 6 か月目に提案が届く）
-    pick(/^D /);
-    expect(anyViz()).toBe(0);
-    const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
-      (x) => x.id === 'p-personal',
-    )!.month;
-    advance(m - 1);
-    expect(vizOf('D')).toBe(1);
     expect(
-      screen.getByRole('img', { name: /^機能開発の累計の見込み/ }),
-    ).toBeDefined();
-    pick(/^なし$/);
-    expect(anyViz()).toBe(0);
-    expect(group()).not.toBeNull();
+      document.querySelectorAll('[data-feature-chart="lines"]'),
+    ).toHaveLength(0);
+    const ring = () =>
+      document.querySelectorAll<HTMLElement>('[data-feature-ring]')[1]!;
+    const label = () =>
+      ring().querySelector('svg[role="img"]')!.getAttribute('aria-label')!;
+    expect(label()).toMatch(/^来月の機能開発 [\d.]+ \/ 期待 8・累計/);
+    expect(ring().textContent).not.toContain('行動で');
+    const before = label();
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
+    );
+    expect(label()).not.toBe(before);
+    expect(ring().textContent).toMatch(/行動で −\d/);
   });
 
   it('W-53 Bot を遮断してから Bot が来ると、出来事の欄に遮断済みの文が出る（2026-11-04）', async () => {

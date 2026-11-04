@@ -44,7 +44,7 @@ export type FeatureOutlook = FeatureProgress & {
   feature: number;
   /** 選んだ行動（提案への返事を含む）で来月の機能開発が変わる量（行動を何も選ばないときとの差）。 */
   change: number;
-  /** 来月の手間の配分の見込み（月ごとの積み上げのグラフ用）。 */
+  /** 来月の手間の配分の見込み（手間の輪のグラフ用）。 */
   effort: EffortBreakdown;
 };
 
@@ -71,36 +71,6 @@ export function featureOutlook(
     change: feature - base,
     effort,
   };
-}
-
-/**
- * 選んだ行動を当てたときの、この先 months か月の機能開発の累計の見込み（添字 0 が来月）。提案を受けるか断るかの比較に使う。
- * 毎月 progressOf で配り、割り込み（機能の追加の作業を含む）の残りの月を減らし、乗り換えなどの進みを足す。
- * 新しく起きる出来事・乗り換えの切り替え後の維持の変化は含めない（見込み）。
- */
-export function featureProjection(
-  state: GameState,
-  actions: readonly Action[],
-  months: number,
-): number[] {
-  let s = applyActions(state, actions);
-  const out: number[] = [];
-  for (let k = 0; k < months; k++) {
-    const p = progressOf(s);
-    out.push(p.featurePoints);
-    s = {
-      ...s,
-      featurePoints: p.featurePoints,
-      plannedEffort: 0,
-      migration: p.migration,
-      componentSwap: p.componentSwap,
-      rewrite: p.rewrite,
-      interrupts: s.interrupts
-        .map((i) => ({ ...i, months: i.months - 1 }))
-        .filter((i) => i.months > 0),
-    };
-  }
-  return out;
 }
 
 /**

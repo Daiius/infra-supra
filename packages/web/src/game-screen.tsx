@@ -76,12 +76,7 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
-import {
-  FeatureVizOutlook,
-  FeatureVizProposal,
-  FeatureVizReport,
-  FeatureVizSwitch,
-} from './feature-viz.tsx';
+import { FeatureChart } from './feature-chart.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
@@ -213,8 +208,6 @@ export function Game({
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         />
       )}
-      {/* 機能開発のグラフの案の切り替え（?featureViz があるときだけ。一時的。D-122 の補足） */}
-      <FeatureVizSwitch />
       <Trends
         history={state.history}
         scenario={scenarioOf(state)}
@@ -716,7 +709,7 @@ function EffortBreakdownView({
           month={r.month}
         />
       </div>
-      <FeatureVizReport scenario={sc} history={history} />
+      <FeatureChart scenario={sc} history={history} />
       <div className="mt-1 text-xs opacity-60">
         SSR の CPU {r.ssrCpuMs} ms（機能開発で重くなる）
       </div>
@@ -1284,7 +1277,7 @@ function Actions({
               : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届かない`}
             （来月に新しく起きる出来事の対応の手間は含めない）
           </div>
-          <FeatureVizOutlook state={state} outlook={outlook} />
+          <FeatureChart scenario={sc} history={state.history} next={outlook} />
         </div>
         {state.pendingProposals.length > 0 && (
           <div className="space-y-2">
@@ -1342,15 +1335,6 @@ function Actions({
                       伴うこと: {summary.costs.join('・')}
                     </div>
                   )}
-                  <FeatureVizProposal
-                    state={state}
-                    accept={
-                      acceptOk
-                        ? build({ answers: { ...answers, [id]: true } })
-                        : null
-                    }
-                    decline={build({ answers: { ...answers, [id]: false } })}
-                  />
                 </div>
               );
             })}
