@@ -451,6 +451,7 @@ function MonthCard({
                       <span className={`badge badge-sm ${eventBadge(e).cls}`}>
                         {eventBadge(e).label}
                       </span>
+                      <BlockedBadge event={e} />
                       {e.tier === 'rare' && (
                         <span className="badge badge-sm badge-outline badge-error">
                           {TIER_LABEL[e.tier]}
@@ -683,6 +684,13 @@ function eventBadge(e: MonthEvent): {
           : { label: '● 起きた', cls: 'badge-info' };
   }
 }
+/** Bot を遮断済みの月の Bot の出来事・予告に添える印（色だけに頼らず文字も出す。2026-11-04）。 */
+const BLOCKED_LABEL = '🛡 対策済み';
+function BlockedBadge({ event: e }: { event: MonthEvent }) {
+  if (!e.botBlocked) return null;
+  return <span className="badge badge-sm badge-success">{BLOCKED_LABEL}</span>;
+}
+
 const TIER_LABEL: Record<MonthEvent['tier'], string> = {
   common: 'ふだん',
   occasional: 'ときどき',
@@ -698,6 +706,7 @@ function EventCard({ event: e }: { event: MonthEvent }) {
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
+        <BlockedBadge event={e} />
         {badge.note && <span className="text-xs">{badge.note}</span>}
         <span className="badge badge-sm badge-outline">
           {TIER_LABEL[e.tier]}
@@ -2216,7 +2225,10 @@ function History({ history }: { history: MonthReport[] }) {
                 </td>
                 <td className="text-xs">
                   {r.events
-                    .map((e) => `${eventBadge(e).label}: ${e.title}`)
+                    .map(
+                      (e) =>
+                        `${eventBadge(e).label}${e.botBlocked ? `（${BLOCKED_LABEL}）` : ''}: ${e.title}`,
+                    )
                     .join('・')}
                 </td>
                 <td className="text-xs">{r.action ?? ''}</td>

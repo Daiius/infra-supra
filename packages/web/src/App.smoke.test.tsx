@@ -1691,6 +1691,19 @@ describe('ゲームモードの画面', () => {
       '今月の費用・満足度に効いている（遮断済みで半分）',
     );
     expect(dialog.textContent).not.toContain('対処は来月から');
+    // 緑の印（文字つき）を添える。閉じた後の月の報告の一覧にも出る
+    expect(
+      within(dialog)
+        .getByText('🛡 対策済み')
+        .classList.contains('badge-success'),
+    ).toBe(true);
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '閉じて今月の行動へ' }),
+    );
+    expect(screen.getAllByText('🛡 対策済み').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/🛡 対策済み）: Bot・クローラーの大量アクセス/),
+    ).toBeDefined();
   });
 });
 

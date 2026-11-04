@@ -122,9 +122,18 @@ describe('Bot を遮断済みなら、Bot の出来事の文を遮断済みの�
     const s = play(x.month, 4, x.noticeMonth! - 1);
     expect(textIn(s, x.noticeMonth!, 'notice')).toBe(bot.notice!.blockedText);
     expect(textIn(s, x.month, 'occurred')).toBe(bot.blockedText);
+    // 予告にも起きた月にも遮断済みの印（画面は「🛡 対策済み」を添える）
+    const flag = (st: GameState, month: number, phase: string) =>
+      st.history[month - 1]!.events.find(
+        (e) => e.id === 'bot' && e.phase === phase,
+      )!.botBlocked;
+    expect(flag(s, x.noticeMonth!, 'notice')).toBe(true);
+    expect(flag(s, x.month, 'occurred')).toBe(true);
     const open = play(x.month, 4);
     expect(textIn(open, x.noticeMonth!, 'notice')).toBe(bot.notice!.text);
     expect(textIn(open, x.month, 'occurred')).toBe(bot.text);
+    expect(flag(open, x.noticeMonth!, 'notice')).toBeUndefined();
+    expect(flag(open, x.month, 'occurred')).toBeUndefined();
   });
 
   it('遮断した月より前の報告の文は変わらない（報告はその月の状態で作る）', () => {

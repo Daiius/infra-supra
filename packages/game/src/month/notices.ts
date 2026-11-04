@@ -134,6 +134,10 @@ export function monthEventsOf(
           ? def.notice!.blockedText
           : def.notice!.text,
       effects: [],
+      // 前兆が Bot の予告を、遮断済みの月に出した（来たときの上乗せは半分）
+      ...(state.botBlocked && def.notice!.bot
+        ? { botBlocked: true as const }
+        : {}),
       premises: premiseRefsOf(def, premises),
     });
   }
