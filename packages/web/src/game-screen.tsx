@@ -674,7 +674,9 @@ function eventBadge(e: MonthEvent): {
         ? {
             label: '⚡ 今月発生',
             cls: 'badge-error',
-            note: '今月の費用・満足度に効いている。対処は来月から',
+            note: e.botBlocked
+              ? '今月の費用・満足度に効いている（遮断済みで半分）'
+              : '今月の費用・満足度に効いている。対処は来月から',
           }
         : e.announced === true
           ? { label: '● 起きた（先月の予告どおり）', cls: 'badge-info' }

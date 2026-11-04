@@ -1683,6 +1683,14 @@ describe('ゲームモードの画面', () => {
     });
     expect(dialog.textContent).toContain(bot.blockedSurpriseText);
     expect(dialog.textContent).not.toContain(bot.surpriseText);
+    // 効果の行は実際の倍率、予告なしの印の説明も遮断済みの文
+    expect(dialog.textContent).toContain(
+      '効果: Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
+    );
+    expect(dialog.textContent).toContain(
+      '今月の費用・満足度に効いている（遮断済みで半分）',
+    );
+    expect(dialog.textContent).not.toContain('対処は来月から');
   });
 });
 

@@ -2,7 +2,13 @@
 import { MVP_STACKS } from 'catalog';
 import type { PlatformPremise } from 'estimator';
 import { eventDef, revisionText, SCHEDULED_CHANGES } from '../core.ts';
-import { acceptEffort, describeEffect, premiseRefsOf } from '../events.ts';
+import { BOT_BLOCK } from '../actions/check.ts';
+import {
+  acceptEffort,
+  describeEffect,
+  describeEffectBlocked,
+  premiseRefsOf,
+} from '../events.ts';
 import { requirementStatus, unavailableReason } from '../requirements.ts';
 import { articleFamily } from '../routes/strategy.ts';
 import type { EventDef, Scenario, Scheduled } from '../scenario.ts';
@@ -61,6 +67,11 @@ export function monthEventsOf(
       });
       continue;
     }
+    // Bot の流量の効果を持つ出来事が、遮断済みの月に起きた（上乗せは半分。2026-11-04）
+    const botBlocked =
+      state.botBlocked &&
+      def.kind !== 'proposal' &&
+      (def.effects ?? []).some((e) => e.type === 'traffic' && e.bot);
     // 予告を持ちうる台本は、予告どおり起きたか、予告なしで起きたか（D-28）
     const announced =
       def.notice && def.kind !== 'proposal'
@@ -74,7 +85,13 @@ export function monthEventsOf(
       ...announced,
       title: def.title,
       text: occurredTextOf(def, x.noticeMonth === undefined, state.botBlocked),
-      effects: (def.effects ?? []).map(describeEffect),
+      // 遮断済みなら Bot の流量は実際の倍率（trafficOf と同じ式・同じ判定）
+      effects: (def.effects ?? []).map((e) =>
+        botBlocked
+          ? describeEffectBlocked(e, BOT_BLOCK.remaining)
+          : describeEffect(e),
+      ),
+      ...(botBlocked ? { botBlocked: true as const } : {}),
       premises: premiseRefsOf(def, premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
       ...(def.showSla ? { sla: slaOf(stackIndexNow) } : {}),

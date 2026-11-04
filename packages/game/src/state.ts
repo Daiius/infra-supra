@@ -124,6 +124,8 @@ export type MonthEvent = {
    * 予告を持ちうる台本が起きた月: true は予告どおり、false は予告なしで今月起きた（対処は来月から。D-28）。
    */
   announced?: boolean;
+  /** Bot の流量の出来事が、Bot を遮断済みの月に起きた（上乗せは半分。効果の要約も実際の倍率。2026-11-04）。 */
+  botBlocked?: true;
   /** 提案の「受ける」の説明。unavailable は受けられない理由（要件を満たせる構成が無い）。 */
   accept?: {
     label: string;

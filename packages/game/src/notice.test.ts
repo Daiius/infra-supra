@@ -99,6 +99,17 @@ describe('Bot を遮断済みなら、Bot の出来事の文を遮断済みの�
     expect(blocked.history[m - 1]!.trafficNote).toContain(
       '（Bot は収益にならない・遮断で半分）',
     );
+    // 効果の要約は実際の倍率と遮断の印（未遮断は従来の × 2）
+    const ev = (s: GameState) =>
+      s.history[m - 1]!.events.find(
+        (e) => e.id === 'bot' && e.phase === 'occurred',
+      )!;
+    expect(ev(blocked).effects).toEqual([
+      'Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
+    ]);
+    expect(ev(blocked).botBlocked).toBe(true);
+    expect(ev(open).effects).toEqual(['Bot のPV × 2（2 か月・収益なし）']);
+    expect(ev(open).botBlocked).toBeUndefined();
     // 計算は従来どおり（遮断すれば上乗せは半分）
     const r = (s: GameState) =>
       s.history[m - 1]!.botPV / s.history[m - 1]!.humanPV;
@@ -126,6 +137,11 @@ describe('Bot を遮断済みなら、Bot の出来事の文を遮断済みの�
     const late = play(x.month + 1, 4, x.month);
     expect(late.botBlocked).toBe(true);
     expect(textIn(late, x.month, 'occurred')).toBe(bot.text);
+    const lateEv = late.history[x.month - 1]!.events.find(
+      (e) => e.id === 'bot' && e.phase === 'occurred',
+    )!;
+    expect(lateEv.botBlocked).toBeUndefined();
+    expect(lateEv.effects).toEqual(['Bot のPV × 2（2 か月・収益なし）']);
     expect(late.history[x.month - 1]!.trafficNote).not.toContain('遮断');
     expect(late.history[x.month]!.trafficNote).toContain('遮断で半分');
   });

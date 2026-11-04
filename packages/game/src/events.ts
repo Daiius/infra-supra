@@ -89,6 +89,18 @@ export function imageRedesignQuality(
 }
 
 /** 効果の要約（画面の通知に出す）。 */
+/**
+ * Bot を遮断済みの月の効果の要約（Bot の流量は上乗せに botRemaining を掛けた実際の倍率と「遮断で半分」。
+ * 計算は trafficOf と同じ式。ほかの効果は describeEffect のまま。2026-11-04）。
+ */
+export function describeEffectBlocked(e: Effect, botRemaining: number): string {
+  if (e.type !== 'traffic' || !e.bot) return describeEffect(e);
+  const factor = 1 + (e.factor - 1) * botRemaining;
+  const cut =
+    botRemaining === 0.5 ? '半分' : `上乗せ ${fmtFactor(botRemaining)}`;
+  return `Bot のPV ${fmtFactor(factor)}（遮断で${cut}・${e.months} か月${e.earnsRevenue ? '' : '・収益なし'}）`;
+}
+
 export function describeEffect(e: Effect): string {
   switch (e.type) {
     case 'traffic':
