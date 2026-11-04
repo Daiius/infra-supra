@@ -204,7 +204,7 @@ export function ScenarioWireframes({
                 {/* ブラウザの窓の上の帯（飾り） */}
                 <div
                   aria-hidden
-                  className="flex items-center gap-1 border-b border-base-content/25 bg-base-300/60 px-2 py-1"
+                  className="flex items-center gap-1 border-b border-base-content/25 bg-base-300/60 px-2 py-0.5"
                 >
                   {[0, 1, 2].map((i) => (
                     <span
@@ -216,14 +216,14 @@ export function ScenarioWireframes({
                 </div>
                 <ul
                   aria-label={`${p.label}の見取り図（要件）`}
-                  className="grid grid-cols-2 gap-1 p-1.5"
+                  className="grid grid-cols-2 gap-0.5 p-1"
                 >
                   {p.regions.map((r) => (
                     <li
                       key={r.id}
                       data-region={r.id}
                       title={`${r.label}: ${r.needs.map((n) => REGION_NEEDS[n].short).join('・')}`}
-                      className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} flex min-w-0 flex-col gap-1 rounded border border-dashed px-1.5 pt-1 pb-1.5 ${KIND_TONE[r.kind ?? 'body']}`}
+                      className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} flex min-w-0 flex-col gap-0.5 rounded border border-dashed px-1.5 pt-0.5 pb-1 ${KIND_TONE[r.kind ?? 'body']}`}
                     >
                       {/* 区画の名前と要件の札を上の行に並べる（狭い区画では札が次の行へ折り返す） */}
                       <span className="flex flex-wrap items-center justify-between gap-x-1 gap-y-0.5">
