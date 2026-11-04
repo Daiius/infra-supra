@@ -1,4 +1,4 @@
-// 機能開発の効き目の輪（progress ring。案 E・一時的。D-122 の補足 3）。`?featureViz=E` のときだけ折れ線の代わりに出す（切り替えは feature-chart.tsx の 1 か所）。
+// 機能開発の効き目の輪（progress ring。D-122）。月の報告の手間の棒の下と、行動の欄の来月の見込みの下に出す。
 // 内側の輪: その月（月の報告）／来月（行動の欄）の手間の総量の円。機能開発に回る分と、ほかに使った分（行動・出来事への対応・乗り換えなど・維持）を
 // 区分で続けて塗り、期待（月の期待）の位置に目盛り。外側の細い輪: 累計 / 期待の進み（100% で一周）。色は段階の色で、普通・良いの境目に目盛り。
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
@@ -244,19 +244,27 @@ export function FeatureRing({
           内側の輪: 手間 {effort.total} の使い道（目盛りは期待 {perMonth}）
         </div>
         <ul className="space-y-0.5">
-          {parts.map((x) => (
-            <li key={x.s.key} className="flex items-center gap-1">
-              <span
-                aria-hidden
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ background: x.s.color }}
-              />
-              {x.s.label}
-              <span className="ml-auto pl-2 text-[var(--text-primary)] tabular-nums">
-                {fmt(x.v)}
-              </span>
-            </li>
-          ))}
+          {/* 値が 0 の区分は省く（機能開発と、行動の欄の「行動」は選ぶと動くので常に出す） */}
+          {parts
+            .filter(
+              (x) =>
+                x.v > 0 ||
+                x.s.key === 'feature' ||
+                (next === true && x.s.key === 'actions'),
+            )
+            .map((x) => (
+              <li key={x.s.key} className="flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-2.5 w-2.5 rounded-sm"
+                  style={{ background: x.s.color }}
+                />
+                {x.s.label}
+                <span className="ml-auto pl-2 text-[var(--text-primary)] tabular-nums">
+                  {fmt(x.v)}
+                </span>
+              </li>
+            ))}
           {effort.featureBonus > 0 && (
             <li>（ほかに提案の加点 +{fmt(effort.featureBonus)}）</li>
           )}
@@ -267,12 +275,10 @@ export function FeatureRing({
             className="inline-block h-2.5 w-2.5 rounded-full"
             style={{ background: STAGE_COLOR[p.stage] }}
           />
-          外側の輪: {progressText}
-          {ratio > 1 && ` +${Math.round((ratio - 1) * 100)}%`}・「機能」は
-          {STAGE_LABEL[p.stage]}
+          外側の輪: {progressText} →「機能」は{STAGE_LABEL[p.stage]}
         </div>
         <div>
-          （目盛りは普通 {fmt(p.fairAt)}・良い {fmt(p.goodAt)}）
+          目盛り: 普通 {fmt(p.fairAt)}・良い {fmt(p.goodAt)}
         </div>
       </div>
     </div>

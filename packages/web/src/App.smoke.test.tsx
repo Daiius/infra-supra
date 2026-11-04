@@ -1708,60 +1708,38 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-55 機能開発の累計と期待の折れ線を、月の報告の手間の棒の下と行動の欄の 2 か所に常に出し、行動を選ぶと見込みの点が動く（D-122）', async () => {
+  it('W-55 手間の輪を、月の報告の手間の棒の下と行動の欄の 2 か所に常に出し、行動を選ぶと中央の数と区分が変わる（D-122）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
     });
-    const charts = () =>
-      document.querySelectorAll<HTMLElement>('[data-feature-chart="lines"]');
-    expect(charts()).toHaveLength(2);
+    const rings = () =>
+      document.querySelectorAll<HTMLElement>('[data-feature-ring]');
+    expect(rings()).toHaveLength(2);
+    // 月の報告の側は、その月の手間と累計
     expect(
-      screen.getAllByRole('img', { name: '機能開発の累計と期待' }),
-    ).toHaveLength(2);
-    // 来月の見込みの凡例は行動の欄の方だけ
-    expect(charts()[0]!.textContent).not.toContain('来月の見込み');
-    expect(charts()[1]!.textContent).toContain('来月の見込み');
-    // 見込みの端の点（中抜きの丸）の高さは、手間を使う行動を選ぶと変わる
-    const nextDot = () =>
-      charts()[1]!
-        .querySelector('circle[fill="var(--surface-1)"]')!
-        .getAttribute('cy');
-    const before = nextDot();
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
-    );
-    expect(nextDot()).not.toBe(before);
-  });
-
-  it('W-56 手間の輪（案 E・一時的）: ?featureViz=E のときだけ折れ線の代わりに 2 か所に出し、行動を選ぶと中央の数と区分が変わる（D-122 の補足 3）', async () => {
-    window.history.replaceState(null, '', '/?featureViz=E');
-    await renderApp();
-    await startGame({
-      scenario: ARTICLE,
-      framework: 'Next.js（App Router）',
-      stack: 'Cloudflare Paid + vinext',
-    });
-    expect(
-      document.querySelectorAll('[data-feature-chart="ring"]'),
-    ).toHaveLength(2);
-    expect(
-      document.querySelectorAll('[data-feature-chart="lines"]'),
-    ).toHaveLength(0);
-    const ring = () =>
-      document.querySelectorAll<HTMLElement>('[data-feature-ring]')[1]!;
+      rings()[0]!.querySelector('svg[role="img"]')!.getAttribute('aria-label'),
+    ).toMatch(/^1 か月目の機能開発 [\d.]+ \/ 期待 8・累計/);
+    const ring = () => rings()[1]!;
     const label = () =>
       ring().querySelector('svg[role="img"]')!.getAttribute('aria-label')!;
     expect(label()).toMatch(/^来月の機能開発 [\d.]+ \/ 期待 8・累計/);
     expect(ring().textContent).not.toContain('行動で');
+    // 値が 0 の区分は凡例に出さない（機能開発と、行動の欄の行動は常に出す）
+    const legend = () =>
+      [...ring().querySelectorAll('li')].map((li) => li.textContent);
+    expect(legend().some((t) => t!.startsWith('機能開発'))).toBe(true);
+    expect(legend().some((t) => t!.startsWith('行動0'))).toBe(true);
+    expect(legend().some((t) => t!.startsWith('出来事への対応0'))).toBe(false);
     const before = label();
     fireEvent.click(
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(label()).not.toBe(before);
     expect(ring().textContent).toMatch(/行動で −\d/);
+    expect(legend().some((t) => t!.startsWith('行動0'))).toBe(false);
   });
 
   it('W-53 Bot を遮断してから Bot が来ると、出来事の欄に遮断済みの文が出る（2026-11-04）', async () => {
