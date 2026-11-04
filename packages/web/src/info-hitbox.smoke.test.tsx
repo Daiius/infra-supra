@@ -4,6 +4,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
+  ensurePartsList,
   openSlot,
   renderApp,
   startGame,
@@ -88,6 +89,7 @@ describe('ⓘ の当たり判定', () => {
     fireEvent.click(info);
     expect(tooltip()).toBeNull();
     // 部品（DB のバックアップ）はゲームと共用の、構成のカードのチップ（D-115・D-116）。チップの ⓘ を押しても選ばない
+    ensurePartsList();
     const backup = openSlot(
       screen.getByRole('group', { name: /^DB のバックアップ/ }),
     );

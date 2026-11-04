@@ -389,7 +389,7 @@ function Conditions({
   const [pvText, setPvText] = useState(String(input.pv));
   useEffect(() => setPvText(String(input.pv)), [input.pv]);
   const select = 'select select-bordered select-sm w-full';
-  // 画像の形式・サイズ違い（画像の部品の行のチップの下。D-119）
+  // 画像の形式・サイズ違い（画像の部品の行のチップの下か、構成図の画像の箱の吹き出しの中。D-119・D-116 の補足）
   const imagesRow = setupSlots(
     scenario,
     stackIndex,
