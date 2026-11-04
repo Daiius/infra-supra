@@ -33,7 +33,9 @@ import {
   frameworkOnStack,
   frameworksOf,
   hiddenSettings,
+  fixedImageFormat,
   IMAGE_FORMAT_KB,
+  imageFormatInactiveReason,
   pageWireframes,
   revalidateSettingOf,
   routePlanRows,
@@ -769,6 +771,22 @@ function resolve(input: EstimateInput, stackId = input.stack): Resolved {
     stackId === input.stack ? input.parts : {},
   );
   return { scenario, stackIndex, components };
+}
+
+/**
+ * 画像の形式の欄が今の画像の部品で効かない理由と、配る形式（ゲームの設定の欄と同じ判定。D-58 とその補足）。
+ * 原本をそのまま配る部品は形式が無い（format は省略）。閲覧のときに変換して形式を自分で選ぶ部品は、その形式で数える。効くなら null。
+ */
+export function imageFormatLock(
+  input: EstimateInput,
+): { reason: string; format?: ImageFormat } | null {
+  const r = resolve(input);
+  const platform = STACKS[r.stackIndex]!.provider;
+  const images = r.components.images;
+  const reason = imageFormatInactiveReason(platform, input.framework, images);
+  if (reason === undefined) return null;
+  const fixed = fixedImageFormat(platform, input.framework, images)?.format;
+  return fixed ? { reason, format: fixed } : { reason };
 }
 
 function run(input: EstimateInput, r: Resolved) {

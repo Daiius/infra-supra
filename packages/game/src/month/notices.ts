@@ -5,6 +5,7 @@ import { eventDef, revisionText, SCHEDULED_CHANGES } from '../core.ts';
 import { BOT_BLOCK } from '../actions/check.ts';
 import {
   acceptEffort,
+  acceptSummary,
   describeEffect,
   describeEffectBlocked,
   premiseRefsOf,
@@ -112,6 +113,9 @@ export function monthEventsOf(
               label: def.accept.label,
               effects: def.accept.effects.map(describeEffect),
               effort: acceptEffort(def, state),
+              ...((d) => (d ? { declineLoss: d } : {}))(
+                acceptSummary(state, def).declineLoss,
+              ),
               ...(unavailableReason(state, def)
                 ? { unavailable: unavailableReason(state, def)! }
                 : {}),

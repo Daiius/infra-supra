@@ -5,7 +5,7 @@ import {
   ARTICLE_COMMUNITY,
   DEFAULT_START_DATE,
   goalChecks,
-  autoImageFormat,
+  fixedImageFormat,
   componentConflict,
   componentSlots,
   isPlanChange,
@@ -221,8 +221,10 @@ describe('AWS の構成', () => {
     ]);
   });
 
-  it('OpenNext の画像の最適化は next/image（Lambda）なのでブラウザに合わせた形式の対象。画像を R2 に出しても CloudFront が残り、定額のプランを選べる（D-62・D-63）', () => {
-    expect(autoImageFormat('aws-opennext', 'nextjs', 'default')).toBe(true);
+  it('OpenNext の画像の最適化は next/image（Lambda）なのでWebP に固定。画像を R2 に出しても CloudFront が残り、定額のプランを選べる（D-62・D-63）', () => {
+    expect(fixedImageFormat('aws-opennext', 'nextjs', 'default')?.format).toBe(
+      'webp',
+    );
     expect(
       componentConflict('aws-opennext', 'cdnPlan', 'flat-pro', {
         images: 'cf-images',

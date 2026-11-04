@@ -210,6 +210,8 @@
 | 4 | その月に選んだ行動 | 下の表 | `IMPROVEMENTS[].cost`（`index.ts:43-68`）のお金を消す |
 | 5 | **機能開発（余り）** | 残り全部 | — |
 
+余りの効き目は画面に出す（D-122）: 月の報告の手間の棒と行動の欄に「機能開発の累計 / 期待 → 『機能』の段階」（良いのときも）と手間の輪（内側: その月の手間 10 の使い道と期待 8 の目盛り、外側: 累計 / 期待。段階の色と境目の目盛り）、行動の欄には選んだ行動を当てた来月の機能開発の見込み（game の `featureOutlook`。配分は `progressOf` と同じ）、提案の選択肢には受けたときの得と伴う手間・使用量（`acceptSummary`。効果のデータから組む）。
+
 始める画面では、構成ごとに毎月の手間をマスのバーで出し、維持と機能開発の内訳で塗り分ける（色は月の手間の棒と同じ。「維持 3・機能開発に 7」と文字でも出す。自前運用には自前の障害の確率を添える）。値はシナリオの `effort`・`incidents` から引き、維持の手間は game の `upkeepOf` を月の配分と共有する（D-36）。
 
 構成の既定は一覧の 1 番目（正解になりやすい構成を既定にしない）で、各構成の名前の下に短い説明（事実だが、それだけで選ぶと外れうる文。数値は書かない。catalog の `STACK_FLAVOR`）を添える（D-41）。
@@ -538,6 +540,7 @@ type StockRule = {
   URL の変換の `format=auto` は「Automatically serves the most efficient format that the requesting browser supports」（[変換の URL](https://developers.cloudflare.com/images/transform-images/transform-via-url/)・[最適化の機能](https://developers.cloudflare.com/images/optimization/features/)）、
   Workers・バインディングでは「Your Worker is responsible for automatic format negotiation. Check the Accept header.」で、Accept を見て AVIF・WebP を選ぶ例がある（[Workers で変換](https://developers.cloudflare.com/images/transform-images/transform-via-workers/)。コードを書く前提）。
   AVIF も選びうるが next/image と揃えて WebP とみなす（AVIF の設定を選べばそちら）。SPA は next/image を使わないが、Cloudflare Images の変換は SPA でも同じ。投稿のときに作る・一律で縮めるは設定どおり。最適化しない（原本）では形式は効かない。
+  **D-58 の補足（2026-11-04）で改めた**: 閲覧のときに変換して形式を自分で選ぶ部品では欄を無効にして固定する（next/image・Astro の `<Image />`・Netlify Image CDN・Bunny Optimizer は WebP、cf-images の `format=auto` は AVIF）。Cloudflare の構成の Images（バインディング）は Worker のコードが選ぶので欄は有効のまま、選んだ形式で数える。
 - **在庫の原本**は形式に依らずそのまま置く（今までの「圧縮の比で原本の保存量も減る」をやめた）。
 - **画質を落とす強い圧縮は残さない**: WebP・AVIF で画質を保ったまま同じくらい小さくなるので、画質を下げる選択肢は「損だけがある」選択になる。画質の満足度の要素は、原本の有無（デザインの刷新）で効く。
 - 古い保存の「画像の圧縮」は近い大きさの形式に読み替える（150 → JPEG・100 → WebP・70 → AVIF）。

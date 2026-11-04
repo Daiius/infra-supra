@@ -20,10 +20,15 @@ import {
   componentSlots,
   swapLabel,
   pageWeightOf,
+  fixedSettingValue,
   settingInactiveReason,
   settingNote,
   EFFORT,
   effortAvailable,
+  acceptSummary,
+  featureOutlook,
+  featureProgressOf,
+  featureRuleText,
   ELEMENT_LABEL,
   ELEMENTS,
   END_LABEL,
@@ -72,6 +77,7 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
+import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
@@ -210,6 +216,7 @@ export function Game({
       />
       <MonthCard
         report={report}
+        scenario={scenarioOf(state)}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
       />
       {playing && (
@@ -407,6 +414,9 @@ const STATUS: Record<MonthReport['status'], { label: string; cls: string }> = {
   down: { label: '停止', cls: 'badge-error' },
 };
 
+/** 手間のポイント（加点の按分で小数になりうる）の表示。丸めは表示のときだけ。 */
+const fmtPoints = (n: number) => String(Number(n.toFixed(1)));
+
 const STAGE_CLS: Record<Stage, string> = {
   good: 'badge-success',
   fair: 'badge-warning',
@@ -415,9 +425,11 @@ const STAGE_CLS: Record<Stage, string> = {
 
 function MonthCard({
   report: r,
+  scenario: sc,
   onShowEvents,
 }: {
   report: MonthReport;
+  scenario: Scenario;
   /** 遊んでいる間だけ渡す。出来事は見出しの一覧に詰め、ダイアログで再表示する（D-23）。 */
   onShowEvents?: (() => void) | undefined;
 }) {
@@ -514,7 +526,7 @@ function MonthCard({
                 : `口コミ ${pct(s.acquisition)}・解約 ${pct(-s.churn)} → 来月の伸び ${pct(s.growth)}`}
             </div>
           </div>
-          <EffortBreakdownView report={r} />
+          <EffortBreakdownView report={r} scenario={sc} />
         </div>
         {r.premises.length > 0 && (
           <div>
@@ -558,7 +570,51 @@ function MonthCard({
   );
 }
 
-function EffortBreakdownView({ report: r }: { report: MonthReport }) {
+/**
+ * 機能開発の累計と期待、「機能」の段階（D-122）。良いのときも出す。余った手間が何に効くかは ⓘ に畳む（狭い画面で溢れない）。
+ */
+function FeatureProgressLine({
+  scenario: sc,
+  total,
+  month,
+  prefix = '',
+  actual,
+  note,
+}: {
+  scenario: Scenario;
+  total: number;
+  month: number;
+  /** 「来月の」など。 */
+  prefix?: string;
+  /** 実際の「機能」の段階（月の報告。メールが届かない分の下げを含む）。 */
+  actual?: Stage;
+  /** 段階に添える断り（来月の見込み）。 */
+  note?: string;
+}) {
+  const p = featureProgressOf(sc, total, month);
+  const shown = featureStageView(p.stage, actual, note);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1">
+      <span>
+        {prefix}機能開発の累計 {Math.round(p.total)} / 期待 {p.expected} →
+        「機能」は
+      </span>
+      <span className={`badge badge-sm ${STAGE_CLS[shown.stage]}`}>
+        {STAGE_LABEL[shown.stage]}
+      </span>
+      {shown.note && <span className="text-xs opacity-70">{shown.note}</span>}
+      <Info label="余った手間の効き目">{featureRuleText(sc)}</Info>
+    </span>
+  );
+}
+
+function EffortBreakdownView({
+  report: r,
+  scenario: sc,
+}: {
+  report: MonthReport;
+  scenario: Scenario;
+}) {
   const e = r.effort;
   const parts = [
     { label: '自前運用の維持', value: e.upkeep, cls: 'bg-warning' },
@@ -650,6 +706,23 @@ function EffortBreakdownView({ report: r }: { report: MonthReport }) {
           />
         </div>
       )}
+      <div className="mt-2 text-sm">
+        <FeatureProgressLine
+          scenario={sc}
+          total={r.featurePoints}
+          month={r.month}
+          actual={r.satisfaction.stages.feature}
+        />
+      </div>
+      <div className="mt-2">
+        <FeatureRing
+          scenario={sc}
+          month={r.month}
+          total={r.featurePoints}
+          effort={r.effort}
+          actual={r.satisfaction.stages.feature}
+        />
+      </div>
       <div className="mt-1 text-xs opacity-60">
         SSR の CPU {r.ssrCpuMs} ms（機能開発で重くなる）
       </div>
@@ -723,7 +796,11 @@ function EventCard({ event: e }: { event: MonthEvent }) {
       {e.accept && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          。月の終わりの行動で受けるか断るかを選ぶ（断っても罰はない）
+          。月の終わりの行動で受けるか断るかを選ぶ（
+          {e.accept.declineLoss
+            ? `断ると${e.accept.declineLoss}`
+            : '断っても罰はない'}
+          ）
         </div>
       )}
       {e.accept?.unavailable && (
@@ -1165,6 +1242,21 @@ function Actions({
   const actions = build();
   const draft = applyActions(state, actions);
   const left = effortAvailable(draft);
+  // 来月の機能開発の見込み（選んだ行動・提案への返事を当てた配分。D-122）
+  const outlook = featureOutlook(state, actions);
+  // 今月の「機能」がメールが届かない分で下がっていれば、来月の見込みの段階は機能開発の比だけで見たものと断る（OCL-7D797D79）
+  const lastReport = state.history[state.history.length - 1];
+  const stageNote =
+    lastReport &&
+    lastReport.satisfaction.stages.feature !==
+      featureProgressOf(
+        scenarioOf(state),
+        lastReport.featurePoints,
+        lastReport.month,
+      ).stage
+      ? '（機能開発の分だけで見た段階。メールが届かないと下がる）'
+      : '';
+  const sc = scenarioOf(state);
   // このシナリオで効かない行動は出さない（D-33・prd/09 E-6）
   const hidden = scenarioOf(state).hidden;
   // シナリオで効かない設定と、SPA の ISR の間隔は出さない（OCL-8DFFDBEC）
@@ -1189,8 +1281,41 @@ function Actions({
           </span>
         </h2>
         <p className="text-sm opacity-70">
-          残りは機能開発（満足度の「機能」と成長）に回る。設定はいつでも戻せる。
+          残りは機能開発に回り、満足度の「機能」（累計 / 期待）と、評判を通して
+          PV の伸びに効く。設定はいつでも戻せる。
         </p>
+        <div className="space-y-0.5 text-sm" data-testid="feature-outlook">
+          <div>
+            来月の機能開発 {fmtPoints(outlook.feature)}
+            {outlook.change !== 0 &&
+              `（行動で ${outlook.change > 0 ? '+' : '−'}${fmtPoints(Math.abs(outlook.change))}）`}
+          </div>
+          <FeatureProgressLine
+            scenario={sc}
+            total={outlook.total}
+            month={outlook.month}
+            prefix="来月の"
+            note={stageNote}
+          />
+          <div className="text-xs opacity-70">
+            {outlook.total >= outlook.expected
+              ? '来月の累計は期待に届く'
+              : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届かない`}
+            （来月に新しく起きる出来事の対応の手間は含めない）
+          </div>
+          <div className="mt-2">
+            <FeatureRing
+              scenario={sc}
+              month={outlook.month}
+              total={outlook.total}
+              effort={outlook.effort}
+              feature={outlook.feature}
+              change={outlook.change}
+              next
+              note={stageNote}
+            />
+          </div>
+        </div>
         {state.pendingProposals.length > 0 && (
           <div className="space-y-2">
             <div className="divider my-1 text-xs">
@@ -1202,6 +1327,7 @@ function Actions({
                 build({ answers: { ...answers, [id]: true } }),
               );
               const acceptOk = acceptWhy === null;
+              const summary = acceptSummary(state, def);
               return (
                 <div
                   key={id}
@@ -1233,9 +1359,19 @@ function Actions({
                         checked={answers[id] !== true}
                         onChange={() => setAnswers({ ...answers, [id]: false })}
                       />
-                      断る（何も変わらない）
+                      断る（{summary.declineLoss ?? '何も変わらない'}）
                     </label>
                   </div>
+                  {summary.gains.length > 0 && (
+                    <div className="mt-1 text-xs">
+                      受けると: {summary.gains.join('・')}
+                    </div>
+                  )}
+                  {summary.costs.length > 0 && (
+                    <div className="mt-0.5 text-xs opacity-70">
+                      伴うこと: {summary.costs.join('・')}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1245,7 +1381,9 @@ function Actions({
           {settingKeys.map((key) => {
             const def = SETTINGS[key];
             const current = state.settings[def.field];
-            const chosen = settings[key] ?? current;
+            // 欄を無効にして固定しているなら、選んだ値でなく固定の値を見せる（数えるのもその値。D-58 の補足）
+            const fixed = fixedSettingValue(draft, key);
+            const chosen = settings[key] ?? fixed ?? current;
             return (
               // 外側を label にしない: label の中で最初の操作できる要素は ⓘ のボタンなので、欄のどこを押しても説明が開く。
               // ⓘ を含む見出しは label にできない（他の操作できる要素を含めない）ので、名前は select の aria-label で付ける
@@ -1309,7 +1447,13 @@ function Actions({
                         disabled={why !== null}
                       >
                         {o.label}
-                        {o.value === current ? '（今）' : ''}
+                        {fixed !== undefined
+                          ? o.value === fixed
+                            ? '（固定）'
+                            : ''
+                          : o.value === current
+                            ? '（今）'
+                            : ''}
                         {why ? `（${why}）` : ''}
                       </option>
                     );

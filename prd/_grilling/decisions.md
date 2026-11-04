@@ -436,6 +436,20 @@
 - 設定「画像の圧縮」を「画像の形式」に置き換えた（JPEG 150・WebP 105・AVIF 84 KB。画質は下げない。比は Google の WebP の比較と Next.js の文書・取り方は仮定）。損の側は、Vercel の AVIF は形式ごとのキャッシュで変換 2 倍・VPS の AVIF は変換の CPU 1.5 倍・投稿のときに作って置く構成は JPEG のフォールバックを保存。Cloudflare Images は形式で変換の数が増えない。Next.js の画像の部品は既定で WebP を配る。
 - 画質を落とす強い圧縮は残さない（画質を保って同じくらい小さくできるので、損だけの選択になる）。原本の保存量に圧縮の比を掛けるのもやめた。古い保存は近い大きさの形式に読み替える。
 - golden: Vercel の構成（Next.js の画像の部品が WebP を配る）の所持金が増える。CF Paid・何もしないは変わらない。prd/07 §10.4。
+- 補足（ユーザーの決定・2026-11-04）: **閲覧のときに変換して形式を自分で選ぶ部品では、「画像の形式」の欄を無効にして形式を固定する**（注記だけで JPEG・AVIF を選べたのをやめた）。
+  欄を無効にした理由の文に固定の形式を書き、状態に残った値（JPEG・AVIF）に依らず固定の形式の大きさで数える（`fixedImageFormat`・`imageFormatInactiveReason`。見積モードの画像の行も同じ）。固定の形式は部品のデータ（catalog の `servedFormat`）に持たせ、フレームワークの部品の WebP は game の判定に残した。
+  - next/image（Vercel・VPS の next start・Amplify・OpenNext・Cloud Run）: **WebP**。`images.formats` の既定は `['image/webp']` で、Accept を見て選ぶ（[Image の formats](https://nextjs.org/docs/app/api-reference/components/image)・2026-09-28 更新）。Vercel は Accept をキャッシュのキーに含む（[Image Optimization](https://vercel.com/docs/image-optimization)・2026-08-13 更新）。
+  - Astro の `<Image />`: **WebP**（「By default, the `<Image />` component will produce a `.webp` file」。[astro:assets](https://docs.astro.build/en/reference/modules/astro-assets/)・更新日の記載なし）。Cloudflare の構成（`@astrojs/cloudflare` の既定 `cloudflare-binding`）でも `<Image />` が WebP を頼むとみなす。バインディングがその指定どおりに変換するかは文書（[@astrojs/cloudflare](https://docs.astro.build/en/guides/integrations-guide/cloudflare/)）に記載が無い。
+  - Netlify Image CDN（形式を指定しないとき）: **WebP**（「1. use webp if accepted 2. otherwise, use avif if accepted 3. 原本」。[Image CDN](https://docs.netlify.com/build/image-cdn/overview/)・2026-09-25 更新）。SPA でも同じ。
+  - Bunny Optimizer: **WebP**（設定で WebP を有効にすると「Browsers supporting WebP receive WebP images」。AVIF を自動で選ぶ記載は無い。[Formats](https://bunny.net/docs/optimizer/dynamic-images/formats)・更新日の記載なし）。
+  - Cloudflare Images の URL の変換 `format=auto`（他の事業者の部品 cf-images）: **AVIF**（「Automatically serves the most efficient format that the requesting browser supports」[変換の URL](https://developers.cloudflare.com/images/transform-images/transform-via-url/)・2026-06-16 更新、「If the browser does not support AVIF, Cloudflare Images will fall back to WebP」[アップロードした画像の配信](https://developers.cloudflare.com/images/optimization/hosted-images/serve-uploaded-images/)・2026-04-21 更新）。
+    大きすぎて AVIF に速く変換できない画像は WebP か JPEG に戻るが、閾値の記載が無いので、このゲームでは当たらないとみなす。
+  - **Cloudflare の構成の Images（バインディング。vinext・SPA）は欄を有効のまま、選んだ形式で数える**（D-62 の「WebP とみなす」の読み替えをやめた）。バインディングでは「Your Worker is responsible for automatic format negotiation」（[Workers で変換](https://developers.cloudflare.com/images/transform-images/transform-via-workers/)・2026-11-02 更新）で、vinext の README にも形式の扱いの記載が無い（[vinext](https://github.com/cloudflare/vinext)）。欄の注記は「形式は Worker のコードが決める。ここで選んだ形式で配る」。
+  - 投稿のときに作る（r2-variants）・一律で縮める・原本（none）は今のまま。Vercel・VPS・Cloud Run の SPA（形式を自分で書く）も欄は有効。出典の取得日はすべて 2026-11-04。
+  - next/image の AVIF の損（Vercel の変換 2 倍・Lambda / Cloud Run の変換の時間 1.5 倍）は、AVIF を選べなくなったので当たらない（コードから外した）。
+  - 影響（シード 1〜50・2 シナリオの全部の基準プレイ × 既定・SPA・Astro）: 所持金が変わったのは KV を DB の代わりにする基準プレイ（cf-paid-kvdb）だけ（Next.js は 23 / 50 のシードで −$55〜65、SPA は 12 / 50 のシードで −$29〜52。既定の JPEG で配るのでページが重くなり、速さが「悪い」月が増える）。合否はどれも変わらない。**CF Paid・何もしない（目標の根拠）は変わらない**（R2 の転送は無料・変換の数は形式で増えない）。1 ページの通信量の表示は約 1 MB → 1.3 MB に戻る。
+    golden はシード 42: $1,915.65 → $1,851.43、シード 3: $1,936.27 → $1,880.35（cf-paid-kvdb だけ）。描き方の同等の記録（route-strategies-equivalence）は、この部品を含む組を記録し直した。
+    古い保存で、固定した部品のときに形式を替えた行動は、再生で選べない行動として飛ばす（状態は変わらず、手間も使わない）。
 
 ### D-59 欠番
 
@@ -462,6 +476,7 @@
   OpenNext（PR #26・aws-opennext）の画像は next/image の最適化（Lambda）なので、`usesNextImage` の対象に入る形で揃えれば足りる（この変更の時点では main に無い）。
 - 影響（シード 1〜50・記事コミュニティ・受託 × Next.js・SPA）: **CF Paid・既定（目標の根拠）は所持金・合否とも変わらない**（R2 の転送は無料・変換の数も変わらない。1 ページの通信量の表示だけ約 1.2 MB → 985 KB）。Vercel・AWS の画像だけ Cloudflare の表も変わらない。
   golden で変わったのは KV を DB の代わりにする基準プレイだけ（ページが軽くなり速さが「悪い」月が減る。シード 42: $1,882.01 → $1,947.35・3: $1,907.89 → $1,964.47・31 は同じ）。
+- 補足（2026-11-04）: D-58 の補足で、Cloudflare の構成の Images（バインディング）を「WebP とみなす」のをやめ、選んだ形式で数える（欄は有効）。cf-images（URL の `format=auto`）は欄を無効にして AVIF に固定した。
 - B-11: 前段の CloudFront が無い Amplify で画像を R2 に出すと CloudFront が無くなるので、「CDN の料金のプラン」の定額を選べなくして理由を出す（`componentConflict`。始める画面とゲーム中で共通）。
   定額のプランを選んでいる間は、CloudFront が無くなる選択（画像を R2 に出す）も選べない（先にプランを従量に戻す。D-37 と同じ向き）。始める画面の部品の依存の判定は、部品の事業者でなく構成の事業者で見るように直した。
 
@@ -1511,6 +1526,29 @@
   Astro × DynamoDB 20・画像だけ Cloudflare 18・Next.js × DynamoDB × 画像だけ Cloudflare 0 も D-120 のまま。Netlify Pro は既定（Flat Rate）の Vercel Pro よりわずかに高くなった（$1,178 > $1,162。従量の Vercel とは比べられる）。
 - テスト: `popularity.test.ts`（一様のとき今までの式・割合の合計 1・厳密な和との一致・偏るほど miss が減る・オンデマンドの分は不変・画像の内訳と保存量）。
   golden・基準プレイの期待値は理由を注記して更新し、描き方の同等の記録（`route-strategies-equivalence`）は記事コミュニティの分だけ記録し直した。
+
+### D-122 機能開発の効き目を手間の欄と提案の選択肢に出す（確定・2026-11-04）
+
+- 依頼（ユーザー。supervisor 経由・2026-11-04）: 余った手間が機能開発に回り、満足度の「機能」と PV の伸びに効くことが画面から読めない。提案を受ける得も見えない。
+- 決定（見せ方だけ。配分・段階・成長の計算は変えない）:
+  - 月の報告の手間の棒の下と、行動の欄に「機能開発の累計 X / 期待 Y → 『機能』は〜」を出す（良いのときも出す）。境目の説明は ⓘ（`featureRuleText`。始める画面の手間の内訳にも同じ文）。
+  - 行動の欄には、選んでいる行動・提案への返事を当てた来月の機能開発の見込みと、行動を何も選ばないときとの差（「行動で −3」）、来月の累計が期待に届くかを出し、選ぶたびに更新する。
+    値は game の `featureOutlook`（`applyActions` → `progressOf` → `allocateEffort`。web で式を複製しない）。来月に新しく起きる出来事の手間は含めない（見込み）。
+  - 提案の受ける・断るの下に、受けたときの得（機能開発の加点・PV の月の伸び・契約の収益）と、伴うこと（行動に使える手間の減り・使用量・費用・要件）を出す。
+    値は提案の効果のデータから組む（`acceptSummary`）。機能の追加の作業は機能開発に数えるので、断ったときより増えるのは加点の分（D-29）。受けられないときは既存の不可の理由をそのまま出す。
+- 補足（同日・ユーザーの要望）: 機能の加点を持たない提案でも得と断ったときの損を出す。
+  - 記事のデザインの刷新（D-47）: 得は「画質の評価を保つ（断ると N か月、画質が 1 段下がる）」、断るの選択肢と出来事の欄に「N か月、画質の評価が 1 段下がる」。
+    N はシナリオの `imageRedesign.declineMonths`。条件は `imageRedesignQuality` と同じ（原本を配っていて粗い画像も少なければ下がらない・粗い画像が多ければ受けても下がる）。
+  - 基準の PV を増やす提案（p-archive・c-p-rollout）: 得に「基準の PV × N（以降ずっと）・収益は 1,000 PV あたり $X」（`revenue.adsUsdPer1000PV`）、伴うことに「使用量・費用: PV に比例して増える」。
+  - データの形: 提案のデータに断ったときの効果の欄は無い。断ったときの損があるのは刷新だけで、シナリオの `imageRedesign` に持つ。ほかの提案は断っても何も変わらない。
+  - 両シナリオの全提案で、得が空にならないことをテストで確かめる。
+- 補足 2（同日・ユーザーの要望）: 手間の輪（内側: その月の手間 10 の使い道と期待 8 の目盛り、外側: 累計 / 期待）を出す（`packages/web/src/feature-ring.tsx`）。
+  月の報告の手間の棒の下（その月）と、行動の欄の来月の見込みの下（選んでいる行動を当てた来月。`featureOutlook` の `effort`）の 2 か所。
+  - 内側の輪: 機能開発・出来事への対応・乗り換えなど・行動・維持と管理を区分で塗る。中央に「機能開発 / 期待」と、行動の欄では「行動で −N」。値が 0 の区分は凡例に出さない（機能開発と行動の欄の行動は常に出す）。
+  - 外側の細い輪: 累計 / 期待の進み（100% で一周・段階の色・普通と良いの境目に目盛り）。
+  - 累計の折れ線・横の目盛り（bullet）・月ごとの手間の積み上げ・提案の受ける / 断るの比較も `?featureViz` で見比べたが、ユーザーが輪だけを残すと決め、ほかの案と切り替えは消した。390px の幅に収まることはユーザーが確かめた。
+- 残した点: 期待を超えた分の効き目（今は段階が「良い」で頭打ち）の見せ方は、この見せ方の後に別途詰める。
+- テスト: game の `feature-outlook.test.ts`（段階の境目・playMonth の配分との一致・行動と提案で変わる量・得と伴うことの文）、web の W-54・W-55（手間の輪）。
 
 ## 未決（grill で詰める）
 

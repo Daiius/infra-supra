@@ -135,6 +135,8 @@ export type MonthEvent = {
     effects: string[];
     effort: number;
     unavailable?: string;
+    /** 断ったときの損（無ければ断っても何も変わらない。D-122）。 */
+    declineLoss?: string;
   };
   /** 今の構成の SLA の扱い（catalog の uptimeSla）。 */
   sla?: string[];

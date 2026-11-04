@@ -1,5 +1,10 @@
 // 設定（Settings・SETTINGS の選択肢）と、設定から決まる値（オンデマンドの再検証・画像の形式と重さ・設定のフレーバー）。
-import { type FrameworkId, imagesBehavior, type Platform } from 'catalog';
+import {
+  type FrameworkId,
+  imagesBehavior,
+  imagesServedFormat,
+  type Platform,
+} from 'catalog';
 import { EFFORT } from './rules.ts';
 import type { Scenario, WorkloadMods } from './scenario.ts';
 
@@ -74,23 +79,50 @@ export function usesNextImage(
   );
 }
 
+/** 部品が自分で選んで配る画像の形式と、配り方の説明（fixedImageFormat）。 */
+export type FixedImageFormat = { format: 'webp' | 'avif'; how: string };
+
 /**
- * 閲覧のときに、ブラウザに合わせた形式（WebP）で配る構成か（D-62）。next/image（usesNextImage）に加えて、
- * Cloudflare Images の閲覧のときの変換（Cloudflare の構成の Images・他の事業者の部品 cf-images）。
- * Cloudflare Images の format=auto は「Automatically serves the most efficient format that the requesting browser supports」
- * （URL の変換。Workers・バインディングでは Accept を見て形式を選ぶ公式の例がある）。AVIF も選びうるが、next/image と揃えて
- * WebP とみなす（AVIF の設定を選べばそちら。推奨案）。images は部品の id（他の事業者の部品は振る舞いで見る）。
+ * 閲覧のときに変換する部品が、設定に依らず自分で選んで配る形式（設定の「画像の形式」を無効にして固定する。D-58 の補足・
+ * 2026-11-04 のユーザーの決定）。省略は、形式を設定（アプリのコード）で選ぶ構成。
+ * - 部品のデータ（catalog の servedFormat）: Cloudflare Images の URL の format=auto（cf-images）は AVIF・Netlify Image CDN と
+ *   Bunny Optimizer は WebP。
+ * - next/image（usesNextImage）: images.formats の既定は ['image/webp'] で、Accept を見て選ぶ
+ *   （https://nextjs.org/docs/app/api-reference/components/image ・2026-09-28 更新・2026-11-04 取得）。
+ * - Astro の <Image />（astroImage）: 「By default, the <Image /> component will produce a .webp file」
+ *   （https://docs.astro.build/en/reference/modules/astro-assets/ ・2026-11-04 取得）。Cloudflare の構成（Images の
+ *   バインディング）でも <Image /> が WebP を頼むとみなす（バインディングがその指定どおりに変換するかは文書に記載が無い）。
+ * Cloudflare の構成の Images（vinext・SPA）はバインディングで変換し、形式は Worker のコードが Accept を見て選ぶ
+ * （「Your Worker is responsible for automatic format negotiation」）ので、設定どおり（D-62 の WebP とみなす読み替えをやめた）。
+ * images は部品の id（他の事業者の部品も id のまま渡す）。
  */
-export function autoImageFormat(
+export function fixedImageFormat(
   platform: Platform,
   framework: FrameworkId,
   images: string | undefined,
-): boolean {
-  return (
-    usesNextImage(platform, framework, images) ||
-    astroImage(platform, framework, images) ||
+): FixedImageFormat | undefined {
+  const served = imagesServedFormat(platform, images);
+  if (served) return served;
+  if (usesNextImage(platform, framework, images))
+    return {
+      format: 'webp',
+      how: 'Next.js の画像の部品（next/image）がブラウザに合わせて WebP で配る（images.formats の既定）',
+    };
+  if (astroImage(platform, framework, images))
+    return {
+      format: 'webp',
+      how: 'Astro の画像の部品（<Image />）が既定で WebP を作る',
+    };
+  if (
+    framework === 'astro' &&
+    platform === 'cloudflare' &&
     imagesBehavior(platform, images) === 'images'
-  );
+  )
+    return {
+      format: 'webp',
+      how: 'Astro の画像の部品（<Image />）が既定で WebP を頼む（Images のバインディングがその指定どおりに変換するとみなす。文書に記載は無い）',
+    };
+  return undefined;
 }
 
 /**
@@ -116,7 +148,7 @@ export const SETTINGS = {
     label: '画像の形式',
     field: 'imageKB',
     effort: EFFORT.setting.format,
-    note: '同じ見た目の画質のまま、画像を小さくする形式（転送量・保存量・速さに効き、画質は下がらない）。WebP は同等の SSIM の JPEG より 25〜34% 小さい（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいが、変換に約 50% 長くかかる（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存する。閲覧のときに変換するサービスはブラウザに合わせて形式を選ぶ（Cloudflare Images の変換の数は形式で増えない・Vercel は形式ごとにキャッシュする）',
+    note: '同じ見た目の画質のまま、画像を小さくする形式（転送量・保存量・速さに効き、画質は下がらない）。WebP は同等の SSIM の JPEG より 25〜34% 小さい（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいが、変換に約 50% 長くかかる（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存する。閲覧のときに変換する部品の多くはブラウザに合わせて形式を自分で選ぶので、その部品では選べない（Next.js の next/image・Astro の <Image />・Netlify Image CDN・Bunny Optimizer は WebP、Cloudflare Images の URL の変換（format=auto）は AVIF）。Cloudflare の構成の Images（バインディング）は Worker のコードが形式を選ぶので、ここで選んだ形式で配る',
     options: [
       { value: IMAGE_FORMAT_KB.jpeg, label: 'JPEG（そのまま）' },
       { value: IMAGE_FORMAT_KB.webp, label: 'WebP' },
@@ -227,13 +259,11 @@ export function deliveredImageKB(
   sc: Scenario,
   settings: Settings,
   images: string | undefined,
-  /** 閲覧のときにブラウザに合わせた形式で配る（JPEG を選んでも WebP。autoImageFormat。D-58・D-62）。 */
-  nextImage = false,
+  /** 部品が自分で選んで配る形式（fixedImageFormat）。あれば設定の形式に依らずこの形式の大きさ（D-58 の補足）。 */
+  fixed?: FixedImageFormat['format'],
 ): number {
   if (images === 'none') return sc.unoptimizedImageKB;
-  const kb = nextImage
-    ? Math.min(settings.imageKB, IMAGE_FORMAT_KB.webp)
-    : settings.imageKB;
+  const kb = fixed ? IMAGE_FORMAT_KB[fixed] : settings.imageKB;
   if (images === 'resize')
     return sc.resizedImageKB * (kb / IMAGE_FORMAT_KB.jpeg);
   return kb;
@@ -247,9 +277,9 @@ export function deliveredThumbnailKB(
   sc: Scenario,
   settings: Settings,
   images: string | undefined,
-  nextImage = false,
+  fixed?: FixedImageFormat['format'],
 ): number {
-  const body = deliveredImageKB(sc, settings, images, nextImage);
+  const body = deliveredImageKB(sc, settings, images, fixed);
   const t = sc.template(1).images;
   if (
     !t.thumbnails ||
@@ -271,13 +301,13 @@ export function pageWeightKB(
   settings: Settings,
   mods: WorkloadMods,
   images: string | undefined,
-  nextImage = false,
+  fixed?: FixedImageFormat['format'],
 ): number {
   const w = sc.template(1);
   const page = w.routes[0]!;
   const html = page.processing.responseKB;
-  const perImage = deliveredImageKB(sc, settings, images, nextImage);
-  const perThumb = deliveredThumbnailKB(sc, settings, images, nextImage);
+  const perImage = deliveredImageKB(sc, settings, images, fixed);
+  const perThumb = deliveredThumbnailKB(sc, settings, images, fixed);
   return (
     html +
     w.perPage.assets * w.assets.sizeKB +

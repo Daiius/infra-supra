@@ -17,6 +17,7 @@ import {
   type RouteStrategyId,
   type Scenario,
   upkeepOf,
+  featureRuleText,
 } from 'game';
 import { ROUTE_STRATEGIES } from 'catalog';
 import {
@@ -668,7 +669,8 @@ export function ScenarioDescription({
         {t?.revenue && <p>{t.revenue}</p>}
         <div>
           {t?.satisfaction}開発の手間は毎月 {sc.effort.perMonth}{' '}
-          ポイントで、運用に使った残りが機能開発に回る。
+          ポイントで、運用に使った残りが機能開発に回り、満足度の「機能」（累計 /
+          期待）と PV の伸びに効く。
           <DetailsDialog label="開発の手間の内訳" title="開発の手間の内訳">
             <p>
               開発の手間は毎月 {sc.effort.perMonth}{' '}
@@ -677,6 +679,7 @@ export function ScenarioDescription({
               月）・他の事業者の管理（構成の既定より増えたアカウント 1 つにつき{' '}
               {EFFORT.accountUpkeep} / 月）に使った残りが機能開発に回る。
             </p>
+            <p>{featureRuleText(sc)}</p>
             <p className="opacity-70">開発の手間はゲーム上の仮定。</p>
           </DetailsDialog>
         </div>

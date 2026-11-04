@@ -776,6 +776,48 @@ describe('見積モードの画面', () => {
     expectEstimate();
   });
 
+  it('W-52 閲覧のときに形式を選ぶ画像の部品では、画像の形式の欄は選べず固定の形式と理由を出す（D-58 の補足）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro&img=avif',
+    );
+    await renderApp();
+    group('画像(?!の)'); // 「機能から選ぶ」の表示にする
+    // 画像の部品の行（畳んでいれば開く）の中の形式の欄
+    const format = () =>
+      within(
+        openSlot(
+          document.querySelector<HTMLElement>(
+            'section[data-parts] [data-slot="images"]',
+          )!,
+        ),
+      ).getByRole('group', { name: '画像の形式' });
+    const selected = () =>
+      format()
+        .querySelector('[data-selected="true"]')
+        ?.getAttribute('data-option');
+    // next/image は WebP に固定（URL の AVIF は残るが、数えるのは WebP）
+    expect(selected()).toBe('webp');
+    expect(format().textContent).toContain('今は効かない');
+    expect(format().textContent).toContain('next/image');
+    for (const id of ['jpeg', 'avif'])
+      expect(
+        format()
+          .querySelector(`[data-option="${id}"]`)!
+          .getAttribute('data-available'),
+      ).toBe('false');
+    // 画像だけ Cloudflare（URL の format=auto）は AVIF に固定
+    choose('画像(?!の)', 'cf-images');
+    expect(selected()).toBe('avif');
+    expect(format().textContent).toContain('format=auto');
+    // 投稿のときに一律で縮める（S3）は選べる
+    choose('画像(?!の)', 'aws-s3-resize');
+    expect(format().textContent).not.toContain('今は効かない');
+    expect(selected()).toBe('avif');
+    expectEstimate();
+  });
+
   it('W-51 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。URL は今の構成の分だけ・フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
     window.history.replaceState(
       null,

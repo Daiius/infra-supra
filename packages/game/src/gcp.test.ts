@@ -234,17 +234,14 @@ describe('Google Cloud の構成', () => {
     return { workload, r };
   };
 
-  it('next/image の AVIF: Cloud Run の変換の CPU が WebP の 1.5 倍になり、サイズ違いの数は増えない（OCL-CDDD26AB）', () => {
+  it('next/image は WebP に固定するので、AVIF を選んだ状態でも WebP と同じ量で数える（D-58 の補足。前は Cloud Run の変換の CPU を 1.5 倍。OCL-CDDD26AB）', () => {
     const webp = monthOne(300_000, IMAGE_FORMAT_KB.webp);
     const avif = monthOne(300_000, IMAGE_FORMAT_KB.avif);
-    expect(avif.workload.images.variants).toBe(webp.workload.images.variants);
-    expect(avif.workload.images.transformWorkFactor).toBe(1.5);
-    expect(webp.workload.images.transformWorkFactor ?? 1).toBe(1);
-    // Cloud Run に届く画像の閲覧（CDN の外れ）ごとの変換 150 ms が 225 ms になる。他のクラスの CPU は同じ
+    expect(avif.workload.images).toEqual(webp.workload.images);
+    expect(avif.workload.images.transformWorkFactor ?? 1).toBe(1);
     const cpu = (x: typeof webp) =>
       x.r.simulation.nodes.run!.resources['cpu-ms']!;
-    const misses = webp.r.simulation.workload.classes['image-read'].count * 0.1;
-    expect(cpu(avif) - cpu(webp)).toBeCloseTo(misses * 150 * 0.5, 3);
+    expect(cpu(avif)).toBe(cpu(webp));
   });
 
   it('冷えた起動は閲覧全体の割合に直して閾値と比べる（閲覧 1 件あたりの要求数を掛けて 1 で頭打ち・投稿は数えない。OCL-554477DF）', () => {

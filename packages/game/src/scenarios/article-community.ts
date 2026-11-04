@@ -529,7 +529,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
     {
       id: 'vps-images',
       label:
-        'さくらの VPS・画像を多く載せる提案だけ受け、画像の保存量が 70% を超えたら画像を WebP にする',
+        'さくらの VPS・画像を多く載せる提案だけ受け、画像の保存量が 70% を超えたら画像を WebP にする（形式を選べる構成のとき）',
       short: 'VPS・画像の提案を受ける',
       stackIndex: VPS,
       decide: (s) => [

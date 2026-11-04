@@ -30,7 +30,8 @@ export {
   IMAGE_FORMAT_KB,
   imageFormatOf,
   usesNextImage,
-  autoImageFormat,
+  fixedImageFormat,
+  type FixedImageFormat,
   SETTINGS,
   type SettingKey,
   deliveredImageKB,
@@ -172,7 +173,14 @@ export {
   nextSsrCpuMs,
   componentEffortLabel,
 } from './effort.ts';
-export { IMAGE_REDESIGN_ID, describeEffect } from './events.ts';
+export { IMAGE_REDESIGN_ID, acceptSummary, describeEffect } from './events.ts';
+export {
+  type FeatureOutlook,
+  type FeatureProgress,
+  featureOutlook,
+  featureProgressOf,
+  featureRuleText,
+} from './feature-outlook.ts';
 export {
   componentsAfterRewrite,
   rewriteTargets,
@@ -180,6 +188,8 @@ export {
 } from './rewrite.ts';
 export {
   settingInactiveReason,
+  imageFormatInactiveReason,
+  fixedSettingValue,
   settingNote,
   routePartNote,
   pageWeightOf,

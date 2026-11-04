@@ -59,6 +59,7 @@ import {
   pickedCurveStacks,
   fromQuery,
   IMAGE_FORMATS,
+  imageFormatLock,
   keptParts,
   normalizeInput,
   type PartsByStack,
@@ -426,6 +427,7 @@ function Conditions({
     input.framework,
     input.parts,
   ).some((x) => x.slot === 'images');
+  const formatLock = settings.format ? imageFormatLock(input) : null;
   const imageSettings =
     settings.format || settings.variants ? (
       <div className="space-y-1.5">
@@ -434,13 +436,21 @@ function Conditions({
             setting="format"
             label="画像の形式"
             note={SETTINGS.format.note}
+            // 原本を配る・閲覧のときに形式を自分で選ぶ部品では選べない（ゲームの設定の欄と同じ理由。D-58 の補足）
             options={IMAGE_FORMATS.map((f) => ({
               value: f.id,
               label: f.label,
+              ...(formatLock ? { why: formatLock.reason } : {}),
             }))}
-            value={input.imageFormat}
+            value={formatLock?.format ?? input.imageFormat}
             onChange={(imageFormat) => setInput({ imageFormat })}
-          />
+          >
+            {formatLock && (
+              <p className="text-xs opacity-70">
+                今は効かない: {formatLock.reason}
+              </p>
+            )}
+          </SettingChips>
         )}
         {settings.variants && (
           <SettingChips

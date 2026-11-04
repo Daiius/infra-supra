@@ -94,12 +94,12 @@ describe('画像の大きさ（D-47）', () => {
     }
   });
 
-  it('1 ページの通信量: 既定 約 1 MB・最適化しない 約 36.5 MB・一律で縮める 約 4.1 MB', () => {
+  it('1 ページの通信量: 既定 約 1.3 MB・最適化しない 約 36.5 MB・一律で縮める 約 4.1 MB', () => {
     const s = playMonth(newGame(CF_PAID, 42, article));
-    // Cloudflare Images（閲覧のときに変換）はブラウザに合わせて WebP で配る（D-62。JPEG では約 1.3 MB）。
-    // 記事のページ: HTML 60 + JS・CSS 400 + 本文 5 × 105 + サムネイル 4 × 10.5 = 1,027 KB（D-121。前は 5 × 105 で 985 KB）。
+    // Cloudflare の構成の Images（バインディング）は選んだ形式（既定は JPEG）で配る（D-58 の補足で D-62 の WebP の読み替えをやめた）。
+    // 記事のページ: HTML 60 + JS・CSS 400 + 本文 5 × 150 + サムネイル 4 × 15 = 1,270 KB（D-121）。
     // 最適化しない・一律で縮めるはサイズ違いを作らないので、サムネイルも本文と同じファイル（9 × 4,000・9 × 400。前は 5 枚）
-    expect(pageWeightOf(s)).toBe('1 ページ約 1 MB');
+    expect(pageWeightOf(s)).toBe('1 ページ約 1.3 MB');
     expect(pageWeightOf(s, 'none')).toBe('1 ページ約 36.5 MB');
     expect(pageWeightOf(s, 'resize')).toBe('1 ページ約 4.1 MB');
   });
