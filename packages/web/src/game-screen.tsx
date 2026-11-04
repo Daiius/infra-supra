@@ -10,6 +10,7 @@ import {
   axesOf,
   BOT_BLOCK,
   cashProjectionOf,
+  isTrafficSpike,
   comparisonRows,
   checkActions,
   componentEffortLabel,
@@ -2268,7 +2269,12 @@ function Trends({
     premiseTrends(
       history.map((m) => m.snapshots),
       scenario.months,
-      projectionNote(last) ? { skipProjection: projectionNote(last)! } : {},
+      {
+        ...(projectionNote(last)
+          ? { skipProjection: projectionNote(last)! }
+          : {}),
+        spikes: history.map(isTrafficSpike),
+      },
     ),
   );
   const tiles = [
@@ -2487,6 +2493,11 @@ function TrendCard({
       <div className="mb-1 text-sm">{t.text}</div>
       {t.projectionNote && (
         <div className="mb-1 text-xs opacity-70">{t.projectionNote}</div>
+      )}
+      {!t.projectionNote && !t.hitNow && t.excluded.length > 0 && (
+        <div className="mb-1 text-xs opacity-70">
+          {`${t.excluded.map((i) => i + 1).join('・')} か月目は一時的に流量が増えた月なので、見込みの計算から除いた`}
+        </div>
       )}
       {t.breaks.length > 0 && (
         <div className="mb-1 text-xs opacity-70">

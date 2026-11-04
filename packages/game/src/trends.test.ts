@@ -15,6 +15,7 @@ import { parseSave, replaySave } from './save.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
 import {
   extrapolate,
+  isTrafficSpike,
   premiseTrends,
   selectTrends,
   type PremiseSnapshot,
@@ -99,6 +100,60 @@ describe('premiseTrends', () => {
     const t = premiseTrends([[snap('a', 0.4)], [], [snap('a', 0.45)]], 12)[0]!;
     expect(t.ratios).toEqual([0.4, null, 0.45]);
     expect(t.monthsUntil).toBeNull(); // 連続した記録が 1 か月だけ
+  });
+});
+
+describe('一時的に流量が増えた月を見込みから除く（D-42 と同じ扱い）', () => {
+  const series = (...rs: number[]) => rs.map((r) => [snap('a', r)]);
+
+  it('話題の月の跳ねで外挿しない（基準にも比にも使わない）', () => {
+    const months = series(0.3, 0.33, 0.9, 0.4);
+    // 除かないと、0.33 → 0.9 の比と 0.9 → 0.4 の比が混ざって大きく伸ばす（2 か月後に超える）
+    expect(premiseTrends(months, 12)[0]!.monthsUntil).toBe(2);
+    const t = premiseTrends(months, 12, {
+      spikes: [false, false, true, false],
+    })[0]!;
+    expect(t.excluded).toEqual([2]);
+    expect(t.ratios[2]).toBe(0.9); // 線には描く
+    // 0.33 → 0.4 は 2 か月で 1 か月あたり √(0.4 / 0.33)。0.3 → 0.33 の 1.1 倍と平均する
+    const factor = (1.1 + Math.sqrt(0.4 / 0.33)) / 2;
+    expect(t.projection[1]!.ratio).toBeCloseTo(0.4 * factor, 12);
+    expect(t.monthsUntil).toBeNull(); // 月 1.1 倍ほどでは、残りの 8 か月で境目に届かない
+  });
+
+  it('ためていく量は、飛んだ月をはさむ増分を 1 か月あたりに直す', () => {
+    const t = premiseTrends(
+      [[snap('a', 0.2, true)], [snap('a', 0.5, true)], [snap('a', 0.4, true)]],
+      12,
+      { spikes: [false, true, false] },
+    )[0]!;
+    expect(t.projection[1]!.ratio).toBeCloseTo(0.5, 12); // 0.2 → 0.4 を 2 か月で（月 0.1）
+  });
+
+  it('除いた後に点が 2 つ未満なら見込みを出さない', () => {
+    const t = premiseTrends(series(0.3, 0.9, 0.5), 12, {
+      spikes: [true, true, false],
+    })[0]!;
+    expect(t.monthsUntil).toBeNull();
+    expect(t.projection).toEqual([]);
+    expect(t.excluded).toEqual([0, 1]);
+  });
+
+  it('前の月の見込み（見込みより早く超えた）も、除いた記録で数える', () => {
+    // 前の月までの記録は 0.5 → 0.9（Bot の月）。除かなければ「来月超える」の見込みが立っていた
+    const months = series(0.45, 0.5, 0.9, 1.2);
+    expect(premiseTrends(months, 12)[0]!.earlierThanProjected).toBe(false);
+    const t = premiseTrends(months, 12, {
+      spikes: [false, false, true, false],
+    })[0]!;
+    expect(t.earlierThanProjected).toBe(true);
+  });
+
+  it('一時的に流量が増えた月が無ければ、渡しても渡さなくても同じ', () => {
+    const months = series(0.2, 0.25, 0.31, 0.4);
+    const a = premiseTrends(months, 12)[0]!;
+    const b = premiseTrends(months, 12, { spikes: [false, false, false] })[0]!;
+    expect(b).toEqual(a);
   });
 });
 
@@ -272,7 +327,10 @@ describe('画像の部品を r2-variants に替えたゲーム（シード 42・
     return premiseTrends(
       s.history.map((m) => m.snapshots),
       sc.months,
-      note ? { skipProjection: note } : {},
+      {
+        ...(note ? { skipProjection: note } : {}),
+        spikes: s.history.map(isTrafficSpike),
+      },
     );
   };
 
@@ -326,35 +384,78 @@ describe('画像の部品を r2-variants に替えたゲーム（シード 42・
     expect(t.projection).toEqual([]);
   });
 
-  it('保存から再生したゲーム（3 か月目に r2-variants と AVIF に替えた）も、替えた月で区切る', () => {
-    const save = parseSave({
-      version: 4,
-      scenarioId: 'article-community',
-      stackIndex: 1,
-      framework: 'nextjs',
-      seed: 42,
-      startDate: '2026-11-04',
-      components: {
-        isrCache: 'workers-cache',
-        images: 'images',
-        db: 'd1',
-        email: 'default',
-      },
-      revalidateSec: 0,
-      turns: [
-        [{ type: 'block-bots' }, { type: 'optimize' }],
-        [
-          { type: 'component', slot: 'images', option: 'r2-variants' },
-          { type: 'set', key: 'format', value: 84 },
-        ],
-        [],
-      ],
-    })!;
-    const s = replaySave(save);
+  it('7 か月目は、6 か月目（話題の月）の跳ねで「2 か月後に超える」と見込まない', () => {
+    const s = swapAfter4(7);
+    expect(isTrafficSpike(s.history[5]!)).toBe(true);
     const t = trendsOf(s).find((x) => x.id === ID)!;
+    expect(t.ratios[5]!).toBeGreaterThan(0.9); // 線には描く
+    expect(t.excluded).toEqual([5]);
+    expect(t.monthsUntil).not.toBe(2);
+    expect(t.monthsUntil).toBe(5); // 5 → 7 か月目の 1 か月あたりの伸び
+  });
+
+  /** ユーザーの保存（1 か月目に Bot の遮断と最適化、2 か月目の終わりに r2-variants と AVIF に替えた）。 */
+  const replayed = () =>
+    replaySave(
+      parseSave({
+        version: 4,
+        scenarioId: 'article-community',
+        stackIndex: 1,
+        framework: 'nextjs',
+        seed: 42,
+        startDate: '2026-11-04',
+        components: {
+          isrCache: 'workers-cache',
+          images: 'images',
+          db: 'd1',
+          email: 'default',
+        },
+        revalidateSec: 0,
+        turns: [
+          [{ type: 'block-bots' }, { type: 'optimize' }],
+          [
+            { type: 'component', slot: 'images', option: 'r2-variants' },
+            { type: 'set', key: 'format', value: 84 },
+          ],
+          [],
+        ],
+      })!,
+    );
+
+  it('保存から再生したゲーム（3 か月目に r2-variants と AVIF に替えた）も、替えた月で区切る', () => {
+    const t = trendsOf(replayed()).find((x) => x.id === ID)!;
     expect(t.breaks).toEqual([2]);
     expect(t.segmentStart).toBe(2);
     expect(t.monthsUntil).toBeNull();
+  });
+
+  it('保存から再生したゲームを 7 か月目まで進めても、話題の月の跳ねで「1 か月後に超える」と見込まない', () => {
+    let s = replayed();
+    while (s.history.length < 7) s = playMonth(s);
+    const t = trendsOf(s).find((x) => x.id === ID)!;
+    expect(t.ratios[5]!).toBeGreaterThan(1); // 6 か月目は話題の月
+    expect(t.excluded).toContain(5);
+    expect(t.monthsUntil).not.toBe(1);
+  });
+
+  it('一時的に流量が増えた月より前は、除いても見込みが変わらない', () => {
+    let s = playMonth(newGame(1, 42, sc, DEFAULT_START_DATE, 'nextjs'));
+    while (s.history.length < 10) {
+      const h = s.history;
+      const plain = premiseTrends(
+        h.map((m) => m.snapshots),
+        sc.months,
+      );
+      const withSpikes = premiseTrends(
+        h.map((m) => m.snapshots),
+        sc.months,
+        { spikes: h.map(isTrafficSpike) },
+      );
+      for (const [k, t] of withSpikes.entries())
+        if (t.excluded.length === 0)
+          expect(t).toEqual({ ...plain[k]!, excluded: [] });
+      s = playMonth(s);
+    }
   });
 
   it('部品を替えないゲームでは区切らない（推移も見込みも前と同じ）', () => {
