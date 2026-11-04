@@ -6,7 +6,7 @@ import {
   ELEMENTS,
   STAGE_VALUE,
 } from './rules.ts';
-import { premiseTrends } from './trends.ts';
+import { isTrafficSpike, premiseTrends } from './trends.ts';
 import type { Scenario, Strategy } from './scenario.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 import type { FrameworkId } from 'catalog';
@@ -131,6 +131,7 @@ export function surprisesOf(state: GameState): Surprise[] {
       premiseTrends(
         state.history.slice(0, r.month).map((m) => m.snapshots),
         months,
+        { spikes: state.history.slice(0, r.month).map(isTrafficSpike) },
       )
         .filter((t) => t.earlierThanProjected)
         .map((t) => t.id),
