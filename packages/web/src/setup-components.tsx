@@ -227,7 +227,8 @@ export function PartChips({
             const [head, last] = splitForInfo(o.label);
             const name = (
               <>
-                <span className="font-semibold">{x.label}:</span>{' '}
+                {/* コロンの後の間は余白で取る（名前が 1 語だけだとボタンの末尾の空白は消える） */}
+                <span className="mr-1 font-semibold">{x.label}:</span>
                 {other && <OtherMark o={o} />}
                 {other && ' '}
                 {head}
