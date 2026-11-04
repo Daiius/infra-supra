@@ -19,7 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
-import { NameWithInfo } from './option-text.tsx';
+import { NameWithInfo, splitForInfo } from './option-text.tsx';
 
 export type SetupChoices = Partial<Record<string, string>>;
 
@@ -221,6 +221,23 @@ export function PartChips({
         {rows.map(({ x, options, unselected, chosen, collapsed }) => {
           if (collapsed) {
             const { o, other } = chosen!;
+            const openRow = () => setOpen((s) => new Set(s).add(x.slot));
+            // 名前は切り詰めず、狭い幅では折り返す。ⓘ は名前の最後の語（1 択は「（1 択）」も）と一緒に置き、ⓘ だけが次の行に落ちない
+            // （NameWithInfo と同じ流儀）
+            const [head, last] = splitForInfo(o.label);
+            const name = (
+              <>
+                <span className="font-semibold">{x.label}:</span>{' '}
+                {other && <OtherMark o={o} />}
+                {other && ' '}
+                {head}
+              </>
+            );
+            const info = (
+              <Info label={`${o.label}の説明`}>
+                <OptionDetail o={o} why={null} />
+              </Info>
+            );
             // 畳んだ行: 「スロット名: 選んだ部品」の小さいチップ。押すとその行だけ開く（1 択は開かない）
             return (
               <div
@@ -235,37 +252,44 @@ export function PartChips({
                   data-option={o.id}
                   data-selected="true"
                   title={`${x.label}: ${o.label}`}
-                  className={`${box} bg-base-100 pr-0.5 pl-2 ring-1 ring-base-300 ring-inset ${
+                  className={`inline-block max-w-full rounded-field bg-base-100 py-0.5 pr-0.5 pl-2 text-xs leading-6 [overflow-wrap:anywhere] ring-1 ring-base-300 ring-inset ${
                     x.fixed ? '' : 'hover:bg-base-200'
                   }`}
                 >
                   {x.fixed ? (
-                    <span className="inline-flex h-full min-w-0 items-center gap-1">
-                      <span className="shrink-0 font-semibold">{x.label}:</span>
-                      {other && <OtherMark o={o} />}
-                      <span className="truncate">{o.label}</span>
-                      <span className="shrink-0 opacity-70">（1 択）</span>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-expanded={false}
-                      data-collapsed-toggle
-                      aria-label={`${x.label}: ${o.label}（押すと選択肢が開く）`}
-                      className="inline-flex h-full min-w-0 cursor-pointer items-center gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                      onClick={() => setOpen((s) => new Set(s).add(x.slot))}
-                    >
-                      <span className="shrink-0 font-semibold">{x.label}:</span>
-                      {other && <OtherMark o={o} />}
-                      <span className="truncate">{o.label}</span>
-                      <span aria-hidden className="shrink-0 opacity-60">
-                        ▾
+                    <>
+                      {name}
+                      <span className="whitespace-nowrap">
+                        {last}
+                        <span className="opacity-70">（1 択）</span> {info}
                       </span>
-                    </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        aria-expanded={false}
+                        data-collapsed-toggle
+                        aria-label={`${x.label}: ${o.label}（押すと選択肢が開く）`}
+                        className="inline cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        onClick={openRow}
+                      >
+                        {name}
+                      </button>
+                      <span className="whitespace-nowrap">
+                        {/* 最後の語と ▾ も押すと開く（キーボードは前のボタンで開く） */}
+                        <span
+                          aria-hidden
+                          className="cursor-pointer"
+                          onClick={openRow}
+                        >
+                          {last}
+                          <span className="ml-0.5 opacity-60">▾</span>
+                        </span>{' '}
+                        {info}
+                      </span>
+                    </>
                   )}
-                  <Info label={`${o.label}の説明`}>
-                    <OptionDetail o={o} why={null} />
-                  </Info>
                 </span>
               </div>
             );

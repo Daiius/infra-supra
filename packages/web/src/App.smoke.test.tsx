@@ -1198,6 +1198,13 @@ describe('ゲームモードの画面', () => {
     expect(document.activeElement).toBe(toggle());
     // 選び済みの行は畳んで「DB: 選んだ部品」のチップだけ。押すとその行だけ開き、見出しを押すとまた畳む
     expect(db().querySelector('li[data-option]')).toBeNull();
+    // 名前は切り詰めず折り返し、ⓘ は名前の最後の語と離さない（狭い幅で ⓘ が文字に重ならない）
+    expect(db().querySelector('.truncate')).toBeNull();
+    expect(
+      within(db())
+        .getByRole('button', { name: /の説明$/ })
+        .closest('.whitespace-nowrap')!.textContent,
+    ).toMatch(/^（Postgres）▾/);
     fireEvent.click(toggle());
     expect(db().hasAttribute('data-collapsed')).toBe(false);
     expect(db().querySelectorAll('li[data-option]').length).toBeGreaterThan(1);
