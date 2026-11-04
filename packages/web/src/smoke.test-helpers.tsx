@@ -125,11 +125,37 @@ export async function renderApp(): Promise<void> {
   await waitLoaded();
 }
 
-/** ラベルの先頭で radio を選ぶ（説明・手間の棒の文字が後ろに続くので前方一致）。 */
+/**
+ * 今の表示で query が見つからなければ、① 構成・② フレームワークのタブ（D-116 の補足。隠れた側は hidden）を順に開いて探す
+ * （人がタブを開いて探すのと同じ）。始める画面・見積モードの外では query をそのまま返す。
+ */
+export function inSetupTabs<T>(query: () => T | null): T | null {
+  const found = query();
+  if (found !== null) return found;
+  for (const tab of ['stack', 'framework'] as const) {
+    const b = document.querySelector(`[data-setup-tab-button="${tab}"]`);
+    if (!b || b.getAttribute('aria-selected') === 'true') continue;
+    showSetupTab(tab);
+    const r = query();
+    if (r !== null) return r;
+  }
+  return null;
+}
+
+/** screen.getByRole('radio', o) と同じ。① ② のタブの隠れた側にあれば開いて引く（inSetupTabs）。 */
+export const getRadio = (o: { name: string | RegExp }): HTMLElement =>
+  inSetupTabs(() => screen.queryByRole('radio', o)) ??
+  screen.getByRole('radio', o);
+
+/** ラベルの先頭で radio を選ぶ（説明・手間の棒の文字が後ろに続くので前方一致）。① ② のタブの隠れた側にあれば開いて選ぶ。 */
 export const pickRadio = (name: string, scope: HTMLElement = document.body) => {
-  const r = within(scope).getByRole('radio', {
+  const byName = {
     name: new RegExp(`^${escape(name)}`),
-  });
+  };
+  // 見つからなければ、隠れたタブを開いてから getByRole で落とす（見つからないときの一覧を出すため）
+  const r =
+    inSetupTabs(() => within(scope).queryByRole('radio', byName)) ??
+    within(scope).getByRole('radio', byName);
   fireEvent.click(r);
   expect((r as HTMLInputElement).checked).toBe(true);
 };
@@ -155,6 +181,7 @@ export const pickPart = (name: string, scope: HTMLElement) => {
  * 選んだ表示は localStorage に覚えるので、テストの中では切り替えたまま（テストの前に消える）。
  */
 export const showPartsView = (view: 'diagram' | 'list') => {
+  if (document.querySelector('[data-setup-tab-button]')) showStackTab();
   const tab = document.querySelector<HTMLElement>(
     `[data-parts-view-tab="${view}"]`,
   );
@@ -165,6 +192,23 @@ export const showPartsView = (view: 'diagram' | 'list') => {
     `部品の表示 ${view}`,
   ).not.toBeNull();
 };
+/**
+ * ① インフラの構成・② フレームワークと描き方のタブ（D-116 の補足）を開く。隠れた側の欄は hidden（getByRole で引けない）なので、
+ * 欄を操作する前に開く。
+ * 選んだタブは localStorage に覚えるので、テストの中では開いたまま（テストの前に消える。既定は ①）。
+ */
+export const showSetupTab = (tab: 'stack' | 'framework') => {
+  const b = document.querySelector<HTMLElement>(
+    `[data-setup-tab-button="${tab}"]`,
+  );
+  expect(b, `選ぶもののタブ ${tab}`).not.toBeNull();
+  if (b!.getAttribute('aria-selected') !== 'true') fireEvent.click(b!);
+  expect(b!.getAttribute('aria-selected')).toBe('true');
+};
+/** ① インフラの構成のタブを開く。 */
+export const showStackTab = () => showSetupTab('stack');
+/** ② フレームワークと描き方のタブを開く。 */
+export const showFrameworkTab = () => showSetupTab('framework');
 /** 部品のチップの一覧（「機能から選ぶ」）にする（チップの行を押すテスト用）。 */
 export const showPartsList = () => showPartsView('list');
 /** 部品を選べるカードがあれば、チップの一覧にする（見出しで欄を引くテスト用。無ければ何もしない）。 */
@@ -200,8 +244,11 @@ export type Setup = {
 export async function startGame(s: Setup) {
   // 始める画面の順（D-113）: シナリオ → ① インフラの構成 → ② フレームワーク
   pickRadio(s.scenario);
+  showStackTab();
   pickRadio(s.stack);
+  showFrameworkTab();
   pickRadio(s.framework);
+  showStackTab();
   showPartsList();
   for (const [slot, option] of Object.entries(s.parts ?? {}))
     pickPart(option, slotGroup(slot));
@@ -242,6 +289,8 @@ export async function startGame(s: Setup) {
  * by: 'slot' のときはスロットの id。
  */
 export const slotGroup = (label: string, by: 'label' | 'slot' = 'label') => {
+  // 始める画面・見積モードの部品の行は ① のタブの中（D-116 の補足）
+  if (document.querySelector('[data-setup-tab-button]')) showStackTab();
   if (!document.querySelector('section[data-parts]')) showPartsList();
   const rows = [
     ...document.querySelectorAll<HTMLElement>(

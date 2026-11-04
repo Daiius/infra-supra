@@ -12,12 +12,15 @@ import {
   pickPart,
   pickRadio,
   renderApp,
+  showFrameworkTab,
   showPartsView,
+  showStackTab,
   slotGroup,
   startGame,
   useSmokeEnv,
   waitLoaded,
   type Setup,
+  getRadio,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -26,10 +29,13 @@ const ARTICLE = '記事コミュニティ';
 const CONTRACT = '受託先の業務アプリの運用';
 
 /** 選んでいるフレームワークのカード（前後のカードも同じ中身で並ぶ。D-113 で構成のカードの後ろに移した）。 */
-const fwCard = () =>
-  document.querySelector<HTMLElement>(
+const fwCard = () => {
+  // ② はタブで出す（D-116 の補足）ので、開いてから引く
+  showFrameworkTab();
+  return document.querySelector<HTMLElement>(
     'section[data-framework][aria-current="true"]',
   )!;
+};
 /** 選んでいるフレームワークのカードの、ページの欄（見取り図・描き方のチップ・札。D-112）。 */
 const pageOf = (route: string) =>
   fwCard().querySelector<HTMLElement>(`section[data-route="${route}"]`)!;
@@ -174,12 +180,13 @@ describe('ゲームモードの画面', () => {
     const text = document.body.textContent ?? '';
     expect(text).toContain('別の CMS は無い');
     expect(text).toContain('一覧・トップのページは記事のページに含めて数える');
-    // 中央のカードに、選んでいるフレームワークのページごとの描き方が出る（D-102 でカルーセルにした）
+    // 中央のカードに、選んでいるフレームワークのページごとの描き方が出る（D-102 でカルーセルにした）。② はタブで開く（D-116 の補足）
+    showFrameworkTab();
     const card = (fw: string) =>
       screen.getByRole('region', { name: `${fw} の説明` }).textContent ?? '';
     expect(card('Next.js（App Router）')).toContain('ISR（最初の閲覧で描いて');
     fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
-    fireEvent.click(screen.getByRole('radio', { name: /^Astro/ }));
+    fireEvent.click(getRadio({ name: /^Astro/ }));
     expect(card('Astro')).toContain(
       'アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）',
     );
@@ -191,8 +198,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-20 始める画面: ページの見取り図の札が、フレームワークとコメントの描き方で変わる（D-102）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     /** 見取り図の区画の札（区画の名前 → 作られ方の札の文字）。 */
     /** 選んでいるカード（前後のカードも同じ中身で並ぶので、選んでいるものに絞る）。 */
     const current = () =>
@@ -210,7 +216,7 @@ describe('ゲームモードの画面', () => {
     pick(/^Next\.js（App Router）/);
     // ロゴ（D-102）: simple-icons にあるものは SVG、無いもの（AWS・さくら）は頭文字のバッジ。構成は事業者の組の頭に出す（D-105 の補足）
     const labelOf = (name: RegExp) => {
-      const r = screen.getByRole('radio', { name });
+      const r = getRadio({ name });
       return (r.closest('[data-tab-group]') ?? r.closest('label'))!;
     };
     expect(
@@ -232,6 +238,7 @@ describe('ゲームモードの画面', () => {
       ),
     ).not.toBeNull();
     // 選んでいるカードが印つきで、前後のカードも同じ中身で読める
+    showFrameworkTab();
     expect(current().getAttribute('aria-label')).toBe(
       'Next.js（App Router） の説明',
     );
@@ -250,7 +257,7 @@ describe('ゲームモードの画面', () => {
     );
     // コメントを記事のページに含めると、コメント欄は ISR のページの一部になる（D-82）。
     // 選ぶのはフレームワークのカードの記事のページの欄（ページの部品。D-109・D-112）
-    const inPage = screen.getByRole('radio', { name: /^記事のページに含める/ });
+    const inPage = getRadio({ name: /^記事のページに含める/ });
     expect(
       inPage.closest('section[data-route]')?.getAttribute('data-route'),
     ).toBe('article');
@@ -294,10 +301,9 @@ describe('ゲームモードの画面', () => {
 
     // 前後のボタンでも選ぶ（並びは Next.js・SPA・Astro・静的書き出し）
     fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
-    expect(
-      (screen.getByRole('radio', { name: /^Astro/ }) as HTMLInputElement)
-        .checked,
-    ).toBe(true);
+    expect((getRadio({ name: /^Astro/ }) as HTMLInputElement).checked).toBe(
+      true,
+    );
     // 選んでいないカードを押しても選ぶ
     fireEvent.click(
       within(
@@ -326,8 +332,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-13 始める画面: フレームワークのカードのページの欄で描き方を選び、要件の札・隣の見取り図が変わる（D-106・D-107・D-112）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     const alternative = (route: string, s: string) =>
       pageOf(route).querySelector(`[data-alternative="${s}"]`);
     const check = (route: string, c: string) =>
@@ -437,8 +442,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-28 始める画面: ページの欄の説明の行と札は、選んだ描き方に合わせる（借りる図の無い記事の毎回描くも。D-112）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     const lines = (route: string, label: string) =>
       within(pageOf(route)).getByRole('list', { name: `${label}の説明` })
         .textContent ?? '';
@@ -471,8 +475,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-29 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     pick(/^記事コミュニティ/);
     pick(/^Astro/);
     pick(/^Cloudflare Free/);
@@ -524,8 +527,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-24 始める画面: 個人向けのページを枠 + サーバーの島にすると、見取り図に島・構成図に島の流れが出る（D-108）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     pick(/^記事コミュニティ/);
     pick(/^Astro/);
     pick(/^Cloudflare Paid/);
@@ -545,7 +547,8 @@ describe('ゲームモードの画面', () => {
       within(list).getAllByText('サーバーの島（閲覧ごとに一部だけ描く）')
         .length,
     ).toBeGreaterThan(0);
-    // 構成図の凡例に島の流れ（個人向けのページ）が出る
+    // 構成図の凡例に島の流れ（個人向けのページ）が出る（① のタブ）
+    showStackTab();
     const legends = screen.getAllByRole('list', {
       name: '構成図の流れの凡例',
     });
@@ -558,8 +561,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-27 始める画面: Google Cloud × Next.js で部品ごとにキャッシュを選び ISR のキャッシュを「キャッシュしない」にすると、表と同じく見取り図も毎回描くになる（D-111・OCL-CD192A98）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     const sources = () =>
       [
         ...within(pageOf('personal'))
@@ -654,6 +656,7 @@ describe('ゲームモードの画面', () => {
       stack: 'Vercel Pro + Supabase Pro',
       beforeStart: () => {
         pickStrategy('記事のページ', '静的（ビルドし直し）');
+        showStackTab();
         // 始める画面: 選べる構成（さくらの VPS・vinext の S1 も出した CF。RS-15 の解除）のカードには出さない。
         // 選んでいない事業者のカードは、その事業者の最初のプランを出す（事業者ごとに 1 枚。D-105 の補足）
         for (const id of ['sakura-vps-2gb', 'cloudflare-vinext-free']) {
@@ -663,6 +666,7 @@ describe('ゲームモードの画面', () => {
           expect(within(card).queryByRole('note')).toBeNull();
         }
         // フレームワークを替えると、選んだ描き方は既定に戻る
+        showFrameworkTab();
         const astro = screen.getByRole('region', { name: 'Astro の説明' });
         expect(within(astro).getByRole('note').textContent).toMatch(
           /^このフレームワークにすると、記事のページは「静的（ビルドし直し）」→「サーバーで描いてキャッシュ（更新で消す）」（既定）に戻る: /,
@@ -685,16 +689,13 @@ describe('ゲームモードの画面', () => {
 
   it('W-17 選んでいない構成のカードも、その構成で選べる描き方で描く（流れの凡例のページ。D-107 の補足・RS-15 の解除）', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
-    fireEvent.click(
-      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
-    );
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    fireEvent.click(getRadio({ name: /^Next\.js（App Router）/ }));
     // CF は Paid を選んでから離れる（選んでいない事業者のカードは最後に選んだプランを出す。D-105 の補足）
-    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Paid/ }));
-    fireEvent.click(
-      screen.getByRole('radio', { name: /^Vercel Pro \+ Supabase Pro/ }),
-    );
+    fireEvent.click(getRadio({ name: /^Cloudflare Paid/ }));
+    fireEvent.click(getRadio({ name: /^Vercel Pro \+ Supabase Pro/ }));
     pickStrategy('記事のページ', '静的（ビルドし直し）');
+    showStackTab();
     const lane = (stackId: string, label: string) =>
       within(
         document.querySelector<HTMLElement>(
@@ -718,10 +719,9 @@ describe('ゲームモードの画面', () => {
 
   it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
-    fireEvent.click(
-      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
-    );
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    fireEvent.click(getRadio({ name: /^Next\.js（App Router）/ }));
+    showStackTab();
     const stackRadios = () =>
       screen
         .getAllByRole<HTMLInputElement>('radio')
@@ -736,7 +736,7 @@ describe('ゲームモードの画面', () => {
     // カードは事業者ごとに 1 枚（D-105 の補足）
     expect(document.querySelectorAll('section[data-stack]').length).toBe(5);
     // タブで選ぶ
-    fireEvent.click(screen.getByRole('radio', { name: /^Vercel Pro/ }));
+    fireEvent.click(getRadio({ name: /^Vercel Pro/ }));
     expect(checked().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
     expect(current().getAttribute('aria-label')).toMatch(/^Vercel Pro/);
     // 選んでいるカードに構成図（要約つきの図・凡例・読み上げ用の一覧）。Vercel と Supabase の枠に分かれる。
@@ -786,7 +786,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-52 始める画面: 狭い画面の前後のカードの帯の三角を押すと前後の構成を選び、帯の無い端では出ない。三角は読み上げに出ない', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     const current = () =>
       document.querySelector<HTMLElement>(
         'section[data-stack][aria-current="true"]',
@@ -828,10 +828,9 @@ describe('ゲームモードの画面', () => {
 
   it('W-21 始める画面のインフラの構成のタブは事業者ごとにまとまり、←/→ は組をまたいで全部の構成を順に移る（D-105 の補足）', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
-    fireEvent.click(
-      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
-    );
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    fireEvent.click(getRadio({ name: /^Next\.js（App Router）/ }));
+    showStackTab();
     const group = screen.getByRole('radiogroup', { name: '① インフラの構成' });
     // 組ごとに、組の名前とプランのチップ（並びは構成の一覧の順）。1 つだけの事業者は事業者の名前だけ
     // ロゴ（aria-hidden）を除いた文字
@@ -879,7 +878,7 @@ describe('ゲームモードの画面', () => {
       ).toBe(`${checked()} の構成`);
     };
     // Cloudflare Paid → → は組をまたいで Vercel Hobby、← で戻る
-    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Paid/ }));
+    fireEvent.click(getRadio({ name: /^Cloudflare Paid/ }));
     radios[1]!.focus();
     press('ArrowRight');
     expect(checked()).toBe('Vercel Hobby + Supabase Free');
@@ -896,11 +895,9 @@ describe('ゲームモードの画面', () => {
 
   it('W-26 始める画面のインフラの構成: プランのチップはカードを動かさず中身を替え、事業者は最後に選んだプランで出る（D-105 の補足）', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
-    fireEvent.click(
-      screen.getByRole('radio', { name: /^Next\.js（App Router）/ }),
-    );
-    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Free/ }));
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    fireEvent.click(getRadio({ name: /^Next\.js（App Router）/ }));
+    fireEvent.click(getRadio({ name: /^Cloudflare Free/ }));
     const current = () =>
       document.querySelector<HTMLElement>(
         'section[data-stack][aria-current="true"]',
@@ -921,7 +918,7 @@ describe('ゲームモードの画面', () => {
     });
     const flavor = card.querySelector('p')!.textContent;
     // Free → Paid: 同じカード・同じ図の要素のまま、名前・説明・構成が替わる。カルーセルは動かさない
-    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Paid/ }));
+    fireEvent.click(getRadio({ name: /^Cloudflare Paid/ }));
     expect(current()).toBe(card);
     expect(card.closest('[data-card]')).toBe(item);
     expect(card.dataset.stack).toBe('cloudflare-vinext-paid');
@@ -932,7 +929,7 @@ describe('ゲームモードの画面', () => {
     );
     expect(scrolls).toBe(0);
     // ほかの事業者へ移るとカルーセルが動き、CF のカードは最後に選んだ Paid のまま薄く出る
-    fireEvent.click(screen.getByRole('radio', { name: /^Vercel Hobby/ }));
+    fireEvent.click(getRadio({ name: /^Vercel Hobby/ }));
     expect(scrolls).toBe(1);
     expect(card.getAttribute('aria-current')).toBeNull();
     expect(card.dataset.stack).toBe('cloudflare-vinext-paid');
@@ -963,7 +960,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-30 始める画面: シナリオの説明に、フレームワークに依らない見取り図（区画の要件の札）が出る（D-113）', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     /** シナリオの見取り図の区画の札（区画の名前 → 要件の札の文字）。 */
     const needs = (page: string, region: string) => {
       const list = screen.getByRole('list', {
@@ -1029,9 +1026,7 @@ describe('ゲームモードの画面', () => {
     expect(mail.textContent).toContain('メール送信');
     expect(mail.closest('li[data-region]')).toBeNull();
     // 受託のシナリオも同じ形で出る
-    fireEvent.click(
-      screen.getByRole('radio', { name: /^受託先の業務アプリの運用/ }),
-    );
+    fireEvent.click(getRadio({ name: /^受託先の業務アプリの運用/ }));
     expect(needs('業務の画面', '一覧の表（申請・記録）')).toContain(
       '人ごとに違う',
     );
@@ -1045,7 +1040,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-32 始める画面: シナリオの説明の出来事の詳細と開発の手間の内訳は畳み、ボタンでダイアログに出す', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     // 本文には要約だけ（出来事の一覧・改定の説明は出さない）
     expect(screen.getByText(/運営中に出来事が起きる/)).toBeDefined();
     expect(screen.queryByText(/Bot が大量に来る/)).toBeNull();
@@ -1069,21 +1064,23 @@ describe('ゲームモードの画面', () => {
 
   it('W-31 始める画面: インフラの構成を先に選び、載せられないフレームワークは選べない。選んでいたら載せられるものに戻して知らせる（D-113）', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
-    // 順: ① インフラの構成 → ② フレームワーク
-    const stackGroup = screen.getByRole('radiogroup', {
-      name: '① インフラの構成',
-    });
-    const fwGroup = screen.getByRole('radiogroup', {
-      name: /^② アプリを何で作りましたか/,
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    // 順: ① インフラの構成 → ② フレームワーク（タブの並び。既定は ①。D-116 の補足）
+    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const fwTab = screen.getByRole('tab', {
+      name: /^② フレームワークと描き方/,
     });
     expect(
-      stackGroup.compareDocumentPosition(fwGroup) &
+      stackTab.compareDocumentPosition(fwTab) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('radio', { name: /^Astro/ }));
+    expect(stackTab.getAttribute('aria-selected')).toBe('true');
+    screen.getByRole('radiogroup', { name: '① インフラの構成' });
+    showFrameworkTab();
+    screen.getByRole('radiogroup', { name: /^② アプリを何で作りましたか/ });
+    fireEvent.click(getRadio({ name: /^Astro/ }));
     // Astro を載せられない構成も隠さず、印を添える（選べる）
-    const amplify = screen.getByRole('radio', {
+    const amplify = getRadio({
       name: /^AWS（Amplify Hosting）/,
     }) as HTMLInputElement;
     expect(amplify.disabled).toBe(false);
@@ -1103,7 +1100,7 @@ describe('ゲームモードの画面', () => {
     // Astro を選んでいたので、載せられる最初のフレームワークに戻して知らせる
     expect(
       (
-        screen.getByRole('radio', {
+        getRadio({
           name: /^Next\.js（App Router）/,
         }) as HTMLInputElement
       ).checked,
@@ -1112,7 +1109,7 @@ describe('ゲームモードの画面', () => {
       /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にした/,
     );
     // Astro は灰色で選べず、カードに理由が出る
-    const astro = screen.getByRole('radio', {
+    const astro = getRadio({
       name: /^Astro/,
     }) as HTMLInputElement;
     expect(astro.disabled).toBe(true);
@@ -1129,15 +1126,16 @@ describe('ゲームモードの画面', () => {
       expect(astro.checked).toBe(false);
     }
     // 載せられる構成に戻すと、また選べる（知らせは消える）
-    fireEvent.click(screen.getByRole('radio', { name: /^Cloudflare Free/ }));
-    expect(astro.disabled).toBe(false);
+    fireEvent.click(getRadio({ name: /^Cloudflare Free/ }));
+    expect((getRadio({ name: /^Astro/ }) as HTMLInputElement).disabled).toBe(
+      false,
+    );
     expect(document.body.textContent).not.toMatch(/公式のアダプターが無いので/);
   });
 
   it('W-39 始める画面: 部品は構成図の箱か機能ごとのチップで選び、未選択・他の事業者の部品も見分けられる（D-116 とその補足）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     const current = () =>
       document.querySelector<HTMLElement>(
         'section[data-stack][aria-current="true"]',
@@ -1145,6 +1143,7 @@ describe('ゲームモードの画面', () => {
     pick(/^受託先の業務アプリの運用/);
     pick(/^Vercel Pro/);
     pick(/^Next\.js（App Router）/);
+    showStackTab();
     // 前の ③ 部品の欄は無く、部品は選んでいる構成のカードの中。最初は構成図の表示で、チップの一覧は出さない
     expect(screen.queryByRole('heading', { name: '③ 部品' })).toBeNull();
     const tabs = within(current()).getByRole('group', {
@@ -1476,10 +1475,110 @@ describe('ゲームモードの画面', () => {
     showPartsView('diagram');
   });
 
+  it('W-54 始める画面: ① 構成と ② フレームワークはタブで切り替え、見出しに今の選択と注意の印が出て、替えても選択は残る（D-116 の補足）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    const tablist = screen.getByRole('tablist', { name: '選ぶもの' });
+    const [stackTab, fwTab] = within(tablist).getAllByRole('tab');
+    // 既定は ①。② の欄は隠れ（hidden）、タブは ② の今の選択を出す
+    expect(stackTab!.getAttribute('aria-selected')).toBe('true');
+    expect(fwTab!.getAttribute('aria-selected')).toBe('false');
+    expect(fwTab!.getAttribute('tabindex')).toBe('-1');
+    const panel = (tab: HTMLElement) =>
+      document.getElementById(tab.getAttribute('aria-controls')!)!;
+    expect(panel(stackTab!).getAttribute('role')).toBe('tabpanel');
+    expect(panel(fwTab!).hidden).toBe(true);
+    expect(
+      screen.queryByRole('radiogroup', { name: /^② アプリを何で作りましたか/ }),
+    ).toBeNull();
+    expect(fwTab!.textContent).toContain('Next.js（App Router）');
+    // 部品がまだ選ばれていないので、① に注意の印（文は名前と title）
+    expect(stackTab!.querySelector('[data-setup-tab-warn]')).not.toBeNull();
+    expect(stackTab!.getAttribute('title')).toContain('部品をまだ選んでいない');
+    expect(fwTab!.querySelector('[data-setup-tab-warn]')).toBeNull();
+    // ① で構成と部品を 1 つ選ぶ
+    pickRadio('Vercel Pro + Supabase Pro');
+    expect(stackTab!.textContent).toContain('Vercel Pro + Supabase Pro');
+    showPartsView('list');
+    const row = document.querySelector<HTMLElement>(
+      'section[data-parts] [data-slot][data-unselected]',
+    )!;
+    const slot = row.getAttribute('data-slot')!;
+    fireEvent.click(within(row).getAllByRole('button', { pressed: false })[0]!);
+    const picked = () =>
+      document
+        .querySelector(
+          `section[data-parts] [data-slot="${slot}"] [data-selected="true"]`,
+        )
+        ?.getAttribute('data-option');
+    const chosen = picked();
+    expect(chosen).toBeDefined();
+    // ② に替えると ① の欄は隠れ、① のタブが選んだ構成を出す。選んだタブは画面ごとに覚える
+    fireEvent.click(fwTab!);
+    expect(fwTab!.getAttribute('aria-selected')).toBe('true');
+    expect(panel(stackTab!).hidden).toBe(true);
+    expect(
+      screen.queryByRole('radiogroup', { name: '① インフラの構成' }),
+    ).toBeNull();
+    screen.getByRole('radiogroup', { name: /^② アプリを何で作りましたか/ });
+    expect(localStorage.getItem('infra-supra:setup-tab:game')).toBe(
+      'framework',
+    );
+    pickRadio('Astro');
+    expect(fwTab!.textContent).toContain('Astro');
+    // ←（キーボード）で ① に戻る。構成と部品の選択は残っている
+    fireEvent.keyDown(fwTab!, { key: 'ArrowLeft' });
+    expect(stackTab!.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(stackTab);
+    expect(
+      (getRadio({ name: /^Vercel Pro \+ Supabase Pro/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    expect(picked()).toBe(chosen);
+    // Astro を載せられない構成を選ぶと、② のタブに付け替えの知らせの印が出る（① を開いたままでも分かる）
+    pickRadio('AWS（Amplify Hosting）');
+    expect(stackTab!.getAttribute('aria-selected')).toBe('true');
+    expect(fwTab!.textContent).toContain('Next.js（App Router）');
+    expect(fwTab!.querySelector('[data-setup-tab-warn]')).not.toBeNull();
+    expect(fwTab!.getAttribute('title')).toMatch(/公式のアダプターが無いので/);
+    // End / Home でも移る
+    fireEvent.keyDown(stackTab!, { key: 'End' });
+    expect(fwTab!.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(fwTab!, { key: 'Home' });
+    expect(stackTab!.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('W-55 始める画面: 選んだタブを開き直しても覚えていて、localStorage が使えない環境でもタブを切り替えられる（D-116 の補足）', async () => {
+    localStorage.setItem('infra-supra:setup-tab:game', 'framework');
+    await renderApp();
+    expect(
+      screen
+        .getByRole('tab', { name: /^② フレームワークと描き方/ })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    cleanup();
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('使えない');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('使えない');
+    });
+    await renderApp();
+    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const fwTab = screen.getByRole('tab', {
+      name: /^② フレームワークと描き方/,
+    });
+    expect(stackTab.getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(fwTab);
+    expect(fwTab.getAttribute('aria-selected')).toBe('true');
+    screen.getByRole('radiogroup', { name: /^② アプリを何で作りましたか/ });
+    fireEvent.keyDown(fwTab, { key: 'ArrowRight' });
+    expect(stackTab.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('W-40 始める画面: 部品どうしの依存で選べない部品のチップは灰色で、理由をツールチップと ⓘ に出す（D-116）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     pick(/^記事コミュニティ/);
     pick(/^さくらの VPS 2GB/);
     pick(/^Vite（SPA）/);
@@ -1609,8 +1708,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-44 始める画面: Astro の記事のキャッシュ・静的書き出しのビルドの間隔も記事のページの行で選ぶ（D-119）', async () => {
     await renderApp();
-    const pick = (name: RegExp) =>
-      fireEvent.click(screen.getByRole('radio', { name }));
+    const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     const setting = (label: string) =>
       within(pageOf('article')).queryByRole('group', { name: label });
     pick(/^記事コミュニティ/);

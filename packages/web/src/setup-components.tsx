@@ -17,8 +17,17 @@ import {
   type SetupOption,
   type SetupSlot,
 } from 'game';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
+import { CarouselVisible } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
 
@@ -582,6 +591,148 @@ export function SettingChips<V extends string | number>({
         })}
       </ul>
       {children}
+    </div>
+  );
+}
+
+/** ① 構成・② フレームワークのタブ（D-116 の補足）。 */
+export type SetupTab = 'stack' | 'framework';
+
+/** タブの見出し: 欄の名前・その欄の今の選択（隠れていても見えるように）・注意（未選択の部品・付け替えの知らせなど）。 */
+export type SetupTabInfo = {
+  label: string;
+  summary: string;
+  /** 注意の文。あればタブに「!」を付け、文は title と読み上げに出す。 */
+  warn?: string | null | undefined;
+  panel: ReactNode;
+};
+
+const SETUP_TABS: readonly SetupTab[] = ['stack', 'framework'];
+
+function readSetupTab(key: string): SetupTab {
+  try {
+    return localStorage.getItem(key) === 'framework' ? 'framework' : 'stack';
+  } catch {
+    // 保存領域が使えない環境では ① から
+    return 'stack';
+  }
+}
+
+function storeSetupTab(key: string, v: SetupTab) {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    // 覚えられなくても切り替えられる（開き直すと ① に戻るだけ）
+  }
+}
+
+/**
+ * ① インフラの構成と ② フレームワークと描き方を、タブで切り替えて片方だけ出す（D-116 の補足。縦の情報量を減らし、どちらから
+ * 選んでもよいように）。WAI-ARIA の tabs（←/→・Home/End で移って選ぶ）。選んだタブは画面ごとに storageKey へ覚える。
+ * 隠れた側も描いたまま hidden にする（carousel の組ごとに最後に選んだプランなど、欄の中の記憶も保つ）。隠れている間は幅が無いので、
+ * carousel は見えたときに選んだカードへ寄せ直す（CarouselVisible）。
+ * 見た目は下線のタブ（部品の選び方の「構成図から / 機能から」の箱のタブと区別する）。
+ */
+export function SetupTabs({
+  storageKey,
+  stack,
+  framework,
+}: {
+  storageKey: string;
+  stack: SetupTabInfo;
+  framework: SetupTabInfo;
+}) {
+  const [tab, setTabState] = useState<SetupTab>(() => readSetupTab(storageKey));
+  const setTab = (v: SetupTab) => {
+    setTabState(v);
+    storeSetupTab(storageKey, v);
+  };
+  const id = useId();
+  const tabs = useRef<Partial<Record<SetupTab, HTMLButtonElement | null>>>({});
+  const info = { stack, framework };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = SETUP_TABS.indexOf(tab);
+    const n = SETUP_TABS.length;
+    const next =
+      e.key === 'ArrowRight'
+        ? SETUP_TABS[(i + 1) % n]
+        : e.key === 'ArrowLeft'
+          ? SETUP_TABS[(i + n - 1) % n]
+          : e.key === 'Home'
+            ? SETUP_TABS[0]
+            : e.key === 'End'
+              ? SETUP_TABS[n - 1]
+              : undefined;
+    if (!next) return;
+    e.preventDefault();
+    setTab(next);
+    tabs.current[next]?.focus();
+  };
+  return (
+    <div className="min-w-0 space-y-2" data-setup-tab={tab}>
+      <div
+        role="tablist"
+        aria-label="選ぶもの"
+        className="tabs tabs-border flex-nowrap"
+        onKeyDown={onKeyDown}
+      >
+        {SETUP_TABS.map((t) => {
+          const x = info[t];
+          const selected = tab === t;
+          return (
+            <button
+              key={t}
+              ref={(el) => {
+                tabs.current[t] = el;
+              }}
+              type="button"
+              role="tab"
+              id={`${id}-tab-${t}`}
+              aria-selected={selected}
+              aria-controls={`${id}-panel-${t}`}
+              tabIndex={selected ? 0 : -1}
+              title={`${x.label}: ${x.summary}${x.warn ? `（${x.warn}）` : ''}`}
+              data-setup-tab-button={t}
+              className={`tab h-auto min-w-0 flex-1 flex-col items-start gap-0 px-2 py-1 text-left ${
+                selected ? 'tab-active font-bold' : ''
+              }`}
+              onClick={() => setTab(t)}
+            >
+              <span className="flex max-w-full items-center gap-1 text-sm">
+                <span className="truncate">{x.label}</span>
+                {x.warn && (
+                  <span
+                    aria-hidden
+                    className="badge shrink-0 badge-xs font-bold badge-warning"
+                    data-setup-tab-warn
+                  >
+                    !
+                  </span>
+                )}
+              </span>
+              <span className="block w-full truncate text-xs font-normal opacity-70">
+                <span className="sr-only">：</span>
+                {x.summary}
+              </span>
+              {x.warn && <span className="sr-only">（{x.warn}）</span>}
+            </button>
+          );
+        })}
+      </div>
+      {SETUP_TABS.map((t) => (
+        <div
+          key={t}
+          role="tabpanel"
+          id={`${id}-panel-${t}`}
+          aria-labelledby={`${id}-tab-${t}`}
+          hidden={tab !== t}
+          className="min-w-0"
+        >
+          <CarouselVisible.Provider value={tab === t}>
+            {info[t].panel}
+          </CarouselVisible.Provider>
+        </div>
+      ))}
     </div>
   );
 }

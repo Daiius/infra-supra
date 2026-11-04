@@ -25,7 +25,9 @@ import {
   partsOfComments,
   defaultRevalidateSec,
   frameworkOnStack,
+  stackName,
   stackUnsupportedReason,
+  FRAMEWORKS,
   type GameState,
   type SaveData,
 } from 'game';
@@ -38,7 +40,11 @@ import {
 } from './scenario-briefing.tsx';
 import { OptionText } from './option-text.tsx';
 import { commitmentMeta } from './commitment-meta.ts';
-import { SetupCostPreview, type SetupChoices } from './setup-components.tsx';
+import {
+  SetupCostPreview,
+  SetupTabs,
+  type SetupChoices,
+} from './setup-components.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import { useRoutePlanEditor } from './route-plan-field.tsx';
 
@@ -325,63 +331,93 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       <div className="card bg-base-100 shadow">
         <div className="card-body px-3 sm:px-6">
           <h2 className="card-title">どの構成で始めますか？</h2>
-          {/* ① インフラの構成を先に選ぶ（D-113）。カードの構成図は今のフレームワークで描く */}
+          {/* ① インフラの構成と ② フレームワークと描き方はタブで切り替える（どちらから選んでもよい。D-116 の補足）。
+              タブの見出しにそれぞれの今の選択と注意（未選択の部品・付け替えの知らせ）を出す */}
           <div className="mt-2">
-            <StackField
-              scenario={scenario}
-              framework={framework}
-              value={stack}
-              onChange={(i) => change({ stack: i })}
-              components={parts}
-              // 選んでいないカードの題・図・手間の棒は、前にその構成で選んだ部品で描く（D-116 の補足）
-              rememberedOf={(i) => partsByStack[i]}
-              comments={commentsChoosable ? comments : undefined}
-              routes={routes}
-              routeNotice={(i) => routeNotice({ stackIndex: i })}
-              // 部品は構成のカードの構成図の箱か、機能ごとのチップで選ぶ（タブで切り替える。D-116 とその補足）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
-              onComponentsChange={(v) =>
-                setParts(validSetupChoices(scenario, stack, framework, v))
-              }
-              partsNote="構成の中の役割ごとに選ぶ（始める前なので手間はかからない）"
-            />
-          </div>
-          {/* ② フレームワークと描き方（構成と同列の判断。D-35）。選んでいる構成に載せられないものは選べない（D-113） */}
-          <div className="mt-2">
-            <FrameworkField
-              scenario={scenario}
-              allowed={frameworks.allowed}
-              value={framework}
-              onChange={(id) => change({ framework: id })}
-              // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
-              comments={commentsChoosable ? comments : undefined}
-              // 既定のページごとの描き方（D-106）: 選んでいる構成で、各フレームワークの既定から
-              routePlan={(id) =>
-                routePlanRows(scenario, {
-                  framework: id,
-                  stackIndex: stack,
-                  settings: {
-                    revalidateSec: defaultRevalidateSec(id, stack, scenario),
-                  },
-                  components: validSetupChoices(scenario, stack, id, parts),
-                  routeParts: partsOfComments(scenario, comments),
-                })
-              }
-              routes={routes}
-              // 見取り図は表・計算と同じ実際の描き方で描く（選んでいるカードは選んだ描き方、ほかは既定。OCL-CD192A98）
-              resolvedRoutes={(id, selected) =>
-                resolvedRouteStrategies(scenario, {
-                  framework: id,
-                  stackIndex: stack,
-                  components: validSetupChoices(scenario, stack, id, parts),
-                  ...(selected ? { routes } : {}),
-                })
-              }
-              routeNotice={(id) => routeNotice({ framework: id })}
-              // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）。
-              // 再検証の間隔などの描き方の設定も、記事のページの行で選ぶ（D-119）
-              editor={routeEditor}
-              unsupported={(id) => stackUnsupportedReason(stack, id)}
-              notice={fallbackNotice}
+            <SetupTabs
+              storageKey="infra-supra:setup-tab:game"
+              stack={{
+                label: '① インフラの構成',
+                summary: stackName(stack, framework, false, parts),
+                warn: problem,
+                panel: (
+                  <StackField
+                    scenario={scenario}
+                    framework={framework}
+                    value={stack}
+                    onChange={(i) => change({ stack: i })}
+                    components={parts}
+                    // 選んでいないカードの題・図・手間の棒は、前にその構成で選んだ部品で描く（D-116 の補足）
+                    rememberedOf={(i) => partsByStack[i]}
+                    comments={commentsChoosable ? comments : undefined}
+                    routes={routes}
+                    routeNotice={(i) => routeNotice({ stackIndex: i })}
+                    // 部品は構成のカードの構成図の箱か、機能ごとのチップで選ぶ（タブで切り替える。D-116 とその補足）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
+                    onComponentsChange={(v) =>
+                      setParts(validSetupChoices(scenario, stack, framework, v))
+                    }
+                    partsNote="構成の中の役割ごとに選ぶ（始める前なので手間はかからない）"
+                  />
+                ),
+              }}
+              // ② フレームワークと描き方（構成と同列の判断。D-35）。選んでいる構成に載せられないものは選べない（D-113）
+              framework={{
+                label: '② フレームワークと描き方',
+                summary: FRAMEWORKS[framework].label,
+                warn: fallbackNotice,
+                panel: (
+                  <FrameworkField
+                    scenario={scenario}
+                    allowed={frameworks.allowed}
+                    value={framework}
+                    onChange={(id) => change({ framework: id })}
+                    // 見取り図のコメント欄はコメントの描き方で変わる（D-82・D-102）
+                    comments={commentsChoosable ? comments : undefined}
+                    // 既定のページごとの描き方（D-106）: 選んでいる構成で、各フレームワークの既定から
+                    routePlan={(id) =>
+                      routePlanRows(scenario, {
+                        framework: id,
+                        stackIndex: stack,
+                        settings: {
+                          revalidateSec: defaultRevalidateSec(
+                            id,
+                            stack,
+                            scenario,
+                          ),
+                        },
+                        components: validSetupChoices(
+                          scenario,
+                          stack,
+                          id,
+                          parts,
+                        ),
+                        routeParts: partsOfComments(scenario, comments),
+                      })
+                    }
+                    routes={routes}
+                    // 見取り図は表・計算と同じ実際の描き方で描く（選んでいるカードは選んだ描き方、ほかは既定。OCL-CD192A98）
+                    resolvedRoutes={(id, selected) =>
+                      resolvedRouteStrategies(scenario, {
+                        framework: id,
+                        stackIndex: stack,
+                        components: validSetupChoices(
+                          scenario,
+                          stack,
+                          id,
+                          parts,
+                        ),
+                        ...(selected ? { routes } : {}),
+                      })
+                    }
+                    routeNotice={(id) => routeNotice({ framework: id })}
+                    // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）。
+                    // 再検証の間隔などの描き方の設定も、記事のページの行で選ぶ（D-119）
+                    editor={routeEditor}
+                    unsupported={(id) => stackUnsupportedReason(stack, id)}
+                    notice={fallbackNotice}
+                  />
+                ),
+              }}
             />
           </div>
           {commitOptions.length > 0 && (

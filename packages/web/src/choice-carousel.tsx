@@ -4,6 +4,8 @@
 // groups を渡すと、タブを事業者などの組にまとめ、組の中の選択肢を小さいチップで出す（インフラの構成。D-105 の補足）。
 // カードは組ごとに 1 枚で、チップで組の中の選択肢を替えるとカードは動かず中身だけが替わる（D-105 の補足）。
 import {
+  createContext,
+  useContext,
   useEffect,
   useId,
   useRef,
@@ -22,6 +24,12 @@ export type ChoiceGroup<T extends string> = {
   items: readonly T[];
   chip: (id: T) => ReactNode;
 };
+
+/**
+ * カルーセルが今見えているか（① ② のタブの隠れた側は false。D-116 の補足）。隠れている間は幅が 0 で中央へ寄せられないので、
+ * 見えたときに選んだカードへ寄せ直す。
+ */
+export const CarouselVisible = createContext(true);
 
 const ARROW: Readonly<Partial<Record<string, number>>> = {
   ArrowRight: 1,
@@ -99,12 +107,14 @@ export function ChoiceCarousel<T extends string>({
   // 選んだカードを中央へ。scrollLeft なので動きは CSS に任せる（daisyUI の carousel は reduced-motion では滑らかにしない）。
   // カードが替わったときだけ動かす（組の中で選択肢を替えてもカードは同じなので動かさない）
   const currentKey = current?.key;
+  const visible = useContext(CarouselVisible);
   useEffect(() => {
+    if (!visible) return;
     const t = track.current;
     const el = currentKey === undefined ? undefined : els.current[currentKey];
     if (!t || !el) return;
     t.scrollLeft = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
-  }, [currentKey, cardKeys]);
+  }, [currentKey, cardKeys, visible]);
   const headingId = useId();
   if (items.length < 2) {
     const id = items[0] ?? value;

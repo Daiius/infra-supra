@@ -7,6 +7,7 @@ import {
   ensurePartsList,
   openSlot,
   renderApp,
+  showFrameworkTab,
   startGame,
   useSmokeEnv,
 } from './smoke.test-helpers.tsx';
@@ -113,6 +114,8 @@ describe('ⓘ の当たり判定', () => {
 
   it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', async () => {
     await renderApp();
+    // ② フレームワークの欄はタブで開く（D-116 の補足）
+    showFrameworkTab();
     // 選ばれていないフレームワークのカード（ⓘ のあるもの。D-102 でタブ + カードにした）
     const radio = screen
       .getAllByRole<HTMLInputElement>('radio')
