@@ -85,7 +85,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'aws',
     label: '投稿のときに一律で縮めて置く',
-    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて S3 に置き、CloudFront で配る。原本は残さない。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて S3 に置き、CloudFront で配る。原本は残さない。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
     premiseRefs: [
       'pool:aws:cloudfront:cloudfront-free-transfer',
       'pool:aws:cloudfront:cloudfront-free-requests',
@@ -134,7 +134,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'aws',
     label: 'DynamoDB（オンデマンド）',
-    note: '読み書きの単位で課金し、時間課金のコンピュートが無い。保存は 25 GB 月まで無料。1 行の大きさは 1 KB 以下と仮定',
+    note: '読み書きの単位で課金し、時間課金のコンピュートが無い。保存は 25 GB 月まで無料。1 行の大きさは 1 kB 以下と仮定',
     premiseRefs: [
       'fact:aws:dynamodb-on-demand:request-units',
       'pool:aws:dynamodb-on-demand:dynamodb-free-storage',

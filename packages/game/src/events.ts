@@ -107,7 +107,7 @@ export function describeEffect(e: Effect): string {
         m.dbRateFactor !== undefined &&
           `DB の増え方 ${fmtFactor(m.dbRateFactor)}`,
         m.apiCpuMs !== undefined && `API 1 回の CPU ${m.apiCpuMs} ms`,
-        m.apiResponseKB !== undefined && `API 1 回の応答 ${m.apiResponseKB} KB`,
+        m.apiResponseKB !== undefined && `API 1 回の応答 ${m.apiResponseKB} kB`,
       ]
         .filter(Boolean)
         .join('・');

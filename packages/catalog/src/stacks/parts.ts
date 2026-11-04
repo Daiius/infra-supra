@@ -41,7 +41,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'resize',
     label: 'Cloudflare: 投稿のときに一律で縮めて R2 に置く',
     note:
-      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて Cloudflare の R2 に置き、原本は残さない。' +
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Cloudflare の R2 に置き、原本は残さない。' +
       '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS・Netlify・Google Cloud）の転送の料金にならない（R2 の転送は無料）。' +
       '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: [...VERCEL_TO_CF_IMAGES_REFS],
@@ -78,7 +78,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'resize',
     label: 'Bunny: 投稿のときに一律で縮めて Storage に置く',
     note:
-      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて Bunny Storage に置き、原本は残さない。' +
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Bunny Storage に置き、原本は残さない。' +
       'Bunny CDN から配るので、画像の転送は土台の転送の料金にならず、Bunny の $0.03/GB（アジア）になる。Optimizer は使わない（月額なし）。' +
       'サイズ違いが無いので、スマホにも同じ大きさを配る。月の最低額は $1。Bunny のアカウントが 1 つ増え、請求が 2 つになる',
     premiseRefs: [
@@ -121,7 +121,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'resize',
     label: 'AWS: 投稿のときに一律で縮めて S3 に置き、CloudFront で配る',
     note:
-      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて AWS の S3（東京）に置き、原本は残さない。' +
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて AWS の S3（東京）に置き、原本は残さない。' +
       '画像は CloudFront（S3 をオリジンにし、OAC で CloudFront からだけ読ませる）から配るので、画像の転送は土台の転送の料金にならず、CloudFront の料金（常時無料の月 1 TB の後）になる。S3 から CloudFront への転送は無料。' +
       '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。往復の遅延は計算しない',
     premiseRefs: [
