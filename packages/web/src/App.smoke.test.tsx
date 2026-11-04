@@ -1658,6 +1658,43 @@ describe('ゲームモードの画面', () => {
     expectGameScreen(4);
   });
 
+  it('W-54 手間の欄に機能開発の累計・期待と来月の見込みが出て、行動を選ぶと見込みが変わる。提案には受けたときの得を出す（D-122）', async () => {
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    // 月の報告の手間の棒の下: 今の累計と期待と段階（良いのときも出す）
+    expect(screen.getByText(/^機能開発の累計 \d+ \/ 期待 8 →/)).toBeDefined();
+    const outlook = () => screen.getByTestId('feature-outlook').textContent!;
+    const feature = () =>
+      Number(outlook().match(/来月の機能開発 ([\d.]+)/)![1]);
+    expect(outlook()).toContain('来月の機能開発の累計');
+    expect(outlook()).toContain('/ 期待 16');
+    expect(outlook()).not.toContain('行動で');
+    const before = feature();
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
+    );
+    expect(feature()).toBeLessThan(before);
+    expect(outlook()).toMatch(/（行動で −\d/);
+    // シード 42 は 6 か月目に個人向けのページの提案が届く
+    const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
+      (x) => x.id === 'p-personal',
+    )!.month;
+    advance(m - 1);
+    expectGameScreen(m);
+    const card =
+      screen.getByText('届いた提案（選ばなければ断る）').parentElement!;
+    expect(card.textContent).toContain(
+      '受けると: 機能開発 +6（作業 4 × 1 か月も機能開発に数える）',
+    );
+    expect(card.textContent).toContain(
+      '伴うこと: 来月、行動に使える手間が 4 減る・使用量・費用: SSR の割合 60%',
+    );
+  });
+
   it('W-53 Bot を遮断してから Bot が来ると、出来事の欄に遮断済みの文が出る（2026-11-04）', async () => {
     // 既定のシード 42 は Bot が予告なしで来る
     const bot = ARTICLE_COMMUNITY.events.find((e) => e.id === 'bot')!;

@@ -236,6 +236,14 @@ const STAGE_DOWN: Record<Stage, Stage> = {
   bad: 'bad',
 };
 
+/** 機能開発の累計と期待の比から「機能」の段階を決める（メールが届かない分の下げは含めない。judgeStages と画面で共用）。 */
+export function featureStageOf(
+  ratio: number,
+  ft: SatisfactionRules['feature'],
+): Stage {
+  return ratio >= ft.good ? 'good' : ratio >= ft.fair ? 'fair' : 'bad';
+}
+
 export function judgeStages(
   i: JudgeInput,
   sat: SatisfactionRules = SATISFACTION,
@@ -258,12 +266,7 @@ export function judgeStages(
     availability: i.blocked ? 'bad' : i.degraded ? 'fair' : 'good',
     speed: i.speedDown ? STAGE_DOWN[speed] : speed,
     feature: ((): Stage => {
-      const base: Stage =
-        featureRatio >= ft.good
-          ? 'good'
-          : featureRatio >= ft.fair
-            ? 'fair'
-            : 'bad';
+      const base = featureStageOf(featureRatio, ft);
       const share = i.emailUndeliveredShare ?? 0;
       if (share >= EMAIL_UNDELIVERED.badShare) return 'bad';
       return share > 0 ? STAGE_DOWN[base] : base;
