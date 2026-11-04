@@ -135,18 +135,26 @@ export const pickRadio = (name: string, scope: HTMLElement = document.body) => {
 };
 /**
  * 部品のチップ（① インフラの構成のカードの構成図の下。D-116）を名前の先頭で押す。押すと選択中（aria-pressed）になる。
- * scope はスロットの行（slotGroup）。
+ * scope はスロットの行（slotGroup）。畳んだ行（選び済み。D-116 の補足）は開いてから押し、選ぶと行はまた畳まれる。
  */
 export const pickPart = (name: string, scope: HTMLElement) => {
+  openSlot(scope);
   const b = within(scope).getByRole('button', {
     name: new RegExp(`^${escape(name)}`),
     pressed: false,
   });
   fireEvent.click(b);
-  within(slotGroup(scope.getAttribute('data-slot')!, 'slot')).getByRole(
-    'button',
-    { name: new RegExp(`^${escape(name)}`), pressed: true },
+  const row = slotGroup(scope.getAttribute('data-slot')!, 'slot');
+  expect(row.getAttribute('data-collapsed')).toBe('true');
+  expect(row.querySelector('[data-selected="true"]')!.textContent).toMatch(
+    new RegExp(escape(name)),
   );
+};
+/** 畳んだ部品の行（D-116 の補足）を開く（開いていればそのまま）。行の要素は開いても同じ。 */
+export const openSlot = (row: HTMLElement) => {
+  const toggle = row.querySelector<HTMLElement>('[data-collapsed-toggle]');
+  if (toggle) fireEvent.click(toggle);
+  return row;
 };
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

@@ -7,6 +7,7 @@ import {
   advance,
   expectGameScreen,
   monthHeading,
+  openSlot,
   pickPart,
   pickRadio,
   renderApp,
@@ -1122,6 +1123,8 @@ describe('ゲームモードの画面', () => {
     const db = () => slotGroup('DB');
     expect(db().getAttribute('aria-label')).toBe('DB（未選択）');
     expect(db().hasAttribute('data-unselected')).toBe(true);
+    // 未選択の行は畳まない（選択肢が並んだまま。D-116 の補足）
+    expect(db().hasAttribute('data-collapsed')).toBe(false);
     // 構成図の DB の箱にも「未選択」の印（既定の部品の名前で描くので、選び済みに見えないように。D-116 の補足）
     const dbBox = () =>
       within(current()).queryByRole('button', {
@@ -1185,10 +1188,37 @@ describe('ゲームモードの画面', () => {
     expect(current().getAttribute('aria-label')).toBe(
       'Vercel Pro + Supabase Pro の構成',
     );
-    // 元の箱は差し替えで消えるので、focus は選択中のチップへ移る（OCL-131BD89D）
-    expect(document.activeElement).toBe(
-      within(db()).getByRole('button', { name: /^Supabase/, pressed: true }),
+    // 元の箱は差し替えで消えるので、focus は DB の畳んだ行のボタンへ移る（OCL-131BD89D・D-116 の補足）
+    const toggle = () =>
+      within(db()).getByRole('button', {
+        name: /^DB: Supabase.*（押すと選択肢が開く）$/,
+        expanded: false,
+      });
+    expect(db().getAttribute('data-collapsed')).toBe('true');
+    expect(document.activeElement).toBe(toggle());
+    // 選び済みの行は畳んで「DB: 選んだ部品」のチップだけ。押すとその行だけ開き、見出しを押すとまた畳む
+    expect(db().querySelector('li[data-option]')).toBeNull();
+    fireEvent.click(toggle());
+    expect(db().hasAttribute('data-collapsed')).toBe(false);
+    expect(db().querySelectorAll('li[data-option]').length).toBeGreaterThan(1);
+    fireEvent.click(within(db()).getByRole('button', { expanded: true }));
+    expect(db().getAttribute('data-collapsed')).toBe('true');
+    // 開いた行でチップを選ぶと畳まれ、focus は畳んだボタンへ
+    fireEvent.click(toggle());
+    fireEvent.click(
+      within(db()).getByRole('button', {
+        name: /^AWS: DynamoDB/,
+        pressed: false,
+      }),
     );
+    expect(db().getAttribute('data-collapsed')).toBe('true');
+    expect(document.activeElement).toBe(
+      within(db()).getByRole('button', {
+        name: /^DB: AWS: DynamoDB.*（押すと選択肢が開く）$/,
+      }),
+    );
+    // 畳んだ並びの上に、押すと開く旨の説明
+    expect(parts.textContent).toContain('押すと選択肢が開く');
   });
 
   it('W-40 始める画面: 部品どうしの依存で選べない部品のチップは灰色で、理由をツールチップと ⓘ に出す（D-116）', async () => {
@@ -1229,7 +1259,7 @@ describe('ゲームモードの画面', () => {
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
       beforeStart: () => {
-        const db = slotGroup('DB');
+        const db = openSlot(slotGroup('DB'));
         const names = [...db.querySelectorAll('li[data-option]')].map(
           (li) => li.textContent ?? '',
         );

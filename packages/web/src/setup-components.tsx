@@ -16,7 +16,7 @@ import {
   type SetupOption,
   type SetupSlot,
 } from 'game';
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
@@ -130,6 +130,8 @@ function OptionDetail({ o, why }: { o: SetupOption; why: string | null }) {
  * （図と月額がその場で替わる）。選択中は枠と「選択中」（② の描き方のチップと同じ見せ方）。チップの高さはそろえ、長い名前は
  * 切り詰めて全体をツールチップと ⓘ に出す。選べない部品は灰色で、理由はツールチップと ⓘ。
  * まだ選んでいないスロット（ゲームの始める画面。D-45）は行を警告色の枠で囲み「未選択」を添える。
+ * 選び済みのスロット（1 択を含む）の行は「スロット名: 選んだ部品」の小さいチップに畳んで横に並べ、押すとその行だけ開く。
+ * 開いた行で選ぶとまた畳む（縦の量を減らす。D-116 の補足）。
  */
 export function PartChips({
   stackIndex,
@@ -152,7 +154,7 @@ export function PartChips({
   /** 注記（画面ごと。D-115）。 */
   note?: ReactNode;
   /**
-   * 描いた後に focus を移すスロット（図の箱の吹き出しで選んだ直後。元の箱は差し替えで消えうるので、常に残る選択中のチップへ移す。
+   * 描いた後に focus を移すスロット（図の箱の吹き出しで選んだ直後。元の箱は差し替えで消えうるので、常に残るそのスロットの行へ移す。行は畳み、畳んだボタンへ。
    * OCL-131BD89D）。移したら onFocused を呼ぶ。
    */
   focusSlot?: string | null | undefined;
@@ -161,21 +163,46 @@ export function PartChips({
   slotExtra?: Partial<Record<string, ReactNode>> | undefined;
 }) {
   const root = useRef<HTMLElement>(null);
+  // 選んだ部品のスロットは畳み、押して開いたものだけ選択肢を出す（未選択の行はいつも開く。D-116 の補足）
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  // 描いた後に focus を移すスロット（チップで選んだ直後・図の箱の吹き出しで選んだ直後）
+  const [refocus, setRefocus] = useState<string | null>(null);
   useEffect(() => {
     if (!focusSlot) return;
+    // 図の箱から選んだときも、チップで選んだときと同じく畳んで、畳んだボタンへ focus を移す
+    setOpen((s) => without(s, focusSlot));
+    setRefocus(focusSlot);
+    onFocused?.();
+  }, [focusSlot, onFocused]);
+  useEffect(() => {
+    if (!refocus) return;
     const row = root.current?.querySelector<HTMLElement>(
-      `[data-slot="${focusSlot}"]`,
+      `[data-slot="${refocus}"]`,
     );
-    // 選択中のチップ。スロットの行が消えた（API の置き場で DB の行が消えるなど）ときは部品の欄の頭
+    // 畳んだボタン（開いたままなら選択中のチップ）。スロットの行が消えた（API の置き場で DB の行が消えるなど）ときは部品の欄の頭
     (
+      row?.querySelector<HTMLElement>('[data-collapsed-toggle]') ??
       row?.querySelector<HTMLElement>('button[aria-pressed="true"]') ??
       root.current
     )?.focus();
-    onFocused?.();
-  }, [focusSlot, value, onFocused]);
+    setRefocus(null);
+  }, [refocus, value]);
   if (slots.length === 0) return null;
   const box =
     'inline-flex h-7 max-w-full min-w-0 items-center gap-1 rounded-field text-xs';
+  const rows = slots.map((x) => {
+    const { options } = slotView(x, stackIndex, framework, value);
+    const unselected = isUnselected(x, value);
+    const chosen = options.find((e) => e.selected);
+    return {
+      x,
+      options,
+      unselected,
+      chosen,
+      collapsed: !unselected && chosen !== undefined && !open.has(x.slot),
+    };
+  });
+  const anyCollapsed = rows.some((r) => r.collapsed);
   return (
     <section
       ref={root}
@@ -185,13 +212,64 @@ export function PartChips({
       className="min-w-0 space-y-1.5 focus:outline-none"
     >
       <p className="text-xs opacity-70">
-        部品（押すと替わる。構成図の箱からも選べる）
+        {anyCollapsed
+          ? '部品（選んだものは畳んである。押すと選択肢が開く。構成図の箱からも選べる）'
+          : '部品（押すと替わる。構成図の箱からも選べる）'}
         {note && <span className="block">{note}</span>}
       </p>
-      <div className="space-y-1">
-        {slots.map((x) => {
-          const { options } = slotView(x, stackIndex, framework, value);
-          const unselected = isUnselected(x, value);
+      <div className="flex min-w-0 flex-wrap gap-1">
+        {rows.map(({ x, options, unselected, chosen, collapsed }) => {
+          if (collapsed) {
+            const { o, other } = chosen!;
+            // 畳んだ行: 「スロット名: 選んだ部品」の小さいチップ。押すとその行だけ開く（1 択は開かない）
+            return (
+              <div
+                key={x.slot}
+                role="group"
+                aria-label={x.label}
+                data-slot={x.slot}
+                data-collapsed="true"
+                className="max-w-full min-w-0"
+              >
+                <span
+                  data-option={o.id}
+                  data-selected="true"
+                  title={`${x.label}: ${o.label}`}
+                  className={`${box} bg-base-100 pr-0.5 pl-2 ring-1 ring-base-300 ring-inset ${
+                    x.fixed ? '' : 'hover:bg-base-200'
+                  }`}
+                >
+                  {x.fixed ? (
+                    <span className="inline-flex h-full min-w-0 items-center gap-1">
+                      <span className="shrink-0 font-semibold">{x.label}:</span>
+                      {other && <OtherMark o={o} />}
+                      <span className="truncate">{o.label}</span>
+                      <span className="shrink-0 opacity-70">（1 択）</span>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-expanded={false}
+                      data-collapsed-toggle
+                      aria-label={`${x.label}: ${o.label}（押すと選択肢が開く）`}
+                      className="inline-flex h-full min-w-0 cursor-pointer items-center gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      onClick={() => setOpen((s) => new Set(s).add(x.slot))}
+                    >
+                      <span className="shrink-0 font-semibold">{x.label}:</span>
+                      {other && <OtherMark o={o} />}
+                      <span className="truncate">{o.label}</span>
+                      <span aria-hidden className="shrink-0 opacity-60">
+                        ▾
+                      </span>
+                    </button>
+                  )}
+                  <Info label={`${o.label}の説明`}>
+                    <OptionDetail o={o} why={null} />
+                  </Info>
+                </span>
+              </div>
+            );
+          }
           return (
             <div
               key={x.slot}
@@ -199,12 +277,27 @@ export function PartChips({
               aria-label={`${x.label}${unselected ? '（未選択）' : ''}`}
               data-slot={x.slot}
               data-unselected={unselected ? 'true' : undefined}
-              className={`grid min-w-0 gap-x-2 gap-y-1 rounded-box sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-start ${
+              className={`grid w-full min-w-0 gap-x-2 gap-y-1 rounded-box sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-start ${
                 unselected ? 'p-1 ring-2 ring-warning ring-inset' : ''
               }`}
             >
               <span className="pt-1 text-xs font-semibold">
-                {x.label}
+                {open.has(x.slot) && !unselected ? (
+                  // 押して開いた行は、見出しを押すと畳む
+                  <button
+                    type="button"
+                    aria-expanded
+                    className="cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    onClick={() => setOpen((s) => without(s, x.slot))}
+                  >
+                    {x.label}
+                    <span aria-hidden className="ml-1 font-normal opacity-60">
+                      ▴
+                    </span>
+                  </button>
+                ) : (
+                  x.label
+                )}
                 {x.fixed && (
                   <span className="ml-1 font-normal opacity-70">（1 択）</span>
                 )}
@@ -248,7 +341,12 @@ export function PartChips({
                           }`}
                           onClick={
                             pick
-                              ? () => onChange({ ...value, [x.slot]: o.id })
+                              ? () => {
+                                  onChange({ ...value, [x.slot]: o.id });
+                                  // 選んだら畳み、畳んだボタンへ focus を移す
+                                  setOpen((s) => without(s, x.slot));
+                                  setRefocus(x.slot);
+                                }
                               : undefined
                           }
                         >
@@ -281,6 +379,14 @@ export function PartChips({
       </div>
     </section>
   );
+}
+
+/** s から v を除いた集合（無ければ s のまま。状態を替えずに済むように）。 */
+function without(s: ReadonlySet<string>, v: string): ReadonlySet<string> {
+  if (!s.has(v)) return s;
+  const next = new Set(s);
+  next.delete(v);
+  return next;
 }
 
 /**
