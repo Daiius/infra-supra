@@ -1006,7 +1006,7 @@ export const cloudflare: PriceBookInput = {
             '2026-12-01 から Workers Logs は Cloudflare Observability の料金になり、取り込み（圧縮前・本文と既定の属性を含む）が 50 GB を超えた分は 1 GB $0.25。それより前は課金しない',
           interpretation: {
             adopted:
-              '表の「Paid」を Workers Paid と読む。1 件の大きさは公式に記載が無いので、1 回の実行のログ（呼び出しのログ + console.log 1 行）を 1.5 KB と仮定する（ゲーム上の仮定）',
+              '表の「Paid」を Workers Paid と読む。1 件の大きさは公式に記載が無いので、1 回の実行のログ（呼び出しのログ + console.log 1 行）を 1.5 kB と仮定する（ゲーム上の仮定）',
             rejected: [
               {
                 reading: '別の Observability の契約（基本料）が要る',

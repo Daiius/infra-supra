@@ -110,7 +110,7 @@ describe('画像の大きさ（D-47）', () => {
     expect(r.satisfaction.stages.speed).toBe('bad');
     expect(r.satisfaction.reasons.speed).toContain('1 ページ約 36.5 MB');
     // サイズ違いは作らないので 1 種と出す
-    expect(r.satisfaction.reasons.speed).toContain('4000 KB × 1 種');
+    expect(r.satisfaction.reasons.speed).toContain('4000 kB');
     const resize = play(
       withRedesign(0),
       CF_PAID,

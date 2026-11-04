@@ -50,7 +50,7 @@ const RUN_REFS = [
 ];
 
 const RESIZE_NOTE =
-  '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 KB に一律で縮めて Cloud Storage に置き、原本は残さない。変換の CPU はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）。配信は Hosting の CDN の後ろの Cloud Run が Cloud Storage から返す';
+  '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Cloud Storage に置き、原本は残さない。変換の CPU はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）。配信は Hosting の CDN の後ろの Cloud Run が Cloud Storage から返す';
 
 export const GCP_COMPONENTS: readonly ComponentOption[] = [
   {
