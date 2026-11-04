@@ -36,6 +36,7 @@ import {
   PageBadges,
   PageWireframe,
   ScenarioWireframes,
+  ScenarioWireframesInfo,
   WireframeLegend,
 } from './page-wireframes.tsx';
 import { RouteChips, RowParts, RowStatus } from './route-plan-table.tsx';
@@ -608,6 +609,12 @@ function DetailsDialog({
   );
 }
 
+/** 文の先頭の 1 文（「。」まで）。 */
+const firstSentence = (text: string) => {
+  const i = text.indexOf('。');
+  return i < 0 ? text : text.slice(0, i + 1);
+};
+
 /** シナリオの説明・目標・アプリの形。 */
 export function ScenarioDescription({
   scenario: sc,
@@ -649,9 +656,13 @@ export function ScenarioDescription({
             aria-labelledby={pagesTitleId}
             className="space-y-2 rounded-box bg-base-200 p-2 sm:p-3"
           >
-            <h3 id={pagesTitleId} className="font-bold">
-              ページ
-            </h3>
+            {/* 札の凡例・ページの性質・注記は見出しの横の ⓘ に畳む（D-113 の補足・2026-11-05） */}
+            <div className="flex items-center gap-1">
+              <h3 id={pagesTitleId} className="font-bold">
+                ページの見取り図
+              </h3>
+              <ScenarioWireframesInfo pages={wireframes} />
+            </div>
             <ScenarioWireframes
               pages={wireframes}
               captionOf={(p) => lineOf(p.label)}
@@ -667,8 +678,22 @@ export function ScenarioDescription({
           </section>
         )}
         {t?.revenue && <p>{t.revenue}</p>}
+        {/* 満足度は先頭の文だけを本文に出し、全文はダイアログに畳む（2026-11-05・ユーザーの要望） */}
         <div>
-          {t?.satisfaction}開発の手間は毎月 {sc.effort.perMonth}{' '}
+          {t?.satisfaction && (
+            <>
+              {firstSentence(t.satisfaction)}
+              <DetailsDialog label="満足度の詳しい説明" title="満足度">
+                <p>{t.satisfaction}</p>
+                <p>
+                  目標の 1 つは満足度の平均 {sc.goal.satisfaction}{' '}
+                  以上。満足度が高ければ PV が伸び、低ければ減る。
+                </p>
+                <p className="opacity-70">満足度の決まり方はゲーム上の仮定。</p>
+              </DetailsDialog>
+            </>
+          )}
+          開発の手間は毎月 {sc.effort.perMonth}{' '}
           ポイントで、運用に使った残りが機能開発に回り、満足度の「機能」（累計 /
           期待）と PV の伸びに効く。
           <DetailsDialog label="開発の手間の内訳" title="開発の手間の内訳">
@@ -728,18 +753,28 @@ export function ScenarioDescription({
             </p>
           </div>
         </div>
-        <h3 className="mt-2 font-bold">
-          アプリの形（コストに効く判断ポイント）
-        </h3>
-        <p className="text-sm opacity-70">
-          フレームワークで変わる点（ページの描き方・SNS のカード・CPU
-          の重さ）は、下の ② フレームワークと描き方で選ぶときに出る。
-        </p>
-        <ul className="list-disc space-y-1 pl-6">
-          {app.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
+        {/* アプリの形は見出しの 1 行だけを出し、注記と箇条書きはダイアログに畳む（2026-11-05・ユーザーの要望） */}
+        {app.length > 0 && (
+          <div>
+            <h3 className="inline font-bold">
+              アプリの形（コストに効く判断ポイント）
+            </h3>
+            <DetailsDialog
+              label={`${app.length} 項目を見る`}
+              title="アプリの形（コストに効く判断ポイント）"
+            >
+              <p className="text-sm opacity-70">
+                フレームワークで変わる点（ページの描き方・SNS のカード・CPU
+                の重さ）は、② フレームワークと描き方で選ぶときに出る。
+              </p>
+              <ul className="list-disc space-y-1 pl-6">
+                {app.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </DetailsDialog>
+          </div>
+        )}
         <p className="text-sm opacity-60">
           料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては 1
           USD = {usdJpy} 円の仮定で換算。
