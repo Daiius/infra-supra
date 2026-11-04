@@ -776,7 +776,11 @@ function EventCard({ event: e }: { event: MonthEvent }) {
       {e.accept && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          。月の終わりの行動で受けるか断るかを選ぶ（断っても罰はない）
+          。月の終わりの行動で受けるか断るかを選ぶ（
+          {e.accept.declineLoss
+            ? `断ると${e.accept.declineLoss}`
+            : '断っても罰はない'}
+          ）
         </div>
       )}
       {e.accept?.unavailable && (
@@ -1310,7 +1314,7 @@ function Actions({
                         checked={answers[id] !== true}
                         onChange={() => setAnswers({ ...answers, [id]: false })}
                       />
-                      断る（何も変わらない）
+                      断る（{summary.declineLoss ?? '何も変わらない'}）
                     </label>
                   </div>
                   {summary.gains.length > 0 && (

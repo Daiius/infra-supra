@@ -7,8 +7,10 @@ import {
   eventDef,
   featureOutlook,
   featureProgressOf,
+  IMAGE_REDESIGN_ID,
   newGame,
   playMonth,
+  SCENARIOS,
   type Action,
   type GameState,
 } from './index.ts';
@@ -87,6 +89,63 @@ describe('acceptSummary', () => {
   it('機能開発に数えない対応の手間は、伴うことに出す', () => {
     const sum = acceptSummary(start(), eventDef(sc, 'p-archive')!);
     expect(sum.costs).toContain('対応の手間 4 × 1 か月（機能開発に数えない）');
-    expect(sum.gains).toEqual([]);
+    // 基準の PV が増える分は、PV に比例する収益を得に出す
+    expect(sum.gains).toEqual([
+      `基準の PV × 1.5（以降ずっと）・収益は 1,000 PV あたり $${sc.revenue.adsUsdPer1000PV}`,
+    ]);
+  });
+});
+
+describe('acceptSummary の得と断ったときの損', () => {
+  it('どのシナリオのどの提案も、受けたときの得が空でない', () => {
+    for (const s of Object.values(SCENARIOS)) {
+      const state = playMonth(newGame(CF_PAID, 42, s, undefined, 'nextjs'));
+      for (const def of s.events.filter((e) => e.kind === 'proposal'))
+        expect(
+          acceptSummary(state, def).gains,
+          `${s.id} ${def.id}`,
+        ).not.toEqual([]);
+    }
+  });
+
+  it('記事のデザインの刷新: 得と断ったときの損を declineMonths から組む。原本を配っていれば断っても下がらない', () => {
+    const def = eventDef(sc, IMAGE_REDESIGN_ID)!;
+    const months = sc.imageRedesign!.declineMonths;
+    const s = start();
+    const sum = acceptSummary(s, def);
+    expect(sum.gains).toEqual([
+      `画質の評価を保つ（断ると ${months} か月、画質が 1 段下がる）`,
+    ]);
+    expect(sum.declineLoss).toBe(`${months} か月、画質の評価が 1 段下がる`);
+    const original = acceptSummary(
+      { ...s, components: { ...s.components, images: 'none' } },
+      def,
+    );
+    expect(original.declineLoss).toBeUndefined();
+    expect(original.gains[0]).toContain('断っても画質の評価は下がらない');
+    // 原本の無い粗い画像が多いと、受けても下がる
+    const coarse = acceptSummary(
+      {
+        ...s,
+        stock: { ...s.stock, images: 100 },
+        coarseImages: 100 * sc.imageRedesign!.coarseShare,
+      },
+      def,
+    );
+    expect(coarse.declineLoss).toBeDefined();
+    expect(
+      coarse.costs.some((c) => c.includes('受けても画質の評価が 1 段下がる')),
+    ).toBe(true);
+  });
+
+  it('基準の PV を増やす提案は、PV に比例する収益を得に、使用量・費用を伴うことに出す', () => {
+    const contract = SCENARIOS['contract-operations']!;
+    const s = playMonth(newGame(CF_PAID, 42, contract, undefined, 'nextjs'));
+    const sum = acceptSummary(s, eventDef(contract, 'c-p-rollout')!);
+    expect(sum.gains).toEqual([
+      `基準の PV × 3（以降ずっと）・収益は 1,000 PV あたり $${contract.revenue.adsUsdPer1000PV}`,
+    ]);
+    expect(sum.costs).toContain('使用量・費用: PV に比例して増える');
+    expect(sum.declineLoss).toBeUndefined();
   });
 });

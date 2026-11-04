@@ -1693,6 +1693,19 @@ describe('ゲームモードの画面', () => {
     expect(card.textContent).toContain(
       '伴うこと: 来月、行動に使える手間が 4 減る・使用量・費用: SSR の割合 60%',
     );
+    expect(card.textContent).toContain('断る（何も変わらない）');
+    // 7 か月目に記事のデザインの刷新の提案が届く。機能の加点が無くても、得と断ったときの損を出す
+    advance(1);
+    const months = ARTICLE_COMMUNITY.imageRedesign!.declineMonths;
+    const proposals =
+      screen.getByText('届いた提案（選ばなければ断る）').parentElement!
+        .textContent!;
+    expect(proposals).toContain(
+      `受けると: 画質の評価を保つ（断ると ${months} か月、画質が 1 段下がる）`,
+    );
+    expect(proposals).toContain(
+      `断る（${months} か月、画質の評価が 1 段下がる）`,
+    );
   });
 
   it('W-53 Bot を遮断してから Bot が来ると、出来事の欄に遮断済みの文が出る（2026-11-04）', async () => {
