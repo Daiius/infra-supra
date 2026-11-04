@@ -369,11 +369,16 @@ const EVENTS: EventDef[] = [
     tier: 'common',
     title: 'Bot・クローラーの大量アクセス',
     text: 'クローラーが大量に来ている（2 か月続く）。Bot は広告の収益にならない。Bot を遮断するルールを入れると、来月から半分になる',
+    // Bot を遮断済みの月の文（計算は上乗せを半分にする。BOT_BLOCK・2026-11-04）
+    blockedText:
+      'クローラーが大量に来ている（2 か月続く）。Bot を遮断するルールで上乗せを半分に抑えている（Bot は収益にならない）',
     when: { type: 'window', from: 3, to: 11 },
     notice: {
       monthsAhead: 1,
       title: 'Bot・クローラーが大量に来そう',
       text: 'クローラーの訪問が増え始めた（来月、大量に来るかもしれない）。今月のうちに Bot を遮断するルールを入れれば、来月から半分になる',
+      blockedText:
+        'クローラーの訪問が増え始めた（来月、大量に来るかもしれない）。Bot を遮断するルールを入れてあるので、来たときの上乗せは半分になる',
       pvFactor: 1.2,
       bot: true,
       // 半分は予告なしで起きる。序盤（1〜2 か月目）には予告を出さない（D-28・D-20 V-12）
@@ -382,6 +387,8 @@ const EVENTS: EventDef[] = [
     },
     surpriseText:
       'クローラーが予告なしに大量に来た（2 か月続く）。Bot は広告の収益にならない。今月の費用に効いている。Bot を遮断するルールは来月から効く',
+    blockedSurpriseText:
+      'クローラーが予告なしに大量に来た（2 か月続く）。Bot を遮断するルールを入れてあるので、上乗せは半分に抑えている',
     premiseRefs: [
       'pool:cloudflare:workers-free:free-requests',
       'pool:cloudflare:workers-paid:paid-requests',

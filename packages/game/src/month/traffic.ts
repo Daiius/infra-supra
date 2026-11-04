@@ -168,7 +168,9 @@ export function trafficOf(
           factor: 1 + extra,
           ...(e.spikeDays ? { spikeDays: e.spikeDays } : {}),
         });
-        trafficNotes.push(`${def.title}（Bot は収益にならない）`);
+        trafficNotes.push(
+          `${def.title}（Bot は収益にならない${state.botBlocked ? '・遮断で半分' : ''}）`,
+        );
       } else {
         const factor = e.social ? 1 + (e.factor - 1) * cardFactor : e.factor;
         humanFactor *= factor;

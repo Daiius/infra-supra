@@ -2,13 +2,34 @@
 import { MVP_STACKS } from 'catalog';
 import type { PlatformPremise } from 'estimator';
 import { eventDef, revisionText, SCHEDULED_CHANGES } from '../core.ts';
-import { acceptEffort, describeEffect, premiseRefsOf } from '../events.ts';
+import { BOT_BLOCK } from '../actions/check.ts';
+import {
+  acceptEffort,
+  describeEffect,
+  describeEffectBlocked,
+  premiseRefsOf,
+} from '../events.ts';
 import { requirementStatus, unavailableReason } from '../requirements.ts';
 import { articleFamily } from '../routes/strategy.ts';
-import type { Scenario, Scheduled } from '../scenario.ts';
+import type { EventDef, Scenario, Scheduled } from '../scenario.ts';
 import { membersOf, slaOf } from '../stacks.ts';
 import type { GameState, MonthEvent, MonthReport } from '../state.ts';
 import type { Due } from './traffic.ts';
+
+/**
+ * 起きた出来事の本文。予告なしなら surpriseText、Bot を遮断済みなら遮断済みの文（D-28・2026-11-04）。
+ * 遮断の判定は起きた今月の状態で、流量の計算（trafficOf）が上乗せを半分にする条件と同じ。
+ * 文は報告（history）に入るので、後で遮断しても過去の月の文は変わらない。
+ */
+function occurredTextOf(
+  def: EventDef,
+  surprise: boolean,
+  botBlocked: boolean,
+): string {
+  if (def.notice && surprise && def.surpriseText)
+    return (botBlocked && def.blockedSurpriseText) || def.surpriseText;
+  return (botBlocked && def.blockedText) || def.text;
+}
 
 /**
  * 今月の出来事の通知を並べる（台本の起きた・予告 → 前提の境目を越えた → 料金の改定の予告の順）。
@@ -46,6 +67,11 @@ export function monthEventsOf(
       });
       continue;
     }
+    // Bot の流量の効果を持つ出来事が、遮断済みの月に起きた（上乗せは半分。2026-11-04）
+    const botBlocked =
+      state.botBlocked &&
+      def.kind !== 'proposal' &&
+      (def.effects ?? []).some((e) => e.type === 'traffic' && e.bot);
     // 予告を持ちうる台本は、予告どおり起きたか、予告なしで起きたか（D-28）
     const announced =
       def.notice && def.kind !== 'proposal'
@@ -58,11 +84,14 @@ export function monthEventsOf(
       phase: def.kind === 'proposal' ? 'proposal' : 'occurred',
       ...announced,
       title: def.title,
-      text:
-        def.notice && x.noticeMonth === undefined && def.surpriseText
-          ? def.surpriseText
-          : def.text,
-      effects: (def.effects ?? []).map(describeEffect),
+      text: occurredTextOf(def, x.noticeMonth === undefined, state.botBlocked),
+      // 遮断済みなら Bot の流量は実際の倍率（trafficOf と同じ式・同じ判定）
+      effects: (def.effects ?? []).map((e) =>
+        botBlocked
+          ? describeEffectBlocked(e, BOT_BLOCK.remaining)
+          : describeEffect(e),
+      ),
+      ...(botBlocked ? { botBlocked: true as const } : {}),
       premises: premiseRefsOf(def, premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
       ...(def.showSla ? { sla: slaOf(stackIndexNow) } : {}),
@@ -99,8 +128,16 @@ export function monthEventsOf(
       tier: def.tier,
       phase: 'notice',
       title: def.notice!.title,
-      text: def.notice!.text,
+      // 遮断の判定は予告を出した今月の状態（流量の計算で前兆を半分にするのと同じ条件）
+      text:
+        state.botBlocked && def.notice!.blockedText
+          ? def.notice!.blockedText
+          : def.notice!.text,
       effects: [],
+      // 前兆が Bot の予告を、遮断済みの月に出した（来たときの上乗せは半分）
+      ...(state.botBlocked && def.notice!.bot
+        ? { botBlocked: true as const }
+        : {}),
       premises: premiseRefsOf(def, premises),
     });
   }
