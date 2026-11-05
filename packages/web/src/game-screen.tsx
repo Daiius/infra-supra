@@ -1,5 +1,5 @@
 // ゲームモードの運営中の画面（月の報告・行動・推移・結果）。App から分けて読む（始める画面の初回の読み込みに含めない）。
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   activeCommitments,
   commitmentOffers,
@@ -1133,6 +1133,40 @@ function RouteActions({
   );
 }
 
+/**
+ * 毎月は変えない選択（構成の乗り換え・プラン変更・作り直し）を畳んで出す。
+ * 畳んでいても件数と選んだもの（行動として予約したもの）が見出しで分かるようにする。
+ */
+function FoldedChoices({
+  title,
+  count,
+  chosen,
+  children,
+}: {
+  title: string;
+  /** 選べる先の数（「このまま」は数えない）。 */
+  count: number;
+  /** 選んだ先の名前。選んでいなければ null。 */
+  chosen: string | null;
+  children: ReactNode;
+}) {
+  return (
+    // 開閉は details に任せる（選ぶ途中の再描画では閉じない）。呼ぶ側が月ごとの key で畳み直す
+    <details className="collapse collapse-arrow bg-base-200">
+      <summary className="collapse-title min-h-0 py-2 text-sm">
+        <span className="font-bold">{title}</span>
+        <span className="opacity-70">（{count} 件）</span>
+        {chosen !== null && (
+          <span className="block break-words text-primary">
+            選んだもの: {chosen}
+          </span>
+        )}
+      </summary>
+      <div className="collapse-content min-w-0 space-y-1">{children}</div>
+    </details>
+  );
+}
+
 /** 今月の行動。設定はいつでも戻せる。手間のポイントの残りの範囲で、いくつでも選べる。 */
 function Actions({
   state,
@@ -1176,6 +1210,11 @@ function Actions({
     setStorage(false);
     setParts({});
   };
+  // 隠した構成（D-100）は乗り換え・プラン変更の先に出さない
+  const stackTargets = STACKS.filter(
+    (s) => s.index !== state.stackIndex && !s.hidden,
+  ).map((s) => s.index);
+  const rewriteFws = rewriteTargets(state);
 
   const build = (
     o: {
@@ -1568,28 +1607,39 @@ function Actions({
           setAnswers={setAnswers}
           blocked={(o) => blocked(build(o))}
         />
-        <div className="divider my-1 text-xs">構成を変える</div>
-        {/* 隠した構成（D-100）で始めた古い保存はそのまま続けられる。選び直す先には出さない */}
-        {STACKS[state.stackIndex]!.hidden && (
-          <div className="text-xs opacity-70">
-            今の構成は、新しく始めるときには選べなくしている（一時的）。このまま続けられるが、同じ事業者のプラン変更や、乗り換えてから戻ることはできない。
-          </div>
-        )}
+        {/* 毎月は変えない選択なので畳んで出す。見出しに件数と選んだものを出し、進行中は畳まずに出す。key を月ごとに替えて毎月畳んだ状態から */}
         {state.migration ? (
-          <div className="text-sm">
-            {stackName(state.migration.to, state.framework)} へ乗り換え中（
-            {state.migration.done} / {state.migration.required}{' '}
-            ポイント）。済むまで別の変更はできない。
-          </div>
+          <>
+            <div className="divider my-1 text-xs">構成を変える</div>
+            <div className="text-sm">
+              {stackName(state.migration.to, state.framework)} へ乗り換え中（
+              {state.migration.done} / {state.migration.required}{' '}
+              ポイント）。済むまで別の変更はできない。
+            </div>
+          </>
         ) : (
-          <div className="space-y-1">
-            {[
-              null,
-              // 隠した構成（D-100）は乗り換え・プラン変更の先に出さない
-              ...STACKS.filter(
-                (s) => s.index !== state.stackIndex && !s.hidden,
-              ).map((s) => s.index),
-            ].map((idx) => {
+          <FoldedChoices
+            title="構成の乗り換え・プラン変更"
+            count={stackTargets.length}
+            chosen={
+              stackChange === null
+                ? null
+                : stackChangeText(
+                    state.stackIndex,
+                    stackChange,
+                    state.framework,
+                    state.components,
+                  ).name
+            }
+            key={`stack-${state.history.length}`}
+          >
+            {/* 隠した構成（D-100）で始めた古い保存はそのまま続けられる。選び直す先には出さない */}
+            {STACKS[state.stackIndex]!.hidden && (
+              <div className="text-xs opacity-70">
+                今の構成は、新しく始めるときには選べなくしている（一時的）。このまま続けられるが、同じ事業者のプラン変更や、乗り換えてから戻ることはできない。
+              </div>
+            )}
+            {[null, ...stackTargets].map((idx) => {
               const why = idx === null ? null : blocked(build({ stack: idx }));
               const ok = why === null;
               const text =
@@ -1630,20 +1680,29 @@ function Actions({
                 </label>
               );
             })}
-          </div>
+          </FoldedChoices>
         )}
-        <div className="divider my-1 text-xs">
-          アプリを作り直す（フレームワークを替える）
-        </div>
         {state.rewrite ? (
-          <div className="text-sm">
-            {FRAMEWORKS[state.rewrite.to].label} へ作り直し中（
-            {state.rewrite.done} / {state.rewrite.required}{' '}
-            ポイント）。済むまで今のアプリのまま動き、乗り換え・部品の差し替えはできない。
-          </div>
+          <>
+            <div className="divider my-1 text-xs">
+              アプリを作り直す（フレームワークを替える）
+            </div>
+            <div className="text-sm">
+              {FRAMEWORKS[state.rewrite.to].label} へ作り直し中（
+              {state.rewrite.done} / {state.rewrite.required}{' '}
+              ポイント）。済むまで今のアプリのまま動き、乗り換え・部品の差し替えはできない。
+            </div>
+          </>
         ) : (
-          <div className="space-y-1">
-            {[null, ...rewriteTargets(state)].map((fw) => {
+          <FoldedChoices
+            title="アプリの作り直し（フレームワークを替える）"
+            count={rewriteFws.length}
+            chosen={
+              rewriteTo === null ? null : rewriteText(state, rewriteTo).name
+            }
+            key={`rewrite-${state.history.length}`}
+          >
+            {[null, ...rewriteFws].map((fw) => {
               const why = fw === null ? null : blocked(build({ rewrite: fw }));
               const ok = why === null;
               const text = fw === null ? null : rewriteText(state, fw);
@@ -1675,7 +1734,7 @@ function Actions({
                 </label>
               );
             })}
-          </div>
+          </FoldedChoices>
         )}
         <div className="card-actions items-center justify-end">
           {actions.length > 0 && (

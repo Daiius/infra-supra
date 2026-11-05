@@ -713,6 +713,42 @@ describe('ゲームモードの画面', () => {
     );
   });
 
+  it('W-57 行動の欄の構成の乗り換え・作り直しは畳んで出し、見出しに件数と選んだものを出す。次の月はまた畳む', async () => {
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Vercel Pro + Supabase Pro',
+    });
+    const fold = (title: string) => screen.getByText(title).closest('details')!;
+    const stack = () => fold('構成の乗り換え・プラン変更');
+    expect(stack().open).toBe(false);
+    expect(fold('アプリの作り直し（フレームワークを替える）').open).toBe(false);
+    expect(stack().querySelector('summary')!.textContent).toMatch(/（\d+ 件）/);
+    // 開いて選ぶと、畳み直しても見出しに選んだものが出る
+    fireEvent.click(stack().querySelector('summary')!);
+    expect(stack().open).toBe(true);
+    const migrate = [...stack().querySelectorAll('label')].find((l) =>
+      /^Cloudflare Paid \+ vinext.*へ乗り換える/.test(l.textContent ?? ''),
+    )!;
+    fireEvent.click(within(migrate).getByRole('radio'));
+    expect(stack().open).toBe(true);
+    expect(stack().querySelector('summary')!.textContent).toMatch(
+      /選んだもの: Cloudflare Paid \+ vinext.*へ乗り換える/,
+    );
+    // 開いた欄も、次の月は畳んだ状態から。乗り換え中は畳まずに進み具合を出す
+    fireEvent.click(
+      fold('アプリの作り直し（フレームワークを替える）').querySelector(
+        'summary',
+      )!,
+    );
+    expect(fold('アプリの作り直し（フレームワークを替える）').open).toBe(true);
+    advance(1);
+    expect(screen.queryByText('構成の乗り換え・プラン変更')).toBeNull();
+    expect(screen.getByText(/へ乗り換え中（/)).toBeDefined();
+    expect(fold('アプリの作り直し（フレームワークを替える）').open).toBe(false);
+  });
+
   it('W-17 選んでいない構成のカードも、その構成で選べる描き方で描く（流れの凡例のページ。D-107 の補足・RS-15 の解除）', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
