@@ -11,6 +11,7 @@ import {
   parseSave,
   replaySave,
   validSetupChoices,
+  setupComponentComparison,
   validRouteOverrides,
   routePlanRows,
   resolvedRouteStrategies,
@@ -357,6 +358,25 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                       setParts(validSetupChoices(scenario, stack, framework, v))
                     }
                     partsNote="構成の中の役割ごとに選ぶ（始める前なので手間はかからない）"
+                    // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）
+                    partsCompare={(slot) => ({
+                      rows: setupComponentComparison(
+                        scenario,
+                        stack,
+                        framework,
+                        parts,
+                        slot,
+                        {
+                          revalidateSec: revalidateChoosable
+                            ? revalidateSec
+                            : undefined,
+                          comments: commentsChoosable ? comments : undefined,
+                          routes,
+                        },
+                      ),
+                      basis:
+                        '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数える。出来事・話題の上乗せは含めない目安。縦の線は選んでいる部品の額',
+                    })}
                   />
                 ),
               }}

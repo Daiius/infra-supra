@@ -1089,3 +1089,105 @@ export function Meter({
     </div>
   );
 }
+
+/** 横棒の 1 本（CostBars）。value が null の棒は描かず、valueText だけを出す（計算できない選択肢）。 */
+export type CostBar = {
+  key: string;
+  label: ReactNode;
+  value: number | null;
+  /** 棒の右の数値のラベル（例: $94/月（+$73））。 */
+  valueText: string;
+  /** 棒の下の小さい注記（選べない理由・止まる前提など）。 */
+  note?: string | undefined;
+  /** 基準の棒（今の部品）。目盛りの線をこの値に引き、ラベルを太くする。 */
+  current?: boolean;
+  /** 薄く出す（選べない選択肢）。 */
+  muted?: boolean;
+};
+
+/**
+ * 同じ量（月の費用）を選択肢ごとに比べる横棒（dataviz の bar。1 系列なので色は series-1 の 1 色）。
+ * 基準の棒（current）の値に縦の目盛りの線を引き、差が棒の端と線のずれで見える。値は棒の右に数値のラベルで出し、
+ * 基準の印は色でなく文字（ラベルの「今」）で示す。読み上げは一覧（各行に名前と数値の文）で、棒そのものは飾り。
+ */
+export function CostBars({
+  items,
+  caption,
+}: {
+  items: readonly CostBar[];
+  /** 図の説明（読み上げの一覧の名前にも使う）。 */
+  caption: string;
+}) {
+  const max = Math.max(0, ...items.map((b) => b.value ?? 0));
+  const pos = (v: number) =>
+    max > 0 ? `${(Math.max(0, v) / max) * 100}%` : '0%';
+  const base = items.find((b) => b.current)?.value ?? undefined;
+  return (
+    <figure className="viz-root min-w-0" data-cost-bars>
+      <ul aria-label={caption} className="space-y-2">
+        {items.map((b) => (
+          <li
+            key={b.key}
+            data-bar={b.key}
+            data-current={b.current ? 'true' : undefined}
+            className={`min-w-0 ${b.muted ? 'opacity-50' : ''}`}
+          >
+            <div
+              className={`text-xs ${b.current ? 'font-semibold' : ''}`}
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {b.label}
+            </div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="relative h-3 min-w-0 flex-1">
+                {b.value !== null && (
+                  <div
+                    aria-hidden
+                    className="motion-grow-x absolute inset-y-0 left-0"
+                    style={{
+                      width: pos(b.value),
+                      background: 'var(--series-1)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+                {base !== undefined && (
+                  <div
+                    aria-hidden
+                    className="absolute -inset-y-0.5"
+                    style={{
+                      left: pos(base),
+                      width: 2,
+                      marginLeft: -1,
+                      background: 'var(--marker)',
+                    }}
+                  />
+                )}
+              </div>
+              <span
+                className="w-32 shrink-0 text-right text-xs tabular-nums sm:w-40"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {b.valueText}
+              </span>
+            </div>
+            {b.note && (
+              <div
+                className="text-xs"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                {b.note}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <figcaption
+        className="mt-1 text-xs"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        {caption}
+      </figcaption>
+    </figure>
+  );
+}

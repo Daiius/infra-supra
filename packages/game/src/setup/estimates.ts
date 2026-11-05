@@ -5,6 +5,7 @@ import {
   type FrameworkId,
   type SlotId,
 } from 'catalog';
+import type { EstimateResult } from 'estimator';
 import type { Scenario } from '../scenario.ts';
 import {
   booksAt,
@@ -25,25 +26,26 @@ import { architectureFor, staticBuildOf, workloadFor } from '../workload.ts';
 import { newGame } from './new-game.ts';
 
 /**
- * 部品を選ぶ前に出す、当たりうる前提（D-24・選ぶ前に前提の文を出す）。今月の基準の PV で、その部品に替えた見積を引き、
- * 部品の premiseRefs に当たる前提を返す。表示のためだけで、ゲームの状態には入れない。
+ * 状態の基準の PV で、部品・設定を替えた月の見積（playMonth と同じ Workload・構成の組み立て。出来事・乱数は含めない）。
+ * 部品の欄の見込み（componentPreview・部品の比較）・無効化の見込み・始める画面の 1 か月目の見込みで共有する。
  */
-export function componentPreview(
+export function monthEstimate(
+  sc: Scenario,
   state: GameState,
-  slot: SlotId,
-  option: string,
-): MonthEvent['premises'] {
-  const sc = scenarioOf(state);
+  p: {
+    books: ReturnType<typeof booksAt>;
+    /** 省略は状態の部品。 */
+    components?: Choices;
+    /** 省略は状態の設定。 */
+    settings?: GameState['settings'];
+  },
+): EstimateResult {
+  const components = p.components ?? state.components;
   const platform = STACKS[state.stackIndex]!.provider;
-  const def = componentsOf(platform, slot, state.framework).find(
-    (c) => c.id === option,
-  );
-  if (!def || def.premiseRefs.length === 0) return [];
-  const components = { ...state.components, [slot]: option };
-  const r = estimate({
+  return estimate({
     workload: workloadFor(sc, {
       pv: state.basePV,
-      settings: state.settings,
+      settings: p.settings ?? state.settings,
       ssrCpuMs: nextSsrCpuMs(state),
       mods: state.mods,
       stock: sc.stock ? state.stock : null,
@@ -62,8 +64,30 @@ export function componentPreview(
       {},
       state.storageOption,
       staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
+      // 容量の段は状態の契約（始めたばかりは最小の段。D-120）
       { tiers: state.capacityTiers },
     ),
+    books: p.books,
+  });
+}
+
+/**
+ * 部品を選ぶ前に出す、当たりうる前提（D-24・選ぶ前に前提の文を出す）。今月の基準の PV で、その部品に替えた見積を引き、
+ * 部品の premiseRefs に当たる前提を返す。表示のためだけで、ゲームの状態には入れない。
+ */
+export function componentPreview(
+  state: GameState,
+  slot: SlotId,
+  option: string,
+): MonthEvent['premises'] {
+  const sc = scenarioOf(state);
+  const platform = STACKS[state.stackIndex]!.provider;
+  const def = componentsOf(platform, slot, state.framework).find(
+    (c) => c.id === option,
+  );
+  if (!def || def.premiseRefs.length === 0) return [];
+  const r = monthEstimate(sc, state, {
+    components: { ...state.components, [slot]: option },
     books: booksAt(state, state.history.length + 1),
   });
   return premiseRefsOf(def, r.premises);
@@ -147,33 +171,9 @@ function invalidationLines(
   components: Choices,
   bk: ReturnType<typeof booksAt>,
 ) {
-  const sc = scenarioOf(state);
-  const platform = STACKS[state.stackIndex]!.provider;
-  const settings = { ...state.settings, revalidateSec: ON_DEMAND_REVALIDATE };
-  const r = estimate({
-    workload: workloadFor(sc, {
-      pv: state.basePV,
-      settings,
-      ssrCpuMs: nextSsrCpuMs(state),
-      mods: state.mods,
-      stock: sc.stock ? state.stock : null,
-      platform,
-      components,
-      framework: state.framework,
-      routes: state.routes,
-      legacyRouteDefaults: state.legacyRouteDefaults,
-      routeParts: state.routeParts,
-    }),
-    architecture: architectureFor(
-      state.stackIndex,
-      state.seats,
-      state.framework,
-      components,
-      {},
-      state.storageOption,
-      staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
-      { tiers: state.capacityTiers },
-    ),
+  const r = monthEstimate(scenarioOf(state), state, {
+    components,
+    settings: { ...state.settings, revalidateSec: ON_DEMAND_REVALIDATE },
     books: bk,
   });
   return r.bill.lines.filter(
@@ -265,33 +265,8 @@ export function setupMonthOneEstimate(
     undefined,
     routes,
   );
-  const r = estimate({
-    workload: workloadFor(scenario, {
-      pv: state.basePV,
-      settings: state.settings,
-      ssrCpuMs: nextSsrCpuMs(state),
-      mods: state.mods,
-      stock: scenario.stock ? state.stock : null,
-      platform: STACKS[state.stackIndex]!.provider,
-      components: state.components,
-      framework: state.framework,
-      routes: state.routes,
-      legacyRouteDefaults: state.legacyRouteDefaults,
-      routeParts: state.routeParts,
-    }),
-    architecture: architectureFor(
-      state.stackIndex,
-      state.seats,
-      state.framework,
-      state.components,
-      {},
-      state.storageOption,
-      staticBuildOf(scenario, state.stackIndex, state.framework, state.routes),
-      // 1 か月目は始めたばかりの契約（容量の段は最小の段。D-120）
-      { tiers: state.capacityTiers },
-    ),
-    books: booksAt(state, 1),
-  });
+  // 1 か月目は始めたばかりの契約（容量の段は最小の段。D-120）
+  const r = monthEstimate(scenario, state, { books: booksAt(state, 1) });
   const costUsd = toUsd(r.bill.totals);
   const loss = scenario.revenue.loss;
   // メールの送信の上限はサイトを止めない（収益を減らさない。D-117）

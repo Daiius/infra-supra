@@ -22,6 +22,9 @@ import {
   type PriceBook,
 } from 'estimator';
 import {
+  analyzeSlot,
+  setupSlots,
+  type SlotCompareRow,
   COMMITMENTS,
   commitmentEligible,
   commitmentTerms,
@@ -958,6 +961,31 @@ export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
         : { ok: true },
       deltas,
     };
+  });
+}
+
+/**
+ * 部品の ⓘ の比較（D-124）: 今の条件（PV・設定・他の部品）で、そのスロットだけ各選択肢に替えた見積を引き、game の analyzeSlot で
+ * 表の行にする。選ぶと整合（estimateComponents）で外れる選択肢（部品どうしの依存で選べないもの）は「計算できない」にする。
+ */
+export function slotComparisonOf(
+  input: EstimateInput,
+  slot: string,
+): SlotCompareRow[] {
+  const r = resolve(input);
+  const options =
+    setupSlots(r.scenario, r.stackIndex, input.framework, input.parts).find(
+      (x) => x.slot === slot,
+    )?.options ?? [];
+  return analyzeSlot({
+    options: options.map((o) => ({ ...o, slot: slot as SlotId })),
+    results: options.map((o) => {
+      const sel = { ...input, parts: { ...input.parts, [slot]: o.id } };
+      const rr = resolve(sel);
+      return rr.components[slot as SlotId] === o.id ? run(sel, rr) : null;
+    }),
+    current: r.components[slot as SlotId],
+    provider: STACKS[r.stackIndex]!.provider,
   });
 }
 

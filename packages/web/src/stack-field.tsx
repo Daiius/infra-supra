@@ -35,9 +35,12 @@ import {
   isUnselected,
   PartChips,
   PartOptions,
+  componentWhy,
   usePartSlots,
+  type PartsCompare,
   type SetupChoices,
 } from './setup-components.tsx';
+import { SlotCompareDialog } from './slot-compare.tsx';
 import {
   DIAGRAM_NOTE,
   SystemDiagram,
@@ -59,6 +62,8 @@ type PartsEditor = {
   note?: ReactNode;
   /** スロットに添えるもの（見積モードの画像の形式・サイズ違い。チップの行の下か、図の箱の吹き出しの中。D-119）。 */
   slotExtra?: Partial<Record<string, ReactNode>> | undefined;
+  /** 部品の ⓘ の比較（D-124。チップの ⓘ と図の箱の吹き出しの「比べる」）。 */
+  compare?: PartsCompare | undefined;
 };
 
 /**
@@ -140,6 +145,11 @@ function EditableDiagram({
   // 箱の吹き出しで選んだスロットと押した箱（描き直した後に、その箱へ focus を移す。消えていればスロットの最初の箱。OCL-131BD89D）
   const [focusTarget, setFocusTarget] = useState<BoxFocus | null>(null);
   const clearFocus = useCallback(() => setFocusTarget(null), []);
+  // 箱の吹き出しの「比べる」で開いた比較（D-124）。閉じたら、開く前に focus のあった箱へ戻す
+  const [comparing, setComparing] = useState<{
+    slot: string;
+    back: HTMLElement | null;
+  } | null>(null);
   const bySlot = new Map<string, (typeof slots)[number]>(
     slots.map((x) => [x.slot, x]),
   );
@@ -162,6 +172,18 @@ function EditableDiagram({
             setFocusTarget({ slot, box });
           }}
           close={close}
+          onCompare={
+            editor.compare
+              ? () => {
+                  // 吹き出しを閉じる（focus は箱に戻る）。その箱を、比較を閉じたときの戻り先にする
+                  close();
+                  setComparing({
+                    slot,
+                    back: document.activeElement as HTMLElement | null,
+                  });
+                }
+              : undefined
+          }
         />
         {/* 見積モードの画像の形式・サイズ違いは、画像の箱の吹き出しの中で選ぶ（D-119） */}
         {editor.slotExtra?.[slot] && (
@@ -229,9 +251,31 @@ function EditableDiagram({
             onChange={editor.onChange}
             note={editor.note}
             slotExtra={editor.slotExtra}
+            compare={editor.compare}
           />
         )}
       </div>
+      {comparing && editor.compare && bySlot.get(comparing.slot) && (
+        <SlotCompareDialog
+          open
+          slotLabel={bySlot.get(comparing.slot)!.label}
+          current={components[comparing.slot]}
+          why={(id) =>
+            componentWhy(
+              stackIndex,
+              framework,
+              bySlot.get(comparing.slot)!,
+              components,
+              id,
+            )
+          }
+          load={() => editor.compare!(comparing.slot)}
+          onClose={() => {
+            comparing.back?.focus();
+            setComparing(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -465,6 +509,7 @@ export function StackField({
   onComponentsChange,
   partsNote,
   partsExtra,
+  partsCompare,
   diagramCaption = defaultDiagramCaption,
 }: {
   scenario: Scenario;
@@ -506,6 +551,8 @@ export function StackField({
   partsExtra?: Partial<Record<string, ReactNode>> | undefined;
   /** 構成図の説明（選んでいるカードか・選んでいないカードで覚えている部品で描くか）。 */
   diagramCaption?: (selected: boolean, remembered: boolean) => string;
+  /** 部品の ⓘ の比較（選んでいる構成の今の条件で、スロットだけ替えた見積。D-124）。省略は説明の吹き出し。 */
+  partsCompare?: PartsCompare | undefined;
 }) {
   // 隠した構成（D-100）だけを外す。今のフレームワークを載せられない構成も出す（D-113）
   const groups = stackTabGroups(
@@ -588,6 +635,7 @@ export function StackField({
                     onChange: onComponentsChange,
                     note: partsNote,
                     slotExtra: partsExtra,
+                    compare: partsCompare,
                   }
                 : undefined
             }
