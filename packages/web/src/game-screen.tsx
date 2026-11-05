@@ -1285,8 +1285,9 @@ function Actions({
         <h2 className="card-title flex-wrap">
           今月の行動（来月に効く）
           <span className="badge badge-lg">
+            {/* 分母も選んでいる行動を当てた draft から（プラン変更で既定の分が替わる。D-123・OCL-ADB0B195） */}
             来月の手間の残り {fmtPoints(left)} /{' '}
-            {fmtPoints(effortTotalOf(state))}
+            {fmtPoints(effortTotalOf(draft))}
           </span>
         </h2>
         <p className="text-sm opacity-70">

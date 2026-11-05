@@ -168,6 +168,27 @@ describe('アカウントの手間', () => {
     );
   });
 
+  it('プラン変更で既定の分が減るときも、変更後の余力で選べるかを確かめる（D-123・OCL-15C8F3A2）', () => {
+    // Cloudflare Free + Resend: 管理 0.5 は Paid でも同じ、既定の分だけ 0.5 → 0 に減る
+    const s = playMonth(
+      newGame(0, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
+        email: 'resend-free',
+      }),
+    );
+    expect(accountAllowanceOf(0)).toBe(EFFORT.accountUpkeep);
+    expect(accountAllowanceOf(CF_PAID)).toBe(0);
+    const full = { ...s, plannedEffort: s.plannedEffort + effortAvailable(s) };
+    expect(effortAvailable(full)).toBe(0);
+    expect(
+      checkAction(full, { type: 'plan', stackIndex: CF_PAID }),
+    ).toMatchObject({ ok: false, reason: 'effort' });
+    // 余力が 0.5 残っていれば選べる
+    const room = { ...full, plannedEffort: full.plannedEffort - 0.5 };
+    expect(checkAction(room, { type: 'plan', stackIndex: CF_PAID }).ok).toBe(
+      true,
+    );
+  });
+
   it('メールを SES → Resend に替えると AWS が要らなくなり、機能開発は基礎のまま（D-123）', () => {
     const s = playMonth(newGame(VERCEL_PRO));
     expect(componentEffortLabel('email', s, 'resend-free')).toContain(
