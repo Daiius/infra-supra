@@ -2,7 +2,13 @@
 import type { Scenario } from './scenario.ts';
 import type { Choices, FrameworkId, SlotId } from 'catalog';
 import { effectiveSsrCpuMs, EFFORT } from './rules.ts';
-import { accountLabel, accountUpkeepOf, newAccountsBy } from './accounts.ts';
+import {
+  accountAllowanceOf,
+  accountLabel,
+  accountUpkeepOf,
+  droppedAccountsBy,
+  newAccountsBy,
+} from './accounts.ts';
 import { baseSsrCpuMsOf, frameworkDefaults, scenarioOf } from './core.ts';
 import { isDataSwap, selfBackupOf, selfHostedOf, STACKS } from './stacks.ts';
 import type { ComponentSwap, GameState, Migration } from './state.ts';
@@ -39,6 +45,29 @@ export function upkeepOf(
 export const accountUpkeepFor = (
   state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
 ) => accountUpkeepOf(state.stackIndex, state.components, state.framework);
+
+/**
+ * 月の手間に足す、今の構成の既定の部品での他の事業者の管理の分（D-123）。乗り換え・作り直しが済むまでは今の構成・
+ * フレームワークの既定で数え、済んだ月から新しい構成の既定に替わる（アカウントの維持も今の構成で数えるのと揃える）。
+ */
+export const accountAllowanceFor = (
+  state: Pick<GameState, 'stackIndex' | 'framework'>,
+) => accountAllowanceOf(state.stackIndex, state.framework);
+
+/**
+ * 月の手間の内訳の断り（D-123）。既定の構成の事業者の管理の分を足しているときだけ「（基礎 10 + 既定の構成の事業者の管理 1）」、
+ * 足していなければ空。total は足した後の総量。
+ */
+export function effortTotalNote(total: number, allowance = 0): string {
+  if (allowance <= 0) return '';
+  const f = (n: number) => String(Number(n.toFixed(1)));
+  return `（基礎 ${f(total - allowance)} + 既定の構成の事業者の管理 ${f(allowance)}）`;
+}
+
+/** 月の手間の総量 = シナリオの基礎（チームが増えた分を含む）+ 既定の構成の事業者の管理の分（D-123）。 */
+export const effortTotalOf = (
+  state: Pick<GameState, 'effortPerMonth' | 'stackIndex' | 'framework'>,
+) => state.effortPerMonth + accountAllowanceFor(state);
 
 /**
  * 動いている構成（乗り換え中は新旧両方）の維持の手間。両方が自前運用でも 1 回分。今の構成は部品（差し替えの途中の新しい部品を含む）
@@ -117,7 +146,7 @@ export function rewriteWanted(
   const w = state.rewrite;
   if (!w) return 0;
   const room =
-    state.effortPerMonth -
+    effortTotalOf(state) -
     upkeepFor(state) -
     accountUpkeepFor(state) -
     interruptOf(state) -
@@ -148,7 +177,7 @@ export const featureBonusOf = (state: Pick<GameState, 'interrupts'>) =>
 /** 次の月に、まだ行動に使える手間。 */
 export function effortAvailable(state: GameState): number {
   return (
-    state.effortPerMonth -
+    effortTotalOf(state) -
     upkeepFor(state) -
     accountUpkeepFor(state) -
     interruptOf(state) -
@@ -182,6 +211,8 @@ export function componentEffortLabel(
 ): string[] {
   const added =
     state && option !== undefined ? newAccountsBy(state, slot, option) : [];
+  const dropped =
+    state && option !== undefined ? droppedAccountsBy(state, slot, option) : [];
   const setup = added.length > 0 ? EFFORT.accountSetup : 0;
   // 部品で VPS を使い始める（VPS の API。D-67）と、自前運用の維持と偶発的な障害が加わる
   const selfHosting =
@@ -201,6 +232,11 @@ export function componentEffortLabel(
     ...(added.length > 0
       ? [
           `${added.map(accountLabel).join('・')} のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep * added.length}）`,
+        ]
+      : []),
+    ...(dropped.length > 0
+      ? [
+          `${dropped.map(accountLabel).join('・')} のアカウントが要らなくなる（毎月の維持 −${EFFORT.accountUpkeep * dropped.length}）`,
         ]
       : []),
     ...selfHosting,

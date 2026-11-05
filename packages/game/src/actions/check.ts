@@ -419,6 +419,16 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
     const after = effortAvailable({ ...state, migration: m });
     if (after < 0) return short(-after);
   }
+  // プラン変更は今月から構成が替わり、月の手間に足す既定の構成の事業者の管理の分（D-123）も替わる。
+  // 減る向き（Cloudflare Free で Resend を選んで Paid へ、など）でも余力が負にならないか、変更後の構成で確かめる（OCL-15C8F3A2）
+  if (action.type === 'plan') {
+    const after = effortAvailable({
+      ...state,
+      stackIndex: action.stackIndex,
+      plannedEffort: state.plannedEffort + r.cost,
+    });
+    if (after < 0) return short(-after);
+  }
   // 作り直しは残りの手間をすべて取れる（月あたりの上限まで）。今月 1 も回せないときだけ選べない
   if (
     action.type === 'rewrite' &&

@@ -116,7 +116,8 @@ export const EFFORT = {
   // DB の差し替えと API の置き場の移し替え（API と DB を一緒に移す。D-65）で共通の大きさ（仮定）
   dbSwap: { perMonth: 6, months: 1 },
   /**
-   * 事業者のアカウントが構成の既定より 1 つ増えるごとの、毎月の維持の手間（請求の確認・権限・障害の窓口。AX-11・D-52）。
+   * 主のアカウント以外の事業者のアカウント 1 つごとの、毎月の維持の手間（請求の確認・権限・障害の窓口・ダッシュボードの設定。
+   * AX-11・D-52。D-123 で構成の既定に含まれるアカウントも数え、既定の分は月の手間に足す）。
    */
   accountUpkeep: 0.5,
   /** 新しい事業者のアカウントを足す部品を差すときの、一度きりの手間（接続の設定・ドメイン・秘密の受け渡し。AX-11・D-52）。 */
@@ -350,8 +351,13 @@ export function effectiveSsrCpuMs(
 export type EffortBreakdown = {
   total: number;
   upkeep: number;
-  /** 他の事業者の管理（構成の既定より増えたアカウントの維持。D-52）。古い保存の報告には無い。 */
+  /** 他の事業者の管理（主のアカウント以外のアカウントの維持。D-52・D-123）。古い保存の報告には無い。 */
   accounts?: number;
+  /**
+   * 月の手間（total）のうち、構成の既定の部品での他の事業者の管理の分として基礎に足した量（D-123）。
+   * total − accountAllowance がシナリオの基礎（チームが増えた分を含む）。古い保存の報告には無い（0 とみなす）。
+   */
+  accountAllowance?: number;
   interrupt: number;
   /** 機能の追加の作業（提案への対応。機能開発に数える。D-29）。 */
   featureWork: number;
@@ -369,8 +375,10 @@ export type EffortBreakdown = {
  */
 export function allocateEffort(input: {
   upkeep: number;
-  /** 他の事業者の管理（D-52）。維持の次に取る。 */
+  /** 他の事業者の管理（D-52・D-123）。維持の次に取る。 */
   accounts?: number;
+  /** 構成の既定の部品での他の事業者の管理の分（D-123）。月の総量に足す。 */
+  accountAllowance?: number;
   interrupt?: number;
   /** 機能の追加の作業（提案への対応）と、その加点（作業が削られたら同じ割合で減る）。 */
   featureWork?: number;
@@ -378,10 +386,11 @@ export function allocateEffort(input: {
   /** 乗り換えに今月入れたい量（0 なら乗り換え中でない）。 */
   migrationWanted: number;
   actions: number;
-  /** 月の総量（チームが増えると増える）。 */
+  /** 月の基礎の総量（チームが増えると増える）。accountAllowance は別に足す。 */
   perMonth?: number;
 }): EffortBreakdown {
-  const total = input.perMonth ?? EFFORT.perMonth;
+  const accountAllowance = input.accountAllowance ?? 0;
+  const total = (input.perMonth ?? EFFORT.perMonth) + accountAllowance;
   let left = total;
   const take = (want: number) => {
     const got = Math.max(0, Math.min(want, left));
@@ -399,6 +408,7 @@ export function allocateEffort(input: {
   const actions = take(input.actions);
   return {
     total,
+    accountAllowance,
     upkeep,
     accounts,
     interrupt,

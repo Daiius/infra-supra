@@ -3,6 +3,7 @@
 import { apiPlacedElsewhere, FRAMEWORKS, type Platform } from 'catalog';
 import { scenarioOf } from '../core.ts';
 import {
+  accountAllowanceFor,
   accountUpkeepFor,
   featureBonusOf,
   featureWorkOf,
@@ -42,6 +43,7 @@ export function progressOf(state: GameState): Progress {
   const effort = allocateEffort({
     upkeep: upkeepFor(state),
     accounts: accountUpkeepFor(state),
+    accountAllowance: accountAllowanceFor(state),
     interrupt: interruptOf(state),
     featureWork: featureWorkOf(state),
     featureBonus: featureBonusOf(state),

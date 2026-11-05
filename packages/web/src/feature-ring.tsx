@@ -5,6 +5,7 @@
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
 // 地の色との対比は WARN なので、凡例に値を書く）。
 import {
+  effortTotalNote,
   featureProgressOf,
   STAGE_LABEL,
   type EffortBreakdown,
@@ -268,7 +269,9 @@ export function FeatureRing({
       <div className="min-w-0 space-y-1 text-xs text-[var(--text-secondary)]">
         <div className="font-semibold text-[var(--text-primary)]">{head}</div>
         <div>
-          内側の輪: 手間 {effort.total} の使い道（目盛りは期待 {perMonth}）
+          内側の輪: 手間 {fmt(effort.total)}
+          {effortTotalNote(effort.total, effort.accountAllowance)}{' '}
+          の使い道（目盛りは期待 {perMonth}）
         </div>
         <ul className="space-y-0.5">
           {/* 値が 0 の区分は省く（機能開発と、行動の欄の「行動」は選ぶと動くので常に出す） */}

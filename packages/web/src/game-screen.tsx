@@ -25,6 +25,8 @@ import {
   settingNote,
   EFFORT,
   effortAvailable,
+  effortTotalNote,
+  effortTotalOf,
   acceptSummary,
   featureOutlook,
   featureProgressOf,
@@ -618,7 +620,7 @@ function EffortBreakdownView({
   const e = r.effort;
   const parts = [
     { label: '自前運用の維持', value: e.upkeep, cls: 'bg-warning' },
-    // 構成の既定より増えた事業者のアカウントの維持（D-52）。増えていなければ出さない
+    // 主のアカウント以外の事業者のアカウントの維持（D-52・D-123）。無ければ出さない
     ...(e.accounts
       ? [{ label: '他の事業者の管理', value: e.accounts, cls: 'bg-warning/50' }]
       : []),
@@ -644,7 +646,13 @@ function EffortBreakdownView({
   return (
     <div>
       <h3 className="mb-1 font-bold">
-        開発の手間 {e.total} ポイント
+        開発の手間 {fmtPoints(e.total)} ポイント
+        {/* 既定の構成の事業者の管理の分を足した月は内訳を添える（D-123） */}
+        {e.accountAllowance ? (
+          <span className="ml-1 text-sm font-normal opacity-70">
+            {effortTotalNote(e.total, e.accountAllowance)}
+          </span>
+        ) : null}
         <span className="ml-2 text-sm font-normal opacity-70">
           機能開発 {Math.round(e.feature)}
           {e.featureBonus > 0 &&
@@ -669,7 +677,7 @@ function EffortBreakdownView({
           <li key={p.label} className="flex items-center gap-2">
             <span className={`inline-block h-2 w-2 rounded-full ${p.cls}`} />
             {p.label}
-            <span className="ml-auto tabular-nums">{p.value}</span>
+            <span className="ml-auto tabular-nums">{fmtPoints(p.value)}</span>
           </li>
         ))}
       </ul>
@@ -1316,7 +1324,9 @@ function Actions({
         <h2 className="card-title flex-wrap">
           今月の行動（来月に効く）
           <span className="badge badge-lg">
-            来月の手間の残り {left} / {state.effortPerMonth}
+            {/* 分母も選んでいる行動を当てた draft から（プラン変更で既定の分が替わる。D-123・OCL-ADB0B195） */}
+            来月の手間の残り {fmtPoints(left)} /{' '}
+            {fmtPoints(effortTotalOf(draft))}
           </span>
         </h2>
         <p className="text-sm opacity-70">
@@ -2272,7 +2282,8 @@ function Result({
                   <p className="text-sm opacity-70">なし</p>
                 )}
                 <h3 className="mt-3 mb-1 font-bold">
-                  手間の使い道（合計 {e.total}）
+                  手間の使い道（合計 {fmtPoints(e.total)}
+                  {effortTotalNote(e.total, e.accountAllowance)}）
                 </h3>
                 <ul className="text-sm">
                   {[
@@ -2290,7 +2301,7 @@ function Result({
                     <li key={label as string} className="flex">
                       {label}
                       <span className="ml-auto tabular-nums">
-                        {v}（
+                        {fmtPoints(v as number)}（
                         {e.total
                           ? (((v as number) / e.total) * 100).toFixed(0)
                           : 0}
