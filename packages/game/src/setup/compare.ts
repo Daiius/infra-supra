@@ -49,10 +49,17 @@ export type SlotCompareRow = {
   /** その部品にしたときの構成全体の月の費用（USD・クレジットの後）。見積を引けなければ null。 */
   costUsd: number | null;
   /**
-   * その部品だけが持つ課金のノードの明細（月額固定・従量（クレジットを差し引いた）・無料 / 込みの分を使ったか）。
+   * その部品だけが持つ課金のノードの明細（月額固定・従量・無料 / 込みの分を使ったか）。金額は**クレジットの前**
+   * （クレジットはプランの従量全体に当たり、部品に配れないので差し引かない。棒の構成全体の額はクレジットの後）。
+   * credit: 部品のノードの従量に当たりうるクレジットがこの月に当たっている。
    * どの選択肢にもある同じノードは数えない。部品が自分のノードを持たない（設定だけが替わる）ときは undefined。
    */
-  charge?: { fixedUsd: number; usageUsd: number; allowance: boolean };
+  charge?: {
+    fixedUsd: number;
+    usageUsd: number;
+    allowance: boolean;
+    credit: boolean;
+  };
   /** その部品のノードに付く上限（止まる・遅くなる。量の境目のあるもの）。 */
   limits: SlotCompareLimit[];
   /** その部品のノードに付く事実の前提（料金データの文。アイドルで止まるなど）。 */
@@ -147,9 +154,16 @@ export function analyzeSlot(p: {
         ls.reduce((a, l) => a + usdOf(l.amount ?? 0, l.currency), 0);
       charge = {
         fixedUsd: sum(lines.filter((l) => l.kind === 'base-fee')),
-        usageUsd: sum(lines.filter((l) => l.kind !== 'base-fee')),
+        usageUsd: sum(lines.filter((l) => l.kind === 'usage')),
         allowance: lines.some(
           (l) => l.kind === 'usage' && (l.allowanceApplied ?? 0) > 0,
+        ),
+        // クレジットの明細の nodeIds は当てた先の従量のノードの和集合（共通のノードも含む）。部品のノードを含めば当たりうる
+        credit: r.bill.lines.some(
+          (l) =>
+            l.kind === 'credit' &&
+            (l.amount ?? 0) !== 0 &&
+            l.nodeIds.some((id) => ownIds.has(id)),
         ),
       };
     }
@@ -191,7 +205,7 @@ export function analyzeSlot(p: {
 }
 
 /** 見積を引く（組めない組み合わせは null。表の行は「計算できない」と出す）。 */
-function tryEstimate(f: () => EstimateResult): EstimateResult | null {
+function tryEstimate(f: () => EstimateResult | null): EstimateResult | null {
   try {
     return f();
   } catch {
@@ -270,6 +284,8 @@ export function setupComponentComparison(
     results: options.map((o) =>
       tryEstimate(() => {
         const state = stateWith({ ...components, [slot]: o.id });
+        // 依存を満たさない部品は newGame の整合で既定に戻る。別の部品の額を出さないよう「計算できない」にする
+        if (state.components[slot as SlotId] !== o.id) return null;
         return monthEstimate(scenario, state, { books: booksAt(state, 1) });
       }),
     ),

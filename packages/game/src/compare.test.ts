@@ -68,4 +68,26 @@ describe('部品の比較（D-124）', () => {
     );
     expect(images.every((r) => r.extra?.includes('画像込み'))).toBe(true);
   });
+
+  it('始める画面で依存を満たさず既定に戻る部品は、別の部品の額を出さず計算できないにする', () => {
+    const rows = setupComponentComparison(
+      article,
+      idx('sakura-vps-2gb'),
+      'vite-spa',
+      { frontCdn: 'none' },
+      'apiCache',
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows)
+      if (r.id === 'none') expect(r.costUsd).not.toBeNull();
+      else expect(r.costUsd).toBeNull();
+  });
+
+  it('部品の分の課金はクレジットの前（従量だけを足し、クレジットの明細は差し引かない）', () => {
+    for (const r of rows)
+      if (r.charge) {
+        expect(r.charge.usageUsd).toBeGreaterThanOrEqual(0);
+        expect(typeof r.charge.credit).toBe('boolean');
+      }
+  });
 });
