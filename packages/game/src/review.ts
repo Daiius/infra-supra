@@ -182,6 +182,8 @@ export function reflectionOf(state: GameState): Reflection {
   const effort = state.history.reduce(
     (a, r) => ({
       total: a.total + r.effort.total,
+      accountAllowance:
+        (a.accountAllowance ?? 0) + (r.effort.accountAllowance ?? 0),
       upkeep: a.upkeep + r.effort.upkeep,
       accounts: (a.accounts ?? 0) + (r.effort.accounts ?? 0),
       interrupt: a.interrupt + r.effort.interrupt,
@@ -193,6 +195,7 @@ export function reflectionOf(state: GameState): Reflection {
     }),
     {
       total: 0,
+      accountAllowance: 0,
       upkeep: 0,
       accounts: 0,
       interrupt: 0,

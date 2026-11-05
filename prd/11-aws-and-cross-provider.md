@@ -220,6 +220,7 @@ type CrossLink = {
 - 経路: `image-read` は `cf-cache → cf-r2`（Vercel の CDN を通らない＝Fast Data Transfer・CDN Requests にならない）。投稿 `image-write` は今と同じく Vercel の関数が受けて R2 に書く（Class A）。
   **関数から外への通信の Vercel の課金**は [CDN の料金と使用量](https://vercel.com/docs/manage-cdn-usage)（2026-09-14 更新）に記載が無い（Fast Origin Transfer は「Data sent between the CDN and Vercel Functions」）ので**未確認として数えない**。R2 の受信（書き込みの転送）は料金表に項目が無い。
 - アカウントの手間（AX-11）: **構成の既定より増えた課金のアカウント 1 つにつき毎月 0.5**、増える部品を差すときに一度きり **1**（ゲーム上の仮定・`EFFORT.accountUpkeep`・`accountSetup`）。
+  → D-123 で毎月の手間は主のアカウント以外の数そのもので数え、構成の既定の分を月の手間に足す形に改めた（prd/07 §9.4）。
   既定の Vercel + Supabase の Supabase は数えない。**既存の Cloudflare + Hyperdrive（Supabase）・VPS + 前段の CDN（Cloudflare）にも同じ規則が効く**（基準プレイ・golden はどれも変わらなかった）。
   月の手間の内訳に「他の事業者の管理」を出し（増えていなければ出さない）、始める画面の手間のバー（D-36）では**マスの左半分を薄い維持の色で塗る**（0.5 の表示の形）。選んでいる構成のカードだけ、選んだ部品で増えるアカウントの名前を添える。
 - **AWS への拡張（D-52 の追記・2026-11-01）**: `CROSS_PAIRS` に AWS × 画像 × Cloudflare を足し、2 つの部品の `hosts` を `['vercel', 'aws']` にした。土台ごとの差は `cross.ts` の `hostImageShape` に閉じる（aws.ts は変えない）。

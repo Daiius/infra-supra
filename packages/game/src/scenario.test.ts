@@ -151,7 +151,9 @@ describe('出来事（シード 42。話題の予告はシード 4）', () => {
   it('チームが増えると手間が増え、Vercel Pro は席の基本料が増える（Supabase は無制限）', () => {
     const team = at(42, 'team')!;
     const v = until(VERCEL_PRO, team.month, 42);
-    expect(month(v, team.month).effort.total).toBe(20);
+    // 基礎 10 + 10（チーム）+ Vercel Pro の既定の構成の事業者の管理（Supabase・AWS）1.0（D-123）
+    expect(month(v, team.month).effort.total).toBe(21);
+    expect(month(v, team.month).effort.accountAllowance).toBe(1);
     expect(month(v, team.month).seats).toBe(1);
     const ev = month(v, team.month).events.find((e) => e.id === 'team')!;
     expect(ev.members!.join()).toContain('席');

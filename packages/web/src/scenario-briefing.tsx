@@ -1,9 +1,10 @@
 // 始める画面のシナリオの選択と説明（D-33・prd/09 E-5・E-6）と、構成のカードのフレームワーク欄（D-35）。文言はシナリオのデータ（Scenario.text）から読む。
 import {
+  accountAllowanceOf,
   accountLabel,
   accountUpkeepOf,
-  addedAccounts,
   EFFORT,
+  effortTotalNote,
   FRAMEWORKS,
   growthFromReputation,
   pageWireframes,
@@ -15,6 +16,7 @@ import {
   type RouteOverrides,
   type RoutePlanRow,
   type RouteStrategyId,
+  otherAccounts,
   type Scenario,
   upkeepOf,
   featureRuleText,
@@ -87,10 +89,13 @@ export function ScenarioPicker({
   );
 }
 
+const fmtEffort = (n: number) => String(Number(n.toFixed(1)));
+
 /**
- * 構成の毎月の手間（D-36）。シナリオの毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・
+ * 構成の毎月の手間（D-36）。毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・
  * 他の事業者の管理 warning の薄い色・機能開発 success）。色だけに頼らず、数を文字でも出す。自前運用の構成には、自前の障害の確率を添える。
  * 他の事業者の管理（D-52）は 1 アカウント 0.5 なので、マスの左半分だけを塗る（0.5 の表示の形）。
+ * 毎月の手間はシナリオの基礎 + 構成の既定の部品での他の事業者の管理の分（D-123）。端数（10.5）は最後のマスの左半分。
  */
 export function EffortBar({
   scenario: sc,
@@ -104,21 +109,26 @@ export function EffortBar({
   components?: Partial<Record<string, string>>;
   framework?: FrameworkId;
 }) {
-  const total = sc.effort.perMonth;
+  // 構成の既定の部品での他の事業者の管理の分を基礎に足す（D-123）。既定のままなら機能開発は基礎のまま
+  const allowance = accountAllowanceOf(stackIndex, framework);
+  const total = sc.effort.perMonth + allowance;
   // 部品で VPS を使う（VPS の API。D-67）ときも自前運用の維持と障害がかかる
   const upkeep = upkeepOf(sc, stackIndex, components, framework);
   const selfHosted = selfHostedOf(stackIndex, components, framework);
   const accounts = accountUpkeepOf(stackIndex, components, framework);
-  const added = addedAccounts(stackIndex, components, framework);
+  const others = otherAccounts(stackIndex, components, framework);
   const free = total - upkeep - accounts;
   const items = [
+    ...(allowance > 0
+      ? [`毎月 ${fmtEffort(total)}${effortTotalNote(total, allowance)}`]
+      : []),
     ...(upkeep > 0 ? [`維持 ${upkeep}`] : []),
     ...(accounts > 0
       ? [
-          `他の事業者の管理 ${accounts}（${added.map(accountLabel).join('・')}）`,
+          `他の事業者の管理 ${fmtEffort(accounts)}（${others.map(accountLabel).join('・')}）`,
         ]
       : []),
-    `機能開発に ${free}`,
+    `機能開発に ${fmtEffort(free)}`,
     // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の手間だけ（D-63）
     ...(selfHosted
       ? [
@@ -140,10 +150,10 @@ export function EffortBar({
     <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span
         role="img"
-        aria-label={`毎月の手間 ${total} のうち、維持 ${upkeep}${accounts > 0 ? `・他の事業者の管理 ${accounts}` : ''}`}
+        aria-label={`毎月の手間 ${fmtEffort(total)}${effortTotalNote(total, allowance)} のうち、維持 ${upkeep}${accounts > 0 ? `・他の事業者の管理 ${fmtEffort(accounts)}` : ''}`}
         className="flex shrink-0 gap-0.5"
       >
-        {Array.from({ length: Math.max(0, total) }, (_, k) => (
+        {Array.from({ length: Math.max(0, Math.ceil(total)) }, (_, k) => (
           <span key={k} className="flex h-2.5 w-2.5 overflow-hidden rounded-sm">
             {cell(k).map((x, i) => (
               <span
@@ -693,16 +703,24 @@ export function ScenarioDescription({
               </DetailsDialog>
             </>
           )}
-          開発の手間は毎月 {sc.effort.perMonth}{' '}
-          ポイントで、運用に使った残りが機能開発に回り、満足度の「機能」（累計 /
-          期待）と PV の伸びに効く。
+          開発の手間は毎月 {sc.effort.perMonth} ポイント（+
+          構成の既定の他の事業者の管理の分）で、運用に使った残りが機能開発に回り、満足度の「機能」（累計
+          / 期待）と PV の伸びに効く。
           <DetailsDialog label="開発の手間の内訳" title="開発の手間の内訳">
             <p>
               開発の手間は毎月 {sc.effort.perMonth}{' '}
               ポイント。設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
               {sc.effort.selfHostedUpkeep} /
-              月）・他の事業者の管理（構成の既定より増えたアカウント 1 つにつき{' '}
-              {EFFORT.accountUpkeep} / 月）に使った残りが機能開発に回る。
+              月）・他の事業者の管理（構成の主の事業者以外のアカウント 1
+              つにつき {EFFORT.accountUpkeep} /
+              月）に使った残りが機能開発に回る。
+            </p>
+            <p>
+              構成の既定の部品で要る他の事業者のアカウント（Vercel と Supabase
+              の構成の Supabase・メールの送信の AWS
+              など）の管理の分は、毎月の手間に足してある（例: 既定で 2 つなら{' '}
+              {sc.effort.perMonth} + {2 * EFFORT.accountUpkeep}
+              ）。既定のままなら機能開発に回る量は同じで、部品でアカウントを減らせばその分だけ増え、増やせば減る。
             </p>
             <p>{featureRuleText(sc)}</p>
             <p className="opacity-70">開発の手間はゲーム上の仮定。</p>

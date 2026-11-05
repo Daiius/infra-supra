@@ -130,6 +130,7 @@ describe('開発の手間', () => {
       allocateEffort({ upkeep: 3, migrationWanted: 6, actions: 4 }),
     ).toEqual({
       total: 10,
+      accountAllowance: 0,
       upkeep: 3,
       accounts: 0,
       interrupt: 0,
@@ -142,6 +143,16 @@ describe('開発の手間', () => {
     expect(
       allocateEffort({ upkeep: 0, migrationWanted: 0, actions: 0 }).feature,
     ).toBe(EFFORT.perMonth);
+    // 既定の構成の事業者の管理の分（D-123）は総量に足し、同じ量の維持を引けば機能開発は基礎のまま
+    const withAccounts = allocateEffort({
+      upkeep: 0,
+      accounts: 1,
+      accountAllowance: 1,
+      migrationWanted: 0,
+      actions: 0,
+    });
+    expect(withAccounts.total).toBe(EFFORT.perMonth + 1);
+    expect(withAccounts.feature).toBe(EFFORT.perMonth);
   });
 
   it('機能の追加の作業は機能開発に数え、加点も足す（D-29）', () => {

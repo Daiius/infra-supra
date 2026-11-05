@@ -95,6 +95,9 @@ export {
   accountsFor,
   addedAccounts,
   accountUpkeepOf,
+  accountAllowanceOf,
+  otherAccounts,
+  droppedAccountsBy,
   newAccountsBy,
 } from './accounts.ts';
 export {
@@ -170,6 +173,8 @@ export {
   upkeepOf,
   rewriteEffort,
   effortAvailable,
+  effortTotalOf,
+  effortTotalNote,
   nextSsrCpuMs,
   componentEffortLabel,
 } from './effort.ts';

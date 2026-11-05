@@ -438,8 +438,10 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           0,
         ) / n;
       const last = months[months.length - 1]!;
-      // 維持には他の事業者の管理（D-52）を含める
-      const upkeepSum = eff.upkeep + (eff.accounts ?? 0);
+      // 維持には他の事業者の管理（D-52）を含める。構成の既定の分は月の手間に足してあるので、それを超えた分だけ数える（D-123）
+      const upkeepSum =
+        eff.upkeep +
+        Math.max(0, (eff.accounts ?? 0) - (eff.accountAllowance ?? 0));
       // 作り直し（D-81）に入れた手間。その間は機能開発がほぼ止まる
       const rewriteSum = h.reduce(
         (a, r) => a + (r.rewrite ? r.effort.migration : 0),

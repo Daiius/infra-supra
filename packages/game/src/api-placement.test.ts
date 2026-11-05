@@ -126,6 +126,8 @@ describe('ゲーム中の移し替え（データの移行）', () => {
       `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月 + 手間 ${EFFORT.accountSetup}`,
       '期間中は新旧両方の費用',
       `Cloudflare のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep}）`,
+      // API と DB を Cloudflare に移すと Supabase が要らなくなる（D-123）
+      `Supabase のアカウントが要らなくなる（毎月の維持 −${EFFORT.accountUpkeep}）`,
     ]);
     const started = applyAction(s, api('cf-workers'));
     expect(started.componentSwap).toMatchObject({

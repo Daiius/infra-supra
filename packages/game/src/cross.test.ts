@@ -1,8 +1,10 @@
 // 事業者をまたぐ構成（D-52）: 許した組だけ選べる・アカウントの手間・請求が 2 つに分かれる・保存の再生。
 import { describe, expect, it } from 'vitest';
 import {
+  accountAllowanceOf,
   accountUpkeepOf,
   addedAccounts,
+  otherAccounts,
   applyAction,
   fixedImageFormat,
   checkAction,
@@ -80,16 +82,51 @@ describe('アカウントの手間', () => {
   it('どの構成も既定の部品ではアカウントが増えない（Vercel の Supabase は構成の既定）', () => {
     for (const s of STACKS) {
       expect(addedAccounts(s.index)).toEqual([]);
-      expect(accountUpkeepOf(s.index)).toBe(0);
+      // 既定の部品の手間は月の手間に足す分と同じ（既定のままなら機能開発は基礎のまま。D-123）
+      expect(accountUpkeepOf(s.index)).toBe(accountAllowanceOf(s.index));
     }
   });
 
-  it('増えたアカウント 1 つにつき毎月 0.5（既存のまたぐ部品も同じ規則）', () => {
+  it('主のアカウント以外を 1 つにつき毎月 0.5 で数え、構成の既定の分を月の手間に足す（D-123）', () => {
+    // 構成ごとの既定の部品での、主のアカウント以外と月の手間に足す分（フレームワークでは変わらない）
+    const table = Object.fromEntries(
+      STACKS.map((s) => [
+        s.id,
+        `${otherAccounts(s.index).join(',')}:${accountAllowanceOf(s.index)}`,
+      ]),
+    );
+    expect(table).toEqual({
+      'cloudflare-vinext-free': 'aws:0.5',
+      'cloudflare-vinext-paid': ':0',
+      'vercel-supabase-hobby': 'supabase,aws:1',
+      'vercel-supabase-pro': 'supabase,aws:1',
+      'sakura-vps-2gb': 'aws:0.5',
+      'sakura-vps-4gb': 'aws:0.5',
+      'aws-amplify': ':0',
+      'aws-opennext': ':0',
+      'netlify-supabase-free': 'supabase,aws:1',
+      'netlify-supabase-personal': 'supabase,aws:1',
+      'netlify-supabase-pro': 'supabase,aws:1',
+      'gcp-cloud-run': 'aws:0.5',
+    });
+    for (const s of STACKS)
+      for (const f of ['vite-spa', 'astro', 'nextjs-export'] as const)
+        expect(accountAllowanceOf(s.index, f)).toBe(
+          accountAllowanceOf(s.index),
+        );
     expect(addedAccounts(VERCEL_PRO, { images: 'cf-images' })).toEqual([
       'cloudflare',
     ]);
     expect(accountUpkeepOf(VERCEL_PRO, { images: 'cf-resize' })).toBe(
-      EFFORT.accountUpkeep,
+      3 * EFFORT.accountUpkeep,
+    );
+    // メールを SES → Resend に替えると AWS が要らなくなり、差し引き 0（D-52 では Resend の分だけ増えていた）
+    expect(otherAccounts(VERCEL_PRO, { email: 'resend-free' })).toEqual([
+      'supabase',
+      'resend',
+    ]);
+    expect(accountUpkeepOf(VERCEL_PRO, { email: 'resend-free' })).toBe(
+      accountAllowanceOf(VERCEL_PRO),
     );
     expect(addedAccounts(CF_PAID, { db: 'hyperdrive' })).toEqual(['supabase']);
     expect(addedAccounts(VPS, { frontCdn: 'static' })).toEqual(['cloudflare']);
@@ -117,11 +154,36 @@ describe('アカウントの手間', () => {
       EFFORT.component.images + EFFORT.accountSetup,
     );
     const next = playMonth(swapped);
-    expect(last(next).effort.accounts).toBe(EFFORT.accountUpkeep);
+    // Vercel Pro の既定の Supabase・AWS（1.0。月の手間に足してある。D-123）+ Cloudflare
+    expect(last(next).effort.accounts).toBe(3 * EFFORT.accountUpkeep);
+    expect(last(next).effort.total).toBe(
+      ARTICLE_COMMUNITY.effort.perMonth + 2 * EFFORT.accountUpkeep,
+    );
     expect(last(next).effort.feature).toBe(
       ARTICLE_COMMUNITY.effort.perMonth - EFFORT.accountUpkeep,
     );
-    expect(last(playMonth(s)).effort.accounts).toBe(0);
+    expect(last(playMonth(s)).effort.accounts).toBe(2 * EFFORT.accountUpkeep);
+    expect(last(playMonth(s)).effort.feature).toBe(
+      ARTICLE_COMMUNITY.effort.perMonth,
+    );
+  });
+
+  it('メールを SES → Resend に替えると AWS が要らなくなり、機能開発は基礎のまま（D-123）', () => {
+    const s = playMonth(newGame(VERCEL_PRO));
+    expect(componentEffortLabel('email', s, 'resend-free')).toContain(
+      `AWS のアカウントが要らなくなる（毎月の維持 −${EFFORT.accountUpkeep}）`,
+    );
+    const next = playMonth(
+      playMonth(
+        applyAction(s, {
+          type: 'component',
+          slot: 'email',
+          option: 'resend-free',
+        }),
+      ),
+    );
+    expect(last(next).effort.accounts).toBe(2 * EFFORT.accountUpkeep);
+    expect(last(next).effort.feature).toBe(ARTICLE_COMMUNITY.effort.perMonth);
   });
 
   it('始める画面で選んでも、毎月の維持は同じく引かれる', () => {
@@ -130,7 +192,10 @@ describe('アカウントの手間', () => {
         images: 'cf-resize',
       }),
     );
-    expect(last(s).effort.accounts).toBe(EFFORT.accountUpkeep);
+    expect(last(s).effort.accounts).toBe(3 * EFFORT.accountUpkeep);
+    expect(last(s).effort.feature).toBe(
+      ARTICLE_COMMUNITY.effort.perMonth - EFFORT.accountUpkeep,
+    );
   });
 });
 
@@ -217,7 +282,9 @@ describe('AWS + 画像だけ Cloudflare', () => {
     );
     expect(out?.ratio).toBeGreaterThan(0);
     expect(out!.ratio).toBeLessThan(1);
+    // Amplify の既定は AWS だけ（月の手間に足す分は 0。D-123）
     expect(last(cf).effort.accounts).toBe(EFFORT.accountUpkeep);
+    expect(last(cf).effort.accountAllowance).toBe(0);
   });
 });
 

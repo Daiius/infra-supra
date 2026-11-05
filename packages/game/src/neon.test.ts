@@ -238,17 +238,20 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     // Vercel Pro の既定の Flat Rate CDN と東京の単価（D-120。前は受託 0/20 $39.5・14/20 $38.4、記事 $119.8）
     // D-121: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分けた。AWS × SPA の既定の画像（一律で縮める）はサムネイルにも 400 KB を
     // 配るので転送が増える（前は $91.8・$91.8）。記事の閲覧の偏り（Zipf）で記事の再生成が減る（前は $54.2・$90.9）
+    // D-123: アカウントを数そのもので数え、既定の分を月の手間に足した。Supabase → Neon は差し引き 0 になり（前は Neon の分 0.5 を引いた）、
+    // 機能開発が月 0.5 増える。受託の Netlify・Vercel の Next.js は機能開発で SSR が重くなる（featurePointsPerSsrMs）のが早まり、
+    // 速さが下がる月が増えて満足度と収益が少し下がる（前は 0/20 $56.4・0/20 $38.1・8/20 $35.3）。SPA は SSR が無いので変わらない
     expect(table).toEqual({
       contractAwsSpaAurora: '0/20 $80.2',
       contractAwsSpaPause: '0/20 $59.0',
       contractOpenNextPause: '0/20 $56.6',
       articleAwsSpaAurora: '0/20 $118.5',
       articleAwsSpaPause: '0/20 $118.5',
-      contractVercelNext: '0/20 $56.4',
+      contractVercelNext: '0/20 $56.3',
       contractVercelSpa: '0/20 $56.6',
-      contractNetlifyNext: '0/20 $38.1',
+      contractNetlifyNext: '0/20 $38.0',
       contractNetlifySpa: '14/20 $38.2',
-      contractPersonalNext: '8/20 $35.3',
+      contractPersonalNext: '6/20 $34.9',
       contractPersonalSpa: '20/20 $30.8',
       articleVercelNext: '0/20 $88.5',
       articleNetlifyNextCf: '1/20 $54.0',
