@@ -1723,15 +1723,86 @@ describe('ゲームモードの画面', () => {
         pressed: false,
       }).disabled,
     ).toBe(true);
+    // ⓘ はスロットの比較のダイアログを開き、選べない行に理由を添えて薄く出す（D-124）
     fireEvent.click(
       within(chip()).getByRole('button', { name: /が選べない理由$/ }),
     );
-    expect(screen.getByRole('tooltip').textContent).not.toBe('');
-    fireEvent.keyDown(document, { key: 'Escape' });
+    const dialog = screen.getByRole('dialog', {
+      name: 'API の応答のキャッシュを比べる',
+    });
+    const row = dialog.querySelector<HTMLElement>(
+      `tbody[data-option="${chip().getAttribute('data-option')}"]`,
+    )!;
+    expect(row.textContent).toMatch(/選べない: .+/);
+    expect(row.querySelector('details')!.open).toBe(true);
+    fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
     // 前段の CDN を置くと選べる
     pickPart('Cloudflare（静的と画像だけ）', slotGroup('前段の CDN'));
     expect(chip().getAttribute('data-available')).toBe('true');
   });
+  it('W-56 部品の ⓘ は、選択肢の比較の表と今の規模での月額の横棒をダイアログに出す（ゲームの行動の欄・始める画面のチップと箱の吹き出し。D-124）', async () => {
+    await renderApp();
+    // 始める画面: DB の箱の吹き出しの「表と月額で比べる」
+    pickRadio(ARTICLE);
+    showStackTab();
+    pickRadio('Vercel Pro + Supabase Pro');
+    showPartsView('diagram');
+    const card = document.querySelector<HTMLElement>(
+      'section[data-stack][aria-current="true"]',
+    )!;
+    const dbBox = within(card).getByRole('button', {
+      name: /（DB、未選択）を替える$/,
+    });
+    fireEvent.click(dbBox);
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: /を替える$/ })).getByRole(
+        'button',
+        { name: '表と月額で比べる' },
+      ),
+    );
+    let dialog = screen.getByRole('dialog', { name: 'DBを比べる' });
+    expect(within(dialog).getByRole('table')).toBeDefined();
+    expect(
+      within(dialog).getByRole('columnheader', { name: '部品' }),
+    ).toBeDefined();
+    // Aurora（最小 0.5 ACU）の棒に月額の数値のラベル
+    expect(dialog.querySelector('[data-bar="aurora"]')!.textContent).toMatch(
+      /\$\d[\d,.]*\/月/,
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(dbBox);
+
+    // ゲームの行動の欄: DB の ⓘ（未選択のスロットは startGame が埋める）
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Vercel Pro + Supabase Pro',
+      parts: { DB: 'Supabase（Postgres）' },
+    });
+    const select = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'DB',
+    });
+    fireEvent.click(
+      within(select.parentElement!).getByRole('button', { name: 'DBの説明' }),
+    );
+    dialog = screen.getByRole('dialog', { name: 'DBを比べる' });
+    const rows = dialog.querySelectorAll('tbody[data-option]');
+    expect(rows.length).toBe(select.options.length);
+    // 今の部品に「今」の印、棒は選択肢の数だけ（今の部品は基準で、他は差を添える）
+    expect(
+      dialog.querySelector('tbody[data-current="true"]')!.textContent,
+    ).toContain('今');
+    expect(dialog.querySelectorAll('[data-bar]').length).toBe(rows.length);
+    expect(dialog.querySelector('[data-bar="aurora"]')!.textContent).toMatch(
+      /[+−]\$/,
+    );
+    // DB の差し替えの注記は表の下に残す
+    expect(dialog.textContent).toContain('データの移行');
+    fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('W-37 始める画面: Vercel の DB に AWS の部品が短い名前で出て、選ぶと構成のカードの題が実際の組になる（D-114 段 2）', async () => {
     await renderApp();
     await startGame({

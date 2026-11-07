@@ -69,6 +69,7 @@ import {
   scenarioOfTemplate,
   SEATS_MAX,
   settingsOf,
+  slotComparisonOf,
   sortRows,
   TEMPLATES,
   toQuery,
@@ -564,6 +565,11 @@ function Conditions({
               onComponentsChange={(parts) => setInput({ parts })}
               partsNote="選んでいないスロットは既定の部品で見積もる"
               partsExtra={imageSettings ? { images: imageSettings } : undefined}
+              // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
+              partsCompare={(slot) => ({
+                rows: slotComparisonOf(input, slot),
+                basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額`,
+              })}
               cardExtra={(i, selected) => {
                 const t = cardTotals[STACKS[i]!.id];
                 if (!t) return null;

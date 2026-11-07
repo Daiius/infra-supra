@@ -16,10 +16,10 @@ import {
   componentEffortLabel,
   componentFlavor,
   componentPreview,
+  componentComparison,
   componentProposal,
   componentSlots,
   swapLabel,
-  pageWeightOf,
   fixedSettingValue,
   settingInactiveReason,
   settingNote,
@@ -79,6 +79,7 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
+import { SlotCompareInfo } from './slot-compare.tsx';
 import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
@@ -1860,6 +1861,19 @@ function ComponentsSection({
               chosen === x.current
                 ? []
                 : componentPreview(state, x.slot, chosen);
+            // 選べない理由（提案で付く部品は、その提案を受けたとして見る）
+            const whyOf = (id: string) => {
+              if (id === x.current) return null;
+              const p = viaProposal.find((q) => q.option === id);
+              const restParts = { ...parts };
+              delete restParts[x.slot];
+              return p
+                ? blocked({
+                    parts: restParts,
+                    answers: { ...answers, [p.id]: true },
+                  })
+                : blocked({ parts: { ...restParts, [x.slot]: id } });
+            };
             return (
               // 外側を label にしない（設定の欄と同じ。名前は select の aria-label）
               <div key={x.slot} className="form-control">
@@ -1869,34 +1883,36 @@ function ComponentsSection({
                     <NameWithInfo
                       name={x.label}
                       info={
-                        <Info>
-                          <ul className="space-y-1">
-                            {x.options.map((o) => (
-                              <li key={o.id}>
-                                <span className="font-semibold">{o.label}</span>
-                                : {o.note}
-                                {x.slot === 'images' &&
-                                  `（${pageWeightOf(state, o.id)}・画像込み）`}
-                              </li>
-                            ))}
-                          </ul>
-                          {x.slot === 'db' && (
-                            <p className="mt-2 opacity-80">
-                              DB
-                              の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
-                              DB の費用を払う。
-                            </p>
-                          )}
-                          {x.slot === 'api' && (
-                            <p className="mt-2 opacity-80">
-                              API の置き場を移すと DB も一緒に移す（API と DB
-                              は同じ事業者に置く）。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払う。事業者をまたぐ往復の遅延は計算していない。
-                              Next.js・Astro では、ページを描くサーバーが API
-                              を呼んで応答を待つ。VPS
-                              に置くと自前運用の維持と障害が加わる。
-                            </p>
-                          )}
-                        </Info>
+                        <SlotCompareInfo
+                          slotLabel={x.label}
+                          current={x.current}
+                          why={whyOf}
+                          load={() => ({
+                            rows: componentComparison(state, x.slot, x.current),
+                            basis: `今月の基準の規模（月 ${state.basePV.toLocaleString('ja-JP')} PV）と今の他の部品で、${x.label}だけを替えた月の費用（構成全体）。出来事・話題の上乗せ・差し替えの期間の二重の費用は含めない目安。縦の線は今の部品の額`,
+                          })}
+                          footnote={
+                            <>
+                              {x.slot === 'db' && (
+                                <p className="mt-2 opacity-80">
+                                  DB
+                                  の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
+                                  DB の費用を払う。
+                                </p>
+                              )}
+                              {x.slot === 'api' && (
+                                <p className="mt-2 opacity-80">
+                                  API の置き場を移すと DB も一緒に移す（API と
+                                  DB
+                                  は同じ事業者に置く）。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払う。事業者をまたぐ往復の遅延は計算していない。
+                                  Next.js・Astro では、ページを描くサーバーが
+                                  API を呼んで応答を待つ。VPS
+                                  に置くと自前運用の維持と障害が加わる。
+                                </p>
+                              )}
+                            </>
+                          }
+                        />
                       }
                     />
                   </span>
@@ -1924,19 +1940,7 @@ function ComponentsSection({
                 >
                   {x.options.map((o) => {
                     const p = viaProposal.find((q) => q.option === o.id);
-                    const restParts = { ...parts };
-                    delete restParts[x.slot];
-                    const why =
-                      o.id === x.current
-                        ? null
-                        : p
-                          ? blocked({
-                              parts: restParts,
-                              answers: { ...answers, [p.id]: true },
-                            })
-                          : blocked({
-                              parts: { ...restParts, [x.slot]: o.id },
-                            });
+                    const why = whyOf(o.id);
                     return (
                       <option key={o.id} value={o.id} disabled={why !== null}>
                         {o.label}

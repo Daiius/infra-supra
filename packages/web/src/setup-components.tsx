@@ -30,6 +30,13 @@ import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { CarouselHeadingHidden, CarouselVisible } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
+import { SlotCompareInfo, type SlotCompareData } from './slot-compare.tsx';
+
+/** 部品のスロットの比較（ⓘ の表と月額の横棒。D-124）。画面ごとの見積でスロットの比較を引く（開いたときだけ呼ぶ）。 */
+export type PartsCompare = (slot: string) => SlotCompareData;
+
+/** 比べられるスロットか（1 択・ファイルの置き場は比べない）。 */
+const comparable = (x: SetupSlot) => !x.fixed && x.slot !== 'files';
 
 export type SetupChoices = Partial<Record<string, string>>;
 
@@ -113,6 +120,21 @@ function slotView(
   return { options };
 }
 
+/** スロットの選択肢の選べない理由（チップと同じ判定。比較のダイアログに使う。D-124）。 */
+export function componentWhy(
+  stackIndex: number,
+  framework: FrameworkId,
+  x: SetupSlot,
+  value: SetupChoices,
+  option: string,
+): string | null {
+  return (
+    slotView(x, stackIndex, framework, value).options.find(
+      (e) => e.o.id === option,
+    )?.why ?? null
+  );
+}
+
 /** 構成と別の事業者の部品のロゴ（D-102。同じ事業者の部品には付けない）。 */
 function OtherMark({ o, size = 14 }: { o: SetupOption; size?: number }) {
   return (
@@ -136,6 +158,43 @@ function OptionDetail({ o, why }: { o: SetupOption; why: string | null }) {
 }
 
 /**
+ * チップの ⓘ。比べられるスロット（compare があり、1 択・ファイルの置き場でない）は、スロットの比較のダイアログを開き、
+ * 押したチップの選択肢の詳細を開いておく（D-124）。それ以外は選択肢の説明の吹き出し。
+ */
+function OptionInfo({
+  x,
+  o,
+  why,
+  options,
+  value,
+  compare,
+}: {
+  x: SetupSlot;
+  o: SetupOption;
+  why: string | null;
+  options: ReturnType<typeof slotView>['options'];
+  value: SetupChoices;
+  compare: PartsCompare | undefined;
+}) {
+  if (!compare || !comparable(x))
+    return (
+      <Info label={`${o.label}${why ? 'が選べない理由' : 'の説明'}`}>
+        <OptionDetail o={o} why={why} />
+      </Info>
+    );
+  return (
+    <SlotCompareInfo
+      label={`${o.label}${why ? 'が選べない理由' : 'の説明'}`}
+      slotLabel={x.label}
+      current={pickedOf(x, value)}
+      why={(id) => options.find((e) => e.o.id === id)?.why ?? null}
+      focus={o.id}
+      load={() => compare(x.slot)}
+    />
+  );
+}
+
+/**
  * 部品のチップ（① インフラの構成の選んでいるカードの「機能から選ぶ」の表示。構成図の表示とタブで切り替える。D-116 とその補足）。スロットごとに 1 行で、押すとその部品に替わる
  * （図と月額がその場で替わる）。選択中は枠と「選択中」（② の描き方のチップと同じ見せ方）。チップの高さはそろえ、長い名前は
  * 切り詰めて全体をツールチップと ⓘ に出す。選べない部品は灰色で、理由はツールチップと ⓘ。
@@ -151,6 +210,7 @@ export function PartChips({
   onChange,
   note,
   slotExtra,
+  compare,
 }: {
   stackIndex: number;
   framework: FrameworkId;
@@ -163,6 +223,8 @@ export function PartChips({
   note?: ReactNode;
   /** スロットの行のチップの下に添えるもの（見積モードの画像の形式・サイズ違い。D-119）。 */
   slotExtra?: Partial<Record<string, ReactNode>> | undefined;
+  /** 部品の ⓘ で開く比較（D-124）。省略は選択肢ごとの説明の吹き出し。 */
+  compare?: PartsCompare | undefined;
 }) {
   const root = useRef<HTMLElement>(null);
   // 選んだ部品のスロットは畳み、押して開いたものだけ選択肢を出す（未選択の行はいつも開く。D-116 の補足）
@@ -230,9 +292,14 @@ export function PartChips({
               </>
             );
             const info = (
-              <Info label={`${o.label}の説明`}>
-                <OptionDetail o={o} why={null} />
-              </Info>
+              <OptionInfo
+                x={x}
+                o={o}
+                why={null}
+                options={options}
+                value={value}
+                compare={compare}
+              />
             );
             // 畳んだ行: 「スロット名: 選んだ部品」の小さいチップ。押すとその行だけ開く（1 択は開かない）
             return (
@@ -379,11 +446,14 @@ export function PartChips({
                           )}
                         </button>
                       )}
-                      <Info
-                        label={`${o.label}${why ? 'が選べない理由' : 'の説明'}`}
-                      >
-                        <OptionDetail o={o} why={why} />
-                      </Info>
+                      <OptionInfo
+                        x={x}
+                        o={o}
+                        why={why}
+                        options={options}
+                        value={value}
+                        compare={compare}
+                      />
                     </li>
                   );
                 })}
@@ -420,6 +490,7 @@ export function PartOptions({
   value,
   onChange,
   close,
+  onCompare,
 }: {
   slot: SetupSlot;
   stackIndex: number;
@@ -427,6 +498,8 @@ export function PartOptions({
   value: SetupChoices;
   onChange: (v: SetupChoices) => void;
   close: () => void;
+  /** 比較のダイアログを開く（D-124。吹き出しは閉じてから開く）。省略は出さない。 */
+  onCompare?: (() => void) | undefined;
 }) {
   const { options } = slotView(x, stackIndex, framework, value);
   return (
@@ -482,6 +555,17 @@ export function PartOptions({
           );
         })}
       </ul>
+      {onCompare && comparable(x) && (
+        <button
+          type="button"
+          className="btn mt-1 w-full btn-ghost btn-xs font-normal underline decoration-dotted underline-offset-2"
+          aria-haspopup="dialog"
+          data-slot-compare-trigger
+          onClick={onCompare}
+        >
+          表と月額で比べる
+        </button>
+      )}
     </div>
   );
 }

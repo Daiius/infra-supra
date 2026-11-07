@@ -15,6 +15,26 @@ import {
 useSmokeEnv();
 
 const tooltip = () => screen.queryByRole('tooltip');
+/** 部品の ⓘ で開く比較のダイアログ（D-124）。 */
+const compareDialog = () =>
+  document.querySelector<HTMLElement>('dialog[data-slot-compare-dialog]');
+
+/** ⓘ を押して説明が開き、閉じられる（部品の ⓘ は比較のダイアログ、ほかは吹き出し）。 */
+function toggleInfo(info: HTMLElement) {
+  fireEvent.click(info);
+  if (info.getAttribute('aria-haspopup') === 'dialog') {
+    const d = compareDialog()!;
+    expect(d).not.toBeNull();
+    expect(tooltip()).toBeNull();
+    fireEvent.click(within(d).getByRole('button', { name: '閉じる' }));
+    expect(compareDialog()).toBeNull();
+    expect(document.activeElement).toBe(info);
+    return;
+  }
+  expect(tooltip()).not.toBeNull();
+  fireEvent.click(info);
+  expect(tooltip()).toBeNull();
+}
 
 /**
  * select の欄（select と見出し・ⓘ を含む要素）で、見出し・余白・ⓘ・select を順に操作する。
@@ -30,12 +50,8 @@ function checkField(select: HTMLSelectElement): boolean {
   expect(tooltip()).toBeNull();
   fireEvent.click(field.firstElementChild!.firstElementChild!);
   expect(tooltip()).toBeNull();
-  // ⓘ を押すと開き、もう一度押すと閉じる
-  const info = within(field).getByRole('button', { name: /説明$/ });
-  fireEvent.click(info);
-  expect(tooltip()).not.toBeNull();
-  fireEvent.click(info);
-  expect(tooltip()).toBeNull();
+  // ⓘ を押すと開き、閉じられる（部品の欄は比較のダイアログ。D-124）
+  toggleInfo(within(field).getByRole('button', { name: /説明$/ }));
   // select は選べる
   const next = Array.from(select.options).find(
     (o) => !o.disabled && o.value !== select.value,
@@ -98,10 +114,9 @@ describe('ⓘ の当たり判定', () => {
       .getAllByRole<HTMLButtonElement>('button', { pressed: false })
       .find((b) => !b.disabled)!;
     const chip = other.closest('li')!;
-    fireEvent.click(within(chip).getByRole('button', { name: /説明$/ }));
-    expect(tooltip()).not.toBeNull();
+    // チップの ⓘ は、そのスロットの比較のダイアログ（D-124）
+    toggleInfo(within(chip).getByRole('button', { name: /説明$/ }));
     expect(other.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.keyDown(document, { key: 'Escape' });
     const label = other.textContent!;
     fireEvent.click(other);
     // 選ぶと行は畳まれ、選んだ部品の名前が残る（D-116 の補足）

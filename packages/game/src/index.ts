@@ -237,6 +237,14 @@ export {
   setupMonthOneEstimate,
 } from './setup/estimates.ts';
 export {
+  analyzeSlot,
+  componentComparison,
+  setupComponentComparison,
+  type SlotCompareLimit,
+  type SlotCompareOption,
+  type SlotCompareRow,
+} from './setup/compare.ts';
+export {
   BOT_BLOCK,
   type ActionBlockReason,
   type ActionCheck,
