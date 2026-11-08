@@ -118,10 +118,11 @@ export function createApp({
             { error: v.code, ...(v.fields ? { fields: v.fields } : {}) },
             422,
           );
-        const stored = await repo.insert(v.record);
-        return stored === 'inserted'
-          ? c.json({ ok: true as const, duplicate: false }, 201)
-          : c.json({ ok: true as const, duplicate: true }, 200);
+        // inHistogram: 保存されている行が分布に入るか（画面が自分を数えるかに使う。D-162・OCL-9B705B16）
+        const { status, inHistogram } = await repo.insert(v.record);
+        return status === 'inserted'
+          ? c.json({ ok: true as const, duplicate: false, inHistogram }, 201)
+          : c.json({ ok: true as const, duplicate: true, inHistogram }, 200);
       },
     )
     .get(

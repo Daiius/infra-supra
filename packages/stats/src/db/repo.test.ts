@@ -38,12 +38,24 @@ const rec = (over: Partial<ResultRecord>): ResultRecord => ({
 
 describe('drizzleRepo（PGlite）', () => {
   it('1 行足し、同じ playHash は duplicate で足さない。保存（jsonb）はそのまま読める', async () => {
-    expect(await repo.insert(base)).toBe('inserted');
-    expect(await repo.insert(base)).toBe('duplicate');
+    expect(await repo.insert(base)).toEqual({
+      status: 'inserted',
+      inHistogram: true,
+    });
+    // 同じ結果のプレイが後から戻らずに来ても、前からある行（戻った印つき）の印を返す（OCL-9B705B16）
+    await repo.insert({ ...base, playHash: 'rw', rewound: true });
+    expect(await repo.insert({ ...base, playHash: 'rw' })).toEqual({
+      status: 'duplicate',
+      inHistogram: false,
+    });
+    expect(await repo.insert(base)).toEqual({
+      status: 'duplicate',
+      inHistogram: true,
+    });
     const rows = await client.query<{ n: number; save: unknown }>(
       'select count(*)::int as n, max(save::text)::jsonb as save from results',
     );
-    expect(rows.rows[0]!.n).toBe(1);
+    expect(rows.rows[0]!.n).toBe(2);
     expect(rows.rows[0]!.save).toEqual(base.save);
   });
 

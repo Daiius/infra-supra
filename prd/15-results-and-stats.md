@@ -144,7 +144,7 @@
 
 | 口 | 中身 |
 |---|---|
-| `POST /api/results` | 本文 `{ save, axes, end }`（§4）。シードは 32 ビットの整数だけ。zod でおおまかな形 → game の `parseSave` → `replaySave` で再生 → 4 軸（相対 1e-9 まで同じとみなす）と終わり方を照合。201 保存・200 同じプレイ（`duplicate`）・400 形が違う・413 大きすぎる（64 KB）・422 `invalid-save` / `replay-failed` / `unfinished` / `mismatch`（食い違った欄つき） |
+| `POST /api/results` | 本文 `{ save, axes, end }`（§4）。シードは 32 ビットの整数だけ。zod でおおまかな形 → game の `parseSave` → `replaySave` で再生 → 4 軸（相対 1e-9 まで同じとみなす）と終わり方を照合。201 保存・200 同じプレイ（`duplicate`）。どちらも `inHistogram`（保存されている行が分布に入るか。段 3 の画面が自分を数えるかに使う。D-162）を返す・400 形が違う・413 大きすぎる（64 KB）・422 `invalid-save` / `replay-failed` / `unfinished` / `mismatch`（食い違った欄つき） |
 | `GET /api/results/histogram?scenario=&axis=[&seed=][&value=]` | 完走・戻っていないプレイだけの分布。`{ count, min, max, bins: [{ from, to, count }], position? }`。④ は値ごとに幅 1、ほかは最小〜最大を 20 本。`value` を付けると `position: { above, equal }`（段 3 の上位 %） |
 | `GET /api/results/distribution?scenario=&seed=[&<軸>=]` | 段 3 の画面が使う。4 軸 ×（同じシード `seed` / 全シード `all`）の 8 本を 1 回で返す（`{ scenarioId, seed, axes }`。切り方は上と同じ。値を付けた軸だけ `position`）。`position` の「同じ」は照合と同じ相対 1e-9 の幅（D-161） |
 | `GET /api/version` | `{ commit, builtAt }`（ビルド引数から。版を手動でそろえるときの確かめ） |
@@ -177,7 +177,7 @@
 
 段 3 の実装（D-161〜D-164）:
 
-- **取り方**: 完走したとき（と、完走した保存を開き直したとき）に、`GET /api/results/distribution` で 4 軸 × 2 を 1 回で取る（D-161）。送信の応答を待ってから取るので、保存されれば**自分を含む**分布になる。保存されなかった・戻ったプレイは自分を 1 件足して数える（D-162）。
+- **取り方**: 完走したとき（と、完走した保存を開き直したとき）に、`GET /api/results/distribution` で 4 軸 × 2 を 1 回で取る（D-161）。送信の応答を待ってから取るので、保存された行が分布に入る（応答の `inHistogram`）なら**自分を含む**分布になる。入らない・保存されなかったプレイは自分を 1 件足して数える（D-162）。
 - **上位 %**: 自分以上の件数（同じ値を含む）÷ 件数（自分を含む）。上位 25% 以内を「上位」とし、同じシードの分布が見せられればそちらで、見せられなければ全シードで見る。花火の段は上位に入った軸の数（D-163）。
 - **段 1 に戻る**: フラグが無い・通信の失敗・4xx・5xx・形の違う応答・全シードの分布が 10 件未満（自分を含む）。同じシードだけ 10 件未満なら、その欄だけ「まだ n 件」（D-163）。
 - **画面**: 軸ごとに「同じシード / 全シード n 件中 上位 x %」のテキストと自前の SVG のヒストグラム（web の `charts.tsx` の `HistogramChart`。棒の色に加えて縦の線と「▼ あなた」）。④ は軽い言い回し。目標の線は出さない。

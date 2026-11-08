@@ -51,10 +51,13 @@ const posts = (f: ReturnType<typeof vi.fn>) =>
 const okFetch = () =>
   vi.fn(
     async (_input: unknown, _init?: RequestInit) =>
-      new Response(JSON.stringify({ ok: true, duplicate: false }), {
-        status: 201,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({ ok: true, duplicate: false, inHistogram: true }),
+        {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
   );
 
 describe('集計への送信とプライバシーポリシー', () => {

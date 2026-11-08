@@ -28,11 +28,19 @@ export type AxisQuery = {
 };
 
 export interface ResultsRepo {
-  /** 1 行足す。同じ playHash がすでにあれば足さずに 'duplicate'。 */
-  insert(record: ResultRecord): Promise<'inserted' | 'duplicate'>;
+  /**
+   * 1 行足す。同じ playHash がすでにあれば足さずに 'duplicate'。inHistogram は保存されている行（duplicate なら前からある行）が
+   * ヒストグラムに入るか（画面が自分を分布に数えるかの判断に使う。戻ったプレイの行が先にあれば入らない。OCL-9B705B16）。
+   */
+  insert(record: ResultRecord): Promise<InsertResult>;
   /** ヒストグラムに入れる値（完走・戻っていないプレイだけ。D-137・D-148）。並びは問わない。 */
   histogramValues(q: AxisQuery): Promise<number[]>;
 }
+
+export type InsertResult = {
+  status: 'inserted' | 'duplicate';
+  inHistogram: boolean;
+};
 
 /** 4 軸の id → 行の欄。 */
 export const AXIS_FIELD = {
@@ -43,7 +51,7 @@ export const AXIS_FIELD = {
 } as const satisfies Record<ResultAxisId, keyof ResultRecord>;
 
 /** ヒストグラムに入れる行か（完走・戻っていない）。DB の層も同じ条件で絞る。 */
-export const inHistogram = (r: Pick<ResultRecord, 'endReason' | 'rewound'>) =>
+export const inHistogram = (r: { endReason: string; rewound: boolean }) =>
   r.endReason === 'completed' && !r.rewound;
 
 /** 手元の実装（テスト・DB を使わない確かめ用）。 */
@@ -52,9 +60,11 @@ export function memoryRepo(): ResultsRepo & { rows: ResultRecord[] } {
   return {
     rows,
     async insert(record) {
-      if (rows.some((r) => r.playHash === record.playHash)) return 'duplicate';
+      const found = rows.find((r) => r.playHash === record.playHash);
+      if (found)
+        return { status: 'duplicate', inHistogram: inHistogram(found) };
       rows.push(record);
-      return 'inserted';
+      return { status: 'inserted', inHistogram: inHistogram(record) };
     },
     async histogramValues({ scenarioId, axis, seed }) {
       return rows

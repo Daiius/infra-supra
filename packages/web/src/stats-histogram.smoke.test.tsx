@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 集計の分布の表示（段 3・D-161〜D-163）の描画テスト（D-86）。fetch はモック。分布の切り方は packages/stats、上位 % の数え方は
 // distribution.test.ts が持つので、ここでは取る・取らない・順序・出る・戻ることだけを見る。
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import {
   newSave,
@@ -80,11 +80,14 @@ const json = (body: unknown, status = 200) =>
   });
 
 /** POST /api/results は 201、GET /api/results/distribution は dist（関数なら呼んだ結果）。 */
-function statsFetch(dist: () => Response | Promise<Response>) {
+function statsFetch(
+  dist: () => Response | Promise<Response>,
+  inHistogram = true,
+) {
   return vi.fn(async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     if (init?.method === 'POST' && url === '/api/results')
-      return json({ ok: true, duplicate: false }, 201);
+      return json({ ok: true, duplicate: false, inHistogram }, 201);
     if (url.startsWith('/api/results/distribution')) return dist();
     return json({ error: 'not-found' }, 404);
   });
@@ -150,6 +153,8 @@ describe('集計の分布の表示（段 3）', () => {
     expect(
       axes.querySelector('[data-result-compare-note]')!.textContent,
     ).toContain('あなたのプレイも数に入っています');
+    // 狭い画面で高さを超えても、4 軸の欄だけを縦にスクロールできる（OCL-3AA8C258）
+    expect(axes.parentElement!.className).toContain('overflow-y-auto');
     // 結果の画面にも同じ分布
     const result = [...document.querySelectorAll('[data-result-axes]')].find(
       (el) => !victory().contains(el),
@@ -226,5 +231,45 @@ describe('集計の分布の表示（段 3）', () => {
     expect(
       dialogAxes().querySelector('[data-result-compare-note]')!.textContent,
     ).toContain('開発用の架空の分布です');
+  });
+
+  it('W-101b VITE_STATS_MOCK と VITE_STATS_ENABLED を両方立てても、完走・途中終了とも送らない（OCL-87C871FB）', async () => {
+    vi.stubEnv('VITE_STATS_MOCK', '1');
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    const fetch = statsFetch(() => json(distribution()));
+    vi.stubGlobal('fetch', fetch);
+    await finish();
+    await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
+    cleanup();
+    // CF Free は何もしないと止まった月の上限を超えて途中で終わる
+    let lost = newSave({
+      scenarioId: 'article-community',
+      stackIndex: 0,
+      seed: 42,
+      startDate: '2026-11-02',
+    });
+    while (replaySave(withTurn(lost, [])).phase === 'playing')
+      lost = withTurn(lost, []);
+    await finish(lost);
+    expect(screen.getByText('止まった回数の上限を超えた')).toBeDefined();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('W-98b 保存された行が分布に入らない（inHistogram: false）なら、自分を 1 件足して数える（OCL-9B705B16）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    vi.stubGlobal(
+      'fetch',
+      statsFetch(() => json(distribution()), false),
+    );
+    await finish();
+    await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
+    const cash = dialogAxes().querySelector<HTMLElement>('[data-axis="cash"]')!;
+    expect(
+      cash.querySelector('[data-dist="all"] [data-dist-summary]')!.textContent,
+    ).toContain('41 件中 上位');
+    expect(
+      dialogAxes().querySelector('[data-result-compare-note]')!.textContent,
+    ).toContain('あなたのプレイを 1 件足して数えています');
   });
 });

@@ -45,10 +45,12 @@ export function submissionOf(save: SaveData, state: GameState) {
 }
 
 /**
- * 送信の結末。accepted はサーバーが保存した（同じプレイがすでにあった duplicate も含む）。rejected は 4xx・5xx、
+ * 送信の結末。included はサーバーが保存し、保存されている行が分布に入る（同じ結果の行がすでにあった duplicate は、その行の印で決まる）。
+ * excluded は保存されたが分布に入らない（戻った印つきの行が先にあったなど。OCL-9B705B16）。rejected は 4xx・5xx、
  * failed は通信の失敗、skipped は送らなかった（フラグが無い・終わっていない）。
  */
-export type SubmitOutcome = 'accepted' | 'rejected' | 'failed' | 'skipped';
+export type SubmitOutcome =
+  'included' | 'excluded' | 'rejected' | 'failed' | 'skipped';
 
 /**
  * 終わったプレイを送る。送らなかった・失敗したときも例外を出さない（画面を壊さない）。
@@ -58,13 +60,23 @@ export async function submitResult(
   save: SaveData,
   state: GameState,
 ): Promise<SubmitOutcome> {
-  if (!statsEnabled() || state.phase === 'playing' || !state.end)
+  // 開発用の架空の分布を出している間は、フラグがあっても送らない（開発のプレイを集計に混ぜない。OCL-87C871FB）
+  if (
+    statsMockEnabled() ||
+    !statsEnabled() ||
+    state.phase === 'playing' ||
+    !state.end
+  )
     return 'skipped';
   try {
     const res = await statsClient().api.results.$post({
       json: submissionOf(save, state),
     });
-    return res.ok ? 'accepted' : 'rejected';
+    if (!res.ok) return 'rejected';
+    const body: unknown = await res.json().catch(() => null);
+    return (body as { inHistogram?: unknown } | null)?.inHistogram === true
+      ? 'included'
+      : 'excluded';
   } catch {
     return 'failed';
   }
@@ -144,8 +156,13 @@ export async function loadStatsView(q: {
     return standingsOf(mockDistribution(q), q.axes, false, true);
   }
   if (!statsEnabled()) return { status: 'off' };
-  const outcome = q.sent ? await q.sent : 'accepted';
+  // 開き直し（前に送ったプレイ）は、戻っていなければ入っている扱い
+  const outcome: SubmitOutcome = q.sent
+    ? await q.sent
+    : q.rewound
+      ? 'excluded'
+      : 'included';
   const dist = await fetchDistribution(q);
   if (!dist) return { status: 'failed' };
-  return standingsOf(dist, q.axes, outcome === 'accepted' && !q.rewound);
+  return standingsOf(dist, q.axes, outcome === 'included');
 }

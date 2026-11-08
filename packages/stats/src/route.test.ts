@@ -40,12 +40,35 @@ describe('POST /api/results', () => {
     const json = submissionOf(completed);
     const r1 = await client.api.results.$post({ json });
     expect(r1.status).toBe(201);
-    expect(await r1.json()).toEqual({ ok: true, duplicate: false });
+    expect(await r1.json()).toEqual({
+      ok: true,
+      duplicate: false,
+      inHistogram: true,
+    });
     const r2 = await client.api.results.$post({ json });
     expect(r2.status).toBe(200);
-    expect(await r2.json()).toEqual({ ok: true, duplicate: true });
+    expect(await r2.json()).toEqual({
+      ok: true,
+      duplicate: true,
+      inHistogram: true,
+    });
     expect(repo.rows).toHaveLength(1);
     expect(repo.rows[0]!.endReason).toBe('completed');
+  });
+
+  it('戻った印つきの同じ結果が先に保存されていれば、duplicate でも inHistogram は false（OCL-9B705B16）', async () => {
+    const { repo, client } = setup();
+    const v = verifySubmission(submissionOf(completed));
+    if (!v.ok) throw new Error('照合に失敗');
+    repo.rows.push({ ...v.record, rewound: true });
+    const r = await client.api.results.$post({
+      json: submissionOf(completed),
+    });
+    expect(await r.json()).toEqual({
+      ok: true,
+      duplicate: true,
+      inHistogram: false,
+    });
   });
 
   it('途中終了も終わり方つきで保存する（ヒストグラムには入れない）', async () => {

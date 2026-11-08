@@ -582,9 +582,10 @@ function VictoryCelebration({
             setAfterglow(!reduced && engine.particles.length > 0);
           }}
         >
-          <div className="modal-box relative z-10 max-w-lg overflow-hidden p-0">
+          {/* 見出しと閉じるボタンは固定し、4 軸の欄だけを縦にスクロールする（狭い画面で分布が高さを超える。OCL-3AA8C258） */}
+          <div className="modal-box relative z-10 flex max-w-lg flex-col overflow-hidden p-0">
             {/* 成功の色の帯で見出しを強調する（色だけにせず ✓ とラベルを添える） */}
-            <div className="bg-success px-6 py-5 text-success-content">
+            <div className="shrink-0 bg-success px-6 py-5 text-success-content">
               <h2 id="victory-title" className="text-3xl font-bold">
                 ✓ 完走
               </h2>
@@ -598,7 +599,7 @@ function VictoryCelebration({
                     `（${updated} つの軸で自己ベストを更新しました）`}
               </p>
             </div>
-            <div className="px-6 pt-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-5">
               <ResultAxesPanel
                 comparisons={comparisons}
                 stats={stats}
@@ -606,7 +607,7 @@ function VictoryCelebration({
                 size="lg"
               />
             </div>
-            <div className="modal-action px-6 pb-6">
+            <div className="modal-action shrink-0 px-6 pb-6">
               <form method="dialog">
                 <button className="btn btn-success" autoFocus>
                   閉じて結果を見る
