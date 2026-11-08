@@ -55,6 +55,7 @@ import {
   type RoutePlanEditor,
 } from './route-plan-field.tsx';
 import { usd } from './format.ts';
+import { PREMISE_NOTE } from './howto-dialog.tsx';
 
 /** 選べるシナリオ（SCENARIOS の登録順）。 */
 export const SCENARIO_LIST: Scenario[] = Object.values(SCENARIOS);
@@ -850,6 +851,11 @@ export function ScenarioDescription({
             </DetailsDialog>
           </div>
         )}
+        {/* 前置き（D-146。遊び方の 1 ページ目と同じ趣旨） */}
+        <p className="text-sm opacity-60" data-premise-note>
+          {PREMISE_NOTE}
+          細かな説明はヘッダーの「遊び方」にあります。
+        </p>
         <p className="text-sm opacity-60">
           料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては 1
           USD = {usdJpy} 円の仮定で換算しています。

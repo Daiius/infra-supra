@@ -11,6 +11,7 @@ import {
 import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import { App } from './App.tsx';
+import { storeHowtoSeen } from './local-records.ts';
 
 /** 始めた日・乱数のシード（画面の入力で固定する。既定の「今日」に頼らない）。 */
 export const START_DATE = '2026-11-02';
@@ -107,6 +108,8 @@ export function useSmokeEnv() {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    // 遊び方（D-146）は見た扱いにする（初回に自動で開いて操作を邪魔しないように）。初回の動きは howto-settings の smoke で確かめる
+    markHowtoSeen();
     window.history.replaceState(null, '', '/');
     errors = [];
     vi.spyOn(console, 'error').mockImplementation((...args) => {
@@ -118,6 +121,16 @@ export function useSmokeEnv() {
     vi.restoreAllMocks();
     expect(errors.map((a) => a.map(String).join(' '))).toEqual([]);
   });
+}
+
+/** 遊び方を見た記録を書く（D-146）。useSmokeEnv が各テストの前に呼ぶ。初回の動きを確かめるテストは localStorage から消す。 */
+export const markHowtoSeen = () => storeHowtoSeen();
+
+/** 遊び方のダイアログが開いていれば × で閉じる（localStorage が使えず、見た記録を読めないテスト用）。 */
+export function closeHowtoIfOpen() {
+  const d = screen.queryByRole('dialog', { name: '遊び方' });
+  if (d)
+    fireEvent.click(within(d).getByRole('button', { name: '遊び方を閉じる' }));
 }
 
 /** 開いている ⓘ の説明のダイアログ（D-129。info.tsx の Info）。無ければ null。 */

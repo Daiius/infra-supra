@@ -9,6 +9,7 @@ import {
   advance,
   nextMonth,
   closeEventsDialog,
+  closeHowtoIfOpen,
   eventPosition,
   expectGameScreen,
   infoDialog,
@@ -749,6 +750,8 @@ describe('ゲームモードの画面', () => {
       throw new Error('使えない');
     });
     await renderApp();
+    // 見た記録を読めないので遊び方が自動で開く（D-146）。閉じてから続ける
+    closeHowtoIfOpen();
     pickRadio(ARTICLE);
     expect(lastButton()).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '残りを既定にする' }));
