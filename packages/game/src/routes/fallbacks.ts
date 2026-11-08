@@ -252,7 +252,13 @@ export function setupRouteFallbacks(
       (o) => o.value === chosen,
     )
       ? chosen
-      : defaultRevalidateSec(framework, stackIndex, sc, nextRoutes);
+      : defaultRevalidateSec(
+          framework,
+          stackIndex,
+          sc,
+          nextRoutes,
+          validSetupChoices(sc, stackIndex, framework, cur.components),
+        );
   return routeFallbacks(
     sc,
     {

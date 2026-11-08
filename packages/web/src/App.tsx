@@ -262,7 +262,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   };
   const problem = setupProblem(scenario, stack, framework, parts);
   // ISR の再検証（D-49）・Astro の記事のキャッシュ（D-103）など。② のカードの記事のページの行で選ぶ（D-119）。選ぶまでは、
-  // フレームワークと構成の既定（Astro は消せる置き場ならオンデマンド、それ以外は 5 分）
+  // フレームワーク・構成・部品の既定（今の部品でオンデマンドが選べればオンデマンド、選べなければ 5 分。D-125）。部品を替えると
+  // 既定も付け替わる（選んだ値は替えない）
   const [revalidateChosen, setRevalidateSec] = useState<number | undefined>(
     undefined,
   );
@@ -272,7 +273,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       (o) => o.value === revalidateChosen,
     )
       ? revalidateChosen
-      : defaultRevalidateSec(framework, stack, scenario, routes);
+      : defaultRevalidateSec(framework, stack, scenario, routes, parts);
   const revalidateChoosable =
     setupRevalidateOptions(scenario, framework, routes).length > 0;
   // 記事のページのコメント欄（D-82。フレームワークのカードの記事のページの欄で選ぶページの部品。D-109・D-112。記事のページがあり、コメントのあるシナリオだけ。
@@ -404,6 +405,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                             id,
                             stack,
                             scenario,
+                            undefined,
+                            validSetupChoices(scenario, stack, id, parts),
                           ),
                         },
                         components: validSetupChoices(

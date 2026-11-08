@@ -50,7 +50,8 @@ const start = (
     DEFAULT_START_DATE,
     fw,
     components,
-    undefined,
+    // 記事の再検証は時間（5 分）で始める（描き方の S2 を確かめるため。既定はオンデマンドが選べればオンデマンド。D-125）
+    300,
     undefined,
     undefined,
     routes,
@@ -378,7 +379,8 @@ describe('古い保存（版 3 まで）は今までの既定で同じ結果に�
         DEFAULT_START_DATE,
         'nextjs',
         undefined,
-        undefined,
+        // revalidateSec の無い保存は D-125 より前の既定（5 分）で読む
+        300,
         undefined,
         undefined,
         undefined,

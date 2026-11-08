@@ -386,6 +386,8 @@ describe('作り直しの総当たり（2 シナリオ × 構成 × 元と先の
               seed,
               startDate: st.startDate,
               components: c,
+              // 始める画面と同じく、始めたときの再検証を保存に書く（無い保存は D-125 より前の既定で読む）
+              revalidateSec: m1.settings.revalidateSec,
             }),
             [action],
           );

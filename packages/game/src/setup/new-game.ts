@@ -233,7 +233,7 @@ export function newGame(
   framework?: FrameworkId,
   /** 始める画面で選んだ部品（D-45）。選べないものは捨て、省略したスロットは既定の部品。 */
   components?: Choices,
-  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（defaultRevalidateSec。Astro はオンデマンド）。 */
+  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。選べないもの・省略は既定（defaultRevalidateSec。オンデマンドが選べればオンデマンド。D-125）。 */
   revalidateSec?: number,
   /**
    * 始める画面で選んだページの部品（記事のページのコメント欄。D-82・D-109）。選べないもの・省略は既定（ブラウザで読み込む）。
@@ -319,7 +319,13 @@ export function newGame(
           (o) => o.value === revalidateSec,
         )
           ? revalidateSec
-          : defaultRevalidateSec(app, stackIndex, scenario, chosenRoutes),
+          : defaultRevalidateSec(
+              app,
+              stackIndex,
+              scenario,
+              chosenRoutes,
+              chosen,
+            ),
       ssrOptimizations: 0,
     },
     cash: scenario.startCash,

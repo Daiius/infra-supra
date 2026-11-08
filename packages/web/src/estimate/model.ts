@@ -200,11 +200,17 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     raw.routes,
   );
   const settings = settingsOf(template, framework, routes);
+  const parts = estimateComponents(
+    scenario,
+    stackIndex,
+    framework,
+    raw.parts ?? {},
+  ).chosen;
   const revalidateSec =
     settings.revalidate?.options.some((o) => o.value === raw.revalidateSec) ===
     true
       ? raw.revalidateSec!
-      : defaultRevalidateSec(framework, stackIndex, scenario, routes);
+      : defaultRevalidateSec(framework, stackIndex, scenario, routes, parts);
   const comments =
     settings.comments?.options.some((o) => o.value === raw.comments) === true
       ? raw.comments!
@@ -223,8 +229,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     pv,
     framework,
     stack: STACKS[stackIndex]!.id,
-    parts: estimateComponents(scenario, stackIndex, framework, raw.parts ?? {})
-      .chosen,
+    parts,
     revalidateSec,
     comments,
     imageFormat,
@@ -252,6 +257,7 @@ function withContext(
       stackIndexOf(input.stack),
       scenarioOfTemplate(input.template),
       input.routes,
+      input.parts,
     );
   if (!followsDefault) return next;
   // 替えた先の既定（revalidateSec を渡さずに直す）
@@ -337,6 +343,17 @@ export function withFramework(
   framework: FrameworkId,
 ): Partial<EstimateInput> {
   return framework === input.framework ? {} : withContext(input, { framework });
+}
+
+/**
+ * 部品を選ぶ。再検証などの値は withContext の規則で付け替える（既定のままなら、替えた部品でオンデマンドが選べるかで既定を
+ * 付け替える。選んだ値は残す。D-125）。
+ */
+export function withParts(
+  input: EstimateInput,
+  parts: Choices,
+): Partial<EstimateInput> {
+  return withContext(input, { parts });
 }
 
 /** テンプレートを選ぶ。再検証などの値は withContext の規則で付け替える。 */

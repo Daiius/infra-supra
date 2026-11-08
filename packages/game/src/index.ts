@@ -126,6 +126,7 @@ export {
   hiddenSettings,
   revalidateSettingOf,
   defaultRevalidateSec,
+  legacyDefaultRevalidateSec,
 } from './routes/hidden-settings.ts';
 export {
   setupRevalidateOptions,

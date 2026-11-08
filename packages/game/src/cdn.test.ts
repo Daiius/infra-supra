@@ -47,7 +47,18 @@ describe('前段の CDN', () => {
   });
 
   it('HTML も・時間の再検証: 更新は最大で間隔の約 2 倍遅れる（5 分 → 10 分で鮮度が 1 段下がる。D-91）', () => {
-    const s = playMonth(newGame(VPS));
+    // 時間の再検証（5 分）で始める（既定は VPS ではオンデマンド。D-125）
+    const s = playMonth(
+      newGame(
+        VPS,
+        42,
+        ARTICLE_COMMUNITY,
+        DEFAULT_START_DATE,
+        'nextjs',
+        undefined,
+        300,
+      ),
+    );
     const html = playMonth(applyAction(s, cdn('html')));
     expect(last(html).satisfaction.stages.freshness).toBe('fair');
     expect(last(html).satisfaction.reasons.freshness).toContain(

@@ -23,6 +23,7 @@ import {
   withStack,
   withTemplate,
   type EstimateInput,
+  withParts,
   withStackRemembered,
 } from './model.ts';
 
@@ -506,6 +507,28 @@ describe('フレームワーク・構成を替えたときの再検証の値（�
     expect(astro.revalidateSec).toBe(3600);
     const gcp = apply(astro, withStack(astro, 'gcp-cloud-run'));
     expect(gcp.revalidateSec).toBe(3600);
+  });
+
+  it('Next.js の再検証の既定は、オンデマンドが選べる部品ならオンデマンド。既定のままなら部品に付いて替わり、選んだ値は残す（D-125）', () => {
+    // Cloudflare の既定の ISR のキャッシュ（KV）は消せないので 5 分、R2 ならオンデマンド
+    const kv = viaUrl(normalizeInput({ stack: 'cloudflare-vinext-paid' }));
+    expect(kv.revalidateSec).toBe(300);
+    const r2 = apply(kv, withParts(kv, { isrCache: 'r2' }));
+    expect(r2.revalidateSec).toBe(0);
+    expect(viaUrl(r2).revalidateSec).toBe(0);
+    expect(apply(r2, withParts(r2, { isrCache: 'kv' })).revalidateSec).toBe(
+      300,
+    );
+    // 選んだ値（1 時間）は部品を替えても残す
+    const chosen = { ...r2, revalidateSec: 3600 };
+    expect(
+      apply(chosen, withParts(chosen, { isrCache: 'kv' })).revalidateSec,
+    ).toBe(3600);
+    // VPS・Vercel は既定の部品で消せる
+    expect(normalizeInput({ stack: 'sakura-vps-2gb' }).revalidateSec).toBe(0);
+    expect(normalizeInput({ stack: 'vercel-supabase-pro' }).revalidateSec).toBe(
+      0,
+    );
   });
 
   it('業務アプリ（設定を出さない）から記事に替えると、替えた先の既定', () => {
