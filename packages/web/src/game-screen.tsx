@@ -550,15 +550,15 @@ function EventsDialog({
                       data-dot={state}
                       onClick={() => go(i)}
                     >
-                      {/* daisyUI の status。大きさでも見分ける: 今 > 未読 > 既読（既読は status の既定の薄い灰色） */}
+                      {/* daisyUI の status。大きさでも見分ける: 今 > 未読 > 既読。テーマの depth の光沢と影は消して平らな丸にする */}
                       <span
                         aria-hidden
-                        className={`status ${
+                        className={`status bg-none shadow-none ${
                           state === 'current'
                             ? 'status-lg status-neutral'
                             : state === 'unread'
                               ? 'status-md bg-primary/40'
-                              : 'status-sm'
+                              : 'status-sm bg-base-content/35'
                         }`}
                       />
                     </button>
