@@ -140,7 +140,30 @@ describe('この月に戻る（D-128）', () => {
     // 前の試行は 5 か月目まで（今は 2 か月目）。PV の線は 5 点を結ぶ
     const pvLine = document.querySelector('path[data-previous-series="pv"]')!;
     expect(pvLine.getAttribute('d')!.match(/[ML]/g)).toHaveLength(5);
-    expect(pvLine.getAttribute('stroke-dasharray')).toBeTruthy();
+    // 灰色の細かい点線（凡例と同じ）。所持金の見込み（系列の色の長い破線）とは模様も色も違う
+    expect(pvLine.getAttribute('stroke-dasharray')).toBe('2 3');
+    expect(pvLine.getAttribute('stroke')).toBe('var(--color-base-content)');
+    const cashChart = screen
+      .getByRole('img', { name: /^所持金/ })
+      .closest('figure')!;
+    const cashPrev = cashChart.querySelector('path[data-previous-series]')!;
+    const projection = [...cashChart.querySelectorAll('path')].find(
+      (p) =>
+        !p.hasAttribute('data-previous-series') &&
+        p.getAttribute('stroke-dasharray'),
+    );
+    expect(projection, '所持金の見込みの線').toBeDefined();
+    expect(cashPrev.getAttribute('stroke-dasharray')).not.toBe(
+      projection!.getAttribute('stroke-dasharray'),
+    );
+    expect(cashPrev.getAttribute('stroke')).not.toBe(
+      projection!.getAttribute('stroke'),
+    );
+    const legendLine = cashChart.querySelector('[data-legend-previous] line')!;
+    expect(legendLine.getAttribute('stroke')).toBe(
+      cashPrev.getAttribute('stroke'),
+    );
+    expect(legendLine.getAttribute('stroke-dasharray')).toBe('2 3');
     // 凡例（1 系列のグラフにも出す）
     const pvChart = screen
       .getByRole('img', { name: 'PV（月）' })
