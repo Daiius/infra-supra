@@ -75,6 +75,14 @@ import {
   type ResultEntry,
   type ResultStore,
 } from './results-history.ts';
+import { BookOpen, Settings } from 'lucide-react';
+import { HowtoDialog } from './howto-dialog.tsx';
+import { SettingsDialog } from './settings-dialog.tsx';
+import {
+  clearLocalRecords,
+  loadHowtoSeen,
+  storeHowtoSeen,
+} from './local-records.ts';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
 /** 今日の日付（YYYY-MM-DD・端末の現地時刻）。改定の出来事の条件に使う（D-21）。 */
@@ -258,11 +266,36 @@ export function App() {
   const [mode, setMode] = useState<Mode>(initialMode);
   // 「最初から」の確認のダイアログ（今のプレイが消えるので確かめる）
   const [confirmRestart, setConfirmRestart] = useState(false);
+  // 遊び方（D-146）: 見た記録が無ければ、ゲームモードを最初に開いたときに自動で開く（見積モードでは開かない）。
+  // first: 自動で開いた（最後のページのボタンを「始める」にする）
+  const [howto, setHowto] = useState<{ first: boolean } | null>(() =>
+    initialMode() === 'game' && !loadHowtoSeen() ? { first: true } : null,
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // ローカルの記録を消したら画面を作り直す（前回の構成・タブの選択など、開いたときに読んだ記録を捨てる。D-147）
+  const [resetGen, setResetGen] = useState(0);
   const switchMode = (m: Mode) => {
     // ゲームに戻るときは見積の入力を URL から外す（見積の入力は見積の画面が書く）
     if (m === 'game')
       window.history.replaceState(null, '', window.location.pathname);
     setMode(m);
+    if (m === 'game' && !howto && !loadHowtoSeen()) setHowto({ first: true });
+  };
+  const closeHowto = () => {
+    storeHowtoSeen();
+    setHowto(null);
+  };
+  const clearRecords = () => {
+    clearLocalRecords();
+    setSettingsOpen(false);
+    setConfirmRestart(false);
+    setSession(null);
+    setResults(parseResults(null));
+    setResetGen((g) => g + 1);
+    window.history.replaceState(null, '', window.location.pathname);
+    setMode('game');
+    // 遊び方を見た記録も消えたので、初めてのときと同じく開く
+    setHowto({ first: true });
   };
   return (
     <div className="min-h-screen bg-base-200">
@@ -289,15 +322,55 @@ export function App() {
             </button>
           ))}
         </div>
-        {mode === 'game' && state && (
+        {/* 右端: 最初から（運営中だけ）・遊び方（ゲームモードだけ）・設定（D-146・D-147） */}
+        <div className="ml-auto flex items-center gap-1">
+          {mode === 'game' && state && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setConfirmRestart(true)}
+            >
+              最初から
+            </button>
+          )}
+          {mode === 'game' && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setHowto({ first: false })}
+              aria-label="遊び方"
+              title="遊び方"
+            >
+              <BookOpen aria-hidden className="size-4" />
+              <span className="hidden sm:inline">遊び方</span>
+            </button>
+          )}
           <button
-            className="btn btn-ghost btn-sm ml-auto"
-            onClick={() => setConfirmRestart(true)}
+            className="btn btn-ghost btn-sm btn-square"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="設定"
+            title="設定"
           >
-            最初から
+            <Settings aria-hidden className="size-4" />
           </button>
-        )}
+        </div>
       </div>
+      {settingsOpen && (
+        <SettingsDialog
+          onHowto={() => {
+            setSettingsOpen(false);
+            setHowto({ first: false });
+          }}
+          onClear={clearRecords}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {howto && (
+        <HowtoDialog
+          // 開き直すたびに 1 ページ目から
+          key={`${resetGen}:${howto.first}`}
+          first={howto.first}
+          onClose={closeHowto}
+        />
+      )}
       {confirmRestart && (
         <RestartDialog
           onConfirm={() => {
@@ -307,7 +380,7 @@ export function App() {
           onClose={() => setConfirmRestart(false)}
         />
       )}
-      <main className="mx-auto max-w-5xl space-y-4 p-2 sm:p-4">
+      <main key={resetGen} className="mx-auto max-w-5xl space-y-4 p-2 sm:p-4">
         <Suspense fallback={<Loading />}>
           {mode === 'estimate' ? (
             <EstimateMode />
