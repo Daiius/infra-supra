@@ -22,7 +22,7 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
       {
         id: 'login',
         kind: 'login',
-        label: 'ログインの表示',
+        label: 'ログイン表示',
         width: 'half',
         needs: ['personal'],
       },
@@ -36,14 +36,12 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
         id: 'body',
         kind: 'body',
         label: '本文',
-        height: 'lg',
         needs: ['same', 'fresh'],
       },
       {
         id: 'images',
         kind: 'image',
         label: '本文の画像（5 枚）',
-        height: 'md',
         needs: ['same', 'media'],
       },
       { id: 'likes', kind: 'likes', label: 'いいね', needs: ['live'] },
