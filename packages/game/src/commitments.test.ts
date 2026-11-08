@@ -1,6 +1,7 @@
 // 確約（D-97・prd/07 §11.12）: 1 年の確約の割引・支払い・取り消せないこと・前払い・スケールアップの引き継ぎ。
 // 金額そのものは期待値に書かず（実在の料金のため。prd/05 §1）、確約なしの同じプレイとの差で確かめる。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   activeCommitments,
   applyAction,
@@ -241,7 +242,8 @@ describe('確約（D-97）', () => {
       newGame(AWS, 1, contract, undefined, 'nextjs', { db: 'rds' }),
     );
     while (s.phase === 'playing') s = playMonth(s);
-    expect(s.end?.reason).toBe('goal');
+    expect(s.end?.reason).toBe('completed');
+    expect(meetsReference(s)).toBe(false);
     const hint = retryHintsOf(s).find((h) => h.kind === 'commitment');
     expect(hint?.what).toContain('リザーブドインスタンス');
     expect(hint?.next).toContain('取り消せず');

@@ -57,14 +57,20 @@ describe('cashProjectionOf', () => {
     const vs = p.projection.map((x) => x.value);
     vs.slice(1).forEach((v, i) => expect(v).toBeGreaterThan(vs[i]!));
     expect(vs.at(-1)).toBeCloseTo(p.final);
-    expect(p.ratio).toBeCloseTo(p.final / ARTICLE_COMMUNITY.goal.cash);
   });
 
-  it('何もしなくても達成する Cloudflare Paid を「届かなそう」と言わない', () => {
-    // 線形では 5 か月目に $1,139（66%）で「届かなそう」と出ていた（D-42 の改定）
-    for (const m of [3, 5, 6, 7, 9])
-      expect(cashProjectionOf(after(m))!.outlook).not.toBe('behind');
-    expect(cashProjectionOf(after(7))!.outlook).toBe('ahead');
+  it('目標との比べ（届きそう・目標の前後）は持たない（D-131）', () => {
+    const p = cashProjectionOf(after(5))!;
+    expect(Object.keys(p).sort()).toEqual(
+      [
+        'final',
+        'growth',
+        'method',
+        'nextProfit',
+        'projection',
+        'skipped',
+      ].sort(),
+    );
   });
 
   it('月の利益が 0 以下なら伸びを入れず、直近 3 か月の平均で線形に伸ばす', () => {
@@ -79,22 +85,17 @@ describe('cashProjectionOf', () => {
   });
 
   it('最終月まで済めば実際の所持金と一致し、線は出さない', () => {
-    for (const [i, won] of [
-      [CF_PAID, true],
-      [PRO, false],
-    ] as const) {
+    for (const i of [CF_PAID, PRO]) {
       const st = playStrategy({ id: 'idle', label: 'x', stackIndex: i });
       const p = cashProjectionOf(st)!;
       expect(p.final).toBe(st.cash);
       expect(p.projection).toEqual([]);
-      expect(p.onTrack).toBe(won);
     }
   });
 
-  it('受託のシナリオでも同じ仕組み（目標は受託の値）', () => {
+  it('受託のシナリオでも同じ仕組み', () => {
     const st = after(4, CF_PAID, CONTRACT_OPERATIONS);
     const p = cashProjectionOf(st)!;
-    expect(p.goal).toBe(CONTRACT_OPERATIONS.goal.cash);
     expect(p.projection.at(-1)!.month).toBe(CONTRACT_OPERATIONS.months);
   });
 });

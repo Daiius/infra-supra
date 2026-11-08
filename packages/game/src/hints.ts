@@ -1,4 +1,4 @@
-// 次のプレイへのヒント（目標に届かなかったとき。D-40）。
+// 次のプレイへのヒント（途中で終わったとき・完走して参照値に届かなかったとき。D-40・D-143）。
 import {
   buzzLasting,
   type Element,
@@ -17,7 +17,7 @@ import { INVALIDATION_METER } from './setup/estimates.ts';
 import { componentLabel, STACKS } from './stacks.ts';
 import type { GameState, MonthReport } from './state.ts';
 
-// ---- 次のプレイへのヒント（目標に届かなかったとき。D-40）----
+// ---- 次のプレイへのヒント（D-40・D-143）----
 
 export type RetryHint = {
   /** 原因の種類（画面のキー・テスト用）。 */
@@ -110,19 +110,23 @@ function socialCardLoss(
 }
 
 /**
- * 次のプレイへのヒント（目標に届かなかったとき・途中で終わったとき。達成なら空）。
+ * 次のプレイへのヒント（途中で終わったとき・完走して参照値に届かなかったとき。それ以外は空）。
+ * 完走したときは「次のプレイで伸ばせる所」として出す（D-143・ST-05）。届いたかは画面に出さない参照値
+ * （シナリオの goal。合否と目標の線はやめた。D-131・D-142）で決め、文には参照値を出さない。
  * 未達の目標と終わり方ごとに、原因を月の記録（止まった月の前提・費用の内訳・満足度の理由・手間の内訳・出来事）から特定し、
  * 影響の大きい順に最大 3 つ返す。終わり方の直接の原因 → 未達の目標の原因 の順に並べる。
  */
 export function retryHintsOf(state: GameState): RetryHint[] {
-  if (state.phase !== 'lost' || !state.end) return [];
+  if (state.phase === 'playing' || !state.end) return [];
   const sc = scenarioOf(state);
   const h = state.history;
   const n = Math.max(1, h.length);
   const reason = state.end.reason;
-  const early = reason !== 'goal';
+  const early = reason !== 'completed';
   const cashShort = reason === 'cash' || (!early && state.cash < sc.goal.cash);
   const satShort = !early && averageSatisfaction(h) < sc.goal.satisfaction;
+  // 完走して参照値に届いていれば出さない（前の「達成」と同じ）
+  if (!early && !cashShort && !satShort) return [];
   const w = sc.satisfaction.weights;
   const out: { hint: RetryHint; score: number }[] = [];
   // 終わり方の直接の原因は 300 台、未達の目標の原因は 200 台、補足は 100 台（それぞれの中は影響の大きさ）
@@ -298,7 +302,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const shortText =
       reason === 'cash'
         ? `${state.end.month} か月目に所持金が尽きました`
-        : `所持金 ${usd(state.cash)} で、目標 ${usd(sc.goal.cash)} に ${usd(sc.goal.cash - state.cash)} 足りません`;
+        : `${state.end.month} か月目の所持金は ${usd(state.cash)} でした`;
     if (top.length)
       out.push({
         hint: {

@@ -1,5 +1,6 @@
 // 画像の大きさ（D-47）: 最適化しない＝原本・投稿のときに一律で縮めて置く部品・記事のデザインの刷新の提案。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import { applyComponentsToWorkload, componentsOf } from 'catalog';
 import {
   actionEffort,
@@ -259,7 +260,8 @@ describe('速さが「悪い」月は PV の伸びが下がる（D-47）', () =>
       42,
       article,
     );
-    expect(st.end?.reason).toBe('goal');
+    expect(st.end?.reason).toBe('completed');
+    expect(meetsReference(st)).toBe(false);
     const hint = retryHintsOf(st).find((x) => x.kind === 'slow');
     expect(hint?.what).toContain('速さが悪く PV の伸びが下がりました');
     expect(hint?.what).toContain('1 ページ約 36.5 MB');

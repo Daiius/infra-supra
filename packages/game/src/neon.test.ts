@@ -1,6 +1,7 @@
 // DB だけ Neon（従量の Postgres。D-77・prd/11 §15）: Vercel・Netlify の DB のスロットで Supabase の代わりに選べ、
 // Neon のアカウントの手間がかかり、基本料の代わりに動いている時間の分だけ払う。基準プレイ（何もしない・シード 1〜20）。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   addedAccounts,
   applyActions,
@@ -42,7 +43,7 @@ function run(
       newGame(stack, seed, sc, DEFAULT_START_DATE, framework, components),
     );
     while (s.phase === 'playing') s = playMonth(s);
-    if (s.phase === 'won') won++;
+    if (meetsReference(s)) won++;
     cost += s.history.reduce((a, h) => a + h.infraCost, 0);
     months += s.history.length;
   }

@@ -92,12 +92,11 @@ const COLORS = [
 export class FireworksEngine {
   particles: Particle[] = [];
 
-  burst(width: number, height: number) {
+  burst(width: number, height: number, n = 70) {
     const cx = width * (0.15 + Math.random() * 0.7);
     const cy = height * (0.12 + Math.random() * 0.4);
     const color = COLORS[Math.floor(Math.random() * COLORS.length)]!;
     const accent = COLORS[Math.floor(Math.random() * COLORS.length)]!;
-    const n = 70;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + Math.random() * 0.1;
       const sp = 2.5 + Math.random() * 3.5;
@@ -146,6 +145,16 @@ export class FireworksEngine {
 }
 
 /**
+ * 花火の段（1〜3）ごとの打ち上げの間隔（ms）と 1 発の粒の数。段が上がるほど多く・速く打ち上げる
+ * （段は自己ベストを更新した軸の数で決める。D-145・prd/15 ST-01 の暫定）。
+ */
+const FIREWORK_LEVELS = {
+  1: { intervalMs: 650, particles: 70 },
+  2: { intervalMs: 420, particles: 90 },
+  3: { intervalMs: 260, particles: 110 },
+} as const;
+
+/**
  * 花火を描く canvas（画面全体・操作を妨げない）。spawn の間は新しい花火を打ち上げ、
  * spawn でなくなったら残りの粒が寿命で消えるまで描き、空になったら onEmpty を呼ぶ。
  */
@@ -153,12 +162,15 @@ export function FireworksCanvas({
   engine,
   spawn,
   alpha = 1,
+  level = 1,
   className,
   onEmpty,
 }: {
   engine: FireworksEngine;
   spawn: boolean;
   alpha?: number;
+  /** 花火の段（1〜3）。 */
+  level?: 1 | 2 | 3;
   className: string;
   onEmpty?: () => void;
 }) {
@@ -182,8 +194,9 @@ export function FireworksCanvas({
     const tick = (now: number) => {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      if (spawn && now - last > 650) {
-        engine.burst(w, h);
+      const lv = FIREWORK_LEVELS[level];
+      if (spawn && now - last > lv.intervalMs) {
+        engine.burst(w, h, lv.particles);
         last = now;
       }
       ctx.clearRect(0, 0, w, h);
@@ -197,6 +210,6 @@ export function FireworksCanvas({
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
     };
-  }, [engine, spawn, alpha]);
+  }, [engine, spawn, alpha, level]);
   return <canvas ref={ref} aria-hidden className={className} />;
 }

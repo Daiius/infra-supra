@@ -265,8 +265,6 @@ export {
 export {
   type Axes,
   axesOf,
-  type Check,
-  goalChecks,
   END_LABEL,
   type Surprise,
   type Reflection,
@@ -278,6 +276,14 @@ export {
   comparisonRows,
 } from './review.ts';
 export { type RetryHint, retryHintsOf } from './hints.ts';
+export {
+  EDGE_RATIO,
+  isEdgeMonth,
+  RESULT_AXES,
+  type ResultAxes,
+  type ResultAxisId,
+  resultAxesOf,
+} from './results.ts';
 export {
   isPolicyViolation,
   type PolicyCause,

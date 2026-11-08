@@ -65,6 +65,16 @@ import {
   type LastSetupStore,
   type SetupState,
 } from './last-setup.ts';
+import {
+  mergeResults,
+  parseResults,
+  playId,
+  RESULTS_KEY,
+  resultEntryOf,
+  withResult,
+  type ResultEntry,
+  type ResultStore,
+} from './results-history.ts';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
 /** 今日の日付（YYYY-MM-DD・端末の現地時刻）。改定の出来事の条件に使う（D-21）。 */
@@ -166,6 +176,52 @@ function storeLastSetup(scenarioId: string, entry: LastSetup) {
   }
 }
 
+/** 手元の結果の履歴（D-144）を読む。使えない・壊れていれば空。 */
+function loadResults(): ResultStore {
+  try {
+    const raw = localStorage.getItem(RESULTS_KEY);
+    return parseResults(raw ? JSON.parse(raw) : null);
+  } catch {
+    return parseResults(null);
+  }
+}
+
+/**
+ * 終わったプレイの 1 件を、保存済みの履歴に足して書く（同じプレイは二重に足さない）。書いた後の履歴を返す。
+ * 書く直前に保存済みの履歴を読み直すので、別のタブが足した結果を消さない（OCL-E9D5918D）。
+ * 書けない環境では undefined（画面の比較はこの画面が持つ履歴で行う）。
+ */
+function persistResult(entry: ResultEntry): ResultStore | undefined {
+  try {
+    const next = withResult(loadResults(), entry);
+    localStorage.setItem(RESULTS_KEY, JSON.stringify(next));
+    return next;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * persistResult を、タブをまたいで 1 つずつ行う（Web Locks API。同じオリジンのタブが同じ名前の鍵を待つ）。
+ * 読み直しから書き込みまでを鍵の中で行うので、2 つのタブが同時に終えても互いの結果を消さない（OCL-E9D5918D）。
+ * Web Locks の無い環境（古いブラウザ・テストの jsdom）では鍵なしでその場で書く。
+ */
+function persistResultLocked(
+  entry: ResultEntry,
+  done: (stored: ResultStore) => void,
+) {
+  const run = () => {
+    const stored = persistResult(entry);
+    if (stored) done(stored);
+  };
+  const locks = (navigator as Partial<Navigator>).locks;
+  if (!locks) {
+    run();
+    return;
+  }
+  locks.request(RESULTS_KEY, run).catch(() => run());
+}
+
 /** 見積モードとゲームモードの切り替え（D-73）。見積モードは URL の mode=estimate で開く（入力もクエリに残る）。 */
 type Mode = 'game' | 'estimate';
 /** 見積モードは開いたときに読む（ゲームの画面の初回の読み込みに含めない）。 */
@@ -187,6 +243,18 @@ export function App() {
   const [session, setSession] = useState<Session | null>(loadSession);
   useEffect(() => storeSave(session?.save ?? null), [session?.save]);
   const state = session?.state ?? null;
+  // 終わったプレイ（完走・途中終了）を手元の履歴に溜める（D-144。再開・戻ってもう一度終えたときも同じ id なら足さない）
+  const [results, setResults] = useState<ResultStore>(loadResults);
+  useEffect(() => {
+    if (!session || session.state.phase === 'playing') return;
+    const entry = resultEntryOf(session.save, session.state, today());
+    if (results.entries.some((e) => e.id === entry.id)) return;
+    // 画面の比較にはすぐ使い、保存は鍵を取ってから（保存した後の履歴と合わせる）
+    setResults((r) => withResult(r, entry));
+    persistResultLocked(entry, (stored) =>
+      setResults((r) => mergeResults(stored, r)),
+    );
+  }, [session, results]);
   const [mode, setMode] = useState<Mode>(initialMode);
   // 「最初から」の確認のダイアログ（今のプレイが消えるので確かめる）
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -254,6 +322,8 @@ export function App() {
                 setSession((s) => (s ? { ...s, resumeNotice: false } : s))
               }
               runId={session!.runId}
+              results={results.entries}
+              playId={playId(session!.save)}
               onAdvance={(actions) => {
                 const next = playMonth(applyActions(state, actions));
                 setSession({

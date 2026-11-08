@@ -456,8 +456,8 @@ export const CONTRACT_OPERATIONS: Scenario = {
   rare: { perGame: 0.25, from: 5, to: 9 },
   events: EVENTS,
   revisions: { from: 3, to: 10 },
-  // 目標は prd/07 §10.8 の決め方（D-64）で確かめ直した: CF Paid・VPS 手入れ・Vercel Pro → CF Paid・AWS 2 構成は
-  // まれな出来事の無いシードで全部届き（VPS は偶発的な障害を除く）、Vercel Pro・何もしない（最大 $1,580）は届かない
+  // 参照値（D-142。合否と画面の目標の線はやめた。D-131）。値は D-64 の決め方で確かめたまま: CF Paid・VPS 手入れ・
+  // Vercel Pro → CF Paid・AWS 2 構成はまれな出来事の無いシードで全部届き（VPS は偶発的な障害を除く）、Vercel Pro・何もしない（最大 $1,580）は届かない
   goal: { cash: 1700, satisfaction: 0.75, maxOutageMonths: 2 },
   startCash: 60,
   // フレームワーク（prd/10 F-04）。既定は Next.js。業務アプリは SPA で作ることも多いので選べる

@@ -1,6 +1,7 @@
 // Bunny（転送の安い従量の CDN。D-98・prd/11 §23）: 画像を Bunny で配る・前段の CDN を Bunny にする部品を、始める画面と
 // ゲーム中に選べ、Bunny のアカウントの手間がかかる。基準プレイ（何もしない・シード 1〜20）。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import type { Choices } from 'catalog';
 import {
   addedAccounts,
@@ -42,7 +43,7 @@ function run(
       newGame(stack, seed, sc, DEFAULT_START_DATE, framework, components),
     );
     while (s.phase === 'playing') s = playMonth(s);
-    if (s.phase === 'won') won++;
+    if (meetsReference(s)) won++;
     cost += s.history.reduce((a, h) => a + h.infraCost, 0);
     months += s.history.length;
   }

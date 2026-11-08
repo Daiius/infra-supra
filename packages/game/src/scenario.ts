@@ -308,6 +308,10 @@ export type Scenario = {
    * 始めた日が施行日より前の予告だけが起きる。
    */
   revisions: { from: number; to: number } | null;
+  /**
+   * 参照値（D-142・ST-04 で残した）。合否と画面の目標の線は D-131 でやめたので、cash・satisfaction は画面に出さず、
+   * 完走したときのヒントの出し分け（D-143）と基準プレイの検証にだけ使う。maxOutageMonths は途中終了の条件（D-19）。
+   */
   goal: { cash: number; satisfaction: number; maxOutageMonths: number };
   startCash: number;
   baselines: Strategy[];

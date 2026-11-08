@@ -1,6 +1,7 @@
 // API の置き場の段 3（D-67・prd/10 §9.5〜）: Next.js のサーバーから別の事業者の API を呼ぶ（F-14）・
 // Cloudflare の静的 + さくらの VPS の API（自前運用の維持・障害が部品で VPS を使うときにも効く）。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   addedAccounts,
   applyAction,
@@ -52,7 +53,7 @@ function run(
   for (let seed = 1; seed <= 20; seed++) {
     let st = game(stack, framework, components, seed, sc);
     while (st.phase === 'playing') st = playMonth(st);
-    if (st.phase === 'won') won++;
+    if (meetsReference(st)) won++;
     incidents += st.history.filter((h) => h.status === 'incident').length;
     cash.push(st.cash);
   }

@@ -1,6 +1,7 @@
 // Cloudflare の DB に他の事業者（Neon・AWS。D-114 段 2b・prd/14 §3.13）: Postgres（Neon・Aurora・RDS）は Hyperdrive を中継に、
 // DynamoDB は Worker から直接つなぐ。基準プレイ（何もしない・シード 1〜20）の達成数は prd/14 §3.13 に記録した。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   addedAccounts,
   applyActions,
@@ -36,7 +37,7 @@ function won(
       newGame(stack, seed, sc, DEFAULT_START_DATE, framework, components),
     );
     while (s.phase === 'playing') s = playMonth(s);
-    if (s.phase === 'won') n++;
+    if (meetsReference(s)) n++;
   }
   return n;
 }

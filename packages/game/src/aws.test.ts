@@ -1,10 +1,10 @@
 // AWS の構成（prd/11 段 1・D-50）をゲームで選べること。始める画面の部品・維持の手間・何もしない方針の性質。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   applyActions,
   ARTICLE_COMMUNITY,
   DEFAULT_START_DATE,
-  goalChecks,
   fixedImageFormat,
   componentConflict,
   componentSlots,
@@ -190,7 +190,7 @@ describe('AWS の構成', () => {
     const passed = (components: Choices = {}) =>
       Array.from({ length: 20 }, (_, i) =>
         doNothing(i + 1, 'vite-spa', components),
-      ).filter((s) => goalChecks(s).every((c) => c.ok)).length;
+      ).filter(meetsReference).length;
     // D-121 の前は 19 / 20。一律で縮めるはサイズ違いを作らないので、関連記事のサムネイル（4 枚）にも 400 KB の画像を配り、
     // Amplify の転送（CloudFront の外への転送）が増えて届かなくなった
     expect(passed()).toBe(0);

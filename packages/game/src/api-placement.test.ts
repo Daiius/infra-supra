@@ -1,5 +1,6 @@
 // SPA の API の置き場（D-65・prd/10 §3）: 許した組だけ選べる・DB は API と同じ事業者・移し替えはデータの移行・基準プレイ。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   addedAccounts,
   applyAction,
@@ -214,7 +215,7 @@ function run(sc: typeof article, stack: number, components: object) {
   for (let seed = 1; seed <= 20; seed++) {
     let st = spaGame(stack, components, seed, sc);
     while (st.phase === 'playing') st = playMonth(st);
-    if (st.phase === 'won') won++;
+    if (meetsReference(st)) won++;
     cash.push(st.cash);
     if (st.end) ends.add(st.end.reason);
   }

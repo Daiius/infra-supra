@@ -1,6 +1,7 @@
 // Astro の API の置き場（D-69・prd/10 §9.5）: Vercel・VPS の Astro のサーバーから Cloudflare Workers + D1 を呼ぶ／
 // Cloudflare の Astro（静的 + Worker の SSR）+ さくらの VPS の API。許した組だけ選べ、他の組は既定に戻る。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   addedAccounts,
   applyAction,
@@ -38,7 +39,7 @@ function run(sc: typeof article, stack: number, components: object) {
   for (let seed = 1; seed <= 20; seed++) {
     let st = game(stack, components, seed, sc);
     while (st.phase === 'playing') st = playMonth(st);
-    if (st.phase === 'won') won++;
+    if (meetsReference(st)) won++;
     cash.push(st.cash);
   }
   cash.sort((a, b) => a - b);
@@ -144,7 +145,7 @@ describe('Astro の API の置き場（D-69）', () => {
       for (let seed = 1; seed <= 20; seed++) {
         let st = newGame(CF_PAID, seed, article, DEFAULT_START_DATE, 'nextjs');
         while (st.phase === 'playing') st = playMonth(st);
-        if (st.phase === 'won') won++;
+        if (meetsReference(st)) won++;
       }
       return won;
     })();

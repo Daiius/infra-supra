@@ -97,7 +97,11 @@ export type Rewrite = {
   done: number;
 };
 
-export type EndReason = 'won' | 'goal' | 'cash' | 'outages' | 'policy';
+/**
+ * 終わり方（D-131・prd/15 §1）。completed: 12 か月を走り切った（完走。合否は付けない）。
+ * ほかは途中終了（所持金が尽きた・止まった月が上限を超えた・規約違反のまま翌月）。
+ */
+export type EndReason = 'completed' | 'cash' | 'outages' | 'policy';
 
 /** 月の報告に出す出来事（予告・起きた・提案）。 */
 export type MonthEvent = {
@@ -339,6 +343,7 @@ export type GameState = {
   /** 成長率への上乗せ（毎月 add を months か月）。 */
   growthBonus: { add: number; months: number }[];
   history: MonthReport[];
-  phase: 'playing' | 'won' | 'lost';
+  /** completed: 完走 / lost: 途中終了（D-131）。 */
+  phase: 'playing' | 'completed' | 'lost';
   end?: { reason: EndReason; month: number };
 };
