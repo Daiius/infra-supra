@@ -55,7 +55,7 @@ const ARTICLE_WIREFRAMES: PageWireframe[] = [
       {
         id: 'footer',
         kind: 'related',
-        label: '関連記事（サムネイル 4 枚）・フッター',
+        label: '関連記事（サムネイル 4 枚）',
         needs: ['same'],
       },
     ],
