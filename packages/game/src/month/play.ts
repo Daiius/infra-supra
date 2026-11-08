@@ -140,7 +140,7 @@ export function playMonth(input: GameState): GameState {
   );
 
   const history = [...state.history, report];
-  const end = endOf(sc, month, { accountSuspended, outages, cash, history });
+  const end = endOf(sc, month, { accountSuspended, outages, cash });
   const { routes } = next;
   const { routes: _routes, capacityTiers: _tiers, ...base } = state;
   return {
@@ -182,7 +182,11 @@ export function playMonth(input: GameState): GameState {
       ? basePV * buzzLasting(rep, buzzRule) * (1 - slowPenalty)
       : basePV * (1 + net),
     history,
-    phase: end ? (end.reason === 'won' ? 'won' : 'lost') : 'playing',
+    phase: end
+      ? end.reason === 'completed'
+        ? 'completed'
+        : 'lost'
+      : 'playing',
     ...(end ? { end } : {}),
   };
 }

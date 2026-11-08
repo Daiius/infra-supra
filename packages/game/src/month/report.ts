@@ -16,7 +16,6 @@ import type { Crossing, GameState, MonthEvent, MonthReport } from '../state.ts';
 import type { Billed, MonthEstimate } from './bill.ts';
 import type { Growth, Judged } from './judge.ts';
 import type { Revenue } from './outcome.ts';
-import { averageSatisfaction } from './satisfaction.ts';
 import type { Traffic, Volume } from './traffic.ts';
 import type { Progress } from './transitions.ts';
 
@@ -223,7 +222,10 @@ export function reportOf(
   };
 }
 
-/** ゲームの終わり（規約違反の停止 → 障害の月数 → 所持金 → 最後の月の目標の順に見る）。続くなら undefined。 */
+/**
+ * ゲームの終わり（規約違反の停止 → 障害の月数 → 所持金 → 最後の月の順に見る）。続くなら undefined。
+ * 最後の月まで途中終了の条件に当たらなければ完走（合否の目標の線は見ない。D-131）。
+ */
 export function endOf(
   sc: Scenario,
   month: number,
@@ -231,10 +233,9 @@ export function endOf(
     accountSuspended: boolean;
     outages: number;
     cash: number;
-    history: readonly MonthReport[];
   },
 ): GameState['end'] {
-  const { accountSuspended, outages, cash, history } = s;
+  const { accountSuspended, outages, cash } = s;
   const finished = month >= sc.months;
   return accountSuspended
     ? { reason: 'policy', month }
@@ -243,24 +244,6 @@ export function endOf(
       : cash < 0
         ? { reason: 'cash', month }
         : finished
-          ? {
-              reason: passes(sc, { cash, outages, history }) ? 'won' : 'goal',
-              month,
-            }
+          ? { reason: 'completed', month }
           : undefined;
-}
-
-function passes(
-  sc: Scenario,
-  s: {
-    cash: number;
-    outages: number;
-    history: readonly MonthReport[];
-  },
-): boolean {
-  return (
-    s.cash >= sc.goal.cash &&
-    averageSatisfaction(s.history) >= sc.goal.satisfaction &&
-    s.outages <= sc.goal.maxOutageMonths
-  );
 }

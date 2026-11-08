@@ -1,6 +1,7 @@
 // フレームワークの分岐（prd/10 段 1・D-34）。SPA を選んだときの基準プレイと、効き方の仕組み。
 // 効き方の値（話題の伸び・初回表示）はゲーム上の仮定。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   applyActions,
   checkAction,
@@ -178,10 +179,10 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       const failing: number[] = [];
       for (let seed = 1; seed <= 50; seed++) {
         // 選べない構成（隠した構成。D-100）の基準プレイは数えない
-        const any = offeredBaselines(sc).some(
-          (b) =>
-            playStrategy(b, seed, sc, DEFAULT_START_DATE, 'vite-spa').end
-              ?.reason === 'won',
+        const any = offeredBaselines(sc).some((b) =>
+          meetsReference(
+            playStrategy(b, seed, sc, DEFAULT_START_DATE, 'vite-spa'),
+          ),
         );
         if (!any) failing.push(seed);
       }
@@ -200,6 +201,7 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
     //        Vercel の CDN の量が小さく従量ならクレジットに収まっていたので $200 減る。乗り換えるまで Vercel の行は $26 増える
     // D-121（D-120 の上で取り直した）: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分けた。一律で縮める画像（OpenNext の SPA の既定）は
     //        サムネイルにも 400 KB を配るので OpenNext・画像の最適化（隠した構成）が $246 減って won → goal。ほかは $0.4 以内
+    // D-131: 合否をやめ、12 か月を走り切った行の終わり方は won・goal でなく completed（所持金・月は 1 セントも変わらない）
     const r = Object.fromEntries(
       article.baselines.map((b) => {
         const s = playStrategy(b, 42, article, DEFAULT_START_DATE, 'vite-spa');
@@ -208,21 +210,21 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
     );
     expect(r).toEqual({
       // D-107: SPA はもともと個人向けも枠 + API なので、何もしないと同じ
-      'cf-paid': ['1835.45', 'won', 12],
-      'cf-paid-accept': ['1902.30', 'won', 12],
-      'vps-images': ['1644.92', 'goal', 12],
-      'vercel-pro': ['1161.22', 'goal', 12],
-      'vercel-to-cf': ['1428.31', 'goal', 12],
+      'cf-paid': ['1835.45', 'completed', 12],
+      'cf-paid-accept': ['1902.30', 'completed', 12],
+      'vps-images': ['1644.92', 'completed', 12],
+      'vercel-pro': ['1161.22', 'completed', 12],
+      'vercel-to-cf': ['1428.31', 'completed', 12],
       'cf-free': ['139.10', 'outages', 3],
-      'cf-paid-kvdb': ['1666.62', 'goal', 12],
-      'cf-paid-chat': ['1862.14', 'won', 12],
-      'vps-sla': ['1595.98', 'goal', 12],
-      'vps-cdn': ['1577.77', 'goal', 12],
-      'vercel-cf-images': ['1159.11', 'goal', 12],
-      'aws-amplify-cdn': ['1814.55', 'won', 12],
-      'aws-opennext-images': ['1700.86', 'goal', 12],
+      'cf-paid-kvdb': ['1666.62', 'completed', 12],
+      'cf-paid-chat': ['1862.14', 'completed', 12],
+      'vps-sla': ['1595.98', 'completed', 12],
+      'vps-cdn': ['1577.77', 'completed', 12],
+      'vercel-cf-images': ['1159.11', 'completed', 12],
+      'aws-amplify-cdn': ['1814.55', 'completed', 12],
+      'aws-opennext-images': ['1700.86', 'completed', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],
-      'cf-paid-personal-api': ['1835.45', 'won', 12],
+      'cf-paid-personal-api': ['1835.45', 'completed', 12],
     });
   });
 });
@@ -355,7 +357,7 @@ describe('Astro（D-68）', () => {
       for (let seed = 1; seed <= 20; seed++) {
         let s = astro(CF_PAID, sc, seed);
         while (s.phase === 'playing') s = playMonth(applyActions(s, []));
-        if (s.end?.reason !== 'won') failing.push(seed);
+        if (!meetsReference(s)) failing.push(seed);
       }
       expect(failing).toEqual([]);
     }

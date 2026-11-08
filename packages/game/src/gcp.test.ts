@@ -1,6 +1,7 @@
 // Google Cloud（Cloud Run + Firebase Hosting。D-88・prd/11 §16）をゲームで選べること。最小インスタンス数・DB（Firestore・Cloud SQL）・
 // 画像だけ Cloudflare を選べ、コンテナの維持の手間が少しかかる。基準プレイ（何もしない・シード 1〜20）。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import { composeStack, loadPriceBooks, type Choices } from 'catalog';
 import { estimate } from 'estimator';
 import {
@@ -48,7 +49,7 @@ function run(
       newGame(stack, seed, sc, DEFAULT_START_DATE, framework, components),
     );
     while (s.phase === 'playing') s = playMonth(s);
-    if (s.phase === 'won') won++;
+    if (meetsReference(s)) won++;
     cost += s.history.reduce((a, h) => a + h.infraCost, 0);
     months += s.history.length;
   }

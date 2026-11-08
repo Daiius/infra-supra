@@ -285,8 +285,6 @@ export function selectTrends(
 
 /** 月の利益の前月比に使う数（直近の比の中央値）と、比のクランプ（外れ値に引っ張られにくくする）。 */
 const CASH_GROWTH = { ratios: 3, min: 0.8, max: 1.2 } as const;
-/** 目標の前後とみなす幅（見込みが目標の ±5% なら「届きそう / 届かなそう」と言い切らない）。 */
-const CASH_CLOSE_BAND = 0.05;
 /** 伸びを入れられないとき（月の利益が 0 以下）に平均する直近の月数。 */
 const CASH_LINEAR_WINDOW = 3;
 
@@ -301,12 +299,6 @@ export type CashProjection = {
   skipped: number;
   /** 最終月の見込みの所持金（最終月まで済んでいれば実際の値）。 */
   final: number;
-  goal: number;
-  /** 目標に対する割合（final / goal）。 */
-  ratio: number;
-  onTrack: boolean;
-  /** ahead: 目標を上回る / close: 目標の ±5% / behind: 届かない（最終月まで済んでいれば ahead か behind）。 */
-  outlook: 'ahead' | 'close' | 'behind';
   /** 見込みの線（今の月から最終月まで。済んでいれば空）。 */
   projection: { month: number; value: number }[];
 };
@@ -329,7 +321,7 @@ export function cashProjectionOf(
 ): CashProjection | undefined {
   const h = state.history;
   if (!h.length) return undefined;
-  const { months, goal, startCash } = state.scenario;
+  const { months, startCash } = state.scenario;
   const cash = [startCash, ...h.map((r) => r.cash)];
   const now = h.length;
   const profit = (i: number) => cash[i + 1]! - cash[i]!; // i は 0 始まり（i + 1 か月目）
@@ -379,15 +371,6 @@ export function cashProjectionOf(
     growth,
     skipped: now - usable.length,
     final: value,
-    goal: goal.cash,
-    ratio: goal.cash > 0 ? value / goal.cash : 1,
-    onTrack: value >= goal.cash,
-    outlook:
-      rest && Math.abs(value / goal.cash - 1) <= CASH_CLOSE_BAND
-        ? 'close'
-        : value >= goal.cash
-          ? 'ahead'
-          : 'behind',
     projection,
   };
 }

@@ -483,10 +483,10 @@ export const ARTICLE_COMMUNITY: Scenario = {
   // 実際に予告されている改定の出来事（D-21）。1〜2 か月目は出さない（V-12）
   revisions: { from: 3, to: 10 },
   /**
-   * 所持金の目標は基準プレイをシード 1〜50 で回して決めた（prd/07 §10.8・D-64）: CF Paid・何もしない（最小 $2,110）・
-   * Amplify・前段の CloudFront + 定額（最小 $1,834）・OpenNext・画像の最適化（最小 $2,145）は全シードで届き、
-   * Vercel Pro・何もしない（最大 $982）と CF Paid・原本のまま配る（最大 $1,702）は届かない。範囲（$1,702〜$1,834）に入るので動かさない。
-   * VPS・前段の CDN（37 / 50）と Vercel Pro → CF Paid（15 / 50）は、届きやすいが確実ではない道筋。
+   * 参照値（D-142）。合否と画面の目標の線はやめた（D-131・prd/15 §1）。cash・satisfaction は完走したときのヒントの出し分け
+   * （D-143）と基準プレイの検証にだけ使い、画面には出さない。maxOutageMonths は途中終了の条件（D-19）。
+   * 値は D-64 で決めたまま。2026-11-09 の調査（シード 1〜50・何もしない）: CF Paid は最小 $2,077・Vercel Pro は最大 $1,473（0 / 50）・
+   * Vercel Pro → CF Paid は最大 $1,671（0 / 50）・CF Paid・原本のまま配るは最大 $1,675。どれも 12 か月を完走する。
    */
   goal: { cash: 1730, satisfaction: 0.75, maxOutageMonths: 2 },
   startCash: 60,

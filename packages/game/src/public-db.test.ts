@@ -2,6 +2,7 @@
 // 他の事業者の DB（Neon・Supabase・AWS）が出て、ゲーム中に差し替えられ、アカウントは今の数え方（D-52）で増える。
 // 基準プレイ（何もしない・シード 1〜20）の達成数は prd/14 §3.15 に記録した。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   addedAccounts,
   applyActions,
@@ -32,7 +33,7 @@ function won(sc: Scenario, stack: number, fw: FrameworkId, c: Choices) {
   for (let seed = 1; seed <= 20; seed++) {
     let s = playMonth(newGame(stack, seed, sc, DEFAULT_START_DATE, fw, c));
     while (s.phase === 'playing') s = playMonth(s);
-    if (s.phase === 'won') n++;
+    if (meetsReference(s)) n++;
   }
   return n;
 }

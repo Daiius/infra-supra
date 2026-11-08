@@ -33,6 +33,7 @@ describe('受託先の業務アプリの運用', () => {
     // D-120: Vercel Pro の既定の Flat Rate CDN（受託の量は 2 か月目から $20 の段）と東京の単価。従量の CDN はクレジットに収まっていたので、
     //        Vercel で遊ぶ行は $204〜214 減る（vercel-pro）・$40 減る（乗り換えるまで Vercel の vercel-to-cf。シード 42 は won → goal）・
     //        $75〜93 減る（Vercel へ乗り換える cf-paid-accept。乗り換え中も前の月の段を払う。シード 42 は $12 減）。CF・VPS・AWS の行は変わらない
+    // D-131: 合否をやめ、12 か月を走り切った行の終わり方は won・goal でなく completed（所持金・月は 1 セントも変わらない）
     const r = (seed: number) =>
       Object.fromEntries(
         sc.baselines.map((b) => {
@@ -41,60 +42,61 @@ describe('受託先の業務アプリの運用', () => {
         }),
       );
     expect(r(42)).toEqual({
-      'cf-paid': ['1892.51', 'won', 12],
+      'cf-paid': ['1892.51', 'completed', 12],
       // D-93: PITR の依頼（D1 の Time Travel で満たす）を受け、乗り換えるまで上乗せ $20 / 月が入る（前は $1,589.92・goal）
       // D-95: メールの送信（CF Paid は Email Service・乗り換えた先は SES）の費用で $1,769.92・won → goal
-      'cf-paid-accept': ['1657.78', 'goal', 12],
-      vps: ['1701.46', 'goal', 12],
-      'vps-care': ['1807.61', 'won', 12],
-      'vps-sla': ['1807.61', 'won', 12],
-      'vercel-pro': ['1256.46', 'goal', 12],
-      'vercel-to-cf': ['1670.34', 'goal', 12],
+      'cf-paid-accept': ['1657.78', 'completed', 12],
+      vps: ['1701.46', 'completed', 12],
+      'vps-care': ['1807.61', 'completed', 12],
+      'vps-sla': ['1807.61', 'completed', 12],
+      'vercel-pro': ['1256.46', 'completed', 12],
+      'vercel-to-cf': ['1670.34', 'completed', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
-      'aws-amplify': ['1800.00', 'won', 12],
-      'aws-opennext': ['1946.08', 'won', 12],
+      'aws-amplify': ['1800.00', 'completed', 12],
+      'aws-opennext': ['1946.08', 'completed', 12],
     });
     expect(r(11)).toEqual({
-      'cf-paid': ['1959.64', 'won', 12],
-      'cf-paid-accept': ['1423.40', 'goal', 12],
+      'cf-paid': ['1959.64', 'completed', 12],
+      'cf-paid-accept': ['1423.40', 'completed', 12],
       vps: ['1564.19', 'outages', 12],
-      'vps-care': ['1880.26', 'won', 12],
-      'vps-sla': ['1988.19', 'won', 12],
-      'vercel-pro': ['1334.49', 'goal', 12],
-      'vercel-to-cf': ['1730.52', 'won', 12],
+      'vps-care': ['1880.26', 'completed', 12],
+      'vps-sla': ['1988.19', 'completed', 12],
+      'vercel-pro': ['1334.49', 'completed', 12],
+      'vercel-to-cf': ['1730.52', 'completed', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
-      'aws-amplify': ['1847.23', 'won', 12],
-      'aws-opennext': ['2014.62', 'won', 12],
+      'aws-amplify': ['1847.23', 'completed', 12],
+      'aws-opennext': ['2014.62', 'completed', 12],
     });
     expect(r(3)).toEqual({
-      'cf-paid': ['1932.41', 'won', 12],
+      'cf-paid': ['1932.41', 'completed', 12],
       // D-46: 乗り換え先の Vercel で添付が Vercel Blob の課金になる
-      'cf-paid-accept': ['1444.79', 'goal', 12],
+      'cf-paid-accept': ['1444.79', 'completed', 12],
       vps: ['1679.32', 'outages', 12],
-      'vps-care': ['1783.73', 'won', 12],
-      'vps-sla': ['1783.73', 'won', 12],
-      'vercel-pro': ['1300.88', 'goal', 12],
-      'vercel-to-cf': ['1707.14', 'won', 12],
+      'vps-care': ['1783.73', 'completed', 12],
+      'vps-sla': ['1783.73', 'completed', 12],
+      'vercel-pro': ['1300.88', 'completed', 12],
+      'vercel-to-cf': ['1707.14', 'completed', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
-      'aws-amplify': ['1827.87', 'won', 12],
-      'aws-opennext': ['1986.49', 'won', 12],
+      'aws-amplify': ['1827.87', 'completed', 12],
+      'aws-opennext': ['1986.49', 'completed', 12],
     });
   });
 
-  it('何もしない構成の差が合否を分け、どのシードでも基準プレイの少なくとも 1 本が合格する（シード 1〜50）', () => {
+  it('何もしない構成の差は所持金に出て、どのシードでも基準プレイの少なくとも 1 本が完走する（シード 1〜50・D-131）', () => {
     for (let seed = 1; seed <= 50; seed++) {
-      const won = (id: string) => run(id, seed).phase === 'won';
-      // 込み分の内で固定費の差だけが効く: Cloudflare Paid は届き、Vercel Pro は届かない
-      expect(won('cf-paid'), `seed ${seed}`).toBe(true);
-      expect(won('vercel-pro'), `seed ${seed}`).toBe(false);
-      // 構成に合った対策（D-64）: AWS は既定の部品のまま届く
-      expect(won('aws-amplify'), `seed ${seed}`).toBe(true);
-      expect(won('aws-opennext'), `seed ${seed}`).toBe(true);
+      const play = (id: string) => run(id, seed);
+      // 込み分の内で固定費の差だけが効く: Cloudflare Paid は完走し、Vercel Pro は完走しても所持金が少ない
+      const cf = play('cf-paid');
+      expect(cf.phase, `seed ${seed}`).toBe('completed');
+      expect(play('vercel-pro').cash, `seed ${seed}`).toBeLessThan(cf.cash);
+      // 構成に合った対策（D-64）: AWS は既定の部品のまま完走する
+      expect(play('aws-amplify').phase, `seed ${seed}`).toBe('completed');
+      expect(play('aws-opennext').phase, `seed ${seed}`).toBe('completed');
       // 受託の案件で非商用のプランは規約違反で終わる
-      expect(run('vercel-hobby', seed).end?.reason).toBe('policy');
+      expect(play('vercel-hobby').end?.reason).toBe('policy');
     }
   });
 

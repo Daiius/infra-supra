@@ -1,6 +1,7 @@
 // Next.js の静的書き出し（output: 'export'。D-80・prd/06 §7）: 記事は静的にビルドし直し（D-68 の Astro と同じ仕組み）、
 // マイページの中身はブラウザが API で取る（SPA と同じ。API の置き場も SPA の組）。初回表示・JS の量は Next.js と同じ扱い。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   applyActions,
   checkAction,
@@ -120,7 +121,7 @@ describe('Next.js の静的書き出し（D-80）', () => {
     const failing = (sc: typeof article) => {
       const out: number[] = [];
       for (let seed = 1; seed <= 20; seed++)
-        if (endCash('nextjs-export', CF_PAID, seed, sc).end?.reason !== 'won')
+        if (!meetsReference(endCash('nextjs-export', CF_PAID, seed, sc)))
           out.push(seed);
       return out;
     };

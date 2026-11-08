@@ -2,6 +2,7 @@
 // AWS のアカウントは既定のメールの送信（SES）で既にあるので増えず、DB の応答は AWS からインターネットへの転送で数える。
 // 基準プレイ（何もしない・シード 1〜20）の達成数は prd/14 §3.12 に記録した。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   addedAccounts,
   applyActions,
@@ -36,7 +37,7 @@ function won(
       newGame(stack, seed, sc, DEFAULT_START_DATE, framework, components),
     );
     while (s.phase === 'playing') s = playMonth(s);
-    if (s.phase === 'won') n++;
+    if (meetsReference(s)) n++;
   }
   return n;
 }

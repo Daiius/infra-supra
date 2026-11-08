@@ -1,5 +1,6 @@
 // アプリの作り直し（フレームワークを替える。D-81・prd/10 F-06）。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   ARTICLE_COMMUNITY,
   applyAction,
@@ -232,18 +233,20 @@ describe('基準プレイの観点: VPS 2GB × SPA → Next.js に作り直す�
     let n = 0;
     for (let seed = 1; seed <= 20; seed++)
       if (
-        playStrategy(
-          {
-            id: 'x',
-            label: 'x',
-            stackIndex: VPS,
-            ...(actions ? { actions } : {}),
-          },
-          seed,
-          ARTICLE_COMMUNITY,
-          undefined,
-          fw,
-        ).phase === 'won'
+        meetsReference(
+          playStrategy(
+            {
+              id: 'x',
+              label: 'x',
+              stackIndex: VPS,
+              ...(actions ? { actions } : {}),
+            },
+            seed,
+            ARTICLE_COMMUNITY,
+            undefined,
+            fw,
+          ),
+        )
       )
         n++;
     return n;

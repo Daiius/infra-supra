@@ -1,4 +1,4 @@
-// 評価（prd/07 §9.6）と基準プレイ（目標値の根拠・成績の目盛り。§10.8）。
+// 評価（prd/07 §9.6）と基準プレイ（成績の目盛り・バランスの検証。§10.8）。振り返りの 4 軸は results.ts（D-132）。
 import {
   type EffortBreakdown,
   type Element,
@@ -54,41 +54,8 @@ export function axesOf(state: GameState): Axes {
   };
 }
 
-export type Check = {
-  label: string;
-  ok: boolean;
-  value: string;
-  target: string;
-};
-
-export function goalChecks(state: GameState): Check[] {
-  const goal = scenarioOf(state).goal;
-  const avg = averageSatisfaction(state.history);
-  return [
-    {
-      label: '所持金',
-      ok: state.cash >= goal.cash,
-      value: `$${state.cash.toFixed(2)}`,
-      target: `$${goal.cash} 以上`,
-    },
-    {
-      label: '満足度の平均',
-      ok: avg >= goal.satisfaction,
-      value: avg.toFixed(2),
-      target: `${goal.satisfaction} 以上`,
-    },
-    {
-      label: '止まった月',
-      ok: state.outages <= goal.maxOutageMonths,
-      value: `${state.outages} 回`,
-      target: `${goal.maxOutageMonths} 回以内`,
-    },
-  ];
-}
-
 export const END_LABEL: Record<EndReason, string> = {
-  won: '目標達成',
-  goal: '目標に届かず',
+  completed: '完走',
   cash: '所持金が尽きた',
   outages: '止まった回数の上限を超えた',
   policy: '規約違反が続き、アカウントが停止された',
@@ -214,7 +181,7 @@ export function reflectionOf(state: GameState): Reflection {
   };
 }
 
-// ---- 基準プレイ（目標値の根拠・成績の目盛り。prd/07 §9.6・§10.8）----
+// ---- 基準プレイ（成績の目盛り・バランスの検証。prd/07 §9.6・§10.8。合否はやめた。D-131）----
 
 /** 記事コミュニティの基準プレイ（シナリオのデータ）。 */
 export const BASELINES: Strategy[] = ARTICLE_COMMUNITY.baselines;

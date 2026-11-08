@@ -1,5 +1,6 @@
 // 記事コミュニティのシナリオと出来事の性質（prd/07 §10.3〜10.8・D-20）。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import { parsePriceBook, type PriceBook } from 'estimator';
 import {
   applyRevisions,
@@ -92,17 +93,17 @@ describe('シナリオのデータ', () => {
       }
   });
 
-  it('詰まない: シード 1〜50 のどれでも、基準プレイの少なくとも 1 本が合格する', () => {
+  it('詰まない: シード 1〜50 のどれでも、基準プレイの少なくとも 1 本が完走する（D-131）', () => {
     for (let seed = 1; seed <= 50; seed++) {
       // 選べない構成（隠した構成。D-100）の基準プレイは数えない
-      const won = offeredBaselines(sc).some(
-        (b) => playStrategy(b, seed).phase === 'won',
+      const done = offeredBaselines(sc).some(
+        (b) => playStrategy(b, seed).phase === 'completed',
       );
-      expect(won, `seed ${seed}`).toBe(true);
+      expect(done, `seed ${seed}`).toBe(true);
     }
   });
 
-  it('目標の決め方（D-64・prd/07 §10.8）: CF Paid と構成に合った対策の 3 構成はまれな出来事の無いシードで全部届き、Vercel Pro・何もしないと原本のまま配るは届かない', () => {
+  it('完走と所持金の並び（D-131。前は D-64 の目標の決め方）: CF Paid と構成に合った対策の 3 構成はまれな出来事の無いシードで全部完走し、Vercel Pro・何もしないと原本のまま配るは CF Paid・何もしないより所持金が少ない', () => {
     const rare = new Set(
       sc.events.filter((e) => e.tier === 'rare').map((e) => e.id),
     );
@@ -114,13 +115,18 @@ describe('シナリオのデータ', () => {
       actions: [[{ type: 'component', slot: 'images', option: 'none' }]],
     } satisfies Parameters<typeof playStrategy>[0];
     for (let seed = 1; seed <= 50; seed++) {
-      const won = (b: Parameters<typeof playStrategy>[0]) =>
-        playStrategy(b, seed).phase === 'won';
+      const play = (b: Parameters<typeof playStrategy>[0]) =>
+        playStrategy(b, seed);
       if (!rollSchedule(sc, seed).some((x) => rare.has(x.id)))
         for (const id of ['cf-paid', 'aws-amplify-cdn', 'aws-opennext-images'])
-          expect(won(baseline(id)), `${id} seed ${seed}`).toBe(true);
-      expect(won(baseline('vercel-pro')), `seed ${seed}`).toBe(false);
-      expect(won(originals), `seed ${seed}`).toBe(false);
+          expect(play(baseline(id)).phase, `${id} seed ${seed}`).toBe(
+            'completed',
+          );
+      const cf = play(baseline('cf-paid')).cash;
+      expect(play(baseline('vercel-pro')).cash, `seed ${seed}`).toBeLessThan(
+        cf,
+      );
+      expect(play(originals).cash, `seed ${seed}`).toBeLessThan(cf);
     }
   });
 });
@@ -373,7 +379,8 @@ describe('まれな出来事（シード 31: 記事の引き取り → D1 の 10
 
   it('断れば何も変わらない', () => {
     const declined = until(CF_PAID, 12, ARCHIVE_SEED);
-    expect(declined.phase).toBe('won');
+    expect(declined.phase).toBe('completed');
+    expect(meetsReference(declined)).toBe(true);
     expect(
       declined.history.some((r) => r.events.some((e) => e.id === 's-d1-limit')),
     ).toBe(false);

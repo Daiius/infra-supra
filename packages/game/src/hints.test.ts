@@ -1,5 +1,6 @@
 // 次のプレイへのヒント（D-40）: 何もしない方針で負けるケースで、原因が実際の負けの理由と合うか。
 import { describe, expect, it } from 'vitest';
+import { meetsReference } from './reference.test-helpers.ts';
 import {
   ARTICLE_COMMUNITY,
   playStrategy,
@@ -32,9 +33,9 @@ const VPS_2GB = 4;
 const VPS_4GB = 5;
 
 describe('retryHintsOf', () => {
-  it('達成したとき・遊んでいる途中は出さない', () => {
+  it('完走して参照値に届いたとき・遊んでいる途中は出さない（D-143）', () => {
     const won = idle(CF_PAID);
-    expect(won.phase).toBe('won');
+    expect(meetsReference(won)).toBe(true);
     expect(retryHintsOf(won)).toEqual([]);
   });
 
@@ -70,10 +71,13 @@ describe('retryHintsOf', () => {
 
   it('Vercel Pro: 所持金が足りず、費用の大きい基本料が出る', () => {
     const st = idle(PRO);
-    expect(st.end?.reason).toBe('goal');
+    expect(st.end?.reason).toBe('completed');
+    expect(meetsReference(st)).toBe(false);
     const hints = retryHintsOf(st);
     expect(hints[0]!.kind).toBe('cost');
-    expect(hints[0]!.what).toMatch(/目標 \$1,730 に \$\d+ 足りません/);
+    expect(hints[0]!.what).toMatch(/^12 か月目の所持金は \$[\d,]+ でした/);
+    // 参照値（画面に出さない。D-142）は文に出さない
+    expect(hints[0]!.what).not.toContain('目標');
     expect(hints[0]!.what).toContain('基本料（Vercel Pro: 1 席ごと）');
     // 込み分を超えて請求が付いた前提も挙がる
     expect(hints.some((x) => x.kind === 'overage')).toBe(true);
@@ -81,7 +85,8 @@ describe('retryHintsOf', () => {
 
   it('さくらの VPS 4GB: 費用は小さく、維持の手間で機能が伸びなかったことが出る', () => {
     const st = idle(VPS_4GB);
-    expect(st.end?.reason).toBe('goal');
+    expect(st.end?.reason).toBe('completed');
+    expect(meetsReference(st)).toBe(false);
     const hints = retryHintsOf(st);
     expect(hints[0]!.kind).toBe('cost');
     expect(hints[0]!.next).toContain('収益（PV の伸び）');
@@ -101,7 +106,8 @@ describe('retryHintsOf', () => {
 
   it('受託・さくらの VPS 2GB: 満足度が届かず、機能・速さとディスクの上限が出る', () => {
     const st = idle(VPS_2GB, CONTRACT_OPERATIONS);
-    expect(st.end?.reason).toBe('goal');
+    expect(st.end?.reason).toBe('completed');
+    expect(meetsReference(st)).toBe(false);
     expect(st.cash).toBeGreaterThanOrEqual(CONTRACT_OPERATIONS.goal.cash);
     const hints = retryHintsOf(st);
     expect(hints.map((x) => x.kind)).toEqual(['element', 'element', 'limit']);
@@ -208,7 +214,8 @@ describe('retryHintsOf', () => {
           undefined,
           'vite-spa',
         );
-        expect(st.end?.reason).toBe('goal');
+        expect(st.end?.reason).toBe('completed');
+        expect(meetsReference(st)).toBe(false);
         expect(st.cash).toBeLessThan(ARTICLE_COMMUNITY.goal.cash);
         const hint = retryHintsOf(st)[0]!;
         expect(hint.kind).toBe('ogp');
@@ -270,7 +277,7 @@ describe('retryHintsOf', () => {
         for (const s of STACKS) {
           const st = idle(s.index, sc, fw);
           const hints = retryHintsOf(st);
-          if (st.phase === 'won') {
+          if (meetsReference(st)) {
             expect(hints).toEqual([]);
             continue;
           }
