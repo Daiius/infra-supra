@@ -20,6 +20,8 @@ import {
   type Scenario,
   upkeepOf,
   featureRuleText,
+  RESULT_AXES,
+  type ResultAxisId,
 } from 'game';
 import {
   useCallback,
@@ -650,7 +652,15 @@ const firstSentence = (text: string) => {
   return i < 0 ? text : text.slice(0, i + 1);
 };
 
-/** シナリオの説明・目標・アプリの形。 */
+/** 始める画面の 4 軸の紹介の短い説明（D-133）。 */
+const AXIS_INTRO: Record<ResultAxisId, string> = {
+  cash: '最後の月の所持金',
+  satisfaction: '12 か月の満足度の平均',
+  featurePoints: '運用に取られずに機能開発に回せた手間',
+  edgeMonths: '止まらずに上限の 90〜100% まで使った月の数（ジョーク枠）',
+};
+
+/** シナリオの説明・走り切ることと 4 軸の紹介・アプリの形。 */
 export function ScenarioDescription({
   scenario: sc,
   usdJpy,
@@ -723,8 +733,8 @@ export function ScenarioDescription({
               <DetailsDialog label="満足度の詳しい説明" title="満足度">
                 <p>{t.satisfaction}</p>
                 <p>
-                  目標の 1 つは満足度の平均 {sc.goal.satisfaction}{' '}
-                  以上です。満足度が高ければ PV が伸び、低ければ減ります。
+                  満足度が高ければ PV が伸び、低ければ減ります。12
+                  か月の平均は、走り切った後の振り返りの軸の 1 つです。
                 </p>
                 <p className="opacity-70">
                   満足度の決まり方はゲーム上の仮定です。
@@ -779,41 +789,45 @@ export function ScenarioDescription({
           </DetailsDialog>
         </div>
         <p>所持金 {usd(sc.startCash)}。</p>
-        {/* daisyUI の alert は子を横の grid に並べるので、中身を 1 つのブロックにして縦に積む */}
-        <div className="alert alert-info">
-          <div className="space-y-1">
-            <div className="font-semibold">
-              目標（{sc.months} か月後に、すべて満たす）
-            </div>
-            <ul className="list-disc space-y-0.5 pl-5">
-              <li>
-                所持金{' '}
-                <span className="whitespace-nowrap tabular-nums">
-                  {usd(sc.goal.cash)} 以上
+        {/* 完走のダイアログに寄せた紹介（D-133）。success は枠と見出しの印にだけ使い、全面は塗りつぶさない */}
+        <section
+          className="rounded-box border-2 border-success bg-base-100 p-3 sm:p-4"
+          aria-labelledby="run-goal-title"
+          data-run-goal
+        >
+          <h3 id="run-goal-title" className="text-lg font-bold">
+            <span className="text-success" aria-hidden>
+              ✓{' '}
+            </span>
+            {sc.months} か月を走り切りましょう
+          </h3>
+          <p className="mt-1 text-sm">
+            合否はありません。走り切ると花火が上がり、4 つの軸で振り返ります（1
+            つの点数にはまとめません）。
+          </p>
+          <ol className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
+            {RESULT_AXES.map((a, i) => (
+              <li
+                key={a.id}
+                className="rounded-box border border-success/40 px-2 py-1"
+              >
+                <span className="font-semibold">
+                  {['①', '②', '③', '④'][i]} {a.label}
+                </span>
+                <span className="block text-xs opacity-70">
+                  {AXIS_INTRO[a.id]}
                 </span>
               </li>
-              <li>
-                満足度の平均{' '}
-                <span className="whitespace-nowrap tabular-nums">
-                  {sc.goal.satisfaction} 以上
-                </span>
-              </li>
-              <li>
-                止まった月が{' '}
-                <span className="whitespace-nowrap tabular-nums">
-                  {sc.goal.maxOutageMonths} 回以内
-                </span>
-              </li>
-            </ul>
-            <p className="text-sm">
-              止まった月が{' '}
-              <span className="whitespace-nowrap">
-                {sc.goal.maxOutageMonths} 回
-              </span>
-              を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わります。
-            </p>
-          </div>
-        </div>
+            ))}
+          </ol>
+          <p className="mt-2 text-xs opacity-80">
+            止まった月が{' '}
+            <span className="whitespace-nowrap">
+              {sc.goal.maxOutageMonths} 回
+            </span>
+            を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わります。
+          </p>
+        </section>
         {/* アプリの形は見出しの 1 行だけを出し、注記と箇条書きはダイアログに畳む（2026-11-05・ユーザーの要望） */}
         {app.length > 0 && (
           <div>

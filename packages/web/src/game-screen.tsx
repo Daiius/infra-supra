@@ -10,7 +10,7 @@ import {
   type CommitmentPaymentId,
   actionEffort,
   applyActions,
-  axesOf,
+  resultAxesOf,
   BOT_BLOCK,
   cashProjectionOf,
   isTrafficSpike,
@@ -38,7 +38,6 @@ import {
   ELEMENTS,
   END_LABEL,
   eventDef,
-  goalChecks,
   isPlanChange,
   stackChangeRouteNotice,
   stackChangeText,
@@ -80,7 +79,14 @@ import {
   type Stage,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
-import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
+import { compact, LineChart, Sparkline } from './charts.tsx';
+import { ResultAxesPanel } from './result-axes.tsx';
+import {
+  compareWithHistory,
+  fireworkLevel,
+  type AxisComparison,
+  type ResultEntry,
+} from './results-history.ts';
 import { Info } from './info.tsx';
 import { eventCategory, EventIcon } from './event-icons.tsx';
 import { SlotCompareInfo } from './slot-compare.tsx';
@@ -239,13 +245,15 @@ export function Game({
   resumeNotice,
   onResumeNoticeShown,
   runId,
+  results,
+  playId,
   onAdvance,
   previous,
   onRewind,
   onClearPrevious,
 }: {
   state: GameState;
-  /** 保存から再開した（出来事・達成のダイアログを自動では開かない。D-26）。 */
+  /** 保存から再開した（出来事・完走のダイアログを自動では開かない。D-26）。 */
   restored: boolean;
   /** 再開の知らせをまだ出していない（保存から再開した直後だけ true）。 */
   resumeNotice: boolean;
@@ -253,6 +261,10 @@ export function Game({
   onResumeNoticeShown: () => void;
   /** 遊び始め（始めた・再開した）ごとの id。出来事のダイアログを月ごとに 1 回だけ自動で開くのに使う（D-126）。 */
   runId: string;
+  /** 手元の結果の履歴（D-144。新しい順。今のプレイの記録を含みうる）。 */
+  results: readonly ResultEntry[];
+  /** 今のプレイの id（履歴の中の今のプレイの記録を比較から除く）。 */
+  playId: string;
   /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
   onAdvance: (actions: Action[]) => GameState;
   /** 前の試行（D-128。保存の前の試行を再生した状態）。無ければ null。 */
@@ -264,17 +276,28 @@ export function Game({
 }) {
   const report = state.history[state.history.length - 1]!;
   const playing = state.phase === 'playing';
+  // 4 軸と手元の履歴との比較（D-132・D-144）。終わったときだけ
+  const comparisons = playing
+    ? []
+    : compareWithHistory(
+        {
+          id: playId,
+          scenarioId: scenarioOf(state).id,
+          axes: resultAxesOf(state),
+        },
+        results,
+      );
   // 月が進んだ直後に、その月の出来事をダイアログで出す（D-23）。結果の画面では出さない。
   // auto: 月が進んだ直後に開いた / manual: 月のカードのボタンで開き直した。
   /**
-   * 目標達成のダイアログを開いた回数（結果の画面のボタンで開き直す。D-25）。null は開いていない
+   * 完走のダイアログを開いた回数（結果の画面のボタンで開き直す。D-25）。null は開いていない
    * （保存から再開したときは自動で開かない。D-26）。
    */
   const [celebration, setCelebration] = useState<number | null>(
     restored ? null : 0,
   );
   useEffect(() => {
-    if (state.phase !== 'won') setCelebration(0);
+    if (state.phase !== 'completed') setCelebration(0);
   }, [state.phase]);
   const [eventsOpen, setEventsOpen] = useState<'auto' | 'manual' | null>(() =>
     playing &&
@@ -314,17 +337,19 @@ export function Game({
           onClose={() => setResumed(false)}
         />
       )}
-      {state.phase === 'won' && celebration !== null && (
+      {state.phase === 'completed' && celebration !== null && (
         // key を変えると最初と同じように開き直す（暗い背景と花火も再開）
         <VictoryCelebration
           key={celebration}
           state={state}
+          comparisons={comparisons}
           auto={celebration === 0}
         />
       )}
       {!playing && (
         <Result
           state={state}
+          comparisons={comparisons}
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         >
           {picker}
@@ -494,16 +519,18 @@ function RewindDialog({
 }
 
 /**
- * 目標達成のダイアログと花火（D-25）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
+ * 完走のダイアログと花火（D-25・D-131）。4 軸の値と手元の履歴との比較を出し、自己ベストを更新した軸が多いほど花火を増やす（D-145）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
  * 閉じると背景が消え、新しい花火は出さない。空中に残った粒は少し薄くして、寿命で消えるまで描いてから片付ける。
  * 動きを減らす設定では、ダイアログだけ出して花火は出さない。作法は出来事のダイアログ（D-23）と同じ。
  */
 function VictoryCelebration({
   state,
+  comparisons,
   auto,
 }: {
   state: GameState;
-  /** 達成した直後に開いた（true）か、結果の画面のボタンで開き直した（false）か。 */
+  comparisons: readonly AxisComparison[];
+  /** 完走した直後に開いた（true）か、結果の画面のボタンで開き直した（false）か。 */
   auto: boolean;
 }) {
   const reduced = useReducedMotion();
@@ -515,17 +542,13 @@ function VictoryCelebration({
   useEffect(() => {
     const d = ref.current;
     if (!d || d.open) return;
-    // 達成した直後はフォーカスを外して開く（閉じた後もページの先頭のまま）。開き直したときはボタンへ戻す（D-23 と同じ）
+    // 完走した直後はフォーカスを外して開く（閉じた後もページの先頭のまま）。開き直したときはボタンへ戻す（D-23 と同じ）
     if (auto && document.activeElement instanceof HTMLElement)
       document.activeElement.blur();
     d.showModal();
   }, [auto]);
-  // 合否の 3 つ（所持金・満足度の平均・止まった月）だけを、結果の画面と同じメーターで出す
-  const cfPaid = comparisonRows(state).find((r) => r.id === 'cf-paid')!;
-  const meters = resultMeters(state, goalChecks(state), axesOf(state), {
-    label: cfPaid.name,
-    axes: cfPaid.axes,
-  }).filter((m) => m.status !== 'reference');
+  const level = fireworkLevel(comparisons);
+  const updated = comparisons.filter((c) => c.newBest).length;
   return (
     <>
       {open && (
@@ -535,6 +558,7 @@ function VictoryCelebration({
           // 花火が映える暗い背景
           style={{ backgroundColor: 'rgba(6, 8, 22, 0.86)' }}
           aria-labelledby="victory-title"
+          data-firework-level={level}
           onClose={() => {
             setOpen(false);
             setAfterglow(!reduced && engine.particles.length > 0);
@@ -544,17 +568,21 @@ function VictoryCelebration({
             {/* 成功の色の帯で見出しを強調する（色だけにせず ✓ とラベルを添える） */}
             <div className="bg-success px-6 py-5 text-success-content">
               <h2 id="victory-title" className="text-3xl font-bold">
-                ✓ 目標達成
+                ✓ 完走
               </h2>
               <p className="mt-1 text-sm">
-                {state.end!.month} か月の運営で、3 つの条件をすべて満たしました
+                {state.end!.month} か月の運営を走り切りました。4
+                つの軸で振り返りましょう
+                {updated > 0 &&
+                  `（${updated} つの軸で自己ベストを更新しました）`}
               </p>
             </div>
-            <div className="space-y-4 px-6 pt-5">
-              {/* 結果の画面と同じメーター（目標・上限の目盛りつき）。開いたときに伸びる（動きを減らす設定では即時） */}
-              {meters.map((m) => (
-                <Meter key={m.label} {...m} size="lg" />
-              ))}
+            <div className="px-6 pt-5">
+              <ResultAxesPanel
+                comparisons={comparisons}
+                outages={state.outages}
+                size="lg"
+              />
             </div>
             <div className="modal-action px-6 pb-6">
               <form method="dialog">
@@ -569,6 +597,7 @@ function VictoryCelebration({
             <FireworksCanvas
               engine={engine}
               spawn
+              level={level}
               className="pointer-events-none absolute inset-0 z-20 h-full w-full"
             />
           )}
@@ -2610,31 +2639,30 @@ function FireworkIcon() {
   );
 }
 
-/** 結果（prd/07 §9.6）: 合否・軸ごとの成績（基準プレイの目盛りつき）・振り返り。 */
+/** 結果（prd/07 §9.6・prd/15 §3）: 終わり方・4 軸と手元の履歴との比較（完走のとき）・基準プレイとの比較・振り返り。 */
 function Result({
   state,
+  comparisons,
   onCelebrate,
   children,
 }: {
   state: GameState;
-  /** 目標達成のダイアログを開き直す（達成のときだけ使う）。 */
+  comparisons: readonly AxisComparison[];
+  /** 完走のダイアログを開き直す（完走のときだけ使う）。 */
   onCelebrate: () => void;
   /** 結果の下に足すもの（過去の月へ戻る欄。D-128）。 */
   children?: ReactNode;
 }) {
-  const won = state.phase === 'won';
+  const completed = state.phase === 'completed';
   const end = state.end!;
-  const checks = goalChecks(state);
-  const axes = axesOf(state);
   // 行の名前（基準プレイは短い名前）は game の comparisonRows で決める（単体テストあり）
   const table = comparisonRows(state);
-  const cfPaid = table.find((r) => r.id === 'cf-paid')!;
   /** 短い名前と説明が違う基準プレイだけを注記に出す。 */
   const abbreviated = offeredBaselines(scenarioOf(state)).filter(
     (b) => b.short && b.short !== b.label,
   );
   const reflection = reflectionOf(state);
-  // 次のプレイへのヒント（未達成・ゲームオーバーのとき。達成なら空。D-40）
+  // 次のプレイへのヒント（途中終了のとき。完走のときは伸ばせる所として出す。D-40・D-143）
   const hints = retryHintsOf(state);
   // 規約違反で終わったときの原因のプラン（それ以外は null）
   const policy = policyCauseOf(state);
@@ -2651,15 +2679,11 @@ function Result({
     },
   ];
   const e = reflection.effort;
-  const meters = resultMeters(state, checks, axes, {
-    label: cfPaid.name,
-    axes: cfPaid.axes,
-  });
   return (
-    // 達成は花火、未達成・ゲームオーバーは控えめにフェードインだけ（D-25。動きを減らす設定では出さない）
+    // 完走は花火、途中終了は控えめにフェードインだけ（D-25。動きを減らす設定では出さない）
     <div className="card motion-fade-in bg-base-100 shadow">
       <div className="card-body gap-4">
-        <div className={`alert ${won ? 'alert-success' : 'alert-error'}`}>
+        <div className={`alert ${completed ? 'alert-success' : 'alert-error'}`}>
           {/* 中身を 1 つのブロックにする（alert の grid で横に割られて途中で折り返さないように） */}
           <div className="min-w-0">
             <div className="text-lg font-bold">{END_LABEL[end.reason]}</div>
@@ -2692,18 +2716,21 @@ function Result({
               </div>
             )}
           </div>
-          {won && (
+          {completed && (
             // 帯の中の花火のアイコンのボタン（SVG。端末のフォントに依存しない）。帯の文字の色で描く
             <button
               className="btn btn-circle btn-sm ml-auto border-current bg-transparent text-current shadow-none hover:bg-black/10"
               onClick={onCelebrate}
-              aria-label="もう一度祝う（達成のダイアログを開く）"
-              title="もう一度祝う（達成のダイアログを開く）"
+              aria-label="もう一度祝う（完走のダイアログを開く）"
+              title="もう一度祝う（完走のダイアログを開く）"
             >
               <FireworkIcon />
             </button>
           )}
         </div>
+        {completed && (
+          <ResultAxesPanel comparisons={comparisons} outages={state.outages} />
+        )}
         {hints.length > 0 && (
           // 折りたたまずに出す。原因と対策の方向だけで、正解の構成名は出さない（D-40）
           <section
@@ -2711,7 +2738,7 @@ function Result({
             aria-labelledby="retry-hints-title"
           >
             <h3 id="retry-hints-title" className="mb-2 font-bold">
-              次のプレイへのヒント
+              {completed ? '次のプレイで伸ばせる所' : '次のプレイへのヒント'}
             </h3>
             <ol className="space-y-3">
               {hints.map((x, i) => (
@@ -2733,11 +2760,6 @@ function Result({
             </ol>
           </section>
         )}
-        <div className="space-y-3">
-          {meters.map((m) => (
-            <Meter key={m.label} {...m} />
-          ))}
-        </div>
         <details className="collapse collapse-arrow bg-base-200">
           <summary className="collapse-title font-bold">
             基準プレイとの比較の表（軸ごとの成績・満足度の要素）
@@ -2931,79 +2953,6 @@ function Result({
   );
 }
 
-/** 結果の上部のメーター（合否の条件 3 つ + 基準プレイと比べる 2 つ）。 */
-function resultMeters(
-  state: GameState,
-  checks: ReturnType<typeof goalChecks>,
-  axes: Axes,
-  reference: { label: string; axes: Axes },
-): Parameters<typeof Meter>[0][] {
-  const ok = (label: string) => checks.find((c) => c.label === label)!.ok;
-  const pass = (good: boolean) =>
-    good
-      ? { status: 'good' as const, statusText: '✓ 達成' }
-      : { status: 'critical' as const, statusText: '✗ 未達' };
-  const goal = scenarioOf(state).goal;
-  const avg = axes.satisfaction;
-  const limit = goal.maxOutageMonths;
-  const ref = reference.axes;
-  const vsRef = (mine: number, theirs: number) =>
-    theirs > 0 ? `基準の ${Math.round((mine / theirs) * 100)}%` : '';
-  return [
-    {
-      label: '所持金',
-      valueText: usd(state.cash),
-      value: state.cash,
-      max: Math.max(state.cash, goal.cash) * 1.15,
-      marker: { value: goal.cash, label: `目標 ${usd(goal.cash)}` },
-      ...pass(ok('所持金')),
-      ...(ok('所持金') ? {} : { note: `あと ${usd(goal.cash - state.cash)}` }),
-    },
-    {
-      label: '満足度の平均',
-      valueText: avg.toFixed(2),
-      value: avg,
-      max: 1,
-      marker: { value: goal.satisfaction, label: `目標 ${goal.satisfaction}` },
-      ...pass(ok('満足度の平均')),
-      ...(ok('満足度の平均')
-        ? {}
-        : { note: `あと ${(goal.satisfaction - avg).toFixed(2)}` }),
-    },
-    {
-      label: '止まった月',
-      valueText: `${state.outages} 回`,
-      value: state.outages,
-      max: Math.max(state.outages, limit + 1) + 1,
-      marker: { value: limit, label: `上限 ${limit} 回` },
-      ...pass(ok('止まった月')),
-      note: ok('止まった月')
-        ? '少ないほど良い（棒が上限の線より左なら達成）'
-        : `少ないほど良いです。上限を ${state.outages - limit} 回超えました`,
-    },
-    {
-      label: '最終的な規模（月 PV）',
-      valueText: compact(Math.round(axes.finalPV)),
-      value: axes.finalPV,
-      max: Math.max(axes.finalPV, ref.finalPV) * 1.15,
-      marker: { value: ref.finalPV, label: `基準: ${reference.label}` },
-      status: 'reference',
-      statusText: '○ 参考（合否には入らない）',
-      note: vsRef(axes.finalPV, ref.finalPV),
-    },
-    {
-      label: '機能開発に回せた手間',
-      valueText: `${axes.featurePoints}（${(axes.featureShare * 100).toFixed(0)}%）`,
-      value: axes.featurePoints,
-      max: Math.max(axes.featurePoints, ref.featurePoints) * 1.15,
-      marker: { value: ref.featurePoints, label: `基準: ${reference.label}` },
-      status: 'reference',
-      statusText: '○ 参考（合否には入らない）',
-      note: vsRef(axes.featurePoints, ref.featurePoints),
-    },
-  ];
-}
-
 function History({
   history,
   rewindable,
@@ -3090,13 +3039,6 @@ function History({
     </div>
   );
 }
-
-/** 所持金の見込みの判定の印と文字（色だけに頼らない。D-42）。 */
-const OUTLOOK = {
-  ahead: { cls: 'badge-success', label: '● 届きそう' },
-  close: { cls: 'badge-info', label: '◐ 目標の前後' },
-  behind: { cls: 'badge-warning', label: '▲ 届かなそう' },
-} as const;
 
 /** 推移と見込み（prd/07 §5・GD-1）。毎月の画面の上に常に出し、続いている感じを見せる。 */
 function Trends({
@@ -3201,20 +3143,13 @@ function Trends({
           ))}
         </div>
         {cashProj && cashProj.projection.length > 0 && (
-          <p className="text-sm">
-            <span
-              className={`badge badge-sm mr-1 ${OUTLOOK[cashProj.outlook].cls}`}
-            >
-              {OUTLOOK[cashProj.outlook].label}
-            </span>
-            <span className="whitespace-nowrap">このペースだと</span> <wbr />
+          <p className="text-sm" data-cash-projection>
+            <span className="whitespace-nowrap">所持金はこのペースだと</span>{' '}
+            <wbr />
             <span className="whitespace-nowrap">
               {`${scenario.months} か月目に約 ${usd(Math.round(cashProj.final))}`}
             </span>
-            <wbr />
-            <span className="whitespace-nowrap">
-              {`（目標 ${usd(cashProj.goal)} の ${Math.round(cashProj.ratio * 100)}%）`}
-            </span>{' '}
+            の見込みです{' '}
             <Info label="所持金の見込みの出し方">
               {cashProj.method === 'growth'
                 ? `月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
@@ -3224,8 +3159,7 @@ function Trends({
               {cashProj.skipped > 0
                 ? `（今回は ${cashProj.skipped} か月を除きました）`
                 : ''}
-              。予告済みの出来事・料金の改定は織り込みません。見込みが目標の ±5%
-              なら「目標の前後」と出します
+              。予告済みの出来事・料金の改定は織り込みません
             </Info>
           </p>
         )}
@@ -3235,7 +3169,7 @@ function Trends({
             data-previous-trial
           >
             <span>
-              {`グラフの灰色の点線は前の試行（${previous.history.length} か月目${previous.phase === 'playing' ? 'まで' : `で${previous.phase === 'won' ? '達成' : '終了'}`}）`}
+              {`グラフの灰色の点線は前の試行（${previous.history.length} か月目${previous.phase === 'playing' ? 'まで' : `で${previous.phase === 'completed' ? '完走' : '終了'}`}）`}
             </span>
             <button
               className="btn btn-ghost btn-xs opacity-70"
@@ -3247,10 +3181,9 @@ function Trends({
         )}
         <div className="grid gap-4 md:grid-cols-2">
           <LineChart
-            title={`所持金（目標 ${usd(scenario.goal.cash)}）`}
+            title="所持金"
             months={scenario.months}
             format={(v) => `$${compact(Math.round(v))}`}
-            reference={{ value: scenario.goal.cash, label: '目標' }}
             series={[
               {
                 id: 'cash',
@@ -3291,11 +3224,10 @@ function Trends({
             ]}
           />
           <LineChart
-            title={`満足度と評判（目標の平均 ${scenario.goal.satisfaction}）`}
+            title="満足度と評判"
             months={scenario.months}
             format={(v) => v.toFixed(2)}
             yMax={1}
-            reference={{ value: scenario.goal.satisfaction, label: '目標' }}
             series={[
               {
                 id: 'score',

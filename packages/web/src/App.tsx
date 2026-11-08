@@ -65,6 +65,14 @@ import {
   type LastSetupStore,
   type SetupState,
 } from './last-setup.ts';
+import {
+  parseResults,
+  playId,
+  RESULTS_KEY,
+  resultEntryOf,
+  withResult,
+  type ResultStore,
+} from './results-history.ts';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
 /** 今日の日付（YYYY-MM-DD・端末の現地時刻）。改定の出来事の条件に使う（D-21）。 */
@@ -166,6 +174,32 @@ function storeLastSetup(scenarioId: string, entry: LastSetup) {
   }
 }
 
+/** 手元の結果の履歴（D-144）を読む。使えない・壊れていれば空。 */
+function loadResults(): ResultStore {
+  try {
+    const raw = localStorage.getItem(RESULTS_KEY);
+    return parseResults(raw ? JSON.parse(raw) : null);
+  } catch {
+    return parseResults(null);
+  }
+}
+
+/** 終わったプレイを履歴に足して書く（同じプレイは二重に足さない）。書けなくても画面の比較には使う。 */
+function recordResult(
+  store: ResultStore,
+  save: SaveData,
+  state: GameState,
+): ResultStore {
+  const next = withResult(store, resultEntryOf(save, state, today()));
+  if (next === store) return store;
+  try {
+    localStorage.setItem(RESULTS_KEY, JSON.stringify(next));
+  } catch {
+    // 保存領域が使えない環境では、この画面の間だけ比べる
+  }
+  return next;
+}
+
 /** 見積モードとゲームモードの切り替え（D-73）。見積モードは URL の mode=estimate で開く（入力もクエリに残る）。 */
 type Mode = 'game' | 'estimate';
 /** 見積モードは開いたときに読む（ゲームの画面の初回の読み込みに含めない）。 */
@@ -187,6 +221,12 @@ export function App() {
   const [session, setSession] = useState<Session | null>(loadSession);
   useEffect(() => storeSave(session?.save ?? null), [session?.save]);
   const state = session?.state ?? null;
+  // 終わったプレイ（完走・途中終了）を手元の履歴に溜める（D-144。再開・戻ってもう一度終えたときも同じ id なら足さない）
+  const [results, setResults] = useState<ResultStore>(loadResults);
+  useEffect(() => {
+    if (session && session.state.phase !== 'playing')
+      setResults((r) => recordResult(r, session.save, session.state));
+  }, [session]);
   const [mode, setMode] = useState<Mode>(initialMode);
   // 「最初から」の確認のダイアログ（今のプレイが消えるので確かめる）
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -254,6 +294,8 @@ export function App() {
                 setSession((s) => (s ? { ...s, resumeNotice: false } : s))
               }
               runId={session!.runId}
+              results={results.entries}
+              playId={playId(session!.save)}
               onAdvance={(actions) => {
                 const next = playMonth(applyActions(state, actions));
                 setSession({
