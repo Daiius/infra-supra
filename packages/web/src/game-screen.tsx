@@ -3015,7 +3015,7 @@ function Trends({
             data-previous-trial
           >
             <span>
-              {`グラフの薄い破線は前の試行（${previous.history.length} か月目${previous.phase === 'playing' ? 'まで' : `で${previous.phase === 'won' ? '達成' : '終了'}`}）`}
+              {`グラフの灰色の点線は前の試行（${previous.history.length} か月目${previous.phase === 'playing' ? 'まで' : `で${previous.phase === 'won' ? '達成' : '終了'}`}）`}
             </span>
             <button
               className="btn btn-ghost btn-xs opacity-70"
