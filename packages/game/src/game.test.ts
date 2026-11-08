@@ -91,6 +91,10 @@ describe('game', () => {
     //        $8〜11・CF の行は $0.1〜6 増える。シード 31 の cf-paid-accept（乗り換え先の Vercel）は $38 増える。結果は変わらない
     // D-58 の補足（2026-11-04）: Cloudflare の構成の Images（バインディング）を「WebP とみなす」のをやめ、選んだ形式（既定は JPEG）で数える。
     //        KV を DB の代わりにする行だけが、ページが重くなり速さが「悪い」月が増えて所持金が減る（シード 42: $64・3: $56。31 と結果は変わらない）
+    // D-125: 再検証の既定を、オンデマンドが選べる構成ではオンデマンドに（Vercel・VPS・AWS。CF は既定の ISR のキャッシュが KV で
+    //        選べないので 5 分のまま・変わらない）。Vercel Pro・何もしないは $70〜122・画像だけ Cloudflare は $23〜69・VPS の行は $18〜50 増え、
+    //        OpenNext は CloudFront の無効化の分 $79〜111 減る。Vercel から CF へ乗り換える行は、乗り換え先の KV にオンデマンドが届かず
+    //        $87〜94 減る。シード 42 の VPS・SLA とシード 3 の VPS・前段の CDN が goal → won
     const r = (seed: number) =>
       Object.fromEntries(
         BASELINES.map((b) => {
@@ -101,51 +105,51 @@ describe('game', () => {
     expect(r(42)).toEqual({
       'cf-paid': ['2087.94', 'won', 12],
       'cf-paid-accept': ['2169.41', 'won', 12],
-      'vps-images': ['1762.05', 'won', 12],
-      'vercel-pro': ['1299.27', 'goal', 12],
-      'vercel-to-cf': ['1638.37', 'goal', 12],
+      'vps-images': ['1786.40', 'won', 12],
+      'vercel-pro': ['1369.73', 'goal', 12],
+      'vercel-to-cf': ['1551.79', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1851.43', 'won', 12],
       'cf-paid-chat': ['2117.38', 'won', 12],
-      'vps-sla': ['1711.71', 'goal', 12],
-      'vps-cdn': ['1787.42', 'won', 12],
-      'vercel-cf-images': ['1410.81', 'goal', 12],
+      'vps-sla': ['1734.77', 'won', 12],
+      'vps-cdn': ['1811.35', 'won', 12],
+      'vercel-cf-images': ['1451.72', 'goal', 12],
       'aws-amplify-cdn': ['1934.63', 'won', 12],
-      'aws-opennext-images': ['2230.29', 'won', 12],
+      'aws-opennext-images': ['2145.39', 'won', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],
       'cf-paid-personal-api': ['2088.02', 'won', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['2115.72', 'won', 12],
       'cf-paid-accept': ['2135.97', 'won', 12],
-      'vps-images': ['1669.34', 'goal', 12],
-      'vercel-pro': ['1067.88', 'goal', 12],
-      'vercel-to-cf': ['1698.14', 'goal', 12],
+      'vps-images': ['1717.63', 'goal', 12],
+      'vercel-pro': ['1190.16', 'goal', 12],
+      'vercel-to-cf': ['1605.65', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1880.35', 'won', 12],
       'cf-paid-chat': ['2145.58', 'won', 12],
-      'vps-sla': ['1781.64', 'won', 12],
-      'vps-cdn': ['1721.45', 'goal', 12],
-      'vercel-cf-images': ['1348.27', 'goal', 12],
+      'vps-sla': ['1828.67', 'won', 12],
+      'vps-cdn': ['1771.65', 'won', 12],
+      'vercel-cf-images': ['1371.13', 'goal', 12],
       'aws-amplify-cdn': ['1918.29', 'won', 12],
-      'aws-opennext-images': ['2237.81', 'won', 12],
+      'aws-opennext-images': ['2159.18', 'won', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],
       'cf-paid-personal-api': ['2116.16', 'won', 12],
     });
     expect(r(31)).toEqual({
       'cf-paid': ['2127.98', 'won', 12],
       'cf-paid-accept': ['2146.90', 'won', 12],
-      'vps-images': ['1673.38', 'goal', 12],
-      'vercel-pro': ['1095.46', 'goal', 12],
-      'vercel-to-cf': ['1668.99', 'goal', 12],
+      'vps-images': ['1692.05', 'goal', 12],
+      'vercel-pro': ['1182.98', 'goal', 12],
+      'vercel-to-cf': ['1574.70', 'goal', 12],
       'cf-free': ['139.10', 'outages', 3],
       'cf-paid-kvdb': ['1851.40', 'won', 12],
       'cf-paid-chat': ['2152.40', 'won', 12],
-      'vps-sla': ['1645.87', 'goal', 12],
-      'vps-cdn': ['1693.58', 'goal', 12],
-      'vercel-cf-images': ['1375.53', 'goal', 12],
+      'vps-sla': ['1664.14', 'goal', 12],
+      'vps-cdn': ['1712.25', 'goal', 12],
+      'vercel-cf-images': ['1444.79', 'goal', 12],
       'aws-amplify-cdn': ['1892.91', 'won', 12],
-      'aws-opennext-images': ['2246.36', 'won', 12],
+      'aws-opennext-images': ['2135.63', 'won', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],
       'cf-paid-personal-api': ['2128.43', 'won', 12],
     });

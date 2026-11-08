@@ -5,6 +5,7 @@ import type { CommitmentPaymentId } from './commitments.ts';
 import { SCENARIOS } from './core.ts';
 import { playMonth } from './month/play.ts';
 import { partsOfComments } from './routes/comments.ts';
+import { legacyDefaultRevalidateSec } from './routes/hidden-settings.ts';
 import { articleFamily, publicRouteId } from './routes/strategy.ts';
 import { newGame } from './setup/new-game.ts';
 import type { Action, GameState, RouteParts } from './state.ts';
@@ -54,7 +55,10 @@ export type SaveData = {
    * 始める画面で選んだ部品（D-45）。部品を選べるようになる前の保存には無く、そのときは今の既定の部品で読む（版は上げない）。
    */
   components?: Choices;
-  /** 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。無い保存は今の既定（5 分）で読む。 */
+  /**
+   * 始める画面で選んだ ISR の再検証（D-49。秒・オンデマンドは 0）。無い保存は D-125 より前の既定（Astro の消せる置き場は
+   * オンデマンド、ほかは 5 分。legacyDefaultRevalidateSec）で読む（既定をオンデマンドにした後も、遊んだときと同じ値で再生する）。
+   */
   revalidateSec?: number;
   /**
    * 版 2 までの、始める画面で選んだコメントの描き方（D-82。0 ブラウザ・1 記事のページ）。版 3 からは routeParts に書く。
@@ -271,7 +275,13 @@ export function replaySave(save: SaveData): GameState {
       save.startDate,
       save.framework,
       save.components,
-      save.revalidateSec,
+      save.revalidateSec ??
+        legacyDefaultRevalidateSec(
+          save.framework,
+          save.stackIndex,
+          scenario,
+          save.routes,
+        ),
       save.routeParts ?? partsOfComments(scenario, save.comments),
       save.commitments,
       save.routes,

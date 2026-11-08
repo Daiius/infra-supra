@@ -125,13 +125,13 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'cache-components',
     code: '',
     label: '部品ごとにキャッシュ（Cache Components）',
-    long: "Next.js 16 の Cache Components（cacheComponents: true）。全員に同じ部品は 'use cache'（cacheLife・cacheTag）でキャッシュして静的な枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流す（PPR）",
+    long: "Next.js 16 の Cache Components（cacheComponents: true）。'use cache' の部品を静的な枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流す（PPR）",
     personalOk: true,
     why: {
       public:
-        "全員に同じ部品を 'use cache' でキャッシュし、静的な枠に入れて使い回す。期限（cacheLife）か、投稿・編集のときのタグ（cacheTag・updateTag）で取り直す。数え方は ISR と同じ。SNS のカードは HTML に入る",
+        '全員に同じ中身なので、部品を使い回せる。期限（cacheLife）か、投稿・編集のときのタグ（cacheTag・updateTag）で作り直す。数え方は ISR と同じ。SNS のカードは HTML に入る',
       personal:
-        '全員に同じ部品（おすすめ・ヘッダーなど）はキャッシュした枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流す。1 リクエストの CPU と DB の問い合わせは人ごとに違う部分の分だけ',
+        'おすすめ・ヘッダーなど全員に同じ部品は枠から返すので、1 リクエストの CPU と DB の問い合わせは人ごとに違う部分の分だけ',
     },
     modeled: true,
   },

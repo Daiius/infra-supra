@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ARTICLE_COMMUNITY,
   checkAction,
+  defaultRevalidateSec,
+  legacyDefaultRevalidateSec,
   EFFORT,
   newGame,
   newSave,
@@ -145,6 +147,51 @@ describe('オンデマンドの再検証（D-49）', () => {
     // CDN の料金は従量（既定の Flat Rate CDN の 1 か月目はクレジットが従量を覆い、差が出ない。D-120）
     const cost = (rv?: number) =>
       playMonth(start(3, rv, { cdnPlan: 'on-demand' })).history[0]!.infraCost;
-    expect(cost(0)).toBeLessThanOrEqual(cost());
+    expect(cost(0)).toBeLessThanOrEqual(cost(300));
+  });
+});
+
+describe('再検証の既定（D-125）: オンデマンドが選べる構成ではオンデマンド、選べなければ 5 分', () => {
+  const VERCEL_PRO = 3;
+  it('今の置き場・部品で決まる（未選択のスロットは既定の部品）', () => {
+    // VPS・Vercel（部品ごとにキャッシュの部品の作り直しも）は消せる
+    expect(defaultRevalidateSec('nextjs', VPS_2GB, sc)).toBe(0);
+    expect(defaultRevalidateSec('nextjs', VERCEL_PRO, sc)).toBe(0);
+    expect(start(VPS_2GB).settings.revalidateSec).toBe(0);
+    // Cloudflare の既定の ISR のキャッシュ（KV）は消す呼び出しが届かないので 5 分。R2 にすると選べてオンデマンド
+    expect(defaultRevalidateSec('nextjs', CF_PAID, sc)).toBe(300);
+    expect(start(CF_PAID).settings.revalidateSec).toBe(300);
+    expect(
+      defaultRevalidateSec('nextjs', CF_PAID, sc, undefined, {
+        isrCache: 'r2',
+      }),
+    ).toBe(0);
+    expect(
+      start(CF_PAID, undefined, { isrCache: 'r2' }).settings.revalidateSec,
+    ).toBe(0);
+    // 静的書き出しのビルドの間隔・SPA の API のキャッシュ・設定を出さない受託は 5 分のまま
+    expect(defaultRevalidateSec('nextjs-export', VPS_2GB, sc)).toBe(300);
+    expect(defaultRevalidateSec('vite-spa', VPS_2GB, sc)).toBe(300);
+    expect(defaultRevalidateSec('nextjs', VPS_2GB, CONTRACT_OPERATIONS)).toBe(
+      300,
+    );
+  });
+
+  it('選んだ値は既定で上書きしない', () => {
+    expect(start(VPS_2GB, 3600).settings.revalidateSec).toBe(3600);
+    expect(start(CF_PAID, 0).settings.revalidateSec).toBe(0);
+  });
+
+  it('revalidateSec の無い古い保存は、遊んだときの既定（5 分）で再生する', () => {
+    const save = newSave({
+      scenarioId: sc.id,
+      stackIndex: VPS_2GB,
+      framework: 'nextjs',
+      seed: 42,
+      startDate: '2026-10-31',
+    });
+    expect(save.revalidateSec).toBeUndefined();
+    expect(replaySave(parseSave(save)!).settings.revalidateSec).toBe(300);
+    expect(legacyDefaultRevalidateSec('nextjs', VPS_2GB, sc)).toBe(300);
   });
 });

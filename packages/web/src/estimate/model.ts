@@ -200,11 +200,17 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     raw.routes,
   );
   const settings = settingsOf(template, framework, routes);
+  const parts = estimateComponents(
+    scenario,
+    stackIndex,
+    framework,
+    raw.parts ?? {},
+  ).chosen;
   const revalidateSec =
     settings.revalidate?.options.some((o) => o.value === raw.revalidateSec) ===
     true
       ? raw.revalidateSec!
-      : defaultRevalidateSec(framework, stackIndex, scenario, routes);
+      : defaultRevalidateSec(framework, stackIndex, scenario, routes, parts);
   const comments =
     settings.comments?.options.some((o) => o.value === raw.comments) === true
       ? raw.comments!
@@ -223,8 +229,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     pv,
     framework,
     stack: STACKS[stackIndex]!.id,
-    parts: estimateComponents(scenario, stackIndex, framework, raw.parts ?? {})
-      .chosen,
+    parts,
     revalidateSec,
     comments,
     imageFormat,
@@ -252,6 +257,7 @@ function withContext(
       stackIndexOf(input.stack),
       scenarioOfTemplate(input.template),
       input.routes,
+      input.parts,
     );
   if (!followsDefault) return next;
   // 替えた先の既定（revalidateSec を渡さずに直す）
@@ -268,6 +274,8 @@ function withContext(
 export function withStack(
   input: EstimateInput,
   stack: string,
+  /** 替えた先の部品（覚えている構成の記憶。省略は空 = 既定）。再検証の既定はこの部品で決める（D-125・OCL-3CBB2E6A）。 */
+  parts: Choices = {},
 ): Partial<EstimateInput> {
   if (stack === input.stack) return {};
   const i = stackIndexOf(stack);
@@ -282,8 +290,8 @@ export function withStack(
   return withContext(
     input,
     framework === input.framework
-      ? { stack, parts: {} }
-      : { stack, framework, parts: {} },
+      ? { stack, parts }
+      : { stack, framework, parts },
   );
 }
 
@@ -291,7 +299,7 @@ export function withStack(
 export type PartsByStack = Partial<Record<string, Choices>>;
 
 /**
- * 構成を替えるときの部品の記憶: 替える前の構成の選択を覚え、替えた先の記憶を部品にする（withStack の parts: {} を上書き）。
+ * 構成を替えるときの部品の記憶: 替える前の構成の選択を覚え、替えた先の記憶を部品にする（withStack に渡し、再検証の既定もその部品で決める。OCL-3CBB2E6A）。
  * どの構成の記憶も、替えた後のテンプレート・フレームワークで選べるものだけにする（keptParts）。計算・URL は今の構成の parts だけ。
  */
 export function withStackRemembered(
@@ -302,8 +310,7 @@ export function withStackRemembered(
   const saved = { ...memory, [input.stack]: input.parts };
   const next = normalizeInput({
     ...input,
-    ...withStack(input, stack),
-    parts: saved[stack] ?? {},
+    ...withStack(input, stack, saved[stack] ?? {}),
   });
   return { input: next, memory: keptParts(saved, next) };
 }
@@ -337,6 +344,17 @@ export function withFramework(
   framework: FrameworkId,
 ): Partial<EstimateInput> {
   return framework === input.framework ? {} : withContext(input, { framework });
+}
+
+/**
+ * 部品を選ぶ。再検証などの値は withContext の規則で付け替える（既定のままなら、替えた部品でオンデマンドが選べるかで既定を
+ * 付け替える。選んだ値は残す。D-125）。
+ */
+export function withParts(
+  input: EstimateInput,
+  parts: Choices,
+): Partial<EstimateInput> {
+  return withContext(input, { parts });
 }
 
 /** テンプレートを選ぶ。再検証などの値は withContext の規則で付け替える。 */

@@ -4,14 +4,18 @@ import {
   ARTICLE_COMMUNITY,
   componentConflict,
   componentFlavor,
+  frameworksOf,
   newGame,
   newSave,
   parseSave,
   replaySave,
   SCENARIOS,
+  setupMissingSlots,
   setupProblem,
   setupSlots,
+  setupWithDefaults,
   STACKS,
+  stackSupports,
   validSetupChoices,
   withTurn,
 } from './index.ts';
@@ -124,6 +128,39 @@ describe('setupProblem・validSetupChoices', () => {
         email: 'default',
       }),
     ).toBeNull();
+  });
+
+  it('未選択のスロットの一覧と、残りを既定の部品で埋める（選んだ部品は替えない。D-125）', () => {
+    expect(
+      setupMissingSlots(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {
+        db: 'd1',
+      }).map((x) => x.slot),
+    ).toEqual(['isrCache', 'images', 'email']);
+    const filled = setupWithDefaults(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {
+      db: 'd1',
+    });
+    expect(filled.db).toBe('d1');
+    // 既定の部品（newGame が選ばれていないスロットに使う部品）
+    const g = newGame(CF_PAID, 0, ARTICLE_COMMUNITY, undefined, 'nextjs', {
+      db: 'd1',
+    });
+    expect(filled.isrCache).toBe(g.components.isrCache);
+    expect(filled.images).toBe(g.components.images);
+    expect(setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', filled)).toBe(
+      null,
+    );
+    // どの構成・フレームワークでも、埋めると始められる（埋めると出てくるスロットも埋める）
+    for (const sc of Object.values(SCENARIOS))
+      for (const st of STACKS)
+        for (const fw of frameworksOf(sc).allowed) {
+          if (!stackSupports(st.index, fw)) continue;
+          const all = setupWithDefaults(sc, st.index, fw, {});
+          expect(
+            setupProblem(sc, st.index, fw, all),
+            `${sc.id} ${st.id} ${fw}`,
+          ).toBeNull();
+          expect(validSetupChoices(sc, st.index, fw, all)).toEqual(all);
+        }
   });
 
   it('構成やフレームワークを替えたら、選べなくなった部品の選択を外す', () => {

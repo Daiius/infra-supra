@@ -297,9 +297,15 @@ describe('AWS の構成', () => {
       setupInvalidationEstimate(ARTICLE_COMMUNITY, AWS, 'nextjs', {}),
     ).toBeUndefined();
     // ゲーム中は今月の規模で引く（今の設定が時間の再検証でも、オンデマンドにしたときの見込み）
-    const st = newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs', {
-      cdnPlan: 'payg',
-    });
+    const st = newGame(
+      ON,
+      1,
+      ARTICLE_COMMUNITY,
+      DEFAULT_START_DATE,
+      'nextjs',
+      { cdnPlan: 'payg' },
+      300,
+    );
     expect(st.settings.revalidateSec).toBe(300);
     expect(onDemandInvalidationEstimate(st)!.paths).toBeCloseTo(1_200, 6);
     // 同じ月に選んだ部品の変更（行動を当てた draft）にも合わせる（OCL-7EDA42D6）

@@ -12,7 +12,7 @@ import type {
   RouteRowStatus,
   RouteStrategyId,
 } from 'game';
-import { ROUTE_STRATEGY_ORDER } from 'catalog';
+import { ROUTE_STRATEGIES, ROUTE_STRATEGY_ORDER } from 'catalog';
 import { Info } from './info.tsx';
 import { SOURCE_CLASS, SOURCE_STYLE } from './page-wireframes.tsx';
 
@@ -424,13 +424,17 @@ export function RoutePlanTable({
  * 選んでいるものは塗りと内側の枠で強調し、使えないものは灰色と理由の ⓘ。長い説明はチップの ⓘ、費用の差は「詳しく比べる」の表に出す。
  * どのチップも同じ高さ（h-7・1 行・長い名前は省略して aria-label と title に全文）。枠は inset の ring で、選んでも箱の大きさは変わらない。
  * onSelect を渡さなければ、選んでいる描き方のチップだけを読むだけで出す（選んでいないフレームワークのカード）。
+ * describe: 選んでいるチップの ⓘ の先頭に描き方そのものの説明（long）を足す（フレームワークの既定と違う描き方で、本文に
+ * フレームワークの説明の行を出さないとき。D-125）。
  */
 export function RouteChips({
   row: r,
   onSelect,
   disabledReason,
+  describe = false,
 }: {
   row: RoutePlanRow;
+  describe?: boolean;
   onSelect?: ((row: RoutePlanRow, alt: RouteAlternative) => void) | undefined;
   disabledReason?:
     | ((row: RoutePlanRow, alt: RouteAlternative) => string | null | undefined)
@@ -486,6 +490,11 @@ export function RouteChips({
                 </span>
               )}
               <Info label={`${r.strategyLabel}の説明`}>
+                {describe && (
+                  <span className="mb-1 block">
+                    {ROUTE_STRATEGIES[r.strategy].long}
+                  </span>
+                )}
                 {r.why}
                 {r.detail.length > 0 && (
                   <ul className="mt-1 list-disc pl-4">

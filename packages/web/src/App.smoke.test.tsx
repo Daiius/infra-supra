@@ -409,11 +409,21 @@ describe('ゲームモードの画面', () => {
     expect(sources('personal', '個人向けのページ')).toContain('api');
     expect(sources('personal', '個人向けのページ')).not.toContain('ssr');
     expect(check('personal', 'cpu')).toBe('true');
-    // 説明の行と札も選んだ描き方のものになる
-    expect(lines('personal', '個人向けのページ')).not.toContain(
-      'アダプターで SSR',
+    // 本文のフレームワークの説明の行は消え、描き方の説明は選んだチップの ⓘ に畳む（D-125）。札も選んだ描き方のものになる
+    expect(
+      within(pageOf('personal')).queryByRole('list', {
+        name: '個人向けのページの説明',
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      within(pageOf('personal')).getByRole('button', {
+        name: '枠 + ブラウザが API で取るの説明',
+      }),
     );
-    expect(lines('personal', '個人向けのページ')).toContain('HTML は静的な枠');
+    expect(screen.getByRole('tooltip').textContent).toContain(
+      'HTML は静的な枠',
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(badges('personal')).not.toContain('CPU:');
     expect(badges('personal')).toContain('API: 1 PV あたり 1 回増える');
     // もとの描き方は選び直せるボタンとして残る
@@ -440,12 +450,23 @@ describe('ゲームモードの画面', () => {
     expect(chosenOf('article')).toBe('shell-api');
   });
 
-  it('W-28 始める画面: ページの欄の説明の行と札は、選んだ描き方に合わせる（借りる図の無い記事の毎回描くも。D-112）', async () => {
+  it('W-28 始める画面: ページの欄の説明の行と札は、選んだ描き方に合わせる（借りる図の無い記事の毎回描くも。描き方の説明はチップの ⓘ。D-112・D-125）', async () => {
     await renderApp();
     const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     const lines = (route: string, label: string) =>
-      within(pageOf(route)).getByRole('list', { name: `${label}の説明` })
-        .textContent ?? '';
+      within(pageOf(route)).queryByRole('list', { name: `${label}の説明` })
+        ?.textContent ?? '';
+    /** 選んでいる描き方のチップの ⓘ の文。 */
+    const chipInfo = (route: string, strategy: string) => {
+      fireEvent.click(
+        within(pageOf(route)).getByRole('button', {
+          name: `${strategy}の説明`,
+        }),
+      );
+      const t = screen.getByRole('tooltip').textContent ?? '';
+      fireEvent.keyDown(document, { key: 'Escape' });
+      return t;
+    };
     const badges = (route: string) =>
       within(pageOf(route)).getByRole('list', { name: 'ページの札' })
         .textContent ?? '';
@@ -458,11 +479,9 @@ describe('ゲームモードの画面', () => {
     );
     pickStrategy('記事のページ', '毎回描く');
     expect(chosenOf('article')).toBe('ssr');
-    expect(lines('article', '記事のページ')).toContain(
+    expect(lines('article', '記事のページ')).toBe('');
+    expect(chipInfo('article', '毎回描く')).toContain(
       'リクエストのたびにサーバーが描く',
-    );
-    expect(lines('article', '記事のページ')).not.toContain(
-      '閲覧時に SSR + キャッシュ',
     );
     expect(badges('article')).toContain('CPU: 閲覧ごとにサーバーが描く');
     expect(badges('article')).not.toContain('投稿・編集でキャッシュを消す');
@@ -471,6 +490,163 @@ describe('ゲームモードの画面', () => {
     expect(lines('article', '記事のページ')).toContain(
       '閲覧時に SSR + キャッシュ',
     );
+  });
+
+  it('W-58 始める画面: 部品ごとにキャッシュ（Cache Components）の説明は本文に出さず、チップと設定の見出しの ⓘ に畳む（D-125）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Vercel Pro + Supabase Pro');
+    showFrameworkTab();
+    // Vercel × Next.js の既定（D-111）。本文に描き方の説明の行・部品の作り直しの関係の行は出ない
+    expect(chosenOf('article')).toBe('cache-components');
+    expect(
+      within(pageOf('article')).queryByRole('list', {
+        name: '記事のページの説明',
+      }),
+    ).toBeNull();
+    expect(pageOf('article').textContent).not.toContain('同じ応答で流す');
+    expect(pageOf('article').textContent).not.toContain('時間は部品の期限');
+    // 選んでいるチップの ⓘ: 描き方の説明・要件に応える理由・値
+    fireEvent.click(
+      within(pageOf('article')).getByRole('button', {
+        name: '部品ごとにキャッシュ（Cache Components）の説明',
+      }),
+    );
+    const tip = screen.getByRole('tooltip').textContent ?? '';
+    expect(tip).toContain('cacheComponents: true');
+    expect(tip).toContain('数え方は ISR と同じ');
+    expect(tip).toMatch(/部品をタグで作り直す|部品の期限/);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // 設定の見出しの ⓘ に時間とタグの意味
+    fireEvent.click(
+      within(pageOf('article')).getByRole('button', {
+        name: '部品の作り直し（cacheLife・タグ）の説明',
+      }),
+    );
+    expect(screen.getByRole('tooltip').textContent).toContain(
+      'オンデマンドは投稿・編集でタグを消して作り直す',
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+  });
+
+  it('W-59 始める画面: 部品を選び残したら、名前を押すと ① のそのスロットへ移り、残りをダイアログで選べ、残りを既定にもできる（D-125）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Cloudflare Paid + vinext');
+    const start = () =>
+      screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' });
+    const missing = () =>
+      document.querySelector<HTMLElement>('[data-missing-parts]');
+    expect(start().disabled).toBe(true);
+    expect(missing()!.textContent).toContain(
+      '部品をまだ選んでいない: ISR のキャッシュ・画像・DB・メール送信',
+    );
+    // ジャンプ: ② を開いていても、DB を押すと ① を開き、構成図の DB の箱にフォーカスする
+    showFrameworkTab();
+    const jump = (slot: string) =>
+      fireEvent.click(
+        missing()!.querySelector<HTMLElement>(`[data-missing-slot="${slot}"]`)!,
+      );
+    jump('db');
+    expect(
+      document
+        .querySelector('[data-setup-tab-button="stack"]')!
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    const card = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    expect(card().contains(document.activeElement)).toBe(true);
+    expect(
+      document.activeElement!.closest('[data-slots~="db"]'),
+    ).not.toBeNull();
+    // 「機能から選ぶ」の表示では、そのスロットのチップの行へ
+    showPartsView('list');
+    showFrameworkTab();
+    jump('email');
+    expect(
+      document.activeElement!.closest('[data-parts] [data-slot="email"]'),
+    ).not.toBeNull();
+    // ダイアログ: 未選択のスロットだけを並べ、その場で選ぶ（選んだ行は畳んで残る）
+    fireEvent.click(screen.getByRole('button', { name: '残りを選ぶ' }));
+    const dialog = screen.getByRole('dialog', { name: '残りの部品を選ぶ' });
+    const rows = () =>
+      [
+        ...dialog.querySelectorAll<HTMLElement>(
+          'section[data-parts] [data-slot]',
+        ),
+      ].map((r) => r.getAttribute('data-slot'));
+    expect(rows()).toEqual(['db', 'images', 'isrCache', 'email']);
+    expect(within(dialog).getByRole('status').textContent).toBe('残り 4 個');
+    const db = dialog.querySelector<HTMLElement>('[data-slot="db"]')!;
+    fireEvent.click(
+      within(db).getByRole('button', { name: /^D1/, pressed: false }),
+    );
+    expect(rows()).toEqual(['db', 'images', 'isrCache', 'email']);
+    expect(
+      dialog.querySelector('[data-slot="db"]')!.getAttribute('data-collapsed'),
+    ).toBe('true');
+    expect(within(dialog).getByRole('status').textContent).toBe('残り 3 個');
+    // 部品の ⓘ の比較のダイアログだけを閉じても、残りを選ぶダイアログは開いたまま（OCL-763C2E15）
+    fireEvent.click(
+      within(
+        dialog.querySelector<HTMLElement>('[data-slot="images"]')!,
+      ).getAllByRole('button', { name: /の説明$/ })[0]!,
+    );
+    const cmp = document.querySelector<HTMLDialogElement>(
+      'dialog[data-slot-compare-dialog]',
+    )!;
+    expect(cmp.open).toBe(true);
+    fireEvent.click(within(cmp).getByRole('button', { name: '閉じる' }));
+    expect(
+      document.querySelector('dialog[data-slot-compare-dialog]'),
+    ).toBeNull();
+    expect(screen.getByRole('dialog', { name: '残りの部品を選ぶ' })).toBe(
+      dialog,
+    );
+    // ダイアログの中でも残りを既定にでき、閉じると「運営を始める」が押せてフォーカスが移る
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '残りを既定にする' }),
+    );
+    expect(within(dialog).getByRole('status').textContent).toContain(
+      'すべて選んだ',
+    );
+    fireEvent.click(
+      within(dialog)
+        .getAllByRole('button', { name: '閉じる' })
+        .find((b) => b.textContent === '閉じる')!,
+    );
+    expect(
+      screen.queryByRole('dialog', { name: '残りの部品を選ぶ' }),
+    ).toBeNull();
+    expect(missing()).toBeNull();
+    expect(start().disabled).toBe(false);
+    expect(document.activeElement).toBe(start());
+    // 選んだ DB は既定で上書きしない
+    expect(
+      document
+        .querySelector(
+          'section[data-parts] [data-slot="db"] [data-selected="true"]',
+        )!
+        .getAttribute('data-option'),
+    ).toBe('d1');
+  });
+
+  it('W-60 始める画面: 「残りを既定にする」で未選択のスロットを既定の部品で埋め、すぐ「運営を始める」を押せる（D-125）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Vercel Pro + Supabase Pro');
+    const start = () =>
+      screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' });
+    expect(start().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '残りを既定にする' }));
+    expect(document.querySelector('[data-missing-parts]')).toBeNull();
+    expect(start().disabled).toBe(false);
+    expect(document.activeElement).toBe(start());
+    fireEvent.click(start());
+    await waitLoaded();
+    expectGameScreen(1);
   });
 
   it('W-29 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
@@ -809,7 +985,7 @@ describe('ゲームモードの画面', () => {
     expect(
       within(current()).getByRole('list', { name: '構成図のつながり' })
         .textContent,
-    ).toContain('閲覧者（ブラウザ） → Vercel CDN');
+    ).toContain('ブラウザ → Vercel CDN');
     const legend = within(current()).getByRole('list', {
       name: '構成図の流れの凡例',
     });
@@ -1836,7 +2012,7 @@ describe('ゲームモードの画面', () => {
     });
   });
 
-  it('W-43 始める画面: 再検証の間隔などの描き方の設定は、② のカードの記事のページの行で選ぶ（S2 と S3 は同じ設定。D-119）', async () => {
+  it('W-43 始める画面: 再検証の間隔などの描き方の設定は、② のカードの記事のページの行で選ぶ（S2 と S3 は同じ設定。D-119。既定はオンデマンドが選べればオンデマンド。D-125）', async () => {
     await renderApp();
     /** 記事のページの行の設定のチップ（名前は設定の見出し）。 */
     const setting = (label: string) =>
@@ -1864,12 +2040,21 @@ describe('ゲームモードの画面', () => {
             name: 'ISR の再検証',
           }),
         ).toBeNull();
-        expect(chosenOf('article')).toBe('cached-ttl');
-        expect(selectedOf('ISR の再検証')).toBe('300');
+        // 既定は、今の部品（R2）でオンデマンドが選べるのでオンデマンド（更新で消す。D-125）
+        expect(chosenOf('article')).toBe('cached-purge');
+        expect(selectedOf('ISR の再検証')).toBe('0');
         expect(setting('ISR の再検証').textContent).toContain(
           '上の 2 つの描き方は、この設定で切り替わる',
         );
-        // 時間を替えても描き方は時間で取り直すのまま。オンデマンドにすると更新で消すになる
+        // 選んでいない間は部品に付いて替わる: KV（消す呼び出しが届かない）は 5 分、R2 に戻すとオンデマンド
+        pickPart('KV', slotGroup('ISR のキャッシュ'));
+        expect(selectedOf('ISR の再検証')).toBe('300');
+        expect(chosenOf('article')).toBe('cached-ttl');
+        pickPart('R2', slotGroup('ISR のキャッシュ'));
+        expect(selectedOf('ISR の再検証')).toBe('0');
+        // 時間にすると描き方は時間で取り直す。時間を替えても時間で取り直すのまま。オンデマンドにすると更新で消すになる
+        choose('ISR の再検証', '300');
+        expect(chosenOf('article')).toBe('cached-ttl');
         choose('ISR の再検証', '3600');
         expect(selectedOf('ISR の再検証')).toBe('3600');
         expect(chosenOf('article')).toBe('cached-ttl');

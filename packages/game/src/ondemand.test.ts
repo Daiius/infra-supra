@@ -131,7 +131,10 @@ describe('先に即時反映にしていれば苦情は来ず、好評の知ら�
 
   it('時間の再検証・消す呼び出しが届かない部品（Workers KV）では今までどおり苦情が来る', () => {
     for (const g of [
-      start(CF_PAID, SEED, { components: { isrCache: 'workers-cache' } }),
+      start(CF_PAID, SEED, {
+        components: { isrCache: 'workers-cache' },
+        revalidateSec: 300,
+      }),
       start(CF_PAID, SEED, { revalidateSec: 0 }),
     ]) {
       expect(editsReflectImmediately(g)).toBe(false);

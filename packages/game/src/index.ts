@@ -126,6 +126,7 @@ export {
   hiddenSettings,
   revalidateSettingOf,
   defaultRevalidateSec,
+  legacyDefaultRevalidateSec,
 } from './routes/hidden-settings.ts';
 export {
   setupRevalidateOptions,
@@ -167,6 +168,8 @@ export {
   setupSlots,
   validSetupChoices,
   setupProblem,
+  setupMissingSlots,
+  setupWithDefaults,
   newGame,
 } from './setup/new-game.ts';
 export {

@@ -76,6 +76,7 @@ import {
   USD_JPY,
   VARIANTS,
   withFramework,
+  withParts,
   withStack,
   withStackRemembered,
   withTemplate,
@@ -562,7 +563,7 @@ function Conditions({
                     : 'この構成を選んだときの既定の部品で描く。'
               }
               // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
-              onComponentsChange={(parts) => setInput({ parts })}
+              onComponentsChange={(parts) => setInput(withParts(input, parts))}
               partsNote="選んでいないスロットは既定の部品で見積もる"
               partsExtra={imageSettings ? { images: imageSettings } : undefined}
               // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）

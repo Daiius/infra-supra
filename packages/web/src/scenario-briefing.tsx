@@ -21,7 +21,6 @@ import {
   upkeepOf,
   featureRuleText,
 } from 'game';
-import { ROUTE_STRATEGIES } from 'catalog';
 import {
   useCallback,
   useEffect,
@@ -327,13 +326,9 @@ function FrameworkCard({
         {pages.map((p) => {
           const row = rowOf(p.route);
           const st = statusOf(p.route);
-          // フレームワークの既定と違う描き方なら、フレームワークの説明の行でなく描き方の説明を出す（D-112）
-          const pageLines = p.strategy
-            ? [
-                ROUTE_STRATEGIES[p.strategy].long,
-                ...(row?.strategy === p.strategy ? [row.why] : []),
-              ]
-            : frameworkLinesOf(p.label);
+          // フレームワークの既定と違う描き方なら、フレームワークの説明の行は出さず、描き方の説明（long・why）はチップの ⓘ に
+          // 畳む（D-112・D-125）
+          const pageLines = p.strategy ? [] : frameworkLinesOf(p.label);
           return (
             <section
               key={p.route}
@@ -344,7 +339,15 @@ function FrameworkCard({
               <PageWireframe page={p} />
               <div className="min-w-0 flex-1 space-y-1.5">
                 <h5 className="font-semibold">{p.label}</h5>
-                {row && <RouteChips row={row} onSelect={editor?.onSelect} />}
+                {row && (
+                  <RouteChips
+                    row={row}
+                    onSelect={editor?.onSelect}
+                    describe={
+                      p.strategy !== undefined && row.strategy === p.strategy
+                    }
+                  />
+                )}
                 {editor && row?.overriddenBy && (
                   <p className="text-[11px] text-warning">
                     既定から変わっている: {row.overriddenBy}

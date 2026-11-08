@@ -52,7 +52,8 @@ const start = (
     DEFAULT_START_DATE,
     fw,
     components,
-    undefined,
+    // 記事の再検証は時間（5 分）で始める（描き方の S2 を確かめるため。既定はオンデマンドが選べればオンデマンド。D-125）
+    300,
     undefined,
     undefined,
     routes,
