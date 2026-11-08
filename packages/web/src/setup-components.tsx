@@ -35,6 +35,7 @@ import { Info } from './info.tsx';
 import { useReducedMotion } from './motion.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
 import { SlotCompareInfo, type SlotCompareData } from './slot-compare.tsx';
+import { roundInt } from './format.ts';
 
 /** 部品のスロットの比較（ⓘ の表と月額の横棒。D-124）。画面ごとの見積でスロットの比較を引く（開いたときだけ呼ぶ）。 */
 export type PartsCompare = (slot: string) => SlotCompareData;
@@ -906,7 +907,7 @@ export function SetupSettings({ children }: { children: ReactNode }) {
 }
 
 /** 「約 $X」（見込みは目安なので整数のドル。丸めは表示のときだけ）。 */
-const aboutUsd = (n: number) => `約 $${Math.round(n).toLocaleString('en-US')}`;
+const aboutUsd = (n: number) => `約 $${roundInt(n).toLocaleString('en-US')}`;
 
 /**
  * 始める画面の 1 か月目の費用の見込み（D-72）。部品と設定がすべて選ばれたときだけ出す。費用が「開始の所持金 + 1 か月目の

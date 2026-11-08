@@ -11,6 +11,7 @@ import {
   monthHeading,
   readEventPages,
   renderApp,
+  restartFromHeader,
   startGame,
   useSmokeEnv,
 } from './smoke.test-helpers.tsx';
@@ -210,7 +211,7 @@ describe('この月に戻る（D-128）', () => {
     // もう一度前の試行を作ってから「最初から」→ 新しく始めると前の試行は無い
     rewindFromHistory(2);
     expect(savedPrevious()).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+    restartFromHeader();
     expect(localStorage.getItem(SAVE_KEY)).toBeNull();
     await start();
     expect(savedPrevious()).toBeUndefined();

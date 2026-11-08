@@ -52,9 +52,7 @@ import {
   RouteSettingChips,
   type RoutePlanEditor,
 } from './route-plan-field.tsx';
-
-const usd = (n: number) =>
-  `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { usd } from './format.ts';
 
 /** 選べるシナリオ（SCENARIOS の登録順）。 */
 export const SCENARIO_LIST: Scenario[] = Object.values(SCENARIOS);

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ARTICLE_COMMUNITY,
   playStrategy,
+  policyCauseOf,
   retryHintsOf,
   SCENARIOS,
   STACKS,
@@ -55,6 +56,16 @@ describe('retryHintsOf', () => {
     expect(hints[0]!.what).toContain('1 か月目');
     expect(hints[0]!.what).toContain('非商用');
     expect(hints.slice(1).every((x) => x.kind === 'limit')).toBe(true);
+    // 原因のプランの名前（画面で強調する）
+    expect(policyCauseOf(st)).toEqual({
+      label: 'Vercel Hobby',
+      text: expect.stringContaining('非商用'),
+      warnedMonth: 1,
+    });
+  });
+
+  it('規約違反で終わっていなければ原因のプランは無い', () => {
+    expect(policyCauseOf(idle(CF_FREE))).toBeNull();
   });
 
   it('Vercel Pro: 所持金が足りず、費用の大きい基本料が出る', () => {

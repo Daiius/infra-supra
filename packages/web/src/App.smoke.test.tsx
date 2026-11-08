@@ -27,6 +27,7 @@ import {
   type Setup,
   getRadio,
   readEventPages,
+  restartFromHeader,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -668,7 +669,7 @@ describe('ゲームモードの画面', () => {
       framework: 'Vite（SPA）+ API',
       parts: { 'CDN の料金のプラン': 'On-demand CDN（従量）' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+    restartFromHeader();
     const b = lastButton()!;
     expect(b.textContent).toBe(
       '前回の構成を選ぶ（Vercel Pro + Supabase Pro・Vite（SPA）+ API）',
@@ -717,7 +718,7 @@ describe('ゲームモードの画面', () => {
       stack: 'Cloudflare Paid + vinext',
       framework: 'Next.js（App Router）',
     });
-    fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+    restartFromHeader();
     pickRadio(CONTRACT);
     expect(lastButton()).toBeNull();
     pickRadio(ARTICLE);
@@ -768,7 +769,7 @@ describe('ゲームモードの画面', () => {
     expect(saved.scenarios['article-community'].components.isrCache).toBe(
       'default',
     );
-    fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+    restartFromHeader();
     const tab = () =>
       document.querySelector('[data-setup-tab-button="stack"]')!.textContent;
     expect(tab()).toMatch(/Cloudflare Free \+ vinext/);
@@ -846,8 +847,9 @@ describe('ゲームモードの画面', () => {
         name: '描き方（この構成で選べるもの）',
       }),
     ).toBeDefined();
-    // 表には 1 か月目の費用の差が出る。番号は出さない
-    expect(table.textContent).toMatch(/[+−]\$\d/);
+    // 表には 1 か月目の費用の差が出る（丸めると 0 の差は「±$0」で、「−$0」「+$0」にしない）。番号は出さない
+    expect(table.textContent).toMatch(/[±+−]\$\d/);
+    expect(table.textContent).not.toMatch(/[+−]\$0(?![\d,])/);
     expect(table.textContent).not.toMatch(/\bS[1-7]\b/);
     // 表の ⓘ の説明のダイアログは、比べるダイアログの中に描く（OCL-8E844E7C。D-129）
     fireEvent.click(

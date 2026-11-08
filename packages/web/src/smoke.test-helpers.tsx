@@ -388,6 +388,16 @@ export function closeEventsDialog(dialog: HTMLElement) {
   expect(screen.queryByRole('dialog')).toBeNull();
 }
 
+/** ヘッダーの「最初から」を押し、確認のダイアログで「やり直す」を押す（始める画面に戻る）。 */
+export function restartFromHeader() {
+  fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+  const dialog = screen.getByRole('dialog', {
+    name: '最初からやり直しますか？',
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'やり直す' }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+}
+
 /** 今の月のカードの見出し（「N か月目 …」）。 */
 export const monthHeading = (n: number) =>
   screen.getByRole('heading', { level: 2, name: new RegExp(`^${n} か月目`) });
