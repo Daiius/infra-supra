@@ -136,6 +136,25 @@ h4,
     motion-pop 300ms ease-out 450ms both,
     motion-pulse 6.3s ease-in-out 750ms infinite;
 }
+/* 出来事のダイアログのカードの入れ替え（D-126）。次へは右から、前へは左から滑り込む */
+@keyframes motion-slide-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes motion-slide-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+.motion-slide-from-right {
+  animation: motion-slide-from-right 180ms ease-out both;
+}
+.motion-slide-from-left {
+  animation: motion-slide-from-left 180ms ease-out both;
+}
 @media (prefers-reduced-motion: reduce) {
   .motion-ping {
     display: none;
@@ -147,7 +166,9 @@ h4,
   .motion-width,
   .motion-draw,
   .motion-pop,
-  .motion-fade-in {
+  .motion-fade-in,
+  .motion-slide-from-right,
+  .motion-slide-from-left {
     animation: none !important;
     transition: none !important;
   }

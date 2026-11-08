@@ -385,10 +385,12 @@ function VictoryCelebration({
 }
 
 /**
- * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつ出し、見出しの下のナビ（「← 前へ」「2 / 4」「次へ →」と、
- * 件数ぶんの印のステップ）で移る（左右の矢印キーでも）。ナビは本文の上に置き、ページの高さが変わっても動かない。
- * 本文が長いときは本文だけをスクロールする。`<dialog>` の showModal でフォーカスを閉じ込め、
- * Esc・×・「あとで見る」・最後のページの「閉じる」で閉じる。選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
+ * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつの通知のカードで出し、見出しの下のナビ
+ * （「← 前へ」「2 / 4」「次へ →」とページ送りの点）で左右に切り替える（左右の矢印キー・横のスワイプでも）。
+ * 未読の数を見出しに、未読だったカードには角に「NEW」を出す。表示したページは既読にする（既読はダイアログを開いている間だけ）。
+ * ナビは本文の上に置き、ページの高さが変わっても動かない。本文が長いときは本文だけをスクロールする。
+ * `<dialog>` の showModal でフォーカスを閉じ込め、Esc・×・「あとで見る」・最後のページの「閉じる」で閉じる。
+ * 選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
  */
 function EventsDialog({
   report: r,
@@ -403,7 +405,15 @@ function EventsDialog({
   const nextRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const [page, setPage] = useState(0);
+  const reduced = useReducedMotion();
+  // page: 今のページ / read: 表示したページ（今のページを含む） / fresh: 今のページが開いた時点で未読だったか / dir: 移った向き
+  const [view, setView] = useState({
+    page: 0,
+    read: new Set([0]),
+    fresh: true,
+    dir: 0,
+  });
+  const { page, read, fresh, dir } = view;
   useEffect(() => {
     const d = ref.current;
     if (!d || d.open) return;
@@ -416,6 +426,7 @@ function EventsDialog({
   const n = r.events.length;
   const last = page >= n - 1;
   const e = r.events[Math.min(page, n - 1)]!;
+  const unread = n - read.size;
   // ページを移ったら本文を先頭へ戻す。押したボタンが端で押せなくなったら、次へ（最後のページでは「閉じる」）へフォーカスを移す
   const moved = useRef(false);
   useEffect(() => {
@@ -431,10 +442,17 @@ function EventsDialog({
     (last ? closeRef : nextRef).current?.focus();
   }, [page, last]);
   const go = (to: number) => {
-    if (to < 0 || to >= n) return;
+    if (to < 0 || to >= n || to === page) return;
     moved.current = true;
-    setPage(to);
+    setView({
+      page: to,
+      read: new Set(read).add(to),
+      fresh: !read.has(to),
+      dir: to > page ? 1 : -1,
+    });
   };
+  // 横のスワイプ（縦のスクロールと区別するため、横の動きが縦より大きく 50px 以上のときだけ）
+  const touch = useRef<{ x: number; y: number } | null>(null);
   return (
     <dialog
       ref={ref}
@@ -449,8 +467,21 @@ function EventsDialog({
       <div className="modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6">
         {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
         <div className="flex shrink-0 items-start justify-between gap-2">
-          <h2 id="events-dialog-title" className="text-lg font-bold">
-            {r.month} か月目の出来事（{n} 件）
+          <h2
+            id="events-dialog-title"
+            className="flex flex-wrap items-center gap-x-2 text-lg font-bold"
+          >
+            <span>
+              {r.month} か月目の出来事（{n} 件）
+            </span>
+            {n > 1 && (
+              <span
+                className={`badge badge-sm font-normal ${unread > 0 ? 'badge-primary' : 'badge-ghost'}`}
+                data-events-unread
+              >
+                {unread > 0 ? `未読 ${unread}` : '✓ すべて既読'}
+              </span>
+            )}
           </h2>
           <form method="dialog">
             <button
@@ -475,10 +506,9 @@ function EventsDialog({
               >
                 ← 前へ
               </button>
-              {/* 位置の表示は読み上げにも伝える（ページを移るたびに読む） */}
               <span
                 className="min-w-12 text-center text-sm tabular-nums"
-                aria-live="polite"
+                aria-hidden
                 data-events-position
               >
                 {page + 1} / {n}
@@ -494,21 +524,36 @@ function EventsDialog({
                 次へ →
               </button>
             </div>
-            {/* 件数ぶんの印（出来事の印の記号と色）。押すとそのページへ移る */}
-            <ol className="flex flex-wrap gap-1.5" data-events-steps>
+            {/* 位置と未読の数は読み上げにも伝える（ページを移るたびに読む） */}
+            <span className="sr-only" aria-live="polite">
+              {n} 件中 {page + 1} 件目。
+              {unread > 0 ? `未読 ${unread} 件` : 'すべて既読'}
+            </span>
+            {/* ページ送りの点。今のページは横長、未読は塗り、既読は輪郭だけ（色だけでなく形で見分ける）。押すとそのページへ */}
+            <ol className="flex items-center gap-0.5" data-events-dots>
               {r.events.map((x, i) => {
-                const b = eventBadge(x);
+                const state =
+                  i === page ? 'current' : read.has(i) ? 'read' : 'unread';
                 return (
                   <li key={`${x.id}:${x.phase}`}>
                     <button
                       type="button"
-                      className={`badge badge-sm cursor-pointer ${b.cls} ${i === page ? 'ring-2 ring-base-content ring-offset-1 ring-offset-base-100' : 'opacity-60'}`}
-                      aria-label={`${i + 1} 件目: ${b.label}: ${x.title}`}
+                      className="flex h-6 items-center px-1"
+                      aria-label={`${i + 1} 件目（${read.has(i) ? '既読' : '未読'}）: ${x.title}`}
                       aria-current={i === page ? 'step' : undefined}
                       title={x.title}
+                      data-dot={state}
                       onClick={() => go(i)}
                     >
-                      {b.label.split(' ')[0]}
+                      <span
+                        className={`block h-2 rounded-full transition-all ${
+                          state === 'current'
+                            ? 'w-6 bg-primary'
+                            : state === 'unread'
+                              ? 'w-2 bg-primary'
+                              : 'w-2 border border-base-content/40'
+                        }`}
+                      />
                     </button>
                   </li>
                 );
@@ -518,15 +563,48 @@ function EventsDialog({
         )}
         <div
           ref={bodyRef}
-          className="mt-3 min-h-0 flex-1 overflow-y-auto"
+          className="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
           data-events-page
+          onTouchStart={(t) => {
+            const p = t.touches[0];
+            touch.current = p ? { x: p.clientX, y: p.clientY } : null;
+          }}
+          onTouchEnd={(t) => {
+            const s0 = touch.current;
+            const p = t.changedTouches[0];
+            touch.current = null;
+            if (!s0 || !p) return;
+            const dx = p.clientX - s0.x;
+            if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(p.clientY - s0.y))
+              go(dx < 0 ? page + 1 : page - 1);
+          }}
         >
-          <EventCard key={`${e.id}:${e.phase}`} event={e} />
-          {e.phase === 'proposal' && (
-            <div className="mt-2 text-sm opacity-80">
-              行動の欄で受けるか断るかを選ぶ（選ばなければ断る）
-            </div>
-          )}
+          {/* key でページごとに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない） */}
+          <div
+            key={page}
+            className={`relative pt-2 ${
+              reduced || dir === 0
+                ? ''
+                : dir > 0
+                  ? 'motion-slide-from-right'
+                  : 'motion-slide-from-left'
+            }`}
+          >
+            {fresh && n > 1 && (
+              <span
+                className="badge badge-primary badge-xs absolute top-0 right-2 z-10"
+                data-events-new
+              >
+                NEW
+              </span>
+            )}
+            <EventCard key={`${e.id}:${e.phase}`} event={e} />
+            {e.phase === 'proposal' && (
+              <div className="mt-2 text-sm opacity-80">
+                行動の欄で受けるか断るかを選ぶ（選ばなければ断る）
+              </div>
+            )}
+          </div>
         </div>
         <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
           {last ? (
