@@ -6,6 +6,8 @@ import { ARTICLE_COMMUNITY, rollSchedule } from 'game';
 import { describe, expect, it, vi } from 'vitest';
 import {
   advance,
+  closeEventsDialog,
+  eventPosition,
   expectGameScreen,
   monthHeading,
   openSlot,
@@ -21,6 +23,7 @@ import {
   waitLoaded,
   type Setup,
   getRadio,
+  readEventPages,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -2222,6 +2225,150 @@ describe('ゲームモードの画面', () => {
     expect(legend().some((t) => t!.startsWith('行動0'))).toBe(false);
   });
 
+  it('W-58 出来事のある月は出来事のダイアログが開き、1 件ずつ前後に移れて、最後のページで「閉じる」が出る（D-126）', async () => {
+    // シード 42 は 6 か月目に 3 件（話題・個人向けのページの提案・料金の改定）
+    const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
+      (x) => x.id === 'p-personal',
+    )!.month;
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    advance(m - 2);
+    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+    const dialog = screen.getByRole('dialog', {
+      name: new RegExp(`^${m} か月目の出来事（\\d+ 件）`),
+    });
+    const n = Number(
+      within(dialog)
+        .getByRole('heading')
+        .textContent!.match(/（(\d+) 件）/)![1],
+    );
+    expect(n).toBeGreaterThanOrEqual(2);
+    expect(eventPosition(dialog)).toBe(`1 / ${n}`);
+    const page = () => dialog.querySelector('[data-events-page]')!.textContent!;
+    const first = page();
+    // 1 ページ目: 前へは押せず、次へ・あとで見る・× がある。最後でないので「閉じる」は無い
+    const prev = () =>
+      within(dialog).getByRole<HTMLButtonElement>('button', {
+        name: /^← 前へ/,
+      });
+    expect(prev().disabled).toBe(true);
+    within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' });
+    within(dialog).getByRole('button', { name: 'ダイアログを閉じる' });
+    expect(within(dialog).queryByRole('button', { name: '閉じる' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
+    expect(eventPosition(dialog)).toBe(`2 / ${n}`);
+    expect(page()).not.toBe(first);
+    fireEvent.click(prev());
+    expect(eventPosition(dialog)).toBe(`1 / ${n}`);
+    expect(page()).toBe(first);
+    // 左右の矢印キーでも移る
+    fireEvent.keyDown(dialog, { key: 'ArrowRight' });
+    expect(eventPosition(dialog)).toBe(`2 / ${n}`);
+    fireEvent.keyDown(dialog, { key: 'ArrowLeft' });
+    expect(eventPosition(dialog)).toBe(`1 / ${n}`);
+    // 各ページに出来事の印（一覧と同じ文言）と題が出る。提案のページには行動の欄で選ぶ案内
+    const pages = readEventPages(dialog);
+    expect(pages).toHaveLength(n);
+    const proposal = pages.find((t) => t.includes('◆ 提案'))!;
+    expect(proposal).toContain('会員向けの個人化');
+    expect(proposal).toContain('行動の欄で受けるか断るかを選ぶ');
+    expect(pages.some((t) => t.includes('⚡ 今月発生'))).toBe(true);
+    // 最後のページ: 「閉じる」が主ボタンで、次へ・あとで見るは無い
+    expect(eventPosition(dialog)).toBe(`${n} / ${n}`);
+    expect(within(dialog).queryByRole('button', { name: /^次へ/ })).toBeNull();
+    expect(
+      within(dialog).queryByRole('button', { name: 'あとで見る（閉じる）' }),
+    ).toBeNull();
+    const close = within(dialog).getByRole('button', { name: '閉じる' });
+    expect(close.classList.contains('btn-primary')).toBe(true);
+    fireEvent.click(close);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // 閉じても月のカードに出来事の一覧が残り、そこから 1 ページ目で開き直せる
+    expect(screen.getAllByText('◆ 提案').length).toBeGreaterThan(0);
+    fireEvent.click(
+      screen.getByRole('button', { name: `出来事を 1 件ずつ見る（${n} 件）` }),
+    );
+    const again = screen.getByRole('dialog');
+    expect(eventPosition(again)).toBe(`1 / ${n}`);
+    closeEventsDialog(again);
+  });
+
+  it('W-59 出来事のダイアログは途中のページでも閉じられ、同じ月では再び自動では開かない（D-126）', async () => {
+    const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
+      (x) => x.id === 'p-personal',
+    )!.month;
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    advance(m - 2);
+    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+    // 途中のページで「あとで見る（閉じる）」
+    let dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // × でも閉じる（一覧のボタンで開き直してから）
+    fireEvent.click(
+      screen.getByRole('button', { name: /^出来事を 1 件ずつ見る/ }),
+    );
+    dialog = screen.getByRole('dialog');
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'ダイアログを閉じる' }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // 見積の画面へ移って戻ると、運営中の画面は作り直されるが、同じ月の出来事は自動では開かない
+    fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    await waitLoaded();
+    fireEvent.click(screen.getByRole('tab', { name: 'ゲーム' }));
+    await waitLoaded();
+    monthHeading(m);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // 次の出来事のある月はまた開く
+    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+    within(screen.getByRole('dialog')).getByRole('heading', {
+      name: new RegExp(`^${m + 1} か月目の出来事`),
+    });
+  });
+
+  it('W-60 行動の欄の機能追加の提案の選択肢に、出来事と同じ「◆ 提案」の印と primary の枠が付く（D-126）', async () => {
+    const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
+      (x) => x.id === 'p-personal',
+    )!.month;
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    expect(document.querySelector('[data-proposal-choice]')).toBeNull();
+    advance(m - 1);
+    const rows = [
+      ...document.querySelectorAll<HTMLElement>('[data-proposal-choice]'),
+    ];
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.textContent).toContain('会員向けの個人化');
+    expect(row.classList.contains('border-primary')).toBe(true);
+    const badge = within(row).getByText('◆ 提案');
+    expect(badge.classList.contains('badge-primary')).toBe(true);
+    // 月のカードの出来事の一覧の印と同じ文言・色
+    const listed = screen
+      .getAllByText('◆ 提案')
+      .find((el) => !row.contains(el))!;
+    expect(listed.className).toContain('badge-primary');
+    // 受ける・断るの選択肢はこの行の中にある
+    expect(within(row).getAllByRole('radio')).toHaveLength(2);
+  });
+
   it('W-53 Bot を遮断してから Bot が来ると、出来事の欄に遮断済みの文が出る（2026-11-04）', async () => {
     // 既定のシード 42 は Bot が予告なしで来る
     const bot = ARTICLE_COMMUNITY.events.find((e) => e.id === 'bot')!;
@@ -2245,6 +2392,9 @@ describe('ゲームモードの画面', () => {
     within(dialog).getByRole('heading', {
       name: new RegExp(`^${m} か月目の出来事`),
     });
+    // 出来事は 1 件ずつ出る（D-126）。Bot のページまで送る
+    for (let i = 0; i < 10 && !dialog.textContent!.includes(bot.title); i++)
+      fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
     expect(dialog.textContent).toContain(bot.blockedSurpriseText);
     expect(dialog.textContent).not.toContain(bot.surpriseText);
     // 効果の行は実際の倍率、予告なしの印の説明も遮断済みの文
@@ -2261,9 +2411,7 @@ describe('ゲームモードの画面', () => {
         .getByText('🛡 対策済み')
         .classList.contains('badge-success'),
     ).toBe(true);
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: '閉じて今月の行動へ' }),
-    );
+    closeEventsDialog(dialog);
     expect(screen.getAllByText('🛡 対策済み').length).toBeGreaterThan(0);
     expect(
       screen.getByText(/🛡 対策済み）: Bot・クローラーの大量アクセス/),

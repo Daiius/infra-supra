@@ -94,6 +94,7 @@ export function useSmokeEnv() {
   }, 30_000);
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     window.history.replaceState(null, '', '/');
     errors = [];
     vi.spyOn(console, 'error').mockImplementation((...args) => {
@@ -310,19 +311,44 @@ export const slotGroup = (label: string, by: 'label' | 'slot' = 'label') => {
 };
 
 /**
- * 「次の月へ」を n 回押す（行動は選ばない）。出来事のダイアログが自動で開いたら、中身が描けていることを見て閉じる。
+ * 「次の月へ」を n 回押す（行動は選ばない）。出来事のダイアログが自動で開いたら、最後のページまで送って中身が描けていることを見て閉じる。
  */
 export function advance(n: number) {
   for (let i = 0; i < n; i++) {
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
     const dialog = screen.queryByRole('dialog');
     if (!dialog) continue;
-    within(dialog).getByRole('heading', { name: /か月目の出来事/ });
-    fireEvent.click(
-      within(dialog).getByRole('button', { name: '閉じて今月の行動へ' }),
-    );
-    expect(screen.queryByRole('dialog')).toBeNull();
+    readEventPages(dialog);
+    closeEventsDialog(dialog);
   }
+}
+
+/** 出来事のダイアログ（D-126）の今のページの位置（「2 / 4」）。 */
+export const eventPosition = (dialog: HTMLElement) =>
+  dialog.querySelector('[data-events-position]')!.textContent!.trim();
+
+/**
+ * 出来事のダイアログを 1 ページ目から最後まで「次へ」で送り、各ページの中身の文を返す（最後のページで止まる）。
+ */
+export function readEventPages(dialog: HTMLElement): string[] {
+  within(dialog).getByRole('heading', { name: /か月目の出来事/ });
+  const pages: string[] = [];
+  for (let i = 0; i < 50; i++) {
+    pages.push(dialog.querySelector('[data-events-page]')!.textContent!);
+    const next = within(dialog).queryByRole('button', { name: /^次へ/ });
+    if (!next) break;
+    fireEvent.click(next);
+  }
+  return pages;
+}
+
+/** 出来事のダイアログを閉じる（最後のページなら「閉じる」、途中なら「あとで見る（閉じる）」）。 */
+export function closeEventsDialog(dialog: HTMLElement) {
+  fireEvent.click(
+    within(dialog).queryByRole('button', { name: '閉じる' }) ??
+      within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' }),
+  );
+  expect(screen.queryByRole('dialog')).toBeNull();
 }
 
 /** 今の月のカードの見出し（「N か月目 …」）。 */

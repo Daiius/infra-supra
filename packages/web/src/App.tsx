@@ -64,7 +64,15 @@ const USD_JPY = 150;
 /** 遊んでいる途中の保存（D-26）。行動の履歴だけを持ち、読み込みは再生で復元する。 */
 const SAVE_KEY = 'infra-supra:game-save';
 
-type Session = { save: SaveData; state: GameState; restored: boolean };
+/** runId: 遊び始め（始めた・再開した）ごとの id。出来事のダイアログを月ごとに 1 回だけ自動で開く（D-126）。保存には入れない。 */
+type Session = {
+  save: SaveData;
+  state: GameState;
+  restored: boolean;
+  runId: string;
+};
+const newRunId = () =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 /** 保存から再開する。読めない・版が違う・再生で例外が出たら、黙って捨てて初期画面にする。 */
 function loadSession(): Session | null {
@@ -73,7 +81,12 @@ function loadSession(): Session | null {
     if (!raw) return null;
     const save = parseSave(JSON.parse(raw));
     if (!save) throw new Error('読めない保存');
-    return { save, state: replaySave(save), restored: true };
+    return {
+      save,
+      state: replaySave(save),
+      restored: true,
+      runId: newRunId(),
+    };
   } catch {
     try {
       localStorage.removeItem(SAVE_KEY);
@@ -162,15 +175,17 @@ export function App() {
           ) : state ? (
             <Game
               // 新しく始めたとき・再開したときは作り直す（ダイアログの状態を引き継がない）
-              key={`${session!.save.seed}:${session!.save.stackIndex}:${session!.save.framework}:${session!.save.startDate}:${session!.restored}`}
+              key={session!.runId}
               state={state}
               restored={session!.restored}
+              runId={session!.runId}
               onAdvance={(actions) => {
                 const next = playMonth(applyActions(state, actions));
                 setSession({
                   save: withTurn(session!.save, actions),
                   state: next,
                   restored: session!.restored,
+                  runId: session!.runId,
                 });
                 return next;
               }}
@@ -178,7 +193,12 @@ export function App() {
           ) : (
             <Briefing
               onStart={(save) =>
-                setSession({ save, state: replaySave(save), restored: false })
+                setSession({
+                  save,
+                  state: replaySave(save),
+                  restored: false,
+                  runId: newRunId(),
+                })
               }
             />
           )}
