@@ -15,6 +15,7 @@
 | `packages/estimator` | Workload・Architecture・ComponentKind・資源シミュレーション・料金計算・容量評価（前提）と、それらの zod スキーマ。**環境非依存** | 実装済み（P1-2〜P1-8。[08](./08-roadmap.md)） |
 | `packages/catalog` | ServiceOffering と PriceBook（プロバイダー別・版付き）、フレームワーク、アプリのテンプレート、構成スタックと部品（事業者をまたぐ部品を含む）、日本の消費税。架空データは `src/fictional/` に分ける（`catalog/fictional`。本体の index からは export しない。D-78） | 実装済み（7 事業者。[README](./README.md)「スコープ」） |
 | `packages/game` | 経営シミュレーション（ターン・ユーザー成長・イベント・収益・評価）。シード付き乱数 | 実装済み（GD-1〜GD-5・2 シナリオ。[07](./07-game-design.md) §8） |
+| `packages/stats` | 集計のサーバー（Hono RPC・drizzle + Postgres。node 専用）。終わったプレイを game で再生して照合し保存する・分布を返す | 実装済み（段 2。デプロイ待ち。[15](./15-results-and-stats.md) §5.4・§7.1） |
 | `packages/web` | 見積モード・ゲームモードの UI | ゲームモードと、見積モードの最初の形（ルーターなし・タブで切り替え。[08](./08-roadmap.md)・D-73〜D-76） |
 
 依存の規則:
@@ -23,7 +24,7 @@
   テストでは架空の PriceBook を渡せる。
 - **catalog → estimator**（型とスキーマだけを使う）。catalog のテストは「全データが estimator のスキーマを通る」ことを確かめる。
 - **game → catalog・estimator**。game は料金を計算しない。catalog の `composeStack` で構成を組み、estimator の Bill をそのまま使う（企画書 §11.1）。
-- **集計のサーバー（D-135・未実装。仮に `packages/stats`）→ game → catalog・estimator。** web はサーバーの型（Hono RPC の `AppType`）だけを devDependencies で読み、実行時にサーバーのコードを含めない（[15](./15-results-and-stats.md) §5）。
+- **集計のサーバー（D-135・`packages/stats`。段 2 で実装・D-155）→ game → catalog・estimator。** web はサーバーの型（Hono RPC の `AppType`）だけを devDependencies で読み、実行時にサーバーのコードを含めない（[15](./15-results-and-stats.md) §5）。
 - **estimator・catalog は game を知らない。** 見積ツールを単独で切り出すときは web から game を外す。
   ただし今の見積モードは、ゲームと数え方をそろえるため部品の規則と Workload の組み立てを game の `estimate-mode.ts` から使っている。切り出すには、それを catalog（か新しいパッケージ）へ移す必要がある（D-73）。
 
@@ -54,7 +55,7 @@ estimator・catalog・game は `lib: ["esnext"]` / `types: []` でビルドし�
 | 言語・構成 | TypeScript の pnpm monorepo | 企画書 §7.1。seseraki と同じ型 |
 | テスト | vitest（+ 性質ベースのテストに fast-check） | 単調性・保存則などを網羅的に確かめる（[05](./05-test-strategy.md)）。fast-check はまだ入れていない（gap） |
 | スキーマ | zod | 保存データ・料金データ・UI 入力の検証を 1 か所にまとめる |
-| 集計のサーバー（D-135・未実装） | **Hono RPC**（さくらの VPS・node）+ 既存の Postgres（drizzle） | 終わったプレイの匿名の集計だけ。ゲームと見積の計算はブラウザのまま。構成は seseraki に倣う（[15](./15-results-and-stats.md) §5） |
+| 集計のサーバー（D-135・`packages/stats`） | **Hono RPC**（さくらの VPS・node）+ 既存の Postgres（drizzle） | 終わったプレイの匿名の集計だけ。ゲームと見積の計算はブラウザのまま。構成は seseraki に倣う（[15](./15-results-and-stats.md) §5） |
 | フロント | React 19 + **Vite**（Next.js は使わない）+ TanStack Router + Tailwind v4 + daisyUI | MVP はサーバーが要らない（計算はブラウザ、保存はローカル）。静的配信だけで動く。**今はルーターを入れていない**（画面は 2 つでタブで切り替え。画面が増えたら入れる。D-73） |
 | 最適化 | **React Compiler**（`babel-plugin-react-compiler` 1.0。`@vitejs/plugin-react` 6 の `reactCompilerPreset` を `@rolldown/plugin-babel` 0.2 + `@babel/core` 7 で掛ける） | 描き直しの抑制を手書きの `useMemo`・`useCallback` に頼らない。入れ方は [react.dev の Installation](https://react.dev/learn/react-compiler/installation) の Vite の節。plugin-react 6 は Babel を内蔵しないので Babel は別の plugin。vitest（jsdom）も同じ変換を通る。手書きの memo を外すのは後で |
 | グラフ | 費用曲線は Recharts か visx（Phase 2 で決める）、構成図は React Flow（Phase 5） | 企画書 §7.1。**今は自前の SVG**（`packages/web/src/charts.tsx` の `LineChart`・`LogCurveChart`。D-74）でライブラリは入れていない |

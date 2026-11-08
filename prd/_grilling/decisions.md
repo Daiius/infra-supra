@@ -1872,6 +1872,107 @@
 - テスト: W-91（「やめる」では消えない・「消す」で `infra-supra:` のキーが localStorage・sessionStorage から全部消え、ほかのキーは残る・始める画面に戻り「前回の構成を選ぶ」が無い・遊び方が自動で開き、閉じると見た記録だけが残る）。`local-records.test.ts`（接頭辞で消す・両方の保存領域）。
 - 残した点: 段 2（D-134・D-138）で集計を送るようになったら、消すのはこの端末の記録だけで送った結果は消えないことを確認の文に足す。
 
+### D-148 「この月に戻る」を使ったプレイは送り、印を付けてヒストグラムから外す（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼（supervisor 経由・2026-11-09）: prd/15 段 2。ST-06（最後の試行だけを送るか・戻った印を付けるか・終わった後に戻ってもう一度終えたら送り直すか）を推奨案で決める。
+- 決定:
+  - **送るのは終わったときの今の試行だけ**（前の試行 `previous` は送らない。サーバーも受け取ったら捨てる）。
+  - 戻ったプレイには**印を付ける**: 保存 `SaveData` に任意の欄 `rewound: true` を足した（`rewindSave` が付け、前の試行を消しても残す。版は上げない。`parseSave` は `true` のときだけ読む）。集計の表の列 `rewound` に入れる。
+  - **終わった後に戻って、違う行動でもう一度終えたら、別のプレイとして送る**（プレイの id は行動の列で変わる。D-144）。同じ行動で終え直したときは同じ id なので送らない。
+  - **ヒストグラム（段 3）には戻ったプレイを入れない**（同じシードの先の月の出来事を知ったうえでやり直せるので、同じシードの分布の中で有利になる。D-136 の「楽なシードの選び直しは同じシードの分布で効かない」を崩さない）。保存はするので、バランスの見直しの材料には使える（途中終了と同じ扱い。D-137）。
+- 選ばなかった案: 戻ったプレイを送らない（遊んだ数が分からなくなる）。最後の試行だけを 1 本にまとめる（「同じプレイ」を決める鍵が要り、端末の識別子に近くなる）。
+- 実装: game の `save.ts`（`rewound`）・stats の `verify.ts`（`rewound` を列に）・`repo.ts` の `inHistogram`。テストは game の `save.test.ts`・stats の `verify.test.ts`・`route.test.ts`・`db/repo.test.ts`。
+- 正典: [prd/15](../15-results-and-stats.md) §8 ST-06。
+
+### D-149 集計の API の形: `POST /api/results`・`GET /api/results/histogram`（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼: ST-07（口の名前・入力の zod・エラーの種類・送り直し・同じプレイの二重の送信）と、段 3 で使う分布の返し方。
+- 決定:
+  - **`POST /api/results`**: 本文 `{ save, axes, end }`（prd/15 §4。`save` は前の試行を除いた保存、`axes` は 4 軸、`end` は `{ reason, month }`）。上限 64 KB（`hono/body-limit`）。
+    - 形の検査は zod（`@hono/zod-validator`）でおおまかに（保存の未知の欄は通す・月は 24 まで・1 か月の行動は 64 まで・数は有限）。細かい形は game の `parseSave` が確かめる。
+    - 照合: game の `replaySave` で再生 → `resultAxesOf` と `state.end` を、送られた値と比べる。4 軸は**相対 1e-9 の差まで同じ**とみなす（JS エンジンの間で超越関数の最後の桁が違いうるため。D-151）。終わり方と月は完全に一致。
+    - 応答: 保存した **201** `{ ok: true, duplicate: false }`・同じプレイがすでにある **200** `{ ok: true, duplicate: true }`・形が違う / JSON でない **400** `{ error: 'invalid' }`・大きすぎる **413** `{ error: 'too-large' }`・照合で受け付けない **422** `{ error: 'invalid-save' | 'replay-failed' | 'unfinished' | 'mismatch', fields? }`（`mismatch` は食い違った欄の名前）・想定外 **500** `{ error: 'internal' }`（例外の文言は載せない）。
+    - **二重の送信**: 鍵はプレイの中身（game の `playContent`。前の試行を除いた保存のキーを並べた JSON）の **SHA-256**。表の一意の制約で 1 行にし、2 回目は 200。web の手元の履歴の id（FNV-1a 32 ビット）は衝突しうるので鍵にしない（`canonicalJson` は web から game に移した）。
+    - 画面での見せ方: **見せない**（失敗も 4xx も画面に出さない。D-152）。
+  - **`GET /api/results/histogram?scenario=&axis=[&seed=][&value=]`**: 完走・戻っていないプレイ（D-137・D-148）だけの分布。`seed` を付ければ同じシードだけ（D-136）。応答 `{ scenarioId, axis, seed | null, count, min, max, bins: [{ from, to, count }], position? }`。
+    - ビン: ④ ギリギリを攻める（整数 0〜12）は値ごとに幅 1、ほかの 3 軸は最小〜最大を **20 本の等しい幅**（最後のビンは上端を含む。全部同じ値なら 1 本・無ければ空）。同じシードと全シードは別々に切る（範囲が違うので、段 3 は 2 つの棒を別々に描く）。
+    - `value` を付けると `position: { above, equal }`（それより大きい数・同じ数）を返す。段 3 の「上位何 %」をビンの近似でなく正しく出すため。
+    - 値の列を DB から取り出してサーバーで切る（数千件までは足りる。重くなったら SQL の集計に移す）。
+  - 送り直しはしない（D-152）。
+- 正典: [prd/15](../15-results-and-stats.md) §5.4・§8 ST-07。実装: stats の `route.ts`・`verify.ts`・`histogram.ts`。テスト: `verify.test.ts`・`route.test.ts`・`histogram.test.ts`。
+
+### D-150 Vercel の中継は `vercel.ts` で、`API_ORIGIN` が無ければ何も足さない（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼: D-139 の第一案（`vercel.ts`）で実装し、使えないときの予備案（`/api/[...path]` の転送の Function）をどうするかを推奨で決める。`API_ORIGIN` が無いときに今の本番デプロイを壊さないこと。
+- 確かめたこと（2026-11-09。公式の文書 https://vercel.com/docs/project-configuration/vercel-ts と `@vercel/config` 0.14.1 の README）: 「`vercel.ts` executes at build time, which lets you dynamically generate configuration」「use environment variables to conditionally set routes」とあり、ビルドのときに評価されて vercel.json に写される。外の URL への rewrite の例（`https://example.com/:match*`）もある。**ビルドのときにダッシュボードの環境変数が `process.env` に入るとは明記されていない**（`deploymentEnv()` はヘッダーの変換に使う別の仕組み）。vercel.ts と vercel.json は同時に置けない。置き場は「project root」で、リポジトリの根か Root Directory かは書かれていない。
+- 決定:
+  - `packages/web/vercel.ts` を置く（このリポジトリに vercel.json は無い）。`API_ORIGIN` から `/api/:path*` → `<API_ORIGIN>/api/:path*` の rewrite を 1 本だけ作る。**`API_ORIGIN` が無い・空なら設定は空**（`{}`。今の本番と同じ）。値が https のオリジン（パス・クエリ・資格情報なし）でなければ**ビルドを止める**（壊れた宛先で中継しない。文に値は出さない）。
+  - `@vercel/config` は型だけを読む（devDependencies）。rewrites は vercel.json と同じ形の値で書き、評価のときに読む依存を持たない。
+  - **予備案（転送の Function）は今は作らない。** 朝のスパイク（prd/15 §7.1 の手順 5: プレビューのデプロイで `/api/version` が VPS の値を返すか）で第一案が動かなかったときに作る。
+  - Root Directory は packages/web と見て置いた（Vite の画面がそこにあるため）。リポジトリの根なら根へ移す（手順で確かめる）。
+- 実装: `packages/web/vercel.ts`（`apiRewritesFor`）。テスト: web の `vercel-config.test.ts`。
+- 正典: [prd/15](../15-results-and-stats.md) §5.3。
+
+### D-151 ES-15 の決定論のテストを stats に置く（今ある超越関数は数で固定する）（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼: prd/15 §5.1「ES-15 は段 2 で入れる」。
+- 分かったこと: prd/12 §9 の 2026-11-01 の調べ（超越関数は `trends.ts` の `Math.pow` だけ）より後に、estimator の結果に効く計算に超越関数が入っている（`simulate.ts` の `Math.exp`・`Math.expm1`（コールドスタート・常駐の割合）・`popularity.ts` の `Math.pow`・`Math.log`（人気の分布）・`resolve.ts` の `Math.exp`（書き換えの重なり））。所持金に効くので、ES-15 の ① をそのまま入れると今のエンジンが通らない。四則演算で書き直すと golden の所持金が変わる。
+- 決定:
+  - stats の `determinism.test.ts` が estimator・catalog・game の src（テストを除く。コメントは外して読む）を読み、**時刻（`Date`・`performance.now`）と `Math.random` は 1 つも無い**こと、**超越関数（`Math.exp` など・`**`）は今ある 4 ファイルの数のまま増えない**ことを確かめる。足すときは結果に効かないか確かめてテストを直す（効くなら四則演算と `Math.sqrt` で書く。prd/02 §3）。
+  - 今ある箇所のエンジンの間の差（最後の桁）は、照合の幅（相対 1e-9。D-149）で吸収する。課金の切り上げは `ceilUnits` の許容誤差（1e-9）があるので、最後の桁の差で単位が変わることはまず無い。
+  - 置き場を stats にしたのは、ファイルを読むのに node の API が要り（game・estimator は `types: []`）、照合を持つパッケージの検査だから。
+- 残した点: 今ある超越関数を四則演算に置き換えるか（golden が変わる。ブラウザの種類で照合が落ちる例が出たら考える）。
+- 正典: [prd/12](../12-external-scenarios-and-ranking.md) ES-15・[prd/15](../15-results-and-stats.md) §5.1。
+
+### D-152 web は `VITE_STATS_ENABLED` が立っているときだけ、終わったプレイを 1 回送る（再送しない）（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼: 終わったプレイを自動で匿名に送る（D-134）。サーバーがまだ無いので、フラグが無いときは送らない。失敗しても画面を壊さない。1 プレイ 1 回（結果の履歴の id）。
+- 決定:
+  - **フラグ**: ビルドのときの環境変数 `VITE_STATS_ENABLED` が `true` か `1` のときだけ送る（無ければ fetch しない。今の本番で 404 を出さない）。
+  - **いつ**: 手元の結果の履歴（D-144）に**新しく足したとき**だけ送る。履歴に同じ id があれば送らないので、再読み込み・再開では送り直さない（端末ごとに 1 プレイ 1 回。ほかの端末やタブからの二重はサーバーが playHash で 1 行にする）。
+  - **送り直さない**: 失敗（通信・4xx・5xx）しても何もしない・画面に出さない。手元の履歴は今までどおり溜まる。送り直しの仕組み（未送信の印・次に開いたときに送る）は、取りこぼしが多いと分かったら足す。
+  - client は seseraki と同じく `hc<AppType>('')`（オリジンの根）。web は stats を devDependencies で持ち、型だけを読む。cookie は送らない（`credentials: 'omit'`）。
+- 実装: web の `stats-client.ts`（`statsEnabled`・`submissionOf`・`submitResult`）・`App.tsx`（履歴に足す effect の中で送る）・`vite-env.d.ts`。テスト: smoke の `stats.smoke.test.tsx`（W-93 フラグが無いと送らない・W-94 あると 1 回だけ・本文の形・開き直しても送らない・W-95 失敗しても画面は壊れない）。
+- 正典: [prd/15](../15-results-and-stats.md) §4。
+
+### D-153 プライバシーポリシーの画面と文面（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼: ST-09（送る項目・目的・保存の期間・問い合わせ先と、画面のどこから開くか）。文はです・ます調（D-130）。
+- 決定:
+  - **開く所**: 設定のダイアログ（D-147）の「送る情報」の節のボタンと、画面の一番下（全部の画面に出すフッター）のリンク。
+  - **文の中身**（web の `privacy-policy.tsx`）: 送る情報（シナリオ・シードと始めた日・構成・月ごとの行動・4 軸・終わり方・「この月に戻る」を使ったか）・送るとき（完走と途中終了の両方・1 プレイ 1 回・自動・止める設定なし）・使い道（利用の分析: 分布を作って振り返りに出す・バランスの見直し。照合で合わない送信は保存しない）・送らない情報（名前・メールなど特定する情報（アカウントなし）・IP アドレス・端末の情報）・保存の期間（**期限を決めない**。匿名なので特定のプレイを選んで消せない）・このブラウザに残す記録（送らない・設定から消せる）・問い合わせ（GitHub のリポジトリの Issue）・最終更新日。
+  - **Vercel の側の記録**は、このアプリの管理の外なので「Vercel のプライバシーポリシーに従う」と書いた（集計のサーバーとそのログには IP を残さない、とだけ言い切る）。
+  - フラグ（D-152）が無い間は「今は集計のサーバーを準備しているところで、まだ何も送っていません」を添える。
+  - 設定の「ローカルの記録を消す」の確認に「集計に送った結果（匿名）は、ここでは消えません」を足した（D-147 の残した点）。
+- 実装: web の `privacy-policy.tsx`・`settings-dialog.tsx`・`App.tsx`（フッター）。テスト: W-96（フッターと設定から開く・送る / 送らない項目が全部ある・フラグが無い間の注記）。
+- 要確認: 文面全体（とくに保存の期間を決めないこと・Vercel の記録の書き方・問い合わせ先）。
+- 正典: [prd/15](../15-results-and-stats.md) §4・§8 ST-09。
+
+### D-154 集計の表は 1 プレイ 1 行・別の DATABASE とロール（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼: ST-08（1 プレイ 1 行・行動の列の持ち方・4 軸を列に出すか・終わり方・既存の Postgres の中での分け方・ロール）。
+- 決定:
+  - 表 `results`（drizzle。列名は snake_case。seseraki と同じ `snakeCase.table`）: `id`（identity）・`play_hash`（一意）・`created_at`・`scenario_id`・`seed`（double precision。画面の入力は小数も受ける）・`start_date`（text。読める保存なら存在しない日付も通るので date 型にしない）・`stack_index`・`framework`・`rewound`・`end_reason`（検査の制約で 4 つだけ）・`end_month`・`outages`・4 軸（`cash`・`satisfaction`・`feature_points`（double precision）・`edge_months`（smallint））・`save`（jsonb。始めたときの選択と行動の列）。索引は（シナリオ・終わり方・戻った印・シード）。
+  - **4 軸は列に出す**（分布の絞り込みを jsonb を開かずに行う）。値は**サーバーが数えた値**（照合済み）。行動の列は保存ごと jsonb に置き、バランスの見直しで再生し直せるようにする。
+  - **名前・IP・端末の情報の列は持たない**（テストで列の名前を確かめる）。
+  - **分け方**: すでにある Postgres の中に**別の DATABASE `infra_supra`** を作り、ロールを 2 つにする: `infra_supra_admin`（DATABASE の持ち主・migration の DDL）と `infra_supra_server`（常駐のサーバー。`results` への SELECT・INSERT だけ。UPDATE・DELETE・DDL なし）。作るのは `packages/stats/scripts/create-db.sh`（パスワードは尋ね、標準入力で psql に渡す・`--check` つき）。seseraki の DATABASE と混ぜない。
+  - migration は drizzle-kit で生成（`packages/stats/drizzle/`。prettier の対象外）、適用は drizzle-orm の migrator（`migrate.ts`）。`drizzle-kit push` は使わない。
+  - DB の層は `ResultsRepo` の口で分け、テストは**実 Postgres を使わず** PGlite（wasm の Postgres）に同じ migration を当てる（`db/repo.test.ts`）。API のテストは手元の実装（`memoryRepo`）。
+- 残した点: シーズンの区切り（ST-12）は列を足さず、`created_at` と保存の中身で後から切れるようにした（段 3 で決める）。`stack_index` は構成の並びが変わると意味が変わるので、構成を並べ替えるときは ST-12 と一緒に考える。
+- 正典: [prd/15](../15-results-and-stats.md) §5.4・§8 ST-08。
+
+### D-155 サーバーのパッケージは `packages/stats`・版の確かめに `GET /api/version`（2026-11-09 夜間・推奨案で決定・要確認）
+
+- 依頼: ST-10（パッケージ名と、版を手動でそろえるときの確かめ方）。
+- 決定:
+  - パッケージ名は仮名のまま **`stats`**（`packages/stats`）。依存は `stats → game → catalog・estimator`（prd/02 §1）。`exports` は `"types": "./src/route.ts"`（seseraki と同じ。web は型だけを読む）。
+  - **`GET /api/version`** を置く（`{ commit, builtAt }`。イメージのビルド引数 `GIT_COMMIT`・`BUILD_TIME` から。読めなければ unknown）。照合には使わない（D-135 のまま）。Vercel の画面のコミットと見比べて手動でそろえる確かめと、中継のスパイク（D-150）の確かめに使う。
+  - 動かす形は seseraki に倣う: `Dockerfile.prod`（文脈はリポジトリの根・esbuild で `server.js` と `migrate.js` にまとめ、distroless の nonroot で動かす・`drizzle/` を同梱）・`.dockerignore`（`.env*` を入れない）・`.env.example`（パスワードは空）。待ち受けは `PORT`（既定 4000）。
+  - アクセスのログは自前の 1 行（方法・パス（クエリを除く）・状態・時間）。IP・ヘッダー・本文を出さない（テストで X-Forwarded-For・User-Agent が出ないことを確かめる）。
+  - pnpm の `allowBuilds` に esbuild を足した（postinstall でバイナリを確かめる。seseraki と同じ）。
+- デプロイはしていない（手順は prd/15 §7.1）。
+- 正典: [prd/15](../15-results-and-stats.md) §5.4・§7.1・§8 ST-10。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
@@ -1883,7 +1984,7 @@
 |---|---|---|
 | RS-01〜RS-18 の残り | ページごとの描き方の段 3 の残り（RS-04 の乗り換えの「描き方も替える（手間 +n）」の表示・RS-06 描画の CPU の倍率（計測待ち）・RS-10 速さの重み付き CPU・RS-13 の「描き方を替えた案」の列）、推奨案のままのもの（RS-02・RS-09・RS-12・RS-14）と段 4（段 5 は D-108）。目標の値の見直し（RS-07）はユーザーの判断待ち | prd/13 §6・§7・D-106・D-107・D-108 |
 | ES-01〜ES-16 | 外部のシナリオ（JSON + zod）とランキング。全部が推奨案つきで未決。ユーザーは「今の作業が落ち着いてから設計する」と決めた（2026-11-01）。ランキングの側は D-131〜D-137（匿名の集計とヒストグラム）で置き換え・影響あり: ES-04・ES-13・ES-16 は置き換え、ES-07 は 4 軸と照合で置き換え、ES-08 は ST-12 に言い換え、ES-15 は段 2 で入れる。外部のシナリオの側（ES-01〜03・05・06・09〜12・14）は未決のまま | prd/12 §9・prd/15 |
-| ST-01・ST-06〜ST-12 | ゲームの結果の振り返りと匿名の集計（D-131〜D-139）の残り（ST-02〜ST-05 は D-141〜D-144 で決定。ST-01 は段 1 の暫定を D-145。D-139 の中継の第一案は段 2 の最初のスパイクで確かめる）: 「上位」の線・戻ったプレイの扱い・API とテーブルの形・プライバシーポリシーの文面・パッケージ名と版の確かめ方・構成ごとの絞り込み・シーズンの区切り | prd/15 §8 |
+| ST-01・ST-11・ST-12 | ゲームの結果の振り返りと匿名の集計（D-131〜D-139）の残り（ST-02〜ST-05 は D-141〜D-144、ST-06〜ST-10 は段 2 の D-148〜D-155 で推奨案のまま決定・要確認。ST-01 は段 1 の暫定を D-145。D-139 の中継の第一案は D-150 で実装し、動くかは朝のスパイクで確かめる）: 「上位」の線・構成ごとの絞り込み・シーズンの区切り | prd/15 §8 |
 | チーム運用と、マネージドの構成どうしの楽さ（2026-11-05） | ① 複数人・社外のメンバーでの運用のしやすさ（ロールの細かさ・招待・監査ログ）を数えていない。SC-3（2 人目）の効きは Vercel の席の料金だけで、席の料金に見合う楽さも、他の事業者の権限の扱いにくさも出ない（Cloudflare・Supabase・さくらの席の扱いは未取得）。② マネージドの維持の手間は Vercel・Cloudflare・Amplify・Netlify がどれも 0（OpenNext 1・Cloud Run 0.5・VPS 3・アカウント 1 つにつき +0.5）。プレビューのデプロイ・ログやデバッグ・フレームワークの対応の成熟度・AWS の IAM の重さの差は入っていない。入れるなら、各事業者の席・ロール・招待の公式の文書を先に取る | `rules.ts` の `EFFORT`・`effort.ts` の `upkeepOf`・prd/07 §10 SC-3・D-36・D-52・D-63 |
 | CP-08・CP-09 の残り | 部品を事業者をまたいで組む（D-114）で後で検討する候補にしたもの: リージョンの要素（関数と DB の地域の違い・地域料金）と、接続の数の上限（`limit`。普通の負荷ならプールで管理される見込み） | prd/14 §8.1・D-114 |
 | ~~D-66 の残り~~ | ~~OpenNext の CloudFront の無効化で、ワイルドカード・タグの無効化を部品にするか~~ → D-79（ワイルドカードを部品に。タグは OpenNext の対応待ちで入れない） | D-66・D-79・prd/11 §13.1 |
@@ -1945,6 +2046,8 @@
 | D-127 | 「前回の構成を選ぶ」の置き場所と幅 360px での折り返しを実機で確かめる |
 | D-129 | ⓘ の説明のダイアログの幅・狭い画面での見え方・長い説明のスクロールを実機で確かめる |
 | D-140 | シナリオの図柄の構図と色・幅 360px・ダークモードを実機で確かめる。出来事の印の対応の見直し |
+| D-150 | Vercel のビルドで `vercel.ts` が `API_ORIGIN` を読めるか（プレビューのデプロイで `/api/version` を確かめる。prd/15 §7.1）・Root Directory の確かめ。動かなければ予備案の転送の Function を作る |
+| D-153 | プライバシーポリシーの文面（保存の期間・Vercel の記録の書き方・問い合わせ先）をユーザーが確かめる |
 | P1-9・P1-11 | 見積のスナップショット・直列化・estimator の golden・開発用の CLI（prd/08） |
 | ~~架空の料金の置き場~~ | ~~設計は `packages/catalog/src/fictional/`、今はテストの中（prd/03 §1・prd/05 §1 の gap）~~ → D-78 で実装済み |
 
