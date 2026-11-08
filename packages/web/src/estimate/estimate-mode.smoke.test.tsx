@@ -296,7 +296,7 @@ describe('見積モードの画面', () => {
     const routes = within(routesDialog());
     fireEvent.click(
       routes.getByRole('button', {
-        name: /^個人向けのページを 枠 \+ サーバーの島/,
+        name: /^個人向けのページを 枠 \+ 人ごとの部分をサーバーで/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=server-island');
@@ -318,12 +318,12 @@ describe('見積モードの画面', () => {
     expect(
       within(row as HTMLElement)
         .getByRole('button', {
-          name: '個人向けのページは 枠 + サーバーの島（選択中）',
+          name: '個人向けのページは 枠 + 人ごとの部分をサーバーで（選択中）',
         })
         .getAttribute('aria-pressed'),
     ).toBe('true');
     expectEstimate();
-    expect(flowLegend()).toContain('サーバーの島（閲覧ごとに一部だけ描く）');
+    expect(flowLegend()).toContain('人ごとの部分（閲覧ごとにサーバーで描く）');
     // URL から開いても同じ。vinext（PPR が未完成）に替えると選べないので消える
     cleanup();
     window.history.replaceState(
@@ -360,7 +360,7 @@ describe('見積モードの画面', () => {
     // 描き方の番号（S1〜S6・文書の S7）は画面に出さない（D-112）
     expect(table().textContent).not.toMatch(/\bS[1-7]\b/);
     expect(window.location.search).not.toContain('rp.');
-    expect(flowLegend()).toContain('動的な穴');
+    expect(flowLegend()).toContain('閲覧ごとに描く部分');
     fireEvent.click(
       within(routesDialog()).getByRole('button', {
         name: /^個人向けのページを 毎回描く/,

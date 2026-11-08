@@ -114,17 +114,17 @@ const AMPLIFY_NEXT: Source = {
 
 /** S6 の数え方の要約（どの組でも同じ。D-108・ゲーム上の仮定）。 */
 const ISLAND_COUNT =
-  '島の CPU はページ全体の SSR の 4 割とみなします（ゲーム上の仮定）';
+  '人ごとの部分の CPU はページ全体の SSR の 4 割とみなします（ゲーム上の仮定）';
 
 /** S6 を全員に同じページに使う数え方はまだ無い（記事の動く部品はコメントの描き方・アイランドで数える。段 4）。 */
 const ISLAND_PUBLIC = no(
-  'このゲームでは、枠 + サーバーの島は人ごとに違うページだけに使います（記事の動く部品はブラウザが API で取る形で数える。段 4）',
+  'このゲームでは、枠 + 人ごとの部分をサーバーで描く形は人ごとに違うページだけに使います（記事の動く部品はブラウザが API で取る形で数える。段 4）',
 );
 
 /** Astro の Server Islands（D-108）。Cloudflare・Node（VPS）・Netlify はアダプターの頁に明記、Vercel・Cloud Run は仮。 */
 function astroIsland(d: DeployTarget): StrategySupport {
   const how =
-    '`server:defer` の島を、枠とは別の GET のリクエストでサーバーが描きます。枠は人ごとに違わないので 1 日の期限でキャッシュし、島は人ごとに違うのでキャッシュしません（props が 2,048 バイトを超えると POST になり、どのみちキャッシュされない）。' +
+    '`server:defer` の部分（Server Island）を、枠とは別の GET のリクエストでサーバーが描きます。枠は人ごとに違わないので 1 日の期限でキャッシュし、その部分は人ごとに違うのでキャッシュしません（props が 2,048 バイトを超えると POST になり、どのみちキャッシュされない）。' +
     ISLAND_COUNT;
   switch (d.platform) {
     case 'cloudflare':
@@ -168,7 +168,7 @@ function astroIsland(d: DeployTarget): StrategySupport {
 /** Next.js の PPR（16 の cacheComponents。D-108）。Vercel・Node の standalone・Cloud Run は ✓、vinext・Amplify は ✗。 */
 function nextIsland(d: DeployTarget): StrategySupport {
   const how =
-    'Partial Prerendering（Next.js 16 の cacheComponents の既定）。静的な枠を先に流し、人ごとに違う部分を同じ応答の中で続けて描きます。枠を CDN から配るかはアダプターしだいなので、閲覧ごとに処理を通して島の分だけ描くとみなします（origin だけの形）。' +
+    'Partial Prerendering（Next.js 16 の cacheComponents の既定）。静的な枠を先に流し、人ごとに違う部分を同じ応答の中で続けて描きます。枠を CDN から配るかはアダプターしだいなので、閲覧ごとに処理を通して人ごとの部分だけ描くとみなします（origin だけの形）。' +
     ISLAND_COUNT;
   switch (d.platform) {
     case 'vercel':
@@ -219,7 +219,7 @@ const NEXT_SELF_HOSTING: Source = {
 
 /** 部品ごとにキャッシュの数え方の要約（D-111・ゲーム上の仮定）。 */
 const CACHE_COMPONENTS_COUNT =
-  '人ごとに違うページは、穴を描く CPU をページ全体の SSR の 4 割、DB の問い合わせを全員に同じ部品の分（3 分の 1）を除いた残りとみなします。全員に同じページは ISR と同じ数え方です（期限かタグかは再検証の設定。ゲーム上の仮定）';
+  '人ごとに違うページは、閲覧ごとに描く部分の CPU をページ全体の SSR の 4 割、DB の問い合わせを全員に同じ部品の分（3 分の 1）を除いた残りとみなします。全員に同じページは ISR と同じ数え方です（期限かタグかは再検証の設定。ゲーム上の仮定）';
 
 /**
  * 部品ごとにキャッシュ（Next.js 16 の Cache Components。D-111）。Vercel は枠を全体の ISR のキャッシュと地域の CDN に置き、
@@ -337,7 +337,7 @@ function astroRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     'shell-api': SHELL_API_ANY,
     'server-island': astroIsland(d),
     'cache-components': no(
-      'Cache Components は Next.js 16 の機能です（Astro には無い。Astro で近いのは枠 + サーバーの島）',
+      'Cache Components は Next.js 16 の機能です（Astro には無い。Astro で近いのは枠 + 人ごとの部分をサーバーで描く形）',
       FRAMEWORKS.astro.sources,
     ),
   };

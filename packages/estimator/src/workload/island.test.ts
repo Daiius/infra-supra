@@ -165,14 +165,14 @@ describe('サーバーの島（S6。D-108）', () => {
     const src = sim.nodes.fn!.cpuSources.find((s) => s.island)!;
     expect(src).toMatchObject({ requestClass: 'document-ssr', cpuMs: 4 });
     expect(cpuSourceText(src)).toBe(
-      '個人向けのページ（サーバーの島・CPU 4 ms）',
+      '個人向けのページ（人ごとの部分・CPU 4 ms）',
     );
     // 枠の取り直し（キャッシュから返す 2 ms + 枠を描く 6 ms）は別の内訳
     const shellSrc = sim.nodes.fn!.cpuSources.find(
       (s) => s.routeId === 'mine' && s.islandShell && s.cpuMs === 8,
     )!;
     expect(cpuSourceText(shellSrc)).toBe(
-      '個人向けのページ（島の枠の閲覧と描き直し・CPU 8 ms）',
+      '個人向けのページ（枠の閲覧と描き直し・CPU 8 ms）',
     );
     // 島のリクエストは関数のリクエストに数える（閲覧 + 島）
     expect(sim.nodes.fn!.resources.requests).toBeCloseTo(200_000, 6);
@@ -189,7 +189,7 @@ describe('島の呼び名（D-111）', () => {
         share: 1,
         pages: 1,
         processing: island,
-        island: { label: '動的な穴' },
+        island: { label: '閲覧ごとに描く部分' },
       },
     ]);
     const sim = simulateResources(resolveWorkload(w), {
@@ -202,6 +202,8 @@ describe('島の呼び名（D-111）', () => {
       routes: { 'document-ssr': ['fn', 'db'] },
     });
     const src = sim.nodes.fn!.cpuSources.find((s) => s.island)!;
-    expect(cpuSourceText(src)).toBe('個人向けのページ（動的な穴・CPU 4 ms）');
+    expect(cpuSourceText(src)).toBe(
+      '個人向けのページ（閲覧ごとに描く部分・CPU 4 ms）',
+    );
   });
 });

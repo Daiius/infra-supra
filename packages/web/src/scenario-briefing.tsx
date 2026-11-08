@@ -748,6 +748,7 @@ export function ScenarioDescription({
           / 期待）と PV の伸びに効きます。
           <DetailsDialog label="開発の手間の内訳" title="開発の手間の内訳">
             <p>
+              手間は、毎月使える作業量の単位です（ゲーム上の仮定。単位はポイント）。
               開発の手間は毎月 {sc.effort.perMonth}{' '}
               ポイントです。設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
               {sc.effort.selfHostedUpkeep} /

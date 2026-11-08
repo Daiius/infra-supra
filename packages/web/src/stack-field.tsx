@@ -18,6 +18,8 @@ import {
   stackName,
   stackSupports,
   STACKS,
+  TERM_NOTES,
+  termNotesOf,
   resolvedRouteStrategies,
   validRouteOverrides,
   type FrameworkId,
@@ -357,6 +359,8 @@ function StackCard({
     slots,
   );
   const premises = [...slaOf(stackIndex), ...membersOf(stackIndex)];
+  // 名前・部品に出る用語（vinext・Fluid）の補足（D-160）
+  const terms = termNotesOf([name, ...arch.nodes.map((n) => n.label)]);
   return (
     <section
       aria-label={`${name} の構成`}
@@ -383,6 +387,9 @@ function StackCard({
                     ))}
                   </ul>
                 ) : null}
+                {terms.map((t) => (
+                  <p key={t}>{t}。</p>
+                ))}
                 <p>{DIAGRAM_NOTE}</p>
               </Info>
             }
@@ -391,6 +398,7 @@ function StackCard({
         {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
         <p id={noteId} className="text-sm opacity-80">
           {stackFlavor(stackIndex)}
+          {name.includes('vinext') && `。${TERM_NOTES.vinext}`}
         </p>
         {extra}
         {fallbackNotice && (

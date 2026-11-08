@@ -85,7 +85,9 @@ describe('ページごとの描き方の表（D-106）', () => {
                     row.audience === 'public' ? 'isr' : 'ssr',
                   );
                   if (row.audience === 'personal')
-                    expect(r.island, key).toEqual({ label: '動的な穴' });
+                    expect(r.island, key).toEqual({
+                      label: '閲覧ごとに描く部分',
+                    });
                 } else
                   expect(r.rendering, key).toBe(
                     RENDERING[row.strategy as keyof typeof RENDERING],

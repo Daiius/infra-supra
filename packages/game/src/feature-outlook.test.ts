@@ -109,7 +109,7 @@ describe('acceptSummary', () => {
     const s = start();
     const sum = acceptSummary(s, eventDef(sc, 'p-images')!);
     expect(sum.gains).toEqual([
-      '機能開発 +8（作業 3 × 2 か月も機能開発に数える）',
+      '機能開発 +8（作業の手間 合計 6 も機能開発に数える）',
       'PV の月の伸び +3 ポイント（3 か月）',
     ]);
     expect(sum.costs).toContain(
@@ -120,7 +120,7 @@ describe('acceptSummary', () => {
 
   it('機能開発に数えない対応の手間は、伴うことに出す', () => {
     const sum = acceptSummary(start(), eventDef(sc, 'p-archive')!);
-    expect(sum.costs).toContain('対応の手間 4 × 1 か月（機能開発に数えない）');
+    expect(sum.costs).toContain('対応の手間 4（1 か月・機能開発に数えない）');
     // 基準の PV が増える分は、PV に比例する収益を得に出す
     expect(sum.gains).toEqual([
       `基準の PV × 1.5（以降ずっと）・収益は 1,000 PV あたり $${sc.revenue.adsUsdPer1000PV}`,

@@ -456,7 +456,7 @@ function EffortPage() {
           <Arrow />
           <Node Icon={TrendingUp} tone="success" label="PV の伸び" />
         </Flow>
-        <FigureTitle>「手間 3 × 2 か月」の読み方</FigureTitle>
+        <FigureTitle>「毎月 手間 3 を 2 か月（合計 6）」の読み方</FigureTitle>
         <div
           className="flex flex-wrap items-center gap-1 text-xs"
           data-howto-effort-months
@@ -478,7 +478,8 @@ function EffortPage() {
       </Figure>
       <ul className="list-disc space-y-1 pl-5">
         <li>
-          「手間 n × m か月」は、翌月から m か月のあいだ、毎月 n
+          手間は、毎月使える作業量の単位です（ゲーム上の仮定。単位はポイント）。「毎月
+          手間 n を m か月（合計 n × m）」は、翌月から m か月のあいだ、毎月 n
           ポイントを使うという意味です。その間は機能開発に回る分が n
           ずつ減ります。
         </li>
@@ -561,7 +562,9 @@ function LimitsPage() {
           課金の境目を超えた印です。止まりませんが、超えた分の費用がかかります。
         </li>
         <li>
-          <span className="badge badge-sm badge-ghost mr-1">止まる上限 +1</span>
+          <span className="badge badge-sm badge-ghost mr-1">
+            止まる上限に達する数 +1
+          </span>
           描き方などの案の横の数は、その案にすると達する止まる上限が 1
           つ増えることを表します（−1 なら 1 つ減る）。
         </li>

@@ -871,7 +871,9 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(
       within(
         table.querySelector<HTMLElement>('tr[data-route="personal"]')!,
-      ).getByRole('button', { name: /^個人向けのページを 枠 \+ サーバーの島/ }),
+      ).getByRole('button', {
+        name: /^個人向けのページを 枠 \+ 人ごとの部分をサーバーで/,
+      }),
     );
     expect(chosenOf('personal')).toBe('server-island');
     expect(screen.getByRole('dialog')).toBe(dialog);
@@ -889,7 +891,7 @@ describe('ゲームモードの画面', () => {
     pick(/^記事コミュニティ/);
     pick(/^Astro/);
     pick(/^Cloudflare Paid/);
-    pickStrategy('個人向けのページ', '枠 + サーバーの島');
+    pickStrategy('個人向けのページ', '枠 + 人ごとの部分をサーバーで');
     expect(chosenOf('personal')).toBe('server-island');
     // 見取り図: 人ごとに違う区画は島、ほかは枠
     const list = within(pageOf('personal')).getByRole('list', {
@@ -902,7 +904,7 @@ describe('ゲームモードの画面', () => {
     expect(sources).toContain('island-shell');
     expect(sources).not.toContain('ssr');
     expect(
-      within(list).getAllByText('サーバーの島（閲覧ごとに一部だけ描く）')
+      within(list).getAllByText('人ごとの部分（閲覧ごとにサーバーで描く）')
         .length,
     ).toBeGreaterThan(0);
     // 構成図の凡例に島の流れ（個人向けのページ）が出る（① のタブ）
@@ -912,7 +914,7 @@ describe('ゲームモードの画面', () => {
     });
     expect(
       legends.some((l) =>
-        within(l).queryByText(/^サーバーの島（閲覧ごとに一部だけ描く）/),
+        within(l).queryByText(/^人ごとの部分（閲覧ごとにサーバーで描く）/),
       ),
     ).toBe(true);
   });
@@ -2352,7 +2354,7 @@ describe('ゲームモードの画面', () => {
     const card =
       screen.getByText('届いた提案（選ばなければ断る）').parentElement!;
     expect(card.textContent).toContain(
-      '受けると: 機能開発 +6（作業 4 × 1 か月も機能開発に数える）',
+      '受けると: 機能開発 +6（作業の手間 4 も機能開発に数える）',
     );
     expect(card.textContent).toContain(
       '伴うこと: 来月、行動に使える手間が 4 減ります・使用量・費用: SSR の割合 60%',

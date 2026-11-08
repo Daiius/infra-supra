@@ -99,11 +99,11 @@ export function cpuSourceText(s: CpuSource): string {
     s.routeId === undefined
       ? undefined
       : s.island
-        ? (s.islandLabel ?? 'サーバーの島')
+        ? (s.islandLabel ?? '人ごとの部分')
         : s.islandShell
           ? s.requestClass === 'document-isr'
-            ? '島の枠をキャッシュから返す'
-            : '島の枠の閲覧と描き直し'
+            ? '枠をキャッシュから返す'
+            : '枠の閲覧と描き直し'
           : s.part
             ? 'ページの部品が呼ぶ API'
             : s.requestClass === 'api' && s.rendering === 'spa'
