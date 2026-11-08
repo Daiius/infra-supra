@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 完走の振り返り（D-131〜D-133）と手元の結果の履歴（D-144・D-145）の画面の描画テスト（D-86）。
 // 4 軸の値・比べ方は results.test.ts（game）と results-history.test.ts が持つので、ここでは出る・溜まる・比べることだけを見る。
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { newSave, replaySave, withTurn, type SaveData } from 'game';
 import { describe, expect, it } from 'vitest';
 import {
@@ -104,6 +104,58 @@ describe('完走の振り返りと手元の結果の履歴', () => {
         .entries.map((e) => e.id)
         .slice(1),
     ).toEqual(['b', 'a']);
+  });
+
+  it('W-78 履歴はタブをまたぐ鍵（Web Locks）の中で、保存済みの履歴を読み直して足す。開いた後に別のタブが足した結果を消さない（OCL-E9D5918D）', async () => {
+    // 鍵の取得を記録し、前の鍵の処理が終わってから次を動かす（Web Locks と同じく 1 つずつ）
+    const names: string[] = [];
+    let queue = Promise.resolve();
+    const locks = {
+      request: (name: string, cb: () => void) => {
+        names.push(name);
+        queue = queue.then(cb);
+        return queue;
+      },
+    };
+    Object.defineProperty(navigator, 'locks', {
+      value: locks,
+      configurable: true,
+    });
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(almostDone()));
+      await renderApp();
+      // 画面を開いた後に、別のタブが 1 件書いた
+      localStorage.setItem(
+        RESULTS_KEY,
+        JSON.stringify({
+          version: RESULTS_VERSION,
+          entries: [
+            {
+              id: 'other-tab',
+              scenarioId: 'article-community',
+              seed: 7,
+              startDate: '2026-11-02',
+              finishedAt: '2026-11-09',
+              setup: 'x',
+              axes: {
+                cash: 1,
+                satisfaction: 0.1,
+                featurePoints: 1,
+                edgeMonths: 0,
+              },
+              outages: 0,
+              end: { reason: 'completed', month: 12 },
+            },
+          ],
+        }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+      await waitFor(() => expect(stored().entries.length).toBe(2));
+      expect(names).toEqual([RESULTS_KEY]);
+      expect(stored().entries[1]!.id).toBe('other-tab');
+    } finally {
+      delete (navigator as { locks?: unknown }).locks;
+    }
   });
 
   it('W-76 途中で終わったプレイも履歴に残り、結果の画面には 4 軸の比較を出さない', async () => {
