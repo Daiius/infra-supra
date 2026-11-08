@@ -18,7 +18,7 @@ import {
   type ReactNode,
 } from 'react';
 import { BrandMark, BRANDS, brandColor, type BrandId } from './brand-logos.tsx';
-import { Info } from './info.tsx';
+import { Popover } from './info.tsx';
 import {
   diagramModel,
   diagramSummary,
@@ -532,7 +532,7 @@ function BandNode({
       data-unselected={warn ? 'true' : undefined}
     >
       {parts && slots.length > 0 ? (
-        <Info
+        <Popover
           label={`${title}: ${n.ghost ? `${n.caption}（${n.label}` : `${n.label}（${n.caption}`}${warn ? '、未選択' : ''}）を替える`}
           interactive
           className={pressableBadge(warn)}
@@ -571,7 +571,7 @@ function BandNode({
               ))}
             </div>
           )}
-        </Info>
+        </Popover>
       ) : (
         <span className={BADGE} title={n.ghost ? GHOST_NOTE : undefined}>
           {name}
@@ -607,7 +607,7 @@ function LooseSlot({
       data-unselected={warn ? 'true' : undefined}
     >
       {parts && x.pressable ? (
-        <Info
+        <Popover
           label={`${x.label}（${x.picked ?? '未選択'}）を替える`}
           interactive
           className={pressableBadge(warn)}
@@ -627,7 +627,7 @@ function LooseSlot({
               {parts.render(x.slot, close, looseBox(x.slot))}
             </div>
           )}
-        </Info>
+        </Popover>
       ) : (
         <span className={BADGE}>{name}</span>
       )}
@@ -933,7 +933,7 @@ function CompactNode({
       data-ghost={n.ghost ? 'true' : undefined}
     >
       <foreignObject x={n.x} y={n.y} width={model.node.w} height={model.node.h}>
-        <Info
+        <Popover
           label={`${title}: ${n.label}（${n.caption}${warn ? '、未選択' : ''}）の${slots.length > 0 ? '説明と差し替え' : '説明'}`}
           interactive={slots.length > 0}
           className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
@@ -1011,7 +1011,7 @@ function CompactNode({
               ))}
             </div>
           )}
-        </Info>
+        </Popover>
       </foreignObject>
     </g>
   );
@@ -1064,7 +1064,7 @@ function SwappableNode({
         width={model.node.w - 4}
         height={model.node.h - 4}
       >
-        <Info
+        <Popover
           label={`${title}: ${n.label}（${n.caption}${warn ? '、未選択' : ''}）を替える`}
           interactive
           // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）。未選択の箱は警告色
@@ -1115,7 +1115,7 @@ function SwappableNode({
               ))}
             </div>
           )}
-        </Info>
+        </Popover>
       </foreignObject>
     </g>
   );

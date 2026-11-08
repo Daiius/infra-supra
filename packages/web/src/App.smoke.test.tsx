@@ -10,6 +10,7 @@ import {
   closeEventsDialog,
   eventPosition,
   expectGameScreen,
+  infoDialog,
   monthHeading,
   openSlot,
   pickPart,
@@ -427,9 +428,7 @@ describe('ゲームモードの画面', () => {
         name: '枠 + ブラウザが API で取るの説明',
       }),
     );
-    expect(screen.getByRole('tooltip').textContent).toContain(
-      'HTML は静的な枠',
-    );
+    expect(infoDialog()!.textContent).toContain('HTML は静的な枠');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(badges('personal')).not.toContain('CPU:');
     expect(badges('personal')).toContain('API: 1 PV あたり 1 回増える');
@@ -470,7 +469,7 @@ describe('ゲームモードの画面', () => {
           name: `${strategy}の説明`,
         }),
       );
-      const t = screen.getByRole('tooltip').textContent ?? '';
+      const t = infoDialog()!.textContent ?? '';
       fireEvent.keyDown(document, { key: 'Escape' });
       return t;
     };
@@ -519,7 +518,7 @@ describe('ゲームモードの画面', () => {
         name: '部品ごとにキャッシュ（Cache Components）の説明',
       }),
     );
-    const tip = screen.getByRole('tooltip').textContent ?? '';
+    const tip = infoDialog()!.textContent ?? '';
     expect(tip).toContain('cacheComponents: true');
     expect(tip).toContain('数え方は ISR と同じ');
     expect(tip).toMatch(/部品をタグで作り直す|部品の期限/);
@@ -530,7 +529,7 @@ describe('ゲームモードの画面', () => {
         name: '部品の作り直し（cacheLife・タグ）の説明',
       }),
     );
-    expect(screen.getByRole('tooltip').textContent).toContain(
+    expect(infoDialog()!.textContent).toContain(
       'オンデマンドは投稿・編集でタグを消して作り直す',
     );
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -847,18 +846,18 @@ describe('ゲームモードの画面', () => {
     // 表には 1 か月目の費用の差が出る。番号は出さない
     expect(table.textContent).toMatch(/[+−]\$\d/);
     expect(table.textContent).not.toMatch(/\bS[1-7]\b/);
-    // 表の ⓘ の吹き出しはダイアログの中に描く（body だと top layer のダイアログの後ろに隠れる。OCL-8E844E7C）
+    // 表の ⓘ の説明のダイアログは、比べるダイアログの中に描く（OCL-8E844E7C。D-129）
     fireEvent.click(
       within(
         table.querySelector<HTMLElement>('tr[data-route="personal"]')!,
       ).getAllByRole('button', { name: /の判定$/ })[0]!,
     );
-    const tip = document.querySelector('[role="tooltip"]');
+    const tip = infoDialog();
     expect(tip).not.toBeNull();
     expect(dialog.contains(tip)).toBe(true);
-    // Esc はまず吹き出しだけを閉じる
+    // Esc はまず説明のダイアログだけを閉じる
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    expect(infoDialog()).toBeNull();
     expect(screen.getByRole('dialog')).toBe(dialog);
     // 表で選んでも、カードのチップと見取り図に効く（ダイアログは開いたまま）
     fireEvent.click(
@@ -1181,8 +1180,8 @@ describe('ゲームモードの画面', () => {
       stackRadios().find((r) => r.getAttribute('aria-label') === otherName)!;
     expect(otherRadio().checked).toBe(false);
     fireEvent.click(within(other).getByRole('button', { name: /説明$/ }));
-    expect(screen.queryByRole('tooltip')).not.toBeNull();
-    fireEvent.click(screen.queryByRole('tooltip')!);
+    expect(infoDialog()).not.toBeNull();
+    fireEvent.click(infoDialog()!);
     expect(otherRadio().checked).toBe(false);
     fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.click(
@@ -1420,7 +1419,7 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'ページの見取り図の説明' }),
     );
-    const info = screen.getByRole('tooltip');
+    const info = infoDialog()!;
     expect(
       within(info).getByRole('list', { name: '記事のページの性質' })
         .textContent,
@@ -1430,7 +1429,7 @@ describe('ゲームモードの画面', () => {
     ).toContain('誰が見ても同じ中身');
     expect(info.textContent).toContain('見取り図はゲーム上の仮定');
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(infoDialog()).toBeNull();
     // 区画は種類ごとのスケルトンで描く（飾りなので aria-hidden。D-113 の追記）
     /** 見取り図の区画の id → スケルトンの種類。 */
     const kinds = (page: string) =>
@@ -1470,7 +1469,7 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(
       within(mail).getByRole('button', { name: 'メール（ページの外）の説明' }),
     );
-    expect(screen.getByRole('tooltip').textContent).toContain('メール送信');
+    expect(infoDialog()!.textContent).toContain('メール送信');
     fireEvent.keyDown(document, { key: 'Escape' });
     // 受託のシナリオも同じ形で出る
     fireEvent.click(getRadio({ name: /^受託先の業務アプリの運用/ }));

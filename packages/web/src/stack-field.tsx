@@ -375,16 +375,14 @@ function StackCard({
             name={name}
             info={
               <Info label={`${name} の説明`}>
-                <span className="block space-y-1">
-                  {premises.length > 0 ? (
-                    <ul className="list-disc space-y-0.5 pl-5">
-                      {premises.map((p) => (
-                        <li key={p}>{p}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <span className="block">{DIAGRAM_NOTE}</span>
-                </span>
+                {premises.length > 0 ? (
+                  <ul className="list-disc space-y-0.5 pl-5">
+                    {premises.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p>{DIAGRAM_NOTE}</p>
               </Info>
             }
           />

@@ -186,9 +186,9 @@ function FrameworkDetail({
       : undefined;
   const ssrCpuMs = sc.template(1).routes[0]!.processing.cpuMs;
   return (
-    <span className="block space-y-1">
-      <span className="block">{f.note}</span>
-      <span className="block font-semibold">このシナリオでは</span>
+    <>
+      <p>{f.note}</p>
+      <p className="font-semibold">このシナリオでは</p>
       <ul className="list-disc space-y-0.5 pl-5">
         {app.map((line) => (
           <li key={line}>{line}</li>
@@ -204,7 +204,7 @@ function FrameworkDetail({
           <li>SSR 1 回の CPU は約 {ssrCpuMs} ms（機能が増えると重くなる）</li>
         )}
       </ul>
-    </span>
+    </>
   );
 }
 
