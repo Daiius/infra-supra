@@ -2,3 +2,5 @@
 # prettier が強調記法と誤認して識別子を壊す（例: API_KEY→API*KEY）ため、整形対象外にする。
 *.md
 pnpm-lock.yaml
+# drizzle-kit が生成する migration（packages/stats/drizzle。手で整形しない）
+packages/stats/drizzle/

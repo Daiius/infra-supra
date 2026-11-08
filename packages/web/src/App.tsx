@@ -78,6 +78,8 @@ import {
 import { BookOpen, Settings } from 'lucide-react';
 import { HowtoDialog } from './howto-dialog.tsx';
 import { SettingsDialog } from './settings-dialog.tsx';
+import { PrivacyPolicyDialog } from './privacy-policy.tsx';
+import { submitResult } from './stats-client.ts';
 import {
   clearLocalRecords,
   loadHowtoSeen,
@@ -259,6 +261,8 @@ export function App() {
     if (results.entries.some((e) => e.id === entry.id)) return;
     // 画面の比較にはすぐ使い、保存は鍵を取ってから（保存した後の履歴と合わせる）
     setResults((r) => withResult(r, entry));
+    // 集計に送る（D-152。手元の履歴に新しく足したときだけなので 1 プレイ 1 回。フラグが無ければ送らない・失敗しても何も出さない）
+    void submitResult(session.save, session.state);
     persistResultLocked(entry, (stored) =>
       setResults((r) => mergeResults(stored, r)),
     );
@@ -272,6 +276,8 @@ export function App() {
     initialMode() === 'game' && !loadHowtoSeen() ? { first: true } : null,
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // プライバシーポリシー（D-153）。設定のダイアログと画面の下のリンクから開く
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   // ローカルの記録を消したら画面を作り直す（前回の構成・タブの選択など、開いたときに読んだ記録を捨てる。D-147）
   const [resetGen, setResetGen] = useState(0);
   const switchMode = (m: Mode) => {
@@ -359,9 +365,16 @@ export function App() {
             setSettingsOpen(false);
             setHowto({ first: false });
           }}
+          onPrivacy={() => {
+            setSettingsOpen(false);
+            setPrivacyOpen(true);
+          }}
           onClear={clearRecords}
           onClose={() => setSettingsOpen(false)}
         />
+      )}
+      {privacyOpen && (
+        <PrivacyPolicyDialog onClose={() => setPrivacyOpen(false)} />
       )}
       {howto && (
         <HowtoDialog
@@ -443,6 +456,15 @@ export function App() {
           )}
         </Suspense>
       </main>
+      <footer className="mx-auto flex max-w-5xl justify-end px-2 pb-4 sm:px-4">
+        <button
+          type="button"
+          className="link link-hover text-xs opacity-60"
+          onClick={() => setPrivacyOpen(true)}
+        >
+          プライバシーポリシー
+        </button>
+      </footer>
     </div>
   );
 }

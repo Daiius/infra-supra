@@ -1,0 +1,60 @@
+# 集計のサーバー（packages/stats）の本番イメージ（seseraki の packages/server/Dockerfile.prod に倣う）。
+# ビルドの文脈はリポジトリの根（game・catalog・estimator をバンドルに入れるため）:
+#   docker build -f packages/stats/Dockerfile.prod \
+#     --build-arg GIT_COMMIT=$(git rev-parse HEAD) \
+#     --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+#     -t infra-supra-stats .
+# 手順は prd/15 §7.1。
+
+# ========================================
+# Stage 1: ビルド
+# ========================================
+FROM node:24-slim AS build
+
+WORKDIR /workspace
+
+RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
+
+# 依存の定義だけ先に写す（ソースの変更で install のキャッシュが壊れにくい）。lockfile と合わせるため全パッケージの package.json を写す
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY packages/estimator/package.json ./packages/estimator/
+COPY packages/catalog/package.json ./packages/catalog/
+COPY packages/game/package.json ./packages/game/
+COPY packages/stats/package.json ./packages/stats/
+COPY packages/web/package.json ./packages/web/
+
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter stats...
+
+COPY packages/estimator/ ./packages/estimator/
+COPY packages/catalog/ ./packages/catalog/
+COPY packages/game/ ./packages/game/
+COPY packages/stats/ ./packages/stats/
+
+RUN pnpm --filter stats build
+
+# ========================================
+# Stage 2: 本番イメージ
+# ========================================
+# 🔒 nonroot（uid 65532）で動かす。サーバーはファイルを書かない
+FROM gcr.io/distroless/nodejs24-debian13:nonroot
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=build /workspace/packages/stats/dist/server.js ./server.js
+
+# migration の適用（使い捨てのコンテナで明示的に流す。起動のときに自動では当てない）。
+#   docker run --rm --env-file <管理ロールの env> infra-supra-stats /app/migrate.js
+COPY --from=build /workspace/packages/stats/dist/migrate.js ./migrate.js
+# 生成した SQL（migrator が実行のときに fs で読むのでバンドルに入らない）
+COPY --from=build /workspace/packages/stats/drizzle ./drizzle
+
+# ビルドの版（GET /api/version が返す）。値が毎回変わるので最後に置く
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+ENV GIT_COMMIT=$GIT_COMMIT BUILD_TIME=$BUILD_TIME
+
+EXPOSE 4000
+CMD ["server.js"]

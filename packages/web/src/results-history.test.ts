@@ -1,5 +1,6 @@
 // 手元の結果の履歴（D-144）の純粋な部分: 形の確かめ・足し方・比べ方・花火の段（D-145）。
 import {
+  canonicalJson,
   newSave,
   parseSave,
   replaySave,
@@ -10,7 +11,6 @@ import {
 } from 'game';
 import { describe, expect, it } from 'vitest';
 import {
-  canonicalJson,
   compareWithHistory,
   fireworkLevel,
   mergeResults,

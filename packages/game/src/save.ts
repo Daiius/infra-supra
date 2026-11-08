@@ -82,6 +82,13 @@ export type SaveData = {
    * 1 本だけ持ち、もう一度戻ると上書きする。無い保存は前の試行なしで読む（版は上げない）。
    */
   previous?: Action[][];
+  /**
+   * 「この月に戻る」（D-128）を一度でも使ったプレイ（D-148・ST-06）。rewindSave が付け、前の試行を消しても残す（版は上げない）。
+   * 集計（prd/15 §4）に送り、同じ先の月を知ったうえでやり直したプレイをヒストグラムから外す印にする。
+   * この欄を足す前に戻った保存（previous はあるが rewound が無い）は、読み込みで rewound を付ける（OCL-C559A5D5）。
+   * 前の試行を消した後の古い保存は見分けられない（戻ったことの記録が残っていない）。
+   */
+  rewound?: true;
 };
 
 /** 始めたときの保存（まだ行動なし）。 */
@@ -115,6 +122,7 @@ export function rewindSave(save: SaveData, month: number): SaveData {
     ...save,
     turns: save.turns.slice(0, month - 1),
     previous: save.turns.map((t) => [...t]),
+    rewound: true,
   };
 }
 
@@ -291,6 +299,8 @@ export function parseSave(raw: unknown): SaveData | null {
     ...(routes !== undefined
       ? { routes: routes as NonNullable<SaveData['routes']> }
       : {}),
+    // 印の無い古い保存でも、前の試行が残っていれば戻ったプレイ（OCL-C559A5D5）
+    ...(raw.rewound === true || previous ? { rewound: true as const } : {}),
     ...(raw.version < CACHE_COMPONENTS_DEFAULT_VERSION ||
     raw.legacyRouteDefaults === true
       ? { legacyRouteDefaults: true as const }
@@ -300,6 +310,34 @@ export function parseSave(raw: unknown): SaveData | null {
       ? { previous: previous.map((t) => t.map(migrateAction)) }
       : {}),
   };
+}
+
+/**
+ * キーの並びをそろえた JSON（オブジェクトのキーを再帰的に並べ替え、undefined の値は JSON.stringify と同じく落とす）。
+ * 保存を読み直す（parseSave）とキーの並びが変わりうるので、プレイの id はこの形から作る（OCL-09A16C94）。
+ */
+export function canonicalJson(x: unknown): string {
+  if (Array.isArray(x)) return `[${x.map(canonicalJson).join(',')}]`;
+  if (typeof x === 'object' && x !== null)
+    return `{${Object.keys(x)
+      .sort()
+      .filter((k) => (x as Record<string, unknown>)[k] !== undefined)
+      .map(
+        (k) =>
+          `${JSON.stringify(k)}:${canonicalJson((x as Record<string, unknown>)[k])}`,
+      )
+      .join(',')}}`;
+  return JSON.stringify(x) ?? 'null';
+}
+
+/**
+ * 1 つのプレイを指す中身（前の試行 D-128 と戻った印を除いた保存の、キーの並びをそろえた JSON）。再開しても同じで、戻って違う行動で
+ * 終えたら変わる。web の手元の履歴の id（FNV-1a。D-144）の元。戻った印は除く（古い保存を読み直して印が付いても id が変わらない）。
+ * 集計のサーバーの二重の送信の判定は、これではなく再生した月の結果から作る（stats の playHashOf。OCL-64BE2E4E）。
+ */
+export function playContent(save: SaveData): string {
+  const { previous: _, rewound: __, ...rest } = save;
+  return canonicalJson(rest);
 }
 
 /**

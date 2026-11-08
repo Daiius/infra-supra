@@ -1,2 +1,5 @@
 packages:
   - 'packages/*'
+# 集計のサーバー（packages/stats）のバンドルに使う esbuild の postinstall（バイナリの確かめ）を許す
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "src",
+    "migrate.ts",
+    "drizzle.config.ts",
+    "esbuild.config.ts",
+    "vitest.config.ts"
+  ]
+}

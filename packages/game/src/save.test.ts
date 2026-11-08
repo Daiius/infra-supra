@@ -2,9 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyActions,
+  canonicalJson,
   newGame,
   newSave,
   parseSave,
+  playContent,
   playMonth,
   previousSave,
   replaySave,
@@ -271,6 +273,41 @@ describe('この月に戻ると前の試行（D-128）', () => {
     expect(legacy.previous).toEqual([
       [{ type: 'set', key: 'format', value: 105 }],
     ]);
+  });
+
+  it('戻ったプレイには rewound の印が付き、前の試行を消しても JSON を通しても残る（D-148）', () => {
+    expect(played(TURNS).rewound).toBeUndefined();
+    const back = rewindSave(played(TURNS), 2);
+    expect(back.rewound).toBe(true);
+    expect(withoutPrevious(back).rewound).toBe(true);
+    expect(parseSave(JSON.parse(JSON.stringify(back)))!.rewound).toBe(true);
+    const noFlag = JSON.parse(JSON.stringify(withoutPrevious(back)));
+    delete noFlag.rewound;
+    expect(parseSave({ ...noFlag, rewound: 'yes' })!.rewound).toBeUndefined();
+    // 印を足す前に戻った古い保存（前の試行はあるが印が無い）は、読み込みで印を付ける（OCL-C559A5D5）
+    const legacy = JSON.parse(JSON.stringify(back));
+    delete legacy.rewound;
+    expect(parseSave(legacy)!.rewound).toBe(true);
+    // 印は id（playContent）に入れない
+    expect(playContent(parseSave(legacy)!)).toBe(playContent(back));
+  });
+
+  it('playContent は前の試行とキーの並びに依らない（D-144・D-149）', () => {
+    const save = played(TURNS);
+    const back = rewindSave(save, 2);
+    expect(playContent(withTurn(withTurn(back, TURNS[1]!), TURNS[2]!))).toBe(
+      playContent(
+        withoutPrevious(withTurn(withTurn(back, TURNS[1]!), TURNS[2]!)),
+      ),
+    );
+    const reordered = Object.fromEntries(
+      Object.entries(save).reverse(),
+    ) as typeof save;
+    expect(playContent(reordered)).toBe(playContent(save));
+    expect(playContent(withTurn(save, []))).not.toBe(playContent(save));
+    expect(canonicalJson({ b: 1, a: [{ d: undefined, c: 2 }] })).toBe(
+      '{"a":[{"c":2}],"b":1}',
+    );
   });
 
   it('終わった後も、行動を選んだ月には戻れる。今の月・最後の月・範囲外には戻れない', () => {

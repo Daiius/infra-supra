@@ -1,5 +1,5 @@
-// 設定のダイアログ（D-147）。ヘッダーの歯車から開く。遊び方を見る・ローカルの記録を消す（確認つき）。
-import { BookOpen, Settings, Trash2 } from 'lucide-react';
+// 設定のダイアログ（D-147）。ヘッダーの歯車から開く。遊び方を見る・ローカルの記録を消す（確認つき）・プライバシーポリシー（D-153）。
+import { BookOpen, Settings, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 /** 消すものの一覧（画面の確認に出す。消すのは接頭辞 infra-supra: のキー全部。local-records.ts の clearLocalRecords）。 */
@@ -13,11 +13,14 @@ const CLEARED = [
 
 export function SettingsDialog({
   onHowto,
+  onPrivacy,
   onClear,
   onClose,
 }: {
   /** 「遊び方を見る」。設定を閉じてから遊び方を開く。 */
   onHowto: () => void;
+  /** 「プライバシーポリシー」。設定を閉じてからポリシーを開く（D-153）。 */
+  onPrivacy: () => void;
   /** 確認の後の「消す」。 */
   onClear: () => void;
   onClose: () => void;
@@ -70,6 +73,9 @@ export function SettingsDialog({
             <p className="text-sm">
               このブラウザに保存した次の記録を全部消します。元には戻せません。
             </p>
+            <p className="text-sm">
+              集計に送った結果（匿名。プライバシーポリシーを参照）は、ここでは消えません。
+            </p>
             <ul className="list-disc pl-5 text-sm">
               {CLEARED.map((x) => (
                 <li key={x}>{x}</li>
@@ -110,6 +116,21 @@ export function SettingsDialog({
               >
                 <BookOpen aria-hidden className="size-4" />
                 遊び方を見る
+              </button>
+            </section>
+            <section className="space-y-1">
+              <h3 className="font-bold">送る情報</h3>
+              <p className="text-sm opacity-70">
+                終わったプレイの結果（構成・行動・4
+                つの軸など）を匿名で送ります。名前・IP・端末の情報は送りません。
+              </p>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={onPrivacy}
+              >
+                <ShieldCheck aria-hidden className="size-4" />
+                プライバシーポリシー
               </button>
             </section>
             <section className="space-y-1">
