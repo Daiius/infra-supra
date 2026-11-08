@@ -107,6 +107,47 @@ describe('照合', () => {
     ).toEqual({ ok: false, code: 'invalid-save' });
   });
 
+  it('結果を変えない書き換え（行動の未知の欄・何もしない行動）は同じ鍵になる（OCL-64BE2E4E）', () => {
+    const hashOf = (s: Submission) => {
+      const v = verifySubmission(s);
+      if (!v.ok) throw new Error(`照合に失敗: ${v.code}`);
+      return v.record.playHash;
+    };
+    const base = hashOf(good);
+    expect(
+      hashOf(
+        tampered((s) =>
+          s.save.turns[0]!.push({ type: 'none', nonce: 'x' } as never),
+        ),
+      ),
+    ).toBe(base);
+    expect(
+      hashOf(
+        tampered((s) => {
+          s.save.turns[1]!.push({ type: 'none' }, { type: 'none', n: 2 });
+          s.save.turns[3]!.push({ type: 'none', nonce: 'z' } as never);
+        }),
+      ),
+    ).toBe(base);
+    // 結果が変わる行動なら別の鍵（照合が合うよう 4 軸も数え直して送る）
+    const other = submissionOf(
+      finishedSave(42, [{ type: 'set', key: 'format', value: 84 }]),
+    );
+    expect(hashOf(other)).not.toBe(base);
+  });
+
+  it('シードは 32 ビットの整数だけ（小数・範囲の外は形の検査で通さない）', () => {
+    for (const seed of [42.5, 2 ** 31, -(2 ** 31) - 1])
+      expect(
+        submissionSchema.safeParse(tampered((s) => (s.save.seed = seed)))
+          .success,
+      ).toBe(false);
+    expect(
+      submissionSchema.safeParse(tampered((s) => (s.save.seed = -(2 ** 31))))
+        .success,
+    ).toBe(true);
+  });
+
   it('前の試行（previous）は照合にも鍵にも使わない', () => {
     const withPrev = tampered((s) => (s.save.previous = [[], []]));
     const a = verifySubmission(good);

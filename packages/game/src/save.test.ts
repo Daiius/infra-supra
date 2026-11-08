@@ -281,10 +281,15 @@ describe('この月に戻ると前の試行（D-128）', () => {
     expect(back.rewound).toBe(true);
     expect(withoutPrevious(back).rewound).toBe(true);
     expect(parseSave(JSON.parse(JSON.stringify(back)))!.rewound).toBe(true);
-    expect(
-      parseSave({ ...JSON.parse(JSON.stringify(back)), rewound: 'yes' })!
-        .rewound,
-    ).toBeUndefined();
+    const noFlag = JSON.parse(JSON.stringify(withoutPrevious(back)));
+    delete noFlag.rewound;
+    expect(parseSave({ ...noFlag, rewound: 'yes' })!.rewound).toBeUndefined();
+    // 印を足す前に戻った古い保存（前の試行はあるが印が無い）は、読み込みで印を付ける（OCL-C559A5D5）
+    const legacy = JSON.parse(JSON.stringify(back));
+    delete legacy.rewound;
+    expect(parseSave(legacy)!.rewound).toBe(true);
+    // 印は id（playContent）に入れない
+    expect(playContent(parseSave(legacy)!)).toBe(playContent(back));
   });
 
   it('playContent は前の試行とキーの並びに依らない（D-144・D-149）', () => {

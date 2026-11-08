@@ -144,11 +144,11 @@
 
 | 口 | 中身 |
 |---|---|
-| `POST /api/results` | 本文 `{ save, axes, end }`（§4）。zod でおおまかな形 → game の `parseSave` → `replaySave` で再生 → 4 軸（相対 1e-9 まで同じとみなす）と終わり方を照合。201 保存・200 同じプレイ（`duplicate`）・400 形が違う・413 大きすぎる（64 KB）・422 `invalid-save` / `replay-failed` / `unfinished` / `mismatch`（食い違った欄つき） |
+| `POST /api/results` | 本文 `{ save, axes, end }`（§4）。シードは 32 ビットの整数だけ。zod でおおまかな形 → game の `parseSave` → `replaySave` で再生 → 4 軸（相対 1e-9 まで同じとみなす）と終わり方を照合。201 保存・200 同じプレイ（`duplicate`）・400 形が違う・413 大きすぎる（64 KB）・422 `invalid-save` / `replay-failed` / `unfinished` / `mismatch`（食い違った欄つき） |
 | `GET /api/results/histogram?scenario=&axis=[&seed=][&value=]` | 完走・戻っていないプレイだけの分布。`{ count, min, max, bins: [{ from, to, count }], position? }`。④ は値ごとに幅 1、ほかは最小〜最大を 20 本。`value` を付けると `position: { above, equal }`（段 3 の上位 %） |
 | `GET /api/version` | `{ commit, builtAt }`（ビルド引数から。版を手動でそろえるときの確かめ） |
 
-表 `results`（1 プレイ 1 行）: `play_hash`（プレイの中身 `playContent` の SHA-256・一意）・`created_at`・`scenario_id`・`seed`・`start_date`・`stack_index`・`framework`・`rewound`・`end_reason`・`end_month`・`outages`・4 軸（サーバーが数えた値）・`save`（jsonb）。IP・端末の情報の列は無い。既存の Postgres の中の別の DATABASE `infra_supra`、ロールは `infra_supra_admin`（DDL）と `infra_supra_server`（SELECT・INSERT だけ）。
+表 `results`（1 プレイ 1 行）: `play_hash`（再生した月ごとの結果とシナリオ・シード・構成・フレームワークの SHA-256・一意。結果を変えない書き換えでは変わらない。OCL-64BE2E4E）・`created_at`・`scenario_id`・`seed`・`start_date`・`stack_index`・`framework`・`rewound`・`end_reason`・`end_month`・`outages`・4 軸（サーバーが数えた値）・`save`（jsonb）。IP・端末の情報の列は無い。既存の Postgres の中の別の DATABASE `infra_supra`、ロールは `infra_supra_admin`（DDL）と `infra_supra_server`（SELECT・INSERT だけ）。
 
 - アクセスのログは「方法・パス・状態・時間」だけ（IP・ヘッダー・クエリを出さない）。
 - テストは実 Postgres を使わない: API は手元の実装（`memoryRepo`）、drizzle の層は PGlite に同じ migration を当てる。

@@ -23,14 +23,14 @@ export const results = table(
   {
     id: bigint({ mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
     /**
-     * プレイの中身（game の playContent。前の試行を除いた保存）の SHA-256（16 進）。同じプレイの二重の送信を 1 行にする。
-     * web の手元の履歴の id（FNV-1a・32 ビット）は衝突しうるので使わない。
+     * 再生した月ごとの結果と始めたときの選択の SHA-256（16 進。verify.ts の playHashOf）。同じプレイの二重の送信を 1 行にする。
+     * web の手元の履歴の id（FNV-1a・32 ビット）は衝突しうるうえ、結果を変えない書き換えで変わるので使わない（OCL-64BE2E4E）。
      */
     playHash: text().notNull().unique(),
     /** 受け付けた日時。シーズンの区切り（ST-12）を後で決めるときの手がかり。 */
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     scenarioId: text().notNull(),
-    /** シード（クライアントが決めた値。画面の入力は小数も受けるので double precision）。 */
+    /** シード（クライアントが決めた 32 ビットの整数。API が整数だけを受ける。列は最初の migration のまま double precision）。 */
     seed: doublePrecision().notNull(),
     /** 始めた日（YYYY-MM-DD。改定の出来事に効く）。存在しない日付も保存は読めるので、date 型にせず text のまま持つ。 */
     startDate: text().notNull(),

@@ -2,13 +2,15 @@
 // 食い違えば受け付けない（書き換えと、画面とサーバーの版ずれの両方をここで止める。版のハッシュは付けない）。
 import { createHash } from 'node:crypto';
 import {
+  canonicalJson,
   parseSave,
-  playContent,
   replaySave,
   resultAxesOf,
   RESULT_AXES,
   SCENARIOS,
   type EndReason,
+  type GameState,
+  type SaveData,
   type ResultAxes,
 } from 'game';
 import { z } from 'zod';
@@ -36,7 +38,14 @@ export const submissionSchema = z.object({
     version: z.number().int(),
     scenarioId: z.string().max(64),
     stackIndex: z.number().int(),
-    seed: finite,
+    /**
+     * シード（32 ビットの整数。乱数は seed | 0 で使うので、小数や範囲の外の値は同じ列の別のシードとして数を水増しできる）。
+     */
+    seed: z
+      .number()
+      .int()
+      .min(-(2 ** 31))
+      .max(2 ** 31 - 1),
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     turns: z
       .array(
@@ -84,8 +93,23 @@ export function sameAxisValue(a: number, b: number): boolean {
   return Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 }
 
-/** プレイの中身の SHA-256（16 進）。二重の送信を 1 行にする鍵。 */
-export function playHashOf(content: string): string {
+/**
+ * 二重の送信を 1 行にする鍵（OCL-64BE2E4E）。送られた行動の列ではなく、**再生した月ごとの結果**（月の報告の列）と、
+ * それを決める始めたときの選択（シナリオ・シード・構成・フレームワーク）の SHA-256（16 進）。
+ * 行動に未知の欄を足す・何もしない行動を足すなど、結果を変えない書き換えは同じ鍵になる（別の行として数を水増しできない）。
+ * 結果が月ごとに全部同じプレイは、行動の列が違っても 1 つのプレイとして数える。
+ */
+export function playHashOf(
+  save: Pick<SaveData, 'scenarioId' | 'seed' | 'stackIndex' | 'framework'>,
+  state: Pick<GameState, 'history'>,
+): string {
+  const content = canonicalJson({
+    scenarioId: save.scenarioId,
+    seed: save.seed,
+    stackIndex: save.stackIndex,
+    framework: save.framework,
+    history: state.history,
+  });
   return createHash('sha256').update(content).digest('hex');
 }
 
@@ -114,7 +138,7 @@ export function verifySubmission(sub: Submission): VerifyResult {
   return {
     ok: true,
     record: {
-      playHash: playHashOf(playContent(save)),
+      playHash: playHashOf(save, state),
       scenarioId: save.scenarioId,
       seed: save.seed,
       startDate: save.startDate,
