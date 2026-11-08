@@ -50,6 +50,18 @@ import {
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import { MissingParts } from './missing-parts.tsx';
 import { useRoutePlanEditor } from './route-plan-field.tsx';
+import {
+  LAST_SETUP_KEY,
+  lastSetupLabel,
+  lastSetupOf,
+  parseLastSetups,
+  restoreLastSetup,
+  sameAsRestored,
+  withLastSetup,
+  type LastSetup,
+  type LastSetupStore,
+  type SetupState,
+} from './last-setup.ts';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
 /** 今日の日付（YYYY-MM-DD・端末の現地時刻）。改定の出来事の条件に使う（D-21）。 */
@@ -103,6 +115,28 @@ function storeSave(save: SaveData | null) {
     else localStorage.removeItem(SAVE_KEY);
   } catch {
     // 保存できなくても遊べる（再読み込みで最初からになるだけ）
+  }
+}
+
+/** 前回の構成（D-127）を読む。使えない・壊れていれば空（ボタンを出さない）。 */
+function loadLastSetups(): LastSetupStore {
+  try {
+    const raw = localStorage.getItem(LAST_SETUP_KEY);
+    return parseLastSetups(raw ? JSON.parse(raw) : null);
+  } catch {
+    return parseLastSetups(null);
+  }
+}
+
+/** 「運営を始める」を押したときの選択を、そのシナリオの前回として書く。書けなくても始められる。 */
+function storeLastSetup(scenarioId: string, entry: LastSetup) {
+  try {
+    localStorage.setItem(
+      LAST_SETUP_KEY,
+      JSON.stringify(withLastSetup(loadLastSetups(), scenarioId, entry)),
+    );
+  } catch {
+    // 保存領域が使えない環境では何もしない（次はボタンが出ないだけ）
   }
 }
 
@@ -262,6 +296,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     const want = fws.allowed.includes(fwChoice) ? fwChoice : fws.default;
     const st = next.stack ?? stack;
     const fw = frameworkOnStack(sc, st, want);
+    setRestoreNotice(null);
     setFallbackNotice(
       fw === want
         ? null
@@ -358,6 +393,46 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const chosenCommits = commitOptions
     .filter((o) => commits[o.key] === o.payment)
     .map((o) => ({ key: o.key, payment: o.payment }));
+  // 前回の構成（D-127）: 「運営を始める」を押したときの選択をシナリオごとに覚え、まとめて戻す（ゲームモードだけ）
+  const [lastSetups] = useState(loadLastSetups);
+  const last = lastSetups.scenarios[scenarioId];
+  // 戻せなかったものの知らせ（構成・フレームワーク・シナリオを替えると消す）
+  const [restoreNotice, setRestoreNotice] = useState<string | null>(null);
+  const current: SetupState = {
+    stack,
+    framework,
+    components: parts,
+    routes,
+    revalidateSec: revalidateChosen,
+    comments,
+    commitments: commits,
+  };
+  const restored = last ? restoreLastSetup(scenario, last, current) : null;
+  const restoreLast = () => {
+    if (!restored) return;
+    // 他の構成の記憶は change と同じく、戻したフレームワークで選べるものだけにする
+    const kept: Record<number, SetupChoices> = {};
+    for (const [k, v] of Object.entries({ ...partsByStack, [stack]: parts })) {
+      const i = Number(k);
+      if (i === restored.stack) continue;
+      kept[i] = validSetupChoices(
+        scenario,
+        i,
+        frameworkOnStack(scenario, i, restored.framework),
+        v,
+      );
+    }
+    setPartsByStack(kept);
+    setStack(restored.stack);
+    setFramework(restored.framework);
+    setParts(restored.components);
+    setRouteChoice(restored.routes);
+    setRevalidateSec(restored.revalidateSec);
+    setComments(restored.comments);
+    setCommits(restored.commitments);
+    setFallbackNotice(null);
+    setRestoreNotice(restored.notice);
+  };
   return (
     <>
       <ScenarioPicker
@@ -370,6 +445,14 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           <h2 className="card-title">どの構成で始めますか？</h2>
           {/* ① インフラの構成と ② フレームワークと描き方はタブで切り替える（どちらから選んでもよい。D-116 の補足）。
               タブの見出しにそれぞれの今の選択と注意（未選択の部品・付け替えの知らせ）を出す */}
+          {last && restored && (
+            <LastSetupButton
+              label={lastSetupLabel(last)}
+              same={sameAsRestored(scenario, current, restored)}
+              notice={restoreNotice}
+              onClick={restoreLast}
+            />
+          )}
           <div className="mt-2">
             <SetupTabs
               api={tabsApi}
@@ -548,6 +631,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               disabled={problem !== null}
               title={problem ?? undefined}
               onClick={() => {
+                storeLastSetup(scenario.id, lastSetupOf(scenario, current));
                 onStart(
                   newSave({
                     scenarioId: scenario.id,
@@ -577,5 +661,42 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** 「前回の構成を選ぶ」（D-127）。前回の構成とフレームワークを添え、今の選択が前回と同じなら押せなくする。 */
+function LastSetupButton({
+  label,
+  same,
+  notice,
+  onClick,
+}: {
+  label: string;
+  same: boolean;
+  notice: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <div className="mt-1" data-last-setup>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-sm btn-outline h-auto min-h-8 max-w-full py-1 text-left font-normal whitespace-normal"
+          disabled={same}
+          onClick={onClick}
+        >
+          前回の構成を選ぶ（{label}）
+        </button>
+        {same && <span className="text-xs opacity-60">前回と同じ</span>}
+      </div>
+      {notice && (
+        <p
+          className="alert alert-warning alert-soft mt-1 py-2 text-sm"
+          role="status"
+        >
+          {notice}
+        </p>
+      )}
+    </div>
   );
 }
