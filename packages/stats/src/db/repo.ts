@@ -1,7 +1,7 @@
 // 保存の口（repo.ts の ResultsRepo）の drizzle の実装。本番は node-postgres（connection.ts）、テストは PGlite（同じ migration を当てる）。
 import { and, eq } from 'drizzle-orm';
 import type { PgAsyncDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-import { AXIS_FIELD, type ResultsRepo } from '../repo.ts';
+import { AXIS_FIELD, inHistogram, type ResultsRepo } from '../repo.ts';
 import { results } from './schema.ts';
 
 /** node-postgres・PGlite のどちらの drizzle も受ける。 */
@@ -15,7 +15,17 @@ export function drizzleRepo(db: AnyDb): ResultsRepo {
         .values(record)
         .onConflictDoNothing({ target: results.playHash })
         .returning({ id: results.id });
-      return inserted.length > 0 ? 'inserted' : 'duplicate';
+      if (inserted.length > 0)
+        return { status: 'inserted', inHistogram: inHistogram(record) };
+      // 前からある行の印で、ヒストグラムに入るかを返す（OCL-9B705B16）
+      const [found] = await db
+        .select({ endReason: results.endReason, rewound: results.rewound })
+        .from(results)
+        .where(eq(results.playHash, record.playHash));
+      return {
+        status: 'duplicate',
+        inHistogram: found ? inHistogram(found) : false,
+      };
     },
     async histogramValues({ scenarioId, axis, seed }) {
       const column = results[AXIS_FIELD[axis]];

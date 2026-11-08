@@ -1310,3 +1310,97 @@ export function CostBars({
     </figure>
   );
 }
+
+// ---- 分布のヒストグラム（振り返りの 4 軸。段 3・D-161）----
+
+export type HistogramChartBin = { from: number; to: number; count: number };
+
+/**
+ * 小さなヒストグラム（棒は件数・横は値）と「あなた」の印。自分の値を含む棒は強調の色、ほかは控えめの色にし、
+ * 色だけに頼らず縦の線と「▼ あなた」のラベルで位置を示す。数値の要約（n 件中 上位 x %）は呼ぶ側がテキストで出す。
+ * discrete: 値ごとに幅 1 の棒（④ ギリギリを攻める）。値の印は棒の真ん中に置く。
+ */
+export function HistogramChart({
+  bins,
+  value,
+  discrete = false,
+  label,
+}: {
+  bins: readonly HistogramChartBin[];
+  value: number;
+  discrete?: boolean;
+  /** 読み上げの名前（例: 同じシードの分布）。 */
+  label: string;
+}) {
+  const W = 200;
+  const H = 36;
+  if (bins.length === 0) return null;
+  const lo = bins[0]!.from;
+  const hi = bins.at(-1)!.to;
+  const span = hi - lo;
+  const maxCount = Math.max(1, ...bins.map((b) => b.count));
+  const at = discrete ? value + 0.5 : value;
+  // 範囲の外（自分が分布に入っていないとき）は端に寄せる。全部同じ値（幅 0）は真ん中
+  const frac = span > 0 ? Math.min(1, Math.max(0, (at - lo) / span)) : 0.5;
+  const mine = bins.findIndex((b, i) =>
+    discrete
+      ? Math.floor(value) === b.from
+      : value >= b.from &&
+        (value < b.to || (i === bins.length - 1 && value <= b.to)),
+  );
+  const bw = W / bins.length;
+  return (
+    <figure className="viz-root relative min-w-0 pt-4" data-histogram>
+      <div
+        aria-hidden
+        className="absolute top-0 text-[10px] leading-none font-semibold whitespace-nowrap"
+        style={{
+          left: `${frac * 100}%`,
+          transform: `translateX(${frac > 0.8 ? '-100%' : frac < 0.2 ? '0' : '-50%'})`,
+          color: 'var(--text-primary)',
+        }}
+      >
+        ▼ あなた
+      </div>
+      <svg
+        role="img"
+        aria-label={label}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="block h-9 w-full"
+      >
+        <line
+          x1="0"
+          x2={W}
+          y1={H - 0.5}
+          y2={H - 0.5}
+          stroke="var(--axis)"
+          strokeWidth="1"
+          vectorEffect="non-scaling-stroke"
+        />
+        {bins.map((b, i) =>
+          b.count > 0 ? (
+            <rect
+              key={i}
+              data-mine={i === mine ? 'true' : undefined}
+              x={i * bw + bw * 0.1}
+              width={bw * 0.8}
+              y={H - (b.count / maxCount) * (H - 2)}
+              height={(b.count / maxCount) * (H - 2)}
+              fill={i === mine ? 'var(--series-1)' : 'var(--deemphasis)'}
+            />
+          ) : null,
+        )}
+        <line
+          x1={frac * W}
+          x2={frac * W}
+          y1="0"
+          y2={H}
+          stroke="var(--marker)"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+    </figure>
+  );
+}

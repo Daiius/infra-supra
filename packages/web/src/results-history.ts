@@ -225,7 +225,7 @@ export function compareWithHistory(
 
 /**
  * 花火の段（1〜3。ST-01 の暫定・D-145）: 自己ベストを更新した軸の数で分ける（0 → 1・1〜2 → 2・3〜4 → 3）。
- * 段 3 で「上位に入った軸の数」に置き換える。
+ * 集計の分布があるときは distribution.ts の distributionFireworkLevel（上位に入った軸の数。D-163）を使い、これは分布が無いときに使う。
  */
 export function fireworkLevel(cmp: readonly AxisComparison[]): 1 | 2 | 3 {
   const n = cmp.filter((c) => c.newBest).length;

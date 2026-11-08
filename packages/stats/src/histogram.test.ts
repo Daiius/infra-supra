@@ -41,6 +41,10 @@ describe('histogramOf', () => {
       above: 2,
       equal: 2,
     });
+    // 最後の桁の差（相対 1e-9 まで）は同じ値に数える（画面の値とサーバーの再生の値。D-162）
+    expect(
+      histogramOf('satisfaction', [0.8 + 1e-12, 0.9], 0.8).position,
+    ).toEqual({ above: 1, equal: 1 });
     expect(histogramOf('cash', [], 2).position).toEqual({
       above: 0,
       equal: 0,

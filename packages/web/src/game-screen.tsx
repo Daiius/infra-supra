@@ -82,6 +82,12 @@ import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Sparkline } from './charts.tsx';
 import { ResultAxesPanel } from './result-axes.tsx';
 import {
+  distributionFireworkLevel,
+  TOP_PERCENT,
+  topAxesCount,
+  type StatsView,
+} from './distribution.ts';
+import {
   compareWithHistory,
   fireworkLevel,
   type AxisComparison,
@@ -247,6 +253,7 @@ export function Game({
   runId,
   results,
   playId,
+  stats,
   onAdvance,
   previous,
   onRewind,
@@ -265,6 +272,8 @@ export function Game({
   results: readonly ResultEntry[];
   /** 今のプレイの id（履歴の中の今のプレイの記録を比較から除く）。 */
   playId: string;
+  /** 集計の分布の中での位置（段 3・D-161）。ready でなければ手元の履歴との比較（段 1）を出す。 */
+  stats: StatsView;
   /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
   onAdvance: (actions: Action[]) => GameState;
   /** 前の試行（D-128。保存の前の試行を再生した状態）。無ければ null。 */
@@ -343,6 +352,7 @@ export function Game({
           key={celebration}
           state={state}
           comparisons={comparisons}
+          stats={stats}
           auto={celebration === 0}
         />
       )}
@@ -350,6 +360,7 @@ export function Game({
         <Result
           state={state}
           comparisons={comparisons}
+          stats={stats}
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         >
           {picker}
@@ -519,17 +530,19 @@ function RewindDialog({
 }
 
 /**
- * 完走のダイアログと花火（D-25・D-131）。4 軸の値と手元の履歴との比較を出し、自己ベストを更新した軸が多いほど花火を増やす（D-145）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
+ * 完走のダイアログと花火（D-25・D-131）。4 軸の値と集計の分布の中での位置（段 3・D-161）か手元の履歴との比較を出し、上位に入った軸（分布が無ければ自己ベストを更新した軸）が多いほど花火を増やす（D-163・D-145）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
  * 閉じると背景が消え、新しい花火は出さない。空中に残った粒は少し薄くして、寿命で消えるまで描いてから片付ける。
  * 動きを減らす設定では、ダイアログだけ出して花火は出さない。作法は出来事のダイアログ（D-23）と同じ。
  */
 function VictoryCelebration({
   state,
   comparisons,
+  stats,
   auto,
 }: {
   state: GameState;
   comparisons: readonly AxisComparison[];
+  stats: StatsView;
   /** 完走した直後に開いた（true）か、結果の画面のボタンで開き直した（false）か。 */
   auto: boolean;
 }) {
@@ -547,8 +560,13 @@ function VictoryCelebration({
       document.activeElement.blur();
     d.showModal();
   }, [auto]);
-  const level = fireworkLevel(comparisons);
+  // 分布があれば上位に入った軸の数、無ければ自己ベストを更新した軸の数で花火の段を決める（D-163・D-145）
+  const dist = stats.status === 'ready' ? stats.view : null;
+  const level = dist
+    ? distributionFireworkLevel(dist)
+    : fireworkLevel(comparisons);
   const updated = comparisons.filter((c) => c.newBest).length;
+  const topAxes = dist ? topAxesCount(dist) : 0;
   return (
     <>
       {open && (
@@ -564,27 +582,32 @@ function VictoryCelebration({
             setAfterglow(!reduced && engine.particles.length > 0);
           }}
         >
-          <div className="modal-box relative z-10 max-w-lg overflow-hidden p-0">
+          {/* 見出しと閉じるボタンは固定し、4 軸の欄だけを縦にスクロールする（狭い画面で分布が高さを超える。OCL-3AA8C258） */}
+          <div className="modal-box relative z-10 flex max-w-lg flex-col overflow-hidden p-0">
             {/* 成功の色の帯で見出しを強調する（色だけにせず ✓ とラベルを添える） */}
-            <div className="bg-success px-6 py-5 text-success-content">
+            <div className="shrink-0 bg-success px-6 py-5 text-success-content">
               <h2 id="victory-title" className="text-3xl font-bold">
                 ✓ 完走
               </h2>
               <p className="mt-1 text-sm">
                 {state.end!.month} か月の運営を走り切りました。4
                 つの軸で振り返りましょう
-                {updated > 0 &&
-                  `（${updated} つの軸で自己ベストを更新しました）`}
+                {dist
+                  ? topAxes > 0 &&
+                    `（${topAxes} つの軸で上位 ${TOP_PERCENT}% に入りました）`
+                  : updated > 0 &&
+                    `（${updated} つの軸で自己ベストを更新しました）`}
               </p>
             </div>
-            <div className="px-6 pt-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-5">
               <ResultAxesPanel
                 comparisons={comparisons}
+                stats={stats}
                 outages={state.outages}
                 size="lg"
               />
             </div>
-            <div className="modal-action px-6 pb-6">
+            <div className="modal-action shrink-0 px-6 pb-6">
               <form method="dialog">
                 <button className="btn btn-success" autoFocus>
                   閉じて結果を見る
@@ -2645,11 +2668,13 @@ function FireworkIcon() {
 function Result({
   state,
   comparisons,
+  stats,
   onCelebrate,
   children,
 }: {
   state: GameState;
   comparisons: readonly AxisComparison[];
+  stats: StatsView;
   /** 完走のダイアログを開き直す（完走のときだけ使う）。 */
   onCelebrate: () => void;
   /** 結果の下に足すもの（過去の月へ戻る欄。D-128）。 */
@@ -2731,7 +2756,11 @@ function Result({
           )}
         </div>
         {completed && (
-          <ResultAxesPanel comparisons={comparisons} outages={state.outages} />
+          <ResultAxesPanel
+            comparisons={comparisons}
+            stats={stats}
+            outages={state.outages}
+          />
         )}
         {hints.length > 0 && (
           // 折りたたまずに出す。原因と対策の方向だけで、正解の構成名は出さない（D-40）

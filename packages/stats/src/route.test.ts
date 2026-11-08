@@ -40,12 +40,35 @@ describe('POST /api/results', () => {
     const json = submissionOf(completed);
     const r1 = await client.api.results.$post({ json });
     expect(r1.status).toBe(201);
-    expect(await r1.json()).toEqual({ ok: true, duplicate: false });
+    expect(await r1.json()).toEqual({
+      ok: true,
+      duplicate: false,
+      inHistogram: true,
+    });
     const r2 = await client.api.results.$post({ json });
     expect(r2.status).toBe(200);
-    expect(await r2.json()).toEqual({ ok: true, duplicate: true });
+    expect(await r2.json()).toEqual({
+      ok: true,
+      duplicate: true,
+      inHistogram: true,
+    });
     expect(repo.rows).toHaveLength(1);
     expect(repo.rows[0]!.endReason).toBe('completed');
+  });
+
+  it('戻った印つきの同じ結果が先に保存されていれば、duplicate でも inHistogram は false（OCL-9B705B16）', async () => {
+    const { repo, client } = setup();
+    const v = verifySubmission(submissionOf(completed));
+    if (!v.ok) throw new Error('照合に失敗');
+    repo.rows.push({ ...v.record, rewound: true });
+    const r = await client.api.results.$post({
+      json: submissionOf(completed),
+    });
+    expect(await r.json()).toEqual({
+      ok: true,
+      duplicate: true,
+      inHistogram: false,
+    });
   });
 
   it('途中終了も終わり方つきで保存する（ヒストグラムには入れない）', async () => {
@@ -171,6 +194,69 @@ describe('GET /api/results/histogram', () => {
       'axis=cash',
     ])
       expect((await app.request(`/api/results/histogram?${q}`)).status).toBe(
+        400,
+      );
+  });
+});
+
+describe('GET /api/results/distribution', () => {
+  const rec = (over: Partial<ResultRecord>): ResultRecord => {
+    const v = verifySubmission(submissionOf(completed));
+    if (!v.ok) throw new Error('照合に失敗');
+    return { ...v.record, ...over };
+  };
+
+  it('4 軸 ×（同じシード / 全シード）の 8 本を 1 回で返し、値を付けた軸だけ位置を返す（D-161）', async () => {
+    const { repo, client } = setup();
+    repo.rows.push(
+      rec({ playHash: 'a', seed: 1, cash: 1000, edgeMonths: 0 }),
+      rec({ playHash: 'b', seed: 1, cash: 2000, edgeMonths: 3 }),
+      rec({ playHash: 'c', seed: 2, cash: 3000, edgeMonths: 3 }),
+      rec({ playHash: 'd', seed: 1, cash: 9999, endReason: 'cash' }),
+      rec({ playHash: 'e', seed: 1, cash: 9999, rewound: true }),
+    );
+    const r = await client.api.results.distribution.$get({
+      query: { scenario: 'article-community', seed: '1', cash: '1500' },
+    });
+    expect(r.status).toBe(200);
+    const d = await r.json();
+    if (!('axes' in d)) throw new Error('エラーの応答');
+    expect(d).toMatchObject({ scenarioId: 'article-community', seed: 1 });
+    expect(Object.keys(d.axes)).toEqual([
+      'cash',
+      'satisfaction',
+      'featurePoints',
+      'edgeMonths',
+    ]);
+    expect(d.axes.cash.seed).toMatchObject({
+      count: 2,
+      min: 1000,
+      max: 2000,
+      position: { above: 1, equal: 0 },
+    });
+    expect(d.axes.cash.all).toMatchObject({
+      count: 3,
+      max: 3000,
+      position: { above: 2, equal: 0 },
+    });
+    // 値を付けなかった軸は位置なし。ヒストグラムの切り方は 1 本ずつの口と同じ
+    expect(d.axes.edgeMonths.all).not.toHaveProperty('position');
+    const single = await (
+      await client.api.results.histogram.$get({
+        query: { scenario: 'article-community', axis: 'edgeMonths' },
+      })
+    ).json();
+    expect('bins' in single && single.bins).toEqual(d.axes.edgeMonths.all.bins);
+  });
+
+  it('知らないシナリオ・シードが無い・数でない値は 400', async () => {
+    const { app } = setup();
+    for (const q of [
+      'scenario=nope&seed=1',
+      'scenario=article-community',
+      'scenario=article-community&seed=1&cash=abc',
+    ])
+      expect((await app.request(`/api/results/distribution?${q}`)).status).toBe(
         400,
       );
   });
