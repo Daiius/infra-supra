@@ -168,6 +168,8 @@ export {
   setupSlots,
   validSetupChoices,
   setupProblem,
+  setupMissingSlots,
+  setupWithDefaults,
   newGame,
 } from './setup/new-game.ts';
 export {

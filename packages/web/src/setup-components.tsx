@@ -20,15 +20,19 @@ import {
 import {
   useEffect,
   useId,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type Ref,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { CarouselHeadingHidden, CarouselVisible } from './choice-carousel.tsx';
 import { Info } from './info.tsx';
+import { useReducedMotion } from './motion.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
 import { SlotCompareInfo, type SlotCompareData } from './slot-compare.tsx';
 
@@ -682,6 +686,17 @@ export function SettingChips<V extends string | number>({
 /** ① 構成・② フレームワークのタブ（D-116 の補足）。 */
 export type SetupTab = 'stack' | 'framework';
 
+/** SetupTabs を外から動かす口（D-125）。 */
+export type SetupTabsApi = {
+  /** タブを開く（描き終えてから戻る）。 */
+  show: (tab: SetupTab) => void;
+  /**
+   * ① を開き、選んでいるカードのそのスロットの選択 UI（機能のチップの行・構成図の箱）までスクロールしてフォーカスする。
+   * 見つからなければカードまでスクロールして false（カードはフォーカスできない）。
+   */
+  focusSlot: (slot: string) => boolean;
+};
+
 /** タブの見出し: 欄の名前・その欄の今の選択（隠れていても見えるように）・注意（未選択の部品・付け替えの知らせなど）。 */
 export type SetupTabInfo = {
   label: string;
@@ -727,10 +742,13 @@ export function SetupTabs({
   storageKey,
   stack,
   framework,
+  api,
 }: {
   storageKey: string;
   stack: SetupTabInfo;
   framework: SetupTabInfo;
+  /** 外からタブを開く・① の部品の選択 UI へ移る口（未選択の部品へのジャンプ。D-125）。 */
+  api?: Ref<SetupTabsApi> | undefined;
 }) {
   const [tab, setTabState] = useState<SetupTab>(() => readSetupTab(storageKey));
   const setTab = (v: SetupTab) => {
@@ -739,6 +757,35 @@ export function SetupTabs({
   };
   const id = useId();
   const tabs = useRef<Partial<Record<SetupTab, HTMLButtonElement | null>>>({});
+  const panels = useRef<Partial<Record<SetupTab, HTMLDivElement | null>>>({});
+  const reduced = useReducedMotion();
+  useImperativeHandle(api, () => ({
+    show: (t) => flushSync(() => setTab(t)),
+    focusSlot: (slot) => {
+      // ① を開いて描き終えてから、選んでいるカードのそのスロットの選択 UI（機能のチップの行か、構成図の箱）を探す
+      flushSync(() => setTab('stack'));
+      const panel = panels.current.stack;
+      const card =
+        panel?.querySelector<HTMLElement>(
+          'section[data-stack][aria-current="true"]',
+        ) ?? panel;
+      const target =
+        card?.querySelector<HTMLElement>(
+          `[data-parts] [data-slot="${slot}"] button:not([disabled])`,
+        ) ??
+        card?.querySelector<HTMLElement>(
+          `[data-slots~="${slot}"] button:not([disabled])`,
+        );
+      const el = target ?? card;
+      if (!el) return false;
+      el.scrollIntoView?.({
+        block: 'center',
+        behavior: reduced ? 'auto' : 'smooth',
+      });
+      el.focus({ preventScroll: true });
+      return target !== null && target !== undefined;
+    },
+  }));
   const info = { stack, framework };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const i = SETUP_TABS.indexOf(tab);
@@ -830,6 +877,9 @@ export function SetupTabs({
           role="tabpanel"
           id={`${id}-panel-${t}`}
           aria-labelledby={`${id}-tab-${t}`}
+          ref={(el) => {
+            panels.current[t] = el;
+          }}
           hidden={tab !== t}
           className="min-w-0"
         >

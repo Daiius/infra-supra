@@ -209,6 +209,53 @@ export function validSetupChoices(
   return out;
 }
 
+/** まだ選んでいないスロット（setupSlots の順。「運営を始める」の前に選ぶもの。setupProblem と同じ判定）。 */
+export function setupMissingSlots(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): (SetupSlot & { slot: SlotId })[] {
+  return choosable(setupSlots(scenario, stackIndex, framework, choices)).filter(
+    (x) => !x.options.some((o) => o.id === choices[x.slot]),
+  );
+}
+
+/**
+ * まだ選んでいないスロットを既定の部品（newGame が選ばれていないスロットに使う部品）で埋める（始める画面の「残りを既定にする」。D-125）。
+ * 選んだ部品は替えない。既定が依存で選べなければ、選べる最初の選択肢にする。埋めると出てくるスロット（DB で決まる DB のバックアップ
+ * など）も埋める。
+ */
+export function setupWithDefaults(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): Choices {
+  const platform = STACKS[stackIndex]!.provider;
+  let out = validSetupChoices(scenario, stackIndex, framework, choices);
+  // 埋めるたびに出てくるスロットがあるので、埋まるか進まなくなるまで繰り返す（スロットの数で打ち切る）
+  for (let i = 0; i < Object.keys(SLOT_LABELS).length; i++) {
+    const missing = setupMissingSlots(scenario, stackIndex, framework, out);
+    if (missing.length === 0) break;
+    const defaults = initialComponents(scenario, stackIndex, framework, out);
+    const next: Choices = { ...out };
+    for (const x of missing) {
+      const ok = (id: string | undefined): id is string =>
+        id !== undefined &&
+        x.options.some((o) => o.id === id) &&
+        componentConflict(platform, x.slot, id, next, framework) === null;
+      const d = defaults[x.slot];
+      const pick = ok(d) ? d : x.options.map((o) => o.id).find(ok);
+      if (pick !== undefined) next[x.slot] = pick;
+    }
+    const valid = validSetupChoices(scenario, stackIndex, framework, next);
+    if (Object.keys(valid).length === Object.keys(out).length) break;
+    out = valid;
+  }
+  return out;
+}
+
 /** 始められない理由（まだ選んでいないスロット）。選び終えていれば null。 */
 export function setupProblem(
   scenario: Scenario,
@@ -216,9 +263,7 @@ export function setupProblem(
   framework: FrameworkId,
   choices: Choices,
 ): string | null {
-  const missing = choosable(
-    setupSlots(scenario, stackIndex, framework, choices),
-  ).filter((x) => !x.options.some((o) => o.id === choices[x.slot]));
+  const missing = setupMissingSlots(scenario, stackIndex, framework, choices);
   return missing.length
     ? `部品をまだ選んでいない: ${missing.map((x) => x.label).join('・')}`
     : null;

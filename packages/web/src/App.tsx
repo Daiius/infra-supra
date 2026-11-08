@@ -1,5 +1,5 @@
 // ゲームモードの画面（Phase 2〜4 の前倒しの試作）。ロジックは game パッケージ、ここは表示と操作だけ。
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   setupCommitments,
   type CommitmentPaymentId,
@@ -44,9 +44,11 @@ import { commitmentMeta } from './commitment-meta.ts';
 import {
   SetupCostPreview,
   SetupTabs,
+  type SetupTabsApi,
   type SetupChoices,
 } from './setup-components.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
+import { MissingParts } from './missing-parts.tsx';
 import { useRoutePlanEditor } from './route-plan-field.tsx';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
@@ -313,6 +315,19 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     },
     onCommentsChange: setComments,
   });
+  // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）。① と「残りを選ぶ」のダイアログで共用
+  const partsCompare = (slot: string) => ({
+    rows: setupComponentComparison(scenario, stack, framework, parts, slot, {
+      revalidateSec: revalidateChoosable ? revalidateSec : undefined,
+      comments: commentsChoosable ? comments : undefined,
+      routes,
+    }),
+    basis:
+      '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数える。出来事・話題の上乗せは含めない目安。縦の線は選んでいる部品の額',
+  });
+  // 部品を選び残したときの手段（D-125）: ① のタブを開いてスロットへ移る口と、埋め終えたら移る「運営を始める」
+  const tabsApi = useRef<SetupTabsApi>(null);
+  const startButton = useRef<HTMLButtonElement>(null);
   // 始めから結ぶ確約（台数の予約・年払いで、前払いが始めの所持金に収まるものだけ。D-97）
   const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
     {},
@@ -337,6 +352,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               タブの見出しにそれぞれの今の選択と注意（未選択の部品・付け替えの知らせ）を出す */}
           <div className="mt-2">
             <SetupTabs
+              api={tabsApi}
               storageKey="infra-supra:setup-tab:game"
               stack={{
                 label: '① インフラの構成',
@@ -360,24 +376,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     }
                     partsNote="構成の中の役割ごとに選ぶ（始める前なので手間はかからない）"
                     // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）
-                    partsCompare={(slot) => ({
-                      rows: setupComponentComparison(
-                        scenario,
-                        stack,
-                        framework,
-                        parts,
-                        slot,
-                        {
-                          revalidateSec: revalidateChoosable
-                            ? revalidateSec
-                            : undefined,
-                          comments: commentsChoosable ? comments : undefined,
-                          routes,
-                        },
-                      ),
-                      basis:
-                        '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数える。出来事・話題の上乗せは含めない目安。縦の線は選んでいる部品の額',
-                    })}
+                    partsCompare={partsCompare}
                   />
                 ),
               }}
@@ -476,11 +475,20 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               ))}
             </div>
           )}
-          {problem ? (
-            <p className="text-right text-sm" role="status">
-              {problem}
-            </p>
-          ) : (
+          {/* 部品を選び残していれば、その名前（押すと ① のそのスロットへ）・残りを選ぶダイアログ・残りを既定にする（D-125） */}
+          <MissingParts
+            scenario={scenario}
+            stackIndex={stack}
+            framework={framework}
+            value={parts}
+            onChange={(v) =>
+              setParts(validSetupChoices(scenario, stack, framework, v))
+            }
+            compare={partsCompare}
+            onJump={(slot) => tabsApi.current?.focusSlot(slot)}
+            onComplete={() => startButton.current?.focus()}
+          />
+          {!problem && (
             // すべて選んだら 1 か月目の費用の見込み（D-72）
             <SetupCostPreview
               scenario={scenario}
@@ -515,6 +523,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               />
             </label>
             <button
+              ref={startButton}
               className="btn btn-primary"
               disabled={problem !== null}
               title={problem ?? undefined}

@@ -529,6 +529,109 @@ describe('ゲームモードの画面', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
   });
 
+  it('W-59 始める画面: 部品を選び残したら、名前を押すと ① のそのスロットへ移り、残りをダイアログで選べ、残りを既定にもできる（D-125）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Cloudflare Paid + vinext');
+    const start = () =>
+      screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' });
+    const missing = () =>
+      document.querySelector<HTMLElement>('[data-missing-parts]');
+    expect(start().disabled).toBe(true);
+    expect(missing()!.textContent).toContain(
+      '部品をまだ選んでいない: ISR のキャッシュ・画像・DB・メール送信',
+    );
+    // ジャンプ: ② を開いていても、DB を押すと ① を開き、構成図の DB の箱にフォーカスする
+    showFrameworkTab();
+    const jump = (slot: string) =>
+      fireEvent.click(
+        missing()!.querySelector<HTMLElement>(`[data-missing-slot="${slot}"]`)!,
+      );
+    jump('db');
+    expect(
+      document
+        .querySelector('[data-setup-tab-button="stack"]')!
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    const card = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    expect(card().contains(document.activeElement)).toBe(true);
+    expect(
+      document.activeElement!.closest('[data-slots~="db"]'),
+    ).not.toBeNull();
+    // 「機能から選ぶ」の表示では、そのスロットのチップの行へ
+    showPartsView('list');
+    showFrameworkTab();
+    jump('email');
+    expect(
+      document.activeElement!.closest('[data-parts] [data-slot="email"]'),
+    ).not.toBeNull();
+    // ダイアログ: 未選択のスロットだけを並べ、その場で選ぶ（選んだ行は畳んで残る）
+    fireEvent.click(screen.getByRole('button', { name: '残りを選ぶ' }));
+    const dialog = screen.getByRole('dialog', { name: '残りの部品を選ぶ' });
+    const rows = () =>
+      [
+        ...dialog.querySelectorAll<HTMLElement>(
+          'section[data-parts] [data-slot]',
+        ),
+      ].map((r) => r.getAttribute('data-slot'));
+    expect(rows()).toEqual(['db', 'images', 'isrCache', 'email']);
+    expect(within(dialog).getByRole('status').textContent).toBe('残り 4 個');
+    const db = dialog.querySelector<HTMLElement>('[data-slot="db"]')!;
+    fireEvent.click(
+      within(db).getByRole('button', { name: /^D1/, pressed: false }),
+    );
+    expect(rows()).toEqual(['db', 'images', 'isrCache', 'email']);
+    expect(
+      dialog.querySelector('[data-slot="db"]')!.getAttribute('data-collapsed'),
+    ).toBe('true');
+    expect(within(dialog).getByRole('status').textContent).toBe('残り 3 個');
+    // ダイアログの中でも残りを既定にでき、閉じると「運営を始める」が押せてフォーカスが移る
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '残りを既定にする' }),
+    );
+    expect(within(dialog).getByRole('status').textContent).toContain(
+      'すべて選んだ',
+    );
+    fireEvent.click(
+      within(dialog)
+        .getAllByRole('button', { name: '閉じる' })
+        .find((b) => b.textContent === '閉じる')!,
+    );
+    expect(
+      screen.queryByRole('dialog', { name: '残りの部品を選ぶ' }),
+    ).toBeNull();
+    expect(missing()).toBeNull();
+    expect(start().disabled).toBe(false);
+    expect(document.activeElement).toBe(start());
+    // 選んだ DB は既定で上書きしない
+    expect(
+      document
+        .querySelector(
+          'section[data-parts] [data-slot="db"] [data-selected="true"]',
+        )!
+        .getAttribute('data-option'),
+    ).toBe('d1');
+  });
+
+  it('W-60 始める画面: 「残りを既定にする」で未選択のスロットを既定の部品で埋め、すぐ「運営を始める」を押せる（D-125）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Vercel Pro + Supabase Pro');
+    const start = () =>
+      screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' });
+    expect(start().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '残りを既定にする' }));
+    expect(document.querySelector('[data-missing-parts]')).toBeNull();
+    expect(start().disabled).toBe(false);
+    expect(document.activeElement).toBe(start());
+    fireEvent.click(start());
+    await waitLoaded();
+    expectGameScreen(1);
+  });
+
   it('W-29 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
     await renderApp();
     const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
