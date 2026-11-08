@@ -381,7 +381,7 @@ export const gcp: PriceBookInput = {
         {
           id: 'cache-cleared-on-deploy',
           premise:
-            'Firebase Hosting の CDN のキャッシュは、サイトを新しくデプロイすると全体が消えます。パスやタグを指定して消す方法は文書にありません（オンデマンドの再検証は CDN に届かない）',
+            'Firebase Hosting の CDN のキャッシュは、サイトを新しくデプロイすると全体が消えます。パスやタグを指定して消す方法は文書にありません（更新で消す再検証は CDN に届かない）',
           sourceIds: ['hostingCache'],
         },
         {
@@ -638,7 +638,7 @@ export const gcp: PriceBookInput = {
         },
       ],
       notes: [
-        '送り先はアジア（Cloudflare の東京の拠点）とみます。北米への 1 GiB の無料の分は当たりません',
+        '送り先はアジア（Cloudflare の東京のサーバー）とみます。北米への 1 GiB の無料の分は当たりません',
       ],
     },
     // Cloud DNS（構成の DNS。D-96・prd/11 §21）

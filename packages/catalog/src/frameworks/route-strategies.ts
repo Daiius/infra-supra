@@ -39,7 +39,7 @@ export const ROUTE_STRATEGIES: Readonly<
   'static-build': {
     id: 'static-build',
     code: 'S1',
-    label: '静的（ビルドし直し）',
+    label: '静的（更新はビルドし直し）',
     long: 'ビルドのときに HTML にして静的な配信から返します。更新はビルドし直しです（間隔をまとめるか、更新のたび）',
     personalOk: false,
     why: {
@@ -67,7 +67,7 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'cached-purge',
     code: 'S3',
     label: 'サーバーで描いてキャッシュ（更新で消す）',
-    long: '最初の閲覧でサーバーが描いてキャッシュし、投稿・編集のときにそのページのキャッシュを消します（オンデマンドの再検証・route caching の invalidate）',
+    long: '最初の閲覧でサーバーが描いてキャッシュし、投稿・編集のときにそのページのキャッシュを消します（Next.js の On-demand Revalidation・route caching の invalidate）',
     personalOk: false,
     why: {
       public:
@@ -80,7 +80,7 @@ export const ROUTE_STRATEGIES: Readonly<
   ssr: {
     id: 'ssr',
     code: 'S4',
-    label: '毎回描く',
+    label: '毎回描く（キャッシュしない）',
     long: 'リクエストのたびにサーバーが描きます（1 回ごとに CPU を使い、事業者の 1 リクエストの CPU の制限をすべての閲覧が受ける）',
     personalOk: true,
     why: {

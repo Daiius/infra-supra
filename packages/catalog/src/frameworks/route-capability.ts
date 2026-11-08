@@ -268,7 +268,7 @@ function nextPurge(d: DeployTarget): StrategySupport {
   const ng = opts.filter((o) => !o.onDemandIsr!.ok);
   if (opts.length === 0 || ng.length === 0)
     return yes(
-      'オンデマンドの再検証（revalidatePath・revalidateTag）で、投稿・編集のときにそのページを取り直します',
+      '更新で消す再検証（revalidatePath・revalidateTag）で、投稿・編集のときにそのページを取り直します',
       d.sources,
     );
   if (ok.length === 0)
@@ -278,7 +278,7 @@ function nextPurge(d: DeployTarget): StrategySupport {
     );
   return {
     ...yes(
-      `ISR のキャッシュの部品で決まります（消せる: ${ok.map((o) => o.label).join('・')}／消せない: ${ng.map((o) => o.label).join('・')}）`,
+      `部品「ページのキャッシュ（ISR）」で決まります（消せる: ${ok.map((o) => o.label).join('・')}／消せない: ${ng.map((o) => o.label).join('・')}）`,
       d.sources,
     ),
     support: 'depends',
@@ -299,7 +299,7 @@ function nextjsRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
             [NEXT_STATIC_PARAMS],
           ),
     'cached-ttl': yes(
-      'ISR（revalidate の期限）です。キャッシュの置き場は ISR のキャッシュの部品です',
+      'ISR（revalidate の期限）です。キャッシュの置き場は部品「ページのキャッシュ（ISR）」です',
       d.sources,
     ),
     'cached-purge': nextPurge(d),

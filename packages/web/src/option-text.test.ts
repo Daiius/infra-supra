@@ -9,9 +9,9 @@ describe('splitForInfo', () => {
   });
 
   it('括弧で終わる名前は、括弧のまとまり全体を末尾にする（「オンデ／マンド」のように語の途中で切れない）', () => {
-    expect(splitForInfo('AWS: DynamoDB（オンデマンド）')).toEqual([
+    expect(splitForInfo('AWS: DynamoDB（リクエスト課金）')).toEqual([
       'AWS: DynamoDB',
-      '（オンデマンド）',
+      '（リクエスト課金）',
     ]);
     expect(splitForInfo('AWS: Aurora Serverless v2（最小 0.5 ACU）')[1]).toBe(
       '（最小 0.5 ACU）',

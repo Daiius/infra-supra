@@ -91,7 +91,7 @@ export function requirementReachable(
 
 export const REQUIREMENT_LABEL: Record<Requirement, string> = {
   'uptime-sla': '稼働率の SLA があるプラン',
-  'on-demand-isr': '即時反映（オンデマンド ISR）',
+  'on-demand-isr': '即時反映（更新で消す ISR）',
   'db-pitr': `DB を直近 ${PITR_REQUIRED_DAYS} 日の任意の時点に戻せる構成`,
 };
 

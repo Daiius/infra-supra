@@ -139,10 +139,12 @@ function CommitmentsSection({
   if (!active.length && !offers.length) return null;
   return (
     <>
-      <div className="divider my-1 text-xs">長期の確約（1 年）</div>
+      <div className="divider my-1 text-xs">
+        1 年契約（途中でやめられません）
+      </div>
       {active.map((c) => (
         <div key={c.key} className="py-1 text-sm">
-          確約中: {c.label}（{PAYMENT_LABEL[c.payment]}・{c.endMonth}{' '}
+          1 年契約中: {c.label}（{PAYMENT_LABEL[c.payment]}・{c.endMonth}{' '}
           か月目まで。取り消せません）
         </div>
       ))}
@@ -173,7 +175,7 @@ function CommitmentsSection({
               info={
                 <Info title={`${o.label}を結ぶ`}>
                   {o.premise}
-                  。確約の額は今月の対象の使用（オンデマンドの額）で決まり、超えた分はオンデマンドのままです。取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残ります。
+                  。契約の額は今月の対象の使用（オンデマンドの額）で決まり、超えた分はオンデマンドのままです。取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残ります。
                 </Info>
               }
               why={why}
@@ -1229,7 +1231,7 @@ function EffortBreakdownView({
         />
       </div>
       <div className="mt-1 text-xs opacity-60">
-        SSR の CPU {r.ssrCpuMs} ms（機能開発で重くなる）
+        サーバーで描く CPU 時間（SSR） {r.ssrCpuMs} ms（機能開発で重くなる）
       </div>
     </div>
   );
@@ -1433,7 +1435,7 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
       : blocked
         ? '上限に達した'
         : credit
-          ? 'クレジット消費'
+          ? '付属クレジットの消費'
           : p.hit
             ? '超過（課金）'
             : 'あと少し';
@@ -1990,7 +1992,7 @@ function Actions({
                       key === 'isr' ||
                       key === 'buildInterval' ||
                       key === 'pageCache'
-                        ? `手間 ${def.effort}（オンデマンドへは ${EFFORT.onDemandSwitch}）`
+                        ? `手間 ${def.effort}（${key === 'buildInterval' ? '更新のたびにビルド' : '更新で消す'}へは ${EFFORT.onDemandSwitch}）`
                         : `手間 ${def.effort}`,
                       '来月から',
                     ]}
@@ -2055,7 +2057,7 @@ function Actions({
                 )}
                 {key === 'isr' && invalidation && (
                   <span className="mt-1 block text-xs text-warning">
-                    オンデマンドでは {invalidation}
+                    「更新で消す」では {invalidation}
                   </span>
                 )}
               </div>

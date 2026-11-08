@@ -209,7 +209,8 @@ function FrameworkDetail({
           </li>
         ) : (
           <li>
-            SSR 1 回の CPU は約 {ssrCpuMs} ms（機能が増えると重くなります）
+            サーバーで 1 回描く CPU 時間（SSR）は約 {ssrCpuMs}{' '}
+            ms（機能が増えると重くなります）
           </li>
         )}
       </ul>

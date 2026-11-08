@@ -309,11 +309,11 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')} です`,
           next: invalidation
-            ? `オンデマンドの再検証で CloudFront の無効化が増えました（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつきます。無効化が込みの定額のプラン・時間の再検証にするか、部品「CDN の無効化のまとめ方」でワイルドカードにまとめましょう${commentsInPage(commentsOf(sc, state.routeParts), state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなります' : ''}`
+            ? `更新で消す再検証で CloudFront の無効化が増えました（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつきます。無効化が込みの定額のプラン・時間の再検証にするか、部品「CDN の無効化のまとめ方」でワイルドカードにまとめましょう${commentsInPage(commentsOf(sc, state.routeParts), state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなります' : ''}`
             : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもあります。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らしましょう。費用を削るなら、${base ? '規模に見合う基本料を見直しましょう' : '設定・部品で量を下げましょう'}`
               : base
-                ? '基本料（固定費）が費用の大半です。今の規模に見合う基本料か、込みの量や席がそこまで要るかを見直しましょう'
+                ? '基本料（固定費）が費用の大半です。今の規模に見合う基本料か、込みの量やメンバー（席）がそこまで要るかを見直しましょう'
                 : '使った分の費用が大きいです。設定・部品で量（転送・変換・実行）を下げるか、込みの量の大きいプランと比べましょう',
         },
         score: tier(reason === 'cash', 50 + Math.min(49, 100 * share)),
@@ -350,7 +350,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         hint: {
           kind: 'commitment',
           what: `${d.commitment.label}の対象の使用が ${ms.length} か月ありました（オンデマンドで ${usd(sum)}）`,
-          next: `1 年の確約で最大 ${Math.round(100 * rate)}% 安くなります（この ${ms.length} か月なら約 ${usd(saving)}）。確約は取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残ります。全額前払いは所持金から一度に引きます`,
+          next: `1 年契約で最大 ${Math.round(100 * rate)}% 安くなります（この ${ms.length} か月なら約 ${usd(saving)}）。1 年契約は取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残ります。全額前払いは所持金から一度に引きます`,
         },
         // 差は月に数ドルのことが多いので、ほかの補足（100 台）より下に置く（ほかに出すものが少ないときだけ出る）
         score: Math.min(99, saving),
@@ -385,7 +385,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         hint: {
           kind: 'slow',
           what: `${monthsText(slow.map((r) => r.month))}、速さが悪く PV の伸びが下がりました（1 か月あたり約 ${Math.round(pen * 100)}%・合わせて約 ${Math.round(cut * 100)}%。${(slow[0]!.satisfaction.reasons.speed ?? '').replace(/。速さが悪く PV の伸び.*$/, '')}）`,
-          next: '速さを「悪い」から戻す: 画像を原本のまま配っていないか（1 ページの通信量）、SSR の重さ、ピークに詰まる上限を見直しましょう',
+          next: '速さを「悪い」から戻す: 画像を原本のまま配っていないか（1 ページの通信量）、サーバーで描く CPU 時間（SSR）、ピークに詰まる上限を見直しましょう',
         },
         // 合わせて 1 割未満なら補足（100 台）。大きいときは未達の原因として並べる
         score:

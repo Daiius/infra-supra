@@ -59,7 +59,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'gcp',
     label: 'Hosting の CDN（s-maxage）+ インスタンスごとのキャッシュ',
-    note: 'ISR のページは Firebase Hosting の CDN が s-maxage の間だけ返し、外れると Cloud Run の Next.js が自分のインスタンスのキャッシュから返して、期限が来たら作り直します。キャッシュはインスタンスごとで共有されません（増えたインスタンスはそれぞれ作り直す）。オンデマンドの再検証は受けたインスタンスにしか効かず、CDN はデプロイのときしか消えないので届きません',
+    note: 'ISR のページは Firebase Hosting の CDN が s-maxage の間だけ返し、外れると Cloud Run の Next.js が自分のインスタンスのキャッシュから返して、期限が来たら作り直します。キャッシュはインスタンスごとで共有されません（増えたインスタンスはそれぞれ作り直す）。更新で消す再検証は受けたインスタンスにしか効かず、CDN はデプロイのときしか消えないので届きません',
     premiseRefs: [
       'fact:gcp:cloud-run:next-local-cache',
       'fact:gcp:firebase-hosting:dynamic-cache',

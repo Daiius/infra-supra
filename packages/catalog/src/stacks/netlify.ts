@@ -70,7 +70,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'netlify',
     label: 'ISR（Netlify の CDN のキャッシュ）',
-    note: 'ISR のページは CDN が返し、期限が来たページは関数が作り直します。オンデマンドの再検証（パス・タグ）にも対応します（OpenNext のアダプター）',
+    note: 'ISR のページは CDN が返し、期限が来たページは関数が作り直します。更新で消す再検証（パス・タグ）にも対応します（OpenNext のアダプター）',
     premiseRefs: ['fact:netlify:'],
     onDemandIsr: { ok: true, fact: 'netlify:pro:next-runtime' },
   },
@@ -88,7 +88,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'netlify',
     label: 'Netlify Image CDN（閲覧のときに変換）',
-    note: '閲覧のときに変換して拠点にキャッシュします。クレジットの表に変換の項目は無く、配信のリクエストと転送量（クレジット）だけを数えます。原本は Netlify Blobs です（料金は未公開）',
+    note: '閲覧のときに変換して各地のサーバーにキャッシュします。クレジットの表に変換の項目は無く、配信のリクエストと転送量（クレジット）だけを数えます。原本は Netlify Blobs です（料金は未公開）',
     premiseRefs: ['fact:netlify:pro:image-cdn', ...CREDIT_REFS],
     // 形式（fm）を指定しないと Accept を見て「1. use webp if accepted 2. otherwise, use avif if accepted 3. 原本」
     // （https://docs.netlify.com/build/image-cdn/overview/ ・2026-09-25 更新・2026-11-04 取得）

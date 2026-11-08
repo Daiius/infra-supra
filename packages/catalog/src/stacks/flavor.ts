@@ -37,11 +37,11 @@ export const STACK_FLAVOR: Readonly<Record<string, string>> = {
 const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   // Cloudflare
   'cloudflare:isrCache:kv':
-    '世界中の拠点に置かれるキーと値の保存。ページを近くの拠点から返せます',
+    '世界各地のサーバーに置かれるキーと値の保存。ページを近くのサーバーから返せます',
   'cloudflare:isrCache:r2':
     '書いたらすぐ全世界で見える、強い整合のストレージ。転送量に課金されません',
   'cloudflare:isrCache:workers-cache':
-    '拠点ごとのキャッシュから返し、更新はタグでまとめて消せます。キャッシュの API に料金の記載はありません',
+    '各地のサーバーごとのキャッシュから返し、更新はタグでまとめて消せます。キャッシュの API に料金の記載はありません',
   'cloudflare:isrCache:none':
     'キャッシュを持たないので、ページはいつも最新です。仕組みがいちばん単純です',
   'cloudflare:images:images':
@@ -135,7 +135,7 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   'cloudflare:apiCache:cdn':
     'ヒットは Worker を動かさずに返すので、CPU とデータベースの読み取りが減ります',
   'cloudflare:apiCache:cache-api':
-    'コードの中で拠点のキャッシュを読みます。何をどうキャッシュするかを細かく決められます',
+    'コードの中で各地のサーバーのキャッシュを読みます。何をどうキャッシュするかを細かく決められます',
   'vercel:apiCache:none':
     'API を毎回関数で処理するので、ページの中身はいつも最新です',
   'vercel:apiCache:cdn':

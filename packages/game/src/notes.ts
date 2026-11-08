@@ -124,7 +124,7 @@ function commentsNote(state: GameState): string | undefined {
       ? 'コメントの投稿のたびにビルドし直します（コメントはビルドの時間の分だけ遅れて見えます）'
       : state.framework === 'astro'
         ? 'コメントの投稿のたびに記事のページのキャッシュを消します（描き直しが増えます）'
-        : 'コメントの投稿のたびに記事のページを再検証します（再生成・CDN の無効化が増えます）';
+        : 'コメントの投稿のたびに記事のページを再検証します（作り直し・CDN の無効化が増えます）';
   return rebuilds
     ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えません。コメントは間隔とビルドの時間の分だけ遅れて見え、鮮度が下がります`
     : state.framework === 'astro'

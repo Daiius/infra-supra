@@ -857,7 +857,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           </div>
           {commitOptions.length > 0 && (
             <div className="mt-2">
-              <h3 className="font-bold">長期の確約（1 年）</h3>
+              <h3 className="font-bold">1 年契約（途中でやめられません）</h3>
               <p className="text-xs opacity-70">
                 安くなる代わりに取り消せません。乗り換え・部品の切り替えで使わなくなっても支払いは残ります。前払いのある形（さくらの年額・全額前払い）は始めの所持金を超えるので、運営の途中から選べます
               </p>

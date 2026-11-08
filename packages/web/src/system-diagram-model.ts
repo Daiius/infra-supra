@@ -113,7 +113,7 @@ export const LANES: Readonly<
   },
   revalidate: {
     // Astro の Cloudflare では、消した後の閲覧が描き終わるのを待つ（裏ではない。D-103）
-    label: 'ISR の再生成・キャッシュの描き直し',
+    label: 'ISR の作り直し・キャッシュの描き直し',
     classes: ['isr-revalidate'],
   },
 };
@@ -158,7 +158,7 @@ const KIND_CAPTION: Readonly<Record<string, string>> = {
   'request-db': 'DB',
   'object-storage': 'ストレージ',
   'image-optimizer': '画像の変換',
-  'isr-store': 'ISR のキャッシュ',
+  'isr-store': 'ページのキャッシュ（ISR）',
   'ci-build': 'ビルド',
   'db-backup': 'バックアップ',
   'email-sender': 'メールの送信',

@@ -286,7 +286,7 @@ export function judgeMonth(
     onDemandReason: onDemand
       ? state.requirements.includes('on-demand-isr')
         ? `即時反映の要件を満たしていません（${onDemand.label}。${onDemand.reason}）`
-        : `オンデマンドの再検証が届きません（${onDemand.label}。${onDemand.reason}）`
+        : `更新で消す再検証が届きません（${onDemand.label}。${onDemand.reason}）`
       : undefined,
   });
   return { stages, reasons, comps, imgs, notes };

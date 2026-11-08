@@ -85,7 +85,7 @@ describe('オンデマンドの再検証（D-49）', () => {
       .satisfaction;
     expect(kv.stages.freshness).not.toBe('good');
     expect(kv.reasons.freshness).toMatch(
-      /^オンデマンドの再検証が届きません（ISR のキャッシュ: KV。/,
+      /^更新で消す再検証が届きません（ページのキャッシュ（ISR）: KV。/,
     );
     // VPS の前段の CDN で HTML もキャッシュしても、再検証のたびに Free の purge の API で消すので届く（D-91）
     const html = playMonth(
