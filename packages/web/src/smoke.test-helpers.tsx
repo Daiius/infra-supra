@@ -328,12 +328,28 @@ export const slotGroup = (label: string, by: 'label' | 'slot' = 'label') => {
   return row!;
 };
 
+/** 未決の提案の確認のダイアログ（D-140）。開いていなければ null。 */
+export const declineConfirm = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('dialog[data-decline-confirm][open]');
+
+/**
+ * 「次の月へ」を押す。未決の提案があって確認（D-140）が出たら「断って進む」で進む（選ばなければ断る、の今までの進め方）。
+ */
+export function nextMonth() {
+  fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+  const confirm = declineConfirm();
+  if (confirm)
+    fireEvent.click(
+      within(confirm).getByRole('button', { name: '断って進む' }),
+    );
+}
+
 /**
  * 「次の月へ」を n 回押す（行動は選ばない）。出来事のダイアログが自動で開いたら、最後のページまで送って中身が描けていることを見て閉じる。
  */
 export function advance(n: number) {
   for (let i = 0; i < n; i++) {
-    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+    nextMonth();
     const dialog = screen.queryByRole('dialog');
     if (!dialog) continue;
     readEventPages(dialog);

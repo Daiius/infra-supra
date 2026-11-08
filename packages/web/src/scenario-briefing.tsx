@@ -32,6 +32,12 @@ import {
 import { ChoiceCarousel } from './choice-carousel.tsx';
 import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
 import { Info, PortalContainer } from './info.tsx';
+import {
+  eventCategory,
+  EventIcon,
+  type EventCategory,
+} from './event-icons.tsx';
+import { ScenarioArt } from './scenario-art.tsx';
 import { Meta, NameWithInfo } from './option-text.tsx';
 import {
   PageBadges,
@@ -622,6 +628,22 @@ function DetailsDialog({
   );
 }
 
+/** 出来事の説明の 1 行（daisyUI の list-row。種類の印 + 文。D-140）。 */
+function EventLine({
+  category,
+  children,
+}: {
+  category: EventCategory;
+  children: ReactNode;
+}) {
+  return (
+    <li className="list-row items-start gap-3 px-3 py-2">
+      <EventIcon category={category} className="mt-0.5 size-5" />
+      <div className="list-col-grow">{children}</div>
+    </li>
+  );
+}
+
 /** 文の先頭の 1 文（「。」まで）。 */
 const firstSentence = (text: string) => {
   const i = text.indexOf('。');
@@ -656,6 +678,8 @@ export function ScenarioDescription({
         <h2 className="card-title">
           シナリオ: {sc.name}を {sc.months} か月運営する
         </h2>
+        {/* シナリオの題材を一般的なアイコンの組み合わせで 1 枚に見せる（D-140） */}
+        <ScenarioArt scenarioId={sc.id} name={sc.name} />
         <p>
           {intro}
           {t?.scale}今は月 {sc.scale.startPV.toLocaleString()} PV。
@@ -734,10 +758,24 @@ export function ScenarioDescription({
         <div>
           運営中に出来事が起きます（時期は乱数のシードで変わります）。
           <DetailsDialog label="出来事の詳しい説明" title="運営中の出来事">
-            {t?.events && <p>{t.events}</p>}
-            <p>
-              時期は乱数のシードで変わります。始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出ます（改定後の料金を取得していないものは、計算に反映しません）。
-            </p>
+            {/* 出来事の種類ごとに印（アイコン）を付けた一覧（D-140）。印は運営中の出来事の通知と同じ */}
+            <ul className="list rounded-box bg-base-200" data-events-list>
+              {(t?.events ?? []).map((line) => {
+                const def = sc.events.find((e) => e.id === line.about[0]);
+                return (
+                  <EventLine
+                    key={line.text}
+                    category={def ? eventCategory(def) : 'other'}
+                  >
+                    {line.text}
+                  </EventLine>
+                );
+              })}
+              <EventLine category="revision">
+                始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出ます（改定後の料金を取得していないものは、計算に反映しません）。
+              </EventLine>
+            </ul>
+            <p>時期は乱数のシードで変わります。</p>
           </DetailsDialog>
         </div>
         <p>所持金 {usd(sc.startCash)}。</p>

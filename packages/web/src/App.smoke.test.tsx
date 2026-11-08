@@ -7,6 +7,7 @@ import { ARTICLE_COMMUNITY, rollSchedule } from 'game';
 import { describe, expect, it, vi } from 'vitest';
 import {
   advance,
+  nextMonth,
   closeEventsDialog,
   eventPosition,
   expectGameScreen,
@@ -1493,12 +1494,12 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     // 本文には要約だけ（出来事の一覧・改定の説明は出さない）
     expect(screen.getByText(/運営中に出来事が起きます/)).toBeDefined();
-    expect(screen.queryByText(/Bot が大量に来る/)).toBeNull();
+    expect(screen.queryByText(/Bot・クローラーが大量に来ます/)).toBeNull();
     expect(screen.queryByText(/実際に予告されている料金/)).toBeNull();
     const open = screen.getByRole('button', { name: '出来事の詳しい説明' });
     fireEvent.click(open);
     const dialog = screen.getByRole('dialog', { name: '運営中の出来事' });
-    expect(dialog.textContent).toContain('Bot が大量に来る');
+    expect(dialog.textContent).toContain('Bot・クローラーが大量に来ます');
     expect(dialog.textContent).toContain('実際に予告されている料金');
     // 話題の出来事で登録の確認のメールが集中する（D-117）
     expect(dialog.textContent).toContain('登録の確認のメール');
@@ -2564,8 +2565,8 @@ describe('ゲームモードの画面', () => {
     await waitLoaded();
     monthHeading(m);
     expect(screen.queryByRole('dialog')).toBeNull();
-    // 次の出来事のある月はまた開く
-    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
+    // 次の出来事のある月はまた開く（この月の提案は選ばずに断って進む。D-140）
+    nextMonth();
     within(screen.getByRole('dialog')).getByRole('heading', {
       name: new RegExp(`^${m + 1} か月目の出来事`),
     });

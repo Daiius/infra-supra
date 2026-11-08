@@ -13,6 +13,7 @@
     "catalog": "workspace:*",
     "estimator": "workspace:*",
     "game": "workspace:*",
+    "lucide-react": "1.70.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "simple-icons": "16.36.0"

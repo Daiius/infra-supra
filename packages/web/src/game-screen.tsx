@@ -82,6 +82,7 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Meter, Sparkline } from './charts.tsx';
 import { Info } from './info.tsx';
+import { eventCategory, EventIcon } from './event-icons.tsx';
 import { SlotCompareInfo } from './slot-compare.tsx';
 import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
@@ -1240,7 +1241,11 @@ function EventCard({ event: e }: { event: MonthEvent }) {
         <span className="badge badge-sm badge-outline">
           {TIER_LABEL[e.tier]}
         </span>
-        <span className="font-semibold">{e.title}</span>
+        {/* 種類の印（D-140）。始める画面の出来事の説明の行と同じ印 */}
+        <span className="flex items-center gap-1.5 font-semibold">
+          <EventIcon category={eventCategory(e)} />
+          {e.title}
+        </span>
       </div>
       <div className="mt-1 text-sm">{e.text}</div>
       {e.effects.length > 0 && (
@@ -1670,6 +1675,8 @@ function Actions({
   const [routeActs, setRouteActs] = useState<RouteActs>({});
   /** ページの部品の変更（記事のページのコメント欄。D-109）。 */
   const [partActs, setPartActs] = useState<PartActs>({});
+  /** 未決の提案があるときに「次の月へ」で出す確認（D-140）。 */
+  const [confirmDecline, setConfirmDecline] = useState(false);
   const reset = () => {
     setCommits({});
     setRouteActs({});
@@ -1752,6 +1759,14 @@ function Actions({
   };
   const valid = (actions: Action[]) => blocked(actions) === null;
   const actions = build();
+  // 受けるも断るも選んでいない提案（このまま進むと断ったことになる。D-140）
+  const undecided = state.pendingProposals.filter(
+    (id) => answers[id] === undefined,
+  );
+  const proceed = () => {
+    onDecide(actions);
+    reset();
+  };
   const draft = applyActions(state, actions);
   const left = effortAvailable(draft);
   // 来月の機能開発の見込み（選んだ行動・提案への返事を当てた配分。D-122）
@@ -1847,7 +1862,7 @@ function Actions({
                 <div
                   key={id}
                   className="rounded-box border border-primary bg-primary/5 p-3"
-                  data-proposal-choice
+                  data-proposal-choice={id}
                 >
                   <div className="mb-1 flex flex-wrap items-center gap-2 font-semibold">
                     <span className={`badge badge-sm ${PROPOSAL_BADGE.cls}`}>
@@ -1877,7 +1892,8 @@ function Actions({
                       <input
                         type="radio"
                         className="radio radio-sm"
-                        checked={answers[id] !== true}
+                        // 選ぶまではどちらにも印を付けない（未決が見えるように。選ばずに進むと確認を挟む。D-140）
+                        checked={answers[id] === false}
                         onChange={() => setAnswers({ ...answers, [id]: false })}
                       />
                       断る（{summary.declineLoss ?? '何も変わりません'}）
@@ -2228,15 +2244,112 @@ function Actions({
             className="btn btn-primary"
             disabled={!valid(actions)}
             onClick={() => {
-              onDecide(actions);
-              reset();
+              if (undecided.length > 0) setConfirmDecline(true);
+              else proceed();
             }}
           >
             次の月へ
           </button>
         </div>
       </div>
+      {confirmDecline && (
+        <DeclineConfirmDialog
+          titles={undecided.map(
+            (id) => eventDef(scenarioOf(state), id)?.title ?? id,
+          )}
+          onDecline={() => {
+            setConfirmDecline(false);
+            proceed();
+          }}
+          onBack={() => {
+            setConfirmDecline(false);
+            // 選び残した最初の提案の行へ移る（受ける・断るを選べるように）
+            const row = document.querySelector<HTMLElement>(
+              `[data-proposal-choice="${CSS.escape(undecided[0]!)}"]`,
+            );
+            row?.scrollIntoView?.({ block: 'center' });
+            row
+              ?.querySelector<HTMLInputElement>('input:not(:disabled)')
+              ?.focus();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * 未決の提案があるまま「次の月へ」を押したときの確認（D-140）。進むと断ったことになる（受けると付く効果は無く、
+ * 断ると起きること（画質が下がるなど）が起きる）。「提案を選ぶ」で行動の欄の提案の行へ戻る。
+ */
+function DeclineConfirmDialog({
+  titles,
+  onDecline,
+  onBack,
+}: {
+  /** 未決の提案の題。 */
+  titles: string[];
+  onDecline: () => void;
+  onBack: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  // 「断って進む」で閉じたときに onBack を呼ばない
+  const declined = useRef(false);
+  useEffect(() => {
+    const d = ref.current;
+    if (d && !d.open) d.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="modal"
+      aria-labelledby="decline-dialog-title"
+      data-decline-confirm
+      onClose={() => {
+        if (!declined.current) onBack();
+      }}
+    >
+      <div className="modal-box max-w-md">
+        <h2 id="decline-dialog-title" className="text-lg font-bold">
+          未決の提案が {titles.length} 件あります
+        </h2>
+        <p className="mt-2 text-sm">
+          このまま進むと、次の提案は断ったことになります。
+        </p>
+        <ul className="mt-2 space-y-1 text-sm">
+          {titles.map((t) => (
+            <li key={t} className="flex items-center gap-2">
+              <span className={`badge badge-sm ${PROPOSAL_BADGE.cls}`}>
+                {PROPOSAL_BADGE.label}
+              </span>
+              <span>{t}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="modal-action">
+          <form method="dialog">
+            <button className="btn btn-primary btn-sm" autoFocus>
+              提案を選ぶ
+            </button>
+          </form>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              declined.current = true;
+              ref.current?.close();
+              onDecline();
+            }}
+          >
+            断って進む
+          </button>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button aria-label="背景を押して閉じる" tabIndex={-1}>
+          閉じる
+        </button>
+      </form>
+    </dialog>
   );
 }
 

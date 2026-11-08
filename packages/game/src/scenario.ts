@@ -352,6 +352,13 @@ export type Scenario = {
   };
 };
 
+/** 始める画面の出来事の説明の 1 行（D-140）。 */
+export type ScenarioEventLine = {
+  /** この行が説明する出来事の id（1 つ以上。シナリオの events にあるもの）。 */
+  about: readonly string[];
+  text: string;
+};
+
 /** 始める画面の説明（シナリオごとの文言）。数値は画面がシナリオの値から足す。 */
 export type ScenarioText = {
   /** 何のアプリで、どう収益を得るか。 */
@@ -365,8 +372,11 @@ export type ScenarioText = {
   scale?: string;
   /** 成長の言い方（満足度が高い / 低いとき）。画面が「満足度 0.9 で毎月約 N%」を挟む。 */
   growth: { up: string; down: string };
-  /** 運営中に起きる出来事の説明。 */
-  events: string;
+  /**
+   * 運営中に起きる出来事の説明（1 種類 1 行。D-140）。about はその行が説明する出来事の id（EventDef.id。
+   * 画面は先頭の id の出来事で行の印（アイコン）を決める）。料金の改定の行は画面が足す。
+   */
+  events: readonly ScenarioEventLine[];
   /** 満足度の要素の説明。 */
   satisfaction: string;
   /** アプリの形（コストに効く判断ポイント）のうち、フレームワークに依らない文。 */

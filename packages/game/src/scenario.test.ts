@@ -62,6 +62,19 @@ describe('シナリオのデータ', () => {
       }
   });
 
+  it('始める画面の出来事の説明の行（D-140）は、どのシナリオでもそのシナリオにある出来事を指す', () => {
+    for (const s of Object.values(SCENARIOS)) {
+      const ids = new Set(s.events.map((e) => e.id));
+      const lines = s.text?.events ?? [];
+      expect(lines.length, s.id).toBeGreaterThan(0);
+      for (const line of lines) {
+        expect(line.about.length, line.text).toBeGreaterThan(0);
+        for (const id of line.about)
+          expect(ids.has(id), `${s.id}: ${id}`).toBe(true);
+      }
+    }
+  });
+
   it('満足度の重みの合計は 1', () => {
     const sum = Object.values(sc.satisfaction.weights).reduce(
       (a, b) => a + b,
