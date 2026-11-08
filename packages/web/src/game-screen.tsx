@@ -476,7 +476,7 @@ function EventsDialog({
             </span>
             {n > 1 && (
               <span
-                className={`badge badge-sm font-normal ${unread > 0 ? 'badge-primary' : 'badge-ghost'}`}
+                className={`badge badge-sm font-normal ${unread > 0 ? 'badge-primary badge-soft' : 'badge-ghost'}`}
                 data-events-unread
               >
                 {unread > 0 ? `未読 ${unread}` : '✓ すべて既読'}
@@ -529,7 +529,7 @@ function EventsDialog({
               {n} 件中 {page + 1} 件目。
               {unread > 0 ? `未読 ${unread} 件` : 'すべて既読'}
             </span>
-            {/* ページ送りの点。今のページは横長、未読は塗り、既読は輪郭だけ（色だけでなく形で見分ける）。押すとそのページへ */}
+            {/* ページ送りの点（daisyUI の status）。今のページは大きい neutral、未読は中くらいの薄い primary、既読は小さい灰色（色だけでなく大きさで見分ける）。押すとそのページへ */}
             <ol className="flex items-center gap-0.5" data-events-dots>
               {r.events.map((x, i) => {
                 const state =
@@ -545,13 +545,15 @@ function EventsDialog({
                       data-dot={state}
                       onClick={() => go(i)}
                     >
+                      {/* daisyUI の status。大きさでも見分ける: 今 > 未読 > 既読（既読は status の既定の薄い灰色） */}
                       <span
-                        className={`block h-2 rounded-full transition-all ${
+                        aria-hidden
+                        className={`status ${
                           state === 'current'
-                            ? 'w-6 bg-primary'
+                            ? 'status-lg status-neutral'
                             : state === 'unread'
-                              ? 'w-2 bg-primary'
-                              : 'w-2 border border-base-content/40'
+                              ? 'status-md bg-primary/40'
+                              : 'status-sm'
                         }`}
                       />
                     </button>
@@ -592,7 +594,7 @@ function EventsDialog({
           >
             {fresh && n > 1 && (
               <span
-                className="badge badge-primary badge-xs absolute top-0 right-2 z-10"
+                className="badge badge-primary badge-soft badge-xs absolute top-0 right-2 z-10"
                 data-events-new
               >
                 NEW
