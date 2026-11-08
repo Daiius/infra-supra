@@ -152,12 +152,12 @@ function OtherMark({ o, size = 14 }: { o: SetupOption; size?: number }) {
 function OptionDetail({ o, why }: { o: SetupOption; why: string | null }) {
   const flavor = componentFlavor(o);
   return (
-    <span className="block space-y-1">
-      {why && <span className="block font-semibold">{why}</span>}
-      <span className="block font-semibold">{o.label}</span>
-      {flavor && <span className="block opacity-80">{flavor}</span>}
-      <span className="block">{o.note}</span>
-    </span>
+    <>
+      {why && <p className="font-semibold">{why}</p>}
+      <p className="font-semibold">{o.label}</p>
+      {flavor && <p className="opacity-80">{flavor}</p>}
+      <p>{o.note}</p>
+    </>
   );
 }
 
@@ -612,18 +612,19 @@ export function SettingChips<V extends string | number>({
   const info =
     note || flavors.length > 0 ? (
       <Info label={`${label}の説明`}>
-        <span className="block space-y-1">
-          {note && <span className="block">{note}</span>}
+        <>
+          {note && <p>{note}</p>}
           {flavors.length > 0 && (
-            <ul className="list-disc pl-4">
+            <dl aria-label={`${label}の選択肢`} className="space-y-1">
               {flavors.map((o) => (
-                <li key={o.value}>
-                  <span className="font-semibold">{o.label}</span>: {o.flavor}
-                </li>
+                <div key={o.value}>
+                  <dt className="inline font-semibold">{o.label}</dt>:{' '}
+                  <dd className="inline">{o.flavor}</dd>
+                </div>
               ))}
-            </ul>
+            </dl>
           )}
-        </span>
+        </>
       </Info>
     ) : undefined;
   return (

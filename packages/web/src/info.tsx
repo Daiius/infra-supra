@@ -1,8 +1,11 @@
-// 説明の ⓘ ボタン（選択肢の長い説明を畳む）。タップ・クリックで開閉し、Esc・外側のクリックで閉じる（hover だけに頼らない）。
+// 説明の ⓘ ボタン（Info。選択肢の長い説明を畳む）と、構成図の箱の吹き出し（Popover）。
+// Info は押すとダイアログ（daisyUI の modal）で中身を出す（D-129。説明が長いものが多く、吹き出しでは読みにくかった）。
+// Popover は箱を押すと出る吹き出しで、タップ・クリックで開閉し、Esc・外側のクリックで閉じる（hover だけに頼らない）。
 // 吹き出しは画面に固定して置き、画面の端からはみ出さないように横位置を詰める（狭い画面でも読める）。
 // 縦は、ボタンの下（足りなければ上の広い方）に置き、残りの高さを上限にして中でスクロールする（長い説明でも末尾まで読める）。
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -13,7 +16,7 @@ import {
 import { createPortal } from 'react-dom';
 
 /**
- * 吹き出しを描く先（既定は body）。モーダルの `<dialog>`（top layer）の中では body に描くとダイアログの後ろに隠れるので、
+ * 吹き出し・説明のダイアログを描く先（既定は body）。モーダルの `<dialog>`（top layer）の中では body に描くとダイアログの後ろに隠れるので、
  * ダイアログがその要素を渡す（OCL-8E844E7C）。位置は画面に固定なので、描く先が替わっても計算は同じ。
  */
 export const PortalContainer = createContext<HTMLElement | null>(null);
@@ -28,7 +31,132 @@ type Pos = { left: number; maxHeight: number } & (
   { top: number; bottom?: undefined } | { bottom: number; top?: undefined }
 );
 
+/** 見出しの既定: 読み上げの名前（「…の説明」）から「の説明」を外したもの。 */
+export function infoTitle(label: string): string {
+  return label.replace(/\s*の説明$/, '') || label;
+}
+
+/**
+ * 説明の ⓘ（D-129）。押すとモーダルのダイアログで中身を出す。× と Esc と背景で閉じ、閉じたらフォーカスを ⓘ に戻す。
+ * ダイアログは開いている間だけ描く（1 つの画面に ⓘ が多数並ぶので、閉じた ⓘ は DOM にダイアログを置かない）。
+ * 見出しは title（省略すると label から「の説明」を外したもの）。中身が長ければ本文だけスクロールする。
+ */
 export function Info({
+  children,
+  label = '説明',
+  title,
+  className = 'btn btn-ghost btn-xs btn-circle align-middle',
+}: {
+  children: ReactNode;
+  /** ボタンの読み上げ（既定「説明」）。 */
+  label?: string;
+  /** ダイアログの見出し（対象の名前。省略すると infoTitle(label)）。 */
+  title?: ReactNode;
+  /** ボタンの class（既定は丸い小さいボタン）。 */
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        className={className}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        data-info-button
+        onClick={(e) => {
+          // label の中に置かれても、選択肢を切り替えない
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(true);
+        }}
+      >
+        <InfoIcon />
+      </button>
+      {open && (
+        <InfoDialog
+          title={title ?? infoTitle(label)}
+          onClose={() => {
+            setOpen(false);
+            button.current?.focus();
+          }}
+        >
+          {children}
+        </InfoDialog>
+      )}
+    </>
+  );
+}
+
+/** 説明のダイアログ（Info が開いている間だけ描く）。slot-compare.tsx の比較のダイアログと同じ組み方。 */
+function InfoDialog({
+  title,
+  onClose,
+  children,
+}: {
+  title: ReactNode;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const container = useContext(PortalContainer);
+  useEffect(() => {
+    const d = dialog.current;
+    if (d && !d.open) d.showModal();
+  }, []);
+  return createPortal(
+    <dialog
+      ref={dialog}
+      className="modal"
+      aria-labelledby={titleId}
+      data-info-dialog
+      onClose={(e) => {
+        // portal でも React の木では親のダイアログの子なので、close・キーの操作を親（比較・出来事のダイアログなど）へ伝えない
+        e.stopPropagation();
+        onClose();
+      }}
+      onKeyDown={(e) => e.stopPropagation()}
+      // label の中に置かれても、ダイアログの中のクリックで選択肢が切り替わらないように
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-lg flex-col overflow-hidden px-3 py-4 text-left text-sm font-normal whitespace-normal sm:px-6">
+        <div className="flex shrink-0 items-start justify-between gap-2">
+          <h2 id={titleId} className="min-w-0 text-base font-bold break-words">
+            {title}
+          </h2>
+          <form method="dialog">
+            <button
+              className="btn btn-circle btn-ghost btn-sm"
+              aria-label="閉じる"
+              autoFocus
+            >
+              ✕
+            </button>
+          </form>
+        </div>
+        <div
+          className="mt-2 min-h-0 space-y-2 overflow-y-auto overscroll-contain break-words"
+          data-info-body
+        >
+          {children}
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button aria-label="背景を押して閉じる" tabIndex={-1}>
+          閉じる
+        </button>
+      </form>
+    </dialog>,
+    container ?? document.body,
+  );
+}
+
+/** 構成図の箱の吹き出し（部品の選択の UI。ⓘ の説明ではないのでダイアログにしない。D-129）。 */
+export function Popover({
   children,
   label = '説明',
   trigger,
@@ -52,7 +180,13 @@ export function Info({
   const [pos, setPos] = useState<Pos | null>(null);
   // ボタンの要素は state に持つ（close を children(close) で渡すので、ref だと render 中に読むとみなされ React Compiler が最適化を諦める）
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
-  const panel = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement | null>(null);
+  // 中の ⓘ の説明のダイアログ（画像の箱の設定のチップなど）は吹き出しの中に描く（外側のクリックとみなして閉じないように）
+  const [panelEl, setPanelEl] = useState<HTMLDivElement | null>(null);
+  const panelRef = useCallback((el: HTMLDivElement | null) => {
+    panel.current = el;
+    setPanelEl(el);
+  }, []);
   const id = useId();
   const container = useContext(PortalContainer);
   const open = pos !== null;
@@ -80,6 +214,8 @@ export function Info({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      // 中の説明のダイアログが開いていれば、Esc はそのダイアログを閉じる（吹き出しは閉じない）
+      if (panel.current?.querySelector('dialog[open]')) return;
       if (e.key === 'Escape') {
         // モーダルの中では、Esc はまず吹き出しだけを閉じる（ダイアログは閉じない）
         e.preventDefault();
@@ -138,7 +274,7 @@ export function Info({
         // body に出す（label の中に置かれても、吹き出しのクリックで選択肢が切り替わらないように）
         createPortal(
           <div
-            ref={panel}
+            ref={panelRef}
             id={id}
             role={interactive ? 'dialog' : 'tooltip'}
             aria-label={interactive ? label : undefined}
@@ -170,7 +306,9 @@ export function Info({
               zIndex: 60,
             }}
           >
-            {typeof children === 'function' ? children(close) : children}
+            <PortalContainer.Provider value={panelEl}>
+              {typeof children === 'function' ? children(close) : children}
+            </PortalContainer.Provider>
           </div>,
           container ?? document.body,
         )}
