@@ -158,34 +158,25 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
     </Row>
   ),
   title: () => (
-    <Stack>
-      <Bar w={85} h="h-2" tone={HEADING} />
+    <Row>
       <Bar w={55} h="h-2" tone={HEADING} />
-      <Row>
-        <Dot tone={PERSON} />
-        <Bar w={22} />
-        <Bar w={14} h="h-1" />
-      </Row>
-    </Stack>
+      <Dot tone={PERSON} />
+      <Bar w={18} />
+    </Row>
   ),
   body: () => (
     <Stack>
-      {[100, 94, 98, 62].map((w, i) => (
+      {[100, 62].map((w, i) => (
         <Bar key={i} w={w} />
       ))}
     </Stack>
   ),
   image: () => (
-    <span className="grid grid-cols-3 gap-1">
-      <span
-        className={`col-span-2 row-span-2 flex h-14 items-center justify-center rounded ${MEDIA}`}
-      >
-        <ImageIcon />
-      </span>
+    <span className="grid grid-cols-[2fr_1fr] gap-1">
       {[0, 1].map((i) => (
         <span
           key={i}
-          className={`flex items-center justify-center rounded ${MEDIA}`}
+          className={`flex h-6 items-center justify-center rounded ${MEDIA}`}
         >
           <ImageIcon className="h-3 w-3" />
         </span>
@@ -216,21 +207,14 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
     </Stack>
   ),
   related: () => (
-    <Stack>
-      <span className="grid grid-cols-3 gap-1">
-        {[0, 1, 2].map((i) => (
-          <span key={i} className="flex flex-col gap-0.5">
-            <span className={`block h-5 rounded ${MEDIA}`} />
-            <Bar w={80} h="h-1" />
-          </span>
-        ))}
-      </span>
-      <span className="flex gap-2 border-t border-base-content/20 pt-1">
-        <Bar w={14} h="h-1" />
-        <Bar w={14} h="h-1" />
-        <Bar w={10} h="h-1" />
-      </span>
-    </Stack>
+    <span className="grid grid-cols-4 gap-1">
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className="flex flex-col gap-0.5">
+          <span className={`block h-5 rounded ${MEDIA}`} />
+          <Bar w={80} h="h-1" />
+        </span>
+      ))}
+    </span>
   ),
   footer: () => (
     <span className="flex gap-2 border-t border-base-content/20 pt-1">
