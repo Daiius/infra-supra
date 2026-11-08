@@ -221,7 +221,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     expect(
       screen.getByText(
-        /^記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える$/,
+        /^記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超えます$/,
       ),
     ).toBeDefined();
     // ページごとの描き方（D-107）: 個人向けを枠 + API にすると URL に残り、その行は CPU の制限に当たらない
@@ -495,14 +495,14 @@ describe('見積モードの画面', () => {
       'nextjs',
     );
     expect(document.body.textContent).toMatch(
-      /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にした/,
+      /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にしました/,
     );
     // Astro は灰色で選べず、カードに理由が出る
     expect(pickerRadio('framework', 'astro').disabled).toBe(true);
     const astroCard = screen.getByRole('region', { name: 'Astro の説明' });
     expect(astroCard.getAttribute('aria-disabled')).toBe('true');
     expect(within(astroCard).getByRole('note').textContent).toMatch(
-      /^選んでいる構成では選べない: 公式のアダプターが無く載せられない/,
+      /^選んでいる構成では選べない: 公式のアダプターが無く載せられません/,
     );
     // 選んでいるフレームワークのカードに、ページの見取り図が出る
     const nextCard = screen.getByRole('region', {
@@ -680,7 +680,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     const heading = screen.getByRole('heading', {
       level: 3,
-      name: /^前提（無料枠・込み分・上限）/,
+      name: /^上限・課金の境目（無料枠・込み分・上限）/,
     });
     // クレジットの消費の行は出る。「超過」の赤い印にはならず、見出しの超過の件数にも入らない
     const use = screen.getByText(

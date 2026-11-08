@@ -105,16 +105,16 @@ export function routeFallbackNotice(
             (f) =>
               `${f.label}は「${strategyTitle(f.from)}」→「${strategyTitle(f.to)}」（既定）`,
           )
-          .join('・')}に戻る${why ? `: ${why.replace(/。$/, '')}` : ''}`,
+          .join('・')}に戻ります${why ? `: ${why.replace(/。$/, '')}` : ''}`,
     )
     .join('。')}`;
 }
 
 /** 作り直しで戻るときの理由（ゲームの作り直しと、始める画面のフレームワークの変更）。 */
 const REWRITE_RESETS_ROUTES =
-  '済んだ翌月から、描き方は新しいフレームワークの既定で始まる（選び直すには手間がかかる）';
+  '済んだ翌月から、描き方は新しいフレームワークの既定で始まります（選び直すには手間がかかります）';
 const SETUP_FRAMEWORK_RESETS_ROUTES =
-  'フレームワークを替えると、描き方はそのフレームワークの既定から選び直しになる';
+  'フレームワークを替えると、描き方はそのフレームワークの既定から選び直しになります';
 
 const planInputOf = (
   state: Pick<

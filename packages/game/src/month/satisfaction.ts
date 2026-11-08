@@ -38,7 +38,7 @@ export function noSocialCards(
 
 /** メールが届かない月の機能の理由と注記の書き出し（D-117）。 */
 export const EMAIL_UNDELIVERED_REASON =
-  'メールの送信の上限に当たり、登録の確認・パスワードの再設定・通知のメールが届かない日があった';
+  'メールの送信の上限に達し、登録の確認・パスワードの再設定・通知のメールが届かない日がありました';
 
 /** 理由の文に出す数（浮動小数の誤差を見せない。小数 1 桁まで）。 */
 const num = (x: number) => Number(x.toFixed(1));
@@ -116,7 +116,7 @@ export function stageReasons(
         : '乗り換えの切り替え';
   if (stages.speed !== 'good')
     out.speed = c.throttling.length
-      ? `前提に当たった: ${c.throttling[0]!.text}`
+      ? `上限に達しました: ${c.throttling[0]!.text}`
       : (c.spaFramework ?? c.spa)
         ? `重さ ${c.heaviness}（SPA の初回表示・API ${num(c.ssrCpuMs)} ms・画像 ${num(c.settings.imageKB)} kB・${c.pageWeight}）`
         : c.apiOnly
@@ -127,7 +127,7 @@ export function stageReasons(
     c.coldShare !== undefined &&
     !c.throttling.length
   )
-    out.speed = `${out.speed}・閲覧の ${Math.round(c.coldShare * 100)}% がコンテナの冷えた起動を待つ（最小インスタンス 0）`;
+    out.speed = `${out.speed}・閲覧の ${Math.round(c.coldShare * 100)}% がコンテナの冷えた起動を待ちます（最小インスタンス 0）`;
   if (stages.quality !== 'good')
     out.quality = c.qualityReason ?? `画像 ${num(c.settings.imageKB)} kB`;
   if (stages.freshness !== 'good')
@@ -142,15 +142,15 @@ export function stageReasons(
               ? `記事のキャッシュの期限 ${optionLabel('pageCache', c.settings.revalidateSec)}`
               : `ISR の間隔 ${optionLabel('isr', c.settings.revalidateSec)}`),
       c.eventuallyConsistent &&
-        'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて（キャッシュを消せない）、更新がすぐ見えない',
+        'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて（キャッシュを消せない）、更新がすぐ見えません',
       c.frontDelayed &&
-        'HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見える（オンデマンドの再検証でキャッシュを消せば遅れない）',
+        'HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見えます（オンデマンドの再検証でキャッシュを消せば遅れない）',
       c.newPostDelayed &&
         (c.shellBuilds
-          ? '新しく投稿された記事は、記事ごとの枠のビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさない）'
-          : '新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けない（コミュニティの要件を満たさない）'),
+          ? '新しく投稿された記事は、記事ごとの枠のビルドが終わるまでページが無く、投稿した人がすぐ開けません（コミュニティの要件を満たさない）'
+          : '新しく投稿された記事はビルドが終わるまでページが無く、投稿した人がすぐ開けません（コミュニティの要件を満たさない）'),
       c.commentsDelayed &&
-        'コメントを記事のページに含めているので、コメントも間隔の分だけ遅れて見える',
+        'コメントを記事のページに含めているので、コメントも間隔の分だけ遅れて見えます',
       c.onDemandReason,
     ]
       .filter(Boolean)
@@ -168,7 +168,7 @@ export function stageReasons(
       (!mail || c.featurePoints / expected < ft.good) &&
         `機能開発 ${c.featurePoints} / 期待 ${expected}`,
       mail &&
-        `${EMAIL_UNDELIVERED_REASON}（その日の約 ${Math.round(undeliveredShare(c.undelivered ?? []) * 100)}% が届かない。${mail.text}）`,
+        `${EMAIL_UNDELIVERED_REASON}（その日の約 ${Math.round(undeliveredShare(c.undelivered ?? []) * 100)}% が届きません。${mail.text}）`,
     ]
       .filter(Boolean)
       .join('・');

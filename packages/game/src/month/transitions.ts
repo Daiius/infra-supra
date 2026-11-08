@@ -114,12 +114,12 @@ export function transitionsOf(
     // 乗り換え・契約し直しは新しいサーバーなので、ストレージ変更オプションは付いていない
     storageOption = false;
     notes.push(
-      `乗り換えの作業が済んだ。来月から ${stackName(migration.to, state.framework)} に切り替える（部品は既定の選択から始まる）`,
+      `乗り換えの作業が済みました。来月から ${stackName(migration.to, state.framework)} に切り替えます（部品は既定の選択から始まります）`,
     );
     if (mods.realtime && !realtimeSupported(STACKS[migration.to]!.provider)) {
       mods = withoutRealtime(mods);
       notes.push(
-        'チャットは乗り換え先のリアルタイムのデータを取得していないため、乗り換えとともに止めた',
+        'チャットは乗り換え先のリアルタイムのデータを取得していないため、乗り換えとともに止めました',
       );
     }
     migration = null;
@@ -134,7 +134,7 @@ export function transitionsOf(
       components = rest;
     }
     notes.push(
-      `${swapLabel(componentSwap.slot)}が済んだ。来月から ${componentLabel(platformNow, componentSwap.slot, componentSwap.option)} を使う`,
+      `${swapLabel(componentSwap.slot)}が済みました。来月から ${componentLabel(platformNow, componentSwap.slot, componentSwap.option)} を使います`,
     );
     componentSwap = null;
   }
@@ -152,7 +152,7 @@ export function transitionsOf(
       revalidateSec: revalidateAfterRewrite(settings.revalidateSec, rewrite.to),
     };
     notes.push(
-      `作り直しが済んだ。来月から ${FRAMEWORKS[rewrite.to].label} で動かす（${stackName(stackIndex, rewrite.to, true, components)}。新しいフレームワークで選べない部品は既定に戻した）`,
+      `作り直しが済みました。来月から ${FRAMEWORKS[rewrite.to].label} で動かします（${stackName(stackIndex, rewrite.to, true, components)}。新しいフレームワークで選べない部品は既定に戻しました）`,
     );
     rewrite = null;
   }

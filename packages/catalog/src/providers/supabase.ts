@@ -12,21 +12,21 @@ const FACTS = [
   {
     id: 'shared-pooler',
     premise:
-      'Supabase の直接の接続は IPv6 だけ（IPv4 はアドオン）で、共有のプール（Supavisor）はどのプランでも IPv4。' +
-      'サーバーレスの関数は共有のプールの transaction モード（6543）、VM・常駐のコンテナは直接の接続か、IPv4 だけの網からは共有のプールの session モード（5432）を使う',
+      'Supabase の直接の接続は IPv6 だけ（IPv4 はアドオン）で、共有のプール（Supavisor）はどのプランでも IPv4 です。' +
+      'サーバーレスの関数は共有のプールの transaction モード（6543）、VM・常駐のコンテナは直接の接続か、IPv4 だけの網からは共有のプールの session モード（5432）を使います',
     sourceIds: ['connecting'],
   },
   {
     id: 'pooler-egress',
     premise:
-      '共有のプールを通した転送は「Shared Pooler Egress」として数え、DB の転送とは二重に数えない。転送の枠（Unified Egress Quota。Free 5 GB・Pro 250 GB）はサービスをまたいで共通',
+      '共有のプールを通した転送は「Shared Pooler Egress」として数え、DB の転送とは二重に数えません。転送の枠（Unified Egress Quota。Free 5 GB・Pro 250 GB）はサービスをまたいで共通です',
     interpretation: {
       adopted:
-        'プール経由の転送を、DB の転送と同じ枠・同じ単価（uncached $0.09/GB）で数える（料金の文はプールを名指ししていない）',
+        'プール経由の転送を、DB の転送と同じ枠・同じ単価（uncached $0.09/GB）で数えます（料金の文はプールを名指ししていない）',
       rejected: [
         {
           reading: 'プール経由の転送を別の枠・別の単価で数える',
-          reason: '公式の文書に別の枠・単価の記載が無い',
+          reason: '公式の文書に別の枠・単価の記載がありません',
         },
       ],
     },
@@ -119,7 +119,7 @@ export const supabase: PriceBookInput = {
       uptimeSla: {
         status: 'none',
         premise:
-          'Supabase の稼働率の SLA は Free・Pro・Team には含まれない（Enterprise だけ 99.9%）',
+          'Supabase の稼働率の SLA は Free・Pro・Team には含まれません（Enterprise だけ 99.9%）',
         sourceIds: ['pricing', 'sla'],
       },
       members: {
@@ -130,9 +130,9 @@ export const supabase: PriceBookInput = {
       },
       facts: FACTS,
       notes: [
-        '1 週間使われないとプロジェクトが一時停止する',
+        '1 週間使われないとプロジェクトが一時停止します',
         '有効な無料プロジェクトは 2 つまで',
-        'Auth の組み込みのメールはプロジェクトのチームのメンバーにしか送れず（他の宛先は「Email address not authorized」）、1 時間 2 通まで。公式は本番では自前の SMTP を設定するよう求めている。構成のメールは外の送信のサービス（Resend など）で数える（D-95）',
+        'Auth の組み込みのメールはプロジェクトのチームのメンバーにしか送れず（他の宛先は「Email address not authorized」）、1 時間 2 通までです。公式は本番では自前の SMTP を設定するよう求めています。構成のメールは外の送信のサービス（Resend など）で数えます（D-95）',
       ],
       meters: [
         {
@@ -174,7 +174,7 @@ export const supabase: PriceBookInput = {
       uptimeSla: {
         status: 'none',
         premise:
-          'Supabase の稼働率の SLA は Free・Pro・Team には含まれない（Enterprise だけ 99.9%）',
+          'Supabase の稼働率の SLA は Free・Pro・Team には含まれません（Enterprise だけ 99.9%）',
         sourceIds: ['pricing', 'sla'],
       },
       members: {
@@ -194,10 +194,10 @@ export const supabase: PriceBookInput = {
       ],
       facts: FACTS,
       notes: [
-        'Pro は支出上限が既定で有効。ただし Compute は上限の対象外',
+        'Pro は支出上限が既定で有効です。ただし Compute は上限の対象外です',
         'Compute は 1 時間単位で切り上げ',
-        '日次のバックアップは 7 日分を残す（Pro に込み）。任意の時点への復元（PITR）はアドオン（D-93）',
-        'Auth の組み込みのメールはプロジェクトのチームのメンバーにしか送れず（他の宛先は「Email address not authorized」）、1 時間 2 通まで。公式は本番では自前の SMTP を設定するよう求めている。構成のメールは外の送信のサービス（Resend など）で数える（D-95）',
+        '日次のバックアップは 7 日分を残します（Pro に込み）。任意の時点への復元（PITR）はアドオンです（D-93）',
+        'Auth の組み込みのメールはプロジェクトのチームのメンバーにしか送れず（他の宛先は「Email address not authorized」）、1 時間 2 通までです。公式は本番では自前の SMTP を設定するよう求めています。構成のメールは外の送信のサービス（Resend など）で数えます（D-95）',
       ],
       meters: [
         {
@@ -207,7 +207,7 @@ export const supabase: PriceBookInput = {
           unit: 'hour',
           rounding: { granularity: 1, scope: 'period' },
           premise:
-            'Supabase の Compute は時間課金で、使われていなくても動いている間は課金される',
+            'Supabase の Compute は時間課金で、使われていなくても動いている間は課金されます',
           pricing: { model: 'flat', per: 1, unitPrice: 0.01344 },
           sourceIds: ['compute'],
         },
@@ -237,15 +237,15 @@ export const supabase: PriceBookInput = {
           unit: 'hour',
           rounding: { granularity: 1, scope: 'period' },
           premise:
-            'Supabase の PITR（7 日）は 1 時間 $0.137（月 約 $100）のアドオンで、compute が Small 以上でないと付けられない（Small は 1 時間 $0.0206、Micro は $0.01344）。PITR を付けると日次のバックアップは取らなくなる',
+            'Supabase の PITR（7 日）は 1 時間 $0.137（月 約 $100）のアドオンで、compute が Small 以上でないと付けられない（Small は 1 時間 $0.0206、Micro は $0.01344）。PITR を付けると日次のバックアップは取らなくなります',
           interpretation: {
             adopted:
-              'PITR の $0.137 と、Micro から Small に上げる差額 $0.00716 を合わせた 1 時間 $0.14416 で、付けている時間に課金する（compute のメーターは Micro のまま。Small の pooler の接続 400 は数えず、Micro の 200 で判定する）',
+              'PITR の $0.137 と、Micro から Small に上げる差額 $0.00716 を合わせた 1 時間 $0.14416 で、付けている時間に課金します（compute のメーターは Micro のまま。Small の pooler の接続 400 は数えず、Micro の 200 で判定する）',
             rejected: [
               {
                 reading: 'Small を別のプランとして持つ',
                 reason:
-                  'PITR の前提として上げるだけで、他の判定（接続の上限）は Micro のまま見る方が高めの側に寄る',
+                  'PITR の前提として上げるだけで、他の判定（接続の上限）は Micro のまま見る方が高めの側に寄ります',
               },
             ],
           },

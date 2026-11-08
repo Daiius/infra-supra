@@ -25,13 +25,13 @@ const common = {
   members: {
     pricing: 'not-stated' as const,
     premise:
-      'AWS のアカウントのメンバー（ユーザー）の料金は、読んだ料金表に書かれていない（記載なし）',
+      'AWS のアカウントのメンバー（ユーザー）の料金は、読んだ料金表に書かれていません（記載なし）',
     sourceIds: ['freeTier'],
   },
   uptimeSla: {
     status: 'not-stated' as const,
     premise:
-      'AWS の稼働率の SLA はサービスごとのページにあり、まだ取得していない（このゲームでは SLA の要件を満たせない扱い）',
+      'AWS の稼働率の SLA はサービスごとのページにあり、まだ取得していません（このゲームでは SLA の要件を満たせない扱い）',
     sourceIds: ['freeTier'],
   },
 };
@@ -39,27 +39,27 @@ const common = {
 /** CloudFront の定額のプランの共通の注記と事実（D-61・2026-11-01 取得）。 */
 const FLAT_NOTES = [
   'WAF・DDoS の保護・Route 53・TLS 証明書・CloudFront Functions・ログの取り込みが込み。Lambda@Edge は従量',
-  'S3 Standard の保存のクレジット（Free 5 GB・Pro 50 GB・Business 1 TB・Premium 5 TB）は数えていない（費用は高めの側）',
-  '1 プランは 1 distribution。Free は 1 アカウントで 3 つまで。このモデルは CloudFront を 1 つの distribution にまとめる',
-  '東京での違いの記述は見当たらない（未確認）',
+  'S3 Standard の保存のクレジット（Free 5 GB・Pro 50 GB・Business 1 TB・Premium 5 TB）は数えていません（費用は高めの側）',
+  '1 プランは 1 distribution です。Free は 1 アカウントで 3 つまでです。このモデルは CloudFront を 1 つの distribution にまとめます',
+  '東京での違いの記述は見当たりません（未確認）',
 ];
 const FLAT_FACTS = [
   {
     id: 'flat-overage',
     premise:
-      'CloudFront の定額のプランは込みの量を超えても追加の請求はない。ただし超えた状態が 2〜3 か月以上続くと、より少ない・遠い拠点から配るなど性能が調整されうる（最初の月の 3 倍までの急増は影響しない）',
+      'CloudFront の定額のプランは込みの量を超えても追加の請求はありません。ただし超えた状態が 2〜3 か月以上続くと、より少ない・遠い拠点から配るなど性能が調整されることがあります（最初の月の 3 倍までの急増は影響しない）',
     sourceIds: ['cloudfrontFlatDocs'],
   },
   {
     id: 'flat-no-discount',
     premise:
-      'CloudFront の定額のプランは他の割引・オファー（従量の常時無料など）と併用できない',
+      'CloudFront の定額のプランは他の割引・オファー（従量の常時無料など）と併用できません',
     sourceIds: ['cloudfrontFlat'],
   },
   {
     id: 'flat-amplify-origin',
     premise:
-      '定額のプランの CloudFront のオリジンとして公式に挙がっているのは S3・ALB・API Gateway など。Amplify をオリジンにする構成は公式に未確認',
+      '定額のプランの CloudFront のオリジンとして公式に挙がっているのは S3・ALB・API Gateway などです。Amplify をオリジンにする構成は公式に未確認です',
     sourceIds: ['cloudfrontFlatDocs'],
   },
 ];
@@ -75,12 +75,12 @@ const FLAT_INVALIDATION: PriceBookInput['plans'][number]['meters'][number] = {
   unit: 'count',
   interpretation: {
     adopted:
-      '定額のプランでは無効化も込み（$0）とみなす。機能の表に全段で「Fast cache invalidations」があり、プランが覆う費用に「Your CloudFront distribution」とある',
+      '定額のプランでは無効化も込み（$0）とみなします。機能の表に全段で「Fast cache invalidations」があり、プランが覆う費用に「Your CloudFront distribution」とあります',
     rejected: [
       {
         reading: '従量と同じく月 1,000 パスを超えた分は 1 パス $0.005',
         reason:
-          '定額のプランの文書・料金ページに無効化の料金の記述が無く、超過の請求は無いと書かれている',
+          '定額のプランの文書・料金ページに無効化の料金の記述が無く、超過の請求は無いと書かれています',
       },
     ],
   },
@@ -95,12 +95,12 @@ const FLAT_INVALIDATION: PriceBookInput['plans'][number]['meters'][number] = {
  */
 const CLOUDWATCH_LOGS_INTERPRETATION = {
   adopted:
-    '取り込み（$0.76 / GB）だけを数え、保存（$0.033 / GB 月）は数えない。保持は既定で無期限だが、保存は圧縮後の量で、12 か月ためても取り込みの 1 割に届かない（高めに見ても小さい）',
+    '取り込み（$0.76 / GB）だけを数え、保存（$0.033 / GB 月）は数えません。保持は既定で無期限ですが、保存は圧縮後の量で、12 か月ためても取り込みの 1 割に届きません（高めに見ても小さい）',
   rejected: [
     {
       reading: '保持の設定（1 か月 / 無期限）を部品の選択肢にする',
       reason:
-        '効きが小さく、部品を増やすほどの差にならない（無期限で 12 か月目に取り込みの約 8%）',
+        '効きが小さく、部品を増やすほどの差になりません（無期限で 12 か月目に取り込みの約 8%）',
     },
   ],
 };
@@ -371,7 +371,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront（従量の料金）のキャッシュの無効化は月 1,000 パスまで無料（アカウントのすべての distribution の合計）。以降 1 パス $0.005。ワイルドカード（/images/*）は 1 パスと数える',
+        'CloudFront（従量の料金）のキャッシュの無効化は月 1,000 パスまで無料（アカウントのすべての distribution の合計）。以降は 1 パス $0.005 です。ワイルドカード（/images/*）は 1 パスと数えます',
       sourceIds: ['cloudfrontInvalidation', 'cloudfrontPrices'],
     },
     {
@@ -418,7 +418,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Free（月 $0）はリクエストが月 100 万 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Free（月 $0）はリクエストが月 100 万 まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
     {
@@ -428,7 +428,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Free（月 $0）は転送が月 100 GB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Free（月 $0）は転送が月 100 GB まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
     {
@@ -438,7 +438,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Pro（月 $15）はリクエストが月 1,000 万 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Pro（月 $15）はリクエストが月 1,000 万 まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
     {
@@ -448,7 +448,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Pro（月 $15）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Pro（月 $15）は転送が月 50 TB まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
     {
@@ -458,7 +458,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Business（月 $200）はリクエストが月 1 億 2,500 万 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Business（月 $200）はリクエストが月 1 億 2,500 万 まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
     {
@@ -468,7 +468,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Business（月 $200）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Business（月 $200）は転送が月 50 TB まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlat', 'cloudfrontFlatDocs'],
     },
     {
@@ -478,7 +478,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Premium（月 $1,000）はリクエストが月 5 億 まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Premium（月 $1,000）はリクエストが月 5 億 まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlatPremium', 'cloudfrontFlatPremiumDocs'],
     },
     {
@@ -488,7 +488,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudFront の定額 Premium（月 $1,000）は転送が月 50 TB まで込み。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる',
+        'CloudFront の定額 Premium（月 $1,000）は転送が月 50 TB まで込みです。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります',
       sourceIds: ['cloudfrontFlatPremium', 'cloudfrontFlatPremiumDocs'],
     },
     {
@@ -498,7 +498,7 @@ export const aws: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'CloudWatch Logs は月 5 GB まで常時無料（取り込み・保存・Logs Insights の走査の合計。このモデルは取り込みだけに当てる）',
+        'CloudWatch Logs は月 5 GB まで常時無料（取り込み・保存・Logs Insights の走査の合計。このモデルは取り込みだけに当てます）',
       sourceIds: ['cloudwatchPricing', 'cloudwatchPrices'],
     },
     // インターネットへの転送の常時無料（全サービス・全リージョンの合計。CloudFront の 1 TB とは別）。
@@ -522,8 +522,8 @@ export const aws: PriceBookInput = {
       name: 'Amplify Hosting',
       sourceIds: ['amplifyPrices', 'amplifyPricing'],
       notes: [
-        'ビルドの時間（$0.01 / 分・標準）と CDN に置いたファイルの保存（$0.023/GB 月）はこのモデルでは数えない',
-        'Amplify Hosting の無料枠（ビルド 1,000 分・配信 15 GB・SSR 50 万リクエスト・100 GB 時間など）は「Free for 12 months」の旧来の無料枠なので入れない（AX-06）',
+        'ビルドの時間（$0.01 / 分・標準）と CDN に置いたファイルの保存（$0.023/GB 月）はこのモデルでは数えません',
+        'Amplify Hosting の無料枠（ビルド 1,000 分・配信 15 GB・SSR 50 万リクエスト・100 GB 時間など）は「Free for 12 months」の旧来の無料枠なので入れません（AX-06）',
       ],
       facts: [
         {
@@ -535,27 +535,27 @@ export const aws: PriceBookInput = {
         {
           id: 'no-on-demand-isr',
           premise:
-            'Amplify Hosting は Next.js のオンデマンド ISR（即時反映）・ストリーミング・Edge のミドルウェアに対応していない',
+            'Amplify Hosting は Next.js のオンデマンド ISR（即時反映）・ストリーミング・Edge のミドルウェアに対応していません',
           sourceIds: ['amplifyNext'],
         },
         {
           id: 'cache-control',
           premise:
-            'Amplify の CDN（Amplify が管理する CloudFront）は SSR の応答の Cache-Control（s-maxage）に従う。既定では SSR の応答をキャッシュせず（0 秒）、静的なファイルは 1 年',
+            'Amplify の CDN（Amplify が管理する CloudFront）は SSR の応答の Cache-Control（s-maxage）に従います。既定では SSR の応答をキャッシュせず（0 秒）、静的なファイルは 1 年です',
           sourceIds: ['amplifyCaching', 'amplifyCacheControl'],
         },
         {
           id: 'front-cloudfront',
           premise:
-            'Amplify の前に自前の CloudFront を置く手順は Amplify の利用者ガイドに無い（AWS の Prescriptive Guidance のパターンと re:Post の回答が根拠）。Amplify は CloudFront の「AWS のオリジンからの取得は無料」の例に挙がっていない',
+            'Amplify の前に自前の CloudFront を置く手順は Amplify の利用者ガイドにありません（AWS の Prescriptive Guidance のパターンと re:Post の回答が根拠）。Amplify は CloudFront の「AWS のオリジンからの取得は無料」の例に挙がっていません',
           interpretation: {
             adopted:
-              '自前の CloudFront の外れた分（Amplify への取得）は Amplify の配信（$0.15/GB served）として課金されるとみなす（高めの側の読み）',
+              '自前の CloudFront の外れた分（Amplify への取得）は Amplify の配信（$0.15/GB served）として課金されるとみなします（高めの側の読み）',
             rejected: [
               {
                 reading: 'AWS のオリジンとして Amplify からの取得も無料',
                 reason:
-                  'CloudFront の料金ページの無料の例は S3・EC2・ELB などで、Amplify は挙がっていない',
+                  'CloudFront の料金ページの無料の例は S3・EC2・ELB などで、Amplify は挙がっていません',
               },
             ],
           },
@@ -565,13 +565,13 @@ export const aws: PriceBookInput = {
           // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
           id: 'ssr-outbound',
           premise:
-            'Amplify Hosting の料金ページの課金の項目（ビルド・保存・配信の転送・SSR のリクエストと時間）に、SSR から外の API への通信の転送は無い（配信の転送は閲覧者へ配った量）。このゲームでは数えない（未確認）',
+            'Amplify Hosting の料金ページの課金の項目（ビルド・保存・配信の転送・SSR のリクエストと時間）に、SSR から外の API への通信の転送はありません（配信の転送は閲覧者へ配った量）。このゲームでは数えません（未確認）',
           sourceIds: ['amplifyPricing'],
         },
         {
           id: 'transfer-not-cloudfront',
           premise:
-            'Amplify Hosting の配信は自前の料金（$0.15/GB）で数え、CloudFront の常時無料（月 1 TB）はここには当てていない（Amplify の料金表は別の行。推測）',
+            'Amplify Hosting の配信は自前の料金（$0.15/GB）で数え、CloudFront の常時無料（月 1 TB）はここには当てていません（Amplify の料金表は別の行。推測）',
           sourceIds: ['amplifyPricing', 'cloudfrontFree'],
         },
       ],
@@ -608,7 +608,7 @@ export const aws: PriceBookInput = {
           unit: 'count',
           pricing: {
             model: 'unpriced',
-            note: '画像の最適化は Compute とは別の仕組み（デプロイの仕様の ImageOptimization）で、料金表に専用の行が無く、Compute の料金に含まれるかも書かれていない（2026-11-01 確認）',
+            note: '画像の最適化は Compute とは別の仕組み（デプロイの仕様の ImageOptimization）で、料金表に専用の行が無く、Compute の料金に含まれるかも書かれていません（2026-11-01 確認）',
           },
           sourceIds: ['amplifyPrices', 'amplifyPricing', 'amplifySpec'],
         },
@@ -619,7 +619,7 @@ export const aws: PriceBookInput = {
           unit: 'gb',
           allowancePool: 'cloudwatch-free-logs',
           premise:
-            'Amplify は SSR の実行の情報を自分のアカウントの CloudWatch Logs に送る（自動で作るサービスロールに権限が入っている）。取り込みは $0.76 / GB（東京・Standard）。保持は既定で無期限',
+            'Amplify は SSR の実行の情報を自分のアカウントの CloudWatch Logs に送ります（自動で作るサービスロールに権限が入っている）。取り込みは $0.76 / GB です（東京・Standard）。保持は既定で無期限です',
           interpretation: CLOUDWATCH_LOGS_INTERPRETATION,
           pricing: { model: 'flat', per: 1, unitPrice: 0.76 },
           sourceIds: [
@@ -640,7 +640,7 @@ export const aws: PriceBookInput = {
         {
           id: 'opennext-isr',
           premise:
-            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から再生成する。オンデマンドの再検証（revalidatePath・revalidateTag）にも対応するが、CloudFront のキャッシュは別に無効化が要る（自動の無効化は既定で無効。有効にすると再検証したページごとにページとそのデータのルートの 2 パスを無効化する。無効化は月 1,000 パスまで無料・以降 1 パス $0.005）',
+            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から再生成します。オンデマンドの再検証（revalidatePath・revalidateTag）にも対応しますが、CloudFront のキャッシュは別に無効化が要ります（自動の無効化は既定で無効です。有効にすると再検証したページごとにページとそのデータのルートの 2 パスを無効化します。無効化は月 1,000 パスまで無料・以降 1 パス $0.005 です）',
           sourceIds: [
             'opennextServer',
             'opennextCaching',
@@ -651,13 +651,13 @@ export const aws: PriceBookInput = {
         {
           id: 'opennext-versions',
           premise:
-            'OpenNext の AWS 向け（V3）は Next.js 15 の機能に対応することを目指している。インフラは作らない（SST などで自分で組み、保守も自分で行う）',
+            'OpenNext の AWS 向け（V3）は Next.js 15 の機能に対応することを目指しています。インフラは作りません（SST などで自分で組み、保守も自分で行う）',
           sourceIds: ['opennextAws', 'opennextArch'],
         },
         {
           id: 'function-url',
           premise:
-            'Lambda の関数 URL に専用の料金の行は無く、Lambda のリクエストと実行時間だけで数えている（追加の料金が無いとは明記されていない）',
+            'Lambda の関数 URL に専用の料金の行は無く、Lambda のリクエストと実行時間だけで数えています（追加の料金が無いとは明記されていない）',
           sourceIds: ['lambdaPrices', 'lambdaUrls'],
         },
       ],
@@ -676,15 +676,15 @@ export const aws: PriceBookInput = {
             { payment: 'all-upfront', discount: 0.148 },
           ],
           premise:
-            'Compute Savings Plans は 1 時間あたりの額を 1 年（または 3 年）確約し、確約の額までの Lambda の実行時間（duration）を割り引く（東京の x86: 前払いなし $0.000015・全額前払い $0.0000142 / GB 秒。オンデマンド $0.0000166667）。リクエストの料金は割り引かない（$0.20 / 100 万のまま）。確約を超えた分はオンデマンドの単価、使わなかった確約も払う（その時間の確約は持ち越せない）',
+            'Compute Savings Plans は 1 時間あたりの額を 1 年（または 3 年）確約し、確約の額までの Lambda の実行時間（duration）を割り引きます（東京の x86: 前払いなし $0.000015・全額前払い $0.0000142 / GB 秒。オンデマンド $0.0000166667）。リクエストの料金は割り引きません（$0.20 / 100 万のまま）。確約を超えた分はオンデマンドの単価、使わなかった確約も払います（その時間の確約は持ち越せない）',
           interpretation: {
             adopted:
-              '確約の額は月の平均の使用（無料枠を引いた後のオンデマンドの額）で比べ、時間ごとの使用の揺れ（ピークの時間帯は確約を超え、夜は余る）は数えない',
+              '確約の額は月の平均の使用（無料枠を引いた後のオンデマンドの額）で比べ、時間ごとの使用の揺れ（ピークの時間帯は確約を超え、夜は余る）は数えません',
             rejected: [
               {
                 reading: '時間帯ごとの使用に確約を当てる',
                 reason:
-                  '明細の金額は月の合計だけで、時間帯ごとの内訳を持たない。月の平均で当てると、時間ごとの余りの分だけ割引を大きく見る（残した点）',
+                  '明細の金額は月の合計だけで、時間帯ごとの内訳を持ちません。月の平均で当てると、時間ごとの余りの分だけ割引を大きく見ます（残した点）',
               },
             ],
           },
@@ -729,7 +729,7 @@ export const aws: PriceBookInput = {
           unit: 'gb',
           allowancePool: 'cloudwatch-free-logs',
           premise:
-            'Lambda は既定で実行ごとのログ（START・END・REPORT の行とアプリの出力）を CloudWatch Logs に送り、取り込みは $0.76 / GB（東京・Lambda のログは量の段階つき。10 TB まで同じ単価）。ロググループの保持は既定で無期限',
+            'Lambda は既定で実行ごとのログ（START・END・REPORT の行とアプリの出力）を CloudWatch Logs に送り、取り込みは $0.76 / GB です（東京・Lambda のログは量の段階つき。10 TB まで同じ単価）。ロググループの保持は既定で無期限です',
           interpretation: CLOUDWATCH_LOGS_INTERPRETATION,
           pricing: {
             model: 'tiered',
@@ -757,8 +757,8 @@ export const aws: PriceBookInput = {
       name: 'API Gateway（HTTP API）',
       sourceIds: ['apiGatewayPrices', 'apiGatewayPricing', 'apiGatewayLogs'],
       notes: [
-        'HTTP API は 512 KB ごとに 1 リクエストとして数える（料金ページの例 2 が 4.5 MB のペイロードを 512 KB で割っている）',
-        'HTTP API のアクセスログは既定で無効（ステージごとに CloudWatch Logs のロググループを指定して有効にする）ので、ログの取り込みは数えない（D-92）',
+        'HTTP API は 512 KB ごとに 1 リクエストとして数えます（料金ページの例 2 が 4.5 MB のペイロードを 512 KB で割っている）',
+        'HTTP API のアクセスログは既定で無効（ステージごとに CloudWatch Logs のロググループを指定して有効にする）ので、ログの取り込みは数えません（D-92）',
       ],
       meters: [
         {
@@ -785,7 +785,7 @@ export const aws: PriceBookInput = {
       name: 'CloudFront（従量の料金・日本）',
       sourceIds: ['cloudfrontPrices', 'cloudfrontFree'],
       notes: [
-        '定額のプラン（Free・Pro・Business）は込み分を超えたときの挙動が未確認なので扱わない（AX-07）',
+        '定額のプラン（Free・Pro・Business）は込み分を超えたときの挙動が未確認なので扱いません（AX-07）',
         '転送・リクエストの単価は日本の拠点の値（閲覧者が日本にいる前提）',
       ],
       facts: [
@@ -814,7 +814,7 @@ export const aws: PriceBookInput = {
           allowancePool: 'cloudfront-free-transfer',
           interpretation: {
             adopted:
-              '1 TB は 1,024 GB とみなす（料金表の段が 10 TB = 10,240 GB で区切られているのに合わせる）',
+              '1 TB は 1,024 GB とみなします（料金表の段が 10 TB = 10,240 GB で区切られているのに合わせる）',
             rejected: [
               {
                 reading: '1 TB = 1,000 GB',
@@ -917,7 +917,7 @@ export const aws: PriceBookInput = {
         {
           id: 'request-units',
           premise:
-            'DynamoDB の読み取りは 4 KB ごとに 1 単位（結果整合なら半分）、書き込みは 1 KB ごとに 1 単位で課金される（RDB ではないので、複雑な検索や集計はアプリの側で工夫が要る）',
+            'DynamoDB の読み取りは 4 KB ごとに 1 単位（結果整合なら半分）、書き込みは 1 KB ごとに 1 単位で課金されます（RDB ではないので、複雑な検索や集計はアプリの側で工夫が要る）',
           sourceIds: ['dynamodbUnits'],
         },
       ],
@@ -953,7 +953,7 @@ export const aws: PriceBookInput = {
           resource: 'backup-gb-month',
           unit: 'gb-month',
           premise:
-            'DynamoDB の PITR（任意の時点への復元）は既定で無効。有効にすると、復元の期間（1〜35 日。既定 35 日）によらず、テーブルの大きさ（GB 月）に $0.228 で課金する（東京）',
+            'DynamoDB の PITR（任意の時点への復元）は既定で無効です。有効にすると、復元の期間（1〜35 日。既定 35 日）によらず、テーブルの大きさ（GB 月）に $0.228 で課金します（東京）',
           pricing: { model: 'flat', per: 1, unitPrice: 0.228 },
           sourceIds: ['dynamodbBackupPrices', 'dynamodbPitr'],
         },
@@ -977,13 +977,13 @@ export const aws: PriceBookInput = {
             { payment: 'all-upfront', upfront: 161 },
           ],
           premise:
-            'RDS のリザーブドインスタンス（db.t4g.micro・PostgreSQL・Single-AZ・東京・1 年）は、前払いなしで 1 時間 $0.0197（オンデマンド $0.025）、全額前払いで $161（期間中の時間の料金なし）。同じ種類のインスタンスの時間の料金だけを割り引き、ストレージ・バックアップには効かない。取り消せず、使わなくても期間中は課金される',
+            'RDS のリザーブドインスタンス（db.t4g.micro・PostgreSQL・Single-AZ・東京・1 年）は、前払いなしで 1 時間 $0.0197（オンデマンド $0.025）、全額前払いで $161 です（期間中の時間の料金なし）。同じ種類のインスタンスの時間の料金だけを割り引き、ストレージ・バックアップには効きません。取り消せず、使わなくても期間中は課金されます',
           sourceIds: ['rdsReservedPrices', 'rdsReserved'],
         },
       ],
       notes: [
-        'ストレージ（gp3）は割り当てた容量で課金され、PostgreSQL の gp3 は 20 GiB から（RDS の利用者ガイド）。このモデルは DB の大きさで近似し、20 GiB に満たない DB は 20 GiB で数える（最小の課金量。D-85）。20 GiB を超えた分は割り当てを DB の大きさに合わせて増やすとみなす',
-        'アプリ（Amplify・Lambda）と RDS の間の転送の料金は未確認なので数えない',
+        'ストレージ（gp3）は割り当てた容量で課金され、PostgreSQL の gp3 は 20 GiB からです（RDS の利用者ガイド）。このモデルは DB の大きさで近似し、20 GiB に満たない DB は 20 GiB で数えます（最小の課金量。D-85）。20 GiB を超えた分は割り当てを DB の大きさに合わせて増やすとみなします',
+        'アプリ（Amplify・Lambda）と RDS の間の転送の料金は未確認なので数えません',
       ],
       meters: [
         {
@@ -992,7 +992,7 @@ export const aws: PriceBookInput = {
           resource: 'instance-hours',
           unit: 'hour',
           premise:
-            'RDS のインスタンスは時間課金で、使われていなくても動いている間は課金される',
+            'RDS のインスタンスは時間課金で、使われていなくても動いている間は課金されます',
           pricing: { model: 'flat', per: 1, unitPrice: 0.025 },
           sourceIds: ['rdsPrices'],
         },
@@ -1004,7 +1004,7 @@ export const aws: PriceBookInput = {
           // PostgreSQL の gp3 の割り当ては 20 GiB から（CHAP_Storage・2026-11-02 取得。D-84・D-85）
           minimumQuantity: 20,
           premise:
-            'RDS for PostgreSQL の gp3 は 20 GiB から割り当てるので、DB が小さくても 20 GiB 分の保存が課金される',
+            'RDS for PostgreSQL の gp3 は 20 GiB から割り当てるので、DB が小さくても 20 GiB 分の保存が課金されます',
           pricing: { model: 'flat', per: 1, unitPrice: 0.138 },
           sourceIds: ['rdsPrices', 'rdsStorage'],
         },
@@ -1014,15 +1014,15 @@ export const aws: PriceBookInput = {
           resource: 'backup-gb-month',
           unit: 'gb-month',
           premise:
-            'RDS の自動バックアップは、リージョンの割り当てた DB の容量の合計と同じ量まで無料で、超えた分が $0.095 / GB 月（東京）。最初のスナップショットは DB 全体、以降は差分で、保持の期間（0〜35 日。コンソールの既定 7 日・API の既定 1 日）の任意の時点に戻せる',
+            'RDS の自動バックアップは、リージョンの割り当てた DB の容量の合計と同じ量まで無料で、超えた分が $0.095 / GB 月です（東京）。最初のスナップショットは DB 全体、以降は差分で、保持の期間（0〜35 日。コンソールの既定 7 日・API の既定 1 日）の任意の時点に戻せます',
           interpretation: {
             adopted:
-              'コンソールで作った既定の 7 日とみる。無料の分（割り当て = max(DB の大きさ, 20 GiB)）を引いた量だけをこのメーターに渡す',
+              'コンソールで作った既定の 7 日とみます。無料の分（割り当て = max(DB の大きさ, 20 GiB)）を引いた量だけをこのメーターに渡します',
             rejected: [
               {
                 reading: 'API・CLI の既定の 1 日とみる',
                 reason:
-                  '自分で 1 台を立てるならコンソールで作ることが多いとみた（1 日でも無料の分に収まり、費用は同じ 0）',
+                  '自分で 1 台を立てるならコンソールで作ることが多いとみました（1 日でも無料の分に収まり、費用は同じ 0）',
               },
             ],
           },
@@ -1038,20 +1038,20 @@ export const aws: PriceBookInput = {
       name: 'Aurora PostgreSQL Serverless v2（I/O-Optimized）',
       sourceIds: ['rdsPrices', 'auroraPricing'],
       notes: [
-        'I/O-Optimized を選んだのは、読み書きの I/O に課金されず、1 件あたりの I/O の数という確かめられない量に依らないため（標準は I/O が $0.24 / 100 万）',
-        'ACU は負荷に応じて伸縮するが、このモデルは最小の容量で動くとみなす（伸びた分は数えない）',
+        'I/O-Optimized を選んだのは、読み書きの I/O に課金されず、1 件あたりの I/O の数という確かめられない量に依らないためです（標準は I/O が $0.24 / 100 万）',
+        'ACU は負荷に応じて伸縮しますが、このモデルは最小の容量で動くとみなします（伸びた分は数えない）',
       ],
       facts: [
         {
           id: 'io-optimized',
           premise:
-            'Aurora I/O-Optimized は読み書きの I/O に課金されない（インスタンスと保存だけ）。I/O の費用が全体の 25% を超えるなら I/O-Optimized が得とされる',
+            'Aurora I/O-Optimized は読み書きの I/O に課金されません（インスタンスと保存だけ）。I/O の費用が全体の 25% を超えるなら I/O-Optimized が得とされます',
           sourceIds: ['auroraPricing'],
         },
         {
           id: 'auto-pause',
           premise:
-            'Aurora Serverless v2 は最小の容量を 0 ACU にすると、ユーザーの接続が指定の時間（最短 300 秒）無いときに止まり、止まっている間はインスタンスの料金がかからない。再開はふつう約 15 秒（24 時間を超えて止まると 30 秒以上）。RDS Proxy を付けると止まらない',
+            'Aurora Serverless v2 は最小の容量を 0 ACU にすると、ユーザーの接続が指定の時間（最短 300 秒）無いときに止まり、止まっている間はインスタンスの料金がかかりません。再開はふつう約 15 秒です（24 時間を超えて止まると 30 秒以上）。RDS Proxy を付けると止まりません',
           sourceIds: ['auroraAutoPause'],
         },
       ],
@@ -1062,7 +1062,7 @@ export const aws: PriceBookInput = {
           resource: 'instance-hours',
           unit: 'hour',
           premise:
-            'Aurora Serverless v2 は ACU の時間で課金され、動いている間は使われていなくても最小の容量の分がかかる',
+            'Aurora Serverless v2 は ACU の時間で課金され、動いている間は使われていなくても最小の容量の分がかかります',
           pricing: { model: 'flat', per: 1, unitPrice: 0.2 },
           sourceIds: ['rdsPrices'],
         },
@@ -1080,7 +1080,7 @@ export const aws: PriceBookInput = {
           resource: 'backup-gb-month',
           unit: 'gb-month',
           premise:
-            'Aurora の自動バックアップは常に有効（止められない）で、保持の既定は 1 日（1〜35 日）。保持 1 日なら課金されず、延ばすとクラスターの大きさまでは無料、超えた分が $0.023 / GB 月（東京）。保持の期間の任意の時点に戻せる',
+            'Aurora の自動バックアップは常に有効（止められない）で、保持の既定は 1 日です（1〜35 日）。保持 1 日なら課金されず、延ばすとクラスターの大きさまでは無料、超えた分が $0.023 / GB 月です（東京）。保持の期間の任意の時点に戻せます',
           pricing: { model: 'flat', per: 1, unitPrice: 0.023 },
           sourceIds: [
             'rdsBackupPrices',
@@ -1097,20 +1097,20 @@ export const aws: PriceBookInput = {
       name: 'Aurora DSQL',
       sourceIds: ['dsqlPrices', 'dsqlPricing', 'dsqlBackup'],
       notes: [
-        'DPU は SQL の処理（ComputeDPU）と保存の読み書き（ReadDPU・WriteDPU）の量。1 件あたりの DPU は公式に書かれていない',
-        'バックアップは AWS Backup の全体のバックアップ（$0.12 / GB 月）として文書にあり、任意の時点への復元（PITR）の記載は見当たらない（2026-11-02 確認。PITR の要件は満たさないとみて、バックアップの部品は作らない。D-93）',
+        'DPU は SQL の処理（ComputeDPU）と保存の読み書き（ReadDPU・WriteDPU）の量です。1 件あたりの DPU は公式に書かれていません',
+        'バックアップは AWS Backup の全体のバックアップ（$0.12 / GB 月）として文書にあり、任意の時点への復元（PITR）の記載は見当たりません（2026-11-02 確認。PITR の要件は満たさないとみて、バックアップの部品は作りません。D-93）',
       ],
       facts: [
         {
           id: 'dpu',
           premise:
-            'Aurora DSQL は処理の量（DPU）と保存で課金され、使われていなければ費用は保存だけ。1 件あたりの DPU は公式に書かれておらず、料金ページの例（10 万 DPU ≈ TPC-C 由来の 70 万トランザクション）から 1 件 0.14 DPU と仮定している',
+            'Aurora DSQL は処理の量（DPU）と保存で課金され、使われていなければ費用は保存だけです。1 件あたりの DPU は公式に書かれておらず、料金ページの例（10 万 DPU ≈ TPC-C 由来の 70 万トランザクション）から 1 件 0.14 DPU と仮定しています',
           sourceIds: ['dsqlPricing'],
         },
         {
           id: 'compat',
           premise:
-            'Aurora DSQL は PostgreSQL 互換だが、一時テーブル・トリガー・PL/pgSQL が無く、1 つのトランザクションで変更できる行は 3,000 まで。分離レベルは Repeatable Read に固定で、競合すると再試行が要る（楽観的な並行制御）。接続は 1 時間で切れる',
+            'Aurora DSQL は PostgreSQL 互換ですが、一時テーブル・トリガー・PL/pgSQL が無く、1 つのトランザクションで変更できる行は 3,000 までです。分離レベルは Repeatable Read に固定で、競合すると再試行が要ります（楽観的な並行制御）。接続は 1 時間で切れます',
           sourceIds: ['dsqlCompat'],
         },
       ],
@@ -1290,7 +1290,7 @@ export const aws: PriceBookInput = {
       sourceIds: ['cloudfrontFlatPremium', 'cloudfrontFlatPremiumDocs'],
       notes: [
         ...FLAT_NOTES,
-        '込みの量は既定の段（50 TB・5 億リクエスト・月 $1,000）で持つ。Premium だけは段を上げられる（75 TB・7.5 億 $1,450 〜 600 TB・60 億 $10,000）が、ここでは持たない。60 億・600 TB を超える Custom は公開の価格が無いので扱わない（D-110）',
+        '込みの量は既定の段（50 TB・5 億リクエスト・月 $1,000）で持ちます。Premium だけは段を上げられます（75 TB・7.5 億 $1,450 〜 600 TB・60 億 $10,000）が、ここでは持ちません。60 億・600 TB を超える Custom は公開の価格が無いので扱いません（D-110）',
       ],
       facts: FLAT_FACTS,
       meters: [
@@ -1333,7 +1333,7 @@ export const aws: PriceBookInput = {
       name: 'SQS（FIFO）',
       sourceIds: ['sqsPrices', 'sqsPricing'],
       notes: [
-        'すべての操作が 1 リクエスト（64 KB ごと）。OpenNext の再検証の待ち行列はメッセージ 1 件を送信・受信・削除の 3 リクエストと数える（仮定）',
+        'すべての操作が 1 リクエスト（64 KB ごと）。OpenNext の再検証の待ち行列はメッセージ 1 件を送信・受信・削除の 3 リクエストと数えます（仮定）',
       ],
       meters: [
         {
@@ -1363,10 +1363,10 @@ export const aws: PriceBookInput = {
       name: 'Amazon SES（東京）',
       sourceIds: ['sesPrices', 'sesPricing'],
       notes: [
-        '添付ファイルは送ったデータ 1 GB $0.12 が別にかかる（通知のメールは添付なしとみなし、数えない）',
-        'SES の常時無料の通数は無い（Price List API の無料の行はメールボックスのシミュレーターだけ）。新しいアカウントの Free Tier のクレジットは数えない（AX-06）',
-        '2026-07-21 から、新しいアカウント（と 2025-06-01 から送信の無いアカウント）は Essentials のプラン（1,000 通 $0.16）で始まる。プランを選ばずに Essentials になったアカウントは、最初の à la carte への切り替えがすぐ効く。このモデルは切り替えた後の à la carte で数える（D-110）',
-        'Pro（1,000 通 $0.22 + 月 $105）・Enterprise（$0.23 + 月 $500）は到達率の管理・専用 IP などが込みのプラン。通知のメールには要らないので扱わない',
+        '添付ファイルは送ったデータ 1 GB $0.12 が別にかかります（通知のメールは添付なしとみなし、数えない）',
+        'SES の常時無料の通数はありません（Price List API の無料の行はメールボックスのシミュレーターだけ）。新しいアカウントの Free Tier のクレジットは数えません（AX-06）',
+        '2026-07-21 から、新しいアカウント（と 2025-06-01 から送信の無いアカウント）は Essentials のプラン（1,000 通 $0.16）で始まります。プランを選ばずに Essentials になったアカウントは、最初の à la carte への切り替えがすぐ効きます。このモデルは切り替えた後の à la carte で数えます（D-110）',
+        'Pro（1,000 通 $0.22 + 月 $105）・Enterprise（$0.23 + 月 $500）は到達率の管理・専用 IP などが込みのプランです。通知のメールには要らないので扱いません',
       ],
       meters: [
         {
@@ -1375,16 +1375,16 @@ export const aws: PriceBookInput = {
           resource: 'emails',
           unit: 'count',
           premise:
-            'Amazon SES の送信は à la carte で受け取る人 1 人ごとに 1,000 通 $0.10（東京も同じ）。月の通数による割引・無料の分は無い',
+            'Amazon SES の送信は à la carte で受け取る人 1 人ごとに 1,000 通 $0.10 です（東京も同じ）。月の通数による割引・無料の分はありません',
           interpretation: {
             adopted:
-              'à la carte（1,000 通 $0.10・月額なし）で数える。料金ページに「You can upgrade or switch to à-la-carte pricing at any time」とあり、既定で Essentials になったアカウントの最初の切り替えはすぐ効く。通知のメールは Essentials の込みの機能（到達率の分析・Mail Manager）を使わない',
+              'à la carte（1,000 通 $0.10・月額なし）で数えます。料金ページに「You can upgrade or switch to à-la-carte pricing at any time」とあり、既定で Essentials になったアカウントの最初の切り替えはすぐ効きます。通知のメールは Essentials の込みの機能（到達率の分析・Mail Manager）を使いません',
             rejected: [
               {
                 reading:
                   '新しいアカウントの既定の Essentials（1,000 通 $0.16。1,000 万通を超えた分は $0.14）で数える',
                 reason:
-                  '既定のプランは誰でもいつでも à la carte に替えられ、替えても失うものが通知のメールでは無い。切り替えないのは安い選択を見落とした状態で、費用を合わせる理由にならない',
+                  '既定のプランは誰でもいつでも à la carte に替えられ、替えても失うものが通知のメールではありません。切り替えないのは安い選択を見落とした状態で、費用を合わせる理由になりません',
               },
             ],
           },
@@ -1410,7 +1410,7 @@ export const aws: PriceBookInput = {
         {
           id: 'alias-free',
           premise:
-            'Route 53 のエイリアスのレコード（CloudFront の distribution・ELB・S3 のウェブサイトのエンドポイントなどを指す）への問い合わせは無料。このモデルはサイトの名前をエイリアスで CloudFront に向けるとみて、問い合わせを数えない',
+            'Route 53 のエイリアスのレコード（CloudFront の distribution・ELB・S3 のウェブサイトのエンドポイントなどを指す）への問い合わせは無料です。このモデルはサイトの名前をエイリアスで CloudFront に向けるとみて、問い合わせを数えません',
           sourceIds: ['route53Pricing'],
         },
       ],
@@ -1446,25 +1446,25 @@ export const aws: PriceBookInput = {
         {
           id: 'lambda-out',
           premise:
-            'Lambda の関数がリージョンの外（他の事業者など）とやり取りするデータは、EC2 のデータ転送の料金で課金される（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
+            'Lambda の関数がリージョンの外（他の事業者など）とやり取りするデータは、EC2 のデータ転送の料金で課金されます（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
           sourceIds: ['lambdaPricing', 'dataTransferPrices'],
         },
         {
           // SPA の API を AWS に置き、静的は他の事業者から配る形（D-65。2026-11-02 に原文で確認）
           id: 'api-gateway-out',
           premise:
-            'API Gateway の HTTP API は、受けた呼び出しと送り出したデータの量で課金される（「Pay only for the API calls you receive and the amount of data transferred out」）。外へのデータ転送は EC2 のデータ転送の料金（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
+            'API Gateway の HTTP API は、受けた呼び出しと送り出したデータの量で課金されます（「Pay only for the API calls you receive and the amount of data transferred out」）。外へのデータ転送は EC2 のデータ転送の料金です（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
           sourceIds: ['apiGatewayPricing', 'dataTransferPrices'],
         },
         {
           // Vercel の関数から DynamoDB を使う形（D-114 段 2）。2026-11-03 に原文で確認
           id: 'dynamodb-out',
           premise:
-            'DynamoDB は受信に課金しない（「DynamoDB does not charge for inbound data transfer」）。外への転送は料金ページに単価の直接の記載が無く、' +
-            'AWS 共通の Data Transfer Out（東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料）の適用と読んだ（EC2 の料金ページの 100 GB 無料の適用サービスに DynamoDB が入っている）。' +
-            '別の事業者の関数（Vercel）へ返す応答（問い合わせの数 × 応答の大きさ）をこれで数える。' +
-            'Vercel の公式文書は関数の地域を AWS の地域名で示すが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載が無い（未確認）。' +
-            '同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性がある。Vercel の関数の既定の地域は iad1',
+            'DynamoDB は受信に課金しません（「DynamoDB does not charge for inbound data transfer」）。外への転送は料金ページに単価の直接の記載が無く、' +
+            'AWS 共通の Data Transfer Out（東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料）の適用と読みました（EC2 の料金ページの 100 GB 無料の適用サービスに DynamoDB が入っている）。' +
+            '別の事業者の関数（Vercel）へ返す応答（問い合わせの数 × 応答の大きさ）をこれで数えます。' +
+            'Vercel の公式文書は関数の地域を AWS の地域名で示しますが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載がありません（未確認）。' +
+            '同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性があります。Vercel の関数の既定の地域は iad1 です',
           sourceIds: [
             'dynamodbTransfer',
             'dataTransferPricesDb',
@@ -1477,11 +1477,11 @@ export const aws: PriceBookInput = {
           // Vercel の関数から Aurora を使う形（D-114 段 2）。2026-11-03 に原文で確認
           id: 'aurora-out',
           premise:
-            'Aurora の料金ページは転送を「in」と「out」で数えると書くが、インターネットへの単価の表は無い。AWS 共通の Data Transfer Out' +
-            '（東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料。Aurora の料金ページにも記載）の適用と読んだ。' +
-            '受信の課金は料金ページに記載が無い（未確認・数えない）。別の事業者の関数（Vercel）へ返す応答（問い合わせの数 × 応答の大きさ）をこれで数える。' +
-            'Vercel の公式文書は関数の地域を AWS の地域名で示すが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載が無い（未確認）。' +
-            '同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性がある。Vercel の関数の既定の地域は iad1',
+            'Aurora の料金ページは転送を「in」と「out」で数えると書いていますが、インターネットへの単価の表はありません。AWS 共通の Data Transfer Out' +
+            '（東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料。Aurora の料金ページにも記載）の適用と読みました。' +
+            '受信の課金は料金ページに記載がありません（未確認・数えない）。別の事業者の関数（Vercel）へ返す応答（問い合わせの数 × 応答の大きさ）をこれで数えます。' +
+            'Vercel の公式文書は関数の地域を AWS の地域名で示しますが、関数が AWS のどのアカウントで動き、同じリージョンの DB との通信が AWS の「同じリージョン内の AWS サービス間は $0」に当たるかは公式に記載がありません（未確認）。' +
+            '同じリージョン（hnd1 と ap-northeast-1）に置けば安くなる可能性があります。Vercel の関数の既定の地域は iad1 です',
           sourceIds: [
             'auroraTransfer',
             'dataTransferPricesDb',
@@ -1493,9 +1493,9 @@ export const aws: PriceBookInput = {
           // AWS の外の事業者（Cloudflare）から DynamoDB・Aurora・RDS を使う形（D-114 段 2b）。2026-11-04 に原文で確認
           id: 'db-out-internet',
           premise:
-            'AWS の外の事業者（Cloudflare の Worker・Hyperdrive）へ DB（DynamoDB・Aurora・RDS）が返す応答は、インターネットへの転送（Data Transfer Out。東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料）で数える。' +
-            'DynamoDB は受信に課金しない。Aurora・RDS for PostgreSQL の料金ページは転送を「in」と「out」で数えると書くが、インターネットへの単価の表は取れず（RDS は畳まれた表で、取得した文に無い）、AWS 共通の単価の適用と読んだ。受信の課金は記載が無い（未確認・数えない）。' +
-            'DynamoDB の API は署名した HTTP(S) の POST で、AWS の外からも呼べる',
+            'AWS の外の事業者（Cloudflare の Worker・Hyperdrive）へ DB（DynamoDB・Aurora・RDS）が返す応答は、インターネットへの転送（Data Transfer Out。東京 → インターネット $0.114/GB から・全サービス・全リージョン合わせて月 100 GB は無料）で数えます。' +
+            'DynamoDB は受信に課金しません。Aurora・RDS for PostgreSQL の料金ページは転送を「in」と「out」で数えると書いていますが、インターネットへの単価の表は取れず（RDS は畳まれた表で、取得した文に無い）、AWS 共通の単価の適用と読みました。受信の課金は記載がありません（未確認・数えない）。' +
+            'DynamoDB の API は署名した HTTP(S) の POST で、AWS の外からも呼べます',
           sourceIds: [
             'dynamodbTransfer',
             'auroraTransfer',

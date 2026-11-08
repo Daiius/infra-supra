@@ -169,7 +169,7 @@ describe('記事のデザインの刷新の提案（D-47）', () => {
     expect(q.slice(3, 5)).toEqual(['fair', 'fair']);
     expect(q[5]).toBe('good');
     expect(declined.history[3]!.satisfaction.reasons.quality).toContain(
-      'デザインの刷新を断った',
+      'デザインの刷新を断りました',
     );
     const accepted = play(withRedesign(), CF_PAID, [], true, 7);
     expect(accepted.history.map((h) => h.satisfaction.stages.quality)).toEqual(
@@ -198,7 +198,9 @@ describe('記事のデザインの刷新の提案（D-47）', () => {
     const r = s.history[8]!;
     expect(r.components.images).toBe('none');
     expect(r.satisfaction.stages.quality).toBe('fair');
-    expect(r.satisfaction.reasons.quality).toContain('デザインの刷新を断った');
+    expect(r.satisfaction.reasons.quality).toContain(
+      'デザインの刷新を断りました',
+    );
   });
 
   it('一律で縮めた構成で受けても、原本の無い粗い画像が多い間は画質が下がる（原本がある構成は下がらない）', () => {
@@ -228,7 +230,7 @@ describe('速さが「悪い」月は PV の伸びが下がる（D-47）', () =>
       9,
     );
     expect(r.satisfaction.reasons.speed).toContain(
-      '速さが悪く PV の伸びが約 3% 下がった',
+      '速さが悪く PV の伸びが約 3% 下がりました',
     );
     const resize = play(
       withRedesign(0),
@@ -259,7 +261,7 @@ describe('速さが「悪い」月は PV の伸びが下がる（D-47）', () =>
     );
     expect(st.end?.reason).toBe('goal');
     const hint = retryHintsOf(st).find((x) => x.kind === 'slow');
-    expect(hint?.what).toContain('速さが悪く PV の伸びが下がった');
+    expect(hint?.what).toContain('速さが悪く PV の伸びが下がりました');
     expect(hint?.what).toContain('1 ページ約 36.5 MB');
   });
 });
@@ -273,7 +275,7 @@ describe('サイズ違いの設定は、最適化しない・一律で縮める�
     for (const opt of ['none', 'resize']) {
       const s = applyActions(base, images(opt));
       expect(settingInactiveReason(s, 'variants')).toContain(
-        'サイズ違いは作らない',
+        'サイズ違いは作りません',
       );
       // 形式は一律で縮めるでは効き、原本を配る最適化しないでは効かない（D-58）
       expect(settingInactiveReason(s, 'format') === undefined).toBe(

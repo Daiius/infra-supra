@@ -67,14 +67,14 @@ export function componentConflict(
   const cfFront = (v: string | undefined) => v === 'static' || v === 'html';
   if (slot === 'apiCache' && option !== 'none' && !cfFront(choices.frontCdn))
     return (choices.frontCdn ?? 'none') === 'none'
-      ? '前段の CDN が要る（先に前段の CDN を選ぶ）'
-      : 'API の応答のキャッシュは Cloudflare の前段だけで扱う（先に前段を Cloudflare にする）';
+      ? '前段の CDN が要ります（先に前段の CDN を選びます）'
+      : 'API の応答のキャッシュは Cloudflare の前段だけで扱います（先に前段を Cloudflare にします）';
   if (
     slot === 'frontCdn' &&
     !cfFront(option) &&
     (choices.apiCache ?? 'none') !== 'none'
   )
-    return 'API の応答を前段の CDN でキャッシュしている（先にキャッシュを外す）';
+    return 'API の応答を前段の CDN でキャッシュしています（先にキャッシュを外します）';
   return null;
 }
 
@@ -90,16 +90,16 @@ function apiConflict(
 ): string | null {
   const elsewhere = apiPlacedElsewhere(choices);
   if (slot === 'db' && elsewhere)
-    return 'API を他の事業者に置いているので、DB はその事業者の部品になる（構成の DB は選べない）';
+    return 'API を他の事業者に置いているので、DB はその事業者の部品になります（構成の DB は選べません）';
   if (slot === 'apiCache' && option !== 'none' && elsewhere)
-    return 'API を他の事業者に置いているので、この事業者の API の応答のキャッシュは効かない';
+    return 'API を他の事業者に置いているので、この事業者の API の応答のキャッシュは効きません';
   if (slot === 'images' && option === 'd1' && elsewhere)
-    return 'API を他の事業者に置いているので、画像を読み出す Worker の API が無い';
+    return 'API を他の事業者に置いているので、画像を読み出す Worker の API がありません';
   if (slot === 'api' && option !== 'same') {
     if ((choices.apiCache ?? 'none') !== 'none')
-      return 'API の応答のキャッシュを使っている（先にキャッシュを外す）';
+      return 'API の応答のキャッシュを使っています（先にキャッシュを外します）';
     if (platform === 'cloudflare' && choices.images === 'd1')
-      return '画像を D1 に置いている（読み出す Worker の API が無くなる。先に画像の置き場を替える）';
+      return '画像を D1 に置いています（読み出す Worker の API が無くなります。先に画像の置き場を替えます）';
   }
   return null;
 }
@@ -132,13 +132,13 @@ function cdnPlanConflict(
   const flat = (v: string | undefined) => v !== undefined && v !== 'payg';
   if (slot === 'cdnPlan')
     return flat(option) && !hasCloudFront(platform, choices, framework)
-      ? 'この構成には CloudFront が無い（前段の CloudFront が無く、画像も他の事業者から配る）ので、CDN の料金のプランは効かない'
+      ? 'この構成には CloudFront がありません（前段の CloudFront が無く、画像も他の事業者から配る）ので、CDN の料金のプランは効きません'
       : null;
   if (!flat(choices.cdnPlan)) return null;
   const next = { ...choices, [slot]: option };
   return hasCloudFront(platform, choices, framework) &&
     !hasCloudFront(platform, next, framework)
-    ? 'CloudFront が無くなり、定額のプランが効かなくなる（先に CDN の料金のプランを従量に戻す）'
+    ? 'CloudFront が無くなり、定額のプランが効かなくなります（先に CDN の料金のプランを従量に戻します）'
     : null;
 }
 

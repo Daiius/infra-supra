@@ -49,7 +49,7 @@ describe('予告の有無（D-28）', () => {
     const s = until(buzz.month, 42);
     const e = eventIn(s, buzz.month, 'buzz');
     expect(e.announced).toBe(false);
-    expect(e.text).toContain('前兆はなかった');
+    expect(e.text).toContain('前兆はありませんでした');
     expect(s.history[buzz.month - 2]!.events.some((x) => x.id === 'buzz')).toBe(
       false,
     );

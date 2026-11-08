@@ -115,26 +115,26 @@ export function withoutUnusedEmail(
 }
 
 const SES_NOTE =
-  'Amazon SES の API（か SMTP）で送る。à la carte で 1,000 通 $0.10 で、無料の通数も 1 日の上限の料金の段も無い。' +
-  '新しいアカウントは Essentials（1,000 通 $0.16）で始まるので、à la carte に切り替えておく（すぐ効く）。送る元のドメインの認証（DNS のレコード）を設定する';
+  'Amazon SES の API（か SMTP）で送ります。à la carte で 1,000 通 $0.10 で、無料の通数も 1 日の上限の料金の段もありません。' +
+  '新しいアカウントは Essentials（1,000 通 $0.16）で始まるので、à la carte に切り替えておきます（すぐ効く）。送る元のドメインの認証（DNS のレコード）を設定します';
 const NO_OWN =
-  'Supabase Auth の組み込みのメールはチームのメンバーにしか送れない（1 時間 2 通）ので、本番は外の送信のサービスを使う。';
+  'Supabase Auth の組み込みのメールはチームのメンバーにしか送れない（1 時間 2 通）ので、本番は外の送信のサービスを使います。';
 
 /** 構成の既定の送信の説明（事業者ごと。何で送り、どこで止まる・払うか）。 */
 const DEFAULT_EMAIL: Record<Platform, { label: string; note: string }> = {
   cloudflare: {
     label: '構成の既定（Email Service。Free は Amazon SES）',
     note:
-      'Cloudflare の Email Service（ベータ）で Worker から送る。Workers Paid は月 3,000 通まで込み、超えた分は 1,000 通 $0.35。' +
-      'Workers Free では送信が使えない（確かめた宛先だけ）ので、Free の構成は Amazon SES（1,000 通 $0.10）で送る',
+      'Cloudflare の Email Service（ベータ）で Worker から送ります。Workers Paid は月 3,000 通まで込み、超えた分は 1,000 通 $0.35 です。' +
+      'Workers Free では送信が使えない（確かめた宛先だけ）ので、Free の構成は Amazon SES（1,000 通 $0.10）で送ります',
   },
   aws: {
     label: '構成の既定（Amazon SES）',
-    note: `同じ AWS のアカウントで送る。${SES_NOTE}`,
+    note: `同じ AWS のアカウントで送ります。${SES_NOTE}`,
   },
   'aws-opennext': {
     label: '構成の既定（Amazon SES）',
-    note: `同じ AWS のアカウントで送る。${SES_NOTE}`,
+    note: `同じ AWS のアカウントで送ります。${SES_NOTE}`,
   },
   vercel: {
     label: '構成の既定（Amazon SES）',
@@ -146,11 +146,11 @@ const DEFAULT_EMAIL: Record<Platform, { label: string; note: string }> = {
   },
   gcp: {
     label: '構成の既定（Amazon SES）',
-    note: `Google Cloud に一般向けのメールの送信のサービスは無いので、外の送信のサービスを使う。ここでは ${SES_NOTE}`,
+    note: `Google Cloud に一般向けのメールの送信のサービスは無いので、外の送信のサービスを使います。ここでは ${SES_NOTE}`,
   },
   sakura: {
     label: '構成の既定（Amazon SES）',
-    note: `VPS から自分のメールサーバーで送る形は扱わない（届きやすさの手入れが要る）。ここでは ${SES_NOTE}`,
+    note: `VPS から自分のメールサーバーで送る形は扱いません（届きやすさの手入れが要る）。ここでは ${SES_NOTE}`,
   },
 };
 
@@ -179,8 +179,8 @@ export const EMAIL_PARTS: readonly PartDef[] = [
     as: 'ses',
     label: 'AWS: Amazon SES で送る',
     note:
-      `${SES_NOTE}。AWS のアカウントが 1 つ増え（すでにあれば増えない）、請求が 2 つになる。` +
-      'Cloudflare Free の構成では既定と同じ',
+      `${SES_NOTE}。AWS のアカウントが 1 つ増え（すでにあれば増えない）、請求が 2 つになります。` +
+      'Cloudflare Free の構成では既定と同じです',
     premiseRefs: [],
   },
   {
@@ -193,8 +193,8 @@ export const EMAIL_PARTS: readonly PartDef[] = [
     as: 'resend-free',
     label: 'Resend: Free で送る',
     note:
-      'Resend の API で送る。費用はかからないが、1 日 100 通・月 3,000 通まで。超えるとその日はそれ以上送れない（登録の確認・パスワードの再設定も届かない）。' +
-      'Resend のアカウントが 1 つ増える',
+      'Resend の API で送ります。費用はかかりませんが、1 日 100 通・月 3,000 通までです。超えるとその日はそれ以上送れません（登録の確認・パスワードの再設定も届かない）。' +
+      'Resend のアカウントが 1 つ増えます',
     premiseRefs: ['pool:resend:free:free-daily'],
   },
   {
@@ -207,8 +207,8 @@ export const EMAIL_PARTS: readonly PartDef[] = [
     as: 'resend-pro',
     label: 'Resend: Pro で送る',
     note:
-      'Resend の API で送る。月 $20 で 5 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い。' +
-      'Resend のアカウントが 1 つ増え、請求が 1 つ増える',
+      'Resend の API で送ります。月 $20 で 5 万通まで込み、超えた分は 1,000 通 $0.90 です。1 日の上限はありません。' +
+      'Resend のアカウントが 1 つ増え、請求が 1 つ増えます',
     premiseRefs: ['pool:resend:pro:pro-emails'],
   },
   {
@@ -221,8 +221,8 @@ export const EMAIL_PARTS: readonly PartDef[] = [
     as: 'resend-pro-100k',
     label: 'Resend: Pro（10 万通）で送る',
     note:
-      'Resend の API で送る。月 $35 で 10 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い。' +
-      '月 約 6.7 万通を超えると、5 万通の段（$20）より安い。Resend のアカウントが 1 つ増え、請求が 1 つ増える',
+      'Resend の API で送ります。月 $35 で 10 万通まで込み、超えた分は 1,000 通 $0.90 です。1 日の上限はありません。' +
+      '月 約 6.7 万通を超えると、5 万通の段（$20）より安くなります。Resend のアカウントが 1 つ増え、請求が 1 つ増えます',
     premiseRefs: ['pool:resend:pro-100k:pro-100k-emails'],
   },
 ];

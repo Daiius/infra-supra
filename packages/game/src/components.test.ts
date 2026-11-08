@@ -298,7 +298,7 @@ describe('SLA の打診（SC-5・W-2）', () => {
     });
     const on2gb = playMonth(accepted);
     expect(last(on2gb).contractRevenue).toBe(0);
-    expect(last(on2gb).notes.join()).toContain('契約の収益が入らなかった');
+    expect(last(on2gb).notes.join()).toContain('契約の収益が入りませんでした');
     const on4gb = playMonth(
       applyAction(on2gb, { type: 'plan', stackIndex: VPS_4GB }),
     );

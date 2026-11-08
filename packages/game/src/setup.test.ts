@@ -111,7 +111,7 @@ it('画面に出る文（シナリオの文・出来事・基準プレイの名�
 describe('setupProblem・validSetupChoices', () => {
   it('未選択のスロットがあると始められず、理由にスロットの名前が出る', () => {
     expect(setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {})).toBe(
-      '部品をまだ選んでいない: ISR のキャッシュ・画像・DB・メール送信',
+      '部品をまだ選んでいません: ISR のキャッシュ・画像・DB・メール送信',
     );
     expect(
       setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {
@@ -119,7 +119,7 @@ describe('setupProblem・validSetupChoices', () => {
         images: 'images',
         email: 'default',
       }),
-    ).toBe('部品をまだ選んでいない: DB');
+    ).toBe('部品をまだ選んでいません: DB');
     expect(
       setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {
         isrCache: 'kv',
@@ -198,7 +198,7 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
 
   it('VPS: 前段の CDN なしでは API のキャッシュを選べず、キャッシュ中は前段の CDN を外せない', () => {
     expect(componentConflict('sakura', 'apiCache', 'cdn', {})).toMatch(
-      /前段の CDN が要る/,
+      /前段の CDN が要ります/,
     );
     expect(
       componentConflict('sakura', 'apiCache', 'cdn', { frontCdn: 'none' }),

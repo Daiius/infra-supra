@@ -42,7 +42,7 @@ describe('retryHintsOf', () => {
     expect(st.end?.reason).toBe('outages');
     const hints = retryHintsOf(st);
     expect(hints[0]!.kind).toBe('limit');
-    expect(hints[0]!.what).toMatch(/1〜3 か月目に止まった/);
+    expect(hints[0]!.what).toMatch(/1〜3 か月目に止まりました/);
     expect(hints[0]!.what).toContain('Free');
     expect(hints[0]!.next).toContain('上限の大きいプラン・部品');
   });
@@ -62,7 +62,7 @@ describe('retryHintsOf', () => {
     expect(st.end?.reason).toBe('goal');
     const hints = retryHintsOf(st);
     expect(hints[0]!.kind).toBe('cost');
-    expect(hints[0]!.what).toMatch(/目標 \$1,730 に \$\d+ 足りない/);
+    expect(hints[0]!.what).toMatch(/目標 \$1,730 に \$\d+ 足りません/);
     expect(hints[0]!.what).toContain('基本料（Vercel Pro: 1 席ごと）');
     // 込み分を超えて請求が付いた前提も挙がる
     expect(hints.some((x) => x.kind === 'overage')).toBe(true);
@@ -147,7 +147,7 @@ describe('retryHintsOf', () => {
       }).find((x) => x.kind === 'limit')!;
     const proposal = withCause('c-p-attachments', '添付ファイルの提案');
     expect(proposal.what).toContain(
-      '「添付ファイルの提案」が無ければ越えなかった',
+      '「添付ファイルの提案」が無ければ越えませんでした',
     );
     expect(proposal.next).toContain('受けた提案で保存量が増え');
     expect(proposal.next).not.toContain('一時的');

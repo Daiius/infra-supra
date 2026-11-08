@@ -145,7 +145,7 @@ const PUBLIC_EGRESS_BASIS =
   '土台の処理は既定で公開のインターネットへ出られる: さくらの VPS は固定の IP（転送量は無制限）、Cloud Run は既定で共有の動的な IP の集まりから、Lambda は既定で Lambda が管理する VPC（インターネットに出られる）から。' +
   'Netlify Functions（隠した構成）から外へつなぐ形は Neon（host-compute-neon）と同じ。VPC に入れた Lambda・Cloud Run の VPC の出口を全部に向ける形は NAT が要り（東京の単価が未取得）、扱わない。往復の遅延は計算しない（CP-08）';
 const PUBLIC_EGRESS_NOTE =
-  '土台の処理から DB へ送る問い合わせの転送は数えない（DB の応答は DB の事業者の転送で数える）';
+  '土台の処理から DB へ送る問い合わせの転送は数えません（DB の応答は DB の事業者の転送で数える）';
 const PUBLIC_EGRESS_URLS = [
   'https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html',
   'https://docs.cloud.google.com/run/docs/configuring/networking-best-practices',
@@ -157,13 +157,13 @@ const SAKURA_SPEC = at('2026-11-02', [
 
 /** Vercel から AWS の DB へつなぐときの部品の説明の文（D-114 段 2。how は認証とつなぎ方）。 */
 const VERCEL_AWS_DB_NOTE = (how: string) =>
-  `Vercel の Marketplace で作る。${how}。Vercel の関数と同じリージョンなら DB の応答の転送が安くなる可能性があるが、公式に記載が無く未確認。` +
-  'AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えない';
+  `Vercel の Marketplace で作ります。${how}。Vercel の関数と同じリージョンなら DB の応答の転送が安くなる可能性がありますが、公式に記載が無く未確認です。` +
+  'AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えません';
 
 /** Hyperdrive を中継にするときの部品の説明の文（D-114 段 2b）。 */
 const HYPERDRIVE_NOTE =
-  'Worker から Hyperdrive（Cloudflare の DB の接続のプール。Free は 1 日 10 万クエリまで・Paid は無制限・転送の課金なし）を通し、node-postgres などのドライバーで DB のユーザーとパスワードでつなぐ（自動で足す中継）。' +
-  'Hyperdrive は使っていない接続を最大 10 分保つので、問い合わせが途切れると止まる DB は止まりにくい可能性がある（未確認・計算に入れない）。Hyperdrive の問い合わせのキャッシュは計算に入れていない';
+  'Worker から Hyperdrive（Cloudflare の DB の接続のプール。Free は 1 日 10 万クエリまで・Paid は無制限・転送の課金なし）を通し、node-postgres などのドライバーで DB のユーザーとパスワードでつなぎます（自動で足す中継）。' +
+  'Hyperdrive は使っていない接続を最大 10 分保つので、問い合わせが途切れると止まる DB は止まりにくい可能性があります（未確認・計算に入れない）。Hyperdrive の問い合わせのキャッシュは計算に入れていません';
 
 /**
  * 接続の規則。今の組（D-52・D-65・D-67・D-69・D-71・D-77・D-88・D-95・D-98）を、つながり方ごとにまとめ直したもの。
@@ -264,7 +264,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'Astro は @astrojs/vercel の imageService（本番は Vercel の画像の最適化。remotePatterns は Astro の画像の設定から自動で入る）、Next.js 以外は /_vercel/image（Build Output API の images の remotePatterns）。' +
       'Next.js の静的書き出しは既定のローダーでの最適化が使えない。R2 の公開バケットはカスタムドメインで配れ、R2 の転送は無料。投稿は Vercel の関数が R2 に書く',
     partNote:
-      'Vercel の関数が投稿を R2 に書き（S3 互換の API とアクセスキー）、閲覧のときは Vercel の画像の最適化が R2 のカスタムドメインの URL から原本を取って変換する（next/image の remotePatterns・@astrojs/vercel の imageService・/_vercel/image）',
+      'Vercel の関数が投稿を R2 に書き（S3 互換の API とアクセスキー）、閲覧のときは Vercel の画像の最適化が R2 のカスタムドメインの URL から原本を取って変換します（next/image の remotePatterns・@astrojs/vercel の imageService・/_vercel/image）',
     sources: [
       ...at('2026-11-04', [
         'https://vercel.com/docs/image-optimization',
@@ -291,7 +291,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'Vercel の関数は OIDC で AWS の一時的な認証を得られ（全プラン）、S3 の API（SDK）で書ける。S3 はインターネットからの受信に課金しない。' +
       'CloudFront は S3 をオリジンにし、オリジンのアクセス制御（OAC）で CloudFront からだけ読ませる。S3 から CloudFront への転送は無料',
     partNote:
-      'Vercel の関数が OIDC の一時的な認証で S3 に書く。AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えない',
+      'Vercel の関数が OIDC の一時的な認証で S3 に書きます。AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えません',
     sources: [
       ...at('2026-11-04', [
         'https://aws.amazon.com/s3/pricing/',
@@ -310,7 +310,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'S3 の API（SDK・署名した HTTPS）はどこからでも呼べ、Netlify Functions・Cloud Run は IAM のアクセスキー（環境変数・Secret に置く）で書く。S3 はインターネットからの受信に課金しない。' +
       '送るデータは土台の送り出しの項目（Netlify の転送量・Cloud Run の Premium Tier）で数える。CloudFront は S3 をオリジンにし（OAC）、S3 から CloudFront への転送は無料',
     partNote:
-      '土台の関数が IAM のアクセスキーで S3 に書く。AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えない',
+      '土台の関数が IAM のアクセスキーで S3 に書きます。AWS のアカウントは既定のメールの送信（Amazon SES）と同じなので増えません',
     sources: at('2026-11-04', [
       'https://aws.amazon.com/s3/pricing/',
       'https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html',
@@ -481,7 +481,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'TCP でつなぐなら serverless の関数には接続のプール（PgBouncer）が推奨。Vercel の Marketplace に Neon があり、新しく作ると請求は Vercel にまとまる（ここでは Neon に直接払う形で数える）。' +
       'Netlify Functions からも同じ（Netlify 自身の Postgres（Netlify Database・クレジットで課金）は扱っていない）。' +
       'Neon の AWS のリージョンに東京は無く、近いのはシンガポール（往復の遅延は計算しない。AX-13・AX-14）',
-    partNote: '関数から serverless driver（HTTP）で問い合わせる',
+    partNote: '関数から serverless driver（HTTP）で問い合わせます',
     sources: at('2026-11-02', [
       'https://neon.com/docs/serverless/serverless-driver',
       'https://neon.com/docs/connect/connection-pooling',
@@ -503,7 +503,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'Vercel の Marketplace に DynamoDB があり、請求は AWS（「All billing is handled directly through AWS」。料金は AWS の料金表）。中継（Static IPs・NAT）は要らない。' +
       '関数の地域と DB の地域の違い（Vercel の関数の既定は iad1）による遅延は計算しない（CP-08）',
     partNote: VERCEL_AWS_DB_NOTE(
-      '関数から OIDC の一時的な認証で SDK（HTTPS）を呼ぶ',
+      '関数から OIDC の一時的な認証で SDK（HTTPS）を呼びます',
     ),
     partRefs: ['fact:aws:data-transfer-out:dynamodb-out'],
     sources: at('2026-11-03', [
@@ -526,7 +526,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
     },
     verdict: 'ok',
     partNote: VERCEL_AWS_DB_NOTE(
-      '関数は OIDC の一時的な認証で IAM 認証のトークンを作り、公開のエンドポイントに接続のプールでつなぐ（公開の設定は推測）',
+      '関数は OIDC の一時的な認証で IAM 認証のトークンを作り、公開のエンドポイントに接続のプールでつなぎます（公開の設定は推測）',
     ),
     partRefs: ['fact:aws:data-transfer-out:aurora-out'],
     basis:
@@ -589,7 +589,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
     basis:
       'Hyperdrive の公式の手順（AWS RDS and Aurora）: DB の公開のアクセスを有効にし、セキュリティグループで Cloudflare の IP からの接続を許し、DB のユーザーとパスワードの接続文字列を Hyperdrive に設定する（IAM 認証の記載は無い。私設の網へは Cloudflare Tunnel でもつなげるが扱わない）。' +
       'Hyperdrive は転送に課金しない。DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）。公開の IPv4 のアドレスの時間課金は未確認として数えない（段 2 の Aurora と同じ）',
-    partNote: `${HYPERDRIVE_NOTE}。DB は公開のアクセスを有効にし、Cloudflare の IP からの接続を許す（IAM 認証でなく DB のユーザーとパスワード）`,
+    partNote: `${HYPERDRIVE_NOTE}。DB は公開のアクセスを有効にし、Cloudflare の IP からの接続を許します（IAM 認証でなく DB のユーザーとパスワード）`,
     partRefs: [
       'fact:cloudflare:hyperdrive-paid:',
       'fact:cloudflare:hyperdrive-free:',
@@ -618,8 +618,8 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'DynamoDB の API は署名（Signature Version 4）した HTTP(S) の POST で、Worker の fetch（サブリクエスト）から呼べる。Worker から外への fetch は課金されず、応答を待つ時間は CPU 時間に数えない。' +
       '認証は IAM のアクセスキー（Worker の Secret に置く。Cloudflare から AWS の一時的な認証を得る仕組みは扱わない）。DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）',
     partNote:
-      'Worker から IAM のアクセスキー（Secret に置く）で署名した HTTPS の要求（SDK など）を呼ぶ。中継は要らない。' +
-      '問い合わせ 1 回が Worker のサブリクエスト 1 回になる（1 回の呼び出しで Free は 50・Paid は 10,000 まで。このモデルでは上限に当たるかを見ていない）',
+      'Worker から IAM のアクセスキー（Secret に置く）で署名した HTTPS の要求（SDK など）を呼びます。中継は要りません。' +
+      '問い合わせ 1 回が Worker のサブリクエスト 1 回になります（1 回の呼び出しで Free は 50・Paid は 10,000 まで。このモデルでは上限に当たるかを見ていない）',
     partRefs: ['fact:aws:data-transfer-out:db-out-internet'],
     sources: [
       ...at('2026-11-04', [
@@ -648,7 +648,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
     basis:
       'Neon は公開のエンドポイントに Postgres（TCP・TLS）でつなぎ、サーバーレスの関数には接続のプール（-pooler の接続文字列。PgBouncer・最大 10,000 の接続）を勧める。' +
       PUBLIC_EGRESS_BASIS,
-    partNote: `土台の処理から接続のプール（-pooler の接続文字列）に Postgres のドライバーでつなぐ。${PUBLIC_EGRESS_NOTE}`,
+    partNote: `土台の処理から接続のプール（-pooler の接続文字列）に Postgres のドライバーでつなぎます。${PUBLIC_EGRESS_NOTE}`,
     sources: [
       ...at('2026-11-04', [
         'https://neon.com/docs/connect/connection-pooling',
@@ -671,7 +671,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'Supabase の直接の接続は IPv6 だけ（IPv4 はアドオン）で、共有のプール（Supavisor）はどのプランでも IPv4。サーバーレスの関数は transaction モード（6543）、VM・常駐のコンテナは直接の接続か、IPv4 だけの網からは session モード（5432）。' +
       'プール経由の転送は Shared Pooler Egress として数え、DB の転送と二重に数えない（枠はサービスをまたいで共通）。' +
       PUBLIC_EGRESS_BASIS,
-    partNote: `土台の処理から共有のプール（IPv4。関数は transaction モード・VPS とコンテナは session モード）に Postgres のドライバーでつなぐ。${PUBLIC_EGRESS_NOTE}`,
+    partNote: `土台の処理から共有のプール（IPv4。関数は transaction モード・VPS とコンテナは session モード）に Postgres のドライバーでつなぎます。${PUBLIC_EGRESS_NOTE}`,
     sources: [
       ...at('2026-11-04', [
         'https://supabase.com/docs/guides/database/connecting-to-postgres',
@@ -696,7 +696,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'DynamoDB の API は署名（Signature Version 4）した HTTPS の要求で、どこからでも呼べる。土台の処理は IAM のアクセスキー（環境変数・Secret に置く）で SDK を呼ぶ。DynamoDB は受信に課金しない。' +
       'DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）。' +
       PUBLIC_EGRESS_BASIS,
-    partNote: `土台の処理から IAM のアクセスキーで署名した HTTPS の要求（SDK）を呼ぶ。中継は要らない。${PUBLIC_EGRESS_NOTE}`,
+    partNote: `土台の処理から IAM のアクセスキーで署名した HTTPS の要求（SDK）を呼びます。中継は要りません。${PUBLIC_EGRESS_NOTE}`,
     partRefs: ['fact:aws:data-transfer-out:db-out-internet'],
     sources: [
       ...at('2026-11-04', [
@@ -725,7 +725,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       '土台の処理の送り元の IP は決まっていない（固定の IP は中継の部品で、扱わない）ので、セキュリティグループは広く開け、DB のユーザーとパスワード（TLS）で守る前提。' +
       'DB の応答は AWS からインターネットへの転送で数える（OUTBOUND）。公開の IPv4 のアドレスの時間課金は未確認として数えない。' +
       PUBLIC_EGRESS_BASIS,
-    partNote: `DB の公開のアクセスを有効にし、セキュリティグループを広く開けて（送り元の IP が決まっていない）、DB のユーザーとパスワードで TLS でつなぐ。${PUBLIC_EGRESS_NOTE}`,
+    partNote: `DB の公開のアクセスを有効にし、セキュリティグループを広く開けて（送り元の IP が決まっていない）、DB のユーザーとパスワードで TLS でつなぎます。${PUBLIC_EGRESS_NOTE}`,
     partRefs: ['fact:aws:data-transfer-out:db-out-internet'],
     sources: [
       ...at('2026-11-04', [

@@ -274,8 +274,8 @@ export function PartChips({
     >
       <p className="text-xs opacity-70">
         {anyCollapsed
-          ? '部品（選んだものは畳んである。押すと選択肢が開く。「構成図から選ぶ」でも選べる）'
-          : '部品（押すと替わる。「構成図から選ぶ」でも選べる）'}
+          ? '部品（選んだものは畳んであります。押すと選択肢が開きます。「構成図から選ぶ」でも選べます）'
+          : '部品（押すと替わります。「構成図から選ぶ」でも選べます）'}
         {note && <span className="block">{note}</span>}
       </p>
       <div className="flex min-w-0 flex-wrap gap-1">
@@ -960,7 +960,7 @@ export function SetupCostPreview({
         <div className="mt-1">
           <p className="font-bold">
             1
-            か月目に当たる上限（止まる・遅くなる分、収益の見込みを減らしている）
+            か月目に達する上限（止まる・遅くなる分、収益の見込みを減らしている）
           </p>
           <ul className="mt-1 list-disc pl-5 text-xs">
             {e.blocking.map((b) => (
@@ -976,7 +976,7 @@ export function SetupCostPreview({
         <div className="mt-1">
           <p className="font-bold">
             1
-            か月目に当たるメールの送信の上限（サイトは止まらないが、超えた日のメールが届かず、機能の満足度が下がる）
+            か月目に達するメールの送信の上限（サイトは止まらないが、超えた日のメールが届かず、機能の満足度が下がる）
           </p>
           <ul className="mt-1 list-disc pl-5 text-xs">
             {e.undelivered.map((b) => (

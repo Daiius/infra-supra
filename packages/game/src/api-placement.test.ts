@@ -99,10 +99,10 @@ describe('依存（始める画面とゲーム中で共通）', () => {
   it('API の応答のキャッシュ・D1 の画像とは同時に選べず、頼る側を先に戻す', () => {
     expect(
       componentConflict('vercel', 'api', 'cf-workers', { apiCache: 'cdn' }),
-    ).toContain('キャッシュを外す');
+    ).toContain('キャッシュを外します');
     expect(
       componentConflict('vercel', 'apiCache', 'cdn', { api: 'cf-workers' }),
-    ).toContain('効かない');
+    ).toContain('効きません');
     expect(
       componentConflict('cloudflare', 'api', 'aws-lambda', { images: 'd1' }),
     ).toContain('D1');

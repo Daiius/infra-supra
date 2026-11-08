@@ -38,8 +38,8 @@ const VINEXT_PRERENDER: Source[] = [
  * 公式の文書は「静的なページ・SSG に対応」までで、compute を呼ばない・課金しないとは書いていない（2026-11-03 の調べ）。
  */
 const STATIC_NO_COMPUTE_ASSUMED: Partial<Record<Platform, string>> = {
-  aws: '。Amplify が静的なページを処理（compute）を通さずに配るとみなすのはゲーム上の仮定（公式の文書は Next.js 15 までの「SSG に対応」までで、配り方・課金の記載は無い）',
-  gcp: '。静的なページを Hosting の CDN が返し Cloud Run を呼ばないとみなすのはゲーム上の仮定（公式の文書は CDN に載った応答は Cloud Run に届かないと書くが、キャッシュの外れ・期限切れは Cloud Run を呼ぶ）',
+  aws: '。Amplify が静的なページを処理（compute）を通さずに配るとみなすのはゲーム上の仮定です（公式の文書は Next.js 15 までの「SSG に対応」までで、配り方・課金の記載は無い）',
+  gcp: '。静的なページを Hosting の CDN が返し Cloud Run を呼ばないとみなすのはゲーム上の仮定です（公式の文書は CDN に載った応答は Cloud Run に届かないと書くが、キャッシュの外れ・期限切れは Cloud Run を呼ぶ）',
 };
 
 /**
@@ -81,7 +81,7 @@ const unverified = (note: string): StrategySupport => ({
 
 /** S5 はどのフレームワークでも作れる（一般的な作り方。API の置き場は D-65・D-69）。ゲーム上の仮定。 */
 const SHELL_API_ANY = yes(
-  'HTML は枠にして、中身をブラウザが API で取る（どのフレームワークでも作れる一般的な形。API の置き場は部品で選ぶ）',
+  'HTML は枠にして、中身をブラウザが API で取ります（どのフレームワークでも作れる一般的な形。API の置き場は部品で選ぶ）',
   [],
 );
 /** S6 の対応を確かめた公式の文書（2026-11-03 取得。prd/13 §8・D-108）。 */
@@ -114,38 +114,38 @@ const AMPLIFY_NEXT: Source = {
 
 /** S6 の数え方の要約（どの組でも同じ。D-108・ゲーム上の仮定）。 */
 const ISLAND_COUNT =
-  '島の CPU はページ全体の SSR の 4 割とみなす（ゲーム上の仮定）';
+  '島の CPU はページ全体の SSR の 4 割とみなします（ゲーム上の仮定）';
 
 /** S6 を全員に同じページに使う数え方はまだ無い（記事の動く部品はコメントの描き方・アイランドで数える。段 4）。 */
 const ISLAND_PUBLIC = no(
-  'このゲームでは、枠 + サーバーの島は人ごとに違うページだけに使う（記事の動く部品はブラウザが API で取る形で数える。段 4）',
+  'このゲームでは、枠 + サーバーの島は人ごとに違うページだけに使います（記事の動く部品はブラウザが API で取る形で数える。段 4）',
 );
 
 /** Astro の Server Islands（D-108）。Cloudflare・Node（VPS）・Netlify はアダプターの頁に明記、Vercel・Cloud Run は仮。 */
 function astroIsland(d: DeployTarget): StrategySupport {
   const how =
-    '`server:defer` の島を、枠とは別の GET のリクエストでサーバーが描く。枠は人ごとに違わないので 1 日の期限でキャッシュし、島は人ごとに違うのでキャッシュしない（props が 2,048 バイトを超えると POST になり、どのみちキャッシュされない）。' +
+    '`server:defer` の島を、枠とは別の GET のリクエストでサーバーが描きます。枠は人ごとに違わないので 1 日の期限でキャッシュし、島は人ごとに違うのでキャッシュしません（props が 2,048 バイトを超えると POST になり、どのみちキャッシュされない）。' +
     ISLAND_COUNT;
   switch (d.platform) {
     case 'cloudflare':
       return yes(
-        `${how}。@astrojs/cloudflare の頁が server islands を含めて配れると書く`,
+        `${how}。@astrojs/cloudflare の頁が server islands を含めて配れると書いています`,
         [ASTRO_ISLANDS, astroAdapter('cloudflare')],
       );
     case 'sakura':
-      return yes(`${how}。@astrojs/node の頁が server islands に対応と書く`, [
-        ASTRO_ISLANDS,
-        astroAdapter('node'),
-      ]);
+      return yes(
+        `${how}。@astrojs/node の頁が server islands に対応と書いています`,
+        [ASTRO_ISLANDS, astroAdapter('node')],
+      );
     case 'netlify':
       return yes(
-        `${how}。@astrojs/netlify の頁が server islands の skew protection を設定すると書く`,
+        `${how}。@astrojs/netlify の頁が server islands の skew protection を設定すると書いています`,
         [ASTRO_ISLANDS, astroAdapter('netlify')],
       );
     case 'vercel':
       return {
         ...yes(
-          `${how}。@astrojs/vercel の頁は機能の一つとして触れるだけで、Server Islands の頁の「どのホストでも動く」から使えるとみなす（ゲーム上の仮定）`,
+          `${how}。@astrojs/vercel の頁は機能の一つとして触れるだけで、Server Islands の頁の「どのホストでも動く」から使えるとみなします（ゲーム上の仮定）`,
           [ASTRO_ISLANDS, astroAdapter('vercel')],
         ),
         basis: 'assumption',
@@ -153,41 +153,43 @@ function astroIsland(d: DeployTarget): StrategySupport {
     case 'gcp':
       return {
         ...yes(
-          `${how}。Cloud Run の Node のアダプターは VPS と同じとみなす（Cloud Run の頁は取得していない。ゲーム上の仮定）`,
+          `${how}。Cloud Run の Node のアダプターは VPS と同じとみなします（Cloud Run の頁は取得していない。ゲーム上の仮定）`,
           [ASTRO_ISLANDS, astroAdapter('node')],
         ),
         basis: 'assumption',
       };
     default:
-      return unverified('Astro の Server Islands をこの事業者で確かめていない');
+      return unverified(
+        'Astro の Server Islands をこの事業者で確かめていません',
+      );
   }
 }
 
 /** Next.js の PPR（16 の cacheComponents。D-108）。Vercel・Node の standalone・Cloud Run は ✓、vinext・Amplify は ✗。 */
 function nextIsland(d: DeployTarget): StrategySupport {
   const how =
-    'Partial Prerendering（Next.js 16 の cacheComponents の既定）。静的な枠を先に流し、人ごとに違う部分を同じ応答の中で続けて描く。枠を CDN から配るかはアダプターしだいなので、閲覧ごとに処理を通して島の分だけ描くとみなす（origin だけの形）。' +
+    'Partial Prerendering（Next.js 16 の cacheComponents の既定）。静的な枠を先に流し、人ごとに違う部分を同じ応答の中で続けて描きます。枠を CDN から配るかはアダプターしだいなので、閲覧ごとに処理を通して島の分だけ描くとみなします（origin だけの形）。' +
     ISLAND_COUNT;
   switch (d.platform) {
     case 'vercel':
     case 'sakura':
     case 'gcp':
       return yes(
-        `${how}。next start（Node）が PPR・Cache Components を扱う（Node のランタイムが要る）`,
+        `${how}。next start（Node）が PPR・Cache Components を扱います（Node のランタイムが要る）`,
         NEXT_PPR,
       );
     case 'cloudflare':
       return no(
-        'vinext は cacheComponents の挙動がまだ不完全（README: partial shells・resume behavior が Next.js と合わない）',
+        'vinext は cacheComponents の挙動がまだ不完全です（README: partial shells・resume behavior が Next.js と合わない）',
         VINEXT_PRERENDER.slice(0, 1),
       );
     case 'aws':
       return no(
-        'Amplify は Next.js 15 まで（PPR を既定にした cacheComponents は 16）',
+        'Amplify は Next.js 15 までです（PPR を既定にした cacheComponents は 16）',
         [AMPLIFY_NEXT],
       );
     default:
-      return unverified('Next.js の PPR をこの事業者で確かめていない');
+      return unverified('Next.js の PPR をこの事業者で確かめていません');
   }
 }
 
@@ -217,7 +219,7 @@ const NEXT_SELF_HOSTING: Source = {
 
 /** 部品ごとにキャッシュの数え方の要約（D-111・ゲーム上の仮定）。 */
 const CACHE_COMPONENTS_COUNT =
-  '人ごとに違うページは、穴を描く CPU をページ全体の SSR の 4 割、DB の問い合わせを全員に同じ部品の分（3 分の 1）を除いた残りとみなす。全員に同じページは ISR と同じ数え方（期限かタグかは再検証の設定）（ゲーム上の仮定）';
+  '人ごとに違うページは、穴を描く CPU をページ全体の SSR の 4 割、DB の問い合わせを全員に同じ部品の分（3 分の 1）を除いた残りとみなします。全員に同じページは ISR と同じ数え方です（期限かタグかは再検証の設定。ゲーム上の仮定）';
 
 /**
  * 部品ごとにキャッシュ（Next.js 16 の Cache Components。D-111）。Vercel は枠を全体の ISR のキャッシュと地域の CDN に置き、
@@ -228,31 +230,31 @@ function nextCacheComponents(d: DeployTarget): StrategySupport {
   switch (d.platform) {
     case 'vercel':
       return yes(
-        `Vercel は静的な枠（キャッシュした部品を含む）を全体の ISR のキャッシュに置いて地域の CDN から返し、人ごとに違う部分を関数で描いて同じ応答で流す（閲覧ごとに関数を呼ぶ）。タグ（revalidateTag・updateTag）で枠を作り直す。${CACHE_COMPONENTS_COUNT}`,
+        `Vercel は静的な枠（キャッシュした部品を含む）を全体の ISR のキャッシュに置いて地域の CDN から返し、人ごとに違う部分を関数で描いて同じ応答で流します（閲覧ごとに関数を呼ぶ）。タグ（revalidateTag・updateTag）で枠を作り直します。${CACHE_COMPONENTS_COUNT}`,
         [...NEXT_CACHE_COMPONENTS, VERCEL_PPR],
       );
     case 'sakura':
       return yes(
-        `next start（1 つの Node のプロセス）が枠をディスクに、'use cache' をメモリに持つ（1 台なのでキャッシュは全員で共有される）。${CACHE_COMPONENTS_COUNT}`,
+        `next start（1 つの Node のプロセス）が枠をディスクに、'use cache' をメモリに持ちます（1 台なのでキャッシュは全員で共有される）。${CACHE_COMPONENTS_COUNT}`,
         [...NEXT_CACHE_COMPONENTS, NEXT_SELF_HOSTING],
       );
     case 'gcp':
       return yes(
-        `Cloud Run の next start が扱う。'use cache' の既定はインスタンスごとのメモリで共有されず、タグで消してもほかのインスタンスには届かない（共有の cacheHandlers は扱わない）。全員に同じページをタグで消す形は Hosting の CDN が消せないのと同じく使えない（期限で取り直す）。${CACHE_COMPONENTS_COUNT}`,
+        `Cloud Run の next start が扱います。'use cache' の既定はインスタンスごとのメモリで共有されず、タグで消してもほかのインスタンスには届きません（共有の cacheHandlers は扱わない）。全員に同じページをタグで消す形は Hosting の CDN が消せないのと同じく使えません（期限で取り直す）。${CACHE_COMPONENTS_COUNT}`,
         [...NEXT_CACHE_COMPONENTS, NEXT_SELF_HOSTING],
       );
     case 'cloudflare':
       return no(
-        "vinext は cacheComponents の挙動がまだ不完全（README: 'use cache' は一部だけ・cache profiles・tags・partial shells が Next.js と合わない）",
+        "vinext は cacheComponents の挙動がまだ不完全です（README: 'use cache' は一部だけ・cache profiles・tags・partial shells が Next.js と合わない）",
         VINEXT_PRERENDER.slice(0, 1),
       );
     case 'aws':
-      return no('Amplify は Next.js 15 まで（Cache Components は 16）', [
+      return no('Amplify は Next.js 15 までです（Cache Components は 16）', [
         AMPLIFY_NEXT,
       ]);
     default:
       return unverified(
-        'Next.js の Cache Components をこの事業者で確かめていない',
+        'Next.js の Cache Components をこの事業者で確かめていません',
       );
   }
 }
@@ -266,17 +268,17 @@ function nextPurge(d: DeployTarget): StrategySupport {
   const ng = opts.filter((o) => !o.onDemandIsr!.ok);
   if (opts.length === 0 || ng.length === 0)
     return yes(
-      'オンデマンドの再検証（revalidatePath・revalidateTag）で、投稿・編集のときにそのページを取り直す',
+      'オンデマンドの再検証（revalidatePath・revalidateTag）で、投稿・編集のときにそのページを取り直します',
       d.sources,
     );
   if (ok.length === 0)
     return no(
-      `ISR のキャッシュ（${ng.map((o) => o.label).join('・')}）を投稿・編集で消して全体に届ける手段が無い`,
+      `ISR のキャッシュ（${ng.map((o) => o.label).join('・')}）を投稿・編集で消して全体に届ける手段がありません`,
       d.sources,
     );
   return {
     ...yes(
-      `ISR のキャッシュの部品で決まる（消せる: ${ok.map((o) => o.label).join('・')}／消せない: ${ng.map((o) => o.label).join('・')}）`,
+      `ISR のキャッシュの部品で決まります（消せる: ${ok.map((o) => o.label).join('・')}／消せない: ${ng.map((o) => o.label).join('・')}）`,
       d.sources,
     ),
     support: 'depends',
@@ -288,20 +290,23 @@ function nextjsRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     'static-build':
       d.platform === 'cloudflare'
         ? yes(
-            'vinext は開発中（README）。prerender: true と staticAssetsAdapter() で記事のページをビルドのときに事前描画し、Worker が静的アセット（ASSETS の binding）から返す（閲覧ごとに Worker のリクエストに数え、CPU はキャッシュから返すのと同じとみなす。ゲーム上の仮定）。新しい記事はビルドし直すまで開けない',
+            'vinext は開発中です（README）。prerender: true と staticAssetsAdapter() で記事のページをビルドのときに事前描画し、Worker が静的アセット（ASSETS の binding）から返します（閲覧ごとに Worker のリクエストに数え、CPU はキャッシュから返すのと同じとみなす。ゲーム上の仮定）。新しい記事はビルドし直すまで開けません',
             VINEXT_PRERENDER,
           )
         : yes(
-            'generateStaticParams で記事のページをビルドのときに静的な HTML にし、dynamicParams = false で一覧に無いページは 404 にする（新しい記事はビルドし直すまで開けない）。ビルドの時間の数え方は静的書き出しと同じとみなす' +
+            'generateStaticParams で記事のページをビルドのときに静的な HTML にし、dynamicParams = false で一覧に無いページは 404 にします（新しい記事はビルドし直すまで開けない）。ビルドの時間の数え方は静的書き出しと同じとみなします' +
               (STATIC_NO_COMPUTE_ASSUMED[d.platform] ?? ''),
             [NEXT_STATIC_PARAMS],
           ),
     'cached-ttl': yes(
-      'ISR（revalidate の期限）。キャッシュの置き場は ISR のキャッシュの部品',
+      'ISR（revalidate の期限）です。キャッシュの置き場は ISR のキャッシュの部品です',
       d.sources,
     ),
     'cached-purge': nextPurge(d),
-    ssr: yes('Server Components を閲覧のたびに描く（動的な描画）', d.sources),
+    ssr: yes(
+      'Server Components を閲覧のたびに描きます（動的な描画）',
+      d.sources,
+    ),
     'shell-api': SHELL_API_ANY,
     'server-island': nextIsland(d),
     'cache-components': nextCacheComponents(d),
@@ -312,21 +317,27 @@ function astroRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
   const c = d.pageCache;
   return {
     'static-build': yes(
-      'prerender でビルドのときに HTML にする（ページごとに選べる）',
+      'prerender でビルドのときに HTML にします（ページごとに選べる）',
       FRAMEWORKS.astro.sources,
     ),
     'cached-ttl': c
-      ? yes(`${c.label} に期限付きでキャッシュする`, d.sources)
-      : no('記事をキャッシュする置き場が無い', d.sources),
+      ? yes(`${c.label} に期限付きでキャッシュします`, d.sources)
+      : no('記事をキャッシュする置き場がありません', d.sources),
     'cached-purge':
       c && c.onDemand
         ? yes(`${c.label}。${c.reason}`, d.sources)
-        : no(c ? c.reason : '記事をキャッシュする置き場が無い', d.sources),
-    ssr: yes('アダプターが閲覧のたびに描く（on-demand rendering）', d.sources),
+        : no(
+            c ? c.reason : '記事をキャッシュする置き場がありません',
+            d.sources,
+          ),
+    ssr: yes(
+      'アダプターが閲覧のたびに描きます（on-demand rendering）',
+      d.sources,
+    ),
     'shell-api': SHELL_API_ANY,
     'server-island': astroIsland(d),
     'cache-components': no(
-      'Cache Components は Next.js 16 の機能（Astro には無い。Astro で近いのは枠 + サーバーの島）',
+      'Cache Components は Next.js 16 の機能です（Astro には無い。Astro で近いのは枠 + サーバーの島）',
       FRAMEWORKS.astro.sources,
     ),
   };
@@ -336,19 +347,19 @@ function nextExportRow(
   d: DeployTarget,
 ): Record<RouteStrategyId, StrategySupport> {
   const noServer = no(
-    '静的書き出しにはサーバーが無い（ISR・SSR は使えない）',
+    '静的書き出しにはサーバーがありません（ISR・SSR は使えない）',
     FRAMEWORKS['nextjs-export'].sources,
   );
   return {
     'static-build': yes(
-      "output: 'export' でルートごとの HTML をビルドのときに作る",
+      "output: 'export' でルートごとの HTML をビルドのときに作ります",
       d.sources,
     ),
     'cached-ttl': noServer,
     'cached-purge': noServer,
     ssr: noServer,
     'shell-api': yes(
-      'ビルドした HTML の上で Client Component が API で中身を取る',
+      'ビルドした HTML の上で Client Component が API で中身を取ります',
       FRAMEWORKS['nextjs-export'].sources,
     ),
     'server-island': noServer,
@@ -358,7 +369,7 @@ function nextExportRow(
 
 function spaRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
   const noHtml = no(
-    '1 つのシェルとブラウザの JS で描く。ページごとの HTML を作らない（サーバーで描く・ビルドで描くなら別のフレームワーク）',
+    '1 つのシェルとブラウザの JS で描きます。ページごとの HTML を作りません（サーバーで描く・ビルドで描くなら別のフレームワーク）',
     FRAMEWORKS['vite-spa'].sources,
   );
   return {
@@ -367,7 +378,7 @@ function spaRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     'cached-purge': noHtml,
     ssr: noHtml,
     'shell-api': yes(
-      'シェルを静的に配り、中身はブラウザが API で取る',
+      'シェルを静的に配り、中身はブラウザが API で取ります',
       d.sources,
     ),
     'server-island': noHtml,
@@ -386,7 +397,7 @@ export function capabilityRow(
   const d = deployTarget(framework, platform);
   if (!d || d.support === 'unsupported') {
     const x = no(
-      d?.note ?? 'このフレームワークをこの事業者に載せる形が無い',
+      d?.note ?? 'このフレームワークをこの事業者に載せる形がありません',
       d?.sources ?? [],
     );
     return Object.fromEntries(

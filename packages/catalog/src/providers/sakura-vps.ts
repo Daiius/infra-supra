@@ -33,15 +33,15 @@ const annual = (
   kind: 'prepay',
   termMonths: 12,
   payments: [{ payment: 'all-upfront', upfront }],
-  premise: `さくらの VPS ${plan} は 12 か月一括で払うと年額 ${upfront.toLocaleString('en-US')} 円（税込。月額の約 11 か月分）。12 か月一括のままスケールアップすると、上位のプランの 1 年分から今のプランの使っていない分を引いた額を払う`,
+  premise: `さくらの VPS ${plan} は 12 か月一括で払うと年額 ${upfront.toLocaleString('en-US')} 円です（税込。月額の約 11 か月分）。12 か月一括のままスケールアップすると、上位のプランの 1 年分から今のプランの使っていない分を引いた額を払います`,
   interpretation: {
     adopted:
-      '途中で解約・乗り換えても払った年額は戻らないとみる。スケールアップは月の単位で使っていない分を引く（公式は日割り・税抜の年額 / 契約日数）',
+      '途中で解約・乗り換えても払った年額は戻らないとみます。スケールアップは月の単位で使っていない分を引きます（公式は日割り・税抜の年額 / 契約日数）',
     rejected: [
       {
         reading: '解約すると使っていない月の分が戻る',
         reason:
-          '仕様・マニュアルに返金の記載が無い（確かめられない分は戻らない側に置いた）',
+          '仕様・マニュアルに返金の記載がありません（確かめられない分は戻らない側に置いた）',
       },
     ],
   },
@@ -134,7 +134,7 @@ export const sakuraVps: PriceBookInput = {
       sourceIds: ['objectStorage'],
       notes: [
         '標準プランはバケットごとに月 495 円（税込）で、保存 100 GiB・転送 10 GiB・リクエスト 10 万・オブジェクト 10 万まで込み',
-        'バックアップを送る（書き込み）だけなら転送の課金は無い（課金はさくらの外への GET だけ）。リクエスト・オブジェクトの数は 1 日数件で、込みの分に収まるので数えない',
+        'バックアップを送る（書き込み）だけなら転送の課金はありません（課金はさくらの外への GET だけ）。リクエスト・オブジェクトの数は 1 日数件で、込みの分に収まるので数えません',
       ],
       meters: [
         {
@@ -147,7 +147,7 @@ export const sakuraVps: PriceBookInput = {
             'さくらのオブジェクトストレージ（標準プラン）は 100 GiB まで込みで、超えると 10 GiB ごとに 49.5 円（税込）',
           interpretation: {
             adopted:
-              '10 GiB 49.5 円を 1 GB 4.95 円の比例で数え、GiB を GB で数える（10 GiB の区切りの切り上げは数えない）',
+              '10 GiB 49.5 円を 1 GB 4.95 円の比例で数え、GiB を GB で数えます（10 GiB の区切りの切り上げは数えない）',
             rejected: [],
           },
           pricing: { model: 'flat', per: 1, unitPrice: 4.95 },
@@ -179,19 +179,19 @@ export const sakuraVps: PriceBookInput = {
         {
           id: 'next-fs-cache',
           premise:
-            'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動く（CDN を前に置くときや複数台では設定が要る）',
+            'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動きます（CDN を前に置くときや複数台では設定が要る）',
           sourceIds: ['nextSelfHosting'],
         },
         {
           id: 'astro-memory-cache',
           premise:
-            'Astro の route caching（astro@7.0.0）は Node 向けにメモリのキャッシュ（memoryCache()）を組み込みで持ち、cache.invalidate でタグ・パス（完全一致）を消せる。1 台の Node のメモリなので、再起動で消える',
+            'Astro の route caching（astro@7.0.0）は Node 向けにメモリのキャッシュ（memoryCache()）を組み込みで持ち、cache.invalidate でタグ・パス（完全一致）を消せます。1 台の Node のメモリなので、再起動で消えます',
           sourceIds: ['astroCaching'],
         },
         {
           id: 'scale-up',
           premise:
-            'さくらの VPS の上位プランへの変更（スケールアップ）はサーバーを停止して行い、増えたディスクを OS に認識させる作業は利用者が行う（growpart・resize2fs など）',
+            'さくらの VPS の上位プランへの変更（スケールアップ）はサーバーを停止して行い、増えたディスクを OS に認識させる作業は利用者が行います（growpart・resize2fs など）',
           sourceIds: ['scaleup', 'diskExpansion'],
         },
       ],
@@ -203,14 +203,14 @@ export const sakuraVps: PriceBookInput = {
           name: 'ストレージ変更オプション',
           oneTimeFee: 2_200,
           premise:
-            'さくらの VPS のストレージ変更オプションは、変更手数料 2,200 円（税込）を一度だけ払い、月額はそのままでストレージを 100 GB から 200 GB に永続的に増やす（利用中のサーバーはスケールアップから申し込む。性能差が出る場合があると記載）',
+            'さくらの VPS のストレージ変更オプションは、変更手数料 2,200 円（税込）を一度だけ払い、月額はそのままでストレージを 100 GB から 200 GB に永続的に増やします（利用中のサーバーはスケールアップから申し込む。性能差が出る場合があると記載）',
           interpretation: {
             adopted:
               '戻せない（「永続的に増加させる」とあり、解約・戻す手順の記載なし）',
             rejected: [
               {
                 reading: '後から外せる',
-                reason: '外す・戻す方法の記載が無い',
+                reason: '外す・戻す方法の記載がありません',
               },
             ],
           },
@@ -247,19 +247,19 @@ export const sakuraVps: PriceBookInput = {
         {
           id: 'next-fs-cache',
           premise:
-            'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動く（CDN を前に置くときや複数台では設定が要る）',
+            'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動きます（CDN を前に置くときや複数台では設定が要る）',
           sourceIds: ['nextSelfHosting'],
         },
         {
           id: 'astro-memory-cache',
           premise:
-            'Astro の route caching（astro@7.0.0）は Node 向けにメモリのキャッシュ（memoryCache()）を組み込みで持ち、cache.invalidate でタグ・パス（完全一致）を消せる。1 台の Node のメモリなので、再起動で消える',
+            'Astro の route caching（astro@7.0.0）は Node 向けにメモリのキャッシュ（memoryCache()）を組み込みで持ち、cache.invalidate でタグ・パス（完全一致）を消せます。1 台の Node のメモリなので、再起動で消えます',
           sourceIds: ['astroCaching'],
         },
         {
           id: 'no-smaller-disk',
           premise:
-            'さくらの VPS は、今よりディスク容量が少ないプランへは変更できない（下位のプランにするには契約し直してデータを移す）',
+            'さくらの VPS は、今よりディスク容量が少ないプランへは変更できません（下位のプランにするには契約し直してデータを移す）',
           sourceIds: ['scaleup'],
         },
       ],
@@ -271,14 +271,14 @@ export const sakuraVps: PriceBookInput = {
           name: 'ストレージ変更オプション',
           oneTimeFee: 4_400,
           premise:
-            'さくらの VPS のストレージ変更オプションは、変更手数料 4,400 円（税込）を一度だけ払い、月額はそのままでストレージを 200 GB から 400 GB に永続的に増やす（利用中のサーバーはスケールアップから申し込む。性能差が出る場合があると記載）',
+            'さくらの VPS のストレージ変更オプションは、変更手数料 4,400 円（税込）を一度だけ払い、月額はそのままでストレージを 200 GB から 400 GB に永続的に増やします（利用中のサーバーはスケールアップから申し込む。性能差が出る場合があると記載）',
           interpretation: {
             adopted:
               '戻せない（「永続的に増加させる」とあり、解約・戻す手順の記載なし）',
             rejected: [
               {
                 reading: '後から外せる',
-                reason: '外す・戻す方法の記載が無い',
+                reason: '外す・戻す方法の記載がありません',
               },
             ],
           },

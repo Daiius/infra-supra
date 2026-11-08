@@ -64,7 +64,7 @@ export function MissingParts({
       {missing.length > 0 && (
         <div className="flex flex-col items-end gap-1.5" data-missing-parts>
           <p className="text-right text-sm" role="status">
-            部品をまだ選んでいない:{' '}
+            部品をまだ選んでいません:{' '}
             {missing.map((x, i) => (
               <Fragment key={x.slot}>
                 {i > 0 && '・'}
@@ -93,7 +93,7 @@ export function MissingParts({
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              title="未選択のスロットを、この構成の既定の部品で埋める（選んだ部品は替えない）"
+              title="未選択のスロットを、この構成の既定の部品で埋めます（選んだ部品は替えません）"
               onClick={() => {
                 // 埋めた選択を描き終えてから（「運営を始める」が押せるようになってから）フォーカスを移す
                 flushSync(fill);
@@ -201,8 +201,8 @@ function MissingPartsDialog({
             </form>
           </div>
           <p className="mt-1 text-xs opacity-70">
-            まだ選んでいないスロットだけを並べる。①
-            インフラの構成のカードで選ぶのと同じ（始める前なので手間はかからない）。
+            まだ選んでいないスロットだけを並べています。①
+            インフラの構成のカードで選ぶのと同じです（始める前なので手間はかかりません）。
           </p>
           <div className="mt-3">
             <PartChips
@@ -218,7 +218,7 @@ function MissingPartsDialog({
             <p className="mr-auto text-sm" role="status">
               {remaining > 0
                 ? `残り ${remaining} 個`
-                : 'すべて選んだ。閉じると「運営を始める」を押せる'}
+                : 'すべて選びました。閉じると「運営を始める」を押せます'}
             </p>
             {remaining > 0 && (
               <button

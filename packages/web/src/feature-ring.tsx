@@ -138,7 +138,7 @@ export function featureStageView(
   if (actual && actual !== ratioStage)
     return {
       stage: actual,
-      note: `（メールが届かない分で下がった。機能開発だけなら${STAGE_LABEL[ratioStage]}）`,
+      note: `（メールが届かない分で下がりました。機能開発だけなら${STAGE_LABEL[ratioStage]}です）`,
     };
   return { stage: actual ?? ratioStage, note: note ?? '' };
 }

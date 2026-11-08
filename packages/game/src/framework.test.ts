@@ -373,7 +373,7 @@ describe('インフラの構成を先に選んだときのフレームワーク�
   it('載せられない理由は DeployTarget の説明を添える', () => {
     expect(stackUnsupportedReason(amplify, 'nextjs')).toBeUndefined();
     expect(stackUnsupportedReason(amplify, 'astro')).toMatch(
-      /^公式のアダプターが無く載せられない（Astro の AWS の手順は/,
+      /^公式のアダプターが無く載せられません（Astro の AWS の手順は/,
     );
   });
 });

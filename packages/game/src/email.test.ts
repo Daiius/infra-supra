@@ -212,9 +212,9 @@ describe('メールの送信の上限とメールが届かない月（D-117）',
     expect(m1.revenue).toBeCloseTo(ses.history[0]!.revenue);
     expect(m1.satisfaction.stages.feature).toBe('fair');
     expect(ses.history[0]!.satisfaction.stages.feature).toBe('good');
-    expect(m1.satisfaction.reasons.feature).toContain('届かない日があった');
-    expect(m1.satisfaction.reasons.feature).toMatch(/約 \d+% が届かない/);
-    expect(m1.notes.join(' ')).toContain('サイトは動いている');
+    expect(m1.satisfaction.reasons.feature).toContain('届かない日がありました');
+    expect(m1.satisfaction.reasons.feature).toMatch(/約 \d+% が届きません/);
+    expect(m1.notes.join(' ')).toContain('サイトは動いています');
   });
 
   it('判定の日のメールの半分以上が届かない月は機能が「悪い」、それ未満は 1 段下げる（ゲーム上の仮定）', () => {

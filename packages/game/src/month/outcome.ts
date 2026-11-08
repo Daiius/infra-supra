@@ -108,24 +108,24 @@ export function revenueOf(
     revenue *= 1 - loss.block;
     outages++;
     status = 'down';
-    notes.push('サービスが止まった（前提に当たった）');
+    notes.push('サービスが止まりました（上限に達しました）');
   } else if (c.incident) {
     revenue *= 1 - loss.incident;
     outages++;
     status = 'incident';
     notes.push(
       c.apiOnlyHost
-        ? 'API の VPS の障害で数時間止まった（SLA なし・1 台構成。シェルは出るが中身が読めない）'
-        : 'VPS の障害で数時間止まった（SLA なし・1 台構成）',
+        ? 'API の VPS の障害で数時間止まりました（SLA なし・1 台構成。シェルは出ますが中身が読めません）'
+        : 'VPS の障害で数時間止まりました（SLA なし・1 台構成）',
     );
   } else if (c.throttling.length) {
     revenue *= 1 - loss.throttle;
     status = 'slow';
-    notes.push('遅くなった（前提に近づいた）');
+    notes.push('遅くなりました（上限に近づきました）');
   }
   if (state.switching) {
     revenue *= 1 - loss.migration;
-    notes.push('乗り換えの切り替えで収益が減った');
+    notes.push('乗り換えの切り替えで収益が減りました');
   }
   // 契約の収益（要件を満たす構成の月だけ。SLA の出来事・D-24）
   let contractRevenue = 0;
@@ -142,7 +142,7 @@ export function revenueOf(
       contractRevenue += k.usdPerMonth;
     else
       notes.push(
-        `契約の収益が入らなかった（${REQUIREMENT_LABEL[k.requires]}でない）`,
+        `契約の収益が入りませんでした（${REQUIREMENT_LABEL[k.requires]}でない）`,
       );
   }
   revenue += contractRevenue;
@@ -172,11 +172,11 @@ export function policyOf(
   const accountSuspended = ps.outcome === 'suspended';
   if (ps.outcome === 'warned')
     notes.push(
-      `運営元から指摘が来た（規約違反の警告: ${policy[0]!.text}）。来月も違反したままならアカウントが停止される`,
+      `運営元から指摘が来ました（規約違反の警告: ${policy[0]!.text}）。来月も違反したままならアカウントが停止されます`,
     );
   else if (ps.outcome === 'grace')
     notes.push('規約違反のまま乗り換えの作業中（猶予中）');
   else if (accountSuspended)
-    notes.push('規約違反が続いたため、アカウントが停止された');
+    notes.push('規約違反が続いたため、アカウントが停止されました');
   return { policyWarnedMonth, policyWarning, accountSuspended, notes };
 }

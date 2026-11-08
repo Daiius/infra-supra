@@ -60,7 +60,7 @@ const RDS: Profile = {
       meter: 'backup',
       label: 'RDS の自動バックアップ（保持 7 日）',
     },
-    text: 'RDS の自動バックアップ（コンソールの既定 7 日）で、7 日の任意の時点に戻せる。割り当てた容量（20 GiB から）までは無料',
+    text: 'RDS の自動バックアップ（コンソールの既定 7 日）で、7 日の任意の時点に戻せます。割り当てた容量（20 GiB から）までは無料です',
   },
   pitr: {
     pitrDays: 35,
@@ -73,14 +73,14 @@ const RDS: Profile = {
       meter: 'backup',
       label: 'RDS の自動バックアップ（保持 35 日）',
     },
-    text: '保持を最長の 35 日に延ばす。割り当てた容量を超えた分が $0.095 / GB 月',
+    text: '保持を最長の 35 日に延ばします。割り当てた容量を超えた分が $0.095 / GB 月です',
   },
 };
 
 const AURORA: Profile = {
   default: {
     pitrDays: 1,
-    text: 'Aurora の自動バックアップは既定で保持 1 日（課金なし）。戻せるのは直近 1 日',
+    text: 'Aurora の自動バックアップは既定で保持 1 日です（課金なし）。戻せるのは直近 1 日です',
   },
   pitr: {
     pitrDays: 7,
@@ -92,7 +92,7 @@ const AURORA: Profile = {
       meter: 'backup',
       label: 'Aurora の自動バックアップ（保持 7 日）',
     },
-    text: '保持を 7 日に延ばす。クラスターの大きさを超えた分が $0.023 / GB 月',
+    text: '保持を 7 日に延ばします。クラスターの大きさを超えた分が $0.023 / GB 月です',
   },
 };
 
@@ -102,7 +102,7 @@ const PROFILES: Record<string, Profile> = {
   'aws:dynamodb-on-demand': {
     default: {
       pitrDays: 0,
-      text: 'DynamoDB の PITR は既定で無効（任意の時点には戻せない）',
+      text: 'DynamoDB の PITR は既定で無効です（任意の時点には戻せない）',
     },
     pitr: {
       pitrDays: 35,
@@ -112,13 +112,13 @@ const PROFILES: Record<string, Profile> = {
         meter: 'pitr',
         label: 'DynamoDB の PITR',
       },
-      text: 'PITR を有効にする（35 日）。テーブルの大きさに $0.228 / GB 月',
+      text: 'PITR を有効にします（35 日）。テーブルの大きさに $0.228 / GB 月かかります',
     },
   },
   'aws:aurora-dsql': {
     default: {
       pitrDays: 0,
-      text: 'Aurora DSQL は AWS Backup の全体のバックアップだけで、任意の時点への復元の記載が無い',
+      text: 'Aurora DSQL は AWS Backup の全体のバックアップだけで、任意の時点への復元の記載がありません',
     },
   },
   'gcp:cloud-sql-f1-micro': {
@@ -131,13 +131,13 @@ const PROFILES: Record<string, Profile> = {
         meter: 'backup',
         label: 'Cloud SQL の自動バックアップ（7 つ）',
       },
-      text: 'Cloud SQL の自動バックアップ（既定 7 つ）と PITR（コンソールの既定で有効・ログ 7 日）。使った量に $0.104 / GiB 月',
+      text: 'Cloud SQL の自動バックアップ（既定 7 つ）と PITR（コンソールの既定で有効・ログ 7 日）です。使った量に $0.104 / GiB 月かかります',
     },
   },
   'gcp:firestore-standard': {
     default: {
       pitrDays: 0,
-      text: 'Firestore の PITR は既定で無効（任意の時点には戻せない）',
+      text: 'Firestore の PITR は既定で無効です（任意の時点には戻せない）',
     },
     pitr: {
       pitrDays: 7,
@@ -147,19 +147,19 @@ const PROFILES: Record<string, Profile> = {
         meter: 'pitr',
         label: 'Firestore の PITR',
       },
-      text: 'PITR を有効にする（7 日）。DB の大きさに 約 $0.195 / GiB 月',
+      text: 'PITR を有効にします（7 日）。DB の大きさに 約 $0.195 / GiB 月かかります',
     },
   },
   'supabase:free': {
     default: {
       pitrDays: 0,
-      text: 'Supabase Free にはバックアップが無い（自分でデータを書き出す）。PITR は付けられない',
+      text: 'Supabase Free にはバックアップがありません（自分でデータを書き出す）。PITR は付けられません',
     },
   },
   'supabase:pro-micro': {
     default: {
       pitrDays: 0,
-      text: 'Supabase Pro の日次のバックアップ（7 日分）。戻せるのは毎日の 1 時点だけ（任意の時点には戻せない）',
+      text: 'Supabase Pro の日次のバックアップ（7 日分）です。戻せるのは毎日の 1 時点だけです（任意の時点には戻せない）',
     },
     pitr: {
       pitrDays: 7,
@@ -169,13 +169,13 @@ const PROFILES: Record<string, Profile> = {
         meter: 'pitr',
         label: 'Supabase の PITR（7 日）',
       },
-      text: 'PITR（7 日）のアドオンを付け、compute を Small に上げる。1 時間 $0.137 + Small との差額（月 約 $105）',
+      text: 'PITR（7 日）のアドオンを付け、compute を Small に上げます。1 時間 $0.137 + Small との差額（月 約 $105）かかります',
     },
   },
   'neon:free': {
     default: {
       pitrDays: 0.25,
-      text: 'Neon Free の履歴の窓は 6 時間で延ばせない（課金なし）',
+      text: 'Neon Free の履歴の窓は 6 時間で延ばせません（課金なし）',
     },
   },
   'neon:launch': {
@@ -187,7 +187,7 @@ const PROFILES: Record<string, Profile> = {
         meter: 'history',
         label: 'Neon の履歴（窓 1 日）',
       },
-      text: 'Neon Launch の履歴の窓は既定 1 日。変更の履歴に $0.20 / GB 月',
+      text: 'Neon Launch の履歴の窓は既定 1 日です。変更の履歴に $0.20 / GB 月かかります',
     },
     pitr: {
       pitrDays: 7,
@@ -197,25 +197,25 @@ const PROFILES: Record<string, Profile> = {
         meter: 'history',
         label: 'Neon の履歴（窓 7 日）',
       },
-      text: '履歴の窓を最長の 7 日に延ばす。7 日分の変更の履歴に $0.20 / GB 月',
+      text: '履歴の窓を最長の 7 日に延ばします。7 日分の変更の履歴に $0.20 / GB 月かかります',
     },
   },
   'd1:workers-paid': {
     default: {
       pitrDays: 30,
-      text: 'D1 の Time Travel は常に有効で、直近 30 日の任意の時点に戻せる（追加の費用なし）',
+      text: 'D1 の Time Travel は常に有効で、直近 30 日の任意の時点に戻せます（追加の費用なし）',
     },
   },
   'd1:workers-free': {
     default: {
       pitrDays: 7,
-      text: 'D1 の Time Travel は常に有効で、Free は直近 7 日の任意の時点に戻せる（追加の費用なし）',
+      text: 'D1 の Time Travel は常に有効で、Free は直近 7 日の任意の時点に戻せます（追加の費用なし）',
     },
   },
   kv: {
     default: {
       pitrDays: 0,
-      text: 'KV には過去の時点に戻す仕組みが無い',
+      text: 'KV には過去の時点に戻す仕組みがありません',
     },
   },
 };
@@ -223,7 +223,7 @@ const PROFILES: Record<string, Profile> = {
 const VPS: Profile = {
   default: {
     pitrDays: 0,
-    text: 'さくらの VPS にはバックアップの機能が無い（自分で取らなければ何も残らない）',
+    text: 'さくらの VPS にはバックアップの機能がありません（自分で取らなければ何も残らない）',
   },
   pitr: {
     pitrDays: 7,
@@ -240,7 +240,7 @@ const VPS: Profile = {
       meter: 'storage',
       label: '自前のバックアップ（さくらのオブジェクトストレージ）',
     },
-    text: '日次のダンプとバイナリログを、さくらのオブジェクトストレージに自分で送る（7 日分）。月 495 円（100 GiB まで込み）と、仕組みを作って見張る手間',
+    text: '日次のダンプとバイナリログを、さくらのオブジェクトストレージに自分で送ります（7 日分）。月 495 円（100 GiB まで込み）と、仕組みを作って見張る手間がかかります',
   },
 };
 

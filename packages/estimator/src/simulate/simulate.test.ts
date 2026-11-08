@@ -548,7 +548,7 @@ describe('1 リクエストあたりの CPU の内訳（D-99）', () => {
     expect(hit.hit).toBe(true);
     expect(hit.causes?.map((c) => c.routeId)).toEqual(['mypage']);
     expect(hit.detail).toBe(
-      'マイページ（SSR・CPU 15 ms）が Basic の 1 リクエスト 12 ms を超える。紹介のページは静的なので 関数 を起動しない',
+      'マイページ（SSR・CPU 15 ms）が Basic の 1 リクエスト 12 ms を超えます。紹介のページは静的なので 関数 を起動しません',
     );
     // 当たっていなければ、最も重いもの 1 つと使用率
     const near = estimate({

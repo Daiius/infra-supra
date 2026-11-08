@@ -11,27 +11,27 @@ const FACTS = [
   {
     id: 'region',
     premise:
-      'Neon の AWS のリージョンに東京は無く、アジアはシンガポール（aws-ap-southeast-1）とシドニーだけ。関数を東京に置くと DB との往復がシンガポールまで延びる（往復の遅延は計算していない）',
+      'Neon の AWS のリージョンに東京は無く、アジアはシンガポール（aws-ap-southeast-1）とシドニーだけです。関数を東京に置くと DB との往復がシンガポールまで延びます（往復の遅延は計算していない）',
     sourceIds: ['regions'],
   },
   {
     id: 'serverless-driver',
     premise:
-      '関数からは Neon の serverless driver で HTTP（既定）か WebSocket で問い合わせる。TCP で直接つなぐ場合は接続のプール（PgBouncer。クライアントの接続は 10,000 まで）を使うのが公式の推奨',
+      '関数からは Neon の serverless driver で HTTP（既定）か WebSocket で問い合わせる。TCP で直接つなぐ場合は接続のプール（PgBouncer。クライアントの接続は 10,000 まで）を使うのが公式の推奨です',
     sourceIds: ['driver', 'pooling'],
   },
   {
     id: 'scale-to-zero',
     premise:
-      'Neon の DB は問い合わせが 5 分無いと止まり（scale to zero）、数百 ms で再開する。止まっている間は CU 時間に数えない。Free は止める設定を外せず、Launch は外せる',
+      'Neon の DB は問い合わせが 5 分無いと止まり（scale to zero）、数百 ms で再開します。止まっている間は CU 時間に数えません。Free は止める設定を外せず、Launch は外せます',
     interpretation: {
       adopted:
-        '止める設定のまま運営し、動いている割合は DB に届く件数の到着率から時間帯ごとに出す（Aurora Serverless v2 の 0 ACU と同じ式。夜間・休日に問い合わせが途切れる時間は止まる）',
+        '止める設定のまま運営し、動いている割合は DB に届く件数の到着率から時間帯ごとに出します（Aurora Serverless v2 の 0 ACU と同じ式。夜間・休日に問い合わせが途切れる時間は止まる）',
       rejected: [
         {
           reading: '常に動かしておく（止める設定を外す）',
           reason:
-            '従量の Postgres を選ぶ理由が閲覧の途切れで止まることなので、既定の 5 分のままとみる',
+            '従量の Postgres を選ぶ理由が閲覧の途切れで止まることなので、既定の 5 分のままとみます',
         },
       ],
     },
@@ -40,15 +40,15 @@ const FACTS = [
   {
     id: 'compute-size',
     premise:
-      'Neon の計算の大きさは 0.25 CU（約 1 GB の RAM）から。CU 時間 = 大きさ × 動いている時間（0.25 CU を 4 時間で 1 CU 時間）',
+      'Neon の計算の大きさは 0.25 CU（約 1 GB の RAM）からです。CU 時間 = 大きさ × 動いている時間（0.25 CU を 4 時間で 1 CU 時間）',
     interpretation: {
       adopted:
-        '最小の 0.25 CU に固定する（負荷で自動で大きくなる分は計算しない）',
+        '最小の 0.25 CU に固定します（負荷で自動で大きくなる分は計算しない）',
       rejected: [
         {
           reading: '自動の拡大（autoscaling）で負荷に合わせて大きくなる',
           reason:
-            '負荷と CU の関係が公式に無く、比べている他の DB（Supabase の Micro）と同じ程度の最小の大きさで見る',
+            '負荷と CU の関係が公式に無く、比べている他の DB（Supabase の Micro）と同じ程度の最小の大きさで見ます',
         },
       ],
     },
@@ -96,7 +96,7 @@ export const neon: PriceBookInput = {
       period: 'month',
       scope: 'node',
       premise:
-        'Neon Free は 1 プロジェクト月 100 CU 時間まで（0.25 CU なら 400 時間）。使い切ると次の月まで DB が止まる',
+        'Neon Free は 1 プロジェクト月 100 CU 時間までです（0.25 CU なら 400 時間）。使い切ると次の月まで DB が止まります',
       sourceIds: ['pricing', 'plans'],
     },
     {
@@ -106,7 +106,7 @@ export const neon: PriceBookInput = {
       period: 'month',
       scope: 'node',
       premise:
-        'Neon Free の公開の転送は 1 プロジェクト月 5 GB まで。使い切ると次の月まで DB が止まる',
+        'Neon Free の公開の転送は 1 プロジェクト月 5 GB までです。使い切ると次の月まで DB が止まります',
       sourceIds: ['pricing', 'plans'],
     },
     {
@@ -131,8 +131,8 @@ export const neon: PriceBookInput = {
       facts: FACTS,
       notes: [
         '保存は 1 プロジェクト 1 GB・アカウント全体で 20 GB まで（超えると保存を増やす書き込みが失敗する）',
-        'DB は 5 分使われないと止まり、止める設定は外せない',
-        'プロジェクトは 100 まで。上限に当たってもデータは消えず、Launch に上げるとすぐ外れる',
+        'DB は 5 分使われないと止まり、止める設定は外せません',
+        'プロジェクトは 100 までです。上限に当たってもデータは消えず、Launch に上げるとすぐ外れます',
         '過去の時点に戻す履歴の窓（instant restore）は 6 時間（1 GB まで）で延ばせず、課金なし（D-93）',
       ],
       meters: [
@@ -144,7 +144,7 @@ export const neon: PriceBookInput = {
           allowancePool: 'free-compute',
           onExceed: 'block',
           premise:
-            'Neon の計算は CU 時間（大きさ × 動いている時間）で数え、止まっている間は数えない',
+            'Neon の計算は CU 時間（大きさ × 動いている時間）で数え、止まっている間は数えません',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['plans'],
         },
@@ -183,7 +183,7 @@ export const neon: PriceBookInput = {
       facts: FACTS,
       notes: [
         '月の最低額は無く、使った分だけの請求（$0.50 未満の請求は取り立てない）',
-        '支出の上限は無く、設定した額の 80%・100% でメールが届くだけ',
+        '支出の上限は無く、設定した額の 80%・100% でメールが届くだけです',
       ],
       meters: [
         {
@@ -192,7 +192,7 @@ export const neon: PriceBookInput = {
           resource: 'instance-hours',
           unit: 'hour',
           premise:
-            'Neon の計算は CU 時間（大きさ × 動いている時間）で数え、止まっている間は数えない',
+            'Neon の計算は CU 時間（大きさ × 動いている時間）で数え、止まっている間は数えません',
           pricing: { model: 'flat', per: 1, unitPrice: 0.106 },
           sourceIds: ['pricing', 'plans'],
         },
@@ -210,7 +210,7 @@ export const neon: PriceBookInput = {
           resource: 'backup-gb-month',
           unit: 'gb-month',
           premise:
-            'Neon Launch は履歴の窓（既定 1 日・最長 7 日）の間の変更の履歴を残し、その量に $0.20 / GB 月で課金する。窓の中の任意の時点に戻せる',
+            'Neon Launch は履歴の窓（既定 1 日・最長 7 日）の間の変更の履歴を残し、その量に $0.20 / GB 月で課金します。窓の中の任意の時点に戻せます',
           pricing: { model: 'flat', per: 1, unitPrice: 0.2 },
           sourceIds: ['pricing', 'plans', 'restoreWindow'],
         },

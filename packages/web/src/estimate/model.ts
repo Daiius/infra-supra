@@ -969,9 +969,12 @@ export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
               r.components.ogp !== 'prerender'
                 ? {
                     ok: false,
-                    text: 'HTML に中身が無いので、記事ごとの SNS のカードが出ない',
+                    text: 'HTML に中身が無いので、記事ごとの SNS のカードが出ません',
                   }
-                : { ok: true, text: '記事ごとの SNS のカードは HTML に入る' },
+                : {
+                    ok: true,
+                    text: '記事ごとの SNS のカードは HTML に入ります',
+                  },
           }
         : {}),
       cpu: cpuHit.length

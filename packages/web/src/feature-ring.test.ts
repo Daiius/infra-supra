@@ -6,7 +6,7 @@ describe('featureStageView', () => {
   it('実際の段階が機能開発の比だけの段階と違えば、実際の段階と理由を出す', () => {
     expect(featureStageView('good', 'fair')).toEqual({
       stage: 'fair',
-      note: '（メールが届かない分で下がった。機能開発だけなら良い）',
+      note: '（メールが届かない分で下がりました。機能開発だけなら良いです）',
     });
   });
 

@@ -42,7 +42,7 @@ import type { ResolvedPage } from './page-wireframes.tsx';
 
 /** 構成図の注記（始める画面・見積モードで同じ文）。 */
 export const DIAGRAM_NOTE =
-  '構成図は費用の計算に使う構成（部品と、リクエストが通る順）から描く。線の色は流れの種類で、凡例を押すとその流れだけが目立つ。';
+  '構成図は費用の計算に使う構成（部品と、リクエストが通る順）から描いています。線の色は流れの種類で、凡例を押すとその流れだけが目立ちます。';
 
 /** 流れの色（見取り図の作られ方の色にそろえる）。 */
 const LANE_COLOR: Readonly<Record<LaneId, string>> = {
@@ -135,7 +135,7 @@ const GHOST_DASH = '4 3';
 const GHOST_OPACITY = 0.5;
 /** 幽霊の箱の吹き出しの説明。 */
 const GHOST_NOTE =
-  '今の選択は、課金される部品を図に持たない（別の部品の中で働くか、使わない）。箱だけを点線で残し、経路の線は引かない。';
+  '今の選択は、課金される部品を図に持ちません（別の部品の中で働くか、使わない）。箱だけを点線で残し、経路の線は引きません。';
 
 /** 幽霊の箱の吹き出しの中身（スロットの名前・今の選択・説明）。 */
 function GhostDetail({ n }: { n: DiagramNode }) {
@@ -431,16 +431,16 @@ export function SystemDiagram({
       </div>
       {tall && (
         <p className="text-xs opacity-60">
-          狭い幅なので縦に並べた。箱を押すと、事業者・種類・通る流れが出る。
-          {parts && '⇄ の箱では部品も替えられる。'}
-          {unselectedAny && '! の箱はまだ選んでいない。'}
+          狭い幅なので縦に並べました。箱を押すと、事業者・種類・通る流れが出ます。
+          {parts && '⇄ の箱では部品も替えられます。'}
+          {unselectedAny && '! の箱はまだ選んでいません。'}
         </p>
       )}
       {!tall && parts && (
         <p className="text-xs opacity-60">
-          ⇄ の付いた箱を押すと、その部品を替えられる。
+          ⇄ の付いた箱を押すと、その部品を替えられます。
           {unselectedAny &&
-            '! の付いた箱はまだ選んでいない（既定の部品の名前で描いている）。'}
+            '! の付いた箱はまだ選んでいません（既定の部品の名前で描いています）。'}
         </p>
       )}
       {caption && <p className="text-xs opacity-60">{caption}</p>}

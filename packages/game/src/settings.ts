@@ -43,7 +43,7 @@ export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
  * タグで再検証するデータに revalidate: 3600 を併せて付けた例（unstable_cache）があることまで。
  */
 export const ON_DEMAND_MAX_AGE_NOTE =
-  '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多い（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがある）。このゲームでは 1 日とみなし、その分の再生成も数える';
+  '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多いです（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがあります）。このゲームでは 1 日とみなし、その分の再生成も数えます';
 
 /**
  * 画像の形式ごとの 1 枚の大きさ（KB。同じ見た目の画質。D-58）。JPEG はテンプレートの 150 KB。
@@ -106,12 +106,12 @@ export function fixedImageFormat(
   if (usesNextImage(platform, framework, images))
     return {
       format: 'webp',
-      how: 'Next.js の画像の部品（next/image）がブラウザに合わせて WebP で配る（images.formats の既定）',
+      how: 'Next.js の画像の部品（next/image）がブラウザに合わせて WebP で配ります（images.formats の既定）',
     };
   if (astroImage(platform, framework, images))
     return {
       format: 'webp',
-      how: 'Astro の画像の部品（<Image />）が既定で WebP を作る',
+      how: 'Astro の画像の部品（<Image />）が既定で WebP を作ります',
     };
   if (
     framework === 'astro' &&
@@ -120,7 +120,7 @@ export function fixedImageFormat(
   )
     return {
       format: 'webp',
-      how: 'Astro の画像の部品（<Image />）が既定で WebP を頼む（Images のバインディングがその指定どおりに変換するとみなす。文書に記載は無い）',
+      how: 'Astro の画像の部品（<Image />）が既定で WebP を頼みます（Images のバインディングがその指定どおりに変換するとみなします。文書に記載はありません）',
     };
   return undefined;
 }
@@ -148,7 +148,7 @@ export const SETTINGS = {
     label: '画像の形式',
     field: 'imageKB',
     effort: EFFORT.setting.format,
-    note: '同じ見た目の画質のまま、画像を小さくする形式（転送量・保存量・速さに効き、画質は下がらない）。WebP は同等の SSIM の JPEG より 25〜34% 小さい（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいが、変換に約 50% 長くかかる（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存する。閲覧のときに変換する部品の多くはブラウザに合わせて形式を自分で選ぶので、その部品では選べない（Next.js の next/image・Astro の <Image />・Netlify Image CDN・Bunny Optimizer は WebP、Cloudflare Images の URL の変換（format=auto）は AVIF）。Cloudflare の構成の Images（バインディング）は Worker のコードが形式を選ぶので、ここで選んだ形式で配る',
+    note: '同じ見た目の画質のまま、画像を小さくする形式です（転送量・保存量・速さに効き、画質は下がりません）。WebP は同等の SSIM の JPEG より 25〜34% 小さくなります（Google の WebP の比較の文書）。AVIF は WebP より約 20% 小さいですが、変換に約 50% 長くかかります（Next.js の画像の部品の文書）。古いブラウザ向けに JPEG の代わり（フォールバック）を用意するのが推奨（MDN）で、投稿のときに作って置く構成では JPEG も保存します。閲覧のときに変換する部品の多くはブラウザに合わせて形式を自分で選ぶので、その部品では選べません（Next.js の next/image・Astro の <Image />・Netlify Image CDN・Bunny Optimizer は WebP、Cloudflare Images の URL の変換（format=auto）は AVIF）。Cloudflare の構成の Images（バインディング）は Worker のコードが形式を選ぶので、ここで選んだ形式で配ります',
     options: [
       { value: IMAGE_FORMAT_KB.jpeg, label: 'JPEG（そのまま）' },
       { value: IMAGE_FORMAT_KB.webp, label: 'WebP' },
@@ -159,7 +159,7 @@ export const SETTINGS = {
     label: '画像のサイズ違い',
     field: 'variants',
     effort: EFFORT.setting.variants,
-    note: '画像変換の件数に効く。1 種だと大きい画像を全端末に配るので遅くなる',
+    note: '画像変換の件数に効きます。1 種だと大きい画像を全端末に配るので遅くなります',
     options: [
       { value: 3, label: '3 種' },
       { value: 2, label: '2 種' },
@@ -171,7 +171,7 @@ export const SETTINGS = {
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
     note:
-      '再生成の回数に効く。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がる。オンデマンドは記事の更新のときに再検証する（再生成はおもに更新の回数。ISR のキャッシュの置き場所によっては再検証が届かない。時間からの切り替えは実装の手間がかかる）。' +
+      '再生成の回数に効きます。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がります。オンデマンドは記事の更新のときに再検証します（再生成はおもに更新の回数です。ISR のキャッシュの置き場所によっては再検証が届きません。時間からの切り替えは実装の手間がかかります）。' +
       ON_DEMAND_MAX_AGE_NOTE,
     options: [
       {
@@ -192,7 +192,7 @@ export const SETTINGS = {
     label: 'API のキャッシュの期間',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: 'API の応答のキャッシュを使うときだけ効く。延ばすとヒットが増えて取り直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる',
+    note: 'API の応答のキャッシュを使うときだけ効きます。延ばすとヒットが増えて取り直しが減りますが、記事の更新が遅れて見え、鮮度（満足度）が下がります',
     options: [
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
@@ -208,7 +208,7 @@ export const SETTINGS = {
     label: 'ビルドの間隔',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: '記事の投稿・編集をまとめてビルドし直す間隔。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効く。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、鮮度（満足度）が下がる。新しく投稿された記事は、ビルドが終わるまでページが無い（投稿した人がすぐ開けない）。オンデマンドは記事を更新するたびにビルドする（ビルドの時間より短くはまとまらない）',
+    note: '記事の投稿・編集をまとめてビルドし直す間隔です。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効きます。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、鮮度（満足度）が下がります。新しく投稿された記事は、ビルドが終わるまでページがありません（投稿した人がすぐ開けない）。オンデマンドは記事を更新するたびにビルドします（ビルドの時間より短くはまとまらない）',
     options: [
       {
         value: ON_DEMAND_REVALIDATE,
@@ -229,7 +229,7 @@ export const SETTINGS = {
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
     note:
-      '記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュする。オンデマンドは記事の投稿・編集のときにそのページのキャッシュを消す（Astro の route caching。消せない置き場では届かず、古いページが出る）。時間はキャッシュの期限で、延ばすと描き直しが減るが、記事の更新が遅れて見え、鮮度（満足度）が下がる。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗る（Workers の 1 リクエストの CPU の上限に効く）。' +
+      '記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュします。オンデマンドは記事の投稿・編集のときにそのページのキャッシュを消します（Astro の route caching。消せない置き場では届かず、古いページが出ます）。時間はキャッシュの期限で、延ばすと描き直しが減りますが、記事の更新が遅れて見え、鮮度（満足度）が下がります。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗ります（Workers の 1 リクエストの CPU の上限に効く）。' +
       ON_DEMAND_MAX_AGE_NOTE,
     options: [
       {
@@ -332,36 +332,39 @@ export const DEFAULT_REVALIDATE_SEC = 300;
  */
 export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
   [`format:${IMAGE_FORMAT_KB.jpeg}`]:
-    'どのブラウザでも表示でき、作るのも速い。仕組みがいちばん単純',
+    'どのブラウザでも表示でき、作るのも速いです。仕組みがいちばん単純です',
   [`format:${IMAGE_FORMAT_KB.webp}`]:
-    '見た目の画質を保ったまま小さくなり、今の主なブラウザで表示できる',
+    '見た目の画質を保ったまま小さくなり、今の主なブラウザで表示できます',
   [`format:${IMAGE_FORMAT_KB.avif}`]:
-    'いちばん小さくなる新しい形式。画質を保ったまま転送量を大きく減らせる',
-  'isr:0': '記事を更新したときだけ作り直すので、無駄な再生成がなく、いつも最新',
-  'isr:60': '少し待てば更新が見える。設定を書くだけで、追加の実装は要らない',
-  'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔',
-  'isr:3600': '間隔が長いほど、同じページを作り直すまでの間があく',
-  'isr:21600': '更新はゆっくり見えるが、同じページを作り直すのは一日に数回まで',
+    'いちばん小さくなる新しい形式です。画質を保ったまま転送量を大きく減らせます',
+  'isr:0':
+    '記事を更新したときだけ作り直すので、無駄な再生成がなく、いつも最新です',
+  'isr:60':
+    '少し待てば更新が見えます。設定を書くだけで、追加の実装は要りません',
+  'isr:300': '更新の反映と作り直しの回数の釣り合いを取った、ほどほどの間隔です',
+  'isr:3600': '間隔が長いほど、同じページを作り直すまでの間があきます',
+  'isr:21600':
+    '更新はゆっくり見えますが、同じページを作り直すのは一日に数回までです',
   'buildInterval:0':
-    '記事を更新するたびにビルドするので、待つのはビルドの間だけ。仕組みもいちばん素直',
+    '記事を更新するたびにビルドするので、待つのはビルドの間だけです。仕組みもいちばん素直です',
   'buildInterval:60':
-    '少し待てば更新が見える。間隔の間の更新はまとめて 1 回でビルドする',
+    '少し待てば更新が見えます。間隔の間の更新はまとめて 1 回でビルドします',
   'buildInterval:300':
-    '更新の反映とビルドの回数の釣り合いを取った、ほどほどの間隔',
-  'buildInterval:3600': '間隔が長いほど、ビルドの回数はまとまって減る',
-  'buildInterval:21600': '更新はゆっくり見えるが、ビルドは一日に数回まで',
+    '更新の反映とビルドの回数の釣り合いを取った、ほどほどの間隔です',
+  'buildInterval:3600': '間隔が長いほど、ビルドの回数はまとまって減ります',
+  'buildInterval:21600': '更新はゆっくり見えますが、ビルドは一日に数回までです',
   'pageCache:0':
-    '記事を投稿・編集したときだけそのページを消すので、無駄な描き直しがなく、いつも最新',
-  'pageCache:60': '少し待てば更新が見える。消す呼び出しを書かなくてよい',
+    '記事を投稿・編集したときだけそのページを消すので、無駄な描き直しがなく、いつも最新です',
+  'pageCache:60': '少し待てば更新が見えます。消す呼び出しを書かなくて済みます',
   'pageCache:300':
-    '更新の反映と描き直しの回数の釣り合いを取った、ほどほどの期限',
-  'pageCache:3600': '期限が長いほど、同じページを描き直すまでの間があく',
+    '更新の反映と描き直しの回数の釣り合いを取った、ほどほどの期限です',
+  'pageCache:3600': '期限が長いほど、同じページを描き直すまでの間があきます',
   'pageCache:21600':
-    '更新はゆっくり見えるが、同じページを描き直すのは一日に数回まで',
+    '更新はゆっくり見えますが、同じページを描き直すのは一日に数回までです',
   [`comments:${COMMENTS_IN_BROWSER}`]:
-    '記事のページはコメントが付いても変わらないので、作り直すのは記事を更新したときだけ',
+    '記事のページはコメントが付いても変わらないので、作り直すのは記事を更新したときだけです',
   [`comments:${COMMENTS_IN_PAGE}`]:
-    'コメントも記事と一緒に HTML で届き、ページを開いてからコメントを取りに行く通信が要らない',
+    'コメントも記事と一緒に HTML で届き、ページを開いてからコメントを取りに行く通信が要りません',
 };
 
 export function settingFlavor(

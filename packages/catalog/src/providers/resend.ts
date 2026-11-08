@@ -9,12 +9,12 @@ const src = (url: string) => ({ url, retrievedAt: R });
 const UPTIME = {
   status: 'none' as const,
   premise:
-    'Resend の稼働率の SLA（99.99%）は Enterprise だけで、Free・Pro には無い',
+    'Resend の稼働率の SLA（99.99%）は Enterprise だけで、Free・Pro にはありません',
   sourceIds: ['pricing'],
 };
 const MEMBERS = {
   pricing: 'not-stated' as const,
-  premise: 'Resend のチームのメンバーの料金は、料金ページに書かれていない',
+  premise: 'Resend のチームのメンバーの料金は、料金ページに書かれていません',
   sourceIds: ['pricing'],
 };
 
@@ -40,7 +40,7 @@ export const resend: PriceBookInput = {
       period: 'day',
       scope: 'account',
       premise:
-        'Resend Free は 1 日 100 通・月 3,000 通まで（1 日は UTC の暦日で、0 時に戻る）。Free には超過の料金が無い',
+        'Resend Free は 1 日 100 通・月 3,000 通までです（1 日は UTC の暦日で、0 時に戻る）。Free には超過の料金がありません',
       sourceIds: ['pricing', 'quotas'],
     },
     {
@@ -50,7 +50,7 @@ export const resend: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'Resend Pro（月 $20）は月 5 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い',
+        'Resend Pro（月 $20）は月 5 万通まで込み、超えた分は 1,000 通 $0.90 です。1 日の上限はありません',
       sourceIds: ['pricing', 'quotas'],
     },
     {
@@ -60,7 +60,7 @@ export const resend: PriceBookInput = {
       period: 'month',
       scope: 'account',
       premise:
-        'Resend Pro の 10 万通の段（月 $35）は月 10 万通まで込み、超えた分は 1,000 通 $0.90。1 日の上限は無い',
+        'Resend Pro の 10 万通の段（月 $35）は月 10 万通まで込み、超えた分は 1,000 通 $0.90 です。1 日の上限はありません',
       sourceIds: ['pricing', 'quotas'],
     },
   ],
@@ -73,7 +73,7 @@ export const resend: PriceBookInput = {
       uptimeSla: UPTIME,
       members: MEMBERS,
       notes: [
-        '月 3,000 通の上限は 1 日 100 通 × 30 日とほぼ同じなので、1 日の上限（平日・休日・最も多い日）で判定する',
+        '月 3,000 通の上限は 1 日 100 通 × 30 日とほぼ同じなので、1 日の上限（平日・休日・最も多い日）で判定します',
         'ドメインは 3 つまで・送ったメールの記録は 30 日',
       ],
       meters: [
@@ -85,14 +85,15 @@ export const resend: PriceBookInput = {
           allowancePool: 'free-daily',
           onExceed: 'block',
           premise:
-            'Resend Free は 1 日 100 通を超えると、その日はそれ以上送れない（Free に超過の料金は無く、上げるには Pro）',
+            'Resend Free は 1 日 100 通を超えると、その日はそれ以上送れません（Free に超過の料金は無く、上げるには Pro）',
           interpretation: {
             adopted:
-              '上限を超えた分は送れない（止まる）とみる。料金ページに Free の超過の料金が無く、FAQ は上限に当たると知らせて上のプランを勧めると書く',
+              '上限を超えた分は送れない（止まる）とみます。料金ページに Free の超過の料金が無く、FAQ は上限に当たると知らせて上のプランを勧めると書いています',
             rejected: [
               {
                 reading: '超えた分も遅れて送られる',
-                reason: '公式に、上限を超えた分を後で送るという記載が無い',
+                reason:
+                  '公式に、上限を超えた分を後で送るという記載がありません',
               },
             ],
           },
@@ -116,7 +117,7 @@ export const resend: PriceBookInput = {
       uptimeSla: UPTIME,
       members: MEMBERS,
       notes: [
-        '超過は込みの通数の 5 倍（25 万通）までで、そこで次の請求の期間まで送信が止まる',
+        '超過は込みの通数の 5 倍（25 万通）までで、そこで次の請求の期間まで送信が止まります',
         'ドメインは 10 まで・送ったメールの記録は 30 日',
       ],
       meters: [
@@ -135,7 +136,7 @@ export const resend: PriceBookInput = {
               {
                 reading: '超えると送れなくなり、上のプランへの変更を求められる',
                 reason:
-                  '有料のプランは従量の超過を選べるので、止める側は運用の選択としては取らない',
+                  '有料のプランは従量の超過を選べるので、止める側は運用の選択としては取りません',
               },
             ],
           },
@@ -160,7 +161,7 @@ export const resend: PriceBookInput = {
           scope: 'month',
           onExceed: 'block',
           premise:
-            'Resend Pro の超過は込みの通数の 5 倍（25 万通）までで、そこで次の請求の期間まで送信が止まる',
+            'Resend Pro の超過は込みの通数の 5 倍（25 万通）までで、そこで次の請求の期間まで送信が止まります',
           sourceIds: ['quotas'],
         },
       ],
@@ -179,9 +180,9 @@ export const resend: PriceBookInput = {
       uptimeSla: UPTIME,
       members: MEMBERS,
       notes: [
-        '超過は込みの通数の 5 倍（50 万通）までで、そこで次の請求の期間まで送信が止まる',
+        '超過は込みの通数の 5 倍（50 万通）までで、そこで次の請求の期間まで送信が止まります',
         'ドメインは 10 まで・送ったメールの記録は 30 日',
-        '月 5 万通の段（$20）とは、月 約 6.7 万通（$20 + 超過 1.67 万通 × $0.90 / 1,000 = $35）を超えるとこちらが安い',
+        '月 5 万通の段（$20）とは、月 約 6.7 万通（$20 + 超過 1.67 万通 × $0.90 / 1,000 = $35）を超えるとこちらが安くなります',
       ],
       meters: [
         {
@@ -199,7 +200,7 @@ export const resend: PriceBookInput = {
               {
                 reading: '超えると送れなくなり、上のプランへの変更を求められる',
                 reason:
-                  '有料のプランは従量の超過を選べるので、止める側は運用の選択としては取らない',
+                  '有料のプランは従量の超過を選べるので、止める側は運用の選択としては取りません',
               },
             ],
           },
@@ -224,7 +225,7 @@ export const resend: PriceBookInput = {
           scope: 'month',
           onExceed: 'block',
           premise:
-            'Resend Pro の 10 万通の段の超過は込みの通数の 5 倍（50 万通）までで、そこで次の請求の期間まで送信が止まる',
+            'Resend Pro の 10 万通の段の超過は込みの通数の 5 倍（50 万通）までで、そこで次の請求の期間まで送信が止まります',
           sourceIds: ['quotas'],
         },
       ],

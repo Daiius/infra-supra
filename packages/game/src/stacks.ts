@@ -129,7 +129,7 @@ export function stackUnsupportedReason(
 ): string | undefined {
   if (stackSupports(stackIndex, framework)) return undefined;
   const note = deployTarget(framework, STACKS[stackIndex]!.provider)?.note;
-  return `公式のアダプターが無く載せられない${note ? `（${note}）` : ''}`;
+  return `公式のアダプターが無く載せられません${note ? `（${note}）` : ''}`;
 }
 
 /**
@@ -380,7 +380,7 @@ export function storageOptionText(
       `手間 ${EFFORT.storageOption}`,
       '来月から',
     ],
-    detail: `${addon.premise}。申し込みはスケールアップと同じ手順で、${scaleUp?.premise ?? 'サーバーを停止して行う'}。計画的な短い停止なので、止まった月には数えない。戻せない（${addon.interpretation?.adopted ?? ''}）。性能差はこの計算に入れていない。上位のプランへ変更してもオプションは残るとみなす（公式に記載なし）。乗り換え・契約し直しでは外れる。`,
+    detail: `${addon.premise}。申し込みはスケールアップと同じ手順で、${scaleUp?.premise ?? 'サーバーを停止して行います'}。計画的な短い停止なので、止まった月には数えません。戻せません（${addon.interpretation?.adopted ?? ''}）。性能差はこの計算に入れていません。上位のプランへ変更してもオプションは残るとみなします（公式に記載なし）。乗り換え・契約し直しでは外れます。`,
   };
 }
 
@@ -463,25 +463,25 @@ export function stackChangeText(
           name: `${target} にプラン変更`,
           meta: ['手間なし', '来月から'],
           detail:
-            '同じ事業者のプランの変更。上限と込み分が変わり、来月から効く。',
+            '同じ事業者のプランの変更です。上限と込み分が変わり、来月から効きます。',
         }
       : {
           name: `${target} にプラン変更`,
           meta: [`手間 ${effort}`, '来月から'],
-          detail: `${fact?.premise ?? ''}。計画的な短い停止なので、止まった月には数えない。`,
+          detail: `${fact?.premise ?? ''}。計画的な短い停止なので、止まった月には数えません。`,
         };
   }
   if (isRecontract(from, to))
     return {
       name: `${target} へ契約し直す`,
       meta: [`${per} × ${months} か月`, both],
-      detail: `${stackFact(from, 'no-smaller-disk')!.premise}。新しく契約してデータを移す間は、新旧両方を動かして両方の費用を払う。`,
+      detail: `${stackFact(from, 'no-smaller-disk')!.premise}。新しく契約してデータを移す間は、新旧両方を動かして両方の費用を払います。`,
     };
   return {
     name: `${target} へ乗り換える`,
     meta: [`${per} × ${months} か月`, both],
     detail:
-      '別の事業者へ移す。作業の間は新旧両方の構成を動かして両方の費用を払い、済んだ翌月に切り替わる（その月は収益が少し減る）。部品は乗り換え先の既定の選択から始まる。',
+      '別の事業者へ移します。作業の間は新旧両方の構成を動かして両方の費用を払い、済んだ翌月に切り替わります（その月は収益が少し減ります）。部品は乗り換え先の既定の選択から始まります。',
   };
 }
 

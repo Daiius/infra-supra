@@ -137,7 +137,7 @@ describe('記事の S5 の記事ごとの枠（D-109）', () => {
     );
     const row = routePlanOf(st).find((r) => r.route === 'article')!;
     expect(row.detail.join()).toContain('記事ごとに書き出す');
-    expect(row.why).toContain('SNS のカードは枠に入る');
+    expect(row.why).toContain('SNS のカードは枠に入ります');
     // コメント欄は含められない（枠に中身が無い）
     expect(row.parts).toEqual([]);
     expect(setupCommentOptions(sc, 'nextjs', S5)).toEqual([]);

@@ -126,7 +126,7 @@ function CommitmentsSection({
       {active.map((c) => (
         <div key={c.key} className="py-1 text-sm">
           確約中: {c.label}（{PAYMENT_LABEL[c.payment]}・{c.endMonth}{' '}
-          か月目まで。取り消せない）
+          か月目まで。取り消せません）
         </div>
       ))}
       {offers.map((o) => {
@@ -156,7 +156,7 @@ function CommitmentsSection({
               info={
                 <Info title={`${o.label}を結ぶ`}>
                   {o.premise}
-                  。確約の額は今月の対象の使用（オンデマンドの額）で決まり、超えた分はオンデマンドのまま。取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残る。
+                  。確約の額は今月の対象の使用（オンデマンドの額）で決まり、超えた分はオンデマンドのままです。取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残ります。
                 </Info>
               }
               why={why}
@@ -359,8 +359,8 @@ function RewindPicker({
         この月に戻る…
       </button>
       <Info label="過去の月に戻ることについて">
-        選んだ月の行動を選ぶ前の状態に戻る。始めたときの選択（シナリオ・構成・部品・乱数のシード）はそのままなので、同じ行動を選べば同じ結果になる。今の結果は「前の試行」として
-        1 本だけ残り、推移のグラフに破線で重なる（もう一度戻ると上書き）
+        選んだ月の行動を選ぶ前の状態に戻ります。始めたときの選択（シナリオ・構成・部品・乱数のシード）はそのままなので、同じ行動を選べば同じ結果になります。今の結果は「前の試行」として
+        1 本だけ残り、推移のグラフに破線で重なります（もう一度戻ると上書き）
       </Info>
     </div>
   );
@@ -480,7 +480,7 @@ function VictoryCelebration({
                 ✓ 目標達成
               </h2>
               <p className="mt-1 text-sm">
-                {state.end!.month} か月の運営で、3 つの条件をすべて満たした
+                {state.end!.month} か月の運営で、3 つの条件をすべて満たしました
               </p>
             </div>
             <div className="space-y-4 px-6 pt-5">
@@ -749,7 +749,7 @@ function EventsDialog({
             <EventCard key={`${e.id}:${e.phase}`} event={e} />
             {e.phase === 'proposal' && (
               <div className="mt-2 text-sm opacity-80">
-                行動の欄で受けるか断るかを選ぶ（選ばなければ断る）
+                行動の欄で受けるか断るかを選びます（選ばなければ断ります）
               </div>
             )}
           </div>
@@ -906,7 +906,7 @@ function MonthCard({
         </div>
         {r.premises.length > 0 && (
           <div>
-            <h3 className="mb-1 font-bold">プラットフォームの前提</h3>
+            <h3 className="mb-1 font-bold">プラットフォームの上限・制限</h3>
             <ul className="space-y-1">
               {r.premises.map((p) => (
                 <PremiseRow key={p.id} p={p} />
@@ -1135,8 +1135,8 @@ function eventBadge(e: MonthEvent): {
             label: '⚡ 今月発生',
             cls: 'badge-error',
             note: e.botBlocked
-              ? '今月の費用・満足度に効いている（遮断済みで半分）'
-              : '今月の費用・満足度に効いている。対処は来月から',
+              ? '今月の費用・満足度に効いています（遮断済みで半分）'
+              : '今月の費用・満足度に効いています。対処は来月から',
           }
         : e.announced === true
           ? { label: '● 起きた（先月の予告どおり）', cls: 'badge-info' }
@@ -1181,10 +1181,10 @@ function EventCard({ event: e }: { event: MonthEvent }) {
       {e.accept && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          。月の終わりの行動で受けるか断るかを選ぶ（
+          。月の終わりの行動で受けるか断るかを選びます（
           {e.accept.declineLoss
             ? `断ると${e.accept.declineLoss}`
-            : '断っても罰はない'}
+            : '断っても罰はありません'}
           ）
         </div>
       )}
@@ -1233,7 +1233,7 @@ function EventCard({ event: e }: { event: MonthEvent }) {
               <span
                 className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
               >
-                {p.hit ? '✗ 当たった' : '○ 当たりうる前提'}
+                {p.hit ? '✗ 上限に達した' : '○ 達しうる上限'}
               </span>
               {p.text}
               {p.ratio !== undefined && (
@@ -1256,11 +1256,11 @@ function EventCard({ event: e }: { event: MonthEvent }) {
 function surpriseReason(x: Surprise): string {
   switch (x.cause.kind) {
     case 'event':
-      return `理由: 出来事「${x.cause.title}」。これが無ければ今月は ${(x.cause.ratioWithout * 100).toFixed(0)}% で、超えなかった`;
+      return `理由: 出来事「${x.cause.title}」。これが無ければ今月は ${(x.cause.ratioWithout * 100).toFixed(0)}% で、超えませんでした`;
     case 'action':
       return `理由: 前の月の選択（${x.cause.action}）`;
     case 'growth':
-      return '理由: 伸びが直近の推移より速かった';
+      return '理由: 伸びが直近の推移より速かったため';
   }
 }
 
@@ -1286,7 +1286,7 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
         ? '違反'
         : '事実'
       : blocked
-        ? '当たった'
+        ? '上限に達した'
         : credit
           ? 'クレジット消費'
           : p.hit
@@ -1678,7 +1678,7 @@ function Actions({
         lastReport.featurePoints,
         lastReport.month,
       ).stage
-      ? '（機能開発の分だけで見た段階。メールが届かないと下がる）'
+      ? '（機能開発の分だけで見た段階。メールが届かないと下がります）'
       : '';
   const sc = scenarioOf(state);
   // このシナリオで効かない行動は出さない（D-33・prd/09 E-6）
@@ -1708,7 +1708,7 @@ function Actions({
         </h2>
         <p className="text-sm opacity-70">
           残りは機能開発に回り、満足度の「機能」（累計 / 期待）と、評判を通して
-          PV の伸びに効く。設定はいつでも戻せる。
+          PV の伸びに効きます。設定はいつでも戻せます。
         </p>
         <div className="space-y-0.5 text-sm" data-testid="feature-outlook">
           <div>
@@ -1725,9 +1725,9 @@ function Actions({
           />
           <div className="text-xs opacity-70">
             {outlook.total >= outlook.expected
-              ? '来月の累計は期待に届く'
-              : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届かない`}
-            （来月に新しく起きる出来事の対応の手間は含めない）
+              ? '来月の累計は期待に届きます'
+              : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届きません`}
+            （来月に新しく起きる出来事の対応の手間は含めません）
           </div>
           <div className="mt-2">
             <FeatureRing
@@ -1792,7 +1792,7 @@ function Actions({
                         checked={answers[id] !== true}
                         onChange={() => setAnswers({ ...answers, [id]: false })}
                       />
-                      断る（{summary.declineLoss ?? '何も変わらない'}）
+                      断る（{summary.declineLoss ?? '何も変わりません'}）
                     </label>
                   </div>
                   {summary.gains.length > 0 && (
@@ -1932,8 +1932,8 @@ function Actions({
             ]}
             info={
               <Info title="SSR を最適化する">
-                CPU 時間と速さに効く。機能開発が進むと SSR
-                はまた重くなるので、繰り返し判断が要る。
+                CPU 時間と速さに効きます。機能開発が進むと SSR
+                はまた重くなるので、繰り返し判断が要ります。
               </Info>
             }
             why={optimize ? null : blocked(build({ optimize: true }))}
@@ -1957,8 +1957,8 @@ function Actions({
               meta={[`手間 ${BOT_BLOCK.effort}`, '来月から効く']}
               info={
                 <Info title="Bot を遮断するルールを入れる">
-                  Bot・クローラーのアクセスが来月から半分になる。一度入れれば続く。対策の製品（WAF
-                  など）の料金は取得していないので、手間だけの行動。
+                  Bot・クローラーのアクセスが来月から半分になります。一度入れれば続きます。対策の製品（WAF
+                  など）の料金は取得していないので、手間だけの行動です。
                 </Info>
               }
               why={blockBots ? null : blocked(build({ blockBots: true }))}
@@ -2008,7 +2008,7 @@ function Actions({
             <div className="text-sm">
               {stackName(state.migration.to, state.framework)} へ乗り換え中（
               {state.migration.done} / {state.migration.required}{' '}
-              ポイント）。済むまで別の変更はできない。
+              ポイント）。済むまで別の変更はできません。
             </div>
           </>
         ) : (
@@ -2030,7 +2030,7 @@ function Actions({
             {/* 隠した構成（D-100）で始めた古い保存はそのまま続けられる。選び直す先には出さない */}
             {STACKS[state.stackIndex]!.hidden && (
               <div className="text-xs opacity-70">
-                今の構成は、新しく始めるときには選べなくしている（一時的）。このまま続けられるが、同じ事業者のプラン変更や、乗り換えてから戻ることはできない。
+                今の構成は、新しく始めるときには選べなくしています（一時的）。このまま続けられますが、同じ事業者のプラン変更や、乗り換えてから戻ることはできません。
               </div>
             )}
             {[null, ...stackTargets].map((idx) => {
@@ -2084,7 +2084,7 @@ function Actions({
             <div className="text-sm">
               {FRAMEWORKS[state.rewrite.to].label} へ作り直し中（
               {state.rewrite.done} / {state.rewrite.required}{' '}
-              ポイント）。済むまで今のアプリのまま動き、乗り換え・部品の差し替えはできない。
+              ポイント）。済むまで今のアプリのまま動き、乗り換え・部品の差し替えはできません。
             </div>
           </>
         ) : (
@@ -2223,11 +2223,11 @@ function ComponentsSection({
       {busy ? (
         <div className="text-sm">
           {state.componentSwap
-            ? `${swapLabel(state.componentSwap.slot)}の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）。`
+            ? `${swapLabel(state.componentSwap.slot)}の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）です。`
             : state.rewrite
-              ? 'アプリの作り直しの最中。'
-              : '乗り換えの最中。'}
-          済むまで部品は差し替えられない。
+              ? 'アプリの作り直しの最中です。'
+              : '乗り換えの最中です。'}
+          済むまで部品は差し替えられません。
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-3">
@@ -2272,25 +2272,25 @@ function ComponentsSection({
                           why={whyOf}
                           load={() => ({
                             rows: componentComparison(state, x.slot, x.current),
-                            basis: `今月の基準の規模（月 ${state.basePV.toLocaleString('ja-JP')} PV）と今の他の部品で、${x.label}だけを替えた月の費用（構成全体）。出来事・話題の上乗せ・差し替えの期間の二重の費用は含めない目安。縦の線は今の部品の額`,
+                            basis: `今月の基準の規模（月 ${state.basePV.toLocaleString('ja-JP')} PV）と今の他の部品で、${x.label}だけを替えた月の費用（構成全体）。出来事・話題の上乗せ・差し替えの期間の二重の費用は含めない目安です。縦の線は今の部品の額です`,
                           })}
                           footnote={
                             <>
                               {x.slot === 'db' && (
                                 <p className="mt-2 opacity-80">
                                   DB
-                                  の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わる。期間中は新旧両方の
-                                  DB の費用を払う。
+                                  の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わります。期間中は新旧両方の
+                                  DB の費用を払います。
                                 </p>
                               )}
                               {x.slot === 'api' && (
                                 <p className="mt-2 opacity-80">
-                                  API の置き場を移すと DB も一緒に移す（API と
-                                  DB
-                                  は同じ事業者に置く）。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払う。事業者をまたぐ往復の遅延は計算していない。
+                                  API の置き場を移すと DB も一緒に移します（API
+                                  と DB
+                                  は同じ事業者に置きます）。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払います。事業者をまたぐ往復の遅延は計算していません。
                                   Next.js・Astro では、ページを描くサーバーが
-                                  API を呼んで応答を待つ。VPS
-                                  に置くと自前運用の維持と障害が加わる。
+                                  API を呼んで応答を待ちます。VPS
+                                  に置くと自前運用の維持と障害が加わります。
                                 </p>
                               )}
                             </>
@@ -2350,7 +2350,7 @@ function ComponentsSection({
                         <span
                           className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
                         >
-                          {p.hit ? '✗ 当たる' : '○ 当たりうる前提'}
+                          {p.hit ? '✗ 上限に達する' : '○ 達しうる上限'}
                         </span>
                         {p.text}
                         {p.ratio !== undefined && (
@@ -2526,7 +2526,8 @@ function Result({
           </summary>
           <div className="collapse-content">
             <p className="mb-1 text-sm opacity-70">
-              1 つの点数にはしない。下の行は同じシードの基準プレイ（目盛り）
+              1
+              つの点数にはしません。下の行は同じシードの基準プレイ（目盛り）です
             </p>
             <div className="overflow-x-auto">
               <table className="table table-sm">
@@ -2609,12 +2610,12 @@ function Result({
         </details>
         <details className="collapse collapse-arrow bg-base-200">
           <summary className="collapse-title font-bold">
-            振り返り: 当たった前提・満足度が悪かった月・手間の内訳
+            振り返り: 達した上限・満足度が悪かった月・手間の内訳
           </summary>
           <div className="collapse-content">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <h3 className="mb-1 font-bold">当たった前提・近づいた前提</h3>
+                <h3 className="mb-1 font-bold">達した上限・近づいた上限</h3>
                 {reflection.premises.length ? (
                   <ul className="space-y-1 text-sm">
                     {reflection.premises.map((p) => (
@@ -2622,7 +2623,7 @@ function Result({
                         <span
                           className={`badge badge-sm mr-1 ${p.hit ? 'badge-error' : 'badge-info'}`}
                         >
-                          {p.month} か月目・{p.hit ? '当たった' : '近づいた'}
+                          {p.month} か月目・{p.hit ? '達した' : '近づいた'}
                         </span>
                         {p.text}
                         {p.action && (
@@ -2639,7 +2640,7 @@ function Result({
                 {reflection.surprises.length > 0 && (
                   <>
                     <h3 className="mt-3 mb-1 font-bold">
-                      見込みより早く超えた前提と、その理由
+                      見込みより早く超えた上限と、その理由
                     </h3>
                     <ul className="space-y-1 text-sm">
                       {reflection.surprises.map((x) => (
@@ -2760,7 +2761,7 @@ function resultMeters(
       ...pass(ok('止まった月')),
       note: ok('止まった月')
         ? '少ないほど良い（棒が上限の線より左なら達成）'
-        : `少ないほど良い。上限を ${state.outages - limit} 回超えた`,
+        : `少ないほど良いです。上限を ${state.outages - limit} 回超えました`,
     },
     {
       label: '最終的な規模（月 PV）',
@@ -3000,12 +3001,13 @@ function Trends({
               {cashProj.method === 'growth'
                 ? `月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
                 : `月の利益（収益 − 費用。所持金の実際の増減）が 0 以下なので、伸びを入れず直近 3 か月の平均（約 ${usd(Math.round(cashProj.nextProfit))}）で残りの月を線形に伸ばしたゲーム上の目安。`}
-              話題・前兆・Bot で一時的に流量が増えた月は、基準にも比にも使わない
+              話題・前兆・Bot
+              で一時的に流量が増えた月は、基準にも比にも使いません
               {cashProj.skipped > 0
-                ? `（今回は ${cashProj.skipped} か月を除いた）`
+                ? `（今回は ${cashProj.skipped} か月を除きました）`
                 : ''}
-              。予告済みの出来事・料金の改定は織り込まない。見込みが目標の ±5%
-              なら「目標の前後」と出す
+              。予告済みの出来事・料金の改定は織り込みません。見込みが目標の ±5%
+              なら「目標の前後」と出します
             </Info>
           </p>
         )}
@@ -3110,7 +3112,7 @@ function Trends({
         {trends.length > 0 && (
           <div>
             <h3 className="mb-2 text-sm font-semibold">
-              前提の使用率（境目 = 100%）
+              上限の使用率（境目 = 100%）
             </h3>
             <div className="grid gap-3 md:grid-cols-2">
               {trends.map((t) => (
@@ -3133,7 +3135,7 @@ function TrendCard({
 }) {
   const blocked = t.hitNow && t.effect !== 'cost';
   const status = blocked
-    ? { cls: 'badge-error', label: '✗ 当たった' }
+    ? { cls: 'badge-error', label: '✗ 上限に達した' }
     : t.hitNow
       ? { cls: 'badge-warning', label: '● 超過（課金）' }
       : t.monthsUntil !== null
@@ -3167,12 +3169,12 @@ function TrendCard({
       )}
       {!t.projectionNote && !t.hitNow && t.excluded.length > 0 && (
         <div className="mb-1 text-xs opacity-70">
-          {`${t.excluded.map((i) => i + 1).join('・')} か月目は一時的に流量が増えた月なので、見込みの計算から除いた`}
+          {`${t.excluded.map((i) => i + 1).join('・')} か月目は一時的に流量が増えた月なので、見込みの計算から除きました`}
         </div>
       )}
       {t.breaks.length > 0 && (
         <div className="mb-1 text-xs opacity-70">
-          {`${t.breaks.map((i) => i + 1).join('・')} か月目に効く部品を替えたので、線（縦の破線）と見込みはそこで区切った`}
+          {`${t.breaks.map((i) => i + 1).join('・')} か月目に効く部品を替えたので、線（縦の破線）と見込みはそこで区切りました`}
         </div>
       )}
       <LineChart
@@ -3197,7 +3199,7 @@ function TrendCard({
       />
       {Math.max(...t.ratios.map((r) => r ?? 0)) > 3 && (
         <div className="text-xs opacity-60">
-          300% を超えた部分はグラフの上端で切っている（値は上の %）
+          300% を超えた部分はグラフの上端で切っています（値は上の %）
         </div>
       )}
     </div>

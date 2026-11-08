@@ -40,12 +40,12 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'static-build',
     code: 'S1',
     label: '静的（ビルドし直し）',
-    long: 'ビルドのときに HTML にして静的な配信から返す。更新はビルドし直し（間隔をまとめるか、更新のたび）',
+    long: 'ビルドのときに HTML にして静的な配信から返します。更新はビルドし直しです（間隔をまとめるか、更新のたび）',
     personalOk: false,
     why: {
       public:
-        '全員に同じ中身なので、作った HTML を全員に配れる。サーバーで描かないので 1 リクエストの CPU の制限に当たらない。SNS のカードは HTML に入る',
-      personal: '人ごとに違う中身は、ビルドのときに作れない',
+        '全員に同じ中身なので、作った HTML を全員に配れます。サーバーで描かないので 1 リクエストの CPU の制限に当たりません。SNS のカードは HTML に入ります',
+      personal: '人ごとに違う中身は、ビルドのときに作れません',
     },
     modeled: true,
   },
@@ -53,13 +53,13 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'cached-ttl',
     code: 'S2',
     label: 'サーバーで描いてキャッシュ（時間で取り直す）',
-    long: '最初の閲覧でサーバーが描いてキャッシュし、期限が来たら取り直す（Next.js の ISR・Astro の route caching の期限）',
+    long: '最初の閲覧でサーバーが描いてキャッシュし、期限が来たら取り直します（Next.js の ISR・Astro の route caching の期限）',
     personalOk: false,
     why: {
       public:
-        '全員に同じ中身なので、描いた HTML を使い回せる。更新は期限の分だけ遅れて見える。SNS のカードは HTML に入る',
+        '全員に同じ中身なので、描いた HTML を使い回せます。更新は期限の分だけ遅れて見えます。SNS のカードは HTML に入ります',
       personal:
-        'キャッシュすると、人ごとに違う中身が他の人に見えてしまうので使えない',
+        'キャッシュすると、人ごとに違う中身が他の人に見えてしまうので使えません',
     },
     modeled: true,
   },
@@ -67,13 +67,13 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'cached-purge',
     code: 'S3',
     label: 'サーバーで描いてキャッシュ（更新で消す）',
-    long: '最初の閲覧でサーバーが描いてキャッシュし、投稿・編集のときにそのページのキャッシュを消す（オンデマンドの再検証・route caching の invalidate）',
+    long: '最初の閲覧でサーバーが描いてキャッシュし、投稿・編集のときにそのページのキャッシュを消します（オンデマンドの再検証・route caching の invalidate）',
     personalOk: false,
     why: {
       public:
-        '全員に同じ中身なので、描いた HTML を使い回せる。投稿・編集で消すので、更新がすぐ見える。SNS のカードは HTML に入る',
+        '全員に同じ中身なので、描いた HTML を使い回せます。投稿・編集で消すので、更新がすぐ見えます。SNS のカードは HTML に入ります',
       personal:
-        'キャッシュすると、人ごとに違う中身が他の人に見えてしまうので使えない',
+        'キャッシュすると、人ごとに違う中身が他の人に見えてしまうので使えません',
     },
     modeled: true,
   },
@@ -81,13 +81,13 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'ssr',
     code: 'S4',
     label: '毎回描く',
-    long: 'リクエストのたびにサーバーが描く（1 回ごとに CPU を使い、事業者の 1 リクエストの CPU の制限をすべての閲覧が受ける）',
+    long: 'リクエストのたびにサーバーが描きます（1 回ごとに CPU を使い、事業者の 1 リクエストの CPU の制限をすべての閲覧が受ける）',
     personalOk: true,
     why: {
       public:
-        'いつも最新の中身を HTML で返す。ただし全員に同じ中身を閲覧のたびに描き直すので、CPU とリクエストが増える',
+        'いつも最新の中身を HTML で返します。ただし全員に同じ中身を閲覧のたびに描き直すので、CPU とリクエストが増えます',
       personal:
-        '人ごとに違う中身なので使い回せない。サーバーが毎回描き、HTML で返す（初回表示が軽い）',
+        '人ごとに違う中身なので使い回せません。サーバーが毎回描き、HTML で返します（初回表示が軽い）',
     },
     modeled: true,
   },
@@ -95,13 +95,13 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'shell-api',
     code: 'S5',
     label: '枠 + ブラウザが API で取る',
-    long: 'HTML は静的な枠。中身はブラウザ（SPA・Client Component・アイランド）が API で取って描く。サーバーが受けるのはデータの API だけ',
+    long: 'HTML は静的な枠です。中身はブラウザ（SPA・Client Component・アイランド）が API で取って描きます。サーバーが受けるのはデータの API だけです',
     personalOk: true,
     why: {
       public:
-        'サーバーは HTML を描かず、データの API だけを返す（API の応答はキャッシュできる）。HTML に中身が無いので、SNS のカードには前処理が要る',
+        'サーバーは HTML を描かず、データの API だけを返します（API の応答はキャッシュできる）。HTML に中身が無いので、SNS のカードには前処理が要ります',
       personal:
-        '人ごとに違う中身をブラウザが API で取る。HTML を描かない分、1 回の CPU は軽い（初回表示は枠 → JS → API の順で重い）',
+        '人ごとに違う中身をブラウザが API で取る。HTML を描かない分、1 回の CPU は軽いです（初回表示は枠 → JS → API の順で重い）',
     },
     modeled: true,
   },
@@ -109,13 +109,13 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'server-island',
     code: 'S6',
     label: '枠 + サーバーの島',
-    long: '枠は静的かキャッシュ。個人化した部分だけを別のリクエストでサーバーが描く（Astro の Server Islands・Next.js の PPR）',
+    long: '枠は静的かキャッシュです。個人化した部分だけを別のリクエストでサーバーが描きます（Astro の Server Islands・Next.js の PPR）',
     personalOk: true,
     why: {
       public:
-        '全員に同じ部分は使い回し、動く部分だけをサーバーが描く。SNS のカードは HTML に入る',
+        '全員に同じ部分は使い回し、動く部分だけをサーバーが描きます。SNS のカードは HTML に入ります',
       personal:
-        '枠は使い回し、人ごとに違う部分（島）だけを閲覧ごとにサーバーが描く。1 リクエストの CPU は島の分だけで、枠の HTML（メタタグ）はそのまま返る',
+        '枠は使い回し、人ごとに違う部分（島）だけを閲覧ごとにサーバーが描きます。1 リクエストの CPU は島の分だけで、枠の HTML（メタタグ）はそのまま返ります',
     },
     modeled: true,
   },
@@ -125,13 +125,13 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'cache-components',
     code: '',
     label: '部品ごとにキャッシュ（Cache Components）',
-    long: "Next.js 16 の Cache Components（cacheComponents: true）。'use cache' の部品を静的な枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流す（PPR）",
+    long: "Next.js 16 の Cache Components（cacheComponents: true）。'use cache' の部品を静的な枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流します（PPR）",
     personalOk: true,
     why: {
       public:
-        '全員に同じ中身なので、部品を使い回せる。期限（cacheLife）か、投稿・編集のときのタグ（cacheTag・updateTag）で作り直す。数え方は ISR と同じ。SNS のカードは HTML に入る',
+        '全員に同じ中身なので、部品を使い回せます。期限（cacheLife）か、投稿・編集のときのタグ（cacheTag・updateTag）で作り直します。数え方は ISR と同じです。SNS のカードは HTML に入ります',
       personal:
-        'おすすめ・ヘッダーなど全員に同じ部品は枠から返すので、1 リクエストの CPU と DB の問い合わせは人ごとに違う部分の分だけ',
+        'おすすめ・ヘッダーなど全員に同じ部品は枠から返すので、1 リクエストの CPU と DB の問い合わせは人ごとに違う部分の分だけです',
     },
     modeled: true,
   },

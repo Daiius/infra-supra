@@ -48,7 +48,7 @@ const FUNCTION_MEMORY_GB = 1;
 const CREDIT_REFS = ['credit:netlify:'];
 
 const RESIZE_NOTE =
-  '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）';
+  '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残しません。変換のサービスの費用はかからず、保存量も小さく済みます。サイズ違いが無いので、スマホにも同じ大きさを配ります（最適化より遅い）';
 
 export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
   // DB（D-77）。既定は Supabase（構成の名前の DB）。Neon（従量の Postgres）は cross.ts の他の事業者の部品
@@ -57,7 +57,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'netlify',
     label: 'Supabase（Postgres）',
-    note: 'Free・Personal は Supabase Free、Pro は Supabase Pro（月の基本料つき・Micro のサーバーが常に動く）。関数から接続のプール（pooler）でつなぐ',
+    note: 'Free・Personal は Supabase Free、Pro は Supabase Pro（月の基本料つき・Micro のサーバーが常に動く）です。関数から接続のプール（pooler）でつなぎます',
     premiseRefs: [
       'fact:supabase:pro-micro:compute',
       'limit:supabase:pro-micro:pooler-connections',
@@ -70,7 +70,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'netlify',
     label: 'ISR（Netlify の CDN のキャッシュ）',
-    note: 'ISR のページは CDN が返し、期限が来たページは関数が作り直す。オンデマンドの再検証（パス・タグ）にも対応する（OpenNext のアダプター）',
+    note: 'ISR のページは CDN が返し、期限が来たページは関数が作り直します。オンデマンドの再検証（パス・タグ）にも対応します（OpenNext のアダプター）',
     premiseRefs: ['fact:netlify:'],
     onDemandIsr: { ok: true, fact: 'netlify:pro:next-runtime' },
   },
@@ -80,7 +80,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'netlify',
     label: 'キャッシュしない（毎回 SSR）',
-    note: '記事の閲覧が毎回関数まで届き、関数の GB 時間（クレジット）が増える。記事は常に新しい',
+    note: '記事の閲覧が毎回関数まで届き、関数の GB 時間（クレジット）が増えます。記事は常に最新です',
     premiseRefs: CREDIT_REFS,
   },
   {
@@ -88,13 +88,13 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'netlify',
     label: 'Netlify Image CDN（閲覧のときに変換）',
-    note: '閲覧のときに変換して拠点にキャッシュする。クレジットの表に変換の項目は無く、配信のリクエストと転送量（クレジット）だけを数える。原本は Netlify Blobs（料金は未公開）',
+    note: '閲覧のときに変換して拠点にキャッシュします。クレジットの表に変換の項目は無く、配信のリクエストと転送量（クレジット）だけを数えます。原本は Netlify Blobs です（料金は未公開）',
     premiseRefs: ['fact:netlify:pro:image-cdn', ...CREDIT_REFS],
     // 形式（fm）を指定しないと Accept を見て「1. use webp if accepted 2. otherwise, use avif if accepted 3. 原本」
     // （https://docs.netlify.com/build/image-cdn/overview/ ・2026-09-25 更新・2026-11-04 取得）
     servedFormat: {
       format: 'webp',
-      how: 'ブラウザに合わせて WebP で配る（形式を指定しないと、WebP を受けるブラウザには WebP。Netlify Image CDN の既定）',
+      how: 'ブラウザに合わせて WebP で配ります（形式を指定しないと、WebP を受けるブラウザには WebP。Netlify Image CDN の既定）',
     },
   },
   {
@@ -102,7 +102,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'netlify',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。転送量（クレジット）が大きく増え、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配ります。転送量（クレジット）が大きく増え、とても遅くなります（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: CREDIT_REFS,
   },
   {
@@ -118,19 +118,19 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     [
       [
         'vite-spa',
-        '同じサイトの Netlify Functions に API を置き、DB は Supabase。同じドメインなので CORS の設定は要らない',
+        '同じサイトの Netlify Functions に API を置き、DB は Supabase です。同じドメインなので CORS の設定は要りません',
       ],
       [
         'nextjs',
-        'Next.js のサーバー（Netlify Functions）が同じ構成の Supabase を直接読む。API を別に立てない',
+        'Next.js のサーバー（Netlify Functions）が同じ構成の Supabase を直接読みます。API を別に立てません',
       ],
       [
         'astro',
-        'Astro のサーバー（Netlify のアダプター・Netlify Functions）が同じ構成の Supabase を直接読む。API を別に立てない',
+        'Astro のサーバー（Netlify のアダプター・Netlify Functions）が同じ構成の Supabase を直接読みます。API を別に立てません',
       ],
       [
         'nextjs-export',
-        '同じサイトの Netlify Functions に API を置き、DB は Supabase。ブラウザ（Client Component）から呼ぶ。同じドメインなので CORS の設定は要らない',
+        '同じサイトの Netlify Functions に API を置き、DB は Supabase です。ブラウザ（Client Component）から呼びます。同じドメインなので CORS の設定は要りません',
       ],
     ] as const
   ).map(([framework, note]): ComponentOption => ({
@@ -149,7 +149,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     platform: 'netlify',
     frameworks: ['vite-spa'],
     label: '前処理しない（全ページ同じカード）',
-    note: 'シェルのメタタグは全ページ同じ。記事ごとのカードは出ない（ゲーム上の仮定: SNS の話題が伸びにくい）',
+    note: 'シェルのメタタグは全ページ同じです。記事ごとのカードは出ません（ゲーム上の仮定: SNS の話題が伸びにくい）',
     premiseRefs: [],
   },
   {
@@ -158,7 +158,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     platform: 'netlify',
     frameworks: ['vite-spa'],
     label: 'OGP の前処理',
-    note: 'シェルを CDN から返さず、関数が記事のメタタグを差し込んで返す。シェルの読み込みが関数の起動（GB 時間）になる',
+    note: 'シェルを CDN から返さず、関数が記事のメタタグを差し込んで返します。シェルの読み込みが関数の起動（GB 時間）になります',
     premiseRefs: CREDIT_REFS,
   },
   // SPA の API の応答のキャッシュ（D-37）
@@ -168,7 +168,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     platform: 'netlify',
     frameworks: ['vite-spa'],
     label: 'なし',
-    note: '記事の中身の API を毎回処理して DB を読む。記事は常に新しい',
+    note: '記事の中身の API を毎回処理して DB を読みます。記事は常に最新です',
     premiseRefs: [],
   },
   {
@@ -177,7 +177,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     platform: 'netlify',
     frameworks: ['vite-spa'],
     label: 'CDN のキャッシュ（Netlify-CDN-Cache-Control）',
-    note: '記事の中身の API の応答にキャッシュの見出しを付け、ヒットは CDN が返す（関数の GB 時間が減る。リクエストと転送量は残る）。タグで数秒のうちに消せる',
+    note: '記事の中身の API の応答にキャッシュの見出しを付け、ヒットは CDN が返します（関数の GB 時間が減る。リクエストと転送量は残る）。タグで数秒のうちに消せます',
     premiseRefs: ['fact:netlify:pro:cdn-cache-functions', ...CREDIT_REFS],
   },
 ];

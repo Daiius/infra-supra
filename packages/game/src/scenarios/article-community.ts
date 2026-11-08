@@ -34,7 +34,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'common',
     title: '込み分・クレジットの 70% を超えた',
-    text: '流量で決まる込み分（Vercel Pro は月のクレジット）に近づいた。設定（ISR・画像の形式）やプランで対応できる',
+    text: '流量で決まる込み分（Vercel Pro は月のクレジット）に近づきました。設定（ISR・画像の形式）やプランで対応できます',
     when: {
       type: 'premise',
       premiseIds: [
@@ -52,7 +52,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'occasional',
     title: 'DB が大きくなった',
-    text: 'たまった投稿とコメントで、DB の保存量が込み分・上限に近づいた',
+    text: 'たまった投稿とコメントで、DB の保存量が込み分・上限に近づきました',
     when: {
       type: 'premise',
       premiseIds: [
@@ -70,7 +70,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'occasional',
     title: '画像の保存量が増えた',
-    text: '投稿された画像がたまり、保存先の容量に近づいた。VPS ではディスクがいっぱいになると止まる',
+    text: '投稿された画像がたまり、保存先の容量に近づきました。VPS ではディスクがいっぱいになると止まります',
     when: {
       type: 'premise',
       premiseIds: ['host:disk:', 'pool:cloudflare:r2-standard:r2-storage'],
@@ -83,7 +83,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'occasional',
     title: '同時接続が増えた',
-    text: 'ピークの時間帯の接続・CPU・回線が上限に近づいた',
+    text: 'ピークの時間帯の接続・CPU・回線が上限に近づきました',
     when: {
       type: 'premise',
       premiseIds: [
@@ -100,7 +100,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'rare',
     title: 'D1 が 10 GB に近づいた',
-    text: 'D1 のデータベースの大きさは引き上げられない。超えると止まるので、乗り換えを考える時期',
+    text: 'D1 のデータベースの大きさは引き上げられません。超えると止まるので、乗り換えを考える時期です',
     when: {
       type: 'premise',
       premiseIds: ['limit:cloudflare:workers-paid:d1-db-size'],
@@ -114,7 +114,7 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'common',
     title: 'コメントへの返信の通知',
-    text: '返信が来たら通知する機能の要望が来た。書き込みが増える',
+    text: '返信が来たら通知する機能の要望が来ました。書き込みが増えます',
     when: { type: 'window', from: 3, to: 10 },
     premiseRefs: [
       'pool:cloudflare:workers-free:free-d1-rows-written',
@@ -135,7 +135,7 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'occasional',
     title: '記事に画像を多く載せる機能',
-    text: '記事に画像を何枚も貼れるようにしてほしいという要望。画像の配信と保存が増える',
+    text: '記事に画像を何枚も貼れるようにしてほしいという要望です。画像の配信と保存が増えます',
     when: { type: 'window', from: 3, to: 8 },
     premiseRefs: [
       'pool:cloudflare:images-',
@@ -159,7 +159,7 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'occasional',
     title: '会員向けの個人化（マイページ・おすすめ）',
-    text: 'ログインした会員に、おすすめの記事を出す機能の要望。SSR のページが増える',
+    text: 'ログインした会員に、おすすめの記事を出す機能の要望です。SSR のページが増えます',
     when: { type: 'window', from: 4, to: 10 },
     premiseRefs: [
       'limit:cloudflare:workers-free:cpu-ms-per-request',
@@ -181,12 +181,12 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'rare',
     title: '閉鎖する別のコミュニティから記事とコメントを引き取る',
-    text: '閉鎖する別のコミュニティから、記事とコメントを引き取ってほしいと打診が来た。読者も移ってくるが、DB が一気に大きくなる',
+    text: '閉鎖する別のコミュニティから、記事とコメントを引き取ってほしいと打診が来ました。読者も移ってきますが、DB が一気に大きくなります',
     when: { type: 'rare', weight: 1 },
     notice: {
       monthsAhead: 1,
       title: '記事の引き取りの打診が来そう',
-      text: '閉鎖するコミュニティから、記事の引き取りの打診が来月来る見込み',
+      text: '閉鎖するコミュニティから、記事の引き取りの打診が来月来る見込みです',
     },
     premiseRefs: [
       'limit:cloudflare:workers-paid:d1-db-size',
@@ -210,7 +210,7 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'occasional',
     title: '記事ごとのチャット（リアルタイム）',
-    text: '記事を読みながら話せるチャットがほしいという要望。WebSocket の接続を保つ部品が要る',
+    text: '記事を読みながら話せるチャットがほしいという要望です。WebSocket の接続を保つ部品が要ります',
     when: { type: 'window', from: 4, to: 9 },
     platforms: ['cloudflare'],
     premiseRefs: [
@@ -247,7 +247,7 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'occasional',
     title: '投稿者から「記事を直してもすぐ反映されない」と苦情（即時反映）',
-    text: '記事を直した投稿者から、読者には古い版が見えたままだという苦情が続いている。受けると、投稿・修正のたびにその記事のページのキャッシュを消して描き直す「即時反映」が以後の要件になる。キャッシュの置き場所しだいで、すぐには反映されない構成がある。先に記事のキャッシュをオンデマンド（投稿・編集で消す）にしていれば、この苦情は来ない（代わりに好評になる）',
+    text: '記事を直した投稿者から、読者には古い版が見えたままだという苦情が続いています。受けると、投稿・修正のたびにその記事のページのキャッシュを消して描き直す「即時反映」が以後の要件になります。キャッシュの置き場所しだいで、すぐには反映されない構成があります。先に記事のキャッシュをオンデマンド（投稿・編集で消す）にしていれば、この苦情は来ません（代わりに好評になります）',
     when: { type: 'window', from: 4, to: 9 },
     previewRequirement: 'on-demand-isr',
     premiseRefs: [
@@ -278,7 +278,7 @@ const EVENTS: EventDef[] = [
     preempted: {
       by: 'edits-immediate',
       title: '投稿者から「記事を直すとすぐ反映される」と好評',
-      text: '記事を直した投稿者から、直した版がすぐ読者に届くと好評で、書き手の間の口コミで広まっている。投稿・編集のたびにそのページのキャッシュを消す（または毎回描く・更新のたびにビルドする）構成にしていたので、「直してもすぐ反映されない」という苦情は来なかった',
+      text: '記事を直した投稿者から、直した版がすぐ読者に届くと好評で、書き手の間の口コミで広まっています。投稿・編集のたびにそのページのキャッシュを消す（または毎回描く・更新のたびにビルドする）構成にしていたので、「直してもすぐ反映されない」という苦情は来ませんでした',
       effects: [{ type: 'growth', add: 0.02, months: 3 }],
     },
   },
@@ -288,12 +288,12 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'rare',
     title: '法人顧客が SLA つきの契約を求める',
-    text: '社内の勉強会で記事を使いたい法人から、稼働率の SLA を条件にした有料の契約の打診が来た。契約の収益は SLA のあるプランで運営している月だけ入る',
+    text: '社内の勉強会で記事を使いたい法人から、稼働率の SLA を条件にした有料の契約の打診が来ました。契約の収益は SLA のあるプランで運営している月だけ入ります',
     when: { type: 'rare', weight: 1 },
     notice: {
       monthsAhead: 1,
       title: '法人から SLA つきの契約の打診が来そう',
-      text: '稼働率の SLA を条件にした契約の打診が来月来る見込み',
+      text: '稼働率の SLA を条件にした契約の打診が来月来る見込みです',
     },
     premiseRefs: [],
     showSla: true,
@@ -313,7 +313,7 @@ const EVENTS: EventDef[] = [
     kind: 'proposal',
     tier: 'occasional',
     title: '記事のデザインを刷新して、画像を大きく綺麗に出したい',
-    text: '大きな画面・高精細の端末で記事を読む人が増え、画像をもっと大きく綺麗に出したいという声が上がった。原本が無いと、過去の画像は大きくできない（縮めて置いた画像からは元の細かさを戻せない）。原本を保存している構成（閲覧のときに変換・投稿のときにサイズ違いを作る）なら過去の記事も含めて大きくでき、一律で縮めて置いた構成はこれからの投稿だけ大きくできる。原本をそのまま配っている構成は既に大きい。断ると、しばらく画質の評価が下がる',
+    text: '大きな画面・高精細の端末で記事を読む人が増え、画像をもっと大きく綺麗に出したいという声が上がりました。原本が無いと、過去の画像は大きくできません（縮めて置いた画像からは元の細かさを戻せません）。原本を保存している構成（閲覧のときに変換・投稿のときにサイズ違いを作る）なら過去の記事も含めて大きくでき、一律で縮めて置いた構成はこれからの投稿だけ大きくできます。原本をそのまま配っている構成は既に大きいです。断ると、しばらく画質の評価が下がります',
     // 確率は基準プレイを見て決めた（ゲーム上の仮定）
     when: { type: 'window', from: 5, to: 10, chance: 0.5 },
     premiseRefs: [],
@@ -329,18 +329,18 @@ const EVENTS: EventDef[] = [
     kind: 'script',
     tier: 'common',
     title: 'SNS で話題になった！',
-    text: '記事が SNS で広まり、今月だけ PV が大きく増えた。会員の登録も増え、登録の確認のメールが話題の日に集中する（1 日・月の通数に上限がある送信の仕組みでは、超えた分が届かない）。満足度が高ければ、その後も伸びが残る',
+    text: '記事が SNS で広まり、今月だけ PV が大きく増えました。会員の登録も増え、登録の確認のメールが話題の日に集中します（1 日・月の通数に上限がある送信の仕組みでは、超えた分が届きません）。満足度が高ければ、その後も伸びが残ります',
     when: { type: 'window', from: 6, to: 9 },
     notice: {
       monthsAhead: 1,
       title: 'SNS で話題になりそう',
-      text: '記事が SNS で伸び始めた（来月、話題になるかもしれない）',
+      text: '記事が SNS で伸び始めました（来月、話題になるかもしれません）',
       pvFactor: 1.2,
       // 半分は予告なしで起きる（対処は来月から。D-28）
       chance: 0.5,
     },
     surpriseText:
-      '記事が突然 SNS で広まり、今月だけ PV が大きく増えた（前兆はなかった）。会員の登録も増え、登録の確認のメールが話題の日に集中する。今月の費用と満足度に効いている。満足度が高ければ、その後も伸びが残る',
+      '記事が突然 SNS で広まり、今月だけ PV が大きく増えました（前兆はありませんでした）。会員の登録も増え、登録の確認のメールが話題の日に集中します。今月の費用と満足度に効いています。満足度が高ければ、その後も伸びが残ります',
     premiseRefs: [
       'pool:vercel:pro:',
       'pool:cloudflare:workers-paid:',
@@ -368,17 +368,17 @@ const EVENTS: EventDef[] = [
     kind: 'script',
     tier: 'common',
     title: 'Bot・クローラーの大量アクセス',
-    text: 'クローラーが大量に来ている（2 か月続く）。Bot は広告の収益にならない。Bot を遮断するルールを入れると、来月から半分になる',
+    text: 'クローラーが大量に来ています（2 か月続きます）。Bot は広告の収益になりません。Bot を遮断するルールを入れると、来月から半分になります',
     // Bot を遮断済みの月の文（計算は上乗せを半分にする。BOT_BLOCK・2026-11-04）
     blockedText:
-      'クローラーが大量に来ている（2 か月続く）。Bot を遮断するルールで上乗せを半分に抑えている（Bot は収益にならない）',
+      'クローラーが大量に来ています（2 か月続きます）。Bot を遮断するルールで上乗せを半分に抑えています（Bot は収益になりません）',
     when: { type: 'window', from: 3, to: 11 },
     notice: {
       monthsAhead: 1,
       title: 'Bot・クローラーが大量に来そう',
-      text: 'クローラーの訪問が増え始めた（来月、大量に来るかもしれない）。今月のうちに Bot を遮断するルールを入れれば、来月から半分になる',
+      text: 'クローラーの訪問が増え始めました（来月、大量に来るかもしれません）。今月のうちに Bot を遮断するルールを入れれば、来月から半分になります',
       blockedText:
-        'クローラーの訪問が増え始めた（来月、大量に来るかもしれない）。Bot を遮断するルールを入れてあるので、来たときの上乗せは半分になる',
+        'クローラーの訪問が増え始めました（来月、大量に来るかもしれません）。Bot を遮断するルールを入れてあるので、来たときの上乗せは半分になります',
       pvFactor: 1.2,
       bot: true,
       // 半分は予告なしで起きる。序盤（1〜2 か月目）には予告を出さない（D-28・D-20 V-12）
@@ -386,9 +386,9 @@ const EVENTS: EventDef[] = [
       notBefore: 3,
     },
     surpriseText:
-      'クローラーが予告なしに大量に来た（2 か月続く）。Bot は広告の収益にならない。今月の費用に効いている。Bot を遮断するルールは来月から効く',
+      'クローラーが予告なしに大量に来ました（2 か月続きます）。Bot は広告の収益になりません。今月の費用に効いています。Bot を遮断するルールは来月から効きます',
     blockedSurpriseText:
-      'クローラーが予告なしに大量に来た（2 か月続く）。Bot を遮断するルールを入れてあるので、上乗せは半分に抑えている',
+      'クローラーが予告なしに大量に来ました（2 か月続きます）。Bot を遮断するルールを入れてあるので、上乗せは半分に抑えています',
     premiseRefs: [
       'pool:cloudflare:workers-free:free-requests',
       'pool:cloudflare:workers-paid:paid-requests',
@@ -413,7 +413,7 @@ const EVENTS: EventDef[] = [
     kind: 'script',
     tier: 'occasional',
     title: 'チームが増えた（2 人目）',
-    text: '開発者がもう 1 人加わった。開発の手間が増える。席（メンバー）ごとに料金がかかるプランでは費用も増える（人件費は所持金に入れない）',
+    text: '開発者がもう 1 人加わりました。開発の手間が増えます。席（メンバー）ごとに料金がかかるプランでは費用も増えます（人件費は所持金に入れません）',
     when: { type: 'window', from: 4, to: 8 },
     premiseRefs: [],
     showMembers: true,

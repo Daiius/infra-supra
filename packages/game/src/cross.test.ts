@@ -428,7 +428,7 @@ describe('前段の無い Amplify で画像を R2 に出すと CDN の料金の�
     const why = componentConflict('aws', 'cdnPlan', 'flat-pro', {
       images: 'cf-images',
     });
-    expect(why).toContain('CloudFront が無い');
+    expect(why).toContain('CloudFront がありません');
     expect(
       componentConflict('aws', 'cdnPlan', 'payg', { images: 'cf-images' }),
     ).toBeNull();
@@ -452,7 +452,7 @@ describe('前段の無い Amplify で画像を R2 に出すと CDN の料金の�
   it('定額のプランの間は、CloudFront が無くなる選択（画像を R2 に出す）も選べない', () => {
     expect(
       componentConflict('aws', 'images', 'cf-resize', { cdnPlan: 'flat-pro' }),
-    ).toContain('従量に戻す');
+    ).toContain('従量に戻します');
     expect(
       componentConflict('aws', 'images', 'cf-resize', { cdnPlan: 'payg' }),
     ).toBeNull();

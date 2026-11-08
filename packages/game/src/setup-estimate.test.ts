@@ -32,7 +32,7 @@ describe('1 か月目に当たる上限と、当たるルート（D-99）', () =
 
   it('Astro × CF Free: 記事のページも、キャッシュを消した後の閲覧が描き終わるのを待つので当たる（D-103。前は静的で Worker を通らなかった）', () => {
     expect(cpu('astro')?.detail).toBe(
-      '記事のページ（ISR の閲覧と再生成・CPU 17 ms）・個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える',
+      '記事のページ（ISR の閲覧と再生成・CPU 17 ms）・個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超えます',
     );
   });
 

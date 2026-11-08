@@ -42,7 +42,7 @@ export const registrar: PriceBookInput = {
         {
           id: 'at-cost',
           premise:
-            '.com の原価は 1 年 $11.17（登録所 Verisign の卸値 $10.97〈2026-11-01 から〉+ ICANN の手数料 $0.20）。Cloudflare Registrar は上乗せなしのこの額で売る（Cloudflare の DNS を使うのが前提）。ほかの登録業者は上乗せがある',
+            '.com の原価は 1 年 $11.17 です（登録所 Verisign の卸値 $10.97〈2026-11-01 から〉+ ICANN の手数料 $0.20）。Cloudflare Registrar は上乗せなしのこの額で売っています（Cloudflare の DNS を使うのが前提）。ほかの登録業者は上乗せがあります',
           sourceIds: ['verisign', 'icann', 'cfRegistrar'],
         },
       ],
@@ -50,21 +50,21 @@ export const registrar: PriceBookInput = {
       members: {
         pricing: 'not-stated',
         premise:
-          'Cloudflare Registrar の文書にメンバー（席）の料金の記載は無い（課金は 1 ドメイン 1 年ごと。土台の事業者のアカウントで持つ）',
+          'Cloudflare Registrar の文書にメンバー（席）の料金の記載はありません（課金は 1 ドメイン 1 年ごと。土台の事業者のアカウントで持つ）',
         sourceIds: ['cfRegistrar'],
       },
       uptimeSla: {
         status: 'not-stated',
         premise:
-          'ドメインの登録はサイトの稼働率の SLA の対象ではない（稼働率の要件ではドメインと DNS を見ない。D-96）',
+          'ドメインの登録はサイトの稼働率の SLA の対象ではありません（稼働率の要件ではドメインと DNS を見ない。D-96）',
         sourceIds: ['cfRegistrar'],
       },
       notes: [
-        '年額を 12 で割って毎月の費用に入れる（実際の支払いは年に 1 回・前払い）',
+        '年額を 12 で割って毎月の費用に入れます（実際の支払いは年に 1 回・前払い）',
       ],
     },
   ],
   notes: [
-    'どの構成でも同じ .com を 1 つ持つとみる（構成の比較の差にはならない）。登録業者ごとの上乗せ・初年度の割引は数えない',
+    'どの構成でも同じ .com を 1 つ持つとみます（構成の比較の差にはならない）。登録業者ごとの上乗せ・初年度の割引は数えません',
   ],
 };

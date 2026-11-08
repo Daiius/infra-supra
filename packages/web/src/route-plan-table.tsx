@@ -357,7 +357,7 @@ export function RoutePlanTable({
                               >
                                 {signedUsd(delta.costUsd)}
                                 {delta.blocking !== 0 &&
-                                  `・止まる前提 ${delta.blocking > 0 ? '+' : '−'}${Math.abs(delta.blocking)}`}
+                                  `・止まる上限 ${delta.blocking > 0 ? '+' : '−'}${Math.abs(delta.blocking)}`}
                               </span>
                             )}
                           </>
@@ -561,4 +561,4 @@ export function RouteChips({
 
 /** 表の下の注記（始める画面・見積モードで同じ文）。 */
 export const ROUTE_PLAN_NOTE =
-  '描き方はフレームワークの既定から、ページごとに選び直せる（人ごとに違うページは使い回す描き方を選べない）。期限・オンデマンドはカードの記事のページの行の設定（再検証・記事のキャッシュ）で決まる。費用の差は 1 か月目の基準の規模での目安。公式の文書で確かめていない組み合わせ（Next.js × Netlify・OpenNext の PPR など）は出していない。';
+  '描き方はフレームワークの既定から、ページごとに選び直せます（人ごとに違うページは使い回す描き方を選べません）。期限・オンデマンドはカードの記事のページの行の設定（再検証・記事のキャッシュ）で決まります。費用の差は 1 か月目の基準の規模での目安です。公式の文書で確かめていない組み合わせ（Next.js × Netlify・OpenNext の PPR など）は出していません。';

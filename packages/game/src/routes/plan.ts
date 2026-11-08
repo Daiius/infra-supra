@@ -204,7 +204,7 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
           reason: blocked
             ? `${blocked.label}: ${blocked.reason}`
             : ccTagBlocked
-              ? `${x.note}。この部品ではタグで消せない（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）ので、選ぶと期限 ${optionLabel(revalidateKey, DEFAULT_REVALIDATE_SEC)} に戻す`
+              ? `${x.note}。この部品ではタグで消せない（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）ので、選ぶと期限 ${optionLabel(revalidateKey, DEFAULT_REVALIDATE_SEC)} に戻します`
               : s === 'shell-api' &&
                   audience === 'public' &&
                   shellPerPage(p.framework, platform)

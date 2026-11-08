@@ -142,7 +142,7 @@ describe('対応表（フレームワーク × 事業者）', () => {
     expect(v.sources.map((x) => x.url)).toContain(
       'https://github.com/cloudflare/vinext',
     );
-    expect(v.note).toContain('vinext は開発中（README）');
+    expect(v.note).toContain('vinext は開発中です（README）');
     expect(v.note).toContain('Worker のリクエストに数え');
   });
 

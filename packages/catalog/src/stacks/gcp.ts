@@ -50,7 +50,7 @@ const RUN_REFS = [
 ];
 
 const RESIZE_NOTE =
-  '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Cloud Storage に置き、原本は残さない。変換の CPU はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）。配信は Hosting の CDN の後ろの Cloud Run が Cloud Storage から返す';
+  '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Cloud Storage に置き、原本は残しません。変換の CPU はかからず、保存量も小さく済みます。サイズ違いが無いので、スマホにも同じ大きさを配ります（最適化より遅い）。配信は Hosting の CDN の後ろの Cloud Run が Cloud Storage から返します';
 
 export const GCP_COMPONENTS: readonly ComponentOption[] = [
   {
@@ -59,7 +59,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'gcp',
     label: 'Hosting の CDN（s-maxage）+ インスタンスごとのキャッシュ',
-    note: 'ISR のページは Firebase Hosting の CDN が s-maxage の間だけ返し、外れると Cloud Run の Next.js が自分のインスタンスのキャッシュから返して、期限が来たら作り直す。キャッシュはインスタンスごとで共有されない（増えたインスタンスはそれぞれ作り直す）。オンデマンドの再検証は受けたインスタンスにしか効かず、CDN はデプロイのときしか消えないので届かない',
+    note: 'ISR のページは Firebase Hosting の CDN が s-maxage の間だけ返し、外れると Cloud Run の Next.js が自分のインスタンスのキャッシュから返して、期限が来たら作り直します。キャッシュはインスタンスごとで共有されません（増えたインスタンスはそれぞれ作り直す）。オンデマンドの再検証は受けたインスタンスにしか効かず、CDN はデプロイのときしか消えないので届きません',
     premiseRefs: [
       'fact:gcp:cloud-run:next-local-cache',
       'fact:gcp:firebase-hosting:dynamic-cache',
@@ -77,7 +77,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'gcp',
     label: 'キャッシュしない（毎回 SSR）',
-    note: '記事の閲覧が毎回 Cloud Run まで届き、CPU とリクエストが増える（同時に処理する分はまとめて数える）。記事は常に新しい',
+    note: '記事の閲覧が毎回 Cloud Run まで届き、CPU とリクエストが増えます（同時に処理する分はまとめて数える）。記事は常に最新です',
     premiseRefs: RUN_REFS,
   },
   {
@@ -86,7 +86,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs', 'vite-spa', 'astro'],
     platform: 'gcp',
     label: 'Cloud Run で変換（next/image・sharp）',
-    note: 'Next.js は next/image の最適化がコンテナの中でそのまま動き、Cloud Storage の原本から変換して Hosting の CDN にキャッシュさせる（外れた分だけ 1 回 150 ms と仮定）。SPA・Astro は同じ形の変換の口を自分で書く（自作）',
+    note: 'Next.js は next/image の最適化がコンテナの中でそのまま動き、Cloud Storage の原本から変換して Hosting の CDN にキャッシュさせます（外れた分だけ 1 回 150 ms と仮定）。SPA・Astro は同じ形の変換の口を自分で書きます（自作）',
     premiseRefs: ['fact:gcp:cloud-run:next-image', ...RUN_REFS],
   },
   {
@@ -94,7 +94,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'gcp',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。Hosting の転送（1 GB $0.15）が大きく増え、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配ります。Hosting の転送（1 GB $0.15）が大きく増え、とても遅くなります（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['pool:gcp:hosting-free-transfer'],
   },
   {
@@ -110,7 +110,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'gcp',
     label: 'Firestore（従量）',
-    note: 'ドキュメントの読み書きの件数と保存だけを払う（1 日 5 万の読み取り・2 万の書き込み・1 GiB までは無料）。基本料は無い。SQL ではない（ドキュメントの DB）ので、作りは Postgres と違う',
+    note: 'ドキュメントの読み書きの件数と保存だけを払います（1 日 5 万の読み取り・2 万の書き込み・1 GiB までは無料）。基本料はありません。SQL ではない（ドキュメントの DB）ので、作りは Postgres と違います',
     premiseRefs: ['fact:gcp:firestore-standard:', 'pool:gcp:firestore-'],
   },
   {
@@ -118,7 +118,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'gcp',
     label: 'Cloud SQL for PostgreSQL（最小・db-f1-micro）',
-    note: '共有の vCPU の最小のインスタンス（メモリ 0.6 GiB）が常に動き、月 約 $8.9 + 保存（1 GiB $0.221）。問い合わせが無くても止まらない。SLA の対象外',
+    note: '共有の vCPU の最小のインスタンス（メモリ 0.6 GiB）が常に動き、月 約 $8.9 + 保存（1 GiB $0.221）がかかります。問い合わせが無くても止まりません。SLA の対象外です',
     premiseRefs: ['fact:gcp:cloud-sql-f1-micro:shared-core'],
   },
   {
@@ -126,7 +126,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     slot: 'minInstances',
     platform: 'gcp',
     label: '0（使っていない間は止める）',
-    note: 'リクエストの無いインスタンスは 15 分で止まり、待機の費用はかからない。止まった後に届いた閲覧はコンテナの起動を待つ（閲覧が途切れがちなサイトでは速さが下がる。ゲーム上の仮定）',
+    note: 'リクエストの無いインスタンスは 15 分で止まり、待機の費用はかかりません。止まった後に届いた閲覧はコンテナの起動を待ちます（閲覧が途切れがちなサイトでは速さが下がる。ゲーム上の仮定）',
     premiseRefs: ['fact:gcp:cloud-run:idle-timeout'],
   },
   {
@@ -134,7 +134,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     slot: 'minInstances',
     platform: 'gcp',
     label: '1（常に 1 つ温めておく）',
-    note: '1 つのインスタンスを常に温めておき、冷えた起動を待たない。リクエストを処理していない間も待機の単価で払う（1 vCPU・512 MiB で月 最大 約 $9.9。処理している時間はアクティブの単価になり、その分は待機から外れる）',
+    note: '1 つのインスタンスを常に温めておき、冷えた起動を待ちません。リクエストを処理していない間も待機の単価で払います（1 vCPU・512 MiB で月 最大 約 $9.9。処理している時間はアクティブの単価になり、その分は待機から外れる）',
     premiseRefs: ['fact:gcp:cloud-run:min-instances'],
   },
   // API の置き場の既定（同じ事業者）
@@ -142,19 +142,19 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     [
       [
         'vite-spa',
-        'Firebase Hosting の書き換えで同じドメインの /api を Cloud Run に渡し、DB を読む。同じドメインなので CORS の設定は要らない',
+        'Firebase Hosting の書き換えで同じドメインの /api を Cloud Run に渡し、DB を読みます。同じドメインなので CORS の設定は要りません',
       ],
       [
         'nextjs',
-        'Next.js のサーバー（Cloud Run のコンテナ）が同じプロジェクトの DB を直接読む。API を別に立てない',
+        'Next.js のサーバー（Cloud Run のコンテナ）が同じプロジェクトの DB を直接読みます。API を別に立てません',
       ],
       [
         'astro',
-        'Astro のサーバー（@astrojs/node のコンテナを Cloud Run で動かす）が同じプロジェクトの DB を直接読む。API を別に立てない',
+        'Astro のサーバー（@astrojs/node のコンテナを Cloud Run で動かす）が同じプロジェクトの DB を直接読みます。API を別に立てません',
       ],
       [
         'nextjs-export',
-        'Firebase Hosting の書き換えで同じドメインの /api を Cloud Run に渡し、DB を読む。ブラウザ（Client Component）から呼ぶ。同じドメインなので CORS の設定は要らない',
+        'Firebase Hosting の書き換えで同じドメインの /api を Cloud Run に渡し、DB を読みます。ブラウザ（Client Component）から呼びます。同じドメインなので CORS の設定は要りません',
       ],
     ] as const
   ).map(([framework, note]): ComponentOption => ({
@@ -173,7 +173,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     platform: 'gcp',
     frameworks: ['vite-spa'],
     label: '前処理しない（全ページ同じカード）',
-    note: 'シェルのメタタグは全ページ同じ。記事ごとのカードは出ない（ゲーム上の仮定: SNS の話題が伸びにくい）',
+    note: 'シェルのメタタグは全ページ同じです。記事ごとのカードは出ません（ゲーム上の仮定: SNS の話題が伸びにくい）',
     premiseRefs: [],
   },
   {
@@ -182,7 +182,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     platform: 'gcp',
     frameworks: ['vite-spa'],
     label: 'OGP の前処理',
-    note: 'シェルを Hosting から返さず、Cloud Run が記事のメタタグを差し込んで返す。シェルの読み込みが Cloud Run のリクエストになる',
+    note: 'シェルを Hosting から返さず、Cloud Run が記事のメタタグを差し込んで返します。シェルの読み込みが Cloud Run のリクエストになります',
     premiseRefs: RUN_REFS,
   },
   // SPA の API の応答のキャッシュ（D-37）
@@ -192,7 +192,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     platform: 'gcp',
     frameworks: ['vite-spa'],
     label: 'なし',
-    note: '記事の中身の API を毎回処理して DB を読む。記事は常に新しい',
+    note: '記事の中身の API を毎回処理して DB を読みます。記事は常に最新です',
     premiseRefs: [],
   },
   {
@@ -201,7 +201,7 @@ export const GCP_COMPONENTS: readonly ComponentOption[] = [
     platform: 'gcp',
     frameworks: ['vite-spa'],
     label: 'Hosting の CDN のキャッシュ（public・s-maxage）',
-    note: '記事の中身の API の応答に Cache-Control: public, s-maxage を付け、ヒットは Hosting の CDN が返す（Cloud Run と DB に届く件数が減る。転送は残る）。CDN はデプロイのときしか消えない',
+    note: '記事の中身の API の応答に Cache-Control: public, s-maxage を付け、ヒットは Hosting の CDN が返します（Cloud Run と DB に届く件数が減る。転送は残る）。CDN はデプロイのときしか消えません',
     premiseRefs: ['fact:gcp:firebase-hosting:dynamic-cache'],
   },
 ];

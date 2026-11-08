@@ -206,7 +206,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'KV',
-    note: '閲覧のたびに Worker が KV を読み、再生成で書く。KV の書き込みは他の拠点で見えるまで 60 秒以上かかることがある',
+    note: '閲覧のたびに Worker が KV を読み、再生成で書きます。KV の書き込みは他の拠点で見えるまで 60 秒以上かかることがあります',
     premiseRefs: ['pool:cloudflare:workers-paid:paid-kv-writes'],
     onDemandIsr: { ok: false, fact: 'cloudflare:workers-paid:kv-propagation' },
   },
@@ -216,7 +216,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'R2（自作のアダプター）',
-    note: '閲覧で R2 を読み（Class B）、再生成で書く（Class A）。vinext に R2 を ISR の置き場にする公式のアダプターは見当たらない（README）ので、キャッシュの処理は自作になる。R2 は強い整合なので、書けばすぐ全世界で見える',
+    note: '閲覧で R2 を読み（Class B）、再生成で書きます（Class A）。vinext に R2 を ISR の置き場にする公式のアダプターは見当たらない（README）ので、キャッシュの処理は自作になります。R2 は強い整合なので、書けばすぐ全世界で見えます',
     premiseRefs: [
       'pool:cloudflare:r2-standard',
       'fact:cloudflare:r2-standard:',
@@ -232,7 +232,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'Workers Cache（タグでパージ）',
-    note: 'vinext の workersCacheCdnAdapter。ISR のページを拠点ごとの Workers Cache から返し、再検証はタグでパージする。Cache API の料金は記載なし（このモデルでは費用なし）。拠点ごとのキャッシュなので、ヒット率が下がって再生成が増える分は計算に入れていない',
+    note: 'vinext の workersCacheCdnAdapter。ISR のページを拠点ごとの Workers Cache から返し、再検証はタグでパージします。Cache API の料金は記載なし（このモデルでは費用なし）。拠点ごとのキャッシュなので、ヒット率が下がって再生成が増える分は計算に入れていません',
     premiseRefs: ['fact:cloudflare:workers-paid:workers-cache'],
     onDemandIsr: { ok: true, fact: 'cloudflare:workers-paid:workers-cache' },
   },
@@ -242,7 +242,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'キャッシュしない（毎回 SSR）',
-    note: '記事も毎回 SSR する。Worker のリクエスト数は変わらない。CPU と D1 の読み取りは、再検証の間隔とページあたりの閲覧しだいで増える（閲覧が薄いと ISR の効きは小さい）。記事は常に新しい',
+    note: '記事も毎回 SSR します。Worker のリクエスト数は変わりません。CPU と D1 の読み取りは、再検証の間隔とページあたりの閲覧しだいで増えます（閲覧が薄いと ISR の効きは小さい）。記事は常に最新です',
     premiseRefs: [
       'limit:cloudflare:workers-free:cpu-ms-per-request',
       'pool:cloudflare:workers-paid:paid-cpu-ms',
@@ -253,7 +253,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'cloudflare',
     label: 'Images（閲覧のときに変換）',
-    note: '一意な変換（種類 × サイズ違い）を月ごとに数える',
+    note: '一意な変換（種類 × サイズ違い）を月ごとに数えます',
     premiseRefs: ['pool:cloudflare:images-paid:images-transformations'],
   },
   {
@@ -269,7 +269,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'cloudflare',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。R2 は転送量に課金しないので費用は増えないが、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配ります。R2 は転送量に課金しないので費用は増えませんが、とても遅くなります（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['fact:cloudflare:r2-standard:egress'],
   },
   {
@@ -277,7 +277,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'cloudflare',
     label: '投稿のときに一律で縮めて置く',
-    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残しません。変換のサービスの費用はかからず、保存量も小さく済みます。サイズ違いが無いので、スマホにも同じ大きさを配ります（最適化より遅い）',
     premiseRefs: [],
   },
   {
@@ -285,7 +285,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'cloudflare',
     label: 'D1 に BLOB で置く',
-    note: '画像を D1 の行に置き、Worker が読み出して配る',
+    note: '画像を D1 の行に置き、Worker が読み出して配ります',
     inappropriate: true,
     premiseRefs: [
       'limit:cloudflare:workers-paid:d1-db-size',
@@ -306,7 +306,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'cloudflare',
     label: 'KV を DB 代わりに',
-    note: '問い合わせを KV の読み取り、行の書き込みを KV の書き込みにする',
+    note: '問い合わせを KV の読み取り、行の書き込みを KV の書き込みにします',
     inappropriate: true,
     premiseRefs: [
       'limit:cloudflare:workers-paid:kv-same-key-writes',
@@ -319,7 +319,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'cloudflare',
     label: 'Hyperdrive 経由で Supabase（Postgres）',
-    note: 'DB だけ Supabase に置く（事業者をまたぐ例外の 1 組・D-24）。往復の遅延は計算しない',
+    note: 'DB だけ Supabase に置きます（事業者をまたぐ例外の 1 組・D-24）。往復の遅延は計算しません',
     premiseRefs: [
       'pool:cloudflare:hyperdrive-free',
       'fact:cloudflare:hyperdrive-paid:queries',
@@ -331,7 +331,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'realtime',
     platform: 'cloudflare',
     label: 'なし',
-    note: 'リアルタイムの機能を持たない',
+    note: 'リアルタイムの機能を持ちません',
     premiseRefs: [],
   },
   {
@@ -339,7 +339,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'realtime',
     platform: 'cloudflare',
     label: 'Durable Objects（休止する WebSocket）',
-    note: '受信メッセージは 20 件で 1 リクエスト。休止中は実行時間を課金しない',
+    note: '受信メッセージは 20 件で 1 リクエストです。休止中は実行時間を課金しません',
     premiseRefs: [
       'pool:cloudflare:durable-objects-paid',
       'pool:cloudflare:durable-objects-free',
@@ -351,7 +351,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'vercel',
     label: 'Supabase（Postgres）',
-    note: 'Hobby は Supabase Free、Pro は Supabase Pro（月の基本料つき・Micro のサーバーが常に動く）。関数から接続のプール（pooler）でつなぐ',
+    note: 'Hobby は Supabase Free、Pro は Supabase Pro（月の基本料つき・Micro のサーバーが常に動く）です。関数から接続のプール（pooler）でつなぎます',
     premiseRefs: [
       'fact:supabase:pro-micro:compute',
       'limit:supabase:pro-micro:pooler-connections',
@@ -365,7 +365,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'vercel',
     label: 'ISR の永続ストレージ',
-    note: 'ISR のページは CDN が返す。再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
+    note: 'ISR のページは CDN が返します。再検証すると全リージョンのキャッシュが 300ms 以内に更新されます',
     premiseRefs: [],
     onDemandIsr: { ok: true, fact: 'vercel:pro:isr-purge' },
   },
@@ -375,7 +375,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'vercel',
     label: 'キャッシュしない（毎回 SSR）',
-    note: '記事の閲覧が毎回関数まで届く。記事は常に新しい',
+    note: '記事の閲覧が毎回関数まで届きます。記事は常に最新です',
     premiseRefs: [
       'credit:vercel:pro:usage-credit',
       'fact:vercel:pro:active-cpu',
@@ -387,7 +387,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'cdnPlan',
     platform: 'vercel',
     label: 'Flat Rate CDN（段の定額・既定）',
-    note: 'CDN のリクエスト・転送（Fast Data Transfer・Blob Data Transfer）を段の定額で払う。Pro に込みの段は月 100 万リクエスト・1 TB、上は $20・$100・$300。量が段を超えた月は請求が増えず、翌月から上の段になる。画像などのメディアが転送の大半だと対象外とされうる（Vercel の判断）',
+    note: 'CDN のリクエスト・転送（Fast Data Transfer・Blob Data Transfer）を段の定額で払います。Pro に込みの段は月 100 万リクエスト・1 TB、上は $20・$100・$300 です。量が段を超えた月は請求が増えず、翌月から上の段になります。画像などのメディアが転送の大半だと対象外とされることがあります（Vercel の判断）',
     premiseRefs: ['capacity:vercel:pro:flat-rate-cdn'],
   },
   {
@@ -395,7 +395,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'cdnPlan',
     platform: 'vercel',
     label: 'On-demand CDN（従量）',
-    note: 'CDN のリクエスト・転送を使った分だけ払う（東京の読者で 100 万リクエスト $2.60・転送 $0.16/GB）。月 $20 のクレジットが当たる',
+    note: 'CDN のリクエスト・転送を使った分だけ払います（東京の読者で 100 万リクエスト $2.60・転送 $0.16/GB）。月 $20 のクレジットが当たります',
     premiseRefs: ['credit:vercel:pro:usage-credit'],
   },
   // Next.js の静的書き出しでは next/image の既定のローダーが使えない（D-80）ので、閲覧のときの変換は選べない
@@ -405,7 +405,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     platform: 'vercel',
     frameworks: ['nextjs', 'vite-spa', 'astro'],
     label: '画像の最適化',
-    note: '閲覧のときに変換する',
+    note: '閲覧のときに変換します',
     premiseRefs: [],
   },
   {
@@ -413,7 +413,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'vercel',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。転送量（Fast Data Transfer）が大きく増え、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配ります。転送量（Fast Data Transfer）が大きく増え、とても遅くなります（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['credit:vercel:pro:usage-credit'],
   },
   {
@@ -421,7 +421,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'vercel',
     label: '投稿のときに一律で縮めて置く',
-    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残しません。変換のサービスの費用はかからず、保存量も小さく済みます。サイズ違いが無いので、スマホにも同じ大きさを配ります（最適化より遅い）',
     premiseRefs: [],
   },
   // さくらの VPS の DB（D-114 段 2d）。既定は同じ VPS の MySQL（今までの構成）。他の事業者の DB（Neon・Supabase・AWS）は cross.ts の部品
@@ -430,7 +430,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'sakura',
     label: 'VPS の MySQL（同居）',
-    note: 'DB を同じ VPS の MySQL に置く（月額の中。VPS のメモリ・CPU・ディスクを使う）。バックアップは自分で取る',
+    note: 'DB を同じ VPS の MySQL に置きます（月額の中。VPS のメモリ・CPU・ディスクを使う）。バックアップは自分で取ります',
     premiseRefs: ['host:'],
   },
   {
@@ -439,7 +439,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'sakura',
     label: 'ディスク',
-    note: 'next start のキャッシュをディスクに置く（1 台・永続ディスクなら自動で動く）',
+    note: 'next start のキャッシュをディスクに置きます（1 台・永続ディスクなら自動で動く）',
     premiseRefs: [],
     onDemandIsr: { ok: true, fact: 'sakura-vps:2gb-tokyo:next-fs-cache' },
   },
@@ -449,7 +449,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'sakura',
     label: 'キャッシュしない（毎回 SSR）',
-    note: '記事も毎回 SSR する。CPU を使う。記事は常に新しい',
+    note: '記事も毎回 SSR します。CPU を使います。記事は常に最新です',
     premiseRefs: ['host:cpu'],
   },
   {
@@ -458,7 +458,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     platform: 'sakura',
     frameworks: ['nextjs', 'vite-spa', 'astro'],
     label: 'ホストで変換',
-    note: '閲覧のときに VPS の CPU で変換する',
+    note: '閲覧のときに VPS の CPU で変換します',
     premiseRefs: [],
   },
   {
@@ -466,7 +466,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'sakura',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配る。共有回線を大きく使い、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）をそのまま配ります。共有回線を大きく使い、とても遅くなります（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: ['host:line'],
   },
   {
@@ -474,7 +474,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'sakura',
     label: '投稿のときに一律で縮めて置く',
-    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残さない。変換のサービスの費用はかからず、保存量も小さい。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて置き、原本は残しません。変換のサービスの費用はかからず、保存量も小さく済みます。サイズ違いが無いので、スマホにも同じ大きさを配ります（最適化より遅い）',
     premiseRefs: [],
   },
 ];
@@ -487,7 +487,7 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
     slot: 'frontCdn',
     platform: 'sakura',
     label: 'なし',
-    note: 'すべてのリクエストを VPS（nginx）が受ける',
+    note: 'すべてのリクエストを VPS（nginx）が受けます',
     premiseRefs: [],
   },
   {
@@ -495,7 +495,7 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
     slot: 'frontCdn',
     platform: 'sakura',
     label: 'Cloudflare（静的と画像だけ）',
-    note: 'DNS をプロキシ（オレンジ雲）にし、静的なファイルと変換済みの画像の大部分を CDN が返す（VPS の回線と CPU が減り、Free は転送量で課金しない）。HTML は既定でキャッシュされないので VPS のまま。/_next/image（拡張子を持たない URL）は Cache Rules で対象にする',
+    note: 'DNS をプロキシ（オレンジ雲）にし、静的なファイルと変換済みの画像の大部分を CDN が返します（VPS の回線と CPU が減り、Free は転送量で課金しない）。HTML は既定でキャッシュされないので VPS のままです。/_next/image（拡張子を持たない URL）は Cache Rules で対象にします',
     premiseRefs: [
       'fact:cloudflare:cdn-free:html-not-cached',
       'fact:cloudflare:cdn-free:free-bandwidth',
@@ -508,7 +508,7 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
     slot: 'frontCdn',
     platform: 'sakura',
     label: 'Cloudflare（HTML も。Cache Rules）',
-    note: 'Cache Rules で HTML もキャッシュの対象にし、記事のページも CDN が返す（ログインの要るページは条件で外す）。CDN は Next.js の s-maxage（再検証の間隔）に従うので、時間の再検証では更新が最大で間隔の約 2 倍遅れて見える。オンデマンドの再検証・ビルドでは、更新のたびに Free の API でそのページのキャッシュを消す（prefix・タグは 1 分 5 回・1 回 100 件まで）ので遅れない',
+    note: 'Cache Rules で HTML もキャッシュの対象にし、記事のページも CDN が返します（ログインの要るページは条件で外す）。CDN は Next.js の s-maxage（再検証の間隔）に従うので、時間の再検証では更新が最大で間隔の約 2 倍遅れて見えます。オンデマンドの再検証・ビルドでは、更新のたびに Free の API でそのページのキャッシュを消す（prefix・タグは 1 分 5 回・1 回 100 件まで）ので遅れません',
     onDemandIsr: { ok: true, fact: 'cloudflare:cdn-free:purge-free' },
     premiseRefs: [
       'fact:cloudflare:cdn-free:cache-rules-html',
@@ -529,7 +529,7 @@ const SPA_OGP: ComponentOption[] = (
   [
     [
       'cloudflare',
-      'シェルを返す前に Worker（run_worker_first）が記事のメタタグを差し込む。シェルの読み込みが Worker の起動として課金され、Free の上限を超えると 429',
+      'シェルを返す前に Worker（run_worker_first）が記事のメタタグを差し込みます。シェルの読み込みが Worker の起動として課金され、Free の上限を超えると 429 になります',
       [
         'fact:cloudflare:workers-free:run-worker-first',
         'fact:cloudflare:workers-paid:run-worker-first',
@@ -538,12 +538,12 @@ const SPA_OGP: ComponentOption[] = (
     ],
     [
       'vercel',
-      'シェルを CDN から返さず、関数が記事のメタタグを差し込んで返す。シェルの読み込みが関数の起動になる',
+      'シェルを CDN から返さず、関数が記事のメタタグを差し込んで返します。シェルの読み込みが関数の起動になります',
       ['credit:vercel:pro:usage-credit', 'fact:vercel:pro:active-cpu'],
     ],
     [
       'sakura',
-      'nginx でなく Node がシェルに記事のメタタグを差し込んで返す（この CPU は数えていない・仮定）',
+      'nginx でなく Node がシェルに記事のメタタグを差し込んで返します（この CPU は数えていない・仮定）',
       ['host:cpu'],
     ],
   ] as const
@@ -554,7 +554,7 @@ const SPA_OGP: ComponentOption[] = (
     platform,
     frameworks: ['vite-spa'],
     label: '前処理しない（全ページ同じカード）',
-    note: 'シェルのメタタグは全ページ同じ。記事ごとのカードは出ない（ゲーム上の仮定: SNS の話題が伸びにくい）',
+    note: 'シェルのメタタグは全ページ同じです。記事ごとのカードは出ません（ゲーム上の仮定: SNS の話題が伸びにくい）',
     premiseRefs:
       platform === 'cloudflare'
         ? [
@@ -587,7 +587,7 @@ const SPA_API_CACHE: ComponentOption[] = [
       platform,
       frameworks: ['vite-spa'],
       label: 'なし',
-      note: '記事の中身の API を毎回処理して DB を読む。記事は常に新しい',
+      note: '記事の中身の API を毎回処理して DB を読みます。記事は常に最新です',
       premiseRefs: [],
     }),
   ),
@@ -597,7 +597,7 @@ const SPA_API_CACHE: ComponentOption[] = [
     platform: 'cloudflare',
     frameworks: ['vite-spa'],
     label: 'Workers Cache（Worker の前のキャッシュ）',
-    note: 'Cache-Control に従い、ヒットは Worker を動かさずに返す（CPU と D1 の読み取りが減る）。有効にすると、キャッシュから返したものも静的アセットも、Worker へのリクエストはすべて課金される',
+    note: 'Cache-Control に従い、ヒットは Worker を動かさずに返します（CPU と D1 の読み取りが減る）。有効にすると、キャッシュから返したものも静的アセットも、Worker へのリクエストはすべて課金されます',
     premiseRefs: [
       'fact:cloudflare:workers-free:workers-cache-front',
       'fact:cloudflare:workers-paid:workers-cache-front',
@@ -611,7 +611,7 @@ const SPA_API_CACHE: ComponentOption[] = [
     platform: 'cloudflare',
     frameworks: ['vite-spa'],
     label: 'Workers の Cache API（コードの中）',
-    note: 'Worker が拠点のキャッシュを読み、ヒットなら D1 を読まずに返す。Worker は毎回動くのでリクエスト数は減らず、CPU と D1 の読み取りが減る。キャッシュは拠点ごとで複製されない（拠点に分かれてヒット率が下がる分は計算に入れていない）',
+    note: 'Worker が拠点のキャッシュを読み、ヒットなら D1 を読まずに返します。Worker は毎回動くのでリクエスト数は減らず、CPU と D1 の読み取りが減ります。キャッシュは拠点ごとで複製されません（拠点に分かれてヒット率が下がる分は計算に入れていない）',
     premiseRefs: [
       'fact:cloudflare:workers-free:cache-api-local',
       'fact:cloudflare:workers-paid:cache-api-local',
@@ -624,7 +624,7 @@ const SPA_API_CACHE: ComponentOption[] = [
     platform: 'vercel',
     frameworks: ['vite-spa'],
     label: 'CDN のキャッシュ（s-maxage）',
-    note: '記事の中身の API の応答に Cache-Control: s-maxage を付け、ヒットは CDN が返す（関数の起動・CPU・Fast Origin Transfer が減る。CDN Requests と Fast Data Transfer は残る）。キャッシュはリージョンごと（分かれてヒット率が下がる分は計算に入れていない）',
+    note: '記事の中身の API の応答に Cache-Control: s-maxage を付け、ヒットは CDN が返します（関数の起動・CPU・Fast Origin Transfer が減る。CDN Requests と Fast Data Transfer は残る）。キャッシュはリージョンごとです（分かれてヒット率が下がる分は計算に入れていない）',
     premiseRefs: [
       'fact:vercel:hobby:cdn-cache-functions',
       'fact:vercel:pro:cdn-cache-functions',
@@ -637,7 +637,7 @@ const SPA_API_CACHE: ComponentOption[] = [
     platform: 'sakura',
     frameworks: ['vite-spa'],
     label: '前段の CDN でキャッシュ（s-maxage）',
-    note: '前段の CDN（Cloudflare）が記事の中身の API の応答を返し、VPS の CPU と回線が減る。前段の CDN が要る。Cloudflare は既定で JSON をキャッシュしないので、Cache Rules で API のパスを対象にする前提（推測）',
+    note: '前段の CDN（Cloudflare）が記事の中身の API の応答を返し、VPS の CPU と回線が減ります。前段の CDN が要ります。Cloudflare は既定で JSON をキャッシュしないので、Cache Rules で API のパスを対象にする前提です（推測）',
     premiseRefs: ['fact:cloudflare:cdn-free:html-not-cached', 'host:cpu'],
   },
 ];
@@ -652,15 +652,15 @@ const SPA_API_SAME: ComponentOption[] = (
   [
     [
       'cloudflare',
-      'シェルを配るのと同じ Worker に API を置き、DB はこの構成の DB の部品（D1 など）を binding で使う。同じドメインなので CORS の設定は要らない',
+      'シェルを配るのと同じ Worker に API を置き、DB はこの構成の DB の部品（D1 など）を binding で使います。同じドメインなので CORS の設定は要りません',
     ],
     [
       'vercel',
-      '同じプロジェクトの関数（Vercel Functions）に API を置き、DB は Supabase。同じドメインなので CORS の設定は要らない',
+      '同じプロジェクトの関数（Vercel Functions）に API を置き、DB は Supabase です。同じドメインなので CORS の設定は要りません',
     ],
     [
       'aws',
-      'CloudFront の後ろの API Gateway（HTTP API）+ Lambda に API を置き、DB はこの構成の DB の部品。同じ CloudFront のドメインなので CORS の設定は要らない',
+      'CloudFront の後ろの API Gateway（HTTP API）+ Lambda に API を置き、DB はこの構成の DB の部品です。同じ CloudFront のドメインなので CORS の設定は要りません',
     ],
   ] as const
 ).map(([platform, note]): ComponentOption => ({
@@ -681,15 +681,15 @@ const NEXT_API_SAME: ComponentOption[] = (
   [
     [
       'vercel',
-      'Next.js のサーバー（Vercel Functions）が同じ構成の Supabase を直接読む。API を別に立てない',
+      'Next.js のサーバー（Vercel Functions）が同じ構成の Supabase を直接読みます。API を別に立てません',
     ],
     [
       'aws',
-      'Next.js のサーバー（Amplify の SSR）が同じ AWS の DB の部品を直接読む。API を別に立てない',
+      'Next.js のサーバー（Amplify の SSR）が同じ AWS の DB の部品を直接読みます。API を別に立てません',
     ],
     [
       'aws-opennext',
-      'Next.js のサーバーの関数（Lambda）が同じ AWS の DB の部品を直接読む。API を別に立てない',
+      'Next.js のサーバーの関数（Lambda）が同じ AWS の DB の部品を直接読みます。API を別に立てません',
     ],
   ] as const
 ).map(([platform, note]): ComponentOption => ({
@@ -711,15 +711,15 @@ const ASTRO_API_SAME: ComponentOption[] = (
   [
     [
       'cloudflare',
-      'Astro の Worker（アダプター）が同じ構成の DB の部品を binding で直接読む。API を別に立てない',
+      'Astro の Worker（アダプター）が同じ構成の DB の部品を binding で直接読みます。API を別に立てません',
     ],
     [
       'vercel',
-      'Astro のサーバー（Vercel Functions）が同じ構成の Supabase を直接読む。API を別に立てない',
+      'Astro のサーバー（Vercel Functions）が同じ構成の Supabase を直接読みます。API を別に立てません',
     ],
     [
       'sakura',
-      'Astro の Node（@astrojs/node）が同じ VPS の MySQL を直接読む。API を別に立てない',
+      'Astro の Node（@astrojs/node）が同じ VPS の MySQL を直接読みます。API を別に立てません',
     ],
   ] as const
 ).map(([platform, note]): ComponentOption => ({
@@ -739,38 +739,38 @@ const ASTRO_API_SAME: ComponentOption[] = (
 const BACKUP_NOTES: Record<Platform, { default: string; pitr: string }> = {
   cloudflare: {
     default:
-      'D1 は Time Travel（Paid は 30 日・Free は 7 日）で任意の時点に戻せる（追加の費用なし）。Hyperdrive の先の Supabase Pro は日次のバックアップ 7 日分。API を AWS に置いたときの DynamoDB は PITR が無効',
-    pitr: 'Hyperdrive の先の Supabase Pro に PITR（7 日）を付ける（月 約 $105。compute を Small に上げる）。API を AWS に置いたときの DynamoDB は PITR を有効にする（テーブルの大きさに $0.228 / GB 月）',
+      'D1 は Time Travel（Paid は 30 日・Free は 7 日）で任意の時点に戻せます（追加の費用なし）。Hyperdrive の先の Supabase Pro は日次のバックアップ 7 日分です。API を AWS に置いたときの DynamoDB は PITR が無効です',
+    pitr: 'Hyperdrive の先の Supabase Pro に PITR（7 日）を付けます（月 約 $105。compute を Small に上げる）。API を AWS に置いたときの DynamoDB は PITR を有効にします（テーブルの大きさに $0.228 / GB 月）',
   },
   vercel: {
     default:
-      'Supabase Pro は日次のバックアップ 7 日分（Free は無し）。Neon は履歴の窓 1 日（Free は 6 時間）',
-    pitr: 'Supabase Pro に PITR（7 日・月 約 $105。compute を Small に上げる）、Neon Launch は履歴の窓を 7 日に（変更の量に $0.20 / GB 月）',
+      'Supabase Pro は日次のバックアップ 7 日分です（Free は無し）。Neon は履歴の窓 1 日です（Free は 6 時間）',
+    pitr: 'Supabase Pro に PITR（7 日・月 約 $105。compute を Small に上げる）を付け、Neon Launch は履歴の窓を 7 日にします（変更の量に $0.20 / GB 月）',
   },
   netlify: {
     default:
-      'Supabase Pro は日次のバックアップ 7 日分（Free は無し）。Neon は履歴の窓 1 日（Free は 6 時間）',
-    pitr: 'Supabase Pro に PITR（7 日・月 約 $105。compute を Small に上げる）、Neon Launch は履歴の窓を 7 日に（変更の量に $0.20 / GB 月）',
+      'Supabase Pro は日次のバックアップ 7 日分です（Free は無し）。Neon は履歴の窓 1 日です（Free は 6 時間）',
+    pitr: 'Supabase Pro に PITR（7 日・月 約 $105。compute を Small に上げる）を付け、Neon Launch は履歴の窓を 7 日にします（変更の量に $0.20 / GB 月）',
   },
   aws: {
     default:
-      'DynamoDB の PITR は無効、Aurora は保持 1 日、RDS は保持 7 日（DB の容量までは無料）',
-    pitr: 'DynamoDB の PITR を有効に（テーブルの大きさに $0.228 / GB 月）、Aurora は保持 7 日・RDS は 35 日に延ばす（DB の大きさを超えた分に課金）',
+      'DynamoDB の PITR は無効、Aurora は保持 1 日、RDS は保持 7 日です（DB の容量までは無料）',
+    pitr: 'DynamoDB の PITR を有効にし（テーブルの大きさに $0.228 / GB 月）、Aurora は保持 7 日・RDS は 35 日に延ばします（DB の大きさを超えた分に課金）',
   },
   'aws-opennext': {
     default:
-      'DynamoDB の PITR は無効、Aurora は保持 1 日、RDS は保持 7 日（DB の容量までは無料）',
-    pitr: 'DynamoDB の PITR を有効に（テーブルの大きさに $0.228 / GB 月）、Aurora は保持 7 日・RDS は 35 日に延ばす（DB の大きさを超えた分に課金）',
+      'DynamoDB の PITR は無効、Aurora は保持 1 日、RDS は保持 7 日です（DB の容量までは無料）',
+    pitr: 'DynamoDB の PITR を有効にし（テーブルの大きさに $0.228 / GB 月）、Aurora は保持 7 日・RDS は 35 日に延ばします（DB の大きさを超えた分に課金）',
   },
   gcp: {
     default:
-      'Firestore の PITR は無効。Cloud SQL は自動バックアップ 7 つと PITR が既定で有効（使った量に $0.104 / GiB 月）',
-    pitr: 'Firestore の PITR を有効に（7 日・DB の大きさに 約 $0.195 / GiB 月）',
+      'Firestore の PITR は無効です。Cloud SQL は自動バックアップ 7 つと PITR が既定で有効です（使った量に $0.104 / GiB 月）',
+    pitr: 'Firestore の PITR を有効にします（7 日・DB の大きさに 約 $0.195 / GiB 月）',
   },
   sakura: {
     default:
-      'さくらの VPS にバックアップの機能は無い。自分で取らなければ、壊れたときに戻せるものが無い',
-    pitr: '日次のダンプとバイナリログを、さくらのオブジェクトストレージに自分で送る（7 日分・月 495 円から）。仕組みを作り、毎月見張る手間がかかる',
+      'さくらの VPS にバックアップの機能はありません。自分で取らなければ、壊れたときに戻せるものがありません',
+    pitr: '日次のダンプとバイナリログを、さくらのオブジェクトストレージに自分で送ります（7 日分・月 495 円から）。仕組みを作り、毎月見張る手間がかかります',
   },
 };
 

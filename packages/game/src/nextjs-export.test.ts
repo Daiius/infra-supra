@@ -137,7 +137,7 @@ describe('Next.js の静的書き出し（D-80）', () => {
       'ビルドの間隔 5 分 + ビルドの時間 約 2 分',
     );
     expect(r.satisfaction.reasons.freshness).toContain(
-      '投稿した人がすぐ開けない',
+      '投稿した人がすぐ開けません',
     );
     // 更新のたびのビルド: 遅れはビルドの時間だけ（2 分で「良い」）だが、許容の 1 分を超えるので「普通」
     const o = playMonth(

@@ -86,7 +86,8 @@ const PARTS_VIEWS: readonly {
   {
     view: 'list',
     label: '機能から選ぶ',
-    title: '機能からインフラを選択（機能ごとの部品のチップ。構成図は出さない）',
+    title:
+      '機能からインフラを選択（機能ごとの部品のチップ。構成図は出しません）',
   },
 ];
 
@@ -485,10 +486,10 @@ export function stackTabGroups(
 /** 構成図の注記の既定（引数の既定値に関数を直接書くと React Compiler が最適化を諦めるので外に置く）。 */
 const defaultDiagramCaption = (selected: boolean, remembered: boolean) =>
   selected
-    ? '部品を選ぶ前のスロットは既定の部品で描く。'
+    ? '部品を選ぶ前のスロットは既定の部品で描いています。'
     : remembered
-      ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描く。'
-      : '既定の部品で描く。';
+      ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
+      : '既定の部品で描いています。';
 
 /** インフラの構成を選ぶ（カルーセル）。value は STACKS の index。 */
 export function StackField({
@@ -568,13 +569,13 @@ export function StackField({
     const kept = routesOnFallback?.(i);
     const chosen = Object.keys(routes ?? {});
     const dropped = chosen.filter((r) => kept?.[r] === undefined).length;
-    return `${fwLabel} はこの構成に載せられない（公式のアダプターが無い）。選ぶとフレームワークは ${to} になる${
+    return `${fwLabel} はこの構成に載せられません（公式のアダプターが無いため）。選ぶとフレームワークは ${to} になります${
       dropped === 0
         ? ''
         : dropped === chosen.length
-          ? '（選んだページの描き方は既定に戻る）'
-          : '（選んだページの描き方のうち、替えた先で選べないものは既定に戻る）'
-    }。構成図は ${to} で描く`;
+          ? '（選んだページの描き方は既定に戻ります）'
+          : '（選んだページの描き方のうち、替えた先で選べないものは既定に戻ります）'
+    }。構成図は ${to} で描きます`;
   };
   return (
     <ChoiceCarousel
@@ -654,7 +655,7 @@ export function frameworkFallbackNotice(
   to: FrameworkId,
   routesReset: boolean,
 ): string {
-  return `${stackName(stackIndex, to, false)} には ${FRAMEWORKS[want].label} を載せる公式のアダプターが無いので、フレームワークを ${FRAMEWORKS[to].label} にした${
-    routesReset ? '（選んだページの描き方は既定に戻した）' : ''
+  return `${stackName(stackIndex, to, false)} には ${FRAMEWORKS[want].label} を載せる公式のアダプターが無いので、フレームワークを ${FRAMEWORKS[to].label} にしました${
+    routesReset ? '（選んだページの描き方は既定に戻しました）' : ''
   }。`;
 }

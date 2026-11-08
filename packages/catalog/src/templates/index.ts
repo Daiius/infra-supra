@@ -25,13 +25,13 @@ export const ARTICLE_COMMUNITY_ROUTES: Readonly<Record<string, RouteTraits>> = {
     audience: 'public',
     needsOgp: true,
     freshness:
-      '投稿・編集が 5 分以内に見えると良い（1 時間以内なら普通）。新しい記事は投稿した人がすぐ開ける',
+      '投稿・編集が 5 分以内に見えると良いです（1 時間以内なら普通）。新しい記事は投稿した人がすぐ開けます',
     parts: ['コメント欄', 'いいね', 'ログインの表示'],
   },
   personal: {
     audience: 'personal',
     needsOgp: false,
-    freshness: '自分の書き込みがすぐ見える',
+    freshness: '自分の書き込みがすぐ見えます',
     parts: ['記事の投稿・編集', '通知'],
   },
 };

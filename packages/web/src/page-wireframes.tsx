@@ -296,8 +296,8 @@ export function ScenarioWireframesInfo({ pages }: { pages: ScenarioPage[] }) {
           </div>
         ))}
         <p className="opacity-70">
-          見取り図はゲーム上の仮定。作り方（ビルド・キャッシュ・閲覧ごとに描く・ブラウザが取る）は、②
-          でフレームワークと描き方を選ぶと出る。
+          見取り図はゲーム上の仮定です。作り方（ビルド・キャッシュ・閲覧ごとに描く・ブラウザが取る）は、②
+          でフレームワークと描き方を選ぶと出ます。
         </p>
       </div>
     </Info>

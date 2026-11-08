@@ -109,7 +109,7 @@ export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
               stage: month1.satisfaction.stages.freshness,
               text:
                 month1.satisfaction.reasons.freshness ??
-                '更新はすぐ・間隔の内に見える',
+                '更新はすぐ・間隔の内に見えます',
             },
           }
         : {}),
@@ -121,9 +121,12 @@ export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
               state.components.ogp !== 'prerender'
                 ? {
                     ok: false,
-                    text: 'HTML に中身が無いので、記事ごとの SNS のカードが出ない（話題の伸びが減る）',
+                    text: 'HTML に中身が無いので、記事ごとの SNS のカードが出ません（話題の伸びが減ります）',
                   }
-                : { ok: true, text: '記事ごとの SNS のカードは HTML に入る' },
+                : {
+                    ok: true,
+                    text: '記事ごとの SNS のカードは HTML に入ります',
+                  },
           }
         : {}),
       cpu: cpuHit.length
