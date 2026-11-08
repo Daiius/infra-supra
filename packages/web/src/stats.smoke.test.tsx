@@ -42,6 +42,12 @@ async function finish(save: SaveData) {
   fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
 }
 
+/** 送信（POST /api/results）の呼び出しだけ（完走すると分布の GET も呼ぶ。D-161）。 */
+const posts = (f: ReturnType<typeof vi.fn>) =>
+  f.mock.calls.filter(
+    (c) => (c[1] as RequestInit | undefined)?.method === 'POST',
+  );
+
 const okFetch = () =>
   vi.fn(
     async (_input: unknown, _init?: RequestInit) =>
@@ -67,8 +73,8 @@ describe('集計への送信とプライバシーポリシー', () => {
     vi.stubGlobal('fetch', fetch);
     const save = almostDone();
     await finish(save);
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    const [url, init] = fetch.mock.calls[0]!;
+    await waitFor(() => expect(posts(fetch)).toHaveLength(1));
+    const [url, init] = posts(fetch)[0]! as Parameters<typeof globalThis.fetch>;
     expect(String(url)).toBe('/api/results');
     expect(init?.method).toBe('POST');
     const body = JSON.parse(String(init?.body));
@@ -87,7 +93,7 @@ describe('集計への送信とプライバシーポリシー', () => {
     cleanup();
     await renderApp();
     await new Promise((r) => setTimeout(r, 0));
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(posts(fetch)).toHaveLength(1);
   });
 
   it('W-95 送信に失敗しても（通信の失敗・500）画面は壊れない', async () => {
@@ -97,13 +103,13 @@ describe('集計への送信とプライバシーポリシー', () => {
     });
     vi.stubGlobal('fetch', fail);
     await finish(almostDone());
-    await waitFor(() => expect(fail).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(posts(fail)).toHaveLength(1));
     expect(victory()).toBeDefined();
     cleanup();
     const err = vi.fn(async () => new Response('oops', { status: 500 }));
     vi.stubGlobal('fetch', err);
     await finish(almostDone(7));
-    await waitFor(() => expect(err).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(posts(err)).toHaveLength(1));
     expect(victory()).toBeDefined();
   });
 

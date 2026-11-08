@@ -3,7 +3,8 @@
  * seseraki の packages/server/src/route.ts に倣い、basePath('/api') の鎖 1 本から型を出す。認証は無い。
  *
  * - `POST /api/results`: 終わったプレイを受け取り、再生で照合（verify.ts）して合えば保存する。
- * - `GET /api/results/histogram`: シナリオ・軸（・シード）ごとの完走の分布（histogram.ts）。段 3 で使う。
+ * - `GET /api/results/histogram`: シナリオ・軸（・シード）ごとの完走の分布（histogram.ts）。
+ * - `GET /api/results/distribution`: 4 軸 ×（同じシード / 全シード）の 8 本を 1 回で返す（段 3 の画面が使う。D-161）。
  * - `GET /api/version`: 動いているサーバーのコミット（Vercel の画面と版を手動でそろえるときの確かめ。照合には使わない。D-135・D-155）。
  *
  * 🔒 IP・端末の情報を保存しない・ログに出さない（D-134）。アクセスのログは方法・パス（クエリを除く）・状態・時間だけで、
@@ -15,7 +16,8 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
-import { histogramOf } from './histogram.ts';
+import { histogramOf, type Histogram } from './histogram.ts';
+export type { Histogram, HistogramBin } from './histogram.ts';
 import type { ResultsRepo } from './repo.ts';
 import { submissionSchema, verifySubmission } from './verify.ts';
 
@@ -72,6 +74,16 @@ const histogramQuery = z.object({
   seed: numberParam.optional(),
   /** 指定すれば、その値の位置（それより大きい数・同じ数）も返す。 */
   value: numberParam.optional(),
+});
+
+const distributionQuery = z.object({
+  scenario: z.string().refine((s) => s in SCENARIOS),
+  /** 同じシードの分布の元（全シードの分布も一緒に返す）。 */
+  seed: numberParam,
+  // 軸ごとの自分の値（付けた軸だけ position を返す）
+  ...(Object.fromEntries(
+    AXIS_IDS.map((id) => [id, numberParam.optional()]),
+  ) as Record<ResultAxisId, z.ZodOptional<typeof numberParam>>),
 });
 
 export function createApp({
@@ -134,7 +146,50 @@ export function createApp({
           200,
         );
       },
+    )
+    .get(
+      '/results/distribution',
+      zValidator('query', distributionQuery, (r, c) => {
+        if (!r.success) return c.json({ error: 'invalid' as const }, 400);
+      }),
+      async (c) => {
+        const q = c.req.valid('query');
+        const scenarioId = q.scenario;
+        const entries = await Promise.all(
+          AXIS_IDS.map(async (axis) => {
+            const [same, all] = await Promise.all([
+              repo.histogramValues({ scenarioId, axis, seed: q.seed }),
+              repo.histogramValues({ scenarioId, axis }),
+            ]);
+            return [
+              axis,
+              {
+                seed: histogramOf(axis, same, q[axis]),
+                all: histogramOf(axis, all, q[axis]),
+              },
+            ] as const;
+          }),
+        );
+        return c.json(
+          {
+            scenarioId,
+            seed: q.seed,
+            axes: Object.fromEntries(entries) as Record<
+              ResultAxisId,
+              { seed: Histogram; all: Histogram }
+            >,
+          },
+          200,
+        );
+      },
     );
 }
+
+/** `GET /api/results/distribution` の応答（web の型の出所）。 */
+export type Distribution = {
+  scenarioId: string;
+  seed: number;
+  axes: Record<ResultAxisId, { seed: Histogram; all: Histogram }>;
+};
 
 export type AppType = ReturnType<typeof createApp>;

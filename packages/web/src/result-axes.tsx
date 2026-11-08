@@ -1,6 +1,15 @@
-// 振り返りの 4 軸（D-132）と、手元の履歴との比較（D-144）。完走のダイアログと結果の画面で共用する。
-// 1 つの点数にはまとめず、軸ごとに並べる（prd/07 §7・prd/15 §2）。
+// 振り返りの 4 軸（D-132）と、集計の分布の中での位置（段 3・D-161）か手元の履歴との比較（D-144）。完走のダイアログと結果の画面で共用する。
+// 1 つの点数にはまとめず、軸ごとに並べる（prd/07 §7・prd/15 §2）。分布が無い・取れない・少ないときは手元の履歴との比較だけを出す（段 1 のまま）。
 import type { ResultAxisId } from 'game';
+import { HistogramChart } from './charts.tsx';
+import {
+  MIN_DISTRIBUTION_COUNT,
+  TOP_PERCENT,
+  type AxisStanding,
+  type DistributionView,
+  type Standing,
+  type StatsView,
+} from './distribution.ts';
 import { signedText, usd } from './format.ts';
 import type { AxisComparison } from './results-history.ts';
 
@@ -22,27 +31,123 @@ const CAPTION: Record<ResultAxisId, string> = {
   edgeMonths: '止まらずに、上限の 90〜100% まで使った月（ジョーク枠）',
 };
 
+/** 上位に入ったときの印（④ はジョーク枠の軽い言い回し）。 */
+const topBadge = (id: ResultAxisId, p: number) =>
+  id === 'edgeMonths' ? `★ 綱渡りの名人（上位 ${p}%）` : `★ 上位 ${p}%`;
+
+/** ④ の分布の下に添える一言（ジョーク枠）。 */
+const edgeQuip = (inTop: boolean) =>
+  inTop
+    ? 'みんなよりギリギリを攻めました（ほめています）。'
+    : '安全運転でした。それも立派です。';
+
+/** 分布の 1 本（同じシード / 全シード）: 数値の要約をテキストで出し、その下にヒストグラム。 */
+function DistributionRow({
+  kind,
+  standing,
+  count,
+  axis,
+  value,
+}: {
+  kind: 'seed' | 'all';
+  /** 件数が少なければ null。 */
+  standing: Standing | null;
+  /** 件数（自分を含む）。 */
+  count: number;
+  axis: ResultAxisId;
+  value: number;
+}) {
+  const name = kind === 'seed' ? '同じシード' : '全シード';
+  return (
+    <div data-dist={kind} data-top-percent={standing?.topPercent}>
+      <div className="text-xs" data-dist-summary>
+        <span className="font-semibold">{name}</span>{' '}
+        {standing ? (
+          <span className="tabular-nums">
+            {standing.n} 件中 上位 {standing.topPercent}%
+            {standing.inTop && '（上位）'}
+          </span>
+        ) : (
+          <span className="opacity-70">
+            まだ {count} 件なので出しません（{MIN_DISTRIBUTION_COUNT}{' '}
+            件から出します）
+          </span>
+        )}
+      </div>
+      {standing && (
+        <HistogramChart
+          bins={standing.histogram.bins}
+          value={value}
+          discrete={axis === 'edgeMonths'}
+          label={`${name}の分布（${standing.n} 件中 上位 ${standing.topPercent}%）`}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 一番上の注記（どちらと比べているか。prd/15 §3.1）。 */
+function compareNote(stats: StatsView, localCount: number): string {
+  const local =
+    localCount > 0
+      ? `この端末に残した過去の完走（同じシナリオの ${localCount} 回）と比べています。`
+      : 'この端末に、比べる過去の完走はまだありません。次に完走すると、自己ベスト・前回との差・順位を出します。';
+  switch (stats.status) {
+    case 'ready': {
+      const v = stats.view;
+      return [
+        v.mock
+          ? '開発用の架空の分布です（遊んだ人の結果ではありません）。'
+          : '',
+        `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます。`,
+        v.included
+          ? 'あなたのプレイも数に入っています。'
+          : 'あなたのプレイを 1 件足して数えています。',
+      ].join('');
+    }
+    case 'loading':
+      return `集計の分布を読み込んでいます。${local}`;
+    case 'failed':
+      return `集計の分布を読み込めなかったので、${local}`;
+    case 'few':
+      return `集計の完走がまだ ${stats.count} 件と少ないので、${local}`;
+    case 'off':
+      return local;
+  }
+}
+
 export function ResultAxesPanel({
   comparisons,
+  stats = { status: 'off' },
   outages,
   size = 'md',
 }: {
   comparisons: readonly AxisComparison[];
+  /** 集計の分布（段 3）。ready のときだけ分布を出す。 */
+  stats?: StatsView;
   /** 止まった月の数（軸ではなく、振り返りとして下に出す）。 */
   outages: number;
   size?: 'md' | 'lg';
 }) {
   const count = comparisons[0]?.count ?? 0;
+  const dist: DistributionView | null =
+    stats.status === 'ready' ? stats.view : null;
   return (
-    <section aria-label="4 つの軸の振り返り" data-result-axes>
+    <section
+      aria-label="4 つの軸の振り返り"
+      data-result-axes
+      data-stats={stats.status}
+    >
       <p className="mb-2 text-xs opacity-70" data-result-compare-note>
-        {count > 0
-          ? `この端末に残した過去の完走（同じシナリオの ${count} 回）と比べています。`
-          : 'この端末に、比べる過去の完走はまだありません。次に完走すると、自己ベスト・前回との差・順位を出します。'}
+        {compareNote(stats, count)}
       </p>
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {comparisons.map((c, i) => {
           const f = FORMAT[c.id];
+          const d: AxisStanding | undefined = dist?.axes.find(
+            (a) => a.id === c.id,
+          );
+          const basis = d ? (d.seed ?? d.all) : null;
           return (
             <li
               key={c.id}
@@ -53,8 +158,15 @@ export function ResultAxesPanel({
                 <span className="text-sm font-semibold">
                   {['①', '②', '③', '④'][i]} {c.label}
                 </span>
+                {d?.inTop && basis && (
+                  <span className="badge badge-success badge-sm" data-axis-top>
+                    {topBadge(c.id, basis.topPercent)}
+                  </span>
+                )}
                 {c.newBest && (
-                  <span className="badge badge-success badge-sm">
+                  <span
+                    className={`badge badge-sm ${d ? 'badge-outline' : 'badge-success'}`}
+                  >
                     ★ 自己ベスト更新
                   </span>
                 )}
@@ -65,7 +177,28 @@ export function ResultAxesPanel({
                 {f(c.value)}
               </div>
               <div className="text-xs opacity-70">{CAPTION[c.id]}</div>
-              {c.count > 0 && (
+              {d && (
+                <div className="mt-2 space-y-2" data-axis-distribution>
+                  <DistributionRow
+                    kind="seed"
+                    standing={d.seed}
+                    count={d.seedCount}
+                    axis={c.id}
+                    value={c.value}
+                  />
+                  <DistributionRow
+                    kind="all"
+                    standing={d.all}
+                    count={d.all.n}
+                    axis={c.id}
+                    value={c.value}
+                  />
+                  {c.id === 'edgeMonths' && (
+                    <p className="text-xs">{edgeQuip(d.inTop)}</p>
+                  )}
+                </div>
+              )}
+              {!d && c.count > 0 && (
                 <ul className="mt-1 space-y-0.5 text-xs">
                   {c.best !== undefined && (
                     <li>

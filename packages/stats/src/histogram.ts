@@ -1,6 +1,7 @@
 // 分布（ヒストグラム）の形（D-149・prd/15 §6）。段 3 の画面が棒を描き、自分の値の「上位何 %」を出せる形にする。
 // 純粋関数（値の列 → ビン）。DB の層は絞り込んだ値の列を返すだけ。
 import type { ResultAxisId } from 'game';
+import { sameAxisValue } from './verify.ts';
 
 /** 連続の値の軸のビンの数。 */
 export const HISTOGRAM_BINS = 20;
@@ -20,7 +21,10 @@ export type Histogram = {
   min: number | null;
   max: number | null;
   bins: HistogramBin[];
-  /** value を指定したときの位置: それより大きい値の数・同じ値の数（上位 % = above / count など）。 */
+  /**
+   * value を指定したときの位置: それより大きい値の数・同じ値の数（上位 % = above / count など）。同じかは照合と同じ幅
+   * （相対 1e-9。sameAxisValue）で見る。画面が送る値とサーバーが再生した値の最後の桁の差で、自分を「上」に数えないため（D-162）。
+   */
   position?: { above: number; equal: number };
 };
 
@@ -40,8 +44,9 @@ export function histogramOf(
       ? {}
       : {
           position: {
-            above: values.filter((v) => v > value).length,
-            equal: values.filter((v) => v === value).length,
+            above: values.filter((v) => v > value && !sameAxisValue(v, value))
+              .length,
+            equal: values.filter((v) => sameAxisValue(v, value)).length,
           },
         };
   if (values.length === 0)

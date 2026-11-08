@@ -79,7 +79,13 @@ import { BookOpen, Settings } from 'lucide-react';
 import { HowtoDialog } from './howto-dialog.tsx';
 import { SettingsDialog } from './settings-dialog.tsx';
 import { PrivacyPolicyDialog } from './privacy-policy.tsx';
-import { submitResult } from './stats-client.ts';
+import {
+  loadStatsView,
+  statsViewEnabled,
+  submitResult,
+  type SubmitOutcome,
+} from './stats-client.ts';
+import type { StatsView } from './distribution.ts';
 import {
   clearLocalRecords,
   loadHowtoSeen,
@@ -255,17 +261,42 @@ export function App() {
   const state = session?.state ?? null;
   // 終わったプレイ（完走・途中終了）を手元の履歴に溜める（D-144。再開・戻ってもう一度終えたときも同じ id なら足さない）
   const [results, setResults] = useState<ResultStore>(loadResults);
+  // 集計の分布の中での位置（段 3・D-161）。プレイの id ごとに 1 回だけ取る（開き直し・StrictMode の 2 回目でも取り直さない）
+  const [stats, setStats] = useState<{ id: string; view: StatsView } | null>(
+    null,
+  );
+  const statsRequested = useRef<string | null>(null);
   useEffect(() => {
     if (!session || session.state.phase === 'playing') return;
     const entry = resultEntryOf(session.save, session.state, today());
-    if (results.entries.some((e) => e.id === entry.id)) return;
-    // 画面の比較にはすぐ使い、保存は鍵を取ってから（保存した後の履歴と合わせる）
-    setResults((r) => withResult(r, entry));
-    // 集計に送る（D-152。手元の履歴に新しく足したときだけなので 1 プレイ 1 回。フラグが無ければ送らない・失敗しても何も出さない）
-    void submitResult(session.save, session.state);
-    persistResultLocked(entry, (stored) =>
-      setResults((r) => mergeResults(stored, r)),
-    );
+    const isNew = !results.entries.some((e) => e.id === entry.id);
+    let sent: Promise<SubmitOutcome> | null = null;
+    if (isNew) {
+      // 画面の比較にはすぐ使い、保存は鍵を取ってから（保存した後の履歴と合わせる）
+      setResults((r) => withResult(r, entry));
+      // 集計に送る（D-152。手元の履歴に新しく足したときだけなので 1 プレイ 1 回。フラグが無ければ送らない・失敗しても何も出さない）
+      sent = submitResult(session.save, session.state);
+      persistResultLocked(entry, (stored) =>
+        setResults((r) => mergeResults(stored, r)),
+      );
+    }
+    // 分布は完走したときだけ（途中終了は 4 軸を出さない）。送信が終わってから取る（自分を含む。D-162）
+    if (
+      session.state.phase !== 'completed' ||
+      statsRequested.current === entry.id ||
+      !statsViewEnabled()
+    )
+      return;
+    statsRequested.current = entry.id;
+    const id = entry.id;
+    setStats({ id, view: { status: 'loading' } });
+    void loadStatsView({
+      scenarioId: entry.scenarioId,
+      seed: entry.seed,
+      axes: entry.axes,
+      rewound: session.save.rewound === true,
+      sent,
+    }).then((view) => setStats((cur) => (cur?.id === id ? { id, view } : cur)));
   }, [session, results]);
   const [mode, setMode] = useState<Mode>(initialMode);
   // 「最初から」の確認のダイアログ（今のプレイが消えるので確かめる）
@@ -410,6 +441,11 @@ export function App() {
               runId={session!.runId}
               results={results.entries}
               playId={playId(session!.save)}
+              stats={
+                stats?.id === playId(session!.save)
+                  ? stats.view
+                  : { status: 'off' }
+              }
               onAdvance={(actions) => {
                 const next = playMonth(applyActions(state, actions));
                 setSession({
