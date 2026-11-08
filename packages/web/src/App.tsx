@@ -681,7 +681,7 @@ function LastSetupButton({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="btn btn-sm btn-outline h-auto min-h-8 py-1 text-left font-normal"
+          className="btn btn-sm btn-outline h-auto min-h-8 max-w-full py-1 text-left font-normal whitespace-normal"
           disabled={same}
           onClick={onClick}
         >
