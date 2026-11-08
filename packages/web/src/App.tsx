@@ -291,6 +291,7 @@ export function App() {
     const id = entry.id;
     setStats({ id, view: { status: 'loading' } });
     void loadStatsView({
+      id,
       scenarioId: entry.scenarioId,
       seed: entry.seed,
       axes: entry.axes,

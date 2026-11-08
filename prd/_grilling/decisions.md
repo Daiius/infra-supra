@@ -2013,10 +2013,10 @@
 - 決定:
   - **送信の応答を待ってから取る**（失敗しても待った後に取る）。`POST /api/results` の応答に **`inHistogram`**（保存されている行が分布に入るか）を足し、`true` なら**自分は分布に入っている**とみなしてそのまま数える。`false`（「この月に戻る」を使ったプレイ。D-148。同じ結果の行が戻った印つきで先に保存されていた duplicate も含む）か、保存されなかった（4xx・5xx・通信の失敗）なら、**自分を 1 件足して**数える。
   - 補足（レビュー OCL-9B705B16）: 最初は「201・200 なら含む（戻っていなければ）」としていたが、playHash は戻った印を含まないので、戻ったプレイの行が先にあると、後から戻らずに同じ結果で終えても duplicate の 200 になり、行は分布に入らないままだった。受け付けたかと分布に入るかを分け、サーバーが保存されている行の印で答える形にした。
-  - 開き直し（前に送ったプレイ）は送らないので、保存された扱い（戻っていなければ含む）。前の送信が失敗していたら 1 件ずれるが、気にしない。
+  - 開き直し（前に送ったプレイ）は送らない（D-152）ので、**送ったときの結末を localStorage に覚えておき**（キー `infra-supra:stats-membership`・版 1・プレイの id → 分布に入ったか・新しい順に 50 件。`infra-supra:` で始まるのでローカルの記録の消去でも消える）、開き直したときはその値で決める。覚えていなければ（送れなかった・この形より前に送った・localStorage が使えない）入っていない扱いで 1 件足す（レビュー OCL-9B705B16 の再判定。最初は「戻っていなければ含む」としていたが、戻った行との重複で分布に入らなかったプレイを開き直すと含む扱いに戻っていた）。
   - **上位 % = 自分以上の件数（自分と同じ値の人を含む）÷ 件数（自分を含む）**を百分率の整数に丸める（1〜100）。同じ値の人も上に数える控えめな数え方で、④ のように 0 か月に固まる軸で「みんな 0 なのに上位 1%」にならない（全員が同じ値なら 100%）。
   - 画面に「あなたのプレイも数に入っています」か「あなたのプレイを 1 件足して数えています」を書く。
-- 実装: stats の `repo.ts`・`db/repo.ts`（`insert` が `{ status, inHistogram }` を返す。duplicate なら前からある行の印）・`route.ts`、web の `distribution.ts`（`standingsOf`・`topPercentOf`）・`stats-client.ts`（`submitResult` は `included` / `excluded` / `rejected` / `failed` / `skipped` を返す）。テスト: `distribution.test.ts`・stats の `route.test.ts`・`db/repo.test.ts`・smoke の W-98b。
+- 実装: stats の `repo.ts`・`db/repo.ts`（`insert` が `{ status, inHistogram }` を返す。duplicate なら前からある行の印）・`route.ts`、web の `distribution.ts`（`standingsOf`・`topPercentOf`）・`stats-client.ts`（`submitResult` は `included` / `excluded` / `rejected` / `failed` / `skipped` を返す）。覚えた結末は `distribution.ts`（`parseMembership`・`withMembership`）と `stats-client.ts`（`loadStatsView` の中で読み書き）。テスト: `distribution.test.ts`・stats の `route.test.ts`・`db/repo.test.ts`・smoke の W-98b・W-98c（開き直し）。
 - 正典: [prd/15](../15-results-and-stats.md) §3.1・§7。
 
 ### D-163 「上位」は上位 25% 以内・花火は上位に入った軸の数・10 件未満は段 1 に戻す（2026-11-09 夜間・推奨案で決定・要確認）

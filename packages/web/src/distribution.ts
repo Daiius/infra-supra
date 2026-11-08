@@ -128,3 +128,53 @@ export function distributionFireworkLevel(view: DistributionView): 1 | 2 | 3 {
   const n = topAxesCount(view);
   return n >= 3 ? 3 : n >= 1 ? 2 : 1;
 }
+
+// ---- 送ったプレイが分布に入ったかの記録（開き直しのとき。OCL-9B705B16）----
+// 送り直さない（D-152）ので、開き直したときは送信の応答（inHistogram）を覚えておいた値で自分を数えるかを決める。
+// キーは infra-supra: で始まるので、ローカルの記録の消去（D-147）でも消える。
+
+export const STATS_MEMBERSHIP_KEY = 'infra-supra:stats-membership';
+/** 覚える件数の上限（手元の結果の履歴と同じ。新しい順に残す）。 */
+export const STATS_MEMBERSHIP_LIMIT = 50;
+
+export type Membership = {
+  version: 1;
+  /** [プレイの id, 分布に入ったか]。新しい順。 */
+  entries: [string, boolean][];
+};
+
+/** 保存した記録を読む。形・版が違えば空、壊れた 1 件はその件だけ捨てる。 */
+export function parseMembership(x: unknown): Membership {
+  const ok =
+    typeof x === 'object' &&
+    x !== null &&
+    (x as { version?: unknown }).version === 1 &&
+    Array.isArray((x as { entries?: unknown }).entries);
+  if (!ok) return { version: 1, entries: [] };
+  const entries = (x as { entries: unknown[] }).entries.filter(
+    (e): e is [string, boolean] =>
+      Array.isArray(e) &&
+      e.length === 2 &&
+      typeof e[0] === 'string' &&
+      typeof e[1] === 'boolean',
+  );
+  return { version: 1, entries: entries.slice(0, STATS_MEMBERSHIP_LIMIT) };
+}
+
+/** 1 件を先頭に足す（同じ id は置き換える）。上限を超えた古いものは落とす。 */
+export function withMembership(
+  m: Membership,
+  id: string,
+  included: boolean,
+): Membership {
+  return {
+    version: 1,
+    entries: [
+      [id, included] as [string, boolean],
+      ...m.entries.filter(([k]) => k !== id),
+    ].slice(0, STATS_MEMBERSHIP_LIMIT),
+  };
+}
+
+export const membershipOf = (m: Membership, id: string) =>
+  m.entries.find(([k]) => k === id)?.[1];

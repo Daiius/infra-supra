@@ -16,7 +16,14 @@ import {
 } from 'game';
 import { hc } from 'hono/client';
 import type { AppType, Distribution } from 'stats';
-import { standingsOf, type StatsView } from './distribution.ts';
+import {
+  membershipOf,
+  parseMembership,
+  standingsOf,
+  STATS_MEMBERSHIP_KEY,
+  withMembership,
+  type StatsView,
+} from './distribution.ts';
 
 /** 送信を有効にする環境変数が立っているか（呼ぶたびに読む。テストで差し替えられる）。 */
 export function statsEnabled(): boolean {
@@ -128,6 +135,35 @@ export async function fetchDistribution(q: {
   }
 }
 
+/** 送ったプレイが分布に入ったか（id → 入ったか）を読む。読めなければ undefined。 */
+function loadMembership(id: string): boolean | undefined {
+  try {
+    const raw = localStorage.getItem(STATS_MEMBERSHIP_KEY);
+    return membershipOf(parseMembership(raw ? JSON.parse(raw) : null), id);
+  } catch {
+    return undefined;
+  }
+}
+
+/** 送ったプレイが分布に入ったかを覚える（localStorage が使えなければ覚えない）。 */
+function storeMembership(id: string, included: boolean): void {
+  try {
+    const raw = localStorage.getItem(STATS_MEMBERSHIP_KEY);
+    let current = parseMembership(null);
+    try {
+      current = parseMembership(raw ? JSON.parse(raw) : null);
+    } catch {
+      // 壊れた値は捨てる
+    }
+    localStorage.setItem(
+      STATS_MEMBERSHIP_KEY,
+      JSON.stringify(withMembership(current, id, included)),
+    );
+  } catch {
+    // 覚えられなくても画面は壊さない
+  }
+}
+
 /** 開発用の架空の分布を使うか（`pnpm dev` で VITE_STATS_MOCK を立てたときだけ。D-164）。 */
 function statsMockEnabled(): boolean {
   if (!import.meta.env.DEV) return false;
@@ -145,6 +181,8 @@ export const statsViewEnabled = (): boolean =>
  * ヒストグラムに入らない（D-148）ので含まない扱いにする。例外は出さない。
  */
 export async function loadStatsView(q: {
+  /** プレイの id（手元の履歴と同じ。分布に入ったかを開き直しのために覚える）。 */
+  id: string;
   scenarioId: string;
   seed: number;
   axes: ResultAxes;
@@ -156,13 +194,17 @@ export async function loadStatsView(q: {
     return standingsOf(mockDistribution(q), q.axes, false, true);
   }
   if (!statsEnabled()) return { status: 'off' };
-  // 開き直し（前に送ったプレイ）は、戻っていなければ入っている扱い
-  const outcome: SubmitOutcome = q.sent
-    ? await q.sent
-    : q.rewound
-      ? 'excluded'
-      : 'included';
+  // 送ったときは結末を覚え、開き直し（送らない）ときは覚えた結末を使う。覚えていなければ入っていない扱い
+  // （送れていなかった・この形より前に送った。1 件ずれても多めに数えない。OCL-9B705B16）
+  let included: boolean;
+  if (q.sent) {
+    const outcome = await q.sent;
+    included = outcome === 'included';
+    if (outcome !== 'skipped') storeMembership(q.id, included);
+  } else {
+    included = !q.rewound && loadMembership(q.id) === true;
+  }
   const dist = await fetchDistribution(q);
   if (!dist) return { status: 'failed' };
-  return standingsOf(dist, q.axes, outcome === 'included');
+  return standingsOf(dist, q.axes, included);
 }

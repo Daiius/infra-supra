@@ -4,7 +4,11 @@ import type { Distribution, Histogram } from 'stats';
 import { describe, expect, it } from 'vitest';
 import {
   distributionFireworkLevel,
+  membershipOf,
   MIN_DISTRIBUTION_COUNT,
+  parseMembership,
+  STATS_MEMBERSHIP_LIMIT,
+  withMembership,
   standingsOf,
   topPercentOf,
 } from './distribution.ts';
@@ -117,5 +121,29 @@ describe('standingsOf', () => {
       return distributionFireworkLevel(v.view);
     };
     expect([0, 1, 2, 3, 4].map(level)).toEqual([1, 2, 2, 3, 3]);
+  });
+});
+
+describe('送ったプレイが分布に入ったかの記録', () => {
+  it('足す・置き換える・上限で古いものを落とす・壊れた値を捨てる', () => {
+    let m = parseMembership(null);
+    m = withMembership(m, 'a', false);
+    m = withMembership(m, 'b', true);
+    m = withMembership(m, 'a', true);
+    expect(m.entries).toEqual([
+      ['a', true],
+      ['b', true],
+    ]);
+    expect(membershipOf(m, 'a')).toBe(true);
+    expect(membershipOf(m, 'z')).toBeUndefined();
+    for (let i = 0; i < STATS_MEMBERSHIP_LIMIT + 5; i++)
+      m = withMembership(m, `x${i}`, false);
+    expect(m.entries).toHaveLength(STATS_MEMBERSHIP_LIMIT);
+    expect(membershipOf(m, 'a')).toBeUndefined();
+    expect(parseMembership({ version: 2, entries: [] }).entries).toEqual([]);
+    expect(
+      parseMembership({ version: 1, entries: [['a', true], ['b', 'x'], 3] })
+        .entries,
+    ).toEqual([['a', true]]);
   });
 });

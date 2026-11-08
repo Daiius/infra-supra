@@ -272,4 +272,29 @@ describe('集計の分布の表示（段 3）', () => {
       dialogAxes().querySelector('[data-result-compare-note]')!.textContent,
     ).toContain('あなたのプレイを 1 件足して数えています');
   });
+
+  it('W-98c 開き直したとき（送り直さない）も、送ったときの inHistogram の結末で自分を数える（OCL-9B705B16）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    const note = () =>
+      document.querySelector<HTMLElement>(
+        '[data-result-axes][data-stats="ready"] [data-result-compare-note]',
+      )?.textContent ?? '';
+    for (const [inHistogram, text] of [
+      [false, 'あなたのプレイを 1 件足して数えています'],
+      [true, 'あなたのプレイも数に入っています'],
+    ] as const) {
+      const fetch = statsFetch(() => json(distribution()), inHistogram);
+      vi.stubGlobal('fetch', fetch);
+      await finish(almostDone(inHistogram ? 8 : 9));
+      await waitFor(() => expect(note()).toContain(text));
+      cleanup();
+      // 終わった状態のまま開き直す: 送らず、分布だけ取り直す
+      await renderApp();
+      await waitFor(() => expect(note()).toContain(text));
+      expect(
+        fetch.mock.calls.filter((c) => c[1]?.method === 'POST'),
+      ).toHaveLength(1);
+      cleanup();
+    }
+  });
 });
