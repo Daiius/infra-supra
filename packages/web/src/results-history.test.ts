@@ -1,9 +1,19 @@
 // 手元の結果の履歴（D-144）の純粋な部分: 形の確かめ・足し方・比べ方・花火の段（D-145）。
-import { newSave, replaySave, withTurn, type ResultAxes } from 'game';
+import {
+  newSave,
+  parseSave,
+  replaySave,
+  ROUTE_STRATEGIES,
+  withTurn,
+  type ResultAxes,
+  type SaveData,
+} from 'game';
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalJson,
   compareWithHistory,
   fireworkLevel,
+  mergeResults,
   parseResults,
   playId,
   RESULTS_LIMIT,
@@ -82,6 +92,32 @@ describe('playId・resultEntryOf', () => {
     expect(playId(withTurn(a, []))).not.toBe(playId(a));
   });
 
+  it('キーの並びが違っても同じ id。描き方と確約を選んだ保存は読み直しても id が変わらない（OCL-09A16C94）', () => {
+    expect(canonicalJson({ b: 1, a: [{ d: 2, c: undefined }] })).toBe(
+      '{"a":[{"d":2}],"b":1}',
+    );
+    const route = Object.keys(ROUTE_STRATEGIES)[0]!;
+    // 始める画面と同じ並び（routes → commitments）で作り、読み直し（parseSave は commitments → routes の並び）と比べる
+    const save: SaveData = {
+      ...newSave({
+        scenarioId: 'article-community',
+        stackIndex: 1,
+        seed: 42,
+        startDate: '2026-11-02',
+        routes: { article: route as never },
+        commitments: [{ key: 'k', payment: 'no-upfront' }],
+      }),
+    };
+    const reread = parseSave(JSON.parse(JSON.stringify(save)))!;
+    expect(reread.routes).toEqual(save.routes);
+    expect(reread.commitments).toEqual(save.commitments);
+    expect(playId(reread)).toBe(playId(save));
+    const shuffled = Object.fromEntries(
+      Object.entries(save).reverse(),
+    ) as SaveData;
+    expect(playId(shuffled)).toBe(playId(save));
+  });
+
   it('終わった状態から 4 軸・止まった月・終わり方を写す', () => {
     let save = newSave({
       scenarioId: 'article-community',
@@ -97,6 +133,24 @@ describe('playId・resultEntryOf', () => {
     expect(e.axes.cash).toBe(st.cash);
     expect(e.setup).toContain('Cloudflare');
     expect(parseResults(store([e])).entries).toEqual([e]);
+  });
+});
+
+describe('mergeResults', () => {
+  it('別のタブが足した結果を消さず、この画面だけが持つ結果も残す（OCL-E9D5918D）', () => {
+    const persisted = store([entry('other-tab', axes(1)), entry('a', axes(2))]);
+    const memory = store([entry('mine', axes(3)), entry('a', axes(2))]);
+    expect(mergeResults(persisted, memory).entries.map((e) => e.id)).toEqual([
+      'other-tab',
+      'a',
+      'mine',
+    ]);
+    const many = store(
+      Array.from({ length: RESULTS_LIMIT }, (_, i) => entry(`p${i}`, axes(i))),
+    );
+    expect(
+      mergeResults(many, store([entry('x', axes(0))])).entries.length,
+    ).toBe(RESULTS_LIMIT);
   });
 });
 

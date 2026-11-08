@@ -66,6 +66,7 @@ import {
   type SetupState,
 } from './last-setup.ts';
 import {
+  mergeResults,
   parseResults,
   playId,
   RESULTS_KEY,
@@ -184,14 +185,22 @@ function loadResults(): ResultStore {
   }
 }
 
-/** 終わったプレイを履歴に足して書く（同じプレイは二重に足さない）。書けなくても画面の比較には使う。 */
+/**
+ * 終わったプレイを履歴に足して書く（同じプレイは二重に足さない）。書けなくても画面の比較には使う。
+ * 書く直前に保存済みの履歴を読み直して合わせるので、別のタブが足した結果を消さない（OCL-E9D5918D）。
+ * 読み直しから書き込みまでは同期で 1 回の処理の中なので、ほかのタブの書き込みがはさまる余地は小さい
+ * （localStorage に排他の仕組みは無い。同時に終えた 2 タブが重なったときに 1 件落ちうるのは受け入れる）。
+ */
 function recordResult(
   store: ResultStore,
   save: SaveData,
   state: GameState,
 ): ResultStore {
-  const next = withResult(store, resultEntryOf(save, state, today()));
-  if (next === store) return store;
+  const entry = resultEntryOf(save, state, today());
+  const latest = mergeResults(loadResults(), store);
+  const next = withResult(latest, entry);
+  if (next === latest && store.entries.some((e) => e.id === entry.id))
+    return store;
   try {
     localStorage.setItem(RESULTS_KEY, JSON.stringify(next));
   } catch {
