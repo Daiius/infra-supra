@@ -21,9 +21,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'images',
     label: 'Cloudflare: R2 に置き、閲覧のときに Images で変換',
     note:
-      '画像の原本を Cloudflare の R2 に置き、画像のドメイン（Cloudflare のゾーン）の URL で変換して配る。土台（Vercel・AWS・Netlify・Google Cloud）の CDN を通らないので、' +
-      '画像の転送は土台の転送の料金にならない（R2 の転送は無料）。一意な変換（種類 × サイズ違い）を月ごとに数える。' +
-      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+      '画像の原本を Cloudflare の R2 に置き、画像のドメイン（Cloudflare のゾーン）の URL で変換して配ります。土台（Vercel・AWS・Netlify・Google Cloud）の CDN を通らないので、' +
+      '画像の転送は土台の転送の料金になりません（R2 の転送は無料）。一意な変換（種類 × サイズ違い）を月ごとに数えます。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       ...VERCEL_TO_CF_IMAGES_REFS,
       'fact:cloudflare:images-paid:transform-url',
@@ -37,7 +37,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     // 閾値の記載が無いので、このゲームでは当たらないとみなす（D-58 の補足）
     servedFormat: {
       format: 'avif',
-      how: 'ブラウザに合わせた形式（format=auto: 対応していれば AVIF、なければ WebP）で配る',
+      how: 'ブラウザに合わせた形式（format=auto: 対応していれば AVIF、なければ WebP）で配ります',
     },
   },
   {
@@ -50,9 +50,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'resize',
     label: 'Cloudflare: 投稿のときに一律で縮めて R2 に置く',
     note:
-      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Cloudflare の R2 に置き、原本は残さない。' +
-      '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS・Netlify・Google Cloud）の転送の料金にならない（R2 の転送は無料）。' +
-      '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Cloudflare の R2 に置き、原本は残しません。' +
+      '画像のドメイン（Cloudflare のゾーン）から配るので、画像の転送は土台（Vercel・AWS・Netlify・Google Cloud）の転送の料金になりません（R2 の転送は無料）。' +
+      '変換のサービスは使いません。サイズ違いが無いので、スマホにも同じ大きさを配ります。Cloudflare のアカウントが 1 つ増え、請求が 2 つになります',
     premiseRefs: [...VERCEL_TO_CF_IMAGES_REFS],
   },
   // Bunny の画像（D-98）。Cloudflare の cf-images・cf-resize と同じ振る舞いで、置き場・配信・変換を Bunny にする
@@ -66,9 +66,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'images',
     label: 'Bunny: Storage に置き、閲覧のときに Optimizer で変換',
     note:
-      '画像の原本を Bunny Storage（東京の 1 地域）に置き、Bunny CDN の URL の引数（?width=）で Optimizer が変換して配る。土台の CDN を通らないので、' +
-      '画像の転送は土台の転送の料金にならず、Bunny の $0.03/GB（アジア）になる。Optimizer は月 $9.50 で変換は無制限（一意な変換の数で課金されない）。' +
-      'next/image のローダーは自分で書く（公式の例に無い）。月の最低額は $1。Bunny のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+      '画像の原本を Bunny Storage（東京の 1 地域）に置き、Bunny CDN の URL の引数（?width=）で Optimizer が変換して配ります。土台の CDN を通らないので、' +
+      '画像の転送は土台の転送の料金にならず、Bunny の $0.03/GB（アジア）になります。Optimizer は月 $9.50 で変換は無制限です（一意な変換の数で課金されない）。' +
+      'next/image のローダーは自分で書きます（公式の例に無い）。月の最低額は $1 です。Bunny のアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       'fact:bunny:standard:asia-rate',
       'fact:bunny:standard:monthly-minimum',
@@ -80,7 +80,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     // JPEG・PNG）。AVIF を自動で選ぶ記載は無い（https://bunny.net/docs/optimizer/dynamic-images/formats ・2026-11-04 取得）
     servedFormat: {
       format: 'webp',
-      how: 'ブラウザに合わせて WebP で配る（Optimizer の WebP の自動の選択。AVIF は自動では選ばない）',
+      how: 'ブラウザに合わせて WebP で配ります（Optimizer の WebP の自動の選択。AVIF は自動では選ばない）',
     },
   },
   {
@@ -93,9 +93,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'resize',
     label: 'Bunny: 投稿のときに一律で縮めて Storage に置く',
     note:
-      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Bunny Storage に置き、原本は残さない。' +
-      'Bunny CDN から配るので、画像の転送は土台の転送の料金にならず、Bunny の $0.03/GB（アジア）になる。Optimizer は使わない（月額なし）。' +
-      'サイズ違いが無いので、スマホにも同じ大きさを配る。月の最低額は $1。Bunny のアカウントが 1 つ増え、請求が 2 つになる',
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて Bunny Storage に置き、原本は残しません。' +
+      'Bunny CDN から配るので、画像の転送は土台の転送の料金にならず、Bunny の $0.03/GB（アジア）になります。Optimizer は使いません（月額なし）。' +
+      'サイズ違いが無いので、スマホにも同じ大きさを配ります。月の最低額は $1 です。Bunny のアカウントが 1 つ増え、請求が 2 つになります',
     premiseRefs: [
       'fact:bunny:standard:asia-rate',
       'fact:bunny:standard:monthly-minimum',
@@ -115,10 +115,10 @@ export const CROSS_PARTS: readonly PartDef[] = [
     label:
       'Cloudflare: R2 に原本を置き、閲覧のときに Vercel の画像の最適化で変換',
     note:
-      '画像の原本を Cloudflare の R2（公開バケット・Cloudflare のゾーンのカスタムドメイン）に置き、閲覧のときの変換と配信は今の画像の最適化のまま（変換・キャッシュの読み書き・CDN の転送とリクエストは同じに数える）。' +
-      'Vercel Blob の保存・操作・転送の代わりに、R2 の保存と書き込みがかかる（R2 の転送は無料）。' +
-      '画像の最適化が原本を取りに来る R2 の読み取り（Class B。外れた変換 1 回あたり 1 回・月 1,000 万回まで無料）は数えない（Blob の原本を取る分を数えないのと同じ）。' +
-      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+      '画像の原本を Cloudflare の R2（公開バケット・Cloudflare のゾーンのカスタムドメイン）に置き、閲覧のときの変換と配信は今の画像の最適化のままです（変換・キャッシュの読み書き・CDN の転送とリクエストは同じに数える）。' +
+      'Vercel Blob の保存・操作・転送の代わりに、R2 の保存と書き込みがかかります（R2 の転送は無料）。' +
+      '画像の最適化が原本を取りに来る R2 の読み取り（Class B。外れた変換 1 回あたり 1 回・月 1,000 万回まで無料）は数えません（Blob の原本を取る分を数えないのと同じ）。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       ...VERCEL_TO_CF_IMAGES_REFS,
       'pool:cloudflare:r2-standard:r2-class-a',
@@ -136,9 +136,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'resize',
     label: 'AWS: 投稿のときに一律で縮めて S3 に置き、CloudFront で配る',
     note:
-      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて AWS の S3（東京）に置き、原本は残さない。' +
-      '画像は CloudFront（S3 をオリジンにし、OAC で CloudFront からだけ読ませる）から配るので、画像の転送は土台の転送の料金にならず、CloudFront の料金（常時無料の月 1 TB の後）になる。S3 から CloudFront への転送は無料。' +
-      '変換のサービスは使わない。サイズ違いが無いので、スマホにも同じ大きさを配る。往復の遅延は計算しない',
+      '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて AWS の S3（東京）に置き、原本は残しません。' +
+      '画像は CloudFront（S3 をオリジンにし、OAC で CloudFront からだけ読ませる）から配るので、画像の転送は土台の転送の料金にならず、CloudFront の料金（常時無料の月 1 TB の後）になります。S3 から CloudFront への転送は無料です。' +
+      '変換のサービスは使いません。サイズ違いが無いので、スマホにも同じ大きさを配ります。往復の遅延は計算しません',
     premiseRefs: [
       'fact:aws:cloudfront:origin-fetch-free',
       'pool:aws:cloudfront:cloudfront-free-transfer',
@@ -158,9 +158,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'static',
     label: 'Bunny: CDN を前段に置く（静的と画像だけ）',
     note:
-      'Bunny CDN の Pull Zone の後ろに Amplify を置き、静的なファイルと Amplify で最適化した画像を Bunny が返す（$0.03/GB・要求の課金なし・月の最低額 $1）。' +
-      '外れた分と HTML・API は Amplify の配信としても課金される（二重になる）とみなす（自前の CloudFront の前段と同じ読み）。CloudFront の常時無料（月 1 TB）は使えない。' +
-      'Bunny のアカウントが 1 つ増え、請求が 2 つになる',
+      'Bunny CDN の Pull Zone の後ろに Amplify を置き、静的なファイルと Amplify で最適化した画像を Bunny が返します（$0.03/GB・要求の課金なし・月の最低額 $1）。' +
+      '外れた分と HTML・API は Amplify の配信としても課金される（二重になる）とみなします（自前の CloudFront の前段と同じ読み）。CloudFront の常時無料（月 1 TB）は使えません。' +
+      'Bunny のアカウントが 1 つ増え、請求が 2 つになります',
     premiseRefs: [
       'fact:bunny:standard:pull-zone-origin',
       'fact:bunny:standard:asia-rate',
@@ -179,9 +179,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'static',
     label: 'Bunny: CDN を前段に置く（静的と画像だけ）',
     note:
-      'Bunny CDN の Pull Zone の後ろに VPS（nginx）を置き、静的なファイルと変換済みの画像の大部分を Bunny が返す（VPS の回線と CPU が減る）。' +
-      'Cloudflare の Free と違い転送に $0.03/GB（アジア）かかるが、画像の割合についての規約の制限は無い。HTML は VPS のまま。' +
-      'API の応答のキャッシュは扱わない（Cloudflare の前段だけ）。月の最低額は $1。Bunny のアカウントが 1 つ増え、請求が 2 つになる',
+      'Bunny CDN の Pull Zone の後ろに VPS（nginx）を置き、静的なファイルと変換済みの画像の大部分を Bunny が返します（VPS の回線と CPU が減る）。' +
+      'Cloudflare の Free と違い転送に $0.03/GB（アジア）かかりますが、画像の割合についての規約の制限はありません。HTML は VPS のままです。' +
+      'API の応答のキャッシュは扱いません（Cloudflare の前段だけ）。月の最低額は $1 です。Bunny のアカウントが 1 つ増え、請求が 2 つになります',
     premiseRefs: [
       'fact:bunny:standard:pull-zone-origin',
       'fact:bunny:standard:asia-rate',
@@ -202,9 +202,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'same',
     label: 'Cloudflare: Workers に API を置き、DB は D1',
     note:
-      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。静的なファイル（シェル・JS・CSS）と画像は今の事業者から配る。' +
-      'ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要る。今の事業者の関数と DB は使わなくなる。' +
-      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使います。静的なファイル（シェル・JS・CSS）と画像は今の事業者から配ります。' +
+      'ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要ります。今の事業者の関数と DB は使わなくなります。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       'fact:cloudflare:workers-paid:custom-domain-origin',
       'fact:cloudflare:workers-paid:cors-headers',
@@ -224,9 +224,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'same',
     label: 'AWS: API Gateway + Lambda に API を置き、DB は DynamoDB',
     note:
-      'API を AWS の API Gateway（HTTP API・api のサブドメイン）+ Lambda に置き、DB は DynamoDB（オンデマンド）。静的なファイルと画像は Cloudflare から配る（静的アセットは Worker を起動しない）。' +
-      'API の応答は CloudFront を通らずに AWS から外へ送るので、データ転送の料金（月 100 GB の無料の後）がかかる。' +
-      'ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要る。AWS のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+      'API を AWS の API Gateway（HTTP API・api のサブドメイン）+ Lambda に置き、DB は DynamoDB（オンデマンド）です。静的なファイルと画像は Cloudflare から配ります（静的アセットは Worker を起動しない）。' +
+      'API の応答は CloudFront を通らずに AWS から外へ送るので、データ転送の料金（月 100 GB の無料の後）がかかります。' +
+      'ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要ります。AWS のアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       'fact:aws:data-transfer-out:api-gateway-out',
       'pool:aws:lambda:lambda-free-requests',
@@ -248,11 +248,11 @@ export const CROSS_PARTS: readonly PartDef[] = [
     label:
       'Cloudflare: Workers に API を置き、DB は D1（Next.js のサーバーから呼ぶ）',
     note:
-      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、' +
-      'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。ブラウザは今の事業者の Next.js だけを呼ぶので CORS の設定は要らない（サーバーどうしの認証は要る）。' +
-      'API を呼ぶたびに Worker のリクエストとして数える。今の事業者の DB は使わなくなる。' +
-      'OpenNext の Lambda から送る問い合わせは AWS のデータ転送の料金、Netlify の関数から送る問い合わせは Netlify の転送量で数え、Vercel・Amplify は料金の文書に項目が無いので数えない。' +
-      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
+      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使います。Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、' +
+      'Worker の API を fetch で呼び、ページの描画は応答を待ちます（往復の遅延は計算しない）。ブラウザは今の事業者の Next.js だけを呼ぶので CORS の設定は要りません（サーバーどうしの認証は要る）。' +
+      'API を呼ぶたびに Worker のリクエストとして数えます。今の事業者の DB は使わなくなります。' +
+      'OpenNext の Lambda から送る問い合わせは AWS のデータ転送の料金、Netlify の関数から送る問い合わせは Netlify の転送量で数え、Vercel・Amplify は料金の文書に項目が無いので数えません。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになります',
     premiseRefs: [
       'fact:cloudflare:workers-paid:custom-domain-origin',
       'fact:cloudflare:workers-paid:server-fetch',
@@ -282,11 +282,11 @@ export const CROSS_PARTS: readonly PartDef[] = [
     label:
       'Cloudflare: Workers に API を置き、DB は D1（Astro のサーバーから呼ぶ）',
     note:
-      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使う。Astro のサーバー（マイページの SSR・エンドポイント）は DB を直接読まず、' +
-      'Worker の API を fetch で呼び、ページの描画は応答を待つ（往復の遅延は計算しない）。記事は今の事業者で描いてキャッシュする（描き直すときも API を呼ぶ。D-103）。' +
-      'ブラウザは今の事業者の Astro だけを呼ぶので CORS の設定は要らない（サーバーどうしの認証は要る）。API を呼ぶたびに Worker のリクエストとして数える。' +
-      '今の DB（Supabase・VPS の MySQL）は使わなくなる。Vercel の関数・VPS から外への通信は数えない（Vercel は料金の文書に項目が無く、VPS は転送量が無制限）。Netlify の関数から送る問い合わせは Netlify の転送量で数える。' +
-      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになる',
+      'API を Cloudflare の Worker（api のサブドメイン）に置き、DB は D1 を binding で使います。Astro のサーバー（マイページの SSR・エンドポイント）は DB を直接読まず、' +
+      'Worker の API を fetch で呼び、ページの描画は応答を待ちます（往復の遅延は計算しない）。記事は今の事業者で描いてキャッシュします（描き直すときも API を呼ぶ。D-103）。' +
+      'ブラウザは今の事業者の Astro だけを呼ぶので CORS の設定は要りません（サーバーどうしの認証は要る）。API を呼ぶたびに Worker のリクエストとして数えます。' +
+      '今の DB（Supabase・VPS の MySQL）は使わなくなります。Vercel の関数・VPS から外への通信は数えません（Vercel は料金の文書に項目が無く、VPS は転送量が無制限）。Netlify の関数から送る問い合わせは Netlify の転送量で数えます。' +
+      'Cloudflare のアカウントが 1 つ増え、請求が 2 つになります',
     premiseRefs: [
       'fact:cloudflare:workers-paid:custom-domain-origin',
       'fact:cloudflare:workers-paid:astro-server-fetch',
@@ -314,9 +314,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     title: { free: 'Neon（Free）', paid: 'Neon（Launch）' },
     label: 'Neon: 従量の Postgres（閲覧が途切れると止まる）',
     note:
-      'DB を Neon に替える。基本料が無く、動いている時間（最小の 0.25 CU）・保存・転送（月 500 GB の後）の分だけ払う。問い合わせが 5 分無いと止まり、止まっている間は計算に払わない（動いている割合は DB に届く件数から出す。ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。' +
-      '土台が無料のプラン（Vercel Hobby・Netlify Free・Cloudflare Free）なら Neon Free（月 100 CU 時間・転送 5 GB・1 GB まで。超えると止まる）、それ以外は Neon Launch。' +
-      '東京のリージョンが無く、最寄りはシンガポール（往復の遅延は計算しない）。Neon のアカウントが 1 つ増え、請求が 2 つになる',
+      'DB を Neon に替えます。基本料が無く、動いている時間（最小の 0.25 CU）・保存・転送（月 500 GB の後）の分だけ払います。問い合わせが 5 分無いと止まり、止まっている間は計算に払いません（動いている割合は DB に届く件数から出す。ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。' +
+      '土台が無料のプラン（Vercel Hobby・Netlify Free・Cloudflare Free）なら Neon Free（月 100 CU 時間・転送 5 GB・1 GB まで。超えると止まる）、それ以外は Neon Launch です。' +
+      '東京のリージョンが無く、最寄りはシンガポールです（往復の遅延は計算しない）。Neon のアカウントが 1 つ増え、請求が 2 つになります',
     premiseRefs: ['fact:neon:', 'pool:neon:', 'limit:neon:'],
   },
   // Supabase（D-114 段 2d）。Vercel・Netlify は土台の既定の DB、Cloudflare は「Hyperdrive 経由で Supabase」（土台の部品）があるので、
@@ -332,9 +332,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     title: { free: 'Supabase Free', paid: 'Supabase Pro' },
     label: 'Supabase: Postgres（共有のプールでつなぐ）',
     note:
-      'DB を Supabase に替える。Pro は月の基本料（$25）と Micro のサーバーの稼働がかかり（Compute のクレジット $10 つき）、転送は月 250 GB の後 $0.09/GB、ディスクは 8 GB の後。' +
-      '土台が無料のプランなら Supabase Free（転送 5 GB・1 週間使われないと一時停止）。共有のプール（Supavisor。IPv4）でつなぎ、プール経由の転送は DB の転送と二重に数えない。' +
-      'Supabase のアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+      'DB を Supabase に替えます。Pro は月の基本料（$25）と Micro のサーバーの稼働がかかり（Compute のクレジット $10 つき）、転送は月 250 GB の後 $0.09/GB、ディスクは 8 GB の後です。' +
+      '土台が無料のプランなら Supabase Free です（転送 5 GB・1 週間使われないと一時停止）。共有のプール（Supavisor。IPv4）でつなぎ、プール経由の転送は DB の転送と二重に数えません。' +
+      'Supabase のアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       'fact:supabase:pro-micro:compute',
       'limit:supabase:pro-micro:pooler-connections',
@@ -353,8 +353,8 @@ export const CROSS_PARTS: readonly PartDef[] = [
     title: 'AWS DynamoDB',
     label: 'AWS: DynamoDB（オンデマンド）',
     note:
-      'DB を AWS の DynamoDB（東京・オンデマンド）に替える。読み書きの単位で課金し、時間課金のコンピュートが無い（保存は 25 GB 月まで無料）。' +
-      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える。請求は AWS。往復の遅延は計算しない',
+      'DB を AWS の DynamoDB（東京・オンデマンド）に替えます。読み書きの単位で課金し、時間課金のコンピュートがありません（保存は 25 GB 月まで無料）。' +
+      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数えます。請求は AWS です。往復の遅延は計算しません',
     premiseRefs: [
       'fact:aws:dynamodb-on-demand:request-units',
       'pool:aws:dynamodb-on-demand:dynamodb-free-storage',
@@ -366,13 +366,13 @@ export const CROSS_PARTS: readonly PartDef[] = [
       {
         id: 'aurora',
         label: 'Aurora Serverless v2（最小 0.5 ACU）',
-        size: '最小の 0.5 ACU の分は常にかかる（負荷で伸びた分はこのモデルでは数えない）',
+        size: '最小の 0.5 ACU の分は常にかかります（負荷で伸びた分はこのモデルでは数えない）',
         refs: ['fact:aws:aurora-serverless-v2-io:io-optimized'],
       },
       {
         id: 'aurora-pause',
         label: 'Aurora Serverless v2（0 ACU まで縮める）',
-        size: '接続が 300 秒ないと止まり、止まっている間は ACU の料金がかからない（再開の待ちは速さに入れていない）',
+        size: '接続が 300 秒ないと止まり、止まっている間は ACU の料金がかかりません（再開の待ちは速さに入れていない）',
         refs: ['fact:aws:aurora-serverless-v2-io:auto-pause'],
       },
     ] as const
@@ -387,8 +387,8 @@ export const CROSS_PARTS: readonly PartDef[] = [
     title: 'AWS Aurora Serverless v2',
     label: `AWS: ${a.label}`,
     note:
-      `DB を AWS の Aurora PostgreSQL（東京・Serverless v2・I/O-Optimized）に替える。ACU の時間で課金し、${a.size}。` +
-      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える。公開の IPv4 のアドレスの時間課金は未確認で数えない。請求は AWS。往復の遅延は計算しない',
+      `DB を AWS の Aurora PostgreSQL（東京・Serverless v2・I/O-Optimized）に替えます。ACU の時間で課金し、${a.size}。` +
+      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数えます。公開の IPv4 のアドレスの時間課金は未確認で数えません。請求は AWS です。往復の遅延は計算しません',
     premiseRefs: [
       ...a.refs,
       'pool:aws:data-transfer-out:internet-free-transfer',
@@ -406,8 +406,8 @@ export const CROSS_PARTS: readonly PartDef[] = [
     title: 'AWS RDS for PostgreSQL',
     label: 'AWS: RDS for PostgreSQL（db.t4g.micro）',
     note:
-      'DB を AWS の RDS for PostgreSQL（東京・db.t4g.micro・Single-AZ）に替える。時間課金で、使われていなくても毎月かかる（ディスクは 20 GiB から）。' +
-      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数える。公開の IPv4 のアドレスの時間課金は未確認で数えない。請求は AWS。往復の遅延は計算しない',
+      'DB を AWS の RDS for PostgreSQL（東京・db.t4g.micro・Single-AZ）に替えます。時間課金で、使われていなくても毎月かかります（ディスクは 20 GiB から）。' +
+      'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数えます。公開の IPv4 のアドレスの時間課金は未確認で数えません。請求は AWS です。往復の遅延は計算しません',
     premiseRefs: ['pool:aws:data-transfer-out:internet-free-transfer'],
   },
   // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の手間・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
@@ -426,10 +426,10 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'same',
     label: `さくらの VPS: ${plan.toUpperCase()} に API と MySQL を置く（自前運用）`,
     note:
-      `API を さくらの VPS ${plan.toUpperCase()}（東京）の Node に置き、DB は同じ VPS の MySQL。api のサブドメインは Cloudflare の DNS で VPS に直接向ける（プロキシしない DNS だけのレコードで、CDN を通らない）。` +
-      '静的なファイル（SPA のシェル・Next.js の静的書き出しの記事のページ）・JS・CSS と画像は Cloudflare から配る。Astro のページ（マイページ・キャッシュを描き直す記事）は Worker が描き、その中から VPS の API を呼ぶ。月額は固定で転送量は無制限だが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届く。' +
-      '自前運用の維持の手間と偶発的な障害（1 台構成）が加わる。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要る。' +
-      'さくらのアカウントが 1 つ増え、請求が 2 つになる。往復の遅延は計算しない',
+      `API を さくらの VPS ${plan.toUpperCase()}（東京）の Node に置き、DB は同じ VPS の MySQL です。api のサブドメインは Cloudflare の DNS で VPS に直接向けます（プロキシしない DNS だけのレコードで、CDN を通らない）。` +
+      '静的なファイル（SPA のシェル・Next.js の静的書き出しの記事のページ）・JS・CSS と画像は Cloudflare から配ります。Astro のページ（マイページ・キャッシュを描き直す記事）は Worker が描き、その中から VPS の API を呼びます。月額は固定で転送量は無制限ですが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届きます。' +
+      '自前運用の維持の手間と偶発的な障害（1 台構成）が加わります。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要ります。' +
+      'さくらのアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       'host:',
       'fact:cloudflare:workers-paid:static-assets',

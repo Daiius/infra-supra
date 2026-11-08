@@ -11,13 +11,13 @@ const src = (url: string) => ({ url, retrievedAt: R });
 const members = {
   pricing: 'not-stated' as const,
   premise:
-    'Google Cloud のプロジェクトのメンバー（IAM のユーザー）の料金は、読んだ料金表に書かれていない（記載なし）',
+    'Google Cloud のプロジェクトのメンバー（IAM のユーザー）の料金は、読んだ料金表に書かれていません（記載なし）',
   sourceIds: ['runPricing'],
 };
 const uptimeSla = {
   status: 'not-stated' as const,
   premise:
-    'Google Cloud の稼働率の SLA はサービスごとのページにあり、まだ取得していない（このゲームでは SLA の要件を満たせない扱い）',
+    'Google Cloud の稼働率の SLA はサービスごとのページにあり、まだ取得していません（このゲームでは SLA の要件を満たせない扱い）',
   sourceIds: ['runPricing'],
 };
 const common = { members, uptimeSla };
@@ -172,16 +172,16 @@ export const gcp: PriceBookInput = {
         {
           id: 'request-billing',
           premise:
-            'Cloud Run のリクエストで課金する設定（既定）は、インスタンスが起動・終了している間と 1 件以上のリクエストを処理している間だけ CPU とメモリを課金する。1 つのインスタンスが同時に複数のリクエストをさばき（既定の上限は 80）、同時に処理している分は 1 回分の時間しか数えない',
+            'Cloud Run のリクエストで課金する設定（既定）は、インスタンスが起動・終了している間と 1 件以上のリクエストを処理している間だけ CPU とメモリを課金します。1 つのインスタンスが同時に複数のリクエストをさばき（既定の上限は 80）、同時に処理している分は 1 回分の時間しか数えません',
           interpretation: {
             adopted:
-              '月のアクティブな時間を、リクエストの到着をポアソンとみた「1 件以上を処理している時間の割合」（1 − e^(−同時に処理している件数の平均)）で出し、同時実行の上限と CPU を使い切る分で下から抑える。インスタンスの時間の 100 ms の切り上げと起動・終了の時間は数えない',
+              '月のアクティブな時間を、リクエストの到着をポアソンとみた「1 件以上を処理している時間の割合」（1 − e^(−同時に処理している件数の平均)）で出し、同時実行の上限と CPU を使い切る分で下から抑えます。インスタンスの時間の 100 ms の切り上げと起動・終了の時間は数えません',
             rejected: [
               {
                 reading:
                   'リクエストごとの壁時計時間を同時実行の上限（80）で割る',
                 reason:
-                  '閲覧が薄い時間帯はリクエストが重ならず、1 件ごとにインスタンスの時間が数えられる。80 で割ると一番うまく詰まった場合の下限になり、安く出すぎる',
+                  '閲覧が薄い時間帯はリクエストが重ならず、1 件ごとにインスタンスの時間が数えられます。80 で割ると一番うまく詰まった場合の下限になり、安く出すぎます',
               },
             ],
           },
@@ -190,15 +190,15 @@ export const gcp: PriceBookInput = {
         {
           id: 'min-instances',
           premise:
-            'Cloud Run の最小インスタンス数を 1 以上にすると、その数のインスタンスを温めておき、リクエストを処理していない間も安い待機（idle）の単価で課金する（CPU は 1 vCPU 秒 $0.0000025）。0 なら待機は課金されず、インスタンスが無いときに届いたリクエストは起動を待つ',
+            'Cloud Run の最小インスタンス数を 1 以上にすると、その数のインスタンスを温めておき、リクエストを処理していない間も安い待機（idle）の単価で課金します（CPU は 1 vCPU 秒 $0.0000025）。0 なら待機は課金されず、インスタンスが無いときに届いたリクエストは起動を待ちます',
           interpretation: {
             adopted:
-              '月の無料の vCPU 秒・GiB 秒は、アクティブな時間にだけ当てる（待機の分には当てない）',
+              '月の無料の vCPU 秒・GiB 秒は、アクティブな時間にだけ当てます（待機の分には当てない）',
             rejected: [
               {
                 reading: '無料の分は金額の割引なので、待機の分にも当たる',
                 reason:
-                  '料金ページの無料の分は「us-central1 のアクティブの単価に基づく」と書かれ、待機に当たるかは書かれていない（費用の高い側を採る）',
+                  '料金ページの無料の分は「us-central1 のアクティブの単価に基づく」と書かれ、待機に当たるかは書かれていません（費用の高い側を採る）',
               },
             ],
           },
@@ -207,21 +207,21 @@ export const gcp: PriceBookInput = {
         {
           id: 'idle-timeout',
           premise:
-            'Cloud Run はリクエストの無いインスタンスを減らし、残す分も 15 分の待機の後に止める。止まった後に届いたリクエストはコンテナの起動を待つ（冷えた起動）',
+            'Cloud Run はリクエストの無いインスタンスを減らし、残す分も 15 分の待機の後に止めます。止まった後に届いたリクエストはコンテナの起動を待ちます（冷えた起動）',
           sourceIds: ['runAutoscaling'],
         },
         {
           id: 'cpu-outside-requests',
           premise:
-            'リクエストで課金する設定では、リクエストを処理していない間の CPU は割り当てられない。応答の後に裏で処理を続けるなら（Next.js の ISR の作り直しなど）、最小インスタンスを 1 以上にするか、インスタンスで課金する設定にするよう公式は勧める',
+            'リクエストで課金する設定では、リクエストを処理していない間の CPU は割り当てられません。応答の後に裏で処理を続けるなら（Next.js の ISR の作り直しなど）、最小インスタンスを 1 以上にするか、インスタンスで課金する設定にするよう公式は勧めています',
           interpretation: {
             adopted:
-              '裏の作り直しの時間も、アクティブな時間として課金に数える（作り直しが遅れる・止まる分は表さない）',
+              '裏の作り直しの時間も、アクティブな時間として課金に数えます（作り直しが遅れる・止まる分は表さない）',
             rejected: [
               {
                 reading: '裏の作り直しは課金されない',
                 reason:
-                  '作り直しが終わるにはどこかで CPU を使う。数えないと安く出すぎる',
+                  '作り直しが終わるにはどこかで CPU を使います。数えないと安く出すぎます',
               },
             ],
           },
@@ -230,13 +230,13 @@ export const gcp: PriceBookInput = {
         {
           id: 'next-local-cache',
           premise:
-            "Next.js を output: 'standalone' のコンテナで動かすと、ISR のキャッシュは既定でインスタンスごとのローカル（ディスク・メモリ）に置かれ、複数のインスタンスで共有されない。共有するには自分で cacheHandler（Redis・オブジェクトストレージなど）を書く。revalidatePath・revalidateTag は受けたインスタンスのキャッシュだけを消す",
+            "Next.js を output: 'standalone' のコンテナで動かすと、ISR のキャッシュは既定でインスタンスごとのローカル（ディスク・メモリ）に置かれ、複数のインスタンスで共有されません。共有するには自分で cacheHandler（Redis・オブジェクトストレージなど）を書きます。revalidatePath・revalidateTag は受けたインスタンスのキャッシュだけを消します",
           sourceIds: ['nextSelfHosting'],
         },
         {
           id: 'next-image',
           premise:
-            'Next.js の next/image の画像の最適化は、next start（standalone のサーバー）でそのまま動き、コンテナの CPU で変換する',
+            'Next.js の next/image の画像の最適化は、next start（standalone のサーバー）でそのまま動き、コンテナの CPU で変換します',
           sourceIds: ['nextSelfHosting'],
         },
       ],
@@ -250,15 +250,15 @@ export const gcp: PriceBookInput = {
           // リクエストで課金する設定のサービスは 1 年・3 年とも 17%（インスタンスで課金する設定は 1 年 28%・3 年 46%）
           payments: [{ payment: 'no-upfront', discount: 0.17 }],
           premise:
-            'Cloud Run の確約利用割引（Compute flexible CUD）は 1 時間あたりの使用の額を 1 年（または 3 年）確約し、確約の額までの使用を割り引く。リクエストで課金する設定のサービスは 1 年・3 年とも 17%。確約を超えた分はオンデマンドの単価で、ネットワークの料金には効かない',
+            'Cloud Run の確約利用割引（Compute flexible CUD）は 1 時間あたりの使用の額を 1 年（または 3 年）確約し、確約の額までの使用を割り引きます。リクエストで課金する設定のサービスは 1 年・3 年とも 17% です。確約を超えた分はオンデマンドの単価で、ネットワークの料金には効きません',
           interpretation: {
             adopted:
-              'CPU・メモリ（アクティブと最小インスタンスの待機）に当て、リクエストの料金（100 万件 $0.40）には当てない。確約の額は月の平均の使用（無料枠を引いた後の額）で比べ、時間ごとの揺れは数えない。請求は月ごと（前払いの形は無い）',
+              'CPU・メモリ（アクティブと最小インスタンスの待機）に当て、リクエストの料金（100 万件 $0.40）には当てません。確約の額は月の平均の使用（無料枠を引いた後の額）で比べ、時間ごとの揺れは数えません。請求は月ごとです（前払いの形は無い）',
             rejected: [
               {
                 reading: 'リクエストの料金も割り引く',
                 reason:
-                  'CUD の文書の例は vCPU 秒・GiB 秒の単価だけで、リクエストに効くとは書かれていない（確かめられない分は割り引かない側に置いた）',
+                  'CUD の文書の例は vCPU 秒・GiB 秒の単価だけで、リクエストに効くとは書かれていません（確かめられない分は割り引かない側に置いた）',
               },
             ],
           },
@@ -337,15 +337,15 @@ export const gcp: PriceBookInput = {
           unit: 'gb',
           allowancePool: 'logging-free',
           premise:
-            'Cloud Run は要求ごとの要求ログ（request log）を自動で作り、コンテナの stdout・stderr と一緒に Cloud Logging に送る（Cloud Run の側では止められず、除外のフィルタで減らす）。取り込みは月 50 GiB を超えた分が $0.50 / GiB で、30 日の保存を含む。_Default のログバケットの保持は既定で 30 日なので、保持の費用はかからない（30 日を超えて残すと $0.01 / GiB 月）',
+            'Cloud Run は要求ごとの要求ログ（request log）を自動で作り、コンテナの stdout・stderr と一緒に Cloud Logging に送ります（Cloud Run の側では止められず、除外のフィルタで減らす）。取り込みは月 50 GiB を超えた分が $0.50 / GiB で、30 日の保存を含む。_Default のログバケットの保持は既定で 30 日なので、保持の費用はかかりません（30 日を超えて残すと $0.01 / GiB 月）',
           interpretation: {
             adopted:
-              'GiB の単価を GB（10^9 バイト）の量に当てる（量は 2 進より約 7% 多く数え、高めの側）',
+              'GiB の単価を GB（10^9 バイト）の量に当てます（量は 2 進より約 7% 多く数え、高めの側）',
             rejected: [
               {
                 reading: '保持の設定を部品の選択肢にする',
                 reason:
-                  '既定の 30 日は無料で、延ばすのは利用者の判断（$0.01 / GiB 月は取り込みの 2%）。部品にするほどの差にならない',
+                  '既定の 30 日は無料で、延ばすのは利用者の判断です（$0.01 / GiB 月は取り込みの 2%）。部品にするほどの差になりません',
               },
             ],
           },
@@ -354,9 +354,9 @@ export const gcp: PriceBookInput = {
         },
       ],
       notes: [
-        '東京（asia-northeast1）は Tier 1。表の単価は us-central1 と同じ',
-        'インスタンスで課金する設定（CPU $0.000018 / vCPU 秒・メモリ $0.000002 / GiB 秒。リクエストの料金なし・起動から終了まで課金）は扱わない（その設定の確約利用割引 1 年 28%・3 年 46% も）',
-        'インスタンスの時間は 100 ms 単位で切り上げる（料金ページ）。このモデルは月の時間を連続の値で出し、切り上げは数えない',
+        '東京（asia-northeast1）は Tier 1 です。表の単価は us-central1 と同じです',
+        'インスタンスで課金する設定（CPU $0.000018 / vCPU 秒・メモリ $0.000002 / GiB 秒。リクエストの料金なし・起動から終了まで課金）は扱いません（その設定の確約利用割引 1 年 28%・3 年 46% も）',
+        'インスタンスの時間は 100 ms 単位で切り上げます（料金ページ）。このモデルは月の時間を連続の値で出し、切り上げは数えません',
       ],
     },
     {
@@ -369,40 +369,40 @@ export const gcp: PriceBookInput = {
         {
           id: 'cloud-run-rewrite',
           premise:
-            'Firebase Hosting は書き換え（rewrites）で Cloud Run のサービスへリクエストを渡せ、東京（asia-northeast1）の Cloud Run にも対応する。Cloud Run を使うには請求先アカウントが要り、プロジェクトは Blaze になる。Hosting から Cloud Run への要求は 60 秒で打ち切られる',
+            'Firebase Hosting は書き換え（rewrites）で Cloud Run のサービスへリクエストを渡せ、東京（asia-northeast1）の Cloud Run にも対応します。Cloud Run を使うには請求先アカウントが要り、プロジェクトは Blaze になります。Hosting から Cloud Run への要求は 60 秒で打ち切られます',
           sourceIds: ['hostingCloudRun'],
         },
         {
           id: 'dynamic-cache',
           premise:
-            'Cloud Run が返す動的な応答は、既定では CDN にキャッシュされない（Hosting が Cache-Control を private にする）。Cache-Control に public と s-maxage を付けると CDN がその秒数だけキャッシュする。Next.js は ISR のページに s-maxage を付ける',
+            'Cloud Run が返す動的な応答は、既定では CDN にキャッシュされません（Hosting が Cache-Control を private にする）。Cache-Control に public と s-maxage を付けると CDN がその秒数だけキャッシュします。Next.js は ISR のページに s-maxage を付けます',
           sourceIds: ['hostingCache', 'nextSelfHosting'],
         },
         {
           id: 'cache-cleared-on-deploy',
           premise:
-            'Firebase Hosting の CDN のキャッシュは、サイトを新しくデプロイすると全体が消える。パスやタグを指定して消す方法は文書に無い（オンデマンドの再検証は CDN に届かない）',
+            'Firebase Hosting の CDN のキャッシュは、サイトを新しくデプロイすると全体が消えます。パスやタグを指定して消す方法は文書にありません（オンデマンドの再検証は CDN に届かない）',
           sourceIds: ['hostingCache'],
         },
         {
           id: 'session-cookie',
           premise:
-            'Firebase Hosting から Cloud Run へ渡すリクエストは Cookie が外され、__session という名前の Cookie だけが通る（キャッシュの鍵にも入る）。ログインの Cookie はこの名前にする',
+            'Firebase Hosting から Cloud Run へ渡すリクエストは Cookie が外され、__session という名前の Cookie だけが通ります（キャッシュの鍵にも入る）。ログインの Cookie はこの名前にします',
           sourceIds: ['hostingCache'],
         },
         {
           id: 'transfer-from-run',
           premise:
-            'Cloud Run の料金ページは Cloud CDN・Media CDN・Cloud Load Balancing への転送を無料と書くが、Firebase Hosting への転送は挙げていない',
+            'Cloud Run の料金ページは Cloud CDN・Media CDN・Cloud Load Balancing への転送を無料と書いていますが、Firebase Hosting への転送は挙げていません',
           interpretation: {
             adopted:
-              'Cloud Run から Hosting への応答は Cloud Run のインターネットへの転送に数えない（利用者への転送は Hosting の転送として数える）',
+              'Cloud Run から Hosting への応答は Cloud Run のインターネットへの転送に数えません（利用者への転送は Hosting の転送として数える）',
             rejected: [
               {
                 reading:
                   'Cloud Run から Hosting への応答もインターネットへの転送として課金される',
                 reason:
-                  'Hosting は Google の CDN で、応答は Google のネットワークの中で渡る。料金ページの「インターネットへの転送」に当たるとは書かれていない（確かめられない。安い側を採った）',
+                  'Hosting は Google の CDN で、応答は Google のネットワークの中で渡る。料金ページの「インターネットへの転送」に当たるとは書かれていません（確かめられない。安い側を採った）',
               },
             ],
           },
@@ -421,8 +421,8 @@ export const gcp: PriceBookInput = {
         },
       ],
       notes: [
-        '保存は 10 GB まで無料・以降 $0.026 / GB（デプロイした版も数える）。このモデルは静的なファイルの保存量を数えない',
-        'リクエストの件数には料金が無い',
+        '保存は 10 GB まで無料・以降 $0.026 / GB です（デプロイした版も数える）。このモデルは静的なファイルの保存量を数えません',
+        'リクエストの件数には料金がありません',
       ],
     },
     {
@@ -459,7 +459,7 @@ export const gcp: PriceBookInput = {
         },
       ],
       notes: [
-        '常に無料の分（5 GB 月など）は米国のリージョンだけで、東京には当たらない',
+        '常に無料の分（5 GB 月など）は米国のリージョンだけで、東京には当たりません',
         '同じリージョンの Google Cloud のサービス（Cloud Run）への転送は無料',
       ],
     },
@@ -473,15 +473,15 @@ export const gcp: PriceBookInput = {
         {
           id: 'document-reads',
           premise:
-            'Firestore はドキュメントの読み取り・書き込み・削除の件数と保存で課金し、問い合わせは返したドキュメントの数だけ読み取りに数える（結果が 0 件でも 1 件分）。同じリージョンの Cloud Run からの通信は無料',
+            'Firestore はドキュメントの読み取り・書き込み・削除の件数と保存で課金し、問い合わせは返したドキュメントの数だけ読み取りに数えます（結果が 0 件でも 1 件分）。同じリージョンの Cloud Run からの通信は無料です',
           interpretation: {
             adopted:
-              '1 回の問い合わせで返すドキュメントの数を、応答の大きさ ÷ 1 ドキュメントの大きさ（1 kB と仮定）の切り上げで数え、書く行 1 行を 1 回の書き込みと数える',
+              '1 回の問い合わせで返すドキュメントの数を、応答の大きさ ÷ 1 ドキュメントの大きさ（1 kB と仮定）の切り上げで数え、書く行 1 行を 1 回の書き込みと数えます',
             rejected: [
               {
                 reading: 'SQL の DB のように、走査した行の数だけ読み取る',
                 reason:
-                  'Firestore の問い合わせはインデックスで返したドキュメントだけを数える（料金ページ）',
+                  'Firestore の問い合わせはインデックスで返したドキュメントだけを数えます（料金ページ）',
               },
             ],
           },
@@ -522,10 +522,10 @@ export const gcp: PriceBookInput = {
           resource: 'backup-gb-month',
           unit: 'gb-month',
           premise:
-            'Firestore の PITR（直近 7 日の任意の時点に戻す）は既定で無効。有効にすると、DB の大きさに $0.000267123 / GiB 時（月 約 $0.195 / GiB。東京・無料の分なし）で課金する',
+            'Firestore の PITR（直近 7 日の任意の時点に戻す）は既定で無効。有効にすると、DB の大きさに $0.000267123 / GiB 時（月 約 $0.195 / GiB。東京・無料の分なし）で課金します',
           interpretation: {
             adopted:
-              '時間の単価 × 730 時間 = $0.195 / GiB 月を、DB の大きさ（GB）に当てる（GiB を GB で数え、量は約 7% 多めの側）',
+              '時間の単価 × 730 時間 = $0.195 / GiB 月を、DB の大きさ（GB）に当てます（GiB を GB で数え、量は約 7% 多めの側）',
             rejected: [],
           },
           pricing: { model: 'flat', per: 1, unitPrice: 0.195 },
@@ -533,7 +533,7 @@ export const gcp: PriceBookInput = {
         },
       ],
       notes: [
-        '削除（10 万件 $0.013）・日次 / 週次のバックアップ（$0.038 / GiB 月）は数えない。PITR はバックアップの部品で選ぶ（D-93）',
+        '削除（10 万件 $0.013）・日次 / 週次のバックアップ（$0.038 / GiB 月）は数えません。PITR はバックアップの部品で選びます（D-93）',
         '無料の分は 1 日ごと（太平洋時間の真夜中にリセット）',
       ],
     },
@@ -547,14 +547,14 @@ export const gcp: PriceBookInput = {
         {
           id: 'shared-core',
           premise:
-            'Cloud SQL の db-f1-micro は共有の vCPU・メモリ 0.6 GiB の最小のインスタンスで、Cloud SQL の SLA の対象外。動いている秒ごとに課金し、問い合わせが無くても止まらない。同じリージョンへの転送は無料',
+            'Cloud SQL の db-f1-micro は共有の vCPU・メモリ 0.6 GiB の最小のインスタンスで、Cloud SQL の SLA の対象外です。動いている秒ごとに課金し、問い合わせが無くても止まりません。同じリージョンへの転送は無料です',
           interpretation: {
-            adopted: '時間の単価（東京 $0.0122 / 時間）× 730 時間で数える',
+            adopted: '時間の単価（東京 $0.0122 / 時間）× 730 時間で数えます',
             rejected: [
               {
                 reading: '料金ページの月額の表示（$10.22 / 月）で数える',
                 reason:
-                  '同じページの時間の表示と月額の表示が 730 時間で合わない（$0.0122 × 730 = $8.91）。課金は秒ごとなので、時間の単価を採った',
+                  '同じページの時間の表示と月額の表示が 730 時間で合いません（$0.0122 × 730 = $8.91）。課金は秒ごとなので、時間の単価を採りました',
               },
             ],
           },
@@ -584,14 +584,14 @@ export const gcp: PriceBookInput = {
           resource: 'backup-gb-month',
           unit: 'gb-month',
           premise:
-            'Cloud SQL の自動バックアップは既定で 7 つ（1 日 1 つ）を残し、最初の 1 つは全体・以降は差分。使った量に $0.000142466 / GiB 時（月 約 $0.104 / GiB。東京）で課金する。コンソールで作った Enterprise のインスタンスは PITR も既定で有効（ログの保持 7 日）',
+            'Cloud SQL の自動バックアップは既定で 7 つ（1 日 1 つ）を残し、最初の 1 つは全体・以降は差分です。使った量に $0.000142466 / GiB 時（月 約 $0.104 / GiB。東京）で課金します。コンソールで作った Enterprise のインスタンスは PITR も既定で有効です（ログの保持 7 日）',
           interpretation: {
             adopted:
-              'コンソールで作った既定（自動バックアップ 7 つ・PITR 有効）とみる。量は全体 1 つ + 7 日分の差分。PITR のログはインスタンスのディスクに置かれ、その分の大きさは数えない（ログの量の課金の記載が料金ページに無い）',
+              'コンソールで作った既定（自動バックアップ 7 つ・PITR 有効）とみます。量は全体 1 つ + 7 日分の差分です。PITR のログはインスタンスのディスクに置かれ、その分の大きさは数えません（ログの量の課金の記載が料金ページに無い）',
             rejected: [
               {
                 reading: 'バックアップを数えない（前の扱い）',
-                reason: '既定で有効で、使った量に課金される（D-93）',
+                reason: '既定で有効で、使った量に課金されます（D-93）',
               },
             ],
           },
@@ -600,9 +600,9 @@ export const gcp: PriceBookInput = {
         },
       ],
       notes: [
-        '保存は割り当てた量で課金する（自動で増やせるが減らせない）。最小の割り当ての量は確かめていない（使用量で数える）',
-        '高可用性（HA は 2 倍）は数えない',
-        'Cloud SQL の確約利用割引（1 年 25%・3 年 52%）は共有の vCPU の種類（db-f1-micro・db-g1-small）に効かないので、確約の行動は無い（D-97）',
+        '保存は割り当てた量で課金します（自動で増やせるが減らせない）。最小の割り当ての量は確かめていません（使用量で数える）',
+        '高可用性（HA は 2 倍）は数えません',
+        'Cloud SQL の確約利用割引（1 年 25%・3 年 52%）は共有の vCPU の種類（db-f1-micro・db-g1-small）に効かないので、確約の行動はありません（D-97）',
       ],
     },
     {
@@ -615,7 +615,7 @@ export const gcp: PriceBookInput = {
         {
           id: 'run-outbound',
           premise:
-            'Cloud Run からインターネットへ送るデータは Premium Tier のネットワークの料金（東京 → アジアは 1 TiB まで $0.12 / GiB）で課金する。受け取るデータは無料',
+            'Cloud Run からインターネットへ送るデータは Premium Tier のネットワークの料金（東京 → アジアは 1 TiB まで $0.12 / GiB）で課金します。受け取るデータは無料です',
           sourceIds: ['networkPricing', 'runPricing'],
         },
       ],
@@ -638,7 +638,7 @@ export const gcp: PriceBookInput = {
         },
       ],
       notes: [
-        '送り先はアジア（Cloudflare の東京の拠点）とみる。北米への 1 GiB の無料の分は当たらない',
+        '送り先はアジア（Cloudflare の東京の拠点）とみます。北米への 1 GiB の無料の分は当たりません',
       ],
     },
     // Cloud DNS（構成の DNS。D-96・prd/11 §21）
@@ -658,13 +658,13 @@ export const gcp: PriceBookInput = {
         {
           id: 'no-free-tier',
           premise:
-            'Cloud DNS に無料の分は無い。ゾーンは使っていなくても時間で課金される（1 アカウントで 25 ゾーンまで 1 時間 $0.000273973 = 月 約 $0.20）',
+            'Cloud DNS に無料の分はありません。ゾーンは使っていなくても時間で課金されます（1 アカウントで 25 ゾーンまで 1 時間 $0.000273973 = 月 約 $0.20）',
           sourceIds: ['dnsPricing'],
         },
         {
           id: 'hosting-no-dns',
           premise:
-            'Firebase Hosting は DNS を持たない。独自のドメインは、使っている DNS の事業者に A・TXT のレコードを足してつなぐ',
+            'Firebase Hosting は DNS を持ちません。独自のドメインは、使っている DNS の事業者に A・TXT のレコードを足してつなぎます',
           sourceIds: ['hostingDomain'],
         },
       ],
@@ -690,8 +690,8 @@ export const gcp: PriceBookInput = {
     },
   ],
   notes: [
-    'Firebase Hosting・Firestore の無料の分はプロジェクトごと。このモデルはプロジェクトを 1 つとみて、アカウントで数える',
-    '日本の利用者の Google Cloud の利用には消費税 10% がかかる（tax/japan.ts）',
-    'GiB で書かれた単価をそのまま GB の量に当てる（他の事業者と同じ。差は 7%）',
+    'Firebase Hosting・Firestore の無料の分はプロジェクトごとです。このモデルはプロジェクトを 1 つとみて、アカウントで数えます',
+    '日本の利用者の Google Cloud の利用には消費税 10% がかかります（tax/japan.ts）',
+    'GiB で書かれた単価をそのまま GB の量に当てます（他の事業者と同じ。差は 7%）',
   ],
 };

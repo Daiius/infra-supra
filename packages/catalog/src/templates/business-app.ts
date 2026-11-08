@@ -8,7 +8,7 @@ export const BUSINESS_APP_ROUTES: Readonly<Record<string, RouteTraits>> = {
   app: {
     audience: 'personal',
     needsOgp: false,
-    freshness: '登録した内容がすぐ一覧に出る',
+    freshness: '登録した内容がすぐ一覧に出ます',
     parts: ['一覧・検索', '登録のフォーム', '添付ファイル'],
   },
 };

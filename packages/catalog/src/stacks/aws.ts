@@ -46,7 +46,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: 'Amplify の ISR',
-    note: 'ISR のページは Amplify の CDN が返し、期限が切れると SSR の計算で作り直す。オンデマンドの再検証（即時反映）には対応していない',
+    note: 'ISR のページは Amplify の CDN が返し、期限が切れると SSR の計算で作り直します。オンデマンドの再検証（即時反映）には対応していません',
     premiseRefs: ['fact:aws:amplify-hosting:no-on-demand-isr'],
     onDemandIsr: { ok: false, fact: 'aws:amplify-hosting:no-on-demand-isr' },
   },
@@ -56,7 +56,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: 'キャッシュしない（毎回 SSR）',
-    note: '記事の閲覧が毎回 SSR の計算まで届く（リクエスト数と GB 時間で課金）。記事は常に新しい',
+    note: '記事の閲覧が毎回 SSR の計算まで届きます（リクエスト数と GB 時間で課金）。記事は常に最新です',
     premiseRefs: [],
     onDemandIsr: { ok: true, fact: 'aws:amplify-hosting:no-on-demand-isr' },
   },
@@ -66,7 +66,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: 'Amplify の画像の最適化（料金未取得）',
-    note: '⚠ 料金未取得（この部品を選ぶと費用は下限）。next/image の最適化を Amplify の画像の最適化（Compute とは別の仕組み。デプロイの仕様の ImageOptimization）が行い、Amplify の CDN から配る（転送は $0.15/GB）。最適化そのものの料金は料金表に行が無く、Compute の料金に含まれるかも書かれていないので、変換の費用は 0 ではなく「未取得」として明細に残す',
+    note: '⚠ 料金未取得（この部品を選ぶと費用は下限）。next/image の最適化を Amplify の画像の最適化（Compute とは別の仕組み。デプロイの仕様の ImageOptimization）が行い、Amplify の CDN から配ります（転送は $0.15/GB）。最適化そのものの料金は料金表に行が無く、Compute の料金に含まれるかも書かれていないので、変換の費用は 0 ではなく「未取得」として明細に残します',
     premiseRefs: ['fact:aws:amplify-hosting:transfer-not-cloudfront'],
   },
   {
@@ -74,7 +74,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'aws',
     label: '最適化しない',
-    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）を S3 から CloudFront で配る。CloudFront の常時無料（月 1 TB）を超えると転送に課金され、とても遅くなる（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
+    note: '投稿された原本（このゲームでは 1 枚 4 MB と仮定）を S3 から CloudFront で配ります。CloudFront の常時無料（月 1 TB）を超えると転送に課金され、とても遅くなります（速さが悪い月は PV の伸びも下がる。ゲーム上の仮定）',
     premiseRefs: [
       'pool:aws:cloudfront:cloudfront-free-transfer',
       'pool:aws:cloudfront:cloudfront-free-requests',
@@ -85,7 +85,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'images',
     platform: 'aws',
     label: '投稿のときに一律で縮めて置く',
-    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて S3 に置き、CloudFront で配る。原本は残さない。サイズ違いが無いので、スマホにも同じ大きさを配る（最適化より遅い）',
+    note: '投稿のとき（ブラウザかサーバーで）に 1 回だけ、長い辺 1,600〜2,000px 程度・数百 kB に一律で縮めて S3 に置き、CloudFront で配ります。原本は残しません。サイズ違いが無いので、スマホにも同じ大きさを配ります（最適化より遅い）',
     premiseRefs: [
       'pool:aws:cloudfront:cloudfront-free-transfer',
       'pool:aws:cloudfront:cloudfront-free-requests',
@@ -98,7 +98,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: 'なし',
-    note: 'すべてを Amplify の CDN が返す（配信は Amplify の料金 $0.15/GB）',
+    note: 'すべてを Amplify の CDN が返します（配信は Amplify の料金 $0.15/GB）',
     premiseRefs: ['fact:aws:amplify-hosting:transfer-not-cloudfront'],
   },
   {
@@ -107,7 +107,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: '自前の CloudFront（静的と画像だけ）',
-    note: '自前の CloudFront の後ろに Amplify を置き、静的なファイルと Amplify で最適化した画像を CloudFront が返す（CloudFront の単価・常時無料）。外れた分と HTML・API は Amplify の配信としても課金される（二重になる）とみなす。Amplify の利用者ガイドに手順は無い',
+    note: '自前の CloudFront の後ろに Amplify を置き、静的なファイルと Amplify で最適化した画像を CloudFront が返します（CloudFront の単価・常時無料）。外れた分と HTML・API は Amplify の配信としても課金される（二重になる）とみなします。Amplify の利用者ガイドに手順はありません',
     premiseRefs: [
       'fact:aws:amplify-hosting:front-cloudfront',
       'pool:aws:cloudfront:cloudfront-free-transfer',
@@ -120,7 +120,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: '自前の CloudFront（ISR のページもキャッシュ）',
-    note: 'ISR のページも s-maxage（ISR の間隔）で CloudFront が返す。オンデマンドの再検証は CloudFront に届かない（Amplify もオンデマンド ISR に非対応）。外れた分と SSR・API は Amplify の配信としても課金されるとみなす',
+    note: 'ISR のページも s-maxage（ISR の間隔）で CloudFront が返します。オンデマンドの再検証は CloudFront に届きません（Amplify もオンデマンド ISR に非対応）。外れた分と SSR・API は Amplify の配信としても課金されるとみなします',
     onDemandIsr: { ok: false, fact: 'aws:amplify-hosting:front-cloudfront' },
     premiseRefs: [
       'fact:aws:amplify-hosting:front-cloudfront',
@@ -134,7 +134,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'aws',
     label: 'DynamoDB（オンデマンド）',
-    note: '読み書きの単位で課金し、時間課金のコンピュートが無い。保存は 25 GB 月まで無料。1 行の大きさは 1 kB 以下と仮定',
+    note: '読み書きの単位で課金し、時間課金のコンピュートがありません。保存は 25 GB 月まで無料です。1 行の大きさは 1 kB 以下と仮定します',
     premiseRefs: [
       'fact:aws:dynamodb-on-demand:request-units',
       'pool:aws:dynamodb-on-demand:dynamodb-free-storage',
@@ -145,7 +145,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'aws',
     label: 'Aurora Serverless v2（最小 0.5 ACU）',
-    note: 'Aurora PostgreSQL の Serverless v2（I/O-Optimized。I/O に課金されない）。ACU の時間で課金し、最小の 0.5 ACU の分は常にかかる（負荷で伸びた分はこのモデルでは数えない）',
+    note: 'Aurora PostgreSQL の Serverless v2（I/O-Optimized。I/O に課金されない）です。ACU の時間で課金し、最小の 0.5 ACU の分は常にかかります（負荷で伸びた分はこのモデルでは数えない）',
     premiseRefs: ['fact:aws:aurora-serverless-v2-io:io-optimized'],
   },
   {
@@ -153,7 +153,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'aws',
     label: 'Aurora Serverless v2（0 ACU まで縮める）',
-    note: '接続が 300 秒ないと止まり、止まっている間は ACU の料金がかからない。動いている割合は DB に届く件数から出す（ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。再開の待ち（約 15 秒）は速さに入れていない',
+    note: '接続が 300 秒ないと止まり、止まっている間は ACU の料金がかかりません。動いている割合は DB に届く件数から出します（ほぼ常に誰かが見ているサイトでは、ほとんど止まらない）。再開の待ち（約 15 秒）は速さに入れていません',
     premiseRefs: ['fact:aws:aurora-serverless-v2-io:auto-pause'],
   },
   {
@@ -161,7 +161,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'aws',
     label: 'Aurora DSQL',
-    note: '処理の量（DPU）と保存で課金するサーバーレスの分散 SQL。月 10 万 DPU と 1 GB は無料。1 件あたりの DPU は公式に無く、料金ページの例から仮定している。PostgreSQL の一部の機能が無い',
+    note: '処理の量（DPU）と保存で課金するサーバーレスの分散 SQL です。月 10 万 DPU と 1 GB は無料です。1 件あたりの DPU は公式に無く、料金ページの例から仮定しています。PostgreSQL の一部の機能がありません',
     premiseRefs: [
       'fact:aws:aurora-dsql:dpu',
       'fact:aws:aurora-dsql:compat',
@@ -173,7 +173,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'db',
     platform: 'aws',
     label: 'RDS for PostgreSQL（db.t4g.micro）',
-    note: '定番の Postgres の最小のインスタンス（Single-AZ）。時間課金で、使われていなくても毎月かかる。アプリとの間の転送の料金は未確認で数えない',
+    note: '定番の Postgres の最小のインスタンス（Single-AZ）。時間課金で、使われていなくても毎月かかります。アプリとの間の転送の料金は未確認で数えません',
     premiseRefs: [],
   },
   // CloudFront の料金（D-61）。従量 / 定額のプラン。CloudFront を使う部品（SPA の配信・画像の S3 + CloudFront・前段）に効く
@@ -182,7 +182,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'cdnPlan',
     platform: 'aws',
     label: '従量（常時無料つき）',
-    note: 'リクエスト $0.012 / 1 万・転送 $0.114/GB（日本）。月 1,000 万リクエスト・1 TB までは常時無料。超えた分だけ請求が増える',
+    note: 'リクエスト $0.012 / 1 万・転送 $0.114/GB（日本）。月 1,000 万リクエスト・1 TB までは常時無料です。超えた分だけ請求が増えます',
     premiseRefs: [
       'pool:aws:cloudfront:cloudfront-free-transfer',
       'pool:aws:cloudfront:cloudfront-free-requests',
@@ -193,7 +193,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'cdnPlan',
     platform: 'aws',
     label: '定額 Free（月 $0）',
-    note: '込みはリクエスト月 100 万・転送 100 GB。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できない。Amplify の前段に使う構成は公式に未確認',
+    note: '込みはリクエスト月 100 万・転送 100 GB です。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できません。Amplify の前段に使う構成は公式に未確認です',
     premiseRefs: [
       'pool:aws:cloudfront-flat-free:flat-free-requests',
       'pool:aws:cloudfront-flat-free:flat-free-transfer',
@@ -205,7 +205,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'cdnPlan',
     platform: 'aws',
     label: '定額 Pro（月 $15）',
-    note: '込みはリクエスト月 1,000 万・転送 50 TB。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できない。Amplify の前段に使う構成は公式に未確認',
+    note: '込みはリクエスト月 1,000 万・転送 50 TB です。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できません。Amplify の前段に使う構成は公式に未確認です',
     premiseRefs: [
       'pool:aws:cloudfront-flat-pro:flat-pro-requests',
       'pool:aws:cloudfront-flat-pro:flat-pro-transfer',
@@ -217,7 +217,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     slot: 'cdnPlan',
     platform: 'aws',
     label: '定額 Business（月 $200）',
-    note: '込みはリクエスト月 1 億 2,500 万・転送 50 TB。超えても請求は増えないが、超えた状態が続くと配信の性能が調整されうる（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できない。Amplify の前段に使う構成は公式に未確認',
+    note: '込みはリクエスト月 1 億 2,500 万・転送 50 TB です。超えても請求は増えませんが、超えた状態が続くと配信の性能が調整されることがあります（ゲームでは速さを 1 段下げる。仮定）。従量の常時無料とは併用できません。Amplify の前段に使う構成は公式に未確認です',
     premiseRefs: [
       'pool:aws:cloudfront-flat-business:flat-business-requests',
       'pool:aws:cloudfront-flat-business:flat-business-transfer',
@@ -231,7 +231,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     platform: 'aws',
     frameworks: ['vite-spa'],
     label: '前処理しない（全ページ同じカード）',
-    note: 'シェルのメタタグは全ページ同じ。記事ごとのカードは出ない（ゲーム上の仮定: SNS の話題が伸びにくい）。AWS で前処理する形（Lambda@Edge など）はまだ入れていない',
+    note: 'シェルのメタタグは全ページ同じです。記事ごとのカードは出ません（ゲーム上の仮定: SNS の話題が伸びにくい）。AWS で前処理する形（Lambda@Edge など）はまだ入れていません',
     premiseRefs: [],
   },
   {
@@ -240,7 +240,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     platform: 'aws',
     frameworks: ['vite-spa'],
     label: 'なし',
-    note: '記事の中身の API を毎回処理して DB を読む。記事は常に新しい',
+    note: '記事の中身の API を毎回処理して DB を読みます。記事は常に最新です',
     premiseRefs: [],
   },
   {
@@ -249,7 +249,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     platform: 'aws',
     frameworks: ['vite-spa'],
     label: 'CloudFront のキャッシュ（s-maxage）',
-    note: '記事の中身の API の応答を CloudFront が返し、API Gateway・Lambda・DB に届く件数が減る（CloudFront のリクエストと転送は残る）。拠点ごとに分かれてヒット率が下がる分は計算に入れていない',
+    note: '記事の中身の API の応答を CloudFront が返し、API Gateway・Lambda・DB に届く件数が減ります（CloudFront のリクエストと転送は残る）。拠点ごとに分かれてヒット率が下がる分は計算に入れていません',
     premiseRefs: [
       'pool:aws:cloudfront:cloudfront-free-requests',
       'pool:aws:lambda:lambda-free-requests',

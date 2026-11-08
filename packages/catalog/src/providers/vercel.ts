@@ -10,13 +10,13 @@ const src = (url: string) => ({ url, retrievedAt: R });
 // 「Pro は込み分の代わりに月のクレジット」で揃い、pricing ページの「10M / 1TB included」だけが古い表記として残っている。
 const PRO_INTERPRETATION = {
   adopted:
-    '資源ごとの込み分はなく、$20 のクレジットがすべての従量に最初の 1 単位から当たる。使い切ったら従量で請求される。CDN Requests・Fast Data Transfer・Blob Data Transfer は、新しい Pro の既定の Flat Rate CDN では段の定額に込み（D-120）、On-demand CDN を選べば従量（クレジットが当たる）',
+    '資源ごとの込み分はなく、$20 のクレジットがすべての従量に最初の 1 単位から当たります。使い切ったら従量で請求されます。CDN Requests・Fast Data Transfer・Blob Data Transfer は、新しい Pro の既定の Flat Rate CDN では段の定額に込み（D-120）、On-demand CDN を選べば従量です（クレジットが当たる）',
   rejected: [
     {
       reading:
         'pricing ページの込み分（CDN Requests 月 1,000 万・Fast Data Transfer 月 1 TB）が残り、$20 のクレジットはそれ以外の従量と超過分に当たる',
       reason:
-        'Pro の文書に「The monthly credit applies to all managed infrastructure billable resources from the first unit you use」、料金の文書に「Pro teams get a monthly usage credit instead」とあり、CDN の表の Pro の込み分は「Flat Rate CDN」（申し込み制の定額の段）になっている。2025-09-09 の changelog「Included Pro usage is now credit-based」で込み分をクレジットに置き換えた。pricing ページの込み分の表記は置き換え前のものが残っていると読む',
+        'Pro の文書に「The monthly credit applies to all managed infrastructure billable resources from the first unit you use」、料金の文書に「Pro teams get a monthly usage credit instead」とあり、CDN の表の Pro の込み分は「Flat Rate CDN」（申し込み制の定額の段）になっている。2025-09-09 の changelog「Included Pro usage is now credit-based」で込み分をクレジットに置き換えた。pricing ページの込み分の表記は置き換え前のものが残っていると読みます',
     },
   ],
 };
@@ -24,12 +24,12 @@ const PRO_INTERPRETATION = {
 // 画像の最適化の地域（D-120）。料金の文書は地域で単価が変わるとだけ書き、どの地域で決まるかは書かない
 const IMAGES_REGION_INTERPRETATION = {
   adopted:
-    '読者の地域（変換した画像を配る CDN の地域）の単価で数える（高いほう。hnd1 は iad1 の約 1.3 倍）',
+    '読者の地域（変換した画像を配る CDN の地域）の単価で数えます（高いほう。hnd1 は iad1 の約 1.3 倍）',
   rejected: [
     {
       reading: '関数の地域（既定の iad1）の単価で数える',
       reason:
-        '画像の最適化の文書は「For detailed pricing information for each region, review Regional Pricing」とだけ書き、地域の決め方は書かない。見積は高いほうに倒す',
+        '画像の最適化の文書は「For detailed pricing information for each region, review Regional Pricing」とだけ書き、地域の決め方は書いていません。見積は高いほうに倒します',
     },
   ],
 };
@@ -318,45 +318,45 @@ export const vercel: PriceBookInput = {
           // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
           id: 'function-outbound',
           premise:
-            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送は無い（Static IPs の Private Data Transfer を除く）。このゲームでは数えない',
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送はありません（Static IPs の Private Data Transfer を除く）。このゲームでは数えません',
           sourceIds: ['pricingDocs'],
         },
         {
           id: 'function-inbound',
           premise:
-            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数が外（DB など）から受け取る通信の転送は無い（未確認・数えない）',
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数が外（DB など）から受け取る通信の転送はありません（未確認・数えない）',
           sourceIds: ['pricingDocsInbound'],
         },
         {
           id: 'builds-hobby',
           premise:
-            'Hobby のビルドは Basic のマシン（2 vCPU）で込み。1 日に作れるデプロイは 100 まで（このモデルでは 1 日の上限を判定していない）',
+            'Hobby のビルドは Basic のマシン（2 vCPU）で込みです。1 日に作れるデプロイは 100 までです（このモデルでは 1 日の上限を判定していない）',
           sourceIds: ['builds', 'buildsPricing', 'limits'],
         },
         {
           id: 'isr-purge',
           premise:
-            'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
+            'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新されます',
           sourceIds: ['isrDocs'],
         },
         {
           id: 'astro-isr',
           premise:
-            '@astrojs/vercel の isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後に（Vercel の ISR として）キャッシュする。期限は expiration、取り直しは bypassToken を x-prerender-revalidate のヘッダーに付けたリクエスト。exclude に挙げたページは毎回描く。Vercel の ISR の文書は Astro を対応するフレームワークに挙げる',
+            '@astrojs/vercel の isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後に（Vercel の ISR として）キャッシュします。期限は expiration、取り直しは bypassToken を x-prerender-revalidate のヘッダーに付けたリクエストです。exclude に挙げたページは毎回描きます。Vercel の ISR の文書は Astro を対応するフレームワークに挙げています',
           sourceIds: ['astroVercel', 'isrDocs'],
         },
         {
           id: 'cdn-cache-functions',
           premise:
-            'Vercel Functions の応答は Cache-Control の s-maxage で CDN にキャッシュされる（全プラン）。条件は GET・HEAD・Authorization なし・Set-Cookie なしなど。キャッシュはリージョンごとに分かれ、めったに読まれない応答は期間の前に追い出されることがある',
+            'Vercel Functions の応答は Cache-Control の s-maxage で CDN にキャッシュされます（全プラン）。条件は GET・HEAD・Authorization なし・Set-Cookie なしなどです。キャッシュはリージョンごとに分かれ、めったに読まれない応答は期間の前に追い出されることがあります',
           interpretation: {
             adopted:
-              'ヒットは CDN が返し、関数を起動しない（CDN Requests と Fast Data Transfer は数え、Invocations・Active CPU・Fast Origin Transfer は miss だけ）',
+              'ヒットは CDN が返し、関数を起動しません（CDN Requests と Fast Data Transfer は数え、Invocations・Active CPU・Fast Origin Transfer は miss だけ）',
             rejected: [
               {
                 reading: 'ヒットでも関数が起動する',
                 reason:
-                  '文書は CDN のキャッシュを「オリジンの負荷を減らす」ものとして説明している',
+                  '文書は CDN のキャッシュを「オリジンの負荷を減らす」ものとして説明しています',
               },
             ],
           },
@@ -529,39 +529,39 @@ export const vercel: PriceBookInput = {
           // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
           id: 'function-outbound',
           premise:
-            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送は無い（Static IPs の Private Data Transfer を除く）。このゲームでは数えない',
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数から外の API への通信の転送はありません（Static IPs の Private Data Transfer を除く）。このゲームでは数えません',
           sourceIds: ['pricingDocs'],
         },
         {
           id: 'function-inbound',
           premise:
-            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数が外（DB など）から受け取る通信の転送は無い（未確認・数えない）',
+            'Vercel の料金の文書の課金の項目（CDN・Functions など）に、関数が外（DB など）から受け取る通信の転送はありません（未確認・数えない）',
           sourceIds: ['pricingDocsInbound'],
         },
         {
           id: 'isr-purge',
           premise:
-            'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新される',
+            'Vercel の ISR は全プランで使え、再検証すると全リージョンのキャッシュが 300ms 以内に更新されます',
           sourceIds: ['isrDocs'],
         },
         {
           id: 'astro-isr',
           premise:
-            '@astrojs/vercel の isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後に（Vercel の ISR として）キャッシュする。期限は expiration、取り直しは bypassToken を x-prerender-revalidate のヘッダーに付けたリクエスト。exclude に挙げたページは毎回描く。Vercel の ISR の文書は Astro を対応するフレームワークに挙げる',
+            '@astrojs/vercel の isr を有効にすると、リクエストのたびに描くページを最初の閲覧の後に（Vercel の ISR として）キャッシュします。期限は expiration、取り直しは bypassToken を x-prerender-revalidate のヘッダーに付けたリクエストです。exclude に挙げたページは毎回描きます。Vercel の ISR の文書は Astro を対応するフレームワークに挙げています',
           sourceIds: ['astroVercel', 'isrDocs'],
         },
         {
           id: 'cdn-cache-functions',
           premise:
-            'Vercel Functions の応答は Cache-Control の s-maxage で CDN にキャッシュされる（全プラン）。条件は GET・HEAD・Authorization なし・Set-Cookie なしなど。キャッシュはリージョンごとに分かれ、めったに読まれない応答は期間の前に追い出されることがある',
+            'Vercel Functions の応答は Cache-Control の s-maxage で CDN にキャッシュされます（全プラン）。条件は GET・HEAD・Authorization なし・Set-Cookie なしなどです。キャッシュはリージョンごとに分かれ、めったに読まれない応答は期間の前に追い出されることがあります',
           interpretation: {
             adopted:
-              'ヒットは CDN が返し、関数を起動しない（CDN Requests と Fast Data Transfer は数え、Invocations・Active CPU・Fast Origin Transfer は miss だけ）',
+              'ヒットは CDN が返し、関数を起動しません（CDN Requests と Fast Data Transfer は数え、Invocations・Active CPU・Fast Origin Transfer は miss だけ）',
             rejected: [
               {
                 reading: 'ヒットでも関数が起動する',
                 reason:
-                  '文書は CDN のキャッシュを「オリジンの負荷を減らす」ものとして説明している',
+                  '文書は CDN のキャッシュを「オリジンの負荷を減らす」ものとして説明しています',
               },
             ],
           },
@@ -577,7 +577,7 @@ export const vercel: PriceBookInput = {
       members: {
         pricing: 'per-seat',
         premise:
-          'Vercel Pro は基本料 $20 に配備できる席（Owner・Member）1 つが含まれ、足す席は 1 つ $20 / 月。閲覧だけの席（Viewer Pro）は無料で数に制限なし（このモデルの席は管理画面で配備する人の数）',
+          'Vercel Pro は基本料 $20 に配備できる席（Owner・Member）1 つが含まれ、足す席は 1 つ $20 / 月です。閲覧だけの席（Viewer Pro）は無料で、数に制限はありません（このモデルの席は管理画面で配備する人の数）',
         sourceIds: ['pro', 'pricing'],
       },
       credits: [
@@ -587,7 +587,7 @@ export const vercel: PriceBookInput = {
           amount: 20,
           appliesTo: 'all-usage',
           premise:
-            'Vercel Pro は月 $20 のクレジットがすべての従量に最初から当たり、使い切ると使った分だけ請求される（席の基本料・Flat Rate CDN の段の月額には当てない。余りは繰り越さない）',
+            'Vercel Pro は月 $20 のクレジットがすべての従量に最初から当たり、使い切ると使った分だけ請求されます（席の基本料・Flat Rate CDN の段の月額には当てない。余りは繰り越さない）',
           interpretation: PRO_INTERPRETATION,
           sourceIds: ['pro', 'pricingDocs', 'creditChangelog'],
         },
@@ -638,22 +638,22 @@ export const vercel: PriceBookInput = {
             },
           ],
           premise:
-            'Vercel Pro は既定で Flat Rate CDN（CDN Requests・Fast Data Transfer・Blob Data Transfer を段の定額で払う。Fast Origin Transfer は従量のまま）。Pro に込みの段は月 100 万リクエスト・1 TB で、上は $20（1,000 万・50 TB）・$100（5,000 万）・$300（1 億 5,000 万）。月の量が段の容量を超えてもその月の請求は増えず、翌月から上の段になる（最上段を超えると従量）',
+            'Vercel Pro は既定で Flat Rate CDN です（CDN Requests・Fast Data Transfer・Blob Data Transfer を段の定額で払う。Fast Origin Transfer は従量のまま）。Pro に込みの段は月 100 万リクエスト・1 TB で、上は $20（1,000 万・50 TB）・$100（5,000 万）・$300（1 億 5,000 万）です。月の量が段の容量を超えてもその月の請求は増えず、翌月から上の段になります（最上段を超えると従量）',
           outOfScope: {
             measure: 'media-transfer-share',
             dimension: 'transfer',
             above: 0.5,
             premise:
-              'Flat Rate CDN は、メディアやファイルの配信が転送の大半を占める使い方を対象外とする。Vercel の判断で Flex CDN へ移す・別のプランを求める・制限することがある（このモデルは段の定額のまま数える）',
+              'Flat Rate CDN は、メディアやファイルの配信が転送の大半を占める使い方を対象外としています。Vercel の判断で Flex CDN へ移す・別のプランを求める・制限することがあります（このモデルは段の定額のまま数える）',
           },
           interpretation: {
             adopted:
-              '段の月額に月のクレジットは当てない（基本料と同じ固定の支払いとして数える）。1 TB は 1,000 GB。翌月の段は今月の量が収まる最小の段とする（上がるのは公式の記述どおり、量が減った月に下げるのは利用者が段を選び直すとみなす）',
+              '段の月額に月のクレジットは当てません（基本料と同じ固定の支払いとして数える）。1 TB は 1,000 GB です。翌月の段は今月の量が収まる最小の段とします（上がるのは公式の記述どおり、量が減った月に下げるのは利用者が段を選び直すとみなす）',
             rejected: [
               {
                 reading: '段の月額にも $20 のクレジットが当たる',
                 reason:
-                  'クレジットは「managed infrastructure billable resources」の従量に当たると書かれ、段の月額（Billing で選ぶ定額）に当たるかは記載が無い。当てないほうが高く、見積は高いほうに倒す',
+                  'クレジットは「managed infrastructure billable resources」の従量に当たると書かれ、段の月額（Billing で選ぶ定額）に当たるかは記載がありません。当てないほうが高く、見積は高いほうに倒します',
               },
             ],
           },
@@ -666,7 +666,7 @@ export const vercel: PriceBookInput = {
         },
       ],
       notes: [
-        'Pro の従量は既定で上限なし。予算で一時停止できるが、数分の遅れがある（spend management）',
+        'Pro の従量は既定で上限がありません。予算で一時停止できますが、数分の遅れがあります（spend management）',
       ],
       meters: [
         {
@@ -675,10 +675,10 @@ export const vercel: PriceBookInput = {
           resource: 'build-minutes',
           unit: 'minute',
           premise:
-            'Vercel Pro のビルドは CPU minute（ビルドの時間を分に切り上げ × マシンの vCPU の数）あたり $0.0035。新しい Pro の既定は Elastic（4〜30 vCPU）で、このモデルは最小の 4 vCPU とみなす（Basic の 2 vCPU を選べば半分）',
+            'Vercel Pro のビルドは CPU minute（ビルドの時間を分に切り上げ × マシンの vCPU の数）あたり $0.0035 です。新しい Pro の既定は Elastic（4〜30 vCPU）で、このモデルは最小の 4 vCPU とみなします（Basic の 2 vCPU を選べば半分）',
           interpretation: {
             adopted:
-              'Elastic が 4 vCPU（Standard 相当）を割り当てるとみなし、1 分のビルドを 4 CPU minute と数える。月のクレジットはビルドにも当たる（ビルドの料金は Managed Infrastructure の節にある）',
+              'Elastic が 4 vCPU（Standard 相当）を割り当てるとみなし、1 分のビルドを 4 CPU minute と数えます。月のクレジットはビルドにも当たります（ビルドの料金は Managed Infrastructure の節にある）',
             rejected: [
               {
                 reading: 'Basic（2 vCPU・$0.007 / 分）で数える',
@@ -744,12 +744,12 @@ export const vercel: PriceBookInput = {
           // Flat Rate CDN の対象外（Pro の込みは「Usage-based」）。地域は読者の地域とみなす（D-120）
           interpretation: {
             adopted:
-              '読者の地域（リクエストが入った CDN の地域）の単価で数える。Fast Origin Transfer は CDN の料金の 3 つの資源の 1 つで、CDN の文書は「pricing varies by the region where requests originate」と書く',
+              '読者の地域（リクエストが入った CDN の地域）の単価で数えます。Fast Origin Transfer は CDN の料金の 3 つの資源の 1 つで、CDN の文書は「pricing varies by the region where requests originate」と書いています',
             rejected: [
               {
                 reading: '関数の地域（既定の iad1・$0.06/GB）の単価で数える',
                 reason:
-                  'Fast Origin Transfer の地域の決め方は書かれていない（「priced regionally」だけ）。CDN の料金の資源としての書き方に合わせ、高いほう（hnd1 は $0.27/GB）で見積もる',
+                  'Fast Origin Transfer の地域の決め方は書かれていません（「priced regionally」だけ）。CDN の料金の資源としての書き方に合わせ、高いほう（hnd1 は $0.27/GB）で見積もります',
               },
             ],
           },
@@ -779,7 +779,7 @@ export const vercel: PriceBookInput = {
               {
                 reading: '従量の課金なし（functions の表の N/A）',
                 reason:
-                  '本文に「Vercel bills Pro invocations on demand」とある',
+                  '本文に「Vercel bills Pro invocations on demand」とあります',
               },
             ],
           },
@@ -792,7 +792,7 @@ export const vercel: PriceBookInput = {
           resource: 'cpu-ms',
           unit: 'cpu-hour',
           rounding: 'not-stated',
-          premise: 'Vercel の Active CPU は I/O 待ちの間は課金しない',
+          premise: 'Vercel の Active CPU は I/O 待ちの間は課金しません',
           pricing: { model: 'flat', per: 1, unitPrice: 0.128 },
           regional: [
             {
@@ -813,7 +813,7 @@ export const vercel: PriceBookInput = {
           unit: 'gb-hour',
           rounding: 'not-stated',
           premise:
-            'Vercel のメモリはインスタンスの生存時間で課金される（I/O 待ちも含む）',
+            'Vercel のメモリはインスタンスの生存時間で課金されます（I/O 待ちも含む）',
           pricing: { model: 'flat', per: 1, unitPrice: 0.0106 },
           regional: [
             {
@@ -976,11 +976,11 @@ export const vercel: PriceBookInput = {
     },
   ],
   notes: [
-    'Pro の CDN（CDN Requests・Fast Data Transfer・Blob Data Transfer）は、新しい Pro の既定の Flat Rate CDN（容量の段の定額）で計算する。On-demand CDN（従量）は構成の部品で選ぶ（D-120。D-48 の「扱わない」を改めた）',
-    'Flat Rate CDN の段の容量を超えた日・月も、その月は請求されない（spike protection。公平な利用の範囲で）。最上段（1 億 5,000 万リクエスト・50 TB）を超えると翌月から従量',
-    'CDN（Requests・FDT・Blob Data Transfer）・Fast Origin Transfer・画像の最適化は読者の地域の単価（構成の既定は東京 hnd1）、Active CPU・メモリ・ISR・Blob の保存と操作は関数の地域の単価（新しいプロジェクトの既定は iad1）。単価は地域の料金のページ（iad1・hnd1）から取った（D-120）',
-    'Active CPU・メモリの既定の単価は iad1（最安の地域）。hnd1・kix1 は地域料金として持つ',
-    '関数のログ（Runtime Logs）は課金されない。保持は Hobby 1 時間・Pro 1 日（D-92。2026-11-02 確認）',
-    'Observability Plus（保持 30 日など）は 100 万 event $1.20 で、2026-04-03 以降に作った・上げた Pro のチームでは既定で有効（外せる）。1 件の要求で 1 つ以上の event ができるとあるが数え方が書かれていないので、数えない（外した前提。料金未取得。D-92）',
+    'Pro の CDN（CDN Requests・Fast Data Transfer・Blob Data Transfer）は、新しい Pro の既定の Flat Rate CDN（容量の段の定額）で計算します。On-demand CDN（従量）は構成の部品で選びます（D-120。D-48 の「扱わない」を改めた）',
+    'Flat Rate CDN の段の容量を超えた日・月も、その月は請求されません（spike protection。公平な利用の範囲で）。最上段（1 億 5,000 万リクエスト・50 TB）を超えると翌月から従量です',
+    'CDN（Requests・FDT・Blob Data Transfer）・Fast Origin Transfer・画像の最適化は読者の地域の単価（構成の既定は東京 hnd1）、Active CPU・メモリ・ISR・Blob の保存と操作は関数の地域の単価です（新しいプロジェクトの既定は iad1）。単価は地域の料金のページ（iad1・hnd1）から取りました（D-120）',
+    'Active CPU・メモリの既定の単価は iad1 です（最安の地域）。hnd1・kix1 は地域料金として持ちます',
+    '関数のログ（Runtime Logs）は課金されません。保持は Hobby 1 時間・Pro 1 日です（D-92。2026-11-02 確認）',
+    'Observability Plus（保持 30 日など）は 100 万 event $1.20 で、2026-04-03 以降に作った・上げた Pro のチームでは既定で有効です（外せる）。1 件の要求で 1 つ以上の event ができるとあるが数え方が書かれていないので、数えません（外した前提。料金未取得。D-92）',
   ],
 };

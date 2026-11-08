@@ -15,7 +15,7 @@ const WORKERS_FACTS = [
   {
     id: 'kv-propagation',
     premise:
-      'KV の書き込みは、他の拠点で見えるまで 60 秒以上かかることがある（同じ拠点でもすぐ見える保証はない）',
+      'KV の書き込みは、他の拠点で見えるまで 60 秒以上かかることがあります（同じ拠点でもすぐ見える保証はない）',
     sourceIds: ['kvHowItWorks'],
   },
   {
@@ -31,14 +31,14 @@ const WORKERS_FACTS = [
   {
     id: 'workers-cache',
     premise:
-      'vinext の workersCacheCdnAdapter は ISR のページを Workers Cache（ctx.cache）から返し、revalidateTag・revalidatePath でタグをパージする。Cache API の中身はキャッシュした拠点の外へは複製されない',
+      'vinext の workersCacheCdnAdapter は ISR のページを Workers Cache（ctx.cache）から返し、revalidateTag・revalidatePath でタグをパージします。Cache API の中身はキャッシュした拠点の外へは複製されません',
     interpretation: {
       adopted:
-        'パージで即時反映の要件を満たせるとみなす（パージが全拠点へ伝わる時間は、読んだページに記載なし）',
+        'パージで即時反映の要件を満たせるとみなします（パージが全拠点へ伝わる時間は、読んだページに記載なし）',
       rejected: [
         {
           reading: '拠点ごとに古い版が残る',
-          reason: 'README はタグでエッジをパージすると書いている',
+          reason: 'README はタグでエッジをパージすると書いています',
         },
       ],
     },
@@ -48,7 +48,7 @@ const WORKERS_FACTS = [
   {
     id: 'static-assets',
     premise:
-      'Workers の静的アセットへのリクエストは無料・無制限で、保存にも追加の費用はない（Worker のスクリプトを起動したリクエストだけが Workers の料金で課金される）',
+      'Workers の静的アセットへのリクエストは無料・無制限で、保存にも追加の費用はありません（Worker のスクリプトを起動したリクエストだけが Workers の料金で課金される）',
     sourceIds: ['staticAssetsBilling'],
   },
   {
@@ -60,33 +60,33 @@ const WORKERS_FACTS = [
   {
     id: 'spa-navigation',
     premise:
-      'SPA のフォールバック（not_found_handling = "single-page-application"）では、ブラウザのページ遷移のリクエストは Worker のスクリプトを起動しない（互換日 2025-04-01 以降）',
+      'SPA のフォールバック（not_found_handling = "single-page-application"）では、ブラウザのページ遷移のリクエストは Worker のスクリプトを起動しません（互換日 2025-04-01 以降）',
     sourceIds: ['staticAssetsSpa'],
   },
   {
     id: 'run-worker-first',
     premise:
-      'run_worker_first に一致するリクエストは常に Worker のスクリプトを起動して課金され、Free の上限を超えると静的アセットに戻らず 429 を返す',
+      'run_worker_first に一致するリクエストは常に Worker のスクリプトを起動して課金され、Free の上限を超えると静的アセットに戻らず 429 を返します',
     sourceIds: ['staticAssetsBilling', 'staticAssetsSpa'],
   },
   // API の応答のキャッシュ（Vite の SPA。2026-11-01 に原文で確認。D-37・prd/10 §8）
   {
     id: 'workers-cache-front',
     premise:
-      'Workers Cache（Worker の前のキャッシュ。wrangler の cache.enabled）は、Cache-Control に従ってキャッシュし、ヒットは Worker を動かさずに返す（CPU 時間は課金されない）。ただし有効にすると、キャッシュから返したものも含め Worker へのリクエストはすべて通常の料金で課金され、ふだん無料の静的アセットへのリクエストも課金される。GET・HEAD だけで、Set-Cookie・Authorization は自動でバイパスする。既定で階層化（tiered）される',
+      'Workers Cache（Worker の前のキャッシュ。wrangler の cache.enabled）は、Cache-Control に従ってキャッシュし、ヒットは Worker を動かさずに返します（CPU 時間は課金されない）。ただし有効にすると、キャッシュから返したものも含め Worker へのリクエストはすべて通常の料金で課金され、ふだん無料の静的アセットへのリクエストも課金されます。GET・HEAD だけで、Set-Cookie・Authorization は自動でバイパスします。既定で階層化（tiered）されます',
     sourceIds: ['workersCacheFront'],
   },
   {
     id: 'cache-api-local',
     premise:
-      'Workers の Cache API は Worker のコードの中から読み書きする（Worker は毎回動く）。中身はキャッシュした拠点（データセンター）の外へは複製されず、cache.delete も拠点の中だけ。Cache API の料金の記載はない',
+      'Workers の Cache API は Worker のコードの中から読み書きします（Worker は毎回動く）。中身はキャッシュした拠点（データセンター）の外へは複製されず、cache.delete も拠点の中だけです。Cache API の料金の記載はありません',
     interpretation: {
       adopted:
-        'Cache API そのものの費用はないとみなす（Workers Cache が「別の料金はない」と書くのと同じ扱い）',
+        'Cache API そのものの費用はないとみなします（Workers Cache が「別の料金はない」と書くのと同じ扱い）',
       rejected: [
         {
           reading: '読み書きに別の料金がかかる',
-          reason: 'Cache API のページにも料金のページにも記載が見当たらない',
+          reason: 'Cache API のページにも料金のページにも記載が見当たりません',
         },
       ],
     },
@@ -96,46 +96,46 @@ const WORKERS_FACTS = [
   {
     id: 'custom-domain-origin',
     premise:
-      'Worker はカスタムドメイン（Cloudflare のゾーンのドメイン・サブドメイン）に置け、そのホスト名では Worker がオリジンになる。DNS のレコードと証明書は Cloudflare が作る。使うには自分のゾーンが Cloudflare に要る',
+      'Worker はカスタムドメイン（Cloudflare のゾーンのドメイン・サブドメイン）に置け、そのホスト名では Worker がオリジンになります。DNS のレコードと証明書は Cloudflare が作ります。使うには自分のゾーンが Cloudflare に要ります',
     sourceIds: ['workersCustomDomains'],
   },
   {
     id: 'cors-headers',
     premise:
-      '別のホスト名のサイトからブラウザで呼ぶ API は、Worker が CORS のヘッダー（Access-Control-Allow-Origin など）を返し、事前のリクエスト（OPTIONS）に答える（公式の例がある）',
+      '別のホスト名のサイトからブラウザで呼ぶ API は、Worker が CORS のヘッダー（Access-Control-Allow-Origin など）を返し、事前のリクエスト（OPTIONS）に答えます（公式の例がある）',
     sourceIds: ['workersCors'],
   },
   {
     id: 'd1-binding',
     premise:
-      'D1 は Worker の binding（Worker Binding API）から SQL を実行する。他の事業者のサーバーから直接つなぐ形（REST API）は管理用の面で、このゲームでは選べない',
+      'D1 は Worker の binding（Worker Binding API）から SQL を実行します。他の事業者のサーバーから直接つなぐ形（REST API）は管理用の面で、このゲームでは選べません',
     sourceIds: ['d1WorkerApi'],
   },
   // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
   {
     id: 'server-fetch',
     premise:
-      'Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、Worker の API を fetch で呼ぶ。キャッシュしない fetch は応答が返るまでページの描画を止める（「will block the page from rendering until the request is complete」）。事業者をまたぐ往復の遅延はこのゲームでは計算しない',
+      'Next.js のサーバー（SSR・ISR の作り直し・Route Handler）は DB を直接読まず、Worker の API を fetch で呼びます。キャッシュしない fetch は応答が返るまでページの描画を止めます（「will block the page from rendering until the request is complete」）。事業者をまたぐ往復の遅延はこのゲームでは計算しません',
     sourceIds: ['nextFetchingData', 'workersCustomDomains'],
   },
   // Astro のサーバーから別の事業者の API を呼ぶ形（D-69。2026-11-02 に原文で確認）
   {
     id: 'astro-server-fetch',
     premise:
-      'Astro のアダプターで描くページ（SSR）は DB を直接読まず、外の API を fetch で呼ぶ。リクエストのたびに描くページの fetch は実行時に走り、応答を待ってページを描く（「If SSR mode is enabled, any fetch calls will be executed at runtime」）。事業者をまたぐ往復の遅延はこのゲームでは計算しない',
+      'Astro のアダプターで描くページ（SSR）は DB を直接読まず、外の API を fetch で呼びます。リクエストのたびに描くページの fetch は実行時に走り、応答を待ってページを描きます（「If SSR mode is enabled, any fetch calls will be executed at runtime」）。事業者をまたぐ往復の遅延はこのゲームでは計算しません',
     sourceIds: ['astroDataFetching', 'workersCustomDomains'],
   },
   // Astro の記事を閲覧のときに描き、Worker の前（Workers Cache）にキャッシュする形（D-103。2026-11-03 に原文で確認）
   {
     id: 'astro-route-cache',
     premise:
-      'Astro の route caching（astro@7.0.0）の cacheCloudflare() は Cloudflare-CDN-Cache-Control と Cache-Tag を付け、アダプター（@astrojs/cloudflare@14.0.0 以降）が Workers Cache を既定の設定で有効にする。ヒットは Worker を動かさずに返す。CDN の provider は実験の段階で、手で有効にする',
+      'Astro の route caching（astro@7.0.0）の cacheCloudflare() は Cloudflare-CDN-Cache-Control と Cache-Tag を付け、アダプター（@astrojs/cloudflare@14.0.0 以降）が Workers Cache を既定の設定で有効にします。ヒットは Worker を動かさずに返します。CDN の provider は実験の段階で、手で有効にします',
     sourceIds: ['astroCaching', 'workersCacheFront'],
   },
   {
     id: 'workers-cache-purge',
     premise:
-      'Workers Cache は Workers の Free・Paid のどちらのプランでも使える（公式のブログ「available today to every Worker on any plan」・2026-07-06）。ヒットも Worker のリクエストとして通常の単価で数え（Free では 1 日 10 万件に数える）、CPU 時間はミス・バイパスのときだけ。Worker の中から ctx.cache.purge でタグ・パスの prefix・すべてを消せ、Instant Purge の仕組みでゾーンの purge と同じ保証で全体に伝わる。消す呼び出しはアカウント・ゾーンのプランによらず Free の制限（タグ・prefix は 1 分 5 回・貯めて 25 回）。消した後の最初の閲覧は Worker が描き終わるのを待つので、その閲覧の CPU に描画の全部が乗る（このモデルの読み）',
+      'Workers Cache は Workers の Free・Paid のどちらのプランでも使えます（公式のブログ「available today to every Worker on any plan」・2026-07-06）。ヒットも Worker のリクエストとして通常の単価で数え（Free では 1 日 10 万件に数える）、CPU 時間はミス・バイパスのときだけです。Worker の中から ctx.cache.purge でタグ・パスの prefix・すべてを消せ、Instant Purge の仕組みでゾーンの purge と同じ保証で全体に伝わります。消す呼び出しはアカウント・ゾーンのプランによらず Free の制限です（タグ・prefix は 1 分 5 回・貯めて 25 回）。消した後の最初の閲覧は Worker が描き終わるのを待つので、その閲覧の CPU に描画の全部が乗ります（このモデルの読み）',
     sourceIds: [
       'workersCacheBlog',
       'workersCacheBilling',
@@ -147,16 +147,16 @@ const WORKERS_FACTS = [
   {
     id: 'vinext-prerender',
     premise:
-      'vinext は prerender: true と staticAssetsAdapter() で、ビルドのときに事前描画した HTML・RSC をクライアントのアセットに写し、実行時に Worker が ASSETS の binding から読んで返す。書き込み・無効化は何もせず、次のデプロイで置き換わる（期限の revalidate でも取り直さない）。vinext は開発中（README「Under active development」）',
+      'vinext は prerender: true と staticAssetsAdapter() で、ビルドのときに事前描画した HTML・RSC をクライアントのアセットに写し、実行時に Worker が ASSETS の binding から読んで返します。書き込み・無効化は何もせず、次のデプロイで置き換わります（期限の revalidate でも取り直さない）。vinext は開発中です（README「Under active development」）',
     interpretation: {
       adopted:
-        '事前描画したページの閲覧は 1 回ごとに Worker のリクエストとして数え、CPU はキャッシュから返すのと同じ 2 ms とみなす（ゲーム上の仮定。描画はしない）',
+        '事前描画したページの閲覧は 1 回ごとに Worker のリクエストとして数え、CPU はキャッシュから返すのと同じ 2 ms とみなします（ゲーム上の仮定。描画はしない）',
       rejected: [
         {
           reading:
-            '静的アセットと同じく Worker を起動せず、リクエストに数えない',
+            '静的アセットと同じく Worker を起動せず、リクエストに数えません',
           reason:
-            'README は Worker が ASSETS の binding から読むと書く（output: "export" の「served as assets only」とは別の経路）。課金の明記は無いので、Worker を通る読みを採った',
+            'README は Worker が ASSETS の binding から読むと書いています（output: "export" の「served as assets only」とは別の経路）。課金の明記は無いので、Worker を通る読みを採りました',
         },
       ],
     },
@@ -165,7 +165,7 @@ const WORKERS_FACTS = [
   {
     id: 'worker-outbound',
     premise:
-      'Worker から外へ送る fetch（サブリクエスト）は課金されず、データ転送（egress）の料金もない。応答を待つ時間は CPU 時間に数えない。1 回の呼び出しのサブリクエストは Free 50・Paid 10,000 まで',
+      'Worker から外へ送る fetch（サブリクエスト）は課金されず、データ転送（egress）の料金もありません。応答を待つ時間は CPU 時間に数えません。1 回の呼び出しのサブリクエストは Free 50・Paid 10,000 までです',
     sourceIds: ['workersPricingOutbound', 'workersLimitsOutbound'],
   },
 ];
@@ -178,16 +178,16 @@ const HYPERDRIVE_FACTS = [
   {
     id: 'origin-db',
     premise:
-      'Hyperdrive は Postgres の接続文字列（ユーザー・パスワード・ホスト）で接続先を設定する。Neon は接続のプールを外した接続文字列を使い、Worker は Neon の serverless driver でなく node-postgres などのドライバーを使う。' +
-      'AWS の RDS / Aurora は公開のアクセスを有効にし、Cloudflare の IP からの接続を許す（公式の手順。私設の網へは Cloudflare Tunnel でもつなげるが、ここでは扱わない）。認証は DB のユーザーとパスワード（IAM 認証の記載は無い）。' +
-      'Hyperdrive は Free・Paid の Workers に含まれ（Free は 1 日 10 万クエリ・Paid は無制限）、転送に課金しない',
+      'Hyperdrive は Postgres の接続文字列（ユーザー・パスワード・ホスト）で接続先を設定します。Neon は接続のプールを外した接続文字列を使い、Worker は Neon の serverless driver でなく node-postgres などのドライバーを使います。' +
+      'AWS の RDS / Aurora は公開のアクセスを有効にし、Cloudflare の IP からの接続を許します（公式の手順。私設の網へは Cloudflare Tunnel でもつなげますが、ここでは扱いません）。認証は DB のユーザーとパスワードです（IAM 認証の記載は無い）。' +
+      'Hyperdrive は Free・Paid の Workers に含まれ（Free は 1 日 10 万クエリ・Paid は無制限）、転送に課金しません',
     sourceIds: ['hyperdriveNeon', 'hyperdriveAws', 'hyperdrivePricingDb'],
   },
   {
     id: 'idle-connections',
     premise:
-      'Hyperdrive は使っていない接続を最大 10 分保ち、接続先への接続は 1 設定あたり約 20（Free）・約 100（Paid）。' +
-      '問い合わせが途切れると止まる DB（Neon・Aurora の 0 ACU）は、Hyperdrive が接続を保つ間は止まらない可能性がある（未確認。止まる時間の計算には入れていない）',
+      'Hyperdrive は使っていない接続を最大 10 分保ち、接続先への接続は 1 設定あたり約 20（Free）・約 100（Paid）です。' +
+      '問い合わせが途切れると止まる DB（Neon・Aurora の 0 ACU）は、Hyperdrive が接続を保つ間は止まらない可能性があります（未確認。止まる時間の計算には入れていない）',
     sourceIds: ['hyperdriveLimitsDb'],
   },
 ];
@@ -218,19 +218,19 @@ const IMAGES_FACTS = [
   {
     id: 'transform-url',
     premise:
-      'URL での変換（/cdn-cgi/image/…）は、変換を有効にした Cloudflare のゾーンの上で頼む。元の画像は既定では同じゾーンのものだけ受け付ける（R2 のカスタムドメインを同じゾーンに置けば足りる）',
+      'URL での変換（/cdn-cgi/image/…）は、変換を有効にした Cloudflare のゾーンの上で頼む。元の画像は既定では同じゾーンのものだけ受け付けます（R2 のカスタムドメインを同じゾーンに置けば足りる）',
     sourceIds: ['imagesTransformUrl', 'imagesSources'],
   },
   {
     id: 'outside-images',
     premise:
-      'Images の変換は Images の外（R2 など）に置いた画像にも使え、Free のプランにも含まれる',
+      'Images の変換は Images の外（R2 など）に置いた画像にも使え、Free のプランにも含まれます',
     sourceIds: ['imagesPricingOutside'],
   },
   {
     id: 'next-loader',
     premise:
-      'Next.js の画像の部品（next/image）は loaderFile で、Cloudflare の変換の URL を返すローダーに替えられる（公式の例がある）。替えると Vercel の画像の最適化は使わない',
+      'Next.js の画像の部品（next/image）は loaderFile で、Cloudflare の変換の URL を返すローダーに替えられます（公式の例がある）。替えると Vercel の画像の最適化は使いません',
     sourceIds: ['nextImageLoader'],
   },
 ];
@@ -792,9 +792,9 @@ export const cloudflare: PriceBookInput = {
         sourceIds: ['members', 'workersPricing'],
       },
       notes: [
-        'Workers Logs は Free で 1 日 20 万件まで（保持 3 日）。課金は無く、ログの費用は数えない（D-92）',
-        'D1 の Time Travel（任意の時点への復元）は常に有効で、Free は直近 7 日。履歴と復元に追加の費用はかからない（D-93）',
-        'Email Service の送信（Email Sending）は Free では使えない（アカウントで確かめた宛先にだけ送れる）。Free の構成のメールは Resend Free で数える（D-95）',
+        'Workers Logs は Free で 1 日 20 万件までです（保持 3 日）。課金は無く、ログの費用は数えません（D-92）',
+        'D1 の Time Travel（任意の時点への復元）は常に有効で、Free は直近 7 日です。履歴と復元に追加の費用はかかりません（D-93）',
+        'Email Service の送信（Email Sending）は Free では使えません（アカウントで確かめた宛先にだけ送れる）。Free の構成のメールは Resend Free で数えます（D-95）',
       ],
       meters: [
         {
@@ -806,14 +806,14 @@ export const cloudflare: PriceBookInput = {
           onExceed: 'upgrade-required',
           rounding: 'not-stated',
           premise:
-            'Workers Builds は Free で月 3,000 分まで。超えたときの扱い（止まる・待つ）は文書に記載なし',
+            'Workers Builds は Free で月 3,000 分までです。超えたときの扱い（止まる・待つ）は文書に記載がありません',
           interpretation: {
             adopted:
-              '超えた分はビルドできず、Paid にしないと記事を出せない（上位のプランが必須とみなす）',
+              '超えた分はビルドできず、Paid にしないと記事を出せません（上位のプランが必須とみなす）',
             rejected: [
               {
-                reading: '超えても待てばビルドされる',
-                reason: '文書に記載がなく、Free に超過の料金の行も無い',
+                reading: '超えても待てばビルドされます',
+                reason: '文書に記載がなく、Free に超過の料金の行もありません',
               },
             ],
           },
@@ -933,7 +933,7 @@ export const cloudflare: PriceBookInput = {
         sourceIds: ['members', 'workersPricing'],
       },
       notes: [
-        'D1 の Time Travel（任意の時点への復元）は常に有効で、Paid は直近 30 日。履歴と復元に追加の費用はかからない（D-93）',
+        'D1 の Time Travel（任意の時点への復元）は常に有効で、Paid は直近 30 日です。履歴と復元に追加の費用はかかりません（D-93）',
       ],
       meters: [
         {
@@ -983,16 +983,16 @@ export const cloudflare: PriceBookInput = {
           unit: 'count',
           allowancePool: 'paid-workers-logs',
           premise:
-            '新しく作る Worker は Workers Logs（observability）が既定で有効で、呼び出しのログ 1 件と console.log の 1 行ずつを 1 件と数える。Paid は月 2,000 万件を超えた分が 100 万件 $0.60。2026-12-01 から Cloudflare Observability の料金（取り込みの GB と保存の GB 月）に移り、件数では課金しない（scheduledChanges）',
+            '新しく作る Worker は Workers Logs（observability）が既定で有効で、呼び出しのログ 1 件と console.log の 1 行ずつを 1 件と数えます。Paid は月 2,000 万件を超えた分が 100 万件 $0.60 です。2026-12-01 から Cloudflare Observability の料金（取り込みの GB と保存の GB 月）に移り、件数では課金しません（scheduledChanges）',
           interpretation: {
             adopted:
-              '既定のまま全件を残す（head_sampling_rate 1）。2026-12-01 以降は件数の課金をやめ、取り込み・保存のメーターで数える（ゲームは改定の出来事が起きた月から。見積モードは今の版）',
+              '既定のまま全件を残します（head_sampling_rate 1）。2026-12-01 以降は件数の課金をやめ、取り込み・保存のメーターで数えます（ゲームは改定の出来事が起きた月から。見積モードは今の版）',
             rejected: [
               {
                 reading:
                   '標本化（head_sampling_rate）・呼び出しのログを切る設定を部品にする',
                 reason:
-                  '既定の振る舞いの費用を見せるのが目的。基準プレイの規模では込みの 2,000 万件に収まる月が多い',
+                  '既定の振る舞いの費用を見せるのが目的です。基準プレイの規模では込みの 2,000 万件に収まる月が多いです',
               },
             ],
           },
@@ -1008,15 +1008,15 @@ export const cloudflare: PriceBookInput = {
           unit: 'gb',
           allowancePool: 'paid-observability-ingest',
           premise:
-            '2026-12-01 から Workers Logs は Cloudflare Observability の料金になり、取り込み（圧縮前・本文と既定の属性を含む）が 50 GB を超えた分は 1 GB $0.25。それより前は課金しない',
+            '2026-12-01 から Workers Logs は Cloudflare Observability の料金になり、取り込み（圧縮前・本文と既定の属性を含む）が 50 GB を超えた分は 1 GB $0.25 です。それより前は課金しません',
           interpretation: {
             adopted:
-              '表の「Paid」を Workers Paid と読む。1 件の大きさは公式に記載が無いので、1 回の実行のログ（呼び出しのログ + console.log 1 行）を 1.5 kB と仮定する（ゲーム上の仮定）',
+              '表の「Paid」を Workers Paid と読みます。1 件の大きさは公式に記載が無いので、1 回の実行のログ（呼び出しのログ + console.log 1 行）を 1.5 kB と仮定します（ゲーム上の仮定）',
             rejected: [
               {
                 reading: '別の Observability の契約（基本料）が要る',
                 reason:
-                  '料金ページに基本料の記載が無く、込みの分と超過の単価だけが書かれている',
+                  '料金ページに基本料の記載が無く、込みの分と超過の単価だけが書かれています',
               },
             ],
           },
@@ -1030,7 +1030,7 @@ export const cloudflare: PriceBookInput = {
           unit: 'gb-month',
           allowancePool: 'paid-observability-storage',
           premise:
-            '2026-12-01 から、保存が 10 GB 月を超えた分は 1 GB 月 $0.10。既定の保持は 7 日（問い合わせられなくなった分は数えない）。それより前は課金しない',
+            '2026-12-01 から、保存が 10 GB 月を超えた分は 1 GB 月 $0.10 です。既定の保持は 7 日です（問い合わせられなくなった分は数えない）。それより前は課金しません',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['observabilityPricing'],
         },
@@ -1098,7 +1098,7 @@ export const cloudflare: PriceBookInput = {
         {
           id: 'email-beta',
           premise:
-            'Cloudflare の Email Service の送信は 2026-11 時点でベータ（Email Sending Beta）。新しいアカウントは控えめな 1 日の上限から始まり、送り方と評判で自動で上がる（数値の記載なし）',
+            'Cloudflare の Email Service の送信は 2026-11 時点でベータです（Email Sending Beta）。新しいアカウントは控えめな 1 日の上限から始まり、送り方と評判で自動で上がります（数値の記載なし）',
           sourceIds: ['emailService', 'emailLimits'],
         },
       ],
@@ -1120,13 +1120,13 @@ export const cloudflare: PriceBookInput = {
         {
           id: 'custom-domain',
           premise:
-            'R2 の公開バケットを本番で配るにはカスタムドメインを使い、そのドメインは R2 と同じアカウントの Cloudflare のゾーンとして足す（r2.dev の URL はレート制限がある開発用）。カスタムドメインなら Cloudflare のキャッシュが効く',
+            'R2 の公開バケットを本番で配るにはカスタムドメインを使い、そのドメインは R2 と同じアカウントの Cloudflare のゾーンとして足します（r2.dev の URL はレート制限がある開発用）。カスタムドメインなら Cloudflare のキャッシュが効きます',
           sourceIds: ['r2PublicBuckets'],
         },
         {
           id: 'egress-other-services',
           premise:
-            'R2 から直接（Workers の API・S3 の API・r2.dev）出す転送は無料。バケットにつないだ他の従量のサービスは別に課金されうる',
+            'R2 から直接（Workers の API・S3 の API・r2.dev）出す転送は無料です。バケットにつないだ他の従量のサービスは別に課金されることがあります',
           sourceIds: ['r2Pricing'],
         },
       ],
@@ -1168,7 +1168,7 @@ export const cloudflare: PriceBookInput = {
           label: 'R2 からの転送（R2: egress）',
           resource: 'egress-gb',
           unit: 'gb',
-          premise: 'R2 は転送量（egress）に課金しない',
+          premise: 'R2 は転送量（egress）に課金しません',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['r2Pricing'],
         },
@@ -1203,7 +1203,7 @@ export const cloudflare: PriceBookInput = {
       sourceIds: ['imagesPricing'],
       uptimeSla: NO_SELF_SERVE_SLA,
       notes: [
-        'Images Paid に基本料は無いとみる。料金のページに基本料の記載が無く、Paid の例（R2 の画像 2,000 枚 × 5 サイズ）の月の合計は変換 $2.50 + R2 $0.22 = $2.72 で基本料を含まない（2026-11-02 確認）',
+        'Images Paid に基本料は無いとみます。料金のページに基本料の記載が無く、Paid の例（R2 の画像 2,000 枚 × 5 サイズ）の月の合計は変換 $2.50 + R2 $0.22 = $2.72 で基本料を含みません（2026-11-02 確認）',
       ],
       facts: IMAGES_FACTS,
       meters: [
@@ -1227,7 +1227,7 @@ export const cloudflare: PriceBookInput = {
       uptimeSla: {
         status: 'none',
         premise:
-          'Cloudflare の Free プランに稼働率の SLA は無い（100% の SLA は Business・Contract）',
+          'Cloudflare の Free プランに稼働率の SLA はありません（100% の SLA は Business・Contract）',
         sourceIds: ['plans'],
       },
       meters: [],
@@ -1235,43 +1235,43 @@ export const cloudflare: PriceBookInput = {
         {
           id: 'html-not-cached',
           premise:
-            'Cloudflare の CDN は既定では HTML と JSON をキャッシュしない。既定でキャッシュするのは拡張子で決めた一覧（JS・CSS・JPG・PNG・WEBP・AVIF・SVG・ICO・WOFF2・PDF・MP4 など）だけ',
+            'Cloudflare の CDN は既定では HTML と JSON をキャッシュしません。既定でキャッシュするのは拡張子で決めた一覧（JS・CSS・JPG・PNG・WEBP・AVIF・SVG・ICO・WOFF2・PDF・MP4 など）だけです',
           sourceIds: ['defaultCache'],
         },
         {
           id: 'cache-rules-html',
           premise:
-            'Cache Rules の「Eligible for cache」で既定の外（HTML・拡張子の無い URL）もキャッシュの対象にでき、Edge TTL は「Cache-Control があれば従う」を選べる。Free の Cache Rules は 10 個まで。動的な中身も区別せずキャッシュするので、ログインの要るページは条件で外す',
+            'Cache Rules の「Eligible for cache」で既定の外（HTML・拡張子の無い URL）もキャッシュの対象にでき、Edge TTL は「Cache-Control があれば従う」を選べます。Free の Cache Rules は 10 個までです。動的な中身も区別せずキャッシュするので、ログインの要るページは条件で外します',
           sourceIds: ['cacheRules', 'cacheRulesSettings', 'cacheEverything'],
         },
         {
           id: 'purge-free',
           premise:
-            'Free でも URL・ホスト名・タグ・prefix・すべてのキャッシュを API で消せる。URL は毎秒 800 件、ホスト名・タグ・prefix・すべては 1 分 5 回（貯めて 25 回）・1 回 100 件まで',
+            'Free でも URL・ホスト名・タグ・prefix・すべてのキャッシュを API で消せます。URL は毎秒 800 件、ホスト名・タグ・prefix・すべては 1 分 5 回（貯めて 25 回）・1 回 100 件までです',
           sourceIds: ['purgeCache'],
         },
         {
           id: 'free-bandwidth',
           premise:
-            'Free プランは $0 / 月で、転送量に上限や課金を設けない（公式ブログ「unmetered bandwidth on the Free plan」2024-09-27。プランの表に転送量の行は無い）',
+            'Free プランは $0 / 月で、転送量に上限や課金を設けません（公式ブログ「unmetered bandwidth on the Free plan」2024-09-27。プランの表に転送量の行は無い）',
           sourceIds: ['freeCommitment', 'plansNetworkCdn'],
         },
         {
           id: 'pictures-terms',
           premise:
-            'Enterprise 以外は、動画などの大きなファイルを CDN で配るには Developer Platform・Images・Stream などの有料サービスを使う。それなしに動画や不釣り合いな割合の画像・音声などの大きなファイルを配ると制限されうる（2023-05 に Self-Serve Subscription Agreement の 2.8 から CDN の Service-Specific Terms へ移した規約）',
+            'Enterprise 以外は、動画などの大きなファイルを CDN で配るには Developer Platform・Images・Stream などの有料サービスを使います。それなしに動画や不釣り合いな割合の画像・音声などの大きなファイルを配ると制限されることがあります（2023-05 に Self-Serve Subscription Agreement の 2.8 から CDN の Service-Specific Terms へ移した規約）',
           sourceIds: ['cdnTerms', 'tosUpdate2023'],
         },
         {
           id: 'next-on-demand',
           premise:
-            'Next.js のオンデマンドの再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返す（再検証と一緒に CDN のパージを呼ぶ必要がある。HTML と RSC の変種の両方）',
+            'Next.js のオンデマンドの再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返します（再検証と一緒に CDN のパージを呼ぶ必要がある。HTML と RSC の変種の両方）',
           sourceIds: ['nextjsCdn'],
         },
         {
           id: 'next-isr-headers',
           premise:
-            'Next.js は ISR のページに s-maxage = 再検証の間隔・stale-while-revalidate を付ける。CDN が従うと、サーバーで作り直した後も CDN の写しが最大で間隔の分だけ残り、更新は最大で間隔の約 2 倍遅れて見える（2 倍はこのモデルの読み）',
+            'Next.js は ISR のページに s-maxage = 再検証の間隔・stale-while-revalidate を付けます。CDN が従うと、サーバーで作り直した後も CDN の写しが最大で間隔の分だけ残り、更新は最大で間隔の約 2 倍遅れて見えます（2 倍はこのモデルの読み）',
           sourceIds: ['nextjsCdn'],
         },
       ],
@@ -1338,7 +1338,7 @@ export const cloudflare: PriceBookInput = {
       sourceIds: ['doPricing'],
       uptimeSla: NO_SELF_SERVE_SLA,
       notes: [
-        'Workers Paid の最低料金 $5/月の中で使う（Durable Objects 単独の基本料はない）',
+        'Workers Paid の最低料金 $5/月の中で使います（Durable Objects 単独の基本料はない）',
       ],
       meters: [
         {
@@ -1423,7 +1423,7 @@ export const cloudflare: PriceBookInput = {
         },
       ],
       notes: [
-        '接続先の DB への接続は 1 設定あたり約 100（Free は約 20）。クエリは 60 秒まで（hyperdriveLimits）',
+        '接続先の DB への接続は 1 設定あたり約 100 です（Free は約 20）。クエリは 60 秒までです（hyperdriveLimits）',
       ],
     },
   ],
@@ -1433,7 +1433,7 @@ export const cloudflare: PriceBookInput = {
       description: 'D1 のクエリ結果の上限 50 MB が施行',
       kind: 'limit',
       notModeledReason:
-        '制限の変更で、料金は変わらない。クエリ結果の大きさはこのモデルの計算に入っていない',
+        '制限の変更で、料金は変わりません。クエリ結果の大きさはこのモデルの計算に入っていません',
       sourceIds: ['d1Limits'],
     },
     {
@@ -1463,6 +1463,6 @@ export const cloudflare: PriceBookInput = {
     },
   ],
   notes: [
-    'D1 の読み取り行は返した行ではなく走査した行で数える（インデックスで桁が変わる）',
+    'D1 の読み取り行は返した行ではなく走査した行で数えます（インデックスで桁が変わる）',
   ],
 };

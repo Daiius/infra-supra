@@ -27,8 +27,8 @@ export function fileStorageOf(stackId: string): FileStorage | undefined {
       platform,
       label: obj.label,
       note: obj.billing
-        ? `${obj.label} に置く。料金は ${obj.billing.provider} のプラン（${obj.billing.planId}）のメーターで見積もる`
-        : `${obj.label}。置き場所の料金は取得していないので、見積では課金先なし（対応なし）として出す`,
+        ? `${obj.label} に置きます。料金は ${obj.billing.provider} のプラン（${obj.billing.planId}）のメーターで見積もります`
+        : `${obj.label}。置き場所の料金は取得していないので、見積では課金先なし（対応なし）として出します`,
     };
   const host = nodes.find((n) => n.config.kind === 'host');
   if (host)
@@ -36,7 +36,7 @@ export function fileStorageOf(stackId: string): FileStorage | undefined {
       id: 'host-disk',
       platform,
       label: 'サーバーのディスク',
-      note: 'VPS のディスクに DB と一緒に置く。容量はプランのディスクで決まり、ためていくと上限に当たりうる',
+      note: 'VPS のディスクに DB と一緒に置きます。容量はプランのディスクで決まり、ためていくと上限に当たることがあります',
     };
   return undefined;
 }

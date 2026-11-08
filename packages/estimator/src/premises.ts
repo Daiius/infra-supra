@@ -144,7 +144,7 @@ function cpuCauses(
   const causes = over.length ? over : uniq.slice(0, 1);
   const what = causes.map(cpuSourceText).join('・');
   const head = over.length
-    ? `${what}が ${planName} の 1 リクエスト ${ms(limit)} ms を超える`
+    ? `${what}が ${planName} の 1 リクエスト ${ms(limit)} ms を超えます`
     : `最も重いのは${what}で、${planName} の 1 リクエスト ${ms(limit)} ms の ${Math.round((causes[0]!.cpuMs / limit) * 100)}%`;
   const viaNode = new Set(sim.architecture.routes['document-static'] ?? []);
   const bypass = viaNode.has(node.id)
@@ -153,7 +153,7 @@ function cpuCauses(
         .filter((r) => r.rendering === 'static' && r.share > 0)
         .map((r) => r.label ?? r.id);
   const tail = bypass.length
-    ? `。${bypass.join('・')}は静的なので ${shortLabel(node)} を起動しない`
+    ? `。${bypass.join('・')}は静的なので ${shortLabel(node)} を起動しません`
     : '';
   return { causes, detail: head + tail };
 }
@@ -481,7 +481,7 @@ export function assessPremises(input: {
             `${plan!.name} の ${limit.id} は ${limit.value} ${limit.unit} まで`,
           ...(perKey
             ? {
-                assumption: `集中するキーへの書き込みの割合 ${node.config.kind === 'kv' ? node.config.hotKeyShare : 0}（仮定）。超えた書き込みは失敗するが、サイト全体は止まらないので遅くなるとして扱う（仮定）`,
+                assumption: `集中するキーへの書き込みの割合 ${node.config.kind === 'kv' ? node.config.hotKeyShare : 0}（仮定）。超えた書き込みは失敗しますが、サイト全体は止まらないので遅くなるとして扱います（仮定）`,
               }
             : {}),
           effect: perKey
@@ -550,7 +550,7 @@ export function assessPremises(input: {
       threshold({
         ...base,
         id: `host:cpu:${node.id}`,
-        text: `${c.vcpu} vCPU をピーク時間帯に使い切ると遅くなる（話題・Bot の上乗せは短い期間に集中すると仮定）`,
+        text: `${c.vcpu} vCPU をピーク時間帯に使い切ると遅くなります（話題・Bot の上乗せは短い期間に集中すると仮定）`,
         effect: 'throttle',
         used: h.peakCores,
         limit: c.vcpu * c.cpuUtilMax,
@@ -561,8 +561,8 @@ export function assessPremises(input: {
         ...base,
         id: `host:memory:${node.id}`,
         text: c.storesDb
-          ? `メモリ ${c.memoryGB} GB に OS・DB・アプリが同居する`
-          : `メモリ ${c.memoryGB} GB に OS・アプリが同居する（DB は別の置き場）`,
+          ? `メモリ ${c.memoryGB} GB に OS・DB・アプリが同居します`
+          : `メモリ ${c.memoryGB} GB に OS・アプリが同居します（DB は別の置き場）`,
         effect: 'block',
         used: h.memoryGB,
         limit: c.memoryGB,
@@ -574,11 +574,11 @@ export function assessPremises(input: {
         id: `host:disk:${node.id}`,
         text: !c.storesDb
           ? c.storesImages
-            ? `ディスク ${c.diskGB} GB に画像を置く（DB は別の置き場）`
-            : `ディスク ${c.diskGB} GB にアプリを置く（DB と画像は別の置き場）`
+            ? `ディスク ${c.diskGB} GB に画像を置きます（DB は別の置き場）`
+            : `ディスク ${c.diskGB} GB にアプリを置きます（DB と画像は別の置き場）`
           : c.storesImages
-            ? `ディスク ${c.diskGB} GB に DB と画像を置く`
-            : `ディスク ${c.diskGB} GB に DB を置く（画像は別の置き場）`,
+            ? `ディスク ${c.diskGB} GB に DB と画像を置きます`
+            : `ディスク ${c.diskGB} GB に DB を置きます（画像は別の置き場）`,
         effect: 'block',
         used: h.diskGB,
         limit: c.diskGB,
