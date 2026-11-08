@@ -146,7 +146,7 @@ describe('幽霊の箱（D-116 の補足）', () => {
     expect(box.querySelector('[data-swap-mark]')).not.toBeNull();
     fireEvent.click(box);
     const popover = screen.getByRole('dialog');
-    expect(popover.textContent).toContain('経路の線は引かない');
+    expect(popover.textContent).toContain('経路の線は引きません');
     fireEvent.click(within(popover).getByRole('button', { name: 'KV に戻す' }));
     expect(picked).toHaveBeenCalledWith('isrCache');
   });
@@ -232,7 +232,7 @@ describe('未選択の箱（D-116 の補足）', () => {
         container.querySelectorAll('[data-node] [data-unselected-mark]'),
       ).toHaveLength(expected.length);
       expect(container.textContent).toMatch(
-        /! の(付いた)?箱はまだ選んでいない/,
+        /! の(付いた)?箱はまだ選んでいません/,
       );
       rerender(view(false));
       for (const id of targets) {

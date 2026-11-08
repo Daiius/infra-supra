@@ -214,7 +214,7 @@ export function EstimateMode() {
   return (
     <div className="space-y-4">
       <p className="text-sm opacity-70">
-        アプリの形と規模を選ぶと、構成ごとの月の費用と、当たるプラットフォームの前提を出す。料金は各社の公式の料金表（出典と取得日は下）、利用の形はテンプレートの仮定（実測ではない）。
+        アプリの形と規模を選ぶと、構成ごとの月の費用と、当たるプラットフォームの前提を出します。料金は各社の公式の料金表（出典と取得日は下）、利用の形はテンプレートの仮定（実測ではありません）です。
       </p>
       <Conditions
         input={input}
@@ -259,7 +259,7 @@ export function EstimateMode() {
         {view.totals.JPY !== undefined && (
           <p className="text-xs opacity-70">
             内訳の通貨: {usd(view.totals.USD ?? 0)} + {jpy(view.totals.JPY)}
-            （円建ての事業者は円で請求される）
+            （円建ての事業者は円で請求されます）
           </p>
         )}
         {view.unpricedLines > 0 && (
@@ -276,7 +276,7 @@ export function EstimateMode() {
       </Card>
       <Card title="明細（事業者・メーターごと）">
         <p className="text-xs opacity-70">
-          使用量のうち「込み分」は無料枠・プランに含まれる量で、残りが課金対象。クレジットは従量の金額に当てる（当てられる額
+          使用量のうち「込み分」は無料枠・プランに含まれる量で、残りが課金対象です。クレジットは従量の金額に当てます（当てられる額
           / 上限）。
         </p>
         {view.providers.map((p) => (
@@ -486,7 +486,7 @@ function Conditions({
         </Field>
         <Field
           label="月の PV"
-          info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたりの月の PV。下に出す）から出す。月の中の伸びは扱わない"
+          info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたりの月の PV。下に出す）から出します。月の中の伸びは扱いません"
         >
           <input
             className="input input-bordered input-sm w-full"
@@ -557,19 +557,19 @@ function Conditions({
               rememberedOf={(i) => memory[STACKS[i]!.id]}
               diagramCaption={(selected, remembered) =>
                 selected
-                  ? '選んだ部品で描く。'
+                  ? '選んだ部品で描いています。'
                   : remembered
-                    ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描く。'
-                    : 'この構成を選んだときの既定の部品で描く。'
+                    ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
+                    : 'この構成を選んだときの既定の部品で描いています。'
               }
               // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
               onComponentsChange={(parts) => setInput(withParts(input, parts))}
-              partsNote="選んでいないスロットは既定の部品で見積もる"
+              partsNote="選んでいないスロットは既定の部品で見積もります"
               partsExtra={imageSettings ? { images: imageSettings } : undefined}
               // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
               partsCompare={(slot) => ({
                 rows: slotComparisonOf(input, slot),
-                basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額`,
+                basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
               })}
               cardExtra={(i, selected) => {
                 const t = cardTotals[STACKS[i]!.id];
@@ -617,15 +617,15 @@ function Conditions({
                 heading: '② アプリのフレームワークとページの描き方',
                 footnote: null,
                 wireframeNote:
-                  '見取り図はテンプレートの仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+                  '見取り図はテンプレートの仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
                 compareHint:
-                  'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べる',
+                  'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べます',
                 compareNote:
-                  'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べる。ここで選んでも、カードのチップで選んでも同じ。構成の比較・費用の曲線もこの描き方で引く。',
+                  'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べます。ここで選んでも、カードのチップで選んでも同じです。構成の比較・費用の曲線もこの描き方で引きます。',
                 // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
                 compareCaption: ROUTE_PLAN_NOTE.replace(
-                  '費用の差は 1 か月目の基準の規模での目安。',
-                  '費用の差は今の条件（月の PV）での目安。',
+                  '費用の差は 1 か月目の基準の規模での目安です。',
+                  '費用の差は今の条件（月の PV）での目安です。',
                 ),
               }}
             />
@@ -659,7 +659,7 @@ function Seats({
   return (
     <Field
       label="チームの人数（管理画面を使う人）"
-      info="事業者の管理画面にメンバーとして入る人の数（席）。席ごとに料金がかかるプランだけ月額が変わる。席の料金が料金データに無い事業者は、前提の文で「未取得」と出す"
+      info="事業者の管理画面にメンバーとして入る人の数（席）。席ごとに料金がかかるプランだけ月額が変わります。席の料金が料金データに無い事業者は、前提の文で「未取得」と出します"
     >
       <input
         className="input input-bordered input-sm w-full"
@@ -702,8 +702,8 @@ function Commitments({ view }: { view: EstimateView }) {
             <Info label={`${c.label}の説明`}>
               {c.premise}
               。この月の対象の使用（{usd(c.coversUsd)}
-              ）を確約で覆うとみた額。前払いは 1 年分を 12
-              で割った。取り消せず、使わなくなっても支払いは残る。
+              ）を確約で覆うとみた額です。前払いは 1 年分を 12
+              で割りました。取り消せず、使わなくなっても支払いは残ります。
             </Info>
           </li>
         ))}
@@ -1000,7 +1000,7 @@ function Comparison({
   return (
     <Card title="構成を比べる">
       <p className="text-xs opacity-70">
-        同じテンプレート・PV・フレームワーク・設定で、載せられる全構成の月額。部品は選んだ構成だけ今の選択、他は既定。行を押すとその構成の見積を出す。
+        同じテンプレート・PV・フレームワーク・設定で、載せられる全構成の月額です。部品は選んだ構成だけ今の選択、他は既定です。行を押すとその構成の見積を出します。
       </p>
       <div className="overflow-x-auto">
         <table className="table table-sm">
@@ -1128,10 +1128,10 @@ function CostCurve({
     <Card title="費用の曲線（月の PV を振る）">
       <p className="text-xs opacity-70">
         今のテンプレート・フレームワーク・設定のまま、月の PV
-        だけを変えたときの月額（USD）。横軸・縦軸とも対数。部品は今の構成だけ今の選択、他は既定。
+        だけを変えたときの月額（USD）です。横軸・縦軸とも対数です。部品は今の構成だけ今の選択、他は既定です。
         {anyStop &&
-          '× は止まる前提（無料プランの上限など）に当たる点で、× どうしを結ぶ線は薄くする。'}
-        {unpriced && '料金未取得の明細がある点は合計が下限。'}
+          '× は止まる前提（無料プランの上限など）に当たる点で、× どうしを結ぶ線は薄くしています。'}
+        {unpriced && '料金未取得の明細がある点は合計が下限です。'}
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] viz-root">
         {series.map((s) => (
@@ -1248,7 +1248,7 @@ function ShareButton() {
       >
         この条件の URL をコピー
       </button>
-      {copied && <span className="text-sm opacity-70">コピーした</span>}
+      {copied && <span className="text-sm opacity-70">コピーしました</span>}
     </div>
   );
 }

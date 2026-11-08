@@ -197,11 +197,13 @@ function FrameworkDetail({
           <li>
             中身を返す API 1 回の CPU は約 {ssrCpuMs * spa.shape.dataCpuFactor}{' '}
             ms（HTML を描かない分 SSR の {spa.shape.dataCpuFactor}{' '}
-            倍と仮定。機能が増えると重くなる）。この仮定で Cloudflare Free の 1
-            リクエスト CPU 10 ms に当たるかが決まる
+            倍と仮定。機能が増えると重くなります）。この仮定で Cloudflare Free
+            の 1 リクエスト CPU 10 ms に当たるかが決まります
           </li>
         ) : (
-          <li>SSR 1 回の CPU は約 {ssrCpuMs} ms（機能が増えると重くなる）</li>
+          <li>
+            SSR 1 回の CPU は約 {ssrCpuMs} ms（機能が増えると重くなります）
+          </li>
         )}
       </ul>
     </>
@@ -420,11 +422,11 @@ export type FrameworkFieldText = {
 const GAME_FRAMEWORK_TEXT: FrameworkFieldText = {
   heading: '② アプリを何で作りましたか？（フレームワークとページの描き方）',
   footnote:
-    '乗り換えても同じアプリのまま。途中で別のフレームワークに作り直せるが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかる。SNS のカード・初回表示への効き方と作り直しの手間はゲーム上の仮定。',
+    '乗り換えても同じアプリのままです。途中で別のフレームワークに作り直せますが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかります。SNS のカード・初回表示への効き方と作り直しの手間はゲーム上の仮定です。',
   wireframeNote:
-    '見取り図はゲーム上の仮定。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わる。',
+    '見取り図はゲーム上の仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
   compareHint:
-    'なぜ・要件の判定・ほかの描き方の 1 か月目の費用の差を表で並べる',
+    'なぜ・要件の判定・ほかの描き方の 1 か月目の費用の差を表で並べます',
 };
 
 /**
@@ -660,7 +662,7 @@ export function ScenarioDescription({
           {intro}
           {t?.scale}今は月 {sc.scale.startPV.toLocaleString()} PV。
           {t?.growth.up ?? '満足度が高ければ伸び'}（満足度 0.9 で毎月約 {growth}
-          %）、{t?.growth.down ?? '低ければ減る'}。
+          %）、{t?.growth.down ?? '低ければ減ります'}。
         </p>
         {/* ページの一覧（ページ → 見る人・要件。D-101）と、フレームワークに依らない見取り図（区画の要件。D-113）。
             描き方はフレームワークのカードに出す。説明文に埋もれないよう、別の面（帯）に載せる */}
@@ -700,41 +702,43 @@ export function ScenarioDescription({
                 <p>{t.satisfaction}</p>
                 <p>
                   目標の 1 つは満足度の平均 {sc.goal.satisfaction}{' '}
-                  以上。満足度が高ければ PV が伸び、低ければ減る。
+                  以上です。満足度が高ければ PV が伸び、低ければ減ります。
                 </p>
-                <p className="opacity-70">満足度の決まり方はゲーム上の仮定。</p>
+                <p className="opacity-70">
+                  満足度の決まり方はゲーム上の仮定です。
+                </p>
               </DetailsDialog>
             </>
           )}
           開発の手間は毎月 {sc.effort.perMonth} ポイント（+
           構成の既定の他の事業者の管理の分）で、運用に使った残りが機能開発に回り、満足度の「機能」（累計
-          / 期待）と PV の伸びに効く。
+          / 期待）と PV の伸びに効きます。
           <DetailsDialog label="開発の手間の内訳" title="開発の手間の内訳">
             <p>
               開発の手間は毎月 {sc.effort.perMonth}{' '}
-              ポイント。設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
+              ポイントです。設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
               {sc.effort.selfHostedUpkeep} /
               月）・他の事業者の管理（構成の主の事業者以外のアカウント 1
               つにつき {EFFORT.accountUpkeep} /
-              月）に使った残りが機能開発に回る。
+              月）に使った残りが機能開発に回ります。
             </p>
             <p>
               構成の既定の部品で要る他の事業者のアカウント（Vercel と Supabase
               の構成の Supabase・メールの送信の AWS
-              など）の管理の分は、毎月の手間に足してある（例: 既定で 2 つなら{' '}
-              {sc.effort.perMonth} + {2 * EFFORT.accountUpkeep}
-              ）。既定のままなら機能開発に回る量は同じで、部品でアカウントを減らせばその分だけ増え、増やせば減る。
+              など）の管理の分は、毎月の手間に足してあります（例: 既定で 2
+              つなら {sc.effort.perMonth} + {2 * EFFORT.accountUpkeep}
+              ）。既定のままなら機能開発に回る量は同じで、部品でアカウントを減らせばその分だけ増え、増やせば減ります。
             </p>
             <p>{featureRuleText(sc)}</p>
-            <p className="opacity-70">開発の手間はゲーム上の仮定。</p>
+            <p className="opacity-70">開発の手間はゲーム上の仮定です。</p>
           </DetailsDialog>
         </div>
         <div>
-          運営中に出来事が起きる（時期は乱数のシードで変わる）。
+          運営中に出来事が起きます（時期は乱数のシードで変わります）。
           <DetailsDialog label="出来事の詳しい説明" title="運営中の出来事">
             {t?.events && <p>{t.events}</p>}
             <p>
-              時期は乱数のシードで変わる。始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出る（改定後の料金を取得していないものは、計算に反映しない）。
+              時期は乱数のシードで変わります。始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出ます（改定後の料金を取得していないものは、計算に反映しません）。
             </p>
           </DetailsDialog>
         </div>
@@ -770,7 +774,7 @@ export function ScenarioDescription({
               <span className="whitespace-nowrap">
                 {sc.goal.maxOutageMonths} 回
               </span>
-              を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わる。
+              を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わります。
             </p>
           </div>
         </div>
@@ -786,7 +790,7 @@ export function ScenarioDescription({
             >
               <p className="text-sm opacity-70">
                 フレームワークで変わる点（ページの描き方・SNS のカード・CPU
-                の重さ）は、② フレームワークと描き方で選ぶときに出る。
+                の重さ）は、② フレームワークと描き方で選ぶときに出ます。
               </p>
               <ul className="list-disc space-y-1 pl-6">
                 {app.map((line) => (
@@ -798,8 +802,8 @@ export function ScenarioDescription({
         )}
         <p className="text-sm opacity-60">
           料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては 1
-          USD = {usdJpy} 円の仮定で換算。
-          収益・成長・満足度・開発の手間・障害の影響はゲーム上の仮定。
+          USD = {usdJpy} 円の仮定で換算しています。
+          収益・成長・満足度・開発の手間・障害の影響はゲーム上の仮定です。
         </p>
       </div>
     </div>

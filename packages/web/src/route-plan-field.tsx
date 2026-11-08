@@ -167,11 +167,11 @@ export function RouteSettingChips({
   }));
   // S2・S3 の切り替わりは選ぶと上の描き方のチップが替わるので本文に出す。部品ごとにキャッシュの時間とタグの意味は ⓘ に畳む（D-125）
   const relation = cached
-    ? `時間を選ぶと「${ROUTE_STRATEGIES['cached-ttl'].label}」、オンデマンドを選ぶと「${ROUTE_STRATEGIES['cached-purge'].label}」（上の 2 つの描き方は、この設定で切り替わる）`
+    ? `時間を選ぶと「${ROUTE_STRATEGIES['cached-ttl'].label}」、オンデマンドを選ぶと「${ROUTE_STRATEGIES['cached-purge'].label}」（上の 2 つの描き方は、この設定で切り替わります）`
     : undefined;
   const note =
     cc && onDemand
-      ? `時間は部品の期限（cacheLife）、オンデマンドは投稿・編集でタグを消して作り直す（updateTag）。${def.note}`
+      ? `時間は部品の期限（cacheLife）、オンデマンドは投稿・編集でタグを消して作り直します（updateTag）。${def.note}`
       : def.note;
   return (
     <SettingChips
@@ -320,7 +320,7 @@ export function useRoutePlanEditor({
 export function RoutePlanCompare({
   editor,
   frameworkLabel,
-  note = 'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの 1 か月目の費用の差を並べる。ここで選んでも、カードのチップで選んでも同じ（始める前なので手間はかからない。途中で替えると手間がかかる）。',
+  note = 'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの 1 か月目の費用の差を並べます。ここで選んでも、カードのチップで選んでも同じです（始める前なので手間はかかりません。途中で替えると手間がかかります）。',
   caption = ROUTE_PLAN_NOTE,
 }: {
   editor: RoutePlanEditor;

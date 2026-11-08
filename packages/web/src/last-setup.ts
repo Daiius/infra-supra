@@ -224,7 +224,7 @@ export function restoreLastSetup(
   const framework = frameworkOnStack(sc, stack, want);
   if (framework !== last.framework)
     notes.push(
-      `前回のフレームワーク（${frameworkLabel(last.framework)}）は今は選べないので ${FRAMEWORKS[framework].label} にした。`,
+      `前回のフレームワーク（${frameworkLabel(last.framework)}）は今は選べないので ${FRAMEWORKS[framework].label} にしました。`,
     );
   const saved = Object.fromEntries(
     Object.entries(last.components).filter(

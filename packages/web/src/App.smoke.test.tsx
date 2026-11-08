@@ -167,7 +167,7 @@ describe('ゲームモードの画面', () => {
 
   it('W-18 Astro × CF Free: 1 リクエストの CPU の上限に当たるルートを、始める画面と月の報告に出す（D-99。D-103 で記事のページも描き直しの閲覧が当たる）', async () => {
     const detail =
-      '記事のページ（ISR の閲覧と再生成・CPU 17 ms）・個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超える';
+      '記事のページ（ISR の閲覧と再生成・CPU 17 ms）・個人向けのページ（SSR・CPU 15 ms）が Workers Free の 1 リクエスト 10 ms を超えます';
     await renderApp();
     await startGame({
       scenario: ARTICLE,
@@ -179,15 +179,17 @@ describe('ゲームモードの画面', () => {
     advance(1);
     // 月の報告の前提（SSR の CPU は開発が進むと重くなるので、数値は見ない）
     expect(document.body.textContent).toMatch(
-      /記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超える/,
+      /記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超えます/,
     );
   });
 
   it('W-19 始める画面: 記事コミュニティの前提・ページの一覧と、フレームワークごとのページの描き方が出る（D-101）', async () => {
     await renderApp();
     const text = document.body.textContent ?? '';
-    expect(text).toContain('別の CMS は無い');
-    expect(text).toContain('一覧・トップのページは記事のページに含めて数える');
+    expect(text).toContain('別の CMS はありません');
+    expect(text).toContain(
+      '一覧・トップのページは記事のページに含めて数えます',
+    );
     // 中央のカードに、選んでいるフレームワークのページごとの描き方が出る（D-102 でカルーセルにした）。② はタブで開く（D-116 の補足）
     showFrameworkTab();
     const card = (fw: string) =>
@@ -487,7 +489,7 @@ describe('ゲームモードの画面', () => {
     expect(chosenOf('article')).toBe('ssr');
     expect(lines('article', '記事のページ')).toBe('');
     expect(chipInfo('article', '毎回描く')).toContain(
-      'リクエストのたびにサーバーが描く',
+      'リクエストのたびにサーバーが描きます',
     );
     expect(badges('article')).toContain('CPU: 閲覧ごとにサーバーが描く');
     expect(badges('article')).not.toContain('投稿・編集でキャッシュを消す');
@@ -530,7 +532,7 @@ describe('ゲームモードの画面', () => {
       }),
     );
     expect(infoDialog()!.textContent).toContain(
-      'オンデマンドは投稿・編集でタグを消して作り直す',
+      'オンデマンドは投稿・編集でタグを消して作り直します',
     );
     fireEvent.keyDown(document, { key: 'Escape' });
   });
@@ -545,7 +547,7 @@ describe('ゲームモードの画面', () => {
       document.querySelector<HTMLElement>('[data-missing-parts]');
     expect(start().disabled).toBe(true);
     expect(missing()!.textContent).toContain(
-      '部品をまだ選んでいない: ISR のキャッシュ・画像・DB・メール送信',
+      '部品をまだ選んでいません: ISR のキャッシュ・画像・DB・メール送信',
     );
     // ジャンプ: ② を開いていても、DB を押すと ① を開き、構成図の DB の箱にフォーカスする
     showFrameworkTab();
@@ -616,7 +618,7 @@ describe('ゲームモードの画面', () => {
       within(dialog).getByRole('button', { name: '残りを既定にする' }),
     );
     expect(within(dialog).getByRole('status').textContent).toContain(
-      'すべて選んだ',
+      'すべて選びました',
     );
     fireEvent.click(
       within(dialog)
@@ -818,7 +820,7 @@ describe('ゲームモードの画面', () => {
     ).toMatch(/:KV/);
     expect(
       document.querySelector('[data-missing-parts]')!.textContent,
-    ).toContain('部品をまだ選んでいない: DB');
+    ).toContain('部品をまだ選んでいません: DB');
     // 今の選択は前回を戻した結果と同じなので押せない（押しても同じ）
     expect(lastButton()!.disabled).toBe(true);
   });
@@ -1045,7 +1047,7 @@ describe('ゲームモードの画面', () => {
         showFrameworkTab();
         const astro = screen.getByRole('region', { name: 'Astro の説明' });
         expect(within(astro).getByRole('note').textContent).toMatch(
-          /^このフレームワークにすると、記事のページは「静的（ビルドし直し）」→「サーバーで描いてキャッシュ（更新で消す）」（既定）に戻る: /,
+          /^このフレームワークにすると、記事のページは「静的（ビルドし直し）」→「サーバーで描いてキャッシュ（更新で消す）」（既定）に戻ります: /,
         );
       },
     });
@@ -1059,7 +1061,7 @@ describe('ゲームモードの画面', () => {
     expect(migrate.textContent).toContain('か月');
     const rewrite = option(/^Astro に作り直す/);
     expect(within(rewrite).getByRole('note').textContent).toMatch(
-      /^作り直すと、記事のページは「静的（ビルドし直し）」→「[^」]+」（既定）に戻る: 済んだ翌月から、描き方は新しいフレームワークの既定で始まる/,
+      /^作り直すと、記事のページは「静的（ビルドし直し）」→「[^」]+」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります/,
     );
   });
 
@@ -1488,7 +1490,7 @@ describe('ゲームモードの画面', () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     // 本文には要約だけ（出来事の一覧・改定の説明は出さない）
-    expect(screen.getByText(/運営中に出来事が起きる/)).toBeDefined();
+    expect(screen.getByText(/運営中に出来事が起きます/)).toBeDefined();
     expect(screen.queryByText(/Bot が大量に来る/)).toBeNull();
     expect(screen.queryByText(/実際に予告されている料金/)).toBeNull();
     const open = screen.getByRole('button', { name: '出来事の詳しい説明' });
@@ -1557,7 +1559,7 @@ describe('ゲームモードの画面', () => {
         )!,
       ).getByRole('note').textContent,
     ).toMatch(
-      /^Astro はこの構成に載せられない.*選ぶとフレームワークは Next\.js（App Router） になる/,
+      /^Astro はこの構成に載せられません.*選ぶとフレームワークは Next\.js（App Router） になります/,
     );
     fireEvent.click(amplify);
     // Astro を選んでいたので、載せられる最初のフレームワークに戻して知らせる
@@ -1569,7 +1571,7 @@ describe('ゲームモードの画面', () => {
       ).checked,
     ).toBe(true);
     expect(document.body.textContent).toMatch(
-      /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にした/,
+      /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にしました/,
     );
     // Astro は灰色で選べず、カードに理由が出る
     const astro = getRadio({
@@ -1579,7 +1581,7 @@ describe('ゲームモードの画面', () => {
     const astroCard = screen.getByRole('region', { name: 'Astro の説明' });
     expect(astroCard.getAttribute('aria-disabled')).toBe('true');
     expect(within(astroCard).getByRole('note').textContent).toMatch(
-      /^選んでいる構成では選べない: 公式のアダプターが無く載せられない（Astro の AWS の手順は/,
+      /^選んでいる構成では選べない: 公式のアダプターが無く載せられません（Astro の AWS の手順は/,
     );
     // 前後のボタン・カードを押しても Astro は選ばない
     fireEvent.click(astroCard);
@@ -1763,7 +1765,7 @@ describe('ゲームモードの画面', () => {
       'Vercel Pro + AWS DynamoDB の構成',
     );
     // 畳んだ並びの上に、押すと開く旨の説明
-    expect(parts.textContent).toContain('押すと選択肢が開く');
+    expect(parts.textContent).toContain('押すと選択肢が開きます');
 
     // 選んだ表示は覚える（開き直しても、見積モードでも「機能から選ぶ」のまま）
     cleanup();
@@ -1962,7 +1964,9 @@ describe('ゲームモードの画面', () => {
     screen.getByRole('radiogroup', { name: '① インフラの構成' });
     // 部品がまだ選ばれていないので、① に注意の印（文は名前と title）
     expect(stackTab!.querySelector('[data-setup-tab-warn]')).not.toBeNull();
-    expect(stackTab!.getAttribute('title')).toContain('部品をまだ選んでいない');
+    expect(stackTab!.getAttribute('title')).toContain(
+      '部品をまだ選んでいません',
+    );
     expect(fwTab!.querySelector('[data-setup-tab-warn]')).toBeNull();
     // ① で構成と部品を 1 つ選ぶ
     pickRadio('Vercel Pro + Supabase Pro');
@@ -2218,7 +2222,7 @@ describe('ゲームモードの画面', () => {
         expect(chosenOf('article')).toBe('cached-purge');
         expect(selectedOf('ISR の再検証')).toBe('0');
         expect(setting('ISR の再検証').textContent).toContain(
-          '上の 2 つの描き方は、この設定で切り替わる',
+          '上の 2 つの描き方は、この設定で切り替わります',
         );
         // 選んでいない間は部品に付いて替わる: KV（消す呼び出しが届かない）は 5 分、R2 に戻すとオンデマンド
         pickPart('KV', slotGroup('ISR のキャッシュ'));
@@ -2345,9 +2349,9 @@ describe('ゲームモードの画面', () => {
       '受けると: 機能開発 +6（作業 4 × 1 か月も機能開発に数える）',
     );
     expect(card.textContent).toContain(
-      '伴うこと: 来月、行動に使える手間が 4 減る・使用量・費用: SSR の割合 60%',
+      '伴うこと: 来月、行動に使える手間が 4 減ります・使用量・費用: SSR の割合 60%',
     );
-    expect(card.textContent).toContain('断る（何も変わらない）');
+    expect(card.textContent).toContain('断る（何も変わりません）');
     // 7 か月目に記事のデザインの刷新の提案が届く。機能の加点が無くても、得と断ったときの損を出す
     advance(1);
     const months = ARTICLE_COMMUNITY.imageRedesign!.declineMonths;
@@ -2358,7 +2362,7 @@ describe('ゲームモードの画面', () => {
       `受けると: 画質の評価を保つ（断ると ${months} か月、画質が 1 段下がる）`,
     );
     expect(proposals).toContain(
-      `断る（${months} か月、画質の評価が 1 段下がる）`,
+      `断る（${months} か月、画質の評価が 1 段下がります）`,
     );
   });
 
@@ -2492,7 +2496,7 @@ describe('ゲームモードの画面', () => {
     expect(pages).toHaveLength(n);
     const proposal = pages.find((t) => t.includes('◆ 提案'))!;
     expect(proposal).toContain('会員向けの個人化');
-    expect(proposal).toContain('行動の欄で受けるか断るかを選ぶ');
+    expect(proposal).toContain('行動の欄で受けるか断るかを選びます');
     expect(pages.some((t) => t.includes('⚡ 今月発生'))).toBe(true);
     // 最後のページ: 「閉じる」が主ボタン。次へは位置を動かさず押せなくなり、あとで見るは無い。全部読んだ
     expect(eventPosition(dialog)).toBe(`${n} / ${n}`);
@@ -2628,7 +2632,7 @@ describe('ゲームモードの画面', () => {
       '効果: Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
     );
     expect(dialog.textContent).toContain(
-      '今月の費用・満足度に効いている（遮断済みで半分）',
+      '今月の費用・満足度に効いています（遮断済みで半分）',
     );
     expect(dialog.textContent).not.toContain('対処は来月から');
     // 緑の印（文字つき）を添える。閉じた後の月の報告の一覧にも出る

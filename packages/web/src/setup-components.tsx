@@ -274,8 +274,8 @@ export function PartChips({
     >
       <p className="text-xs opacity-70">
         {anyCollapsed
-          ? '部品（選んだものは畳んである。押すと選択肢が開く。「構成図から選ぶ」でも選べる）'
-          : '部品（押すと替わる。「構成図から選ぶ」でも選べる）'}
+          ? '部品（選んだものは畳んであります。押すと選択肢が開きます。「構成図から選ぶ」でも選べます）'
+          : '部品（押すと替わります。「構成図から選ぶ」でも選べます）'}
         {note && <span className="block">{note}</span>}
       </p>
       <div className="flex min-w-0 flex-wrap gap-1">

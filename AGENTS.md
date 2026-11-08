@@ -57,6 +57,7 @@
 - 見積対象のフレームワーク・構成を特定のスタックに寄せない。フレームワーク固有の扱いは FrameworkProfile / DeployTarget のデータに閉じ込める（[prd/06](./prd/06-frameworks.md)）。
 - 金額・使用量は number で計算し、課金の切り上げは `ceilUnits` だけを使う（`Math.ceil` を直接使わない）。丸めは表示のときだけ（[prd/02](./prd/02-architecture.md) §3）。
 - estimator・catalog・game の計算は純粋関数にする（時刻・乱数・I/O に触れない。乱数はシードを引数で受ける）。
+- 画面の文言はです・ます調で書く（体言止めのラベルはそのまま。PRD・コメントは対象外。D-130）。
 
 ## 開発コマンド
 

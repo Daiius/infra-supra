@@ -413,7 +413,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       routes,
     }),
     basis:
-      '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数える。出来事・話題の上乗せは含めない目安。縦の線は選んでいる部品の額',
+      '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数えます。出来事・話題の上乗せは含めない目安です。縦の線は選んでいる部品の額です',
   });
   // 部品を選び残したときの手段（D-125）: ① のタブを開いてスロットへ移る口と、埋め終えたら移る「運営を始める」
   const tabsApi = useRef<SetupTabsApi>(null);
@@ -512,7 +512,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     onComponentsChange={(v) =>
                       setParts(validSetupChoices(scenario, stack, framework, v))
                     }
-                    partsNote="構成の中の役割ごとに選ぶ（始める前なので手間はかからない）"
+                    partsNote="構成の中の役割ごとに選びます（始める前なので手間はかかりません）"
                     // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）
                     partsCompare={partsCompare}
                   />
@@ -585,7 +585,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             <div className="mt-2">
               <h3 className="font-bold">長期の確約（1 年）</h3>
               <p className="text-xs opacity-70">
-                安くなる代わりに取り消せない。乗り換え・部品の切り替えで使わなくなっても支払いは残る。前払いのある形（さくらの年額・全額前払い）は始めの所持金を超えるので、運営の途中から選べる
+                安くなる代わりに取り消せません。乗り換え・部品の切り替えで使わなくなっても支払いは残ります。前払いのある形（さくらの年額・全額前払い）は始めの所持金を超えるので、運営の途中から選べます
               </p>
               {commitOptions.map((o) => (
                 <label
@@ -641,7 +641,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           <div className="card-actions flex-wrap items-center justify-end">
             <label
               className="flex items-center gap-2 text-sm whitespace-nowrap"
-              title="この日より後に施行される、実際に予告されている料金・制限の改定だけが出来事として出る"
+              title="この日より後に施行される、実際に予告されている料金・制限の改定だけが出来事として出ます"
             >
               始めた日
               <input
