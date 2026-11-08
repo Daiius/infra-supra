@@ -2255,6 +2255,8 @@ describe('ゲームモードの画面', () => {
       name: '出来事のページ',
     });
     const body = dialog.querySelector('[data-events-page]')!;
+    // 2 件以上の月は高さを一定にして、ページを替えても上端・ナビが動かない（見た目は画面で確かめる）
+    expect(dialog.querySelector('[data-events-fixed-height]')).not.toBeNull();
     expect(
       nav.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

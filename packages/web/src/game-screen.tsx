@@ -464,7 +464,12 @@ function EventsDialog({
         else if (k.key === 'ArrowLeft') go(page - 1);
       }}
     >
-      <div className="modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6">
+      <div
+        // 2 件以上の月は高さを一定にする（modal は縦中央なので、高さが変わると上端・ナビ・閉じるが上下に動く）。
+        // 短いページは本文の下が空くだけ。1 件だけの月は内容に合わせる
+        className={`modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6 ${n > 1 ? 'h-[min(40rem,calc(100dvh-2rem))]' : ''}`}
+        data-events-fixed-height={n > 1 ? '' : undefined}
+      >
         {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
         <div className="flex shrink-0 items-start justify-between gap-2">
           <h2
