@@ -179,7 +179,10 @@ function MissingPartsDialog({
       className="modal"
       aria-labelledby={titleId}
       data-missing-parts-dialog
-      onClose={onClose}
+      // 中の部品の ⓘ の比較のダイアログ（portal でも React の木では子）の close が伝わってくるので、自分の close だけで閉じる（OCL-763C2E15）
+      onClose={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <PortalContainer.Provider value={dialogEl}>
         <div className="modal-box w-11/12 max-w-3xl px-3 sm:px-6">

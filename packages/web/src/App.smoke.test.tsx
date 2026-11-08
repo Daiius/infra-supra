@@ -588,6 +588,23 @@ describe('ゲームモードの画面', () => {
       dialog.querySelector('[data-slot="db"]')!.getAttribute('data-collapsed'),
     ).toBe('true');
     expect(within(dialog).getByRole('status').textContent).toBe('残り 3 個');
+    // 部品の ⓘ の比較のダイアログだけを閉じても、残りを選ぶダイアログは開いたまま（OCL-763C2E15）
+    fireEvent.click(
+      within(
+        dialog.querySelector<HTMLElement>('[data-slot="images"]')!,
+      ).getAllByRole('button', { name: /の説明$/ })[0]!,
+    );
+    const cmp = document.querySelector<HTMLDialogElement>(
+      'dialog[data-slot-compare-dialog]',
+    )!;
+    expect(cmp.open).toBe(true);
+    fireEvent.click(within(cmp).getByRole('button', { name: '閉じる' }));
+    expect(
+      document.querySelector('dialog[data-slot-compare-dialog]'),
+    ).toBeNull();
+    expect(screen.getByRole('dialog', { name: '残りの部品を選ぶ' })).toBe(
+      dialog,
+    );
     // ダイアログの中でも残りを既定にでき、閉じると「運営を始める」が押せてフォーカスが移る
     fireEvent.click(
       within(dialog).getByRole('button', { name: '残りを既定にする' }),
