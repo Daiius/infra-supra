@@ -1,0 +1,12 @@
+# docker build の文脈から外すもの（集計のサーバーの packages/stats/Dockerfile.prod。文脈はリポジトリの根）。
+# 🔒 .env* をイメージに入れない（雛形の .example も要らない）
+.git
+.claude
+.claude-personal
+**/node_modules
+**/dist
+.env
+.env.*
+**/.env
+**/.env.*
+*.log
