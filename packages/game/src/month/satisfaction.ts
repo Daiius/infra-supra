@@ -38,7 +38,7 @@ export function noSocialCards(
 
 /** メールが届かない月の機能の理由と注記の書き出し（D-117）。 */
 export const EMAIL_UNDELIVERED_REASON =
-  'メールの送信の上限に当たり、登録の確認・パスワードの再設定・通知のメールが届かない日がありました';
+  'メールの送信の上限に達し、登録の確認・パスワードの再設定・通知のメールが届かない日がありました';
 
 /** 理由の文に出す数（浮動小数の誤差を見せない。小数 1 桁まで）。 */
 const num = (x: number) => Number(x.toFixed(1));

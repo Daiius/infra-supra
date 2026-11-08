@@ -960,7 +960,7 @@ export function SetupCostPreview({
         <div className="mt-1">
           <p className="font-bold">
             1
-            か月目に当たる上限（止まる・遅くなる分、収益の見込みを減らしている）
+            か月目に達する上限（止まる・遅くなる分、収益の見込みを減らしている）
           </p>
           <ul className="mt-1 list-disc pl-5 text-xs">
             {e.blocking.map((b) => (
@@ -976,7 +976,7 @@ export function SetupCostPreview({
         <div className="mt-1">
           <p className="font-bold">
             1
-            か月目に当たるメールの送信の上限（サイトは止まらないが、超えた日のメールが届かず、機能の満足度が下がる）
+            か月目に達するメールの送信の上限（サイトは止まらないが、超えた日のメールが届かず、機能の満足度が下がる）
           </p>
           <ul className="mt-1 list-disc pl-5 text-xs">
             {e.undelivered.map((b) => (

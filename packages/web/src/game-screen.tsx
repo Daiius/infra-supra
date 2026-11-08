@@ -1286,7 +1286,7 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
         ? '違反'
         : '事実'
       : blocked
-        ? '当たった'
+        ? '上限に達した'
         : credit
           ? 'クレジット消費'
           : p.hit
@@ -3135,7 +3135,7 @@ function TrendCard({
 }) {
   const blocked = t.hitNow && t.effect !== 'cost';
   const status = blocked
-    ? { cls: 'badge-error', label: '✗ 当たった' }
+    ? { cls: 'badge-error', label: '✗ 上限に達した' }
     : t.hitNow
       ? { cls: 'badge-warning', label: '● 超過（課金）' }
       : t.monthsUntil !== null

@@ -113,7 +113,7 @@ export function SlotCompareBody({
       note:
         [
           w ? `選べない: ${w}` : '',
-          r.blocking ? `当たって止まる・遅くなる上限 ${r.blocking} 件` : '',
+          r.blocking ? `達すると止まる・遅くなる上限 ${r.blocking} 件` : '',
         ]
           .filter(Boolean)
           .join('・') || undefined,

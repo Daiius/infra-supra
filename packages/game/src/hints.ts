@@ -188,7 +188,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           : '一時的に流量が増える出来事で上限を越えました。予告や前兆が来たら、前もって上限に余裕を作りましょう'
         : l.accumulates
           ? 'ためていく量（保存量）は減りません。上限に届く前に、容量の大きいプラン・部品へ移すか、ためる量を減らしましょう'
-          : '込みの量・無料枠の上限に当たると止まります。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らしましょう';
+          : '込みの量・無料枠の上限に達すると止まります。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らしましょう';
     const g = groups.get(next) ?? { months: new Set<number>(), items: [] };
     l.months.forEach((m) => g.months.add(m));
     g.items.push({
@@ -208,8 +208,8 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const by = g.cause ? `。「${g.cause}」が無ければ越えませんでした` : '';
     const what =
       items.length === 1
-        ? `${monthsText(months)}に「${top.text}」に当たって止まりました${times(top.ratio) ? `。使用量は上限の ${times(top.ratio)}です` : ''}${top.detail ? `。${top.detail}` : ''}${by}`
-        : `${monthsText(months)}に止まりました。当たった上限: ${items
+        ? `${monthsText(months)}に「${top.text}」に達して止まりました${times(top.ratio) ? `。使用量は上限の ${times(top.ratio)}です` : ''}${top.detail ? `。${top.detail}` : ''}${by}`
+        : `${monthsText(months)}に止まりました。達した上限: ${items
             .slice(0, 2)
             .map(
               (x) =>
