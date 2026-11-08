@@ -221,7 +221,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     expect(
       screen.getByText(
-        /^記事のページ（ISR の閲覧と再生成・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超えます$/,
+        /^記事のページ（ISR の閲覧と作り直し・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超えます$/,
       ),
     ).toBeDefined();
     // ページごとの描き方（D-107）: 個人向けを枠 + API にすると URL に残り、その行は CPU の制限に当たらない
@@ -680,14 +680,14 @@ describe('見積モードの画面', () => {
     expectEstimate();
     const heading = screen.getByRole('heading', {
       level: 3,
-      name: /^上限・課金の境目（無料枠・込み分・上限）/,
+      name: /^上限と課金の境目/,
     });
     // クレジットの消費の行は出る。「超過」の赤い印にはならず、見出しの超過の件数にも入らない
     const use = screen.getByText(
       /^\$20\.00 のクレジットのうち \$[\d.,]+ 分を使用（超えた分 \$[\d.,]+ は従量で請求）$/,
     );
     const row = use.closest('li')!;
-    expect(within(row).getByText('クレジット消費')).toBeDefined();
+    expect(within(row).getByText('付属クレジットの消費')).toBeDefined();
     expect(within(row).queryByText('超過')).toBeNull();
     expect(row.querySelector('.badge-error, .progress-error')).toBeNull();
     expect(heading.textContent).not.toMatch(/超過 [1-9]\d* 件/);
@@ -726,7 +726,7 @@ describe('見積モードの画面', () => {
     expect(
       isr.querySelector('[data-option="0"]')!.getAttribute('data-available'),
     ).toBe('false');
-    choose('ISR のキャッシュ', 'r2');
+    choose('ページのキャッシュ（ISR）', 'r2');
     expect(q().get('c.isrCache')).toBe('r2');
     // オンデマンドにすると記事のページは更新で消すになる（同じ設定）
     choose('ISR の再検証', '0');
@@ -832,7 +832,7 @@ describe('見積モードの画面', () => {
     const q = () => new URLSearchParams(window.location.search);
     const DB = 'DB(?! のバックアップ)';
     choose(DB, 'dynamodb');
-    choose('ISR のキャッシュ', 'r2');
+    choose('ページのキャッシュ（ISR）', 'r2');
     expect(q().get('c.db')).toBe('dynamodb');
     // 構成 B は既定の部品から（A の選択は混ざらず、URL も B の部品）
     pick('stack', 'vercel-supabase-pro');
@@ -842,7 +842,7 @@ describe('見積モードの画面', () => {
     // A に戻ると A の選択が戻る（B の Neon は混ざらない）
     pick('stack', 'cloudflare-vinext-paid');
     expect(checked(DB)).toBe('dynamodb');
-    expect(checked('ISR のキャッシュ')).toBe('r2');
+    expect(checked('ページのキャッシュ（ISR）')).toBe('r2');
     expect(q().get('c.db')).toBe('dynamodb');
     // 選んでいない B のカードは覚えている部品（Neon）で題・月額を出し、比較の表の行も同じ（D-116 の補足）
     const bCard = document.querySelector<HTMLElement>(
@@ -869,10 +869,10 @@ describe('見積モードの画面', () => {
     pick('framework', 'vite-spa');
     pick('stack', 'cloudflare-vinext-paid');
     expect(checked(DB)).toBe('dynamodb');
-    expect(queryGroup('ISR のキャッシュ')).toBeNull();
+    expect(queryGroup('ページのキャッシュ（ISR）')).toBeNull();
     // Next.js に戻しても落ちた ISR のキャッシュは復活しない（既定の KV）
     pick('framework', 'nextjs');
-    expect(checked('ISR のキャッシュ')).toBe('kv');
+    expect(checked('ページのキャッシュ（ISR）')).toBe('kv');
     expect(checked(DB)).toBe('dynamodb');
     expectEstimate();
   });

@@ -224,7 +224,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     as: 'same',
     label: 'AWS: API Gateway + Lambda に API を置き、DB は DynamoDB',
     note:
-      'API を AWS の API Gateway（HTTP API・api のサブドメイン）+ Lambda に置き、DB は DynamoDB（オンデマンド）です。静的なファイルと画像は Cloudflare から配ります（静的アセットは Worker を起動しない）。' +
+      'API を AWS の API Gateway（HTTP API・api のサブドメイン）+ Lambda に置き、DB は DynamoDB（リクエスト課金）です。静的なファイルと画像は Cloudflare から配ります（静的アセットは Worker を起動しない）。' +
       'API の応答は CloudFront を通らずに AWS から外へ送るので、データ転送の料金（月 100 GB の無料の後）がかかります。' +
       'ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要ります。AWS のアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
@@ -351,9 +351,9 @@ export const CROSS_PARTS: readonly PartDef[] = [
     attachesTo: ['compute'],
     as: 'dynamodb',
     title: 'AWS DynamoDB',
-    label: 'AWS: DynamoDB（オンデマンド）',
+    label: 'AWS: DynamoDB（リクエスト課金）',
     note:
-      'DB を AWS の DynamoDB（東京・オンデマンド）に替えます。読み書きの単位で課金し、時間課金のコンピュートがありません（保存は 25 GB 月まで無料）。' +
+      'DB を AWS の DynamoDB（東京・リクエスト課金）に替えます。読み書きの単位で課金し、時間課金のコンピュートがありません（保存は 25 GB 月まで無料）。' +
       'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数えます。請求は AWS です。往復の遅延は計算しません',
     premiseRefs: [
       'fact:aws:dynamodb-on-demand:request-units',

@@ -136,13 +136,13 @@ export function describeEffect(e: Effect): string {
     case 'basePV':
       return `基準の PV ${fmtFactor(e.factor)}（以降ずっと）`;
     case 'seats':
-      return `席（メンバー）+${e.add}`;
+      return `メンバー（席）+${e.add}`;
     case 'effortPerMonth':
       return `開発の手間 +${e.add} / 月`;
     case 'interrupt':
       if (e.featureWork)
         return effortSpanText('機能の追加の作業', e.points, e.months, [
-          `翌月から。その月の機能開発に数える${e.unlessOnDemand ? '。再検証がすでにオンデマンドなら不要' : ''}`,
+          `翌月から。その月の機能開発に数える${e.unlessOnDemand ? '。再検証がすでに「更新で消す」なら不要' : ''}`,
         ]);
       return effortSpanText('対応の手間', e.points, e.months, ['翌月から']);
     case 'feature':
@@ -152,7 +152,7 @@ export function describeEffect(e: Effect): string {
     case 'component':
       return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel('cloudflare', e.slot, e.option)}）`;
     case 'on-demand-revalidate':
-      return 'ISR の再検証をオンデマンドにする（Next.js）';
+      return 'ISR の再検証を「更新で消す」にする（Next.js）';
     case 'requirement':
       return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がります）`;
     case 'contract':

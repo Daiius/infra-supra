@@ -110,7 +110,7 @@ const FACTS = [
   {
     id: 'next-runtime',
     premise:
-      'Netlify の Next.js は OpenNext のアダプターで設定なしに動き、ISR は時間・オンデマンド（パス・タグ）の再検証とも完全に対応します。SSR・ISR・Route Handler・Server Actions は Netlify Functions、ミドルウェアは Edge Functions で動きます',
+      'Netlify の Next.js は OpenNext のアダプターで設定なしに動き、ISR は時間の再検証・更新で消す再検証（パス・タグ）とも完全に対応します。SSR・ISR・Route Handler・Server Actions は Netlify Functions、ミドルウェアは Edge Functions で動きます',
     sourceIds: ['nextjs'],
   },
   {
@@ -124,7 +124,7 @@ const FACTS = [
         {
           reading: 'ヒットでも関数が起動する',
           reason:
-            '文書は durable の指定を「関数をもう一度起動せずに他の拠点が使い回す」と説明し、新しいキャッシュが無いときに拠点が関数を起動すると書いています',
+            '文書は durable の指定を「関数をもう一度起動せずに他の地域のサーバーが使い回す」と説明し、新しいキャッシュが無いときに各地のサーバーが関数を起動すると書いています',
         },
       ],
     },
@@ -133,7 +133,7 @@ const FACTS = [
   {
     id: 'image-cdn',
     premise:
-      'Netlify Image CDN は閲覧のときに変換して拠点にキャッシュします。next/image と Astro の <Image /> がそのまま使います。クレジットの表に変換の項目は無く、画像の配信は転送量（Bandwidth）に数えます',
+      'Netlify Image CDN は閲覧のときに変換して各地のサーバーにキャッシュします。next/image と Astro の <Image /> がそのまま使います。クレジットの表に変換の項目は無く、画像の配信は転送量（Bandwidth）に数えます',
     interpretation: {
       adopted:
         '変換そのものはクレジットを使わず、配信のリクエストと転送だけを数えます',
@@ -150,7 +150,7 @@ const FACTS = [
   {
     id: 'blobs',
     premise:
-      'Netlify Blobs は自分のサイト（関数・Edge Functions）からだけ読み書きでき、1 つのリージョンに置いて拠点でキャッシュします。料金の単価は公開されていません',
+      'Netlify Blobs は自分のサイト（関数・Edge Functions）からだけ読み書きでき、1 つのリージョンに置いて各地のサーバーでキャッシュします。料金の単価は公開されていません',
     sourceIds: ['blobs', 'blobsVsVercel'],
   },
   {

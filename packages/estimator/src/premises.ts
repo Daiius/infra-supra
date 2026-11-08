@@ -65,7 +65,7 @@ const SOURCE_MODE: Partial<Record<CpuSource['requestClass'], string>> = {
   'document-static': '静的',
   'document-ssr': 'SSR',
   'document-isr': 'ISR のキャッシュから返す',
-  'isr-revalidate': 'ISR の閲覧と再生成',
+  'isr-revalidate': 'ISR の閲覧と作り直し',
   'api-content': 'ブラウザが API で中身を取る・キャッシュの取り直し',
 };
 
@@ -109,7 +109,7 @@ export function cpuSourceText(s: CpuSource): string {
             : s.requestClass === 'api' && s.rendering === 'spa'
               ? 'ブラウザが API で中身を取る'
               : s.requestClass === 'isr-revalidate' && !s.background
-                ? 'ISR の再生成'
+                ? 'ISR の作り直し'
                 : SOURCE_MODE[s.requestClass];
   return `${name}（${mode ? `${mode}・` : ''}CPU ${ms(s.cpuMs)} ms）`;
 }

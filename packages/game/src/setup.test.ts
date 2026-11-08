@@ -111,7 +111,7 @@ it('画面に出る文（シナリオの文・出来事・基準プレイの名�
 describe('setupProblem・validSetupChoices', () => {
   it('未選択のスロットがあると始められず、理由にスロットの名前が出る', () => {
     expect(setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {})).toBe(
-      '部品をまだ選んでいません: ISR のキャッシュ・画像・DB・メール送信',
+      '部品をまだ選んでいません: ページのキャッシュ（ISR）・画像・DB・メール送信',
     );
     expect(
       setupProblem(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {

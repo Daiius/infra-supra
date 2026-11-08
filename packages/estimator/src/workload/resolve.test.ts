@@ -73,7 +73,7 @@ describe('オンデマンドの再検証（D-49・prd/04 §2）', () => {
     );
     expect(
       w.derivations.find((d) => d.id === 'isr-revalidations:article')!.label,
-    ).toContain('オンデマンド');
+    ).toContain('更新で消す');
   });
 
   it('最大寿命（保険の時間の再検証）を併せると、時間の式の分が加わる。閲覧が少ないと小さく、閲覧の回数は超えない（D-56）', () => {

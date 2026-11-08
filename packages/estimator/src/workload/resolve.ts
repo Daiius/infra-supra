@@ -411,7 +411,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         derivations.push({
           id: `api-cache-misses:${r.id}`,
           label: `API の応答のキャッシュの取り直し（${r.id}）`,
-          expression: `Σ ページ (ページの閲覧 / (1 + ページの閲覧 × キャッシュの期間 / 1 か月))（${popularityNote(r)}。ISR の再生成と同じ形）`,
+          expression: `Σ ページ (ページの閲覧 / (1 + ページの閲覧 × キャッシュの期間 / 1 か月))（${popularityNote(r)}。ISR の作り直しと同じ形）`,
           inputs: [
             { name: '閲覧', value: views, basis: 'derived' },
             { name: 'ページ数', value: r.pages, basis: 'user-input' },
@@ -473,7 +473,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         onDemandUpdates += updates;
         derivations.push({
           id: `on-demand-pages:${r.id}`,
-          label: `オンデマンドの再検証を呼ぶページ（${r.id}）`,
+          label: `更新で消す再検証を呼ぶページ（${r.id}）`,
           expression:
             '内容の更新 × 1 回の更新で再検証するページの数（CDN のキャッシュの無効化に使う）',
           inputs: [
@@ -560,7 +560,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         updates === undefined
           ? {
               id: `isr-revalidations:${r.id}`,
-              label: `ISR の再生成（${r.id}）`,
+              label: `ISR の作り直し（${r.id}）`,
               expression: `Σ ページ (ページの閲覧 / (1 + ページの閲覧 × 再検証の間隔 / 1 か月))（${popularityNote(r)}）`,
               inputs: [
                 { name: '閲覧', value: views, basis: 'derived' },
@@ -577,11 +577,11 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
             }
           : {
               id: `isr-revalidations:${r.id}`,
-              label: `ISR の再生成（${r.id}・オンデマンド）`,
+              label: `ISR の作り直し（${r.id}・更新で消す）`,
               expression:
                 maxAge === undefined
                   ? '更新 × 閲覧 / (更新 + 閲覧)（更新のあとの最初の閲覧で 1 回。更新と閲覧がページに一様に散ると仮定）'
-                  : `min(閲覧, 更新 × 閲覧 / (更新 + 閲覧) + Σ ページ (ページの閲覧 / (1 + ページの閲覧 × 最大寿命 / 1 か月)))（オンデマンドに最大寿命の時間の再検証を足す。${popularityNote(r)}）`,
+                  : `min(閲覧, 更新 × 閲覧 / (更新 + 閲覧) + Σ ページ (ページの閲覧 / (1 + ページの閲覧 × 最大寿命 / 1 か月)))（更新で消す分に最大寿命の時間の再検証を足す。${popularityNote(r)}）`,
               inputs: [
                 { name: '閲覧', value: views, basis: 'derived' },
                 {

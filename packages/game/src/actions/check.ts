@@ -174,7 +174,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         ? ok(EFFORT.optimize)
         : ng(
             'limit',
-            `SSR の CPU は ${EFFORT.minSsrCpuMs} ms より下げられません`,
+            `サーバーで描く CPU 時間（SSR）は ${EFFORT.minSsrCpuMs} ms より下げられません`,
           );
     case 'plan':
     case 'migrate': {
@@ -238,9 +238,9 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         : ok(BOT_BLOCK.effort);
     case 'commit': {
       const def = commitmentDef(action.key);
-      if (!def) return ng('invalid', '確約がありません');
+      if (!def) return ng('invalid', '1 年契約がありません');
       if (!def.commitment.payments.some((p) => p.payment === action.payment))
-        return ng('invalid', 'この確約に無い支払いの形');
+        return ng('invalid', 'この 1 年契約に無い支払いの形');
       const cur = activeCommitments(state).find((c) => c.key === action.key);
       if (cur)
         return ng(
@@ -296,7 +296,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         return ng(
           'same',
           strategyFamily(now) === 'cached'
-            ? '期限とオンデマンドは設定で替えます'
+            ? '期限と「更新で消す」は設定で替えます'
             : '今の描き方と同じ',
         );
       if (

@@ -47,7 +47,7 @@ const FLAT_FACTS = [
   {
     id: 'flat-overage',
     premise:
-      'CloudFront の定額のプランは込みの量を超えても追加の請求はありません。ただし超えた状態が 2〜3 か月以上続くと、より少ない・遠い拠点から配るなど性能が調整されることがあります（最初の月の 3 倍までの急増は影響しない）',
+      'CloudFront の定額のプランは込みの量を超えても追加の請求はありません。ただし超えた状態が 2〜3 か月以上続くと、より少ない・遠いサーバーから配るなど性能が調整されることがあります（最初の月の 3 倍までの急増は影響しない）',
     sourceIds: ['cloudfrontFlatDocs'],
   },
   {
@@ -535,7 +535,7 @@ export const aws: PriceBookInput = {
         {
           id: 'no-on-demand-isr',
           premise:
-            'Amplify Hosting は Next.js のオンデマンド ISR（即時反映）・ストリーミング・Edge のミドルウェアに対応していません',
+            'Amplify Hosting は Next.js の更新で消す ISR（On-demand。即時反映）・ストリーミング・Edge のミドルウェアに対応していません',
           sourceIds: ['amplifyNext'],
         },
         {
@@ -640,7 +640,7 @@ export const aws: PriceBookInput = {
         {
           id: 'opennext-isr',
           premise:
-            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から再生成します。オンデマンドの再検証（revalidatePath・revalidateTag）にも対応しますが、CloudFront のキャッシュは別に無効化が要ります（自動の無効化は既定で無効です。有効にすると再検証したページごとにページとそのデータのルートの 2 パスを無効化します。無効化は月 1,000 パスまで無料・以降 1 パス $0.005 です）',
+            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から作り直します。更新で消す再検証（revalidatePath・revalidateTag）にも対応しますが、CloudFront のキャッシュは別に無効化が要ります（自動の無効化は既定で無効です。有効にすると再検証したページごとにページとそのデータのルートの 2 パスを無効化します。無効化は月 1,000 パスまで無料・以降 1 パス $0.005 です）',
           sourceIds: [
             'opennextServer',
             'opennextCaching',
@@ -785,8 +785,8 @@ export const aws: PriceBookInput = {
       name: 'CloudFront（従量の料金・日本）',
       sourceIds: ['cloudfrontPrices', 'cloudfrontFree'],
       notes: [
-        '定額のプラン（Free・Pro・Business）は込み分を超えたときの挙動が未確認なので扱いません（AX-07）',
-        '転送・リクエストの単価は日本の拠点の値（閲覧者が日本にいる前提）',
+        '定額のプラン（Free・Pro・Business）はプランに含まれる分を超えたときの挙動が未確認なので扱いません（AX-07）',
+        '転送・リクエストの単価は日本のサーバーの値（閲覧者が日本にいる前提）',
       ],
       facts: [
         {
@@ -911,7 +911,7 @@ export const aws: PriceBookInput = {
       id: 'dynamodb-on-demand',
       service: 'dynamodb',
       ...common,
-      name: 'DynamoDB（オンデマンド・標準）',
+      name: 'DynamoDB（リクエスト課金・標準）',
       sourceIds: ['dynamodbPrices', 'dynamodbUnits'],
       facts: [
         {

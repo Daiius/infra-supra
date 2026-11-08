@@ -690,7 +690,7 @@ function membersOf(
       pricing: members?.pricing ?? 'unknown',
       premise:
         members?.premise ??
-        `${u.provider} ${plan?.name ?? u.planId} の席（メンバー）の料金は未取得`,
+        `${u.provider} ${plan?.name ?? u.planId} のメンバー（席）の料金は未取得`,
       ...(members?.pricing === 'per-seat' && fee && fee.amount !== null
         ? { seatFee: { amount: fee.amount, currency: fee.currency, seats } }
         : {}),

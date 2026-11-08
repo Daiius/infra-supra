@@ -135,8 +135,8 @@ const EVENTS: EventDef[] = [
     id: 'c-s-allowance',
     kind: 'state',
     tier: 'common',
-    title: '込み分・クレジットの 70% を超えた',
-    text: '利用の増加で、込み分（Vercel Pro は月のクレジット）に近づきました。運用費は固定が主なので、超えた分の従量課金はそのまま利幅を削ります',
+    title: 'プランに含まれる分・クレジットの 70% を超えた',
+    text: '利用の増加で、プランに含まれる分（Vercel Pro は月のクレジット）に近づきました。運用費は固定が主なので、超えた分の従量課金はそのまま利幅を削ります',
     when: {
       type: 'premise',
       premiseIds: [
@@ -153,7 +153,7 @@ const EVENTS: EventDef[] = [
     kind: 'state',
     tier: 'occasional',
     title: 'DB が大きくなった',
-    text: '業務の記録がたまり、DB の保存量が込み分・上限に近づきました',
+    text: '業務の記録がたまり、DB の保存量がプランに含まれる分・上限に近づきました',
     when: {
       type: 'premise',
       premiseIds: [

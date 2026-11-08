@@ -183,7 +183,7 @@ export type ComponentOption = {
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
-  isrCache: 'ISR のキャッシュ',
+  isrCache: 'ページのキャッシュ（ISR）',
   images: '画像',
   api: 'API の置き場',
   db: 'DB',
@@ -206,7 +206,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'KV',
-    note: '閲覧のたびに Worker が KV を読み、再生成で書きます。KV の書き込みは他の拠点で見えるまで 60 秒以上かかることがあります',
+    note: '閲覧のたびに Worker が KV を読み、作り直しで書きます。KV の書き込みは他の地域のサーバーで見えるまで 60 秒以上かかることがあります',
     premiseRefs: ['pool:cloudflare:workers-paid:paid-kv-writes'],
     onDemandIsr: { ok: false, fact: 'cloudflare:workers-paid:kv-propagation' },
   },
@@ -216,7 +216,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'R2（自作のアダプター）',
-    note: '閲覧で R2 を読み（Class B）、再生成で書きます（Class A）。vinext に R2 を ISR の置き場にする公式のアダプターは見当たらない（README）ので、キャッシュの処理は自作になります。R2 は強い整合なので、書けばすぐ全世界で見えます',
+    note: '閲覧で R2 を読み（Class B）、作り直しで書きます（Class A）。vinext に R2 を ISR の置き場にする公式のアダプターは見当たらない（README）ので、キャッシュの処理は自作になります。R2 は強い整合なので、書けばすぐ全世界で見えます',
     premiseRefs: [
       'pool:cloudflare:r2-standard',
       'fact:cloudflare:r2-standard:',
@@ -232,7 +232,7 @@ const BASE_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'cloudflare',
     label: 'Workers Cache（タグでパージ）',
-    note: 'vinext の workersCacheCdnAdapter。ISR のページを拠点ごとの Workers Cache から返し、再検証はタグでパージします。Cache API の料金は記載なし（このモデルでは費用なし）。拠点ごとのキャッシュなので、ヒット率が下がって再生成が増える分は計算に入れていません',
+    note: 'vinext の workersCacheCdnAdapter。ISR のページを各地のサーバーごとの Workers Cache から返し、再検証はタグでパージします。Cache API の料金は記載なし（このモデルでは費用なし）。各地のサーバーごとのキャッシュなので、ヒット率が下がって作り直しが増える分は計算に入れていません',
     premiseRefs: ['fact:cloudflare:workers-paid:workers-cache'],
     onDemandIsr: { ok: true, fact: 'cloudflare:workers-paid:workers-cache' },
   },
@@ -508,7 +508,7 @@ const SAKURA_FRONT_CDN: ComponentOption[] = [
     slot: 'frontCdn',
     platform: 'sakura',
     label: 'Cloudflare（HTML も。Cache Rules）',
-    note: 'Cache Rules で HTML もキャッシュの対象にし、記事のページも CDN が返します（ログインの要るページは条件で外す）。CDN は Next.js の s-maxage（再検証の間隔）に従うので、時間の再検証では更新が最大で間隔の約 2 倍遅れて見えます。オンデマンドの再検証・ビルドでは、更新のたびに Free の API でそのページのキャッシュを消す（prefix・タグは 1 分 5 回・1 回 100 件まで）ので遅れません',
+    note: 'Cache Rules で HTML もキャッシュの対象にし、記事のページも CDN が返します（ログインの要るページは条件で外す）。CDN は Next.js の s-maxage（再検証の間隔）に従うので、時間の再検証では更新が最大で間隔の約 2 倍遅れて見えます。更新で消す再検証・更新のたびのビルドでは、更新のたびに Free の API でそのページのキャッシュを消す（prefix・タグは 1 分 5 回・1 回 100 件まで）ので遅れません',
     onDemandIsr: { ok: true, fact: 'cloudflare:cdn-free:purge-free' },
     premiseRefs: [
       'fact:cloudflare:cdn-free:cache-rules-html',
@@ -611,7 +611,7 @@ const SPA_API_CACHE: ComponentOption[] = [
     platform: 'cloudflare',
     frameworks: ['vite-spa'],
     label: 'Workers の Cache API（コードの中）',
-    note: 'Worker が拠点のキャッシュを読み、ヒットなら D1 を読まずに返します。Worker は毎回動くのでリクエスト数は減らず、CPU と D1 の読み取りが減ります。キャッシュは拠点ごとで複製されません（拠点に分かれてヒット率が下がる分は計算に入れていない）',
+    note: 'Worker が各地のサーバーのキャッシュを読み、ヒットなら D1 を読まずに返します。Worker は毎回動くのでリクエスト数は減らず、CPU と D1 の読み取りが減ります。キャッシュは各地のサーバーごとで複製されません（各地のサーバーに分かれてヒット率が下がる分は計算に入れていない）',
     premiseRefs: [
       'fact:cloudflare:workers-free:cache-api-local',
       'fact:cloudflare:workers-paid:cache-api-local',

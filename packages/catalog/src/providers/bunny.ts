@@ -11,20 +11,20 @@ const FACTS = [
   {
     id: 'asia-rate',
     premise:
-      'Bunny CDN（Standard network）の転送は配った拠点の地域ごとの単価: Europe & North America $0.01/GB・Asia & Oceania $0.03/GB・South America $0.045/GB・Middle East & Africa $0.06/GB です（段の割引は無い）。要求（リクエスト）の課金はありません（「No Request Fees」）',
+      'Bunny CDN（Standard network）の転送は配った地域ごとの単価: Europe & North America $0.01/GB・Asia & Oceania $0.03/GB・South America $0.045/GB・Middle East & Africa $0.06/GB です（段の割引は無い）。要求（リクエスト）の課金はありません（「No Request Fees」）',
     interpretation: {
       adopted:
-        '日本の閲覧者は東京などアジアの拠点から配られるとみて、Asia & Oceania の $0.03/GB で数えます（アジアの拠点の一覧に Tokyo がある）',
+        '日本の閲覧者は東京などアジアのサーバーから配られるとみて、Asia & Oceania の $0.03/GB で数えます（アジアのサーバーの一覧に Tokyo がある）',
       rejected: [
         {
           reading: 'Europe & North America の $0.01/GB で数える',
           reason:
-            '閲覧者は日本にいて、東京の拠点はアジアの地域のページに載る。料金ページは日本がどの地域かを書いていないので、高めの側の読みを取ります',
+            '閲覧者は日本にいて、東京のサーバーはアジアの地域のページに載る。料金ページは日本がどの地域かを書いていないので、高めの側の読みを取ります',
         },
         {
           reading: 'Volume network の $0.005/GB で数える',
           reason:
-            'Volume network は 10 拠点で、アジアの拠点の一覧に「Tokyo (Volume)」はありますが、日本の閲覧がその単価で配られるかは料金ページに書かれていません（未確認）',
+            'Volume network は 10 か所で、アジアのサーバーの一覧に「Tokyo (Volume)」はありますが、日本の閲覧がその単価で配られるかは料金ページに書かれていません（未確認）',
         },
       ],
     },
@@ -50,7 +50,7 @@ const FACTS = [
   {
     id: 'pull-zone-origin',
     premise:
-      'Bunny CDN の Pull Zone は自分のサーバー（オリジン）につなぎ、キャッシュに無ければ拠点がオリジンから取って、キャッシュして返します（「If not cached, the edge fetches from your origin, caches the response, and delivers it」）',
+      'Bunny CDN の Pull Zone は自分のサーバー（オリジン）につなぎ、キャッシュに無ければ各地のサーバーがオリジンから取って、キャッシュして返します（「If not cached, the edge fetches from your origin, caches the response, and delivers it」）',
     sourceIds: ['cdnDocs'],
   },
   {
@@ -62,7 +62,7 @@ const FACTS = [
   {
     id: 'dynamic-images',
     premise:
-      'Bunny Optimizer を Pull Zone で有効にし、Dynamic Image API を有効にすると、URL の引数（?width=500・?quality=75&format=webp）で画像を変換でき、変換の結果は拠点でキャッシュされます',
+      'Bunny Optimizer を Pull Zone で有効にし、Dynamic Image API を有効にすると、URL の引数（?width=500・?quality=75&format=webp）で画像を変換でき、変換の結果は各地のサーバーでキャッシュされます',
     sourceIds: ['dynamicImages'],
   },
   {

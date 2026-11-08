@@ -167,11 +167,11 @@ export function RouteSettingChips({
   }));
   // S2・S3 の切り替わりは選ぶと上の描き方のチップが替わるので本文に出す。部品ごとにキャッシュの時間とタグの意味は ⓘ に畳む（D-125）
   const relation = cached
-    ? `時間を選ぶと「${ROUTE_STRATEGIES['cached-ttl'].label}」、オンデマンドを選ぶと「${ROUTE_STRATEGIES['cached-purge'].label}」（上の 2 つの描き方は、この設定で切り替わります）`
+    ? `時間を選ぶと「${ROUTE_STRATEGIES['cached-ttl'].label}」、「更新で消す」を選ぶと「${ROUTE_STRATEGIES['cached-purge'].label}」（上の 2 つの描き方は、この設定で切り替わります）`
     : undefined;
   const note =
     cc && onDemand
-      ? `時間は部品の期限（cacheLife）、オンデマンドは投稿・編集でタグを消して作り直します（updateTag）。${def.note}`
+      ? `時間は部品の期限（cacheLife）、「更新で消す」は投稿・編集でタグを消して作り直します（updateTag）。${def.note}`
       : def.note;
   return (
     <SettingChips
@@ -185,12 +185,12 @@ export function RouteSettingChips({
       {relation && <p className="text-[11px] opacity-70">{relation}</p>}
       {onDemand && x.onDemandBlocked && (
         <p className="text-[11px] opacity-70">
-          オンデマンドは選べない（{x.onDemandBlocked}）
+          「{onDemand.label}」は選べない（{x.onDemandBlocked}）
         </p>
       )}
       {onDemand && !x.onDemandBlocked && x.onDemandNote && (
         <p className="text-[11px] text-warning">
-          オンデマンドにすると: {x.onDemandNote}
+          「{onDemand.label}」にすると: {x.onDemandNote}
         </p>
       )}
     </SettingChips>

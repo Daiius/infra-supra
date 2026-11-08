@@ -220,7 +220,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
     verdict: 'ok',
     basis:
       'Bunny Storage の Storage Zone を Pull Zone のオリジンにでき、Storage から CDN への転送は無料。' +
-      'Optimizer の Dynamic Image API を有効にすると URL の引数（?width=）で変換でき、結果は拠点でキャッシュされる（Optimizer はサイトごとに月 $9.50・変換は無制限）。' +
+      'Optimizer の Dynamic Image API を有効にすると URL の引数（?width=）で変換でき、結果は各地のサーバーでキャッシュされる（Optimizer はサイトごとに月 $9.50・変換は無制限）。' +
       'CDN の転送は Asia & Oceania で $0.03/GB・要求の課金なし・月の最低額 $1。' +
       'next/image は loaderFile で ?width= の URL を返す関数に替えられる（公式の例に Bunny は無い）',
     sources: at('2026-11-02', [

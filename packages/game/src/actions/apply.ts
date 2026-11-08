@@ -209,7 +209,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         (o) => o.key === action.key && o.payment === action.payment,
       )!;
       return withNote(
-        `確約: ${offer.label}（${PAYMENT_LABEL[offer.payment]}）`,
+        `1 年契約: ${offer.label}（${PAYMENT_LABEL[offer.payment]}）`,
         {
           ...state,
           commitments: [

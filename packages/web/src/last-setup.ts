@@ -276,7 +276,7 @@ export function restoreLastSetup(
     for (const c of last.commitments ?? [])
       if (!offers.some((o) => o.key === c.key && o.payment === c.payment)) {
         delete commitments[c.key];
-        lost.push('長期の確約');
+        lost.push('1 年契約');
       }
   }
   const unique = [...new Set(lost)];

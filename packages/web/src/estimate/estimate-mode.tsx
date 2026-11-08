@@ -275,7 +275,7 @@ export function EstimateMode() {
       </Card>
       <Card title="明細（事業者・メーターごと）">
         <p className="text-xs opacity-70">
-          使用量のうち「込み分」は無料枠・プランに含まれる量で、残りが課金対象です。クレジットは従量の金額に当てます（当てられる額
+          使用量のうち「プランに含まれる分」は無料枠やプランで賄える量で、残りが課金対象です。クレジットは従量の金額に当てます（当てられる額
           / 上限）。
         </p>
         {view.providers.map((p) => (
@@ -658,7 +658,7 @@ function Seats({
   return (
     <Field
       label="チームの人数（管理画面を使う人）"
-      info="事業者の管理画面にメンバーとして入る人の数（席）。席ごとに料金がかかるプランだけ月額が変わります。席の料金が料金データに無い事業者は、席の料金の行で「未取得」と出します"
+      info="事業者の管理画面に入るメンバー（席）の数です。メンバー（席）ごとに料金がかかるプランだけ月額が変わります。席の料金が料金データに無い事業者は、席の料金の行で「未取得」と出します"
     >
       <input
         className="input input-bordered input-sm w-full"
@@ -679,8 +679,8 @@ function Seats({
 }
 
 const MEMBER_BADGE: Record<MemberView['pricing'], string> = {
-  'per-seat': '席ごとに課金',
-  included: '席の料金なし',
+  'per-seat': 'メンバー（席）ごとに課金',
+  included: 'メンバー（席）の料金なし',
   'not-stated': '記載なし',
   unknown: '未取得',
 };
@@ -690,7 +690,7 @@ function Commitments({ view }: { view: EstimateView }) {
   if (!view.commitments.length) return null;
   return (
     <div className="space-y-1 text-sm">
-      <h3 className="font-semibold">1 年の確約を結んだときの月額</h3>
+      <h3 className="font-semibold">1 年契約を結んだときの月額</h3>
       <ul className="space-y-1">
         {view.commitments.map((c) => (
           <li key={`${c.label}|${c.payment}`} className="min-w-0">
@@ -701,7 +701,7 @@ function Commitments({ view }: { view: EstimateView }) {
             <Info label={`${c.label}の説明`}>
               {c.premise}
               。この月の対象の使用（{usd(c.coversUsd)}
-              ）を確約で覆うとみた額です。前払いは 1 年分を 12
+              ）を 1 年契約で覆うとみた額です。前払いは 1 年分を 12
               で割りました。取り消せず、使わなくなっても支払いは残ります。
             </Info>
           </li>
@@ -719,7 +719,7 @@ function Members({ members, seats }: { members: MemberView[]; seats: number }) {
   return (
     <div className="space-y-1 text-sm">
       <h3 className="font-semibold">
-        チーム {seats} 人の席の料金
+        チーム {seats} 人のメンバー（席）の料金
         {seats > 1 && unknown.length > 0 && (
           <span className="ml-2 text-xs font-normal text-warning">
             席の料金が書かれていない事業者 {unknown.length}{' '}
@@ -822,7 +822,7 @@ function Premises({
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">
-        上限・課金の境目（無料枠・込み分・上限）
+        上限と課金の境目
         <span className="ml-2 text-sm font-normal opacity-70">
           超過 {stops} 件{costs > 0 ? `・従量に回る ${costs} 件` : ''}・
           {thresholds.length} 件中
@@ -837,7 +837,7 @@ function Premises({
               <li key={p.id} className="min-w-0 text-sm">
                 <div className="flex flex-wrap items-center gap-x-2">
                   <span className="badge badge-info badge-sm">
-                    クレジット消費
+                    付属クレジットの消費
                   </span>
                   <span className="tabular-nums font-semibold">{pct(r)}</span>
                   <span className="text-xs opacity-70">
@@ -913,7 +913,7 @@ function Lines({ lines }: { lines: LineView[] }) {
           <tr>
             <th>項目</th>
             <th className="text-right">使用量</th>
-            <th className="text-right">込み分</th>
+            <th className="text-right">プランに含まれる分</th>
             <th className="text-right">課金対象</th>
             <th className="text-right">金額</th>
           </tr>

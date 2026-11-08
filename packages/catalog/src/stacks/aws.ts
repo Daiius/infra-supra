@@ -46,7 +46,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: 'Amplify の ISR',
-    note: 'ISR のページは Amplify の CDN が返し、期限が切れると SSR の計算で作り直します。オンデマンドの再検証（即時反映）には対応していません',
+    note: 'ISR のページは Amplify の CDN が返し、期限が切れると SSR の計算で作り直します。更新で消す再検証（即時反映）には対応していません',
     premiseRefs: ['fact:aws:amplify-hosting:no-on-demand-isr'],
     onDemandIsr: { ok: false, fact: 'aws:amplify-hosting:no-on-demand-isr' },
   },
@@ -120,7 +120,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: '自前の CloudFront（ISR のページもキャッシュ）',
-    note: 'ISR のページも s-maxage（ISR の間隔）で CloudFront が返します。オンデマンドの再検証は CloudFront に届きません（Amplify もオンデマンド ISR に非対応）。外れた分と SSR・API は Amplify の配信としても課金されるとみなします',
+    note: 'ISR のページも s-maxage（ISR の間隔）で CloudFront が返します。更新で消す再検証は CloudFront に届きません（Amplify も更新で消す ISR に非対応）。外れた分と SSR・API は Amplify の配信としても課金されるとみなします',
     onDemandIsr: { ok: false, fact: 'aws:amplify-hosting:front-cloudfront' },
     premiseRefs: [
       'fact:aws:amplify-hosting:front-cloudfront',
@@ -133,7 +133,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     id: 'dynamodb',
     slot: 'db',
     platform: 'aws',
-    label: 'DynamoDB（オンデマンド）',
+    label: 'DynamoDB（リクエスト課金）',
     note: '読み書きの単位で課金し、時間課金のコンピュートがありません。保存は 25 GB 月まで無料です。1 行の大きさは 1 kB 以下と仮定します',
     premiseRefs: [
       'fact:aws:dynamodb-on-demand:request-units',
@@ -249,7 +249,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     platform: 'aws',
     frameworks: ['vite-spa'],
     label: 'CloudFront のキャッシュ（s-maxage）',
-    note: '記事の中身の API の応答を CloudFront が返し、API Gateway・Lambda・DB に届く件数が減ります（CloudFront のリクエストと転送は残る）。拠点ごとに分かれてヒット率が下がる分は計算に入れていません',
+    note: '記事の中身の API の応答を CloudFront が返し、API Gateway・Lambda・DB に届く件数が減ります（CloudFront のリクエストと転送は残る）。各地のサーバーごとに分かれてヒット率が下がる分は計算に入れていません',
     premiseRefs: [
       'pool:aws:cloudfront:cloudfront-free-requests',
       'pool:aws:lambda:lambda-free-requests',
@@ -312,7 +312,7 @@ export function dbNode(opt: string | undefined): ArchNodeIn {
     : {
         id: 'dynamodb',
         role: 'sql-db',
-        label: 'DynamoDB（オンデマンド）',
+        label: 'DynamoDB（リクエスト課金）',
         config: {
           kind: 'request-db',
           readUnitKB: 4,

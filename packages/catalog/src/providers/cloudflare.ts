@@ -15,7 +15,7 @@ const WORKERS_FACTS = [
   {
     id: 'kv-propagation',
     premise:
-      'KV の書き込みは、他の拠点で見えるまで 60 秒以上かかることがあります（同じ拠点でもすぐ見える保証はない）',
+      'KV の書き込みは、他の地域のサーバーで見えるまで 60 秒以上かかることがあります（同じ地域のサーバーでもすぐ見える保証はない）',
     sourceIds: ['kvHowItWorks'],
   },
   {
@@ -31,13 +31,13 @@ const WORKERS_FACTS = [
   {
     id: 'workers-cache',
     premise:
-      'vinext の workersCacheCdnAdapter は ISR のページを Workers Cache（ctx.cache）から返し、revalidateTag・revalidatePath でタグをパージします。Cache API の中身はキャッシュした拠点の外へは複製されません',
+      'vinext の workersCacheCdnAdapter は ISR のページを Workers Cache（ctx.cache）から返し、revalidateTag・revalidatePath でタグをパージします。Cache API の中身はキャッシュした地域のサーバーの外へは複製されません',
     interpretation: {
       adopted:
-        'パージで即時反映の要件を満たせるとみなします（パージが全拠点へ伝わる時間は、読んだページに記載なし）',
+        'パージで即時反映の要件を満たせるとみなします（パージがすべての地域のサーバーへ伝わる時間は、読んだページに記載なし）',
       rejected: [
         {
-          reading: '拠点ごとに古い版が残る',
+          reading: '各地のサーバーごとに古い版が残る',
           reason: 'README はタグでエッジをパージすると書いています',
         },
       ],
@@ -79,7 +79,7 @@ const WORKERS_FACTS = [
   {
     id: 'cache-api-local',
     premise:
-      'Workers の Cache API は Worker のコードの中から読み書きします（Worker は毎回動く）。中身はキャッシュした拠点（データセンター）の外へは複製されず、cache.delete も拠点の中だけです。Cache API の料金の記載はありません',
+      'Workers の Cache API は Worker のコードの中から読み書きします（Worker は毎回動く）。中身はキャッシュした地域のサーバー（データセンター）の外へは複製されず、cache.delete もその地域のサーバーの中だけです。Cache API の料金の記載はありません',
     interpretation: {
       adopted:
         'Cache API そのものの費用はないとみなします（Workers Cache が「別の料金はない」と書くのと同じ扱い）',
@@ -883,7 +883,7 @@ export const cloudflare: PriceBookInput = {
           allowancePool: 'free-kv-writes',
           onExceed: 'block',
           premise:
-            'KV Free は 1 日 1,000 回の書き込みまで（ISR の再生成のたびに書く）',
+            'KV Free は 1 日 1,000 回の書き込みまで（ISR の作り直しのたびに書く）',
           pricing: { model: 'flat', per: 1, unitPrice: 0 },
           sourceIds: ['kvPricing'],
         },
@@ -1265,7 +1265,7 @@ export const cloudflare: PriceBookInput = {
         {
           id: 'next-on-demand',
           premise:
-            'Next.js のオンデマンドの再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返します（再検証と一緒に CDN のパージを呼ぶ必要がある。HTML と RSC の変種の両方）',
+            'Next.js の更新で消す再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返します（再検証と一緒に CDN のパージを呼ぶ必要がある。HTML と RSC の変種の両方）',
           sourceIds: ['nextjsCdn'],
         },
         {
