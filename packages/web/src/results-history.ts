@@ -6,6 +6,7 @@ import {
   resultAxesOf,
   stackName,
   FRAMEWORKS,
+  playContent,
   type EndReason,
   type GameState,
   type ResultAxes,
@@ -118,30 +119,11 @@ function fnv1a(text: string): string {
 }
 
 /**
- * キーの並びをそろえた JSON（オブジェクトのキーを再帰的に並べ替え、undefined の値は JSON.stringify と同じく落とす）。
- * 保存を読み直す（parseSave）とキーの並びが変わりうるので、id はこの形から作る（OCL-09A16C94）。
- */
-export function canonicalJson(x: unknown): string {
-  if (Array.isArray(x)) return `[${x.map(canonicalJson).join(',')}]`;
-  if (typeof x === 'object' && x !== null)
-    return `{${Object.keys(x)
-      .sort()
-      .filter((k) => (x as Record<string, unknown>)[k] !== undefined)
-      .map(
-        (k) =>
-          `${JSON.stringify(k)}:${canonicalJson((x as Record<string, unknown>)[k])}`,
-      )
-      .join(',')}}`;
-  return JSON.stringify(x) ?? 'null';
-}
-
-/**
- * プレイの id。前の試行（D-128）を除いた保存の中身（キーの並びはそろえる）から決めるので、再開しても同じ id になり、
- * 戻って違う行動で終えたら別の id になる。
+ * プレイの id。前の試行（D-128）を除いた保存の中身（キーの並びはそろえる。game の playContent）から決めるので、再開しても同じ id になり、
+ * 戻って違う行動で終えたら別の id になる。集計のサーバーの二重の送信の判定も同じ中身から作る（D-149）。
  */
 export function playId(save: SaveData): string {
-  const { previous: _, ...rest } = save;
-  return fnv1a(canonicalJson(rest));
+  return fnv1a(playContent(save));
 }
 
 /** 終わった状態から履歴の 1 件を作る。 */
