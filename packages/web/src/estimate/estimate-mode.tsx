@@ -87,10 +87,9 @@ import {
   type TaxView,
   type TemplateId,
 } from './model.ts';
+import { roundInt, usd } from '../format.ts';
 
-const usd = (n: number) =>
-  `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const jpy = (n: number) => `¥${Math.round(n).toLocaleString('ja-JP')}`;
+const jpy = (n: number) => `¥${roundInt(n).toLocaleString('ja-JP')}`;
 const money = (n: number, currency: string) =>
   currency === 'JPY' ? jpy(n) : usd(n);
 const qty = (n: number) =>
@@ -1085,7 +1084,7 @@ const SHAPES: readonly MarkShape[] = ['circle', 'square', 'diamond'];
 const pvLabel = (v: number) => (v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}K`);
 const usdTick = (v: number) => (v >= 1e3 ? `$${v / 1e3}K` : `$${v}`);
 const usdShort = (n: number) =>
-  `$${n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 2 })}`;
+  `$${n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 2, signDisplay: 'negative' })}`;
 
 /** 費用の曲線（D-74）。今の条件のまま PV だけを振った月額。系列の色は事業者、点の形は事業者の中のプランで固定。 */
 function CostCurve({

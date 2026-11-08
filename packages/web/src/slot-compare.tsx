@@ -15,6 +15,7 @@ import {
 import { createPortal } from 'react-dom';
 import { CostBars, type CostBar } from './charts.tsx';
 import { InfoIcon, PortalContainer } from './info.tsx';
+import { isZeroText, signedText } from './format.ts';
 
 /** 比較の中身（開いたときに load で引く）。 */
 export type SlotCompareData = {
@@ -41,10 +42,10 @@ export type SlotCompareProps = {
 export const money = (x: number) => {
   const a = Math.abs(x);
   const s = a < 10 ? a.toFixed(2) : Math.round(a).toLocaleString('en-US');
-  return `${x < 0 ? '−' : ''}$${s}`;
+  // 丸めると 0 になる負の値に − を付けない
+  return `${x < 0 && !isZeroText(s) ? '−' : ''}$${s}`;
 };
-const signed = (x: number) =>
-  Math.abs(x) < 0.005 ? '±$0' : `${x > 0 ? '+' : '−'}${money(Math.abs(x))}`;
+const signed = (x: number) => signedText(x, money);
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** 課金の形の列の文（部品のノードの明細）。 */

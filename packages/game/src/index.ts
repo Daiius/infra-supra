@@ -278,6 +278,12 @@ export {
   comparisonRows,
 } from './review.ts';
 export { type RetryHint, retryHintsOf } from './hints.ts';
+export {
+  isPolicyViolation,
+  type PolicyCause,
+  policyCauseOf,
+  premisePlanLabel,
+} from './policy-cause.ts';
 export { nextRandom } from './random.ts';
 export * from './rules.ts';
 export * from './trends.ts';
