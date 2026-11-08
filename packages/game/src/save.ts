@@ -77,11 +77,16 @@ export type SaveData = {
   legacyRouteDefaults?: true;
   /** 月ごとの行動（添字 0 が 1 か月目の終わりに選んだ行動）。 */
   turns: Action[][];
+  /**
+   * 前の試行（D-128）。「この月に戻る」で戻る直前まで進めていた月ごとの行動（turns と同じ形。始めたときの選択は今の保存と同じ）。
+   * 1 本だけ持ち、もう一度戻ると上書きする。無い保存は前の試行なしで読む（版は上げない）。
+   */
+  previous?: Action[][];
 };
 
 /** 始めたときの保存（まだ行動なし）。 */
 export function newSave(
-  input: Omit<SaveData, 'version' | 'turns' | 'framework'> & {
+  input: Omit<SaveData, 'version' | 'turns' | 'framework' | 'previous'> & {
     framework?: FrameworkId;
   },
 ): SaveData {
@@ -96,6 +101,34 @@ export function newSave(
 /** 月の終わりの行動を足した保存。 */
 export function withTurn(save: SaveData, actions: readonly Action[]): SaveData {
   return { ...save, turns: [...save.turns, [...actions]] };
+}
+
+/**
+ * 「この月に戻る」（D-128）: month か月目の行動を選ぶ直前（month か月目の報告を見た状態）に戻した保存。month か月目以降の行動を
+ * 切り落とし、戻る前の行動の列を前の試行として 1 本だけ残す（前からあった前の試行は上書き）。選べる month は 1〜turns の数
+ * （行動を選んだ月。今の月・終わった後の最後の月には戻れない）。
+ */
+export function rewindSave(save: SaveData, month: number): SaveData {
+  if (!Number.isInteger(month) || month < 1 || month > save.turns.length)
+    throw new RangeError(`戻れない月: ${month}`);
+  return {
+    ...save,
+    turns: save.turns.slice(0, month - 1),
+    previous: save.turns.map((t) => [...t]),
+  };
+}
+
+/** 前の試行を、始めたときの選択が同じ別の保存として取り出す（再生して推移を重ねる。D-128）。無ければ null。 */
+export function previousSave(save: SaveData): SaveData | null {
+  if (!save.previous) return null;
+  const { previous, ...rest } = save;
+  return { ...rest, turns: previous };
+}
+
+/** 前の試行を消した保存（D-128）。 */
+export function withoutPrevious(save: SaveData): SaveData {
+  const { previous: _, ...rest } = save;
+  return rest;
 }
 
 /**
@@ -145,6 +178,15 @@ function migrateActionFor(
 
 const isObject = (x: unknown): x is Record<string, unknown> =>
   typeof x === 'object' && x !== null && !Array.isArray(x);
+
+/** 月ごとの行動の列の形（中身は再生のときに確かめる）。 */
+const isTurns = (x: unknown): x is Action[][] =>
+  Array.isArray(x) &&
+  x.every(
+    (t) =>
+      Array.isArray(t) &&
+      t.every((a) => isObject(a) && typeof a.type === 'string'),
+  );
 
 /**
  * 保存の形を確かめる（読めない・版が違うなら null）。行動の中身は再生のときに確かめる
@@ -221,14 +263,11 @@ export function parseSave(raw: unknown): SaveData | null {
     !Number.isFinite(seed) ||
     typeof startDate !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
-    !Array.isArray(turns) ||
-    !turns.every(
-      (t) =>
-        Array.isArray(t) &&
-        t.every((a) => isObject(a) && typeof a.type === 'string'),
-    )
+    !isTurns(turns)
   )
     return null;
+  // 前の試行（D-128）は形が壊れていたら捨てる（今の試行は読める）
+  const previous = isTurns(raw.previous) ? raw.previous : undefined;
   return {
     version: SAVE_VERSION,
     scenarioId,
@@ -256,7 +295,10 @@ export function parseSave(raw: unknown): SaveData | null {
     raw.legacyRouteDefaults === true
       ? { legacyRouteDefaults: true as const }
       : {}),
-    turns: (turns as Action[][]).map((t) => t.map(migrateAction)),
+    turns: turns.map((t) => t.map(migrateAction)),
+    ...(previous
+      ? { previous: previous.map((t) => t.map(migrateAction)) }
+      : {}),
   };
 }
 
@@ -299,4 +341,14 @@ export function replaySave(save: SaveData): GameState {
   if (s.history.length !== save.turns.length + 1)
     throw new Error('再生した月数が保存と合わない');
   return s;
+}
+
+/**
+ * month か月目の行動を選ぶ直前まで再生する（D-128。month か月目の報告を見た状態）。month は 1〜turns の数 + 1
+ * （turns の数 + 1 は replaySave と同じ）。rewindSave(save, month) を再生した結果と同じ。
+ */
+export function replaySaveTo(save: SaveData, month: number): GameState {
+  if (!Number.isInteger(month) || month < 1 || month > save.turns.length + 1)
+    throw new RangeError(`再生できない月: ${month}`);
+  return replaySave({ ...save, turns: save.turns.slice(0, month - 1) });
 }
