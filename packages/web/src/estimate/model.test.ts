@@ -519,6 +519,15 @@ describe('フレームワーク・構成を替えたときの再検証の値（�
     expect(apply(r2, withParts(r2, { isrCache: 'kv' })).revalidateSec).toBe(
       300,
     );
+    // 構成を替えて戻ると、覚えていた R2 に合わせてオンデマンドの既定に戻る（OCL-3CBB2E6A）
+    const away = withStackRemembered(r2, 'sakura-vps-2gb', {});
+    const back = withStackRemembered(
+      away.input,
+      'cloudflare-vinext-paid',
+      away.memory,
+    ).input;
+    expect(back.parts.isrCache).toBe('r2');
+    expect(back.revalidateSec).toBe(0);
     // 選んだ値（1 時間）は部品を替えても残す
     const chosen = { ...r2, revalidateSec: 3600 };
     expect(
