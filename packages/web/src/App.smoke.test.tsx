@@ -754,6 +754,35 @@ describe('ゲームモードの画面', () => {
     expectGameScreen(1);
   });
 
+  it('W-68 始める画面: 「残りを既定にする」で始めた前回（部品の値が default）も、押すと構成・部品が選んだ状態で戻る（D-127）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Vercel Pro + Supabase Pro');
+    pickRadio('Next.js（App Router）');
+    fireEvent.click(screen.getByRole('button', { name: '残りを既定にする' }));
+    fireEvent.click(screen.getByRole('button', { name: '運営を始める' }));
+    await waitLoaded();
+    const saved = JSON.parse(localStorage.getItem(LAST_SETUP_KEY)!);
+    expect(saved.scenarios['article-community'].components.isrCache).toBe(
+      'default',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+    const tab = () =>
+      document.querySelector('[data-setup-tab-button="stack"]')!.textContent;
+    expect(tab()).toMatch(/Cloudflare Free \+ vinext/);
+    fireEvent.click(lastButton()!);
+    expect(tab()).toBe('① インフラの構成：Vercel Pro + Supabase Pro');
+    expect(document.querySelector('[data-missing-parts]')).toBeNull();
+    expect(
+      document.querySelector('[data-last-setup] [role="status"]'),
+    ).toBeNull();
+    expect(lastButton()!.disabled).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' })
+        .disabled,
+    ).toBe(false);
+  });
+
   it('W-67 始める画面: 前回の部品が今は選べなければ、その部品だけ未選択にして知らせる（D-127）', async () => {
     localStorage.setItem(
       LAST_SETUP_KEY,

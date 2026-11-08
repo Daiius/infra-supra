@@ -93,6 +93,33 @@ describe('前回の構成を戻す', () => {
     expect(sameAsRestored(sc, filled({ revalidateSec: 60 }), r)).toBe(false);
   });
 
+  it('既定のまま始めた部品（値が default）も選んだ状態で戻る（実機で保存された中身）', () => {
+    const store = parseLastSetups({
+      version: LAST_SETUP_VERSION,
+      scenarios: {
+        [sc.id]: {
+          stackId: 'vercel-supabase-pro',
+          framework: 'nextjs',
+          components: {
+            isrCache: 'default',
+            images: 'default',
+            api: 'same',
+            db: 'supabase',
+            cdnPlan: 'flat-rate',
+            dbBackup: 'default',
+            email: 'default',
+          },
+          comments: 0,
+        },
+      },
+    });
+    const last = store.scenarios[sc.id]!;
+    const r = restoreLastSetup(sc, last, { stack: 0 });
+    expect(r.notice).toBeNull();
+    expect(r.stack).toBe(indexOf('vercel-supabase-pro'));
+    expect(r.components).toEqual(last.components);
+  });
+
   it('今は選べない部品は未選択にして知らせる', () => {
     const entry = lastSetupOf(sc, filled());
     const r = restoreLastSetup(
