@@ -52,10 +52,10 @@ describe('遊び方と設定', () => {
     fireEvent.click(within(d).getByRole('button', { name: /2 ページ目/ }));
     expect(d.textContent).toContain('残りを既定にする');
     fireEvent.click(within(d).getByRole('button', { name: /5 ページ目/ }));
-    expect(d.textContent).toContain('手間 3 × 2 か月');
+    expect(d.textContent).toContain('毎月 手間 3 を 2 か月（合計 6）');
     fireEvent.click(within(d).getByRole('button', { name: /6 ページ目/ }));
     expect(d.textContent).toContain('✗ 上限に達した');
-    expect(d.textContent).toContain('止まる上限 +1');
+    expect(d.textContent).toContain('止まる上限に達する数 +1');
     fireEvent.click(within(d).getByRole('button', { name: /7 ページ目/ }));
     expect(localStorage.getItem(HOWTO_SEEN_KEY)).toBeNull();
     fireEvent.click(within(d).getByRole('button', { name: '始める' }));

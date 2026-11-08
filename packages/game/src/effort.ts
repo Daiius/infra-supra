@@ -10,6 +10,7 @@ import {
   newAccountsBy,
 } from './accounts.ts';
 import { baseSsrCpuMsOf, frameworkDefaults, scenarioOf } from './core.ts';
+import { effortSpanText } from './format.ts';
 import { isDataSwap, selfBackupOf, selfHostedOf, STACKS } from './stacks.ts';
 import type { ComponentSwap, GameState, Migration } from './state.ts';
 
@@ -243,7 +244,7 @@ export function componentEffortLabel(
   ];
   return isDataSwap(slot)
     ? [
-        `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月${setup ? ` + 手間 ${setup}` : ''}`,
+        `${effortSpanText('手間', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)}${setup ? ` + 手間 ${setup}` : ''}`,
         '期間中は新旧両方の費用',
         ...cross,
       ]

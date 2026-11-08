@@ -3,7 +3,7 @@ import type { Effect, EventDef, Scenario } from './scenario.ts';
 import { SLOT_LABELS } from 'catalog';
 import type { PlatformPremise } from 'estimator';
 import { scenarioOf } from './core.ts';
-import { fmtFactor } from './format.ts';
+import { effortSpanText, fmtFactor } from './format.ts';
 import { REQUIREMENT_LABEL } from './requirements.ts';
 import { isOnDemand, ON_DEMAND_REVALIDATE } from './settings.ts';
 import { componentLabel, imagesOf } from './stacks.ts';
@@ -141,8 +141,10 @@ export function describeEffect(e: Effect): string {
       return `開発の手間 +${e.add} / 月`;
     case 'interrupt':
       if (e.featureWork)
-        return `機能の追加の作業 ${e.points} × ${e.months} か月（翌月から。その月の機能開発に数える${e.unlessOnDemand ? '。再検証がすでにオンデマンドなら不要' : ''}）`;
-      return `対応の手間 ${e.points} × ${e.months} か月（翌月から）`;
+        return effortSpanText('機能の追加の作業', e.points, e.months, [
+          `翌月から。その月の機能開発に数える${e.unlessOnDemand ? '。再検証がすでにオンデマンドなら不要' : ''}`,
+        ]);
+      return effortSpanText('対応の手間', e.points, e.months, ['翌月から']);
     case 'feature':
       return `機能開発 +${e.points}`;
     case 'growth':
@@ -187,7 +189,7 @@ export function acceptSummary(
   if (bonus > 0)
     gains.push(
       work
-        ? `機能開発 +${bonus}（作業 ${work.points} × ${work.months} か月も機能開発に数える）`
+        ? `機能開発 +${bonus}（作業の手間${work.months > 1 ? ' 合計' : ''} ${work.points * work.months} も機能開発に数える）`
         : `機能開発 +${bonus}`,
     );
   for (const e of effects) {
@@ -208,7 +210,9 @@ export function acceptSummary(
       case 'interrupt':
         effort.push(
           !e.featureWork
-            ? `対応の手間 ${e.points} × ${e.months} か月（機能開発に数えない）`
+            ? effortSpanText('対応の手間', e.points, e.months, [
+                '機能開発に数えない',
+              ])
             : e.months === 1
               ? `来月、行動に使える手間が ${e.points} 減ります`
               : `その間、行動に使える手間が ${e.points} 減ります（${e.months} か月）`,

@@ -2,6 +2,7 @@
 // Cloudflare の静的 + さくらの VPS の API（自前運用の維持・障害が部品で VPS を使うときにも効く）。
 import { describe, expect, it } from 'vitest';
 import { meetsReference } from './reference.test-helpers.ts';
+import { effortSpanText } from './format.ts';
 import {
   addedAccounts,
   applyAction,
@@ -151,7 +152,7 @@ describe('Cloudflare の静的 + さくらの VPS の API', () => {
   it('移し替えの途中も新しい VPS の維持がかかり、手間の見込みにアカウントの設定が付く', () => {
     const s = playMonth(game(CF_PAID, 'vite-spa'));
     expect(componentEffortLabel('api', s, 'sakura-vps-2gb')).toEqual([
-      `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月 + 手間 ${EFFORT.accountSetup}`,
+      `${effortSpanText('手間', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)} + 手間 ${EFFORT.accountSetup}`,
       '期間中は新旧両方の費用',
       `さくらのクラウド のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep}）`,
       `自前運用になる（毎月の維持 ${article.effort.selfHostedUpkeep}・自前の障害 月 ${Math.round(article.incidents.selfHostedChancePerMonth * 100)}%）`,

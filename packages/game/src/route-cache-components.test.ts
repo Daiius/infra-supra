@@ -152,7 +152,7 @@ describe('数え方（D-111）', () => {
     const p = cc.routes[1]!;
     const q = isr.routes[1]!;
     expect(p.rendering).toBe('ssr');
-    expect(p.island).toEqual({ label: '動的な穴' });
+    expect(p.island).toEqual({ label: '閲覧ごとに描く部分' });
     expect(p.processing.cpuMs).toBeCloseTo(15 * CACHE_COMPONENTS.dynamicShare);
     expect(p.processing.queries).toBeCloseTo(
       q.processing.queries * (1 - CACHE_COMPONENTS.cachedQueryShare),

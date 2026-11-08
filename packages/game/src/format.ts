@@ -25,3 +25,21 @@ export const commas = (x: number) =>
     .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 export const usd = (x: number) => `$${commas(x)}`;
+
+/**
+ * 何か月かにわたる手間の表示（D-160）: 「毎月 手間 6 を 2 か月（合計 12）」。1 か月なら「手間 4（1 か月）」。
+ * notes は括弧の中に「・」でつないで添える（「翌月から」など）。
+ */
+export function effortSpanText(
+  label: string,
+  points: number,
+  months: number,
+  notes: readonly string[] = [],
+): string {
+  const head =
+    months > 1
+      ? `毎月 ${label} ${points} を ${months} か月`
+      : `${label} ${points}`;
+  const paren = [months > 1 ? `合計 ${points * months}` : '1 か月', ...notes];
+  return `${head}（${paren.join('・')}）`;
+}

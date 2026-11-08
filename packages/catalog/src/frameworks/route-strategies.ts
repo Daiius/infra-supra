@@ -108,14 +108,14 @@ export const ROUTE_STRATEGIES: Readonly<
   'server-island': {
     id: 'server-island',
     code: 'S6',
-    label: '枠 + サーバーの島',
-    long: '枠は静的かキャッシュです。個人化した部分だけを別のリクエストでサーバーが描きます（Astro の Server Islands・Next.js の PPR）',
+    label: '枠 + 人ごとの部分をサーバーで',
+    long: '枠はキャッシュ（か静的）にし、人ごとの部分だけを閲覧ごとにサーバーで描きます（Astro の Server Islands・Next.js の PPR）',
     personalOk: true,
     why: {
       public:
         '全員に同じ部分は使い回し、動く部分だけをサーバーが描きます。SNS のカードは HTML に入ります',
       personal:
-        '枠は使い回し、人ごとに違う部分（島）だけを閲覧ごとにサーバーが描きます。1 リクエストの CPU は島の分だけで、枠の HTML（メタタグ）はそのまま返ります',
+        '枠は使い回し、人ごとに違う部分だけを閲覧ごとにサーバーが描きます。1 リクエストの CPU は人ごとの部分の分だけで、枠の HTML（メタタグ）はそのまま返ります',
     },
     modeled: true,
   },
@@ -286,7 +286,7 @@ export const CACHE_COMPONENTS = {
   dynamicShare: 0.4,
   cachedQueryShare: 1 / 3,
   /** 1 リクエストの CPU の内訳（D-99）の文での呼び名。 */
-  holeLabel: '動的な穴',
+  holeLabel: '閲覧ごとに描く部分',
 } as const;
 
 /**
