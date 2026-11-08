@@ -335,8 +335,11 @@ export function readEventPages(dialog: HTMLElement): string[] {
   const pages: string[] = [];
   for (let i = 0; i < 50; i++) {
     pages.push(dialog.querySelector('[data-events-page]')!.textContent!);
-    const next = within(dialog).queryByRole('button', { name: /^次へ/ });
-    if (!next) break;
+    // 1 件だけならナビは無い。最後のページでは「次へ」は押せない（位置を動かさないので消さない）
+    const next = within(dialog).queryByRole<HTMLButtonElement>('button', {
+      name: /^次へ/,
+    });
+    if (!next || next.disabled) break;
     fireEvent.click(next);
   }
   return pages;

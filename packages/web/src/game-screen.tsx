@@ -385,9 +385,10 @@ function VictoryCelebration({
 }
 
 /**
- * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつ出し、「前へ」「次へ」（左右の矢印キーでも）で移る。
- * `<dialog>` の showModal でフォーカスを閉じ込め、Esc・×・「あとで見る」・最後のページの「閉じる」で閉じる。
- * 選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
+ * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつ出し、見出しの下のナビ（「← 前へ」「2 / 4」「次へ →」と、
+ * 件数ぶんの印のステップ）で移る（左右の矢印キーでも）。ナビは本文の上に置き、ページの高さが変わっても動かない。
+ * 本文が長いときは本文だけをスクロールする。`<dialog>` の showModal でフォーカスを閉じ込め、
+ * Esc・×・「あとで見る」・最後のページの「閉じる」で閉じる。選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
  */
 function EventsDialog({
   report: r,
@@ -399,7 +400,9 @@ function EventsDialog({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const primary = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
   useEffect(() => {
     const d = ref.current;
@@ -413,11 +416,20 @@ function EventsDialog({
   const n = r.events.length;
   const last = page >= n - 1;
   const e = r.events[Math.min(page, n - 1)]!;
-  // ページを移ったら主ボタン（次へ・閉じる）へフォーカスを移す（最後のページで「次へ」が消えてもフォーカスを失わない）
+  // ページを移ったら本文を先頭へ戻す。押したボタンが端で押せなくなったら、次へ（最後のページでは「閉じる」）へフォーカスを移す
   const moved = useRef(false);
   useEffect(() => {
-    if (moved.current) primary.current?.focus();
-  }, [page]);
+    if (!moved.current) return;
+    bodyRef.current?.scrollTo?.({ top: 0 });
+    const a = document.activeElement;
+    if (
+      a instanceof HTMLButtonElement &&
+      !a.disabled &&
+      ref.current?.contains(a)
+    )
+      return;
+    (last ? closeRef : nextRef).current?.focus();
+  }, [page, last]);
   const go = (to: number) => {
     if (to < 0 || to >= n) return;
     moved.current = true;
@@ -434,8 +446,9 @@ function EventsDialog({
         else if (k.key === 'ArrowLeft') go(page - 1);
       }}
     >
-      <div className="modal-box w-11/12 max-w-2xl px-3 sm:px-6">
-        <div className="flex items-start justify-between gap-2">
+      <div className="modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6">
+        {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
+        <div className="flex shrink-0 items-start justify-between gap-2">
           <h2 id="events-dialog-title" className="text-lg font-bold">
             {r.month} か月目の出来事（{n} 件）
           </h2>
@@ -448,15 +461,66 @@ function EventsDialog({
             </button>
           </form>
         </div>
-        {/* 位置の表示は読み上げにも伝える（ページを移るたびに読む） */}
+        {n > 1 && (
+          <nav
+            className="mt-3 shrink-0 space-y-2 border-b border-base-300 pb-3"
+            aria-label="出来事のページ"
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={page === 0}
+                onClick={() => go(page - 1)}
+              >
+                ← 前へ
+              </button>
+              {/* 位置の表示は読み上げにも伝える（ページを移るたびに読む） */}
+              <span
+                className="min-w-12 text-center text-sm tabular-nums"
+                aria-live="polite"
+                data-events-position
+              >
+                {page + 1} / {n}
+              </span>
+              <button
+                ref={nextRef}
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={last}
+                autoFocus
+                onClick={() => go(page + 1)}
+              >
+                次へ →
+              </button>
+            </div>
+            {/* 件数ぶんの印（出来事の印の記号と色）。押すとそのページへ移る */}
+            <ol className="flex flex-wrap gap-1.5" data-events-steps>
+              {r.events.map((x, i) => {
+                const b = eventBadge(x);
+                return (
+                  <li key={`${x.id}:${x.phase}`}>
+                    <button
+                      type="button"
+                      className={`badge badge-sm cursor-pointer ${b.cls} ${i === page ? 'ring-2 ring-base-content ring-offset-1 ring-offset-base-100' : 'opacity-60'}`}
+                      aria-label={`${i + 1} 件目: ${b.label}: ${x.title}`}
+                      aria-current={i === page ? 'step' : undefined}
+                      title={x.title}
+                      onClick={() => go(i)}
+                    >
+                      {b.label.split(' ')[0]}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        )}
         <div
-          className="mt-1 text-sm tabular-nums opacity-70"
-          aria-live="polite"
-          data-events-position
+          ref={bodyRef}
+          className="mt-3 min-h-0 flex-1 overflow-y-auto"
+          data-events-page
         >
-          {page + 1} / {n}
-        </div>
-        <div className="mt-2" data-events-page>
           <EventCard key={`${e.id}:${e.phase}`} event={e} />
           {e.phase === 'proposal' && (
             <div className="mt-2 text-sm opacity-80">
@@ -464,44 +528,23 @@ function EventsDialog({
             </div>
           )}
         </div>
-        <div className="modal-action flex-wrap items-center gap-2">
-          {!last && (
-            <form method="dialog" className="mr-auto">
-              <button className="btn btn-ghost btn-sm">
-                あとで見る（閉じる）
-              </button>
-            </form>
-          )}
-          {n > 1 && (
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={page === 0}
-              onClick={() => go(page - 1)}
-            >
-              ← 前へ
-            </button>
-          )}
+        <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
           {last ? (
             <form method="dialog">
               <button
-                ref={primary}
+                ref={closeRef}
                 className="btn btn-primary btn-sm"
-                autoFocus
+                autoFocus={n === 1}
               >
                 閉じる
               </button>
             </form>
           ) : (
-            <button
-              ref={primary}
-              type="button"
-              className="btn btn-primary btn-sm"
-              autoFocus
-              onClick={() => go(page + 1)}
-            >
-              次へ →
-            </button>
+            <form method="dialog">
+              <button className="btn btn-ghost btn-sm">
+                あとで見る（閉じる）
+              </button>
+            </form>
           )}
         </div>
       </div>

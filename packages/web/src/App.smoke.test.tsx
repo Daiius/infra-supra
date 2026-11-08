@@ -2225,7 +2225,7 @@ describe('ゲームモードの画面', () => {
     expect(legend().some((t) => t!.startsWith('行動0'))).toBe(false);
   });
 
-  it('W-58 出来事のある月は出来事のダイアログが開き、1 件ずつ前後に移れて、最後のページで「閉じる」が出る（D-126）', async () => {
+  it('W-61 出来事のある月は出来事のダイアログが開き、1 件ずつ前後に移れて、最後のページで「閉じる」が出る（D-126）', async () => {
     // シード 42 は 6 か月目に 3 件（話題・個人向けのページの提案・料金の改定）
     const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
       (x) => x.id === 'p-personal',
@@ -2250,6 +2250,22 @@ describe('ゲームモードの画面', () => {
     expect(eventPosition(dialog)).toBe(`1 / ${n}`);
     const page = () => dialog.querySelector('[data-events-page]')!.textContent!;
     const first = page();
+    // ナビ（前へ・位置・次へ・件数ぶんの印）は本文の上にあり、× とは別の行（D-126）
+    const nav = within(dialog).getByRole('navigation', {
+      name: '出来事のページ',
+    });
+    const body = dialog.querySelector('[data-events-page]')!;
+    expect(
+      nav.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      nav.contains(
+        within(dialog).getByRole('button', { name: 'ダイアログを閉じる' }),
+      ),
+    ).toBe(false);
+    const steps = within(nav).getAllByRole('button', { name: /^\d+ 件目: / });
+    expect(steps).toHaveLength(n);
+    expect(steps[0]!.getAttribute('aria-current')).toBe('step');
     // 1 ページ目: 前へは押せず、次へ・あとで見る・× がある。最後でないので「閉じる」は無い
     const prev = () =>
       within(dialog).getByRole<HTMLButtonElement>('button', {
@@ -2265,6 +2281,17 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(prev());
     expect(eventPosition(dialog)).toBe(`1 / ${n}`);
     expect(page()).toBe(first);
+    // 件数ぶんの印を押すとそのページへ移る（印は出来事の印と同じ記号・色）
+    const proposalStep = steps.find((b) =>
+      b.getAttribute('aria-label')!.includes('◆ 提案'),
+    )!;
+    expect(proposalStep.textContent).toBe('◆');
+    expect(proposalStep.classList.contains('badge-primary')).toBe(true);
+    fireEvent.click(proposalStep);
+    expect(page()).toContain('会員向けの個人化');
+    expect(proposalStep.getAttribute('aria-current')).toBe('step');
+    fireEvent.click(steps[0]!);
+    expect(eventPosition(dialog)).toBe(`1 / ${n}`);
     // 左右の矢印キーでも移る
     fireEvent.keyDown(dialog, { key: 'ArrowRight' });
     expect(eventPosition(dialog)).toBe(`2 / ${n}`);
@@ -2277,9 +2304,12 @@ describe('ゲームモードの画面', () => {
     expect(proposal).toContain('会員向けの個人化');
     expect(proposal).toContain('行動の欄で受けるか断るかを選ぶ');
     expect(pages.some((t) => t.includes('⚡ 今月発生'))).toBe(true);
-    // 最後のページ: 「閉じる」が主ボタンで、次へ・あとで見るは無い
+    // 最後のページ: 「閉じる」が主ボタン。次へは位置を動かさず押せなくなり、あとで見るは無い
     expect(eventPosition(dialog)).toBe(`${n} / ${n}`);
-    expect(within(dialog).queryByRole('button', { name: /^次へ/ })).toBeNull();
+    expect(
+      within(dialog).getByRole<HTMLButtonElement>('button', { name: /^次へ/ })
+        .disabled,
+    ).toBe(true);
     expect(
       within(dialog).queryByRole('button', { name: 'あとで見る（閉じる）' }),
     ).toBeNull();
@@ -2297,7 +2327,7 @@ describe('ゲームモードの画面', () => {
     closeEventsDialog(again);
   });
 
-  it('W-59 出来事のダイアログは途中のページでも閉じられ、同じ月では再び自動では開かない（D-126）', async () => {
+  it('W-62 出来事のダイアログは途中のページでも閉じられ、同じ月では再び自動では開かない（D-126）', async () => {
     const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
       (x) => x.id === 'p-personal',
     )!.month;
@@ -2339,7 +2369,7 @@ describe('ゲームモードの画面', () => {
     });
   });
 
-  it('W-60 行動の欄の機能追加の提案の選択肢に、出来事と同じ「◆ 提案」の印と primary の枠が付く（D-126）', async () => {
+  it('W-63 行動の欄の機能追加の提案の選択肢に、出来事と同じ「◆ 提案」の印と primary の枠が付く（D-126）', async () => {
     const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
       (x) => x.id === 'p-personal',
     )!.month;
