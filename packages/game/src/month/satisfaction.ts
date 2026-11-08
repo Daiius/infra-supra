@@ -40,6 +40,9 @@ export function noSocialCards(
 export const EMAIL_UNDELIVERED_REASON =
   'メールの送信の上限に当たり、登録の確認・パスワードの再設定・通知のメールが届かない日があった';
 
+/** 理由の文に出す数（浮動小数の誤差を見せない。小数 1 桁まで）。 */
+const num = (x: number) => Number(x.toFixed(1));
+
 /**
  * 当たったメールの送信の前提から、判定の日に届かなかったメールの割合（上限を超えた分 = 1 − 上限 / 通数。最も大きいもの。D-117）。
  * 割合の分からない前提（ratio が無い）は全部届かないとみる。
@@ -115,10 +118,10 @@ export function stageReasons(
     out.speed = c.throttling.length
       ? `前提に当たった: ${c.throttling[0]!.text}`
       : (c.spaFramework ?? c.spa)
-        ? `重さ ${c.heaviness}（SPA の初回表示・API ${Number(c.ssrCpuMs.toFixed(1))} ms・画像 ${c.settings.imageKB} kB・${c.pageWeight}）`
+        ? `重さ ${c.heaviness}（SPA の初回表示・API ${num(c.ssrCpuMs)} ms・画像 ${num(c.settings.imageKB)} kB・${c.pageWeight}）`
         : c.apiOnly
-          ? `重さ ${c.heaviness}（API を待つブラウザの描画 ${c.ssrCpuMs} ms 相当・画像 ${c.settings.imageKB} kB・${c.pageWeight}）`
-          : `重さ ${c.heaviness}（SSR ${c.ssrCpuMs} ms・画像 ${c.settings.imageKB} kB・${c.pageWeight}）`;
+          ? `重さ ${c.heaviness}（API を待つブラウザの描画 ${num(c.ssrCpuMs)} ms 相当・画像 ${num(c.settings.imageKB)} kB・${c.pageWeight}）`
+          : `重さ ${c.heaviness}（SSR ${num(c.ssrCpuMs)} ms・画像 ${num(c.settings.imageKB)} kB・${c.pageWeight}）`;
   if (
     stages.speed !== 'good' &&
     c.coldShare !== undefined &&
@@ -126,7 +129,7 @@ export function stageReasons(
   )
     out.speed = `${out.speed}・閲覧の ${Math.round(c.coldShare * 100)}% がコンテナの冷えた起動を待つ（最小インスタンス 0）`;
   if (stages.quality !== 'good')
-    out.quality = c.qualityReason ?? `画像 ${c.settings.imageKB} kB`;
+    out.quality = c.qualityReason ?? `画像 ${num(c.settings.imageKB)} kB`;
   if (stages.freshness !== 'good')
     out.freshness = [
       !c.uncached &&
