@@ -28,6 +28,7 @@
 | [prd/12-external-scenarios-and-ranking.md](./prd/12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod・ファイル / URL の読み込み）と、再生による検証のランキング（**下書き・未実装・未決 ES-01〜16**） |
 | [prd/13-route-strategies.md](./prd/13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット・`applyRouteStrategies`（段 0〜5 は実装済み。D-106〜D-109。RS の残りは未決） |
 | [prd/14-composable-parts.md](./prd/14-composable-parts.md) | 部品を事業者をまたいで組む: 役割と接続の口・接続の規則（つなげない組・中継・転送の課金）・公式の文書の調査（**決定 D-114**。段 1（規則への移し替え）・段 2（Vercel × DynamoDB / Aurora）を実装。後で検討する候補: リージョン・接続の数の上限） |
+| [prd/15-results-and-stats.md](./prd/15-results-and-stats.md) | ゲームの結果の振り返りと匿名の集計（合否をやめ、完走したら所持金・満足度の平均・機能開発の累計・ギリギリを攻めるの 4 軸の分布の中での位置で振り返る。終わったプレイを匿名で自動に送り、さくらの VPS の Hono RPC が再生して照合する。**決定 D-131〜D-138・未実装**。段 1 ローカル・段 2 サーバー・段 3 ヒストグラム。prd/07 の合否と prd/12 §5 のランキングを置き換え） |
 
 > 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)（未決の一覧は末尾の「未決」の節）
 

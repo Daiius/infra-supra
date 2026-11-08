@@ -40,7 +40,7 @@
   - 料金データ（catalog）: 下の事業者の公式の料金表から、出典 URL と取得日つき（P1-10）。明細の表示名（D-75）・日本の消費税の扱い（D-76）。
   - ゲームモード（game・web）: GD-1〜GD-5（[07](./07-game-design.md) §8）。シナリオは記事コミュニティと受託の業務アプリ（[09](./09-scenario-contract.md)）。始める画面は シナリオ（ページと要件の見取り図）→ ① インフラの構成（構成図つきのカルーセル）→ ② フレームワーク（カードのページの欄でページの描き方も選ぶ。構成に載せられないものは選べない）の順に選び（部品は ① の構成のカードの中のチップと構成図の箱、再検証の間隔などの描き方の設定は ② のカードの記事のページの行で選ぶ。D-116・D-119）、1 か月目の費用の見込みを出す（D-45・D-72・D-102・D-105・D-107・D-112・D-113・D-116。[13](./13-route-strategies.md) §5b・§5f）。
   - 見積モード（web の `?mode=estimate`）: 明細・前提・構成の比較・費用の曲線・席・税込の目安・構成図・ページの描き方（D-73〜D-76・D-105・D-107。今の形は [08](./08-roadmap.md)「見積モードの今の形」）。
-- **計画中**: ページごとの描き方の段 4・5（[13](./13-route-strategies.md)・RS の残りは未決）、見積の JSON の保存・料金の改定の予告・判断ポイントの境目の値（D-73・D-74 の残し）、見積のスナップショットと golden（P1-9 の残り）、外部のシナリオとランキング（[12](./12-external-scenarios-and-ranking.md)・未決）、部品を事業者をまたいで組む（[14](./14-composable-parts.md)・D-114・未実装）、アーキテクチャエディタ（Phase 5）。
+- **計画中**: ページごとの描き方の段 4・5（[13](./13-route-strategies.md)・RS の残りは未決）、見積の JSON の保存・料金の改定の予告・判断ポイントの境目の値（D-73・D-74 の残し）、見積のスナップショットと golden（P1-9 の残り）、外部のシナリオとランキング（[12](./12-external-scenarios-and-ranking.md)・未決。ランキングの側は [15](./15-results-and-stats.md) の匿名の集計で置き換え）、ゲームの結果の振り返りと匿名の集計（[15](./15-results-and-stats.md)・D-131〜D-138・未実装）、部品を事業者をまたいで組む（[14](./14-composable-parts.md)・D-114・未実装）、アーキテクチャエディタ（Phase 5）。
 - **対象の事業者と構成**（catalog の `src/providers/`・`src/stacks/`）:
 
   | 事業者 | 構成・役割 | 決定 |
@@ -78,8 +78,9 @@
 | [12-external-scenarios-and-ranking.md](./12-external-scenarios-and-ranking.md) | 外部のシナリオ（JSON + zod）と再生による検証のランキング。**下書き・未実装・未決 ES-01〜16** |
 | [13-route-strategies.md](./13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット。段 0〜5 は実装済み（D-106〜D-109）、RS の残りは未決 |
 | [14-composable-parts.md](./14-composable-parts.md) | 部品を事業者をまたいで組む（役割と接続の口・接続の規則）。決定 D-114・未実装（段 2 は Vercel × DynamoDB / Aurora） |
+| [15-results-and-stats.md](./15-results-and-stats.md) | ゲームの結果の振り返り（合否をやめ、完走したら 4 軸の分布の中での位置で振り返る）と匿名の集計（さくらの VPS の Hono RPC・既存の Postgres・再生で照合）。決定 D-131〜D-138・未実装 |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |
-| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-107）と、末尾に未決の論点の一覧 |
+| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-138）と、末尾に未決の論点の一覧 |
 
 ## 用語
 

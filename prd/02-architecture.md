@@ -23,6 +23,7 @@
   テストでは架空の PriceBook を渡せる。
 - **catalog → estimator**（型とスキーマだけを使う）。catalog のテストは「全データが estimator のスキーマを通る」ことを確かめる。
 - **game → catalog・estimator**。game は料金を計算しない。catalog の `composeStack` で構成を組み、estimator の Bill をそのまま使う（企画書 §11.1）。
+- **集計のサーバー（D-135・未実装。仮に `packages/stats`）→ game → catalog・estimator。** web はサーバーの型（Hono RPC の `AppType`）だけを devDependencies で読み、実行時にサーバーのコードを含めない（[15](./15-results-and-stats.md) §5）。
 - **estimator・catalog は game を知らない。** 見積ツールを単独で切り出すときは web から game を外す。
   ただし今の見積モードは、ゲームと数え方をそろえるため部品の規則と Workload の組み立てを game の `estimate-mode.ts` から使っている。切り出すには、それを catalog（か新しいパッケージ）へ移す必要がある（D-73）。
 
@@ -53,6 +54,7 @@ estimator・catalog・game は `lib: ["esnext"]` / `types: []` でビルドし�
 | 言語・構成 | TypeScript の pnpm monorepo | 企画書 §7.1。seseraki と同じ型 |
 | テスト | vitest（+ 性質ベースのテストに fast-check） | 単調性・保存則などを網羅的に確かめる（[05](./05-test-strategy.md)）。fast-check はまだ入れていない（gap） |
 | スキーマ | zod | 保存データ・料金データ・UI 入力の検証を 1 か所にまとめる |
+| 集計のサーバー（D-135・未実装） | **Hono RPC**（さくらの VPS・node）+ 既存の Postgres（drizzle） | 終わったプレイの匿名の集計だけ。ゲームと見積の計算はブラウザのまま。構成は seseraki に倣う（[15](./15-results-and-stats.md) §5） |
 | フロント | React 19 + **Vite**（Next.js は使わない）+ TanStack Router + Tailwind v4 + daisyUI | MVP はサーバーが要らない（計算はブラウザ、保存はローカル）。静的配信だけで動く。**今はルーターを入れていない**（画面は 2 つでタブで切り替え。画面が増えたら入れる。D-73） |
 | 最適化 | **React Compiler**（`babel-plugin-react-compiler` 1.0。`@vitejs/plugin-react` 6 の `reactCompilerPreset` を `@rolldown/plugin-babel` 0.2 + `@babel/core` 7 で掛ける） | 描き直しの抑制を手書きの `useMemo`・`useCallback` に頼らない。入れ方は [react.dev の Installation](https://react.dev/learn/react-compiler/installation) の Vite の節。plugin-react 6 は Babel を内蔵しないので Babel は別の plugin。vitest（jsdom）も同じ変換を通る。手書きの memo を外すのは後で |
 | グラフ | 費用曲線は Recharts か visx（Phase 2 で決める）、構成図は React Flow（Phase 5） | 企画書 §7.1。**今は自前の SVG**（`packages/web/src/charts.tsx` の `LineChart`・`LogCurveChart`。D-74）でライブラリは入れていない |
@@ -69,6 +71,8 @@ Vite を選んだ判断は [_grilling/decisions.md](./_grilling/decisions.md) D-
 
 ## 5. 永続化
 
+> ⚠ **D-134・D-135 で例外ができた**（[15](./15-results-and-stats.md)）: 終わったプレイ（始めたときの選択・行動の列・4 軸の値・終わり方）を匿名でサーバー（さくらの VPS の Hono RPC・既存の Postgres）に送る。サーバーなしで遊べる前提は変えない（送れなくてもゲームは続き、比較は手元の履歴に戻る）。途中の保存は今までどおりローカルだけ。
+
 - MVP は**ローカル保存**（localStorage / IndexedDB）と **JSON の書き出し・読み込み**。
 - 保存形式は zod スキーマに `schemaVersion` を持たせ、読み込み時に移行関数を通す。
 - 見積は §1 の流れの入力と PriceBook の版を保存し、結果は再計算で復元する（結果のキャッシュも持つが正は入力）。
@@ -79,3 +83,4 @@ Vite を選んだ判断は [_grilling/decisions.md](./_grilling/decisions.md) D-
 
 静的配信だけで動くので、このアプリ自体を MVP の比較対象のどれかに載せ、
 **自分の見積と実際の請求を突き合わせる**ことができる（見積ツールの検証に使える）。デプロイ先は未決。
+⚠ D-135 で、画面は Vercel、集計のサーバーはさくらの VPS に置くことにした（両方の版は手動でそろえる。[15](./15-results-and-stats.md) §5）。
