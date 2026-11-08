@@ -381,7 +381,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         hint: {
           kind: 'slow',
           what: `${monthsText(slow.map((r) => r.month))}、速さが悪く PV の伸びが下がりました（1 か月あたり約 ${Math.round(pen * 100)}%・合わせて約 ${Math.round(cut * 100)}%。${(slow[0]!.satisfaction.reasons.speed ?? '').replace(/。速さが悪く PV の伸び.*$/, '')}）`,
-          next: '速さを「悪い」から戻す: 画像を原本のまま配っていないか（1 ページの通信量）、SSR の重さ、ピークに詰まる前提を見直しましょう',
+          next: '速さを「悪い」から戻す: 画像を原本のまま配っていないか（1 ページの通信量）、SSR の重さ、ピークに詰まる上限を見直しましょう',
         },
         // 合わせて 1 割未満なら補足（100 台）。大きいときは未達の原因として並べる
         score:

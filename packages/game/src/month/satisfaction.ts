@@ -116,7 +116,7 @@ export function stageReasons(
         : '乗り換えの切り替え';
   if (stages.speed !== 'good')
     out.speed = c.throttling.length
-      ? `前提に当たった: ${c.throttling[0]!.text}`
+      ? `上限に達しました: ${c.throttling[0]!.text}`
       : (c.spaFramework ?? c.spa)
         ? `重さ ${c.heaviness}（SPA の初回表示・API ${num(c.ssrCpuMs)} ms・画像 ${num(c.settings.imageKB)} kB・${c.pageWeight}）`
         : c.apiOnly

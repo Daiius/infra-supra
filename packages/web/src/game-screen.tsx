@@ -906,7 +906,7 @@ function MonthCard({
         </div>
         {r.premises.length > 0 && (
           <div>
-            <h3 className="mb-1 font-bold">プラットフォームの前提</h3>
+            <h3 className="mb-1 font-bold">プラットフォームの上限・制限</h3>
             <ul className="space-y-1">
               {r.premises.map((p) => (
                 <PremiseRow key={p.id} p={p} />
@@ -1233,7 +1233,7 @@ function EventCard({ event: e }: { event: MonthEvent }) {
               <span
                 className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
               >
-                {p.hit ? '✗ 当たった' : '○ 当たりうる前提'}
+                {p.hit ? '✗ 上限に達した' : '○ 達しうる上限'}
               </span>
               {p.text}
               {p.ratio !== undefined && (
@@ -2350,7 +2350,7 @@ function ComponentsSection({
                         <span
                           className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
                         >
-                          {p.hit ? '✗ 当たる' : '○ 当たりうる前提'}
+                          {p.hit ? '✗ 上限に達する' : '○ 達しうる上限'}
                         </span>
                         {p.text}
                         {p.ratio !== undefined && (
@@ -2610,12 +2610,12 @@ function Result({
         </details>
         <details className="collapse collapse-arrow bg-base-200">
           <summary className="collapse-title font-bold">
-            振り返り: 当たった前提・満足度が悪かった月・手間の内訳
+            振り返り: 達した上限・満足度が悪かった月・手間の内訳
           </summary>
           <div className="collapse-content">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <h3 className="mb-1 font-bold">当たった前提・近づいた前提</h3>
+                <h3 className="mb-1 font-bold">達した上限・近づいた上限</h3>
                 {reflection.premises.length ? (
                   <ul className="space-y-1 text-sm">
                     {reflection.premises.map((p) => (
@@ -2623,7 +2623,7 @@ function Result({
                         <span
                           className={`badge badge-sm mr-1 ${p.hit ? 'badge-error' : 'badge-info'}`}
                         >
-                          {p.month} か月目・{p.hit ? '当たった' : '近づいた'}
+                          {p.month} か月目・{p.hit ? '達した' : '近づいた'}
                         </span>
                         {p.text}
                         {p.action && (
@@ -2640,7 +2640,7 @@ function Result({
                 {reflection.surprises.length > 0 && (
                   <>
                     <h3 className="mt-3 mb-1 font-bold">
-                      見込みより早く超えた前提と、その理由
+                      見込みより早く超えた上限と、その理由
                     </h3>
                     <ul className="space-y-1 text-sm">
                       {reflection.surprises.map((x) => (
@@ -3112,7 +3112,7 @@ function Trends({
         {trends.length > 0 && (
           <div>
             <h3 className="mb-2 text-sm font-semibold">
-              前提の使用率（境目 = 100%）
+              上限の使用率（境目 = 100%）
             </h3>
             <div className="grid gap-3 md:grid-cols-2">
               {trends.map((t) => (

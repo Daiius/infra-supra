@@ -108,7 +108,7 @@ export function revenueOf(
     revenue *= 1 - loss.block;
     outages++;
     status = 'down';
-    notes.push('サービスが止まりました（前提に当たった）');
+    notes.push('サービスが止まりました（上限に達しました）');
   } else if (c.incident) {
     revenue *= 1 - loss.incident;
     outages++;
@@ -121,7 +121,7 @@ export function revenueOf(
   } else if (c.throttling.length) {
     revenue *= 1 - loss.throttle;
     status = 'slow';
-    notes.push('遅くなりました（前提に近づいた）');
+    notes.push('遅くなりました（上限に近づきました）');
   }
   if (state.switching) {
     revenue *= 1 - loss.migration;

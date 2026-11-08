@@ -357,7 +357,7 @@ export function RoutePlanTable({
                               >
                                 {signedUsd(delta.costUsd)}
                                 {delta.blocking !== 0 &&
-                                  `・止まる前提 ${delta.blocking > 0 ? '+' : '−'}${Math.abs(delta.blocking)}`}
+                                  `・止まる上限 ${delta.blocking > 0 ? '+' : '−'}${Math.abs(delta.blocking)}`}
                               </span>
                             )}
                           </>

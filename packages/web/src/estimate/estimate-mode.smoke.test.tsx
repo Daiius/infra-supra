@@ -680,7 +680,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     const heading = screen.getByRole('heading', {
       level: 3,
-      name: /^前提（無料枠・込み分・上限）/,
+      name: /^上限・課金の境目（無料枠・込み分・上限）/,
     });
     // クレジットの消費の行は出る。「超過」の赤い印にはならず、見出しの超過の件数にも入らない
     const use = screen.getByText(

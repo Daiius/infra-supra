@@ -214,7 +214,7 @@ export function EstimateMode() {
   return (
     <div className="space-y-4">
       <p className="text-sm opacity-70">
-        アプリの形と規模を選ぶと、構成ごとの月の費用と、当たるプラットフォームの前提を出します。料金は各社の公式の料金表（出典と取得日は下）、利用の形はテンプレートの仮定（実測ではありません）です。
+        アプリの形と規模を選ぶと、構成ごとの月の費用と、当たるプラットフォームの上限・制限を出します。料金は各社の公式の料金表（出典と取得日は下）、利用の形はテンプレートの仮定（実測ではありません）です。
       </p>
       <Conditions
         input={input}
@@ -536,7 +536,7 @@ function Conditions({
           summary: stackName(stackIndex, input.framework, false, input.parts),
           warn:
             (cardTotals[input.stack]?.blocking ?? 0) > 0
-              ? `止まる・プランの変更が要る前提 ${cardTotals[input.stack]!.blocking} 件`
+              ? `止まる・プランの変更が要る上限 ${cardTotals[input.stack]!.blocking} 件`
               : undefined,
           panel: (
             <StackField
@@ -582,7 +582,7 @@ function Conditions({
                       `（${FRAMEWORKS[t.framework].label} にしたとき）`}
                     {t.blocking > 0 && (
                       <span className="ml-1 text-xs text-warning">
-                        止まる・プランの変更が要る前提 {t.blocking} 件
+                        止まる・プランの変更が要る上限 {t.blocking} 件
                       </span>
                     )}
                   </p>
@@ -659,7 +659,7 @@ function Seats({
   return (
     <Field
       label="チームの人数（管理画面を使う人）"
-      info="事業者の管理画面にメンバーとして入る人の数（席）。席ごとに料金がかかるプランだけ月額が変わります。席の料金が料金データに無い事業者は、前提の文で「未取得」と出します"
+      info="事業者の管理画面にメンバーとして入る人の数（席）。席ごとに料金がかかるプランだけ月額が変わります。席の料金が料金データに無い事業者は、席の料金の行で「未取得」と出します"
     >
       <input
         className="input input-bordered input-sm w-full"
@@ -823,7 +823,7 @@ function Premises({
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">
-        前提（無料枠・込み分・上限）
+        上限・課金の境目（無料枠・込み分・上限）
         <span className="ml-2 text-sm font-normal opacity-70">
           超過 {stops} 件{costs > 0 ? `・従量に回る ${costs} 件` : ''}・
           {thresholds.length} 件中
@@ -1009,8 +1009,8 @@ function Comparison({
               {header('name', '構成')}
               {header('cost', '月額', 'text-right')}
               {showTax && <th className="text-right">税込の目安</th>}
-              {header('blocking', '止まる前提', 'text-right')}
-              <th>使用率の最も高い前提</th>
+              {header('blocking', '止まる上限', 'text-right')}
+              <th>使用率の最も高い上限</th>
             </tr>
           </thead>
           <tbody>
@@ -1130,7 +1130,7 @@ function CostCurve({
         今のテンプレート・フレームワーク・設定のまま、月の PV
         だけを変えたときの月額（USD）です。横軸・縦軸とも対数です。部品は今の構成だけ今の選択、他は既定です。
         {anyStop &&
-          '× は止まる前提（無料プランの上限など）に当たる点で、× どうしを結ぶ線は薄くしています。'}
+          '× は止まる上限（無料プランの上限など）に達する点で、× どうしを結ぶ線は薄くしています。'}
         {unpriced && '料金未取得の明細がある点は合計が下限です。'}
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] viz-root">
