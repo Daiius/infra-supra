@@ -165,16 +165,19 @@ export function RouteSettingChips({
     ...o,
     why: o === onDemand ? (x.onDemandBlocked ?? null) : null,
   }));
+  // S2・S3 の切り替わりは選ぶと上の描き方のチップが替わるので本文に出す。部品ごとにキャッシュの時間とタグの意味は ⓘ に畳む（D-125）
   const relation = cached
     ? `時間を選ぶと「${ROUTE_STRATEGIES['cached-ttl'].label}」、オンデマンドを選ぶと「${ROUTE_STRATEGIES['cached-purge'].label}」（上の 2 つの描き方は、この設定で切り替わる）`
-    : cc && onDemand
-      ? '時間は部品の期限（cacheLife）、オンデマンドは投稿・編集でタグを消して作り直す（updateTag）'
-      : undefined;
+    : undefined;
+  const note =
+    cc && onDemand
+      ? `時間は部品の期限（cacheLife）、オンデマンドは投稿・編集でタグを消して作り直す（updateTag）。${def.note}`
+      : def.note;
   return (
     <SettingChips
       setting={x.key}
       label={label}
-      note={def.note}
+      note={note}
       options={options}
       value={x.value}
       onChange={x.onChange}

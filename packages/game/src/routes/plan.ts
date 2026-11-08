@@ -148,14 +148,13 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
           ? 'ビルドし直し: 更新のたび'
           : `ビルドし直し: 間隔 ${value}`,
       );
-    // 部品ごとにキャッシュ（D-111）: 記事は期限（cacheLife）かタグ（cacheTag・updateTag）、個人向けは動的な穴
-    if (choice.strategy === 'cache-components')
+    // 部品ごとにキャッシュ（D-111）: 記事は期限（cacheLife）かタグ（cacheTag・updateTag）。個人向けの動的な穴は説明（long・why）に
+    // 書いてあるので値の行を持たない（D-125）
+    if (choice.strategy === 'cache-components' && audience === 'public')
       detail.push(
-        audience === 'personal'
-          ? '人ごとに違う部分だけ閲覧ごとに描く（全員に同じ部品は枠に入る）'
-          : isOnDemand(p.settings)
-            ? '部品をタグで作り直す（投稿・編集で updateTag）'
-            : `部品の期限 ${value}（cacheLife）`,
+        isOnDemand(p.settings)
+          ? '部品をタグで作り直す（投稿・編集で updateTag）'
+          : `部品の期限 ${value}（cacheLife）`,
       );
     if (choice.shellPerPage)
       detail.push(

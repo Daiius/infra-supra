@@ -409,11 +409,21 @@ describe('ゲームモードの画面', () => {
     expect(sources('personal', '個人向けのページ')).toContain('api');
     expect(sources('personal', '個人向けのページ')).not.toContain('ssr');
     expect(check('personal', 'cpu')).toBe('true');
-    // 説明の行と札も選んだ描き方のものになる
-    expect(lines('personal', '個人向けのページ')).not.toContain(
-      'アダプターで SSR',
+    // 本文のフレームワークの説明の行は消え、描き方の説明は選んだチップの ⓘ に畳む（D-125）。札も選んだ描き方のものになる
+    expect(
+      within(pageOf('personal')).queryByRole('list', {
+        name: '個人向けのページの説明',
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      within(pageOf('personal')).getByRole('button', {
+        name: '枠 + ブラウザが API で取るの説明',
+      }),
     );
-    expect(lines('personal', '個人向けのページ')).toContain('HTML は静的な枠');
+    expect(screen.getByRole('tooltip').textContent).toContain(
+      'HTML は静的な枠',
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(badges('personal')).not.toContain('CPU:');
     expect(badges('personal')).toContain('API: 1 PV あたり 1 回増える');
     // もとの描き方は選び直せるボタンとして残る
@@ -440,12 +450,23 @@ describe('ゲームモードの画面', () => {
     expect(chosenOf('article')).toBe('shell-api');
   });
 
-  it('W-28 始める画面: ページの欄の説明の行と札は、選んだ描き方に合わせる（借りる図の無い記事の毎回描くも。D-112）', async () => {
+  it('W-28 始める画面: ページの欄の説明の行と札は、選んだ描き方に合わせる（借りる図の無い記事の毎回描くも。描き方の説明はチップの ⓘ。D-112・D-125）', async () => {
     await renderApp();
     const pick = (name: RegExp) => fireEvent.click(getRadio({ name }));
     const lines = (route: string, label: string) =>
-      within(pageOf(route)).getByRole('list', { name: `${label}の説明` })
-        .textContent ?? '';
+      within(pageOf(route)).queryByRole('list', { name: `${label}の説明` })
+        ?.textContent ?? '';
+    /** 選んでいる描き方のチップの ⓘ の文。 */
+    const chipInfo = (route: string, strategy: string) => {
+      fireEvent.click(
+        within(pageOf(route)).getByRole('button', {
+          name: `${strategy}の説明`,
+        }),
+      );
+      const t = screen.getByRole('tooltip').textContent ?? '';
+      fireEvent.keyDown(document, { key: 'Escape' });
+      return t;
+    };
     const badges = (route: string) =>
       within(pageOf(route)).getByRole('list', { name: 'ページの札' })
         .textContent ?? '';
@@ -458,11 +479,9 @@ describe('ゲームモードの画面', () => {
     );
     pickStrategy('記事のページ', '毎回描く');
     expect(chosenOf('article')).toBe('ssr');
-    expect(lines('article', '記事のページ')).toContain(
+    expect(lines('article', '記事のページ')).toBe('');
+    expect(chipInfo('article', '毎回描く')).toContain(
       'リクエストのたびにサーバーが描く',
-    );
-    expect(lines('article', '記事のページ')).not.toContain(
-      '閲覧時に SSR + キャッシュ',
     );
     expect(badges('article')).toContain('CPU: 閲覧ごとにサーバーが描く');
     expect(badges('article')).not.toContain('投稿・編集でキャッシュを消す');
@@ -471,6 +490,43 @@ describe('ゲームモードの画面', () => {
     expect(lines('article', '記事のページ')).toContain(
       '閲覧時に SSR + キャッシュ',
     );
+  });
+
+  it('W-58 始める画面: 部品ごとにキャッシュ（Cache Components）の説明は本文に出さず、チップと設定の見出しの ⓘ に畳む（D-125）', async () => {
+    await renderApp();
+    pickRadio(ARTICLE);
+    pickRadio('Vercel Pro + Supabase Pro');
+    showFrameworkTab();
+    // Vercel × Next.js の既定（D-111）。本文に描き方の説明の行・部品の作り直しの関係の行は出ない
+    expect(chosenOf('article')).toBe('cache-components');
+    expect(
+      within(pageOf('article')).queryByRole('list', {
+        name: '記事のページの説明',
+      }),
+    ).toBeNull();
+    expect(pageOf('article').textContent).not.toContain('同じ応答で流す');
+    expect(pageOf('article').textContent).not.toContain('時間は部品の期限');
+    // 選んでいるチップの ⓘ: 描き方の説明・要件に応える理由・値
+    fireEvent.click(
+      within(pageOf('article')).getByRole('button', {
+        name: '部品ごとにキャッシュ（Cache Components）の説明',
+      }),
+    );
+    const tip = screen.getByRole('tooltip').textContent ?? '';
+    expect(tip).toContain('cacheComponents: true');
+    expect(tip).toContain('数え方は ISR と同じ');
+    expect(tip).toMatch(/部品をタグで作り直す|部品の期限/);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // 設定の見出しの ⓘ に時間とタグの意味
+    fireEvent.click(
+      within(pageOf('article')).getByRole('button', {
+        name: '部品の作り直し（cacheLife・タグ）の説明',
+      }),
+    );
+    expect(screen.getByRole('tooltip').textContent).toContain(
+      'オンデマンドは投稿・編集でタグを消して作り直す',
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
   });
 
   it('W-29 始める画面: 「詳しく比べる」のダイアログに表を出し、表で選んでもカードに効く。閉じるとボタンへ戻る（D-112）', async () => {
