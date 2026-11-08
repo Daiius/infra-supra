@@ -235,6 +235,8 @@ function ResumedToast({
 export function Game({
   state,
   restored,
+  resumeNotice,
+  onResumeNoticeShown,
   runId,
   onAdvance,
   previous,
@@ -244,6 +246,10 @@ export function Game({
   state: GameState;
   /** 保存から再開した（出来事・達成のダイアログを自動では開かない。D-26）。 */
   restored: boolean;
+  /** 再開の知らせをまだ出していない（保存から再開した直後だけ true）。 */
+  resumeNotice: boolean;
+  /** 再開の知らせを出した（App のセッションに印を付け、作り直しても出し直さない）。 */
+  onResumeNoticeShown: () => void;
   /** 遊び始め（始めた・再開した）ごとの id。出来事のダイアログを月ごとに 1 回だけ自動で開くのに使う（D-126）。 */
   runId: string;
   /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
@@ -280,8 +286,13 @@ export function Game({
   useEffect(() => {
     if (eventsOpen === 'auto') markEventsSeen(runId, report.month);
   }, [eventsOpen, runId, report.month]);
-  // 保存から再開したときに一度だけ出す知らせ（数秒で消える・× で閉じる）。画面は遊び始めごとに作り直すので、月を進めても出し直さない
-  const [resumed, setResumed] = useState(restored);
+  // 保存から再開したときに一度だけ出す知らせ（数秒で消える・× で閉じる）。出したことは外側（App のセッション）に返し、
+  // 見積の画面から戻ってこの画面を作り直しても出し直さない
+  const [resumed, setResumed] = useState(resumeNotice);
+  useEffect(() => {
+    if (resumeNotice) onResumeNoticeShown();
+    // 作られたときに一度だけ（出した印を返す）
+  }, []);
   useEffect(() => {
     if (!resumed) return;
     const t = setTimeout(() => setResumed(false), RESUMED_TOAST_MS);

@@ -89,6 +89,11 @@ type Session = {
   previous: GameState | null;
   restored: boolean;
   runId: string;
+  /**
+   * 再開の知らせをまだ出していない（保存から再開したときだけ true）。出したら false にし、見積の画面から戻って
+   * 運営中の画面を作り直しても出し直さない。
+   */
+  resumeNotice?: boolean;
 };
 const newRunId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -112,7 +117,14 @@ function loadSession(): Session | null {
         save = withoutPrevious(parsed);
       }
     }
-    return { save, state, previous, restored: true, runId: newRunId() };
+    return {
+      save,
+      state,
+      previous,
+      restored: true,
+      runId: newRunId(),
+      resumeNotice: true,
+    };
   } catch {
     try {
       localStorage.removeItem(SAVE_KEY);
@@ -237,6 +249,10 @@ export function App() {
               key={session!.runId}
               state={state}
               restored={session!.restored}
+              resumeNotice={session!.resumeNotice ?? false}
+              onResumeNoticeShown={() =>
+                setSession((s) => (s ? { ...s, resumeNotice: false } : s))
+              }
               runId={session!.runId}
               onAdvance={(actions) => {
                 const next = playMonth(applyActions(state, actions));

@@ -12,6 +12,7 @@ import {
   showStackTab,
   startGame,
   useSmokeEnv,
+  waitLoaded,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -72,6 +73,13 @@ describe('小さな不具合の回帰', () => {
     expect(resumedToast()).toBeNull();
     // 月を進めても出し直さない
     advance(1);
+    expect(resumedToast()).toBeNull();
+    // 見積の画面へ切り替えて戻っても出し直さない（運営中の画面は作り直される。OCL-F453F189）
+    fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    await waitLoaded();
+    fireEvent.click(screen.getByRole('tab', { name: 'ゲーム' }));
+    await waitLoaded();
+    expectGameScreen(4);
     expect(resumedToast()).toBeNull();
   });
 
