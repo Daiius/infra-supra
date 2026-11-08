@@ -490,14 +490,10 @@ export function RouteChips({
                 </span>
               )}
               <Info label={`${r.strategyLabel}の説明`}>
-                {describe && (
-                  <span className="mb-1 block">
-                    {ROUTE_STRATEGIES[r.strategy].long}
-                  </span>
-                )}
-                {r.why}
+                {describe && <p>{ROUTE_STRATEGIES[r.strategy].long}</p>}
+                <p>{r.why}</p>
                 {r.detail.length > 0 && (
-                  <ul className="mt-1 list-disc pl-4">
+                  <ul className="list-disc pl-5">
                     {r.detail.map((d) => (
                       <li key={d}>{d}</li>
                     ))}
@@ -550,9 +546,11 @@ export function RouteChips({
             <Info
               label={`${a.label}${a.available ? 'の説明' : 'が使えない理由'}`}
             >
-              {why && <span className="block font-semibold">{why}</span>}
-              {a.reason}
-              {a.basis === 'assumption' && '（ゲーム上の仮定）'}
+              {why && <p className="font-semibold">{why}</p>}
+              <p>
+                {a.reason}
+                {a.basis === 'assumption' && '（ゲーム上の仮定）'}
+              </p>
             </Info>
           </li>
         );

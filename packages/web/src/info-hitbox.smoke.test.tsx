@@ -5,6 +5,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
   ensurePartsList,
+  infoDialog,
   openSlot,
   renderApp,
   showFrameworkTab,
@@ -14,26 +15,23 @@ import {
 
 useSmokeEnv();
 
-const tooltip = () => screen.queryByRole('tooltip');
+/** ⓘ の説明のダイアログ（D-129）。 */
+const tooltip = () => infoDialog();
 /** 部品の ⓘ で開く比較のダイアログ（D-124）。 */
 const compareDialog = () =>
   document.querySelector<HTMLElement>('dialog[data-slot-compare-dialog]');
 
-/** ⓘ を押して説明が開き、閉じられる（部品の ⓘ は比較のダイアログ、ほかは吹き出し）。 */
+/** ⓘ を押して説明が開き、閉じられる（部品の ⓘ は比較のダイアログ、ほかは説明のダイアログ。D-129）。 */
 function toggleInfo(info: HTMLElement) {
   fireEvent.click(info);
-  if (info.getAttribute('aria-haspopup') === 'dialog') {
-    const d = compareDialog()!;
-    expect(d).not.toBeNull();
-    expect(tooltip()).toBeNull();
-    fireEvent.click(within(d).getByRole('button', { name: '閉じる' }));
-    expect(compareDialog()).toBeNull();
-    expect(document.activeElement).toBe(info);
-    return;
-  }
-  expect(tooltip()).not.toBeNull();
-  fireEvent.click(info);
-  expect(tooltip()).toBeNull();
+  const compare = compareDialog();
+  const d = compare ?? infoDialog();
+  expect(d).not.toBeNull();
+  if (compare) expect(infoDialog()).toBeNull();
+  fireEvent.click(within(d!).getByRole('button', { name: '閉じる' }));
+  expect(compareDialog()).toBeNull();
+  expect(infoDialog()).toBeNull();
+  expect(document.activeElement).toBe(info);
 }
 
 /**
@@ -99,12 +97,8 @@ describe('ⓘ の当たり判定', () => {
     expect(tooltip()).toBeNull();
     fireEvent.click(screen.getByText('月の PV', { selector: 'label' }));
     expect(tooltip()).toBeNull();
-    // ⓘ を押すと開き、もう一度押すと閉じる
-    const info = within(field).getByRole('button', { name: /説明$/ });
-    fireEvent.click(info);
-    expect(tooltip()).not.toBeNull();
-    fireEvent.click(info);
-    expect(tooltip()).toBeNull();
+    // ⓘ を押すと開き、閉じられる
+    toggleInfo(within(field).getByRole('button', { name: /説明$/ }));
     // 部品（DB のバックアップ）はゲームと共用の、構成のカードのチップ（D-115・D-116）。チップの ⓘ を押しても選ばない
     ensurePartsList();
     const backup = openSlot(
@@ -144,7 +138,9 @@ describe('ⓘ の当たり判定', () => {
     expect(radio.checked).toBe(false);
     // 説明の中（ポータル）を押しても選ばれない（OCL-A1FCD9AC）
     fireEvent.click(tooltip()!);
-    fireEvent.click(tooltip()!.querySelector('*') ?? tooltip()!);
+    fireEvent.click(
+      tooltip()!.querySelector('[data-info-body] *') ?? tooltip()!,
+    );
     expect(radio.checked).toBe(false);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(tooltip()).toBeNull();

@@ -606,7 +606,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   <OptionText
                     name={`${o.label}を結ぶ`}
                     meta={[...commitmentMeta(o), '1 か月目から']}
-                    info={<Info>{o.premise}</Info>}
+                    info={<Info title={`${o.label}を結ぶ`}>{o.premise}</Info>}
                     why={null}
                   />
                 </label>

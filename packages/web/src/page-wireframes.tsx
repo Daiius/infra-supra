@@ -265,7 +265,7 @@ export function ScenarioWireframesInfo({ pages }: { pages: ScenarioPage[] }) {
   const used = new Set(pages.flatMap((p) => p.regions.flatMap((r) => r.needs)));
   return (
     <Info label="ページの見取り図の説明">
-      <div className="space-y-2 text-xs">
+      <div className="space-y-3">
         <p className="font-semibold">区画の札</p>
         <ul aria-label="要件の札の凡例" className="space-y-1">
           {NEED_ORDER.filter((n) => used.has(n)).map((n) => (
@@ -280,7 +280,10 @@ export function ScenarioWireframesInfo({ pages }: { pages: ScenarioPage[] }) {
         {pages.map((p) => (
           <div key={p.route}>
             <p className="font-semibold">{p.label}</p>
-            <ul aria-label={`${p.label}の性質`} className="opacity-80">
+            <ul
+              aria-label={`${p.label}の性質`}
+              className="list-disc pl-5 opacity-80"
+            >
               <li>
                 {audienceText(p)}・
                 {p.needsOgp ? 'SNS のカードが要る' : 'SNS のカードは要らない'}
@@ -337,9 +340,9 @@ function OffscreenLine({ element: e }: { element: OffscreenElement }) {
         <span className="font-bold">{e.label}</span>: {summary}
       </p>
       <Info label={`${e.label}の説明`}>
-        <div className="space-y-1 text-xs">
+        <div className="space-y-1">
           <p className="font-semibold">{e.label}</p>
-          <ul className="list-disc pl-4">
+          <ul className="list-disc pl-5">
             {e.items.map((item) => (
               <li key={item}>{item}</li>
             ))}

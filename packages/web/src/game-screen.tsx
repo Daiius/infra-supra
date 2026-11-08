@@ -154,7 +154,7 @@ function CommitmentsSection({
               name={`${o.label}を結ぶ`}
               meta={[...commitmentMeta(o), '来月から']}
               info={
-                <Info>
+                <Info title={`${o.label}を結ぶ`}>
                   {o.premise}
                   。確約の額は今月の対象の使用（オンデマンドの額）で決まり、超えた分はオンデマンドのまま。取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残る。
                 </Info>
@@ -1393,7 +1393,7 @@ function RouteActions({
                     <NameWithInfo
                       name={`${r.label}の描き方`}
                       info={
-                        <Info>
+                        <Info title={`${r.label}の描き方`}>
                           今: {r.strategyLabel}。{r.why}
                         </Info>
                       }
@@ -1459,7 +1459,7 @@ function RouteActions({
                       <NameWithInfo
                         name={`└ ${p.label}`}
                         info={
-                          <Info>
+                          <Info title={p.label}>
                             {p.note}
                             {routePartNote(state, p.part) &&
                               `（今: ${routePartNote(state, p.part)}）`}
@@ -1766,7 +1766,7 @@ function Actions({
                       {PROPOSAL_BADGE.label}
                     </span>
                     <span>
-                      {def.title} <Info>{def.text}</Info>
+                      {def.title} <Info title={def.title}>{def.text}</Info>
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-4">
@@ -1825,7 +1825,7 @@ function Actions({
                   <span className="block font-semibold">
                     <NameWithInfo
                       name={def.label}
-                      info={<Info>{def.note}</Info>}
+                      info={<Info title={def.label}>{def.note}</Info>}
                     />
                   </span>
                   <Meta
@@ -1931,7 +1931,7 @@ function Actions({
               '来月から',
             ]}
             info={
-              <Info>
+              <Info title="SSR を最適化する">
                 CPU 時間と速さに効く。機能開発が進むと SSR
                 はまた重くなるので、繰り返し判断が要る。
               </Info>
@@ -1956,7 +1956,7 @@ function Actions({
               name="Bot を遮断するルールを入れる"
               meta={[`手間 ${BOT_BLOCK.effort}`, '来月から効く']}
               info={
-                <Info>
+                <Info title="Bot を遮断するルールを入れる">
                   Bot・クローラーのアクセスが来月から半分になる。一度入れれば続く。対策の製品（WAF
                   など）の料金は取得していないので、手間だけの行動。
                 </Info>
@@ -1981,7 +1981,7 @@ function Actions({
               <OptionText
                 name={t.name}
                 meta={t.meta}
-                info={<Info>{t.detail}</Info>}
+                info={<Info title={t.name}>{t.detail}</Info>}
                 why={why}
               />
             </label>
@@ -2064,7 +2064,7 @@ function Actions({
                     <OptionText
                       name={text.name}
                       meta={text.meta}
-                      info={<Info>{text.detail}</Info>}
+                      info={<Info title={text.name}>{text.detail}</Info>}
                       why={why}
                       notice={notice}
                     />
@@ -2118,7 +2118,7 @@ function Actions({
                     <OptionText
                       name={text.name}
                       meta={text.meta}
-                      info={<Info>{text.detail}</Info>}
+                      info={<Info title={text.name}>{text.detail}</Info>}
                       why={why}
                       notice={notice}
                     />
