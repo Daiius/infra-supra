@@ -49,7 +49,38 @@ export type Series = {
   projection?: { month: number; value: number }[];
   /** 線を区切る月の添字（部品を差し替えた月など。前の月から線をつながず、縦の破線の印を付ける）。 */
   breaks?: number[];
+  /**
+   * 前の試行の同じ系列（D-128。添字 0 が 1 か月目・null は記録なし）。今の試行より長くてもよい。灰色の細かい点線で今の線の下に
+   * 重ね（見込みの長い破線・系列の色と分ける）、凡例に「前の試行」・ツールチップに値を並べる。1 枚の中で 2 系列以上が持つときは、
+   * どの系列か分かるよう系列の色を薄くした点線にし、凡例も「収益（前の試行）」のように系列ごとに出す。
+   */
+  previous?: (number | null)[];
 };
+
+/**
+ * 前の試行の線（D-128）。灰色（base-content の 40%）の細かい点線。見込みの線（系列の色・長い破線 4 4）と色と模様の両方で分ける。
+ */
+const PREVIOUS_GRAY = 'var(--color-base-content)';
+const PREVIOUS_OPACITY = 0.4;
+const PREVIOUS_DASH = '2 3';
+
+/** 前の試行の値を記録のない月で区間に分ける（添字 0 が 1 か月目）。 */
+function previousRuns(values: (number | null)[]): { m: number; v: number }[][] {
+  const runs: { m: number; v: number }[][] = [];
+  let current: { m: number; v: number }[] | null = null;
+  values.forEach((v, i) => {
+    if (v === null) {
+      current = null;
+      return;
+    }
+    if (!current) {
+      current = [];
+      runs.push(current);
+    }
+    current.push({ m: i + 1, v });
+  });
+  return runs;
+}
 
 /** 系列を記録のない月と区切りの月で区間に分ける（添字 0 が 1 か月目）。 */
 function runsOf(s: Series): { m: number; v: number }[][] {
@@ -181,7 +212,15 @@ export function LineChart({
   const all = series.flatMap((s) => [
     ...s.values.filter((v): v is number => v !== null),
     ...(s.projection ?? []).map((p) => p.value),
+    ...(s.previous ?? []).filter((v): v is number => v !== null),
   ]);
+  const withPrevious = series.filter((s) =>
+    (s.previous ?? []).some((v) => v !== null),
+  );
+  const hasPrevious = withPrevious.length > 0;
+  // 1 枚に前の試行が 1 系列だけなら灰色、2 系列以上なら系列の色を薄くする（どの系列の前の試行か分かるように）
+  const previousColor = (s: Series) =>
+    withPrevious.length > 1 ? s.color : PREVIOUS_GRAY;
   const ticks = niceTicks(yMax ?? Math.max(reference?.value ?? 0, ...all, 0));
   const top = ticks[ticks.length - 1]!;
   // 1 か月目の左に 0.6 か月分の内側の余白を取る（点が 1 つだけの区間の延長線の余地。月の目盛り・ツールチップは月に揃う）
@@ -217,19 +256,37 @@ export function LineChart({
   const hoverRows =
     hover === null
       ? []
-      : series
-          .map((s) => {
-            const v = s.values[hover - 1];
-            const p = s.projection?.find(
-              (q) => q.month === hover && hover - 1 > lastIndex(s),
-            );
-            return v !== null && v !== undefined
-              ? { s, value: format(v), note: '' }
+      : series.flatMap((s) => {
+          const v = s.values[hover - 1];
+          const p = s.projection?.find(
+            (q) => q.month === hover && hover - 1 > lastIndex(s),
+          );
+          const now =
+            v !== null && v !== undefined
+              ? { s, key: s.id, value: format(v), note: '', previous: false }
               : p
-                ? { s, value: format(p.value), note: '（見込み）' }
+                ? {
+                    s,
+                    key: s.id,
+                    value: format(p.value),
+                    note: '（見込み）',
+                    previous: false,
+                  }
                 : null;
-          })
-          .filter((r) => r !== null);
+          // 前の試行の同じ月の値（D-128）を今の値の下に並べる
+          const pv = s.previous?.[hover - 1];
+          const prev =
+            pv !== null && pv !== undefined
+              ? {
+                  s,
+                  key: `${s.id}-previous`,
+                  value: format(pv),
+                  note: '（前の試行）',
+                  previous: true,
+                }
+              : null;
+          return [now, prev].filter((r) => r !== null);
+        });
 
   return (
     // daisyUI の .card figure は overflow: hidden（最新の点の輪が切れるので見えるようにする）
@@ -241,7 +298,7 @@ export function LineChart({
       {title && (
         <figcaption className="mb-1 text-sm font-semibold">{title}</figcaption>
       )}
-      {series.length > 1 && (
+      {(series.length > 1 || hasPrevious) && (
         <div className="mb-1 flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
           {series.map((s) => (
             <span key={s.id} className="flex items-center gap-1">
@@ -257,6 +314,31 @@ export function LineChart({
                 />
               </svg>
               {s.label}
+            </span>
+          ))}
+          {/* 前の試行（D-128）: 線と同じ色・模様の見本。2 系列以上なら系列ごと */}
+          {(withPrevious.length > 1
+            ? withPrevious
+            : withPrevious.slice(0, 1)
+          ).map((s) => (
+            <span
+              key={`previous-${s.id}`}
+              className="flex items-center gap-1"
+              data-legend-previous
+            >
+              <svg width="18" height="4" aria-hidden>
+                <line
+                  x1="1"
+                  y1="2"
+                  x2="17"
+                  y2="2"
+                  stroke={previousColor(s)}
+                  strokeOpacity={PREVIOUS_OPACITY}
+                  strokeWidth="2"
+                  strokeDasharray={PREVIOUS_DASH}
+                />
+              </svg>
+              {withPrevious.length > 1 ? `${s.label}（前の試行）` : '前の試行'}
             </span>
           ))}
         </div>
@@ -383,6 +465,38 @@ export function LineChart({
               />
             )),
           )}
+          {series.flatMap((s) =>
+            // 前の試行（D-128）は今の線の下に、灰色の細かい点線で描く（後の月まで進んでいた分も描く）
+            s.previous
+              ? previousRuns(s.previous).map((run, i) =>
+                  run.length >= 2 ? (
+                    <path
+                      key={`previous-${s.id}-${i}`}
+                      data-previous-series={s.id}
+                      d={path(run)}
+                      fill="none"
+                      stroke={previousColor(s)}
+                      strokeOpacity={PREVIOUS_OPACITY}
+                      strokeWidth="2"
+                      strokeDasharray={PREVIOUS_DASH}
+                      strokeLinejoin="round"
+                      pointerEvents="none"
+                    />
+                  ) : (
+                    <circle
+                      key={`previous-${s.id}-${i}`}
+                      data-previous-series={s.id}
+                      cx={x(run[0]!.m)}
+                      cy={y(run[0]!.v)}
+                      r="2.5"
+                      fill={previousColor(s)}
+                      fillOpacity={PREVIOUS_OPACITY}
+                      pointerEvents="none"
+                    />
+                  ),
+                )
+              : [],
+          )}
           {series.map((s) => {
             // 記録のない月（構成を乗り換えて前提が途切れたとき）と区切りの月（部品の差し替え）で線を切る
             const runs = runsOf(s);
@@ -504,16 +618,21 @@ export function LineChart({
         >
           <div className="text-[var(--text-secondary)]">{hover} か月目</div>
           {hoverRows.map((r) => (
-            <div key={r.s.id} className="flex items-center gap-2">
+            <div key={r.key} className="flex items-center gap-2">
               <svg width="10" height="4" aria-hidden>
                 <line
                   x1="0"
                   y1="2"
                   x2="10"
                   y2="2"
-                  stroke={r.s.color}
+                  stroke={r.previous ? previousColor(r.s) : r.s.color}
                   strokeWidth="2"
-                  strokeLinecap="round"
+                  {...(r.previous
+                    ? {
+                        strokeOpacity: PREVIOUS_OPACITY,
+                        strokeDasharray: PREVIOUS_DASH,
+                      }
+                    : { strokeLinecap: 'round' as const })}
                 />
               </svg>
               <span className="font-semibold text-[var(--text-primary)]">

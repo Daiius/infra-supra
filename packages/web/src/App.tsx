@@ -9,7 +9,10 @@ import {
   type RouteOverrides,
   newSave,
   parseSave,
+  previousSave,
   replaySave,
+  rewindSave,
+  withoutPrevious,
   validSetupChoices,
   setupComponentComparison,
   validRouteOverrides,
@@ -76,10 +79,14 @@ const USD_JPY = 150;
 /** 遊んでいる途中の保存（D-26）。行動の履歴だけを持ち、読み込みは再生で復元する。 */
 const SAVE_KEY = 'infra-supra:game-save';
 
-/** runId: 遊び始め（始めた・再開した）ごとの id。出来事のダイアログを月ごとに 1 回だけ自動で開く（D-126）。保存には入れない。 */
+/**
+ * runId: 遊び始め（始めた・再開した・過去の月に戻った）ごとの id。出来事のダイアログを月ごとに 1 回だけ自動で開く（D-126）。
+ * 保存には入れない。previous: 保存の前の試行（D-128）を再生した状態（推移のグラフに重ねる）。
+ */
 type Session = {
   save: SaveData;
   state: GameState;
+  previous: GameState | null;
   restored: boolean;
   runId: string;
 };
@@ -91,14 +98,21 @@ function loadSession(): Session | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const save = parseSave(JSON.parse(raw));
-    if (!save) throw new Error('読めない保存');
-    return {
-      save,
-      state: replaySave(save),
-      restored: true,
-      runId: newRunId(),
-    };
+    const parsed = parseSave(JSON.parse(raw));
+    if (!parsed) throw new Error('読めない保存');
+    const state = replaySave(parsed);
+    // 前の試行が再生できなければ、前の試行だけを捨てる（今の試行は続けられる。D-128）
+    let save = parsed;
+    let previous: GameState | null = null;
+    const prev = previousSave(parsed);
+    if (prev) {
+      try {
+        previous = replaySave(prev);
+      } catch {
+        save = withoutPrevious(parsed);
+      }
+    }
+    return { save, state, previous, restored: true, runId: newRunId() };
   } catch {
     try {
       localStorage.removeItem(SAVE_KEY);
@@ -216,13 +230,33 @@ export function App() {
               onAdvance={(actions) => {
                 const next = playMonth(applyActions(state, actions));
                 setSession({
+                  ...session!,
                   save: withTurn(session!.save, actions),
                   state: next,
-                  restored: session!.restored,
-                  runId: session!.runId,
                 });
                 return next;
               }}
+              previous={session!.previous}
+              onRewind={(month) => {
+                // 戻る直前の今の試行を前の試行にする（D-128）。戻った状態は保存の再生と同じ（決定論）。
+                // 遊び始めの id を替えて画面を作り直す（戻った月の出来事のダイアログも開き直す）
+                const save = rewindSave(session!.save, month);
+                setSession({
+                  save,
+                  state: replaySave(save),
+                  previous: state,
+                  restored: false,
+                  runId: newRunId(),
+                });
+                scrollTop();
+              }}
+              onClearPrevious={() =>
+                setSession({
+                  ...session!,
+                  save: withoutPrevious(session!.save),
+                  previous: null,
+                })
+              }
             />
           ) : (
             <Briefing
@@ -230,6 +264,7 @@ export function App() {
                 setSession({
                   save,
                   state: replaySave(save),
+                  previous: null,
                   restored: false,
                   runId: newRunId(),
                 })

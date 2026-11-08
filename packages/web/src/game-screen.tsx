@@ -196,6 +196,9 @@ export function Game({
   restored,
   runId,
   onAdvance,
+  previous,
+  onRewind,
+  onClearPrevious,
 }: {
   state: GameState;
   /** 保存から再開した（出来事・達成のダイアログを自動では開かない。D-26）。 */
@@ -204,6 +207,12 @@ export function Game({
   runId: string;
   /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
   onAdvance: (actions: Action[]) => GameState;
+  /** 前の試行（D-128。保存の前の試行を再生した状態）。無ければ null。 */
+  previous: GameState | null;
+  /** month か月目の行動を選ぶ直前に戻す（D-128。今の試行は前の試行として残す）。確認はこの画面で取ってから呼ぶ。 */
+  onRewind: (month: number) => void;
+  /** 前の試行を消す（D-128）。 */
+  onClearPrevious: () => void;
 }) {
   const report = state.history[state.history.length - 1]!;
   const playing = state.phase === 'playing';
@@ -230,6 +239,12 @@ export function Game({
   useEffect(() => {
     if (eventsOpen === 'auto') markEventsSeen(runId, report.month);
   }, [eventsOpen, runId, report.month]);
+  // 戻る先の月の確認（D-128）。null は閉じている。戻れるのは行動を選んだ月（今の月より前）だけ
+  const [rewindTo, setRewindTo] = useState<number | null>(null);
+  const rewindable = state.history.length - 1;
+  const picker = rewindable > 0 && (
+    <RewindPicker months={rewindable} onPick={setRewindTo} />
+  );
   return (
     <>
       {state.phase === 'won' && celebration !== null && (
@@ -244,18 +259,25 @@ export function Game({
         <Result
           state={state}
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
-        />
+        >
+          {picker}
+        </Result>
       )}
       <Trends
         history={state.history}
         scenario={scenarioOf(state)}
         ended={state.phase !== 'playing'}
+        previous={previous}
+        onClearPrevious={onClearPrevious}
       />
       <MonthCard
         report={report}
         scenario={scenarioOf(state)}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
       />
+      {playing && picker && (
+        <div className="flex justify-end px-1">{picker}</div>
+      )}
       {playing && (
         <Actions
           state={state}
@@ -280,8 +302,127 @@ export function Game({
           onClose={() => setEventsOpen(null)}
         />
       )}
-      <History history={state.history} />
+      <History
+        history={state.history}
+        rewindable={rewindable}
+        onRewind={setRewindTo}
+      />
+      {rewindTo !== null && (
+        <RewindDialog
+          month={rewindTo}
+          current={state.history.length}
+          ended={!playing}
+          previousMonths={previous?.history.length ?? null}
+          onConfirm={() => {
+            setRewindTo(null);
+            onRewind(rewindTo);
+          }}
+          onClose={() => setRewindTo(null)}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * 過去の月へ戻る先を選ぶ欄（D-128。今の月の行動の欄の上と、終わった後の結果の画面に出す）。押すと確認のダイアログを開く。
+ * months: 戻れる月の数（1〜months か月目）。既定は 1 つ前の月。
+ */
+function RewindPicker({
+  months,
+  onPick,
+}: {
+  months: number;
+  onPick: (month: number) => void;
+}) {
+  // null は 1 つ前の月（月が進んでも追いかける）
+  const [month, setMonth] = useState<number | null>(null);
+  const m = Math.min(month ?? months, months);
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm" data-rewind>
+      <label className="flex items-center gap-1">
+        <span className="opacity-70">戻る先</span>
+        <select
+          className="select select-sm w-auto"
+          value={m}
+          onChange={(e) => setMonth(Number(e.target.value))}
+          aria-label="戻る先の月"
+        >
+          {Array.from({ length: months }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              {n} か月目
+            </option>
+          ))}
+        </select>
+      </label>
+      <button className="btn btn-outline btn-sm" onClick={() => onPick(m)}>
+        この月に戻る…
+      </button>
+      <Info label="過去の月に戻ることについて">
+        選んだ月の行動を選ぶ前の状態に戻る。始めたときの選択（シナリオ・構成・部品・乱数のシード）はそのままなので、同じ行動を選べば同じ結果になる。今の結果は「前の試行」として
+        1 本だけ残り、推移のグラフに破線で重なる（もう一度戻ると上書き）
+      </Info>
+    </div>
+  );
+}
+
+/** 戻る前の確認（D-128。押し間違いを防ぐ）。作法は出来事のダイアログ（D-23）と同じ `<dialog>` の showModal。 */
+function RewindDialog({
+  month,
+  current,
+  ended,
+  previousMonths,
+  onConfirm,
+  onClose,
+}: {
+  month: number;
+  /** 今の試行の月数（今の月・終わった月）。 */
+  current: number;
+  ended: boolean;
+  /** 今ある前の試行の月数（上書きの知らせ）。無ければ null。 */
+  previousMonths: number | null;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (d && !d.open) d.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="modal"
+      aria-labelledby="rewind-dialog-title"
+      onClose={onClose}
+    >
+      <div className="modal-box max-w-md">
+        <h2 id="rewind-dialog-title" className="text-lg font-bold">
+          {month} か月目に戻る
+        </h2>
+        <p className="mt-2 text-sm">
+          {`${month} か月目の行動を選ぶ前に戻ります。今の結果（${current} か月目${ended ? 'で終了' : 'まで'}）は「前の試行」として 1 本だけ残ります。`}
+        </p>
+        {previousMonths !== null && (
+          <p className="mt-1 text-sm opacity-70">
+            {`今ある前の試行（${previousMonths} か月目まで）は上書きされます。`}
+          </p>
+        )}
+        <div className="modal-action">
+          <form method="dialog">
+            <button className="btn btn-ghost btn-sm">やめる</button>
+          </form>
+          <button className="btn btn-primary btn-sm" onClick={onConfirm}>
+            {month} か月目に戻る
+          </button>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button aria-label="背景を押して閉じる" tabIndex={-1}>
+          閉じる
+        </button>
+      </form>
+    </dialog>
   );
 }
 
@@ -2272,10 +2413,13 @@ function FireworkIcon() {
 function Result({
   state,
   onCelebrate,
+  children,
 }: {
   state: GameState;
   /** 目標達成のダイアログを開き直す（達成のときだけ使う）。 */
   onCelebrate: () => void;
+  /** 結果の下に足すもの（過去の月へ戻る欄。D-128）。 */
+  children?: ReactNode;
 }) {
   const won = state.phase === 'won';
   const end = state.end!;
@@ -2562,6 +2706,7 @@ function Result({
             </div>
           </div>
         </details>
+        {children}
       </div>
     </div>
   );
@@ -2640,7 +2785,16 @@ function resultMeters(
   ];
 }
 
-function History({ history }: { history: MonthReport[] }) {
+function History({
+  history,
+  rewindable,
+  onRewind,
+}: {
+  history: MonthReport[];
+  /** 戻れる月の数（1〜rewindable か月目。D-128）。 */
+  rewindable: number;
+  onRewind: (month: number) => void;
+}) {
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body overflow-x-auto">
@@ -2659,6 +2813,9 @@ function History({ history }: { history: MonthReport[] }) {
               <th>状態</th>
               <th>出来事</th>
               <th>行動</th>
+              <th>
+                <span className="sr-only">戻る</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -2695,6 +2852,17 @@ function History({ history }: { history: MonthReport[] }) {
                     .join('・')}
                 </td>
                 <td className="text-xs">{r.action ?? ''}</td>
+                <td>
+                  {r.month <= rewindable && (
+                    <button
+                      className="btn btn-ghost btn-xs whitespace-nowrap"
+                      aria-label={`${r.month} か月目に戻る`}
+                      onClick={() => onRewind(r.month)}
+                    >
+                      この月に戻る
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -2716,12 +2884,20 @@ function Trends({
   history,
   scenario,
   ended,
+  previous,
+  onClearPrevious,
 }: {
   history: MonthReport[];
   scenario: Scenario;
   /** 終わったら見込みを出さない（途中のゲームオーバーで残りの月を伸ばさない）。 */
   ended: boolean;
+  /** 前の試行（D-128）。所持金・PV・費用・満足度の線に破線で重ねる。 */
+  previous: GameState | null;
+  onClearPrevious: () => void;
 }) {
+  const prevHistory = previous?.history;
+  const prevOf = (get: (r: MonthReport) => number) =>
+    prevHistory ? { previous: prevHistory.map(get) } : {};
   const last = history[history.length - 1]!;
   // 所持金の見込み（目安。直近 3 か月の月の利益の平均で線形に伸ばす。D-42）
   const cashProj = ended ? undefined : cashProjectionOf({ history, scenario });
@@ -2833,6 +3009,22 @@ function Trends({
             </Info>
           </p>
         )}
+        {previous && (
+          <div
+            className="flex flex-wrap items-center gap-2 text-xs opacity-80"
+            data-previous-trial
+          >
+            <span>
+              {`グラフの灰色の点線は前の試行（${previous.history.length} か月目${previous.phase === 'playing' ? 'まで' : `で${previous.phase === 'won' ? '達成' : '終了'}`}）`}
+            </span>
+            <button
+              className="btn btn-ghost btn-xs opacity-70"
+              onClick={onClearPrevious}
+            >
+              前の試行を消す
+            </button>
+          </div>
+        )}
         <div className="grid gap-4 md:grid-cols-2">
           <LineChart
             title={`所持金（目標 ${usd(scenario.goal.cash)}）`}
@@ -2846,6 +3038,7 @@ function Trends({
                 color: 'var(--series-1)',
                 // 負の値は軸の下に出ないよう 0 で切る（表示だけ。負になった月にゲームは終わる）
                 values: history.map((r) => Math.max(0, r.cash)),
+                ...prevOf((r) => Math.max(0, r.cash)),
                 ...(cashProj && cashProj.projection.length > 1
                   ? {
                       projection: cashProj.projection.map((p) => ({
@@ -2873,6 +3066,7 @@ function Trends({
                 label: '費用',
                 color: 'var(--series-2)',
                 values: history.map(cost),
+                ...prevOf(cost),
               },
             ]}
           />
@@ -2888,12 +3082,27 @@ function Trends({
                 label: '満足度',
                 color: 'var(--series-1)',
                 values: history.map((r) => r.satisfaction.score),
+                ...prevOf((r) => r.satisfaction.score),
               },
               {
                 id: 'reputation',
                 label: '評判',
                 color: 'var(--series-2)',
                 values: history.map((r) => r.satisfaction.reputation),
+              },
+            ]}
+          />
+          <LineChart
+            title="PV（月）"
+            months={scenario.months}
+            format={(v) => compact(Math.round(v))}
+            series={[
+              {
+                id: 'pv',
+                label: 'PV',
+                color: 'var(--series-1)',
+                values: history.map((r) => r.pv),
+                ...prevOf((r) => r.pv),
               },
             ]}
           />
