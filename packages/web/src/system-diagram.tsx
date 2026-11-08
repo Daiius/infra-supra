@@ -727,7 +727,7 @@ function Viewer({ model }: { model: DiagramModel }) {
           y={v.y + v.h / 2 + 4}
           className="fill-current text-[11px] font-semibold"
         >
-          閲覧者
+          {VIEWER_LABEL}
         </text>
       </g>
     );
@@ -763,19 +763,11 @@ function Viewer({ model }: { model: DiagramModel }) {
       />
       <text
         x={v.x + v.w / 2}
-        y={v.y + 44}
+        y={v.y + 47}
         textAnchor="middle"
         className="fill-current text-[11px] font-semibold"
       >
-        閲覧者
-      </text>
-      <text
-        x={v.x + v.w / 2}
-        y={v.y + 57}
-        textAnchor="middle"
-        className="fill-current text-[9px] opacity-60"
-      >
-        ブラウザ
+        {VIEWER_LABEL}
       </text>
     </g>
   );

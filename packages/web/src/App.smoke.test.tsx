@@ -809,7 +809,7 @@ describe('ゲームモードの画面', () => {
     expect(
       within(current()).getByRole('list', { name: '構成図のつながり' })
         .textContent,
-    ).toContain('閲覧者（ブラウザ） → Vercel CDN');
+    ).toContain('ブラウザ → Vercel CDN');
     const legend = within(current()).getByRole('list', {
       name: '構成図の流れの凡例',
     });

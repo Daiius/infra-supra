@@ -216,7 +216,7 @@ const ACCOUNT_BRAND: Readonly<Record<string, BrandId>> = {
 };
 
 export const VIEWER = 'viewer';
-export const VIEWER_LABEL = '閲覧者（ブラウザ）';
+export const VIEWER_LABEL = 'ブラウザ';
 
 export type DiagramNode = {
   id: string;
@@ -697,7 +697,7 @@ export function diagramSummary(
   const parts = [...model.nodes, ...model.side.flatMap((s) => s.nodes)].filter(
     (n) => !n.ghost,
   ).length;
-  return `構成図: 閲覧者のリクエストは ${first.join('・')} に届く。部品 ${parts} 個、事業者は ${providers.join('・')}`;
+  return `構成図: ブラウザのリクエストは ${first.join('・')} に届く。部品 ${parts} 個、事業者は ${providers.join('・')}`;
 }
 
 /** 強調する流れ（選んでいた流れが今の図に無ければ強調しない）。 */
