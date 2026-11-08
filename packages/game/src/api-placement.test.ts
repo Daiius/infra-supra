@@ -1,6 +1,7 @@
 // SPA の API の置き場（D-65・prd/10 §3）: 許した組だけ選べる・DB は API と同じ事業者・移し替えはデータの移行・基準プレイ。
 import { describe, expect, it } from 'vitest';
 import { meetsReference } from './reference.test-helpers.ts';
+import { effortSpanText } from './format.ts';
 import {
   addedAccounts,
   applyAction,
@@ -124,7 +125,7 @@ describe('ゲーム中の移し替え（データの移行）', () => {
       cost: EFFORT.accountSetup,
     });
     expect(componentEffortLabel('api', s, 'cf-workers')).toEqual([
-      `${EFFORT.dbSwap.perMonth} × ${EFFORT.dbSwap.months} か月 + 手間 ${EFFORT.accountSetup}`,
+      `${effortSpanText('手間', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)} + 手間 ${EFFORT.accountSetup}`,
       '期間中は新旧両方の費用',
       `Cloudflare のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep}）`,
       // API と DB を Cloudflare に移すと Supabase が要らなくなる（D-123）

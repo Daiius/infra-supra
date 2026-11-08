@@ -94,12 +94,12 @@ export const LANES: Readonly<
   // 枠 + サーバーの島（S6。D-108）。島のリクエストは document-ssr で数えるので、クラスでなく見取り図の島の区画で分ける
   // （islandLanes。島の区画のあるページがあれば document-ssr の線に載せる）
   island: {
-    label: 'サーバーの島（閲覧ごとに一部だけ描く）',
+    label: '人ごとの部分（閲覧ごとにサーバーで描く）',
     classes: [],
   },
   // 部品ごとにキャッシュ（Cache Components。D-111）の人ごとに違う部分。島と同じく document-ssr を見取り図の区画で分ける
   holes: {
-    label: '動的な穴（部品ごとにキャッシュ・閲覧ごとに一部だけ描く）',
+    label: '閲覧ごとに描く部分（部品ごとにキャッシュ）',
     classes: [],
   },
   api: { label: 'API', classes: ['api', 'api-content'] },

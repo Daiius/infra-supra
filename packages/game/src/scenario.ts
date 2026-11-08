@@ -474,10 +474,10 @@ export const REGION_SOURCES: Readonly<
   // 枠 + サーバーの島（S6。D-108）
   'island-shell': {
     short: '枠（使い回す）',
-    long: '人ごとに違わない枠です。Astro は最初の閲覧で描いてキャッシュし 1 日の期限で取り直します。Next.js の PPR はビルドで作った枠を島と同じ応答の先頭で流します（費用は閲覧ごとに島を描く分で数える）',
+    long: '人ごとに違わない枠です。Astro は最初の閲覧で描いてキャッシュし 1 日の期限で取り直します。Next.js の PPR はビルドで作った枠を人ごとの部分と同じ応答の先頭で流します（費用は閲覧ごとに人ごとの部分を描く分で数える）',
   },
   'server-island': {
-    short: 'サーバーの島（閲覧ごとに一部だけ描く）',
+    short: '人ごとの部分（閲覧ごとにサーバーで描く）',
     long: '人ごとに違う部分だけを閲覧のたびにサーバーが描きます（Astro は枠とは別のリクエスト・Next.js の PPR は同じ応答の中）。キャッシュしません',
   },
   // 部品ごとにキャッシュ（Cache Components。D-111）
@@ -486,7 +486,7 @@ export const REGION_SOURCES: Readonly<
     long: "全員に同じ部品です。'use cache' でキャッシュして静的な枠に入れ、期限（cacheLife）かタグ（cacheTag・updateTag）で作り直します（Vercel は全体の ISR のキャッシュと CDN、自前の Node はインスタンスのディスク・メモリ）",
   },
   'cc-dynamic': {
-    short: '動的な穴（閲覧ごとに描く）',
+    short: '閲覧ごとに描く部分',
     long: '人ごとに違う部分です。Suspense の中で閲覧のたびにサーバーが描き、枠と同じ応答で続けて流します。キャッシュしません',
   },
   shell: {

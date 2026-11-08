@@ -24,6 +24,7 @@ import type { Scenario, Strategy, WorkloadMods } from './scenario.ts';
 import type { ArchitectureInput } from 'estimator';
 import { EFFORT } from './rules.ts';
 import { books, frameworkDefaults, frameworksOf } from './core.ts';
+import { effortSpanText } from './format.ts';
 import type { GameState } from './state.ts';
 
 /**
@@ -474,12 +475,12 @@ export function stackChangeText(
   if (isRecontract(from, to))
     return {
       name: `${target} へ契約し直す`,
-      meta: [`${per} × ${months} か月`, both],
+      meta: [effortSpanText('手間', per, months), both],
       detail: `${stackFact(from, 'no-smaller-disk')!.premise}。新しく契約してデータを移す間は、新旧両方を動かして両方の費用を払います。`,
     };
   return {
     name: `${target} へ乗り換える`,
-    meta: [`${per} × ${months} か月`, both],
+    meta: [effortSpanText('手間', per, months), both],
     detail:
       '別の事業者へ移します。作業の間は新旧両方の構成を動かして両方の費用を払い、済んだ翌月に切り替わります（その月は収益が少し減ります）。部品は乗り換え先の既定の選択から始まります。',
   };
@@ -499,4 +500,21 @@ export function imagesOf(
 /** 構成の短い説明（始める画面のフレーバー。catalog の STACK_FLAVOR。D-41）。 */
 export function stackFlavor(stackIndex: number): string | undefined {
   return STACK_FLAVOR[STACKS[stackIndex]!.id];
+}
+
+/** 構成の名前・部品の名前に出る用語の補足（構成のカードの説明・ⓘ・構成図の箱の初出に添える。D-160）。 */
+export const TERM_NOTES = {
+  vinext:
+    'vinext は Cloudflare 製の Next.js 互換の仕組みで、Next.js のアプリを Workers で動かします',
+  fluid:
+    'Fluid は Vercel の関数の動かし方です。1 つの実行環境で複数のリクエストを同時に処理し、CPU は動いた時間（Active CPU）だけ課金します',
+} as const;
+
+/** 名前に含まれる用語の補足（vinext・Fluid。D-160）。 */
+export function termNotesOf(names: readonly string[]): string[] {
+  const t = names.join(' ');
+  return [
+    ...(t.includes('vinext') ? [TERM_NOTES.vinext] : []),
+    ...(t.includes('Fluid') ? [TERM_NOTES.fluid] : []),
+  ];
 }

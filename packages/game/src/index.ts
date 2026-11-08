@@ -84,6 +84,8 @@ export {
   migrationEffort,
   stackChangeText,
   stackFlavor,
+  TERM_NOTES,
+  termNotesOf,
 } from './stacks.ts';
 export {
   componentProposal,

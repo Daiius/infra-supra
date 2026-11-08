@@ -145,7 +145,7 @@ const EVENTS: EventDef[] = [
       'pool:cloudflare:r2-standard:r2-storage',
     ],
     accept: {
-      label: '受ける（手間 3 × 2 か月）',
+      label: '受ける（毎月 手間 3 を 2 か月）',
       effects: [
         { type: 'workload', mods: { imagesPerPage: 10, uploadsFactor: 3 } },
         { type: 'feature', points: 8 },

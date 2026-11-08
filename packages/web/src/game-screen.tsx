@@ -1337,7 +1337,7 @@ function EventCard({ event: e }: { event: MonthEvent }) {
               <span
                 className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
               >
-                {p.hit ? '✗ 上限に達した' : '○ 達しうる上限'}
+                {p.hit ? '✗ 上限に達した' : '○ 達する可能性のある上限'}
               </span>
               {p.text}
               {p.ratio !== undefined && (
@@ -2580,7 +2580,9 @@ function ComponentsSection({
                         <span
                           className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
                         >
-                          {p.hit ? '✗ 上限に達する' : '○ 達しうる上限'}
+                          {p.hit
+                            ? '✗ 上限に達する'
+                            : '○ 達する可能性のある上限'}
                         </span>
                         {p.text}
                         {p.ratio !== undefined && (

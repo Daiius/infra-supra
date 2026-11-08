@@ -112,7 +112,7 @@ describe('選べる組（D-108）', () => {
     const rows = routePlanOf(start(VERCEL_PRO, 'astro', ISLAND));
     const p = rows.find((r) => r.route === 'personal')!;
     expect(p.code).toBe('S6');
-    expect(p.why).toContain('島');
+    expect(p.why).toContain('人ごとの部分');
     expect(p.overriddenBy).toContain('選んだ描き方');
     // Vercel の Astro の S6 は仮（Vercel のアダプターの頁は機能の一つとして触れるだけ）
     const cf = routePlanOf(start(CF_PAID, 'astro'))
@@ -205,9 +205,9 @@ describe('費用と制限（D-108）', () => {
     expect(cpu().detail).toContain('個人向けのページ（SSR・CPU 15 ms）');
     const after = cpu(ISLAND);
     expect(after.detail).toContain(
-      '個人向けのページ（島の枠の閲覧と描き直し・CPU 11 ms）',
+      '個人向けのページ（枠の閲覧と描き直し・CPU 11 ms）',
     );
-    expect(after.detail).not.toContain('サーバーの島');
+    expect(after.detail).not.toContain('人ごとの部分');
     expect(after.routes).toContain('personal');
   });
 
@@ -226,7 +226,7 @@ describe('費用と制限（D-108）', () => {
     });
     const p = st.find((r) => r.route === 'personal')!;
     expect(p.cpu.ok).toBe(false);
-    expect(p.cpu.text).toContain('島の枠');
+    expect(p.cpu.text).toContain('枠の');
     // 人ごとに違うページには SNS のカードの判定を出さない
     expect(p.ogp).toBeUndefined();
   });
@@ -290,7 +290,7 @@ describe('見取り図（D-108）', () => {
         mine: 'server-island',
         editor: 'island-shell',
       });
-      expect(page.badges[0]!.text).toContain('島の分だけ');
+      expect(page.badges[0]!.text).toContain('人ごとの部分だけ');
     }
     // 記事のページは変わらない
     expect(

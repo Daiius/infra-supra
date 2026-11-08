@@ -250,8 +250,8 @@ export function pageWireframes(
                 kind: 'cpu' as const,
                 text:
                   framework === 'astro'
-                    ? 'CPU: 島の分だけ閲覧ごとに描く（島は別のリクエスト・枠はキャッシュ）'
-                    : 'CPU: 島の分だけ閲覧ごとに描く（同じ応答の中で続けて流す）',
+                    ? 'CPU: 人ごとの部分だけ閲覧ごとに描く（その部分は別のリクエスト・枠はキャッシュ）'
+                    : 'CPU: 人ごとの部分だけ閲覧ごとに描く（同じ応答の中で続けて流す）',
               },
             ]
           : (perPage?.badges ?? retagged ?? w.badges?.[donor] ?? []),

@@ -1,5 +1,6 @@
 // 画像の形式（D-58）: 同じ見た目の画質で小さくする。画質は下げない。損の側は変換の件数・保存（フォールバック）で表す。
 import { describe, expect, it } from 'vitest';
+import { effortSpanText } from './format.ts';
 import {
   applyActions,
   DEFAULT_START_DATE,
@@ -14,6 +15,8 @@ import {
   pageWeightOf,
   settingInactiveReason,
   settingNote,
+  TERM_NOTES,
+  termNotesOf,
   type Action,
   type GameState,
 } from './index.ts';
@@ -189,5 +192,26 @@ describe('固定した形式の表示の値（OCL-CAAEFA7D）', () => {
       fixedSettingValue(playMonth(newGame(CF_PAID, 42, article)), 'format'),
     ).toBeUndefined();
     expect(fixedSettingValue(vercel, 'variants')).toBeUndefined();
+  });
+});
+
+describe('何か月かにわたる手間の表示（D-160）', () => {
+  it('2 か月以上は「毎月 手間 n を m か月（合計）」、1 か月は「手間 n（1 か月）」', () => {
+    expect(effortSpanText('手間', 6, 2)).toBe(
+      '毎月 手間 6 を 2 か月（合計 12）',
+    );
+    expect(effortSpanText('対応の手間', 4, 1, ['機能開発に数えない'])).toBe(
+      '対応の手間 4（1 か月・機能開発に数えない）',
+    );
+  });
+
+  it('名前に vinext・Fluid が出るときだけ用語の補足を添える', () => {
+    expect(termNotesOf(['Cloudflare Paid + vinext'])).toEqual([
+      TERM_NOTES.vinext,
+    ]);
+    expect(termNotesOf(['Vercel Functions（Fluid）'])).toEqual([
+      TERM_NOTES.fluid,
+    ]);
+    expect(termNotesOf(['さくらの VPS 2GB（東京）'])).toEqual([]);
   });
 });

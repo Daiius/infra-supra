@@ -8,6 +8,7 @@
 // 図の一番下の段には、経路に載らない部品（メールの送信・バックアップなど）と、図に箱を持たないスロット（1 択など）を並べ、
 // 部品を選べる図ではそこからも選べる（どのスロットも図の中で選べる。D-116 の補足・2 つの表示）。
 import type { ArchitectureInput } from 'estimator';
+import { termNotesOf } from 'game';
 import {
   useEffect,
   useId,
@@ -974,6 +975,11 @@ function CompactNode({
                 {title}・{n.caption}
               </div>
               <div className="font-semibold">{n.label}</div>
+              {termNotesOf([n.label]).map((t) => (
+                <div key={t} className="text-xs opacity-70">
+                  {t}。
+                </div>
+              ))}
               {n.ghost && <GhostDetail n={n} />}
               {n.compute && (
                 <div className="text-xs opacity-70">
