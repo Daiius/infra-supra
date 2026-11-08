@@ -144,9 +144,9 @@ describe('AWS の構成', () => {
     expect(over[0]).toBe(true);
     // 1 か月目は 3 倍までなら調整されない・2 か月目は続けて超えたので調整される
     const notes = (i: number) => free.history[i]!.notes.join('・');
-    expect(notes(1)).toContain('配信の性能が調整された');
+    expect(notes(1)).toContain('配信の性能が調整され');
     expect(free.history[1]!.satisfaction.reasons.speed).toContain(
-      '配信の性能が調整された',
+      '配信の性能が調整され',
     );
     // CloudFront の料金は定額（Free は 0 円）で、従量の転送の明細が無い
     expect(
@@ -359,7 +359,7 @@ describe('AWS の構成', () => {
     expect(cost.next).toContain('60,000 パス・$295');
     expect(cost.next).toContain('定額のプラン');
     expect(cost.next).toContain('時間の再検証');
-    expect(cost.next).toContain('ワイルドカードにまとめる');
+    expect(cost.next).toContain('ワイルドカードにまとめましょう');
   });
 
   it('無効化をワイルドカードでまとめる（D-79）: パスは更新ごとに 1、CDN の外れと関数の呼び出しが増え、再生成は変わらない', () => {

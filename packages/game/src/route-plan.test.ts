@@ -149,7 +149,7 @@ describe('ページごとの描き方の表（D-106）', () => {
     const s1 = a.alternatives.find((x) => x.strategy === 'static-build')!;
     expect(s1.available).toBe(true);
     expect(s1.basis).toBe('source');
-    expect(s1.reason).toContain('vinext は開発中（README）');
+    expect(s1.reason).toContain('vinext は開発中です（README）');
     const r2 = rows('nextjs', 'cloudflare-vinext-paid', settings(), {
       isrCache: 'r2',
     });

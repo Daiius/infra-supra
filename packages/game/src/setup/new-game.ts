@@ -265,7 +265,7 @@ export function setupProblem(
 ): string | null {
   const missing = setupMissingSlots(scenario, stackIndex, framework, choices);
   return missing.length
-    ? `部品をまだ選んでいない: ${missing.map((x) => x.label).join('・')}`
+    ? `部品をまだ選んでいません: ${missing.map((x) => x.label).join('・')}`
     : null;
 }
 

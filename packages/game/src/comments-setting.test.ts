@@ -143,7 +143,7 @@ describe('記事のページの部品「コメント欄」（D-82・D-109）', (
       6,
     );
     expect(routePartNote(start(CF_PAID, 300, 1), 'comments')).toContain(
-      '作り直しの回数は増えない',
+      '作り直しの回数は増えません',
     );
     expect(routePartNote(start(CF_PAID, 300, 0), 'comments')).toBeUndefined();
   });
@@ -190,7 +190,7 @@ describe('記事のページの部品「コメント欄」（D-82・D-109）', (
       x.classes['isr-revalidate'].count,
     );
     expect(routePartNote(start(CF_PAID, 0, 1, 'astro'), 'comments')).toContain(
-      'キャッシュを消す',
+      'キャッシュを消します',
     );
   });
 
@@ -325,7 +325,7 @@ describe('記事のページの部品「コメント欄」（D-82・D-109）', (
     const five = fresh(300, COMMENTS_IN_PAGE);
     expect(five.stages.freshness).toBe('fair');
     expect(five.reasons.freshness).toContain(
-      'コメントも間隔の分だけ遅れて見える',
+      'コメントも間隔の分だけ遅れて見えます',
     );
     // 含める × 1 時間: 記事は「普通」・コメントは「悪い」→「悪い」
     expect(fresh(3600, COMMENTS_IN_PAGE).stages.freshness).toBe('bad');

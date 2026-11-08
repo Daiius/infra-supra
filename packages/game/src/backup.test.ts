@@ -121,7 +121,7 @@ describe('受託の依頼（c-p-backup）', () => {
     expect(pro.history.every((h) => h.contractRevenue === 0)).toBe(true);
     expect(
       pro.history.some((h) =>
-        h.notes.some((n) => n.includes('契約の収益が入らなかった')),
+        h.notes.some((n) => n.includes('契約の収益が入りませんでした')),
       ),
     ).toBe(true);
   });

@@ -79,11 +79,11 @@ export function imageRedesignQuality(
     month > at &&
     month <= at + rule.declineMonths
   )
-    return '記事のデザインの刷新を断った（大きな画面で画像が小さく粗く見える）';
+    return '記事のデザインの刷新を断りました（大きな画面で画像が小さく粗く見えます）';
   if (state.imageRedesign && state.stock.images > 0) {
     const share = state.imageRedesign.coarseImages / state.stock.images;
     if (share >= rule.coarseShare)
-      return `原本の無い粗い画像が在庫の ${Math.round(share * 100)}%（一律で縮めて置いた画像は、後から大きくできない）`;
+      return `原本の無い粗い画像が在庫の ${Math.round(share * 100)}%です（一律で縮めて置いた画像は、後から大きくできません）`;
   }
   return undefined;
 }
@@ -152,7 +152,7 @@ export function describeEffect(e: Effect): string {
     case 'on-demand-revalidate':
       return 'ISR の再検証をオンデマンドにする（Next.js）';
     case 'requirement':
-      return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がる）`;
+      return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がります）`;
     case 'contract':
       return `契約の収益 $${e.usdPerMonth} / 月（${REQUIREMENT_LABEL[e.requires]}のときだけ）`;
     case 'imageRedesign':
@@ -210,14 +210,16 @@ export function acceptSummary(
           !e.featureWork
             ? `対応の手間 ${e.points} × ${e.months} か月（機能開発に数えない）`
             : e.months === 1
-              ? `来月、行動に使える手間が ${e.points} 減る`
-              : `その間、行動に使える手間が ${e.points} 減る（${e.months} か月）`,
+              ? `来月、行動に使える手間が ${e.points} 減ります`
+              : `その間、行動に使える手間が ${e.points} 減ります（${e.months} か月）`,
         );
         break;
       case 'imageRedesign': {
         const points = imageRedesignEffort(state);
         effort.push(
-          points > 0 ? `来月、行動に使える手間が ${points} 減る` : '手間なし',
+          points > 0
+            ? `来月、行動に使える手間が ${points} 減ります`
+            : '手間なし',
         );
         const rule = sc.imageRedesign;
         if (!rule) {
@@ -228,17 +230,17 @@ export function acceptSummary(
         const coarse = hasManyCoarseImages(state);
         const lowers = imagesOf(state) !== 'none' || coarse;
         if (lowers)
-          declineLoss = `${rule.declineMonths} か月、画質の評価が 1 段下がる`;
+          declineLoss = `${rule.declineMonths} か月、画質の評価が 1 段下がります`;
         gains.push(
           !lowers
-            ? '画像はすでに大きい（断っても画質の評価は下がらない）'
+            ? '画像はすでに大きいです（断っても画質の評価は下がりません）'
             : coarse
               ? `断ったときの画質の低下（${rule.declineMonths} か月）を避ける`
               : `画質の評価を保つ（断ると ${rule.declineMonths} か月、画質が 1 段下がる）`,
         );
         if (coarse)
           costs.push(
-            `原本の無い粗い画像が在庫の ${Math.round(rule.coarseShare * 100)}% 以上のうちは、受けても画質の評価が 1 段下がる`,
+            `原本の無い粗い画像が在庫の ${Math.round(rule.coarseShare * 100)}% 以上のうちは、受けても画質の評価が 1 段下がります`,
           );
         break;
       }
@@ -247,7 +249,7 @@ export function acceptSummary(
         gains.push(
           `${describeEffect(e)}・収益は 1,000 PV あたり $${sc.revenue.adsUsdPer1000PV}`,
         );
-        costs.push('使用量・費用: PV に比例して増える');
+        costs.push('使用量・費用: PV に比例して増えます');
         break;
       case 'workload':
       case 'stock':

@@ -117,7 +117,7 @@ export function trafficOf(
   let botExtra = 0;
   let peakFactor = 1;
   let lasting = false;
-  // 記事ごとの SNS のカードが出ないと、話題の伸びが小さい（SPA で OGP の前処理なし。ゲーム上の仮定・prd/10 F-05）
+  // 記事ごとの SNS のカードが出ないと、話題の伸びが小さくなりました（SPA で OGP の前処理なし。ゲーム上の仮定・prd/10 F-05）
   const cardFactor = noSocialCards(state)
     ? (sc.frameworks?.spa?.socialCardFactor ?? 1)
     : 1;
@@ -179,7 +179,7 @@ export function trafficOf(
         if (e.lasting && e.social) socialLasting = true;
         if (e.social && cardFactor !== 1)
           trafficNotes.push(
-            `記事ごとの SNS のカードが出ないので、話題の伸びが小さい（${fmtFactor(e.factor)} → ${fmtFactor(factor)}・ゲーム上の仮定）`,
+            `記事ごとの SNS のカードが出ないので、話題の伸びが小さくなりました（${fmtFactor(e.factor)} → ${fmtFactor(factor)}・ゲーム上の仮定）`,
           );
         trafficEvents.push({
           id: def.id,

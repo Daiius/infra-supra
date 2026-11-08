@@ -211,7 +211,7 @@ export function requirementStatus(
             ? '記事のページを毎回描く'
             : '記事のページを枠 + API に',
         ok: true,
-        reason: 'キャッシュが無いので、更新はいつもすぐ見える',
+        reason: 'キャッシュが無いので、更新はいつもすぐ見えます',
         current: true,
       },
     ];
@@ -221,7 +221,7 @@ export function requirementStatus(
         label: '記事のページを静的にビルドし直す',
         ok: true,
         reason:
-          '記事を更新するたびにビルドし直す（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増える',
+          '記事を更新するたびにビルドし直します（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増えます',
         current: true,
       },
     ];
@@ -230,7 +230,7 @@ export function requirementStatus(
       {
         label: 'Vite の SPA',
         ok: true,
-        reason: 'ISR を持たず、ページの中身を毎回 API で読む',
+        reason: 'ISR を持たず、ページの中身を毎回 API で読みます',
         current: true,
       },
     ];
@@ -240,7 +240,7 @@ export function requirementStatus(
         label: FRAMEWORKS[framework].label,
         ok: true,
         reason:
-          '記事を更新するたびにビルドし直す（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増える',
+          '記事を更新するたびにビルドし直します（ビルドの数分は待つ。ゲーム上の仮定）。ビルドの回数と時間が増えます',
         current: true,
       },
     ];
@@ -333,5 +333,5 @@ export function unavailableReason(
     )
   )
     return undefined;
-  return `今の事業者では「${REQUIREMENT_LABEL[def.requires]}」を選べない（セルフサービスのプランに無く、Enterprise などの契約の料金は取得していない）`;
+  return `今の事業者では「${REQUIREMENT_LABEL[def.requires]}」を選べません（セルフサービスのプランに無く、Enterprise などの契約の料金は取得していません）`;
 }

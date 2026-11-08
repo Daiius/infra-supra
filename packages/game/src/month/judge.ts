@@ -229,11 +229,11 @@ export function judgeMonth(
   );
   if (undelivered.length)
     notes.push(
-      `${EMAIL_UNDELIVERED_REASON}（${undelivered[0]!.text}）。サイトは動いている`,
+      `${EMAIL_UNDELIVERED_REASON}（${undelivered[0]!.text}）。サイトは動いています`,
     );
   if (adjusted.length)
     notes.push(
-      'CDN の定額のプランの込みを超え続け、配信の性能が調整された（請求は増えない。ゲーム上の仮定）',
+      'CDN の定額のプランの込みを超え続け、配信の性能が調整されました（請求は増えません。ゲーム上の仮定）',
     );
   const reasons = stageReasons(sc, stages, {
     blocking,
@@ -285,8 +285,8 @@ export function judgeMonth(
       commentsDelayed && judgedDelaySec > sc.comments!.freshness.good,
     onDemandReason: onDemand
       ? state.requirements.includes('on-demand-isr')
-        ? `即時反映の要件を満たさない（${onDemand.label}。${onDemand.reason}）`
-        : `オンデマンドの再検証が届かない（${onDemand.label}。${onDemand.reason}）`
+        ? `即時反映の要件を満たしていません（${onDemand.label}。${onDemand.reason}）`
+        : `オンデマンドの再検証が届きません（${onDemand.label}。${onDemand.reason}）`
       : undefined,
   });
   return { stages, reasons, comps, imgs, notes };
@@ -329,7 +329,7 @@ export function growthOf(
     slowPenalty > 0 && c.reasons.speed
       ? {
           ...c.reasons,
-          speed: `${c.reasons.speed}。速さが悪く PV の伸びが約 ${Math.round(slowPenalty * 100)}% 下がった`,
+          speed: `${c.reasons.speed}。速さが悪く PV の伸びが約 ${Math.round(slowPenalty * 100)}% 下がりました`,
         }
       : c.reasons;
   const net = g.net + bonus - slowPenalty;

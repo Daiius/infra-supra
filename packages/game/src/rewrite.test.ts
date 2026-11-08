@@ -145,7 +145,9 @@ describe('作り直しの手間と切り替え', () => {
     const last = done.history[done.history.length - 1]!;
     // 済んだ月までは旧アプリ（SPA）
     expect(done.history.every((r) => r.framework === 'vite-spa')).toBe(true);
-    expect(last.notes.some((n) => n.startsWith('作り直しが済んだ'))).toBe(true);
+    expect(last.notes.some((n) => n.startsWith('作り直しが済みました'))).toBe(
+      true,
+    );
     expect(done.framework).toBe('nextjs');
     expect(done.components).toEqual(
       newGame(CF_PAID, 1, ARTICLE_COMMUNITY, undefined, 'nextjs').components,

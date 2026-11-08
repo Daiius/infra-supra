@@ -66,7 +66,7 @@ describe('即時反映の要件', () => {
     expect(last(declined).satisfaction.stages.freshness).toBe('good');
     expect(last(accepted).satisfaction.stages.freshness).toBe('fair');
     expect(last(accepted).satisfaction.reasons.freshness).toContain(
-      '即時反映の要件を満たさない',
+      '即時反映の要件を満たしていません',
     );
     const fixed = playMonth(
       applyAction(accepted, {

@@ -190,8 +190,8 @@ export function playMonth(input: GameState): GameState {
 /** 今月見込みを出さない理由（一時的に流量が増えた月。プレイヤーにも見えている出来事。prd/07 §10.7）。 */
 export function projectionNote(r: MonthReport): string | undefined {
   if (r.buzz)
-    return '話題になった月の伸びは続かないかもしれないので、今月は見込みを出さない';
+    return '話題になった月の伸びは続かないかもしれないので、今月は見込みを出しません';
   if (r.trafficNote)
-    return `一時的に流量が増えた月（${r.trafficNote}）なので、今月は見込みを出さない`;
+    return `一時的に流量が増えた月（${r.trafficNote}）なので、今月は見込みを出しません`;
   return undefined;
 }

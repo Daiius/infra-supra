@@ -38,7 +38,7 @@ export function settingInactiveReason(
   if (key !== 'variants') return undefined;
   const images = imagesOf(state);
   return images === 'none' || images === 'resize'
-    ? `画像の部品が「${componentLabel(platform, 'images', raw)}」なのでサイズ違いは作らない（1 種）`
+    ? `画像の部品が「${componentLabel(platform, 'images', raw)}」なのでサイズ違いは作りません（1 種）`
     : undefined;
 }
 
@@ -68,7 +68,7 @@ export function imageFormatInactiveReason(
 ): string | undefined {
   const label = componentLabel(platform, 'images', images);
   if (imagesBehavior(platform, images) === 'none')
-    return `画像の部品が「${label}」なので原本の形式のまま配る`;
+    return `画像の部品が「${label}」なので原本の形式のまま配ります`;
   const fixed = fixedImageFormat(platform, framework, images);
   return fixed ? `画像の部品が「${label}」なので、${fixed.how}` : undefined;
 }
@@ -84,7 +84,7 @@ export function settingNote(
   if (key !== 'format' || settingInactiveReason(state, key)) return undefined;
   const platform = STACKS[state.stackIndex]!.provider;
   return platform === 'cloudflare' && imagesOf(state) === 'images'
-    ? 'Cloudflare Images のバインディングで変換するので、形式は Worker のコード（Accept を見て選ぶ）が決める。ここで選んだ形式で配る'
+    ? 'Cloudflare Images のバインディングで変換するので、形式は Worker のコード（Accept を見て選ぶ）が決めます。ここで選んだ形式で配ります'
     : undefined;
 }
 
@@ -118,18 +118,18 @@ function commentsNote(state: GameState): string | undefined {
   const rebuilds =
     fam !== undefined ? fam === 'static' : rebuildsStaticPages(state.framework);
   if (fam === 'ssr' || (!rebuilds && isrCacheOf(state) === 'none'))
-    return 'ISR のキャッシュを使わない（毎回描く）ので、作り直しは増えない';
+    return 'ISR のキャッシュを使わない（毎回描く）ので、作り直しは増えません';
   if (isOnDemand(state.settings))
     return rebuilds
-      ? 'コメントの投稿のたびにビルドし直す（コメントはビルドの時間の分だけ遅れて見える）'
+      ? 'コメントの投稿のたびにビルドし直します（コメントはビルドの時間の分だけ遅れて見えます）'
       : state.framework === 'astro'
-        ? 'コメントの投稿のたびに記事のページのキャッシュを消す（描き直しが増える）'
-        : 'コメントの投稿のたびに記事のページを再検証する（再生成・CDN の無効化が増える）';
+        ? 'コメントの投稿のたびに記事のページのキャッシュを消します（描き直しが増えます）'
+        : 'コメントの投稿のたびに記事のページを再検証します（再生成・CDN の無効化が増えます）';
   return rebuilds
-    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えない。コメントは間隔とビルドの時間の分だけ遅れて見え、鮮度が下がる`
+    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えません。コメントは間隔とビルドの時間の分だけ遅れて見え、鮮度が下がります`
     : state.framework === 'astro'
-      ? `記事のキャッシュが時間（${optionLabel('pageCache', state.settings.revalidateSec)}）なので、描き直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`
-      : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えない。コメントはその分遅れて見え、鮮度が下がる`;
+      ? `記事のキャッシュが時間（${optionLabel('pageCache', state.settings.revalidateSec)}）なので、描き直しの回数は増えません。コメントはその分遅れて見え、鮮度が下がります`
+      : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えません。コメントはその分遅れて見え、鮮度が下がります`;
 }
 
 /** ISR のキャッシュの部品（Next.js）。Astro は事業者で決まる置き場で、キャッシュしない形は無い（D-103）。 */

@@ -51,13 +51,13 @@ function monthsText(ms: readonly number[]): string {
 
 const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
   speed:
-    'ページの重さ（サーバーの処理・画像の大きさと種類）を設定や部品で軽くするか、処理の上限に余裕のある構成を考える',
+    'ページの重さ（サーバーの処理・画像の大きさと種類）を設定や部品で軽くするか、処理の上限に余裕のある構成を考えましょう',
   quality:
-    '画像の画質が下がっている（記事のデザインの刷新など）。画像の部品と、原本を残しているかを見直す',
+    '画像の画質が下がっています（記事のデザインの刷新など）。画像の部品と、原本を残しているかを見直しましょう',
   freshness:
-    'キャッシュの間隔や部品の性質で更新が遅れて見える。間隔を短くするか、更新がすぐ届く部品を考える',
+    'キャッシュの間隔や部品の性質で更新が遅れて見えます。間隔を短くするか、更新がすぐ届く部品を考えましょう',
   feature:
-    '機能開発に回せる手間が期待に届かない。維持・出来事への対応・行動の手間を減らして、機能開発に回す',
+    '機能開発に回せる手間が期待に届いていません。維持・出来事への対応・行動の手間を減らして、機能開発に回しましょう',
 };
 
 /**
@@ -180,15 +180,15 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       cause !== undefined && eventDef(sc, cause.eventId)?.kind === 'proposal';
     const next = permanent
       ? l.accumulates
-        ? '受けた提案で保存量が増え、上限を越えた。ためていく量は減らない。受ける前に容量との余裕を確かめるか、容量の大きいプラン・部品へ移す'
-        : '受けた提案で以後の負荷が増え、上限を越えた。受ける前に上限との余裕を確かめるか、上限の大きいプラン・部品・設定で負荷を下げる'
+        ? '受けた提案で保存量が増え、上限を越えました。ためていく量は減りません。受ける前に容量との余裕を確かめるか、容量の大きいプラン・部品へ移しましょう'
+        : '受けた提案で以後の負荷が増え、上限を越えました。受ける前に上限との余裕を確かめるか、上限の大きいプラン・部品・設定で負荷を下げましょう'
       : cause
         ? cause.eventId === 'bot'
-          ? 'Bot の大量アクセスで上限を越えた。Bot を遮断するか、上限に余裕のあるプラン・部品を考える'
-          : '一時的に流量が増える出来事で上限を越えた。予告や前兆が来たら、前もって上限に余裕を作る'
+          ? 'Bot の大量アクセスで上限を越えました。Bot を遮断するか、上限に余裕のあるプラン・部品を考えましょう'
+          : '一時的に流量が増える出来事で上限を越えました。予告や前兆が来たら、前もって上限に余裕を作りましょう'
         : l.accumulates
-          ? 'ためていく量（保存量）は減らない。上限に届く前に、容量の大きいプラン・部品へ移すか、ためる量を減らす'
-          : '込みの量・無料枠の上限に当たると止まる。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らす';
+          ? 'ためていく量（保存量）は減りません。上限に届く前に、容量の大きいプラン・部品へ移すか、ためる量を減らしましょう'
+          : '込みの量・無料枠の上限に当たると止まります。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らしましょう';
     const g = groups.get(next) ?? { months: new Set<number>(), items: [] };
     l.months.forEach((m) => g.months.add(m));
     g.items.push({
@@ -205,11 +205,11 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     const months = [...g.months].sort((a, b) => a - b);
     const items = [...g.items].sort((a, b) => b.ratio - a.ratio);
     const top = items[0]!;
-    const by = g.cause ? `。「${g.cause}」が無ければ越えなかった` : '';
+    const by = g.cause ? `。「${g.cause}」が無ければ越えませんでした` : '';
     const what =
       items.length === 1
-        ? `${monthsText(months)}に「${top.text}」に当たって止まった${times(top.ratio) ? `。使用量は上限の ${times(top.ratio)}` : ''}${top.detail ? `。${top.detail}` : ''}${by}`
-        : `${monthsText(months)}に止まった。当たった上限: ${items
+        ? `${monthsText(months)}に「${top.text}」に当たって止まりました${times(top.ratio) ? `。使用量は上限の ${times(top.ratio)}です` : ''}${top.detail ? `。${top.detail}` : ''}${by}`
+        : `${monthsText(months)}に止まりました。当たった上限: ${items
             .slice(0, 2)
             .map(
               (x) =>
@@ -237,8 +237,8 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     out.push({
       hint: {
         kind: 'incident',
-        what: `${monthsText(incidents)}に自前運用のサーバーの障害で止まった（偶発的。1 台構成・SLA なし）`,
-        next: '自前運用は偶発的に止まることがある。止まった回数の上限に余裕を残すか、障害の対応を事業者に任せられる構成を考える',
+        what: `${monthsText(incidents)}に自前運用のサーバーの障害で止まりました（偶発的。1 台構成・SLA なし）`,
+        next: '自前運用は偶発的に止まることがあります。止まった回数の上限に余裕を残すか、障害の対応を事業者に任せられる構成を考えましょう',
       },
       score: tier(
         reason === 'outages',
@@ -256,8 +256,8 @@ export function retryHintsOf(state: GameState): RetryHint[] {
     out.push({
       hint: {
         kind: 'policy',
-        what: `${warned ? `${warned.month} か月目に運営元から規約違反の指摘${p ? `（${p.text}）` : ''}を受け、` : ''}${state.end.month} か月目も違反したままでアカウントが停止された`,
-        next: '指摘が来た月のうちにプランを変えるか、乗り換えを始める（乗り換えの作業中は猶予される）。規約の条件は始める前に構成の説明で確かめられる',
+        what: `${warned ? `${warned.month} か月目に運営元から規約違反の指摘${p ? `（${p.text}）` : ''}を受け、` : ''}${state.end.month} か月目も違反したままでアカウントが停止されました`,
+        next: '指摘が来た月のうちにプランを変えるか、乗り換えを始めましょう（乗り換えの作業中は猶予されます）。規約の条件は始める前に構成の説明で確かめられます',
       },
       score: tier(true, 99),
     });
@@ -297,20 +297,20 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         : undefined;
     const shortText =
       reason === 'cash'
-        ? `${state.end.month} か月目に所持金が尽きた`
-        : `所持金 ${usd(state.cash)} で、目標 ${usd(sc.goal.cash)} に ${usd(sc.goal.cash - state.cash)} 足りない`;
+        ? `${state.end.month} か月目に所持金が尽きました`
+        : `所持金 ${usd(state.cash)} で、目標 ${usd(sc.goal.cash)} に ${usd(sc.goal.cash - state.cash)} 足りません`;
     if (top.length)
       out.push({
         hint: {
           kind: 'cost',
-          what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')}`,
+          what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')} です`,
           next: invalidation
-            ? `オンデマンドの再検証で CloudFront の無効化が増えた（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつく。無効化が込みの定額のプラン・時間の再検証にする、または部品「CDN の無効化のまとめ方」でワイルドカードにまとめる${commentsInPage(commentsOf(sc, state.routeParts), state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなる' : ''}`
+            ? `オンデマンドの再検証で CloudFront の無効化が増えました（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつきます。無効化が込みの定額のプラン・時間の再検証にするか、部品「CDN の無効化のまとめ方」でワイルドカードにまとめましょう${commentsInPage(commentsOf(sc, state.routeParts), state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなります' : ''}`
             : share < 0.2
-              ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもある。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らす。費用を削るなら、${base ? '規模に見合う基本料を見直す' : '設定・部品で量を下げる'}`
+              ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもあります。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らしましょう。費用を削るなら、${base ? '規模に見合う基本料を見直しましょう' : '設定・部品で量を下げましょう'}`
               : base
-                ? '基本料（固定費）が費用の大半。今の規模に見合う基本料か、込みの量や席がそこまで要るかを見直す'
-                : '使った分の費用が大きい。設定・部品で量（転送・変換・実行）を下げるか、込みの量の大きいプランと比べる',
+                ? '基本料（固定費）が費用の大半です。今の規模に見合う基本料か、込みの量や席がそこまで要るかを見直しましょう'
+                : '使った分の費用が大きいです。設定・部品で量（転送・変換・実行）を下げるか、込みの量の大きいプランと比べましょう',
         },
         score: tier(reason === 'cash', 50 + Math.min(49, 100 * share)),
       });
@@ -345,8 +345,8 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       out.push({
         hint: {
           kind: 'commitment',
-          what: `${d.commitment.label}の対象の使用が ${ms.length} か月あった（オンデマンドで ${usd(sum)}）`,
-          next: `1 年の確約で最大 ${Math.round(100 * rate)}% 安くなる（この ${ms.length} か月なら約 ${usd(saving)}）。確約は取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残る。全額前払いは所持金から一度に引く`,
+          what: `${d.commitment.label}の対象の使用が ${ms.length} か月ありました（オンデマンドで ${usd(sum)}）`,
+          next: `1 年の確約で最大 ${Math.round(100 * rate)}% 安くなります（この ${ms.length} か月なら約 ${usd(saving)}）。確約は取り消せず、乗り換え・部品の切り替えで使わなくなっても支払いは残ります。全額前払いは所持金から一度に引きます`,
         },
         // 差は月に数ドルのことが多いので、ほかの補足（100 台）より下に置く（ほかに出すものが少ないときだけ出る）
         score: Math.min(99, saving),
@@ -358,13 +358,13 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           ? {
               // 容量の段（D-120。Vercel の Flat Rate CDN）: 超えた月は請求が増えず、翌月から上の段の月額になる
               kind: 'overage',
-              what: `${o.months[0]} か月目から CDN の量が今の段の容量を超え、翌月から上の段の月額になった（${o.text}）`,
-              next: '段は前の月の量で決まる。リクエスト・転送を設定・部品で減らすか、部品「CDN の料金」の従量（On-demand）と月額を比べる（量が少ないうちは従量のほうが安いことがある）',
+              what: `${o.months[0]} か月目から CDN の量が今の段の容量を超え、翌月から上の段の月額になりました（${o.text}）`,
+              next: '段は前の月の量で決まります。リクエスト・転送を設定・部品で減らすか、部品「CDN の料金」の従量（On-demand）と月額を比べましょう（量が少ないうちは従量のほうが安いことがあります）',
             }
           : {
               kind: 'overage',
-              what: `${o.months[0]} か月目から「${o.text}」を超え、超えた分が請求された`,
-              next: '込みの量・クレジットを超えた分は使った分だけ請求される。設定・部品で量を下げるか、超えたときの単価をプランごとに比べる',
+              what: `${o.months[0]} か月目から「${o.text}」を超え、超えた分が請求されました`,
+              next: '込みの量・クレジットを超えた分は使った分だけ請求されます。設定・部品で量を下げるか、超えたときの単価をプランごとに比べましょう',
             },
         score: tier(false, 20 + o.months.length),
       });
@@ -380,8 +380,8 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       out.push({
         hint: {
           kind: 'slow',
-          what: `${monthsText(slow.map((r) => r.month))}、速さが悪く PV の伸びが下がった（1 か月あたり約 ${Math.round(pen * 100)}%・合わせて約 ${Math.round(cut * 100)}%。${(slow[0]!.satisfaction.reasons.speed ?? '').replace(/。速さが悪く PV の伸び.*$/, '')}）`,
-          next: '速さを「悪い」から戻す: 画像を原本のまま配っていないか（1 ページの通信量）、SSR の重さ、ピークに詰まる前提を見直す',
+          what: `${monthsText(slow.map((r) => r.month))}、速さが悪く PV の伸びが下がりました（1 か月あたり約 ${Math.round(pen * 100)}%・合わせて約 ${Math.round(cut * 100)}%。${(slow[0]!.satisfaction.reasons.speed ?? '').replace(/。速さが悪く PV の伸び.*$/, '')}）`,
+          next: '速さを「悪い」から戻す: 画像を原本のまま配っていないか（1 ページの通信量）、SSR の重さ、ピークに詰まる前提を見直しましょう',
         },
         // 合わせて 1 割未満なら補足（100 台）。大きいときは未達の原因として並べる
         score:
@@ -405,8 +405,8 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       out.push({
         hint: {
           kind: 'ogp',
-          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さかった（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込み${noFrontCdn ? '（ただし前段の CDN が無いと、伸びた話題の月に回線が詰まりうるので、増えた分の一部が失われる）' : ''}`,
-          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付ける${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられる' : ''}。または、記事ごとに HTML を返すフレームワークへ作り直す（大きな手間で数か月かかり、その間は機能開発がほぼ止まるので、話題に間に合うよう早めに）`,
+          what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さくなりました（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込みです${noFrontCdn ? '（ただし前段の CDN が無いと、伸びた話題の月に回線が詰まりうるので、増えた分の一部が失われます）' : ''}`,
+          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付けましょう${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられます' : ''}。または、記事ごとに HTML を返すフレームワークへ作り直しましょう（大きな手間で数か月かかり、その間は機能開発がほぼ止まるので、話題に間に合うよう早めに）`,
         },
         // 影響額で比べる: 足りない額に対する、取り戻せた収益の割合（半分以上なら最上位）
         score: tier(
@@ -452,10 +452,10 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         e === 'feature' && spent > 0
           ? `。維持の手間 計 ${upkeepSum}・出来事への対応 計 ${eff.interrupt}${rewriteSum > 0 ? `・作り直し 計 ${rewriteSum}` : ''}（手間の合計 ${eff.total} の ${Math.round((100 * spent) / Math.max(1, eff.total))}%）`
           : '';
-      const growth = satShort ? '' : '満足度は伸び（PV と収益）にも効く。';
+      const growth = satShort ? '' : '満足度は伸び（PV と収益）にも効きます。';
       const rewriteNext =
         e === 'feature' && rewriteSum > 0
-          ? '。作り直しの間は機能開発がほぼ止まるので、作り直すなら早い月に始めて、止まる月を短くする'
+          ? '。作り直しの間は機能開発がほぼ止まるので、作り直すなら早い月に始めて、止まる月を短くしましょう'
           : '';
       out.push({
         hint: {
@@ -487,13 +487,13 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       );
       const ratio =
         top.p.ratio !== undefined && Number.isFinite(top.p.ratio)
-          ? `。最も多い月は上限の ${top.p.ratio.toFixed(1)} 倍（${top.month} か月目）`
+          ? `。最も多い月は上限の ${top.p.ratio.toFixed(1)} 倍です（${top.month} か月目）`
           : '';
       out.push({
         hint: {
           kind: 'email',
-          what: `${monthsText(mails.map((x) => x.month))}に「${top.p.text}」に当たり、登録の確認・パスワードの再設定・通知のメールが届かない日があった（機能が 1 段下がった）${ratio}`,
-          next: 'メールの通数は利用者と書き込みに比例し、話題で登録が増える日は 1 日の通数も跳ねる。1 日・月の上限に余裕のある送信の仕組みに替える',
+          what: `${monthsText(mails.map((x) => x.month))}に「${top.p.text}」に当たり、登録の確認・パスワードの再設定・通知のメールが届かない日がありました（機能が 1 段下がりました）${ratio}`,
+          next: 'メールの通数は利用者と書き込みに比例し、話題で登録が増える日は 1 日の通数も跳ねます。1 日・月の上限に余裕のある送信の仕組みに替えましょう',
         },
         score: satShort
           ? tier(false, (100 * w.feature * mails.length) / n)

@@ -161,7 +161,7 @@ export function revisionText(
 ): string {
   const effect =
     c.revisedMeters.length > 0
-      ? 'あり（改定後の料金を公式の出典つきで持っているので、今月から改定後の料金で計算する）'
+      ? 'あり（改定後の料金を公式の出典つきで持っているので、今月から改定後の料金で計算します）'
       : `なし（${c.notModeledReason}）`;
-  return `実際に予告されている改定（${c.provider}・施行日 ${c.effectiveFrom}）: ${c.description}。${usedByStack ? '' : '今の構成では使っていない事業者。'}このモデルの計算への影響: ${effect}`;
+  return `実際に予告されている改定（${c.provider}・施行日 ${c.effectiveFrom}）: ${c.description}。${usedByStack ? '' : '今の構成では使っていない事業者です。'}このモデルの計算への影響: ${effect}`;
 }

@@ -79,5 +79,5 @@ export function featureOutlook(
  */
 export function featureRuleText(sc: Scenario): string {
   const ft = sc.satisfaction.feature;
-  return `余った手間は機能開発に回る。機能開発の累計が期待（月 ${ft.expectedPerMonth} × 経過月数）の ${ft.good} 倍以上なら満足度の「機能」は良い、${ft.fair} 倍以上なら普通、それより下は悪い。満足度は評判を通して PV の伸びに効く。`;
+  return `余った手間は機能開発に回ります。機能開発の累計が期待（月 ${ft.expectedPerMonth} × 経過月数）の ${ft.good} 倍以上なら満足度の「機能」は良い、${ft.fair} 倍以上なら普通、それより下は悪いです。満足度は評判を通して PV の伸びに効きます。`;
 }

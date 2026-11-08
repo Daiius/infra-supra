@@ -154,7 +154,7 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
     case 'rewrite':
       return withNote(
-        `${FRAMEWORKS[action.framework].label} への作り直しを始めた`,
+        `${FRAMEWORKS[action.framework].label} への作り直しを始めました`,
         { ...state, rewrite: newRewrite(state, action.framework) },
       );
     case 'migrate': {
@@ -167,7 +167,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       // 乗り換えの月ごとの手間と行動を合わせて、来月の手間に収まるか
       if (effortAvailable({ ...state, migration }) < 0) return state;
       return withNote(
-        `${stackName(action.stackIndex, state.framework)} へ乗り換えを始めた`,
+        `${stackName(action.stackIndex, state.framework)} へ乗り換えを始めました`,
         {
           ...state,
           migration,
@@ -185,7 +185,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         },
       };
       return withNote(
-        `提案「${def.title}」を${action.accept ? '受けた' : '断った'}`,
+        `提案「${def.title}」を${action.accept ? '受けました' : '断りました'}`,
         action.accept
           ? applyEffects(responded, def.accept!.effects, def.id)
           : responded,
@@ -193,7 +193,7 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
     case 'storage-option': {
       const addon = storageOptionAddon(state.stackIndex)!;
-      return withNote('ストレージ変更オプションを付けた', {
+      return withNote('ストレージ変更オプションを付けました', {
         ...state,
         ...planned,
         storageOption: true,
@@ -220,7 +220,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       );
     }
     case 'block-bots':
-      return withNote('Bot を遮断するルールを入れた', {
+      return withNote('Bot を遮断するルールを入れました', {
         ...state,
         ...planned,
         botBlocked: true,
@@ -238,9 +238,9 @@ export function applyAction(state: GameState, action: Action): GameState {
         // 新しい事業者のアカウントを足す DB（Hyperdrive の Supabase など）は、設定の一度きりの手間も今月使う（D-52・OCL-B6A107A3）
         const next = { ...state, ...planned, componentSwap };
         if (effortAvailable(next) < 0) return state;
-        return withNote(`${label} へ差し替えを始めた`, next);
+        return withNote(`${label} へ差し替えを始めました`, next);
       }
-      return withNote(`${label} に差し替えた`, {
+      return withNote(`${label} に差し替えました`, {
         ...state,
         ...planned,
         components: { ...state.components, [action.slot]: action.option },

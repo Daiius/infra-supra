@@ -112,7 +112,9 @@ describe('acceptSummary', () => {
       '機能開発 +8（作業 3 × 2 か月も機能開発に数える）',
       'PV の月の伸び +3 ポイント（3 か月）',
     ]);
-    expect(sum.costs).toContain('その間、行動に使える手間が 3 減る（2 か月）');
+    expect(sum.costs).toContain(
+      'その間、行動に使える手間が 3 減ります（2 か月）',
+    );
     expect(sum.costs.some((c) => c.startsWith('使用量・費用: '))).toBe(true);
   });
 
@@ -146,13 +148,13 @@ describe('acceptSummary の得と断ったときの損', () => {
     expect(sum.gains).toEqual([
       `画質の評価を保つ（断ると ${months} か月、画質が 1 段下がる）`,
     ]);
-    expect(sum.declineLoss).toBe(`${months} か月、画質の評価が 1 段下がる`);
+    expect(sum.declineLoss).toBe(`${months} か月、画質の評価が 1 段下がります`);
     const original = acceptSummary(
       { ...s, components: { ...s.components, images: 'none' } },
       def,
     );
     expect(original.declineLoss).toBeUndefined();
-    expect(original.gains[0]).toContain('断っても画質の評価は下がらない');
+    expect(original.gains[0]).toContain('断っても画質の評価は下がりません');
     // 原本の無い粗い画像が多いと、受けても下がる
     const coarse = acceptSummary(
       {
@@ -164,7 +166,9 @@ describe('acceptSummary の得と断ったときの損', () => {
     );
     expect(coarse.declineLoss).toBeDefined();
     expect(
-      coarse.costs.some((c) => c.includes('受けても画質の評価が 1 段下がる')),
+      coarse.costs.some((c) =>
+        c.includes('受けても画質の評価が 1 段下がります'),
+      ),
     ).toBe(true);
   });
 
@@ -175,7 +179,7 @@ describe('acceptSummary の得と断ったときの損', () => {
     expect(sum.gains).toEqual([
       `基準の PV × 3（以降ずっと）・収益は 1,000 PV あたり $${contract.revenue.adsUsdPer1000PV}`,
     ]);
-    expect(sum.costs).toContain('使用量・費用: PV に比例して増える');
+    expect(sum.costs).toContain('使用量・費用: PV に比例して増えます');
     expect(sum.declineLoss).toBeUndefined();
   });
 });
