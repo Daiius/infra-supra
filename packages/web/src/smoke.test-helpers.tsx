@@ -19,7 +19,7 @@ export const SEED = 42;
 /**
  * jsdom の不足を補う。
  * - matchMedia: 無い。常に「動きを減らす」にして、花火（canvas）と数え上げ（requestAnimationFrame）を止める。
- * - HTMLDialogElement の showModal・close: 無い。open 属性を付け外しするだけ。
+ * - HTMLDialogElement の showModal・close: 無い。open 属性を付け外しするだけ。Esc は一番上の開いたダイアログを閉じる（ブラウザと同じ）。
  * - ResizeObserver・要素の大きさ: 無い・常に 0。グラフは幅が 0 だと描かないので、幅 640 を返す。
  * - `<form method="dialog">` の送信: 未実装。送信を止めてダイアログを閉じる（ブラウザと同じ）。
  * - scrollTo・canvas の getContext: 未実装の警告を出すので黙らせる。
@@ -37,9 +37,21 @@ function installDomShims() {
       dispatchEvent: () => false,
     }) as MediaQueryList;
   const dialog = HTMLDialogElement.prototype;
-  dialog.showModal ??= function (this: HTMLDialogElement) {
-    this.setAttribute('open', '');
-  };
+  if (!dialog.showModal) {
+    dialog.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    // Esc: ブラウザと同じく、一番上（後から開いた）のダイアログに cancel を送り、止められなければ閉じる。
+    // 中の要素が keydown を preventDefault したら（吹き出しを閉じたとき）閉じない
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const top = [...document.querySelectorAll('dialog[open]')].at(-1) as
+        HTMLDialogElement | undefined;
+      if (!top) return;
+      const cancel = new Event('cancel', { cancelable: true });
+      if (top.dispatchEvent(cancel)) top.close();
+    });
+  }
   dialog.close ??= function (this: HTMLDialogElement) {
     this.removeAttribute('open');
     this.dispatchEvent(new Event('close'));
@@ -107,6 +119,12 @@ export function useSmokeEnv() {
     expect(errors.map((a) => a.map(String).join(' '))).toEqual([]);
   });
 }
+
+/** 開いている ⓘ の説明のダイアログ（D-129。info.tsx の Info）。無ければ null。 */
+export const infoDialog = (): HTMLElement | null =>
+  [
+    ...document.querySelectorAll<HTMLElement>('dialog[data-info-dialog][open]'),
+  ].at(-1) ?? null;
 
 /** 分けて読む画面（見積・運営中。App.tsx の lazy）の読み込みを待つ。 */
 export async function waitLoaded(): Promise<void> {
