@@ -4,6 +4,7 @@
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
 // 地の色との対比は WARN なので、凡例に値を書く）。
+import { isZeroText, signedText } from './format.ts';
 import {
   effortTotalNote,
   featureProgressOf,
@@ -261,8 +262,8 @@ export function FeatureRing({
           textAnchor="middle"
           className="fill-[var(--text-secondary)] text-[10px]"
         >
-          {change !== undefined && change !== 0
-            ? `行動で ${change > 0 ? '+' : '−'}${fmt(Math.abs(change))}`
+          {change !== undefined && !isZeroText(fmt(Math.abs(change)))
+            ? `行動で ${signedText(change, fmt)}`
             : '機能開発 / 期待'}
         </text>
       </svg>

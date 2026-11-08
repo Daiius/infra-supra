@@ -176,6 +176,8 @@ export function App() {
   useEffect(() => storeSave(session?.save ?? null), [session?.save]);
   const state = session?.state ?? null;
   const [mode, setMode] = useState<Mode>(initialMode);
+  // 「最初から」の確認のダイアログ（今のプレイが消えるので確かめる）
+  const [confirmRestart, setConfirmRestart] = useState(false);
   const switchMode = (m: Mode) => {
     // ゲームに戻るときは見積の入力を URL から外す（見積の入力は見積の画面が書く）
     if (m === 'game')
@@ -210,12 +212,21 @@ export function App() {
         {mode === 'game' && state && (
           <button
             className="btn btn-ghost btn-sm ml-auto"
-            onClick={() => setSession(null)}
+            onClick={() => setConfirmRestart(true)}
           >
             最初から
           </button>
         )}
       </div>
+      {confirmRestart && (
+        <RestartDialog
+          onConfirm={() => {
+            setConfirmRestart(false);
+            setSession(null);
+          }}
+          onClose={() => setConfirmRestart(false)}
+        />
+      )}
       <main className="mx-auto max-w-5xl space-y-4 p-2 sm:p-4">
         <Suspense fallback={<Loading />}>
           {mode === 'estimate' ? (
@@ -274,6 +285,51 @@ export function App() {
         </Suspense>
       </main>
     </div>
+  );
+}
+
+/** 「最初から」の確認（daisyUI の modal）。やり直すと保存したプレイを消して始める画面に戻る。 */
+function RestartDialog({
+  onConfirm,
+  onClose,
+}: {
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (d && !d.open) d.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="modal"
+      aria-labelledby="restart-dialog-title"
+      onClose={onClose}
+    >
+      <div className="modal-box max-w-md">
+        <h2 id="restart-dialog-title" className="text-lg font-bold">
+          最初からやり直しますか？
+        </h2>
+        <p className="mt-2 text-sm">
+          今のプレイは消えます（前の試行も消えます）。始める画面に戻ります。
+        </p>
+        <div className="modal-action">
+          <form method="dialog">
+            <button className="btn btn-ghost btn-sm">やめる</button>
+          </form>
+          <button className="btn btn-error btn-sm" onClick={onConfirm}>
+            やり直す
+          </button>
+        </div>
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button aria-label="背景を押して閉じる" tabIndex={-1}>
+          閉じる
+        </button>
+      </form>
+    </dialog>
   );
 }
 

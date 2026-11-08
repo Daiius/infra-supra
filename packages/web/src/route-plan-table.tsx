@@ -15,6 +15,7 @@ import type {
 import { ROUTE_STRATEGIES, ROUTE_STRATEGY_ORDER } from 'catalog';
 import { Info } from './info.tsx';
 import { SOURCE_CLASS, SOURCE_STYLE } from './page-wireframes.tsx';
+import { signedText } from './format.ts';
 
 /** 描き方 → 見取り図の作られ方（色だけに使う）。 */
 const STRATEGY_SOURCE: Record<RouteStrategyId, RegionSource> = {
@@ -46,7 +47,7 @@ export function Swatch({
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const signedUsd = (n: number) =>
-  `${n >= 0 ? '+' : '−'}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
+  signedText(n, (a) => `$${Math.round(a).toLocaleString('en-US')}`);
 
 const MARK = { good: '✓', fair: '△', bad: '✗' } as const;
 

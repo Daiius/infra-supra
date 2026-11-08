@@ -1,6 +1,9 @@
 // ゲームモードの運営中の画面（月の報告・行動・推移・結果）。App から分けて読む（始める画面の初回の読み込みに含めない）。
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  isPolicyViolation,
+  policyCauseOf,
+  premisePlanLabel,
   activeCommitments,
   commitmentOffers,
   PAYMENT_LABEL,
@@ -98,8 +101,9 @@ import {
   FireworksEngine,
   useReducedMotion,
 } from './motion.tsx';
+import { isZeroText, roundInt, signedText } from './format.ts';
 
-const pct = (n: number) => `${n >= 0 ? '+' : ''}${(n * 100).toFixed(0)}%`;
+const pct = (n: number) => signedText(n, (a) => `${(a * 100).toFixed(0)}%`);
 const scrollTop = () => window.scrollTo({ top: 0 });
 type SlotId = Extract<Action, { type: 'component' }>['slot'];
 
@@ -191,6 +195,43 @@ function markEventsSeen(runId: string, month: number) {
   }
 }
 
+/** 再開の知らせを出しておく時間（ミリ秒）。 */
+const RESUMED_TOAST_MS = 6000;
+
+/** 保存から再開したことの知らせ（daisyUI の toast。画面の右下）。 */
+function ResumedToast({
+  month,
+  ended,
+  onClose,
+}: {
+  month: number;
+  ended: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="toast toast-end toast-bottom z-50">
+      <div
+        role="status"
+        data-resumed-toast
+        className="alert alert-info py-2 text-sm shadow"
+      >
+        <span>
+          {ended
+            ? `前回の結果（${month} か月目に終了）を表示しています`
+            : `前回の続き（${month} か月目）から再開しました`}
+        </span>
+        <button
+          className="btn btn-ghost btn-xs btn-circle"
+          aria-label="知らせを閉じる"
+          onClick={onClose}
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Game({
   state,
   restored,
@@ -239,6 +280,13 @@ export function Game({
   useEffect(() => {
     if (eventsOpen === 'auto') markEventsSeen(runId, report.month);
   }, [eventsOpen, runId, report.month]);
+  // 保存から再開したときに一度だけ出す知らせ（数秒で消える・× で閉じる）。画面は遊び始めごとに作り直すので、月を進めても出し直さない
+  const [resumed, setResumed] = useState(restored);
+  useEffect(() => {
+    if (!resumed) return;
+    const t = setTimeout(() => setResumed(false), RESUMED_TOAST_MS);
+    return () => clearTimeout(t);
+  }, [resumed]);
   // 戻る先の月の確認（D-128）。null は閉じている。戻れるのは行動を選んだ月（今の月より前）だけ
   const [rewindTo, setRewindTo] = useState<number | null>(null);
   const rewindable = state.history.length - 1;
@@ -247,6 +295,13 @@ export function Game({
   );
   return (
     <>
+      {resumed && (
+        <ResumedToast
+          month={report.month}
+          ended={!playing}
+          onClose={() => setResumed(false)}
+        />
+      )}
       {state.phase === 'won' && celebration !== null && (
         // key を変えると最初と同じように開き直す（暗い背景と花火も再開）
         <VictoryCelebration
@@ -908,7 +963,11 @@ function MonthCard({
           <div>
             <h3 className="mb-1 font-bold">プラットフォームの上限・制限</h3>
             <ul className="space-y-1">
-              {r.premises.map((p) => (
+              {/* 規約違反の行を一番上に（ほかは estimator の並び順のまま） */}
+              {[
+                ...r.premises.filter(isPolicyViolation),
+                ...r.premises.filter((p) => !isPolicyViolation(p)),
+              ].map((p) => (
                 <PremiseRow key={p.id} p={p} />
               ))}
             </ul>
@@ -932,7 +991,7 @@ function MonthCard({
                     <td>{l.label}</td>
                     <td className="text-right font-mono">
                       {l.currency === 'JPY'
-                        ? `${Math.round(l.amount).toLocaleString()} 円`
+                        ? `${roundInt(l.amount).toLocaleString()} 円`
                         : usd(l.amount)}
                     </td>
                   </tr>
@@ -1265,6 +1324,24 @@ function surpriseReason(x: Surprise): string {
 }
 
 function PremiseRow({ p }: { p: PlatformPremise }) {
+  // 規約違反（Vercel Hobby の非商用など）は原因のプランの名前を目立たせる（どの選択が原因か分かるように）
+  if (isPolicyViolation(p)) {
+    const plan = premisePlanLabel(p);
+    return (
+      <li
+        className="flex flex-wrap items-center gap-2 rounded-box border border-error bg-error/10 px-2 py-1"
+        data-policy-violation
+      >
+        <span className="badge badge-sm badge-error">規約違反</span>
+        {plan && (
+          <span className="font-bold text-error" data-policy-cause>
+            原因: {plan}
+          </span>
+        )}
+        <span>{p.text}</span>
+      </li>
+    );
+  }
   const blocked = p.hit && p.effect !== 'cost';
   // 込みのクレジットの消費は異常ではない（超えた分は従量で請求）。超過の印にせず消費として見せる
   const credit = isCreditUse(p);
@@ -1713,8 +1790,8 @@ function Actions({
         <div className="space-y-0.5 text-sm" data-testid="feature-outlook">
           <div>
             来月の機能開発 {fmtPoints(outlook.feature)}
-            {outlook.change !== 0 &&
-              `（行動で ${outlook.change > 0 ? '+' : '−'}${fmtPoints(Math.abs(outlook.change))}）`}
+            {!isZeroText(fmtPoints(Math.abs(outlook.change))) &&
+              `（行動で ${signedText(outlook.change, fmtPoints)}）`}
           </div>
           <FeatureProgressLine
             scenario={sc}
@@ -2435,6 +2512,8 @@ function Result({
   const reflection = reflectionOf(state);
   // 次のプレイへのヒント（未達成・ゲームオーバーのとき。達成なら空。D-40）
   const hints = retryHintsOf(state);
+  // 規約違反で終わったときの原因のプラン（それ以外は null）
+  const policy = policyCauseOf(state);
   const rows: { label: string; get: (a: Axes) => string }[] = [
     { label: '累積の利益', get: (a) => usd(a.profit) },
     { label: '満足度の平均', get: (a) => a.satisfaction.toFixed(2) },
@@ -2473,6 +2552,21 @@ function Result({
                 止まった月 {state.outages} 回
               </span>
             </div>
+            {policy && (
+              // 規約違反で終わったとき: 原因のプラン・部品を強調する（どの選択が原因か分かるように）
+              <div className="mt-1" data-policy-cause-result>
+                原因のプラン:{' '}
+                <span className="badge badge-neutral font-bold">
+                  {policy.label ?? policy.text}
+                </span>
+                <span className="ml-1 text-sm">
+                  （{policy.text}
+                  {policy.warnedMonth !== null &&
+                    `。${policy.warnedMonth} か月目に指摘を受けました`}
+                  ）
+                </span>
+              </div>
+            )}
           </div>
           {won && (
             // 帯の中の花火のアイコンのボタン（SVG。端末のフォントに依存しない）。帯の文字の色で描く
