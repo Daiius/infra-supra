@@ -168,14 +168,40 @@ function CommitmentsSection({
   );
 }
 
+/**
+ * 出来事のダイアログを自動で開いた月（D-126）。月ごとに 1 回だけ自動で開く（見積の画面から戻って作り直したときに再び開かない）。
+ * ゲームの状態（保存）には入れず sessionStorage に「遊び始めの id: 月」を 1 つだけ持つ。使えない環境では覚えない。
+ */
+const EVENTS_SEEN_KEY = 'infra-supra:events-seen';
+function eventsSeen(runId: string, month: number): boolean {
+  try {
+    const v = sessionStorage.getItem(EVENTS_SEEN_KEY);
+    if (!v) return false;
+    const i = v.lastIndexOf(':');
+    return v.slice(0, i) === runId && Number(v.slice(i + 1)) >= month;
+  } catch {
+    return false;
+  }
+}
+function markEventsSeen(runId: string, month: number) {
+  try {
+    sessionStorage.setItem(EVENTS_SEEN_KEY, `${runId}:${month}`);
+  } catch {
+    // 保存領域が使えない環境では覚えない（作り直すと再び開くだけ）
+  }
+}
+
 export function Game({
   state,
   restored,
+  runId,
   onAdvance,
 }: {
   state: GameState;
   /** 保存から再開した（出来事・達成のダイアログを自動では開かない。D-26）。 */
   restored: boolean;
+  /** 遊び始め（始めた・再開した）ごとの id。出来事のダイアログを月ごとに 1 回だけ自動で開くのに使う（D-126）。 */
+  runId: string;
   /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
   onAdvance: (actions: Action[]) => GameState;
 }) {
@@ -194,8 +220,16 @@ export function Game({
     if (state.phase !== 'won') setCelebration(0);
   }, [state.phase]);
   const [eventsOpen, setEventsOpen] = useState<'auto' | 'manual' | null>(() =>
-    playing && !restored && report.events.length > 0 ? 'auto' : null,
+    playing &&
+    !restored &&
+    report.events.length > 0 &&
+    !eventsSeen(runId, report.month)
+      ? 'auto'
+      : null,
   );
+  useEffect(() => {
+    if (eventsOpen === 'auto') markEventsSeen(runId, report.month);
+  }, [eventsOpen, runId, report.month]);
   return (
     <>
       {state.phase === 'won' && celebration !== null && (
@@ -239,6 +273,8 @@ export function Game({
       )}
       {playing && eventsOpen && (
         <EventsDialog
+          // 月が替わったら 1 ページ目から
+          key={report.month}
           report={report}
           auto={eventsOpen === 'auto'}
           onClose={() => setEventsOpen(null)}
@@ -349,7 +385,11 @@ function VictoryCelebration({
 }
 
 /**
- * その月の出来事のダイアログ（D-23）。`<dialog>` の showModal でフォーカスを閉じ込め、Esc で閉じる。
+ * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつの通知のカードで出し、見出しの下のナビ
+ * （「← 前へ」「2 / 4」「次へ →」とページ送りの点）で左右に切り替える（左右の矢印キー・横のスワイプでも）。
+ * 未読の数を見出しに、未読だったカードには角に「NEW」を出す。表示したページは既読にする（既読はダイアログを開いている間だけ）。
+ * ナビは本文の上に置き、ページの高さが変わっても動かない。本文が長いときは本文だけをスクロールする。
+ * `<dialog>` の showModal でフォーカスを閉じ込め、Esc・×・「あとで見る」・最後のページの「閉じる」で閉じる。
  * 選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
  */
 function EventsDialog({
@@ -362,6 +402,18 @@ function EventsDialog({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
+  // page: 今のページ / read: 表示したページ（今のページを含む） / fresh: 今のページが開いた時点で未読だったか / dir: 移った向き
+  const [view, setView] = useState({
+    page: 0,
+    read: new Set([0]),
+    fresh: true,
+    dir: 0,
+  });
+  const { page, read, fresh, dir } = view;
   useEffect(() => {
     const d = ref.current;
     if (!d || d.open) return;
@@ -371,38 +423,218 @@ function EventsDialog({
       document.activeElement.blur();
     d.showModal();
   }, [auto]);
-  const hasProposal = r.events.some((e) => e.phase === 'proposal');
+  const n = r.events.length;
+  const last = page >= n - 1;
+  const e = r.events[Math.min(page, n - 1)]!;
+  const unread = n - read.size;
+  // ページを移ったら本文を先頭へ戻す。押したボタンが端で押せなくなったら、次へ（最後のページでは「閉じる」）へフォーカスを移す
+  const moved = useRef(false);
+  useEffect(() => {
+    if (!moved.current) return;
+    bodyRef.current?.scrollTo?.({ top: 0 });
+    const a = document.activeElement;
+    if (
+      a instanceof HTMLButtonElement &&
+      !a.disabled &&
+      ref.current?.contains(a)
+    )
+      return;
+    (last ? closeRef : nextRef).current?.focus();
+  }, [page, last]);
+  const go = (to: number) => {
+    if (to < 0 || to >= n || to === page) return;
+    moved.current = true;
+    setView({
+      page: to,
+      read: new Set(read).add(to),
+      fresh: !read.has(to),
+      dir: to > page ? 1 : -1,
+    });
+  };
+  // 横のスワイプ（縦のスクロールと区別するため、横の動きが縦より大きく 50px 以上のときだけ）
+  const touch = useRef<{ x: number; y: number } | null>(null);
   return (
     <dialog
       ref={ref}
       className="modal"
       aria-labelledby="events-dialog-title"
       onClose={onClose}
+      onKeyDown={(k) => {
+        if (k.key === 'ArrowRight') go(page + 1);
+        else if (k.key === 'ArrowLeft') go(page - 1);
+      }}
     >
-      <div className="modal-box max-w-2xl">
-        <h2 id="events-dialog-title" className="text-lg font-bold">
-          {r.month} か月目の出来事（{r.events.length} 件）
-        </h2>
-        <div className="mt-3 space-y-2">
-          {r.events.map((e) => (
-            <EventCard key={`${e.id}:${e.phase}`} event={e} />
-          ))}
-        </div>
-        {hasProposal && (
-          <div className="mt-3 text-sm opacity-80">
-            ◆ 提案は、月の終わりの行動の欄で受けるか断るかを選ぶ。
-          </div>
-        )}
-        <div className="modal-action">
+      <div
+        // 2 件以上の月は高さを一定にする（modal は縦中央なので、高さが変わると上端・ナビ・閉じるが上下に動く）。
+        // 短いページは本文の下が空くだけ。1 件だけの月は内容に合わせる
+        className={`modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6 ${n > 1 ? 'h-[min(40rem,calc(100dvh-2rem))]' : ''}`}
+        data-events-fixed-height={n > 1 ? '' : undefined}
+      >
+        {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
+        <div className="flex shrink-0 items-start justify-between gap-2">
+          <h2
+            id="events-dialog-title"
+            className="flex flex-wrap items-center gap-x-2 text-lg font-bold"
+          >
+            <span>
+              {r.month} か月目の出来事（{n} 件）
+            </span>
+            {n > 1 && (
+              <span
+                className={`badge badge-sm font-normal ${unread > 0 ? 'badge-primary badge-soft' : 'badge-ghost'}`}
+                data-events-unread
+              >
+                {unread > 0 ? `未読 ${unread}` : '✓ すべて既読'}
+              </span>
+            )}
+          </h2>
           <form method="dialog">
-            <button className="btn btn-primary" autoFocus>
-              閉じて今月の行動へ
+            <button
+              className="btn btn-circle btn-ghost btn-sm"
+              aria-label="ダイアログを閉じる"
+            >
+              ✕
             </button>
           </form>
         </div>
+        {n > 1 && (
+          <nav
+            className="mt-3 shrink-0 space-y-2 border-b border-base-300 pb-3"
+            aria-label="出来事のページ"
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={page === 0}
+                onClick={() => go(page - 1)}
+              >
+                ← 前へ
+              </button>
+              <span
+                className="min-w-12 text-center text-sm tabular-nums"
+                aria-hidden
+                data-events-position
+              >
+                {page + 1} / {n}
+              </span>
+              <button
+                ref={nextRef}
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={last}
+                autoFocus
+                onClick={() => go(page + 1)}
+              >
+                次へ →
+              </button>
+            </div>
+            {/* 位置と未読の数は読み上げにも伝える（ページを移るたびに読む） */}
+            <span className="sr-only" aria-live="polite">
+              {n} 件中 {page + 1} 件目。
+              {unread > 0 ? `未読 ${unread} 件` : 'すべて既読'}
+            </span>
+            {/* ページ送りの点（daisyUI の status）。今のページは大きい neutral、未読は中くらいの薄い primary、既読は小さい灰色（色だけでなく大きさで見分ける）。押すとそのページへ */}
+            <ol className="flex items-center gap-0.5" data-events-dots>
+              {r.events.map((x, i) => {
+                const state =
+                  i === page ? 'current' : read.has(i) ? 'read' : 'unread';
+                return (
+                  <li key={`${x.id}:${x.phase}`}>
+                    <button
+                      type="button"
+                      className="flex h-6 items-center px-1"
+                      aria-label={`${i + 1} 件目（${read.has(i) ? '既読' : '未読'}）: ${x.title}`}
+                      aria-current={i === page ? 'step' : undefined}
+                      title={x.title}
+                      data-dot={state}
+                      onClick={() => go(i)}
+                    >
+                      {/* 普通の塗りの丸。大きさでも見分ける: 今 > 未読 > 既読 */}
+                      <span
+                        aria-hidden
+                        className={`block rounded-full ${
+                          state === 'current'
+                            ? 'h-2.5 w-2.5 bg-base-content/60'
+                            : state === 'unread'
+                              ? 'h-2 w-2 bg-primary/40'
+                              : 'h-1.5 w-1.5 bg-base-content/30'
+                        }`}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        )}
+        <div
+          ref={bodyRef}
+          className="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          data-events-page
+          onTouchStart={(t) => {
+            const p = t.touches[0];
+            touch.current = p ? { x: p.clientX, y: p.clientY } : null;
+          }}
+          onTouchEnd={(t) => {
+            const s0 = touch.current;
+            const p = t.changedTouches[0];
+            touch.current = null;
+            if (!s0 || !p) return;
+            const dx = p.clientX - s0.x;
+            if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(p.clientY - s0.y))
+              go(dx < 0 ? page + 1 : page - 1);
+          }}
+        >
+          {/* key でページごとに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない） */}
+          <div
+            key={page}
+            className={`relative pt-2 ${
+              reduced || dir === 0
+                ? ''
+                : dir > 0
+                  ? 'motion-slide-from-right'
+                  : 'motion-slide-from-left'
+            }`}
+          >
+            {fresh && n > 1 && (
+              <span
+                className="badge badge-primary badge-soft badge-xs absolute top-0 right-2 z-10"
+                data-events-new
+              >
+                NEW
+              </span>
+            )}
+            <EventCard key={`${e.id}:${e.phase}`} event={e} />
+            {e.phase === 'proposal' && (
+              <div className="mt-2 text-sm opacity-80">
+                行動の欄で受けるか断るかを選ぶ（選ばなければ断る）
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
+          {last ? (
+            <form method="dialog">
+              <button
+                ref={closeRef}
+                className="btn btn-primary btn-sm"
+                autoFocus={n === 1}
+              >
+                閉じる
+              </button>
+            </form>
+          ) : (
+            <form method="dialog">
+              <button className="btn btn-ghost btn-sm">
+                あとで見る（閉じる）
+              </button>
+            </form>
+          )}
+        </div>
       </div>
       <form method="dialog" className="modal-backdrop">
-        <button aria-label="閉じる" tabIndex={-1}>
+        <button aria-label="背景を押して閉じる" tabIndex={-1}>
           閉じる
         </button>
       </form>
@@ -433,7 +665,7 @@ function MonthCard({
 }: {
   report: MonthReport;
   scenario: Scenario;
-  /** 遊んでいる間だけ渡す。出来事は見出しの一覧に詰め、ダイアログで再表示する（D-23）。 */
+  /** 遊んでいる間だけ渡す。出来事は見出しの一覧に詰め、ダイアログで再表示する（D-23・D-126）。 */
   onShowEvents?: (() => void) | undefined;
 }) {
   const s = r.satisfaction;
@@ -481,7 +713,7 @@ function MonthCard({
                   className="btn btn-sm btn-outline mt-2"
                   onClick={onShowEvents}
                 >
-                  今月の出来事を見る（{r.events.length} 件）
+                  出来事を 1 件ずつ見る（{r.events.length} 件）
                 </button>
               </div>
             )
@@ -739,6 +971,9 @@ function EffortBreakdownView({
   );
 }
 
+/** 提案の印（D-28）。出来事の一覧・ダイアログと、行動の欄の提案の選択肢で共有する（D-126）。 */
+const PROPOSAL_BADGE = { label: '◆ 提案', cls: 'badge-primary' } as const;
+
 /**
  * 出来事の印（D-28）。予告・予告なしで今月発生・予告どおり起きた・提案を、印・色・文言の 3 つで区別する（色だけにしない）。
  */
@@ -752,7 +987,7 @@ function eventBadge(e: MonthEvent): {
     case 'notice':
       return { label: '⏳ 予告: 来月起きそう', cls: 'badge-warning' };
     case 'proposal':
-      return { label: '◆ 提案', cls: 'badge-primary' };
+      return PROPOSAL_BADGE;
     case 'occurred':
       return e.announced === false
         ? {
@@ -1379,12 +1614,19 @@ function Actions({
               const acceptOk = acceptWhy === null;
               const summary = acceptSummary(state, def);
               return (
+                // 提案から来た選択肢は、印（出来事と同じ ◆ 提案）と primary 系の枠・背景で通常の開発と見分ける（D-126）
                 <div
                   key={id}
-                  className="rounded-box border border-base-300 p-3"
+                  className="rounded-box border border-primary bg-primary/5 p-3"
+                  data-proposal-choice
                 >
-                  <div className="mb-1 font-semibold">
-                    {def.title} <Info>{def.text}</Info>
+                  <div className="mb-1 flex flex-wrap items-center gap-2 font-semibold">
+                    <span className={`badge badge-sm ${PROPOSAL_BADGE.cls}`}>
+                      {PROPOSAL_BADGE.label}
+                    </span>
+                    <span>
+                      {def.title} <Info>{def.text}</Info>
+                    </span>
                   </div>
                   <div className="flex flex-wrap gap-4">
                     <label
@@ -1945,7 +2187,9 @@ function ComponentsSection({
                       <option key={o.id} value={o.id} disabled={why !== null}>
                         {o.label}
                         {o.id === x.current ? '（今）' : ''}
-                        {p ? '（届いた提案を受ける）' : ''}
+                        {p
+                          ? `（${PROPOSAL_BADGE.label}: 届いた提案を受ける）`
+                          : ''}
                         {why ? `（${why}）` : ''}
                       </option>
                     );
