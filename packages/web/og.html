@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1200" />
+    <meta name="robots" content="noindex" />
+    <!-- OGP の画像（public/og.png）の書き出し用（D-191）。dev サーバーで /og.html を開き、[data-og-card] の 1200×630 の箱を撮る。
+         build の input に入れていないので本番には含まれない -->
+    <link
+      rel="preload"
+      href="/fonts/philosopher-bold-supra-inf.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <title>infra-supra OGP</title>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/og-main.tsx"></script>
+  </body>
+</html>

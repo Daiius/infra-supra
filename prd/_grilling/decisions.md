@@ -2284,6 +2284,24 @@
   - favicon は今のまま。
 - テスト: `logo.smoke.test.tsx`（W-184a〜e。分子と分母・読み上げの名前・開いて数秒後の 1 回・ホバーとタッチ・動きを減らす設定では入れ替えない・ヘッダーに出る）。
 - 実装: `packages/web/src/logo.tsx`・`styles.css`（`@font-face` と `.logo-fraction`）・`index.html`（preload）・App.tsx のヘッダー。
+- 補足（2026-11-10・ユーザーの要望。字体の補足は下の「未決」の節の頭にある）:
+  - **括線の位置**: 分子の下を負の margin で詰めていたため、括線が「p」のディセンダーにかかっていた。括線を下げて p にかからないようにし、分母との間もそろえた。字の寸法（1em あたり。canvas の measureText で測った）は、字の箱が上 0.90・下 0.22、p の下端が基線の 0.203 下、I・f の上端が 0.672、x の高さが 0.484。
+    - 括線の上端は基線の 0.28em 下（行の下 0.16 + 空き `--logo-gap-above: 0.12em`）で、p の下端との間は 0.077em。分母は `--logo-pull-denominator: -0.08em` で詰め、括線の下端から I・f の上端まで 0.09em。分子の基線から括線（0.28）と、括線から分母の x の高さ（0.278）もそろう。
+    - 括線の太さ・空き・詰めはすべて em（`--logo-rule: 0.085em`）にし、px は字の大きさの既定（`var(--logo-size, 18px)`）だけにした。大写し（OGP。D-191）でも比率が崩れない。18px では括線 1.53px・上の空き 2.16px・分母の詰め −1.44px で、ロゴの高さは約 38px（前は約 37px）。
+  - **入れ替えを繰り返す**: 開いて 8 秒後の 1 回だけでなく、普段の形 20 秒（`LOGO_NORMAL_MS`）・入れ替えた形 12 秒（`LOGO_HOLD_MS`）を繰り返す（フェードは 1.2 秒のまま。最初だけ 8 秒 `LOGO_INTRO_DELAY_MS`）。タブが見えていない間（`document.hidden`）は残りの時間を持ったまま止め、見えるようになったら続きから進める。マウスを乗せている間（タッチは押して 12 秒）は入れ替えた形を保ち、離すと周期の今の形に戻る（周期は乗せている間も裏で進む）。`prefers-reduced-motion: reduce` では今までどおり入れ替えない。`Logo` の `still` で入れ替えを止め、`size` で字の大きさを替えられる（OGP の画像で使う）。
+  - テスト: `logo.smoke.test.tsx` の W-184b（何周も繰り返す）・W-184f（hidden の間は進まず、続きから）・W-184g（周期の途中で乗せても保つ）・W-184d（動きを減らす設定では何周分たっても動かない）・W-184h（`still`）・W-184i（styles.css の寸法が em で、px は既定の 18px だけ）。
+
+### D-191 OGP の画像（ロゴの大写し + 記事コミュニティの図柄）とメタタグ（2026-11-10・ユーザーの依頼）
+
+- 依頼（ユーザー。supervisor 経由・2026-11-09）: 1200×630 の OGP 画像を、ロゴ（D-184）を大写しにし、背景に記事コミュニティのシナリオの図柄（D-140）を薄く写した形で作る。
+- 決定:
+  - **書き出し用のページ**: `packages/web/og.html`（Vite の別の入口）と `src/og-main.tsx`・`src/og-card.tsx`（`OgCard`）。箱は `[data-og-card]` の 1200×630 ちょうど。ロゴは `<Logo still size={150} />`（入れ替えない）。背景は `ScenarioArt` の記事コミュニティを素の幅 448px で描いて箱の幅まで拡大し（`scale(1200/448)`）、不透明度 0.2。破線は拡大しても太くならない（non-scaling-stroke）ので、この箱の中だけ太くする。ロゴの後ろだけ地の色を楕円のぼかしで戻す。副題「Web アプリのインフラ運営シミュレーション」を 34px で小さく入れた（字体はアプリの標準）。テーマはライト。
+  - **本番には含めない**: build の input に og.html を足していない（既定の index.html だけ）ので、dev サーバーでだけ開ける。`robots: noindex` も付けた。
+  - **画像の置き場**: `packages/web/public/og.png`（まだ無い。無くてもページは壊れない）。
+  - **メタタグ**: index.html に `description`・`og:type`・`og:site_name`・`og:title`・`og:description`・`og:image`・`og:image:width/height`（1200・630）・`og:image:alt`・`twitter:card=summary_large_image`・`twitter:title`・`twitter:image`。og:image・twitter:image は目印 `__OG_IMAGE_URL__` で書き、vite.config.ts のプラグイン（`ogImageMeta`。値は `src/og-meta.ts` の `ogImageUrl`）がビルドのとき **環境変数 `VITE_SITE_URL` のオリジン + `/og.png`** に置き換える。無ければ相対の `/og.png`（SNS によっては画像が出ない）。URL として読めない・http(s) でなければビルドを止める。🔒 実ドメインはリポジトリに書かず、**Vercel のダッシュボードの環境変数 `VITE_SITE_URL`（Production。例の形 `https://<ホスト名>`）で設定する**。
+  - **作り直す手順**: ① `pnpm dev` を動かし、`http://127.0.0.1:<ポート>/og.html` を幅 1200 以上の窓で開く（字体の読み込みを待つ）。② `[data-og-card]` の要素だけを撮る（playwright なら `page.locator('[data-og-card]').screenshot({ path: 'packages/web/public/og.png' })`。拡大率 1 で 1200×630 になる）。③ `public/og.png` をコミットし、`VITE_SITE_URL` を入れた本番で SNS のカードの確認の道具（各社のもの）で確かめる。
+- テスト: `og-card.smoke.test.tsx`（W-191a。1200×630・ロゴの大きさと入れ替えなし・図柄が記事コミュニティで印 7 つ・破線 6 本・不透明度 0.15〜0.25）・`og-meta.test.ts`（`ogImageUrl` と index.html のメタタグ）。
+- 残した点: 画像の書き出しと見た目の確かめ（supervisor がブラウザで行う）・`VITE_SITE_URL` を Vercel に入れること（ユーザー）・og:url と canonical（オリジンが決まってから）。
 
 ## 未決（grill で詰める）
 
