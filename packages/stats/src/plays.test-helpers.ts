@@ -30,10 +30,18 @@ export function finishedSave(
   return save;
 }
 
+/** テスト用のプレイの id（D-169 の形: UUID と手元の履歴の id を . でつなぐ）。n で端末（UUID）を変える。 */
+export const testPlayId = (n = 0, history = '0123abcd') =>
+  `${n.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000.${history}`;
+
 /** 保存から送る中身（web の stats-client.ts と同じ形）。 */
-export function submissionOf(save: SaveData): Submission {
+export function submissionOf(
+  save: SaveData,
+  playId = testPlayId(),
+): Submission {
   const state = replaySave(save);
   return {
+    playId,
     save: JSON.parse(JSON.stringify(save)),
     axes: resultAxesOf(state),
     end: state.end!,

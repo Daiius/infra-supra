@@ -7,7 +7,7 @@
 //   （壊れた宛先で中継しない）。
 // - vercel.json と同時には置けない（同じ文書）。このプロジェクトに vercel.json は無い。
 // - 実行のときに読む依存を持たないよう、@vercel/config は型だけを読み、rewrites は vercel.json と同じ形の値で書く。
-// ⚠ Vercel のプロジェクトの Root Directory が packages/web である前提でここに置く（リポジトリの根なら根へ移す。prd/15 §7.1）。
+// Vercel のプロジェクト infra-supra（チーム faveo-systema）の Root Directory は packages/web（2026-11-09 に CLI で読み取って確認済み。Framework Preset は Vite・Node は 26.x）なので、ここに置く（prd/15 §7.1）。
 import type { VercelConfig } from '@vercel/config/v1';
 
 type Rewrite = { source: string; destination: string };

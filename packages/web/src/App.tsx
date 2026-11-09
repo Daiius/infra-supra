@@ -66,6 +66,7 @@ import {
   type SetupState,
 } from './last-setup.ts';
 import {
+  isLegacyResult,
   mergeResults,
   parseResults,
   playId,
@@ -86,6 +87,7 @@ import {
   type SubmitOutcome,
 } from './stats-client.ts';
 import type { StatsView } from './distribution.ts';
+import { loadPlayNonce, newPlayNonce, storePlayNonce } from './play-nonce.ts';
 import {
   clearLocalRecords,
   loadHowtoSeen,
@@ -111,6 +113,8 @@ const SAVE_KEY = 'infra-supra:game-save';
  */
 type Session = {
   save: SaveData;
+  /** 集計に送るプレイの id の nonce（D-169。play-nonce.ts）。新しく始めたときに作り、戻る・再開では引き継ぐ。 */
+  nonce: string;
   state: GameState;
   previous: GameState | null;
   restored: boolean;
@@ -145,6 +149,8 @@ function loadSession(): Session | null {
     }
     return {
       save,
+      // nonce の無い古い保存は、ここで作る（D-169）
+      nonce: loadPlayNonce() ?? newPlayNonce(),
       state,
       previous,
       restored: true,
@@ -258,6 +264,7 @@ const initialMode = (): Mode =>
 export function App() {
   const [session, setSession] = useState<Session | null>(loadSession);
   useEffect(() => storeSave(session?.save ?? null), [session?.save]);
+  useEffect(() => storePlayNonce(session?.nonce ?? null), [session?.nonce]);
   const state = session?.state ?? null;
   // 終わったプレイ（完走・途中終了）を手元の履歴に溜める（D-144。再開・戻ってもう一度終えたときも同じ id なら足さない）
   const [results, setResults] = useState<ResultStore>(loadResults);
@@ -274,8 +281,10 @@ export function App() {
     if (isNew) {
       // 画面の比較にはすぐ使い、保存は鍵を取ってから（保存した後の履歴と合わせる）
       setResults((r) => withResult(r, entry));
-      // 集計に送る（D-152。手元の履歴に新しく足したときだけなので 1 プレイ 1 回。フラグが無ければ送らない・失敗しても何も出さない）
-      sent = submitResult(session.save, session.state);
+      // 集計に送る（D-152。手元の履歴に新しく足したときだけなので 1 プレイ 1 回。フラグが無ければ送らない・失敗しても何も出さない）。
+      // 前の版の履歴にあったプレイ（前の版で終わって送っている）は、今の版の履歴に足し直すだけで送り直さない（OCL-46A5876A）
+      if (!isLegacyResult(results, entry.id))
+        sent = submitResult(session.save, session.state, session.nonce);
       persistResultLocked(entry, (stored) =>
         setResults((r) => mergeResults(stored, r)),
       );
@@ -464,6 +473,7 @@ export function App() {
                 const save = rewindSave(session!.save, month);
                 setSession({
                   save,
+                  nonce: session!.nonce,
                   state: replaySave(save),
                   previous: state,
                   restored: false,
@@ -484,6 +494,7 @@ export function App() {
               onStart={(save) =>
                 setSession({
                   save,
+                  nonce: newPlayNonce(),
                   state: replaySave(save),
                   previous: null,
                   restored: false,

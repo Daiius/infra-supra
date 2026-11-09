@@ -2,7 +2,11 @@
 import { replaySave } from 'game';
 import { hc } from 'hono/client';
 import { describe, expect, it } from 'vitest';
-import { finishedSave, submissionOf } from './plays.test-helpers.ts';
+import {
+  finishedSave,
+  submissionOf,
+  testPlayId,
+} from './plays.test-helpers.ts';
 import { memoryRepo, type ResultRecord } from './repo.ts';
 import {
   buildVersionFromEnv,
@@ -56,7 +60,57 @@ describe('POST /api/results', () => {
     expect(repo.rows[0]!.endReason).toBe('completed');
   });
 
-  it('戻った印つきの同じ結果が先に保存されていれば、duplicate でも inHistogram は false（OCL-9B705B16）', async () => {
+  it('別の端末の同じプレイ（同じ結果・別の playId）は別の行になる（D-169）', async () => {
+    const { repo, client } = setup();
+    const a = await client.api.results.$post({
+      json: submissionOf(completed, testPlayId(1)),
+    });
+    const b = await client.api.results.$post({
+      json: submissionOf(completed, testPlayId(2)),
+    });
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(repo.rows).toHaveLength(2);
+    // 結果の中身のハッシュは同じ（分析用の列。一意ではない）
+    expect(repo.rows[0]!.playHash).toBe(repo.rows[1]!.playHash);
+  });
+
+  it('同じ端末で「この月に戻る」を使い、違う行動で終え直したプレイは別の行（D-148・D-169）', async () => {
+    const { repo, client } = setup();
+    const other = finishedSave(42, [{ type: 'set', key: 'format', value: 84 }]);
+    await client.api.results.$post({
+      json: submissionOf(completed, testPlayId(1, '0000aaaa')),
+    });
+    const r = await client.api.results.$post({
+      json: submissionOf(other, testPlayId(1, '0000bbbb')),
+    });
+    expect(r.status).toBe(201);
+    expect(repo.rows).toHaveLength(2);
+  });
+
+  it('playId の形（UUID + . + 16 進 8 文字）でなければ 400 で、保存しない（D-169）', async () => {
+    const { repo, app } = setup();
+    for (const playId of [
+      '',
+      'x',
+      testPlayId().toUpperCase(),
+      testPlayId().replace('.', ''),
+      `${testPlayId()}0`,
+      testPlayId().replace('0123abcd', '0123abcz'),
+      123,
+    ]) {
+      const body = { ...submissionOf(completed), playId };
+      const r = await post(app, JSON.stringify(body));
+      expect(r.status, String(playId)).toBe(400);
+    }
+    const missing = submissionOf(completed) as Partial<
+      ReturnType<typeof submissionOf>
+    >;
+    delete missing.playId;
+    expect((await post(app, JSON.stringify(missing))).status).toBe(400);
+    expect(repo.rows).toHaveLength(0);
+  });
+
+  it('戻った印つきの同じ playId が先に保存されていれば、duplicate でも inHistogram は false（OCL-9B705B16）', async () => {
     const { repo, client } = setup();
     const v = verifySubmission(submissionOf(completed));
     if (!v.ok) throw new Error('照合に失敗');
@@ -142,12 +196,12 @@ describe('GET /api/results/histogram', () => {
   it('完走・戻っていないプレイだけを、同じシード / 全シードで数える', async () => {
     const { repo, client } = setup();
     repo.rows.push(
-      rec({ playHash: 'a', seed: 1, cash: 1000 }),
-      rec({ playHash: 'b', seed: 1, cash: 2000 }),
-      rec({ playHash: 'c', seed: 2, cash: 3000 }),
-      rec({ playHash: 'd', seed: 1, cash: 9999, endReason: 'cash' }),
-      rec({ playHash: 'e', seed: 1, cash: 9999, rewound: true }),
-      rec({ playHash: 'f', seed: 1, cash: 9999, scenarioId: 'other' }),
+      rec({ playId: 'a', seed: 1, cash: 1000 }),
+      rec({ playId: 'b', seed: 1, cash: 2000 }),
+      rec({ playId: 'c', seed: 2, cash: 3000 }),
+      rec({ playId: 'd', seed: 1, cash: 9999, endReason: 'cash' }),
+      rec({ playId: 'e', seed: 1, cash: 9999, rewound: true }),
+      rec({ playId: 'f', seed: 1, cash: 9999, scenarioId: 'other' }),
     );
     const all = await client.api.results.histogram.$get({
       query: { scenario: 'article-community', axis: 'cash', value: '2000' },
@@ -175,7 +229,7 @@ describe('GET /api/results/histogram', () => {
   it('データが無ければ空の分布', async () => {
     const { client } = setup();
     const r = await client.api.results.histogram.$get({
-      query: { scenario: 'contract-operations', axis: 'edgeMonths' },
+      query: { scenario: 'contract-operations', axis: 'totalCost' },
     });
     expect(await r.json()).toMatchObject({
       count: 0,
@@ -209,11 +263,11 @@ describe('GET /api/results/distribution', () => {
   it('4 軸 ×（同じシード / 全シード）の 8 本を 1 回で返し、値を付けた軸だけ位置を返す（D-161）', async () => {
     const { repo, client } = setup();
     repo.rows.push(
-      rec({ playHash: 'a', seed: 1, cash: 1000, edgeMonths: 0 }),
-      rec({ playHash: 'b', seed: 1, cash: 2000, edgeMonths: 3 }),
-      rec({ playHash: 'c', seed: 2, cash: 3000, edgeMonths: 3 }),
-      rec({ playHash: 'd', seed: 1, cash: 9999, endReason: 'cash' }),
-      rec({ playHash: 'e', seed: 1, cash: 9999, rewound: true }),
+      rec({ playId: 'a', seed: 1, cash: 1000, totalCost: 10 }),
+      rec({ playId: 'b', seed: 1, cash: 2000, totalCost: 30 }),
+      rec({ playId: 'c', seed: 2, cash: 3000, totalCost: 30 }),
+      rec({ playId: 'd', seed: 1, cash: 9999, endReason: 'cash' }),
+      rec({ playId: 'e', seed: 1, cash: 9999, rewound: true }),
     );
     const r = await client.api.results.distribution.$get({
       query: { scenario: 'article-community', seed: '1', cash: '1500' },
@@ -226,7 +280,7 @@ describe('GET /api/results/distribution', () => {
       'cash',
       'satisfaction',
       'featurePoints',
-      'edgeMonths',
+      'totalCost',
     ]);
     expect(d.axes.cash.seed).toMatchObject({
       count: 2,
@@ -240,13 +294,13 @@ describe('GET /api/results/distribution', () => {
       position: { above: 2, equal: 0 },
     });
     // 値を付けなかった軸は位置なし。ヒストグラムの切り方は 1 本ずつの口と同じ
-    expect(d.axes.edgeMonths.all).not.toHaveProperty('position');
+    expect(d.axes.totalCost.all).not.toHaveProperty('position');
     const single = await (
       await client.api.results.histogram.$get({
-        query: { scenario: 'article-community', axis: 'edgeMonths' },
+        query: { scenario: 'article-community', axis: 'totalCost' },
       })
     ).json();
-    expect('bins' in single && single.bins).toEqual(d.axes.edgeMonths.all.bins);
+    expect('bins' in single && single.bins).toEqual(d.axes.totalCost.all.bins);
   });
 
   it('知らないシナリオ・シードが無い・数でない値は 400', async () => {

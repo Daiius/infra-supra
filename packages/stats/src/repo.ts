@@ -3,11 +3,15 @@ import type { EndReason, ResultAxisId, SaveData } from 'game';
 
 /** 照合を通った 1 プレイ（表 results の 1 行。id と受け付けた日時は DB が付ける）。 */
 export type ResultRecord = {
+  /** 端末ごとのプレイの id（D-169）。二重の送信を 1 行にする鍵。 */
+  playId: string;
+  /** 結果の中身のハッシュ（分析用。一意ではない）。 */
   playHash: string;
   scenarioId: string;
   seed: number;
   startDate: string;
-  stackIndex: number;
+  /** 構成の id（STACKS の id。例 cloudflare-vinext-paid。並びの番号では持たない。D-171）。 */
+  stackId: string;
   framework: string;
   rewound: boolean;
   endReason: EndReason;
@@ -16,7 +20,7 @@ export type ResultRecord = {
   cash: number;
   satisfaction: number;
   featurePoints: number;
-  edgeMonths: number;
+  totalCost: number;
   save: SaveData;
 };
 
@@ -29,7 +33,7 @@ export type AxisQuery = {
 
 export interface ResultsRepo {
   /**
-   * 1 行足す。同じ playHash がすでにあれば足さずに 'duplicate'。inHistogram は保存されている行（duplicate なら前からある行）が
+   * 1 行足す。同じ playId がすでにあれば足さずに 'duplicate'。inHistogram は保存されている行（duplicate なら前からある行）が
    * ヒストグラムに入るか（画面が自分を分布に数えるかの判断に使う。戻ったプレイの行が先にあれば入らない。OCL-9B705B16）。
    */
   insert(record: ResultRecord): Promise<InsertResult>;
@@ -47,7 +51,7 @@ export const AXIS_FIELD = {
   cash: 'cash',
   satisfaction: 'satisfaction',
   featurePoints: 'featurePoints',
-  edgeMonths: 'edgeMonths',
+  totalCost: 'totalCost',
 } as const satisfies Record<ResultAxisId, keyof ResultRecord>;
 
 /** ヒストグラムに入れる行か（完走・戻っていない）。DB の層も同じ条件で絞る。 */
@@ -60,7 +64,7 @@ export function memoryRepo(): ResultsRepo & { rows: ResultRecord[] } {
   return {
     rows,
     async insert(record) {
-      const found = rows.find((r) => r.playHash === record.playHash);
+      const found = rows.find((r) => r.playId === record.playId);
       if (found)
         return { status: 'duplicate', inHistogram: inHistogram(found) };
       rows.push(record);

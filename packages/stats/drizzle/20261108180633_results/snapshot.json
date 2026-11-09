@@ -1,16 +1,67 @@
 {
-  "version": "8",
+  "type": "base",
+  "version": "9",
   "dialect": "postgres",
   "id": "d415da92-567d-43bf-b3d8-bce827aea010",
-  "prevIds": ["00000000-0000-0000-0000-000000000000"],
-  "ddl": [
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "footprints": [
     {
-      "isRlsEnabled": false,
-      "name": "results",
-      "entityType": "tables",
-      "schema": "public"
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "results"
+      ],
+      "writes": [
+        "s|tbl|public.results",
+        "n|tbl|public.results",
+        "e|tbl|public.results",
+        "n|rel|public.results",
+        "n|type|public.results",
+        "n|rel|public.results_pkey",
+        "n|rel|public.results_play_hash_key"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
     },
     {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "results",
+        "results_histogram_idx"
+      ],
+      "writes": [
+        "s|idx|public.results_histogram_idx",
+        "n|idx|public.results_histogram_idx",
+        "e|idx|public.results_histogram_idx",
+        "n|rel|public.results_histogram_idx"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public",
+        "n|col|public.results.scenario_id",
+        "n|col|public.results.end_reason",
+        "n|col|public.results.rewound",
+        "n|col|public.results.seed"
+      ]
+    }
+  ],
+  "ddl": [
+    {
+      "schema": "public",
+      "name": "results",
+      "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
+      "table": "results",
+      "name": "id",
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -27,12 +78,12 @@
         "cache": 1,
         "cycle": false
       },
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "play_hash",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -40,12 +91,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "play_hash",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "created_at",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -53,12 +104,12 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "scenario_id",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -66,12 +117,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "scenario_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "seed",
       "type": "double precision",
       "typeSchema": null,
       "notNull": true,
@@ -79,12 +130,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "seed",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "start_date",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -92,12 +143,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "start_date",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "stack_index",
       "type": "smallint",
       "typeSchema": null,
       "notNull": true,
@@ -105,12 +156,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "stack_index",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "framework",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -118,12 +169,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "framework",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "rewound",
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -131,12 +182,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "rewound",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "end_reason",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -144,25 +195,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "end_reason",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
-      "type": "smallint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "results",
       "name": "end_month",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
-    },
-    {
       "type": "smallint",
       "typeSchema": null,
       "notNull": true,
@@ -170,51 +208,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "results",
       "name": "outages",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
-    },
-    {
-      "type": "double precision",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "cash",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
-    },
-    {
-      "type": "double precision",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "satisfaction",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
-    },
-    {
-      "type": "double precision",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "feature_points",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
-    },
-    {
       "type": "smallint",
       "typeSchema": null,
       "notNull": true,
@@ -222,12 +221,64 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "edge_months",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "cash",
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "results",
+      "name": "satisfaction",
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "results",
+      "name": "feature_points",
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "results",
+      "name": "edge_months",
+      "type": "smallint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "results",
+      "name": "save",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
@@ -235,12 +286,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "save",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "results"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "results",
+      "name": "results_histogram_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -277,35 +328,35 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "results_histogram_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "results"
+      "entityType": "indexes"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "results_pkey",
       "schema": "public",
       "table": "results",
+      "name": "results_pkey",
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "nameExplicit": false,
-      "columns": ["play_hash"],
-      "nullsNotDistinct": false,
-      "name": "results_play_hash_key",
       "schema": "public",
       "table": "results",
+      "name": "results_play_hash_key",
+      "nameExplicit": false,
+      "columns": [
+        "play_hash"
+      ],
+      "nullsNotDistinct": false,
       "entityType": "uniques"
     },
     {
-      "value": "\"end_reason\" in ('completed', 'cash', 'outages', 'policy')",
-      "name": "results_end_reason_check",
-      "entityType": "checks",
       "schema": "public",
-      "table": "results"
+      "table": "results",
+      "name": "results_end_reason_check",
+      "value": "\"end_reason\" in ('completed', 'cash', 'outages', 'policy')",
+      "entityType": "checks"
     }
-  ],
-  "renames": []
+  ]
 }

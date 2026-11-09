@@ -1,0 +1,220 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "68d551aa-1a98-4042-b2cd-0efd16afe690",
+  "prevIds": [
+    "d415da92-567d-43bf-b3d8-bce827aea010"
+  ],
+  "footprints": [
+    {
+      "statementType": "drop_unique",
+      "statementTarget": [
+        "table",
+        "public",
+        "results"
+      ],
+      "writes": [
+        "s|uq|public.results.results_play_hash_key",
+        "n|uq|public.results.results_play_hash_key",
+        "e|uq|public.results.results_play_hash_key",
+        "n|con|public.results.results_play_hash_key",
+        "n|rel|public.results_play_hash_key"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public",
+        "e|col|public.results.play_hash"
+      ],
+      "sharedWrites": [
+        "e|uniqueness|public.results.play_hash"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "results",
+        "play_id"
+      ],
+      "writes": [
+        "s|col|public.results.play_id",
+        "n|col|public.results.play_id",
+        "e|col|public.results.play_id"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "results",
+        "stack_id"
+      ],
+      "writes": [
+        "s|col|public.results.stack_id",
+        "n|col|public.results.stack_id",
+        "e|col|public.results.stack_id"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "results",
+        "total_cost"
+      ],
+      "writes": [
+        "s|col|public.results.total_cost",
+        "n|col|public.results.total_cost",
+        "e|col|public.results.total_cost"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "results",
+        "stack_index"
+      ],
+      "writes": [
+        "s|col|public.results.stack_index",
+        "n|col|public.results.stack_index",
+        "e|col|public.results.stack_index"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "drop_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "results",
+        "edge_months"
+      ],
+      "writes": [
+        "s|col|public.results.edge_months",
+        "n|col|public.results.edge_months",
+        "e|col|public.results.edge_months"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_unique",
+      "statementTarget": [
+        "table",
+        "public",
+        "results"
+      ],
+      "writes": [
+        "s|uq|public.results.results_play_id_key",
+        "n|uq|public.results.results_play_id_key",
+        "e|uq|public.results.results_play_id_key",
+        "n|con|public.results.results_play_id_key",
+        "n|rel|public.results_play_id_key"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public",
+        "n|col|public.results.play_id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "play_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "stack_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "total_cost",
+        "type": "double precision",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "results_play_id_key",
+        "nameExplicit": false,
+        "columns": [
+          "play_id"
+        ],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"results\",\"stack_index\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"results\",\"edge_months\"]"
+    },
+    {
+      "op": "drop",
+      "key": "uniques\u0000[\"public\",\"results\",\"results_play_hash_key\"]"
+    }
+  ]
+}

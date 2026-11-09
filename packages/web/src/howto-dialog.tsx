@@ -593,9 +593,9 @@ function EndingPage() {
               <Node Icon={Smile} label="② 満足度" sub="12 か月の平均" />
               <Node Icon={Puzzle} label="③ 機能開発" sub="累計" />
               <Node
-                Icon={Gauge}
-                label="④ ギリギリ"
-                sub="上限の 90〜100% の月（ジョーク枠）"
+                Icon={Receipt}
+                label="④ 費用の合計"
+                sub="インフラの費用（良し悪しは付けない）"
               />
             </div>
             <Arrow dir="down" />
@@ -603,7 +603,7 @@ function EndingPage() {
               Icon={Trophy}
               tone="success"
               label="この端末の過去の完走と比べる"
-              sub="自己ベスト・前回との差・順位"
+              sub="自己ベスト・前回との差・順位（④ は前回との差だけ）"
             />
           </div>
           <div className="space-y-1 rounded-box border-2 border-error/60 bg-base-100 p-2">
@@ -639,6 +639,13 @@ function EndingPage() {
         <li>
           所持金だけで比べると、開発が大変な構成が勝ち筋に見えることがあります。③
           機能開発の累計も合わせて見てください。
+        </li>
+        <li>
+          ④
+          費用の合計は、高いから良い・低いから良いという軸ではありません。どの構成でいくら払ったかを見返すために出します。
+        </li>
+        <li>
+          所持金には目標の目安があります（推移のグラフの点線）。下回っても完走になります。
         </li>
       </ul>
     </>

@@ -1,5 +1,5 @@
 // 照合（D-135・prd/15 §7 段 2 の合格の条件: 書き換えた値・版のずれた送信がエラーになる。同じ送信を 2 回照合して同じ値）。
-import { replaySave, rewindSave, withTurn } from 'game';
+import { replaySave, rewindSave, STACKS, withTurn } from 'game';
 import { describe, expect, it } from 'vitest';
 import { finishedSave, submissionOf } from './plays.test-helpers.ts';
 import {
@@ -28,14 +28,22 @@ describe('照合', () => {
       scenarioId: 'article-community',
       seed: 42,
       startDate: '2026-11-01',
-      stackIndex: 1,
+      stackId: 'cloudflare-vinext-paid',
       rewound: false,
       endReason: 'completed',
       endMonth: good.end.month,
       ...good.axes,
     });
     expect(v.record.playHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(v.record.playId).toBe(good.playId);
     expect(v.record.save.turns).toEqual(save.turns);
+  });
+
+  it('構成は並びの番号ではなく id で行に入れる（D-171）', () => {
+    const lost = finishedSave(42, [], 0);
+    const v = verifySubmission(submissionOf(lost));
+    expect(v.ok && v.record.stackId).toBe(STACKS[0]!.id);
+    expect(v.ok && 'stackIndex' in v.record).toBe(false);
   });
 
   it('同じ送信を 2 回照合して同じ値（決定論）', () => {
@@ -54,13 +62,13 @@ describe('照合', () => {
       verifySubmission(
         tampered((s) => {
           s.axes.satisfaction += 0.001;
-          s.axes.edgeMonths += 1;
+          s.axes.totalCost += 0.01;
         }),
       ),
     ).toEqual({
       ok: false,
       code: 'mismatch',
-      fields: ['satisfaction', 'edgeMonths'],
+      fields: ['satisfaction', 'totalCost'],
     });
     expect(
       verifySubmission(tampered((s) => (s.axes.featurePoints += 1))),
@@ -107,7 +115,7 @@ describe('照合', () => {
     ).toEqual({ ok: false, code: 'invalid-save' });
   });
 
-  it('結果を変えない書き換え（行動の未知の欄・何もしない行動）は同じ鍵になる（OCL-64BE2E4E）', () => {
+  it('結果を変えない書き換え（行動の未知の欄・何もしない行動）は同じ結果のハッシュになる（OCL-64BE2E4E。D-169 からは分析用）', () => {
     const hashOf = (s: Submission) => {
       const v = verifySubmission(s);
       if (!v.ok) throw new Error(`照合に失敗: ${v.code}`);

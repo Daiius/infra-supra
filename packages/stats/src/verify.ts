@@ -8,6 +8,7 @@ import {
   resultAxesOf,
   RESULT_AXES,
   SCENARIOS,
+  STACKS,
   type EndReason,
   type GameState,
   type SaveData,
@@ -30,10 +31,19 @@ const END_REASONS = [
 const finite = z.number().refine(Number.isFinite);
 
 /**
+ * プレイの id の形（D-169）: 新しいプレイを始めたときに web が作るランダムな UUID（小文字の 16 進）と、手元の結果の履歴の id
+ * （FNV-1a 32 ビットの 16 進 8 文字。D-144）を `.` でつないだもの。端末や人を識別する値ではない。
+ */
+export const PLAY_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[0-9a-f]{8}$/;
+
+/**
  * 送る中身（prd/15 §4）。保存はおおまかな形だけをここで確かめ（未知の欄は通す）、細かい形は game の parseSave が確かめる。
  * 前の試行（previous）は受け取っても使わない（照合と保存の前に外す）。
  */
 export const submissionSchema = z.object({
+  /** 二重の送信を 1 行にする鍵（D-169）。同じ端末の同じプレイの送り直しは同じ値、別の端末なら別の値になる。 */
+  playId: z.string().max(64).regex(PLAY_ID_PATTERN),
   save: z.looseObject({
     version: z.number().int(),
     scenarioId: z.string().max(64),
@@ -59,7 +69,7 @@ export const submissionSchema = z.object({
     cash: finite,
     satisfaction: finite,
     featurePoints: finite,
-    edgeMonths: finite,
+    totalCost: finite,
   }),
   end: z.object({
     reason: z.enum(END_REASONS),
@@ -94,10 +104,10 @@ export function sameAxisValue(a: number, b: number): boolean {
 }
 
 /**
- * 二重の送信を 1 行にする鍵（OCL-64BE2E4E）。送られた行動の列ではなく、**再生した月ごとの結果**（月の報告の列）と、
- * それを決める始めたときの選択（シナリオ・シード・構成・フレームワーク）の SHA-256（16 進）。
- * 行動に未知の欄を足す・何もしない行動を足すなど、結果を変えない書き換えは同じ鍵になる（別の行として数を水増しできない）。
- * 結果が月ごとに全部同じプレイは、行動の列が違っても 1 つのプレイとして数える。
+ * 結果の中身のハッシュ（OCL-64BE2E4E。D-169 からは一意の鍵ではなく分析用の列）。送られた行動の列ではなく、
+ * **再生した月ごとの結果**（月の報告の列）と、それを決める始めたときの選択（シナリオ・シード・構成・フレームワーク）の SHA-256（16 進）。
+ * 結果を変えない書き換えは同じ値になる。別の人の同じ遊び方（既定のシード 42・同じ構成・何もしない）も同じ値になるので、
+ * 鍵にすると人気の遊び方が少なく数えられた。二重の送信は playId（端末ごとのプレイの id）で 1 行にする（D-169）。
  */
 export function playHashOf(
   save: Pick<SaveData, 'scenarioId' | 'seed' | 'stackIndex' | 'framework'>,
@@ -106,7 +116,8 @@ export function playHashOf(
   const content = canonicalJson({
     scenarioId: save.scenarioId,
     seed: save.seed,
-    stackIndex: save.stackIndex,
+    // 構成は id で（並びが変わっても同じ値。D-171）
+    stackId: STACKS[save.stackIndex]?.id ?? null,
     framework: save.framework,
     history: state.history,
   });
@@ -120,6 +131,9 @@ export function verifySubmission(sub: Submission): VerifyResult {
     return { ok: false, code: 'invalid-save' };
   const save = parseSave(raw);
   if (!save) return { ok: false, code: 'invalid-save' };
+  // 列には構成の id を入れる（STACKS の並びが変わっても過去の行の意味がずれない。D-171）
+  const stack = STACKS[save.stackIndex];
+  if (!stack) return { ok: false, code: 'invalid-save' };
   let state;
   try {
     state = replaySave(save);
@@ -138,11 +152,12 @@ export function verifySubmission(sub: Submission): VerifyResult {
   return {
     ok: true,
     record: {
+      playId: sub.playId,
       playHash: playHashOf(save, state),
       scenarioId: save.scenarioId,
       seed: save.seed,
       startDate: save.startDate,
-      stackIndex: save.stackIndex,
+      stackId: stack.id,
       framework: save.framework,
       rewound: save.rewound === true,
       endReason: state.end.reason,

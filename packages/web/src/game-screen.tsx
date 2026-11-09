@@ -89,7 +89,6 @@ import {
 } from './distribution.ts';
 import {
   compareWithHistory,
-  fireworkLevel,
   type AxisComparison,
   type ResultEntry,
 } from './results-history.ts';
@@ -532,7 +531,7 @@ function RewindDialog({
 }
 
 /**
- * 完走のダイアログと花火（D-25・D-131）。4 軸の値と集計の分布の中での位置（段 3・D-161）か手元の履歴との比較を出し、上位に入った軸（分布が無ければ自己ベストを更新した軸）が多いほど花火を増やす（D-163・D-145）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
+ * 完走のダイアログと花火（D-25・D-131）。4 軸の値と集計の分布の中での位置（段 3・D-161）か手元の履歴との比較を出し、分布があれば上位に入った軸（向きのある 3 軸）が多いほど花火を増やす（D-163）。分布が無ければ花火はいつも 1 段（D-168）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
  * 閉じると背景が消え、新しい花火は出さない。空中に残った粒は少し薄くして、寿命で消えるまで描いてから片付ける。
  * 動きを減らす設定では、ダイアログだけ出して花火は出さない。作法は出来事のダイアログ（D-23）と同じ。
  */
@@ -562,13 +561,11 @@ function VictoryCelebration({
       document.activeElement.blur();
     d.showModal();
   }, [auto]);
-  // 分布があれば上位に入った軸の数、無ければ自己ベストを更新した軸の数で花火の段を決める（D-163・D-145）
+  // 分布があれば上位に入った軸の数で花火の段を決め、無ければいつも 1 段（D-163・D-168。自己ベストの数では変えない）
   const dist = stats.status === 'ready' ? stats.view : null;
-  const level = dist
-    ? distributionFireworkLevel(dist)
-    : fireworkLevel(comparisons);
-  const updated = comparisons.filter((c) => c.newBest).length;
+  const level = dist ? distributionFireworkLevel(dist) : 1;
   const topAxes = dist ? topAxesCount(dist) : 0;
+  const cashGuide = scenarioOf(state).goal.cash;
   return (
     <>
       {open && (
@@ -594,11 +591,9 @@ function VictoryCelebration({
               <p className="mt-1 text-sm">
                 {state.end!.month} か月の運営を走り切りました。4
                 つの軸で振り返りましょう
-                {dist
-                  ? topAxes > 0 &&
-                    `（${topAxes} つの軸で上位 ${TOP_PERCENT}% に入りました）`
-                  : updated > 0 &&
-                    `（${updated} つの軸で自己ベストを更新しました）`}
+                {dist &&
+                  topAxes > 0 &&
+                  `（${topAxes} つの軸で上位 ${TOP_PERCENT}% に入りました）`}
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-5">
@@ -606,6 +601,7 @@ function VictoryCelebration({
                 comparisons={comparisons}
                 stats={stats}
                 outages={state.outages}
+                cashGuide={cashGuide}
                 size="lg"
               />
             </div>
@@ -2712,10 +2708,21 @@ function Result({
     // 完走は花火、途中終了は控えめにフェードインだけ（D-25。動きを減らす設定では出さない）
     <div className="card motion-fade-in bg-base-100 shadow">
       <div className="card-body gap-4">
-        <div className={`alert ${completed ? 'alert-success' : 'alert-error'}`}>
+        {/* 完走の帯は始める画面の紹介の箱（D-133）と同じ形: success の枠と印だけで、全面は塗りつぶさない（D-170）。途中終了は今の塗りのまま */}
+        <div
+          className={`alert ${completed ? 'border-2 border-success bg-base-100 text-base-content' : 'alert-error'}`}
+          data-result-band={completed ? 'completed' : 'lost'}
+        >
           {/* 中身を 1 つのブロックにする（alert の grid で横に割られて途中で折り返さないように） */}
           <div className="min-w-0">
-            <div className="text-lg font-bold">{END_LABEL[end.reason]}</div>
+            <div className="text-lg font-bold">
+              {completed && (
+                <span className="text-success" aria-hidden>
+                  ✓{' '}
+                </span>
+              )}
+              {END_LABEL[end.reason]}
+            </div>
             <div>
               <span className="whitespace-nowrap">
                 {end.month} か月目で終了
@@ -2762,6 +2769,7 @@ function Result({
             comparisons={comparisons}
             stats={stats}
             outages={state.outages}
+            cashGuide={scenarioOf(state).goal.cash}
           />
         )}
         {hints.length > 0 && (
@@ -3095,6 +3103,9 @@ function Trends({
   const last = history[history.length - 1]!;
   // 所持金の見込み（目安。直近 3 か月の月の利益の平均で線形に伸ばす。D-42）
   const cashProj = ended ? undefined : cashProjectionOf({ history, scenario });
+  // 所持金の目標の目安（シナリオの goal.cash。表示だけで合否にしない。D-167）。
+  // 後で集計の分布（完走した人の 12 か月目の所持金の上位 90% の線など）から出す余地を残す（prd/15 §2.1）
+  const cashGuide = scenario.goal.cash;
   const prev = history[history.length - 2];
   const cost = (r: MonthReport) => r.infraCost;
   const trends = selectTrends(
@@ -3196,6 +3207,20 @@ function Trends({
             </Info>
           </p>
         )}
+        {!ended && (
+          <p className="text-sm" data-cash-guide>
+            {`目標の目安は ${scenario.months} か月目に所持金 ${usd(cashGuide)} です`}
+            {cashProj && cashProj.projection.length > 0
+              ? cashProj.final >= cashGuide
+                ? `（見込みは目安を約 ${usd(Math.round(cashProj.final - cashGuide))} 上回ります）`
+                : `（見込みでは目安まで約 ${usd(Math.round(cashGuide - cashProj.final))} です）`
+              : ''}
+            。届かなくても完走になり、合否はありません{' '}
+            <Info label="目標の目安とは">
+              {`シナリオが想定した ${scenario.months} か月目の所持金の目安です（ゲーム上の仮定）。下回っても途中で終わったり失敗になったりはしません。完走したら、4 つの軸で振り返ります。所持金のグラフの点線が目安の額です`}
+            </Info>
+          </p>
+        )}
         {previous && (
           <div
             className="flex flex-wrap items-center gap-2 text-xs opacity-80"
@@ -3217,6 +3242,11 @@ function Trends({
             title="所持金"
             months={scenario.months}
             format={(v) => `$${compact(Math.round(v))}`}
+            reference={{
+              value: cashGuide,
+              label: `目標の目安 $${compact(Math.round(cashGuide))}`,
+              tone: 'neutral',
+            }}
             series={[
               {
                 id: 'cash',

@@ -1,4 +1,4 @@
-// 手元の結果の履歴（D-144）の純粋な部分: 形の確かめ・足し方・比べ方・花火の段（D-145）。
+// 手元の結果の履歴（D-144）の純粋な部分: 形の確かめ・足し方・比べ方（④ は向きを持たない。D-166）。
 import {
   canonicalJson,
   newSave,
@@ -12,7 +12,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   compareWithHistory,
-  fireworkLevel,
+  isLegacyResult,
   mergeResults,
   parseResults,
   playId,
@@ -28,8 +28,8 @@ const axes = (
   cash: number,
   satisfaction = 0.8,
   featurePoints = 50,
-  edgeMonths = 1,
-): ResultAxes => ({ cash, satisfaction, featurePoints, edgeMonths });
+  totalCost = 300,
+): ResultAxes => ({ cash, satisfaction, featurePoints, totalCost });
 const entry = (
   id: string,
   a: ResultAxes,
@@ -56,6 +56,30 @@ describe('parseResults', () => {
     expect(parseResults(null).entries).toEqual([]);
     expect(parseResults('x').entries).toEqual([]);
     expect(parseResults({ version: 999, entries: [] }).entries).toEqual([]);
+    // ④ がギリギリを攻めるだった版 1 の履歴は値を読まず、プレイの id だけ残す（D-166・OCL-46A5876A）
+    const v1 = parseResults({
+      version: 1,
+      entries: [
+        {
+          ...entry('old', axes(100)),
+          axes: { cash: 1, satisfaction: 1, featurePoints: 1, edgeMonths: 0 },
+        },
+        3,
+      ],
+    });
+    expect(v1.entries).toEqual([]);
+    expect(v1.legacyIds).toEqual(['old']);
+    expect(isLegacyResult(v1, 'old')).toBe(true);
+    expect(isLegacyResult(v1, 'new')).toBe(false);
+    // 版 2 に書き直しても残る・足しても合わせても消えない
+    const added = withResult(v1, entry('old', axes(100)));
+    expect(added.legacyIds).toEqual(['old']);
+    expect(parseResults(JSON.parse(JSON.stringify(added))).legacyIds).toEqual([
+      'old',
+    ]);
+    expect(
+      mergeResults(store([]), { ...store([]), legacyIds: ['x'] }).legacyIds,
+    ).toEqual(['x']);
     const ok = entry('a', axes(100));
     const parsed = parseResults({
       version: RESULTS_VERSION,
@@ -154,30 +178,29 @@ describe('mergeResults', () => {
   });
 });
 
-describe('compareWithHistory・fireworkLevel', () => {
+describe('compareWithHistory', () => {
   const cur = (a: ResultAxes) => ({
     id: 'now',
     scenarioId: 'article-community',
     axes: a,
   });
 
-  it('過去が無ければ比べず、花火は 1 段', () => {
+  it('過去が無ければ比べない', () => {
     const c = compareWithHistory(cur(axes(100)), [entry('now', axes(100))]);
     expect(c.map((x) => x.count)).toEqual([0, 0, 0, 0]);
     expect(c.some((x) => x.newBest)).toBe(false);
     expect(c[0]!.rank).toBe(1);
-    expect(fireworkLevel(c)).toBe(1);
   });
 
   it('同じシナリオの完走だけと比べ、自己ベスト・前回との差・順位を出す', () => {
     const past = [
       entry('now', axes(999)), // 今のプレイの記録は除く
-      entry('last', axes(150, 0.7, 60, 0)),
-      entry('old', axes(200, 0.9, 40, 0)),
+      entry('last', axes(150, 0.7, 60, 250)),
+      entry('old', axes(200, 0.9, 40, 100)),
       entry('lost', axes(5000), 'cash'), // 途中終了は混ぜない
       entry('other', axes(5000), 'completed', 'contract-operations'),
     ];
-    const c = compareWithHistory(cur(axes(180, 0.8, 70, 2)), past);
+    const c = compareWithHistory(cur(axes(180, 0.8, 70, 400)), past);
     const by = Object.fromEntries(c.map((x) => [x.id, x]));
     expect(by.cash).toMatchObject({
       count: 2,
@@ -187,17 +210,27 @@ describe('compareWithHistory・fireworkLevel', () => {
       rank: 2,
     });
     expect(by.featurePoints).toMatchObject({ newBest: true, rank: 1 });
-    expect(by.edgeMonths).toMatchObject({ newBest: true, diffFromLast: 2 });
     expect(by.satisfaction!.rank).toBe(2);
-    // 自己ベストの更新が 2 軸 → 2 段
-    expect(fireworkLevel(c)).toBe(2);
   });
 
-  it('同じ値は自己ベストの更新に数えず、3 軸以上の更新で 3 段', () => {
+  it('④ 費用の合計は向きを持たない: 前回との差だけ出し、自己ベスト・順位は出さない（D-166）', () => {
+    const past = [entry('last', axes(150, 0.7, 60, 250))];
+    const c = compareWithHistory(cur(axes(180, 0.8, 70, 400)), past);
+    const cost = c.find((x) => x.id === 'totalCost')!;
+    expect(cost).toMatchObject({ directed: false, newBest: false, count: 1 });
+    expect(cost.diffFromLast).toBe(150);
+    expect(cost).not.toHaveProperty('best');
+    expect(cost).not.toHaveProperty('rank');
+    // 費用が減っても増えても自己ベストにはならない
+    const lower = compareWithHistory(cur(axes(180, 0.8, 70, 10)), past);
+    expect(lower.find((x) => x.id === 'totalCost')!.newBest).toBe(false);
+  });
+
+  it('同じ値は自己ベストの更新に数えない', () => {
     const past = [entry('a', axes(100, 0.5, 10, 0))];
     const tie = compareWithHistory(cur(axes(100, 0.5, 10, 0)), past);
-    expect(tie.every((x) => !x.newBest && x.rank === 1)).toBe(true);
-    const up = compareWithHistory(cur(axes(101, 0.6, 11, 0)), past);
-    expect(fireworkLevel(up)).toBe(3);
+    expect(
+      tie.filter((x) => x.directed).every((x) => !x.newBest && x.rank === 1),
+    ).toBe(true);
   });
 });

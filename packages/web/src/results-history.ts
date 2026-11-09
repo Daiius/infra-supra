@@ -1,6 +1,6 @@
 // 手元の結果の履歴（D-144・prd/15 §3.3）。終わったプレイ（完走・途中終了）ごとに 4 軸の値などを localStorage に溜め、
 // 集計（段 2・3）が無い間の比較（自己ベスト・前回との差・過去の中での順位）の元にする。
-// ここは純粋な部分だけ（形の確かめ・足し方・比べ方・花火の段）。localStorage の読み書きは App.tsx。
+// ここは純粋な部分だけ（形の確かめ・足し方・比べ方）。localStorage の読み書きは App.tsx。
 import {
   RESULT_AXES,
   resultAxesOf,
@@ -17,8 +17,8 @@ import {
 /** localStorage のキー（値は ResultStore の JSON）。 */
 export const RESULTS_KEY = 'infra-supra:results';
 
-/** 履歴の版。形を変えたら上げる（読めない版は黙って捨てる）。 */
-export const RESULTS_VERSION = 1;
+/** 履歴の版。形を変えたら上げる（読めない版は黙って捨てる）。2: ④ をギリギリを攻めるから費用の合計に替えた（D-166）。 */
+export const RESULTS_VERSION = 2;
 
 /** 溜める件数の上限（新しい順に残す）。 */
 export const RESULTS_LIMIT = 50;
@@ -43,9 +43,21 @@ export type ResultStore = {
   version: typeof RESULTS_VERSION;
   /** 新しい順。 */
   entries: ResultEntry[];
+  /**
+   * 前の版（版 1）の履歴にあったプレイの id（OCL-46A5876A）。版 1 の値は ④ の形が違うので比較には使えないが、そのプレイは前の版で
+   * 終わって（フラグがあれば送って）いる。開き直したときに新しいプレイと見なして送り直さないよう、id だけを残す。新しい順・上限は RESULTS_LIMIT。
+   */
+  legacyIds?: string[];
 };
 
 const EMPTY: ResultStore = { version: RESULTS_VERSION, entries: [] };
+
+const legacyIdsOf = (x: unknown): string[] =>
+  Array.isArray(x)
+    ? x
+        .filter((v): v is string => typeof v === 'string')
+        .slice(0, RESULTS_LIMIT)
+    : [];
 const END_REASONS: readonly EndReason[] = [
   'completed',
   'cash',
@@ -94,19 +106,33 @@ function parseEntry(x: unknown): ResultEntry | null {
   };
 }
 
-/** 保存した履歴を読む。形・版が違えば空（黙って捨てる）。中の 1 件だけ壊れていれば、その件だけ捨てる。 */
+/**
+ * 保存した履歴を読む。形・版が違えば空（黙って捨てる）。中の 1 件だけ壊れていれば、その件だけ捨てる。
+ * 版 1（④ がギリギリを攻めるだった形。D-166）は値を捨て、プレイの id だけを legacyIds に残す（送り直さないため。OCL-46A5876A）。
+ */
 export function parseResults(x: unknown): ResultStore {
-  if (
-    !isObject(x) ||
-    x.version !== RESULTS_VERSION ||
-    !Array.isArray(x.entries)
-  )
-    return EMPTY;
+  if (!isObject(x) || !Array.isArray(x.entries)) return EMPTY;
+  if (x.version === 1) {
+    const ids = legacyIdsOf(
+      x.entries.map((e) => (isObject(e) ? e.id : undefined)),
+    );
+    return ids.length ? { ...EMPTY, legacyIds: ids } : EMPTY;
+  }
+  if (x.version !== RESULTS_VERSION) return EMPTY;
   const entries = x.entries
     .map(parseEntry)
     .filter((e): e is ResultEntry => e !== null);
-  return { version: RESULTS_VERSION, entries: entries.slice(0, RESULTS_LIMIT) };
+  const legacyIds = legacyIdsOf(x.legacyIds);
+  return {
+    version: RESULTS_VERSION,
+    entries: entries.slice(0, RESULTS_LIMIT),
+    ...(legacyIds.length ? { legacyIds } : {}),
+  };
 }
+
+/** 前の版の履歴にあったプレイか（前の版で終わっているので、集計に送り直さない。OCL-46A5876A）。 */
+export const isLegacyResult = (store: ResultStore, id: string): boolean =>
+  store.legacyIds?.includes(id) ?? false;
 
 /** 32 ビットの FNV-1a（16 進）。プレイの id に使う（暗号の用途ではない）。 */
 function fnv1a(text: string): string {
@@ -152,6 +178,7 @@ export function withResult(
 ): ResultStore {
   if (store.entries.some((e) => e.id === entry.id)) return store;
   return {
+    ...store,
     version: RESULTS_VERSION,
     entries: [entry, ...store.entries].slice(0, RESULTS_LIMIT),
   };
@@ -166,29 +193,35 @@ export function mergeResults(
   memory: ResultStore,
 ): ResultStore {
   const seen = new Set(persisted.entries.map((e) => e.id));
+  const legacyIds = [
+    ...new Set([...(persisted.legacyIds ?? []), ...(memory.legacyIds ?? [])]),
+  ].slice(0, RESULTS_LIMIT);
   return {
     version: RESULTS_VERSION,
     entries: [
       ...persisted.entries,
       ...memory.entries.filter((e) => !seen.has(e.id)),
     ].slice(0, RESULTS_LIMIT),
+    ...(legacyIds.length ? { legacyIds } : {}),
   };
 }
 
 export type AxisComparison = {
   id: ResultAxisId;
   label: string;
+  /** 大きいほど上位の向きを持つか（④ 費用の合計は持たない。D-166）。持たなければ自己ベスト・順位を出さない。 */
+  directed: boolean;
   value: number;
   /** 比べた過去の完走の数（今回を除く）。 */
   count: number;
-  /** 過去の完走の中の最高（無ければ undefined）。 */
+  /** 過去の完走の中の最高（無ければ・向きを持たない軸なら undefined）。 */
   best?: number;
-  /** 過去の最高を上回った（同じ値は更新に数えない）。過去が無ければ false。 */
+  /** 過去の最高を上回った（同じ値は更新に数えない）。過去が無い・向きを持たない軸なら false。 */
   newBest: boolean;
-  /** 前回（今回を除く最新の完走）との差。 */
+  /** 前回（今回を除く最新の完走）との差（向きを持たない軸も出す。色で良し悪しを付けない）。 */
   diffFromLast?: number;
-  /** 今回を含めた中での順位（1 が最上位。同じ値は同じ順位）。 */
-  rank: number;
+  /** 今回を含めた中での順位（1 が最上位。同じ値は同じ順位）。向きを持たない軸は undefined。 */
+  rank?: number;
 };
 
 /**
@@ -206,28 +239,20 @@ export function compareWithHistory(
       e.end.reason === 'completed',
   );
   const last = past[0];
-  return RESULT_AXES.map(({ id, label }) => {
+  return RESULT_AXES.map(({ id, label, directed }) => {
     const value = current.axes[id];
     const values = past.map((e) => e.axes[id]);
-    const best = values.length ? Math.max(...values) : undefined;
+    const best = directed && values.length ? Math.max(...values) : undefined;
     return {
       id,
       label,
+      directed,
       value,
       count: past.length,
       ...(best !== undefined ? { best } : {}),
       newBest: best !== undefined && value > best,
       ...(last ? { diffFromLast: value - last.axes[id] } : {}),
-      rank: 1 + values.filter((v) => v > value).length,
+      ...(directed ? { rank: 1 + values.filter((v) => v > value).length } : {}),
     };
   });
-}
-
-/**
- * 花火の段（1〜3。ST-01 の暫定・D-145）: 自己ベストを更新した軸の数で分ける（0 → 1・1〜2 → 2・3〜4 → 3）。
- * 集計の分布があるときは distribution.ts の distributionFireworkLevel（上位に入った軸の数。D-163）を使い、これは分布が無いときに使う。
- */
-export function fireworkLevel(cmp: readonly AxisComparison[]): 1 | 2 | 3 {
-  const n = cmp.filter((c) => c.newBest).length;
-  return n >= 3 ? 3 : n >= 1 ? 2 : 1;
 }

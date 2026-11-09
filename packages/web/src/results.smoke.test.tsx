@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// 完走の振り返り（D-131〜D-133）と手元の結果の履歴（D-144・D-145）の画面の描画テスト（D-86）。
+// 完走の振り返り（D-131〜D-133）と手元の結果の履歴（D-144）・④ 費用の合計（D-166）・目標の目安（D-167）・花火（D-168）・
+// 完走の帯（D-170）の画面の描画テスト（D-86）。
 // 4 軸の値・比べ方は results.test.ts（game）と results-history.test.ts が持つので、ここでは出る・溜まる・比べることだけを見る。
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { newSave, replaySave, withTurn, type SaveData } from 'game';
@@ -50,13 +51,19 @@ describe('完走の振り返りと手元の結果の履歴', () => {
       'cash',
       'satisfaction',
       'featurePoints',
-      'edgeMonths',
+      'totalCost',
     ]);
-    expect(d.textContent).toContain('ギリギリを攻める');
+    expect(d.textContent).toContain('費用の合計');
+    expect(d.textContent).not.toContain('ギリギリを攻める');
+    expect(d.textContent).not.toContain('ジョーク');
     expect(d.textContent).toContain('止まった月');
     expect(d.textContent).toContain('比べる過去の完走はまだありません');
-    // 目標の値・合否は出さない（D-131）
-    expect(d.textContent).not.toContain('目標');
+    // 所持金の目標の目安は出すが、合否の言葉は使わない（D-131・D-167）
+    const guide = d.querySelector('[data-axis="cash"] [data-cash-guide]')!;
+    expect(guide.textContent).toMatch(
+      /目標の目安 \$1,730\.00 (を \$[\d,.]+ 上回りました|まで \$[\d,.]+ でした)/,
+    );
+    expect(d.textContent).not.toMatch(/未達|達成|不合格|合格|✗/);
     expect(d.getAttribute('data-firework-level')).toBe('1');
     const s = stored();
     expect(s.entries.length).toBe(1);
@@ -67,11 +74,21 @@ describe('完走の振り返りと手元の結果の履歴', () => {
     );
     expect(screen.getByText('完走')).toBeDefined();
     expect(document.querySelector('[data-result-axes]')).not.toBeNull();
-    expect(screen.queryByText(/目標/)).toBeNull();
+    expect(
+      document.querySelector('[data-result-axes] [data-cash-guide]'),
+    ).not.toBeNull();
+    // 完走の帯は success の枠と印だけで、全面は塗らない（D-170）
+    const band = document.querySelector<HTMLElement>(
+      '[data-result-band="completed"]',
+    )!;
+    expect(band.className).toContain('border-success');
+    expect(band.className).not.toContain('alert-success');
+    expect(band.className).not.toContain('bg-success');
+    expect(band.textContent).toContain('✓');
   });
 
-  it('W-75 過去の完走があると、自己ベスト・前回との差・順位を出し、更新した軸の数で花火の段が上がる', async () => {
-    // 過去 2 回（どれも低い値）を置く。今回は全部の軸で上回るので 3 段
+  it('W-75 過去の完走があると、自己ベスト・前回との差・順位を出す。分布が無いので花火は自己ベストの数に依らず 1 段（D-168）', async () => {
+    // 過去 2 回（どれも低い値）を置く。今回は向きのある 3 軸すべてで上回るが、花火の段は変えない
     const low = (id: string, cash: number) => ({
       id,
       scenarioId: 'article-community',
@@ -79,7 +96,7 @@ describe('完走の振り返りと手元の結果の履歴', () => {
       startDate: '2026-11-02',
       finishedAt: '2026-11-08',
       setup: 'x',
-      axes: { cash, satisfaction: 0.1, featurePoints: 1, edgeMonths: -1 },
+      axes: { cash, satisfaction: 0.1, featurePoints: 1, totalCost: 5 },
       outages: 0,
       end: { reason: 'completed', month: 12 },
     });
@@ -98,7 +115,13 @@ describe('完走の振り返りと手元の結果の履歴', () => {
     expect(cash.textContent).toContain('これまでの自己ベスト $20.00');
     expect(cash.textContent).toContain('前回との差 +$');
     expect(cash.textContent).toContain('過去 3 回の中で 1 位');
-    expect(d.getAttribute('data-firework-level')).toBe('3');
+    // ④ 費用の合計は前回との差だけ（自己ベスト・順位を出さない。D-166）
+    const cost = d.querySelector('[data-axis="totalCost"]')!;
+    expect(cost.textContent).toContain('前回との差 +$');
+    expect(cost.textContent).not.toContain('自己ベスト');
+    expect(cost.textContent).not.toContain('位');
+    expect(d.getAttribute('data-firework-level')).toBe('1');
+    expect(d.textContent).not.toContain('自己ベストを更新しました');
     expect(
       stored()
         .entries.map((e) => e.id)
@@ -141,7 +164,7 @@ describe('完走の振り返りと手元の結果の履歴', () => {
                 cash: 1,
                 satisfaction: 0.1,
                 featurePoints: 1,
-                edgeMonths: 0,
+                totalCost: 0,
               },
               outages: 0,
               end: { reason: 'completed', month: 12 },
@@ -177,6 +200,33 @@ describe('完走の振り返りと手元の結果の履歴', () => {
     expect(s.entries[0]!.end.reason).toBe('outages');
   });
 
+  it('W-102 プレイ中は推移に所持金の目標の目安を出す: 文と所持金のグラフの控えめな点線（合否の言葉・色を使わない。D-167）', async () => {
+    let save = newSave({
+      scenarioId: 'article-community',
+      stackIndex: 1,
+      seed: 42,
+      startDate: '2026-11-02',
+    });
+    for (let i = 0; i < 4; i++) save = withTurn(save, []);
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    await renderApp();
+    const guide = document.querySelector<HTMLElement>('p[data-cash-guide]')!;
+    expect(guide.textContent).toContain(
+      '目標の目安は 12 か月目に所持金 $1,730.00 です',
+    );
+    expect(guide.textContent).toMatch(/見込み(は目安を約|では目安まで約)/);
+    expect(guide.textContent).toContain(
+      '届かなくても完走になり、合否はありません',
+    );
+    expect(guide.textContent).not.toMatch(/未達|届かなそう|✗/);
+    const ref = document.querySelector('[data-reference="neutral"]')!;
+    expect(ref).not.toBeNull();
+    expect(ref.textContent).toContain('目標の目安');
+    expect(ref.querySelector('line')!.getAttribute('stroke')).not.toContain(
+      'critical',
+    );
+  });
+
   it('W-77 始める画面の箱は「走り切る・4 つの軸で振り返る」紹介で、目標の値を出さない（D-133）', async () => {
     await renderApp();
     const box = document.querySelector<HTMLElement>('[data-run-goal]')!;
@@ -188,9 +238,10 @@ describe('完走の振り返りと手元の結果の履歴', () => {
       '所持金',
       '満足度の平均',
       '機能開発の累計',
-      'ギリギリを攻める',
+      '費用の合計',
     ])
       expect(box.textContent).toContain(label);
+    expect(box.textContent).not.toContain('ジョーク');
     expect(box.textContent).toContain('その場で終わります');
     expect(box.textContent).not.toMatch(/\$1,730|以上/);
     expect(box.className).toContain('border-success');

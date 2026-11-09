@@ -3,8 +3,9 @@
 //
 // - 送るのは VITE_STATS_ENABLED が立っているときだけ（サーバーが無い間に 404 を出し続けない）。
 // - 終わったプレイ（完走・途中終了）を 1 プレイ 1 回だけ送る（手元の履歴に新しく足したとき。App.tsx）。
-// - 失敗しても画面には何も出さず、送り直さない。サーバーも同じプレイを 1 行にする（playHash）。
-// - 送るもの: 始めたときの選択・行動の列（前の試行は除く）・4 軸・終わり方。名前・IP・端末の情報は送らない（本文に入れない）。
+// - 失敗しても画面には何も出さず、送り直さない。サーバーも同じプレイを 1 行にする（playId。D-169）。
+// - 送るもの: プレイの id（プレイごとのランダムな nonce と手元の履歴の id。端末や人を識別しない）・始めたときの選択・
+//   行動の列（前の試行は除く）・4 軸・終わり方。名前・IP・端末の情報は送らない（本文に入れない）。
 // - 分布（段 3・D-161）: 完走したら、送信が終わった後に 4 軸 × 2 の分布を 1 回で取る（fetchDistribution）。
 import {
   RESULT_AXES,
@@ -15,6 +16,7 @@ import {
   type SaveData,
 } from 'game';
 import { hc } from 'hono/client';
+import { statsPlayId } from './play-nonce.ts';
 import type { AppType, Distribution } from 'stats';
 import {
   membershipOf,
@@ -42,9 +44,10 @@ const statsClient = (): Client =>
       fetch(input, { ...init, credentials: 'omit' }),
   }));
 
-/** 送る中身（prd/15 §4）。 */
-export function submissionOf(save: SaveData, state: GameState) {
+/** 送る中身（prd/15 §4）。nonce は play-nonce.ts（D-169）。 */
+export function submissionOf(save: SaveData, state: GameState, nonce: string) {
   return {
+    playId: statsPlayId(nonce, save),
     save: withoutPrevious(save),
     axes: resultAxesOf(state),
     end: state.end!,
@@ -66,6 +69,7 @@ export type SubmitOutcome =
 export async function submitResult(
   save: SaveData,
   state: GameState,
+  nonce: string,
 ): Promise<SubmitOutcome> {
   // 開発用の架空の分布を出している間は、フラグがあっても送らない（開発のプレイを集計に混ぜない。OCL-87C871FB）
   if (
@@ -77,7 +81,7 @@ export async function submitResult(
     return 'skipped';
   try {
     const res = await statsClient().api.results.$post({
-      json: submissionOf(save, state),
+      json: submissionOf(save, state, nonce),
     });
     if (!res.ok) return 'rejected';
     const body: unknown = await res.json().catch(() => null);

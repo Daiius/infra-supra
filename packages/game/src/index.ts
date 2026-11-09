@@ -279,8 +279,7 @@ export {
 } from './review.ts';
 export { type RetryHint, retryHintsOf } from './hints.ts';
 export {
-  EDGE_RATIO,
-  isEdgeMonth,
+  DIRECTED_AXES,
   RESULT_AXES,
   type ResultAxes,
   type ResultAxisId,

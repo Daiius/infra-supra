@@ -11,6 +11,8 @@ import {
 import { newSave, replaySave, withTurn, type SaveData } from 'game';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NOT_SENT_ITEMS, SENT_ITEMS } from './privacy-policy.tsx';
+import { PLAY_NONCE_KEY, STATS_PLAY_ID_PATTERN } from './play-nonce.ts';
+import { playId } from './results-history.ts';
 import { renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -81,7 +83,13 @@ describe('集計への送信とプライバシーポリシー', () => {
     expect(String(url)).toBe('/api/results');
     expect(init?.method).toBe('POST');
     const body = JSON.parse(String(init?.body));
-    expect(Object.keys(body).sort()).toEqual(['axes', 'end', 'save']);
+    expect(Object.keys(body).sort()).toEqual(['axes', 'end', 'playId', 'save']);
+    // プレイの id は nonce（UUID）と手元の履歴の id。nonce は保存と並べて持つ（D-169）
+    expect(body.playId).toMatch(STATS_PLAY_ID_PATTERN);
+    expect(body.playId.split('.')[0]).toBe(
+      localStorage.getItem(PLAY_NONCE_KEY),
+    );
+    expect(body.save).not.toHaveProperty('nonce');
     expect(body.end.reason).toBe('completed');
     expect(body.save.turns).toHaveLength(save.turns.length + 1);
     expect(body.save).not.toHaveProperty('previous');
@@ -89,7 +97,7 @@ describe('集計への送信とプライバシーポリシー', () => {
       'cash',
       'satisfaction',
       'featurePoints',
-      'edgeMonths',
+      'totalCost',
     ]);
     // 終わった状態のまま開き直しても、手元の履歴に同じプレイがあるので送らない
     screen.getByRole('dialog', { name: /完走/ });
@@ -97,6 +105,82 @@ describe('集計への送信とプライバシーポリシー', () => {
     await renderApp();
     await new Promise((r) => setTimeout(r, 0));
     expect(posts(fetch)).toHaveLength(1);
+  });
+
+  it('W-94b プレイの id: 開き直しても nonce は同じ・別の端末（nonce も履歴も無い）の同じプレイは別の id（D-169）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    const fetch = okFetch();
+    vi.stubGlobal('fetch', fetch);
+    const playIdOf = (i: number) =>
+      JSON.parse(String((posts(fetch)[i]![1] as RequestInit).body))
+        .playId as string;
+    await finish(almostDone());
+    await waitFor(() => expect(posts(fetch)).toHaveLength(1));
+    const first = playIdOf(0);
+    const nonce = localStorage.getItem(PLAY_NONCE_KEY);
+    cleanup();
+    // 開き直しても nonce は替えない（送り直さない）
+    await renderApp();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(localStorage.getItem(PLAY_NONCE_KEY)).toBe(nonce);
+    expect(posts(fetch)).toHaveLength(1);
+    cleanup();
+    // 別の端末で同じ遊び方（同じシード・構成・何もしない）: 手元の記録が無いので新しい nonce で送る
+    for (const k of [
+      PLAY_NONCE_KEY,
+      'infra-supra:results',
+      'infra-supra:stats-membership',
+    ])
+      localStorage.removeItem(k);
+    await finish(almostDone());
+    await waitFor(() => expect(posts(fetch)).toHaveLength(2));
+    const second = playIdOf(1);
+    expect(second).toMatch(STATS_PLAY_ID_PATTERN);
+    expect(second).not.toBe(first);
+    // 後ろ（手元の履歴の id）は同じプレイなので同じ
+    expect(second.split('.')[1]).toBe(first.split('.')[1]);
+  });
+
+  it('W-94c 前の版（版 1）の履歴にある終わったプレイは、開き直しても送り直さず、今の版の履歴に足し直す（OCL-46A5876A）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    const fetch = okFetch();
+    vi.stubGlobal('fetch', fetch);
+    // 前の版で完走して送ったプレイ: 終わった保存と、版 1 の履歴（④ がギリギリを攻めるだった形）が残っている
+    let save = almostDone();
+    save = withTurn(save, []);
+    expect(replaySave(save).phase).toBe('completed');
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    localStorage.setItem(
+      'infra-supra:results',
+      JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            id: playId(save),
+            scenarioId: 'article-community',
+            seed: 42,
+            startDate: '2026-11-02',
+            finishedAt: '2026-11-08',
+            setup: 'x',
+            axes: { cash: 1, satisfaction: 1, featurePoints: 1, edgeMonths: 0 },
+            outages: 0,
+            end: { reason: 'completed', month: 12 },
+          },
+        ],
+      }),
+    );
+    await renderApp();
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem('infra-supra:results')!).entries,
+      ).toHaveLength(1),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(posts(fetch)).toHaveLength(0);
+    const stored = JSON.parse(localStorage.getItem('infra-supra:results')!);
+    expect(stored.version).toBe(2);
+    expect(stored.entries[0].id).toBe(playId(save));
+    expect(stored.entries[0].axes).toHaveProperty('totalCost');
   });
 
   it('W-95 送信に失敗しても（通信の失敗・500）画面は壊れない', async () => {

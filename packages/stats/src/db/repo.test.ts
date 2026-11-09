@@ -37,14 +37,14 @@ const rec = (over: Partial<ResultRecord>): ResultRecord => ({
 });
 
 describe('drizzleRepo（PGlite）', () => {
-  it('1 行足し、同じ playHash は duplicate で足さない。保存（jsonb）はそのまま読める', async () => {
+  it('1 行足し、同じ playId は duplicate で足さない。保存（jsonb）はそのまま読める（D-169）', async () => {
     expect(await repo.insert(base)).toEqual({
       status: 'inserted',
       inHistogram: true,
     });
     // 同じ結果のプレイが後から戻らずに来ても、前からある行（戻った印つき）の印を返す（OCL-9B705B16）
-    await repo.insert({ ...base, playHash: 'rw', rewound: true });
-    expect(await repo.insert({ ...base, playHash: 'rw' })).toEqual({
+    await repo.insert({ ...base, playId: 'rw', rewound: true });
+    expect(await repo.insert({ ...base, playId: 'rw' })).toEqual({
       status: 'duplicate',
       inHistogram: false,
     });
@@ -59,24 +59,33 @@ describe('drizzleRepo（PGlite）', () => {
     expect(rows.rows[0]!.save).toEqual(base.save);
   });
 
+  it('同じ playHash（同じ結果）でも playId が違えば別の行（別の端末の同じ遊び方。D-169）', async () => {
+    await repo.insert({ ...base, playId: 'other-device' });
+    const rows = await client.query<{ n: number }>(
+      'select count(*)::int as n from results where play_hash = $1',
+      [base.playHash],
+    );
+    expect(rows.rows[0]!.n).toBe(3);
+    await client.query("delete from results where play_id = 'other-device'");
+  });
+
   it('🔒 表に IP・端末の情報の列が無い', async () => {
     const cols = await client.query<{ column_name: string }>(
       "select column_name from information_schema.columns where table_name = 'results'",
     );
     const names = cols.rows.map((r) => r.column_name);
     expect(names).toContain('play_hash');
+    expect(names).toContain('play_id');
     for (const n of names) expect(n).not.toMatch(/ip|agent|addr|name/i);
   });
 
   it('ヒストグラムの値は完走・戻っていない・同じシナリオ（・同じシード）だけ', async () => {
-    await repo.insert(rec({ playHash: 'h1', seed: 1, cash: 100 }));
-    await repo.insert(rec({ playHash: 'h2', seed: 2, cash: 200 }));
+    await repo.insert(rec({ playId: 'h1', seed: 1, cash: 100 }));
+    await repo.insert(rec({ playId: 'h2', seed: 2, cash: 200 }));
     await repo.insert(
-      rec({ playHash: 'h3', seed: 1, cash: 900, endReason: 'outages' }),
+      rec({ playId: 'h3', seed: 1, cash: 900, endReason: 'outages' }),
     );
-    await repo.insert(
-      rec({ playHash: 'h4', seed: 1, cash: 900, rewound: true }),
-    );
+    await repo.insert(rec({ playId: 'h4', seed: 1, cash: 900, rewound: true }));
     const q = { scenarioId: 'article-community', axis: 'cash' } as const;
     const all = await repo.histogramValues(q);
     expect(all.sort((a, b) => a - b)).toEqual(
@@ -87,13 +96,13 @@ describe('drizzleRepo（PGlite）', () => {
       await repo.histogramValues({ ...q, scenarioId: 'contract-operations' }),
     ).toEqual([]);
     expect(
-      await repo.histogramValues({ ...q, axis: 'edgeMonths', seed: 2 }),
-    ).toEqual([base.edgeMonths]);
+      await repo.histogramValues({ ...q, axis: 'totalCost', seed: 2 }),
+    ).toEqual([base.totalCost]);
   });
 
   it('知らない終わり方は表の検査で入らない', async () => {
     await expect(
-      repo.insert(rec({ playHash: 'x', endReason: 'won' as never })),
+      repo.insert(rec({ playId: 'x', endReason: 'won' as never })),
     ).rejects.toThrow();
   });
 });

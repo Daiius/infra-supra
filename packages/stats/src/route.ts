@@ -142,7 +142,7 @@ export function createApp({
             scenarioId: scenario,
             axis,
             seed: seed ?? null,
-            ...histogramOf(axis, values, value),
+            ...histogramOf(values, value),
           },
           200,
         );
@@ -165,8 +165,8 @@ export function createApp({
             return [
               axis,
               {
-                seed: histogramOf(axis, same, q[axis]),
-                all: histogramOf(axis, all, q[axis]),
+                seed: histogramOf(same, q[axis]),
+                all: histogramOf(all, q[axis]),
               },
             ] as const;
           }),
