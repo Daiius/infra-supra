@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 // 見積モードの画面の描画テスト（D-86・prd/05 §7）。構成・フレームワーク・テンプレート・PV を切り替えても例外が無く、
 // 月の費用・比較表・費用の曲線が出ることだけを見る（金額は model.test.ts と game のテストが持つ）。
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
   ensurePartsList,
+  infoDialog,
   inSetupTabs,
   openSlot,
   renderApp,
@@ -12,7 +19,15 @@ import {
   useSmokeEnv,
   waitLoaded,
 } from '../smoke.test-helpers.tsx';
-import { fromQuery, normalizeInput, withStack } from './model.ts';
+import { usd } from '../format.ts';
+import { Lines } from './estimate-mode.tsx';
+import {
+  fromQuery,
+  normalizeInput,
+  runEstimate,
+  withStack,
+  type LineView,
+} from './model.ts';
 
 useSmokeEnv();
 
@@ -130,7 +145,8 @@ function expectEstimate(): string {
   const chart = curve.getByRole('img', {
     name: '月の PV ごとの月額（構成ごと）',
   });
-  expect(chart.querySelectorAll('path').length).toBeGreaterThan(0);
+  // 線の区間（止まる区間は薄い破線。D-180）
+  expect(chart.querySelectorAll('[data-segment]').length).toBeGreaterThan(0);
   return title.textContent!.replace(/^月の費用: /, '');
 }
 
@@ -918,5 +934,383 @@ describe('見積モードの画面', () => {
     expect(checked('ページのキャッシュ（ISR）')).toBe('kv');
     expect(checked(DB)).toBe('dynamodb');
     expectEstimate();
+  });
+
+  it('W-60 税込の目安は合計の円の横に常に出し、事業者ごとの扱いと出典は ⓘ に出す。前の版の tax=0 の URL でも出る（D-177）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&s=aws-amplify&pv=1000000&tax=0',
+    );
+    await renderApp();
+    expectEstimate();
+    const total = within(card(/^月の費用: /));
+    // チェックはもう無い
+    expect(total.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByText(/税込の目安（円）を出す/)).toBeNull();
+    const tax = screen.getByTestId('tax-inclusive');
+    expect(card(/^月の費用: /).contains(tax)).toBe(true);
+    expect(tax.textContent).toMatch(/^税込 約 ¥[\d,]+/);
+    // ⓘ のダイアログに事業者ごとの扱いと出典
+    fireEvent.click(
+      within(tax).getByRole('button', { name: '税込の目安の説明' }),
+    );
+    const dialog = infoDialog()!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain('事業者ごとの消費税の扱い');
+    expect(dialog.textContent).toContain('消費税 10% を足す');
+    expect(
+      within(dialog)
+        .getAllByRole('link')
+        .some((a) => /^出典（/.test(a.textContent ?? '')),
+    ).toBe(true);
+    // 比較の表の「税込の目安」の列は常に出る
+    const compare = within(card('構成を比べる'));
+    expect(
+      compare.getByRole('columnheader', { name: '税込の目安' }),
+    ).toBeDefined();
+    // 古い tax=0 は URL に書き戻さない
+    expect(new URLSearchParams(window.location.search).has('tax')).toBe(false);
+  });
+
+  it('W-61 ① の選んでいる構成のカードと ① のタブの「止まる」は、明細・上限の一覧と同じ赤（D-178）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-free&pv=30000000',
+    );
+    await renderApp();
+    expectEstimate();
+    const stop = stackCard().querySelector<HTMLElement>('[data-stack-stop]')!;
+    expect(stop).not.toBeNull();
+    expect(stop.textContent).toMatch(/止まる・プランの変更が要る上限 \d+ 件/);
+    expect(stop.className).toContain('text-error');
+    expect(stop.className).not.toContain('text-warning');
+    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const badge = stackTab.querySelector('[data-setup-tab-warn]')!;
+    expect(badge.className).toContain('badge-error');
+    // 下の上限の一覧の「超過」（止まる）も赤
+    const over = within(card(/^月の費用: /)).getAllByText('超過');
+    expect(over[0]!.className).toContain('badge-error');
+  });
+
+  it('W-62 費用の曲線の軸は既定で通常（等間隔・0 から）、対数を選ぶと 10 倍ごとの目盛りと注記が出て、選んだ表示を覚える（D-179）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&s=cloudflare-vinext-paid&pv=1000000',
+    );
+    await renderApp();
+    expectEstimate();
+    const curve = card('費用の曲線（月の PV を振る）');
+    const fig = () => curve.querySelector<HTMLElement>('figure[data-scale]')!;
+    const ticks = (axis: 'x' | 'y') =>
+      [...fig().querySelectorAll(`[data-${axis}-tick]`)].map((e) =>
+        Number(e.getAttribute(`data-${axis}-tick`)),
+      );
+    const scaleButton = (v: string) =>
+      curve.querySelector<HTMLElement>(`[data-curve-scale="${v}"]`)!;
+    // 既定は通常: 0 から等間隔、対数の注記は無い
+    expect(fig().dataset.scale).toBe('linear');
+    expect(scaleButton('linear').getAttribute('aria-pressed')).toBe('true');
+    expect(ticks('x')[0]).toBe(0);
+    expect(ticks('y')[0]).toBe(0);
+    const step = ticks('x')[1]! - ticks('x')[0]!;
+    expect(ticks('x').every((v, i) => v === i * step)).toBe(true);
+    expect(fig().querySelector('[data-log-note]')).toBeNull();
+    // 対数: 目盛りは 10 倍ごと、注記を出す
+    fireEvent.click(scaleButton('log'));
+    expect(fig().dataset.scale).toBe('log');
+    expect(scaleButton('log').getAttribute('aria-pressed')).toBe('true');
+    for (const axis of ['x', 'y'] as const) {
+      const t = ticks(axis);
+      expect(t.length).toBeGreaterThan(1);
+      for (let i = 1; i < t.length; i++)
+        expect(t[i]! / t[i - 1]!).toBeCloseTo(10, 9);
+    }
+    expect(fig().querySelector('[data-log-note]')!.textContent).toContain(
+      '1 目盛りで 10 倍',
+    );
+    expect(localStorage.getItem('infra-supra:estimate-curve-scale')).toBe(
+      'log',
+    );
+    // 開き直しても対数のまま
+    cleanup();
+    await renderApp();
+    expect(
+      card('費用の曲線（月の PV を振る）').querySelector<HTMLElement>(
+        'figure[data-scale]',
+      )!.dataset.scale,
+    ).toBe('log');
+  });
+
+  it('W-63 費用の曲線: 止まるまでの区間は通常の線、上限に達して止まる区間は薄い破線で印を描かず、言葉で「止まります」と示す。通常・対数のどちらでも同じ（D-180）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-free&pv=10000',
+    );
+    await renderApp();
+    expectEstimate();
+    const curve = card('費用の曲線（月の PV を振る）');
+    const free = () =>
+      curve.querySelector<HTMLElement>(
+        '[data-curve-legend="cloudflare-vinext-free"]',
+      )!;
+    // 凡例: 止まり始める PV を言葉で（実データの無料プランは在庫の上限でどの規模でも止まる。途中から止まる線は curve-chart の smoke）
+    expect(free().textContent).toMatch(
+      /(PV から|どの規模でも)止まります（上限）/,
+    );
+    expect(curve.querySelector('[data-stopped-key]')!.textContent).toContain(
+      '上限に達して止まる区間',
+    );
+    for (const scale of ['linear', 'log'] as const) {
+      fireEvent.click(
+        curve.querySelector<HTMLElement>(`[data-curve-scale="${scale}"]`)!,
+      );
+      const svg = curve.querySelector('figure[data-scale] svg')!;
+      const normal = [...svg.querySelectorAll('[data-segment="normal"]')];
+      const stopped = [...svg.querySelectorAll('[data-segment="stopped"]')];
+      // 止まらない区間（有料のプラン）も、止まる区間（無料のプラン）もある
+      expect(normal.length, scale).toBeGreaterThan(0);
+      expect(stopped.length, scale).toBeGreaterThan(0);
+      for (const l of normal) {
+        expect(l.getAttribute('stroke-dasharray')).toBeNull();
+        expect(l.getAttribute('stroke-opacity')).toBe('1');
+      }
+      for (const l of stopped) {
+        expect(l.getAttribute('stroke-dasharray')).not.toBeNull();
+        expect(Number(l.getAttribute('stroke-opacity'))).toBeLessThan(1);
+      }
+    }
+    // × を止まるの印に使っていない（グラフにも表にも凡例にも × の文字・印が無い）
+    expect(curve.textContent).not.toContain('×');
+    // 表で見る: 止まる点は言葉で
+    const table = within(curve).getByRole('table');
+    expect(
+      within(table)
+        .getAllByText('止まる')
+        .every((e) => e.className.includes('text-error')),
+    ).toBe(true);
+  });
+
+  it('W-64 席の料金の「記載なし」「未取得」の行は最後にまとめて既定で畳み、開けば中身がある。合計は変わらない（D-181）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro&seats=3',
+    );
+    await renderApp();
+    expectEstimate();
+    const total = card(/^月の費用: /);
+    const folded = total.querySelector<HTMLDetailsElement>(
+      'details[data-members-unknown]',
+    )!;
+    expect(folded).not.toBeNull();
+    expect(folded.open).toBe(false);
+    const view = runEstimate(normalizeInput(fromQuery(window.location.search)));
+    const unknown = view.members.filter(
+      (m) => m.pricing === 'not-stated' || m.pricing === 'unknown',
+    );
+    expect(unknown.length).toBeGreaterThan(0);
+    expect(folded.querySelector('summary')!.textContent).toContain(
+      `（${unknown.length} 件）`,
+    );
+    // 畳んだ中に今と同じ内容（記載なし・未取得の印と前提の文）
+    const items = folded.querySelectorAll('li');
+    expect(items).toHaveLength(unknown.length);
+    expect(folded.textContent).toMatch(/記載なし|未取得/);
+    expect(folded.textContent).toContain(unknown[0]!.premise);
+    // 畳まない行（席ごとに課金など）が先、畳んだ行は最後
+    const block = folded.parentElement!;
+    expect(block.lastElementChild).toBe(folded);
+    const open = block.querySelector(':scope > ul')!;
+    expect(open.textContent).toContain('メンバー（席）ごとに課金');
+    expect(open.textContent).not.toMatch(/記載なし|未取得/);
+    // 合計は計算どおり（表示の並びだけを変えた）
+    expect(within(total).getByText(/^\$[\d,]+\.\d\d$/).textContent).toBe(
+      usd(view.totalUsd),
+    );
+  });
+
+  it('W-65 明細の料金未取得の行は表の最後にまとめて既定で畳む（D-181）', () => {
+    const line = (label: string, status: LineView['status']): LineView => ({
+      kind: 'usage',
+      label,
+      quantity: 1,
+      unit: 'GB',
+      amount: status === 'unpriced' ? null : 1,
+      currency: 'USD',
+      status,
+    });
+    const { container } = render(
+      <Lines
+        lines={[
+          line('A', 'priced'),
+          line('B', 'unpriced'),
+          line('C', 'priced'),
+          line('D', 'unpriced'),
+        ]}
+      />,
+    );
+    const tables = container.querySelectorAll('table');
+    expect(tables).toHaveLength(2);
+    const firstRows = [...tables[0]!.querySelectorAll('tbody tr')].map(
+      (r) => r.firstElementChild!.textContent,
+    );
+    expect(firstRows).toEqual(['A', 'C']);
+    const folded = container.querySelector<HTMLDetailsElement>(
+      'details[data-unpriced-lines]',
+    )!;
+    expect(folded.open).toBe(false);
+    expect(folded.querySelector('summary')!.textContent).toContain('（2 件');
+    expect(container.lastElementChild).toBe(folded);
+    expect(folded.textContent).toContain('料金未取得');
+    expect(
+      [...folded.querySelectorAll('tbody tr')].map((r) =>
+        r.firstElementChild!.textContent!.replace('料金未取得', ''),
+      ),
+    ).toEqual(['B', 'D']);
+  });
+
+  it('W-66 費用の曲線は条件の直下・① の構成のカードの上にあり、今の構成の線を強調する（D-182）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const conditions = card('条件');
+    const curve = card('費用の曲線（月の PV を振る）');
+    const setup = document.querySelector('section[data-setup-card]')!;
+    const total = card(/^月の費用: /);
+    const before = (a: Node, b: Node) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    // 条件 → 曲線 → ①② → 月の費用（DOM の順。狭い画面でも同じ並び）
+    expect(before(conditions, curve)).toBe(true);
+    expect(before(curve, setup)).toBe(true);
+    expect(before(setup, total)).toBe(true);
+    expect(setup.contains(stackCard())).toBe(true);
+    // 曲線の説明・軸の切り替えも一緒
+    expect(curve.querySelector('[data-curve-scale="log"]')).not.toBeNull();
+    // 今の構成の線は強調（太い線）、凡例も太字
+    const current = curve.querySelector('[data-series="vercel-supabase-pro"]')!;
+    expect(current.getAttribute('data-emphasis')).toBe('strong');
+    expect(
+      current.querySelector('[data-segment]')!.getAttribute('stroke-width'),
+    ).toBe('3.5');
+    expect(
+      curve.querySelector('[data-curve-legend="vercel-supabase-pro"] button')!
+        .className,
+    ).toContain('font-semibold');
+  });
+
+  it('W-67 費用の曲線は載せられる全構成を線にし、凡例を押すとその線を強調する。足し引きの UI は無い（D-183）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const curve = card('費用の曲線（月の PV を振る）');
+    const compareRows = within(card('構成を比べる'))
+      .getAllByRole('row')
+      .slice(1);
+    const lines = curve.querySelectorAll('svg [data-series]');
+    expect(lines.length).toBe(compareRows.length);
+    expect(lines.length).toBeGreaterThanOrEqual(8);
+    expect(curve.textContent).not.toContain('比べる構成を足す・外す');
+    expect(curve.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    const search = window.location.search;
+    // 凡例を押すとその線を強調し、ほかを薄くする
+    const pick = () =>
+      curve.querySelector<HTMLButtonElement>(
+        '[data-curve-legend="sakura-vps-2gb"] button',
+      )!;
+    fireEvent.click(pick());
+    expect(pick().getAttribute('aria-pressed')).toBe('true');
+    const emphasis = (id: string) =>
+      curve
+        .querySelector(`svg [data-series="${id}"]`)!
+        .getAttribute('data-emphasis');
+    expect(emphasis('sakura-vps-2gb')).toBe('strong');
+    expect(emphasis('vercel-supabase-pro')).toBe('muted');
+    expect(emphasis('cloudflare-vinext-paid')).toBe('muted');
+    // もう一度押すと戻り、今の構成の強調に戻る
+    fireEvent.click(pick());
+    expect(pick().getAttribute('aria-pressed')).toBe('false');
+    expect(emphasis('vercel-supabase-pro')).toBe('strong');
+    expect(emphasis('sakura-vps-2gb')).toBe('normal');
+    // 見方なので URL には残さない
+    expect(window.location.search).toBe(search);
+  });
+
+  it('W-68 ① のカルーセルは開いた直後は滑らかにせず一度で中央へ寄せ、幅が後から替わっても寄せ直す（D-182 の後の退行）', async () => {
+    // scrollLeft を書いた時点の scroll-behavior を記録する（jsdom はレイアウトをしないので、寄せ方の呼ばれ方で確かめる）
+    const writes: { el: HTMLElement; left: number; behavior: string }[] = [];
+    Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
+      configurable: true,
+      get() {
+        return 0;
+      },
+      set(this: HTMLElement, v: number) {
+        writes.push({ el: this, left: v, behavior: this.style.scrollBehavior });
+      },
+    });
+    // ResizeObserver の通知を後から送れるように、観ている要素と callback を持つ
+    const observers: { cb: ResizeObserverCallback; els: Element[] }[] = [];
+    const prevRO = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      entry: { cb: ResizeObserverCallback; els: Element[] };
+      constructor(cb: ResizeObserverCallback) {
+        this.entry = { cb, els: [] };
+        observers.push(this.entry);
+      }
+      observe(el: Element) {
+        this.entry.els.push(el);
+      }
+      unobserve() {}
+      disconnect() {
+        this.entry.els = [];
+      }
+    } as never;
+    try {
+      window.history.replaceState(
+        null,
+        '',
+        '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+      );
+      await renderApp();
+      const card = stackCard();
+      const t = card.closest<HTMLElement>('.carousel')!;
+      const first = writes.filter((w) => w.el === t);
+      // 開いた直後の寄せは scroll-behavior: auto（smooth のアニメーションが途中で止まって外れたままにならない）
+      expect(first.length).toBeGreaterThan(0);
+      expect(first.every((w) => w.behavior === 'auto')).toBe(true);
+      expect(t.style.scrollBehavior).toBe('');
+      // 幅が後から決まったら、選んでいるカードを中央へ寄せ直す
+      const item = card.closest<HTMLElement>('[data-card]')!;
+      Object.defineProperty(t, 'clientWidth', { value: 944 });
+      Object.defineProperty(item, 'clientWidth', { value: 802 });
+      Object.defineProperty(item, 'offsetLeft', { value: 873 });
+      writes.length = 0;
+      for (const o of observers)
+        if (o.els.includes(t))
+          o.cb([{ target: t } as never], {} as ResizeObserver);
+      const again = writes.filter((w) => w.el === t);
+      expect(again.length).toBeGreaterThan(0);
+      expect(again.at(-1)!.left).toBe(873 - (944 - 802) / 2);
+      expect(again.at(-1)!.behavior).toBe('auto');
+      // 別の構成を選んだときは滑らかに動かす（CSS の scroll-behavior のまま）
+      writes.length = 0;
+      pick('stack', 'sakura-vps-2gb');
+      const moved = writes.filter((w) => w.el === t && w.behavior === '');
+      expect(moved.length).toBeGreaterThan(0);
+    } finally {
+      delete (HTMLElement.prototype as { scrollLeft?: number }).scrollLeft;
+      globalThis.ResizeObserver = prevRO;
+    }
   });
 });

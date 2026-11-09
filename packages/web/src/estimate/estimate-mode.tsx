@@ -22,7 +22,8 @@ import {
   type FrameworkId,
 } from 'game';
 import {
-  LogCurveChart,
+  CurveChart,
+  type CurveScale,
   SeriesSwatch,
   type CurveChartSeries,
   type MarkShape,
@@ -54,11 +55,9 @@ import {
   type ComparisonRow,
   diagramOf,
   routeStatusOf,
-  CURVE_MAX,
   CURVE_PVS,
   curveColorSlot,
-  defaultCurveStacks,
-  pickedCurveStacks,
+  curveStacks,
   fromQuery,
   IMAGE_FORMATS,
   imageFormatLock,
@@ -243,6 +242,8 @@ export function EstimateMode() {
         onPickFramework={pickFramework}
         onPickParts={pickParts}
         editor={editor}
+        // 全体の図（費用の曲線）を条件の直下・① の上に置き、そこからカードで詳しく見る（D-182）
+        overview={<CostCurve input={input} rows={rows} memory={partsByGroup} />}
       />
       <Card title={`月の費用: ${view.name}`}>
         <div className="flex flex-wrap items-baseline gap-x-3">
@@ -253,17 +254,8 @@ export function EstimateMode() {
           <span className="text-sm opacity-70">
             約 {jpy(view.totalJpy)}（1 USD = {USD_JPY} 円の仮定）
           </span>
+          <TaxInclusive tax={view.tax} />
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm"
-            checked={input.showTax}
-            onChange={(e) => setInput({ showTax: e.target.checked })}
-          />
-          日本から契約するときの税込の目安（円）を出す
-        </label>
-        {input.showTax && <Tax tax={view.tax} />}
         <Commitments view={view} />
         <Members members={view.members} seats={view.seats} />
         {view.totals.JPY !== undefined && (
@@ -301,11 +293,9 @@ export function EstimateMode() {
       </Card>
       <Comparison
         rows={rows}
-        showTax={input.showTax}
         // 行を押すとカルーセルもその構成へ移る（値は同じ入力。D-115）
         onPick={pickStack}
       />
-      <CostCurve input={input} rows={rows} memory={partsByGroup} />
       <Card title="料金データの出典">
         <ul className="space-y-2 text-sm">
           {view.sources.map((s) => (
@@ -396,6 +386,7 @@ function Conditions({
   onPickFramework,
   onPickParts,
   editor,
+  overview,
 }: {
   input: EstimateInput;
   setInput: (p: Partial<EstimateInput>) => void;
@@ -412,6 +403,8 @@ function Conditions({
   onPickParts: (parts: SetupChoices) => void;
   /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップ。D-112・D-115）。 */
   editor: RoutePlanEditor;
+  /** 条件の直下・① の上に置く全体の図（費用の曲線。D-182）。 */
+  overview?: ReactNode;
 }) {
   const scenario = scenarioOfTemplate(input.template);
   // 構成の id ↔ STACKS の index の変換はここで 1 回（共用の欄は index で持つ）
@@ -480,178 +473,208 @@ function Conditions({
       </div>
     ) : null;
   return (
-    <Card title="条件">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="テンプレート">
-          <select
-            className={select}
-            value={input.template}
-            onChange={(e) =>
-              setInput(withTemplate(input, e.target.value as TemplateId))
-            }
+    <>
+      <Card title="条件">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="テンプレート">
+            <select
+              className={select}
+              value={input.template}
+              onChange={(e) =>
+                setInput(withTemplate(input, e.target.value as TemplateId))
+              }
+            >
+              {TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="月の PV"
+            info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたりの月の PV。下に出す）から出します。月の中の伸びは扱いません"
           >
-            {TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="月の PV"
-          info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたりの月の PV。下に出す）から出します。月の中の伸びは扱いません"
-        >
-          <input
-            className="input input-bordered input-sm w-full"
-            type="number"
-            inputMode="numeric"
-            min={1000}
-            step={1000}
-            list="estimate-pv-presets"
-            value={pvText}
-            onChange={(e) => setPvText(e.target.value)}
-            onBlur={() => setInput({ pv: Number(pvText) })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') setInput({ pv: Number(pvText) });
+            <input
+              className="input input-bordered input-sm w-full"
+              type="number"
+              inputMode="numeric"
+              min={1000}
+              step={1000}
+              list="estimate-pv-presets"
+              value={pvText}
+              onChange={(e) => setPvText(e.target.value)}
+              onBlur={() => setInput({ pv: Number(pvText) })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setInput({ pv: Number(pvText) });
+              }}
+            />
+            <datalist id="estimate-pv-presets">
+              {PV_PRESETS.map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
+            <span className="mt-1 flex flex-wrap gap-1">
+              {PV_PRESETS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`btn btn-xs ${v === input.pv ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => setInput({ pv: v })}
+                >
+                  {v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}K`}
+                </button>
+              ))}
+            </span>
+            <span className="mt-1 block text-xs opacity-70">
+              MAU 約 {Math.round(mau).toLocaleString('ja-JP')}
+              {mau > 0 &&
+                `（テンプレートの仮定: 1 人あたり月 ${Math.round(input.pv / mau).toLocaleString('ja-JP')} PV）`}
+            </span>
+          </Field>
+          <Seats seats={input.seats} setInput={setInput} />
+        </div>
+      </Card>
+      {overview}
+      <section
+        className="card bg-base-100 shadow"
+        aria-label="インフラの構成とフレームワークを選ぶ"
+        data-setup-card
+      >
+        <div className="card-body min-w-0 gap-3 px-3 py-4 sm:p-6">
+          {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。タブで切り替え、
+          見出しにそれぞれの今の選択と注意を出す（D-116 の補足） */}
+          <SetupTabs
+            storageKey="infra-supra:setup-tab:estimate"
+            stack={{
+              label: '① インフラの構成',
+              summary: stackName(
+                stackIndex,
+                input.framework,
+                false,
+                input.parts,
+              ),
+              warn:
+                (cardTotals[input.stack]?.blocking ?? 0) > 0
+                  ? `止まる・プランの変更が要る上限 ${cardTotals[input.stack]!.blocking} 件`
+                  : undefined,
+              // 「止まる」は明細・上限の一覧と同じ赤（D-178）
+              warnTone: 'error',
+              panel: (
+                <StackField
+                  scenario={scenario}
+                  framework={input.framework}
+                  value={stackIndex}
+                  onChange={(i) => onPickStack(STACKS[i]!.id)}
+                  components={input.parts}
+                  comments={comments}
+                  routes={input.routes}
+                  effort={false}
+                  // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
+                  routesOnFallback={(i) =>
+                    normalizeInput({
+                      ...input,
+                      ...withStack(input, STACKS[i]!.id),
+                    }).routes
+                  }
+                  // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
+                  rememberedOf={(i) =>
+                    partsOfStack(memory, scenario, i, input.framework)
+                  }
+                  diagramCaption={(selected, remembered) =>
+                    selected
+                      ? '選んだ部品で描いています。'
+                      : remembered
+                        ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
+                        : 'この構成を選んだときの既定の部品で描いています。'
+                  }
+                  // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
+                  onComponentsChange={onPickParts}
+                  partsNote="選んでいないスロットは既定の部品で見積もります"
+                  partsExtra={
+                    imageSettings ? { images: imageSettings } : undefined
+                  }
+                  // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
+                  partsCompare={(slot) => ({
+                    rows: slotComparisonOf(input, slot),
+                    basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
+                  })}
+                  cardExtra={(i, selected) => {
+                    const t = cardTotals[STACKS[i]!.id];
+                    if (!t) return null;
+                    return (
+                      <p className="text-sm" data-stack-total={STACKS[i]!.id}>
+                        {selected ? '今の条件で月 ' : 'この構成にすると月 '}
+                        <strong className="tabular-nums">
+                          {usd(t.totalUsd)}
+                        </strong>
+                        {t.framework !== input.framework &&
+                          `（${FRAMEWORKS[t.framework].label} にしたとき）`}
+                        {t.blocking > 0 && (
+                          <span
+                            className="ml-1 text-xs text-error"
+                            data-stack-stop
+                          >
+                            止まる・プランの変更が要る上限 {t.blocking} 件
+                          </span>
+                        )}
+                      </p>
+                    );
+                  }}
+                />
+              ),
+            }}
+            framework={{
+              label: '② フレームワークと描き方',
+              summary: FRAMEWORKS[input.framework].label,
+              warn: notice,
+              live: notice,
+              panel: (
+                <FrameworkField
+                  scenario={scenario}
+                  allowed={allowed}
+                  value={input.framework}
+                  onChange={onPickFramework}
+                  comments={comments}
+                  routePlan={(id) => fwRoutes.get(id) ?? []}
+                  routes={input.routes}
+                  resolvedRoutes={(id) =>
+                    Object.fromEntries(
+                      (fwRoutes.get(id) ?? []).map((r) => [
+                        r.route,
+                        r.strategy,
+                      ]),
+                    )
+                  }
+                  unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
+                  notice={notice}
+                  editor={editor}
+                  text={{
+                    heading: '② アプリのフレームワークとページの描き方',
+                    footnote: null,
+                    wireframeNote:
+                      '見取り図はテンプレートの仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
+                    compareHint:
+                      'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べます',
+                    compareNote:
+                      'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べます。ここで選んでも、カードのチップで選んでも同じです。構成の比較・費用の曲線もこの描き方で引きます。',
+                    // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
+                    compareCaption: ROUTE_PLAN_NOTE.replace(
+                      '費用の差は 1 か月目の基準の規模での目安です。',
+                      '費用の差は今の条件（月の PV）での目安です。',
+                    ),
+                  }}
+                />
+              ),
             }}
           />
-          <datalist id="estimate-pv-presets">
-            {PV_PRESETS.map((v) => (
-              <option key={v} value={v} />
-            ))}
-          </datalist>
-          <span className="mt-1 flex flex-wrap gap-1">
-            {PV_PRESETS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                className={`btn btn-xs ${v === input.pv ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setInput({ pv: v })}
-              >
-                {v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}K`}
-              </button>
-            ))}
-          </span>
-          <span className="mt-1 block text-xs opacity-70">
-            MAU 約 {Math.round(mau).toLocaleString('ja-JP')}
-            {mau > 0 &&
-              `（テンプレートの仮定: 1 人あたり月 ${Math.round(input.pv / mau).toLocaleString('ja-JP')} PV）`}
-          </span>
-        </Field>
-        <Seats seats={input.seats} setInput={setInput} />
-      </div>
-      {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。タブで切り替え、
-          見出しにそれぞれの今の選択と注意を出す（D-116 の補足） */}
-      <SetupTabs
-        storageKey="infra-supra:setup-tab:estimate"
-        stack={{
-          label: '① インフラの構成',
-          summary: stackName(stackIndex, input.framework, false, input.parts),
-          warn:
-            (cardTotals[input.stack]?.blocking ?? 0) > 0
-              ? `止まる・プランの変更が要る上限 ${cardTotals[input.stack]!.blocking} 件`
-              : undefined,
-          panel: (
-            <StackField
-              scenario={scenario}
-              framework={input.framework}
-              value={stackIndex}
-              onChange={(i) => onPickStack(STACKS[i]!.id)}
-              components={input.parts}
-              comments={comments}
-              routes={input.routes}
-              effort={false}
-              // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
-              routesOnFallback={(i) =>
-                normalizeInput({ ...input, ...withStack(input, STACKS[i]!.id) })
-                  .routes
-              }
-              // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
-              rememberedOf={(i) =>
-                partsOfStack(memory, scenario, i, input.framework)
-              }
-              diagramCaption={(selected, remembered) =>
-                selected
-                  ? '選んだ部品で描いています。'
-                  : remembered
-                    ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
-                    : 'この構成を選んだときの既定の部品で描いています。'
-              }
-              // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
-              onComponentsChange={onPickParts}
-              partsNote="選んでいないスロットは既定の部品で見積もります"
-              partsExtra={imageSettings ? { images: imageSettings } : undefined}
-              // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
-              partsCompare={(slot) => ({
-                rows: slotComparisonOf(input, slot),
-                basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
-              })}
-              cardExtra={(i, selected) => {
-                const t = cardTotals[STACKS[i]!.id];
-                if (!t) return null;
-                return (
-                  <p className="text-sm" data-stack-total={STACKS[i]!.id}>
-                    {selected ? '今の条件で月 ' : 'この構成にすると月 '}
-                    <strong className="tabular-nums">{usd(t.totalUsd)}</strong>
-                    {t.framework !== input.framework &&
-                      `（${FRAMEWORKS[t.framework].label} にしたとき）`}
-                    {t.blocking > 0 && (
-                      <span className="ml-1 text-xs text-warning">
-                        止まる・プランの変更が要る上限 {t.blocking} 件
-                      </span>
-                    )}
-                  </p>
-                );
-              }}
-            />
-          ),
-        }}
-        framework={{
-          label: '② フレームワークと描き方',
-          summary: FRAMEWORKS[input.framework].label,
-          warn: notice,
-          live: notice,
-          panel: (
-            <FrameworkField
-              scenario={scenario}
-              allowed={allowed}
-              value={input.framework}
-              onChange={onPickFramework}
-              comments={comments}
-              routePlan={(id) => fwRoutes.get(id) ?? []}
-              routes={input.routes}
-              resolvedRoutes={(id) =>
-                Object.fromEntries(
-                  (fwRoutes.get(id) ?? []).map((r) => [r.route, r.strategy]),
-                )
-              }
-              unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
-              notice={notice}
-              editor={editor}
-              text={{
-                heading: '② アプリのフレームワークとページの描き方',
-                footnote: null,
-                wireframeNote:
-                  '見取り図はテンプレートの仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
-                compareHint:
-                  'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べます',
-                compareNote:
-                  'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べます。ここで選んでも、カードのチップで選んでも同じです。構成の比較・費用の曲線もこの描き方で引きます。',
-                // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
-                compareCaption: ROUTE_PLAN_NOTE.replace(
-                  '費用の差は 1 か月目の基準の規模での目安です。',
-                  '費用の差は今の条件（月の PV）での目安です。',
-                ),
-              }}
-            />
-          ),
-        }}
-      />
-      {/* 画像の形式・サイズ違いは ① の画像の部品の行で選ぶ（D-119）。画像の行が無い構成だけ ③ 設定に出す */}
-      {imageSettings && !imagesRow && (
-        <SetupSettings>{imageSettings}</SetupSettings>
-      )}
-    </Card>
+          {/* 画像の形式・サイズ違いは ① の画像の部品の行で選ぶ（D-119）。画像の行が無い構成だけ ③ 設定に出す */}
+          {imageSettings && !imagesRow && (
+            <SetupSettings>{imageSettings}</SetupSettings>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -732,6 +755,7 @@ function Members({ members, seats }: { members: MemberView[]; seats: number }) {
   const unknown = members.filter(
     (m) => m.pricing === 'not-stated' || m.pricing === 'unknown',
   );
+  const stated = members.filter((m) => !unknown.includes(m));
   return (
     <div className="space-y-1 text-sm">
       <h3 className="font-semibold">
@@ -743,23 +767,38 @@ function Members({ members, seats }: { members: MemberView[]; seats: number }) {
           </span>
         )}
       </h3>
-      <ul className="space-y-1">
-        {members.map((m) => (
-          <li key={`${m.provider}|${m.plan}`} className="min-w-0">
-            <span
-              className={`badge badge-sm mr-1 ${m.pricing === 'per-seat' ? 'badge-info' : m.pricing === 'included' ? 'badge-ghost' : 'badge-warning'}`}
-            >
-              {MEMBER_BADGE[m.pricing]}
-            </span>
-            <span className="break-words">
-              {m.provider} {m.plan}: {m.premise}
-              {m.seatFee &&
-                `（${m.seatFee.seats} 席で ${money(m.seatFee.amount, m.seatFee.currency)}）`}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {stated.length > 0 && <MemberList members={stated} />}
+      {unknown.length > 0 && (
+        // 「記載なし」「未取得」の行は読む所が少ないので、最後にまとめて既定で畳む（D-181）
+        <details data-members-unknown={unknown.length}>
+          <summary className="cursor-pointer text-xs opacity-80">
+            席の料金の記載なし・未取得の項目（{unknown.length} 件）
+          </summary>
+          <MemberList members={unknown} />
+        </details>
+      )}
     </div>
+  );
+}
+
+function MemberList({ members }: { members: MemberView[] }) {
+  return (
+    <ul className="space-y-1">
+      {members.map((m) => (
+        <li key={`${m.provider}|${m.plan}`} className="min-w-0">
+          <span
+            className={`badge badge-sm mr-1 ${m.pricing === 'per-seat' ? 'badge-info' : m.pricing === 'included' ? 'badge-ghost' : 'badge-warning'}`}
+          >
+            {MEMBER_BADGE[m.pricing]}
+          </span>
+          <span className="break-words">
+            {m.provider} {m.plan}: {m.premise}
+            {m.seatFee &&
+              `（${m.seatFee.seats} 席で ${money(m.seatFee.amount, m.seatFee.currency)}）`}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -769,53 +808,61 @@ const TAX_BADGE: Record<TaxView['lines'][number]['status'], string> = {
   unconfirmed: '未確認（税抜のまま）',
 };
 
-/** 日本から契約するときの税込の目安（D-76）。 */
-function Tax({ tax }: { tax: TaxView }) {
+/**
+ * 日本から契約するときの税込の目安（D-76）。合計の円の横に常に出し（D-177）、
+ * 事業者ごとの消費税の扱いと出典は ⓘ のダイアログに出す。
+ */
+function TaxInclusive({ tax }: { tax: TaxView }) {
   return (
-    <div className="space-y-1 text-sm">
+    <span className="text-sm" data-testid="tax-inclusive">
+      税込 約 {jpy(tax.totalJpy)}
+      <Info label="税込の目安の説明" title="日本から契約するときの税込の目安">
+        <TaxDetails tax={tax} />
+      </Info>
+    </span>
+  );
+}
+
+function TaxDetails({ tax }: { tax: TaxView }) {
+  return (
+    <div className="space-y-2 text-sm">
       <p>
-        <span className="font-semibold">税込の目安 約 {jpy(tax.totalJpy)}</span>
-        <span className="opacity-70">
-          （うち消費税 約 {jpy(tax.taxJpy + tax.includedTaxJpy)}
-          {tax.includedTaxJpy > 0 &&
-            `: 足した分 ${jpy(tax.taxJpy)}・税込の価格に含まれる分 ${jpy(tax.includedTaxJpy)}`}
-          {tax.unconfirmed.length > 0 &&
-            `・${tax.unconfirmed.join('・')} は消費税の扱いが未確認のため税抜のまま`}
-          ）
-        </span>
+        税込の目安は 約 {jpy(tax.totalJpy)} です（うち消費税 約{' '}
+        {jpy(tax.taxJpy + tax.includedTaxJpy)}
+        {tax.includedTaxJpy > 0 &&
+          `: 足した分 ${jpy(tax.taxJpy)}・税込の価格に含まれる分 ${jpy(tax.includedTaxJpy)}`}
+        ）。
+        {tax.unconfirmed.length > 0 &&
+          `${tax.unconfirmed.join('・')} は消費税の扱いが未確認のため、税抜のまま足しています。`}
       </p>
-      <details>
-        <summary className="cursor-pointer text-xs">
-          事業者ごとの消費税の扱い（出典つき）
-        </summary>
-        <ul className="mt-1 space-y-1 text-xs">
-          {tax.lines.map((l) => (
-            <li key={l.provider} className="break-words">
-              <span
-                className={`badge badge-xs mr-1 ${l.status === 'unconfirmed' ? 'badge-warning' : 'badge-ghost'}`}
+      <p className="font-semibold">事業者ごとの消費税の扱い（出典つき）</p>
+      <ul className="space-y-1 text-xs">
+        {tax.lines.map((l) => (
+          <li key={l.provider} className="break-words">
+            <span
+              className={`badge badge-xs mr-1 ${l.status === 'unconfirmed' ? 'badge-warning' : 'badge-ghost'}`}
+            >
+              {TAX_BADGE[l.status]}
+            </span>
+            {l.provider}: {l.premise}
+            {l.status === 'added' && `（+${jpy(l.taxJpy)}）`}
+            {l.status === 'included' &&
+              `（うち消費税 ${jpy(l.includedTaxJpy)}）`}{' '}
+            {l.sources.map((x) => (
+              <a
+                key={x.url}
+                className="link mr-1 break-all opacity-70"
+                href={x.url}
+                target="_blank"
+                rel="noreferrer"
               >
-                {TAX_BADGE[l.status]}
-              </span>
-              {l.provider}: {l.premise}
-              {l.status === 'added' && `（+${jpy(l.taxJpy)}）`}
-              {l.status === 'included' &&
-                `（うち消費税 ${jpy(l.includedTaxJpy)}）`}{' '}
-              {l.sources.map((x) => (
-                <a
-                  key={x.url}
-                  className="link mr-1 break-all opacity-70"
-                  href={x.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  出典（{x.retrievedAt}）
-                </a>
-              ))}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-1 text-xs opacity-70">{tax.assumption}</p>
-      </details>
+                出典（{x.retrievedAt}）
+              </a>
+            ))}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs opacity-70">{tax.assumption}</p>
     </div>
   );
 }
@@ -921,7 +968,30 @@ function Premises({
   );
 }
 
-function Lines({ lines }: { lines: LineView[] }) {
+/**
+ * 事業者の明細。料金未取得（`unpriced`）の行は金額が「—」だけで読む所が少ないので、表の最後に既定で畳んでまとめる
+ * （D-181。開けば同じ列で読める。合計の計算は変えない）。
+ */
+export function Lines({ lines }: { lines: LineView[] }) {
+  const unpriced = lines.filter((l) => l.status === 'unpriced');
+  const rest = lines.filter((l) => l.status !== 'unpriced');
+  return (
+    <>
+      {rest.length > 0 && <LineTable lines={rest} />}
+      {unpriced.length > 0 && (
+        <details className="mt-1" data-unpriced-lines={unpriced.length}>
+          <summary className="cursor-pointer text-xs opacity-80">
+            料金の記載なし・未取得の項目（{unpriced.length}{' '}
+            件。合計に含めていません）
+          </summary>
+          <LineTable lines={unpriced} />
+        </details>
+      )}
+    </>
+  );
+}
+
+function LineTable({ lines }: { lines: LineView[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="table table-xs">
@@ -980,11 +1050,9 @@ function Lines({ lines }: { lines: LineView[] }) {
 
 function Comparison({
   rows,
-  showTax,
   onPick,
 }: {
   rows: ReturnType<typeof compareStacks>;
-  showTax: boolean;
   onPick: (stack: string) => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({
@@ -1023,7 +1091,7 @@ function Comparison({
             <tr>
               {header('name', '構成')}
               {header('cost', '月額', 'text-right')}
-              {showTax && <th className="text-right">税込の目安</th>}
+              <th className="text-right">税込の目安</th>
               {header('blocking', '止まる上限', 'text-right')}
               <th>使用率の最も高い上限</th>
             </tr>
@@ -1056,11 +1124,9 @@ function Comparison({
                     </span>
                   )}
                 </td>
-                {showTax && (
-                  <td className="text-right tabular-nums whitespace-nowrap">
-                    {jpy(r.taxInclJpy)}
-                  </td>
-                )}
+                <td className="text-right tabular-nums whitespace-nowrap">
+                  {jpy(r.taxInclJpy)}
+                </td>
                 <td className="text-right tabular-nums">
                   {r.blocking > 0 ? (
                     <span className="badge badge-error badge-sm">
@@ -1103,6 +1169,39 @@ const usdShort = (n: number) =>
   `$${n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 2, signDisplay: 'negative' })}`;
 
 /** 費用の曲線（D-74）。今の条件のまま PV だけを振った月額。系列の色は事業者、点の形は事業者の中のプランで固定。 */
+/** 費用の曲線の軸の目盛りの記憶（D-179。既定は通常）。 */
+const CURVE_SCALE_KEY = 'infra-supra:estimate-curve-scale';
+const CURVE_SCALES: readonly {
+  value: CurveScale;
+  label: string;
+  note: string;
+}[] = [
+  {
+    value: 'linear',
+    label: '通常',
+    note: '等間隔の目盛りです。小さい PV の差は左下に詰まります。',
+  },
+  {
+    value: 'log',
+    label: '対数',
+    note: '1 目盛りで 10 倍です。小さい PV・安い構成の差も広げて見せます。',
+  },
+];
+
+function readCurveScale(): CurveScale {
+  try {
+    return localStorage.getItem(CURVE_SCALE_KEY) === 'log' ? 'log' : 'linear';
+  } catch {
+    return 'linear';
+  }
+}
+
+/** 最初に止まる点の添字（止まらなければ null）。凡例に「〜 PV から止まります」と言葉で出す（D-180）。 */
+function stopsFrom(points: readonly { blocking: readonly string[] }[]) {
+  const i = points.findIndex((p) => p.blocking.length > 0);
+  return i < 0 ? null : i;
+}
+
 function CostCurve({
   input,
   rows,
@@ -1113,28 +1212,36 @@ function CostCurve({
   /** 構成ごとに覚えている部品（比較の表と同じ部品で数える。D-116 の補足）。 */
   memory: PartsByGroup;
 }) {
-  // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
-  const [picked, setPicked] = useState<string[] | null>(null);
-  const stacks =
-    picked === null
-      ? defaultCurveStacks(rows)
-      : pickedCurveStacks(picked, rows);
-  const curves = costCurves(input, stacks, CURVE_PVS, memory);
+  // 凡例で選んだ構成（その線を強調し、ほかを薄くする。もう一度押すと戻す。D-183）
+  const [focus, setFocus] = useState<string | null>(null);
+  const [scale, setScaleState] = useState<CurveScale>(readCurveScale);
+  const setScale = (v: CurveScale) => {
+    setScaleState(v);
+    try {
+      localStorage.setItem(CURVE_SCALE_KEY, v);
+    } catch {
+      // 覚えられなくても表示は替える
+    }
+  };
+  // 載せられる全構成を線にする（D-183。隠した構成は比較の表と同じく入らない）
+  const curves = costCurves(input, curveStacks(rows), CURVE_PVS, memory);
+  const focused = curves.some((c) => c.stack === focus) ? focus : null;
   const series: CurveChartSeries[] = curves.map((c) => ({
     id: c.stack,
     label: c.current ? `${c.name}（今の構成）` : c.name,
     color: `var(--series-${curveColorSlot(c.provider) + 1})`,
     shape: SHAPES[c.variant] ?? 'circle',
     points: c.points.map((p) => ({ y: p.totalUsd, flags: p.blocking })),
+    // 今の構成は太い線で一番上に描き、① のカードとつなぐ（D-182）。凡例で選んだ構成があればそれを強調する（D-183）
+    emphasis:
+      focused === null
+        ? c.current
+          ? ('strong' as const)
+          : ('normal' as const)
+        : focused === c.stack
+          ? ('strong' as const)
+          : ('muted' as const),
   }));
-  // 選んだ順を保つ（上限を超えるときは先に選んだものから残す。pickedCurveStacks）
-  const toggle = (id: string) =>
-    setPicked(
-      stacks.includes(id)
-        ? stacks.filter((s) => s !== id)
-        : [...(picked ?? stacks).filter((s) => stacks.includes(s)), id],
-    );
-  const full = stacks.length >= CURVE_MAX;
   const anyStop = curves.some((c) => c.points.some((p) => p.blocking.length));
   const unpriced = curves.some((c) =>
     c.points.some((p) => p.unpricedLines > 0),
@@ -1143,20 +1250,90 @@ function CostCurve({
     <Card title="費用の曲線（月の PV を振る）">
       <p className="text-xs opacity-70">
         今のテンプレート・フレームワーク・設定のまま、月の PV
-        だけを変えたときの月額（USD）です。横軸・縦軸とも対数です。部品は今の構成だけ今の選択、他は既定です。
+        だけを変えたときの月額（USD）です。載せられる全構成を線にし、部品は今の構成だけ今の選択、他は既定です。凡例を押すとその線を強調します。
         {anyStop &&
-          '× は止まる上限（無料プランの上限など）に達する点で、× どうしを結ぶ線は薄くしています。'}
+          '上限（無料プランの上限など）に達して止まる規模は、線を薄い破線にしています（その月額では運用できません）。止まるまでの範囲は通常の線です。'}
         {unpriced && '料金未取得の明細がある点は合計が下限です。'}
       </p>
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] viz-root">
-        {series.map((s) => (
-          <li key={s.id} className="flex min-w-0 items-center gap-1">
-            <SeriesSwatch color={s.color} shape={s.shape} />
-            <span className="break-words">{s.label}</span>
-          </li>
+      <div
+        role="group"
+        aria-label="軸の目盛り"
+        className="flex flex-wrap items-center gap-2 text-xs"
+      >
+        <span className="opacity-70">軸の目盛り</span>
+        {CURVE_SCALES.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            className={`btn btn-xs ${scale === o.value ? 'btn-primary' : 'btn-outline'}`}
+            aria-pressed={scale === o.value}
+            data-curve-scale={o.value}
+            title={o.note}
+            onClick={() => setScale(o.value)}
+          >
+            {o.label}
+          </button>
         ))}
+        <span className="opacity-70">
+          {CURVE_SCALES.find((o) => o.value === scale)!.note}
+        </span>
+      </div>
+      <ul
+        className="viz-root flex flex-wrap gap-1 text-xs text-[var(--text-secondary)]"
+        aria-label="構成の凡例（押すとその線を強調します）"
+      >
+        {series.map((s, i) => {
+          const c = curves[i]!;
+          const stop = stopsFrom(c.points);
+          const on = focused === s.id;
+          return (
+            <li key={s.id} className="min-w-0" data-curve-legend={s.id}>
+              <button
+                type="button"
+                className={`flex min-w-0 items-center gap-1 rounded-box border px-1.5 py-0.5 text-left ${
+                  on
+                    ? 'border-primary bg-primary/10'
+                    : c.current
+                      ? 'border-[var(--text-secondary)]'
+                      : 'border-base-300'
+                } ${s.emphasis === 'strong' ? 'font-semibold text-[var(--text-primary)]' : ''} ${
+                  s.emphasis === 'muted' ? 'opacity-60' : ''
+                }`}
+                aria-pressed={on}
+                onClick={() => setFocus(on ? null : s.id)}
+              >
+                <SeriesSwatch color={s.color} shape={s.shape} />
+                <span className="min-w-0 break-words">
+                  {c.name}
+                  {c.current && <span className="opacity-80">（今）</span>}
+                  {stop !== null && (
+                    <span className="text-error" data-stops-from>
+                      {stop === 0
+                        ? '・どの規模でも止まります（上限）'
+                        : `・${pvLabel(CURVE_PVS[stop]!)} PV から止まります（上限）`}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+        {anyStop && (
+          <li
+            className="flex min-w-0 items-center gap-1 px-1.5 py-0.5"
+            data-stopped-key
+          >
+            <SeriesSwatch
+              color="var(--text-secondary)"
+              shape="circle"
+              stopped
+            />
+            <span>薄い破線: 上限に達して止まる区間</span>
+          </li>
+        )}
       </ul>
-      <LogCurveChart
+      <CurveChart
+        scale={scale}
         series={series}
         xs={CURVE_PVS}
         formatX={pvLabel}
@@ -1165,45 +1342,6 @@ function CostCurve({
         marker={{ x: input.pv, label: '今の PV' }}
         label="月の PV ごとの月額（構成ごと）"
       />
-      <details>
-        <summary className="cursor-pointer text-sm">
-          比べる構成を足す・外す（{stacks.length} / 最大 {CURVE_MAX}）
-        </summary>
-        <div className="mt-2 grid gap-1 sm:grid-cols-2">
-          {rows.map((r) => {
-            const on = stacks.includes(r.stack);
-            return (
-              <label
-                key={r.stack}
-                className="flex min-w-0 cursor-pointer items-center gap-2 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm"
-                  checked={on}
-                  disabled={r.current || (!on && full)}
-                  onChange={() => toggle(r.stack)}
-                />
-                <span className="min-w-0 break-words">
-                  {r.name}
-                  {r.current && (
-                    <span className="opacity-70">（今の構成）</span>
-                  )}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        {picked !== null && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs mt-2"
-            onClick={() => setPicked(null)}
-          >
-            既定に戻す（今の PV で安い順）
-          </button>
-        )}
-      </details>
       <details>
         <summary className="cursor-pointer text-sm">表で見る</summary>
         <div className="overflow-x-auto">
@@ -1234,7 +1372,7 @@ function CostCurve({
                     >
                       {usdShort(p.totalUsd)}
                       {p.blocking.length > 0 && (
-                        <span className="text-error"> ×</span>
+                        <span className="block text-error">止まる</span>
                       )}
                     </td>
                   ))}
