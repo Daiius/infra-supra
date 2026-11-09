@@ -2139,6 +2139,17 @@
 - rc.5 で snapshot が増分の形式（`type: base` / `diff`）になったので、最初の migration の `snapshot.json` だけを `drizzle-kit up` で上げた（`migration.sql` とフォルダの名前・順序は変えていない。migrator は SQL とフォルダの名前で当てる）。
 - rc.4 から、TTY の無い環境では `generate` が名前の変更か作り直しかを尋ねず `missing_hints` を返す。次の migration は `--hints-file` で 3 列と一意の制約を「作り直し」と答えて生成し、すでにある行を埋める手順を手で足した（migration の先頭のコメント）。
 
+### D-172 集計のサーバーのイメージは GHCR から配り、VPS は SHA を指定して入れ替える（2026-11-09）
+
+- 依頼（ユーザー）: VPS へのデプロイの手順。ユーザーの選択: Postgres は VPS の docker compose のサービス・前段は nginx・イメージは**レジストリ経由**。
+- 決定:
+  - GitHub Actions の `stats-image.yml`（`workflow_dispatch`）が `packages/stats/Dockerfile.prod` を作り、`ghcr.io/daiius/infra-supra-stats:<SHA>`（main からなら `latest` も）を push する。`GIT_COMMIT` はその SHA（`/api/version` と画面のデプロイのコミットを見比べる。D-135・D-155）。第三者の action は使わず、ランナーの docker と `GITHUB_TOKEN` で login する（seseraki の build-push-server.yml の形に倣い、action の固定を増やさない）。
+  - VPS の側は `packages/stats/deploy/` の例（`compose.example.yml`・`nginx.example.conf`・`server.env.example`・`migrate.env.example`・`deploy.sh`）を写して使う。compose は既存の Postgres の compose と分け、Postgres の網に external で入る。**env は常駐のサーバー用と migration 用に分け**、常駐のコンテナに管理ロールのパスワードを渡さない。
+  - `deploy.sh <SHA> [--check]`: 今の版・イメージの有無を見る → 確認 → pull → migration（使い捨て）→ `up -d` → `/api/version` の commit が SHA と一致するかまで確かめる。
+  - nginx は `$remote_addr`・`$http_x_forwarded_for` を含まない `log_format`、`X-Forwarded-For`・`X-Real-IP` を空にして渡す、error_log は `/dev/null`（どのレベルでも IP が付くため。nginx 全体の error_log も見直す）、`/api/` 以外は 404、本文は 128k で止める（§4・D-149・D-153）。
+  - migration は足す方向だけにする（本番に流した migration は書き換えない）。
+- 正典: [prd/15](../15-results-and-stats.md) §7.1。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

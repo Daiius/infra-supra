@@ -1,0 +1,31 @@
+# 集計のサーバー（packages/stats）を VPS で動かす compose の例（prd/15 §7.1）。写して <…> を埋める。実値はリポジトリに書かない。
+# 既存の Postgres の compose とは別のファイルにし、Postgres の網（external）に入れて DB_HOST にサービス名を使う。
+#   STATS_TAG=<コミットの SHA> docker compose -f compose.yml up -d
+name: infra-supra-stats
+
+services:
+  stats:
+    image: ghcr.io/daiius/infra-supra-stats:${STATS_TAG:?STATS_TAG にコミットの SHA を入れてください}
+    restart: unless-stopped
+    # 常駐のサーバーのロール（infra_supra_server）の値だけ。管理ロールのパスワードは入れない（migrate.env に分ける）
+    env_file: ./server.env
+    # nginx がホストで動くなら 127.0.0.1 にだけ開ける（外からは nginx を通す）
+    ports:
+      - '127.0.0.1:4000:4000'
+    networks:
+      - db
+
+  # migration（一度だけ流す。deploy.sh が `run --rm migrate` で呼ぶ）
+  migrate:
+    image: ghcr.io/daiius/infra-supra-stats:${STATS_TAG:?STATS_TAG にコミットの SHA を入れてください}
+    command: ['/app/migrate.js']
+    env_file: ./migrate.env
+    networks:
+      - db
+    profiles: [migrate]
+
+networks:
+  db:
+    external: true
+    # 既存の Postgres のコンテナが入っている網の名前（docker network ls で確かめる）
+    name: <Postgres の網>
