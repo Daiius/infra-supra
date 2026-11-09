@@ -822,6 +822,49 @@ describe('見積モードの画面', () => {
     expectEstimate();
   });
 
+  it('W-105 同じ事業者のプランは部品の選択を共有し、今のプランで選べない部品は記憶に残して戻ると戻る。比較の表も同じ選択で数える（D-176）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-hobby',
+    );
+    await renderApp();
+    const q = () => new URLSearchParams(window.location.search);
+    const DB = 'DB(?! のバックアップ)';
+    const CDN = 'CDN の料金のプラン';
+    choose(DB, 'neon');
+    pick('stack', 'vercel-supabase-pro');
+    expect(checked(DB)).toBe('neon');
+    expect(q().get('c.db')).toBe('neon');
+    choose(CDN, 'on-demand');
+    expect(q().get('c.cdnPlan')).toBe('on-demand');
+    // Hobby には CDN の料金のプランが無い（URL にも出ない）
+    pick('stack', 'vercel-supabase-hobby');
+    expect(queryGroup(CDN)).toBeNull();
+    expect(q().get('c.cdnPlan')).toBeNull();
+    expect(checked(DB)).toBe('neon');
+    // 選んでいない Pro のカードの月額・比較の表の行は、戻った後の見積と同じ
+    const proRow = within(card('構成を比べる')).getByRole('row', {
+      name: /Vercel Pro \+ Neon/,
+    });
+    const rowText = proRow.textContent;
+    // Hobby でほかの部品を選んでも、Pro だけの記憶は消えない
+    pick('stack', 'vercel-supabase-pro');
+    expect(checked(CDN)).toBe('on-demand');
+    expect(checked(DB)).toBe('neon');
+    expect(rowText).toContain(
+      within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent,
+    );
+    // 別の組（Cloudflare）に替えて戻ると、それぞれの組の選択が戻る
+    pick('stack', 'cloudflare-vinext-paid');
+    choose(DB, 'dynamodb');
+    pick('stack', 'vercel-supabase-hobby');
+    expect(checked(DB)).toBe('neon');
+    pick('stack', 'cloudflare-vinext-free');
+    expect(checked(DB)).toBe('dynamodb');
+    expectEstimate();
+  });
+
   it('W-51 構成を替えても部品の選択は構成ごとに覚えていて、戻ると戻る。URL は今の構成の分だけ・フレームワークで選べなくなったものだけ落ちる（D-116 の補足）', async () => {
     window.history.replaceState(
       null,

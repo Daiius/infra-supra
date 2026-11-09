@@ -51,6 +51,14 @@ import {
   type SetupChoices,
 } from './setup-components.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
+import {
+  editParts,
+  partsOfStack,
+  prunePartsMemory,
+  rememberCurrent,
+  stackGroupOf,
+  type PartsMemory,
+} from './parts-memory.ts';
 import { MissingParts } from './missing-parts.tsx';
 import { useRoutePlanEditor } from './route-plan-field.tsx';
 import {
@@ -602,14 +610,22 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   );
   const [seed, setSeed] = useState(42);
   const [startDate, setStartDate] = useState(today);
-  // 部品は既定なしで、スロットごとに選ぶ（D-45）。構成・フレームワーク・シナリオを替えたら、選べなくなった選択を
-  // 状態からも外す（元の組み合わせに戻しても復活しない。OCL-09D12A43）。構成ごとの記憶は partsByStack
+  // 部品は既定なしで、スロットごとに選ぶ（D-45）。parts は今の構成で選べるものだけ（計算・始めるのに使う）
   const [parts, setParts] = useState<SetupChoices>({});
-  // 他の構成で選んでいた部品（構成の index → 選択）。構成を替えるときに覚え、戻ったら戻す。計算・始めるのに使うのは今の構成の
-  // parts だけ。ページを開いている間だけ持つ（D-116 の補足）
-  const [partsByStack, setPartsByStack] = useState<
-    Record<number, SetupChoices>
-  >({});
+  // 部品の選択の記憶（組 = 同じ事業者のプランの組 → 生の選択。D-116 の補足・D-176）。同じ組のプランは選択を共有し、今のプランで
+  // 選べないもの（Vercel Pro だけの CDN のプランなど）も記憶に残して、選べるプランに戻ったら戻す。フレームワーク・シナリオを替えたら、
+  // 組のどのプランでも選べなくなったものは落とす（戻しても復活しない。OCL-09D12A43）。ページを開いている間だけ持つ
+  const [partsMemory, setPartsMemory] = useState<PartsMemory>({});
+  // 今の構成で部品を選び直す（依存の崩れた選択（VPS の API のキャッシュなど）を外して持ち、記憶は選び直したスロットだけ書き換える）
+  const editComponents = (v: SetupChoices) => {
+    const next = validSetupChoices(scenario, stack, framework, v);
+    const g = stackGroupOf(stack);
+    setPartsMemory({
+      ...partsMemory,
+      [g]: editParts(partsMemory[g], parts, next),
+    });
+    setParts(next);
+  };
   // ページごとの描き方（D-107）。フレームワークを替えると既定に戻す。構成で使えないものは validRouteOverrides で外す
   const [routeChoice, setRouteChoice] = useState<RouteOverrides>({});
   const routes = validRouteOverrides(scenario, stack, framework, routeChoice);
@@ -638,16 +654,19 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     if (fw !== frameworkChoice) setFramework(fw);
     if (fw !== framework || next.scenarioId !== undefined) setRouteChoice({});
     if (st !== stack) setStack(st);
-    // 今の構成の選択も覚えてから、どの構成の記憶も今のシナリオ・フレームワークで選べるものだけにする（その構成に
-    // 載せられないフレームワークなら、選んだときに付け替わる先で見る）
-    const kept: Record<number, SetupChoices> = {};
-    for (const [k, v] of Object.entries({ ...partsByStack, [stack]: parts })) {
-      const i = Number(k);
-      kept[i] = validSetupChoices(sc, i, frameworkOnStack(sc, i, fw), v);
-    }
-    setParts(kept[st] ?? {});
-    delete kept[st];
-    setPartsByStack(kept);
+    // 今の構成の選択を組の記憶に書き戻し、シナリオ・フレームワークが替わるなら、組のどのプランでも選べなくなったものを落とす
+    // （OCL-09D12A43）。替えた先の構成の部品は、その組の記憶をその構成で選べるものだけにしたもの（D-176）
+    let memory = rememberCurrent(
+      partsMemory,
+      parts,
+      scenario,
+      stack,
+      framework,
+    );
+    if (sc !== scenario || fw !== framework)
+      memory = prunePartsMemory(memory, sc, fw);
+    setPartsMemory(memory);
+    setParts(partsOfStack(memory, sc, st, fw) ?? {});
   };
   const problem = setupProblem(scenario, stack, framework, parts);
   // ISR の再検証（D-49）・Astro の記事のキャッシュ（D-103）など。② のカードの記事のページの行で選ぶ（D-119）。選ぶまでは、
@@ -742,19 +761,20 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const restored = last ? restoreLastSetup(scenario, last, current) : null;
   const restoreLast = () => {
     if (!restored) return;
-    // 他の構成の記憶は change と同じく、戻したフレームワークで選べるものだけにする
-    const kept: Record<number, SetupChoices> = {};
-    for (const [k, v] of Object.entries({ ...partsByStack, [stack]: parts })) {
-      const i = Number(k);
-      if (i === restored.stack) continue;
-      kept[i] = validSetupChoices(
-        scenario,
-        i,
-        frameworkOnStack(scenario, i, restored.framework),
-        v,
-      );
-    }
-    setPartsByStack(kept);
+    // 他の組の記憶は change と同じく、戻したフレームワークで選べるものだけにする。戻した構成の組は戻した部品にする
+    let memory = rememberCurrent(
+      partsMemory,
+      parts,
+      scenario,
+      stack,
+      framework,
+    );
+    if (restored.framework !== framework)
+      memory = prunePartsMemory(memory, scenario, restored.framework);
+    setPartsMemory({
+      ...memory,
+      [stackGroupOf(restored.stack)]: restored.components,
+    });
     setStack(restored.stack);
     setFramework(restored.framework);
     setParts(restored.components);
@@ -800,15 +820,15 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     value={stack}
                     onChange={(i) => change({ stack: i })}
                     components={parts}
-                    // 選んでいないカードの題・図・手間の棒は、前にその構成で選んだ部品で描く（D-116 の補足）
-                    rememberedOf={(i) => partsByStack[i]}
+                    // 選んでいないカードの題・図・手間の棒は、その組（同じ事業者のプラン）で前に選んだ部品で描く（D-116 の補足・D-176）
+                    rememberedOf={(i) =>
+                      partsOfStack(partsMemory, scenario, i, framework)
+                    }
                     comments={commentsChoosable ? comments : undefined}
                     routes={routes}
                     routeNotice={(i) => routeNotice({ stackIndex: i })}
                     // 部品は構成のカードの構成図の箱か、機能ごとのチップで選ぶ（タブで切り替える。D-116 とその補足）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
-                    onComponentsChange={(v) =>
-                      setParts(validSetupChoices(scenario, stack, framework, v))
-                    }
+                    onComponentsChange={editComponents}
                     partsNote="構成の中の役割ごとに選びます（始める前なので手間はかかりません）"
                     // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）
                     partsCompare={partsCompare}
@@ -916,9 +936,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
             stackIndex={stack}
             framework={framework}
             value={parts}
-            onChange={(v) =>
-              setParts(validSetupChoices(scenario, stack, framework, v))
-            }
+            onChange={editComponents}
             compare={partsCompare}
             onJump={(slot) => tabsApi.current?.focusSlot(slot)}
             onComplete={() => startButton.current?.focus()}
