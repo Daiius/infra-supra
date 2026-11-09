@@ -186,13 +186,23 @@ h4,
   unicode-range: U+49, U+53, U+61, U+66, U+6E, U+70, U+72, U+75;
 }
 /* 分数の形: 分子「Supra」・括線・分母「Infra」。字の幅が違うので中央にそろえ、括線は広い方の幅に合わせる。
-   入れ替えは位置を動かさず、普段の形と入れ替えた形の不透明度だけを替える */
+   入れ替えは位置を動かさず、普段の形と入れ替えた形の不透明度だけを替える。
+   括線の太さ・上下の空き・詰めはすべて em で決め、大写し（OGP の画像。og-card.tsx）でも同じ比率で描く。
+   字の寸法（Philosopher Bold・1em あたり。canvas の measureText で測った）: 字の箱は上 0.90・下 0.22（USE_TYPO_METRICS）で、
+   line-height: 1 の行では基線が行の上から 0.84、行の下は基線の 0.16 下。p のディセンダーは基線の 0.203 下、I・f の上端は 0.672、
+   S の上端は 0.688、x の高さは 0.484。
+   - 括線の上端は基線の 0.28 下（行の下 0.16 + 空き 0.12）。p の下端との間が 0.077em（18px で約 1.4px）空き、p にかからない。
+   - 分母は行を 0.08em 上に詰め、括線の下端から I・f の上端まで 0.09em（行の上の余り 0.168 − 0.08 + 0）。
+     括線と分子の p の間（0.077）と、括線と分母の I・f の間（0.09）がほぼそろう。小文字どうし（分子の基線 0.28・分母の x の高さ 0.278）もそろう。
+   18px では括線 1.53px・括線の上の空き 2.16px・分母の詰め −1.44px（2026-11-10 の微調整の前は 1.5px・2px の px 指定で、p にかかっていた） */
 .logo-fraction {
-  --logo-rule: 1.5px;
+  --logo-rule: 0.085em;
+  --logo-gap-above: 0.12em;
+  --logo-pull-denominator: -0.08em;
   display: inline-grid;
   font-family: 'Philosopher Logo', serif;
   font-weight: 700;
-  font-size: 18px;
+  font-size: var(--logo-size, 18px);
   line-height: 1;
   color: var(--color-base-content);
   cursor: default;
@@ -221,17 +231,13 @@ h4,
   white-space: nowrap;
   text-align: center;
 }
-/* 字の箱の上下の空き（アセント・ディセンダーの余り）を詰め、括線との間を上下でそろえる */
-.logo-numerator {
-  margin-bottom: -0.12em;
-}
 .logo-denominator {
-  margin-top: -0.14em;
+  margin-top: var(--logo-pull-denominator);
 }
 .logo-bar {
   display: block;
   height: var(--logo-rule);
-  margin-block: 2px;
+  margin-top: var(--logo-gap-above);
   background: currentColor;
 }
 @media (prefers-reduced-motion: reduce) {
