@@ -709,6 +709,7 @@ function Members({ members, seats }: { members: MemberView[]; seats: number }) {
   const unknown = members.filter(
     (m) => m.pricing === 'not-stated' || m.pricing === 'unknown',
   );
+  const stated = members.filter((m) => !unknown.includes(m));
   return (
     <div className="space-y-1 text-sm">
       <h3 className="font-semibold">
@@ -720,23 +721,38 @@ function Members({ members, seats }: { members: MemberView[]; seats: number }) {
           </span>
         )}
       </h3>
-      <ul className="space-y-1">
-        {members.map((m) => (
-          <li key={`${m.provider}|${m.plan}`} className="min-w-0">
-            <span
-              className={`badge badge-sm mr-1 ${m.pricing === 'per-seat' ? 'badge-info' : m.pricing === 'included' ? 'badge-ghost' : 'badge-warning'}`}
-            >
-              {MEMBER_BADGE[m.pricing]}
-            </span>
-            <span className="break-words">
-              {m.provider} {m.plan}: {m.premise}
-              {m.seatFee &&
-                `（${m.seatFee.seats} 席で ${money(m.seatFee.amount, m.seatFee.currency)}）`}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {stated.length > 0 && <MemberList members={stated} />}
+      {unknown.length > 0 && (
+        // 「記載なし」「未取得」の行は読む所が少ないので、最後にまとめて既定で畳む（D-181）
+        <details data-members-unknown={unknown.length}>
+          <summary className="cursor-pointer text-xs opacity-80">
+            席の料金の記載なし・未取得の項目（{unknown.length} 件）
+          </summary>
+          <MemberList members={unknown} />
+        </details>
+      )}
     </div>
+  );
+}
+
+function MemberList({ members }: { members: MemberView[] }) {
+  return (
+    <ul className="space-y-1">
+      {members.map((m) => (
+        <li key={`${m.provider}|${m.plan}`} className="min-w-0">
+          <span
+            className={`badge badge-sm mr-1 ${m.pricing === 'per-seat' ? 'badge-info' : m.pricing === 'included' ? 'badge-ghost' : 'badge-warning'}`}
+          >
+            {MEMBER_BADGE[m.pricing]}
+          </span>
+          <span className="break-words">
+            {m.provider} {m.plan}: {m.premise}
+            {m.seatFee &&
+              `（${m.seatFee.seats} 席で ${money(m.seatFee.amount, m.seatFee.currency)}）`}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -906,7 +922,30 @@ function Premises({
   );
 }
 
-function Lines({ lines }: { lines: LineView[] }) {
+/**
+ * 事業者の明細。料金未取得（`unpriced`）の行は金額が「—」だけで読む所が少ないので、表の最後に既定で畳んでまとめる
+ * （D-181。開けば同じ列で読める。合計の計算は変えない）。
+ */
+export function Lines({ lines }: { lines: LineView[] }) {
+  const unpriced = lines.filter((l) => l.status === 'unpriced');
+  const rest = lines.filter((l) => l.status !== 'unpriced');
+  return (
+    <>
+      {rest.length > 0 && <LineTable lines={rest} />}
+      {unpriced.length > 0 && (
+        <details className="mt-1" data-unpriced-lines={unpriced.length}>
+          <summary className="cursor-pointer text-xs opacity-80">
+            料金の記載なし・未取得の項目（{unpriced.length}{' '}
+            件。合計に含めていません）
+          </summary>
+          <LineTable lines={unpriced} />
+        </details>
+      )}
+    </>
+  );
+}
+
+function LineTable({ lines }: { lines: LineView[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="table table-xs">

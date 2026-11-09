@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 // 見積モードの画面の描画テスト（D-86・prd/05 §7）。構成・フレームワーク・テンプレート・PV を切り替えても例外が無く、
 // 月の費用・比較表・費用の曲線が出ることだけを見る（金額は model.test.ts と game のテストが持つ）。
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
   ensurePartsList,
@@ -13,7 +19,15 @@ import {
   useSmokeEnv,
   waitLoaded,
 } from '../smoke.test-helpers.tsx';
-import { fromQuery, normalizeInput, withStack } from './model.ts';
+import { usd } from '../format.ts';
+import { Lines } from './estimate-mode.tsx';
+import {
+  fromQuery,
+  normalizeInput,
+  runEstimate,
+  withStack,
+  type LineView,
+} from './model.ts';
 
 useSmokeEnv();
 
@@ -1035,5 +1049,84 @@ describe('見積モードの画面', () => {
         .getAllByText('止まる')
         .every((e) => e.className.includes('text-error')),
     ).toBe(true);
+  });
+
+  it('W-64 席の料金の「記載なし」「未取得」の行は最後にまとめて既定で畳み、開けば中身がある。合計は変わらない（D-181）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro&seats=3',
+    );
+    await renderApp();
+    expectEstimate();
+    const total = card(/^月の費用: /);
+    const folded = total.querySelector<HTMLDetailsElement>(
+      'details[data-members-unknown]',
+    )!;
+    expect(folded).not.toBeNull();
+    expect(folded.open).toBe(false);
+    const view = runEstimate(normalizeInput(fromQuery(window.location.search)));
+    const unknown = view.members.filter(
+      (m) => m.pricing === 'not-stated' || m.pricing === 'unknown',
+    );
+    expect(unknown.length).toBeGreaterThan(0);
+    expect(folded.querySelector('summary')!.textContent).toContain(
+      `（${unknown.length} 件）`,
+    );
+    // 畳んだ中に今と同じ内容（記載なし・未取得の印と前提の文）
+    const items = folded.querySelectorAll('li');
+    expect(items).toHaveLength(unknown.length);
+    expect(folded.textContent).toMatch(/記載なし|未取得/);
+    expect(folded.textContent).toContain(unknown[0]!.premise);
+    // 畳まない行（席ごとに課金など）が先、畳んだ行は最後
+    const block = folded.parentElement!;
+    expect(block.lastElementChild).toBe(folded);
+    const open = block.querySelector(':scope > ul')!;
+    expect(open.textContent).toContain('メンバー（席）ごとに課金');
+    expect(open.textContent).not.toMatch(/記載なし|未取得/);
+    // 合計は計算どおり（表示の並びだけを変えた）
+    expect(within(total).getByText(/^\$[\d,]+\.\d\d$/).textContent).toBe(
+      usd(view.totalUsd),
+    );
+  });
+
+  it('W-65 明細の料金未取得の行は表の最後にまとめて既定で畳む（D-181）', () => {
+    const line = (label: string, status: LineView['status']): LineView => ({
+      kind: 'usage',
+      label,
+      quantity: 1,
+      unit: 'GB',
+      amount: status === 'unpriced' ? null : 1,
+      currency: 'USD',
+      status,
+    });
+    const { container } = render(
+      <Lines
+        lines={[
+          line('A', 'priced'),
+          line('B', 'unpriced'),
+          line('C', 'priced'),
+          line('D', 'unpriced'),
+        ]}
+      />,
+    );
+    const tables = container.querySelectorAll('table');
+    expect(tables).toHaveLength(2);
+    const firstRows = [...tables[0]!.querySelectorAll('tbody tr')].map(
+      (r) => r.firstElementChild!.textContent,
+    );
+    expect(firstRows).toEqual(['A', 'C']);
+    const folded = container.querySelector<HTMLDetailsElement>(
+      'details[data-unpriced-lines]',
+    )!;
+    expect(folded.open).toBe(false);
+    expect(folded.querySelector('summary')!.textContent).toContain('（2 件');
+    expect(container.lastElementChild).toBe(folded);
+    expect(folded.textContent).toContain('料金未取得');
+    expect(
+      [...folded.querySelectorAll('tbody tr')].map((r) =>
+        r.firstElementChild!.textContent!.replace('料金未取得', ''),
+      ),
+    ).toEqual(['B', 'D']);
   });
 });
