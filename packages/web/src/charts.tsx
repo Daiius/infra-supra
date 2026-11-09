@@ -1413,3 +1413,180 @@ export function HistogramChart({
     </figure>
   );
 }
+
+/** 比較の図の 1 行（構成・フレームワークごとの分布の要約）。stats が null なら件数が少なく、帯を描かない。 */
+export type RangeChartRow = {
+  key: string;
+  label: string;
+  count: number;
+  stats: { p25: number; median: number; p75: number } | null;
+  mine: boolean;
+};
+
+/**
+ * 行ごとの分布の比較（ST-11・D-175）: 各行に 25〜75% の帯と中央値の縦の印を描き、全部の行で横の目盛りをそろえ、自分の値の位置に
+ * 縦の線を引く（色だけに頼らず「▼ あなた」のラベル）。自分の構成の行は強調の色・ほかは控えめの色（emphasis）。良し悪しの色
+ * （status）は使わない（向きを持たない ④ 費用の合計にも同じ図を使う。D-166）。件数が少ない行は帯を出さず emptyText を出す。
+ * 件数は行ごとに常にテキストで出す。数値は呼ぶ側の表（数値で見る）でも読める。
+ */
+export function GroupRangeChart({
+  rows,
+  value,
+  format,
+  label,
+  emptyText,
+}: {
+  rows: readonly RangeChartRow[];
+  /** 自分の値。 */
+  value: number;
+  format: (n: number) => string;
+  /** 読み上げの名前（図全体）。 */
+  label: string;
+  /** 件数が少ない行の文（例: まだ 3 件です）。 */
+  emptyText: (count: number) => string;
+}) {
+  const shown = rows.flatMap((r) => (r.stats ? [r.stats] : []));
+  const dataLo = Math.min(value, ...shown.map((s) => s.p25));
+  const dataHi = Math.max(value, ...shown.map((s) => s.p75));
+  let lo = dataLo;
+  let hi = dataHi;
+  if (hi - lo <= 0) {
+    const d = Math.abs(lo) * 0.1 || 1;
+    lo -= d;
+    hi += d;
+  }
+  const pad = (hi - lo) * 0.04;
+  lo -= pad;
+  hi += pad;
+  const W = 100;
+  const H = 16;
+  const xOf = (v: number) => ((v - lo) / (hi - lo)) * W;
+  const frac = xOf(value) / W;
+  const ticks = [dataLo, (dataLo + dataHi) / 2, dataHi];
+  // 狭い画面: 名前と件数の行の下に帯。sm 以上: 名前 | 帯 | 件数 の 3 列（帯の列で目盛りをそろえる）
+  const grid =
+    'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 sm:grid-cols-[10rem_minmax(0,1fr)_5rem]';
+  const trackCell =
+    'order-3 col-span-2 sm:order-2 sm:col-span-1 sm:col-start-2';
+  return (
+    <figure
+      className="viz-root min-w-0"
+      aria-label={label}
+      data-group-range-chart
+    >
+      <div className={grid} aria-hidden>
+        <div className={`${trackCell} relative h-3`}>
+          <div
+            className="absolute top-0 text-[10px] leading-none font-semibold whitespace-nowrap"
+            style={{
+              left: `${frac * 100}%`,
+              transform: `translateX(${frac > 0.8 ? '-100%' : frac < 0.2 ? '0' : '-50%'})`,
+              color: 'var(--text-primary)',
+            }}
+          >
+            ▼ あなた
+          </div>
+        </div>
+      </div>
+      <ul className="space-y-1">
+        {rows.map((r) => (
+          <li
+            key={r.key}
+            className={grid}
+            data-group-row={r.key}
+            data-mine={r.mine ? 'true' : undefined}
+          >
+            <div
+              className={`order-1 min-w-0 truncate text-xs ${r.mine ? 'font-semibold' : ''}`}
+              title={r.label}
+            >
+              {r.label}
+              {r.mine && '（あなた）'}
+            </div>
+            <div
+              className="order-2 text-right text-xs tabular-nums sm:order-3"
+              data-group-count
+            >
+              {r.count} 件
+            </div>
+            <div className={trackCell}>
+              {r.stats ? (
+                <svg
+                  role="img"
+                  aria-label={`${r.label}: 中央値 ${format(r.stats.median)}・25〜75% は ${format(r.stats.p25)}〜${format(r.stats.p75)}・${r.count} 件`}
+                  viewBox={`0 0 ${W} ${H}`}
+                  preserveAspectRatio="none"
+                  className="block h-4 w-full"
+                  data-group-band
+                >
+                  <line
+                    x1="0"
+                    x2={W}
+                    y1={H / 2}
+                    y2={H / 2}
+                    stroke="var(--grid)"
+                    strokeWidth="1"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <rect
+                    x={xOf(r.stats.p25)}
+                    width={Math.max(0.5, xOf(r.stats.p75) - xOf(r.stats.p25))}
+                    y={H / 2 - 3}
+                    height="6"
+                    fill={r.mine ? 'var(--series-1-track)' : 'var(--grid)'}
+                  />
+                  <line
+                    x1={xOf(r.stats.median)}
+                    x2={xOf(r.stats.median)}
+                    y1="1"
+                    y2={H - 1}
+                    stroke={r.mine ? 'var(--series-1)' : 'var(--text-muted)'}
+                    strokeWidth="3"
+                    vectorEffect="non-scaling-stroke"
+                    data-group-median
+                  />
+                  <line
+                    x1={frac * W}
+                    x2={frac * W}
+                    y1="0"
+                    y2={H}
+                    stroke="var(--marker)"
+                    strokeWidth="2"
+                    vectorEffect="non-scaling-stroke"
+                    data-group-mine-line
+                  />
+                </svg>
+              ) : (
+                <div
+                  className="h-4 text-xs leading-4 opacity-70"
+                  data-group-few
+                >
+                  {emptyText(r.count)}
+                </div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className={`${grid} mt-0.5`} aria-hidden>
+        <div
+          className={`${trackCell} relative h-3 text-[10px] leading-none tabular-nums`}
+          style={{ color: 'var(--text-muted)' }}
+        >
+          {ticks.map((t, i) => (
+            <span
+              key={i}
+              className="absolute top-0 whitespace-nowrap"
+              style={{
+                left: `${(xOf(t) / W) * 100}%`,
+                transform: `translateX(${i === 0 ? '0' : i === 2 ? '-100%' : '-50%'})`,
+              }}
+            >
+              {format(t)}
+            </span>
+          ))}
+        </div>
+      </div>
+    </figure>
+  );
+}

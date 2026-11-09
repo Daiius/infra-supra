@@ -83,6 +83,7 @@ import { PrivacyPolicyDialog } from './privacy-policy.tsx';
 import {
   loadStatsView,
   requestPlayToken,
+  statsQueryOf,
   statsViewEnabled,
   submitResult,
   type SubmitOutcome,
@@ -456,6 +457,7 @@ export function App() {
                   ? stats.view
                   : { status: 'off' }
               }
+              statsQuery={statsQueryOf(session!.save)}
               onAdvance={(actions) => {
                 const next = playMonth(applyActions(state, actions));
                 setSession({
