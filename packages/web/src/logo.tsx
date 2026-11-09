@@ -1,5 +1,5 @@
-// ヘッダーのロゴ（D-184）。分数の形で、分子に「Supra」・括線・分母に「Infra」。フォントは Bytesized を使う 8 文字に絞って配る
-// （public/fonts。出典とライセンスは同じ場所の SOURCE.txt・Bytesized-OFL.txt）。
+// ヘッダーのロゴ（D-184）。分数の形で、分子に「Supra」・括線・分母に「Infra」。フォントは Philosopher Bold を使う 8 文字に絞って配る
+// （public/fonts。出典とライセンスは同じ場所の SOURCE.txt・Philosopher-OFL.txt）。
 // こっそりの演出: 開いてしばらくすると分子と分母がゆっくりのフェードで入れ替わり、しばらくその位置のまま、またしれっと戻る。
 // マウスを乗せる（タッチは押す）と入れ替わる。できるだけ目立たないように動かない（位置は動かさず、2 つの重ねた形の不透明度だけを替える）。
 // prefers-reduced-motion: reduce では入れ替え自体をしない（styles.css でも動きを止める）。

@@ -174,26 +174,25 @@ h4,
   }
 }
 
-/* ヘッダーのロゴ（D-184）。Bytesized を「S u p r a I n f」の 8 文字に絞って自分で配る（public/fonts。出典は SOURCE.txt・
-   ライセンスは Bytesized-OFL.txt）。実行時に Google へは通信しない。564 バイトで index.html から preload するので、
-   代わりの字体が一瞬出ないよう block にする。 */
+/* ヘッダーのロゴ（D-184）。Philosopher Bold を「S u p r a I n f」の 8 文字に絞って自分で配る（public/fonts。出典は SOURCE.txt・
+   ライセンスは Philosopher-OFL.txt）。実行時に Google へは通信しない。小さいので index.html から preload し、代わりの字体が
+   一瞬出ないよう block にする（2026-11-09 に Bytesized から替えた。ユーザーの要望）。 */
 @font-face {
-  font-family: 'Bytesized Logo';
+  font-family: 'Philosopher Logo';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 700;
   font-display: block;
-  src: url('/fonts/bytesized-supra-inf.woff2') format('woff2');
+  src: url('/fonts/philosopher-bold-supra-inf.woff2') format('woff2');
   unicode-range: U+49, U+53, U+61, U+66, U+6E, U+70, U+72, U+75;
 }
-/* 分数の形: 分子「Supra」・括線・分母「Infra」。Bytesized は 1em = 16 単位・点 1 つが 2 単位なので、16px で点が 2px ちょうどになる
-   （ぼやけない）。括線は点 1 つの太さで、上下に点 1 つずつ空ける。字の送りは 8 単位で字の幅は 6 単位なので、右に余る 2 単位と同じだけ
-   左にも空け、括線を文字の幅の左右に点 1 つずつ出す。入れ替えは transform だけで動かし、配置は揺らさない */
+/* 分数の形: 分子「Supra」・括線・分母「Infra」。字の幅が違うので中央にそろえ、括線は広い方の幅に合わせる。
+   入れ替えは位置を動かさず、普段の形と入れ替えた形の不透明度だけを替える */
 .logo-fraction {
-  /* 1 点 = 1em / 8（Bytesized は 16 単位で 1 点が 2 単位）。24px で 1 点が 3px になり、ぼやけない */
-  --logo-dot: 0.125em;
+  --logo-rule: 1.5px;
   display: inline-grid;
-  font-family: 'Bytesized Logo', ui-monospace, monospace;
-  font-size: 24px;
+  font-family: 'Philosopher Logo', serif;
+  font-weight: 700;
+  font-size: 18px;
   line-height: 1;
   color: var(--color-base-content);
   cursor: default;
@@ -220,18 +219,19 @@ h4,
 .logo-denominator {
   display: block;
   white-space: nowrap;
-  padding-inline-start: var(--logo-dot);
+  text-align: center;
 }
-/* 字の箱の上に空き（アセントの余り）があるので、分母を括線へ寄せる */
+/* 字の箱の上下の空き（アセント・ディセンダーの余り）を詰め、括線との間を上下でそろえる */
+.logo-numerator {
+  margin-bottom: -0.12em;
+}
 .logo-denominator {
-  margin-top: calc(-3 * var(--logo-dot));
+  margin-top: -0.08em;
 }
 .logo-bar {
   display: block;
-  height: var(--logo-dot);
-  /* 分子の p の下（ディセンダー）と括線の間を 1 点空ける */
-  margin-top: calc(2 * var(--logo-dot));
-  margin-bottom: var(--logo-dot);
+  height: var(--logo-rule);
+  margin-block: 2px;
   background: currentColor;
 }
 @media (prefers-reduced-motion: reduce) {
