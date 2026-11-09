@@ -37,6 +37,7 @@ import {
   TrendingDown,
   TrendingUp,
   Trophy,
+  Undo2,
   UserMinus,
   Wallet,
   WandSparkles,
@@ -327,7 +328,14 @@ function MonthPage() {
         <li>
           推移のグラフで、所持金・PV・上限の使用率がこの先どうなりそうかを確かめられます。
         </li>
-        <li>うまくいかなかった月は、履歴の「この月に戻る」でやり直せます。</li>
+        <li>
+          うまくいかなかった月は、画面の上の「戻る…」（狭い画面では
+          <Undo2
+            aria-hidden
+            className="mx-0.5 inline size-4 align-text-bottom"
+          />
+          のボタン）か、履歴の「この月に戻る」でやり直せます。
+        </li>
       </ul>
     </>
   );
