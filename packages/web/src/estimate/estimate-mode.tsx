@@ -527,6 +527,8 @@ function Conditions({
             (cardTotals[input.stack]?.blocking ?? 0) > 0
               ? `止まる・プランの変更が要る上限 ${cardTotals[input.stack]!.blocking} 件`
               : undefined,
+          // 「止まる」は明細・上限の一覧と同じ赤（D-178）
+          warnTone: 'error',
           panel: (
             <StackField
               scenario={scenario}
@@ -570,7 +572,7 @@ function Conditions({
                     {t.framework !== input.framework &&
                       `（${FRAMEWORKS[t.framework].label} にしたとき）`}
                     {t.blocking > 0 && (
-                      <span className="ml-1 text-xs text-warning">
+                      <span className="ml-1 text-xs text-error" data-stack-stop>
                         止まる・プランの変更が要る上限 {t.blocking} 件
                       </span>
                     )}

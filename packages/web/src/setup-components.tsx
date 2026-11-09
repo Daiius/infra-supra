@@ -705,6 +705,8 @@ export type SetupTabInfo = {
   summary: string;
   /** 注意の文。あればタブに「!」を付け、文は title と読み上げに出す。 */
   warn?: string | null | undefined;
+  /** 「!」の色。止まる上限の知らせは明細・上限の一覧と同じ赤（error）にする（D-178）。既定は warning。 */
+  warnTone?: 'warning' | 'error';
   /**
    * 他方の欄の操作で起きた変化の知らせ（② の付け替えの知らせ。D-113）。欄の中の aria-live は隠れている間は読まれないので、
    * このタブが隠れている間だけ、パネルの外の常設の aria-live で読む（OCL-B12E7ACB）。
@@ -847,7 +849,7 @@ export function SetupTabs({
                 {x.warn && (
                   <span
                     aria-hidden
-                    className="badge shrink-0 badge-xs font-bold badge-warning"
+                    className={`badge shrink-0 badge-xs font-bold ${x.warnTone === 'error' ? 'badge-error' : 'badge-warning'}`}
                     data-setup-tab-warn
                   >
                     !

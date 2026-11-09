@@ -914,4 +914,25 @@ describe('見積モードの画面', () => {
     // 古い tax=0 は URL に書き戻さない
     expect(new URLSearchParams(window.location.search).has('tax')).toBe(false);
   });
+
+  it('W-61 ① の選んでいる構成のカードと ① のタブの「止まる」は、明細・上限の一覧と同じ赤（D-178）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-free&pv=30000000',
+    );
+    await renderApp();
+    expectEstimate();
+    const stop = stackCard().querySelector<HTMLElement>('[data-stack-stop]')!;
+    expect(stop).not.toBeNull();
+    expect(stop.textContent).toMatch(/止まる・プランの変更が要る上限 \d+ 件/);
+    expect(stop.className).toContain('text-error');
+    expect(stop.className).not.toContain('text-warning');
+    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const badge = stackTab.querySelector('[data-setup-tab-warn]')!;
+    expect(badge.className).toContain('badge-error');
+    // 下の上限の一覧の「超過」（止まる）も赤
+    const over = within(card(/^月の費用: /)).getAllByText('超過');
+    expect(over[0]!.className).toContain('badge-error');
+  });
 });
