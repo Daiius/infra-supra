@@ -935,4 +935,54 @@ describe('見積モードの画面', () => {
     const over = within(card(/^月の費用: /)).getAllByText('超過');
     expect(over[0]!.className).toContain('badge-error');
   });
+
+  it('W-62 費用の曲線の軸は既定で通常（等間隔・0 から）、対数を選ぶと 10 倍ごとの目盛りと注記が出て、選んだ表示を覚える（D-179）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&s=cloudflare-vinext-paid&pv=1000000',
+    );
+    await renderApp();
+    expectEstimate();
+    const curve = card('費用の曲線（月の PV を振る）');
+    const fig = () => curve.querySelector<HTMLElement>('figure[data-scale]')!;
+    const ticks = (axis: 'x' | 'y') =>
+      [...fig().querySelectorAll(`[data-${axis}-tick]`)].map((e) =>
+        Number(e.getAttribute(`data-${axis}-tick`)),
+      );
+    const scaleButton = (v: string) =>
+      curve.querySelector<HTMLElement>(`[data-curve-scale="${v}"]`)!;
+    // 既定は通常: 0 から等間隔、対数の注記は無い
+    expect(fig().dataset.scale).toBe('linear');
+    expect(scaleButton('linear').getAttribute('aria-pressed')).toBe('true');
+    expect(ticks('x')[0]).toBe(0);
+    expect(ticks('y')[0]).toBe(0);
+    const step = ticks('x')[1]! - ticks('x')[0]!;
+    expect(ticks('x').every((v, i) => v === i * step)).toBe(true);
+    expect(fig().querySelector('[data-log-note]')).toBeNull();
+    // 対数: 目盛りは 10 倍ごと、注記を出す
+    fireEvent.click(scaleButton('log'));
+    expect(fig().dataset.scale).toBe('log');
+    expect(scaleButton('log').getAttribute('aria-pressed')).toBe('true');
+    for (const axis of ['x', 'y'] as const) {
+      const t = ticks(axis);
+      expect(t.length).toBeGreaterThan(1);
+      for (let i = 1; i < t.length; i++)
+        expect(t[i]! / t[i - 1]!).toBeCloseTo(10, 9);
+    }
+    expect(fig().querySelector('[data-log-note]')!.textContent).toContain(
+      '1 目盛りで 10 倍',
+    );
+    expect(localStorage.getItem('infra-supra:estimate-curve-scale')).toBe(
+      'log',
+    );
+    // 開き直しても対数のまま
+    cleanup();
+    await renderApp();
+    expect(
+      card('費用の曲線（月の PV を振る）').querySelector<HTMLElement>(
+        'figure[data-scale]',
+      )!.dataset.scale,
+    ).toBe('log');
+  });
 });

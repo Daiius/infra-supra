@@ -765,7 +765,7 @@ export function Sparkline({
   );
 }
 
-// ---- 対数の軸の折れ線（見積の費用の曲線。D-74）----
+// ---- PV ごとの月額の折れ線（見積の費用の曲線。D-74。通常 / 対数の軸は D-179）----
 
 export type MarkShape = 'circle' | 'square' | 'diamond';
 
@@ -844,12 +844,45 @@ export function SeriesSwatch({
   );
 }
 
+/** 費用の曲線の軸の目盛り（D-179）。linear は等間隔（既定）、log は 1 目盛りで 10 倍。 */
+export type CurveScale = 'linear' | 'log';
+
+/** lo〜hi の中の 10 のべき（対数の目盛り。1 目盛りで 10 倍）。 */
+function decadeTicks(lo: number, hi: number): number[] {
+  const a = Math.ceil(Math.log10(lo) - 1e-9);
+  const b = Math.floor(Math.log10(hi) + 1e-9);
+  return Array.from(
+    { length: Math.max(0, b - a + 1) },
+    (_, i) => 10 ** (a + i),
+  );
+}
+
+/** 1 本の軸（値 → 0〜1 の位置と目盛り）。 */
+function curveAxis(
+  scale: CurveScale,
+  lo: number,
+  hi: number,
+): { at: (v: number) => number; ticks: number[] } {
+  if (scale === 'log') {
+    const l0 = Math.log10(lo);
+    const l1 = Math.log10(hi);
+    return {
+      at: (v) => (Math.log10(Math.max(v, lo)) - l0) / Math.max(l1 - l0, 1e-9),
+      ticks: decadeTicks(lo, hi),
+    };
+  }
+  const ticks = niceTicks(hi);
+  const top = ticks[ticks.length - 1]!;
+  return { at: (v) => Math.max(v, 0) / Math.max(top, 1e-9), ticks };
+}
+
 /**
- * x・y とも対数の軸の折れ線（2 軸にしない）。y は floor 未満を floor の位置に描く（値はツールチップで読む）。
+ * PV ごとの月額の折れ線（2 軸にしない）。軸は scale で通常（等間隔・0 から。既定）か対数（1 目盛りで 10 倍）を選ぶ（D-179）。
+ * 対数では y は floor 未満を floor の位置に描き（値はツールチップで読む）、目盛りは 10 倍ごとにする。
  * ホバーで最も近い x の縦線とツールチップ。凡例は呼び出し側（系列の選び方と一緒に出す）。直接のラベルは幅があって
  * 描画域に収まるときだけ線の右端に出す（近いものは上下に押し広げる）。
  */
-export function LogCurveChart({
+export function CurveChart({
   series,
   xs,
   formatX,
@@ -858,6 +891,7 @@ export function LogCurveChart({
   marker,
   height = 240,
   floor = 1,
+  scale = 'linear',
   label,
 }: {
   series: CurveChartSeries[];
@@ -870,12 +904,15 @@ export function LogCurveChart({
   /** x の目印（今の値など）。 */
   marker?: { x: number; label: string };
   height?: number;
+  /** 対数のときの y の底（これ未満は底に寄せる）。 */
   floor?: number;
+  scale?: CurveScale;
   label: string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const directLabels = width >= 600 && series.length > 0;
+  const log = scale === 'log';
   const pad = {
     top: 14,
     right: directLabels ? 150 : 14,
@@ -884,26 +921,26 @@ export function LogCurveChart({
   };
   const w = Math.max(0, width - pad.left - pad.right);
   const h = height - pad.top - pad.bottom;
-  const lx0 = Math.log10(xs[0]!);
-  const lx1 = Math.log10(xs[xs.length - 1]!);
-  const x = (v: number) =>
-    pad.left + ((Math.log10(v) - lx0) / Math.max(lx1 - lx0, 1e-9)) * w;
-  const maxY = Math.max(
-    floor * 10,
+  const xMax = xs[xs.length - 1]!;
+  const xAxis = curveAxis(scale, log ? xs[0]! : 0, xMax);
+  const x = (v: number) => pad.left + xAxis.at(v) * w;
+  const maxValue = Math.max(
+    0,
     ...series.flatMap((s) => s.points.map((p) => p.y)),
   );
-  const ly0 = Math.log10(floor);
-  const ly1 = Math.ceil(Math.log10(maxY) - 1e-9);
-  const yTicks = Array.from(
-    { length: ly1 - ly0 + 1 },
-    (_, i) => 10 ** (ly0 + i),
-  );
-  const y = (v: number) =>
-    pad.top +
-    h -
-    ((Math.log10(Math.max(v, floor)) - ly0) / Math.max(ly1 - ly0, 1e-9)) * h;
-  // 狭いときは x の目盛りを 1 つおきにする（文字が重ならないように）
-  const xLabelEvery = w / xs.length < 34 ? 2 : 1;
+  const yAxis = log
+    ? curveAxis(
+        'log',
+        floor,
+        10 ** Math.ceil(Math.log10(Math.max(floor * 10, maxValue)) - 1e-9),
+      )
+    : curveAxis('linear', 0, maxValue);
+  const y = (v: number) => pad.top + h - yAxis.at(v) * h;
+  const yTicks = yAxis.ticks;
+  // x の目盛り: 狭いときは 1 つおきにする（文字が重ならないように）
+  const xTicks = xAxis.ticks;
+  const xLabelEvery = w / Math.max(xTicks.length, 1) < 34 ? 2 : 1;
+  const xTickLabel = (v: number) => (v === 0 ? '0' : formatX(v));
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
@@ -926,7 +963,28 @@ export function LogCurveChart({
   const labelsFit = ends.every((e) => e.y <= height - 4);
 
   return (
-    <figure className="viz-root relative block w-full" ref={ref}>
+    <figure
+      className="viz-root relative block w-full"
+      ref={ref}
+      data-scale={scale}
+    >
+      {log && (
+        // 対数は読み違えやすいので、軸のすぐ上に強く書く（D-179）
+        <figcaption
+          className="mb-1 flex flex-wrap items-center gap-2 text-xs"
+          data-log-note
+        >
+          <span className="badge badge-info badge-sm font-semibold">
+            対数の目盛り
+          </span>
+          <span className="font-semibold text-[var(--text-primary)]">
+            横軸・縦軸とも、1 目盛りで 10 倍です（等間隔ではありません）。
+          </span>
+          <span className="text-[var(--text-secondary)]">
+            {`${formatY(floor)} 未満は底の目盛り（≤${formatY(floor)}）に寄せています。`}
+          </span>
+        </figcaption>
+      )}
       {width > 0 && (
         <svg
           // 幅は 100%（LineChart と同じ理由。固定の px にすると狭めても縮まない）
@@ -938,7 +996,7 @@ export function LogCurveChart({
           aria-label={label}
         >
           {yTicks.map((t, i) => (
-            <g key={t}>
+            <g key={t} data-y-tick={t}>
               <line
                 x1={pad.left}
                 x2={pad.left + w}
@@ -954,19 +1012,20 @@ export function LogCurveChart({
                 textAnchor="end"
                 className="fill-[var(--text-muted)] text-[10px] tabular-nums"
               >
-                {i === 0 ? `≤${formatY(t)}` : formatY(t)}
+                {log && i === 0 ? `≤${formatY(t)}` : formatY(t)}
               </text>
             </g>
           ))}
-          {xs.map((v, i) => (
+          {xTicks.map((v, i) => (
             <text
               key={v}
+              data-x-tick={v}
               x={x(v)}
               y={height - 6}
-              textAnchor="middle"
+              textAnchor={i === 0 && !log ? 'start' : 'middle'}
               className="fill-[var(--text-muted)] text-[10px] tabular-nums"
             >
-              {i % xLabelEvery === 0 ? formatX(v) : ''}
+              {i % xLabelEvery === 0 ? xTickLabel(v) : ''}
             </text>
           ))}
           {marker && marker.x >= xs[0]! && marker.x <= xs[xs.length - 1]! && (

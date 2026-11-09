@@ -22,7 +22,8 @@ import {
   type FrameworkId,
 } from 'game';
 import {
-  LogCurveChart,
+  CurveChart,
+  type CurveScale,
   SeriesSwatch,
   type CurveChartSeries,
   type MarkShape,
@@ -1083,6 +1084,33 @@ const usdShort = (n: number) =>
   `$${n.toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 2, signDisplay: 'negative' })}`;
 
 /** 費用の曲線（D-74）。今の条件のまま PV だけを振った月額。系列の色は事業者、点の形は事業者の中のプランで固定。 */
+/** 費用の曲線の軸の目盛りの記憶（D-179。既定は通常）。 */
+const CURVE_SCALE_KEY = 'infra-supra:estimate-curve-scale';
+const CURVE_SCALES: readonly {
+  value: CurveScale;
+  label: string;
+  note: string;
+}[] = [
+  {
+    value: 'linear',
+    label: '通常',
+    note: '等間隔の目盛りです。小さい PV の差は左下に詰まります。',
+  },
+  {
+    value: 'log',
+    label: '対数',
+    note: '1 目盛りで 10 倍です。小さい PV・安い構成の差も広げて見せます。',
+  },
+];
+
+function readCurveScale(): CurveScale {
+  try {
+    return localStorage.getItem(CURVE_SCALE_KEY) === 'log' ? 'log' : 'linear';
+  } catch {
+    return 'linear';
+  }
+}
+
 function CostCurve({
   input,
   rows,
@@ -1095,6 +1123,15 @@ function CostCurve({
 }) {
   // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
   const [picked, setPicked] = useState<string[] | null>(null);
+  const [scale, setScaleState] = useState<CurveScale>(readCurveScale);
+  const setScale = (v: CurveScale) => {
+    setScaleState(v);
+    try {
+      localStorage.setItem(CURVE_SCALE_KEY, v);
+    } catch {
+      // 覚えられなくても表示は替える
+    }
+  };
   const stacks =
     picked === null
       ? defaultCurveStacks(rows)
@@ -1123,11 +1160,34 @@ function CostCurve({
     <Card title="費用の曲線（月の PV を振る）">
       <p className="text-xs opacity-70">
         今のテンプレート・フレームワーク・設定のまま、月の PV
-        だけを変えたときの月額（USD）です。横軸・縦軸とも対数です。部品は今の構成だけ今の選択、他は既定です。
+        だけを変えたときの月額（USD）です。部品は今の構成だけ今の選択、他は既定です。
         {anyStop &&
           '× は止まる上限（無料プランの上限など）に達する点で、× どうしを結ぶ線は薄くしています。'}
         {unpriced && '料金未取得の明細がある点は合計が下限です。'}
       </p>
+      <div
+        role="group"
+        aria-label="軸の目盛り"
+        className="flex flex-wrap items-center gap-2 text-xs"
+      >
+        <span className="opacity-70">軸の目盛り</span>
+        {CURVE_SCALES.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            className={`btn btn-xs ${scale === o.value ? 'btn-primary' : 'btn-outline'}`}
+            aria-pressed={scale === o.value}
+            data-curve-scale={o.value}
+            title={o.note}
+            onClick={() => setScale(o.value)}
+          >
+            {o.label}
+          </button>
+        ))}
+        <span className="opacity-70">
+          {CURVE_SCALES.find((o) => o.value === scale)!.note}
+        </span>
+      </div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] viz-root">
         {series.map((s) => (
           <li key={s.id} className="flex min-w-0 items-center gap-1">
@@ -1136,7 +1196,8 @@ function CostCurve({
           </li>
         ))}
       </ul>
-      <LogCurveChart
+      <CurveChart
+        scale={scale}
         series={series}
         xs={CURVE_PVS}
         formatX={pvLabel}

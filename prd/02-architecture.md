@@ -58,7 +58,7 @@ estimator・catalog・game は `lib: ["esnext"]` / `types: []` でビルドし�
 | 集計のサーバー（D-135・`packages/stats`） | **Hono RPC**（さくらの VPS・node）+ 既存の Postgres（drizzle） | 終わったプレイの匿名の集計だけ。ゲームと見積の計算はブラウザのまま。構成は seseraki に倣う（[15](./15-results-and-stats.md) §5） |
 | フロント | React 19 + **Vite**（Next.js は使わない）+ TanStack Router + Tailwind v4 + daisyUI | MVP はサーバーが要らない（計算はブラウザ、保存はローカル）。静的配信だけで動く。**今はルーターを入れていない**（画面は 2 つでタブで切り替え。画面が増えたら入れる。D-73） |
 | 最適化 | **React Compiler**（`babel-plugin-react-compiler` 1.0。`@vitejs/plugin-react` 6 の `reactCompilerPreset` を `@rolldown/plugin-babel` 0.2 + `@babel/core` 7 で掛ける） | 描き直しの抑制を手書きの `useMemo`・`useCallback` に頼らない。入れ方は [react.dev の Installation](https://react.dev/learn/react-compiler/installation) の Vite の節。plugin-react 6 は Babel を内蔵しないので Babel は別の plugin。vitest（jsdom）も同じ変換を通る。手書きの memo を外すのは後で |
-| グラフ | 費用曲線は Recharts か visx（Phase 2 で決める）、構成図は React Flow（Phase 5） | 企画書 §7.1。**今は自前の SVG**（`packages/web/src/charts.tsx` の `LineChart`・`LogCurveChart`。D-74）でライブラリは入れていない |
+| グラフ | 費用曲線は Recharts か visx（Phase 2 で決める）、構成図は React Flow（Phase 5） | 企画書 §7.1。**今は自前の SVG**（`packages/web/src/charts.tsx` の `LineChart`・`CurveChart`。D-74・D-179）でライブラリは入れていない |
 
 Vite を選んだ判断は [_grilling/decisions.md](./_grilling/decisions.md) D-01。
 
