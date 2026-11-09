@@ -85,65 +85,71 @@ export function drizzleRepo(db: AnyDb): ResultsRepo {
         isNotNull(column),
         seed === undefined ? undefined : eq(results.seed, seed),
       );
-      // 共通の区切りは、その軸のその条件での全体の最小・最大から決める（D-175）
-      const [range] = await db
-        .select({
-          min: sql<number | null>`min(${column})`,
-          max: sql<number | null>`max(${column})`,
-        })
-        .from(results)
-        .where(where);
-      if (range?.min == null || range.max == null)
-        return { binEdges: [], groups: [] };
-      const min = Number(range.min);
-      const max = Number(range.max);
-      const width = binWidthOf(min, max);
-      // 分位と棒の件数は SQL で集計する（行を読み出さない）。percentile_cont は double precision で、node-postgres・PGlite とも
-      // number で返る。棒の番号は histogram.ts の binIndexOf と同じ式（width_bucket は計算の順が違い、境目で 1 本ずれうる）
-      const [stats, counts] = await Promise.all([
-        db
-          .select({
-            key,
-            count: sql<number>`count(*)::int`,
-            p25: sql<number>`percentile_cont(0.25) within group (order by ${column})`,
-            median: sql<number>`percentile_cont(0.5) within group (order by ${column})`,
-            p75: sql<number>`percentile_cont(0.75) within group (order by ${column})`,
-          })
-          .from(results)
-          .where(where)
-          .groupBy(key),
-        (() => {
-          const bin =
-            width > 0
-              ? sql<number>`least(${sql.raw(String(GROUP_BINS - 1))}, floor((${column} - ${min}::float8) / ${width}::float8))::int`
-              : sql<number>`0`;
-          return (
-            db
-              .select({ key, bin, n: sql<number>`count(*)::int` })
-              .from(results)
-              .where(where)
-              // 式を 2 度書くと引数が別の番号になり、同じ式とみなされないので、列の番号で束ねる
-              .groupBy(sql`1, 2`)
-          );
-        })(),
-      ]);
-      const groups = stats
-        .map((r) => {
-          const bins = Array<number>(GROUP_BINS).fill(0);
-          for (const c of counts)
-            if (c.key === r.key) bins[Number(c.bin)] = Number(c.n);
-          return {
-            key: r.key,
-            count: Number(r.count),
-            p25: Number(r.p25),
-            median: Number(r.median),
-            p75: Number(r.p75),
-            bins,
-          };
-        })
-        // 鍵の順は手元の実装と同じ（コードの単位の順。DB の照合順序に依らない）
-        .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-      return { binEdges: binEdgesOf(min, max), groups };
+      // 範囲・分位・棒の 3 つの問い合わせを、同じスナップショット（repeatable read の読むだけのトランザクション）で行う。
+      // 間に送信が足されても同じ母集団で数え、件数と棒の合計が食い違わない・最小より小さい値で棒の番号が負にならない（OCL-7F31023B）
+      return db.transaction(
+        async (tx) => {
+          // 共通の区切りは、その軸のその条件での全体の最小・最大から決める（D-175）
+          const [range] = await tx
+            .select({
+              min: sql<number | null>`min(${column})`,
+              max: sql<number | null>`max(${column})`,
+            })
+            .from(results)
+            .where(where);
+          if (range?.min == null || range.max == null)
+            return { binEdges: [], groups: [] };
+          const min = Number(range.min);
+          const max = Number(range.max);
+          const width = binWidthOf(min, max);
+          // 分位と棒の件数は SQL で集計する（行を読み出さない）。percentile_cont は double precision で、node-postgres・PGlite とも
+          // number で返る。棒の番号は histogram.ts の binIndexOf と同じ式（width_bucket は計算の順が違い、境目で 1 本ずれうる）
+          // 同じトランザクションの中では 1 つの接続で順に流す（並べない）
+          const stats = await tx
+            .select({
+              key,
+              count: sql<number>`count(*)::int`,
+              p25: sql<number>`percentile_cont(0.25) within group (order by ${column})`,
+              median: sql<number>`percentile_cont(0.5) within group (order by ${column})`,
+              p75: sql<number>`percentile_cont(0.75) within group (order by ${column})`,
+            })
+            .from(results)
+            .where(where)
+            .groupBy(key);
+          const counts = await (() => {
+            const bin =
+              width > 0
+                ? sql<number>`least(${sql.raw(String(GROUP_BINS - 1))}, floor((${column} - ${min}::float8) / ${width}::float8))::int`
+                : sql<number>`0`;
+            return (
+              tx
+                .select({ key, bin, n: sql<number>`count(*)::int` })
+                .from(results)
+                .where(where)
+                // 式を 2 度書くと引数が別の番号になり、同じ式とみなされないので、列の番号で束ねる
+                .groupBy(sql`1, 2`)
+            );
+          })();
+          const groups = stats
+            .map((r) => {
+              const bins = Array<number>(GROUP_BINS).fill(0);
+              for (const c of counts)
+                if (c.key === r.key) bins[Number(c.bin)] = Number(c.n);
+              return {
+                key: r.key,
+                count: Number(r.count),
+                p25: Number(r.p25),
+                median: Number(r.median),
+                p75: Number(r.p75),
+                bins,
+              };
+            })
+            // 鍵の順は手元の実装と同じ（コードの単位の順。DB の照合順序に依らない）
+            .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+          return { binEdges: binEdgesOf(min, max), groups };
+        },
+        { isolationLevel: 'repeatable read', accessMode: 'read only' },
+      );
     },
     async histogramValues({ scenarioId, axis, seed, stackId, framework }) {
       // 軸ごとに条件に合う行の値を全部読む（distribution は 1 回で 8 本 = 8 回読む）。行が増えて重くなったら SQL でビンに分ける
