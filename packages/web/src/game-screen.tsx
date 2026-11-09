@@ -106,6 +106,7 @@ import {
   hitLabel,
   hitTone,
   isCreditUse,
+  isStopping,
 } from './premise-view.ts';
 import { Swatch } from './route-plan-table.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
@@ -1462,7 +1463,7 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
     );
   }
   // 止まる・プランの変更が要るは赤、遅くなる・課金・調整は黄（D-188）
-  const blocked = p.hit && hitTone(p.effect) === 'error';
+  const blocked = isStopping(p);
   // 込みのクレジットの消費は異常ではない（超えた分は従量で請求）。超過の印にせず消費として見せる
   const credit = isCreditUse(p);
   const badge =

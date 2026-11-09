@@ -30,7 +30,11 @@ import {
 } from '../charts.tsx';
 import { Info } from '../info.tsx';
 import { CreditBar } from '../credit-bar.tsx';
-import { creditUseText, isCreditUse, isStopping } from '../premise-view.ts';
+import {
+  creditUseText,
+  isCreditUse,
+  isStoppingLimit,
+} from '../premise-view.ts';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
 import { partsOfStack } from '../parts-memory.ts';
 import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
@@ -110,6 +114,13 @@ const EFFECT_LABEL: Record<PlatformPremise['effect'], string> = {
   cost: '費用が増える',
   policy: '規約',
   info: '情報',
+};
+
+/** 止まらない超過（黄）の印の文言（D-190）。 */
+const OVER_LABEL: Partial<Record<PlatformPremise['effect'], string>> = {
+  cost: '超過（従量）',
+  throttle: '超過（遅くなる）',
+  adjust: '超過（調整）',
 };
 
 export function EstimateMode() {
@@ -868,7 +879,7 @@ function TaxDetails({ tax }: { tax: TaxView }) {
 }
 
 /** 当たる前提（量の境目の使用率と、超過の印）。止まる前提と、費用が増えるだけの前提・クレジットの消費は見た目を分ける。 */
-function Premises({
+export function Premises({
   thresholds,
   facts,
   unpriced,
@@ -877,17 +888,22 @@ function Premises({
   facts: PlatformPremise[];
   unpriced: number;
 }) {
-  // 「超過」に数えるのは止まる・プランの変更が要るもの（① のカードの数え方と同じ）。クレジットの消費は数えない
-  const stops = thresholds.filter(isStopping).length;
+  // 「超過」（赤）に数えるのは止まる・プランの変更が要るもの（① のカードの数え方と同じ。D-190）。クレジットの消費は数えない。
+  // 遅くなる・調整は黄で、止まる数には入れず別に数える
+  const stops = thresholds.filter(isStoppingLimit).length;
   const costs = thresholds.filter(
     (p) => p.hit && p.effect === 'cost' && !isCreditUse(p),
+  ).length;
+  const slows = thresholds.filter(
+    (p) => p.hit && (p.effect === 'throttle' || p.effect === 'adjust'),
   ).length;
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">
         上限と課金の境目
         <span className="ml-2 text-sm font-normal opacity-70">
-          超過 {stops} 件{costs > 0 ? `・従量に回る ${costs} 件` : ''}・
+          超過 {stops} 件{costs > 0 ? `・従量に回る ${costs} 件` : ''}
+          {slows > 0 ? `・遅くなる・調整される ${slows} 件` : ''}・
           {thresholds.length} 件中
           {unpriced > 0 ? `・料金未取得 ${unpriced} 件` : ''}
         </span>
@@ -917,7 +933,7 @@ function Premises({
               </li>
             );
           }
-          const stopped = isStopping(p);
+          const stopped = isStoppingLimit(p);
           const costOnly = p.hit && !stopped;
           return (
             <li key={p.id} className="min-w-0 text-sm">
@@ -925,8 +941,9 @@ function Premises({
                 {stopped ? (
                   <span className="badge badge-error badge-sm">超過</span>
                 ) : costOnly ? (
+                  // 遅くなる・調整・課金は黄（D-190。ゲームの画面の hitTone と同じ）
                   <span className="badge badge-warning badge-sm">
-                    超過（従量）
+                    {OVER_LABEL[p.effect] ?? '超過'}
                   </span>
                 ) : r >= 0.7 ? (
                   <span className="badge badge-warning badge-sm">近い</span>
@@ -959,7 +976,13 @@ function Premises({
           </summary>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
             {facts.map((p) => (
-              <li key={p.id}>{p.text}</li>
+              <li key={p.id}>
+                {/* 規約に当たる事実は赤（D-190。ゲームの画面の規約違反と同じ） */}
+                {p.hit && p.effect === 'policy' && (
+                  <span className="badge badge-error badge-xs mr-1">規約</span>
+                )}
+                {p.text}
+              </li>
             ))}
           </ul>
         </details>
