@@ -3019,76 +3019,88 @@ function History({
 }) {
   return (
     <div className="card bg-base-100 shadow">
-      <div className="card-body overflow-x-auto">
-        <h2 className="card-title">これまでの運営</h2>
-        <table className="table table-sm">
-          <thead>
-            <tr>
-              <th>月</th>
-              <th>構成</th>
-              <th className="text-right">PV</th>
-              <th className="text-right">収益</th>
-              <th className="text-right">費用</th>
-              <th className="text-right">所持金</th>
-              <th className="text-right">満足度</th>
-              <th className="text-right">機能開発</th>
-              <th>状態</th>
-              <th>出来事</th>
-              <th>行動</th>
-              <th>
-                <span className="sr-only">戻る</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.map((r) => (
-              <tr key={r.month}>
-                <td>{r.month}</td>
-                <td>{r.stackName}</td>
-                <td className="text-right">
-                  {Math.round(r.pv).toLocaleString()}
-                </td>
-                <td className="text-right">{usd(r.revenue)}</td>
-                <td className="text-right">{usd(r.infraCost)}</td>
-                <td className="text-right">{usd(r.cash)}</td>
-                <td className="text-right">
-                  {r.satisfaction.score.toFixed(2)}
-                </td>
-                <td className="text-right">{r.effort.feature}</td>
-                <td>
-                  <span className={`badge badge-sm ${STATUS[r.status].cls}`}>
-                    {STATUS[r.status].label}
-                  </span>
-                  {r.policyWarning && (
-                    <span className="badge badge-sm badge-error ml-1">
-                      規約違反の指摘
-                    </span>
-                  )}
-                </td>
-                <td className="text-xs">
-                  {r.events
-                    .map(
-                      (e) =>
-                        `${eventBadge(e).label}${e.botBlocked ? `（${BLOCKED_LABEL}）` : ''}: ${e.title}`,
-                    )
-                    .join('・')}
-                </td>
-                <td className="text-xs">{r.action ?? ''}</td>
-                <td>
-                  {r.month <= rewindable && (
-                    <button
-                      className="btn btn-ghost btn-xs whitespace-nowrap"
-                      aria-label={`${r.month} か月目に戻る`}
-                      onClick={() => onRewind(r.month)}
-                    >
-                      この月に戻る
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="card-body">
+        {/* 月ごとの行が積み重なって長くなるので、既定で畳む（D-187）。見出しに月数を出す */}
+        <details className="collapse collapse-arrow" data-history>
+          <summary className="collapse-title flex flex-wrap items-baseline gap-x-2 px-0 pe-10">
+            <h2 className="card-title">これまでの運営</h2>
+            <span className="text-sm opacity-70" data-history-months>
+              （{history.length} か月）
+            </span>
+          </summary>
+          <div className="collapse-content overflow-x-auto px-0">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>月</th>
+                  <th>構成</th>
+                  <th className="text-right">PV</th>
+                  <th className="text-right">収益</th>
+                  <th className="text-right">費用</th>
+                  <th className="text-right">所持金</th>
+                  <th className="text-right">満足度</th>
+                  <th className="text-right">機能開発</th>
+                  <th>状態</th>
+                  <th>出来事</th>
+                  <th>行動</th>
+                  <th>
+                    <span className="sr-only">戻る</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((r) => (
+                  <tr key={r.month}>
+                    <td>{r.month}</td>
+                    <td>{r.stackName}</td>
+                    <td className="text-right">
+                      {Math.round(r.pv).toLocaleString()}
+                    </td>
+                    <td className="text-right">{usd(r.revenue)}</td>
+                    <td className="text-right">{usd(r.infraCost)}</td>
+                    <td className="text-right">{usd(r.cash)}</td>
+                    <td className="text-right">
+                      {r.satisfaction.score.toFixed(2)}
+                    </td>
+                    <td className="text-right">{r.effort.feature}</td>
+                    <td>
+                      <span
+                        className={`badge badge-sm ${STATUS[r.status].cls}`}
+                      >
+                        {STATUS[r.status].label}
+                      </span>
+                      {r.policyWarning && (
+                        <span className="badge badge-sm badge-error ml-1">
+                          規約違反の指摘
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-xs">
+                      {r.events
+                        .map(
+                          (e) =>
+                            `${eventBadge(e).label}${e.botBlocked ? `（${BLOCKED_LABEL}）` : ''}: ${e.title}`,
+                        )
+                        .join('・')}
+                    </td>
+                    <td className="text-xs">{r.action ?? ''}</td>
+                    <td>
+                      {r.month <= rewindable && (
+                        <button
+                          className="btn btn-ghost btn-xs whitespace-nowrap"
+                          aria-label={`${r.month} か月目に戻る`}
+                          onClick={() => onRewind(r.month)}
+                        >
+                          この月に戻る
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
       </div>
     </div>
   );
