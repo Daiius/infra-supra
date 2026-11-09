@@ -48,11 +48,74 @@ export function loadPlayNonce(): string | null {
   }
 }
 
-/** nonce を書く（null なら消す）。書けなくても遊べる（再読み込みで nonce が替わるだけ）。 */
+/**
+ * nonce を書く（null なら消す）。書けなくても遊べる（再読み込みで nonce が替わるだけ）。
+ * 別のプレイ（別の nonce）の開始のトークンが残っていれば一緒に消す（D-174）。
+ */
 export function storePlayNonce(nonce: string | null): void {
   try {
     if (nonce) localStorage.setItem(PLAY_NONCE_KEY, nonce);
     else localStorage.removeItem(PLAY_NONCE_KEY);
+  } catch {
+    // 保存領域が使えない環境では何もしない
+  }
+  if (nonce === null || readPlayToken()?.nonce !== nonce) clearPlayToken();
+}
+
+// 開始のトークン（D-174・prd/15 §4）。新しいプレイを始めるときに集計のサーバーから受け取る使い捨ての番号（個人を識別しない）。
+// nonce と組にして持ち、同じプレイの送信にだけ添える（再開しても同じトークン・別のプレイには使わない）。
+// localStorage が使えない環境でも、開いている間はメモリに持つ。
+
+/** 開始のトークンの localStorage のキー（infra-supra: で始まるので、ローカルの記録の消去でも消える）。 */
+export const PLAY_TOKEN_KEY = 'infra-supra:play-token';
+
+/** packages/stats の PLAY_TOKEN_PATTERN と同じ形（32 バイトの base64url）。 */
+export const STATS_PLAY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+type StoredToken = { nonce: string; token: string };
+let memoToken: StoredToken | null = null;
+
+function readPlayToken(): StoredToken | null {
+  try {
+    const raw = localStorage.getItem(PLAY_TOKEN_KEY);
+    const v: unknown = raw ? JSON.parse(raw) : null;
+    if (
+      typeof v === 'object' &&
+      v !== null &&
+      isPlayNonce((v as StoredToken).nonce) &&
+      typeof (v as StoredToken).token === 'string' &&
+      STATS_PLAY_TOKEN_PATTERN.test((v as StoredToken).token)
+    )
+      return {
+        nonce: (v as StoredToken).nonce,
+        token: (v as StoredToken).token,
+      };
+    return null;
+  } catch {
+    return memoToken;
+  }
+}
+
+/** そのプレイ（nonce）の開始のトークン。無ければ null（取りに行かなかった・失敗した・別のプレイのもの）。 */
+export function loadPlayToken(nonce: string): string | null {
+  const v = readPlayToken();
+  return v?.nonce === nonce ? v.token : null;
+}
+
+/** 開始のトークンを nonce と組にして書く。 */
+export function storePlayToken(nonce: string, token: string): void {
+  memoToken = { nonce, token };
+  try {
+    localStorage.setItem(PLAY_TOKEN_KEY, JSON.stringify(memoToken));
+  } catch {
+    // 保存領域が使えない環境ではメモリにだけ持つ
+  }
+}
+
+function clearPlayToken(): void {
+  memoToken = null;
+  try {
+    localStorage.removeItem(PLAY_TOKEN_KEY);
   } catch {
     // 保存領域が使えない環境では何もしない
   }

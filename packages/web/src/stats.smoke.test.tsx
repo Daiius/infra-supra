@@ -11,9 +11,21 @@ import {
 import { newSave, replaySave, withTurn, type SaveData } from 'game';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NOT_SENT_ITEMS, SENT_ITEMS } from './privacy-policy.tsx';
-import { PLAY_NONCE_KEY, STATS_PLAY_ID_PATTERN } from './play-nonce.ts';
+import {
+  PLAY_NONCE_KEY,
+  PLAY_TOKEN_KEY,
+  STATS_PLAY_ID_PATTERN,
+} from './play-nonce.ts';
 import { playId } from './results-history.ts';
-import { renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
+import {
+  advance,
+  closeEventsDialog,
+  nextMonth,
+  readEventPages,
+  renderApp,
+  startGame,
+  useSmokeEnv,
+} from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -44,11 +56,62 @@ async function finish(save: SaveData) {
   fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
 }
 
-/** 送信（POST /api/results）の呼び出しだけ（完走すると分布の GET も呼ぶ。D-161）。 */
+/** 送信（POST /api/results）の呼び出しだけ（完走すると分布の GET も、始めると開始のトークンの POST も呼ぶ。D-161・D-174）。 */
 const posts = (f: ReturnType<typeof vi.fn>) =>
   f.mock.calls.filter(
-    (c) => (c[1] as RequestInit | undefined)?.method === 'POST',
+    (c) =>
+      (c[1] as RequestInit | undefined)?.method === 'POST' &&
+      String(c[0]) === '/api/results',
   );
+
+/** 開始のトークン（POST /api/plays）の呼び出し（D-174）。 */
+const tokenRequests = (f: ReturnType<typeof vi.fn>) =>
+  f.mock.calls.filter((c) => String(c[0]) === '/api/plays');
+
+const TOKEN = 'T'.repeat(43);
+
+/** 開始のトークンを返し（fail なら通信の失敗）、ほかは送信の成功を返す fetch。 */
+const tokenFetch = (fail = false) =>
+  vi.fn(async (input: unknown, _init?: RequestInit) => {
+    if (String(input) === '/api/plays') {
+      if (fail) throw new TypeError('network');
+      return new Response(JSON.stringify({ token: TOKEN }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(
+      JSON.stringify({ ok: true, duplicate: false, inHistogram: true }),
+      { status: 201, headers: { 'content-type': 'application/json' } },
+    );
+  });
+
+const SETUP = {
+  scenario: '記事コミュニティ',
+  framework: 'Next.js（App Router）',
+  stack: 'Cloudflare Paid + vinext',
+};
+
+/** 終わるまで進める（何もしない）。出来事のダイアログは advance と同じく読んで閉じ、ほかのダイアログ（完走）が開いたら止める。 */
+function playToEnd() {
+  for (let i = 0; i < 24; i++) {
+    if (!screen.queryByRole('button', { name: '次の月へ' })) return;
+    nextMonth();
+    const dialog = screen.queryByRole('dialog');
+    if (!dialog) continue;
+    // 出来事のダイアログでなければ（完走のダイアログ）終わり
+    if (!within(dialog).queryByRole('heading', { name: /か月目の出来事/ }))
+      return;
+    readEventPages(dialog);
+    closeEventsDialog(dialog);
+  }
+}
+
+const sentBody = (f: ReturnType<typeof vi.fn>) =>
+  JSON.parse(String((posts(f)[0]![1] as RequestInit).body)) as Record<
+    string,
+    unknown
+  >;
 
 const okFetch = () =>
   vi.fn(
@@ -198,6 +261,63 @@ describe('集計への送信とプライバシーポリシー', () => {
     await finish(almostDone(7));
     await waitFor(() => expect(posts(err)).toHaveLength(1));
     expect(victory()).toBeDefined();
+  });
+
+  it('W-103 フラグがあると、新しいプレイを始めたときに開始のトークンを 1 回取り、nonce と組で持って、再開しても同じトークンを送信に添える（D-174）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    const fetch = tokenFetch();
+    vi.stubGlobal('fetch', fetch);
+    await renderApp();
+    await startGame(SETUP);
+    await waitFor(() =>
+      expect(localStorage.getItem(PLAY_TOKEN_KEY)).not.toBeNull(),
+    );
+    expect(tokenRequests(fetch)).toHaveLength(1);
+    expect(
+      (tokenRequests(fetch)[0]![1] as RequestInit | undefined)?.method,
+    ).toBe('POST');
+    expect(JSON.parse(localStorage.getItem(PLAY_TOKEN_KEY)!)).toEqual({
+      nonce: localStorage.getItem(PLAY_NONCE_KEY),
+      token: TOKEN,
+    });
+    // 再開しても取り直さない
+    advance(1);
+    cleanup();
+    await renderApp();
+    playToEnd();
+    await waitFor(() => expect(posts(fetch)).toHaveLength(1));
+    expect(tokenRequests(fetch)).toHaveLength(1);
+    expect(sentBody(fetch).token).toBe(TOKEN);
+  });
+
+  it('W-103b 開始のトークンが取れなくても（通信の失敗）遊べて、トークン無しで送る（D-174）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    const fetch = tokenFetch(true);
+    vi.stubGlobal('fetch', fetch);
+    await renderApp();
+    await startGame(SETUP);
+    await waitFor(() => expect(tokenRequests(fetch)).toHaveLength(1));
+    playToEnd();
+    await waitFor(() => expect(posts(fetch)).toHaveLength(1));
+    expect(sentBody(fetch)).not.toHaveProperty('token');
+    expect(localStorage.getItem(PLAY_TOKEN_KEY)).toBeNull();
+  });
+
+  it('W-103c フラグが無い・開発用の架空の分布（VITE_STATS_MOCK）のときは、始めても開始のトークンを取りに行かない（D-174）', async () => {
+    const fetch = tokenFetch();
+    vi.stubGlobal('fetch', fetch);
+    await renderApp();
+    await startGame(SETUP);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetch).not.toHaveBeenCalled();
+    cleanup();
+    localStorage.clear();
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    vi.stubEnv('VITE_STATS_MOCK', '1');
+    await renderApp();
+    await startGame(SETUP);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(tokenRequests(fetch)).toHaveLength(0);
   });
 
   it('W-96 プライバシーポリシーは画面の下のリンクと設定のダイアログから開き、送る情報と送らない情報を書いている', async () => {
