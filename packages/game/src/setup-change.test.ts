@@ -252,6 +252,21 @@ describe('構成を変える（D-185）', () => {
     expect(d.components.realtime).toBe('durable-objects');
     expect(sameAsCurrent(s, d)).toBe(true);
     expect(setupChangeOf(s, d).items).toEqual([]);
+    // 部品のスロットは今の部品の 1 択（「なし」の 1 択にしない）
+    const rt = setupSlots(
+      ARTICLE_COMMUNITY,
+      CF_PAID,
+      'nextjs',
+      d.components,
+    ).find((x) => x.slot === 'realtime')!;
+    expect(rt.fixed).toBe(true);
+    expect(rt.options.map((o) => o.id)).toEqual(['durable-objects']);
+    // 始める画面（提案の部品を選んでいない）では今までどおり出さない
+    expect(
+      setupSlots(ARTICLE_COMMUNITY, CF_PAID, 'nextjs', {})
+        .find((x) => x.slot === 'realtime')
+        ?.options.some((o) => o.id === 'durable-objects') ?? false,
+    ).toBe(false);
     // 同じ事業者のプランへ替えても持ち越す
     expect(draftComponentsFor(s, CF_FREE, 'nextjs').realtime).toBe(
       'durable-objects',
