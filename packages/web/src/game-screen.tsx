@@ -101,7 +101,12 @@ import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
-import { creditUseText, isCreditUse } from './premise-view.ts';
+import {
+  creditUseText,
+  hitLabel,
+  hitTone,
+  isCreditUse,
+} from './premise-view.ts';
 import { Swatch } from './route-plan-table.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
 import {
@@ -871,7 +876,11 @@ function EventsDialog({
                 NEW
               </span>
             )}
-            <EventCard key={`${e.id}:${e.phase}`} event={e} />
+            <EventCard
+              key={`${e.id}:${e.phase}`}
+              event={e}
+              premises={r.premises}
+            />
             {e.phase === 'proposal' && (
               <div className="mt-2 text-sm opacity-80">
                 行動の欄で受けるか断るかを選びます（選ばなければ断ります）
@@ -984,7 +993,11 @@ function MonthCard({
               </div>
             )
           : r.events.map((e) => (
-              <EventCard key={`${e.id}:${e.phase}`} event={e} />
+              <EventCard
+                key={`${e.id}:${e.phase}`}
+                event={e}
+                premises={r.premises}
+              />
             ))}
         {r.notes.map((n) => (
           <div
@@ -1285,9 +1298,21 @@ const TIER_LABEL: Record<MonthEvent['tier'], string> = {
   rare: 'まれ',
 };
 
+/** 当たった前提の印の色のクラス（D-188。daisyUI のクラスは文字列のまま書く）。 */
+const HIT_BADGE = { error: 'badge-error', warning: 'badge-warning' } as const;
+
 /** 出来事の通知（prd/07 §10.2）。当たりうる前提は catalog の文のまま出す（D-12）。 */
-function EventCard({ event: e }: { event: MonthEvent }) {
+export function EventCard({
+  event: e,
+  premises,
+}: {
+  event: MonthEvent;
+  /** 同じ月の前提。出来事の前提の効き方（止まる・課金など）を引き、印の色を分ける（D-188）。 */
+  premises: readonly PlatformPremise[];
+}) {
   const badge = eventBadge(e);
+  // 効き方が引けない前提は、今までどおり止まる側（赤）に倒す
+  const effectOf = (id: string) => premises.find((p) => p.id === id)?.effect;
   return (
     <div
       className={`rounded-box border p-3 ${e.tier === 'rare' ? 'border-error' : 'border-base-300'}`}
@@ -1361,24 +1386,34 @@ function EventCard({ event: e }: { event: MonthEvent }) {
       )}
       {e.premises.length > 0 && (
         <ul className="mt-1 space-y-0.5 text-xs">
-          {e.premises.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-center gap-1">
-              <span
-                className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
+          {e.premises.map((p) => {
+            const effect = effectOf(p.id);
+            const tone = effect ? hitTone(effect) : 'error';
+            return (
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center gap-1"
+                data-event-premise={effect ?? ''}
               >
-                {p.hit ? '✗ 上限に達した' : '○ 達する可能性のある上限'}
-              </span>
-              {p.text}
-              {p.ratio !== undefined && (
-                <span className="tabular-nums opacity-70">
-                  （今 {(p.ratio * 100).toFixed(0)}%）
+                <span
+                  className={`badge badge-xs ${p.hit ? HIT_BADGE[tone] : 'badge-ghost'}`}
+                >
+                  {p.hit
+                    ? `${tone === 'error' ? '✗' : '●'} ${effect ? hitLabel(effect) : '上限に達した'}`
+                    : '○ 達する可能性のある上限'}
                 </span>
-              )}
-              {p.detail && (
-                <span className="basis-full opacity-80">{p.detail}</span>
-              )}
-            </li>
-          ))}
+                {p.text}
+                {p.ratio !== undefined && (
+                  <span className="tabular-nums opacity-70">
+                    （今 {(p.ratio * 100).toFixed(0)}%）
+                  </span>
+                )}
+                {p.detail && (
+                  <span className="basis-full opacity-80">{p.detail}</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -1416,7 +1451,8 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
       </li>
     );
   }
-  const blocked = p.hit && p.effect !== 'cost';
+  // 止まる・プランの変更が要るは赤、遅くなる・課金・調整は黄（D-188）
+  const blocked = p.hit && hitTone(p.effect) === 'error';
   // 込みのクレジットの消費は異常ではない（超えた分は従量で請求）。超過の印にせず消費として見せる
   const credit = isCreditUse(p);
   const badge =
@@ -1436,13 +1472,11 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
       ? p.hit
         ? '違反'
         : '事実'
-      : blocked
-        ? '上限に達した'
-        : credit
-          ? '付属クレジットの消費'
-          : p.hit
-            ? '超過（課金）'
-            : 'あと少し';
+      : credit
+        ? '付属クレジットの消費'
+        : p.hit
+          ? hitLabel(p.effect)
+          : 'あと少し';
   const ratio = p.ratio === undefined ? null : Math.min(p.ratio, 1);
   return (
     <li className="flex flex-wrap items-center gap-2">
@@ -3391,11 +3425,12 @@ function TrendCard({
   t: ReturnType<typeof premiseTrends>[number];
   months: number;
 }) {
-  const blocked = t.hitNow && t.effect !== 'cost';
+  // 効き方で色を分ける（D-188。月の報告の上限の一覧・出来事と同じ）
+  const blocked = t.hitNow && hitTone(t.effect) === 'error';
   const status = blocked
-    ? { cls: 'badge-error', label: '✗ 上限に達した' }
+    ? { cls: HIT_BADGE.error, label: `✗ ${hitLabel(t.effect)}` }
     : t.hitNow
-      ? { cls: 'badge-warning', label: '● 超過（課金）' }
+      ? { cls: HIT_BADGE.warning, label: `● ${hitLabel(t.effect)}` }
       : t.monthsUntil !== null
         ? {
             cls: 'badge-warning',
