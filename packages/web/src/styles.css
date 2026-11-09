@@ -224,12 +224,14 @@ h4,
 }
 /* 字の箱の上に空き（アセントの余り）があるので、分母を括線へ寄せる */
 .logo-denominator {
-  margin-top: calc(-2 * var(--logo-dot));
+  margin-top: calc(-3 * var(--logo-dot));
 }
 .logo-bar {
   display: block;
   height: var(--logo-dot);
-  margin-block: var(--logo-dot);
+  /* 分子の p の下（ディセンダー）と括線の間を 1 点空ける */
+  margin-top: calc(2 * var(--logo-dot));
+  margin-bottom: var(--logo-dot);
   background: currentColor;
 }
 @media (prefers-reduced-motion: reduce) {
