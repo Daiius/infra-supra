@@ -79,7 +79,7 @@ import {
   type Stage,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
-import { compact, LineChart, Sparkline } from './charts.tsx';
+import { compact, LineChart, Sparkline, useNarrowScreen } from './charts.tsx';
 import { ResultAxesPanel } from './result-axes.tsx';
 import { ResultStatsSection } from './stats-breakdown.tsx';
 import type { StatsQuery } from './stats-client.ts';
@@ -3110,6 +3110,7 @@ function Trends({
   previous: GameState | null;
   onClearPrevious: () => void;
 }) {
+  const narrow = useNarrowScreen();
   const prevHistory = previous?.history;
   const prevOf = (get: (r: MonthReport) => number) =>
     prevHistory ? { previous: prevHistory.map(get) } : {};
@@ -3178,23 +3179,42 @@ function Trends({
   ];
   return (
     <div className="card bg-base-100 shadow">
-      <div className="card-body gap-4">
+      <div className="card-body gap-3 sm:gap-4">
         <h2 className="card-title">これまでの推移</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {/* 狭い画面は 1 行に名前・値・前月比・小さな推移を並べた細い行を積む（D-186） */}
+        <div
+          className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-3 md:grid-cols-5"
+          data-trend-tiles
+        >
           {tiles.map((t) => (
-            <div key={t.label} className="rounded-box bg-base-200 p-3">
-              <div className="text-xs opacity-70">{t.label}</div>
-              <div className="text-xl font-semibold tabular-nums">
+            <div
+              key={t.label}
+              className="flex items-center gap-2 rounded-box bg-base-200 px-3 py-1.5 sm:block sm:p-3"
+              data-trend-tile
+            >
+              <div className="w-20 shrink-0 text-xs opacity-70 sm:w-auto">
+                {t.label}
+              </div>
+              <div className="min-w-0 flex-1 text-base font-semibold tabular-nums sm:text-xl">
                 {/* 月が進むと前の月の値から数え上げる（D-25） */}
                 <CountUp value={t.value} format={t.format} />
               </div>
-              <div className="flex flex-wrap items-end justify-between">
-                <span className="text-xs opacity-70">
-                  {t.delta === null || !Number.isFinite(t.delta)
-                    ? ''
-                    : `前月比 ${pct(t.delta)}`}
+              <div className="flex shrink-0 items-center gap-2 sm:flex-wrap sm:items-end sm:justify-between sm:gap-0">
+                <span className="text-xs whitespace-nowrap opacity-70">
+                  {t.delta === null || !Number.isFinite(t.delta) ? (
+                    ''
+                  ) : (
+                    <>
+                      <span className="max-sm:hidden">前月比 </span>
+                      {pct(t.delta)}
+                    </>
+                  )}
                 </span>
-                <Sparkline values={t.series} months={scenario.months} />
+                <Sparkline
+                  values={t.series}
+                  months={scenario.months}
+                  {...(narrow ? { width: 64, height: 20 } : {})}
+                />
               </div>
             </div>
           ))}
@@ -3250,7 +3270,7 @@ function Trends({
             </button>
           </div>
         )}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
           <LineChart
             title="所持金"
             months={scenario.months}
@@ -3340,7 +3360,7 @@ function Trends({
             <h3 className="mb-2 text-sm font-semibold">
               上限の使用率（境目 = 100%）
             </h3>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-2 sm:gap-3 md:grid-cols-2">
               {trends.map((t) => (
                 <TrendCard key={t.id} t={t} months={scenario.months} />
               ))}
@@ -3377,7 +3397,7 @@ function TrendCard({
     ...t.projection.map((p) => p.ratio),
   );
   return (
-    <div className="rounded-box border border-base-300 p-3">
+    <div className="rounded-box border border-base-300 p-2 sm:p-3">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <span className={`badge badge-sm ${status.cls}`}>{status.label}</span>
         <span className="text-sm font-semibold tabular-nums">
