@@ -65,8 +65,8 @@ describe('OGP の画像の箱（D-191）', () => {
     const art = card.querySelector<HTMLElement>('[data-og-art]')!;
     expect(art.getAttribute('aria-hidden')).toBe('true');
     expect(Number(art.style.opacity)).toBe(OG_ART_OPACITY);
-    expect(OG_ART_OPACITY).toBeGreaterThanOrEqual(0.15);
-    expect(OG_ART_OPACITY).toBeLessThanOrEqual(0.25);
+    expect(OG_ART_OPACITY).toBeGreaterThanOrEqual(0.3);
+    expect(OG_ART_OPACITY).toBeLessThanOrEqual(0.7);
     const scenario = art.querySelector('[data-scenario-art]')!;
     expect(scenario.getAttribute('data-scenario-art')).toBe(
       'article-community',
