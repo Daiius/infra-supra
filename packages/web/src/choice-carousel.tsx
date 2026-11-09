@@ -375,6 +375,28 @@ export function ChoiceCarousel<T extends string>({
                         onChange(id);
                       }
                 }
+                // 選んでいないカードの中へフォーカスが入ると（Tab など）ブラウザがそのカードまで横に送るので、
+                // そのカードを選ぶ（見えているカードと選択を食い違わせない）。選べないカードなら選んでいるカードを中央へ戻す
+                onFocus={
+                  selected
+                    ? undefined
+                    : (e) => {
+                        if (!e.currentTarget.contains(e.target as Node)) return;
+                        if (!off(id)) {
+                          onChange(id);
+                          return;
+                        }
+                        const t = track.current;
+                        const el =
+                          currentKey === undefined
+                            ? undefined
+                            : els.current[currentKey];
+                        if (t && el)
+                          t.scrollLeft =
+                            el.offsetLeft -
+                            (t.clientWidth - el.clientWidth) / 2;
+                      }
+                }
               >
                 {renderCard(id, { selected, idPrefix: headingId })}
               </div>

@@ -1210,6 +1210,28 @@ describe('ゲームモードの画面', () => {
     expect(current()).toBe(other);
   });
 
+  it('W-52b 始める画面: 選んでいないカードの中へフォーカスが入ると（Tab など）そのカードを選ぶ', async () => {
+    await renderApp();
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    const cards = [
+      ...current()
+        .closest('[data-card]')!
+        .parentElement!.querySelectorAll<HTMLElement>('[data-card]'),
+    ];
+    const selected = current().closest<HTMLElement>('[data-card]')!;
+    const other = cards.find((c) => c !== selected)!;
+    // カードの中のフォーカスを受けるもの（ⓘ などのボタン）にフォーカスを当てる
+    const target = other.querySelector<HTMLElement>(
+      'button, input, [tabindex]',
+    )!;
+    fireEvent.focus(target);
+    expect(current().closest('[data-card]')).toBe(other);
+  });
+
   it('W-52 始める画面: 狭い画面の前後のカードの帯の三角を押すと前後の構成を選び、帯の無い端では出ない。三角は読み上げに出ない', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
