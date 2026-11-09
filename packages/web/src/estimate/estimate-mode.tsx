@@ -233,6 +233,8 @@ export function EstimateMode() {
         onPickStack={pickStack}
         onPickFramework={pickFramework}
         editor={editor}
+        // 全体の図（費用の曲線）を条件の直下・① の上に置き、そこからカードで詳しく見る（D-182）
+        overview={<CostCurve input={input} rows={rows} memory={partsByStack} />}
       />
       <Card title={`月の費用: ${view.name}`}>
         <div className="flex flex-wrap items-baseline gap-x-3">
@@ -285,7 +287,6 @@ export function EstimateMode() {
         // 行を押すとカルーセルもその構成へ移る（値は同じ入力。D-115）
         onPick={pickStack}
       />
-      <CostCurve input={input} rows={rows} memory={partsByStack} />
       <Card title="料金データの出典">
         <ul className="space-y-2 text-sm">
           {view.sources.map((s) => (
@@ -375,6 +376,7 @@ function Conditions({
   onPickStack,
   onPickFramework,
   editor,
+  overview,
 }: {
   input: EstimateInput;
   setInput: (p: Partial<EstimateInput>) => void;
@@ -389,6 +391,8 @@ function Conditions({
   onPickFramework: (framework: FrameworkId) => void;
   /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップ。D-112・D-115）。 */
   editor: RoutePlanEditor;
+  /** 条件の直下・① の上に置く全体の図（費用の曲線。D-182）。 */
+  overview?: ReactNode;
 }) {
   const scenario = scenarioOfTemplate(input.template);
   // 構成の id ↔ STACKS の index の変換はここで 1 回（共用の欄は index で持つ）
@@ -457,178 +461,208 @@ function Conditions({
       </div>
     ) : null;
   return (
-    <Card title="条件">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="テンプレート">
-          <select
-            className={select}
-            value={input.template}
-            onChange={(e) =>
-              setInput(withTemplate(input, e.target.value as TemplateId))
-            }
+    <>
+      <Card title="条件">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="テンプレート">
+            <select
+              className={select}
+              value={input.template}
+              onChange={(e) =>
+                setInput(withTemplate(input, e.target.value as TemplateId))
+              }
+            >
+              {TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="月の PV"
+            info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたりの月の PV。下に出す）から出します。月の中の伸びは扱いません"
           >
-            {TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field
-          label="月の PV"
-          info="1 か月のページビュー。MAU はテンプレートの仮定（1 人あたりの月の PV。下に出す）から出します。月の中の伸びは扱いません"
-        >
-          <input
-            className="input input-bordered input-sm w-full"
-            type="number"
-            inputMode="numeric"
-            min={1000}
-            step={1000}
-            list="estimate-pv-presets"
-            value={pvText}
-            onChange={(e) => setPvText(e.target.value)}
-            onBlur={() => setInput({ pv: Number(pvText) })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') setInput({ pv: Number(pvText) });
+            <input
+              className="input input-bordered input-sm w-full"
+              type="number"
+              inputMode="numeric"
+              min={1000}
+              step={1000}
+              list="estimate-pv-presets"
+              value={pvText}
+              onChange={(e) => setPvText(e.target.value)}
+              onBlur={() => setInput({ pv: Number(pvText) })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setInput({ pv: Number(pvText) });
+              }}
+            />
+            <datalist id="estimate-pv-presets">
+              {PV_PRESETS.map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
+            <span className="mt-1 flex flex-wrap gap-1">
+              {PV_PRESETS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`btn btn-xs ${v === input.pv ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => setInput({ pv: v })}
+                >
+                  {v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}K`}
+                </button>
+              ))}
+            </span>
+            <span className="mt-1 block text-xs opacity-70">
+              MAU 約 {Math.round(mau).toLocaleString('ja-JP')}
+              {mau > 0 &&
+                `（テンプレートの仮定: 1 人あたり月 ${Math.round(input.pv / mau).toLocaleString('ja-JP')} PV）`}
+            </span>
+          </Field>
+          <Seats seats={input.seats} setInput={setInput} />
+        </div>
+      </Card>
+      {overview}
+      <section
+        className="card bg-base-100 shadow"
+        aria-label="インフラの構成とフレームワークを選ぶ"
+        data-setup-card
+      >
+        <div className="card-body min-w-0 gap-3 px-3 py-4 sm:p-6">
+          {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。タブで切り替え、
+          見出しにそれぞれの今の選択と注意を出す（D-116 の補足） */}
+          <SetupTabs
+            storageKey="infra-supra:setup-tab:estimate"
+            stack={{
+              label: '① インフラの構成',
+              summary: stackName(
+                stackIndex,
+                input.framework,
+                false,
+                input.parts,
+              ),
+              warn:
+                (cardTotals[input.stack]?.blocking ?? 0) > 0
+                  ? `止まる・プランの変更が要る上限 ${cardTotals[input.stack]!.blocking} 件`
+                  : undefined,
+              // 「止まる」は明細・上限の一覧と同じ赤（D-178）
+              warnTone: 'error',
+              panel: (
+                <StackField
+                  scenario={scenario}
+                  framework={input.framework}
+                  value={stackIndex}
+                  onChange={(i) => onPickStack(STACKS[i]!.id)}
+                  components={input.parts}
+                  comments={comments}
+                  routes={input.routes}
+                  effort={false}
+                  // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
+                  routesOnFallback={(i) =>
+                    normalizeInput({
+                      ...input,
+                      ...withStack(input, STACKS[i]!.id),
+                    }).routes
+                  }
+                  // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
+                  rememberedOf={(i) => memory[STACKS[i]!.id]}
+                  diagramCaption={(selected, remembered) =>
+                    selected
+                      ? '選んだ部品で描いています。'
+                      : remembered
+                        ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
+                        : 'この構成を選んだときの既定の部品で描いています。'
+                  }
+                  // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
+                  onComponentsChange={(parts) =>
+                    setInput(withParts(input, parts))
+                  }
+                  partsNote="選んでいないスロットは既定の部品で見積もります"
+                  partsExtra={
+                    imageSettings ? { images: imageSettings } : undefined
+                  }
+                  // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
+                  partsCompare={(slot) => ({
+                    rows: slotComparisonOf(input, slot),
+                    basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
+                  })}
+                  cardExtra={(i, selected) => {
+                    const t = cardTotals[STACKS[i]!.id];
+                    if (!t) return null;
+                    return (
+                      <p className="text-sm" data-stack-total={STACKS[i]!.id}>
+                        {selected ? '今の条件で月 ' : 'この構成にすると月 '}
+                        <strong className="tabular-nums">
+                          {usd(t.totalUsd)}
+                        </strong>
+                        {t.framework !== input.framework &&
+                          `（${FRAMEWORKS[t.framework].label} にしたとき）`}
+                        {t.blocking > 0 && (
+                          <span
+                            className="ml-1 text-xs text-error"
+                            data-stack-stop
+                          >
+                            止まる・プランの変更が要る上限 {t.blocking} 件
+                          </span>
+                        )}
+                      </p>
+                    );
+                  }}
+                />
+              ),
+            }}
+            framework={{
+              label: '② フレームワークと描き方',
+              summary: FRAMEWORKS[input.framework].label,
+              warn: notice,
+              live: notice,
+              panel: (
+                <FrameworkField
+                  scenario={scenario}
+                  allowed={allowed}
+                  value={input.framework}
+                  onChange={onPickFramework}
+                  comments={comments}
+                  routePlan={(id) => fwRoutes.get(id) ?? []}
+                  routes={input.routes}
+                  resolvedRoutes={(id) =>
+                    Object.fromEntries(
+                      (fwRoutes.get(id) ?? []).map((r) => [
+                        r.route,
+                        r.strategy,
+                      ]),
+                    )
+                  }
+                  unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
+                  notice={notice}
+                  editor={editor}
+                  text={{
+                    heading: '② アプリのフレームワークとページの描き方',
+                    footnote: null,
+                    wireframeNote:
+                      '見取り図はテンプレートの仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
+                    compareHint:
+                      'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べます',
+                    compareNote:
+                      'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べます。ここで選んでも、カードのチップで選んでも同じです。構成の比較・費用の曲線もこの描き方で引きます。',
+                    // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
+                    compareCaption: ROUTE_PLAN_NOTE.replace(
+                      '費用の差は 1 か月目の基準の規模での目安です。',
+                      '費用の差は今の条件（月の PV）での目安です。',
+                    ),
+                  }}
+                />
+              ),
             }}
           />
-          <datalist id="estimate-pv-presets">
-            {PV_PRESETS.map((v) => (
-              <option key={v} value={v} />
-            ))}
-          </datalist>
-          <span className="mt-1 flex flex-wrap gap-1">
-            {PV_PRESETS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                className={`btn btn-xs ${v === input.pv ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setInput({ pv: v })}
-              >
-                {v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}K`}
-              </button>
-            ))}
-          </span>
-          <span className="mt-1 block text-xs opacity-70">
-            MAU 約 {Math.round(mau).toLocaleString('ja-JP')}
-            {mau > 0 &&
-              `（テンプレートの仮定: 1 人あたり月 ${Math.round(input.pv / mau).toLocaleString('ja-JP')} PV）`}
-          </span>
-        </Field>
-        <Seats seats={input.seats} setInput={setInput} />
-      </div>
-      {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。タブで切り替え、
-          見出しにそれぞれの今の選択と注意を出す（D-116 の補足） */}
-      <SetupTabs
-        storageKey="infra-supra:setup-tab:estimate"
-        stack={{
-          label: '① インフラの構成',
-          summary: stackName(stackIndex, input.framework, false, input.parts),
-          warn:
-            (cardTotals[input.stack]?.blocking ?? 0) > 0
-              ? `止まる・プランの変更が要る上限 ${cardTotals[input.stack]!.blocking} 件`
-              : undefined,
-          // 「止まる」は明細・上限の一覧と同じ赤（D-178）
-          warnTone: 'error',
-          panel: (
-            <StackField
-              scenario={scenario}
-              framework={input.framework}
-              value={stackIndex}
-              onChange={(i) => onPickStack(STACKS[i]!.id)}
-              components={input.parts}
-              comments={comments}
-              routes={input.routes}
-              effort={false}
-              // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
-              routesOnFallback={(i) =>
-                normalizeInput({ ...input, ...withStack(input, STACKS[i]!.id) })
-                  .routes
-              }
-              // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
-              rememberedOf={(i) => memory[STACKS[i]!.id]}
-              diagramCaption={(selected, remembered) =>
-                selected
-                  ? '選んだ部品で描いています。'
-                  : remembered
-                    ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
-                    : 'この構成を選んだときの既定の部品で描いています。'
-              }
-              // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
-              onComponentsChange={(parts) => setInput(withParts(input, parts))}
-              partsNote="選んでいないスロットは既定の部品で見積もります"
-              partsExtra={imageSettings ? { images: imageSettings } : undefined}
-              // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
-              partsCompare={(slot) => ({
-                rows: slotComparisonOf(input, slot),
-                basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
-              })}
-              cardExtra={(i, selected) => {
-                const t = cardTotals[STACKS[i]!.id];
-                if (!t) return null;
-                return (
-                  <p className="text-sm" data-stack-total={STACKS[i]!.id}>
-                    {selected ? '今の条件で月 ' : 'この構成にすると月 '}
-                    <strong className="tabular-nums">{usd(t.totalUsd)}</strong>
-                    {t.framework !== input.framework &&
-                      `（${FRAMEWORKS[t.framework].label} にしたとき）`}
-                    {t.blocking > 0 && (
-                      <span className="ml-1 text-xs text-error" data-stack-stop>
-                        止まる・プランの変更が要る上限 {t.blocking} 件
-                      </span>
-                    )}
-                  </p>
-                );
-              }}
-            />
-          ),
-        }}
-        framework={{
-          label: '② フレームワークと描き方',
-          summary: FRAMEWORKS[input.framework].label,
-          warn: notice,
-          live: notice,
-          panel: (
-            <FrameworkField
-              scenario={scenario}
-              allowed={allowed}
-              value={input.framework}
-              onChange={onPickFramework}
-              comments={comments}
-              routePlan={(id) => fwRoutes.get(id) ?? []}
-              routes={input.routes}
-              resolvedRoutes={(id) =>
-                Object.fromEntries(
-                  (fwRoutes.get(id) ?? []).map((r) => [r.route, r.strategy]),
-                )
-              }
-              unsupported={(id) => stackUnsupportedReason(stackIndex, id)}
-              notice={notice}
-              editor={editor}
-              text={{
-                heading: '② アプリのフレームワークとページの描き方',
-                footnote: null,
-                wireframeNote:
-                  '見取り図はテンプレートの仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
-                compareHint:
-                  'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べます',
-                compareNote:
-                  'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べます。ここで選んでも、カードのチップで選んでも同じです。構成の比較・費用の曲線もこの描き方で引きます。',
-                // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
-                compareCaption: ROUTE_PLAN_NOTE.replace(
-                  '費用の差は 1 か月目の基準の規模での目安です。',
-                  '費用の差は今の条件（月の PV）での目安です。',
-                ),
-              }}
-            />
-          ),
-        }}
-      />
-      {/* 画像の形式・サイズ違いは ① の画像の部品の行で選ぶ（D-119）。画像の行が無い構成だけ ③ 設定に出す */}
-      {imageSettings && !imagesRow && (
-        <SetupSettings>{imageSettings}</SetupSettings>
-      )}
-    </Card>
+          {/* 画像の形式・サイズ違いは ① の画像の部品の行で選ぶ（D-119）。画像の行が無い構成だけ ③ 設定に出す */}
+          {imageSettings && !imagesRow && (
+            <SetupSettings>{imageSettings}</SetupSettings>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -1188,6 +1222,8 @@ function CostCurve({
     color: `var(--series-${curveColorSlot(c.provider) + 1})`,
     shape: SHAPES[c.variant] ?? 'circle',
     points: c.points.map((p) => ({ y: p.totalUsd, flags: p.blocking })),
+    // 今の構成は太い線で一番上に描き、① のカードとつなぐ（D-182）
+    emphasis: c.current ? ('strong' as const) : ('normal' as const),
   }));
   // 選んだ順を保つ（上限を超えるときは先に選んだものから残す。pickedCurveStacks）
   const toggle = (id: string) =>
@@ -1239,7 +1275,7 @@ function CostCurve({
           return (
             <li
               key={s.id}
-              className="flex min-w-0 items-center gap-1"
+              className={`flex min-w-0 items-center gap-1 ${s.emphasis === 'strong' ? 'font-semibold text-[var(--text-primary)]' : ''}`}
               data-curve-legend={s.id}
             >
               <SeriesSwatch color={s.color} shape={s.shape} />

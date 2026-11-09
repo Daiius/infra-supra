@@ -781,7 +781,15 @@ export type CurveChartSeries = {
    * 薄い破線にし、ツールチップに「止まります（上限）」と言葉で出す。止まらない区間は通常どおり描く。
    */
   points: { y: number; flags: string[] }[];
+  /**
+   * 強調（D-182・D-183）: strong は太い線で一番上に描き（今の構成・凡例で選んだ構成）、muted は薄くする（凡例で別の構成を選んだとき）。
+   * 既定は normal。
+   */
+  emphasis?: 'strong' | 'normal' | 'muted';
 };
+
+/** 凡例で別の構成を選んだときの、ほかの線の不透明度。 */
+const MUTED_OPACITY = 0.15;
 
 /** 系列の点の印（r4 相当・2px の地の色の輪）。 */
 function MarkGlyph({
@@ -1062,43 +1070,57 @@ export function CurveChart({
               strokeWidth="1"
             />
           )}
-          {series.map((s) => (
-            <g key={s.id} data-series={s.id}>
-              {s.points.slice(1).map((p, i) => {
-                const a = s.points[i]!;
-                // 片端でも止まる点に触れる区間は薄い破線（上限に達した後の月額では実際には運用できない。D-180）。
-                // 止まらない区間（無料枠の範囲など）は通常どおり描く
-                const stopped = a.flags.length > 0 || p.flags.length > 0;
-                return (
-                  <line
-                    key={i}
-                    data-segment={stopped ? 'stopped' : 'normal'}
-                    x1={x(xs[i]!)}
-                    y1={y(a.y)}
-                    x2={x(xs[i + 1]!)}
-                    y2={y(p.y)}
-                    stroke={s.color}
-                    strokeOpacity={stopped ? STOPPED_OPACITY : 1}
-                    strokeDasharray={stopped ? STOPPED_DASH : undefined}
-                    strokeWidth="2"
-                    strokeLinecap={stopped ? 'butt' : 'round'}
-                  />
-                );
-              })}
-              {s.points.map((p, i) =>
-                // 止まる点には印を描かない（× などの印に「止まる」の意味を持たせない。D-180）
-                p.flags.length > 0 ? null : (
-                  <MarkGlyph
-                    key={i}
-                    shape={s.shape}
-                    x={x(xs[i]!)}
-                    y={y(p.y)}
-                    color={s.color}
-                  />
-                ),
-              )}
-            </g>
-          ))}
+          {
+            // 強調する線を一番上に描く（並びは凡例と同じまま。描く順だけ替える）
+            [...series]
+              .sort(
+                (a, b) =>
+                  Number(a.emphasis === 'strong') -
+                  Number(b.emphasis === 'strong'),
+              )
+              .map((s) => (
+                <g
+                  key={s.id}
+                  data-series={s.id}
+                  data-emphasis={s.emphasis ?? 'normal'}
+                  opacity={s.emphasis === 'muted' ? MUTED_OPACITY : 1}
+                >
+                  {s.points.slice(1).map((p, i) => {
+                    const a = s.points[i]!;
+                    // 片端でも止まる点に触れる区間は薄い破線（上限に達した後の月額では実際には運用できない。D-180）。
+                    // 止まらない区間（無料枠の範囲など）は通常どおり描く
+                    const stopped = a.flags.length > 0 || p.flags.length > 0;
+                    return (
+                      <line
+                        key={i}
+                        data-segment={stopped ? 'stopped' : 'normal'}
+                        x1={x(xs[i]!)}
+                        y1={y(a.y)}
+                        x2={x(xs[i + 1]!)}
+                        y2={y(p.y)}
+                        stroke={s.color}
+                        strokeOpacity={stopped ? STOPPED_OPACITY : 1}
+                        strokeDasharray={stopped ? STOPPED_DASH : undefined}
+                        strokeWidth={s.emphasis === 'strong' ? 3.5 : 2}
+                        strokeLinecap={stopped ? 'butt' : 'round'}
+                      />
+                    );
+                  })}
+                  {s.points.map((p, i) =>
+                    // 止まる点には印を描かない（× などの印に「止まる」の意味を持たせない。D-180）
+                    p.flags.length > 0 ? null : (
+                      <MarkGlyph
+                        key={i}
+                        shape={s.shape}
+                        x={x(xs[i]!)}
+                        y={y(p.y)}
+                        color={s.color}
+                      />
+                    ),
+                  )}
+                </g>
+              ))
+          }
           {labelsFit &&
             ends.map((e) => (
               <text
@@ -1106,7 +1128,8 @@ export function CurveChart({
                 x={pad.left + w + 10}
                 y={e.y}
                 dy="0.32em"
-                className="fill-[var(--text-secondary)] text-[11px]"
+                className={`text-[11px] ${e.s.emphasis === 'strong' ? 'fill-[var(--text-primary)] font-semibold' : 'fill-[var(--text-secondary)]'}`}
+                opacity={e.s.emphasis === 'muted' ? 0.4 : 1}
               >
                 {e.s.label.length > 22
                   ? `${e.s.label.slice(0, 21)}…`

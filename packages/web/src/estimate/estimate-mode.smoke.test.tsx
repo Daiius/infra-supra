@@ -1129,4 +1129,37 @@ describe('見積モードの画面', () => {
       ),
     ).toEqual(['B', 'D']);
   });
+
+  it('W-66 費用の曲線は条件の直下・① の構成のカードの上にあり、今の構成の線を強調する（D-182）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const conditions = card('条件');
+    const curve = card('費用の曲線（月の PV を振る）');
+    const setup = document.querySelector('section[data-setup-card]')!;
+    const total = card(/^月の費用: /);
+    const before = (a: Node, b: Node) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    // 条件 → 曲線 → ①② → 月の費用（DOM の順。狭い画面でも同じ並び）
+    expect(before(conditions, curve)).toBe(true);
+    expect(before(curve, setup)).toBe(true);
+    expect(before(setup, total)).toBe(true);
+    expect(setup.contains(stackCard())).toBe(true);
+    // 曲線の説明・軸の切り替えも一緒
+    expect(curve.querySelector('[data-curve-scale="log"]')).not.toBeNull();
+    // 今の構成の線は強調（太い線）、凡例も太字
+    const current = curve.querySelector('[data-series="vercel-supabase-pro"]')!;
+    expect(current.getAttribute('data-emphasis')).toBe('strong');
+    expect(
+      current.querySelector('[data-segment]')!.getAttribute('stroke-width'),
+    ).toBe('3.5');
+    expect(
+      curve.querySelector('[data-curve-legend="vercel-supabase-pro"]')!
+        .className,
+    ).toContain('font-semibold');
+  });
 });
