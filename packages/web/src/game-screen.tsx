@@ -1015,10 +1015,20 @@ function MonthCard({
                 評判（前月との平均）{s.reputation.toFixed(2)}
               </span>
             </h3>
-            <ul className="space-y-1 text-sm">
+            {/* 狭い画面は要素を横に並べて折り返す（D-189）。sm 以上は 1 要素 1 行のまま */}
+            <ul
+              className="flex flex-wrap gap-x-4 gap-y-1 text-sm sm:block sm:space-y-1"
+              data-satisfaction-elements
+            >
               {ELEMENTS.map((e) => (
-                <li key={e} className="flex flex-wrap items-center gap-2">
-                  <span className="w-14">{ELEMENT_LABEL[e]}</span>
+                <li
+                  key={e}
+                  className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 sm:gap-2"
+                  data-satisfaction-element={e}
+                >
+                  <span className="whitespace-nowrap sm:w-14">
+                    {ELEMENT_LABEL[e]}
+                  </span>
                   <span className={`badge badge-sm ${STAGE_CLS[s.stages[e]]}`}>
                     {STAGE_LABEL[s.stages[e]]}
                   </span>

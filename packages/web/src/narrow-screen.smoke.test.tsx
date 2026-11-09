@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// 狭い画面（sm 未満）の推移のグラフ（D-186）の描画テスト。見た目は確かめず、高さ・目盛りの数・推移のタイルの行の形を見る。
+// 狭い画面（sm 未満）の描画テスト。見た目は確かめず、推移のグラフ（D-186）の高さ・目盛りの数・推移のタイルの行の形と、
+// 満足度の要素（D-189）の並べ方のクラスを見る。
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LineChart } from './charts.tsx';
@@ -94,6 +95,30 @@ describe('狭い画面の推移のタイル（D-186）', () => {
       expect(t.className).toContain('sm:block');
       const spark = t.querySelector('svg')!;
       expect(spark.getAttribute('width')).toBe('64');
+    }
+  });
+});
+
+describe('狭い画面の満足度の要素（D-189）', () => {
+  it('W-189 満足度の 5 要素は折り返して横に並べ（flex-wrap）、sm 以上は 1 要素 1 行', async () => {
+    await renderApp();
+    await startGame({
+      scenario: '記事コミュニティ',
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    const list = document.querySelector<HTMLElement>(
+      '[data-satisfaction-elements]',
+    )!;
+    expect(list.tagName).toBe('UL');
+    for (const c of ['flex', 'flex-wrap', 'sm:block'])
+      expect(list.className.split(' ')).toContain(c);
+    const items = list.querySelectorAll('[data-satisfaction-element]');
+    expect(items).toHaveLength(5);
+    // 各要素は名前と段階の印を 1 つの項目にまとめる
+    for (const li of items) {
+      expect(li.parentElement).toBe(list);
+      expect(li.querySelector('.badge')).not.toBeNull();
     }
   });
 });
