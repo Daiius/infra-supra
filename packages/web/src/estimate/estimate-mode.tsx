@@ -53,11 +53,9 @@ import {
   type ComparisonRow,
   diagramOf,
   routeStatusOf,
-  CURVE_MAX,
   CURVE_PVS,
   curveColorSlot,
-  defaultCurveStacks,
-  pickedCurveStacks,
+  curveStacks,
   fromQuery,
   IMAGE_FORMATS,
   imageFormatLock,
@@ -1200,8 +1198,8 @@ function CostCurve({
   /** 構成ごとに覚えている部品（比較の表と同じ部品で数える。D-116 の補足）。 */
   memory: PartsByStack;
 }) {
-  // null は既定（今の構成 + 今の PV で安い順の数構成）。一度足し引きしたら、その選び方を保つ
-  const [picked, setPicked] = useState<string[] | null>(null);
+  // 凡例で選んだ構成（その線を強調し、ほかを薄くする。もう一度押すと戻す。D-183）
+  const [focus, setFocus] = useState<string | null>(null);
   const [scale, setScaleState] = useState<CurveScale>(readCurveScale);
   const setScale = (v: CurveScale) => {
     setScaleState(v);
@@ -1211,28 +1209,25 @@ function CostCurve({
       // 覚えられなくても表示は替える
     }
   };
-  const stacks =
-    picked === null
-      ? defaultCurveStacks(rows)
-      : pickedCurveStacks(picked, rows);
-  const curves = costCurves(input, stacks, CURVE_PVS, memory);
+  // 載せられる全構成を線にする（D-183。隠した構成は比較の表と同じく入らない）
+  const curves = costCurves(input, curveStacks(rows), CURVE_PVS, memory);
+  const focused = curves.some((c) => c.stack === focus) ? focus : null;
   const series: CurveChartSeries[] = curves.map((c) => ({
     id: c.stack,
     label: c.current ? `${c.name}（今の構成）` : c.name,
     color: `var(--series-${curveColorSlot(c.provider) + 1})`,
     shape: SHAPES[c.variant] ?? 'circle',
     points: c.points.map((p) => ({ y: p.totalUsd, flags: p.blocking })),
-    // 今の構成は太い線で一番上に描き、① のカードとつなぐ（D-182）
-    emphasis: c.current ? ('strong' as const) : ('normal' as const),
+    // 今の構成は太い線で一番上に描き、① のカードとつなぐ（D-182）。凡例で選んだ構成があればそれを強調する（D-183）
+    emphasis:
+      focused === null
+        ? c.current
+          ? ('strong' as const)
+          : ('normal' as const)
+        : focused === c.stack
+          ? ('strong' as const)
+          : ('muted' as const),
   }));
-  // 選んだ順を保つ（上限を超えるときは先に選んだものから残す。pickedCurveStacks）
-  const toggle = (id: string) =>
-    setPicked(
-      stacks.includes(id)
-        ? stacks.filter((s) => s !== id)
-        : [...(picked ?? stacks).filter((s) => stacks.includes(s)), id],
-    );
-  const full = stacks.length >= CURVE_MAX;
   const anyStop = curves.some((c) => c.points.some((p) => p.blocking.length));
   const unpriced = curves.some((c) =>
     c.points.some((p) => p.unpricedLines > 0),
@@ -1241,7 +1236,7 @@ function CostCurve({
     <Card title="費用の曲線（月の PV を振る）">
       <p className="text-xs opacity-70">
         今のテンプレート・フレームワーク・設定のまま、月の PV
-        だけを変えたときの月額（USD）です。部品は今の構成だけ今の選択、他は既定です。
+        だけを変えたときの月額（USD）です。載せられる全構成を線にし、部品は今の構成だけ今の選択、他は既定です。凡例を押すとその線を強調します。
         {anyStop &&
           '上限（無料プランの上限など）に達して止まる規模は、線を薄い破線にしています（その月額では運用できません）。止まるまでの範囲は通常の線です。'}
         {unpriced && '料金未取得の明細がある点は合計が下限です。'}
@@ -1269,31 +1264,51 @@ function CostCurve({
           {CURVE_SCALES.find((o) => o.value === scale)!.note}
         </span>
       </div>
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] viz-root">
+      <ul
+        className="viz-root flex flex-wrap gap-1 text-xs text-[var(--text-secondary)]"
+        aria-label="構成の凡例（押すとその線を強調します）"
+      >
         {series.map((s, i) => {
-          const stop = stopsFrom(curves[i]!.points);
+          const c = curves[i]!;
+          const stop = stopsFrom(c.points);
+          const on = focused === s.id;
           return (
-            <li
-              key={s.id}
-              className={`flex min-w-0 items-center gap-1 ${s.emphasis === 'strong' ? 'font-semibold text-[var(--text-primary)]' : ''}`}
-              data-curve-legend={s.id}
-            >
-              <SeriesSwatch color={s.color} shape={s.shape} />
-              <span className="break-words">
-                {s.label}
-                {stop !== null && (
-                  <span className="text-error" data-stops-from>
-                    {stop === 0
-                      ? ' — どの規模でも止まります（上限）'
-                      : ` — ${pvLabel(CURVE_PVS[stop]!)} PV から止まります（上限）`}
-                  </span>
-                )}
-              </span>
+            <li key={s.id} className="min-w-0" data-curve-legend={s.id}>
+              <button
+                type="button"
+                className={`flex min-w-0 items-center gap-1 rounded-box border px-1.5 py-0.5 text-left ${
+                  on
+                    ? 'border-primary bg-primary/10'
+                    : c.current
+                      ? 'border-[var(--text-secondary)]'
+                      : 'border-base-300'
+                } ${s.emphasis === 'strong' ? 'font-semibold text-[var(--text-primary)]' : ''} ${
+                  s.emphasis === 'muted' ? 'opacity-60' : ''
+                }`}
+                aria-pressed={on}
+                onClick={() => setFocus(on ? null : s.id)}
+              >
+                <SeriesSwatch color={s.color} shape={s.shape} />
+                <span className="min-w-0 break-words">
+                  {c.name}
+                  {c.current && <span className="opacity-80">（今）</span>}
+                  {stop !== null && (
+                    <span className="text-error" data-stops-from>
+                      {stop === 0
+                        ? '・どの規模でも止まります（上限）'
+                        : `・${pvLabel(CURVE_PVS[stop]!)} PV から止まります（上限）`}
+                    </span>
+                  )}
+                </span>
+              </button>
             </li>
           );
         })}
         {anyStop && (
-          <li className="flex min-w-0 items-center gap-1" data-stopped-key>
+          <li
+            className="flex min-w-0 items-center gap-1 px-1.5 py-0.5"
+            data-stopped-key
+          >
             <SeriesSwatch
               color="var(--text-secondary)"
               shape="circle"
@@ -1313,45 +1328,6 @@ function CostCurve({
         marker={{ x: input.pv, label: '今の PV' }}
         label="月の PV ごとの月額（構成ごと）"
       />
-      <details>
-        <summary className="cursor-pointer text-sm">
-          比べる構成を足す・外す（{stacks.length} / 最大 {CURVE_MAX}）
-        </summary>
-        <div className="mt-2 grid gap-1 sm:grid-cols-2">
-          {rows.map((r) => {
-            const on = stacks.includes(r.stack);
-            return (
-              <label
-                key={r.stack}
-                className="flex min-w-0 cursor-pointer items-center gap-2 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm"
-                  checked={on}
-                  disabled={r.current || (!on && full)}
-                  onChange={() => toggle(r.stack)}
-                />
-                <span className="min-w-0 break-words">
-                  {r.name}
-                  {r.current && (
-                    <span className="opacity-70">（今の構成）</span>
-                  )}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        {picked !== null && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs mt-2"
-            onClick={() => setPicked(null)}
-          >
-            既定に戻す（今の PV で安い順）
-          </button>
-        )}
-      </details>
       <details>
         <summary className="cursor-pointer text-sm">表で見る</summary>
         <div className="overflow-x-auto">

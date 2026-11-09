@@ -1158,8 +1158,49 @@ describe('見積モードの画面', () => {
       current.querySelector('[data-segment]')!.getAttribute('stroke-width'),
     ).toBe('3.5');
     expect(
-      curve.querySelector('[data-curve-legend="vercel-supabase-pro"]')!
+      curve.querySelector('[data-curve-legend="vercel-supabase-pro"] button')!
         .className,
     ).toContain('font-semibold');
+  });
+
+  it('W-67 費用の曲線は載せられる全構成を線にし、凡例を押すとその線を強調する。足し引きの UI は無い（D-183）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const curve = card('費用の曲線（月の PV を振る）');
+    const compareRows = within(card('構成を比べる'))
+      .getAllByRole('row')
+      .slice(1);
+    const lines = curve.querySelectorAll('svg [data-series]');
+    expect(lines.length).toBe(compareRows.length);
+    expect(lines.length).toBeGreaterThanOrEqual(8);
+    expect(curve.textContent).not.toContain('比べる構成を足す・外す');
+    expect(curve.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+    const search = window.location.search;
+    // 凡例を押すとその線を強調し、ほかを薄くする
+    const pick = () =>
+      curve.querySelector<HTMLButtonElement>(
+        '[data-curve-legend="sakura-vps-2gb"] button',
+      )!;
+    fireEvent.click(pick());
+    expect(pick().getAttribute('aria-pressed')).toBe('true');
+    const emphasis = (id: string) =>
+      curve
+        .querySelector(`svg [data-series="${id}"]`)!
+        .getAttribute('data-emphasis');
+    expect(emphasis('sakura-vps-2gb')).toBe('strong');
+    expect(emphasis('vercel-supabase-pro')).toBe('muted');
+    expect(emphasis('cloudflare-vinext-paid')).toBe('muted');
+    // もう一度押すと戻り、今の構成の強調に戻る
+    fireEvent.click(pick());
+    expect(pick().getAttribute('aria-pressed')).toBe('false');
+    expect(emphasis('vercel-supabase-pro')).toBe('strong');
+    expect(emphasis('sakura-vps-2gb')).toBe('normal');
+    // 見方なので URL には残さない
+    expect(window.location.search).toBe(search);
   });
 });

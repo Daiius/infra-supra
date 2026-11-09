@@ -1,15 +1,15 @@
 // 見積モードの計算と入力の扱い（D-73）。
 import { describe, expect, it } from 'vitest';
 import { composeStack } from 'catalog';
+import { STACKS } from 'game';
 import {
   withSeats,
   compareStacks,
   costCurves,
   CURVE_PVS,
   curveColorSlot,
-  defaultCurveStacks,
   diagramOf,
-  pickedCurveStacks,
+  curveStacks,
   fromQuery,
   japanTax,
   normalizeInput,
@@ -648,46 +648,23 @@ describe('費用の曲線（D-74）', () => {
     expect(costCurves(i, ['aws-amplify'])).toEqual([]);
   });
 
-  it('既定は今の構成 + 今の PV で安い順に 4 構成で、STACKS の順に並ぶ', () => {
+  it('曲線は載せられる全構成を STACKS の順に出す（隠した構成は入らない。D-183）', () => {
     const i = normalizeInput({ stack: 'vercel-supabase-pro' });
     const rows = compareStacks(i);
-    const ids = defaultCurveStacks(rows);
-    expect(ids).toHaveLength(5);
+    const ids = curveStacks(rows);
+    expect(ids).toHaveLength(rows.length);
+    expect(ids.length).toBeGreaterThanOrEqual(8);
     expect(ids).toContain('vercel-supabase-pro');
-    const priciestPicked = Math.max(
-      ...ids
-        .filter((id) => id !== i.stack)
-        .map((id) => rows.find((r) => r.stack === id)!.totalUsd),
-    );
-    for (const r of rows)
-      if (!ids.includes(r.stack))
-        expect(r.totalUsd).toBeGreaterThanOrEqual(priciestPicked);
-    const order = rows.map((r) => r.stack);
+    expect(ids).not.toContain('netlify-supabase-pro');
+    expect(ids).not.toContain('aws-opennext');
+    const order = STACKS.map((s) => s.id);
     expect(ids).toEqual(
       [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b)),
     );
-  });
-
-  it('6 構成を選んだ後に未選択の構成へ切り替えても、今の構成を入れて 6 構成に抑える（OCL-E5E5FCBD）', () => {
-    const before = compareStacks(
-      normalizeInput({ stack: 'cloudflare-vinext-free' }),
-    );
-    const picked = before.slice(0, 6).map((r) => r.stack);
-    expect(picked).toContain('cloudflare-vinext-free');
-    const outside = before.find((r) => !picked.includes(r.stack))!.stack;
-    const rows = compareStacks(normalizeInput({ stack: outside }));
-    const ids = pickedCurveStacks(picked, rows);
-    expect(ids).toHaveLength(6);
-    expect(ids).toContain(outside);
-    // 先に選んだものから残す
-    expect(ids).toEqual(
-      expect.arrayContaining(picked.filter((id) => id !== outside).slice(0, 5)),
-    );
-    // 載せられない構成は外す
-    const astro = compareStacks(normalizeInput({ framework: 'astro' }));
+    // Astro は AWS に載せられないので出さない
     expect(
-      pickedCurveStacks(['aws-amplify'], astro).includes('aws-amplify'),
-    ).toBe(false);
+      curveStacks(compareStacks(normalizeInput({ framework: 'astro' }))),
+    ).not.toContain('aws-amplify');
   });
 
   it('色は会社に固定（AWS の 2 つの構成は同じ色で、7 事業者が 6 色の枠に収まる。D-88）', () => {

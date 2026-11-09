@@ -1185,11 +1185,6 @@ export const CURVE_PVS = [
   30_000_000,
 ] as const;
 
-/** 既定で曲線に出す構成の数（今の構成を除く、月額の安い順）。 */
-export const CURVE_DEFAULT_COUNT = 4;
-/** 曲線に同時に出せる構成の数の上限（色と形の組で見分けられる数に抑える）。 */
-export const CURVE_MAX = 6;
-
 export type CurvePoint = {
   pv: number;
   totalUsd: number;
@@ -1257,39 +1252,11 @@ export function costCurves(
 }
 
 /**
- * 曲線に既定で出す構成: 今の構成と、今の PV の月額の安い順に CURVE_DEFAULT_COUNT 構成（今の構成を除く）。
- * 並びは STACKS の順（表示の順位で色や並びが入れ替わらないように）。
+ * 曲線に出す構成: 載せられる全構成（比較の表の行。隠した構成は入らない。D-183）。並びは STACKS の順
+ * （表示の順位で色や並びが入れ替わらないように）。
  */
-export function defaultCurveStacks(
-  rows: readonly ComparisonRow[],
-  count = CURVE_DEFAULT_COUNT,
-): string[] {
-  const cheap = sortRows(
-    rows.filter((r) => !r.current),
-    'cost',
-  )
-    .slice(0, count)
-    .map((r) => r.stack);
-  const current = rows.filter((r) => r.current).map((r) => r.stack);
-  return inStackOrder([...current, ...cheap]);
-}
-
-/**
- * 足し引きした後の曲線の構成: 今の構成を必ず入れ、載せられない構成（フレームワークを替えたとき）は外し、
- * 合わせて CURVE_MAX までに抑える（OCL-E5E5FCBD。選んだ後に未選択の構成へ切り替えても超えない）。
- * 溢れたときは選んだ順の先頭から残す。並びは STACKS の順。
- */
-export function pickedCurveStacks(
-  picked: readonly string[],
-  rows: readonly ComparisonRow[],
-  max = CURVE_MAX,
-): string[] {
-  const current = rows.filter((r) => r.current).map((r) => r.stack);
-  const others = [...new Set(picked)]
-    .filter((id) => !current.includes(id))
-    .filter((id) => rows.some((r) => r.stack === id))
-    .slice(0, Math.max(0, max - current.length));
-  return inStackOrder([...current, ...others]);
+export function curveStacks(rows: readonly ComparisonRow[]): string[] {
+  return inStackOrder(rows.map((r) => r.stack));
 }
 
 /**
