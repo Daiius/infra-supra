@@ -175,6 +175,19 @@ export {
   newGame,
 } from './setup/new-game.ts';
 export {
+  type DraftRoutes,
+  type SetupDraft,
+  type SetupChange,
+  type SetupChangeGroups,
+  type SetupChangeItem,
+  currentSetupDraft,
+  draftComponentsFor,
+  flattenSetupChange,
+  sameAsCurrent,
+  setupChangeOf,
+  setupChangeSummary,
+} from './setup/change.ts';
+export {
   upkeepOf,
   rewriteEffort,
   effortAvailable,
