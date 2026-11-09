@@ -79,7 +79,7 @@ import {
   type Stage,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
-import { compact, LineChart, Sparkline } from './charts.tsx';
+import { compact, LineChart, Sparkline, useNarrowScreen } from './charts.tsx';
 import { ResultAxesPanel } from './result-axes.tsx';
 import { ResultStatsSection } from './stats-breakdown.tsx';
 import type { StatsQuery } from './stats-client.ts';
@@ -101,7 +101,13 @@ import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
-import { creditUseText, isCreditUse } from './premise-view.ts';
+import {
+  creditUseText,
+  hitLabel,
+  hitTone,
+  isCreditUse,
+  isStopping,
+} from './premise-view.ts';
 import { Swatch } from './route-plan-table.tsx';
 import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
 import {
@@ -871,7 +877,11 @@ function EventsDialog({
                 NEW
               </span>
             )}
-            <EventCard key={`${e.id}:${e.phase}`} event={e} />
+            <EventCard
+              key={`${e.id}:${e.phase}`}
+              event={e}
+              premises={r.premises}
+            />
             {e.phase === 'proposal' && (
               <div className="mt-2 text-sm opacity-80">
                 行動の欄で受けるか断るかを選びます（選ばなければ断ります）
@@ -984,7 +994,11 @@ function MonthCard({
               </div>
             )
           : r.events.map((e) => (
-              <EventCard key={`${e.id}:${e.phase}`} event={e} />
+              <EventCard
+                key={`${e.id}:${e.phase}`}
+                event={e}
+                premises={r.premises}
+              />
             ))}
         {r.notes.map((n) => (
           <div
@@ -1002,10 +1016,20 @@ function MonthCard({
                 評判（前月との平均）{s.reputation.toFixed(2)}
               </span>
             </h3>
-            <ul className="space-y-1 text-sm">
+            {/* 狭い画面は要素を横に並べて折り返す（D-189）。sm 以上は 1 要素 1 行のまま */}
+            <ul
+              className="flex flex-wrap gap-x-4 gap-y-1 text-sm sm:block sm:space-y-1"
+              data-satisfaction-elements
+            >
               {ELEMENTS.map((e) => (
-                <li key={e} className="flex flex-wrap items-center gap-2">
-                  <span className="w-14">{ELEMENT_LABEL[e]}</span>
+                <li
+                  key={e}
+                  className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 sm:gap-2"
+                  data-satisfaction-element={e}
+                >
+                  <span className="whitespace-nowrap sm:w-14">
+                    {ELEMENT_LABEL[e]}
+                  </span>
                   <span className={`badge badge-sm ${STAGE_CLS[s.stages[e]]}`}>
                     {STAGE_LABEL[s.stages[e]]}
                   </span>
@@ -1285,9 +1309,21 @@ const TIER_LABEL: Record<MonthEvent['tier'], string> = {
   rare: 'まれ',
 };
 
+/** 当たった前提の印の色のクラス（D-188。daisyUI のクラスは文字列のまま書く）。 */
+const HIT_BADGE = { error: 'badge-error', warning: 'badge-warning' } as const;
+
 /** 出来事の通知（prd/07 §10.2）。当たりうる前提は catalog の文のまま出す（D-12）。 */
-function EventCard({ event: e }: { event: MonthEvent }) {
+export function EventCard({
+  event: e,
+  premises,
+}: {
+  event: MonthEvent;
+  /** 同じ月の前提。出来事の前提の効き方（止まる・課金など）を引き、印の色を分ける（D-188）。 */
+  premises: readonly PlatformPremise[];
+}) {
   const badge = eventBadge(e);
+  // 効き方が引けない前提は、今までどおり止まる側（赤）に倒す
+  const effectOf = (id: string) => premises.find((p) => p.id === id)?.effect;
   return (
     <div
       className={`rounded-box border p-3 ${e.tier === 'rare' ? 'border-error' : 'border-base-300'}`}
@@ -1361,24 +1397,34 @@ function EventCard({ event: e }: { event: MonthEvent }) {
       )}
       {e.premises.length > 0 && (
         <ul className="mt-1 space-y-0.5 text-xs">
-          {e.premises.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-center gap-1">
-              <span
-                className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
+          {e.premises.map((p) => {
+            const effect = effectOf(p.id);
+            const tone = effect ? hitTone(effect) : 'error';
+            return (
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center gap-1"
+                data-event-premise={effect ?? ''}
               >
-                {p.hit ? '✗ 上限に達した' : '○ 達する可能性のある上限'}
-              </span>
-              {p.text}
-              {p.ratio !== undefined && (
-                <span className="tabular-nums opacity-70">
-                  （今 {(p.ratio * 100).toFixed(0)}%）
+                <span
+                  className={`badge badge-xs ${p.hit ? HIT_BADGE[tone] : 'badge-ghost'}`}
+                >
+                  {p.hit
+                    ? `${tone === 'error' ? '✗' : '●'} ${effect ? hitLabel(effect) : '上限に達した'}`
+                    : '○ 達する可能性のある上限'}
                 </span>
-              )}
-              {p.detail && (
-                <span className="basis-full opacity-80">{p.detail}</span>
-              )}
-            </li>
-          ))}
+                {p.text}
+                {p.ratio !== undefined && (
+                  <span className="tabular-nums opacity-70">
+                    （今 {(p.ratio * 100).toFixed(0)}%）
+                  </span>
+                )}
+                {p.detail && (
+                  <span className="basis-full opacity-80">{p.detail}</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -1416,7 +1462,8 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
       </li>
     );
   }
-  const blocked = p.hit && p.effect !== 'cost';
+  // 止まる・プランの変更が要るは赤、遅くなる・課金・調整は黄（D-188）
+  const blocked = isStopping(p);
   // 込みのクレジットの消費は異常ではない（超えた分は従量で請求）。超過の印にせず消費として見せる
   const credit = isCreditUse(p);
   const badge =
@@ -1436,21 +1483,16 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
       ? p.hit
         ? '違反'
         : '事実'
-      : blocked
-        ? '上限に達した'
-        : credit
-          ? '付属クレジットの消費'
-          : p.hit
-            ? '超過（課金）'
-            : 'あと少し';
+      : credit
+        ? '付属クレジットの消費'
+        : p.hit
+          ? hitLabel(p.effect)
+          : 'あと少し';
   const ratio = p.ratio === undefined ? null : Math.min(p.ratio, 1);
   return (
     <li className="flex flex-wrap items-center gap-2">
+      {/* バッジ・使用率のグラフ・説明の順（バッジとグラフは横幅を取らないので同じ高さに並べる。2026-11-10・ユーザーの要望） */}
       <span className={`badge badge-sm ${badge}`}>{label}</span>
-      <span>{credit ? creditUseText(p, usd) : p.text}</span>
-      {p.detail && (
-        <span className="basis-full text-xs opacity-80">{p.detail}</span>
-      )}
       {ratio !== null && (
         <span className="flex items-center gap-1 text-xs opacity-70">
           {credit ? (
@@ -1468,6 +1510,10 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
           )}
           {(p.ratio! * 100).toFixed(0)}%
         </span>
+      )}
+      <span>{credit ? creditUseText(p, usd) : p.text}</span>
+      {p.detail && (
+        <span className="basis-full text-xs opacity-80">{p.detail}</span>
       )}
       {/* 判定に置いた仮定（話題・Bot の日の集中など。D-60）は ⓘ に畳む */}
       {p.assumption && (
@@ -3019,76 +3065,88 @@ function History({
 }) {
   return (
     <div className="card bg-base-100 shadow">
-      <div className="card-body overflow-x-auto">
-        <h2 className="card-title">これまでの運営</h2>
-        <table className="table table-sm">
-          <thead>
-            <tr>
-              <th>月</th>
-              <th>構成</th>
-              <th className="text-right">PV</th>
-              <th className="text-right">収益</th>
-              <th className="text-right">費用</th>
-              <th className="text-right">所持金</th>
-              <th className="text-right">満足度</th>
-              <th className="text-right">機能開発</th>
-              <th>状態</th>
-              <th>出来事</th>
-              <th>行動</th>
-              <th>
-                <span className="sr-only">戻る</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.map((r) => (
-              <tr key={r.month}>
-                <td>{r.month}</td>
-                <td>{r.stackName}</td>
-                <td className="text-right">
-                  {Math.round(r.pv).toLocaleString()}
-                </td>
-                <td className="text-right">{usd(r.revenue)}</td>
-                <td className="text-right">{usd(r.infraCost)}</td>
-                <td className="text-right">{usd(r.cash)}</td>
-                <td className="text-right">
-                  {r.satisfaction.score.toFixed(2)}
-                </td>
-                <td className="text-right">{r.effort.feature}</td>
-                <td>
-                  <span className={`badge badge-sm ${STATUS[r.status].cls}`}>
-                    {STATUS[r.status].label}
-                  </span>
-                  {r.policyWarning && (
-                    <span className="badge badge-sm badge-error ml-1">
-                      規約違反の指摘
-                    </span>
-                  )}
-                </td>
-                <td className="text-xs">
-                  {r.events
-                    .map(
-                      (e) =>
-                        `${eventBadge(e).label}${e.botBlocked ? `（${BLOCKED_LABEL}）` : ''}: ${e.title}`,
-                    )
-                    .join('・')}
-                </td>
-                <td className="text-xs">{r.action ?? ''}</td>
-                <td>
-                  {r.month <= rewindable && (
-                    <button
-                      className="btn btn-ghost btn-xs whitespace-nowrap"
-                      aria-label={`${r.month} か月目に戻る`}
-                      onClick={() => onRewind(r.month)}
-                    >
-                      この月に戻る
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="card-body">
+        {/* 月ごとの行が積み重なって長くなるので、既定で畳む（D-187）。見出しに月数を出す */}
+        <details className="collapse collapse-arrow" data-history>
+          <summary className="collapse-title flex flex-wrap items-baseline gap-x-2 px-0 pe-10">
+            <h2 className="card-title">これまでの運営</h2>
+            <span className="text-sm opacity-70" data-history-months>
+              （{history.length} か月）
+            </span>
+          </summary>
+          <div className="collapse-content overflow-x-auto px-0">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>月</th>
+                  <th>構成</th>
+                  <th className="text-right">PV</th>
+                  <th className="text-right">収益</th>
+                  <th className="text-right">費用</th>
+                  <th className="text-right">所持金</th>
+                  <th className="text-right">満足度</th>
+                  <th className="text-right">機能開発</th>
+                  <th>状態</th>
+                  <th>出来事</th>
+                  <th>行動</th>
+                  <th>
+                    <span className="sr-only">戻る</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((r) => (
+                  <tr key={r.month}>
+                    <td>{r.month}</td>
+                    <td>{r.stackName}</td>
+                    <td className="text-right">
+                      {Math.round(r.pv).toLocaleString()}
+                    </td>
+                    <td className="text-right">{usd(r.revenue)}</td>
+                    <td className="text-right">{usd(r.infraCost)}</td>
+                    <td className="text-right">{usd(r.cash)}</td>
+                    <td className="text-right">
+                      {r.satisfaction.score.toFixed(2)}
+                    </td>
+                    <td className="text-right">{r.effort.feature}</td>
+                    <td>
+                      <span
+                        className={`badge badge-sm ${STATUS[r.status].cls}`}
+                      >
+                        {STATUS[r.status].label}
+                      </span>
+                      {r.policyWarning && (
+                        <span className="badge badge-sm badge-error ml-1">
+                          規約違反の指摘
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-xs">
+                      {r.events
+                        .map(
+                          (e) =>
+                            `${eventBadge(e).label}${e.botBlocked ? `（${BLOCKED_LABEL}）` : ''}: ${e.title}`,
+                        )
+                        .join('・')}
+                    </td>
+                    <td className="text-xs">{r.action ?? ''}</td>
+                    <td>
+                      {r.month <= rewindable && (
+                        <button
+                          className="btn btn-ghost btn-xs whitespace-nowrap"
+                          aria-label={`${r.month} か月目に戻る`}
+                          onClick={() => onRewind(r.month)}
+                        >
+                          この月に戻る
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -3110,6 +3168,7 @@ function Trends({
   previous: GameState | null;
   onClearPrevious: () => void;
 }) {
+  const narrow = useNarrowScreen();
   const prevHistory = previous?.history;
   const prevOf = (get: (r: MonthReport) => number) =>
     prevHistory ? { previous: prevHistory.map(get) } : {};
@@ -3178,23 +3237,42 @@ function Trends({
   ];
   return (
     <div className="card bg-base-100 shadow">
-      <div className="card-body gap-4">
+      <div className="card-body gap-3 sm:gap-4">
         <h2 className="card-title">これまでの推移</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {/* 狭い画面は 1 行に名前・値・前月比・小さな推移を並べた細い行を積む（D-186） */}
+        <div
+          className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-3 md:grid-cols-5"
+          data-trend-tiles
+        >
           {tiles.map((t) => (
-            <div key={t.label} className="rounded-box bg-base-200 p-3">
-              <div className="text-xs opacity-70">{t.label}</div>
-              <div className="text-xl font-semibold tabular-nums">
+            <div
+              key={t.label}
+              className="flex items-center gap-2 rounded-box bg-base-200 px-3 py-1.5 sm:block sm:p-3"
+              data-trend-tile
+            >
+              <div className="w-20 shrink-0 text-xs opacity-70 sm:w-auto">
+                {t.label}
+              </div>
+              <div className="min-w-0 flex-1 text-base font-semibold tabular-nums sm:text-xl">
                 {/* 月が進むと前の月の値から数え上げる（D-25） */}
                 <CountUp value={t.value} format={t.format} />
               </div>
-              <div className="flex flex-wrap items-end justify-between">
-                <span className="text-xs opacity-70">
-                  {t.delta === null || !Number.isFinite(t.delta)
-                    ? ''
-                    : `前月比 ${pct(t.delta)}`}
+              <div className="flex shrink-0 items-center gap-2 sm:flex-wrap sm:items-end sm:justify-between sm:gap-0">
+                <span className="text-xs whitespace-nowrap opacity-70">
+                  {t.delta === null || !Number.isFinite(t.delta) ? (
+                    ''
+                  ) : (
+                    <>
+                      <span className="max-sm:hidden">前月比 </span>
+                      {pct(t.delta)}
+                    </>
+                  )}
                 </span>
-                <Sparkline values={t.series} months={scenario.months} />
+                <Sparkline
+                  values={t.series}
+                  months={scenario.months}
+                  {...(narrow ? { width: 64, height: 20 } : {})}
+                />
               </div>
             </div>
           ))}
@@ -3250,7 +3328,7 @@ function Trends({
             </button>
           </div>
         )}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
           <LineChart
             title="所持金"
             months={scenario.months}
@@ -3340,7 +3418,7 @@ function Trends({
             <h3 className="mb-2 text-sm font-semibold">
               上限の使用率（境目 = 100%）
             </h3>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-2 sm:gap-3 md:grid-cols-2">
               {trends.map((t) => (
                 <TrendCard key={t.id} t={t} months={scenario.months} />
               ))}
@@ -3359,11 +3437,12 @@ function TrendCard({
   t: ReturnType<typeof premiseTrends>[number];
   months: number;
 }) {
-  const blocked = t.hitNow && t.effect !== 'cost';
+  // 効き方で色を分ける（D-188。月の報告の上限の一覧・出来事と同じ）
+  const blocked = t.hitNow && hitTone(t.effect) === 'error';
   const status = blocked
-    ? { cls: 'badge-error', label: '✗ 上限に達した' }
+    ? { cls: HIT_BADGE.error, label: `✗ ${hitLabel(t.effect)}` }
     : t.hitNow
-      ? { cls: 'badge-warning', label: '● 超過（課金）' }
+      ? { cls: HIT_BADGE.warning, label: `● ${hitLabel(t.effect)}` }
       : t.monthsUntil !== null
         ? {
             cls: 'badge-warning',
@@ -3377,7 +3456,7 @@ function TrendCard({
     ...t.projection.map((p) => p.ratio),
   );
   return (
-    <div className="rounded-box border border-base-300 p-3">
+    <div className="rounded-box border border-base-300 p-2 sm:p-3">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <span className={`badge badge-sm ${status.cls}`}>{status.label}</span>
         <span className="text-sm font-semibold tabular-nums">

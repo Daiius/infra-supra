@@ -256,3 +256,27 @@ describe('この月に戻る（D-128）', () => {
     expect(screen.getByText(/前の試行（\d+ か月目で終了）/)).toBeDefined();
   });
 });
+
+describe('これまでの運営の表は既定で畳む（D-187）', () => {
+  it('W-187 表は畳んだ状態で始まり、見出しに月数が出る。開くと月ごとの行と「この月に戻る」が出る', async () => {
+    await renderApp();
+    await start();
+    advance(2);
+    expectGameScreen(3);
+    const details = historyCard().querySelector<HTMLDetailsElement>(
+      'details[data-history]',
+    )!;
+    expect(details.open).toBe(false);
+    const summary = details.querySelector('summary')!;
+    expect(summary.textContent).toContain('これまでの運営');
+    expect(summary.textContent).toContain('（3 か月）');
+    // 表は畳んだ中身（summary の外）にある
+    expect(summary.querySelector('table')).toBeNull();
+    fireEvent.click(summary);
+    expect(details.open).toBe(true);
+    expect(historyRows()).toHaveLength(3);
+    expect(
+      within(details).getByRole('button', { name: '1 か月目に戻る' }),
+    ).toBeDefined();
+  });
+});

@@ -2,6 +2,7 @@
 // 2 系列以上は凡例 + 線の端の直接ラベル・縦線とツールチップのホバー（値は表でも読める。ホバーだけに閉じ込めない）。
 // 色は CSS 変数（styles.css の .viz-root）で役割として参照する。テキストに系列の色は使わない。
 import {
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -159,10 +160,39 @@ function useWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
-/** 目盛りをきりのよい値にする（0 から上限まで 3〜5 本）。 */
-function niceTicks(max: number): number[] {
+/** Tailwind の sm（40rem）未満。狭い画面では推移のグラフの縦を縮める（D-186）。 */
+const NARROW_QUERY = '(max-width: 39.99rem)';
+
+/** 狭い画面（sm 未満）か。画面の幅の変更にも追従する。matchMedia が無い環境では広い画面として扱う。 */
+export function useNarrowScreen(): boolean {
+  const supported =
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function';
+  const [narrow, setNarrow] = useState(
+    () => supported && window.matchMedia(NARROW_QUERY).matches,
+  );
+  useEffect(() => {
+    if (!supported) return;
+    const mq = window.matchMedia(NARROW_QUERY);
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [supported]);
+  return narrow;
+}
+
+/** 狭い画面のグラフの高さ（元の 55%。下限 72px。D-186）。 */
+export const narrowHeight = (height: number) =>
+  Math.max(72, Math.round(height * 0.55));
+
+/** 狭い画面で月の目盛りに数字を出す月（1・3 の倍数・最後の月。D-186）。 */
+export const narrowMonthLabel = (m: number, months: number) =>
+  m === 1 || m === months || (m % 3 === 0 && months - m >= 2);
+
+/** 目盛りをきりのよい値にする（0 から上限まで 3〜5 本。divisions を 2 にすると 2〜3 本）。 */
+function niceTicks(max: number, divisions = 4): number[] {
   if (!(max > 0)) return [0, 1];
-  const raw = max / 4;
+  const raw = max / divisions;
   const pow = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * pow).find((s) => s >= raw)!;
   const ticks: number[] = [];
@@ -182,7 +212,7 @@ export const compact = (n: number) =>
 export function LineChart({
   series,
   months,
-  height = 180,
+  height: wideHeight = 180,
   format,
   yMax,
   reference,
@@ -203,11 +233,14 @@ export function LineChart({
   const [ref, width] = useWidth<HTMLDivElement>();
   const uid = useId().replace(/:/g, '');
   const [hover, setHover] = useState<number | null>(null);
+  // 狭い画面は横長の比率にし、縦の余白・目盛りを減らす（D-186）
+  const narrow = useNarrowScreen();
+  const height = narrow ? narrowHeight(wideHeight) : wideHeight;
   const pad = {
-    top: 12,
+    top: narrow ? 8 : 12,
     right: series.length > 1 ? 56 : 16,
-    bottom: 24,
-    left: 48,
+    bottom: narrow ? 18 : 24,
+    left: narrow ? 40 : 48,
   };
   const w = Math.max(0, width - pad.left - pad.right);
   const h = height - pad.top - pad.bottom;
@@ -223,7 +256,10 @@ export function LineChart({
   // 1 枚に前の試行が 1 系列だけなら灰色、2 系列以上なら系列の色を薄くする（どの系列の前の試行か分かるように）
   const previousColor = (s: Series) =>
     withPrevious.length > 1 ? s.color : PREVIOUS_GRAY;
-  const ticks = niceTicks(yMax ?? Math.max(reference?.value ?? 0, ...all, 0));
+  const ticks = niceTicks(
+    yMax ?? Math.max(reference?.value ?? 0, ...all, 0),
+    narrow ? 2 : 4,
+  );
   const top = ticks[ticks.length - 1]!;
   // 1 か月目の左に 0.6 か月分の内側の余白を取る（点が 1 つだけの区間の延長線の余地。月の目盛り・ツールチップは月に揃う）
   const lead = 0.6;
@@ -296,6 +332,7 @@ export function LineChart({
       className="viz-root relative block w-full"
       style={{ overflow: 'visible' }}
       ref={ref}
+      {...(narrow ? { 'data-narrow': '' } : {})}
     >
       {title && (
         <figcaption className="mb-1 text-sm font-semibold">{title}</figcaption>
@@ -410,17 +447,19 @@ export function LineChart({
               </text>
             </g>
           ))}
-          {Array.from({ length: months }, (_, i) => i + 1).map((m) => (
-            <text
-              key={m}
-              x={x(m)}
-              y={height - 6}
-              textAnchor="middle"
-              className="fill-[var(--text-muted)] text-[10px] tabular-nums"
-            >
-              {m}
-            </text>
-          ))}
+          {Array.from({ length: months }, (_, i) => i + 1)
+            .filter((m) => !narrow || narrowMonthLabel(m, months))
+            .map((m) => (
+              <text
+                key={m}
+                x={x(m)}
+                y={height - (narrow ? 4 : 6)}
+                textAnchor="middle"
+                className="fill-[var(--text-muted)] text-[10px] tabular-nums"
+              >
+                {m}
+              </text>
+            ))}
           {reference && (
             <g data-reference={reference.tone ?? 'critical'}>
               <line
@@ -663,12 +702,15 @@ export function LineChart({
 export function Sparkline({
   values,
   months,
+  width = 120,
+  height = 28,
 }: {
   values: number[];
   months: number;
+  /** 狭い画面の細い行では小さくする（D-186）。 */
+  width?: number;
+  height?: number;
 }) {
-  const width = 120;
-  const height = 28;
   const max = Math.max(...values, 0);
   const min = Math.min(...values, 0);
   const span = max - min || 1;

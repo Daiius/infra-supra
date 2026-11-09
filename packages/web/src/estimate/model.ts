@@ -65,6 +65,7 @@ import {
   type RouteStrategyId,
   type Scenario,
 } from 'game';
+import { isStoppingLimit } from '../premise-view.ts';
 import { diagramArchitecture } from '../system-diagram-model.ts';
 import {
   editParts,
@@ -954,9 +955,7 @@ export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
   });
   const base = run(input, r);
   const blockingOf = (res: ReturnType<typeof run>) =>
-    res.premises.filter(
-      (p) => p.hit && (p.effect === 'block' || p.effect === 'upgrade-required'),
-    );
+    res.premises.filter(isStoppingLimit);
   const baseUsd = toUsd(base.bill.totals);
   const baseBlocking = blockingOf(base).length;
   return rows.map((row) => {
@@ -1163,9 +1162,7 @@ export function compareStacks(
         totalUsd: toUsd(res.bill.totals),
         taxInclJpy: japanTax(subtotalsOf(res.bill.lines)).totalJpy,
         unpricedLines: res.bill.unpricedLines,
-        blocking: hit.filter(
-          (p) => p.effect === 'block' || p.effect === 'upgrade-required',
-        ).length,
+        blocking: hit.filter(isStoppingLimit).length,
         hits: hit.length,
         ...(top ? { top: { text: top.text, ratio: top.ratio ?? 0 } } : {}),
         current: s.id === input.stack,
@@ -1210,10 +1207,7 @@ export function stackCardTotals(
     out[s.id] = {
       totalUsd: toUsd(res.bill.totals),
       framework: sel.framework,
-      blocking: res.premises.filter(
-        (p) =>
-          p.hit && (p.effect === 'block' || p.effect === 'upgrade-required'),
-      ).length,
+      blocking: res.premises.filter(isStoppingLimit).length,
     };
   }
   return out;
@@ -1269,13 +1263,7 @@ export function costCurves(
         pv,
         totalUsd: toUsd(res.bill.totals),
         unpricedLines: res.bill.unpricedLines,
-        blocking: res.premises
-          .filter(
-            (p) =>
-              p.hit &&
-              (p.effect === 'block' || p.effect === 'upgrade-required'),
-          )
-          .map((p) => p.text),
+        blocking: res.premises.filter(isStoppingLimit).map((p) => p.text),
       };
     });
     return [
