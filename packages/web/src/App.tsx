@@ -88,6 +88,7 @@ import { BookOpen, Settings } from 'lucide-react';
 import { HowtoDialog } from './howto-dialog.tsx';
 import { SettingsDialog } from './settings-dialog.tsx';
 import { PrivacyPolicyDialog } from './privacy-policy.tsx';
+import { Logo } from './logo.tsx';
 import {
   loadStatsView,
   requestPlayToken,
@@ -355,7 +356,11 @@ export function App() {
   return (
     <div className="min-h-screen bg-base-200">
       <div className="navbar flex-wrap gap-y-1 bg-base-100 shadow-sm">
-        <span className="px-4 text-lg font-bold">infra-supra（仮称）</span>
+        {/* ロゴ（D-184）。正式名称は未決（Q-07）なので「仮称」を小さく添える */}
+        <span className="flex items-center gap-1.5 px-4">
+          <Logo />
+          <span className="text-xs opacity-60">（仮称）</span>
+        </span>
         <span className="text-sm opacity-60">
           Web アプリのインフラ運営シミュレーション（試作）
         </span>
