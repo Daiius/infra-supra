@@ -7,6 +7,14 @@ import {
   submissionOf,
   testPlayId,
 } from './plays.test-helpers.ts';
+import {
+  DUP_CAP_MAX,
+  DUP_CAP_WINDOW_MS,
+  MIN_SECONDS_PER_MONTH,
+  memoryTokenStore,
+  PLAY_TOKEN_PATTERN,
+  PLAY_TOKEN_TTL_SECONDS,
+} from './play-tokens.ts';
 import { memoryRepo, type ResultRecord } from './repo.ts';
 import {
   buildVersionFromEnv,
@@ -20,15 +28,26 @@ const completed = finishedSave();
 const lost = finishedSave(42, [], 0);
 
 function setup() {
-  const repo = memoryRepo();
+  // 時刻は手で進める（トークンの発行から送信までの時間・同じ結果の数の窓。D-174）
+  const clock = { t: Date.UTC(2026, 10, 9) };
+  const now = () => clock.t;
+  const repo = memoryRepo(now);
+  const tokens = memoryTokenStore(now);
   const lines: string[] = [];
-  const app = createApp({ repo, log: (l) => lines.push(l) });
+  const app = createApp({ repo, tokens, now, log: (l) => lines.push(l) });
   // web と同じ hc<AppType> の client で叩く（型の出所が route.ts の鎖 1 本で足りることも確かめる）
   const client = hc<AppType>('http://stats.test', {
     fetch: (input: string | URL | Request, init?: RequestInit) =>
       app.request(input, init),
   });
-  return { repo, lines, app, client };
+  /** 開始のトークンを取り、ms だけ時計を進める（既定は人が遊ぶくらいの 5 分）。 */
+  const start = async (ms = 5 * 60 * 1000) => {
+    const r = await client.api.plays.$post();
+    const { token } = await r.json();
+    clock.t += ms;
+    return token;
+  };
+  return { repo, tokens, clock, lines, app, client, start };
 }
 
 const post = (app: ReturnType<typeof createApp>, body: string, headers = {}) =>
@@ -40,8 +59,8 @@ const post = (app: ReturnType<typeof createApp>, body: string, headers = {}) =>
 
 describe('POST /api/results', () => {
   it('照合が合えば 201 で保存し、同じプレイの 2 回目は 200（duplicate）で行を増やさない', async () => {
-    const { repo, client } = setup();
-    const json = submissionOf(completed);
+    const { repo, client, start } = setup();
+    const json = { ...submissionOf(completed), token: await start() };
     const r1 = await client.api.results.$post({ json });
     expect(r1.status).toBe(201);
     expect(await r1.json()).toEqual({
@@ -183,6 +202,190 @@ describe('POST /api/results', () => {
     const all = lines.join('\n');
     for (const leaked of ['203.0.113', '198.51.100', 'TestAgent', 'seed='])
       expect(all).not.toContain(leaked);
+  });
+});
+
+describe('開始のトークンと大量の送信（D-174）', () => {
+  const MIN = 60 * 1000;
+  const histogramCount = async (client: ReturnType<typeof setup>['client']) => {
+    const h = await (
+      await client.api.results.histogram.$get({
+        query: { scenario: 'article-community', axis: 'cash' },
+      })
+    ).json();
+    return 'count' in h ? h.count : -1;
+  };
+
+  it('POST /api/plays は使い捨てのトークンを発行し、発行時刻だけを置く', async () => {
+    const { tokens, clock, client } = setup();
+    const r = await client.api.plays.$post();
+    expect(r.status).toBe(201);
+    const { token } = await r.json();
+    expect(token).toMatch(PLAY_TOKEN_PATTERN);
+    expect([...tokens.tokens]).toEqual([[token, clock.t]]);
+    const again = await (await client.api.plays.$post()).json();
+    expect(again.token).not.toBe(token);
+  });
+
+  it('有効なトークンで十分に時間をかけた送信は分布に入り、トークンは消える', async () => {
+    const { repo, tokens, client, start } = setup();
+    const token = await start();
+    const r = await client.api.results.$post({
+      json: { ...submissionOf(completed), token },
+    });
+    expect(r.status).toBe(201);
+    expect(await r.json()).toEqual({
+      ok: true,
+      duplicate: false,
+      inHistogram: true,
+    });
+    expect(repo.rows[0]!.flag).toBeNull();
+    expect(tokens.tokens.size).toBe(0);
+    expect(await histogramCount(client)).toBe(1);
+  });
+
+  it('トークンが無い送信は保存するが分布に入れず、正直に inHistogram: false を返す（no-token）', async () => {
+    const { repo, client } = setup();
+    const r = await client.api.results.$post({ json: submissionOf(completed) });
+    expect(r.status).toBe(201);
+    expect(await r.json()).toEqual({
+      ok: true,
+      duplicate: false,
+      inHistogram: false,
+    });
+    expect(repo.rows.map((x) => x.flag)).toEqual(['no-token']);
+    expect(await histogramCount(client)).toBe(0);
+  });
+
+  it('無効なトークン（作り物・形が違う・使い済み・期限切れ）は分布に入れず、成功と同じ応答を返す（bad-token）', async () => {
+    const { repo, clock, client, start } = setup();
+    const used = await start();
+    await client.api.results.$post({
+      json: { ...submissionOf(completed, testPlayId(0)), token: used },
+    });
+    const expired = await start(0);
+    clock.t += PLAY_TOKEN_TTL_SECONDS * 1000;
+    const cases = ['A'.repeat(43), 'short', used, expired];
+    for (const [i, token] of cases.entries()) {
+      const r = await client.api.results.$post({
+        json: { ...submissionOf(completed, testPlayId(i + 1)), token },
+      });
+      expect(r.status, token).toBe(201);
+      expect(await r.json(), token).toEqual({
+        ok: true,
+        duplicate: false,
+        inHistogram: true,
+      });
+    }
+    expect(repo.rows.map((x) => x.flag)).toEqual([
+      null,
+      'bad-token',
+      'bad-token',
+      'bad-token',
+      'bad-token',
+    ]);
+    expect(await histogramCount(client)).toBe(1);
+  });
+
+  it('発行から送信までが遊んだ月の数 × 下限の秒数より短ければ分布に入れない（too-fast）。ちょうどなら入る', async () => {
+    const { repo, client, start } = setup();
+    const months = replaySave(completed).end!.month;
+    const limit = months * MIN_SECONDS_PER_MONTH * 1000;
+    const fast = await client.api.results.$post({
+      json: {
+        ...submissionOf(completed, testPlayId(1)),
+        token: await start(limit - 1),
+      },
+    });
+    expect(await fast.json()).toEqual({
+      ok: true,
+      duplicate: false,
+      inHistogram: true,
+    });
+    await client.api.results.$post({
+      json: {
+        ...submissionOf(completed, testPlayId(2)),
+        token: await start(limit),
+      },
+    });
+    expect(repo.rows.map((x) => x.flag)).toEqual(['too-fast', null]);
+    expect(await histogramCount(client)).toBe(1);
+  });
+
+  it('途中終了も、月の数で下限を数える（終わった月が少なければ下限も短い）', async () => {
+    const { repo, client, start } = setup();
+    const months = replaySave(lost).end!.month;
+    await client.api.results.$post({
+      json: {
+        ...submissionOf(lost),
+        token: await start(months * MIN_SECONDS_PER_MONTH * 1000),
+      },
+    });
+    expect(repo.rows[0]!.flag).toBeNull();
+  });
+
+  it('同じ結果が直近 1 時間に上限の件数だけ分布に入っていれば、それより後は分布に入れない（dup-cap）。窓を過ぎれば入る', async () => {
+    const { repo, clock, client, start } = setup();
+    const send = async (n: number, token?: string) =>
+      client.api.results.$post({
+        json: {
+          ...submissionOf(completed, testPlayId(n)),
+          ...(token ? { token } : {}),
+        },
+      });
+    // 印の付いた行（トークン無し）は上限に数えない
+    await send(100);
+    for (let n = 0; n < DUP_CAP_MAX + 1; n++) {
+      const r = await send(n, await start(MIN));
+      expect(r.status).toBe(201);
+      expect(await r.json()).toEqual({
+        ok: true,
+        duplicate: false,
+        inHistogram: true,
+      });
+    }
+    expect(repo.rows.map((x) => x.flag)).toEqual([
+      'no-token',
+      ...Array(DUP_CAP_MAX).fill(null),
+      'dup-cap',
+    ]);
+    // 別の結果（別のシード）は別に数える
+    const other = finishedSave(7);
+    await client.api.results.$post({
+      json: { ...submissionOf(other, testPlayId(50)), token: await start() },
+    });
+    expect(repo.rows.at(-1)!.flag).toBeNull();
+    // 1 時間を過ぎると、最初の行が窓から外れる
+    clock.t += DUP_CAP_WINDOW_MS;
+    await send(99, await start(MIN));
+    expect(repo.rows.at(-1)!.flag).toBeNull();
+    expect(await histogramCount(client)).toBe(DUP_CAP_MAX + 2);
+  });
+
+  it('照合で落ちた送信ではトークンを消さない', async () => {
+    const { tokens, client, start } = setup();
+    const token = await start();
+    const json = { ...submissionOf(completed), token };
+    json.axes.cash += 1;
+    expect((await client.api.results.$post({ json })).status).toBe(422);
+    expect(tokens.tokens.has(token)).toBe(true);
+  });
+
+  it('同じプレイの送り直し（duplicate）は前からある行の印で答える', async () => {
+    const { client, start } = setup();
+    const first = await client.api.results.$post({
+      json: submissionOf(completed),
+    });
+    expect(await first.json()).toMatchObject({ inHistogram: false });
+    const again = await client.api.results.$post({
+      json: { ...submissionOf(completed), token: await start() },
+    });
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({
+      ok: true,
+      duplicate: true,
+      inHistogram: false,
+    });
   });
 });
 
@@ -330,7 +533,12 @@ describe('GET /api/version', () => {
       commit: 'unknown',
       builtAt: 'unknown',
     });
-    const app = createApp({ repo: memoryRepo(), log: () => {}, version });
+    const app = createApp({
+      repo: memoryRepo(),
+      tokens: memoryTokenStore(),
+      log: () => {},
+      version,
+    });
     expect(await (await app.request('/api/version')).json()).toEqual(version);
   });
 });

@@ -44,6 +44,11 @@ export const PLAY_ID_PATTERN =
 export const submissionSchema = z.object({
   /** 二重の送信を 1 行にする鍵（D-169）。同じ端末の同じプレイの送り直しは同じ値、別の端末なら別の値になる。 */
   playId: z.string().max(64).regex(PLAY_ID_PATTERN),
+  /**
+   * 開始のトークン（D-174。`POST /api/plays` で受け取った使い捨ての番号）。無ければ開始の通信に失敗したプレイとみなす。
+   * 形の違う値も 400 にせず、置き場に無いトークンと同じに扱う（弾いたことを悟らせない）。
+   */
+  token: z.string().max(128).optional(),
   save: z.looseObject({
     version: z.number().int(),
     scenarioId: z.string().max(64),
@@ -166,6 +171,8 @@ export function verifySubmission(sub: Submission): VerifyResult {
       // 保存するのはサーバーが数えた値（クライアントの値とは上の幅の中で同じ）
       ...axes,
       save,
+      // 印は route.ts がトークンと同じ結果の数を見て付ける（D-174）
+      flag: null,
     },
   };
 }

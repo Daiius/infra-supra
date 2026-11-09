@@ -1,0 +1,128 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "a18e71ca-9ccf-4a06-ae71-e59133ac698f",
+  "prevIds": [
+    "68d551aa-1a98-4042-b2cd-0efd16afe690"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "results",
+        "flag"
+      ],
+      "writes": [
+        "s|col|public.results.flag",
+        "n|col|public.results.flag",
+        "e|col|public.results.flag"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "results",
+        "results_dup_cap_idx"
+      ],
+      "writes": [
+        "s|idx|public.results_dup_cap_idx",
+        "n|idx|public.results_dup_cap_idx",
+        "e|idx|public.results_dup_cap_idx",
+        "n|rel|public.results_dup_cap_idx"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public",
+        "n|col|public.results.play_hash",
+        "n|col|public.results.created_at"
+      ]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": [
+        "table",
+        "public",
+        "results"
+      ],
+      "writes": [
+        "s|ck|public.results.results_flag_check",
+        "n|ck|public.results.results_flag_check",
+        "e|ck|public.results.results_flag_check",
+        "n|con|public.results.results_flag_check"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public",
+        "n|col|public.results.flag"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "flag",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "results_dup_cap_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "play_hash",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "created_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "results_flag_check",
+        "value": "\"flag\" is null or \"flag\" in ('no-token', 'bad-token', 'too-fast', 'dup-cap')",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

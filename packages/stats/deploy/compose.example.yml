@@ -12,8 +12,11 @@ services:
     # nginx がホストで動くなら 127.0.0.1 にだけ開ける（外からは nginx を通す）
     ports:
       - '127.0.0.1:4000:4000'
+    # Postgres の網と、既存の Redis の網（REDIS_URL のサービス名が引ける網）に入る（D-174）。
+    # Redis が Postgres と同じ網にいるなら redis の行と下の networks.redis を消す
     networks:
       - db
+      - redis
 
   # migration（一度だけ流す。deploy.sh が `run --rm migrate` で呼ぶ）
   migrate:
@@ -29,3 +32,7 @@ networks:
     external: true
     # 既存の Postgres のコンテナが入っている網の名前（docker network ls で確かめる）
     name: <Postgres の網>
+  redis:
+    external: true
+    # 既存の Redis のコンテナが入っている網の名前（docker network ls で確かめる。migration は Redis を使わない）
+    name: <Redis の網>
