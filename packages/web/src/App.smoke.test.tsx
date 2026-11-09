@@ -1176,13 +1176,35 @@ describe('ゲームモードの画面', () => {
     ).not.toContain('来月の行動');
     openSetupChange();
     expect(setupChangeFold().textContent).toContain('今の構成と同じです');
-    // もう一度選んで登録し、次の月へ: 乗り換え中は欄を出さず進み具合を出す
+    // もう一度選んで登録し、次の月へ: 乗り換え中も欄は出し、見出しに進み具合を出す（OCL-0B7CAFEB）
     showStackTab();
     pickRadio('Cloudflare Paid + vinext', setupChangeFold());
     registerSetupChange();
     advance(1);
-    expect(setupChangeFold()).toBeNull();
-    expect(screen.getByText(/へ乗り換え中（/)).toBeDefined();
+    const moving = setupChangeFold();
+    expect(moving.querySelector('summary')!.textContent).toMatch(
+      /へ乗り換え中（\d+ \/ \d+ ポイント）/,
+    );
+    openSetupChange();
+    // ① の構成・部品は選べず、理由を出す
+    showStackTab();
+    expect(
+      moving.querySelector('[data-migrating-note]')!.textContent,
+    ).toContain('乗り換えの最中は選べません');
+    expect(
+      within(moving).queryAllByRole('radio', { name: /^Cloudflare/ }),
+    ).toEqual([]);
+    // ② は今のフレームワークだけ（作り直しは選べない）。描き方は選び直して登録できる
+    showFrameworkTab();
+    expect(within(moving).queryByRole('radio', { name: /^Astro/ })).toBeNull();
+    pickStrategy('個人向けのページ', '枠 + ブラウザが API で取る');
+    expect(
+      changeItems().map((x) => x.getAttribute('data-change-kind')),
+    ).toEqual(['route']);
+    registerSetupChange();
+    advance(1);
+    openSetupChange();
+    expect(chosenOf('personal')).toBe('shell-api');
   });
 
   it('W-106 構成を変えるの欄で部品を差し替えると行動が送られ、乗り換えと作り直しの組み合わせはできない理由を出す（D-185）', async () => {

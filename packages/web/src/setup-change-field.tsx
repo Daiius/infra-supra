@@ -134,6 +134,9 @@ export function SetupChangeField({
     ? setupChangeSummary(registeredChange)
     : null;
   const busy = [
+    state.migration
+      ? `${stackName(state.migration.to, state.framework)} へ乗り換え中（${state.migration.done} / ${state.migration.required} ポイント）です。済むまで構成・部品・フレームワークは替えられません（ページの描き方とコメント欄は替えられます）。`
+      : null,
     state.rewrite
       ? `${FRAMEWORKS[state.rewrite.to].label} へ作り直し中（${state.rewrite.done} / ${state.rewrite.required} ポイント）です。済むまで今のアプリのまま動き、乗り換え・部品の差し替えはできません。`
       : null,
@@ -334,6 +337,11 @@ function ChangeBody({
   const change = setupChangeOf(state, draft, wrap);
   const isRegistered =
     registered !== null && JSON.stringify(registered) === JSON.stringify(draft);
+  // 乗り換えの最中は構成・部品・フレームワークを選べない（今の行動の検査「乗り換えの最中は選べません」。OCL-0B7CAFEB）
+  const migrating = state.migration !== null;
+  const migratingNote = state.migration
+    ? `${stackName(state.migration.to, state.framework)} への乗り換えの最中は、構成・部品・フレームワーク（作り直し）は選べません（乗り換えの最中は選べません）。ページの描き方とコメント欄は ② で選び直せます。`
+    : null;
   return (
     <>
       {/* 隠した構成（D-100）で始めた古い保存はそのまま続けられる。選び直す先には出さない */}
@@ -355,7 +363,11 @@ function ChangeBody({
             false,
             draft.components,
           ),
-          panel: (
+          panel: migrating ? (
+            <p className="text-sm" role="note" data-migrating-note>
+              {migratingNote}
+            </p>
+          ) : (
             <StackField
               scenario={sc}
               framework={draft.framework}
@@ -388,50 +400,60 @@ function ChangeBody({
           warn: fallbackNotice,
           live: fallbackNotice,
           panel: (
-            <FrameworkField
-              scenario={sc}
-              allowed={allowed}
-              value={draft.framework}
-              onChange={onFramework}
-              comments={commentsOn}
-              routePlan={(id) =>
-                routePlanRows(sc, {
-                  framework: id,
-                  stackIndex: draft.stackIndex,
-                  settings: { revalidateSec },
-                  components: chosenOf(
-                    draftComponentsFor(state, draft.stackIndex, id),
-                  ),
-                  routeParts,
-                })
-              }
-              routes={routes}
-              resolvedRoutes={(id, selected) =>
-                resolvedRouteStrategies(sc, {
-                  framework: id,
-                  stackIndex: draft.stackIndex,
-                  settings: { revalidateSec },
-                  components: chosenOf(
-                    selected
-                      ? draft.components
-                      : draftComponentsFor(state, draft.stackIndex, id),
-                  ),
-                  ...(selected ? { routes } : {}),
-                })
-              }
-              routeNotice={(id) =>
-                id === state.framework ? null : rewriteRouteNotice(state, id)
-              }
-              editor={editor}
-              unsupported={(id) => stackUnsupportedReason(draft.stackIndex, id)}
-              notice={fallbackNotice}
-              text={{
-                heading: '② フレームワークとページの描き方',
-                footnote:
-                  'フレームワークを替えるのはアプリの作り直しです（大きな手間・数か月。その間は機能開発がほぼ止まります）。ページの描き方とコメント欄は来月から替わります。期限と「更新で消す」は下の設定の欄で替えます。',
-                compareHint: null,
-              }}
-            />
+            <div className="space-y-2">
+              {migrating && (
+                <p className="text-sm" role="note" data-migrating-note>
+                  {migratingNote}
+                </p>
+              )}
+              <FrameworkField
+                scenario={sc}
+                // 乗り換えの最中は作り直せない（今の検査）ので、今のフレームワークのカードだけ出して描き方とコメント欄を選ぶ
+                allowed={migrating ? [state.framework] : allowed}
+                value={draft.framework}
+                onChange={onFramework}
+                comments={commentsOn}
+                routePlan={(id) =>
+                  routePlanRows(sc, {
+                    framework: id,
+                    stackIndex: draft.stackIndex,
+                    settings: { revalidateSec },
+                    components: chosenOf(
+                      draftComponentsFor(state, draft.stackIndex, id),
+                    ),
+                    routeParts,
+                  })
+                }
+                routes={routes}
+                resolvedRoutes={(id, selected) =>
+                  resolvedRouteStrategies(sc, {
+                    framework: id,
+                    stackIndex: draft.stackIndex,
+                    settings: { revalidateSec },
+                    components: chosenOf(
+                      selected
+                        ? draft.components
+                        : draftComponentsFor(state, draft.stackIndex, id),
+                    ),
+                    ...(selected ? { routes } : {}),
+                  })
+                }
+                routeNotice={(id) =>
+                  id === state.framework ? null : rewriteRouteNotice(state, id)
+                }
+                editor={editor}
+                unsupported={(id) =>
+                  stackUnsupportedReason(draft.stackIndex, id)
+                }
+                notice={fallbackNotice}
+                text={{
+                  heading: '② フレームワークとページの描き方',
+                  footnote:
+                    'フレームワークを替えるのはアプリの作り直しです（大きな手間・数か月。その間は機能開発がほぼ止まります）。ページの描き方とコメント欄は来月から替わります。期限と「更新で消す」は下の設定の欄で替えます。',
+                  compareHint: null,
+                }}
+              />
+            </div>
           ),
         }}
       />

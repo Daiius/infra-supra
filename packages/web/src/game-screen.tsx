@@ -31,7 +31,6 @@ import {
   ELEMENTS,
   END_LABEL,
   eventDef,
-  stackName,
   hiddenSettings,
   storageOptionText,
   nextSsrCpuMs,
@@ -1916,25 +1915,15 @@ function Actions({
           blocked={(c) => blocked(build({ commits: c }))}
         />
         {/* 構成を変える（D-185）: ①② のタブで今の状態から選び直し、差を行動に写し取る。毎月は変えない選択なので畳んで出し、
-            見出しに登録した行動の要約を出す。乗り換えの最中は欄を出さず進み具合を出す。key を月ごとに替えて毎月畳んだ状態から */}
-        {state.migration ? (
-          <>
-            <div className="divider my-1 text-xs">構成を変える</div>
-            <div className="text-sm">
-              {stackName(state.migration.to, state.framework)} へ乗り換え中（
-              {state.migration.done} / {state.migration.required}{' '}
-              ポイント）。済むまで別の変更はできません。
-            </div>
-          </>
-        ) : (
-          <SetupChangeField
-            key={`change-${state.history.length}-${resets}`}
-            state={state}
-            registered={change}
-            onRegister={setChange}
-            wrap={(g) => build({ change: g })}
-          />
-        )}
+            見出しに登録した行動の要約を出す。乗り換えの最中も出し、描き方とコメント欄だけ選び直せる（見出しに進み具合。OCL-0B7CAFEB）。
+            key を月ごとに替えて毎月畳んだ状態から */}
+        <SetupChangeField
+          key={`change-${state.history.length}-${resets}`}
+          state={state}
+          registered={change}
+          onRegister={setChange}
+          wrap={(g) => build({ change: g })}
+        />
         <div className="card-actions items-center justify-end">
           {actions.length > 0 && (
             <button className="btn btn-ghost btn-sm" onClick={reset}>
