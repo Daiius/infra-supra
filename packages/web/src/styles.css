@@ -189,42 +189,51 @@ h4,
    （ぼやけない）。括線は点 1 つの太さで、上下に点 1 つずつ空ける。字の送りは 8 単位で字の幅は 6 単位なので、右に余る 2 単位と同じだけ
    左にも空け、括線を文字の幅の左右に点 1 つずつ出す。入れ替えは transform だけで動かし、配置は揺らさない */
 .logo-fraction {
-  --logo-gap: 0.125em;
-  --logo-shift: calc(1em + 3 * var(--logo-gap));
-  display: inline-flex;
-  flex-direction: column;
-  align-items: stretch;
+  /* 1 点 = 1em / 8（Bytesized は 16 単位で 1 点が 2 単位）。24px で 1 点が 3px になり、ぼやけない */
+  --logo-dot: 0.125em;
+  display: inline-grid;
   font-family: 'Bytesized Logo', ui-monospace, monospace;
-  font-size: 16px;
+  font-size: 24px;
   line-height: 1;
   color: var(--color-base-content);
   cursor: default;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
+.logo-layer {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  transition: opacity 1200ms ease-in-out;
+}
+.logo-layer-swapped {
+  opacity: 0;
+}
+.logo-fraction[data-swapped] .logo-layer-normal {
+  opacity: 0;
+}
+.logo-fraction[data-swapped] .logo-layer-swapped {
+  opacity: 1;
+}
 .logo-numerator,
 .logo-denominator {
   display: block;
   white-space: nowrap;
-  padding-inline-start: var(--logo-gap);
-  transition: transform 450ms cubic-bezier(0.65, 0, 0.35, 1);
+  padding-inline-start: var(--logo-dot);
+}
+/* 字の箱の上に空き（アセントの余り）があるので、分母を括線へ寄せる */
+.logo-denominator {
+  margin-top: calc(-2 * var(--logo-dot));
 }
 .logo-bar {
   display: block;
-  height: var(--logo-gap);
-  margin-block: var(--logo-gap);
+  height: var(--logo-dot);
+  margin-block: var(--logo-dot);
   background: currentColor;
 }
-.logo-fraction[data-swapped] .logo-numerator {
-  transform: translateY(var(--logo-shift));
-}
-.logo-fraction[data-swapped] .logo-denominator {
-  transform: translateY(calc(-1 * var(--logo-shift)));
-}
 @media (prefers-reduced-motion: reduce) {
-  .logo-numerator,
-  .logo-denominator {
+  .logo-layer {
     transition: none;
-    transform: none !important;
   }
 }

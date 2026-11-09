@@ -1,14 +1,15 @@
 // ヘッダーのロゴ（D-184）。分数の形で、分子に「Supra」・括線・分母に「Infra」。フォントは Bytesized を使う 8 文字に絞って配る
 // （public/fonts。出典とライセンスは同じ場所の SOURCE.txt・Bytesized-OFL.txt）。
-// こっそりの演出: 開いて数秒後に 1 回だけ分子と分母が入れ替わって戻る・マウスを乗せる（タッチは押す）と入れ替わる。
+// こっそりの演出: 開いてしばらくすると分子と分母がゆっくりのフェードで入れ替わり、しばらくその位置のまま、またしれっと戻る。
+// マウスを乗せる（タッチは押す）と入れ替わる。できるだけ目立たないように動かない（位置は動かさず、2 つの重ねた形の不透明度だけを替える）。
 // prefers-reduced-motion: reduce では入れ替え自体をしない（styles.css でも動きを止める）。
 import { useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from './motion.tsx';
 
 /** 開いてから入れ替わるまで（ミリ秒）。 */
-export const LOGO_INTRO_DELAY_MS = 4000;
+export const LOGO_INTRO_DELAY_MS = 8000;
 /** 入れ替わったまま止まっている長さ（開いたとき・タッチで押したとき。ミリ秒）。 */
-export const LOGO_HOLD_MS = 1600;
+export const LOGO_HOLD_MS = 12000;
 
 export function Logo() {
   const reduced = useReducedMotion();
@@ -53,12 +54,16 @@ export function Logo() {
         pressTimer.current = setTimeout(() => setPressed(false), LOGO_HOLD_MS);
       }}
     >
-      <span aria-hidden className="logo-numerator">
-        Supra
+      {/* 普段の形と入れ替えた形を同じ場所に重ね、不透明度だけをゆっくり替える */}
+      <span aria-hidden className="logo-layer logo-layer-normal">
+        <span className="logo-numerator">Supra</span>
+        <span className="logo-bar" />
+        <span className="logo-denominator">Infra</span>
       </span>
-      <span aria-hidden className="logo-bar" />
-      <span aria-hidden className="logo-denominator">
-        Infra
+      <span aria-hidden className="logo-layer logo-layer-swapped">
+        <span className="logo-numerator">Infra</span>
+        <span className="logo-bar" />
+        <span className="logo-denominator">Supra</span>
       </span>
     </span>
   );
