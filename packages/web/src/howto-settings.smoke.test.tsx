@@ -3,6 +3,7 @@
 // useSmokeEnv は各テストの前に遊び方を見た扱いにするので、初回の動きを確かめるテストは記録を消してから描く。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { USD_JPY } from 'game';
 import { HOWTO_PAGES, PREMISE_NOTE } from './howto-dialog.tsx';
 import { HOWTO_SEEN_KEY } from './local-records.ts';
 import {
@@ -31,10 +32,12 @@ describe('遊び方と設定', () => {
     await renderApp();
     const d = howto()!;
     expect(d).not.toBeNull();
-    // 1 ページ目に前置き（ゲームで、実際の開発より大幅に単純化）
-    expect(d.querySelector('[data-howto-premise]')!.textContent).toContain(
-      PREMISE_NOTE,
-    );
+    // 1 ページ目に前置き（ゲームで、実際の開発より大幅に単純化）と料金の前提（時点・円の換算。D-173）
+    const premise = d.querySelector('[data-howto-premise]')!.textContent;
+    expect(premise).toContain(PREMISE_NOTE);
+    expect(premise).toContain('2026-10-31');
+    expect(premise).toContain(`1 USD = ${USD_JPY} 円`);
+    expect(premise).toContain('障害の影響');
     const titles: string[] = [];
     for (let i = 0; i < HOWTO_PAGES.length; i++) {
       const page = d.querySelector<HTMLElement>('[data-howto-page]')!;
@@ -65,10 +68,8 @@ describe('遊び方と設定', () => {
     cleanup();
     await renderApp();
     expect(howto()).toBeNull();
-    // 始める画面の下にも前置き
-    expect(
-      document.querySelector('[data-premise-note]')!.textContent,
-    ).toContain(PREMISE_NOTE);
+    // 始める画面の下の前置きはやめ、遊び方の 1 ページ目だけにした（D-173）
+    expect(document.querySelector('[data-premise-note]')).toBeNull();
   });
 
   it('W-89 × で閉じても見た扱いになる。壊れた記録は見ていない扱い', async () => {
