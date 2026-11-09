@@ -1255,6 +1255,42 @@ describe('ゲームモードの画面', () => {
     expect(current().closest('[data-card]')).toBe(other);
   });
 
+  it('W-52c 始める画面: カードを横にスワイプすると前後の構成を選び、端のカードからは外へ送らない', async () => {
+    await renderApp();
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    const card = () => current().closest<HTMLElement>('[data-card]')!;
+    const track = card().closest<HTMLElement>('.carousel')!;
+    const cards = [...track.querySelectorAll<HTMLElement>('[data-card]')];
+    const swipe = (dx: number, dy = 0) => {
+      fireEvent.touchStart(card(), {
+        touches: [{ clientX: 200, clientY: 300 }],
+      });
+      fireEvent.touchEnd(card(), {
+        changedTouches: [{ clientX: 200 + dx, clientY: 300 + dy }],
+      });
+    };
+    // 最初のカードへ
+    fireEvent.click(
+      document.querySelector(
+        `input[name="stack"][value="${cards[0]!.querySelector<HTMLElement>('section[data-stack]')!.dataset.stack}"]`,
+      )!,
+    );
+    swipe(80); // 右へ（前へ）: 端なので動かない
+    expect(card()).toBe(cards[0]);
+    swipe(-80); // 左へ（次へ）
+    expect(card()).toBe(cards[1]);
+    swipe(-30); // 短いスワイプは無視
+    expect(card()).toBe(cards[1]);
+    swipe(-60, 120); // 縦に大きい（縦のスクロール）は無視
+    expect(card()).toBe(cards[1]);
+    swipe(80);
+    expect(card()).toBe(cards[0]);
+  });
+
   it('W-52 始める画面: 狭い画面の前後のカードの帯の三角を押すと前後の構成を選び、帯の無い端では出ない。三角は読み上げに出ない', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
