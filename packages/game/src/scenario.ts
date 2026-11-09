@@ -381,8 +381,6 @@ export type ScenarioText = {
    * 画面は先頭の id の出来事で行の印（アイコン）を決める）。料金の改定の行は画面が足す。
    */
   events: readonly ScenarioEventLine[];
-  /** 満足度の要素の説明。 */
-  satisfaction: string;
   /** アプリの形（コストに効く判断ポイント）のうち、フレームワークに依らない文。 */
   app: string[];
   /**

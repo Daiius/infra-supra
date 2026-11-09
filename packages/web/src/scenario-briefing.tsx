@@ -3,7 +3,6 @@ import {
   accountAllowanceOf,
   accountLabel,
   accountUpkeepOf,
-  EFFORT,
   effortTotalNote,
   FRAMEWORKS,
   growthFromReputation,
@@ -19,7 +18,6 @@ import {
   otherAccounts,
   type Scenario,
   upkeepOf,
-  featureRuleText,
   RESULT_AXES,
   type ResultAxisId,
 } from 'game';
@@ -55,7 +53,6 @@ import {
   type RoutePlanEditor,
 } from './route-plan-field.tsx';
 import { usd } from './format.ts';
-import { PREMISE_NOTE } from './howto-dialog.tsx';
 
 /** 選べるシナリオ（SCENARIOS の登録順）。 */
 export const SCENARIO_LIST: Scenario[] = Object.values(SCENARIOS);
@@ -555,7 +552,7 @@ export function FrameworkField({
 }
 
 /**
- * 興味のある人だけ読めばよい説明を畳むボタンとダイアログ（出来事の詳細・開発の手間の内訳）。
+ * 興味のある人だけ読めばよい説明を畳むボタンとダイアログ（出来事の詳細・アプリの形）。
  * 中で ⓘ を使っても吹き出しがダイアログの後ろに隠れないよう、PortalContainer にダイアログを渡す（OCL-8E844E7C）。
  */
 function DetailsDialog({
@@ -648,12 +645,6 @@ function EventLine({
   );
 }
 
-/** 文の先頭の 1 文（「。」まで）。 */
-const firstSentence = (text: string) => {
-  const i = text.indexOf('。');
-  return i < 0 ? text : text.slice(0, i + 1);
-};
-
 /** 始める画面の 4 軸の紹介の短い説明（D-133）。 */
 const AXIS_INTRO: Record<ResultAxisId, string> = {
   cash: '最後の月の所持金',
@@ -664,13 +655,7 @@ const AXIS_INTRO: Record<ResultAxisId, string> = {
 };
 
 /** シナリオの説明・走り切ることと 4 軸の紹介・アプリの形。 */
-export function ScenarioDescription({
-  scenario: sc,
-  usdJpy,
-}: {
-  scenario: Scenario;
-  usdJpy: number;
-}) {
+export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
   const t = sc.text;
   const intro = t?.intro;
   const app = t?.app ?? [];
@@ -728,47 +713,6 @@ export function ScenarioDescription({
           </section>
         )}
         {t?.revenue && <p>{t.revenue}</p>}
-        {/* 満足度は先頭の文だけを本文に出し、全文はダイアログに畳む（2026-11-05・ユーザーの要望） */}
-        <div>
-          {t?.satisfaction && (
-            <>
-              {firstSentence(t.satisfaction)}
-              <DetailsDialog label="満足度の詳しい説明" title="満足度">
-                <p>{t.satisfaction}</p>
-                <p>
-                  満足度が高ければ PV が伸び、低ければ減ります。12
-                  か月の平均は、走り切った後の振り返りの軸の 1 つです。
-                </p>
-                <p className="opacity-70">
-                  満足度の決まり方はゲーム上の仮定です。
-                </p>
-              </DetailsDialog>
-            </>
-          )}
-          開発の手間は毎月 {sc.effort.perMonth} ポイント（+
-          構成の既定の他の事業者の管理の分）で、運用に使った残りが機能開発に回り、満足度の「機能」（累計
-          / 期待）と PV の伸びに効きます。
-          <DetailsDialog label="開発の手間の内訳" title="開発の手間の内訳">
-            <p>
-              手間は、毎月使える作業量の単位です（ゲーム上の仮定。単位はポイント）。
-              開発の手間は毎月 {sc.effort.perMonth}{' '}
-              ポイントです。設定の変更・最適化・乗り換え・出来事への対応・自前運用の維持（
-              {sc.effort.selfHostedUpkeep} /
-              月）・他の事業者の管理（構成の主の事業者以外のアカウント 1
-              つにつき {EFFORT.accountUpkeep} /
-              月）に使った残りが機能開発に回ります。
-            </p>
-            <p>
-              構成の既定の部品で要る他の事業者のアカウント（Vercel と Supabase
-              の構成の Supabase・メールの送信の AWS
-              など）の管理の分は、毎月の手間に足してあります（例: 既定で 2
-              つなら {sc.effort.perMonth} + {2 * EFFORT.accountUpkeep}
-              ）。既定のままなら機能開発に回る量は同じで、部品でアカウントを減らせばその分だけ増え、増やせば減ります。
-            </p>
-            <p>{featureRuleText(sc)}</p>
-            <p className="opacity-70">開発の手間はゲーム上の仮定です。</p>
-          </DetailsDialog>
-        </div>
         <div>
           運営中に出来事が起きます（時期は乱数のシードで変わります）。
           <DetailsDialog label="出来事の詳しい説明" title="運営中の出来事">
@@ -854,16 +798,6 @@ export function ScenarioDescription({
             </DetailsDialog>
           </div>
         )}
-        {/* 前置き（D-146。遊び方の 1 ページ目と同じ趣旨） */}
-        <p className="text-sm opacity-60" data-premise-note>
-          {PREMISE_NOTE}
-          細かな説明はヘッダーの「遊び方」にあります。
-        </p>
-        <p className="text-sm opacity-60">
-          料金は 2026-10-31 時点の公式の料金表（エンジンと実データ）。円建ては 1
-          USD = {usdJpy} 円の仮定で換算しています。
-          収益・成長・満足度・開発の手間・障害の影響はゲーム上の仮定です。
-        </p>
       </div>
     </div>
   );

@@ -43,6 +43,7 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
+import { USD_JPY } from 'game';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useReducedMotion } from './motion.tsx';
 
@@ -131,7 +132,7 @@ const FigureTitle = ({ children }: { children: ReactNode }) => (
   <div className="text-xs font-bold opacity-70">{children}</div>
 );
 
-/** 前置き（D-146。ユーザーの決定）: ゲームであり、実際の開発より大幅に単純化していること。始める画面の下にも同じ趣旨の 1 行を置く。 */
+/** 前置き（D-146。ユーザーの決定）: ゲームであり、実際の開発より大幅に単純化していること。遊び方の 1 ページ目に置く（始める画面の下の 1 行は D-173 でやめた）。 */
 export const PREMISE_NOTE =
   'これはゲームで、実際の開発より大幅に単純化されています。';
 
@@ -189,8 +190,10 @@ function AboutPage() {
         <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-info" />
         <span>
           {PREMISE_NOTE}
-          料金・制限は実在の公式の料金表（出典つき）で計算しますが、収益・PV
-          の伸び・満足度・開発の手間・出来事はゲーム上の仮定です。
+          料金・制限は実在の公式の料金表（出典つき。2026-10-31
+          時点）で計算します。円建ての料金は 1 USD = {USD_JPY}{' '}
+          円の仮定で換算しています。収益・PV
+          の伸び・満足度・開発の手間・障害の影響・出来事はゲーム上の仮定です。
         </span>
       </p>
       <p className="text-sm opacity-70">
