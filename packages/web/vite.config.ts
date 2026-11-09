@@ -7,6 +7,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { OG_IMAGE_TOKEN, ogImageUrl } from './src/og-meta.ts';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -30,6 +31,21 @@ function watchWorkspacePackages(): Plugin {
   };
 }
 
+/**
+ * index.html の OGP の画像の URL の目印を、VITE_SITE_URL + /og.png（無ければ相対の /og.png）に置き換える（D-191）。
+ * 実ドメインはリポジトリに書かず、Vercel のダッシュボードの環境変数 VITE_SITE_URL で渡す。
+ */
+function ogImageMeta(siteUrl: string | undefined): Plugin {
+  const url = ogImageUrl(siteUrl);
+  return {
+    name: 'og-image-meta',
+    transformIndexHtml: {
+      order: 'pre',
+      handler: (html) => html.replaceAll(OG_IMAGE_TOKEN, url),
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
   const [bindHost = '127.0.0.1', bindPort = '5173'] = (
@@ -47,7 +63,9 @@ export default defineConfig(({ mode }) => {
       babel({ presets: [reactCompilerPreset()] }),
       tailwindcss(),
       watchWorkspacePackages(),
+      ogImageMeta(env.VITE_SITE_URL),
     ],
+    // og.html（OGP の画像の書き出し用。D-191）は dev でだけ開く。build の input は既定の index.html だけなので本番には含めない
     build: {
       rolldownOptions: {
         output: {
