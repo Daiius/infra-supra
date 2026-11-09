@@ -53,6 +53,7 @@ export function loadPlayNonce(): string | null {
  * 別のプレイ（別の nonce）の開始のトークンが残っていれば一緒に消す（D-174）。
  */
 export function storePlayNonce(nonce: string | null): void {
+  currentNonce = nonce;
   try {
     if (nonce) localStorage.setItem(PLAY_NONCE_KEY, nonce);
     else localStorage.removeItem(PLAY_NONCE_KEY);
@@ -64,7 +65,8 @@ export function storePlayNonce(nonce: string | null): void {
 
 // 開始のトークン（D-174・prd/15 §4）。新しいプレイを始めるときに集計のサーバーから受け取る使い捨ての番号（個人を識別しない）。
 // nonce と組にして持ち、同じプレイの送信にだけ添える（再開しても同じトークン・別のプレイには使わない）。
-// localStorage が使えない環境でも、開いている間はメモリに持つ。
+// localStorage が使えない・書き込みだけ失敗する環境でも、開いている間はメモリに持つ（OCL-07814537）。
+// 取りに行った後に別のプレイを始めていたら、遅れて届いた応答は捨てる（OCL-DE27A041）。
 
 /** 開始のトークンの localStorage のキー（infra-supra: で始まるので、ローカルの記録の消去でも消える）。 */
 export const PLAY_TOKEN_KEY = 'infra-supra:play-token';
@@ -74,8 +76,13 @@ export const STATS_PLAY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 type StoredToken = { nonce: string; token: string };
 let memoToken: StoredToken | null = null;
+/** memoToken を localStorage に書けなかった（読み出しはメモリを優先する）。 */
+let memoUnsaved = false;
+/** 今のプレイの nonce（storePlayNonce が最後に書いた値。このタブの中だけ）。 */
+let currentNonce: string | null = null;
 
 function readPlayToken(): StoredToken | null {
+  if (memoToken && memoUnsaved) return memoToken;
   try {
     const raw = localStorage.getItem(PLAY_TOKEN_KEY);
     const v: unknown = raw ? JSON.parse(raw) : null;
@@ -102,18 +109,25 @@ export function loadPlayToken(nonce: string): string | null {
   return v?.nonce === nonce ? v.token : null;
 }
 
-/** 開始のトークンを nonce と組にして書く。 */
+/**
+ * 開始のトークンを nonce と組にして書く。nonce が今のプレイのものでなければ書かない（取りに行った後に別のプレイを始めていた。
+ * 遅れて届いた古い応答で今のプレイのトークンを上書きしない。OCL-DE27A041）。
+ */
 export function storePlayToken(nonce: string, token: string): void {
+  if (nonce !== currentNonce) return;
   memoToken = { nonce, token };
   try {
     localStorage.setItem(PLAY_TOKEN_KEY, JSON.stringify(memoToken));
+    memoUnsaved = false;
   } catch {
-    // 保存領域が使えない環境ではメモリにだけ持つ
+    // 書けない環境（容量の上限など）ではメモリにだけ持ち、読み出しもメモリから（OCL-07814537）
+    memoUnsaved = true;
   }
 }
 
 function clearPlayToken(): void {
   memoToken = null;
+  memoUnsaved = false;
   try {
     localStorage.removeItem(PLAY_TOKEN_KEY);
   } catch {

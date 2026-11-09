@@ -119,9 +119,45 @@ describe('開始のトークン（D-174）', () => {
       removeItem: broken,
     });
     const a = newPlayNonce();
+    storePlayNonce(a);
     storePlayToken(a, token);
     expect(loadPlayToken(a)).toBe(token);
     storePlayNonce(null);
+    expect(loadPlayToken(a)).toBeNull();
+  });
+
+  it('書き込みだけ失敗する環境（容量の上限など）でも、メモリのトークンを読み出す（OCL-07814537）', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', {
+      ...storage,
+      setItem: () => {
+        throw new Error('quota');
+      },
+    });
+    const a = newPlayNonce();
+    // 前のプレイの古い値が残っていても、メモリの今の値を使う
+    storage.m.set(
+      PLAY_TOKEN_KEY,
+      JSON.stringify({ nonce: newPlayNonce(), token: 'b'.repeat(43) }),
+    );
+    storePlayNonce(a);
+    storePlayToken(a, token);
+    expect(loadPlayToken(a)).toBe(token);
+    storePlayNonce(a);
+    expect(loadPlayToken(a)).toBe(token);
+    storePlayNonce(null);
+    expect(loadPlayToken(a)).toBeNull();
+  });
+
+  it('取りに行った後に別のプレイを始めていたら、遅れて届いた前のプレイのトークンは書かない（OCL-DE27A041）', () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    const a = newPlayNonce();
+    const b = newPlayNonce();
+    storePlayNonce(a);
+    storePlayNonce(b);
+    storePlayToken(b, token);
+    storePlayToken(a, 'c'.repeat(43));
+    expect(loadPlayToken(b)).toBe(token);
     expect(loadPlayToken(a)).toBeNull();
   });
 });
