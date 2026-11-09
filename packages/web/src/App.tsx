@@ -300,7 +300,7 @@ export function App() {
     }).then((view) => setStats((cur) => (cur?.id === id ? { id, view } : cur)));
   }, [session, results]);
   const [mode, setMode] = useState<Mode>(initialMode);
-  // 「最初から」の確認のダイアログ（今のプレイが消えるので確かめる）
+  // 「新しいゲーム」の確認のダイアログ（途中なら今のプレイが終わるので確かめる）
   const [confirmRestart, setConfirmRestart] = useState(false);
   // 遊び方（D-146）: 見た記録が無ければ、ゲームモードを最初に開いたときに自動で開く（見積モードでは開かない）。
   // first: 自動で開いた（最後のページのボタンを「始める」にする）
@@ -360,14 +360,14 @@ export function App() {
             </button>
           ))}
         </div>
-        {/* 右端: 最初から（運営中だけ）・遊び方（ゲームモードだけ）・設定（D-146・D-147） */}
+        {/* 右端: 新しいゲーム（運営中・終わった後）・遊び方（ゲームモードだけ）・設定（D-146・D-147） */}
         <div className="ml-auto flex items-center gap-1">
           {mode === 'game' && state && (
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => setConfirmRestart(true)}
             >
-              最初から
+              新しいゲーム
             </button>
           )}
           {mode === 'game' && (
@@ -418,6 +418,7 @@ export function App() {
       )}
       {confirmRestart && (
         <RestartDialog
+          inProgress={state?.phase === 'playing'}
           onConfirm={() => {
             setConfirmRestart(false);
             setSession(null);
@@ -506,11 +507,16 @@ export function App() {
   );
 }
 
-/** 「最初から」の確認（daisyUI の modal）。やり直すと保存したプレイを消して始める画面に戻る。 */
+/**
+ * 「新しいゲーム」の確認（daisyUI の modal）。始めると保存したプレイを消して始める画面に戻る。
+ * 途中（inProgress）のときだけ「今のプレイは途中で終わります」を添える（終わった後の結果は手元の履歴に残っている）。
+ */
 function RestartDialog({
+  inProgress,
   onConfirm,
   onClose,
 }: {
+  inProgress: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -528,17 +534,17 @@ function RestartDialog({
     >
       <div className="modal-box max-w-md">
         <h2 id="restart-dialog-title" className="text-lg font-bold">
-          最初からやり直しますか？
+          新しいゲームを始めますか？
         </h2>
-        <p className="mt-2 text-sm">
-          今のプレイは消えます（前の試行も消えます）。始める画面に戻ります。
-        </p>
+        {inProgress && (
+          <p className="mt-2 text-sm">今のプレイは途中で終わります。</p>
+        )}
         <div className="modal-action">
           <form method="dialog">
             <button className="btn btn-ghost btn-sm">やめる</button>
           </form>
-          <button className="btn btn-error btn-sm" onClick={onConfirm}>
-            やり直す
+          <button className="btn btn-primary btn-sm" onClick={onConfirm}>
+            新しく始める
           </button>
         </div>
       </div>

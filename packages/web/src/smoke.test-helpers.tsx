@@ -401,13 +401,13 @@ export function closeEventsDialog(dialog: HTMLElement) {
   expect(screen.queryByRole('dialog')).toBeNull();
 }
 
-/** ヘッダーの「最初から」を押し、確認のダイアログで「やり直す」を押す（始める画面に戻る）。 */
+/** ヘッダーの「新しいゲーム」を押し、確認のダイアログで「新しく始める」を押す（始める画面に戻る）。 */
 export function restartFromHeader() {
-  fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+  fireEvent.click(screen.getByRole('button', { name: '新しいゲーム' }));
   const dialog = screen.getByRole('dialog', {
-    name: '最初からやり直しますか？',
+    name: '新しいゲームを始めますか？',
   });
-  fireEvent.click(within(dialog).getByRole('button', { name: 'やり直す' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: '新しく始める' }));
   expect(screen.queryByRole('dialog')).toBeNull();
 }
 

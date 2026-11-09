@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// 外部のプレイで見つかった小さな不具合の回帰（描画テスト。D-86）: 「最初から」の確認・再開の知らせ・「−$0」・規約違反の強調。
+// 外部のプレイで見つかった小さな不具合の回帰（描画テスト。D-86）: 「新しいゲーム」の確認・再開の知らせ・「−$0」・規約違反の強調。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
@@ -34,26 +34,26 @@ const resumedToast = () =>
 const SIGNED_ZERO = /[−+-]\$0(?![\d,]|\.\d*[1-9])|\$-0(?![\d,]|\.\d*[1-9])/;
 
 describe('小さな不具合の回帰', () => {
-  it('「最初から」は確認のダイアログを出し、「やめる」なら続き、「やり直す」で始める画面に戻る', async () => {
+  it('「新しいゲーム」は確認のダイアログを出し、「やめる」なら続き、「新しく始める」で始める画面に戻る', async () => {
     await renderApp();
     await start();
     advance(1);
-    fireEvent.click(screen.getByRole('button', { name: '最初から' }));
+    fireEvent.click(screen.getByRole('button', { name: '新しいゲーム' }));
     const dialog = screen.getByRole('dialog', {
-      name: '最初からやり直しますか？',
+      name: '新しいゲームを始めますか？',
     });
-    expect(dialog.textContent).toContain('今のプレイは消えます');
+    expect(dialog.textContent).toContain('今のプレイは途中で終わります');
     // やめる: 何も消えない
     fireEvent.click(within(dialog).getByRole('button', { name: 'やめる' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expectGameScreen(2);
     expect(localStorage.getItem(SAVE_KEY)).not.toBeNull();
-    // やり直す: 保存を消して始める画面へ
+    // 新しく始める: 保存を消して始める画面へ
     restartFromHeader();
     expect(localStorage.getItem(SAVE_KEY)).toBeNull();
     expect(screen.getByRole('button', { name: '運営を始める' })).toBeDefined();
-    // 始める画面には「最初から」を出さない（確認も要らない）
-    expect(screen.queryByRole('button', { name: '最初から' })).toBeNull();
+    // 始める画面には「新しいゲーム」を出さない（確認も要らない）
+    expect(screen.queryByRole('button', { name: '新しいゲーム' })).toBeNull();
   });
 
   it('リロードして再開したときだけ「前回の続き（n か月目）から再開しました」を一度出し、× で閉じる', async () => {
