@@ -1246,4 +1246,71 @@ describe('見積モードの画面', () => {
     // 見方なので URL には残さない
     expect(window.location.search).toBe(search);
   });
+
+  it('W-68 ① のカルーセルは開いた直後は滑らかにせず一度で中央へ寄せ、幅が後から替わっても寄せ直す（D-182 の後の退行）', async () => {
+    // scrollLeft を書いた時点の scroll-behavior を記録する（jsdom はレイアウトをしないので、寄せ方の呼ばれ方で確かめる）
+    const writes: { el: HTMLElement; left: number; behavior: string }[] = [];
+    Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
+      configurable: true,
+      get() {
+        return 0;
+      },
+      set(this: HTMLElement, v: number) {
+        writes.push({ el: this, left: v, behavior: this.style.scrollBehavior });
+      },
+    });
+    // ResizeObserver の通知を後から送れるように、観ている要素と callback を持つ
+    const observers: { cb: ResizeObserverCallback; els: Element[] }[] = [];
+    const prevRO = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      entry: { cb: ResizeObserverCallback; els: Element[] };
+      constructor(cb: ResizeObserverCallback) {
+        this.entry = { cb, els: [] };
+        observers.push(this.entry);
+      }
+      observe(el: Element) {
+        this.entry.els.push(el);
+      }
+      unobserve() {}
+      disconnect() {
+        this.entry.els = [];
+      }
+    } as never;
+    try {
+      window.history.replaceState(
+        null,
+        '',
+        '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
+      );
+      await renderApp();
+      const card = stackCard();
+      const t = card.closest<HTMLElement>('.carousel')!;
+      const first = writes.filter((w) => w.el === t);
+      // 開いた直後の寄せは scroll-behavior: auto（smooth のアニメーションが途中で止まって外れたままにならない）
+      expect(first.length).toBeGreaterThan(0);
+      expect(first.every((w) => w.behavior === 'auto')).toBe(true);
+      expect(t.style.scrollBehavior).toBe('');
+      // 幅が後から決まったら、選んでいるカードを中央へ寄せ直す
+      const item = card.closest<HTMLElement>('[data-card]')!;
+      Object.defineProperty(t, 'clientWidth', { value: 944 });
+      Object.defineProperty(item, 'clientWidth', { value: 802 });
+      Object.defineProperty(item, 'offsetLeft', { value: 873 });
+      writes.length = 0;
+      for (const o of observers)
+        if (o.els.includes(t))
+          o.cb([{ target: t } as never], {} as ResizeObserver);
+      const again = writes.filter((w) => w.el === t);
+      expect(again.length).toBeGreaterThan(0);
+      expect(again.at(-1)!.left).toBe(873 - (944 - 802) / 2);
+      expect(again.at(-1)!.behavior).toBe('auto');
+      // 別の構成を選んだときは滑らかに動かす（CSS の scroll-behavior のまま）
+      writes.length = 0;
+      pick('stack', 'sakura-vps-2gb');
+      const moved = writes.filter((w) => w.el === t && w.behavior === '');
+      expect(moved.length).toBeGreaterThan(0);
+    } finally {
+      delete (HTMLElement.prototype as { scrollLeft?: number }).scrollLeft;
+      globalThis.ResizeObserver = prevRO;
+    }
+  });
 });

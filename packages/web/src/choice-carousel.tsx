@@ -131,13 +131,44 @@ export function ChoiceCarousel<T extends string>({
   // カードが替わったときだけ動かす（組の中で選択肢を替えてもカードは同じなので動かさない）
   const currentKey = current?.key;
   const visible = useContext(CarouselVisible);
-  useEffect(() => {
-    if (!visible) return;
+  // 開いた直後（と見えるようになった直後）は滑らかにせず一度で寄せる。carousel の CSS の smooth のまま動かすと、読み込みの重い
+  // 描画（上の費用の曲線など）やレイアウトの変化でアニメーションが途中で止まり、カードが中央から外れたまま残る（D-182 の後の退行）。
+  // 別のカードへ替えたときだけ滑らかに動かす（StrictMode の 2 回目の実行・同じカードの寄せ直しは一度で寄せる）。
+  // centeredKey は最後に寄せたカード（見えていない間は無し）
+  const centeredKey = useRef<string | undefined>(undefined);
+  const center = (key: string | undefined, instant: boolean) => {
     const t = track.current;
-    const el = currentKey === undefined ? undefined : els.current[currentKey];
-    if (!t || !el) return;
-    t.scrollLeft = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
+    const el = key === undefined ? undefined : els.current[key];
+    if (!t || !el) return false;
+    const left = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
+    if (instant) {
+      const behavior = t.style.scrollBehavior;
+      t.style.scrollBehavior = 'auto';
+      t.scrollLeft = left;
+      t.style.scrollBehavior = behavior;
+    } else t.scrollLeft = left;
+    return true;
+  };
+  useEffect(() => {
+    if (!visible) {
+      centeredKey.current = undefined;
+      return;
+    }
+    const prev = centeredKey.current;
+    if (center(currentKey, prev === undefined || prev === currentKey))
+      centeredKey.current = currentKey;
   }, [currentKey, cardKeys, visible]);
+  // 幅が後から決まる・替わる（測った時点でレイアウトが確定していない、画面の幅を替えた）ときも、最後に寄せたカードを中央へ
+  // 寄せ直す。カードを替えるたびに作り直さない（observe の最初の通知で、替えたときの滑らかな動きを止めないように）
+  useEffect(() => {
+    const t = track.current;
+    if (!visible || !t || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      center(centeredKey.current, true);
+    });
+    ro.observe(t);
+    return () => ro.disconnect();
+  }, [visible]);
   const headingId = useId();
   const headingClass = useContext(CarouselHeadingHidden)
     ? 'sr-only'
