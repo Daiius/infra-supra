@@ -355,16 +355,13 @@ export function App() {
   };
   return (
     <div className="min-h-screen bg-base-200">
-      <div className="navbar flex-wrap gap-y-1 bg-base-100 shadow-sm">
-        {/* ロゴ（D-184）。正式名称は未決（Q-07）なので「仮称」を小さく添える */}
-        <span className="flex items-center gap-1.5 px-4">
+      {/* 全部を 1 行に並べる（2026-11-09・ユーザーの要望。狭い画面でも折り返さない） */}
+      <div className="navbar min-h-0 flex-nowrap gap-1 bg-base-100 px-2 py-1.5 shadow-sm sm:px-4">
+        {/* ロゴ（D-184）。正式名称の「仮称」と副題は外した（2026-11-09・ユーザーの要望） */}
+        <span className="flex shrink-0 items-center pr-1 sm:pr-3">
           <Logo />
-          <span className="text-xs opacity-60">（仮称）</span>
         </span>
-        <span className="text-sm opacity-60">
-          Web アプリのインフラ運営シミュレーション（試作）
-        </span>
-        <div role="tablist" className="tabs tabs-box tabs-sm mx-2">
+        <div role="tablist" className="tabs tabs-box tabs-sm shrink-0">
           {(
             [
               ['game', 'ゲーム'],
@@ -383,10 +380,10 @@ export function App() {
           ))}
         </div>
         {/* 右端: 新しいゲーム（運営中・終わった後）・遊び方（ゲームモードだけ）・設定（D-146・D-147） */}
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
           {mode === 'game' && state && (
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-sm px-2 whitespace-nowrap"
               onClick={() => setConfirmRestart(true)}
             >
               新しいゲーム
