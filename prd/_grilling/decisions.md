@@ -2072,7 +2072,7 @@
   - GitHub Actions の `stats-image.yml`（`workflow_dispatch`）が `packages/stats/Dockerfile.prod` を作り、`ghcr.io/daiius/infra-supra-stats:<SHA>`（main からなら `latest` も）を push する。`GIT_COMMIT` はその SHA（`/api/version` と画面のデプロイのコミットを見比べる。D-135・D-155）。第三者の action は使わず、ランナーの docker と `GITHUB_TOKEN` で login する（seseraki の build-push-server.yml の形に倣い、action の固定を増やさない）。
   - VPS の側は `packages/stats/deploy/` の例（`compose.example.yml`・`nginx.example.conf`・`server.env.example`・`migrate.env.example`・`deploy.sh`）を写して使う。compose は既存の Postgres の compose と分け、Postgres の網に external で入る。**env は常駐のサーバー用と migration 用に分け**、常駐のコンテナに管理ロールのパスワードを渡さない。
   - `deploy.sh <SHA> [--check]`: 今の版・イメージの有無を見る → 確認 → pull → migration（使い捨て）→ `up -d` → `/api/version` の commit が SHA と一致するかまで確かめる。
-  - nginx は `$remote_addr`・`$http_x_forwarded_for` を含まない `log_format`、`X-Forwarded-For`・`X-Real-IP` を空にして渡す、error_log は `crit`、`/api/` 以外は 404、本文は 128k で止める（§4・D-149・D-153）。
+  - nginx は `$remote_addr`・`$http_x_forwarded_for` を含まない `log_format`、`X-Forwarded-For`・`X-Real-IP` を空にして渡す、error_log は `/dev/null`（どのレベルでも IP が付くため。nginx 全体の error_log も見直す）、`/api/` 以外は 404、本文は 128k で止める（§4・D-149・D-153）。
   - migration は足す方向だけにする（本番に流した migration は書き換えない）。
 - 正典: [prd/15](../15-results-and-stats.md) §7.1。
 
