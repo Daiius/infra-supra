@@ -210,7 +210,11 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
     <span className="grid grid-cols-4 gap-1">
       {[0, 1, 2, 3].map((i) => (
         <span key={i} className="flex flex-col gap-0.5">
-          <span className={`block h-5 rounded ${MEDIA}`} />
+          <span
+            className={`flex h-5 items-center justify-center rounded ${MEDIA}`}
+          >
+            <ImageIcon className="h-2.5 w-2.5" />
+          </span>
           <Bar w={80} h="h-1" />
         </span>
       ))}
