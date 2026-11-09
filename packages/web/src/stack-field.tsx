@@ -519,6 +519,7 @@ export function StackField({
   partsExtra,
   partsCompare,
   diagramCaption = defaultDiagramCaption,
+  alsoShow,
 }: {
   scenario: Scenario;
   framework: FrameworkId;
@@ -561,10 +562,12 @@ export function StackField({
   diagramCaption?: (selected: boolean, remembered: boolean) => string;
   /** 部品の ⓘ の比較（選んでいる構成の今の条件で、スロットだけ替えた見積。D-124）。省略は説明の吹き出し。 */
   partsCompare?: PartsCompare | undefined;
+  /** 隠した構成でも出す構成（ゲームの途中で、隠した構成で始めた古い保存の今の構成。D-100・D-185）。 */
+  alsoShow?: number | undefined;
 }) {
   // 隠した構成（D-100）だけを外す。今のフレームワークを載せられない構成も出す（D-113）
   const groups = stackTabGroups(
-    STACKS.filter((s) => !s.hidden).map((s) => s.index),
+    STACKS.filter((s) => !s.hidden || s.index === alsoShow).map((s) => s.index),
     framework,
   );
   const indexOf = (id: string) => STACKS.findIndex((s) => s.id === id);

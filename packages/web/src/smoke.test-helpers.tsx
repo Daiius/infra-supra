@@ -341,6 +341,40 @@ export const slotGroup = (label: string, by: 'label' | 'slot' = 'label') => {
   return row!;
 };
 
+/** ゲームの行動の欄の「構成を変える」の畳んだ欄（D-185）。 */
+export const setupChangeFold = (): HTMLDetailsElement =>
+  document.querySelector<HTMLDetailsElement>('details[data-setup-change]')!;
+
+/** 「構成を変える」の欄を開く（開いていればそのまま）。中身は開いたときだけ描く。 */
+export function openSetupChange(): HTMLDetailsElement {
+  const d = setupChangeFold();
+  expect(d, '構成を変える の欄').not.toBeNull();
+  if (!d.open) fireEvent.click(d.querySelector('summary')!);
+  expect(d.open).toBe(true);
+  return d;
+}
+
+/** 「構成を変える」の変更の内訳の行（D-185）。 */
+export const changeItems = (): HTMLElement[] => [
+  ...setupChangeFold().querySelectorAll<HTMLElement>(
+    'section[aria-label="変更の内訳"] li[data-change-kind]',
+  ),
+];
+
+/** 「来月の行動にする」を押す（選び直したものを今月の行動にする。D-185）。 */
+export function registerSetupChange() {
+  const b = within(setupChangeFold()).getByRole<HTMLButtonElement>('button', {
+    name: '来月の行動にする',
+  });
+  expect(
+    b.disabled,
+    changeItems()
+      .map((x) => x.textContent)
+      .join('\n'),
+  ).toBe(false);
+  fireEvent.click(b);
+}
+
 /** 未決の提案の確認のダイアログ（D-140）。開いていなければ null。 */
 export const declineConfirm = (): HTMLElement | null =>
   document.querySelector<HTMLElement>('dialog[data-decline-confirm][open]');

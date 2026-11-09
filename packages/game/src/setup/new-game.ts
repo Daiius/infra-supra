@@ -158,6 +158,13 @@ export function setupSlots(
   };
   const slots: SetupSlot[] = componentSlots(draft).map(
     ({ slot, label, options }) => {
+      // 提案で付いた部品を今使っている（ゲームの途中の「構成を変える」の欄でチャットを受けた後など）なら、その部品の 1 択として
+      // 出す（今の値を消さない。新しくは選べず、外せない。OCL-80A47F1A）
+      const active = options.find(
+        (o) =>
+          o.id === choices[slot] && proposalOnlyComponent(scenario, slot, o.id),
+      );
+      if (active) return { slot, label, options: [active], fixed: true };
       const usable = options.filter(
         (o) => !proposalOnlyComponent(scenario, slot, o.id),
       );
