@@ -1,0 +1,16 @@
+bytesized-supra-inf.woff2
+=========================
+
+Font: Bytesized Regular (Copyright 2024 The Bytesized Project Authors,
+https://github.com/balt-dev/bytesized-gf)
+License: SIL Open Font License, Version 1.1 (full text: Bytesized-OFL.txt next to this file)
+
+This file is a subset of Bytesized that contains only the glyphs
+"S u p r a I n f" (U+49, U+53, U+61, U+66, U+6E, U+70, U+72, U+75),
+used only for the header logo of infra-supra (D-184).
+
+Retrieved: 2026-11-09
+- CSS (subset request): https://fonts.googleapis.com/css2?family=Bytesized&text=SupraInf
+- woff2 (URL listed in that CSS): https://fonts.gstatic.com/l/font?kit=goksH6L8FkdnROln8XBTTliv0a8hxcu7ZJ0&skey=5635b0b1851f8597&v=v1
+- License text: https://raw.githubusercontent.com/google/fonts/main/ofl/bytesized/OFL.txt
+  (METADATA.pb in the same directory: license "OFL", no Reserved Font Name)

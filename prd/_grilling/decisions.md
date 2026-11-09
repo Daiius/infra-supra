@@ -2272,6 +2272,19 @@
 - 描き方（ページの描き方）は曲線にも効く: 今の構成は入力のまま、ほかの構成は `withStackRemembered`（構成を選んだときと同じ）で描き方を引き継ぎ、その構成で使えない描き方だけ既定に戻る。
 - テスト: web の `model.test.ts`（全構成を STACKS の順に・隠した構成と Astro × AWS は入らない）・`estimate-mode.smoke.test.tsx` の W-67（全構成が線・足し引きの UI が無い・凡例で強調と戻す・URL は変わらない）。
 
+### D-184 ヘッダーの名前を、分数の形のロゴ（Supra / Infra）にする（2026-11-09・ユーザーの決定）
+
+- 依頼（ユーザー。supervisor 経由・2026-11-09）: ヘッダーの左上の「infra-supra（仮称）」の文字をロゴにする。
+- 決定:
+  - **形**: Google Fonts の Bytesized で、分数の要領で分子に「Supra」・括線・分母に「Infra」。括線は文字の幅にそろえる。色はテーマのトークン（`--color-base-content`）。読み上げの名前は「infra-supra」（`role="img"` + `aria-label`）。
+  - **フォントの配り方**: ロゴでしか使わないので、使う 8 文字（S u p r a I n f）だけに絞った woff2 を自分で配る（`packages/web/public/fonts/bytesized-supra-inf.woff2`・564 バイト。CSS2 API の `text=SupraInf` で取得）。実行時に Google へ通信しない。ライセンスは SIL OFL 1.1（Reserved Font Name なし）で、本文 `Bytesized-OFL.txt` と出典・取得日 `SOURCE.txt` を同じ場所に置く。`font-display: block` + index.html の preload。
+  - **入れ替えの演出（こっそり）**: 開いて数秒後（4 秒）に 1 回だけ分子と分母が上下に滑って入れ替わり、1.6 秒後に戻る。マウスを乗せている間（タッチは押すと 1.6 秒）も入れ替わる。transform だけで動かす。`prefers-reduced-motion: reduce` では入れ替え自体をしない。
+  - **大きさ**: Bytesized は 1em = 16 単位・点 1 つが 2 単位なので、16px（点が 2px ちょうど）にする。ロゴの高さは 38px（字 16px × 2 + 括線と上下の空き 6px）で、ヘッダー（daisyUI の navbar。最小 64px）の中に収まり、高さは変わらない。
+  - **「（仮称）」**: 正式名称は未決（Q-07）なので、ロゴの横に小さく残す。
+  - favicon は今のまま。
+- テスト: `logo.smoke.test.tsx`（W-184a〜e。分子と分母・読み上げの名前・開いて数秒後の 1 回・ホバーとタッチ・動きを減らす設定では入れ替えない・ヘッダーに出る）。
+- 実装: `packages/web/src/logo.tsx`・`styles.css`（`@font-face` と `.logo-fraction`）・`index.html`（preload）・App.tsx のヘッダー。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
