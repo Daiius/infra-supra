@@ -3,9 +3,13 @@ import { newSave, rewindSave, replaySave, withTurn } from 'game';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isPlayNonce,
+  loadPlayToken,
   newPlayNonce,
+  PLAY_TOKEN_KEY,
   STATS_PLAY_ID_PATTERN,
   statsPlayId,
+  storePlayNonce,
+  storePlayToken,
 } from './play-nonce.ts';
 
 afterEach(() => {
@@ -56,5 +60,104 @@ describe('play-nonce', () => {
     b = withTurn(b, [{ type: 'set', key: 'format', value: 84 }]);
     while (replaySave(b).phase === 'playing') b = withTurn(b, []);
     expect(statsPlayId(nonce, b)).not.toBe(id);
+  });
+});
+
+describe('開始のトークン（D-174）', () => {
+  const memoryStorage = () => {
+    const m = new Map<string, string>();
+    return {
+      m,
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+    };
+  };
+  const token = 'a'.repeat(43);
+
+  it('nonce と組で持ち、そのプレイにだけ返す。別のプレイを始める・プレイが無くなると消える', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    const a = newPlayNonce();
+    const b = newPlayNonce();
+    storePlayNonce(a);
+    storePlayToken(a, token);
+    expect(JSON.parse(storage.m.get(PLAY_TOKEN_KEY)!)).toEqual({
+      nonce: a,
+      token,
+    });
+    expect(loadPlayToken(a)).toBe(token);
+    expect(loadPlayToken(b)).toBeNull();
+    // 同じ nonce を書き直しても残る（再開）
+    storePlayNonce(a);
+    expect(loadPlayToken(a)).toBe(token);
+    // 別のプレイを始めると消える
+    storePlayNonce(b);
+    expect(storage.m.has(PLAY_TOKEN_KEY)).toBe(false);
+    storePlayToken(b, token);
+    storePlayNonce(null);
+    expect(loadPlayToken(b)).toBeNull();
+  });
+
+  it('形の違う値は読まない', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    const a = newPlayNonce();
+    for (const v of ['x', '{}', JSON.stringify({ nonce: a, token: 'short' })]) {
+      storage.m.set(PLAY_TOKEN_KEY, v);
+      expect(loadPlayToken(a)).toBeNull();
+    }
+  });
+
+  it('localStorage が使えない環境でも、開いている間はメモリに持つ', () => {
+    const broken = () => {
+      throw new Error('blocked');
+    };
+    vi.stubGlobal('localStorage', {
+      getItem: broken,
+      setItem: broken,
+      removeItem: broken,
+    });
+    const a = newPlayNonce();
+    storePlayNonce(a);
+    storePlayToken(a, token);
+    expect(loadPlayToken(a)).toBe(token);
+    storePlayNonce(null);
+    expect(loadPlayToken(a)).toBeNull();
+  });
+
+  it('書き込みだけ失敗する環境（容量の上限など）でも、メモリのトークンを読み出す（OCL-07814537）', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', {
+      ...storage,
+      setItem: () => {
+        throw new Error('quota');
+      },
+    });
+    const a = newPlayNonce();
+    // 前のプレイの古い値が残っていても、メモリの今の値を使う
+    storage.m.set(
+      PLAY_TOKEN_KEY,
+      JSON.stringify({ nonce: newPlayNonce(), token: 'b'.repeat(43) }),
+    );
+    storePlayNonce(a);
+    storePlayToken(a, token);
+    expect(loadPlayToken(a)).toBe(token);
+    storePlayNonce(a);
+    expect(loadPlayToken(a)).toBe(token);
+    storePlayNonce(null);
+    expect(loadPlayToken(a)).toBeNull();
+  });
+
+  it('取りに行った後に別のプレイを始めていたら、遅れて届いた前のプレイのトークンは書かない（OCL-DE27A041）', () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    const a = newPlayNonce();
+    const b = newPlayNonce();
+    storePlayNonce(a);
+    storePlayNonce(b);
+    storePlayToken(b, token);
+    storePlayToken(a, 'c'.repeat(43));
+    expect(loadPlayToken(b)).toBe(token);
+    expect(loadPlayToken(a)).toBeNull();
   });
 });

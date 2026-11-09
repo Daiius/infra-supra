@@ -1,4 +1,4 @@
-// migration を順に当てたとき、前の migration の行が残って通るか（D-166・D-169・D-171）。
+// migration を順に当てたとき、前の migration の行が残って通るか（D-166・D-169・D-171・D-174）。
 // 本番は最初の migration（20261108180633_results）を流した後に、次の migration を足して流す。前の形で保存した行があっても
 // 止まらず、play_id・stack_id は埋まり、total_cost は null（分布に入れない）になることを PGlite で確かめる。
 import { PGlite } from '@electric-sql/pglite';
@@ -48,12 +48,15 @@ describe('migration の順序', () => {
       play_id: string;
       stack_id: string;
       total_cost: number | null;
-    }>('select play_id, stack_id, total_cost from results');
+      flag: string | null;
+    }>('select play_id, stack_id, total_cost, flag from results');
     expect(rows.rows).toEqual([
       {
         play_id: expect.stringMatching(/^legacy-\d+$/),
         stack_id: 'cloudflare-vinext-paid',
         total_cost: null,
+        // 印の列（D-174）を足す前の行は印なし（分布に入る）
+        flag: null,
       },
     ]);
     const repo = drizzleRepo(db);

@@ -15,6 +15,7 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 import type { SaveData } from 'game';
+import { RESULT_FLAGS, type ResultFlag } from '../repo.ts';
 
 const table = snakeCase.table;
 
@@ -60,11 +61,20 @@ export const results = table(
     totalCost: doublePrecision(),
     /** 送られた保存（始めたときの選択と行動の列。前の試行は除く）。バランスの見直しで再生し直す元。 */
     save: jsonb().$type<SaveData>().notNull(),
+    /**
+     * 分布に入れない理由の印（D-174。repo.ts の RESULT_FLAGS）。null なら印なし。大量の送信を止めるために付け、行は消さない
+     * （後で見直して null に戻せば分布に入る）。この列を足す前の行は null。
+     */
+    flag: text().$type<ResultFlag>(),
   },
   (t) => [
     check(
       'results_end_reason_check',
       sql`${t.endReason} in ('completed', 'cash', 'outages', 'policy')`,
+    ),
+    check(
+      'results_flag_check',
+      sql`${t.flag} is null or ${t.flag} in (${sql.raw(RESULT_FLAGS.map((f) => `'${f}'`).join(', '))})`,
     ),
     // ヒストグラムの絞り込み（シナリオ・完走・戻っていない・同じシード）
     index('results_histogram_idx').on(
@@ -73,6 +83,8 @@ export const results = table(
       t.rewound,
       t.seed,
     ),
+    // 同じ結果の数の上限（D-174）: 同じ play_hash の直近の行を数える
+    index('results_dup_cap_idx').on(t.playHash, t.createdAt),
   ],
 );
 

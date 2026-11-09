@@ -6,6 +6,8 @@
 // - 失敗しても画面には何も出さず、送り直さない。サーバーも同じプレイを 1 行にする（playId。D-169）。
 // - 送るもの: プレイの id（プレイごとのランダムな nonce と手元の履歴の id。端末や人を識別しない）・始めたときの選択・
 //   行動の列（前の試行は除く）・4 軸・終わり方。名前・IP・端末の情報は送らない（本文に入れない）。
+// - 開始のトークン（D-174）: 新しいプレイを始めるときに取りに行き（requestPlayToken）、送信に添える。失敗しても遊べる
+//   （トークン無しで送る。サーバーは保存するが分布に入れない）。
 // - 分布（段 3・D-161）: 完走したら、送信が終わった後に 4 軸 × 2 の分布を 1 回で取る（fetchDistribution）。
 import {
   RESULT_AXES,
@@ -16,7 +18,12 @@ import {
   type SaveData,
 } from 'game';
 import { hc } from 'hono/client';
-import { statsPlayId } from './play-nonce.ts';
+import {
+  loadPlayToken,
+  statsPlayId,
+  STATS_PLAY_TOKEN_PATTERN,
+  storePlayToken,
+} from './play-nonce.ts';
 import type { AppType, Distribution } from 'stats';
 import {
   membershipOf,
@@ -44,14 +51,38 @@ const statsClient = (): Client =>
       fetch(input, { ...init, credentials: 'omit' }),
   }));
 
-/** 送る中身（prd/15 §4）。nonce は play-nonce.ts（D-169）。 */
-export function submissionOf(save: SaveData, state: GameState, nonce: string) {
+/** 送る中身（prd/15 §4）。nonce は play-nonce.ts（D-169）。token は開始のトークン（無ければ欄ごと付けない。D-174）。 */
+export function submissionOf(
+  save: SaveData,
+  state: GameState,
+  nonce: string,
+  token: string | null = null,
+) {
   return {
     playId: statsPlayId(nonce, save),
+    ...(token ? { token } : {}),
     save: withoutPrevious(save),
     axes: resultAxesOf(state),
     end: state.end!,
   };
+}
+
+/**
+ * 新しいプレイの開始のトークンを取りに行き、nonce と組にして持つ（D-174）。フラグが無い・開発用の架空の分布のときは取りに行かない。
+ * 失敗しても何もしない（例外を出さない。トークン無しで送るだけ）。
+ */
+export async function requestPlayToken(nonce: string): Promise<void> {
+  if (statsMockEnabled() || !statsEnabled()) return;
+  try {
+    const res = await statsClient().api.plays.$post();
+    if (!res.ok) return;
+    const body: unknown = await res.json().catch(() => null);
+    const token = (body as { token?: unknown } | null)?.token;
+    if (typeof token === 'string' && STATS_PLAY_TOKEN_PATTERN.test(token))
+      storePlayToken(nonce, token);
+  } catch {
+    // 取れなくても遊べる
+  }
 }
 
 /**
@@ -81,7 +112,7 @@ export async function submitResult(
     return 'skipped';
   try {
     const res = await statsClient().api.results.$post({
-      json: submissionOf(save, state, nonce),
+      json: submissionOf(save, state, nonce, loadPlayToken(nonce)),
     });
     if (!res.ok) return 'rejected';
     const body: unknown = await res.json().catch(() => null);

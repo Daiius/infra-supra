@@ -22,7 +22,24 @@ export type ResultRecord = {
   featurePoints: number;
   totalCost: number;
   save: SaveData;
+  /** 分布に入れない理由の印（D-174）。null なら印なし。後で見直して外せば分布に戻る。 */
+  flag: ResultFlag | null;
 };
+
+/**
+ * 分布に入れない理由（D-174。大量の送信を止める）。行は保存し、後で見直して除外・復帰できるようにする。
+ * - no-token: 開始のトークンが本文に無い（開始の通信に失敗した正直なプレイとみなす。応答も正直に分布に入らないと返す）
+ * - bad-token: トークンが置き場に無い（期限切れ・使い済み・作り物）
+ * - too-fast: 発行から送信までが、遊んだ月の数 × 下限の秒数より短い
+ * - dup-cap: 同じ結果（play_hash）が直近 1 時間に上限の件数だけ分布に入っている
+ */
+export const RESULT_FLAGS = [
+  'no-token',
+  'bad-token',
+  'too-fast',
+  'dup-cap',
+] as const;
+export type ResultFlag = (typeof RESULT_FLAGS)[number];
 
 /** 分布の絞り込み。seed を指定すれば同じシードだけ（D-136）。 */
 export type AxisQuery = {
@@ -31,19 +48,29 @@ export type AxisQuery = {
   seed?: number;
 };
 
+/** 同じ結果の数の上限（D-174）。since より後に、同じ play_hash で分布に入った行が max 件以上あれば dup-cap の印を付ける。 */
+export type DupCap = { since: Date; max: number };
+
 export interface ResultsRepo {
   /**
-   * 1 行足す。同じ playId がすでにあれば足さずに 'duplicate'。inHistogram は保存されている行（duplicate なら前からある行）が
-   * ヒストグラムに入るか（画面が自分を分布に数えるかの判断に使う。戻ったプレイの行が先にあれば入らない。OCL-9B705B16）。
+   * 1 行足す。同じ playId がすでにあれば足さずに 'duplicate'。stored は保存されている行（duplicate なら前からある行）の印
+   * （画面が自分を分布に数えるかの判断に使う。戻ったプレイの行が先にあれば入らない。OCL-9B705B16）。
+   * dupCap を渡すと、印の無い完走の行は同じ結果の件数を数えてから足す（数えて足すまでを同じ play_hash の間で直列にする）。
    */
-  insert(record: ResultRecord): Promise<InsertResult>;
-  /** ヒストグラムに入れる値（完走・戻っていないプレイだけ。D-137・D-148）。並びは問わない。 */
+  insert(record: ResultRecord, dupCap?: DupCap): Promise<InsertResult>;
+  /** ヒストグラムに入れる値（完走・戻っていない・印の無いプレイだけ。D-137・D-148・D-174）。並びは問わない。 */
   histogramValues(q: AxisQuery): Promise<number[]>;
 }
 
+/** 分布に入るかを決める行の欄。 */
+export type HistogramMarks = Pick<
+  ResultRecord,
+  'endReason' | 'rewound' | 'flag'
+>;
+
 export type InsertResult = {
   status: 'inserted' | 'duplicate';
-  inHistogram: boolean;
+  stored: HistogramMarks;
 };
 
 /** 4 軸の id → 行の欄。 */
@@ -54,21 +81,49 @@ export const AXIS_FIELD = {
   totalCost: 'totalCost',
 } as const satisfies Record<ResultAxisId, keyof ResultRecord>;
 
-/** ヒストグラムに入れる行か（完走・戻っていない）。DB の層も同じ条件で絞る。 */
-export const inHistogram = (r: { endReason: string; rewound: boolean }) =>
+/** 印を除けば分布に入る行か（完走・戻っていない）。 */
+export const histogramEligible = (r: { endReason: string; rewound: boolean }) =>
   r.endReason === 'completed' && !r.rewound;
 
-/** 手元の実装（テスト・DB を使わない確かめ用）。 */
-export function memoryRepo(): ResultsRepo & { rows: ResultRecord[] } {
-  const rows: ResultRecord[] = [];
+/** ヒストグラムに入れる行か（完走・戻っていない・印なし）。DB の層も同じ条件で絞る。 */
+export const inHistogram = (r: HistogramMarks) =>
+  histogramEligible(r) && r.flag === null;
+
+/**
+ * 応答で返す inHistogram（D-174）。no-token は正直に返し、ほかの印（bad-token・too-fast・dup-cap）は印が無いときと同じ値を返して、
+ * 弾いたことを悟らせない（大量の送信を作る側に、どの条件で弾かれたかを試させない）。
+ */
+export const reportedInHistogram = (r: HistogramMarks) =>
+  r.flag === 'no-token' ? false : histogramEligible(r);
+
+const marksOf = ({ endReason, rewound, flag }: HistogramMarks) => ({
+  endReason,
+  rewound,
+  flag,
+});
+
+/** 手元の実装（テスト・DB を使わない確かめ用）。createdAt は now で付ける。 */
+export function memoryRepo(
+  now: () => number = Date.now,
+): ResultsRepo & { rows: (ResultRecord & { createdAt?: Date })[] } {
+  const rows: (ResultRecord & { createdAt?: Date })[] = [];
   return {
     rows,
-    async insert(record) {
+    async insert(record, dupCap) {
       const found = rows.find((r) => r.playId === record.playId);
-      if (found)
-        return { status: 'duplicate', inHistogram: inHistogram(found) };
-      rows.push(record);
-      return { status: 'inserted', inHistogram: inHistogram(record) };
+      if (found) return { status: 'duplicate', stored: marksOf(found) };
+      let row = { ...record, createdAt: new Date(now()) };
+      if (dupCap && inHistogram(row)) {
+        const recent = rows.filter(
+          (r) =>
+            r.playHash === row.playHash &&
+            inHistogram(r) &&
+            (r.createdAt?.getTime() ?? 0) >= dupCap.since.getTime(),
+        ).length;
+        if (recent >= dupCap.max) row = { ...row, flag: 'dup-cap' };
+      }
+      rows.push(row);
+      return { status: 'inserted', stored: marksOf(row) };
     },
     async histogramValues({ scenarioId, axis, seed }) {
       return rows

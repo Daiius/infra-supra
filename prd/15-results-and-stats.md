@@ -1,6 +1,6 @@
 # 15. ゲームの結果の振り返りと匿名の集計
 
-> 状態: **決定（2026-11-09・D-131〜D-139）・段 1（ローカル）を実装（D-141〜D-145）・段 2（サーバーと送信）を実装（D-148〜D-155。デプロイは未。§7.1 の手順を待つ）・段 3（ヒストグラムの表示）を実装（D-161〜D-164）・2026-11-09 朝の確認で ④ を費用の合計に替え（D-166）、所持金の目標の目安を表示し（D-167）、花火（D-168）・重複の判定（D-169）・完走の帯（D-170）・構成の列（D-171）を直した**。§8 の未決は、各段に入る前に詰める。
+> 状態: **決定（2026-11-09・D-131〜D-139）・段 1（ローカル）を実装（D-141〜D-145）・段 2（サーバーと送信）を実装（D-148〜D-155。デプロイは未。§7.1 の手順を待つ）・段 3（ヒストグラムの表示）を実装（D-161〜D-164）・2026-11-09 朝の確認で ④ を費用の合計に替え（D-166）、所持金の目標の目安を表示し（D-167）、花火（D-168）・重複の判定（D-169）・完走の帯（D-170）・構成の列（D-171）を直した**。大量の送信を開始のトークンと同じ結果の数の上限で分布から外した（D-174）。§8 の未決は、各段に入る前に詰める。
 > この文書は [07](./07-game-design.md) §7・§9.6・§10.8 の「合否」と「所持金の目標」、[12](./12-external-scenarios-and-ranking.md) §5 の「ランキング」の下書きを置き換える（各節に注記を置いた。元の記述は消していない）。
 > サーバーを持つのはこの集計だけで、ゲームと見積の計算は今までどおりブラウザで行う（[02](./02-architecture.md) §4〜5 の例外。§5）。
 > ゲームのバランスの値（シナリオの値・手間・満足度）は今までどおり**ゲーム上の仮定**。集計の値は遊んだ人の結果で、実在の値ではない。
@@ -92,9 +92,11 @@
 | 行動の列 | 月ごとの行動（今のセーブ `SaveData` の `turns` と同じ中身。D-26） |
 | 4 軸の値 | クライアントが計算した値（§2） |
 | プレイの id | プレイごとのランダムな nonce（UUID）と手元の結果の履歴の id をつないだもの（`<nonce>.<16 進 8 文字>`）。同じプレイの送り直しを 1 件に数えるため。端末や人を識別しない（D-169） |
+| 開始のトークン | 新しいプレイを始めるときに `POST /api/plays` で受け取る使い捨ての番号（乱数。個人を識別しない）。取れなかったときは付けない（§5.5。D-174） |
 | 終わり方 | 完走 / 途中終了の理由（§1） |
 
 - 送るのは 1 プレイ 1 回（手元の履歴に新しく足したとき）。web はビルドの環境変数 `VITE_STATS_ENABLED` が立っているときだけ送り、失敗しても画面に出さず送り直さない（D-152）。「この月に戻る」を使ったプレイは `rewound` の印つきで送る（D-148）。
+- 開始のトークンは、web が新しいプレイを始めるとき（nonce を作る所）に非同期で取りに行き、nonce と組で localStorage（`infra-supra:play-token`）に持つ。`VITE_STATS_ENABLED` が無い・`VITE_STATS_MOCK` のときは取りに行かない。失敗しても遊べる（トークン無しで送る）。再開しても同じトークンを使う（D-174）。
 - **持たないもの**: 名前・IP アドレス・端末の情報（User-Agent など）。サーバーとリバースプロキシのアクセスログにも **IP を残さない設定**にする。Vercel 経由の中継（§5.3）では送り手の IP が転送のヘッダー（`X-Forwarded-For` など）で届くので、そのヘッダーもログに残さない。
 - 表示名・ログインは無い（[12](./12-external-scenarios-and-ranking.md) ES-16 の「匿名の表示名」も置かない）。
 - プライバシーポリシーの画面（web の `privacy-policy.tsx`）は、設定のダイアログと画面の一番下のリンクから開く。文面は D-153。
@@ -153,16 +155,35 @@
 
 | 口 | 中身 |
 |---|---|
-| `POST /api/results` | 本文 `{ playId, save, axes, end }`（§4。`playId` の形が違えば 400。D-169）。シードは 32 ビットの整数だけ。zod でおおまかな形 → game の `parseSave` → `replaySave` で再生 → 4 軸（相対 1e-9 まで同じとみなす）と終わり方を照合。201 保存・200 同じプレイ（同じ `playId`。`duplicate`）。どちらも `inHistogram`（保存されている行が分布に入るか。段 3 の画面が自分を数えるかに使う。D-162）を返す・400 形が違う・413 大きすぎる（64 KB）・422 `invalid-save` / `replay-failed` / `unfinished` / `mismatch`（食い違った欄つき） |
+| `POST /api/plays` | 開始のトークンを発行する。201 `{ token }`（§5.5。D-174） |
+| `POST /api/results` | 本文 `{ playId, token?, save, axes, end }`（§4。`playId` の形が違えば 400。D-169。`token` は §5.5）。シードは 32 ビットの整数だけ。zod でおおまかな形 → game の `parseSave` → `replaySave` で再生 → 4 軸（相対 1e-9 まで同じとみなす）と終わり方を照合。201 保存・200 同じプレイ（同じ `playId`。`duplicate`）。どちらも `inHistogram`（保存されている行が分布に入るか。段 3 の画面が自分を数えるかに使う。D-162）を返す・400 形が違う・413 大きすぎる（64 KB）・422 `invalid-save` / `replay-failed` / `unfinished` / `mismatch`（食い違った欄つき） |
 | `GET /api/results/histogram?scenario=&axis=[&seed=][&value=]` | 完走・戻っていないプレイだけの分布。`{ count, min, max, bins: [{ from, to, count }], position? }`。どの軸も最小〜最大を 20 本（④ が費用の合計になったので幅 1 のビンはやめた。D-166）・中央値 `median`。`value` を付けると `position: { above, equal }`（段 3 の上位 %） |
 | `GET /api/results/distribution?scenario=&seed=[&<軸>=]` | 段 3 の画面が使う。4 軸 ×（同じシード `seed` / 全シード `all`）の 8 本を 1 回で返す（`{ scenarioId, seed, axes }`。切り方は上と同じ。値を付けた軸だけ `position`）。`position` の「同じ」は照合と同じ相対 1e-9 の幅（D-161） |
 | `GET /api/version` | `{ commit, builtAt }`（ビルド引数から。版を手動でそろえるときの確かめ） |
 
-表 `results`（1 プレイ 1 行）: `play_id`（端末ごとのプレイの id・一意。二重の送信を 1 行にする鍵。D-169）・`play_hash`（再生した月ごとの結果とシナリオ・シード・構成・フレームワークの SHA-256。分析用で一意ではない。結果を変えない書き換えでは変わらない。OCL-64BE2E4E）・`created_at`・`scenario_id`・`seed`・`start_date`・`stack_id`（構成の id。並びの番号では持たない。D-171）・`framework`・`rewound`・`end_reason`・`end_month`・`outages`・4 軸（サーバーが数えた値。`total_cost` は 2 つ目の migration より前の行だけ null で、分布に入れない）・`save`（jsonb）。IP・端末の情報の列は無い。既存の Postgres の中の別の DATABASE `infra_supra`、ロールは `infra_supra_admin`（DDL）と `infra_supra_server`（SELECT・INSERT だけ）。
+表 `results`（1 プレイ 1 行）: `play_id`（端末ごとのプレイの id・一意。二重の送信を 1 行にする鍵。D-169）・`play_hash`（再生した月ごとの結果とシナリオ・シード・構成・フレームワークの SHA-256。分析用で一意ではない。結果を変えない書き換えでは変わらない。OCL-64BE2E4E）・`created_at`・`scenario_id`・`seed`・`start_date`・`stack_id`（構成の id。並びの番号では持たない。D-171）・`framework`・`rewound`・`end_reason`・`end_month`・`outages`・4 軸（サーバーが数えた値。`total_cost` は 2 つ目の migration より前の行だけ null で、分布に入れない）・`save`（jsonb）・`flag`（分布に入れない理由の印。null なら印なし。§5.5。D-174）。IP・端末の情報の列は無い。既存の Postgres の中の別の DATABASE `infra_supra`、ロールは `infra_supra_admin`（DDL）と `infra_supra_server`（SELECT・INSERT だけ）。
 
 - アクセスのログは「方法・パス・状態・時間」だけ（IP・ヘッダー・クエリを出さない）。
 - テストは実 Postgres を使わない: API は手元の実装（`memoryRepo`）、drizzle の層は PGlite に同じ migration を当てる。
-- migration（drizzle-orm・drizzle-kit 1.0.0-rc.5）: `20261108180633_results`（最初の表。本番に流したものは書き換えない）→ `20261109011723_play_id_stack_id_total_cost`（D-166・D-169・D-171。前の形の行があっても通るよう、`play_id` は `legacy-<id>`・`stack_id` は `stack_index` から引き直し・`total_cost` は null で埋める。`db/migration.test.ts`）。
+- migration（drizzle-orm・drizzle-kit 1.0.0-rc.5）: `20261108180633_results`（最初の表。本番に流したものは書き換えない）→ `20261109011723_play_id_stack_id_total_cost`（D-166・D-169・D-171。前の形の行があっても通るよう、`play_id` は `legacy-<id>`・`stack_id` は `stack_index` から引き直し・`total_cost` は null で埋める。`db/migration.test.ts`）→ `20261109021859_play_tokens_flag`（D-174。列 `flag` と索引 `results_dup_cap_idx` を足すだけ。前の行は印なし）。
+
+### 5.5 大量の送信を分布から外す（D-174）
+
+ありえない値（改ざん）は再生と照合で止まる（§5.1）。ここで止めたいのは、照合を通る送信を**大量に**送って分布を壊すことだけで、できるだけシンプルに食い止める。**IP は一切使わない**（§4）。
+
+| 何を見るか | 印（列 `flag`） | 分布 | 応答 |
+|---|---|---|---|
+| 本文にトークンが無い（開始の通信に失敗した正直なプレイとみなす） | `no-token` | 入れない | 正直に `inHistogram: false` |
+| トークンが無効（置き場に無い・期限切れ・使い済み・形が違う） | `bad-token` | 入れない | 印が無いときと同じ（201・完走で戻っていなければ `inHistogram: true`） |
+| 発行から送信までが、遊んだ月の数 × **3 秒**より短い | `too-fast` | 入れない | 同上 |
+| 同じ結果（`play_hash`）が**直近 1 時間**に分布に入った件数が **3 件**以上（4 件目以降） | `dup-cap` | 入れない | 同上 |
+
+- 開始のトークン: `POST /api/plays` でサーバーが乱数（32 バイト・base64url）を作り、Redis に `値 = 発行時刻`・**TTL 1 日**で置く（人のプレイは 5〜10 分）。送信のときに**原子的に取り出して消す**（MULTI の GET + DEL。使い捨て）。照合で落ちた送信ではトークンを消さない。
+- **行は全部保存する**。印は後で見直して除外・復帰できるように残す（null に戻せば分布に入る）。分布は完走・戻っていない・`flag IS NULL` の行だけを数える。
+- 同じ結果の数は DB で数える（`created_at`・`play_hash`・`flag`。索引 `results_dup_cap_idx`）。数えて足すまでを同じ `play_hash` の間で直列にする（advisory lock）。既定のシード 42 の何もしない遊び方のような正当な重なりは時間で散らばる前提。
+- 値は stats の `play-tokens.ts` の定数（`PLAY_TOKEN_TTL_SECONDS`・`MIN_SECONDS_PER_MONTH`・`DUP_CAP_WINDOW_MS`・`DUP_CAP_MAX`）。
+- **Redis**: 環境変数 `REDIS_URL`（VPS の既存の Redis を DB 番号を分けて使う）。`REDIS_URL` が無いとき、本番（`NODE_ENV=production`。Dockerfile.prod が立てる）は**起動を止める**（黙って全部をトークン無しの扱いにしない）。`pnpm dev` ではメモリに置く。テストはメモリ上の実装（実の Redis を使わない）。Redis が落ちている間の送信は 500（画面は何も出さない）。トークンは個人の情報を含まないので、Redis の永続化はどちらでもよい（失うと進行中のプレイが分布から漏れるだけ）。
+- 残した点: トークンの発行に上限は無いので、時間をかけて本当に遊んだ別のシード・別の構成の送信を並べて送ることは止められない（一つずつは遊んだ月 × 3 秒かかる）。
 
 ## 6. シードと分布（D-136・D-137）
 
@@ -199,13 +220,13 @@
 
 1. **DB を作る**（すでにある Postgres に、別の DATABASE とロールを作る。D-154）: `PSQL='<管理者で繋ぐ psql のコマンド>' sh packages/stats/scripts/create-db.sh --check` で今の状態を見てから、`--check` を外して流す（パスワードは尋ねられる。切り戻しはスクリプトの先頭）。
 2. **イメージを作る**（GHCR。D-172）: GitHub の Actions で「Stats image」（`.github/workflows/stats-image.yml`）を、デプロイしたい ref を選んで手で走らせる。`ghcr.io/daiius/infra-supra-stats:<コミットの SHA>` ができる（main からなら `latest` も）。初回は GitHub の Packages でパッケージの公開範囲を決める（公開のリポジトリのコードだけで秘密は入らないので public にしてよい。private のままなら VPS で `docker login ghcr.io`）。
-3. **VPS に置くファイル**（`packages/stats/deploy/` の例を写して埋める。リポジトリには入れない）: `compose.yml`（`compose.example.yml`。既存の Postgres の網を external で指定）・`server.env`（常駐のサーバーのロールだけ）・`migrate.env`（管理ロールだけ。常駐のコンテナには管理ロールのパスワードを渡さない）・`deploy.sh`。env は `chmod 600`。
+3. **VPS に置くファイル**（`packages/stats/deploy/` の例を写して埋める。リポジトリには入れない）: `compose.yml`（`compose.example.yml`。既存の Postgres の網と既存の Redis の網を external で指定。同じ網なら 1 つにする）・`server.env`（常駐のサーバーのロールと `REDIS_URL`。§5.5・D-174。VPS の既存の Redis を、ほかのアプリと DB 番号を分けて使う（例 `redis://<Redis のサービス名>:6379/3`）。無いと起動しない。トークンは個人の情報を含まないので、Redis の永続化はどちらでもよい）・`migrate.env`（管理ロールだけ。常駐のコンテナには管理ロールのパスワードを渡さない）・`deploy.sh`。env は `chmod 600`。
 4. **migration を流し、サーバーを入れ替える**: `sh deploy.sh <SHA> --check` で今の版とイメージの有無を見てから、`sh deploy.sh <SHA>`（pull → migration → `up -d` → `/api/version` の commit が SHA と一致するかまで確かめる）。サーバーは `127.0.0.1:4000` にだけ開け、前段の nginx から届かせる。
    - 🔒 **前段の nginx のアクセスログに IP を残さない**（§4）: `deploy/nginx.example.conf` のとおり、`$remote_addr`・`$http_x_forwarded_for` を含まない `log_format` にし、`X-Forwarded-For`・`X-Real-IP` もサーバーへ渡さない。error_log はどのレベルでも IP を付けるので、このサーバーの分は `/dev/null` に捨てる（server を決める前の TLS の失敗などは nginx 全体の error_log に出るので、その保存先と期間も見直す）。
    - API の宛先は https にする（`vercel.ts` が https のオリジンしか受けない）。
    - migration は**足す方向だけ**にする（流した migration は書き換えない）。前の SHA に戻すときも、前の版のサーバーが新しい表で動く範囲に保つ。
 5. **中継を確かめる（D-150 のスパイク）**: Vercel のプロジェクト infra-supra（チーム faveo-systema）の Root Directory は `packages/web`（2026-11-09 に CLI で読み取って確認済み。Framework Preset は Vite・Node は 26.x）なので、`packages/web/vercel.ts` のままでよい。環境変数 `API_ORIGIN` に `https://<VPS のホスト名>` を（Preview だけに先に）入れ、プレビューをデプロイして `<プレビューの URL>/api/version` を開く。VPS の `{ commit, builtAt }` が返れば第一案で動いている。404 や画面の HTML が返れば、`vercel.ts` が環境変数を読めていないので予備案（転送の Function）を作る（Claude に頼む）。
-6. **送信を立てる**: 動いたら `API_ORIGIN` を Production にも入れ、`VITE_STATS_ENABLED=true` を Production（と Preview）に入れて再デプロイする。1 回遊び切って、`select count(*), max(created_at) from results;` で 1 行増えたこと、プライバシーポリシーの「まだ何も送っていません」が消えたことを確かめる。
+6. **送信を立てる**: 動いたら `API_ORIGIN` を Production にも入れ、`VITE_STATS_ENABLED=true` を Production（と Preview）に入れて再デプロイする。1 回遊び切って、`select count(*), max(created_at) from results;` で 1 行増えたこと、`select flag, count(*) from results group by flag;` で自分のプレイが印なし（null）で入ったこと（`no-token` なら開始のトークンが取れていない。§5.5）、プライバシーポリシーの「まだ何も送っていません」が消えたことを確かめる。
 7. **版をそろえる**: 以後、画面とサーバーを同じコミットからデプロイし、`/api/version` の `commit` と Vercel のデプロイのコミットが同じかを見る。版がずれると正しいプレイも `mismatch`（422）になる（画面には出ない）。
 
 ## 8. 未決（各段に入る前に詰める）

@@ -82,6 +82,7 @@ import { SettingsDialog } from './settings-dialog.tsx';
 import { PrivacyPolicyDialog } from './privacy-policy.tsx';
 import {
   loadStatsView,
+  requestPlayToken,
   statsViewEnabled,
   submitResult,
   type SubmitOutcome,
@@ -489,16 +490,21 @@ export function App() {
             />
           ) : (
             <Briefing
-              onStart={(save) =>
+              onStart={(save) => {
+                const nonce = newPlayNonce();
+                // 今のプレイの nonce を先に書いてから、開始のトークンを取りに行く（D-174。非同期・失敗しても遊べる。
+                // フラグが無ければ何もしない。応答が届く前に別のプレイを始めていたら、その応答は捨てる。OCL-DE27A041）
+                storePlayNonce(nonce);
+                void requestPlayToken(nonce);
                 setSession({
                   save,
-                  nonce: newPlayNonce(),
+                  nonce,
                   state: replaySave(save),
                   previous: null,
                   restored: false,
                   runId: newRunId(),
-                })
-              }
+                });
+              }}
             />
           )}
         </Suspense>
