@@ -149,7 +149,8 @@ export function ChoiceCarousel<T extends string>({
       (g) => g.querySelector('input:checked'),
     );
     if (!el) return;
-    const left = el.offsetLeft - row.offsetLeft;
+    // 列に relative を付けているので、子の offsetLeft は列を基準にした位置（列の offsetLeft は引かない。OCL-8A619CC3）
+    const left = el.offsetLeft;
     if (
       left < row.scrollLeft ||
       left + el.offsetWidth > row.scrollLeft + row.clientWidth
@@ -386,8 +387,12 @@ export function ChoiceCarousel<T extends string>({
           // 中で横にスクロールできるもの（構成図など）の上で始めたスワイプは、そちらのスクロールに任せる
           onTouchStart={(t) => {
             const p = t.touches[0];
+            // ⓘ の説明・部品の比較・吹き出しはポータルで描くので、その中の操作も React の木を伝ってここへ届く。
+            // DOM でカード列の中で始めたスワイプだけを見る（OCL-A3158607）
             swipe.current =
-              p && !inHorizontalScroller(t.target as Element, t.currentTarget)
+              p &&
+              t.currentTarget.contains(t.target as Node) &&
+              !inHorizontalScroller(t.target as Element, t.currentTarget)
                 ? { x: p.clientX, y: p.clientY }
                 : null;
           }}

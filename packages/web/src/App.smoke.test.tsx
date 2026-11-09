@@ -1289,6 +1289,17 @@ describe('ゲームモードの画面', () => {
     expect(card()).toBe(cards[1]);
     swipe(80);
     expect(card()).toBe(cards[0]);
+    // カードの外（ポータルの説明など）で始めたスワイプは構成を替えない（OCL-A3158607）
+    const outside = document.createElement('div');
+    document.body.appendChild(outside);
+    fireEvent.touchStart(outside, {
+      touches: [{ clientX: 200, clientY: 300 }],
+    });
+    fireEvent.touchEnd(outside, {
+      changedTouches: [{ clientX: 100, clientY: 300 }],
+    });
+    expect(card()).toBe(cards[0]);
+    outside.remove();
   });
 
   it('W-52 始める画面: 狭い画面の前後のカードの帯の三角を押すと前後の構成を選び、帯の無い端では出ない。三角は読み上げに出ない', async () => {
