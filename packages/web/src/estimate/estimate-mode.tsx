@@ -1111,6 +1111,12 @@ function readCurveScale(): CurveScale {
   }
 }
 
+/** 最初に止まる点の添字（止まらなければ null）。凡例に「〜 PV から止まります」と言葉で出す（D-180）。 */
+function stopsFrom(points: readonly { blocking: readonly string[] }[]) {
+  const i = points.findIndex((p) => p.blocking.length > 0);
+  return i < 0 ? null : i;
+}
+
 function CostCurve({
   input,
   rows,
@@ -1162,7 +1168,7 @@ function CostCurve({
         今のテンプレート・フレームワーク・設定のまま、月の PV
         だけを変えたときの月額（USD）です。部品は今の構成だけ今の選択、他は既定です。
         {anyStop &&
-          '× は止まる上限（無料プランの上限など）に達する点で、× どうしを結ぶ線は薄くしています。'}
+          '上限（無料プランの上限など）に達して止まる規模は、線を薄い破線にしています（その月額では運用できません）。止まるまでの範囲は通常の線です。'}
         {unpriced && '料金未取得の明細がある点は合計が下限です。'}
       </p>
       <div
@@ -1189,12 +1195,38 @@ function CostCurve({
         </span>
       </div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] viz-root">
-        {series.map((s) => (
-          <li key={s.id} className="flex min-w-0 items-center gap-1">
-            <SeriesSwatch color={s.color} shape={s.shape} />
-            <span className="break-words">{s.label}</span>
+        {series.map((s, i) => {
+          const stop = stopsFrom(curves[i]!.points);
+          return (
+            <li
+              key={s.id}
+              className="flex min-w-0 items-center gap-1"
+              data-curve-legend={s.id}
+            >
+              <SeriesSwatch color={s.color} shape={s.shape} />
+              <span className="break-words">
+                {s.label}
+                {stop !== null && (
+                  <span className="text-error" data-stops-from>
+                    {stop === 0
+                      ? ' — どの規模でも止まります（上限）'
+                      : ` — ${pvLabel(CURVE_PVS[stop]!)} PV から止まります（上限）`}
+                  </span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+        {anyStop && (
+          <li className="flex min-w-0 items-center gap-1" data-stopped-key>
+            <SeriesSwatch
+              color="var(--text-secondary)"
+              shape="circle"
+              stopped
+            />
+            <span>薄い破線: 上限に達して止まる区間</span>
           </li>
-        ))}
+        )}
       </ul>
       <CurveChart
         scale={scale}
@@ -1275,7 +1307,7 @@ function CostCurve({
                     >
                       {usdShort(p.totalUsd)}
                       {p.blocking.length > 0 && (
-                        <span className="text-error"> ×</span>
+                        <span className="block text-error">止まる</span>
                       )}
                     </td>
                   ))}

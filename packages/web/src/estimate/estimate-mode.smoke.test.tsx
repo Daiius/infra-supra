@@ -131,7 +131,8 @@ function expectEstimate(): string {
   const chart = curve.getByRole('img', {
     name: '月の PV ごとの月額（構成ごと）',
   });
-  expect(chart.querySelectorAll('path').length).toBeGreaterThan(0);
+  // 線の区間（止まる区間は薄い破線。D-180）
+  expect(chart.querySelectorAll('[data-segment]').length).toBeGreaterThan(0);
   return title.textContent!.replace(/^月の費用: /, '');
 }
 
@@ -984,5 +985,55 @@ describe('見積モードの画面', () => {
         'figure[data-scale]',
       )!.dataset.scale,
     ).toBe('log');
+  });
+
+  it('W-63 費用の曲線: 止まるまでの区間は通常の線、上限に達して止まる区間は薄い破線で印を描かず、言葉で「止まります」と示す。通常・対数のどちらでも同じ（D-180）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&fw=nextjs&s=cloudflare-vinext-free&pv=10000',
+    );
+    await renderApp();
+    expectEstimate();
+    const curve = card('費用の曲線（月の PV を振る）');
+    const free = () =>
+      curve.querySelector<HTMLElement>(
+        '[data-curve-legend="cloudflare-vinext-free"]',
+      )!;
+    // 凡例: 止まり始める PV を言葉で（実データの無料プランは在庫の上限でどの規模でも止まる。途中から止まる線は curve-chart の smoke）
+    expect(free().textContent).toMatch(
+      /(PV から|どの規模でも)止まります（上限）/,
+    );
+    expect(curve.querySelector('[data-stopped-key]')!.textContent).toContain(
+      '上限に達して止まる区間',
+    );
+    for (const scale of ['linear', 'log'] as const) {
+      fireEvent.click(
+        curve.querySelector<HTMLElement>(`[data-curve-scale="${scale}"]`)!,
+      );
+      const svg = curve.querySelector('figure[data-scale] svg')!;
+      const normal = [...svg.querySelectorAll('[data-segment="normal"]')];
+      const stopped = [...svg.querySelectorAll('[data-segment="stopped"]')];
+      // 止まらない区間（有料のプラン）も、止まる区間（無料のプラン）もある
+      expect(normal.length, scale).toBeGreaterThan(0);
+      expect(stopped.length, scale).toBeGreaterThan(0);
+      for (const l of normal) {
+        expect(l.getAttribute('stroke-dasharray')).toBeNull();
+        expect(l.getAttribute('stroke-opacity')).toBe('1');
+      }
+      for (const l of stopped) {
+        expect(l.getAttribute('stroke-dasharray')).not.toBeNull();
+        expect(Number(l.getAttribute('stroke-opacity'))).toBeLessThan(1);
+      }
+    }
+    // × を止まるの印に使っていない（グラフにも表にも凡例にも × の文字・印が無い）
+    expect(curve.textContent).not.toContain('×');
+    // 表で見る: 止まる点は言葉で
+    const table = within(curve).getByRole('table');
+    expect(
+      within(table)
+        .getAllByText('止まる')
+        .every((e) => e.className.includes('text-error')),
+    ).toBe(true);
   });
 });

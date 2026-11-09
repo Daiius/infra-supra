@@ -776,7 +776,10 @@ export type CurveChartSeries = {
   color: string;
   /** 点の形（同じ色の系列を見分ける 2 つ目の手がかり）。 */
   shape: MarkShape;
-  /** 添字は xs と同じ。flags が空でない点は × で描き、ツールチップに出す。 */
+  /**
+   * 添字は xs と同じ。flags が空でない点は上限に達して止まる点（D-180）: 印を描かず、そこへ入る・そこから出る区間を
+   * 薄い破線にし、ツールチップに「止まります（上限）」と言葉で出す。止まらない区間は通常どおり描く。
+   */
   points: { y: number; flags: string[] }[];
 };
 
@@ -805,27 +808,28 @@ function MarkGlyph({
   return <circle cx={x} cy={y} r="4" {...ring} />;
 }
 
-/** 止まる点の印（×）。地の色の縁取りで線の上でも読めるようにする。 */
-function Cross({ x, y, color }: { x: number; y: number; color: string }) {
-  const d = `M${x - 4.5},${y - 4.5}L${x + 4.5},${y + 4.5}M${x + 4.5},${y - 4.5}L${x - 4.5},${y + 4.5}`;
-  return (
-    <g>
-      <path d={d} stroke="var(--surface-1)" strokeWidth="5" />
-      <path d={d} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-    </g>
-  );
-}
+/** 止まる区間の線（薄い破線。D-180）。 */
+const STOPPED_OPACITY = 0.35;
+const STOPPED_DASH = '4 4';
 
-/** 凡例の見本（線 + 点の形。× は止まる点の印）。 */
+/** 凡例の見本（線 + 点の形）。stopped は止まる区間の見本（薄い破線・点の印なし。D-180）。 */
 export function SeriesSwatch({
   color,
   shape,
+  stopped = false,
 }: {
   color: string;
-  shape: MarkShape | 'cross';
+  shape: MarkShape;
+  stopped?: boolean;
 }) {
   return (
-    <svg width="22" height="12" aria-hidden className="shrink-0">
+    <svg
+      width="22"
+      height="12"
+      aria-hidden
+      className="shrink-0"
+      data-swatch={stopped ? 'stopped' : 'normal'}
+    >
       <line
         x1="1"
         y1="6"
@@ -833,13 +837,11 @@ export function SeriesSwatch({
         y2="6"
         stroke={color}
         strokeWidth="2"
-        strokeLinecap="round"
+        strokeLinecap={stopped ? 'butt' : 'round'}
+        strokeOpacity={stopped ? STOPPED_OPACITY : 1}
+        strokeDasharray={stopped ? STOPPED_DASH : undefined}
       />
-      {shape === 'cross' ? (
-        <Cross x={11} y={6} color={color} />
-      ) : (
-        <MarkGlyph shape={shape} x={11} y={6} color={color} />
-      )}
+      {!stopped && <MarkGlyph shape={shape} x={11} y={6} color={color} />}
     </svg>
   );
 }
@@ -1061,29 +1063,31 @@ export function CurveChart({
             />
           )}
           {series.map((s) => (
-            <g key={s.id}>
+            <g key={s.id} data-series={s.id}>
               {s.points.slice(1).map((p, i) => {
                 const a = s.points[i]!;
-                // 両端とも止まる区間は薄く（その月額では実際には運用できない）
-                const stopped = a.flags.length > 0 && p.flags.length > 0;
+                // 片端でも止まる点に触れる区間は薄い破線（上限に達した後の月額では実際には運用できない。D-180）。
+                // 止まらない区間（無料枠の範囲など）は通常どおり描く
+                const stopped = a.flags.length > 0 || p.flags.length > 0;
                 return (
                   <line
                     key={i}
+                    data-segment={stopped ? 'stopped' : 'normal'}
                     x1={x(xs[i]!)}
                     y1={y(a.y)}
                     x2={x(xs[i + 1]!)}
                     y2={y(p.y)}
                     stroke={s.color}
-                    strokeOpacity={stopped ? 0.35 : 1}
+                    strokeOpacity={stopped ? STOPPED_OPACITY : 1}
+                    strokeDasharray={stopped ? STOPPED_DASH : undefined}
                     strokeWidth="2"
-                    strokeLinecap="round"
+                    strokeLinecap={stopped ? 'butt' : 'round'}
                   />
                 );
               })}
               {s.points.map((p, i) =>
-                p.flags.length > 0 ? (
-                  <Cross key={i} x={x(xs[i]!)} y={y(p.y)} color={s.color} />
-                ) : (
+                // 止まる点には印を描かない（× などの印に「止まる」の意味を持たせない。D-180）
+                p.flags.length > 0 ? null : (
                   <MarkGlyph
                     key={i}
                     shape={s.shape}
@@ -1129,7 +1133,8 @@ export function CurveChart({
                 <div className="flex min-w-0 items-center gap-2">
                   <SeriesSwatch
                     color={s.color}
-                    shape={p.flags.length > 0 ? 'cross' : s.shape}
+                    shape={s.shape}
+                    stopped={p.flags.length > 0}
                   />
                   <span className="font-semibold text-[var(--text-primary)] tabular-nums">
                     {formatValue(p.y)}
@@ -1140,7 +1145,7 @@ export function CurveChart({
                 </div>
                 {p.flags.length > 0 && (
                   <div className="pl-7 text-[var(--text-secondary)]">
-                    止まる: {p.flags[0]}
+                    止まります（上限）: {p.flags[0]}
                     {p.flags.length > 1
                       ? `（ほか ${p.flags.length - 1} 件）`
                       : ''}
