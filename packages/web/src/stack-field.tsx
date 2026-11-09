@@ -30,6 +30,7 @@ import {
 import { useCallback, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
 import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
+import { stackGroupOf } from './parts-memory.ts';
 import { Info } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
 import { EffortBar } from './scenario-briefing.tsx';
@@ -464,7 +465,7 @@ export function stackTabGroups(
 ): ChoiceGroup<string>[] {
   const by = new Map<string, number[]>();
   for (const i of stackIndices) {
-    const p = STACKS[i]!.provider;
+    const p = stackGroupOf(i);
     by.set(p, [...(by.get(p) ?? []), i]);
   }
   const title = (p: string) =>

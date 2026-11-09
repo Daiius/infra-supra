@@ -1891,6 +1891,44 @@ describe('ゲームモードの画面', () => {
     expect(chosen('DB')).toMatch(/^D1/);
   });
 
+  it('W-104 始める画面: 同じ事業者のプランは部品の選択を共有し、今のプランで選べない部品は未選択にして記憶に残し、戻ると戻る（D-176）', async () => {
+    await renderApp();
+    const HOBBY = 'Vercel Hobby + Supabase Free';
+    const PRO = 'Vercel Pro + Supabase Pro';
+    const chosen = (slot: string) =>
+      slotGroup(slot)
+        .querySelector('[data-selected="true"]')
+        ?.textContent?.replace(/^[^:]*:/, '')
+        .trim() ?? null;
+    const cdnRow = () =>
+      document.querySelector('section[data-parts] [data-slot="cdnPlan"]');
+    pickRadio(ARTICLE);
+    pickRadio(HOBBY);
+    pickRadio('Next.js（App Router）');
+    // Hobby で選んだ部品は Pro でも選ばれている
+    pickPart('Neon', slotGroup('DB'));
+    pickRadio(PRO);
+    expect(chosen('DB')).toMatch(/^Neon/);
+    // Pro でだけ選べる部品（CDN の料金のプラン）は、Hobby では出ず、Pro に戻すと戻る
+    pickPart('On-demand CDN（従量）', slotGroup('CDN の料金のプラン'));
+    pickRadio(HOBBY);
+    expect(cdnRow()).toBeNull();
+    expect(chosen('DB')).toMatch(/^Neon/);
+    // Hobby でほかの部品を選んでも、Pro だけの記憶は消えない
+    pickPart('最適化しない', slotGroup('画像'));
+    pickRadio(PRO);
+    expect(chosen('CDN の料金のプラン')).toMatch(/^On-demand CDN/);
+    expect(chosen('画像')).toMatch(/^最適化しない/);
+    // 別の組（Cloudflare）に替えて戻ると、それぞれの組の選択が戻る
+    pickRadio('Cloudflare Paid');
+    expect(slotGroup('DB').hasAttribute('data-unselected')).toBe(true);
+    pickPart('D1', slotGroup('DB'));
+    pickRadio(HOBBY);
+    expect(chosen('DB')).toMatch(/^Neon/);
+    pickRadio('Cloudflare Free');
+    expect(chosen('DB')).toMatch(/^D1/);
+  });
+
   it('W-48 始める画面: どちらの表示でも全部のスロットに届く（構成図は経路の箱か一番下の段の箱、一覧はチップの行。選んだ後の組でも。D-116 の補足）', async () => {
     await renderApp();
     const current = () =>
