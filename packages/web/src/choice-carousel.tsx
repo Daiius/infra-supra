@@ -93,15 +93,22 @@ export function ChoiceCarousel<T extends string>({
   const track = useRef<HTMLDivElement>(null);
   const inputs = useRef<Partial<Record<string, HTMLInputElement | null>>>({});
   const els = useRef<Partial<Record<string, HTMLDivElement | null>>>({});
-  // 直前に Tab を押した時刻。Tab で選んでいないカードの中へ進んだときだけ、そのカードを選ぶ
-  // （ⓘ の説明を閉じてフォーカスが戻ったときや、マウスで ⓘ を押したときは選ばない）
+  // 直前の操作が Tab だったか（その時刻）。Tab で選んでいないカードの中へ進んだときだけ、そのカードを選ぶ。
+  // ほかのキー（説明を閉じる Escape など）・ポインターの操作で解き、使ったら消す（説明を閉じてフォーカスが戻ったときは選ばない。OCL-2B972F69）
   const lastTab = useRef(-Infinity);
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Tab') lastTab.current = performance.now();
+      lastTab.current = e.key === 'Tab' ? performance.now() : -Infinity;
+    };
+    const onPointer = () => {
+      lastTab.current = -Infinity;
     };
     document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', onPointer, true);
+    };
   }, []);
   // カード: 組があれば組ごとに 1 枚、無ければ選択肢ごとに 1 枚
   const cards: readonly { key: string; items: readonly T[] }[] = groups
@@ -392,7 +399,10 @@ export function ChoiceCarousel<T extends string>({
                     ? undefined
                     : (e) => {
                         if (!e.currentTarget.contains(e.target as Node)) return;
-                        if (performance.now() - lastTab.current > 500) return;
+                        const tabbed =
+                          performance.now() - lastTab.current <= 500;
+                        lastTab.current = -Infinity;
+                        if (!tabbed) return;
                         if (!off(id)) {
                           onChange(id);
                           return;

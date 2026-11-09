@@ -1231,6 +1231,21 @@ describe('ゲームモードの画面', () => {
     )!;
     fireEvent.focus(target);
     expect(current().closest('[data-card]')).toBe(other);
+    // 説明の中で Tab を押した直後に Escape で閉じて、選んでいないカードへフォーカスが戻っても選ばない（OCL-2B972F69）
+    const third = cards.find((c) => c !== selected && c !== other)!;
+    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.focus(
+      third.querySelector<HTMLElement>('button, input, [tabindex]')!,
+    );
+    expect(current().closest('[data-card]')).toBe(other);
+    // Tab のあとのマウスの操作でも選ばない
+    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.pointerDown(document);
+    fireEvent.focus(
+      third.querySelector<HTMLElement>('button, input, [tabindex]')!,
+    );
+    expect(current().closest('[data-card]')).toBe(other);
     // Tab でないフォーカス（説明を閉じて戻ったときなど）では選ばない
     const back = selected.querySelector<HTMLElement>(
       'button, input, [tabindex]',
