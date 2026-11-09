@@ -1210,7 +1210,7 @@ describe('ゲームモードの画面', () => {
     expect(current()).toBe(other);
   });
 
-  it('W-52b 始める画面: 選んでいないカードの中へフォーカスが入ると（Tab など）そのカードを選ぶ', async () => {
+  it('W-52b 始める画面: 選んでいないカードの中へ Tab でフォーカスが入るとそのカードを選ぶ（Tab でなければ選ばない）', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     const current = () =>
@@ -1224,11 +1224,19 @@ describe('ゲームモードの画面', () => {
     ];
     const selected = current().closest<HTMLElement>('[data-card]')!;
     const other = cards.find((c) => c !== selected)!;
-    // カードの中のフォーカスを受けるもの（ⓘ などのボタン）にフォーカスを当てる
+    // Tab でカードの中のフォーカスを受けるもの（ⓘ などのボタン）へ進む
+    fireEvent.keyDown(document, { key: 'Tab' });
     const target = other.querySelector<HTMLElement>(
       'button, input, [tabindex]',
     )!;
     fireEvent.focus(target);
+    expect(current().closest('[data-card]')).toBe(other);
+    // Tab でないフォーカス（説明を閉じて戻ったときなど）では選ばない
+    const back = selected.querySelector<HTMLElement>(
+      'button, input, [tabindex]',
+    )!;
+    await new Promise((r) => setTimeout(r, 600));
+    fireEvent.focus(back);
     expect(current().closest('[data-card]')).toBe(other);
   });
 

@@ -93,6 +93,16 @@ export function ChoiceCarousel<T extends string>({
   const track = useRef<HTMLDivElement>(null);
   const inputs = useRef<Partial<Record<string, HTMLInputElement | null>>>({});
   const els = useRef<Partial<Record<string, HTMLDivElement | null>>>({});
+  // 直前に Tab を押した時刻。Tab で選んでいないカードの中へ進んだときだけ、そのカードを選ぶ
+  // （ⓘ の説明を閉じてフォーカスが戻ったときや、マウスで ⓘ を押したときは選ばない）
+  const lastTab = useRef(-Infinity);
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Tab') lastTab.current = performance.now();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, []);
   // カード: 組があれば組ごとに 1 枚、無ければ選択肢ごとに 1 枚
   const cards: readonly { key: string; items: readonly T[] }[] = groups
     ? groups.map((g) => ({ key: g.key, items: g.items }))
@@ -375,13 +385,14 @@ export function ChoiceCarousel<T extends string>({
                         onChange(id);
                       }
                 }
-                // 選んでいないカードの中へフォーカスが入ると（Tab など）ブラウザがそのカードまで横に送るので、
+                // 選んでいないカードの中へ Tab でフォーカスが入ると、ブラウザがそのカードまで横に送るので、
                 // そのカードを選ぶ（見えているカードと選択を食い違わせない）。選べないカードなら選んでいるカードを中央へ戻す
                 onFocus={
                   selected
                     ? undefined
                     : (e) => {
                         if (!e.currentTarget.contains(e.target as Node)) return;
+                        if (performance.now() - lastTab.current > 500) return;
                         if (!off(id)) {
                           onChange(id);
                           return;
