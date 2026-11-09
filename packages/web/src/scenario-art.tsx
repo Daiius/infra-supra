@@ -143,10 +143,14 @@ const SIZE: Record<Size, string> = {
   sm: 'size-8 p-1.5 sm:size-9 sm:p-2',
 };
 
+// 印の地は不透明にする（半透明だと後ろの破線が印の上に透けて見える）。テーマの色を base-100 に 15% 混ぜた色で塗る
 const TONE: Record<Tone, string> = {
-  primary: 'bg-primary/15 text-primary ring-primary/30',
-  secondary: 'bg-secondary/15 text-secondary ring-secondary/30',
-  accent: 'bg-accent/15 text-accent ring-accent/30',
+  primary:
+    'bg-[color-mix(in_oklab,var(--color-primary)_15%,var(--color-base-100))] text-primary ring-primary/30',
+  secondary:
+    'bg-[color-mix(in_oklab,var(--color-secondary)_15%,var(--color-base-100))] text-secondary ring-secondary/30',
+  accent:
+    'bg-[color-mix(in_oklab,var(--color-accent)_15%,var(--color-base-100))] text-accent ring-accent/30',
   muted: 'bg-base-100 text-base-content/60 ring-base-content/15',
 };
 
