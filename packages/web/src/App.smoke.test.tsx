@@ -1167,8 +1167,18 @@ describe('ゲームモードの画面', () => {
     );
     expect(summary()).not.toContain('来月の行動');
     expect(fold.textContent).toContain('今の構成と同じです');
-    // もう一度選んで登録し、次の月へ: 乗り換え中は欄を出さず進み具合を出す
+    // 登録してから全体の「選択を戻す」を押すと、欄の選び直しも今の状態に戻る（OCL-E8982F9F）
     pickRadio('Cloudflare Paid + vinext', fold);
+    registerSetupChange();
+    fireEvent.click(screen.getByRole('button', { name: '選択を戻す' }));
+    expect(
+      setupChangeFold().querySelector('summary')!.textContent,
+    ).not.toContain('来月の行動');
+    openSetupChange();
+    expect(setupChangeFold().textContent).toContain('今の構成と同じです');
+    // もう一度選んで登録し、次の月へ: 乗り換え中は欄を出さず進み具合を出す
+    showStackTab();
+    pickRadio('Cloudflare Paid + vinext', setupChangeFold());
     registerSetupChange();
     advance(1);
     expect(setupChangeFold()).toBeNull();

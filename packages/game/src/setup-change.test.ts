@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ARTICLE_COMMUNITY,
   applyActions,
+  checkActions,
   COMMENTS_IN_PAGE,
   currentSetupDraft,
   draftComponentsFor,
@@ -211,5 +212,49 @@ describe('構成を変える（D-185）', () => {
       routes: { personal: { strategy: 'ssr' } },
     });
     expect(same.items).toEqual([]);
+  });
+  it('依存のある部品は、選べる順に当てる（定額の CDN のプランを従量に戻してから CloudFront を外す。OCL-099AD8D5）', () => {
+    const s = playMonth(
+      newGame(AWS, 1, ARTICLE_COMMUNITY, undefined, 'nextjs', {
+        images: 'cf-images',
+        frontCdn: 'static',
+        cdnPlan: 'flat-free',
+      }),
+    );
+    const d = currentSetupDraft(s);
+    expect(d.components.cdnPlan).toBe('flat-free');
+    expect(d.components.images).toBe('cf-images');
+    const c = setupChangeOf(s, {
+      ...d,
+      components: { ...d.components, frontCdn: 'none', cdnPlan: 'payg' },
+    });
+    // 前段を先に外すと選べない（今の検査）。写し取りでは従量に戻す行動を先にする
+    expect(
+      checkActions(s, [
+        { type: 'component', slot: 'frontCdn', option: 'none' },
+        { type: 'component', slot: 'cdnPlan', option: 'payg' },
+      ]).ok,
+    ).toBe(false);
+    expect(c.groups.components).toEqual([
+      { type: 'component', slot: 'cdnPlan', option: 'payg' },
+      { type: 'component', slot: 'frontCdn', option: 'none' },
+    ]);
+    expect(c.why).toBeNull();
+  });
+
+  it('提案で付いた部品（チャットの Durable Objects）は今の部品として残し、変更に数えない（OCL-80A47F1A）', () => {
+    const s0 = start(CF_PAID);
+    const s: GameState = {
+      ...s0,
+      components: { ...s0.components, realtime: 'durable-objects' },
+    };
+    const d = currentSetupDraft(s);
+    expect(d.components.realtime).toBe('durable-objects');
+    expect(sameAsCurrent(s, d)).toBe(true);
+    expect(setupChangeOf(s, d).items).toEqual([]);
+    // 同じ事業者のプランへ替えても持ち越す
+    expect(draftComponentsFor(s, CF_FREE, 'nextjs').realtime).toBe(
+      'durable-objects',
+    );
   });
 });

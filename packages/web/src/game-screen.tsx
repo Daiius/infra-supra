@@ -1476,7 +1476,10 @@ function Actions({
   );
   /** 未決の提案があるときに「次の月へ」で出す確認（D-140）。 */
   const [confirmDecline, setConfirmDecline] = useState(false);
+  /** 「選択を戻す」の回数（構成を変えるの欄の選び直しの途中も今の状態に戻すため、欄を描き直す。OCL-E8982F9F）。 */
+  const [resets, setResets] = useState(0);
   const reset = () => {
+    setResets((n) => n + 1);
     setCommits({});
     setSettings({});
     setOptimize(false);
@@ -1879,7 +1882,7 @@ function Actions({
           </>
         ) : (
           <SetupChangeField
-            key={`change-${state.history.length}`}
+            key={`change-${state.history.length}-${resets}`}
             state={state}
             registered={change}
             onRegister={setChange}

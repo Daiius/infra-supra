@@ -2,6 +2,7 @@
 // 選び直した差を、今ある行動（plan・migrate・component・rewrite・route・route-part）に写し取る。新しいゲームの決まりは作らず、
 // 選べるか・手間・期間は今までの行動の検査（checkActions）と文（stackChangeText・rewriteText など）に任せる。
 import {
+  componentsOf,
   DEFAULT_CHOICES,
   type Choices,
   type FrameworkId,
@@ -10,8 +11,9 @@ import {
   type SlotId,
   strategyTitle,
 } from 'catalog';
-import { checkActions } from '../actions/apply.ts';
-import { actionEffort } from '../actions/check.ts';
+import { applyAction, checkActions } from '../actions/apply.ts';
+import { actionEffort, checkAction } from '../actions/check.ts';
+import { proposalOnlyComponent } from '../components.ts';
 import { frameworkDefaults, scenarioOf } from '../core.ts';
 import { componentEffortLabel } from '../effort.ts';
 import { componentsAfterRewrite, rewriteText } from '../rewrite.ts';
@@ -111,7 +113,49 @@ export function draftComponentsFor(
     : framework !== state.framework
       ? componentsAfterRewrite({ ...state, stackIndex }, framework)
       : effectiveComponents(state);
-  return validSetupChoices(sc, stackIndex, framework, base);
+  return validDraftComponents(state, stackIndex, framework, base);
+}
+
+/**
+ * 欄の部品の整合（始める画面と同じ validSetupChoices）。ただし提案で付いた部品（チャットの Durable Objects など）は、運営中の値として
+ * その構成・フレームワークでも使えれば残す（新しく選べないのは選択肢の側で絞る。OCL-80A47F1A）。
+ */
+export function validDraftComponents(
+  state: GameState,
+  stackIndex: number,
+  framework: FrameworkId,
+  choices: Choices,
+): Choices {
+  const sc = scenarioOf(state);
+  const platform = STACKS[stackIndex]!.provider;
+  const out = validSetupChoices(sc, stackIndex, framework, choices);
+  for (const [slot, option] of Object.entries(choices) as [SlotId, string][])
+    if (
+      option !== undefined &&
+      proposalOnlyComponent(sc, slot, option) &&
+      componentsOf(platform, slot, framework).some((o) => o.id === option)
+    )
+      out[slot] = option;
+  return out;
+}
+
+/**
+ * 部品の行動の順（OCL-099AD8D5）。並べた順のまま選べればそのまま（前の画面と同じ順）。依存で選べなければ（定額の CDN のプランを
+ * 従量に戻してから CloudFront を外す など）、選べる行動から順に当てる。依存の向きは今の検査（componentConflict）に任せる。
+ */
+function orderComponents(state: GameState, actions: Action[]): Action[] {
+  if (actions.length < 2 || checkActions(state, actions).ok) return actions;
+  const out: Action[] = [];
+  const rest = [...actions];
+  let s = state;
+  while (rest.length > 0) {
+    const i = rest.findIndex((a) => checkAction(s, a).ok);
+    if (i < 0) break;
+    const [a] = rest.splice(i, 1);
+    out.push(a!);
+    s = applyAction(s, a!);
+  }
+  return [...out, ...rest];
 }
 
 /** 今の状態を選んだ欄（開いたときの値）。 */
@@ -224,9 +268,18 @@ export function setupChangeOf(
   // VPS の API の応答のキャッシュは前段の CDN が要る（D-37）。付けるときは前段の CDN の後、外すときは先に当てる
   const order = (slot: SlotId) =>
     slot === 'apiCache' ? (draft.components[slot] === 'none' ? -1 : 1) : 0;
-  for (const slot of [...changed].sort((a, b) => order(a) - order(b))) {
-    const option = draft.components[slot]!;
-    const action: Action = { type: 'component', slot, option };
+  const ordered = orderComponents(
+    state,
+    [...changed]
+      .sort((a, b) => order(a) - order(b))
+      .map((slot): Action => ({
+        type: 'component',
+        slot,
+        option: draft.components[slot]!,
+      })),
+  ) as Extract<Action, { type: 'component' }>[];
+  for (const action of ordered) {
+    const { slot, option } = action;
     groups.components.push(action);
     items.push({
       kind: 'component',

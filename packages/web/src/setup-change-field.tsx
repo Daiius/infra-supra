@@ -29,7 +29,7 @@ import {
   strategyFamily,
   swapLabel,
   validRouteOverrides,
-  validSetupChoices,
+  validDraftComponents,
   withRouteChoice,
   type Action,
   type FrameworkId,
@@ -274,7 +274,7 @@ function ChangeBody({
   const componentsFor = (i: number, fw: FrameworkId): SetupChoices =>
     STACKS[i]!.provider === STACKS[draft.stackIndex]!.provider &&
     fw === draft.framework
-      ? validSetupChoices(sc, i, fw, chosenOf(draft.components))
+      ? validDraftComponents(state, i, fw, chosenOf(draft.components))
       : draftComponentsFor(state, i, fw);
   const onStack = (i: number) => {
     const fw = frameworkOnStack(sc, i, draft.framework);
@@ -308,8 +308,8 @@ function ChangeBody({
   const onComponents = (v: SetupChoices) =>
     setDraft({
       ...draft,
-      components: validSetupChoices(
-        sc,
+      components: validDraftComponents(
+        state,
         draft.stackIndex,
         draft.framework,
         chosenOf(v),
