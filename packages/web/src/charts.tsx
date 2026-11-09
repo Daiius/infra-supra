@@ -765,7 +765,7 @@ export function Sparkline({
   );
 }
 
-// ---- 対数の軸の折れ線（見積の費用の曲線。D-74）----
+// ---- PV ごとの月額の折れ線（見積の費用の曲線。D-74。通常 / 対数の軸は D-179）----
 
 export type MarkShape = 'circle' | 'square' | 'diamond';
 
@@ -776,9 +776,20 @@ export type CurveChartSeries = {
   color: string;
   /** 点の形（同じ色の系列を見分ける 2 つ目の手がかり）。 */
   shape: MarkShape;
-  /** 添字は xs と同じ。flags が空でない点は × で描き、ツールチップに出す。 */
+  /**
+   * 添字は xs と同じ。flags が空でない点は上限に達して止まる点（D-180）: 印を描かず、そこへ入る・そこから出る区間を
+   * 薄い破線にし、ツールチップに「止まります（上限）」と言葉で出す。止まらない区間は通常どおり描く。
+   */
   points: { y: number; flags: string[] }[];
+  /**
+   * 強調（D-182・D-183）: strong は太い線で一番上に描き（今の構成・凡例で選んだ構成）、muted は薄くする（凡例で別の構成を選んだとき）。
+   * 既定は normal。
+   */
+  emphasis?: 'strong' | 'normal' | 'muted';
 };
+
+/** 凡例で別の構成を選んだときの、ほかの線の不透明度。 */
+const MUTED_OPACITY = 0.15;
 
 /** 系列の点の印（r4 相当・2px の地の色の輪）。 */
 function MarkGlyph({
@@ -805,27 +816,28 @@ function MarkGlyph({
   return <circle cx={x} cy={y} r="4" {...ring} />;
 }
 
-/** 止まる点の印（×）。地の色の縁取りで線の上でも読めるようにする。 */
-function Cross({ x, y, color }: { x: number; y: number; color: string }) {
-  const d = `M${x - 4.5},${y - 4.5}L${x + 4.5},${y + 4.5}M${x + 4.5},${y - 4.5}L${x - 4.5},${y + 4.5}`;
-  return (
-    <g>
-      <path d={d} stroke="var(--surface-1)" strokeWidth="5" />
-      <path d={d} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-    </g>
-  );
-}
+/** 止まる区間の線（薄い破線。D-180）。 */
+const STOPPED_OPACITY = 0.35;
+const STOPPED_DASH = '4 4';
 
-/** 凡例の見本（線 + 点の形。× は止まる点の印）。 */
+/** 凡例の見本（線 + 点の形）。stopped は止まる区間の見本（薄い破線・点の印なし。D-180）。 */
 export function SeriesSwatch({
   color,
   shape,
+  stopped = false,
 }: {
   color: string;
-  shape: MarkShape | 'cross';
+  shape: MarkShape;
+  stopped?: boolean;
 }) {
   return (
-    <svg width="22" height="12" aria-hidden className="shrink-0">
+    <svg
+      width="22"
+      height="12"
+      aria-hidden
+      className="shrink-0"
+      data-swatch={stopped ? 'stopped' : 'normal'}
+    >
       <line
         x1="1"
         y1="6"
@@ -833,23 +845,54 @@ export function SeriesSwatch({
         y2="6"
         stroke={color}
         strokeWidth="2"
-        strokeLinecap="round"
+        strokeLinecap={stopped ? 'butt' : 'round'}
+        strokeOpacity={stopped ? STOPPED_OPACITY : 1}
+        strokeDasharray={stopped ? STOPPED_DASH : undefined}
       />
-      {shape === 'cross' ? (
-        <Cross x={11} y={6} color={color} />
-      ) : (
-        <MarkGlyph shape={shape} x={11} y={6} color={color} />
-      )}
+      {!stopped && <MarkGlyph shape={shape} x={11} y={6} color={color} />}
     </svg>
   );
 }
 
+/** 費用の曲線の軸の目盛り（D-179）。linear は等間隔（既定）、log は 1 目盛りで 10 倍。 */
+export type CurveScale = 'linear' | 'log';
+
+/** lo〜hi の中の 10 のべき（対数の目盛り。1 目盛りで 10 倍）。 */
+function decadeTicks(lo: number, hi: number): number[] {
+  const a = Math.ceil(Math.log10(lo) - 1e-9);
+  const b = Math.floor(Math.log10(hi) + 1e-9);
+  return Array.from(
+    { length: Math.max(0, b - a + 1) },
+    (_, i) => 10 ** (a + i),
+  );
+}
+
+/** 1 本の軸（値 → 0〜1 の位置と目盛り）。 */
+function curveAxis(
+  scale: CurveScale,
+  lo: number,
+  hi: number,
+): { at: (v: number) => number; ticks: number[] } {
+  if (scale === 'log') {
+    const l0 = Math.log10(lo);
+    const l1 = Math.log10(hi);
+    return {
+      at: (v) => (Math.log10(Math.max(v, lo)) - l0) / Math.max(l1 - l0, 1e-9),
+      ticks: decadeTicks(lo, hi),
+    };
+  }
+  const ticks = niceTicks(hi);
+  const top = ticks[ticks.length - 1]!;
+  return { at: (v) => Math.max(v, 0) / Math.max(top, 1e-9), ticks };
+}
+
 /**
- * x・y とも対数の軸の折れ線（2 軸にしない）。y は floor 未満を floor の位置に描く（値はツールチップで読む）。
+ * PV ごとの月額の折れ線（2 軸にしない）。軸は scale で通常（等間隔・0 から。既定）か対数（1 目盛りで 10 倍）を選ぶ（D-179）。
+ * 対数では y は floor 未満を floor の位置に描き（値はツールチップで読む）、目盛りは 10 倍ごとにする。
  * ホバーで最も近い x の縦線とツールチップ。凡例は呼び出し側（系列の選び方と一緒に出す）。直接のラベルは幅があって
  * 描画域に収まるときだけ線の右端に出す（近いものは上下に押し広げる）。
  */
-export function LogCurveChart({
+export function CurveChart({
   series,
   xs,
   formatX,
@@ -858,6 +901,7 @@ export function LogCurveChart({
   marker,
   height = 240,
   floor = 1,
+  scale = 'linear',
   label,
 }: {
   series: CurveChartSeries[];
@@ -870,12 +914,15 @@ export function LogCurveChart({
   /** x の目印（今の値など）。 */
   marker?: { x: number; label: string };
   height?: number;
+  /** 対数のときの y の底（これ未満は底に寄せる）。 */
   floor?: number;
+  scale?: CurveScale;
   label: string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const directLabels = width >= 600 && series.length > 0;
+  const log = scale === 'log';
   const pad = {
     top: 14,
     right: directLabels ? 150 : 14,
@@ -884,26 +931,26 @@ export function LogCurveChart({
   };
   const w = Math.max(0, width - pad.left - pad.right);
   const h = height - pad.top - pad.bottom;
-  const lx0 = Math.log10(xs[0]!);
-  const lx1 = Math.log10(xs[xs.length - 1]!);
-  const x = (v: number) =>
-    pad.left + ((Math.log10(v) - lx0) / Math.max(lx1 - lx0, 1e-9)) * w;
-  const maxY = Math.max(
-    floor * 10,
+  const xMax = xs[xs.length - 1]!;
+  const xAxis = curveAxis(scale, log ? xs[0]! : 0, xMax);
+  const x = (v: number) => pad.left + xAxis.at(v) * w;
+  const maxValue = Math.max(
+    0,
     ...series.flatMap((s) => s.points.map((p) => p.y)),
   );
-  const ly0 = Math.log10(floor);
-  const ly1 = Math.ceil(Math.log10(maxY) - 1e-9);
-  const yTicks = Array.from(
-    { length: ly1 - ly0 + 1 },
-    (_, i) => 10 ** (ly0 + i),
-  );
-  const y = (v: number) =>
-    pad.top +
-    h -
-    ((Math.log10(Math.max(v, floor)) - ly0) / Math.max(ly1 - ly0, 1e-9)) * h;
-  // 狭いときは x の目盛りを 1 つおきにする（文字が重ならないように）
-  const xLabelEvery = w / xs.length < 34 ? 2 : 1;
+  const yAxis = log
+    ? curveAxis(
+        'log',
+        floor,
+        10 ** Math.ceil(Math.log10(Math.max(floor * 10, maxValue)) - 1e-9),
+      )
+    : curveAxis('linear', 0, maxValue);
+  const y = (v: number) => pad.top + h - yAxis.at(v) * h;
+  const yTicks = yAxis.ticks;
+  // x の目盛り: 狭いときは 1 つおきにする（文字が重ならないように）
+  const xTicks = xAxis.ticks;
+  const xLabelEvery = w / Math.max(xTicks.length, 1) < 34 ? 2 : 1;
+  const xTickLabel = (v: number) => (v === 0 ? '0' : formatX(v));
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
@@ -926,7 +973,28 @@ export function LogCurveChart({
   const labelsFit = ends.every((e) => e.y <= height - 4);
 
   return (
-    <figure className="viz-root relative block w-full" ref={ref}>
+    <figure
+      className="viz-root relative block w-full"
+      ref={ref}
+      data-scale={scale}
+    >
+      {log && (
+        // 対数は読み違えやすいので、軸のすぐ上に強く書く（D-179）
+        <figcaption
+          className="mb-1 flex flex-wrap items-center gap-2 text-xs"
+          data-log-note
+        >
+          <span className="badge badge-info badge-sm font-semibold">
+            対数の目盛り
+          </span>
+          <span className="font-semibold text-[var(--text-primary)]">
+            横軸・縦軸とも、1 目盛りで 10 倍です（等間隔ではありません）。
+          </span>
+          <span className="text-[var(--text-secondary)]">
+            {`${formatY(floor)} 未満は底の目盛り（≤${formatY(floor)}）に寄せています。`}
+          </span>
+        </figcaption>
+      )}
       {width > 0 && (
         <svg
           // 幅は 100%（LineChart と同じ理由。固定の px にすると狭めても縮まない）
@@ -938,7 +1006,7 @@ export function LogCurveChart({
           aria-label={label}
         >
           {yTicks.map((t, i) => (
-            <g key={t}>
+            <g key={t} data-y-tick={t}>
               <line
                 x1={pad.left}
                 x2={pad.left + w}
@@ -954,19 +1022,20 @@ export function LogCurveChart({
                 textAnchor="end"
                 className="fill-[var(--text-muted)] text-[10px] tabular-nums"
               >
-                {i === 0 ? `≤${formatY(t)}` : formatY(t)}
+                {log && i === 0 ? `≤${formatY(t)}` : formatY(t)}
               </text>
             </g>
           ))}
-          {xs.map((v, i) => (
+          {xTicks.map((v, i) => (
             <text
               key={v}
+              data-x-tick={v}
               x={x(v)}
               y={height - 6}
-              textAnchor="middle"
+              textAnchor={i === 0 && !log ? 'start' : 'middle'}
               className="fill-[var(--text-muted)] text-[10px] tabular-nums"
             >
-              {i % xLabelEvery === 0 ? formatX(v) : ''}
+              {i % xLabelEvery === 0 ? xTickLabel(v) : ''}
             </text>
           ))}
           {marker && marker.x >= xs[0]! && marker.x <= xs[xs.length - 1]! && (
@@ -1001,41 +1070,57 @@ export function LogCurveChart({
               strokeWidth="1"
             />
           )}
-          {series.map((s) => (
-            <g key={s.id}>
-              {s.points.slice(1).map((p, i) => {
-                const a = s.points[i]!;
-                // 両端とも止まる区間は薄く（その月額では実際には運用できない）
-                const stopped = a.flags.length > 0 && p.flags.length > 0;
-                return (
-                  <line
-                    key={i}
-                    x1={x(xs[i]!)}
-                    y1={y(a.y)}
-                    x2={x(xs[i + 1]!)}
-                    y2={y(p.y)}
-                    stroke={s.color}
-                    strokeOpacity={stopped ? 0.35 : 1}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                );
-              })}
-              {s.points.map((p, i) =>
-                p.flags.length > 0 ? (
-                  <Cross key={i} x={x(xs[i]!)} y={y(p.y)} color={s.color} />
-                ) : (
-                  <MarkGlyph
-                    key={i}
-                    shape={s.shape}
-                    x={x(xs[i]!)}
-                    y={y(p.y)}
-                    color={s.color}
-                  />
-                ),
-              )}
-            </g>
-          ))}
+          {
+            // 強調する線を一番上に描く（並びは凡例と同じまま。描く順だけ替える）
+            [...series]
+              .sort(
+                (a, b) =>
+                  Number(a.emphasis === 'strong') -
+                  Number(b.emphasis === 'strong'),
+              )
+              .map((s) => (
+                <g
+                  key={s.id}
+                  data-series={s.id}
+                  data-emphasis={s.emphasis ?? 'normal'}
+                  opacity={s.emphasis === 'muted' ? MUTED_OPACITY : 1}
+                >
+                  {s.points.slice(1).map((p, i) => {
+                    const a = s.points[i]!;
+                    // 片端でも止まる点に触れる区間は薄い破線（上限に達した後の月額では実際には運用できない。D-180）。
+                    // 止まらない区間（無料枠の範囲など）は通常どおり描く
+                    const stopped = a.flags.length > 0 || p.flags.length > 0;
+                    return (
+                      <line
+                        key={i}
+                        data-segment={stopped ? 'stopped' : 'normal'}
+                        x1={x(xs[i]!)}
+                        y1={y(a.y)}
+                        x2={x(xs[i + 1]!)}
+                        y2={y(p.y)}
+                        stroke={s.color}
+                        strokeOpacity={stopped ? STOPPED_OPACITY : 1}
+                        strokeDasharray={stopped ? STOPPED_DASH : undefined}
+                        strokeWidth={s.emphasis === 'strong' ? 3.5 : 2}
+                        strokeLinecap={stopped ? 'butt' : 'round'}
+                      />
+                    );
+                  })}
+                  {s.points.map((p, i) =>
+                    // 止まる点には印を描かない（× などの印に「止まる」の意味を持たせない。D-180）
+                    p.flags.length > 0 ? null : (
+                      <MarkGlyph
+                        key={i}
+                        shape={s.shape}
+                        x={x(xs[i]!)}
+                        y={y(p.y)}
+                        color={s.color}
+                      />
+                    ),
+                  )}
+                </g>
+              ))
+          }
           {labelsFit &&
             ends.map((e) => (
               <text
@@ -1043,7 +1128,8 @@ export function LogCurveChart({
                 x={pad.left + w + 10}
                 y={e.y}
                 dy="0.32em"
-                className="fill-[var(--text-secondary)] text-[11px]"
+                className={`text-[11px] ${e.s.emphasis === 'strong' ? 'fill-[var(--text-primary)] font-semibold' : 'fill-[var(--text-secondary)]'}`}
+                opacity={e.s.emphasis === 'muted' ? 0.4 : 1}
               >
                 {e.s.label.length > 22
                   ? `${e.s.label.slice(0, 21)}…`
@@ -1070,7 +1156,8 @@ export function LogCurveChart({
                 <div className="flex min-w-0 items-center gap-2">
                   <SeriesSwatch
                     color={s.color}
-                    shape={p.flags.length > 0 ? 'cross' : s.shape}
+                    shape={s.shape}
+                    stopped={p.flags.length > 0}
                   />
                   <span className="font-semibold text-[var(--text-primary)] tabular-nums">
                     {formatValue(p.y)}
@@ -1081,7 +1168,7 @@ export function LogCurveChart({
                 </div>
                 {p.flags.length > 0 && (
                   <div className="pl-7 text-[var(--text-secondary)]">
-                    止まる: {p.flags[0]}
+                    止まります（上限）: {p.flags[0]}
                     {p.flags.length > 1
                       ? `（ほか ${p.flags.length - 1} 件）`
                       : ''}
