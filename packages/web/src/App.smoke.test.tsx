@@ -1210,6 +1210,51 @@ describe('ゲームモードの画面', () => {
     expect(current()).toBe(other);
   });
 
+  it('W-52b 始める画面: 選んでいないカードの中へ Tab でフォーカスが入るとそのカードを選ぶ（Tab でなければ選ばない）', async () => {
+    await renderApp();
+    fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    const current = () =>
+      document.querySelector<HTMLElement>(
+        'section[data-stack][aria-current="true"]',
+      )!;
+    const cards = [
+      ...current()
+        .closest('[data-card]')!
+        .parentElement!.querySelectorAll<HTMLElement>('[data-card]'),
+    ];
+    const selected = current().closest<HTMLElement>('[data-card]')!;
+    const other = cards.find((c) => c !== selected)!;
+    // Tab でカードの中のフォーカスを受けるもの（ⓘ などのボタン）へ進む
+    fireEvent.keyDown(document, { key: 'Tab' });
+    const target = other.querySelector<HTMLElement>(
+      'button, input, [tabindex]',
+    )!;
+    fireEvent.focus(target);
+    expect(current().closest('[data-card]')).toBe(other);
+    // 説明の中で Tab を押した直後に Escape で閉じて、選んでいないカードへフォーカスが戻っても選ばない（OCL-2B972F69）
+    const third = cards.find((c) => c !== selected && c !== other)!;
+    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.focus(
+      third.querySelector<HTMLElement>('button, input, [tabindex]')!,
+    );
+    expect(current().closest('[data-card]')).toBe(other);
+    // Tab のあとのマウスの操作でも選ばない
+    fireEvent.keyDown(document, { key: 'Tab' });
+    fireEvent.pointerDown(document);
+    fireEvent.focus(
+      third.querySelector<HTMLElement>('button, input, [tabindex]')!,
+    );
+    expect(current().closest('[data-card]')).toBe(other);
+    // Tab でないフォーカス（説明を閉じて戻ったときなど）では選ばない
+    const back = selected.querySelector<HTMLElement>(
+      'button, input, [tabindex]',
+    )!;
+    await new Promise((r) => setTimeout(r, 600));
+    fireEvent.focus(back);
+    expect(current().closest('[data-card]')).toBe(other);
+  });
+
   it('W-52 始める画面: 狭い画面の前後のカードの帯の三角を押すと前後の構成を選び、帯の無い端では出ない。三角は読み上げに出ない', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));

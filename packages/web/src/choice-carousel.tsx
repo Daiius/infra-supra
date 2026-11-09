@@ -93,6 +93,23 @@ export function ChoiceCarousel<T extends string>({
   const track = useRef<HTMLDivElement>(null);
   const inputs = useRef<Partial<Record<string, HTMLInputElement | null>>>({});
   const els = useRef<Partial<Record<string, HTMLDivElement | null>>>({});
+  // 直前の操作が Tab だったか（その時刻）。Tab で選んでいないカードの中へ進んだときだけ、そのカードを選ぶ。
+  // ほかのキー（説明を閉じる Escape など）・ポインターの操作で解き、使ったら消す（説明を閉じてフォーカスが戻ったときは選ばない。OCL-2B972F69）
+  const lastTab = useRef(-Infinity);
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      lastTab.current = e.key === 'Tab' ? performance.now() : -Infinity;
+    };
+    const onPointer = () => {
+      lastTab.current = -Infinity;
+    };
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', onPointer, true);
+    };
+  }, []);
   // カード: 組があれば組ごとに 1 枚、無ければ選択肢ごとに 1 枚
   const cards: readonly { key: string; items: readonly T[] }[] = groups
     ? groups.map((g) => ({ key: g.key, items: g.items }))
@@ -373,6 +390,32 @@ export function ChoiceCarousel<T extends string>({
                         if (!e.currentTarget.contains(target)) return;
                         if (target.closest('button')) return;
                         onChange(id);
+                      }
+                }
+                // 選んでいないカードの中へ Tab でフォーカスが入ると、ブラウザがそのカードまで横に送るので、
+                // そのカードを選ぶ（見えているカードと選択を食い違わせない）。選べないカードなら選んでいるカードを中央へ戻す
+                onFocus={
+                  selected
+                    ? undefined
+                    : (e) => {
+                        if (!e.currentTarget.contains(e.target as Node)) return;
+                        const tabbed =
+                          performance.now() - lastTab.current <= 500;
+                        lastTab.current = -Infinity;
+                        if (!tabbed) return;
+                        if (!off(id)) {
+                          onChange(id);
+                          return;
+                        }
+                        const t = track.current;
+                        const el =
+                          currentKey === undefined
+                            ? undefined
+                            : els.current[currentKey];
+                        if (t && el)
+                          t.scrollLeft =
+                            el.offsetLeft -
+                            (t.clientWidth - el.clientWidth) / 2;
                       }
                 }
               >
