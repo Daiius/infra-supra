@@ -138,6 +138,25 @@ export function ChoiceCarousel<T extends string>({
     if (!t || !el) return;
     t.scrollLeft = el.offsetLeft - (t.clientWidth - el.clientWidth) / 2;
   }, [currentKey, cardKeys, visible]);
+  // 組のチップの列（狭い画面では 1 行で横にスクロールする）も、選んでいる組が見えるよう横にだけ送る（縦には動かさない）
+  const chipRow = useRef<HTMLDivElement>(null);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!visible) return;
+    const row = chipRow.current;
+    if (!row || row.scrollWidth <= row.clientWidth) return;
+    const el = [...row.querySelectorAll<HTMLElement>('[data-tab-group]')].find(
+      (g) => g.querySelector('input:checked'),
+    );
+    if (!el) return;
+    // 列に relative を付けているので、子の offsetLeft は列を基準にした位置（列の offsetLeft は引かない。OCL-8A619CC3）
+    const left = el.offsetLeft;
+    if (
+      left < row.scrollLeft ||
+      left + el.offsetWidth > row.scrollLeft + row.clientWidth
+    )
+      row.scrollLeft = left - (row.clientWidth - el.offsetWidth) / 2;
+  }, [currentKey, visible]);
   const headingId = useId();
   const headingClass = useContext(CarouselHeadingHidden)
     ? 'sr-only'
@@ -251,11 +270,13 @@ export function ChoiceCarousel<T extends string>({
           ‹
         </button>
         {groups ? (
-          // 組ごとの枠（ロゴと名前）に、選択肢のチップを並べる。狭い画面では枠ごと折り返す（横にスクロールしない）
+          // 組ごとの枠（ロゴと名前）に、選択肢のチップを並べる。狭い画面（sm 未満）では 1 行のまま横にスクロールし、
+          // sm 以上では枠ごと折り返す（2026-11-09・ユーザーの要望。前は狭い画面でも折り返して数行になっていた）
           <div
+            ref={chipRow}
             role="radiogroup"
             aria-labelledby={headingId}
-            className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-box bg-base-200 p-1.5"
+            className="relative flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto rounded-box bg-base-200 p-1.5 *:shrink-0 sm:flex-wrap"
             onKeyDown={onKeyDown}
           >
             {groups.map((g) => {
@@ -362,6 +383,31 @@ export function ChoiceCarousel<T extends string>({
         <div
           ref={track}
           className="relative carousel w-full carousel-center gap-1.5 overflow-x-hidden py-2 sm:gap-3"
+          // 横にスワイプすると前後のカードを選ぶ（2026-11-09・ユーザーの要望。前後のボタンと同じく、端のカードでは外へは送らない）。
+          // 中で横にスクロールできるもの（構成図など）の上で始めたスワイプは、そちらのスクロールに任せる
+          onTouchStart={(t) => {
+            const p = t.touches[0];
+            // ⓘ の説明・部品の比較・吹き出しはポータルで描くので、その中の操作も React の木を伝ってここへ届く。
+            // DOM でカード列の中で始めたスワイプだけを見る（OCL-A3158607）
+            swipe.current =
+              p &&
+              t.currentTarget.contains(t.target as Node) &&
+              !inHorizontalScroller(t.target as Element, t.currentTarget)
+                ? { x: p.clientX, y: p.clientY }
+                : null;
+          }}
+          onTouchEnd={(t) => {
+            const s0 = swipe.current;
+            const p = t.changedTouches[0];
+            swipe.current = null;
+            if (!s0 || !p) return;
+            const dx = p.clientX - s0.x;
+            if (Math.abs(dx) < 50 || Math.abs(dx) <= Math.abs(p.clientY - s0.y))
+              return;
+            const d = dx < 0 ? 1 : -1;
+            if ((d < 0 && ci <= 0) || (d > 0 && ci >= cards.length - 1)) return;
+            onChange(cardAt(d));
+          }}
         >
           {/* 最初と最後のカードも中央に来るように、両端に空きを置く（カードの幅の残りの半分 − 間隔。狭い画面は (100% − 92%) / 2 − gap-1.5） */}
           <div
@@ -437,4 +483,15 @@ export function ChoiceCarousel<T extends string>({
       </div>
     </div>
   );
+}
+
+/** el から stop（含まない）までの間に、横にスクロールできる要素があるか（スワイプをそちらに任せる）。 */
+function inHorizontalScroller(el: Element | null, stop: Element): boolean {
+  for (let e = el; e && e !== stop; e = e.parentElement) {
+    if (!(e instanceof HTMLElement)) continue;
+    const ox = getComputedStyle(e).overflowX;
+    if ((ox === 'auto' || ox === 'scroll') && e.scrollWidth > e.clientWidth)
+      return true;
+  }
+  return false;
 }
