@@ -270,7 +270,45 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
       '[data-group-row="gcp-cloud-run"]',
     )!;
     expect(empty.querySelector('[data-group-count]')!.textContent).toBe('0 件');
-    expect(compare().textContent).toContain('▼ あなた');
+    // 配置（テストの幅 640 では 3 列）: 帯・自分の線・目盛り・「▼ あなた」が同じ座標の基準（1 つの SVG）にあり、
+    // 「▼」は自分の線の真上・目盛りは帯の列の中・件数は帯の列の右（以前は HTML のグリッドと伸び縮みする SVG がずれた）
+    const svg = compare().querySelector<SVGSVGElement>(
+      '[data-group-range-chart] svg',
+    )!;
+    expect(svg.dataset.layout).toBe('wide');
+    expect(svg.getAttribute('viewBox')).toBe(
+      `0 0 640 ${svg.getAttribute('height')}`,
+    );
+    const x0 = Number(svg.dataset.bandX0);
+    const x1 = Number(svg.dataset.bandX1);
+    expect(x1 - x0).toBeGreaterThan(640 / 2);
+    const mineLabel = svg.querySelector<SVGGElement>(
+      '[data-group-mine-label]',
+    )!;
+    expect(mineLabel.textContent).toBe('あなた');
+    const mineX = Number(mineLabel.dataset.x);
+    const lines = [...svg.querySelectorAll('[data-group-mine-line]')];
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) {
+      expect(Number(l.getAttribute('x1'))).toBe(mineX);
+      expect(Number(l.getAttribute('x2'))).toBe(mineX);
+    }
+    const tip = mineLabel.querySelector('path')!.getAttribute('d')!;
+    expect(tip).toContain(`L${mineX},`);
+    for (const t of svg.querySelectorAll<SVGTextElement>(
+      '[data-group-ticks] text',
+    )) {
+      expect(Number(t.dataset.x)).toBeGreaterThanOrEqual(x0);
+      expect(Number(t.dataset.x)).toBeLessThanOrEqual(x1);
+    }
+    for (const c of svg.querySelectorAll('[data-group-count]'))
+      expect(Number(c.getAttribute('x'))).toBeGreaterThan(x1);
+    for (const r of own.querySelectorAll('[data-group-band] rect')) {
+      expect(Number(r.getAttribute('x'))).toBeGreaterThanOrEqual(x0);
+      expect(
+        Number(r.getAttribute('x')) + Number(r.getAttribute('width')),
+      ).toBeLessThanOrEqual(x1);
+    }
 
     fireEvent.click(chip('by', 'framework'));
     await waitFor(() =>

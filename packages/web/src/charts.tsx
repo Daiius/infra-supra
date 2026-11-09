@@ -1423,11 +1423,103 @@ export type RangeChartRow = {
   mine: boolean;
 };
 
+/** 比較の図を 3 列（名前｜帯｜件数）にする最少の幅。これより狭ければ、名前と件数の下に帯を全幅で入れる 2 段組み。 */
+export const RANGE_WIDE_MIN = 480;
+const RANGE_NAME_W = 220;
+const RANGE_COUNT_W = 60;
+const RANGE_GAP = 8;
+/** 「▼ あなた」の段と目盛りの段の高さ。 */
+const RANGE_HEAD_H = 16;
+const RANGE_TICKS_H = 16;
+/** 12px の文字の幅の目安（全角 12・半角 7）。名前を列に収めるときに使う。 */
+const charW = (c: string) => (c.charCodeAt(0) > 0xff ? 12 : 7);
+
+/** 名前を幅に収める（はみ出せば末尾を … にする。全部の名前は title で読める）。 */
+export function fitText(s: string, width: number): string {
+  let w = 0;
+  const chars = [...s];
+  for (let i = 0; i < chars.length; i++) {
+    w += charW(chars[i]!);
+    if (w > width) {
+      let out = chars.slice(0, i).join('');
+      let ow = [...out].reduce((n, c) => n + charW(c), 0);
+      while (out && ow + 12 > width) {
+        const last = [...out].at(-1)!;
+        out = [...out].slice(0, -1).join('');
+        ow -= charW(last);
+      }
+      return `${out}…`;
+    }
+  }
+  return s;
+}
+
+/**
+ * 比較の図の配置（純粋な計算。幅は実際の画素）。帯・中央値・自分の線・目盛り・「▼ あなた」を全部この 1 つの x の座標（xOf）で置く。
+ * wide: 名前（RANGE_NAME_W まで）｜帯（残り全部）｜件数（RANGE_COUNT_W）の 3 列。狭いとき: 名前と件数の行の下に帯を全幅。
+ */
+export function groupRangeLayout(
+  width: number,
+  rows: readonly RangeChartRow[],
+  value: number,
+) {
+  const wide = width >= RANGE_WIDE_MIN;
+  const nameW = wide ? Math.min(RANGE_NAME_W, width * 0.3) : width;
+  const bandX0 = wide ? nameW + RANGE_GAP : 0;
+  const bandX1 = wide ? width - RANGE_COUNT_W - RANGE_GAP : width;
+  // 帯の列の中で、端の目盛りの文字が切れないよう少し内側に寄せる
+  const inset = 4;
+  const shown = rows.flatMap((r) => (r.stats ? [r.stats] : []));
+  const dataLo = Math.min(value, ...shown.map((s) => s.p25));
+  const dataHi = Math.max(value, ...shown.map((s) => s.p75));
+  let lo = dataLo;
+  let hi = dataHi;
+  if (hi - lo <= 0) {
+    const d = Math.abs(lo) * 0.1 || 1;
+    lo -= d;
+    hi += d;
+  }
+  const pad = (hi - lo) * 0.04;
+  lo -= pad;
+  hi += pad;
+  const xOf = (v: number) =>
+    bandX0 + inset + ((v - lo) / (hi - lo)) * (bandX1 - bandX0 - 2 * inset);
+  const rowH = wide ? 24 : 36;
+  const rowTop = (i: number) => RANGE_HEAD_H + i * rowH;
+  // 帯の縦の真ん中（wide は行の真ん中・狭いときは名前の段の下）
+  const bandY = (i: number) => rowTop(i) + (wide ? rowH / 2 : 26);
+  const textY = (i: number) => rowTop(i) + (wide ? rowH / 2 + 4 : 12);
+  const height = RANGE_HEAD_H + rows.length * rowH + RANGE_TICKS_H;
+  const ticksY = height - 4;
+  const ticks = [dataLo, (dataLo + dataHi) / 2, dataHi].map((t) => ({
+    v: t,
+    x: xOf(t),
+  }));
+  return {
+    wide,
+    nameW,
+    bandX0,
+    bandX1,
+    xOf,
+    mineX: xOf(value),
+    /** 「あなた」を ▼ の左に置くか（右の端に近いとき。帯の列からはみ出さない）。 */
+    mineEnd: bandX1 - xOf(value) < 48,
+    rowH,
+    rowTop,
+    bandY,
+    textY,
+    height,
+    ticksY,
+    ticks,
+  };
+}
+
 /**
  * 行ごとの分布の比較（ST-11・D-175）: 各行に 25〜75% の帯と中央値の縦の印を描き、全部の行で横の目盛りをそろえ、自分の値の位置に
  * 縦の線を引く（色だけに頼らず「▼ あなた」のラベル）。自分の構成の行は強調の色・ほかは控えめの色（emphasis）。良し悪しの色
  * （status）は使わない（向きを持たない ④ 費用の合計にも同じ図を使う。D-166）。件数が少ない行は帯を出さず emptyText を出す。
  * 件数は行ごとに常にテキストで出す。数値は呼ぶ側の表（数値で見る）でも読める。
+ * 1 つの SVG を実際の幅（画素）で描き、文字も同じ座標で置く（HTML のグリッドと伸び縮みする SVG を混ぜると列がずれたため）。
  */
 export function GroupRangeChart({
   rows,
@@ -1445,147 +1537,155 @@ export function GroupRangeChart({
   /** 件数が少ない行の文（例: まだ 3 件です）。 */
   emptyText: (count: number) => string;
 }) {
-  const shown = rows.flatMap((r) => (r.stats ? [r.stats] : []));
-  const dataLo = Math.min(value, ...shown.map((s) => s.p25));
-  const dataHi = Math.max(value, ...shown.map((s) => s.p75));
-  let lo = dataLo;
-  let hi = dataHi;
-  if (hi - lo <= 0) {
-    const d = Math.abs(lo) * 0.1 || 1;
-    lo -= d;
-    hi += d;
-  }
-  const pad = (hi - lo) * 0.04;
-  lo -= pad;
-  hi += pad;
-  const W = 100;
-  const H = 16;
-  const xOf = (v: number) => ((v - lo) / (hi - lo)) * W;
-  const frac = xOf(value) / W;
-  const ticks = [dataLo, (dataLo + dataHi) / 2, dataHi];
-  // 狭い画面: 名前と件数の行の下に帯。sm 以上: 名前 | 帯 | 件数 の 3 列（帯の列で目盛りをそろえる）
-  const grid =
-    'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 sm:grid-cols-[10rem_minmax(0,1fr)_5rem]';
-  const trackCell =
-    'order-3 col-span-2 sm:order-2 sm:col-span-1 sm:col-start-2';
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const L = width > 0 ? groupRangeLayout(width, rows, value) : null;
   return (
-    <figure
-      className="viz-root min-w-0"
-      aria-label={label}
-      data-group-range-chart
-    >
-      <div className={grid} aria-hidden>
-        <div className={`${trackCell} relative h-3`}>
-          <div
-            className="absolute top-0 text-[10px] leading-none font-semibold whitespace-nowrap"
-            style={{
-              left: `${frac * 100}%`,
-              transform: `translateX(${frac > 0.8 ? '-100%' : frac < 0.2 ? '0' : '-50%'})`,
-              color: 'var(--text-primary)',
-            }}
+    <figure className="viz-root min-w-0" data-group-range-chart>
+      <div ref={ref} className="w-full">
+        {L && (
+          <svg
+            role="group"
+            aria-label={label}
+            width={width}
+            height={L.height}
+            viewBox={`0 0 ${width} ${L.height}`}
+            className="block"
+            data-layout={L.wide ? 'wide' : 'narrow'}
+            data-band-x0={L.bandX0}
+            data-band-x1={L.bandX1}
+            fontSize="12"
           >
-            ▼ あなた
-          </div>
-        </div>
-      </div>
-      <ul className="space-y-1">
-        {rows.map((r) => (
-          <li
-            key={r.key}
-            className={grid}
-            data-group-row={r.key}
-            data-mine={r.mine ? 'true' : undefined}
-          >
-            <div
-              className={`order-1 min-w-0 truncate text-xs ${r.mine ? 'font-semibold' : ''}`}
-              title={r.label}
-            >
-              {r.label}
-              {r.mine && '（あなた）'}
-            </div>
-            <div
-              className="order-2 text-right text-xs tabular-nums sm:order-3"
-              data-group-count
-            >
-              {r.count} 件
-            </div>
-            <div className={trackCell}>
-              {r.stats ? (
-                <svg
-                  role="img"
-                  aria-label={`${r.label}: 中央値 ${format(r.stats.median)}・25〜75% は ${format(r.stats.p25)}〜${format(r.stats.p75)}・${r.count} 件`}
-                  viewBox={`0 0 ${W} ${H}`}
-                  preserveAspectRatio="none"
-                  className="block h-4 w-full"
-                  data-group-band
+            {/* 自分の線の真上に ▼、その横に「あなた」（右の端では左へ寄せる） */}
+            <g aria-hidden data-group-mine-label data-x={L.mineX}>
+              <path
+                d={`M${L.mineX - 4},4 L${L.mineX + 4},4 L${L.mineX},10 Z`}
+                fill="var(--text-primary)"
+              />
+              <text
+                x={L.mineEnd ? L.mineX - 7 : L.mineX + 7}
+                y="11"
+                textAnchor={L.mineEnd ? 'end' : 'start'}
+                fontSize="10"
+                fontWeight="600"
+                fill="var(--text-primary)"
+              >
+                あなた
+              </text>
+            </g>
+            {rows.map((r, i) => {
+              const top = L.rowTop(i);
+              const by = L.bandY(i);
+              const ty = L.textY(i);
+              const nameMax = L.wide ? L.nameW : width - RANGE_COUNT_W;
+              const name = `${r.label}${r.mine ? '（あなた）' : ''}`;
+              return (
+                <g
+                  key={r.key}
+                  data-group-row={r.key}
+                  data-mine={r.mine ? 'true' : undefined}
                 >
+                  <title>{name}</title>
+                  <text
+                    x="0"
+                    y={ty}
+                    fill="var(--text-primary)"
+                    fontWeight={r.mine ? 600 : 400}
+                    data-group-name
+                  >
+                    {fitText(name, nameMax)}
+                  </text>
+                  <text
+                    x={width}
+                    y={ty}
+                    textAnchor="end"
+                    fill="var(--text-primary)"
+                    className="tabular-nums"
+                    data-group-count
+                  >
+                    {r.count} 件
+                  </text>
                   <line
-                    x1="0"
-                    x2={W}
-                    y1={H / 2}
-                    y2={H / 2}
+                    x1={L.bandX0}
+                    x2={L.bandX1}
+                    y1={by}
+                    y2={by}
                     stroke="var(--grid)"
                     strokeWidth="1"
-                    vectorEffect="non-scaling-stroke"
                   />
-                  <rect
-                    x={xOf(r.stats.p25)}
-                    width={Math.max(0.5, xOf(r.stats.p75) - xOf(r.stats.p25))}
-                    y={H / 2 - 3}
-                    height="6"
-                    fill={r.mine ? 'var(--series-1-track)' : 'var(--grid)'}
-                  />
-                  <line
-                    x1={xOf(r.stats.median)}
-                    x2={xOf(r.stats.median)}
-                    y1="1"
-                    y2={H - 1}
-                    stroke={r.mine ? 'var(--series-1)' : 'var(--text-muted)'}
-                    strokeWidth="3"
-                    vectorEffect="non-scaling-stroke"
-                    data-group-median
-                  />
-                  <line
-                    x1={frac * W}
-                    x2={frac * W}
-                    y1="0"
-                    y2={H}
-                    stroke="var(--marker)"
-                    strokeWidth="2"
-                    vectorEffect="non-scaling-stroke"
-                    data-group-mine-line
-                  />
-                </svg>
-              ) : (
-                <div
-                  className="h-4 text-xs leading-4 opacity-70"
-                  data-group-few
-                >
-                  {emptyText(r.count)}
-                </div>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div className={`${grid} mt-0.5`} aria-hidden>
-        <div
-          className={`${trackCell} relative h-3 text-[10px] leading-none tabular-nums`}
-          style={{ color: 'var(--text-muted)' }}
-        >
-          {ticks.map((t, i) => (
-            <span
-              key={i}
-              className="absolute top-0 whitespace-nowrap"
-              style={{
-                left: `${(xOf(t) / W) * 100}%`,
-                transform: `translateX(${i === 0 ? '0' : i === 2 ? '-100%' : '-50%'})`,
-              }}
+                  {r.stats ? (
+                    <g
+                      role="img"
+                      aria-label={`${r.label}: 中央値 ${format(r.stats.median)}・25〜75% は ${format(r.stats.p25)}〜${format(r.stats.p75)}・${r.count} 件`}
+                      data-group-band
+                    >
+                      <rect
+                        x={L.xOf(r.stats.p25)}
+                        width={Math.max(
+                          2,
+                          L.xOf(r.stats.p75) - L.xOf(r.stats.p25),
+                        )}
+                        y={by - 4}
+                        height="8"
+                        rx="2"
+                        fill={r.mine ? 'var(--series-1-track)' : 'var(--grid)'}
+                      />
+                      <line
+                        x1={L.xOf(r.stats.median)}
+                        x2={L.xOf(r.stats.median)}
+                        y1={by - 7}
+                        y2={by + 7}
+                        stroke={
+                          r.mine ? 'var(--series-1)' : 'var(--text-muted)'
+                        }
+                        strokeWidth="3"
+                        data-group-median
+                      />
+                    </g>
+                  ) : (
+                    <text
+                      x={L.bandX0 + 4}
+                      y={by + 4}
+                      fill="var(--text-muted)"
+                      data-group-few
+                    >
+                      {emptyText(r.count)}
+                    </text>
+                  )}
+                  {r.stats && (
+                    <line
+                      x1={L.mineX}
+                      x2={L.mineX}
+                      y1={L.wide ? top : by - 9}
+                      y2={L.wide ? top + L.rowH : by + 9}
+                      stroke="var(--marker)"
+                      strokeWidth="2"
+                      data-group-mine-line
+                    />
+                  )}
+                </g>
+              );
+            })}
+            <g
+              aria-hidden
+              fontSize="10"
+              fill="var(--text-muted)"
+              className="tabular-nums"
+              data-group-ticks
             >
-              {format(t)}
-            </span>
-          ))}
-        </div>
+              {L.ticks.map((t, i) => (
+                <text
+                  key={i}
+                  x={t.x}
+                  y={L.ticksY}
+                  textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}
+                  data-x={t.x}
+                >
+                  {format(t.v)}
+                </text>
+              ))}
+            </g>
+          </svg>
+        )}
       </div>
     </figure>
   );
