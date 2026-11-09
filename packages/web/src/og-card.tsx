@@ -26,7 +26,7 @@ export function OgCard() {
       <div
         aria-hidden
         data-og-art
-        className="absolute top-1/2 left-1/2 [&_[data-scenario-art]]:rounded-none [&_[data-scenario-art]]:bg-transparent [&_line]:[stroke-width:4]"
+        className="absolute top-1/2 left-1/2 [&_[data-scenario-art]]:overflow-visible [&_[data-scenario-art]]:rounded-none [&_[data-scenario-art]]:bg-transparent [&_line]:[stroke-width:4]"
         style={{
           width: ART_BASE_WIDTH,
           opacity: OG_ART_OPACITY,
