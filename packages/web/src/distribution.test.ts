@@ -1,4 +1,4 @@
-// 分布の中での位置の数え方（D-162・D-163）。
+// 分布の中での位置の数え方（D-162・D-163・D-166・D-168）。
 import type { ResultAxes } from 'game';
 import type { Distribution, Histogram } from 'stats';
 import { describe, expect, it } from 'vitest';
@@ -17,6 +17,7 @@ const h = (count: number, above: number, equal: number): Histogram => ({
   count,
   min: 0,
   max: 1,
+  median: 0.5,
   bins: [{ from: 0, to: 1, count }],
   position: { above, equal },
 });
@@ -25,7 +26,7 @@ const axes: ResultAxes = {
   cash: 1,
   satisfaction: 1,
   featurePoints: 1,
-  edgeMonths: 1,
+  totalCost: 1,
 };
 
 function dist(
@@ -38,7 +39,7 @@ function dist(
       cash: per('cash'),
       satisfaction: per('satisfaction'),
       featurePoints: per('featurePoints'),
-      edgeMonths: per('edgeMonths'),
+      totalCost: per('totalCost'),
     },
   };
 }
@@ -105,9 +106,10 @@ describe('standingsOf', () => {
     expect(v.view.axes[0]!.inTop).toBe(true);
   });
 
-  it('同じシードが見せられればそちらで上位を見る・花火の段は上位の軸の数（0 → 1・1〜2 → 2・3〜4 → 3）', () => {
+  it('同じシードが見せられればそちらで上位を見る・花火の段は向きのある 3 軸の上位の数（0 → 1・1〜2 → 2・3 → 3。D-168）', () => {
     const level = (tops: number) => {
-      const ids = ['cash', 'satisfaction', 'featurePoints', 'edgeMonths'];
+      // ④ 費用の合計は最後に置き、上位の位置でも数えない
+      const ids = ['cash', 'satisfaction', 'featurePoints', 'totalCost'];
       const v = standingsOf(
         dist((id) => ({
           // 全シードは全部上位だが、同じシードの上位は tops 本だけ
@@ -121,6 +123,22 @@ describe('standingsOf', () => {
       return distributionFireworkLevel(v.view);
     };
     expect([0, 1, 2, 3, 4].map(level)).toEqual([1, 2, 2, 3, 3]);
+  });
+
+  it('④ 費用の合計は向きを持たないので、分布の上の方にいても上位に数えない（D-166）', () => {
+    const v = standingsOf(
+      dist((id) =>
+        id === 'totalCost'
+          ? { seed: h(20, 0, 1), all: h(40, 0, 1) }
+          : { seed: h(20, 19, 1), all: h(40, 39, 1) },
+      ),
+      axes,
+      true,
+    );
+    if (v.status !== 'ready') throw new Error(v.status);
+    const cost = v.view.axes.find((a) => a.id === 'totalCost')!;
+    expect(cost).toMatchObject({ directed: false, inTop: false });
+    expect(distributionFireworkLevel(v.view)).toBe(1);
   });
 });
 

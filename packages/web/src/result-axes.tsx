@@ -1,4 +1,4 @@
-// 振り返りの 4 軸（D-132）と、集計の分布の中での位置（段 3・D-161）か手元の履歴との比較（D-144）。完走のダイアログと結果の画面で共用する。
+// 振り返りの 4 軸（D-132・D-166）と、集計の分布の中での位置（段 3・D-161）か手元の履歴との比較（D-144）。完走のダイアログと結果の画面で共用する。
 // 1 つの点数にはまとめず、軸ごとに並べる（prd/07 §7・prd/15 §2）。分布が無い・取れない・少ないときは手元の履歴との比較だけを出す（段 1 のまま）。
 import type { ResultAxisId } from 'game';
 import { HistogramChart } from './charts.tsx';
@@ -20,26 +20,31 @@ const FORMAT: Record<ResultAxisId, (n: number) => string> = {
   cash: usd,
   satisfaction: (n) => n.toFixed(2),
   featurePoints: fmtPoints,
-  edgeMonths: (n) => `${n} か月`,
+  totalCost: usd,
 };
 
-/** 軸の短い説明（値の意味。④ はジョーク枠）。 */
+/** 軸の短い説明（値の意味）。 */
 const CAPTION: Record<ResultAxisId, string> = {
   cash: '最後の月の所持金',
   satisfaction: '毎月の満足度の平均',
   featurePoints: '機能開発に回せた手間の合計',
-  edgeMonths: '止まらずに、上限の 90〜100% まで使った月（ジョーク枠）',
+  totalCost:
+    'プレイした月のインフラの費用の合計（高い・低いで良し悪しは付けません）',
 };
 
-/** 上位に入ったときの印（④ はジョーク枠の軽い言い回し）。 */
-const topBadge = (id: ResultAxisId, p: number) =>
-  id === 'edgeMonths' ? `★ 綱渡りの名人（上位 ${p}%）` : `★ 上位 ${p}%`;
+/** 上位に入ったときの印（向きのある軸だけ）。 */
+const topBadge = (p: number) => `★ 上位 ${p}%`;
 
-/** ④ の分布の下に添える一言（ジョーク枠）。 */
-const edgeQuip = (inTop: boolean) =>
-  inTop
-    ? 'みんなよりギリギリを攻めました（ほめています）。'
-    : '安全運転でした。それも立派です。';
+/**
+ * 所持金の目標の目安との差の文（D-167）。合否の言葉・色は使わない（D-131）。
+ */
+export function cashGuideText(cash: number, guide: number): string {
+  const diff = cash - guide;
+  if (Math.abs(diff) < 0.005) return `目標の目安 ${usd(guide)} と同じでした`;
+  return diff > 0
+    ? `目標の目安 ${usd(guide)} を ${usd(diff)} 上回りました`
+    : `目標の目安 ${usd(guide)} まで ${usd(-diff)} でした`;
+}
 
 /** 分布の 1 本（同じシード / 全シード）: 数値の要約をテキストで出し、その下にヒストグラム。 */
 function DistributionRow({
@@ -47,6 +52,7 @@ function DistributionRow({
   standing,
   count,
   axis,
+  directed,
   value,
 }: {
   kind: 'seed' | 'all';
@@ -55,17 +61,28 @@ function DistributionRow({
   /** 件数（自分を含む）。 */
   count: number;
   axis: ResultAxisId;
+  /** 向きを持たない軸（④ 費用の合計）は上位 % の代わりに中央値を出す（D-166）。 */
+  directed: boolean;
   value: number;
 }) {
   const name = kind === 'seed' ? '同じシード' : '全シード';
+  const median = standing?.histogram.median;
+  const summary = !standing
+    ? ''
+    : directed
+      ? `${standing.n} 件中 上位 ${standing.topPercent}%`
+      : `${standing.n} 件${median != null ? `・${kind === 'seed' ? '同じシード' : '全体'}の中央値は ${FORMAT[axis](median)} です` : ''}`;
   return (
-    <div data-dist={kind} data-top-percent={standing?.topPercent}>
+    <div
+      data-dist={kind}
+      data-top-percent={directed ? standing?.topPercent : undefined}
+    >
       <div className="text-xs" data-dist-summary>
         <span className="font-semibold">{name}</span>{' '}
         {standing ? (
           <span className="tabular-nums">
-            {standing.n} 件中 上位 {standing.topPercent}%
-            {standing.inTop && '（上位）'}
+            {summary}
+            {directed && standing.inTop && '（上位）'}
           </span>
         ) : (
           <span className="opacity-70">
@@ -78,8 +95,7 @@ function DistributionRow({
         <HistogramChart
           bins={standing.histogram.bins}
           value={value}
-          discrete={axis === 'edgeMonths'}
-          label={`${name}の分布（${standing.n} 件中 上位 ${standing.topPercent}%）`}
+          label={`${name}の分布（${summary}）`}
         />
       )}
     </div>
@@ -99,7 +115,7 @@ function compareNote(stats: StatsView, localCount: number): string {
         v.mock
           ? '開発用の架空の分布です（遊んだ人の結果ではありません）。'
           : '',
-        `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます。`,
+        `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます（④ 費用の合計は上位を数えず、分布の中の位置だけを示します）。`,
         v.included
           ? 'あなたのプレイも数に入っています。'
           : 'あなたのプレイを 1 件足して数えています。',
@@ -120,9 +136,12 @@ export function ResultAxesPanel({
   comparisons,
   stats = { status: 'off' },
   outages,
+  cashGuide,
   size = 'md',
 }: {
   comparisons: readonly AxisComparison[];
+  /** 所持金の目標の目安（シナリオの goal.cash。表示だけで合否にしない。D-167）。 */
+  cashGuide?: number;
   /** 集計の分布（段 3）。ready のときだけ分布を出す。 */
   stats?: StatsView;
   /** 止まった月の数（軸ではなく、振り返りとして下に出す）。 */
@@ -160,7 +179,7 @@ export function ResultAxesPanel({
                 </span>
                 {d?.inTop && basis && (
                   <span className="badge badge-success badge-sm" data-axis-top>
-                    {topBadge(c.id, basis.topPercent)}
+                    {topBadge(basis.topPercent)}
                   </span>
                 )}
                 {c.newBest && (
@@ -177,6 +196,11 @@ export function ResultAxesPanel({
                 {f(c.value)}
               </div>
               <div className="text-xs opacity-70">{CAPTION[c.id]}</div>
+              {c.id === 'cash' && cashGuide !== undefined && (
+                <div className="text-xs" data-cash-guide>
+                  {cashGuideText(c.value, cashGuide)}
+                </div>
+              )}
               {d && (
                 <div className="mt-2 space-y-2" data-axis-distribution>
                   <DistributionRow
@@ -184,6 +208,7 @@ export function ResultAxesPanel({
                     standing={d.seed}
                     count={d.seedCount}
                     axis={c.id}
+                    directed={c.directed}
                     value={c.value}
                   />
                   <DistributionRow
@@ -191,11 +216,9 @@ export function ResultAxesPanel({
                     standing={d.all}
                     count={d.all.n}
                     axis={c.id}
+                    directed={c.directed}
                     value={c.value}
                   />
-                  {c.id === 'edgeMonths' && (
-                    <p className="text-xs">{edgeQuip(d.inTop)}</p>
-                  )}
                 </div>
               )}
               {!d && c.count > 0 && (
@@ -214,9 +237,11 @@ export function ResultAxesPanel({
                       </span>
                     </li>
                   )}
-                  <li>
-                    過去 {c.count + 1} 回の中で {c.rank} 位
-                  </li>
+                  {c.rank !== undefined && (
+                    <li>
+                      過去 {c.count + 1} 回の中で {c.rank} 位
+                    </li>
+                  )}
                 </ul>
               )}
             </li>

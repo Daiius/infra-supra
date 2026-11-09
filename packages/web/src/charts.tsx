@@ -194,8 +194,10 @@ export function LineChart({
   height?: number;
   format: (v: number) => string;
   yMax?: number;
-  /** 境目の線（使用率 100% など）。 */
-  reference?: { value: number; label: string };
+  /**
+   * 境目の線（使用率 100% など）。tone が neutral なら控えめの色の破線（所持金の目標の目安など、合否を表さない線。D-167）。
+   */
+  reference?: { value: number; label: string; tone?: 'critical' | 'neutral' };
   title?: ReactNode;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
@@ -420,14 +422,21 @@ export function LineChart({
             </text>
           ))}
           {reference && (
-            <g>
+            <g data-reference={reference.tone ?? 'critical'}>
               <line
                 x1={pad.left}
                 x2={pad.left + w}
                 y1={y(reference.value)}
                 y2={y(reference.value)}
-                stroke="var(--status-critical)"
+                stroke={
+                  reference.tone === 'neutral'
+                    ? 'var(--text-secondary)'
+                    : 'var(--status-critical)'
+                }
                 strokeWidth="1"
+                {...(reference.tone === 'neutral'
+                  ? { strokeDasharray: '2 3' }
+                  : {})}
               />
               <text
                 x={pad.left + w}
@@ -1318,7 +1327,7 @@ export type HistogramChartBin = { from: number; to: number; count: number };
 /**
  * 小さなヒストグラム（棒は件数・横は値）と「あなた」の印。自分の値を含む棒は強調の色、ほかは控えめの色にし、
  * 色だけに頼らず縦の線と「▼ あなた」のラベルで位置を示す。数値の要約（n 件中 上位 x %）は呼ぶ側がテキストで出す。
- * discrete: 値ごとに幅 1 の棒（④ ギリギリを攻める）。値の印は棒の真ん中に置く。
+ * discrete: 値ごとに幅 1 の棒（整数の軸用。D-166 で ④ を費用の合計に替えてからは使う軸が無い）。値の印は棒の真ん中に置く。
  */
 export function HistogramChart({
   bins,

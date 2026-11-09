@@ -659,7 +659,8 @@ const AXIS_INTRO: Record<ResultAxisId, string> = {
   cash: '最後の月の所持金',
   satisfaction: '12 か月の満足度の平均',
   featurePoints: '運用に取られずに機能開発に回せた手間',
-  edgeMonths: '止まらずに上限の 90〜100% まで使った月の数（ジョーク枠）',
+  totalCost:
+    'プレイした月のインフラの費用の合計（高い・低いで良し悪しは付けません）',
 };
 
 /** シナリオの説明・走り切ることと 4 軸の紹介・アプリの形。 */

@@ -1,6 +1,6 @@
 // 手元の結果の履歴（D-144・prd/15 §3.3）。終わったプレイ（完走・途中終了）ごとに 4 軸の値などを localStorage に溜め、
 // 集計（段 2・3）が無い間の比較（自己ベスト・前回との差・過去の中での順位）の元にする。
-// ここは純粋な部分だけ（形の確かめ・足し方・比べ方・花火の段）。localStorage の読み書きは App.tsx。
+// ここは純粋な部分だけ（形の確かめ・足し方・比べ方）。localStorage の読み書きは App.tsx。
 import {
   RESULT_AXES,
   resultAxesOf,
@@ -17,8 +17,8 @@ import {
 /** localStorage のキー（値は ResultStore の JSON）。 */
 export const RESULTS_KEY = 'infra-supra:results';
 
-/** 履歴の版。形を変えたら上げる（読めない版は黙って捨てる）。 */
-export const RESULTS_VERSION = 1;
+/** 履歴の版。形を変えたら上げる（読めない版は黙って捨てる）。2: ④ をギリギリを攻めるから費用の合計に替えた（D-166）。 */
+export const RESULTS_VERSION = 2;
 
 /** 溜める件数の上限（新しい順に残す）。 */
 export const RESULTS_LIMIT = 50;
@@ -178,17 +178,19 @@ export function mergeResults(
 export type AxisComparison = {
   id: ResultAxisId;
   label: string;
+  /** 大きいほど上位の向きを持つか（④ 費用の合計は持たない。D-166）。持たなければ自己ベスト・順位を出さない。 */
+  directed: boolean;
   value: number;
   /** 比べた過去の完走の数（今回を除く）。 */
   count: number;
-  /** 過去の完走の中の最高（無ければ undefined）。 */
+  /** 過去の完走の中の最高（無ければ・向きを持たない軸なら undefined）。 */
   best?: number;
-  /** 過去の最高を上回った（同じ値は更新に数えない）。過去が無ければ false。 */
+  /** 過去の最高を上回った（同じ値は更新に数えない）。過去が無い・向きを持たない軸なら false。 */
   newBest: boolean;
-  /** 前回（今回を除く最新の完走）との差。 */
+  /** 前回（今回を除く最新の完走）との差（向きを持たない軸も出す。色で良し悪しを付けない）。 */
   diffFromLast?: number;
-  /** 今回を含めた中での順位（1 が最上位。同じ値は同じ順位）。 */
-  rank: number;
+  /** 今回を含めた中での順位（1 が最上位。同じ値は同じ順位）。向きを持たない軸は undefined。 */
+  rank?: number;
 };
 
 /**
@@ -206,28 +208,20 @@ export function compareWithHistory(
       e.end.reason === 'completed',
   );
   const last = past[0];
-  return RESULT_AXES.map(({ id, label }) => {
+  return RESULT_AXES.map(({ id, label, directed }) => {
     const value = current.axes[id];
     const values = past.map((e) => e.axes[id]);
-    const best = values.length ? Math.max(...values) : undefined;
+    const best = directed && values.length ? Math.max(...values) : undefined;
     return {
       id,
       label,
+      directed,
       value,
       count: past.length,
       ...(best !== undefined ? { best } : {}),
       newBest: best !== undefined && value > best,
       ...(last ? { diffFromLast: value - last.axes[id] } : {}),
-      rank: 1 + values.filter((v) => v > value).length,
+      ...(directed ? { rank: 1 + values.filter((v) => v > value).length } : {}),
     };
   });
-}
-
-/**
- * 花火の段（1〜3。ST-01 の暫定・D-145）: 自己ベストを更新した軸の数で分ける（0 → 1・1〜2 → 2・3〜4 → 3）。
- * 集計の分布があるときは distribution.ts の distributionFireworkLevel（上位に入った軸の数。D-163）を使い、これは分布が無いときに使う。
- */
-export function fireworkLevel(cmp: readonly AxisComparison[]): 1 | 2 | 3 {
-  const n = cmp.filter((c) => c.newBest).length;
-  return n >= 3 ? 3 : n >= 1 ? 2 : 1;
 }

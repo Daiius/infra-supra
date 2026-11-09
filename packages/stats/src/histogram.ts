@@ -1,6 +1,5 @@
 // 分布（ヒストグラム）の形（D-149・prd/15 §6）。段 3 の画面が棒を描き、自分の値の「上位何 %」を出せる形にする。
 // 純粋関数（値の列 → ビン）。DB の層は絞り込んだ値の列を返すだけ。
-import type { ResultAxisId } from 'game';
 import { sameAxisValue } from './verify.ts';
 
 /** 連続の値の軸のビンの数。 */
@@ -19,6 +18,11 @@ export type Histogram = {
   count: number;
   /** 値が無ければ null。 */
   min: number | null;
+  /**
+   * 中央値（件数が偶数なら真ん中の 2 つの平均）。値が無ければ null。向きを持たない軸（④ 費用の合計）は上位 % の代わりに
+   * 「全体の中央値は $X です」と出す（D-166）。
+   */
+  median: number | null;
   max: number | null;
   bins: HistogramBin[];
   /**
@@ -30,12 +34,11 @@ export type Histogram = {
 
 /**
  * ビンの切り方:
- * - ④ ギリギリを攻める（edgeMonths）は 0〜12 の整数なので、幅 1 のビンを最小〜最大の整数ごとに 1 本ずつ（from = 値・to = 値 + 1）。
- * - ほかの軸は最小〜最大を HISTOGRAM_BINS 本の等しい幅に分ける（最後のビンは上端を含む）。全部同じ値なら 1 本。
+ * - どの軸も最小〜最大を HISTOGRAM_BINS 本の等しい幅に分ける（最後のビンは上端を含む）。全部同じ値なら 1 本。
+ *   （前の ④ ギリギリを攻めるは整数の軸で幅 1 だった。D-166 で ④ を連続の値の費用の合計に替えた）
  * 同じシード / 全シードの分布は別々に切る（範囲が違うので、段 3 は軸ごとに 2 つの棒を別々に描く）。
  */
 export function histogramOf(
-  axis: ResultAxisId,
   values: readonly number[],
   value?: number,
 ): Histogram {
@@ -50,7 +53,14 @@ export function histogramOf(
           },
         };
   if (values.length === 0)
-    return { count: 0, min: null, max: null, bins: [], ...position };
+    return {
+      count: 0,
+      min: null,
+      max: null,
+      median: null,
+      bins: [],
+      ...position,
+    };
   let min = Infinity;
   let max = -Infinity;
   for (const v of values) {
@@ -58,12 +68,7 @@ export function histogramOf(
     if (v > max) max = v;
   }
   let bins: HistogramBin[];
-  if (axis === 'edgeMonths') {
-    bins = [];
-    for (let k = Math.floor(min); k <= Math.floor(max); k++)
-      bins.push({ from: k, to: k + 1, count: 0 });
-    for (const v of values) bins[Math.floor(v) - Math.floor(min)]!.count++;
-  } else if (min === max) {
+  if (min === max) {
     bins = [{ from: min, to: max, count: values.length }];
   } else {
     const width = (max - min) / HISTOGRAM_BINS;
@@ -77,5 +82,11 @@ export function histogramOf(
       bins[i]!.count++;
     }
   }
-  return { count: values.length, min, max, bins, ...position };
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const median =
+    sorted.length % 2 === 1
+      ? sorted[mid]!
+      : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  return { count: values.length, min, max, median, bins, ...position };
 }

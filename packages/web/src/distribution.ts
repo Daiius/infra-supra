@@ -1,5 +1,6 @@
 // 集計の分布の中での位置（段 3・D-161〜D-164・prd/15 §3.1・§6）。サーバーの分布（4 軸 × 同じシード / 全シード）と自分の値から、
-// 軸ごとの「上位何 %」と、上位に入った軸の数（花火の段）を出す。純粋な部分だけ（取得は stats-client.ts、順序は App.tsx）。
+// 軸ごとの「上位何 %」と、上位に入った軸の数（花火の段）を出す。④ 費用の合計は向きを持たない軸なので、上位 % と上位の判定を
+// 出さず、分布の中の位置と中央値だけを見せる（D-166）。純粋な部分だけ（取得は stats-client.ts、順序は App.tsx）。
 import { RESULT_AXES, type ResultAxes, type ResultAxisId } from 'game';
 import type { Distribution, Histogram } from 'stats';
 
@@ -27,6 +28,8 @@ export type Standing = {
 export type AxisStanding = {
   id: ResultAxisId;
   label: string;
+  /** 大きいほど上位の向きを持つか（④ 費用の合計は持たない。D-166）。持たなければ上位 % と上位の判定を出さない。 */
+  directed: boolean;
   value: number;
   /** 同じシードの分布の中での位置。件数が少なければ null（seedCount に件数）。 */
   seed: Standing | null;
@@ -35,7 +38,7 @@ export type AxisStanding = {
   all: Standing;
   /**
    * 上位に入ったか（花火の段に数える）。同じシードの分布が見せられればそちら（楽なシードを選び直しても有利にならない。D-136）、
-   * 見せられなければ全シードで見る。
+   * 見せられなければ全シードで見る。向きを持たない軸は常に false。
    */
   inTop: boolean;
 };
@@ -97,7 +100,7 @@ export function standingsOf(
     view: {
       included,
       mock,
-      axes: RESULT_AXES.map(({ id, label }) => {
+      axes: RESULT_AXES.map(({ id, label, directed }) => {
         const d = dist.axes[id];
         const all = toStanding(d.all, included);
         const seedStanding = toStanding(d.seed, included);
@@ -106,23 +109,25 @@ export function standingsOf(
         return {
           id,
           label,
+          directed,
           value: axes[id],
           seed,
           seedCount: seedStanding.n,
           all,
-          inTop: (seed ?? all).inTop,
+          inTop: directed && (seed ?? all).inTop,
         };
       }),
     },
   };
 }
 
-/** 上位に入った軸の数。 */
+/** 上位に入った軸の数（向きのある 3 軸だけ。D-166）。 */
 export const topAxesCount = (view: DistributionView) =>
   view.axes.filter((a) => a.inTop).length;
 
 /**
- * 花火の段（1〜3。ST-01・D-163）: 分布があるときは上位に入った軸の数で分ける（0 → 1・1〜2 → 2・3〜4 → 3。段 1 の D-145 と同じ区切り）。
+ * 花火の段（1〜3。ST-01・D-163・D-168）: 分布があるときは上位に入った軸の数（向きのある 3 軸）で分ける（0 → 1・1〜2 → 2・3 → 3）。
+ * 分布が無いときは常に 1 段（自己ベストの数では変えない。D-168 で D-145 を撤回）。
  */
 export function distributionFireworkLevel(view: DistributionView): 1 | 2 | 3 {
   const n = topAxesCount(view);
