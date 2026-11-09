@@ -188,11 +188,12 @@
 実ドメイン・接続先・パスワードはリポジトリに書かない（`<…>` は手元の値に置き換える）。画面とサーバーは**同じコミット**からデプロイする（D-135）。
 
 1. **DB を作る**（すでにある Postgres に、別の DATABASE とロールを作る。D-154）: `PSQL='<管理者で繋ぐ psql のコマンド>' sh packages/stats/scripts/create-db.sh --check` で今の状態を見てから、`--check` を外して流す（パスワードは尋ねられる。切り戻しはスクリプトの先頭）。
-2. **イメージを作る**（VPS か手元で。文脈はリポジトリの根）: `docker build -f packages/stats/Dockerfile.prod --build-arg GIT_COMMIT=$(git rev-parse HEAD) --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) -t infra-supra-stats .`
-3. **環境変数のファイルを VPS に置く**（`packages/stats/.env.example` を写して埋める。リポジトリには入れない）。`DB_HOST` は Postgres に届く名前（同じ compose の網ならサービス名）。
-4. **migration を流し、サーバーを起動する**: 管理ロールの値を入れた env で `docker run --rm --env-file <env> --network <Postgres の網> infra-supra-stats /app/migrate.js`。サーバーは同じイメージを常駐させる（compose のサービスにするなら `restart: unless-stopped`・ポートは前段のリバースプロキシからだけ届くようにする）。
-   - 🔒 **前段のリバースプロキシのアクセスログに IP を残さない**（§4）: 例えば Caddy なら `log` を付けないか、付けるなら `request>remote_ip`・`request>client_ip`・`request>headers>X-Forwarded-For` を消す filter を掛ける。nginx なら `access_log off;` か、`$remote_addr`・`$http_x_forwarded_for` を含まない `log_format` にする。
+2. **イメージを作る**（GHCR。D-172）: GitHub の Actions で「Stats image」（`.github/workflows/stats-image.yml`）を、デプロイしたい ref を選んで手で走らせる。`ghcr.io/daiius/infra-supra-stats:<コミットの SHA>` ができる（main からなら `latest` も）。初回は GitHub の Packages でパッケージの公開範囲を決める（公開のリポジトリのコードだけで秘密は入らないので public にしてよい。private のままなら VPS で `docker login ghcr.io`）。
+3. **VPS に置くファイル**（`packages/stats/deploy/` の例を写して埋める。リポジトリには入れない）: `compose.yml`（`compose.example.yml`。既存の Postgres の網を external で指定）・`server.env`（常駐のサーバーのロールだけ）・`migrate.env`（管理ロールだけ。常駐のコンテナには管理ロールのパスワードを渡さない）・`deploy.sh`。env は `chmod 600`。
+4. **migration を流し、サーバーを入れ替える**: `sh deploy.sh <SHA> --check` で今の版とイメージの有無を見てから、`sh deploy.sh <SHA>`（pull → migration → `up -d` → `/api/version` の commit が SHA と一致するかまで確かめる）。サーバーは `127.0.0.1:4000` にだけ開け、前段の nginx から届かせる。
+   - 🔒 **前段の nginx のアクセスログに IP を残さない**（§4）: `deploy/nginx.example.conf` のとおり、`$remote_addr`・`$http_x_forwarded_for` を含まない `log_format` にし、`X-Forwarded-For`・`X-Real-IP` もサーバーへ渡さない。error_log はどのレベルでも IP を付けるので、このサーバーの分は `/dev/null` に捨てる（server を決める前の TLS の失敗などは nginx 全体の error_log に出るので、その保存先と期間も見直す）。
    - API の宛先は https にする（`vercel.ts` が https のオリジンしか受けない）。
+   - migration は**足す方向だけ**にする（流した migration は書き換えない）。前の SHA に戻すときも、前の版のサーバーが新しい表で動く範囲に保つ。
 5. **中継を確かめる（D-150 のスパイク）**: Vercel のプロジェクトの設定で Root Directory が `packages/web` かを確かめる（リポジトリの根なら `vercel.ts` を根へ移し、`@vercel/config` を根の devDependencies に入れる）。環境変数 `API_ORIGIN` に `https://<VPS のホスト名>` を（Preview だけに先に）入れ、プレビューをデプロイして `<プレビューの URL>/api/version` を開く。VPS の `{ commit, builtAt }` が返れば第一案で動いている。404 や画面の HTML が返れば、`vercel.ts` が環境変数を読めていないので予備案（転送の Function）を作る（Claude に頼む）。
 6. **送信を立てる**: 動いたら `API_ORIGIN` を Production にも入れ、`VITE_STATS_ENABLED=true` を Production（と Preview）に入れて再デプロイする。1 回遊び切って、`select count(*), max(created_at) from results;` で 1 行増えたこと、プライバシーポリシーの「まだ何も送っていません」が消えたことを確かめる。
 7. **版をそろえる**: 以後、画面とサーバーを同じコミットからデプロイし、`/api/version` の `commit` と Vercel のデプロイのコミットが同じかを見る。版がずれると正しいプレイも `mismatch`（422）になる（画面には出ない）。

@@ -1,0 +1,50 @@
+name: Stats image
+
+# 集計のサーバー（packages/stats）のイメージを作り、GHCR に push する（prd/15 §7.1）。手で起動する（Actions の画面で ref を選ぶ）。
+# タグはコミットの SHA（VPS はこれを指定して pull する。画面と同じコミットにそろえる。D-135）。main から作ったときだけ latest も付ける。
+# 第三者の action は使わず、ランナーの docker で作る。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/daiius/infra-supra-stats
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      # v7.0.1（test.yml と同じ固定）
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Login to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+      - name: Build
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          docker build -f packages/stats/Dockerfile.prod \
+            --build-arg GIT_COMMIT="$SHA" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label org.opencontainers.image.source=https://github.com/Daiius/infra-supra \
+            --label org.opencontainers.image.revision="$SHA" \
+            -t "$IMAGE:$SHA" .
+      - name: Push
+        env:
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        run: |
+          docker push "$IMAGE:$SHA"
+          if [ "$REF" = "refs/heads/main" ]; then
+            docker tag "$IMAGE:$SHA" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
+          echo "pushed $IMAGE:$SHA" >> "$GITHUB_STEP_SUMMARY"
