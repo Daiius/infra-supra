@@ -1,6 +1,7 @@
 // 振り返りの 4 軸（D-132・D-166）と、集計の分布の中での位置（段 3・D-161）か手元の履歴との比較（D-144）。完走のダイアログと結果の画面で共用する。
 // 1 つの点数にはまとめず、軸ごとに並べる（prd/07 §7・prd/15 §2）。分布が無い・取れない・少ないときは手元の履歴との比較だけを出す（段 1 のまま）。
 import type { ResultAxisId } from 'game';
+import type { ReactNode } from 'react';
 import { HistogramChart } from './charts.tsx';
 import {
   MIN_DISTRIBUTION_COUNT,
@@ -103,7 +104,11 @@ function DistributionRow({
 }
 
 /** 一番上の注記（どちらと比べているか。prd/15 §3.1）。 */
-function compareNote(stats: StatsView, localCount: number): string {
+function compareNote(
+  stats: StatsView,
+  localCount: number,
+  filterName?: string,
+): string {
   const local =
     localCount > 0
       ? `この端末に残した過去の完走（同じシナリオの ${localCount} 回）と比べています。`
@@ -115,7 +120,9 @@ function compareNote(stats: StatsView, localCount: number): string {
         v.mock
           ? '開発用の架空の分布です（遊んだ人の結果ではありません）。'
           : '',
-        `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます（④ 費用の合計は上位を数えず、分布の中の位置だけを示します）。`,
+        filterName
+          ? `${filterName}の完走のプレイの分布と比べています（見るための絞り込みです。「★ 上位」の印と花火は全部の構成の分布で決めます）。`
+          : `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます（④ 費用の合計は上位を数えず、分布の中の位置だけを示します）。`,
         v.included
           ? 'あなたのプレイも数に入っています。'
           : 'あなたのプレイを 1 件足して数えています。',
@@ -138,6 +145,8 @@ export function ResultAxesPanel({
   outages,
   cashGuide,
   size = 'md',
+  filter,
+  children,
 }: {
   comparisons: readonly AxisComparison[];
   /** 所持金の目標の目安（シナリオの goal.cash。表示だけで合否にしない。D-167）。 */
@@ -147,10 +156,18 @@ export function ResultAxesPanel({
   /** 止まった月の数（軸ではなく、振り返りとして下に出す）。 */
   outages: number;
   size?: 'md' | 'lg';
+  /**
+   * 絞った分布を出すとき（結果の画面の絞り込みのチップ。D-175）: name は注記に出す名前（例: 同じインフラ（…））、top は
+   * 「★ 上位」の印を決める全部の構成の分布（見るためだけの絞り込みで、上位の判定は変えない）。
+   */
+  filter?: { name: string; top: DistributionView | null };
+  /** 注記と 4 軸の間に置くもの（絞り込みのチップ）。 */
+  children?: ReactNode;
 }) {
   const count = comparisons[0]?.count ?? 0;
   const dist: DistributionView | null =
     stats.status === 'ready' ? stats.view : null;
+  const top = filter ? filter.top : dist;
   return (
     <section
       aria-label="4 つの軸の振り返り"
@@ -158,15 +175,18 @@ export function ResultAxesPanel({
       data-stats={stats.status}
     >
       <p className="mb-2 text-xs opacity-70" data-result-compare-note>
-        {compareNote(stats, count)}
+        {compareNote(stats, count, filter?.name)}
       </p>
+      {children}
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {comparisons.map((c, i) => {
           const f = FORMAT[c.id];
           const d: AxisStanding | undefined = dist?.axes.find(
             (a) => a.id === c.id,
           );
-          const basis = d ? (d.seed ?? d.all) : null;
+          // 「★ 上位」の印は全部の構成の分布で決める（絞り込みは見るためだけ。D-175）
+          const t = top?.axes.find((a) => a.id === c.id);
+          const basis = t ? (t.seed ?? t.all) : null;
           return (
             <li
               key={c.id}
@@ -177,14 +197,14 @@ export function ResultAxesPanel({
                 <span className="text-sm font-semibold">
                   {['①', '②', '③', '④'][i]} {c.label}
                 </span>
-                {d?.inTop && basis && (
+                {t?.inTop && basis && (
                   <span className="badge badge-success badge-sm" data-axis-top>
                     {topBadge(basis.topPercent)}
                   </span>
                 )}
                 {c.newBest && (
                   <span
-                    className={`badge badge-sm ${d ? 'badge-outline' : 'badge-success'}`}
+                    className={`badge badge-sm ${top ? 'badge-outline' : 'badge-success'}`}
                   >
                     ★ 自己ベスト更新
                   </span>

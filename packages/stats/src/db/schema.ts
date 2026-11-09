@@ -85,6 +85,9 @@ export const results = table(
     ),
     // 同じ結果の数の上限（D-174）: 同じ play_hash の直近の行を数える
     index('results_dup_cap_idx').on(t.playHash, t.createdAt),
+    // 同じ構成・同じフレームワークの分布の絞り込み（ST-11・D-175）
+    index('results_stack_idx').on(t.scenarioId, t.stackId),
+    index('results_framework_idx').on(t.scenarioId, t.framework),
   ],
 );
 
