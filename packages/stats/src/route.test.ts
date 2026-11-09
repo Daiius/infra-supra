@@ -587,7 +587,7 @@ describe('GET /api/results/groups', () => {
     return { ...v.record, ...over };
   };
 
-  it('構成ごと / フレームワークごとの件数・25%・中央値・75% を、分布と同じ条件の行だけで返す（D-175）', async () => {
+  it('構成ごと / フレームワークごとの件数・25%・中央値・75%・共通の区切りでの棒の件数を、分布と同じ条件の行だけで返す（D-175）', async () => {
     const { repo, client } = setup();
     repo.rows.push(
       ...[100, 200, 300, 400, 500].map((cash, i) =>
@@ -616,9 +616,26 @@ describe('GET /api/results/groups', () => {
     const g = await r.json();
     if (!('groups' in g)) throw new Error('エラーの応答');
     expect(g).toMatchObject({ axis: 'cash', by: 'stack', seed: null });
+    // 区切りは全部の行の最小〜最大（50〜500）を 12 等分し、全部の構成で共通
+    expect(g.binEdges).toHaveLength(13);
+    expect([g.binEdges[0], g.binEdges[12]]).toEqual([50, 500]);
     expect(g.groups).toEqual([
-      { key: 'cloudflare-vinext-paid', count: 1, p25: 50, median: 50, p75: 50 },
-      { key: 'sakura-vps-2gb', count: 5, p25: 200, median: 300, p75: 400 },
+      {
+        key: 'cloudflare-vinext-paid',
+        count: 1,
+        p25: 50,
+        median: 50,
+        p75: 50,
+        bins: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      },
+      {
+        key: 'sakura-vps-2gb',
+        count: 5,
+        p25: 200,
+        median: 300,
+        p75: 400,
+        bins: [0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1],
+      },
     ]);
     const fw = await (
       await client.api.results.groups.$get({
@@ -632,9 +649,24 @@ describe('GET /api/results/groups', () => {
     ).json();
     if (!('groups' in fw)) throw new Error('エラーの応答');
     // シード 1 は p1（200）・p3（400）・v（50）
+    expect([fw.binEdges[0], fw.binEdges[12]]).toEqual([50, 400]);
     expect(fw.groups).toEqual([
-      { key: 'nextjs', count: 2, p25: 250, median: 300, p75: 350 },
-      { key: 'vite-spa', count: 1, p25: 50, median: 50, p75: 50 },
+      {
+        key: 'nextjs',
+        count: 2,
+        p25: 250,
+        median: 300,
+        p75: 350,
+        bins: [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+      },
+      {
+        key: 'vite-spa',
+        count: 1,
+        p25: 50,
+        median: 50,
+        p75: 50,
+        bins: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      },
     ]);
   });
 

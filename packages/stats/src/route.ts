@@ -8,7 +8,7 @@
  * - `GET /api/results/histogram`: シナリオ・軸（・シード）ごとの完走の分布（histogram.ts）。
  * - `GET /api/results/distribution`: 4 軸 ×（同じシード / 全シード）の 8 本を 1 回で返す（段 3 の画面が使う。D-161）。
  *   `stack`・`framework` で同じ構成・同じフレームワークに絞れる（ST-11・D-175）。
- * - `GET /api/results/groups`: 1 つの軸の構成ごと（またはフレームワークごと）の件数・25%・中央値・75%（比較の図。D-175）。
+ * - `GET /api/results/groups`: 1 つの軸の構成ごと（またはフレームワークごと）の件数・25%・中央値・75%・共通の区切りでの棒の件数（比較の図。D-175）。
  * - `GET /api/version`: 動いているサーバーのコミット（Vercel の画面と版を手動でそろえるときの確かめ。照合には使わない。D-135・D-155）。
  *
  * 🔒 IP・端末の情報を保存しない・ログに出さない（D-134）。アクセスのログは方法・パス（クエリを除く）・状態・時間だけで、
@@ -289,7 +289,7 @@ export function createApp({
         }),
         async (c) => {
           const { scenario, axis, by, seed } = c.req.valid('query');
-          const groups = await repo.groupStats({
+          const { binEdges, groups } = await repo.groupStats({
             scenarioId: scenario,
             axis,
             by,
@@ -301,6 +301,7 @@ export function createApp({
               axis,
               by,
               seed: seed ?? null,
+              binEdges,
               groups,
             } satisfies Groups,
             200,
@@ -325,6 +326,8 @@ export type Groups = {
   axis: ResultAxisId;
   by: GroupBy;
   seed: number | null;
+  /** 全部の行で共通の棒の区切り（GROUP_BINS + 1 個。行が無ければ空）。 */
+  binEdges: number[];
   groups: GroupStat[];
 };
 

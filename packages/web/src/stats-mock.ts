@@ -108,39 +108,68 @@ export function mockDistribution(
   };
 }
 
+/** 比較の図の棒の数（packages/stats の GROUP_BINS と同じ）。 */
+const GROUP_BINS = 12;
+
+/** 並べた値の分位（packages/stats の quantileOf と同じ線形の補間）。 */
+function quantile(sorted: readonly number[], p: number): number {
+  const at = (sorted.length - 1) * p;
+  const lo = Math.floor(at);
+  const hi = Math.ceil(at);
+  return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (at - lo);
+}
+
 /**
- * 架空の構成ごと（フレームワークごと）の要約（GET /api/results/groups と同じ形。D-175）。鍵ごとに件数と、自分の値の周りに
- * ずらした 25%・中央値・75% を作る。3 つ目ごとの鍵は 10 件未満にして「まだ n 件です」の行も出す。シードと鍵から決まる。
+ * 架空の構成ごと（フレームワークごと）の要約（GET /api/results/groups と同じ形。D-175）。鍵ごとに、自分の値から少しずらした所に
+ * 散らした値を作り、packages/stats の groupStatsOf と同じく全体の最小〜最大を 12 等分した共通の区切りで数える。
+ * 3 つ目ごとの鍵は 10 件未満にして「まだ n 件です」の行も出す。シードと鍵から決まる。
  */
 export function mockGroups(q: {
   seed: number;
   axis: ResultAxisId;
   value: number;
   keys: readonly string[];
-}): GroupStat[] {
-  return q.keys.map((key, i) => {
+}): { binEdges: number[]; groups: GroupStat[] } {
+  const perKey = q.keys.map((key, i) => {
     let h = q.seed >>> 0;
     for (const c of `${q.axis}:${key}`)
       h = Math.imul(h ^ c.charCodeAt(0), 16777619);
     const next = rng(h);
     const count =
       i % 3 === 2 ? Math.floor(next() * 10) : 10 + Math.floor(next() * 80);
-    const [a, b, c] = spread(q.axis, q.value, 3, next).sort((x, y) => x - y);
-    const width =
-      Math.abs(c! - a!) / 2 + (q.axis === 'satisfaction' ? 0.02 : 5);
-    const median = b!;
-    const clamp = (x: number) =>
-      q.axis === 'satisfaction'
-        ? Math.max(0, Math.min(1, x))
-        : q.axis === 'totalCost'
-          ? Math.max(0, x)
-          : x;
+    const [center] = spread(q.axis, q.value, 1, next);
     return {
       key,
-      count,
-      p25: clamp(median - width * (0.5 + next() * 0.5)),
-      median: clamp(median),
-      p75: clamp(median + width * (0.5 + next() * 0.5)),
+      values: count > 0 ? spread(q.axis, center!, count, next) : [],
     };
   });
+  const all = perKey.flatMap((k) => k.values);
+  if (all.length === 0) return { binEdges: [], groups: [] };
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  const width = (max - min) / GROUP_BINS;
+  const binEdges = Array.from({ length: GROUP_BINS + 1 }, (_, i) =>
+    i === GROUP_BINS ? max : min + width * i,
+  );
+  const groups = perKey
+    .filter((k) => k.values.length > 0)
+    .map(({ key, values }) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      const bins = Array<number>(GROUP_BINS).fill(0);
+      for (const v of sorted)
+        bins[
+          width > 0
+            ? Math.min(GROUP_BINS - 1, Math.floor((v - min) / width))
+            : 0
+        ]!++;
+      return {
+        key,
+        count: sorted.length,
+        p25: quantile(sorted, 0.25),
+        median: quantile(sorted, 0.5),
+        p75: quantile(sorted, 0.75),
+        bins,
+      };
+    });
+  return { binEdges, groups };
 }

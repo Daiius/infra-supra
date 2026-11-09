@@ -1,4 +1,4 @@
-// 比較の図（GroupRangeChart。D-175）の配置の計算。jsdom では幅を測れないので、幅を渡して座標の関係を確かめる。
+// 比較の図（GroupHistogramChart。D-175）の配置の計算。jsdom では幅を測れないので、幅を渡して座標の関係を確かめる。
 import { describe, expect, it } from 'vitest';
 import {
   fitText,
@@ -7,12 +7,14 @@ import {
   type RangeChartRow,
 } from './charts.tsx';
 
+const bins = (n: number) =>
+  Array.from({ length: 12 }, (_, i) => (i === n ? 3 : 1));
 const rows: RangeChartRow[] = [
   {
     key: 'a',
     label: 'A',
     count: 30,
-    stats: { p25: 1500, median: 2000, p75: 2600 },
+    stats: { median: 2000, bins: bins(8) },
     mine: true,
   },
   { key: 'b', label: 'B', count: 4, stats: null, mine: false },
@@ -20,19 +22,19 @@ const rows: RangeChartRow[] = [
     key: 'c',
     label: 'C',
     count: 12,
-    stats: { p25: 100, median: 200, p75: 300 },
+    stats: { median: 200, bins: bins(1) },
     mine: false,
   },
 ];
+/** 共通の区切り（100〜2500 を 12 等分）。 */
+const edges = Array.from({ length: 13 }, (_, i) => 100 + 200 * i);
 
 function checkCommon(width: number, value: number) {
-  const L = groupRangeLayout(width, rows, value);
-  // 帯・中央値・目盛り・自分の線が帯の列の中にある
-  for (const r of rows.filter((x) => x.stats)) {
-    for (const v of [r.stats!.p25, r.stats!.median, r.stats!.p75]) {
-      expect(L.xOf(v)).toBeGreaterThanOrEqual(L.bandX0);
-      expect(L.xOf(v)).toBeLessThanOrEqual(L.bandX1);
-    }
+  const L = groupRangeLayout(width, rows, value, edges);
+  // 区切り・中央値・目盛り・自分の線が棒の列の中にある
+  for (const v of [...edges, 2000, 200]) {
+    expect(L.xOf(v)).toBeGreaterThanOrEqual(L.bandX0);
+    expect(L.xOf(v)).toBeLessThanOrEqual(L.bandX1);
   }
   for (const t of L.ticks) {
     expect(t.x).toBeGreaterThanOrEqual(L.bandX0);
@@ -41,38 +43,48 @@ function checkCommon(width: number, value: number) {
   expect(L.mineX).toBeGreaterThanOrEqual(L.bandX0);
   expect(L.mineX).toBeLessThanOrEqual(L.bandX1);
   expect(L.bandX1).toBeLessThanOrEqual(width);
+  for (let i = 0; i < rows.length; i++) {
+    // ヒストグラムは行の中: 上端 < 基線、中央値の印（基線の下）も次の行より上
+    expect(L.histTop(i)).toBeGreaterThanOrEqual(L.rowTop(i));
+    expect(L.baseY(i) - L.histTop(i)).toBeGreaterThanOrEqual(14);
+    expect(L.baseY(i) + 6).toBeLessThanOrEqual(L.rowTop(i + 1));
+  }
   return L;
 }
 
 describe('groupRangeLayout', () => {
-  it('広い幅（結果の画面のカード 930px）: 名前 220px｜帯（残り全部）｜件数 60px の 3 列', () => {
+  it('広い幅（結果の画面のカード 930px）: 名前 220px｜棒（残り全部）｜件数 60px の 3 列・1 行 28px', () => {
     const L = checkCommon(930, 2100);
     expect(L.wide).toBe(true);
     expect(L.nameW).toBe(220);
     expect(L.bandX0).toBe(228);
     expect(L.bandX1).toBe(930 - 60 - 8);
-    // 目盛りは帯の列の両端と真ん中
-    expect(L.ticks[0]!.x).toBeLessThan(L.bandX0 + 40);
-    expect(L.ticks[2]!.x).toBeGreaterThan(L.bandX1 - 40);
+    expect(L.rowH).toBe(28);
+    // 横の範囲は共通の区切りの両端（目盛りは両端と真ん中）
+    expect(L.ticks.map((t) => t.v)).toEqual([100, 1300, 2500]);
+    expect(L.ticks[0]!.x).toBeLessThan(L.bandX0 + 10);
+    expect(L.ticks[2]!.x).toBeGreaterThan(L.bandX1 - 10);
   });
 
-  it('狭い幅（360px の画面のカード 300px）: 名前と件数の段の下に帯を全幅で入れる 2 段組み', () => {
+  it('狭い幅（360px の画面のカード 300px）: 名前と件数の段の下に棒を全幅で入れる 2 段組み', () => {
     expect(300).toBeLessThan(RANGE_WIDE_MIN);
     const L = checkCommon(300, 2100);
     expect(L.wide).toBe(false);
     expect(L.bandX0).toBe(0);
     expect(L.bandX1).toBe(300);
-    for (let i = 0; i < rows.length; i++) {
-      // 帯は名前の文字の下、次の行より上
-      expect(L.bandY(i)).toBeGreaterThan(L.textY(i));
-      expect(L.bandY(i) + 9).toBeLessThanOrEqual(L.rowTop(i + 1));
-    }
+    // 棒は名前の文字の下
+    for (let i = 0; i < rows.length; i++)
+      expect(L.histTop(i)).toBeGreaterThan(L.textY(i));
   });
 
-  it('自分の値が分布より外でも、帯の列の中に線を引く（範囲に自分の値を含める）', () => {
+  it('自分の値が区切りの外でも、範囲を広げて棒の列の中に線を引く', () => {
     for (const v of [-500, 9999]) checkCommon(930, v);
-    expect(groupRangeLayout(930, rows, 9999).mineEnd).toBe(true);
-    expect(groupRangeLayout(930, rows, -500).mineEnd).toBe(false);
+    expect(groupRangeLayout(930, rows, 9999, edges).mineEnd).toBe(true);
+    expect(groupRangeLayout(930, rows, -500, edges).mineEnd).toBe(false);
+    // 行が無い（区切りが空）でも描ける
+    const empty = groupRangeLayout(930, [], 50, []);
+    expect(empty.ticks.map((t) => t.v)).toEqual([50]);
+    expect(Number.isFinite(empty.mineX)).toBe(true);
   });
 
   it('名前は幅に収め、はみ出せば … で切る', () => {

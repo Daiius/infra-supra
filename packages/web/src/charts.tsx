@@ -1414,16 +1414,19 @@ export function HistogramChart({
   );
 }
 
-/** 比較の図の 1 行（構成・フレームワークごとの分布の要約）。stats が null なら件数が少なく、帯を描かない。 */
+/**
+ * 比較の図の 1 行（構成・フレームワークごとの小さなヒストグラム）。stats が null なら件数が少なく、棒を描かない。
+ * bins は全部の行で共通の区切り（GroupHistogramChart の binEdges）での棒の件数。
+ */
 export type RangeChartRow = {
   key: string;
   label: string;
   count: number;
-  stats: { p25: number; median: number; p75: number } | null;
+  stats: { median: number; bins: readonly number[] } | null;
   mine: boolean;
 };
 
-/** 比較の図を 3 列（名前｜帯｜件数）にする最少の幅。これより狭ければ、名前と件数の下に帯を全幅で入れる 2 段組み。 */
+/** 比較の図を 3 列（名前｜棒｜件数）にする最少の幅。これより狭ければ、名前と件数の下に棒を全幅で入れる 2 段組み。 */
 export const RANGE_WIDE_MIN = 480;
 const RANGE_NAME_W = 220;
 const RANGE_COUNT_W = 60;
@@ -1431,6 +1434,11 @@ const RANGE_GAP = 8;
 /** 「▼ あなた」の段と目盛りの段の高さ。 */
 const RANGE_HEAD_H = 16;
 const RANGE_TICKS_H = 16;
+/** 1 行の高さ（3 列・2 段組み）。2 段組みは名前の段（16px）の下にヒストグラム（3 列と同じ高さ）。 */
+const RANGE_ROW_H = 28;
+const RANGE_NAME_ROW_H = 16;
+/** 中央値の印（棒の下の短い縦の印）の長さ。 */
+const MEDIAN_TICK = 5;
 /** 12px の文字の幅の目安（全角 12・半角 7）。名前を列に収めるときに使う。 */
 const charW = (c: string) => (c.charCodeAt(0) > 0xff ? 12 : 7);
 
@@ -1455,46 +1463,47 @@ export function fitText(s: string, width: number): string {
 }
 
 /**
- * 比較の図の配置（純粋な計算。幅は実際の画素）。帯・中央値・自分の線・目盛り・「▼ あなた」を全部この 1 つの x の座標（xOf）で置く。
- * wide: 名前（RANGE_NAME_W まで）｜帯（残り全部）｜件数（RANGE_COUNT_W）の 3 列。狭いとき: 名前と件数の行の下に帯を全幅。
+ * 比較の図の配置（純粋な計算。幅は実際の画素）。棒・中央値・自分の線・目盛り・「▼ あなた」を全部この 1 つの x の座標（xOf）で置く。
+ * wide: 名前（RANGE_NAME_W まで）｜棒（残り全部）｜件数（RANGE_COUNT_W）の 3 列。狭いとき: 名前と件数の段の下に棒を全幅。
+ * 横の範囲は共通の区切り（binEdges）の両端で、自分の値が外にあれば広げる。
  */
 export function groupRangeLayout(
   width: number,
-  rows: readonly RangeChartRow[],
+  rows: readonly unknown[],
   value: number,
+  binEdges: readonly number[],
 ) {
   const wide = width >= RANGE_WIDE_MIN;
   const nameW = wide ? Math.min(RANGE_NAME_W, width * 0.3) : width;
   const bandX0 = wide ? nameW + RANGE_GAP : 0;
   const bandX1 = wide ? width - RANGE_COUNT_W - RANGE_GAP : width;
-  // 帯の列の中で、端の目盛りの文字が切れないよう少し内側に寄せる
+  // 棒の列の中で、端の目盛りの文字・自分の線が切れないよう少し内側に寄せる
   const inset = 4;
-  const shown = rows.flatMap((r) => (r.stats ? [r.stats] : []));
-  const dataLo = Math.min(value, ...shown.map((s) => s.p25));
-  const dataHi = Math.max(value, ...shown.map((s) => s.p75));
-  let lo = dataLo;
-  let hi = dataHi;
+  const edgeLo = binEdges[0] ?? value;
+  const edgeHi = binEdges.at(-1) ?? value;
+  let lo = Math.min(value, edgeLo);
+  let hi = Math.max(value, edgeHi);
   if (hi - lo <= 0) {
     const d = Math.abs(lo) * 0.1 || 1;
     lo -= d;
     hi += d;
   }
-  const pad = (hi - lo) * 0.04;
-  lo -= pad;
-  hi += pad;
   const xOf = (v: number) =>
     bandX0 + inset + ((v - lo) / (hi - lo)) * (bandX1 - bandX0 - 2 * inset);
-  const rowH = wide ? 24 : 36;
+  const rowH = wide ? RANGE_ROW_H : RANGE_NAME_ROW_H + RANGE_ROW_H;
   const rowTop = (i: number) => RANGE_HEAD_H + i * rowH;
-  // 帯の縦の真ん中（wide は行の真ん中・狭いときは名前の段の下）
-  const bandY = (i: number) => rowTop(i) + (wide ? rowH / 2 : 26);
+  /** ヒストグラムの上端と、棒の下端（基線）。中央値の印は基線の下に MEDIAN_TICK だけ伸ばす。 */
+  const histTop = (i: number) => rowTop(i) + (wide ? 0 : RANGE_NAME_ROW_H) + 3;
+  const baseY = (i: number) => rowTop(i) + rowH - MEDIAN_TICK - 2;
   const textY = (i: number) => rowTop(i) + (wide ? rowH / 2 + 4 : 12);
-  const height = RANGE_HEAD_H + rows.length * rowH + RANGE_TICKS_H;
+  const rowsBottom = RANGE_HEAD_H + rows.length * rowH;
+  const height = rowsBottom + RANGE_TICKS_H;
   const ticksY = height - 4;
-  const ticks = [dataLo, (dataLo + dataHi) / 2, dataHi].map((t) => ({
-    v: t,
-    x: xOf(t),
-  }));
+  const tickValues =
+    binEdges.length > 1
+      ? [edgeLo, binEdges[Math.floor((binEdges.length - 1) / 2)]!, edgeHi]
+      : [value];
+  const ticks = tickValues.map((t) => ({ v: t, x: xOf(t) }));
   return {
     wide,
     nameW,
@@ -1502,12 +1511,14 @@ export function groupRangeLayout(
     bandX1,
     xOf,
     mineX: xOf(value),
-    /** 「あなた」を ▼ の左に置くか（右の端に近いとき。帯の列からはみ出さない）。 */
+    /** 「あなた」を ▼ の左に置くか（右の端に近いとき。棒の列からはみ出さない）。 */
     mineEnd: bandX1 - xOf(value) < 48,
     rowH,
     rowTop,
-    bandY,
+    histTop,
+    baseY,
     textY,
+    rowsBottom,
     height,
     ticksY,
     ticks,
@@ -1515,20 +1526,24 @@ export function groupRangeLayout(
 }
 
 /**
- * 行ごとの分布の比較（ST-11・D-175）: 各行に 25〜75% の帯と中央値の縦の印を描き、全部の行で横の目盛りをそろえ、自分の値の位置に
- * 縦の線を引く（色だけに頼らず「▼ あなた」のラベル）。自分の構成の行は強調の色・ほかは控えめの色（emphasis）。良し悪しの色
- * （status）は使わない（向きを持たない ④ 費用の合計にも同じ図を使う。D-166）。件数が少ない行は帯を出さず emptyText を出す。
+ * 行ごとの分布の比較（ST-11・D-175）: 各行に小さなヒストグラム（全部の行で同じ x 軸と区切り）を描き、棒の下に中央値の短い縦の印、
+ * 全部の行を貫く自分の値の縦の線を引く（色だけに頼らず「▼ あなた」のラベル）。棒の高さは行ごとの最大で割る（件数の違う行どうしでも
+ * 形を比べられるように。呼ぶ側の注記に書く）。自分の構成の行は強調の色・ほかは控えめの色（emphasis）。良し悪しの色（status）は
+ * 使わない（向きを持たない ④ 費用の合計にも同じ図を使う。D-166）。件数が少ない行は棒を出さず emptyText を出す。
  * 件数は行ごとに常にテキストで出す。数値は呼ぶ側の表（数値で見る）でも読める。
  * 1 つの SVG を実際の幅（画素）で描き、文字も同じ座標で置く（HTML のグリッドと伸び縮みする SVG を混ぜると列がずれたため）。
  */
-export function GroupRangeChart({
+export function GroupHistogramChart({
   rows,
+  binEdges,
   value,
   format,
   label,
   emptyText,
 }: {
   rows: readonly RangeChartRow[];
+  /** 全部の行で共通の区切り（棒の数 + 1 個）。 */
+  binEdges: readonly number[];
   /** 自分の値。 */
   value: number;
   format: (n: number) => string;
@@ -1538,7 +1553,7 @@ export function GroupRangeChart({
   emptyText: (count: number) => string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
-  const L = width > 0 ? groupRangeLayout(width, rows, value) : null;
+  const L = width > 0 ? groupRangeLayout(width, rows, value, binEdges) : null;
   return (
     <figure className="viz-root min-w-0" data-group-range-chart>
       <div ref={ref} className="w-full">
@@ -1555,29 +1570,14 @@ export function GroupRangeChart({
             data-band-x1={L.bandX1}
             fontSize="12"
           >
-            {/* 自分の線の真上に ▼、その横に「あなた」（右の端では左へ寄せる） */}
-            <g aria-hidden data-group-mine-label data-x={L.mineX}>
-              <path
-                d={`M${L.mineX - 4},4 L${L.mineX + 4},4 L${L.mineX},10 Z`}
-                fill="var(--text-primary)"
-              />
-              <text
-                x={L.mineEnd ? L.mineX - 7 : L.mineX + 7}
-                y="11"
-                textAnchor={L.mineEnd ? 'end' : 'start'}
-                fontSize="10"
-                fontWeight="600"
-                fill="var(--text-primary)"
-              >
-                あなた
-              </text>
-            </g>
             {rows.map((r, i) => {
-              const top = L.rowTop(i);
-              const by = L.bandY(i);
+              const top = L.histTop(i);
+              const base = L.baseY(i);
               const ty = L.textY(i);
               const nameMax = L.wide ? L.nameW : width - RANGE_COUNT_W;
               const name = `${r.label}${r.mine ? '（あなた）' : ''}`;
+              const bins = r.stats?.bins ?? [];
+              const rowMax = Math.max(1, ...bins);
               return (
                 <g
                   key={r.key}
@@ -1607,64 +1607,86 @@ export function GroupRangeChart({
                   <line
                     x1={L.bandX0}
                     x2={L.bandX1}
-                    y1={by}
-                    y2={by}
-                    stroke="var(--grid)"
+                    y1={base + 0.5}
+                    y2={base + 0.5}
+                    stroke="var(--axis)"
                     strokeWidth="1"
                   />
                   {r.stats ? (
                     <g
                       role="img"
-                      aria-label={`${r.label}: 中央値 ${format(r.stats.median)}・25〜75% は ${format(r.stats.p25)}〜${format(r.stats.p75)}・${r.count} 件`}
-                      data-group-band
+                      aria-label={`${r.label}: ${r.count} 件・中央値 ${format(r.stats.median)}`}
+                      data-group-hist
                     >
-                      <rect
-                        x={L.xOf(r.stats.p25)}
-                        width={Math.max(
-                          2,
-                          L.xOf(r.stats.p75) - L.xOf(r.stats.p25),
-                        )}
-                        y={by - 4}
-                        height="8"
-                        rx="2"
-                        fill={r.mine ? 'var(--series-1-track)' : 'var(--grid)'}
-                      />
+                      {bins.map((n, k) => {
+                        if (n <= 0 || binEdges.length < k + 2) return null;
+                        // 隣の棒との間に 2px の地の色のすき間
+                        const x0 = L.xOf(binEdges[k]!) + 1;
+                        const x1 = L.xOf(binEdges[k + 1]!) - 1;
+                        const h = (n / rowMax) * (base - top);
+                        return (
+                          <rect
+                            key={k}
+                            x={x0}
+                            width={Math.max(1, x1 - x0)}
+                            y={base - h}
+                            height={h}
+                            fill={
+                              r.mine ? 'var(--series-1)' : 'var(--deemphasis)'
+                            }
+                            data-bin={k}
+                          />
+                        );
+                      })}
                       <line
                         x1={L.xOf(r.stats.median)}
                         x2={L.xOf(r.stats.median)}
-                        y1={by - 7}
-                        y2={by + 7}
-                        stroke={
-                          r.mine ? 'var(--series-1)' : 'var(--text-muted)'
-                        }
-                        strokeWidth="3"
+                        y1={base + 1}
+                        y2={base + 1 + MEDIAN_TICK}
+                        stroke="var(--text-primary)"
+                        strokeWidth="2"
                         data-group-median
                       />
                     </g>
                   ) : (
                     <text
                       x={L.bandX0 + 4}
-                      y={by + 4}
+                      y={base - 4}
                       fill="var(--text-muted)"
                       data-group-few
                     >
                       {emptyText(r.count)}
                     </text>
                   )}
-                  {r.stats && (
-                    <line
-                      x1={L.mineX}
-                      x2={L.mineX}
-                      y1={L.wide ? top : by - 9}
-                      y2={L.wide ? top + L.rowH : by + 9}
-                      stroke="var(--marker)"
-                      strokeWidth="2"
-                      data-group-mine-line
-                    />
-                  )}
                 </g>
               );
             })}
+            {/* 自分の値の縦の線（全部の行を貫く）と、その真上の ▼・横の「あなた」（右の端では左へ寄せる） */}
+            <line
+              x1={L.mineX}
+              x2={L.mineX}
+              y1={RANGE_HEAD_H - 4}
+              y2={L.rowsBottom}
+              stroke="var(--marker)"
+              strokeWidth="2"
+              data-group-mine-line
+            />
+            <g aria-hidden data-group-mine-label data-x={L.mineX}>
+              <path
+                d={`M${L.mineX - 4},2 L${L.mineX + 4},2 L${L.mineX},8 Z`}
+                fill="var(--text-primary)"
+              />
+              <text
+                x={L.mineEnd ? L.mineX - 7 : L.mineX + 7}
+                y="9"
+                textAnchor={L.mineEnd ? 'end' : 'start'}
+                fontSize="10"
+                fontWeight="600"
+                fill="var(--text-primary)"
+              >
+                あなた
+              </text>
+            </g>
             <g
               aria-hidden
               fontSize="10"
@@ -1672,12 +1694,20 @@ export function GroupRangeChart({
               className="tabular-nums"
               data-group-ticks
             >
-              {L.ticks.map((t, i) => (
+              {L.ticks.map((t, i, all) => (
                 <text
                   key={i}
                   x={t.x}
                   y={L.ticksY}
-                  textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}
+                  textAnchor={
+                    all.length === 1
+                      ? 'middle'
+                      : i === 0
+                        ? 'start'
+                        : i === all.length - 1
+                          ? 'end'
+                          : 'middle'
+                  }
                   data-x={t.x}
                 >
                   {format(t.v)}

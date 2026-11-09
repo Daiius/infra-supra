@@ -228,9 +228,9 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
   it('要約を出す行に写す: 並びは keys のまま・無い鍵は 0 件・10 件未満は帯なし・keys に無い鍵は出さない', () => {
     const rows = groupRowsOf(
       [
-        { key: 'b', count: 12, p25: 1, median: 2, p75: 3 },
-        { key: 'a', count: 9, p25: 1, median: 2, p75: 3 },
-        { key: 'hidden', count: 99, p25: 1, median: 2, p75: 3 },
+        { key: 'b', count: 12, p25: 1, median: 2, p75: 3, bins: [9, 3] },
+        { key: 'a', count: 9, p25: 1, median: 2, p75: 3, bins: [9, 3] },
+        { key: 'hidden', count: 99, p25: 1, median: 2, p75: 3, bins: [9, 3] },
       ],
       [
         { key: 'a', label: 'A' },
@@ -245,7 +245,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
         key: 'b',
         label: 'B',
         count: 12,
-        stats: { p25: 1, median: 2, p75: 3 },
+        stats: { p25: 1, median: 2, p75: 3, bins: [9, 3] },
         mine: true,
       },
       { key: 'c', label: 'C', count: 0, stats: null, mine: false },

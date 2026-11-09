@@ -170,6 +170,8 @@ describe('drizzleRepo（PGlite）', () => {
       ['sakura-vps-2gb', 'nextjs', 1, 45.5],
       ['vercel-supabase-pro', 'nextjs', 1, 900],
       ['vercel-supabase-pro', 'astro', 2, 700],
+      // 区切りのちょうど上（45.5 + 3 × (900 - 45.5) / 12）。SQL と手元で同じ棒に入るか
+      ['gcp-cloud-run', 'astro', 2, 259.125],
     ] as const;
     let i = 0;
     for (const [stackId, framework, seed, totalCost] of data)
@@ -222,15 +224,32 @@ describe('drizzleRepo（PGlite）', () => {
         const g = { ...q, by, ...(seed === undefined ? {} : { seed }) };
         const got = await repo.groupStats(g);
         const want = await mem.groupStats(g);
-        expect(got.map((x) => x.key)).toEqual(want.map((x) => x.key));
-        got.forEach((x, k) => {
-          const w = want[k]!;
+        expect(got.binEdges).toEqual(want.binEdges);
+        expect(got.groups.map((x) => x.key)).toEqual(
+          want.groups.map((x) => x.key),
+        );
+        got.groups.forEach((x, k) => {
+          const w = want.groups[k]!;
           expect(x.count).toBe(w.count);
+          expect(x.bins).toEqual(w.bins);
           for (const f of ['p25', 'median', 'p75'] as const)
             expect(x[f]).toBeCloseTo(w[f], 9);
         });
       }
-    expect(await repo.groupStats({ ...q, by: 'stack' })).toEqual([
+    const byStack = await repo.groupStats({ ...q, by: 'stack' });
+    // 区切りは全体の最小〜最大（45.5〜900）を 12 等分
+    expect(byStack.binEdges).toHaveLength(13);
+    expect(byStack.binEdges[0]).toBe(45.5);
+    expect(byStack.binEdges[12]).toBe(900);
+    expect(byStack.groups).toEqual([
+      {
+        key: 'gcp-cloud-run',
+        count: 1,
+        p25: 259.125,
+        median: 259.125,
+        p75: 259.125,
+        bins: [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      },
       // 45.5・80・120・310 → 25% は 45.5 + 0.75 × 34.5
       {
         key: 'sakura-vps-2gb',
@@ -238,6 +257,7 @@ describe('drizzleRepo（PGlite）', () => {
         p25: 71.375,
         median: 100,
         p75: 167.5,
+        bins: [2, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
       },
       {
         key: 'vercel-supabase-pro',
@@ -245,8 +265,13 @@ describe('drizzleRepo（PGlite）', () => {
         p25: 750,
         median: 800,
         p75: 850,
+        bins: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
       },
     ]);
+    // 行が無ければ区切りも空
+    expect(
+      await repo.groupStats({ scenarioId: 'none', axis: 'cash', by: 'stack' }),
+    ).toEqual({ binEdges: [], groups: [] });
   });
 
   it('知らない終わり方は表の検査で入らない', async () => {

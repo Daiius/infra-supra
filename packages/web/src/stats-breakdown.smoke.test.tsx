@@ -80,12 +80,42 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   });
 
+/** 共通の区切り（0〜3,600 を 12 等分）と、構成ごとの棒の件数。 */
+const BIN_EDGES = Array.from({ length: 13 }, (_, i) => 300 * i);
 const GROUPS = [
-  { key: OWN_STACK, count: 30, p25: 1500, median: 2000, p75: 2600 },
-  { key: 'sakura-vps-2gb', count: 4, p25: 100, median: 200, p75: 300 },
+  {
+    key: OWN_STACK,
+    count: 30,
+    p25: 1500,
+    median: 2000,
+    p75: 2600,
+    bins: [0, 0, 0, 1, 2, 4, 6, 8, 5, 3, 1, 0],
+  },
+  {
+    key: 'sakura-vps-2gb',
+    count: 4,
+    p25: 100,
+    median: 200,
+    p75: 300,
+    bins: [3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
   // 隠した構成（D-100）は行に出さない
-  { key: 'aws-opennext', count: 50, p25: 1, median: 2, p75: 3 },
-  { key: 'nextjs', count: 12, p25: 1000, median: 1800, p75: 2400 },
+  {
+    key: 'aws-opennext',
+    count: 50,
+    p25: 1,
+    median: 2,
+    p75: 3,
+    bins: [50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
+  {
+    key: 'nextjs',
+    count: 12,
+    p25: 1000,
+    median: 1800,
+    p75: 2400,
+    bins: [0, 0, 1, 2, 3, 3, 2, 1, 0, 0, 0, 0],
+  },
 ];
 
 /**
@@ -110,6 +140,7 @@ function statsFetch(
         axis: url.searchParams.get('axis'),
         by: url.searchParams.get('by'),
         seed: null,
+        binEdges: BIN_EDGES,
         groups: GROUPS,
       });
     return json({ error: 'not-found' }, 404);
@@ -253,15 +284,27 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(own.dataset.mine).toBe('true');
     expect(own.textContent).toContain('Cloudflare Paid + vinext（あなた）');
     expect(own.querySelector('[data-group-count]')!.textContent).toBe('30 件');
-    expect(own.querySelector('[data-group-band]')).not.toBeNull();
-    expect(own.querySelector('[data-group-mine-line]')).not.toBeNull();
+    // 行ごとの小さなヒストグラム: 件数の無い棒は描かず、棒の高さは行ごとの最大（8）で割る
+    const ownBars = [
+      ...own.querySelectorAll<SVGRectElement>('[data-group-hist] rect'),
+    ];
+    expect(ownBars.map((r) => Number(r.dataset.bin))).toEqual([
+      3, 4, 5, 6, 7, 8, 9, 10,
+    ]);
+    const heights = ownBars.map((r) => Number(r.getAttribute('height')));
+    const tallest = Math.max(...heights);
+    expect(heights[4]).toBe(tallest);
+    expect(heights[0]).toBeCloseTo(tallest / 8, 6);
+    // 自分の行は強調の色・ほかの行は控えめの色
+    expect(ownBars[0]!.getAttribute('fill')).toBe('var(--series-1)');
+    expect(own.querySelector('[data-group-median]')).not.toBeNull();
     expect(
-      own.querySelector('[data-group-band]')!.getAttribute('aria-label'),
+      own.querySelector('[data-group-hist]')!.getAttribute('aria-label'),
     ).toContain('中央値 $2,000');
     const few = compare().querySelector<HTMLElement>(
       '[data-group-row="sakura-vps-2gb"]',
     )!;
-    expect(few.querySelector('[data-group-band]')).toBeNull();
+    expect(few.querySelector('[data-group-hist]')).toBeNull();
     expect(few.querySelector('[data-group-few]')!.textContent).toBe(
       'まだ 4 件です',
     );
@@ -270,8 +313,8 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
       '[data-group-row="gcp-cloud-run"]',
     )!;
     expect(empty.querySelector('[data-group-count]')!.textContent).toBe('0 件');
-    // 配置（テストの幅 640 では 3 列）: 帯・自分の線・目盛り・「▼ あなた」が同じ座標の基準（1 つの SVG）にあり、
-    // 「▼」は自分の線の真上・目盛りは帯の列の中・件数は帯の列の右（以前は HTML のグリッドと伸び縮みする SVG がずれた）
+    // 配置（テストの幅 640 では 3 列）: 棒・自分の線・目盛り・「▼ あなた」が同じ座標の基準（1 つの SVG）にあり、
+    // 「▼」は自分の線の真上・目盛りは棒の列の中・件数は棒の列の右（以前は HTML のグリッドと伸び縮みする SVG がずれた）
     const svg = compare().querySelector<SVGSVGElement>(
       '[data-group-range-chart] svg',
     )!;
@@ -287,12 +330,30 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     )!;
     expect(mineLabel.textContent).toBe('あなた');
     const mineX = Number(mineLabel.dataset.x);
+    // 自分の線は 1 本で全部の行を貫く
     const lines = [...svg.querySelectorAll('[data-group-mine-line]')];
-    expect(lines.length).toBeGreaterThan(0);
-    for (const l of lines) {
-      expect(Number(l.getAttribute('x1'))).toBe(mineX);
-      expect(Number(l.getAttribute('x2'))).toBe(mineX);
-    }
+    expect(lines).toHaveLength(1);
+    expect(Number(lines[0]!.getAttribute('x1'))).toBe(mineX);
+    expect(Number(lines[0]!.getAttribute('x2'))).toBe(mineX);
+    const rowCount = svg.querySelectorAll('[data-group-row]').length;
+    expect(Number(lines[0]!.getAttribute('y2'))).toBeGreaterThan(
+      Number(lines[0]!.getAttribute('y1')) + (rowCount - 1) * 24,
+    );
+    // 棒の区切りは全部の行でそろう（同じ番号の棒は同じ x）
+    const xsOf = (key: string) =>
+      new Map(
+        [
+          ...svg.querySelectorAll<SVGRectElement>(
+            `[data-group-row="${key}"] [data-group-hist] rect`,
+          ),
+        ].map((r) => [r.dataset.bin, r.getAttribute('x')]),
+      );
+    const tickXs = [
+      ...svg.querySelectorAll<SVGTextElement>('[data-group-ticks] text'),
+    ].map((t) => Number(t.dataset.x));
+    expect(tickXs).toHaveLength(3);
+    // 6 本目の棒の左端（2px のすき間の半分を足す）は、真ん中の目盛り（区切りの 6 番目）と同じ x
+    expect(Number(xsOf(OWN_STACK).get('6'))).toBeCloseTo(tickXs[1]! + 1, 6);
     const tip = mineLabel.querySelector('path')!.getAttribute('d')!;
     expect(tip).toContain(`L${mineX},`);
     for (const t of svg.querySelectorAll<SVGTextElement>(
@@ -303,7 +364,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     }
     for (const c of svg.querySelectorAll('[data-group-count]'))
       expect(Number(c.getAttribute('x'))).toBeGreaterThan(x1);
-    for (const r of own.querySelectorAll('[data-group-band] rect')) {
+    for (const r of own.querySelectorAll('[data-group-hist] rect')) {
       expect(Number(r.getAttribute('x'))).toBeGreaterThanOrEqual(x0);
       expect(
         Number(r.getAttribute('x')) + Number(r.getAttribute('width')),
@@ -323,6 +384,11 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
       ).toBe('true'),
     );
     expect(compare().querySelectorAll('[data-group-row]')).toHaveLength(4);
+    // フレームワークごとでも同じ区切りの同じ番号の棒は同じ x（行どうしで区切りがそろう）
+    expect(Number(xsOf('nextjs').get('6'))).toBeCloseTo(
+      Number(xsOf(OWN_STACK).get('6') ?? tickXs[1]! + 1),
+      6,
+    );
   });
 
   it('W-107 比較の図の軸を ④ 費用の合計に替えると、向きの文が「良し悪しを付けません」になり、良し悪しの色を使わない', async () => {
@@ -384,7 +450,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     );
     expect(compare().textContent).toContain('開発用の架空の値です');
     expect(
-      compare().querySelectorAll('[data-group-band]').length,
+      compare().querySelectorAll('[data-group-hist]').length,
     ).toBeGreaterThan(0);
     expect(
       compare().querySelectorAll('[data-group-few]').length,

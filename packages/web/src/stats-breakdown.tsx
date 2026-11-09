@@ -1,12 +1,11 @@
 // 結果の画面の、構成・フレームワークごとの分布（ST-11・D-175）。完走のダイアログには置かない（ダイアログを複雑にしない）。
 // - 絞り込みのチップ（全部 / 同じインフラ / 同じフレームワーク / 同じ組み合わせ）で、4 軸の分布（同じシード / 全シード）を切り替える。
-// - 比較の図: 1 つの軸について、構成ごと（切り替えでフレームワークごと）の 25〜75% の帯と中央値・自分の値の縦の線。
+// - 比較の図: 1 つの軸について、構成ごと（切り替えでフレームワークごと）の小さなヒストグラム（共通の区切り）と中央値の印・自分の値の縦の線。
 // 絞り込みは見るためだけ。「★ 上位」の印と花火の段（D-163・D-168）は全部の構成の分布のまま。選んだチップ・軸・分け方は
 // localStorage（STATS_BREAKDOWN_KEY）に覚える。VITE_STATS_ENABLED が無ければ取りに行かない（開発の VITE_STATS_MOCK は架空の値）。
 import { FRAMEWORKS, RESULT_AXES, STACKS, type ResultAxisId } from 'game';
 import { useEffect, useMemo, useState } from 'react';
-import type { GroupStat } from 'stats';
-import { GroupRangeChart } from './charts.tsx';
+import { GroupHistogramChart } from './charts.tsx';
 import {
   DEFAULT_BREAKDOWN_PREFS,
   groupRowsOf,
@@ -27,6 +26,7 @@ import type { AxisComparison } from './results-history.ts';
 import {
   loadFilteredView,
   loadGroups,
+  type GroupsView,
   type StatsQuery,
 } from './stats-client.ts';
 
@@ -269,7 +269,7 @@ function GroupCompare({
   const reqKey = `${by}:${axis}:${query.scenarioId}:${query.seed}`;
   const [res, setRes] = useState<{
     key: string;
-    data: { groups: GroupStat[]; mock: boolean } | null;
+    data: GroupsView | null;
   } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -310,8 +310,8 @@ function GroupCompare({
       </h3>
       <p className="mb-2 text-xs opacity-70">
         全シードの完走を{byName}
-        ごとに分けて、真ん中の半分（25〜75%）を帯、中央値を縦の印で描きます。縦の線はあなたの値です。
-        {MIN_DISTRIBUTION_COUNT} 件未満の行は帯を出しません。
+        ごとに分けて、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値、縦の線はあなたの値です。
+        {MIN_DISTRIBUTION_COUNT} 件未満の行は棒を出しません。
         {data?.mock && '開発用の架空の値です（遊んだ人の結果ではありません）。'}
       </p>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -347,11 +347,12 @@ function GroupCompare({
           className={cur ? undefined : 'opacity-60 transition-opacity'}
           aria-busy={cur ? undefined : true}
         >
-          <GroupRangeChart
+          <GroupHistogramChart
             rows={rows}
+            binEdges={data!.binEdges}
             value={value}
             format={format}
-            label={`${byName}ごとの${def.label}の分布（25〜75% と中央値）`}
+            label={`${byName}ごとの${def.label}の分布（ヒストグラムと中央値）`}
             emptyText={(n) => `まだ ${n} 件です`}
           />
           <details className="mt-2 text-xs">

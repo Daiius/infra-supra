@@ -1,6 +1,6 @@
 // 保存の口（D-154）。API（route.ts）はこの形だけを知り、drizzle の層（db/repo.ts）とテスト用の手元の実装（memoryRepo）を差し替える。
 import type { EndReason, ResultAxisId, SaveData } from 'game';
-import { groupStatsOf, type GroupStat } from './histogram.ts';
+import { groupStatsOf, type GroupStats } from './histogram.ts';
 
 /** 照合を通った 1 プレイ（表 results の 1 行。id と受け付けた日時は DB が付ける）。 */
 export type ResultRecord = {
@@ -78,10 +78,10 @@ export interface ResultsRepo {
   /** ヒストグラムに入れる値（完走・戻っていない・印の無いプレイだけ。D-137・D-148・D-174）。並びは問わない。 */
   histogramValues(q: AxisQuery): Promise<number[]>;
   /**
-   * 構成（またはフレームワーク）ごとの件数・25%・中央値・75%（分布と同じ条件の行だけ。鍵の順）。行の無い鍵は返さない。
-   * DB の層は SQL の percentile_cont で集計する（行を読み出さない）。
+   * 構成（またはフレームワーク）ごとの件数・25%・中央値・75%・共通の区切りでの棒の件数（分布と同じ条件の行だけ。鍵の順）。
+   * 行の無い鍵は返さない。DB の層は SQL（percentile_cont と棒の番号の式）で集計する（行を読み出さない）。
    */
-  groupStats(q: GroupQuery): Promise<GroupStat[]>;
+  groupStats(q: GroupQuery): Promise<GroupStats>;
 }
 
 /** 分布に入るかを決める行の欄。 */

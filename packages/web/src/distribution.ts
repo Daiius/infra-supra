@@ -201,12 +201,18 @@ export function filterParams(
   };
 }
 
-/** 比較の図の 1 行。stats は件数が少なければ null（帯を出さず「まだ n 件です」）。 */
+/** 比較の図の 1 行（小さなヒストグラム）。stats は件数が少なければ null（棒を出さず「まだ n 件です」）。 */
 export type GroupRow = {
   key: string;
   label: string;
   count: number;
-  stats: { p25: number; median: number; p75: number } | null;
+  /** 件数が少なければ null（棒と中央値を出さず「まだ n 件です」）。bins は共通の区切りでの棒の件数。 */
+  stats: {
+    p25: number;
+    median: number;
+    p75: number;
+    bins: number[];
+  } | null;
   /** 自分のプレイの構成（フレームワーク）の行か。 */
   mine: boolean;
 };
@@ -229,7 +235,7 @@ export function groupRowsOf(
       count,
       stats:
         g && count >= MIN_DISTRIBUTION_COUNT
-          ? { p25: g.p25, median: g.median, p75: g.p75 }
+          ? { p25: g.p25, median: g.median, p75: g.p75, bins: g.bins }
           : null,
       mine: key === mineKey,
     };

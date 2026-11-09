@@ -186,17 +186,31 @@ export async function fetchDistribution(q: {
 /** 構成ごとの要約の応答の形をおおまかに確かめる。 */
 function isGroups(x: unknown): x is Groups {
   const groups = (x as { groups?: unknown } | null)?.groups;
-  return (
-    Array.isArray(groups) &&
-    groups.every(
-      (g: unknown) =>
-        typeof (g as GroupStat | null)?.key === 'string' &&
-        (['count', 'p25', 'median', 'p75'] as const).every(
-          (k) => typeof (g as GroupStat)[k] === 'number',
-        ),
-    )
+  const edges = (x as { binEdges?: unknown } | null)?.binEdges;
+  const nums = (a: unknown, n?: number): boolean =>
+    Array.isArray(a) &&
+    (n === undefined || a.length === n) &&
+    a.every((v) => typeof v === 'number' && Number.isFinite(v));
+  if (!Array.isArray(groups) || !nums(edges)) return false;
+  // 行があれば区切りは棒の数 + 1 個
+  const bins = (edges as number[]).length - 1;
+  if (groups.length > 0 && bins < 1) return false;
+  return groups.every(
+    (g: unknown) =>
+      typeof (g as GroupStat | null)?.key === 'string' &&
+      (['count', 'p25', 'median', 'p75'] as const).every(
+        (k) => typeof (g as GroupStat)[k] === 'number',
+      ) &&
+      nums((g as GroupStat).bins, bins),
   );
 }
+
+/** 比較の図の元（共通の区切りと構成ごとの要約）。 */
+export type GroupsView = {
+  binEdges: number[];
+  groups: GroupStat[];
+  mock: boolean;
+};
 
 /** 自分のプレイの絞り込みの元（結果の画面が持つ。D-175）。 */
 export type StatsQuery = {
@@ -248,7 +262,7 @@ export async function loadFilteredView(
 }
 
 /**
- * 1 つの軸の構成ごと（またはフレームワークごと）の要約（比較の図。全シード。D-175）。フラグが無い・失敗は null。例外は出さない。
+ * 1 つの軸の構成ごと（またはフレームワークごと）の要約と共通の棒の区切り（比較の図。全シード。D-175）。フラグが無い・失敗は null。例外は出さない。
  * keys は出す行の鍵（架空の値を作るときに使う）。
  */
 export async function loadGroups(q: {
@@ -258,10 +272,10 @@ export async function loadGroups(q: {
   by: GroupBy;
   value: number;
   keys: readonly string[];
-}): Promise<{ groups: GroupStat[]; mock: boolean } | null> {
+}): Promise<GroupsView | null> {
   if (statsMockEnabled()) {
     const { mockGroups } = await import('./stats-mock.ts');
-    return { groups: mockGroups(q), mock: true };
+    return { ...mockGroups(q), mock: true };
   }
   if (!statsEnabled()) return null;
   try {
@@ -270,7 +284,9 @@ export async function loadGroups(q: {
     });
     if (!res.ok) return null;
     const body: unknown = await res.json();
-    return isGroups(body) ? { groups: body.groups, mock: false } : null;
+    return isGroups(body)
+      ? { binEdges: body.binEdges, groups: body.groups, mock: false }
+      : null;
   } catch {
     return null;
   }
