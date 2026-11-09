@@ -506,16 +506,179 @@ describe('GET /api/results/distribution', () => {
     expect('bins' in single && single.bins).toEqual(d.axes.totalCost.all.bins);
   });
 
-  it('知らないシナリオ・シードが無い・数でない値は 400', async () => {
+  it('stack・framework で 8 本とも同じ構成・同じフレームワークに絞り、両方なら両方に合う行だけ（D-175）', async () => {
+    const { repo, client } = setup();
+    repo.rows.push(
+      rec({ playId: 'a', seed: 1, cash: 1000, stackId: 'vercel-supabase-pro' }),
+      rec({
+        playId: 'b',
+        seed: 1,
+        cash: 2000,
+        stackId: 'vercel-supabase-pro',
+        framework: 'vite-spa',
+      }),
+      rec({ playId: 'c', seed: 2, cash: 3000, framework: 'vite-spa' }),
+      rec({ playId: 'd', seed: 1, cash: 4000 }),
+      // 印つき・途中終了は絞っても入らない（D-174）
+      rec({
+        playId: 'e',
+        seed: 1,
+        stackId: 'vercel-supabase-pro',
+        flag: 'dup-cap',
+      }),
+      rec({
+        playId: 'f',
+        seed: 1,
+        stackId: 'vercel-supabase-pro',
+        endReason: 'cash',
+      }),
+    );
+    const get = async (query: Record<string, string>) => {
+      const d = await (
+        await client.api.results.distribution.$get({
+          query: { scenario: 'article-community', seed: '1', ...query },
+        })
+      ).json();
+      if (!('axes' in d)) throw new Error('エラーの応答');
+      return d;
+    };
+    const byStack = await get({ stack: 'vercel-supabase-pro' });
+    expect(byStack).toMatchObject({
+      stack: 'vercel-supabase-pro',
+      framework: null,
+    });
+    expect(byStack.axes.cash.all).toMatchObject({ count: 2, max: 2000 });
+    expect(byStack.axes.cash.seed.count).toBe(2);
+    const byFw = await get({ framework: 'vite-spa' });
+    expect(byFw.axes.cash.all).toMatchObject({ count: 2, min: 2000 });
+    expect(byFw.axes.cash.seed.count).toBe(1);
+    const both = await get({
+      stack: 'vercel-supabase-pro',
+      framework: 'vite-spa',
+    });
+    expect(both.axes.satisfaction.all.count).toBe(1);
+    expect(both).toMatchObject({
+      stack: 'vercel-supabase-pro',
+      framework: 'vite-spa',
+    });
+    // 絞らなければ今までどおり全部
+    expect((await get({})).axes.cash.all.count).toBe(4);
+  });
+
+  it('知らないシナリオ・シードが無い・数でない値・知らない構成やフレームワークは 400', async () => {
     const { app } = setup();
     for (const q of [
       'scenario=nope&seed=1',
       'scenario=article-community',
       'scenario=article-community&seed=1&cash=abc',
+      'scenario=article-community&seed=1&stack=nope',
+      'scenario=article-community&seed=1&framework=toString',
     ])
       expect((await app.request(`/api/results/distribution?${q}`)).status).toBe(
         400,
       );
+  });
+});
+
+describe('GET /api/results/groups', () => {
+  const rec = (over: Partial<ResultRecord>): ResultRecord => {
+    const v = verifySubmission(submissionOf(completed));
+    if (!v.ok) throw new Error('照合に失敗');
+    return { ...v.record, ...over };
+  };
+
+  it('構成ごと / フレームワークごとの件数・25%・中央値・75%・共通の区切りでの棒の件数を、分布と同じ条件の行だけで返す（D-175）', async () => {
+    const { repo, client } = setup();
+    repo.rows.push(
+      ...[100, 200, 300, 400, 500].map((cash, i) =>
+        rec({ playId: `p${i}`, seed: i % 2, cash, stackId: 'sakura-vps-2gb' }),
+      ),
+      rec({ playId: 'v', seed: 1, cash: 50, framework: 'vite-spa' }),
+      // 印つき・戻った・途中終了は数えない
+      rec({
+        playId: 'x',
+        cash: 1e6,
+        stackId: 'sakura-vps-2gb',
+        flag: 'too-fast',
+      }),
+      rec({ playId: 'y', cash: 1e6, stackId: 'sakura-vps-2gb', rewound: true }),
+      rec({
+        playId: 'z',
+        cash: 1e6,
+        stackId: 'sakura-vps-2gb',
+        endReason: 'cash',
+      }),
+    );
+    const r = await client.api.results.groups.$get({
+      query: { scenario: 'article-community', axis: 'cash', by: 'stack' },
+    });
+    expect(r.status).toBe(200);
+    const g = await r.json();
+    if (!('groups' in g)) throw new Error('エラーの応答');
+    expect(g).toMatchObject({ axis: 'cash', by: 'stack', seed: null });
+    // 区切りは全部の行の最小〜最大（50〜500）を 12 等分し、全部の構成で共通
+    expect(g.binEdges).toHaveLength(13);
+    expect([g.binEdges[0], g.binEdges[12]]).toEqual([50, 500]);
+    expect(g.groups).toEqual([
+      {
+        key: 'cloudflare-vinext-paid',
+        count: 1,
+        p25: 50,
+        median: 50,
+        p75: 50,
+        bins: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      },
+      {
+        key: 'sakura-vps-2gb',
+        count: 5,
+        p25: 200,
+        median: 300,
+        p75: 400,
+        bins: [0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1],
+      },
+    ]);
+    const fw = await (
+      await client.api.results.groups.$get({
+        query: {
+          scenario: 'article-community',
+          axis: 'cash',
+          by: 'framework',
+          seed: '1',
+        },
+      })
+    ).json();
+    if (!('groups' in fw)) throw new Error('エラーの応答');
+    // シード 1 は p1（200）・p3（400）・v（50）
+    expect([fw.binEdges[0], fw.binEdges[12]]).toEqual([50, 400]);
+    expect(fw.groups).toEqual([
+      {
+        key: 'nextjs',
+        count: 2,
+        p25: 250,
+        median: 300,
+        p75: 350,
+        bins: [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+      },
+      {
+        key: 'vite-spa',
+        count: 1,
+        p25: 50,
+        median: 50,
+        p75: 50,
+        bins: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      },
+    ]);
+  });
+
+  it('知らないシナリオ・軸・分け方は 400', async () => {
+    const { app } = setup();
+    for (const q of [
+      'scenario=nope&axis=cash&by=stack',
+      'scenario=article-community&axis=rank&by=stack',
+      'scenario=article-community&axis=cash&by=components',
+      'scenario=article-community&axis=cash',
+    ])
+      expect((await app.request(`/api/results/groups?${q}`)).status).toBe(400);
   });
 });
 

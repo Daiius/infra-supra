@@ -1,5 +1,6 @@
 // 保存の口（D-154）。API（route.ts）はこの形だけを知り、drizzle の層（db/repo.ts）とテスト用の手元の実装（memoryRepo）を差し替える。
 import type { EndReason, ResultAxisId, SaveData } from 'game';
+import { groupStatsOf, type GroupStats } from './histogram.ts';
 
 /** 照合を通った 1 プレイ（表 results の 1 行。id と受け付けた日時は DB が付ける）。 */
 export type ResultRecord = {
@@ -46,6 +47,22 @@ export type AxisQuery = {
   scenarioId: string;
   axis: ResultAxisId;
   seed?: number;
+  /** 指定すれば同じ構成（stack_id）だけ（ST-11・D-175）。 */
+  stackId?: string;
+  /** 指定すれば同じフレームワークだけ（ST-11・D-175）。 */
+  framework?: string;
+};
+
+/** 比較の図の分け方（構成ごと / フレームワークごと。ST-11・D-175）。 */
+export const GROUP_BY = ['stack', 'framework'] as const;
+export type GroupBy = (typeof GROUP_BY)[number];
+
+/** 構成（またはフレームワーク）ごとの要約の絞り込み。seed を指定すれば同じシードだけ。 */
+export type GroupQuery = {
+  scenarioId: string;
+  axis: ResultAxisId;
+  by: GroupBy;
+  seed?: number;
 };
 
 /** 同じ結果の数の上限（D-174）。since より後に、同じ play_hash で分布に入った行が max 件以上あれば dup-cap の印を付ける。 */
@@ -60,6 +77,11 @@ export interface ResultsRepo {
   insert(record: ResultRecord, dupCap?: DupCap): Promise<InsertResult>;
   /** ヒストグラムに入れる値（完走・戻っていない・印の無いプレイだけ。D-137・D-148・D-174）。並びは問わない。 */
   histogramValues(q: AxisQuery): Promise<number[]>;
+  /**
+   * 構成（またはフレームワーク）ごとの件数・25%・中央値・75%・共通の区切りでの棒の件数（分布と同じ条件の行だけ。鍵の順）。
+   * 行の無い鍵は返さない。DB の層は SQL（percentile_cont と棒の番号の式）で集計する（行を読み出さない）。
+   */
+  groupStats(q: GroupQuery): Promise<GroupStats>;
 }
 
 /** 分布に入るかを決める行の欄。 */
@@ -125,15 +147,32 @@ export function memoryRepo(
       rows.push(row);
       return { status: 'inserted', stored: marksOf(row) };
     },
-    async histogramValues({ scenarioId, axis, seed }) {
+    async histogramValues({ scenarioId, axis, seed, stackId, framework }) {
       return rows
         .filter(
           (r) =>
             r.scenarioId === scenarioId &&
             inHistogram(r) &&
-            (seed === undefined || r.seed === seed),
+            (seed === undefined || r.seed === seed) &&
+            (stackId === undefined || r.stackId === stackId) &&
+            (framework === undefined || r.framework === framework),
         )
         .map((r) => r[AXIS_FIELD[axis]]);
+    },
+    async groupStats({ scenarioId, axis, by, seed }) {
+      return groupStatsOf(
+        rows
+          .filter(
+            (r) =>
+              r.scenarioId === scenarioId &&
+              inHistogram(r) &&
+              (seed === undefined || r.seed === seed),
+          )
+          .map((r) => ({
+            key: by === 'stack' ? r.stackId : r.framework,
+            value: r[AXIS_FIELD[axis]],
+          })),
+      );
     },
   };
 }

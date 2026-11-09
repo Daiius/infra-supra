@@ -117,8 +117,10 @@ describe('集計の分布の表示（段 3）', () => {
     vi.stubGlobal('fetch', fetch);
     await finish();
     await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
-    // 送信（POST）が先、分布（GET）が後で、分布は 1 回だけ
-    const urls = fetch.mock.calls.map((c) => String(c[0]));
+    // 送信（POST）が先、分布（GET）が後で、分布は 1 回だけ（結果の画面の比較の図の groups は D-175 の stats-breakdown.smoke.test.tsx で見る）
+    const urls = fetch.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => !u.startsWith('/api/results/groups'));
     expect(urls).toEqual(['/api/results', expect.any(String)]);
     const q = new URL(urls[1]!, 'http://x').searchParams;
     expect(new URL(urls[1]!, 'http://x').pathname).toBe(
