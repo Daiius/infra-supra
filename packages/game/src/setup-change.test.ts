@@ -7,6 +7,7 @@ import {
   COMMENTS_IN_PAGE,
   currentSetupDraft,
   draftComponentsFor,
+  draftRouteBase,
   flattenSetupChange,
   isDataSwap,
   newGame,
@@ -30,6 +31,17 @@ const AWS = STACKS.findIndex((s) => s.provider === 'aws' && !s.hidden);
 
 const start = (stackIndex: number, fw: GameState['framework'] = 'nextjs') =>
   playMonth(newGame(stackIndex, 1, ARTICLE_COMMUNITY, undefined, fw));
+
+/** setupSlots の並びで DB より後のスロット（DB の移行を先に当てると、これらが「最中」で選べなくなる）。 */
+const PART_ORDER_AFTER_DB = new Set([
+  'images',
+  'isrCache',
+  'ogp',
+  'email',
+  'dbBackup',
+  'apiCache',
+  'frontCdn',
+]);
 
 const kinds = (s: GameState, d: SetupDraft) =>
   setupChangeOf(s, d).items.map((x) => x.kind);
@@ -271,5 +283,70 @@ describe('構成を変える（D-185）', () => {
     expect(draftComponentsFor(s, CF_FREE, 'nextjs').realtime).toBe(
       'durable-objects',
     );
+  });
+  it('DB の差し替え（移行を始める）は、ほかの部品の差し替えより後に当てる（OCL-8361F527）', () => {
+    const s = start(CF_PAID);
+    const d = currentSetupDraft(s);
+    const slots = setupSlots(
+      ARTICLE_COMMUNITY,
+      CF_PAID,
+      'nextjs',
+      d.components,
+    );
+    const alt = (
+      slot: string,
+      ok: (c: ReturnType<typeof setupChangeOf>) => boolean,
+    ) => {
+      const x = slots.find((y) => y.slot === slot && !y.fixed)!;
+      return x.options.find(
+        (o) =>
+          o.id !== d.components[slot as SlotId] &&
+          ok(
+            setupChangeOf(s, {
+              ...d,
+              components: { ...d.components, [slot]: o.id },
+            }),
+          ),
+      )?.id;
+    };
+    const db = alt('db', (c) => c.why === null)!;
+    const other = slots
+      .filter(
+        (x) =>
+          !x.fixed &&
+          x.slot !== 'files' &&
+          !isDataSwap(x.slot as SlotId) &&
+          PART_ORDER_AFTER_DB.has(x.slot),
+      )
+      .map((x) => [x.slot, alt(x.slot, (c) => c.why === null)] as const)
+      .find(([, v]) => v !== undefined)!;
+    const c = setupChangeOf(s, {
+      ...d,
+      components: { ...d.components, db, [other[0]]: other[1] },
+    });
+    expect(
+      c.groups.components.map((a) => a.type === 'component' && a.slot),
+    ).toEqual([other[0], 'db']);
+    expect(c.why).toBeNull();
+  });
+
+  it('描き方の差は、欄で選んだ部品を当てた後の描き方と比べる（OCL-E7B403BA）', () => {
+    const s = start(VERCEL_PRO);
+    const d = currentSetupDraft(s);
+    const draft = { ...d, components: { ...d.components, isrCache: 'none' } };
+    const before = Object.fromEntries(
+      routePlanOf(s).map((r) => [r.route, r.strategy]),
+    );
+    const base = draftRouteBase(s, draft);
+    const route = Object.keys(base).find((r) => base[r] !== before[r])!;
+    expect(route).toBeDefined();
+    // 部品で既定が替わったページを、元の描き方に選び直すと route の行動になる
+    const c = setupChangeOf(s, {
+      ...draft,
+      routes: { [route]: { strategy: before[route]! } },
+    });
+    expect(c.groups.routes).toEqual([
+      expect.objectContaining({ type: 'route', route }),
+    ]);
   });
 });

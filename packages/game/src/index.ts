@@ -182,6 +182,7 @@ export {
   type SetupChangeItem,
   currentSetupDraft,
   draftComponentsFor,
+  draftRouteBase,
   validDraftComponents,
   flattenSetupChange,
   sameAsCurrent,

@@ -9,13 +9,13 @@ import {
   componentSlots,
   currentSetupDraft,
   draftComponentsFor,
+  draftRouteBase,
   FRAMEWORKS,
   frameworkOnStack,
   frameworksOf,
   partsOfComments,
   resolvedRouteStrategies,
   rewriteRouteNotice,
-  routePlanOf,
   routePlanRows,
   sameAsCurrent,
   scenarioOf,
@@ -228,9 +228,8 @@ function ChangeBody({
       ? draft.comments
       : undefined;
   // 今の描き方（選び直したページを「今」に戻すと、選び直しを消す）
-  const now = Object.fromEntries(
-    routePlanOf(state).map((r) => [r.route, r.strategy]),
-  );
+  // 部品・プラン変更を当てた後の描き方（setupChangeOf の差と同じ基準。OCL-E7B403BA）
+  const now = draftRouteBase(state, draft);
   const sameFw = draft.framework === state.framework;
   const rows = routePlanRows(sc, {
     framework: draft.framework,

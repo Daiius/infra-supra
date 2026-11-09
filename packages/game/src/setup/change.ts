@@ -11,7 +11,7 @@ import {
   type SlotId,
   strategyTitle,
 } from 'catalog';
-import { applyAction, checkActions } from '../actions/apply.ts';
+import { applyAction, applyActions, checkActions } from '../actions/apply.ts';
 import { actionEffort, checkAction } from '../actions/check.ts';
 import { proposalOnlyComponent } from '../components.ts';
 import { frameworkDefaults, scenarioOf } from '../core.ts';
@@ -149,7 +149,11 @@ function orderComponents(state: GameState, actions: Action[]): Action[] {
   const rest = [...actions];
   let s = state;
   while (rest.length > 0) {
-    const i = rest.findIndex((a) => checkAction(s, a).ok);
+    // 移行を始める差し替えは、ほかに選べる行動が無いときだけ（始めるとほかの部品を差し替えられない。OCL-8361F527）
+    const ok = (a: Action) => checkAction(s, a).ok;
+    const swap = (a: Action) => a.type === 'component' && isDataSwap(a.slot);
+    let i = rest.findIndex((a) => !swap(a) && ok(a));
+    if (i < 0) i = rest.findIndex(ok);
     if (i < 0) break;
     const [a] = rest.splice(i, 1);
     out.push(a!);
@@ -184,6 +188,27 @@ export function sameAsCurrent(state: GameState, draft: SetupDraft): boolean {
     [...keys].every(
       (k) => cur.components[k as SlotId] === draft.components[k as SlotId],
     )
+  );
+}
+
+const routeStrategiesOf = (s: GameState) =>
+  Object.fromEntries(
+    routePlanOf(s).map((r) => [r.route, r.strategy]),
+  ) as Partial<Record<string, RouteStrategyId>>;
+
+/**
+ * 描き方を選び直すときの「今」（欄で選んだ部品・プラン変更を当てた後の描き方。setupChangeOf の差の基準と同じ。OCL-E7B403BA）。
+ */
+export function draftRouteBase(
+  state: GameState,
+  draft: SetupDraft,
+): Partial<Record<string, RouteStrategyId>> {
+  const { groups } = setupChangeOf(state, { ...draft, routes: {} });
+  return routeStrategiesOf(
+    applyActions(state, [
+      ...groups.components,
+      ...(groups.stack ? [groups.stack] : []),
+    ]),
   );
 }
 
@@ -266,8 +291,15 @@ export function setupChangeOf(
     changed.push(slot);
   }
   // VPS の API の応答のキャッシュは前段の CDN が要る（D-37）。付けるときは前段の CDN の後、外すときは先に当てる
+  // DB・API の置き場の差し替え（データの移行）は始めると最中はほかの部品を差し替えられないので最後に当てる（OCL-8361F527）
   const order = (slot: SlotId) =>
-    slot === 'apiCache' ? (draft.components[slot] === 'none' ? -1 : 1) : 0;
+    isDataSwap(slot)
+      ? 2
+      : slot === 'apiCache'
+        ? draft.components[slot] === 'none'
+          ? -1
+          : 1
+        : 0;
   const ordered = orderComponents(
     state,
     [...changed]
@@ -321,9 +353,12 @@ export function setupChangeOf(
   }
 
   // ページの描き方
-  const now = Object.fromEntries(
-    routePlanOf(state).map((r) => [r.route, r.strategy]),
-  );
+  // 描き方の差は、先に当てる部品・プラン変更の後の状態と比べる（部品で既定の描き方が変わる。OCL-E7B403BA）
+  const before = applyActions(state, [
+    ...groups.components,
+    ...(groups.stack ? [groups.stack] : []),
+  ]);
+  const now = routeStrategiesOf(before);
   for (const [route, want] of Object.entries(draft.routes)) {
     if (!want) continue;
     const from = now[route];
@@ -350,7 +385,7 @@ export function setupChangeOf(
       ...(want.value !== undefined ? { value: want.value } : {}),
     };
     groups.routes.push(action);
-    const effort = actionEffort(state, action);
+    const effort = actionEffort(before, action);
     items.push({
       kind: 'route',
       action,
