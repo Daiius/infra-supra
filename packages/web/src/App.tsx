@@ -102,8 +102,6 @@ const today = () => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
-/** 画面に出す為替の仮定（game の共通の仮定）。 */
-const USD_JPY = 150;
 
 /** 遊んでいる途中の保存（D-26）。行動の履歴だけを持ち、読み込みは再生で復元する。 */
 const SAVE_KEY = 'infra-supra:game-save';
@@ -769,7 +767,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
         value={scenarioId}
         onChange={(id) => change({ scenarioId: id })}
       />
-      <ScenarioDescription scenario={scenario} usdJpy={USD_JPY} />
+      <ScenarioDescription scenario={scenario} />
       <div className="card bg-base-100 shadow">
         <div className="card-body px-3 sm:px-6">
           <h2 className="card-title">どの構成で始めますか？</h2>

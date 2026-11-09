@@ -1498,7 +1498,7 @@ describe('ゲームモードの画面', () => {
     });
   });
 
-  it('W-32 始める画面: シナリオの説明の出来事の詳細と開発の手間の内訳は畳み、ボタンでダイアログに出す', async () => {
+  it('W-32 始める画面: シナリオの説明の出来事の詳細は畳んでボタンでダイアログに出し、遊び方と重なる説明は出さない（D-173）', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     // 本文には要約だけ（出来事の一覧・改定の説明は出さない）
@@ -1515,20 +1515,16 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(open);
-    // 開発の手間の内訳
-    fireEvent.click(screen.getByRole('button', { name: '開発の手間の内訳' }));
-    const effort = screen.getByRole('dialog', { name: '開発の手間の内訳' });
-    expect(effort.textContent).toContain('自前運用の維持');
-    fireEvent.click(within(effort).getByRole('button', { name: '閉じる' }));
-    // 満足度は先頭の文だけを本文に出し、残りはダイアログ（2026-11-05）
+    // 満足度・開発の手間の説明と前置き・料金の前提は遊び方に任せ、始める画面には出さない（D-173）
     expect(
-      screen.getByText(/満足度は可用性・速さ・機能・鮮度・画質/),
-    ).toBeDefined();
-    expect(screen.queryByText(/離脱や検索からの流入/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '満足度の詳しい説明' }));
-    const sat = screen.getByRole('dialog', { name: '満足度' });
-    expect(sat.textContent).toContain('離脱や検索からの流入');
-    fireEvent.click(within(sat).getByRole('button', { name: '閉じる' }));
+      screen.queryByRole('button', { name: '開発の手間の内訳' }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '満足度の詳しい説明' }),
+    ).toBeNull();
+    expect(screen.queryByText(/開発の手間は毎月/)).toBeNull();
+    expect(document.querySelector('[data-premise-note]')).toBeNull();
+    expect(screen.queryByText(/2026-10-31 時点の公式の料金表/)).toBeNull();
     // アプリの形は見出しの 1 行だけ。箇条書きはダイアログ（2026-11-05）
     expect(screen.queryByText(/本文の画像 5 枚/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '3 項目を見る' }));
