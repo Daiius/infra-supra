@@ -42,7 +42,7 @@ export function OgCard() {
       />
       <div className="relative flex h-full flex-col items-center justify-center gap-7">
         <Logo still size={OG_LOGO_SIZE} />
-        <p className="text-[34px] font-medium tracking-wide text-base-content/70">
+        <p className="text-[34px] font-medium tracking-wide text-neutral-700">
           Web アプリのインフラ運営シミュレーション
         </p>
       </div>

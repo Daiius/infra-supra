@@ -204,10 +204,14 @@ h4,
   font-weight: 700;
   font-size: var(--logo-size, 18px);
   line-height: 1;
-  color: var(--color-base-content);
+  /* 真っ黒にせず濃い灰色（Tailwind の neutral-700。2026-11-10・ユーザーの決定）。暗いテーマでは neutral-300 */
+  color: var(--color-neutral-700);
   cursor: default;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+[data-theme='dark'] .logo-fraction {
+  color: var(--color-neutral-300);
 }
 .logo-layer {
   grid-area: 1 / 1;
