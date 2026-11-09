@@ -3,7 +3,12 @@ import type { ResultAxes } from 'game';
 import type { Distribution, Histogram } from 'stats';
 import { describe, expect, it } from 'vitest';
 import {
+  axisStandingsOf,
+  DEFAULT_BREAKDOWN_PREFS,
   distributionFireworkLevel,
+  filterParams,
+  groupRowsOf,
+  parseBreakdownPrefs,
   membershipOf,
   MIN_DISTRIBUTION_COUNT,
   parseMembership,
@@ -35,6 +40,8 @@ function dist(
   return {
     scenarioId: 'article-community',
     seed: 1,
+    stack: null,
+    framework: null,
     axes: {
       cash: per('cash'),
       satisfaction: per('satisfaction'),
@@ -184,5 +191,64 @@ describe('送ったプレイが分布に入ったかの記録', () => {
       parseMembership({ version: 1, entries: [['a', true], ['b', 'x'], 3] })
         .entries,
     ).toEqual([['a', true]]);
+  });
+});
+
+describe('構成・フレームワークごとの分布（ST-11・D-175）', () => {
+  it('絞った分布は全体の件数で段 1 に戻さず、軸・シードごとに少ない分布だけ null にする', () => {
+    const d = dist(() => ({ seed: h(3, 0, 1), all: h(9, 0, 1) }));
+    expect(standingsOf(d, axes, true)).toEqual({ status: 'few', count: 9 });
+    const v = axisStandingsOf(d, axes, true);
+    expect(v.axes.map((a) => [a.seed, a.seedCount, a.all, a.allCount])).toEqual(
+      Array(4).fill([null, 3, null, 9]),
+    );
+    // 入っていなければ自分を 1 件足す（10 件になれば出す）
+    const out = axisStandingsOf(d, axes, false);
+    expect(out.axes[0]!.all?.n).toBe(MIN_DISTRIBUTION_COUNT);
+  });
+
+  it('チップから絞りの引数を作る（同じインフラ・同じフレームワーク・両方）', () => {
+    const own = { stackId: 'sakura-vps-2gb', framework: 'astro' };
+    expect(filterParams('all', own)).toEqual({});
+    expect(filterParams('stack', own)).toEqual({ stack: 'sakura-vps-2gb' });
+    expect(filterParams('framework', own)).toEqual({ framework: 'astro' });
+    expect(filterParams('both', own)).toEqual({
+      stack: 'sakura-vps-2gb',
+      framework: 'astro',
+    });
+  });
+
+  it('覚えた選択は形が違う欄だけ既定に戻す', () => {
+    expect(parseBreakdownPrefs(null)).toEqual(DEFAULT_BREAKDOWN_PREFS);
+    expect(
+      parseBreakdownPrefs({ filter: 'both', by: 'nope', axis: 'totalCost' }),
+    ).toEqual({ filter: 'both', by: 'stack', axis: 'totalCost' });
+  });
+
+  it('要約を出す行に写す: 並びは keys のまま・無い鍵は 0 件・10 件未満は帯なし・keys に無い鍵は出さない', () => {
+    const rows = groupRowsOf(
+      [
+        { key: 'b', count: 12, p25: 1, median: 2, p75: 3, bins: [9, 3] },
+        { key: 'a', count: 9, p25: 1, median: 2, p75: 3, bins: [9, 3] },
+        { key: 'hidden', count: 99, p25: 1, median: 2, p75: 3, bins: [9, 3] },
+      ],
+      [
+        { key: 'a', label: 'A' },
+        { key: 'b', label: 'B' },
+        { key: 'c', label: 'C' },
+      ],
+      'b',
+    );
+    expect(rows).toEqual([
+      { key: 'a', label: 'A', count: 9, stats: null, mine: false },
+      {
+        key: 'b',
+        label: 'B',
+        count: 12,
+        stats: { p25: 1, median: 2, p75: 3, bins: [9, 3] },
+        mine: true,
+      },
+      { key: 'c', label: 'C', count: 0, stats: null, mine: false },
+    ]);
   });
 });

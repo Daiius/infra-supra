@@ -66,6 +66,14 @@ import {
   type Scenario,
 } from 'game';
 import { diagramArchitecture } from '../system-diagram-model.ts';
+import {
+  editParts,
+  partsOfStack,
+  prunePartsMemory,
+  rememberCurrent,
+  stackGroupOf,
+  type PartsMemory,
+} from '../parts-memory.ts';
 
 export const BOOKS: readonly PriceBook[] = loadPriceBooks();
 
@@ -292,47 +300,81 @@ export function withStack(
   );
 }
 
-/** 他の構成で選んでいた部品（構成の id → 選択）。構成を替えても画面が覚えておき、戻ったら戻す（D-116 の補足）。 */
-export type PartsByStack = Partial<Record<string, Choices>>;
+/**
+ * 部品の選択の記憶（組 = 同じ事業者のプランの組 → 生の選択。D-116 の補足・D-176）。同じ組のプラン（Vercel の Hobby / Pro など）は
+ * 選択を共有し、今のプランで選べないものも残して、選べるプランに戻ったら戻す。今の構成の組の記憶は、構成を替えるときに今の選択で
+ * 書き戻す（rememberCurrent）ので、部品を選び直すときは withPartsRemembered で選び直したスロットだけを書き換える。
+ */
+export type PartsByGroup = PartsMemory;
 
 /**
- * 構成を替えるときの部品の記憶: 替える前の構成の選択を覚え、替えた先の記憶を部品にする（withStack に渡し、再検証の既定もその部品で決める。OCL-3CBB2E6A）。
- * どの構成の記憶も、替えた後のテンプレート・フレームワークで選べるものだけにする（keptParts）。計算・URL は今の構成の parts だけ。
+ * 構成を替えるときの部品の記憶: 今の構成の選択を組の記憶へ書き戻し、替えた先の組の記憶をその構成で選べるものにして部品にする
+ * （withStack に渡し、再検証の既定もその部品で決める。OCL-3CBB2E6A）。フレームワークが替わる（載せられない構成を選んだ）ときは、
+ * 組のどのプランでも選べなくなったものを記憶から落とす（keptParts）。計算・URL は今の構成の parts だけ。
  */
 export function withStackRemembered(
   input: EstimateInput,
   stack: string,
-  memory: PartsByStack,
-): { input: EstimateInput; memory: PartsByStack } {
-  const saved = { ...memory, [input.stack]: input.parts };
+  memory: PartsByGroup,
+): { input: EstimateInput; memory: PartsByGroup } {
+  const scenario = scenarioOfTemplate(input.template);
+  const saved = rememberCurrent(
+    memory,
+    input.parts,
+    scenario,
+    stackIndexOf(input.stack),
+    input.framework,
+  );
+  const i = stackIndexOf(stack);
+  const parts =
+    i < 0 ? {} : (partsOfStack(saved, scenario, i, input.framework) ?? {});
   const next = normalizeInput({
     ...input,
-    ...withStack(input, stack, saved[stack] ?? {}),
+    ...withStack(input, stack, parts),
   });
-  return { input: next, memory: keptParts(saved, next) };
+  return {
+    input: next,
+    memory: next.framework === input.framework ? saved : keptParts(saved, next),
+  };
 }
 
 /**
- * 構成ごとの部品の記憶を、今のテンプレート・フレームワークで選べるものだけにする（今の構成の分は持たない）。
- * 今のフレームワークを載せられない構成の記憶は、その構成を選んだときに付け替わる先のフレームワーク（frameworkOnStack）で見る。
+ * テンプレート・フレームワークを替えたときの記憶: 今の構成の選択（替える前の input）を組の記憶へ書き戻し、組のどのプランでも
+ * 替えた後のテンプレート・フレームワークで選べなくなったものを落とす（戻しても復活しない。OCL-09D12A43）。
  */
 export function keptParts(
-  memory: PartsByStack,
-  input: EstimateInput,
-): PartsByStack {
-  const scenario = scenarioOfTemplate(input.template);
-  const out: PartsByStack = {};
-  for (const [id, parts] of Object.entries(memory)) {
-    const i = stackIndexOf(id);
-    if (id === input.stack || i < 0 || !parts) continue;
-    out[id] = estimateComponents(
-      scenario,
-      i,
-      frameworkOnStack(scenario, i, input.framework),
-      parts,
-    ).chosen;
-  }
-  return out;
+  memory: PartsByGroup,
+  next: EstimateInput,
+  before?: EstimateInput,
+): PartsByGroup {
+  const saved = before
+    ? rememberCurrent(
+        memory,
+        before.parts,
+        scenarioOfTemplate(before.template),
+        stackIndexOf(before.stack),
+        before.framework,
+      )
+    : memory;
+  return prunePartsMemory(
+    saved,
+    scenarioOfTemplate(next.template),
+    next.framework,
+  );
+}
+
+/**
+ * 今の構成で部品を選び直したときの記憶: 選び直したスロットだけを今の組の記憶に書き換える（今のプランで選べずに残している
+ * 記憶は触らない。D-176）。prev・next は選び直す前・後の入力（normalizeInput 済み）。
+ */
+export function withPartsRemembered(
+  memory: PartsByGroup,
+  prev: EstimateInput,
+  next: EstimateInput,
+): PartsByGroup {
+  if (next.stack !== prev.stack) return memory;
+  const g = stackGroupOf(stackIndexOf(prev.stack));
+  return { ...memory, [g]: editParts(memory[g], prev.parts, next.parts) };
 }
 
 /** フレームワークを選ぶ。再検証などの値・ページごとの描き方は withContext の規則で付け替える。 */
@@ -1092,7 +1134,7 @@ export type ComparisonRow = {
 const selectedInput = (
   input: EstimateInput,
   stack: string,
-  memory: PartsByStack,
+  memory: PartsByGroup,
 ): EstimateInput =>
   stack === input.stack
     ? input
@@ -1104,7 +1146,7 @@ const selectedInput = (
  */
 export function compareStacks(
   input: EstimateInput,
-  memory: PartsByStack = {},
+  memory: PartsByGroup = {},
 ): ComparisonRow[] {
   return STACKS.filter((s) => stackOffered(s.index, input.framework)).map(
     (s) => {
@@ -1149,7 +1191,7 @@ export function stackCardTotals(
   input: EstimateInput,
   rows: readonly ComparisonRow[],
   /** 構成ごとに覚えている部品（compareStacks に渡したものと同じ）。 */
-  memory: PartsByStack = {},
+  memory: PartsByGroup = {},
 ): Partial<Record<string, StackCardTotal>> {
   const out: Partial<Record<string, StackCardTotal>> = {};
   for (const s of STACKS) {
@@ -1213,7 +1255,7 @@ export function costCurves(
   input: EstimateInput,
   stacks: readonly string[],
   pvs: readonly number[] = CURVE_PVS,
-  memory: PartsByStack = {},
+  memory: PartsByGroup = {},
 ): CurveSeries[] {
   return stacks.flatMap((id) => {
     const index = stackIndexOf(id);

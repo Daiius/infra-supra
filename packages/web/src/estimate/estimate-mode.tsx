@@ -32,6 +32,7 @@ import { Info } from '../info.tsx';
 import { CreditBar } from '../credit-bar.tsx';
 import { creditUseText, isCreditUse, isStopping } from '../premise-view.ts';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
+import { partsOfStack } from '../parts-memory.ts';
 import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
 import {
   routeChoiceOf,
@@ -43,6 +44,7 @@ import {
   SettingChips,
   SetupSettings,
   SetupTabs,
+  type SetupChoices,
 } from '../setup-components.tsx';
 import {
   type EstimateView,
@@ -61,7 +63,7 @@ import {
   imageFormatLock,
   keptParts,
   normalizeInput,
-  type PartsByStack,
+  type PartsByGroup,
   normalizeSeats,
   PV_PRESETS,
   runEstimate,
@@ -78,6 +80,7 @@ import {
   withParts,
   withStack,
   withStackRemembered,
+  withPartsRemembered,
   withTemplate,
   type EstimateInput,
   type LineView,
@@ -126,15 +129,16 @@ export function EstimateMode() {
 
   // 構成を替えて、今のフレームワークを載せられないので付け替えたときの知らせ（D-113・D-115）。構成・フレームワーク・テンプレートを替えると消す
   const [notice, setNotice] = useState<string | null>(null);
-  // 他の構成で選んでいた部品（D-116 の補足）。構成を替えても覚えておき、戻ったら戻す。見積・URL は今の構成の parts だけ
-  const [partsByStack, setPartsByStack] = useState<PartsByStack>({});
+  // 部品の選択の記憶（組 = 同じ事業者のプランの組ごと。D-116 の補足・D-176）。構成を替えても覚えておき、戻ったら戻す。同じ組の
+  // プランは選択を共有し、今のプランで選べないものも記憶には残す。見積・URL は今の構成の parts（選べるものだけ）
+  const [partsByGroup, setPartsByGroup] = useState<PartsByGroup>({});
   const pickStack = (stack: string) => {
     const { input: next, memory } = withStackRemembered(
       input,
       stack,
-      partsByStack,
+      partsByGroup,
     );
-    setPartsByStack(memory);
+    setPartsByGroup(memory);
     setNotice(
       next.framework === input.framework
         ? null
@@ -154,12 +158,18 @@ export function EstimateMode() {
       ...input,
       ...withFramework(input, framework),
     });
-    setPartsByStack(keptParts(partsByStack, next));
+    setPartsByGroup(keptParts(partsByGroup, next, input));
+    setInputState(next);
+  };
+  // 部品を選び直す（記憶は選び直したスロットだけ書き換える。D-176）
+  const pickParts = (parts: SetupChoices) => {
+    const next = normalizeInput({ ...input, ...withParts(input, parts) });
+    setPartsByGroup(withPartsRemembered(partsByGroup, input, next));
     setInputState(next);
   };
   const view = runEstimate(input);
   // 他の構成は覚えている部品（無ければ既定）で数える（D-116 の補足）。構成のカードの月額・費用の曲線も同じ
-  const rows = compareStacks(input, partsByStack);
+  const rows = compareStacks(input, partsByGroup);
   const diagram = diagramOf(input);
   const routeStatus = routeStatusOf(input);
   // 再検証の間隔などの描き方の設定は、記事のページの行で選ぶ（D-119。ゲームの始める画面と同じ部品）
@@ -221,18 +231,19 @@ export function EstimateMode() {
           setNotice(null);
           // テンプレートを替えたときも、構成ごとの記憶は替えた先で選べるものだけを残す
           const next = normalizeInput({ ...input, ...p });
-          setPartsByStack(keptParts(partsByStack, next));
+          setPartsByGroup(keptParts(partsByGroup, next, input));
           setInputState(next);
         }}
         mau={view.mau}
         rows={rows}
-        memory={partsByStack}
+        memory={partsByGroup}
         notice={notice}
         onPickStack={pickStack}
         onPickFramework={pickFramework}
+        onPickParts={pickParts}
         editor={editor}
         // 全体の図（費用の曲線）を条件の直下・① の上に置き、そこからカードで詳しく見る（D-182）
-        overview={<CostCurve input={input} rows={rows} memory={partsByStack} />}
+        overview={<CostCurve input={input} rows={rows} memory={partsByGroup} />}
       />
       <Card title={`月の費用: ${view.name}`}>
         <div className="flex flex-wrap items-baseline gap-x-3">
@@ -373,6 +384,7 @@ function Conditions({
   notice,
   onPickStack,
   onPickFramework,
+  onPickParts,
   editor,
   overview,
 }: {
@@ -381,12 +393,14 @@ function Conditions({
   mau: number;
   /** 構成の比較の行（構成のカードの月額に使う）。 */
   rows: readonly ComparisonRow[];
-  /** 構成ごとに覚えている部品（選んでいないカードの月額・図に使う。D-116 の補足）。 */
-  memory: PartsByStack;
+  /** 組ごとに覚えている部品（選んでいないカードの月額・図に使う。D-116 の補足・D-176）。 */
+  memory: PartsByGroup;
   /** 構成を替えてフレームワークを付け替えたときの知らせ（D-113・D-115）。 */
   notice: string | null;
   onPickStack: (stack: string) => void;
   onPickFramework: (framework: FrameworkId) => void;
+  /** 部品を選び直す（記憶も書き換える。D-176）。 */
+  onPickParts: (parts: SetupChoices) => void;
   /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップ。D-112・D-115）。 */
   editor: RoutePlanEditor;
   /** 条件の直下・① の上に置く全体の図（費用の曲線。D-182）。 */
@@ -564,7 +578,9 @@ function Conditions({
                     }).routes
                   }
                   // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
-                  rememberedOf={(i) => memory[STACKS[i]!.id]}
+                  rememberedOf={(i) =>
+                    partsOfStack(memory, scenario, i, input.framework)
+                  }
                   diagramCaption={(selected, remembered) =>
                     selected
                       ? '選んだ部品で描いています。'
@@ -573,9 +589,7 @@ function Conditions({
                         : 'この構成を選んだときの既定の部品で描いています。'
                   }
                   // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
-                  onComponentsChange={(parts) =>
-                    setInput(withParts(input, parts))
-                  }
+                  onComponentsChange={onPickParts}
                   partsNote="選んでいないスロットは既定の部品で見積もります"
                   partsExtra={
                     imageSettings ? { images: imageSettings } : undefined
@@ -1196,7 +1210,7 @@ function CostCurve({
   input: EstimateInput;
   rows: ReturnType<typeof compareStacks>;
   /** 構成ごとに覚えている部品（比較の表と同じ部品で数える。D-116 の補足）。 */
-  memory: PartsByStack;
+  memory: PartsByGroup;
 }) {
   // 凡例で選んだ構成（その線を強調し、ほかを薄くする。もう一度押すと戻す。D-183）
   const [focus, setFocus] = useState<string | null>(null);

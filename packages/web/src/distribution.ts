@@ -2,7 +2,7 @@
 // 軸ごとの「上位何 %」と、上位に入った軸の数（花火の段）を出す。④ 費用の合計は向きを持たない軸なので、上位 % と上位の判定を
 // 出さず、分布の中の位置と中央値だけを見せる（D-166）。純粋な部分だけ（取得は stats-client.ts、順序は App.tsx）。
 import { RESULT_AXES, type ResultAxes, type ResultAxisId } from 'game';
-import type { Distribution, Histogram } from 'stats';
+import type { Distribution, GroupStat, Histogram } from 'stats';
 
 /**
  * 分布として見せる最少の件数（自分を含む）。全シードの分布がこれより少なければ分布を出さず、手元の履歴との比較（段 1）に戻る。
@@ -99,33 +99,147 @@ export function standingsOf(
   const allCount = standingOf(dist.axes.cash.all, included).n;
   if (allCount < MIN_DISTRIBUTION_COUNT)
     return { status: 'few', count: allCount };
+  return { status: 'ready', view: axisStandingsOf(dist, axes, included, mock) };
+}
+
+/**
+ * 軸ごとの位置（全体の件数で段 1 に戻さない）。絞った分布（同じインフラなど。D-175）はこちらを使い、少ない分布は
+ * 軸・シードごとに「まだ n 件」と出す（上位の判定と花火の段には使わない）。
+ */
+export function axisStandingsOf(
+  dist: Distribution,
+  axes: ResultAxes,
+  included: boolean,
+  mock = false,
+): DistributionView {
   return {
-    status: 'ready',
-    view: {
-      included,
-      mock,
-      axes: RESULT_AXES.map(({ id, label, directed }) => {
-        const d = dist.axes[id];
-        const allStanding = toStanding(d.all, included);
-        const all =
-          allStanding.n >= MIN_DISTRIBUTION_COUNT ? allStanding : null;
-        const seedStanding = toStanding(d.seed, included);
-        const seed =
-          seedStanding.n >= MIN_DISTRIBUTION_COUNT ? seedStanding : null;
-        return {
-          id,
-          label,
-          directed,
-          value: axes[id],
-          seed,
-          seedCount: seedStanding.n,
-          all,
-          allCount: allStanding.n,
-          inTop: directed && (seed ?? all)?.inTop === true,
-        };
-      }),
-    },
+    included,
+    mock,
+    axes: RESULT_AXES.map(({ id, label, directed }) => {
+      const d = dist.axes[id];
+      const allStanding = toStanding(d.all, included);
+      const all = allStanding.n >= MIN_DISTRIBUTION_COUNT ? allStanding : null;
+      const seedStanding = toStanding(d.seed, included);
+      const seed =
+        seedStanding.n >= MIN_DISTRIBUTION_COUNT ? seedStanding : null;
+      return {
+        id,
+        label,
+        directed,
+        value: axes[id],
+        seed,
+        seedCount: seedStanding.n,
+        all,
+        allCount: allStanding.n,
+        inTop: directed && (seed ?? all)?.inTop === true,
+      };
+    }),
   };
+}
+
+// ---- 構成・フレームワークごとの分布（ST-11・D-175）----
+// 見るためだけの絞り込み。上位 25% の判定と花火の段（D-163・D-168）は、今までどおり全部の構成の分布で決める。
+
+/** 分布の絞り込みのチップ。stack は同じインフラ（構成）、framework は同じフレームワーク、both は両方。 */
+export const STATS_FILTERS = ['all', 'stack', 'framework', 'both'] as const;
+export type StatsFilter = (typeof STATS_FILTERS)[number];
+
+export const STATS_FILTER_LABEL: Record<StatsFilter, string> = {
+  all: '全部',
+  stack: '同じインフラ',
+  framework: '同じフレームワーク',
+  both: '同じ組み合わせ',
+};
+
+/** 比較の図の分け方。 */
+export type GroupBy = 'stack' | 'framework';
+
+/** 結果の画面で選んだ絞り込み・比較の図の軸と分け方を覚えるキー（infra-supra: で始まるので、ローカルの記録の消去でも消える）。 */
+export const STATS_BREAKDOWN_KEY = 'infra-supra:stats-breakdown';
+
+export type StatsBreakdownPrefs = {
+  filter: StatsFilter;
+  by: GroupBy;
+  axis: ResultAxisId;
+};
+
+export const DEFAULT_BREAKDOWN_PREFS: StatsBreakdownPrefs = {
+  filter: 'all',
+  by: 'stack',
+  axis: 'cash',
+};
+
+/** 覚えた選択を読む。形が違う欄は既定に戻す。 */
+export function parseBreakdownPrefs(x: unknown): StatsBreakdownPrefs {
+  const o = (typeof x === 'object' && x !== null ? x : {}) as Record<
+    string,
+    unknown
+  >;
+  const pick = <T extends string>(v: unknown, all: readonly T[], d: T): T =>
+    all.includes(v as T) ? (v as T) : d;
+  return {
+    filter: pick(o.filter, STATS_FILTERS, DEFAULT_BREAKDOWN_PREFS.filter),
+    by: pick(o.by, ['stack', 'framework'], DEFAULT_BREAKDOWN_PREFS.by),
+    axis: pick(
+      o.axis,
+      RESULT_AXES.map((a) => a.id),
+      DEFAULT_BREAKDOWN_PREFS.axis,
+    ),
+  };
+}
+
+/** 絞り込みのチップから、distribution の口に足す引数（自分のプレイの構成・フレームワーク）。 */
+export function filterParams(
+  filter: StatsFilter,
+  own: { stackId: string; framework: string },
+): { stack?: string; framework?: string } {
+  return {
+    ...(filter === 'stack' || filter === 'both' ? { stack: own.stackId } : {}),
+    ...(filter === 'framework' || filter === 'both'
+      ? { framework: own.framework }
+      : {}),
+  };
+}
+
+/** 比較の図の 1 行（小さなヒストグラム）。stats は件数が少なければ null（棒を出さず「まだ n 件です」）。 */
+export type GroupRow = {
+  key: string;
+  label: string;
+  count: number;
+  /** 件数が少なければ null（棒と中央値を出さず「まだ n 件です」）。bins は共通の区切りでの棒の件数。 */
+  stats: {
+    p25: number;
+    median: number;
+    p75: number;
+    bins: number[];
+  } | null;
+  /** 自分のプレイの構成（フレームワーク）の行か。 */
+  mine: boolean;
+};
+
+/**
+ * サーバーの要約を、出す行（隠した構成を除いた構成・フレームワークの並び）に写す。行の無い鍵は 0 件。
+ * keys に無い鍵（隠した構成・知らない id）は出さない。
+ */
+export function groupRowsOf(
+  groups: readonly GroupStat[],
+  keys: readonly { key: string; label: string }[],
+  mineKey: string,
+): GroupRow[] {
+  return keys.map(({ key, label }) => {
+    const g = groups.find((x) => x.key === key);
+    const count = g?.count ?? 0;
+    return {
+      key,
+      label,
+      count,
+      stats:
+        g && count >= MIN_DISTRIBUTION_COUNT
+          ? { p25: g.p25, median: g.median, p75: g.p75, bins: g.bins }
+          : null,
+      mine: key === mineKey,
+    };
+  });
 }
 
 /** 上位に入った軸の数（向きのある 3 軸だけ。D-166）。 */

@@ -7,19 +7,28 @@
  *   大量の送信と見たものは印を付けて分布から外す（D-174）。
  * - `GET /api/results/histogram`: シナリオ・軸（・シード）ごとの完走の分布（histogram.ts）。
  * - `GET /api/results/distribution`: 4 軸 ×（同じシード / 全シード）の 8 本を 1 回で返す（段 3 の画面が使う。D-161）。
+ *   `stack`・`framework` で同じ構成・同じフレームワークに絞れる（ST-11・D-175）。
+ * - `GET /api/results/groups`: 1 つの軸の構成ごと（またはフレームワークごと）の件数・25%・中央値・75%・共通の区切りでの棒の件数（比較の図。D-175）。
  * - `GET /api/version`: 動いているサーバーのコミット（Vercel の画面と版を手動でそろえるときの確かめ。照合には使わない。D-135・D-155）。
  *
  * 🔒 IP・端末の情報を保存しない・ログに出さない（D-134）。アクセスのログは方法・パス（クエリを除く）・状態・時間だけで、
  * ヘッダー（X-Forwarded-For・User-Agent など）は読まない。例外の文言は応答に載せない。
  */
 import { zValidator } from '@hono/zod-validator';
-import { RESULT_AXES, SCENARIOS, type ResultAxisId } from 'game';
+import {
+  FRAMEWORKS,
+  RESULT_AXES,
+  SCENARIOS,
+  STACKS,
+  type ResultAxisId,
+} from 'game';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
-import { histogramOf, type Histogram } from './histogram.ts';
-export type { Histogram, HistogramBin } from './histogram.ts';
+import { histogramOf, type GroupStat, type Histogram } from './histogram.ts';
+export type { GroupStat, Histogram, HistogramBin } from './histogram.ts';
+export type { GroupBy } from './repo.ts';
 import {
   DUP_CAP_MAX,
   DUP_CAP_WINDOW_MS,
@@ -29,7 +38,9 @@ import {
   type PlayTokenStore,
 } from './play-tokens.ts';
 import {
+  GROUP_BY,
   reportedInHistogram,
+  type GroupBy,
   type ResultFlag,
   type ResultRecord,
   type ResultsRepo,
@@ -95,14 +106,31 @@ const histogramQuery = z.object({
   value: numberParam.optional(),
 });
 
+/** 構成の id（STACKS の id。知らない id は 400）。 */
+const stackParam = z.string().refine((s) => STACKS.some((x) => x.id === s));
+/** フレームワークの id（知らない id は 400）。 */
+const frameworkParam = z.string().refine((s) => Object.hasOwn(FRAMEWORKS, s));
+
 const distributionQuery = z.object({
   scenario: z.string().refine((s) => s in SCENARIOS),
   /** 同じシードの分布の元（全シードの分布も一緒に返す）。 */
   seed: numberParam,
+  /** 指定すれば、8 本とも同じ構成だけで数える（ST-11・D-175）。 */
+  stack: stackParam.optional(),
+  /** 指定すれば、8 本とも同じフレームワークだけで数える。stack と両方なら両方に合う行だけ。 */
+  framework: frameworkParam.optional(),
   // 軸ごとの自分の値（付けた軸だけ position を返す）
   ...(Object.fromEntries(
     AXIS_IDS.map((id) => [id, numberParam.optional()]),
   ) as Record<ResultAxisId, z.ZodOptional<typeof numberParam>>),
+});
+
+const groupsQuery = z.object({
+  scenario: z.string().refine((s) => s in SCENARIOS),
+  axis: z.enum(AXIS_IDS),
+  by: z.enum(GROUP_BY),
+  /** 指定すれば同じシードだけ。 */
+  seed: numberParam.optional(),
 });
 
 /**
@@ -215,11 +243,20 @@ export function createApp({
         async (c) => {
           const q = c.req.valid('query');
           const scenarioId = q.scenario;
+          const filter = {
+            ...(q.stack !== undefined ? { stackId: q.stack } : {}),
+            ...(q.framework !== undefined ? { framework: q.framework } : {}),
+          };
           const entries = await Promise.all(
             AXIS_IDS.map(async (axis) => {
               const [same, all] = await Promise.all([
-                repo.histogramValues({ scenarioId, axis, seed: q.seed }),
-                repo.histogramValues({ scenarioId, axis }),
+                repo.histogramValues({
+                  scenarioId,
+                  axis,
+                  seed: q.seed,
+                  ...filter,
+                }),
+                repo.histogramValues({ scenarioId, axis, ...filter }),
               ]);
               return [
                 axis,
@@ -234,11 +271,39 @@ export function createApp({
             {
               scenarioId,
               seed: q.seed,
+              stack: q.stack ?? null,
+              framework: q.framework ?? null,
               axes: Object.fromEntries(entries) as Record<
                 ResultAxisId,
                 { seed: Histogram; all: Histogram }
               >,
-            },
+            } satisfies Distribution,
+            200,
+          );
+        },
+      )
+      .get(
+        '/results/groups',
+        zValidator('query', groupsQuery, (r, c) => {
+          if (!r.success) return c.json({ error: 'invalid' as const }, 400);
+        }),
+        async (c) => {
+          const { scenario, axis, by, seed } = c.req.valid('query');
+          const { binEdges, groups } = await repo.groupStats({
+            scenarioId: scenario,
+            axis,
+            by,
+            ...(seed !== undefined ? { seed } : {}),
+          });
+          return c.json(
+            {
+              scenarioId: scenario,
+              axis,
+              by,
+              seed: seed ?? null,
+              binEdges,
+              groups,
+            } satisfies Groups,
             200,
           );
         },
@@ -246,11 +311,24 @@ export function createApp({
   );
 }
 
-/** `GET /api/results/distribution` の応答（web の型の出所）。 */
+/** `GET /api/results/distribution` の応答（web の型の出所）。stack・framework は絞り込み（無ければ null。D-175）。 */
 export type Distribution = {
   scenarioId: string;
   seed: number;
+  stack: string | null;
+  framework: string | null;
   axes: Record<ResultAxisId, { seed: Histogram; all: Histogram }>;
+};
+
+/** `GET /api/results/groups` の応答（構成ごと / フレームワークごとの要約。D-175）。 */
+export type Groups = {
+  scenarioId: string;
+  axis: ResultAxisId;
+  by: GroupBy;
+  seed: number | null;
+  /** 全部の行で共通の棒の区切り（GROUP_BINS + 1 個。行が無ければ空）。 */
+  binEdges: number[];
+  groups: GroupStat[];
 };
 
 export type AppType = ReturnType<typeof createApp>;

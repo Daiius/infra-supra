@@ -81,6 +81,8 @@ import {
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Sparkline } from './charts.tsx';
 import { ResultAxesPanel } from './result-axes.tsx';
+import { ResultStatsSection } from './stats-breakdown.tsx';
+import type { StatsQuery } from './stats-client.ts';
 import {
   distributionFireworkLevel,
   TOP_PERCENT,
@@ -255,6 +257,7 @@ export function Game({
   results,
   playId,
   stats,
+  statsQuery = null,
   onAdvance,
   previous,
   onRewind,
@@ -275,6 +278,8 @@ export function Game({
   playId: string;
   /** 集計の分布の中での位置（段 3・D-161）。ready でなければ手元の履歴との比較（段 1）を出す。 */
   stats: StatsView;
+  /** 結果の画面の絞り込みと比較の図の元（始めたときの構成など。D-175）。無ければ出さない。 */
+  statsQuery?: Omit<StatsQuery, 'axes'> | null;
   /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
   onAdvance: (actions: Action[]) => GameState;
   /** 前の試行（D-128。保存の前の試行を再生した状態）。無ければ null。 */
@@ -362,6 +367,9 @@ export function Game({
           state={state}
           comparisons={comparisons}
           stats={stats}
+          statsQuery={
+            statsQuery ? { ...statsQuery, axes: resultAxesOf(state) } : null
+          }
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
         >
           {picker}
@@ -2667,12 +2675,15 @@ function Result({
   state,
   comparisons,
   stats,
+  statsQuery,
   onCelebrate,
   children,
 }: {
   state: GameState;
   comparisons: readonly AxisComparison[];
   stats: StatsView;
+  /** 絞り込みのチップと比較の図の元（D-175）。 */
+  statsQuery: StatsQuery | null;
   /** 完走のダイアログを開き直す（完走のときだけ使う）。 */
   onCelebrate: () => void;
   /** 結果の下に足すもの（過去の月へ戻る欄。D-128）。 */
@@ -2765,11 +2776,13 @@ function Result({
           )}
         </div>
         {completed && (
-          <ResultAxesPanel
+          // 結果の画面だけ、絞り込みのチップと構成ごとの比較の図を足す（完走のダイアログは今のまま。D-175）
+          <ResultStatsSection
             comparisons={comparisons}
             stats={stats}
             outages={state.outages}
             cashGuide={scenarioOf(state).goal.cash}
+            query={statsQuery}
           />
         )}
         {hints.length > 0 && (

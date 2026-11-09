@@ -9,12 +9,15 @@
 // - 開始のトークン（D-174）: 新しいプレイを始めるときに取りに行き（requestPlayToken）、送信に添える。失敗しても遊べる
 //   （トークン無しで送る。サーバーは保存するが分布に入れない）。
 // - 分布（段 3・D-161）: 完走したら、送信が終わった後に 4 軸 × 2 の分布を 1 回で取る（fetchDistribution）。
+// - 構成ごとの分布（ST-11・D-175）: 結果の画面のチップで絞った分布（loadFilteredView）と、比較の図の構成ごとの要約（loadGroups）。
 import {
   RESULT_AXES,
   resultAxesOf,
+  STACKS,
   withoutPrevious,
   type GameState,
   type ResultAxes,
+  type ResultAxisId,
   type SaveData,
 } from 'game';
 import { hc } from 'hono/client';
@@ -24,9 +27,14 @@ import {
   STATS_PLAY_TOKEN_PATTERN,
   storePlayToken,
 } from './play-nonce.ts';
-import type { AppType, Distribution } from 'stats';
+import type { AppType, Distribution, Groups, GroupStat } from 'stats';
 import {
+  axisStandingsOf,
+  filterParams,
   membershipOf,
+  type DistributionView,
+  type GroupBy,
+  type StatsFilter,
   parseMembership,
   standingsOf,
   STATS_MEMBERSHIP_KEY,
@@ -150,6 +158,9 @@ export async function fetchDistribution(q: {
   scenarioId: string;
   seed: number;
   axes: ResultAxes;
+  /** 同じ構成・同じフレームワークに絞る（D-175。無ければ全部）。 */
+  stack?: string;
+  framework?: string;
 }): Promise<Distribution | null> {
   if (!statsEnabled()) return null;
   try {
@@ -157,6 +168,8 @@ export async function fetchDistribution(q: {
       query: {
         scenario: q.scenarioId,
         seed: String(q.seed),
+        ...(q.stack !== undefined ? { stack: q.stack } : {}),
+        ...(q.framework !== undefined ? { framework: q.framework } : {}),
         ...(Object.fromEntries(
           RESULT_AXES.map((a) => [a.id, String(q.axes[a.id])]),
         ) as Record<keyof ResultAxes, string>),
@@ -165,6 +178,115 @@ export async function fetchDistribution(q: {
     if (!res.ok) return null;
     const body: unknown = await res.json();
     return isDistribution(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 構成ごとの要約の応答の形をおおまかに確かめる。 */
+function isGroups(x: unknown): x is Groups {
+  const groups = (x as { groups?: unknown } | null)?.groups;
+  const edges = (x as { binEdges?: unknown } | null)?.binEdges;
+  const nums = (a: unknown, n?: number): boolean =>
+    Array.isArray(a) &&
+    (n === undefined || a.length === n) &&
+    a.every((v) => typeof v === 'number' && Number.isFinite(v));
+  if (!Array.isArray(groups) || !nums(edges)) return false;
+  // 行があれば区切りは棒の数 + 1 個
+  const bins = (edges as number[]).length - 1;
+  if (groups.length > 0 && bins < 1) return false;
+  return groups.every(
+    (g: unknown) =>
+      typeof (g as GroupStat | null)?.key === 'string' &&
+      (['count', 'p25', 'median', 'p75'] as const).every(
+        (k) => typeof (g as GroupStat)[k] === 'number',
+      ) &&
+      nums((g as GroupStat).bins, bins),
+  );
+}
+
+/** 比較の図の元（共通の区切りと構成ごとの要約）。 */
+export type GroupsView = {
+  binEdges: number[];
+  groups: GroupStat[];
+  mock: boolean;
+};
+
+/** 自分のプレイの絞り込みの元（結果の画面が持つ。D-175）。 */
+export type StatsQuery = {
+  scenarioId: string;
+  seed: number;
+  /** 始めたときの構成の id（サーバーの stack_id と同じ）。 */
+  stackId: string;
+  framework: string;
+  axes: ResultAxes;
+};
+
+/**
+ * 保存から、結果の画面の絞り込みの元（始めたときの構成の id・フレームワーク）を作る。分布を取りに行かない（フラグが無い）ときは
+ * null（チップと比較の図を出さない）。構成の id はサーバーと同じく保存の stackIndex から STACKS で引く（D-171）。
+ */
+export function statsQueryOf(
+  save: Pick<SaveData, 'scenarioId' | 'seed' | 'stackIndex' | 'framework'>,
+): Omit<StatsQuery, 'axes'> | null {
+  const stack = STACKS[save.stackIndex];
+  if (!statsViewEnabled() || !stack) return null;
+  return {
+    scenarioId: save.scenarioId,
+    seed: save.seed,
+    stackId: stack.id,
+    framework: save.framework,
+  };
+}
+
+/**
+ * 同じインフラ・同じフレームワーク・同じ組み合わせに絞った分布の中での位置（見るためだけ。上位の判定には使わない。D-175）。
+ * included は全部の分布を取ったときの結末（自分が分布に入っているか）。フラグが無い・失敗は null。例外は出さない。
+ */
+export async function loadFilteredView(
+  q: StatsQuery & { filter: Exclude<StatsFilter, 'all'>; included: boolean },
+): Promise<DistributionView | null> {
+  const params = filterParams(q.filter, q);
+  if (statsMockEnabled()) {
+    const { mockDistribution } = await import('./stats-mock.ts');
+    return axisStandingsOf(mockDistribution(q, q.filter), q.axes, false, true);
+  }
+  if (!statsEnabled()) return null;
+  const dist = await fetchDistribution({
+    scenarioId: q.scenarioId,
+    seed: q.seed,
+    axes: q.axes,
+    ...params,
+  });
+  return dist ? axisStandingsOf(dist, q.axes, q.included) : null;
+}
+
+/**
+ * 1 つの軸の構成ごと（またはフレームワークごと）の要約と共通の棒の区切り（比較の図。全シード。D-175）。フラグが無い・失敗は null。例外は出さない。
+ * keys は出す行の鍵（架空の値を作るときに使う）。
+ */
+export async function loadGroups(q: {
+  scenarioId: string;
+  seed: number;
+  axis: ResultAxisId;
+  by: GroupBy;
+  value: number;
+  keys: readonly string[];
+}): Promise<GroupsView | null> {
+  if (statsMockEnabled()) {
+    const { mockGroups } = await import('./stats-mock.ts');
+    return { ...mockGroups(q), mock: true };
+  }
+  if (!statsEnabled()) return null;
+  try {
+    const res = await statsClient().api.results.groups.$get({
+      query: { scenario: q.scenarioId, axis: q.axis, by: q.by },
+    });
+    if (!res.ok) return null;
+    const body: unknown = await res.json();
+    return isGroups(body)
+      ? { binEdges: body.binEdges, groups: body.groups, mock: false }
+      : null;
   } catch {
     return null;
   }

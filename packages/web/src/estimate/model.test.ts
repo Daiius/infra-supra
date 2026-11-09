@@ -25,6 +25,9 @@ import {
   type EstimateInput,
   withParts,
   withStackRemembered,
+  withPartsRemembered,
+  keptParts,
+  type PartsByGroup,
 } from './model.ts';
 
 describe('normalizeInput', () => {
@@ -434,9 +437,9 @@ describe('構成が先（D-115。始める画面と同じ D-113 の規則）', (
     expect(totals['aws-opennext']).toBeUndefined();
   });
 
-  it('覚えている構成は、比較の表・カードの月額・費用の曲線をその記憶の部品で数え、戻った後の見積と同じ。触っていない構成は既定のまま（D-116 の補足）', () => {
+  it('覚えている構成は、比較の表・カードの月額・費用の曲線をその記憶の部品で数え、戻った後の見積と同じ。触っていない構成は既定のまま（D-116 の補足・記憶は組ごと。D-176）', () => {
     const i = normalizeInput({ stack: 'cloudflare-vinext-paid' });
-    const memory = { 'vercel-supabase-pro': { db: 'neon' } };
+    const memory = { vercel: { db: 'neon' } };
     const plain = compareStacks(i);
     const rows = compareStacks(i, memory);
     const totals = stackCardTotals(i, rows, memory);
@@ -455,10 +458,97 @@ describe('構成が先（D-115。始める画面と同じ D-113 の規則）', (
     );
     const [curve] = costCurves(i, ['vercel-supabase-pro'], [i.pv], memory);
     expect(curve!.points[0]!.totalUsd).toBeCloseTo(after.totalUsd, 6);
-    // 触っていない構成・今の構成は記憶なしと同じ
+    // 同じ組（Vercel Hobby）も同じ記憶の部品で数える（D-176）
+    expect(
+      rows.find((r) => r.stack === 'vercel-supabase-hobby')!.name,
+    ).toContain('Neon');
+    // 触っていない組・今の構成は記憶なしと同じ
     for (const r of rows)
-      if (r.stack !== 'vercel-supabase-pro')
+      if (!r.stack.startsWith('vercel-'))
         expect(r).toEqual(plain.find((p) => p.stack === r.stack));
+  });
+
+  it('同じ事業者のプランは部品の選択を共有し、今のプランで選べないものは記憶に残して戻ったら戻す（D-176）', () => {
+    const pick = (
+      i: EstimateInput,
+      memory: PartsByGroup,
+      parts: EstimateInput['parts'],
+    ) => {
+      const next = normalizeInput({ ...i, ...withParts(i, parts) });
+      return { input: next, memory: withPartsRemembered(memory, i, next) };
+    };
+    // Hobby で DB を選ぶ → Pro に替えると同じ DB
+    const hobby = normalizeInput({ stack: 'vercel-supabase-hobby' });
+    const a = pick(hobby, {}, { ...hobby.parts, db: 'neon' });
+    const pro = withStackRemembered(a.input, 'vercel-supabase-pro', a.memory);
+    expect(pro.input.parts.db).toBe('neon');
+    // Pro でだけ選べる部品（CDN のプラン）を選ぶ → Hobby では無い → Pro に戻すと戻る
+    expect(pro.input.parts.cdnPlan).not.toBe('on-demand');
+    const b = pick(pro.input, pro.memory, {
+      ...pro.input.parts,
+      cdnPlan: 'on-demand',
+    });
+    const back = withStackRemembered(
+      b.input,
+      'vercel-supabase-hobby',
+      b.memory,
+    );
+    expect(back.input.parts.cdnPlan).toBeUndefined();
+    expect(back.input.parts.db).toBe('neon');
+    // Hobby でほかの部品を選び直しても、Pro だけの記憶は消えない（選び直すかどうかで復活が変わらない。OCL-09D12A43 の趣旨）
+    const c = pick(back.input, back.memory, {
+      ...back.input.parts,
+      db: 'supabase',
+    });
+    const again = withStackRemembered(c.input, 'vercel-supabase-pro', c.memory);
+    expect(again.input.parts.cdnPlan).toBe('on-demand');
+    expect(again.input.parts.db).toBe('supabase');
+    // 比較の表の Pro の行も、戻った後の見積と同じ（同じ組は同じ選択で数える）
+    const row = compareStacks(c.input, c.memory).find(
+      (r) => r.stack === 'vercel-supabase-pro',
+    )!;
+    expect(row.totalUsd).toBeCloseTo(runEstimate(again.input).totalUsd, 6);
+    // 別の組へ替えて戻ると、それぞれの組の選択が戻る
+    const cf = withStackRemembered(
+      again.input,
+      'cloudflare-vinext-free',
+      again.memory,
+    );
+    const cf2 = pick(cf.input, cf.memory, { ...cf.input.parts, db: 'neon' });
+    const v = withStackRemembered(cf2.input, 'vercel-supabase-pro', cf2.memory);
+    expect(v.input.parts.db).toBe('supabase');
+    expect(v.input.parts.cdnPlan).toBe('on-demand');
+    const cfBack = withStackRemembered(
+      v.input,
+      'cloudflare-vinext-paid',
+      v.memory,
+    );
+    expect(cfBack.input.parts.db).toBe('neon');
+  });
+
+  it('フレームワークを替えて組のどのプランでも選べなくなった部品は、記憶からも落ちる（戻しても復活しない。OCL-09D12A43・D-176）', () => {
+    const i = normalizeInput({ stack: 'cloudflare-vinext-paid' });
+    const next = normalizeInput({
+      ...i,
+      ...withParts(i, { ...i.parts, isrCache: 'r2' }),
+    });
+    const memory = withPartsRemembered({}, i, next);
+    const vite = normalizeInput({
+      ...next,
+      ...withFramework(next, 'vite-spa'),
+    });
+    const kept = keptParts(memory, vite, next);
+    expect(kept.cloudflare?.isrCache).toBeUndefined();
+    const nextjs = normalizeInput({
+      ...vite,
+      ...withFramework(vite, 'nextjs'),
+    });
+    const away = withStackRemembered(
+      nextjs,
+      'cloudflare-vinext-free',
+      keptParts(kept, nextjs, vite),
+    );
+    expect(away.input.parts.isrCache).not.toBe('r2');
   });
 });
 
