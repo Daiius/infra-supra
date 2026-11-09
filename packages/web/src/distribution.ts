@@ -34,8 +34,12 @@ export type AxisStanding = {
   /** 同じシードの分布の中での位置。件数が少なければ null（seedCount に件数）。 */
   seed: Standing | null;
   seedCount: number;
-  /** 全シードの分布の中での位置（DistributionView がある間は必ずある）。 */
-  all: Standing;
+  /**
+   * 全シードの分布の中での位置。件数が少なければ null（allCount に件数）。軸ごとに見る（④ 費用の合計は、列を足す前の行が
+   * null で分布に入らないので、ほかの軸より少ないことがある。OCL-22EC415E）。
+   */
+  all: Standing | null;
+  allCount: number;
   /**
    * 上位に入ったか（花火の段に数える）。同じシードの分布が見せられればそちら（楽なシードを選び直しても有利にならない。D-136）、
    * 見せられなければ全シードで見る。向きを持たない軸は常に false。
@@ -102,7 +106,9 @@ export function standingsOf(
       mock,
       axes: RESULT_AXES.map(({ id, label, directed }) => {
         const d = dist.axes[id];
-        const all = toStanding(d.all, included);
+        const allStanding = toStanding(d.all, included);
+        const all =
+          allStanding.n >= MIN_DISTRIBUTION_COUNT ? allStanding : null;
         const seedStanding = toStanding(d.seed, included);
         const seed =
           seedStanding.n >= MIN_DISTRIBUTION_COUNT ? seedStanding : null;
@@ -114,7 +120,8 @@ export function standingsOf(
           seed,
           seedCount: seedStanding.n,
           all,
-          inTop: directed && (seed ?? all).inTop,
+          allCount: allStanding.n,
+          inTop: directed && (seed ?? all)?.inTop === true,
         };
       }),
     },

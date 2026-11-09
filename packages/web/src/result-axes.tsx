@@ -214,7 +214,7 @@ export function ResultAxesPanel({
                   <DistributionRow
                     kind="all"
                     standing={d.all}
-                    count={d.all.n}
+                    count={d.allCount}
                     axis={c.id}
                     directed={c.directed}
                     value={c.value}

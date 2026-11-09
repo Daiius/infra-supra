@@ -12,6 +12,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   compareWithHistory,
+  isLegacyResult,
   mergeResults,
   parseResults,
   playId,
@@ -55,18 +56,30 @@ describe('parseResults', () => {
     expect(parseResults(null).entries).toEqual([]);
     expect(parseResults('x').entries).toEqual([]);
     expect(parseResults({ version: 999, entries: [] }).entries).toEqual([]);
-    // ④ がギリギリを攻めるだった版 1 の履歴は読まない（D-166）
+    // ④ がギリギリを攻めるだった版 1 の履歴は値を読まず、プレイの id だけ残す（D-166・OCL-46A5876A）
+    const v1 = parseResults({
+      version: 1,
+      entries: [
+        {
+          ...entry('old', axes(100)),
+          axes: { cash: 1, satisfaction: 1, featurePoints: 1, edgeMonths: 0 },
+        },
+        3,
+      ],
+    });
+    expect(v1.entries).toEqual([]);
+    expect(v1.legacyIds).toEqual(['old']);
+    expect(isLegacyResult(v1, 'old')).toBe(true);
+    expect(isLegacyResult(v1, 'new')).toBe(false);
+    // 版 2 に書き直しても残る・足しても合わせても消えない
+    const added = withResult(v1, entry('old', axes(100)));
+    expect(added.legacyIds).toEqual(['old']);
+    expect(parseResults(JSON.parse(JSON.stringify(added))).legacyIds).toEqual([
+      'old',
+    ]);
     expect(
-      parseResults({
-        version: 1,
-        entries: [
-          {
-            ...entry('old', axes(100)),
-            axes: { cash: 1, satisfaction: 1, featurePoints: 1, edgeMonths: 0 },
-          },
-        ],
-      }).entries,
-    ).toEqual([]);
+      mergeResults(store([]), { ...store([]), legacyIds: ['x'] }).legacyIds,
+    ).toEqual(['x']);
     const ok = entry('a', axes(100));
     const parsed = parseResults({
       version: RESULTS_VERSION,

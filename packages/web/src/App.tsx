@@ -66,6 +66,7 @@ import {
   type SetupState,
 } from './last-setup.ts';
 import {
+  isLegacyResult,
   mergeResults,
   parseResults,
   playId,
@@ -280,8 +281,10 @@ export function App() {
     if (isNew) {
       // 画面の比較にはすぐ使い、保存は鍵を取ってから（保存した後の履歴と合わせる）
       setResults((r) => withResult(r, entry));
-      // 集計に送る（D-152。手元の履歴に新しく足したときだけなので 1 プレイ 1 回。フラグが無ければ送らない・失敗しても何も出さない）
-      sent = submitResult(session.save, session.state, session.nonce);
+      // 集計に送る（D-152。手元の履歴に新しく足したときだけなので 1 プレイ 1 回。フラグが無ければ送らない・失敗しても何も出さない）。
+      // 前の版の履歴にあったプレイ（前の版で終わって送っている）は、今の版の履歴に足し直すだけで送り直さない（OCL-46A5876A）
+      if (!isLegacyResult(results, entry.id))
+        sent = submitResult(session.save, session.state, session.nonce);
       persistResultLocked(entry, (stored) =>
         setResults((r) => mergeResults(stored, r)),
       );

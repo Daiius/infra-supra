@@ -12,6 +12,7 @@ import { newSave, replaySave, withTurn, type SaveData } from 'game';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NOT_SENT_ITEMS, SENT_ITEMS } from './privacy-policy.tsx';
 import { PLAY_NONCE_KEY, STATS_PLAY_ID_PATTERN } from './play-nonce.ts';
+import { playId } from './results-history.ts';
 import { renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -138,6 +139,48 @@ describe('集計への送信とプライバシーポリシー', () => {
     expect(second).not.toBe(first);
     // 後ろ（手元の履歴の id）は同じプレイなので同じ
     expect(second.split('.')[1]).toBe(first.split('.')[1]);
+  });
+
+  it('W-94c 前の版（版 1）の履歴にある終わったプレイは、開き直しても送り直さず、今の版の履歴に足し直す（OCL-46A5876A）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    const fetch = okFetch();
+    vi.stubGlobal('fetch', fetch);
+    // 前の版で完走して送ったプレイ: 終わった保存と、版 1 の履歴（④ がギリギリを攻めるだった形）が残っている
+    let save = almostDone();
+    save = withTurn(save, []);
+    expect(replaySave(save).phase).toBe('completed');
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    localStorage.setItem(
+      'infra-supra:results',
+      JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            id: playId(save),
+            scenarioId: 'article-community',
+            seed: 42,
+            startDate: '2026-11-02',
+            finishedAt: '2026-11-08',
+            setup: 'x',
+            axes: { cash: 1, satisfaction: 1, featurePoints: 1, edgeMonths: 0 },
+            outages: 0,
+            end: { reason: 'completed', month: 12 },
+          },
+        ],
+      }),
+    );
+    await renderApp();
+    await waitFor(() =>
+      expect(
+        JSON.parse(localStorage.getItem('infra-supra:results')!).entries,
+      ).toHaveLength(1),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(posts(fetch)).toHaveLength(0);
+    const stored = JSON.parse(localStorage.getItem('infra-supra:results')!);
+    expect(stored.version).toBe(2);
+    expect(stored.entries[0].id).toBe(playId(save));
+    expect(stored.entries[0].axes).toHaveProperty('totalCost');
   });
 
   it('W-95 送信に失敗しても（通信の失敗・500）画面は壊れない', async () => {

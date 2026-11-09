@@ -74,7 +74,7 @@ describe('standingsOf', () => {
       true,
     );
     if (zero.status !== 'ready') throw new Error(zero.status);
-    expect(zero.view.axes[0]!.all.topPercent).toBe(25);
+    expect(zero.view.axes[0]!.all!.topPercent).toBe(25);
     const exc = standingsOf(
       dist(() => ({ seed: h(19, 4, 0), all: h(19, 4, 0) })),
       axes,
@@ -123,6 +123,27 @@ describe('standingsOf', () => {
       return distributionFireworkLevel(v.view);
     };
     expect([0, 1, 2, 3, 4].map(level)).toEqual([1, 2, 2, 3, 3]);
+  });
+
+  it('全シードの件数も軸ごとに見る: ④ だけ少なければその欄だけ出さない（OCL-22EC415E）', () => {
+    const v = standingsOf(
+      dist((id) =>
+        id === 'totalCost'
+          ? { seed: h(2, 0, 1), all: h(MIN_DISTRIBUTION_COUNT - 1, 0, 1) }
+          : { seed: h(20, 19, 1), all: h(40, 39, 1) },
+      ),
+      axes,
+      true,
+    );
+    if (v.status !== 'ready') throw new Error(v.status);
+    const cost = v.view.axes.find((a) => a.id === 'totalCost')!;
+    expect(cost).toMatchObject({
+      all: null,
+      allCount: MIN_DISTRIBUTION_COUNT - 1,
+      seed: null,
+      inTop: false,
+    });
+    expect(v.view.axes[0]!.all).not.toBeNull();
   });
 
   it('④ 費用の合計は向きを持たないので、分布の上の方にいても上位に数えない（D-166）', () => {

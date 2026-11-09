@@ -43,9 +43,21 @@ export type ResultStore = {
   version: typeof RESULTS_VERSION;
   /** 新しい順。 */
   entries: ResultEntry[];
+  /**
+   * 前の版（版 1）の履歴にあったプレイの id（OCL-46A5876A）。版 1 の値は ④ の形が違うので比較には使えないが、そのプレイは前の版で
+   * 終わって（フラグがあれば送って）いる。開き直したときに新しいプレイと見なして送り直さないよう、id だけを残す。新しい順・上限は RESULTS_LIMIT。
+   */
+  legacyIds?: string[];
 };
 
 const EMPTY: ResultStore = { version: RESULTS_VERSION, entries: [] };
+
+const legacyIdsOf = (x: unknown): string[] =>
+  Array.isArray(x)
+    ? x
+        .filter((v): v is string => typeof v === 'string')
+        .slice(0, RESULTS_LIMIT)
+    : [];
 const END_REASONS: readonly EndReason[] = [
   'completed',
   'cash',
@@ -94,19 +106,33 @@ function parseEntry(x: unknown): ResultEntry | null {
   };
 }
 
-/** 保存した履歴を読む。形・版が違えば空（黙って捨てる）。中の 1 件だけ壊れていれば、その件だけ捨てる。 */
+/**
+ * 保存した履歴を読む。形・版が違えば空（黙って捨てる）。中の 1 件だけ壊れていれば、その件だけ捨てる。
+ * 版 1（④ がギリギリを攻めるだった形。D-166）は値を捨て、プレイの id だけを legacyIds に残す（送り直さないため。OCL-46A5876A）。
+ */
 export function parseResults(x: unknown): ResultStore {
-  if (
-    !isObject(x) ||
-    x.version !== RESULTS_VERSION ||
-    !Array.isArray(x.entries)
-  )
-    return EMPTY;
+  if (!isObject(x) || !Array.isArray(x.entries)) return EMPTY;
+  if (x.version === 1) {
+    const ids = legacyIdsOf(
+      x.entries.map((e) => (isObject(e) ? e.id : undefined)),
+    );
+    return ids.length ? { ...EMPTY, legacyIds: ids } : EMPTY;
+  }
+  if (x.version !== RESULTS_VERSION) return EMPTY;
   const entries = x.entries
     .map(parseEntry)
     .filter((e): e is ResultEntry => e !== null);
-  return { version: RESULTS_VERSION, entries: entries.slice(0, RESULTS_LIMIT) };
+  const legacyIds = legacyIdsOf(x.legacyIds);
+  return {
+    version: RESULTS_VERSION,
+    entries: entries.slice(0, RESULTS_LIMIT),
+    ...(legacyIds.length ? { legacyIds } : {}),
+  };
 }
+
+/** 前の版の履歴にあったプレイか（前の版で終わっているので、集計に送り直さない。OCL-46A5876A）。 */
+export const isLegacyResult = (store: ResultStore, id: string): boolean =>
+  store.legacyIds?.includes(id) ?? false;
 
 /** 32 ビットの FNV-1a（16 進）。プレイの id に使う（暗号の用途ではない）。 */
 function fnv1a(text: string): string {
@@ -152,6 +178,7 @@ export function withResult(
 ): ResultStore {
   if (store.entries.some((e) => e.id === entry.id)) return store;
   return {
+    ...store,
     version: RESULTS_VERSION,
     entries: [entry, ...store.entries].slice(0, RESULTS_LIMIT),
   };
@@ -166,12 +193,16 @@ export function mergeResults(
   memory: ResultStore,
 ): ResultStore {
   const seen = new Set(persisted.entries.map((e) => e.id));
+  const legacyIds = [
+    ...new Set([...(persisted.legacyIds ?? []), ...(memory.legacyIds ?? [])]),
+  ].slice(0, RESULTS_LIMIT);
   return {
     version: RESULTS_VERSION,
     entries: [
       ...persisted.entries,
       ...memory.entries.filter((e) => !seen.has(e.id)),
     ].slice(0, RESULTS_LIMIT),
+    ...(legacyIds.length ? { legacyIds } : {}),
   };
 }
 
