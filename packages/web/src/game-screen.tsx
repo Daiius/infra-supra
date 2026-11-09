@@ -1465,11 +1465,8 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
   const ratio = p.ratio === undefined ? null : Math.min(p.ratio, 1);
   return (
     <li className="flex flex-wrap items-center gap-2">
+      {/* バッジ・使用率のグラフ・説明の順（バッジとグラフは横幅を取らないので同じ高さに並べる。2026-11-10・ユーザーの要望） */}
       <span className={`badge badge-sm ${badge}`}>{label}</span>
-      <span>{credit ? creditUseText(p, usd) : p.text}</span>
-      {p.detail && (
-        <span className="basis-full text-xs opacity-80">{p.detail}</span>
-      )}
       {ratio !== null && (
         <span className="flex items-center gap-1 text-xs opacity-70">
           {credit ? (
@@ -1487,6 +1484,10 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
           )}
           {(p.ratio! * 100).toFixed(0)}%
         </span>
+      )}
+      <span>{credit ? creditUseText(p, usd) : p.text}</span>
+      {p.detail && (
+        <span className="basis-full text-xs opacity-80">{p.detail}</span>
       )}
       {/* 判定に置いた仮定（話題・Bot の日の集中など。D-60）は ⓘ に畳む */}
       {p.assumption && (
