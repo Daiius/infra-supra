@@ -2182,6 +2182,25 @@
 - 実装: stats の `play-tokens.ts`（定数・`redisTokenStore`・`memoryTokenStore`）・`route.ts`（`POST /api/plays`・`tokenFlag`）・`repo.ts`（`ResultFlag`・`reportedInHistogram`・`DupCap`）・`db/repo.ts`（トランザクションと advisory lock）・`db/schema.ts`・`index.ts`（`REDIS_URL`）・migration `20261109021859_play_tokens_flag`（足す形だけ。D-172）・`deploy/server.env.example`・`deploy/compose.example.yml`、web の `play-nonce.ts`（`PLAY_TOKEN_KEY`・`loadPlayToken`・`storePlayToken`）・`stats-client.ts`（`requestPlayToken`・`submissionOf` の `token`）・`App.tsx`・`privacy-policy.tsx`。テスト: stats の `route.test.ts`（発行・使い捨て・期限切れ・no-token・bad-token・too-fast・dup-cap と窓・応答が成功と同じ形・分布から外れる・照合で落ちたらトークンを消さない）・`db/repo.test.ts`（flag の列・dup-cap の数え方・並んだ送信）・`db/migration.test.ts`・`play-tokens.test.ts`、web の `play-nonce.test.ts`・smoke の W-103（始めると 1 回取り、再開しても同じトークンを添える）・W-103b（失敗しても遊べ、トークン無しで送る）・W-103c（フラグが無い・モックでは取りに行かない）。
 - 正典: [prd/15](../15-results-and-stats.md) §4・§5.4・§5.5・§7.1。
 
+### D-175 構成・フレームワークごとの分布を、結果の画面の絞り込みのチップと比較の図で見せる（ST-11。2026-11-09・ユーザーの決定）
+
+- 依頼（ユーザー。supervisor 経由・2026-11-09）: 集計のヒストグラムは構成・フレームワークを問わず全部のプレイを含む（絞りはシナリオと同じシード / 全シードだけ）。インフラごと・フレームワークごとにどんな分布になるかを見たい。D-171 で表の構成を id（`stack_id`）で持つようにしていた。
+- 決定（ユーザー）:
+  - **絞り込みのチップ**: 結果の画面の 4 軸の分布の上に「全部 / 同じインフラ / 同じフレームワーク / 同じ組み合わせ」を置き、今の同じシード / 全シードの 2 本と組み合わせて切り替える。同じインフラは自分のプレイと同じ構成（`stack_id`。始めたときの構成）、同じフレームワークは同じ `framework`、同じ組み合わせは両方。選んだチップは localStorage（`infra-supra:stats-breakdown`。比較の図の軸と分け方も一緒に）に覚える。
+  - **構成ごとの比較の図**: 1 つの軸について、構成ごと（切り替えでフレームワークごと）に 25〜75% の帯と中央値の縦の印を横に並べ、自分の値の位置に縦の線を引く。軸は 4 つ（① 所持金・② 満足度の平均・③ 機能開発の累計・④ 費用の合計）を切り替える。全シードの完走で数える。
+  - **件数**: 絞った分布・比較の図の行が 10 件未満（D-163 の `MIN_DISTRIBUTION_COUNT`）なら分布・帯を出さず「まだ n 件」と出す。件数は常に見える（比較の図は行ごとに「n 件」）。絞った分布は全部の分布が少ないとき（D-163）のように段 1 には戻さず、軸・シードごとに「まだ n 件」にする。
+  - **上位 25% の判定と花火**（D-163・D-168）は**今のまま全部の構成**で決める。絞り込みは見るためだけ。絞った分布を出している間も「★ 上位」の印は全部の分布の判定のまま（注記にそう書く）。
+- 決定（推奨案）:
+  - チップと比較の図は**結果の画面だけ**に置き、完走のダイアログは今のまま（ダイアログを複雑にしない）。
+  - 比較の図の行は、隠した構成（`HIDDEN_PLATFORMS`。D-100）を除いた STACKS の並び（フレームワークは FRAMEWORKS の並び）で、行の無い構成も 0 件で出す。名前は STACKS（catalog の構成の名前）から引く。自分の行は強調の色・ほかは控えめの色（emphasis）で、**良し悪しの色（status）はどの軸にも使わない**。向きのある軸は「右ほど上位です」、④ は「高い・低いで良し悪しを付けません」と文で添える（D-166）。数値は「数値で見る」の表でも読める。
+  - サーバー: `GET /api/results/distribution` に `stack`・`framework`（知らない id は 400）を足し、8 本とも絞って数える（応答に `stack`・`framework` を返す）。比較の図用に `GET /api/results/groups?scenario=&axis=&by=stack|framework[&seed=]` → `{ scenarioId, axis, by, seed, groups: [{ key, count, p25, median, p75 }] }` を足した。どちらも分布の条件（完走・戻っていない・`flag IS NULL`。D-174）を守る。groups は SQL の `percentile_cont` で集計し（行を読み出さない。PGlite でも同じ値になることをテストで確かめた）、手元の実装（`memoryRepo`）は同じ線形の補間（`quantileOf`）。distribution は今までどおり軸ごとに条件に合う行を読む（8 回。D-161 の残した点のまま）。
+  - 表: 索引 `results_stack_idx`（`scenario_id, stack_id`）・`results_framework_idx`（`scenario_id, framework`）を足す migration `20261109030017_stack_framework_idx` だけ（前の migration は書き換えない。D-172）。
+  - web: `VITE_STATS_ENABLED` が無ければ取りに行かず、チップと比較の図も出さない。開発用の `VITE_STATS_MOCK`（D-164）では、絞り込みごとに件数を減らした架空の分布（同じ組み合わせは全シードも 10 件未満）と、構成ごとの架空の要約（3 つ目ごとの行は 10 件未満）をシードから決まる乱数で出す。読み込み中は前の表示を薄くして残す。絞った分布が取れなければ全部の分布に戻して一言添える。
+- 実装: stats の `route.ts`（`distribution` の絞り・`groups`）・`repo.ts`（`AxisQuery` の `stackId`・`framework`・`groupStats`）・`db/repo.ts`・`histogram.ts`（`GroupStat`・`quantileOf`・`groupStatsOf`）・`db/schema.ts`、web の `stats-breakdown.tsx`（`ResultStatsSection`・比較の図）・`charts.tsx`（`GroupRangeChart`。自前の SVG）・`distribution.ts`（`axisStandingsOf`・`STATS_FILTERS`・`groupRowsOf`）・`stats-client.ts`（`statsQueryOf`・`loadFilteredView`・`loadGroups`）・`stats-mock.ts`（`mockGroups`）・`result-axes.tsx`（`filter`）。
+- テスト: stats の `route.test.ts`（絞り込み・両方・印つきを除く・groups の分位・400）・`db/repo.test.ts`（PGlite の `percentile_cont` と手元の実装が同じ）、web の `distribution.test.ts`・smoke の `stats-breakdown.smoke.test.tsx`（W-104〜W-109: チップの切り替えと引数・★ 上位は全部のまま・10 件未満・比較の図の行と自分の線・隠した構成を出さない・④ に良し悪しの色が無い・フラグ無しで取りに行かない・モック）。
+- 残した点: 比較の図は全シードだけ（同じシードの切り替えは置いていない。口は `seed` を受ける）。比較の図の件数は自分が分布に入らなかったプレイ（D-162）を足していない。絞った分布の件数が増えたら、閾値（10 件）を絞り込みごとに見直す。
+- 正典: [prd/15](../15-results-and-stats.md) §5.4・§6・§7・§8 ST-11。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
@@ -2193,7 +2212,7 @@
 |---|---|---|
 | RS-01〜RS-18 の残り | ページごとの描き方の段 3 の残り（RS-04 の乗り換えの「描き方も替える（手間 +n）」の表示・RS-06 描画の CPU の倍率（計測待ち）・RS-10 速さの重み付き CPU・RS-13 の「描き方を替えた案」の列）、推奨案のままのもの（RS-02・RS-09・RS-12・RS-14）と段 4（段 5 は D-108）。目標の値の見直し（RS-07）はユーザーの判断待ち | prd/13 §6・§7・D-106・D-107・D-108 |
 | ES-01〜ES-16 | 外部のシナリオ（JSON + zod）とランキング。全部が推奨案つきで未決。ユーザーは「今の作業が落ち着いてから設計する」と決めた（2026-11-01）。ランキングの側は D-131〜D-137（匿名の集計とヒストグラム）で置き換え・影響あり: ES-04・ES-13・ES-16 は置き換え、ES-07 は 4 軸と照合で置き換え、ES-08 は ST-12 に言い換え、ES-15 は段 2 で入れる。外部のシナリオの側（ES-01〜03・05・06・09〜12・14）は未決のまま | prd/12 §9・prd/15 |
-| ST-11・ST-12 | ゲームの結果の振り返りと匿名の集計（D-131〜D-139）の残り（ST-02〜ST-05 は D-141〜D-144、ST-06〜ST-10 は段 2 の D-148〜D-155 で推奨案のまま決定・要確認。ST-01 は段 1 の暫定を D-145、段 3 で D-163（上位 25%・上位の軸の数で花火）。D-139 の中継の第一案は D-150 で実装し、動くかは朝のスパイクで確かめる）: 構成ごとの絞り込み（D-171 で表の構成を id で持つようにした。絞り込みの API・画面は次の PR）・シーズンの区切り | prd/15 §8 |
+| ST-12 | ゲームの結果の振り返りと匿名の集計（D-131〜D-139）の残り（ST-02〜ST-05 は D-141〜D-144、ST-06〜ST-10 は段 2 の D-148〜D-155 で推奨案のまま決定・要確認。ST-01 は段 1 の暫定を D-145、段 3 で D-163（上位 25%・上位の軸の数で花火）。D-139 の中継の第一案は D-150 で実装し、動くかは朝のスパイクで確かめる。ST-11 の構成ごとの絞り込みは D-175 で決定・実装）: シーズンの区切り | prd/15 §8 |
 | チーム運用と、マネージドの構成どうしの楽さ（2026-11-05） | ① 複数人・社外のメンバーでの運用のしやすさ（ロールの細かさ・招待・監査ログ）を数えていない。SC-3（2 人目）の効きは Vercel の席の料金だけで、席の料金に見合う楽さも、他の事業者の権限の扱いにくさも出ない（Cloudflare・Supabase・さくらの席の扱いは未取得）。② マネージドの維持の手間は Vercel・Cloudflare・Amplify・Netlify がどれも 0（OpenNext 1・Cloud Run 0.5・VPS 3・アカウント 1 つにつき +0.5）。プレビューのデプロイ・ログやデバッグ・フレームワークの対応の成熟度・AWS の IAM の重さの差は入っていない。入れるなら、各事業者の席・ロール・招待の公式の文書を先に取る | `rules.ts` の `EFFORT`・`effort.ts` の `upkeepOf`・prd/07 §10 SC-3・D-36・D-52・D-63 |
 | CP-08・CP-09 の残り | 部品を事業者をまたいで組む（D-114）で後で検討する候補にしたもの: リージョンの要素（関数と DB の地域の違い・地域料金）と、接続の数の上限（`limit`。普通の負荷ならプールで管理される見込み） | prd/14 §8.1・D-114 |
 | ~~D-66 の残り~~ | ~~OpenNext の CloudFront の無効化で、ワイルドカード・タグの無効化を部品にするか~~ → D-79（ワイルドカードを部品に。タグは OpenNext の対応待ちで入れない） | D-66・D-79・prd/11 §13.1 |
