@@ -242,17 +242,8 @@ export function EstimateMode() {
           <span className="text-sm opacity-70">
             約 {jpy(view.totalJpy)}（1 USD = {USD_JPY} 円の仮定）
           </span>
+          <TaxInclusive tax={view.tax} />
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm"
-            checked={input.showTax}
-            onChange={(e) => setInput({ showTax: e.target.checked })}
-          />
-          日本から契約するときの税込の目安（円）を出す
-        </label>
-        {input.showTax && <Tax tax={view.tax} />}
         <Commitments view={view} />
         <Members members={view.members} seats={view.seats} />
         {view.totals.JPY !== undefined && (
@@ -290,7 +281,6 @@ export function EstimateMode() {
       </Card>
       <Comparison
         rows={rows}
-        showTax={input.showTax}
         // 行を押すとカルーセルもその構成へ移る（値は同じ入力。D-115）
         onPick={pickStack}
       />
@@ -753,53 +743,61 @@ const TAX_BADGE: Record<TaxView['lines'][number]['status'], string> = {
   unconfirmed: '未確認（税抜のまま）',
 };
 
-/** 日本から契約するときの税込の目安（D-76）。 */
-function Tax({ tax }: { tax: TaxView }) {
+/**
+ * 日本から契約するときの税込の目安（D-76）。合計の円の横に常に出し（D-177）、
+ * 事業者ごとの消費税の扱いと出典は ⓘ のダイアログに出す。
+ */
+function TaxInclusive({ tax }: { tax: TaxView }) {
   return (
-    <div className="space-y-1 text-sm">
+    <span className="text-sm" data-testid="tax-inclusive">
+      税込 約 {jpy(tax.totalJpy)}
+      <Info label="税込の目安の説明" title="日本から契約するときの税込の目安">
+        <TaxDetails tax={tax} />
+      </Info>
+    </span>
+  );
+}
+
+function TaxDetails({ tax }: { tax: TaxView }) {
+  return (
+    <div className="space-y-2 text-sm">
       <p>
-        <span className="font-semibold">税込の目安 約 {jpy(tax.totalJpy)}</span>
-        <span className="opacity-70">
-          （うち消費税 約 {jpy(tax.taxJpy + tax.includedTaxJpy)}
-          {tax.includedTaxJpy > 0 &&
-            `: 足した分 ${jpy(tax.taxJpy)}・税込の価格に含まれる分 ${jpy(tax.includedTaxJpy)}`}
-          {tax.unconfirmed.length > 0 &&
-            `・${tax.unconfirmed.join('・')} は消費税の扱いが未確認のため税抜のまま`}
-          ）
-        </span>
+        税込の目安は 約 {jpy(tax.totalJpy)} です（うち消費税 約{' '}
+        {jpy(tax.taxJpy + tax.includedTaxJpy)}
+        {tax.includedTaxJpy > 0 &&
+          `: 足した分 ${jpy(tax.taxJpy)}・税込の価格に含まれる分 ${jpy(tax.includedTaxJpy)}`}
+        ）。
+        {tax.unconfirmed.length > 0 &&
+          `${tax.unconfirmed.join('・')} は消費税の扱いが未確認のため、税抜のまま足しています。`}
       </p>
-      <details>
-        <summary className="cursor-pointer text-xs">
-          事業者ごとの消費税の扱い（出典つき）
-        </summary>
-        <ul className="mt-1 space-y-1 text-xs">
-          {tax.lines.map((l) => (
-            <li key={l.provider} className="break-words">
-              <span
-                className={`badge badge-xs mr-1 ${l.status === 'unconfirmed' ? 'badge-warning' : 'badge-ghost'}`}
+      <p className="font-semibold">事業者ごとの消費税の扱い（出典つき）</p>
+      <ul className="space-y-1 text-xs">
+        {tax.lines.map((l) => (
+          <li key={l.provider} className="break-words">
+            <span
+              className={`badge badge-xs mr-1 ${l.status === 'unconfirmed' ? 'badge-warning' : 'badge-ghost'}`}
+            >
+              {TAX_BADGE[l.status]}
+            </span>
+            {l.provider}: {l.premise}
+            {l.status === 'added' && `（+${jpy(l.taxJpy)}）`}
+            {l.status === 'included' &&
+              `（うち消費税 ${jpy(l.includedTaxJpy)}）`}{' '}
+            {l.sources.map((x) => (
+              <a
+                key={x.url}
+                className="link mr-1 break-all opacity-70"
+                href={x.url}
+                target="_blank"
+                rel="noreferrer"
               >
-                {TAX_BADGE[l.status]}
-              </span>
-              {l.provider}: {l.premise}
-              {l.status === 'added' && `（+${jpy(l.taxJpy)}）`}
-              {l.status === 'included' &&
-                `（うち消費税 ${jpy(l.includedTaxJpy)}）`}{' '}
-              {l.sources.map((x) => (
-                <a
-                  key={x.url}
-                  className="link mr-1 break-all opacity-70"
-                  href={x.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  出典（{x.retrievedAt}）
-                </a>
-              ))}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-1 text-xs opacity-70">{tax.assumption}</p>
-      </details>
+                出典（{x.retrievedAt}）
+              </a>
+            ))}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs opacity-70">{tax.assumption}</p>
     </div>
   );
 }
@@ -964,11 +962,9 @@ function Lines({ lines }: { lines: LineView[] }) {
 
 function Comparison({
   rows,
-  showTax,
   onPick,
 }: {
   rows: ReturnType<typeof compareStacks>;
-  showTax: boolean;
   onPick: (stack: string) => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({
@@ -1007,7 +1003,7 @@ function Comparison({
             <tr>
               {header('name', '構成')}
               {header('cost', '月額', 'text-right')}
-              {showTax && <th className="text-right">税込の目安</th>}
+              <th className="text-right">税込の目安</th>
               {header('blocking', '止まる上限', 'text-right')}
               <th>使用率の最も高い上限</th>
             </tr>
@@ -1040,11 +1036,9 @@ function Comparison({
                     </span>
                   )}
                 </td>
-                {showTax && (
-                  <td className="text-right tabular-nums whitespace-nowrap">
-                    {jpy(r.taxInclJpy)}
-                  </td>
-                )}
+                <td className="text-right tabular-nums whitespace-nowrap">
+                  {jpy(r.taxInclJpy)}
+                </td>
                 <td className="text-right tabular-nums">
                   {r.blocking > 0 ? (
                     <span className="badge badge-error badge-sm">

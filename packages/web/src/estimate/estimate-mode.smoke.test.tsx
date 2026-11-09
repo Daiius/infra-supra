@@ -5,6 +5,7 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
   ensurePartsList,
+  infoDialog,
   inSetupTabs,
   openSlot,
   renderApp,
@@ -875,5 +876,42 @@ describe('見積モードの画面', () => {
     expect(checked('ページのキャッシュ（ISR）')).toBe('kv');
     expect(checked(DB)).toBe('dynamodb');
     expectEstimate();
+  });
+
+  it('W-60 税込の目安は合計の円の横に常に出し、事業者ごとの扱いと出典は ⓘ に出す。前の版の tax=0 の URL でも出る（D-177）', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&s=aws-amplify&pv=1000000&tax=0',
+    );
+    await renderApp();
+    expectEstimate();
+    const total = within(card(/^月の費用: /));
+    // チェックはもう無い
+    expect(total.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByText(/税込の目安（円）を出す/)).toBeNull();
+    const tax = screen.getByTestId('tax-inclusive');
+    expect(card(/^月の費用: /).contains(tax)).toBe(true);
+    expect(tax.textContent).toMatch(/^税込 約 ¥[\d,]+/);
+    // ⓘ のダイアログに事業者ごとの扱いと出典
+    fireEvent.click(
+      within(tax).getByRole('button', { name: '税込の目安の説明' }),
+    );
+    const dialog = infoDialog()!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain('事業者ごとの消費税の扱い');
+    expect(dialog.textContent).toContain('消費税 10% を足す');
+    expect(
+      within(dialog)
+        .getAllByRole('link')
+        .some((a) => /^出典（/.test(a.textContent ?? '')),
+    ).toBe(true);
+    // 比較の表の「税込の目安」の列は常に出る
+    const compare = within(card('構成を比べる'));
+    expect(
+      compare.getByRole('columnheader', { name: '税込の目安' }),
+    ).toBeDefined();
+    // 古い tax=0 は URL に書き戻さない
+    expect(new URLSearchParams(window.location.search).has('tax')).toBe(false);
   });
 });

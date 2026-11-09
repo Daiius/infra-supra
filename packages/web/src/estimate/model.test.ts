@@ -122,7 +122,6 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
       imageFormat: 'webp',
       variants: 2,
       seats: 3,
-      showTax: true,
       routes: { article: 'static-build' },
     });
     expect(toQuery(i).toString()).toBe(
@@ -130,7 +129,7 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
     );
   });
 
-  it('Next.js × Vercel Pro・記事のコメント欄・税込を出さない（選べない部品の値は捨てる）', () => {
+  it('Next.js × Vercel Pro・記事のコメント欄・前の版の tax=0 は黙って無視する（選べない部品の値は捨てる。D-177）', () => {
     const i = read(
       '?mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&tax=0&c.ogp=prerender',
     );
@@ -138,11 +137,11 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
       framework: 'nextjs',
       stack: 'vercel-supabase-pro',
       comments: 1,
-      showTax: false,
       routes: {},
     });
+    expect(i).not.toHaveProperty('showTax');
     expect(toQuery(i).toString()).toBe(
-      'mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&img=jpeg&v=3&seats=1&tax=0&c.isrCache=default&c.images=default&c.api=same&c.db=supabase&c.cdnPlan=flat-rate&c.dbBackup=default&c.email=default',
+      'mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&img=jpeg&v=3&seats=1&c.isrCache=default&c.images=default&c.api=same&c.db=supabase&c.cdnPlan=flat-rate&c.dbBackup=default&c.email=default',
     );
   });
 
@@ -186,7 +185,6 @@ describe('URL のクエリ', () => {
       variants: 2,
       revalidateSec: 3600,
       seats: 3,
-      showTax: false,
     });
     expect(normalizeInput(fromQuery(`?${toQuery(i)}`))).toEqual(i);
   });
@@ -713,7 +711,6 @@ describe('費用の曲線（D-74）', () => {
 describe('チームの人数（席。D-76）', () => {
   it('既定は 1 人で、1〜100 に収める', () => {
     expect(normalizeInput({}).seats).toBe(1);
-    expect(normalizeInput({}).showTax).toBe(true);
     expect(normalizeInput({ seats: 0 }).seats).toBe(1);
     expect(normalizeInput({ seats: 1e6 }).seats).toBe(100);
     expect(normalizeInput({ seats: 2.6 }).seats).toBe(3);

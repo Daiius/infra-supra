@@ -116,8 +116,6 @@ export type EstimateInput = {
   variants: number;
   /** チームの人数（管理画面を使う人。席）。席課金のプランだけ費用が変わる（D-76）。 */
   seats: number;
-  /** 税込の目安（円）を出すか（D-76）。計算には効かない。 */
-  showTax: boolean;
   /** 選んだページごとの描き方（フレームワークの既定と違うものだけ。D-107）。 */
   routes: RouteOverrides;
 };
@@ -235,7 +233,6 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     imageFormat,
     variants,
     seats,
-    showTax: raw.showTax ?? true,
     routes,
   };
 }
@@ -388,7 +385,6 @@ export function toQuery(input: EstimateInput): URLSearchParams {
   q.set('img', input.imageFormat);
   q.set('v', String(input.variants));
   q.set('seats', String(input.seats));
-  if (!input.showTax) q.set('tax', '0');
   for (const [slot, id] of Object.entries(input.parts))
     if (id !== undefined) q.set(PART_PREFIX + slot, id);
   for (const [route, s] of Object.entries(input.routes))
@@ -436,8 +432,7 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   set('imageFormat', str('img') as ImageFormat | undefined);
   set('variants', num('v'));
   set('seats', num('seats'));
-  const tax = str('tax');
-  if (tax === '0' || tax === '1') out.showTax = tax === '1';
+  // 前の版の税込の目安の切り替え（tax=0/1）は常に出すことにしたので読まない（D-177）
   return out;
 }
 

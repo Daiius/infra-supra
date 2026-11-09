@@ -2182,6 +2182,13 @@
 - 実装: stats の `play-tokens.ts`（定数・`redisTokenStore`・`memoryTokenStore`）・`route.ts`（`POST /api/plays`・`tokenFlag`）・`repo.ts`（`ResultFlag`・`reportedInHistogram`・`DupCap`）・`db/repo.ts`（トランザクションと advisory lock）・`db/schema.ts`・`index.ts`（`REDIS_URL`）・migration `20261109021859_play_tokens_flag`（足す形だけ。D-172）・`deploy/server.env.example`・`deploy/compose.example.yml`、web の `play-nonce.ts`（`PLAY_TOKEN_KEY`・`loadPlayToken`・`storePlayToken`）・`stats-client.ts`（`requestPlayToken`・`submissionOf` の `token`）・`App.tsx`・`privacy-policy.tsx`。テスト: stats の `route.test.ts`（発行・使い捨て・期限切れ・no-token・bad-token・too-fast・dup-cap と窓・応答が成功と同じ形・分布から外れる・照合で落ちたらトークンを消さない）・`db/repo.test.ts`（flag の列・dup-cap の数え方・並んだ送信）・`db/migration.test.ts`・`play-tokens.test.ts`、web の `play-nonce.test.ts`・smoke の W-103（始めると 1 回取り、再開しても同じトークンを添える）・W-103b（失敗しても遊べ、トークン無しで送る）・W-103c（フラグが無い・モックでは取りに行かない）。
 - 正典: [prd/15](../15-results-and-stats.md) §4・§5.4・§5.5・§7.1。
 
+### D-177 税込の目安は合計の円の横に常に出し、事業者ごとの扱いは ⓘ に移す（D-76 の見直し。2026-11-09・ユーザーの決定）
+
+- 見積モードの「日本から契約するときの税込の目安（円）を出す」のチェックをやめた。月の費用のカードの「約 X 円（1 USD = 150 円の仮定）」の横に「税込 約 Y 円」を常に出す。
+- 事業者ごとの消費税の扱い（足す・税込の価格・未確認）・出典・計算の想定は、前の `<details>` の中身を ⓘ のダイアログ（`info.tsx` の `Info`。D-129）に移した。構成の比較の表の「税込の目安」の列も常に出す。
+- 入力の `showTax` と URL の `tax` は消した。前の版の `tax=0` / `tax=1` の URL は黙って無視する（開いても壊れず、書き戻さない）。
+- テスト: web の `model.test.ts`（前の `tax=0` を読んでも入力に残らない）・`estimate-mode.smoke.test.tsx` の W-60（チェックが無い・常に出る・ⓘ に出典・表の列・`tax=0` の URL）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
