@@ -1,0 +1,117 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "8f6df2bb-ed45-414e-95a2-bf4c57677b4c",
+  "prevIds": [
+    "a18e71ca-9ccf-4a06-ae71-e59133ac698f"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "results",
+        "results_stack_idx"
+      ],
+      "writes": [
+        "s|idx|public.results_stack_idx",
+        "n|idx|public.results_stack_idx",
+        "e|idx|public.results_stack_idx",
+        "n|rel|public.results_stack_idx"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public",
+        "n|col|public.results.scenario_id",
+        "n|col|public.results.stack_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "results",
+        "results_framework_idx"
+      ],
+      "writes": [
+        "s|idx|public.results_framework_idx",
+        "n|idx|public.results_framework_idx",
+        "e|idx|public.results_framework_idx",
+        "n|rel|public.results_framework_idx"
+      ],
+      "reads": [
+        "n|tbl|public.results",
+        "n|sch|public",
+        "n|col|public.results.scenario_id",
+        "n|col|public.results.framework"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "results_stack_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "scenario_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "stack_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "results",
+        "name": "results_framework_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "scenario_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "framework",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

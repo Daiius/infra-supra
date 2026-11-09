@@ -35,6 +35,8 @@ function dist(
   return {
     scenarioId: 'article-community',
     seed: 1,
+    stack: null,
+    framework: null,
     axes: {
       cash: per('cash'),
       satisfaction: per('satisfaction'),

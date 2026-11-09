@@ -75,7 +75,40 @@ export function drizzleRepo(db: AnyDb): ResultsRepo {
         };
       });
     },
-    async histogramValues({ scenarioId, axis, seed }) {
+    async groupStats({ scenarioId, axis, by, seed }) {
+      const column = results[AXIS_FIELD[axis]];
+      const key = by === 'stack' ? results.stackId : results.framework;
+      // 分位は SQL で集計する（行を読み出さない）。percentile_cont は double precision で、node-postgres・PGlite とも number で返る
+      const rows = await db
+        .select({
+          key,
+          count: sql<number>`count(*)::int`,
+          p25: sql<number>`percentile_cont(0.25) within group (order by ${column})`,
+          median: sql<number>`percentile_cont(0.5) within group (order by ${column})`,
+          p75: sql<number>`percentile_cont(0.75) within group (order by ${column})`,
+        })
+        .from(results)
+        .where(
+          and(
+            eq(results.scenarioId, scenarioId),
+            inHistogramWhere,
+            isNotNull(column),
+            seed === undefined ? undefined : eq(results.seed, seed),
+          ),
+        )
+        .groupBy(key)
+        .orderBy(key);
+      return rows.map((r) => ({
+        key: r.key,
+        count: Number(r.count),
+        p25: Number(r.p25),
+        median: Number(r.median),
+        p75: Number(r.p75),
+      }));
+    },
+    async histogramValues({ scenarioId, axis, seed, stackId, framework }) {
+      // 軸ごとに条件に合う行の値を全部読む（distribution は 1 回で 8 本 = 8 回読む）。行が増えて重くなったら SQL でビンに分ける
+      // （width_bucket など。D-161 の残した点）
       const column = results[AXIS_FIELD[axis]];
       const rows = await db
         .select({ v: column })
@@ -87,6 +120,10 @@ export function drizzleRepo(db: AnyDb): ResultsRepo {
             // ④ 費用の合計を足す前の行は null（分布に入れない。D-166）
             isNotNull(column),
             seed === undefined ? undefined : eq(results.seed, seed),
+            stackId === undefined ? undefined : eq(results.stackId, stackId),
+            framework === undefined
+              ? undefined
+              : eq(results.framework, framework),
           ),
         );
       return rows.flatMap((r) => (r.v === null ? [] : [r.v]));

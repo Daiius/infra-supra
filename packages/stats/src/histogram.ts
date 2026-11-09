@@ -90,3 +90,48 @@ export function histogramOf(
       : (sorted[mid - 1]! + sorted[mid]!) / 2;
   return { count: values.length, min, max, median, bins, ...position };
 }
+
+/**
+ * 構成（またはフレームワーク）ごとの分布の要約（ST-11・D-175）。比較の図が行ごとに中央値と 25〜75% の幅を描く元。
+ * 分位は Postgres の percentile_cont と同じ線形の補間（並べた値の (n - 1) × p の位置）。DB の層は SQL で同じ値を出す。
+ */
+export type GroupStat = {
+  /** 構成の id（stack_id）かフレームワークの id。 */
+  key: string;
+  count: number;
+  p25: number;
+  median: number;
+  p75: number;
+};
+
+/** 並べた値の分位（percentile_cont と同じ線形の補間）。sorted は昇順・1 件以上。 */
+export function quantileOf(sorted: readonly number[], p: number): number {
+  const at = (sorted.length - 1) * p;
+  const lo = Math.floor(at);
+  const hi = Math.ceil(at);
+  return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (at - lo);
+}
+
+/** 鍵と値の組から、鍵ごとの要約（鍵の順に並べる）。 */
+export function groupStatsOf(
+  rows: readonly { key: string; value: number }[],
+): GroupStat[] {
+  const byKey = new Map<string, number[]>();
+  for (const r of rows) {
+    const list = byKey.get(r.key);
+    if (list) list.push(r.value);
+    else byKey.set(r.key, [r.value]);
+  }
+  return [...byKey.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, values]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return {
+        key,
+        count: sorted.length,
+        p25: quantileOf(sorted, 0.25),
+        median: quantileOf(sorted, 0.5),
+        p75: quantileOf(sorted, 0.75),
+      };
+    });
+}

@@ -5,7 +5,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { finishedSave, submissionOf } from '../plays.test-helpers.ts';
-import type { ResultRecord, ResultsRepo } from '../repo.ts';
+import { memoryRepo, type ResultRecord, type ResultsRepo } from '../repo.ts';
 import { verifySubmission } from '../verify.ts';
 import { drizzleRepo } from './repo.ts';
 
@@ -157,6 +157,95 @@ describe('drizzleRepo（PGlite）', () => {
       'dup-cap',
       null,
       null,
+    ]);
+  });
+
+  it('同じ構成・同じフレームワークに絞った値と、構成ごとの分位（percentile_cont）が手元の実装と同じ（D-175）', async () => {
+    // ほかのテストの行と混ざらないよう、別のシナリオの id で入れる
+    const scenarioId = 'group-test';
+    const data = [
+      ['sakura-vps-2gb', 'nextjs', 1, 120],
+      ['sakura-vps-2gb', 'nextjs', 2, 80],
+      ['sakura-vps-2gb', 'vite-spa', 1, 310],
+      ['sakura-vps-2gb', 'nextjs', 1, 45.5],
+      ['vercel-supabase-pro', 'nextjs', 1, 900],
+      ['vercel-supabase-pro', 'astro', 2, 700],
+    ] as const;
+    let i = 0;
+    for (const [stackId, framework, seed, totalCost] of data)
+      await repo.insert(
+        rec({
+          playId: `g${i++}`,
+          scenarioId,
+          stackId,
+          framework,
+          seed,
+          totalCost,
+        }),
+      );
+    // 印つき・戻ったは数えない
+    await repo.insert(
+      rec({ playId: 'g-flag', scenarioId, totalCost: 1e6, flag: 'dup-cap' }),
+    );
+    await repo.insert(
+      rec({ playId: 'g-rw', scenarioId, totalCost: 1e6, rewound: true }),
+    );
+    const mem = memoryRepo();
+    for (const [stackId, framework, seed, totalCost] of data)
+      await mem.insert(
+        rec({
+          playId: `m${i++}`,
+          scenarioId,
+          stackId,
+          framework,
+          seed,
+          totalCost,
+        }),
+      );
+    const q = { scenarioId, axis: 'totalCost' } as const;
+    const sorted = (xs: number[]) => xs.sort((a, b) => a - b);
+    expect(
+      sorted(await repo.histogramValues({ ...q, stackId: 'sakura-vps-2gb' })),
+    ).toEqual([45.5, 80, 120, 310]);
+    expect(
+      sorted(
+        await repo.histogramValues({
+          ...q,
+          stackId: 'sakura-vps-2gb',
+          framework: 'nextjs',
+          seed: 1,
+        }),
+      ),
+    ).toEqual([45.5, 120]);
+    for (const by of ['stack', 'framework'] as const)
+      for (const seed of [undefined, 1]) {
+        const g = { ...q, by, ...(seed === undefined ? {} : { seed }) };
+        const got = await repo.groupStats(g);
+        const want = await mem.groupStats(g);
+        expect(got.map((x) => x.key)).toEqual(want.map((x) => x.key));
+        got.forEach((x, k) => {
+          const w = want[k]!;
+          expect(x.count).toBe(w.count);
+          for (const f of ['p25', 'median', 'p75'] as const)
+            expect(x[f]).toBeCloseTo(w[f], 9);
+        });
+      }
+    expect(await repo.groupStats({ ...q, by: 'stack' })).toEqual([
+      // 45.5・80・120・310 → 25% は 45.5 + 0.75 × 34.5
+      {
+        key: 'sakura-vps-2gb',
+        count: 4,
+        p25: 71.375,
+        median: 100,
+        p75: 167.5,
+      },
+      {
+        key: 'vercel-supabase-pro',
+        count: 2,
+        p25: 750,
+        median: 800,
+        p75: 850,
+      },
     ]);
   });
 

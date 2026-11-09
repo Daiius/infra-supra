@@ -80,5 +80,11 @@ export function mockDistribution(q: {
       ];
     }),
   ) as Distribution['axes'];
-  return { scenarioId: q.scenarioId, seed: q.seed, axes };
+  return {
+    scenarioId: q.scenarioId,
+    seed: q.seed,
+    stack: null,
+    framework: null,
+    axes,
+  };
 }
