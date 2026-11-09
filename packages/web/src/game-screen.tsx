@@ -16,13 +16,6 @@ import {
   isTrafficSpike,
   comparisonRows,
   checkActions,
-  componentEffortLabel,
-  componentFlavor,
-  componentPreview,
-  componentComparison,
-  componentProposal,
-  componentSlots,
-  swapLabel,
   fixedSettingValue,
   settingInactiveReason,
   settingNote,
@@ -38,23 +31,10 @@ import {
   ELEMENTS,
   END_LABEL,
   eventDef,
-  isPlanChange,
-  stackChangeRouteNotice,
-  stackChangeText,
-  rewriteRouteNotice,
-  rewriteTargets,
-  rewriteText,
   stackName,
-  FRAMEWORKS,
   hiddenSettings,
-  type FrameworkId,
   storageOptionText,
   nextSsrCpuMs,
-  routePlanOf,
-  routePartNote,
-  ROUTE_PARTS,
-  routeAlternativeAction,
-  strategyFamily,
   premiseTrends,
   projectionNote,
   reflectionOf,
@@ -66,9 +46,11 @@ import {
   onDemandInvalidationEstimate,
   settingFlavor,
   SETTINGS,
-  STACKS,
   STAGE_LABEL,
   type Action,
+  type SetupChangeGroups,
+  type SetupDraft,
+  setupChangeOf,
   type Axes,
   type GameState,
   type MonthEvent,
@@ -96,19 +78,12 @@ import {
 } from './results-history.ts';
 import { Info } from './info.tsx';
 import { eventCategory, EventIcon } from './event-icons.tsx';
-import { SlotCompareInfo } from './slot-compare.tsx';
 import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
+import { SetupChangeField } from './setup-change-field.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
 import { creditUseText, isCreditUse } from './premise-view.ts';
-import { Swatch } from './route-plan-table.tsx';
-import { DIAGRAM_NOTE, SystemDiagram } from './system-diagram.tsx';
-import {
-  diagramArchitecture,
-  diagramComponents,
-  slotBoxes,
-} from './system-diagram-model.ts';
 import {
   CountUp,
   FireworksCanvas,
@@ -119,7 +94,6 @@ import { isZeroText, roundInt, signedText } from './format.ts';
 
 const pct = (n: number) => signedText(n, (a) => `${(a * 100).toFixed(0)}%`);
 const scrollTop = () => window.scrollTo({ top: 0 });
-type SlotId = Extract<Action, { type: 'component' }>['slot'];
 
 /** 確約の行動（D-97）。今月の明細に対象の使用がある確約だけ出す。結んだ確約は期間を出す。 */
 function CommitmentsSection({
@@ -1477,232 +1451,6 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
   );
 }
 
-/** ページの描き方の変更（ルート → 行動。D-107）。 */
-type RouteActs = Partial<Record<string, Extract<Action, { type: 'route' }>>>;
-/** ページの部品の変更（「ルート:部品」→ 行動。記事のページのコメント欄。D-109）。 */
-type PartActs = Partial<
-  Record<string, Extract<Action, { type: 'route-part' }>>
->;
-
-/**
- * ページの描き方を途中で替える（D-107）。期限 ↔ オンデマンド（S2 ↔ S3）は設定の欄で替えるので、ここは分け方の違う描き方だけ。
- * 手間はゲーム上の仮定（枠 + API へは 4・それ以外は 3）。来月から効く。
- */
-function RouteActions({
-  state,
-  value,
-  onChange,
-  blocked,
-  parts,
-  onPartsChange,
-  blockedParts,
-}: {
-  state: GameState;
-  value: RouteActs;
-  onChange: (v: RouteActs) => void;
-  blocked: (v: RouteActs) => string | null;
-  /** ページの部品（記事のページのコメント欄。D-109）。 */
-  parts: PartActs;
-  onPartsChange: (v: PartActs) => void;
-  blockedParts: (v: PartActs) => string | null;
-}) {
-  const rows = routePlanOf(state);
-  const choosable = rows.filter(
-    (r) =>
-      r.parts.length > 0 ||
-      r.alternatives.some(
-        (a) =>
-          a.available &&
-          strategyFamily(a.strategy) !== strategyFamily(r.strategy),
-      ),
-  );
-  if (choosable.length === 0) return null;
-  return (
-    <div className="space-y-1">
-      <div className="divider my-1 text-xs">ページの描き方（来月から）</div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {choosable.map((r) => {
-          const alts = r.alternatives.filter(
-            (a) =>
-              a.available &&
-              strategyFamily(a.strategy) !== strategyFamily(r.strategy) &&
-              // S2 と S3 は同じ分け方なので 1 つにまとめる（期限・オンデマンドは設定の欄）
-              !(
-                a.strategy === 'cached-purge' &&
-                r.alternatives.some(
-                  (b) => b.strategy === 'cached-ttl' && b.available,
-                )
-              ),
-          );
-          const chosen = value[r.route]?.strategy ?? r.strategy;
-          return (
-            <div key={r.route} data-route={r.route}>
-              <div className="form-control">
-                <span className="label-text mb-1 block">
-                  <span className="flex items-start gap-1.5 font-semibold">
-                    <Swatch strategy={chosen} />
-                    <NameWithInfo
-                      name={`${r.label}の描き方`}
-                      info={
-                        <Info title={`${r.label}の描き方`}>
-                          今: {r.strategyLabel}。{r.why}
-                        </Info>
-                      }
-                    />
-                  </span>
-                  <Meta
-                    items={[
-                      `手間 ${EFFORT.route.other}（枠 + API へは ${EFFORT.route.toApi}）`,
-                      '来月から',
-                    ]}
-                  />
-                </span>
-                <select
-                  aria-label={`${r.label}の描き方`}
-                  className="select select-bordered select-sm w-full"
-                  value={chosen}
-                  onChange={(e) => {
-                    const next = { ...value };
-                    const alt = alts.find((a) => a.strategy === e.target.value);
-                    if (!alt) delete next[r.route];
-                    else
-                      next[r.route] = routeAlternativeAction(
-                        state,
-                        r,
-                        alt,
-                      ) as Extract<Action, { type: 'route' }>;
-                    onChange(next);
-                  }}
-                >
-                  <option value={r.strategy}>{r.strategyLabel}（今）</option>
-                  {alts.map((a) => {
-                    const trial: RouteActs = {
-                      ...value,
-                      [r.route]: routeAlternativeAction(state, r, a) as Extract<
-                        Action,
-                        { type: 'route' }
-                      >,
-                    };
-                    const why = blocked(trial);
-                    return (
-                      <option
-                        key={a.strategy}
-                        value={a.strategy}
-                        disabled={why !== null}
-                      >
-                        {a.label}
-                        {why ? `（${why}）` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              {r.parts.map((p) => {
-                const key = `${r.route}:${p.part}`;
-                const picked = parts[key]?.value ?? p.value;
-                return (
-                  <fieldset
-                    key={p.part}
-                    className="mt-1 text-sm"
-                    data-part={p.part}
-                  >
-                    <legend className="flex flex-wrap items-center gap-1">
-                      <NameWithInfo
-                        name={`└ ${p.label}`}
-                        info={
-                          <Info title={p.label}>
-                            {p.note}
-                            {routePartNote(state, p.part) &&
-                              `（今: ${routePartNote(state, p.part)}）`}
-                          </Info>
-                        }
-                      />
-                      <Meta
-                        items={[
-                          `手間 ${ROUTE_PARTS[p.part].effort}`,
-                          '来月から',
-                        ]}
-                      />
-                    </legend>
-                    <div className="flex flex-wrap gap-x-3">
-                      {p.options.map((o) => {
-                        const next = { ...parts };
-                        if (o.value === p.value) delete next[key];
-                        else
-                          next[key] = {
-                            type: 'route-part',
-                            route: r.route,
-                            part: p.part,
-                            value: o.value,
-                          };
-                        const why =
-                          o.value === picked ? null : blockedParts(next);
-                        return (
-                          <label
-                            key={o.value}
-                            className={`flex items-center gap-1 ${why ? 'opacity-50' : 'cursor-pointer'}`}
-                            title={o.flavor}
-                          >
-                            <input
-                              type="radio"
-                              className="radio radio-xs"
-                              name={`part-${key}`}
-                              checked={o.value === picked}
-                              disabled={why !== null}
-                              onChange={() => onPartsChange(next)}
-                            />
-                            {o.label}
-                            {o.value === p.value && '（今）'}
-                            {why && <span className="text-xs">（{why}）</span>}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/**
- * 毎月は変えない選択（構成の乗り換え・プラン変更・作り直し）を畳んで出す。
- * 畳んでいても件数と選んだもの（行動として予約したもの）が見出しで分かるようにする。
- */
-function FoldedChoices({
-  title,
-  count,
-  chosen,
-  children,
-}: {
-  title: string;
-  /** 選べる先の数（「このまま」は数えない）。 */
-  count: number;
-  /** 選んだ先の名前。選んでいなければ null。 */
-  chosen: string | null;
-  children: ReactNode;
-}) {
-  return (
-    // 開閉は details に任せる（選ぶ途中の再描画では閉じない）。呼ぶ側が月ごとの key で畳み直す
-    <details className="collapse collapse-arrow bg-base-200">
-      <summary className="collapse-title min-h-0 py-2 text-sm">
-        <span className="font-bold">{title}</span>
-        <span className="opacity-70">（{count} 件）</span>
-        {chosen !== null && (
-          <span className="block break-words text-primary">
-            選んだもの: {chosen}
-          </span>
-        )}
-      </summary>
-      <div className="collapse-content min-w-0 space-y-1">{children}</div>
-    </details>
-  );
-}
-
 /** 今月の行動。設定はいつでも戻せる。手間のポイントの残りの範囲で、いくつでも選べる。 */
 function Actions({
   state,
@@ -1715,66 +1463,47 @@ function Actions({
     {},
   );
   const [optimize, setOptimize] = useState(false);
-  const [stackChange, setStackChange] = useState<number | null>(null);
-  /** アプリの作り直し（フレームワークを替える。D-81）。 */
-  const [rewriteTo, setRewriteTo] = useState<FrameworkId | null>(null);
+  /** 構成を変える（構成・部品・フレームワーク・ページの描き方・コメント欄をまとめて選び直したもの。D-185）。 */
+  const [change, setChange] = useState<SetupDraft | null>(null);
   /** 提案への返事（選ばなければ断る）。 */
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [blockBots, setBlockBots] = useState(false);
   /** さくらの VPS のストレージ変更オプション（D-30）。 */
   const [storage, setStorage] = useState(false);
-  /** 部品の差し替え（スロットごと。D-24）。 */
-  const [parts, setParts] = useState<Partial<Record<SlotId, string>>>({});
   /** 結ぶ確約（確約ごとの支払いの形。D-97）。 */
   const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
     {},
   );
-  /** ページの描き方の変更（ルートごと。D-107）。 */
-  const [routeActs, setRouteActs] = useState<RouteActs>({});
-  /** ページの部品の変更（記事のページのコメント欄。D-109）。 */
-  const [partActs, setPartActs] = useState<PartActs>({});
   /** 未決の提案があるときに「次の月へ」で出す確認（D-140）。 */
   const [confirmDecline, setConfirmDecline] = useState(false);
   const reset = () => {
     setCommits({});
-    setRouteActs({});
-    setPartActs({});
     setSettings({});
     setOptimize(false);
-    setStackChange(null);
-    setRewriteTo(null);
+    setChange(null);
     setAnswers({});
     setBlockBots(false);
     setStorage(false);
-    setParts({});
   };
-  // 隠した構成（D-100）は乗り換え・プラン変更の先に出さない
-  const stackTargets = STACKS.filter(
-    (s) => s.index !== state.stackIndex && !s.hidden,
-  ).map((s) => s.index);
-  const rewriteFws = rewriteTargets(state);
+  // 登録した「構成を変える」を写し取った行動（D-185）
+  const changeGroups = change ? setupChangeOf(state, change).groups : null;
 
   const build = (
     o: {
       settings?: Partial<Record<SettingKey, number>>;
       optimize?: boolean;
-      stack?: number | null;
-      rewrite?: FrameworkId | null;
+      /** 構成を変える（写し取った行動の組。D-185）。 */
+      change?: SetupChangeGroups | null;
       answers?: Record<string, boolean>;
       blockBots?: boolean;
       storage?: boolean;
-      parts?: Partial<Record<SlotId, string>>;
       commits?: Record<string, CommitmentPaymentId>;
-      routes?: RouteActs;
-      routeParts?: PartActs;
     } = {},
   ): Action[] => {
     const st = o.settings ?? settings;
     const opt = o.optimize ?? optimize;
-    const stack = o.stack === undefined ? stackChange : o.stack;
-    const rw = o.rewrite === undefined ? rewriteTo : o.rewrite;
+    const ch = o.change === undefined ? changeGroups : o.change;
     const ans = o.answers ?? answers;
-    const ps = o.parts ?? parts;
     const out: Action[] = [];
     // 提案を受ける手間（割り込み）を先に取る
     for (const eventId of state.pendingProposals)
@@ -1784,27 +1513,18 @@ function Actions({
     // 確約は今月の明細の使用で結ぶので、構成を変える行動より先に当てる（D-97）
     for (const [key, payment] of Object.entries(o.commits ?? commits))
       out.push({ type: 'commit', key, payment });
-    // VPS の API の応答のキャッシュは前段の CDN が要る（D-37）。付けるときは前段の CDN の後、外すときは先に当てる
-    const order = ([slot, option]: [string, string | undefined]) =>
-      slot === 'apiCache' ? (option === 'none' ? -1 : 1) : 0;
-    for (const [slot, option] of Object.entries(ps).sort(
-      (a, b) => order(a) - order(b),
-    ))
-      out.push({ type: 'component', slot: slot as SlotId, option: option! });
-    if (stack !== null)
-      out.push({
-        type: isPlanChange(state.stackIndex, stack) ? 'plan' : 'migrate',
-        stackIndex: stack,
-      });
-    // 描き方の変更（D-107）は設定の前に当てる（描き方で出す設定が変わる）
-    for (const a of Object.values(o.routes ?? routeActs)) if (a) out.push(a);
-    // ページの部品（コメント欄。D-109）は描き方の後（枠 + API にすると含められない）
-    for (const a of Object.values(o.routeParts ?? partActs)) if (a) out.push(a);
+    // 構成を変える（D-185）: 部品（VPS の API の応答のキャッシュは前段の CDN の後・外すときは先。D-37）→ 構成 → 描き方（D-107。
+    // 描き方で出す設定が変わるので設定の前）→ ページの部品（コメント欄。D-109。枠 + API にすると含められないので描き方の後）
+    if (ch) {
+      out.push(...ch.components);
+      if (ch.stack) out.push(ch.stack);
+      out.push(...ch.routes, ...ch.routeParts);
+    }
     for (const [key, value] of Object.entries(st))
       out.push({ type: 'set', key: key as SettingKey, value: value! });
     if (opt) out.push({ type: 'optimize' });
     // 作り直しは残りの手間をすべて取れるので、ほかの行動の後に当てる（D-81）
-    if (rw !== null) out.push({ type: 'rewrite', framework: rw });
+    if (ch?.rewrite) out.push(ch.rewrite);
     return out;
   };
   /**
@@ -2068,15 +1788,6 @@ function Actions({
             );
           })}
         </div>
-        <RouteActions
-          state={state}
-          value={routeActs}
-          onChange={setRouteActs}
-          blocked={(r) => blocked(build({ routes: r }))}
-          parts={partActs}
-          onPartsChange={setPartActs}
-          blockedParts={(v) => blocked(build({ routeParts: v }))}
-        />
         <label className="flex cursor-pointer items-start gap-3 py-1">
           <input
             type="checkbox"
@@ -2155,15 +1866,8 @@ function Actions({
           onChange={setCommits}
           blocked={(c) => blocked(build({ commits: c }))}
         />
-        <ComponentsSection
-          state={state}
-          parts={parts}
-          setParts={setParts}
-          answers={answers}
-          setAnswers={setAnswers}
-          blocked={(o) => blocked(build(o))}
-        />
-        {/* 毎月は変えない選択なので畳んで出す。見出しに件数と選んだものを出し、進行中は畳まずに出す。key を月ごとに替えて毎月畳んだ状態から */}
+        {/* 構成を変える（D-185）: ①② のタブで今の状態から選び直し、差を行動に写し取る。毎月は変えない選択なので畳んで出し、
+            見出しに登録した行動の要約を出す。乗り換えの最中は欄を出さず進み具合を出す。key を月ごとに替えて毎月畳んだ状態から */}
         {state.migration ? (
           <>
             <div className="divider my-1 text-xs">構成を変える</div>
@@ -2174,123 +1878,13 @@ function Actions({
             </div>
           </>
         ) : (
-          <FoldedChoices
-            title="構成の乗り換え・プラン変更"
-            count={stackTargets.length}
-            chosen={
-              stackChange === null
-                ? null
-                : stackChangeText(
-                    state.stackIndex,
-                    stackChange,
-                    state.framework,
-                    state.components,
-                  ).name
-            }
-            key={`stack-${state.history.length}`}
-          >
-            {/* 隠した構成（D-100）で始めた古い保存はそのまま続けられる。選び直す先には出さない */}
-            {STACKS[state.stackIndex]!.hidden && (
-              <div className="text-xs opacity-70">
-                今の構成は、新しく始めるときには選べなくしています（一時的）。このまま続けられますが、同じ事業者のプラン変更や、乗り換えてから戻ることはできません。
-              </div>
-            )}
-            {[null, ...stackTargets].map((idx) => {
-              const why = idx === null ? null : blocked(build({ stack: idx }));
-              const ok = why === null;
-              const text =
-                idx === null
-                  ? null
-                  : stackChangeText(
-                      state.stackIndex,
-                      idx,
-                      state.framework,
-                      state.components,
-                    );
-              // 乗り換え先で使えない描き方は既定に戻る。替える前に見せる（D-107 の補足）
-              const notice =
-                idx === null ? null : stackChangeRouteNotice(state, idx);
-              return (
-                <label
-                  key={idx ?? 'keep'}
-                  className={`flex items-start gap-3 py-1 ${ok ? 'cursor-pointer' : 'opacity-50'}`}
-                >
-                  <input
-                    type="radio"
-                    className="radio radio-sm mt-1"
-                    checked={stackChange === idx}
-                    disabled={!ok}
-                    onChange={() => setStackChange(idx)}
-                  />
-                  {text ? (
-                    <OptionText
-                      name={text.name}
-                      meta={text.meta}
-                      info={<Info title={text.name}>{text.detail}</Info>}
-                      why={why}
-                      notice={notice}
-                    />
-                  ) : (
-                    <span>構成はこのまま</span>
-                  )}
-                </label>
-              );
-            })}
-          </FoldedChoices>
-        )}
-        {state.rewrite ? (
-          <>
-            <div className="divider my-1 text-xs">
-              アプリを作り直す（フレームワークを替える）
-            </div>
-            <div className="text-sm">
-              {FRAMEWORKS[state.rewrite.to].label} へ作り直し中（
-              {state.rewrite.done} / {state.rewrite.required}{' '}
-              ポイント）。済むまで今のアプリのまま動き、乗り換え・部品の差し替えはできません。
-            </div>
-          </>
-        ) : (
-          <FoldedChoices
-            title="アプリの作り直し（フレームワークを替える）"
-            count={rewriteFws.length}
-            chosen={
-              rewriteTo === null ? null : rewriteText(state, rewriteTo).name
-            }
-            key={`rewrite-${state.history.length}`}
-          >
-            {[null, ...rewriteFws].map((fw) => {
-              const why = fw === null ? null : blocked(build({ rewrite: fw }));
-              const ok = why === null;
-              const text = fw === null ? null : rewriteText(state, fw);
-              // 作り直しが済むと描き方は既定に戻る。替える前に見せる（D-107 の補足）
-              const notice = fw === null ? null : rewriteRouteNotice(state, fw);
-              return (
-                <label
-                  key={fw ?? 'keep'}
-                  className={`flex items-start gap-3 py-1 ${ok ? 'cursor-pointer' : 'opacity-50'}`}
-                >
-                  <input
-                    type="radio"
-                    className="radio radio-sm mt-1"
-                    checked={rewriteTo === fw}
-                    disabled={!ok}
-                    onChange={() => setRewriteTo(fw)}
-                  />
-                  {text ? (
-                    <OptionText
-                      name={text.name}
-                      meta={text.meta}
-                      info={<Info title={text.name}>{text.detail}</Info>}
-                      why={why}
-                      notice={notice}
-                    />
-                  ) : (
-                    <span>{FRAMEWORKS[state.framework].label} のまま</span>
-                  )}
-                </label>
-              );
-            })}
-          </FoldedChoices>
+          <SetupChangeField
+            key={`change-${state.history.length}`}
+            state={state}
+            registered={change}
+            onRegister={setChange}
+            wrap={(g) => build({ change: g })}
+          />
         )}
         <div className="card-actions items-center justify-end">
           {actions.length > 0 && (
@@ -2408,227 +2002,6 @@ function DeclineConfirmDialog({
         </button>
       </form>
     </dialog>
-  );
-}
-
-/** 部品の差し替え（同じ事業者の中・D-24・prd/07 §11.3）。今の行動の欄に収める（D-22）。 */
-function ComponentsSection({
-  state,
-  parts,
-  setParts,
-  answers,
-  setAnswers,
-  blocked,
-}: {
-  state: GameState;
-  parts: Partial<Record<SlotId, string>>;
-  setParts: (p: Partial<Record<SlotId, string>>) => void;
-  /** 提案への返事（提案で付く部品は、部品の欄で選ぶと提案を受けたことになる）。 */
-  answers: Record<string, boolean>;
-  setAnswers: (a: Record<string, boolean>) => void;
-  blocked: (o: {
-    parts?: Partial<Record<SlotId, string>>;
-    answers?: Record<string, boolean>;
-  }) => string | null;
-}) {
-  const slots = componentSlots(state);
-  if (slots.length === 0) return null;
-  const busy =
-    state.migration !== null ||
-    state.componentSwap !== null ||
-    state.rewrite !== null;
-  return (
-    <>
-      <div className="divider my-1 text-xs">
-        部品（同じ事業者の中で差し替える）
-      </div>
-      {/* 今の構成図（D-105）。畳んでおく */}
-      <details className="text-sm">
-        <summary className="cursor-pointer">今の構成図</summary>
-        <div className="mt-2">
-          <SystemDiagram
-            architecture={diagramArchitecture(
-              state.scenario,
-              state.stackIndex,
-              state.framework,
-              state.components,
-              // 選んだページの描き方（S1 のビルド・Astro の記事のキャッシュの有無。D-107・OCL-C9CD8783）
-              state.routes,
-            )}
-            caption={DIAGRAM_NOTE}
-            // 今の部品が箱を持たないスロットは幽霊の箱で残す（D-116 の補足）
-            ghosts={
-              slotBoxes(
-                (c) =>
-                  diagramArchitecture(
-                    state.scenario,
-                    state.stackIndex,
-                    state.framework,
-                    c,
-                    state.routes,
-                  ),
-                diagramComponents(
-                  state.scenario,
-                  state.stackIndex,
-                  state.framework,
-                  state.components,
-                ),
-                slots,
-              ).ghosts
-            }
-          />
-        </div>
-      </details>
-      {busy ? (
-        <div className="text-sm">
-          {state.componentSwap
-            ? `${swapLabel(state.componentSwap.slot)}の最中（${state.componentSwap.done} / ${state.componentSwap.required} ポイント）です。`
-            : state.rewrite
-              ? 'アプリの作り直しの最中です。'
-              : '乗り換えの最中です。'}
-          済むまで部品は差し替えられません。
-        </div>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-3">
-          {slots.map((x) => {
-            // 届いている提案で付く部品（チャットの Durable Objects など）。選ぶのは提案を受けるのと同じ
-            const viaProposal = x.options.flatMap((o) => {
-              const id = componentProposal(state, x.slot, o.id);
-              return id ? [{ option: o.id, id }] : [];
-            });
-            const accepted = viaProposal.find((v) => answers[v.id]);
-            const chosen = accepted?.option ?? parts[x.slot] ?? x.current;
-            const opt = x.options.find((o) => o.id === chosen)!;
-            const preview =
-              chosen === x.current
-                ? []
-                : componentPreview(state, x.slot, chosen);
-            // 選べない理由（提案で付く部品は、その提案を受けたとして見る）
-            const whyOf = (id: string) => {
-              if (id === x.current) return null;
-              const p = viaProposal.find((q) => q.option === id);
-              const restParts = { ...parts };
-              delete restParts[x.slot];
-              return p
-                ? blocked({
-                    parts: restParts,
-                    answers: { ...answers, [p.id]: true },
-                  })
-                : blocked({ parts: { ...restParts, [x.slot]: id } });
-            };
-            return (
-              // 外側を label にしない（設定の欄と同じ。名前は select の aria-label）
-              <div key={x.slot} className="form-control">
-                <span className="label-text mb-1 block">
-                  <span className="block font-semibold">
-                    {/* select の選択肢の中には置けないので、選択肢ごとの説明をまとめて出す */}
-                    <NameWithInfo
-                      name={x.label}
-                      info={
-                        <SlotCompareInfo
-                          slotLabel={x.label}
-                          current={x.current}
-                          why={whyOf}
-                          load={() => ({
-                            rows: componentComparison(state, x.slot, x.current),
-                            basis: `今月の基準の規模（月 ${state.basePV.toLocaleString('ja-JP')} PV）と今の他の部品で、${x.label}だけを替えた月の費用（構成全体）。出来事・話題の上乗せ・差し替えの期間の二重の費用は含めない目安です。縦の線は今の部品の額です`,
-                          })}
-                          footnote={
-                            <>
-                              {x.slot === 'db' && (
-                                <p className="mt-2 opacity-80">
-                                  DB
-                                  の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わります。期間中は新旧両方の
-                                  DB の費用を払います。
-                                </p>
-                              )}
-                              {x.slot === 'api' && (
-                                <p className="mt-2 opacity-80">
-                                  API の置き場を移すと DB も一緒に移します（API
-                                  と DB
-                                  は同じ事業者に置きます）。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払います。事業者をまたぐ往復の遅延は計算していません。
-                                  Next.js・Astro では、ページを描くサーバーが
-                                  API を呼んで応答を待ちます。VPS
-                                  に置くと自前運用の維持と障害が加わります。
-                                </p>
-                              )}
-                            </>
-                          }
-                        />
-                      }
-                    />
-                  </span>
-                  <Meta items={componentEffortLabel(x.slot, state, chosen)} />
-                </span>
-                <select
-                  aria-label={x.label}
-                  className="select select-bordered select-sm w-full"
-                  value={chosen}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const next = { ...parts };
-                    delete next[x.slot];
-                    const nextAnswers = { ...answers };
-                    for (const p of viaProposal)
-                      nextAnswers[p.id] = p.option === v;
-                    if (
-                      v !== x.current &&
-                      !viaProposal.some((p) => p.option === v)
-                    )
-                      next[x.slot] = v;
-                    setParts(next);
-                    if (viaProposal.length) setAnswers(nextAnswers);
-                  }}
-                >
-                  {x.options.map((o) => {
-                    const p = viaProposal.find((q) => q.option === o.id);
-                    const why = whyOf(o.id);
-                    return (
-                      <option key={o.id} value={o.id} disabled={why !== null}>
-                        {o.label}
-                        {o.id === x.current ? '（今）' : ''}
-                        {p
-                          ? `（${PROPOSAL_BADGE.label}: 届いた提案を受ける）`
-                          : ''}
-                        {why ? `（${why}）` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-                {/* 選んだ部品の短い説明（フレーバー。「不適切」の印は出さない。D-45） */}
-                <span className="mt-1 block text-xs opacity-70">
-                  {componentFlavor(opt)}
-                </span>
-                {preview.length > 0 && (
-                  <ul className="mt-1 space-y-0.5 text-xs">
-                    {preview.map((p) => (
-                      <li
-                        key={p.id}
-                        className="flex flex-wrap items-center gap-1"
-                      >
-                        <span
-                          className={`badge badge-xs ${p.hit ? 'badge-error' : 'badge-ghost'}`}
-                        >
-                          {p.hit
-                            ? '✗ 上限に達する'
-                            : '○ 達する可能性のある上限'}
-                        </span>
-                        {p.text}
-                        {p.ratio !== undefined && (
-                          <span className="tabular-nums opacity-70">
-                            （今の規模で {(p.ratio * 100).toFixed(0)}%）
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </>
   );
 }
 
