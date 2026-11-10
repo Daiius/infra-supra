@@ -60,8 +60,9 @@ describe('構成図の向き', () => {
     const worker = within(svg).getByRole('button', {
       name: /Worker（vinext）.*の説明$/,
     });
-    // 箱には短い名前だけ
-    expect(worker.textContent).toBe('Worker');
+    // 箱に見えるのは短い名前だけ（名前は見えている短い名前で始め、正式の名前などは読み上げだけに足す。D-196）
+    expect(worker.querySelector('.line-clamp-3')!.textContent).toBe('Worker');
+    expect(worker.hasAttribute('aria-label')).toBe(false);
     expect(screen.queryByRole('tooltip')).toBeNull();
     fireEvent.click(worker);
     const tip = screen.getByRole('tooltip');
@@ -238,7 +239,9 @@ describe('未選択の箱（D-116 の補足）', () => {
       for (const id of targets) {
         expect(box(id).hasAttribute('data-unselected')).toBe(false);
         const button = within(box(id)).getByRole('button');
-        expect(button.getAttribute('aria-label')).not.toMatch(/未選択/);
+        expect(
+          within(box(id)).queryByRole('button', { name: /未選択/ }),
+        ).toBeNull();
         expect(button.querySelector('[data-unselected-mark]')).toBeNull();
         expect(button.querySelector('[data-swap-mark]')).not.toBeNull();
       }

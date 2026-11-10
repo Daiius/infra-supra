@@ -121,7 +121,7 @@ export function RowStatus({
           ? 'badge-warning'
           : 'badge-success'
       : mark === '✗'
-        ? 'text-error'
+        ? 'text-error-strong'
         : mark === '△'
           ? 'text-warning'
           : '';

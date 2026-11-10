@@ -645,7 +645,7 @@ describe('見積モードの画面', () => {
       stackCard().querySelector<HTMLElement>(
         '[data-swappable][data-slots~="db"] button',
       )!;
-    expect(dbBox().getAttribute('aria-label')).toMatch(/Supabase.*を替える$/);
+    expect(dbBox().textContent).toMatch(/^DB：Supabase.*を替える/);
     fireEvent.click(dbBox());
     const popover = screen.getByRole('dialog', { name: /を替える$/ });
     fireEvent.click(
@@ -663,7 +663,7 @@ describe('見積モードの画面', () => {
     );
     // focus は DB の今の箱（Neon）へ（元の Supabase の箱は消える。OCL-131BD89D）
     expect(document.activeElement).toBe(dbBox());
-    expect(dbBox().getAttribute('aria-label')).toMatch(/Neon.*を替える$/);
+    expect(dbBox().textContent).toMatch(/^DB：Neon.*を替える/);
     // 「機能から選ぶ」にすると、図の代わりにチップの一覧（全部の行が畳まれ、未選択は無い）
     fireEvent.click(
       within(stackCard()).getByRole('button', { name: '機能から選ぶ' }),
@@ -988,7 +988,7 @@ describe('見積モードの画面', () => {
     const stop = stackCard().querySelector<HTMLElement>('[data-stack-stop]')!;
     expect(stop).not.toBeNull();
     expect(stop.textContent).toMatch(/止まる・プランの変更が要る上限 \d+ 件/);
-    expect(stop.className).toContain('text-error');
+    expect(stop.className).toContain('text-error-strong');
     expect(stop.className).not.toContain('text-warning');
     const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
     const badge = stackTab.querySelector('[data-setup-tab-warn]')!;
@@ -1094,7 +1094,7 @@ describe('見積モードの画面', () => {
     expect(
       within(table)
         .getAllByText('止まる')
-        .every((e) => e.className.includes('text-error')),
+        .every((e) => e.className.includes('text-error-strong')),
     ).toBe(true);
   });
 
@@ -1315,6 +1315,58 @@ describe('見積モードの画面', () => {
     } finally {
       delete (HTMLElement.prototype as { scrollLeft?: number }).scrollLeft;
       globalThis.ResizeObserver = prevRO;
+    }
+  });
+});
+
+describe('Lighthouse の指摘の手直し（D-196）', () => {
+  it('W-69 比較の表の並べ替えの aria-sort は見出しのセル（th）に付け、中のボタンには付けない', async () => {
+    window.history.replaceState(null, '', '/?mode=estimate');
+    await renderApp();
+    expectEstimate();
+    const table = card('構成を比べる').querySelector('table')!;
+    expect(table.querySelector('button[aria-sort]')).toBeNull();
+    const sorted = () =>
+      [...table.querySelectorAll('th[aria-sort]')].map((th) => [
+        th.textContent!.replace(/ [▲▼]$/, ''),
+        th.getAttribute('aria-sort'),
+      ]);
+    expect(sorted()).toEqual([
+      ['構成', 'none'],
+      ['月額', 'ascending'],
+      ['止まる上限', 'none'],
+    ]);
+    fireEvent.click(within(table).getByRole('button', { name: /^月額/ }));
+    expect(sorted()[1]).toEqual(['月額', 'descending']);
+  });
+
+  it('W-70 構成図の押せる箱は aria-label を持たず、名前は見えている文字で始まり、補足を重ねない', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const diagram = stackCard().querySelector('[data-diagram="system"]')!;
+    const buttons = [
+      ...diagram.querySelectorAll<HTMLElement>('[data-slots] button'),
+    ];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) {
+      expect(b.hasAttribute('aria-label')).toBe(false);
+      // 読み上げだけの補足（sr-only）は見えている文字の後ろに置く
+      const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+      let first: Node | null = walker.nextNode();
+      while (
+        first &&
+        (first.textContent!.trim() === '' ||
+          first.parentElement!.closest('[aria-hidden]') !== null)
+      )
+        first = walker.nextNode();
+      expect(first!.parentElement!.closest('.sr-only')).toBeNull();
+      expect(b.textContent).toMatch(/を替える/);
+      expect(b.textContent).not.toMatch(/（([^（）]+)）（\1[）、]/);
     }
   });
 });

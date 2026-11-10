@@ -1,6 +1,33 @@
 @import 'tailwindcss';
 @plugin 'daisyui';
 
+/* 文字に使う赤（D-196）。daisyUI の light の error（#ff627d）は白地で 2.87:1 で、文字には薄い。止まる印などの赤い文字・印は
+   text-error-strong を使う（白地 6.29:1・base-200 5.92:1・base-300 5.42:1）。地・枠・バッジの塗りは error のまま */
+@theme {
+  --color-error-strong: #be123c;
+}
+
+/* 選んでいないタブの文字（D-196）。daisyUI の既定は base-content の 50%（base-200 の地で 3.33:1）で、AA の 4.5:1 に届かない。
+   70% にする（base-200 の地で約 6:1）。ホバー・選んだタブは daisyUI のまま */
+.tabs
+  > .tab:not(
+    :checked,
+    label:has(:checked),
+    :hover,
+    .tab-active,
+    [aria-selected='true'],
+    [aria-current='true'],
+    [aria-current='page']
+  ) {
+  color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+}
+
+/* スクロールバーの場所をいつも空ける（D-196）。場所を取るスクロールバーの環境では、読み込み中の短いページから長いページに替わると
+   スクロールバーが出て中央寄せの全体が横にずれ、CLS 0.727 に数えられていた */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* 日本語の折り返し: 文節で折り返す（Chrome 119+。非対応のブラウザでは無視される）・行末の 1 文字の取り残しを避ける。
    見出しは行の長さを揃える。数値と単位は個別に whitespace-nowrap で切らない */
 body {

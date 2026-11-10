@@ -623,7 +623,7 @@ function Conditions({
                           `（${FRAMEWORKS[t.framework].label} にしたとき）`}
                         {t.blocking > 0 && (
                           <span
-                            className="ml-1 text-xs text-error"
+                            className="ml-1 text-xs text-error-strong"
                             data-stack-stop
                           >
                             止まる・プランの変更が要る上限 {t.blocking} 件
@@ -1084,13 +1084,15 @@ function Comparison({
   });
   const sorted = sortRows(rows, sort.key, sort.desc);
   const header = (key: SortKey, label: string, className = '') => (
-    <th className={className}>
+    <th
+      className={className}
+      aria-sort={
+        sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'
+      }
+    >
       <button
         type="button"
         className="link link-hover font-semibold"
-        aria-sort={
-          sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'
-        }
         onClick={() =>
           setSort((s) => ({
             key,
@@ -1168,7 +1170,7 @@ function Comparison({
                   {r.top && (
                     <>
                       <span
-                        className={`font-semibold ${r.top.ratio > 1 ? 'text-error' : ''}`}
+                        className={`font-semibold ${r.top.ratio > 1 ? 'text-error-strong' : ''}`}
                       >
                         {pct(r.top.ratio)}
                       </span>{' '}
@@ -1330,7 +1332,7 @@ function CostCurve({
                   {c.name}
                   {c.current && <span className="opacity-80">（今）</span>}
                   {stop !== null && (
-                    <span className="text-error" data-stops-from>
+                    <span className="text-error-strong" data-stops-from>
                       {stop === 0
                         ? '・どの規模でも止まります（上限）'
                         : `・${pvLabel(CURVE_PVS[stop]!)} PV から止まります（上限）`}
@@ -1395,7 +1397,7 @@ function CostCurve({
                     >
                       {usdShort(p.totalUsd)}
                       {p.blocking.length > 0 && (
-                        <span className="block text-error">止まる</span>
+                        <span className="block text-error-strong">止まる</span>
                       )}
                     </td>
                   ))}
