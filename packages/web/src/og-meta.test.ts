@@ -4,19 +4,19 @@ import { OG_IMAGE_TOKEN, ogImageUrl } from './og-meta.ts';
 import indexHtml from '../index.html?raw';
 
 describe('ogImageUrl', () => {
-  it('VITE_SITE_URL が無い・空なら相対の /og.png', () => {
-    expect(ogImageUrl(undefined)).toBe('/og.png');
-    expect(ogImageUrl('  ')).toBe('/og.png');
+  it('VITE_SITE_URL が無い・空なら相対の /og.png?v=2', () => {
+    expect(ogImageUrl(undefined)).toBe('/og.png?v=2');
+    expect(ogImageUrl('  ')).toBe('/og.png?v=2');
   });
   it('あればオリジンだけを使う（末尾の / やパスは落とす）', () => {
     expect(ogImageUrl('https://example.com')).toBe(
-      'https://example.com/og.png',
+      'https://example.com/og.png?v=2',
     );
     expect(ogImageUrl('https://example.com/')).toBe(
-      'https://example.com/og.png',
+      'https://example.com/og.png?v=2',
     );
     expect(ogImageUrl('https://example.com/app/')).toBe(
-      'https://example.com/og.png',
+      'https://example.com/og.png?v=2',
     );
   });
   it('URL として読めない・http(s) でない値は止める', () => {
