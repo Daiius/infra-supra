@@ -6,11 +6,9 @@
 // VITE_STATS_ENABLED（開発は VITE_STATS_MOCK）が無ければ App.tsx がこの画面を開かない。
 import { RESULT_AXES, SCENARIOS, type ResultAxisId } from 'game';
 import { useEffect, useState } from 'react';
-import { HistogramChart } from './charts.tsx';
+import { HistogramChart, HistogramSkeleton } from './charts.tsx';
 import {
-  fewNote,
   filterParams,
-  isFewCount,
   MIN_DRAWN_COUNT,
   STATS_FILTER_LABEL,
   STATS_FILTERS,
@@ -86,7 +84,8 @@ export function StatsMode({ results }: { results: readonly ResultEntry[] }) {
     : cur.view
       ? 'ready'
       : 'failed';
-  // 読み込み中は前の表示（別のシナリオ・絞り込み）を薄くして残す（形が跳ねないように）。初回は読み込み中の文だけ
+  // 読み込み中は前の表示（別のシナリオ・絞り込み）を薄くして残す（形が跳ねないように）。そのあいだ「あなた」の印は出さない
+  // （前の範囲の上に新しい値を置くと、届いたときに印が跳ぶ。D-200）。初回は同じ高さのスケルトン
   const view = cur ? cur.view : (res?.view ?? null);
   const total = view?.axes.cash.count ?? 0;
   const scenario = SCENARIOS[scenarioId]!;
@@ -135,10 +134,12 @@ export function StatsMode({ results }: { results: readonly ResultEntry[] }) {
           mock={view?.mock === true}
           filter={mine && filter !== 'all' ? filterName(filter, mine) : ''}
         />
-        {view && (
+        {(view || status === 'loading') && (
           <div
             className={
-              status === 'loading' ? 'opacity-60 transition-opacity' : undefined
+              view && status === 'loading'
+                ? 'opacity-60 transition-opacity'
+                : undefined
             }
             aria-busy={status === 'loading' || undefined}
           >
@@ -149,14 +150,15 @@ export function StatsMode({ results }: { results: readonly ResultEntry[] }) {
                   key={a.id}
                   id={a.id}
                   label={a.label}
-                  histogram={view.axes[a.id]}
+                  histogram={view ? view.axes[a.id] : null}
                   {...(own ? { value: own.axes[a.id] } : {})}
+                  hideMine={status !== 'ready'}
                 />
               ))}
             </ul>
           </div>
         )}
-        {view && total > 0 && (
+        {(view ? total > 0 : status === 'loading') && (
           <GroupCompare
             scenarioId={scenarioId}
             seed={seed}
@@ -164,6 +166,7 @@ export function StatsMode({ results }: { results: readonly ResultEntry[] }) {
             mine={mine}
             by={prefs.by}
             axis={prefs.axis}
+            defer={!view}
             onChange={update}
           />
         )}
@@ -211,21 +214,13 @@ function StatusNote({
     text = filter
       ? `${filter}の完走はまだ集計にありません。`
       : 'まだ集計された完走がありません。';
-  else if (isFewCount(total))
-    text = `${filter ? `${filter}の` : ''}完走 ${total} 件の分布です。${fewNote(total)}`;
   else text = `${filter ? `${filter}の` : ''}完走 ${total} 件の分布です。`;
   return (
     <p
       className="text-xs opacity-70"
       role={status === 'failed' ? 'alert' : undefined}
       data-stats-note={
-        status === 'ready'
-          ? total === 0
-            ? 'empty'
-            : isFewCount(total)
-              ? 'few'
-              : 'ready'
-          : status
+        status === 'ready' ? (total === 0 ? 'empty' : 'ready') : status
       }
     >
       {mock && '開発用の架空の分布です（遊んだ人の結果ではありません）。'}
@@ -234,21 +229,49 @@ function StatusNote({
   );
 }
 
-/** 1 つの軸の全シードの分布（件数・中央値のテキスト・ヒストグラム・数値の表）。 */
+/**
+ * 1 つの軸の全シードの分布（件数・中央値のテキスト・ヒストグラム・数値の表）。histogram が null なら最初の読み込み中で、
+ * 同じ高さのスケルトンを出す。hideMine の間は「あなた」の印と値を出さない（D-200）。
+ */
 function AxisCard({
   id,
   label,
   histogram,
   value,
+  hideMine,
 }: {
   id: ResultAxisId;
   label: string;
-  histogram: Histogram;
+  histogram: Histogram | null;
   value?: number;
+  hideMine: boolean;
 }) {
   const f = AXIS_FORMAT[id];
+  if (!histogram)
+    return (
+      <li
+        className="rounded-box border border-base-300 bg-base-100 p-3"
+        data-axis={id}
+        data-axis-skeleton
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+          <span className="text-sm font-semibold">
+            {AXIS_MARK[id]} {label}
+          </span>
+        </div>
+        <div className="text-xs opacity-70">{CAPTION[id]}</div>
+        <div className="mt-2" aria-hidden>
+          <div className="flex h-4 items-center">
+            <span className="block h-2 w-1/2 rounded-full bg-base-content/10" />
+          </div>
+          <HistogramSkeleton mineSpace={value !== undefined} />
+          <div className="mt-1 flex h-4 items-center">
+            <span className="block h-2 w-16 rounded-full bg-base-content/10" />
+          </div>
+        </div>
+      </li>
+    );
   const drawn = histogram.count >= MIN_DRAWN_COUNT;
-  const few = drawn && isFewCount(histogram.count);
   const median = histogram.median;
   const summary = `${histogram.count} 件${median != null ? `・中央値は ${f(median)} です` : ''}`;
   return (
@@ -260,7 +283,7 @@ function AxisCard({
         <span className="text-sm font-semibold">
           {AXIS_MARK[id]} {label}
         </span>
-        {value !== undefined && (
+        {value !== undefined && !hideMine && (
           <span className="text-xs tabular-nums" data-axis-own>
             あなた {f(value)}
           </span>
@@ -268,23 +291,15 @@ function AxisCard({
       </div>
       <div className="text-xs opacity-70">{CAPTION[id]}</div>
       {drawn ? (
-        <div
-          className="mt-2"
-          data-axis-distribution
-          data-dist-few={few ? 'true' : undefined}
-        >
+        <div className="mt-2" data-axis-distribution>
           <div className="text-xs tabular-nums" data-dist-summary>
             {summary}
           </div>
-          {few && (
-            <div className="text-xs opacity-70" data-dist-few-note>
-              {fewNote(histogram.count)}
-            </div>
-          )}
           <HistogramChart
             bins={histogram.bins}
             {...(value !== undefined ? { value } : {})}
-            label={`全シードの${label}の分布（${summary}${few ? `。${fewNote(histogram.count)}` : ''}）`}
+            hideMine={hideMine}
+            label={`全シードの${label}の分布（${summary}）`}
           />
           <details className="mt-1 text-xs">
             <summary className="cursor-pointer">数値で見る</summary>

@@ -1490,19 +1490,26 @@ export type HistogramChartBin = { from: number; to: number; count: number };
  */
 export function HistogramChart({
   bins,
-  value,
+  value: given,
+  hideMine = false,
   discrete = false,
   label,
 }: {
   bins: readonly HistogramChartBin[];
   /** 自分の値。無ければ「あなた」の印を出さず、棒は全部控えめの色（統計の画面でまだ遊んでいないとき。D-197）。 */
   value?: number;
+  /**
+   * 自分の値はあるが、まだ印を出さない（切り替えの読み込み中に前の分布を薄く残している間。前の範囲の上に新しい値を置くと、
+   * 届いたときに印が跳ぶため。D-200）。印の段の高さは取っておく。
+   */
+  hideMine?: boolean;
   discrete?: boolean;
   /** 読み上げの名前（例: 同じシードの分布）。 */
   label: string;
 }) {
   const W = 200;
   const H = 36;
+  const value = hideMine ? undefined : given;
   if (bins.length === 0) return null;
   const lo = bins[0]!.from;
   const hi = bins.at(-1)!.to;
@@ -1523,7 +1530,7 @@ export function HistogramChart({
   const bw = W / bins.length;
   return (
     <figure
-      className={`viz-root relative min-w-0 ${value === undefined ? '' : 'pt-4'}`}
+      className={`viz-root relative min-w-0 ${given === undefined ? '' : 'pt-4'}`}
       data-histogram
       data-has-mine={value === undefined ? 'false' : 'true'}
     >
@@ -1587,6 +1594,22 @@ export function HistogramChart({
 }
 
 /**
+ * 分布の読み込み中に HistogramChart の場所に出すスケルトン（D-200）。同じ高さ（印の段・h-9）を取り、読み込み後に高さが変わらない。
+ * 動きは付けない（region-skeleton.tsx と同じ）。「あなた」の印は出さない。
+ */
+export function HistogramSkeleton({ mineSpace }: { mineSpace: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className={`min-w-0 ${mineSpace ? 'pt-4' : ''}`}
+      data-histogram-skeleton
+    >
+      <span className="block h-9 w-full rounded bg-base-content/10" />
+    </div>
+  );
+}
+
+/**
  * 比較の図の 1 行（構成・フレームワークごとの小さなヒストグラム）。stats が null なら件数が少なく、棒を描かない。
  * bins は全部の行で共通の区切り（GroupHistogramChart の binEdges）での棒の件数。
  */
@@ -1596,8 +1619,6 @@ export type RangeChartRow = {
   count: number;
   stats: { median: number; bins: readonly number[] } | null;
   mine: boolean;
-  /** 描くが件数がまだ少ない行（件数に ※ を付け、読み上げに「形は参考程度」と添える。D-198）。 */
-  few?: boolean;
 };
 
 /** 比較の図を 3 列（名前｜棒｜件数）にする最少の幅。これより狭ければ、名前と件数の下に棒を全幅で入れる 2 段組み。 */
@@ -1712,7 +1733,8 @@ export function groupRangeLayout(
 export function GroupHistogramChart({
   rows,
   binEdges,
-  value,
+  value: given,
+  hideMine = false,
   format,
   label,
   emptyText,
@@ -1722,12 +1744,15 @@ export function GroupHistogramChart({
   binEdges: readonly number[];
   /** 自分の値（無ければ縦の線と「あなた」を出さない。D-197）。 */
   value?: number;
+  /** 切り替えの読み込み中で、自分の線と「あなた」をまだ出さない（前の範囲の上に新しい値を置かない。D-200）。 */
+  hideMine?: boolean;
   format: (n: number) => string;
   /** 読み上げの名前（図全体）。 */
   label: string;
   /** 0 件の行の文（例: まだ 0 件です）。 */
   emptyText: (count: number) => string;
 }) {
+  const value = hideMine ? undefined : given;
   const [ref, width] = useWidth<HTMLDivElement>();
   const L = width > 0 ? groupRangeLayout(width, rows, value, binEdges) : null;
   return (
@@ -1777,9 +1802,8 @@ export function GroupHistogramChart({
                     fill="var(--text-primary)"
                     className="tabular-nums"
                     data-group-count
-                    data-few={r.few ? 'true' : undefined}
                   >
-                    {r.count} 件{r.few ? '※' : ''}
+                    {r.count} 件
                   </text>
                   <line
                     x1={L.bandX0}
@@ -1792,7 +1816,7 @@ export function GroupHistogramChart({
                   {r.stats ? (
                     <g
                       role="img"
-                      aria-label={`${r.label}: ${r.count} 件・中央値 ${format(r.stats.median)}${r.few ? `・まだ ${r.count} 件なので、形は参考程度です` : ''}`}
+                      aria-label={`${r.label}: ${r.count} 件・中央値 ${format(r.stats.median)}`}
                       data-group-hist
                     >
                       {bins.map((n, k) => {
@@ -1899,5 +1923,37 @@ export function GroupHistogramChart({
         )}
       </div>
     </figure>
+  );
+}
+
+/**
+ * 比較の図の最初の読み込み中に出すスケルトン（D-200）。rows 行ぶんの高さ（GroupHistogramChart と同じ配置の計算）を取る。
+ * 行の数は届くまで分からないので、呼ぶ側の見込みの数で取る。「あなた」の線は出さない。
+ */
+export function GroupChartSkeleton({ rows }: { rows: number }) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const L =
+    width > 0
+      ? groupRangeLayout(width, Array(rows).fill(0), undefined, [])
+      : null;
+  return (
+    <div ref={ref} aria-hidden className="w-full" data-group-skeleton>
+      {L && (
+        <div className="relative" style={{ height: L.height }}>
+          {Array.from({ length: rows }, (_, i) => (
+            <span
+              key={i}
+              className="absolute block rounded bg-base-content/10"
+              style={{
+                top: L.histTop(i),
+                height: L.baseY(i) - L.histTop(i),
+                left: L.bandX0,
+                width: L.bandX1 - L.bandX0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

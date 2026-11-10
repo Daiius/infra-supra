@@ -5,11 +5,10 @@
 // localStorage（STATS_BREAKDOWN_KEY）に覚える。VITE_STATS_ENABLED が無ければ取りに行かない（開発の VITE_STATS_MOCK は架空の値）。
 import { FRAMEWORKS, RESULT_AXES, STACKS, type ResultAxisId } from 'game';
 import { useEffect, useMemo, useState } from 'react';
-import { GroupHistogramChart } from './charts.tsx';
+import { GroupChartSkeleton, GroupHistogramChart } from './charts.tsx';
 import {
   DEFAULT_BREAKDOWN_PREFS,
   groupRowsOf,
-  MIN_RANKED_COUNT,
   parseBreakdownPrefs,
   STATS_BREAKDOWN_KEY,
   STATS_FILTER_LABEL,
@@ -154,7 +153,8 @@ export function filterName(
 
 /**
  * 結果の画面の 4 軸の振り返り（ResultAxesPanel）に、絞り込みのチップと比較の図を足したもの。
- * 全部の分布が出ているとき（ready）だけチップを出し、比較の図は全部の分布が取れたとき（ready・few）に出す。
+ * 全部の分布が出ているとき（ready）だけチップを出し、比較の図は全部の分布が取れたとき（ready・few）に出す。全部の分布の
+ * 読み込み中は、比較の図の場所にスケルトンを出して取りに行かない（D-200）。絞り込みの読み込み中は「あなた」の印を出さない。
  */
 export function ResultStatsSection({
   comparisons,
@@ -227,6 +227,7 @@ export function ResultStatsSection({
           outages={outages}
           {...(cashGuide !== undefined ? { cashGuide } : {})}
           {...(shownFilter ? { filter: shownFilter } : {})}
+          hideMine={loading}
         >
           {base && query && (
             <div className="mb-2 space-y-1" data-stats-filter-chips>
@@ -250,17 +251,21 @@ export function ResultStatsSection({
           )}
         </ResultAxesPanel>
       </div>
-      {query && (stats.status === 'ready' || stats.status === 'few') && (
-        <GroupCompare
-          scenarioId={query.scenarioId}
-          seed={query.seed}
-          value={query.axes[prefs.axis]}
-          mine={query}
-          by={prefs.by}
-          axis={prefs.axis}
-          onChange={update}
-        />
-      )}
+      {query &&
+        (stats.status === 'ready' ||
+          stats.status === 'few' ||
+          stats.status === 'loading') && (
+          <GroupCompare
+            scenarioId={query.scenarioId}
+            seed={query.seed}
+            value={query.axes[prefs.axis]}
+            mine={query}
+            by={prefs.by}
+            axis={prefs.axis}
+            defer={stats.status === 'loading'}
+            onChange={update}
+          />
+        )}
     </>
   );
 }
@@ -268,6 +273,8 @@ export function ResultStatsSection({
 /**
  * 構成ごと（フレームワークごと）の分布の比較の図（全シード）。結果の画面と統計の画面（D-197）で共用する。
  * value・mine が無ければ（統計の画面でまだ完走していない）自分の線と「（あなた）」の行を出さない。
+ * 最初の読み込み（まだ 1 度も取れていない・defer の間）は同じ高さのスケルトンを出し、切り替えの読み込み中は前の図を薄く残して
+ * 自分の線と「あなた」を出さない（前の範囲の上に新しい値を置くと、届いたときに跳ぶため。D-200）。
  */
 export function GroupCompare({
   scenarioId,
@@ -276,6 +283,7 @@ export function GroupCompare({
   mine,
   by,
   axis,
+  defer = false,
   onChange,
 }: {
   scenarioId: string;
@@ -287,6 +295,8 @@ export function GroupCompare({
   mine?: { stackId: string; framework: string } | undefined;
   by: GroupBy;
   axis: ResultAxisId;
+  /** まだ取りに行かずスケルトンを出す（全体の分布の読み込み中。D-200）。 */
+  defer?: boolean;
   onChange: (p: Partial<StatsBreakdownPrefs>) => void;
 }) {
   const keys = useMemo(() => groupKeys(by), [by]);
@@ -296,6 +306,7 @@ export function GroupCompare({
     data: GroupsView | null;
   } | null>(null);
   useEffect(() => {
+    if (defer) return;
     let alive = true;
     void loadGroups({
       scenarioId,
@@ -310,8 +321,8 @@ export function GroupCompare({
     return () => {
       alive = false;
     };
-    // 取り直すのは分け方・軸・プレイ（reqKey）が変わったときだけ
-  }, [reqKey]);
+    // 取り直すのは分け方・軸・プレイ（reqKey）が変わったときと、待つのをやめたときだけ
+  }, [reqKey, defer]);
   const cur = res?.key === reqKey ? res : null;
   // 読み込み中は前の図を薄くして残す（形が跳ねないように）
   const data = cur ? cur.data : (res?.data ?? null);
@@ -336,8 +347,7 @@ export function GroupCompare({
         全シードの完走を{byName}
         ごとに分けて（集計にまだ無い{byName}
         の行は出しません）、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値
-        {value !== undefined ? '、縦の線はあなたの値' : ''}です。 件数に ※
-        の付いた行はまだ {MIN_RANKED_COUNT} 件未満なので、形は参考程度です。
+        {value !== undefined ? '、縦の線はあなたの値' : ''}です。
         {data?.mock && '開発用の架空の値です（遊んだ人の結果ではありません）。'}
       </p>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -381,6 +391,7 @@ export function GroupCompare({
             rows={rows}
             binEdges={data!.binEdges}
             {...(value !== undefined ? { value } : {})}
+            hideMine={!cur}
             format={format}
             label={`${byName}ごとの${def.label}の分布（ヒストグラムと中央値）`}
             emptyText={(n) => `まだ ${n} 件です`}
@@ -406,7 +417,6 @@ export function GroupCompare({
                     </td>
                     <td className="text-right" data-group-table-count>
                       {r.count}
-                      {r.few && ' ※'}
                     </td>
                     <td className="text-right">{format(r.stats.p25)}</td>
                     <td className="text-right">{format(r.stats.median)}</td>
@@ -417,12 +427,19 @@ export function GroupCompare({
             </table>
           </details>
         </div>
-      ) : (
-        <p className="text-xs opacity-70" data-group-status>
-          {cur
-            ? `${byName}ごとの分布を読み込めませんでした。`
-            : '読み込んでいます。'}
+      ) : cur ? (
+        <p className="text-xs opacity-70" data-group-status="failed">
+          {`${byName}ごとの分布を読み込めませんでした。`}
         </p>
+      ) : (
+        // 最初の読み込み: 全部の行が揃ったときと同じ高さ（行は並びの数で見込む）と「数値で見る」の行を取っておく
+        <div aria-busy data-group-status="loading">
+          <span className="sr-only">読み込んでいます。</span>
+          <GroupChartSkeleton rows={keys.length} />
+          <div aria-hidden className="mt-2 text-xs">
+            <span className="inline-block h-2 w-16 rounded-full bg-base-content/10" />
+          </div>
+        </div>
       )}
     </section>
   );

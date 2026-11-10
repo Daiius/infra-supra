@@ -2,9 +2,8 @@
 // 1 つの点数にはまとめず、軸ごとに並べる（prd/07 §7・prd/15 §2）。分布が無い・取れない・少ないときは手元の履歴との比較だけを出す（段 1 のまま）。
 import type { ResultAxisId } from 'game';
 import type { ReactNode } from 'react';
-import { HistogramChart } from './charts.tsx';
+import { HistogramChart, HistogramSkeleton } from './charts.tsx';
 import {
-  fewNote,
   MIN_RANKED_COUNT,
   rankBasisOf,
   TOP_PERCENT,
@@ -51,7 +50,7 @@ export function cashGuideText(cash: number, guide: number): string {
 
 /**
  * 分布の 1 本（同じシード / 全シード）: 数値の要約をテキストで出し、その下にヒストグラム。集計に 1 件でもあれば描き、
- * MIN_RANKED_COUNT 件未満のうちは上位 % を出さず中央値を出して「形は参考程度」と添える（D-198）。
+ * MIN_RANKED_COUNT 件未満のうちは上位 % を出さず中央値を出す（D-198。注記は添えない。D-199）。
  */
 function DistributionRow({
   kind,
@@ -59,6 +58,7 @@ function DistributionRow({
   axis,
   directed,
   value,
+  hideMine,
 }: {
   kind: 'seed' | 'all';
   /** 集計に 1 件も無ければ null。 */
@@ -67,6 +67,8 @@ function DistributionRow({
   /** 向きを持たない軸（④ 費用の合計）は上位 % の代わりに中央値を出す（D-166）。 */
   directed: boolean;
   value: number;
+  /** 切り替えの読み込み中で、前の分布の上に「あなた」の印を出さない（D-200）。 */
+  hideMine: boolean;
 }) {
   const name = kind === 'seed' ? '同じシード' : '全シード';
   const median = standing?.histogram.median;
@@ -81,7 +83,6 @@ function DistributionRow({
       data-top-percent={
         directed && standing?.ranked ? standing.topPercent : undefined
       }
-      data-dist-few={standing && !standing.ranked ? 'true' : undefined}
     >
       <div className="text-xs" data-dist-summary>
         <span className="font-semibold">{name}</span>{' '}
@@ -94,17 +95,17 @@ function DistributionRow({
           <span className="opacity-70">{name}の完走はまだ集計にありません</span>
         )}
       </div>
-      {standing && !standing.ranked && (
-        <div className="text-xs opacity-70" data-dist-few-note>
-          {fewNote(standing.n)}
-          {directed && `上位 % は ${MIN_RANKED_COUNT} 件から出します。`}
+      {standing && !standing.ranked && directed && (
+        <div className="text-xs opacity-70" data-dist-rank-note>
+          上位 % は {MIN_RANKED_COUNT} 件から出します。
         </div>
       )}
       {standing && (
         <HistogramChart
           bins={standing.histogram.bins}
           value={value}
-          label={`${name}の分布（${summary}${standing.ranked ? '' : `。${fewNote(standing.n)}`}）`}
+          hideMine={hideMine}
+          label={`${name}の分布（${summary}）`}
         />
       )}
     </div>
@@ -154,6 +155,7 @@ export function ResultAxesPanel({
   cashGuide,
   size = 'md',
   filter,
+  hideMine = false,
   children,
 }: {
   comparisons: readonly AxisComparison[];
@@ -169,6 +171,8 @@ export function ResultAxesPanel({
    * 「★ 上位」の印を決める全部の構成の分布（見るためだけの絞り込みで、上位の判定は変えない）。
    */
   filter?: { name: string; top: DistributionView | null };
+  /** 絞り込みの読み込み中（前の分布を薄く残している間）で、「あなた」の印を出さない（D-200）。 */
+  hideMine?: boolean;
   /** 注記と 4 軸の間に置くもの（絞り込みのチップ）。 */
   children?: ReactNode;
 }) {
@@ -237,6 +241,7 @@ export function ResultAxesPanel({
                     axis={c.id}
                     directed={c.directed}
                     value={c.value}
+                    hideMine={hideMine}
                   />
                   <DistributionRow
                     kind="all"
@@ -244,10 +249,28 @@ export function ResultAxesPanel({
                     axis={c.id}
                     directed={c.directed}
                     value={c.value}
+                    hideMine={hideMine}
                   />
                 </div>
               )}
-              {!d && c.count > 0 && (
+              {stats.status === 'loading' && (
+                // 最初の読み込み: 分布が出たときと同じ高さ（同じシード・全シードの 2 本）のスケルトン。「あなた」の印は出さない（D-200）
+                <div
+                  className="mt-2 space-y-2"
+                  aria-hidden
+                  data-axis-distribution-skeleton
+                >
+                  {[0, 1].map((k) => (
+                    <div key={k}>
+                      <div className="flex h-4 items-center">
+                        <span className="block h-2 w-2/3 rounded-full bg-base-content/10" />
+                      </div>
+                      <HistogramSkeleton mineSpace />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!d && stats.status !== 'loading' && c.count > 0 && (
                 <ul className="mt-1 space-y-0.5 text-xs">
                   {c.best !== undefined && (
                     <li>
