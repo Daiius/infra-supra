@@ -509,7 +509,12 @@ export function App() {
           onClose={() => setConfirmRestart(false)}
         />
       )}
-      <main key={resetGen} className="mx-auto max-w-5xl space-y-4 p-2 sm:p-4">
+      {/* 最小の高さを画面の高さにして、フッターをいつも画面の外に置く（読み込み中の短いページから長いページに替わるとき、
+          フッターが押し出されて CLS に数えられないように。D-196） */}
+      <main
+        key={resetGen}
+        className="mx-auto min-h-screen max-w-5xl space-y-4 p-2 sm:p-4"
+      >
         <Suspense fallback={<Loading />}>
           {mode === 'estimate' ? (
             <EstimateMode />

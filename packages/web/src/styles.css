@@ -22,6 +22,12 @@
   color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
 }
 
+/* スクロールバーの場所をいつも空ける（D-196）。場所を取るスクロールバーの環境では、読み込み中の短いページから長いページに替わると
+   スクロールバーが出て中央寄せの全体が横にずれ、CLS 0.727 に数えられていた */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* 日本語の折り返し: 文節で折り返す（Chrome 119+。非対応のブラウザでは無視される）・行末の 1 文字の取り残しを避ける。
    見出しは行の長さを揃える。数値と単位は個別に whitespace-nowrap で切らない */
 body {
