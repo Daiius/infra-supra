@@ -557,4 +557,107 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     ).toContain('開発用の架空の分布です');
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('W-109b 読み込み中は「あなた」の印を出さない: 最初は同じ高さのスケルトン、絞り込みの切り替え中は前の分布を薄く残して印だけ隠し、届いたら出す（D-200）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    // 分布の取得を手で止める（全部の分布・絞った分布のどちらも）
+    let release!: () => void;
+    let gate = new Promise<void>((r) => (release = r));
+    const inner = statsFetch(() => distribution(20, 12, false));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        if (
+          new URL(String(input), 'http://x').pathname ===
+          '/api/results/distribution'
+        )
+          await gate;
+        return inner(input, init);
+      }),
+    );
+    await finish();
+    await waitFor(() => expect(resultAxes()?.dataset.stats).toBe('loading'));
+    const axes = resultAxes()!;
+    // 最初の読み込み: 4 軸ともスケルトン・比較の図もスケルトンで、まだ取りに行かない。「あなた」の印は無い
+    expect(
+      axes.querySelectorAll('[data-axis-distribution-skeleton]'),
+    ).toHaveLength(4);
+    expect(axes.querySelectorAll('[data-histogram-skeleton]')).toHaveLength(8);
+    expect(axes.querySelector('[data-histogram]')).toBeNull();
+    expect(compare().querySelector('[data-group-skeleton]')).not.toBeNull();
+    expect(compare().querySelector('[data-group-mine-line]')).toBeNull();
+    expect(callsTo(inner, '/api/results/groups')).toHaveLength(0);
+    release();
+    await ready();
+    // 届いたら印を出す
+    await waitFor(() =>
+      expect(compare().querySelector('[data-group-mine-line]')).not.toBeNull(),
+    );
+    expect(
+      resultAxes()!.querySelector('[data-axis-distribution-skeleton]'),
+    ).toBeNull();
+    expect(
+      resultAxes()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
+    ).toHaveLength(8);
+    expect(compare().querySelector('[data-group-skeleton]')).toBeNull();
+
+    // 絞り込みの切り替え中: 前の分布の棒は薄く残すが、「あなた」の印は出さない
+    gate = new Promise<void>((r) => (release = r));
+    fireEvent.click(chip('filter', 'stack'));
+    await waitFor(() =>
+      expect(
+        resultAxes()!.closest('[data-stats-filter]')!.getAttribute('aria-busy'),
+      ).toBe('true'),
+    );
+    expect(resultAxes()!.querySelectorAll('[data-histogram]')).toHaveLength(8);
+    expect(
+      resultAxes()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
+    ).toHaveLength(0);
+    expect(resultAxes()!.querySelector('[data-histogram-mine]')).toBeNull();
+    release();
+    await waitFor(() =>
+      expect(
+        resultAxes()!.querySelector('[data-result-compare-note]')!.textContent,
+      ).toContain('同じインフラ'),
+    );
+    expect(
+      resultAxes()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
+    ).toHaveLength(8);
+  });
+
+  it('W-109c 比較の図は軸を切り替えている間、前の図を薄く残して自分の線と「あなた」を出さない（D-200）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    let release: () => void = () => {};
+    let gate: Promise<void> | null = null;
+    const inner = statsFetch();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        if (
+          gate &&
+          new URL(String(input), 'http://x').pathname === '/api/results/groups'
+        )
+          await gate;
+        return inner(input, init);
+      }),
+    );
+    await finish();
+    await ready();
+    await waitFor(() =>
+      expect(compare().querySelector('[data-group-mine-line]')).not.toBeNull(),
+    );
+    gate = new Promise<void>((r) => (release = r));
+    fireEvent.click(chip('axis', 'satisfaction'));
+    await waitFor(() =>
+      expect(compare().querySelector('[aria-busy="true"]')).not.toBeNull(),
+    );
+    expect(compare().querySelector('[data-group-hist]')).not.toBeNull();
+    expect(compare().querySelector('[data-group-mine-line]')).toBeNull();
+    expect(compare().querySelector('[data-group-mine-label]')).toBeNull();
+    release();
+    await waitFor(() =>
+      expect(compare().querySelector('[data-group-mine-line]')).not.toBeNull(),
+    );
+    expect(compare().querySelector('[aria-busy="true"]')).toBeNull();
+  });
 });

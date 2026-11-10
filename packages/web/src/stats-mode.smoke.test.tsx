@@ -365,4 +365,61 @@ describe('統計の画面（D-197）', () => {
     expect(page()!.textContent).toContain('開発用の架空の分布です');
     expect(page()!.querySelectorAll('[data-histogram]')).toHaveLength(4);
   });
+
+  it('W-117 読み込み中は「あなた」の印を出さない: 最初は同じ高さのスケルトン、シナリオの切り替え中は前の分布を薄く残して印だけ隠し、届いたら出す（D-200）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    storeResults([{}, { scenarioId: 'contract-operations', seed: 7 }]);
+    let release!: () => void;
+    let gate = new Promise<void>((r) => (release = r));
+    const inner = statsFetch();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        if (
+          new URL(String(input), 'http://x').pathname ===
+          '/api/results/distribution'
+        )
+          await gate;
+        return inner(input);
+      }),
+    );
+    await openStats();
+    expect(page()!.dataset.statsStatus).toBe('loading');
+    // 最初の読み込み: 4 軸ともスケルトン。「あなた」の印と値・比較の図の自分の線は出さない
+    expect(page()!.querySelectorAll('[data-axis-skeleton]')).toHaveLength(4);
+    expect(page()!.querySelectorAll('[data-histogram-skeleton]')).toHaveLength(
+      4,
+    );
+    expect(page()!.querySelector('[data-histogram]')).toBeNull();
+    expect(page()!.querySelector('[data-axis-own]')).toBeNull();
+    expect(page()!.querySelector('[data-group-skeleton]')).not.toBeNull();
+    expect(page()!.querySelector('[data-group-mine-line]')).toBeNull();
+    expect(callsTo(inner, '/api/results/groups')).toHaveLength(0);
+    release();
+    await ready();
+    await waitFor(() =>
+      expect(page()!.querySelector('[data-group-mine-line]')).not.toBeNull(),
+    );
+    expect(page()!.querySelector('[data-axis-skeleton]')).toBeNull();
+    expect(
+      page()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
+    ).toHaveLength(4);
+    expect(page()!.querySelectorAll('[data-axis-own]')).toHaveLength(4);
+
+    // シナリオの切り替え中: 前の分布は薄く残すが、新しいシナリオの自分の値を前の範囲の上に置かない
+    gate = new Promise<void>((r) => (release = r));
+    fireEvent.click(chip('scenario', 'contract-operations'));
+    await waitFor(() => expect(page()!.dataset.statsStatus).toBe('loading'));
+    expect(page()!.querySelectorAll('[data-histogram]')).toHaveLength(4);
+    expect(
+      page()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
+    ).toHaveLength(0);
+    expect(page()!.querySelector('[data-histogram-mine]')).toBeNull();
+    expect(page()!.querySelector('[data-axis-own]')).toBeNull();
+    release();
+    await ready();
+    expect(
+      page()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
+    ).toHaveLength(4);
+  });
 });
