@@ -13,6 +13,7 @@ import {
   robotsTxt,
   siteOrigin,
   sitemapXml,
+  statsFlag,
 } from './src/site-meta.ts';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -62,12 +63,13 @@ function ogImageMeta(siteUrl: string | undefined): Plugin {
  * サイトとして配るもの（D-194。中身は src/site-meta.ts）。
  * - canonical の link を index.html に足す（VITE_SITE_URL があるときだけ。見積モードでは画面が href を /?mode=estimate に替える）
  * - ビルドの出力に robots.txt（常に）と sitemap.xml（VITE_SITE_URL があるときだけ）を書き出す。dev でも同じ中身を返す
+ * - sitemap の統計の画面（/?mode=stats）は VITE_STATS_ENABLED が立っているときだけ載せる（D-197）
  */
-function siteFiles(siteUrl: string | undefined): Plugin {
+function siteFiles(siteUrl: string | undefined, stats: boolean): Plugin {
   const origin = siteOrigin(siteUrl);
   const files: Record<string, string | undefined> = {
     'robots.txt': robotsTxt(origin),
-    'sitemap.xml': sitemapXml(origin),
+    'sitemap.xml': sitemapXml(origin, stats),
   };
   const canonical = canonicalUrl(origin);
   return {
@@ -122,7 +124,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       watchWorkspacePackages(),
       ogImageMeta(env.VITE_SITE_URL),
-      siteFiles(env.VITE_SITE_URL),
+      siteFiles(env.VITE_SITE_URL, statsFlag(env.VITE_STATS_ENABLED)),
     ],
     // og.html（OGP の画像の書き出し用。D-191）は dev でだけ開く。build の input は既定の index.html だけなので本番には含めない
     build: {

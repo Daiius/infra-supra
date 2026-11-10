@@ -30,14 +30,14 @@ import {
   type StatsQuery,
 } from './stats-client.ts';
 
-const AXIS_FORMAT: Record<ResultAxisId, (n: number) => string> = {
+export const AXIS_FORMAT: Record<ResultAxisId, (n: number) => string> = {
   cash: usd,
   satisfaction: (n) => n.toFixed(2),
   featurePoints: (n) => String(Number(n.toFixed(1))),
   totalCost: usd,
 };
 
-const AXIS_MARK: Record<ResultAxisId, string> = {
+export const AXIS_MARK: Record<ResultAxisId, string> = {
   cash: '①',
   satisfaction: '②',
   featurePoints: '③',
@@ -45,8 +45,9 @@ const AXIS_MARK: Record<ResultAxisId, string> = {
 };
 
 /** 構成の名前（STACKS の id → 名前。知らない id はそのまま）。 */
-const stackLabel = (id: string) => STACKS.find((s) => s.id === id)?.name ?? id;
-const frameworkLabel = (id: string) =>
+export const stackLabel = (id: string) =>
+  STACKS.find((s) => s.id === id)?.name ?? id;
+export const frameworkLabel = (id: string) =>
   (FRAMEWORKS as Record<string, { label: string } | undefined>)[id]?.label ??
   id;
 
@@ -76,8 +77,20 @@ function storePrefs(p: StatsBreakdownPrefs): void {
   }
 }
 
+/** 選んだ絞り込み・比較の図の軸と分け方（結果の画面と統計の画面で同じ記録を使う。D-197）。 */
+export function useBreakdownPrefs() {
+  const [prefs, setPrefs] = useState<StatsBreakdownPrefs>(loadPrefs);
+  const update = (p: Partial<StatsBreakdownPrefs>) =>
+    setPrefs((cur) => {
+      const next = { ...cur, ...p };
+      storePrefs(next);
+      return next;
+    });
+  return [prefs, update] as const;
+}
+
 /** 小さな選択のチップ（1 つだけ選ぶ）。 */
-function Chips<T extends string>({
+export function Chips<T extends string>({
   label,
   options,
   value,
@@ -123,7 +136,10 @@ function Chips<T extends string>({
 }
 
 /** 絞り込みの名前（注記に出す）。 */
-function filterName(filter: StatsFilter, q: StatsQuery): string {
+export function filterName(
+  filter: StatsFilter,
+  q: { stackId: string; framework: string },
+): string {
   switch (filter) {
     case 'all':
       return '';
@@ -154,13 +170,7 @@ export function ResultStatsSection({
   /** 自分のプレイの構成など（無ければチップと比較の図を出さない）。 */
   query: StatsQuery | null;
 }) {
-  const [prefs, setPrefs] = useState<StatsBreakdownPrefs>(loadPrefs);
-  const update = (p: Partial<StatsBreakdownPrefs>) =>
-    setPrefs((cur) => {
-      const next = { ...cur, ...p };
-      storePrefs(next);
-      return next;
-    });
+  const [prefs, update] = useBreakdownPrefs();
   const base = stats.status === 'ready' ? stats.view : null;
   const filter = base && query ? prefs.filter : 'all';
   // 絞った分布（チップを替えるたびに取る）。読み込み中は前の表示を薄くして残す
@@ -242,7 +252,10 @@ export function ResultStatsSection({
       </div>
       {query && (stats.status === 'ready' || stats.status === 'few') && (
         <GroupCompare
-          query={query}
+          scenarioId={query.scenarioId}
+          seed={query.seed}
+          value={query.axes[prefs.axis]}
+          mine={query}
           by={prefs.by}
           axis={prefs.axis}
           onChange={update}
@@ -252,21 +265,32 @@ export function ResultStatsSection({
   );
 }
 
-/** 構成ごと（フレームワークごと）の分布の比較の図（全シード）。 */
-function GroupCompare({
-  query,
+/**
+ * 構成ごと（フレームワークごと）の分布の比較の図（全シード）。結果の画面と統計の画面（D-197）で共用する。
+ * value・mine が無ければ（統計の画面でまだ完走していない）自分の線と「（あなた）」の行を出さない。
+ */
+export function GroupCompare({
+  scenarioId,
+  seed,
+  value,
+  mine,
   by,
   axis,
   onChange,
 }: {
-  query: StatsQuery;
+  scenarioId: string;
+  /** 架空の値の乱数の元（サーバーの口には付けない。全シード）。 */
+  seed: number;
+  /** 選んだ軸の自分の値。 */
+  value?: number;
+  /** 自分のプレイの構成・フレームワーク（その行を強調する）。 */
+  mine?: { stackId: string; framework: string } | undefined;
   by: GroupBy;
   axis: ResultAxisId;
   onChange: (p: Partial<StatsBreakdownPrefs>) => void;
 }) {
   const keys = useMemo(() => groupKeys(by), [by]);
-  const value = query.axes[axis];
-  const reqKey = `${by}:${axis}:${query.scenarioId}:${query.seed}`;
+  const reqKey = `${by}:${axis}:${scenarioId}:${seed}:${value ?? ''}`;
   const [res, setRes] = useState<{
     key: string;
     data: GroupsView | null;
@@ -274,11 +298,11 @@ function GroupCompare({
   useEffect(() => {
     let alive = true;
     void loadGroups({
-      scenarioId: query.scenarioId,
-      seed: query.seed,
+      scenarioId,
+      seed,
       axis,
       by,
-      value,
+      ...(value !== undefined ? { value } : {}),
       keys: keys.map((k) => k.key),
     }).then((data) => {
       if (alive) setRes({ key: reqKey, data });
@@ -291,7 +315,7 @@ function GroupCompare({
   const cur = res?.key === reqKey ? res : null;
   // 読み込み中は前の図を薄くして残す（形が跳ねないように）
   const data = cur ? cur.data : (res?.data ?? null);
-  const mineKey = by === 'stack' ? query.stackId : query.framework;
+  const mineKey = mine ? (by === 'stack' ? mine.stackId : mine.framework) : '';
   const rows = data ? groupRowsOf(data.groups, keys, mineKey) : null;
   const def = RESULT_AXES.find((a) => a.id === axis)!;
   const format = AXIS_FORMAT[axis];
@@ -310,7 +334,8 @@ function GroupCompare({
       </h3>
       <p className="mb-2 text-xs opacity-70">
         全シードの完走を{byName}
-        ごとに分けて、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値、縦の線はあなたの値です。
+        ごとに分けて、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値
+        {value !== undefined ? '、縦の線はあなたの値' : ''}です。
         {MIN_DISTRIBUTION_COUNT} 件未満の行は棒を出しません。
         {data?.mock && '開発用の架空の値です（遊んだ人の結果ではありません）。'}
       </p>
@@ -340,7 +365,7 @@ function GroupCompare({
         {def.directed
           ? `${def.label}は右ほど上位です。`
           : `${def.label}は高い・低いで良し悪しを付けません。`}
-        あなたの値は {format(value)} です。
+        {value !== undefined && `あなたの値は ${format(value)} です。`}
       </p>
       {rows ? (
         <div
@@ -350,7 +375,7 @@ function GroupCompare({
           <GroupHistogramChart
             rows={rows}
             binEdges={data!.binEdges}
-            value={value}
+            {...(value !== undefined ? { value } : {})}
             format={format}
             label={`${byName}ごとの${def.label}の分布（ヒストグラムと中央値）`}
             emptyText={(n) => `まだ ${n} 件です`}

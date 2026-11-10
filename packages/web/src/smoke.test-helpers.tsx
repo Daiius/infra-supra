@@ -103,6 +103,7 @@ export function useSmokeEnv() {
     await Promise.all([
       import('./game-screen.tsx'),
       import('./estimate/estimate-mode.tsx'),
+      import('./stats-mode.tsx'),
     ]);
   }, 30_000);
   beforeEach(() => {

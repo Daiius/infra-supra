@@ -254,8 +254,12 @@ function persistResultLocked(
   locks.request(RESULTS_KEY, run).catch(() => run());
 }
 
-/** 見積モードとゲームモードの切り替え（D-73）。見積モードは URL の mode=estimate で開く（入力もクエリに残る）。 */
-type Mode = 'game' | 'estimate';
+/**
+ * 見積モードとゲームモードの切り替え（D-73）。見積モードは URL の mode=estimate で開く（入力もクエリに残る）。
+ * 統計（D-197）は mode=stats。集計が無効（VITE_STATS_ENABLED も開発の VITE_STATS_MOCK も無い）ならタブを出さず、
+ * mode=stats で直接来てもゲームを開く（URL からも外す）。
+ */
+type Mode = 'game' | 'estimate' | 'stats';
 /** 見積モードは開いたときに読む（ゲームの画面の初回の読み込みに含めない）。 */
 const EstimateMode = lazy(() =>
   import('./estimate/estimate-mode.tsx').then((m) => ({
@@ -266,10 +270,16 @@ const EstimateMode = lazy(() =>
 const Game = lazy(() =>
   import('./game-screen.tsx').then((m) => ({ default: m.Game })),
 );
-const initialMode = (): Mode =>
-  new URLSearchParams(window.location.search).get('mode') === 'estimate'
-    ? 'estimate'
-    : 'game';
+/** 統計の画面も開いたときに読む（D-197）。 */
+const StatsMode = lazy(() =>
+  import('./stats-mode.tsx').then((m) => ({ default: m.StatsMode })),
+);
+const initialMode = (): Mode => {
+  const m = new URLSearchParams(window.location.search).get('mode');
+  if (m === 'estimate') return 'estimate';
+  if (m === 'stats' && statsViewEnabled()) return 'stats';
+  return 'game';
+};
 
 export function App() {
   const [session, setSession] = useState<Session | null>(loadSession);
@@ -319,15 +329,23 @@ export function App() {
     }).then((view) => setStats((cur) => (cur?.id === id ? { id, view } : cur)));
   }, [session, results]);
   const [mode, setMode] = useState<Mode>(initialMode);
+  // 集計が無効のビルドに mode=stats で来たらゲームを開くので、URL からも外す（D-197）
+  useEffect(() => {
+    if (
+      mode === 'game' &&
+      new URLSearchParams(window.location.search).get('mode') === 'stats'
+    )
+      window.history.replaceState(null, '', window.location.pathname);
+  }, []);
   // canonical（D-194。VITE_SITE_URL があるときだけビルドで index.html に入る）を今のモードのページに合わせる。
-  // 見積の入力のクエリは載せず、トップか /?mode=estimate のどちらか（sitemap と同じ 2 つ）にする
+  // 見積の入力のクエリは載せず、トップか /?mode=estimate・/?mode=stats のどれか（sitemap と同じ。D-197）にする
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>(
       'link[rel="canonical"]',
     );
     if (!link) return;
     const url = new URL('/', link.href);
-    if (mode === 'estimate') url.searchParams.set('mode', 'estimate');
+    if (mode !== 'game') url.searchParams.set('mode', mode);
     link.href = url.href;
   }, [mode]);
   // 「新しいゲーム」の確認のダイアログ（途中なら今のプレイが終わるので確かめる）
@@ -365,6 +383,13 @@ export function App() {
     // ゲームに戻るときは見積の入力を URL から外す（見積の入力は見積の画面が書く）
     if (m === 'game')
       window.history.replaceState(null, '', window.location.pathname);
+    // 統計は入力をクエリに持たない（D-197）。見積の入力は見積の画面が書く
+    if (m === 'stats')
+      window.history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}?mode=stats`,
+      );
     setMode(m);
     if (m === 'game' && !howto && !loadHowtoSeen()) setHowto({ first: true });
   };
@@ -393,7 +418,7 @@ export function App() {
         <h1 className="flex shrink-0 items-center pr-1 sm:pr-3">
           <Logo />
         </h1>
-        {/* モードの切り替え（D-194）: 画面全体を替える 2 つのボタン。タブの部品（role="tab"）にすると矢印キー・tabpanel が要るが、
+        {/* モードの切り替え（D-194）: 画面全体を替えるボタン（統計は集計が有効なときだけ。D-197）。タブの部品（role="tab"）にすると矢印キー・tabpanel が要るが、
             切り替わるのはページそのもの（URL も ?mode=estimate に替わる）なので、ナビの中のボタンにして今の方へ aria-current="page" を付ける。
             見た目は daisyUI の tabs のまま（tab-active と aria-current のどちらでも選んだ形になる） */}
         <nav aria-label="モード" className="tabs tabs-box tabs-sm shrink-0">
@@ -401,6 +426,7 @@ export function App() {
             [
               ['game', 'ゲーム'],
               ['estimate', '見積'],
+              ...(statsViewEnabled() ? ([['stats', '統計']] as const) : []),
             ] as const
           ).map(([m, label]) => (
             <button
@@ -518,6 +544,8 @@ export function App() {
         <Suspense fallback={<Loading />}>
           {mode === 'estimate' ? (
             <EstimateMode />
+          ) : mode === 'stats' ? (
+            <StatsMode results={results.entries} />
           ) : state ? (
             <Game
               // 新しく始めたとき・再開したときは作り直す（ダイアログの状態を引き継がない）

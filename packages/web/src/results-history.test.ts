@@ -5,6 +5,7 @@ import {
   parseSave,
   replaySave,
   ROUTE_STRATEGIES,
+  STACKS,
   withTurn,
   type ResultAxes,
   type SaveData,
@@ -156,7 +157,17 @@ describe('playId・resultEntryOf', () => {
     expect(e.outages).toBe(st.outages);
     expect(e.axes.cash).toBe(st.cash);
     expect(e.setup).toContain('Cloudflare');
+    // 統計の画面の絞り込みの元（D-197）
+    expect(e.stackId).toBe(STACKS[0]!.id);
+    expect(e.framework).toBe('nextjs');
     expect(parseResults(store([e])).entries).toEqual([e]);
+  });
+
+  it('構成・フレームワークの id は無くても読め、知らない id は捨てる（D-197）', () => {
+    const old = entry('a', axes(1));
+    expect(parseResults(store([old])).entries).toEqual([old]);
+    const bad = { ...old, stackId: 'nope', framework: 'nope' };
+    expect(parseResults(store([bad])).entries).toEqual([old]);
   });
 });
 

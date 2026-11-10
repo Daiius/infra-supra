@@ -25,6 +25,12 @@ export function siteOrigin(siteUrl: string | undefined): string | undefined {
 
 /** sitemap に載せるページ（トップ = ゲーム・見積モード）。オリジンからの相対。 */
 export const SITEMAP_PATHS = ['/', '/?mode=estimate'] as const;
+/** 統計の画面（D-197）。集計が有効なビルド（VITE_STATS_ENABLED）でだけ載せる（無効ならタブも出さず、開いてもゲームに戻るため）。 */
+export const STATS_PATH = '/?mode=stats';
+
+/** VITE_STATS_ENABLED が立っているか（stats-client.ts の statsEnabled と同じ読み方。ビルドの環境変数から）。 */
+export const statsFlag = (v: string | undefined): boolean =>
+  v === 'true' || v === '1';
 
 /** robots.txt の中身（全部を許可。オリジンがあれば Sitemap の行を足す）。 */
 export function robotsTxt(origin: string | undefined): string {
@@ -41,10 +47,14 @@ const escapeXml = (s: string) =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
 
-/** sitemap.xml の中身（オリジンが無ければ undefined = 出さない）。 */
-export function sitemapXml(origin: string | undefined): string | undefined {
+/** sitemap.xml の中身（オリジンが無ければ undefined = 出さない）。stats は統計の画面を載せるか（D-197）。 */
+export function sitemapXml(
+  origin: string | undefined,
+  stats = false,
+): string | undefined {
   if (!origin) return undefined;
-  const urls = SITEMAP_PATHS.map(
+  const paths = [...SITEMAP_PATHS, ...(stats ? [STATS_PATH] : [])];
+  const urls = paths.map(
     (p) => `  <url>\n    <loc>${escapeXml(`${origin}${p}`)}</loc>\n  </url>`,
   );
   return [

@@ -6,6 +6,7 @@ import {
   resultAxesOf,
   stackName,
   FRAMEWORKS,
+  STACKS,
   playContent,
   type EndReason,
   type GameState,
@@ -33,6 +34,12 @@ export type ResultEntry = {
   finishedAt: string;
   /** 構成の要約（構成の名前・フレームワーク）。 */
   setup: string;
+  /**
+   * 始めたときの構成の id（STACKS の id）とフレームワークの id（統計の画面の絞り込みに使う。D-197）。この欄を足す前の記録には無い
+   * （そのプレイでは絞り込みのチップを出さない）。知らない id は読むときに捨てる。
+   */
+  stackId?: string;
+  framework?: string;
   axes: ResultAxes;
   /** 止まった月の数（軸ではない。振り返りに出す）。 */
   outages: number;
@@ -76,6 +83,14 @@ function parseEntry(x: unknown): ResultEntry | null {
   const { id, scenarioId, seed, startDate, finishedAt, setup, axes, outages } =
     x;
   const end = x.end;
+  const stackId =
+    isStr(x.stackId) && STACKS.some((s) => s.id === x.stackId)
+      ? x.stackId
+      : undefined;
+  const framework =
+    isStr(x.framework) && Object.hasOwn(FRAMEWORKS, x.framework)
+      ? x.framework
+      : undefined;
   if (
     !isStr(id) ||
     !isStr(scenarioId) ||
@@ -98,6 +113,8 @@ function parseEntry(x: unknown): ResultEntry | null {
     startDate,
     finishedAt,
     setup,
+    ...(stackId !== undefined ? { stackId } : {}),
+    ...(framework !== undefined ? { framework } : {}),
     axes: Object.fromEntries(
       RESULT_AXES.map((a) => [a.id, axes[a.id] as number]),
     ) as ResultAxes,
@@ -165,6 +182,10 @@ export function resultEntryOf(
     startDate: save.startDate,
     finishedAt,
     setup: `${stackName(state.stackIndex, state.framework, false)}・${FRAMEWORKS[state.framework].label}`,
+    ...(STACKS[save.stackIndex]
+      ? { stackId: STACKS[save.stackIndex]!.id }
+      : {}),
+    framework: save.framework,
     axes: resultAxesOf(state),
     outages: state.outages,
     end: state.end!,

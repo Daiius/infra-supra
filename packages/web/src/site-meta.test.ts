@@ -7,6 +7,7 @@ import {
   robotsTxt,
   siteOrigin,
   sitemapXml,
+  statsFlag,
 } from './site-meta.ts';
 
 const webRoot = join(import.meta.dirname, '..');
@@ -47,6 +48,27 @@ describe('sitemap.xml', () => {
       'https://example.com/',
       'https://example.com/?mode=estimate',
     ]);
+  });
+  it('統計の画面（/?mode=stats）は集計が有効なビルドでだけ載せる（D-197）', () => {
+    const locs = (xml: string) =>
+      [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    expect(locs(sitemapXml('https://example.com', true)!)).toEqual([
+      'https://example.com/',
+      'https://example.com/?mode=estimate',
+      'https://example.com/?mode=stats',
+    ]);
+    expect(locs(sitemapXml('https://example.com', false)!)).not.toContain(
+      'https://example.com/?mode=stats',
+    );
+  });
+});
+
+describe('statsFlag', () => {
+  it('true か 1 のときだけ立っている（stats-client.ts の statsEnabled と同じ）', () => {
+    expect(statsFlag('true')).toBe(true);
+    expect(statsFlag('1')).toBe(true);
+    expect(statsFlag(undefined)).toBe(false);
+    expect(statsFlag('false')).toBe(false);
   });
 });
 

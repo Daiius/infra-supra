@@ -5,6 +5,17 @@ import { RESULT_AXES, type ResultAxes, type ResultAxisId } from 'game';
 import type { Distribution, GroupStat, Histogram } from 'stats';
 import { STATS_FILTERS, type StatsFilter } from './distribution.ts';
 
+/**
+ * 自分の値が無いとき（統計の画面でそのシナリオをまだ完走していない。D-197）に架空の値を散らす中心。
+ * 🔒 架空の値の元で、ゲームのバランスの値でも遊んだ人の結果でもない。
+ */
+export const MOCK_CENTER: ResultAxes = {
+  cash: 1600,
+  satisfaction: 0.8,
+  featurePoints: 60,
+  totalCost: 900,
+};
+
 /** 架空の分布の件数（全シード・同じシード）。 */
 const MOCK_COUNTS = { all: 120, seed: 24 } as const;
 
