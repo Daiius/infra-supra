@@ -37,7 +37,10 @@ const historyRows = () =>
     .slice(1)
     .map((r) => r.textContent);
 const rewindDialog = () =>
-  screen.getByRole('dialog', { name: /か月目に戻る$/ });
+  screen.getByRole('dialog', { name: '過去の月に戻る' });
+/** ヘッダーの「戻る…」（D-192。狭い画面ではアイコンだけなので名前は aria-label）。 */
+const headerRewind = () =>
+  screen.queryByRole('button', { name: '過去の月に戻る…' });
 
 /** 出来事のダイアログが開いていたら最後まで送って閉じる（戻った月でも開き直す。D-126・D-128）。 */
 function closeEventsIfOpen() {
@@ -66,11 +69,12 @@ const savedPrevious = () =>
   (JSON.parse(localStorage.getItem(SAVE_KEY)!) as SaveData).previous;
 
 describe('この月に戻る（D-128）', () => {
-  it('W-70 これまでの運営の行と今の月の欄から、確認のダイアログを経て過去の月に戻る。やめると戻らない', async () => {
+  it('W-70 これまでの運営の行とヘッダーの「戻る…」から、ダイアログを経て過去の月に戻る。やめると戻らない', async () => {
     await renderApp();
     await start();
-    // 1 か月目はまだ戻る先が無い
+    // 1 か月目はまだ戻る先が無い（ヘッダーにも出さない。D-192）
     expect(screen.queryByRole('button', { name: /^この月に戻る/ })).toBeNull();
+    expect(headerRewind()).toBeNull();
     advance(3);
     expectGameScreen(4);
     const before = historyRows();
@@ -84,6 +88,10 @@ describe('この月に戻る（D-128）', () => {
       within(historyCard()).getByRole('button', { name: '2 か月目に戻る' }),
     );
     const dialog = rewindDialog();
+    // 履歴の行から開くと、その行の月を選んだ状態
+    expect(
+      (within(dialog).getByLabelText('戻る先の月') as HTMLSelectElement).value,
+    ).toBe('2');
     expect(dialog.textContent).toContain(
       '2 か月目の行動を選ぶ前に戻ります。今の結果（4 か月目まで）は「前の試行」として 1 本だけ残ります。',
     );
@@ -101,13 +109,21 @@ describe('この月に戻る（D-128）', () => {
     expect(savedPrevious()).toHaveLength(3);
     expect(screen.getByText(/前の試行（4 か月目まで）/)).toBeDefined();
 
-    // 今の月の欄（行動の欄の上）からも戻れる。もう一度戻ると前の試行は上書き
-    const picker = document.querySelector<HTMLElement>('[data-rewind]')!;
-    fireEvent.change(within(picker).getByLabelText('戻る先の月'), {
-      target: { value: '1' },
-    });
-    fireEvent.click(
-      within(picker).getByRole('button', { name: 'この月に戻る…' }),
+    // 行動の欄の上には戻る欄を出さない（D-192）
+    expect(screen.queryByLabelText('戻る先の月')).toBeNull();
+    // ヘッダーの「戻る…」からも戻れる。既定は 1 つ前の月。もう一度戻ると前の試行は上書き
+    fireEvent.click(headerRewind()!);
+    const select = within(rewindDialog()).getByLabelText(
+      '戻る先の月',
+    ) as HTMLSelectElement;
+    expect(select.value).toBe('1');
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['1 か月目']);
+    expect(rewindDialog().textContent).toContain(
+      '選んだ月の行動を選ぶ前の状態に戻ります。',
     );
     expect(rewindDialog().textContent).toContain(
       '今ある前の試行（4 か月目まで）は上書きされます。',
@@ -122,6 +138,47 @@ describe('この月に戻る（D-128）', () => {
     // 戻った後も進められる
     advance(1);
     expectGameScreen(2);
+  });
+
+  it('W-192 ヘッダーの「戻る…」のダイアログで月を選び直して戻る。やめると戻らない', async () => {
+    await renderApp();
+    await start();
+    advance(3);
+    expectGameScreen(4);
+    // 行動の欄の上に戻る欄は無い
+    expect(screen.queryByLabelText('戻る先の月')).toBeNull();
+    // 既定は 1 つ前の月（3 か月目）。やめると何も変わらない
+    fireEvent.click(headerRewind()!);
+    const select = () =>
+      within(rewindDialog()).getByLabelText('戻る先の月') as HTMLSelectElement;
+    expect(select().value).toBe('3');
+    expect(
+      within(select())
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['1 か月目', '2 か月目', '3 か月目']);
+    fireEvent.click(
+      within(rewindDialog()).getByRole('button', { name: 'やめる' }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectGameScreen(4);
+    expect(savedPrevious()).toBeUndefined();
+    // 選び直すと、文と戻るボタンが選んだ月に変わる
+    fireEvent.click(headerRewind()!);
+    fireEvent.change(select(), { target: { value: '2' } });
+    expect(rewindDialog().textContent).toContain(
+      '2 か月目の行動を選ぶ前に戻ります。今の結果（4 か月目まで）は「前の試行」として 1 本だけ残ります。',
+    );
+    fireEvent.click(
+      within(rewindDialog()).getByRole('button', { name: '2 か月目に戻る' }),
+    );
+    closeEventsIfOpen();
+    expectGameScreen(2);
+    expect(savedPrevious()).toHaveLength(3);
+    // 履歴の行の「この月に戻る」は残る
+    expect(
+      within(historyCard()).getByRole('button', { name: '1 か月目に戻る' }),
+    ).toBeDefined();
   });
 
   it('W-71 推移のグラフに前の試行の破線（所持金・PV・費用・満足度）と凡例が出て、前の試行の方が長くても描き、ツールチップに値が並ぶ', async () => {
@@ -218,7 +275,7 @@ describe('この月に戻る（D-128）', () => {
     expect(document.querySelector('[data-previous-trial]')).toBeNull();
   });
 
-  it('W-73 終わった後の結果の画面からも過去の月に戻れ、前の試行は終わった月まで描く', async () => {
+  it('W-73 終わった後もヘッダーの「戻る…」から過去の月に戻れ、前の試行は終わった月まで描く', async () => {
     // CF Free（構成の 1 番目）は行動なしだと数か月で終わる。終わるまで進めた保存を置いて開く
     let save = newSave({
       scenarioId: 'article-community',
@@ -233,15 +290,14 @@ describe('この月に戻る（D-128）', () => {
     await renderApp();
     expect(screen.getByText(new RegExp(`${end} か月目で終了`))).toBeDefined();
     expect(screen.queryByRole('button', { name: '次の月へ' })).toBeNull();
-    const picker = document.querySelector<HTMLElement>('[data-rewind]')!;
+    // 結果の画面には戻る欄を出さず、ヘッダーの「戻る…」から戻る（D-192）
+    expect(screen.queryByLabelText('戻る先の月')).toBeNull();
+    fireEvent.click(headerRewind()!);
     expect(
-      within(picker)
+      within(within(rewindDialog()).getByLabelText('戻る先の月'))
         .getAllByRole('option')
         .map((o) => o.textContent),
     ).toEqual(Array.from({ length: end - 1 }, (_, i) => `${i + 1} か月目`));
-    fireEvent.click(
-      within(picker).getByRole('button', { name: 'この月に戻る…' }),
-    );
     expect(rewindDialog().textContent).toContain(
       `今の結果（${end} か月目で終了）`,
     );

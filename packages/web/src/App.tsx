@@ -84,8 +84,9 @@ import {
   type ResultEntry,
   type ResultStore,
 } from './results-history.ts';
-import { BookOpen, Settings } from 'lucide-react';
+import { BookOpen, Plus, Settings, Undo2 } from 'lucide-react';
 import { HowtoDialog } from './howto-dialog.tsx';
+import { RewindDialog } from './rewind-dialog.tsx';
 import { SettingsDialog } from './settings-dialog.tsx';
 import { PrivacyPolicyDialog } from './privacy-policy.tsx';
 import { Logo } from './logo.tsx';
@@ -320,6 +321,25 @@ export function App() {
   const [mode, setMode] = useState<Mode>(initialMode);
   // 「新しいゲーム」の確認のダイアログ（途中なら今のプレイが終わるので確かめる）
   const [confirmRestart, setConfirmRestart] = useState(false);
+  // 過去の月へ戻るダイアログ（D-128・D-192）。開いたときに選んでいる月。null は閉じている。
+  // 戻れるのは行動を選んだ月（今の月・終わった月より前）だけ
+  const [rewindPick, setRewindPick] = useState<number | null>(null);
+  const rewindable = state ? state.history.length - 1 : 0;
+  const rewind = (month: number) => {
+    if (!session) return;
+    // 戻る直前の今の試行を前の試行にする（D-128）。戻った状態は保存の再生と同じ（決定論）。
+    // 遊び始めの id を替えて画面を作り直す（戻った月の出来事のダイアログも開き直す）
+    const save = rewindSave(session.save, month);
+    setSession({
+      save,
+      nonce: session.nonce,
+      state: replaySave(save),
+      previous: session.state,
+      restored: false,
+      runId: newRunId(),
+    });
+    scrollTop();
+  };
   // 遊び方（D-146）: 見た記録が無ければ、ゲームモードを最初に開いたときに自動で開く（見積モードでは開かない）。
   // first: 自動で開いた（最後のページのボタンを「始める」にする）
   const [howto, setHowto] = useState<{ first: boolean } | null>(() =>
@@ -379,14 +399,29 @@ export function App() {
             </button>
           ))}
         </div>
-        {/* 右端: 新しいゲーム（運営中・終わった後）・遊び方（ゲームモードだけ）・設定（D-146・D-147） */}
+        {/* 右端: 戻る…（戻れる月があるとき。D-192）・新しいゲーム（運営中・終わった後）・遊び方（ゲームモードだけ）・設定（D-146・D-147）。
+            狭い画面（sm 未満）はアイコンだけにして 1 行に収める */}
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+          {mode === 'game' && state && rewindable > 0 && (
+            <button
+              className="btn btn-ghost btn-sm px-2 whitespace-nowrap"
+              onClick={() => setRewindPick(rewindable)}
+              aria-label="過去の月に戻る…"
+              title="過去の月に戻る"
+            >
+              <Undo2 aria-hidden className="size-4" />
+              <span className="hidden sm:inline">戻る…</span>
+            </button>
+          )}
           {mode === 'game' && state && (
             <button
               className="btn btn-ghost btn-sm px-2 whitespace-nowrap"
               onClick={() => setConfirmRestart(true)}
+              aria-label="新しいゲーム"
+              title="新しいゲーム"
             >
-              新しいゲーム
+              <Plus aria-hidden className="size-4" />
+              <span className="hidden sm:inline">新しいゲーム</span>
             </button>
           )}
           {mode === 'game' && (
@@ -435,6 +470,20 @@ export function App() {
           onClose={closeHowto}
         />
       )}
+      {mode === 'game' && state && rewindPick !== null && rewindable > 0 && (
+        <RewindDialog
+          months={rewindable}
+          initial={rewindPick}
+          current={state.history.length}
+          ended={state.phase !== 'playing'}
+          previousMonths={session!.previous?.history.length ?? null}
+          onConfirm={(month) => {
+            setRewindPick(null);
+            rewind(month);
+          }}
+          onClose={() => setRewindPick(null)}
+        />
+      )}
       {confirmRestart && (
         <RestartDialog
           inProgress={state?.phase === 'playing'}
@@ -478,20 +527,7 @@ export function App() {
                 return next;
               }}
               previous={session!.previous}
-              onRewind={(month) => {
-                // 戻る直前の今の試行を前の試行にする（D-128）。戻った状態は保存の再生と同じ（決定論）。
-                // 遊び始めの id を替えて画面を作り直す（戻った月の出来事のダイアログも開き直す）
-                const save = rewindSave(session!.save, month);
-                setSession({
-                  save,
-                  nonce: session!.nonce,
-                  state: replaySave(save),
-                  previous: state,
-                  restored: false,
-                  runId: newRunId(),
-                });
-                scrollTop();
-              }}
+              onPickRewind={setRewindPick}
               onClearPrevious={() =>
                 setSession({
                   ...session!,

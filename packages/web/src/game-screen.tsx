@@ -1,5 +1,5 @@
 // ゲームモードの運営中の画面（月の報告・行動・推移・結果）。App から分けて読む（始める画面の初回の読み込みに含めない）。
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   isPolicyViolation,
   policyCauseOf,
@@ -239,7 +239,7 @@ export function Game({
   statsQuery = null,
   onAdvance,
   previous,
-  onRewind,
+  onPickRewind,
   onClearPrevious,
 }: {
   state: GameState;
@@ -263,8 +263,8 @@ export function Game({
   onAdvance: (actions: Action[]) => GameState;
   /** 前の試行（D-128。保存の前の試行を再生した状態）。無ければ null。 */
   previous: GameState | null;
-  /** month か月目の行動を選ぶ直前に戻す（D-128。今の試行は前の試行として残す）。確認はこの画面で取ってから呼ぶ。 */
-  onRewind: (month: number) => void;
+  /** 履歴の行の「この月に戻る」で、その月を選んだ状態で戻るダイアログを開く（D-128・D-192。ダイアログは App が持つ）。 */
+  onPickRewind: (month: number) => void;
   /** 前の試行を消す（D-128）。 */
   onClearPrevious: () => void;
 }) {
@@ -316,12 +316,8 @@ export function Game({
     const t = setTimeout(() => setResumed(false), RESUMED_TOAST_MS);
     return () => clearTimeout(t);
   }, [resumed]);
-  // 戻る先の月の確認（D-128）。null は閉じている。戻れるのは行動を選んだ月（今の月より前）だけ
-  const [rewindTo, setRewindTo] = useState<number | null>(null);
+  // 戻れるのは行動を選んだ月（今の月より前）だけ（D-128）。戻る入口はヘッダーと履歴の行（D-192）
   const rewindable = state.history.length - 1;
-  const picker = rewindable > 0 && (
-    <RewindPicker months={rewindable} onPick={setRewindTo} />
-  );
   return (
     <>
       {resumed && (
@@ -350,9 +346,7 @@ export function Game({
             statsQuery ? { ...statsQuery, axes: resultAxesOf(state) } : null
           }
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
-        >
-          {picker}
-        </Result>
+        />
       )}
       <Trends
         history={state.history}
@@ -366,9 +360,6 @@ export function Game({
         scenario={scenarioOf(state)}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
       />
-      {playing && picker && (
-        <div className="flex justify-end px-1">{picker}</div>
-      )}
       {playing && (
         <Actions
           state={state}
@@ -396,124 +387,9 @@ export function Game({
       <History
         history={state.history}
         rewindable={rewindable}
-        onRewind={setRewindTo}
+        onRewind={onPickRewind}
       />
-      {rewindTo !== null && (
-        <RewindDialog
-          month={rewindTo}
-          current={state.history.length}
-          ended={!playing}
-          previousMonths={previous?.history.length ?? null}
-          onConfirm={() => {
-            setRewindTo(null);
-            onRewind(rewindTo);
-          }}
-          onClose={() => setRewindTo(null)}
-        />
-      )}
     </>
-  );
-}
-
-/**
- * 過去の月へ戻る先を選ぶ欄（D-128。今の月の行動の欄の上と、終わった後の結果の画面に出す）。押すと確認のダイアログを開く。
- * months: 戻れる月の数（1〜months か月目）。既定は 1 つ前の月。
- */
-function RewindPicker({
-  months,
-  onPick,
-}: {
-  months: number;
-  onPick: (month: number) => void;
-}) {
-  // null は 1 つ前の月（月が進んでも追いかける）
-  const [month, setMonth] = useState<number | null>(null);
-  const m = Math.min(month ?? months, months);
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-sm" data-rewind>
-      <label className="flex items-center gap-1">
-        <span className="opacity-70">戻る先</span>
-        <select
-          className="select select-sm w-auto"
-          value={m}
-          onChange={(e) => setMonth(Number(e.target.value))}
-          aria-label="戻る先の月"
-        >
-          {Array.from({ length: months }, (_, i) => i + 1).map((n) => (
-            <option key={n} value={n}>
-              {n} か月目
-            </option>
-          ))}
-        </select>
-      </label>
-      <button className="btn btn-outline btn-sm" onClick={() => onPick(m)}>
-        この月に戻る…
-      </button>
-      <Info label="過去の月に戻ることについて">
-        選んだ月の行動を選ぶ前の状態に戻ります。始めたときの選択（シナリオ・構成・部品・乱数のシード）はそのままなので、同じ行動を選べば同じ結果になります。今の結果は「前の試行」として
-        1 本だけ残り、推移のグラフに破線で重なります（もう一度戻ると上書き）
-      </Info>
-    </div>
-  );
-}
-
-/** 戻る前の確認（D-128。押し間違いを防ぐ）。作法は出来事のダイアログ（D-23）と同じ `<dialog>` の showModal。 */
-function RewindDialog({
-  month,
-  current,
-  ended,
-  previousMonths,
-  onConfirm,
-  onClose,
-}: {
-  month: number;
-  /** 今の試行の月数（今の月・終わった月）。 */
-  current: number;
-  ended: boolean;
-  /** 今ある前の試行の月数（上書きの知らせ）。無ければ null。 */
-  previousMonths: number | null;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const d = ref.current;
-    if (d && !d.open) d.showModal();
-  }, []);
-  return (
-    <dialog
-      ref={ref}
-      className="modal"
-      aria-labelledby="rewind-dialog-title"
-      onClose={onClose}
-    >
-      <div className="modal-box max-w-md">
-        <h2 id="rewind-dialog-title" className="text-lg font-bold">
-          {month} か月目に戻る
-        </h2>
-        <p className="mt-2 text-sm">
-          {`${month} か月目の行動を選ぶ前に戻ります。今の結果（${current} か月目${ended ? 'で終了' : 'まで'}）は「前の試行」として 1 本だけ残ります。`}
-        </p>
-        {previousMonths !== null && (
-          <p className="mt-1 text-sm opacity-70">
-            {`今ある前の試行（${previousMonths} か月目まで）は上書きされます。`}
-          </p>
-        )}
-        <div className="modal-action">
-          <form method="dialog">
-            <button className="btn btn-ghost btn-sm">やめる</button>
-          </form>
-          <button className="btn btn-primary btn-sm" onClick={onConfirm}>
-            {month} か月目に戻る
-          </button>
-        </div>
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        <button aria-label="背景を押して閉じる" tabIndex={-1}>
-          閉じる
-        </button>
-      </form>
-    </dialog>
   );
 }
 
@@ -2088,7 +1964,6 @@ function Result({
   stats,
   statsQuery,
   onCelebrate,
-  children,
 }: {
   state: GameState;
   comparisons: readonly AxisComparison[];
@@ -2097,8 +1972,6 @@ function Result({
   statsQuery: StatsQuery | null;
   /** 完走のダイアログを開き直す（完走のときだけ使う）。 */
   onCelebrate: () => void;
-  /** 結果の下に足すもの（過去の月へ戻る欄。D-128）。 */
-  children?: ReactNode;
 }) {
   const completed = state.phase === 'completed';
   const end = state.end!;
@@ -2412,7 +2285,6 @@ function Result({
             </div>
           </div>
         </details>
-        {children}
       </div>
     </div>
   );
