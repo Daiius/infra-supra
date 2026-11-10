@@ -27,7 +27,13 @@ import {
   STATS_PLAY_TOKEN_PATTERN,
   storePlayToken,
 } from './play-nonce.ts';
-import type { AppType, Distribution, Groups, GroupStat } from 'stats';
+import type {
+  AppType,
+  Distribution,
+  Groups,
+  GroupStat,
+  Histogram,
+} from 'stats';
 import {
   axisStandingsOf,
   filterParams,
@@ -157,7 +163,8 @@ function isDistribution(x: unknown): x is Distribution {
 export async function fetchDistribution(q: {
   scenarioId: string;
   seed: number;
-  axes: ResultAxes;
+  /** 自分の値（付けた軸だけ position が返る）。統計の画面は位置を使わないので付けない（D-197）。 */
+  axes?: ResultAxes;
   /** 同じ構成・同じフレームワークに絞る（D-175。無ければ全部）。 */
   stack?: string;
   framework?: string;
@@ -170,9 +177,11 @@ export async function fetchDistribution(q: {
         seed: String(q.seed),
         ...(q.stack !== undefined ? { stack: q.stack } : {}),
         ...(q.framework !== undefined ? { framework: q.framework } : {}),
-        ...(Object.fromEntries(
-          RESULT_AXES.map((a) => [a.id, String(q.axes[a.id])]),
-        ) as Record<keyof ResultAxes, string>),
+        ...(q.axes
+          ? (Object.fromEntries(
+              RESULT_AXES.map((a) => [a.id, String(q.axes![a.id])]),
+            ) as Record<keyof ResultAxes, string>)
+          : {}),
       },
     });
     if (!res.ok) return null;
@@ -270,12 +279,16 @@ export async function loadGroups(q: {
   seed: number;
   axis: ResultAxisId;
   by: GroupBy;
-  value: number;
+  /** 自分の値（架空の値を散らす中心。無ければ架空の既定の中心。統計の画面で遊んでいないとき。D-197）。 */
+  value?: number;
   keys: readonly string[];
 }): Promise<GroupsView | null> {
   if (statsMockEnabled()) {
-    const { mockGroups } = await import('./stats-mock.ts');
-    return { ...mockGroups(q), mock: true };
+    const { mockGroups, MOCK_CENTER } = await import('./stats-mock.ts');
+    return {
+      ...mockGroups({ ...q, value: q.value ?? MOCK_CENTER[q.axis] }),
+      mock: true,
+    };
   }
   if (!statsEnabled()) return null;
   try {
@@ -291,6 +304,49 @@ export async function loadGroups(q: {
     return null;
   }
 }
+
+/** 統計の画面（D-197）の 4 軸の全シードの分布。axes は軸ごとのサーバーの分布そのまま（件数は軸ごとに見る）。 */
+export type AllSeedsView = {
+  axes: Record<ResultAxisId, Histogram>;
+  mock: boolean;
+};
+
+/**
+ * 統計の画面（?mode=stats。D-197）の 4 軸の全シードの分布を取る。distribution の口はシードが必須なので、手元の最新の完走のシード
+ * （無ければ 0）を付けて取り、全シードの側（all）だけを使う（サーバーの口は変えない）。自分の値は付けない（位置・上位 % を出さない）。
+ * filter は自分の最新の完走の構成・フレームワークでの絞り込み。フラグが無い・失敗は null。例外は出さない。
+ */
+export async function loadAllSeeds(q: {
+  scenarioId: string;
+  seed: number;
+  stack?: string;
+  framework?: string;
+  /** 開発用の架空の分布の中心（自分の値。無ければ架空の既定の中心）。 */
+  center?: ResultAxes;
+  filter?: StatsFilter;
+}): Promise<AllSeedsView | null> {
+  if (statsMockEnabled()) {
+    const { mockDistribution, MOCK_CENTER } = await import('./stats-mock.ts');
+    const d = mockDistribution(
+      { scenarioId: q.scenarioId, seed: q.seed, axes: q.center ?? MOCK_CENTER },
+      q.filter ?? 'all',
+    );
+    return { axes: allSeedsOf(d), mock: true };
+  }
+  if (!statsEnabled()) return null;
+  const dist = await fetchDistribution({
+    scenarioId: q.scenarioId,
+    seed: q.seed,
+    ...(q.stack !== undefined ? { stack: q.stack } : {}),
+    ...(q.framework !== undefined ? { framework: q.framework } : {}),
+  });
+  return dist ? { axes: allSeedsOf(dist), mock: false } : null;
+}
+
+const allSeedsOf = (d: Distribution) =>
+  Object.fromEntries(
+    RESULT_AXES.map((a) => [a.id, d.axes[a.id].all]),
+  ) as Record<ResultAxisId, Histogram>;
 
 /** 送ったプレイが分布に入ったか（id → 入ったか）を読む。読めなければ undefined。 */
 function loadMembership(id: string): boolean | undefined {

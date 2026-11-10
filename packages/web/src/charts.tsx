@@ -1495,7 +1495,8 @@ export function HistogramChart({
   label,
 }: {
   bins: readonly HistogramChartBin[];
-  value: number;
+  /** 自分の値。無ければ「あなた」の印を出さず、棒は全部控えめの色（統計の画面でまだ遊んでいないとき。D-197）。 */
+  value?: number;
   discrete?: boolean;
   /** 読み上げの名前（例: 同じシードの分布）。 */
   label: string;
@@ -1507,29 +1508,38 @@ export function HistogramChart({
   const hi = bins.at(-1)!.to;
   const span = hi - lo;
   const maxCount = Math.max(1, ...bins.map((b) => b.count));
-  const at = discrete ? value + 0.5 : value;
+  const at = value === undefined ? 0 : discrete ? value + 0.5 : value;
   // 範囲の外（自分が分布に入っていないとき）は端に寄せる。全部同じ値（幅 0）は真ん中
   const frac = span > 0 ? Math.min(1, Math.max(0, (at - lo) / span)) : 0.5;
-  const mine = bins.findIndex((b, i) =>
-    discrete
-      ? Math.floor(value) === b.from
-      : value >= b.from &&
-        (value < b.to || (i === bins.length - 1 && value <= b.to)),
-  );
+  const mine =
+    value === undefined
+      ? -1
+      : bins.findIndex((b, i) =>
+          discrete
+            ? Math.floor(value) === b.from
+            : value >= b.from &&
+              (value < b.to || (i === bins.length - 1 && value <= b.to)),
+        );
   const bw = W / bins.length;
   return (
-    <figure className="viz-root relative min-w-0 pt-4" data-histogram>
-      <div
-        aria-hidden
-        className="absolute top-0 text-[10px] leading-none font-semibold whitespace-nowrap"
-        style={{
-          left: `${frac * 100}%`,
-          transform: `translateX(${frac > 0.8 ? '-100%' : frac < 0.2 ? '0' : '-50%'})`,
-          color: 'var(--text-primary)',
-        }}
-      >
-        ▼ あなた
-      </div>
+    <figure
+      className={`viz-root relative min-w-0 ${value === undefined ? '' : 'pt-4'}`}
+      data-histogram
+      data-has-mine={value === undefined ? 'false' : 'true'}
+    >
+      {value !== undefined && (
+        <div
+          aria-hidden
+          className="absolute top-0 text-[10px] leading-none font-semibold whitespace-nowrap"
+          style={{
+            left: `${frac * 100}%`,
+            transform: `translateX(${frac > 0.8 ? '-100%' : frac < 0.2 ? '0' : '-50%'})`,
+            color: 'var(--text-primary)',
+          }}
+        >
+          ▼ あなた
+        </div>
+      )}
       <svg
         role="img"
         aria-label={label}
@@ -1559,15 +1569,18 @@ export function HistogramChart({
             />
           ) : null,
         )}
-        <line
-          x1={frac * W}
-          x2={frac * W}
-          y1="0"
-          y2={H}
-          stroke="var(--marker)"
-          strokeWidth="2"
-          vectorEffect="non-scaling-stroke"
-        />
+        {value !== undefined && (
+          <line
+            x1={frac * W}
+            x2={frac * W}
+            y1="0"
+            y2={H}
+            stroke="var(--marker)"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+            data-histogram-mine
+          />
+        )}
       </svg>
     </figure>
   );
@@ -1629,7 +1642,8 @@ export function fitText(s: string, width: number): string {
 export function groupRangeLayout(
   width: number,
   rows: readonly unknown[],
-  value: number,
+  /** 自分の値（無ければ区切りの両端だけで横の範囲を決める。統計の画面でまだ遊んでいないとき。D-197）。 */
+  value: number | undefined,
   binEdges: readonly number[],
 ) {
   const wide = width >= RANGE_WIDE_MIN;
@@ -1638,10 +1652,10 @@ export function groupRangeLayout(
   const bandX1 = wide ? width - RANGE_COUNT_W - RANGE_GAP : width;
   // 棒の列の中で、端の目盛りの文字・自分の線が切れないよう少し内側に寄せる
   const inset = 4;
-  const edgeLo = binEdges[0] ?? value;
-  const edgeHi = binEdges.at(-1) ?? value;
-  let lo = Math.min(value, edgeLo);
-  let hi = Math.max(value, edgeHi);
+  const edgeLo = binEdges[0] ?? value ?? 0;
+  const edgeHi = binEdges.at(-1) ?? value ?? 0;
+  let lo = Math.min(value ?? edgeLo, edgeLo);
+  let hi = Math.max(value ?? edgeHi, edgeHi);
   if (hi - lo <= 0) {
     const d = Math.abs(lo) * 0.1 || 1;
     lo -= d;
@@ -1661,7 +1675,7 @@ export function groupRangeLayout(
   const tickValues =
     binEdges.length > 1
       ? [edgeLo, binEdges[Math.floor((binEdges.length - 1) / 2)]!, edgeHi]
-      : [value];
+      : [value ?? edgeLo];
   const ticks = tickValues.map((t) => ({ v: t, x: xOf(t) }));
   return {
     wide,
@@ -1669,9 +1683,10 @@ export function groupRangeLayout(
     bandX0,
     bandX1,
     xOf,
-    mineX: xOf(value),
+    /** 自分の値の x（自分の値が無ければ null）。 */
+    mineX: value === undefined ? null : xOf(value),
     /** 「あなた」を ▼ の左に置くか（右の端に近いとき。棒の列からはみ出さない）。 */
-    mineEnd: bandX1 - xOf(value) < 48,
+    mineEnd: value !== undefined && bandX1 - xOf(value) < 48,
     rowH,
     rowTop,
     histTop,
@@ -1703,8 +1718,8 @@ export function GroupHistogramChart({
   rows: readonly RangeChartRow[];
   /** 全部の行で共通の区切り（棒の数 + 1 個）。 */
   binEdges: readonly number[];
-  /** 自分の値。 */
-  value: number;
+  /** 自分の値（無ければ縦の線と「あなた」を出さない。D-197）。 */
+  value?: number;
   format: (n: number) => string;
   /** 読み上げの名前（図全体）。 */
   label: string;
@@ -1821,31 +1836,35 @@ export function GroupHistogramChart({
               );
             })}
             {/* 自分の値の縦の線（全部の行を貫く）と、その真上の ▼・横の「あなた」（右の端では左へ寄せる） */}
-            <line
-              x1={L.mineX}
-              x2={L.mineX}
-              y1={RANGE_HEAD_H - 4}
-              y2={L.rowsBottom}
-              stroke="var(--marker)"
-              strokeWidth="2"
-              data-group-mine-line
-            />
-            <g aria-hidden data-group-mine-label data-x={L.mineX}>
-              <path
-                d={`M${L.mineX - 4},2 L${L.mineX + 4},2 L${L.mineX},8 Z`}
-                fill="var(--text-primary)"
-              />
-              <text
-                x={L.mineEnd ? L.mineX - 7 : L.mineX + 7}
-                y="9"
-                textAnchor={L.mineEnd ? 'end' : 'start'}
-                fontSize="10"
-                fontWeight="600"
-                fill="var(--text-primary)"
-              >
-                あなた
-              </text>
-            </g>
+            {L.mineX !== null && (
+              <>
+                <line
+                  x1={L.mineX}
+                  x2={L.mineX}
+                  y1={RANGE_HEAD_H - 4}
+                  y2={L.rowsBottom}
+                  stroke="var(--marker)"
+                  strokeWidth="2"
+                  data-group-mine-line
+                />
+                <g aria-hidden data-group-mine-label data-x={L.mineX}>
+                  <path
+                    d={`M${L.mineX - 4},2 L${L.mineX + 4},2 L${L.mineX},8 Z`}
+                    fill="var(--text-primary)"
+                  />
+                  <text
+                    x={L.mineEnd ? L.mineX - 7 : L.mineX + 7}
+                    y="9"
+                    textAnchor={L.mineEnd ? 'end' : 'start'}
+                    fontSize="10"
+                    fontWeight="600"
+                    fill="var(--text-primary)"
+                  >
+                    あなた
+                  </text>
+                </g>
+              </>
+            )}
             <g
               aria-hidden
               fontSize="10"

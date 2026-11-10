@@ -2431,6 +2431,21 @@
   - 直し方: `html { scrollbar-gutter: stable; }`（styles.css。スクロールバーの場所をいつも空ける）と、main に `min-h-screen`（App.tsx。フッターが読み込み中から画面の外にある）。ゲームモードも同じ App の枠なので両方に効く。
 - テスト: web の `estimate-mode.smoke.test.tsx`（W-69 th の aria-sort・W-70 箱の名前が見えている文字で始まり aria-label を持たない）。止まる印の class・箱の名前を引くテストを合わせた。
 
+### D-197 ヘッダーの 3 つ目のタブ「統計」（`?mode=stats`）で、集計の分布と構成ごとの比較を遊ばずに見られるようにする（2026-11-10・ユーザーの決定）
+
+- 依頼（ユーザー。supervisor 経由）: 完走しなくても集計の分布を見られる画面。置き場・中身・自分の印・出さないものはユーザーが決めた（下）。
+- 決定:
+  - **置き場**: ヘッダーのモードのナビの 3 つ目のボタン「統計」。`?mode=stats` で開き、開いたときだけ `stats-mode.tsx` を lazy で読む。集計が無効（`VITE_STATS_ENABLED` も開発の `VITE_STATS_MOCK` も無い）ならボタンを出さず、`?mode=stats` で直接来てもゲームを開いて URL から `mode` を外す（「集計は無効です」の空のページを作らない・無効のビルドでは集計の口に一切触れない方を安全とみた）。canonical は `/?mode=stats`。sitemap には `VITE_STATS_ENABLED` が立ったビルドでだけ `/?mode=stats` を載せる（無効のビルドではゲームに戻るページなので載せない。`site-meta.ts` の `sitemapXml(origin, stats)`）。
+  - **中身**: 4 軸の**全シード**の分布（軸ごとに件数・中央値・ヒストグラム・「数値で見る」の表）と、結果の画面の構成ごとの比較の図（`stats-breakdown.tsx` の `GroupCompare` をそのまま。全シード）。シナリオのチップ（記事コミュニティ・受託の業務アプリ）で切り替える。distribution の口はシードが必須なので、手元の最新の完走のシード（無ければ 0）を付けて取り、`all` の側だけを使う（web の `loadAllSeeds`。**サーバーは変えていない**）。自分の値は付けない（位置を取らない）。
+  - **自分の印**: このブラウザの結果の履歴（`infra-supra:results`）から、選んだシナリオの**最新の完走**の 4 軸を「▼ あなた」としてヒストグラムと比較の図に重ね、日付・構成・シードを小さく添える。途中終了は重ねない。遊んでいなければ印を出さず「このシナリオを完走すると、ここにあなたの位置が出ます。」とだけ出す。
+  - **絞り込みのチップ**: 最新の完走の構成・フレームワークで「全部 / 同じインフラ / 同じフレームワーク / 同じ組み合わせ」（結果の画面と同じ部品・同じ記録 `infra-supra:stats-breakdown`）。そのために履歴の 1 件に `stackId`・`framework` を足した（省略できる欄。版は上げない。この欄が無い前の記録・遊んでいないときはチップを出さない）。
+  - **出さないもの**: 上位 % と「★ 上位」の印・花火（結果の画面のもの）・同じシードの分布・完走率・途中終了の数・構成の人気の横棒。
+  - **状態**: 読み込み中（前の表示を薄く残す）・取れない（`role="alert"` の一文）・0 件（「まだ集計された完走がありません。」・比較の図も出さない）・10 件未満（「まだ n 件です」・軸ごとにも出す）・出せる。開発の `VITE_STATS_MOCK` は架空の分布（遊んでいなければ `stats-mock.ts` の `MOCK_CENTER` の周り）と明記。
+  - 部品の差は props で吸収した: `HistogramChart`・`GroupHistogramChart`・`groupRangeLayout` の自分の値を省略できる（省けば線と「あなた」を出さない）、`GroupCompare` は `StatsQuery` でなく `scenarioId`・`seed`・`value?`・`mine?` を受ける。
+- 実装: web の `stats-mode.tsx`（新規）・`App.tsx`（モード・lazy・URL・canonical）・`stats-client.ts`（`loadAllSeeds`・`fetchDistribution` の自分の値を省略可・`loadGroups` の値を省略可）・`stats-breakdown.tsx`（部品の export・`useBreakdownPrefs`）・`charts.tsx`・`results-history.ts`・`stats-mock.ts`・`site-meta.ts`・`vite.config.ts`。テスト: `stats-mode.smoke.test.tsx`（W-110〜W-116）・`results-history.test.ts`・`site-meta.test.ts`。
+- 残した点: 狭い画面（幅 360px）でヘッダーに 3 つのタブが 1 行に収まるか・比較の図の見え方を実機で確かめる。履歴の 1 件の構成の id を足す前に完走したプレイでは、絞り込みのチップが出ない（次に完走すれば出る）。
+- 正典: [prd/15](../15-results-and-stats.md) §7 の段 3 の最後。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

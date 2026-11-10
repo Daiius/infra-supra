@@ -24,8 +24,8 @@ const FORMAT: Record<ResultAxisId, (n: number) => string> = {
   totalCost: usd,
 };
 
-/** 軸の短い説明（値の意味）。 */
-const CAPTION: Record<ResultAxisId, string> = {
+/** 軸の短い説明（値の意味。統計の画面でも使う。D-197）。 */
+export const CAPTION: Record<ResultAxisId, string> = {
   cash: '最後の月の所持金',
   satisfaction: '毎月の満足度の平均',
   featurePoints: '機能開発に回せた手間の合計',
