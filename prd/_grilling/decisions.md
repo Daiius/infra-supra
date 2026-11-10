@@ -2408,6 +2408,17 @@
 - 入れなかったもの: 本格的な CSP（読み込み元の洗い出しが要る）、PNG のアイコン・apple-touch-icon、`btn-xs` の押せる的の大きさと 9〜11px の固定の文字（実測してから決める）。
 - テスト: web の `site-meta.test.ts`（robots・sitemap・canonical・HTML にコメントが無い・manifest・404）、`vercel-config.test.ts`（安全のヘッダーが API_ORIGIN と無関係に付く）、`a11y.smoke.test.tsx`（banner と h1・モードのナビの aria-current・グラフの要約）。
 
+### D-195 favicon とアイコンをロゴに寄せた「Sup. / Inf.」の分数の形にする（D-194 の「PNG のアイコンは入れない」の見直し。2026-11-10・ユーザーの決定）
+
+- 決定（3 案から A 案）:
+  - **favicon**（`public/favicon.svg`）: ヘッダーのロゴ（D-184）に寄せた「Sup. / Inf.」の分数の形。字形は Philosopher Bold（SIL OFL 1.1。ロゴと同じ字体）をパスにしたもの。neutral-700（#404040）の角の丸い板に白い字、縁に明るい灰（#d4d4d4）の線を付け、明るいタブでも暗いタブでも見えるようにした。
+  - **apple-touch-icon**（`public/apple-touch-icon.png`・180px）: 同じ図柄を縁なし・全面の正方形で（iOS が角を丸めるため）。index.html から link する。
+  - **manifest**: favicon.svg（any）に `icon-192.png`・`icon-512.png`（purpose any）を足した。
+  - 16px では字が潰れて分数の形にしか見えない（読めるのは大きいアイコンだけ）。それで構わないとした。
+- 出典: `public/fonts/SOURCE.txt` に、アイコンの字形も Philosopher Bold の「Sup.Inf」から作ったことを書いた（https://fonts.googleapis.com/css2?family=Philosopher:wght@700&text=Sup.Inf の TTF・2026-11-10）。
+- 作り直す手順: 上の CSS から TTF を取り、opentype.js@1.3.4 で 'Sup.' 'Inf.' をパスにして 64 の viewBox に置き、sharp@0.34.4 で PNG（180・192・512）に書き出す。生成のスクリプトはリポジトリに入れていない。
+- テスト: web の `site-meta.test.ts`（manifest の icons・PNG の寸法・apple-touch-icon の link）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

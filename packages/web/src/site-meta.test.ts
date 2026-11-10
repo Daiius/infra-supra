@@ -76,7 +76,7 @@ describe('配る HTML と manifest', () => {
     expect(html).not.toContain('rel="canonical"');
   });
 
-  it('manifest は日本語・トップから始まり、アイコンは favicon.svg だけ', () => {
+  it('manifest は日本語・トップから始まり、アイコンは favicon.svg と PNG の 192・512（D-195）', () => {
     const m = JSON.parse(read('public/manifest.webmanifest')) as Record<
       string,
       unknown
@@ -92,7 +92,35 @@ describe('配る HTML と manifest', () => {
     expect(typeof m.background_color).toBe('string');
     expect(m.icons).toEqual([
       { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+      {
+        src: '/icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
     ]);
+    // 置いたファイルが manifest・index.html の参照と一致する（PNG の寸法は IHDR の幅・高さ）
+    for (const [p, size] of [
+      ['public/icon-192.png', 192],
+      ['public/icon-512.png', 512],
+      ['public/apple-touch-icon.png', 180],
+    ] as const) {
+      const png = readFileSync(join(webRoot, p));
+      expect(png.readUInt32BE(16)).toBe(size);
+      expect(png.readUInt32BE(20)).toBe(size);
+    }
+  });
+
+  it('index.html は apple-touch-icon を持つ（D-195）', () => {
+    expect(read('index.html')).toContain(
+      '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
+    );
   });
 
   it('404.html は JS 無しで読め、トップへのリンクを持つ', () => {

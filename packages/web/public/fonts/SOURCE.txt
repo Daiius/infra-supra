@@ -14,3 +14,7 @@ Retrieved: 2026-11-09
 - woff2 (URL listed in that CSS): https://fonts.gstatic.com/l/font?kit=vEFI2_5QCwIS4_Dhez5jcWjVamgZ4NrWDNegwrumCA&skey=cbdf56dd530768da&v=v21
 - License text: https://raw.githubusercontent.com/google/fonts/main/ofl/philosopher/OFL.txt
   (METADATA.pb in the same directory: license "OFL")
+
+The favicon and app icons (public/favicon.svg, apple-touch-icon.png, icon-192.png, icon-512.png; D-195)
+use the glyphs "Sup." / "Inf." of Philosopher Bold converted to paths. Source: the TTF from
+https://fonts.googleapis.com/css2?family=Philosopher:wght@700&text=Sup.Inf (retrieved 2026-11-10).
