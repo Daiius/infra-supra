@@ -494,7 +494,7 @@ function ChangeBody({
           </ul>
         )}
         {!same && change.why && (
-          <p className="text-xs text-error" role="note">
+          <p className="text-xs text-error-strong" role="note">
             この組み合わせでは来月の行動にできません。
           </p>
         )}

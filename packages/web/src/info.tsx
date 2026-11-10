@@ -162,6 +162,7 @@ export function Popover({
   trigger,
   className = 'btn btn-ghost btn-xs btn-circle align-middle',
   interactive = false,
+  nameFromContent = false,
 }: {
   /** 中身。関数なら閉じる関数を受ける（中の操作で閉じるとき。interactive と使う）。 */
   children: ReactNode | ((close: () => void) => ReactNode);
@@ -176,6 +177,11 @@ export function Popover({
    * focus が吹き出しとボタンの外へ出たら閉じる。読み上げは説明（tooltip）でなく、名前つきの dialog（モーダルでない）。
    */
   interactive?: boolean;
+  /**
+   * ボタンの名前を aria-label でなく中身（trigger）から取る（label は吹き出しの名前にだけ使う）。中身に見えている文字があるときに使う
+   * （WCAG 2.5.3: 名前は見えている文字で始める。補足は中身の sr-only で後ろに足す。D-196）。
+   */
+  nameFromContent?: boolean;
 }) {
   const [pos, setPos] = useState<Pos | null>(null);
   // ボタンの要素は state に持つ（close を children(close) で渡すので、ref だと render 中に読むとみなされ React Compiler が最適化を諦める）
@@ -255,7 +261,7 @@ export function Popover({
         ref={setButton}
         type="button"
         className={className}
-        aria-label={label}
+        aria-label={nameFromContent ? undefined : label}
         aria-expanded={open}
         aria-haspopup={interactive ? 'dialog' : undefined}
         aria-controls={id}

@@ -212,7 +212,7 @@ export function SlotCompareBody({
                     {hasLimits && (
                       <td
                         className={
-                          r.limits.some((l) => l.hit) ? 'text-error' : ''
+                          r.limits.some((l) => l.hit) ? 'text-error-strong' : ''
                         }
                       >
                         {limitText(r.limits)}

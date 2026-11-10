@@ -45,7 +45,11 @@ export const EVENT_CATEGORY: Record<
     label: '苦情・評判',
     cls: 'text-secondary',
   },
-  major: { Icon: TriangleAlert, label: '大きな出来事', cls: 'text-error' },
+  major: {
+    Icon: TriangleAlert,
+    label: '大きな出来事',
+    cls: 'text-error-strong',
+  },
   limit: { Icon: Gauge, label: '上限・保存量', cls: 'text-info' },
   revision: { Icon: Receipt, label: '料金・制限の改定', cls: 'text-neutral' },
   other: { Icon: CircleDot, label: '出来事', cls: 'text-base-content/60' },

@@ -1209,7 +1209,7 @@ export function EventCard({
         </div>
       )}
       {e.accept?.unavailable && (
-        <div className="mt-1 text-xs text-error">
+        <div className="mt-1 text-xs text-error-strong">
           ✗ 受けられない: {e.accept.unavailable}
         </div>
       )}
@@ -1305,7 +1305,7 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
       >
         <span className="badge badge-sm badge-error">規約違反</span>
         {plan && (
-          <span className="font-bold text-error" data-policy-cause>
+          <span className="font-bold text-error-strong" data-policy-cause>
             原因: {plan}
           </span>
         )}

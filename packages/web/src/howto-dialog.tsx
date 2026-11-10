@@ -60,7 +60,7 @@ const TONE = {
   info: { box: 'border-info/40 bg-info/5', icon: 'text-info' },
   success: { box: 'border-success/50 bg-success/5', icon: 'text-success' },
   warning: { box: 'border-warning/50 bg-warning/5', icon: 'text-warning' },
-  error: { box: 'border-error/40 bg-error/5', icon: 'text-error' },
+  error: { box: 'border-error/40 bg-error/5', icon: 'text-error-strong' },
 } as const;
 type Tone = keyof typeof TONE;
 
@@ -619,7 +619,7 @@ function EndingPage() {
           </div>
           <div className="space-y-1 rounded-box border-2 border-error/60 bg-base-100 p-2">
             <div className="flex items-center gap-1 text-sm font-bold">
-              <OctagonX aria-hidden className="size-4 text-error" />
+              <OctagonX aria-hidden className="size-4 text-error-strong" />
               途中終了（どれか 1 つ）
             </div>
             <Node

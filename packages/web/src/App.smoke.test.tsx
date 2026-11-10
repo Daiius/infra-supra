@@ -1885,7 +1885,7 @@ describe('ゲームモードの画面', () => {
     // 構成図の DB の箱に「未選択」の印（既定の部品の名前で描くので、選び済みに見えないように。D-116 の補足）
     const dbBox = () =>
       within(current()).queryByRole('button', {
-        name: /（DB、未選択）を替える$/,
+        name: /^DB：.*、未選択）を替える$/,
       });
     expect(dbBox()!.querySelector('[data-unselected-mark]')).not.toBeNull();
     expect(dbBox()!.querySelector('[data-swap-mark]')).toBeNull();
@@ -1966,9 +1966,8 @@ describe('ゲームモードの画面', () => {
         .activeElement!.closest('[data-slots]')!
         .getAttribute('data-slots'),
     ).toMatch(/\bdb\b/);
-    expect(document.activeElement!.getAttribute('aria-label')).toMatch(
-      /Supabase.*を替える$/,
-    );
+    // 箱のボタンの名前は中身から取る（見えている文字で始める。D-196）
+    expect(document.activeElement!.textContent).toMatch(/Supabase.*を替える/);
 
     // 「機能から選ぶ」にすると、構成図は出さずにチップの一覧だけ（縦の量を減らす）
     fireEvent.click(within(tabs).getByRole('button', { name: '機能から選ぶ' }));
@@ -2402,7 +2401,7 @@ describe('ゲームモードの画面', () => {
       'section[data-stack][aria-current="true"]',
     )!;
     const dbBox = within(card).getByRole('button', {
-      name: /（DB、未選択）を替える$/,
+      name: /^DB：.*、未選択）を替える$/,
     });
     fireEvent.click(dbBox);
     fireEvent.click(

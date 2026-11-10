@@ -2419,6 +2419,17 @@
 - 作り直す手順: 上の CSS から TTF を取り、opentype.js@1.3.4 で 'Sup.' 'Inf.' をパスにして 64 の viewBox に置き、sharp@0.34.4 で PNG（180・192・512）に書き出す。生成のスクリプトはリポジトリに入れていない。
 - テスト: web の `site-meta.test.ts`（manifest の icons・PNG の寸法・apple-touch-icon の link）。
 
+### D-196 本番の Lighthouse（見積モード）の指摘を直す（2026-11-10・ユーザーの依頼）
+
+- 依頼（ユーザー。supervisor 経由）: Lighthouse 13.6（本番の main = 3c2218c・`?mode=estimate`）のコントラスト・aria-sort・名前と見えている文字の食い違いを直す。CLS は原因を調べる。
+- 決定:
+  - **文字に使う赤**は `text-error-strong`（styles.css の `@theme` の `--color-error-strong: #be123c`）。daisyUI light の error（#ff627d）は白地で 2.87:1 で文字には薄い。#be123c は白地 6.29:1・base-200 5.92:1・base-300 5.42:1。止まる印（見積の `data-stops-from`・`data-stack-stop`・比較の表・部品の比較・ゲームの規約違反の原因・受けられない出来事・大きな出来事の印・遊び方の図の印）の `text-error` を全部置き換えた。地・枠・バッジの塗り（`bg-error`・`border-error`・`badge-error`）は error のまま。
+  - **選んでいない daisyUI の tab の文字**は base-content の 70%（既定は 50% で base-200 の地で 3.33:1）。styles.css で daisyUI の非選択の規則を上書きする（ヘッダーのモードの切り替え・部品の選び方のタブ・カルーセルの組のタブ）。
+  - **aria-sort** は比較の表の見出しのセル（th）に付け、中のボタンからは外す。
+  - **構成図の押せる箱**（横の図の箱・縦の図の箱・一番下の段の箱）は aria-label をやめ、名前を中身から取る（WCAG 2.5.3。名前を見えている文字で始める）。事業者・スロット・未選択・「を替える」は sr-only で後ろに足す（例:「DB：D1（Cloudflare）を替える」）。部品の名前が既にスロットを含むとき（「Amazon SES（メールの送信）」）はスロットを重ねない。吹き出しの名前は同じ文字列（info.tsx の `Popover` の `nameFromContent`）。
+- CLS（デスクトップ 0.727・要素は `<main>`）: 原因はコードからは特定できていない。0.727 は main の見えている面積（1024 × 約 890px ÷ 画面）とほぼ同じで、距離の割合が上限の 1 に達している（main が画面の長辺以上動いたように測られている）。本体で測ってから決める。
+- テスト: web の `estimate-mode.smoke.test.tsx`（W-69 th の aria-sort・W-70 箱の名前が見えている文字で始まり aria-label を持たない）。止まる印の class・箱の名前を引くテストを合わせた。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

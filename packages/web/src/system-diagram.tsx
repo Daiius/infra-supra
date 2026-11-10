@@ -489,6 +489,22 @@ function BandMark({ warn }: { warn: boolean }) {
 }
 
 /**
+ * 押せる箱の名前の補足（見えている文字の後ろに続ける。WCAG 2.5.3: 名前は見えている文字で始める。D-196）。
+ * 例: 「（Cloudflare、未選択）を替える」。ボタンには sr-only で、吹き出しの名前には文字列でそのまま足す。
+ */
+function swapSuffix(...extras: (string | false | undefined)[]): string {
+  return nameSuffix(extras, 'を替える');
+}
+
+function nameSuffix(
+  extras: readonly (string | false | undefined)[],
+  tail: string,
+): string {
+  const xs = extras.filter((x): x is string => !!x);
+  return `${xs.length > 0 ? `（${xs.join('、')}）` : ''}${tail}`;
+}
+
+/**
  * 未選択の段の箱の中身: 名前と「! 未選択」を 1 つの文の流れにして左に寄せる（狭い幅で名前が折り返しても、印は名前の後ろに続く。
  * 横並びの flex のままだと、名前が中央に寄り、印が右の別の列に立つ）。
  */
@@ -519,10 +535,23 @@ function BandNode({
 }) {
   const warn =
     parts?.unselected !== undefined && slots.some((x) => parts.unselected!(x));
-  const text = (
+  const pressable = parts !== undefined && slots.length > 0;
+  const visible = n.ghost ? `${n.caption}: ${n.label}` : n.label;
+  // 押せる箱は見えている文字で名前を始め、事業者・スロット・未選択は後ろに足す（名前に既に含むスロットは重ねない。D-196）
+  const suffix = swapSuffix(
+    !n.ghost && !n.label.includes(n.caption) && n.caption,
+    title,
+    warn && '未選択',
+  );
+  const text = pressable ? (
+    <>
+      {visible}
+      <span className="sr-only">{suffix}</span>
+    </>
+  ) : (
     <>
       <span className="sr-only">{title}: </span>
-      {n.ghost ? `${n.caption}: ${n.label}` : n.label}
+      {visible}
     </>
   );
   const name = (
@@ -542,9 +571,10 @@ function BandNode({
       data-slots={slots.length > 0 ? slots.join(' ') : undefined}
       data-unselected={warn ? 'true' : undefined}
     >
-      {parts && slots.length > 0 ? (
+      {parts && pressable ? (
         <Popover
-          label={`${title}: ${n.ghost ? `${n.caption}（${n.label}` : `${n.label}（${n.caption}`}${warn ? '、未選択' : ''}）を替える`}
+          label={`${visible}${suffix}`}
+          nameFromContent
           interactive
           className={pressableBadge(warn)}
           trigger={
@@ -608,6 +638,7 @@ function LooseSlot({
     <span>
       <span className="font-semibold">{x.label}:</span> {x.picked ?? '未選択'}
       {x.fixed && <span className="opacity-70">（1 択）</span>}
+      {parts && x.pressable && <span className="sr-only">{swapSuffix()}</span>}
     </span>
   );
   return (
@@ -619,7 +650,8 @@ function LooseSlot({
     >
       {parts && x.pressable ? (
         <Popover
-          label={`${x.label}（${x.picked ?? '未選択'}）を替える`}
+          label={`${x.label}: ${x.picked ?? '未選択'}${swapSuffix()}`}
+          nameFromContent
           interactive
           className={pressableBadge(warn)}
           trigger={
@@ -935,6 +967,16 @@ function CompactNode({
   const lanes = lanesThrough(model, n.id);
   const laneLabel = (l: LaneId) =>
     model.lanes.find((x) => x.id === l)?.label ?? l;
+  // 名前は見えている短い名前で始め、正式の名前・スロット・事業者・未選択を後ろに足す（D-196）
+  const suffix = nameSuffix(
+    [
+      n.short !== n.label && n.label,
+      !n.label.includes(n.caption) && n.caption,
+      title,
+      warn && '未選択',
+    ],
+    slots.length > 0 ? 'の説明と差し替え' : 'の説明',
+  );
   return (
     <g
       data-node={n.id}
@@ -945,7 +987,8 @@ function CompactNode({
     >
       <foreignObject x={n.x} y={n.y} width={model.node.w} height={model.node.h}>
         <Popover
-          label={`${title}: ${n.label}（${n.caption}${warn ? '、未選択' : ''}）の${slots.length > 0 ? '説明と差し替え' : '説明'}`}
+          label={`${n.short}${suffix}`}
+          nameFromContent
           interactive={slots.length > 0}
           className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
             n.compute ? 'font-semibold' : ''
@@ -970,6 +1013,7 @@ function CompactNode({
               >
                 {n.short}
               </span>
+              <span className="sr-only">{suffix}</span>
               {warn ? (
                 <UnselectedMark compact />
               ) : (
@@ -1081,7 +1125,9 @@ function SwappableNode({
         height={model.node.h - 4}
       >
         <Popover
-          label={`${title}: ${n.label}（${n.caption}${warn ? '、未選択' : ''}）を替える`}
+          label={`${n.caption}：${n.label}${swapSuffix(title, warn && '未選択')}`}
+          // 名前は見えている「スロット：部品」で始め、事業者・未選択を後ろに足す（D-196）
+          nameFromContent
           interactive
           // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）。未選択の箱は警告色
           className={`relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:ring-2 hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
@@ -1098,6 +1144,7 @@ function SwappableNode({
                 >
                   {n.caption}
                 </span>
+                <span className="sr-only">：</span>
                 {warn && (
                   <span
                     aria-hidden
@@ -1112,6 +1159,9 @@ function SwappableNode({
                 style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
               >
                 {n.label}
+              </span>
+              <span className="sr-only">
+                {swapSuffix(title, warn && '未選択')}
               </span>
               {warn ? <UnselectedMark /> : <SwapMark />}
             </>
