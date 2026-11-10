@@ -8,6 +8,12 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { OG_IMAGE_TOKEN, ogImageUrl } from './src/og-meta.ts';
+import {
+  canonicalUrl,
+  robotsTxt,
+  siteOrigin,
+  sitemapXml,
+} from './src/site-meta.ts';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -34,6 +40,12 @@ function watchWorkspacePackages(): Plugin {
 /**
  * index.html の OGP の画像の URL の目印を、VITE_SITE_URL + /og.png（無ければ相対の /og.png）に置き換える（D-191）。
  * 実ドメインはリポジトリに書かず、Vercel のダッシュボードの環境変数 VITE_SITE_URL で渡す。
+ *
+ * index.html のメモ（本番の HTML に配らないよう、HTML のコメントにせずここに置く。D-194）:
+ * - ヘッダーのロゴの字体（D-184）は使う 8 文字だけに絞った woff2 を preload する
+ * - OGP（D-191）: __OG_IMAGE_URL__ はビルドのとき VITE_SITE_URL + /og.png?v=版（無ければ相対）に置き換える。
+ *   画像（public/og.png）は og.html を dev で開いて 1200×630 の箱を撮ったもの（手順は decisions.md の D-191）
+ * - theme-color はヘッダーの地（daisyUI の light の base-100 = 白）。manifest（public/manifest.webmanifest）と合わせる
  */
 function ogImageMeta(siteUrl: string | undefined): Plugin {
   const url = ogImageUrl(siteUrl);
@@ -42,6 +54,52 @@ function ogImageMeta(siteUrl: string | undefined): Plugin {
     transformIndexHtml: {
       order: 'pre',
       handler: (html) => html.replaceAll(OG_IMAGE_TOKEN, url),
+    },
+  };
+}
+
+/**
+ * サイトとして配るもの（D-194。中身は src/site-meta.ts）。
+ * - canonical の link を index.html に足す（VITE_SITE_URL があるときだけ。見積モードでは画面が href を /?mode=estimate に替える）
+ * - ビルドの出力に robots.txt（常に）と sitemap.xml（VITE_SITE_URL があるときだけ）を書き出す。dev でも同じ中身を返す
+ */
+function siteFiles(siteUrl: string | undefined): Plugin {
+  const origin = siteOrigin(siteUrl);
+  const files: Record<string, string | undefined> = {
+    'robots.txt': robotsTxt(origin),
+    'sitemap.xml': sitemapXml(origin),
+  };
+  const canonical = canonicalUrl(origin);
+  return {
+    name: 'site-files',
+    transformIndexHtml: () =>
+      canonical
+        ? [
+            {
+              tag: 'link',
+              attrs: { rel: 'canonical', href: canonical },
+              injectTo: 'head',
+            },
+          ]
+        : [],
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const name = req.url?.split('?')[0]?.replace(/^\//, '');
+        const body = name ? files[name] : undefined;
+        if (body === undefined) return next();
+        res.setHeader(
+          'Content-Type',
+          name!.endsWith('.xml')
+            ? 'application/xml; charset=utf-8'
+            : 'text/plain; charset=utf-8',
+        );
+        res.end(body);
+      });
+    },
+    generateBundle() {
+      for (const [fileName, source] of Object.entries(files))
+        if (source !== undefined)
+          this.emitFile({ type: 'asset', fileName, source });
     },
   };
 }
@@ -64,6 +122,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       watchWorkspacePackages(),
       ogImageMeta(env.VITE_SITE_URL),
+      siteFiles(env.VITE_SITE_URL),
     ],
     // og.html（OGP の画像の書き出し用。D-191）は dev でだけ開く。build の input は既定の index.html だけなので本番には含めない
     build: {

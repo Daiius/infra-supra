@@ -319,6 +319,17 @@ export function App() {
     }).then((view) => setStats((cur) => (cur?.id === id ? { id, view } : cur)));
   }, [session, results]);
   const [mode, setMode] = useState<Mode>(initialMode);
+  // canonical（D-194。VITE_SITE_URL があるときだけビルドで index.html に入る）を今のモードのページに合わせる。
+  // 見積の入力のクエリは載せず、トップか /?mode=estimate のどちらか（sitemap と同じ 2 つ）にする
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>(
+      'link[rel="canonical"]',
+    );
+    if (!link) return;
+    const url = new URL('/', link.href);
+    if (mode === 'estimate') url.searchParams.set('mode', 'estimate');
+    link.href = url.href;
+  }, [mode]);
   // 「新しいゲーム」の確認のダイアログ（途中なら今のプレイが終わるので確かめる）
   const [confirmRestart, setConfirmRestart] = useState(false);
   // 過去の月へ戻るダイアログ（D-128・D-192）。開いたときに選んでいる月。null は閉じている。

@@ -1,0 +1,18 @@
+{
+  "name": "infra-supra",
+  "short_name": "infra-supra",
+  "description": "実在するクラウドの料金で、Web アプリのインフラの月額と制限を比べながら運営するシミュレーションです。",
+  "lang": "ja",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "theme_color": "#ffffff",
+  "background_color": "#f8f8f8",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

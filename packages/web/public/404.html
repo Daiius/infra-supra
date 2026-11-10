@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>ページが見つかりません | infra-supra</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --base-100: oklch(100% 0 0);
+        --base-200: oklch(98% 0 0);
+        --base-300: oklch(95% 0 0);
+        --base-content: oklch(21% 0.006 285.885);
+        --primary: oklch(45% 0.24 277.023);
+        --primary-content: oklch(93% 0.034 272.788);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+        background: var(--base-200);
+        color: var(--base-content);
+        font-family:
+          ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+          'Segoe UI Emoji';
+        line-height: 1.6;
+        word-break: auto-phrase;
+      }
+      main {
+        width: 100%;
+        max-width: 28rem;
+        padding: 2rem 1.5rem;
+        border: 1px solid var(--base-300);
+        border-radius: 1rem;
+        background: var(--base-100);
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+        text-align: center;
+      }
+      .code {
+        margin: 0;
+        font-size: 0.875rem;
+        opacity: 0.7;
+      }
+      h1 {
+        margin: 0.25rem 0 0.75rem;
+        font-size: 1.25rem;
+      }
+      p {
+        margin: 0 0 1.5rem;
+      }
+      a {
+        display: inline-block;
+        padding: 0.5rem 1.25rem;
+        border-radius: 0.5rem;
+        background: var(--primary);
+        color: var(--primary-content);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      a:hover {
+        filter: brightness(1.1);
+      }
+      a:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="code">404</p>
+      <h1>ページが見つかりません</h1>
+      <p>お探しのページは移動したか、削除された可能性があります。</p>
+      <a href="/">トップページへ戻る</a>
+    </main>
+  </body>
+</html>
