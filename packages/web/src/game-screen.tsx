@@ -1109,7 +1109,7 @@ function EffortBreakdownView({
           actual={r.satisfaction.stages.feature}
         />
       </div>
-      <div className="mt-1 text-xs opacity-60">
+      <div className="mt-1 text-xs opacity-70">
         サーバーで描く CPU 時間（SSR） {r.ssrCpuMs} ms（機能開発で重くなる）
       </div>
     </div>
@@ -2207,7 +2207,7 @@ function Result({
                         </span>
                         {p.text}
                         {p.action && (
-                          <span className="block text-xs opacity-60">
+                          <span className="block text-xs opacity-70">
                             その月の選択: {p.action}
                           </span>
                         )}
@@ -2742,7 +2742,7 @@ function TrendCard({
         ]}
       />
       {Math.max(...t.ratios.map((r) => r ?? 0)) > 3 && (
-        <div className="text-xs opacity-60">
+        <div className="text-xs opacity-70">
           300% を超えた部分はグラフの上端で切っています（値は上の %）
         </div>
       )}

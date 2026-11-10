@@ -162,7 +162,12 @@ describe('遊び方と設定', () => {
     expect(howto()).toBeNull();
     // 見積モードのヘッダーには遊び方の入口を出さない（設定からは開ける）
     expect(screen.queryByRole('button', { name: '遊び方' })).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: 'ゲーム' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'モード' })).getByRole(
+        'button',
+        { name: 'ゲーム' },
+      ),
+    );
     expect(howto()).not.toBeNull();
   });
 });

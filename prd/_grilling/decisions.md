@@ -2391,6 +2391,23 @@
 - 残した点: 狭い画面での英字の長い名前（「Partial Prerendering（PPR）」「Client-side data fetching」）のチップの省略の見え方を実機で確かめる。
 - 補足（2026-11-10・ユーザーの決定）: そのフレームワークに呼び名の無い描き方（選べない薄いチップなど）は、**一般の言葉だけ**にする。ほかのフレームワークの名前を括弧で添えない。一般の言葉からフレームワークの名前を外した: 「部品ごとにキャッシュ（Cache Components）」→「部品ごとにキャッシュ」、部品「ページのキャッシュ（ISR）」・構成図の箱 →「ページのキャッシュ」、流れ「ISR のページ（キャッシュ）」→「キャッシュしたページ」・「ISR の作り直し・キャッシュの描き直し」→「キャッシュの作り直し・描き直し」、見取り図の札「ISR（キャッシュ）」→「キャッシュ（期限で取り直す）」・「アイランドが API で取る」→「部品だけブラウザが API で取る」、描き方の長い説明・区画の凡例の説明の「Next.js の ISR・Astro の route caching」などの括弧、使えない理由（Astro の「Cache Components は Next.js 16 の機能です」→「このフレームワークには、部品ごとにキャッシュする仕組みがありません（近いのは Server islands）」・静的書き出しの「（ISR・SSR は使えない）」）、Astro × Vercel の置き場の名前（「ISR（@astrojs/vercel の isr）」→「Vercel のキャッシュ（@astrojs/vercel の isr）」）、表の注記の「Next.js × Netlify・OpenNext の PPR など」。テスト: game の `framework-terms.test.ts`（Astro・Vite の SPA・静的書き出しの全構成の表の名前・説明・使えない理由・見取り図の札に、Next.js・Astro の呼び名が出ない）、web の `system-diagram-model.test.ts`（流れの名前）。
 
+### D-194 サイトとして備えるものとアクセシビリティの手直し（2026-11-10・ユーザーの依頼）
+
+- 依頼（ユーザー。supervisor 経由）: 会社のブログで紹介するので、最低限のサイトの体裁とアクセシビリティをそろえる。
+- 決定（サイト）:
+  - **robots.txt・sitemap.xml・canonical** は OGP（D-191）と同じく `VITE_SITE_URL` から絶対 URL を作る（web の `site-meta.ts`。vite.config.ts の `siteFiles` がビルドの出力に書き出し、dev でも同じ中身を返す。値が環境変数で変わるので public の静的ファイルにしない）。sitemap はトップ（ゲーム）と `/?mode=estimate` の 2 つ。**`VITE_SITE_URL` が無いとき**: robots.txt は出す（全部許可・Sitemap の行を省く）、sitemap.xml は出さない（`<loc>` は絶対 URL が要る）、canonical は付けない。canonical は見積モードでは画面が `/?mode=estimate` に替える（入力のクエリは載せない）。
+  - **index.html**: theme-color（ヘッダーの地 = daisyUI light の base-100 の白）・manifest へのリンク・`<noscript>` の案内。開発のメモの HTML コメントは本番に配られ、目印まで置き換わっていたので、vite.config.ts のコメントへ移した（index.html・404.html にコメントが無いことをテストで見る）。
+  - **manifest**（`public/manifest.webmanifest`）: アイコンは favicon.svg だけ。display は browser（オフライン・インストールの体験は作っていないため）。background_color は base-200。
+  - **404**: `public/404.html`（JS 無し・テーマの色・トップへのリンク）。Vercel は出力の 404.html を、どの静的ファイルにも当たらないときの 404 のページとして使う。SPA の rewrite（全部 index.html）にはしない（/api/* の中継と衝突させない）。
+  - **安全のヘッダー**（vercel.ts の `SECURITY_HEADERS`。API_ORIGIN の有無と無関係に全パス）: `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`・`Permissions-Policy`（カメラ・マイク・位置・支払い・USB を空）・`Content-Security-Policy: frame-ancestors 'none'`。
+- 決定（アクセシビリティ）:
+  - ヘッダーを `<header>` にし、ロゴを h1 で包む（見た目は変えない。画面の見出しは h2 から）。
+  - **モードの切り替え**は `role="tab"` をやめ、`<nav aria-label="モード">` の中のボタンにして今の方へ `aria-current="page"`。切り替わるのは画面全体（URL も変わる）でタブの部品の意味（同じ画面の中の tabpanel）に当たらず、矢印キー・tabpanel を足すより簡単で正しい。daisyUI の tab は `aria-current` でも選んだ形になる。
+  - 折れ線のグラフの `aria-label` に、系列ごとの最初と最後の月の値・最大・最小を入れる（charts.tsx の `lineChartSummary`）。
+  - 本文として読む文字の `opacity-50/60` を `opacity-70` にした（説明・注記・キャプション・使えない理由・読み込み中・フッターのリンク・表の 0）。無効・未選択・読み込み中の薄さ・飾りの記号（▾▴・矢印のアイコン）・凡例で別の線を選んだときの薄さは意図なのでそのまま。
+- 入れなかったもの: 本格的な CSP（読み込み元の洗い出しが要る）、PNG のアイコン・apple-touch-icon、`btn-xs` の押せる的の大きさと 9〜11px の固定の文字（実測してから決める）。
+- テスト: web の `site-meta.test.ts`（robots・sitemap・canonical・HTML にコメントが無い・manifest・404）、`vercel-config.test.ts`（安全のヘッダーが API_ORIGIN と無関係に付く）、`a11y.smoke.test.tsx`（banner と h1・モードのナビの aria-current・グラフの要約）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

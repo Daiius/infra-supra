@@ -75,9 +75,19 @@ describe('小さな不具合の回帰', () => {
     advance(1);
     expect(resumedToast()).toBeNull();
     // 見積の画面へ切り替えて戻っても出し直さない（運営中の画面は作り直される。OCL-F453F189）
-    fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'モード' })).getByRole(
+        'button',
+        { name: '見積' },
+      ),
+    );
     await waitLoaded();
-    fireEvent.click(screen.getByRole('tab', { name: 'ゲーム' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'モード' })).getByRole(
+        'button',
+        { name: 'ゲーム' },
+      ),
+    );
     await waitLoaded();
     expectGameScreen(4);
     expect(resumedToast()).toBeNull();

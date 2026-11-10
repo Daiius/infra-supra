@@ -209,6 +209,32 @@ export const compact = (n: number) =>
       ? `${Math.round(n / 1e3)}K`
       : n.toLocaleString();
 
+/**
+ * 折れ線のグラフの読み上げの要約（D-194）。値はホバーでしか出ないので、系列ごとに記録のある最初の月・最後の月の値と最大・最小を
+ * aria-label に入れる（見込み・前の試行は入れない）。例: 「所持金。1 か月目 $100 → 6 か月目 $250・最大 $300（4 か月目）・最小 $80（2 か月目）」。
+ * 系列が 2 つ以上なら系列の名前を前に付ける。記録が 1 つも無い系列は「記録なし」。
+ */
+export function lineChartSummary(
+  title: string,
+  series: Pick<Series, 'label' | 'values'>[],
+  format: (v: number) => string,
+): string {
+  const parts = series.map((s) => {
+    const pts = s.values.flatMap((v, i) =>
+      v === null ? [] : [{ m: i + 1, v }],
+    );
+    const head = series.length > 1 ? `${s.label}: ` : '';
+    if (pts.length === 0) return `${head}記録なし`;
+    const first = pts[0]!;
+    const last = pts[pts.length - 1]!;
+    if (pts.length === 1) return `${head}${first.m} か月目 ${format(first.v)}`;
+    const max = pts.reduce((a, p) => (p.v > a.v ? p : a));
+    const min = pts.reduce((a, p) => (p.v < a.v ? p : a));
+    return `${head}${first.m} か月目 ${format(first.v)} → ${last.m} か月目 ${format(last.v)}・最大 ${format(max.v)}（${max.m} か月目）・最小 ${format(min.v)}（${min.m} か月目）`;
+  });
+  return `${title}。${parts.join('。')}`;
+}
+
 export function LineChart({
   series,
   months,
@@ -394,7 +420,11 @@ export function LineChart({
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}
           role="img"
-          aria-label={typeof title === 'string' ? title : '推移のグラフ'}
+          aria-label={lineChartSummary(
+            typeof title === 'string' ? title : '推移のグラフ',
+            series,
+            format,
+          )}
         >
           {/*
             点が 1 つだけの区間（1 か月目・乗り換えや部品の差し替えの後など）は、点だけで光ると不自然なので、左へ 1 か月分の水平線を

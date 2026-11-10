@@ -224,7 +224,7 @@ describe('この月に戻る（D-128）', () => {
     expect(legendLine.getAttribute('stroke-dasharray')).toBe('2 3');
     // 凡例（1 系列のグラフにも出す）
     const pvChart = screen
-      .getByRole('img', { name: 'PV（月）' })
+      .getByRole('img', { name: /^PV（月）。/ })
       .closest('figure')!;
     expect(within(pvChart).getByText('前の試行')).toBeDefined();
     // 今の試行の無い月（4 か月目）にも、前の試行の値だけツールチップに出る

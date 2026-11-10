@@ -131,7 +131,7 @@ export function PrivacyPolicyDialog({ onClose }: { onClose: () => void }) {
               でお知らせください。
             </p>
           </section>
-          <p className="opacity-60">
+          <p className="opacity-70">
             内容を変えるときは、この画面を更新します。最終更新日:{' '}
             {PRIVACY_UPDATED}
           </p>
