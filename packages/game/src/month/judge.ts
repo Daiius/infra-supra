@@ -8,6 +8,7 @@ import {
   DEFAULT_CHOICES,
   imagesBehavior,
   type Platform,
+  termName,
 } from 'catalog';
 import type { PlatformPremise } from 'estimator';
 import {
@@ -37,6 +38,7 @@ import {
   pageWeightLabel,
   type Settings,
 } from '../settings.ts';
+import { nameThen } from '../format.ts';
 import type { GameState, MonthReport } from '../state.ts';
 import { coldStartViewShare } from '../workload.ts';
 import type { MonthEstimate } from './bill.ts';
@@ -286,7 +288,7 @@ export function judgeMonth(
     onDemandReason: onDemand
       ? state.requirements.includes('on-demand-isr')
         ? `即時反映の要件を満たしていません（${onDemand.label}。${onDemand.reason}）`
-        : `更新で消す再検証が届きません（${onDemand.label}。${onDemand.reason}）`
+        : `${nameThen(termName(state.framework, 'onDemand', '更新で消す再検証'))}が届きません（${onDemand.label}。${onDemand.reason}）`
       : undefined,
   });
   return { stages, reasons, comps, imgs, notes };

@@ -46,7 +46,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: 'Amplify の ISR',
-    note: 'ISR のページは Amplify の CDN が返し、期限が切れると SSR の計算で作り直します。更新で消す再検証（即時反映）には対応していません',
+    note: 'ISR のページは Amplify の CDN が返し、期限が切れると SSR の計算で作り直します。On-demand revalidation（即時反映）には対応していません',
     premiseRefs: ['fact:aws:amplify-hosting:no-on-demand-isr'],
     onDemandIsr: { ok: false, fact: 'aws:amplify-hosting:no-on-demand-isr' },
   },
@@ -120,7 +120,7 @@ export const AWS_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws',
     label: '自前の CloudFront（ISR のページもキャッシュ）',
-    note: 'ISR のページも s-maxage（ISR の間隔）で CloudFront が返します。更新で消す再検証は CloudFront に届きません（Amplify も更新で消す ISR に非対応）。外れた分と SSR・API は Amplify の配信としても課金されるとみなします',
+    note: 'ISR のページも s-maxage（ISR の間隔）で CloudFront が返します。On-demand revalidationは CloudFront に届きません（Amplify も On-demand revalidation に非対応）。外れた分と SSR・API は Amplify の配信としても課金されるとみなします',
     onDemandIsr: { ok: false, fact: 'aws:amplify-hosting:front-cloudfront' },
     premiseRefs: [
       'fact:aws:amplify-hosting:front-cloudfront',

@@ -58,6 +58,8 @@ import {
   type Surprise,
   type SettingKey,
   type Stage,
+  ASTRO_ON_DEMAND,
+  NEXT_ON_DEMAND,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { compact, LineChart, Sparkline, useNarrowScreen } from './charts.tsx';
@@ -1640,7 +1642,7 @@ function Actions({
                       key === 'isr' ||
                       key === 'buildInterval' ||
                       key === 'pageCache'
-                        ? `手間 ${def.effort}（${key === 'buildInterval' ? '更新のたびにビルド' : '更新で消す'}へは ${EFFORT.onDemandSwitch}）`
+                        ? `手間 ${def.effort}（${key === 'buildInterval' ? '更新のたびにビルド' : key === 'pageCache' ? ASTRO_ON_DEMAND : NEXT_ON_DEMAND}へは ${EFFORT.onDemandSwitch}）`
                         : `手間 ${def.effort}`,
                       '来月から',
                     ]}
@@ -1705,7 +1707,7 @@ function Actions({
                 )}
                 {key === 'isr' && invalidation && (
                   <span className="mt-1 block text-xs text-warning">
-                    「更新で消す」では {invalidation}
+                    「{NEXT_ON_DEMAND}」では {invalidation}
                   </span>
                 )}
               </div>

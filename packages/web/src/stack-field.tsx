@@ -237,6 +237,7 @@ function EditableDiagram({
             {editor.note && <p className="text-xs opacity-70">{editor.note}</p>}
             <SystemDiagram
               architecture={arch}
+              framework={framework}
               pages={pages}
               caption={caption}
               parts={parts}
@@ -439,6 +440,7 @@ function StackCard({
         ) : (
           <SystemDiagram
             architecture={arch}
+            framework={framework}
             pages={pages}
             caption={caption}
             ghosts={boxes.ghosts}

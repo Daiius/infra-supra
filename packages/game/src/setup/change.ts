@@ -7,7 +7,7 @@ import {
   type Choices,
   type FrameworkId,
   type RouteStrategyId,
-  SLOT_LABELS,
+  slotLabel,
   type SlotId,
   strategyTitle,
 } from 'catalog';
@@ -279,7 +279,7 @@ export function setupChangeOf(
       items.push({
         kind: 'component',
         action: null,
-        name: `${SLOT_LABELS[slot]}を${componentLabel(toPlatform, slot, v)}に`,
+        name: `${slotLabel(slot, draft.framework)}を${componentLabel(toPlatform, slot, v)}に`,
         meta: [],
         why: migrate
           ? `乗り換えでは部品は乗り換え先の既定の選択（${componentLabel(toPlatform, slot, fixedStart[slot] ?? '')}）から始まります。乗り換えが済んでから差し替えられます`
@@ -316,7 +316,7 @@ export function setupChangeOf(
     items.push({
       kind: 'component',
       action,
-      name: `${SLOT_LABELS[slot]}を${componentLabel(platform, slot, option)}に差し替える`,
+      name: `${slotLabel(slot, state.framework)}を${componentLabel(platform, slot, option)}に差し替える`,
       meta: componentEffortLabel(slot, state, option),
       detail:
         slot === 'api'
@@ -367,7 +367,7 @@ export function setupChangeOf(
       strategyFamily(from) === strategyFamily(want.strategy)
     )
       continue;
-    const name = `${routeLabel(state, route)}を「${strategyTitle(want.strategy)}」に`;
+    const name = `${routeLabel(state, route)}を「${strategyTitle(want.strategy, draft.framework)}」に`;
     if (rewrite) {
       items.push({
         kind: 'route',

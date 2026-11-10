@@ -2,7 +2,11 @@
 // 振る舞いは estimator の ComponentKind、ここはノードの値と課金先のメーターの対応だけを持つ。
 // GD-4（D-24・prd/07 §11）: 構成は役割ごとのスロットの選択（部品）から組み立てる。完成品は「既定の選択」。
 import type { ArchitectureInput, RequestClass, WorkloadInput } from 'estimator';
-import { browserCallsApi, type FrameworkId } from '../frameworks/index.ts';
+import {
+  browserCallsApi,
+  termName,
+  type FrameworkId,
+} from '../frameworks/index.ts';
 import {
   AWS_COMPONENTS,
   AWS_DEFAULT_CHOICES,
@@ -183,7 +187,7 @@ export type ComponentOption = {
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
-  isrCache: 'ページのキャッシュ（ISR）',
+  isrCache: 'ページのキャッシュ',
   images: '画像',
   api: 'API の置き場',
   db: 'DB',
@@ -197,6 +201,16 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   dbBackup: 'DB のバックアップ',
   email: 'メール送信',
 };
+
+/**
+ * 画面に出すスロットの名前。フレームワークを渡すと、そのフレームワークでの呼び名にする（D-193。ページのキャッシュは Next.js の
+ * 「ISR のキャッシュ」。呼び名が無い・フレームワークを選ぶ前は SLOT_LABELS の一般の言葉）。
+ */
+export function slotLabel(slot: SlotId, framework?: FrameworkId): string {
+  return slot === 'isrCache'
+    ? termName(framework, 'pageCacheStore', SLOT_LABELS.isrCache)
+    : SLOT_LABELS[slot];
+}
 
 const BASE_COMPONENTS: readonly ComponentOption[] = [
   // Cloudflare

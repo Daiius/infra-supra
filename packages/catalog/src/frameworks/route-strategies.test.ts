@@ -25,9 +25,9 @@ import {
   routeAudience,
   SERVER_ISLAND,
   serverIslandDelivery,
-  strategyTitle,
   CACHE_COMPONENTS,
 } from './route-strategies.ts';
+import { strategyTitle } from './terms.ts';
 
 const FRAMEWORK_IDS = Object.keys(FRAMEWORK_PRESETS) as FrameworkId[];
 
@@ -45,9 +45,8 @@ describe('描き方のメニュー', () => {
     expect(
       ROUTE_STRATEGY_ORDER.filter((s) => ROUTE_STRATEGIES[s].personalOk),
     ).toEqual(['ssr', 'shell-api', 'server-island', 'cache-components']);
-    expect(strategyTitle('cache-components')).toBe(
-      '部品ごとにキャッシュ（Cache Components）',
-    );
+    // 一般の言葉にフレームワークの名前を添えない（D-193）
+    expect(strategyTitle('cache-components')).toBe('部品ごとにキャッシュ');
     // 番号（S1〜S6）は画面に出さない（D-112）
     expect(strategyTitle('ssr')).toBe('毎回描く（キャッシュしない）');
   });

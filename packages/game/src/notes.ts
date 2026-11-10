@@ -6,6 +6,7 @@ import {
   imagesBehavior,
   type Platform,
   rebuildsStaticPages,
+  strategyTitle,
 } from 'catalog';
 import { scenarioOf } from './core.ts';
 import { commentsInPage, commentsOf } from './routes/comments.ts';
@@ -118,7 +119,7 @@ function commentsNote(state: GameState): string | undefined {
   const rebuilds =
     fam !== undefined ? fam === 'static' : rebuildsStaticPages(state.framework);
   if (fam === 'ssr' || (!rebuilds && isrCacheOf(state) === 'none'))
-    return 'ISR のキャッシュを使わない（毎回描く）ので、作り直しは増えません';
+    return `ISR のキャッシュを使わない（${strategyTitle('ssr', state.framework)}）ので、作り直しは増えません`;
   if (isOnDemand(state.settings))
     return rebuilds
       ? 'コメントの投稿のたびにビルドし直します（コメントはビルドの時間の分だけ遅れて見えます）'

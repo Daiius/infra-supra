@@ -244,7 +244,7 @@ describe('見積モードの画面', () => {
     const routes = within(routesDialog());
     fireEvent.click(
       routes.getByRole('button', {
-        name: /^個人向けのページを 枠 \+ ブラウザが API で取る/,
+        name: /^個人向けのページを Client Islands/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=shell-api');
@@ -312,7 +312,7 @@ describe('見積モードの画面', () => {
     const routes = within(routesDialog());
     fireEvent.click(
       routes.getByRole('button', {
-        name: /^個人向けのページを 枠 \+ 人ごとの部分をサーバーで/,
+        name: /^個人向けのページを Partial Prerendering（PPR）/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=server-island');
@@ -334,7 +334,7 @@ describe('見積モードの画面', () => {
     expect(
       within(row as HTMLElement)
         .getByRole('button', {
-          name: '個人向けのページは 枠 + 人ごとの部分をサーバーで（選択中）',
+          name: '個人向けのページは Partial Prerendering（PPR）（選択中）',
         })
         .getAttribute('aria-pressed'),
     ).toBe('true');
@@ -370,16 +370,14 @@ describe('見積モードの画面', () => {
         .getAttribute('data-strategy');
     expect(strategyOf('article')).toBe('cache-components');
     expect(strategyOf('personal')).toBe('cache-components');
-    expect(table().textContent).toContain(
-      '部品ごとにキャッシュ（Cache Components）',
-    );
+    expect(table().textContent).toContain('Cache Components');
     // 描き方の番号（S1〜S6・文書の S7）は画面に出さない（D-112）
     expect(table().textContent).not.toMatch(/\bS[1-7]\b/);
     expect(window.location.search).not.toContain('rp.');
     expect(flowLegend()).toContain('閲覧ごとに描く部分');
     fireEvent.click(
       within(routesDialog()).getByRole('button', {
-        name: /^個人向けのページを 毎回描く/,
+        name: /^個人向けのページを Dynamic rendering/,
       }),
     );
     expectEstimate();
@@ -392,7 +390,7 @@ describe('見積モードの画面', () => {
     expect(strategyOf('personal')).toBe('ssr');
     expect(
       within(routesDialog()).getByRole('button', {
-        name: /^個人向けのページを 部品ごとにキャッシュ（Cache Components）にする/,
+        name: /^個人向けのページを Cache Componentsにする/,
       }),
     ).toBeTruthy();
   });
@@ -538,7 +536,7 @@ describe('見積モードの画面', () => {
       within(
         screen.getByRole('region', { name: 'Next.js（App Router） の説明' }),
       ).getByRole('button', {
-        name: /^個人向けのページを 枠 \+ ブラウザが API で取る/,
+        name: /^個人向けのページを Client-side data fetching/,
       }),
     );
     expectEstimate();
@@ -742,7 +740,7 @@ describe('見積モードの画面', () => {
     expect(
       isr.querySelector('[data-option="0"]')!.getAttribute('data-available'),
     ).toBe('false');
-    choose('ページのキャッシュ（ISR）', 'r2');
+    choose('ISR のキャッシュ', 'r2');
     expect(q().get('c.isrCache')).toBe('r2');
     // オンデマンドにすると記事のページは更新で消すになる（同じ設定）
     choose('ISR の再検証', '0');
@@ -891,7 +889,7 @@ describe('見積モードの画面', () => {
     const q = () => new URLSearchParams(window.location.search);
     const DB = 'DB(?! のバックアップ)';
     choose(DB, 'dynamodb');
-    choose('ページのキャッシュ（ISR）', 'r2');
+    choose('ISR のキャッシュ', 'r2');
     expect(q().get('c.db')).toBe('dynamodb');
     // 構成 B は既定の部品から（A の選択は混ざらず、URL も B の部品）
     pick('stack', 'vercel-supabase-pro');
@@ -901,7 +899,7 @@ describe('見積モードの画面', () => {
     // A に戻ると A の選択が戻る（B の Neon は混ざらない）
     pick('stack', 'cloudflare-vinext-paid');
     expect(checked(DB)).toBe('dynamodb');
-    expect(checked('ページのキャッシュ（ISR）')).toBe('r2');
+    expect(checked('ISR のキャッシュ')).toBe('r2');
     expect(q().get('c.db')).toBe('dynamodb');
     // 選んでいない B のカードは覚えている部品（Neon）で題・月額を出し、比較の表の行も同じ（D-116 の補足）
     const bCard = document.querySelector<HTMLElement>(
@@ -928,10 +926,11 @@ describe('見積モードの画面', () => {
     pick('framework', 'vite-spa');
     pick('stack', 'cloudflare-vinext-paid');
     expect(checked(DB)).toBe('dynamodb');
-    expect(queryGroup('ページのキャッシュ（ISR）')).toBeNull();
+    expect(queryGroup('ページのキャッシュ')).toBeNull();
+    expect(queryGroup('ISR のキャッシュ')).toBeNull();
     // Next.js に戻しても落ちた ISR のキャッシュは復活しない（既定の KV）
     pick('framework', 'nextjs');
-    expect(checked('ページのキャッシュ（ISR）')).toBe('kv');
+    expect(checked('ISR のキャッシュ')).toBe('kv');
     expect(checked(DB)).toBe('dynamodb');
     expectEstimate();
   });

@@ -6,6 +6,8 @@ import {
   COMPONENTS,
   ROUTE_STRATEGIES,
   SLOT_LABELS,
+  slotLabel,
+  strategyTitle,
   type SlotId,
 } from 'catalog';
 import {
@@ -222,6 +224,9 @@ export function restoreLastSetup(
     ? (last.framework as FrameworkId)
     : fws.default;
   const framework = frameworkOnStack(sc, stack, want);
+  // 前回の選択の名前は前回のフレームワークでの呼び名（D-193）。今は無いフレームワークなら一般の言葉
+  const lastFramework =
+    last.framework in FRAMEWORKS ? (last.framework as FrameworkId) : undefined;
   if (framework !== last.framework)
     notes.push(
       `前回のフレームワーク（${frameworkLabel(last.framework)}）は今は選べないので ${FRAMEWORKS[framework].label} にしました。`,
@@ -235,7 +240,7 @@ export function restoreLastSetup(
   for (const [slot, id] of Object.entries(saved))
     if (components[slot as SlotId] !== id)
       lost.push(
-        `${SLOT_LABELS[slot as SlotId] ?? slot}（${optionLabel(slot, id)}）`,
+        `${slot in SLOT_LABELS ? slotLabel(slot as SlotId, lastFramework) : slot}（${optionLabel(slot, id)}）`,
       );
   const wantRoutes = Object.fromEntries(
     Object.entries(last.routes ?? {}).filter(
@@ -250,7 +255,7 @@ export function restoreLastSetup(
       lost.push(
         `${routeLabels.find((r) => r.id === route)?.label ?? route}の描き方（${
           id in ROUTE_STRATEGIES
-            ? ROUTE_STRATEGIES[id as keyof typeof ROUTE_STRATEGIES].label
+            ? strategyTitle(id as keyof typeof ROUTE_STRATEGIES, lastFramework)
             : id
         }）`,
       );

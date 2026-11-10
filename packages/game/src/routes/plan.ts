@@ -9,7 +9,8 @@ import {
   type RouteAudience,
   type RouteStrategyId,
   type RouteTraits,
-  SLOT_LABELS,
+  slotLabel,
+  strategyTermNote,
   strategySupport,
   strategyTitle,
 } from 'catalog';
@@ -50,7 +51,10 @@ import {
  */
 export type RouteAlternative = {
   strategy: RouteStrategyId;
+  /** 描き方の名前（選んだフレームワークでの呼び名。無ければ一般の言葉。D-193）。 */
   label: string;
+  /** 呼び名の短い説明（ⓘ。呼び名が無ければ無い。D-193）。 */
+  termNote?: string;
   /** 文書の中の番号（S1〜S6。部品ごとにキャッシュは空）。画面には出さない（D-112）。 */
   code: string;
   available: boolean;
@@ -70,8 +74,10 @@ export type RoutePlanRow = {
   /** PV の割合（0〜1。テンプレートの値）。 */
   share: number;
   strategy: RouteStrategyId;
-  /** 描き方の名前（番号なし。D-112）。 */
+  /** 描き方の名前（番号なし。D-112。選んだフレームワークでの呼び名。無ければ一般の言葉。D-193）。 */
   strategyLabel: string;
+  /** 呼び名の短い説明（ⓘ。呼び名が無ければ無い。D-193）。 */
+  strategyTermNote?: string;
   /** 文書の中の番号（S1〜S6。部品ごとにキャッシュは空）。画面には出さない（D-112）。 */
   code: string;
   /** 描き方の値（期限・更新のたび・API の応答のキャッシュの期間・記事ごとの枠）。コメント欄は parts（D-109）。 */
@@ -135,6 +141,7 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
     const audience = routeAudienceOf(sc, r);
     const choice = plan[r.id]!;
     const def = ROUTE_STRATEGIES[choice.strategy];
+    const rowTermNote = strategyTermNote(choice.strategy, p.framework);
     const preset = defaultStrategy(p.framework, platform, audience, {
       legacy: p.legacyRouteDefaults === true,
     });
@@ -167,9 +174,9 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       strategyFamily(choice.strategy) === strategyFamily(preset)
         ? undefined
         : chosen
-          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は「${strategyTitle(preset)}」）`
+          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は「${strategyTitle(preset, p.framework)}」）`
           : choice.strategy === 'ssr'
-            ? `${SLOT_LABELS.isrCache}の部品が「キャッシュしない」`
+            ? `${slotLabel('isrCache', p.framework)}の部品が「キャッシュしない」`
             : undefined;
     const alternatives = ROUTE_STRATEGY_ORDER.filter(
       (s) => s !== choice.strategy,
@@ -177,6 +184,7 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       const x = strategySupport(p.framework, platform, audience, s);
       if (x.support === 'unverified') return [];
       const d = ROUTE_STRATEGIES[s];
+      const termNote = strategyTermNote(s, p.framework);
       // 部品で決まるもの（Next.js の S3）は、今の部品で消せるか（onDemandBlocker）で判定する
       const blocked =
         x.support === 'depends' && s === 'cached-purge' ? blocker : undefined;
@@ -196,7 +204,8 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       return [
         {
           strategy: s,
-          label: d.label,
+          label: strategyTitle(s, p.framework),
+          ...(termNote !== undefined ? { termNote } : {}),
           code: d.code,
           available:
             strategySelectable(p.framework, platform, audience, s) &&
@@ -222,7 +231,8 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       traits: sc.routeTraits[r.id],
       share: r.share,
       strategy: choice.strategy,
-      strategyLabel: def.label,
+      strategyLabel: strategyTitle(choice.strategy, p.framework),
+      ...(rowTermNote !== undefined ? { strategyTermNote: rowTermNote } : {}),
       code: def.code,
       detail,
       why: choice.shellPerPage ? SHELL_PER_PAGE_WHY : def.why[audience],

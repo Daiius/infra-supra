@@ -535,7 +535,7 @@ export const aws: PriceBookInput = {
         {
           id: 'no-on-demand-isr',
           premise:
-            'Amplify Hosting は Next.js の更新で消す ISR（On-demand。即時反映）・ストリーミング・Edge のミドルウェアに対応していません',
+            'Amplify Hosting は Next.js のOn-demand revalidation（即時反映）・ストリーミング・Edge のミドルウェアに対応していません',
           sourceIds: ['amplifyNext'],
         },
         {
@@ -640,7 +640,7 @@ export const aws: PriceBookInput = {
         {
           id: 'opennext-isr',
           premise:
-            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から作り直します。更新で消す再検証（revalidatePath・revalidateTag）にも対応しますが、CloudFront のキャッシュは別に無効化が要ります（自動の無効化は既定で無効です。有効にすると再検証したページごとにページとそのデータのルートの 2 パスを無効化します。無効化は月 1,000 パスまで無料・以降 1 パス $0.005 です）',
+            'OpenNext（AWS）の ISR は、キャッシュを S3、タグを DynamoDB に置き、時間の再検証は SQS（FIFO）の待ち行列から作り直します。On-demand revalidation（revalidatePath・revalidateTag）にも対応しますが、CloudFront のキャッシュは別に無効化が要ります（自動の無効化は既定で無効です。有効にすると再検証したページごとにページとそのデータのルートの 2 パスを無効化します。無効化は月 1,000 パスまで無料・以降 1 パス $0.005 です）',
           sourceIds: [
             'opennextServer',
             'opennextCaching',

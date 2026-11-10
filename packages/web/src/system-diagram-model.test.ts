@@ -23,6 +23,8 @@ import {
   isCallerKind,
   isNarrow,
   lanesThrough,
+  laneLabel,
+  LANE_ORDER,
   LANES,
   LAYOUT,
   LAYOUT_VERTICAL,
@@ -798,7 +800,7 @@ describe('slotBoxes（どのスロットにも箱。今の選択が箱を持た�
         ).toBe(false);
         const g = model.nodes.find((n) => n.id === 'ghost:isrCache')!;
         expect(g.ghost?.slot, `${stack} ${choice}`).toBe('isrCache');
-        expect(g.caption).toBe('ページのキャッシュ（ISR）');
+        expect(g.caption).toBe('ISR のキャッシュ');
         expect(g.label, `${stack} ${choice}`).toBe(
           ghosts.find((x) => x.slot === 'isrCache')!.label,
         );
@@ -845,5 +847,24 @@ describe('slotBoxes（どのスロットにも箱。今の選択が箱を持た�
       isrCache: 'workers-cache',
     });
     expect(wc.swap.get('r2') ?? []).not.toContain('isrCache');
+  });
+});
+
+describe('流れの名前（D-193）', () => {
+  it('呼び名の無いフレームワークでは一般の言葉だけで、Next.js・Astro の名前を出さない', () => {
+    expect(laneLabel('isr', 'nextjs')).toBe('ISR');
+    expect(laneLabel('island', 'astro')).toBe('Server islands');
+    expect(laneLabel('isr', 'astro')).toBe('Route caching');
+    for (const fw of ['vite-spa', 'nextjs-export', undefined] as const)
+      for (const l of LANE_ORDER) {
+        expect(laneLabel(l, fw)).toBe(LANES[l].label);
+        expect(laneLabel(l, fw)).not.toMatch(
+          /ISR|PPR|Cache Components|Dynamic rendering|Server islands|Route caching/,
+        );
+      }
+    for (const l of LANE_ORDER)
+      expect(laneLabel(l, 'astro')).not.toMatch(
+        /ISR|PPR|Cache Components|Dynamic rendering/,
+      );
   });
 });

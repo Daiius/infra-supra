@@ -1,4 +1,5 @@
 // ページの見取り図（描き方ごとの領域の出どころ）。
+import { REGION_SOURCES } from './scenario.ts';
 import type {
   OffscreenElement,
   PageBadge,
@@ -10,6 +11,8 @@ import type {
 import {
   FRAMEWORK_PRESETS,
   type FrameworkId,
+  frameworkTerm,
+  type FrameworkTermKey,
   perPageShellFramework,
   type RouteStrategyId,
 } from 'catalog';
@@ -111,7 +114,42 @@ export function scenarioWireframes(sc: Scenario): {
 }
 
 /** 見取り図の区画に、選んだフレームワークでの作られ方を付けたもの（D-102）。 */
-export type ResolvedRegion = WireframeRegion & { source: RegionSource };
+export type ResolvedRegion = WireframeRegion & {
+  source: RegionSource;
+  /** 作られ方の札（選んだフレームワークでの呼び名。無ければ一般の言葉。D-193）。 */
+  sourceLabel: string;
+  /** 呼び名の短い説明（title。呼び名が無ければ無い）。 */
+  sourceNote?: string;
+};
+
+/** 区画の作られ方 → フレームワークの呼び名の所（D-193）。無いもの（画像・部品ごとにキャッシュの区画）は一般の言葉。 */
+const REGION_TERM: Partial<Record<RegionSource, FrameworkTermKey>> = {
+  build: 'static-build',
+  isr: 'cached-ttl',
+  cached: 'cachedRegion',
+  ssr: 'ssr',
+  api: 'shell-api',
+  island: 'shell-api',
+  shell: 'shell-api',
+  'island-shell': 'shellRegion',
+  'server-island': 'islandRegion',
+};
+
+/** 区画の作られ方の札（フレームワークの呼び名。無ければ REGION_SOURCES の short。D-193）。 */
+export function regionSourceLabel(
+  source: RegionSource,
+  framework: FrameworkId | undefined,
+): { label: string; note?: string } {
+  const key = REGION_TERM[source];
+  // Vite の SPA はページ全体が SPA なので、シェルの区画だけに呼び名を付ける（API で取る区画まで「SPA」にしない）
+  const t =
+    key === undefined || (framework === 'vite-spa' && source !== 'shell')
+      ? undefined
+      : frameworkTerm(framework, key);
+  return t
+    ? { label: t.name, ...(t.note !== undefined ? { note: t.note } : {}) }
+    : { label: REGION_SOURCES[source].short };
+}
 
 /**
  * 始める画面のページの見取り図（D-102）。シナリオの wireframes を、選んだフレームワークとコメントの描き方（D-82）で解く。
@@ -225,10 +263,16 @@ export function pageWireframes(
       route: w.route,
       label: r?.label ?? w.route,
       ...(chosen !== undefined ? { strategy: chosen } : {}),
-      regions: w.regions.map((r) => ({
-        ...r,
-        source: sourceOf(r.id),
-      })),
+      regions: w.regions.map((r) => {
+        const source = sourceOf(r.id);
+        const t = regionSourceLabel(source, framework);
+        return {
+          ...r,
+          source,
+          sourceLabel: t.label,
+          ...(t.note !== undefined ? { sourceNote: t.note } : {}),
+        };
+      }),
       badges: components
         ? audience === 'personal'
           ? [

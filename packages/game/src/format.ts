@@ -16,6 +16,10 @@ export function lineLabel(l: LineItem): string {
   return `${l.priceRef.provider} ${l.priceRef.meterId}`;
 }
 
+/** 名前のあとに助詞を続ける（英字で終わる名前には半角の空白を挟む。フレームワークの呼び名。D-193）。 */
+export const nameThen = (name: string) =>
+  /[A-Za-z0-9.)]$/.test(name) ? `${name} ` : name;
+
 export const fmtFactor = (f: number) => `× ${Number(f.toFixed(2))}`;
 
 /** 整数に丸めて 3 桁ごとにカンマを入れる。 */

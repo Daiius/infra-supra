@@ -22,6 +22,8 @@ export {
 export {
   type Settings,
   ON_DEMAND_REVALIDATE,
+  NEXT_ON_DEMAND,
+  ASTRO_ON_DEMAND,
   COMMENTS_IN_BROWSER,
   COMMENTS_IN_PAGE,
   COMMENT_PAGES_PER_UPDATE,
@@ -222,6 +224,7 @@ export {
 export {
   type ResolvedRegion,
   pageWireframes,
+  regionSourceLabel,
   scenarioOffscreen,
   scenarioWireframes,
 } from './wireframes.ts';

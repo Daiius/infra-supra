@@ -1,12 +1,13 @@
 // 描き方の対応表（フレームワーク × 事業者。D-106・prd/13 §3）。新しい事実は書かず、今の catalog のデータ（DeployTarget の
 // 出典・Astro の記事のキャッシュの置き場 pageCache・Next.js の ISR のキャッシュの部品の onDemandIsr）から組み立てる。
 // 出典の無い「できる」は basis: 'assumption'（ゲーム上の仮定）、確かめていないものは 'unverified'（画面に出さない。RS-04）。
-import { componentsOf, type Platform } from '../stacks/index.ts';
+import { componentsOf, type Platform, slotLabel } from '../stacks/index.ts';
 import {
   deployTarget,
   FRAMEWORKS,
   type DeployTarget,
   type FrameworkId,
+  termName,
 } from './index.ts';
 import {
   FRAMEWORK_PRESETS,
@@ -268,7 +269,7 @@ function nextPurge(d: DeployTarget): StrategySupport {
   const ng = opts.filter((o) => !o.onDemandIsr!.ok);
   if (opts.length === 0 || ng.length === 0)
     return yes(
-      '更新で消す再検証（revalidatePath・revalidateTag）で、投稿・編集のときにそのページを取り直します',
+      `${termName('nextjs', 'onDemand', '更新で消す再検証')}（revalidatePath・revalidateTag）で、投稿・編集のときにそのページを取り直します`,
       d.sources,
     );
   if (ok.length === 0)
@@ -278,7 +279,7 @@ function nextPurge(d: DeployTarget): StrategySupport {
     );
   return {
     ...yes(
-      `部品「ページのキャッシュ（ISR）」で決まります（消せる: ${ok.map((o) => o.label).join('・')}／消せない: ${ng.map((o) => o.label).join('・')}）`,
+      `部品「${slotLabel('isrCache', 'nextjs')}」で決まります（消せる: ${ok.map((o) => o.label).join('・')}／消せない: ${ng.map((o) => o.label).join('・')}）`,
       d.sources,
     ),
     support: 'depends',
@@ -299,7 +300,7 @@ function nextjsRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
             [NEXT_STATIC_PARAMS],
           ),
     'cached-ttl': yes(
-      'ISR（revalidate の期限）です。キャッシュの置き場は部品「ページのキャッシュ（ISR）」です',
+      `ISR（revalidate の期限）です。キャッシュの置き場は部品「${slotLabel('isrCache', 'nextjs')}」です`,
       d.sources,
     ),
     'cached-purge': nextPurge(d),
@@ -337,7 +338,8 @@ function astroRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     'shell-api': SHELL_API_ANY,
     'server-island': astroIsland(d),
     'cache-components': no(
-      'Cache Components は Next.js 16 の機能です（Astro には無い。Astro で近いのは枠 + 人ごとの部分をサーバーで描く形）',
+      // 呼び名はこのフレームワークのものだけ（ほかのフレームワークの名前を出さない。D-193）
+      `このフレームワークには、部品ごとにキャッシュする仕組みがありません（近いのは ${termName('astro', 'server-island', '枠 + 人ごとの部分をサーバーで描く形')}）`,
       FRAMEWORKS.astro.sources,
     ),
   };
@@ -347,7 +349,7 @@ function nextExportRow(
   d: DeployTarget,
 ): Record<RouteStrategyId, StrategySupport> {
   const noServer = no(
-    '静的書き出しにはサーバーがありません（ISR・SSR は使えない）',
+    '静的書き出しにはサーバーがありません（サーバーで描く・キャッシュする描き方は使えない）',
     FRAMEWORKS['nextjs-export'].sources,
   );
   return {

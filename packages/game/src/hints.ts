@@ -6,8 +6,9 @@ import {
   ELEMENTS,
   STAGE_VALUE,
 } from './rules.ts';
+import { termName } from 'catalog';
 import { eventDef, scenarioOf, USD_JPY } from './core.ts';
-import { commas, fmtFactor, usd, usdOf } from './format.ts';
+import { commas, fmtFactor, nameThen, usd, usdOf } from './format.ts';
 import { emailOnlyPremise } from './month/outcome.ts';
 import { averageSatisfaction } from './month/satisfaction.ts';
 import { COMMITMENTS, offerOf } from './offers.ts';
@@ -309,7 +310,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           kind: 'cost',
           what: `${shortText}。${h.length} か月の収益 ${usd(revenue)} に対し、インフラの費用は ${usd(infra)}（${Math.round(100 * share)}%）で、大きいのは ${top.map(([k, v]) => `${k} ${usd(v)}`).join('・')} です`,
           next: invalidation
-            ? `更新で消す再検証で CloudFront の無効化が増えました（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつきます。無効化が込みの定額のプラン・時間の再検証にするか、部品「CDN の無効化のまとめ方」でワイルドカードにまとめましょう${commentsInPage(commentsOf(sc, state.routeParts), state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなります' : ''}`
+            ? `${nameThen(termName(state.framework, 'onDemand', '更新で消す再検証'))}で CloudFront の無効化が増えました（${h.length} か月で ${commas(invalidation.paths)} パス・${usd(invalidation.usd)}）。更新のたびにページごとに無効化するので、記事の更新が多い規模では高くつきます。無効化が込みの定額のプラン・時間の再検証にするか、部品「CDN の無効化のまとめ方」でワイルドカードにまとめましょう${commentsInPage(commentsOf(sc, state.routeParts), state.framework, sc, state.routes) ? '。コメントを記事のページに含めているなら、ブラウザで読み込む形に戻すとコメントの投稿のたびの無効化が無くなります' : ''}`
             : share < 0.2
               ? `費用は収益に比べて小さく、差は収益（PV の伸び）の側にもあります。伸びは満足度（評判）で決まるので、「良い」でない要素や止まった月を減らしましょう。費用を削るなら、${base ? '規模に見合う基本料を見直しましょう' : '設定・部品で量を下げましょう'}`
               : base

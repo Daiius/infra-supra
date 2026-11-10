@@ -78,7 +78,7 @@ export const OPENNEXT_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws-opennext',
     label: 'S3 + DynamoDB のタグ + SQS の再検証',
-    note: 'ISR のページは CloudFront が返し、外れると関数が S3 のキャッシュと DynamoDB のタグを読みます。期限が来たページは SQS の待ち行列から再検証の関数がサーバーの関数を呼んで作り直します。更新で消す再検証にも対応します（CloudFront の無効化が別に要る。従量では月 1,000 パスを超えると 1 パス $0.005）',
+    note: 'ISR のページは CloudFront が返し、外れると関数が S3 のキャッシュと DynamoDB のタグを読みます。期限が来たページは SQS の待ち行列から再検証の関数がサーバーの関数を呼んで作り直します。On-demand revalidationにも対応します（CloudFront の無効化が別に要る。従量では月 1,000 パスを超えると 1 パス $0.005）',
     premiseRefs: [
       'fact:aws:lambda:opennext-isr',
       'pool:aws:sqs-fifo:sqs-free-requests',
@@ -102,7 +102,7 @@ export const OPENNEXT_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'aws-opennext',
     label: 'ページごと（OpenNext の CloudFront の実装）',
-    note: '更新で消す再検証のたびに、再検証したページごとに「ページとそのデータのルート」の 2 パスを無効化します（OpenNext の自動の CDN の無効化）。関係ないページの CDN のキャッシュは残ります。従量では月 1,000 パスを超えると 1 パス $0.005 です。時間の再検証では無効化しません',
+    note: 'On-demand revalidationのたびに、再検証したページごとに「ページとそのデータのルート」の 2 パスを無効化します（OpenNext の自動の CDN の無効化）。関係ないページの CDN のキャッシュは残ります。従量では月 1,000 パスを超えると 1 パス $0.005 です。時間の再検証では無効化しません',
     premiseRefs: ['pool:aws:cloudfront:cloudfront-free-invalidations'],
   },
   {

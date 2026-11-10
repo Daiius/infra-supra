@@ -110,7 +110,7 @@ const FACTS = [
   {
     id: 'next-runtime',
     premise:
-      'Netlify の Next.js は OpenNext のアダプターで設定なしに動き、ISR は時間の再検証・更新で消す再検証（パス・タグ）とも完全に対応します。SSR・ISR・Route Handler・Server Actions は Netlify Functions、ミドルウェアは Edge Functions で動きます',
+      'Netlify の Next.js は OpenNext のアダプターで設定なしに動き、ISR は時間の再検証・On-demand revalidation（パス・タグ）とも完全に対応します。SSR・ISR・Route Handler・Server Actions は Netlify Functions、ミドルウェアは Edge Functions で動きます',
     sourceIds: ['nextjs'],
   },
   {

@@ -5,7 +5,11 @@ import type { PlatformPremise } from 'estimator';
 import { scenarioOf } from './core.ts';
 import { effortSpanText, fmtFactor } from './format.ts';
 import { REQUIREMENT_LABEL } from './requirements.ts';
-import { isOnDemand, ON_DEMAND_REVALIDATE } from './settings.ts';
+import {
+  isOnDemand,
+  NEXT_ON_DEMAND,
+  ON_DEMAND_REVALIDATE,
+} from './settings.ts';
 import { componentLabel, imagesOf } from './stacks.ts';
 import type { GameState, MonthEvent } from './state.ts';
 
@@ -142,7 +146,7 @@ export function describeEffect(e: Effect): string {
     case 'interrupt':
       if (e.featureWork)
         return effortSpanText('機能の追加の作業', e.points, e.months, [
-          `翌月から。その月の機能開発に数える${e.unlessOnDemand ? '。再検証がすでに「更新で消す」なら不要' : ''}`,
+          `翌月から。その月の機能開発に数える${e.unlessOnDemand ? `。再検証がすでに「${NEXT_ON_DEMAND}」なら不要` : ''}`,
         ]);
       return effortSpanText('対応の手間', e.points, e.months, ['翌月から']);
     case 'feature':
@@ -152,7 +156,7 @@ export function describeEffect(e: Effect): string {
     case 'component':
       return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel('cloudflare', e.slot, e.option)}）`;
     case 'on-demand-revalidate':
-      return 'ISR の再検証を「更新で消す」にする（Next.js）';
+      return `ISR の再検証を「${NEXT_ON_DEMAND}」にする（Next.js）`;
     case 'requirement':
       return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がります）`;
     case 'contract':
