@@ -8,9 +8,7 @@ import { RESULT_AXES, SCENARIOS, type ResultAxisId } from 'game';
 import { useEffect, useState } from 'react';
 import { HistogramChart } from './charts.tsx';
 import {
-  fewNote,
   filterParams,
-  isFewCount,
   MIN_DRAWN_COUNT,
   STATS_FILTER_LABEL,
   STATS_FILTERS,
@@ -211,21 +209,13 @@ function StatusNote({
     text = filter
       ? `${filter}の完走はまだ集計にありません。`
       : 'まだ集計された完走がありません。';
-  else if (isFewCount(total))
-    text = `${filter ? `${filter}の` : ''}完走 ${total} 件の分布です。${fewNote(total)}`;
   else text = `${filter ? `${filter}の` : ''}完走 ${total} 件の分布です。`;
   return (
     <p
       className="text-xs opacity-70"
       role={status === 'failed' ? 'alert' : undefined}
       data-stats-note={
-        status === 'ready'
-          ? total === 0
-            ? 'empty'
-            : isFewCount(total)
-              ? 'few'
-              : 'ready'
-          : status
+        status === 'ready' ? (total === 0 ? 'empty' : 'ready') : status
       }
     >
       {mock && '開発用の架空の分布です（遊んだ人の結果ではありません）。'}
@@ -248,7 +238,6 @@ function AxisCard({
 }) {
   const f = AXIS_FORMAT[id];
   const drawn = histogram.count >= MIN_DRAWN_COUNT;
-  const few = drawn && isFewCount(histogram.count);
   const median = histogram.median;
   const summary = `${histogram.count} 件${median != null ? `・中央値は ${f(median)} です` : ''}`;
   return (
@@ -268,23 +257,14 @@ function AxisCard({
       </div>
       <div className="text-xs opacity-70">{CAPTION[id]}</div>
       {drawn ? (
-        <div
-          className="mt-2"
-          data-axis-distribution
-          data-dist-few={few ? 'true' : undefined}
-        >
+        <div className="mt-2" data-axis-distribution>
           <div className="text-xs tabular-nums" data-dist-summary>
             {summary}
           </div>
-          {few && (
-            <div className="text-xs opacity-70" data-dist-few-note>
-              {fewNote(histogram.count)}
-            </div>
-          )}
           <HistogramChart
             bins={histogram.bins}
             {...(value !== undefined ? { value } : {})}
-            label={`全シードの${label}の分布（${summary}${few ? `。${fewNote(histogram.count)}` : ''}）`}
+            label={`全シードの${label}の分布（${summary}）`}
           />
           <details className="mt-1 text-xs">
             <summary className="cursor-pointer">数値で見る</summary>

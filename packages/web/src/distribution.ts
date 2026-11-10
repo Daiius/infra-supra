@@ -12,15 +12,9 @@ export const MIN_RANKED_COUNT = 10;
 
 /**
  * 分布（ヒストグラム・中央値・比較の図の行）を描く最少の件数（集計にある件数。自分を 1 件足す分は数えない）。
- * これ以上 MIN_RANKED_COUNT 未満のうちは描いたうえで「まだ n 件なので、形は参考程度です」と添える（D-198）。
+ * MIN_RANKED_COUNT 未満でも注記を添えずにそのまま描く（集まった値を見せるだけで、母集団を推定しないため。D-198・D-199）。
  */
 export const MIN_DRAWN_COUNT = 1;
-
-/** 描くが、まだ少ないので注記を添える件数か（MIN_RANKED_COUNT 未満。D-198）。 */
-export const isFewCount = (n: number) => n < MIN_RANKED_COUNT;
-
-/** 少ない分布に添える注記（D-198）。 */
-export const fewNote = (n: number) => `まだ ${n} 件なので、形は参考程度です。`;
 
 /** 「上位に入った」の線（上位 25% 以内。ST-01・D-163）。 */
 export const TOP_PERCENT = 25;
@@ -238,8 +232,6 @@ export type GroupRow = {
   };
   /** 自分のプレイの構成（フレームワーク）の行か。 */
   mine: boolean;
-  /** 件数がまだ少ない行か（MIN_RANKED_COUNT 未満。形は参考程度と添える。D-198）。 */
-  few: boolean;
 };
 
 /**
@@ -263,7 +255,6 @@ export function groupRowsOf(
         count: g.count,
         stats: { p25: g.p25, median: g.median, p75: g.p75, bins: g.bins },
         mine: key === mineKey,
-        few: isFewCount(g.count),
       },
     ];
   });

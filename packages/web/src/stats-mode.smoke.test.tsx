@@ -289,7 +289,7 @@ describe('統計の画面（D-197）', () => {
     expect(page()!.querySelector('[data-group-compare]')).toBeNull();
   });
 
-  it('W-114b 1〜9 件は描いたうえで「形は参考程度」と添える（D-198）', async () => {
+  it('W-114b 1〜9 件も描き、「形は参考程度」の注記は添えない（D-198・D-199）', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     vi.stubGlobal('fetch', statsFetch(4));
     await openStats();
@@ -297,13 +297,14 @@ describe('統計の画面（D-197）', () => {
     expect(
       page()!.querySelector<HTMLElement>('[data-stats-note]')!.dataset
         .statsNote,
-    ).toBe('few');
+    ).toBe('ready');
     expect(
       page()!.querySelector<HTMLElement>('[data-stats-note]')!.textContent,
-    ).toContain('完走 4 件の分布です。まだ 4 件なので、形は参考程度です。');
+    ).toBe('完走 4 件の分布です。');
     expect(page()!.querySelectorAll('[data-axis-few]')).toHaveLength(0);
     expect(page()!.querySelectorAll('[data-histogram]')).toHaveLength(4);
-    expect(page()!.querySelectorAll('[data-dist-few-note]')).toHaveLength(4);
+    expect(page()!.textContent).not.toContain('参考程度');
+    expect(page()!.textContent).not.toContain('※');
     // 中央値・数値で見る の表も出す
     const cash = page()!.querySelector<HTMLElement>('[data-axis="cash"]')!;
     expect(cash.querySelector('[data-dist-summary]')!.textContent).toContain(
@@ -322,12 +323,13 @@ describe('統計の画面（D-197）', () => {
     expect(
       page()!.querySelector<HTMLElement>('[data-stats-note]')!.dataset
         .statsNote,
-    ).toBe('few');
+    ).toBe('ready');
     expect(page()!.querySelectorAll('[data-histogram]')).toHaveLength(4);
     expect(
-      page()!.querySelector('[data-axis="cash"] [data-dist-few-note]')!
+      page()!.querySelector('[data-axis="cash"] [data-dist-summary]')!
         .textContent,
-    ).toBe('まだ 1 件なので、形は参考程度です。');
+    ).toContain('1 件・中央値は');
+    expect(page()!.textContent).not.toContain('参考程度');
   });
 
   it('W-115 読み込みに失敗したら知らせる。読み込み中はその旨を出す', async () => {

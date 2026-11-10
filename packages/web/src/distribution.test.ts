@@ -156,7 +156,7 @@ describe('standingsOf', () => {
     expect([0, 1, 2, 3, 4].map(level)).toEqual([1, 2, 2, 3, 3]);
   });
 
-  it('全シードの件数も軸ごとに見る: ④ だけ少なければその欄だけ参考程度に描き、0 件なら出さない（OCL-22EC415E・D-198）', () => {
+  it('全シードの件数も軸ごとに見る: ④ だけ少なければその欄だけ上位を数えずに描き、0 件なら出さない（OCL-22EC415E・D-198）', () => {
     const v = standingsOf(
       dist((id) =>
         id === 'totalCost'
@@ -274,7 +274,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     ).toEqual({ filter: 'both', by: 'stack', axis: 'totalCost' });
   });
 
-  it('要約を出す行に写す: 並びは keys のまま・0 件の鍵（自分の構成でも）と keys に無い鍵は出さない・1〜9 件は描いて few（D-198）', () => {
+  it('要約を出す行に写す: 並びは keys のまま・0 件の鍵（自分の構成でも）と keys に無い鍵は出さない・1〜9 件も同じ形で描く（D-198・D-199）', () => {
     const rows = groupRowsOf(
       [
         { key: 'b', count: 12, p25: 1, median: 2, p75: 3, bins: [9, 3] },
@@ -297,7 +297,6 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
         count: 1,
         stats: { p25: 4, median: 4, p75: 4, bins: [0, 1] },
         mine: false,
-        few: true,
       },
       {
         key: 'b',
@@ -305,7 +304,6 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
         count: 12,
         stats: { p25: 1, median: 2, p75: 3, bins: [9, 3] },
         mine: true,
-        few: false,
       },
     ]);
     // 自分の構成でも 0 件なら行を出さない・全部 0 件なら空

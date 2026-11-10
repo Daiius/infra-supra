@@ -4,7 +4,6 @@ import type { ResultAxisId } from 'game';
 import type { ReactNode } from 'react';
 import { HistogramChart } from './charts.tsx';
 import {
-  fewNote,
   MIN_RANKED_COUNT,
   rankBasisOf,
   TOP_PERCENT,
@@ -51,7 +50,7 @@ export function cashGuideText(cash: number, guide: number): string {
 
 /**
  * 分布の 1 本（同じシード / 全シード）: 数値の要約をテキストで出し、その下にヒストグラム。集計に 1 件でもあれば描き、
- * MIN_RANKED_COUNT 件未満のうちは上位 % を出さず中央値を出して「形は参考程度」と添える（D-198）。
+ * MIN_RANKED_COUNT 件未満のうちは上位 % を出さず中央値を出す（D-198。注記は添えない。D-199）。
  */
 function DistributionRow({
   kind,
@@ -81,7 +80,6 @@ function DistributionRow({
       data-top-percent={
         directed && standing?.ranked ? standing.topPercent : undefined
       }
-      data-dist-few={standing && !standing.ranked ? 'true' : undefined}
     >
       <div className="text-xs" data-dist-summary>
         <span className="font-semibold">{name}</span>{' '}
@@ -94,17 +92,16 @@ function DistributionRow({
           <span className="opacity-70">{name}の完走はまだ集計にありません</span>
         )}
       </div>
-      {standing && !standing.ranked && (
-        <div className="text-xs opacity-70" data-dist-few-note>
-          {fewNote(standing.n)}
-          {directed && `上位 % は ${MIN_RANKED_COUNT} 件から出します。`}
+      {standing && !standing.ranked && directed && (
+        <div className="text-xs opacity-70" data-dist-rank-note>
+          上位 % は {MIN_RANKED_COUNT} 件から出します。
         </div>
       )}
       {standing && (
         <HistogramChart
           bins={standing.histogram.bins}
           value={value}
-          label={`${name}の分布（${summary}${standing.ranked ? '' : `。${fewNote(standing.n)}`}）`}
+          label={`${name}の分布（${summary}）`}
         />
       )}
     </div>

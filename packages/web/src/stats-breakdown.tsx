@@ -9,7 +9,6 @@ import { GroupHistogramChart } from './charts.tsx';
 import {
   DEFAULT_BREAKDOWN_PREFS,
   groupRowsOf,
-  MIN_RANKED_COUNT,
   parseBreakdownPrefs,
   STATS_BREAKDOWN_KEY,
   STATS_FILTER_LABEL,
@@ -336,8 +335,7 @@ export function GroupCompare({
         全シードの完走を{byName}
         ごとに分けて（集計にまだ無い{byName}
         の行は出しません）、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値
-        {value !== undefined ? '、縦の線はあなたの値' : ''}です。 件数に ※
-        の付いた行はまだ {MIN_RANKED_COUNT} 件未満なので、形は参考程度です。
+        {value !== undefined ? '、縦の線はあなたの値' : ''}です。
         {data?.mock && '開発用の架空の値です（遊んだ人の結果ではありません）。'}
       </p>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -406,7 +404,6 @@ export function GroupCompare({
                     </td>
                     <td className="text-right" data-group-table-count>
                       {r.count}
-                      {r.few && ' ※'}
                     </td>
                     <td className="text-right">{format(r.stats.p25)}</td>
                     <td className="text-right">{format(r.stats.median)}</td>

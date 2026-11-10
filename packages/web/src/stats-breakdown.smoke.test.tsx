@@ -226,7 +226,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(callsTo(fetch, '/api/results/distribution')).toHaveLength(3);
   });
 
-  it('W-105 絞った分布が 10 件未満でも描き、形は参考程度と添えて上位 % を出さない（全部の分布が少ないときのように段 1 には戻さない。D-198）', async () => {
+  it('W-105 絞った分布が 10 件未満でも描き、上位 % を出さない（全部の分布が少ないときのように段 1 には戻さない。D-198）。参考程度の注記は添えない（D-199）', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     localStorage.setItem(
       STATS_BREAKDOWN_KEY,
@@ -258,15 +258,20 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
       '上位',
     );
     expect(all.dataset.topPercent).toBeUndefined();
-    expect(all.querySelector('[data-dist-few-note]')!.textContent).toBe(
-      'まだ 6 件なので、形は参考程度です。上位 % は 10 件から出します。',
+    // 向きのある軸は上位 % が出ない理由だけを添え、「参考程度」の注記は出さない（D-199）
+    expect(all.querySelector('[data-dist-rank-note]')!.textContent).toBe(
+      '上位 % は 10 件から出します。',
     );
-    expect(seed.querySelector('[data-dist-few-note]')!.textContent).toContain(
-      'まだ 2 件なので、形は参考程度です。',
+    expect(seed.querySelector('[data-dist-rank-note]')!.textContent).toBe(
+      '上位 % は 10 件から出します。',
     );
+    expect(cash.textContent).not.toContain('参考程度');
+    expect(
+      all.querySelector('[data-histogram] svg')!.getAttribute('aria-label'),
+    ).not.toContain('参考程度');
   });
 
-  it('W-106 比較の図: 隠した構成と 0 件の構成を除いた構成ごとの行・自分の行と自分の縦の線・10 件未満の行は描いて件数に ※。フレームワークごとに切り替えられる', async () => {
+  it('W-106 比較の図: 隠した構成と 0 件の構成を除いた構成ごとの行・自分の行と自分の縦の線・10 件未満の行も ※ や注記なしで描く（D-199）。フレームワークごとに切り替えられる', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     const fetch = statsFetch();
     vi.stubGlobal('fetch', fetch);
@@ -318,25 +323,23 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     const few = compare().querySelector<HTMLElement>(
       '[data-group-row="sakura-vps-2gb"]',
     )!;
-    // 10 件未満の行も描き、件数に ※・読み上げに「形は参考程度」（D-198）
+    // 10 件未満の行も描き、件数に ※ も読み上げの注記も付けない（D-198・D-199）
     expect(few.querySelector('[data-group-hist]')).not.toBeNull();
     expect(few.querySelector('[data-group-median]')).not.toBeNull();
     expect(few.querySelector('[data-group-few]')).toBeNull();
-    expect(few.querySelector('[data-group-count]')!.textContent).toBe('4 件※');
-    expect(
-      few.querySelector('[data-group-hist]')!.getAttribute('aria-label'),
-    ).toContain('まだ 4 件なので、形は参考程度です');
-    expect(
-      own.querySelector('[data-group-count]')!.getAttribute('data-few'),
-    ).toBeNull();
-    expect(compare().textContent).toContain(
-      '件数に ※ の付いた行はまだ 10 件未満なので、形は参考程度です。',
-    );
+    expect(few.querySelector('[data-group-count]')!.textContent).toBe('4 件');
+    const fewLabel = few
+      .querySelector('[data-group-hist]')!
+      .getAttribute('aria-label');
+    expect(fewLabel).toContain('4 件・中央値');
+    expect(fewLabel).not.toContain('参考程度');
+    expect(compare().textContent).not.toContain('※');
+    expect(compare().textContent).not.toContain('参考程度');
     // 0 件の構成の行は出さない（D-198）
     expect(
       compare().querySelector('[data-group-row="gcp-cloud-run"]'),
     ).toBeNull();
-    // 数値で見る: 10 件未満の行も分位を出し、件数に ※
+    // 数値で見る: 10 件未満の行も分位を出す（件数に ※ は付けない。D-199）
     const tableRows = [
       ...compare().querySelectorAll<HTMLTableRowElement>(
         '[data-group-table] tbody tr',
@@ -345,7 +348,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(tableRows).toHaveLength(withData.length);
     const fewRow = tableRows.find((r) => r.textContent!.includes('さくら'))!;
     expect(fewRow.querySelector('[data-group-table-count]')!.textContent).toBe(
-      '4 ※',
+      '4',
     );
     expect(fewRow.querySelectorAll('td')).toHaveLength(5);
     // 配置（テストの幅 640 では 3 列）: 棒・自分の線・目盛り・「▼ あなた」が同じ座標の基準（1 つの SVG）にあり、
@@ -531,21 +534,24 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(
       compare().querySelectorAll('[data-group-hist]').length,
     ).toBeGreaterThan(0);
-    // 10 件未満の行（件数に ※）も描く
-    expect(
-      compare().querySelectorAll('[data-group-count][data-few="true"]').length,
-    ).toBeGreaterThan(0);
+    // 10 件未満の行も描く（※ は付けない。D-199）
+    const counts = [...compare().querySelectorAll('[data-group-count]')].map(
+      (e) => e.textContent,
+    );
+    expect(counts.some((t) => /^[1-9] 件$/.test(t ?? ''))).toBe(true);
+    expect(compare().textContent).not.toContain('※');
     fireEvent.click(chip('filter', 'both'));
     await waitFor(() =>
       expect(
         resultAxes()!.querySelector('[data-result-compare-note]')!.textContent,
       ).toContain('同じ組み合わせ'),
     );
-    // 架空の同じ組み合わせは全シードも 10 件未満: 描いたうえで形は参考程度と添える（D-198）
+    // 架空の同じ組み合わせは全シードも 10 件未満: 描いて上位 % を出さない。参考程度の注記は添えない（D-198・D-199）
     expect(resultAxes()!.querySelector('[data-histogram]')).not.toBeNull();
     expect(
-      resultAxes()!.querySelector('[data-dist="all"] [data-dist-few-note]'),
+      resultAxes()!.querySelector('[data-dist="all"] [data-dist-rank-note]'),
     ).not.toBeNull();
+    expect(resultAxes()!.textContent).not.toContain('参考程度');
     expect(
       resultAxes()!.querySelector('[data-result-compare-note]')!.textContent,
     ).toContain('開発用の架空の分布です');

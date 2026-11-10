@@ -1596,8 +1596,6 @@ export type RangeChartRow = {
   count: number;
   stats: { median: number; bins: readonly number[] } | null;
   mine: boolean;
-  /** 描くが件数がまだ少ない行（件数に ※ を付け、読み上げに「形は参考程度」と添える。D-198）。 */
-  few?: boolean;
 };
 
 /** 比較の図を 3 列（名前｜棒｜件数）にする最少の幅。これより狭ければ、名前と件数の下に棒を全幅で入れる 2 段組み。 */
@@ -1777,9 +1775,8 @@ export function GroupHistogramChart({
                     fill="var(--text-primary)"
                     className="tabular-nums"
                     data-group-count
-                    data-few={r.few ? 'true' : undefined}
                   >
-                    {r.count} 件{r.few ? '※' : ''}
+                    {r.count} 件
                   </text>
                   <line
                     x1={L.bandX0}
@@ -1792,7 +1789,7 @@ export function GroupHistogramChart({
                   {r.stats ? (
                     <g
                       role="img"
-                      aria-label={`${r.label}: ${r.count} 件・中央値 ${format(r.stats.median)}${r.few ? `・まだ ${r.count} 件なので、形は参考程度です` : ''}`}
+                      aria-label={`${r.label}: ${r.count} 件・中央値 ${format(r.stats.median)}`}
                       data-group-hist
                     >
                       {bins.map((n, k) => {
