@@ -204,7 +204,7 @@ export function RowParts({
                       onChange={() => onChange(row, p.part, o.value)}
                     />
                     {o.label}
-                    {why && <span className="opacity-60">（{why}）</span>}
+                    {why && <span className="opacity-70">（{why}）</span>}
                   </label>
                 );
               })}
@@ -275,7 +275,7 @@ export function RoutePlanTable({
                 <tr key={r.route} data-route={r.route} className="align-top">
                   <th className="font-medium whitespace-nowrap">
                     {r.label}
-                    <span className="block text-[11px] font-normal opacity-60">
+                    <span className="block text-[11px] font-normal opacity-70">
                       {r.audience === 'public' ? '全員に同じ' : '人ごとに違う'}
                       ・{pct(r.share)}
                     </span>
@@ -402,7 +402,7 @@ export function RoutePlanTable({
                               <span className="sr-only">（使えない）</span>
                             )}
                             {why && (
-                              <span className="pr-1 opacity-60">（{why}）</span>
+                              <span className="pr-1 opacity-70">（{why}）</span>
                             )}
                             <Info
                               label={`${a.label}${a.available ? '' : 'が使えない理由'}`}
@@ -422,7 +422,7 @@ export function RoutePlanTable({
           </tbody>
         </table>
       </div>
-      {caption && <p className="text-xs opacity-60">{caption}</p>}
+      {caption && <p className="text-xs opacity-70">{caption}</p>}
     </div>
   );
 }

@@ -319,6 +319,17 @@ export function App() {
     }).then((view) => setStats((cur) => (cur?.id === id ? { id, view } : cur)));
   }, [session, results]);
   const [mode, setMode] = useState<Mode>(initialMode);
+  // canonical（D-194。VITE_SITE_URL があるときだけビルドで index.html に入る）を今のモードのページに合わせる。
+  // 見積の入力のクエリは載せず、トップか /?mode=estimate のどちらか（sitemap と同じ 2 つ）にする
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>(
+      'link[rel="canonical"]',
+    );
+    if (!link) return;
+    const url = new URL('/', link.href);
+    if (mode === 'estimate') url.searchParams.set('mode', 'estimate');
+    link.href = url.href;
+  }, [mode]);
   // 「新しいゲーム」の確認のダイアログ（途中なら今のプレイが終わるので確かめる）
   const [confirmRestart, setConfirmRestart] = useState(false);
   // 過去の月へ戻るダイアログ（D-128・D-192）。開いたときに選んでいる月。null は閉じている。
@@ -376,12 +387,16 @@ export function App() {
   return (
     <div className="min-h-screen bg-base-200">
       {/* 全部を 1 行に並べる（2026-11-09・ユーザーの要望。狭い画面でも折り返さない） */}
-      <div className="navbar min-h-0 flex-nowrap gap-1 bg-base-100 px-2 py-1.5 shadow-sm sm:px-4">
+      {/* ヘッダーのランドマーク（D-194）。ページの h1 はロゴ（読み上げの名前は infra-supra）。画面の見出しは h2 から */}
+      <header className="navbar min-h-0 flex-nowrap gap-1 bg-base-100 px-2 py-1.5 shadow-sm sm:px-4">
         {/* ロゴ（D-184）。正式名称の「仮称」と副題は外した（2026-11-09・ユーザーの要望） */}
-        <span className="flex shrink-0 items-center pr-1 sm:pr-3">
+        <h1 className="flex shrink-0 items-center pr-1 sm:pr-3">
           <Logo />
-        </span>
-        <div role="tablist" className="tabs tabs-box tabs-sm shrink-0">
+        </h1>
+        {/* モードの切り替え（D-194）: 画面全体を替える 2 つのボタン。タブの部品（role="tab"）にすると矢印キー・tabpanel が要るが、
+            切り替わるのはページそのもの（URL も ?mode=estimate に替わる）なので、ナビの中のボタンにして今の方へ aria-current="page" を付ける。
+            見た目は daisyUI の tabs のまま（tab-active と aria-current のどちらでも選んだ形になる） */}
+        <nav aria-label="モード" className="tabs tabs-box tabs-sm shrink-0">
           {(
             [
               ['game', 'ゲーム'],
@@ -390,15 +405,15 @@ export function App() {
           ).map(([m, label]) => (
             <button
               key={m}
-              role="tab"
-              aria-selected={mode === m}
+              type="button"
+              aria-current={mode === m ? 'page' : undefined}
               className={`tab ${mode === m ? 'tab-active' : ''}`}
               onClick={() => switchMode(m)}
             >
               {label}
             </button>
           ))}
-        </div>
+        </nav>
         {/* 右端: 戻る…（戻れる月があるとき。D-192）・新しいゲーム（運営中・終わった後）・遊び方（ゲームモードだけ）・設定（D-146・D-147）。
             狭い画面（sm 未満）はアイコンだけにして 1 行に収める */}
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
@@ -444,7 +459,7 @@ export function App() {
             <Settings aria-hidden className="size-4" />
           </button>
         </div>
-      </div>
+      </header>
       {settingsOpen && (
         <SettingsDialog
           onHowto={() => {
@@ -560,7 +575,7 @@ export function App() {
       <footer className="mx-auto flex max-w-5xl justify-end px-2 pb-4 sm:px-4">
         <button
           type="button"
-          className="link link-hover text-xs opacity-60"
+          className="link link-hover text-xs opacity-70"
           onClick={() => setPrivacyOpen(true)}
         >
           プライバシーポリシー
@@ -623,7 +638,7 @@ function RestartDialog({
 /** 分けて読む画面の読み込み中の表示。 */
 function Loading() {
   return (
-    <p className="p-8 text-center text-sm opacity-60" role="status">
+    <p className="p-8 text-center text-sm opacity-70" role="status">
       読み込み中…
     </p>
   );
@@ -1075,7 +1090,7 @@ function LastSetupButton({
         >
           前回の構成を選ぶ（{label}）
         </button>
-        {same && <span className="text-xs opacity-60">前回と同じ</span>}
+        {same && <span className="text-xs opacity-70">前回と同じ</span>}
       </div>
       {notice && (
         <p

@@ -2031,7 +2031,12 @@ describe('ゲームモードの画面', () => {
         .getAttribute('aria-pressed'),
     ).toBe('true');
     expect(current().querySelector('[data-diagram="system"]')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'モード' })).getByRole(
+        'button',
+        { name: '見積' },
+      ),
+    );
     await waitLoaded();
     expect(current().querySelector('section[data-parts]')).not.toBeNull();
     // 構成図に戻すと、チップの一覧は消える
@@ -2843,9 +2848,19 @@ describe('ゲームモードの画面', () => {
     );
     expect(screen.queryByRole('dialog')).toBeNull();
     // 見積の画面へ移って戻ると、運営中の画面は作り直されるが、同じ月の出来事は自動では開かない
-    fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'モード' })).getByRole(
+        'button',
+        { name: '見積' },
+      ),
+    );
     await waitLoaded();
-    fireEvent.click(screen.getByRole('tab', { name: 'ゲーム' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'モード' })).getByRole(
+        'button',
+        { name: 'ゲーム' },
+      ),
+    );
     await waitLoaded();
     monthHeading(m);
     expect(screen.queryByRole('dialog')).toBeNull();

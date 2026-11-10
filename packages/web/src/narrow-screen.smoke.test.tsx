@@ -42,7 +42,7 @@ const chart = () => (
 );
 
 const svgOf = () =>
-  screen.getByRole('img', { name: '所持金' }) as unknown as SVGSVGElement;
+  screen.getByRole('img', { name: /^所持金。/ }) as unknown as SVGSVGElement;
 // 縦の目盛りの数字は textAnchor="end"、月の数字は middle
 const yTicks = (svg: SVGSVGElement) =>
   svg.querySelectorAll('text[text-anchor="end"]').length;

@@ -401,7 +401,7 @@ function FrameworkCard({
         {pages.length > 0 && (
           <div className="border-t border-base-300 pt-2">
             <WireframeLegend pages={pages} />
-            <p className="mt-1 text-xs opacity-60">{text.wireframeNote}</p>
+            <p className="mt-1 text-xs opacity-70">{text.wireframeNote}</p>
           </div>
         )}
       </div>
@@ -545,7 +545,7 @@ export function FrameworkField({
       />
 
       {allowed.length >= 2 && text.footnote && (
-        <p className="text-sm opacity-60">{text.footnote}</p>
+        <p className="text-sm opacity-70">{text.footnote}</p>
       )}
     </div>
   );

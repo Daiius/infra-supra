@@ -3,8 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- ヘッダーのロゴの字体（D-184。使う 8 文字だけに絞ったもの） -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link
       rel="preload"
       href="/fonts/philosopher-bold-supra-inf.woff2"
@@ -13,8 +15,6 @@
       crossorigin
     />
     <title>infra-supra</title>
-    <!-- OGP（D-191）。__OG_IMAGE_URL__ はビルドのとき vite.config.ts が VITE_SITE_URL + /og.png（無ければ /og.png）に置き換える。
-         画像（public/og.png）は og.html を dev で開いて 1200×630 の箱を撮ったもの（手順は decisions.md の D-191） -->
     <meta
       name="description"
       content="実在するクラウドの料金で、Web アプリのインフラの月額と制限を比べながら運営するシミュレーションです。"
@@ -38,6 +38,11 @@
     <meta name="twitter:image" content="__OG_IMAGE_URL__" />
   </head>
   <body>
+    <noscript>
+      <p style="padding: 2rem 1rem; text-align: center">
+        このページを使うには JavaScript を有効にしてください。
+      </p>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

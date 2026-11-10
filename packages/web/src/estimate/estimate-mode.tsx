@@ -1156,7 +1156,7 @@ function Comparison({
                       {r.blocking}
                     </span>
                   ) : (
-                    <span className="opacity-50">0</span>
+                    <span className="opacity-70">0</span>
                   )}
                   {r.hits > r.blocking && (
                     <span className="block text-xs opacity-70">

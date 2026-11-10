@@ -153,7 +153,12 @@ function expectEstimate(): string {
 describe('見積モードの画面', () => {
   it('W-05 見積を描き、構成・フレームワーク・テンプレート・PV を切り替える', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('tab', { name: '見積' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'モード' })).getByRole(
+        'button',
+        { name: '見積' },
+      ),
+    );
     await waitLoaded();
     const first = expectEstimate();
 

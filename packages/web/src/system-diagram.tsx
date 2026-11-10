@@ -395,7 +395,7 @@ export function SystemDiagram({
                       className="flex h-full flex-col justify-center leading-tight"
                       style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
                     >
-                      <span className="text-[10px] opacity-60">
+                      <span className="text-[10px] opacity-70">
                         {n.caption}
                       </span>
                       <span
@@ -441,20 +441,20 @@ export function SystemDiagram({
         )}
       </div>
       {tall && (
-        <p className="text-xs opacity-60">
+        <p className="text-xs opacity-70">
           狭い幅なので縦に並べました。箱を押すと、事業者・種類・通る流れが出ます。
           {parts && '⇄ の箱では部品も替えられます。'}
           {unselectedAny && '! の箱はまだ選んでいません。'}
         </p>
       )}
       {!tall && parts && (
-        <p className="text-xs opacity-60">
+        <p className="text-xs opacity-70">
           ⇄ の付いた箱を押すと、その部品を替えられます。
           {unselectedAny &&
             '! の付いた箱はまだ選んでいません（既定の部品の名前で描いています）。'}
         </p>
       )}
-      {caption && <p className="text-xs opacity-60">{caption}</p>}
+      {caption && <p className="text-xs opacity-70">{caption}</p>}
       <Legend model={model} active={active} onToggle={setActive} />
       <ConnectionList model={model} title={title} />
     </div>
@@ -1093,8 +1093,8 @@ function SwappableNode({
             <>
               <span className="flex items-center gap-1">
                 <span
-                  className="text-[10px] opacity-60"
-                  style={n.ghost ? { opacity: 0.6 * GHOST_OPACITY } : undefined}
+                  className="text-[10px] opacity-70"
+                  style={n.ghost ? { opacity: 0.7 * GHOST_OPACITY } : undefined}
                 >
                   {n.caption}
                 </span>
