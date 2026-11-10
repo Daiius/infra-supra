@@ -9,6 +9,7 @@ import {
   fileStorageOf,
   type FrameworkId,
   SLOT_LABELS,
+  slotLabel,
   type SlotId,
 } from 'catalog';
 import { ARTICLE_COMMUNITY } from '../scenarios/article-community.ts';
@@ -101,7 +102,7 @@ export function componentSlots(state: GameState): {
   return (Object.keys(SLOT_LABELS) as SlotId[])
     .map((slot) => ({
       slot,
-      label: SLOT_LABELS[slot],
+      label: slotLabel(slot, state.framework),
       current: current[slot] ?? '',
       options: componentsOf(platform, slot, state.framework),
     }))

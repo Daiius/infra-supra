@@ -14,8 +14,10 @@ import {
   type Platform,
   rebuildsStaticPages,
   SLOT_LABELS,
+  slotLabel,
   type SlotId,
   STACK_DEFS,
+  frameworkTerm,
 } from 'catalog';
 import { books } from './core.ts';
 import { articleFamily } from './routes/strategy.ts';
@@ -166,7 +168,7 @@ export function onDemandBlockerOn(
     if (opt?.onDemandIsr && !opt.onDemandIsr.ok)
       return {
         slot,
-        label: `${SLOT_LABELS[slot]}: ${opt.label}`,
+        label: `${slotLabel(slot, framework)}: ${opt.label}`,
         reason: factByRef(opt.onDemandIsr.fact)?.premise ?? '',
       };
   }
@@ -206,10 +208,14 @@ export function requirementStatus(
   if (fam === 'ssr' || (fam === 'api' && framework !== 'vite-spa'))
     return [
       {
+        // 描き方の名前はフレームワークの呼び名（D-193）。無ければ一般の言葉
         label:
-          fam === 'ssr'
+          ((t) => (t ? `記事のページを ${t.name} に` : undefined))(
+            frameworkTerm(framework, fam === 'ssr' ? 'ssr' : 'shell-api'),
+          ) ??
+          (fam === 'ssr'
             ? '記事のページを毎回描く'
-            : '記事のページを枠 + API に',
+            : '記事のページを枠 + API に'),
         ok: true,
         reason: 'キャッシュが無いので、更新はいつもすぐ見えます',
         current: true,
@@ -269,7 +275,7 @@ export function requirementStatus(
       if (!opt.onDemandIsr) continue;
       if (framework === 'astro' && slot === 'isrCache') continue;
       out.push({
-        label: `${SLOT_LABELS[slot]}: ${opt.label}`,
+        label: `${slotLabel(slot, framework)}: ${opt.label}`,
         ok: opt.onDemandIsr.ok,
         reason: factByRef(opt.onDemandIsr.fact)?.premise ?? '',
         current: c[slot] === opt.id,

@@ -34,6 +34,9 @@ export type RouteFallback = {
   label: string;
   from: RouteStrategyId;
   to: RouteStrategyId;
+  /** 替える前と後のフレームワーク（描き方の呼び名に使う。D-193）。 */
+  fromFramework: FrameworkId;
+  toFramework: FrameworkId;
   /** 戻る理由（乗り換え先の対応表の理由。使えるのに戻るときは reset の文）。 */
   reason: string;
 };
@@ -83,7 +86,15 @@ export function routeFallbacks(
     const reason = strategySelectable(to.framework, toPlatform, audience, want)
       ? (reset ?? '')
       : strategySupport(to.framework, toPlatform, audience, want).note;
-    out.push({ route: r.id, label: r.label ?? r.id, from: a, to: b, reason });
+    out.push({
+      route: r.id,
+      label: r.label ?? r.id,
+      from: a,
+      to: b,
+      fromFramework: from.framework,
+      toFramework: to.framework,
+      reason,
+    });
   }
   return out;
 }
@@ -103,7 +114,7 @@ export function routeFallbackNotice(
           .filter((f) => f.reason === why)
           .map(
             (f) =>
-              `${f.label}は「${strategyTitle(f.from)}」→「${strategyTitle(f.to)}」（既定）`,
+              `${f.label}は「${strategyTitle(f.from, f.fromFramework)}」→「${strategyTitle(f.to, f.toFramework)}」（既定）`,
           )
           .join('・')}に戻ります${why ? `: ${why.replace(/。$/, '')}` : ''}`,
     )

@@ -76,8 +76,11 @@ export function PageWireframe({ page }: { page: ResolvedPage }) {
             {r.label}
           </span>
           <span className="sr-only">: </span>
-          <span className="badge mt-0.5 h-auto badge-xs bg-base-100/85 py-0.5 text-[10px] leading-tight whitespace-normal">
-            {REGION_SOURCES[r.source].short}
+          <span
+            className="badge mt-0.5 h-auto badge-xs bg-base-100/85 py-0.5 text-[10px] leading-tight whitespace-normal"
+            {...(r.sourceNote ? { title: r.sourceNote } : {})}
+          >
+            {r.sourceLabel}
           </span>
         </li>
       ))}
@@ -105,6 +108,13 @@ export function PageBadges({ badges }: { badges: PageBadge[] }) {
 /** 見取り図に出ている作られ方だけの凡例。 */
 export function WireframeLegend({ pages }: { pages: ResolvedPage[] }) {
   const used = new Set(pages.flatMap((p) => p.regions.map((r) => r.source)));
+  // 札はフレームワークの呼び名（D-193）。同じ作られ方の区画は同じ札なので、最初の区画のものを使う
+  const labelOf = new Map(
+    pages
+      .flatMap((p) => p.regions)
+      .reverse()
+      .map((r) => [r.source, r.sourceLabel] as const),
+  );
   return (
     <ul aria-label="見取り図の凡例" className="space-y-0.5 text-xs">
       {ORDER.filter((s) => used.has(s)).map((s) => (
@@ -115,8 +125,10 @@ export function WireframeLegend({ pages }: { pages: ResolvedPage[] }) {
             style={SOURCE_STYLE[s]}
           />
           <span>
-            <span className="font-semibold">{REGION_SOURCES[s].short}</span>:{' '}
-            <span className="opacity-80">{REGION_SOURCES[s].long}</span>
+            <span className="font-semibold">
+              {labelOf.get(s) ?? REGION_SOURCES[s].short}
+            </span>
+            : <span className="opacity-80">{REGION_SOURCES[s].long}</span>
           </span>
         </li>
       ))}

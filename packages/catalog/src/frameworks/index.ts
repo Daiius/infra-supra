@@ -7,6 +7,7 @@ import type { Platform } from '../stacks/index.ts';
 import { applyRouteStrategies, presetPlan } from './route-strategies.ts';
 
 export * from './route-strategies.ts';
+export * from './terms.ts';
 
 export type FrameworkId = 'nextjs' | 'vite-spa' | 'astro' | 'nextjs-export';
 
@@ -315,7 +316,7 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     platform: 'aws',
     adapter: 'Amplify Hosting（SSR の計算）',
     support: 'native',
-    note: 'Amplify Hosting が Next.js 12〜15 の SSR・ISR・画像の最適化を扱います。更新で消す ISR（On-demand）・ストリーミング・Edge のミドルウェアは非対応です（16 の機能は使わない前提。prd/11 AX-03）',
+    note: 'Amplify Hosting が Next.js 12〜15 の SSR・ISR・画像の最適化を扱います。On-demand revalidation・ストリーミング・Edge のミドルウェアは非対応です（16 の機能は使わない前提。prd/11 AX-03）',
     sources: [
       src(
         'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
@@ -336,7 +337,7 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     platform: 'aws-opennext',
     adapter: 'OpenNext（Lambda + CloudFront + S3 + DynamoDB + SQS）',
     support: 'emulated',
-    note: 'OpenNext がビルド出力を Lambda 向けに直します。ISR は S3 のキャッシュ・DynamoDB のタグ・SQS の再検証で自前に再現します（更新で消す再検証に対応）。Next.js 15 が対象です。インフラは SST などで自分で組みます',
+    note: 'OpenNext がビルド出力を Lambda 向けに直します。ISR は S3 のキャッシュ・DynamoDB のタグ・SQS の再検証で自前に再現します（On-demand revalidationに対応）。Next.js 15 が対象です。インフラは SST などで自分で組みます',
     sources: [
       src('https://opennext.js.org/aws'),
       src('https://opennext.js.org/aws/inner_workings/architecture'),
@@ -357,7 +358,7 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
     platform: 'netlify',
     adapter: 'OpenNext のアダプター（設定なし）',
     support: 'native',
-    note: 'Next.js 13.5 以降を設定なしで載せます。SSR・ISR・Route Handler・Server Actions は Netlify Functions、ミドルウェアは Edge Functions です。ISR は時間の再検証・更新で消す再検証（パス・タグ）とも完全に対応します。next/image は Netlify Image CDN です',
+    note: 'Next.js 13.5 以降を設定なしで載せます。SSR・ISR・Route Handler・Server Actions は Netlify Functions、ミドルウェアは Edge Functions です。ISR は時間の再検証・On-demand revalidation（パス・タグ）とも完全に対応します。next/image は Netlify Image CDN です',
     sources: [src2('https://docs.netlify.com/frameworks/next-js/overview/')],
   },
   {

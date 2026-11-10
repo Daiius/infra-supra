@@ -166,12 +166,19 @@ export function RouteSettingChips({
     why: o === onDemand ? (x.onDemandBlocked ?? null) : null,
   }));
   // S2・S3 の切り替わりは選ぶと上の描き方のチップが替わるので本文に出す。部品ごとにキャッシュの時間とタグの意味は ⓘ に畳む（D-125）
-  const relation = cached
-    ? `時間を選ぶと「${ROUTE_STRATEGIES['cached-ttl'].label}」、「更新で消す」を選ぶと「${ROUTE_STRATEGIES['cached-purge'].label}」（上の 2 つの描き方は、この設定で切り替わります）`
-    : undefined;
+  // 描き方の名前は表の行と同じ（選んだフレームワークでの呼び名。D-193）
+  const nameOf = (s: 'cached-ttl' | 'cached-purge') =>
+    s === row.strategy
+      ? row.strategyLabel
+      : (row.alternatives.find((a) => a.strategy === s)?.label ??
+        ROUTE_STRATEGIES[s].label);
+  const relation =
+    cached && onDemand
+      ? `時間を選ぶと「${nameOf('cached-ttl')}」、「${onDemand.label}」を選ぶと「${nameOf('cached-purge')}」（上の 2 つの描き方は、この設定で切り替わります）`
+      : undefined;
   const note =
     cc && onDemand
-      ? `時間は部品の期限（cacheLife）、「更新で消す」は投稿・編集でタグを消して作り直します（updateTag）。${def.note}`
+      ? `時間は部品の期限（cacheLife）、「${onDemand.label}」は投稿・編集でタグを消して作り直します（updateTag）。${def.note}`
       : def.note;
   return (
     <SettingChips

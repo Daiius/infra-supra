@@ -70,7 +70,7 @@ export const NETLIFY_COMPONENTS: readonly ComponentOption[] = [
     frameworks: ['nextjs'],
     platform: 'netlify',
     label: 'ISR（Netlify の CDN のキャッシュ）',
-    note: 'ISR のページは CDN が返し、期限が来たページは関数が作り直します。更新で消す再検証（パス・タグ）にも対応します（OpenNext のアダプター）',
+    note: 'ISR のページは CDN が返し、期限が来たページは関数が作り直します。On-demand revalidation（パス・タグ）にも対応します（OpenNext のアダプター）',
     premiseRefs: ['fact:netlify:'],
     onDemandIsr: { ok: true, fact: 'netlify:pro:next-runtime' },
   },

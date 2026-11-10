@@ -340,3 +340,31 @@ API の置き場・画像を替えた静的書き出し（同じ取り方）:
 - 目標・バランスの値は動かしていない（ユーザーの決定どおり、静的書き出しはコミュニティの要件に合わない選択として不利になる）。
 - 受託（記事のページが無い）は変わらない。
 
+
+## 8. 描き方の呼び名（フレームワークの公式の用語。D-193・2026-11-10）
+
+画面に出る描き方・区画・部品・設定の名前は、**選んだフレームワークの公式の文書の用語だけ**で出す（一般の言葉を併記しない）。
+呼び名の無いものと、フレームワークを選ぶ前の画面（遊び方など）は一般の言葉（[13](./13-route-strategies.md) の `ROUTE_STRATEGIES` の label・`SLOT_LABELS`・`REGION_SOURCES` の short）のまま。
+データは catalog の `FRAMEWORK_TERMS`（`packages/catalog/src/frameworks/terms.ts`。名前・短い説明・出典と取得日）で、画面は `strategyTitle(id, framework)`・`slotLabel(slot, framework)`・`termName`・game の `regionSourceLabel` を通して読むだけ。分かりにくい名前の説明（note）は ⓘ か title に出す。
+
+| 所 | Next.js（App Router） | Next.js（静的書き出し） | Astro | Vite（SPA） |
+|---|---|---|---|---|
+| S1 静的 | Prerendering | Static Export | prerender | — |
+| S2 期限で取り直す | ISR | — | Route caching（maxAge） | — |
+| S3 更新で消す | On-demand revalidation | — | Route caching（invalidate） | — |
+| S4 毎回描く | Dynamic rendering | — | On-demand rendering | — |
+| S5 枠 + ブラウザが API | Client-side data fetching | Client-side data fetching | Client Islands | SPA（シェルの区画だけ。API で取る区画は一般の言葉） |
+| S6 枠 + 人ごとの部分 | Partial Prerendering（PPR） | — | Server islands | — |
+| 部品ごとにキャッシュ | Cache Components | — | — | — |
+| 設定のチップ（消す） | On-demand revalidation | — | cache.invalidate | — |
+| ページのキャッシュの部品・構成図の箱 | ISR のキャッシュ | — | — | — |
+| 見取り図の枠 / 人ごとの部分 | Static Shell / —（一般の言葉） | — | — / Server islands | — |
+| 見取り図の閲覧時にキャッシュ（Astro の記事） | — | — | Route caching | — |
+
+出典（2026-11-10 取得）:
+- Next.js: [Glossary](https://nextjs.org/docs/app/glossary)（2026-10-01 更新。Prerendering・Dynamic rendering・Incremental Static Regeneration (ISR)・Partial Prerendering (PPR)・Cache Components・Static Shell。「SSG」「SSR」の見出しは無い）、[ISR](https://nextjs.org/docs/app/guides/incremental-static-regeneration)（2026-10-15 更新。「On-demand revalidation with `revalidatePath`」）、[Static Exports](https://nextjs.org/docs/app/guides/static-exports)（2026-08-09 更新）、[SPAs](https://nextjs.org/docs/app/guides/single-page-applications)（2026-11-06 更新。関連の文書「Client-side data fetching」）。
+- Astro: [On-demand rendering](https://docs.astro.build/en/guides/on-demand-rendering/)（「pre-rendered at build time」・`prerender`）、[Route caching](https://docs.astro.build/en/guides/caching/)（`maxAge`・「Invalidating cache entries」の `cache.invalidate()`）、[Islands](https://docs.astro.build/en/concepts/islands/)（見出し「Client Islands」「Server islands」）。
+- Vite: [Shared Options の `appType`](https://vite.dev/config/shared-options)（「Whether your application is a Single Page Application (SPA)」。CSR の語は無い）。
+
+- ユーザーの例（「SSG」「Dynamic Rendering（SSR）」「CSR」）は、公式の文書の見出しにそろえるため Prerendering・Dynamic rendering・SPA にした。
+- 変えていないもの: ID・型名・保存値・URL・計算・golden。estimator の内訳の名前（「ISR の作り直し（…・更新で消す）」など。estimator はフレームワークを知らない）、要件の名前「即時反映（更新で消す ISR）」、基準プレイの名前、事業者の文書の文（Firebase Hosting・Cloudflare の CDN の注記。Next.js 以外にも出る）、遊び方。

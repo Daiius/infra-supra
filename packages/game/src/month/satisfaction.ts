@@ -7,7 +7,13 @@ import {
   publicRoute,
   routeFamily,
 } from '../routes/strategy.ts';
-import { isOnDemand, optionLabel, type Settings } from '../settings.ts';
+import {
+  ASTRO_ON_DEMAND,
+  isOnDemand,
+  NEXT_ON_DEMAND,
+  optionLabel,
+  type Settings,
+} from '../settings.ts';
 import type { GameState, MonthReport, RouteOverrides } from '../state.ts';
 
 /**
@@ -144,7 +150,7 @@ export function stageReasons(
       c.eventuallyConsistent &&
         'KV を DB の代わりにしているか、HTML を前段の CDN でキャッシュしていて（キャッシュを消せない）、更新がすぐ見えません',
       c.frontDelayed &&
-        'HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見えます（更新で消す再検証でキャッシュを消せば遅れない）',
+        `HTML を前段の CDN でもキャッシュしているので、更新は最大で間隔の約 2 倍遅れて見えます（${c.astro ? ASTRO_ON_DEMAND : NEXT_ON_DEMAND} でキャッシュを消せば遅れない）`,
       c.newPostDelayed &&
         (c.shellBuilds
           ? '新しく投稿された記事は、記事ごとの枠のビルドが終わるまでページが無く、投稿した人がすぐ開けません（コミュニティの要件を満たさない）'

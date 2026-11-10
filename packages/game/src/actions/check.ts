@@ -5,6 +5,8 @@ import {
   FRAMEWORKS,
   ROUTE_STRATEGIES,
   strategySupport,
+  strategyTitle,
+  termName,
 } from 'catalog';
 import { EFFORT } from '../rules.ts';
 import { newAccountsBy } from '../accounts.ts';
@@ -50,6 +52,7 @@ import {
   strategySelectable,
 } from '../routes/strategy.ts';
 import { ON_DEMAND_REVALIDATE, SETTINGS } from '../settings.ts';
+import { nameThen } from '../format.ts';
 import {
   isDataSwap,
   isPlanChange,
@@ -154,7 +157,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         )
           return ng(
             'unavailable',
-            `部品ごとにキャッシュの記事をタグで消せません（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）`,
+            `${nameThen(strategyTitle('cache-components', state.framework))}の記事をタグで消せません（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）`,
           );
       }
       // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の手間がかかる（D-49）
@@ -296,7 +299,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         return ng(
           'same',
           strategyFamily(now) === 'cached'
-            ? '期限と「更新で消す」は設定で替えます'
+            ? `期限と「${termName(state.framework, 'onDemand', '更新で消す')}」は設定で替えます`
             : '今の描き方と同じ',
         );
       if (

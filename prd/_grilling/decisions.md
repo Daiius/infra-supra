@@ -2376,6 +2376,19 @@
   - 遊び方の 3 ページ目を「画面の上の『戻る…』（狭い画面ではアイコンのボタン）か、履歴の『この月に戻る』でやり直せます。」にした。
 - テスト: web の `rewind.smoke.test.tsx` の W-70（履歴の行から開くとその月を選んでいる・ヘッダーから・1 か月目はヘッダーに出ない・行動の欄の上に欄が無い）・W-192（ヘッダーから既定は 1 つ前の月・選び直すと文とボタンが変わる・やめる・履歴の行のボタンが残る）・W-73（終わった後はヘッダーから戻る・結果の画面に欄が無い）。
 
+### D-193 描き方の名前を、選んだフレームワークの呼び名だけで出す（D-160・D-165 の見直し。2026-11-10・ユーザーの決定）
+
+- 依頼（ユーザー。supervisor 経由・2026-11-09）: D-160・D-165 で一般の言葉に置き換えた描き方の用語（「閲覧ごとに描く部分」「枠 + 人ごとの部分をサーバーで」「静的（更新はビルドし直し）」「毎回描く（キャッシュしない）」「更新で消す」「ページのキャッシュ（ISR）」など）を、選んだフレームワークでの呼び名だけで出す。一般の言葉を併記しない。呼び名の無いもの・フレームワークを選ぶ前は一般の言葉のまま。
+- 決定:
+  - **データ**: catalog の `FRAMEWORK_TERMS`（`frameworks/terms.ts`。描き方・設定のチップ・ページのキャッシュの部品・見取り図の区画ごとの名前・短い説明・出典と取得日）。画面は `strategyTitle(id, framework)`・`slotLabel(slot, framework)`・`termName`・game の `regionSourceLabel`・web の `laneLabel` で読む。対応の表と出典は [prd/06](../06-frameworks.md) §8。
+  - **呼び名は公式の文書の見出しにそろえた**: Next.js は用語集（Prerendering・ISR・Dynamic rendering・Partial Prerendering（PPR）・Cache Components・Static Shell）と ISR の文書（On-demand revalidation）。用語集に「SSG」「SSR」の見出しが無いので、ユーザーの例の「SSG」「Dynamic Rendering（SSR）」は Prerendering・Dynamic rendering にした。Astro は prerender・Route caching（maxAge / invalidate）・On-demand rendering・Client Islands・Server islands。Vite は `appType` の「SPA」（CSR の語は文書に無い）。
+  - **分かりにくい名前の説明**: 表・チップの ⓘ の先頭と title に短い説明（例: ISR →「Incremental Static Regeneration。最初の閲覧で描いた HTML をキャッシュし…」）。
+  - **替えた所**: 描き方のチップ・表（始める画面・見積モード・ゲームの「構成を変える」の ②）・既定に戻る注意（替える前と後のフレームワークの呼び名）・行動の記録・前回の構成を戻したときの知らせ・見取り図の札と凡例・構成図の流れの凡例（ISR・Dynamic rendering・Server islands など）と箱の種類（Next.js の isr-store は「ISR のキャッシュ」）・部品のスロット（Next.js の `isrCache` は「ISR のキャッシュ」。始める画面・行動・要件の判定・作り直しの説明）・設定のチップ（再検証は「On-demand revalidation」、Astro の記事のキャッシュは「cache.invalidate」）と手間・説明・出来事・提案の効果・判定の理由・ヒント・対応表の注記（Next.js 専用の事業者の注記の「更新で消す再検証」は On-demand revalidation）。
+  - **残したもの**（一般の言葉のまま）: 遊び方・基準プレイの名前・要件の名前「即時反映（更新で消す ISR）」・estimator の内訳の名前（フレームワークを知らない）・Next.js 以外にも出る事業者の注記（Firebase Hosting・Cloudflare の CDN）・描き方の長い説明（long）と「なぜ」の文・PPR の人ごとの部分と Cache Components の動的な部分の区画（公式の名前が無い）。どのフレームワークでも出る文の「更新で消す」は「投稿・編集のときに消す」と言い換えた。
+  - ID・型名・保存値・URL・計算・golden は変えない。
+- テスト: catalog の `terms.test.ts`（出典・一般の言葉に落ちる）、game の `framework-terms.test.ts`（Next.js・Astro・静的書き出し・Vite の SPA で替わる・選ぶ前は一般の言葉・部品と見取り図の札）。文言に依存する game・web のテスト（ondemand-setting・route-fallback・setup・App.smoke・estimate-mode.smoke・info-hitbox.smoke・system-diagram・system-diagram-model）を新しい名前に合わせた。
+- 残した点: 狭い画面での英字の長い名前（「Partial Prerendering（PPR）」「Client-side data fetching」）のチップの省略の見え方を実機で確かめる。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

@@ -137,11 +137,11 @@ describe('幽霊の箱（D-116 の補足）', () => {
     expect(g.querySelector('rect')!.getAttribute('stroke-dasharray')).toBe(
       '4 3',
     );
-    expect(g.textContent).toContain('ページのキャッシュ（ISR）');
+    expect(g.textContent).toContain('ISR のキャッシュ');
     expect(g.textContent).toContain('Workers Cache');
     expect(container.querySelector('[data-edge*="ghost:"]')).toBeNull();
     const box = within(g as HTMLElement).getByRole('button', {
-      name: /ページのキャッシュ（ISR）.*を替える$/,
+      name: /ISR のキャッシュ.*を替える$/,
     });
     expect(box.querySelector('[data-swap-mark]')).not.toBeNull();
     fireEvent.click(box);

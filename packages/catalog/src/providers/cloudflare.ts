@@ -1265,7 +1265,7 @@ export const cloudflare: PriceBookInput = {
         {
           id: 'next-on-demand',
           premise:
-            'Next.js の更新で消す再検証（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返します（再検証と一緒に CDN のパージを呼ぶ必要がある。HTML と RSC の変種の両方）',
+            'Next.js のOn-demand revalidation（revalidatePath・revalidateTag）は CDN には届かず、CDN は s-maxage が切れるまで古いページを返します（再検証と一緒に CDN のパージを呼ぶ必要がある。HTML と RSC の変種の両方）',
           sourceIds: ['nextjsCdn'],
         },
         {

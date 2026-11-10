@@ -283,7 +283,13 @@ export function RoutePlanTable({
                   <td className="min-w-40" data-strategy={r.strategy}>
                     <span className="flex items-start gap-1.5">
                       <Swatch strategy={r.strategy} />
-                      <span>{r.strategyLabel}</span>
+                      <span
+                        {...(r.strategyTermNote
+                          ? { title: r.strategyTermNote }
+                          : {})}
+                      >
+                        {r.strategyLabel}
+                      </span>
                     </span>
                     {r.detail.length > 0 && (
                       <ul className="mt-0.5 text-[11px] opacity-70">
@@ -401,6 +407,7 @@ export function RoutePlanTable({
                             <Info
                               label={`${a.label}${a.available ? '' : 'が使えない理由'}`}
                             >
+                              {a.termNote && <>{a.termNote}。</>}
                               {a.reason}
                               {a.basis === 'assumption' && '（ゲーム上の仮定）'}
                             </Info>
@@ -491,6 +498,7 @@ export function RouteChips({
                 </span>
               )}
               <Info label={`${r.strategyLabel}の説明`}>
+                {r.strategyTermNote && <p>{r.strategyTermNote}</p>}
                 {describe && <p>{ROUTE_STRATEGIES[r.strategy].long}</p>}
                 <p>{r.why}</p>
                 {r.detail.length > 0 && (
@@ -548,6 +556,7 @@ export function RouteChips({
               label={`${a.label}${a.available ? 'の説明' : 'が使えない理由'}`}
             >
               {why && <p className="font-semibold">{why}</p>}
+              {a.termNote && <p>{a.termNote}</p>}
               <p>
                 {a.reason}
                 {a.basis === 'assumption' && '（ゲーム上の仮定）'}
@@ -562,4 +571,4 @@ export function RouteChips({
 
 /** 表の下の注記（始める画面・見積モードで同じ文）。 */
 export const ROUTE_PLAN_NOTE =
-  '描き方はフレームワークの既定から、ページごとに選び直せます（人ごとに違うページは使い回す描き方を選べません）。期限か「更新で消す」かはカードの記事のページの行の設定（再検証・記事のキャッシュ）で決まります。費用の差は 1 か月目の基準の規模での目安です。公式の文書で確かめていない組み合わせ（Next.js × Netlify・OpenNext の PPR など）は出していません。';
+  '描き方はフレームワークの既定から、ページごとに選び直せます（人ごとに違うページは使い回す描き方を選べません）。期限か、投稿・編集のときに消すかは、カードの記事のページの行の設定（再検証・記事のキャッシュ）で決まります。費用の差は 1 か月目の基準の規模での目安です。公式の文書で確かめていない組み合わせ（Next.js × Netlify・OpenNext の PPR など）は出していません。';

@@ -208,7 +208,8 @@ describe('作り直しで既定に戻る描き方の予測（D-107 の補足）'
       personal: 'shell-api',
     });
     expect(rewriteRouteNotice(s0, 'astro')).toBe(
-      '作り直すと、記事のページは「静的（更新はビルドし直し）」→「サーバーで描いてキャッシュ（時間で取り直す）」（既定）・個人向けのページは「枠 + ブラウザが API で取る」→「毎回描く（キャッシュしない）」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります（選び直すには手間がかかります）',
+      // 描き方の名前は替える前と後のフレームワークの呼び名（D-193）
+      '作り直すと、記事のページは「Prerendering」→「Route caching（maxAge）」（既定）・個人向けのページは「Client-side data fetching」→「On-demand rendering」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります（選び直すには手間がかかります）',
     );
     // 静的書き出しの既定は記事 S1・個人向け S5 で、選んだものと同じ
     expect(rewriteRouteNotice(s0, 'nextjs-export')).toBeNull();
@@ -238,7 +239,7 @@ describe('始める画面のカードの注意（D-107 の補足）', () => {
 
   it('フレームワークを替えると、選んだ描き方は既定に戻る', () => {
     expect(setupRouteNotice(ARTICLE, cur, { framework: 'astro' })).toBe(
-      'このフレームワークにすると、記事のページは「静的（更新はビルドし直し）」→「サーバーで描いてキャッシュ（更新で消す）」（既定）・個人向けのページは「枠 + ブラウザが API で取る」→「毎回描く（キャッシュしない）」（既定）に戻ります: フレームワークを替えると、描き方はそのフレームワークの既定から選び直しになります',
+      'このフレームワークにすると、記事のページは「Prerendering」→「Route caching（invalidate）」（既定）・個人向けのページは「Client-side data fetching」→「On-demand rendering」（既定）に戻ります: フレームワークを替えると、描き方はそのフレームワークの既定から選び直しになります',
     );
     expect(
       setupRouteNotice(
@@ -285,7 +286,7 @@ describe('始める画面のカードの注意（D-107 の補足）', () => {
   it('選んだ再検証が替えた先でも選べれば残る（Vercel の Next.js の記事 S1・ビルドの間隔 5 分 → Astro は S2。OCL-0ABECA36）', () => {
     const chosen = { ...cur, revalidateChosen: 300 };
     expect(setupRouteNotice(ARTICLE, chosen, { framework: 'astro' })).toMatch(
-      /^このフレームワークにすると、記事のページは「静的（更新はビルドし直し）」→「サーバーで描いてキャッシュ（時間で取り直す）」（既定）/,
+      /^このフレームワークにすると、記事のページは「Prerendering」→「Route caching（maxAge）」（既定）/,
     );
     const after = setupStart(VERCEL_PRO, 'astro', undefined, 300);
     expect(planOf(after).article).toBe('cached-ttl');

@@ -15,6 +15,8 @@ import {
   STACK_DEFS,
   withoutUnusedEmail,
   type FrameworkId,
+  type FrameworkTermKey,
+  termName,
 } from 'catalog';
 import type { ArchitectureInput, RequestClass, Role } from 'estimator';
 import {
@@ -118,6 +120,24 @@ export const LANES: Readonly<
   },
 };
 export const LANE_ORDER = Object.keys(LANES) as LaneId[];
+
+/** 流れの名前をフレームワークの呼び名にする所（D-193）。無いもの・フレームワークを選ぶ前は LANES の一般の言葉。 */
+const LANE_TERM: Partial<Record<LaneId, FrameworkTermKey>> = {
+  isr: 'cached-ttl',
+  ssr: 'ssr',
+  island: 'islandRegion',
+};
+
+/** 流れの名前（選んだフレームワークでの呼び名。無ければ一般の言葉。D-193）。 */
+export function laneLabel(l: LaneId, framework?: FrameworkId): string {
+  const key = LANE_TERM[l];
+  // Astro の記事は閲覧時に描いてキャッシュする（Route caching。期限と消すのを区別しない。D-103）
+  const k: FrameworkTermKey | undefined =
+    l === 'isr' && framework === 'astro' ? 'cachedRegion' : key;
+  return k === undefined
+    ? LANES[l].label
+    : termName(framework, k, LANES[l].label);
+}
 
 const laneOf = (cls: RequestClass): LaneId =>
   LANE_ORDER.find((l) => LANES[l].classes.includes(cls)) ?? 'api';
@@ -346,6 +366,8 @@ export function diagramModel(
   orientation: Orientation = 'horizontal',
   /** 幽霊の箱（slotBoxes。D-116 の補足）。線は引かず、手がかりの帯・段に置く。 */
   ghosts: readonly GhostSlot[] = [],
+  /** 選んだフレームワーク（流れ・箱の名前をその呼び名にする。D-193）。省略は一般の言葉。 */
+  framework?: FrameworkId,
 ): DiagramModel {
   const routes = Object.entries(arch.routes).filter(
     (e): e is [RequestClass, string[]] => (e[1]?.length ?? 0) > 0,
@@ -499,7 +521,7 @@ export function diagramModel(
     }[] = [
       ...routed
         .filter((n) => accountOf(n.id) === g)
-        .map((n) => ({ view: nodeView(n, g), d: depth.get(n.id)! })),
+        .map((n) => ({ view: nodeView(n, g, framework), d: depth.get(n.id)! })),
       ...routedGhosts
         .filter((r) => r.group === g)
         .map((r) => ({ view: ghostView(r.gh, g), d: r.depth })),
@@ -573,7 +595,7 @@ export function diagramModel(
       s = { group: g, ...(brand ? { brand } : {}), nodes: [] };
       side.push(s);
     }
-    s.nodes.push({ ...nodeView(n, g), x: 0, y: 0 });
+    s.nodes.push({ ...nodeView(n, g, framework), x: 0, y: 0 });
     if (!groups.some((x) => x.account === g)) {
       const brand = ACCOUNT_BRAND[g];
       groups.push({ account: g, ...(brand ? { brand } : {}) });
@@ -608,7 +630,7 @@ export function diagramModel(
   const used = new Set(edges.flatMap((e) => e.lanes));
   const lanes = LANE_ORDER.filter((l) => used.has(l)).map((l) => ({
     id: l,
-    label: LANES[l].label,
+    label: laneLabel(l, framework),
     pages: pages
       .filter((p) => p.regions.some((r) => SOURCE_LANE[r.source] === l))
       .map((p) => p.label),
@@ -639,6 +661,7 @@ const rank = (groups: DiagramGroup[], g: string) => {
 function nodeView(
   n: ArchitectureInput['nodes'][number],
   group: string,
+  framework: FrameworkId | undefined,
 ): Omit<DiagramNode, 'x' | 'y' | 'depth'> {
   const kind = n.config.kind;
   return {
@@ -646,7 +669,10 @@ function nodeView(
     label: n.label,
     short: shortLabel(n.label),
     kind,
-    caption: KIND_CAPTION[kind] ?? kind,
+    caption:
+      kind === 'isr-store'
+        ? termName(framework, 'pageCacheStore', KIND_CAPTION[kind]!)
+        : (KIND_CAPTION[kind] ?? kind),
     compute: isComputeKind(kind),
     billed: n.billing !== undefined,
     group,

@@ -1,5 +1,5 @@
 // 行動の適用と、まとめての検査。
-import { FRAMEWORKS, SLOT_LABELS, strategyTitle } from 'catalog';
+import { FRAMEWORKS, slotLabel, strategyTitle } from 'catalog';
 import { PAYMENT_LABEL } from '../commitments.ts';
 import { EFFORT } from '../rules.ts';
 import { componentProposal } from '../components.ts';
@@ -114,7 +114,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       const sc = scenarioOf(state);
       const r = sc.template(1).routes.find((x) => x.id === action.route)!;
       return withNote(
-        `${r.label ?? r.id}を「${strategyTitle(action.strategy)}」に`,
+        `${r.label ?? r.id}を「${strategyTitle(action.strategy, state.framework)}」に`,
         {
           ...state,
           ...planned,
@@ -227,7 +227,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       });
     case 'component': {
       const platform = STACKS[state.stackIndex]!.provider;
-      const label = `${SLOT_LABELS[action.slot]}: ${componentLabel(platform, action.slot, action.option)}`;
+      const label = `${slotLabel(action.slot, state.framework)}: ${componentLabel(platform, action.slot, action.option)}`;
       if (isDataSwap(action.slot)) {
         const componentSwap: ComponentSwap = {
           slot: action.slot,

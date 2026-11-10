@@ -69,7 +69,7 @@ describe('ⓘ の当たり判定', () => {
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
       parts: {
-        'ページのキャッシュ（ISR）': 'KV',
+        'ISR のキャッシュ': 'KV',
         画像: 'Images（閲覧のときに変換）',
         DB: 'D1',
       },

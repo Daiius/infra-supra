@@ -137,14 +137,6 @@ export const ROUTE_STRATEGIES: Readonly<
   },
 };
 
-/**
- * 画面に出す描き方の名前。S1〜S6 の番号（`code`）は分かりにくいので画面には出さず、名前だけにする（D-112）。
- * 番号は文書・コードの中の呼び名として残す。
- */
-export function strategyTitle(id: RouteStrategyId): string {
-  return ROUTE_STRATEGIES[id].label;
-}
-
 /** 画面に並べる順（S1〜S6、部品ごとにキャッシュ）。 */
 export const ROUTE_STRATEGY_ORDER: readonly RouteStrategyId[] = [
   'static-build',

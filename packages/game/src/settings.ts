@@ -4,6 +4,7 @@ import {
   imagesBehavior,
   imagesServedFormat,
   type Platform,
+  termName,
 } from 'catalog';
 import { EFFORT } from './rules.ts';
 import type { Scenario, WorkloadMods } from './scenario.ts';
@@ -42,6 +43,10 @@ export function isOnDemand(settings: Pick<Settings, 'revalidateSec'>): boolean {
  * オンデマンドの最大寿命の説明（設定の ⓘ に出す。D-56）。Next.js の文書（ISR のガイド・2026-10-15 更新）で確かめたのは、
  * タグで再検証するデータに revalidate: 3600 を併せて付けた例（unstable_cache）があることまで。
  */
+/** 投稿・編集でページのキャッシュを消す設定のチップの名前（フレームワークの呼び名。D-193）。再検証は Next.js、記事のキャッシュは Astro。 */
+export const NEXT_ON_DEMAND = termName('nextjs', 'onDemand', '更新で消す');
+export const ASTRO_ON_DEMAND = termName('astro', 'onDemand', '更新で消す');
+
 export const ON_DEMAND_MAX_AGE_NOTE =
   '実際には、再検証の呼び出しの取りこぼし（webhook の失敗・呼び忘れ・外部データの変化）に備えて、時間の再検証（最大寿命）を併せて設定することが多いです（1 時間〜1 日など。Next.js の文書の例にも、タグで再検証するデータに revalidate: 3600 を併せて付けたものがあります）。このゲームでは 1 日とみなし、その分の作り直しも数えます';
 
@@ -171,12 +176,12 @@ export const SETTINGS = {
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
     note:
-      '作り直しの回数に効きます。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がります。「更新で消す」は記事の更新のときに再検証します（作り直しはおもに更新の回数です。ISR のキャッシュの置き場所によっては再検証が届きません。時間からの切り替えは実装の手間がかかります）。' +
+      `作り直しの回数に効きます。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がります。「${NEXT_ON_DEMAND}」は記事の更新のときに再検証します（作り直しはおもに更新の回数です。ISR のキャッシュの置き場所によっては再検証が届きません。時間からの切り替えは実装の手間がかかります）。` +
       ON_DEMAND_MAX_AGE_NOTE,
     options: [
       {
         value: ON_DEMAND_REVALIDATE,
-        label: '更新で消す',
+        label: NEXT_ON_DEMAND,
       },
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
@@ -229,12 +234,12 @@ export const SETTINGS = {
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
     note:
-      '記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュします。「更新で消す」は記事の投稿・編集のときにそのページのキャッシュを消します（Astro の route caching。消せない置き場では届かず、古いページが出ます）。時間はキャッシュの期限で、延ばすと描き直しが減りますが、記事の更新が遅れて見え、鮮度（満足度）が下がります。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗ります（Workers の 1 リクエストの CPU の上限に効く）。' +
+      `記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュします。「${ASTRO_ON_DEMAND}」は記事の投稿・編集のときにそのページのキャッシュを消します（Astro の Route caching。消せない置き場では届かず、古いページが出ます）。時間はキャッシュの期限で、延ばすと描き直しが減りますが、記事の更新が遅れて見え、鮮度（満足度）が下がります。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗ります（Workers の 1 リクエストの CPU の上限に効く）。` +
       ON_DEMAND_MAX_AGE_NOTE,
     options: [
       {
         value: ON_DEMAND_REVALIDATE,
-        label: '更新で消す',
+        label: ASTRO_ON_DEMAND,
       },
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },

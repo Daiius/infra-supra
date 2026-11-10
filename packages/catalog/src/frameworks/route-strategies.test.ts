@@ -25,9 +25,9 @@ import {
   routeAudience,
   SERVER_ISLAND,
   serverIslandDelivery,
-  strategyTitle,
   CACHE_COMPONENTS,
 } from './route-strategies.ts';
+import { strategyTitle } from './terms.ts';
 
 const FRAMEWORK_IDS = Object.keys(FRAMEWORK_PRESETS) as FrameworkId[];
 

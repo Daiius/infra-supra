@@ -798,7 +798,7 @@ describe('slotBoxes（どのスロットにも箱。今の選択が箱を持た�
         ).toBe(false);
         const g = model.nodes.find((n) => n.id === 'ghost:isrCache')!;
         expect(g.ghost?.slot, `${stack} ${choice}`).toBe('isrCache');
-        expect(g.caption).toBe('ページのキャッシュ（ISR）');
+        expect(g.caption).toBe('ISR のキャッシュ');
         expect(g.label, `${stack} ${choice}`).toBe(
           ghosts.find((x) => x.slot === 'isrCache')!.label,
         );

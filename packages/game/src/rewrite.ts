@@ -8,6 +8,7 @@ import {
   type FrameworkId,
   FRAMEWORKS,
   SLOT_LABELS,
+  slotLabel,
   type SlotId,
 } from 'catalog';
 import { EFFORT } from './rules.ts';
@@ -139,7 +140,7 @@ export function rewriteText(
         ? `替わる部品: ${lost
             .map(
               (slot) =>
-                `${SLOT_LABELS[slot]}（${componentLabel(platform, slot, state.components[slot])} → ${componentLabel(platform, slot, after[slot])}）`,
+                `${slotLabel(slot, state.framework)}（${componentLabel(platform, slot, state.components[slot])} → ${componentLabel(platform, slot, after[slot])}）`,
             )
             .join('・')}。`
         : '') +

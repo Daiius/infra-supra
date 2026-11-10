@@ -7,6 +7,7 @@
 // 部品を差し替えられる箱（parts。始める画面・見積の選んでいる構成のカード）は、横の図でも押せて、そのスロットの選択肢を出す（D-116）。
 // 図の一番下の段には、経路に載らない部品（メールの送信・バックアップなど）と、図に箱を持たないスロット（1 択など）を並べ、
 // 部品を選べる図ではそこからも選べる（どのスロットも図の中で選べる。D-116 の補足・2 つの表示）。
+import type { FrameworkId } from 'catalog';
 import type { ArchitectureInput } from 'estimator';
 import { termNotesOf } from 'game';
 import {
@@ -180,8 +181,11 @@ export function SystemDiagram({
   bandSlots,
   focusTarget,
   onFocused,
+  framework,
 }: {
   architecture: ArchitectureInput;
+  /** 選んだフレームワーク（流れ・箱の名前をその呼び名にする。D-193）。 */
+  framework?: FrameworkId | undefined;
   /** ページの見取り図（流れの凡例にページの名前を添える。省略可）。 */
   pages?: readonly ResolvedPage[] | undefined;
   /** 図の下の注記。 */
@@ -212,10 +216,16 @@ export function SystemDiagram({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const wide = diagramModel(architecture, pages ?? [], 'horizontal', ghosts);
+  const wide = diagramModel(
+    architecture,
+    pages ?? [],
+    'horizontal',
+    ghosts,
+    framework,
+  );
   const narrow = isNarrow(boxWidth, wide.width);
   const tall = narrow
-    ? diagramModel(architecture, pages ?? [], 'vertical', ghosts)
+    ? diagramModel(architecture, pages ?? [], 'vertical', ghosts, framework)
     : null;
   const model = tall ?? wide;
   // 幽霊の箱は、そのスロットの差し替えを出す（D-116 の補足）

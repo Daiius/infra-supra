@@ -96,7 +96,7 @@ describe('ゲームモードの画面', () => {
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
       parts: {
-        'ページのキャッシュ（ISR）': 'KV',
+        'ISR のキャッシュ': 'KV',
         画像: 'Images（閲覧のときに変換）',
         DB: 'D1',
       },
@@ -265,12 +265,13 @@ describe('ゲームモードの画面', () => {
         { name: '記事のページの見取り図' },
       ),
     ).toBeDefined();
-    expect(tag('記事のページ', '本文')).toBe('ISR（キャッシュ）');
+    // 札は選んだフレームワークでの呼び名（D-193）
+    expect(tag('記事のページ', '本文')).toBe('ISR');
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
-      'ブラウザが API で取る',
+      'Client-side data fetching',
     );
     expect(tag('個人向けのページ', '自分の下書き・記事の一覧')).toBe(
-      '閲覧ごとに SSR',
+      'Dynamic rendering',
     );
     // コメントを記事のページに含めると、コメント欄は ISR のページの一部になる（D-82）。
     // 選ぶのはフレームワークのカードの記事のページの欄（ページの部品。D-109・D-112）
@@ -280,40 +281,36 @@ describe('ゲームモードの画面', () => {
     ).toBe('article');
     expect(current().contains(inPage)).toBe(true);
     pick(/^記事のページに含める/);
-    expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
-      'ISR（キャッシュ）',
-    );
+    expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe('ISR');
     pick(/^ブラウザで読み込む/);
 
     // Astro の記事は閲覧時に SSR + キャッシュ（投稿で消す。D-103）
     pick(/^Astro/);
-    expect(tag('記事のページ', '本文')).toBe(
-      '閲覧時に SSR + キャッシュ（投稿で消す）',
-    );
-    expect(tag('記事のページ', 'いいね')).toBe('アイランドが API で取る');
+    expect(tag('記事のページ', '本文')).toBe('Route caching');
+    expect(tag('記事のページ', 'いいね')).toBe('Client Islands');
     expect(tag('個人向けのページ', '自分の下書き・記事の一覧')).toBe(
-      '閲覧ごとに SSR',
+      'On-demand rendering',
     );
     pick(/^記事のページに含める/);
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
-      '閲覧時に SSR + キャッシュ（投稿で消す）',
+      'Route caching',
     );
 
     pick(/^Next\.js（静的書き出し）/);
-    expect(tag('個人向けのページ', 'ヘッダー・ナビ')).toBe('ビルドで静的');
-    expect(tag('個人向けのページ', '通知')).toBe('ブラウザが API で取る');
+    expect(tag('個人向けのページ', 'ヘッダー・ナビ')).toBe('Static Export');
+    expect(tag('個人向けのページ', '通知')).toBe('Client-side data fetching');
 
     // SPA はコメントを含められない（設定が出ない）ので、コメント欄は API のまま
     pick(/^Vite（SPA）/);
-    expect(tag('記事のページ', 'ヘッダー・ナビ')).toBe('シェル + JS');
+    expect(tag('記事のページ', 'ヘッダー・ナビ')).toBe('SPA');
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
       'ブラウザが API で取る',
     );
-    // 凡例は文字で出る
+    // 凡例は文字で出る（Vite の SPA の API で取る区画に呼び名は無いので、一般の言葉のまま。D-193）
     expect(
       within(
         within(current()).getByRole('list', { name: '見取り図の凡例' }),
-      ).getByText('シェル + JS'),
+      ).getByText('SPA'),
     ).toBeDefined();
 
     // 前後のボタンでも選ぶ（並びは Next.js・SPA・Astro・静的書き出し）
@@ -341,7 +338,9 @@ describe('ゲームモードの画面', () => {
     // 受託: 業務の画面の 1 枚
     pick(/^受託先の業務アプリの運用/);
     pick(/^Next\.js（App Router）/);
-    expect(tag('業務の画面', '一覧の表（申請・記録）')).toBe('閲覧ごとに SSR');
+    expect(tag('業務の画面', '一覧の表（申請・記録）')).toBe(
+      'Dynamic rendering',
+    );
     expect(
       screen.queryByRole('list', { name: '記事のページの見取り図' }),
     ).toBeNull();
@@ -378,7 +377,7 @@ describe('ゲームモードの画面', () => {
     expect(
       within(group)
         .getByRole('button', {
-          name: '個人向けのページは 毎回描く（キャッシュしない）（選択中）',
+          name: '個人向けのページは On-demand rendering（選択中）',
         })
         .getAttribute('aria-pressed'),
     ).toBe('true');
@@ -405,7 +404,7 @@ describe('ゲームモードの画面', () => {
     ).toBe('false');
     expect(
       within(pageOf('personal')).getByRole('button', {
-        name: 'サーバーで描いてキャッシュ（更新で消す）が使えない理由',
+        name: 'Route caching（invalidate）が使えない理由',
       }),
     ).toBeDefined();
     expect(
@@ -423,7 +422,8 @@ describe('ゲームモードの画面', () => {
     expect(badges('personal')).toContain('CPU: 閲覧ごとにサーバーが描く');
     // 個人向けを枠 + API にすると、隣の見取り図が枠 + API になり、その行は CPU の制限に当たらない
     expect(sources('personal', '個人向けのページ')).toContain('ssr');
-    pickStrategy('個人向けのページ', '枠 + ブラウザが API で取る');
+    // 描き方の名前は Astro の呼び名（D-193）
+    pickStrategy('個人向けのページ', 'Client Islands');
     expect(chosenOf('personal')).toBe('shell-api');
     expect(sources('personal', '個人向けのページ')).toContain('api');
     expect(sources('personal', '個人向けのページ')).not.toContain('ssr');
@@ -436,7 +436,7 @@ describe('ゲームモードの画面', () => {
     ).toBeNull();
     fireEvent.click(
       within(pageOf('personal')).getByRole('button', {
-        name: '枠 + ブラウザが API で取るの説明',
+        name: 'Client Islandsの説明',
       }),
     );
     expect(infoDialog()!.textContent).toContain('HTML は静的な枠');
@@ -446,7 +446,9 @@ describe('ゲームモードの画面', () => {
     // もとの描き方は選び直せるボタンとして残る
     expect(
       within(pageOf('personal'))
-        .getByRole('button', { name: /^個人向けのページを 毎回描く/ })
+        .getByRole('button', {
+          name: /^個人向けのページを On-demand rendering/,
+        })
         .getAttribute('aria-pressed'),
     ).toBe('false');
     expect(
@@ -494,15 +496,15 @@ describe('ゲームモードの画面', () => {
     expect(lines('article', '記事のページ')).toContain(
       '閲覧時に SSR + キャッシュ',
     );
-    pickStrategy('記事のページ', '毎回描く（キャッシュしない）');
+    pickStrategy('記事のページ', 'On-demand rendering');
     expect(chosenOf('article')).toBe('ssr');
     expect(lines('article', '記事のページ')).toBe('');
-    expect(chipInfo('article', '毎回描く（キャッシュしない）')).toContain(
+    expect(chipInfo('article', 'On-demand rendering')).toContain(
       'リクエストのたびにサーバーが描きます',
     );
     expect(badges('article')).toContain('CPU: 閲覧ごとにサーバーが描く');
     expect(badges('article')).not.toContain('投稿・編集でキャッシュを消す');
-    pickStrategy('記事のページ', 'サーバーで描いてキャッシュ（更新で消す）');
+    pickStrategy('記事のページ', 'Route caching（invalidate）');
     expect(chosenOf('article')).toBe('cached-purge');
     expect(lines('article', '記事のページ')).toContain(
       '閲覧時に SSR + キャッシュ',
@@ -526,7 +528,7 @@ describe('ゲームモードの画面', () => {
     // 選んでいるチップの ⓘ: 描き方の説明・要件に応える理由・値
     fireEvent.click(
       within(pageOf('article')).getByRole('button', {
-        name: '部品ごとにキャッシュ（Cache Components）の説明',
+        name: 'Cache Componentsの説明',
       }),
     );
     const tip = infoDialog()!.textContent ?? '';
@@ -541,7 +543,7 @@ describe('ゲームモードの画面', () => {
       }),
     );
     expect(infoDialog()!.textContent).toContain(
-      '「更新で消す」は投稿・編集でタグを消して作り直します',
+      '「On-demand revalidation」は投稿・編集でタグを消して作り直します',
     );
     fireEvent.keyDown(document, { key: 'Escape' });
   });
@@ -556,7 +558,7 @@ describe('ゲームモードの画面', () => {
       document.querySelector<HTMLElement>('[data-missing-parts]');
     expect(start().disabled).toBe(true);
     expect(missing()!.textContent).toContain(
-      '部品をまだ選んでいません: ページのキャッシュ（ISR）・画像・DB・メール送信',
+      '部品をまだ選んでいません: ISR のキャッシュ・画像・DB・メール送信',
     );
     // ジャンプ: ② を開いていても、DB を押すと ① を開き、構成図の DB の箱にフォーカスする
     showFrameworkTab();
@@ -826,9 +828,8 @@ describe('ゲームモードの画面', () => {
     ).toBe('前回の DB（no-such-db）は今は選べないので選び直してください。');
     expect(slotGroup('DB').getAttribute('data-unselected')).toBe('true');
     expect(
-      slotGroup('ページのキャッシュ（ISR）').querySelector(
-        '[data-selected="true"]',
-      )!.textContent,
+      slotGroup('ISR のキャッシュ').querySelector('[data-selected="true"]')!
+        .textContent,
     ).toMatch(/:KV/);
     expect(
       document.querySelector('[data-missing-parts]')!.textContent,
@@ -879,7 +880,7 @@ describe('ゲームモードの画面', () => {
       within(
         table.querySelector<HTMLElement>('tr[data-route="personal"]')!,
       ).getByRole('button', {
-        name: /^個人向けのページを 枠 \+ 人ごとの部分をサーバーで/,
+        name: /^個人向けのページを Server islands/,
       }),
     );
     expect(chosenOf('personal')).toBe('server-island');
@@ -898,7 +899,7 @@ describe('ゲームモードの画面', () => {
     pick(/^記事コミュニティ/);
     pick(/^Astro/);
     pick(/^Cloudflare Paid/);
-    pickStrategy('個人向けのページ', '枠 + 人ごとの部分をサーバーで');
+    pickStrategy('個人向けのページ', 'Server islands');
     expect(chosenOf('personal')).toBe('server-island');
     // 見取り図: 人ごとに違う区画は島、ほかは枠
     const list = within(pageOf('personal')).getByRole('list', {
@@ -910,20 +911,17 @@ describe('ゲームモードの画面', () => {
     expect(sources).toContain('server-island');
     expect(sources).toContain('island-shell');
     expect(sources).not.toContain('ssr');
-    expect(
-      within(list).getAllByText('人ごとの部分（閲覧ごとにサーバーで描く）')
-        .length,
-    ).toBeGreaterThan(0);
+    expect(within(list).getAllByText('Server islands').length).toBeGreaterThan(
+      0,
+    );
     // 構成図の凡例に島の流れ（個人向けのページ）が出る（① のタブ）
     showStackTab();
     const legends = screen.getAllByRole('list', {
       name: '構成図の流れの凡例',
     });
-    expect(
-      legends.some((l) =>
-        within(l).queryByText(/^人ごとの部分（閲覧ごとにサーバーで描く）/),
-      ),
-    ).toBe(true);
+    expect(legends.some((l) => within(l).queryByText(/^Server islands/))).toBe(
+      true,
+    );
   });
 
   it('W-27 始める画面: Google Cloud × Next.js で部品ごとにキャッシュを選び ISR のキャッシュを「キャッシュしない」にすると、表と同じく見取り図も毎回描くになる（D-111・OCL-CD192A98）', async () => {
@@ -939,11 +937,11 @@ describe('ゲームモードの画面', () => {
     pick(/^Next\.js（App Router）/);
     pick(/^Google Cloud/);
     // 描き方はカードのページの欄のチップで選ぶ（D-112）
-    pickStrategy('個人向けのページ', '部品ごとにキャッシュ');
+    pickStrategy('個人向けのページ', 'Cache Components');
     expect(chosenOf('personal')).toBe('cache-components');
     expect(sources()).toContain('cc-dynamic');
     // ISR のキャッシュを「キャッシュしない」に: 行（チップ）は毎回描く、見取り図も同じ
-    pickPart('キャッシュしない', slotGroup('ページのキャッシュ（ISR）'));
+    pickPart('キャッシュしない', slotGroup('ISR のキャッシュ'));
     expect(chosenOf('personal')).toBe('ssr');
     expect(sources()).not.toContain('cc-dynamic');
     expect(sources()).not.toContain('cc-cached');
@@ -959,7 +957,7 @@ describe('ゲームモードの画面', () => {
     });
     openSetupChange();
     expect(chosenOf('personal')).toBe('ssr');
-    pickStrategy('個人向けのページ', '枠 + ブラウザが API で取る');
+    pickStrategy('個人向けのページ', 'Client-side data fetching');
     expect(chosenOf('personal')).toBe('shell-api');
     // 内訳に行動の名前と手間
     const items = changeItems();
@@ -1048,8 +1046,7 @@ describe('ゲームモードの画面', () => {
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
-      beforeStart: () =>
-        pickStrategy('記事のページ', '静的（更新はビルドし直し）'),
+      beforeStart: () => pickStrategy('記事のページ', 'Prerendering'),
     });
     openSetupChange();
     showPartsView('diagram');
@@ -1067,7 +1064,7 @@ describe('ゲームモードの画面', () => {
       framework: 'Next.js（App Router）',
       stack: 'Vercel Pro + Supabase Pro',
       beforeStart: () => {
-        pickStrategy('記事のページ', '静的（更新はビルドし直し）');
+        pickStrategy('記事のページ', 'Prerendering');
         showStackTab();
         // 始める画面: 選べる構成（さくらの VPS・vinext の S1 も出した CF。RS-15 の解除）のカードには出さない。
         // 選んでいない事業者のカードは、その事業者の最初のプランを出す（事業者ごとに 1 枚。D-105 の補足）
@@ -1081,7 +1078,7 @@ describe('ゲームモードの画面', () => {
         showFrameworkTab();
         const astro = screen.getByRole('region', { name: 'Astro の説明' });
         expect(within(astro).getByRole('note').textContent).toMatch(
-          /^このフレームワークにすると、記事のページは「静的（更新はビルドし直し）」→「サーバーで描いてキャッシュ（更新で消す）」（既定）に戻ります: /,
+          /^このフレームワークにすると、記事のページは「Prerendering」→「Route caching（invalidate）」（既定）に戻ります: /,
         );
       },
     });
@@ -1090,7 +1087,7 @@ describe('ゲームモードの画面', () => {
     showFrameworkTab();
     const astro = within(fold).getByRole('region', { name: 'Astro の説明' });
     expect(within(astro).getByRole('note').textContent).toMatch(
-      /^作り直すと、記事のページは「静的（更新はビルドし直し）」→「[^」]+」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります/,
+      /^作り直すと、記事のページは「Prerendering」→「[^」]+」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります/,
     );
     // 乗り換え: 内訳に手間（か月）が出て、描き方の知らせは出ない
     showStackTab();
@@ -1113,7 +1110,7 @@ describe('ゲームモードの画面', () => {
     expect(rewrite.textContent).toMatch(/^Astro に作り直す/);
     expect(rewrite.textContent).toContain('か月');
     expect(within(rewrite).getByRole('note').textContent).toMatch(
-      /^作り直すと、記事のページは「静的（更新はビルドし直し）」→/,
+      /^作り直すと、記事のページは「Prerendering」→/,
     );
   });
 
@@ -1197,7 +1194,7 @@ describe('ゲームモードの画面', () => {
     // ② は今のフレームワークだけ（作り直しは選べない）。描き方は選び直して登録できる
     showFrameworkTab();
     expect(within(moving).queryByRole('radio', { name: /^Astro/ })).toBeNull();
-    pickStrategy('個人向けのページ', '枠 + ブラウザが API で取る');
+    pickStrategy('個人向けのページ', 'Client-side data fetching');
     expect(
       changeItems().map((x) => x.getAttribute('data-change-kind')),
     ).toEqual(['route']);
@@ -1213,7 +1210,7 @@ describe('ゲームモードの画面', () => {
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
-      parts: { 'ページのキャッシュ（ISR）': 'KV' },
+      parts: { 'ISR のキャッシュ': 'KV' },
     });
     const fold = openSetupChange();
     // 乗り換えと作り直しを一緒に選ぶと、作り直しの行に今の行動の検査の理由が出て、登録できない
@@ -1237,7 +1234,7 @@ describe('ゲームモードの画面', () => {
       within(fold).getByRole('button', { name: '構成はこのまま' }),
     );
     showPartsView('list');
-    const row = openSlot(slotGroup('ページのキャッシュ（ISR）'));
+    const row = openSlot(slotGroup('ISR のキャッシュ'));
     const other = within(row)
       .getAllByRole<HTMLButtonElement>('button', { pressed: false })
       .find(
@@ -1250,9 +1247,7 @@ describe('ゲームモードの画面', () => {
     expect(items.map((x) => x.getAttribute('data-change-kind'))).toEqual([
       'component',
     ]);
-    expect(items[0]!.textContent).toMatch(
-      /^ページのキャッシュ（ISR）を.*に差し替える/,
-    );
+    expect(items[0]!.textContent).toMatch(/^ISR のキャッシュを.*に差し替える/);
     registerSetupChange();
     nextMonth();
     const dialog = screen.queryByRole('dialog');
@@ -1265,7 +1260,7 @@ describe('ゲームモードの画面', () => {
       .getByRole('heading', { name: 'これまでの運営' })
       .closest('.card-body') as HTMLElement;
     expect(history.textContent).toMatch(
-      /ページのキャッシュ（ISR）: [^・]+に差し替えました/,
+      /ISR のキャッシュ: [^・]+に差し替えました/,
     );
   });
 
@@ -1276,13 +1271,15 @@ describe('ゲームモードの画面', () => {
     // CF は Paid を選んでから離れる（選んでいない事業者のカードは最後に選んだプランを出す。D-105 の補足）
     fireEvent.click(getRadio({ name: /^Cloudflare Paid/ }));
     fireEvent.click(getRadio({ name: /^Vercel Pro \+ Supabase Pro/ }));
-    pickStrategy('記事のページ', '静的（更新はビルドし直し）');
+    pickStrategy('記事のページ', 'Prerendering');
     showStackTab();
     const lane = (stackId: string, label: string) =>
       within(
-        document.querySelector<HTMLElement>(
-          `section[data-stack="${stackId}"]`,
-        )!,
+        within(
+          document.querySelector<HTMLElement>(
+            `section[data-stack="${stackId}"]`,
+          )!,
+        ).getByRole('list', { name: '構成図の流れの凡例' }),
       )
         .getAllByRole('button')
         .find((b) => b.textContent?.startsWith(label))?.textContent ?? '';
@@ -1294,9 +1291,8 @@ describe('ゲームモードの画面', () => {
     expect(lane('cloudflare-vinext-paid', '静的なページ')).toContain(
       '記事のページ',
     );
-    expect(lane('cloudflare-vinext-paid', 'ISR のページ')).not.toContain(
-      '記事のページ',
-    );
+    // 流れの名前は Next.js の呼び名（ISR。D-193）
+    expect(lane('cloudflare-vinext-paid', 'ISR')).not.toContain('記事のページ');
   });
 
   it('W-12 始める画面のインフラの構成は、タブ・前後のボタン・カードで選べ、カードに構成図が出る（D-105）', async () => {
@@ -1333,7 +1329,9 @@ describe('ゲームモードの画面', () => {
     const legend = within(current()).getByRole('list', {
       name: '構成図の流れの凡例',
     });
-    const isr = within(legend).getByRole('button', { name: /^ISR のページ/ });
+    const isr = within(legend).getByRole('button', {
+      name: /^ISR(?! の作り直し)/,
+    });
     expect(isr.textContent).toContain('記事のページ');
     fireEvent.click(isr);
     expect(isr.getAttribute('aria-pressed')).toBe('true');
@@ -2060,7 +2058,7 @@ describe('ゲームモードの画面', () => {
     pickRadio('Next.js（App Router）');
     pickPart('D1', slotGroup('DB'));
     pickPart('最適化しない', slotGroup('画像'));
-    pickPart('R2', slotGroup('ページのキャッシュ（ISR）'));
+    pickPart('R2', slotGroup('ISR のキャッシュ'));
     // 構成 B では A の選択が混ざらず、B で選んだものは B だけに残る
     pickRadio(VERCEL);
     expect(slotGroup('DB').hasAttribute('data-unselected')).toBe(true);
@@ -2070,7 +2068,7 @@ describe('ゲームモードの画面', () => {
     pickRadio(CF);
     expect(chosen('DB')).toMatch(/^D1/);
     expect(chosen('画像')).toMatch(/^最適化しない/);
-    expect(chosen('ページのキャッシュ（ISR）')).toMatch(/^R2/);
+    expect(chosen('ISR のキャッシュ')).toMatch(/^R2/);
     // 選んでいない B のカードは覚えている部品で描く（題も実際の組。D-116 の補足）
     expect(
       document
@@ -2088,9 +2086,9 @@ describe('ゲームモードの画面', () => {
     expect(isrRow()).toBeNull();
     // Next.js に戻しても落ちた ISR のキャッシュは復活しない（OCL-09D12A43）
     pickRadio('Next.js（App Router）');
-    expect(
-      slotGroup('ページのキャッシュ（ISR）').hasAttribute('data-unselected'),
-    ).toBe(true);
+    expect(slotGroup('ISR のキャッシュ').hasAttribute('data-unselected')).toBe(
+      true,
+    );
     expect(chosen('DB')).toMatch(/^D1/);
   });
 
@@ -2501,7 +2499,7 @@ describe('ゲームモードの画面', () => {
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
-      parts: { 'ページのキャッシュ（ISR）': 'R2', DB: 'D1' },
+      parts: { 'ISR のキャッシュ': 'R2', DB: 'D1' },
       beforeStart: () => {
         // ③ 設定の欄は無く、記事のページの行（描き方のチップの下）に出る。個人向けのページの行には出ない
         expect(screen.queryByRole('heading', { name: '③ 設定' })).toBeNull();
@@ -2510,17 +2508,17 @@ describe('ゲームモードの画面', () => {
             name: 'ISR の再検証',
           }),
         ).toBeNull();
-        // 既定は、今の部品（R2）でオンデマンドが選べるのでオンデマンド（更新で消す。D-125）
+        // 既定は、今の部品（R2）でオンデマンドが選べるのでオンデマンド（On-demand revalidation。D-125）
         expect(chosenOf('article')).toBe('cached-purge');
         expect(selectedOf('ISR の再検証')).toBe('0');
         expect(setting('ISR の再検証').textContent).toContain(
           '上の 2 つの描き方は、この設定で切り替わります',
         );
         // 選んでいない間は部品に付いて替わる: KV（消す呼び出しが届かない）は 5 分、R2 に戻すとオンデマンド
-        pickPart('KV', slotGroup('ページのキャッシュ（ISR）'));
+        pickPart('KV', slotGroup('ISR のキャッシュ'));
         expect(selectedOf('ISR の再検証')).toBe('300');
         expect(chosenOf('article')).toBe('cached-ttl');
-        pickPart('R2', slotGroup('ページのキャッシュ（ISR）'));
+        pickPart('R2', slotGroup('ISR のキャッシュ'));
         expect(selectedOf('ISR の再検証')).toBe('0');
         // 時間にすると描き方は時間で取り直す。時間を替えても時間で取り直すのまま。オンデマンドにすると更新で消すになる
         choose('ISR の再検証', '300');
@@ -2531,14 +2529,11 @@ describe('ゲームモードの画面', () => {
         choose('ISR の再検証', '0');
         expect(chosenOf('article')).toBe('cached-purge');
         // 描き方のチップで時間で取り直すに戻すと、設定も 5 分に戻る（同じ設定）
-        pickStrategy(
-          '記事のページ',
-          'サーバーで描いてキャッシュ（時間で取り直す）',
-        );
+        pickStrategy('記事のページ', 'ISR');
         expect(selectedOf('ISR の再検証')).toBe('300');
         choose('ISR の再検証', '3600');
         // ISR を KV に置くとオンデマンドは届かないので、灰色で理由を ⓘ に出す
-        pickPart('KV', slotGroup('ページのキャッシュ（ISR）'));
+        pickPart('KV', slotGroup('ISR のキャッシュ'));
         expect(chip('ISR の再検証', '0').getAttribute('data-available')).toBe(
           'false',
         );
@@ -2548,7 +2543,7 @@ describe('ゲームモードの画面', () => {
           }),
         ).toBeDefined();
         expect(setting('ISR の再検証').textContent).toContain(
-          '「更新で消す」は選べない',
+          '「On-demand revalidation」は選べない',
         );
         expect(selectedOf('ISR の再検証')).toBe('3600');
       },
