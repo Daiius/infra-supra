@@ -5,10 +5,22 @@ import { RESULT_AXES, type ResultAxes, type ResultAxisId } from 'game';
 import type { Distribution, GroupStat, Histogram } from 'stats';
 
 /**
- * 分布として見せる最少の件数（自分を含む）。全シードの分布がこれより少なければ分布を出さず、手元の履歴との比較（段 1）に戻る。
- * 同じシードの分布がこれより少なければ、その分布だけ「まだ少ない」と出す（D-163）。
+ * 上位の判定に使う最少の件数（自分を含む）。上位何 % の文・「★ 上位」の印・花火の段はこれ以上の分布だけで決める。
+ * 結果の画面では、全シードの分布がこれより少なければ分布を出さず、手元の履歴との比較（段 1）に戻る（D-163・D-198）。
  */
-export const MIN_DISTRIBUTION_COUNT = 10;
+export const MIN_RANKED_COUNT = 10;
+
+/**
+ * 分布（ヒストグラム・中央値・比較の図の行）を描く最少の件数（集計にある件数。自分を 1 件足す分は数えない）。
+ * これ以上 MIN_RANKED_COUNT 未満のうちは描いたうえで「まだ n 件なので、形は参考程度です」と添える（D-198）。
+ */
+export const MIN_DRAWN_COUNT = 1;
+
+/** 描くが、まだ少ないので注記を添える件数か（MIN_RANKED_COUNT 未満。D-198）。 */
+export const isFewCount = (n: number) => n < MIN_RANKED_COUNT;
+
+/** 少ない分布に添える注記（D-198）。 */
+export const fewNote = (n: number) => `まだ ${n} 件なので、形は参考程度です。`;
 
 /** 「上位に入った」の線（上位 25% 以内。ST-01・D-163）。 */
 export const TOP_PERCENT = 25;
@@ -19,7 +31,9 @@ export type Standing = {
   n: number;
   /** 上位何 %（自分以上の件数 ÷ n を百分率の整数に丸めた値。1〜100）。 */
   topPercent: number;
-  /** 上位 TOP_PERCENT % 以内か（丸めた topPercent で見る。表示と食い違わない）。 */
+  /** 上位の判定に使える件数か（n が MIN_RANKED_COUNT 以上。D-198）。false なら topPercent を画面に出さない。 */
+  ranked: boolean;
+  /** 上位 TOP_PERCENT % 以内か（丸めた topPercent で見る。表示と食い違わない）。ranked でなければ常に false。 */
   inTop: boolean;
   /** 棒を描く元（サーバーの分布そのまま）。 */
   histogram: Histogram;
@@ -31,18 +45,18 @@ export type AxisStanding = {
   /** 大きいほど上位の向きを持つか（④ 費用の合計は持たない。D-166）。持たなければ上位 % と上位の判定を出さない。 */
   directed: boolean;
   value: number;
-  /** 同じシードの分布の中での位置。件数が少なければ null（seedCount に件数）。 */
+  /** 同じシードの分布の中での位置。集計に 1 件も無ければ null（seedCount に件数）。 */
   seed: Standing | null;
   seedCount: number;
   /**
-   * 全シードの分布の中での位置。件数が少なければ null（allCount に件数）。軸ごとに見る（④ 費用の合計は、列を足す前の行が
+   * 全シードの分布の中での位置。集計に 1 件も無ければ null（allCount に件数）。軸ごとに見る（④ 費用の合計は、列を足す前の行が
    * null で分布に入らないので、ほかの軸より少ないことがある。OCL-22EC415E）。
    */
   all: Standing | null;
   allCount: number;
   /**
-   * 上位に入ったか（花火の段に数える）。同じシードの分布が見せられればそちら（楽なシードを選び直しても有利にならない。D-136）、
-   * 見せられなければ全シードで見る。向きを持たない軸は常に false。
+   * 上位に入ったか（花火の段に数える）。同じシードの分布が上位の判定に使える件数ならそちら（楽なシードを選び直しても有利に
+   * ならない。D-136）、使えなければ全シードで見る（rankBasisOf）。向きを持たない軸は常に false。
    */
   inTop: boolean;
 };
@@ -83,8 +97,19 @@ export function topPercentOf(n: number, atOrAbove: number): number {
 function toStanding(h: Histogram, included: boolean): Standing {
   const { n, atOrAbove } = standingOf(h, included);
   const topPercent = topPercentOf(n, atOrAbove);
-  return { n, topPercent, inTop: topPercent <= TOP_PERCENT, histogram: h };
+  const ranked = n >= MIN_RANKED_COUNT;
+  return {
+    n,
+    topPercent,
+    ranked,
+    inTop: ranked && topPercent <= TOP_PERCENT,
+    histogram: h,
+  };
 }
+
+/** 上位の判定の元にする分布（同じシードが使える件数ならそちら、無理なら全シード。どちらも少なければ null。D-136・D-198）。 */
+export const rankBasisOf = (a: Pick<AxisStanding, 'seed' | 'all'>) =>
+  a.seed?.ranked ? a.seed : a.all?.ranked ? a.all : null;
 
 /**
  * 分布と自分の値から、軸ごとの位置を出す。全シードの分布が少なすぎれば few（段 1 に戻す）。
@@ -97,14 +122,13 @@ export function standingsOf(
   mock = false,
 ): StatsView {
   const allCount = standingOf(dist.axes.cash.all, included).n;
-  if (allCount < MIN_DISTRIBUTION_COUNT)
-    return { status: 'few', count: allCount };
+  if (allCount < MIN_RANKED_COUNT) return { status: 'few', count: allCount };
   return { status: 'ready', view: axisStandingsOf(dist, axes, included, mock) };
 }
 
 /**
- * 軸ごとの位置（全体の件数で段 1 に戻さない）。絞った分布（同じインフラなど。D-175）はこちらを使い、少ない分布は
- * 軸・シードごとに「まだ n 件」と出す（上位の判定と花火の段には使わない）。
+ * 軸ごとの位置（全体の件数で段 1 に戻さない）。絞った分布（同じインフラなど。D-175）はこちらを使う。集計に 1 件でもあれば
+ * 描き、MIN_RANKED_COUNT 件未満の分布は上位の判定に使わない（D-198）。
  */
 export function axisStandingsOf(
   dist: Distribution,
@@ -118,10 +142,9 @@ export function axisStandingsOf(
     axes: RESULT_AXES.map(({ id, label, directed }) => {
       const d = dist.axes[id];
       const allStanding = toStanding(d.all, included);
-      const all = allStanding.n >= MIN_DISTRIBUTION_COUNT ? allStanding : null;
+      const all = d.all.count >= MIN_DRAWN_COUNT ? allStanding : null;
       const seedStanding = toStanding(d.seed, included);
-      const seed =
-        seedStanding.n >= MIN_DISTRIBUTION_COUNT ? seedStanding : null;
+      const seed = d.seed.count >= MIN_DRAWN_COUNT ? seedStanding : null;
       return {
         id,
         label,
@@ -131,7 +154,7 @@ export function axisStandingsOf(
         seedCount: seedStanding.n,
         all,
         allCount: allStanding.n,
-        inTop: directed && (seed ?? all)?.inTop === true,
+        inTop: directed && rankBasisOf({ seed, all })?.inTop === true,
       };
     }),
   };
@@ -201,44 +224,48 @@ export function filterParams(
   };
 }
 
-/** 比較の図の 1 行（小さなヒストグラム）。stats は件数が少なければ null（棒を出さず「まだ n 件です」）。 */
+/** 比較の図の 1 行（小さなヒストグラム）。集計に 1 件以上ある構成（フレームワーク）だけを行にする（D-198）。 */
 export type GroupRow = {
   key: string;
   label: string;
   count: number;
-  /** 件数が少なければ null（棒と中央値を出さず「まだ n 件です」）。bins は共通の区切りでの棒の件数。 */
+  /** bins は共通の区切りでの棒の件数。 */
   stats: {
     p25: number;
     median: number;
     p75: number;
     bins: number[];
-  } | null;
+  };
   /** 自分のプレイの構成（フレームワーク）の行か。 */
   mine: boolean;
+  /** 件数がまだ少ない行か（MIN_RANKED_COUNT 未満。形は参考程度と添える。D-198）。 */
+  few: boolean;
 };
 
 /**
- * サーバーの要約を、出す行（隠した構成を除いた構成・フレームワークの並び）に写す。行の無い鍵は 0 件。
- * keys に無い鍵（隠した構成・知らない id）は出さない。
+ * サーバーの要約を、出す行（隠した構成を除いた構成・フレームワークの並び）に写す。keys の順のまま、集計に 1 件以上ある鍵
+ * （MIN_DRAWN_COUNT 以上）だけを行にする。0 件の鍵は自分の構成でも出さない（Free のプランのように完走できない構成の空の行が
+ * 並ぶだけになるため。自分の値は図の縦の線で出る。D-198）。keys に無い鍵（隠した構成・知らない id）も出さない。
+ * 全部が 0 件なら空の配列（呼ぶ側は図を出さない）。
  */
 export function groupRowsOf(
   groups: readonly GroupStat[],
   keys: readonly { key: string; label: string }[],
   mineKey: string,
 ): GroupRow[] {
-  return keys.map(({ key, label }) => {
+  return keys.flatMap(({ key, label }) => {
     const g = groups.find((x) => x.key === key);
-    const count = g?.count ?? 0;
-    return {
-      key,
-      label,
-      count,
-      stats:
-        g && count >= MIN_DISTRIBUTION_COUNT
-          ? { p25: g.p25, median: g.median, p75: g.p75, bins: g.bins }
-          : null,
-      mine: key === mineKey,
-    };
+    if (!g || g.count < MIN_DRAWN_COUNT) return [];
+    return [
+      {
+        key,
+        label,
+        count: g.count,
+        stats: { p25: g.p25, median: g.median, p75: g.p75, bins: g.bins },
+        mine: key === mineKey,
+        few: isFewCount(g.count),
+      },
+    ];
   });
 }
 

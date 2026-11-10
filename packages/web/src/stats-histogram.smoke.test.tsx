@@ -199,7 +199,7 @@ describe('集計の分布の表示（段 3）', () => {
     expect(dialogAxes().querySelector('[data-histogram]')).toBeNull();
   });
 
-  it('W-100 件数が少ないとき: 全シードが少なければ段 1、同じシードだけ少なければその分布だけ「まだ少ない」', async () => {
+  it('W-100 件数が少ないとき: 全シードが 10 件未満なら段 1 に戻す（上位の判定の下限は 10 件のまま。D-198）', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     vi.stubGlobal(
       'fetch',
@@ -213,7 +213,7 @@ describe('集計の分布の表示（段 3）', () => {
     ).toContain('集計の完走がまだ 5 件と少ないので');
   });
 
-  it('W-100b 同じシードだけ少なければ、全シードの分布で上位を数える', async () => {
+  it('W-100b 同じシードだけ少なければ、その分布も描いて形は参考程度と添え、上位は全シードの分布で数える（D-163・D-198）', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     vi.stubGlobal(
       'fetch',
@@ -222,10 +222,24 @@ describe('集計の分布の表示（段 3）', () => {
     await finish(almostDone(7));
     await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
     const cash = dialogAxes().querySelector<HTMLElement>('[data-axis="cash"]')!;
+    const seed = cash.querySelector<HTMLElement>('[data-dist="seed"]')!;
+    // 同じシードは 3 件でも描く。上位 % は出さず、件数と中央値・注記
+    expect(seed.querySelector('[data-dist-summary]')!.textContent).toMatch(
+      /同じシード 3 件・同じシードの中央値は/,
+    );
     expect(
-      cash.querySelector('[data-dist="seed"] [data-dist-summary]')!.textContent,
-    ).toContain('まだ 3 件なので出しません');
-    expect(cash.querySelectorAll('[data-histogram]')).toHaveLength(1);
+      seed.querySelector('[data-dist-summary]')!.textContent,
+    ).not.toContain('上位');
+    expect(seed.dataset.topPercent).toBeUndefined();
+    expect(seed.querySelector('[data-dist-few-note]')!.textContent).toContain(
+      'まだ 3 件なので、形は参考程度です。',
+    );
+    expect(cash.querySelectorAll('[data-histogram]')).toHaveLength(2);
+    // 「★ 上位」の印と花火は全シード（40 件）で決める
+    expect(cash.querySelector('[data-axis-top]')).not.toBeNull();
+    expect(
+      cash.querySelector<HTMLElement>('[data-dist="all"]')!.dataset.topPercent,
+    ).toBeDefined();
     expect(victory().dataset.fireworkLevel).toBe('3');
   });
 

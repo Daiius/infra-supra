@@ -289,7 +289,7 @@ describe('統計の画面（D-197）', () => {
     expect(page()!.querySelector('[data-group-compare]')).toBeNull();
   });
 
-  it('W-114b 10 件未満は「まだ n 件」', async () => {
+  it('W-114b 1〜9 件は描いたうえで「形は参考程度」と添える（D-198）', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     vi.stubGlobal('fetch', statsFetch(4));
     await openStats();
@@ -298,11 +298,36 @@ describe('統計の画面（D-197）', () => {
       page()!.querySelector<HTMLElement>('[data-stats-note]')!.dataset
         .statsNote,
     ).toBe('few');
-    expect(page()!.textContent).toContain(
-      '集計された完走はまだ 4 件です。10 件から分布を出します。',
+    expect(
+      page()!.querySelector<HTMLElement>('[data-stats-note]')!.textContent,
+    ).toContain('完走 4 件の分布です。まだ 4 件なので、形は参考程度です。');
+    expect(page()!.querySelectorAll('[data-axis-few]')).toHaveLength(0);
+    expect(page()!.querySelectorAll('[data-histogram]')).toHaveLength(4);
+    expect(page()!.querySelectorAll('[data-dist-few-note]')).toHaveLength(4);
+    // 中央値・数値で見る の表も出す
+    const cash = page()!.querySelector<HTMLElement>('[data-axis="cash"]')!;
+    expect(cash.querySelector('[data-dist-summary]')!.textContent).toContain(
+      '4 件・中央値は',
     );
-    expect(page()!.querySelectorAll('[data-axis-few]')).toHaveLength(4);
-    expect(page()!.querySelectorAll('[data-histogram]')).toHaveLength(0);
+    expect(cash.querySelector('[data-axis-table]')).not.toBeNull();
+    // 比較の図も出す（1 件以上）
+    expect(page()!.querySelector('[data-group-compare]')).not.toBeNull();
+  });
+
+  it('W-114c 1 件でも描く（中央値はその値）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    vi.stubGlobal('fetch', statsFetch(1));
+    await openStats();
+    await ready();
+    expect(
+      page()!.querySelector<HTMLElement>('[data-stats-note]')!.dataset
+        .statsNote,
+    ).toBe('few');
+    expect(page()!.querySelectorAll('[data-histogram]')).toHaveLength(4);
+    expect(
+      page()!.querySelector('[data-axis="cash"] [data-dist-few-note]')!
+        .textContent,
+    ).toBe('まだ 1 件なので、形は参考程度です。');
   });
 
   it('W-115 読み込みに失敗したら知らせる。読み込み中はその旨を出す', async () => {

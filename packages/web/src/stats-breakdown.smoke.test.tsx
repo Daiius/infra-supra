@@ -226,7 +226,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(callsTo(fetch, '/api/results/distribution')).toHaveLength(3);
   });
 
-  it('W-105 絞った分布が 10 件未満なら、分布を出さず件数を出す（全部の分布が少ないときのように段 1 には戻さない）', async () => {
+  it('W-105 絞った分布が 10 件未満でも描き、形は参考程度と添えて上位 % を出さない（全部の分布が少ないときのように段 1 には戻さない。D-198）', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     localStorage.setItem(
       STATS_BREAKDOWN_KEY,
@@ -245,17 +245,28 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     );
     const axes = resultAxes()!;
     expect(axes.dataset.stats).toBe('ready');
-    expect(axes.querySelector('[data-histogram]')).toBeNull();
     const cash = axes.querySelector<HTMLElement>('[data-axis="cash"]')!;
-    expect(
-      cash.querySelector('[data-dist="all"] [data-dist-summary]')!.textContent,
-    ).toContain('まだ 6 件');
-    expect(
-      cash.querySelector('[data-dist="seed"] [data-dist-summary]')!.textContent,
-    ).toContain('まだ 2 件');
+    const all = cash.querySelector<HTMLElement>('[data-dist="all"]')!;
+    const seed = cash.querySelector<HTMLElement>('[data-dist="seed"]')!;
+    expect(all.querySelector('[data-histogram]')).not.toBeNull();
+    expect(seed.querySelector('[data-histogram]')).not.toBeNull();
+    // 件数と中央値は出すが、上位 % は出さない
+    expect(all.querySelector('[data-dist-summary]')!.textContent).toContain(
+      '6 件・全体の中央値は',
+    );
+    expect(all.querySelector('[data-dist-summary]')!.textContent).not.toContain(
+      '上位',
+    );
+    expect(all.dataset.topPercent).toBeUndefined();
+    expect(all.querySelector('[data-dist-few-note]')!.textContent).toBe(
+      'まだ 6 件なので、形は参考程度です。上位 % は 10 件から出します。',
+    );
+    expect(seed.querySelector('[data-dist-few-note]')!.textContent).toContain(
+      'まだ 2 件なので、形は参考程度です。',
+    );
   });
 
-  it('W-106 比較の図: 隠した構成を除いた構成ごとの行・自分の行と自分の縦の線・10 件未満の行は「まだ n 件です」。フレームワークごとに切り替えられる', async () => {
+  it('W-106 比較の図: 隠した構成と 0 件の構成を除いた構成ごとの行・自分の行と自分の縦の線・10 件未満の行は描いて件数に ※。フレームワークごとに切り替えられる', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
     const fetch = statsFetch();
     vi.stubGlobal('fetch', fetch);
@@ -273,9 +284,12 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     const rows = [
       ...compare().querySelectorAll<HTMLElement>('[data-group-row]'),
     ];
-    const visible = STACKS.filter((s) => !s.hidden);
+    // 並びは構成の順のまま、集計に 1 件以上ある構成だけ（D-198）
+    const withData = STACKS.filter(
+      (s) => !s.hidden && GROUPS.some((g) => g.key === s.id),
+    );
     expect(rows.map((r) => r.dataset.groupRow)).toEqual(
-      visible.map((s) => s.id),
+      withData.map((s) => s.id),
     );
     expect(rows.some((r) => r.dataset.groupRow === 'aws-opennext')).toBe(false);
     const own = compare().querySelector<HTMLElement>(
@@ -304,15 +318,36 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     const few = compare().querySelector<HTMLElement>(
       '[data-group-row="sakura-vps-2gb"]',
     )!;
-    expect(few.querySelector('[data-group-hist]')).toBeNull();
-    expect(few.querySelector('[data-group-few]')!.textContent).toBe(
-      'まだ 4 件です',
+    // 10 件未満の行も描き、件数に ※・読み上げに「形は参考程度」（D-198）
+    expect(few.querySelector('[data-group-hist]')).not.toBeNull();
+    expect(few.querySelector('[data-group-median]')).not.toBeNull();
+    expect(few.querySelector('[data-group-few]')).toBeNull();
+    expect(few.querySelector('[data-group-count]')!.textContent).toBe('4 件※');
+    expect(
+      few.querySelector('[data-group-hist]')!.getAttribute('aria-label'),
+    ).toContain('まだ 4 件なので、形は参考程度です');
+    expect(
+      own.querySelector('[data-group-count]')!.getAttribute('data-few'),
+    ).toBeNull();
+    expect(compare().textContent).toContain(
+      '件数に ※ の付いた行はまだ 10 件未満なので、形は参考程度です。',
     );
-    // 行の無い構成も 0 件として出す（件数は常に見える）
-    const empty = compare().querySelector<HTMLElement>(
-      '[data-group-row="gcp-cloud-run"]',
-    )!;
-    expect(empty.querySelector('[data-group-count]')!.textContent).toBe('0 件');
+    // 0 件の構成の行は出さない（D-198）
+    expect(
+      compare().querySelector('[data-group-row="gcp-cloud-run"]'),
+    ).toBeNull();
+    // 数値で見る: 10 件未満の行も分位を出し、件数に ※
+    const tableRows = [
+      ...compare().querySelectorAll<HTMLTableRowElement>(
+        '[data-group-table] tbody tr',
+      ),
+    ];
+    expect(tableRows).toHaveLength(withData.length);
+    const fewRow = tableRows.find((r) => r.textContent!.includes('さくら'))!;
+    expect(fewRow.querySelector('[data-group-table-count]')!.textContent).toBe(
+      '4 ※',
+    );
+    expect(fewRow.querySelectorAll('td')).toHaveLength(5);
     // 配置（テストの幅 640 では 3 列）: 棒・自分の線・目盛り・「▼ あなた」が同じ座標の基準（1 つの SVG）にあり、
     // 「▼」は自分の線の真上・目盛りは棒の列の中・件数は棒の列の右（以前は HTML のグリッドと伸び縮みする SVG がずれた）
     const svg = compare().querySelector<SVGSVGElement>(
@@ -383,12 +418,56 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
           ?.dataset.mine,
       ).toBe('true'),
     );
-    expect(compare().querySelectorAll('[data-group-row]')).toHaveLength(4);
+    // フレームワークで集計にあるのは Next.js だけ（0 件のフレームワークの行は出さない）
+    expect(compare().querySelectorAll('[data-group-row]')).toHaveLength(1);
     // フレームワークごとでも同じ区切りの同じ番号の棒は同じ x（行どうしで区切りがそろう）
     expect(Number(xsOf('nextjs').get('6'))).toBeCloseTo(
       Number(xsOf(OWN_STACK).get('6') ?? tickXs[1]! + 1),
       6,
     );
+  });
+
+  it('W-106b 比較の図: 0 件の行は自分の構成でも出さず（自分の線は出す）、全部 0 件なら図を出さない（D-198）', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    let groups: unknown[] = GROUPS.filter((g) => g.key !== OWN_STACK);
+    const base = statsFetch();
+    const fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://x');
+      if (url.pathname === '/api/results/groups')
+        return json({
+          scenarioId: 'article-community',
+          axis: url.searchParams.get('axis'),
+          by: url.searchParams.get('by'),
+          seed: null,
+          binEdges: groups.length > 0 ? BIN_EDGES : [],
+          groups,
+        });
+      return base(input, init);
+    });
+    vi.stubGlobal('fetch', fetch);
+    await finish();
+    await ready();
+    await waitFor(() =>
+      expect(
+        compare().querySelector('[data-group-range-chart]'),
+      ).not.toBeNull(),
+    );
+    expect(
+      compare().querySelector(`[data-group-row="${OWN_STACK}"]`),
+    ).toBeNull();
+    expect(compare().querySelector('[data-group-mine-line]')).not.toBeNull();
+    // 全部 0 件: 図を出さず、まだ無いことを書く
+    groups = [];
+    fireEvent.click(chip('axis', 'satisfaction'));
+    await waitFor(() =>
+      expect(
+        compare().querySelector('[data-group-status="empty"]'),
+      ).not.toBeNull(),
+    );
+    expect(compare().querySelector('[data-group-range-chart]')).toBeNull();
+    expect(
+      compare().querySelector('[data-group-status="empty"]')!.textContent,
+    ).toBe('まだ構成ごとに数えられる完走がありません。');
   });
 
   it('W-107 比較の図の軸を ④ 費用の合計に替えると、向きの文が「良し悪しを付けません」になり、良し悪しの色を使わない', async () => {
@@ -452,8 +531,9 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(
       compare().querySelectorAll('[data-group-hist]').length,
     ).toBeGreaterThan(0);
+    // 10 件未満の行（件数に ※）も描く
     expect(
-      compare().querySelectorAll('[data-group-few]').length,
+      compare().querySelectorAll('[data-group-count][data-few="true"]').length,
     ).toBeGreaterThan(0);
     fireEvent.click(chip('filter', 'both'));
     await waitFor(() =>
@@ -461,8 +541,11 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
         resultAxes()!.querySelector('[data-result-compare-note]')!.textContent,
       ).toContain('同じ組み合わせ'),
     );
-    // 架空の同じ組み合わせは全シードも 10 件未満
-    expect(resultAxes()!.querySelector('[data-histogram]')).toBeNull();
+    // 架空の同じ組み合わせは全シードも 10 件未満: 描いたうえで形は参考程度と添える（D-198）
+    expect(resultAxes()!.querySelector('[data-histogram]')).not.toBeNull();
+    expect(
+      resultAxes()!.querySelector('[data-dist="all"] [data-dist-few-note]'),
+    ).not.toBeNull();
     expect(
       resultAxes()!.querySelector('[data-result-compare-note]')!.textContent,
     ).toContain('開発用の架空の分布です');

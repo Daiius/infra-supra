@@ -74,7 +74,7 @@ function spread(
 }
 
 /**
- * 絞り込みごとの架空の件数（D-175）。同じインフラ・同じ組み合わせでは同じシードが 10 件未満になり、「まだ n 件です」も
+ * 絞り込みごとの架空の件数（D-175）。同じインフラ・同じ組み合わせでは同じシードが 10 件未満になり、「形は参考程度」の注記（D-198）も
  * 確かめられる。同じ組み合わせは全シードも 10 件未満。
  */
 const MOCK_FILTER_COUNTS: Record<
@@ -133,7 +133,7 @@ function quantile(sorted: readonly number[], p: number): number {
 /**
  * 架空の構成ごと（フレームワークごと）の要約（GET /api/results/groups と同じ形。D-175）。鍵ごとに、自分の値から少しずらした所に
  * 散らした値を作り、packages/stats の groupStatsOf と同じく全体の最小〜最大を 12 等分した共通の区切りで数える。
- * 3 つ目ごとの鍵は 10 件未満にして「まだ n 件です」の行も出す。シードと鍵から決まる。
+ * 3 つ目ごとの鍵は 1〜9 件にして、件数に ※ の付く行（形は参考程度。D-198）も出す。シードと鍵から決まる。
  */
 export function mockGroups(q: {
   seed: number;
@@ -147,7 +147,7 @@ export function mockGroups(q: {
       h = Math.imul(h ^ c.charCodeAt(0), 16777619);
     const next = rng(h);
     const count =
-      i % 3 === 2 ? Math.floor(next() * 10) : 10 + Math.floor(next() * 80);
+      i % 3 === 2 ? 1 + Math.floor(next() * 9) : 10 + Math.floor(next() * 80);
     const [center] = spread(q.axis, q.value, 1, next);
     return {
       key,
