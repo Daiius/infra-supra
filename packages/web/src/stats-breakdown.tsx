@@ -9,7 +9,7 @@ import { GroupHistogramChart } from './charts.tsx';
 import {
   DEFAULT_BREAKDOWN_PREFS,
   groupRowsOf,
-  MIN_DISTRIBUTION_COUNT,
+  MIN_RANKED_COUNT,
   parseBreakdownPrefs,
   STATS_BREAKDOWN_KEY,
   STATS_FILTER_LABEL,
@@ -334,9 +334,10 @@ export function GroupCompare({
       </h3>
       <p className="mb-2 text-xs opacity-70">
         全シードの完走を{byName}
-        ごとに分けて、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値
-        {value !== undefined ? '、縦の線はあなたの値' : ''}です。
-        {MIN_DISTRIBUTION_COUNT} 件未満の行は棒を出しません。
+        ごとに分けて（集計にまだ無い{byName}
+        の行は出しません）、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値
+        {value !== undefined ? '、縦の線はあなたの値' : ''}です。 件数に ※
+        の付いた行はまだ {MIN_RANKED_COUNT} 件未満なので、形は参考程度です。
         {data?.mock && '開発用の架空の値です（遊んだ人の結果ではありません）。'}
       </p>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -367,7 +368,11 @@ export function GroupCompare({
           : `${def.label}は高い・低いで良し悪しを付けません。`}
         {value !== undefined && `あなたの値は ${format(value)} です。`}
       </p>
-      {rows ? (
+      {rows && rows.length === 0 ? (
+        <p className="text-xs opacity-70" data-group-status="empty">
+          {`まだ${byName}ごとに数えられる完走がありません。`}
+        </p>
+      ) : rows ? (
         <div
           className={cur ? undefined : 'opacity-60 transition-opacity'}
           aria-busy={cur ? undefined : true}
@@ -399,18 +404,13 @@ export function GroupCompare({
                       {r.label}
                       {r.mine && '（あなた）'}
                     </td>
-                    <td className="text-right">{r.count}</td>
-                    {r.stats ? (
-                      <>
-                        <td className="text-right">{format(r.stats.p25)}</td>
-                        <td className="text-right">{format(r.stats.median)}</td>
-                        <td className="text-right">{format(r.stats.p75)}</td>
-                      </>
-                    ) : (
-                      <td colSpan={3} className="text-right opacity-70">
-                        まだ {r.count} 件です
-                      </td>
-                    )}
+                    <td className="text-right" data-group-table-count>
+                      {r.count}
+                      {r.few && ' ※'}
+                    </td>
+                    <td className="text-right">{format(r.stats.p25)}</td>
+                    <td className="text-right">{format(r.stats.median)}</td>
+                    <td className="text-right">{format(r.stats.p75)}</td>
                   </tr>
                 ))}
               </tbody>

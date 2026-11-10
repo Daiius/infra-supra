@@ -8,8 +8,10 @@ import { RESULT_AXES, SCENARIOS, type ResultAxisId } from 'game';
 import { useEffect, useState } from 'react';
 import { HistogramChart } from './charts.tsx';
 import {
+  fewNote,
   filterParams,
-  MIN_DISTRIBUTION_COUNT,
+  isFewCount,
+  MIN_DRAWN_COUNT,
   STATS_FILTER_LABEL,
   STATS_FILTERS,
   type StatsFilter,
@@ -209,8 +211,8 @@ function StatusNote({
     text = filter
       ? `${filter}の完走はまだ集計にありません。`
       : 'まだ集計された完走がありません。';
-  else if (total < MIN_DISTRIBUTION_COUNT)
-    text = `${filter ? `${filter}の` : ''}集計された完走はまだ ${total} 件です。${MIN_DISTRIBUTION_COUNT} 件から分布を出します。`;
+  else if (isFewCount(total))
+    text = `${filter ? `${filter}の` : ''}完走 ${total} 件の分布です。${fewNote(total)}`;
   else text = `${filter ? `${filter}の` : ''}完走 ${total} 件の分布です。`;
   return (
     <p
@@ -220,7 +222,7 @@ function StatusNote({
         status === 'ready'
           ? total === 0
             ? 'empty'
-            : total < MIN_DISTRIBUTION_COUNT
+            : isFewCount(total)
               ? 'few'
               : 'ready'
           : status
@@ -245,7 +247,8 @@ function AxisCard({
   value?: number;
 }) {
   const f = AXIS_FORMAT[id];
-  const enough = histogram.count >= MIN_DISTRIBUTION_COUNT;
+  const drawn = histogram.count >= MIN_DRAWN_COUNT;
+  const few = drawn && isFewCount(histogram.count);
   const median = histogram.median;
   const summary = `${histogram.count} 件${median != null ? `・中央値は ${f(median)} です` : ''}`;
   return (
@@ -264,15 +267,24 @@ function AxisCard({
         )}
       </div>
       <div className="text-xs opacity-70">{CAPTION[id]}</div>
-      {enough ? (
-        <div className="mt-2" data-axis-distribution>
+      {drawn ? (
+        <div
+          className="mt-2"
+          data-axis-distribution
+          data-dist-few={few ? 'true' : undefined}
+        >
           <div className="text-xs tabular-nums" data-dist-summary>
             {summary}
           </div>
+          {few && (
+            <div className="text-xs opacity-70" data-dist-few-note>
+              {fewNote(histogram.count)}
+            </div>
+          )}
           <HistogramChart
             bins={histogram.bins}
             {...(value !== undefined ? { value } : {})}
-            label={`全シードの${label}の分布（${summary}）`}
+            label={`全シードの${label}の分布（${summary}${few ? `。${fewNote(histogram.count)}` : ''}）`}
           />
           <details className="mt-1 text-xs">
             <summary className="cursor-pointer">数値で見る</summary>
@@ -298,8 +310,7 @@ function AxisCard({
         </div>
       ) : (
         <p className="mt-2 text-xs opacity-70" data-axis-few>
-          まだ {histogram.count} 件なので出しません（{MIN_DISTRIBUTION_COUNT}{' '}
-          件から出します）
+          まだ集計された完走がありません。
         </p>
       )}
     </li>

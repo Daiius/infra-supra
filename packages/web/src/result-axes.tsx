@@ -4,7 +4,9 @@ import type { ResultAxisId } from 'game';
 import type { ReactNode } from 'react';
 import { HistogramChart } from './charts.tsx';
 import {
-  MIN_DISTRIBUTION_COUNT,
+  fewNote,
+  MIN_RANKED_COUNT,
+  rankBasisOf,
   TOP_PERCENT,
   type AxisStanding,
   type DistributionView,
@@ -47,20 +49,20 @@ export function cashGuideText(cash: number, guide: number): string {
     : `目標の目安 ${usd(guide)} まで ${usd(-diff)} でした`;
 }
 
-/** 分布の 1 本（同じシード / 全シード）: 数値の要約をテキストで出し、その下にヒストグラム。 */
+/**
+ * 分布の 1 本（同じシード / 全シード）: 数値の要約をテキストで出し、その下にヒストグラム。集計に 1 件でもあれば描き、
+ * MIN_RANKED_COUNT 件未満のうちは上位 % を出さず中央値を出して「形は参考程度」と添える（D-198）。
+ */
 function DistributionRow({
   kind,
   standing,
-  count,
   axis,
   directed,
   value,
 }: {
   kind: 'seed' | 'all';
-  /** 件数が少なければ null。 */
+  /** 集計に 1 件も無ければ null。 */
   standing: Standing | null;
-  /** 件数（自分を含む）。 */
-  count: number;
   axis: ResultAxisId;
   /** 向きを持たない軸（④ 費用の合計）は上位 % の代わりに中央値を出す（D-166）。 */
   directed: boolean;
@@ -70,13 +72,16 @@ function DistributionRow({
   const median = standing?.histogram.median;
   const summary = !standing
     ? ''
-    : directed
+    : directed && standing.ranked
       ? `${standing.n} 件中 上位 ${standing.topPercent}%`
       : `${standing.n} 件${median != null ? `・${kind === 'seed' ? '同じシード' : '全体'}の中央値は ${FORMAT[axis](median)} です` : ''}`;
   return (
     <div
       data-dist={kind}
-      data-top-percent={directed ? standing?.topPercent : undefined}
+      data-top-percent={
+        directed && standing?.ranked ? standing.topPercent : undefined
+      }
+      data-dist-few={standing && !standing.ranked ? 'true' : undefined}
     >
       <div className="text-xs" data-dist-summary>
         <span className="font-semibold">{name}</span>{' '}
@@ -86,17 +91,20 @@ function DistributionRow({
             {directed && standing.inTop && '（上位）'}
           </span>
         ) : (
-          <span className="opacity-70">
-            まだ {count} 件なので出しません（{MIN_DISTRIBUTION_COUNT}{' '}
-            件から出します）
-          </span>
+          <span className="opacity-70">{name}の完走はまだ集計にありません</span>
         )}
       </div>
+      {standing && !standing.ranked && (
+        <div className="text-xs opacity-70" data-dist-few-note>
+          {fewNote(standing.n)}
+          {directed && `上位 % は ${MIN_RANKED_COUNT} 件から出します。`}
+        </div>
+      )}
       {standing && (
         <HistogramChart
           bins={standing.histogram.bins}
           value={value}
-          label={`${name}の分布（${summary}）`}
+          label={`${name}の分布（${summary}${standing.ranked ? '' : `。${fewNote(standing.n)}`}）`}
         />
       )}
     </div>
@@ -186,7 +194,7 @@ export function ResultAxesPanel({
           );
           // 「★ 上位」の印は全部の構成の分布で決める（絞り込みは見るためだけ。D-175）
           const t = top?.axes.find((a) => a.id === c.id);
-          const basis = t ? (t.seed ?? t.all) : null;
+          const basis = t ? rankBasisOf(t) : null;
           return (
             <li
               key={c.id}
@@ -226,7 +234,6 @@ export function ResultAxesPanel({
                   <DistributionRow
                     kind="seed"
                     standing={d.seed}
-                    count={d.seedCount}
                     axis={c.id}
                     directed={c.directed}
                     value={c.value}
@@ -234,7 +241,6 @@ export function ResultAxesPanel({
                   <DistributionRow
                     kind="all"
                     standing={d.all}
-                    count={d.allCount}
                     axis={c.id}
                     directed={c.directed}
                     value={c.value}
