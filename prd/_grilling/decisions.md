@@ -2302,6 +2302,7 @@
   - **作り直す手順**: ① `pnpm dev` を動かし、`http://127.0.0.1:<ポート>/og.html` を幅 1200 以上の窓で開く（字体の読み込みを待つ）。② `[data-og-card]` の要素だけを撮る（playwright なら `page.locator('[data-og-card]').screenshot({ path: 'packages/web/public/og.png' })`。拡大率 1 で 1200×630 になる）。③ `public/og.png` をコミットし、`VITE_SITE_URL` を入れた本番で SNS のカードの確認の道具（各社のもの）で確かめる。
 - テスト: `og-card.smoke.test.tsx`（W-191a。1200×630・ロゴの大きさと入れ替えなし・図柄が記事コミュニティで印 7 つ・破線 6 本・不透明度 0.15〜0.25）・`og-meta.test.ts`（`ogImageUrl` と index.html のメタタグ）。
 - 残した点: 画像の書き出しと見た目の確かめ（supervisor がブラウザで行う）・`VITE_SITE_URL` を Vercel に入れること（ユーザー）・og:url と canonical（オリジンが決まってから）。
+- 補足（2026-11-10・ユーザーの依頼）: zenn などのリンクのカードが古い画像をキャッシュするので、og:image・twitter:image の URL に版を付ける（`/og.png?v=2`。`src/og-meta.ts` の `OG_IMAGE_VERSION`）。og.png を作り直したら版を上げる。
 
 ### D-185 ゲームの途中の構成を変える行動を「構成を変える」1 つの畳んだ欄にまとめ、始める画面の ①② のタブを使い回す（2026-11-09・ユーザーの決定）
 

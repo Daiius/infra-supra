@@ -6,11 +6,17 @@
 export const OG_IMAGE_TOKEN = '__OG_IMAGE_URL__';
 /** 書き出した画像の置き場（public/og.png）。 */
 export const OG_IMAGE_PATH = '/og.png';
+/**
+ * 画像の版。og.png を作り直したら上げる（SNS・zenn などのリンクのカードのキャッシュを破るため、og:image の URL に ?v= で付ける）。
+ * 2: 2026-11-10 にロゴを Philosopher Bold・neutral-700 にし、背景を濃くした版。
+ */
+export const OG_IMAGE_VERSION = 2;
 
-/** VITE_SITE_URL から og:image の URL を作る（純粋）。無い・空なら相対。URL として読めない・http(s) でなければ止める。 */
+/** VITE_SITE_URL から og:image の URL を作る（純粋。末尾に ?v=版）。無い・空なら相対。URL として読めない・http(s) でなければ止める。 */
 export function ogImageUrl(siteUrl: string | undefined): string {
   const raw = siteUrl?.trim();
-  if (!raw) return OG_IMAGE_PATH;
+  const path = `${OG_IMAGE_PATH}?v=${OG_IMAGE_VERSION}`;
+  if (!raw) return path;
   let url: URL;
   try {
     url = new URL(raw);
@@ -20,5 +26,5 @@ export function ogImageUrl(siteUrl: string | undefined): string {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('VITE_SITE_URL は http(s) のオリジンにしてください');
   }
-  return `${url.origin}${OG_IMAGE_PATH}`;
+  return `${url.origin}${path}`;
 }
