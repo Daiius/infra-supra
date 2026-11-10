@@ -200,10 +200,10 @@ export const DEPLOY_TARGETS: readonly DeployTarget[] = [
       src2('https://vercel.com/docs/pricing'),
     ],
     pageCache: {
-      label: 'ISR（@astrojs/vercel の isr）',
+      label: 'Vercel のキャッシュ（@astrojs/vercel の isr）',
       onDemand: true,
       reason:
-        'bypassToken を付けたリクエストでそのページを取り直します（Vercel の ISR の全リージョンの更新）',
+        'bypassToken を付けたリクエストでそのページを取り直します（Vercel のキャッシュを全リージョンで更新）',
     },
   },
   {

@@ -91,7 +91,7 @@ export const LANES: Readonly<
     label: '静的なページ・JS と CSS',
     classes: ['document-static', 'asset'],
   },
-  isr: { label: 'ISR のページ（キャッシュ）', classes: ['document-isr'] },
+  isr: { label: 'キャッシュしたページ', classes: ['document-isr'] },
   ssr: { label: '閲覧ごとに描くページ', classes: ['document-ssr'] },
   // 枠 + サーバーの島（S6。D-108）。島のリクエストは document-ssr で数えるので、クラスでなく見取り図の島の区画で分ける
   // （islandLanes。島の区画のあるページがあれば document-ssr の線に載せる）
@@ -115,7 +115,7 @@ export const LANES: Readonly<
   },
   revalidate: {
     // Astro の Cloudflare では、消した後の閲覧が描き終わるのを待つ（裏ではない。D-103）
-    label: 'ISR の作り直し・キャッシュの描き直し',
+    label: 'キャッシュの作り直し・描き直し',
     classes: ['isr-revalidate'],
   },
 };
@@ -178,7 +178,7 @@ const KIND_CAPTION: Readonly<Record<string, string>> = {
   'request-db': 'DB',
   'object-storage': 'ストレージ',
   'image-optimizer': '画像の変換',
-  'isr-store': 'ページのキャッシュ（ISR）',
+  'isr-store': 'ページのキャッシュ',
   'ci-build': 'ビルド',
   'db-backup': 'バックアップ',
   'email-sender': 'メールの送信',

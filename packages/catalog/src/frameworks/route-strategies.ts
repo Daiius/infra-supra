@@ -53,7 +53,7 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'cached-ttl',
     code: 'S2',
     label: 'サーバーで描いてキャッシュ（時間で取り直す）',
-    long: '最初の閲覧でサーバーが描いてキャッシュし、期限が来たら取り直します（Next.js の ISR・Astro の route caching の期限）',
+    long: '最初の閲覧でサーバーが描いてキャッシュし、期限が来たら取り直します',
     personalOk: false,
     why: {
       public:
@@ -67,7 +67,7 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'cached-purge',
     code: 'S3',
     label: 'サーバーで描いてキャッシュ（更新で消す）',
-    long: '最初の閲覧でサーバーが描いてキャッシュし、投稿・編集のときにそのページのキャッシュを消します（Next.js の On-demand Revalidation・route caching の invalidate）',
+    long: '最初の閲覧でサーバーが描いてキャッシュし、投稿・編集のときにそのページのキャッシュを消します',
     personalOk: false,
     why: {
       public:
@@ -95,7 +95,7 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'shell-api',
     code: 'S5',
     label: '枠 + ブラウザが API で取る',
-    long: 'HTML は静的な枠です。中身はブラウザ（SPA・Client Component・アイランド）が API で取って描きます。サーバーが受けるのはデータの API だけです',
+    long: 'HTML は静的な枠です。中身はブラウザの JS が API で取って描きます。サーバーが受けるのはデータの API だけです',
     personalOk: true,
     why: {
       public:
@@ -109,7 +109,7 @@ export const ROUTE_STRATEGIES: Readonly<
     id: 'server-island',
     code: 'S6',
     label: '枠 + 人ごとの部分をサーバーで',
-    long: '枠はキャッシュ（か静的）にし、人ごとの部分だけを閲覧ごとにサーバーで描きます（Astro の Server Islands・Next.js の PPR）',
+    long: '枠はキャッシュ（か静的）にし、人ごとの部分だけを閲覧ごとにサーバーで描きます',
     personalOk: true,
     why: {
       public:
@@ -124,7 +124,7 @@ export const ROUTE_STRATEGIES: Readonly<
   'cache-components': {
     id: 'cache-components',
     code: '',
-    label: '部品ごとにキャッシュ（Cache Components）',
+    label: '部品ごとにキャッシュ',
     long: "Next.js 16 の Cache Components（cacheComponents: true）。'use cache' の部品を静的な枠に入れ、人ごとに違う部分だけを閲覧ごとに描いて同じ応答で流します（PPR）",
     personalOk: true,
     why: {

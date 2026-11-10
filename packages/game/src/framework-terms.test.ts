@@ -73,7 +73,7 @@ describe('描き方の表の名前（D-193）', () => {
       ROUTE_STRATEGIES,
     ) as (keyof typeof ROUTE_STRATEGIES)[])
       expect(strategyTitle(id)).toBe(ROUTE_STRATEGIES[id].label);
-    expect(slotLabel('isrCache')).toBe('ページのキャッシュ（ISR）');
+    expect(slotLabel('isrCache')).toBe('ページのキャッシュ');
   });
 });
 
@@ -85,7 +85,7 @@ describe('部品・見取り図の名前（D-193）', () => {
       'nextjs',
     ).find((x) => x.slot === 'isrCache');
     expect(slot?.label).toBe('ISR のキャッシュ');
-    expect(slotLabel('isrCache', 'astro')).toBe('ページのキャッシュ（ISR）');
+    expect(slotLabel('isrCache', 'astro')).toBe('ページのキャッシュ');
   });
 
   it('見取り図の札はフレームワークの呼び名。Vite の SPA の API で取る区画は一般の言葉', () => {
@@ -106,5 +106,64 @@ describe('部品・見取り図の名前（D-193）', () => {
       'ブラウザが API で取る',
     );
     expect(regionSourceLabel('ssr', undefined).label).toBe('閲覧ごとに SSR');
+  });
+});
+
+describe('ほかのフレームワークの呼び名を出さない（D-193 の補足）', () => {
+  /** Next.js（App Router）の呼び名と、Next.js だけの仕組みの名前。 */
+  const NEXT_NAMES =
+    /Cache Components|cacheComponents|Partial Prerendering|PPR|ISR|On-demand revalidation|Dynamic rendering|Prerendering|Static Shell/;
+  /** Astro の呼び名。 */
+  const ASTRO_NAMES =
+    /Server islands|Client Islands|Route caching|On-demand rendering|prerender|アイランド/i;
+  /** 表の行で画面に出る文（名前・説明・使えない理由・なぜ・値）。全部の構成で見る。 */
+  const texts = (fw: FrameworkId) =>
+    STACKS.flatMap((st) =>
+      routePlanRows(ARTICLE_COMMUNITY, {
+        framework: fw,
+        stackIndex: st.index,
+        settings: { revalidateSec: 300 },
+        components: {},
+      }).flatMap((r) => [
+        r.strategyLabel,
+        r.strategyTermNote ?? '',
+        r.why,
+        ROUTE_STRATEGIES[r.strategy].long,
+        ...r.detail,
+        ...r.alternatives.flatMap((a) => [a.label, a.termNote ?? '', a.reason]),
+      ]),
+    );
+  const regionTexts = (fw: FrameworkId) =>
+    (
+      [
+        'build',
+        'isr',
+        'cached',
+        'ssr',
+        'api',
+        'island',
+        'island-shell',
+        'server-island',
+        'shell',
+        'image',
+      ] as const
+    ).map((s) => regionSourceLabel(s, fw).label);
+
+  it('Astro では、選べない描き方も含めて Next.js の呼び名が出ない', () => {
+    for (const t of [...texts('astro'), ...regionTexts('astro')])
+      expect(t).not.toMatch(NEXT_NAMES);
+  });
+
+  it('Vite の SPA・Next.js の静的書き出しでは、選べない描き方に Next.js（App Router）・Astro の呼び名が出ない', () => {
+    for (const fw of ['vite-spa', 'nextjs-export'] as const)
+      for (const t of [...texts(fw), ...regionTexts(fw)]) {
+        expect(t).not.toMatch(NEXT_NAMES);
+        expect(t).not.toMatch(ASTRO_NAMES);
+      }
+  });
+
+  it('選べない描き方の名前は一般の言葉だけ（Astro の「部品ごとにキャッシュ」）', () => {
+    const r = labels('astro', 'cloudflare-vinext-paid');
+    expect(r.personal!.alts['cache-components']).toBe('部品ごとにキャッシュ');
   });
 });

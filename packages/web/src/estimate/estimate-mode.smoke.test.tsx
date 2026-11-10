@@ -926,7 +926,7 @@ describe('見積モードの画面', () => {
     pick('framework', 'vite-spa');
     pick('stack', 'cloudflare-vinext-paid');
     expect(checked(DB)).toBe('dynamodb');
-    expect(queryGroup('ページのキャッシュ（ISR）')).toBeNull();
+    expect(queryGroup('ページのキャッシュ')).toBeNull();
     expect(queryGroup('ISR のキャッシュ')).toBeNull();
     // Next.js に戻しても落ちた ISR のキャッシュは復活しない（既定の KV）
     pick('framework', 'nextjs');

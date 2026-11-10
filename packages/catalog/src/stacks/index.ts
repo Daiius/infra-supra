@@ -187,7 +187,7 @@ export type ComponentOption = {
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
-  isrCache: 'ページのキャッシュ（ISR）',
+  isrCache: 'ページのキャッシュ',
   images: '画像',
   api: 'API の置き場',
   db: 'DB',

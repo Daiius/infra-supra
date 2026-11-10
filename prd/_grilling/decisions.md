@@ -2389,6 +2389,7 @@
   - ID・型名・保存値・URL・計算・golden は変えない。
 - テスト: catalog の `terms.test.ts`（出典・一般の言葉に落ちる）、game の `framework-terms.test.ts`（Next.js・Astro・静的書き出し・Vite の SPA で替わる・選ぶ前は一般の言葉・部品と見取り図の札）。文言に依存する game・web のテスト（ondemand-setting・route-fallback・setup・App.smoke・estimate-mode.smoke・info-hitbox.smoke・system-diagram・system-diagram-model）を新しい名前に合わせた。
 - 残した点: 狭い画面での英字の長い名前（「Partial Prerendering（PPR）」「Client-side data fetching」）のチップの省略の見え方を実機で確かめる。
+- 補足（2026-11-10・ユーザーの決定）: そのフレームワークに呼び名の無い描き方（選べない薄いチップなど）は、**一般の言葉だけ**にする。ほかのフレームワークの名前を括弧で添えない。一般の言葉からフレームワークの名前を外した: 「部品ごとにキャッシュ（Cache Components）」→「部品ごとにキャッシュ」、部品「ページのキャッシュ（ISR）」・構成図の箱 →「ページのキャッシュ」、流れ「ISR のページ（キャッシュ）」→「キャッシュしたページ」・「ISR の作り直し・キャッシュの描き直し」→「キャッシュの作り直し・描き直し」、見取り図の札「ISR（キャッシュ）」→「キャッシュ（期限で取り直す）」・「アイランドが API で取る」→「部品だけブラウザが API で取る」、描き方の長い説明・区画の凡例の説明の「Next.js の ISR・Astro の route caching」などの括弧、使えない理由（Astro の「Cache Components は Next.js 16 の機能です」→「このフレームワークには、部品ごとにキャッシュする仕組みがありません（近いのは Server islands）」・静的書き出しの「（ISR・SSR は使えない）」）、Astro × Vercel の置き場の名前（「ISR（@astrojs/vercel の isr）」→「Vercel のキャッシュ（@astrojs/vercel の isr）」）、表の注記の「Next.js × Netlify・OpenNext の PPR など」。テスト: game の `framework-terms.test.ts`（Astro・Vite の SPA・静的書き出しの全構成の表の名前・説明・使えない理由・見取り図の札に、Next.js・Astro の呼び名が出ない）、web の `system-diagram-model.test.ts`（流れの名前）。
 
 ## 未決（grill で詰める）
 

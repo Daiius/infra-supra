@@ -338,7 +338,8 @@ function astroRow(d: DeployTarget): Record<RouteStrategyId, StrategySupport> {
     'shell-api': SHELL_API_ANY,
     'server-island': astroIsland(d),
     'cache-components': no(
-      `Cache Components は Next.js 16 の機能です（Astro には無い。Astro で近いのは ${termName('astro', 'server-island', '枠 + 人ごとの部分をサーバーで描く形')}）`,
+      // 呼び名はこのフレームワークのものだけ（ほかのフレームワークの名前を出さない。D-193）
+      `このフレームワークには、部品ごとにキャッシュする仕組みがありません（近いのは ${termName('astro', 'server-island', '枠 + 人ごとの部分をサーバーで描く形')}）`,
       FRAMEWORKS.astro.sources,
     ),
   };
@@ -348,7 +349,7 @@ function nextExportRow(
   d: DeployTarget,
 ): Record<RouteStrategyId, StrategySupport> {
   const noServer = no(
-    '静的書き出しにはサーバーがありません（ISR・SSR は使えない）',
+    '静的書き出しにはサーバーがありません（サーバーで描く・キャッシュする描き方は使えない）',
     FRAMEWORKS['nextjs-export'].sources,
   );
   return {

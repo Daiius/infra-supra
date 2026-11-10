@@ -366,5 +366,6 @@ API の置き場・画像を替えた静的書き出し（同じ取り方）:
 - Astro: [On-demand rendering](https://docs.astro.build/en/guides/on-demand-rendering/)（「pre-rendered at build time」・`prerender`）、[Route caching](https://docs.astro.build/en/guides/caching/)（`maxAge`・「Invalidating cache entries」の `cache.invalidate()`）、[Islands](https://docs.astro.build/en/concepts/islands/)（見出し「Client Islands」「Server islands」）。
 - Vite: [Shared Options の `appType`](https://vite.dev/config/shared-options)（「Whether your application is a Single Page Application (SPA)」。CSR の語は無い）。
 
+- そのフレームワークに呼び名の無い描き方（選べない薄いチップなど）は一般の言葉だけで出し、ほかのフレームワークの名前を括弧で添えない（D-193 の補足）。そのため一般の言葉（label・long・区画・流れ・部品の名前）にはフレームワークの名前を入れない。
 - ユーザーの例（「SSG」「Dynamic Rendering（SSR）」「CSR」）は、公式の文書の見出しにそろえるため Prerendering・Dynamic rendering・SPA にした。
 - 変えていないもの: ID・型名・保存値・URL・計算・golden。estimator の内訳の名前（「ISR の作り直し（…・更新で消す）」など。estimator はフレームワークを知らない）、要件の名前「即時反映（更新で消す ISR）」、基準プレイの名前、事業者の文書の文（Firebase Hosting・Cloudflare の CDN の注記。Next.js 以外にも出る）、遊び方。
