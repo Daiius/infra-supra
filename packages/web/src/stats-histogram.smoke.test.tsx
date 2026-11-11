@@ -11,7 +11,7 @@ import {
   type SaveData,
 } from 'game';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
+import { infoDialog, renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -94,6 +94,17 @@ function statsFetch(
 
 const dialogAxes = () =>
   victory().querySelector<HTMLElement>('[data-result-axes]')!;
+/** 4 軸の欄の注記の横の ⓘ を開き、分布との比べ方の詳しい説明の文を返して閉じる（D-207）。 */
+function compareDetail(root: HTMLElement): string {
+  fireEvent.click(
+    within(root).getByRole('button', { name: '分布との比べ方の説明' }),
+  );
+  const d = infoDialog()!;
+  const text = d.querySelector('[data-compare-detail]')!.textContent ?? '';
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(infoDialog()).toBeNull();
+  return text;
+}
 /** 見る分布（同じシード / 全シード）の切り替えを押す（D-204）。 */
 const pickScope = (root: HTMLElement, scope: 'seed' | 'all') =>
   fireEvent.click(
@@ -169,9 +180,23 @@ describe('集計の分布の表示（段 3）', () => {
     // 向きのある 3 つの軸が上位 → 花火は 3 段・見出しに数
     expect(victory().dataset.fireworkLevel).toBe('3');
     expect(victory().textContent).toContain('3 つの軸で上位 25% に入りました');
-    expect(
-      axes.querySelector('[data-result-compare-note]')!.textContent,
-    ).toContain('あなたのプレイも数に入っています');
+    // 注記は 1 行だけにし、数え方の詳しい説明は ⓘ に畳む（D-207）
+    const note = axes.querySelector<HTMLElement>('[data-result-compare-note]')!;
+    expect(note.textContent).toBe('集計した完走のプレイの分布と比べています。');
+    expect(note.dataset.self).toBe('included');
+    const detail = compareDetail(axes);
+    expect(detail).toContain('上位 25% 以内に入った軸を「上位」に数えます');
+    expect(detail).toContain('上位 % は 10 件から出します');
+    expect(detail).toContain(
+      '④ 費用の合計は高い・低いで良し悪しを付けないので、上位を数えず',
+    );
+    expect(detail).toContain(
+      '見る分布を選ぶだけで、「上位」の数え方は変えません',
+    );
+    expect(detail).toContain('あなたのプレイも数に入っています');
+    expect(detail).not.toContain('開発用の架空');
+    // ⓘ を閉じても完走のダイアログは開いたまま
+    expect(victory()).toBeDefined();
     // 狭い画面で高さを超えても、4 軸の欄だけを縦にスクロールできる（OCL-3AA8C258）
     expect(axes.parentElement!.className).toContain('overflow-y-auto');
     // 結果の画面にも同じ分布
@@ -268,7 +293,12 @@ describe('集計の分布の表示（段 3）', () => {
     expect(dialogAxes().querySelectorAll('[data-histogram]')).toHaveLength(4);
     expect(
       dialogAxes().querySelector('[data-result-compare-note]')!.textContent,
-    ).toContain('開発用の架空の分布です');
+    ).toBe(
+      '開発用の架空の分布です。集計した完走のプレイの分布と比べています。',
+    );
+    expect(compareDetail(dialogAxes())).toContain(
+      '開発用の架空の分布です（遊んだ人の結果ではありません）',
+    );
   });
 
   it('W-101b VITE_STATS_MOCK と VITE_STATS_ENABLED を両方立てても、完走・途中終了とも送らない（OCL-87C871FB）', async () => {
@@ -307,28 +337,33 @@ describe('集計の分布の表示（段 3）', () => {
       cash.querySelector('[data-dist="all"] [data-dist-summary]')!.textContent,
     ).toContain('41 件中 上位');
     expect(
-      dialogAxes().querySelector('[data-result-compare-note]')!.textContent,
-    ).toContain('あなたのプレイを 1 件足して数えています');
+      dialogAxes().querySelector<HTMLElement>('[data-result-compare-note]')!
+        .dataset.self,
+    ).toBe('added');
+    expect(compareDetail(dialogAxes())).toContain(
+      'あなたのプレイを 1 件足して数えています',
+    );
   });
 
   it('W-98c 開き直したとき（送り直さない）も、送ったときの inHistogram の結末で自分を数える（OCL-9B705B16）', async () => {
     vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    // 自分を数えたかの文は ⓘ に畳んだので（D-207）、注記の data-self で見る
     const note = () =>
       document.querySelector<HTMLElement>(
         '[data-result-axes][data-stats="ready"] [data-result-compare-note]',
-      )?.textContent ?? '';
+      )?.dataset.self ?? '';
     for (const [inHistogram, text] of [
-      [false, 'あなたのプレイを 1 件足して数えています'],
-      [true, 'あなたのプレイも数に入っています'],
+      [false, 'added'],
+      [true, 'included'],
     ] as const) {
       const fetch = statsFetch(() => json(distribution()), inHistogram);
       vi.stubGlobal('fetch', fetch);
       await finish(almostDone(inHistogram ? 8 : 9));
-      await waitFor(() => expect(note()).toContain(text));
+      await waitFor(() => expect(note()).toBe(text));
       cleanup();
       // 終わった状態のまま開き直す: 送らず、分布だけ取り直す
       await renderApp();
-      await waitFor(() => expect(note()).toContain(text));
+      await waitFor(() => expect(note()).toBe(text));
       expect(
         fetch.mock.calls.filter((c) => c[1]?.method === 'POST'),
       ).toHaveLength(1);
@@ -346,10 +381,14 @@ describe('見る分布の切り替えと完走のダイアログの高さ（D-20
     );
     await finish();
     await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
-    // ダイアログの高さは dvh で抑え、中身だけをスクロールする（iOS Safari のツールバーで下のボタンが隠れない）
-    expect(victory().querySelector('.modal-box')!.className).toContain(
-      'max-h-[calc(100dvh-2rem)]',
-    );
+    // ダイアログの高さは dvh で抑え（styles.css の .modal-box。D-208）、中身だけをスクロールする
+    // （iOS Safari のツールバーで下のボタンが隠れない）
+    const box = victory().querySelector('.modal-box')!;
+    for (const c of ['flex', 'flex-col', 'overflow-hidden'])
+      expect(box.className.split(' ')).toContain(c);
+    expect(
+      victory().querySelector('[data-result-axes]')!.parentElement!.className,
+    ).toContain('overflow-y-auto');
     const axes = dialogAxes();
     const chips = [
       ...axes.querySelectorAll<HTMLElement>(

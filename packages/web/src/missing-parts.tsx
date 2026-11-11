@@ -185,8 +185,9 @@ function MissingPartsDialog({
       }}
     >
       <PortalContainer.Provider value={dialogEl}>
-        <div className="modal-box w-11/12 max-w-3xl px-3 sm:px-6">
-          <div className="flex items-start justify-between gap-2">
+        <div className="modal-box flex flex-col overflow-hidden w-11/12 max-w-3xl px-3 sm:px-6">
+          {/* 見出しと × と下のボタンは固定し、説明と部品の一覧だけスクロールする（D-208） */}
+          <div className="flex shrink-0 items-start justify-between gap-2">
             <h2 id={titleId} className="text-lg font-bold">
               残りの部品を選ぶ
             </h2>
@@ -200,21 +201,26 @@ function MissingPartsDialog({
               </button>
             </form>
           </div>
-          <p className="mt-1 text-xs opacity-70">
-            まだ選んでいないスロットだけを並べています。①
-            インフラの構成のカードで選ぶのと同じです（始める前なので手間はかかりません）。
-          </p>
-          <div className="mt-3">
-            <PartChips
-              stackIndex={stackIndex}
-              framework={framework}
-              slots={slots}
-              value={value}
-              onChange={onChange}
-              compare={compare}
-            />
+          <div
+            className="mt-1 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            data-modal-scroll
+          >
+            <p className="text-xs opacity-70">
+              まだ選んでいないスロットだけを並べています。①
+              インフラの構成のカードで選ぶのと同じです（始める前なので手間はかかりません）。
+            </p>
+            <div className="mt-3">
+              <PartChips
+                stackIndex={stackIndex}
+                framework={framework}
+                slots={slots}
+                value={value}
+                onChange={onChange}
+                compare={compare}
+              />
+            </div>
           </div>
-          <div className="modal-action mt-4 flex-wrap items-center justify-end gap-2">
+          <div className="modal-action mt-4 shrink-0 flex-wrap items-center justify-end gap-2">
             <p className="mr-auto text-sm" role="status">
               {remaining > 0
                 ? `残り ${remaining} 個`

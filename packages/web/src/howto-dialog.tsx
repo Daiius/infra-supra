@@ -737,7 +737,7 @@ export function HowtoDialog({
       }}
     >
       {/* 高さを一定にする（modal は縦中央なので、ページで高さが変わると上端・ナビが上下に動く。D-146） */}
-      <div className="modal-box flex h-[min(42rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6">
+      <div className="modal-box flex h-[min(42rem,calc(100dvh-2rem))] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6">
         <div className="flex shrink-0 items-start justify-between gap-2">
           <h2
             id="howto-dialog-title"

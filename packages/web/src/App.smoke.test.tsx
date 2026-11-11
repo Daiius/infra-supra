@@ -30,6 +30,7 @@ import {
   readEventPages,
   restartFromHeader,
   openSetupChange,
+  expectFixedChrome,
   setupChangeFold,
   changeItems,
   registerSetupChange,
@@ -590,6 +591,8 @@ describe('ゲームモードの画面', () => {
     // ダイアログ: 未選択のスロットだけを並べ、その場で選ぶ（選んだ行は畳んで残る）
     fireEvent.click(screen.getByRole('button', { name: '残りを選ぶ' }));
     const dialog = screen.getByRole('dialog', { name: '残りの部品を選ぶ' });
+    // 見出し・× と下のボタンは固定し、部品の一覧だけスクロールする（D-208）
+    expectFixedChrome(dialog);
     const rows = () =>
       [
         ...dialog.querySelectorAll<HTMLElement>(
@@ -617,6 +620,8 @@ describe('ゲームモードの画面', () => {
       'dialog[data-slot-compare-dialog]',
     )!;
     expect(cmp.open).toBe(true);
+    // 比較のダイアログも見出しと × を固定し、表だけスクロールする（D-208）
+    expectFixedChrome(cmp);
     fireEvent.click(within(cmp).getByRole('button', { name: '閉じる' }));
     expect(
       document.querySelector('dialog[data-slot-compare-dialog]'),

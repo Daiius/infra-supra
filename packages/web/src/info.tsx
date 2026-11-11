@@ -123,7 +123,7 @@ function InfoDialog({
       // label の中に置かれても、ダイアログの中のクリックで選択肢が切り替わらないように
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-lg flex-col overflow-hidden px-3 py-4 text-left text-sm font-normal whitespace-normal sm:px-6">
+      <div className="modal-box flex w-11/12 max-w-lg flex-col overflow-hidden px-3 py-4 text-left text-sm font-normal whitespace-normal sm:px-6">
         <div className="flex shrink-0 items-start justify-between gap-2">
           <h2 id={titleId} className="min-w-0 text-base font-bold break-words">
             {title}

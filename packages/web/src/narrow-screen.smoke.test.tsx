@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 // 狭い画面（sm 未満）の描画テスト。見た目は確かめず、推移のグラフ（D-186）の高さ・目盛りの数・推移のタイルの行の形と、
-// 満足度の要素（D-189）の並べ方のクラスを見る。
-import { render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+// 満足度の要素（D-189）の並べ方のクラスと、ヘッダーのボタン（D-206）の名前・狭い画面の形を見る。
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LineChart } from './charts.tsx';
-import { renderApp, startGame, useSmokeEnv } from './smoke.test-helpers.tsx';
+import {
+  advance,
+  renderApp,
+  startGame,
+  useSmokeEnv,
+} from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -119,6 +124,66 @@ describe('狭い画面の満足度の要素（D-189）', () => {
     for (const li of items) {
       expect(li.parentElement).toBe(list);
       expect(li.querySelector('.badge')).not.toBeNull();
+    }
+  });
+});
+
+describe('狭い画面のヘッダー（D-206）', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('W-206 右端のボタンは sm 未満でアイコンだけの 32px の正方形になり、名前（アクセシブルネーム）は保つ。見積・統計のヘッダーも同じ', async () => {
+    // 統計のタブも出る、いちばん混んだ形（開発用の架空の分布なら取りに行かない）
+    vi.stubEnv('VITE_STATS_MOCK', '1');
+    await renderApp();
+    await startGame({
+      scenario: '記事コミュニティ',
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    advance(1);
+    const header = screen.getByRole('banner');
+    const nav = within(header).getByRole('navigation', { name: 'モード' });
+    expect(
+      within(nav)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['ゲーム', '見積', '統計']);
+    const right = nav.nextElementSibling as HTMLElement;
+    expect(right.className.split(' ')).toContain('gap-0');
+    const buttons = within(right).getAllByRole('button');
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+      '過去の月に戻る…',
+      '新しいゲーム',
+      '遊び方',
+      '設定',
+    ]);
+    for (const [name, text] of [
+      ['過去の月に戻る…', '戻る…'],
+      ['新しいゲーム', '新しいゲーム'],
+      ['遊び方', '遊び方'],
+    ] as const) {
+      const b = within(header).getByRole('button', { name });
+      const cls = b.className.split(' ');
+      // sm 未満は設定と同じ 32px の正方形、sm 以上は文字つきの幅
+      for (const c of ['w-8', 'px-0', 'sm:w-auto']) expect(cls).toContain(c);
+      // 文字は sm 以上でだけ見せる（アイコンは飾り）
+      const label = [...b.querySelectorAll('span')].find(
+        (s) => s.textContent === text,
+      )!;
+      expect(label.className.split(' ')).toEqual(['hidden', 'sm:inline']);
+      expect(b.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(
+      within(header).getByRole('button', { name: '設定' }).className,
+    ).toContain('btn-square');
+    // 見積・統計のヘッダーは設定だけ（ゲームのボタンは出さない）
+    for (const m of ['見積', '統計']) {
+      fireEvent.click(within(nav).getByRole('button', { name: m }));
+      expect(
+        within(right)
+          .getAllByRole('button')
+          .map((b) => b.getAttribute('aria-label')),
+      ).toEqual(['設定']);
     }
   });
 });

@@ -25,6 +25,7 @@ import {
   renderApp,
   startGame,
   useSmokeEnv,
+  expectFixedChrome,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -326,6 +327,8 @@ describe('集計への送信とプライバシーポリシー', () => {
       screen.getByRole('button', { name: 'プライバシーポリシー' }),
     );
     const d = screen.getByRole('dialog', { name: 'プライバシーポリシー' });
+    // 見出しと × は固定し、本文だけスクロールする（D-208）
+    expectFixedChrome(d);
     const sent = d.querySelector('[data-privacy-sent]')!.textContent!;
     for (const x of SENT_ITEMS) expect(sent).toContain(x);
     const notSent = d.querySelector('[data-privacy-not-sent]')!.textContent!;

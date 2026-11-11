@@ -441,11 +441,12 @@ export function App() {
           ))}
         </nav>
         {/* 右端: 戻る…（戻れる月があるとき。D-192）・新しいゲーム（運営中・終わった後）・遊び方（ゲームモードだけ）・設定（D-146・D-147）。
-            狭い画面（sm 未満）はアイコンだけにして 1 行に収める */}
-        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+            狭い画面（sm 未満）はアイコンだけにして 1 行に収める。アイコンだけのときは設定と同じ 32px の正方形にし、間も詰める
+            （左右の余白のぶんで幅 360px からはみ出していた。D-206）。名前は aria-label */}
+        <div className="ml-auto flex shrink-0 items-center gap-0 sm:gap-1">
           {mode === 'game' && state && rewindable > 0 && (
             <button
-              className="btn btn-ghost btn-sm px-2 whitespace-nowrap"
+              className="btn btn-ghost btn-sm w-8 px-0 whitespace-nowrap sm:w-auto sm:px-2"
               onClick={() => setRewindPick(rewindable)}
               aria-label="過去の月に戻る…"
               title="過去の月に戻る"
@@ -456,7 +457,7 @@ export function App() {
           )}
           {mode === 'game' && state && (
             <button
-              className="btn btn-ghost btn-sm px-2 whitespace-nowrap"
+              className="btn btn-ghost btn-sm w-8 px-0 whitespace-nowrap sm:w-auto sm:px-2"
               onClick={() => setConfirmRestart(true)}
               aria-label="新しいゲーム"
               title="新しいゲーム"
@@ -467,7 +468,7 @@ export function App() {
           )}
           {mode === 'game' && (
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-sm w-8 px-0 sm:w-auto sm:px-3"
               onClick={() => setHowto({ first: false })}
               aria-label="遊び方"
               title="遊び方"

@@ -134,6 +134,26 @@ export function closeHowtoIfOpen() {
     fireEvent.click(within(d).getByRole('button', { name: '遊び方を閉じる' }));
 }
 
+/**
+ * 長いダイアログの形（D-208）: 箱は flex の縦並びで箱自体はスクロールせず、中身（data-modal-scroll）だけがスクロールし、
+ * 見出しと閉じるボタン（背景の閉じるは除く）は中身のスクロールの外にある。
+ */
+export function expectFixedChrome(dialog: HTMLElement) {
+  const box = dialog.querySelector<HTMLElement>('.modal-box')!;
+  for (const c of ['flex', 'flex-col', 'overflow-hidden'])
+    expect(box.className.split(' ')).toContain(c);
+  const scroll = box.querySelector<HTMLElement>('[data-modal-scroll]')!;
+  for (const c of ['min-h-0', 'flex-1', 'overflow-y-auto'])
+    expect(scroll.className.split(' ')).toContain(c);
+  expect(scroll.parentElement).toBe(box);
+  expect(scroll.contains(box.querySelector('h2'))).toBe(false);
+  const closers = [...box.querySelectorAll<HTMLButtonElement>('button')].filter(
+    (b) => /閉じる/.test(b.getAttribute('aria-label') ?? b.textContent ?? ''),
+  );
+  expect(closers.length).toBeGreaterThan(0);
+  for (const b of closers) expect(scroll.contains(b)).toBe(false);
+}
+
 /** 開いている ⓘ の説明のダイアログ（D-129。info.tsx の Info）。無ければ null。 */
 export const infoDialog = (): HTMLElement | null =>
   [

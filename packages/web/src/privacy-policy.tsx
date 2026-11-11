@@ -41,8 +41,9 @@ export function PrivacyPolicyDialog({ onClose }: { onClose: () => void }) {
       data-privacy-policy
       onClose={onClose}
     >
-      <div className="modal-box max-w-2xl">
-        <div className="flex items-start justify-between gap-2">
+      <div className="modal-box flex flex-col overflow-hidden max-w-2xl">
+        {/* 見出しと × は固定し、本文だけスクロールする（D-208） */}
+        <div className="flex shrink-0 items-start justify-between gap-2">
           <h2
             id="privacy-dialog-title"
             className="flex items-center gap-2 text-lg font-bold"
@@ -59,7 +60,10 @@ export function PrivacyPolicyDialog({ onClose }: { onClose: () => void }) {
             </button>
           </form>
         </div>
-        <div className="mt-3 space-y-4 text-sm">
+        <div
+          className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 text-sm"
+          data-modal-scroll
+        >
           <p>
             このアプリ（infra-supra）がゲームのプレイを終えたときに送る情報と、その扱いを説明します。
           </p>

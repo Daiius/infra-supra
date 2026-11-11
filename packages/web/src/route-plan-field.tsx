@@ -373,8 +373,9 @@ export function RoutePlanCompare({
           }}
         >
           <PortalContainer.Provider value={dialogEl}>
-            <div className="modal-box w-11/12 max-w-5xl">
-              <div className="flex items-start justify-between gap-2">
+            <div className="modal-box flex flex-col overflow-hidden w-11/12 max-w-5xl">
+              {/* 見出しと × は固定し、表だけスクロールする（D-208） */}
+              <div className="flex shrink-0 items-start justify-between gap-2">
                 <h2 id={titleId} className="text-lg font-bold">
                   ページの描き方を比べる（{frameworkLabel}）
                 </h2>
@@ -388,15 +389,20 @@ export function RoutePlanCompare({
                   </button>
                 </form>
               </div>
-              <p className="mt-1 text-xs opacity-70">{note}</p>
-              <div className="mt-2">
-                <RoutePlanTable
-                  rows={editor.rows}
-                  status={editor.status}
-                  onSelect={editor.onSelect}
-                  onPart={editor.onPart}
-                  caption={caption}
-                />
+              <div
+                className="mt-1 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                data-modal-scroll
+              >
+                <p className="text-xs opacity-70">{note}</p>
+                <div className="mt-2">
+                  <RoutePlanTable
+                    rows={editor.rows}
+                    status={editor.status}
+                    onSelect={editor.onSelect}
+                    onPart={editor.onPart}
+                    caption={caption}
+                  />
+                </div>
               </div>
             </div>
           </PortalContainer.Provider>
