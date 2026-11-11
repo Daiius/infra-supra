@@ -20,6 +20,7 @@ import {
   type StatsView,
 } from './distribution.ts';
 import { usd } from './format.ts';
+import { Chips } from './chips.tsx';
 import { ResultAxesPanel } from './result-axes.tsx';
 import type { AxisComparison } from './results-history.ts';
 import {
@@ -86,52 +87,6 @@ export function useBreakdownPrefs() {
       return next;
     });
   return [prefs, update] as const;
-}
-
-/** 小さな選択のチップ（1 つだけ選ぶ）。 */
-export function Chips<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-  name,
-}: {
-  label: string;
-  options: readonly { value: T; label: string; title?: string }[];
-  value: T;
-  onChange: (v: T) => void;
-  /** data-chips の値（テストと見た目の確かめ用）。 */
-  name: string;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={label}
-      data-chips={name}
-      className="flex min-w-0 flex-wrap gap-1"
-    >
-      {options.map((o) => {
-        const selected = o.value === value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={selected}
-            data-chip={o.value}
-            title={o.title ?? o.label}
-            onClick={() => onChange(o.value)}
-            className={`rounded-full px-2 py-0.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-              selected
-                ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
-                : 'cursor-pointer bg-base-100 ring-1 ring-base-300 ring-inset hover:bg-base-200'
-            }`}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 /** 絞り込みの名前（注記に出す）。 */

@@ -171,7 +171,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     await finish();
     await ready();
     // 完走のダイアログにはチップも比較の図も置かない
-    expect(victory()!.querySelector('[data-chips]')).toBeNull();
+    expect(victory()!.querySelector('[data-chips="filter"]')).toBeNull();
     expect(victory()!.querySelector('[data-group-compare]')).toBeNull();
     const group = within(chips('filter'));
     expect(group.getAllByRole('button').map((b) => b.textContent)).toEqual([
@@ -247,9 +247,18 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(axes.dataset.stats).toBe('ready');
     const cash = axes.querySelector<HTMLElement>('[data-axis="cash"]')!;
     const all = cash.querySelector<HTMLElement>('[data-dist="all"]')!;
-    const seed = cash.querySelector<HTMLElement>('[data-dist="seed"]')!;
     expect(all.querySelector('[data-histogram]')).not.toBeNull();
-    expect(seed.querySelector('[data-histogram]')).not.toBeNull();
+    // 同じシードは切り替えて見る（D-204）。要素は描き直すので、チェックは後で引き直す
+    const seedRow = () => {
+      fireEvent.click(
+        axes.querySelector<HTMLElement>(
+          '[data-chips="dist-scope"] [data-chip="seed"]',
+        )!,
+      );
+      const seed = cash.querySelector<HTMLElement>('[data-dist="seed"]')!;
+      expect(seed.querySelector('[data-histogram]')).not.toBeNull();
+      return seed;
+    };
     // 件数と中央値は出すが、上位 % は出さない
     expect(all.querySelector('[data-dist-summary]')!.textContent).toContain(
       '6 件・全体の中央値は',
@@ -262,13 +271,13 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(all.querySelector('[data-dist-rank-note]')!.textContent).toBe(
       '上位 % は 10 件から出します。',
     );
-    expect(seed.querySelector('[data-dist-rank-note]')!.textContent).toBe(
-      '上位 % は 10 件から出します。',
-    );
-    expect(cash.textContent).not.toContain('参考程度');
     expect(
       all.querySelector('[data-histogram] svg')!.getAttribute('aria-label'),
     ).not.toContain('参考程度');
+    expect(seedRow().querySelector('[data-dist-rank-note]')!.textContent).toBe(
+      '上位 % は 10 件から出します。',
+    );
+    expect(cash.textContent).not.toContain('参考程度');
   });
 
   it('W-106 比較の図: 隠した構成と 0 件の構成を除いた構成ごとの行・自分の行と自分の縦の線・10 件未満の行も ※ や注記なしで描く（D-199）。フレームワークごとに切り替えられる', async () => {
@@ -582,7 +591,8 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     expect(
       axes.querySelectorAll('[data-axis-distribution-skeleton]'),
     ).toHaveLength(4);
-    expect(axes.querySelectorAll('[data-histogram-skeleton]')).toHaveLength(8);
+    // 見る分布の 1 本分（D-204）
+    expect(axes.querySelectorAll('[data-histogram-skeleton]')).toHaveLength(4);
     expect(axes.querySelector('[data-histogram]')).toBeNull();
     expect(compare().querySelector('[data-group-skeleton]')).not.toBeNull();
     expect(compare().querySelector('[data-group-mine-line]')).toBeNull();
@@ -598,7 +608,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     ).toBeNull();
     expect(
       resultAxes()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
-    ).toHaveLength(8);
+    ).toHaveLength(4);
     expect(compare().querySelector('[data-group-skeleton]')).toBeNull();
 
     // 絞り込みの切り替え中: 前の分布の棒は薄く残すが、「あなた」の印は出さない
@@ -609,7 +619,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
         resultAxes()!.closest('[data-stats-filter]')!.getAttribute('aria-busy'),
       ).toBe('true'),
     );
-    expect(resultAxes()!.querySelectorAll('[data-histogram]')).toHaveLength(8);
+    expect(resultAxes()!.querySelectorAll('[data-histogram]')).toHaveLength(4);
     expect(
       resultAxes()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
     ).toHaveLength(0);
@@ -622,7 +632,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     );
     expect(
       resultAxes()!.querySelectorAll('[data-histogram][data-has-mine="true"]'),
-    ).toHaveLength(8);
+    ).toHaveLength(4);
   });
 
   it('W-109c 比較の図は軸を切り替えている間、前の図を薄く残して自分の線と「あなた」を出さない（D-200）', async () => {
