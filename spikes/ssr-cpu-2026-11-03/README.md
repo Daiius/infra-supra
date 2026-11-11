@@ -36,6 +36,10 @@ vinext の **見える部分のマークアップは Astro とほぼ同じ**（s
 水和用に同じツリーを RSC ペイロード（エスケープされた JSON）として HTML に埋め込む分。島が無くても埋め込まれる。
 これは App Router を使う限り付いてくる費用なので、そのまま測る（転送量の仮定 60 KB にも効く点に注意）。
 
+> 表の値は、架空のユーザー名を今の `Alex Example` に替える（2026-11-11。前の名前は 1 文字長かった）前に測ったもの。
+> 今の `shared/feed.ts` で作ると、名前とハンドルが出る箇所ごとに 1 バイトずつ小さくなる（数十バイトの差で、表の読み方は変わらない）。
+> 本番の結果（`results/2026-11-11-workers-free/requests.tsv`）も替える前のコードで測った。
+
 ## 版（2026-11-03 時点の最新に固定）
 
 | | 版 |
@@ -147,6 +151,57 @@ Workers の Metrics タブの「CPU Time per execution」（分位）でも、�
   数 ms 乗っていると見られる（推測）ので、**比ではなく差で読む**: vinext は Astro より items=10 で約 8 ms、items=30 で約 10 ms 多い。
 - 本番の CPU 時間がこの差を保つなら、vinext は Free の 10 ms に近いか超える側、Astro は下回る側の見込み（推測。本番で確かめる）。
 
+## 本番の結果（2026-11-11）
+
+生の値は [`results/2026-11-11-workers-free/`](./results/2026-11-11-workers-free/)（`results.json` は GraphQL の応答・
+`windows.tsv` はサイズごとの時間の窓・`requests.tsv` は各リクエストの HTTP コード・バイト数・TTFB）。
+`runs/` は git 管理外なので、本番の 1 回分だけをここへ写した（アカウント ID・URL は含まない）。
+
+### 条件
+
+- Workers **Free**・workers.dev のサブドメイン。
+- 各アプリへ暖機 5 回の後、サイズ（items=10 → 30）ごとに **直列で各約 300 回**。
+- サイズは **時間の窓で分けた**（items=10 は 02:13:00〜02:14:59Z、items=30 は 02:15:00〜02:16:59Z。UTC）。
+- CPU 時間は GraphQL Analytics の `workersInvocationsAdaptive` の `quantiles.cpuTime*`。
+  スキーマの説明で **単位はマイクロ秒** と確かめた（下の表は ms に換算）。
+
+### CPU 時間の分位（ms）
+
+| | 回数 | p50 | p90 | p99 | p99.9 | wall p50 |
+|---|---|---|---|---|---|---|
+| Astro items=10（約 23 KB） | 300 | 2.62 | 6.19 | 20.34 | 25.39 | 3.56 |
+| Astro items=30（約 62 KB） | 308 | 3.47 | 8.19 | 21.62 | 30.02 | 4.84 |
+| vinext items=10（約 74 KB） | 301 | 18.39 | 39.71 | 100.2 | 197.45 | 20.59 |
+| vinext items=30（約 180 KB） | 298 | 31.53 | 53.76 | 91.22 | 97.07 | 34.78 |
+
+- 回数は GraphQL の `sum.requests`（全 1,207 回）。load.sh が窓の中で送ったのは各 300 回（`windows.tsv`）で、ずれの理由（標本抽出の推定か窓の端か）は未確認。全部が `status: success`・`errors` 0。
+- 手元の `requests.tsv` でも全部 HTTP 200 で、**Error 1102（exceededCpu）は 0 件**。
+- 平均 TTFB（ネットワーク込み・手元から）: Astro 137 / 131 ms、vinext 149 / 159 ms（items=10 / 30）。
+
+### 読み方
+
+- **Astro** は p50 で Free の上限 10 ms を大きく下回る（2.6〜3.5 ms）。p90 も下回るが、p99 は 20 ms を超える。
+- **vinext** は p50 で常に上限の 2〜3 倍（18〜32 ms）を使ったが、1102 で止まったリクエストは無かった。
+- Free の 10 ms は厳密な打ち切りではない。公式の limits のページ（https://developers.cloudflare.com/workers/platform/limits/ 。
+  2026-10-29 更新・2026-11-11 取得）は「Each isolate has some built-in flexibility ... infrequently runs over」とし、
+  「If your Worker starts hitting the limit consistently, its execution will be terminated」とも書く。
+  Cloudflare の社員はフォーラムで isolate ごとの「rollover bank」（使わなかった分を貯めて超過に充てる）と説明している
+  （https://community.cloudflare.com/t/worker-cpu-time-rollover/187072 。原文は未確認）。
+- 今回は 1 アプリ・1 サイズあたり 2 分・約 300 回の短い観測なので、**vinext が Free で「止まらない」とは言えない**。
+  いつ止まり始めるかの閾値を公開で実測したものは見つからなかった。
+
+### vinext が重い理由（推測）
+
+- App Router（RSC）は 1 リクエストで同じ木を 3 回扱う: RSC で木を Flight の形式に書き出す → それを読み戻して
+  react-dom/server で HTML にする → Flight を `<script>` へエスケープして HTML に埋め込む。Astro は木を HTML に 1 回書くだけ。
+- items を 10 → 30 にしたときの p50 の増え方は Astro +0.9 ms・vinext +13 ms。記事 1 件あたりの費用が 1 桁違う。
+
+### 既知の非最適化
+
+- vinext のページ（`vinext/app/feed/page.tsx`）は `generateMetadata` と本体で `buildFeedPage` を 2 回呼ぶ。
+  React の `cache()` で 1 回にできる。データ作りは軽いので、影響は 1 ms 程度の見込み（未計測）。
+- バンドルに React の開発版の印は無かった（本番ビルドで測っている）。
+
 ## 片付け
 
 ```bash
@@ -156,7 +211,12 @@ Workers の Metrics タブの「CPU Time per execution」（分位）でも、�
 
 Workers Logs は保持期間（Free 3 日）で消える。
 
+2026-11-11 の計測の後、両方の Worker は削除済み。
+
 ## 見積への戻し方
+
+> 2026-11-11 時点で、上の本番の結果はまだ見積に反映していない（どう戻すかはユーザーが論点を検討中。D-209）。
+> 以下は計測の前に書いた案。
 
 - results.sh の **items=30（≒ 60 KB）の CPU p50** を、そのフレームワークの「個人化されたページ」の `cpuMs` にする
   （今は Next.js 想定で一律 15 ms。`packages/catalog/src/templates/index.ts`）。p90 / p99 は Free の 10 ms 上限に
@@ -169,8 +229,8 @@ Workers Logs は保持期間（Free 3 日）で消える。
 
 ## 未確認
 
-- GraphQL の分位フィールドのうち公式のチュートリアルで確認できたのは `cpuTimeP50` / `cpuTimeP99` だけ。`cpuTimeP90` / `cpuTimeP999` / `wallTimeP50` は未確認
-  （失敗したら results.sh が P50/P99 だけで取り直す）。
-- 分位の **単位はマイクロ秒と想定**（未確認）。`./results.sh --schema` の説明で確かめ、違えば換算を直す。
+- ~~GraphQL の分位フィールドのうち `cpuTimeP90` / `cpuTimeP999` / `wallTimeP50` は未確認~~ → 2026-11-11 の本番で全部取れた。
+- ~~分位の単位はマイクロ秒と想定~~ → `./results.sh --schema` のスキーマの説明でマイクロ秒と確かめた（2026-11-11）。
+- vinext が Free で上限を常に超えたとき、どれだけ続けば止められるか（上の「読み方」）。
 - `workersInvocationsAdaptive` の標本抽出が数百件の規模で効くか、`datetime` の粒度（窓を分単位で切っているのはそのため）。
 - Workers Logs の CPU time のキー名。

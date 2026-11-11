@@ -1,0 +1,5 @@
+framework	worker	items	start_utc	end_utc	requests
+astro	ssr-cpu-astro	10	2026-11-11T02:13:00Z	2026-11-11T02:14:59Z	300
+vinext	ssr-cpu-vinext	10	2026-11-11T02:13:00Z	2026-11-11T02:14:59Z	300
+astro	ssr-cpu-astro	30	2026-11-11T02:15:00Z	2026-11-11T02:16:59Z	300
+vinext	ssr-cpu-vinext	30	2026-11-11T02:15:00Z	2026-11-11T02:16:59Z	300

@@ -2567,6 +2567,12 @@
 - 実装: web の `styles.css`・`privacy-policy.tsx`・`route-plan-field.tsx`・`slot-compare.tsx`・`missing-parts.tsx`（ほかは個別の上限を外しただけ）。テスト: `small-ui.smoke.test.tsx` の W-208（styles.css の規則が vh → dvh の順で層の外・`.modal-box` の行に個別の `max-h-` が残っていない）と、長い 4 つのダイアログの形（`smoke.test-helpers.tsx` の `expectFixedChrome`: 箱は flex の縦並びで中身だけスクロールし、見出しと閉じるボタンはスクロールの外。W-29 相当の small-ui・残りを選ぶ・部品の比較・W-96）。W-204 は箱のクラスの代わりに形を見る。
 - 残した点: iPhone の Safari で、ツールバーが出ている間も各ダイアログの × と下のボタンが見えることを実機で確かめる。
 
+### D-209 SSR の CPU のスパイクを本番の Workers Free で測り、記録としてリポジトリに入れた（見積への反映は未決。2026-11-11）
+
+- 何を: 同じ「個人のフィード」のページを Astro と vinext で作り、Workers Free（workers.dev）で items=10 / 30 を各約 300 回ずつ直列に送り、GraphQL Analytics の CPU 時間の分位を取った。仕掛け・結果・読み方は [`spikes/ssr-cpu-2026-11-03/README.md`](../../spikes/ssr-cpu-2026-11-03/README.md)、生の値は同じ場所の `results/2026-11-11-workers-free/`。
+- 結果の要点: CPU の p50 は Astro 2.6 / 3.5 ms、vinext 18.4 / 31.5 ms（items=10 / 30）。全 1,207 回が 200 で、Error 1102 は 0 件。短い観測なので、vinext が Free で止まらないとは言えない。
+- 未決: テンプレートの SSR の CPU（15 ms）とフレームワークごとの倍率（RS-06）へどう戻すかは、ユーザーが検討中。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
