@@ -15,6 +15,9 @@ import { describe, expect, it } from 'vitest';
 import {
   activeLane,
   ARROW,
+  COMPACT_TEXT,
+  compactLineWidth,
+  compactText,
   diagramArchitecture,
   diagramComponents,
   diagramModel,
@@ -555,6 +558,86 @@ describe('diagramModel', () => {
     const through = lanesThrough(m, worker.id);
     expect(through).toContain('ssr');
     expect(through).toContain('api');
+  });
+});
+
+describe('縦の図の箱の短い名前の行（compactText。D-213 の補足）', () => {
+  // 今ある構成 × フレームワーク × 部品（1 つずつ替える）の縦の図の箱の短い名前
+  const shorts = new Set<string>();
+  for (const sc of Object.values(SCENARIOS))
+    for (const fw of frameworksOf(sc).allowed as FrameworkId[])
+      STACKS.forEach((_, i) => {
+        const slots = setupSlots(sc, i, fw);
+        const variants: Record<string, string>[] = [
+          {},
+          ...slots.flatMap((x) => x.options.map((o) => ({ [x.slot]: o.id }))),
+        ];
+        for (const v of variants) {
+          const comps = diagramComponents(sc, i, fw, v);
+          const build = (c: Partial<Record<string, string>>) =>
+            diagramArchitecture(sc, i, fw, c);
+          const { ghosts } = slotBoxes(
+            build,
+            comps,
+            setupSlots(sc, i, fw, comps),
+          );
+          const m = diagramModel(
+            build(comps),
+            pageWireframes(sc, fw),
+            'vertical',
+            ghosts,
+            fw,
+          );
+          for (const n of m.nodes) shorts.add(n.short);
+        }
+      });
+  const words = (s: string): string[] => s.match(/[A-Za-z0-9.+\-/]+/g) ?? [];
+
+  it('どの名前も 3 行以内で、行は箱の幅に収まり（印のある箱は 3 行なら 1 行目が印を避け）、英数字の語を途中で切らない', () => {
+    expect(shorts.size).toBeGreaterThan(30);
+    for (const short of shorts)
+      for (const mark of [false, true]) {
+        const t = compactText(short, mark);
+        const where = `${short}（印 ${mark}）`;
+        expect(t.lines.length, where).toBeGreaterThan(0);
+        expect(t.lines.length, where).toBeLessThanOrEqual(COMPACT_TEXT.lines);
+        expect(COMPACT_TEXT.sizes as readonly number[]).toContain(t.size);
+        t.lines.forEach((l, i) =>
+          expect(
+            compactLineWidth(l, t.size),
+            `${where} ${l}`,
+          ).toBeLessThanOrEqual(
+            i === 0 && mark && t.lines.length === COMPACT_TEXT.lines
+              ? COMPACT_TEXT.firstWithMark
+              : COMPACT_TEXT.width,
+          ),
+        );
+        if (!t.truncated) {
+          // 省略しないときは、空白を除けば名前そのままで、英数字の語はどれも 1 つの行にある
+          expect(t.lines.join('').replace(/ /g, ''), where).toBe(
+            short.replace(/ /g, ''),
+          );
+          for (const w of words(short))
+            expect(
+              t.lines.some((l) => words(l).includes(w)),
+              `${where} ${w}`,
+            ).toBe(true);
+        } else expect(t.lines.at(-1)!.endsWith('…'), where).toBe(true);
+      }
+  });
+
+  it('報告のあった名前: 単語の途中で折らず、長い名前は小さい字か「…」で 3 行に収める', () => {
+    expect(compactText('Firebase Hosting', true)).toEqual({
+      lines: ['Firebase', 'Hosting'],
+      size: 10,
+      truncated: false,
+    });
+    expect(compactText('Firestore', true).lines).toEqual(['Firestore']);
+    const r2 = compactText('R2 公開バケットのキャッシュ', true);
+    expect(r2.lines.length).toBeLessThanOrEqual(3);
+    expect(r2.lines[0]!.startsWith('R2 ')).toBe(true);
+    // 小さい仮名・長音は行頭に置かない
+    for (const l of r2.lines.slice(1)) expect(l).not.toMatch(/^[ーッュャョ]/);
   });
 });
 

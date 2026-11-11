@@ -976,6 +976,151 @@ export function shortLabel(label: string): string {
   return s === '' ? label : s;
 }
 
+/**
+ * 縦の図の小さい箱に短い名前を描く形（D-213 の補足）。行に分け、字の大きさを決め、収まらなければ末尾を「…」にする。
+ * 折り返しをブラウザに任せない: line-clamp（overflow: hidden）は WebKit の foreignObject の中で独自のレイヤーになり、
+ * 印の余白で狭くなった幅では英単語の途中で折れた（「Firebas / e」）。英数字の語は途中で切らず、和文は字ごとに切る
+ * （小さい仮名・長音・閉じ括弧は行頭に置かない）。字の幅は推定（em）で、実際より少し広めに見積もる。
+ */
+export const COMPACT_TEXT = {
+  /** 1 行の幅の上限（箱 56 − 枠 2 × 2 − 左右の余白 2 × 2）。 */
+  width: 48,
+  /**
+   * 右上の印がある箱で 3 行になるときの 1 行目（印は箱の角に重ねて描き、箱の内側は右端から 8・上端から 8 まで。中央寄せの行がそこへ届かない幅）。
+   * 2 行までは行を縦の真ん中に置くので、1 行目は印より下に来る。
+   */
+  firstWithMark: 40,
+  /** 行の数の上限（箱の高さ 40 に、行の高さ 1.25 で 3 行）。 */
+  lines: 3,
+  /**
+   * 字の大きさ（図の座標。縦の図は 1.5 倍まで広げて描く）。収まらなければ小さい方にする（8 は「PostgreSQL」のような長い 1 語だけ）。
+   */
+  sizes: [10, 9, 8],
+} as const;
+
+const NO_LINE_START = new Set([
+  ...'ーッュャョァィゥェォヮっゅゃょぁぃぅぇぉゎ、。）」』・',
+]);
+
+/** 1 字の幅（em。推定）。 */
+function charEm(c: string): number {
+  if (c === ' ') return 0.3;
+  if (/[ilj|.,:;'!]/.test(c)) return 0.25;
+  if (/[tfrI()\-/]/.test(c)) return 0.35;
+  if (/[mwMW]/.test(c)) return 0.85;
+  if (/[A-Z]/.test(c)) return 0.7;
+  if (/[a-z0-9]/.test(c)) return 0.58;
+  // 和文・全角・記号（→ など）
+  return 1;
+}
+
+const textEm = (s: string) => [...s].reduce((sum, c) => sum + charEm(c), 0);
+
+/** 改行してよい単位に分ける（英数字の語・空白・和文の 1 字。行頭に置かない字は前に付ける）。 */
+function breakUnits(text: string): string[] {
+  const units: string[] = [];
+  for (const m of text.matchAll(/[A-Za-z0-9.+\-/]+| +|./gu)) {
+    const u = m[0];
+    if (units.length > 0 && NO_LINE_START.has(u)) units[units.length - 1] += u;
+    else units.push(u);
+  }
+  return units;
+}
+
+/**
+ * 短い名前を行に分ける（字の大きさ size・1 行目の幅 first）。語が 1 行に収まらない・行が上限を超えるなら null。
+ */
+function layoutLines(
+  text: string,
+  size: number,
+  first: number,
+): string[] | null {
+  const lines: string[] = [];
+  let line = '';
+  const limit = () => (lines.length === 0 ? first : COMPACT_TEXT.width);
+  for (const u of breakUnits(text)) {
+    if (line === '' && u.trim() === '') continue;
+    if (textEm(line + u) * size <= limit()) {
+      line += u;
+      continue;
+    }
+    if (u.trim() === '') {
+      // 空白で行を替える
+      lines.push(line);
+      line = '';
+      continue;
+    }
+    if (line !== '') lines.push(line.trimEnd());
+    line = u;
+    if (textEm(u) * size > limit()) return null;
+  }
+  if (line.trim() !== '') lines.push(line.trimEnd());
+  return lines.length <= COMPACT_TEXT.lines ? lines : null;
+}
+
+/** 3 行で、1 行目が右上の印に届く幅か。 */
+const needsShortFirst = (
+  lines: readonly string[],
+  size: number,
+  mark: boolean,
+) =>
+  mark &&
+  lines.length === COMPACT_TEXT.lines &&
+  textEm(lines[0]!) * size > COMPACT_TEXT.firstWithMark;
+
+/**
+ * 縦の図の箱の短い名前の描き方。mark は右上の印（⇄・!）がある箱。大きい字で収まればそれ、だめなら小さい字、
+ * それでも収まらなければ小さい字で行の上限まで詰め、最後の行の末尾を「…」にする（読み上げの名前と吹き出しは全部の名前のまま）。
+ */
+export function compactText(
+  short: string,
+  mark: boolean,
+): { lines: string[]; size: number; truncated: boolean } {
+  // 1 行目が印に届くのは 3 行のとき（行を縦の真ん中に置くので、2 行までは 1 行目が印より下に来る）。3 行になるときだけ 1 行目を短くする
+  const first = mark ? COMPACT_TEXT.firstWithMark : COMPACT_TEXT.width;
+  for (const size of COMPACT_TEXT.sizes) {
+    const wide = layoutLines(short, size, COMPACT_TEXT.width);
+    if (wide && !needsShortFirst(wide, size, mark))
+      return { lines: wide, size, truncated: false };
+    const lines = layoutLines(short, size, first);
+    if (lines) return { lines, size, truncated: false };
+  }
+  // 小さい字で行の上限まで詰め、最後の行を「…」で止める（1 行目に収まらない語だけは字ごとに分ける）
+  const size = COMPACT_TEXT.sizes[COMPACT_TEXT.sizes.length - 1]!;
+  const units = breakUnits(short).flatMap((u) =>
+    textEm(u) * size > first ? [...u] : [u],
+  );
+  const lines: string[] = [];
+  let line = '';
+  const limit = () => (lines.length === 0 ? first : COMPACT_TEXT.width);
+  for (const u of units) {
+    if (line === '' && u.trim() === '') continue;
+    if (textEm(line + u) * size <= limit()) {
+      line += u;
+      continue;
+    }
+    if (lines.length === COMPACT_TEXT.lines - 1) {
+      // 最後の行: 入るだけ字を足して「…」で止める
+      for (const c of u) {
+        if (textEm(line + c + '…') * size > limit()) break;
+        line += c;
+      }
+      while (line !== '' && textEm(line + '…') * size > limit())
+        line = [...line].slice(0, -1).join('');
+      lines.push(`${line.trimEnd()}…`);
+      return { lines, size, truncated: true };
+    }
+    if (line.trim() !== '') lines.push(line.trimEnd());
+    line = u.trim() === '' ? '' : u;
+  }
+  if (line.trim() !== '') lines.push(line.trimEnd());
+  return { lines, size, truncated: false };
+}
+
+/** 縦の図の箱の 1 行の推定の幅（px。テスト用）。 */
+export const compactLineWidth = (line: string, size: number) =>
+  textEm(line) * size;
+
 /** ノードを通る流れ（入る線と出る線の流れ。LANE_ORDER の順）。 */
 export function lanesThrough(model: DiagramModel, id: string): LaneId[] {
   const set = new Set(
