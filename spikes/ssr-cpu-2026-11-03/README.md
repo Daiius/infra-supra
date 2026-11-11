@@ -40,6 +40,32 @@ vinext の **見える部分のマークアップは Astro とほぼ同じ**（s
 > 今の `shared/feed.ts` で作ると、名前とハンドルが出る箇所ごとに 1 バイトずつ小さくなる（数十バイトの差で、表の読み方は変わらない）。
 > 本番の結果（`results/2026-11-11-workers-free/requests.tsv`）も替える前のコードで測った。
 
+### 本家の Next.js との比べ（2026-11-11・手元）
+
+本家の Next.js（App Router）でも、HTML が RSC の埋め込みで同じように大きくなるかを手元で確かめた。
+`nextjs/` は vinext と同じページ（`app/`・`components/` は vinext の写し。`"use client"` 無し・`dynamic = 'force-dynamic'`・
+`buildFeedPage` の 2 回呼びも同じ）を Next.js 16.4.6 で作ったもの。`next build`（Turbopack）→ `next start`（Node）で
+`./local-bench.sh --apps nextjs` を流した。内訳は `html-size.mjs`（正規表現で `<script>` 要素を数える目安）。
+Astro・vinext の行は 2026-11-03 の手元の HTML の見本（`runs/local-*`）を同じ道具で数えた値。
+
+| | items=10 全体 | 見える部分（script を除く） | script（うち RSC の埋め込み） | 全体 ÷ 見える部分 |
+|---|---|---|---|---|
+| Astro | 23,684 B | 23,684 B | 0 B | 1.00 |
+| vinext 1.4.1 | 76,207 B | 25,380 B | 50,827 B（`vinext.navigationRuntime` の `rsc` 49,227 B） | 3.00 |
+| Next.js 16.4.6 | 71,195 B | 25,146 B | 46,049 B（`self.__next_f` 45,380 B） | 2.83 |
+
+| | items=30 全体 | 見える部分（script を除く） | script（うち RSC の埋め込み） | 全体 ÷ 見える部分 |
+|---|---|---|---|---|
+| Astro | 62,956 B | 62,956 B | 0 B | 1.00 |
+| vinext 1.4.1 | 184,632 B | 66,572 B | 118,060 B（116,460 B。2 つの script に分かれる） | 2.77 |
+| Next.js 16.4.6 | 179,469 B | 66,338 B | 113,131 B（`self.__next_f` 112,462 B） | 2.71 |
+
+- Next.js も **同じように約 2.7〜2.8 倍** になる。RSC の埋め込みは App Router の性質で、vinext に固有のものではない。
+- Next.js は vinext より 4〜6 KB（6〜8%）小さい。埋め込みの中身はどちらも同じ Flight の行（`\"` でエスケープした文字列）で、
+  vinext は境界の部品（`LayoutSegmentProvider`・`BfcacheChildrenBoundary`・`Unauthorized` / `Forbidden` / `NotFound` の境界・
+  `AppRouterScrollTarget` など）の参照の行が多く、`\\` のエスケープも多い（推測。items=10 の埋め込みの先頭の行とエスケープの数を比べただけ）。
+- Next.js の行は名前を `Alex Example` に替えた後のコードで測ったので、vinext より名前の分（数十バイト）小さく出る。表の読み方は変わらない。
+
 ## 版（2026-11-03 時点の最新に固定）
 
 | | 版 |
@@ -53,6 +79,7 @@ vinext の **見える部分のマークアップは Astro とほぼ同じ**（s
 | vite | 8.3.5 |
 | wrangler | 4.156.2 |
 | compatibility_date | 2026-11-02（`nodejs_compat`） |
+| next（`nextjs/`。手元の比べだけ・2026-11-11 時点の最新の安定版） | 16.4.6（react / react-dom 19.3.1） |
 
 ロックファイル（各 `pnpm-lock.yaml`）も入れてある。
 
@@ -63,13 +90,16 @@ spikes/ssr-cpu-2026-11-03/
   shared/feed.ts     両アプリが import する決定論的データと CSS
   astro/             Astro（/feed）。Worker 名 ssr-cpu-astro
   vinext/            vinext App Router（/feed）。Worker 名 ssr-cpu-vinext
+  nextjs/            本家の Next.js App Router（/feed）。手元の next start だけ（deploy しない）
   deploy.sh          build → wrangler deploy（--check で中身だけ表示）
   load.sh            サイズごとに直列で 300 回ずつ送る
   results.sh         GraphQL Analytics API から CPU 時間の分位を取る
-  local-bench.sh     ローカル（wrangler dev）での相対比較
+  local-bench.sh     ローカル（wrangler dev / next start）での相対比較と HTML の大きさ
+  html-size.mjs      HTML の大きさの内訳（全体・script を除く・RSC の埋め込み）
+  results/           本番の結果のうち残すもの（runs/ は git 管理外）
 ```
 
-- 2 つのアプリはそれぞれ独立した pnpm のルート（各ディレクトリに `pnpm-workspace.yaml`）。リポジトリ直下の
+- 3 つのアプリはそれぞれ独立した pnpm のルート（各ディレクトリに `pnpm-workspace.yaml`）。リポジトリ直下の
   workspace は `packages/*` だけなので、ルートの `pnpm install` / `typecheck` / `test` には入らない。
 - 両方の `wrangler.jsonc` で `observability.enabled = true`（Workers Logs に CPU time / Wall time が残る。Free でも可・1 日 20 万件・保持 3 日）。
 - Astro はセッション（KV）と Images のバインディングを切ってある（`astro.config.mjs`）。既定のままだと deploy で KV namespace が自動作成されるため。
@@ -133,7 +163,8 @@ Workers の Metrics タブの「CPU Time per execution」（分位）でも、�
 ## ローカルでの相対比較（参考）
 
 ```bash
-./local-bench.sh --requests 100     # build → wrangler dev → 計測 → 停止 をアプリごとに
+./local-bench.sh --requests 100     # build → wrangler dev / next start → 計測 → 停止 をアプリごとに
+./local-bench.sh --apps nextjs      # 1 つだけ（--port で待ち受けのポートを替えられる。既定 8799）
 ```
 
 ループバックで応答完了までの時間（`curl` の `time_total`）を測る。**手元の CPU と本番の Workers は違い、
@@ -150,6 +181,10 @@ Workers の Metrics タブの「CPU Time per execution」（分位）でも、�
 - Astro はサイズを 3 倍にしても 0.3 ms しか増えない。手元の値には `wrangler dev` の前段（プロキシ）と curl の固定の時間が
   数 ms 乗っていると見られる（推測）ので、**比ではなく差で読む**: vinext は Astro より items=10 で約 8 ms、items=30 で約 10 ms 多い。
 - 本番の CPU 時間がこの差を保つなら、vinext は Free の 10 ms に近いか超える側、Astro は下回る側の見込み（推測。本番で確かめる）。
+
+2026-11-11 の手元の Next.js 16.4.6（`next start`・Node。各 100 回・中央値 / p90）: items=10 は 4.5 / 5.7 ms、items=30 は 6.7 / 8.1 ms。
+**wrangler dev（workerd とその前段のプロキシ）を通らないので、上の表の Astro・vinext とは同じ物差しではない**（日も違う）。
+Next.js と workerd 上の vinext の CPU を比べたいなら、同じ実行環境で測り直す必要がある。
 
 ## 本番の結果（2026-11-11）
 

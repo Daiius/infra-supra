@@ -2571,6 +2571,7 @@
 
 - 何を: 同じ「個人のフィード」のページを Astro と vinext で作り、Workers Free（workers.dev）で items=10 / 30 を各約 300 回ずつ直列に送り、GraphQL Analytics の CPU 時間の分位を取った。仕掛け・結果・読み方は [`spikes/ssr-cpu-2026-11-03/README.md`](../../spikes/ssr-cpu-2026-11-03/README.md)、生の値は同じ場所の `results/2026-11-11-workers-free/`。
 - 結果の要点: CPU の p50 は Astro 2.6 / 3.5 ms、vinext 18.4 / 31.5 ms（items=10 / 30）。全 1,207 回が 200 で、Error 1102 は 0 件。短い観測なので、vinext が Free で止まらないとは言えない。
+- 追記（同日・ユーザーの決定で手元だけ）: 本家の Next.js 16.4.6 で同じページを作って `next start` で測ると、HTML は見える部分の 2.7〜2.8 倍（vinext は 2.8〜3.0 倍）で、RSC の埋め込みで大きくなるのは App Router の性質と確かめた（vinext より 4〜6 KB 小さい）。
 - 未決: テンプレートの SSR の CPU（15 ms）とフレームワークごとの倍率（RS-06）へどう戻すかは、ユーザーが検討中。
 
 ## 未決（grill で詰める）
