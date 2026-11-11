@@ -4,6 +4,7 @@ import type { ResultAxisId } from 'game';
 import { useEffect, useState, type ReactNode } from 'react';
 import { HistogramChart, HistogramSkeleton } from './charts.tsx';
 import { Chips } from './chips.tsx';
+import { Info } from './info.tsx';
 import {
   MIN_RANKED_COUNT,
   rankBasisOf,
@@ -154,7 +155,10 @@ function useDistScope() {
   return [scope, update] as const;
 }
 
-/** 一番上の注記（どちらと比べているか。prd/15 §3.1）。 */
+/**
+ * 一番上の注記（どちらと比べているか。prd/15 §3.1）。分布と比べるときは 1 行だけにし、数え方の詳しい説明は ⓘ に畳む
+ * （完走のダイアログで最初に見える軸が 1 つだけになっていた。D-207）。
+ */
 function compareNote(
   stats: StatsView,
   localCount: number,
@@ -165,20 +169,13 @@ function compareNote(
       ? `この端末に残した過去の完走（同じシナリオの ${localCount} 回）と比べています。`
       : 'この端末に、比べる過去の完走はまだありません。次に完走すると、自己ベスト・前回との差・順位を出します。';
   switch (stats.status) {
-    case 'ready': {
-      const v = stats.view;
+    case 'ready':
       return [
-        v.mock
-          ? '開発用の架空の分布です（遊んだ人の結果ではありません）。'
-          : '',
+        stats.view.mock ? '開発用の架空の分布です。' : '',
         filterName
-          ? `${filterName}の完走のプレイの分布と比べています（見るための絞り込みです。「★ 上位」の印と花火は全部の構成の分布で決めます）。`
-          : `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます（④ 費用の合計は上位を数えず、分布の中の位置だけを示します）。下の切り替えは見る分布を選ぶだけで、「上位」の数え方は変えません。`,
-        v.included
-          ? 'あなたのプレイも数に入っています。'
-          : 'あなたのプレイを 1 件足して数えています。',
+          ? `${filterName}の完走の分布と比べています。`
+          : '集計した完走のプレイの分布と比べています。',
       ].join('');
-    }
     case 'loading':
       return `集計の分布を読み込んでいます。${local}`;
     case 'failed':
@@ -188,6 +185,50 @@ function compareNote(
     case 'off':
       return local;
   }
+}
+
+/** 分布との比べ方の詳しい説明（注記の横の ⓘ。D-207）。 */
+function CompareInfo({
+  view,
+  filterName,
+}: {
+  view: DistributionView;
+  filterName?: string | undefined;
+}) {
+  return (
+    <Info label="分布との比べ方の説明">
+      <ul className="list-disc space-y-1 pl-5" data-compare-detail>
+        {view.mock && (
+          <li>開発用の架空の分布です（遊んだ人の結果ではありません）。</li>
+        )}
+        <li>
+          同じシードと全シードの 2 つの分布で、上位 {TOP_PERCENT}%
+          以内に入った軸を「上位」に数えます（「★ 上位」の印と花火の段）。上位 %
+          は {MIN_RANKED_COUNT} 件から出します。
+        </li>
+        <li>
+          ④
+          費用の合計は高い・低いで良し悪しを付けないので、上位を数えず、分布の中の位置だけを示します。
+        </li>
+        <li>
+          「見る分布」の切り替え（全シード /
+          同じシード）は見る分布を選ぶだけで、「上位」の数え方は変えません。
+        </li>
+        {filterName && (
+          <li>
+            {filterName}
+            の絞り込みは見るためのものです。「★
+            上位」の印と花火は全部の構成の分布で決めます。
+          </li>
+        )}
+        <li>
+          {view.included
+            ? 'あなたのプレイも数に入っています。'
+            : 'あなたのプレイを 1 件足して数えています。'}
+        </li>
+      </ul>
+    </Info>
+  );
 }
 
 export function ResultAxesPanel({
@@ -234,8 +275,15 @@ export function ResultAxesPanel({
       data-result-axes
       data-stats={stats.status}
     >
-      <p className="mb-2 text-xs opacity-70" data-result-compare-note>
-        {compareNote(stats, count, filter?.name)}
+      <p
+        className="mb-2 text-xs"
+        data-result-compare-note
+        data-self={dist ? (dist.included ? 'included' : 'added') : undefined}
+      >
+        <span className="opacity-70">
+          {compareNote(stats, count, filter?.name)}
+        </span>
+        {dist && <CompareInfo view={dist} filterName={filter?.name} />}
       </p>
       {children}
       {dist && (

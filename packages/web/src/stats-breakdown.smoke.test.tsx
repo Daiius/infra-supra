@@ -5,7 +5,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { newSave, replaySave, STACKS, withTurn, type SaveData } from 'game';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STATS_BREAKDOWN_KEY } from './distribution.ts';
-import { renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
+import { infoDialog, renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -189,6 +189,19 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
         resultAxes()!.querySelector('[data-result-compare-note]')!.textContent,
       ).toContain('同じインフラ（Cloudflare Paid + vinext）'),
     );
+    // 絞り込みは見るためだけ、という説明は注記の横の ⓘ に畳む（D-207）
+    fireEvent.click(
+      within(resultAxes()!).getByRole('button', {
+        name: '分布との比べ方の説明',
+      }),
+    );
+    expect(
+      infoDialog()!.querySelector('[data-compare-detail]')!.textContent,
+    ).toContain(
+      '同じインフラ（Cloudflare Paid + vinext）の絞り込みは見るためのものです',
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(infoDialog()).toBeNull();
     const byStack = callsTo(fetch, '/api/results/distribution').at(-1)!;
     expect(byStack.searchParams.get('stack')).toBe(OWN_STACK);
     expect(byStack.searchParams.has('framework')).toBe(false);

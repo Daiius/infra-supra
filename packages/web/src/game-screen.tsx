@@ -1,5 +1,5 @@
 // ゲームモードの運営中の画面（月の報告・行動・推移・結果）。App から分けて読む（始める画面の初回の読み込みに含めない）。
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   isPolicyViolation,
   policyCauseOf,
@@ -69,7 +69,7 @@ import {
   type AxisComparison,
   type ResultEntry,
 } from './results-history.ts';
-import { Info } from './info.tsx';
+import { Info, PortalContainer } from './info.tsx';
 import { eventCategory, EventIcon } from './event-icons.tsx';
 import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
@@ -416,7 +416,13 @@ function VictoryCelebration({
   const [engine] = useState(() => new FireworksEngine());
   const [open, setOpen] = useState(true);
   const [afterglow, setAfterglow] = useState(false);
-  const ref = useRef<HTMLDialogElement>(null);
+  const ref = useRef<HTMLDialogElement | null>(null);
+  // 4 軸の欄の ⓘ（D-207）の説明のダイアログを、このダイアログの中に描く（info.tsx の PortalContainer）
+  const [dialogEl, setDialogEl] = useState<HTMLDialogElement | null>(null);
+  const dialogRef = useCallback((el: HTMLDialogElement | null) => {
+    ref.current = el;
+    setDialogEl(el);
+  }, []);
   useEffect(() => {
     const d = ref.current;
     if (!d || d.open) return;
@@ -434,7 +440,7 @@ function VictoryCelebration({
     <>
       {open && (
         <dialog
-          ref={ref}
+          ref={dialogRef}
           className="modal"
           // 花火が映える暗い背景
           style={{ backgroundColor: 'rgba(6, 8, 22, 0.86)' }}
@@ -462,13 +468,15 @@ function VictoryCelebration({
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-5">
-              <ResultAxesPanel
-                comparisons={comparisons}
-                stats={stats}
-                outages={state.outages}
-                cashGuide={cashGuide}
-                size="lg"
-              />
+              <PortalContainer.Provider value={dialogEl}>
+                <ResultAxesPanel
+                  comparisons={comparisons}
+                  stats={stats}
+                  outages={state.outages}
+                  cashGuide={cashGuide}
+                  size="lg"
+                />
+              </PortalContainer.Provider>
             </div>
             <div className="modal-action shrink-0 px-6 pb-6">
               <form method="dialog">
