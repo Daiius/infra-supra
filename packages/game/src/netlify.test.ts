@@ -110,9 +110,10 @@ describe('Netlify の構成', () => {
   it('Pro は使い切っても止まらず、補充の分だけ請求が増える（Vercel Pro の従量の CDN より安い）', () => {
     const s = doNothing(PRO, 1);
     expect(s.history.every((h) => h.status !== 'down')).toBe(true);
-    const credit = s.history[0]!.premises.find(
-      (p) => p.id === 'credit:netlify:pro:monthly-credits',
-    )!;
+    // 転送を圧縮後の大きさにして（D-211）1 か月目はクレジットに収まるようになったので、使い切る月を探す
+    const credit = s.history
+      .flatMap((h) => h.premises)
+      .find((p) => p.id === 'credit:netlify:pro:monthly-credits' && p.hit)!;
     expect(credit).toMatchObject({ effect: 'cost', hit: true });
     const total = (st: ReturnType<typeof doNothing>) =>
       st.history.reduce((a, h) => a + h.infraCost, 0);

@@ -18,9 +18,10 @@ const TRANSFER: PlanInput['meters'][number] = {
   label: '転送量（さくらの VPS: 転送量無制限）',
   resource: 'egress-gb',
   unit: 'gb',
-  premise: 'さくらの VPS は転送量無制限（ただし回線は 100 Mbps の共有）',
+  premise:
+    'さくらの VPS は転送量無制限（ただし回線は 100 Mbps の共有）。転送の大きさは圧縮後で数えます（D-211）。nginx の gzip は既定で off（gzip_types の既定も text/html だけ）なので、JS・CSS・JSON も圧縮して配る設定にしている前提です。next start は既定で gzip で圧縮します。@astrojs/node が自分で圧縮するかは未確認です',
   pricing: { model: 'flat', per: 1, unitPrice: 0 },
-  sourceIds: ['spec'],
+  sourceIds: ['spec', 'nginxGzip', 'nextCompress'],
 };
 
 /** 年額（12 か月一括。月額の 11 か月分）の支払い（D-97）。 */
@@ -58,6 +59,15 @@ export const sakuraVps: PriceBookInput = {
   retrievedAt: R,
   sources: {
     spec: src('https://vps.sakura.ad.jp/specification/'),
+    // 圧縮の既定（2026-11-11 に原文で確認。D-211）: nginx の gzip は「Default: gzip off;」、next start は既定で gzip
+    nginxGzip: {
+      url: 'https://nginx.org/en/docs/http/ngx_http_gzip_module.html',
+      retrievedAt: '2026-11-11',
+    },
+    nextCompress: {
+      url: 'https://nextjs.org/docs/app/api-reference/config/next-config-js/compress',
+      retrievedAt: '2026-11-11',
+    },
     // Astro の記事を Node のメモリにキャッシュする形（2026-11-03 に原文で確認。D-103）
     astroCaching: {
       url: 'https://docs.astro.build/en/guides/caching/',

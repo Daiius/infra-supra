@@ -148,6 +148,51 @@ CDN が無い構成は、再生成を月の数のまま流す（変えていな�
   枠 `N = 1 か月 / max(T, m 分)`、回数 `N × (1 − e^(−U / N))`（枠に更新が 1 回でもあれば 1 回。更新は一様に到着すると仮定）、時間 `回数 × ⌈m⌉`。
   経路を持たないノード `ci-build` が `build-minutes`（× `cpusPerBuild`）として数える。
 
+### 2.1 大きさの定義: 転送の大きさ（圧縮後。D-211・2026-11-11）
+
+`size(k)`（`processing.responseKB`・`shellKB`・`assets.sizeKB`・`images.sizeKB`）は**転送の大きさ**で持つ。HTML・JSON・JS・CSS は
+**圧縮後**（gzip・Brotli で送るときのバイト数）、画像は**配るファイルそのまま**（JPEG・WebP・AVIF は圧縮済みで、送るときにさらに縮めない）。
+DB → アプリの応答（`db.responseKBPerQuery`）は内部の転送としてそのまま。計算の仕組みは変えず、テンプレートの値だけを圧縮後に直した
+（圧縮の比を式の中で掛けない）。転送（egress・CDN の転送・VPS の回線）・ISR の読み書きの 8 KB 単位・S3 の ISR のキャッシュ・
+1 ページの通信量（ゲームの表示）がすべてこの値から出る。
+
+事業者は圧縮後のバイトで数え、自動で圧縮する（2026-11-11 に原文で確認）:
+
+| 事業者 | 何が書かれているか | 出典 |
+|---|---|---|
+| Vercel | Gzip・Brotli に対応し、`Accept-Encoding` があれば `text/html`・`json`・`javascript`・`css` などを自動で圧縮する（「Vercel helps reduce data transfer … by supporting both Gzip and Brotli compression」）。画像（JPEG・PNG・WebP）は圧縮しない | [CDN Compression](https://vercel.com/docs/how-vercel-cdn-works/compression) |
+| Vercel の ISR | 読み書きは 8 KB 単位。「Automatic compression of ISR writes helps keep costs down」（書き込みは圧縮して数える） | [ISR Usage and Pricing](https://vercel.com/docs/incremental-static-regeneration/limits-and-pricing) |
+| Cloudflare | ブラウザが対応していれば HTML・CSS・JavaScript・JSON などを Gzip・Brotli・Zstandard で返す | [Content compression](https://developers.cloudflare.com/speed/optimization/content/compression/) |
+| CloudFront | 「Compress objects automatically」で gzip・Brotli（1,000 B〜10 MB・`text/html`・`application/json` など）。「the cost of CloudFront data transfer is based on the total amount of data served. Serving compressed objects can be less expensive」 | [Serve compressed files](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/ServingCompressedFiles.html) |
+| Next.js（`next start`） | `compress` は既定で on（「By default, Next.js uses gzip to compress rendered content and static files when using next start or a custom server」） | [compress](https://nextjs.org/docs/app/api-reference/config/next-config-js/compress) |
+| nginx | `gzip` の既定は off、`gzip_types` の既定は `text/html` だけ | [ngx_http_gzip_module](https://nginx.org/en/docs/http/ngx_http_gzip_module.html) |
+
+- **確かめていないもの**: Amplify Hosting・Firebase Hosting が自分で圧縮するか（Amplify の Next.js の対応のページ・Firebase Hosting の
+  キャッシュと設定のページに記載なし）。どちらも後ろの Next.js（`next start` 相当）が既定で圧縮するので、HTML・JSON は圧縮後とみなす。
+- **圧縮しない構成**（行動・部品にはしない。前提の文に添えるだけ）: さくらの VPS の nginx は既定で gzip が off なので、圧縮して配る設定に
+  している前提にする（さくらの VPS の転送量の前提の文）。`next start` は自分で圧縮する。`@astrojs/node` が自分で圧縮するかは未確認。
+
+**テンプレートの値**（ゲーム上の仮定。`catalog/src/templates/` の `ARTICLE_TRANSFER_KB`・`BUSINESS_TRANSFER_KB`）:
+
+| 値 | 記事コミュニティ（前 → 後） | 業務アプリ（前 → 後） | 導き方 |
+|---|---|---|---|
+| ページの HTML | 60 → **9** KB | 40 → **6** KB | 圧縮前 × 約 0.15 |
+| API の応答（JSON） | 5 → **1.5** KB | 8 → **2.5** KB（帳票の依頼 30 → **9**） | 圧縮前 × 約 0.3 |
+| SPA の中身の API | 10 → **3** KB | 10 → **3** KB | 圧縮前 × 約 0.3 |
+| SPA のシェル | 5 → **2** KB | 5 → **2** KB | 小さいファイルは縮みにくい |
+| JS・CSS（1 ファイル） | 40 KB × 10（**据え置き**） | 40 KB × 8（**据え置き**） | 圧縮後の値とみる |
+| 画像・DB の応答 | そのまま | そのまま | 配るファイルそのまま・内部の転送 |
+
+- **HTML の比**: SSR の CPU のスパイク（[`spikes/ssr-cpu-2026-11-03`](../spikes/ssr-cpu-2026-11-03/README.md)）の同じページの HTML を
+  `gzip -9` で縮めた実測: Astro 23.7 KB → 4.6 KB（items=10）・63.0 KB → 8.8 KB（items=30）。記事 1 本のページ（60 KB）は items=30 に近いので約 0.15。
+  Brotli はさらに小さい（Vercel の文書で HTML は gzip より 21% 小さい）が、gzip の側（大きい側）で置く。
+- **JSON の比**: 実測は無い。小さい JSON はマークアップより繰り返しが少ないので、HTML より縮みにくい 0.3 と置いた。
+- **照合**: HTTP Archive Web Almanac 2024 の HTML の転送の中央値は 18 KB（[Page Weight](https://almanac.httparchive.org/en/2024/page-weight) の
+  ホームページの内訳。モバイル・デスクトップとも）・32 KB（モバイル）/ 33 KB（デスクトップ）（[Markup](https://almanac.httparchive.org/en/2024/markup) の
+  文書の大きさ。圧縮を含む転送）。取得 2026-11-11。9 KB はその下側で、記事 1 本のページとして軽い側。
+- **JS・CSS を据え置く根拠**: 同じ Page Weight の章の中央値は JavaScript 約 570 KB（モバイル）・CSS 約 75 KB（モバイル。すべてのページ）。
+  ページあたり 400 KB（10 × 40 KB）はそれより軽いので、圧縮後の値として妥当とみた。
+
 ## 3. ComponentKind ごとの変換
 
 各 Kind は「受け取った件数と転送量」から **Usage（汎用リソース）** と **次のノードへ流す件数** を返す。

@@ -2574,6 +2574,26 @@
 - 追記（同日・ユーザーの決定で手元だけ）: 本家の Next.js 16.4.6 で同じページを作って `next start` で測ると、HTML は見える部分の 2.7〜2.8 倍（vinext は 2.8〜3.0 倍）で、RSC の埋め込みで大きくなるのは App Router の性質と確かめた（vinext より 4〜6 KB 小さい）。
 - 未決: テンプレートの SSR の CPU（15 ms）とフレームワークごとの倍率（RS-06）へどう戻すかは、ユーザーが検討中。
 
+### D-211 大きさの値を「転送の大きさ（圧縮後。画像は配るファイルそのまま）」と定義し、テンプレートの値を直す（2026-11-11・ユーザーの決定）
+
+- 何を: Workload の大きさ（`responseKB`・`shellKB`・`assets.sizeKB`・`images.sizeKB`）を転送の大きさと定義した。HTML・JSON・JS・CSS は圧縮後、
+  画像は配るファイルそのまま、DB の応答はそのまま。estimator の JSDoc と [prd/04](../04-resource-simulation.md) §2.1 に書いた。計算の仕組みは変えない。
+- なぜ: 事業者は圧縮後のバイトで転送を数え、自動で圧縮する（Vercel・Cloudflare・CloudFront・`next start`。出典は prd/04 §2.1）のに、
+  テンプレートの HTML 60 KB は圧縮前の目安だった。スパイクの HTML を `gzip -9` で縮めると約 0.15 倍（Astro 63.0 KB → 8.8 KB）。
+- テンプレートの値（ゲーム上の仮定）: 記事 HTML 60 → 9・API 5 → 1.5・SPA の中身 10 → 3・シェル 5 → 2 KB。業務 HTML 40 → 6・API 8 → 2.5・
+  SPA の中身 10 → 3・シェル 5 → 2・帳票の依頼の応答 30 → 9 KB。JS・CSS（40 KB × 10）は圧縮後として据え置き（HTTP Archive Web Almanac 2024 の
+  中央値 JS 約 570 KB・CSS 約 75 KB より軽い）。画像・DB の応答はそのまま。照合は Web Almanac 2024 の HTML の転送の中央値 18 KB（Page Weight）・
+  32 KB（Markup。モバイル）。
+- 圧縮しない構成: さくらの VPS の nginx は既定で gzip が off。行動・部品にはせず、さくらの VPS の転送量の前提の文に「圧縮して配る設定の前提」と
+  添えた（`next start` は自分で圧縮する。`@astrojs/node` は未確認）。Amplify・Firebase Hosting が自分で圧縮するかは未確認（後ろの Next.js が圧縮する）。
+- テンプレートのコメント「Next.js 製を想定」は「HTML はフレームワークに依らない値。RSC の分はフレームワークのデータが足す（D-212）」に改めた。
+- 結果（golden を取り直した）: 転送で払う構成ほど安くなる。見積モードの月額（既定の部品・前 → 後）は、記事 30 万 PV で Amplify $12.86 → $10.41・
+  Cloud Run $20.99 → $18.54、300 万 PV で Amplify $485.44 → $460.91・Cloud Run $220.76 → $196.23・Vercel Pro（Next.js）$166.93 → $149.53。
+  受託 300 万 PV で Vercel Pro $206.57 → $165.67・Amplify $112.11 → $89.39。Cloudflare・さくらの VPS は変わらない（転送に課金が無い）。
+  ゲームの基準プレイで達成が増えた組: 受託 × Vercel Pro × Next.js で API を Workers に出し従量の CDN（0 → 19）・受託 × Google Cloud × Supabase
+  （6 → 17）・記事 × Netlify Pro × Neon（11 → 20）・記事 × VPS 2GB × Next.js（12 → 15）など。前段の CDN の無い VPS でも話題の月の回線が 1 を下回る（約 0.88）。
+- 1 ページの通信量（ゲームの表示）: JPEG で 約 1.3 → 1.2 MB・最適化しない 約 36.5 → 36.4 MB（[prd/07](../07-game-design.md)）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

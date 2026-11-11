@@ -1,5 +1,6 @@
 // アプリのテンプレート: 業務の Web アプリ（prd/09 §4・D-33）。値はすべてテンプレートの既定値（template-default）で、
 // 実測ではない。フレームワークは決めない（prd/06・AGENTS.md: 見積対象を特定のスタックに寄せない）。
+// 大きさ（KB）は転送の大きさ（圧縮後。D-211・prd/04 §2.1）。HTML はフレームワークに依らない値で、RSC の分はフレームワークのデータが足す（D-212）。
 import type { WorkloadInput } from 'estimator';
 import type { AstroShape, RouteTraits, SpaShape } from '../frameworks/index.ts';
 
@@ -31,6 +32,18 @@ export const BUSINESS_HOURLY_PROFILE: readonly number[] = [
  *   （配信は数えず、変換もしない。保存量と投稿の書き込みだけ。prd/09 B-2）。
  * @param monthlyPageViews 月間 PV（MAU からの導出を上書きする）
  */
+/**
+ * 応答の転送の大きさ（KB・圧縮後。D-211。**ゲーム上の仮定**）。記事コミュニティ（ARTICLE_TRANSFER_KB）と同じ比で、圧縮前の目安
+ * （HTML 40・API 8・SPA の中身 10・シェル 5）から直した: HTML × 約 0.15 = 6、JSON × 約 0.3 = 2.5・3、シェル 2。
+ * JS・CSS（assets 40 KB × 8）は圧縮後の値として据え置く。添付ファイル・DB の応答はそのまま。
+ */
+export const BUSINESS_TRANSFER_KB = {
+  html: 6,
+  api: 2.5,
+  spaShell: 2,
+  spaData: 3,
+} as const;
+
 export function businessApp(monthlyPageViews: number): WorkloadInput {
   return {
     commercial: true,
@@ -57,7 +70,7 @@ export function businessApp(monthlyPageViews: number): WorkloadInput {
           ioWaitMs: 80,
           queries: 5,
           rowsReadPerQuery: 30,
-          responseKB: 40,
+          responseKB: BUSINESS_TRANSFER_KB.html,
         },
       },
     ],
@@ -67,7 +80,7 @@ export function businessApp(monthlyPageViews: number): WorkloadInput {
       ioWaitMs: 40,
       queries: 2,
       rowsReadPerQuery: 20,
-      responseKB: 8,
+      responseKB: BUSINESS_TRANSFER_KB.api,
       writesPerCall: 0.3,
       rowsWrittenPerWrite: 3,
     },
@@ -91,13 +104,13 @@ export function businessApp(monthlyPageViews: number): WorkloadInput {
 
 /**
  * 業務アプリを Vite の SPA で作ったときの形（prd/10。template-default・実測ではない）。
- * 画面の中身を返す API は HTML を描かない分 SSR の半分の CPU・応答 10 KB と仮定（SSR 20 ms × 0.5 = 10 ms。
+ * 画面の中身を返す API は HTML を描かない分 SSR の半分の CPU・応答 3 KB（圧縮後。D-211）と仮定（SSR 20 ms × 0.5 = 10 ms。
  * ⚠ Cloudflare Free の 1 リクエスト CPU 10 ms の境目にちょうど乗る。prd/10 B-5）。
  */
 export const BUSINESS_APP_SPA: SpaShape = {
-  shellKB: 5,
+  shellKB: BUSINESS_TRANSFER_KB.spaShell,
   dataCpuFactor: 0.5,
-  dataResponseKB: 10,
+  dataResponseKB: BUSINESS_TRANSFER_KB.spaData,
 };
 
 /**

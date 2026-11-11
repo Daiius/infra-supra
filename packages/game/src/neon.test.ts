@@ -156,24 +156,25 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
         .won,
     ).toBe(0);
     // Netlify Pro × Next.js は Neon と画像だけ Cloudflare の組で一部のシードが届く（メールの送信の費用で 7 → 3。D-95。
-    // ドメインの登録の費用で 3 → 1。D-96。記事の再検証の既定がオンデマンドになり、好評の知らせで 1 → 11。D-125）
+    // ドメインの登録の費用で 3 → 1。D-96。記事の再検証の既定がオンデマンドになり、好評の知らせで 1 → 11。D-125。
+    // 転送を圧縮後の大きさにして 11 → 20。D-211）
     expect(
       run(article, NETLIFY_PRO, 'nextjs', { db: 'neon', images: 'cf-resize' })
         .won,
-    ).toBe(11);
+    ).toBe(20);
   });
 
   it('受託: 夜間・休日に止まる分（D-90）で Neon の SPA は多くのシードが届き、Netlify Personal（Neon Launch）では全シードが届く', () => {
     expect(run(contract, VERCEL_PRO, 'vite-spa').won).toBe(0);
     // メールの送信（D-95）の費用で 18 → 14・6 → 0。既定の Flat Rate CDN（2 か月目から $20 の段。D-120）では 14 → 0、
-    // 従量の CDN でも東京の単価（D-120）で 14 → 6
+    // 従量の CDN でも東京の単価（D-120）で 14 → 6。転送を圧縮後の大きさにして（D-211）6 → 14
     expect(run(contract, VERCEL_PRO, 'vite-spa', { db: 'neon' }).won).toBe(0);
     expect(
       run(contract, VERCEL_PRO, 'vite-spa', {
         db: 'neon',
         cdnPlan: 'on-demand',
       }).won,
-    ).toBe(6);
+    ).toBe(14);
     expect(run(contract, VERCEL_PRO, 'nextjs', { db: 'neon' }).won).toBe(0);
     expect(
       run(contract, NETLIFY_PERSONAL, 'vite-spa', { db: 'neon' }).won,
@@ -244,20 +245,21 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     // 速さが下がる月が増えて満足度と収益が少し下がる（前は 0/20 $56.4・0/20 $38.1・8/20 $35.3）。SPA は SSR が無いので変わらない
     // D-125: 記事の再検証の既定がオンデマンドに（Vercel・Netlify の Next.js。前は 0/20 $88.5・1/20 $54.0）。即時反映の苦情の代わりに
     // 好評の知らせで PV が伸び、Netlify は 1 → 11 が届く。Vercel の月額は再生成が更新の回数だけになって下がる
+    // D-211: 転送を圧縮後の大きさにした（前は記事 AWS $118.5・$118.5、受託 Personal 6/20 $34.9・20/20 $30.8、記事 Vercel $84.4・Netlify 11/20 $54.2）
     expect(table).toEqual({
       contractAwsSpaAurora: '0/20 $80.2',
       contractAwsSpaPause: '0/20 $59.0',
       contractOpenNextPause: '0/20 $56.6',
-      articleAwsSpaAurora: '0/20 $118.5',
-      articleAwsSpaPause: '0/20 $118.5',
+      articleAwsSpaAurora: '0/20 $117.7',
+      articleAwsSpaPause: '0/20 $117.7',
       contractVercelNext: '0/20 $56.3',
       contractVercelSpa: '0/20 $56.6',
       contractNetlifyNext: '0/20 $38.0',
       contractNetlifySpa: '14/20 $38.2',
-      contractPersonalNext: '6/20 $34.9',
-      contractPersonalSpa: '20/20 $30.8',
-      articleVercelNext: '0/20 $84.4',
-      articleNetlifyNextCf: '11/20 $54.2',
+      contractPersonalNext: '19/20 $30.4',
+      contractPersonalSpa: '20/20 $28.8',
+      articleVercelNext: '0/20 $82.9',
+      articleNetlifyNextCf: '20/20 $48.8',
     });
   });
 });

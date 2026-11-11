@@ -178,19 +178,20 @@ describe('Google Cloud の構成', () => {
     // D-118: 記事 × SPA は即時反映の苦情の代わりに好評の知らせ（口コミの上乗せ）で PV が伸びた分、費用が上がった（前は $56.2・$11.6。達成は不変）
     // D-121: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分け、記事の閲覧を Zipf で偏らせた（記事の Next.js は描き直しが減って
     //        $0.1〜0.5 下がり、SPA は 1 枚ずつのサムネイルの分 $0.4 上がる。達成は不変）
+    // D-211: 転送の大きさを圧縮後にした。Cloud Run・Firebase Hosting の転送が減り $1.4〜7.3 下がる（達成は不変）
     expect(table).toEqual({
-      articleNext: { won: 0, monthly: 64 },
-      articleNextMin1: { won: 0, monthly: 73.4 },
-      articleNextSql: { won: 0, monthly: 71.4 },
-      articleNextCfResize: { won: 20, monthly: 27.5 },
-      articleSpa: { won: 0, monthly: 57.8 },
-      articleSpaCfResize: { won: 20, monthly: 11.9 },
-      contractNext: { won: 20, monthly: 15.9 },
-      contractNextMin1: { won: 20, monthly: 25.4 },
+      articleNext: { won: 0, monthly: 56.7 },
+      articleNextMin1: { won: 0, monthly: 66.1 },
+      articleNextSql: { won: 0, monthly: 64.1 },
+      articleNextCfResize: { won: 20, monthly: 20.2 },
+      articleSpa: { won: 0, monthly: 56.4 },
+      articleSpaCfResize: { won: 20, monthly: 10.5 },
+      contractNext: { won: 20, monthly: 12 },
+      contractNextMin1: { won: 20, monthly: 21.5 },
       // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）
-      contractNextSql: { won: 20, monthly: 20.7 },
-      contractSpa: { won: 20, monthly: 12.6 },
-      contractSpaSql: { won: 20, monthly: 16.9 },
+      contractNextSql: { won: 20, monthly: 16.8 },
+      contractSpa: { won: 20, monthly: 10.9 },
+      contractSpaSql: { won: 20, monthly: 15.2 },
     });
     // 目標の根拠（CF Paid × Next.js）: 達成は不変。メールの送信（D-95・Email Service）の分だけ費用が上がった（前は $15.2・$5.7）
     // ドメインの登録（D-96。$0.93 / 月）の分も上がった（前は $18.0・$13.4）

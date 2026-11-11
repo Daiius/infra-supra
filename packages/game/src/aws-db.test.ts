@@ -88,12 +88,12 @@ describe('DB だけ AWS（D-114 段 2）', () => {
 });
 
 describe('基準プレイ（何もしない・シード 1〜20。prd/14 §3.12）', () => {
-  it('受託 × Vercel Pro: DynamoDB は CDN を従量にすると届き（Next.js 17・SPA 20 シード）、Aurora は届かない', () => {
+  it('受託 × Vercel Pro: DynamoDB は CDN を従量にすると全シード届き、Aurora は届かない', () => {
     // 既定の Flat Rate CDN（2 か月目から $20 の段）では届かない。受託の量では従量の CDN がクレジットに収まる（D-120）
     expect(won(contract, VERCEL_PRO, 'nextjs', { db: 'dynamodb' })).toBe(0);
     const onDemand = { db: 'dynamodb', cdnPlan: 'on-demand' };
-    // 東京の単価（D-120）で Next.js は 20 → 17
-    expect(won(contract, VERCEL_PRO, 'nextjs', onDemand)).toBe(17);
+    // 東京の単価（D-120）で Next.js は 20 → 17。転送を圧縮後の大きさにして（D-211）17 → 20
+    expect(won(contract, VERCEL_PRO, 'nextjs', onDemand)).toBe(20);
     expect(won(contract, VERCEL_PRO, 'vite-spa', onDemand)).toBe(20);
     expect(won(contract, VERCEL_PRO, 'nextjs', { db: 'aurora-pause' })).toBe(0);
   });

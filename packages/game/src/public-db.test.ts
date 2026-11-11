@@ -104,13 +104,15 @@ describe('公開の口の DB（D-114 段 2d）', () => {
 describe('基準プレイ（何もしない・シード 1〜20。prd/14 §3.15）', () => {
   it('受託 × Google Cloud: DynamoDB は Firestore と同じく全シードで届く（月の費用は Firestore より安い）', () => {
     expect(won(contract, GCP, 'nextjs', { db: 'dynamodb' })).toBe(20);
-    expect(won(contract, GCP, 'nextjs', { db: 'supabase' })).toBe(6);
+    // 転送を圧縮後の大きさにして（D-211）6 → 17
+    expect(won(contract, GCP, 'nextjs', { db: 'supabase' })).toBe(17);
     expect(won(contract, GCP, 'nextjs', { db: 'aurora-pause' })).toBe(0);
   });
 
-  it('記事 × さくらの VPS 2GB × Astro: 外の DB は MySQL（17）とほぼ同じか少し下がる。Aurora は届かない', () => {
+  it('記事 × さくらの VPS 2GB × Astro: 外の DB は MySQL（17）と同じくらい。Aurora は届かない', () => {
     expect(won(article, VPS_2GB, 'astro', { db: 'mysql' })).toBe(17);
-    expect(won(article, VPS_2GB, 'astro', { db: 'neon' })).toBe(16);
+    // 転送を圧縮後の大きさにして（D-211）16 → 17
+    expect(won(article, VPS_2GB, 'astro', { db: 'neon' })).toBe(17);
     expect(won(article, VPS_2GB, 'astro', { db: 'aurora' })).toBe(0);
   });
 

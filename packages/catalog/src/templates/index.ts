@@ -1,5 +1,7 @@
 // アプリのテンプレート（prd/README のスコープ・企画書 §4.2）。値はすべてテンプレートの既定値（template-default）で、
 // 実測ではない。コストに効く値は判断ポイント（prd/01 §8）として選択肢にする（D-11）。
+// 大きさ（KB）は転送の大きさ（圧縮後。画像は配るファイルそのまま。D-211・prd/04 §2.1）。圧縮の比はゲーム上の仮定で、導き方は
+// TRANSFER_KB の注記と prd/04 §2.1。
 import type { WorkloadInput } from 'estimator';
 import type { AstroShape, RouteTraits, SpaShape } from '../frameworks/index.ts';
 
@@ -13,7 +15,8 @@ export const ARTICLE_HOURLY_PROFILE: readonly number[] = [
 ];
 
 /**
- * 記事 + コメントのコミュニティ（Next.js 製を想定）。スパイク（spikes/concept-2026-10-31）と同じ仮定。
+ * 記事 + コメントのコミュニティ。スパイク（spikes/concept-2026-10-31）と同じ仮定。HTML の大きさはフレームワークに依らない値
+ * （見える部分のマークアップ）で、App Router の RSC の埋め込みの分はフレームワークのデータ（FrameworkProfile.documentKBFactor）が足す（D-212）。
  * 記事ページは ISR（60%）、個人化されたページは SSR（40%）。
  * @param monthlyPageViews 月間 PV（MAU からの導出を上書きする）
  */
@@ -58,13 +61,31 @@ export const ARTICLE_IMAGE_REUSE = { body: 0.2, thumbnails: 0.5 } as const;
 /** 記事の閲覧の偏り（Zipf の指数 s。順位 k の記事の閲覧 ∝ k^(−s)。ゲーム上の仮定・出典なし。D-121）。 */
 export const ARTICLE_ZIPF_EXPONENT = 1;
 
+/**
+ * 応答の転送の大きさ（KB・圧縮後。D-211。**ゲーム上の仮定**）。D-211 までは圧縮前の目安（HTML 60・API 5・SPA の中身 10・シェル 5）で、
+ * 圧縮の比を掛けて圧縮後に直した:
+ * - HTML: 圧縮前 60 KB × 約 0.15 = 9 KB。比は SSR の CPU のスパイク（spikes/ssr-cpu-2026-11-03）の同じページの gzip -9 の実測
+ *   （Astro 63.0 KB → 8.8 KB・23.7 KB → 4.6 KB）から。照合: HTTP Archive Web Almanac 2024 の HTML の転送の中央値 18 KB（モバイル）・
+ *   32 KB（デスクトップ。Page Weight の章）と同じ桁で、記事 1 本のページとして軽い側。
+ * - API・SPA の中身（JSON）: 圧縮前 × 約 0.3（1.5 KB・3 KB）。小さい JSON はマークアップより繰り返しが少なく縮みにくいとみた。
+ * - SPA のシェル: 5 KB → 2 KB（小さいファイルは縮みにくい）。
+ * JS・CSS（assets 40 KB × 10）は圧縮後の値として据え置く（HTTP Archive Web Almanac 2024 の中央値は JS 約 570 KB・CSS 約 75 KB
+ * （転送）で、ページあたり 400 KB はそれより軽い。記事のページとして妥当とみた）。画像（配るファイルそのまま）・DB の応答はそのまま。
+ */
+export const ARTICLE_TRANSFER_KB = {
+  html: 9,
+  api: 1.5,
+  spaShell: 2,
+  spaData: 3,
+} as const;
+
 export function articleCommunity(monthlyPageViews: number): WorkloadInput {
   const page = {
     cpuMs: 15,
     ioWaitMs: 65,
     queries: 3,
     rowsReadPerQuery: 20,
-    responseKB: 60,
+    responseKB: ARTICLE_TRANSFER_KB.html,
   };
   return {
     commercial: true,
@@ -114,7 +135,7 @@ export function articleCommunity(monthlyPageViews: number): WorkloadInput {
       ioWaitMs: 35,
       queries: 1,
       rowsReadPerQuery: 10,
-      responseKB: 5,
+      responseKB: ARTICLE_TRANSFER_KB.api,
       writesPerCall: 0.1,
       rowsWrittenPerWrite: 3,
     },
@@ -147,13 +168,13 @@ export {
 
 /**
  * 記事コミュニティを Vite の SPA で作ったときの形（prd/10。template-default・実測ではない）。
- * シェル 5 KB、記事・個人化の中身を返す API は HTML を描かない分 SSR の半分の CPU・応答 10 KB と仮定。
+ * シェル 2 KB、記事・個人化の中身を返す API は HTML を描かない分 SSR の半分の CPU・応答 3 KB と仮定（どちらも圧縮後。D-211）。
  * ⚠ dataCpuFactor で Cloudflare Free の 1 リクエスト CPU 10 ms に当たるかが決まる（SSR 15 ms × 0.5 = 7.5 ms。prd/10 B-5）。
  */
 export const ARTICLE_COMMUNITY_SPA: SpaShape = {
-  shellKB: 5,
+  shellKB: ARTICLE_TRANSFER_KB.spaShell,
   dataCpuFactor: 0.5,
-  dataResponseKB: 10,
+  dataResponseKB: ARTICLE_TRANSFER_KB.spaData,
 };
 
 /**

@@ -95,21 +95,21 @@ describe('画像の大きさ（D-47）', () => {
     }
   });
 
-  it('1 ページの通信量: 既定 約 1.3 MB・最適化しない 約 36.5 MB・一律で縮める 約 4.1 MB', () => {
+  it('1 ページの通信量: 既定 約 1.2 MB・最適化しない 約 36.4 MB・一律で縮める 約 4 MB（HTML は圧縮後。D-211）', () => {
     const s = playMonth(newGame(CF_PAID, 42, article));
     // Cloudflare の構成の Images（バインディング）は選んだ形式（既定は JPEG）で配る（D-58 の補足で D-62 の WebP の読み替えをやめた）。
     // 記事のページ: HTML 60 + JS・CSS 400 + 本文 5 × 150 + サムネイル 4 × 15 = 1,270 KB（D-121）。
     // 最適化しない・一律で縮めるはサイズ違いを作らないので、サムネイルも本文と同じファイル（9 × 4,000・9 × 400。前は 5 枚）
-    expect(pageWeightOf(s)).toBe('1 ページ約 1.3 MB');
-    expect(pageWeightOf(s, 'none')).toBe('1 ページ約 36.5 MB');
-    expect(pageWeightOf(s, 'resize')).toBe('1 ページ約 4.1 MB');
+    expect(pageWeightOf(s)).toBe('1 ページ約 1.2 MB');
+    expect(pageWeightOf(s, 'none')).toBe('1 ページ約 36.4 MB');
+    expect(pageWeightOf(s, 'resize')).toBe('1 ページ約 4 MB');
   });
 
   it('最適化しない（原本）は速さが「悪い」で、理由に 1 ページの通信量を出す。一律で縮めるは「普通」', () => {
     const none = play(withRedesign(0), CF_PAID, images('none'), undefined, 3);
     const r = none.history[2]!;
     expect(r.satisfaction.stages.speed).toBe('bad');
-    expect(r.satisfaction.reasons.speed).toContain('1 ページ約 36.5 MB');
+    expect(r.satisfaction.reasons.speed).toContain('1 ページ約 36.4 MB');
     // サイズ違いは作らないので 1 種と出す
     expect(r.satisfaction.reasons.speed).toContain('4000 kB');
     const resize = play(
@@ -264,7 +264,7 @@ describe('速さが「悪い」月は PV の伸びが下がる（D-47）', () =>
     expect(meetsReference(st)).toBe(false);
     const hint = retryHintsOf(st).find((x) => x.kind === 'slow');
     expect(hint?.what).toContain('速さが悪く PV の伸びが下がりました');
-    expect(hint?.what).toContain('1 ページ約 36.5 MB');
+    expect(hint?.what).toContain('1 ページ約 36.4 MB');
   });
 });
 

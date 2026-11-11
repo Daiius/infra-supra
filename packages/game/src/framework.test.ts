@@ -202,6 +202,7 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
     // D-121（D-120 の上で取り直した）: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分けた。一律で縮める画像（OpenNext の SPA の既定）は
     //        サムネイルにも 400 KB を配るので OpenNext・画像の最適化（隠した構成）が $246 減って won → goal。ほかは $0.4 以内
     // D-131: 合否をやめ、12 か月を走り切った行の終わり方は won・goal でなく completed（所持金・月は 1 セントも変わらない）
+    // D-211: 転送の大きさを圧縮後に（シェル 5 → 2・中身の API 10 → 3 kB など）。OpenNext・画像の最適化の行だけ所持金が $10 増える
     const r = Object.fromEntries(
       article.baselines.map((b) => {
         const s = playStrategy(b, 42, article, DEFAULT_START_DATE, 'vite-spa');
@@ -222,7 +223,7 @@ describe('SPA の基準プレイ（prd/10 B-4。目標の値は Next.js のま�
       'vps-cdn': ['1577.77', 'completed', 12],
       'vercel-cf-images': ['1159.11', 'completed', 12],
       'aws-amplify-cdn': ['1814.55', 'completed', 12],
-      'aws-opennext-images': ['1700.86', 'completed', 12],
+      'aws-opennext-images': ['1710.44', 'completed', 12],
       'cf-free-personal-api': ['139.10', 'outages', 3],
       'cf-paid-personal-api': ['1835.45', 'completed', 12],
     });
