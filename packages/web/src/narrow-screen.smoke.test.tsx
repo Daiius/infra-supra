@@ -176,7 +176,8 @@ describe('狭い画面のヘッダー（D-206・D-210）', () => {
     const wide = right.querySelector('[data-game-buttons]') as HTMLElement;
     expect(wide.className.split(' ')).toEqual(['hidden', 'sm:contents']);
     for (const [name, text] of [
-      ['過去の月に戻る…', '戻る…'],
+      // 「戻る…」だけではブラウザの戻ると紛らわしいので、見える文字もメニューと同じ（D-210）
+      ['過去の月に戻る…', '過去の月に戻る…'],
       ['新しいゲーム', '新しいゲーム'],
     ] as const) {
       const b = within(wide).getByRole('button', { name });

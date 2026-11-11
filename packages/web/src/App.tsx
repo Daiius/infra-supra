@@ -445,7 +445,7 @@ export function App() {
             狭い画面（sm 未満）はアイコンだけにして 1 行に収める。アイコンだけのときは設定と同じ 32px の正方形にし、間も詰める
             （左右の余白のぶんで幅 360px からはみ出していた。D-206）。名前は aria-label。
             狭い画面では「戻る…」と「新しいゲーム」を 1 つのメニュー「ゲームの操作」にまとめる（+ のアイコンだけでは分からなかった。D-210）。
-            sm 以上は文字つきのボタンを並べる。出し分けは CSS（hidden / sm:contents）で、メニューの項目は開いたときだけ描く */}
+            sm 以上は文字つきのボタンを並べる（「戻る…」はブラウザの戻ると紛らわしいので、メニューと同じ「過去の月に戻る…」）。出し分けは CSS（hidden / sm:contents）で、メニューの項目は開いたときだけ描く */}
         <div className="ml-auto flex shrink-0 items-center gap-0 sm:gap-1">
           {mode === 'game' && state && (
             <div className="sm:hidden" data-game-menu>
@@ -466,7 +466,7 @@ export function App() {
                   title="過去の月に戻る"
                 >
                   <Undo2 aria-hidden className="size-4" />
-                  戻る…
+                  過去の月に戻る…
                 </button>
               )}
               <button

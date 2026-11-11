@@ -38,7 +38,7 @@ const historyRows = () =>
     .map((r) => r.textContent);
 const rewindDialog = () =>
   screen.getByRole('dialog', { name: '過去の月に戻る' });
-/** ヘッダーの「戻る…」（D-192。狭い画面ではアイコンだけなので名前は aria-label）。 */
+/** ヘッダーの「過去の月に戻る…」（D-192・D-210。狭い画面では「ゲームの操作」のメニューの中。ここは sm 以上のボタン）。 */
 const headerRewind = () =>
   screen.queryByRole('button', { name: '過去の月に戻る…' });
 
@@ -69,7 +69,7 @@ const savedPrevious = () =>
   (JSON.parse(localStorage.getItem(SAVE_KEY)!) as SaveData).previous;
 
 describe('この月に戻る（D-128）', () => {
-  it('W-70 これまでの運営の行とヘッダーの「戻る…」から、ダイアログを経て過去の月に戻る。やめると戻らない', async () => {
+  it('W-70 これまでの運営の行とヘッダーの「過去の月に戻る…」から、ダイアログを経て過去の月に戻る。やめると戻らない', async () => {
     await renderApp();
     await start();
     // 1 か月目はまだ戻る先が無い（ヘッダーにも出さない。D-192）
@@ -111,7 +111,7 @@ describe('この月に戻る（D-128）', () => {
 
     // 行動の欄の上には戻る欄を出さない（D-192）
     expect(screen.queryByLabelText('戻る先の月')).toBeNull();
-    // ヘッダーの「戻る…」からも戻れる。既定は 1 つ前の月。もう一度戻ると前の試行は上書き
+    // ヘッダーの「過去の月に戻る…」からも戻れる。既定は 1 つ前の月。もう一度戻ると前の試行は上書き
     fireEvent.click(headerRewind()!);
     const select = within(rewindDialog()).getByLabelText(
       '戻る先の月',
@@ -140,7 +140,7 @@ describe('この月に戻る（D-128）', () => {
     expectGameScreen(2);
   });
 
-  it('W-192 ヘッダーの「戻る…」のダイアログで月を選び直して戻る。やめると戻らない', async () => {
+  it('W-192 ヘッダーの「過去の月に戻る…」のダイアログで月を選び直して戻る。やめると戻らない', async () => {
     await renderApp();
     await start();
     advance(3);
@@ -275,7 +275,7 @@ describe('この月に戻る（D-128）', () => {
     expect(document.querySelector('[data-previous-trial]')).toBeNull();
   });
 
-  it('W-73 終わった後もヘッダーの「戻る…」から過去の月に戻れ、前の試行は終わった月まで描く', async () => {
+  it('W-73 終わった後もヘッダーの「過去の月に戻る…」から過去の月に戻れ、前の試行は終わった月まで描く', async () => {
     // CF Free（構成の 1 番目）は行動なしだと数か月で終わる。終わるまで進めた保存を置いて開く
     let save = newSave({
       scenarioId: 'article-community',
@@ -290,7 +290,7 @@ describe('この月に戻る（D-128）', () => {
     await renderApp();
     expect(screen.getByText(new RegExp(`${end} か月目で終了`))).toBeDefined();
     expect(screen.queryByRole('button', { name: '次の月へ' })).toBeNull();
-    // 結果の画面には戻る欄を出さず、ヘッダーの「戻る…」から戻る（D-192）
+    // 結果の画面には戻る欄を出さず、ヘッダーの「過去の月に戻る…」から戻る（D-192）
     expect(screen.queryByLabelText('戻る先の月')).toBeNull();
     fireEvent.click(headerRewind()!);
     expect(
