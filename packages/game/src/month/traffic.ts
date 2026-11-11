@@ -5,7 +5,7 @@ import { BOT_BLOCK } from '../actions/check.ts';
 import { eventDef } from '../core.ts';
 import { applyEffects } from '../events.ts';
 import { fmtFactor } from '../format.ts';
-import { editsReflectImmediately } from '../requirements.ts';
+import { editsReflectImmediately, unavailableReason } from '../requirements.ts';
 import { STACKS } from '../stacks.ts';
 import type { GameState } from '../state.ts';
 import type { Spike } from '../workload.ts';
@@ -39,8 +39,10 @@ export function declineUnanswered(input: GameState): GameState {
 
 /**
  * 今月起きる出来事。preempted: 構成が先に手を打っていたので、提案の代わりに知らせを出す（EventDef.preempted。D-118）。
+ * unavailable: 今の構成では受けられない提案（要件を満たせるプランが今の事業者に無い）。返事を待たずに知らせにし、
+ * 断ったことにする（理由の文。D-201）。
  */
-export type Due = Scheduled & { preempted?: true };
+export type Due = Scheduled & { preempted?: true; unavailable?: string };
 
 /** 出来事の preempted の条件を、起きる月の構成が満たすか（D-118）。 */
 function preempts(sc: Scenario, state: GameState, id: string): boolean {
@@ -63,12 +65,16 @@ export function scriptOf(
     const ps = eventDef(sc, x.id)!.platforms;
     return !ps || ps.includes(platform);
   };
-  // 台本（時期）はそのままで、起きる月の構成で中身だけ替える（乱数を引かない。D-118）
+  // 台本（時期）はそのままで、起きる月の構成で中身だけ替える（乱数を引かない。D-118・D-201）
   const due = state.schedule
     .filter((x) => x.month === month && forPlatform(x))
-    .map((x): Due =>
-      preempts(sc, state, x.id) ? { ...x, preempted: true } : x,
-    );
+    .map((x): Due => {
+      if (preempts(sc, state, x.id)) return { ...x, preempted: true };
+      const def = eventDef(sc, x.id)!;
+      const why =
+        def.kind === 'proposal' ? unavailableReason(state, def) : undefined;
+      return why ? { ...x, unavailable: why } : x;
+    });
   const noticed = state.schedule.filter(
     (x) => x.noticeMonth === month && forPlatform(x),
   );
