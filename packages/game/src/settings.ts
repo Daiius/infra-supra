@@ -1,6 +1,7 @@
 // 設定（Settings・SETTINGS の選択肢）と、設定から決まる値（オンデマンドの再検証・画像の形式と重さ・設定のフレーバー）。
 import {
   type FrameworkId,
+  FRAMEWORKS,
   imagesBehavior,
   imagesServedFormat,
   type Platform,
@@ -298,8 +299,9 @@ export function deliveredThumbnailKB(
 }
 
 /**
- * 1 ページの通信量（KB）: HTML（SPA はデータの API）+ JS・CSS + 画像（本文とサムネイル。D-121）。ブラウザのキャッシュが無い最初の
+ * 1 ページの通信量（KB・転送の大きさ。D-211）: HTML（SPA はデータの API）+ JS・CSS + 画像（本文とサムネイル。D-121）。ブラウザのキャッシュが無い最初の
  * 1 ページ（D-47）。ページはテンプレートの最初のルート（記事のページ）。本文の画像の枚数は提案で変わる（mods.imagesPerPage）。
+ * HTML はフレームワークの文書の倍率（App Router の RSC の埋め込み。D-212）を掛ける（省略は倍率 1）。
  */
 export function pageWeightKB(
   sc: Scenario,
@@ -307,10 +309,13 @@ export function pageWeightKB(
   mods: WorkloadMods,
   images: string | undefined,
   fixed?: FixedImageFormat['format'],
+  framework?: FrameworkId,
 ): number {
   const w = sc.template(1);
   const page = w.routes[0]!;
-  const html = page.processing.responseKB;
+  const html =
+    page.processing.responseKB *
+    (framework ? FRAMEWORKS[framework].documentKBFactor.value : 1);
   const perImage = deliveredImageKB(sc, settings, images, fixed);
   const perThumb = deliveredThumbnailKB(sc, settings, images, fixed);
   return (

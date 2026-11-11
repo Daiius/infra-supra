@@ -153,6 +153,7 @@ export function pageWeightOf(state: GameState, images?: string): string {
       state.mods,
       opt,
       fixedImageFormat(platform, state.framework, raw)?.format,
+      state.framework,
     ),
   );
 }

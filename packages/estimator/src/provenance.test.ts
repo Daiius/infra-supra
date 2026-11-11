@@ -21,6 +21,22 @@ describe('sourcedSchema', () => {
     ).toBe(true);
   });
 
+  it('measured には測った記録が必要（D-212）', () => {
+    expect(Price.safeParse({ value: '2.5', basis: 'measured' }).success).toBe(
+      false,
+    );
+    expect(
+      Price.safeParse({
+        value: '2.5',
+        basis: 'measured',
+        sourceRef: {
+          url: 'https://example.com/spike/README.md',
+          retrievedAt: '2000-01-01',
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   it('derived には導出が必要', () => {
     expect(Price.safeParse({ value: '2', basis: 'derived' }).success).toBe(
       false,

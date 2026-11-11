@@ -199,18 +199,19 @@ describe('基準プレイ（何もしない・シード 1〜20・prd/10 §9.6）
     expect(run(article, CF_PAID, 'nextjs', {}).won).toBe(20);
   });
 
-  it('受託: Vercel Pro の Next.js は API と DB を Workers・D1 に出すと Supabase Pro の固定費が消えるが、CDN の段と東京の単価で届かない', () => {
+  it('受託: Vercel Pro の Next.js は API と DB を Workers・D1 に出すと Supabase Pro の固定費が消える。既定の CDN の段では届かず、従量の CDN なら届く', () => {
     expect(run(contract, VERCEL_PRO, 'nextjs', {}).won).toBe(0);
     // ドメインの登録（D-96）の費用で 20 → 19（届く・届かないの境目のすぐ上）。
     // Vercel × Next.js の既定を部品ごとにキャッシュにして（D-111）業務の画面の CPU・I/O 待ちが減り 19 → 20。
     // 既定の Flat Rate CDN（2 か月目から $20 の段）と東京の単価（D-120）で 20 → 0（従量の CDN を選んでも東京の単価で 0）
+    // D-211: 転送を圧縮後の大きさにして CDN の転送が減り、従量の CDN では 0 → 19（既定の段では 0 のまま）
     expect(run(contract, VERCEL_PRO, 'nextjs', NEXT_API).won).toBe(0);
     expect(
       run(contract, VERCEL_PRO, 'nextjs', {
         ...NEXT_API,
         cdnPlan: 'on-demand',
       }).won,
-    ).toBe(0);
+    ).toBe(19);
   });
 
   it('記事コミュニティ: Vercel Pro の Next.js は API を出しても席と転送が残り届かない', () => {

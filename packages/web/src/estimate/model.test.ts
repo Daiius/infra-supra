@@ -203,11 +203,12 @@ describe('URL のクエリ', () => {
       0,
     );
     // 時間の再検証で記事のページに含めると、記事を開いたときのコメントの取得（API の関数）が無くなり安くなる
+    // （転送を圧縮後の大きさにして（D-211）300 万 PV では合計に差が出なくなったので 1,000 万 PV で見る）
     const usd = (comments: number) =>
       runEstimate(
         normalizeInput({
           stack: 'vercel-supabase-pro',
-          pv: 3_000_000,
+          pv: 10_000_000,
           comments,
         }),
       ).totalUsd;

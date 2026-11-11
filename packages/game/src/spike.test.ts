@@ -85,13 +85,16 @@ describe('話題・Bot の集中（D-44）', () => {
   });
 
   it('前段の CDN で、話題の月の VPS の回線・CPU のピークが下がり、詰まらない', () => {
+    // 転送を圧縮後の大きさにして（D-211）、前段が無くても話題の月の回線は 1 を下回るようになった（約 0.88）。下がることを比べて確かめる
     const s = play(article, VPS);
     const c = play(article, VPS, [
       { type: 'component', slot: 'frontCdn', option: 'static' },
     ]);
     const m = buzzMonth(s);
-    expect(ratio(s.history[m]!, 'host:line')).toBeGreaterThan(1);
-    expect(ratio(c.history[m]!, 'host:line')).toBeLessThan(1);
+    expect(ratio(s.history[m]!, 'host:line')).toBeGreaterThan(0.5);
+    expect(ratio(c.history[m]!, 'host:line')).toBeLessThan(
+      ratio(s.history[m]!, 'host:line') / 2,
+    );
     expect(ratio(c.history[m]!, 'host:cpu')).toBeLessThan(
       ratio(s.history[m]!, 'host:cpu'),
     );

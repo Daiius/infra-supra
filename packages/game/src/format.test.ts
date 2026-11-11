@@ -100,9 +100,9 @@ describe('画像の形式（D-58）', () => {
     const jpeg = month2(CF_PAID, []);
     expect(settingInactiveReason(jpeg, 'format')).toBeUndefined();
     expect(settingNote(jpeg, 'format')).toContain('Worker のコード');
-    expect(pageWeightOf(jpeg)).toBe('1 ページ約 1.3 MB');
+    expect(pageWeightOf(jpeg)).toBe('1 ページ約 1.2 MB');
     const webp = month2(CF_PAID, [format(IMAGE_FORMAT_KB.webp)]);
-    expect(pageWeightOf(webp)).toBe('1 ページ約 1 MB');
+    expect(pageWeightOf(webp)).toBe('1 ページ約 990 kB');
   });
 
   it('閲覧のときに変換する他の部品も欄を無効にして固定する: cf-images は AVIF・Bunny Optimizer は WebP・Astro の <Image /> は WebP', () => {
@@ -125,7 +125,7 @@ describe('画像の形式（D-58）', () => {
     );
     // cf-images は AVIF の大きさで数える（JPEG のままでも）
     // 記事のページ: HTML 60 + JS・CSS 400 + 本文 5 × 84 + サムネイル 4 × 8.4 = 914 KB
-    expect(pageWeightOf(cf)).toBe('1 ページ約 914 kB');
+    expect(pageWeightOf(cf)).toBe('1 ページ約 876 kB');
   });
 
   it('Netlify Image CDN は WebP に固定（SPA でも）', () => {

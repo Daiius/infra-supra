@@ -6,6 +6,11 @@ const NonNeg = z.number().finite().nonnegative();
 const Pos = z.number().finite().positive();
 const Ratio = z.number().finite().min(0).max(1);
 
+// 大きさ（KB）の定義（D-211・prd/04 §2）: 利用者に届く応答の大きさは「転送の大きさ」＝圧縮後（gzip・Brotli で送る HTML・JSON・
+// JS・CSS）の値で持つ。事業者は圧縮後のバイトで転送を数え、自動で圧縮する（出典は prd/04 §2.1）。画像は配るファイルそのまま
+// （JPEG・WebP・AVIF は圧縮済みで、送るときにさらに圧縮しない）。DB → アプリの応答（db.responseKBPerQuery）はそのまま。
+// 計算はこの値をそのまま使う（圧縮の比を式の中で掛けない）。
+
 /** 1 リクエストあたりの処理の性質。 */
 export const ProcessingSchema = z.object({
   cpuMs: NonNeg,
@@ -13,6 +18,7 @@ export const ProcessingSchema = z.object({
   ioWaitMs: NonNeg,
   queries: NonNeg,
   rowsReadPerQuery: NonNeg,
+  /** 応答 1 回の転送の大きさ（KB・圧縮後。D-211）。HTML の文書なら RSC などフレームワークが埋め込む分も含む（D-212）。 */
   responseKB: NonNeg,
 });
 
@@ -60,7 +66,7 @@ export const RouteGroupSchema = z.object({
   processing: ProcessingSchema,
   /** ISR のページをキャッシュから返すときの CPU（ホストによっては関数・Worker を通る）。 */
   cachedServeCpuMs: NonNeg.default(0),
-  /** spa のみ: シェル（index.html）の大きさ。 */
+  /** spa のみ: シェル（index.html）の転送の大きさ（KB・圧縮後。D-211）。 */
   shellKB: NonNeg.optional(),
   /**
    * spa のみ: ページの中身の API の応答をキャッシュする期間（s-maxage・秒）。与えると中身の API を api-content のクラスに分け、
@@ -141,9 +147,10 @@ export const WorkloadInputSchema = z
       writesPerCall: NonNeg,
       rowsWrittenPerWrite: NonNeg,
     }),
+    /** JS・CSS 1 ファイルの転送の大きさ（sizeKB。KB・圧縮後。D-211）と、ブラウザのキャッシュから出す割合。 */
     assets: z.object({ sizeKB: NonNeg, browserReuse: Ratio }),
     images: z.object({
-      /** 本文の画像 1 枚（配るサイズ違い）の大きさ。 */
+      /** 本文の画像 1 枚（配るサイズ違い）の大きさ（KB。配るファイルそのまま。送るときにさらに圧縮しない。D-211）。 */
       sizeKB: NonNeg,
       /** 本文の画像のうち、ブラウザのキャッシュから出す割合（同じ人が同じページを開き直す割合）。 */
       browserReuse: Ratio,
@@ -180,7 +187,7 @@ export const WorkloadInputSchema = z
     }),
     db: z.object({
       sizeGB: NonNeg,
-      /** DB → アプリの応答サイズ（マネージド DB の egress）。 */
+      /** DB → アプリの応答サイズ（マネージド DB の egress。KB。圧縮しない内部の転送としてそのまま。D-211）。 */
       responseKBPerQuery: NonNeg,
     }),
     /**

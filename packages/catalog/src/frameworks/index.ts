@@ -2,7 +2,7 @@
 // FrameworkProfile は 2 つ（Next.js・Vite の SPA）、DeployTarget は「どのホストにどう載るか」の表だけを持つ。
 // BuildOutput は新しい型を作らず、Workload の routes をそのまま使う（フレームワークの違いはテンプレートの書き換えに閉じ込める）。
 // 対応の状況は公式の文書を出典にし、取得日を付ける（prd/03 §1 と同じ規律）。
-import type { WorkloadInput } from 'estimator';
+import type { Sourced, WorkloadInput } from 'estimator';
 import type { Platform } from '../stacks/index.ts';
 import { applyRouteStrategies, presetPlan } from './route-strategies.ts';
 
@@ -37,6 +37,30 @@ const ASTRO_CACHING_DOC = 'https://docs.astro.build/en/guides/caching/';
 /** Next.js の静的書き出しの公式の文書（2026-08-09 更新・2026-11-02 取得。D-80）。 */
 const NEXT_EXPORT_DOC = 'https://nextjs.org/docs/app/guides/static-exports';
 
+/**
+ * App Router の文書（HTML）の大きさの倍率（D-212）。App Router は水和のために同じツリーを RSC のペイロードとして HTML に埋め込むので、
+ * 同じページでも HTML が大きくなる。SSR の CPU のスパイク（spikes/ssr-cpu-2026-11-03）の同じページを gzip -9 で縮めた実測で、
+ * vinext ÷ Astro が 11.6 / 4.6 KB（items=10）・22.0 / 8.8 KB（items=30）＝ 約 2.5。本家の Next.js 16.4.6 も圧縮前で同じ形
+ * （全体 ÷ 見える部分 2.7〜2.8。vinext は 2.8〜3.0）。テンプレートの HTML（フレームワークに依らない値・圧縮後。D-211）に掛ける。
+ */
+const APP_ROUTER_DOCUMENT_FACTOR: Sourced<number> = {
+  value: 2.5,
+  basis: 'measured',
+  sourceRef: {
+    url: 'https://github.com/Daiius/infra-supra/blob/main/spikes/ssr-cpu-2026-11-03/README.md',
+    retrievedAt: '2026-11-11',
+    excerpt:
+      'gzip -9: Astro 23.7 KB → 4.6 KB・63.0 KB → 8.8 KB、vinext 76.2 KB → 11.6 KB・184.6 KB → 22.0 KB（vinext ÷ Astro = 2.5）',
+  },
+  note: 'App Router が HTML に埋め込む RSC のペイロードの分（圧縮後の比）',
+};
+/** 文書に何も足さないフレームワーク（倍率 1。テンプレートの HTML そのまま）。 */
+const plainDocument = (note: string): Sourced<number> => ({
+  value: 1,
+  basis: 'assumption',
+  note,
+});
+
 export type FrameworkProfile = {
   id: FrameworkId;
   /** 画面の名前。 */
@@ -45,6 +69,11 @@ export type FrameworkProfile = {
   /** 選ぶ前に出す説明（何が変わるか）。 */
   note: string;
   sources: Source[];
+  /**
+   * サーバーが返す文書（HTML。ssr・isr・static のルート）の大きさの、テンプレートの HTML に対する倍率（D-212）。
+   * App Router は RSC の埋め込みの分だけ大きい（2.5・実測）。applyRouteStrategies の段で文書の responseKB にだけ掛ける。
+   */
+  documentKBFactor: Sourced<number>;
 };
 
 export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
@@ -56,6 +85,8 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
     sources: [
       src('https://nextjs.org/docs/app/guides/single-page-applications'),
     ],
+    // Vercel・自前の Node（next start）・vinext（Cloudflare）・OpenNext（AWS）・Amplify はどれも App Router の同じ HTML を返す
+    documentKBFactor: APP_ROUTER_DOCUMENT_FACTOR,
   },
   'vite-spa': {
     id: 'vite-spa',
@@ -66,6 +97,9 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
       src('https://vite.dev/guide/static-deploy'),
       src('https://nextjs.org/docs/app/guides/single-page-applications'),
     ],
+    documentKBFactor: plainDocument(
+      'サーバーが文書を描かない（シェルは shellKB・中身は API の応答）',
+    ),
   },
   astro: {
     id: 'astro',
@@ -77,6 +111,12 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
       src2('https://docs.astro.build/en/concepts/islands/'),
       src3(ASTRO_CACHING_DOC),
     ],
+    documentKBFactor: {
+      value: 1,
+      basis: 'measured',
+      sourceRef: APP_ROUTER_DOCUMENT_FACTOR.sourceRef!,
+      note: '島の無い Astro の HTML は見える部分のマークアップだけ（スパイクの比べの基準）',
+    },
   },
   'nextjs-export': {
     id: 'nextjs-export',
@@ -87,6 +127,9 @@ export const FRAMEWORKS: Record<FrameworkId, FrameworkProfile> = {
       src2(NEXT_EXPORT_DOC),
       src2('https://nextjs.org/docs/app/api-reference/components/image'),
     ],
+    documentKBFactor: plainDocument(
+      '静的書き出しも App Router なら RSC を出すが、書き出した HTML の実測が無いので 1 のまま',
+    ),
   },
 };
 

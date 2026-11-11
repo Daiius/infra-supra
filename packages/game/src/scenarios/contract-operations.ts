@@ -204,7 +204,8 @@ const EVENTS: EventDef[] = [
     accept: {
       label: '受ける（手間 3）',
       effects: [
-        { type: 'workload', mods: { apiCpuMs: 15, apiResponseKB: 30 } },
+        // 帳票の応答は圧縮後 9 kB（D-211 で圧縮前の 30 kB に API と同じ比 約 0.3 を掛けた。ゲーム上の仮定）
+        { type: 'workload', mods: { apiCpuMs: 15, apiResponseKB: 9 } },
         { type: 'feature', points: 4 },
         { type: 'interrupt', featureWork: true, points: 3, months: 1 },
       ],

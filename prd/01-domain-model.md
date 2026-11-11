@@ -44,13 +44,14 @@ type Basis =
   | 'template-default' // テンプレートの既定値（それ自体は仮定。テンプレートに根拠メモを書く）
   | 'derived'          // 他の値から計算した値（式と入力を保持）
   | 'assumption'       // 測れない値を置いたもの（性能・障害率・ユーザー行動）
+  | 'measured'         // 自分で測った値（スパイクなど）。測った記録（sourceRef）が必須（D-212）
   | 'fictional';       // テスト用の架空値。本番の UI では使わない
 
 type Sourced<T> = { value: T; basis: Basis; note?: string; sourceRef?: SourceRef };
 type SourceRef = { url: string; retrievedAt: string /* YYYY-MM-DD */; excerpt?: string };
 ```
 
-- `official` は `sourceRef` を必須にする（スキーマ検証で落とす）。
+- `official` は `sourceRef` を必須にする（スキーマ検証で落とす）。`measured` も測った記録（スパイクの README など）の `sourceRef` を必須にする（D-212）。
 - `fictional` を含む PriceBook は、本番ビルドの UI では読み込みを拒む（[05](./05-test-strategy.md) §4）。
 
 ## 3. Workload

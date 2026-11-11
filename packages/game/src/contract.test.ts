@@ -34,6 +34,9 @@ describe('受託先の業務アプリの運用', () => {
     //        Vercel で遊ぶ行は $204〜214 減る（vercel-pro）・$40 減る（乗り換えるまで Vercel の vercel-to-cf。シード 42 は won → goal）・
     //        $75〜93 減る（Vercel へ乗り換える cf-paid-accept。乗り換え中も前の月の段を払う。シード 42 は $12 減）。CF・VPS・AWS の行は変わらない
     // D-131: 合否をやめ、12 か月を走り切った行の終わり方は won・goal でなく completed（所持金・月は 1 セントも変わらない）
+    // D-211: 転送の大きさを圧縮後に（HTML 40 → 6・API 8 → 2.5・帳票 30 → 9 kB）。転送の費用が減り、所持金は AWS（Amplify）が $38〜44・Vercel へ乗り換える
+    //        cf-paid-accept は $19〜186・Vercel Pro は $1〜2 増える。CF・VPS・OpenNext の行は変わらない
+    // D-212: App Router の文書の倍率（業務の画面の HTML 6 → 15 kB）。AWS（Amplify）は $7〜8・cf-paid-accept（シード 3）は $17 減る
     const r = (seed: number) =>
       Object.fromEntries(
         sc.baselines.map((b) => {
@@ -45,7 +48,7 @@ describe('受託先の業務アプリの運用', () => {
       'cf-paid': ['1892.51', 'completed', 12],
       // D-93: PITR の依頼（D1 の Time Travel で満たす）を受け、乗り換えるまで上乗せ $20 / 月が入る（前は $1,589.92・goal）
       // D-95: メールの送信（CF Paid は Email Service・乗り換えた先は SES）の費用で $1,769.92・won → goal
-      'cf-paid-accept': ['1657.78', 'completed', 12],
+      'cf-paid-accept': ['1676.81', 'completed', 12],
       vps: ['1701.46', 'completed', 12],
       'vps-care': ['1807.61', 'completed', 12],
       'vps-sla': ['1807.61', 'completed', 12],
@@ -53,34 +56,34 @@ describe('受託先の業務アプリの運用', () => {
       'vercel-to-cf': ['1670.34', 'completed', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
-      'aws-amplify': ['1800.00', 'completed', 12],
+      'aws-amplify': ['1831.66', 'completed', 12],
       'aws-opennext': ['1946.08', 'completed', 12],
     });
     expect(r(11)).toEqual({
       'cf-paid': ['1959.64', 'completed', 12],
-      'cf-paid-accept': ['1423.40', 'completed', 12],
+      'cf-paid-accept': ['1473.72', 'completed', 12],
       vps: ['1564.19', 'outages', 12],
       'vps-care': ['1880.26', 'completed', 12],
       'vps-sla': ['1988.19', 'completed', 12],
-      'vercel-pro': ['1334.49', 'completed', 12],
+      'vercel-pro': ['1335.51', 'completed', 12],
       'vercel-to-cf': ['1730.52', 'completed', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
-      'aws-amplify': ['1847.23', 'completed', 12],
+      'aws-amplify': ['1883.58', 'completed', 12],
       'aws-opennext': ['2014.62', 'completed', 12],
     });
     expect(r(3)).toEqual({
       'cf-paid': ['1932.41', 'completed', 12],
       // D-46: 乗り換え先の Vercel で添付が Vercel Blob の課金になる
-      'cf-paid-accept': ['1444.79', 'completed', 12],
+      'cf-paid-accept': ['1613.27', 'completed', 12],
       vps: ['1679.32', 'outages', 12],
       'vps-care': ['1783.73', 'completed', 12],
       'vps-sla': ['1783.73', 'completed', 12],
-      'vercel-pro': ['1300.88', 'completed', 12],
+      'vercel-pro': ['1303.06', 'completed', 12],
       'vercel-to-cf': ['1707.14', 'completed', 12],
       'vercel-hobby': ['174.43', 'policy', 2],
       'cf-free': ['230.48', 'outages', 3],
-      'aws-amplify': ['1827.87', 'completed', 12],
+      'aws-amplify': ['1862.28', 'completed', 12],
       'aws-opennext': ['1986.49', 'completed', 12],
     });
   });
@@ -134,7 +137,7 @@ describe('受託先の業務アプリの運用', () => {
   it('帳票の依頼の効果の要約', () => {
     const def = sc.events.find((e) => e.id === 'c-p-report')!;
     expect(def.accept!.effects.map(describeEffect)[0]).toBe(
-      'API 1 回の CPU 15 ms・API 1 回の応答 30 kB',
+      'API 1 回の CPU 15 ms・API 1 回の応答 9 kB',
     );
   });
 

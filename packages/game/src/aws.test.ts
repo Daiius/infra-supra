@@ -186,14 +186,14 @@ describe('AWS の構成', () => {
     expect(storage.amount).toBeCloseTo(20 * unit, 10);
   });
 
-  it('記事コミュニティの SPA: 既定の部品（一律で縮める）は届かず、画像を Cloudflare Images で配ると全シード届く（目盛り。D-50・D-121）', () => {
+  it('記事コミュニティの SPA: 既定の部品（一律で縮める）はほぼ届かず、画像を Cloudflare Images で配ると全シード届く（目盛り。D-50・D-121）', () => {
     const passed = (components: Choices = {}) =>
       Array.from({ length: 20 }, (_, i) =>
         doNothing(i + 1, 'vite-spa', components),
       ).filter(meetsReference).length;
     // D-121 の前は 19 / 20。一律で縮めるはサイズ違いを作らないので、関連記事のサムネイル（4 枚）にも 400 KB の画像を配り、
-    // Amplify の転送（CloudFront の外への転送）が増えて届かなくなった
-    expect(passed()).toBe(0);
+    // Amplify の転送（CloudFront の外への転送）が増えて届かなくなった。転送を圧縮後の大きさにして（D-211）0 → 1
+    expect(passed()).toBe(1);
     expect(passed({ images: 'cf-images' })).toBe(20);
   });
 

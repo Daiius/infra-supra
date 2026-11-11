@@ -174,11 +174,12 @@ describe('数え方（D-111）', () => {
       ).costUsd;
     const cc = m1();
     // D-121（記事の閲覧の偏りで ISR の再生成が減る）で、1 か月目はどちらも月のクレジットに収まり同じ額になった
+    // （同じ額は足す順の違いで 1e-14 ほどずれうるので、許す幅を置く。D-212）
     expect(cc).toBeLessThanOrEqual(
-      m1({ article: 'cached-ttl', personal: 'ssr' }),
+      m1({ article: 'cached-ttl', personal: 'ssr' }) + 1e-9,
     );
     expect(cc).toBeLessThanOrEqual(
-      m1({ article: 'cached-ttl', personal: 'server-island' }),
+      m1({ article: 'cached-ttl', personal: 'server-island' }) + 1e-9,
     );
   });
 });
@@ -389,9 +390,12 @@ describe('古い保存（版 3 まで）は今までの既定で同じ結果に�
     );
     for (const t of turns) played = playMonth(applyActions(played, t));
     expect(s).toEqual(played);
-    // 新しい既定で始めたゲームとは費用が違う（既定が変わったことの確かめ）
+    // 新しい既定で始めたゲームとは月ごとの費用が違う（既定が変わったことの確かめ。転送を圧縮後の大きさにして（D-211）12 か月の
+    // 所持金は同じになったので、月ごとのインフラ費で比べる）
     const fresh = replaySave(parseSave({ ...v3, version: 4 })!);
-    expect(fresh.cash).not.toBe(s.cash);
+    expect(fresh.history.map((h) => h.infraCost)).not.toEqual(
+      s.history.map((h) => h.infraCost),
+    );
     // 保存し直しても印が残る
     const again = parseSave(JSON.parse(JSON.stringify(withTurn(parsed, []))))!;
     expect(again.legacyRouteDefaults).toBe(true);
