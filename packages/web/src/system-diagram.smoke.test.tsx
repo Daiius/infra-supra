@@ -61,7 +61,7 @@ describe('構成図の向き', () => {
       name: /Worker（vinext）.*の説明$/,
     });
     // 箱に見えるのは短い名前だけ（名前は見えている短い名前で始め、正式の名前などは読み上げだけに足す。D-196）
-    expect(worker.querySelector('.line-clamp-3')!.textContent).toBe('Worker');
+    expect(worker.querySelector('[data-short]')!.textContent).toBe('Worker');
     expect(worker.hasAttribute('aria-label')).toBe(false);
     expect(screen.queryByRole('tooltip')).toBeNull();
     fireEvent.click(worker);
@@ -144,7 +144,7 @@ describe('幽霊の箱（D-116 の補足）', () => {
     const box = within(g as HTMLElement).getByRole('button', {
       name: /ISR のキャッシュ.*を替える$/,
     });
-    expect(box.querySelector('[data-swap-mark]')).not.toBeNull();
+    expect(g.querySelector('[data-swap-mark]')).not.toBeNull();
     fireEvent.click(box);
     const popover = screen.getByRole('dialog');
     expect(popover.textContent).toContain('経路の線は引きません');
@@ -161,9 +161,14 @@ describe('幽霊の箱（D-116 の補足）', () => {
     ).toBe('vertical');
     const g = container.querySelector('[data-ghost="true"]')!;
     expect(g.getAttribute('data-node')).toBe('ghost:isrCache');
-    const box = within(g as HTMLElement).getByRole('button');
-    expect(box.className).toContain('border-dashed');
-    expect(box.querySelector('[data-swap-mark]')).toBeNull();
+    within(g as HTMLElement).getByRole('button');
+    // 点線の枠は SVG の rect（D-213）
+    expect(
+      g
+        .querySelector('rect[stroke-dasharray]')!
+        .getAttribute('stroke-dasharray'),
+    ).toBe('4 3');
+    expect(g.querySelector('[data-swap-mark]')).toBeNull();
     cleanup();
     vi.restoreAllMocks();
     const wide = renderGhost(900, false);
@@ -207,9 +212,10 @@ describe('未選択の箱（D-116 の補足）', () => {
         container.querySelector<HTMLElement>(`[data-node="${id}"]`)!;
       for (const id of targets) {
         expect(box(id).getAttribute('data-unselected'), id).toBe('true');
-        const button = within(box(id)).getByRole('button', { name: /未選択/ });
-        expect(button.querySelector('[data-unselected-mark]')).not.toBeNull();
-        expect(button.querySelector('[data-swap-mark]')).toBeNull();
+        within(box(id)).getByRole('button', { name: /未選択/ });
+        // 印はボタンの外の SVG（箱の右上。D-213）
+        expect(box(id).querySelector('[data-unselected-mark]')).not.toBeNull();
+        expect(box(id).querySelector('[data-swap-mark]')).toBeNull();
       }
       if (w === 900) {
         // 横の図の箱の枠は警告色
@@ -238,12 +244,12 @@ describe('未選択の箱（D-116 の補足）', () => {
       rerender(view(false));
       for (const id of targets) {
         expect(box(id).hasAttribute('data-unselected')).toBe(false);
-        const button = within(box(id)).getByRole('button');
+        within(box(id)).getByRole('button');
         expect(
           within(box(id)).queryByRole('button', { name: /未選択/ }),
         ).toBeNull();
-        expect(button.querySelector('[data-unselected-mark]')).toBeNull();
-        expect(button.querySelector('[data-swap-mark]')).not.toBeNull();
+        expect(box(id).querySelector('[data-unselected-mark]')).toBeNull();
+        expect(box(id).querySelector('[data-swap-mark]')).not.toBeNull();
       }
       expect(container.textContent).not.toMatch(/まだ選んでいない/);
       cleanup();
@@ -309,5 +315,110 @@ describe('箱の吹き出しで選んだ後の focus（OCL-131BD89D・D-116 の�
       container.querySelector('[data-diagram="system"]'),
     );
     expect(onFocused).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('foreignObject の中に独自のレイヤーを作らない（D-213）', () => {
+  // WebKit（iPhone の Safari）は foreignObject の中で独自のレイヤーを持つ要素（位置指定・opacity・transform・filter・overflow など）を、
+  // viewBox の拡大縮小と foreignObject の位置を受けずに描き、箱が枠・線とずれる。jsdom では描画を測れないので、規則を固定する
+  const LAYER_CLASS =
+    /^(relative|absolute|fixed|sticky|sr-only|opacity-|transform|translate-|-translate-|scale-|rotate-|skew-|filter|blur|drop-shadow|backdrop-|overflow-|line-clamp-|isolate|z-|will-change|mix-blend|clip-|contain-)/;
+  const LAYER_STYLE = [
+    'position',
+    'opacity',
+    'transform',
+    'translate',
+    'scale',
+    'rotate',
+    'filter',
+    'backdrop-filter',
+    'overflow',
+    'overflow-x',
+    'overflow-y',
+    'clip-path',
+    'mask',
+    'will-change',
+    'z-index',
+    'mix-blend-mode',
+    'isolation',
+    'contain',
+  ];
+  const comps = diagramComponents(sc, cf, 'nextjs', {
+    isrCache: 'workers-cache',
+  });
+  const wc = diagramArchitecture(sc, cf, 'nextjs', comps);
+  const { swap, ghosts } = slotBoxes(
+    (c) => diagramArchitecture(sc, cf, 'nextjs', c),
+    comps,
+    setupSlots(sc, cf, 'nextjs', comps),
+  );
+  const [, firstSlots] = [...swap.entries()][0]!;
+
+  it('W-213 横の図・縦の図（部品を選べる図・選べない図・幽霊の箱・未選択の箱）', () => {
+    for (const w of [900, 320])
+      for (const withParts of [true, false]) {
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(
+          w,
+        );
+        const { container } = render(
+          <SystemDiagram
+            architecture={wc}
+            pages={pages}
+            ghosts={ghosts}
+            parts={
+              withParts
+                ? {
+                    slotsOf: (id) => swap.get(id) ?? [],
+                    render: () => null,
+                    unselected: (slot) =>
+                      slot === 'isrCache' || slot === firstSlots[0],
+                  }
+                : undefined
+            }
+          />,
+        );
+        const where = `幅 ${w}・部品を選べる ${withParts}`;
+        const fos = [...container.querySelectorAll('foreignObject')];
+        expect(fos.length).toBeGreaterThan(0);
+        for (const el of fos.flatMap((fo) => [...fo.querySelectorAll('*')])) {
+          const tokens = (el.getAttribute('class') ?? '')
+            .split(/\s+/)
+            .filter(Boolean)
+            // hover: などの前置きを外す
+            .map((t) => t.split(':').pop()!);
+          expect(
+            tokens.filter((t) => LAYER_CLASS.test(t)),
+            `${where} ${el.outerHTML.slice(0, 120)}`,
+          ).toEqual([]);
+          const style = (el as HTMLElement).style;
+          for (const p of LAYER_STYLE)
+            expect(
+              style?.getPropertyValue(p) ?? '',
+              `${where} ${p} ${el.outerHTML.slice(0, 120)}`,
+            ).toBe('');
+        }
+        if (withParts) {
+          // 箱の印（! と ⇄）は foreignObject の外の SVG の円と字
+          const marks = container.querySelectorAll(
+            '[data-node] [data-unselected-mark], [data-node] [data-swap-mark]',
+          );
+          expect(marks.length, where).toBeGreaterThan(0);
+          for (const m of marks) {
+            expect(m.closest('foreignObject')).toBeNull();
+            expect(m.querySelector('circle')).not.toBeNull();
+          }
+        }
+        if (w === 320 && withParts) {
+          // 縦の図の未選択の幽霊の箱の枠は、foreignObject の外の rect（警告色の点線）
+          const g = container.querySelector('[data-node="ghost:isrCache"]')!;
+          const frame = [...g.querySelectorAll<SVGRectElement>('rect')].find(
+            (r) => r.style.fill === 'none',
+          )!;
+          expect(frame.style.stroke).toBe('var(--color-warning)');
+          expect(frame.getAttribute('stroke-dasharray')).toBe('4 3');
+        }
+        cleanup();
+        vi.restoreAllMocks();
+      }
   });
 });

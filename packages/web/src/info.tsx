@@ -163,6 +163,7 @@ export function Popover({
   className = 'btn btn-ghost btn-xs btn-circle align-middle',
   interactive = false,
   nameFromContent = false,
+  hiddenName = false,
 }: {
   /** 中身。関数なら閉じる関数を受ける（中の操作で閉じるとき。interactive と使う）。 */
   children: ReactNode | ((close: () => void) => ReactNode);
@@ -182,6 +183,12 @@ export function Popover({
    * （WCAG 2.5.3: 名前は見えている文字で始める。補足は中身の sr-only で後ろに足す。D-196）。
    */
   nameFromContent?: boolean;
+  /**
+   * ボタンの名前を、ボタンの中の hidden の要素（label の文字列）から aria-labelledby で取る（aria-label は付けない）。
+   * 構成図の foreignObject の中の箱で使う: sr-only は position: absolute で、WebKit は foreignObject の中の位置指定の要素を
+   * viewBox の拡大縮小を受けずに描く（D-213）。label は見えている文字で始める（WCAG 2.5.3。D-196）。
+   */
+  hiddenName?: boolean;
 }) {
   const [pos, setPos] = useState<Pos | null>(null);
   // ボタンの要素は state に持つ（close を children(close) で渡すので、ref だと render 中に読むとみなされ React Compiler が最適化を諦める）
@@ -194,6 +201,7 @@ export function Popover({
     setPanelEl(el);
   }, []);
   const id = useId();
+  const nameId = useId();
   const container = useContext(PortalContainer);
   const open = pos !== null;
   const close = () => {
@@ -261,7 +269,8 @@ export function Popover({
         ref={setButton}
         type="button"
         className={className}
-        aria-label={nameFromContent ? undefined : label}
+        aria-label={nameFromContent || hiddenName ? undefined : label}
+        aria-labelledby={hiddenName ? nameId : undefined}
         aria-expanded={open}
         aria-haspopup={interactive ? 'dialog' : undefined}
         aria-controls={id}
@@ -275,6 +284,11 @@ export function Popover({
         }}
       >
         {trigger ?? <InfoIcon />}
+        {hiddenName && (
+          <span id={nameId} hidden>
+            {label}
+          </span>
+        )}
       </button>
       {open &&
         // body に出す（label の中に置かれても、吹き出しのクリックで選択肢が切り替わらないように）

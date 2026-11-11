@@ -1892,8 +1892,10 @@ describe('ゲームモードの画面', () => {
       within(current()).queryByRole('button', {
         name: /^DB：.*、未選択）を替える$/,
       });
-    expect(dbBox()!.querySelector('[data-unselected-mark]')).not.toBeNull();
-    expect(dbBox()!.querySelector('[data-swap-mark]')).toBeNull();
+    // 印はボタンの外（箱の右上の SVG。foreignObject の中に位置指定の要素を置かない。D-213）
+    const dbG = dbBox()!.closest('[data-box]')!;
+    expect(dbG.querySelector('[data-unselected-mark]')).not.toBeNull();
+    expect(dbG.querySelector('[data-swap-mark]')).toBeNull();
     expect(
       screen.getByRole<HTMLButtonElement>('button', { name: '運営を始める' })
         .disabled,
@@ -1940,7 +1942,9 @@ describe('ゲームモードの画面', () => {
     });
     expect(document.activeElement).toBe(box);
     expect(box.closest('[data-swappable="true"]')).not.toBeNull();
-    expect(box.querySelector('[data-swap-mark]')).not.toBeNull();
+    expect(
+      box.closest('[data-swappable="true"]')!.querySelector('[data-swap-mark]'),
+    ).not.toBeNull();
     // Esc で閉じると箱に focus が戻る
     fireEvent.click(box);
     expect(screen.getByRole('dialog')).toBeDefined();

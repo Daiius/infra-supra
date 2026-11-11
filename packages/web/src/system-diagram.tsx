@@ -85,43 +85,55 @@ const hasUnselected = (parts: DiagramParts | undefined, nodeId: string) =>
   parts.slotsOf(nodeId).some((slot) => parts.unselected!(slot));
 
 /**
- * 差し替えられる箱の印（角の丸いバッジに ⇄。primary の地で、押せる箱だと一目で分かるように。色だけに頼らず記号も付ける）。
- * compact は縦の図の小さい箱。
+ * 箱の右上の印（D-116 とその補足）。差し替えられる箱は primary の地に ⇄、まだ選んでいない部品の箱は warning の地に「!」
+ * （色だけに頼らず記号も付ける。読み上げは箱の名前の「未選択」・「を替える」）。箱の名前は既定の部品なので、「!」が無いと選び済みに見える。
+ * foreignObject の外に SVG の円と字で描く（WebKit は foreignObject の中の位置指定の要素を viewBox の拡大縮小を受けずに描き、
+ * 箱と印がずれる。D-213）。押しても下の箱のボタンに届くよう、印は pointer-events を受けない。
+ * right・top は印の右上の角、compact は縦の図の小さい箱。
  */
-function SwapMark({ compact = false }: { compact?: boolean }) {
+function BoxMark({
+  right,
+  top,
+  warn,
+  compact = false,
+}: {
+  right: number;
+  top: number;
+  warn: boolean;
+  compact?: boolean;
+}) {
+  const r = compact ? 7 : 9;
   return (
-    <span
+    <g
       aria-hidden
-      data-swap-mark
-      className={`absolute flex items-center justify-center rounded-full bg-primary leading-none font-bold text-primary-content shadow-sm ${
-        compact
-          ? 'top-0 right-0 h-3.5 w-3.5 text-[9px]'
-          : 'top-0.5 right-0.5 h-[18px] w-[18px] text-[12px]'
-      }`}
+      data-unselected-mark={warn ? '' : undefined}
+      data-swap-mark={warn ? undefined : ''}
+      style={{ pointerEvents: 'none' }}
     >
-      ⇄
-    </span>
-  );
-}
-
-/**
- * まだ選んでいない部品の箱の印（⇄ の代わりに warning の地に「!」。D-116 の補足）。色だけに頼らず記号を付け、読み上げは箱の名前の「未選択」。
- * 箱の名前は既定の部品なので、印が無いと選び済みに見える。
- */
-function UnselectedMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <span
-      aria-hidden
-      data-unselected-mark
-      title="未選択"
-      className={`absolute flex items-center justify-center rounded-full bg-warning leading-none font-bold text-warning-content shadow-sm ${
-        compact
-          ? 'top-0 right-0 h-3.5 w-3.5 text-[9px]'
-          : 'top-0.5 right-0.5 h-[18px] w-[18px] text-[12px]'
-      }`}
-    >
-      !
-    </span>
+      <circle
+        cx={right - r}
+        cy={top + r}
+        r={r}
+        style={{
+          fill: warn ? 'var(--color-warning)' : 'var(--color-primary)',
+        }}
+      />
+      <text
+        x={right - r}
+        y={top + r}
+        textAnchor="middle"
+        dominantBaseline="central"
+        style={{
+          fill: warn
+            ? 'var(--color-warning-content)'
+            : 'var(--color-primary-content)',
+          fontSize: compact ? 9 : 12,
+          fontWeight: 700,
+        }}
+      >
+        {warn ? '!' : '⇄'}
+      </text>
+    </g>
   );
 }
 
@@ -135,6 +147,13 @@ const SWAP_STROKE =
  */
 const GHOST_DASH = '4 3';
 const GHOST_OPACITY = 0.5;
+/**
+ * foreignObject の中の字の薄さ（opacity の代わりに色の透明度。WebKit は foreignObject の中の opacity・位置指定などで独自のレイヤーを
+ * 作る要素を、viewBox の拡大縮小と foreignObject の位置を受けずに描く。D-213）。幽霊の箱は GHOST_OPACITY を掛けた値。
+ */
+const CAPTION = 'text-base-content/70';
+const GHOST_CAPTION = 'text-base-content/35';
+const GHOST_TEXT = 'text-base-content/50';
 /** 幽霊の箱の吹き出しの説明。 */
 const GHOST_NOTE =
   '今の選択は、課金される部品を図に持ちません（別の部品の中で働くか、使わない）。箱だけを点線で残し、経路の線は引きません。';
@@ -392,14 +411,16 @@ export function SystemDiagram({
                           ? `${n.caption}: ${n.label}（${GHOST_NOTE}）`
                           : n.label
                       }
+                      // 幽霊の箱の薄さは opacity でなく字の色の透明度で出す（foreignObject の中に独自のレイヤーを作らない。D-213）
                       className="flex h-full flex-col justify-center leading-tight"
-                      style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
                     >
-                      <span className="text-[10px] opacity-70">
+                      <span
+                        className={`text-[10px] ${n.ghost ? GHOST_CAPTION : CAPTION}`}
+                      >
                         {n.caption}
                       </span>
                       <span
-                        className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
+                        className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''} ${n.ghost ? GHOST_TEXT : ''}`}
                       >
                         {n.label}
                       </span>
@@ -710,7 +731,8 @@ function GroupBox({
         <g>
           <title>{title}</title>
           <foreignObject x={b.x + 3} y={b.y + 2} width={b.w - 6} height={13}>
-            <div className="flex h-full items-center overflow-hidden text-[9px] font-semibold whitespace-nowrap opacity-80">
+            {/* 切り詰めは foreignObject の既定の切り抜きに任せる（中に overflow・opacity のレイヤーを作らない。D-213） */}
+            <div className="flex h-full items-center text-[9px] font-semibold whitespace-nowrap text-base-content/80">
               {g.brand ? <BrandMark brand={g.brand} size={12} /> : title}
             </div>
           </foreignObject>
@@ -722,7 +744,7 @@ function GroupBox({
           width={Math.max(40, b.w - 12)}
           height={LAYOUT.bandHeader - 2}
         >
-          <div className="flex items-center gap-1 text-[11px] font-semibold whitespace-nowrap opacity-80">
+          <div className="flex items-center gap-1 text-[11px] font-semibold whitespace-nowrap text-base-content/80">
             {g.brand && <BrandMark brand={g.brand} size={12} />}
             {title}
           </div>
@@ -977,6 +999,16 @@ function CompactNode({
     ],
     slots.length > 0 ? 'の説明と差し替え' : 'の説明',
   );
+  // 枠の太さと色（未選択は警告色の太い枠・差し替えられる箱は primary・処理を動かす部品は太い枠。D-116 とその補足）
+  const sw = warn ? 2 : n.compute ? 1.75 : 1;
+  const stroke = warn
+    ? 'var(--color-warning)'
+    : slots.length > 0
+      ? SWAP_STROKE
+      : n.compute
+        ? 'var(--color-base-content)'
+        : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)';
+  const mark = warn || slots.length > 0;
   return (
     <g
       data-node={n.id}
@@ -985,41 +1017,46 @@ function CompactNode({
       data-unselected={warn ? 'true' : undefined}
       data-ghost={n.ghost ? 'true' : undefined}
     >
+      {/* 箱の地と枠は SVG の rect（D-213。WebKit は foreignObject の中の位置指定・opacity の要素を viewBox の拡大縮小を受けずに描く）。
+          地は下に、枠はボタン（ホバーの地・輪）の上に重ねて押すのを邪魔しない。枠の太さは CSS の border と同じく箱の内側に収める */}
+      <rect
+        x={n.x}
+        y={n.y}
+        width={model.node.w}
+        height={model.node.h}
+        rx={6}
+        style={{
+          fill: 'var(--color-base-100)',
+          // 幽霊の箱は半透明の地（D-116 の補足）
+          ...(n.ghost ? { fillOpacity: GHOST_OPACITY } : {}),
+        }}
+      />
       <foreignObject x={n.x} y={n.y} width={model.node.w} height={model.node.h}>
         <Popover
           label={`${n.short}${suffix}`}
-          nameFromContent
+          hiddenName
           interactive={slots.length > 0}
-          className={`relative flex h-full w-full cursor-pointer items-center justify-center rounded-md px-0.5 text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
-            n.compute ? 'font-semibold' : ''
-          } ${warn ? 'border-2' : n.compute ? 'border-[1.75px]' : 'border'} ${
-            // 幽霊の箱は点線の枠・半透明の地（D-116 の補足）
-            n.ghost ? 'border-dashed bg-base-100/50' : 'bg-base-100'
+          // 枠は上の rect が描く。ボタンにも同じ太さの透明の枠を持たせ、ホバーの輪（inset）を枠の内側に置く（前と同じ見た目）。
+          // 右上の印（!・⇄）がある箱は、名前が印に重ならないよう右に余白を取る
+          className={`flex h-full w-full cursor-pointer items-center justify-center rounded-md border-transparent text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+            mark ? 'pr-3 pl-0.5' : 'px-0.5'
+          } ${n.compute ? 'font-semibold' : ''} ${
+            warn ? 'border-2' : n.compute ? 'border-[1.75px]' : 'border'
           } ${
-            // 差し替えられる箱は primary の枠で、ホバーで太くする（D-116）。未選択の箱は警告色の太い枠（D-116 の補足）
+            // 差し替えられる箱は、ホバーで primary の輪を足して太く見せる（D-116）。未選択の箱は警告色（D-116 の補足）
             warn
-              ? 'border-warning hover:bg-warning/10 hover:ring-2 hover:ring-warning hover:ring-inset'
+              ? 'hover:bg-warning/10 hover:ring-2 hover:ring-warning hover:ring-inset'
               : slots.length > 0
-                ? 'border-primary/70 hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset'
-                : n.compute
-                  ? 'border-base-content'
-                  : 'border-base-content/35'
+                ? 'hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset'
+                : ''
           }`}
           trigger={
-            <>
-              <span
-                className="line-clamp-3 [overflow-wrap:anywhere]"
-                style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
-              >
-                {n.short}
-              </span>
-              <span className="sr-only">{suffix}</span>
-              {warn ? (
-                <UnselectedMark compact />
-              ) : (
-                slots.length > 0 && <SwapMark compact />
-              )}
-            </>
+            <span
+              data-short
+              className={`[overflow-wrap:anywhere] ${n.ghost ? GHOST_TEXT : ''}`}
+            >
+              {n.short}
+            </span>
           }
         >
           {(close) => (
@@ -1073,6 +1110,19 @@ function CompactNode({
           )}
         </Popover>
       </foreignObject>
+      <rect
+        x={n.x + sw / 2}
+        y={n.y + sw / 2}
+        width={model.node.w - sw}
+        height={model.node.h - sw}
+        rx={6 - sw / 2}
+        // 幽霊の箱は点線の枠（D-116 の補足）
+        strokeDasharray={n.ghost ? GHOST_DASH : undefined}
+        style={{ fill: 'none', stroke, strokeWidth: sw, pointerEvents: 'none' }}
+      />
+      {mark && (
+        <BoxMark right={n.x + model.node.w} top={n.y} warn={warn} compact />
+      )}
     </g>
   );
 }
@@ -1126,11 +1176,13 @@ function SwappableNode({
       >
         <Popover
           label={`${n.caption}：${n.label}${swapSuffix(title, warn && '未選択')}`}
-          // 名前は見えている「スロット：部品」で始め、事業者・未選択を後ろに足す（D-196）
-          nameFromContent
+          // 名前は見えている「スロット：部品」で始め、事業者・未選択を後ろに足す（D-196）。sr-only（position: absolute）は
+          // foreignObject の中に置けないので、名前は hidden の要素から取る（D-213）
+          hiddenName
           interactive
-          // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）。未選択の箱は警告色
-          className={`relative flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:ring-2 hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+          // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）。未選択の箱は警告色。
+          // 右の余白（pr-5）は右上の印の分
+          className={`flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:ring-2 hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
             warn
               ? 'hover:bg-warning/10 hover:ring-warning'
               : 'hover:bg-primary/10 hover:ring-primary'
@@ -1139,12 +1191,12 @@ function SwappableNode({
             <>
               <span className="flex items-center gap-1">
                 <span
-                  className="text-[10px] opacity-70"
-                  style={n.ghost ? { opacity: 0.7 * GHOST_OPACITY } : undefined}
+                  className={`text-[10px] ${n.ghost ? GHOST_CAPTION : CAPTION}`}
                 >
                   {n.caption}
                 </span>
-                <span className="sr-only">：</span>
+                {/* 文字として続ける区切り（見せない。読み上げの名前は hiddenName の文字列） */}
+                <span hidden>：</span>
                 {warn && (
                   <span
                     aria-hidden
@@ -1155,15 +1207,10 @@ function SwappableNode({
                 )}
               </span>
               <span
-                className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''}`}
-                style={n.ghost ? { opacity: GHOST_OPACITY } : undefined}
+                className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''} ${n.ghost ? GHOST_TEXT : ''}`}
               >
                 {n.label}
               </span>
-              <span className="sr-only">
-                {swapSuffix(title, warn && '未選択')}
-              </span>
-              {warn ? <UnselectedMark /> : <SwapMark />}
             </>
           }
         >
@@ -1183,6 +1230,7 @@ function SwappableNode({
           )}
         </Popover>
       </foreignObject>
+      <BoxMark right={n.x + model.node.w - 4} top={n.y + 4} warn={warn} />
     </g>
   );
 }

@@ -2627,6 +2627,18 @@
   払う行が少し戻る（記事 × Netlify Pro × Neon 20 → 19・受託 × Google Cloud × Supabase 17 → 16 など。golden の各テストのコメント）。
 - 1 ページの通信量（Next.js）: WebP で 約 976 → 990 kB（JPEG は 約 1.2 MB のまま）。
 
+### D-213 構成図の foreignObject の中に独自のレイヤーを作る要素を置かない（iPhone の Safari で箱と線・枠がずれる。2026-11-11・ユーザーの指摘）
+
+- 症状: iPhone の Safari で、始める画面の縦の図の箱だけが左上に寄り、事業者の枠（点線の角丸）と矢印は正しい位置にあるので箱と線がずれる（Google Cloud の構成で大きい）。WebKit（Playwright の webkit・390px）では Cloudflare の構成でも下の段の箱が矢印の先とずれ、枠の下半分が空いた。Chromium では出ない。ラベルと右上の「!」が重なるのは Chromium でも出た。
+- 原因（推定）: WebKit は foreignObject の中で独自のレイヤーを持つ要素（position: relative / absolute・opacity・transform・filter・overflow など）を、SVG の viewBox の拡大縮小と foreignObject の位置を受けずに描く。縦の図の箱はボタン（`relative`）の中の HTML で枠と地を描き、印は `absolute`、幽霊の箱は `opacity`、読み上げの補足は `sr-only`（absolute）だった。縦の図は `maxWidth: 幅 × 1.5` で拡大して中央に寄せるので、ずれが大きく出る。
+- 決定（規則）: **構成図の foreignObject の中に、位置指定（relative / absolute / fixed / sticky。`sr-only` も）・opacity・transform・filter・overflow（`line-clamp` も）など独自のレイヤーを作る class・style を置かない。** SVG の要素（rect など）の opacity は foreignObject の外なので構わない。
+  - 縦の図の箱（`CompactNode`）: 地と枠を SVG の rect で描く（地はボタンの下、枠は上に重ねて `pointer-events: none`。枠の太さは前の CSS の border と同じく箱の内側に収める。幽霊の箱は点線 `4 3`・地の `fillOpacity` 0.5）。ボタンは同じ太さの透明の枠を持ち、ホバーの地・inset の輪・フォーカスの輪は今までどおりボタンに付ける。短い名前の `line-clamp-3` はやめ、はみ出しは foreignObject の切り抜きに任せる。
+  - 右上の印（⇄・「!」）: 縦の図・横の図の差し替えられる箱（`SwappableNode`）とも、foreignObject の外に SVG の円と字で描く（`BoxMark`。`data-swap-mark`・`data-unselected-mark` はその g に付く。押しても下のボタンに届くよう `pointer-events: none`）。縦の図で印のある箱は名前の右に `pr-3` を空け、名前と「!」が重ならないようにした。印の影（`shadow-sm`）と「!」の title（ホバーの「未選択」）は落とした（読み上げの名前に「未選択」がある）。
+  - 幽霊の箱・見出しの薄さ: opacity をやめ、字の色の透明度（`text-base-content/70`・幽霊の箱は名前 /50・見出し /35）にした。事業者の枠の見出しの `opacity-80` も `text-base-content/80`（ロゴは薄くしない）。
+  - 読み上げの名前: `sr-only` が置けないので、info.tsx の `Popover` に `hiddenName` を足し、ボタンの中の `hidden` の要素（吹き出しの名前と同じ文字列）を `aria-labelledby` で指す。aria-label は付けず、名前は見えている文字で始まる（D-196 の WCAG 2.5.3 は保つ）。一番下の段の箱は SVG の外なので `nameFromContent` + `sr-only` のまま。Popover の吹き出しは `getBoundingClientRect` から `position: fixed` で置くので、ボタンの `relative` には頼っていない（Popover の既定は変えていない）。
+- テスト: web の `system-diagram.smoke.test.tsx` の W-213（横・縦 × 部品を選べる / 選べない・幽霊の箱・未選択の箱で、foreignObject の中の要素の class と style にレイヤーを作るものが無いこと・印が foreignObject の外の SVG であること・縦の図の枠が rect の警告色の点線であること）。WebKit の描画そのものは jsdom で測れないので規則を固定する。W-34・W-41・W-42・W-47 と App の未選択の DB の箱の検査を、印がボタンの外にある形に合わせた。
+- 残した点: iPhone 13 相当（390px）の WebKit で、始める画面の縦の図（Cloudflare・Google Cloud ほか）の箱と矢印・枠が合うこと、「!」とラベルが重ならないこと、横の図と見積モードの見た目が前と同じことを、supervisor が確かめる。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。
