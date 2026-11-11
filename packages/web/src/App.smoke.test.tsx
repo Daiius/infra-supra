@@ -2787,7 +2787,10 @@ describe('ゲームモードの画面', () => {
     expect(pages).toHaveLength(n);
     const proposal = pages.find((t) => t.includes('◆ 提案'))!;
     expect(proposal).toContain('会員向けの個人化');
-    expect(proposal).toContain('行動の欄で受けるか断るかを選びます');
+    // 提案のページで受ける / 断るを選べる（D-202）
+    expect(proposal).toContain(
+      '受けるか断るかを選びます（選ばなければ断ります）',
+    );
     expect(pages.some((t) => t.includes('⚡ 今月発生'))).toBe(true);
     // 最後のページ: 「閉じる」が主ボタン。次へは位置を動かさず押せなくなり、あとで見るは無い。全部読んだ
     expect(eventPosition(dialog)).toBe(`${n} / ${n}`);

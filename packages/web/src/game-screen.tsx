@@ -9,21 +9,16 @@ import {
   PAYMENT_LABEL,
   type CommitmentPaymentId,
   actionEffort,
-  applyActions,
   resultAxesOf,
   BOT_BLOCK,
   cashProjectionOf,
   isTrafficSpike,
   comparisonRows,
-  checkActions,
   fixedSettingValue,
   settingInactiveReason,
   settingNote,
   EFFORT,
-  effortAvailable,
   effortTotalNote,
-  effortTotalOf,
-  acceptSummary,
   featureOutlook,
   featureProgressOf,
   featureRuleText,
@@ -47,9 +42,6 @@ import {
   SETTINGS,
   STAGE_LABEL,
   type Action,
-  type SetupChangeGroups,
-  type SetupDraft,
-  setupChangeOf,
   type Axes,
   type GameState,
   type MonthEvent,
@@ -82,6 +74,8 @@ import { eventCategory, EventIcon } from './event-icons.tsx';
 import { FeatureRing, featureStageView } from './feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from './option-text.tsx';
 import { SetupChangeField } from './setup-change-field.tsx';
+import { useMonthDraft, type MonthDraft } from './month-draft.ts';
+import { PROPOSAL_BADGE, ProposalChoice } from './proposal-choice.tsx';
 import { commitmentMeta, usd } from './commitment-meta.ts';
 import { CreditBar } from './credit-bar.tsx';
 import {
@@ -320,6 +314,8 @@ export function Game({
   }, [resumed]);
   // 戻れるのは行動を選んだ月（今の月より前）だけ（D-128）。戻る入口はヘッダーと履歴の行（D-192）
   const rewindable = state.history.length - 1;
+  // 今月の行動の下書き。行動の欄と出来事のダイアログの提案のページで共有する（どちらで返事を選んでも同じ。D-202）
+  const monthDraft = useMonthDraft(state);
   return (
     <>
       {resumed && (
@@ -365,6 +361,7 @@ export function Game({
       {playing && (
         <Actions
           state={state}
+          draft={monthDraft}
           onDecide={(actions) => {
             const next = onAdvance(actions);
             const last = next.history[next.history.length - 1]!;
@@ -382,6 +379,8 @@ export function Game({
           // 月が替わったら 1 ページ目から
           key={report.month}
           report={report}
+          state={state}
+          draft={monthDraft}
           auto={eventsOpen === 'auto'}
           onClose={() => setEventsOpen(null)}
         />
@@ -517,10 +516,16 @@ function VictoryCelebration({
  */
 function EventsDialog({
   report: r,
+  state,
+  draft,
   auto,
   onClose,
 }: {
   report: MonthReport;
+  /** 今の状態（提案のページで受ける / 断るを選ぶ。D-202）。 */
+  state: GameState;
+  /** 今月の行動の下書き（行動の欄と共有する。D-202）。 */
+  draft: MonthDraft;
   auto: boolean;
   onClose: () => void;
 }) {
@@ -583,6 +588,8 @@ function EventsDialog({
       aria-labelledby="events-dialog-title"
       onClose={onClose}
       onKeyDown={(k) => {
+        // 提案のページの受ける / 断るの radio は矢印で選び直すので、ページは送らない（D-202）
+        if (k.target instanceof HTMLInputElement) return;
         if (k.key === 'ArrowRight') go(page + 1);
         else if (k.key === 'ArrowLeft') go(page - 1);
       }}
@@ -732,12 +739,22 @@ function EventsDialog({
               key={`${e.id}:${e.phase}`}
               event={e}
               premises={r.premises}
+              choosing={
+                e.phase === 'proposal' && state.pendingProposals.includes(e.id)
+              }
             />
-            {e.phase === 'proposal' && (
-              <div className="mt-2 text-sm opacity-80">
-                行動の欄で受けるか断るかを選びます（選ばなければ断ります）
-              </div>
-            )}
+            {/* 提案のページで受ける / 断るを選ぶ（行動の欄と同じ下書き。選べば「次の月へ」の確認は出ない。D-202） */}
+            {e.phase === 'proposal' &&
+              state.pendingProposals.includes(e.id) && (
+                <div className="mt-2">
+                  <ProposalChoice
+                    state={state}
+                    id={e.id}
+                    draft={draft}
+                    where="dialog"
+                  />
+                </div>
+              )}
           </div>
         </div>
         <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
@@ -1117,7 +1134,6 @@ function EffortBreakdownView({
 }
 
 /** 提案の印（D-28）。出来事の一覧・ダイアログと、行動の欄の提案の選択肢で共有する（D-126）。 */
-const PROPOSAL_BADGE = { label: '◆ 提案', cls: 'badge-primary' } as const;
 
 /**
  * 出来事の印（D-28）。予告・予告なしで今月発生・予告どおり起きた・提案を、印・色・文言の 3 つで区別する（色だけにしない）。
@@ -1167,10 +1183,13 @@ const HIT_BADGE = { error: 'badge-error', warning: 'badge-warning' } as const;
 export function EventCard({
   event: e,
   premises,
+  choosing = false,
 }: {
   event: MonthEvent;
   /** 同じ月の前提。出来事の前提の効き方（止まる・課金など）を引き、印の色を分ける（D-188）。 */
   premises: readonly PlatformPremise[];
+  /** すぐ下で受ける / 断るを選べる（出来事のダイアログの提案のページ。D-202）。 */
+  choosing?: boolean;
 }) {
   const badge = eventBadge(e);
   // 効き方が引けない前提は、今までどおり止まる側（赤）に倒す
@@ -1201,11 +1220,18 @@ export function EventCard({
       {e.accept && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          。月の終わりの行動で受けるか断るかを選びます（
+          {choosing ? '' : '。月の終わりの行動で受けるか断るかを選びます'}（
           {e.accept.declineLoss
             ? `断ると${e.accept.declineLoss}`
             : '断っても罰はありません'}
           ）
+        </div>
+      )}
+      {e.unavailable && (
+        // 今の構成では受けられない提案は、返事を待たずに断ったことにした（D-201）
+        <div className="mt-1 text-xs" data-event-unavailable>
+          <span className="mr-1 badge badge-ghost badge-xs">返事は不要</span>
+          受けられないので、断ったことになります
         </div>
       )}
       {e.accept?.unavailable && (
@@ -1377,102 +1403,43 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
 /** 今月の行動。設定はいつでも戻せる。手間のポイントの残りの範囲で、いくつでも選べる。 */
 function Actions({
   state,
+  draft: d,
   onDecide,
 }: {
   state: GameState;
+  /** 今月の行動の下書き（出来事のダイアログの提案のページと共有する。D-202）。 */
+  draft: MonthDraft;
   onDecide: (a: Action[]) => void;
 }) {
-  const [settings, setSettings] = useState<Partial<Record<SettingKey, number>>>(
-    {},
-  );
-  const [optimize, setOptimize] = useState(false);
-  /** 構成を変える（構成・部品・フレームワーク・ページの描き方・コメント欄をまとめて選び直したもの。D-185）。 */
-  const [change, setChange] = useState<SetupDraft | null>(null);
-  /** 提案への返事（選ばなければ断る）。 */
-  const [answers, setAnswers] = useState<Record<string, boolean>>({});
-  const [blockBots, setBlockBots] = useState(false);
-  /** さくらの VPS のストレージ変更オプション（D-30）。 */
-  const [storage, setStorage] = useState(false);
-  /** 結ぶ確約（確約ごとの支払いの形。D-97）。 */
-  const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
-    {},
-  );
+  const {
+    settings,
+    setSettings,
+    optimize,
+    setOptimize,
+    change,
+    setChange,
+    blockBots,
+    setBlockBots,
+    storage,
+    setStorage,
+    commits,
+    setCommits,
+    resets,
+    reset,
+    build,
+    blocked,
+    valid,
+    actions,
+    draft,
+    left,
+    undecided,
+  } = d;
   /** 未決の提案があるときに「次の月へ」で出す確認（D-140）。 */
   const [confirmDecline, setConfirmDecline] = useState(false);
-  /** 「選択を戻す」の回数（構成を変えるの欄の選び直しの途中も今の状態に戻すため、欄を描き直す。OCL-E8982F9F）。 */
-  const [resets, setResets] = useState(0);
-  const reset = () => {
-    setResets((n) => n + 1);
-    setCommits({});
-    setSettings({});
-    setOptimize(false);
-    setChange(null);
-    setAnswers({});
-    setBlockBots(false);
-    setStorage(false);
-  };
-  // 登録した「構成を変える」を写し取った行動（D-185）
-  const changeGroups = change ? setupChangeOf(state, change).groups : null;
-
-  const build = (
-    o: {
-      settings?: Partial<Record<SettingKey, number>>;
-      optimize?: boolean;
-      /** 構成を変える（写し取った行動の組。D-185）。 */
-      change?: SetupChangeGroups | null;
-      answers?: Record<string, boolean>;
-      blockBots?: boolean;
-      storage?: boolean;
-      commits?: Record<string, CommitmentPaymentId>;
-    } = {},
-  ): Action[] => {
-    const st = o.settings ?? settings;
-    const opt = o.optimize ?? optimize;
-    const ch = o.change === undefined ? changeGroups : o.change;
-    const ans = o.answers ?? answers;
-    const out: Action[] = [];
-    // 提案を受ける手間（割り込み）を先に取る
-    for (const eventId of state.pendingProposals)
-      out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
-    if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
-    if (o.storage ?? storage) out.push({ type: 'storage-option' });
-    // 確約は今月の明細の使用で結ぶので、構成を変える行動より先に当てる（D-97）
-    for (const [key, payment] of Object.entries(o.commits ?? commits))
-      out.push({ type: 'commit', key, payment });
-    // 構成を変える（D-185）: 部品（VPS の API の応答のキャッシュは前段の CDN の後・外すときは先。D-37）→ 構成 → 描き方（D-107。
-    // 描き方で出す設定が変わるので設定の前）→ ページの部品（コメント欄。D-109。枠 + API にすると含められないので描き方の後）
-    if (ch) {
-      out.push(...ch.components);
-      if (ch.stack) out.push(ch.stack);
-      out.push(...ch.routes, ...ch.routeParts);
-    }
-    for (const [key, value] of Object.entries(st))
-      out.push({ type: 'set', key: key as SettingKey, value: value! });
-    if (opt) out.push({ type: 'optimize' });
-    // 作り直しは残りの手間をすべて取れるので、ほかの行動の後に当てる（D-81）
-    if (ch?.rewrite) out.push(ch.rewrite);
-    return out;
-  };
-  /**
-   * 選べない理由（すべて選べれば null）。理由はエンジンが区別して返す文をそのまま出す
-   * （手間が足りない・今と同じ・最中・要件・提案を受けると付く など）。
-   */
-  const blocked = (actions: Action[]): string | null => {
-    const r = checkActions(state, actions);
-    return r.ok ? null : r.message;
-  };
-  const valid = (actions: Action[]) => blocked(actions) === null;
-  const actions = build();
-  // 受けるも断るも選んでいない提案（このまま進むと断ったことになる。D-140）
-  const undecided = state.pendingProposals.filter(
-    (id) => answers[id] === undefined,
-  );
   const proceed = () => {
     onDecide(actions);
     reset();
   };
-  const draft = applyActions(state, actions);
-  const left = effortAvailable(draft);
   // 来月の機能開発の見込み（選んだ行動・提案への返事を当てた配分。D-122）
   const outlook = featureOutlook(state, actions);
   // 今月の「機能」がメールが届かない分で下がっていれば、来月の見込みの段階は機能開発の比だけで見たものと断る（OCL-7D797D79）
@@ -1509,8 +1476,7 @@ function Actions({
           今月の行動（来月に効く）
           <span className="badge badge-lg">
             {/* 分母も選んでいる行動を当てた draft から（プラン変更で既定の分が替わる。D-123・OCL-ADB0B195） */}
-            来月の手間の残り {fmtPoints(left)} /{' '}
-            {fmtPoints(effortTotalOf(draft))}
+            来月の手間の残り {fmtPoints(left)} / {fmtPoints(d.total)}
           </span>
         </h2>
         <p className="text-sm opacity-70">
@@ -1554,68 +1520,15 @@ function Actions({
             <div className="divider my-1 text-xs">
               届いた提案（選ばなければ断る）
             </div>
-            {state.pendingProposals.map((id) => {
-              const def = eventDef(scenarioOf(state), id)!;
-              const acceptWhy = blocked(
-                build({ answers: { ...answers, [id]: true } }),
-              );
-              const acceptOk = acceptWhy === null;
-              const summary = acceptSummary(state, def);
-              return (
-                // 提案から来た選択肢は、印（出来事と同じ ◆ 提案）と primary 系の枠・背景で通常の開発と見分ける（D-126）
-                <div
-                  key={id}
-                  className="rounded-box border border-primary bg-primary/5 p-3"
-                  data-proposal-choice={id}
-                >
-                  <div className="mb-1 flex flex-wrap items-center gap-2 font-semibold">
-                    <span className={`badge badge-sm ${PROPOSAL_BADGE.cls}`}>
-                      {PROPOSAL_BADGE.label}
-                    </span>
-                    <span>
-                      {def.title} <Info title={def.title}>{def.text}</Info>
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-4">
-                    <label
-                      className={`flex items-center gap-2 ${acceptOk || answers[id] ? 'cursor-pointer' : 'opacity-50'}`}
-                    >
-                      <input
-                        type="radio"
-                        className="radio radio-sm"
-                        checked={answers[id] === true}
-                        disabled={!acceptOk && !answers[id]}
-                        onChange={() => setAnswers({ ...answers, [id]: true })}
-                      />
-                      {def.accept!.label}
-                      {!acceptOk && !answers[id] && (
-                        <span className="text-xs">（{acceptWhy}）</span>
-                      )}
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="radio"
-                        className="radio radio-sm"
-                        // 選ぶまではどちらにも印を付けない（未決が見えるように。選ばずに進むと確認を挟む。D-140）
-                        checked={answers[id] === false}
-                        onChange={() => setAnswers({ ...answers, [id]: false })}
-                      />
-                      断る（{summary.declineLoss ?? '何も変わりません'}）
-                    </label>
-                  </div>
-                  {summary.gains.length > 0 && (
-                    <div className="mt-1 text-xs">
-                      受けると: {summary.gains.join('・')}
-                    </div>
-                  )}
-                  {summary.costs.length > 0 && (
-                    <div className="mt-0.5 text-xs opacity-70">
-                      伴うこと: {summary.costs.join('・')}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {state.pendingProposals.map((id) => (
+              <ProposalChoice
+                key={id}
+                state={state}
+                id={id}
+                draft={d}
+                where="actions"
+              />
+            ))}
           </div>
         )}
         <div className="grid gap-3 md:grid-cols-3">
