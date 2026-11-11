@@ -174,11 +174,12 @@ describe('数え方（D-111）', () => {
       ).costUsd;
     const cc = m1();
     // D-121（記事の閲覧の偏りで ISR の再生成が減る）で、1 か月目はどちらも月のクレジットに収まり同じ額になった
+    // （同じ額は足す順の違いで 1e-14 ほどずれうるので、許す幅を置く。D-212）
     expect(cc).toBeLessThanOrEqual(
-      m1({ article: 'cached-ttl', personal: 'ssr' }),
+      m1({ article: 'cached-ttl', personal: 'ssr' }) + 1e-9,
     );
     expect(cc).toBeLessThanOrEqual(
-      m1({ article: 'cached-ttl', personal: 'server-island' }),
+      m1({ article: 'cached-ttl', personal: 'server-island' }) + 1e-9,
     );
   });
 });

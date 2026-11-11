@@ -179,17 +179,18 @@ describe('Google Cloud の構成', () => {
     // D-121: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分け、記事の閲覧を Zipf で偏らせた（記事の Next.js は描き直しが減って
     //        $0.1〜0.5 下がり、SPA は 1 枚ずつのサムネイルの分 $0.4 上がる。達成は不変）
     // D-211: 転送の大きさを圧縮後にした。Cloud Run・Firebase Hosting の転送が減り $1.4〜7.3 下がる（達成は不変）
+    // D-212: App Router の文書の倍率で Next.js の行が $0.7〜1.8 上がる（SPA は変わらない。達成は不変）
     expect(table).toEqual({
-      articleNext: { won: 0, monthly: 56.7 },
-      articleNextMin1: { won: 0, monthly: 66.1 },
-      articleNextSql: { won: 0, monthly: 64.1 },
-      articleNextCfResize: { won: 20, monthly: 20.2 },
+      articleNext: { won: 0, monthly: 58.5 },
+      articleNextMin1: { won: 0, monthly: 67.9 },
+      articleNextSql: { won: 0, monthly: 65.9 },
+      articleNextCfResize: { won: 20, monthly: 22 },
       articleSpa: { won: 0, monthly: 56.4 },
       articleSpaCfResize: { won: 20, monthly: 10.5 },
-      contractNext: { won: 20, monthly: 12 },
-      contractNextMin1: { won: 20, monthly: 21.5 },
+      contractNext: { won: 20, monthly: 12.7 },
+      contractNextMin1: { won: 20, monthly: 22.2 },
       // Cloud SQL の既定の自動バックアップ（7 つ）を数えた分（D-93。前は $16.7・$12.7）
-      contractNextSql: { won: 20, monthly: 16.8 },
+      contractNextSql: { won: 20, monthly: 17.5 },
       contractSpa: { won: 20, monthly: 10.9 },
       contractSpaSql: { won: 20, monthly: 15.2 },
     });

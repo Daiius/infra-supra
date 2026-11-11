@@ -9,7 +9,7 @@ import {
   BUSINESS_APP_ROUTES,
   businessApp,
 } from '../templates/index.ts';
-import { DEPLOY_TARGETS, type FrameworkId } from './index.ts';
+import { DEPLOY_TARGETS, FRAMEWORKS, type FrameworkId } from './index.ts';
 import {
   capabilityRow,
   defaultStrategy,
@@ -470,5 +470,54 @@ describe('部品ごとにキャッシュ（Cache Components。D-111）', () => {
       before.processing.ioWaitMs * (1 - CACHE_COMPONENTS.cachedQueryShare),
     );
     expect(after.processing.responseKB).toBe(before.processing.responseKB);
+  });
+});
+
+describe('App Router の文書の倍率（D-212）', () => {
+  it('Next.js（App Router）だけが 2.5（実測）で、ほかは 1。実測の値には測った記録が付く', () => {
+    expect(
+      Object.fromEntries(
+        FRAMEWORK_IDS.map((f) => [f, FRAMEWORKS[f].documentKBFactor.value]),
+      ),
+    ).toEqual({
+      nextjs: 2.5,
+      astro: 1,
+      'nextjs-export': 1,
+      'vite-spa': 1,
+    });
+    for (const f of FRAMEWORK_IDS) {
+      const d = FRAMEWORKS[f].documentKBFactor;
+      if (d.basis === 'measured') expect(d.sourceRef?.url).toMatch(/^https:/);
+    }
+  });
+
+  it('ssr・isr・static の文書の応答にだけ掛け、SPA の枠・API・プランに無いルートの扱いは描き方に依らない', () => {
+    const w = articleCommunity(300_000);
+    const k = FRAMEWORKS.nextjs.documentKBFactor.value;
+    const html = w.routes[0]!.processing.responseKB;
+    const next = applyRouteStrategies(w, presetPlan(w.routes, 'nextjs'), {
+      documentKBFactor: k,
+    });
+    // 記事（isr）・個人向け（ssr）とも文書なので倍率が掛かる。API の応答は変わらない
+    expect(next.routes.map((r) => r.processing.responseKB)).toEqual([
+      html * k,
+      w.routes[1]!.processing.responseKB * k,
+    ]);
+    expect(next.api).toEqual(w.api);
+    // 枠 + API（spa）にしたルートは中身の API の大きさのまま（文書でない）
+    const spa = applyRouteStrategies(
+      w,
+      { personal: { strategy: 'shell-api' } },
+      { spa: ARTICLE_COMMUNITY_SPA, documentKBFactor: k },
+    );
+    expect(spa.routes[0]!.processing.responseKB).toBe(html * k);
+    expect(spa.routes[1]!.processing.responseKB).toBe(
+      ARTICLE_COMMUNITY_SPA.dataResponseKB,
+    );
+    // 省略は 1（今までと同じ）
+    expect(
+      applyRouteStrategies(w, presetPlan(w.routes, 'nextjs')).routes[0]!
+        .processing.responseKB,
+    ).toBe(html);
   });
 });

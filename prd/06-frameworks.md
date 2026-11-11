@@ -69,6 +69,21 @@ type FrameworkProfile = {
 };
 ```
 
+- **文書の倍率 `documentKBFactor`**（D-212・2026-11-11）: サーバーが返す文書（HTML。ssr・isr・static のルート）の大きさの、テンプレートの HTML
+  （フレームワークに依らない値・圧縮後。[04](./04-resource-simulation.md) §2.1）に対する倍率。`Sourced<number>` で持ち、実測は `basis: 'measured'`
+  （測った記録の `sourceRef` が必須）。
+  - **Next.js（App Router）= 2.5**（Vercel・`next start`・vinext・OpenNext・Amplify・Cloud Run のどれにも効く）。App Router は水和のために
+    同じツリーを RSC のペイロードとして HTML に埋め込む。SSR の CPU のスパイク（[`spikes/ssr-cpu-2026-11-03`](../spikes/ssr-cpu-2026-11-03/README.md)）の
+    同じページを `gzip -9` で縮めた実測で vinext ÷ Astro = 11.6 / 4.6 KB（items=10）・22.0 / 8.8 KB（items=30）＝ 約 2.5。本家の Next.js 16.4.6 も
+    圧縮前で同じ形（全体 ÷ 見える部分 2.7〜2.8）。
+  - **Astro = 1**（島の無い HTML。スパイクの比べの基準）・**Vite の SPA = 1**（サーバーが文書を描かない）・**Next.js の静的書き出し = 1**
+    （App Router なら RSC も書き出すが、書き出した HTML の実測が無いので 1 のまま）。
+  - 掛ける場所は `applyRouteStrategies` の最後の段で、書き換えた後の ssr・isr・static のルートの `responseKB` だけ（SPA の枠・API・Astro の島の
+    リクエストには掛けない）。ISR の 8 KB 単位の読み書き・CDN の転送・OpenNext の S3 のキャッシュ（D-66 の「× 2（HTML と RSC）」は 1 倍に直して
+    二重に数えない。[11](./11-aws-and-cross-provider.md) §13）・ゲームの 1 ページの通信量にこの大きさがそのまま効く。
+  - **近似の限界**（入れていない）: App Router のクライアント側の遷移では 2 ページ目から HTML でなく RSC だけを取り（埋め込みの分だけで、
+    見える部分のマークアップは無い）、`<Link>` の先読みも RSC を取る。どちらも数えず、閲覧ごとに文書を 1 回取るとみなす（遷移の割合と
+    先読みの量の根拠が無い）。SPA の枠を Next.js で書き出すとき（S5 のページごとの枠）の枠の RSC にも掛けていない。
 - 実装では `renderingModes` を残しているが、ページごとに使える描き方は [13](./13-route-strategies.md) §3 の対応表（`capabilityRow`・`strategySupport`）で決める。`renderingModes` は対応表に置き換えて消す予定（13 §6 の「段 3 でしなかったこと」）。
 
 ### 2.3 DeployTarget（データ・catalog）

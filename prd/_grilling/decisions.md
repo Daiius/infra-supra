@@ -2594,6 +2594,24 @@
   （6 → 17）・記事 × Netlify Pro × Neon（11 → 20）・記事 × VPS 2GB × Next.js（12 → 15）など。前段の CDN の無い VPS でも話題の月の回線が 1 を下回る（約 0.88）。
 - 1 ページの通信量（ゲームの表示）: JPEG で 約 1.3 → 1.2 MB・最適化しない 約 36.5 → 36.4 MB（[prd/07](../07-game-design.md)）。
 
+### D-212 App Router の文書の大きさの倍率 `documentKBFactor`（2.5・実測）を FrameworkProfile に持たせる（2026-11-11・ユーザーの決定）
+
+- 何を: `FrameworkProfile.documentKBFactor`（`Sourced<number>`）を足した。Next.js（App Router）は 2.5（Vercel・`next start`・vinext・OpenNext・
+  Amplify・Cloud Run のどれにも効く）、Astro・Vite の SPA・Next.js の静的書き出しは 1（静的書き出しも RSC を出すが実測が無いので 1 のまま）。
+  `applyRouteStrategies` の最後の段で、書き換えた後の ssr・isr・static のルートの `responseKB` にだけ掛ける（ゲームの `workloadFor` が渡す）。
+  ゲームの 1 ページの通信量も同じ倍率を掛ける。詳細は [prd/06](../06-frameworks.md) §2.2。
+- 出典: スパイク（D-209）の同じページの `gzip -9` の実測で vinext ÷ Astro = 11.6 / 4.6 KB・22.0 / 8.8 KB ＝ 約 2.5（README に表を足した）。
+  本家の Next.js 16.4.6 も圧縮前で同じ形（全体 ÷ 見える部分 2.7〜2.8）。出所の種別に `measured`（自分で測った値。測った記録の `sourceRef` が必須）を
+  最小限で足した（[prd/01](../01-domain-model.md) §2）。
+- 二重に数えない: OpenNext の S3 の ISR のキャッシュの「× 2（HTML と RSC）」（D-66）を × 1 に直した（[prd/11](../11-aws-and-cross-provider.md) §13.1）。
+  ISR の 8 KB 単位の読み書き・CDN の転送には、大きくなった文書がそのまま効く。
+- 近似の限界（入れていない）: クライアント側の遷移（2 ページ目からは RSC だけ）・`<Link>` の先読みは数えず、閲覧ごとに文書を 1 回取るとみなす。
+- 結果（見積モードの月額・既定の部品・D-211 の後 → D-212 の後）: Cloudflare・さくらの VPS は変わらない。記事 30 万 PV で Amplify $10.41 → $11.02・
+  Cloud Run $18.54 → $19.14。記事 300 万 PV で Vercel Pro（Next.js）$149.53 → $151.15（Astro は $149.53 のまま）・Amplify $460.91 → $466.99・
+  Cloud Run $196.23 → $202.31。受託 300 万 PV で Vercel Pro $165.67 → $172.96・Amplify $89.39 → $93.44。ゲームの基準プレイは Next.js で転送に
+  払う行が少し戻る（記事 × Netlify Pro × Neon 20 → 19・受託 × Google Cloud × Supabase 17 → 16 など。golden の各テストのコメント）。
+- 1 ページの通信量（Next.js）: WebP で 約 976 → 990 kB（JPEG は 約 1.2 MB のまま）。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

@@ -192,6 +192,8 @@ DB → アプリの応答（`db.responseKBPerQuery`）は内部の転送とし�
   文書の大きさ。圧縮を含む転送）。取得 2026-11-11。9 KB はその下側で、記事 1 本のページとして軽い側。
 - **JS・CSS を据え置く根拠**: 同じ Page Weight の章の中央値は JavaScript 約 570 KB（モバイル）・CSS 約 75 KB（モバイル。すべてのページ）。
   ページあたり 400 KB（10 × 40 KB）はそれより軽いので、圧縮後の値として妥当とみた。
+- **App Router の文書**（D-212）: 上の HTML はフレームワークに依らない値（見える部分のマークアップ）。App Router の RSC の埋め込みの分は
+  フレームワークのデータ（`FrameworkProfile.documentKBFactor`。Next.js 2.5）が足す（[06](./06-frameworks.md) §2.2）。
 
 ## 3. ComponentKind ごとの変換
 

@@ -302,6 +302,11 @@ export type RouteStrategyContext = {
   minutesPerBuild?: AstroShape['minutesPerBuild'];
   /** S1 のビルドを起こす内容の更新（間隔の省略は更新のたび）。 */
   build?: { updatesPerMonth: number; intervalSeconds?: number };
+  /**
+   * サーバーが返す文書の大きさの倍率（フレームワークの FrameworkProfile.documentKBFactor の値。D-212）。書き換えた後の
+   * ssr・isr・static のルートの responseKB にだけ掛ける（SPA の枠・API・Astro の島のリクエストは文書でないので掛けない）。省略は 1。
+   */
+  documentKBFactor?: number;
 };
 
 type Route = WorkloadInput['routes'][number];
@@ -330,6 +335,8 @@ const parts = (r: Route) => ({
  *   （人ごとに違うページ）は ssr のまま、CPU を穴の分（dynamicShare 倍）、DB の問い合わせ・I/O 待ちを全員に同じ部品の分を除いた
  *   残り（1 − cachedQueryShare 倍）にし、同じ応答の中の島（island）として内訳に出す。
  * まだ数え方の無い組（個人化のルートをキャッシュ・静的にする、全員に同じページの S6）は例外にする。
+ * 最後に、文書（ssr・isr・static）の応答の大きさにフレームワークの倍率（documentKBFactor。App Router の RSC の埋め込み。D-212）を掛ける。
+ * プランに載っていないルートにも掛ける（倍率は描き方でなくフレームワークの性質）。ISR の 8 KB 単位・S3 のキャッシュもこの大きさで数える。
  */
 export function applyRouteStrategies(
   w: WorkloadInput,
@@ -337,7 +344,7 @@ export function applyRouteStrategies(
   ctx: RouteStrategyContext = {},
 ): WorkloadInput {
   let staticPages = 0;
-  const routes = w.routes.map((r): Route => {
+  const drawn = w.routes.map((r): Route => {
     const choice = plan[r.id];
     if (!choice) return r;
     const unsupported = () =>
@@ -453,6 +460,21 @@ export function applyRouteStrategies(
       }
     }
   });
+  const k = ctx.documentKBFactor ?? 1;
+  const routes =
+    k === 1
+      ? drawn
+      : drawn.map((r): Route =>
+          r.rendering === 'spa'
+            ? r
+            : {
+                ...r,
+                processing: {
+                  ...r.processing,
+                  responseKB: r.processing.responseKB * k,
+                },
+              },
+        );
   if (staticPages === 0) return { ...w, routes };
   const { minutesPerBuild, build } = ctx;
   if (!minutesPerBuild || !build)

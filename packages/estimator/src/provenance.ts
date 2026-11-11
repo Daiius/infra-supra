@@ -8,6 +8,7 @@ export const BASES = [
   'template-default', // テンプレートの既定値（それ自体は仮定）
   'derived', // 他の値から計算した値（導出を保持）
   'assumption', // 測れない値を置いたもの
+  'measured', // 自分で測った値（スパイクなど）。測った記録（sourceRef）が必須。D-212
   'fictional', // テスト用の架空値。本番の UI では使わない
 ] as const;
 export type Basis = (typeof BASES)[number];
@@ -70,6 +71,7 @@ export const DerivationSchema = z.object({
 /**
  * `Sourced<T>` のスキーマ。規則:
  * - `official` は出典（sourceRef）が必須
+ * - `measured` は測った記録（sourceRef）が必須
  * - `derived` は導出（derivation）が必須
  */
 export function sourcedSchema<T extends z.ZodType>(value: T) {
@@ -87,6 +89,13 @@ export function sourcedSchema<T extends z.ZodType>(value: T) {
           code: 'custom',
           path: ['sourceRef'],
           message: 'official の値には出典（sourceRef）が必要',
+        });
+      }
+      if (v.basis === 'measured' && !v.sourceRef) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sourceRef'],
+          message: 'measured の値には測った記録（sourceRef）が必要',
         });
       }
       if (v.basis === 'derived' && !v.derivation) {

@@ -52,9 +52,12 @@ const INVALIDATION_PATHS_PER_PAGE = 2;
 const INVALIDATION_WILDCARD_PATHS_PER_UPDATE = 1;
 /**
  * S3 の ISR のキャッシュの 1 ページの大きさを、ページの応答の何倍とみるか。OpenNext は HTML と RSC（または JSON）を
- * 1 つの .cache にまとめて置く（公式の文書）。RSC は HTML と同じくらいとみて 2 倍（仮定。D-66）。
+ * 1 つの .cache にまとめて置く（公式の文書）。D-66 では RSC を HTML と同じくらいとみて 2 倍にしていたが、ページの応答の大きさに
+ * App Router の RSC の埋め込みの分（FrameworkProfile.documentKBFactor 2.5。D-212）を足したので、二重に数えないよう 1 倍にした（仮定）。
+ * 応答は圧縮後の大きさ（D-211）で、S3 に置く .cache は圧縮しない形なので実際より小さく数える（記事コミュニティの 2,000 ページで
+ * 約 0.05 GB。圧縮前の見本の比（約 7 倍）なら約 0.3 GB で、S3 の $0.025 / GB 月では差は月 $0.01 未満）。
  */
-const ISR_CACHE_SIZE_FACTOR = 2;
+const ISR_CACHE_SIZE_FACTOR = 1;
 
 /** Amplify の構成と同じ部品（DB・CDN の料金のプラン・最適化しない / 縮める画像・SPA の部品）を、この事業者の部品として使う。 */
 const SHARED = AWS_COMPONENTS.filter(

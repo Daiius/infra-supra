@@ -7,6 +7,7 @@ import {
   composeStack,
   DEFAULT_CHOICES,
   type FrameworkId,
+  FRAMEWORKS,
   type Platform,
   serverIslandDelivery,
   STACK_DEFS,
@@ -318,6 +319,8 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
             }
           : {}),
         ...(island ? { island } : {}),
+        // App Router の文書は RSC の埋め込みの分だけ大きい（D-212）
+        documentKBFactor: FRAMEWORKS[p.framework].documentKBFactor.value,
       })
     : w;
   // Astro の JS・CSS はアイランドの分だけ（描き方でなくフレームワークの性質）

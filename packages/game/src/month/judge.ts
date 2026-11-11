@@ -273,6 +273,7 @@ export function judgeMonth(
         state.mods,
         imgs,
         fixedImageFormat(platformNow, state.framework, comps.images)?.format,
+        state.framework,
       ),
     ),
     qualityReason: redesign,
