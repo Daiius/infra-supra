@@ -96,9 +96,11 @@ export function GameMenu({
       ref={rootRef}
       className="relative"
       onBlur={(e) => {
-        // フォーカスがメニューの外へ出たら閉じる（Tab で抜けたとき）
-        if (open && !rootRef.current?.contains(e.relatedTarget as Node | null))
-          setOpen(false);
+        // フォーカスがメニューの外の要素へ移ったら閉じる（Tab で抜けたとき）。行き先が無い blur（relatedTarget が null）は無視する:
+        // Safari（iPhone も）はボタンを押してもフォーカスを移さず、押した瞬間に今の項目を blur するだけなので、ここで閉じると
+        // 項目が消えて click が届かず「新しいゲーム」が反応しなかった。外側を押したときは上の pointerdown で閉じる
+        const to = e.relatedTarget as Node | null;
+        if (open && to && !rootRef.current?.contains(to)) setOpen(false);
       }}
     >
       <button
