@@ -128,10 +128,10 @@ describe('狭い画面の満足度の要素（D-189）', () => {
   });
 });
 
-describe('狭い画面のヘッダー（D-206）', () => {
+describe('狭い画面のヘッダー（D-206・D-210）', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('W-206 右端のボタンは sm 未満でアイコンだけの 32px の正方形になり、名前（アクセシブルネーム）は保つ。見積・統計のヘッダーも同じ', async () => {
+  const setup = async () => {
     // 統計のタブも出る、いちばん混んだ形（開発用の架空の分布なら取りに行かない）
     vi.stubEnv('VITE_STATS_MOCK', '1');
     await renderApp();
@@ -140,43 +140,61 @@ describe('狭い画面のヘッダー（D-206）', () => {
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
     });
-    advance(1);
     const header = screen.getByRole('banner');
     const nav = within(header).getByRole('navigation', { name: 'モード' });
+    const right = nav.nextElementSibling as HTMLElement;
+    return { header, nav, right };
+  };
+  const trigger = (header: HTMLElement) =>
+    within(header).getByRole('button', { name: 'ゲームの操作' });
+
+  it('W-206 右端は sm 未満で「ゲームの操作」のメニュー・遊び方・設定のアイコンだけになり、sm 以上は文字つきのボタンを並べる。見積・統計のヘッダーは設定だけ', async () => {
+    const { header, nav, right } = await setup();
+    advance(1);
     expect(
       within(nav)
         .getAllByRole('button')
         .map((b) => b.textContent),
     ).toEqual(['ゲーム', '見積', '統計']);
-    const right = nav.nextElementSibling as HTMLElement;
     expect(right.className.split(' ')).toContain('gap-0');
-    const buttons = within(right).getAllByRole('button');
-    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+    // jsdom は CSS を当てないので、狭い画面用（メニュー）と広い画面用（文字つき）の両方が並ぶ
+    expect(
+      within(right)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual([
+      'ゲームの操作',
       '過去の月に戻る…',
       '新しいゲーム',
       '遊び方',
       '設定',
     ]);
+    // メニューは sm 未満だけ、文字つきのボタンは sm 以上だけ
+    const menuBox = right.querySelector('[data-game-menu]')!;
+    expect(menuBox.className.split(' ')).toEqual(['sm:hidden']);
+    expect(menuBox.contains(trigger(header))).toBe(true);
+    const wide = right.querySelector('[data-game-buttons]') as HTMLElement;
+    expect(wide.className.split(' ')).toEqual(['hidden', 'sm:contents']);
     for (const [name, text] of [
       ['過去の月に戻る…', '戻る…'],
       ['新しいゲーム', '新しいゲーム'],
-      ['遊び方', '遊び方'],
     ] as const) {
-      const b = within(header).getByRole('button', { name });
-      const cls = b.className.split(' ');
-      // sm 未満は設定と同じ 32px の正方形、sm 以上は文字つきの幅
-      for (const c of ['w-8', 'px-0', 'sm:w-auto']) expect(cls).toContain(c);
-      // 文字は sm 以上でだけ見せる（アイコンは飾り）
-      const label = [...b.querySelectorAll('span')].find(
-        (s) => s.textContent === text,
-      )!;
-      expect(label.className.split(' ')).toEqual(['hidden', 'sm:inline']);
+      const b = within(wide).getByRole('button', { name });
+      expect(b.textContent).toBe(text);
       expect(b.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
     }
+    // 遊び方は sm 未満で設定と同じ 32px の正方形、文字は sm 以上でだけ見せる
+    const howto = within(header).getByRole('button', { name: '遊び方' });
+    for (const c of ['w-8', 'px-0', 'sm:w-auto'])
+      expect(howto.className.split(' ')).toContain(c);
+    const label = [...howto.querySelectorAll('span')].find(
+      (s) => s.textContent === '遊び方',
+    )!;
+    expect(label.className.split(' ')).toEqual(['hidden', 'sm:inline']);
     expect(
       within(header).getByRole('button', { name: '設定' }).className,
     ).toContain('btn-square');
-    // 見積・統計のヘッダーは設定だけ（ゲームのボタンは出さない）
+    // 見積・統計のヘッダーは設定だけ（ゲームのボタンもメニューも出さない）
     for (const m of ['見積', '統計']) {
       fireEvent.click(within(nav).getByRole('button', { name: m }));
       expect(
@@ -185,5 +203,87 @@ describe('狭い画面のヘッダー（D-206）', () => {
           .map((b) => b.getAttribute('aria-label')),
       ).toEqual(['設定']);
     }
+  });
+
+  it('W-210 「ゲームの操作」はメニューを開閉する（ボタン・Esc・外側のクリック）。開くボタンはアイコン 2 つ（戻る + 下向きの三角）で、項目は右揃え・高さ 40px 以上', async () => {
+    const { header } = await setup();
+    const t = trigger(header);
+    expect(t.getAttribute('aria-haspopup')).toBe('menu');
+    expect(t.getAttribute('aria-expanded')).toBe('false');
+    expect(t.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(2);
+    expect(screen.queryByRole('menu')).toBeNull();
+    // 開く: 最初の項目にフォーカスが行く
+    fireEvent.click(t);
+    expect(t.getAttribute('aria-expanded')).toBe('true');
+    const menu = screen.getByRole('menu', { name: 'ゲームの操作' });
+    expect(t.getAttribute('aria-controls')).toBe(menu.id);
+    for (const c of ['absolute', 'right-0', 'top-full'])
+      expect(menu.className.split(' ')).toContain(c);
+    const items = within(menu).getAllByRole('menuitem');
+    expect(items.map((i) => i.textContent)).toEqual([
+      '過去の月に戻る…戻れる月はまだありません',
+      '新しいゲーム',
+    ]);
+    for (const i of items) expect(i.className.split(' ')).toContain('min-h-10');
+    expect(document.activeElement).toBe(items[0]);
+    // 矢印で項目を移る（端で回る）
+    fireEvent.keyDown(items[0]!, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1]);
+    fireEvent.keyDown(items[1]!, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[0]);
+    // Esc で閉じて開くボタンに戻る
+    fireEvent.keyDown(items[0]!, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(t.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(t);
+    // もう一度押すと閉じる
+    fireEvent.click(t);
+    fireEvent.click(t);
+    expect(screen.queryByRole('menu')).toBeNull();
+    // 外側を押すと閉じる
+    fireEvent.click(t);
+    expect(screen.getByRole('menu')).toBeDefined();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('W-210b 1 か月目は「過去の月に戻る…」を押せない形で見せ、2 か月目からは押すと戻るダイアログ、「新しいゲーム」は確認のダイアログを開く', async () => {
+    const { header } = await setup();
+    const t = trigger(header);
+    // 1 か月目: 戻れる月が無いので押せない（理由の短い文つき）
+    fireEvent.click(t);
+    let rewindItem = screen.getByRole('menuitem', { name: '過去の月に戻る…' });
+    expect(rewindItem.getAttribute('aria-disabled')).toBe('true');
+    const reason = document.getElementById(
+      rewindItem.getAttribute('aria-describedby')!,
+    )!;
+    expect(reason.textContent).toBe('戻れる月はまだありません');
+    fireEvent.click(rewindItem);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // 「新しいゲーム」: メニューを閉じて確認のダイアログを開く（やめれば続き）
+    fireEvent.click(screen.getByRole('menuitem', { name: '新しいゲーム' }));
+    expect(screen.queryByRole('menu')).toBeNull();
+    const restart = screen.getByRole('dialog', {
+      name: '新しいゲームを始めますか？',
+    });
+    fireEvent.click(within(restart).getByRole('button', { name: 'やめる' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // 2 か月目: 押すと過去の月に戻るダイアログ
+    advance(1);
+    fireEvent.click(t);
+    rewindItem = screen.getByRole('menuitem', { name: '過去の月に戻る…' });
+    expect(rewindItem.getAttribute('aria-disabled')).toBeNull();
+    expect(rewindItem.getAttribute('aria-describedby')).toBeNull();
+    fireEvent.click(rewindItem);
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(
+      screen.getByRole('dialog', { name: '過去の月に戻る' }),
+    ).toBeDefined();
+  });
+
+  it('W-210c 始める前（ゲームの状態が無い）は「ゲームの操作」を出さない', async () => {
+    await renderApp();
+    expect(screen.queryByRole('button', { name: 'ゲームの操作' })).toBeNull();
   });
 });

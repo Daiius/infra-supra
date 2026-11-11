@@ -90,6 +90,7 @@ import { RewindDialog } from './rewind-dialog.tsx';
 import { SettingsDialog } from './settings-dialog.tsx';
 import { PrivacyPolicyDialog } from './privacy-policy.tsx';
 import { Logo } from './logo.tsx';
+import { GameMenu } from './game-menu.tsx';
 import {
   loadStatsView,
   requestPlayToken,
@@ -442,29 +443,42 @@ export function App() {
         </nav>
         {/* 右端: 戻る…（戻れる月があるとき。D-192）・新しいゲーム（運営中・終わった後）・遊び方（ゲームモードだけ）・設定（D-146・D-147）。
             狭い画面（sm 未満）はアイコンだけにして 1 行に収める。アイコンだけのときは設定と同じ 32px の正方形にし、間も詰める
-            （左右の余白のぶんで幅 360px からはみ出していた。D-206）。名前は aria-label */}
+            （左右の余白のぶんで幅 360px からはみ出していた。D-206）。名前は aria-label。
+            狭い画面では「戻る…」と「新しいゲーム」を 1 つのメニュー「ゲームの操作」にまとめる（+ のアイコンだけでは分からなかった。D-210）。
+            sm 以上は文字つきのボタンを並べる。出し分けは CSS（hidden / sm:contents）で、メニューの項目は開いたときだけ描く */}
         <div className="ml-auto flex shrink-0 items-center gap-0 sm:gap-1">
-          {mode === 'game' && state && rewindable > 0 && (
-            <button
-              className="btn btn-ghost btn-sm w-8 px-0 whitespace-nowrap sm:w-auto sm:px-2"
-              onClick={() => setRewindPick(rewindable)}
-              aria-label="過去の月に戻る…"
-              title="過去の月に戻る"
-            >
-              <Undo2 aria-hidden className="size-4" />
-              <span className="hidden sm:inline">戻る…</span>
-            </button>
+          {mode === 'game' && state && (
+            <div className="sm:hidden" data-game-menu>
+              <GameMenu
+                canRewind={rewindable > 0}
+                onRewind={() => setRewindPick(rewindable)}
+                onRestart={() => setConfirmRestart(true)}
+              />
+            </div>
           )}
           {mode === 'game' && state && (
-            <button
-              className="btn btn-ghost btn-sm w-8 px-0 whitespace-nowrap sm:w-auto sm:px-2"
-              onClick={() => setConfirmRestart(true)}
-              aria-label="新しいゲーム"
-              title="新しいゲーム"
-            >
-              <Plus aria-hidden className="size-4" />
-              <span className="hidden sm:inline">新しいゲーム</span>
-            </button>
+            <div className="hidden sm:contents" data-game-buttons>
+              {rewindable > 0 && (
+                <button
+                  className="btn btn-ghost btn-sm px-2 whitespace-nowrap"
+                  onClick={() => setRewindPick(rewindable)}
+                  aria-label="過去の月に戻る…"
+                  title="過去の月に戻る"
+                >
+                  <Undo2 aria-hidden className="size-4" />
+                  戻る…
+                </button>
+              )}
+              <button
+                className="btn btn-ghost btn-sm px-2 whitespace-nowrap"
+                onClick={() => setConfirmRestart(true)}
+                aria-label="新しいゲーム"
+                title="新しいゲーム"
+              >
+                <Plus aria-hidden className="size-4" />
+                新しいゲーム
+              </button>
+            </div>
           )}
           {mode === 'game' && (
             <button
