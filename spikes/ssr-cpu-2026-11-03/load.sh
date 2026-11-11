@@ -45,11 +45,16 @@ printf 'framework\titems\tseq\thttp_code\tbytes\tttfb_s\ttotal_s\n' >"$REQS"
 declare -A URL=([astro]="$ASTRO_URL" [vinext]="$VINEXT_URL")
 declare -A WORKER=([astro]=ssr-cpu-astro [vinext]=ssr-cpu-vinext)
 
-hit() { # $1=url → "code bytes ttfb total"
+hit() { # $1=url → "code bytes ttfb total"（必ず 1 行）
   # 同じ URL を CDN が返さないよう、毎回変わる無害な値を付ける（両 Worker とも no-store で返す）
-  curl -sS -o /dev/null -H 'Cache-Control: no-cache' \
-    -w '%{http_code}\t%{size_download}\t%{time_starttransfer}\t%{time_total}\n' "$1&_r=$RANDOM$RANDOM" ||
+  # curl が失敗しても -w の行は出るので、受けてから成功の値か代わりの値のどちらか一方だけを出す。
+  local out
+  if out="$(curl -sS -o /dev/null -H 'Cache-Control: no-cache' \
+    -w '%{http_code}\t%{size_download}\t%{time_starttransfer}\t%{time_total}' "$1&_r=$RANDOM$RANDOM")"; then
+    printf '%s\n' "$out"
+  else
     printf '000\t0\t0\t0\n'
+  fi
 }
 
 wait_next_minute() {
