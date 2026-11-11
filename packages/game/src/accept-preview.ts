@@ -45,6 +45,23 @@ function limitKey(p: Pick<PlatformPremise, 'id' | 'planId'>): string {
 }
 
 /**
+ * 提案の premiseRefs（「limit:cloudflare:workers-paid:d1-db-size」など、プランまで書いた前提の id の先頭）に当たるか。
+ * 今月の行動で同じ事業者の別のプランにする（Cloudflare Paid → Free など）と前提の id のプランが替わるので、
+ * 制限・枠の前提はプランを伏せて比べる（同じ上限を指す。D-203）。
+ */
+function refMatches(
+  ref: string,
+  p: Pick<PlatformPremise, 'id' | 'planId'>,
+): boolean {
+  if (p.id.startsWith(ref)) return true;
+  const r = ref.split(':');
+  const q = p.id.split(':');
+  if (r.length < 4 || (r[0] !== 'limit' && r[0] !== 'pool')) return false;
+  if (q[0] !== r[0] || q[1] !== r[1] || q[2] !== p.planId) return false;
+  return [q[0], q[1], r[2], ...q.slice(3)].join(':').startsWith(ref);
+}
+
+/**
  * 提案を受けたときの、提案の premiseRefs に当たる止まりうる上限（止まる・プランの変更が要る量の境目）の見込み。
  * 受けても使用量が変わらない上限は出さない。提案でない・受ける効果が無いなら空。
  * actions: 今月選んでいる行動（プラン変更・ストレージ変更オプションなど）。この提案への返事は除いて当てる。
@@ -71,7 +88,7 @@ export function acceptPreview(
     !emailOnlyPremise(p) &&
     p.used !== undefined &&
     p.limit !== undefined &&
-    def.premiseRefs.some((ref) => p.id.startsWith(ref));
+    def.premiseRefs.some((ref) => refMatches(ref, p));
   const out: AcceptLimit[] = [];
   for (const p of ra.premises) {
     if (!relevant(p)) continue;

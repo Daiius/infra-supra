@@ -55,6 +55,20 @@ describe('acceptPreview（D-203）', () => {
     expect(x!.monthsUntil).toBeGreaterThan(1);
   });
 
+  it('今月 Cloudflare Free へのプラン変更を選んでいれば、Free の D1（0.5 GB）で止まり、Paid に戻せば止まらない（プランの替わった前提も当たる）', () => {
+    const s = withProposal(CF_PAID, 'p-archive');
+    const [x, ...rest] = acceptPreview(s, 'p-archive', [
+      { type: 'plan', stackIndex: 0 },
+    ]);
+    expect(rest).toEqual([]);
+    expect(x).toMatchObject({
+      id: 'limit:cloudflare:workers-free:d1-db-size:d1',
+      limit: 0.5,
+      stops: true,
+      raisable: true,
+    });
+  });
+
   it('VPS のディスクは、今月ストレージ変更オプションを選んでいれば越えない（今月の行動を当てて計算する）', () => {
     const s = withProposal(VPS, 'p-archive', { imagesGB: 85 });
     const [x] = acceptPreview(s, 'p-archive');

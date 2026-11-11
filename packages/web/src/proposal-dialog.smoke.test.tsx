@@ -16,7 +16,12 @@ import {
   closeEventsDialog,
   declineConfirm,
   monthHeading,
+  openSetupChange,
+  pickRadio,
+  registerSetupChange,
   renderApp,
+  setupChangeFold,
+  showStackTab,
   startGame,
   useSmokeEnv,
 } from './smoke.test-helpers.tsx';
@@ -187,6 +192,33 @@ describe('受けると止まりうる上限の見込み（D-203）', () => {
         '今の規模（基準の PV）での見込み',
       );
     }
+  });
+
+  it('W-203c 「構成を変える」で Cloudflare Free を登録すると、行動の欄とダイアログに Free の D1 で止まる赤が出る（画面の経路）', () => {
+    renderGame(stateWith('p-archive'));
+    closeEventsDialog(
+      screen.getByRole('dialog', { name: /^2 か月目の出来事/ }),
+    );
+    const tone = (root: HTMLElement) =>
+      root
+        .querySelector('[data-accept-limit]')
+        ?.getAttribute('data-accept-limit-tone');
+    expect(tone(actionRow('p-archive'))).toBe('soon');
+    openSetupChange();
+    showStackTab();
+    pickRadio('Cloudflare Free + vinext', setupChangeFold());
+    registerSetupChange();
+    const row = actionRow('p-archive');
+    expect(tone(row)).toBe('stop');
+    expect(row.textContent).toContain('受けると来月止まります');
+    expect(row.textContent).toContain('/ 0.5 GB');
+    expect(row.textContent).toContain(
+      'プランの変更などで上限を引き上げれば止まりません',
+    );
+    // 開き直したダイアログも同じ下書きで出す
+    fireEvent.click(screen.getByRole('button', { name: /出来事/ }));
+    const dialog = screen.getByRole('dialog', { name: /^2 か月目の出来事/ });
+    expect(tone(pageOf(dialog, 'p-archive'))).toBe('stop');
   });
 
   it('W-203b 来月は越えなくても、残りの月に届く見込みなら黄の「n か月後に止まる見込み」を出す', () => {

@@ -2521,10 +2521,10 @@
   - 来月は止まらなくても、今の規模のまま残りの月のうちに届く見込みなら、黄（「● 止まる見込み」の印）で「今の規模なら n か月後に止まる見込みです」（来月 = 1 か月後）。ためていく量（保存量）だけ。
   - 受ける操作は止めず、確認のダイアログも足さない。色だけに頼らず印と文で言う。数字は「今月選んでいる行動を当てた、今の規模（基準の PV）での見込みです。PV が伸びれば早まります」と断る。
 - 計算（game の `accept-preview.ts`。表示のためだけで、ゲームの状態には入れない）:
-  - `acceptPreview(state, eventId, actions?)`: 今月選んでいる行動（この提案への返事は除く）を当てた base と、そこに「受ける」の効果（`applyEffects`）を当てた after に、それぞれ来月の料金表で `monthEstimate`（基準の PV。出来事・乱数は含めない）を引き、前提を `{ id, text, unit, effect, limit, before, after, stops, raisable?, monthsUntil? }` で返す。`stops` の規則は `month/outcome.ts` の `stopsSite`（`premiseOutcomesOf` の止まる判定と共用）。
+  - `acceptPreview(state, eventId, actions?)`: 今月選んでいる行動（この提案への返事は除く）を当てた base と、そこに「受ける」の効果（`applyEffects`）を当てた after に、それぞれ来月の料金表で `monthEstimate`（基準の PV。出来事・乱数は含めない）を引き、前提を `{ id, text, unit, effect, limit, before, after, stops, raisable?, monthsUntil? }` で返す。今月の行動で同じ事業者の別のプランにする（Cloudflare Paid → Free など）と前提の id のプランが替わるので、制限・枠の前提はプランを伏せて `premiseRefs` と比べる（`refMatches`。supervisor の確認で、Free を登録すると表示が消えていたのを直した）。`stops` の規則は `month/outcome.ts` の `stopsSite`（`premiseOutcomesOf` の止まる判定と共用）。
   - `monthsUntilLimit(state)`: playMonth と同じ在庫の伸び（`stockOf`）を基準の PV で 1 か月当てた見積との差を 1 か月の増分とし、まっすぐ伸ばして上限を越える月を出す。最後の月までに届かなければ出さない。推移の外挿（`premiseTrends`）とは別。
   - 見込みは、出来事の無い月に実際に受けて進めた翌月の使用率・当たり・止まったかと一致する（テストで突き合わせた）。
-- テスト: game の `accept-preview.test.ts`（記事の引き取り × Cloudflare D1 で止まる・引き上げられない・越えなければ見込みの月・VPS でストレージ変更オプション / 4GB を選ぶと越えない・保存量の効果の無い提案と課金だけの前提は空・入力を変えない・決定論・翌月との突き合わせ）。web の `proposal-dialog.smoke.test.tsx`（W-203a 赤・W-203b 黄）。
+- テスト: game の `accept-preview.test.ts`（記事の引き取り × Cloudflare D1 で止まる・引き上げられない・越えなければ見込みの月・VPS でストレージ変更オプション / 4GB を選ぶと越えない・保存量の効果の無い提案と課金だけの前提は空・入力を変えない・決定論・翌月との突き合わせ）。web の `proposal-dialog.smoke.test.tsx`（W-203a 赤・W-203b 黄・W-203c「構成を変える」で Cloudflare Free を登録すると赤）。
 - 残した点: 伸び方だけを変える提案（監査ログの DB の増え方 × 3・添付の 3 倍など）は、来月の使用量が変わらないので出していない（受けた後の推移の見込みで分かる）。PV の伸びを含めた見込みにはしていない（今の規模で断る）。赤・黄の見え方と、狭い画面での折り返しを実機で確かめる。
 
 ## 未決（grill で詰める）
