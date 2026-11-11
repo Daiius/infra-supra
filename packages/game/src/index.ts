@@ -275,6 +275,11 @@ export {
   checkAction,
 } from './actions/check.ts';
 export { checkActions, applyAction, applyActions } from './actions/apply.ts';
+export {
+  type AcceptLimit,
+  acceptPreview,
+  monthsUntilLimit,
+} from './accept-preview.ts';
 export { averageSatisfaction } from './month/satisfaction.ts';
 export { playMonth, projectionNote } from './month/play.ts';
 export {

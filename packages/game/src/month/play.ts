@@ -134,10 +134,13 @@ export function playMonth(input: GameState): GameState {
   });
 
   // 今月届いた提案は、月の終わりに返事を待つ
-  // 先に手を打っていた提案は知らせにしたので、返事を待たない（D-118）
+  // 先に手を打っていた提案は知らせにしたので、返事を待たない（D-118）。
+  // 今の構成では受けられない提案も知らせにし、断ったことにする（今までは翌月の初めに断ったことになっていた。D-201）
   const proposals = due.filter(
-    (x) => !x.preempted && eventDef(sc, x.id)!.kind === 'proposal',
+    (x) =>
+      !x.preempted && !x.unavailable && eventDef(sc, x.id)!.kind === 'proposal',
   );
+  const unavailable = due.filter((x) => x.unavailable !== undefined);
 
   const history = [...state.history, report];
   const end = endOf(sc, month, { accountSuspended, outages, cash });
@@ -171,6 +174,16 @@ export function playMonth(input: GameState): GameState {
     stock,
     ...(coarseImages > 0 ? { coarseImages } : {}),
     fired,
+    ...(unavailable.length
+      ? {
+          responses: {
+            ...state.responses,
+            ...Object.fromEntries(
+              unavailable.map((x) => [x.id, 'declined' as const]),
+            ),
+          },
+        }
+      : {}),
     pendingProposals: end ? [] : proposals.map((x) => x.id),
     interrupts: state.interrupts
       .map((i) => ({ ...i, months: i.months - 1 }))

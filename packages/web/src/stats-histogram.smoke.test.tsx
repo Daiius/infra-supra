@@ -94,6 +94,13 @@ function statsFetch(
 
 const dialogAxes = () =>
   victory().querySelector<HTMLElement>('[data-result-axes]')!;
+/** 見る分布（同じシード / 全シード）の切り替えを押す（D-204）。 */
+const pickScope = (root: HTMLElement, scope: 'seed' | 'all') =>
+  fireEvent.click(
+    root.querySelector<HTMLElement>(
+      `[data-chips="dist-scope"] [data-chip="${scope}"]`,
+    )!,
+  );
 
 describe('集計の分布の表示（段 3）', () => {
   it('W-97 VITE_STATS_ENABLED が無ければ分布を取らず、段 1 の表示（手元の履歴との比較・自己ベストの段）', async () => {
@@ -131,23 +138,26 @@ describe('集計の分布の表示（段 3）', () => {
     for (const a of RESULT_AXES)
       expect(Number.isFinite(Number(q.get(a.id)))).toBe(true);
     const axes = dialogAxes();
-    expect(axes.querySelectorAll('[data-histogram]')).toHaveLength(8);
+    // 4 軸とも見る分布の 1 本だけ（既定は全シード。D-204）
+    expect(axes.querySelectorAll('[data-histogram]')).toHaveLength(4);
     // 数値の要約をテキストでも出す（色だけに頼らない）
     const cash = axes.querySelector<HTMLElement>('[data-axis="cash"]')!;
     expect(
       cash.querySelector('[data-dist="all"] [data-dist-summary]')!.textContent,
     ).toContain('40 件中 上位 10%');
+    expect(within(cash).getByText(/★ 上位 \d+%/)).toBeDefined();
+    pickScope(axes, 'seed');
     expect(
       cash.querySelector('[data-dist="seed"] [data-dist-summary]')!.textContent,
     ).toContain('12 件中 上位');
-    expect(within(cash).getByText(/★ 上位 \d+%/)).toBeDefined();
     expect(
       cash.querySelector('[role="img"]')!.getAttribute('aria-label'),
     ).toMatch(/同じシードの分布（12 件中 上位 \d+%）/);
+    pickScope(axes, 'all');
     // ④ 費用の合計は分布の上の方でも上位 % ・上位の印を出さず、中央値だけ（D-166）
     const cost = axes.querySelector<HTMLElement>('[data-axis="totalCost"]')!;
     expect(cost.querySelector('[data-axis-top]')).toBeNull();
-    expect(cost.querySelectorAll('[data-histogram]')).toHaveLength(2);
+    expect(cost.querySelectorAll('[data-histogram]')).toHaveLength(1);
     expect(
       cost.querySelector('[data-dist="all"] [data-dist-summary]')!.textContent,
     ).toContain('40 件・全体の中央値は $2.00 です');
@@ -168,7 +178,7 @@ describe('集計の分布の表示（段 3）', () => {
     const result = [...document.querySelectorAll('[data-result-axes]')].find(
       (el) => !victory().contains(el),
     )!;
-    expect(result.querySelectorAll('[data-histogram]')).toHaveLength(8);
+    expect(result.querySelectorAll('[data-histogram]')).toHaveLength(4);
   });
 
   it('W-99 分布の取得に失敗したら（500・通信の失敗）、段 1 の表示に戻る', async () => {
@@ -222,6 +232,9 @@ describe('集計の分布の表示（段 3）', () => {
     await finish(almostDone(7));
     await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
     const cash = dialogAxes().querySelector<HTMLElement>('[data-axis="cash"]')!;
+    // 「★ 上位」の印は見る分布によらない（D-204）
+    expect(cash.querySelector('[data-axis-top]')).not.toBeNull();
+    pickScope(dialogAxes(), 'seed');
     const seed = cash.querySelector<HTMLElement>('[data-dist="seed"]')!;
     // 同じシードは 3 件でも描く。上位 % は出さず、件数と中央値と、上位 % が出ない理由
     expect(seed.querySelector('[data-dist-summary]')!.textContent).toMatch(
@@ -235,9 +248,10 @@ describe('集計の分布の表示（段 3）', () => {
       '上位 % は 10 件から出します。',
     );
     expect(cash.textContent).not.toContain('参考程度');
-    expect(cash.querySelectorAll('[data-histogram]')).toHaveLength(2);
-    // 「★ 上位」の印と花火は全シード（40 件）で決める
+    expect(cash.querySelectorAll('[data-histogram]')).toHaveLength(1);
+    // 「★ 上位」の印と花火は全シード（40 件）で決める（同じシードを見ていても変わらない）
     expect(cash.querySelector('[data-axis-top]')).not.toBeNull();
+    pickScope(dialogAxes(), 'all');
     expect(
       cash.querySelector<HTMLElement>('[data-dist="all"]')!.dataset.topPercent,
     ).toBeDefined();
@@ -251,7 +265,7 @@ describe('集計の分布の表示（段 3）', () => {
     await finish();
     await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
     expect(fetch).not.toHaveBeenCalled();
-    expect(dialogAxes().querySelectorAll('[data-histogram]')).toHaveLength(8);
+    expect(dialogAxes().querySelectorAll('[data-histogram]')).toHaveLength(4);
     expect(
       dialogAxes().querySelector('[data-result-compare-note]')!.textContent,
     ).toContain('開発用の架空の分布です');
@@ -320,5 +334,59 @@ describe('集計の分布の表示（段 3）', () => {
       ).toHaveLength(1);
       cleanup();
     }
+  });
+});
+
+describe('見る分布の切り替えと完走のダイアログの高さ（D-204）', () => {
+  it('W-204 既定は全シード。切り替えると 4 軸がそろって替わり、覚えて次も同じ。★ 上位と花火は変わらない', async () => {
+    vi.stubEnv('VITE_STATS_ENABLED', 'true');
+    vi.stubGlobal(
+      'fetch',
+      statsFetch(() => json(distribution())),
+    );
+    await finish();
+    await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
+    // ダイアログの高さは dvh で抑え、中身だけをスクロールする（iOS Safari のツールバーで下のボタンが隠れない）
+    expect(victory().querySelector('.modal-box')!.className).toContain(
+      'max-h-[calc(100dvh-2rem)]',
+    );
+    const axes = dialogAxes();
+    const chips = [
+      ...axes.querySelectorAll<HTMLElement>(
+        '[data-chips="dist-scope"] [data-chip]',
+      ),
+    ];
+    expect(
+      chips.map((c) => [c.textContent, c.getAttribute('aria-pressed')]),
+    ).toEqual([
+      ['全シード（40 件）', 'true'],
+      ['同じシード（12 件）', 'false'],
+    ]);
+    const kinds = (root: HTMLElement) =>
+      [...root.querySelectorAll<HTMLElement>('[data-dist]')].map(
+        (d) => d.dataset.dist,
+      );
+    expect(kinds(axes)).toEqual(['all', 'all', 'all', 'all']);
+    const tops = () => axes.querySelectorAll('[data-axis-top]').length;
+    expect(tops()).toBe(3);
+    pickScope(axes, 'seed');
+    expect(kinds(axes)).toEqual(['seed', 'seed', 'seed', 'seed']);
+    expect(axes.querySelectorAll('[data-histogram]')).toHaveLength(4);
+    // 上位の判定は見る分布によらない
+    expect(tops()).toBe(3);
+    expect(victory().dataset.fireworkLevel).toBe('3');
+    expect(localStorage.getItem('infra-supra:dist-scope')).toBe('seed');
+    // 後ろの結果の画面もそろう
+    const result = [
+      ...document.querySelectorAll<HTMLElement>('[data-result-axes]'),
+    ].find((el) => !victory().contains(el))!;
+    await waitFor(() =>
+      expect(kinds(result)).toEqual(['seed', 'seed', 'seed', 'seed']),
+    );
+    // 開き直しても覚えている
+    cleanup();
+    await finish();
+    await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
+    expect(kinds(dialogAxes())).toEqual(['seed', 'seed', 'seed', 'seed']);
   });
 });

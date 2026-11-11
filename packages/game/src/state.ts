@@ -133,7 +133,14 @@ export type MonthEvent = {
    * 画面は「🛡 対策済み」の印を添える。2026-11-04）。
    */
   botBlocked?: true;
-  /** 提案の「受ける」の説明。unavailable は受けられない理由（要件を満たせる構成が無い）。 */
+  /**
+   * 今の構成では受けられない提案が届いた（返事を待たず、断ったことにした。理由の文。D-201）。phase は occurred。
+   */
+  unavailable?: string;
+  /**
+   * 提案の「受ける」の説明。unavailable は受けられない理由（要件を満たせる構成が無い）。D-201 からは受けられない提案を
+   * 知らせ（上の unavailable）にするので付けない（前の版の保存の報告にだけ残る）。
+   */
   accept?: {
     label: string;
     effects: string[];

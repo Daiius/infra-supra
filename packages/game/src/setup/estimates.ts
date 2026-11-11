@@ -38,6 +38,11 @@ export function monthEstimate(
     components?: Choices;
     /** 省略は状態の設定。 */
     settings?: GameState['settings'];
+    /**
+     * 差し替え中の移行先の部品も動かしている構成で見積もる（playMonth の estimateMonth と同じ。提案を受けたときの見込み。
+     * OCL-F585BA69）。省略は含めない（部品の欄の見込みなど、今までの呼び出し）。
+     */
+    withSwap?: boolean;
   },
 ): EstimateResult {
   const components = p.components ?? state.components;
@@ -61,7 +66,9 @@ export function monthEstimate(
       state.seats,
       state.framework,
       components,
-      {},
+      p.withSwap && state.componentSwap
+        ? { [state.componentSwap.slot]: state.componentSwap.option }
+        : {},
       state.storageOption,
       staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
       // 容量の段は状態の契約（始めたばかりは最小の段。D-120）

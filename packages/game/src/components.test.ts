@@ -274,11 +274,16 @@ describe('SLA の打診（SC-5・W-2）', () => {
     (x) => x.id === 'p-sla',
   )!.month;
 
-  it('Cloudflare では受けられない理由が出て、受けることを選べない', () => {
+  it('Cloudflare では受けられない理由つきの知らせになり、返事を待たずに断ったことになる（D-201）', () => {
     const s = until(CF_PAID, slaMonth, 3);
     const e = last(s).events.find((x) => x.id === 'p-sla')!;
-    expect(e.accept?.unavailable).toBeDefined();
+    expect(e.phase).toBe('occurred');
+    expect(e.unavailable).toBeDefined();
+    expect(e.text).toContain('今の構成では受けられません: ');
+    expect(e.accept).toBeUndefined();
     expect(e.sla?.length).toBeGreaterThan(0);
+    expect(s.pendingProposals).not.toContain('p-sla');
+    expect(s.responses['p-sla']).toBe('declined');
     expect(
       actionEffort(s, { type: 'respond', eventId: 'p-sla', accept: true }),
     ).toBeNull();

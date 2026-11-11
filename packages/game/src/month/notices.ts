@@ -10,7 +10,11 @@ import {
   describeEffectBlocked,
   premiseRefsOf,
 } from '../events.ts';
-import { requirementStatus, unavailableReason } from '../requirements.ts';
+import {
+  REQUIREMENT_LABEL,
+  requirementStatus,
+  unavailableReason,
+} from '../requirements.ts';
 import { articleFamily } from '../routes/strategy.ts';
 import type { EventDef, Scenario, Scheduled } from '../scenario.ts';
 import { membersOf, slaOf } from '../stacks.ts';
@@ -68,6 +72,23 @@ export function monthEventsOf(
       });
       continue;
     }
+    // 今の構成では受けられない提案は、返事を待たない知らせにする（断ったことになる。D-201）
+    if (x.unavailable) {
+      events.push({
+        id: def.id,
+        kind: def.kind,
+        tier: def.tier,
+        phase: 'occurred',
+        title: def.title,
+        text: `${def.text}。今の構成では受けられません: ${x.unavailable}`,
+        effects: [],
+        premises: premiseRefsOf(def, premises),
+        unavailable: x.unavailable,
+        ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
+        ...(def.showSla ? { sla: slaOf(stackIndexNow) } : {}),
+      });
+      continue;
+    }
     // Bot の流量の効果を持つ出来事が、遮断済みの月に起きた（上乗せは半分。2026-11-04）
     const botBlocked =
       state.botBlocked &&
@@ -116,9 +137,6 @@ export function monthEventsOf(
               ...((d) => (d ? { declineLoss: d } : {}))(
                 acceptSummary(state, def).declineLoss,
               ),
-              ...(unavailableReason(state, def)
-                ? { unavailable: unavailableReason(state, def)! }
-                : {}),
             },
           }
         : {}),
@@ -126,6 +144,11 @@ export function monthEventsOf(
   }
   for (const x of noticed) {
     const def = eventDef(sc, x.id)!;
+    // 今の構成では受けられない提案の予告は、来ても受けられない見込みと添える（D-201）
+    const unreachable =
+      def.kind === 'proposal' && def.requires && unavailableReason(state, def)
+        ? `。ただし今の事業者では「${REQUIREMENT_LABEL[def.requires]}」を選べないので、来ても受けられない見込みです`
+        : '';
     events.push({
       id: def.id,
       kind: def.kind,
@@ -134,9 +157,9 @@ export function monthEventsOf(
       title: def.notice!.title,
       // 遮断の判定は予告を出した今月の状態（流量の計算で前兆を半分にするのと同じ条件）
       text:
-        state.botBlocked && def.notice!.blockedText
+        (state.botBlocked && def.notice!.blockedText
           ? def.notice!.blockedText
-          : def.notice!.text,
+          : def.notice!.text) + unreachable,
       effects: [],
       // 前兆が Bot の予告を、遮断済みの月に出した（来たときの上乗せは半分）
       ...(state.botBlocked && def.notice!.bot

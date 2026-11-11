@@ -1,5 +1,5 @@
 // 統計の画面（ヘッダーの 3 つ目のタブ「統計」・?mode=stats。D-197）。集計した完走のプレイ（全シード）の 4 軸の分布と、構成ごとの比較の図。
-// - 部品は結果の画面のもの（HistogramChart・stats-breakdown.tsx の Chips・GroupCompare・絞り込みの記録）を使い回す。
+// - 部品は結果の画面のもの（HistogramChart・chips.tsx の Chips・GroupCompare・絞り込みの記録）を使い回す。
 // - distribution の口はシードが必須なので、手元の最新の完走のシード（無ければ 0）を付けて取り、全シードの側だけを使う（loadAllSeeds）。
 // - このブラウザの結果の履歴から、選んだシナリオの最新の完走の 4 軸を「▼ あなた」として重ねる（無ければ印を出さない）。
 // - 出さないもの: 上位 % と「★ 上位」の印・花火（結果の画面のもの）・完走率・途中終了の数・構成の人気（prd/15 §6・§7）。
@@ -19,11 +19,11 @@ import type { ResultEntry } from './results-history.ts';
 import {
   AXIS_FORMAT,
   AXIS_MARK,
-  Chips,
   filterName,
   GroupCompare,
   useBreakdownPrefs,
 } from './stats-breakdown.tsx';
+import { Chips } from './chips.tsx';
 import { loadAllSeeds, type AllSeedsView } from './stats-client.ts';
 import type { Histogram } from 'stats';
 

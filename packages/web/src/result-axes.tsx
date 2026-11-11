@@ -1,8 +1,9 @@
 // 振り返りの 4 軸（D-132・D-166）と、集計の分布の中での位置（段 3・D-161）か手元の履歴との比較（D-144）。完走のダイアログと結果の画面で共用する。
 // 1 つの点数にはまとめず、軸ごとに並べる（prd/07 §7・prd/15 §2）。分布が無い・取れない・少ないときは手元の履歴との比較だけを出す（段 1 のまま）。
 import type { ResultAxisId } from 'game';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { HistogramChart, HistogramSkeleton } from './charts.tsx';
+import { Chips } from './chips.tsx';
 import {
   MIN_RANKED_COUNT,
   rankBasisOf,
@@ -112,6 +113,47 @@ function DistributionRow({
   );
 }
 
+/** 見る分布（同じシード / 全シード）。4 軸まとめて 1 本だけ出す（D-204）。 */
+export type DistScope = 'seed' | 'all';
+
+/** 選んだ見る分布を覚えるキー（infra-supra: で始まるので、ローカルの記録の消去でも消える。D-204）。 */
+export const DIST_SCOPE_KEY = 'infra-supra:dist-scope';
+
+/** 既定は全シード（件数が多い方。D-204）。 */
+export const DEFAULT_DIST_SCOPE: DistScope = 'all';
+
+function loadScope(): DistScope {
+  try {
+    const v = localStorage.getItem(DIST_SCOPE_KEY);
+    return v === 'seed' || v === 'all' ? v : DEFAULT_DIST_SCOPE;
+  } catch {
+    return DEFAULT_DIST_SCOPE;
+  }
+}
+
+/** 同じ画面に出ている切り替え（完走のダイアログと結果の画面）を、片方で選んだらもう片方もそろえる。 */
+const scopeListeners = new Set<(v: DistScope) => void>();
+
+/** 見る分布の切り替え（完走のダイアログと結果の画面で同じ記録。見るためだけで、上位の判定は変えない。D-204）。 */
+function useDistScope() {
+  const [scope, setScope] = useState<DistScope>(loadScope);
+  useEffect(() => {
+    scopeListeners.add(setScope);
+    return () => {
+      scopeListeners.delete(setScope);
+    };
+  }, []);
+  const update = (v: DistScope) => {
+    for (const l of scopeListeners) l(v);
+    try {
+      localStorage.setItem(DIST_SCOPE_KEY, v);
+    } catch {
+      // 覚えられなくても画面は壊さない
+    }
+  };
+  return [scope, update] as const;
+}
+
 /** 一番上の注記（どちらと比べているか。prd/15 §3.1）。 */
 function compareNote(
   stats: StatsView,
@@ -131,7 +173,7 @@ function compareNote(
           : '',
         filterName
           ? `${filterName}の完走のプレイの分布と比べています（見るための絞り込みです。「★ 上位」の印と花火は全部の構成の分布で決めます）。`
-          : `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます（④ 費用の合計は上位を数えず、分布の中の位置だけを示します）。`,
+          : `集計した完走のプレイの分布と比べています。同じシードと全シードの 2 つで、上位 ${TOP_PERCENT}% 以内を「上位」に数えます（④ 費用の合計は上位を数えず、分布の中の位置だけを示します）。下の切り替えは見る分布を選ぶだけで、「上位」の数え方は変えません。`,
         v.included
           ? 'あなたのプレイも数に入っています。'
           : 'あなたのプレイを 1 件足して数えています。',
@@ -180,6 +222,12 @@ export function ResultAxesPanel({
   const dist: DistributionView | null =
     stats.status === 'ready' ? stats.view : null;
   const top = filter ? filter.top : dist;
+  const [scope, setScope] = useDistScope();
+  // 切り替えのチップに件数を添える（件数は軸によらない。集計に無ければ 0 件）
+  const countOf = (k: DistScope) => {
+    const a = dist?.axes[0];
+    return (k === 'seed' ? a?.seed : a?.all)?.n ?? 0;
+  };
   return (
     <section
       aria-label="4 つの軸の振り返り"
@@ -190,6 +238,20 @@ export function ResultAxesPanel({
         {compareNote(stats, count, filter?.name)}
       </p>
       {children}
+      {dist && (
+        <div className="mb-2" data-dist-scope>
+          <Chips<DistScope>
+            label="見る分布"
+            name="dist-scope"
+            value={scope}
+            onChange={setScope}
+            options={(['all', 'seed'] as const).map((k) => ({
+              value: k,
+              label: `${k === 'all' ? '全シード' : '同じシード'}（${countOf(k)} 件）`,
+            }))}
+          />
+        </div>
+      )}
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {comparisons.map((c, i) => {
           const f = FORMAT[c.id];
@@ -235,17 +297,10 @@ export function ResultAxesPanel({
               )}
               {d && (
                 <div className="mt-2 space-y-2" data-axis-distribution>
+                  {/* 見る分布は 4 軸まとめて 1 本（D-204）。「★ 上位」は上の rankBasisOf のまま */}
                   <DistributionRow
-                    kind="seed"
-                    standing={d.seed}
-                    axis={c.id}
-                    directed={c.directed}
-                    value={c.value}
-                    hideMine={hideMine}
-                  />
-                  <DistributionRow
-                    kind="all"
-                    standing={d.all}
+                    kind={scope}
+                    standing={scope === 'seed' ? d.seed : d.all}
                     axis={c.id}
                     directed={c.directed}
                     value={c.value}
@@ -254,20 +309,18 @@ export function ResultAxesPanel({
                 </div>
               )}
               {stats.status === 'loading' && (
-                // 最初の読み込み: 分布が出たときと同じ高さ（同じシード・全シードの 2 本）のスケルトン。「あなた」の印は出さない（D-200）
+                // 最初の読み込み: 分布が出たときと同じ高さ（見る分布の 1 本。D-204）のスケルトン。「あなた」の印は出さない（D-200）
                 <div
                   className="mt-2 space-y-2"
                   aria-hidden
                   data-axis-distribution-skeleton
                 >
-                  {[0, 1].map((k) => (
-                    <div key={k}>
-                      <div className="flex h-4 items-center">
-                        <span className="block h-2 w-2/3 rounded-full bg-base-content/10" />
-                      </div>
-                      <HistogramSkeleton mineSpace />
+                  <div>
+                    <div className="flex h-4 items-center">
+                      <span className="block h-2 w-2/3 rounded-full bg-base-content/10" />
                     </div>
-                  ))}
+                    <HistogramSkeleton mineSpace />
+                  </div>
                 </div>
               )}
               {!d && stats.status !== 'loading' && c.count > 0 && (
