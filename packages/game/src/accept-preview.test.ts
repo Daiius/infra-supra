@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   acceptPreview,
   applyAction,
+  ARTICLE_COMMUNITY,
   newGame,
   playMonth,
   type GameState,
@@ -67,6 +68,41 @@ describe('acceptPreview（D-203）', () => {
       stops: true,
       raisable: true,
     });
+  });
+
+  it('DB の差し替え中（Supabase → D1）は、移行先の D1 も動かしている構成で見込み、受けると止まる（playMonth と同じ。OCL-F585BA69）', () => {
+    const g = playMonth(
+      newGame(CF_PAID, 42, ARTICLE_COMMUNITY, undefined, 'nextjs', {
+        db: 'hyperdrive',
+      }),
+    );
+    const swapping = applyAction(
+      {
+        ...g,
+        schedule: [],
+        revisions: [],
+        pendingProposals: ['p-archive'],
+        stock: { ...g.stock, dbGB: 1.5 },
+        // 差し替えと受けるの両方に手間が足りるように
+        effortPerMonth: g.effortPerMonth + 20,
+      },
+      { type: 'component', slot: 'db', option: 'd1' },
+    );
+    expect(swapping.componentSwap?.option).toBe('d1');
+    const preview = acceptPreview(swapping, 'p-archive');
+    const d1 = preview.find((x) => x.id.includes(':d1-db-size:'));
+    expect(d1).toMatchObject({ limit: 10, stops: true });
+    const next = last(
+      playMonth(
+        applyAction(swapping, {
+          type: 'respond',
+          eventId: 'p-archive',
+          accept: true,
+        }),
+      ),
+    );
+    expect(next.snapshots.find((q) => q.id === d1!.id)?.hit).toBe(true);
+    expect(next.status).toBe('down');
   });
 
   it('VPS のディスクは、今月ストレージ変更オプションを選んでいれば越えない（今月の行動を当てて計算する）', () => {

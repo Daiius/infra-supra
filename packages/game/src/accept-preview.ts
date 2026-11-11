@@ -80,8 +80,8 @@ export function acceptPreview(
   );
   const after = applyEffects(base, def.accept.effects, def.id);
   const books = booksAt(state, state.history.length + 1);
-  const rb = monthEstimate(sc, base, { books });
-  const ra = monthEstimate(sc, after, { books });
+  const rb = monthEstimate(sc, base, { books, withSwap: true });
+  const ra = monthEstimate(sc, after, { books, withSwap: true });
   const relevant = (p: PlatformPremise) =>
     p.kind === 'threshold' &&
     isStopEffect(p.effect) &&
@@ -110,7 +110,7 @@ export function acceptPreview(
   // 止まるなら、引き上げられるか（同じ事業者のプラン変更・ストレージ変更オプションで止まらなくなるか）
   if (out.some((x) => x.stops)) {
     const alts = raiseAlternatives(after).map(
-      (s) => monthEstimate(sc, s, { books }).premises,
+      (s) => monthEstimate(sc, s, { books, withSwap: true }).premises,
     );
     for (const x of out) {
       if (!x.stops) continue;
@@ -151,7 +151,7 @@ export function monthsUntilLimit(
   premises: readonly PlatformPremise[] = monthEstimate(
     scenarioOf(state),
     state,
-    { books: booksAt(state, state.history.length + 1) },
+    { books: booksAt(state, state.history.length + 1), withSwap: true },
   ).premises,
 ): Map<string, number> {
   const out = new Map<string, number>();
@@ -174,6 +174,7 @@ export function monthsUntilLimit(
   };
   const later = monthEstimate(sc, grown, {
     books: booksAt(state, next + 1),
+    withSwap: true,
   }).premises;
   for (const p of watched) {
     const q = later.find((x) => x.id === p.id);
