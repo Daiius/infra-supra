@@ -33,6 +33,18 @@ const EMAIL_NODE_ID = 'email';
 export const emailOnlyPremise = (p: Pick<PlatformPremise, 'nodeIds'>) =>
   p.nodeIds.length > 0 && p.nodeIds.every((id) => id === EMAIL_NODE_ID);
 
+/** 当たると止まる効き方（止まる・プランの変更が要る）。規約（policy）は指摘 → 翌月の停止で別に扱う（D-19）。 */
+export const isStopEffect = (effect: PlatformPremise['effect']) =>
+  effect === 'block' || effect === 'upgrade-required';
+
+/**
+ * 当たるとサイトが止まる前提か（止まる・プランの変更が要る上限に当たり、メールの送信だけに効くものでない）。
+ * playMonth の判定（premiseOutcomesOf の blocking）と、提案を受けたときの見込み（acceptPreview。D-203）で共用する。
+ */
+export const stopsSite = (
+  p: Pick<PlatformPremise, 'hit' | 'effect' | 'nodeIds'>,
+) => p.hit && isStopEffect(p.effect) && !emailOnlyPremise(p);
+
 export type PremiseOutcomes = {
   blocking: PlatformPremise[];
   /**
@@ -51,12 +63,11 @@ export function premiseOutcomesOf(
   premises: readonly PlatformPremise[],
 ): PremiseOutcomes {
   // 規約違反（policy）はすぐには止めず、指摘 → 翌月にアカウント停止の流れで扱う（D-19）
-  const stops = premises.filter(
-    (p) => p.hit && (p.effect === 'block' || p.effect === 'upgrade-required'),
-  );
   // メールの送信の上限はサイトを止めない（送れない分のメールが届かない。D-117）
-  const blocking = stops.filter((p) => !emailOnlyPremise(p));
-  const undelivered = stops.filter(emailOnlyPremise);
+  const blocking = premises.filter(stopsSite);
+  const undelivered = premises.filter(
+    (p) => p.hit && isStopEffect(p.effect) && emailOnlyPremise(p),
+  );
   const policy = premises.filter((p) => p.hit && p.effect === 'policy');
   const throttling = premises.filter((p) => p.hit && p.effect === 'throttle');
   // CDN の定額のプランの込みを超えた前提（請求は増えない）。急増が大きいか、続けて超えると性能が調整される（D-61）
