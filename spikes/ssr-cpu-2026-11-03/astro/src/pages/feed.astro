@@ -1,0 +1,37 @@
+---
+// リクエストごとに描画する（静的に書き出さない）。キャッシュもしない。
+export const prerender = false;
+
+import Header from "../components/Header.astro";
+import UserCard from "../components/UserCard.astro";
+import FeedItem from "../components/FeedItem.astro";
+import Sidebar from "../components/Sidebar.astro";
+import Footer from "../components/Footer.astro";
+import { buildFeedPage, parseItems, PAGE_CSS } from "../../../shared/feed";
+
+const page = buildFeedPage(parseItems(Astro.url.searchParams.get("items")));
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feed · {page.user.name}</title>
+    <style is:inline set:html={PAGE_CSS}></style>
+  </head>
+  <body>
+    <Header nav={page.nav} user={page.user} />
+    <div class="layout">
+      <main>
+        <UserCard user={page.user} />
+        <section class="feed" aria-label="Feed">
+          {page.items.map((item) => <FeedItem item={item} />)}
+        </section>
+      </main>
+      <Sidebar trendingTags={page.trendingTags} suggested={page.suggested} />
+    </div>
+    <Footer links={page.footerLinks} />
+  </body>
+</html>

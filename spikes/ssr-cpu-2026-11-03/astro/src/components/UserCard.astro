@@ -1,0 +1,18 @@
+---
+import type { FeedUser } from "../../../shared/feed";
+interface Props {
+  user: FeedUser;
+}
+const { user } = Astro.props;
+---
+
+<section class="card user-card">
+  <h1>{user.name}</h1>
+  <p class="meta">@{user.handle}</p>
+  <p>{user.bio}</p>
+  <ul class="counts">
+    <li><strong>{user.posts}</strong> posts</li>
+    <li><strong>{user.followers}</strong> followers</li>
+    <li><strong>{user.following}</strong> following</li>
+  </ul>
+</section>

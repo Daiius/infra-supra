@@ -1,0 +1,102 @@
+[
+  {
+    "framework": "astro",
+    "items": 10,
+    "start": "2026-11-11T02:13:00Z",
+    "end": "2026-11-11T02:14:59Z",
+    "rows": [
+      {
+        "dimensions": {
+          "status": "success"
+        },
+        "quantiles": {
+          "cpuTimeP50": 2621,
+          "cpuTimeP90": 6188,
+          "cpuTimeP99": 20342,
+          "cpuTimeP999": 25392,
+          "wallTimeP50": 3560
+        },
+        "sum": {
+          "errors": 0,
+          "requests": 300,
+          "subrequests": 0
+        }
+      }
+    ]
+  },
+  {
+    "framework": "vinext",
+    "items": 10,
+    "start": "2026-11-11T02:13:00Z",
+    "end": "2026-11-11T02:14:59Z",
+    "rows": [
+      {
+        "dimensions": {
+          "status": "success"
+        },
+        "quantiles": {
+          "cpuTimeP50": 18390,
+          "cpuTimeP90": 39711,
+          "cpuTimeP99": 100201,
+          "cpuTimeP999": 197448,
+          "wallTimeP50": 20591
+        },
+        "sum": {
+          "errors": 0,
+          "requests": 301,
+          "subrequests": 0
+        }
+      }
+    ]
+  },
+  {
+    "framework": "astro",
+    "items": 30,
+    "start": "2026-11-11T02:15:00Z",
+    "end": "2026-11-11T02:16:59Z",
+    "rows": [
+      {
+        "dimensions": {
+          "status": "success"
+        },
+        "quantiles": {
+          "cpuTimeP50": 3466,
+          "cpuTimeP90": 8188,
+          "cpuTimeP99": 21619,
+          "cpuTimeP999": 30018,
+          "wallTimeP50": 4835
+        },
+        "sum": {
+          "errors": 0,
+          "requests": 308,
+          "subrequests": 0
+        }
+      }
+    ]
+  },
+  {
+    "framework": "vinext",
+    "items": 30,
+    "start": "2026-11-11T02:15:00Z",
+    "end": "2026-11-11T02:16:59Z",
+    "rows": [
+      {
+        "dimensions": {
+          "status": "success"
+        },
+        "quantiles": {
+          "cpuTimeP50": 31533,
+          "cpuTimeP90": 53759,
+          "cpuTimeP99": 91215,
+          "cpuTimeP999": 97070,
+          "wallTimeP50": 34784
+        },
+        "sum": {
+          "errors": 0,
+          "requests": 298,
+          "subrequests": 0
+        }
+      }
+    ]
+  }
+]

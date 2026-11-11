@@ -1,0 +1,18 @@
+# このディレクトリを独立した pnpm のルートにする（リポジトリ直下の workspace に入れない）。
+packages: []
+allowBuilds:
+  esbuild: true
+  workerd: true
+  sharp: false
+minimumReleaseAgeExclude:
+  - '@cloudflare/vite-plugin@1.67.0'
+  - '@cloudflare/workerd-darwin-64@1.20261102.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20261102.1'
+  - '@cloudflare/workerd-linux-64@1.20261102.1'
+  - '@cloudflare/workerd-linux-arm64@1.20261102.1'
+  - '@cloudflare/workerd-windows-64@1.20261102.1'
+  - '@vitejs/plugin-react@6.2.1'
+  - miniflare@5.20261101.0-beta || 5.20261102.0-beta
+  - vinext@1.4.1
+  - workerd@1.20261102.1
+  - wrangler@4.156.2
