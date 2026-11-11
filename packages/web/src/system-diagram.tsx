@@ -25,6 +25,7 @@ import {
   diagramModel,
   diagramSummary,
   activeLane,
+  compactText,
   edgeGeometry,
   isNarrow,
   labelOf,
@@ -102,7 +103,7 @@ function BoxMark({
   warn: boolean;
   compact?: boolean;
 }) {
-  const r = compact ? 7 : 9;
+  const r = compact ? 6 : 9;
   return (
     <g
       aria-hidden
@@ -127,7 +128,7 @@ function BoxMark({
           fill: warn
             ? 'var(--color-warning-content)'
             : 'var(--color-primary-content)',
-          fontSize: compact ? 9 : 12,
+          fontSize: compact ? 8 : 12,
           fontWeight: 700,
         }}
       >
@@ -1009,6 +1010,7 @@ function CompactNode({
         ? 'var(--color-base-content)'
         : 'color-mix(in oklab, var(--color-base-content) 35%, transparent)';
   const mark = warn || slots.length > 0;
+  const text = compactText(n.short, mark);
   return (
     <g
       data-node={n.id}
@@ -1037,9 +1039,13 @@ function CompactNode({
           hiddenName
           interactive={slots.length > 0}
           // 枠は上の rect が描く。ボタンにも同じ太さの透明の枠を持たせ、ホバーの輪（inset）を枠の内側に置く（前と同じ見た目）。
-          // 右上の印（!・⇄）がある箱は、名前が印に重ならないよう右に余白を取る
-          className={`flex h-full w-full cursor-pointer items-center justify-center rounded-md border-transparent text-center text-[10px] leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
-            mark ? 'pr-3 pl-0.5' : 'px-0.5'
+          // 名前は真ん中のまま、右上の印（!・⇄）は箱の角に重ねる（印の分の余白は取らず、1 行目を短くして避ける。compactText）
+          className={`flex h-full w-full cursor-pointer items-center justify-center rounded-md border-transparent px-0.5 text-center leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+            text.size === 8
+              ? 'text-[8px]'
+              : text.size === 9
+                ? 'text-[9px]'
+                : 'text-[10px]'
           } ${n.compute ? 'font-semibold' : ''} ${
             warn ? 'border-2' : n.compute ? 'border-[1.75px]' : 'border'
           } ${
@@ -1051,11 +1057,15 @@ function CompactNode({
                 : ''
           }`}
           trigger={
+            // 行はモデルで分けてある（英単語の途中で折らない・長い名前は「…」。D-213 の補足）。ブラウザには折り返させない
             <span
               data-short
-              className={`[overflow-wrap:anywhere] ${n.ghost ? GHOST_TEXT : ''}`}
+              data-truncated={text.truncated ? 'true' : undefined}
+              className={`flex flex-col items-center whitespace-nowrap ${n.ghost ? GHOST_TEXT : ''}`}
             >
-              {n.short}
+              {text.lines.map((l, i) => (
+                <span key={i}>{l}</span>
+              ))}
             </span>
           }
         >
@@ -1121,7 +1131,13 @@ function CompactNode({
         style={{ fill: 'none', stroke, strokeWidth: sw, pointerEvents: 'none' }}
       />
       {mark && (
-        <BoxMark right={n.x + model.node.w} top={n.y} warn={warn} compact />
+        // 縦の図は印を箱の右上の角に重ね（外へ 4 はみ出す）、箱の内側は右端から 8・上端から 8 だけ使う
+        <BoxMark
+          right={n.x + model.node.w + 4}
+          top={n.y - 4}
+          warn={warn}
+          compact
+        />
       )}
     </g>
   );
