@@ -381,10 +381,14 @@ describe('見る分布の切り替えと完走のダイアログの高さ（D-20
     );
     await finish();
     await waitFor(() => expect(dialogAxes().dataset.stats).toBe('ready'));
-    // ダイアログの高さは dvh で抑え、中身だけをスクロールする（iOS Safari のツールバーで下のボタンが隠れない）
-    expect(victory().querySelector('.modal-box')!.className).toContain(
-      'max-h-[calc(100dvh-2rem)]',
-    );
+    // ダイアログの高さは dvh で抑え（styles.css の .modal-box。D-208）、中身だけをスクロールする
+    // （iOS Safari のツールバーで下のボタンが隠れない）
+    const box = victory().querySelector('.modal-box')!;
+    for (const c of ['flex', 'flex-col', 'overflow-hidden'])
+      expect(box.className.split(' ')).toContain(c);
+    expect(
+      victory().querySelector('[data-result-axes]')!.parentElement!.className,
+    ).toContain('overflow-y-auto');
     const axes = dialogAxes();
     const chips = [
       ...axes.querySelectorAll<HTMLElement>(

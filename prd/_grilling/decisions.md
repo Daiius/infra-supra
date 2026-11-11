@@ -2558,6 +2558,15 @@
 - 実装: web の `result-axes.tsx`（`compareNote`・`CompareInfo`。注記に自分を数えたかを `data-self` で残す）・`game-screen.tsx`。テスト: `stats-histogram.smoke.test.tsx` の W-98・W-98b・W-98c・W-101、`stats-breakdown.smoke.test.tsx` の絞り込みの説明。
 - 残した点: 390×664 の画面で最初に見える軸の数を実機で確かめる。
 
+### D-208 全部のダイアログの箱の高さの上限を dvh 基準にし、長いダイアログは見出しと閉じるボタンを固定する（D-204 の広げ。2026-11-11・supervisor の指摘）
+
+- 依頼（supervisor）: 完走のダイアログ（D-204）と同じく、ほかのダイアログも daisyUI の `.modal-box` の既定の上限（`100vh`・`calc(100vh - 5em)`）が vh 基準で、iPhone の Safari ではツールバーの分はみ出しうる。個別に `max-h-[calc(100dvh-2rem)]` を付けていたのは完走・出来事・ⓘ・遊び方のダイアログだけだった。
+- 決定（表示だけ）:
+  - `styles.css` で `.modal-box` の `max-height` を `calc(100vh - 2rem)` → `calc(100dvh - 2rem)` の順に書く（dvh に対応しないブラウザは vh の値）。層の外に書くので daisyUI の値より優先し、全部のダイアログに一括で効く。個別の `max-h-[calc(100dvh-2rem)]` は重複なので外した（値は同じなので挙動は変わらない）。
+  - 中身が長いダイアログ（プライバシーポリシー・ページの描き方を比べる表・部品の比較・残りの部品を選ぶ）は、箱ごとスクロールして × が上へ流れていく形だったので、完走のダイアログと同じ flex の縦並びにし、見出しと ×（残りを選ぶは下のボタンの行も）を固定して中身（`data-modal-scroll`）だけスクロールする。短い確認のダイアログ（設定・過去の月に戻る・新しいゲーム・提案の確認・出来事の詳しい説明）はそのまま（上限は効く）。
+- 実装: web の `styles.css`・`privacy-policy.tsx`・`route-plan-field.tsx`・`slot-compare.tsx`・`missing-parts.tsx`（ほかは個別の上限を外しただけ）。テスト: `small-ui.smoke.test.tsx` の W-208（styles.css の規則が vh → dvh の順で層の外・`.modal-box` の行に個別の `max-h-` が残っていない）と、長い 4 つのダイアログの形（`smoke.test-helpers.tsx` の `expectFixedChrome`: 箱は flex の縦並びで中身だけスクロールし、見出しと閉じるボタンはスクロールの外。W-29 相当の small-ui・残りを選ぶ・部品の比較・W-96）。W-204 は箱のクラスの代わりに形を見る。
+- 残した点: iPhone の Safari で、ツールバーが出ている間も各ダイアログの × と下のボタンが見えることを実機で確かめる。
+
 ## 未決（grill で詰める）
 
 > 2026-11-02 に、各文書と各決定の「未決」「残した点」「未取得」「見送った案」を集めた一覧（2026-11-03 に D-107 まで見直した）。本文は消していないので、詳細は参照先を読む。

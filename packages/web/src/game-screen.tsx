@@ -452,8 +452,8 @@ function VictoryCelebration({
           }}
         >
           {/* 見出しと閉じるボタンは固定し、4 軸の欄だけを縦にスクロールする（狭い画面で分布が高さを超える。OCL-3AA8C258）。
-              高さは dvh で抑える（daisyUI の既定 100vh は iOS Safari のツールバーの分はみ出し、下のボタンが隠れる。D-204） */}
-          <div className="modal-box relative z-10 flex max-h-[calc(100dvh-2rem)] max-w-lg flex-col overflow-hidden p-0">
+              高さは dvh で抑える（daisyUI の既定 100vh は iOS Safari のツールバーの分はみ出し、下のボタンが隠れる。D-204。上限は styles.css の .modal-box で全部のダイアログに。D-208） */}
+          <div className="modal-box relative z-10 flex max-w-lg flex-col overflow-hidden p-0">
             {/* 成功の色の帯で見出しを強調する（色だけにせず ✓ とラベルを添える） */}
             <div className="shrink-0 bg-success px-6 py-5 text-success-content">
               <h2 id="victory-title" className="text-3xl font-bold">
@@ -606,7 +606,7 @@ function EventsDialog({
       <div
         // 2 件以上の月は高さを一定にする（modal は縦中央なので、高さが変わると上端・ナビ・閉じるが上下に動く）。
         // 短いページは本文の下が空くだけ。1 件だけの月は内容に合わせる
-        className={`modal-box flex max-h-[calc(100dvh-2rem)] w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6 ${n > 1 ? 'h-[min(40rem,calc(100dvh-2rem))]' : ''}`}
+        className={`modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6 ${n > 1 ? 'h-[min(40rem,calc(100dvh-2rem))]' : ''}`}
         data-events-fixed-height={n > 1 ? '' : undefined}
       >
         {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}

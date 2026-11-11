@@ -324,8 +324,9 @@ export function SlotCompareDialog({
       onClick={(e) => e.stopPropagation()}
     >
       <PortalContainer.Provider value={dialogEl}>
-        <div className="modal-box w-11/12 max-w-3xl px-3 sm:px-6">
-          <div className="flex items-start justify-between gap-2">
+        <div className="modal-box flex flex-col overflow-hidden w-11/12 max-w-3xl px-3 sm:px-6">
+          {/* 見出しと × は固定し、比較の表だけスクロールする（D-208） */}
+          <div className="flex shrink-0 items-start justify-between gap-2">
             <h2 id={titleId} className="text-lg font-bold">
               {slotLabel}を比べる
             </h2>
@@ -339,7 +340,10 @@ export function SlotCompareDialog({
               </button>
             </form>
           </div>
-          <div className="mt-2 text-sm">
+          <div
+            className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain text-sm"
+            data-modal-scroll
+          >
             <LoadedBody
               load={load}
               current={current}

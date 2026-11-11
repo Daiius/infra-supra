@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // 外部のプレイで見つかった小さな不具合の回帰（描画テスト。D-86）: 「新しいゲーム」の確認・再開の知らせ・「−$0」・規約違反の強調。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   advance,
@@ -13,6 +15,7 @@ import {
   startGame,
   useSmokeEnv,
   waitLoaded,
+  expectFixedChrome,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -108,6 +111,8 @@ describe('小さな不具合の回帰', () => {
     const dialog = screen.getByRole('dialog', {
       name: /^ページの描き方を比べる/,
     });
+    // 見出しと × は固定し、表だけスクロールする（D-208）
+    expectFixedChrome(dialog);
     // 小さい構成では描き方を替えても 1 か月目の費用が $1 未満しか変わらない（以前は「−$0」「+$0」と出ていた）
     expect(dialog.textContent).toContain('±$0');
     expect(dialog.textContent).not.toMatch(SIGNED_ZERO);
@@ -141,5 +146,42 @@ describe('小さな不具合の回帰', () => {
     expect(cause).not.toBeNull();
     expect(cause.textContent).toContain('原因のプラン: Vercel Hobby');
     expect(cause.textContent).toContain('1 か月目に指摘を受けました');
+  });
+});
+
+describe('ダイアログの箱の高さ（D-208）', () => {
+  // vitest は CSS の import を空にするので、ファイルを直に読む
+  const read = (rel: string) =>
+    readFileSync(join(import.meta.dirname, rel), 'utf8');
+
+  it('W-208 全部の .modal-box の高さの上限を styles.css で dvh 基準にする（vh を先に書いて上書き・層の外）', () => {
+    const css = read('styles.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const m = /(^|\n)\.modal-box \{([^}]*)\}/.exec(css);
+    expect(m).not.toBeNull();
+    const decls = m![2]!
+      .split(';')
+      .map((d) => d.trim())
+      .filter(Boolean);
+    expect(decls).toEqual([
+      'max-height: calc(100vh - 2rem)',
+      'max-height: calc(100dvh - 2rem)',
+    ]);
+    // 層の外（daisyUI の値より優先する）: 規則より前に開いたままの @layer が無い
+    const before = css.slice(0, m!.index);
+    expect(before).not.toContain('@layer');
+    // 個別の上限は残さない（全部のダイアログに styles.css の上限が効く）
+    const tsx = [
+      ...readdirSync(import.meta.dirname, { recursive: true }),
+    ].filter(
+      (f): f is string =>
+        typeof f === 'string' && f.endsWith('.tsx') && !f.includes('.test.'),
+    );
+    const boxes = tsx.flatMap((f) =>
+      read(f)
+        .split('\n')
+        .filter((l) => l.includes('modal-box')),
+    );
+    expect(boxes.length).toBeGreaterThanOrEqual(10);
+    for (const l of boxes) expect(l).not.toMatch(/\bmax-h-/);
   });
 });
