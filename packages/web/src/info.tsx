@@ -11,7 +11,7 @@ import {
 } from 'react';
 import clsx from 'clsx';
 import { BookOpenText, ChevronDown } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 
 /**
  * 吹き出し・説明のダイアログを描く先（既定は body）。モーダルの `<dialog>`（top layer）の中では body に描くとダイアログの後ろに隠れるので、
@@ -180,7 +180,9 @@ export function Popover({
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
   const nameId = useId();
   const close = () => {
-    setOpen(false);
+    // モーダルのダイアログが残っている間は背後の箱が inert で focus が効かないので、先にダイアログを外してから箱へ戻す
+    // （中の「表と月額で比べる」で閉じて比較を開き、比較を閉じたときに箱へ戻れるように。OCL-349609BC）
+    flushSync(() => setOpen(false));
     button?.focus();
   };
   return (
