@@ -330,8 +330,8 @@ describe('結果の比較の表', () => {
     expect(rows.map((r) => r.name)).toEqual([
       'あなた',
       'CF Paid・何もしない',
-      'CF Paid・提案を受ける',
-      'VPS・画像の提案を受ける',
+      'CF Paid・開発依頼を受ける',
+      'VPS・画像の開発依頼を受ける',
       'Vercel Pro・何もしない',
       'Vercel Pro → CF Paid',
       'CF Free・何もしない',

@@ -29,7 +29,7 @@ const SEGMENTS: {
   },
   {
     key: 'interrupt',
-    label: '出来事への対応',
+    label: 'イベントへの対応',
     color: 'var(--series-2)',
     of: (e) => e.interrupt,
   },
@@ -41,7 +41,7 @@ const SEGMENTS: {
   },
   {
     key: 'actions',
-    label: '行動',
+    label: 'アクション',
     color: 'var(--series-5)',
     of: (e) => e.actions,
   },
@@ -263,7 +263,7 @@ export function FeatureRing({
           className="fill-[var(--text-secondary)] text-[10px]"
         >
           {change !== undefined && !isZeroText(fmt(Math.abs(change)))
-            ? `行動で ${signedText(change, fmt)}`
+            ? `アクションで ${signedText(change, fmt)}`
             : '機能開発 / 期待'}
         </text>
       </svg>
@@ -297,7 +297,7 @@ export function FeatureRing({
               </li>
             ))}
           {feature - parts[0]!.v > 0 && (
-            <li>（ほかに提案の加点 +{fmt(feature - parts[0]!.v)}）</li>
+            <li>（ほかに開発依頼の加点 +{fmt(feature - parts[0]!.v)}）</li>
           )}
         </ul>
         <div className="flex items-center gap-1">

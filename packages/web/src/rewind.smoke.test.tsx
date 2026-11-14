@@ -44,7 +44,7 @@ const headerRewind = () =>
 
 /** 出来事のダイアログが開いていたら最後まで送って閉じる（戻った月でも開き直す。D-126・D-128）。 */
 function closeEventsIfOpen() {
-  const d = screen.queryByRole('dialog', { name: /か月目の出来事/ });
+  const d = screen.queryByRole('dialog', { name: /か月目のイベント/ });
   if (!d) return;
   readEventPages(d);
   closeEventsDialog(d);
@@ -93,7 +93,7 @@ describe('この月に戻る（D-128）', () => {
       (within(dialog).getByLabelText('戻る先の月') as HTMLSelectElement).value,
     ).toBe('2');
     expect(dialog.textContent).toContain(
-      '2 か月目の行動を選ぶ前に戻ります。今の結果（4 か月目まで）は「前の試行」として 1 本だけ残ります。',
+      '2 か月目のアクションを選ぶ前に戻ります。今の結果（4 か月目まで）は「前の試行」として 1 本だけ残ります。',
     );
     fireEvent.click(within(dialog).getByRole('button', { name: 'やめる' }));
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -123,7 +123,7 @@ describe('この月に戻る（D-128）', () => {
         .map((o) => o.textContent),
     ).toEqual(['1 か月目']);
     expect(rewindDialog().textContent).toContain(
-      '選んだ月の行動を選ぶ前の状態に戻ります。',
+      '選んだ月のアクションを選ぶ前の状態に戻ります。',
     );
     expect(rewindDialog().textContent).toContain(
       '今ある前の試行（4 か月目まで）は上書きされます。',
@@ -167,7 +167,7 @@ describe('この月に戻る（D-128）', () => {
     fireEvent.click(headerRewind()!);
     fireEvent.change(select(), { target: { value: '2' } });
     expect(rewindDialog().textContent).toContain(
-      '2 か月目の行動を選ぶ前に戻ります。今の結果（4 か月目まで）は「前の試行」として 1 本だけ残ります。',
+      '2 か月目のアクションを選ぶ前に戻ります。今の結果（4 か月目まで）は「前の試行」として 1 本だけ残ります。',
     );
     fireEvent.click(
       within(rewindDialog()).getByRole('button', { name: '2 か月目に戻る' }),

@@ -41,7 +41,7 @@ export function RewindDialog({
           過去の月に戻る
         </h2>
         <p className="mt-2 text-sm opacity-80">
-          選んだ月の行動を選ぶ前の状態に戻ります。始めたときの選択（シナリオ・構成・部品・乱数のシード）はそのままなので、同じ行動を選べば同じ結果になります。今の結果は「前の試行」として
+          選んだ月のアクションを選ぶ前の状態に戻ります。始めたときの選択（シナリオ・構成・部品・乱数のシード）はそのままなので、同じアクションを選べば同じ結果になります。今の結果は「前の試行」として
           1 本だけ残り、推移のグラフに破線で重なります（もう一度戻ると上書き）。
         </p>
         <label className="mt-3 flex items-center gap-2 text-sm">
@@ -60,7 +60,7 @@ export function RewindDialog({
           </select>
         </label>
         <p className="mt-3 text-sm" data-rewind-summary>
-          {`${month} か月目の行動を選ぶ前に戻ります。今の結果（${current} か月目${ended ? 'で終了' : 'まで'}）は「前の試行」として 1 本だけ残ります。`}
+          {`${month} か月目のアクションを選ぶ前に戻ります。今の結果（${current} か月目${ended ? 'で終了' : 'まで'}）は「前の試行」として 1 本だけ残ります。`}
         </p>
         {previousMonths !== null && (
           <p className="mt-1 text-sm opacity-70">

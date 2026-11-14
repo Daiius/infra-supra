@@ -8,7 +8,7 @@ const CLEARED = [
   '前回の構成',
   '結果の履歴（自己ベスト・前回との差の比較の元）',
   'タブと表示の選択',
-  '遊び方を見たかどうか・出来事の既読',
+  '遊び方を見たかどうか・イベントの既読',
 ];
 
 export function SettingsDialog({
@@ -121,7 +121,7 @@ export function SettingsDialog({
             <section className="space-y-1">
               <h3 className="font-bold">送る情報</h3>
               <p className="text-sm opacity-70">
-                終わったプレイの結果（構成・行動・4
+                終わったプレイの結果（構成・アクション・4
                 つの軸など）を匿名で送ります。名前・IP・端末の情報は送りません。
               </p>
               <button

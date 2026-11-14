@@ -974,7 +974,7 @@ describe('ゲームモードの画面', () => {
     );
     registerSetupChange();
     expect(setupChangeFold().querySelector('summary')!.textContent).toMatch(
-      /来月の行動: 個人向けのページを「/,
+      /来月のアクション: 個人向けのページを「/,
     );
     advance(1);
     // 次の月の欄では、替えた描き方が「今」（欄は畳んだ状態から）
@@ -1152,7 +1152,7 @@ describe('ゲームモードの画面', () => {
     expect(fold.textContent).toContain('今の構成と同じです');
     expect(
       within(fold).getByRole<HTMLButtonElement>('button', {
-        name: '来月の行動にする',
+        name: '来月のアクションにする',
       }).disabled,
     ).toBe(true);
     // 選び直すと内訳、登録すると見出しに要約
@@ -1161,13 +1161,13 @@ describe('ゲームモードの画面', () => {
     registerSetupChange();
     const summary = () => fold.querySelector('summary')!.textContent!;
     expect(summary()).toMatch(
-      /来月の行動: Cloudflare Paid \+ vinext.*へ乗り換える/,
+      /来月のアクション: Cloudflare Paid \+ vinext.*へ乗り換える/,
     );
     // 取り消すと今の状態に戻り、要約も消える
     fireEvent.click(
       within(fold).getByRole('button', { name: '構成はこのまま' }),
     );
-    expect(summary()).not.toContain('来月の行動');
+    expect(summary()).not.toContain('来月のアクション');
     expect(fold.textContent).toContain('今の構成と同じです');
     // 登録してから全体の「選択を戻す」を押すと、欄の選び直しも今の状態に戻る（OCL-E8982F9F）
     pickRadio('Cloudflare Paid + vinext', fold);
@@ -1175,7 +1175,7 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(screen.getByRole('button', { name: '選択を戻す' }));
     expect(
       setupChangeFold().querySelector('summary')!.textContent,
-    ).not.toContain('来月の行動');
+    ).not.toContain('来月のアクション');
     openSetupChange();
     expect(setupChangeFold().textContent).toContain('今の構成と同じです');
     // もう一度選んで登録し、次の月へ: 乗り換え中も欄は出し、見出しに進み具合を出す（OCL-0B7CAFEB）
@@ -1231,7 +1231,7 @@ describe('ゲームモードの画面', () => {
     );
     expect(
       within(fold).getByRole<HTMLButtonElement>('button', {
-        name: '来月の行動にする',
+        name: '来月のアクションにする',
       }).disabled,
     ).toBe(true);
     // 取り消して、今の構成のまま部品（ISR のキャッシュ）を差し替える
@@ -1753,12 +1753,12 @@ describe('ゲームモードの画面', () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     // 本文には要約だけ（出来事の一覧・改定の説明は出さない）
-    expect(screen.getByText(/運営中に出来事が起きます/)).toBeDefined();
+    expect(screen.getByText(/運営中にイベントが起きます/)).toBeDefined();
     expect(screen.queryByText(/Bot・クローラーが大量に来ます/)).toBeNull();
     expect(screen.queryByText(/実際に予告されている料金/)).toBeNull();
-    const open = screen.getByRole('button', { name: '出来事の詳しい説明' });
+    const open = screen.getByRole('button', { name: 'イベントの詳しい説明' });
     fireEvent.click(open);
-    const dialog = screen.getByRole('dialog', { name: '運営中の出来事' });
+    const dialog = screen.getByRole('dialog', { name: '運営中のイベント' });
     expect(dialog.textContent).toContain('Bot・クローラーが大量に来ます');
     expect(dialog.textContent).toContain('実際に予告されている料金');
     // 話題の出来事で登録の確認のメールが集中する（D-117）
@@ -2630,13 +2630,13 @@ describe('ゲームモードの画面', () => {
       Number(outlook().match(/来月の機能開発 ([\d.]+)/)![1]);
     expect(outlook()).toContain('来月の機能開発の累計');
     expect(outlook()).toContain('/ 期待 16');
-    expect(outlook()).not.toContain('行動で');
+    expect(outlook()).not.toContain('アクションで');
     const before = feature();
     fireEvent.click(
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(feature()).toBeLessThan(before);
-    expect(outlook()).toMatch(/（行動で −\d/);
+    expect(outlook()).toMatch(/（アクションで −\d/);
     // シード 42 は 6 か月目に個人向けのページの提案が届く
     const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
       (x) => x.id === 'p-personal',
@@ -2644,19 +2644,19 @@ describe('ゲームモードの画面', () => {
     advance(m - 1);
     expectGameScreen(m);
     const card =
-      screen.getByText('届いた提案（選ばなければ断る）').parentElement!;
+      screen.getByText('届いた開発依頼（選ばなければ断る）').parentElement!;
     expect(card.textContent).toContain(
       '受けると: 機能開発 +6（作業の手間 4 も機能開発に数える）',
     );
     expect(card.textContent).toContain(
-      '伴うこと: 来月、行動に使える手間が 4 減ります・使用量・費用: SSR の割合 60%',
+      '伴うこと: 来月、アクションに使える手間が 4 減ります・使用量・費用: SSR の割合 60%',
     );
     expect(card.textContent).toContain('断る（何も変わりません）');
     // 7 か月目に記事のデザインの刷新の提案が届く。機能の加点が無くても、得と断ったときの損を出す
     advance(1);
     const months = ARTICLE_COMMUNITY.imageRedesign!.declineMonths;
     const proposals =
-      screen.getByText('届いた提案（選ばなければ断る）').parentElement!
+      screen.getByText('届いた開発依頼（選ばなければ断る）').parentElement!
         .textContent!;
     expect(proposals).toContain(
       `受けると: 画質の評価を保つ（断ると ${months} か月、画質が 1 段下がる）`,
@@ -2684,20 +2684,22 @@ describe('ゲームモードの画面', () => {
     const label = () =>
       ring().querySelector('svg[role="img"]')!.getAttribute('aria-label')!;
     expect(label()).toMatch(/^来月の機能開発 [\d.]+ \/ 期待 8・累計/);
-    expect(ring().textContent).not.toContain('行動で');
+    expect(ring().textContent).not.toContain('アクションで');
     // 値が 0 の区分は凡例に出さない（機能開発と、行動の欄の行動は常に出す）
     const legend = () =>
       [...ring().querySelectorAll('li')].map((li) => li.textContent);
     expect(legend().some((t) => t!.startsWith('機能開発'))).toBe(true);
-    expect(legend().some((t) => t!.startsWith('行動0'))).toBe(true);
-    expect(legend().some((t) => t!.startsWith('出来事への対応0'))).toBe(false);
+    expect(legend().some((t) => t!.startsWith('アクション0'))).toBe(true);
+    expect(legend().some((t) => t!.startsWith('イベントへの対応0'))).toBe(
+      false,
+    );
     const before = label();
     fireEvent.click(
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(label()).not.toBe(before);
-    expect(ring().textContent).toMatch(/行動で −\d/);
-    expect(legend().some((t) => t!.startsWith('行動0'))).toBe(false);
+    expect(ring().textContent).toMatch(/アクションで −\d/);
+    expect(legend().some((t) => t!.startsWith('アクション0'))).toBe(false);
   });
 
   it('W-61 出来事のある月は出来事のダイアログが開き、1 件ずつ前後に移れて、最後のページで「閉じる」が出る（D-126）', async () => {
@@ -2714,7 +2716,7 @@ describe('ゲームモードの画面', () => {
     advance(m - 2);
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
     const dialog = screen.getByRole('dialog', {
-      name: new RegExp(`^${m} か月目の出来事（\\d+ 件）`),
+      name: new RegExp(`^${m} か月目のイベント（\\d+ 件）`),
     });
     const n = Number(
       within(dialog)
@@ -2727,7 +2729,7 @@ describe('ゲームモードの画面', () => {
     const first = page();
     // ナビ（前へ・位置・次へ・件数ぶんの印）は本文の上にあり、× とは別の行（D-126）
     const nav = within(dialog).getByRole('navigation', {
-      name: '出来事のページ',
+      name: 'イベントのページ',
     });
     const body = dialog.querySelector('[data-events-page]')!;
     // 2 件以上の月は高さを一定にして、ページを替えても上端・ナビが動かない（見た目は画面で確かめる）
@@ -2782,7 +2784,7 @@ describe('ゲームモードの画面', () => {
       b.getAttribute('aria-label')!.includes('会員向けの個人化'),
     )!;
     fireEvent.click(proposalDot);
-    expect(page()).toContain('◆ 提案');
+    expect(page()).toContain('◆ 開発依頼');
     expect(proposalDot.getAttribute('aria-current')).toBe('step');
     fireEvent.click(dots[0]!);
     expect(eventPosition(dialog)).toBe(`1 / ${n}`);
@@ -2794,7 +2796,7 @@ describe('ゲームモードの画面', () => {
     // 各ページに出来事の印（一覧と同じ文言）と題が出る。提案のページには行動の欄で選ぶ案内
     const pages = readEventPages(dialog);
     expect(pages).toHaveLength(n);
-    const proposal = pages.find((t) => t.includes('◆ 提案'))!;
+    const proposal = pages.find((t) => t.includes('◆ 開発依頼'))!;
     expect(proposal).toContain('会員向けの個人化');
     // 提案のページで受ける / 断るを選べる（D-202）
     expect(proposal).toContain(
@@ -2817,9 +2819,11 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(close);
     expect(screen.queryByRole('dialog')).toBeNull();
     // 閉じても月のカードに出来事の一覧が残り、そこから 1 ページ目で開き直せる
-    expect(screen.getAllByText('◆ 提案').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('◆ 開発依頼').length).toBeGreaterThan(0);
     fireEvent.click(
-      screen.getByRole('button', { name: `出来事を 1 件ずつ見る（${n} 件）` }),
+      screen.getByRole('button', {
+        name: `イベントを 1 件ずつ見る（${n} 件）`,
+      }),
     );
     const again = screen.getByRole('dialog');
     expect(eventPosition(again)).toBe(`1 / ${n}`);
@@ -2851,7 +2855,7 @@ describe('ゲームモードの画面', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     // × でも閉じる（一覧のボタンで開き直してから）
     fireEvent.click(
-      screen.getByRole('button', { name: /^出来事を 1 件ずつ見る/ }),
+      screen.getByRole('button', { name: /^イベントを 1 件ずつ見る/ }),
     );
     dialog = screen.getByRole('dialog');
     fireEvent.click(
@@ -2878,7 +2882,7 @@ describe('ゲームモードの画面', () => {
     // 次の出来事のある月はまた開く（この月の提案は選ばずに断って進む。D-140）
     nextMonth();
     within(screen.getByRole('dialog')).getByRole('heading', {
-      name: new RegExp(`^${m + 1} か月目の出来事`),
+      name: new RegExp(`^${m + 1} か月目のイベント`),
     });
   });
 
@@ -2901,11 +2905,11 @@ describe('ゲームモードの画面', () => {
     const row = rows[0]!;
     expect(row.textContent).toContain('会員向けの個人化');
     expect(row.classList.contains('border-primary')).toBe(true);
-    const badge = within(row).getByText('◆ 提案');
+    const badge = within(row).getByText('◆ 開発依頼');
     expect(badge.classList.contains('badge-primary')).toBe(true);
     // 月のカードの出来事の一覧の印と同じ文言・色
     const listed = screen
-      .getAllByText('◆ 提案')
+      .getAllByText('◆ 開発依頼')
       .find((el) => !row.contains(el))!;
     expect(listed.className).toContain('badge-primary');
     // 受ける・断るの選択肢はこの行の中にある
@@ -2933,7 +2937,7 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
     const dialog = screen.getByRole('dialog');
     within(dialog).getByRole('heading', {
-      name: new RegExp(`^${m} か月目の出来事`),
+      name: new RegExp(`^${m} か月目のイベント`),
     });
     // 出来事は 1 件ずつ出る（D-126）。Bot のページまで送る
     for (let i = 0; i < 10 && !dialog.textContent!.includes(bot.title); i++)

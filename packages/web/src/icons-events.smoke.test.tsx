@@ -70,8 +70,10 @@ describe('シナリオの図柄と出来事の印（D-140）', () => {
   it('W-84 出来事の詳しい説明は種類ごとの印の付いた一覧で、運営中の出来事の通知の見出しにも同じ印が出る', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
-    fireEvent.click(screen.getByRole('button', { name: '出来事の詳しい説明' }));
-    const dialog = screen.getByRole('dialog', { name: '運営中の出来事' });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'イベントの詳しい説明' }),
+    );
+    const dialog = screen.getByRole('dialog', { name: '運営中のイベント' });
     const list = dialog.querySelector('[data-events-list]')!;
     const rows = [...list.querySelectorAll('li')];
     // シナリオの行 + 料金の改定の行
@@ -93,7 +95,7 @@ describe('シナリオの図柄と出来事の印（D-140）', () => {
     advance(m - 2);
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
     const events = screen.getByRole('dialog', {
-      name: new RegExp(`^${m} か月目の出来事`),
+      name: new RegExp(`^${m} か月目のイベント`),
     });
     const seen: string[] = [];
     for (let i = 0; i < 10; i++) {
@@ -121,12 +123,14 @@ describe('未決の提案の確認（D-140）', () => {
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
     let confirm = declineConfirm()!;
     expect(confirm).not.toBeNull();
-    within(confirm).getByRole('heading', { name: '未決の提案が 1 件あります' });
+    within(confirm).getByRole('heading', {
+      name: '未決の開発依頼が 1 件あります',
+    });
     expect(confirm.textContent).toContain('断ったことになります');
     expect(confirm.textContent).toContain('会員向けの個人化');
     // 提案を選ぶ: 進まずに、提案の行へ戻る
     fireEvent.click(
-      within(confirm).getByRole('button', { name: '提案を選ぶ' }),
+      within(confirm).getByRole('button', { name: '開発依頼を選ぶ' }),
     );
     expect(declineConfirm()).toBeNull();
     monthHeading(m);

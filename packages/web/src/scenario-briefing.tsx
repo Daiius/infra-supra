@@ -714,8 +714,8 @@ export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
         )}
         {t?.revenue && <p>{t.revenue}</p>}
         <div>
-          運営中に出来事が起きます（時期は乱数のシードで変わります）。
-          <DetailsDialog label="出来事の詳しい説明" title="運営中の出来事">
+          運営中にイベントが起きます（時期は乱数のシードで変わります）。
+          <DetailsDialog label="イベントの詳しい説明" title="運営中のイベント">
             {/* 出来事の種類ごとに印（アイコン）を付けた一覧（D-140）。印は運営中の出来事の通知と同じ */}
             <ul className="list rounded-box bg-base-200" data-events-list>
               {(t?.events ?? []).map((line) => {
@@ -730,7 +730,7 @@ export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
                 );
               })}
               <EventLine category="revision">
-                始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それも出来事として出ます（改定後の料金を取得していないものは、計算に反映しません）。
+                始めた日より後に施行される、実際に予告されている料金・制限の改定があれば、それもイベントとして出ます（改定後の料金を取得していないものは、計算に反映しません）。
               </EventLine>
             </ul>
             <p>時期は乱数のシードで変わります。</p>

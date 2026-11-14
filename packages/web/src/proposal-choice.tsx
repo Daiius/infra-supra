@@ -15,7 +15,7 @@ import type { MonthDraft } from './month-draft.ts';
 
 /** 提案の印（出来事の印と同じ。D-126）。 */
 export const PROPOSAL_BADGE = {
-  label: '◆ 提案',
+  label: '◆ 開発依頼',
   cls: 'badge-primary',
 } as const;
 
@@ -84,8 +84,8 @@ export function AcceptLimits({ limits }: { limits: readonly AcceptLimit[] }) {
         );
       })}
       <li className="opacity-70">
-        ※ 今月選んでいる行動を当てた、今の規模（基準の PV）での見込みです。PV
-        が伸びれば早まります
+        ※ 今月選んでいるアクションを当てた、今の規模（基準の
+        PV）での見込みです。PV が伸びれば早まります
       </li>
     </ul>
   );

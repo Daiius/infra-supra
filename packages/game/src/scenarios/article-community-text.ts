@@ -267,7 +267,7 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
         'p-chat',
         'p-image-redesign',
       ],
-      text: '機能追加の提案が来ます（受けるか断るかを選びます）。',
+      text: '機能追加の開発依頼が来ます（受けるか断るかを選びます）。',
     },
     {
       about: [
@@ -281,11 +281,11 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
     },
     {
       about: ['p-archive', 'p-sla'],
-      text: 'まれに、構成の乗り換えを迫るほどの大きな出来事が来ます（1 か月前に予告が出ます）。',
+      text: 'まれに、構成の乗り換えを迫るほどの大きなイベントが来ます（1 か月前に予告が出ます）。',
     },
     {
       about: ['p-ondemand'],
-      text: '投稿者から「記事を直してもすぐ反映されない」と苦情が来ることもあります。先に記事のキャッシュを投稿・編集のときに消す設定にしていれば苦情は来ず、すぐ反映されると好評になります（口コミが少し伸びます）。',
+      text: '投稿者から「直した記事をすぐ反映してほしい」と依頼が来ることもあります。先に記事のキャッシュを投稿・編集のときに消す設定にしていれば依頼は来ず、すぐ反映されると好評になります（口コミが少し伸びます）。',
     },
   ],
   app: [
@@ -303,7 +303,7 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
       app: [
         '記事のページは ISR（再検証 5 分・2,000 ページ）、個人向けのページは SSR です',
         '記事ごとの SNS のカード（OGP）は HTML に入ります',
-        '即時反映（出来事で要件になる）は、投稿・修正のたびに revalidatePath・revalidateTag で再検証する形です。古い版を一度も出さないなら revalidateTag の { expire: 0 }（次のアクセスは作り直しを待つ）です',
+        '即時反映（イベントで要件になる）は、投稿・修正のたびに revalidatePath・revalidateTag で再検証する形です。古い版を一度も出さないなら revalidateTag の { expire: 0 }（次のアクセスは作り直しを待つ）です',
       ],
     },
     astro: {

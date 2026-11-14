@@ -185,7 +185,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         },
       };
       return withNote(
-        `提案「${def.title}」を${action.accept ? '受けました' : '断りました'}`,
+        `開発依頼「${def.title}」を${action.accept ? '受けました' : '断りました'}`,
         action.accept
           ? applyEffects(responded, def.accept!.effects, def.id)
           : responded,

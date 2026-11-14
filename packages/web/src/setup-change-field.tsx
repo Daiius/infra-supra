@@ -170,7 +170,7 @@ export function SetupChangeField({
         </span>
         {summary && (
           <span className="block break-words text-primary">
-            来月の行動: {summary}
+            来月のアクション: {summary}
           </span>
         )}
         {busy.map((b) => (
@@ -325,7 +325,7 @@ function ChangeBody({
           const x = slots.find((s) => s.slot === slot);
           return {
             rows: x ? componentComparison(state, x.slot, x.current) : [],
-            basis: `今月の基準の規模（月 ${state.basePV.toLocaleString('ja-JP')} PV）と今の他の部品で、${x?.label ?? slot}だけを替えた月の費用（構成全体）。出来事・話題の上乗せ・差し替えの期間の二重の費用は含めない目安です。縦の線は今の部品の額です${
+            basis: `今月の基準の規模（月 ${state.basePV.toLocaleString('ja-JP')} PV）と今の他の部品で、${x?.label ?? slot}だけを替えた月の費用（構成全体）。イベント・話題の上乗せ・差し替えの期間の二重の費用は含めない目安です。縦の線は今の部品の額です${
               slot === 'db' || slot === 'api'
                 ? '。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払います（変更の内訳の ⓘ に詳しく出します）'
                 : ''
@@ -495,7 +495,7 @@ function ChangeBody({
         )}
         {!same && change.why && (
           <p className="text-xs text-error-strong" role="note">
-            この組み合わせでは来月の行動にできません。
+            この組み合わせでは来月のアクションにできません。
           </p>
         )}
       </section>
@@ -518,7 +518,9 @@ function ChangeBody({
           disabled={same || change.why !== null || isRegistered}
           onClick={() => onRegister(draft)}
         >
-          {isRegistered ? '来月の行動にしました' : '来月の行動にする'}
+          {isRegistered
+            ? '来月のアクションにしました'
+            : '来月のアクションにする'}
         </button>
       </div>
     </>
