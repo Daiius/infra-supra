@@ -10,7 +10,7 @@ import {
   RESULTS_VERSION,
   type ResultStore,
 } from './results-history.ts';
-import { renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
+import { infoDialog, renderApp, useSmokeEnv } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -210,15 +210,23 @@ describe('完走の振り返りと手元の結果の履歴', () => {
     for (let i = 0; i < 4; i++) save = withTurn(save, []);
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
     await renderApp();
+    // 見込みと目安は 1 行、目安の意味（合否は無い）は ⓘ の中（prd/16）
     const guide = document.querySelector<HTMLElement>('p[data-cash-guide]')!;
-    expect(guide.textContent).toContain(
-      '目標の目安は 12 か月目に所持金 $1,730.00 です',
-    );
-    expect(guide.textContent).toMatch(/見込み(は目安を約|では目安まで約)/);
-    expect(guide.textContent).toContain(
-      '届かなくても完走になり、合否はありません',
+    expect(guide.textContent).toMatch(
+      /目安 \$1,730\.00 (を約 \$[\d,.]+ 上回る|まで約 \$[\d,.]+)/,
     );
     expect(guide.textContent).not.toMatch(/未達|届かなそう|✗/);
+    fireEvent.click(
+      within(guide).getByRole('button', { name: '所持金の見込みと目安' }),
+    );
+    const info = infoDialog()!;
+    expect(info.textContent).toContain(
+      '目標の目安は 12 か月目に所持金 $1,730.00 です',
+    );
+    expect(info.textContent).toContain(
+      '届かなくても完走になり、合否はありません',
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
     const ref = document.querySelector('[data-reference="neutral"]')!;
     expect(ref).not.toBeNull();
     expect(ref.textContent).toContain('目標の目安');

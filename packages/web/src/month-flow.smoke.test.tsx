@@ -150,7 +150,8 @@ describe('ゲームモードの画面', () => {
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(feature()).toBeLessThan(before);
-    expect(outlook()).toMatch(/（アクションで −\d/);
+    // アクションでの増減は輪のグラフの中央に出す（prd/16）
+    expect(outlook()).toMatch(/アクションで −\d/);
     // シード 42 は 6 か月目に個人向けのページの提案が届く
     const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
       (x) => x.id === 'p-personal',
