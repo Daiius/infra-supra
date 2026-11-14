@@ -25,6 +25,7 @@ import {
   LimitsPage,
   EndingPage,
 } from './howto/help-pages.tsx';
+import { slideInClass, useSwipe } from './swipe.ts';
 
 export { PREMISE_NOTE } from './howto/about-page.tsx';
 
@@ -92,7 +93,8 @@ export function HowtoDialog({
     moved.current = true;
     setView({ page: to, dir: to > page ? 1 : -1 });
   };
-  const touch = useRef<{ x: number; y: number } | null>(null);
+  // 横のスワイプ（縦のスクロールと区別する。swipe.ts）
+  const swipe = useSwipe((d) => go(page + d));
   const Body = current.body;
   return (
     <dialog
@@ -190,31 +192,12 @@ export function HowtoDialog({
           ref={bodyRef}
           className="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
           data-howto-page={page + 1}
-          onTouchStart={(t) => {
-            const p = t.touches[0];
-            touch.current = p ? { x: p.clientX, y: p.clientY } : null;
-          }}
-          onTouchEnd={(t) => {
-            const s0 = touch.current;
-            const p = t.changedTouches[0];
-            touch.current = null;
-            if (!s0 || !p) return;
-            const dx = p.clientX - s0.x;
-            if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(p.clientY - s0.y))
-              go(dx < 0 ? page + 1 : page - 1);
-          }}
+          {...swipe}
         >
           <section
             key={page}
             aria-labelledby="howto-page-title"
-            className={clsx(
-              'space-y-3',
-              !reduced &&
-                dir !== 0 &&
-                (dir > 0
-                  ? 'motion-slide-from-right'
-                  : 'motion-slide-from-left'),
-            )}
+            className={clsx('space-y-3', slideInClass(dir, reduced))}
           >
             <h3
               id="howto-page-title"

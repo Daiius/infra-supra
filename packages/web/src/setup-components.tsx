@@ -5,6 +5,7 @@
 // 構成図の箱を押したときの差し替え（PartOptions）も同じ判定で描く。設定の小さなチップ（SettingChips）は ② のカードの記事のページの行
 // （描き方の設定。D-119）と、見積モードの画像の部品の行（画像の形式・サイズ違い）で使う。
 // 状態と整合（ゲームの validSetupChoices・見積の normalizeInput）は各画面が持ち、ここは値・変更・注記を受けて描くだけ。
+import clsx from 'clsx';
 import {
   componentConflict,
   componentFlavor,
@@ -320,9 +321,10 @@ export function PartChips({
                   data-option={o.id}
                   data-selected="true"
                   title={`${x.label}: ${o.label}`}
-                  className={`inline-block max-w-full rounded-field bg-base-100 py-0.5 pr-0.5 pl-2 text-xs leading-6 [overflow-wrap:anywhere] ring-1 ring-base-300 ring-inset ${
-                    x.fixed ? '' : 'hover:bg-base-200'
-                  }`}
+                  className={clsx(
+                    'inline-block max-w-full rounded-field bg-base-100 py-0.5 pr-0.5 pl-2 text-xs leading-6 [overflow-wrap:anywhere] ring-1 ring-base-300 ring-inset',
+                    !x.fixed && 'hover:bg-base-200',
+                  )}
                 >
                   {x.fixed ? (
                     <>
@@ -369,9 +371,10 @@ export function PartChips({
               aria-label={`${x.label}${unselected ? '（未選択）' : ''}`}
               data-slot={x.slot}
               data-unselected={unselected ? 'true' : undefined}
-              className={`grid w-full min-w-0 gap-x-2 gap-y-1 rounded-box sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-start ${
-                unselected ? 'p-1 ring-2 ring-warning ring-inset' : ''
-              }`}
+              className={clsx(
+                'grid w-full min-w-0 gap-x-2 gap-y-1 rounded-box sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-start',
+                unselected && 'p-1 ring-2 ring-warning ring-inset',
+              )}
             >
               <span className="pt-1 text-xs font-semibold">
                 {open.has(x.slot) && !unselected ? (
@@ -409,13 +412,15 @@ export function PartChips({
                       data-selected={selected ? 'true' : 'false'}
                       data-available={why === null ? 'true' : 'false'}
                       title={why ? `${o.label}（${why}）` : o.label}
-                      className={`${box} pr-0.5 pl-2 ${
+                      className={clsx(
+                        box,
+                        'pr-0.5 pl-2',
                         selected
                           ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
                           : pick
                             ? 'bg-base-100 ring-1 ring-base-300 ring-inset hover:bg-base-200'
-                            : 'bg-base-200 opacity-50 ring-1 ring-base-300 ring-inset'
-                      }`}
+                            : 'bg-base-200 opacity-50 ring-1 ring-base-300 ring-inset',
+                      )}
                     >
                       {x.fixed ? (
                         <span className="inline-flex h-full min-w-0 items-center gap-1">
@@ -525,13 +530,14 @@ export function PartOptions({
                 aria-pressed={selected}
                 disabled={why !== null}
                 aria-label={`${o.label}${why ? `（${why}）` : ''}`}
-                className={`flex w-full min-w-0 items-start gap-1.5 rounded-field px-2 py-1 text-left text-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                className={clsx(
+                  'flex w-full min-w-0 items-start gap-1.5 rounded-field px-2 py-1 text-left text-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary',
                   selected
                     ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
                     : why
                       ? 'cursor-default opacity-50'
-                      : 'cursor-pointer hover:bg-base-200'
-                }`}
+                      : 'cursor-pointer hover:bg-base-200',
+                )}
                 onClick={() => {
                   if (selected || why !== null) return;
                   close();
@@ -650,13 +656,16 @@ export function SettingChips<V extends string | number>({
               data-selected={selected ? 'true' : 'false'}
               data-available={why === null ? 'true' : 'false'}
               title={why ? `${o.label}（${why}）` : (o.flavor ?? o.label)}
-              className={`${box} ${selected || why ? 'pr-0.5' : 'pr-2'} pl-2 ${
+              className={clsx(
+                box,
+                selected || why ? 'pr-0.5' : 'pr-2',
+                'pl-2',
                 selected
                   ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
                   : pick
                     ? 'bg-base-100 ring-1 ring-base-300 ring-inset hover:bg-base-200'
-                    : 'bg-base-200 opacity-50 ring-1 ring-base-300 ring-inset'
-              }`}
+                    : 'bg-base-200 opacity-50 ring-1 ring-base-300 ring-inset',
+              )}
             >
               <button
                 type="button"
@@ -843,7 +852,7 @@ export function SetupTabs({
               onClick={() => setTab(t)}
             >
               <span className="flex max-w-full items-center gap-1 text-sm">
-                <span className={`truncate ${selected ? 'text-primary' : ''}`}>
+                <span className={clsx('truncate', selected && 'text-primary')}>
                   {x.label}
                 </span>
                 {x.warn && (

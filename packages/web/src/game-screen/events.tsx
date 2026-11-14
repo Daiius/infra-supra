@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
 import type { GameState, MonthEvent, MonthReport } from 'game';
 import type { PlatformPremise } from 'estimator';
@@ -6,6 +7,7 @@ import type { MonthDraft } from '../month-draft.ts';
 import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
 import { hitLabel, hitTone } from '../premise-view.ts';
 import { useReducedMotion } from '../motion.tsx';
+import { slideInClass, useSwipe } from '../swipe.ts';
 
 /**
  * 出来事のダイアログを自動で開いた月（D-126）。月ごとに 1 回だけ自動で開く（見積の画面から戻って作り直したときに再び開かない）。
@@ -29,6 +31,13 @@ export function markEventsSeen(runId: string, month: number) {
     // 保存領域が使えない環境では覚えない（作り直すと再び開くだけ）
   }
 }
+
+// ページ送りの点の大きさと色: 今 > 未読 > 既読
+const DOT_CLASS = {
+  current: 'h-2.5 w-2.5 bg-base-content/60',
+  unread: 'h-2 w-2 bg-primary/40',
+  read: 'h-1.5 w-1.5 bg-base-content/30',
+} as const;
 
 /**
  * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつの通知のカードで出し、見出しの下のナビ
@@ -78,6 +87,9 @@ export function EventsDialog({
   const n = r.events.length;
   const last = page >= n - 1;
   const e = r.events[Math.min(page, n - 1)]!;
+  // 受ける / 断るをまだ選べる開発依頼か
+  const choosing =
+    e.phase === 'proposal' && state.pendingProposals.includes(e.id);
   const unread = n - read.size;
   // ページを移ったら本文を先頭へ戻す。押したボタンが端で押せなくなったら、次へ（最後のページでは「閉じる」）へフォーカスを移す
   const moved = useRef(false);
@@ -103,8 +115,8 @@ export function EventsDialog({
       dir: to > page ? 1 : -1,
     });
   };
-  // 横のスワイプ（縦のスクロールと区別するため、横の動きが縦より大きく 50px 以上のときだけ）
-  const touch = useRef<{ x: number; y: number } | null>(null);
+  // 横のスワイプ（縦のスクロールと区別する。swipe.ts）
+  const swipe = useSwipe((d) => go(page + d));
   return (
     <dialog
       ref={ref}
@@ -121,7 +133,10 @@ export function EventsDialog({
       <div
         // 2 件以上の月は高さを一定にする（modal は縦中央なので、高さが変わると上端・ナビ・閉じるが上下に動く）。
         // 短いページは本文の下が空くだけ。1 件だけの月は内容に合わせる
-        className={`modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6 ${n > 1 ? 'h-[min(40rem,calc(100dvh-2rem))]' : ''}`}
+        className={clsx(
+          'modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6',
+          n > 1 && 'h-[min(40rem,calc(100dvh-2rem))]',
+        )}
         data-events-fixed-height={n > 1 ? '' : undefined}
       >
         {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
@@ -207,13 +222,7 @@ export function EventsDialog({
                       {/* 普通の塗りの丸。大きさでも見分ける: 今 > 未読 > 既読 */}
                       <span
                         aria-hidden
-                        className={`block rounded-full ${
-                          state === 'current'
-                            ? 'h-2.5 w-2.5 bg-base-content/60'
-                            : state === 'unread'
-                              ? 'h-2 w-2 bg-primary/40'
-                              : 'h-1.5 w-1.5 bg-base-content/30'
-                        }`}
+                        className={clsx('block rounded-full', DOT_CLASS[state])}
                       />
                     </button>
                   </li>
@@ -226,30 +235,12 @@ export function EventsDialog({
           ref={bodyRef}
           className="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
           data-events-page
-          onTouchStart={(t) => {
-            const p = t.touches[0];
-            touch.current = p ? { x: p.clientX, y: p.clientY } : null;
-          }}
-          onTouchEnd={(t) => {
-            const s0 = touch.current;
-            const p = t.changedTouches[0];
-            touch.current = null;
-            if (!s0 || !p) return;
-            const dx = p.clientX - s0.x;
-            if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(p.clientY - s0.y))
-              go(dx < 0 ? page + 1 : page - 1);
-          }}
+          {...swipe}
         >
           {/* key でページごとに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない） */}
           <div
             key={page}
-            className={`relative pt-2 ${
-              reduced || dir === 0
-                ? ''
-                : dir > 0
-                  ? 'motion-slide-from-right'
-                  : 'motion-slide-from-left'
-            }`}
+            className={clsx('relative pt-2', slideInClass(dir, reduced))}
           >
             {fresh && n > 1 && (
               <span
@@ -263,22 +254,19 @@ export function EventsDialog({
               key={`${e.id}:${e.phase}`}
               event={e}
               premises={r.premises}
-              choosing={
-                e.phase === 'proposal' && state.pendingProposals.includes(e.id)
-              }
+              choosing={choosing}
             />
             {/* 提案のページで受ける / 断るを選ぶ（行動の欄と同じ下書き。選べば「次の月へ」の確認は出ない。D-202） */}
-            {e.phase === 'proposal' &&
-              state.pendingProposals.includes(e.id) && (
-                <div className="mt-2">
-                  <ProposalChoice
-                    state={state}
-                    id={e.id}
-                    draft={draft}
-                    where="dialog"
-                  />
-                </div>
-              )}
+            {choosing && (
+              <div className="mt-2">
+                <ProposalChoice
+                  state={state}
+                  id={e.id}
+                  draft={draft}
+                  where="dialog"
+                />
+              </div>
+            )}
           </div>
         </div>
         <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
@@ -309,8 +297,6 @@ export function EventsDialog({
     </dialog>
   );
 }
-
-/** 提案の印（D-28）。出来事の一覧・ダイアログと、行動の欄の提案の選択肢で共有する（D-126）。 */
 
 /**
  * 出来事の印（D-28）。予告・予告なしで今月発生・予告どおり起きた・提案を、印・色・文言の 3 つで区別する（色だけにしない）。

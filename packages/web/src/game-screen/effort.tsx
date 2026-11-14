@@ -9,7 +9,8 @@ import {
 } from 'game';
 import { Info } from '../info.tsx';
 import { FeatureRing, featureStageView } from '../feature-ring.tsx';
-import { fmtPoints, STAGE_CLS } from './shared.ts';
+import { fmtPoints } from '../format.ts';
+import { STAGE_CLS } from './shared.ts';
 
 /**
  * 機能開発の累計と期待、「機能」の段階（D-122）。良いのときも出す。余った手間が何に効くかは ⓘ に畳む（狭い画面で溢れない）。
@@ -99,7 +100,7 @@ export function EffortBreakdownView({
         <span className="ml-2 text-sm font-normal opacity-70">
           機能開発 {Math.round(e.feature)}
           {e.featureBonus > 0 &&
-            `（うち開発依頼の加点 +${Number(e.featureBonus.toFixed(1))}）`}
+            `（うち開発依頼の加点 +${fmtPoints(e.featureBonus)}）`}
           ・累計 {Math.round(r.featurePoints)}
         </span>
       </h3>

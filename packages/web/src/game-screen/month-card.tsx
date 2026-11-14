@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 import {
   isPolicyViolation,
   premisePlanLabel,
@@ -248,7 +249,14 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
             />
           ) : (
             <progress
-              className={`progress w-20 ${blocked ? 'progress-error' : p.hit ? 'progress-warning' : 'progress-info'}`}
+              className={clsx(
+                'progress w-20',
+                blocked
+                  ? 'progress-error'
+                  : p.hit
+                    ? 'progress-warning'
+                    : 'progress-info',
+              )}
               value={ratio}
               max={1}
             />

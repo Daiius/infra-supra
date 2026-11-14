@@ -5,6 +5,7 @@
 // 区画の地は種類の系統ごとの淡い色（KIND_TONE）。ページの描き方・作られ方の色（daisyUI の success・info・warning・
 // secondary・accent・primary・error。はっきりした地と実線の枠）と取り違えないよう、テーマの色ではなく Tailwind の色を
 // より淡く・破線の枠で使い、info（水色）・secondary（桃色）に近い色相は避ける。不透明度つきなので暗い地でも読める。
+import clsx from 'clsx';
 import type { RegionKind } from 'game';
 import type { ReactNode } from 'react';
 
@@ -327,7 +328,10 @@ const SKELETON: Record<RegionKind, () => ReactNode> = {
       {[60, 45, 55, 40].map((w, i) => (
         <span
           key={i}
-          className={`flex items-center gap-1 rounded px-0.5 py-0.5 ${i === 0 ? 'bg-base-content/10' : ''}`}
+          className={clsx(
+            'flex items-center gap-1 rounded px-0.5 py-0.5',
+            i === 0 && 'bg-base-content/10',
+          )}
         >
           <span className="block h-2 w-2 shrink-0 rounded-sm bg-base-content/15" />
           <Bar w={w} />

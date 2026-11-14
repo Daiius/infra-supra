@@ -22,3 +22,6 @@ export const usd = (n: number) =>
 
 /** 整数に丸める（表示用）。丸めると 0 になる負の値は 0（「-0」と出さない）。 */
 export const roundInt = (n: number) => Math.round(n) || 0;
+
+/** 手間・機能開発のポイント（加点の按分で小数になりうる）の表示。小数 1 桁まで・末尾の 0 は付けない。丸めは表示のときだけ。 */
+export const fmtPoints = (n: number) => String(Number(n.toFixed(1)));

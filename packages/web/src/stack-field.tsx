@@ -8,6 +8,7 @@
 // （見積はその構成の月額）は cardExtra、手間の棒（ゲームだけ）は effort で切り替える。
 // 部品の選択は選んでいるカードの中で行う（D-116。前の ③ 部品の欄を移した）。構成図の箱から選ぶ表示と、機能ごとのチップから選ぶ表示を
 // タブで切り替える（D-116 の補足。どちらの表示でもすべてのスロットを選べる）。
+import clsx from 'clsx';
 import {
   FRAMEWORKS,
   frameworkOnStack,
@@ -224,7 +225,7 @@ function EditableDiagram({
             aria-pressed={view === t.view}
             title={t.title}
             data-parts-view-tab={t.view}
-            className={`tab ${view === t.view ? 'tab-active' : ''}`}
+            className={clsx('tab', view === t.view && 'tab-active')}
             onClick={() => setView(t.view)}
           >
             {t.label}

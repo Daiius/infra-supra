@@ -4,7 +4,7 @@
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
 // 地の色との対比は WARN なので、凡例に値を書く）。
-import { isZeroText, signedText } from './format.ts';
+import { isZeroText, signedText, fmtPoints } from './format.ts';
 import {
   effortTotalNote,
   featureProgressOf,
@@ -59,7 +59,6 @@ const STAGE_COLOR: Record<Stage, string> = {
   bad: 'var(--status-critical)',
 };
 
-const fmt = (n: number) => String(Number(n.toFixed(1)));
 const SIZE = 148;
 const C = SIZE / 2;
 const INNER = { r: 46, w: 12 };
@@ -185,8 +184,8 @@ export function FeatureRing({
     acc += x.v;
     return { ...x, from, to: acc / T };
   });
-  const head = `${next ? '来月' : `${month} か月目`}の機能開発 ${fmt(feature)} / 期待 ${perMonth}`;
-  const progressText = `累計 ${fmt(p.total)} / 期待 ${fmt(p.expected)}（${Math.round(ratio * 100)}%）`;
+  const head = `${next ? '来月' : `${month} か月目`}の機能開発 ${fmtPoints(feature)} / 期待 ${perMonth}`;
+  const progressText = `累計 ${fmtPoints(p.total)} / 期待 ${fmtPoints(p.expected)}（${Math.round(ratio * 100)}%）`;
   return (
     <div
       className="viz-root flex flex-wrap items-center gap-x-4 gap-y-2"
@@ -244,7 +243,7 @@ export function FeatureRing({
             to={a.to}
             color={a.s.color}
             gap={GAP}
-            label={`${a.s.label} ${fmt(a.v)}`}
+            label={`${a.s.label} ${fmtPoints(a.v)}`}
           />
         ))}
         <Tick frac={Math.min(perMonth / T, 1)} r={INNER.r} width={INNER.w} />
@@ -254,7 +253,7 @@ export function FeatureRing({
           textAnchor="middle"
           className="fill-[var(--text-primary)] text-[20px] font-bold tabular-nums"
         >
-          {fmt(feature)} / {perMonth}
+          {fmtPoints(feature)} / {perMonth}
         </text>
         <text
           x={C}
@@ -262,15 +261,15 @@ export function FeatureRing({
           textAnchor="middle"
           className="fill-[var(--text-secondary)] text-[10px]"
         >
-          {change !== undefined && !isZeroText(fmt(Math.abs(change)))
-            ? `アクションで ${signedText(change, fmt)}`
+          {change !== undefined && !isZeroText(fmtPoints(Math.abs(change)))
+            ? `アクションで ${signedText(change, fmtPoints)}`
             : '機能開発 / 期待'}
         </text>
       </svg>
       <div className="min-w-0 space-y-1 text-xs text-[var(--text-secondary)]">
         <div className="font-semibold text-[var(--text-primary)]">{head}</div>
         <div>
-          内側の輪: 手間 {fmt(effort.total)}
+          内側の輪: 手間 {fmtPoints(effort.total)}
           {effortTotalNote(effort.total, effort.accountAllowance)}{' '}
           の使い道（目盛りは期待 {perMonth}）
         </div>
@@ -292,12 +291,14 @@ export function FeatureRing({
                 />
                 {x.s.label}
                 <span className="ml-auto pl-2 text-[var(--text-primary)] tabular-nums">
-                  {fmt(x.v)}
+                  {fmtPoints(x.v)}
                 </span>
               </li>
             ))}
           {feature - parts[0]!.v > 0 && (
-            <li>（ほかに開発依頼の加点 +{fmt(feature - parts[0]!.v)}）</li>
+            <li>
+              （ほかに開発依頼の加点 +{fmtPoints(feature - parts[0]!.v)}）
+            </li>
           )}
         </ul>
         <div className="flex items-center gap-1">
@@ -310,7 +311,7 @@ export function FeatureRing({
           {shown.note}
         </div>
         <div>
-          目盛り: 普通 {fmt(p.fairAt)}・良い {fmt(p.goodAt)}
+          目盛り: 普通 {fmtPoints(p.fairAt)}・良い {fmtPoints(p.goodAt)}
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 // 見積モードの画面（D-73）。計算は model.ts（純粋関数）、ここは入力と表示だけ。入力は URL のクエリに残す（共有のため）。
+import clsx from 'clsx';
 import {
   Children,
   cloneElement,
@@ -798,7 +799,14 @@ function MemberList({ members }: { members: MemberView[] }) {
       {members.map((m) => (
         <li key={`${m.provider}|${m.plan}`} className="min-w-0">
           <span
-            className={`badge badge-sm mr-1 ${m.pricing === 'per-seat' ? 'badge-info' : m.pricing === 'included' ? 'badge-ghost' : 'badge-warning'}`}
+            className={clsx(
+              'badge badge-sm mr-1',
+              m.pricing === 'per-seat'
+                ? 'badge-info'
+                : m.pricing === 'included'
+                  ? 'badge-ghost'
+                  : 'badge-warning',
+            )}
           >
             {MEMBER_BADGE[m.pricing]}
           </span>
@@ -954,7 +962,14 @@ export function Premises({
                 </span>
               </div>
               <progress
-                className={`progress w-full ${stopped ? 'progress-error' : costOnly || r >= 0.7 ? 'progress-warning' : 'progress-success'}`}
+                className={clsx(
+                  'progress w-full',
+                  stopped
+                    ? 'progress-error'
+                    : costOnly || r >= 0.7
+                      ? 'progress-warning'
+                      : 'progress-success',
+                )}
                 value={Math.min(1, Number.isFinite(r) ? r : 1) * 100}
                 max={100}
                 aria-label={`${p.text} ${pct(r)}`}
@@ -1125,7 +1140,10 @@ function Comparison({
             {sorted.map((r) => (
               <tr
                 key={r.stack}
-                className={`cursor-pointer hover:bg-base-200 ${r.current ? 'bg-base-200 font-semibold' : ''}`}
+                className={clsx(
+                  'cursor-pointer hover:bg-base-200',
+                  r.current && 'bg-base-200 font-semibold',
+                )}
                 onClick={() => onPick(r.stack)}
               >
                 <td className="min-w-40">
@@ -1170,7 +1188,10 @@ function Comparison({
                   {r.top && (
                     <>
                       <span
-                        className={`font-semibold ${r.top.ratio > 1 ? 'text-error-strong' : ''}`}
+                        className={clsx(
+                          'font-semibold',
+                          r.top.ratio > 1 && 'text-error-strong',
+                        )}
                       >
                         {pct(r.top.ratio)}
                       </span>{' '}
@@ -1315,15 +1336,17 @@ function CostCurve({
             <li key={s.id} className="min-w-0" data-curve-legend={s.id}>
               <button
                 type="button"
-                className={`flex min-w-0 items-center gap-1 rounded-box border px-1.5 py-0.5 text-left ${
+                className={clsx(
+                  'flex min-w-0 items-center gap-1 rounded-box border px-1.5 py-0.5 text-left',
                   on
                     ? 'border-primary bg-primary/10'
                     : c.current
                       ? 'border-[var(--text-secondary)]'
-                      : 'border-base-300'
-                } ${s.emphasis === 'strong' ? 'font-semibold text-[var(--text-primary)]' : ''} ${
-                  s.emphasis === 'muted' ? 'opacity-60' : ''
-                }`}
+                      : 'border-base-300',
+                  s.emphasis === 'strong' &&
+                    'font-semibold text-[var(--text-primary)]',
+                  s.emphasis === 'muted' && 'opacity-60',
+                )}
                 aria-pressed={on}
                 onClick={() => setFocus(on ? null : s.id)}
               >

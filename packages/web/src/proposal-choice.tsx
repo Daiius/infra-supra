@@ -12,14 +12,13 @@ import {
 } from 'game';
 import { Info } from './info.tsx';
 import type { MonthDraft } from './month-draft.ts';
+import { fmtPoints } from './format.ts';
 
 /** 提案の印（出来事の印と同じ。D-126）。 */
 export const PROPOSAL_BADGE = {
   label: '◆ 開発依頼',
   cls: 'badge-primary',
 } as const;
-
-const fmtPoints = (n: number) => String(Number(n.toFixed(1)));
 
 /** 量の単位の表示（前提の unit）。 */
 const UNIT_TEXT: Partial<Record<NonNullable<AcceptLimit['unit']>, string>> = {

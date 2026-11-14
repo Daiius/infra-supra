@@ -3,6 +3,7 @@
 // 前後のカードも同じ中身で両脇に見える（daisyUI の carousel）。選んでいる＝中央のカード（「これにする」のボタンは置かない）。
 // groups を渡すと、タブを事業者などの組にまとめ、組の中の選択肢を小さいチップで出す（インフラの構成。D-105 の補足）。
 // カードは組ごとに 1 枚で、チップで組の中の選択肢を替えるとカードは動かず中身だけが替わる（D-105 の補足）。
+import clsx from 'clsx';
 import {
   createContext,
   useContext,
@@ -323,9 +324,11 @@ export function ChoiceCarousel<T extends string>({
                   <label
                     key={g.key}
                     data-tab-group={g.key}
-                    className={`${chipClass(only)} h-[calc(var(--size)+0.25rem+2px)] ${
-                      on ? '' : 'border-base-300'
-                    }`}
+                    className={clsx(
+                      chipClass(only),
+                      'h-[calc(var(--size)+0.25rem+2px)]',
+                      !on && 'border-base-300',
+                    )}
                   >
                     {radio(only, label(only))}
                     {g.mark}
@@ -344,9 +347,10 @@ export function ChoiceCarousel<T extends string>({
                   {/* 組の名前を押すと、その組のカード（最後に選んだ選択肢・無ければ最初）を選ぶ。キーボード・読み上げはチップのラジオで選ぶ */}
                   <span
                     aria-hidden
-                    className={`inline-flex items-center gap-1 px-1 text-xs font-semibold whitespace-nowrap ${
-                      on ? '' : 'cursor-pointer'
-                    }`}
+                    className={clsx(
+                      'inline-flex items-center gap-1 px-1 text-xs font-semibold whitespace-nowrap',
+                      !on && 'cursor-pointer',
+                    )}
                     onClick={
                       on
                         ? undefined
@@ -382,9 +386,11 @@ export function ChoiceCarousel<T extends string>({
               // ロゴを添えるので input でなく label をタブにする（daisyUI の label:has(:checked)）。名前は文字で出す
               <label
                 key={id}
-                className={`tab shrink-0 gap-1 whitespace-nowrap ${focusRing} ${
-                  off(id) ? 'tab-disabled cursor-not-allowed opacity-50' : ''
-                }`}
+                className={clsx(
+                  'tab shrink-0 gap-1 whitespace-nowrap',
+                  focusRing,
+                  off(id) && 'tab-disabled cursor-not-allowed opacity-50',
+                )}
               >
                 {radio(id)}
                 {tab(id)}
@@ -456,7 +462,11 @@ export function ChoiceCarousel<T extends string>({
                 ref={(el) => {
                   els.current[c.key] = el;
                 }}
-                className={`carousel-item w-[92%] sm:w-[88%] lg:w-[85%] ${selected ? '' : off(id) ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                className={clsx(
+                  'carousel-item w-[92%] sm:w-[88%] lg:w-[85%]',
+                  !selected &&
+                    (off(id) ? 'cursor-not-allowed' : 'cursor-pointer'),
+                )}
                 // 選んでいないカードを押すと選ぶ（キーボードはタブの ←/→ と前後のボタン）。カードの中の ⓘ などのボタンを押したときは選ばない
                 onClick={
                   selected || off(id)

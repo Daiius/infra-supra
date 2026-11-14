@@ -6,7 +6,6 @@ import {
   Flag,
   Info,
   Layers,
-  Lightbulb,
   Pause,
   type LucideIcon,
   Play,
@@ -36,6 +35,7 @@ import {
   PLATFORM_BRANDS,
   PlatformMarks,
 } from '../brand-logos.tsx';
+import { EVENT_CATEGORY } from '../event-icons.tsx';
 import { useReducedMotion } from '../motion.tsx';
 import { Figure } from './figure.tsx';
 
@@ -92,6 +92,9 @@ const sparkPath = (ys: readonly number[]) =>
     )
     .join(' ');
 
+/** 伸び方の型ごとの線（定数なので読み込み時に 1 回だけ作る）。 */
+const GROWTH_PATHS = GROWTH_SHAPES.map(sparkPath);
+
 /** 並びをランダムに入れ替えた添字（Fisher–Yates。画面の演出だけなので Math.random でよい）。 */
 function shuffled(n: number): number[] {
   const a = Array.from({ length: n }, (_, i) => i);
@@ -113,9 +116,17 @@ const GROWTH_FRAMEWORKS = (Object.keys(FRAMEWORKS) as FrameworkId[]).filter(
   (f) => f !== 'nextjs-export',
 );
 
-/** その事業者に載せられるフレームワークから 1 つをランダムに選ぶ（ありえない組み合わせは出さない。D-68）。 */
+/** 事業者ごとの載せられるフレームワーク（ありえない組み合わせは出さない。D-68。読み込み時に 1 回だけ数える）。 */
+const SUPPORTED_FRAMEWORKS = new Map<Platform, FrameworkId[]>(
+  GROWTH_PLATFORMS.map((p) => [
+    p,
+    GROWTH_FRAMEWORKS.filter((f) => frameworkSupported(f, p)),
+  ]),
+);
+
+/** その事業者に載せられるフレームワークから 1 つをランダムに選ぶ。 */
 function pickFramework(p: Platform): FrameworkId {
-  const ok = GROWTH_FRAMEWORKS.filter((f) => frameworkSupported(f, p));
+  const ok = SUPPORTED_FRAMEWORKS.get(p) ?? [];
   return ok[Math.floor(Math.random() * ok.length)] ?? GROWTH_FRAMEWORKS[0]!;
 }
 
@@ -129,6 +140,91 @@ const newRound = (n: number) => ({
 /** 構成とフレームワークの名前（読み上げ・title 用）。 */
 const comboName = (p: Platform, f: FrameworkId) =>
   `${PLATFORM_BRANDS[p].map((b) => BRANDS[b].title).join(' + ')} × ${FRAMEWORKS[f].label}`;
+
+/** 概念図の線（縦横の伸び縮みでも太さを保つ）。 */
+const ConceptLine = ({
+  d,
+  className,
+  style,
+  chosen,
+}: {
+  d: string;
+  className: string;
+  style?: CSSProperties;
+  chosen?: boolean;
+}) => (
+  <path
+    d={d}
+    fill="none"
+    className={className}
+    style={style}
+    data-howto-chosen={chosen || undefined}
+    strokeWidth="2.5"
+    strokeLinejoin="round"
+    strokeLinecap="round"
+    vectorEffect="non-scaling-stroke"
+  />
+);
+
+/**
+ * 1 ページ目の概念図の枠（縦軸の名前・軸・下の「月 →（12 か月）」）。lines は 0〜100 の座標の SVG の中身、
+ * overlay は線の上に重ねる HTML（札・アイコン。右の余白 padRight の中に置ける）。
+ */
+function ConceptChart({
+  yLabel,
+  label,
+  padRight,
+  footerPad,
+  lines,
+  overlay,
+  growth,
+}: {
+  yLabel: string;
+  label: string;
+  padRight: string;
+  footerPad?: string;
+  lines: ReactNode;
+  overlay: ReactNode;
+  growth?: boolean;
+}) {
+  return (
+    <div className="rounded-box border border-base-300 bg-base-100 p-2">
+      <div className="flex gap-1">
+        <div className="flex shrink-0 flex-col items-center gap-0.5 text-[10px] opacity-70">
+          <ArrowUp aria-hidden className="size-3" />
+          <span className="[writing-mode:vertical-rl]">{yLabel}</span>
+        </div>
+        <div
+          className={clsx('relative min-w-0 flex-1', padRight)}
+          data-howto-growth={growth || undefined}
+        >
+          <svg
+            role="img"
+            aria-label={label}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="h-36 w-full overflow-visible"
+          >
+            <path
+              d="M0 0 V100 H100"
+              fill="none"
+              className="stroke-base-content/40"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+            />
+            {lines}
+          </svg>
+          {overlay}
+        </div>
+      </div>
+      <div
+        className={clsx('mt-0.5 text-right text-[10px] opacity-70', footerPad)}
+      >
+        月 →（12 か月）
+      </div>
+    </div>
+  );
+}
 
 /**
  * 1 ページ目の概念図: インフラとフレームワークの組ごとの月ごとの収支の伸びを 1 つのグラフに重ねる。一定の間隔で伸び方の型と
@@ -149,55 +245,38 @@ function GrowthByPlatform() {
     p,
     f: round.frameworks[i]!,
     stroke: GROWTH_STROKES[i % GROWTH_STROKES.length]!,
-    ys: GROWTH_SHAPES[round.order[i]! % GROWTH_SHAPES.length]!,
+    ys: GROWTH_SHAPES[round.order[i]!]!,
+    d: GROWTH_PATHS[round.order[i]!]!,
   }));
   // 実際に選べる組は 1 つだけなので、12 か月目にいちばん高い線だけを濃く出し、ほかは半透明にする
   const top = Math.max(...lines.map((l) => l.ys.at(-1)!));
   const marked = lines.map((l) => ({ ...l, chosen: l.ys.at(-1) === top }));
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-2">
-      <div className="flex gap-1">
-        <div className="flex shrink-0 flex-col items-center gap-0.5 text-[10px] opacity-70">
-          <ArrowUp aria-hidden className="size-3" />
-          <span className="[writing-mode:vertical-rl]">月ごとの収支</span>
-        </div>
-        {/* 右の余白はアイコンの置き場 */}
-        <div className="relative min-w-0 flex-1 pr-[6.75rem]" data-howto-growth>
-          <svg
-            role="img"
-            aria-label="概念図: インフラとフレームワークの組ごとに、収支が月を追って右肩上がりに伸びる。伸び方は組ごとに違う"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            className="h-36 w-full overflow-visible"
-          >
-            <path
-              d="M0 0 V100 H100"
-              fill="none"
-              className="stroke-base-content/40"
-              strokeWidth="1.5"
-              vectorEffect="non-scaling-stroke"
+    <ConceptChart
+      yLabel="月ごとの収支"
+      label="概念図: インフラとフレームワークの組ごとに、収支が月を追って右肩上がりに伸びる。伸び方は組ごとに違う"
+      padRight="pr-[6.75rem]"
+      footerPad="pr-[6.75rem]"
+      growth
+      lines={
+        // 選んだ線を最後に描いて上に重ねる
+        [...marked]
+          .sort((a, b) => Number(a.chosen) - Number(b.chosen))
+          .map(({ p, stroke, d, chosen }) => (
+            <ConceptLine
+              key={`${p}:${round.n}`}
+              d={d}
+              className={clsx(
+                'motion-reveal-x',
+                stroke,
+                !chosen && 'opacity-25',
+              )}
+              chosen={chosen}
             />
-            {/* 選んだ線を最後に描いて上に重ねる */}
-            {[...marked]
-              .sort((a, b) => Number(a.chosen) - Number(b.chosen))
-              .map(({ p, stroke, ys, chosen }) => (
-                <path
-                  key={`${p}:${round.n}`}
-                  d={sparkPath(ys)}
-                  fill="none"
-                  className={clsx(
-                    'motion-reveal-x',
-                    stroke,
-                    !chosen && 'opacity-25',
-                  )}
-                  data-howto-chosen={chosen || undefined}
-                  strokeWidth="2.5"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-          </svg>
+          ))
+      }
+      overlay={
+        <>
           {/* 線の右端のアイコン: インフラ × フレームワーク（新しい終わりの位置へ滑らせる） */}
           {marked.map(({ p, f, stroke, ys, chosen }) => (
             <span
@@ -244,12 +323,9 @@ function GrowthByPlatform() {
               <span className="sr-only">{comboName(p, f)}</span>
             </span>
           ))}
-        </div>
-      </div>
-      <div className="mt-0.5 pr-[6.75rem] text-right text-[10px] opacity-70">
-        月 →（12 か月）
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
 
@@ -276,12 +352,16 @@ const MONTHS_MARKS = [
   },
   {
     month: 8,
-    Icon: Lightbulb,
+    // 印と名前はイベントの種類の「開発依頼」と同じもの
+    Icon: EVENT_CATEGORY.proposal.Icon,
     badge: 'badge-primary',
-    label: '開発依頼',
+    label: EVENT_CATEGORY.proposal.label,
     below: false,
   },
 ] as const;
+
+/** 運営の概念図の線（定数）。 */
+const MONTHS_PATH = sparkPath(MONTHS_CASH);
 
 /** 運営の概念図の線を引き終えるまで（ミリ秒）。印はその月に線が届いたときに出す。 */
 const MONTHS_DRAW_MS = 6000;
@@ -291,41 +371,22 @@ function MonthsSketch() {
   // 線の横位置（右の余白 pr-5 = 1.25rem を除いた幅の中での位置。absolute の left は余白を含む幅に対して決まるため）
   const x = (m: number) => `calc((100% - 1.25rem) * ${(m - 1) / 11})`;
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-2">
-      <div className="flex gap-1">
-        <div className="flex shrink-0 flex-col items-center gap-0.5 text-[10px] opacity-70">
-          <ArrowUp aria-hidden className="size-3" />
-          <span className="[writing-mode:vertical-rl]">所持金</span>
-        </div>
-        <div className="relative min-w-0 flex-1 pr-5">
-          <svg
-            role="img"
-            aria-label="概念図: 所持金が月を追って伸びる。4 か月目のイベントで落ち、5 か月目のアクションで持ち直し、8 か月目の開発依頼を受けてさらに伸びる"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            className="h-36 w-full overflow-visible"
-          >
-            <path
-              d="M0 0 V100 H100"
-              fill="none"
-              className="stroke-base-content/40"
-              strokeWidth="1.5"
-              vectorEffect="non-scaling-stroke"
-            />
-            <path
-              d={sparkPath(MONTHS_CASH)}
-              fill="none"
-              className="motion-reveal-x stroke-success"
-              style={{
-                animationDuration: `${MONTHS_DRAW_MS}ms`,
-                animationTimingFunction: 'linear',
-              }}
-              strokeWidth="2.5"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          </svg>
+    <ConceptChart
+      yLabel="所持金"
+      label="概念図: 所持金が月を追って伸びる。4 か月目のイベントで落ち、5 か月目のアクションで持ち直し、8 か月目の開発依頼を受けてさらに伸びる"
+      padRight="pr-5"
+      lines={
+        <ConceptLine
+          d={MONTHS_PATH}
+          className="motion-reveal-x stroke-success"
+          style={{
+            animationDuration: `${MONTHS_DRAW_MS}ms`,
+            animationTimingFunction: 'linear',
+          }}
+        />
+      }
+      overlay={
+        <>
           {MONTHS_MARKS.map((m) => (
             <span
               key={m.month}
@@ -364,12 +425,9 @@ function MonthsSketch() {
               <Flag className="size-4 text-success" />
             </span>
           </span>
-        </div>
-      </div>
-      <div className="mt-0.5 text-right text-[10px] opacity-70">
-        月 →（12 か月）
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
 
@@ -479,7 +537,7 @@ const ABOUT_STEPS: {
 /**
  * 自動で進めるときの残りの円（daisyUI の radial-progress）。値は requestAnimationFrame で毎フレーム直接書き、React の描き直しを
  * 挟まない。daisyUI の 0.3 秒の補間は切る（細かく値を変えると補間が始め直しになってカクつくため）。
- * running の間、key が変わるたびに 0 から ms かけて 100 まで進む。
+ * running の間、restart（段）が変わるたびに 0 から ms かけて 100 まで進む。
  */
 function AutoplayRing({
   running,
@@ -524,16 +582,10 @@ function AboutCarousel() {
   const reduced = useReducedMotion();
   const n = ABOUT_STEPS.length;
   const [step, setStep] = useState(0);
-  // 段に入った回数（入り直すたびに図の動きを最初から見せる）
-  const [visit, setVisit] = useState(0);
   const [auto, setAuto] = useState(!reduced);
   const ref = useRef<HTMLDivElement>(null);
   // こちらから送っている間の scroll は、手で送ったものとして扱わない
   const scripted = useRef(false);
-  const show = (i: number) => {
-    setStep(i);
-    setVisit((v) => v + 1);
-  };
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
@@ -545,18 +597,18 @@ function AboutCarousel() {
     const t = setTimeout(() => (scripted.current = false), 700);
     return () => clearTimeout(t);
   }, [step, reduced]);
+  const running = auto && !reduced;
   // 自動で進める: その段の長さが過ぎたら次の段へ（残りの円は AutoplayRing が同じ長さで描く）
   useEffect(() => {
-    if (!auto || reduced) return;
-    const t = setTimeout(() => show((step + 1) % n), ABOUT_STEPS[step]!.ms);
+    if (!running) return;
+    const t = setTimeout(() => setStep((step + 1) % n), ABOUT_STEPS[step]!.ms);
     return () => clearTimeout(t);
-  }, [auto, reduced, step, n]);
+  }, [running, step, n]);
   const pick = (i: number) => {
     setAuto(false);
-    if (i !== step) show(i);
+    setStep(i);
   };
   const current = ABOUT_STEPS[step]!;
-  const running = auto && !reduced;
   return (
     <div className="space-y-2">
       {/* 段（steps）と、右上に自動で進める・止めるの円（radial-progress。円が次の段までの残りを表す） */}
@@ -606,7 +658,7 @@ function AboutCarousel() {
           onClick={() => setAuto((x) => !x)}
           data-howto-autoplay
         >
-          <AutoplayRing running={running} ms={current.ms} restart={visit} />
+          <AutoplayRing running={running} ms={current.ms} restart={step} />
         </button>
       </div>
       <div
@@ -622,7 +674,7 @@ function AboutCarousel() {
           const i = Math.round(c.scrollLeft / c.clientWidth);
           if (i !== step && i >= 0 && i < n) {
             setAuto(false);
-            show(i);
+            setStep(i);
           }
         }}
       >
@@ -640,10 +692,11 @@ function AboutCarousel() {
             >
               {s.title}
             </p>
-            {/* 入り直すたびに描き直す（線を引く・棒を伸ばす動きを最初から） */}
-            <div key={i === step ? `on:${visit}` : 'off'}>
-              <s.body />
-            </div>
+            {/*
+              図は今の段だけ描く（見えない段の入れ替え・波紋・入場の動きを回さない）。段に入るたびに新しく描くので、
+              線を引く・棒を伸ばす動きは最初から見える
+            */}
+            {i === step && <s.body />}
           </section>
         ))}
       </div>

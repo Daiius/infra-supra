@@ -37,6 +37,7 @@ import {
   Zap,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { hitLabel } from '../premise-view.ts';
 import { Node, Arrow, Flow, Figure, FigureTitle } from './figure.tsx';
 
 /** 2 ページ目: 始め方。 */
@@ -128,7 +129,7 @@ export function MonthPage() {
           />
         </Flow>
         <FigureTitle>所持金の増減</FigureTitle>
-        <div className="flex flex-col items-stretch gap-1 sm:flex-row sm:items-center sm:[&>[data-howto-node]]:flex-1">
+        <Flow>
           <Node
             Icon={Coins}
             tone="success"
@@ -150,7 +151,7 @@ export function MonthPage() {
             className="size-4 shrink-0 self-center opacity-60"
           />
           <Node Icon={Wallet} label="所持金に足し引き" />
-        </div>
+        </Flow>
       </Figure>
       <ul className="list-disc space-y-1 pl-5">
         <li>
@@ -396,14 +397,14 @@ export function LimitsPage() {
       <ul className="space-y-1.5">
         <li>
           <span className="badge badge-sm badge-error mr-1">
-            ✗ 上限に達した
+            ✗ {hitLabel('block')}
           </span>
           止まる・遅くなる上限に届いた印です。止まる上限なら、その月は収益が減り、可用性が下がり、「止まった月」に
           1 回数えます。遅くなる上限なら、速さなどの満足度の要素が下がります。
         </li>
         <li>
           <span className="badge badge-sm badge-warning mr-1">
-            ● 超過（課金）
+            ● {hitLabel('cost')}
           </span>
           課金の境目を超えた印です。止まりませんが、超えた分の費用がかかります。
         </li>

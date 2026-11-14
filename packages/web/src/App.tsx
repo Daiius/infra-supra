@@ -1,4 +1,5 @@
 // ゲームモードの画面（Phase 2〜4 の前倒しの試作）。ロジックは game パッケージ、ここは表示と操作だけ。
+import clsx from 'clsx';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   setupCommitments,
@@ -434,7 +435,7 @@ export function App() {
               key={m}
               type="button"
               aria-current={mode === m ? 'page' : undefined}
-              className={`tab ${mode === m ? 'tab-active' : ''}`}
+              className={clsx('tab', mode === m && 'tab-active')}
               onClick={() => switchMode(m)}
             >
               {label}
