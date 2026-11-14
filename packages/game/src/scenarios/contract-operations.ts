@@ -506,8 +506,8 @@ export const CONTRACT_OPERATIONS: Scenario = {
     ],
     scale: '利用者は顧客の社員と取引先で、平日の日中に集中します。',
     growth: {
-      up: '顧客の満足度が高ければ社内で利用が広がり',
-      down: '低ければ利用が減ります',
+      up: '顧客の満足度が高いと、社内で利用が広がります',
+      down: '満足度が低いと、利用が減ります',
     },
     events: [
       {

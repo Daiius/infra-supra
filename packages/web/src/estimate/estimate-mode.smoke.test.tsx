@@ -18,6 +18,7 @@ import {
   showSetupTab,
   useSmokeEnv,
   waitLoaded,
+  showPage,
 } from '../smoke.test-helpers.tsx';
 import { usd } from '../format.ts';
 import { Lines } from './estimate-mode.tsx';
@@ -537,10 +538,12 @@ describe('見積モードの画面', () => {
       /公式のアダプターが無いので、フレームワークを/,
     );
     // 選んでいるカードのチップで描き方を選ぶと、URL と下の表にも残る（同じ書き換え。D-112・D-115）
+    const nextFwCard = screen.getByRole('region', {
+      name: 'Next.js（App Router） の説明',
+    });
+    showPage(nextFwCard, '個人向けのページ');
     fireEvent.click(
-      within(
-        screen.getByRole('region', { name: 'Next.js（App Router） の説明' }),
-      ).getByRole('button', {
+      within(nextFwCard).getByRole('button', {
         name: /^個人向けのページを Client-side data fetching/,
       }),
     );

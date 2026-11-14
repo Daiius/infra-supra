@@ -23,6 +23,7 @@ import {
   pageOf,
   chosenOf,
   pickStrategy,
+  showPage,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -50,16 +51,50 @@ describe('ゲームモードの画面', () => {
     await renderApp();
     const text = document.body.textContent ?? '';
     expect(text).toContain('別の CMS はありません');
-    expect(text).toContain(
+    // ページの一覧の補足は「ページの見取り図」のダイアログの中（2026-11-14 から本文に出さない）
+    expect(text).not.toContain(
       '一覧・トップのページは記事のページに含めて数えます',
     );
+    fireEvent.click(screen.getByRole('button', { name: 'ページの見取り図' }));
+    expect(document.body.textContent).toContain(
+      '一覧・トップのページは記事のページに含めて数えます',
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
     // 中央のカードに、選んでいるフレームワークのページごとの描き方が出る（D-102 でカルーセルにした）。② はタブで開く（D-116 の補足）
     showFrameworkTab();
     const card = (fw: string) =>
       screen.getByRole('region', { name: `${fw} の説明` }).textContent ?? '';
     expect(card('Next.js（App Router）')).toContain('ISR（最初の閲覧で描いて');
+    // ページはタブで 1 ページずつ出す（2026-11-14）: 始めは記事のページだけ、タブで個人向けのページへ
+    const nextRegion = screen.getByRole('region', {
+      name: 'Next.js（App Router） の説明',
+    });
+    const pageTabs = within(nextRegion).getAllByRole('tab');
+    expect(pageTabs.map((t) => t.textContent)).toEqual([
+      '記事のページ',
+      '個人向けのページ',
+    ]);
+    expect(nextRegion.querySelectorAll('section[data-route]').length).toBe(1);
+    expect(
+      nextRegion.querySelector('section[data-route="article"]'),
+    ).not.toBeNull();
+    fireEvent.click(pageTabs[1]!);
+    expect(
+      nextRegion.querySelector('section[data-route="article"]'),
+    ).toBeNull();
+    expect(
+      within(nextRegion)
+        .getByRole('tab', { name: '個人向けのページ' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    fireEvent.click(pageTabs[0]!);
     fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
     fireEvent.click(getRadio({ name: /^Astro/ }));
+    // ページはタブで 1 ページずつ（個人向けのページの説明は 2 つ目のタブ）
+    showPage(
+      screen.getByRole('region', { name: 'Astro の説明' }),
+      '個人向けのページ',
+    );
     expect(card('Astro')).toContain(
       'アダプターで SSR（閲覧のたびにサーバーが描く。Cloudflare では Worker が描くので、1 リクエストの CPU の上限に注意）',
     );
@@ -79,6 +114,7 @@ describe('ゲームモードの画面', () => {
         'section[data-framework][aria-current="true"]',
       )!;
     const tag = (page: string, region: string) => {
+      showPage(current(), page);
       const list = within(current()).getByRole('list', {
         name: `${page}の見取り図`,
       });
@@ -131,6 +167,7 @@ describe('ゲームモードの画面', () => {
     );
     // コメントを記事のページに含めると、コメント欄は ISR のページの一部になる（D-82）。
     // 選ぶのはフレームワークのカードの記事のページの欄（ページの部品。D-109・D-112）
+    showPage(current(), '記事のページ');
     const inPage = getRadio({ name: /^記事のページに含める/ });
     expect(
       inPage.closest('section[data-route]')?.getAttribute('data-route'),
@@ -147,6 +184,7 @@ describe('ゲームモードの画面', () => {
     expect(tag('個人向けのページ', '自分の下書き・記事の一覧')).toBe(
       'On-demand rendering',
     );
+    showPage(current(), '記事のページ');
     pick(/^記事のページに含める/);
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
       'Route caching',
@@ -185,6 +223,7 @@ describe('ゲームモードの画面', () => {
     );
     pick(/^Astro/);
     // ページの札（CPU の注意）
+    showPage(current(), '個人向けのページ');
     expect(
       within(
         within(current()).getByRole('region', { name: '個人向けのページ' }),
@@ -243,6 +282,7 @@ describe('ゲームモードの画面', () => {
     const next = screen.getByRole('region', {
       name: 'Next.js（App Router） の説明',
     });
+    showPage(next, '個人向けのページ');
     const nextGroup = within(next).getByRole('group', {
       name: '個人向けのページの描き方',
     });
@@ -602,9 +642,14 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-30 始める画面: シナリオの説明に、フレームワークに依らない見取り図（区画の要件の札）が出る（D-113）', async () => {
+  it('W-30 始める画面: シナリオの説明の「ページの見取り図」のダイアログに、フレームワークに依らない見取り図（区画の要件の札）が出る（D-113。2026-11-14 からダイアログに畳む）', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
+    // 本文にはページの一覧の箇条書きだけ。見取り図はダイアログを開いたときだけ描く
+    expect(
+      screen.queryByRole('list', { name: '記事のページの見取り図（要件）' }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'ページの見取り図' }));
     /** シナリオの見取り図の区画の札（区画の名前 → 要件の札の文字）。 */
     const needs = (page: string, region: string) => {
       const list = screen.getByRole('list', {
