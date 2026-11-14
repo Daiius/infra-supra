@@ -1,6 +1,6 @@
 // 遊び方のダイアログ（D-146）。初めてゲームモードを開いたときに自動で開き、あとは設定の「遊び方を見る」・ヘッダーの「遊び方」で開く。
 // 各ページに lucide-react のアイコンを組み合わせた図を置く（生成画像・ラスタは使わない。色は daisyUI のトークンだけで、ダークモードでも替わる）。
-// ページ送りは出来事のダイアログ（game-screen.tsx の EventsDialog）と同じ作法: 見出しの下のナビ・固定の高さ・左右の矢印キー・横のスワイプ。
+// ページ送りは出来事のダイアログ（game-screen/events.tsx の EventsDialog）と同じ作法: 見出しの下のナビ・固定の高さ・左右の矢印キー・横のスワイプ。
 import {
   ArrowDown,
   ArrowUp,
@@ -1305,7 +1305,7 @@ function SatisfactionPage() {
   );
 }
 
-/** 手間の棒の例（10 マス）の塗り分け。色はゲーム中の手間の棒（game-screen.tsx の EffortBreakdownView）と同じ。 */
+/** 手間の棒の例（10 マス）の塗り分け。色はゲーム中の手間の棒（game-screen/effort.tsx の EffortBreakdownView）と同じ。 */
 const EFFORT_EXAMPLE: { label: string; n: number; cls: string }[] = [
   { label: '自前運用の維持・他の事業者の管理', n: 2, cls: 'bg-warning' },
   { label: 'イベントへの対応', n: 1, cls: 'bg-error' },
