@@ -135,7 +135,7 @@ describe('ⓘ の説明のダイアログ', () => {
     within(body).getByRole('heading', { name: '構成図の矢印の色' });
   });
 
-  it('W-82 見積モード: 欄の ⓘ は見出しに欄の名前。設定の ⓘ の選択肢は dt / dd で並ぶ。画像の箱の吹き出しの中の ⓘ は、吹き出しを閉じずに開く', async () => {
+  it('W-82 見積モード: 欄の ⓘ は見出しに欄の名前。設定の ⓘ の選択肢は dt / dd で並ぶ。画像の箱のダイアログの中の ⓘ は、箱のダイアログを閉じずに開く', async () => {
     window.history.replaceState(
       null,
       '',
@@ -181,24 +181,25 @@ describe('ⓘ の説明のダイアログ', () => {
     fireEvent.click(
       stack.querySelector<HTMLElement>('[data-slots~="images"] button')!,
     );
+    // 箱を押すとダイアログで出す（D-221）
     const popover = screen.getByRole('dialog', { name: /を替える$/ });
-    expect(popover.tagName).toBe('DIV');
+    expect(popover.tagName).toBe('DIALOG');
     const format = within(popover).getByRole('group', { name: '画像の形式' });
     const formatInfo = within(format).getByRole('button', {
       name: '画像の形式の説明',
     });
     const { dialog, heading: h2 } = openInfo(formatInfo);
     expect(h2).toBe('画像の形式');
-    // 吹き出しの中で押しても、吹き出しは閉じない（ダイアログは吹き出しの中に描く）
+    // 箱のダイアログの中で開いても、箱のダイアログは閉じない（説明のダイアログは箱のダイアログの中に描く）
     fireEvent.pointerDown(dialog);
     expect(popover.isConnected).toBe(true);
-    expect(popover.contains(dialog)).toBe(true);
-    // Esc は説明のダイアログだけを閉じる（吹き出しは開いたまま）
+    expect(dialog.isConnected).toBe(true);
+    // Esc は説明のダイアログだけを閉じる（箱のダイアログは開いたまま）
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(infoDialog()).toBeNull();
-    expect(popover.isConnected).toBe(true);
+    expect(dialog.isConnected).toBe(false);
+    expect(infoDialog()).toBe(popover);
     expect(document.activeElement).toBe(formatInfo);
-    // もう一度 Esc で吹き出しも閉じる
+    // もう一度 Esc で箱のダイアログも閉じる
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(popover.isConnected).toBe(false);
   });

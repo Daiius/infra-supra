@@ -16,6 +16,10 @@ import {
   diagramComponents,
   slotBoxes,
 } from './system-diagram-model.ts';
+import { infoDialog, useSmokeEnv } from './smoke.test-helpers.tsx';
+
+// 箱を押すとダイアログ（showModal）で出すので、描画テストの共通の準備（dialog の補い）を使う（D-221）
+useSmokeEnv();
 
 const sc = SCENARIOS['article-community']!;
 const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
@@ -63,14 +67,16 @@ describe('構成図の向き', () => {
     // 箱に見えるのは短い名前だけ（名前は見えている短い名前で始め、正式の名前などは読み上げだけに足す。D-196）
     expect(worker.querySelector('[data-short]')!.textContent).toBe('Worker');
     expect(worker.hasAttribute('aria-label')).toBe(false);
-    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(infoDialog()).toBeNull();
     fireEvent.click(worker);
-    const tip = screen.getByRole('tooltip');
+    // 箱を押すとダイアログで出す（D-221。吹き出しをやめた）
+    const tip = infoDialog()!;
     expect(tip.textContent).toContain('Worker（vinext）');
     expect(tip.textContent).toContain('関数');
-    expect(within(tip).getByRole('list', { name: '通る流れ' })).toBeDefined();
+    // 通る流れの色の凡例は吹き出しに出さない（構成のカードの ⓘ にある。D-221）
+    expect(within(tip).queryByRole('list', { name: '通る流れ' })).toBeNull();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(infoDialog()).toBeNull();
   });
 });
 
@@ -146,8 +152,9 @@ describe('幽霊の箱（D-116 の補足）', () => {
     });
     expect(g.querySelector('[data-swap-mark]')).not.toBeNull();
     fireEvent.click(box);
-    const popover = screen.getByRole('dialog');
-    expect(popover.textContent).toContain('経路の線は引きません');
+    const popover = infoDialog()!;
+    // 点線の箱の説明・部品ごとの注記は吹き出しに出さない（D-221。読み上げと title には残す）
+    expect(popover.textContent).not.toContain('経路の線は引きません');
     fireEvent.click(within(popover).getByRole('button', { name: 'KV に戻す' }));
     expect(picked).toHaveBeenCalledWith('isrCache');
   });

@@ -226,7 +226,8 @@ describe('ゲームモードの画面', () => {
     // DB の箱を押すと選択肢の吹き出しが出て、focus が移る（キーボードで続けて選べる）。同じ事業者の部品が先、他の事業者はロゴ付き
     fireEvent.click(dbBox()!);
     let popover = screen.getByRole('dialog', { name: /を替える$/ });
-    expect(document.activeElement).toBe(popover);
+    // ダイアログ（showModal）で出す。focus はブラウザがダイアログの中へ移す（jsdom の補いでは移らないので見ない。D-221）
+    expect(popover.tagName).toBe('DIALOG');
     let swap = within(popover).getByRole('group', { name: 'DBを替える' });
     const options = within(swap).getAllByRole('button');
     expect(options[0]!.textContent).toMatch(/^Supabase/);
@@ -609,12 +610,18 @@ describe('ゲームモードの画面', () => {
       name: /^DB：.*、未選択）を替える$/,
     });
     fireEvent.click(dbBox);
+    // 箱へ focus を戻すときには、箱のダイアログはもう外れている（残っていると背後の箱は inert で focus が効かない。OCL-349609BC）
+    const boxDialog = screen.getByRole('dialog', { name: /を替える$/ });
+    let detachedOnFocus: boolean | undefined;
+    const focus = dbBox.focus.bind(dbBox);
+    dbBox.focus = () => {
+      detachedOnFocus ??= !boxDialog.isConnected;
+      focus();
+    };
     fireEvent.click(
-      within(screen.getByRole('dialog', { name: /を替える$/ })).getByRole(
-        'button',
-        { name: '表と月額で比べる' },
-      ),
+      within(boxDialog).getByRole('button', { name: '表と月額で比べる' }),
     );
+    expect(detachedOnFocus).toBe(true);
     let dialog = screen.getByRole('dialog', { name: 'DBを比べる' });
     expect(within(dialog).getByRole('table')).toBeDefined();
     expect(

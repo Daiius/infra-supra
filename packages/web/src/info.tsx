@@ -1,11 +1,7 @@
-// 説明の ⓘ ボタン（Info。選択肢の長い説明を畳む）と、構成図の箱の吹き出し（Popover）。
-// Info は押すとダイアログ（daisyUI の modal）で中身を出す（D-129。説明が長いものが多く、吹き出しでは読みにくかった）。
-// Popover は箱を押すと出る吹き出しで、タップ・クリックで開閉し、Esc・外側のクリックで閉じる（hover だけに頼らない）。
-// 吹き出しは画面に固定して置き、画面の端からはみ出さないように横位置を詰める（狭い画面でも読める）。
-// 縦は、ボタンの下（足りなければ上の広い方）に置き、残りの高さを上限にして中でスクロールする（長い説明でも末尾まで読める）。
+// 説明の ⓘ ボタン（Info。選択肢の長い説明を畳む）と、構成図の箱を押したときの説明と部品の差し替え（Popover）。
+// どちらも押すとダイアログ（daisyUI の modal）で中身を出す（D-129。Popover も D-221 で吹き出しからダイアログにした）。
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useId,
@@ -15,23 +11,13 @@ import {
 } from 'react';
 import clsx from 'clsx';
 import { BookOpenText, ChevronDown } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 
 /**
  * 吹き出し・説明のダイアログを描く先（既定は body）。モーダルの `<dialog>`（top layer）の中では body に描くとダイアログの後ろに隠れるので、
- * ダイアログがその要素を渡す（OCL-8E844E7C）。位置は画面に固定なので、描く先が替わっても計算は同じ。
+ * ダイアログがその要素を渡す（OCL-8E844E7C）。
  */
 export const PortalContainer = createContext<HTMLElement | null>(null);
-
-const WIDTH = 288;
-const MARGIN = 8;
-const GAP = 4;
-/** 下にこれだけ入れば、上の方が広くても下に置く。 */
-const MIN_BELOW = 200;
-
-type Pos = { left: number; maxHeight: number } & (
-  { top: number; bottom?: undefined } | { bottom: number; top?: undefined }
-);
 
 /** 見出しの既定: 読み上げの名前（「…の説明」）から「の説明」を外したもの。 */
 export function infoTitle(label: string): string {
@@ -159,17 +145,16 @@ function InfoDialog({
   );
 }
 
-/** 構成図の箱の吹き出し（部品の選択の UI。ⓘ の説明ではないのでダイアログにしない。D-129）。 */
+/** 構成図の箱を押したときの説明と部品の差し替え（ⓘ と同じダイアログ。D-221 で吹き出しからダイアログにした）。 */
 export function Popover({
   children,
   label = '説明',
   trigger,
   className = 'btn btn-ghost btn-xs btn-circle align-middle',
-  interactive = false,
   nameFromContent = false,
   hiddenName = false,
 }: {
-  /** 中身。関数なら閉じる関数を受ける（中の操作で閉じるとき。interactive と使う）。 */
+  /** 中身。関数なら閉じる関数を受ける（部品を選んで閉じるとき）。 */
   children: ReactNode | ((close: () => void) => ReactNode);
   /** ボタンの読み上げ（既定「説明」）。 */
   label?: string;
@@ -178,12 +163,7 @@ export function Popover({
   /** ボタンの class（既定は丸い小さいボタン）。 */
   className?: string;
   /**
-   * 中に操作（部品の差し替えのボタン。D-116）を置く吹き出し。開くと吹き出しに focus を移し（ポータルの先は Tab の順で遠いので）、
-   * focus が吹き出しとボタンの外へ出たら閉じる。読み上げは説明（tooltip）でなく、名前つきの dialog（モーダルでない）。
-   */
-  interactive?: boolean;
-  /**
-   * ボタンの名前を aria-label でなく中身（trigger）から取る（label は吹き出しの名前にだけ使う）。中身に見えている文字があるときに使う
+   * ボタンの名前を aria-label でなく中身（trigger）から取る（label はダイアログの見出しにだけ使う）。中身に見えている文字があるときに使う
    * （WCAG 2.5.3: 名前は見えている文字で始める。補足は中身の sr-only で後ろに足す。D-196）。
    */
   nameFromContent?: boolean;
@@ -194,79 +174,17 @@ export function Popover({
    */
   hiddenName?: boolean;
 }) {
-  const [pos, setPos] = useState<Pos | null>(null);
+  // 中身が多い（部品の差し替え・説明）ので、吹き出しでなく ⓘ と同じモーダルのダイアログで出す（D-221。画面の幅によらない）
+  const [open, setOpen] = useState(false);
   // ボタンの要素は state に持つ（close を children(close) で渡すので、ref だと render 中に読むとみなされ React Compiler が最適化を諦める）
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
-  const panel = useRef<HTMLDivElement | null>(null);
-  // 中の ⓘ の説明のダイアログ（画像の箱の設定のチップなど）は吹き出しの中に描く（外側のクリックとみなして閉じないように）
-  const [panelEl, setPanelEl] = useState<HTMLDivElement | null>(null);
-  const panelRef = useCallback((el: HTMLDivElement | null) => {
-    panel.current = el;
-    setPanelEl(el);
-  }, []);
-  const id = useId();
   const nameId = useId();
-  const container = useContext(PortalContainer);
-  const open = pos !== null;
   const close = () => {
-    setPos(null);
+    // モーダルのダイアログが残っている間は背後の箱が inert で focus が効かないので、先にダイアログを外してから箱へ戻す
+    // （中の「表と月額で比べる」で閉じて比較を開き、比較を閉じたときに箱へ戻れるように。OCL-349609BC）
+    flushSync(() => setOpen(false));
     button?.focus();
   };
-
-  const show = () => {
-    const r = button!.getBoundingClientRect();
-    const width = Math.min(WIDTH, window.innerWidth - MARGIN * 2);
-    const left = Math.min(
-      Math.max(MARGIN, r.left - 8),
-      window.innerWidth - width - MARGIN,
-    );
-    const below = window.innerHeight - r.bottom - GAP - MARGIN;
-    const above = r.top - GAP - MARGIN;
-    setPos(
-      below >= MIN_BELOW || below >= above
-        ? { left, top: r.bottom + GAP, maxHeight: below }
-        : { left, bottom: window.innerHeight - r.top + GAP, maxHeight: above },
-    );
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      // 中の説明のダイアログが開いていれば、Esc はそのダイアログを閉じる（吹き出しは閉じない）
-      if (panel.current?.querySelector('dialog[open]')) return;
-      if (e.key === 'Escape') {
-        // モーダルの中では、Esc はまず吹き出しだけを閉じる（ダイアログは閉じない）
-        e.preventDefault();
-        e.stopPropagation();
-        setPos(null);
-        button?.focus();
-      }
-    };
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (!panel.current?.contains(t) && !button?.contains(t)) setPos(null);
-    };
-    // スクロールでは、ボタンに付いて動かす。ボタンが画面の外へ大きく出たときだけ閉じる
-    // （開いた直後の慣性スクロールや、数 px のスクロールで閉じないように）
-    const follow = () => {
-      const r = button?.getBoundingClientRect();
-      if (!r || r.bottom < 0 || r.top > window.innerHeight) setPos(null);
-      else show();
-    };
-    const close = () => setPos(null);
-    if (interactive) panel.current?.focus();
-    document.addEventListener('keydown', onKey, true);
-    document.addEventListener('pointerdown', onDown);
-    window.addEventListener('scroll', follow, true);
-    window.addEventListener('resize', close);
-    return () => {
-      document.removeEventListener('keydown', onKey, true);
-      document.removeEventListener('pointerdown', onDown);
-      window.removeEventListener('scroll', follow, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [open, interactive, button]);
-
   return (
     <>
       <button
@@ -276,15 +194,12 @@ export function Popover({
         aria-label={nameFromContent || hiddenName ? undefined : label}
         aria-labelledby={hiddenName ? nameId : undefined}
         aria-expanded={open}
-        aria-haspopup={interactive ? 'dialog' : undefined}
-        aria-controls={id}
-        aria-describedby={open && !interactive ? id : undefined}
+        aria-haspopup="dialog"
         onClick={(e) => {
           // label の中に置かれても、選択肢を切り替えない
           e.preventDefault();
           e.stopPropagation();
-          if (open) setPos(null);
-          else show();
+          setOpen(true);
         }}
       >
         {trigger ?? <InfoIcon />}
@@ -294,48 +209,11 @@ export function Popover({
           </span>
         )}
       </button>
-      {open &&
-        // body に出す（label の中に置かれても、吹き出しのクリックで選択肢が切り替わらないように）
-        createPortal(
-          <div
-            ref={panelRef}
-            id={id}
-            role={interactive ? 'dialog' : 'tooltip'}
-            aria-label={interactive ? label : undefined}
-            tabIndex={interactive ? -1 : undefined}
-            onBlur={
-              interactive
-                ? (e) => {
-                    // focus が吹き出しの外（ボタンを除く）へ出たら閉じる（Tab で抜けたとき）
-                    const to = e.relatedTarget as Node | null;
-                    if (
-                      to &&
-                      !e.currentTarget.contains(to) &&
-                      !button?.contains(to)
-                    )
-                      setPos(null);
-                  }
-                : undefined
-            }
-            className="rounded-box border border-base-300 bg-base-100 p-3 text-left text-sm font-normal shadow-lg focus:outline-none"
-            style={{
-              position: 'fixed',
-              top: pos.top,
-              bottom: pos.bottom,
-              left: pos.left,
-              maxHeight: pos.maxHeight,
-              overflowY: 'auto',
-              overscrollBehavior: 'contain',
-              width: Math.min(WIDTH, window.innerWidth - MARGIN * 2),
-              zIndex: 60,
-            }}
-          >
-            <PortalContainer.Provider value={panelEl}>
-              {typeof children === 'function' ? children(close) : children}
-            </PortalContainer.Provider>
-          </div>,
-          container ?? document.body,
-        )}
+      {open && (
+        <InfoDialog title={infoTitle(label)} onClose={close}>
+          {typeof children === 'function' ? children(close) : children}
+        </InfoDialog>
+      )}
     </>
   );
 }

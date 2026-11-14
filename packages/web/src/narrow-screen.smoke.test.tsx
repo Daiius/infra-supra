@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LineChart } from './charts.tsx';
 import {
   advance,
+  infoDialog,
   renderApp,
+  showStackTab,
   startGame,
   useSmokeEnv,
 } from './smoke.test-helpers.tsx';
@@ -286,5 +288,31 @@ describe('狭い画面のヘッダー（D-206・D-210）', () => {
   it('W-210c 始める前（ゲームの状態が無い）は「ゲームの操作」を出さない', async () => {
     await renderApp();
     expect(screen.queryByRole('button', { name: 'ゲームの操作' })).toBeNull();
+  });
+});
+
+describe('構成図の箱はダイアログで出す（D-221）', () => {
+  afterEach(() => stubScreen(false));
+  const pressBox = async (narrow: boolean) => {
+    stubScreen(narrow);
+    await renderApp();
+    fireEvent.click(screen.getByRole('radio', { name: /^記事コミュニティ/ }));
+    showStackTab();
+    const card = document.querySelector<HTMLElement>(
+      'section[data-stack][aria-current="true"]',
+    )!;
+    fireEvent.click(card.querySelector<HTMLElement>('[data-node] button')!);
+  };
+
+  it('W-221a 狭い画面では、箱を押すと吹き出しでなくモーダルのダイアログで出す', async () => {
+    await pressBox(true);
+    expect(infoDialog()).not.toBeNull();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('W-221b 広い画面でも、箱を押すとモーダルのダイアログで出す（吹き出しにしない）', async () => {
+    await pressBox(false);
+    expect(infoDialog()).not.toBeNull();
+    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 });
