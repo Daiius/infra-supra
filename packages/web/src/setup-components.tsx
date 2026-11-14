@@ -602,8 +602,11 @@ export function SettingChips<V extends string | number>({
   onChange,
   setting,
   children,
+  info: withInfo = true,
 }: {
   label: string;
+  /** 見出し・選べない選択肢の ⓘ を出すか（フレームワークのカードはカードの ⓘ にまとめるので出さない。D-219）。 */
+  info?: boolean;
   note?: ReactNode;
   options: readonly SettingChipOption<V>[];
   value: V;
@@ -617,7 +620,7 @@ export function SettingChips<V extends string | number>({
     'inline-flex h-7 max-w-full min-w-0 items-center gap-1 rounded-field text-xs';
   const flavors = options.filter((o) => o.flavor);
   const info =
-    note || flavors.length > 0 ? (
+    withInfo && (note || flavors.length > 0) ? (
       <Info label={`${label}の説明`}>
         <>
           {note && <p>{note}</p>}
@@ -658,7 +661,7 @@ export function SettingChips<V extends string | number>({
               title={why ? `${o.label}（${why}）` : (o.flavor ?? o.label)}
               className={clsx(
                 box,
-                selected || why ? 'pr-0.5' : 'pr-2',
+                selected || (why && withInfo) ? 'pr-0.5' : 'pr-2',
                 'pl-2',
                 selected
                   ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
@@ -684,7 +687,10 @@ export function SettingChips<V extends string | number>({
                   </span>
                 )}
               </button>
-              {why && <Info label={`${o.label}が選べない理由`}>{why}</Info>}
+              {/* カード（info={false}）ではページの欄の下の「選べない選択肢について」にまとめる（D-220） */}
+              {why && withInfo && (
+                <Info label={`${o.label}が選べない理由`}>{why}</Info>
+              )}
             </li>
           );
         })}

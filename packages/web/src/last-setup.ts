@@ -17,7 +17,6 @@ import {
   defaultRevalidateSec,
   frameworkOnStack,
   frameworksOf,
-  setupCommentOptions,
   setupCommitments,
   setupProblem,
   setupRevalidateOptions,
@@ -30,6 +29,7 @@ import {
   type Scenario,
 } from 'game';
 import type { SetupChoices } from './setup-components.tsx';
+import { commentOptionsOf } from './comments-choice.ts';
 
 /** localStorage のキー（値は LastSetupStore の JSON）。 */
 export const LAST_SETUP_KEY = 'infra-supra:last-setup';
@@ -177,7 +177,7 @@ export function lastSetupOf(sc: Scenario, s: SetupState): LastSetup {
     setupRevalidateOptions(sc, s.framework, s.routes).some(
       (o) => o.value === s.revalidateSec,
     );
-  const commentsOk = setupCommentOptions(sc, s.framework, s.routes).length > 0;
+  const commentsOk = commentOptionsOf(sc, s.framework, s.routes).length > 0;
   const commitments = effectiveCommitments(sc, s);
   return {
     stackId: STACKS[s.stack]!.id,
@@ -266,7 +266,7 @@ export function restoreLastSetup(
     if (o) revalidateSec = o.value;
     else lost.push('再検証の間隔');
   }
-  const commentOptions = setupCommentOptions(sc, framework, routes);
+  const commentOptions = commentOptionsOf(sc, framework, routes);
   let comments = COMMENTS_IN_BROWSER;
   if (last.comments !== undefined && commentOptions.length > 0) {
     if (commentOptions.some((o) => o.value === last.comments))
@@ -329,9 +329,7 @@ function setupKey(sc: Scenario, s: SetupState): string {
     sorted(s.components),
     sorted(s.routes),
     effectiveRevalidate(sc, s) ?? null,
-    setupCommentOptions(sc, s.framework, s.routes).length > 0
-      ? s.comments
-      : null,
+    commentOptionsOf(sc, s.framework, s.routes).length > 0 ? s.comments : null,
     effectiveCommitments(sc, s)
       .map((c) => `${c.key}:${c.payment}`)
       .sort(),

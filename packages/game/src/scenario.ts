@@ -48,7 +48,7 @@ export type SatisfactionRules = {
     fair: number;
     /**
      * 利用者が投稿した記事が、投稿した人に開けるまでの許容（秒。D-104・ゲーム上の仮定）。記事をビルドし直す形（静的書き出し）では、
-     * 新しい記事のページはビルドが終わるまで無い。遅れ（間隔 + ビルドの時間）がこれを超えると、鮮度を 1 段下げる。省略は判定しない。
+     * 新しい記事のページはビルドが終わるまで無い。遅れ（間隔 + ビルドの時間）がこれを超えると、反映スピードを 1 段下げる。省略は判定しない。
      */
     newPostVisibleSec?: number;
   };
@@ -237,7 +237,7 @@ export type Scenario = {
   months: number;
   /** テンプレート（PV → Workload）。catalog のものを見積モードと共有する。 */
   template: (pv: number) => WorkloadInput;
-  /** テンプレートのルートの性質（見る人・SNS のカード・鮮度の要件・部品。catalog のテンプレートのデータ。D-107）。 */
+  /** テンプレートのルートの性質（見る人・SNS のカード・反映スピードの要件・部品。catalog のテンプレートのデータ。D-107）。 */
   routeTraits: Readonly<Record<string, RouteTraits>>;
   /** ためていく量の増え方。null なら増えない（テンプレートの値のまま）。 */
   stock: StockRule | null;
@@ -281,8 +281,8 @@ export type Scenario = {
   comments?: {
     pageUpdateShare: number;
     /**
-     * 記事のページに含めて時間で再検証・ビルドするとき、コメントが間隔の分だけ遅れて見える。その遅れ（秒）の鮮度の段階の境目
-     * （D-85。記事の freshness より厳しい。満足度の鮮度は記事とコメントの悪い方）。値はゲーム上の仮定。
+     * 記事のページに含めて時間で再検証・ビルドするとき、コメントが間隔の分だけ遅れて見える。その遅れ（秒）の反映スピードの段階の境目
+     * （D-85。記事の freshness より厳しい。満足度の反映スピードは記事とコメントの悪い方）。値はゲーム上の仮定。
      */
     freshness: { good: number; fair: number };
   };
@@ -592,7 +592,7 @@ export type PageWireframe = {
    * 枠（ビルドで書き出す・メタタグ入り）と、ブラウザが API で取る中身に分ける。
    */
   shellPerPage?: { sources: Record<string, RegionSource>; badges: PageBadge[] };
-  /** フレームワークごとの、ページの短い札（鮮度・SNS のカード・CPU の注意・API の増え方。文字で出す）。 */
+  /** フレームワークごとの、ページの短い札（反映スピード・SNS のカード・CPU の注意・API の増え方。文字で出す）。 */
   badges?: Partial<Record<FrameworkId, PageBadge[]>>;
 };
 

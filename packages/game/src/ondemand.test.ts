@@ -55,7 +55,7 @@ describe('即時反映の要件', () => {
     expect(st.find((x) => x.label.includes('Workers Cache'))?.ok).toBe(true);
   });
 
-  it('受けて満たさない構成では鮮度が 1 段下がり、Workers Cache に替えると戻る', () => {
+  it('受けて満たさない構成では反映スピードが 1 段下がり、Workers Cache に替えると戻る', () => {
     const s = until(CF_PAID, month(42), 42);
     const accepted = playMonth(
       applyAction(s, { type: 'respond', eventId: 'p-ondemand', accept: true }),

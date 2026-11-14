@@ -19,6 +19,7 @@ import {
   useState,
 } from 'react';
 import { flushSync } from 'react-dom';
+import { TriangleAlert } from 'lucide-react';
 import { PortalContainer } from './info.tsx';
 import {
   isUnselected,
@@ -62,25 +63,35 @@ export function MissingParts({
   return (
     <>
       {missing.length > 0 && (
-        <div className="flex flex-col items-end gap-1.5" data-missing-parts>
-          <p className="text-right text-sm" role="status">
-            部品をまだ選んでいません:{' '}
-            {missing.map((x, i) => (
-              <Fragment key={x.slot}>
-                {i > 0 && '・'}
-                <button
-                  type="button"
-                  className="link font-semibold decoration-warning decoration-2 underline-offset-2"
-                  title={`① インフラの構成で${x.label}を選ぶ`}
-                  data-missing-slot={x.slot}
-                  onClick={() => onJump(x.slot)}
-                >
-                  {x.label}
-                </button>
-              </Fragment>
-            ))}
+        // 始める前に気づけるよう、警告の色の面で左寄せに出す（D-219）
+        <div
+          className="flex w-full flex-col items-start gap-2 rounded-box border border-warning/60 bg-warning/10 p-3"
+          data-missing-parts
+        >
+          <p className="flex items-start gap-2 text-sm" role="status">
+            <TriangleAlert
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 text-warning"
+            />
+            <span>
+              <span className="font-semibold">部品をまだ選んでいません:</span>{' '}
+              {missing.map((x, i) => (
+                <Fragment key={x.slot}>
+                  {i > 0 && '・'}
+                  <button
+                    type="button"
+                    className="link font-semibold decoration-warning decoration-2 underline-offset-2"
+                    title={`① インフラの構成で${x.label}を選ぶ`}
+                    data-missing-slot={x.slot}
+                    onClick={() => onJump(x.slot)}
+                  >
+                    {x.label}
+                  </button>
+                </Fragment>
+              ))}
+            </span>
           </p>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               ref={trigger}
               type="button"

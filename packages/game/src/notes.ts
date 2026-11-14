@@ -102,7 +102,7 @@ export function routePartNote(
 /**
  * コメントを記事のページに含めているときの効き方の注記（D-82）。作り直しが増えるのは、更新のたびに作り直すとき
  * （オンデマンドの再検証・更新のたびのビルド）。時間の再検証は更新の数に依らないので増えず、間隔でまとめるビルドも
- * 間隔の数までしか増えない。どちらもコメントは間隔の分だけ遅れて見え、鮮度の判定に入る（D-85）。
+ * 間隔の数までしか増えない。どちらもコメントは間隔の分だけ遅れて見え、反映スピードの判定に入る（D-85）。
  */
 function commentsNote(state: GameState): string | undefined {
   const sc = scenarioOf(state);
@@ -127,10 +127,10 @@ function commentsNote(state: GameState): string | undefined {
         ? 'コメントの投稿のたびに記事のページのキャッシュを消します（描き直しが増えます）'
         : 'コメントの投稿のたびに記事のページを再検証します（作り直し・CDN の無効化が増えます）';
   return rebuilds
-    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えません。コメントは間隔とビルドの時間の分だけ遅れて見え、鮮度が下がります`
+    ? `ビルドは間隔（${optionLabel('buildInterval', state.settings.revalidateSec)}）でまとめるので、回数は間隔の数までしか増えません。コメントは間隔とビルドの時間の分だけ遅れて見え、反映スピードが下がります`
     : state.framework === 'astro'
-      ? `記事のキャッシュが時間（${optionLabel('pageCache', state.settings.revalidateSec)}）なので、描き直しの回数は増えません。コメントはその分遅れて見え、鮮度が下がります`
-      : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えません。コメントはその分遅れて見え、鮮度が下がります`;
+      ? `記事のキャッシュが時間（${optionLabel('pageCache', state.settings.revalidateSec)}）なので、描き直しの回数は増えません。コメントはその分遅れて見え、反映スピードが下がります`
+      : `ISR の再検証が時間（${optionLabel('isr', state.settings.revalidateSec)}）なので、作り直しの回数は増えません。コメントはその分遅れて見え、反映スピードが下がります`;
 }
 
 /** ISR のキャッシュの部品（Next.js）。Astro は事業者で決まる置き場で、キャッシュしない形は無い（D-103）。 */

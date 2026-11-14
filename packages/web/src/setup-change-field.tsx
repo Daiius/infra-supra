@@ -22,7 +22,6 @@ import {
   scenarioOf,
   setupChangeOf,
   setupChangeSummary,
-  setupCommentOptions,
   stackChangeRouteNotice,
   stackName,
   STACKS,
@@ -47,6 +46,7 @@ import type { RoutePlanEditor } from './route-plan-field.tsx';
 import { FrameworkField } from './scenario-briefing.tsx';
 import { SetupTabs, type SetupChoices } from './setup-components.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
+import { commentOptionsOf } from './comments-choice.ts';
 
 /** 選んだ部品（undefined を除く）。 */
 const chosenOf = (c: SetupChoices) =>
@@ -228,7 +228,7 @@ function ChangeBody({
   const revalidateSec = draftRevalidate(state, draft);
   const routeParts = partsOfComments(sc, draft.comments);
   const commentsOn =
-    setupCommentOptions(sc, draft.framework, routes).length > 0
+    commentOptionsOf(sc, draft.framework, routes).length > 0
       ? draft.comments
       : undefined;
   // 今の描き方（選び直したページを「今」に戻すと、選び直しを消す）
@@ -268,9 +268,6 @@ function ChangeBody({
           ...(alt.value !== undefined ? { value: alt.value } : {}),
         };
       setDraft({ ...draft, routes: next });
-    },
-    onPart: (_, part, v) => {
-      if (part === 'comments') setDraft({ ...draft, comments: v });
     },
   };
   /** その構成・フレームワークで欄が始める部品（同じ事業者のプランの間は選び直した部品を引き継ぐ。D-176）。 */
@@ -450,8 +447,7 @@ function ChangeBody({
                 text={{
                   heading: '② フレームワークとページの描き方',
                   footnote:
-                    'フレームワークを替えるのはアプリの作り直しです（大きな手間・数か月。その間は機能開発がほぼ止まります）。ページの描き方とコメント欄は来月から替わります。期限か、投稿・編集のときに消すかは下の設定の欄で替えます。',
-                  compareHint: null,
+                    'フレームワークを替えるのはアプリの作り直しです（大きな手間・数か月。その間は機能開発がほぼ止まります）。ページの描き方は来月から替わります。期限か、投稿・編集のときに消すかは下の設定の欄で替えます。',
                 }}
               />
             </div>

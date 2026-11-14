@@ -1,4 +1,4 @@
-// ISR の再検証の設定の「オンデマンド」（D-49）: 再生成は内容の更新の回数・対応しない部品では届かず鮮度が下がる・
+// ISR の再検証の設定の「オンデマンド」（D-49）: 再生成は内容の更新の回数・対応しない部品では届かず反映スピードが下がる・
 // 始める画面で選べて保存の再生で同じ・時間からの切り替えと p-ondemand の手間。
 import { describe, expect, it } from 'vitest';
 import {
@@ -77,7 +77,7 @@ describe('オンデマンドの再検証（D-49）', () => {
     expect(cost(od)).toBeLessThanOrEqual(cost(timed));
   });
 
-  it('対応する部品なら鮮度は「良い」、対応しない部品（KV）では再検証が届かず下がる（理由は既存の判定の文）', () => {
+  it('対応する部品なら反映スピードは「良い」、対応しない部品（KV）では再検証が届かず下がる（理由は既存の判定の文）', () => {
     const ok = playMonth(start(CF_PAID, 0, { isrCache: 'workers-cache' }))
       .history[0]!.satisfaction;
     expect(ok.stages.freshness).toBe('good');

@@ -30,7 +30,7 @@ import {
 } from 'react';
 import { ChoiceCarousel } from './choice-carousel.tsx';
 import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
-import { Info, PortalContainer } from './info.tsx';
+import { Info, MoreDetails, PortalContainer } from './info.tsx';
 import {
   eventCategory,
   EventIcon,
@@ -44,10 +44,17 @@ import {
   ScenarioWireframesInfo,
   WireframeLegend,
 } from './page-wireframes.tsx';
-import { RouteChips, RowParts, RowStatus } from './route-plan-table.tsx';
 import {
-  RoutePlanCompare,
+  RouteChips,
+  StrategyExplain,
+  RowStatus,
+  UnavailableInfo,
+  unavailableOf,
+} from './route-plan-table.tsx';
+import {
   RouteSettingChips,
+  SettingExplain,
+  settingUnavailableOf,
   type RoutePlanEditor,
 } from './route-plan-field.tsx';
 import { usd, fmtPoints } from './format.ts';
@@ -295,9 +302,8 @@ function FrameworkCard({
   scenario,
   id,
   comments,
-  info,
+  detail,
   selected,
-  noteId,
   routes,
   chosenRoutes,
   routeNotice,
@@ -309,10 +315,9 @@ function FrameworkCard({
   scenario: Scenario;
   id: FrameworkId;
   comments: number | undefined;
-  info: ReactNode;
+  /** フレームワークそのものの説明（カードの ⓘ の「詳しい説明を見る」に畳む）。 */
+  detail: ReactNode;
   selected: boolean;
-  /** 要約の要素の id（タブのラジオの aria-describedby に使う）。 */
-  noteId: string;
   /** 既定のページごとの描き方（選んでいる構成で。D-106）。 */
   routes?: RoutePlanRow[] | undefined;
   /** 選んだ描き方（選んでいるカードの見取り図に使う。D-107）。 */
@@ -380,14 +385,71 @@ function FrameworkCard({
         <h4 className="card-title text-lg">
           <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
           <span className="min-w-0">{FRAMEWORKS[id].label}</span>
-          {/* カードの ⓘ は右上の 1 つ（D-218） */}
-          <span className="ml-auto shrink-0">{info}</span>
+          {/* カードの ⓘ は右上の 1 つ（D-218）。短い説明・ページごとの描き方と判定と設定・見取り図の凡例・詳しく比べるをまとめる（D-219） */}
+          <span className="ml-auto shrink-0">
+            <Info label={`${FRAMEWORKS[id].label} の説明`}>
+              {/* 先に図の読み方（見取り図の色）と比べる表を出し、文の説明は「詳しい説明を見る」に畳む（D-219。構成のカードの ⓘ と同じ形） */}
+              {t?.note && <p>{t.note}。</p>}
+              {pages.length > 0 && (
+                <section className="space-y-1" data-wireframe-legend>
+                  <h3 className="font-semibold">見取り図の色</h3>
+                  <WireframeLegend pages={pages} />
+                </section>
+              )}
+              <MoreDetails>
+                {(() => {
+                  // ページの札・フレームワークの説明の行・設定の説明は、そのページで選んでいる描き方の中に入れる（D-220）
+                  const extraOf = (route: string) => {
+                    const p = pages.find((x) => x.route === route);
+                    if (!p) return null;
+                    const row = rowOf(route);
+                    const pageLines = p.strategy
+                      ? []
+                      : frameworkLinesOf(p.label);
+                    return (
+                      <>
+                        {p.badges.length > 0 && (
+                          <div data-page-badges={p.route}>
+                            <PageBadges badges={p.badges} />
+                          </div>
+                        )}
+                        {pageLines.length > 0 && (
+                          <ul
+                            aria-label={`${p.label}の説明`}
+                            className="list-disc space-y-0.5 pl-5"
+                          >
+                            {pageLines.map((l) => (
+                              <li key={l}>{l}</li>
+                            ))}
+                          </ul>
+                        )}
+                        {editor?.setting?.route === p.route && row && (
+                          <SettingExplain setting={editor.setting} row={row} />
+                        )}
+                      </>
+                    );
+                  };
+                  const rows = pages.flatMap((p) => {
+                    const r = rowOf(p.route);
+                    return r ? [r] : [];
+                  });
+                  return <StrategyExplain rows={rows} extraOf={extraOf} />;
+                })()}
+                {rest.length > 0 && (
+                  <ul className="list-disc pl-5">
+                    {rest.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                )}
+                {pages.length > 0 && (
+                  <p className="text-xs opacity-70">{text.wireframeNote}</p>
+                )}
+                {detail}
+              </MoreDetails>
+            </Info>
+          </span>
         </h4>
-        {t?.note && (
-          <p id={noteId} className="text-sm opacity-80">
-            {t.note}
-          </p>
-        )}
         {unsupported && (
           <p className="text-xs text-warning" role="note">
             選んでいる構成では選べない: {unsupported}
@@ -397,13 +459,6 @@ function FrameworkCard({
           <p className="text-xs text-warning" role="note">
             {routeNotice}
           </p>
-        )}
-        {rest.length > 0 && (
-          <ul className="list-disc pl-5 text-sm">
-            {rest.map((l) => (
-              <li key={l}>{l}</li>
-            ))}
-          </ul>
         )}
         {pages.length > 1 && (
           <div
@@ -431,16 +486,13 @@ function FrameworkCard({
           if (p !== shownPage) return null;
           const row = rowOf(p.route);
           const st = statusOf(p.route);
-          // フレームワークの既定と違う描き方なら、フレームワークの説明の行は出さず、描き方の説明（long・why）はチップの ⓘ に
-          // 畳む（D-112・D-125）
-          const pageLines = p.strategy ? [] : frameworkLinesOf(p.label);
           return (
             <section
               key={p.route}
               aria-label={p.label}
               data-route={p.route}
               className={clsx(
-                'flex flex-col gap-2 lg:flex-row lg:gap-4',
+                'flex flex-col gap-2 md:flex-row md:gap-4',
                 pages.length === 1 && 'border-t border-base-300 pt-3',
               )}
             >
@@ -459,60 +511,37 @@ function FrameworkCard({
                   <RouteChips
                     row={row}
                     onSelect={editor?.onSelect}
-                    describe={
-                      p.strategy !== undefined && row.strategy === p.strategy
-                    }
+                    info={false}
                   />
                 )}
                 {editor && row?.overriddenBy && (
-                  <p className="text-[11px] text-warning">
-                    既定から変わっている: {row.overriddenBy}
-                  </p>
+                  <p className="text-[11px] text-warning">{row.overriddenBy}</p>
+                )}
+                {/* 選べない描き方・設定の理由は、チップごとでなく 1 つの ⓘ にまとめる（D-220）。設定のチップより上に置く */}
+                {row && (
+                  <UnavailableInfo
+                    items={[
+                      ...unavailableOf(row),
+                      ...(editor?.setting?.route === p.route
+                        ? settingUnavailableOf(editor.setting, row)
+                        : []),
+                    ]}
+                  />
                 )}
                 {/* 描き方の設定（再検証の間隔・オンデマンドなど）は記事のページの行で選ぶ（D-119） */}
                 {editor?.setting?.route === p.route && row && (
-                  <RouteSettingChips setting={editor.setting} row={row} />
-                )}
-                {editor && row && (
-                  <RowParts
+                  <RouteSettingChips
+                    setting={editor.setting}
                     row={row}
-                    onChange={editor.onPart}
-                    namePrefix="card-part"
+                    info={false}
                   />
                 )}
-                {st && <RowStatus s={st} variant="badges" />}
-                <PageBadges badges={p.badges} />
-                {pageLines.length > 0 && (
-                  <ul
-                    aria-label={`${p.label}の説明`}
-                    className="list-disc space-y-0.5 pl-5 text-sm"
-                  >
-                    {pageLines.map((l) => (
-                      <li key={l}>{l}</li>
-                    ))}
-                  </ul>
-                )}
+                {/* 判定は問題のあるもの（△・✗）だけを出す。満たしているものと判定の文はカードの ⓘ（D-219） */}
+                {st && <RowStatus s={st} variant="badges" issuesOnly />}
               </div>
             </section>
           );
         })}
-        {editor && editor.rows.length > 0 && text.compareHint !== null && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-base-300 pt-3">
-            <RoutePlanCompare
-              editor={editor}
-              frameworkLabel={FRAMEWORKS[id].label}
-              {...(text.compareNote ? { note: text.compareNote } : {})}
-              {...(text.compareCaption ? { caption: text.compareCaption } : {})}
-            />
-            <span className="text-xs opacity-70">{text.compareHint}</span>
-          </div>
-        )}
-        {pages.length > 0 && (
-          <div className="border-t border-base-300 pt-2">
-            <WireframeLegend pages={pages} />
-            <p className="mt-1 text-xs opacity-70">{text.wireframeNote}</p>
-          </div>
-        )}
       </div>
     </section>
   );
@@ -526,21 +555,14 @@ export type FrameworkFieldText = {
   footnote: string | null;
   /** 見取り図の凡例の下の注記。 */
   wireframeNote: string;
-  /** 「詳しく比べる」のボタンの横の文（null はボタンごと出さない）。 */
-  compareHint: string | null;
-  /** 「詳しく比べる」のダイアログの説明と表の説明（省略は RoutePlanCompare の既定。ゲームの始める画面の文）。 */
-  compareNote?: string | undefined;
-  compareCaption?: string | undefined;
 };
 
 const GAME_FRAMEWORK_TEXT: FrameworkFieldText = {
   heading: '② アプリを何で作りましたか？（フレームワークとページの描き方）',
-  footnote:
-    '乗り換えても同じアプリのままです。途中で別のフレームワークに作り直せますが、大きな手間（数か月・その間は機能開発がほぼ止まる）がかかります。SNS のカード・初回表示への効き方と作り直しの手間はゲーム上の仮定です。',
+  // 乗り換え・作り直しの説明は遊び方に任せる（D-219）
+  footnote: null,
   wireframeNote:
-    '見取り図はゲーム上の仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
-  compareHint:
-    'なぜ・要件の判定・ほかの描き方の 1 か月目の費用の差を表で並べます',
+    '見取り図はゲーム上の仮定です。描き方のチップを変えると、隣の見取り図の札も変わります。',
 };
 
 /**
@@ -591,11 +613,6 @@ export function FrameworkField({
   text?: Partial<FrameworkFieldText> | undefined;
 }) {
   const text = { ...GAME_FRAMEWORK_TEXT, ...textOverride };
-  const info = (id: FrameworkId) => (
-    <Info label={`${FRAMEWORKS[id].label} の説明`}>
-      <FrameworkDetail scenario={scenario} id={id} />
-    </Info>
-  );
   return (
     <div className="space-y-2">
       {/* 構成を替えて戻したときの知らせ（D-113）。読み上げに届くよう、知らせの無いときも枠は置く */}
@@ -628,9 +645,8 @@ export function FrameworkField({
             {FRAMEWORKS[id].label}
           </>
         )}
-        describedBy={(id) => Boolean(scenario.text?.byFramework?.[id]?.note)}
         disabled={(id) => unsupported?.(id) !== undefined}
-        renderCard={(id, { selected, idPrefix }) => {
+        renderCard={(id, { selected }) => {
           // 載せられないフレームワークは、構成で決まる描き方を引かない（その組の行・図は無い。D-113）
           const off = selected ? undefined : unsupported?.(id);
           return (
@@ -638,9 +654,8 @@ export function FrameworkField({
               scenario={scenario}
               id={id}
               comments={comments}
-              info={info(id)}
+              detail={<FrameworkDetail scenario={scenario} id={id} />}
               selected={selected}
-              noteId={`${idPrefix}-${id}`}
               routes={off ? undefined : routePlan?.(id)}
               chosenRoutes={routes}
               routeNotice={selected || off ? null : routeNotice?.(id)}

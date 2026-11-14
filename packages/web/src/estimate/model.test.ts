@@ -139,12 +139,13 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
     expect(i).toMatchObject({
       framework: 'nextjs',
       stack: 'vercel-supabase-pro',
-      comments: 1,
+      // コメント欄は画面で選ばせないので、URL の値も読まない（D-220）
+      comments: 0,
       routes: {},
     });
     expect(i).not.toHaveProperty('showTax');
     expect(toQuery(i).toString()).toBe(
-      'mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&rp.article.comments=1&img=jpeg&v=3&seats=1&c.isrCache=default&c.images=default&c.api=same&c.db=supabase&c.cdnPlan=flat-rate&c.dbBackup=default&c.email=default',
+      'mode=estimate&t=article&pv=300000&fw=nextjs&s=vercel-supabase-pro&r=300&img=jpeg&v=3&seats=1&c.isrCache=default&c.images=default&c.api=same&c.db=supabase&c.cdnPlan=flat-rate&c.dbBackup=default&c.email=default',
     );
   });
 
@@ -192,50 +193,18 @@ describe('URL のクエリ', () => {
     expect(normalizeInput(fromQuery(`?${toQuery(i)}`))).toEqual(i);
   });
 
-  it('コメントの描き方（D-82）: 書いて読むと戻り、SPA・業務アプリでは既定（ブラウザで読み込む）', () => {
-    const i = normalizeInput({ framework: 'astro', comments: 1 });
-    expect(i.comments).toBe(1);
-    expect(normalizeInput(fromQuery(`?${toQuery(i)}`))).toEqual(i);
-    expect(
-      normalizeInput({ framework: 'vite-spa', comments: 1 }).comments,
-    ).toBe(0);
-    expect(normalizeInput({ template: 'business', comments: 1 }).comments).toBe(
-      0,
-    );
-    // 時間の再検証で記事のページに含めると、記事を開いたときのコメントの取得（API の関数）が無くなり安くなる
-    // （転送を圧縮後の大きさにして（D-211）300 万 PV では合計に差が出なくなったので 1,000 万 PV で見る）
-    const usd = (comments: number) =>
-      runEstimate(
-        normalizeInput({
-          stack: 'vercel-supabase-pro',
-          pv: 10_000_000,
-          comments,
-        }),
-      ).totalUsd;
-    expect(usd(1)).toBeLessThan(usd(0));
-  });
-
-  it('コメント欄は記事のページの部品（D-109）: URL は rp.article.comments に書き、前の cm も読む。枠 + API の記事では既定', () => {
-    const i = normalizeInput({ framework: 'astro', comments: 1 });
-    const q = toQuery(i);
-    expect(q.get('rp.article.comments')).toBe('1');
-    expect(q.has('cm')).toBe(false);
-    expect(normalizeInput(fromQuery('?fw=astro&cm=1')).comments).toBe(1);
+  it('コメント欄は選ばせない（D-220）: どの組もブラウザで読み込む。前の URL の rp.article.comments・cm は読まず、URL にも書かない', () => {
+    for (const framework of ['astro', 'nextjs', 'vite-spa'] as const)
+      expect(normalizeInput({ framework, comments: 1 }).comments).toBe(0);
+    expect(normalizeInput(fromQuery('?fw=astro&cm=1')).comments).toBe(0);
     expect(
       normalizeInput(fromQuery('?fw=astro&rp.article.comments=1')).comments,
-    ).toBe(1);
+    ).toBe(0);
+    const q = toQuery(normalizeInput({ framework: 'astro', comments: 1 }));
+    expect(q.has('rp.article.comments')).toBe(false);
+    expect(q.has('cm')).toBe(false);
     // 部品のキーは描き方として読まない
     expect(fromQuery('?rp.article.comments=1').routes).toEqual({});
-    expect(
-      normalizeInput({
-        framework: 'astro',
-        comments: 1,
-        routes: { article: 'shell-api' },
-      }).comments,
-    ).toBe(0);
-    // 表の記事の行に部品として出る
-    const row = diagramOf(i).routes.find((r) => r.route === 'article')!;
-    expect(row.parts.map((p) => [p.part, p.value])).toEqual([['comments', 1]]);
   });
 
   it('記事ごとの枠（S5。D-109）: Next.js・Astro の記事の S5 は SNS のカードが出る。SPA は前処理の部品が要る', () => {

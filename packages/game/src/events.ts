@@ -158,7 +158,7 @@ export function describeEffect(e: Effect): string {
     case 'on-demand-revalidate':
       return `ISR の再検証を「${NEXT_ON_DEMAND}」にする（Next.js）`;
     case 'requirement':
-      return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は鮮度が下がります）`;
+      return `以後の要件: ${REQUIREMENT_LABEL[e.requirement]}（満たさない月は反映スピードが下がります）`;
     case 'contract':
       return `契約の収益 $${e.usdPerMonth} / 月（${REQUIREMENT_LABEL[e.requires]}のときだけ）`;
     case 'imageRedesign':

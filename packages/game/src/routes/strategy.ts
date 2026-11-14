@@ -42,7 +42,7 @@ export function strategyFamily(s: RouteStrategyId): StrategyFamily {
 
 /**
  * 記事のページ（全員に同じ中身）の判定に使う分け方（D-111）。部品ごとにキャッシュの記事はキャッシュした部品だけで穴が無く、
- * 数え方・設定の意味（期限かタグか）・鮮度・SNS のカードは S2・S3 と同じなので「キャッシュ」として扱う。
+ * 数え方・設定の意味（期限かタグか）・反映スピード・SNS のカードは S2・S3 と同じなので「キャッシュ」として扱う。
  */
 export function articleJudgeFamily(f: StrategyFamily): StrategyFamily {
   return f === 'components' ? 'cached' : f;
@@ -92,7 +92,7 @@ export function routeFamily(
 
 /**
  * 記事のページ（全員に同じ中身）の描き方の分け方。設定の意味（再検証・ビルドの間隔・API のキャッシュの期間）・
- * 鮮度の判定・SNS のカード・コメントの描き方がこれで決まる（D-107）。記事のページが無いシナリオは undefined
+ * 反映スピードの判定・SNS のカード・コメントの描き方がこれで決まる（D-107）。記事のページが無いシナリオは undefined
  * （フレームワークで決める今までの判定のまま）。
  */
 export function articleFamily(state: {

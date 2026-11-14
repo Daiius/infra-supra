@@ -439,7 +439,7 @@ export const CONTRACT_OPERATIONS: Scenario = {
   unoptimizedImageKB: 2_000,
   resizedImageKB: 400,
   satisfaction: {
-    // 顧客の満足。業務アプリなので画質・鮮度は効かせない
+    // 顧客の満足。業務アプリなので画質・反映スピードは効かせない
     weights: {
       availability: 0.45,
       speed: 0.3,

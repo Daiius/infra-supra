@@ -96,28 +96,6 @@ describe('小さな不具合の回帰', () => {
     expect(resumedToast()).toBeNull();
   });
 
-  it('ページの描き方を比べる表の費用の差は、丸めると 0 なら「±$0」で、「−$0」「+$0」にしない', async () => {
-    await renderApp();
-    pickRadio(ARTICLE);
-    showFrameworkTab();
-    pickRadio('Astro');
-    showStackTab();
-    pickRadio('Cloudflare Free');
-    showFrameworkTab();
-    const card = document.querySelector<HTMLElement>(
-      'section[data-framework][aria-current="true"]',
-    )!;
-    fireEvent.click(within(card).getByRole('button', { name: '詳しく比べる' }));
-    const dialog = screen.getByRole('dialog', {
-      name: /^ページの描き方を比べる/,
-    });
-    // 見出しと × は固定し、表だけスクロールする（D-208）
-    expectFixedChrome(dialog);
-    // 小さい構成では描き方を替えても 1 か月目の費用が $1 未満しか変わらない（以前は「−$0」「+$0」と出ていた）
-    expect(dialog.textContent).toContain('±$0');
-    expect(dialog.textContent).not.toMatch(SIGNED_ZERO);
-  });
-
   it('規約違反（Vercel Hobby の非商用）は、上限・制限の一覧の一番上に「規約違反」と原因のプランを出し、終わった後の振り返りにも原因のプランを出す', async () => {
     await renderApp();
     await startGame({

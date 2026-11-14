@@ -157,7 +157,7 @@ export type RouteTraits = {
   audience: RouteAudience;
   /** HTML に記事ごとのメタタグ（SNS のカード・検索）が要るか。 */
   needsOgp: boolean;
-  /** 鮮度の要件（画面の文。判定の値はシナリオの満足度の freshness）。 */
+  /** 反映スピードの要件（画面の文。判定の値はシナリオの満足度の freshness）。 */
   freshness: string;
   /** ページの中の動きのある部品（画面の文）。 */
   parts: string[];

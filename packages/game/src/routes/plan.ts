@@ -69,7 +69,7 @@ export type RoutePlanRow = {
   route: string;
   label: string;
   audience: RouteAudience;
-  /** ページの性質（SNS のカード・鮮度の要件・部品。D-107）。 */
+  /** ページの性質（SNS のカード・反映スピードの要件・部品。D-107）。 */
   traits: RouteTraits | undefined;
   /** PV の割合（0〜1。テンプレートの値）。 */
   share: number;
@@ -84,7 +84,7 @@ export type RoutePlanRow = {
   detail: string[];
   /** この描き方がこのページの何の要件に応えるか。 */
   why: string;
-  /** フレームワークの既定から外れている理由（選んだ描き方・今の部品で決まった分）。 */
+  /** フレームワークの既定から外れている印（「既定（ISR）から変更」。今の部品で決まった分は理由を括弧で添える。D-219）。 */
   overriddenBy?: string;
   /** ほかの描き方（確かめていない描き方は出さない。RS-04）。 */
   alternatives: RouteAlternative[];
@@ -174,9 +174,9 @@ export function routePlanRows(sc: Scenario, p: RoutePlanInput): RoutePlanRow[] {
       strategyFamily(choice.strategy) === strategyFamily(preset)
         ? undefined
         : chosen
-          ? `選んだ描き方（${FRAMEWORKS[p.framework].label} の既定は「${strategyTitle(preset, p.framework)}」）`
+          ? `既定（${strategyTitle(preset, p.framework)}）から変更`
           : choice.strategy === 'ssr'
-            ? `${slotLabel('isrCache', p.framework)}の部品が「キャッシュしない」`
+            ? `既定（${strategyTitle(preset, p.framework)}）から変更（${slotLabel('isrCache', p.framework)}の部品が「キャッシュしない」）`
             : undefined;
     const alternatives = ROUTE_STRATEGY_ORDER.filter(
       (s) => s !== choice.strategy,

@@ -1,8 +1,9 @@
 // ページごとの描き方の表（D-106・D-107）。始める画面・見積モード・フレームワークのカードで共有する。
 // 行は game の routePlanRows（workloadFor が当てる描き方と同じ）。onSelect を渡すと、描き方の一覧（選んでいるものも含む）からボタンで選べる。
-// status を渡すと、行ごとに要件の判定（鮮度・SNS のカード・1 リクエストの CPU の制限）とほかの描き方の 1 か月目の差を出す。
+// status を渡すと、行ごとに要件の判定（反映スピード・SNS のカード・1 リクエストの CPU の制限）とほかの描き方の 1 か月目の差を出す。
 // 色は見取り図の作られ方の色を流用し、必ず文字を添える。描き方の番号（S1〜S6）は画面に出さず、名前だけにする（D-112）。
 // 始める画面ではフレームワークのカードのページごとにチップ（RouteChips）で選び、表は「詳しく比べる」のダイアログに出す（D-112）。
+import type { ReactNode } from 'react';
 import clsx from 'clsx';
 import type {
   RegionSource,
@@ -80,24 +81,15 @@ function SelectedBody({ r }: { r: RoutePlanRow }) {
   );
 }
 
-/**
- * 行の要件の判定（鮮度・SNS のカード・CPU の制限）。文は ⓘ に畳む。
- * badges: フレームワークのカードのページの欄に出す小さい札（D-112）。表の中は文字の列。
- */
-export function RowStatus({
-  s,
-  variant = 'inline',
-}: {
-  s: RouteRowStatus;
-  variant?: 'inline' | 'badges';
-}) {
+/** 行の要件の判定の項目（反映スピード・SNS のカード・1 リクエストの CPU）。 */
+function statusItems(s: RouteRowStatus) {
   const items: { key: string; mark: string; label: string; text?: string }[] =
     [];
   if (s.freshness)
     items.push({
       key: 'freshness',
       mark: MARK[s.freshness.stage],
-      label: '鮮度',
+      label: '反映スピード',
       text: s.freshness.text,
     });
   if (s.ogp)
@@ -113,6 +105,28 @@ export function RowStatus({
     label: '1 リクエストの CPU',
     ...(s.cpu.text ? { text: s.cpu.text } : {}),
   });
+  return items;
+}
+
+/**
+ * 行の要件の判定（反映スピード・SNS のカード・CPU の制限）。文は ⓘ に畳む。
+ * badges: フレームワークのカードのページの欄に出す小さい札（D-112）。表の中は文字の列。
+ */
+export function RowStatus({
+  s,
+  variant = 'inline',
+  issuesOnly = false,
+}: {
+  s: RouteRowStatus;
+  variant?: 'inline' | 'badges';
+  /**
+   * 問題のある判定（△・✗）だけを、ⓘ なしで出す（フレームワークのカード。満たしている判定と判定の文はカードの ⓘ の RowExplain。D-219）。
+   */
+  issuesOnly?: boolean;
+}) {
+  const all = statusItems(s);
+  const items = issuesOnly ? all.filter((i) => i.mark !== '✓') : all;
+  if (items.length === 0) return null;
   const badges = variant === 'badges';
   const tone = (mark: string) =>
     badges
@@ -126,7 +140,7 @@ export function RowStatus({
         : mark === '△'
           ? 'text-warning'
           : '';
-  return (
+  const list = (
     <ul
       aria-label="要件の判定"
       className={
@@ -142,84 +156,46 @@ export function RowStatus({
           data-ok={i.mark === '✓'}
           className={
             badges
-              ? `badge h-6 gap-0.5 badge-outline badge-sm pr-0 whitespace-nowrap ${i.text ? '' : 'pr-2'} ${tone(i.mark)}`
+              ? `badge h-6 gap-0.5 badge-outline badge-sm pr-0 whitespace-nowrap ${i.text && !issuesOnly ? '' : 'pr-2'} ${tone(i.mark)}`
               : tone(i.mark)
           }
         >
           {i.mark} {i.label}
-          {i.text && <Info label={`${i.label}の判定`}>{i.text}</Info>}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * 行のページの部品（記事のページのコメント欄。D-109）。onChange を渡すとラジオで選べ、渡さなければ今の選択を文字で出す。
- */
-export function RowParts({
-  row,
-  onChange,
-  disabledReason,
-  namePrefix = 'part',
-}: {
-  row: RoutePlanRow;
-  /** ラジオの name の頭（同じ画面に表とカードの両方が出るときに組を分ける）。 */
-  namePrefix?: string;
-  onChange?: (row: RoutePlanRow, part: RoutePartKey, value: number) => void;
-  disabledReason?: (
-    row: RoutePlanRow,
-    part: RoutePartKey,
-    value: number,
-  ) => string | null | undefined;
-}) {
-  if (row.parts.length === 0) return null;
-  const label = (p: RoutePartRow) =>
-    p.options.find((o) => o.value === p.value)?.label ?? '';
-  return (
-    <ul aria-label="ページの部品" className="mt-1 space-y-0.5 text-[11px]">
-      {row.parts.map((p) => (
-        <li key={p.part} data-part={p.part} data-value={p.value}>
-          {onChange ? (
-            <fieldset className="flex flex-wrap items-center gap-x-2">
-              <legend className="contents">
-                <span className="opacity-70">└ {p.label}:</span>
-              </legend>
-              {p.options.map((o) => {
-                const why =
-                  o.value === p.value
-                    ? undefined
-                    : disabledReason?.(row, p.part, o.value);
-                return (
-                  <label
-                    key={o.value}
-                    className={`inline-flex items-center gap-1 ${why ? 'opacity-50' : 'cursor-pointer'}`}
-                    title={why ?? o.flavor}
-                  >
-                    <input
-                      type="radio"
-                      className="radio radio-xs"
-                      name={`${namePrefix}-${row.route}-${p.part}`}
-                      checked={o.value === p.value}
-                      disabled={Boolean(why)}
-                      onChange={() => onChange(row, p.part, o.value)}
-                    />
-                    {o.label}
-                    {why && <span className="opacity-70">（{why}）</span>}
-                  </label>
-                );
-              })}
-              <Info label={`${p.label}の説明`}>{p.note}</Info>
-            </fieldset>
-          ) : (
-            <span className="opacity-70">
-              {p.label}: {label(p)}
-              <Info label={`${p.label}の説明`}>{p.note}</Info>
-            </span>
+          {i.text && !issuesOnly && (
+            <Info label={`${i.label}の判定`}>{i.text}</Info>
           )}
         </li>
       ))}
     </ul>
+  );
+  // カードには問題のある判定だけが出るので、何の札か分かるように見出しを付ける（D-220）
+  if (!issuesOnly) return list;
+  return (
+    <div className="flex flex-wrap items-center gap-1" data-status-issues>
+      <span className="text-xs font-semibold">注意が必要な制限:</span>
+      {list}
+      {/* 札ごとの判定の文は 1 つの ⓘ にまとめる（D-220） */}
+      {items.some((i) => i.text) && (
+        <span className="flex items-center text-xs opacity-80">
+          それぞれの説明
+          <Info label="注意が必要な制限の説明">
+            <ul className="space-y-2">
+              {/* カードの札と同じ色の札で頭を出し、どの札の説明か見分けられるようにする */}
+              {items.map((i) => (
+                <li key={i.key} className="space-y-0.5">
+                  <span
+                    className={`badge h-6 badge-outline badge-sm whitespace-nowrap ${tone(i.mark)}`}
+                  >
+                    {i.mark} {i.label}
+                  </span>
+                  {i.text && <p>{i.text}</p>}
+                </li>
+              ))}
+            </ul>
+          </Info>
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -233,8 +209,6 @@ export function RoutePlanTable({
   onSelect,
   status,
   disabledReason,
-  onPart,
-  partDisabledReason,
 }: {
   rows: RoutePlanRow[];
   caption?: string;
@@ -248,13 +222,6 @@ export function RoutePlanTable({
     alt: RouteAlternative,
   ) => string | null | undefined;
   /** ページの部品（記事のページのコメント欄。D-109）を選ぶ（渡さなければ今の選択を文字で出す）。 */
-  onPart?: (row: RoutePlanRow, part: RoutePartKey, value: number) => void;
-  /** 部品の選択肢を選べない理由（ゲームの途中で手間が足りないなど）。 */
-  partDisabledReason?: (
-    row: RoutePlanRow,
-    part: RoutePartKey,
-    value: number,
-  ) => string | null | undefined;
 }) {
   if (rows.length === 0) return null;
   return (
@@ -301,16 +268,9 @@ export function RoutePlanTable({
                     )}
                     {r.overriddenBy && (
                       <span className="mt-0.5 block text-[11px] text-warning">
-                        既定から変わっている: {r.overriddenBy}
+                        {r.overriddenBy}
                       </span>
                     )}
-                    <RowParts
-                      row={r}
-                      {...(onPart ? { onChange: onPart } : {})}
-                      {...(partDisabledReason
-                        ? { disabledReason: partDisabledReason }
-                        : {})}
-                    />
                     {st && <RowStatus s={st} />}
                   </td>
                   <td className="min-w-48 text-xs opacity-80">{r.why}</td>
@@ -444,9 +404,12 @@ export function RouteChips({
   onSelect,
   disabledReason,
   describe = false,
+  info = true,
 }: {
   row: RoutePlanRow;
   describe?: boolean;
+  /** チップごとの ⓘ を出すか（フレームワークのカードはカードの ⓘ の RowExplain にまとめるので出さない。D-219）。 */
+  info?: boolean;
   onSelect?: ((row: RoutePlanRow, alt: RouteAlternative) => void) | undefined;
   disabledReason?:
     | ((row: RoutePlanRow, alt: RouteAlternative) => string | null | undefined)
@@ -482,7 +445,7 @@ export function RouteChips({
               data-alternative={c.strategy}
               data-available="true"
               data-selected="true"
-              className={`${box} bg-primary/10 pr-0.5 pl-2 font-medium ring-2 ring-primary ring-inset`}
+              className={`${box} bg-primary/10 ${info ? 'pr-0.5' : 'pr-2'} pl-2 font-medium ring-2 ring-primary ring-inset`}
             >
               {onSelect ? (
                 <button
@@ -501,31 +464,26 @@ export function RouteChips({
                   {body}
                 </span>
               )}
-              <Info label={`${r.strategyLabel}の説明`}>
-                {r.strategyTermNote && <p>{r.strategyTermNote}</p>}
-                {describe && <p>{ROUTE_STRATEGIES[r.strategy].long}</p>}
-                <p>{r.why}</p>
-                {r.detail.length > 0 && (
-                  <ul className="list-disc pl-5">
-                    {r.detail.map((d) => (
-                      <li key={d}>{d}</li>
-                    ))}
-                  </ul>
-                )}
-              </Info>
+              {info && (
+                <Info label={`${r.strategyLabel}の説明`}>
+                  <SelectedExplain row={r} describe={describe} />
+                </Info>
+              )}
             </li>
           );
         }
         const a = c.alt;
         const why = a.available ? disabledReason?.(r, a) : undefined;
         const pick = onSelect && a.available && !why;
+        // カード（info={false}）では選べない描き方にも ⓘ を付けず、ページの欄の下の「選べない選択肢について」にまとめる（D-220）
+        const showInfo = info;
         return (
           <li
             key={a.strategy}
             data-alternative={a.strategy}
             data-available={a.available}
             data-selected="false"
-            className={`${box} pr-0.5 pl-2 ring-1 ring-base-300 ring-inset ${
+            className={`${box} ${showInfo ? 'pr-0.5' : 'pr-2'} pl-2 ring-1 ring-base-300 ring-inset ${
               pick ? 'bg-base-100 hover:bg-base-200' : 'bg-base-200 opacity-50'
             }`}
           >
@@ -556,20 +514,219 @@ export function RouteChips({
                 </span>
               </span>
             )}
-            <Info
-              label={`${a.label}${a.available ? 'の説明' : 'が使えない理由'}`}
-            >
-              {why && <p className="font-semibold">{why}</p>}
-              {a.termNote && <p>{a.termNote}</p>}
-              <p>
-                {a.reason}
-                {a.basis === 'assumption' && '（ゲーム上の仮定）'}
-              </p>
-            </Info>
+            {showInfo && (
+              <Info
+                label={`${a.label}${a.available ? (why ? 'が選べない理由' : 'の説明') : 'が使えない理由'}`}
+              >
+                {why && <p className="font-semibold">{why}</p>}
+                {a.termNote && <p>{a.termNote}</p>}
+                <p>
+                  {a.reason}
+                  {a.basis === 'assumption' && '（ゲーム上の仮定）'}
+                </p>
+              </Info>
+            )}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** 行の選べない描き方と理由（使えない描き方は使えない理由）。カードの「選べない選択肢について」に使う。 */
+export function unavailableOf(
+  r: RoutePlanRow,
+): { label: string; why: string }[] {
+  return choicesOf(r).flatMap((c) =>
+    c.kind === 'selected' || c.alt.available
+      ? []
+      : [
+          {
+            label: c.alt.label,
+            why: `${c.alt.reason}${c.alt.basis === 'assumption' ? '（ゲーム上の仮定）' : ''}`,
+          },
+        ],
+  );
+}
+
+/**
+ * 選べない選択肢の理由を、1 つの ⓘ にまとめる（フレームワークのカードのページの欄の下。チップごとに ⓘ を並べない。D-220）。
+ * 描き方そのものの説明は入れず、選べない理由だけを出す。無ければ何も出さない。
+ */
+export function UnavailableInfo({
+  items,
+}: {
+  items: { label: string; why: string }[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <p className="flex items-center gap-1 text-xs opacity-80" data-unavailable>
+      選べない選択肢について
+      <Info label="選べない選択肢について">
+        <ul className="space-y-1">
+          {items.map((i) => (
+            <li key={i.label}>
+              <span className="font-semibold">{i.label}</span>: {i.why}
+            </li>
+          ))}
+        </ul>
+      </Info>
+    </p>
+  );
+}
+
+/** 選んでいる描き方の説明（チップの ⓘ とカードの ⓘ の RowExplain で共用）。 */
+function SelectedExplain({
+  row: r,
+  describe,
+}: {
+  row: RoutePlanRow;
+  describe: boolean;
+}) {
+  return (
+    <>
+      {r.strategyTermNote && <p>{r.strategyTermNote}</p>}
+      {describe && <p>{ROUTE_STRATEGIES[r.strategy].long}</p>}
+      <p>{r.why}</p>
+      {r.detail.length > 0 && (
+        <ul className="list-disc pl-5">
+          {r.detail.map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+/**
+ * フレームワークのカードの ⓘ の「詳しい説明」（D-219）。描き方ごとに畳み、ページをまたいで共通にする（D-220）:
+ * 折りたたみの中は、描き方そのものの説明（呼び名の補足・長い説明）と、ページごとの扱い（選択中ならなぜ・値・extra、
+ * 選べるならその描き方での注記、使えないなら理由）。要件の判定の文はカードの「それぞれの説明」に出すので、ここには出さない。
+ * 並びは ROUTE_STRATEGY_ORDER で、どれかのページで選んでいる描き方を開く前から目立たせる。
+ */
+export function StrategyExplain({
+  rows,
+  extraOf,
+}: {
+  rows: RoutePlanRow[];
+  /** ページの選んでいる描き方の中に添えるもの（ページの札・フレームワークの説明の行・設定の説明）。 */
+  extraOf?: (route: string) => ReactNode;
+}) {
+  type Entry = {
+    route: string;
+    page: string;
+    kind: 'selected' | 'available' | 'unavailable';
+    row: RoutePlanRow;
+    alt?: RouteAlternative;
+  };
+  const byStrategy = new Map<
+    string,
+    { label: string; termNote?: string; entries: Entry[] }
+  >();
+  const add = (
+    s: string,
+    label: string,
+    termNote: string | undefined,
+    e: Entry,
+  ) => {
+    const x = byStrategy.get(s) ?? {
+      label,
+      ...(termNote ? { termNote } : {}),
+      entries: [],
+    };
+    x.entries.push(e);
+    byStrategy.set(s, x);
+  };
+  for (const r of rows)
+    for (const c of choicesOf(r)) {
+      if (c.kind === 'selected')
+        add(r.strategy, r.strategyLabel, r.strategyTermNote, {
+          route: r.route,
+          page: r.label,
+          kind: 'selected',
+          row: r,
+        });
+      else
+        add(c.alt.strategy, c.alt.label, c.alt.termNote, {
+          route: r.route,
+          page: r.label,
+          kind: c.alt.available ? 'available' : 'unavailable',
+          row: r,
+          alt: c.alt,
+        });
+    }
+  const fold = 'collapse collapse-arrow rounded-box border border-base-300';
+  const title =
+    'collapse-title flex min-h-0 flex-wrap items-center gap-1.5 py-2 pr-8 pl-3 text-sm font-medium';
+  return (
+    <div className="space-y-1.5" data-strategy-explains>
+      {ROUTE_STRATEGY_ORDER.filter((s) => byStrategy.has(s)).map((s) => {
+        const x = byStrategy.get(s)!;
+        const selectedIn = x.entries.filter((e) => e.kind === 'selected');
+        return (
+          <details
+            key={s}
+            className={clsx(fold, selectedIn.length > 0 && 'bg-primary/5')}
+            data-strategy-explain={s}
+            data-selected-in={selectedIn.map((e) => e.route).join(' ')}
+          >
+            <summary className={title}>
+              <Swatch strategy={s as RoutePlanRow['strategy']} className="" />
+              {x.label}
+              {selectedIn.map((e) => (
+                <span
+                  key={e.route}
+                  className="badge h-4 badge-xs px-1 badge-primary"
+                >
+                  {e.page}で選択中
+                </span>
+              ))}
+            </summary>
+            <div className="collapse-content space-y-2 px-3 text-sm">
+              {x.termNote && <p>{x.termNote}。</p>}
+              <p>{ROUTE_STRATEGIES[s as RoutePlanRow['strategy']].long}</p>
+              <ul className="space-y-2">
+                {x.entries.map((e) => (
+                  <li
+                    key={e.route}
+                    className="space-y-1"
+                    data-page-entry={e.route}
+                  >
+                    <p className="font-semibold">
+                      {e.page}:{' '}
+                      {e.kind === 'selected'
+                        ? '選択中'
+                        : e.kind === 'available'
+                          ? '選べる'
+                          : '使えない'}
+                    </p>
+                    {e.kind === 'selected' ? (
+                      <>
+                        <p>{e.row.why}</p>
+                        {e.row.detail.length > 0 && (
+                          <ul className="list-disc pl-5">
+                            {e.row.detail.map((d) => (
+                              <li key={d}>{d}</li>
+                            ))}
+                          </ul>
+                        )}
+                        {extraOf?.(e.route)}
+                      </>
+                    ) : (
+                      <p>
+                        {e.alt!.reason}
+                        {e.alt!.basis === 'assumption' && '（ゲーム上の仮定）'}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </details>
+        );
+      })}
+    </div>
   );
 }
 

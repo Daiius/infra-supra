@@ -158,7 +158,7 @@ describe('ゲーム中の移し替え（データの移行）', () => {
 });
 
 describe('KV を DB にした構成から API を移す（OCL-5A7916E6）', () => {
-  it('移し替えが済むと構成の DB の選択は既定に戻り、KV の鮮度の低下も消える', () => {
+  it('移し替えが済むと構成の DB の選択は既定に戻り、KV の反映スピードの低下も消える', () => {
     let s = playMonth(spaGame(CF_PAID, { db: 'kv' }));
     const kvMonth = s.history[0]!;
     expect(kvMonth.satisfaction.stages.freshness).not.toBe('good');

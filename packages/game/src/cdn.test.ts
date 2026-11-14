@@ -46,7 +46,7 @@ describe('前段の CDN', () => {
     );
   });
 
-  it('HTML も・時間の再検証: 更新は最大で間隔の約 2 倍遅れる（5 分 → 10 分で鮮度が 1 段下がる。D-91）', () => {
+  it('HTML も・時間の再検証: 更新は最大で間隔の約 2 倍遅れる（5 分 → 10 分で反映スピードが 1 段下がる。D-91）', () => {
     // 時間の再検証（5 分）で始める（既定は VPS ではオンデマンド。D-125）
     const s = playMonth(
       newGame(
@@ -105,7 +105,7 @@ describe('前段の CDN', () => {
     expect(last(html).infraCost).toBeCloseTo(last(stat).infraCost, 6);
   });
 
-  it('HTML も: SPA はシェル、Astro は記事の静的なページを CDN が返す（鮮度は変わらない。D-91）', () => {
+  it('HTML も: SPA はシェル、Astro は記事の静的なページを CDN が返す（反映スピードは変わらない。D-91）', () => {
     for (const fw of ['vite-spa', 'astro'] as const) {
       const start = (option: string) =>
         playMonth(

@@ -90,7 +90,7 @@ describe('フレームワークの選択', () => {
     expect(app.some((l) => l.includes(`月 ${perUser} 件`))).toBe(true);
   });
 
-  it('SPA は記事が常に新しく（鮮度は良い）、記事コミュニティでは初回表示が速さに効く', () => {
+  it('SPA は記事が常に新しく（反映スピードは良い）、記事コミュニティでは初回表示が速さに効く', () => {
     const s = playMonth(
       newGame(1, 42, article, DEFAULT_START_DATE, 'vite-spa'),
     );
@@ -131,7 +131,7 @@ describe('SPA の API の応答のキャッシュ（D-37）', () => {
     expect(hiddenSettings(c)).toContain('apiCacheTtl');
   });
 
-  it('キャッシュすると記事は期間だけ古く見え、期間を延ばすと鮮度が下がる', () => {
+  it('キャッシュすると記事は期間だけ古く見え、期間を延ばすと反映スピードが下がる', () => {
     let s = applyActions(spaGame(VERCEL_PRO), [
       { type: 'component', slot: 'apiCache', option: 'cdn' },
       { type: 'set', key: 'apiCacheTtl', value: 21600 },
@@ -303,7 +303,7 @@ describe('Astro（D-68）', () => {
     expect(r.satisfaction.reasons.freshness).toContain('Hosting の CDN');
   });
 
-  it('記事のキャッシュの期限を延ばすと鮮度が下がる（理由は「記事のキャッシュの期限」）', () => {
+  it('記事のキャッシュの期限を延ばすと反映スピードが下がる（理由は「記事のキャッシュの期限」）', () => {
     let s = applyActions(astro(), [
       { type: 'set', key: 'pageCache', value: 21600 },
     ]);

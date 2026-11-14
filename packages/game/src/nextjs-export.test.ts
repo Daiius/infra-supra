@@ -92,7 +92,7 @@ describe('Next.js の静的書き出し（D-80）', () => {
     expect(ex(VERCEL_PRO, contract).components.images).toBe('default');
   });
 
-  it('revalidateSec は「ビルドの間隔」として出し、延ばすと鮮度が下がる。即時反映の要件は記事の更新ごとのビルドで満たす（仮定）', () => {
+  it('revalidateSec は「ビルドの間隔」として出し、延ばすと反映スピードが下がる。即時反映の要件は記事の更新ごとのビルドで満たす（仮定）', () => {
     const s = ex();
     expect(hiddenSettings(s)).toEqual(
       expect.arrayContaining(['isr', 'apiCacheTtl']),
@@ -117,7 +117,7 @@ describe('Next.js の静的書き出し（D-80）', () => {
   });
 
   // D-117 でメールの通数から Bot の PV を除き、所持金がわずかに増えて記事は 17 → 18 / 20
-  it('CF Paid は何もしないで、受託はシード 1〜20 のすべてで合格する。記事は新しい記事がビルドまで開けない分（D-104）だけ鮮度が下がり、20 → 18 / 20', () => {
+  it('CF Paid は何もしないで、受託はシード 1〜20 のすべてで合格する。記事は新しい記事がビルドまで開けない分（D-104）だけ反映スピードが下がり、20 → 18 / 20', () => {
     const failing = (sc: typeof article) => {
       const out: number[] = [];
       for (let seed = 1; seed <= 20; seed++)
@@ -129,7 +129,7 @@ describe('Next.js の静的書き出し（D-80）', () => {
     expect(failing(article).length).toBe(2);
   });
 
-  it('記事: 鮮度の遅れは間隔 + ビルドの時間（記事 2,000 ページで 2 分）。新しい記事はビルドまで開けないので、投稿した人の許容（1 分）を超えて 1 段下げる（D-104）', () => {
+  it('記事: 反映スピードの遅れは間隔 + ビルドの時間（記事 2,000 ページで 2 分）。新しい記事はビルドまで開けないので、投稿した人の許容（1 分）を超えて 1 段下げる（D-104）', () => {
     expect(article.satisfaction.freshness.newPostVisibleSec).toBe(60);
     // 既定の 5 分: 遅れ 5 分 + 2 分 = 7 分で「普通」、さらに 1 段下げて「悪い」
     const r = ex().history[0]!;

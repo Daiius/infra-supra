@@ -64,7 +64,7 @@ describe('部品の差し替え', () => {
     );
     const next = playMonth(a);
     expect(last(next).components.isrCache).toBe('none');
-    // キャッシュしないと記事は常に新しい（鮮度は良い）
+    // キャッシュしないと記事は常に新しい（反映スピードは良い）
     expect(last(next).satisfaction.stages.freshness).toBe('good');
   });
 
@@ -93,7 +93,7 @@ describe('部品の差し替え', () => {
     expect(last(after).components.db).toBe('hyperdrive');
   });
 
-  it('KV を DB の代わりにすると、鮮度が 1 段下がり、同じキーの書き込みの前提が仮定の印つきで出る', () => {
+  it('KV を DB の代わりにすると、反映スピードが 1 段下がり、同じキーの書き込みの前提が仮定の印つきで出る', () => {
     const s = until(CF_PAID, 3, 42, (x) =>
       x.history.length === 1 ? [comp('db', 'kv')] : [],
     );

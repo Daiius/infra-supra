@@ -177,7 +177,7 @@ export const SETTINGS = {
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
     note:
-      `作り直しの回数に効きます。間隔を延ばすと記事の更新が遅れて見え、鮮度（満足度）が下がります。「${NEXT_ON_DEMAND}」は記事の更新のときに再検証します（作り直しはおもに更新の回数です。ISR のキャッシュの置き場所によっては再検証が届きません。時間からの切り替えは実装の手間がかかります）。` +
+      `作り直しの回数に効きます。間隔を延ばすと記事の更新が遅れて見え、反映スピード（満足度）が下がります。「${NEXT_ON_DEMAND}」は記事の更新のときに再検証します（作り直しはおもに更新の回数です。ISR のキャッシュの置き場所によっては再検証が届きません。時間からの切り替えは実装の手間がかかります）。` +
       ON_DEMAND_MAX_AGE_NOTE,
     options: [
       {
@@ -198,7 +198,7 @@ export const SETTINGS = {
     label: 'API のキャッシュの期間',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: 'API の応答のキャッシュを使うときだけ効きます。延ばすとヒットが増えて取り直しが減りますが、記事の更新が遅れて見え、鮮度（満足度）が下がります',
+    note: 'API の応答のキャッシュを使うときだけ効きます。延ばすとヒットが増えて取り直しが減りますが、記事の更新が遅れて見え、反映スピード（満足度）が下がります',
     options: [
       { value: 60, label: '1 分' },
       { value: 300, label: '5 分' },
@@ -214,7 +214,7 @@ export const SETTINGS = {
     label: 'ビルドの間隔',
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
-    note: '記事の投稿・編集をまとめてビルドし直す間隔です。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効きます。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、鮮度（満足度）が下がります。新しく投稿された記事は、ビルドが終わるまでページがありません（投稿した人がすぐ開けない）。「更新のたびにビルド」は記事を更新するたびにビルドします（ビルドの時間より短くはまとまらない）',
+    note: '記事の投稿・編集をまとめてビルドし直す間隔です。ビルドの回数と時間（Workers Builds・Vercel のビルドの料金）に効きます。記事の更新は間隔にビルドの時間を足した分だけ遅れて見え、反映スピード（満足度）が下がります。新しく投稿された記事は、ビルドが終わるまでページがありません（投稿した人がすぐ開けない）。「更新のたびにビルド」は記事を更新するたびにビルドします（ビルドの時間より短くはまとまらない）',
     options: [
       {
         value: ON_DEMAND_REVALIDATE,
@@ -235,7 +235,7 @@ export const SETTINGS = {
     field: 'revalidateSec',
     effort: EFFORT.setting.isr,
     note:
-      `記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュします。「${ASTRO_ON_DEMAND}」は記事の投稿・編集のときにそのページのキャッシュを消します（Astro の Route caching。消せない置き場では届かず、古いページが出ます）。時間はキャッシュの期限で、延ばすと描き直しが減りますが、記事の更新が遅れて見え、鮮度（満足度）が下がります。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗ります（Workers の 1 リクエストの CPU の上限に効く）。` +
+      `記事のページは閲覧のときにサーバーが描き、前段（Cloudflare は Workers Cache・Vercel は ISR・VPS は Node のメモリ・Google Cloud は Hosting の CDN）にキャッシュします。「${ASTRO_ON_DEMAND}」は記事の投稿・編集のときにそのページのキャッシュを消します（Astro の Route caching。消せない置き場では届かず、古いページが出ます）。時間はキャッシュの期限で、延ばすと描き直しが減りますが、記事の更新が遅れて見え、反映スピード（満足度）が下がります。消した・期限が切れた後の最初の閲覧は描き終わるのを待つので、その閲覧に描画の CPU の全部が乗ります（Workers の 1 リクエストの CPU の上限に効く）。` +
       ON_DEMAND_MAX_AGE_NOTE,
     options: [
       {

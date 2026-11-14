@@ -116,11 +116,11 @@ export function judgeMonth(
   const spaFramework = state.framework === 'vite-spa';
   const spa = fam !== undefined ? fam === 'api' : spaFramework;
   const astro = state.framework === 'astro';
-  // Next.js の静的書き出し（D-80）: 記事は静的なページ（鮮度はビルドの間隔）、マイページの中身は SPA と同じく API
+  // Next.js の静的書き出し（D-80）: 記事は静的なページ（反映スピードはビルドの間隔）、マイページの中身は SPA と同じく API
   const nextExport = state.framework === 'nextjs-export';
   const rebuilds = fam !== undefined ? fam === 'static' : nextExport;
   const ssrArticle = fam === 'ssr';
-  // Astro の記事は閲覧のときに描いて事業者の置き場にキャッシュする（D-103）。キャッシュしない形は無く、鮮度は Next.js の ISR と同じ
+  // Astro の記事は閲覧のときに描いて事業者の置き場にキャッシュする（D-103）。キャッシュしない形は無く、反映スピードは Next.js の ISR と同じ
   // （オンデマンドで消す・期限で取り直す）。置き場は事業者で決まるので、ISR のキャッシュの部品の選択は見ない
   const cacheComps: Choices = astro
     ? { ...comps, isrCache: astroPageCacheChoice(platformNow) }
