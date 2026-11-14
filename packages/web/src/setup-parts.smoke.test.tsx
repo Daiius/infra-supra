@@ -226,7 +226,8 @@ describe('ゲームモードの画面', () => {
     // DB の箱を押すと選択肢の吹き出しが出て、focus が移る（キーボードで続けて選べる）。同じ事業者の部品が先、他の事業者はロゴ付き
     fireEvent.click(dbBox()!);
     let popover = screen.getByRole('dialog', { name: /を替える$/ });
-    expect(document.activeElement).toBe(popover);
+    // ダイアログ（showModal）で出す。focus はブラウザがダイアログの中へ移す（jsdom の補いでは移らないので見ない。D-221）
+    expect(popover.tagName).toBe('DIALOG');
     let swap = within(popover).getByRole('group', { name: 'DBを替える' });
     const options = within(swap).getAllByRole('button');
     expect(options[0]!.textContent).toMatch(/^Supabase/);

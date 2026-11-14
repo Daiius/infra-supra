@@ -532,11 +532,12 @@ export function PartOptions({
                 aria-label={`${o.label}${why ? `（${why}）` : ''}`}
                 className={clsx(
                   'flex w-full min-w-0 items-start gap-1.5 rounded-field px-2 py-1 text-left text-xs focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary',
+                  // 説明の文と見分けられるよう、どの選択肢も枠で囲む（選んでいるものは太い枠と塗り）
                   selected
                     ? 'bg-primary/10 font-medium ring-2 ring-primary ring-inset'
                     : why
-                      ? 'cursor-default opacity-50'
-                      : 'cursor-pointer hover:bg-base-200',
+                      ? 'cursor-default bg-base-200 opacity-50 ring-1 ring-base-300 ring-inset'
+                      : 'cursor-pointer bg-base-100 ring-1 ring-base-300 ring-inset hover:bg-base-200',
                 )}
                 onClick={() => {
                   if (selected || why !== null) return;

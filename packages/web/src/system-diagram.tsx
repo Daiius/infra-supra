@@ -3,7 +3,7 @@
 // 線は流れ（ページの描き方・API・画像）ごとに色の違う細い線を並べ（路線図の形）、凡例を押すとその流れだけを目立たせる。
 // SVG は role="img" で要約を名前にし、箱とつながりの一覧を読み上げ用に別に置く（色だけに頼らない）。
 // 入れ物が狭い（sm 未満で、横の図が縮めずには収まらない）ときは縦の図にする: 段を上→下・事業者の枠を左→右に並べ、
-// 箱は短い名前だけにし、箱を押す（キーボードは Enter・Space）と詳しい説明（事業者・種類・名前・通る流れ）を出す（D-105 の補足）。
+// 箱は短い名前だけにし、箱を押す（キーボードは Enter・Space）と詳しい説明（事業者・種類・名前）を出す（D-105 の補足。通る流れの色の凡例は構成のカードの ⓘ にあるので吹き出しには出さない。D-221）。
 // 部品を差し替えられる箱（parts。始める画面・見積の選んでいる構成のカード）は、横の図でも押せて、そのスロットの選択肢を出す（D-116）。
 // 図の一番下の段には、経路に載らない部品（メールの送信・バックアップなど）と、図に箱を持たないスロット（1 択など）を並べ、
 // 部品を選べる図ではそこからも選べる（どのスロットも図の中で選べる。D-116 の補足・2 つの表示）。
@@ -29,7 +29,6 @@ import {
   edgeGeometry,
   isNarrow,
   labelOf,
-  lanesThrough,
   looseSlots,
   nodeSlots,
   ARROW,
@@ -159,18 +158,6 @@ const GHOST_TEXT = 'text-base-content/50';
 const GHOST_NOTE =
   '今の選択は、課金される部品を図に持ちません（別の部品の中で働くか、使わない）。箱だけを点線で残し、経路の線は引きません。';
 
-/** 幽霊の箱の吹き出しの中身（スロットの名前・今の選択・説明）。 */
-function GhostDetail({ n }: { n: DiagramNode }) {
-  return (
-    <>
-      <div className="text-xs opacity-80">{GHOST_NOTE}</div>
-      {n.ghost?.note && (
-        <div className="text-xs opacity-70">{n.ghost.note}</div>
-      )}
-    </>
-  );
-}
-
 /** 箱の吹き出しで選んだ後に focus を移す先（スロットと、押した箱の id。data-box）。 */
 export type BoxFocus = { slot: string; box: string };
 
@@ -223,7 +210,7 @@ export function SystemDiagram({
   focusTarget?: BoxFocus | null | undefined;
   onFocused?: (() => void) | undefined;
 }) {
-  // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。カルーセルのカード・畳んだ欄の中でも同じ判定）
+  // 入れ物の幅を測り、狭ければ縦の図にする（画面の幅でなく入れ物の幅。構成のカード・畳んだ欄の中でも同じ判定）
   const wrap = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
   useLayoutEffect(() => {
@@ -576,7 +563,6 @@ function BandNode({
         <Popover
           label={`${visible}${suffix}`}
           nameFromContent
-          interactive
           className={pressableBadge(warn)}
           trigger={
             warn ? (
@@ -605,7 +591,6 @@ function BandNode({
                 {title}・{n.caption}
               </div>
               <div className="font-semibold">{n.label}</div>
-              {n.ghost && <GhostDetail n={n} />}
               {slots.map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
                   {parts.render(slot, close, n.id)}
@@ -653,7 +638,6 @@ function LooseSlot({
         <Popover
           label={`${x.label}: ${x.picked ?? '未選択'}${swapSuffix()}`}
           nameFromContent
-          interactive
           className={pressableBadge(warn)}
           trigger={
             warn ? (
@@ -954,9 +938,6 @@ function CompactNode({
 }) {
   const slots = parts?.slotsOf(n.id) ?? [];
   const warn = hasUnselected(parts, n.id);
-  const lanes = lanesThrough(model, n.id);
-  const laneLabel = (l: LaneId) =>
-    model.lanes.find((x) => x.id === l)?.label ?? l;
   // 名前は見えている短い名前で始め、正式の名前・スロット・事業者・未選択を後ろに足す（D-196）
   const suffix = nameSuffix(
     [
@@ -1004,7 +985,6 @@ function CompactNode({
         <Popover
           label={`${n.short}${suffix}`}
           hiddenName
-          interactive={slots.length > 0}
           // 枠は上の rect が描く。ボタンにも同じ太さの透明の枠を持たせ、ホバーの輪（inset）を枠の内側に置く（前と同じ見た目）。
           // 名前は真ん中のまま、右上の印（!・⇄）は箱の角に重ねる（印の分の余白は取らず、1 行目を短くして避ける。compactText）
           className={clsx(
@@ -1050,35 +1030,10 @@ function CompactNode({
                   {t}。
                 </div>
               ))}
-              {n.ghost && <GhostDetail n={n} />}
               {n.compute && (
                 <div className="text-xs opacity-70">
                   処理を動かす部品（太い枠）
                 </div>
-              )}
-              {lanes.length > 0 && (
-                <ul className="space-y-0.5 text-xs" aria-label="通る流れ">
-                  {lanes.map((l) => (
-                    <li key={l} className="flex items-center gap-1.5">
-                      <svg
-                        aria-hidden
-                        width="14"
-                        height="6"
-                        className="shrink-0"
-                      >
-                        <line
-                          x1="0"
-                          x2="14"
-                          y1="3"
-                          y2="3"
-                          style={{ stroke: LANE_COLOR[l], strokeWidth: 2.5 }}
-                          strokeDasharray={LANE_DASH[l]}
-                        />
-                      </svg>
-                      {laneLabel(l)}
-                    </li>
-                  ))}
-                </ul>
               )}
               {slots.map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
@@ -1164,7 +1119,6 @@ function SwappableNode({
           // 名前は見えている「スロット：部品」で始め、事業者・未選択を後ろに足す（D-196）。sr-only（position: absolute）は
           // foreignObject の中に置けないので、名前は hidden の要素から取る（D-213）
           hiddenName
-          interactive
           // ホバーで primary の枠を太くし、地を薄く塗る（押せる箱だと分かるように。D-116）。未選択の箱は警告色。
           // 右の余白（pr-5）は右上の印の分
           className={`flex h-full w-full cursor-pointer flex-col justify-center rounded-md py-0.5 pr-5 pl-0.5 text-left leading-tight hover:ring-2 hover:ring-inset focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
@@ -1209,7 +1163,6 @@ function SwappableNode({
                 {title}・{n.caption}
               </div>
               <div className="font-semibold">{n.label}</div>
-              {n.ghost && <GhostDetail n={n} />}
               {parts.slotsOf(n.id).map((slot) => (
                 <div key={slot} className="border-t border-base-300 pt-1.5">
                   {parts.render(slot, close, n.id)}
