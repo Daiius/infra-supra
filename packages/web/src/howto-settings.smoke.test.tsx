@@ -27,7 +27,7 @@ const openSettings = () => {
 };
 
 describe('遊び方と設定', () => {
-  it('W-88 初回はゲームモードで遊び方が自動で開き、全ページに図がある。「始める」で閉じると記録し、再読み込みでは開かない', async () => {
+  it('W-88 初回はゲームモードで遊び方が 1 ページ目だけで自動で開き、「詳しい説明を見る」で全ページを送れる。全ページに図がある。「始める」で閉じると記録し、再読み込みでは開かない', async () => {
     forgetHowto();
     await renderApp();
     const d = howto()!;
@@ -38,8 +38,32 @@ describe('遊び方と設定', () => {
     expect(premise).toContain('2026-10-31');
     expect(premise).toContain(`1 USD = ${USD_JPY} 円`);
     expect(premise).toContain('障害の影響');
-    const titles: string[] = [];
-    for (let i = 0; i < HOWTO_PAGES.length; i++) {
+    // 初回は 1 ページ目だけ: ページ送りを出さず、「始める」と「詳しい説明を見る」だけ
+    expect(d.querySelector('[data-howto-dots]')).toBeNull();
+    expect(within(d).queryByRole('button', { name: '次へ →' })).toBeNull();
+    expect(within(d).getByRole('button', { name: '始める' })).toBeDefined();
+    // 1 ページ目は段（構成を選ぶ → 毎月の運営 → 振り返り）の図で見せる。段を押すとその段に移る
+    expect(d.textContent).not.toContain('記事のコミュニティ');
+    expect(d.querySelectorAll('[data-howto-figure]').length).toBe(1);
+    expect(d.querySelector('[data-howto-growth]')).not.toBeNull();
+    const steps = d.querySelector<HTMLElement>('[data-howto-steps]')!;
+    expect(
+      within(steps).getByRole('button', { current: 'step' }).textContent,
+    ).toBe('構成を選ぶ');
+    fireEvent.click(within(steps).getByRole('button', { name: '振り返り' }));
+    expect(
+      within(steps).getByRole('button', { current: 'step' }).textContent,
+    ).toBe('振り返り');
+    expect(
+      within(d).getByRole('button', { name: '自動で進める' }),
+    ).toBeDefined();
+    const titles: string[] = [
+      within(d).getByRole('heading', { level: 3 }).textContent!,
+    ];
+    fireEvent.click(
+      within(d).getByRole('button', { name: /^詳しい説明を見る/ }),
+    );
+    for (let i = 1; i < HOWTO_PAGES.length; i++) {
       const page = d.querySelector<HTMLElement>('[data-howto-page]')!;
       expect(page.getAttribute('data-howto-page')).toBe(String(i + 1));
       titles.push(within(page).getByRole('heading', { level: 3 }).textContent!);
@@ -84,7 +108,7 @@ describe('遊び方と設定', () => {
     expect(howto()).toBeNull();
   });
 
-  it('W-90 設定の「遊び方を見る」とヘッダーの「遊び方」で 1 ページ目から開く（最後のボタンは「閉じる」）', async () => {
+  it('W-90 設定の「遊び方を見る」とヘッダーの「遊び方」でも 1 ページ目だけで開き、すぐ「閉じる」で閉じられる。詳しい説明は押したときだけ送れる', async () => {
     await renderApp();
     expect(howto()).toBeNull();
     const s = openSettings();
@@ -94,12 +118,21 @@ describe('遊び方と設定', () => {
     expect(
       d.querySelector('[data-howto-page]')!.getAttribute('data-howto-page'),
     ).toBe('1');
+    // 1 ページ目だけ: ページ送りは出さず、閉じるボタンが主のボタン（初回ではないので「始める」ではない）
+    expect(d.querySelector('[data-howto-dots]')).toBeNull();
+    expect(within(d).queryByRole('button', { name: '始める' })).toBeNull();
+    expect(
+      within(d).getByRole('button', { name: '閉じる' }).className,
+    ).toContain('btn-primary');
+    // 詳しい説明を開くと最後のページまで送れ、どのページでも閉じられる
+    fireEvent.click(
+      within(d).getByRole('button', { name: /^詳しい説明を見る/ }),
+    );
     fireEvent.click(
       within(d).getByRole('button', {
         name: `${HOWTO_PAGES.length} ページ目: ${HOWTO_PAGES.at(-1)!.title}`,
       }),
     );
-    expect(within(d).queryByRole('button', { name: '始める' })).toBeNull();
     fireEvent.click(within(d).getByRole('button', { name: '閉じる' }));
     expect(howto()).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '遊び方' }));
@@ -146,11 +179,7 @@ describe('遊び方と設定', () => {
     ).toBeNull();
     const d = howto()!;
     expect(d).not.toBeNull();
-    fireEvent.click(
-      within(d).getByRole('button', {
-        name: `${HOWTO_PAGES.length} ページ目: ${HOWTO_PAGES.at(-1)!.title}`,
-      }),
-    );
+    // 初回の扱い（1 ページ目だけ）で開き、「始める」で閉じる
     fireEvent.click(within(d).getByRole('button', { name: '始める' }));
     expect(appKeys(localStorage)).toEqual([HOWTO_SEEN_KEY]);
   });
