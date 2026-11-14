@@ -3,6 +3,7 @@
 // status を渡すと、行ごとに要件の判定（鮮度・SNS のカード・1 リクエストの CPU の制限）とほかの描き方の 1 か月目の差を出す。
 // 色は見取り図の作られ方の色を流用し、必ず文字を添える。描き方の番号（S1〜S6）は画面に出さず、名前だけにする（D-112）。
 // 始める画面ではフレームワークのカードのページごとにチップ（RouteChips）で選び、表は「詳しく比べる」のダイアログに出す（D-112）。
+import clsx from 'clsx';
 import type {
   RegionSource,
   RouteAlternative,
@@ -375,11 +376,11 @@ export function RoutePlanTable({
                             data-alternative={a.strategy}
                             data-available={a.available}
                             data-selected="false"
-                            className={`inline-flex items-center gap-1 rounded border border-base-300 text-[11px] ${
-                              a.available
-                                ? ''
-                                : 'bg-base-200 px-1 py-0.5 opacity-50'
-                            }`}
+                            className={clsx(
+                              'inline-flex items-center gap-1 rounded border border-base-300 text-[11px]',
+                              !a.available &&
+                                'bg-base-200 px-1 py-0.5 opacity-50',
+                            )}
                           >
                             {pick ? (
                               <button
@@ -393,7 +394,10 @@ export function RoutePlanTable({
                               </button>
                             ) : (
                               <span
-                                className={`inline-flex items-center gap-1 ${a.available ? 'px-1 py-0.5' : ''}`}
+                                className={clsx(
+                                  'inline-flex items-center gap-1',
+                                  a.available && 'px-1 py-0.5',
+                                )}
                               >
                                 {body}
                               </span>

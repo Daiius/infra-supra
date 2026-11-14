@@ -1,6 +1,7 @@
 // ページの見取り図（D-102）。区画と作られ方はシナリオのデータ（ScenarioText.wireframes）から読み、
 // 選んだフレームワークと記事のページの部品「コメント欄」（D-82・D-109）で game の pageWireframes が解く。ここはフレームワークを知らない。
 // 区画は daisyUI の skeleton を使わない（読み込み中の印で、光る動きと塗りが作られ方の色を消すため）。札は badge。
+import clsx from 'clsx';
 import {
   REGION_NEEDS,
   REGION_SOURCES,
@@ -192,7 +193,7 @@ export function ScenarioWireframes({
   if (pages.length === 0) return null;
   return (
     <div className="space-y-2">
-      <div className={`grid gap-3 ${pages.length > 1 ? 'md:grid-cols-2' : ''}`}>
+      <div className={clsx('grid gap-3', pages.length > 1 && 'md:grid-cols-2')}>
         {pages.map((p) => {
           const caption = captionOf?.(p);
           return (

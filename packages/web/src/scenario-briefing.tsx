@@ -1,4 +1,5 @@
 // 始める画面のシナリオの選択と説明（D-33・prd/09 E-5・E-6）と、構成のカードのフレームワーク欄（D-35）。文言はシナリオのデータ（Scenario.text）から読む。
+import clsx from 'clsx';
 import {
   accountAllowanceOf,
   accountLabel,
@@ -286,13 +287,14 @@ function FrameworkCard({
       aria-label={`${FRAMEWORKS[id].label} の説明`}
       aria-current={selected ? 'true' : undefined}
       data-framework={id}
-      className={`card w-full border border-t-4 bg-base-100 motion-safe:transition ${
+      className={clsx(
+        'card w-full border border-t-4 bg-base-100 motion-safe:transition',
         selected
           ? 'border-primary shadow-md ring-2 ring-primary/30'
           : unsupported
             ? 'scale-[0.97] border-base-300 opacity-50 grayscale'
-            : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80'
-      }`}
+            : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80',
+      )}
       aria-disabled={unsupported ? 'true' : undefined}
       // ブランドの色は選んでいるカードの上の縁だけ（黒一色のロゴは文字の色）
       style={

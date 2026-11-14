@@ -32,6 +32,13 @@ export function markEventsSeen(runId: string, month: number) {
   }
 }
 
+// ページ送りの点の大きさと色: 今 > 未読 > 既読
+const DOT_CLASS = {
+  current: 'h-2.5 w-2.5 bg-base-content/60',
+  unread: 'h-2 w-2 bg-primary/40',
+  read: 'h-1.5 w-1.5 bg-base-content/30',
+} as const;
+
 /**
  * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつの通知のカードで出し、見出しの下のナビ
  * （「← 前へ」「2 / 4」「次へ →」とページ送りの点）で左右に切り替える（左右の矢印キー・横のスワイプでも）。
@@ -126,7 +133,10 @@ export function EventsDialog({
       <div
         // 2 件以上の月は高さを一定にする（modal は縦中央なので、高さが変わると上端・ナビ・閉じるが上下に動く）。
         // 短いページは本文の下が空くだけ。1 件だけの月は内容に合わせる
-        className={`modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6 ${n > 1 ? 'h-[min(40rem,calc(100dvh-2rem))]' : ''}`}
+        className={clsx(
+          'modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6',
+          n > 1 && 'h-[min(40rem,calc(100dvh-2rem))]',
+        )}
         data-events-fixed-height={n > 1 ? '' : undefined}
       >
         {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
@@ -212,13 +222,7 @@ export function EventsDialog({
                       {/* 普通の塗りの丸。大きさでも見分ける: 今 > 未読 > 既読 */}
                       <span
                         aria-hidden
-                        className={`block rounded-full ${
-                          state === 'current'
-                            ? 'h-2.5 w-2.5 bg-base-content/60'
-                            : state === 'unread'
-                              ? 'h-2 w-2 bg-primary/40'
-                              : 'h-1.5 w-1.5 bg-base-content/30'
-                        }`}
+                        className={clsx('block rounded-full', DOT_CLASS[state])}
                       />
                     </button>
                   </li>

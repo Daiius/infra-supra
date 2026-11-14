@@ -2,6 +2,7 @@
 // 使い回し、今の状態を選んだ状態から選び直す。選び直した差は game の setupChangeOf が今ある行動（plan・migrate・component・
 // rewrite・route・route-part）に写し取り、欄の下に変更の内訳（手間・期間・並行の費用・選べない理由）を出す。
 // 「来月の行動にする」で今月の行動に登録し、「構成はこのまま」で取り消す。状態（選び直しの途中）はこの欄が持つ（D-115 の境目）。
+import clsx from 'clsx';
 import { useState } from 'react';
 import {
   componentComparison,
@@ -469,7 +470,7 @@ function ChangeBody({
               <li
                 key={`${x.kind}:${x.name}`}
                 data-change-kind={x.kind}
-                className={`text-sm ${x.why ? 'opacity-80' : ''}`}
+                className={clsx('text-sm', x.why && 'opacity-80')}
               >
                 <OptionText
                   name={x.name}

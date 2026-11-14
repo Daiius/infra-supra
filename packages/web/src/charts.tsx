@@ -1,6 +1,7 @@
 // 推移のグラフ（prd/07 §5）。dataviz の指針に沿う: 2px の線・r4 の端点と 2px の地の色の輪・細い目盛線（実線）・
 // 2 系列以上は凡例 + 線の端の直接ラベル・縦線とツールチップのホバー（値は表でも読める。ホバーだけに閉じ込めない）。
 // 色は CSS 変数（styles.css の .viz-root）で役割として参照する。テキストに系列の色は使わない。
+import clsx from 'clsx';
 import {
   useEffect,
   useId,
@@ -132,7 +133,7 @@ function PingRings({
       {[0, 1].map((i) => (
         <circle
           key={i}
-          className={`motion-ping ${i ? 'motion-ping-late' : ''}`}
+          className={clsx('motion-ping', i > 0 && 'motion-ping-late')}
           cx={cx}
           cy={cy}
           r="4"
@@ -651,7 +652,10 @@ export function LineChart({
                 {li >= 0 && (
                   <circle
                     key={`end-${li}`}
-                    className={`motion-pop ${li === s.values.length - 1 ? 'motion-pulse' : ''}`}
+                    className={clsx(
+                      'motion-pop',
+                      li === s.values.length - 1 && 'motion-pulse',
+                    )}
                     ref={syncPing}
                     cx={x(li + 1)}
                     cy={y(s.values[li]!)}
@@ -1417,10 +1421,10 @@ export function CostBars({
             key={b.key}
             data-bar={b.key}
             data-current={b.current ? 'true' : undefined}
-            className={`min-w-0 ${b.muted ? 'opacity-50' : ''}`}
+            className={clsx('min-w-0', b.muted && 'opacity-50')}
           >
             <div
-              className={`text-xs ${b.current ? 'font-semibold' : ''}`}
+              className={clsx('text-xs', b.current && 'font-semibold')}
               style={{ color: 'var(--text-primary)' }}
             >
               {b.label}
@@ -1530,7 +1534,10 @@ export function HistogramChart({
   const bw = W / bins.length;
   return (
     <figure
-      className={`viz-root relative min-w-0 ${given === undefined ? '' : 'pt-4'}`}
+      className={clsx(
+        'viz-root relative min-w-0',
+        given !== undefined && 'pt-4',
+      )}
       data-histogram
       data-has-mine={value === undefined ? 'false' : 'true'}
     >
@@ -1601,7 +1608,7 @@ export function HistogramSkeleton({ mineSpace }: { mineSpace: boolean }) {
   return (
     <div
       aria-hidden
-      className={`min-w-0 ${mineSpace ? 'pt-4' : ''}`}
+      className={clsx('min-w-0', mineSpace && 'pt-4')}
       data-histogram-skeleton
     >
       <span className="block h-9 w-full rounded bg-base-content/10" />

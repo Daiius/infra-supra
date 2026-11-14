@@ -7,6 +7,7 @@
 // 部品を差し替えられる箱（parts。始める画面・見積の選んでいる構成のカード）は、横の図でも押せて、そのスロットの選択肢を出す（D-116）。
 // 図の一番下の段には、経路に載らない部品（メールの送信・バックアップなど）と、図に箱を持たないスロット（1 択など）を並べ、
 // 部品を選べる図ではそこからも選べる（どのスロットも図の中で選べる。D-116 の補足・2 つの表示）。
+import clsx from 'clsx';
 import type { FrameworkId } from 'catalog';
 import type { ArchitectureInput } from 'estimator';
 import { termNotesOf } from 'game';
@@ -421,7 +422,11 @@ export function SystemDiagram({
                         {n.caption}
                       </span>
                       <span
-                        className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''} ${n.ghost ? GHOST_TEXT : ''}`}
+                        className={clsx(
+                          'text-[11px] break-words',
+                          n.compute && 'font-semibold',
+                          n.ghost && GHOST_TEXT,
+                        )}
                       >
                         {n.label}
                       </span>
@@ -904,7 +909,10 @@ function Legend({
           <button
             type="button"
             aria-pressed={active === l.id}
-            className={`btn h-auto min-h-0 max-w-full shrink gap-1.5 btn-ghost px-2 py-1 text-left text-xs font-normal btn-xs ${active === l.id ? 'btn-active' : ''}`}
+            className={clsx(
+              'btn h-auto min-h-0 max-w-full shrink gap-1.5 btn-ghost px-2 py-1 text-left text-xs font-normal btn-xs',
+              active === l.id && 'btn-active',
+            )}
             onClick={() => onToggle(active === l.id ? null : l.id)}
           >
             <svg aria-hidden width="18" height="6" className="shrink-0">
@@ -1040,28 +1048,30 @@ function CompactNode({
           interactive={slots.length > 0}
           // 枠は上の rect が描く。ボタンにも同じ太さの透明の枠を持たせ、ホバーの輪（inset）を枠の内側に置く（前と同じ見た目）。
           // 名前は真ん中のまま、右上の印（!・⇄）は箱の角に重ねる（印の分の余白は取らず、1 行目を短くして避ける。compactText）
-          className={`flex h-full w-full cursor-pointer items-center justify-center rounded-md border-transparent px-0.5 text-center leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
+          className={clsx(
+            'flex h-full w-full cursor-pointer items-center justify-center rounded-md border-transparent px-0.5 text-center leading-tight hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary',
             text.size === 8
               ? 'text-[8px]'
               : text.size === 9
                 ? 'text-[9px]'
-                : 'text-[10px]'
-          } ${n.compute ? 'font-semibold' : ''} ${
-            warn ? 'border-2' : n.compute ? 'border-[1.75px]' : 'border'
-          } ${
+                : 'text-[10px]',
+            n.compute && 'font-semibold',
+            warn ? 'border-2' : n.compute ? 'border-[1.75px]' : 'border',
             // 差し替えられる箱は、ホバーで primary の輪を足して太く見せる（D-116）。未選択の箱は警告色（D-116 の補足）
             warn
               ? 'hover:bg-warning/10 hover:ring-2 hover:ring-warning hover:ring-inset'
-              : slots.length > 0
-                ? 'hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset'
-                : ''
-          }`}
+              : slots.length > 0 &&
+                  'hover:bg-primary/10 hover:ring-2 hover:ring-primary hover:ring-inset',
+          )}
           trigger={
             // 行はモデルで分けてある（英単語の途中で折らない・長い名前は「…」。D-213 の補足）。ブラウザには折り返させない
             <span
               data-short
               data-truncated={text.truncated ? 'true' : undefined}
-              className={`flex flex-col items-center whitespace-nowrap ${n.ghost ? GHOST_TEXT : ''}`}
+              className={clsx(
+                'flex flex-col items-center whitespace-nowrap',
+                n.ghost && GHOST_TEXT,
+              )}
             >
               {text.lines.map((l, i) => (
                 <span key={i}>{l}</span>
@@ -1223,7 +1233,11 @@ function SwappableNode({
                 )}
               </span>
               <span
-                className={`text-[11px] break-words ${n.compute ? 'font-semibold' : ''} ${n.ghost ? GHOST_TEXT : ''}`}
+                className={clsx(
+                  'text-[11px] break-words',
+                  n.compute && 'font-semibold',
+                  n.ghost && GHOST_TEXT,
+                )}
               >
                 {n.label}
               </span>

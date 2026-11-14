@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   policyCauseOf,
@@ -379,7 +380,10 @@ export function Result({
                       {rows.map((r) => (
                         <td
                           key={r.label}
-                          className={`whitespace-nowrap text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
+                          className={clsx(
+                            'whitespace-nowrap text-right tabular-nums',
+                            !p.you && 'opacity-70',
+                          )}
                         >
                           {r.get(p.axes)}
                         </td>
@@ -413,7 +417,10 @@ export function Result({
                       {ELEMENTS.map((el) => (
                         <td
                           key={el}
-                          className={`text-right tabular-nums ${p.you ? '' : 'opacity-70'}`}
+                          className={clsx(
+                            'text-right tabular-nums',
+                            !p.you && 'opacity-70',
+                          )}
                         >
                           {p.axes.elements[el].toFixed(2)}
                         </td>
