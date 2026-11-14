@@ -77,6 +77,14 @@ describe('ⓘ の説明のダイアログ', () => {
       within(dialog).getByRole('button', { name: '詳しい説明を見る' }),
     );
     expect(body.querySelector('[data-more-details]')).not.toBeNull();
+    // もう一度押すと畳め、また開ける
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '詳しい説明を畳む' }),
+    );
+    expect(body.querySelector('[data-more-details]')).toBeNull();
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '詳しい説明を見る' }),
+    );
     expect(within(body).queryAllByRole('listitem').length).toBeGreaterThan(0);
     for (const li of within(body).queryAllByRole('listitem'))
       expect(li.tagName).toBe('LI');
@@ -89,6 +97,37 @@ describe('ⓘ の説明のダイアログ', () => {
     );
     expect(infoDialog()).toBeNull();
     expect(document.activeElement).toBe(button);
+  });
+
+  it('W-83 始める画面の構成のカード: ⓘ は右上の 1 つ。手間はマスの図と機能開発に回せる分だけを出し、ⓘ の中にマスの図と色の凡例（D-218）', async () => {
+    await renderApp();
+    showStackTab();
+    const card = document.querySelector<HTMLElement>(
+      'section[data-stack][aria-current="true"]',
+    )!;
+    const name = card.getAttribute('aria-label')!.replace(/ の構成$/, '');
+    // 見出しの ⓘ（構成図の箱の吹き出しの中は数えない）
+    expect(
+      card.querySelector('h4')!.querySelectorAll('[data-info-button]'),
+    ).toHaveLength(1);
+    const effort = card.querySelector<HTMLElement>('[data-effort]')!;
+    within(effort).getByRole('img', { name: /^毎月の手間/ });
+    expect(effort.querySelector('[data-effort-free]')!.textContent).toMatch(
+      /^機能開発に毎月 [\d.]+ pt$/,
+    );
+    expect(effort.querySelector('[data-info-button]')).toBeNull();
+    const { body } = openInfo(
+      within(card).getByRole('button', { name: `${name} の説明` }),
+    );
+    // ⓘ の中にもマスの図と、色の凡例（名前と pt）を出す
+    const detail = body.querySelector<HTMLElement>('[data-effort-detail]')!;
+    within(detail).getByRole('img', { name: /^毎月の手間 [\d.]+ pt のうち/ });
+    const legend = within(detail).getByRole('list', {
+      name: '毎月の手間の内訳',
+    });
+    expect(legend.textContent).toMatch(/機能開発 [\d.]+ pt/);
+    // 線の色の凡例には見出しを付ける（手間の凡例と見分ける）
+    within(body).getByRole('heading', { name: '構成図の矢印の色' });
   });
 
   it('W-82 見積モード: 欄の ⓘ は見出しに欄の名前。設定の ⓘ の選択肢は dt / dd で並ぶ。画像の箱の吹き出しの中の ⓘ は、吹き出しを閉じずに開く', async () => {

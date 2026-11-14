@@ -5,7 +5,6 @@ import {
   accountAllowanceOf,
   accountLabel,
   accountUpkeepOf,
-  effortTotalNote,
   FRAMEWORKS,
   growthFromReputation,
   pageWireframes,
@@ -38,7 +37,6 @@ import {
   type EventCategory,
 } from './event-icons.tsx';
 import { ScenarioArt } from './scenario-art.tsx';
-import { Meta, NameWithInfo } from './option-text.tsx';
 import {
   PageBadges,
   PageWireframe,
@@ -92,82 +90,155 @@ export function ScenarioPicker({
   );
 }
 
-/**
- * 構成の毎月の手間（D-36）。毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・
- * 他の事業者の管理 warning の薄い色・機能開発 success）。色だけに頼らず、数を文字でも出す。自前運用の構成には、自前の障害の確率を添える。
- * 他の事業者の管理（D-52）は 1 アカウント 0.5 なので、マスの左半分だけを塗る（0.5 の表示の形）。
- * 毎月の手間はシナリオの基礎 + 構成の既定の部品での他の事業者の管理の分（D-123）。端数（10.5）は最後のマスの左半分。
- */
-export function EffortBar({
+type EffortProps = {
+  scenario: Scenario;
+  stackIndex: number;
+  /** 選んでいる部品（他の事業者のアカウントが増える分を出す。省略は構成の既定）。 */
+  components?: Partial<Record<string, string>> | undefined;
+  framework?: FrameworkId | undefined;
+};
+
+/** 手間の数（単位 pt。D-218）。 */
+const pt = (n: number) => `${fmtPoints(n)} pt`;
+
+/** 構成の毎月の手間の数と内訳（マスの塗り分けと ⓘ の凡例に使う。D-218）。 */
+function effortOf({
   scenario: sc,
   stackIndex,
   components,
   framework,
-}: {
-  scenario: Scenario;
-  stackIndex: number;
-  /** 選んでいる部品（他の事業者のアカウントが増える分を出す。省略は構成の既定）。 */
-  components?: Partial<Record<string, string>>;
-  framework?: FrameworkId;
-}) {
+}: EffortProps) {
   // 構成の既定の部品での他の事業者の管理の分を基礎に足す（D-123）。既定のままなら機能開発は基礎のまま
   const allowance = accountAllowanceOf(stackIndex, framework);
   const total = sc.effort.perMonth + allowance;
   // 部品で VPS を使う（VPS の API。D-67）ときも自前運用の維持と障害がかかる
   const upkeep = upkeepOf(sc, stackIndex, components, framework);
-  const selfHosted = selfHostedOf(stackIndex, components, framework);
   const accounts = accountUpkeepOf(stackIndex, components, framework);
   const others = otherAccounts(stackIndex, components, framework);
   const free = total - upkeep - accounts;
-  const items = [
-    ...(allowance > 0
-      ? [`毎月 ${fmtPoints(total)}${effortTotalNote(total, allowance)}`]
-      : []),
-    ...(upkeep > 0 ? [`維持 ${upkeep}`] : []),
-    ...(accounts > 0
-      ? [
-          `他の事業者の管理 ${fmtPoints(accounts)}（${others.map(accountLabel).join('・')}）`,
-        ]
-      : []),
-    `機能開発に ${fmtPoints(free)}`,
-    // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の手間だけ（D-63）
-    ...(selfHosted
-      ? [
-          `自前の障害 月 ${Math.round(sc.incidents.selfHostedChancePerMonth * 100)}%`,
-        ]
-      : []),
+  // 色はゲーム中の手間の棒と同じ（維持 warning・他の事業者の管理 warning の薄い色・機能開発 success）
+  const segments = [
+    { key: 'upkeep', cls: 'bg-warning', label: '維持', value: upkeep },
+    {
+      key: 'accounts',
+      cls: 'bg-warning/50',
+      label: '他の事業者の管理',
+      value: accounts,
+      note: others.map(accountLabel).join('・'),
+    },
+    { key: 'free', cls: 'bg-success', label: '機能開発', value: free },
   ];
+  // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の手間だけ（D-63）
+  const incidentPct = selfHostedOf(stackIndex, components, framework)
+    ? Math.round(sc.incidents.selfHostedChancePerMonth * 100)
+    : undefined;
+  return { allowance, total, upkeep, accounts, free, segments, incidentPct };
+}
+
+/** 毎月の手間のマス（1 マス 1 pt。内訳を左から塗る。0.5 はマスの左半分）。 */
+function EffortSquares({
+  e,
+  size,
+}: {
+  e: ReturnType<typeof effortOf>;
+  size: string;
+}) {
   // マスごとに、維持・他の事業者の管理・機能開発の割合（0〜1）を左から塗る
   const cell = (k: number) => {
-    const part = (from: number, to: number) =>
-      Math.max(0, Math.min(1, to - k) - Math.max(0, from - k));
-    return [
-      { cls: 'bg-warning', w: part(0, upkeep) },
-      { cls: 'bg-warning/50', w: part(upkeep, upkeep + accounts) },
-      { cls: 'bg-success', w: part(upkeep + accounts, total) },
-    ].filter((x) => x.w > 0);
+    let from = 0;
+    return e.segments
+      .map((x) => {
+        const to = from + x.value;
+        const w = Math.max(0, Math.min(1, to - k) - Math.max(0, from - k));
+        from = to;
+        return { cls: x.cls, w };
+      })
+      .filter((x) => x.w > 0);
   };
   return (
-    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-      <span
-        role="img"
-        aria-label={`毎月の手間 ${fmtPoints(total)}${effortTotalNote(total, allowance)} のうち、維持 ${upkeep}${accounts > 0 ? `・他の事業者の管理 ${fmtPoints(accounts)}` : ''}`}
-        className="flex shrink-0 gap-0.5"
-      >
-        {Array.from({ length: Math.max(0, Math.ceil(total)) }, (_, k) => (
-          <span key={k} className="flex h-2.5 w-2.5 overflow-hidden rounded-sm">
-            {cell(k).map((x, i) => (
-              <span
-                key={i}
-                className={`h-full ${x.cls}`}
-                style={{ width: `${x.w * 100}%` }}
-              />
-            ))}
-          </span>
-        ))}
-      </span>
-      <Meta items={items} className="text-xs opacity-80" />
+    <span
+      role="img"
+      aria-label={`毎月の手間 ${pt(e.total)} のうち、${e.segments
+        .filter((x) => x.value > 0)
+        .map((x) => `${x.label} ${pt(x.value)}`)
+        .join('・')}`}
+      className="flex flex-wrap gap-0.5"
+    >
+      {Array.from({ length: Math.max(0, Math.ceil(e.total)) }, (_, k) => (
+        <span key={k} className={clsx('flex overflow-hidden rounded-sm', size)}>
+          {cell(k).map((x, i) => (
+            <span
+              key={i}
+              className={`h-full ${x.cls}`}
+              style={{ width: `${x.w * 100}%` }}
+            />
+          ))}
+        </span>
+      ))}
     </span>
+  );
+}
+
+/**
+ * 構成の毎月の手間（D-36）。カードには毎月の手間のマスと機能開発に回せる分だけを出す（内訳はカードの ⓘ の EffortDetail。D-218）。
+ * 他の事業者の管理（D-52）は 1 アカウント 0.5 なので、マスの左半分だけを塗る（0.5 の表示の形）。
+ * 毎月の手間はシナリオの基礎 + 構成の既定の部品での他の事業者の管理の分（D-123）。端数（10.5）は最後のマスの左半分。
+ */
+export function EffortBar(props: EffortProps) {
+  const e = effortOf(props);
+  return (
+    <span
+      className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5"
+      data-effort
+    >
+      <span className="shrink-0">
+        <EffortSquares e={e} size="h-2.5 w-2.5" />
+      </span>
+      <span className="text-xs" data-effort-free>
+        機能開発に毎月 {pt(e.free)}
+      </span>
+    </span>
+  );
+}
+
+/** 構成のカードの ⓘ の中の毎月の手間: 大きめのマスと、色の凡例（色・名前・数）。 */
+export function EffortDetail(props: EffortProps) {
+  const e = effortOf(props);
+  return (
+    <section className="space-y-2" data-effort-detail>
+      <h3 className="font-semibold">毎月の手間 {pt(e.total)}</h3>
+      <EffortSquares e={e} size="h-4 w-4" />
+      <ul aria-label="毎月の手間の内訳" className="space-y-1 text-sm">
+        {e.segments
+          .filter((x) => x.value > 0)
+          .map((x) => (
+            <li key={x.key} className="flex items-start gap-2">
+              <span
+                aria-hidden
+                className={clsx('mt-1 size-3 shrink-0 rounded-sm', x.cls)}
+              />
+              <span>
+                {x.label}{' '}
+                <span className="font-semibold tabular-nums">
+                  {pt(x.value)}
+                </span>
+                {x.note && <span className="opacity-70">（{x.note}）</span>}
+              </span>
+            </li>
+          ))}
+      </ul>
+      {e.allowance > 0 && (
+        <p className="text-xs opacity-70">
+          毎月 {pt(e.total)} は、基礎 {pt(e.total - e.allowance)}{' '}
+          と既定の構成の事業者の管理 {pt(e.allowance)} の合計です。
+        </p>
+      )}
+      {e.incidentPct !== undefined && (
+        <p className="text-xs opacity-70">
+          自前運用なので、障害が月 {e.incidentPct}% の確率で起きます。
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -308,7 +379,9 @@ function FrameworkCard({
       <div className="card-body justify-start gap-3 p-3 *:grow-0 sm:p-4">
         <h4 className="card-title text-lg">
           <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
-          <NameWithInfo name={FRAMEWORKS[id].label} info={info} />
+          <span className="min-w-0">{FRAMEWORKS[id].label}</span>
+          {/* カードの ⓘ は右上の 1 つ（D-218） */}
+          <span className="ml-auto shrink-0">{info}</span>
         </h4>
         {t?.note && (
           <p id={noteId} className="text-sm opacity-80">

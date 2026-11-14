@@ -531,7 +531,8 @@ export const pickStrategy = (page: string, strategy: string) => {
 
 /** 構成のカードの線の色の凡例（ⓘ のダイアログの中。D-217）。ⓘ を開いて行の文字を読み、閉じる。 */
 export function laneLegendOf(card: HTMLElement): string[] {
-  fireEvent.click(within(card).getByRole('button', { name: /の説明$/ }));
+  const name = card.getAttribute('aria-label')!.replace(/ の構成$/, '');
+  fireEvent.click(within(card).getByRole('button', { name: `${name} の説明` }));
   const dialog = infoDialog()!;
   const items = within(
     within(dialog).getByRole('list', { name: '構成図の線の色' }),
