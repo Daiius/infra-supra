@@ -863,29 +863,37 @@ function Edges({ model, markerId }: { model: DiagramModel; markerId: string }) {
  */
 export function LaneLegend({ lanes }: { lanes: DiagramModel['lanes'] }) {
   if (lanes.length === 0) return null;
+  // 毎月の手間の凡例と並ぶので、見出しを付け、線にも図と同じ矢印の先端を描いて、構成図の矢印の凡例だと分かるようにする
   return (
-    <ul aria-label="構成図の線の色" className="space-y-1">
-      {lanes.map((l) => (
-        <li key={l.id} className="flex items-center gap-2 text-sm">
-          <svg aria-hidden width="24" height="6" className="shrink-0">
-            <line
-              x1="0"
-              x2="24"
-              y1="3"
-              y2="3"
-              style={{ stroke: LANE_COLOR[l.id], strokeWidth: 2.5 }}
-              strokeDasharray={LANE_DASH[l.id]}
-            />
-          </svg>
-          <span className="min-w-0 break-words">
-            {l.label}
-            {l.pages.length > 0 && (
-              <span className="opacity-70">（{l.pages.join('・')}）</span>
-            )}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <section className="space-y-1" data-lane-legend>
+      <h3 className="font-semibold">構成図の矢印の色</h3>
+      <ul aria-label="構成図の線の色" className="space-y-1">
+        {lanes.map((l) => (
+          <li key={l.id} className="flex items-center gap-2 text-sm">
+            <svg aria-hidden width="30" height="10" className="shrink-0">
+              <line
+                x1="0"
+                x2="23"
+                y1="5"
+                y2="5"
+                style={{ stroke: LANE_COLOR[l.id], strokeWidth: 2.5 }}
+                strokeDasharray={LANE_DASH[l.id]}
+              />
+              <path
+                d="M22 0 L30 5 L22 10 Z"
+                style={{ fill: LANE_COLOR[l.id] }}
+              />
+            </svg>
+            <span className="min-w-0 break-words">
+              {l.label}
+              {l.pages.length > 0 && (
+                <span className="opacity-70">（{l.pages.join('・')}）</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

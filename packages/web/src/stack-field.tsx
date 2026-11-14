@@ -32,8 +32,7 @@ import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
 import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
 import { stackGroupOf } from './parts-memory.ts';
 import { Info, MoreDetails } from './info.tsx';
-import { NameWithInfo } from './option-text.tsx';
-import { EffortBar } from './scenario-briefing.tsx';
+import { EffortBar, EffortDetail } from './scenario-briefing.tsx';
 import {
   isUnselected,
   PartChips,
@@ -364,6 +363,14 @@ function StackCard({
   // 名前・部品に出る用語（vinext・Fluid）の補足（D-160）
   const terms = termNotesOf([name, ...arch.nodes.map((n) => n.label)]);
   const flavor = stackFlavor(stackIndex);
+  // 選んでいる構成と覚えている部品のある構成は、その部品で増える他の事業者の管理も出す（D-52・D-116 の補足）
+  const effortProps = {
+    scenario,
+    stackIndex,
+    ...(selected || components
+      ? { components: components ?? {}, framework }
+      : {}),
+  };
   // 線の色の凡例は ⓘ の中に出す（D-217。図の下には出さない）
   const lanes = diagramModel(
     arch,
@@ -387,29 +394,28 @@ function StackCard({
       <div className="card-body min-w-0 justify-start gap-3 p-3 *:grow-0 sm:p-4">
         <h4 className="card-title text-lg">
           <PlatformMarks platform={STACKS[stackIndex]!.provider} />
-          <NameWithInfo
-            name={name}
-            info={
-              // 短い説明（フレーバー。D-41）は ⓘ の冒頭に、前提・用語・図の注記は「詳しい説明を見る」の中に畳む（D-217）
-              <Info label={`${name} の説明`}>
-                {flavor && <p>{flavor}。</p>}
-                <LaneLegend lanes={lanes} />
-                <MoreDetails>
-                  {premises.length > 0 ? (
-                    <ul className="list-disc space-y-0.5 pl-5">
-                      {premises.map((p) => (
-                        <li key={p}>{p}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {terms.map((t) => (
-                    <p key={t}>{t}。</p>
-                  ))}
-                  <p>{DIAGRAM_NOTE}</p>
-                </MoreDetails>
-              </Info>
-            }
-          />
+          <span className="min-w-0">{name}</span>
+          {/* カードの ⓘ は右上の 1 つにまとめる（短い説明・毎月の手間の内訳・線の色・詳しい説明。D-217・D-218） */}
+          <span className="ml-auto shrink-0">
+            <Info label={`${name} の説明`}>
+              {flavor && <p>{flavor}。</p>}
+              {effort && <EffortDetail {...effortProps} />}
+              <LaneLegend lanes={lanes} />
+              <MoreDetails>
+                {premises.length > 0 ? (
+                  <ul className="list-disc space-y-0.5 pl-5">
+                    {premises.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {terms.map((t) => (
+                  <p key={t}>{t}。</p>
+                ))}
+                <p>{DIAGRAM_NOTE}</p>
+              </MoreDetails>
+            </Info>
+          </span>
         </h4>
         {extra}
         {fallbackNotice && (
@@ -422,16 +428,7 @@ function StackCard({
             {routeNotice}
           </p>
         )}
-        {effort && (
-          <EffortBar
-            scenario={scenario}
-            stackIndex={stackIndex}
-            // 選んでいる構成と覚えている部品のある構成は、その部品で増える他の事業者の管理も出す（D-52・D-116 の補足）
-            {...(selected || components
-              ? { components: components ?? {}, framework }
-              : {})}
-          />
-        )}
+        {effort && <EffortBar {...effortProps} />}
         {/* 選んでいるカードは部品を選べる（構成図の箱か機能ごとのチップ。D-116 とその補足）。選んでいないカードは図だけ */}
         {selected && parts ? (
           <EditableDiagram
