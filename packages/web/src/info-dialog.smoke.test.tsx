@@ -69,9 +69,17 @@ describe('ⓘ の説明のダイアログ', () => {
     const button = within(card).getByRole('button', { name: `${name} の説明` });
     let { dialog, heading, body } = openInfo(button);
     expect(heading).toBe(name);
+    // 短い説明はカードに出さず ⓘ の冒頭に。前提・図の注記は「詳しい説明を見る」を押すと出る（D-217）
+    expect(card.querySelector('.card-body > p')).toBeNull();
+    expect(body.querySelector('p')).not.toBeNull();
+    expect(body.querySelector('[data-more-details]')).toBeNull();
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '詳しい説明を見る' }),
+    );
+    expect(body.querySelector('[data-more-details]')).not.toBeNull();
+    expect(within(body).queryAllByRole('listitem').length).toBeGreaterThan(0);
     for (const li of within(body).queryAllByRole('listitem'))
       expect(li.tagName).toBe('LI');
-    expect(body.querySelector('p')).not.toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
     expect(infoDialog()).toBeNull();
     expect(document.activeElement).toBe(button);

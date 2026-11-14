@@ -13,7 +13,6 @@ import {
 import type { RequestClass } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
-  activeLane,
   ARROW,
   COMPACT_TEXT,
   compactLineWidth,
@@ -394,17 +393,6 @@ describe('diagramModel', () => {
       diagramComponents(sc, vercel, 'nextjs-export', { images: 'default' })
         .images,
     ).toBe('default');
-  });
-
-  it('強調していた流れが図から消えたら、強調をやめる（OCL-FD14A04C）', () => {
-    const sc = SCENARIOS['article-community']!;
-    const cf = STACKS.findIndex((s) => s.id === 'cloudflare-vinext-paid');
-    const next = diagramModel(diagramArchitecture(sc, cf, 'nextjs'));
-    const spa = diagramModel(diagramArchitecture(sc, cf, 'vite-spa'));
-    expect(activeLane('isr', next)).toBe('isr');
-    expect(spa.lanes.some((l) => l.id === 'isr')).toBe(false);
-    expect(activeLane('isr', spa)).toBeNull();
-    expect(activeLane(null, next)).toBeNull();
   });
 
   it('縦の図（狭い幅）: 段が上→下に積まれ、箱は小さく、箱どうし・枠どうしが重ならず、図の中に収まる', () => {

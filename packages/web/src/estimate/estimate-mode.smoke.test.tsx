@@ -19,6 +19,7 @@ import {
   useSmokeEnv,
   waitLoaded,
   showPage,
+  laneLegendOf,
 } from '../smoke.test-helpers.tsx';
 import { usd } from '../format.ts';
 import { Lines } from './estimate-mode.tsx';
@@ -108,10 +109,8 @@ const routesDialog = () => {
 };
 const routesTable = () =>
   within(routesDialog()).getByRole('table', { name: 'ページごとの描き方' });
-/** 構成図の流れの凡例（① の選んでいる構成のカード）。 */
-const flowLegend = () =>
-  within(stackCard()).getByRole('list', { name: '構成図の流れの凡例' })
-    .textContent;
+/** 構成図の線の色の凡例（① の選んでいる構成のカードの ⓘ の中。D-217）。 */
+const flowLegend = () => laneLegendOf(stackCard()).join('');
 
 /** 月の費用・明細・比較表・費用の曲線が出ていることを見て、今の構成の名前を返す。 */
 function expectEstimate(): string {

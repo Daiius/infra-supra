@@ -931,7 +931,6 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     routeNotice={(i) => routeNotice({ stackIndex: i })}
                     // 部品は構成のカードの構成図の箱か、機能ごとのチップで選ぶ（タブで切り替える。D-116 とその補足）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
                     onComponentsChange={editComponents}
-                    partsNote="構成の中の役割ごとに選びます（始める前なので手間はかかりません）"
                     // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）
                     partsCompare={partsCompare}
                   />

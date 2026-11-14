@@ -227,24 +227,9 @@ describe('完走の振り返りと手元の結果の履歴', () => {
     );
   });
 
-  it('W-77 始める画面の箱は「走り切る・4 つの軸で振り返る」紹介で、目標の値を出さない（D-133）', async () => {
+  it('W-77 始める画面には「走り切る・4 つの軸」の箱を出さない（遊び方の 1 ページ目と重なる。D-217 で D-133 の箱をやめた）', async () => {
     await renderApp();
-    const box = document.querySelector<HTMLElement>('[data-run-goal]')!;
-    expect(box).not.toBeNull();
-    expect(
-      within(box).getByRole('heading', { name: /12 か月を走り切りましょう/ }),
-    ).toBeDefined();
-    for (const label of [
-      '所持金',
-      '満足度の平均',
-      '機能開発の累計',
-      '費用の合計',
-    ])
-      expect(box.textContent).toContain(label);
-    expect(box.textContent).not.toContain('ジョーク');
-    expect(box.textContent).toContain('その場で終わります');
-    expect(box.textContent).not.toMatch(/\$1,730|以上/);
-    expect(box.className).toContain('border-success');
-    expect(box.className).not.toContain('bg-success');
+    expect(document.querySelector('[data-run-goal]')).toBeNull();
+    expect(screen.queryByText(/か月を走り切りましょう/)).toBeNull();
   });
 });

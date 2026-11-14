@@ -14,6 +14,7 @@ import {
   showStackTab,
   showFrameworkTab,
   ARTICLE,
+  laneLegendOf,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -50,20 +51,15 @@ describe('ゲームモードの画面', () => {
       within(current()).getByRole('list', { name: '構成図のつながり' })
         .textContent,
     ).toContain('ブラウザ → Vercel CDN');
-    const legend = within(current()).getByRole('list', {
-      name: '構成図の流れの凡例',
-    });
-    const isr = within(legend).getByRole('button', {
-      name: /^ISR(?! の作り直し)/,
-    });
-    expect(isr.textContent).toContain('記事のページ');
-    fireEvent.click(isr);
-    expect(isr.getAttribute('aria-pressed')).toBe('true');
+    // 線の色の凡例は ⓘ の中（D-217）
+    expect(
+      laneLegendOf(current()).find((t) => /^ISR(?! の作り直し)/.test(t)),
+    ).toContain('記事のページ');
     // 前後のボタンで選ぶ（フレームワークの欄の前後のボタンとは名前で分かれる）。カード（事業者）ごとに移る
     fireEvent.click(screen.getByRole('button', { name: /^次の構成/ }));
     expect(checked().getAttribute('aria-label')).toMatch(/^さくらの VPS 2GB/);
     fireEvent.click(screen.getByRole('button', { name: /^前の構成/ }));
-    // 選んでいないカード: ⓘ・凡例を押しても選ばれない
+    // 選んでいないカード: ⓘ を押しても選ばれない
     const other = document.querySelector<HTMLElement>(
       'section[data-stack]:not([aria-current="true"])',
     )!;
@@ -76,14 +72,9 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(infoDialog()!);
     expect(otherRadio().checked).toBe(false);
     fireEvent.keyDown(document, { key: 'Escape' });
-    fireEvent.click(
-      within(
-        within(other).getByRole('list', { name: '構成図の流れの凡例' }),
-      ).getAllByRole('button')[0]!,
-    );
     expect(otherRadio().checked).toBe(false);
-    // カードの文字を押すと選ぶ
-    fireEvent.click(other.querySelector('p')!);
+    // カードの文字（名前）を押すと選ぶ
+    fireEvent.click(other.querySelector('h4')!);
     expect(otherRadio().checked).toBe(true);
     expect(current()).toBe(other);
   });
@@ -312,14 +303,12 @@ describe('ゲームモードの画面', () => {
         scrolls++;
       },
     });
-    const flavor = card.querySelector('p')!.textContent;
-    // Free → Paid: 同じカード・同じ図の要素のまま、名前・説明・構成が替わる。カルーセルは動かさない
+    // Free → Paid: 同じカード・同じ図の要素のまま、名前・構成が替わる（説明は ⓘ の中。D-217）。カルーセルは動かさない
     fireEvent.click(getRadio({ name: /^Cloudflare Paid/ }));
     expect(current()).toBe(card);
     expect(card.closest('[data-card]')).toBe(item);
     expect(card.dataset.stack).toBe('cloudflare-vinext-paid');
     expect(card.getAttribute('aria-label')).toMatch(/^Cloudflare Paid/);
-    expect(card.querySelector('p')!.textContent).not.toBe(flavor);
     expect(within(card).getByRole('group', { name: /^構成図: / })).toBe(
       diagram,
     );
@@ -330,7 +319,7 @@ describe('ゲームモードの画面', () => {
     expect(card.getAttribute('aria-current')).toBeNull();
     expect(card.dataset.stack).toBe('cloudflare-vinext-paid');
     // 選んでいない事業者のカードを押すと、そのカードに出ているプランを選ぶ
-    fireEvent.click(card.querySelector('p')!);
+    fireEvent.click(card.querySelector('h4')!);
     expect(
       screen.getByRole<HTMLInputElement>('radio', { name: /^Cloudflare Paid/ })
         .checked,

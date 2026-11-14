@@ -13,6 +13,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { BookOpenText } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 /**
@@ -358,5 +359,29 @@ export function InfoIcon() {
         fill="currentColor"
       />
     </svg>
+  );
+}
+
+/**
+ * ⓘ のダイアログの中で、詳しい説明を畳む（遊び方の「詳しい説明を見る」と同じ形。2026-11-14）。
+ * 押すとボタンの代わりに中身を出す（閉じ直す必要は無いので、開くだけ）。
+ */
+export function MoreDetails({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (open)
+    return (
+      <div className="space-y-2" data-more-details>
+        {children}
+      </div>
+    );
+  return (
+    <button
+      type="button"
+      className="btn btn-ghost btn-sm px-2"
+      onClick={() => setOpen(true)}
+    >
+      <BookOpenText aria-hidden className="size-4" />
+      詳しい説明を見る
+    </button>
   );
 }

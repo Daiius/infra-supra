@@ -19,7 +19,6 @@ import {
   stackName,
   stackSupports,
   STACKS,
-  TERM_NOTES,
   termNotesOf,
   resolvedRouteStrategies,
   validRouteOverrides,
@@ -32,7 +31,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
 import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
 import { stackGroupOf } from './parts-memory.ts';
-import { Info } from './info.tsx';
+import { Info, MoreDetails } from './info.tsx';
 import { NameWithInfo } from './option-text.tsx';
 import { EffortBar } from './scenario-briefing.tsx';
 import {
@@ -47,12 +46,14 @@ import {
 import { SlotCompareDialog } from './slot-compare.tsx';
 import {
   DIAGRAM_NOTE,
+  LaneLegend,
   SystemDiagram,
   type BandSlot,
   type BoxFocus,
   type DiagramParts,
 } from './system-diagram.tsx';
 import type { ResolvedPage } from './page-wireframes.tsx';
+import { diagramModel } from './system-diagram-model.ts';
 import {
   diagramArchitecture,
   diagramComponents,
@@ -139,7 +140,7 @@ function EditableDiagram({
   ghosts: readonly GhostSlot[];
   arch: ReturnType<typeof diagramArchitecture>;
   pages: readonly ResolvedPage[];
-  caption: string;
+  caption: string | undefined;
   editor: PartsEditor;
 }) {
   const [view, setViewState] = useState<PartsView>(readPartsView);
@@ -295,7 +296,6 @@ function StackCard({
   comments,
   routes,
   selected,
-  noteId,
   routeNotice,
   fallbackNotice,
   extra,
@@ -312,7 +312,6 @@ function StackCard({
   /** 選んだページごとの描き方（図と流れの凡例に効く。D-107）。 */
   routes: RouteOverrides | undefined;
   selected: boolean;
-  noteId: string;
   /** この構成にすると既定に戻る描き方の注意（選んでいないカードだけ。D-107 の補足）。 */
   routeNotice?: string | null | undefined;
   /** 今のフレームワークを載せられない構成の注意（選ぶとフレームワークが替わる。D-113）。 */
@@ -322,7 +321,7 @@ function StackCard({
   /** 毎月の手間の棒を出すか（ゲームだけ）。 */
   effort: boolean;
   /** 構成図の説明。 */
-  caption: string;
+  caption: string | undefined;
   /** 部品の選択（選んでいるカードだけ。D-116）。 */
   parts?: PartsEditor | undefined;
 }) {
@@ -364,6 +363,15 @@ function StackCard({
   const premises = [...slaOf(stackIndex), ...membersOf(stackIndex)];
   // 名前・部品に出る用語（vinext・Fluid）の補足（D-160）
   const terms = termNotesOf([name, ...arch.nodes.map((n) => n.label)]);
+  const flavor = stackFlavor(stackIndex);
+  // 線の色の凡例は ⓘ の中に出す（D-217。図の下には出さない）
+  const lanes = diagramModel(
+    arch,
+    pages,
+    'horizontal',
+    boxes.ghosts,
+    framework,
+  ).lanes;
   return (
     <section
       aria-label={`${name} の構成`}
@@ -382,27 +390,27 @@ function StackCard({
           <NameWithInfo
             name={name}
             info={
+              // 短い説明（フレーバー。D-41）は ⓘ の冒頭に、前提・用語・図の注記は「詳しい説明を見る」の中に畳む（D-217）
               <Info label={`${name} の説明`}>
-                {premises.length > 0 ? (
-                  <ul className="list-disc space-y-0.5 pl-5">
-                    {premises.map((p) => (
-                      <li key={p}>{p}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                {terms.map((t) => (
-                  <p key={t}>{t}。</p>
-                ))}
-                <p>{DIAGRAM_NOTE}</p>
+                {flavor && <p>{flavor}。</p>}
+                <LaneLegend lanes={lanes} />
+                <MoreDetails>
+                  {premises.length > 0 ? (
+                    <ul className="list-disc space-y-0.5 pl-5">
+                      {premises.map((p) => (
+                        <li key={p}>{p}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {terms.map((t) => (
+                    <p key={t}>{t}。</p>
+                  ))}
+                  <p>{DIAGRAM_NOTE}</p>
+                </MoreDetails>
               </Info>
             }
           />
         </h4>
-        {/* 短い説明（フレーバー。事実だが、それだけで選ぶと外れうる。D-41） */}
-        <p id={noteId} className="text-sm opacity-80">
-          {stackFlavor(stackIndex)}
-          {name.includes('vinext') && `。${TERM_NOTES.vinext}`}
-        </p>
         {extra}
         {fallbackNotice && (
           <p className="text-xs text-warning" role="note">
@@ -495,14 +503,6 @@ export function stackTabGroups(
   });
 }
 
-/** 構成図の注記の既定（引数の既定値に関数を直接書くと React Compiler が最適化を諦めるので外に置く）。 */
-const defaultDiagramCaption = (selected: boolean, remembered: boolean) =>
-  selected
-    ? '部品を選ぶ前のスロットは既定の部品で描いています。'
-    : remembered
-      ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
-      : '既定の部品で描いています。';
-
 /** インフラの構成を選ぶ（カルーセル）。value は STACKS の index。 */
 export function StackField({
   scenario,
@@ -521,7 +521,7 @@ export function StackField({
   partsNote,
   partsExtra,
   partsCompare,
-  diagramCaption = defaultDiagramCaption,
+  diagramCaption,
   alsoShow,
 }: {
   scenario: Scenario;
@@ -609,13 +609,12 @@ export function StackField({
           {stackName(indexOf(id), framework, false)}
         </>
       )}
-      describedBy={(id) => stackFlavor(indexOf(id)) !== undefined}
       flag={(id) =>
         stackSupports(indexOf(id), framework)
           ? undefined
           : `${fwLabel} を載せられない構成（選ぶとフレームワークが替わる）`
       }
-      renderCard={(id, { selected, idPrefix }) => {
+      renderCard={(id, { selected }) => {
         const remembered = selected ? undefined : rememberedOf?.(indexOf(id));
         const hasRemembered =
           remembered !== undefined && Object.keys(remembered).length > 0;
@@ -633,7 +632,6 @@ export function StackField({
               fallbackOf(indexOf(id)) ? routesOnFallback?.(indexOf(id)) : routes
             }
             selected={selected}
-            noteId={`${idPrefix}-${id}`}
             routeNotice={
               selected || fallbackOf(indexOf(id))
                 ? null
@@ -642,7 +640,7 @@ export function StackField({
             fallbackNotice={selected ? undefined : fallbackOf(indexOf(id))}
             extra={cardExtra?.(indexOf(id), selected)}
             effort={effort}
-            caption={diagramCaption(selected, hasRemembered)}
+            caption={diagramCaption?.(selected, hasRemembered)}
             parts={
               selected && onComponentsChange
                 ? {
