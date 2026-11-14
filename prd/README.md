@@ -80,7 +80,8 @@
 | [14-composable-parts.md](./14-composable-parts.md) | 部品を事業者をまたいで組む（役割と接続の口・接続の規則）。決定 D-114・未実装（段 2 は Vercel × DynamoDB / Aurora） |
 | [15-results-and-stats.md](./15-results-and-stats.md) | ゲームの結果の振り返り（合否をやめ、完走したら 4 軸の分布の中での位置で振り返る）と匿名の集計（さくらの VPS の Hono RPC・既存の Postgres・再生で照合）。決定 D-131〜D-139・未実装 |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |
-| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログ（D-01〜D-139）と、末尾に未決の論点の一覧 |
+| [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログの索引（本文は番号の範囲ごとの `decisions-001-099.md`・`decisions-100-199.md`・`decisions-200-299.md`） |
+| [_grilling/open-issues.md](./_grilling/open-issues.md) | 未決の論点の一覧 |
 
 ## 用語
 

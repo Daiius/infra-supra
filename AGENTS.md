@@ -30,7 +30,7 @@
 | [prd/14-composable-parts.md](./prd/14-composable-parts.md) | 部品を事業者をまたいで組む: 役割と接続の口・接続の規則（つなげない組・中継・転送の課金）・公式の文書の調査（**決定 D-114**。段 1（規則への移し替え）・段 2（Vercel × DynamoDB / Aurora）を実装。後で検討する候補: リージョン・接続の数の上限） |
 | [prd/15-results-and-stats.md](./prd/15-results-and-stats.md) | ゲームの結果の振り返りと匿名の集計（合否をやめ、完走したら所持金・満足度の平均・機能開発の累計・費用の合計（D-166）の 4 軸の分布の中での位置で振り返る。終わったプレイを匿名で自動に送り、さくらの VPS の Hono RPC（Vercel 経由で同じオリジンの `/api/*`）が再生して照合する。**決定 D-131〜D-139**。段 1 ローカル（実装済み。D-141〜D-145）・段 2 サーバーと送信（実装済み・デプロイ待ち。D-148〜D-155。朝の手順は §7.1）・段 3 ヒストグラム（実装済み。統計の画面 D-197）。prd/07 の合否と prd/12 §5 のランキングを置き換え） |
 
-> 決定ログと未決の論点: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)（未決の一覧は末尾の「未決」の節）
+> 決定ログ: [`prd/_grilling/decisions.md`](./prd/_grilling/decisions.md)（索引。本文は番号の範囲ごとの `decisions-001-099.md` などに分けてある。新しい決定は最後のファイルの末尾と索引に足す）。未決の論点: [`prd/_grilling/open-issues.md`](./prd/_grilling/open-issues.md)
 
 ## 技術スタック / 構成
 
