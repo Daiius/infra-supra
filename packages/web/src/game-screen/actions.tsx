@@ -34,7 +34,6 @@ import { SetupChangeField } from '../setup-change-field.tsx';
 import type { MonthDraft } from '../month-draft.ts';
 import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
 import { commitmentMeta } from '../commitment-meta.ts';
-import { isZeroText, signedText } from '../format.ts';
 import { fmtPoints } from '../format.ts';
 import { FeatureProgressLine } from './effort.tsx';
 
@@ -183,17 +182,20 @@ export function Actions({
             {/* 分母も選んでいる行動を当てた draft から（プラン変更で既定の分が替わる。D-123・OCL-ADB0B195） */}
             来月の手間の残り {fmtPoints(left)} / {fmtPoints(d.total)}
           </span>
+          {/* 欄の使い方の説明は ⓘ に畳む（prd/16） */}
+          <Info label="アクションの説明" title="今月のアクション">
+            <p>
+              選んだアクションは来月から効きます。手間の残りは機能開発に回り、満足度の「機能」（累計
+              / 期待）と、評判を通して PV
+              の伸びに効きます。設定はいつでも戻せます。
+            </p>
+            <p>
+              来月の見込みには、来月に新しく起きるイベントの対応の手間は含めません。
+            </p>
+          </Info>
         </h2>
-        <p className="text-sm opacity-70">
-          残りは機能開発に回り、満足度の「機能」（累計 / 期待）と、評判を通して
-          PV の伸びに効きます。設定はいつでも戻せます。
-        </p>
         <div className="space-y-0.5 text-sm" data-testid="feature-outlook">
-          <div>
-            来月の機能開発 {fmtPoints(outlook.feature)}
-            {!isZeroText(fmtPoints(Math.abs(outlook.change))) &&
-              `（アクションで ${signedText(outlook.change, fmtPoints)}）`}
-          </div>
+          {/* 来月の機能開発の量とアクションでの増減は、下の輪のグラフの見出しと中央に出す */}
           <FeatureProgressLine
             scenario={sc}
             total={outlook.total}
@@ -205,7 +207,6 @@ export function Actions({
             {outlook.total >= outlook.expected
               ? '来月の累計は期待に届きます'
               : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届きません`}
-            （来月に新しく起きるイベントの対応の手間は含めません）
           </div>
           <div className="mt-2">
             <FeatureRing
@@ -249,9 +250,20 @@ export function Actions({
               <div key={key} className="form-control">
                 <span className="label-text mb-1 block">
                   <span className="block font-semibold">
+                    {/* 設定の説明・今の部品での注記・選んだ値の説明は ⓘ にまとめる（prd/16） */}
                     <NameWithInfo
                       name={def.label}
-                      info={<Info title={def.label}>{def.note}</Info>}
+                      info={
+                        <Info title={def.label}>
+                          <p>{def.note}</p>
+                          {settingNote(draft, key) && (
+                            <p>{settingNote(draft, key)}</p>
+                          )}
+                          {settingFlavor(key, chosen) && (
+                            <p>選んでいる値: {settingFlavor(key, chosen)}</p>
+                          )}
+                        </Info>
+                      }
                     />
                   </span>
                   <Meta
@@ -268,11 +280,6 @@ export function Actions({
                   {settingInactiveReason(draft, key) && (
                     <span className="block text-xs opacity-70">
                       今は効かない: {settingInactiveReason(draft, key)}
-                    </span>
-                  )}
-                  {settingNote(draft, key) && (
-                    <span className="block text-xs opacity-70">
-                      {settingNote(draft, key)}
                     </span>
                   )}
                 </span>
@@ -318,11 +325,6 @@ export function Actions({
                     );
                   })}
                 </select>
-                {settingFlavor(key, chosen) && (
-                  <span className="mt-1 block text-xs opacity-70">
-                    {settingFlavor(key, chosen)}
-                  </span>
-                )}
                 {key === 'isr' && invalidation && (
                   <span className="mt-1 block text-xs text-warning">
                     「{NEXT_ON_DEMAND}」では {invalidation}

@@ -4,6 +4,7 @@
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
 // 地の色との対比は WARN なので、凡例に値を書く）。
+import { Info } from './info.tsx';
 import { isZeroText, signedText, fmtPoints } from './format.ts';
 import {
   effortTotalNote,
@@ -266,12 +267,25 @@ export function FeatureRing({
             : '機能開発 / 期待'}
         </text>
       </svg>
-      <div className="min-w-0 space-y-1 text-xs text-[var(--text-secondary)]">
-        <div className="font-semibold text-[var(--text-primary)]">{head}</div>
-        <div>
-          内側の輪: 手間 {fmtPoints(effort.total)}
-          {effortTotalNote(effort.total, effort.accountAllowance)}{' '}
-          の使い道（目盛りは期待 {perMonth}）
+      <div className="min-w-0 max-w-64 flex-1 basis-32 space-y-1 text-xs text-[var(--text-secondary)]">
+        {/* 輪の読み方（内側・外側・目盛り）は ⓘ に畳み、見出しと色の凡例だけを出す（prd/16） */}
+        <div className="flex items-center gap-1 font-semibold text-[var(--text-primary)]">
+          {head}
+          <Info label="輪のグラフの見方" title="輪のグラフの見方">
+            <p>
+              内側の輪: 手間 {fmtPoints(effort.total)}
+              {effortTotalNote(effort.total, effort.accountAllowance)}{' '}
+              の使い道（目盛りは期待 {perMonth}）。
+            </p>
+            <p>
+              外側の輪: {progressText} →「機能」は{STAGE_LABEL[shown.stage]}
+              {shown.note}。
+            </p>
+            <p>
+              外側の目盛り: 普通 {fmtPoints(p.fairAt)}・良い{' '}
+              {fmtPoints(p.goodAt)}。
+            </p>
+          </Info>
         </div>
         <ul className="space-y-0.5">
           {/* 値が 0 の区分は省く（機能開発と、行動の欄の「行動」は選ぶと動くので常に出す） */}
@@ -307,11 +321,7 @@ export function FeatureRing({
             className="inline-block h-2.5 w-2.5 rounded-full"
             style={{ background: STAGE_COLOR[shown.stage] }}
           />
-          外側の輪: {progressText} →「機能」は{STAGE_LABEL[shown.stage]}
-          {shown.note}
-        </div>
-        <div>
-          目盛り: 普通 {fmtPoints(p.fairAt)}・良い {fmtPoints(p.goodAt)}
+          累計 {fmtPoints(p.total)} / 期待 {fmtPoints(p.expected)}
         </div>
       </div>
     </div>

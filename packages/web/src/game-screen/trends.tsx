@@ -138,6 +138,10 @@ export function Trends({
   const last = history[history.length - 1]!;
   // 所持金の見込み（目安。直近 3 か月の月の利益の平均で線形に伸ばす。D-42）
   const cashProj = ended ? undefined : cashProjectionOf({ history, scenario });
+  const hasProj =
+    cashProj !== null &&
+    cashProj !== undefined &&
+    cashProj.projection.length > 0;
   // 所持金の目標の目安（シナリオの goal.cash。表示だけで合否にしない。D-167）。
   // 後で集計の分布（完走した人の 12 か月目の所持金の上位 90% の線など）から出す余地を残す（prd/15 §2.1）
   const cashGuide = scenario.goal.cash;
@@ -240,38 +244,46 @@ export function Trends({
             </div>
           ))}
         </div>
-        {cashProj && cashProj.projection.length > 0 && (
-          <p className="text-sm" data-cash-projection>
-            <span className="whitespace-nowrap">所持金はこのペースだと</span>{' '}
-            <wbr />
-            <span className="whitespace-nowrap">
-              {`${scenario.months} か月目に約 ${usd(Math.round(cashProj.final))}`}
-            </span>
-            の見込みです{' '}
-            <Info label="所持金の見込みの出し方">
-              {cashProj.method === 'growth'
-                ? `月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
-                : `月の利益（収益 − 費用。所持金の実際の増減）が 0 以下なので、伸びを入れず直近 3 か月の平均（約 ${usd(Math.round(cashProj.nextProfit))}）で残りの月を線形に伸ばしたゲーム上の目安。`}
-              話題・前兆・Bot
-              で一時的に流量が増えた月は、基準にも比にも使いません
-              {cashProj.skipped > 0
-                ? `（今回は ${cashProj.skipped} か月を除きました）`
-                : ''}
-              。予告済みのイベント・料金の改定は織り込みません
-            </Info>
-          </p>
-        )}
-        {!ended && (
-          <p className="text-sm" data-cash-guide>
-            {`目標の目安は ${scenario.months} か月目に所持金 ${usd(cashGuide)} です`}
-            {cashProj && cashProj.projection.length > 0
-              ? cashProj.final >= cashGuide
-                ? `（見込みは目安を約 ${usd(Math.round(cashProj.final - cashGuide))} 上回ります）`
-                : `（見込みでは目安まで約 ${usd(Math.round(cashGuide - cashProj.final))} です）`
-              : ''}
-            。届かなくても完走になり、合否はありません{' '}
-            <Info label="目標の目安とは">
-              {`シナリオが想定した ${scenario.months} か月目の所持金の目安です（ゲーム上の仮定）。下回っても途中で終わったり失敗になったりはしません。完走したら、4 つの軸で振り返ります。所持金のグラフの点線が目安の額です`}
+        {/* 所持金の見込みと目安を 1 行にまとめ、出し方・目安の意味は ⓘ に畳む（prd/16） */}
+        {(hasProj || !ended) && (
+          <p
+            className="flex flex-wrap items-center gap-x-1 text-sm"
+            data-cash-projection={hasProj ? '' : undefined}
+            data-cash-guide={ended ? undefined : ''}
+          >
+            {hasProj && (
+              <span className="whitespace-nowrap">
+                {`${scenario.months} か月目の所持金の見込み 約 ${usd(Math.round(cashProj.final))}`}
+              </span>
+            )}
+            {!ended && (
+              <span className="whitespace-nowrap opacity-80">
+                {hasProj
+                  ? cashProj.final >= cashGuide
+                    ? `（目安 ${usd(cashGuide)} を約 ${usd(Math.round(cashProj.final - cashGuide))} 上回る）`
+                    : `（目安 ${usd(cashGuide)} まで約 ${usd(Math.round(cashGuide - cashProj.final))}）`
+                  : `目安: ${scenario.months} か月目に所持金 ${usd(cashGuide)}`}
+              </span>
+            )}
+            <Info label="所持金の見込みと目安" title="所持金の見込みと目安">
+              {hasProj && (
+                <p>
+                  {cashProj.method === 'growth'
+                    ? `見込みは、月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安です。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
+                    : `見込みは、月の利益（収益 − 費用。所持金の実際の増減）が 0 以下なので、伸びを入れず直近 3 か月の平均（約 ${usd(Math.round(cashProj.nextProfit))}）で残りの月を線形に伸ばしたゲーム上の目安です。`}
+                  話題・前兆・Bot
+                  で一時的に流量が増えた月は、基準にも比にも使いません
+                  {cashProj.skipped > 0
+                    ? `（今回は ${cashProj.skipped} か月を除きました）`
+                    : ''}
+                  。予告済みのイベント・料金の改定は織り込みません。
+                </p>
+              )}
+              {!ended && (
+                <p>
+                  {`目標の目安は ${scenario.months} か月目に所持金 ${usd(cashGuide)} です。シナリオが想定した額で（ゲーム上の仮定）、所持金のグラフの点線が目安の額です。届かなくても完走になり、合否はありません。完走したら、4 つの軸で振り返ります。`}
+                </p>
+              )}
             </Info>
           </p>
         )}
@@ -377,16 +389,22 @@ export function Trends({
           />
         </div>
         {trends.length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              上限の使用率（境目 = 100%）
-            </h3>
-            <div className="grid gap-2 sm:gap-3 md:grid-cols-2">
+          // 今月の上限は月の報告の「プラットフォームの上限・制限」に出るので、推移のグラフは畳む。
+          // 先で超える見込み（▲）があるときだけ開いて出す（prd/16）
+          <details
+            className="collapse-arrow collapse rounded-box border border-base-300"
+            open={trends.some((t) => !t.hitNow && t.monthsUntil !== null)}
+            data-limit-trends
+          >
+            <summary className="collapse-title min-h-0 py-2 text-sm font-semibold">
+              上限の使用率の推移（{trends.length} 件。境目 = 100%）
+            </summary>
+            <div className="collapse-content grid gap-2 sm:gap-3 md:grid-cols-2">
               {trends.map((t) => (
                 <TrendCard key={t.id} t={t} months={scenario.months} />
               ))}
             </div>
-          </div>
+          </details>
         )}
       </div>
     </div>
@@ -418,6 +436,19 @@ function TrendCard({
     ...t.ratios.map((r) => r ?? 0),
     ...t.projection.map((p) => p.ratio),
   );
+  // グラフの注記（見込みを出さない・除いた月・区切った月・上端で切った値）は、見出しの ⓘ にまとめる（prd/16）
+  const notes = [
+    t.projectionNote,
+    !t.projectionNote && !t.hitNow && t.excluded.length > 0
+      ? `${t.excluded.map((i) => i + 1).join('・')} か月目は一時的に流量が増えた月なので、見込みの計算から除きました`
+      : undefined,
+    t.breaks.length > 0
+      ? `${t.breaks.map((i) => i + 1).join('・')} か月目に効く部品を替えたので、線（縦の破線）と見込みはそこで区切りました`
+      : undefined,
+    Math.max(...t.ratios.map((r) => r ?? 0)) > 3
+      ? '300% を超えた部分はグラフの上端で切っています（値は上の %）'
+      : undefined,
+  ].filter((x): x is string => Boolean(x));
   return (
     <div className="rounded-box border border-base-300 p-2 sm:p-3">
       <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -430,21 +461,19 @@ function TrendCard({
             見込みより早く超えた
           </span>
         )}
+        {notes.length > 0 && (
+          <span className="ml-auto">
+            <Info label="このグラフの注記" title={t.text}>
+              <ul className="list-disc space-y-0.5 pl-5">
+                {notes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            </Info>
+          </span>
+        )}
       </div>
       <div className="mb-1 text-sm">{t.text}</div>
-      {t.projectionNote && (
-        <div className="mb-1 text-xs opacity-70">{t.projectionNote}</div>
-      )}
-      {!t.projectionNote && !t.hitNow && t.excluded.length > 0 && (
-        <div className="mb-1 text-xs opacity-70">
-          {`${t.excluded.map((i) => i + 1).join('・')} か月目は一時的に流量が増えた月なので、見込みの計算から除きました`}
-        </div>
-      )}
-      {t.breaks.length > 0 && (
-        <div className="mb-1 text-xs opacity-70">
-          {`${t.breaks.map((i) => i + 1).join('・')} か月目に効く部品を替えたので、線（縦の破線）と見込みはそこで区切りました`}
-        </div>
-      )}
       <LineChart
         months={months}
         height={120}
@@ -465,11 +494,6 @@ function TrendCard({
           },
         ]}
       />
-      {Math.max(...t.ratios.map((r) => r ?? 0)) > 3 && (
-        <div className="text-xs opacity-70">
-          300% を超えた部分はグラフの上端で切っています（値は上の %）
-        </div>
-      )}
     </div>
   );
 }

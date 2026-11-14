@@ -58,73 +58,32 @@ export function EffortBreakdownView({
   scenario: Scenario;
 }) {
   const e = r.effort;
-  const parts = [
-    { label: '自前運用の維持', value: e.upkeep, cls: 'bg-warning' },
-    // 主のアカウント以外の事業者のアカウントの維持（D-52・D-123）。無ければ出さない
-    ...(e.accounts
-      ? [{ label: '他の事業者の管理', value: e.accounts, cls: 'bg-warning/50' }]
-      : []),
-    { label: 'イベントへの対応', value: e.interrupt, cls: 'bg-error' },
-    {
-      label: '乗り換え・作り直し・DB や API の移し替え',
-      value: e.migration,
-      cls: 'bg-secondary',
-    },
-    {
-      label: 'アクション（設定・最適化・部品）',
-      value: e.actions,
-      cls: 'bg-info',
-    },
-    // 機能追加の提案への対応は機能開発に数える（D-29）。棒は手間の総量の内訳なので、加点は棒に入れず下に添える
-    {
-      label: '機能の追加（開発依頼）',
-      value: e.featureWork,
-      cls: 'bg-accent',
-    },
-    {
-      label: '機能開発（残り）',
-      value: e.feature - e.featureWork - e.featureBonus,
-      cls: 'bg-success',
-    },
-  ];
+  // 手間の使い道は下の輪のグラフ（色の凡例つき）で見せ、横棒と全区分の表は出さない（0 の区分が多く、輪と重なる）。
+  // 総量の内訳と SSR の CPU の注記は見出しの ⓘ に畳む（prd/16）
   return (
     <div>
-      <h3 className="mb-1 font-bold">
+      <h3 className="mb-1 flex flex-wrap items-center gap-x-1 font-bold">
         開発の手間 {fmtPoints(e.total)} ポイント
-        {/* 既定の構成の事業者の管理の分を足した月は内訳を添える（D-123） */}
-        {e.accountAllowance ? (
-          <span className="ml-1 text-sm font-normal opacity-70">
-            {effortTotalNote(e.total, e.accountAllowance)}
-          </span>
-        ) : null}
-        <span className="ml-2 text-sm font-normal opacity-70">
-          機能開発 {Math.round(e.feature)}
-          {e.featureBonus > 0 &&
-            `（うち開発依頼の加点 +${fmtPoints(e.featureBonus)}）`}
-          ・累計 {Math.round(r.featurePoints)}
+        <span className="text-sm font-normal opacity-70">
+          機能開発 {Math.round(e.feature)}・累計 {Math.round(r.featurePoints)}
         </span>
+        <Info label="開発の手間の説明" title="開発の手間">
+          <p>
+            毎月使える手間 {fmtPoints(e.total)} ポイント
+            {e.accountAllowance
+              ? effortTotalNote(e.total, e.accountAllowance)
+              : ''}
+            のうち、運用やアクションに使わなかった分が機能開発に回ります。使い道の内訳は下の輪のグラフです。
+          </p>
+          {e.featureBonus > 0 && (
+            <p>機能開発のうち開発依頼の加点 +{fmtPoints(e.featureBonus)}。</p>
+          )}
+          <p>
+            サーバーで描く CPU 時間（SSR）は {r.ssrCpuMs} ms
+            です（機能開発で重くなります）。
+          </p>
+        </Info>
       </h3>
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-base-200">
-        {parts
-          .filter((p) => p.value > 0)
-          .map((p) => (
-            <div
-              key={p.label}
-              className={`${p.cls} motion-width`}
-              style={{ width: `${(p.value / e.total) * 100}%` }}
-              title={`${p.label} ${p.value}`}
-            />
-          ))}
-      </div>
-      <ul className="mt-2 grid grid-cols-2 gap-x-4 text-sm">
-        {parts.map((p) => (
-          <li key={p.label} className="flex items-center gap-2">
-            <span className={`inline-block h-2 w-2 rounded-full ${p.cls}`} />
-            {p.label}
-            <span className="ml-auto tabular-nums">{fmtPoints(p.value)}</span>
-          </li>
-        ))}
-      </ul>
       {r.componentSwap && (
         <div className="mt-2 text-sm">
           {r.componentSwap.label}差し替え中（データの移行）:{' '}
@@ -174,9 +133,6 @@ export function EffortBreakdownView({
           effort={r.effort}
           actual={r.satisfaction.stages.feature}
         />
-      </div>
-      <div className="mt-1 text-xs opacity-70">
-        サーバーで描く CPU 時間（SSR） {r.ssrCpuMs} ms（機能開発で重くなる）
       </div>
     </div>
   );

@@ -44,10 +44,13 @@ export function MonthCard({
           <span className={`badge ${STATUS[r.status].cls}`}>
             {STATUS[r.status].label}
           </span>
+          {/* 部品の一覧は長いので、構成の名前の横の ⓘ に畳む（prd/16） */}
+          {r.componentSummary && (
+            <Info label="部品の一覧" title={r.stackName}>
+              <p>部品: {r.componentSummary}</p>
+            </Info>
+          )}
         </h2>
-        {r.componentSummary && (
-          <div className="text-xs opacity-70">部品 {r.componentSummary}</div>
-        )}
         {r.contractRevenue > 0 && (
           <div className="text-xs opacity-70">
             契約の収益 {usd(r.contractRevenue)}（収益に含む）
@@ -117,7 +120,7 @@ export function MonthCard({
                   className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 sm:gap-2"
                   data-satisfaction-element={e}
                 >
-                  <span className="whitespace-nowrap sm:w-14">
+                  <span className="whitespace-nowrap sm:w-24 sm:shrink-0">
                     {ELEMENT_LABEL[e]}
                   </span>
                   <span className={`badge badge-sm ${STAGE_CLS[s.stages[e]]}`}>
@@ -264,7 +267,10 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
           {(p.ratio! * 100).toFixed(0)}%
         </span>
       )}
-      <span>{credit ? creditUseText(p, usd) : p.text}</span>
+      {/* 広い画面では札の右の残りの幅で折り返し、狭い画面では札の下の 1 行に回す */}
+      <span className="min-w-0 basis-full sm:basis-0 sm:flex-1">
+        {credit ? creditUseText(p, usd) : p.text}
+      </span>
       {p.detail && (
         <span className="basis-full text-xs opacity-80">{p.detail}</span>
       )}
