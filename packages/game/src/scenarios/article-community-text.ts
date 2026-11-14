@@ -249,8 +249,8 @@ export const ARTICLE_COMMUNITY_TEXT: ScenarioText = {
     '一覧・トップのページは記事のページに含めて数えます',
   ],
   growth: {
-    up: '利用者の満足度が高ければ口コミで伸び',
-    down: '低ければ解約が増えます',
+    up: '利用者の満足度が高いと、口コミで伸びます',
+    down: '満足度が低いと、解約が増えます',
   },
   events: [
     {

@@ -497,18 +497,34 @@ export const fwCard = () => {
     'section[data-framework][aria-current="true"]',
   )!;
 };
+/**
+ * カードの中のページのタブを開く（ページが 2 つ以上のカードはタブで 1 ページずつ出す。2026-11-14）。route か名前で指す。
+ * タブが無い（1 ページだけの）カードでは何もしない。
+ */
+export const showPage = (card: HTMLElement, page: string) => {
+  const tab =
+    card.querySelector<HTMLElement>(`[data-page-tab="${page}"]`) ??
+    within(card).queryByRole('tab', { name: page });
+  if (tab) fireEvent.click(tab);
+};
 /** 選んでいるフレームワークのカードの、ページの欄（見取り図・描き方のチップ・札。D-112）。 */
-export const pageOf = (route: string) =>
-  fwCard().querySelector<HTMLElement>(`section[data-route="${route}"]`)!;
+export const pageOf = (route: string) => {
+  const card = fwCard();
+  showPage(card, route);
+  return card.querySelector<HTMLElement>(`section[data-route="${route}"]`)!;
+};
 /** ページの欄で選んでいる描き方。 */
 export const chosenOf = (route: string) =>
   pageOf(route)
     .querySelector('[data-selected="true"]')!
     .getAttribute('data-alternative');
 /** ページの欄の描き方のチップを押す（名前は描き方の名前の前方一致。番号は出さない。D-112）。 */
-export const pickStrategy = (page: string, strategy: string) =>
+export const pickStrategy = (page: string, strategy: string) => {
+  const card = fwCard();
+  showPage(card, page);
   fireEvent.click(
-    within(fwCard()).getByRole('button', {
+    within(card).getByRole('button', {
       name: (n) => n.startsWith(`${page}を ${strategy}`),
     }),
   );
+};

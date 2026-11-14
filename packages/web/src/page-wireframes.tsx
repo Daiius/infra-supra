@@ -70,18 +70,26 @@ export function PageWireframe({ page }: { page: ResolvedPage }) {
           key={r.id}
           data-region={r.id}
           data-source={r.source}
-          className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} ${HEIGHT[r.height ?? 'sm']} rounded border p-1 ${SOURCE_CLASS[r.source]}`}
+          className={`${r.width === 'half' ? 'col-span-1' : 'col-span-2'} ${HEIGHT[r.height ?? 'sm']} flex min-w-0 flex-col gap-0.5 rounded border p-1 ${SOURCE_CLASS[r.source]}`}
           style={SOURCE_STYLE[r.source]}
         >
-          <span className="block text-[11px] leading-tight font-medium">
-            {r.label}
+          {/* 区画の名前と作られ方の札を上の行に並べる（狭い区画では札が次の行へ折り返す。シナリオの見取り図と同じ並べ方） */}
+          <span className="flex flex-wrap items-center justify-between gap-x-1 gap-y-0.5">
+            <span className="block text-[11px] leading-tight font-medium">
+              {r.label}
+            </span>
+            <span className="sr-only">: </span>
+            <span
+              className="badge h-auto badge-xs bg-base-100/85 py-0.5 text-[10px] leading-tight whitespace-normal"
+              {...(r.sourceNote ? { title: r.sourceNote } : {})}
+            >
+              {r.sourceLabel}
+            </span>
           </span>
-          <span className="sr-only">: </span>
-          <span
-            className="badge mt-0.5 h-auto badge-xs bg-base-100/85 py-0.5 text-[10px] leading-tight whitespace-normal"
-            {...(r.sourceNote ? { title: r.sourceNote } : {})}
-          >
-            {r.sourceLabel}
+          {/* 中身の形（シナリオの見取り図と同じスケルトン。始める画面ではシナリオの見取り図をダイアログに畳んだので、ここで見せる） */}
+          {/* 地の色が作られ方を表すので、中身の形は色を抜いて薄く描く（画像・人の色が地の色と混ざってにごらないように） */}
+          <span className="block opacity-70 grayscale">
+            <RegionSkeleton kind={r.kind ?? 'body'} />
           </span>
         </li>
       ))}

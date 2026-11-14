@@ -1,5 +1,6 @@
 // 始める画面のシナリオの選択と説明（D-33・prd/09 E-5・E-6）と、構成のカードのフレームワーク欄（D-35）。文言はシナリオのデータ（Scenario.text）から読む。
 import clsx from 'clsx';
+import { Eye, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   accountAllowanceOf,
   accountLabel,
@@ -282,6 +283,9 @@ function FrameworkCard({
     (editor?.rows ?? routes)?.find((r) => r.route === route);
   const statusOf = (route: string) =>
     editor?.status.find((x) => x.route === route);
+  // ページが 2 つ以上なら、タブで 1 ページずつ出す（2026-11-14）
+  const [pageTab, setPageTab] = useState(0);
+  const shownPage = pages[Math.min(pageTab, pages.length - 1)];
   return (
     <section
       aria-label={`${FRAMEWORKS[id].label} の説明`}
@@ -330,7 +334,30 @@ function FrameworkCard({
             ))}
           </ul>
         )}
+        {pages.length > 1 && (
+          <div
+            role="tablist"
+            aria-label="ページ"
+            className="tabs-box tabs w-fit max-w-full tabs-sm"
+            data-page-tabs
+          >
+            {pages.map((p, i) => (
+              <button
+                key={p.route}
+                type="button"
+                role="tab"
+                aria-selected={p === shownPage}
+                data-page-tab={p.route}
+                className={clsx('tab', p === shownPage && 'tab-active')}
+                onClick={() => setPageTab(i)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
         {pages.map((p) => {
+          if (p !== shownPage) return null;
           const row = rowOf(p.route);
           const st = statusOf(p.route);
           // フレームワークの既定と違う描き方なら、フレームワークの説明の行は出さず、描き方の説明（long・why）はチップの ⓘ に
@@ -341,11 +368,22 @@ function FrameworkCard({
               key={p.route}
               aria-label={p.label}
               data-route={p.route}
-              className="flex flex-col gap-2 border-t border-base-300 pt-3 lg:flex-row lg:gap-4"
+              className={clsx(
+                'flex flex-col gap-2 lg:flex-row lg:gap-4',
+                pages.length === 1 && 'border-t border-base-300 pt-3',
+              )}
             >
               <PageWireframe page={p} />
               <div className="min-w-0 flex-1 space-y-1.5">
-                <h5 className="font-semibold">{p.label}</h5>
+                {/* タブがあるときは見出しをタブと重ねない（読み上げには残す） */}
+                <h5
+                  className={clsx(
+                    'font-semibold',
+                    pages.length > 1 && 'sr-only',
+                  )}
+                >
+                  {p.label}
+                </h5>
                 {row && (
                   <RouteChips
                     row={row}
@@ -559,11 +597,14 @@ function DetailsDialog({
   label,
   title,
   children,
+  wide = false,
 }: {
   /** 開くボタンの文字。 */
   label: string;
   title: string;
   children: ReactNode;
+  /** 図を載せるとき（見取り図）の広い幅。 */
+  wide?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -600,7 +641,12 @@ function DetailsDialog({
           }}
         >
           <PortalContainer.Provider value={dialogEl}>
-            <div className="modal-box max-w-xl">
+            <div
+              className={clsx(
+                'modal-box',
+                wide ? 'w-11/12 max-w-4xl' : 'max-w-xl',
+              )}
+            >
               <div className="flex items-start justify-between gap-2">
                 <h2 id={titleId} className="text-lg font-bold">
                   {title}
@@ -654,6 +700,24 @@ const AXIS_INTRO: Record<ResultAxisId, string> = {
     'プレイした月のインフラの費用の合計（高い・低いで良し悪しは付けません）',
 };
 
+/** 文を「。」ごとに分ける（括弧（）の中の「。」では切らない）。 */
+function sentencesOf(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of text) {
+    cur += ch;
+    if (ch === '（') depth++;
+    else if (ch === '）') depth = Math.max(0, depth - 1);
+    else if (ch === '。' && depth === 0) {
+      out.push(cur);
+      cur = '';
+    }
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
 /** シナリオの説明・走り切ることと 4 軸の紹介・アプリの形。 */
 export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
   const t = sc.text;
@@ -664,12 +728,13 @@ export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
   ).toFixed(0);
   const wireframes = scenarioWireframes(sc);
   const pageLines = t?.pages ?? [];
-  // ページの一覧の行のうち、見取り図のページの行は見取り図の説明にし、残り（「一覧・トップは…」など）は下に並べる
+  // 見取り図のページの説明（ダイアログの中で、見取り図の下に添える）
   const lineOf = (label: string) => pageLines.find((l) => l.startsWith(label));
+  // 見取り図に当てはまらない行（「一覧・トップは…」など）は、ダイアログの見取り図の下に並べる
   const otherLines = pageLines.filter(
     (l) => !wireframes.some((p) => l.startsWith(p.label)),
   );
-  const pagesTitleId = useId();
+  const introLines = sentencesOf(intro ?? '');
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body px-3 sm:px-6">
@@ -678,40 +743,87 @@ export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
         </h2>
         {/* シナリオの題材を一般的なアイコンの組み合わせで 1 枚に見せる（D-140） */}
         <ScenarioArt scenarioId={sc.id} name={sc.name} />
-        <p>
-          {intro}
-          {t?.scale}今は月 {sc.scale.startPV.toLocaleString()} PV。
-          {t?.growth.up ?? '満足度が高ければ伸び'}（満足度 0.9 で毎月約 {growth}
-          %）、{t?.growth.down ?? '低ければ減ります'}。
-        </p>
-        {/* ページの一覧（ページ → 見る人・要件。D-101）と、フレームワークに依らない見取り図（区画の要件。D-113）。
-            描き方はフレームワークのカードに出す。説明文に埋もれないよう、別の面（帯）に載せる */}
-        {t?.pages && (
-          <section
-            aria-labelledby={pagesTitleId}
-            className="space-y-2 rounded-box bg-base-200 p-2 sm:p-3"
-          >
-            {/* 札の凡例・ページの性質・注記は見出しの横の ⓘ に畳む（D-113 の補足・2026-11-05） */}
-            <div className="flex items-center gap-1">
-              <h3 id={pagesTitleId} className="font-bold">
-                ページの見取り図
-              </h3>
-              <ScenarioWireframesInfo pages={wireframes} />
+        {/*
+          紹介（2026-11-14）: どんなアプリかを中立の面に箇条書きで、伸びる・減る要因を色分けした 2 つのパネルに分ける。
+          ページの一覧と見取り図は、フレームワークの描き方の選択でも見られるので「ページの見取り図」のダイアログに畳む
+        */}
+        <div className="space-y-2" data-scenario-intro>
+          <div className="rounded-box bg-base-200 p-2 sm:p-3">
+            <ul className="list-disc space-y-0.5 pl-5">
+              {introLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+              {t?.scale && <li>{t.scale}</li>}
+            </ul>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="flex items-center gap-1 text-sm">
+                <Eye aria-hidden className="size-4 opacity-70" />
+                今は月{' '}
+                <span className="font-bold tabular-nums">
+                  {sc.scale.startPV.toLocaleString()}
+                </span>{' '}
+                PV
+              </span>
+              {t?.pages && (
+                <DetailsDialog
+                  label="ページの見取り図"
+                  title="ページの見取り図"
+                  wide
+                >
+                  {/* 札の凡例・ページの性質・注記は ⓘ に畳む（D-113 の補足・2026-11-05） */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm opacity-80">凡例と注記</span>
+                    <ScenarioWireframesInfo pages={wireframes} />
+                  </div>
+                  <ScenarioWireframes
+                    pages={wireframes}
+                    captionOf={(p) => lineOf(p.label)}
+                    offscreen={scenarioOffscreen(sc)}
+                  />
+                  {otherLines.length > 0 && (
+                    <ul className="list-disc space-y-0.5 pl-5">
+                      {otherLines.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  )}
+                </DetailsDialog>
+              )}
             </div>
-            <ScenarioWireframes
-              pages={wireframes}
-              captionOf={(p) => lineOf(p.label)}
-              offscreen={scenarioOffscreen(sc)}
-            />
-            {otherLines.length > 0 && (
-              <ul className="list-disc space-y-0.5 pl-6 text-sm">
-                {otherLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div
+              className="flex items-start gap-2 rounded-box border border-success/50 bg-success/5 p-2 sm:p-3"
+              data-growth="up"
+            >
+              {/* 良い効果は緑の右肩上がり・悪い効果は赤の右肩下がり（色と矢印の向きの両方で見分ける） */}
+              <TrendingUp
+                aria-label="良い効果"
+                className="size-7 shrink-0 text-success"
+              />
+              <div className="min-w-0 self-center">
+                <p className="text-sm">
+                  {t?.growth.up ?? '満足度が高いと伸びます'}（満足度 0.9
+                  で毎月約 {growth}%）。
+                </p>
+              </div>
+            </div>
+            <div
+              className="flex items-start gap-2 rounded-box border border-error/40 bg-error/5 p-2 sm:p-3"
+              data-growth="down"
+            >
+              <TrendingDown
+                aria-label="悪い効果"
+                className="size-7 shrink-0 text-error-strong"
+              />
+              <div className="min-w-0 self-center">
+                <p className="text-sm">
+                  {t?.growth.down ?? '満足度が低いと減ります'}。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
         {t?.revenue && <p>{t.revenue}</p>}
         <div>
           運営中にイベントが起きます（時期は乱数のシードで変わります）。
