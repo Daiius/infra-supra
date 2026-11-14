@@ -484,3 +484,31 @@ export function expectGameScreen(month: number) {
   // 見出しの行 + 月の数
   expect(within(history).getAllByRole('row')).toHaveLength(month + 1);
 }
+
+/** シナリオの名前（始める画面のラジオで選ぶ）。 */
+export const ARTICLE = '記事コミュニティ';
+export const CONTRACT = '受託先の業務アプリの運用';
+
+/** 選んでいるフレームワークのカード（前後のカードも同じ中身で並ぶ。D-113 で構成のカードの後ろに移した）。 */
+export const fwCard = () => {
+  // ② はタブで出す（D-116 の補足）ので、開いてから引く
+  showFrameworkTab();
+  return document.querySelector<HTMLElement>(
+    'section[data-framework][aria-current="true"]',
+  )!;
+};
+/** 選んでいるフレームワークのカードの、ページの欄（見取り図・描き方のチップ・札。D-112）。 */
+export const pageOf = (route: string) =>
+  fwCard().querySelector<HTMLElement>(`section[data-route="${route}"]`)!;
+/** ページの欄で選んでいる描き方。 */
+export const chosenOf = (route: string) =>
+  pageOf(route)
+    .querySelector('[data-selected="true"]')!
+    .getAttribute('data-alternative');
+/** ページの欄の描き方のチップを押す（名前は描き方の名前の前方一致。番号は出さない。D-112）。 */
+export const pickStrategy = (page: string, strategy: string) =>
+  fireEvent.click(
+    within(fwCard()).getByRole('button', {
+      name: (n) => n.startsWith(`${page}を ${strategy}`),
+    }),
+  );
