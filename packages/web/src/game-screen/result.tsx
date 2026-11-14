@@ -32,7 +32,7 @@ import {
   FireworksEngine,
   useReducedMotion,
 } from '../motion.tsx';
-import { fmtPoints } from './shared.ts';
+import { fmtPoints } from '../format.ts';
 
 /**
  * 完走のダイアログと花火（D-25・D-131）。4 軸の値と集計の分布の中での位置（段 3・D-161）か手元の履歴との比較を出し、分布があれば上位に入った軸（向きのある 3 軸）が多いほど花火を増やす（D-163）。分布が無ければ花火はいつも 1 段（D-168）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。

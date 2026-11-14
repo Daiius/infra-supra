@@ -35,7 +35,7 @@ import type { MonthDraft } from '../month-draft.ts';
 import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
 import { commitmentMeta } from '../commitment-meta.ts';
 import { isZeroText, signedText } from '../format.ts';
-import { fmtPoints } from './shared.ts';
+import { fmtPoints } from '../format.ts';
 import { FeatureProgressLine } from './effort.tsx';
 
 /** 確約の行動（D-97）。今月の明細に対象の使用がある確約だけ出す。結んだ確約は期間を出す。 */

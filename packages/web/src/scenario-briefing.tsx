@@ -52,7 +52,7 @@ import {
   RouteSettingChips,
   type RoutePlanEditor,
 } from './route-plan-field.tsx';
-import { usd } from './format.ts';
+import { usd, fmtPoints } from './format.ts';
 
 /** 選べるシナリオ（SCENARIOS の登録順）。 */
 export const SCENARIO_LIST: Scenario[] = Object.values(SCENARIOS);
@@ -92,8 +92,6 @@ export function ScenarioPicker({
   );
 }
 
-const fmtEffort = (n: number) => String(Number(n.toFixed(1)));
-
 /**
  * 構成の毎月の手間（D-36）。毎月の手間をマスで並べ、内訳で塗り分ける（色はゲーム中の手間の棒と同じ: 維持 warning・
  * 他の事業者の管理 warning の薄い色・機能開発 success）。色だけに頼らず、数を文字でも出す。自前運用の構成には、自前の障害の確率を添える。
@@ -123,15 +121,15 @@ export function EffortBar({
   const free = total - upkeep - accounts;
   const items = [
     ...(allowance > 0
-      ? [`毎月 ${fmtEffort(total)}${effortTotalNote(total, allowance)}`]
+      ? [`毎月 ${fmtPoints(total)}${effortTotalNote(total, allowance)}`]
       : []),
     ...(upkeep > 0 ? [`維持 ${upkeep}`] : []),
     ...(accounts > 0
       ? [
-          `他の事業者の管理 ${fmtEffort(accounts)}（${others.map(accountLabel).join('・')}）`,
+          `他の事業者の管理 ${fmtPoints(accounts)}（${others.map(accountLabel).join('・')}）`,
         ]
       : []),
-    `機能開発に ${fmtEffort(free)}`,
+    `機能開発に ${fmtPoints(free)}`,
     // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の手間だけ（D-63）
     ...(selfHosted
       ? [
@@ -153,7 +151,7 @@ export function EffortBar({
     <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span
         role="img"
-        aria-label={`毎月の手間 ${fmtEffort(total)}${effortTotalNote(total, allowance)} のうち、維持 ${upkeep}${accounts > 0 ? `・他の事業者の管理 ${fmtEffort(accounts)}` : ''}`}
+        aria-label={`毎月の手間 ${fmtPoints(total)}${effortTotalNote(total, allowance)} のうち、維持 ${upkeep}${accounts > 0 ? `・他の事業者の管理 ${fmtPoints(accounts)}` : ''}`}
         className="flex shrink-0 gap-0.5"
       >
         {Array.from({ length: Math.max(0, Math.ceil(total)) }, (_, k) => (

@@ -14,10 +14,8 @@ import {
   type Standing,
   type StatsView,
 } from './distribution.ts';
-import { signedText, usd } from './format.ts';
+import { signedText, usd, fmtPoints } from './format.ts';
 import type { AxisComparison } from './results-history.ts';
-
-const fmtPoints = (n: number) => String(Number(n.toFixed(1)));
 
 /** 軸ごとの値の書式（差は絶対値の書式に符号を付ける）。 */
 const FORMAT: Record<ResultAxisId, (n: number) => string> = {

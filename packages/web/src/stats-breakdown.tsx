@@ -19,7 +19,7 @@ import {
   type StatsFilter,
   type StatsView,
 } from './distribution.ts';
-import { usd } from './format.ts';
+import { usd, fmtPoints } from './format.ts';
 import { Chips } from './chips.tsx';
 import { ResultAxesPanel } from './result-axes.tsx';
 import type { AxisComparison } from './results-history.ts';
@@ -33,7 +33,7 @@ import {
 export const AXIS_FORMAT: Record<ResultAxisId, (n: number) => string> = {
   cash: usd,
   satisfaction: (n) => n.toFixed(2),
-  featurePoints: (n) => String(Number(n.toFixed(1))),
+  featurePoints: fmtPoints,
   totalCost: usd,
 };
 

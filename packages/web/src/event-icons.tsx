@@ -74,12 +74,10 @@ export function eventCategory(e: {
 }): EventCategory {
   if (e.id.startsWith('revision:')) return 'revision';
   const base = e.id.replace(/:notice$/, '');
-  // 即時反映の依頼（D-215 で苦情から依頼の形に）: 依頼として届く・届きうるときは開発依頼。先に対策していて
-  // 好評の知らせになったとき（D-118。phase は occurred。受けられない知らせ（D-201。unavailable）は除く）は評判
-  if (base === 'p-ondemand')
-    return e.phase === 'occurred' && e.unavailable === undefined
-      ? 'complaint'
-      : 'proposal';
+  // 先に対策していて、開発依頼の代わりに届いた好評の知らせ（D-118。返事を待たないので phase は occurred）は評判。
+  // 受けられない開発依頼の知らせ（D-201）も occurred だが、理由（unavailable）が付くので開発依頼のまま
+  if (e.kind === 'proposal' && e.phase === 'occurred' && !e.unavailable)
+    return 'complaint';
   const byId = BY_ID[base];
   if (byId) return byId;
   if (e.kind === 'proposal') return e.tier === 'rare' ? 'major' : 'proposal';

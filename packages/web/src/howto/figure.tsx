@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { type ReactNode } from 'react';
 
 /** 図の箱の色（daisyUI のテーマの色。Tailwind が拾えるよう、クラスは文字列のまま書く）。 */
-export const TONE = {
+const TONE = {
   neutral: { box: 'border-base-300 bg-base-100', icon: 'text-base-content/70' },
   primary: { box: 'border-primary/40 bg-primary/5', icon: 'text-primary' },
   secondary: {
@@ -17,7 +17,7 @@ export const TONE = {
   warning: { box: 'border-warning/50 bg-warning/5', icon: 'text-warning' },
   error: { box: 'border-error/40 bg-error/5', icon: 'text-error-strong' },
 } as const;
-export type Tone = keyof typeof TONE;
+type Tone = keyof typeof TONE;
 
 /** 図の 1 つの箱（印・名前・短い説明）。 */
 export function Node({
@@ -25,20 +25,17 @@ export function Node({
   label,
   sub,
   tone = 'neutral',
-  className = '',
 }: {
   Icon: LucideIcon;
   label: ReactNode;
   sub?: ReactNode;
   tone?: Tone;
-  className?: string;
 }) {
   return (
     <div
       className={clsx(
         'flex min-w-0 items-start gap-2 rounded-box border px-2 py-1.5',
         TONE[tone].box,
-        className,
       )}
       data-howto-node
     >
