@@ -103,7 +103,6 @@ describe('ゲームモードの画面', () => {
         .getAttribute('aria-selected'),
     ).toBe('true');
     fireEvent.click(pageTabs[0]!);
-    fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
     fireEvent.click(getRadio({ name: /^Astro/ }));
     // ページはタブで 1 ページずつ（個人向けのページの説明は 2 つ目のタブ）
     showPage(
@@ -148,30 +147,35 @@ describe('ゲームモードの画面', () => {
         'svg[data-brand="nextjs"]',
       ),
     ).not.toBeNull();
+    // 構成のロゴは事業者のタブに出る（D-221）
+    showStackTab();
+    const stackTab = (name: RegExp) =>
+      within(screen.getByRole('radiogroup', { name: '① インフラの構成' }))
+        .getByRole('radio', { name })
+        .closest('label')!;
     expect(
-      labelOf(/^Cloudflare Paid/).querySelector('svg[data-brand="cloudflare"]'),
+      stackTab(/^Cloudflare/).querySelector('svg[data-brand="cloudflare"]'),
     ).not.toBeNull();
-    const aws = labelOf(/^AWS（Amplify Hosting）/).querySelector(
-      '[data-brand="aws"]',
-    );
+    // 事業者のロゴだけ（既定の部品の Supabase のロゴは添えない。D-221）
+    expect(
+      stackTab(/^Vercel/).querySelector('[data-brand="supabase"]'),
+    ).toBeNull();
+    const aws = stackTab(/^AWS/).querySelector('[data-brand="aws"]');
     expect(aws?.getAttribute('data-fallback')).toBe('monogram');
     expect(aws?.textContent).toBe('AWS');
     expect(
-      labelOf(/^さくらの VPS 2GB/).querySelector(
+      stackTab(/^さくら/).querySelector(
         '[data-brand="sakura"][data-fallback="monogram"]',
       ),
     ).not.toBeNull();
-    // 選んでいるカードが印つきで、前後のカードも同じ中身で読める
+    // 選んでいるフレームワークのカードだけを出す（D-221）
     showFrameworkTab();
     expect(current().getAttribute('aria-label')).toBe(
       'Next.js（App Router） の説明',
     );
-    expect(
-      within(screen.getByRole('region', { name: 'Astro の説明' })).getByRole(
-        'list',
-        { name: '記事のページの見取り図' },
-      ),
-    ).toBeDefined();
+    expect(document.querySelectorAll('section[data-framework]')).toHaveLength(
+      1,
+    );
     // 札は選んだフレームワークでの呼び名（D-193）
     expect(tag('記事のページ', '本文')).toBe('ISR');
     expect(tag('記事のページ', 'コメント欄（読む・書く）')).toBe(
@@ -218,17 +222,8 @@ describe('ゲームモードの画面', () => {
     ).toBeDefined();
     closeInfo();
 
-    // 前後のボタンでも選ぶ（並びは Next.js・SPA・Astro・静的書き出し）
-    fireEvent.click(screen.getByRole('button', { name: /^次の選択肢/ }));
-    expect((getRadio({ name: /^Astro/ }) as HTMLInputElement).checked).toBe(
-      true,
-    );
-    // 選んでいないカードを押しても選ぶ
-    fireEvent.click(
-      within(
-        screen.getByRole('region', { name: 'Next.js（静的書き出し） の説明' }),
-      ).getByRole('heading', { level: 4 }),
-    );
+    // タブで選ぶ（並びは Next.js・SPA・Astro・静的書き出し）
+    pick(/^Next\.js（静的書き出し）/);
     expect(current().getAttribute('aria-label')).toBe(
       'Next.js（静的書き出し） の説明',
     );
@@ -285,18 +280,6 @@ describe('ゲームモードの画面', () => {
     ).toBe('true');
     // 描き方の番号（S1〜S6）は出さない（D-112）
     expect(fwCard().textContent).not.toMatch(/\bS[1-7]\b/);
-    // 選んでいないカードは既定の描き方を読むだけ（押して選ぶボタンは無い）
-    const next = screen.getByRole('region', {
-      name: 'Next.js（App Router） の説明',
-    });
-    showPage(next, '個人向けのページ');
-    const nextGroup = within(next).getByRole('group', {
-      name: '個人向けのページの描き方',
-    });
-    expect(
-      within(nextGroup).queryAllByRole('button', { pressed: false }),
-    ).toEqual([]);
-    expect(nextGroup.querySelectorAll('[data-alternative]').length).toBe(1);
     // 要件の札: CF Free は 1 リクエスト 10 ms に、記事（再生成）も個人向けも当たる
     expect(check('article', 'cpu')).toBe('false');
     expect(check('personal', 'cpu')).toBe('false');
@@ -349,7 +332,7 @@ describe('ゲームモードの画面', () => {
       within(pageOf('personal')).getByText(/^既定（.+）から変更$/),
     ).toBeDefined();
     // Google Cloud（Hosting の CDN）では消せないので、記事は期限で取り直す（選んだ個人向けの枠 + API は残る）
-    pick(/^Google Cloud/);
+    pick(/^Google Cloud（/);
     expect(chosenOf('article')).toBe('cached-ttl');
     expect(chosenOf('personal')).toBe('shell-api');
     expect(
@@ -461,7 +444,7 @@ describe('ゲームモードの画面', () => {
       ].map((x) => x.getAttribute('data-source'));
     pick(/^記事コミュニティ/);
     pick(/^Next\.js（App Router）/);
-    pick(/^Google Cloud/);
+    pick(/^Google Cloud（/);
     // 描き方はカードのページの欄のチップで選ぶ（D-112）
     pickStrategy('個人向けのページ', 'Cache Components');
     expect(chosenOf('personal')).toBe('cache-components');
@@ -474,31 +457,26 @@ describe('ゲームモードの画面', () => {
     expect(sources()).toContain('ssr');
   });
 
-  it('W-17 選んでいない構成のカードも、その構成で選べる描き方で描く（流れの凡例のページ。D-107 の補足・RS-15 の解除）', async () => {
+  it('W-17 構成を替えても、その構成で選べる描き方で構成図を描く（流れの凡例のページ。D-107 の補足・RS-15 の解除）', async () => {
     await renderApp();
     fireEvent.click(getRadio({ name: /^記事コミュニティ/ }));
     fireEvent.click(getRadio({ name: /^Next\.js（App Router）/ }));
-    // CF は Paid を選んでから離れる（選んでいない事業者のカードは最後に選んだプランを出す。D-105 の補足）
-    fireEvent.click(getRadio({ name: /^Cloudflare Paid/ }));
     fireEvent.click(getRadio({ name: /^Vercel Pro \+ Supabase Pro/ }));
     pickStrategy('記事のページ', 'Prerendering');
     showStackTab();
-    const lane = (stackId: string, label: string) =>
+    const lane = (label: string) =>
       laneLegendOf(
         document.querySelector<HTMLElement>(
-          `section[data-stack="${stackId}"]`,
+          'section[data-stack][aria-current="true"]',
         )!,
       ).find((t) => t.startsWith(label)) ?? '';
     // 選べる構成（Vercel）は S1 のまま: 記事のページは静的なページの流れ
-    expect(lane('vercel-supabase-pro', '静的なページ')).toContain(
-      '記事のページ',
-    );
-    // vinext でも S1 を選べるので、CF のカードも記事のページを静的なページの流れで描く（Worker を通る）
-    expect(lane('cloudflare-vinext-paid', '静的なページ')).toContain(
-      '記事のページ',
-    );
+    expect(lane('静的なページ')).toContain('記事のページ');
+    // vinext でも S1 を選べるので、CF にしても記事のページは静的なページの流れで描く（Worker を通る）
+    fireEvent.click(getRadio({ name: /^Cloudflare Free/ }));
+    expect(lane('静的なページ')).toContain('記事のページ');
     // 流れの名前は Next.js の呼び名（ISR。D-193）
-    expect(lane('cloudflare-vinext-paid', 'ISR')).not.toContain('記事のページ');
+    expect(lane('ISR')).not.toContain('記事のページ');
   });
 
   it('W-16 構成・フレームワークを替える前に、既定に戻るページの描き方を知らせる（D-107 の補足）', async () => {
@@ -510,29 +488,12 @@ describe('ゲームモードの画面', () => {
       beforeStart: () => {
         pickStrategy('記事のページ', 'Prerendering');
         showStackTab();
-        // 始める画面: 選べる構成（さくらの VPS・vinext の S1 も出した CF。RS-15 の解除）のカードには出さない。
-        // 選んでいない事業者のカードは、その事業者の最初のプランを出す（事業者ごとに 1 枚。D-105 の補足）
-        for (const id of ['sakura-vps-2gb', 'cloudflare-vinext-free']) {
-          const card = document.querySelector<HTMLElement>(
-            `section[data-stack="${id}"]`,
-          )!;
-          expect(within(card).queryByRole('note')).toBeNull();
-        }
-        // フレームワークを替えると、選んだ描き方は既定に戻る
-        showFrameworkTab();
-        const astro = screen.getByRole('region', { name: 'Astro の説明' });
-        expect(within(astro).getByRole('note').textContent).toMatch(
-          /^このフレームワークにすると、記事のページは「Prerendering」→「Route caching（invalidate）」（既定）に戻ります: /,
-        );
+        // 始める画面は選んでいるカードだけを出すので、替える前の注意は出さない（D-221）
+        expect(within(fwCard()).queryByRole('note')).toBeNull();
       },
     });
-    // ゲームの途中: 構成を変えるの欄（D-185）。② の作り直し先のカードに、替える前に出す
+    // ゲームの途中: 構成を変えるの欄（D-185）。作り直しの内訳に、描き方が既定に戻ることを出す（下で確かめる）
     const fold = openSetupChange();
-    showFrameworkTab();
-    const astro = within(fold).getByRole('region', { name: 'Astro の説明' });
-    expect(within(astro).getByRole('note').textContent).toMatch(
-      /^作り直すと、記事のページは「Prerendering」→「[^」]+」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります/,
-    );
     // 乗り換え: 内訳に手間（か月）が出て、描き方の知らせは出ない
     showStackTab();
     pickRadio('Cloudflare Paid + vinext', fold);
@@ -772,7 +733,7 @@ describe('ゲームモードの画面', () => {
         ?.getAttribute('data-option'),
     ).toBe('0');
     // 消せない置き場（Google Cloud の Hosting の CDN）ではオンデマンドが灰色
-    pick(/^Google Cloud/);
+    pick(/^Google Cloud（/);
     expect(
       setting('記事のキャッシュ')
         ?.querySelector('[data-option="0"]')

@@ -1,5 +1,5 @@
 // 部品の選択の記憶（D-176）: 同じ事業者のプラン（Cloudflare の Free / Paid・Vercel の Hobby / Pro・さくらの VPS の 2GB / 4GB など、
-// 構成のカルーセルで 1 枚のカードにまとめている組。stack-field.tsx の stackTabGroups）は部品の選択を共有する。
+// 構成の事業者のタブ。D-221）は部品の選択を共有する。
 // 記憶は組ごとの生の選択で、今のプランで選べないもの（Vercel Pro だけの CDN のプランなど）も残す。計算・始める・見積に使うのは、
 // その構成で選べるものだけ（validSetupChoices で絞った値）。ゲームの始める画面と見積モードで共用する。
 import {
@@ -12,10 +12,10 @@ import {
 
 type Choices = Partial<Record<string, string>>;
 
-/** 組（カルーセルのカードの key）ごとの、部品の生の選択。 */
+/** 組（事業者）ごとの、部品の生の選択。 */
 export type PartsMemory = Partial<Record<string, Choices>>;
 
-/** 構成の組: 土台の事業者（STACKS の provider）。カルーセルのカードの組（stackTabGroups）と同じ key。 */
+/** 構成の組: 土台の事業者（STACKS の provider）。構成の事業者のタブと同じ key。 */
 export const stackGroupOf = (stackIndex: number): string =>
   STACKS[stackIndex]!.provider;
 

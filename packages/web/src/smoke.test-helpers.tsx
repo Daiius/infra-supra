@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import { FRAMEWORKS, STACKS, stackName, type FrameworkId } from 'game';
 import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import { App } from './App.tsx';
@@ -196,9 +197,35 @@ export function inSetupTabs<T>(query: () => T | null): T | null {
 }
 
 /** screen.getByRole('radio', o) と同じ。① ② のタブの隠れた側にあれば開いて引く（inSetupTabs）。 */
-export const getRadio = (o: { name: string | RegExp }): HTMLElement =>
-  inSetupTabs(() => screen.queryByRole('radio', o)) ??
-  screen.getByRole('radio', o);
+/**
+ * 構成のプランのラジオは、選んでいる事業者のカードにしか無い（D-221。タブ + 1 枚のカード）。名前が構成の名前に当たれば、
+ * その事業者のタブを押して出す（当たらなければ何もしない）。
+ */
+function revealStackPlan(name: string | RegExp): void {
+  const test = (t: string) =>
+    typeof name === 'string' ? t === name : name.test(t);
+  for (const s of STACKS)
+    for (const fw of Object.keys(FRAMEWORKS) as FrameworkId[])
+      if (test(stackName(s.index, fw, false))) {
+        const tab = inSetupTabs(() =>
+          document.querySelector<HTMLInputElement>(
+            `input[name="stack"][value="${s.provider}"]`,
+          ),
+        );
+        if (tab && !tab.checked) fireEvent.click(tab);
+        return;
+      }
+}
+
+export const getRadio = (o: { name: string | RegExp }): HTMLElement => {
+  const found = inSetupTabs(() => screen.queryByRole('radio', o));
+  if (found) return found;
+  revealStackPlan(o.name);
+  return (
+    inSetupTabs(() => screen.queryByRole('radio', o)) ??
+    screen.getByRole('radio', o)
+  );
+};
 
 /** ラベルの先頭で radio を選ぶ（説明・手間の棒の文字が後ろに続くので前方一致）。① ② のタブの隠れた側にあれば開いて選ぶ。 */
 export const pickRadio = (name: string, scope: HTMLElement = document.body) => {
@@ -206,9 +233,13 @@ export const pickRadio = (name: string, scope: HTMLElement = document.body) => {
     name: new RegExp(`^${escape(name)}`),
   };
   // 見つからなければ、隠れたタブを開いてから getByRole で落とす（見つからないときの一覧を出すため）
-  const r =
-    inSetupTabs(() => within(scope).queryByRole('radio', byName)) ??
-    within(scope).getByRole('radio', byName);
+  let r = inSetupTabs(() => within(scope).queryByRole('radio', byName));
+  if (!r) {
+    revealStackPlan(byName.name);
+    r =
+      inSetupTabs(() => within(scope).queryByRole('radio', byName)) ??
+      within(scope).getByRole('radio', byName);
+  }
   fireEvent.click(r);
   expect((r as HTMLInputElement).checked).toBe(true);
 };

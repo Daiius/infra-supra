@@ -1,4 +1,4 @@
-// 始める画面のインフラの構成（D-105）。フレームワークの欄（D-102）と同じカルーセルで、カードに構成図を出す
+// 始める画面のインフラの構成（D-105）。事業者のタブ（D-221）と、選んでいる構成のカード（プラン・構成図）。
 // （選んだフレームワークと部品で描く。どんなアプリをどこに載せるのかを図で分かるように）。
 // どれにも推奨・既定の印を付けない（D-41）。並びは今までの一覧の順（隠した構成は出さない。D-100）。
 // 始める画面では構成を先に選ぶ（D-113）。今のフレームワークを載せられない構成も隠さず、印と注意を添える（選ぶとフレームワークが替わる）。
@@ -11,7 +11,6 @@
 import clsx from 'clsx';
 import {
   FRAMEWORKS,
-  frameworkOnStack,
   membersOf,
   pageWireframes,
   slaOf,
@@ -29,8 +28,7 @@ import {
 } from 'game';
 import { useCallback, useState, type ReactNode } from 'react';
 import { BRANDS, PLATFORM_BRANDS, PlatformMarks } from './brand-logos.tsx';
-import { ChoiceCarousel, type ChoiceGroup } from './choice-carousel.tsx';
-import { stackGroupOf } from './parts-memory.ts';
+import { ChoiceTabs } from './choice-tabs.tsx';
 import { Info, MoreDetails } from './info.tsx';
 import { EffortBar, EffortDetail } from './scenario-briefing.tsx';
 import {
@@ -294,37 +292,32 @@ function StackCard({
   components,
   comments,
   routes,
-  selected,
-  routeNotice,
-  fallbackNotice,
   extra,
   effort,
   caption,
   parts,
+  plans,
 }: {
   scenario: Scenario;
   stackIndex: number;
-  /** この構成で描くフレームワーク（今のものを載せられなければ、選ぶと替わる先。D-113）。 */
+  /** この構成で描くフレームワーク。 */
   framework: FrameworkId;
   components: Partial<Record<string, string>> | undefined;
   comments: number | undefined;
   /** 選んだページごとの描き方（図と流れの凡例に効く。D-107）。 */
   routes: RouteOverrides | undefined;
-  selected: boolean;
-  /** この構成にすると既定に戻る描き方の注意（選んでいないカードだけ。D-107 の補足）。 */
-  routeNotice?: string | null | undefined;
-  /** 今のフレームワークを載せられない構成の注意（選ぶとフレームワークが替わる。D-113）。 */
-  fallbackNotice?: string | undefined;
   /** 説明の下に添える注記（見積の月額など。D-115）。 */
   extra?: ReactNode;
   /** 毎月の手間の棒を出すか（ゲームだけ）。 */
   effort: boolean;
   /** 構成図の説明。 */
   caption: string | undefined;
-  /** 部品の選択（選んでいるカードだけ。D-116）。 */
+  /** 部品の選択（D-116）。省略は図だけ。 */
   parts?: PartsEditor | undefined;
+  /** プランのチップ（D-221）。 */
+  plans?: ReactNode;
 }) {
-  // 選んでいるカードは、DB を他の事業者に替えた実際の組の名前（「Vercel Pro + AWS DynamoDB」。D-77・D-114 段 2）
+  // DB を他の事業者に替えた実際の組の名前（「Vercel Pro + AWS DynamoDB」。D-77・D-114 段 2）
   const name = stackName(
     stackIndex,
     framework,
@@ -352,7 +345,7 @@ function StackCard({
     components ?? {},
     routes,
   );
-  // 差し替えられるスロットの箱と幽霊の箱（選んでいないカードも、選んだときと同じ形に。D-116 の補足）
+  // 差し替えられるスロットの箱と幽霊の箱（D-116 の補足）
   const slots = usePartSlots(scenario, stackIndex, framework, components ?? {});
   const boxes = slotBoxes(
     (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
@@ -363,13 +356,12 @@ function StackCard({
   // 名前・部品に出る用語（vinext・Fluid）の補足（D-160）
   const terms = termNotesOf([name, ...arch.nodes.map((n) => n.label)]);
   const flavor = stackFlavor(stackIndex);
-  // 選んでいる構成と覚えている部品のある構成は、その部品で増える他の事業者の管理も出す（D-52・D-116 の補足）
+  // 選んでいる部品で増える他の事業者の管理も出す（D-52）
   const effortProps = {
     scenario,
     stackIndex,
-    ...(selected || components
-      ? { components: components ?? {}, framework }
-      : {}),
+    components: components ?? {},
+    framework,
   };
   // 線の色の凡例は ⓘ の中に出す（D-217。図の下には出さない）
   const lanes = diagramModel(
@@ -382,18 +374,14 @@ function StackCard({
   return (
     <section
       aria-label={`${name} の構成`}
-      aria-current={selected ? 'true' : undefined}
+      aria-current="true"
       data-stack={STACKS[stackIndex]!.id}
-      className={`card w-full border border-t-4 bg-base-100 motion-safe:transition ${
-        selected
-          ? 'border-primary shadow-md ring-2 ring-primary/30'
-          : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80'
-      }`}
+      className="card w-full bg-base-100"
     >
-      {/* 中身は上に詰める（carousel で高さを揃えたときの余りは下に回す） */}
-      <div className="card-body min-w-0 justify-start gap-3 p-3 *:grow-0 sm:p-4">
+      {/* カードの枠はタブの下の枠（ChoiceTabs）が持つ */}
+      <div className="card-body min-w-0 gap-3 p-1 sm:p-2">
         <h4 className="card-title text-lg">
-          <PlatformMarks platform={STACKS[stackIndex]!.provider} />
+          <PlatformMarks platform={STACKS[stackIndex]!.provider} primaryOnly />
           <span className="min-w-0">{name}</span>
           {/* カードの ⓘ は右上の 1 つにまとめる（短い説明・毎月の手間の内訳・線の色・詳しい説明。D-217・D-218） */}
           <span className="ml-auto shrink-0">
@@ -417,20 +405,11 @@ function StackCard({
             </Info>
           </span>
         </h4>
+        {plans}
         {extra}
-        {fallbackNotice && (
-          <p className="text-xs text-warning" role="note">
-            {fallbackNotice}
-          </p>
-        )}
-        {!selected && !fallbackNotice && routeNotice && (
-          <p className="text-xs text-warning" role="note">
-            {routeNotice}
-          </p>
-        )}
         {effort && <EffortBar {...effortProps} />}
-        {/* 選んでいるカードは部品を選べる（構成図の箱か機能ごとのチップ。D-116 とその補足）。選んでいないカードは図だけ */}
-        {selected && parts ? (
+        {/* 部品を選べる（構成図の箱か機能ごとのチップ。D-116 とその補足）。部品を選ばせない画面は図だけ */}
+        {parts ? (
           <EditableDiagram
             stackIndex={stackIndex}
             framework={framework}
@@ -457,50 +436,79 @@ function StackCard({
   );
 }
 
-/** プランの短い名前（STACKS の plan。「free」→「Free」・「2gb」→「2GB」）。 */
+/** プランの短い名前（STACKS の plan。「free」→「Free」・「2gb」→「2GB」・「pay-as-you-go」→「従量課金」）。 */
 const planLabel = (plan: string): string =>
-  /^\d+gb$/i.test(plan)
-    ? plan.toUpperCase()
-    : plan.charAt(0).toUpperCase() + plan.slice(1);
+  plan === 'pay-as-you-go'
+    ? '従量課金'
+    : /^\d+gb$/i.test(plan)
+      ? plan.toUpperCase()
+      : plan.charAt(0).toUpperCase() + plan.slice(1);
+
+/** 事業者の名前（その事業者の最初のブランド）。 */
+const providerTitle = (provider: string): string =>
+  BRANDS[PLATFORM_BRANDS[provider as keyof typeof PLATFORM_BRANDS][0]!].title;
 
 /**
- * 構成のタブの組: 土台の事業者（STACKS の provider）ごとに、並びの順で最初に出た位置にまとめる。組の名前は事業者の最初のブランド。
- * チップはプランの短い名前（組の中でプランが重なるときは構成の名前）。1 つだけの組の名前が他の組と重なるときは構成の名前にする。
+ * 構成のカードの中のプランのチップ（D-221。プランが 1 つの事業者も、何のプランかを出す）。ラジオの名前は構成の名前（「Cloudflare Paid」）、
+ * 値は構成の id。
  */
-export function stackTabGroups(
-  stackIndices: readonly number[],
-  framework: FrameworkId,
-): ChoiceGroup<string>[] {
-  const by = new Map<string, number[]>();
-  for (const i of stackIndices) {
-    const p = stackGroupOf(i);
-    by.set(p, [...(by.get(p) ?? []), i]);
-  }
-  const title = (p: string) =>
-    BRANDS[PLATFORM_BRANDS[p as keyof typeof PLATFORM_BRANDS][0]!].title;
-  const titles = [...by.keys()].map(title);
-  return [...by].map(([p, idx]) => {
-    const plans = idx.map((i) => STACKS[i]!.plan);
-    const distinct = new Set(plans).size === plans.length;
-    const name = (i: number) => stackName(i, framework, false);
-    const label =
-      idx.length === 1 && titles.filter((t) => t === title(p)).length > 1
-        ? name(idx[0]!)
-        : title(p);
-    return {
-      key: p,
-      label,
-      mark: <PlatformMarks platform={STACKS[idx[0]!]!.provider} />,
-      items: idx.map((i) => STACKS[i]!.id),
-      chip: (id: string) => {
-        const i = STACKS.findIndex((s) => s.id === id);
-        return distinct ? planLabel(STACKS[i]!.plan) : name(i);
-      },
-    };
-  });
+function PlanChips({
+  plans,
+  shown,
+  value,
+  framework,
+  onChange,
+}: {
+  plans: readonly number[];
+  /** このカードに出しているプラン。 */
+  shown: number;
+  /** 選んでいる構成（選んでいない事業者のカードでは、どのプランのラジオも選ばれていない）。 */
+  value: number;
+  framework: FrameworkId;
+  onChange: (stackIndex: number) => void;
+}) {
+  const distinct =
+    new Set(plans.map((i) => STACKS[i]!.plan)).size === plans.length;
+  return (
+    <div
+      role="radiogroup"
+      aria-label="プラン"
+      className="flex flex-wrap items-center gap-2 text-sm"
+      data-plan-chips
+      // カードを押して選ぶ動き（その事業者の最初のプラン）と重ねない
+      onClick={(e) => e.stopPropagation()}
+    >
+      <span className="font-semibold">プラン:</span>
+      {/* 枠つきの切り替えボタン（選んだプランを塗る。選択肢だと分かるように枠で囲む。D-221） */}
+      <div className="join">
+        {plans.map((i) => (
+          <label
+            key={i}
+            className={clsx(
+              'join-item btn gap-1 btn-sm btn-primary has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-primary',
+              i === shown ? '' : 'btn-outline bg-base-100',
+            )}
+          >
+            <input
+              type="radio"
+              name="stack-plan"
+              value={STACKS[i]!.id}
+              className="sr-only"
+              aria-label={stackName(i, framework, false)}
+              checked={i === value}
+              onChange={() => onChange(i)}
+            />
+            {distinct
+              ? planLabel(STACKS[i]!.plan)
+              : stackName(i, framework, false)}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-/** インフラの構成を選ぶ（カルーセル）。value は STACKS の index。 */
+/** インフラの構成を選ぶ（事業者のタブとカードの中のプラン。D-221）。value は STACKS の index。 */
 export function StackField({
   scenario,
   framework,
@@ -509,10 +517,7 @@ export function StackField({
   components,
   comments,
   routes,
-  routeNotice,
   cardExtra,
-  routesOnFallback,
-  rememberedOf,
   effort = true,
   onComponentsChange,
   partsNote,
@@ -531,22 +536,8 @@ export function StackField({
   comments?: number | undefined;
   /** 選んだページごとの描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
-  /** その構成にすると既定に戻る描き方の注意（D-107 の補足）。 */
-  routeNotice?: (stackIndex: number) => string | null;
   /** カードの説明の下に添える注記（見積モードはその構成の月額。D-115）。 */
-  cardExtra?: (stackIndex: number, selected: boolean) => ReactNode;
-  /**
-   * 今のフレームワークを載せられない構成を選んだとき、付け替えた後に残る描き方（そのカードの図と注意に使う）。
-   * 省略は全部を既定に戻す（ゲームの始める画面の規則）。見積モードは替えた先で選べるものを残す（OCL-00BB1F11）。
-   */
-  routesOnFallback?: (stackIndex: number) => RouteOverrides | undefined;
-  /**
-   * 選んでいない構成で覚えている部品（前にその構成で選んだもの。D-116 の補足）。そのカードの題・図・手間の棒に使う。
-   * 記憶と整合（今のフレームワークで選べるものだけ）は呼び出し側が持つ。
-   */
-  rememberedOf?: (
-    stackIndex: number,
-  ) => Partial<Record<string, string>> | undefined;
+  cardExtra?: (stackIndex: number) => ReactNode;
   /** 毎月の手間の棒を出すか（ゲームの仮定なので、見積モードでは出さない。D-115）。 */
   effort?: boolean;
   /**
@@ -558,99 +549,78 @@ export function StackField({
   partsNote?: ReactNode;
   /** 部品のスロットの行に添えるもの（見積モードの画像の形式・サイズ違いを画像の行に。D-119）。 */
   partsExtra?: Partial<Record<string, ReactNode>> | undefined;
-  /** 構成図の説明（選んでいるカードか・選んでいないカードで覚えている部品で描くか）。 */
-  diagramCaption?: (selected: boolean, remembered: boolean) => string;
+  /** 構成図の説明。 */
+  diagramCaption?: string | undefined;
   /** 部品の ⓘ の比較（選んでいる構成の今の条件で、スロットだけ替えた見積。D-124）。省略は説明の吹き出し。 */
   partsCompare?: PartsCompare | undefined;
   /** 隠した構成でも出す構成（ゲームの途中で、隠した構成で始めた古い保存の今の構成。D-100・D-185）。 */
   alsoShow?: number | undefined;
 }) {
   // 隠した構成（D-100）だけを外す。今のフレームワークを載せられない構成も出す（D-113）
-  const groups = stackTabGroups(
-    STACKS.filter((s) => !s.hidden || s.index === alsoShow).map((s) => s.index),
-    framework,
-  );
-  const indexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
+  const shownStacks = STACKS.filter(
+    (s) => !s.hidden || s.index === alsoShow,
+  ).map((s) => s.index);
+  // タブは事業者ごと、プランはカードの中で選ぶ（D-221）。その事業者へ移るときは最初のプラン
+  const providers = [...new Set(shownStacks.map((i) => STACKS[i]!.provider))];
+  const plansOf = (p: string) =>
+    shownStacks.filter((i) => STACKS[i]!.provider === p);
+  const currentProvider = STACKS[value]!.provider;
+  const stackOf = (p: string) =>
+    p === currentProvider ? value : plansOf(p)[0]!;
+  // タブは事業者の名前だけ（プランはカードの中。D-221）
+  const tabName = providerTitle;
   const fwLabel = FRAMEWORKS[framework].label;
-  /** その構成で描くフレームワーク（載せられなければ選ぶと替わる先）。 */
-  const fwOf = (i: number) => frameworkOnStack(scenario, i, framework);
-  const fallbackOf = (i: number) => {
-    if (stackSupports(i, framework)) return undefined;
-    const to = FRAMEWORKS[fwOf(i)].label;
-    // 選んだ描き方のうち、付け替えた後に残らないもの（ゲームは全部。見積は替えた先で選べないものだけ。OCL-00BB1F11）
-    const kept = routesOnFallback?.(i);
-    const chosen = Object.keys(routes ?? {});
-    const dropped = chosen.filter((r) => kept?.[r] === undefined).length;
-    return `${fwLabel} はこの構成に載せられません（公式のアダプターが無いため）。選ぶとフレームワークは ${to} になります${
-      dropped === 0
-        ? ''
-        : dropped === chosen.length
-          ? '（選んだページの描き方は既定に戻ります）'
-          : '（選んだページの描き方のうち、替えた先で選べないものは既定に戻ります）'
-    }。構成図は ${to} で描きます`;
-  };
   return (
-    <ChoiceCarousel
+    <ChoiceTabs
       heading="① インフラの構成"
       name="stack"
-      noun="構成"
-      // 並びは組の順（←/→ は組をまたいでこの順に移る）
-      items={groups.flatMap((g) => g.items)}
-      groups={groups}
-      value={STACKS[value]!.id}
-      onChange={(id) => onChange(indexOf(id))}
-      label={(id) => stackName(indexOf(id), framework, false)}
-      tab={(id) => (
-        <>
-          <PlatformMarks platform={STACKS[indexOf(id)]!.provider} />
-          {stackName(indexOf(id), framework, false)}
-        </>
-      )}
-      flag={(id) =>
-        stackSupports(indexOf(id), framework)
+      items={providers}
+      value={currentProvider}
+      onChange={(p) => onChange(stackOf(p))}
+      tab={(p) => ({
+        mark: (
+          <PlatformMarks platform={STACKS[stackOf(p)]!.provider} primaryOnly />
+        ),
+        label: tabName(p),
+      })}
+      flag={(p) =>
+        stackSupports(stackOf(p), framework)
           ? undefined
           : `${fwLabel} を載せられない構成（選ぶとフレームワークが替わる）`
       }
-      renderCard={(id, { selected }) => {
-        const remembered = selected ? undefined : rememberedOf?.(indexOf(id));
-        const hasRemembered =
-          remembered !== undefined && Object.keys(remembered).length > 0;
-        return (
-          <StackCard
-            scenario={scenario}
-            stackIndex={indexOf(id)}
-            framework={fwOf(indexOf(id))}
-            components={
-              selected ? components : hasRemembered ? remembered : undefined
-            }
-            comments={comments}
-            // 替わる先のフレームワークでは、付け替えた後の描き方で描く（ゲームは既定に戻る）
-            routes={
-              fallbackOf(indexOf(id)) ? routesOnFallback?.(indexOf(id)) : routes
-            }
-            selected={selected}
-            routeNotice={
-              selected || fallbackOf(indexOf(id))
-                ? null
-                : routeNotice?.(indexOf(id))
-            }
-            fallbackNotice={selected ? undefined : fallbackOf(indexOf(id))}
-            extra={cardExtra?.(indexOf(id), selected)}
-            effort={effort}
-            caption={diagramCaption?.(selected, hasRemembered)}
-            parts={
-              selected && onComponentsChange
-                ? {
-                    onChange: onComponentsChange,
-                    note: partsNote,
-                    slotExtra: partsExtra,
-                    compare: partsCompare,
-                  }
-                : undefined
-            }
-          />
-        );
-      }}
+      renderCard={(p) => (
+        // 出すのは選んでいる構成のカードだけ（D-221。タブにした）
+        <StackCard
+          scenario={scenario}
+          stackIndex={value}
+          framework={framework}
+          components={components}
+          comments={comments}
+          routes={routes}
+          plans={
+            <PlanChips
+              plans={plansOf(p)}
+              shown={value}
+              value={value}
+              framework={framework}
+              onChange={onChange}
+            />
+          }
+          extra={cardExtra?.(value)}
+          effort={effort}
+          caption={diagramCaption}
+          parts={
+            onComponentsChange
+              ? {
+                  onChange: onComponentsChange,
+                  note: partsNote,
+                  slotExtra: partsExtra,
+                  compare: partsCompare,
+                }
+              : undefined
+          }
+        />
+      )}
     />
   );
 }

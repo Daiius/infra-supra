@@ -16,13 +16,11 @@ import {
   frameworksOf,
   partsOfComments,
   resolvedRouteStrategies,
-  rewriteRouteNotice,
   routePlanRows,
   sameAsCurrent,
   scenarioOf,
   setupChangeOf,
   setupChangeSummary,
-  stackChangeRouteNotice,
   stackName,
   STACKS,
   stackUnsupportedReason,
@@ -354,7 +352,7 @@ function ChangeBody({
       <SetupTabs
         storageKey="infra-supra:setup-tab:game-change"
         stack={{
-          label: '① インフラの構成',
+          label: 'インフラ構成',
           summary: stackName(
             draft.stackIndex,
             draft.framework,
@@ -372,28 +370,18 @@ function ChangeBody({
               value={draft.stackIndex}
               onChange={onStack}
               components={draft.components}
-              rememberedOf={(i) =>
-                componentsFor(i, frameworkOnStack(sc, i, draft.framework))
-              }
               comments={commentsOn}
               routes={routes}
-              routeNotice={(i) =>
-                i === state.stackIndex ? null : stackChangeRouteNotice(state, i)
-              }
               onComponentsChange={onComponents}
               partsNote="役割ごとに選び直します。差し替えの手間と期間は下の変更の内訳に出ます"
               partsCompare={partsCompare}
-              diagramCaption={(selected) =>
-                selected
-                  ? '選んでいる部品で描いています。'
-                  : 'この構成にしたときに始まる部品で描いています。'
-              }
+              diagramCaption="選んでいる部品で描いています。"
               alsoShow={state.stackIndex}
             />
           ),
         }}
         framework={{
-          label: '② フレームワークと描き方',
+          label: 'フレームワーク',
           summary: FRAMEWORKS[draft.framework].label,
           warn: fallbackNotice,
           live: fallbackNotice,
@@ -423,21 +411,14 @@ function ChangeBody({
                   })
                 }
                 routes={routes}
-                resolvedRoutes={(id, selected) =>
+                resolvedRoutes={(id) =>
                   resolvedRouteStrategies(sc, {
                     framework: id,
                     stackIndex: draft.stackIndex,
                     settings: { revalidateSec },
-                    components: chosenOf(
-                      selected
-                        ? draft.components
-                        : draftComponentsFor(state, draft.stackIndex, id),
-                    ),
-                    ...(selected ? { routes } : {}),
+                    components: chosenOf(draft.components),
+                    routes,
                   })
-                }
-                routeNotice={(id) =>
-                  id === state.framework ? null : rewriteRouteNotice(state, id)
                 }
                 editor={editor}
                 unsupported={(id) =>

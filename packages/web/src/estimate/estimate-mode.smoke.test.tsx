@@ -8,6 +8,7 @@ import {
   screen,
   within,
 } from '@testing-library/react';
+import { STACKS } from 'game';
 import { describe, expect, it } from 'vitest';
 import {
   ensurePartsList,
@@ -50,8 +51,8 @@ const queryGroup = (label: string) =>
 const group = (label: string) =>
   queryGroup(label) ??
   screen.getByRole('group', { name: new RegExp(`^${label}`) });
-/** ① 構成・② フレームワークのカルーセルのラジオ（ゲームと共用。D-115）。その欄のタブを開いて引く。 */
-const pickerRadios = (name: 'stack' | 'framework') => {
+/** ② フレームワークのタブのラジオ（ゲームと共用。D-115）。その欄のタブを開いて引く。 */
+const pickerRadios = (name: 'framework') => {
   showSetupTab(name);
   return [
     ...document.querySelectorAll<HTMLInputElement>(
@@ -59,8 +60,22 @@ const pickerRadios = (name: 'stack' | 'framework') => {
     ),
   ];
 };
-const pickerRadio = (name: 'stack' | 'framework', value: string) =>
-  pickerRadios(name).find((r) => r.value === value)!;
+/**
+ * 構成はその事業者のタブを開いてから、カードの中のプランのラジオ（値は構成の id。D-221）。フレームワークはタブのラジオ。
+ */
+const pickerRadio = (name: 'stack' | 'framework', value: string) => {
+  if (name === 'framework')
+    return pickerRadios('framework').find((r) => r.value === value)!;
+  showSetupTab('stack');
+  const provider = STACKS.find((s) => s.id === value)!.provider;
+  const tab = document.querySelector<HTMLInputElement>(
+    `input[name="stack"][value="${provider}"]`,
+  )!;
+  if (!tab.checked) fireEvent.click(tab);
+  return document.querySelector<HTMLInputElement>(
+    `input[name="stack-plan"][value="${value}"]`,
+  )!;
+};
 /** 構成・フレームワークを選ぶ（タブのラジオを押す）。 */
 const pick = (name: 'stack' | 'framework', value: string) => {
   const r = pickerRadio(name, value);
@@ -148,8 +163,8 @@ describe('見積モードの画面', () => {
     await waitLoaded();
     const first = expectEstimate();
 
-    // 構成を切り替える（ゲームと同じカルーセル。選べる構成をすべて回す。D-115）
-    const stacks = pickerRadios('stack').map((r) => r.value);
+    // 構成を切り替える（ゲームと同じタブ。選べる構成をすべて回す。D-115・D-221）
+    const stacks = STACKS.filter((s) => !s.hidden).map((s) => s.id);
     expect(stacks.length).toBeGreaterThan(5);
     const names = new Set([first]);
     for (const id of stacks) {
@@ -386,9 +401,9 @@ describe('見積モードの画面', () => {
       '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-paid',
     );
     await renderApp();
-    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const stackTab = screen.getByRole('tab', { name: /^インフラ構成/ });
     const fwTab = screen.getByRole('tab', {
-      name: /^② フレームワークと描き方/,
+      name: /^フレームワーク/,
     });
     // 既定は ①。② のタブに今のフレームワーク、① のタブに今の構成
     expect(stackTab.getAttribute('aria-selected')).toBe('true');
@@ -467,9 +482,9 @@ describe('見積モードの画面', () => {
     expectEstimate();
     // 順: ① インフラの構成（部品のチップはカードの中。D-116） → ② フレームワーク（描き方の設定は記事のページの行。D-119）。
     // タブで切り替え、タブの並びもこの順（D-116 の補足）
-    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const stackTab = screen.getByRole('tab', { name: /^インフラ構成/ });
     const fwTab = screen.getByRole('tab', {
-      name: /^② フレームワークと描き方/,
+      name: /^フレームワーク/,
     });
     expect(
       stackTab.compareDocumentPosition(fwTab) &
@@ -481,11 +496,13 @@ describe('見積モードの画面', () => {
     screen.getByRole('radiogroup', {
       name: '② アプリのフレームワークとページの描き方',
     });
-    // Astro を載せられない構成も隠さず選べる。カードの月額は替わる先のフレームワークで数える
-    expect(pickerRadio('stack', 'aws-amplify').disabled).toBe(false);
+    // Astro を載せられない構成も隠さず選べ、事業者のタブに印が付く（D-113・D-221）
+    showSetupTab('stack');
     expect(
-      document.querySelector('[data-stack-total="aws-amplify"]')?.textContent,
-    ).toContain('Next.js（App Router） にしたとき');
+      document
+        .querySelector('input[name="stack"][value="aws"]')!
+        .closest('label')!.textContent,
+    ).toContain('Astro を載せられない構成');
     pick('stack', 'aws-amplify');
     expectEstimate();
     expect(pickerRadio('framework', 'nextjs').checked).toBe(true);
@@ -495,13 +512,11 @@ describe('見積モードの画面', () => {
     expect(document.body.textContent).toMatch(
       /には Astro を載せる公式のアダプターが無いので、フレームワークを Next\.js（App Router） にしました/,
     );
-    // Astro は灰色で選べず、カードに理由が出る
+    // Astro は灰色で選べず、タブの印と下の注記に理由が出る（D-221）
     expect(pickerRadio('framework', 'astro').disabled).toBe(true);
-    const astroCard = screen.getByRole('region', { name: 'Astro の説明' });
-    expect(astroCard.getAttribute('aria-disabled')).toBe('true');
-    expect(within(astroCard).getByRole('note').textContent).toMatch(
-      /^選んでいる構成では選べない: 公式のアダプターが無く載せられません/,
-    );
+    expect(
+      pickerRadio('framework', 'astro').closest('label')!.textContent,
+    ).toMatch(/公式のアダプターが無く載せられません/);
     // 選んでいるフレームワークのカードに、ページの見取り図が出る
     const nextCard = screen.getByRole('region', {
       name: 'Next.js（App Router） の説明',
@@ -528,34 +543,6 @@ describe('見積モードの画面', () => {
     expectEstimate();
     expect(window.location.search).toContain('rp.personal=shell-api');
     expect(chosenOf('personal')).toBe('shell-api');
-  });
-
-  it('W-36 載せられない構成のカードは、選んだ後に残る描き方で注意を出す（見積は替えた先で選べる描き方を残す。OCL-00BB1F11）', async () => {
-    const url =
-      '/?mode=estimate&t=article&fw=astro&s=cloudflare-vinext-paid&rp.article=static-build&rp.personal=shell-api';
-    window.history.replaceState(null, '', url);
-    await renderApp();
-    expectEstimate();
-    const cur = normalizeInput(fromQuery(url.slice(url.indexOf('?'))));
-    const after = normalizeInput({ ...cur, ...withStack(cur, 'aws-amplify') });
-    const chosen = Object.keys(cur.routes);
-    expect(chosen.length).toBe(2);
-    const dropped = chosen.filter((r) => after.routes[r] === undefined).length;
-    showSetupTab('stack');
-    const note = within(
-      document.querySelector<HTMLElement>('section[data-stack="aws-amplify"]')!,
-    ).getByRole('note').textContent!;
-    if (dropped === 0) expect(note).not.toContain('既定に戻る');
-    else if (dropped === chosen.length)
-      expect(note).toContain('（選んだページの描き方は既定に戻る）');
-    else expect(note).toContain('替えた先で選べないものは既定に戻る');
-    // 選ぶと、カードの注意のとおりの描き方が URL に残る
-    pick('stack', 'aws-amplify');
-    expectEstimate();
-    for (const r of chosen)
-      expect(window.location.search.includes(`rp.${r}=`)).toBe(
-        after.routes[r] !== undefined,
-      );
   });
 
   it('W-07 見出しに ⓘ のある欄の入力は、見出しの文字だけを名前に持つ（ボタンの名前が混ざらない。D-94）', async () => {
@@ -883,14 +870,7 @@ describe('見積モードの画面', () => {
     expect(checked(DB)).toBe('dynamodb');
     expect(checked('ISR のキャッシュ')).toBe('r2');
     expect(q().get('c.db')).toBe('dynamodb');
-    // 選んでいない B のカードは覚えている部品（Neon）で題・月額を出し、比較の表の行も同じ（D-116 の補足）
-    const bCard = document.querySelector<HTMLElement>(
-      'section[data-stack="vercel-supabase-pro"]',
-    )!;
-    expect(bCard.getAttribute('aria-label')).toBe(
-      'Vercel Pro + Neon（Launch） の構成',
-    );
-    expect(bCard.textContent).toContain('前にこの構成で選んだ部品');
+    // 選んでいない B は、比較の表の行が覚えている部品（Neon）で数える（D-116 の補足。カードは選んでいるものだけ。D-221）
     const bRow = within(card('構成を比べる')).getByRole('row', {
       name: /Vercel Pro \+ Neon/,
     });
@@ -967,7 +947,7 @@ describe('見積モードの画面', () => {
     expect(stop.textContent).toMatch(/止まる・プランの変更が要る上限 \d+ 件/);
     expect(stop.className).toContain('text-error-strong');
     expect(stop.className).not.toContain('text-warning');
-    const stackTab = screen.getByRole('tab', { name: /^① インフラの構成/ });
+    const stackTab = screen.getByRole('tab', { name: /^インフラ構成/ });
     const badge = stackTab.querySelector('[data-setup-tab-warn]')!;
     expect(badge.className).toContain('badge-error');
     // 下の上限の一覧の「超過」（止まる）も赤
@@ -1228,75 +1208,6 @@ describe('見積モードの画面', () => {
     expect(window.location.search).toBe(search);
   });
 
-  it('W-68 ① のカルーセルは開いた直後は滑らかにせず一度で中央へ寄せ、幅が後から替わっても寄せ直す（D-182 の後の退行）', async () => {
-    // scrollLeft を書いた時点の scroll-behavior を記録する（jsdom はレイアウトをしないので、寄せ方の呼ばれ方で確かめる）
-    const writes: { el: HTMLElement; left: number; behavior: string }[] = [];
-    Object.defineProperty(HTMLElement.prototype, 'scrollLeft', {
-      configurable: true,
-      get() {
-        return 0;
-      },
-      set(this: HTMLElement, v: number) {
-        writes.push({ el: this, left: v, behavior: this.style.scrollBehavior });
-      },
-    });
-    // ResizeObserver の通知を後から送れるように、観ている要素と callback を持つ
-    const observers: { cb: ResizeObserverCallback; els: Element[] }[] = [];
-    const prevRO = globalThis.ResizeObserver;
-    globalThis.ResizeObserver = class {
-      entry: { cb: ResizeObserverCallback; els: Element[] };
-      constructor(cb: ResizeObserverCallback) {
-        this.entry = { cb, els: [] };
-        observers.push(this.entry);
-      }
-      observe(el: Element) {
-        this.entry.els.push(el);
-      }
-      unobserve() {}
-      disconnect() {
-        this.entry.els = [];
-      }
-    } as never;
-    try {
-      window.history.replaceState(
-        null,
-        '',
-        '/?mode=estimate&t=article&fw=nextjs&s=vercel-supabase-pro',
-      );
-      await renderApp();
-      const card = stackCard();
-      const t = card.closest<HTMLElement>('.carousel')!;
-      const first = writes.filter((w) => w.el === t);
-      // 開いた直後の寄せは scroll-behavior: auto（smooth のアニメーションが途中で止まって外れたままにならない）
-      expect(first.length).toBeGreaterThan(0);
-      expect(first.every((w) => w.behavior === 'auto')).toBe(true);
-      expect(t.style.scrollBehavior).toBe('');
-      // 幅が後から決まったら、選んでいるカードを中央へ寄せ直す
-      const item = card.closest<HTMLElement>('[data-card]')!;
-      Object.defineProperty(t, 'clientWidth', { value: 944 });
-      Object.defineProperty(item, 'clientWidth', { value: 802 });
-      Object.defineProperty(item, 'offsetLeft', { value: 873 });
-      writes.length = 0;
-      for (const o of observers)
-        if (o.els.includes(t))
-          o.cb([{ target: t } as never], {} as ResizeObserver);
-      const again = writes.filter((w) => w.el === t);
-      expect(again.length).toBeGreaterThan(0);
-      expect(again.at(-1)!.left).toBe(873 - (944 - 802) / 2);
-      expect(again.at(-1)!.behavior).toBe('auto');
-      // 別の構成を選んだときは滑らかに動かす（CSS の scroll-behavior のまま）
-      writes.length = 0;
-      pick('stack', 'sakura-vps-2gb');
-      const moved = writes.filter((w) => w.el === t && w.behavior === '');
-      expect(moved.length).toBeGreaterThan(0);
-    } finally {
-      delete (HTMLElement.prototype as { scrollLeft?: number }).scrollLeft;
-      globalThis.ResizeObserver = prevRO;
-    }
-  });
-});
-
-describe('Lighthouse の指摘の手直し（D-196）', () => {
   it('W-69 比較の表の並べ替えの aria-sort は見出しのセル（th）に付け、中のボタンには付けない', async () => {
     window.history.replaceState(null, '', '/?mode=estimate');
     await renderApp();

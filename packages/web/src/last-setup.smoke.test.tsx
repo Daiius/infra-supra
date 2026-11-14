@@ -145,7 +145,7 @@ describe('ゲームモードの画面', () => {
       document.querySelector('[data-setup-tab-button="stack"]')!.textContent;
     expect(tab()).toMatch(/Cloudflare Free \+ vinext/);
     fireEvent.click(lastButton()!);
-    expect(tab()).toBe('① インフラの構成：Vercel Pro + Supabase Pro');
+    expect(tab()).toBe('インフラ構成：Vercel Pro + Supabase Pro');
     expect(document.querySelector('[data-missing-parts]')).toBeNull();
     expect(
       document.querySelector('[data-last-setup] [role="status"]'),

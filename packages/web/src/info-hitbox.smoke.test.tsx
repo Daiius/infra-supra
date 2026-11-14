@@ -120,32 +120,4 @@ describe('ⓘ の当たり判定', () => {
         .querySelector('[data-selected="true"]')!.textContent,
     ).toContain(label);
   });
-
-  it('W-11 始める画面のフレームワークのカードは、ⓘ を押しても選ばれず、カードの文字を押すと選ばれる', async () => {
-    await renderApp();
-    // ② フレームワークの欄はタブで開く（D-116 の補足）
-    showFrameworkTab();
-    // 選ばれていないフレームワークのカード（ⓘ のあるもの。D-102 でタブ + カードにした）
-    const radio = screen
-      .getAllByRole<HTMLInputElement>('radio')
-      .find((r) => r.name === 'framework' && !r.checked)!;
-    const name = radio.closest('label')!.textContent!.replace(/^export/, '');
-    const card = screen.getByRole('region', { name: `${name} の説明` });
-    fireEvent.click(
-      within(card).getByRole('button', { name: `${name} の説明` }),
-    );
-    expect(tooltip()).not.toBeNull();
-    expect(radio.checked).toBe(false);
-    // 説明の中（ポータル）を押しても選ばれない（OCL-A1FCD9AC）
-    fireEvent.click(tooltip()!);
-    fireEvent.click(
-      tooltip()!.querySelector('[data-info-body] *') ?? tooltip()!,
-    );
-    expect(radio.checked).toBe(false);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(tooltip()).toBeNull();
-    fireEvent.click(card.querySelector('p, li')!);
-    expect(radio.checked).toBe(true);
-    expect(tooltip()).toBeNull();
-  });
 });

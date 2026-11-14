@@ -24,7 +24,6 @@ import {
   SCENARIOS,
   setupProblem,
   setupRevalidateOptions,
-  setupRouteNotice,
   COMMENTS_IN_BROWSER,
   partsOfComments,
   defaultRevalidateSec,
@@ -791,23 +790,6 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
   const commentsChoosable =
     commentOptionsOf(scenario, framework, routes).length > 0;
-  // 構成・フレームワークを替えると既定に戻る描き方（カードに添える。D-107 の補足）
-  const routeNotice = (next: {
-    stackIndex?: number;
-    framework?: FrameworkId;
-  }) =>
-    setupRouteNotice(
-      scenario,
-      {
-        stackIndex: stack,
-        framework,
-        components: parts,
-        revalidateSec,
-        revalidateChosen,
-        routes,
-      },
-      next,
-    );
   // ページごとの描き方の行・要件の判定・選んだときの書き換え（フレームワークのカードで選ぶ。D-107・D-112）
   const routeEditor = useRoutePlanEditor({
     scenario,
@@ -911,7 +893,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               api={tabsApi}
               storageKey="infra-supra:setup-tab:game"
               stack={{
-                label: '① インフラの構成',
+                label: 'インフラ構成',
                 summary: stackName(stack, framework, false, parts),
                 warn: problem,
                 panel: (
@@ -921,13 +903,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     value={stack}
                     onChange={(i) => change({ stack: i })}
                     components={parts}
-                    // 選んでいないカードの題・図・手間の棒は、その組（同じ事業者のプラン）で前に選んだ部品で描く（D-116 の補足・D-176）
-                    rememberedOf={(i) =>
-                      partsOfStack(partsMemory, scenario, i, framework)
-                    }
                     comments={commentsChoosable ? comments : undefined}
                     routes={routes}
-                    routeNotice={(i) => routeNotice({ stackIndex: i })}
                     // 部品は構成のカードの構成図の箱か、機能ごとのチップで選ぶ（タブで切り替える。D-116 とその補足）。選んだ直後も依存の崩れた選択（VPS の API のキャッシュなど）を外して持つ
                     onComponentsChange={editComponents}
                     // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）
@@ -937,7 +914,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               }}
               // ② フレームワークと描き方（構成と同列の判断。D-35）。選んでいる構成に載せられないものは選べない（D-113）
               framework={{
-                label: '② フレームワークと描き方',
+                label: 'フレームワーク',
                 summary: FRAMEWORKS[framework].label,
                 warn: fallbackNotice,
                 live: fallbackNotice,
@@ -973,8 +950,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                       })
                     }
                     routes={routes}
-                    // 見取り図は表・計算と同じ実際の描き方で描く（選んでいるカードは選んだ描き方、ほかは既定。OCL-CD192A98）
-                    resolvedRoutes={(id, selected) =>
+                    // 見取り図は表・計算と同じ実際の描き方で描く（OCL-CD192A98）
+                    resolvedRoutes={(id) =>
                       resolvedRouteStrategies(scenario, {
                         framework: id,
                         stackIndex: stack,
@@ -984,10 +961,9 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                           id,
                           parts,
                         ),
-                        ...(selected ? { routes } : {}),
+                        routes,
                       })
                     }
-                    routeNotice={(id) => routeNotice({ framework: id })}
                     // ページの描き方（D-107）は、カードのページの欄のチップで選ぶ（表は「詳しく比べる」。D-112）。
                     // 再検証の間隔などの描き方の設定も、記事のページの行で選ぶ（D-119）
                     editor={routeEditor}
