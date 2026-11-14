@@ -604,12 +604,18 @@ describe('ゲームモードの画面', () => {
       name: /^DB：.*、未選択）を替える$/,
     });
     fireEvent.click(dbBox);
+    // 箱へ focus を戻すときには、箱のダイアログはもう外れている（残っていると背後の箱は inert で focus が効かない。OCL-349609BC）
+    const boxDialog = screen.getByRole('dialog', { name: /を替える$/ });
+    let detachedOnFocus: boolean | undefined;
+    const focus = dbBox.focus.bind(dbBox);
+    dbBox.focus = () => {
+      detachedOnFocus ??= !boxDialog.isConnected;
+      focus();
+    };
     fireEvent.click(
-      within(screen.getByRole('dialog', { name: /を替える$/ })).getByRole(
-        'button',
-        { name: '表と月額で比べる' },
-      ),
+      within(boxDialog).getByRole('button', { name: '表と月額で比べる' }),
     );
+    expect(detachedOnFocus).toBe(true);
     let dialog = screen.getByRole('dialog', { name: 'DBを比べる' });
     expect(within(dialog).getByRole('table')).toBeDefined();
     expect(
