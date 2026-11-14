@@ -267,7 +267,7 @@ export function FeatureRing({
             : '機能開発 / 期待'}
         </text>
       </svg>
-      <div className="min-w-0 space-y-1 text-xs text-[var(--text-secondary)]">
+      <div className="min-w-0 max-w-64 flex-1 basis-32 space-y-1 text-xs text-[var(--text-secondary)]">
         {/* 輪の読み方（内側・外側・目盛り）は ⓘ に畳み、見出しと色の凡例だけを出す（prd/16） */}
         <div className="flex items-center gap-1 font-semibold text-[var(--text-primary)]">
           {head}
