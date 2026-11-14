@@ -5,6 +5,9 @@
    text-error-strong を使う（白地 6.29:1・base-200 5.92:1・base-300 5.42:1）。地・枠・バッジの塗りは error のまま */
 @theme {
   --color-error-strong: #be123c;
+  /* 文字に使う水色（error-strong と同じ理由）。daisyUI の light の info（oklch 0.74 0.16 232.661）は白地で文字には薄く、
+     alert-soft の文字もこの色になる。info の淡い地の上の文字は text-info-strong を使う（Tailwind の sky-700。白地 5.93:1） */
+  --color-info-strong: #0369a1;
 }
 
 /* 選んでいないタブの文字（D-196）。daisyUI の既定は base-content の 50%（base-200 の地で 3.33:1）で、AA の 4.5:1 に届かない。
@@ -191,6 +194,28 @@ h4,
 .motion-slide-from-left {
   animation: motion-slide-from-left 180ms ease-out both;
 }
+/* 左から現す（線の太さを保つ non-scaling-stroke の線でも使える。motion-draw は pathLength の破線なので、縦横で伸び縮みする SVG では切れる） */
+@keyframes motion-reveal-x {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.motion-reveal-x {
+  animation: motion-reveal-x 900ms ease-out both;
+}
+/* 下から伸ばす（遊び方の振り返りの概念図の棒） */
+@keyframes motion-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+.motion-grow-y {
+  transform-origin: bottom;
+  animation: motion-grow-y 600ms ease-out both;
+}
 @media (prefers-reduced-motion: reduce) {
   .motion-ping {
     display: none;
@@ -204,6 +229,8 @@ h4,
   .motion-pop,
   .motion-fade-in,
   .motion-slide-from-right,
+  .motion-reveal-x,
+  .motion-grow-y,
   .motion-slide-from-left {
     animation: none !important;
     transition: none !important;
