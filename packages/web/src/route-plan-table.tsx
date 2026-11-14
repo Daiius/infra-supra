@@ -8,8 +8,6 @@ import clsx from 'clsx';
 import type {
   RegionSource,
   RouteAlternative,
-  RoutePartKey,
-  RoutePartRow,
   RoutePlanRow,
   RouteRowStatus,
   RouteStrategyId,

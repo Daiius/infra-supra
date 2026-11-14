@@ -28,8 +28,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ChoiceCarousel } from './choice-carousel.tsx';
-import { BrandMark, brandColor, FRAMEWORK_BRAND } from './brand-logos.tsx';
+import { ChoiceTabs } from './choice-tabs.tsx';
+import { BrandMark, FRAMEWORK_BRAND } from './brand-logos.tsx';
 import { Info, MoreDetails, PortalContainer } from './info.tsx';
 import {
   eventCategory,
@@ -303,13 +303,10 @@ function FrameworkCard({
   id,
   comments,
   detail,
-  selected,
   routes,
   chosenRoutes,
-  routeNotice,
   resolved,
   editor,
-  unsupported,
   text,
 }: {
   scenario: Scenario;
@@ -317,31 +314,20 @@ function FrameworkCard({
   comments: number | undefined;
   /** フレームワークそのものの説明（カードの ⓘ の「詳しい説明を見る」に畳む）。 */
   detail: ReactNode;
-  selected: boolean;
   /** 既定のページごとの描き方（選んでいる構成で。D-106）。 */
   routes?: RoutePlanRow[] | undefined;
   /** 選んだ描き方（選んでいるカードの見取り図に使う。D-107）。 */
   chosenRoutes?: RouteOverrides | undefined;
-  /** このフレームワークにすると既定に戻る描き方の注意（選んでいないカードだけ。D-107 の補足）。 */
-  routeNotice?: string | null | undefined;
   /** 実際の描き方（routeChoices。表・計算と同じ。見取り図に使う。D-111）。 */
   resolved?: Partial<Record<string, RouteStrategyId>> | undefined;
   /** 描き方を選ぶ（選んでいるカードだけ。D-112）。 */
   editor?: RoutePlanEditor | undefined;
-  /** 選んでいる構成に載せられない理由（D-113。あれば灰色にして選べない。描き方のチップは出さない）。 */
-  unsupported?: string | undefined;
   text: FrameworkFieldText;
 }) {
   const t = scenario.text?.byFramework?.[id];
   // 選んでいるカードは選んだ描き方で描く（D-107）。表・計算と同じ実際の描き方（resolved。事業者で決まる既定・部品の
   // 「キャッシュしない」も効く。D-111・OCL-CD192A98）があればそれで描く
-  const pages = pageWireframes(
-    scenario,
-    id,
-    comments,
-    selected ? chosenRoutes : undefined,
-    resolved,
-  );
+  const pages = pageWireframes(scenario, id, comments, chosenRoutes, resolved);
   const lines = t?.pages ?? [];
   /** ページの行（「記事のページ: …」）を、見取り図のページに振り分ける。 */
   const frameworkLinesOf = (label: string) =>
@@ -363,25 +349,12 @@ function FrameworkCard({
   return (
     <section
       aria-label={`${FRAMEWORKS[id].label} の説明`}
-      aria-current={selected ? 'true' : undefined}
+      aria-current="true"
       data-framework={id}
-      className={clsx(
-        'card w-full border border-t-4 bg-base-100 motion-safe:transition',
-        selected
-          ? 'border-primary shadow-md ring-2 ring-primary/30'
-          : unsupported
-            ? 'scale-[0.97] border-base-300 opacity-50 grayscale'
-            : 'scale-[0.97] border-base-300 opacity-60 saturate-50 hover:opacity-80',
-      )}
-      aria-disabled={unsupported ? 'true' : undefined}
-      // ブランドの色は選んでいるカードの上の縁だけ（黒一色のロゴは文字の色）
-      style={
-        selected
-          ? { borderTopColor: brandColor(brand.brand) ?? 'currentColor' }
-          : undefined
-      }
+      className="card w-full bg-base-100"
     >
-      <div className="card-body justify-start gap-3 p-3 *:grow-0 sm:p-4">
+      {/* カードの枠はタブの下の枠（ChoiceTabs）が持つ */}
+      <div className="card-body gap-3 p-1 sm:p-2">
         <h4 className="card-title text-lg">
           <BrandMark brand={brand.brand} size={22} tag={brand.tag} />
           <span className="min-w-0">{FRAMEWORKS[id].label}</span>
@@ -450,16 +423,6 @@ function FrameworkCard({
             </Info>
           </span>
         </h4>
-        {unsupported && (
-          <p className="text-xs text-warning" role="note">
-            選んでいる構成では選べない: {unsupported}
-          </p>
-        )}
-        {!selected && !unsupported && routeNotice && (
-          <p className="text-xs text-warning" role="note">
-            {routeNotice}
-          </p>
-        )}
         {pages.length > 1 && (
           <div
             role="tablist"
@@ -579,7 +542,6 @@ export function FrameworkField({
   comments,
   routePlan,
   routes,
-  routeNotice,
   resolvedRoutes,
   editor,
   unsupported,
@@ -596,12 +558,9 @@ export function FrameworkField({
   routePlan?: (id: FrameworkId) => RoutePlanRow[];
   /** 選んだ描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
-  /** そのフレームワークにすると既定に戻る描き方の注意（D-107 の補足）。 */
-  routeNotice?: (id: FrameworkId) => string | null;
-  /** フレームワークごとの実際の描き方（選んでいるカードは選んだ描き方込み。見取り図に使う。D-111・OCL-CD192A98）。 */
+  /** 選んでいるフレームワークの実際の描き方（選んだ描き方込み。見取り図に使う。D-111・OCL-CD192A98）。 */
   resolvedRoutes?: (
     id: FrameworkId,
-    selected: boolean,
   ) => Partial<Record<string, RouteStrategyId>>;
   /** 選んでいるフレームワークのページの描き方を選ぶ（カードのチップと「詳しく比べる」。D-112）。 */
   editor?: RoutePlanEditor | undefined;
@@ -614,62 +573,56 @@ export function FrameworkField({
 }) {
   const text = { ...GAME_FRAMEWORK_TEXT, ...textOverride };
   return (
-    <div className="space-y-2">
+    <div>
       {/* 構成を替えて戻したときの知らせ（D-113）。読み上げに届くよう、知らせの無いときも枠は置く */}
       <div aria-live="polite">
         {notice && (
-          <p className="text-sm text-warning" role="note">
+          <p className="mb-2 text-sm text-warning" role="note">
             {notice}
           </p>
         )}
       </div>
-      <ChoiceCarousel
+      <ChoiceTabs
         heading={
           allowed.length < 2
             ? '② アプリのフレームワークとページの描き方'
             : text.heading
         }
         name="framework"
-        noun="選択肢"
         items={allowed}
         value={value}
         onChange={onChange}
-        label={(id) => FRAMEWORKS[id].label}
-        tab={(id) => (
-          <>
+        tab={(id) => ({
+          mark: (
             <BrandMark
               brand={FRAMEWORK_BRAND[id].brand}
               size={14}
               tag={FRAMEWORK_BRAND[id].tag}
             />
-            {FRAMEWORKS[id].label}
-          </>
-        )}
+          ),
+          label: FRAMEWORKS[id].label,
+        })}
         disabled={(id) => unsupported?.(id) !== undefined}
-        renderCard={(id, { selected }) => {
-          // 載せられないフレームワークは、構成で決まる描き方を引かない（その組の行・図は無い。D-113）
-          const off = selected ? undefined : unsupported?.(id);
-          return (
-            <FrameworkCard
-              scenario={scenario}
-              id={id}
-              comments={comments}
-              detail={<FrameworkDetail scenario={scenario} id={id} />}
-              selected={selected}
-              routes={off ? undefined : routePlan?.(id)}
-              chosenRoutes={routes}
-              routeNotice={selected || off ? null : routeNotice?.(id)}
-              resolved={off ? undefined : resolvedRoutes?.(id, selected)}
-              editor={selected ? editor : undefined}
-              unsupported={off}
-              text={text}
-            />
-          );
-        }}
+        // 選べない理由はタブの印と下の注記に出す（選んでいないカードは描かないので。D-221）
+        flag={(id) => unsupported?.(id)}
+        renderCard={(id) => (
+          // 出すのは選んでいるフレームワークのカードだけ（D-221。タブにした）
+          <FrameworkCard
+            scenario={scenario}
+            id={id}
+            comments={comments}
+            detail={<FrameworkDetail scenario={scenario} id={id} />}
+            routes={routePlan?.(id)}
+            chosenRoutes={routes}
+            resolved={resolvedRoutes?.(id)}
+            editor={editor}
+            text={text}
+          />
+        )}
       />
 
       {allowed.length >= 2 && text.footnote && (
-        <p className="text-sm opacity-70">{text.footnote}</p>
+        <p className="mt-2 text-sm opacity-70">{text.footnote}</p>
       )}
     </div>
   );

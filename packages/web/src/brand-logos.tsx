@@ -137,10 +137,23 @@ export function BrandMark({
 }
 
 /** 構成の事業者のロゴを並べる。 */
-export function PlatformMarks({ platform }: { platform: Platform }) {
+export function PlatformMarks({
+  platform,
+  primaryOnly = false,
+}: {
+  platform: Platform;
+  /**
+   * 事業者のロゴだけを出す（構成のタブ・カード。D-221）。DB などの部品は替えられるので、既定の部品（Vercel の Supabase など）の
+   * ロゴを添えると、替えた後に食い違う。
+   */
+  primaryOnly?: boolean;
+}) {
+  const brands = primaryOnly
+    ? PLATFORM_BRANDS[platform].slice(0, 1)
+    : PLATFORM_BRANDS[platform];
   return (
     <span aria-hidden className="inline-flex shrink-0 items-center gap-1">
-      {PLATFORM_BRANDS[platform].map((b) => (
+      {brands.map((b) => (
         <BrandMark key={b} brand={b} size={14} />
       ))}
     </span>

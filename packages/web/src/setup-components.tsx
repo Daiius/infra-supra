@@ -31,7 +31,7 @@ import {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
-import { CarouselHeadingHidden, CarouselVisible } from './choice-carousel.tsx';
+import { ChoiceHeadingHidden } from './choice-tabs.tsx';
 import { Info } from './info.tsx';
 import { useReducedMotion } from './motion.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
@@ -754,9 +754,8 @@ function storeSetupTab(key: string, v: SetupTab) {
  * ① インフラの構成と ② フレームワークと描き方を、タブで切り替えて片方だけ出す（D-116 の補足。縦の情報量を減らし、どちらから
  * 選んでもよいように）。WAI-ARIA の tabs（←/→・Home/End で移って選ぶ）。選んだタブは画面ごとに storageKey へ覚える。
  * 隠れた側も描いたまま hidden にする（carousel の組ごとに最後に選んだプランなど、欄の中の記憶も保つ）。隠れている間は幅が無いので、
- * carousel は見えたときに選んだカードへ寄せ直す（CarouselVisible）。
  * 見た目は ① の事業者の組のタブに寄せる（地の上の枠。選んでいるタブは 2px の primary の枠・淡い地・太字）。部品の選び方の「構成図から /
- * 機能から」（daisyUI の tabs-box）とは区別する。欄の中の見出しはタブと重なるので画面からは隠す（CarouselHeadingHidden。読み上げには残す）。
+ * 機能から」（daisyUI の tabs-box）とは区別する。欄の中の見出しはタブと重なるので画面からは隠す（ChoiceHeadingHidden。読み上げには残す）。
  */
 export function SetupTabs({
   storageKey,
@@ -826,11 +825,15 @@ export function SetupTabs({
     tabs.current[next]?.focus();
   };
   return (
-    <div className="min-w-0 space-y-2" data-setup-tab={tab}>
+    // タブと中身を 1 つの灰色の面で包み、選んだタブと中身を白で同じ面に見せる（daisyUI の tabs-box と tab-content の形。D-221）
+    <div
+      className="min-w-0 space-y-1.5 rounded-box bg-base-200 p-1.5"
+      data-setup-tab={tab}
+    >
       <div
         role="tablist"
         aria-label="選ぶもの"
-        className="flex min-w-0 gap-1.5 rounded-box bg-base-200 p-1.5"
+        className="flex min-w-0 gap-1.5"
         onKeyDown={onKeyDown}
       >
         {SETUP_TABS.map((t) => {
@@ -851,10 +854,10 @@ export function SetupTabs({
               title={`${x.label}: ${x.summary}${x.warn ? `（${x.warn}）` : ''}`}
               data-setup-tab-button={t}
               className={`flex min-w-0 flex-1 cursor-pointer flex-col items-start rounded-field text-left motion-safe:transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
-                // 選んでいるタブは 2px の primary の枠・淡い地・太字、選んでいないタブは 1px の灰色の枠（線の差は余白で埋めて高さを揃える）
+                // 選んでいるタブは中身と同じ白い地と影・太字、選んでいないタブは地なし（外側の灰色の面のまま）
                 selected
-                  ? 'border-2 border-primary bg-primary/10 px-2 py-1 font-bold'
-                  : 'border border-base-300 bg-base-100 px-[calc(0.5rem+1px)] py-[calc(0.25rem+1px)] font-normal hover:border-primary/60'
+                  ? 'bg-base-100 px-2 py-1 font-bold shadow-sm'
+                  : 'px-2 py-1 font-normal hover:bg-base-100/60'
               }`}
               onClick={() => setTab(t)}
             >
@@ -901,13 +904,11 @@ export function SetupTabs({
             panels.current[t] = el;
           }}
           hidden={tab !== t}
-          className="min-w-0"
+          className="min-w-0 rounded-box border border-base-300 bg-base-100 p-1 sm:p-2"
         >
-          <CarouselVisible.Provider value={tab === t}>
-            <CarouselHeadingHidden.Provider value>
-              {info[t].panel}
-            </CarouselHeadingHidden.Provider>
-          </CarouselVisible.Provider>
+          <ChoiceHeadingHidden.Provider value>
+            {info[t].panel}
+          </ChoiceHeadingHidden.Provider>
         </div>
       ))}
     </div>

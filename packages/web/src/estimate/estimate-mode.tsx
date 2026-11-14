@@ -37,7 +37,6 @@ import {
   isStoppingLimit,
 } from '../premise-view.ts';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
-import { partsOfStack } from '../parts-memory.ts';
 import {
   routeChoiceOf,
   routeSettingOf,
@@ -82,7 +81,6 @@ import {
   VARIANTS,
   withFramework,
   withParts,
-  withStack,
   withStackRemembered,
   withPartsRemembered,
   withTemplate,
@@ -301,7 +299,7 @@ export function EstimateMode() {
       </Card>
       <Comparison
         rows={rows}
-        // 行を押すとカルーセルもその構成へ移る（値は同じ入力。D-115）
+        // 行を押すと構成のタブもその構成へ移る（値は同じ入力。D-115）
         onPick={pickStack}
       />
       <Card title="料金データの出典">
@@ -550,12 +548,12 @@ function Conditions({
         data-setup-card
       >
         <div className="card-body min-w-0 gap-3 px-3 py-4 sm:p-6">
-          {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じカルーセル（D-115）。タブで切り替え、
+          {/* ① インフラの構成・② フレームワークとページの描き方はゲームの始める画面と同じタブ（D-115・D-221）。タブで切り替え、
           見出しにそれぞれの今の選択と注意を出す（D-116 の補足） */}
           <SetupTabs
             storageKey="infra-supra:setup-tab:estimate"
             stack={{
-              label: '① インフラの構成',
+              label: 'インフラ構成',
               summary: stackName(
                 stackIndex,
                 input.framework,
@@ -578,24 +576,7 @@ function Conditions({
                   comments={comments}
                   routes={input.routes}
                   effort={false}
-                  // 載せられない構成のカードは、選んだ後（withStack + normalizeInput）に残る描き方で描く（月額と同じ条件。OCL-00BB1F11）
-                  routesOnFallback={(i) =>
-                    normalizeInput({
-                      ...input,
-                      ...withStack(input, STACKS[i]!.id),
-                    }).routes
-                  }
-                  // 選んでいないカードは、覚えている部品（前にこの構成で選んだもの。D-116 の補足）で描く
-                  rememberedOf={(i) =>
-                    partsOfStack(memory, scenario, i, input.framework)
-                  }
-                  diagramCaption={(selected, remembered) =>
-                    selected
-                      ? '選んだ部品で描いています。'
-                      : remembered
-                        ? '前にこの構成で選んだ部品（選んでいないスロットは既定）で描いています。'
-                        : 'この構成を選んだときの既定の部品で描いています。'
-                  }
+                  diagramCaption="選んだ部品で描いています。"
                   // 部品は構成のカードの構成図の下のチップと図の箱で選ぶ（D-116）。normalizeInput が選べるものに直す
                   onComponentsChange={onPickParts}
                   partsNote="選んでいないスロットは既定の部品で見積もります"
@@ -607,12 +588,12 @@ function Conditions({
                     rows: slotComparisonOf(input, slot),
                     basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
                   })}
-                  cardExtra={(i, selected) => {
+                  cardExtra={(i) => {
                     const t = cardTotals[STACKS[i]!.id];
                     if (!t) return null;
                     return (
                       <p className="text-sm" data-stack-total={STACKS[i]!.id}>
-                        {selected ? '今の条件で月 ' : 'この構成にすると月 '}
+                        今の条件で月{' '}
                         <strong className="tabular-nums">
                           {usd(t.totalUsd)}
                         </strong>
@@ -633,7 +614,7 @@ function Conditions({
               ),
             }}
             framework={{
-              label: '② フレームワークと描き方',
+              label: 'フレームワーク',
               summary: FRAMEWORKS[input.framework].label,
               warn: notice,
               live: notice,

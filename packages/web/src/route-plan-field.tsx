@@ -23,7 +23,6 @@ import {
   type SettingKey,
   type RouteAlternative,
   type RouteOverrides,
-  type RoutePartKey,
   type RoutePlanRow,
   type RouteRowStatus,
   type Scenario,

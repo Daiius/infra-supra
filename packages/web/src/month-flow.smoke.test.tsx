@@ -23,9 +23,12 @@ describe('ゲームモードの画面', () => {
   it('W-01 記事コミュニティ × Next.js × CF Paid で始めて 3 か月進める', async () => {
     await renderApp();
     // 始める画面: シナリオ・フレームワーク・構成・部品の選択肢が出る
-    expect(screen.getAllByRole('radio', { name: /^Cloudflare/ }).length).toBe(
-      2,
-    );
+    // Cloudflare のプランは Free と Paid（カードの中のプランのラジオ。D-221）
+    expect(
+      screen
+        .getAllByRole<HTMLInputElement>('radio', { name: /^Cloudflare / })
+        .filter((r) => r.name === 'stack-plan').length,
+    ).toBe(2);
     await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
