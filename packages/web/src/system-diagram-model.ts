@@ -726,16 +726,6 @@ export function diagramSummary(
   return `構成図: ブラウザのリクエストは ${first.join('・')} に届きます。部品 ${parts} 個、事業者は ${providers.join('・')}です`;
 }
 
-/** 強調する流れ（選んでいた流れが今の図に無ければ強調しない）。 */
-export function activeLane(
-  chosen: LaneId | null,
-  model: Pick<DiagramModel, 'lanes'>,
-): LaneId | null {
-  return chosen !== null && model.lanes.some((l) => l.id === chosen)
-    ? chosen
-    : null;
-}
-
 /**
  * スロットが差し替える箱の役割（ノードの role。D-114）。箱の吹き出しには、箱の役割がここに入るスロットだけを出す（D-116 の補足）。
  * 別のスロットの選択で名前が変わるだけの箱（「D1 に BLOB で置く」で名前が変わる D1 の箱の画像など）には出さない。

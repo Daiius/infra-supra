@@ -238,9 +238,6 @@ describe('未選択の箱（D-116 の補足）', () => {
       expect(
         container.querySelectorAll('[data-node] [data-unselected-mark]'),
       ).toHaveLength(expected.length);
-      expect(container.textContent).toMatch(
-        /! の(付いた)?箱はまだ選んでいません/,
-      );
       rerender(view(false));
       for (const id of targets) {
         expect(box(id).hasAttribute('data-unselected')).toBe(false);

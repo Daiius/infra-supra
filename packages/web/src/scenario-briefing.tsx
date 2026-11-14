@@ -20,8 +20,6 @@ import {
   otherAccounts,
   type Scenario,
   upkeepOf,
-  RESULT_AXES,
-  type ResultAxisId,
 } from 'game';
 import {
   useCallback,
@@ -691,15 +689,6 @@ function EventLine({
   );
 }
 
-/** 始める画面の 4 軸の紹介の短い説明（D-133）。 */
-const AXIS_INTRO: Record<ResultAxisId, string> = {
-  cash: '最後の月の所持金',
-  satisfaction: '12 か月の満足度の平均',
-  featurePoints: '運用に取られずに機能開発に回せた手間',
-  totalCost:
-    'プレイした月のインフラの費用の合計（高い・低いで良し悪しは付けません）',
-};
-
 /** 文を「。」ごとに分ける（括弧（）の中の「。」では切らない）。 */
 function sentencesOf(text: string): string[] {
   const out: string[] = [];
@@ -718,7 +707,7 @@ function sentencesOf(text: string): string[] {
   return out;
 }
 
-/** シナリオの説明・走り切ることと 4 軸の紹介・アプリの形。 */
+/** シナリオの説明・アプリの形（走り切ることと 4 軸の紹介は遊び方に任せる。D-217）。 */
 export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
   const t = sc.text;
   const intro = t?.intro;
@@ -849,45 +838,6 @@ export function ScenarioDescription({ scenario: sc }: { scenario: Scenario }) {
           </DetailsDialog>
         </div>
         <p>所持金 {usd(sc.startCash)}。</p>
-        {/* 完走のダイアログに寄せた紹介（D-133）。success は枠と見出しの印にだけ使い、全面は塗りつぶさない */}
-        <section
-          className="rounded-box border-2 border-success bg-base-100 p-3 sm:p-4"
-          aria-labelledby="run-goal-title"
-          data-run-goal
-        >
-          <h3 id="run-goal-title" className="text-lg font-bold">
-            <span className="text-success" aria-hidden>
-              ✓{' '}
-            </span>
-            {sc.months} か月を走り切りましょう
-          </h3>
-          <p className="mt-1 text-sm">
-            合否はありません。走り切ると花火が上がり、4 つの軸で振り返ります（1
-            つの点数にはまとめません）。
-          </p>
-          <ol className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
-            {RESULT_AXES.map((a, i) => (
-              <li
-                key={a.id}
-                className="rounded-box border border-success/40 px-2 py-1"
-              >
-                <span className="font-semibold">
-                  {['①', '②', '③', '④'][i]} {a.label}
-                </span>
-                <span className="block text-xs opacity-70">
-                  {AXIS_INTRO[a.id]}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-2 text-xs opacity-80">
-            止まった月が{' '}
-            <span className="whitespace-nowrap">
-              {sc.goal.maxOutageMonths} 回
-            </span>
-            を超えた時点、所持金が尽きた時点、規約違反の指摘を受けた翌月も違反したままのときは、その場で終わります。
-          </p>
-        </section>
         {/* アプリの形は見出しの 1 行だけを出し、注記と箇条書きはダイアログに畳む（2026-11-05・ユーザーの要望） */}
         {app.length > 0 && (
           <div>

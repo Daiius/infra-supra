@@ -24,6 +24,7 @@ import {
   chosenOf,
   pickStrategy,
   showPage,
+  laneLegendOf,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -522,12 +523,12 @@ describe('ゲームモードの画面', () => {
     );
     // 構成図の凡例に島の流れ（個人向けのページ）が出る（① のタブ）
     showStackTab();
-    const legends = screen.getAllByRole('list', {
-      name: '構成図の流れの凡例',
-    });
-    expect(legends.some((l) => within(l).queryByText(/^Server islands/))).toBe(
-      true,
-    );
+    const current = document.querySelector<HTMLElement>(
+      'section[data-stack][aria-current="true"]',
+    )!;
+    expect(
+      laneLegendOf(current).some((t) => t.startsWith('Server islands')),
+    ).toBe(true);
   });
 
   it('W-27 始める画面: Google Cloud × Next.js で部品ごとにキャッシュを選び ISR のキャッシュを「キャッシュしない」にすると、表と同じく見取り図も毎回描くになる（D-111・OCL-CD192A98）', async () => {
@@ -564,15 +565,11 @@ describe('ゲームモードの画面', () => {
     pickStrategy('記事のページ', 'Prerendering');
     showStackTab();
     const lane = (stackId: string, label: string) =>
-      within(
-        within(
-          document.querySelector<HTMLElement>(
-            `section[data-stack="${stackId}"]`,
-          )!,
-        ).getByRole('list', { name: '構成図の流れの凡例' }),
-      )
-        .getAllByRole('button')
-        .find((b) => b.textContent?.startsWith(label))?.textContent ?? '';
+      laneLegendOf(
+        document.querySelector<HTMLElement>(
+          `section[data-stack="${stackId}"]`,
+        )!,
+      ).find((t) => t.startsWith(label)) ?? '';
     // 選べる構成（Vercel）は S1 のまま: 記事のページは静的なページの流れ
     expect(lane('vercel-supabase-pro', '静的なページ')).toContain(
       '記事のページ',

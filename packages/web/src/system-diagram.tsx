@@ -25,7 +25,6 @@ import { Popover } from './info.tsx';
 import {
   diagramModel,
   diagramSummary,
-  activeLane,
   compactText,
   edgeGeometry,
   isNarrow,
@@ -210,7 +209,7 @@ export function SystemDiagram({
   /** ページの見取り図（流れの凡例にページの名前を添える。省略可）。 */
   pages?: readonly ResolvedPage[] | undefined;
   /** 図の下の注記。 */
-  caption?: string;
+  caption?: string | undefined;
   /** 箱から部品を差し替える（選んでいる構成のカードだけ。D-116）。 */
   parts?: DiagramParts | undefined;
   /** 今の選択が箱を持たないスロットの幽霊の箱（slotBoxes。D-116 の補足）。 */
@@ -286,16 +285,6 @@ export function SystemDiagram({
     )?.focus();
     onFocused?.();
   }, [focusTarget, onFocused]);
-  // 未選択の箱があるときだけ、説明文に印の意味を足す
-  // （どのスロットも図の箱か段の箱に当たるので、選べるスロットのどれかが未選択なら ! の箱がある）
-  const unselectedAny =
-    model.nodes.some((n) => hasUnselected(nodeParts, n.id)) ||
-    (bandSlots ?? []).some(
-      (x) => x.pressable && nodeParts?.unselected?.(x.slot) === true,
-    );
-  const [chosen, setActive] = useState<LaneId | null>(null);
-  // 構成・部品を替えて選んでいた流れが図から消えたら、強調をやめる（凡例に無い流れで全部の線が薄くならないように）
-  const active = activeLane(chosen, model);
   const markerId = useId().replace(/:/g, '');
   const title = (account: string) =>
     groupTitle(account, model.groups.find((g) => g.account === account)?.brand);
@@ -359,7 +348,7 @@ export function SystemDiagram({
                 />
               ) : null,
             )}
-            <Edges model={model} active={active} markerId={markerId} />
+            <Edges model={model} markerId={markerId} />
             <Viewer model={model} />
             {model.nodes.map((n) =>
               tall ? (
@@ -467,22 +456,7 @@ export function SystemDiagram({
           </div>
         )}
       </div>
-      {tall && (
-        <p className="text-xs opacity-70">
-          狭い幅なので縦に並べました。箱を押すと、事業者・種類・通る流れが出ます。
-          {parts && '⇄ の箱では部品も替えられます。'}
-          {unselectedAny && '! の箱はまだ選んでいません。'}
-        </p>
-      )}
-      {!tall && parts && (
-        <p className="text-xs opacity-70">
-          ⇄ の付いた箱を押すと、その部品を替えられます。
-          {unselectedAny &&
-            '! の付いた箱はまだ選んでいません（既定の部品の名前で描いています）。'}
-        </p>
-      )}
       {caption && <p className="text-xs opacity-70">{caption}</p>}
-      <Legend model={model} active={active} onToggle={setActive} />
       <ConnectionList model={model} title={title} />
     </div>
   );
@@ -848,15 +822,7 @@ const STEP = 3;
 /** 縮めても文字が読める最小の幅（これより狭い画面では横にスクロールする）。 */
 const MIN_WIDTH = 560;
 
-function Edges({
-  model,
-  active,
-  markerId,
-}: {
-  model: DiagramModel;
-  active: LaneId | null;
-  markerId: string;
-}) {
+function Edges({ model, markerId }: { model: DiagramModel; markerId: string }) {
   return (
     <g fill="none">
       {model.edges.map((e) => {
@@ -865,11 +831,10 @@ function Edges({
           <g key={`${e.from}>${e.to}`} data-edge={`${e.from}>${e.to}`}>
             {e.lanes.map((l, k) => {
               const off = (k - (e.lanes.length - 1) / 2) * STEP;
-              const dim = active !== null && active !== l;
               const style: CSSProperties = {
                 stroke: LANE_COLOR[l],
-                strokeWidth: active === l ? 2.5 : 1.75,
-                opacity: dim ? 0.12 : 0.9,
+                strokeWidth: 1.75,
+                opacity: 0.9,
               };
               return (
                 <path
@@ -879,7 +844,7 @@ function Edges({
                   style={style}
                   strokeDasharray={LANE_DASH[l]}
                   markerEnd={
-                    k === e.lanes.length - 1 || active === l
+                    k === e.lanes.length - 1
                       ? `url(#${markerId}-${l})`
                       : undefined
                   }
@@ -893,45 +858,31 @@ function Edges({
   );
 }
 
-function Legend({
-  model,
-  active,
-  onToggle,
-}: {
-  model: DiagramModel;
-  active: LaneId | null;
-  onToggle: (l: LaneId | null) => void;
-}) {
+/**
+ * 線の色の凡例（構成のカードの ⓘ のダイアログの中に出す。D-217）。図の向きで流れは変わらないので、横の図のモデルの lanes を渡す。
+ */
+export function LaneLegend({ lanes }: { lanes: DiagramModel['lanes'] }) {
+  if (lanes.length === 0) return null;
   return (
-    <ul aria-label="構成図の流れの凡例" className="flex flex-wrap gap-1">
-      {model.lanes.map((l) => (
-        <li key={l.id} className="max-w-full min-w-0">
-          <button
-            type="button"
-            aria-pressed={active === l.id}
-            className={clsx(
-              'btn h-auto min-h-0 max-w-full shrink gap-1.5 btn-ghost px-2 py-1 text-left text-xs font-normal btn-xs',
-              active === l.id && 'btn-active',
+    <ul aria-label="構成図の線の色" className="space-y-1">
+      {lanes.map((l) => (
+        <li key={l.id} className="flex items-center gap-2 text-sm">
+          <svg aria-hidden width="24" height="6" className="shrink-0">
+            <line
+              x1="0"
+              x2="24"
+              y1="3"
+              y2="3"
+              style={{ stroke: LANE_COLOR[l.id], strokeWidth: 2.5 }}
+              strokeDasharray={LANE_DASH[l.id]}
+            />
+          </svg>
+          <span className="min-w-0 break-words">
+            {l.label}
+            {l.pages.length > 0 && (
+              <span className="opacity-70">（{l.pages.join('・')}）</span>
             )}
-            onClick={() => onToggle(active === l.id ? null : l.id)}
-          >
-            <svg aria-hidden width="18" height="6" className="shrink-0">
-              <line
-                x1="0"
-                x2="18"
-                y1="3"
-                y2="3"
-                style={{ stroke: LANE_COLOR[l.id], strokeWidth: 2.5 }}
-                strokeDasharray={LANE_DASH[l.id]}
-              />
-            </svg>
-            <span className="min-w-0 break-words">
-              {l.label}
-              {l.pages.length > 0 && (
-                <span className="opacity-70">（{l.pages.join('・')}）</span>
-              )}
-            </span>
-          </button>
+          </span>
         </li>
       ))}
     </ul>
