@@ -101,7 +101,7 @@ function playToEnd() {
     const dialog = screen.queryByRole('dialog');
     if (!dialog) continue;
     // 出来事のダイアログでなければ（完走のダイアログ）終わり
-    if (!within(dialog).queryByRole('heading', { name: /か月目の出来事/ }))
+    if (!within(dialog).queryByRole('heading', { name: /か月目のイベント/ }))
       return;
     readEventPages(dialog);
     closeEventsDialog(dialog);

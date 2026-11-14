@@ -385,7 +385,7 @@ export const changeItems = (): HTMLElement[] => [
 /** 「来月の行動にする」を押す（選び直したものを今月の行動にする。D-185）。 */
 export function registerSetupChange() {
   const b = within(setupChangeFold()).getByRole<HTMLButtonElement>('button', {
-    name: '来月の行動にする',
+    name: '来月のアクションにする',
   });
   expect(
     b.disabled,
@@ -433,7 +433,7 @@ export const eventPosition = (dialog: HTMLElement) =>
  * 出来事のダイアログを 1 ページ目から最後まで「次へ」で送り、各ページの中身の文を返す（最後のページで止まる）。
  */
 export function readEventPages(dialog: HTMLElement): string[] {
-  within(dialog).getByRole('heading', { name: /か月目の出来事/ });
+  within(dialog).getByRole('heading', { name: /か月目のイベント/ });
   const pages: string[] = [];
   for (let i = 0; i < 50; i++) {
     pages.push(dialog.querySelector('[data-events-page]')!.textContent!);

@@ -218,7 +218,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
     }
     case 'respond': {
       const def = eventDef(scenarioOf(state), action.eventId);
-      if (!def?.accept) return ng('invalid', '提案がありません');
+      if (!def?.accept) return ng('invalid', '開発依頼がありません');
       if (!state.pendingProposals.includes(action.eventId))
         return ng('same', 'すでに返事をしました');
       if (action.accept) {
@@ -381,7 +381,10 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (via) {
         const pending = componentProposal(state, action.slot, action.option);
         if (!pending)
-          return ng('via-proposal', `提案「${via.title}」を受けると付きます`);
+          return ng(
+            'via-proposal',
+            `開発依頼「${via.title}」を受けると付きます`,
+          );
         return actionRule(state, {
           type: 'respond',
           eventId: pending,

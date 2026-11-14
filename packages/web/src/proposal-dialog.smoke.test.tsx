@@ -106,7 +106,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     advance(m - 2);
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
     const dialog = screen.getByRole('dialog', {
-      name: new RegExp(`^${m} か月目の出来事`),
+      name: new RegExp(`^${m} か月目のイベント`),
     });
     const choice = pageOf(dialog, 'p-personal');
     // 手間の残りも出す
@@ -125,9 +125,9 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     fireEvent.click(
       within(actionRow('p-personal')).getByRole('radio', { name: /^断る/ }),
     );
-    fireEvent.click(screen.getByRole('button', { name: /出来事/ }));
+    fireEvent.click(screen.getByRole('button', { name: /イベント/ }));
     const again = screen.getByRole('dialog', {
-      name: new RegExp(`^${m} か月目の出来事`),
+      name: new RegExp(`^${m} か月目のイベント`),
     });
     expect(
       within(pageOf(again, 'p-personal')).getByRole<HTMLInputElement>('radio', {
@@ -145,7 +145,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
   it('W-202b 受けられないときは、ダイアログにも選べない理由を出す', () => {
     // 手間を 0 にして、受ける手間が足りない形
     renderGame(stateWith('p-archive', (s) => ({ ...s, effortPerMonth: -50 })));
-    const dialog = screen.getByRole('dialog', { name: /^2 か月目の出来事/ });
+    const dialog = screen.getByRole('dialog', { name: /^2 か月目のイベント/ });
     const choice = pageOf(dialog, 'p-archive');
     const accept = within(choice).getByRole<HTMLInputElement>('radio', {
       name: /^受ける/,
@@ -173,7 +173,7 @@ describe('受けると止まりうる上限の見込み（D-203）', () => {
     ]);
     expect(x!.stops).toBe(true);
     renderGame(state);
-    const dialog = screen.getByRole('dialog', { name: /^2 か月目の出来事/ });
+    const dialog = screen.getByRole('dialog', { name: /^2 か月目のイベント/ });
     const rows = [pageOf(dialog, 'p-archive'), actionRow('p-archive')].map(
       (r) => r.querySelector<HTMLElement>('[data-accept-limit]')!,
     );
@@ -197,7 +197,7 @@ describe('受けると止まりうる上限の見込み（D-203）', () => {
   it('W-203c 「構成を変える」で Cloudflare Free を登録すると、行動の欄とダイアログに Free の D1 で止まる赤が出る（画面の経路）', () => {
     renderGame(stateWith('p-archive'));
     closeEventsDialog(
-      screen.getByRole('dialog', { name: /^2 か月目の出来事/ }),
+      screen.getByRole('dialog', { name: /^2 か月目のイベント/ }),
     );
     const tone = (root: HTMLElement) =>
       root
@@ -216,8 +216,8 @@ describe('受けると止まりうる上限の見込み（D-203）', () => {
       'プランの変更などで上限を引き上げれば止まりません',
     );
     // 開き直したダイアログも同じ下書きで出す
-    fireEvent.click(screen.getByRole('button', { name: /出来事/ }));
-    const dialog = screen.getByRole('dialog', { name: /^2 か月目の出来事/ });
+    fireEvent.click(screen.getByRole('button', { name: /イベント/ }));
+    const dialog = screen.getByRole('dialog', { name: /^2 か月目のイベント/ });
     expect(tone(pageOf(dialog, 'p-archive'))).toBe('stop');
   });
 
@@ -244,7 +244,7 @@ describe('受けられない提案は知らせにする（D-201）', () => {
     const state = stateWith('p-sla');
     expect(state.pendingProposals).toEqual([]);
     const { advanced } = renderGame(state);
-    const dialog = screen.getByRole('dialog', { name: /^2 か月目の出来事/ });
+    const dialog = screen.getByRole('dialog', { name: /^2 か月目のイベント/ });
     const page = dialog.querySelector('[data-events-page]')!;
     expect(page.textContent).toContain('今の構成では受けられません: ');
     expect(page.querySelector('[data-event-unavailable]')).not.toBeNull();

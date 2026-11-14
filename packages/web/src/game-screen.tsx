@@ -616,7 +616,7 @@ function EventsDialog({
             className="flex flex-wrap items-center gap-x-2 text-lg font-bold"
           >
             <span>
-              {r.month} か月目の出来事（{n} 件）
+              {r.month} か月目のイベント（{n} 件）
             </span>
             {n > 1 && (
               <span
@@ -639,7 +639,7 @@ function EventsDialog({
         {n > 1 && (
           <nav
             className="mt-3 shrink-0 space-y-2 border-b border-base-300 pb-3"
-            aria-label="出来事のページ"
+            aria-label="イベントのページ"
           >
             <div className="flex items-center gap-2">
               <button
@@ -866,7 +866,7 @@ function MonthCard({
                   className="btn btn-sm btn-outline mt-2"
                   onClick={onShowEvents}
                 >
-                  出来事を 1 件ずつ見る（{r.events.length} 件）
+                  イベントを 1 件ずつ見る（{r.events.length} 件）
                 </button>
               </div>
             )
@@ -1028,16 +1028,20 @@ function EffortBreakdownView({
     ...(e.accounts
       ? [{ label: '他の事業者の管理', value: e.accounts, cls: 'bg-warning/50' }]
       : []),
-    { label: '出来事への対応', value: e.interrupt, cls: 'bg-error' },
+    { label: 'イベントへの対応', value: e.interrupt, cls: 'bg-error' },
     {
       label: '乗り換え・作り直し・DB や API の移し替え',
       value: e.migration,
       cls: 'bg-secondary',
     },
-    { label: '行動（設定・最適化・部品）', value: e.actions, cls: 'bg-info' },
+    {
+      label: 'アクション（設定・最適化・部品）',
+      value: e.actions,
+      cls: 'bg-info',
+    },
     // 機能追加の提案への対応は機能開発に数える（D-29）。棒は手間の総量の内訳なので、加点は棒に入れず下に添える
     {
-      label: '機能の追加（提案）',
+      label: '機能の追加（開発依頼）',
       value: e.featureWork,
       cls: 'bg-accent',
     },
@@ -1060,7 +1064,7 @@ function EffortBreakdownView({
         <span className="ml-2 text-sm font-normal opacity-70">
           機能開発 {Math.round(e.feature)}
           {e.featureBonus > 0 &&
-            `（うち提案の加点 +${Number(e.featureBonus.toFixed(1))}）`}
+            `（うち開発依頼の加点 +${Number(e.featureBonus.toFixed(1))}）`}
           ・累計 {Math.round(r.featurePoints)}
         </span>
       </h3>
@@ -1229,7 +1233,8 @@ export function EventCard({
       {e.accept && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          {choosing ? '' : '。月の終わりの行動で受けるか断るかを選びます'}（
+          {choosing ? '' : '。月の終わりのアクションで受けるか断るかを選びます'}
+          （
           {e.accept.declineLoss
             ? `断ると${e.accept.declineLoss}`
             : '断っても罰はありません'}
@@ -1321,7 +1326,7 @@ export function EventCard({
 function surpriseReason(x: Surprise): string {
   switch (x.cause.kind) {
     case 'event':
-      return `理由: 出来事「${x.cause.title}」。これが無ければ今月は ${(x.cause.ratioWithout * 100).toFixed(0)}% で、超えませんでした`;
+      return `理由: イベント「${x.cause.title}」。これが無ければ今月は ${(x.cause.ratioWithout * 100).toFixed(0)}% で、超えませんでした`;
     case 'action':
       return `理由: 前の月の選択（${x.cause.action}）`;
     case 'growth':
@@ -1482,7 +1487,7 @@ function Actions({
     <div className="card bg-base-100 shadow">
       <div className="card-body">
         <h2 className="card-title flex-wrap">
-          今月の行動（来月に効く）
+          今月のアクション（来月に効く）
           <span className="badge badge-lg">
             {/* 分母も選んでいる行動を当てた draft から（プラン変更で既定の分が替わる。D-123・OCL-ADB0B195） */}
             来月の手間の残り {fmtPoints(left)} / {fmtPoints(d.total)}
@@ -1496,7 +1501,7 @@ function Actions({
           <div>
             来月の機能開発 {fmtPoints(outlook.feature)}
             {!isZeroText(fmtPoints(Math.abs(outlook.change))) &&
-              `（行動で ${signedText(outlook.change, fmtPoints)}）`}
+              `（アクションで ${signedText(outlook.change, fmtPoints)}）`}
           </div>
           <FeatureProgressLine
             scenario={sc}
@@ -1509,7 +1514,7 @@ function Actions({
             {outlook.total >= outlook.expected
               ? '来月の累計は期待に届きます'
               : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届きません`}
-            （来月に新しく起きる出来事の対応の手間は含めません）
+            （来月に新しく起きるイベントの対応の手間は含めません）
           </div>
           <div className="mt-2">
             <FeatureRing
@@ -1527,7 +1532,7 @@ function Actions({
         {state.pendingProposals.length > 0 && (
           <div className="space-y-2">
             <div className="divider my-1 text-xs">
-              届いた提案（選ばなければ断る）
+              届いた開発依頼（選ばなければ断る）
             </div>
             {state.pendingProposals.map((id) => (
               <ProposalChoice
@@ -1679,7 +1684,7 @@ function Actions({
               info={
                 <Info title="Bot を遮断するルールを入れる">
                   Bot・クローラーのアクセスが来月から半分になります。一度入れれば続きます。対策の製品（WAF
-                  など）の料金は取得していないので、手間だけの行動です。
+                  など）の料金は取得していないので、手間だけのアクションです。
                 </Info>
               }
               why={blockBots ? null : blocked(build({ blockBots: true }))}
@@ -1801,10 +1806,10 @@ function DeclineConfirmDialog({
     >
       <div className="modal-box max-w-md">
         <h2 id="decline-dialog-title" className="text-lg font-bold">
-          未決の提案が {titles.length} 件あります
+          未決の開発依頼が {titles.length} 件あります
         </h2>
         <p className="mt-2 text-sm">
-          このまま進むと、次の提案は断ったことになります。
+          このまま進むと、次の開発依頼は断ったことになります。
         </p>
         <ul className="mt-2 space-y-1 text-sm">
           {titles.map((t) => (
@@ -1819,7 +1824,7 @@ function DeclineConfirmDialog({
         <div className="modal-action">
           <form method="dialog">
             <button className="btn btn-primary btn-sm" autoFocus>
-              提案を選ぶ
+              開発依頼を選ぶ
             </button>
           </form>
           <button
@@ -2184,10 +2189,10 @@ function Result({
                   {[
                     ['自前運用の維持', e.upkeep],
                     ...(e.accounts ? [['他の事業者の管理', e.accounts]] : []),
-                    ['出来事への対応', e.interrupt],
+                    ['イベントへの対応', e.interrupt],
                     ['乗り換え', e.migration],
-                    ['行動（設定・最適化）', e.actions],
-                    ['機能の追加（提案）', e.featureWork],
+                    ['アクション（設定・最適化）', e.actions],
+                    ['機能の追加（開発依頼）', e.featureWork],
                     [
                       '機能開発（残り）',
                       e.feature - e.featureWork - e.featureBonus,
@@ -2248,8 +2253,8 @@ function History({
                   <th className="text-right">満足度</th>
                   <th className="text-right">機能開発</th>
                   <th>状態</th>
-                  <th>出来事</th>
-                  <th>行動</th>
+                  <th>イベント</th>
+                  <th>アクション</th>
                   <th>
                     <span className="sr-only">戻る</span>
                   </th>
@@ -2389,7 +2394,7 @@ function Trends({
       format: (n: number) => {
         const p = last.effort.featureWork + last.effort.featureBonus;
         return p > 0
-          ? `${Math.round(n)}（うち提案 ${Math.round(p)}）`
+          ? `${Math.round(n)}（うち開発依頼 ${Math.round(p)}）`
           : `${Math.round(n)} / ${last.effort.total}`;
       },
       series: history.map((r) => r.effort.feature),
@@ -2455,7 +2460,7 @@ function Trends({
               {cashProj.skipped > 0
                 ? `（今回は ${cashProj.skipped} か月を除きました）`
                 : ''}
-              。予告済みの出来事・料金の改定は織り込みません
+              。予告済みのイベント・料金の改定は織り込みません
             </Info>
           </p>
         )}

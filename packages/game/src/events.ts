@@ -218,15 +218,15 @@ export function acceptSummary(
                 '機能開発に数えない',
               ])
             : e.months === 1
-              ? `来月、行動に使える手間が ${e.points} 減ります`
-              : `その間、行動に使える手間が ${e.points} 減ります（${e.months} か月）`,
+              ? `来月、アクションに使える手間が ${e.points} 減ります`
+              : `その間、アクションに使える手間が ${e.points} 減ります（${e.months} か月）`,
         );
         break;
       case 'imageRedesign': {
         const points = imageRedesignEffort(state);
         effort.push(
           points > 0
-            ? `来月、行動に使える手間が ${points} 減ります`
+            ? `来月、アクションに使える手間が ${points} 減ります`
             : '手間なし',
         );
         const rule = sc.imageRedesign;

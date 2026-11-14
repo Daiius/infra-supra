@@ -166,7 +166,7 @@ describe('retryHintsOf', () => {
     expect(proposal.what).toContain(
       '「添付ファイルの提案」が無ければ越えませんでした',
     );
-    expect(proposal.next).toContain('受けた提案で保存量が増え');
+    expect(proposal.next).toContain('受けた開発依頼で保存量が増え');
     expect(proposal.next).not.toContain('一時的');
     // 流量の出来事なら従来どおり
     expect(withCause('c-busy', '繁忙期').next).toContain(

@@ -168,7 +168,7 @@ function AboutPage() {
             Icon={CalendarDays}
             tone="info"
             label="毎月の運営"
-            sub="12 か月。出来事に応じて手を打つ"
+            sub="12 か月。イベントにアクションで応える"
           />
           <Arrow />
           <Node
@@ -182,7 +182,7 @@ function AboutPage() {
       <p>
         Web アプリ（記事のコミュニティなど）のインフラを選び、12
         か月運営するゲームです。PV
-        が伸びると費用も上限の使用率も上がっていきます。どの構成にどんな得意・不得意があるかを、月ごとの費用と出来事で確かめます。
+        が伸びると費用も上限の使用率も上がっていきます。どの構成にどんな得意・不得意があるかを、月ごとの費用とイベントで確かめます。
       </p>
       <p
         className="flex items-start gap-2 rounded-box border border-info/50 bg-info/5 p-2 text-sm"
@@ -194,7 +194,7 @@ function AboutPage() {
           料金・制限は実在の公式の料金表（出典つき。2026-10-31
           時点）で計算します。円建ての料金は 1 USD = {USD_JPY}{' '}
           円の仮定で換算しています。収益・PV
-          の伸び・満足度・開発の手間・障害の影響・出来事はゲーム上の仮定です。
+          の伸び・満足度・開発の手間・障害の影響・イベントはゲーム上の仮定です。
         </span>
       </p>
       <p className="text-sm opacity-70">
@@ -266,13 +266,13 @@ function SetupPage() {
 function MonthPage() {
   return (
     <>
-      <Figure label="図: 行動を選んで次の月へ進むと、その月の収益と費用が所持金に反映され、出来事と提案が届く。これを 12 か月繰り返す">
+      <Figure label="図: アクションを選んで次の月へ進むと、その月の収益と費用が所持金に反映され、イベントと開発依頼が届く。これを 12 か月繰り返す">
         <FigureTitle>1 か月の流れ（12 回繰り返す）</FigureTitle>
         <Flow>
           <Node
             Icon={Wrench}
             tone="info"
-            label="行動を選ぶ"
+            label="アクションを選ぶ"
             sub="手間を使って設定・最適化・乗り換え"
           />
           <Arrow />
@@ -288,7 +288,7 @@ function MonthPage() {
           <Node
             Icon={Bell}
             tone="warning"
-            label="出来事・提案"
+            label="イベント・開発依頼"
             sub="ダイアログで知らせます"
           />
         </Flow>
@@ -323,7 +323,7 @@ function MonthPage() {
             aria-hidden
             className="mr-1 inline size-4 align-text-bottom text-primary"
           />
-          提案（機能追加の依頼など）は、行動の欄で受けるか断るかを選びます。選ばずに「次の月へ」進むと断ったことになります。
+          開発依頼（機能追加など）は、アクションの欄で受けるか断るかを選びます。選ばずに「次の月へ」進むと断ったことになります。
         </li>
         <li>
           推移のグラフで、所持金・PV・上限の使用率がこの先どうなりそうかを確かめられます。
@@ -417,9 +417,9 @@ function SatisfactionPage() {
 /** 手間の棒の例（10 マス）の塗り分け。色はゲーム中の手間の棒（game-screen.tsx の EffortBreakdownView）と同じ。 */
 const EFFORT_EXAMPLE: { label: string; n: number; cls: string }[] = [
   { label: '自前運用の維持・他の事業者の管理', n: 2, cls: 'bg-warning' },
-  { label: '出来事への対応', n: 1, cls: 'bg-error' },
+  { label: 'イベントへの対応', n: 1, cls: 'bg-error' },
   { label: '乗り換え・移し替え', n: 2, cls: 'bg-secondary' },
-  { label: '行動（設定・最適化・部品）', n: 1, cls: 'bg-info' },
+  { label: 'アクション（設定・最適化・部品）', n: 1, cls: 'bg-info' },
   { label: '機能開発（残り）', n: 4, cls: 'bg-success' },
 ];
 
@@ -427,7 +427,7 @@ const EFFORT_EXAMPLE: { label: string; n: number; cls: string }[] = [
 function EffortPage() {
   return (
     <>
-      <Figure label="図: 毎月の手間から運用・出来事への対応・乗り換え・行動に使った残りが機能開発に回り、満足度の機能と PV の伸びに効く">
+      <Figure label="図: 毎月の手間から運用・イベントへの対応・乗り換え・アクションに使った残りが機能開発に回り、満足度の機能と PV の伸びに効く">
         <FigureTitle>毎月の手間（例: 10 ポイント）の使い道</FigureTitle>
         <div className="flex gap-0.5" aria-hidden>
           {EFFORT_EXAMPLE.flatMap((p) =>
@@ -495,7 +495,7 @@ function EffortPage() {
           ずつ減ります。
         </li>
         <li>
-          機能追加の提案を受けたときの作業は、機能開発に数えます（ほかの対応は数えません）。
+          機能追加の開発依頼を受けたときの作業は、機能開発に数えます（ほかの対応は数えません）。
         </li>
         <li>
           自前で運用する構成（VPS
@@ -581,7 +581,7 @@ function LimitsPage() {
         </li>
         <li>
           手前で気づくには、推移の「○
-          か月後に超える見込み」と、プランの変更・部品の切り替えの行動を使います。
+          か月後に超える見込み」と、プランの変更・部品の切り替えのアクションを使います。
         </li>
       </ul>
     </>

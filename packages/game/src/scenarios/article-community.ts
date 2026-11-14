@@ -246,8 +246,8 @@ const EVENTS: EventDef[] = [
     id: 'p-ondemand',
     kind: 'proposal',
     tier: 'occasional',
-    title: '投稿者から「記事を直してもすぐ反映されない」と苦情（即時反映）',
-    text: '記事を直した投稿者から、読者には古い版が見えたままだという苦情が続いています。受けると、投稿・修正のたびにその記事のページのキャッシュを消して描き直す「即時反映」が以後の要件になります。キャッシュの置き場所しだいで、すぐには反映されない構成があります。先に記事のキャッシュを投稿・編集のときに消す設定にしていれば、この苦情は来ません（代わりに好評になります）',
+    title: '投稿者から「直した記事をすぐ反映してほしい」と依頼（即時反映）',
+    text: '記事を直した投稿者から、読者には古い版が見えたままなので、直したらすぐ反映してほしいという依頼が来ています。受けると、投稿・修正のたびにその記事のページのキャッシュを消して描き直す「即時反映」が以後の要件になります。キャッシュの置き場所しだいで、すぐには反映されない構成があります。先に記事のキャッシュを投稿・編集のときに消す設定にしていれば、この依頼は来ません（代わりに好評になります）',
     when: { type: 'window', from: 4, to: 9 },
     previewRequirement: 'on-demand-isr',
     premiseRefs: [
@@ -278,7 +278,7 @@ const EVENTS: EventDef[] = [
     preempted: {
       by: 'edits-immediate',
       title: '投稿者から「記事を直すとすぐ反映される」と好評',
-      text: '記事を直した投稿者から、直した版がすぐ読者に届くと好評で、書き手の間の口コミで広まっています。投稿・編集のたびにそのページのキャッシュを消す（または毎回描く・更新のたびにビルドする）構成にしていたので、「直してもすぐ反映されない」という苦情は来ませんでした',
+      text: '記事を直した投稿者から、直した版がすぐ読者に届くと好評で、書き手の間の口コミで広まっています。投稿・編集のたびにそのページのキャッシュを消す（または毎回描く・更新のたびにビルドする）構成にしていたので、「直した記事をすぐ反映してほしい」という依頼は来ませんでした',
       effects: [{ type: 'growth', add: 0.02, months: 3 }],
     },
   },
@@ -509,15 +509,15 @@ export const ARTICLE_COMMUNITY: Scenario = {
   baselines: [
     {
       id: 'cf-paid',
-      label: 'Cloudflare Paid・何もしない（提案は断る）',
+      label: 'Cloudflare Paid・何もしない（開発依頼は断る）',
       short: 'CF Paid・何もしない',
       stackIndex: CF_PAID,
     },
     {
       id: 'cf-paid-accept',
       label:
-        'Cloudflare Paid・提案を全部受ける（D1 が 10 GB に近づいたら Vercel Pro + Supabase へ乗り換え）',
-      short: 'CF Paid・提案を受ける',
+        'Cloudflare Paid・開発依頼を全部受ける（D1 が 10 GB に近づいたら Vercel Pro + Supabase へ乗り換え）',
+      short: 'CF Paid・開発依頼を受ける',
       stackIndex: CF_PAID,
       decide: (s) => [
         ...respondAll(s, true),
@@ -529,8 +529,8 @@ export const ARTICLE_COMMUNITY: Scenario = {
     {
       id: 'vps-images',
       label:
-        'さくらの VPS・画像を多く載せる提案だけ受け、画像の保存量が 70% を超えたら画像を WebP にする（形式を選べる構成のとき）',
-      short: 'VPS・画像の提案を受ける',
+        'さくらの VPS・画像を多く載せる開発依頼だけ受け、画像の保存量が 70% を超えたら画像を WebP にする（形式を選べる構成のとき）',
+      short: 'VPS・画像の開発依頼を受ける',
       stackIndex: VPS,
       decide: (s) => [
         ...s.pendingProposals.map((eventId): Action => ({
@@ -573,7 +573,7 @@ export const ARTICLE_COMMUNITY: Scenario = {
     },
     {
       id: 'cf-paid-chat',
-      label: 'Cloudflare Paid・チャットの提案だけ受ける',
+      label: 'Cloudflare Paid・チャットの開発依頼だけ受ける',
       short: 'CF Paid・チャットを受ける',
       stackIndex: CF_PAID,
       decide: (s) =>

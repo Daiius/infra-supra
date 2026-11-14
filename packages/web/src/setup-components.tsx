@@ -1005,7 +1005,7 @@ export function SetupCostPreview({
         </>
       )}
       <p className="mt-1 text-xs opacity-70">
-        ゲーム上の目安（1 か月目の基準の規模。出来事・障害は含めない）
+        ゲーム上の目安（1 か月目の基準の規模。イベント・障害は含めない）
       </p>
     </div>
   );

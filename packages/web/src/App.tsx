@@ -830,7 +830,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       routes,
     }),
     basis:
-      '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数えます。出来事・話題の上乗せは含めない目安です。縦の線は選んでいる部品の額です',
+      '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数えます。イベント・話題の上乗せは含めない目安です。縦の線は選んでいる部品の額です',
   });
   // 部品を選び残したときの手段（D-125）: ① のタブを開いてスロットへ移る口と、埋め終えたら移る「運営を始める」
   const tabsApi = useRef<SetupTabsApi>(null);
@@ -1057,7 +1057,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
           <div className="card-actions flex-wrap items-center justify-end">
             <label
               className="flex items-center gap-2 text-sm whitespace-nowrap"
-              title="この日より後に施行される、実際に予告されている料金・制限の改定だけが出来事として出ます"
+              title="この日より後に施行される、実際に予告されている料金・制限の改定だけがイベントとして出ます"
             >
               始めた日
               <input

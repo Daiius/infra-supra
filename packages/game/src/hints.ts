@@ -58,7 +58,7 @@ const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
   freshness:
     'キャッシュの間隔や部品の性質で更新が遅れて見えます。間隔を短くするか、更新がすぐ届く部品を考えましょう',
   feature:
-    '機能開発に回せる手間が期待に届いていません。維持・出来事への対応・行動の手間を減らして、機能開発に回しましょう',
+    '機能開発に回せる手間が期待に届いていません。維持・イベントへの対応・アクションの手間を減らして、機能開発に回しましょう',
 };
 
 /**
@@ -185,12 +185,12 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       cause !== undefined && eventDef(sc, cause.eventId)?.kind === 'proposal';
     const next = permanent
       ? l.accumulates
-        ? '受けた提案で保存量が増え、上限を越えました。ためていく量は減りません。受ける前に容量との余裕を確かめるか、容量の大きいプラン・部品へ移しましょう'
-        : '受けた提案で以後の負荷が増え、上限を越えました。受ける前に上限との余裕を確かめるか、上限の大きいプラン・部品・設定で負荷を下げましょう'
+        ? '受けた開発依頼で保存量が増え、上限を越えました。ためていく量は減りません。受ける前に容量との余裕を確かめるか、容量の大きいプラン・部品へ移しましょう'
+        : '受けた開発依頼で以後の負荷が増え、上限を越えました。受ける前に上限との余裕を確かめるか、上限の大きいプラン・部品・設定で負荷を下げましょう'
       : cause
         ? cause.eventId === 'bot'
           ? 'Bot の大量アクセスで上限を越えました。Bot を遮断するか、上限に余裕のあるプラン・部品を考えましょう'
-          : '一時的に流量が増える出来事で上限を越えました。予告や前兆が来たら、前もって上限に余裕を作りましょう'
+          : '一時的に流量が増えるイベントで上限を越えました。予告や前兆が来たら、前もって上限に余裕を作りましょう'
         : l.accumulates
           ? 'ためていく量（保存量）は減りません。上限に届く前に、容量の大きいプラン・部品へ移すか、ためる量を減らしましょう'
           : '込みの量・無料枠の上限に達すると止まります。上限の大きいプラン・部品に変えるか、設定・部品で量や処理を減らしましょう';
@@ -455,7 +455,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       const spent = upkeepSum + eff.interrupt + rewriteSum;
       const effortText =
         e === 'feature' && spent > 0
-          ? `。維持の手間 計 ${upkeepSum}・出来事への対応 計 ${eff.interrupt}${rewriteSum > 0 ? `・作り直し 計 ${rewriteSum}` : ''}（手間の合計 ${eff.total} の ${Math.round((100 * spent) / Math.max(1, eff.total))}%）`
+          ? `。維持の手間 計 ${upkeepSum}・イベントへの対応 計 ${eff.interrupt}${rewriteSum > 0 ? `・作り直し 計 ${rewriteSum}` : ''}（手間の合計 ${eff.total} の ${Math.round((100 * spent) / Math.max(1, eff.total))}%）`
           : '';
       const growth = satShort ? '' : '満足度は伸び（PV と収益）にも効きます。';
       const rewriteNext =

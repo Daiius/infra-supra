@@ -113,7 +113,7 @@ describe('acceptSummary', () => {
       'PV の月の伸び +3 ポイント（3 か月）',
     ]);
     expect(sum.costs).toContain(
-      'その間、行動に使える手間が 3 減ります（2 か月）',
+      'その間、アクションに使える手間が 3 減ります（2 か月）',
     );
     expect(sum.costs.some((c) => c.startsWith('使用量・費用: '))).toBe(true);
   });

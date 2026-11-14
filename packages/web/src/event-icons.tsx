@@ -39,7 +39,7 @@ export const EVENT_CATEGORY: Record<
   team: { Icon: UserPlus, label: 'チームが増える', cls: 'text-secondary' },
   busy: { Icon: CalendarClock, label: '繁忙期', cls: 'text-warning' },
   expand: { Icon: TrendingUp, label: '利用の広がり', cls: 'text-success' },
-  proposal: { Icon: Lightbulb, label: '提案・依頼', cls: 'text-primary' },
+  proposal: { Icon: Lightbulb, label: '開発依頼', cls: 'text-primary' },
   complaint: {
     Icon: MessageSquareWarning,
     label: '苦情・評判',
@@ -47,12 +47,12 @@ export const EVENT_CATEGORY: Record<
   },
   major: {
     Icon: TriangleAlert,
-    label: '大きな出来事',
+    label: '大きなイベント',
     cls: 'text-error-strong',
   },
   limit: { Icon: Gauge, label: '上限・保存量', cls: 'text-info' },
   revision: { Icon: Receipt, label: '料金・制限の改定', cls: 'text-neutral' },
-  other: { Icon: CircleDot, label: '出来事', cls: 'text-base-content/60' },
+  other: { Icon: CircleDot, label: 'イベント', cls: 'text-base-content/60' },
 };
 
 /** 台本の出来事など、id で決める種類（予告は「id:notice」でも来る）。 */
@@ -62,7 +62,6 @@ const BY_ID: Record<string, EventCategory> = {
   team: 'team',
   'c-busy': 'busy',
   'c-expand': 'expand',
-  'p-ondemand': 'complaint',
 };
 
 /** 出来事の種類。改定 → id で決まる台本 → まれな提案（大きな出来事）→ 提案 → 状態（上限）の順に見る。 */
@@ -70,9 +69,17 @@ export function eventCategory(e: {
   id: string;
   kind: EventKind;
   tier: EventTier;
+  phase?: string;
+  unavailable?: string;
 }): EventCategory {
   if (e.id.startsWith('revision:')) return 'revision';
   const base = e.id.replace(/:notice$/, '');
+  // 即時反映の依頼（D-215 で苦情から依頼の形に）: 依頼として届く・届きうるときは開発依頼。先に対策していて
+  // 好評の知らせになったとき（D-118。phase は occurred。受けられない知らせ（D-201。unavailable）は除く）は評判
+  if (base === 'p-ondemand')
+    return e.phase === 'occurred' && e.unavailable === undefined
+      ? 'complaint'
+      : 'proposal';
   const byId = BY_ID[base];
   if (byId) return byId;
   if (e.kind === 'proposal') return e.tier === 'rare' ? 'major' : 'proposal';

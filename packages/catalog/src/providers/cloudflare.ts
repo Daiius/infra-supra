@@ -986,7 +986,7 @@ export const cloudflare: PriceBookInput = {
             '新しく作る Worker は Workers Logs（observability）が既定で有効で、呼び出しのログ 1 件と console.log の 1 行ずつを 1 件と数えます。Paid は月 2,000 万件を超えた分が 100 万件 $0.60 です。2026-12-01 から Cloudflare Observability の料金（取り込みの GB と保存の GB 月）に移り、件数では課金しません（scheduledChanges）',
           interpretation: {
             adopted:
-              '既定のまま全件を残します（head_sampling_rate 1）。2026-12-01 以降は件数の課金をやめ、取り込み・保存のメーターで数えます（ゲームは改定の出来事が起きた月から。見積モードは今の版）',
+              '既定のまま全件を残します（head_sampling_rate 1）。2026-12-01 以降は件数の課金をやめ、取り込み・保存のメーターで数えます（ゲームは改定のイベントが起きた月から。見積モードは今の版）',
             rejected: [
               {
                 reading:
