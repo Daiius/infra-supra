@@ -350,7 +350,7 @@ describe('見取り図と要件の判定（D-107）', () => {
     expect(src('nextjs', { article: 'ssr' }).article).not.toContain('isr');
   });
 
-  it('行ごとに鮮度・SNS のカード・CPU の制限・ほかの描き方の 1 か月目の差を出す', () => {
+  it('行ごとに反映スピード・SNS のカード・CPU の制限・ほかの描き方の 1 か月目の差を出す', () => {
     const st = routePlanStatus(ARTICLE_COMMUNITY, {
       framework: 'astro',
       stackIndex: CF_FREE,

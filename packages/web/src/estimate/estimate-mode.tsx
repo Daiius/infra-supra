@@ -38,7 +38,6 @@ import {
 } from '../premise-view.ts';
 import { frameworkFallbackNotice, StackField } from '../stack-field.tsx';
 import { partsOfStack } from '../parts-memory.ts';
-import { ROUTE_PLAN_NOTE } from '../route-plan-table.tsx';
 import {
   routeChoiceOf,
   routeSettingOf,
@@ -224,9 +223,6 @@ export function EstimateMode() {
           ? { revalidateSec: next.revalidateSec }
           : {}),
       });
-    },
-    onPart: (_, part, v) => {
-      if (part === 'comments') setInput({ comments: v });
     },
     setting,
   };
@@ -665,16 +661,7 @@ function Conditions({
                     heading: '② アプリのフレームワークとページの描き方',
                     footnote: null,
                     wireframeNote:
-                      '見取り図はテンプレートの仮定です。描き方のチップや記事のページのコメント欄を変えると、隣の見取り図の札も変わります。',
-                    compareHint:
-                      'なぜ・要件の判定・ほかの描き方にしたときの今の PV での月額の差を表で並べます',
-                    compareNote:
-                      'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの今の PV での月額の差を並べます。ここで選んでも、カードのチップで選んでも同じです。構成の比較・費用の曲線もこの描き方で引きます。',
-                    // 表の注記は見積用（ゲームの「1 か月目の基準の規模」を今の条件に替える）
-                    compareCaption: ROUTE_PLAN_NOTE.replace(
-                      '費用の差は 1 か月目の基準の規模での目安です。',
-                      '費用の差は今の条件（月の PV）での目安です。',
-                    ),
+                      '見取り図はテンプレートの仮定です。描き方のチップを変えると、隣の見取り図の札も変わります。',
                   }}
                 />
               ),

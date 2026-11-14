@@ -63,7 +63,7 @@ export function PageWireframe({ page }: { page: ResolvedPage }) {
   return (
     <ul
       aria-label={`${page.label}の見取り図`}
-      className="grid w-full grid-cols-2 gap-1 rounded-box border border-base-300 bg-base-100 p-1.5 lg:w-64 lg:shrink-0"
+      className="grid w-full grid-cols-2 gap-1 rounded-box border border-base-300 bg-base-100 p-1.5 md:w-64 md:shrink-0"
     >
       {page.regions.map((r) => (
         <li
@@ -97,7 +97,7 @@ export function PageWireframe({ page }: { page: ResolvedPage }) {
   );
 }
 
-/** ページの短い札（鮮度・SNS のカード・CPU の注意・API の増え方）。 */
+/** ページの短い札（反映スピード・SNS のカード・CPU の注意・API の増え方）。 */
 export function PageBadges({ badges }: { badges: PageBadge[] }) {
   if (badges.length === 0) return null;
   return (
@@ -309,7 +309,7 @@ export function ScenarioWireframesInfo({ pages }: { pages: ScenarioPage[] }) {
                 {audienceText(p)}・
                 {p.needsOgp ? 'SNS のカードが要る' : 'SNS のカードは要らない'}
               </li>
-              {p.freshness && <li>鮮度: {p.freshness}</li>}
+              {p.freshness && <li>反映スピード: {p.freshness}</li>}
               {p.parts.length > 0 && (
                 <li>動きのある部品: {p.parts.join('・')}</li>
               )}

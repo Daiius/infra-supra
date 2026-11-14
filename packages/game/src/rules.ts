@@ -30,7 +30,7 @@ export const ELEMENT_LABEL: Record<Element, string> = {
   availability: '可用性',
   speed: '速さ',
   feature: '機能',
-  freshness: '鮮度',
+  freshness: '反映スピード',
   quality: '画質',
 };
 
@@ -184,7 +184,7 @@ export type JudgeInput = {
   premises: readonly PlatformPremise[];
   /** ISR のキャッシュを使わない（毎回 SSR なので記事は常に新しい。D-24）。 */
   uncached?: boolean;
-  /** 書き込みが他の拠点にすぐ反映されない DB（KV を DB の代わり）。鮮度を 1 段下げる（仮定・D-24）。 */
+  /** 書き込みが他の拠点にすぐ反映されない DB（KV を DB の代わり）。反映スピードを 1 段下げる（仮定・D-24）。 */
   eventuallyConsistent?: boolean;
   /** 即時反映（オンデマンド ISR）の要件を満たさない。さらに 1 段下げる（仮定・D-32）。 */
   onDemandUnmet?: boolean;
@@ -194,8 +194,8 @@ export type JudgeInput = {
    */
   newPostDelayed?: boolean;
   /**
-   * コメントが遅れて見える時間と、コメントの鮮度の段階の境目（D-85）。コメントを記事のページに含め、時間で再検証・ビルドするときだけ
-   * （遅れ = 間隔）。省略はコメントがすぐ見える（ブラウザで読み込む・オンデマンド・キャッシュしない）。鮮度は記事とコメントの悪い方。
+   * コメントが遅れて見える時間と、コメントの反映スピードの段階の境目（D-85）。コメントを記事のページに含め、時間で再検証・ビルドするときだけ
+   * （遅れ = 間隔）。省略はコメントがすぐ見える（ブラウザで読み込む・オンデマンド・キャッシュしない）。反映スピードは記事とコメントの悪い方。
    */
   commentFreshness?: { delaySec: number; good: number; fair: number };
   /** SPA の初回表示（速さの重さを 1 つ数える。仮定・prd/10 F-05）。 */

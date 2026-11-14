@@ -15,7 +15,7 @@ import { articleShellPerPage, withRouteChoice } from './strategy.ts';
 /** 表の行の要件の判定（D-107。始める画面の 1 か月目の見込みと同じ組み立て）。 */
 export type RouteRowStatus = {
   route: string;
-  /** 鮮度（全員に同じ中身のページだけ。1 か月目の満足度の判定）。 */
+  /** 反映スピード（全員に同じ中身のページだけ。1 か月目の満足度の判定）。 */
   freshness?: { stage: Stage; text: string };
   /** SNS のカード（HTML に記事ごとのメタタグが要るページだけ）。 */
   ogp?: { ok: boolean; text: string };
@@ -39,7 +39,7 @@ export type RouteSetup = {
 
 /**
  * ページごとの描き方の行の要件の判定と、ほかの描き方にしたときの 1 か月目の差（D-107）。
- * 1 か月目の基準の PV で、setupMonthOneEstimate（費用・止まる前提）と playMonth の 1 か月目（鮮度）を引く。出来事・乱数は含めない目安。
+ * 1 か月目の基準の PV で、setupMonthOneEstimate（費用・止まる前提）と playMonth の 1 か月目（反映スピード）を引く。出来事・乱数は含めない目安。
  */
 export function routePlanStatus(sc: Scenario, p: RouteSetup): RouteRowStatus[] {
   const est = (x: RouteSetup) =>

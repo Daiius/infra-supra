@@ -183,12 +183,12 @@ export function SatisfactionPage() {
     { Icon: ShieldCheck, label: '可用性', sub: '止まらない' },
     { Icon: Zap, label: '速さ', sub: 'ページが速く開く' },
     { Icon: Puzzle, label: '機能', sub: '機能開発の累計 / 期待' },
-    { Icon: RefreshCw, label: '鮮度', sub: '更新がすぐ見える' },
+    { Icon: RefreshCw, label: '反映スピード', sub: '更新がすぐ見える' },
     { Icon: Image, label: '画質', sub: '画像の見た目' },
   ];
   return (
     <>
-      <Figure label="図: 可用性・速さ・機能・鮮度・画質の 5 つの要素から満足度が決まり、高ければ口コミで、低ければ解約で PV が増減して収益に効く">
+      <Figure label="図: 可用性・速さ・機能・反映スピード・画質の 5 つの要素から満足度が決まり、高ければ口コミで、低ければ解約で PV が増減して収益に効く">
         <FigureTitle>5 つの要素（それぞれ 良い・普通・悪い）</FigureTitle>
         <div className="grid grid-cols-2 gap-1 sm:grid-cols-5">
           {elements.map((e) => (

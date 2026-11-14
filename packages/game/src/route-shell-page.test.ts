@@ -127,7 +127,7 @@ describe('記事の S5 の記事ごとの枠（D-109）', () => {
     expect(staticBuildOf(sc, CF_PAID, 'vite-spa', {})).toEqual({});
   });
 
-  it('SNS のカードは枠に入る。新しい記事は枠のビルドまで開けないので鮮度は 1 段下がる（中身は API で常に新しい）', () => {
+  it('SNS のカードは枠に入る。新しい記事は枠のビルドまで開けないので反映スピードは 1 段下がる（中身は API で常に新しい）', () => {
     const st = start(VERCEL_PRO, 'nextjs', S5);
     expect(articleShellPerPage(st)).toBe(true);
     const h = playMonth(st).history[0]!;

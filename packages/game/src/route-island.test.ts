@@ -113,7 +113,7 @@ describe('選べる組（D-108）', () => {
     const p = rows.find((r) => r.route === 'personal')!;
     expect(p.code).toBe('S6');
     expect(p.why).toContain('人ごとの部分');
-    expect(p.overriddenBy).toContain('選んだ描き方');
+    expect(p.overriddenBy).toMatch(/^既定（.+）から変更$/);
     // Vercel の Astro の S6 は仮（Vercel のアダプターの頁は機能の一つとして触れるだけ）
     const cf = routePlanOf(start(CF_PAID, 'astro'))
       .find((r) => r.route === 'personal')!

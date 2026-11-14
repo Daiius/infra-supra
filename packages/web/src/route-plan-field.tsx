@@ -15,7 +15,6 @@ import {
   routePlanRows,
   routePlanStatus,
   SETTINGS,
-  setupCommentOptions,
   setupInvalidationEstimate,
   setupRevalidateOptions,
   STACKS,
@@ -41,6 +40,7 @@ import { ROUTE_STRATEGIES } from 'catalog';
 import { PortalContainer } from './info.tsx';
 import { ROUTE_PLAN_NOTE, RoutePlanTable } from './route-plan-table.tsx';
 import { SettingChips } from './setup-components.tsx';
+import { commentOptionsOf } from './comments-choice.ts';
 
 /**
  * ページの描き方を選んだときの書き換え（始める画面と見積モードで共用。D-115）: 選んだ描き方（フレームワークの既定と違うものだけ
@@ -71,7 +71,6 @@ export type RoutePlanEditor = {
   rows: RoutePlanRow[];
   status: RouteRowStatus[];
   onSelect: (row: RoutePlanRow, alt: RouteAlternative) => void;
-  onPart: (row: RoutePlanRow, part: RoutePartKey, value: number) => void;
   /** 記事のページの行で選ぶ描き方の設定（再検証の間隔など。選べなければ undefined。D-119）。 */
   setting?: RouteSettingEditor | undefined;
 };
@@ -138,18 +137,8 @@ const SETTING_STRATEGIES: ReadonlySet<string> = new Set([
   'shell-api',
 ]);
 
-/**
- * 記事のページの行の描き方の設定のチップ（D-119）。時間を先に、オンデマンドを最後に並べる。S2（時間で取り直す）と S3（更新で消す）は
- * 同じ設定なので、その関係をチップの下に添える。オンデマンドを選べない置き場では灰色にして理由を ⓘ に出す。
- */
-export function RouteSettingChips({
-  setting: x,
-  row,
-}: {
-  setting: RouteSettingEditor;
-  row: RoutePlanRow;
-}) {
-  if (!SETTING_STRATEGIES.has(row.strategy)) return null;
+/** 描き方の設定の文（チップの見出し・注記と、カードの ⓘ の SettingExplain で共用）。 */
+function settingTexts(x: RouteSettingEditor, row: RoutePlanRow) {
   const def = SETTINGS[x.key];
   const cc = row.strategy === 'cache-components';
   const cached =
@@ -165,7 +154,6 @@ export function RouteSettingChips({
     ...o,
     why: o === onDemand ? (x.onDemandBlocked ?? null) : null,
   }));
-  // S2・S3 の切り替わりは選ぶと上の描き方のチップが替わるので本文に出す。部品ごとにキャッシュの時間とタグの意味は ⓘ に畳む（D-125）
   // 描き方の名前は表の行と同じ（選んだフレームワークでの呼び名。D-193）
   const nameOf = (s: 'cached-ttl' | 'cached-purge') =>
     s === row.strategy
@@ -180,27 +168,99 @@ export function RouteSettingChips({
     cc && onDemand
       ? `時間は部品の期限（cacheLife）、「${onDemand.label}」は投稿・編集でタグを消して作り直します（updateTag）。${def.note}`
       : def.note;
+  const blocked =
+    onDemand && x.onDemandBlocked
+      ? `「${onDemand.label}」は選べない（${x.onDemandBlocked}）`
+      : undefined;
+  const ifOnDemand =
+    onDemand && !x.onDemandBlocked && x.onDemandNote
+      ? `「${onDemand.label}」にすると: ${x.onDemandNote}`
+      : undefined;
+  return { label, note, options, relation, blocked, ifOnDemand };
+}
+
+/**
+ * 記事のページの行の描き方の設定のチップ（D-119）。時間を先に、オンデマンドを最後に並べる。S2（時間で取り直す）と S3（更新で消す）は
+ * 同じ設定なので、その関係をチップの下に添える。オンデマンドを選べない置き場では灰色にして理由を ⓘ に出す。
+ * info={false}（フレームワークのカード）は ⓘ と下の注記を出さず、文はカードの ⓘ の SettingExplain にまとめる（D-219）。
+ */
+export function RouteSettingChips({
+  setting: x,
+  row,
+  info = true,
+}: {
+  setting: RouteSettingEditor;
+  row: RoutePlanRow;
+  info?: boolean;
+}) {
+  if (!SETTING_STRATEGIES.has(row.strategy)) return null;
+  const t = settingTexts(x, row);
   return (
     <SettingChips
       setting={x.key}
-      label={label}
-      note={note}
-      options={options}
+      label={t.label}
+      note={t.note}
+      options={t.options}
       value={x.value}
       onChange={x.onChange}
+      info={info}
     >
-      {relation && <p className="text-[11px] opacity-70">{relation}</p>}
-      {onDemand && x.onDemandBlocked && (
-        <p className="text-[11px] opacity-70">
-          「{onDemand.label}」は選べない（{x.onDemandBlocked}）
-        </p>
+      {info && t.relation && (
+        <p className="text-[11px] opacity-70">{t.relation}</p>
       )}
-      {onDemand && !x.onDemandBlocked && x.onDemandNote && (
-        <p className="text-[11px] text-warning">
-          「{onDemand.label}」にすると: {x.onDemandNote}
-        </p>
+      {info && t.blocked && (
+        <p className="text-[11px] opacity-70">{t.blocked}</p>
+      )}
+      {info && t.ifOnDemand && (
+        <p className="text-[11px] text-warning">{t.ifOnDemand}</p>
       )}
     </SettingChips>
+  );
+}
+
+/** 描き方の設定の選べない選択肢と理由（カードの「選べない選択肢について」に使う。D-220）。 */
+export function settingUnavailableOf(
+  x: RouteSettingEditor,
+  row: RoutePlanRow,
+): { label: string; why: string }[] {
+  if (!SETTING_STRATEGIES.has(row.strategy)) return [];
+  const t = settingTexts(x, row);
+  return t.options.flatMap((o) =>
+    o.why && o.value !== x.value
+      ? [{ label: `${o.label}（${t.label}）`, why: o.why }]
+      : [],
+  );
+}
+
+/** カードの ⓘ に出す、描き方の設定の説明（RouteSettingChips の ⓘ と注記の文。D-219）。 */
+export function SettingExplain({
+  setting: x,
+  row,
+}: {
+  setting: RouteSettingEditor;
+  row: RoutePlanRow;
+}) {
+  if (!SETTING_STRATEGIES.has(row.strategy)) return null;
+  const t = settingTexts(x, row);
+  const flavors = t.options.filter((o) => o.flavor);
+  return (
+    <div className="space-y-1" data-setting-explain>
+      <p className="font-semibold">{t.label}</p>
+      {t.note && <p>{t.note}</p>}
+      {flavors.length > 0 && (
+        <dl aria-label={`${t.label}の選択肢`} className="space-y-1">
+          {flavors.map((o) => (
+            <div key={o.value}>
+              <dt className="inline font-semibold">{o.label}</dt>:{' '}
+              <dd className="inline">{o.flavor}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {t.relation && <p>{t.relation}</p>}
+      {t.blocked && <p>{t.blocked}</p>}
+      {t.ifOnDemand && <p className="text-warning">{t.ifOnDemand}</p>}
+    </div>
   );
 }
 
@@ -213,7 +273,6 @@ export function useRoutePlanEditor({
   comments,
   routes,
   onChange,
-  onCommentsChange,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -225,8 +284,6 @@ export function useRoutePlanEditor({
   routes: RouteOverrides;
   /** 選んだ描き方と、一緒に替える revalidateSec（S3 はオンデマンドなど。省略は今のまま）。 */
   onChange: (routes: RouteOverrides, revalidateSec?: number) => void;
-  /** 記事のページのコメント欄を選ぶ（D-109）。 */
-  onCommentsChange: (comments: number) => void;
 }): RoutePlanEditor {
   const chosen = useMemo(
     () =>
@@ -274,7 +331,7 @@ export function useRoutePlanEditor({
       framework,
       chosen,
       // コメント欄を選べない描き方では、ブラウザで読み込む（無効化の見込みに含めない。D-82・D-109）
-      setupCommentOptions(scenario, framework, routes).length > 0
+      commentOptionsOf(scenario, framework, routes).length > 0
         ? comments
         : COMMENTS_IN_BROWSER,
     );
@@ -313,13 +370,11 @@ export function useRoutePlanEditor({
       );
       onChange(next.routes, next.revalidateSec);
     },
-    onPart: (_, part, v) => {
-      if (part === 'comments') onCommentsChange(v);
-    },
   };
 }
 
 /**
+ * ⚠ 今は画面から参照していない（D-220。使い方が分かりにくい割に情報が多いので、カードの ⓘ から外した。ソースだけ残す）。
  * 「詳しく比べる」のボタンと、全部のページの描き方を表で比べるダイアログ（D-112）。表は見積モードと同じ RoutePlanTable
  * （なぜ・要件の判定・ほかの描き方の 1 か月目の差）。`<dialog>` の showModal でフォーカスを閉じ込め、Esc・背景・閉じるのボタンで閉じ、
  * 閉じたらボタンへフォーカスを戻す。表の中で選んでも閉じない（カードの見取り図はダイアログの後ろで同じ選択で描き直る）。
@@ -367,7 +422,9 @@ export function RoutePlanCompare({
           ref={dialogRef}
           className="modal"
           aria-labelledby={titleId}
-          onClose={() => {
+          onClose={(e) => {
+            // ⓘ の中に重ねて開くので、close を親の ⓘ のダイアログへ伝えない（D-219）
+            e.stopPropagation();
             setOpen(false);
             trigger.current?.focus();
           }}
@@ -399,7 +456,6 @@ export function RoutePlanCompare({
                     rows={editor.rows}
                     status={editor.status}
                     onSelect={editor.onSelect}
-                    onPart={editor.onPart}
                     caption={caption}
                   />
                 </div>

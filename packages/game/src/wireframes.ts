@@ -56,7 +56,7 @@ function strategyBadges(
           ? [
               {
                 kind: 'freshness' as const,
-                text: '鮮度: 常に新しい（閲覧ごとに描く）',
+                text: '反映スピード: 常に新しい（閲覧ごとに描く）',
               },
               { kind: 'ogp' as const, text: 'SNS のカード: HTML に入る' },
             ]
@@ -67,7 +67,10 @@ function strategyBadges(
       return [{ kind: 'api' as const, text: 'API: 1 PV あたり 1 回増える' }];
     case 'static':
       return [
-        { kind: 'freshness' as const, text: '鮮度: ビルドし直しで載る' },
+        {
+          kind: 'freshness' as const,
+          text: '反映スピード: ビルドし直しで載る',
+        },
         { kind: 'ogp' as const, text: 'SNS のカード: HTML に入る' },
       ];
     default:
@@ -86,7 +89,7 @@ export function scenarioOffscreen(sc: Scenario): OffscreenElement[] {
 
 /**
  * シナリオの説明の見取り図（D-113）。フレームワークに依らず、ページの区画が何で、何が要るか（区画の要件）と、
- * ページの性質（見る人・SNS のカード・鮮度の要件・動きのある部品。テンプレートの routeTraits。RS-17）を返す。作られ方は持たない。
+ * ページの性質（見る人・SNS のカード・反映スピードの要件・動きのある部品。テンプレートの routeTraits。RS-17）を返す。作られ方は持たない。
  */
 export function scenarioWireframes(sc: Scenario): {
   route: string;
@@ -284,7 +287,7 @@ export function pageWireframes(
           : [
               {
                 kind: 'freshness' as const,
-                text: '鮮度: 期限（cacheLife）かタグ（投稿・編集で updateTag）で作り直す',
+                text: '反映スピード: 期限（cacheLife）かタグ（投稿・編集で updateTag）で作り直す',
               },
               { kind: 'ogp' as const, text: 'SNS のカード: HTML に入る' },
             ]

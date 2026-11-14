@@ -83,9 +83,9 @@ export function stageReasons(
     spaFramework?: boolean;
     /** Next.js の静的書き出し（速さは Next.js と同じ扱いで、理由を「API を待つブラウザの描画」で書く。D-80）。 */
     apiOnly?: boolean;
-    /** 記事をビルドし直す（Next.js の静的書き出し。鮮度の理由を「ビルドの間隔」で書く。D-80）。 */
+    /** 記事をビルドし直す（Next.js の静的書き出し。反映スピードの理由を「ビルドの間隔」で書く。D-80）。 */
     rebuilds?: boolean;
-    /** Astro（鮮度の理由を「記事のキャッシュの期限」で書く。D-103）。 */
+    /** Astro（反映スピードの理由を「記事のキャッシュの期限」で書く。D-103）。 */
     astro?: boolean;
     settings: Settings;
     heaviness: number;
@@ -100,7 +100,7 @@ export function stageReasons(
     /** HTML を前段の CDN でもキャッシュし、時間で再検証している（更新は最大で間隔の約 2 倍遅れる。D-91）。 */
     frontDelayed?: boolean;
     uncached: boolean;
-    /** ビルドし直す形の 1 回のビルドの時間（秒。鮮度の遅れに足す。D-104）。 */
+    /** ビルドし直す形の 1 回のビルドの時間（秒。反映スピードの遅れに足す。D-104）。 */
     buildDelaySec?: number;
     /** 記事ごとの枠（S5）をビルドで書き出す（新しい記事の理由を「枠のビルド」で書く。D-109）。 */
     shellBuilds?: boolean;

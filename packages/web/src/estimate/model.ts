@@ -47,7 +47,6 @@ import {
   partsOfComments,
   publicRouteId,
   ROUTE_PARTS,
-  setupCommentOptions,
   staticBuildOf,
   validRouteOverrides,
   withRouteChoice,
@@ -75,6 +74,7 @@ import {
   stackGroupOf,
   type PartsMemory,
 } from '../parts-memory.ts';
+import { commentOptionsOf } from '../comments-choice.ts';
 
 export const BOOKS: readonly PriceBook[] = loadPriceBooks();
 
@@ -158,7 +158,7 @@ export function settingsOf(
         },
     // コメント欄は記事のページの部品（D-109）。選べるのは記事のページが HTML のときだけ
     comments:
-      setupCommentOptions(scenario, framework, routes).length === 0
+      commentOptionsOf(scenario, framework, routes).length === 0
         ? null
         : {
             label: ROUTE_PARTS.comments.label,
@@ -941,7 +941,7 @@ export function frameworkCardRoutes(
 
 /**
  * ページごとの描き方の行の判定（D-107。見積の PV で）: SNS のカード・1 リクエストの CPU の制限（D-99 の causes をその行で絞る）と、
- * ほかの描き方にしたときの月額の差と止まる前提の数の差。鮮度はゲームの満足度の判定なので、見積モードでは出さない。
+ * ほかの描き方にしたときの月額の差と止まる前提の数の差。反映スピードはゲームの満足度の判定なので、見積モードでは出さない。
  */
 export function routeStatusOf(input: EstimateInput): RouteRowStatus[] {
   const r = resolve(input);

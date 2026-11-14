@@ -25,7 +25,6 @@ import {
   setupProblem,
   setupRevalidateOptions,
   setupRouteNotice,
-  setupCommentOptions,
   COMMENTS_IN_BROWSER,
   partsOfComments,
   defaultRevalidateSec,
@@ -107,6 +106,7 @@ import {
   loadHowtoSeen,
   storeHowtoSeen,
 } from './local-records.ts';
+import { commentOptionsOf } from './comments-choice.ts';
 
 const scrollTop = () => window.scrollTo({ top: 0 });
 /** 今日の日付（YYYY-MM-DD・端末の現地時刻）。改定の出来事の条件に使う（D-21）。 */
@@ -790,7 +790,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   // 既定はブラウザで読み込む）
   const [comments, setComments] = useState(COMMENTS_IN_BROWSER);
   const commentsChoosable =
-    setupCommentOptions(scenario, framework, routes).length > 0;
+    commentOptionsOf(scenario, framework, routes).length > 0;
   // 構成・フレームワークを替えると既定に戻る描き方（カードに添える。D-107 の補足）
   const routeNotice = (next: {
     stackIndex?: number;
@@ -821,7 +821,6 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       setRouteChoice(r);
       if (v !== undefined) setRevalidateSec(v);
     },
-    onCommentsChange: setComments,
   });
   // 部品の ⓘ の比較: 1 か月目の見込みと同じ条件で、そのスロットだけ替えた月の費用（D-124）。① と「残りを選ぶ」のダイアログで共用
   const partsCompare = (slot: string) => ({

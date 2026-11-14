@@ -20,6 +20,8 @@ import {
   waitLoaded,
   showPage,
   laneLegendOf,
+  pageOf,
+  chosenOf,
 } from '../smoke.test-helpers.tsx';
 import { usd } from '../format.ts';
 import { Lines } from './estimate-mode.tsx';
@@ -93,22 +95,6 @@ const fwCard = () => {
     'section[data-framework][aria-current="true"]',
   )!;
 };
-/** ② のカードの「詳しく比べる」のダイアログ（閉じていれば開く。D-115 で下の表のカードの代わり）。 */
-const routesDialog = () => {
-  if (!screen.queryByRole('dialog'))
-    fireEvent.click(
-      within(fwCard()).getByRole('button', { name: '詳しく比べる' }),
-    );
-  const dialog = screen.getByRole('dialog', {
-    name: /^ページの描き方を比べる/,
-  });
-  // 表の注記は見積用の文（ゲームの「1 か月目の基準の規模」を出さない。D-115）
-  expect(dialog.textContent).toContain('費用の差は今の条件（月の PV）での目安');
-  expect(dialog.textContent).not.toContain('1 か月目の基準の規模');
-  return dialog;
-};
-const routesTable = () =>
-  within(routesDialog()).getByRole('table', { name: 'ページごとの描き方' });
 /** 構成図の線の色の凡例（① の選んでいる構成のカードの ⓘ の中。D-217）。 */
 const flowLegend = () => laneLegendOf(stackCard()).join('');
 
@@ -246,20 +232,20 @@ describe('見積モードの画面', () => {
       ),
     ).toBeDefined();
     // ページごとの描き方（D-107）: 個人向けを枠 + API にすると URL に残り、その行は CPU の制限に当たらない
-    const routes = within(routesDialog());
+    // 描き方はカードのチップで選ぶ（「詳しく比べる」の表は出さない。D-220）
     fireEvent.click(
-      routes.getByRole('button', {
+      within(pageOf('personal')).getByRole('button', {
         name: /^個人向けのページを Client Islands/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=shell-api');
-    const row = routesTable().querySelector('tr[data-route="personal"]')!;
+    expect(chosenOf('personal')).toBe('shell-api');
+    // CPU の制限に当たらないので、注意が必要な制限の札に出ない
     expect(
-      row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
-    ).toBe('shell-api');
-    expect(
-      row.querySelector('[data-check="cpu"]')!.getAttribute('data-ok'),
-    ).toBe('true');
+      pageOf('personal').querySelector(
+        '[data-status-issues] [data-check="cpu"]',
+      ),
+    ).toBeNull();
     expectEstimate();
   });
 
@@ -314,17 +300,14 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    const routes = within(routesDialog());
     fireEvent.click(
-      routes.getByRole('button', {
+      within(pageOf('personal')).getByRole('button', {
         name: /^個人向けのページを Partial Prerendering（PPR）/,
       }),
     );
     expect(window.location.search).toContain('rp.personal=server-island');
-    const row = routesTable().querySelector('tr[data-route="personal"]')!;
-    expect(
-      row.querySelector('[data-strategy]')!.getAttribute('data-strategy'),
-    ).toBe('server-island');
+    expect(chosenOf('personal')).toBe('server-island');
+    const row = pageOf('personal');
     // 描き方の列は選んでいるもの（S6）も含めて S1〜S6 の順に並び、S6 が選択中になる
     const chips = [...row.querySelectorAll('[data-alternative]')];
     const order = chips.map((x) => x.getAttribute('data-alternative'));
@@ -368,20 +351,16 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    const table = () => routesTable();
-    const strategyOf = (route: string) =>
-      table()
-        .querySelector(`tr[data-route="${route}"] [data-strategy]`)!
-        .getAttribute('data-strategy');
+    const strategyOf = (route: string) => chosenOf(route);
     expect(strategyOf('article')).toBe('cache-components');
     expect(strategyOf('personal')).toBe('cache-components');
-    expect(table().textContent).toContain('Cache Components');
+    expect(pageOf('article').textContent).toContain('Cache Components');
     // 描き方の番号（S1〜S6・文書の S7）は画面に出さない（D-112）
-    expect(table().textContent).not.toMatch(/\bS[1-7]\b/);
+    expect(fwCard().textContent).not.toMatch(/\bS[1-7]\b/);
     expect(window.location.search).not.toContain('rp.');
     expect(flowLegend()).toContain('閲覧ごとに描く部分');
     fireEvent.click(
-      within(routesDialog()).getByRole('button', {
+      within(pageOf('personal')).getByRole('button', {
         name: /^個人向けのページを Dynamic rendering/,
       }),
     );
@@ -394,7 +373,7 @@ describe('見積モードの画面', () => {
     expect(window.location.search).not.toContain('rp.personal');
     expect(strategyOf('personal')).toBe('ssr');
     expect(
-      within(routesDialog()).getByRole('button', {
+      within(pageOf('personal')).getByRole('button', {
         name: /^個人向けのページを Cache Componentsにする/,
       }),
     ).toBeTruthy();
@@ -548,11 +527,7 @@ describe('見積モードの画面', () => {
     );
     expectEstimate();
     expect(window.location.search).toContain('rp.personal=shell-api');
-    expect(
-      routesTable()
-        .querySelector('tr[data-route="personal"] [data-strategy]')!
-        .getAttribute('data-strategy'),
-    ).toBe('shell-api');
+    expect(chosenOf('personal')).toBe('shell-api');
   });
 
   it('W-36 載せられない構成のカードは、選んだ後に残る描き方で注意を出す（見積は替えた先で選べる描き方を残す。OCL-00BB1F11）', async () => {

@@ -74,7 +74,7 @@ describe('満足度の段階', () => {
     ).toBe(1);
   });
 
-  it('画質・鮮度・機能の境目', () => {
+  it('画質・反映スピード・機能の境目', () => {
     expect(judgeStages({ ...base, imageKB: 100 }).quality).toBe('fair');
     expect(judgeStages({ ...base, imageKB: 70 }).quality).toBe('bad');
     expect(judgeStages({ ...base, revalidateSec: 3600 }).freshness).toBe(

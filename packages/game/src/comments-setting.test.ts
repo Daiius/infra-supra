@@ -314,7 +314,7 @@ describe('記事のページの部品「コメント欄」（D-82・D-109）', (
     expect(cost.next).toContain('ブラウザで読み込む形に戻す');
   });
 
-  it('鮮度（D-85）: 含めて時間で再検証すると、コメントは間隔の分だけ遅れて見え、記事とコメントの悪い方になる', () => {
+  it('反映スピード（D-85）: 含めて時間で再検証すると、コメントは間隔の分だけ遅れて見え、記事とコメントの悪い方になる', () => {
     const fresh = (rev: number, cm: number, fw: FrameworkId = 'nextjs') =>
       playMonth(start(CF_PAID, rev, cm, fw)).history[0]!.satisfaction;
     // ブラウザで読み込む: コメントは常に新しい（記事の 5 分は「良い」のまま）
@@ -341,7 +341,7 @@ describe('記事のページの部品「コメント欄」（D-82・D-109）', (
     );
   });
 
-  it('鮮度（D-85）: ISR のキャッシュを使わない（毎回描く）なら、含めてもコメントは遅れない', () => {
+  it('反映スピード（D-85）: ISR のキャッシュを使わない（毎回描く）なら、含めてもコメントは遅れない', () => {
     const st = playMonth(
       start(CF_PAID, 300, COMMENTS_IN_PAGE, 'nextjs', { isrCache: 'none' }),
     );

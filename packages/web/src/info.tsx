@@ -119,6 +119,8 @@ function InfoDialog({
       onClose={(e) => {
         // portal でも React の木では親のダイアログの子なので、close・キーの操作を親（比較・出来事のダイアログなど）へ伝えない
         e.stopPropagation();
+        // 中に重ねたダイアログ（ⓘ の中の「詳しく比べる」。D-219）の close は、React の木を伝ってここに来るので無視する
+        if (e.target !== e.currentTarget) return;
         onClose();
       }}
       onKeyDown={(e) => e.stopPropagation()}

@@ -88,7 +88,7 @@ describe('ゲームモードの画面', () => {
     ).toContain('WebP');
   });
 
-  it('W-25 ゲームの途中で記事のページのコメント欄を替える（構成を変えるの欄の記事の行の部品・手間 2・来月から。D-109・D-185）', async () => {
+  it('W-25 ゲームの途中の「構成を変える」に、記事のページのコメント欄の選択は出ない（D-220。選ばせずブラウザで読み込む）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
@@ -96,31 +96,12 @@ describe('ゲームモードの画面', () => {
       stack: 'Cloudflare Paid + vinext',
     });
     openSetupChange();
-    const part = () =>
-      pageOf('article').querySelector<HTMLElement>('li[data-part="comments"]')!;
-    const left = () =>
-      screen.getByText(/来月の手間の残り/).textContent!.match(/(\d+) \//)![1];
-    const before = Number(left());
     expect(
-      within(part()).getByRole<HTMLInputElement>('radio', {
-        name: /^ブラウザで読み込む/,
-      }).checked,
-    ).toBe(true);
-    fireEvent.click(
-      within(part()).getByRole('radio', { name: /^記事のページに含める/ }),
-    );
-    expect(changeItems()[0]!.textContent).toMatch(/コメント欄.*手間 2/);
-    // 登録するまでは今月の行動に入らない
-    expect(Number(left())).toBe(before);
-    registerSetupChange();
-    expect(Number(left())).toBe(before - 2);
-    advance(1);
-    openSetupChange();
+      pageOf('article').querySelector('li[data-part="comments"]'),
+    ).toBeNull();
     expect(
-      within(part()).getByRole<HTMLInputElement>('radio', {
-        name: /^記事のページに含める/,
-      }).checked,
-    ).toBe(true);
+      screen.queryByRole('radio', { name: /^記事のページに含める/ }),
+    ).toBeNull();
   });
 
   it('W-15 ゲーム中の構成を変えるの欄の構成図も、今の描き方で描く（記事を静的にしたビルドのノード。OCL-C9CD8783・D-185）', async () => {

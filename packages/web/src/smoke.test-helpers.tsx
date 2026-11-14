@@ -542,3 +542,79 @@ export function laneLegendOf(card: HTMLElement): string[] {
   fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
   return items;
 }
+
+/** ② の選んでいるフレームワークのカード。 */
+export const currentFrameworkCard = (): HTMLElement => {
+  showSetupTab('framework');
+  return document.querySelector<HTMLElement>(
+    'section[data-framework][aria-current="true"]',
+  )!;
+};
+
+/**
+ * フレームワークのカードの ⓘ を開き、「詳しい説明を見る」も開いてダイアログを返す（描き方・判定・設定・見取り図の凡例・
+ * 詳しく比べるはここ。D-219）。開いていればそのまま使う。
+ */
+export function openFrameworkInfo(
+  card: HTMLElement = currentFrameworkCard(),
+): HTMLElement {
+  let d = infoDialog();
+  if (!d) {
+    const name = card.getAttribute('aria-label')!.replace(/ の説明$/, '');
+    fireEvent.click(
+      within(card).getByRole('button', { name: `${name} の説明` }),
+    );
+    d = infoDialog()!;
+  }
+  // 文の説明（ページごとの描き方・判定・設定）は「詳しい説明を見る」の中なので開いておく
+  const more = within(d).queryByRole('button', { name: '詳しい説明を見る' });
+  if (more) fireEvent.click(more);
+  return d;
+}
+
+/** 開いている ⓘ のダイアログを閉じる（無ければ何もしない）。 */
+export function closeInfo() {
+  const d = infoDialog();
+  if (d)
+    fireEvent.click(within(d).getAllByRole('button', { name: '閉じる' })[0]!);
+}
+
+/** カードの ⓘ の中の文を読んで閉じる（sel に当たる要素の文。無ければ ''）。 */
+function readFrameworkInfo(sel: (d: HTMLElement) => Element | null): string {
+  const d = openFrameworkInfo();
+  const t = sel(d)?.textContent ?? '';
+  closeInfo();
+  return t;
+}
+
+/** ページのフレームワークの説明の行（カードの ⓘ の中。既定の描き方のときだけ。D-219）。 */
+export const pageLinesOf = (label: string) =>
+  readFrameworkInfo((d) =>
+    within(d).queryByRole('list', { name: `${label}の説明` }),
+  );
+
+/** ページで選んでいる描き方の折りたたみの文（描き方の説明・ページごとの扱い。カードの ⓘ の中。D-219・D-220）。 */
+export const rowExplainOf = (route: string) =>
+  readFrameworkInfo((d) =>
+    d.querySelector(`[data-strategy-explain][data-selected-in~="${route}"]`),
+  );
+
+/** 描き方の設定の説明（カードの ⓘ の中。D-219）。 */
+export const settingExplainOf = () =>
+  readFrameworkInfo((d) => d.querySelector('[data-setting-explain]'));
+
+/** ページの札（反映スピード・CPU・API の増え方。カードの ⓘ の中。D-219）。 */
+export const pageBadgesOf = (route: string) =>
+  readFrameworkInfo((d) => d.querySelector(`[data-page-badges="${route}"]`));
+
+/** ページの欄の「選べない選択肢について」の ⓘ の文（無ければ ''。チップごとの ⓘ はやめた。D-220）。 */
+export function unavailableInfoOf(page: HTMLElement): string {
+  const box = page.querySelector<HTMLElement>('[data-unavailable]');
+  if (!box) return '';
+  fireEvent.click(
+    within(box).getByRole('button', { name: '選べない選択肢について' }),
+  );
+  const t = infoDialog()!.textContent ?? '';
+  closeInfo();
+  return t;
+}

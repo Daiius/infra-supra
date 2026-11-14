@@ -9,6 +9,7 @@ import {
   showFrameworkTab,
   showStackTab,
   useSmokeEnv,
+  openFrameworkInfo,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -42,6 +43,10 @@ describe('ⓘ の説明のダイアログ', () => {
     })[0]!;
     const { dialog, heading, body } = openInfo(button);
     expect(heading).toBe(name);
+    // フレームワークそのものの説明は「詳しい説明を見る」の中（D-219）
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '詳しい説明を見る' }),
+    );
     expect(body.textContent).toContain('このシナリオでは');
     const items = within(body).getAllByRole('listitem');
     expect(items.length).toBeGreaterThan(0);
@@ -148,21 +153,22 @@ describe('ⓘ の説明のダイアログ', () => {
     expect(document.activeElement).toBe(pvInfo);
     // 描き方の設定の ⓘ: 「選択肢: 説明」は dt / dd
     showFrameworkTab();
+    // 設定のチップには ⓘ を付けず、説明はカードの ⓘ にまとめる（D-219）
     const isr = within(
       document.querySelector<HTMLElement>(
         'section[data-framework][aria-current="true"] section[data-route="article"]',
       )!,
     ).getByRole('group', { name: 'ISR の再検証' });
-    const isrInfo = within(isr).getByRole('button', {
-      name: 'ISR の再検証の説明',
-    });
-    const isrOpen = openInfo(isrInfo);
-    expect(isrOpen.heading).toBe('ISR の再検証');
-    const terms = isrOpen.body.querySelectorAll('dl dt');
+    expect(within(isr).queryByRole('button', { name: /の説明$/ })).toBeNull();
+    const fwInfo = openFrameworkInfo();
+    const setting = fwInfo.querySelector<HTMLElement>(
+      '[data-setting-explain]',
+    )!;
+    expect(setting.textContent).toContain('ISR の再検証');
+    const terms = setting.querySelectorAll('dl dt');
     expect(terms.length).toBeGreaterThan(1);
-    expect(isrOpen.body.querySelectorAll('dl dd').length).toBe(terms.length);
+    expect(setting.querySelectorAll('dl dd').length).toBe(terms.length);
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(document.activeElement).toBe(isrInfo);
     // 構成図の画像の箱の吹き出し（部品の選択の UI。ダイアログにしない）の中の、画像の形式の ⓘ
     showStackTab();
     const stack = document.querySelector<HTMLElement>(
