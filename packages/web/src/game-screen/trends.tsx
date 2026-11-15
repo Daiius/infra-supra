@@ -258,7 +258,7 @@ export function Trends({
             </button>
           </div>
         )}
-        {/* グラフごとに枠で囲み、上下のグラフと線が混ざって見えないようにする（上限の推移のカードと同じ枠） */}
+        {/* グラフごとに影の付いたカードにし、上下のグラフと線が混ざって見えないようにする */}
         <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
           <ChartBox>
             <LineChart
@@ -375,11 +375,11 @@ export function Trends({
   );
 }
 
-/** 推移の線グラフ 1 つの枠（TrendCard と同じ）。 */
+/** 推移の線グラフ 1 つの枠。影の付いたカードにして、上下・左右のグラフとの区切りをはっきりさせる（D-222 の補足・ユーザーが A〜D から選んだ）。 */
 function ChartBox({ children }: { children: ReactNode }) {
   return (
     <div
-      className="min-w-0 rounded-box border border-base-300 p-2 sm:p-3"
+      className="min-w-0 rounded-box border border-base-200 bg-base-100 p-2 shadow-[0_1px_3px_rgb(0_0_0/0.12),0_4px_12px_rgb(0_0_0/0.08)] sm:p-3"
       data-chart-box
     >
       {children}
