@@ -1,6 +1,7 @@
 // 機能開発の効き目の輪（progress ring。D-122）。行動の欄の来月の見込みの下に出す（月の報告の輪と工数の欄は D-222 の補足で外した）。
 // 内側の輪: その月（月の報告）／来月（行動の欄）の工数の総量の円。機能開発に回る分と、ほかに使った分（行動・出来事への対応・乗り換えなど・維持）を
-// 区分で続けて塗り、期待（月の期待）の位置に目盛り。外側の細い輪: 累計 / 期待の進み（100% で一周）。色は段階の色で、普通・良いの境目に目盛り。
+// 区分で続けて塗り、期待（月の期待）の位置に目盛り。外側の細い輪: 累計の進み（一周はその月の工数をすべて機能開発に回したときの累計）。
+// 色は段階の色で、普通・良い（期待）の境目に目盛り。
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
 // 地の色との対比は WARN なので、凡例に値を書く）。
@@ -213,6 +214,10 @@ export function FeatureRing({
   const ratio = p.expected > 0 ? p.total / p.expected : 1;
   const parts = effortParts(effort);
   const T = Math.max(effort.total, 1);
+  // 外側の一周 = その月の工数をすべて機能開発に回したときの累計（行動・対応・維持に回すほど進みが減って見える。
+  // 期待（良いの境目）と普通の境目は、この一周の上の位置に目盛りで出す。一周を超える目盛りは届かないので描かない）
+  const most = p.total + Math.max(0, effort.total - parts[0]!.v);
+  const of = (v: number) => (most > 0 ? v / most : 0);
   let acc = 0;
   const arcs = parts.map((x) => {
     const from = acc / T;
@@ -233,7 +238,7 @@ export function FeatureRing({
         aria-label={`${head}・${progressText}・「機能」は${STAGE_LABEL[shown.stage]}${shown.note}`}
         className="shrink-0"
       >
-        {/* 外側: 累計 / 期待（下地 + 段階の色の進み。100% を超えた分は中の文字で） */}
+        {/* 外側: 累計（下地 + 段階の色の進み。一周は工数をすべて機能開発に回したときの累計） */}
         <circle
           cx={C}
           cy={C}
@@ -246,20 +251,15 @@ export function FeatureRing({
           r={OUTER.r}
           width={OUTER.w}
           from={0}
-          to={Math.min(ratio, 1)}
+          to={Math.min(of(p.total), 1)}
           color={STAGE_COLOR[shown.stage]}
           label={progressText}
         />
-        <Tick
-          frac={p.fairAt / Math.max(p.expected, 1)}
-          r={OUTER.r}
-          width={OUTER.w}
-        />
-        <Tick
-          frac={p.goodAt / Math.max(p.expected, 1)}
-          r={OUTER.r}
-          width={OUTER.w}
-        />
+        {[p.fairAt, p.goodAt]
+          .filter((v) => of(v) <= 1)
+          .map((v) => (
+            <Tick key={v} frac={of(v)} r={OUTER.r} width={OUTER.w} />
+          ))}
         {/* 内側: 月の工数の総量の内訳 */}
         <circle
           cx={C}
@@ -313,11 +313,17 @@ export function FeatureRing({
             </p>
             <p>
               外側の輪: {progressText} →「機能」は{STAGE_LABEL[shown.stage]}
-              {shown.note}。
+              {shown.note}。一周は、工数をすべて機能開発に回したときの累計{' '}
+              {fmtPoints(most)}{' '}
+              です。アクションなどに工数を使うと、その分だけ短くなります。
             </p>
             <p>
-              外側の目盛り: 普通 {fmtPoints(p.fairAt)}・良い{' '}
-              {fmtPoints(p.goodAt)}。
+              外側の目盛り: 普通 {fmtPoints(p.fairAt)}・良い（期待）{' '}
+              {fmtPoints(p.goodAt)}
+              {of(p.goodAt) > 1
+                ? '（この月の工数では届かないので描きません）'
+                : ''}
+              。
             </p>
             <p>{featureRuleText(sc)}</p>
           </Info>
