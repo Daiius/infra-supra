@@ -297,26 +297,22 @@ export function FeatureRing({
         >
           機能開発 / 期待
         </text>
-        {/* 外側の輪が機能開発の累計だと分かるよう、輪の下に外側の輪の色の見本と累計を置く */}
-        <g data-ring-total-label>
-          <line
-            x1={C - 30}
-            y1={SIZE + FOOT / 2 - 1}
-            x2={C - 20}
-            y2={SIZE + FOOT / 2 - 1}
-            stroke={STAGE_COLOR[shown.stage]}
-            strokeWidth={OUTER.w}
-            strokeLinecap="round"
-          />
-          <text
-            x={C - 16}
-            y={SIZE + FOOT / 2}
-            dominantBaseline="middle"
-            className="fill-[var(--text-primary)] text-[11px] font-semibold tabular-nums"
-          >
-            累計 {fmtPoints(p.total)}
-          </text>
-        </g>
+        {/* 外側の輪が機能開発の累計だと分かるよう、輪の下に累計を置く */}
+        {/* 名前は中央の「機能開発 / 期待」と同じ字、数は太字 */}
+        <text
+          x={C}
+          y={SIZE + FOOT / 2}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          data-ring-total-label
+        >
+          <tspan className="fill-[var(--text-secondary)] text-[10px]">
+            累計{' '}
+          </tspan>
+          <tspan className="fill-[var(--text-primary)] text-[11px] font-semibold tabular-nums">
+            {fmtPoints(p.total)}
+          </tspan>
+        </text>
       </svg>
       <div className="min-w-0 max-w-64 flex-1 basis-28 space-y-1 text-xs text-[var(--text-secondary)]">
         {/* 輪の読み方（内側・外側・目盛り）は ⓘ に畳み、見出しと色の凡例だけを出す（prd/16） */}
