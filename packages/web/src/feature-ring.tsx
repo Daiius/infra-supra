@@ -333,9 +333,11 @@ export function FeatureRing({
             className="inline-block h-2.5 w-2.5 rounded-full"
             style={{ background: STAGE_COLOR[shown.stage] }}
           />
-          累計 {fmtPoints(p.total)} / 期待 {fmtPoints(p.expected)}
           {/* 段階は色だけに頼らず文字でも添える */}
-          <span data-feature-stage>（{STAGE_LABEL[shown.stage]}）</span>
+          <span>
+            累計 {fmtPoints(p.total)} / 期待 {fmtPoints(p.expected)}
+            <span data-feature-stage>（{STAGE_LABEL[shown.stage]}）</span>
+          </span>
         </div>
       </div>
     </div>
