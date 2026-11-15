@@ -1,4 +1,4 @@
-// 機能開発の効き目の輪（progress ring。D-122）。月の報告の手間の棒の下と、行動の欄の来月の見込みの下に出す。
+// 機能開発の効き目の輪（progress ring。D-122）。行動の欄の来月の見込みの下に出す（月の報告の輪と手間の欄は D-222 の補足で外した）。
 // 内側の輪: その月（月の報告）／来月（行動の欄）の手間の総量の円。機能開発に回る分と、ほかに使った分（行動・出来事への対応・乗り換えなど・維持）を
 // 区分で続けて塗り、期待（月の期待）の位置に目盛り。外側の細い輪: 累計 / 期待の進み（100% で一周）。色は段階の色で、普通・良いの境目に目盛り。
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
@@ -53,6 +53,39 @@ const SEGMENTS: {
     of: (e) => e.upkeep + (e.accounts ?? 0),
   },
 ];
+
+/** 手間の区分と値（輪の色と同じ並び・同じ色）。 */
+const effortParts = (e: EffortBreakdown) =>
+  SEGMENTS.map((s) => ({ s, v: Math.max(0, s.of(e)) }));
+
+/** 手間の使い道の一覧（色の見本つき）。keep の区分は 0 でも出す。 */
+function EffortParts({
+  effort,
+  keep = ['feature'],
+}: {
+  effort: EffortBreakdown;
+  keep?: readonly string[];
+}) {
+  return (
+    <ul className="space-y-0.5">
+      {effortParts(effort)
+        .filter((x) => x.v > 0 || keep.includes(x.s.key))
+        .map((x) => (
+          <li key={x.s.key} className="flex items-center gap-1">
+            <span
+              aria-hidden
+              className="inline-block h-2.5 w-2.5 rounded-sm"
+              style={{ background: x.s.color }}
+            />
+            {x.s.label}
+            <span className="ml-auto pl-2 text-[var(--text-primary)] tabular-nums">
+              {fmtPoints(x.v)}
+            </span>
+          </li>
+        ))}
+    </ul>
+  );
+}
 
 const STAGE_COLOR: Record<Stage, string> = {
   good: 'var(--status-good)',
@@ -177,7 +210,7 @@ export function FeatureRing({
   const shown = featureStageView(p.stage, actual, note);
   const perMonth = featureProgressOf(sc, 0, 1).expected;
   const ratio = p.expected > 0 ? p.total / p.expected : 1;
-  const parts = SEGMENTS.map((s) => ({ s, v: Math.max(0, s.of(effort)) }));
+  const parts = effortParts(effort);
   const T = Math.max(effort.total, 1);
   let acc = 0;
   const arcs = parts.map((x) => {
@@ -287,34 +320,14 @@ export function FeatureRing({
             </p>
           </Info>
         </div>
-        <ul className="space-y-0.5">
-          {/* 値が 0 の区分は省く（機能開発と、行動の欄の「行動」は選ぶと動くので常に出す） */}
-          {parts
-            .filter(
-              (x) =>
-                x.v > 0 ||
-                x.s.key === 'feature' ||
-                (next === true && x.s.key === 'actions'),
-            )
-            .map((x) => (
-              <li key={x.s.key} className="flex items-center gap-1">
-                <span
-                  aria-hidden
-                  className="inline-block h-2.5 w-2.5 rounded-sm"
-                  style={{ background: x.s.color }}
-                />
-                {x.s.label}
-                <span className="ml-auto pl-2 text-[var(--text-primary)] tabular-nums">
-                  {fmtPoints(x.v)}
-                </span>
-              </li>
-            ))}
-          {feature - parts[0]!.v > 0 && (
-            <li>
-              （ほかに開発依頼の加点 +{fmtPoints(feature - parts[0]!.v)}）
-            </li>
-          )}
-        </ul>
+        {/* 値が 0 の区分は省く（機能開発と、行動の欄の「行動」は選ぶと動くので常に出す） */}
+        <EffortParts
+          effort={effort}
+          keep={next === true ? ['feature', 'actions'] : ['feature']}
+        />
+        {feature - parts[0]!.v > 0 && (
+          <p>（ほかに開発依頼の加点 +{fmtPoints(feature - parts[0]!.v)}）</p>
+        )}
         <div className="flex items-center gap-1">
           <span
             aria-hidden

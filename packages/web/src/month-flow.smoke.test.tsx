@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ゲームモードの画面の描画テスト（D-86・prd/05 §7）。画面を描いて操作し、例外が出ない・描ける・選択肢と結果が出ることだけを見る。
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
-// このファイルで見るもの: 月の進行・保存と再開・手間の欄と輪（App.smoke.test.tsx から分けた）。
+// このファイルで見るもの: 月の進行・保存と再開・手間の欄と輪（行動の欄）（App.smoke.test.tsx から分けた）。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { ARTICLE_COMMUNITY, rollSchedule } from 'game';
 import { describe, expect, it } from 'vitest';
@@ -130,15 +130,16 @@ describe('ゲームモードの画面', () => {
     expectGameScreen(4);
   });
 
-  it('W-54 手間の欄に機能開発の累計・期待と来月の見込みが出て、行動を選ぶと見込みが変わる。提案には受けたときの得を出す（D-122）', async () => {
+  it('W-54 行動の欄に来月の機能開発の累計・期待の見込みが出て、行動を選ぶと見込みが変わる。提案には受けたときの得を出す（D-122）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
     });
-    // 月の報告の手間の棒の下: 今の累計と期待と段階（良いのときも出す）
-    expect(screen.getByText(/^機能開発の累計 \d+ \/ 期待 8 →/)).toBeDefined();
+    // 月の報告には手間の欄を出さない（評価は累計なので、満足度の「機能」の札と行動の欄の見込みに任せる。D-222 の補足）
+    expect(screen.queryByText(/^機能開発の累計 \d+ \/ 期待 8 →/)).toBeNull();
+    expect(screen.queryByText(/^開発の手間 /)).toBeNull();
     const outlook = () => screen.getByTestId('feature-outlook').textContent!;
     const feature = () =>
       Number(outlook().match(/来月の機能開発 ([\d.]+)/)![1]);
@@ -181,7 +182,7 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-55 手間の輪を、月の報告の手間の棒の下と行動の欄の 2 か所に常に出し、行動を選ぶと中央の数と区分が変わる（D-122）', async () => {
+  it('W-55 手間の輪を行動の欄にだけ常に出し、行動を選ぶと中央の数と区分が変わる（D-122・D-222）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
@@ -190,12 +191,8 @@ describe('ゲームモードの画面', () => {
     });
     const rings = () =>
       document.querySelectorAll<HTMLElement>('[data-feature-ring]');
-    expect(rings()).toHaveLength(2);
-    // 月の報告の側は、その月の手間と累計
-    expect(
-      rings()[0]!.querySelector('svg[role="img"]')!.getAttribute('aria-label'),
-    ).toMatch(/^1 か月目の機能開発 [\d.]+ \/ 期待 8・累計/);
-    const ring = () => rings()[1]!;
+    expect(rings()).toHaveLength(1);
+    const ring = () => rings()[0]!;
     const label = () =>
       ring().querySelector('svg[role="img"]')!.getAttribute('aria-label')!;
     expect(label()).toMatch(/^来月の機能開発 [\d.]+ \/ 期待 8・累計/);

@@ -188,7 +188,6 @@ export function Game({
       />
       <MonthCard
         report={report}
-        scenario={scenarioOf(state)}
         onShowEvents={playing ? () => setEventsOpen('manual') : undefined}
       />
       {playing && (

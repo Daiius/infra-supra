@@ -1,5 +1,4 @@
 import {
-  effortTotalNote,
   featureProgressOf,
   featureRuleText,
   STAGE_LABEL,
@@ -8,8 +7,7 @@ import {
   type Stage,
 } from 'game';
 import { Info } from '../info.tsx';
-import { FeatureRing, featureStageView } from '../feature-ring.tsx';
-import { fmtPoints } from '../format.ts';
+import { featureStageView } from '../feature-ring.tsx';
 import { STAGE_CLS } from './shared.ts';
 
 /**
@@ -50,40 +48,14 @@ export function FeatureProgressLine({
   );
 }
 
-export function EffortBreakdownView({
-  report: r,
-  scenario: sc,
-}: {
-  report: MonthReport;
-  scenario: Scenario;
-}) {
-  const e = r.effort;
-  // 手間の使い道は下の輪のグラフ（色の凡例つき）で見せ、横棒と全区分の表は出さない（0 の区分が多く、輪と重なる）。
-  // 総量の内訳と SSR の CPU の注記は見出しの ⓘ に畳む（prd/16）
+/**
+ * 月の報告の、進行中の作業（部品の差し替え・乗り換え・作り直し）の進み。どれも無ければ出さない。
+ * 手間の総量・使い道・累計の行は外した（評価は累計で、満足度の「機能」の札と行動の欄の来月の見込みに任せる。D-222 の補足）。
+ */
+export function WorkProgressView({ report: r }: { report: MonthReport }) {
+  if (!r.componentSwap && !r.migration && !r.rewrite) return null;
   return (
     <div>
-      <h3 className="mb-1 flex flex-wrap items-center gap-x-1 font-bold">
-        開発の手間 {fmtPoints(e.total)} ポイント
-        <span className="text-sm font-normal opacity-70">
-          機能開発 {Math.round(e.feature)}・累計 {Math.round(r.featurePoints)}
-        </span>
-        <Info label="開発の手間の説明" title="開発の手間">
-          <p>
-            毎月使える手間 {fmtPoints(e.total)} ポイント
-            {e.accountAllowance
-              ? effortTotalNote(e.total, e.accountAllowance)
-              : ''}
-            のうち、運用やアクションに使わなかった分が機能開発に回ります。使い道の内訳は下の輪のグラフです。
-          </p>
-          {e.featureBonus > 0 && (
-            <p>機能開発のうち開発依頼の加点 +{fmtPoints(e.featureBonus)}。</p>
-          )}
-          <p>
-            サーバーで描く CPU 時間（SSR）は {r.ssrCpuMs} ms
-            です（機能開発で重くなります）。
-          </p>
-        </Info>
-      </h3>
       {r.componentSwap && (
         <div className="mt-2 text-sm">
           {r.componentSwap.label}差し替え中（データの移行）:{' '}
@@ -117,23 +89,6 @@ export function EffortBreakdownView({
           />
         </div>
       )}
-      <div className="mt-2 text-sm">
-        <FeatureProgressLine
-          scenario={sc}
-          total={r.featurePoints}
-          month={r.month}
-          actual={r.satisfaction.stages.feature}
-        />
-      </div>
-      <div className="mt-2">
-        <FeatureRing
-          scenario={sc}
-          month={r.month}
-          total={r.featurePoints}
-          effort={r.effort}
-          actual={r.satisfaction.stages.feature}
-        />
-      </div>
     </div>
   );
 }

@@ -250,7 +250,7 @@ export function SatisfactionPage() {
   );
 }
 
-/** 手間の棒の例（10 マス）の塗り分け。色はゲーム中の手間の棒（game-screen/effort.tsx の EffortBreakdownView）と同じ。 */
+/** 手間の棒の例（10 マス）の塗り分け。（ゲーム中の手間の棒は D-222 で外した。今は行動の欄の輪のグラフ feature-ring.tsx）。 */
 const EFFORT_EXAMPLE: { label: string; n: number; cls: string }[] = [
   { label: '自前運用の維持・他の事業者の管理', n: 2, cls: 'bg-warning' },
   { label: 'イベントへの対応', n: 1, cls: 'bg-error' },

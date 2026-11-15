@@ -1,12 +1,19 @@
 import clsx from 'clsx';
 import {
+  Gauge,
+  Image as ImageIcon,
+  Puzzle,
+  RefreshCw,
+  ShieldCheck,
+  type LucideIcon,
+} from 'lucide-react';
+import {
   isPolicyViolation,
   premisePlanLabel,
   ELEMENT_LABEL,
   ELEMENTS,
   STAGE_LABEL,
   type MonthReport,
-  type Scenario,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { compact } from '../charts.tsx';
@@ -22,15 +29,22 @@ import {
 import { roundInt } from '../format.ts';
 import { pct, STATUS, STAGE_CLS } from './shared.ts';
 import { EventCard, eventBadge, BlockedBadge, TIER_LABEL } from './events.tsx';
-import { EffortBreakdownView } from './effort.tsx';
+import { WorkProgressView } from './effort.tsx';
+
+/** 満足度の要素の印（名前と並べて札に出す。名前だけより一目で見分けやすい）。 */
+const ELEMENT_ICON: Record<(typeof ELEMENTS)[number], LucideIcon> = {
+  availability: ShieldCheck,
+  speed: Gauge,
+  feature: Puzzle,
+  freshness: RefreshCw,
+  quality: ImageIcon,
+};
 
 export function MonthCard({
   report: r,
-  scenario: sc,
   onShowEvents,
 }: {
   report: MonthReport;
-  scenario: Scenario;
   /** 遊んでいる間だけ渡す。出来事は見出しの一覧に詰め、ダイアログで再表示する（D-23・D-126）。 */
   onShowEvents?: (() => void) | undefined;
 }) {
@@ -101,7 +115,13 @@ export function MonthCard({
             {n}
           </div>
         ))}
-        <div className="grid gap-4 md:grid-cols-2">
+        {/* 進行中の作業（乗り換えなど）があるときだけ右の列に置く。無ければ満足度を 1 列で */}
+        <div
+          className={clsx(
+            'grid gap-4',
+            (r.componentSwap || r.migration || r.rewrite) && 'md:grid-cols-2',
+          )}
+        >
           <div>
             <h3 className="mb-1 font-bold">
               満足度 {s.score.toFixed(2)}
@@ -109,29 +129,38 @@ export function MonthCard({
                 評判（前月との平均）{s.reputation.toFixed(2)}
               </span>
             </h3>
-            {/* 狭い画面は要素を横に並べて折り返す（D-189）。sm 以上は 1 要素 1 行のまま */}
+            {/* 要素はアイコン・名前・段階を段階の色の札 1 つにまとめ、どの幅でも折り返して横に詰め、行を埋めるように伸ばす（D-189・D-222 の補足）。
+                理由は札の下に、理由のある要素だけ 1 行ずつ */}
             <ul
-              className="flex flex-wrap gap-x-4 gap-y-1 text-sm sm:block sm:space-y-1"
+              className="flex flex-wrap gap-1.5 text-sm"
               data-satisfaction-elements
             >
-              {ELEMENTS.map((e) => (
-                <li
-                  key={e}
-                  className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 sm:gap-2"
-                  data-satisfaction-element={e}
-                >
-                  <span className="whitespace-nowrap sm:w-24 sm:shrink-0">
+              {ELEMENTS.map((e) => {
+                const Icon = ELEMENT_ICON[e];
+                return (
+                  <li
+                    key={e}
+                    className={`badge grow gap-1 whitespace-nowrap ${STAGE_CLS[s.stages[e]]}`}
+                    data-satisfaction-element={e}
+                  >
+                    <Icon aria-hidden className="size-3.5" />
                     {ELEMENT_LABEL[e]}
-                  </span>
-                  <span className={`badge badge-sm ${STAGE_CLS[s.stages[e]]}`}>
-                    {STAGE_LABEL[s.stages[e]]}
-                  </span>
-                  {s.reasons[e] && (
-                    <span className="text-xs opacity-70">{s.reasons[e]}</span>
-                  )}
-                </li>
-              ))}
+                    <span className="font-semibold">
+                      {STAGE_LABEL[s.stages[e]]}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
+            {ELEMENTS.some((e) => s.reasons[e]) && (
+              <ul className="mt-1.5 space-y-0.5 text-xs opacity-80">
+                {ELEMENTS.filter((e) => s.reasons[e]).map((e) => (
+                  <li key={e}>
+                    {ELEMENT_LABEL[e]}: {s.reasons[e]}
+                  </li>
+                ))}
+              </ul>
+            )}
             {r.botPV > 0 && (
               <div className="mt-2 text-sm opacity-80">
                 PV {compact(Math.round(r.pv))} のうち Bot{' '}
@@ -144,7 +173,7 @@ export function MonthCard({
                 : `口コミ ${pct(s.acquisition)}・解約 ${pct(-s.churn)} → 来月の伸び ${pct(s.growth)}`}
             </div>
           </div>
-          <EffortBreakdownView report={r} scenario={sc} />
+          <WorkProgressView report={r} />
         </div>
         {r.premises.length > 0 && (
           <div>
