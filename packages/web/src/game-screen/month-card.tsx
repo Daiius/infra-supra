@@ -34,6 +34,8 @@ import {
   hitLabel,
   isCreditUse,
   isStopping,
+  premiseIcon,
+  premiseName,
 } from '../premise-view.ts';
 import { isZeroText, roundInt } from '../format.ts';
 import { pct, STATUS, STAGE_CLS } from './shared.ts';
@@ -185,6 +187,11 @@ export function MonthCard({
   onShowEvents?: (() => void) | undefined;
 }) {
   const s = r.satisfaction;
+  // 規約違反の行を一番上に（ほかは estimator の並び順のまま）
+  const premises = [
+    ...r.premises.filter(isPolicyViolation),
+    ...r.premises.filter((p) => !isPolicyViolation(p)),
+  ];
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body">
@@ -323,13 +330,27 @@ export function MonthCard({
         </div>
         {r.premises.length > 0 && (
           <div>
-            <h3 className="mb-1 font-bold">プラットフォームの上限・制限</h3>
-            <ul className="space-y-1">
-              {/* 規約違反の行を一番上に（ほかは estimator の並び順のまま） */}
-              {[
-                ...r.premises.filter(isPolicyViolation),
-                ...r.premises.filter((p) => !isPolicyViolation(p)),
-              ].map((p) => (
+            {/* 本体は札・使用率のグラフ・短い名前だけ。文の全文・内訳・仮定は見出しの ⓘ にまとめる（D-222 の補足・prd/16） */}
+            <h3 className="mb-1 flex items-center gap-1 font-bold">
+              プラットフォームの上限・制限
+              <Info
+                label="上限・制限の説明"
+                title="プラットフォームの上限・制限"
+              >
+                <p className="mb-2 text-sm opacity-80">
+                  棒は使用量です。100% を超えたときは、薄い青が込みの分（100%
+                  まで）、黄・赤の分が超えた分です。
+                </p>
+                <ul className="space-y-3">
+                  {premises.map((p) => (
+                    <PremiseRow key={p.id} p={p} full />
+                  ))}
+                </ul>
+              </Info>
+            </h3>
+            {/* 名前・札・棒の 3 列の表（行は subgrid）。名前の列はいちばん長い名前に合わせ、狭い画面では 8rem で切る（全文は ⓘ） */}
+            <ul className="grid grid-cols-[minmax(0,max-content)_max-content_1fr] items-center gap-x-2 gap-y-1">
+              {premises.map((p) => (
                 <PremiseRow key={p.id} p={p} />
               ))}
             </ul>
@@ -367,22 +388,82 @@ export function MonthCard({
   );
 }
 
-function PremiseRow({ p }: { p: PlatformPremise }) {
+/**
+ * 使用率の棒。100% までは 1 本、超えたら棒全体を使用量にして、込みの分（100% まで・安全な薄い青）と超えた分（札と同じ色）を
+ * daisyUI の join で 2 本くっつけて塗り分ける（超えた量の違いが長さで分かる。D-222 の補足）。
+ */
+function UsageBar({ ratio, tone }: { ratio: number; tone: string }) {
+  if (ratio <= 1)
+    return (
+      <progress className={clsx('progress w-20', tone)} value={ratio} max={1} />
+    );
+  const within = 100 / ratio;
+  return (
+    <span className="join w-20" data-usage-over>
+      <progress
+        className="progress join-item progress-info opacity-45"
+        style={{ width: `${within}%` }}
+        value={1}
+        max={1}
+      />
+      <progress
+        className={clsx('progress join-item border-l border-base-100', tone)}
+        style={{ width: `${100 - within}%` }}
+        value={1}
+        max={1}
+      />
+    </span>
+  );
+}
+
+/** 上限・制限の対象の印と短い名前。 */
+function PremiseName({
+  p,
+  clip = false,
+}: {
+  p: PlatformPremise;
+  /** 狭い画面で幅を抑える（本体の表）。 */
+  clip?: boolean;
+}) {
+  const Icon = premiseIcon(p);
+  return (
+    <span
+      className={clsx(
+        'flex min-w-0 items-center gap-1 font-medium',
+        clip && 'max-w-32 sm:max-w-none',
+      )}
+      title={clip ? premiseName(p) : undefined}
+    >
+      <Icon aria-hidden className="size-4 shrink-0 opacity-70" />
+      <span className="truncate">{premiseName(p)}</span>
+    </span>
+  );
+}
+
+/** 上限・制限の 1 行。本体は札・グラフ・短い名前、full（ⓘ の中）は札・グラフと全文・内訳・仮定。 */
+function PremiseRow({
+  p,
+  full = false,
+}: {
+  p: PlatformPremise;
+  full?: boolean;
+}) {
   // 規約違反（Vercel Hobby の非商用など）は原因のプランの名前を目立たせる（どの選択が原因か分かるように）
   if (isPolicyViolation(p)) {
     const plan = premisePlanLabel(p);
     return (
       <li
-        className="flex flex-wrap items-center gap-2 rounded-box border border-error bg-error/10 px-2 py-1"
+        className="col-span-3 flex flex-wrap items-center gap-2 rounded-box border border-error bg-error/10 px-2 py-1"
         data-policy-violation
       >
+        <PremiseName p={p} clip={!full} />
         <span className="badge badge-sm badge-error">規約違反</span>
         {plan && (
           <span className="font-bold text-error-strong" data-policy-cause>
             原因: {plan}
           </span>
         )}
-        <span>{p.text}</span>
+        {full && <span className="basis-full">{p.text}</span>}
       </li>
     );
   }
@@ -414,9 +495,17 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
           : 'あと少し';
   const ratio = p.ratio === undefined ? null : Math.min(p.ratio, 1);
   return (
-    <li className="flex flex-wrap items-center gap-2">
-      {/* バッジ・使用率のグラフ・説明の順（バッジとグラフは横幅を取らないので同じ高さに並べる。2026-11-10・ユーザーの要望） */}
+    <li
+      className={
+        full
+          ? 'flex flex-wrap items-center gap-x-2 gap-y-1'
+          : 'col-span-3 grid grid-cols-subgrid items-center'
+      }
+    >
+      {/* 印と名前・札・使用率のグラフの順（何が・どうなって・どれだけ。D-222 の補足）。全文・内訳・仮定は ⓘ の中（full）だけ */}
+      <PremiseName p={p} clip={!full} />
       <span className={`badge badge-sm ${badge}`}>{label}</span>
+      {ratio === null && !full && <span />}
       {ratio !== null && (
         <span className="flex items-center gap-1 text-xs opacity-70">
           {credit ? (
@@ -426,33 +515,36 @@ function PremiseRow({ p }: { p: PlatformPremise }) {
               className="w-20"
             />
           ) : (
-            <progress
-              className={clsx(
-                'progress w-20',
+            <UsageBar
+              ratio={p.ratio!}
+              tone={
                 blocked
                   ? 'progress-error'
                   : p.hit
                     ? 'progress-warning'
-                    : 'progress-info',
-              )}
-              value={ratio}
-              max={1}
+                    : 'progress-info'
+              }
             />
           )}
           {(p.ratio! * 100).toFixed(0)}%
         </span>
       )}
-      {/* 広い画面では札の右の残りの幅で折り返し、狭い画面では札の下の 1 行に回す */}
-      <span className="min-w-0 basis-full sm:basis-0 sm:flex-1">
-        {credit ? creditUseText(p, usd) : p.text}
-      </span>
-      {p.detail && (
-        <span className="basis-full text-xs opacity-80">{p.detail}</span>
-      )}
-      {/* 判定に置いた仮定（話題・Bot の日の集中など。D-60）は ⓘ に畳む */}
-      {p.assumption && (
-        <Info label="この判定の仮定">{`仮定: ${p.assumption}`}</Info>
-      )}
+      {full ? (
+        <>
+          <span className="basis-full">
+            {credit ? creditUseText(p, usd) : p.text}
+          </span>
+          {p.detail && (
+            <span className="basis-full text-xs opacity-80">{p.detail}</span>
+          )}
+          {/* 判定に置いた仮定（話題・Bot の日の集中など。D-60） */}
+          {p.assumption && (
+            <span className="basis-full text-xs opacity-80">
+              仮定: {p.assumption}
+            </span>
+          )}
+        </>
+      ) : null}
     </li>
   );
 }

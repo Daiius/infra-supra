@@ -252,6 +252,37 @@ describe('ゲームモードの画面', () => {
     }
     expect(seen).toBe(true);
   });
+
+  it('W-56c 上限・制限は印・短い名前・札・使用率の棒の順で、100% を超えたら込みの分と超えた分を塗り分ける。全文は ⓘ の中（D-222 の補足）', async () => {
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    advance(2);
+    const list = screen
+      .getByRole('heading', { name: /プラットフォームの上限・制限/ })
+      .parentElement!.querySelector('ul')!;
+    const rows = [...list.querySelectorAll<HTMLElement>(':scope > li')];
+    expect(rows.length).toBeGreaterThan(0);
+    let over = 0;
+    for (const li of rows) {
+      // 先頭は印と名前（札より前）
+      expect(li.firstElementChild!.querySelector('svg')).not.toBeNull();
+      const m = li.textContent!.match(/(\d+)%/);
+      if (!m || li.hasAttribute('data-policy-violation')) continue;
+      const split = li.querySelector('[data-usage-over]');
+      if (Number(m[1]) > 100) {
+        over++;
+        expect(split!.querySelectorAll('progress')).toHaveLength(2);
+      } else expect(split).toBeNull();
+    }
+    expect(over).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '上限・制限の説明' }));
+    expect(infoDialog()!.textContent).toContain('100% を超えたときは');
+    closeInfo();
+  });
 });
 
 const historyText = () =>

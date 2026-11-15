@@ -138,10 +138,6 @@ export function Trends({
   const last = history[history.length - 1]!;
   // 所持金の見込み（目安。直近 3 か月の月の利益の平均で線形に伸ばす。D-42）
   const cashProj = ended ? undefined : cashProjectionOf({ history, scenario });
-  const hasProj =
-    cashProj !== null &&
-    cashProj !== undefined &&
-    cashProj.projection.length > 0;
   // 所持金の目標の目安（シナリオの goal.cash。表示だけで合否にしない。D-167）。
   // 後で集計の分布（完走した人の 12 か月目の所持金の上位 90% の線など）から出す余地を残す（prd/15 §2.1）
   const cashGuide = scenario.goal.cash;
@@ -244,49 +240,7 @@ export function Trends({
             </div>
           ))}
         </div>
-        {/* 所持金の見込みと目安を 1 行にまとめ、出し方・目安の意味は ⓘ に畳む（prd/16） */}
-        {(hasProj || !ended) && (
-          <p
-            className="flex flex-wrap items-center gap-x-1 text-sm"
-            data-cash-projection={hasProj ? '' : undefined}
-            data-cash-guide={ended ? undefined : ''}
-          >
-            {hasProj && (
-              <span className="whitespace-nowrap">
-                {`${scenario.months} か月目の所持金の見込み 約 ${usd(Math.round(cashProj.final))}`}
-              </span>
-            )}
-            {!ended && (
-              <span className="whitespace-nowrap opacity-80">
-                {hasProj
-                  ? cashProj.final >= cashGuide
-                    ? `（目安 ${usd(cashGuide)} を約 ${usd(Math.round(cashProj.final - cashGuide))} 上回る）`
-                    : `（目安 ${usd(cashGuide)} まで約 ${usd(Math.round(cashGuide - cashProj.final))}）`
-                  : `目安: ${scenario.months} か月目に所持金 ${usd(cashGuide)}`}
-              </span>
-            )}
-            <Info label="所持金の見込みと目安" title="所持金の見込みと目安">
-              {hasProj && (
-                <p>
-                  {cashProj.method === 'growth'
-                    ? `見込みは、月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安です。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
-                    : `見込みは、月の利益（収益 − 費用。所持金の実際の増減）が 0 以下なので、伸びを入れず直近 3 か月の平均（約 ${usd(Math.round(cashProj.nextProfit))}）で残りの月を線形に伸ばしたゲーム上の目安です。`}
-                  話題・前兆・Bot
-                  で一時的に流量が増えた月は、基準にも比にも使いません
-                  {cashProj.skipped > 0
-                    ? `（今回は ${cashProj.skipped} か月を除きました）`
-                    : ''}
-                  。予告済みのイベント・料金の改定は織り込みません。
-                </p>
-              )}
-              {!ended && (
-                <p>
-                  {`目標の目安は ${scenario.months} か月目に所持金 ${usd(cashGuide)} です。シナリオが想定した額で（ゲーム上の仮定）、所持金のグラフの点線が目安の額です。届かなくても完走になり、合否はありません。完走したら、4 つの軸で振り返ります。`}
-                </p>
-              )}
-            </Info>
-          </p>
-        )}
+        {/* 所持金の見込みと目安は、下の所持金のグラフ（見込みの破線・目安の点線と札）に任せる（D-222 の補足） */}
         {previous && (
           <div
             className="flex flex-wrap items-center gap-2 text-xs opacity-80"

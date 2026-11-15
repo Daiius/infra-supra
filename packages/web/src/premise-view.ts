@@ -1,5 +1,21 @@
 // 前提の見せ方の共有（見積モードとゲームの画面）。表示だけで、計算には触れない。
 import type { PlatformPremise } from 'estimator';
+import {
+  ArrowLeftRight,
+  Coins,
+  Cpu,
+  Database,
+  Gauge,
+  Hammer,
+  HardDrive,
+  Image as ImageIcon,
+  KeyRound,
+  Mail,
+  Network,
+  Scale,
+  ScrollText,
+  type LucideIcon,
+} from 'lucide-react';
 
 /**
  * 込みのクレジットの消費（超えても止まらず、超えた分が従量で請求される）か。
@@ -73,4 +89,36 @@ export function creditUseText(
   return used > limit
     ? `${head}（超えた分 ${money(used - limit)} は従量で請求）`
     : head;
+}
+
+/**
+ * 前提の短い名前（一覧の本体に出す。全文は ⓘ の中。D-222 の補足）。前提は名前の欄を持たないので、文の頭の主語
+ * （「Images は月 5,000 …」の「Images」・「Email Service の送信は …」の「Email Service の送信」）を、最初の「は」「（」「。」「、」の前で切って取る。
+ * 長すぎるとき（主語の無い文）は頭を 18 文字で切って「…」を付ける。
+ */
+export function premiseName(p: PlatformPremise): string {
+  const head = p.text.split(/は|（|。|、/)[0]!.trim();
+  if (head.length > 0 && head.length <= 20) return head;
+  return `${p.text.slice(0, 18).trim()}…`;
+}
+
+/** 対象の言葉から選ぶ印（上から順に最初に当たったもの。製品の公式のアイコンではなく、何の上限かの目印）。 */
+const PREMISE_ICONS: [RegExp, LucideIcon][] = [
+  [/メール|Email/, Mail],
+  [/画像|Images|変換/, ImageIcon],
+  [/CPU/, Cpu],
+  [/DB|D1|行の|Supabase|Neon|Aurora|DynamoDB/, Database],
+  [/KV/, KeyRound],
+  [/保存|容量|storage/, HardDrive],
+  [/転送|帯域|回線|Mbps/, Network],
+  [/ビルド/, Hammer],
+  [/ログ/, ScrollText],
+  [/リクエスト|requests|呼び出し/, ArrowLeftRight],
+];
+
+/** 前提の印（一覧の名前の前に出す。D-222 の補足）。 */
+export function premiseIcon(p: PlatformPremise): LucideIcon {
+  if (p.effect === 'policy') return Scale;
+  if (isCreditUse(p)) return Coins;
+  return PREMISE_ICONS.find(([re]) => re.test(p.text))?.[1] ?? Gauge;
 }
