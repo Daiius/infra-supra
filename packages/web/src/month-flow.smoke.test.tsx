@@ -253,7 +253,7 @@ describe('ゲームモードの画面', () => {
     expect(seen).toBe(true);
   });
 
-  it('W-56c 上限・制限は札の種類ごとの見出しにまとめ、行は印・短い名前・使用率の棒。棒の目盛りは共通で、100% を超えたら込みの分と超えた分を塗り分ける。全文は ⓘ の中（D-222 の補足）', async () => {
+  it('W-56c 上限・制限は札の種類ごとの見出しにまとめ、行は印・短い名前・使用率の棒。棒の目盛りは共通で、100% を超えたら込みの分と超えた分を塗り分け、課金なら費用を出す。全文は ⓘ の中（D-222 の補足）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
@@ -287,6 +287,11 @@ describe('ゲームモードの画面', () => {
           const bars = split!.querySelectorAll<HTMLElement>('progress');
           expect(bars).toHaveLength(2);
           within.push(bars[0]!.style.width);
+          // 超えて課金になる行は、明細と結んだ費用を棒の右に出す
+          if (g.dataset.premiseGroup === '超過（課金）')
+            expect(
+              li.querySelector('[data-premise-cost]')!.textContent,
+            ).toMatch(/^\$[\d,.]+$/);
         } else expect(split).toBeNull();
       }
     }

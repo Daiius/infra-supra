@@ -342,10 +342,10 @@ export function MonthCard({
                   を超えたときは、薄い青が込みの分（100%
                   まで）、黄・赤の分が超えた分です。
                 </p>
-                <PremiseList premises={premises} full />
+                <PremiseList premises={premises} lines={r.lines} full />
               </Info>
             </h3>
-            <PremiseList premises={premises} />
+            <PremiseList premises={premises} lines={r.lines} />
           </div>
         )}
         <details className="collapse collapse-arrow bg-base-200">
@@ -508,15 +508,42 @@ function groupPremises(premises: readonly PlatformPremise[]) {
   return groups.sort((a, b) => a.rank - b.rank);
 }
 
+type ReportLine = MonthReport['lines'][number];
+
 /**
- * 上限・制限の一覧。札は種類ごとの見出しに 1 つだけ出し、行は印と名前（札と同じ系統の色）・使用率の棒の 2 列（D-222 の補足）。
- * 列は全部の行でそろえる（subgrid）。full（ⓘ の中）は行ごとに全文・内訳・仮定を添える。
+ * 前提の超えた分の費用（D-222 の補足）。無料枠の前提が数えるメーター（estimator の meterIds）と同じ事業者・メーターの明細の行を足す。
+ * 結べないとき（meterIds の無い前提・前の保存）は出さない。
+ */
+function premiseCostOf(p: PlatformPremise, lines: readonly ReportLine[]) {
+  if (!p.meterIds?.length || !p.provider) return undefined;
+  const hits = lines.filter(
+    (l) =>
+      l.kind === 'usage' &&
+      l.provider === p.provider &&
+      l.meterId !== undefined &&
+      p.meterIds!.includes(l.meterId),
+  );
+  if (hits.length === 0) return undefined;
+  const currency = hits[0]!.currency;
+  const amount = hits
+    .filter((l) => l.currency === currency)
+    .reduce((a, l) => a + l.amount, 0);
+  return currency === 'JPY'
+    ? `${roundInt(amount).toLocaleString()} 円`
+    : usd(amount);
+}
+
+/**
+ * 上限・制限の一覧。札は種類ごとの見出しにまとめ、行は 2 段（1 段目: 印と名前。省略しない。2 段目: 使用率の棒・%・超えた分の費用）（D-222 の補足）。
+ * 棒の幅と左端は全部の行でそろえ、100% の位置がそろう。full（ⓘ の中）は行ごとに全文・内訳・仮定を添える。
  */
 function PremiseList({
   premises,
+  lines,
   full = false,
 }: {
   premises: readonly PlatformPremise[];
+  lines: readonly ReportLine[];
   full?: boolean;
 }) {
   // 棒の共通の目盛り（いちばん大きい使用率。込みのクレジットと規約違反は数えない）
@@ -527,23 +554,17 @@ function PremiseList({
       .map((p) => p.ratio ?? 0),
   );
   return (
-    <div
-      className="grid grid-cols-[minmax(0,max-content)_1fr] items-center gap-x-3 gap-y-2"
-      data-premise-list
-    >
+    <div className="space-y-2" data-premise-list>
       {groupPremises(premises).map((g) => (
         <ul
           key={g.label}
-          className={clsx(
-            'col-span-2 grid grid-cols-subgrid gap-y-1',
-            TONE_PANEL[g.tone],
-          )}
+          className={clsx('space-y-1.5', TONE_PANEL[g.tone])}
           aria-label={g.label}
           data-premise-group={g.label}
         >
           <li
             className={clsx(
-              'col-span-2 flex items-center gap-1 font-semibold',
+              'flex items-center gap-1 font-semibold',
               TONE_HEAD[g.tone],
             )}
             data-premise-heading
@@ -566,6 +587,7 @@ function PremiseList({
               tone={g.tone}
               full={full}
               scale={scale}
+              cost={premiseCostOf(p, lines)}
             />
           ))}
         </ul>
@@ -575,91 +597,86 @@ function PremiseList({
 }
 
 /** 上限・制限の対象の印と短い名前（どちらも普通の色。段階の色はまとめの見出しの印と棒）。 */
-function PremiseName({
-  p,
-  clip = false,
-}: {
-  p: PlatformPremise;
-  /** 狭い画面で幅を抑える（本体の表）。 */
-  clip?: boolean;
-}) {
+function PremiseName({ p }: { p: PlatformPremise }) {
   const Icon = premiseIcon(p);
   return (
-    <span
-      className={clsx(
-        'flex min-w-0 items-center gap-1 text-sm font-medium',
-        clip && 'max-w-40 sm:max-w-none',
-      )}
-      title={clip ? premiseName(p) : undefined}
-    >
+    <span className="flex min-w-0 items-center gap-1 text-sm font-medium">
       <Icon aria-hidden className="size-4 shrink-0 opacity-70" />
-      <span className="truncate">{premiseName(p)}</span>
+      <span className="min-w-0">{premiseName(p)}</span>
     </span>
   );
 }
 
-/** 上限・制限の 1 行（名前・棒）。規約違反は棒の代わりに原因のプランを出す。 */
+/** 上限・制限の 1 行（1 段目: 名前、2 段目: 棒・%・費用）。規約違反は棒の代わりに原因のプランを出す。 */
 function PremiseRow({
   p,
   tone,
   full,
   scale,
+  cost,
 }: {
   p: PlatformPremise;
   tone: Tone;
   full: boolean;
   /** 棒の共通の目盛り。 */
   scale: number;
+  /** 超えた分の費用（結べたときだけ）。 */
+  cost?: string | undefined;
 }) {
   const policy = isPolicyViolation(p);
   const plan = policy ? premisePlanLabel(p) : undefined;
   const credit = isCreditUse(p);
   return (
     <li
-      className="col-span-2 grid grid-cols-subgrid items-center gap-y-0.5"
+      className="space-y-0.5"
       {...(policy ? { 'data-policy-violation': '' } : {})}
     >
-      <PremiseName p={p} clip={!full} />
-      {policy ? (
-        // 規約違反（Vercel Hobby の非商用など）は原因のプランの名前を目立たせる（どの選択が原因か分かるように）
-        <span>
-          {plan && (
-            <span className="font-bold text-error-strong" data-policy-cause>
+      <PremiseName p={p} />
+      {/* 2 段目は名前の文字の頭（印の右）にそろえる */}
+      <div className="flex flex-wrap items-center gap-x-2 pl-5 text-xs">
+        {policy ? (
+          // 規約違反（Vercel Hobby の非商用など）は原因のプランの名前を目立たせる（どの選択が原因か分かるように）
+          plan && (
+            <span
+              className="text-sm font-bold text-error-strong"
+              data-policy-cause
+            >
               原因: {plan}
             </span>
-          )}
-        </span>
-      ) : p.ratio !== undefined ? (
-        <span className="flex items-center gap-1 text-xs opacity-70">
-          {credit ? (
-            <CreditBar
-              ratio={p.ratio}
-              label={`${p.text} ${(p.ratio * 100).toFixed(0)}%`}
-              className="w-20"
-            />
-          ) : (
-            <UsageBar ratio={p.ratio} tone={TONE_BAR[tone]} scale={scale} />
-          )}
-          {(p.ratio * 100).toFixed(0)}%
-        </span>
-      ) : (
-        <span />
-      )}
+          )
+        ) : p.ratio !== undefined ? (
+          <>
+            <span className="flex items-center gap-1 opacity-70">
+              {credit ? (
+                <CreditBar
+                  ratio={p.ratio}
+                  label={`${p.text} ${(p.ratio * 100).toFixed(0)}%`}
+                  className="w-28"
+                />
+              ) : (
+                <UsageBar ratio={p.ratio} tone={TONE_BAR[tone]} scale={scale} />
+              )}
+              <span className="w-10 text-right tabular-nums">
+                {(p.ratio * 100).toFixed(0)}%
+              </span>
+            </span>
+            {cost && (
+              <span className="font-semibold tabular-nums" data-premise-cost>
+                {cost}
+              </span>
+            )}
+          </>
+        ) : null}
+      </div>
       {full && (
-        <span className="col-span-2 mb-1.5 space-y-0.5 text-sm">
-          <span className="block">
-            {credit ? creditUseText(p, usd) : p.text}
-          </span>
-          {p.detail && (
-            <span className="block text-xs opacity-80">{p.detail}</span>
-          )}
+        <div className="mb-1.5 space-y-0.5 pl-5 text-sm">
+          <p>{credit ? creditUseText(p, usd) : p.text}</p>
+          {p.detail && <p className="text-xs opacity-80">{p.detail}</p>}
           {/* 判定に置いた仮定（話題・Bot の日の集中など。D-60） */}
           {p.assumption && (
-            <span className="block text-xs opacity-80">
-              仮定: {p.assumption}
-            </span>
+            <p className="text-xs opacity-80">仮定: {p.assumption}</p>
           )}
-        </span>
+        </div>
       )}
     </li>
   );
