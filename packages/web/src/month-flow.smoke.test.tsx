@@ -253,7 +253,7 @@ describe('ゲームモードの画面', () => {
     expect(seen).toBe(true);
   });
 
-  it('W-56c 上限・制限は印・短い名前・札・使用率の棒の順で、100% を超えたら込みの分と超えた分を塗り分ける。全文は ⓘ の中（D-222 の補足）', async () => {
+  it('W-56c 上限・制限は札の種類ごとの見出しにまとめ、行は印・短い名前・使用率の棒。棒の目盛りは共通で、100% を超えたら込みの分と超えた分を塗り分ける。全文は ⓘ の中（D-222 の補足）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
@@ -261,24 +261,38 @@ describe('ゲームモードの画面', () => {
       stack: 'Cloudflare Paid + vinext',
     });
     advance(2);
-    const list = screen
-      .getByRole('heading', { name: /プラットフォームの上限・制限/ })
-      .parentElement!.querySelector('ul')!;
-    const rows = [...list.querySelectorAll<HTMLElement>(':scope > li')];
-    expect(rows.length).toBeGreaterThan(0);
+    const groups = [
+      ...document
+        .querySelector<HTMLElement>('[data-premise-list]')!
+        .querySelectorAll<HTMLElement>('[data-premise-group]'),
+    ];
+    expect(groups.length).toBeGreaterThan(0);
     let over = 0;
-    for (const li of rows) {
-      // 先頭は印と名前（札より前）
-      expect(li.firstElementChild!.querySelector('svg')).not.toBeNull();
-      const m = li.textContent!.match(/(\d+)%/);
-      if (!m || li.hasAttribute('data-policy-violation')) continue;
-      const split = li.querySelector('[data-usage-over]');
-      if (Number(m[1]) > 100) {
-        over++;
-        expect(split!.querySelectorAll('progress')).toHaveLength(2);
-      } else expect(split).toBeNull();
+    const within: string[] = [];
+    for (const g of groups) {
+      // 見出しは札でなく、印と文字
+      const head = g.querySelector('[data-premise-heading]')!;
+      expect(head.textContent).toBe(g.dataset.premiseGroup);
+      expect(head.querySelector('.badge')).toBeNull();
+      for (const li of g.querySelectorAll<HTMLElement>(
+        ':scope > li:not([data-premise-heading])',
+      )) {
+        expect(li.querySelector('.badge')).toBeNull();
+        expect(li.firstElementChild!.querySelector('svg')).not.toBeNull();
+        const m = li.textContent!.match(/(\d+)%/);
+        if (!m) continue;
+        const split = li.querySelector('[data-usage-over]');
+        if (Number(m[1]) > 100) {
+          over++;
+          const bars = split!.querySelectorAll<HTMLElement>('progress');
+          expect(bars).toHaveLength(2);
+          within.push(bars[0]!.style.width);
+        } else expect(split).toBeNull();
+      }
     }
     expect(over).toBeGreaterThan(0);
+    // 100% の位置（込みの分の長さ）は全部の行でそろう
+    expect(new Set(within).size).toBe(1);
     fireEvent.click(screen.getByRole('button', { name: '上限・制限の説明' }));
     expect(infoDialog()!.textContent).toContain('100% を超えたときは');
     closeInfo();

@@ -104,14 +104,12 @@ describe('小さな不具合の回帰', () => {
       framework: 'Next.js（App Router）',
       stack: 'Vercel Hobby + Supabase Free',
     });
-    const list = screen
-      .getByRole('heading', { name: 'プラットフォームの上限・制限' })
-      .parentElement!.querySelector('ul')!;
-    const first = list.querySelector('li')!;
-    expect(first.hasAttribute('data-policy-violation')).toBe(true);
-    expect(within(first).getByText('規約違反').className).toContain(
-      'badge-error',
-    );
+    // 一番上のまとめが「規約違反」（札でなく見出し）で、その中の行に原因のプランを出す
+    const first = document.querySelector<HTMLElement>(
+      '[data-premise-list] [data-premise-group]',
+    )!;
+    expect(first.dataset.premiseGroup).toBe('規約違反');
+    expect(first.querySelector('[data-policy-violation]')).not.toBeNull();
     expect(first.querySelector('[data-policy-cause]')!.textContent).toBe(
       '原因: Vercel Hobby',
     );
