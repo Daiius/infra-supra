@@ -98,7 +98,7 @@ const STAGE_COLOR: Record<Stage, string> = {
 const SIZE = 148;
 const C = SIZE / 2;
 /** 外側の輪の端に添える札（累計）のための、輪の外の余白。 */
-const PAD = { x: 38, y: 12 };
+const PAD = { x: 30, y: 18 };
 const INNER = { r: 46, w: 12 };
 const OUTER = { r: 64, w: 5 };
 const GAP = 2;
@@ -148,12 +148,16 @@ function Arc({
 }
 
 /** 外側の輪の進みの端に添える札（端から外へ短い線を引き、その先に文字）。 */
-function EndLabel({ frac, text }: { frac: number; text: string }) {
+function EndLabel({ frac, lines }: { frac: number; lines: [string, string] }) {
   const a = at(frac, OUTER.r + OUTER.w / 2 + 1);
-  const b = at(frac, OUTER.r + 8);
-  const t = at(frac, OUTER.r + 10);
+  const b = at(frac, OUTER.r + 7);
+  const t = at(frac, OUTER.r + 9);
   const dx = t.x - C;
+  const dy = t.y - C;
   const anchor = dx > 8 ? 'start' : dx < -8 ? 'end' : 'middle';
+  // 2 行にして横幅を詰める（狭い画面でも凡例を輪の横に置けるように）。上の端では上へ、下の端では下へ積む
+  const LH = 11;
+  const y0 = dy < -40 ? t.y - LH : dy > 40 ? t.y : t.y - LH / 2;
   return (
     <g data-ring-end-label>
       <line
@@ -165,13 +169,15 @@ function EndLabel({ frac, text }: { frac: number; text: string }) {
         strokeWidth="1"
       />
       <text
-        x={t.x}
-        y={t.y}
         textAnchor={anchor}
         dominantBaseline="middle"
         className="fill-[var(--text-primary)] text-[10px] font-semibold tabular-nums"
       >
-        {text}
+        {lines.map((l, i) => (
+          <tspan key={i} x={t.x} y={y0 + i * LH}>
+            {l}
+          </tspan>
+        ))}
       </text>
     </g>
   );
@@ -257,7 +263,7 @@ export function FeatureRing({
   const progressText = `累計 ${fmtPoints(p.total)} / 期待 ${fmtPoints(p.expected)}（${Math.round(ratio * 100)}%）`;
   return (
     <div
-      className="viz-root flex flex-wrap items-center gap-x-4 gap-y-2"
+      className="viz-root flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4"
       data-feature-ring
     >
       <svg
@@ -266,7 +272,8 @@ export function FeatureRing({
         viewBox={`${-PAD.x} ${-PAD.y} ${SIZE + 2 * PAD.x} ${SIZE + 2 * PAD.y}`}
         role="img"
         aria-label={`${head}・${progressText}・「機能」は${STAGE_LABEL[shown.stage]}${shown.note}`}
-        className="shrink-0"
+        // 狭い画面では少し縮めて、凡例を輪の横に収める（viewBox のまま拡大縮小する）
+        className="h-auto shrink-0 max-sm:w-44"
       >
         {/* 外側: 累計（下地 + 段階の色の進み。一周は工数をすべて機能開発に回したときの累計） */}
         <circle
@@ -331,10 +338,10 @@ export function FeatureRing({
         {/* 外側の輪が機能開発の累計だと分かるよう、進みの端に札を添える（データに合わせて動く） */}
         <EndLabel
           frac={Math.min(of(p.total), 1)}
-          text={`累計 ${fmtPoints(p.total)}`}
+          lines={['累計', fmtPoints(p.total)]}
         />
       </svg>
-      <div className="min-w-0 max-w-64 flex-1 basis-32 space-y-1 text-xs text-[var(--text-secondary)]">
+      <div className="min-w-0 max-w-64 flex-1 basis-28 space-y-1 text-xs text-[var(--text-secondary)]">
         {/* 輪の読み方（内側・外側・目盛り）は ⓘ に畳み、見出しと色の凡例だけを出す（prd/16） */}
         <div className="flex items-center gap-1 font-semibold text-[var(--text-primary)]">
           {head}
