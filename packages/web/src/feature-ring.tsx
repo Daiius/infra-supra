@@ -5,7 +5,6 @@
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
 // 地の色との対比は WARN なので、凡例に値を書く）。
-import { Info } from './info.tsx';
 import { fmtPoints } from './format.ts';
 import {
   effortTotalNote,
@@ -216,16 +215,7 @@ export function featureStageView(
   return { stage: actual ?? ratioStage, note: note ?? '' };
 }
 
-export function FeatureRing({
-  scenario: sc,
-  month,
-  total,
-  effort,
-  feature = effort.feature,
-  next,
-  actual,
-  note,
-}: {
+type RingProps = {
   scenario: Scenario;
   /** 累計と期待を見る月。 */
   month: number;
@@ -241,7 +231,19 @@ export function FeatureRing({
   note?: string;
   /** 来月の見込み（行動の欄）。 */
   next?: boolean;
-}) {
+};
+
+/** 輪の値（輪の図と、パネルの ⓘ の読み方の説明で共有する）。 */
+function ringModel({
+  scenario: sc,
+  month,
+  total,
+  effort,
+  feature = effort.feature,
+  next,
+  actual,
+  note,
+}: RingProps) {
   const p = featureProgressOf(sc, total, month);
   const shown = featureStageView(p.stage, actual, note);
   const perMonth = featureProgressOf(sc, 0, 1).expected;
@@ -260,6 +262,37 @@ export function FeatureRing({
   });
   const head = `${next ? '来月' : `${month} か月目`}の機能開発 ${fmtPoints(feature)} / 期待 ${perMonth}`;
   const progressText = `累計 ${fmtPoints(p.total)} / 期待 ${fmtPoints(p.expected)}（${Math.round(ratio * 100)}%）`;
+  return {
+    p,
+    shown,
+    perMonth,
+    parts,
+    most,
+    of,
+    arcs,
+    T,
+    head,
+    progressText,
+    feature,
+    effort,
+  };
+}
+
+export function FeatureRing(props: RingProps) {
+  const {
+    p,
+    shown,
+    perMonth,
+    parts,
+    most,
+    of,
+    arcs,
+    T,
+    head,
+    progressText,
+    feature,
+    effort,
+  } = ringModel(props);
   return (
     <div
       className="viz-root flex flex-wrap items-center gap-x-4 gap-y-2"
@@ -362,31 +395,37 @@ export function FeatureRing({
             累計 {fmtPoints(p.total)} / 期待 {fmtPoints(p.expected)}
             <span data-feature-stage>（{STAGE_LABEL[shown.stage]}）</span>
           </span>
-          {/* 来月の機能開発 / 期待は輪の中央で読めるので見出しは出さない。輪の読み方（内側・外側・目盛り）は ⓘ に畳む（prd/16） */}
-          <Info label="輪のグラフの見方" title="輪のグラフの見方">
-            <p>
-              内側の輪: 工数 {fmtPoints(effort.total)}
-              {effortTotalNote(effort.total, effort.accountAllowance)}{' '}
-              の使い道（目盛りは期待 {perMonth}）。
-            </p>
-            <p>
-              外側の輪: {progressText} →「機能」は{STAGE_LABEL[shown.stage]}
-              {shown.note}。一周は、工数をすべて機能開発に回したときの累計{' '}
-              {fmtPoints(most)}{' '}
-              です。アクションなどに工数を使うと、その分だけ短くなります。
-            </p>
-            <p>
-              外側の目盛り: 普通 {fmtPoints(p.fairAt)}・良い（期待）{' '}
-              {fmtPoints(p.goodAt)}
-              {of(p.goodAt) > 1
-                ? '（この月の工数では届かないので描きません）'
-                : ''}
-              。
-            </p>
-            <p>{featureRuleText(sc)}</p>
-          </Info>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 輪のグラフの読み方（内側・外側・目盛り）と、余った工数の効き目。パネル（今月のアクション）の ⓘ にまとめて出す。
+ */
+export function FeatureRingGuide(props: RingProps) {
+  const { p, shown, perMonth, most, of, progressText, effort } =
+    ringModel(props);
+  return (
+    <>
+      <p>
+        内側の輪: 工数 {fmtPoints(effort.total)}
+        {effortTotalNote(effort.total, effort.accountAllowance)}{' '}
+        の使い道（目盛りは期待 {perMonth}）。
+      </p>
+      <p>
+        外側の輪: {progressText} →「機能」は{STAGE_LABEL[shown.stage]}
+        {shown.note}。一周は、工数をすべて機能開発に回したときの累計{' '}
+        {fmtPoints(most)}{' '}
+        です。アクションなどに工数を使うと、その分だけ短くなります。
+      </p>
+      <p>
+        外側の目盛り: 普通 {fmtPoints(p.fairAt)}・良い（期待）{' '}
+        {fmtPoints(p.goodAt)}
+        {of(p.goodAt) > 1 ? '（この月の工数では届かないので描きません）' : ''}。
+      </p>
+      <p>{featureRuleText(props.scenario)}</p>
+    </>
   );
 }

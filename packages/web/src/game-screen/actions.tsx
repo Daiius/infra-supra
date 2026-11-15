@@ -28,7 +28,7 @@ import {
   NEXT_ON_DEMAND,
 } from 'game';
 import { Info } from '../info.tsx';
-import { FeatureRing } from '../feature-ring.tsx';
+import { FeatureRing, FeatureRingGuide } from '../feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from '../option-text.tsx';
 import { SetupChangeField } from '../setup-change-field.tsx';
 import type { MonthDraft } from '../month-draft.ts';
@@ -171,13 +171,26 @@ export function Actions({
     : undefined;
   const invalidation = invalidationEst && invalidationNote(invalidationEst);
 
+  // 来月の見込みの輪（図と、見出しの ⓘ の読み方の説明で同じ値を使う）
+  const ring = {
+    scenario: sc,
+    month: outlook.month,
+    total: outlook.total,
+    effort: outlook.effort,
+    feature: outlook.feature,
+    next: true,
+    note: stageNote,
+  };
+
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body">
         <h2 className="card-title flex-wrap">
           今月のアクション
-          {/* 欄の使い方の説明は ⓘ に畳む（prd/16） */}
-          <Info label="アクションの説明" title="今月のアクション">
+          {/* パネルの大事なこと（アクションの効き方・輪のグラフの読み方）をこの ⓘ にまとめる。
+              個々のアクションの細かい説明はそれぞれの ⓘ（prd/16・D-222 の補足） */}
+          <Info label="今月のアクションの見方" title="今月のアクション">
+            <h3 className="font-bold">アクションの効き方</h3>
             <p>
               選んだアクションは来月から効きます。工数の残りは機能開発に回り、満足度の「機能」（累計
               / 期待）と、評判を通して PV
@@ -186,6 +199,8 @@ export function Actions({
             <p>
               来月の見込みには、来月に新しく起きるイベントの対応の工数は含めません。
             </p>
+            <h3 className="pt-2 font-bold">輪のグラフの見方</h3>
+            <FeatureRingGuide {...ring} />
           </Info>
         </h2>
         {/* 広い画面では、入り切りのアクション（チェックボックス）を輪の右に並べ、選ぶと輪が変わるのを横で見られるようにする。
@@ -193,15 +208,7 @@ export function Actions({
         <div className="grid gap-3 md:grid-cols-[auto_minmax(0,1fr)] md:gap-x-8">
           {/* 来月の機能開発・累計・「機能」の段階は輪のグラフに任せる（文の行は外した。読み上げは輪の aria-label。D-222 の補足） */}
           <div className="text-sm" data-testid="feature-outlook">
-            <FeatureRing
-              scenario={sc}
-              month={outlook.month}
-              total={outlook.total}
-              effort={outlook.effort}
-              feature={outlook.feature}
-              next
-              note={stageNote}
-            />
+            <FeatureRing {...ring} />
           </div>
           {state.pendingProposals.length > 0 && (
             <div className="col-span-full space-y-2">

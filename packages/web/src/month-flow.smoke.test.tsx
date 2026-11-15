@@ -232,6 +232,14 @@ describe('ゲームモードの画面', () => {
       ring().querySelectorAll('li [data-ring-swatch="inner"]').length,
     ).toBe(legend().length);
     expect(ring().querySelector('[data-ring-swatch="outer"]')).not.toBeNull();
+    // 輪の読み方は輪の横でなく、パネルの見出しの ⓘ にまとめる（D-222 の補足）
+    expect(within(ring()).queryByRole('button')).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: '今月のアクションの見方' }),
+    );
+    expect(infoDialog()!.textContent).toContain('外側の輪');
+    expect(infoDialog()!.textContent).toContain('アクションの効き方');
+    closeInfo();
     // 輪の下の札は外側の輪の累計（行動を選ぶと減る）
     expect(
       ring().querySelector('[data-ring-total-label]')!.textContent,
