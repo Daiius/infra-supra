@@ -396,7 +396,7 @@ function UsageBar({
 }) {
   const at = (r: number) => `${(Math.min(r, scale) / scale) * 100}%`;
   return (
-    <span className="flex w-28">
+    <span className="flex w-full">
       {ratio <= 1 ? (
         <progress
           className={clsx('progress', tone)}
@@ -558,13 +558,17 @@ function PremiseList({
       {groupPremises(premises).map((g) => (
         <ul
           key={g.label}
-          className={clsx('space-y-1.5', TONE_PANEL[g.tone])}
+          className={clsx(
+            'grid gap-x-6 gap-y-1.5',
+            !full && 'sm:grid-cols-2 lg:grid-cols-3',
+            TONE_PANEL[g.tone],
+          )}
           aria-label={g.label}
           data-premise-group={g.label}
         >
           <li
             className={clsx(
-              'flex items-center gap-1 font-semibold',
+              'col-span-full flex items-center gap-1 font-semibold',
               TONE_HEAD[g.tone],
             )}
             data-premise-heading
@@ -632,8 +636,8 @@ function PremiseRow({
       {...(policy ? { 'data-policy-violation': '' } : {})}
     >
       <PremiseName p={p} />
-      {/* 2 段目は名前の文字の頭（印の右）にそろえる */}
-      <div className="flex flex-wrap items-center gap-x-2 pl-5 text-xs">
+      {/* 2 段目は名前の文字の頭（印の右）にそろえる。棒はマスの幅いっぱいで、% と費用の欄は幅を決めておく（どの行も棒が同じ幅になり、100% の位置がそろう） */}
+      <div className="flex items-center gap-x-2 pl-5 text-xs">
         {policy ? (
           // 規約違反（Vercel Hobby の非商用など）は原因のプランの名前を目立たせる（どの選択が原因か分かるように）
           plan && (
@@ -646,25 +650,26 @@ function PremiseRow({
           )
         ) : p.ratio !== undefined ? (
           <>
-            <span className="flex items-center gap-1 opacity-70">
+            <span className="min-w-0 flex-1 opacity-70">
               {credit ? (
                 <CreditBar
                   ratio={p.ratio}
                   label={`${p.text} ${(p.ratio * 100).toFixed(0)}%`}
-                  className="w-28"
+                  className="w-full"
                 />
               ) : (
                 <UsageBar ratio={p.ratio} tone={TONE_BAR[tone]} scale={scale} />
               )}
-              <span className="w-10 text-right tabular-nums">
-                {(p.ratio * 100).toFixed(0)}%
-              </span>
             </span>
-            {cost && (
-              <span className="font-semibold tabular-nums" data-premise-cost>
-                {cost}
-              </span>
-            )}
+            <span className="w-10 shrink-0 text-right tabular-nums opacity-70">
+              {(p.ratio * 100).toFixed(0)}%
+            </span>
+            <span
+              className="w-16 shrink-0 text-right font-semibold tabular-nums"
+              {...(cost ? { 'data-premise-cost': '' } : {})}
+            >
+              {cost}
+            </span>
           </>
         ) : null}
       </div>
