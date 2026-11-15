@@ -460,6 +460,17 @@ const TONE_PANEL: Record<Tone, string> = {
   neutral: 'px-2',
 };
 
+/**
+ * まとめの見出しの文字（パネルの題なので行の名前（text-sm）より 1 段大きい）。色は daisyUI のその色の面に置く文字の色（-content。
+ * 薄い黄・赤の面の上で濃い茶・濃い赤になり読める）。面の無い青・灰は普通の文字。
+ */
+const TONE_HEAD: Record<Tone, string> = {
+  error: 'text-error-content',
+  warning: 'text-warning-content',
+  info: 'text-sm opacity-80',
+  neutral: 'text-sm opacity-80',
+};
+
 /** まとめの見出しの印（札の代わり。文字は普通の色にし、印だけ段階の色）。 */
 const TONE_MARK: Record<Tone, LucideIcon> = {
   error: OctagonX,
@@ -531,7 +542,10 @@ function PremiseList({
           data-premise-group={g.label}
         >
           <li
-            className="col-span-2 flex items-center gap-1 text-xs font-semibold opacity-80"
+            className={clsx(
+              'col-span-2 flex items-center gap-1 font-semibold',
+              TONE_HEAD[g.tone],
+            )}
             data-premise-heading
           >
             {(() => {
@@ -539,7 +553,7 @@ function PremiseList({
               return (
                 <Mark
                   aria-hidden
-                  className={`size-3.5 shrink-0 ${TONE_ICON[g.tone]}`}
+                  className={`size-4 shrink-0 ${TONE_ICON[g.tone]}`}
                 />
               );
             })()}
@@ -573,7 +587,7 @@ function PremiseName({
   return (
     <span
       className={clsx(
-        'flex min-w-0 items-center gap-1 font-medium',
+        'flex min-w-0 items-center gap-1 text-sm font-medium',
         clip && 'max-w-40 sm:max-w-none',
       )}
       title={clip ? premiseName(p) : undefined}
