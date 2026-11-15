@@ -126,6 +126,8 @@ export function reportOf(
             provider: l.priceRef.provider,
             kind: l.kind,
             ...(l.priceRef.meterId ? { meterId: l.priceRef.meterId } : {}),
+            planId: l.priceRef.planId,
+            nodeIds: l.nodeIds,
             amount: l.amount!,
             currency: l.currency,
             ...(l.priceRef.meterId === INVALIDATION_METER

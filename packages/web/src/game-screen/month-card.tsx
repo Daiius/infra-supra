@@ -36,6 +36,7 @@ import {
   hitLabel,
   isCreditUse,
   isStopping,
+  premiseCostOf,
   premiseIcon,
   premiseName,
 } from '../premise-view.ts';
@@ -509,29 +510,6 @@ function groupPremises(premises: readonly PlatformPremise[]) {
 }
 
 type ReportLine = MonthReport['lines'][number];
-
-/**
- * 前提の超えた分の費用（D-222 の補足）。無料枠の前提が数えるメーター（estimator の meterIds）と同じ事業者・メーターの明細の行を足す。
- * 結べないとき（meterIds の無い前提・前の保存）は出さない。
- */
-function premiseCostOf(p: PlatformPremise, lines: readonly ReportLine[]) {
-  if (!p.meterIds?.length || !p.provider) return undefined;
-  const hits = lines.filter(
-    (l) =>
-      l.kind === 'usage' &&
-      l.provider === p.provider &&
-      l.meterId !== undefined &&
-      p.meterIds!.includes(l.meterId),
-  );
-  if (hits.length === 0) return undefined;
-  const currency = hits[0]!.currency;
-  const amount = hits
-    .filter((l) => l.currency === currency)
-    .reduce((a, l) => a + l.amount, 0);
-  return currency === 'JPY'
-    ? `${roundInt(amount).toLocaleString()} 円`
-    : usd(amount);
-}
 
 /**
  * 上限・制限の一覧。札は種類ごとの見出しにまとめ、行は 2 段（1 段目: 印と名前。省略しない。2 段目: 使用率の棒・%・超えた分の費用）（D-222 の補足）。

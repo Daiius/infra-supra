@@ -204,6 +204,9 @@ export type MonthReport = {
     provider: string;
     kind: LineItem['kind'] | 'fee' | 'commitment';
     meterId?: string;
+    /** 料金のプランと、行が数えたノード（上限・制限の前提と結んで超えた分の費用を出す。同じ事業者の同名のメーターを混ぜない。D-222 の補足）。 */
+    planId?: string;
+    nodeIds?: string[];
     amount: number;
     currency: string;
     /** 使用量（CloudFront の無効化のパスだけ。次のプレイへのヒントに使う。D-66）。 */
