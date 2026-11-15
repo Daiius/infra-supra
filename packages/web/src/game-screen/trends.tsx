@@ -9,6 +9,7 @@ import {
   type Scenario,
 } from 'game';
 import { compact, LineChart, Sparkline, useNarrowScreen } from '../charts.tsx';
+import type { ReactNode } from 'react';
 import { Info } from '../info.tsx';
 import { usd } from '../commitment-meta.ts';
 import { hitLabel, hitTone } from '../premise-view.ts';
@@ -257,90 +258,99 @@ export function Trends({
             </button>
           </div>
         )}
+        {/* グラフごとに枠で囲み、上下のグラフと線が混ざって見えないようにする（上限の推移のカードと同じ枠） */}
         <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-          <LineChart
-            title="所持金"
-            months={scenario.months}
-            format={(v) => `$${compact(Math.round(v))}`}
-            reference={{
-              value: cashGuide,
-              label: `目標の目安 $${compact(Math.round(cashGuide))}`,
-              tone: 'neutral',
-            }}
-            series={[
-              {
-                id: 'cash',
-                label: '所持金',
-                color: 'var(--series-1)',
-                // 負の値は軸の下に出ないよう 0 で切る（表示だけ。負になった月にゲームは終わる）
-                values: history.map((r) => Math.max(0, r.cash)),
-                ...prevOf((r) => Math.max(0, r.cash)),
-                ...(cashProj && cashProj.projection.length > 1
-                  ? {
-                      projection: cashProj.projection.map((p) => ({
-                        month: p.month,
-                        value: Math.max(0, p.value),
-                      })),
-                    }
-                  : {}),
-              },
-            ]}
-          />
-          <LineChart
-            title="収益と費用（月）"
-            months={scenario.months}
-            format={(v) => `$${compact(Math.round(v))}`}
-            series={[
-              {
-                id: 'revenue',
-                label: '収益',
-                color: 'var(--series-1)',
-                values: history.map((r) => r.revenue),
-              },
-              {
-                id: 'cost',
-                label: '費用',
-                color: 'var(--series-2)',
-                values: history.map(cost),
-                ...prevOf(cost),
-              },
-            ]}
-          />
-          <LineChart
-            title="満足度と評判"
-            months={scenario.months}
-            format={(v) => v.toFixed(2)}
-            yMax={1}
-            series={[
-              {
-                id: 'score',
-                label: '満足度',
-                color: 'var(--series-1)',
-                values: history.map((r) => r.satisfaction.score),
-                ...prevOf((r) => r.satisfaction.score),
-              },
-              {
-                id: 'reputation',
-                label: '評判',
-                color: 'var(--series-2)',
-                values: history.map((r) => r.satisfaction.reputation),
-              },
-            ]}
-          />
-          <LineChart
-            title="PV（月）"
-            months={scenario.months}
-            format={(v) => compact(Math.round(v))}
-            series={[
-              {
-                id: 'pv',
-                label: 'PV',
-                color: 'var(--series-1)',
-                values: history.map((r) => r.pv),
-                ...prevOf((r) => r.pv),
-              },
-            ]}
-          />
+          <ChartBox>
+            <LineChart
+              title="所持金"
+              months={scenario.months}
+              format={(v) => `$${compact(Math.round(v))}`}
+              reference={{
+                value: cashGuide,
+                label: `目標の目安 $${compact(Math.round(cashGuide))}`,
+                tone: 'neutral',
+              }}
+              series={[
+                {
+                  id: 'cash',
+                  label: '所持金',
+                  color: 'var(--series-1)',
+                  // 負の値は軸の下に出ないよう 0 で切る（表示だけ。負になった月にゲームは終わる）
+                  values: history.map((r) => Math.max(0, r.cash)),
+                  ...prevOf((r) => Math.max(0, r.cash)),
+                  ...(cashProj && cashProj.projection.length > 1
+                    ? {
+                        projection: cashProj.projection.map((p) => ({
+                          month: p.month,
+                          value: Math.max(0, p.value),
+                        })),
+                      }
+                    : {}),
+                },
+              ]}
+            />
+          </ChartBox>
+          <ChartBox>
+            <LineChart
+              title="収益と費用（月）"
+              months={scenario.months}
+              format={(v) => `$${compact(Math.round(v))}`}
+              series={[
+                {
+                  id: 'revenue',
+                  label: '収益',
+                  color: 'var(--series-1)',
+                  values: history.map((r) => r.revenue),
+                },
+                {
+                  id: 'cost',
+                  label: '費用',
+                  color: 'var(--series-2)',
+                  values: history.map(cost),
+                  ...prevOf(cost),
+                },
+              ]}
+            />
+          </ChartBox>
+          <ChartBox>
+            <LineChart
+              title="満足度と評判"
+              months={scenario.months}
+              format={(v) => v.toFixed(2)}
+              yMax={1}
+              series={[
+                {
+                  id: 'score',
+                  label: '満足度',
+                  color: 'var(--series-1)',
+                  values: history.map((r) => r.satisfaction.score),
+                  ...prevOf((r) => r.satisfaction.score),
+                },
+                {
+                  id: 'reputation',
+                  label: '評判',
+                  color: 'var(--series-2)',
+                  values: history.map((r) => r.satisfaction.reputation),
+                },
+              ]}
+            />
+          </ChartBox>
+          <ChartBox>
+            <LineChart
+              title="PV（月）"
+              months={scenario.months}
+              format={(v) => compact(Math.round(v))}
+              series={[
+                {
+                  id: 'pv',
+                  label: 'PV',
+                  color: 'var(--series-1)',
+                  values: history.map((r) => r.pv),
+                  ...prevOf((r) => r.pv),
+                },
+              ]}
+            />
+          </ChartBox>
         </div>
         {trends.length > 0 && (
           // 今月の上限は月の報告の「プラットフォームの上限・制限」に出るので、推移のグラフは畳む。
@@ -361,6 +371,18 @@ export function Trends({
           </details>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 推移の線グラフ 1 つの枠（TrendCard と同じ）。 */
+function ChartBox({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="min-w-0 rounded-box border border-base-300 p-2 sm:p-3"
+      data-chart-box
+    >
+      {children}
     </div>
   );
 }
