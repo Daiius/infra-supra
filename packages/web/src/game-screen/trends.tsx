@@ -379,7 +379,7 @@ export function Trends({
 function ChartBox({ children }: { children: ReactNode }) {
   return (
     <div
-      className="min-w-0 rounded-box border border-base-200 bg-base-100 p-2 shadow-[0_1px_3px_rgb(0_0_0/0.12),0_4px_12px_rgb(0_0_0/0.08)] sm:p-3"
+      className="min-w-0 rounded-box border border-base-200 bg-base-100 p-2 shadow-sm sm:p-3"
       data-chart-box
     >
       {children}
