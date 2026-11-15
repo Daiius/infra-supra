@@ -85,6 +85,27 @@ describe('完走の振り返りと手元の結果の履歴', () => {
     expect(band.className).not.toContain('alert-success');
     expect(band.className).not.toContain('bg-success');
     expect(band.textContent).toContain('✓');
+    // 結果の画面を絞る（D-223）: 所持金は ① の軸に、止まった月は帯に、軸の説明の文は ⓘ に任せて重ねない
+    expect(band.textContent).not.toContain('所持金');
+    expect(band.textContent).toContain('止まった月 0 回');
+    const axes = document.querySelector<HTMLElement>('[data-result-axes]')!;
+    expect(axes.textContent).not.toContain('止まった月');
+    expect(axes.textContent).not.toContain('最後の月の所持金');
+    fireEvent.click(
+      within(axes).getByRole('button', { name: '4 つの軸の見方' }),
+    );
+    const info = infoDialog()!;
+    expect(info.querySelector('[data-axis-captions]')!.textContent).toContain(
+      '最後の月の所持金',
+    );
+    expect(info.textContent).toContain('軸には入れません');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // 工数の使い道は輪と同じ色の帯と、0 でない区分だけの凡例
+    const stack = document.querySelector('[data-effort-stack]')!;
+    expect(
+      stack.querySelector('[role="img"]')!.getAttribute('aria-label'),
+    ).toMatch(/^工数の使い道: 機能開発 /);
+    expect(stack.textContent).not.toMatch(/イベントへの対応 0/);
   });
 
   it('W-75 過去の完走があると、自己ベスト・前回との差・順位を出す。分布が無いので花火は自己ベストの数に依らず 1 段（D-168）', async () => {
@@ -193,6 +214,10 @@ describe('完走の振り返りと手元の結果の履歴', () => {
       save = withTurn(save, []);
     await finish(save);
     expect(screen.getByText('止まった回数の上限を超えた')).toBeDefined();
+    // 途中終了は 4 軸が無いので、帯に所持金を残す（D-223）
+    expect(
+      document.querySelector('[data-result-band="lost"]')!.textContent,
+    ).toContain('所持金');
     expect(screen.queryByRole('dialog', { name: /完走/ })).toBeNull();
     expect(document.querySelector('[data-result-axes]')).toBeNull();
     const s = stored();

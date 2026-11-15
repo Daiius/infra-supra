@@ -185,8 +185,47 @@ function compareNote(
   }
 }
 
-/** 分布との比べ方の詳しい説明（注記の横の ⓘ。D-207）。 */
-function CompareInfo({
+/**
+ * 4 軸の欄の ⓘ（注記の横に 1 つ）: 軸の意味・止まった月の扱い・分布との比べ方（D-207）。軸のカードの説明の文はここに畳む
+ * （ゲーム中の画面と同じく、本体は値と分布の図だけ。D-223）。
+ */
+function AxesInfo({
+  view,
+  filterName,
+}: {
+  view: DistributionView | null;
+  filterName?: string | undefined;
+}) {
+  return (
+    <Info label="4 つの軸の見方" title="4 つの軸の見方">
+      <div className="space-y-3">
+        <section>
+          <h3 className="mb-1 font-bold">4 つの軸</h3>
+          <ul className="list-disc space-y-1 pl-5" data-axis-captions>
+            {(Object.keys(CAPTION) as ResultAxisId[]).map((id, i) => (
+              <li key={id}>
+                {['①', '②', '③', '④'][i]} {CAPTION[id]}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1">
+            1
+            つの点数にはまとめません。止まった月の数は振り返りとして出し、軸には入れません。
+          </p>
+        </section>
+        {view && (
+          <section>
+            <h3 className="mb-1 font-bold">分布との比べ方</h3>
+            <CompareDetail view={view} filterName={filterName} />
+          </section>
+        )}
+      </div>
+    </Info>
+  );
+}
+
+/** 分布との比べ方の詳しい説明（AxesInfo の中）。 */
+function CompareDetail({
   view,
   filterName,
 }: {
@@ -194,7 +233,7 @@ function CompareInfo({
   filterName?: string | undefined;
 }) {
   return (
-    <Info label="分布との比べ方の説明">
+    <>
       <ul className="list-disc space-y-1 pl-5" data-compare-detail>
         {view.mock && (
           <li>開発用の架空の分布です（遊んだ人の結果ではありません）。</li>
@@ -225,7 +264,7 @@ function CompareInfo({
             : 'あなたのプレイを 1 件足して数えています。'}
         </li>
       </ul>
-    </Info>
+    </>
   );
 }
 
@@ -237,6 +276,7 @@ export function ResultAxesPanel({
   size = 'md',
   filter,
   hideMine = false,
+  outagesLine = true,
   children,
 }: {
   comparisons: readonly AxisComparison[];
@@ -254,6 +294,8 @@ export function ResultAxesPanel({
   filter?: { name: string; top: DistributionView | null };
   /** 絞り込みの読み込み中（前の分布を薄く残している間）で、「あなた」の印を出さない（D-200）。 */
   hideMine?: boolean;
+  /** 止まった月の行を出すか（結果の画面は上の帯に出すので出さない。D-223）。 */
+  outagesLine?: boolean;
   /** 注記と 4 軸の間に置くもの（絞り込みのチップ）。 */
   children?: ReactNode;
 }) {
@@ -281,7 +323,7 @@ export function ResultAxesPanel({
         <span className="opacity-70">
           {compareNote(stats, count, filter?.name)}
         </span>
-        {dist && <CompareInfo view={dist} filterName={filter?.name} />}
+        <AxesInfo view={dist} filterName={filter?.name} />
       </p>
       {children}
       {dist && (
@@ -335,7 +377,6 @@ export function ResultAxesPanel({
               >
                 {f(c.value)}
               </div>
-              <div className="text-xs opacity-70">{CAPTION[c.id]}</div>
               {c.id === 'cash' && cashGuide !== undefined && (
                 <div className="text-xs" data-cash-guide>
                   {cashGuideText(c.value, cashGuide)}
@@ -396,12 +437,11 @@ export function ResultAxesPanel({
           );
         })}
       </ul>
-      <p className="mt-2 text-sm">
-        止まった月 <span className="tabular-nums">{outages} 回</span>
-        <span className="text-xs opacity-70">
-          （振り返りとして出します。軸には入れません）
-        </span>
-      </p>
+      {outagesLine && (
+        <p className="mt-2 text-sm">
+          止まった月 <span className="tabular-nums">{outages} 回</span>
+        </p>
+      )}
     </section>
   );
 }
