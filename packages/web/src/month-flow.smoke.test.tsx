@@ -145,8 +145,15 @@ describe('ゲームモードの画面', () => {
     const outlook = () => screen.getByTestId('feature-outlook').textContent!;
     const feature = () =>
       Number(outlook().match(/来月の機能開発 ([\d.]+)/)![1]);
-    expect(outlook()).toContain('来月の機能開発の累計');
-    expect(outlook()).toContain('/ 期待 16');
+    // 累計・期待の文の行と手間の残りの札は出さず、輪のグラフ（凡例の累計と段階の文字）に任せる（D-222 の補足）
+    expect(outlook()).not.toContain('来月の機能開発の累計');
+    expect(outlook()).not.toContain('届きません');
+    expect(screen.queryByText(/^来月の手間の残り/)).toBeNull();
+    expect(screen.queryByText(/来月に効く/)).toBeNull();
+    expect(
+      screen.getByRole('heading', { name: /^今月のアクション/ }),
+    ).toBeDefined();
+    expect(outlook()).toMatch(/累計 [\d.]+ \/ 期待 16（(良い|普通|悪い)）/);
     expect(outlook()).not.toContain('アクションで');
     const before = feature();
     fireEvent.click(
@@ -199,11 +206,11 @@ describe('ゲームモードの画面', () => {
       ring().querySelector('svg[role="img"]')!.getAttribute('aria-label')!;
     expect(label()).toMatch(/^来月の機能開発 [\d.]+ \/ 期待 8・累計/);
     expect(ring().textContent).not.toContain('アクションで');
-    // 値が 0 の区分は凡例に出さない（機能開発と、行動の欄の行動は常に出す）
+    // 値が 0 の区分は凡例に出さない（機能開発だけは常に出す）
     const legend = () =>
       [...ring().querySelectorAll('li')].map((li) => li.textContent);
     expect(legend().some((t) => t!.startsWith('機能開発'))).toBe(true);
-    expect(legend().some((t) => t!.startsWith('アクション0'))).toBe(true);
+    expect(legend().some((t) => t!.startsWith('アクション'))).toBe(false);
     expect(legend().some((t) => t!.startsWith('イベントへの対応0'))).toBe(
       false,
     );
@@ -213,7 +220,7 @@ describe('ゲームモードの画面', () => {
     );
     expect(label()).not.toBe(before);
     expect(ring().textContent).toMatch(/アクションで −\d/);
-    expect(legend().some((t) => t!.startsWith('アクション0'))).toBe(false);
+    expect(legend().some((t) => /^アクション[\d.]+$/.test(t!))).toBe(true);
   });
 
   it('W-56b 満足度の理由は「改善できる項目について」の ⓘ に畳み、一番重い段階の色で出す（D-222 の補足）', async () => {

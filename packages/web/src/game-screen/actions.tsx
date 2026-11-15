@@ -35,7 +35,6 @@ import type { MonthDraft } from '../month-draft.ts';
 import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
 import { commitmentMeta } from '../commitment-meta.ts';
 import { fmtPoints } from '../format.ts';
-import { FeatureProgressLine } from './effort.tsx';
 
 /** 確約の行動（D-97）。今月の明細に対象の使用がある確約だけ出す。結んだ確約は期間を出す。 */
 function CommitmentsSection({
@@ -135,7 +134,6 @@ export function Actions({
     valid,
     actions,
     draft,
-    left,
     undecided,
   } = d;
   /** 未決の提案があるときに「次の月へ」で出す確認（D-140）。 */
@@ -177,11 +175,7 @@ export function Actions({
     <div className="card bg-base-100 shadow">
       <div className="card-body">
         <h2 className="card-title flex-wrap">
-          今月のアクション（来月に効く）
-          <span className="badge badge-lg">
-            {/* 分母も選んでいる行動を当てた draft から（プラン変更で既定の分が替わる。D-123・OCL-ADB0B195） */}
-            来月の手間の残り {fmtPoints(left)} / {fmtPoints(d.total)}
-          </span>
+          今月のアクション
           {/* 欄の使い方の説明は ⓘ に畳む（prd/16） */}
           <Info label="アクションの説明" title="今月のアクション">
             <p>
@@ -194,32 +188,18 @@ export function Actions({
             </p>
           </Info>
         </h2>
-        <div className="space-y-0.5 text-sm" data-testid="feature-outlook">
-          {/* 来月の機能開発の量とアクションでの増減は、下の輪のグラフの見出しと中央に出す */}
-          <FeatureProgressLine
+        {/* 来月の機能開発・累計・「機能」の段階は輪のグラフに任せる（文の行は外した。読み上げは輪の aria-label。D-222 の補足） */}
+        <div className="text-sm" data-testid="feature-outlook">
+          <FeatureRing
             scenario={sc}
-            total={outlook.total}
             month={outlook.month}
-            prefix="来月の"
+            total={outlook.total}
+            effort={outlook.effort}
+            feature={outlook.feature}
+            change={outlook.change}
+            next
             note={stageNote}
           />
-          <div className="text-xs opacity-70">
-            {outlook.total >= outlook.expected
-              ? '来月の累計は期待に届きます'
-              : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届きません`}
-          </div>
-          <div className="mt-2">
-            <FeatureRing
-              scenario={sc}
-              month={outlook.month}
-              total={outlook.total}
-              effort={outlook.effort}
-              feature={outlook.feature}
-              change={outlook.change}
-              next
-              note={stageNote}
-            />
-          </div>
         </div>
         {state.pendingProposals.length > 0 && (
           <div className="space-y-2">

@@ -9,6 +9,7 @@ import { isZeroText, signedText, fmtPoints } from './format.ts';
 import {
   effortTotalNote,
   featureProgressOf,
+  featureRuleText,
   STAGE_LABEL,
   type EffortBreakdown,
   type Scenario,
@@ -318,13 +319,11 @@ export function FeatureRing({
               外側の目盛り: 普通 {fmtPoints(p.fairAt)}・良い{' '}
               {fmtPoints(p.goodAt)}。
             </p>
+            <p>{featureRuleText(sc)}</p>
           </Info>
         </div>
-        {/* 値が 0 の区分は省く（機能開発と、行動の欄の「行動」は選ぶと動くので常に出す） */}
-        <EffortParts
-          effort={effort}
-          keep={next === true ? ['feature', 'actions'] : ['feature']}
-        />
+        {/* 値が 0 の区分は省く（輪に無いものは出さない。機能開発だけは 0 でも出す） */}
+        <EffortParts effort={effort} />
         {feature - parts[0]!.v > 0 && (
           <p>（ほかに開発依頼の加点 +{fmtPoints(feature - parts[0]!.v)}）</p>
         )}
@@ -335,6 +334,8 @@ export function FeatureRing({
             style={{ background: STAGE_COLOR[shown.stage] }}
           />
           累計 {fmtPoints(p.total)} / 期待 {fmtPoints(p.expected)}
+          {/* 段階は色だけに頼らず文字でも添える */}
+          <span data-feature-stage>（{STAGE_LABEL[shown.stage]}）</span>
         </div>
       </div>
     </div>
