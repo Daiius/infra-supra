@@ -143,8 +143,16 @@ describe('ゲームモードの画面', () => {
     expect(screen.queryByText(/^機能開発の累計 \d+ \/ 期待 8 →/)).toBeNull();
     expect(screen.queryByText(/^開発の工数 /)).toBeNull();
     const outlook = () => screen.getByTestId('feature-outlook').textContent!;
+    // 来月の機能開発は輪の中央と読み上げ（aria-label）で読む（凡例の見出しは外した。D-222 の補足）
     const feature = () =>
-      Number(outlook().match(/来月の機能開発 ([\d.]+)/)![1]);
+      Number(
+        screen
+          .getByTestId('feature-outlook')
+          .querySelector('svg[role="img"]')!
+          .getAttribute('aria-label')!
+          .match(/来月の機能開発 ([\d.]+)/)![1],
+      );
+    expect(outlook()).not.toMatch(/来月の機能開発 [\d.]+ \/ 期待/);
     // 累計・期待の文の行と工数の残りの札は出さず、輪のグラフ（凡例の累計と段階の文字）に任せる（D-222 の補足）
     expect(outlook()).not.toContain('来月の機能開発の累計');
     expect(outlook()).not.toContain('届きません');
@@ -219,6 +227,11 @@ describe('ゲームモードの画面', () => {
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(label()).not.toBe(before);
+    // 凡例の見本は二重の輪で、内側の区分か外側（累計）かを形で分ける
+    expect(
+      ring().querySelectorAll('li [data-ring-swatch="inner"]').length,
+    ).toBe(legend().length);
+    expect(ring().querySelector('[data-ring-swatch="outer"]')).not.toBeNull();
     // 輪の下の札は外側の輪の累計（行動を選ぶと減る）
     expect(
       ring().querySelector('[data-ring-total-label]')!.textContent,

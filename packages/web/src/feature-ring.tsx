@@ -73,12 +73,8 @@ function EffortParts({
       {effortParts(effort)
         .filter((x) => x.v > 0 || keep.includes(x.s.key))
         .map((x) => (
-          <li key={x.s.key} className="flex items-center gap-1">
-            <span
-              aria-hidden
-              className="inline-block h-2.5 w-2.5 rounded-sm"
-              style={{ background: x.s.color }}
-            />
+          <li key={x.s.key} className="flex items-center gap-1.5">
+            <RingSwatch color={x.s.color} ring="inner" />
             {x.s.label}
             <span className="ml-auto pl-2 text-[var(--text-primary)] tabular-nums">
               {fmtPoints(x.v)}
@@ -86,6 +82,45 @@ function EffortParts({
           </li>
         ))}
     </ul>
+  );
+}
+
+/**
+ * 凡例の色の見本: 小さな二重の輪で、内側の輪の区分か外側の輪（累計）かを形で分ける（色が近くても見分けられる）。
+ */
+function RingSwatch({
+  color,
+  ring,
+}: {
+  color: string;
+  ring: 'inner' | 'outer';
+}) {
+  return (
+    <svg
+      aria-hidden
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      className="shrink-0"
+      data-ring-swatch={ring}
+    >
+      <circle
+        cx="10"
+        cy="10"
+        r="8.5"
+        fill="none"
+        stroke={ring === 'outer' ? color : 'var(--grid)'}
+        strokeWidth="2.5"
+      />
+      <circle
+        cx="10"
+        cy="10"
+        r="4.2"
+        fill="none"
+        stroke={ring === 'inner' ? color : 'var(--grid)'}
+        strokeWidth="3.6"
+      />
+    </svg>
   );
 }
 
@@ -315,9 +350,19 @@ export function FeatureRing({
         </text>
       </svg>
       <div className="min-w-0 max-w-64 flex-1 basis-28 space-y-1 text-xs text-[var(--text-secondary)]">
-        {/* 輪の読み方（内側・外側・目盛り）は ⓘ に畳み、見出しと色の凡例だけを出す（prd/16） */}
-        <div className="flex items-center gap-1 font-semibold text-[var(--text-primary)]">
-          {head}
+        {/* 値が 0 の区分は省く（輪に無いものは出さない。機能開発だけは 0 でも出す） */}
+        <EffortParts effort={effort} />
+        {feature - parts[0]!.v > 0 && (
+          <p>（ほかに開発依頼の加点 +{fmtPoints(feature - parts[0]!.v)}）</p>
+        )}
+        <div className="flex items-center gap-1.5">
+          <RingSwatch color={STAGE_COLOR[shown.stage]} ring="outer" />
+          {/* 段階は色だけに頼らず文字でも添える */}
+          <span>
+            累計 {fmtPoints(p.total)} / 期待 {fmtPoints(p.expected)}
+            <span data-feature-stage>（{STAGE_LABEL[shown.stage]}）</span>
+          </span>
+          {/* 来月の機能開発 / 期待は輪の中央で読めるので見出しは出さない。輪の読み方（内側・外側・目盛り）は ⓘ に畳む（prd/16） */}
           <Info label="輪のグラフの見方" title="輪のグラフの見方">
             <p>
               内側の輪: 工数 {fmtPoints(effort.total)}
@@ -340,23 +385,6 @@ export function FeatureRing({
             </p>
             <p>{featureRuleText(sc)}</p>
           </Info>
-        </div>
-        {/* 値が 0 の区分は省く（輪に無いものは出さない。機能開発だけは 0 でも出す） */}
-        <EffortParts effort={effort} />
-        {feature - parts[0]!.v > 0 && (
-          <p>（ほかに開発依頼の加点 +{fmtPoints(feature - parts[0]!.v)}）</p>
-        )}
-        <div className="flex items-center gap-1">
-          <span
-            aria-hidden
-            className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{ background: STAGE_COLOR[shown.stage] }}
-          />
-          {/* 段階は色だけに頼らず文字でも添える */}
-          <span>
-            累計 {fmtPoints(p.total)} / 期待 {fmtPoints(p.expected)}
-            <span data-feature-stage>（{STAGE_LABEL[shown.stage]}）</span>
-          </span>
         </div>
       </div>
     </div>
