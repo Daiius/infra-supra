@@ -1,6 +1,14 @@
 import clsx from 'clsx';
 import {
+  Eye,
   Gauge,
+  Megaphone,
+  MessagesSquare,
+  OctagonX,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+  UserMinus,
   Image as ImageIcon,
   Puzzle,
   RefreshCw,
@@ -14,6 +22,7 @@ import {
   ELEMENTS,
   STAGE_LABEL,
   type MonthReport,
+  type Stage,
 } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { compact } from '../charts.tsx';
@@ -26,7 +35,7 @@ import {
   isCreditUse,
   isStopping,
 } from '../premise-view.ts';
-import { roundInt } from '../format.ts';
+import { isZeroText, roundInt } from '../format.ts';
 import { pct, STATUS, STAGE_CLS } from './shared.ts';
 import { EventCard, eventBadge, BlockedBadge, TIER_LABEL } from './events.tsx';
 import { WorkProgressView } from './effort.tsx';
@@ -39,6 +48,133 @@ const ELEMENT_ICON: Record<(typeof ELEMENTS)[number], LucideIcon> = {
   freshness: RefreshCw,
   quality: ImageIcon,
 };
+
+const STAGE_PANEL: Record<Stage, string> = {
+  good: 'border-base-300',
+  fair: 'border-warning/60 bg-warning/5',
+  bad: 'border-error/40 bg-error/5',
+};
+
+const STAGE_TEXT: Record<Stage, string> = {
+  good: '',
+  fair: 'text-warning',
+  bad: 'text-error-strong',
+};
+
+/** 満足度の札（アイコン・名前・段階を段階の色で）。 */
+function ElementBadge({
+  element: e,
+  stage,
+  className = '',
+}: {
+  element: (typeof ELEMENTS)[number];
+  stage: Stage;
+  className?: string;
+}) {
+  const Icon = ELEMENT_ICON[e];
+  return (
+    <span
+      className={`badge gap-1 whitespace-nowrap ${STAGE_CLS[stage]} ${className}`}
+    >
+      <Icon aria-hidden className="size-3.5" />
+      {ELEMENT_LABEL[e]}
+      <span className="font-semibold">{STAGE_LABEL[stage]}</span>
+    </span>
+  );
+}
+
+/** 「改善できる項目について」の ⓘ。理由のある要素が無ければ出さない。 */
+function ImproveInfo({
+  stages,
+  reasons,
+}: {
+  stages: MonthReport['satisfaction']['stages'];
+  reasons: MonthReport['satisfaction']['reasons'];
+}) {
+  const items = ELEMENTS.filter((e) => reasons[e]);
+  if (items.length === 0) return null;
+  const worst: Stage = items.some((e) => stages[e] === 'bad') ? 'bad' : 'fair';
+  const WorstIcon = worst === 'bad' ? OctagonX : TriangleAlert;
+  return (
+    <p
+      className={`mt-1.5 flex items-center gap-1 text-sm font-semibold ${STAGE_TEXT[worst]}`}
+      data-improve-info
+    >
+      <WorstIcon aria-hidden className="size-4 shrink-0" />
+      改善できる項目について:
+      <Info label="改善できる項目について" title="改善できる項目について">
+        {/* 項目ごとに、段階の色の枠の中に本体と同じ札と理由（「良い」でない要素だけ） */}
+        <ul className="space-y-2">
+          {items.map((e) => {
+            const Icon = stages[e] === 'bad' ? OctagonX : TriangleAlert;
+            return (
+              <li
+                key={e}
+                className={`flex items-start gap-2 rounded-box border p-2 ${STAGE_PANEL[stages[e]]}`}
+              >
+                <Icon
+                  aria-hidden
+                  className={`mt-0.5 size-5 shrink-0 ${STAGE_TEXT[stages[e]]}`}
+                />
+                <div className="min-w-0 space-y-1">
+                  <ElementBadge element={e} stage={stages[e]} />
+                  <p className="text-sm">{reasons[e]}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </Info>
+    </p>
+  );
+}
+
+/** 伸びの内訳の札。正なら緑の右肩上がり、負なら赤の右肩下がり、0 なら灰色。 */
+function GrowthChip({
+  Icon,
+  label,
+  value,
+  strong = false,
+  lead,
+}: {
+  /** 札の前に添える印（「→」。折り返しても札と離れない）。 */
+  lead?: string;
+  Icon: LucideIcon;
+  label: string;
+  value: number;
+  strong?: boolean;
+}) {
+  const text = pct(value);
+  const sign = isZeroText(text) ? 0 : Math.sign(value);
+  const Trend = sign > 0 ? TrendingUp : sign < 0 ? TrendingDown : null;
+  const tone =
+    sign > 0
+      ? 'border-success/50 bg-success/5'
+      : sign < 0
+        ? 'border-error/40 bg-error/5'
+        : 'border-base-300';
+  const arrow = sign > 0 ? 'text-success' : 'text-error-strong';
+  const chip = (
+    <span
+      className={`flex items-center gap-1 rounded-box border px-2 py-0.5 ${tone} ${strong ? 'font-semibold' : ''}`}
+    >
+      <Icon aria-hidden className="size-4 shrink-0 opacity-70" />
+      {label}
+      <span className="tabular-nums">{text}</span>
+      {Trend && <Trend aria-hidden className={`size-4 shrink-0 ${arrow}`} />}
+    </span>
+  );
+  return (
+    <li className="flex items-center gap-1.5">
+      {lead && (
+        <span aria-hidden className="opacity-60">
+          {lead}
+        </span>
+      )}
+      {chip}
+    </li>
+  );
+}
 
 export function MonthCard({
   report: r,
@@ -135,43 +271,53 @@ export function MonthCard({
               className="flex flex-wrap gap-1.5 text-sm"
               data-satisfaction-elements
             >
-              {ELEMENTS.map((e) => {
-                const Icon = ELEMENT_ICON[e];
-                return (
-                  <li
-                    key={e}
-                    className={`badge grow gap-1 whitespace-nowrap ${STAGE_CLS[s.stages[e]]}`}
-                    data-satisfaction-element={e}
-                  >
-                    <Icon aria-hidden className="size-3.5" />
-                    {ELEMENT_LABEL[e]}
-                    <span className="font-semibold">
-                      {STAGE_LABEL[s.stages[e]]}
-                    </span>
-                  </li>
-                );
-              })}
+              {ELEMENTS.map((e) => (
+                <li key={e} className="flex grow" data-satisfaction-element={e}>
+                  <ElementBadge
+                    element={e}
+                    stage={s.stages[e]}
+                    className="grow"
+                  />
+                </li>
+              ))}
             </ul>
-            {ELEMENTS.some((e) => s.reasons[e]) && (
-              <ul className="mt-1.5 space-y-0.5 text-xs opacity-80">
-                {ELEMENTS.filter((e) => s.reasons[e]).map((e) => (
-                  <li key={e}>
-                    {ELEMENT_LABEL[e]}: {s.reasons[e]}
-                  </li>
-                ))}
-              </ul>
-            )}
+            {/* 理由（「良い」でない要素だけに付く）は 1 行の ⓘ に畳む。文字は札のうち一番重い段階の色、中は札と同じ色の札と理由（prd/16） */}
+            <ImproveInfo stages={s.stages} reasons={s.reasons} />
             {r.botPV > 0 && (
               <div className="mt-2 text-sm opacity-80">
                 PV {compact(Math.round(r.pv))} のうち Bot{' '}
                 {compact(Math.round(r.botPV))}（収益にならない）
               </div>
             )}
-            <div className="mt-2 text-sm opacity-80">
-              {r.buzz
-                ? `話題の後に残る伸び ${pct(s.growth)}`
-                : `口コミ ${pct(s.acquisition)}・解約 ${pct(-s.churn)} → 来月の伸び ${pct(s.growth)}`}
-            </div>
+            {/* 伸びの内訳は、遊び方・始める画面と同じ緑の右肩上がり・赤の右肩下がりの札で（色と矢印の向きの両方で見分ける。D-216） */}
+            <ul
+              className="mt-2 flex flex-wrap items-center gap-1.5 text-sm"
+              data-growth-line
+            >
+              {r.buzz ? (
+                <GrowthChip
+                  Icon={Megaphone}
+                  label="話題の後に残る伸び"
+                  value={s.growth}
+                />
+              ) : (
+                <>
+                  <GrowthChip
+                    Icon={MessagesSquare}
+                    label="口コミ"
+                    value={s.acquisition}
+                  />
+                  <GrowthChip Icon={UserMinus} label="解約" value={-s.churn} />
+                  <GrowthChip
+                    Icon={Eye}
+                    label="来月の伸び"
+                    value={s.growth}
+                    strong
+                    lead="→"
+                  />
+                </>
+              )}
+            </ul>
           </div>
           <WorkProgressView report={r} />
         </div>

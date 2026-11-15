@@ -126,7 +126,7 @@ describe('狭い画面の満足度の要素（D-189）', () => {
     // 各要素は名前と段階を 1 つの札にまとめる
     for (const li of items) {
       expect(li.parentElement).toBe(list);
-      expect(li.classList.contains('badge')).toBe(true);
+      expect(li.querySelector('.badge')).not.toBeNull();
       expect(li.textContent).toMatch(/(良い|普通|悪い)$/);
     }
   });

@@ -12,6 +12,8 @@ import {
   advance,
   monthHeading,
   expectGameScreen,
+  infoDialog,
+  closeInfo,
   ARTICLE,
   CONTRACT,
   type Setup,
@@ -212,6 +214,43 @@ describe('ゲームモードの画面', () => {
     expect(label()).not.toBe(before);
     expect(ring().textContent).toMatch(/アクションで −\d/);
     expect(legend().some((t) => t!.startsWith('アクション0'))).toBe(false);
+  });
+
+  it('W-56b 満足度の理由は「改善できる項目について」の ⓘ に畳み、一番重い段階の色で出す（D-222 の補足）', async () => {
+    await renderApp();
+    await startGame({
+      scenario: ARTICLE,
+      framework: 'Next.js（App Router）',
+      stack: 'Cloudflare Paid + vinext',
+    });
+    let seen = false;
+    for (let m = 1; m <= 4; m++) {
+      const badges = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-satisfaction-element] .badge',
+        ),
+      ];
+      const notGood = badges.filter((b) => !b.textContent!.endsWith('良い'));
+      const line = document.querySelector<HTMLElement>('[data-improve-info]');
+      if (notGood.length === 0) expect(line).toBeNull();
+      else {
+        seen = true;
+        expect(line).not.toBeNull();
+        const bad = notGood.some((b) => b.textContent!.endsWith('悪い'));
+        expect(
+          line!.classList.contains(bad ? 'text-error-strong' : 'text-warning'),
+        ).toBe(true);
+        fireEvent.click(
+          within(line!).getByRole('button', { name: '改善できる項目について' }),
+        );
+        const d = infoDialog()!;
+        // 中は札と同じ色・同じ名前の札と理由
+        expect(d.querySelectorAll('.badge')).toHaveLength(notGood.length);
+        closeInfo();
+      }
+      if (m < 4) advance(1);
+    }
+    expect(seen).toBe(true);
   });
 });
 
