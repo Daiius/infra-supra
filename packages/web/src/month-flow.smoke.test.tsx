@@ -219,10 +219,10 @@ describe('ゲームモードの画面', () => {
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(label()).not.toBe(before);
-    // 外側の輪の端の札は累計（行動を選ぶと減る）
-    expect(ring().querySelector('[data-ring-end-label]')!.textContent).toMatch(
-      /^累計[\d.]+$/,
-    );
+    // 輪の下の札は外側の輪の累計（行動を選ぶと減る）
+    expect(
+      ring().querySelector('[data-ring-total-label]')!.textContent,
+    ).toMatch(/^累計 [\d.]+$/);
     expect(legend().some((t) => /^アクション[\d.]+$/.test(t!))).toBe(true);
   });
 
