@@ -105,10 +105,10 @@ type EffortProps = {
   framework?: FrameworkId | undefined;
 };
 
-/** 手間の数（単位 pt。D-218）。 */
+/** 工数の数（単位 pt。D-218）。 */
 const pt = (n: number) => `${fmtPoints(n)} pt`;
 
-/** 構成の毎月の手間の数と内訳（マスの塗り分けと ⓘ の凡例に使う。D-218）。 */
+/** 構成の毎月の工数の数と内訳（マスの塗り分けと ⓘ の凡例に使う。D-218）。 */
 function effortOf({
   scenario: sc,
   stackIndex,
@@ -123,7 +123,7 @@ function effortOf({
   const accounts = accountUpkeepOf(stackIndex, components, framework);
   const others = otherAccounts(stackIndex, components, framework);
   const free = total - upkeep - accounts;
-  // 色はゲーム中の手間の棒と同じ（維持 warning・他の事業者の管理 warning の薄い色・機能開発 success）
+  // 色はゲーム中の工数の棒と同じ（維持 warning・他の事業者の管理 warning の薄い色・機能開発 success）
   const segments = [
     { key: 'upkeep', cls: 'bg-warning', label: '維持', value: upkeep },
     {
@@ -135,14 +135,14 @@ function effortOf({
     },
     { key: 'free', cls: 'bg-success', label: '機能開発', value: free },
   ];
-  // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の手間だけ（D-63）
+  // 偶発的な障害は自前運用（VPS）だけ。自分で組む構成（OpenNext）は維持の工数だけ（D-63）
   const incidentPct = selfHostedOf(stackIndex, components, framework)
     ? Math.round(sc.incidents.selfHostedChancePerMonth * 100)
     : undefined;
   return { allowance, total, upkeep, accounts, free, segments, incidentPct };
 }
 
-/** 毎月の手間のマス（1 マス 1 pt。内訳を左から塗る。0.5 はマスの左半分）。 */
+/** 毎月の工数のマス（1 マス 1 pt。内訳を左から塗る。0.5 はマスの左半分）。 */
 function EffortSquares({
   e,
   size,
@@ -165,7 +165,7 @@ function EffortSquares({
   return (
     <span
       role="img"
-      aria-label={`毎月の手間 ${pt(e.total)} のうち、${e.segments
+      aria-label={`毎月の工数 ${pt(e.total)} のうち、${e.segments
         .filter((x) => x.value > 0)
         .map((x) => `${x.label} ${pt(x.value)}`)
         .join('・')}`}
@@ -187,9 +187,9 @@ function EffortSquares({
 }
 
 /**
- * 構成の毎月の手間（D-36）。カードには毎月の手間のマスと機能開発に回せる分だけを出す（内訳はカードの ⓘ の EffortDetail。D-218）。
+ * 構成の毎月の工数（D-36）。カードには毎月の工数のマスと機能開発に回せる分だけを出す（内訳はカードの ⓘ の EffortDetail。D-218）。
  * 他の事業者の管理（D-52）は 1 アカウント 0.5 なので、マスの左半分だけを塗る（0.5 の表示の形）。
- * 毎月の手間はシナリオの基礎 + 構成の既定の部品での他の事業者の管理の分（D-123）。端数（10.5）は最後のマスの左半分。
+ * 毎月の工数はシナリオの基礎 + 構成の既定の部品での他の事業者の管理の分（D-123）。端数（10.5）は最後のマスの左半分。
  */
 export function EffortBar(props: EffortProps) {
   const e = effortOf(props);
@@ -208,14 +208,14 @@ export function EffortBar(props: EffortProps) {
   );
 }
 
-/** 構成のカードの ⓘ の中の毎月の手間: 大きめのマスと、色の凡例（色・名前・数）。 */
+/** 構成のカードの ⓘ の中の毎月の工数: 大きめのマスと、色の凡例（色・名前・数）。 */
 export function EffortDetail(props: EffortProps) {
   const e = effortOf(props);
   return (
     <section className="space-y-2" data-effort-detail>
-      <h3 className="font-semibold">毎月の手間 {pt(e.total)}</h3>
+      <h3 className="font-semibold">毎月の工数 {pt(e.total)}</h3>
       <EffortSquares e={e} size="h-4 w-4" />
-      <ul aria-label="毎月の手間の内訳" className="space-y-1 text-sm">
+      <ul aria-label="毎月の工数の内訳" className="space-y-1 text-sm">
         {e.segments
           .filter((x) => x.value > 0)
           .map((x) => (

@@ -148,7 +148,7 @@ describe('記事のデザインの刷新の提案（D-47）', () => {
     expect(s1.schedule.find((x) => x.id === IMAGE_REDESIGN_ID)?.month).toBe(3);
   });
 
-  it('受ける手間は構成で違う: 原本あり 1・一律で縮めた 2・原本を配っている 0', () => {
+  it('受ける工数は構成で違う: 原本あり 1・一律で縮めた 2・原本を配っている 0', () => {
     const at = (opt: Action[]) => {
       const s = play(withRedesign(), CF_PAID, opt, undefined, 3);
       expect(s.pendingProposals).toContain(IMAGE_REDESIGN_ID);
@@ -180,7 +180,7 @@ describe('記事のデザインの刷新の提案（D-47）', () => {
     expect(none.history[3]!.satisfaction.stages.quality).toBe('good');
   });
 
-  it('一律で縮めて画像をためてから「最適化しない」に替えても、断れば画質が下がり、受ける手間は 2（OCL-0A3AC32F）', () => {
+  it('一律で縮めて画像をためてから「最適化しない」に替えても、断れば画質が下がり、受ける工数は 2（OCL-0A3AC32F）', () => {
     const sc = withRedesign(1, 8);
     // 1 か月目の終わりに一律で縮める → 6 か月目の終わりに最適化しないへ替える → 8 か月目に提案
     let s = playMonth(newGame(CF_PAID, 42, sc, DEFAULT_START_DATE));

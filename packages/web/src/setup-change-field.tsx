@@ -1,6 +1,6 @@
 // ゲームの途中の「構成を変える」の畳んだ欄（D-185）。始める画面・見積モードの ①② のタブ（SetupTabs・StackField・FrameworkField）を
 // 使い回し、今の状態を選んだ状態から選び直す。選び直した差は game の setupChangeOf が今ある行動（plan・migrate・component・
-// rewrite・route・route-part）に写し取り、欄の下に変更の内訳（手間・期間・並行の費用・選べない理由）を出す。
+// rewrite・route・route-part）に写し取り、欄の下に変更の内訳（工数・期間・並行の費用・選べない理由）を出す。
 // 「来月の行動にする」で今月の行動に登録し、「構成はこのまま」で取り消す。状態（選び直しの途中）はこの欄が持つ（D-115 の境目）。
 import clsx from 'clsx';
 import { useState } from 'react';
@@ -323,7 +323,7 @@ function ChangeBody({
             rows: x ? componentComparison(state, x.slot, x.current) : [],
             basis: `今月の基準の規模（月 ${state.basePV.toLocaleString('ja-JP')} PV）と今の他の部品で、${x?.label ?? slot}だけを替えた月の費用（構成全体）。イベント・話題の上乗せ・差し替えの期間の二重の費用は含めない目安です。縦の線は今の部品の額です${
               slot === 'db' || slot === 'api'
-                ? '。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払います（変更の内訳の ⓘ に詳しく出します）'
+                ? '。データの移行があるので、工数を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払います（変更の内訳の ⓘ に詳しく出します）'
                 : ''
             }`,
           };
@@ -347,7 +347,7 @@ function ChangeBody({
         </p>
       )}
       <p className="text-xs opacity-70">
-        今の構成・部品・フレームワーク・ページの描き方を選んだ状態から始まります。選び直すと、下に変更の内訳（手間・期間・選べない理由）が出ます。
+        今の構成・部品・フレームワーク・ページの描き方を選んだ状態から始まります。選び直すと、下に変更の内訳（工数・期間・選べない理由）が出ます。
       </p>
       <SetupTabs
         storageKey="infra-supra:setup-tab:game-change"
@@ -373,7 +373,7 @@ function ChangeBody({
               comments={commentsOn}
               routes={routes}
               onComponentsChange={onComponents}
-              partsNote="役割ごとに選び直します。差し替えの手間と期間は下の変更の内訳に出ます"
+              partsNote="役割ごとに選び直します。差し替えの工数と期間は下の変更の内訳に出ます"
               partsCompare={partsCompare}
               diagramCaption="選んでいる部品で描いています。"
               alsoShow={state.stackIndex}
@@ -428,7 +428,7 @@ function ChangeBody({
                 text={{
                   heading: '② フレームワークとページの描き方',
                   footnote:
-                    'フレームワークを替えるのはアプリの作り直しです（大きな手間・数か月。その間は機能開発がほぼ止まります）。ページの描き方は来月から替わります。期限か、投稿・編集のときに消すかは下の設定の欄で替えます。',
+                    'フレームワークを替えるのはアプリの作り直しです（大きな工数・数か月。その間は機能開発がほぼ止まります）。ページの描き方は来月から替わります。期限か、投稿・編集のときに消すかは下の設定の欄で替えます。',
                 }}
               />
             </div>

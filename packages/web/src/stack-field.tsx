@@ -3,9 +3,9 @@
 // どれにも推奨・既定の印を付けない（D-41）。並びは今までの一覧の順（隠した構成は出さない。D-100）。
 // 始める画面では構成を先に選ぶ（D-113）。今のフレームワークを載せられない構成も隠さず、印と注意を添える（選ぶとフレームワークが替わる）。
 // タブは土台の事業者（課金のアカウント）ごとの枠にまとめ、プランをチップで出す（1 つだけの事業者は事業者の名前だけ。D-105 の補足）。
-// カードは事業者ごとに 1 枚で、プランのチップはカードを動かさず中身（名前・説明・手間・注意・構成図）を替える（D-105 の補足）。
+// カードは事業者ごとに 1 枚で、プランのチップはカードを動かさず中身（名前・説明・工数・注意・構成図）を替える（D-105 の補足）。
 // 見積モードと共用（D-115）。値は STACKS の index（見積の構成の id との変換は見積の画面の境目で 1 回）。カードに添える注記
-// （見積はその構成の月額）は cardExtra、手間の棒（ゲームだけ）は effort で切り替える。
+// （見積はその構成の月額）は cardExtra、工数の棒（ゲームだけ）は effort で切り替える。
 // 部品の選択は選んでいるカードの中で行う（D-116。前の ③ 部品の欄を移した）。構成図の箱から選ぶ表示と、機能ごとのチップから選ぶ表示を
 // タブで切り替える（D-116 の補足。どちらの表示でもすべてのスロットを選べる）。
 import clsx from 'clsx';
@@ -284,7 +284,7 @@ function EditableDiagram({
   );
 }
 
-/** 構成のカード: 名前・説明・毎月の手間・構成図。 */
+/** 構成のカード: 名前・説明・毎月の工数・構成図。 */
 function StackCard({
   scenario,
   stackIndex,
@@ -308,7 +308,7 @@ function StackCard({
   routes: RouteOverrides | undefined;
   /** 説明の下に添える注記（見積の月額など。D-115）。 */
   extra?: ReactNode;
-  /** 毎月の手間の棒を出すか（ゲームだけ）。 */
+  /** 毎月の工数の棒を出すか（ゲームだけ）。 */
   effort: boolean;
   /** 構成図の説明。 */
   caption: string | undefined;
@@ -383,7 +383,7 @@ function StackCard({
         <h4 className="card-title text-lg">
           <PlatformMarks platform={STACKS[stackIndex]!.provider} primaryOnly />
           <span className="min-w-0">{name}</span>
-          {/* カードの ⓘ は右上の 1 つにまとめる（短い説明・毎月の手間の内訳・線の色・詳しい説明。D-217・D-218） */}
+          {/* カードの ⓘ は右上の 1 つにまとめる（短い説明・毎月の工数の内訳・線の色・詳しい説明。D-217・D-218） */}
           <span className="ml-auto shrink-0">
             <Info label={`${name} の説明`}>
               {flavor && <p>{flavor}。</p>}
@@ -530,7 +530,7 @@ export function StackField({
   framework: FrameworkId;
   value: number;
   onChange: (stackIndex: number) => void;
-  /** 選んでいる構成の部品（選んでいる構成の図と手間に使う）。 */
+  /** 選んでいる構成の部品（選んでいる構成の図と工数に使う）。 */
   components: Partial<Record<string, string>>;
   /** 記事のページのコメント欄（流れの凡例のページの名前に使う。D-82・D-109）。 */
   comments?: number | undefined;
@@ -538,7 +538,7 @@ export function StackField({
   routes?: RouteOverrides | undefined;
   /** カードの説明の下に添える注記（見積モードはその構成の月額。D-115）。 */
   cardExtra?: (stackIndex: number) => ReactNode;
-  /** 毎月の手間の棒を出すか（ゲームの仮定なので、見積モードでは出さない。D-115）。 */
+  /** 毎月の工数の棒を出すか（ゲームの仮定なので、見積モードでは出さない。D-115）。 */
   effort?: boolean;
   /**
    * 部品を選び直す（選んでいるカードの構成図の下のチップと、図の箱から。D-116）。整合（ゲームの validSetupChoices・

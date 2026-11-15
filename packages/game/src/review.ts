@@ -124,7 +124,7 @@ export function surprisesOf(state: GameState): Surprise[] {
   return out;
 }
 
-/** 振り返り（①前提とその月の選択 ②「悪い」になった月と理由 ③手間の内訳 ④見込みが外れた理由）。 */
+/** 振り返り（①前提とその月の選択 ②「悪い」になった月と理由 ③工数の内訳 ④見込みが外れた理由）。 */
 export function reflectionOf(state: GameState): Reflection {
   const seen = new Map<string, Reflection['premises'][number]>();
   for (const r of state.history)

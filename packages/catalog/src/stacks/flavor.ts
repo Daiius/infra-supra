@@ -61,7 +61,7 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   'cloudflare:db:hyperdrive':
     '実績のある Postgres を使えます。事業者が増え、請求も別の所から来ます',
   'cloudflare:realtime:none':
-    'リアルタイムの機能を持ちません。費用も手間もかかりません',
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
   'cloudflare:realtime:durable-objects':
     '接続を保ったまま休止でき、休止中は実行時間を課金しない WebSocket',
   // Vercel
@@ -79,7 +79,7 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '原本をそのまま配るので、画質が落ちず、変換の費用もかかりません',
   'vercel:images:resize':
     '投稿のときに一度だけ縮めて置くので、変換の費用がかからず、仕組みも単純です',
-  // 他の事業者の部品（Vercel の画像だけ Cloudflare。D-52）。利点だけを書き、損（アカウント・請求が増える）は ⓘ と手間に出す
+  // 他の事業者の部品（Vercel の画像だけ Cloudflare。D-52）。利点だけを書き、損（アカウント・請求が増える）は ⓘ と工数に出す
   'cloudflare:images:cf-images':
     '転送量に課金されないストレージから画像を配り、閲覧のときに必要なサイズへ変換します',
   'cloudflare:images:cf-resize':
@@ -144,7 +144,7 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'API はいつもサーバーが処理します。前段の CDN が無くても使えます',
   'sakura:apiCache:cdn':
     '前段の CDN が API の応答も返し、サーバーの CPU と回線が減ります',
-  // SPA の API の置き場（D-65）。他の事業者の部品は利点だけを書き、損（CORS・アカウント・転送・移行）は ⓘ と手間に出す
+  // SPA の API の置き場（D-65）。他の事業者の部品は利点だけを書き、損（CORS・アカウント・転送・移行）は ⓘ と工数に出す
   'cloudflare:api:same':
     'サイトと同じ Worker に API を置くので、ドメインが一つで設定も少なく済みます',
   'vercel:api:same':
@@ -249,7 +249,7 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   'gcp:images:default':
     'Next.js の画像の部品がそのまま使え、変換は自分のコンテナで行います',
   'gcp:images:none':
-    '原本をそのまま配るので、画質が落ちず、変換の手間もかかりません',
+    '原本をそのまま配るので、画質が落ちず、変換の工数もかかりません',
   'gcp:images:resize':
     '投稿のときに一度だけ縮めて置くので、変換の費用がかからず、仕組みも単純です',
   'gcp:db:firestore':
@@ -308,7 +308,7 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
       [
         `${p}:dbBackup:default`,
         p === 'sakura'
-          ? '何も足さないので、費用も手間も増えません'
+          ? '何も足さないので、費用も工数も増えません'
           : '事業者が既定で残す分だけで、設定も追加の費用も要りません',
       ],
       [

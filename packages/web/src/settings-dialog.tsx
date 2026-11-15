@@ -107,7 +107,7 @@ export function SettingsDialog({
             <section className="space-y-1">
               <h3 className="font-bold">遊び方</h3>
               <p className="text-sm opacity-70">
-                ゲームの流れ・満足度・開発の手間・上限・終わり方を図で説明します。
+                ゲームの流れ・満足度・開発の工数・上限・終わり方を図で説明します。
               </p>
               <button
                 type="button"

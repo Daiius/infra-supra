@@ -1,5 +1,5 @@
-// 機能開発の効き目の輪（progress ring。D-122）。行動の欄の来月の見込みの下に出す（月の報告の輪と手間の欄は D-222 の補足で外した）。
-// 内側の輪: その月（月の報告）／来月（行動の欄）の手間の総量の円。機能開発に回る分と、ほかに使った分（行動・出来事への対応・乗り換えなど・維持）を
+// 機能開発の効き目の輪（progress ring。D-122）。行動の欄の来月の見込みの下に出す（月の報告の輪と工数の欄は D-222 の補足で外した）。
+// 内側の輪: その月（月の報告）／来月（行動の欄）の工数の総量の円。機能開発に回る分と、ほかに使った分（行動・出来事への対応・乗り換えなど・維持）を
 // 区分で続けて塗り、期待（月の期待）の位置に目盛り。外側の細い輪: 累計 / 期待の進み（100% で一周）。色は段階の色で、普通・良いの境目に目盛り。
 // 値は game の関数（featureProgressOf・featureOutlook）と月の報告から引き、式を持たない。
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
@@ -26,7 +26,7 @@ const SEGMENTS: {
     key: 'feature',
     label: '機能開発',
     color: 'var(--series-3)',
-    // 加点は手間の総量の外なので輪に入れない（中央の数に含める）
+    // 加点は工数の総量の外なので輪に入れない（中央の数に含める）
     of: (e) => e.feature - e.featureBonus,
   },
   {
@@ -55,11 +55,11 @@ const SEGMENTS: {
   },
 ];
 
-/** 手間の区分と値（輪の色と同じ並び・同じ色）。 */
+/** 工数の区分と値（輪の色と同じ並び・同じ色）。 */
 const effortParts = (e: EffortBreakdown) =>
   SEGMENTS.map((s) => ({ s, v: Math.max(0, s.of(e)) }));
 
-/** 手間の使い道の一覧（色の見本つき）。keep の区分は 0 でも出す。 */
+/** 工数の使い道の一覧（色の見本つき）。keep の区分は 0 でも出す。 */
 function EffortParts({
   effort,
   keep = ['feature'],
@@ -194,7 +194,7 @@ export function FeatureRing({
   month: number;
   /** その月の終わりの累計。 */
   total: number;
-  /** その月の手間の配分。 */
+  /** その月の工数の配分。 */
   effort: EffortBreakdown;
   /** その月に増える機能開発（省略は effort.feature。受けた提案の今すぐの加点を含めるときに渡す）。 */
   feature?: number;
@@ -260,7 +260,7 @@ export function FeatureRing({
           r={OUTER.r}
           width={OUTER.w}
         />
-        {/* 内側: 月の手間の総量の内訳 */}
+        {/* 内側: 月の工数の総量の内訳 */}
         <circle
           cx={C}
           cy={C}
@@ -307,7 +307,7 @@ export function FeatureRing({
           {head}
           <Info label="輪のグラフの見方" title="輪のグラフの見方">
             <p>
-              内側の輪: 手間 {fmtPoints(effort.total)}
+              内側の輪: 工数 {fmtPoints(effort.total)}
               {effortTotalNote(effort.total, effort.accountAllowance)}{' '}
               の使い道（目盛りは期待 {perMonth}）。
             </p>

@@ -1,4 +1,4 @@
-// 開発の手間: 毎月の維持・乗り換え・差し替え・書き直しに要る手間と、使える手間。
+// 開発の工数: 毎月の維持・乗り換え・差し替え・書き直しに要る工数と、使える工数。
 import type { Scenario } from './scenario.ts';
 import type { Choices, FrameworkId, SlotId } from 'catalog';
 import { effectiveSsrCpuMs, EFFORT } from './rules.ts';
@@ -15,8 +15,8 @@ import { isDataSwap, selfBackupOf, selfHostedOf, STACKS } from './stacks.ts';
 import type { ComponentSwap, GameState, Migration } from './state.ts';
 
 /**
- * 構成ごとの維持の手間（毎月）。自前運用（VPS）はシナリオの値、自分で組む構成（OpenNext）は EFFORT.assembledUpkeep、
- * コンテナで動かすマネージド（Cloud Run）は EFFORT.containerUpkeep、それ以外のマネージドなら 0。始める画面の手間のバーにも使う（D-36・D-63）。
+ * 構成ごとの維持の工数（毎月）。自前運用（VPS）はシナリオの値、自分で組む構成（OpenNext）は EFFORT.assembledUpkeep、
+ * コンテナで動かすマネージド（Cloud Run）は EFFORT.containerUpkeep、それ以外のマネージドなら 0。始める画面の工数のバーにも使う（D-36・D-63）。
  */
 export function upkeepOf(
   sc: Scenario,
@@ -48,7 +48,7 @@ export const accountUpkeepFor = (
 ) => accountUpkeepOf(state.stackIndex, state.components, state.framework);
 
 /**
- * 月の手間に足す、今の構成の既定の部品での他の事業者の管理の分（D-123）。乗り換え・作り直しが済むまでは今の構成・
+ * 月の工数に足す、今の構成の既定の部品での他の事業者の管理の分（D-123）。乗り換え・作り直しが済むまでは今の構成・
  * フレームワークの既定で数え、済んだ月から新しい構成の既定に替わる（アカウントの維持も今の構成で数えるのと揃える）。
  */
 export const accountAllowanceFor = (
@@ -56,7 +56,7 @@ export const accountAllowanceFor = (
 ) => accountAllowanceOf(state.stackIndex, state.framework);
 
 /**
- * 月の手間の内訳の断り（D-123）。既定の構成の事業者の管理の分を足しているときだけ「（基礎 10 + 既定の構成の事業者の管理 1）」、
+ * 月の工数の内訳の断り（D-123）。既定の構成の事業者の管理の分を足しているときだけ「（基礎 10 + 既定の構成の事業者の管理 1）」、
  * 足していなければ空。total は足した後の総量。
  */
 export function effortTotalNote(total: number, allowance = 0): string {
@@ -65,13 +65,13 @@ export function effortTotalNote(total: number, allowance = 0): string {
   return `（基礎 ${f(total - allowance)} + 既定の構成の事業者の管理 ${f(allowance)}）`;
 }
 
-/** 月の手間の総量 = シナリオの基礎（チームが増えた分を含む）+ 既定の構成の事業者の管理の分（D-123）。 */
+/** 月の工数の総量 = シナリオの基礎（チームが増えた分を含む）+ 既定の構成の事業者の管理の分（D-123）。 */
 export const effortTotalOf = (
   state: Pick<GameState, 'effortPerMonth' | 'stackIndex' | 'framework'>,
 ) => state.effortPerMonth + accountAllowanceFor(state);
 
 /**
- * 動いている構成（乗り換え中は新旧両方）の維持の手間。両方が自前運用でも 1 回分。今の構成は部品（差し替えの途中の新しい部品を含む）
+ * 動いている構成（乗り換え中は新旧両方）の維持の工数。両方が自前運用でも 1 回分。今の構成は部品（差し替えの途中の新しい部品を含む）
  * で VPS を使うときも自前運用（D-67）。乗り換え先は既定の部品から始まる。
  */
 export function upkeepFor(
@@ -120,14 +120,14 @@ export function swapWanted(s: ComponentSwap | null): number {
   return s ? Math.min(EFFORT.dbSwap.perMonth, s.required - s.done) : 0;
 }
 
-/** 作り直しに必要な手間の合計（ゲーム上の仮定。D-81）。 */
+/** 作り直しに必要な工数の合計（ゲーム上の仮定。D-81）。 */
 export function rewriteEffort(): number {
   return EFFORT.rewrite.perMonth * EFFORT.rewrite.months;
 }
 
 /**
- * 作り直しに今月入れる手間（D-81）。月あたり EFFORT.rewrite.perMonth まで、維持・出来事への対応・機能の追加の作業・
- * 予定した行動の残りをすべて取る（維持の手間がある構成では月あたりが減り、そのぶん長くかかる）。
+ * 作り直しに今月入れる工数（D-81）。月あたり EFFORT.rewrite.perMonth まで、維持・出来事への対応・機能の追加の作業・
+ * 予定した行動の残りをすべて取る（維持の工数がある構成では月あたりが減り、そのぶん長くかかる）。
  */
 export function rewriteWanted(
   state: Pick<
@@ -175,7 +175,7 @@ export const featureBonusOf = (state: Pick<GameState, 'interrupts'>) =>
     0,
   );
 
-/** 次の月に、まだ行動に使える手間。 */
+/** 次の月に、まだ行動に使える工数。 */
 export function effortAvailable(state: GameState): number {
   return (
     effortTotalOf(state) -
@@ -200,8 +200,8 @@ export function nextSsrCpuMs(state: GameState): number {
 }
 
 /**
- * 部品の差し替えの手間の説明（DB は進行中の月ごと）。state と option を渡すと、新しい事業者のアカウントが増える部品の
- * 一度きりの手間と毎月の維持を添える（D-52）。
+ * 部品の差し替えの工数の説明（DB は進行中の月ごと）。state と option を渡すと、新しい事業者のアカウントが増える部品の
+ * 一度きりの工数と毎月の維持を添える（D-52）。
  */
 export function componentEffortLabel(
   slot: SlotId,
@@ -244,16 +244,16 @@ export function componentEffortLabel(
   ];
   return isDataSwap(slot)
     ? [
-        `${effortSpanText('手間', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)}${setup ? ` + 手間 ${setup}` : ''}`,
+        `${effortSpanText('工数', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)}${setup ? ` + 工数 ${setup}` : ''}`,
         '期間中は新旧両方の費用',
         ...cross,
       ]
     : [
-        `手間 ${(state && option !== undefined ? componentBaseEffort(state, slot, option) : EFFORT.component[slot]) + setup}${setup ? `（他の事業者の設定 ${setup} を含む）` : ''}`,
+        `工数 ${(state && option !== undefined ? componentBaseEffort(state, slot, option) : EFFORT.component[slot]) + setup}${setup ? `（他の事業者の設定 ${setup} を含む）` : ''}`,
         '来月から',
         ...(state && option !== undefined && selfBackupBy(state, slot, option)
           ? [
-              `自前のバックアップの維持（毎月の手間 ${EFFORT.selfBackup.upkeep}）`,
+              `自前のバックアップの維持（毎月の工数 ${EFFORT.selfBackup.upkeep}）`,
             ]
           : []),
         ...cross,
@@ -276,7 +276,7 @@ function selfBackupBy(
   );
 }
 
-/** 部品の差し替えの一度きりの手間（他の事業者の設定を除く）。VPS の自前のバックアップは仕組みを作る手間（D-93）。 */
+/** 部品の差し替えの一度きりの工数（他の事業者の設定を除く）。VPS の自前のバックアップは仕組みを作る工数（D-93）。 */
 export function componentBaseEffort(
   state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
   slot: Exclude<SlotId, 'db' | 'api'>,

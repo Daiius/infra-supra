@@ -214,7 +214,7 @@ export function RoutePlanTable({
   onSelect?: (row: RoutePlanRow, alt: RouteAlternative) => void;
   /** 行ごとの要件の判定と 1 か月目の差。 */
   status?: RouteRowStatus[];
-  /** 選べない理由（ゲームの途中で手間が足りないなど）。描き方ごと。 */
+  /** 選べない理由（ゲームの途中で工数が足りないなど）。描き方ごと。 */
   disabledReason?: (
     row: RoutePlanRow,
     alt: RouteAlternative,

@@ -104,7 +104,7 @@ describe('ⓘ の説明のダイアログ', () => {
     expect(document.activeElement).toBe(button);
   });
 
-  it('W-83 始める画面の構成のカード: ⓘ は右上の 1 つ。手間はマスの図と機能開発に回せる分だけを出し、ⓘ の中にマスの図と色の凡例（D-218）', async () => {
+  it('W-83 始める画面の構成のカード: ⓘ は右上の 1 つ。工数はマスの図と機能開発に回せる分だけを出し、ⓘ の中にマスの図と色の凡例（D-218）', async () => {
     await renderApp();
     showStackTab();
     const card = document.querySelector<HTMLElement>(
@@ -116,7 +116,7 @@ describe('ⓘ の説明のダイアログ', () => {
       card.querySelector('h4')!.querySelectorAll('[data-info-button]'),
     ).toHaveLength(1);
     const effort = card.querySelector<HTMLElement>('[data-effort]')!;
-    within(effort).getByRole('img', { name: /^毎月の手間/ });
+    within(effort).getByRole('img', { name: /^毎月の工数/ });
     expect(effort.querySelector('[data-effort-free]')!.textContent).toMatch(
       /^機能開発に毎月 [\d.]+ pt$/,
     );
@@ -126,12 +126,12 @@ describe('ⓘ の説明のダイアログ', () => {
     );
     // ⓘ の中にもマスの図と、色の凡例（名前と pt）を出す
     const detail = body.querySelector<HTMLElement>('[data-effort-detail]')!;
-    within(detail).getByRole('img', { name: /^毎月の手間 [\d.]+ pt のうち/ });
+    within(detail).getByRole('img', { name: /^毎月の工数 [\d.]+ pt のうち/ });
     const legend = within(detail).getByRole('list', {
-      name: '毎月の手間の内訳',
+      name: '毎月の工数の内訳',
     });
     expect(legend.textContent).toMatch(/機能開発 [\d.]+ pt/);
-    // 線の色の凡例には見出しを付ける（手間の凡例と見分ける）
+    // 線の色の凡例には見出しを付ける（工数の凡例と見分ける）
     within(body).getByRole('heading', { name: '構成図の矢印の色' });
   });
 

@@ -2,7 +2,7 @@ import type { MonthReport } from 'game';
 
 /**
  * 月の報告の、進行中の作業（部品の差し替え・乗り換え・作り直し）の進み。どれも無ければ出さない。
- * 手間の総量・使い道・累計の行は外した（評価は累計で、満足度の「機能」の札と行動の欄の来月の見込みに任せる。D-222 の補足）。
+ * 工数の総量・使い道・累計の行は外した（評価は累計で、満足度の「機能」の札と行動の欄の来月の見込みに任せる。D-222 の補足）。
  */
 export function WorkProgressView({ report: r }: { report: MonthReport }) {
   if (!r.componentSwap && !r.migration && !r.rewrite) return null;

@@ -233,7 +233,7 @@ describe('費用と制限（D-108）', () => {
 });
 
 describe('途中の行動・保存（D-108）', () => {
-  it('S4 → S6 の手間は 3（RS-08）で、翌月から効く。使えない組は理由つきで弾く', () => {
+  it('S4 → S6 の工数は 3（RS-08）で、翌月から効く。使えない組は理由つきで弾く', () => {
     const s = start(VERCEL_PRO, 'astro');
     expect(checkAction(s, route('personal', 'server-island'))).toMatchObject({
       ok: true,

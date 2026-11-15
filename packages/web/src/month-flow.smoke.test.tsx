@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ゲームモードの画面の描画テスト（D-86・prd/05 §7）。画面を描いて操作し、例外が出ない・描ける・選択肢と結果が出ることだけを見る。
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
-// このファイルで見るもの: 月の進行・保存と再開・手間の欄と輪（行動の欄）（App.smoke.test.tsx から分けた）。
+// このファイルで見るもの: 月の進行・保存と再開・工数の欄と輪（行動の欄）（App.smoke.test.tsx から分けた）。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { ARTICLE_COMMUNITY, rollSchedule } from 'game';
 import { describe, expect, it } from 'vitest';
@@ -139,16 +139,16 @@ describe('ゲームモードの画面', () => {
       framework: 'Next.js（App Router）',
       stack: 'Cloudflare Paid + vinext',
     });
-    // 月の報告には手間の欄を出さない（評価は累計なので、満足度の「機能」の札と行動の欄の見込みに任せる。D-222 の補足）
+    // 月の報告には工数の欄を出さない（評価は累計なので、満足度の「機能」の札と行動の欄の見込みに任せる。D-222 の補足）
     expect(screen.queryByText(/^機能開発の累計 \d+ \/ 期待 8 →/)).toBeNull();
-    expect(screen.queryByText(/^開発の手間 /)).toBeNull();
+    expect(screen.queryByText(/^開発の工数 /)).toBeNull();
     const outlook = () => screen.getByTestId('feature-outlook').textContent!;
     const feature = () =>
       Number(outlook().match(/来月の機能開発 ([\d.]+)/)![1]);
-    // 累計・期待の文の行と手間の残りの札は出さず、輪のグラフ（凡例の累計と段階の文字）に任せる（D-222 の補足）
+    // 累計・期待の文の行と工数の残りの札は出さず、輪のグラフ（凡例の累計と段階の文字）に任せる（D-222 の補足）
     expect(outlook()).not.toContain('来月の機能開発の累計');
     expect(outlook()).not.toContain('届きません');
-    expect(screen.queryByText(/^来月の手間の残り/)).toBeNull();
+    expect(screen.queryByText(/^来月の工数の残り/)).toBeNull();
     expect(screen.queryByText(/来月に効く/)).toBeNull();
     expect(
       screen.getByRole('heading', { name: /^今月のアクション/ }),
@@ -171,10 +171,10 @@ describe('ゲームモードの画面', () => {
     const card =
       screen.getByText('届いた開発依頼（選ばなければ断る）').parentElement!;
     expect(card.textContent).toContain(
-      '受けると: 機能開発 +6（作業の手間 4 も機能開発に数える）',
+      '受けると: 機能開発 +6（作業の工数 4 も機能開発に数える）',
     );
     expect(card.textContent).toContain(
-      '伴うこと: 来月、アクションに使える手間が 4 減ります・使用量・費用: SSR の割合 60%',
+      '伴うこと: 来月、アクションに使える工数が 4 減ります・使用量・費用: SSR の割合 60%',
     );
     expect(card.textContent).toContain('断る（何も変わりません）');
     // 7 か月目に記事のデザインの刷新の提案が届く。機能の加点が無くても、得と断ったときの損を出す
@@ -191,7 +191,7 @@ describe('ゲームモードの画面', () => {
     );
   });
 
-  it('W-55 手間の輪を行動の欄にだけ常に出し、行動を選ぶと中央の数と区分が変わる（D-122・D-222）', async () => {
+  it('W-55 工数の輪を行動の欄にだけ常に出し、行動を選ぶと中央の数と区分が変わる（D-122・D-222）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,

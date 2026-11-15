@@ -103,7 +103,7 @@ function CommitmentsSection({
   );
 }
 
-/** 今月の行動。設定はいつでも戻せる。手間のポイントの残りの範囲で、いくつでも選べる。 */
+/** 今月の行動。設定はいつでも戻せる。工数のポイントの残りの範囲で、いくつでも選べる。 */
 export function Actions({
   state,
   draft: d,
@@ -179,12 +179,12 @@ export function Actions({
           {/* 欄の使い方の説明は ⓘ に畳む（prd/16） */}
           <Info label="アクションの説明" title="今月のアクション">
             <p>
-              選んだアクションは来月から効きます。手間の残りは機能開発に回り、満足度の「機能」（累計
+              選んだアクションは来月から効きます。工数の残りは機能開発に回り、満足度の「機能」（累計
               / 期待）と、評判を通して PV
               の伸びに効きます。設定はいつでも戻せます。
             </p>
             <p>
-              来月の見込みには、来月に新しく起きるイベントの対応の手間は含めません。
+              来月の見込みには、来月に新しく起きるイベントの対応の工数は含めません。
             </p>
           </Info>
         </h2>
@@ -251,12 +251,12 @@ export function Actions({
                     </span>
                     <Meta
                       items={[
-                        // 時間 → オンデマンドだけ実装の手間がかかる（D-49）
+                        // 時間 → オンデマンドだけ実装の工数がかかる（D-49）
                         key === 'isr' ||
                         key === 'buildInterval' ||
                         key === 'pageCache'
-                          ? `手間 ${def.effort}（${key === 'buildInterval' ? '更新のたびにビルド' : key === 'pageCache' ? ASTRO_ON_DEMAND : NEXT_ON_DEMAND}へは ${EFFORT.onDemandSwitch}）`
-                          : `手間 ${def.effort}`,
+                          ? `工数 ${def.effort}（${key === 'buildInterval' ? '更新のたびにビルド' : key === 'pageCache' ? ASTRO_ON_DEMAND : NEXT_ON_DEMAND}へは ${EFFORT.onDemandSwitch}）`
+                          : `工数 ${def.effort}`,
                         '来月から',
                       ]}
                     />
@@ -330,7 +330,7 @@ export function Actions({
                 name="SSR を最適化する"
                 meta={[
                   `CPU ${nextSsrCpuMs(state)} → ${Math.max(EFFORT.minSsrCpuMs, nextSsrCpuMs(state) - EFFORT.optimizeStepMs)} ms`,
-                  `手間 ${EFFORT.optimize}`,
+                  `工数 ${EFFORT.optimize}`,
                   '来月から',
                 ]}
                 info={
@@ -357,11 +357,11 @@ export function Actions({
                 />
                 <OptionText
                   name="Bot を遮断するルールを入れる"
-                  meta={[`手間 ${BOT_BLOCK.effort}`, '来月から効く']}
+                  meta={[`工数 ${BOT_BLOCK.effort}`, '来月から効く']}
                   info={
                     <Info title="Bot を遮断するルールを入れる">
                       Bot・クローラーのアクセスが来月から半分になります。一度入れれば続きます。対策の製品（WAF
-                      など）の料金は取得していないので、手間だけのアクションです。
+                      など）の料金は取得していないので、工数だけのアクションです。
                     </Info>
                   }
                   why={blockBots ? null : blocked(build({ blockBots: true }))}

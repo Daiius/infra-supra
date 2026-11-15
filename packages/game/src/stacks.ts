@@ -28,7 +28,7 @@ import { effortSpanText } from './format.ts';
 import type { GameState } from './state.ts';
 
 /**
- * データの移行を伴う差し替え（DB・API の置き場）。乗り換えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替える
+ * データの移行を伴う差し替え（DB・API の置き場）。乗り換えと同じく進行中の状態を持ち、工数を入れ終えた翌月に切り替える
  * （期間中は新旧の両方の費用）。API の置き場は DB も一緒に移す（API と DB は同じ事業者。D-65）。
  */
 export const isDataSwap = (slot: SlotId): slot is 'db' | 'api' =>
@@ -76,7 +76,7 @@ export function dbBackupStatus(
   );
 }
 
-/** 自前で取るバックアップ（VPS）を選んでいるか（毎月の維持の手間。D-93）。 */
+/** 自前で取るバックアップ（VPS）を選んでいるか（毎月の維持の工数。D-93）。 */
 export function selfBackupOf(
   stackIndex: number,
   components: Choices = {},
@@ -95,9 +95,9 @@ export const STACKS = MVP_STACKS.map((s, i) => ({
   provider: STACK_DEFS[i]!.platform as Platform,
   plan: STACK_DEFS[i]!.plan,
   selfHosted: s.nodes.some((n) => n.config.kind === 'host'),
-  /** 自分で組む構成（OpenNext など。維持の手間がかかる。D-63）。 */
+  /** 自分で組む構成（OpenNext など。維持の工数がかかる。D-63）。 */
   assembled: STACK_DEFS[i]!.assembled ?? false,
-  /** コンテナで動かすマネージドの構成（Cloud Run。維持の手間が少しかかる。D-88）。 */
+  /** コンテナで動かすマネージドの構成（Cloud Run。維持の工数が少しかかる。D-88）。 */
   containerized: STACK_DEFS[i]!.containerized ?? false,
   /** 一時的に隠している構成（catalog の HIDDEN_PLATFORMS。選ぶ場所に出さない。計算はそのまま。D-100）。 */
   hidden: stackHidden(STACK_DEFS[i]!),
@@ -378,7 +378,7 @@ export function storageOptionText(
     meta: [
       `ディスク ${disk(false)} → ${disk(true)} GB`,
       `手数料 ${addon.oneTimeFee.toLocaleString('ja-JP')} 円（一度だけ）`,
-      `手間 ${EFFORT.storageOption}`,
+      `工数 ${EFFORT.storageOption}`,
       '来月から',
     ],
     detail: `${addon.premise}。申し込みはスケールアップと同じ手順で、${scaleUp?.premise ?? 'サーバーを停止して行います'}。計画的な短い停止なので、止まった月には数えません。戻せません（${addon.interpretation?.adopted ?? ''}）。性能差はこの計算に入れていません。上位のプランへ変更してもオプションは残るとみなします（公式に記載なし）。乗り換え・契約し直しでは外れます。`,
@@ -409,7 +409,7 @@ function stackFact(stackIndex: number, factId: string) {
 
 /**
  * 同じ事業者でも、下位のプランへは変更できず契約し直す（さくらの VPS は今よりディスクが少ないプランへ変更できない。D-27）。
- * 乗り換えと同じ仕組み（手間・期間・新旧両方の費用）で扱う。
+ * 乗り換えと同じ仕組み（工数・期間・新旧両方の費用）で扱う。
  */
 export function isRecontract(from: number, to: number): boolean {
   return (
@@ -420,12 +420,12 @@ export function isRecontract(from: number, to: number): boolean {
   );
 }
 
-/** プラン変更の手間（さくらの VPS の上位への変更は停止とディスクの拡張の作業がある。D-27）。 */
+/** プラン変更の工数（さくらの VPS の上位への変更は停止とディスクの拡張の作業がある。D-27）。 */
 export function planChangeEffort(from: number): number {
   return stackFact(from, 'scale-up') ? EFFORT.scaleUp : EFFORT.plan;
 }
 
-/** 乗り換えに必要な手間の合計（VPS が絡むと長い。下位のプランへの契約し直しは別の値）。 */
+/** 乗り換えに必要な工数の合計（VPS が絡むと長い。下位のプランへの契約し直しは別の値）。 */
 export function migrationEffort(from: number, to: number): number {
   const m = EFFORT.migrationMonths;
   const months = isRecontract(from, to)
@@ -462,25 +462,25 @@ export function stackChangeText(
     return effort === 0
       ? {
           name: `${target} にプラン変更`,
-          meta: ['手間なし', '来月から'],
+          meta: ['工数なし', '来月から'],
           detail:
             '同じ事業者のプランの変更です。上限とプランに含まれる分が変わり、来月から効きます。',
         }
       : {
           name: `${target} にプラン変更`,
-          meta: [`手間 ${effort}`, '来月から'],
+          meta: [`工数 ${effort}`, '来月から'],
           detail: `${fact?.premise ?? ''}。計画的な短い停止なので、止まった月には数えません。`,
         };
   }
   if (isRecontract(from, to))
     return {
       name: `${target} へ契約し直す`,
-      meta: [effortSpanText('手間', per, months), both],
+      meta: [effortSpanText('工数', per, months), both],
       detail: `${stackFact(from, 'no-smaller-disk')!.premise}。新しく契約してデータを移す間は、新旧両方を動かして両方の費用を払います。`,
     };
   return {
     name: `${target} へ乗り換える`,
-    meta: [effortSpanText('手間', per, months), both],
+    meta: [effortSpanText('工数', per, months), both],
     detail:
       '別の事業者へ移します。作業の間は新旧両方の構成を動かして両方の費用を払い、済んだ翌月に切り替わります（その月は収益が少し減ります）。部品は乗り換え先の既定の選択から始まります。',
   };

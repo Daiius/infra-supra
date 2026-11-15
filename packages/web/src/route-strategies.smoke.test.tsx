@@ -495,7 +495,7 @@ describe('ゲームモードの画面', () => {
     });
     // ゲームの途中: 構成を変えるの欄（D-185）。作り直しの内訳に、描き方が既定に戻ることを出す（下で確かめる）
     const fold = openSetupChange();
-    // 乗り換え: 内訳に手間（か月）が出て、描き方の知らせは出ない
+    // 乗り換え: 内訳に工数（か月）が出て、描き方の知らせは出ない
     showStackTab();
     pickRadio('Cloudflare Paid + vinext', fold);
     const migrate = changeItems().find(

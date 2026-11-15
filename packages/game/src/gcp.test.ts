@@ -1,5 +1,5 @@
 // Google Cloud（Cloud Run + Firebase Hosting。D-88・prd/11 §16）をゲームで選べること。最小インスタンス数・DB（Firestore・Cloud SQL）・
-// 画像だけ Cloudflare を選べ、コンテナの維持の手間が少しかかる。基準プレイ（何もしない・シード 1〜20）。
+// 画像だけ Cloudflare を選べ、コンテナの維持の工数が少しかかる。基準プレイ（何もしない・シード 1〜20）。
 import { describe, expect, it } from 'vitest';
 import { meetsReference } from './reference.test-helpers.ts';
 import { composeStack, loadPriceBooks, type Choices } from 'catalog';
@@ -134,7 +134,7 @@ describe('Google Cloud の構成', () => {
           if (x.slot !== 'files') expect(componentFlavor(o)).toBeDefined();
   });
 
-  it('コンテナのビルドとデプロイの管理で維持の手間 0.5（OpenNext の 1 より小さい）。即時反映は満たせず、SLA は無い', () => {
+  it('コンテナのビルドとデプロイの管理で維持の工数 0.5（OpenNext の 1 より小さい）。即時反映は満たせず、SLA は無い', () => {
     for (const sc of Object.values(SCENARIOS))
       expect(upkeepOf(sc, GCP)).toBe(EFFORT.containerUpkeep);
     expect(EFFORT.containerUpkeep).toBeLessThan(EFFORT.assembledUpkeep);

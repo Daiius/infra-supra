@@ -410,7 +410,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
       'DB の応答は AWS からインターネットへの転送（$0.114/GB。AWS 全体で月 100 GB は無料）で数えます。公開の IPv4 のアドレスの時間課金は未確認で数えません。請求は AWS です。往復の遅延は計算しません',
     premiseRefs: ['pool:aws:data-transfer-out:internet-free-transfer'],
   },
-  // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の手間・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
+  // VPS の API + Cloudflare の静的（SPA・D-67）。自前運用の維持の工数・障害は部品で VPS を使うときにも効く（game の selfHostedOf）。
   // プランは 2GB と 4GB（ディスクが 2 倍）。プランの間の移し替えも API と DB のデータの移行として扱う（仮定）
   ...(['2gb', '4gb'] as const).map((plan): PartDef => ({
     id: `sakura-vps-${plan}`,
@@ -428,7 +428,7 @@ export const CROSS_PARTS: readonly PartDef[] = [
     note:
       `API を さくらの VPS ${plan.toUpperCase()}（東京）の Node に置き、DB は同じ VPS の MySQL です。api のサブドメインは Cloudflare の DNS で VPS に直接向けます（プロキシしない DNS だけのレコードで、CDN を通らない）。` +
       '静的なファイル（SPA のシェル・Next.js の静的書き出しの記事のページ）・JS・CSS と画像は Cloudflare から配ります。Astro のページ（マイページ・キャッシュを描き直す記事）は Worker が描き、その中から VPS の API を呼びます。月額は固定で転送量は無制限ですが、回線（100 Mbps の共有）・CPU・メモリ・ディスクに上限があり、話題の集中も API の分が VPS に届きます。' +
-      '自前運用の維持の手間と偶発的な障害（1 台構成）が加わります。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要ります。' +
+      '自前運用の維持の工数と偶発的な障害（1 台構成）が加わります。ブラウザは別のサブドメインの API を呼ぶので、CORS のヘッダーと認証の Cookie の設定が要ります。' +
       'さくらのアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません',
     premiseRefs: [
       'host:',

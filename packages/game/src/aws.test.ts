@@ -1,4 +1,4 @@
-// AWS の構成（prd/11 段 1・D-50）をゲームで選べること。始める画面の部品・維持の手間・何もしない方針の性質。
+// AWS の構成（prd/11 段 1・D-50）をゲームで選べること。始める画面の部品・維持の工数・何もしない方針の性質。
 import { describe, expect, it } from 'vitest';
 import { meetsReference } from './reference.test-helpers.ts';
 import {
@@ -96,7 +96,7 @@ describe('AWS の構成', () => {
     ]);
   });
 
-  it('マネージドなので維持の手間は 0。即時反映は ISR を持つ間は満たせない', () => {
+  it('マネージドなので維持の工数は 0。即時反映は ISR を持つ間は満たせない', () => {
     for (const sc of Object.values(SCENARIOS))
       expect(upkeepOf(sc, AWS)).toBe(0);
     expect(meetsRequirement(AWS, 'on-demand-isr')).toBe(false);
@@ -197,7 +197,7 @@ describe('AWS の構成', () => {
     expect(passed({ images: 'cf-images' })).toBe(20);
   });
 
-  it('OpenNext（D-63）: 別の事業者として足し、維持の手間 1・オンデマンドの即時反映を満たす・Amplify との行き来は乗り換え', () => {
+  it('OpenNext（D-63）: 別の事業者として足し、維持の工数 1・オンデマンドの即時反映を満たす・Amplify との行き来は乗り換え', () => {
     const ON = STACKS.findIndex((x) => x.id === 'aws-opennext');
     expect(ON).toBe(7);
     expect(STACKS[ON]!.provider).toBe('aws-opennext');
@@ -381,7 +381,7 @@ describe('AWS の構成', () => {
     expect(est(ARTICLE_COMMUNITY, { cdnPlan: 'flat-pro' }).ifWildcard).toBe(
       undefined,
     );
-    // 部品の欄に出る（ISR をキャッシュしない部品では効かないので出さない）・差し替えは手間 1
+    // 部品の欄に出る（ISR をキャッシュしない部品では効かないので出さない）・差し替えは工数 1
     const st = newGame(ON, 1, ARTICLE_COMMUNITY, DEFAULT_START_DATE, 'nextjs');
     expect(componentSlots(st).map((x) => x.slot)).toContain('cdnInvalidation');
     expect(

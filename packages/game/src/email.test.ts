@@ -1,5 +1,5 @@
 // メール送信（D-95・prd/11 §20）をゲームで選べること。既定は Cloudflare Paid が Email Service・ほかは SES、
-// Resend Free は 1 日 100 通で止まる。アカウントの手間（D-52）は構成の既定より増えた分だけ。
+// Resend Free は 1 日 100 通で止まる。アカウントの工数（D-52）は構成の既定より増えた分だけ。
 import { describe, expect, it } from 'vitest';
 import { meetsReference } from './reference.test-helpers.ts';
 import {
@@ -315,7 +315,7 @@ describe('メールの送信の上限とメールが届かない月（D-117）',
     const hint = retryHintsOf(s).find((h) => h.kind === 'email');
     expect(hint?.what).toContain('Resend Free');
     expect(retryHintsOf(s).some((h) => h.kind === 'limit')).toBe(false);
-    // 機能開発は期待に届いているので、手間の不足のヒントは出さない（OCL-7F0F6051）
+    // 機能開発は期待に届いているので、工数の不足のヒントは出さない（OCL-7F0F6051）
     expect(
       s.history.every(
         (r) =>

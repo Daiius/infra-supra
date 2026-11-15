@@ -847,7 +847,7 @@ function Edges({ model, markerId }: { model: DiagramModel; markerId: string }) {
  */
 export function LaneLegend({ lanes }: { lanes: DiagramModel['lanes'] }) {
   if (lanes.length === 0) return null;
-  // 毎月の手間の凡例と並ぶので、見出しを付け、線にも図と同じ矢印の先端を描いて、構成図の矢印の凡例だと分かるようにする
+  // 毎月の工数の凡例と並ぶので、見出しを付け、線にも図と同じ矢印の先端を描いて、構成図の矢印の凡例だと分かるようにする
   return (
     <section className="space-y-1" data-lane-legend>
       <h3 className="font-semibold">構成図の矢印の色</h3>

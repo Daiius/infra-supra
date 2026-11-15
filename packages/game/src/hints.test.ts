@@ -83,7 +83,7 @@ describe('retryHintsOf', () => {
     expect(hints.some((x) => x.kind === 'overage')).toBe(true);
   });
 
-  it('さくらの VPS 4GB: 費用は小さく、維持の手間で機能が伸びなかったことが出る', () => {
+  it('さくらの VPS 4GB: 費用は小さく、維持の工数で機能が伸びなかったことが出る', () => {
     const st = idle(VPS_4GB);
     expect(st.end?.reason).toBe('completed');
     expect(meetsReference(st)).toBe(false);
@@ -91,7 +91,7 @@ describe('retryHintsOf', () => {
     expect(hints[0]!.kind).toBe('cost');
     expect(hints[0]!.next).toContain('収益（PV の伸び）');
     const feature = hints.find((x) => x.what.startsWith('機能'));
-    expect(feature?.what).toContain('維持の手間 計 36');
+    expect(feature?.what).toContain('維持の工数 計 36');
   });
 
   it('受託・Cloudflare Free: DB の容量（ためていく量）と CPU の上限を分けて出す', () => {

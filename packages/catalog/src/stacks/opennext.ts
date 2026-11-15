@@ -1,5 +1,5 @@
 // AWS の 2 つ目の構成: OpenNext で Next.js を Lambda + CloudFront + S3 + DynamoDB + SQS に載せる（prd/11 §13・D-63）。
-// AX-02 で Amplify を選んだときの対案。インフラは自分で組む（SST など）ので、ゲームでは維持の手間がかかる（仮定）。
+// AX-02 で Amplify を選んだときの対案。インフラは自分で組む（SST など）ので、ゲームでは維持の工数がかかる（仮定）。
 // 料金は AWS のもの（providers/aws.ts）を再利用する。Amplify の構成（stacks/aws.ts）の id と経路は変えない。
 // 事業者（Platform）は 'aws-opennext' として分ける（部品の選択肢が Amplify と違い、Amplify との行き来はプラン変更でなく乗り換えになるため）。
 import type { ArchitectureInput, RequestClass } from 'estimator';

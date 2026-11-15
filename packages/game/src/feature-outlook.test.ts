@@ -47,13 +47,13 @@ describe('featureOutlook', () => {
     expect(o.change).toBe(0);
     expect(o.month).toBe(2);
     const next = playMonth(s);
-    // 来月の出来事で対応の手間が増えていなければ一致する（シード 42 の 2 か月目は割り込みなし）
+    // 来月の出来事で対応の工数が増えていなければ一致する（シード 42 の 2 か月目は割り込みなし）
     expect(next.history[1]!.effort.feature).toBe(o.feature);
     expect(next.featurePoints).toBe(o.total);
     expect(o.expected).toBe(ft.expectedPerMonth * 2);
   });
 
-  it('手間を使う行動を選ぶと、来月の機能開発がその分減る', () => {
+  it('工数を使う行動を選ぶと、来月の機能開発がその分減る', () => {
     const s = start();
     const act: Action = { type: 'block-bots' };
     const cost = checkAction(s, act);
@@ -89,7 +89,7 @@ describe('featureOutlook', () => {
     const decline = featureOutlook(s, [
       { type: 'respond', eventId: 'c-p-members', accept: false },
     ]);
-    // 加点 +2 は今すぐ、対応の手間 1 は来月の余りから減る
+    // 加点 +2 は今すぐ、対応の工数 1 は来月の余りから減る
     expect(o.total - decline.total).toBe(1);
     expect(o.change).toBe(1);
     expect(o.feature).toBe(o.effort.feature + 2);
@@ -105,22 +105,22 @@ describe('featureOutlook', () => {
 });
 
 describe('acceptSummary', () => {
-  it('得（機能開発・PV の伸び）と、伴うこと（手間・使用量）をデータから組む', () => {
+  it('得（機能開発・PV の伸び）と、伴うこと（工数・使用量）をデータから組む', () => {
     const s = start();
     const sum = acceptSummary(s, eventDef(sc, 'p-images')!);
     expect(sum.gains).toEqual([
-      '機能開発 +8（作業の手間 合計 6 も機能開発に数える）',
+      '機能開発 +8（作業の工数 合計 6 も機能開発に数える）',
       'PV の月の伸び +3 ポイント（3 か月）',
     ]);
     expect(sum.costs).toContain(
-      'その間、アクションに使える手間が 3 減ります（2 か月）',
+      'その間、アクションに使える工数が 3 減ります（2 か月）',
     );
     expect(sum.costs.some((c) => c.startsWith('使用量・費用: '))).toBe(true);
   });
 
-  it('機能開発に数えない対応の手間は、伴うことに出す', () => {
+  it('機能開発に数えない対応の工数は、伴うことに出す', () => {
     const sum = acceptSummary(start(), eventDef(sc, 'p-archive')!);
-    expect(sum.costs).toContain('対応の手間 4（1 か月・機能開発に数えない）');
+    expect(sum.costs).toContain('対応の工数 4（1 か月・機能開発に数えない）');
     // 基準の PV が増える分は、PV に比例する収益を得に出す
     expect(sum.gains).toEqual([
       `基準の PV × 1.5（以降ずっと）・収益は 1,000 PV あたり $${sc.revenue.adsUsdPer1000PV}`,

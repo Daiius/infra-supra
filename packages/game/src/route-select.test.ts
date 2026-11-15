@@ -1,4 +1,4 @@
-// ページごとの描き方を選ぶ（D-107・段 3）: 始める画面の選択・途中の行動と手間・設定の意味・保存・構成・見取り図・要件の判定。
+// ページごとの描き方を選ぶ（D-107・段 3）: 始める画面の選択・途中の行動と工数・設定の意味・保存・構成・見取り図・要件の判定。
 import { describe, expect, it } from 'vitest';
 import { composeStack, STACK_DEFS } from 'catalog';
 import {
@@ -184,7 +184,7 @@ describe('始める画面で選ぶ（D-107）', () => {
 });
 
 describe('途中で描き方を替える（D-107・RS-08）', () => {
-  it('手間: 枠 + API へは 4・それ以外は 3。期限 ↔ オンデマンドは設定で替える', () => {
+  it('工数: 枠 + API へは 4・それ以外は 3。期限 ↔ オンデマンドは設定で替える', () => {
     // Vercel × Next.js の既定は部品ごとにキャッシュ（D-111）なので、ISR が既定の VPS で見る
     const s = start(VPS, 'nextjs');
     const cost = (a: Action) => {
@@ -205,7 +205,7 @@ describe('途中で描き方を替える（D-107・RS-08）', () => {
         route('article', 'cached-purge'),
       ),
     ).toMatchObject({ ok: true, cost: 3 });
-    // CF の Next.js（vinext）の S1 も同じ手間で選べる（RS-15 の解除）
+    // CF の Next.js（vinext）の S1 も同じ工数で選べる（RS-15 の解除）
     expect(
       checkAction(start(CF_PAID, 'nextjs'), route('article', 'static-build')),
     ).toMatchObject({ ok: true, cost: 3 });

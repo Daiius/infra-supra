@@ -122,7 +122,7 @@ const EVENTS: EventDef[] = [
       'pool:supabase:',
     ],
     accept: {
-      label: '受ける（手間 2）',
+      label: '受ける（工数 2）',
       effects: [
         { type: 'workload', mods: { writesPerCall: 0.2 } },
         { type: 'feature', points: 4 },
@@ -145,7 +145,7 @@ const EVENTS: EventDef[] = [
       'pool:cloudflare:r2-standard:r2-storage',
     ],
     accept: {
-      label: '受ける（毎月 手間 3 を 2 か月）',
+      label: '受ける（毎月 工数 3 を 2 か月）',
       effects: [
         { type: 'workload', mods: { imagesPerPage: 10, uploadsFactor: 3 } },
         { type: 'feature', points: 8 },
@@ -168,7 +168,7 @@ const EVENTS: EventDef[] = [
       'limit:supabase:pro-micro:pooler-connections',
     ],
     accept: {
-      label: '受ける（手間 4）',
+      label: '受ける（工数 4）',
       effects: [
         { type: 'workload', mods: { ssrShare: 0.6 } },
         { type: 'feature', points: 6 },
@@ -195,7 +195,7 @@ const EVENTS: EventDef[] = [
       'host:disk:',
     ],
     accept: {
-      label: '受ける（手間 4）',
+      label: '受ける（工数 4）',
       effects: [
         { type: 'stock', add: { dbGB: 9, articlePages: 4000 } },
         { type: 'workload', mods: { dbRateFactor: 4 } },
@@ -218,7 +218,7 @@ const EVENTS: EventDef[] = [
       'pool:cloudflare:workers-free:free-requests',
     ],
     accept: {
-      label: '受ける（Durable Objects を付ける。手間 4）',
+      label: '受ける（Durable Objects を付ける。工数 4）',
       effects: [
         {
           type: 'workload',
@@ -254,10 +254,10 @@ const EVENTS: EventDef[] = [
       'fact:cloudflare:workers-paid:',
       'fact:cloudflare:cdn-free:next-on-demand',
     ],
-    // 受けると再検証をオンデマンドにする。時間のままなら切り替えの実装（設定の切り替えと同じ手間 2）がかかり、
-    // すでにオンデマンドなら作業は要らない（D-49。それまでは一律に手間 3）
+    // 受けると再検証をオンデマンドにする。時間のままなら切り替えの実装（設定の切り替えと同じ工数 2）がかかり、
+    // すでにオンデマンドなら作業は要らない（D-49。それまでは一律に工数 3）
     accept: {
-      label: '受ける（手間 2。すでに投稿・編集のときに消す設定なら 0）',
+      label: '受ける（工数 2。すでに投稿・編集のときに消す設定なら 0）',
       effects: [
         { type: 'feature', points: 5 },
         { type: 'growth', add: 0.02, months: 3 },
@@ -299,7 +299,7 @@ const EVENTS: EventDef[] = [
     showSla: true,
     requires: 'uptime-sla',
     accept: {
-      label: '受ける（契約の対応に手間 2）',
+      label: '受ける（契約の対応に工数 2）',
       effects: [
         // 契約の金額は仮定
         { type: 'contract', usdPerMonth: 40, requires: 'uptime-sla' },
@@ -319,7 +319,7 @@ const EVENTS: EventDef[] = [
     premiseRefs: [],
     accept: {
       label:
-        '受ける（手間: 原本がある構成 1・一律で縮めた構成 2・原本を配っている構成 0）',
+        '受ける（工数: 原本がある構成 1・一律で縮めた構成 2・原本を配っている構成 0）',
       effects: [{ type: 'imageRedesign' }],
     },
   },
@@ -413,7 +413,7 @@ const EVENTS: EventDef[] = [
     kind: 'script',
     tier: 'occasional',
     title: 'チームが増えた（2 人目）',
-    text: '開発者がもう 1 人加わりました。開発の手間が増えます。メンバー（席）ごとに料金がかかるプランでは費用も増えます（人件費は所持金に入れません）',
+    text: '開発者がもう 1 人加わりました。開発の工数が増えます。メンバー（席）ごとに料金がかかるプランでは費用も増えます（人件費は所持金に入れません）',
     when: { type: 'window', from: 4, to: 8 },
     premiseRefs: [],
     showMembers: true,

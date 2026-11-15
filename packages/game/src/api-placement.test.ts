@@ -118,14 +118,14 @@ describe('依存（始める画面とゲーム中で共通）', () => {
 });
 
 describe('ゲーム中の移し替え（データの移行）', () => {
-  it('DB の差し替えと同じく進行中の状態を持ち、手間を入れ終えた翌月に切り替わる（期間中は新旧両方の費用）', () => {
+  it('DB の差し替えと同じく進行中の状態を持ち、工数を入れ終えた翌月に切り替わる（期間中は新旧両方の費用）', () => {
     const s = playMonth(spaGame(VERCEL_PRO));
     expect(checkAction(s, api('cf-workers'))).toEqual({
       ok: true,
       cost: EFFORT.accountSetup,
     });
     expect(componentEffortLabel('api', s, 'cf-workers')).toEqual([
-      `${effortSpanText('手間', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)} + 手間 ${EFFORT.accountSetup}`,
+      `${effortSpanText('工数', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)} + 工数 ${EFFORT.accountSetup}`,
       '期間中は新旧両方の費用',
       `Cloudflare のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep}）`,
       // API と DB を Cloudflare に移すと Supabase が要らなくなる（D-123）

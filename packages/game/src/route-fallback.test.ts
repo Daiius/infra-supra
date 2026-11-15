@@ -125,7 +125,7 @@ describe('乗り換え・プラン変更で既定に戻る描き方の予測（D
             };
             if (!checkAction(s0, action).ok) continue;
             const predicted = stackChangeRouteFallbacks(s0, dst.index);
-            // 乗り換えは手間を入れ終えた月の翌月に切り替わる（済んだ状態から 1 か月進める）
+            // 乗り換えは工数を入れ終えた月の翌月に切り替わる（済んだ状態から 1 か月進める）
             const s1 = plan
               ? playMonth(applyAction(s0, action))
               : playMonth({
@@ -156,7 +156,7 @@ describe('乗り換え・プラン変更で既定に戻る描き方の予測（D
     expect(stackChangeRouteFallbacks(s0, CF_PAID)).toEqual([]);
   });
 
-  it('乗り換え・プラン変更の手間は描き方を選んでいても変わらない', () => {
+  it('乗り換え・プラン変更の工数は描き方を選んでいても変わらない', () => {
     for (const fw of frameworksOf(ARTICLE).allowed)
       for (const s0 of starts(ARTICLE, fw)) {
         const plain = start(ARTICLE, s0.stackIndex, fw);
@@ -209,7 +209,7 @@ describe('作り直しで既定に戻る描き方の予測（D-107 の補足）'
     });
     expect(rewriteRouteNotice(s0, 'astro')).toBe(
       // 描き方の名前は替える前と後のフレームワークの呼び名（D-193）
-      '作り直すと、記事のページは「Prerendering」→「Route caching（maxAge）」（既定）・個人向けのページは「Client-side data fetching」→「On-demand rendering」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります（選び直すには手間がかかります）',
+      '作り直すと、記事のページは「Prerendering」→「Route caching（maxAge）」（既定）・個人向けのページは「Client-side data fetching」→「On-demand rendering」（既定）に戻ります: 済んだ翌月から、描き方は新しいフレームワークの既定で始まります（選び直すには工数がかかります）',
     );
     // 静的書き出しの既定は記事 S1・個人向け S5 で、選んだものと同じ
     expect(rewriteRouteNotice(s0, 'nextjs-export')).toBeNull();

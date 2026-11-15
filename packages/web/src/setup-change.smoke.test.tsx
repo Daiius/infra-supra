@@ -31,7 +31,7 @@ import {
 useSmokeEnv();
 
 describe('ゲームモードの画面', () => {
-  it('W-14 ゲームの途中で個人向けのページの描き方を替える（構成を変えるの欄の ② のチップ・手間 4・来月から。D-107・D-185）', async () => {
+  it('W-14 ゲームの途中で個人向けのページの描き方を替える（構成を変えるの欄の ② のチップ・工数 4・来月から。D-107・D-185）', async () => {
     await renderApp();
     await startGame({
       scenario: ARTICLE,
@@ -42,13 +42,13 @@ describe('ゲームモードの画面', () => {
     expect(chosenOf('personal')).toBe('ssr');
     pickStrategy('個人向けのページ', 'Client-side data fetching');
     expect(chosenOf('personal')).toBe('shell-api');
-    // 内訳に行動の名前と手間
+    // 内訳に行動の名前と工数
     const items = changeItems();
     expect(items.map((x) => x.getAttribute('data-change-kind'))).toEqual([
       'route',
     ]);
     expect(items[0]!.textContent).toMatch(
-      /^個人向けのページを「[^」]+」に.*手間 4・来月から/,
+      /^個人向けのページを「[^」]+」に.*工数 4・来月から/,
     );
     registerSetupChange();
     expect(setupChangeFold().querySelector('summary')!.textContent).toMatch(

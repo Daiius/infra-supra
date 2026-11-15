@@ -194,7 +194,7 @@ describe('記事のページの部品「コメント欄」（D-82・D-109）', (
     );
   });
 
-  it('切り替えは記事のページの部品の行動で、手間 2（どちらの向きも）。SPA・枠 + API・ほかのページでは選べない', () => {
+  it('切り替えは記事のページの部品の行動で、工数 2（どちらの向きも）。SPA・枠 + API・ほかのページでは選べない', () => {
     expect(EFFORT.route.comments).toBe(2);
     const st = playMonth(start(CF_PAID, 300, 0));
     const on = {
@@ -298,7 +298,7 @@ describe('記事のページの部品「コメント欄」（D-82・D-109）', (
     expect(a.history.map((h) => h.infraCost)).toEqual(
       b.history.map((h) => h.infraCost),
     );
-    // 手間も同じ（2 か月目に外す・4 か月目に含める）
+    // 工数も同じ（2 か月目に外す・4 か月目に含める）
     expect(a.history.map((h) => h.effort)).toEqual(
       b.history.map((h) => h.effort),
     );

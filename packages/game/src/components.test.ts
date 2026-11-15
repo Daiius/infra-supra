@@ -56,7 +56,7 @@ describe('部品の差し替え', () => {
     );
   });
 
-  it('ISR のキャッシュ・画像は翌月から効き、手間を使う', () => {
+  it('ISR のキャッシュ・画像は翌月から効き、工数を使う', () => {
     const s = playMonth(newGame(CF_PAID));
     const a = applyAction(s, comp('isrCache', 'none'));
     expect(effortAvailable(a)).toBe(
@@ -72,7 +72,7 @@ describe('部品の差し替え', () => {
     const s = playMonth(newGame(CF_PAID));
     const a = applyAction(s, comp('db', 'hyperdrive'));
     expect(a.componentSwap?.option).toBe('hyperdrive');
-    // Supabase のアカウントが増えるので、設定の一度きりの手間も今月使う（D-52・OCL-B6A107A3）
+    // Supabase のアカウントが増えるので、設定の一度きりの工数も今月使う（D-52・OCL-B6A107A3）
     expect(effortAvailable(a)).toBe(
       effortAvailable(s) - EFFORT.dbSwap.perMonth - EFFORT.accountSetup,
     );
@@ -178,7 +178,7 @@ describe('チャットの提案（W-1）', () => {
     expect(actionEffort(accepted, comp('realtime', 'none'))).toBeNull();
   });
 
-  it('部品の欄で Durable Objects を選ぶのは提案を受けるのと同じ（どちらの順でも同じ状態・同じ手間）', () => {
+  it('部品の欄で Durable Objects を選ぶのは提案を受けるのと同じ（どちらの順でも同じ状態・同じ工数）', () => {
     const cf = until(CF_PAID, chatMonth(42));
     const viaProposal = applyAction(cf, {
       type: 'respond',
@@ -206,7 +206,7 @@ describe('チャットの提案（W-1）', () => {
     expect(playMonth(viaComponent).mods).toEqual(playMonth(viaProposal).mods);
   });
 
-  it('機能追加の提案を受けると、翌月の機能開発に作業の手間と加点が数えられる（D-29）', () => {
+  it('機能追加の提案を受けると、翌月の機能開発に作業の工数と加点が数えられる（D-29）', () => {
     const cf = until(CF_PAID, chatMonth(42));
     const accepted = applyAction(cf, {
       type: 'respond',
@@ -224,7 +224,7 @@ describe('チャットの提案（W-1）', () => {
     expect(a.featureWork).toBe(4);
     expect(a.featureBonus).toBe(6);
     expect(a.interrupt).toBe(d.interrupt);
-    // 断った月と比べ、作業の手間は機能開発のままで、加点の分だけ多い
+    // 断った月と比べ、作業の工数は機能開発のままで、加点の分だけ多い
     expect(a.feature).toBe(d.feature + 6);
   });
 
@@ -238,7 +238,7 @@ describe('チャットの提案（W-1）', () => {
 });
 
 describe('選べない理由の区別', () => {
-  it('手間が足りない・同じ・最中・要件を区別する', () => {
+  it('工数が足りない・同じ・最中・要件を区別する', () => {
     const s = playMonth(newGame(CF_PAID));
     expect(checkAction(s, comp('isrCache', 'kv'))).toMatchObject({
       ok: false,
@@ -252,7 +252,7 @@ describe('選べない理由の区別', () => {
     expect(
       checkAction(swapping, { type: 'migrate', stackIndex: VERCEL_PRO }),
     ).toMatchObject({ ok: false, reason: 'busy' });
-    // 手間を使い切ると、手間の理由になる
+    // 工数を使い切ると、工数の理由になる
     const tired = applyActions(s, [
       { type: 'optimize' },
       { type: 'set', key: 'format', value: 105 },
@@ -292,7 +292,7 @@ describe('SLA の打診（SC-5・W-2）', () => {
   it('VPS 2GB は受けられ、4GB にプラン変更した月から契約の収益が入る', () => {
     const s = until(VPS, slaMonth, 3);
     expect(isPlanChange(VPS, VPS_4GB)).toBe(true);
-    // 上位への変更はプラン変更（来月から）だが、停止とディスクの拡張の手間がある（D-27）
+    // 上位への変更はプラン変更（来月から）だが、停止とディスクの拡張の工数がある（D-27）
     expect(actionEffort(s, { type: 'plan', stackIndex: VPS_4GB })).toBe(
       EFFORT.scaleUp,
     );

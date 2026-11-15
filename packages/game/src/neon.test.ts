@@ -1,5 +1,5 @@
 // DB だけ Neon（従量の Postgres。D-77・prd/11 §15）: Vercel・Netlify の DB のスロットで Supabase の代わりに選べ、
-// Neon のアカウントの手間がかかり、基本料の代わりに動いている時間の分だけ払う。基準プレイ（何もしない・シード 1〜20）。
+// Neon のアカウントの工数がかかり、基本料の代わりに動いている時間の分だけ払う。基準プレイ（何もしない・シード 1〜20）。
 import { describe, expect, it } from 'vitest';
 import { meetsReference } from './reference.test-helpers.ts';
 import {
@@ -89,7 +89,7 @@ describe('DB だけ Neon', () => {
     ).not.toContain('Neon');
   });
 
-  it('Neon のアカウントが増える（アカウントの手間。D-52）', () => {
+  it('Neon のアカウントが増える（アカウントの工数。D-52）', () => {
     expect(addedAccounts(VERCEL_PRO, { db: 'neon' })).toEqual(['neon']);
     expect(addedAccounts(NETLIFY_PRO, { db: 'neon' }, 'vite-spa')).toEqual([
       'neon',
@@ -240,7 +240,7 @@ describe('基準プレイ（何もしない・シード 1〜20。prd/11 §15.3�
     // Vercel Pro の既定の Flat Rate CDN と東京の単価（D-120。前は受託 0/20 $39.5・14/20 $38.4、記事 $119.8）
     // D-121: 画像を記事のページの本文 5 枚・サムネイル 4 枚に分けた。AWS × SPA の既定の画像（一律で縮める）はサムネイルにも 400 KB を
     // 配るので転送が増える（前は $91.8・$91.8）。記事の閲覧の偏り（Zipf）で記事の再生成が減る（前は $54.2・$90.9）
-    // D-123: アカウントを数そのもので数え、既定の分を月の手間に足した。Supabase → Neon は差し引き 0 になり（前は Neon の分 0.5 を引いた）、
+    // D-123: アカウントを数そのもので数え、既定の分を月の工数に足した。Supabase → Neon は差し引き 0 になり（前は Neon の分 0.5 を引いた）、
     // 機能開発が月 0.5 増える。受託の Netlify・Vercel の Next.js は機能開発で SSR が重くなる（featurePointsPerSsrMs）のが早まり、
     // 速さが下がる月が増えて満足度と収益が少し下がる（前は 0/20 $56.4・0/20 $38.1・8/20 $35.3）。SPA は SSR が無いので変わらない
     // D-125: 記事の再検証の既定がオンデマンドに（Vercel・Netlify の Next.js。前は 0/20 $88.5・1/20 $54.0）。即時反映の苦情の代わりに

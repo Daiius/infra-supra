@@ -1,6 +1,6 @@
 // ゲームの途中の「構成を変える」（D-185）。始める画面と同じ ①② の選択（構成・部品・フレームワーク・ページの描き方・コメント欄）で
 // 選び直した差を、今ある行動（plan・migrate・component・rewrite・route・route-part）に写し取る。新しいゲームの決まりは作らず、
-// 選べるか・手間・期間は今までの行動の検査（checkActions）と文（stackChangeText・rewriteText など）に任せる。
+// 選べるか・工数・期間は今までの行動の検査（checkActions）と文（stackChangeText・rewriteText など）に任せる。
 import {
   componentsOf,
   DEFAULT_CHOICES,
@@ -67,7 +67,7 @@ export type SetupChangeItem = {
   /** 写し取った行動（写し取れない差は null）。 */
   action: Action | null;
   name: string;
-  /** 手間・期間・並行の費用・翌月から など。 */
+  /** 工数・期間・並行の費用・翌月から など。 */
   meta: string[];
   /** ⓘ に出す説明。 */
   detail?: string | undefined;
@@ -320,9 +320,9 @@ export function setupChangeOf(
       meta: componentEffortLabel(slot, state, option),
       detail:
         slot === 'api'
-          ? 'API の置き場を移すと DB も一緒に移します（API と DB は同じ事業者に置きます）。データの移行があるので、手間を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払います。事業者をまたぐ往復の遅延は計算していません。Next.js・Astro では、ページを描くサーバーが API を呼んで応答を待ちます。VPS に置くと自前運用の維持と障害が加わります。'
+          ? 'API の置き場を移すと DB も一緒に移します（API と DB は同じ事業者に置きます）。データの移行があるので、工数を入れ終えた翌月に切り替わり、期間中は新旧両方の費用を払います。事業者をまたぐ往復の遅延は計算していません。Next.js・Astro では、ページを描くサーバーが API を呼んで応答を待ちます。VPS に置くと自前運用の維持と障害が加わります。'
           : isDataSwap(slot)
-            ? 'DB の差し替えはデータの移行があるので、手間を入れ終えた翌月に切り替わります。期間中は新旧両方の DB の費用を払います。'
+            ? 'DB の差し替えはデータの移行があるので、工数を入れ終えた翌月に切り替わります。期間中は新旧両方の DB の費用を払います。'
             : undefined,
       why: null,
     });
@@ -390,7 +390,7 @@ export function setupChangeOf(
       kind: 'route',
       action,
       name,
-      meta: [...(effort !== null ? [`手間 ${effort}`] : []), '来月から'],
+      meta: [...(effort !== null ? [`工数 ${effort}`] : []), '来月から'],
       why: null,
     });
   }
@@ -413,13 +413,13 @@ export function setupChangeOf(
       kind: 'route-part',
       action,
       name: `${routeLabel(state, route)}の${def.label}を「${def.options.find((o) => o.value === draft.comments)?.label ?? ''}」に`,
-      meta: [`手間 ${def.effort}`, '来月から'],
+      meta: [`工数 ${def.effort}`, '来月から'],
       detail: def.note,
       why: null,
     });
   }
 
-  // 作り直し（残りの手間をすべて取れるので最後。D-81）
+  // 作り直し（残りの工数をすべて取れるので最後。D-81）
   if (rewrite) {
     const action: Action = { type: 'rewrite', framework: draft.framework };
     groups.rewrite = action;

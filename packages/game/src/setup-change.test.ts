@@ -59,7 +59,7 @@ describe('構成を変える（D-185）', () => {
     expect(c.why).toBeNull();
   });
 
-  it('同じ事業者のプランは plan、別の事業者は migrate。文と手間は今までの行動の文', () => {
+  it('同じ事業者のプランは plan、別の事業者は migrate。文と工数は今までの行動の文', () => {
     const s = start(CF_FREE);
     const plan = setupChangeOf(s, {
       ...currentSetupDraft(s),
@@ -214,8 +214,8 @@ describe('構成を変える（D-185）', () => {
       },
     ]);
     expect(c.items.map((x) => x.meta.join('・'))).toEqual([
-      '手間 4・来月から',
-      '手間 2・来月から',
+      '工数 4・来月から',
+      '工数 2・来月から',
     ]);
     expect(c.why).toBeNull();
     // 今と同じ分け方を選んだものは写し取らない

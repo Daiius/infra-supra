@@ -1,4 +1,4 @@
-// 満足度と開発の手間の純粋関数（prd/07 §9）。値はゲーム上の仮定なので、境目と代表的な月の値を確かめる。
+// 満足度と開発の工数の純粋関数（prd/07 §9）。値はゲーム上の仮定なので、境目と代表的な月の値を確かめる。
 import type { PlatformPremise } from 'estimator';
 import { describe, expect, it } from 'vitest';
 import {
@@ -124,7 +124,7 @@ describe('評判と成長', () => {
   });
 });
 
-describe('開発の手間', () => {
+describe('開発の工数', () => {
   it('維持 → 乗り換え → 行動の順に取り、余りが機能開発', () => {
     expect(
       allocateEffort({ upkeep: 3, migrationWanted: 6, actions: 4 }),

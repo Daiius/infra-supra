@@ -88,9 +88,9 @@ export type StackDef = {
   platform: Platform;
   plan: string;
   name: string;
-  /** 自分で組む構成（OpenNext など。ゲームでは維持の手間がかかる。D-63）。 */
+  /** 自分で組む構成（OpenNext など。ゲームでは維持の工数がかかる。D-63）。 */
   assembled?: boolean;
-  /** コンテナで動かすマネージドの構成（Cloud Run。ゲームでは小さな維持の手間がかかる。D-88）。 */
+  /** コンテナで動かすマネージドの構成（Cloud Run。ゲームでは小さな維持の工数がかかる。D-88）。 */
   containerized?: boolean;
 };
 
@@ -784,7 +784,7 @@ const BACKUP_NOTES: Record<Platform, { default: string; pitr: string }> = {
   sakura: {
     default:
       'さくらの VPS にバックアップの機能はありません。自分で取らなければ、壊れたときに戻せるものがありません',
-    pitr: '日次のダンプとバイナリログを、さくらのオブジェクトストレージに自分で送ります（7 日分・月 495 円から）。仕組みを作り、毎月見張る手間がかかります',
+    pitr: '日次のダンプとバイナリログを、さくらのオブジェクトストレージに自分で送ります（7 日分・月 495 円から）。仕組みを作り、毎月見張る工数がかかります',
   },
 };
 

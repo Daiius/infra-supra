@@ -32,7 +32,7 @@ export type RoutePartKey = 'comments';
 
 /**
  * 描き方の分け方（D-107）。S2 と S3 は同じ「キャッシュ」で、期限かオンデマンドかは設定（revalidateSec）で決まる
- * （今までの ISR の再検証・記事のキャッシュの設定のまま。切り替えの手間も今までどおり）。
+ * （今までの ISR の再検証・記事のキャッシュの設定のまま。切り替えの工数も今までどおり）。
  */
 export type StrategyFamily =
   'static' | 'cached' | 'ssr' | 'api' | 'island' | 'components';
@@ -41,9 +41,9 @@ export type Action =
   | { type: 'none' }
   | { type: 'set'; key: SettingKey; value: number }
   | { type: 'optimize' }
-  /** 同じ事業者のプランの変更（ほぼ即時・手間なし）。 */
+  /** 同じ事業者のプランの変更（ほぼ即時・工数なし）。 */
   | { type: 'plan'; stackIndex: number }
-  /** 別の事業者への乗り換え（手間・数か月・期間中は新旧両方の費用）。 */
+  /** 別の事業者への乗り換え（工数・数か月・期間中は新旧両方の費用）。 */
   | { type: 'migrate'; stackIndex: number }
   /** 提案への返事（受ける / 断る）。返事をしなければ断ったことになる。 */
   | { type: 'respond'; eventId: string; accept: boolean }
@@ -53,7 +53,7 @@ export type Action =
   | { type: 'component'; slot: SlotId; option: string }
   /** さくらの VPS のストレージ変更オプションを付ける（ディスク 2 倍・手数料一度だけ・戻せない。D-30）。 */
   | { type: 'storage-option' }
-  /** アプリを作り直す（フレームワークを替える。大きな手間・数か月。済んだ翌月から新しいフレームワーク。D-81）。 */
+  /** アプリを作り直す（フレームワークを替える。大きな工数・数か月。済んだ翌月から新しいフレームワーク。D-81）。 */
   | { type: 'rewrite'; framework: FrameworkId }
   /**
    * ページの描き方を替える（D-107。翌月から）。期限とオンデマンド（S2 ↔ S3）は今までどおり設定（再検証・記事のキャッシュ）で替える。
@@ -81,14 +81,14 @@ export type ComponentSwap = {
 export type Migration = {
   from: number;
   to: number;
-  /** 必要な手間の合計と、入れた手間。 */
+  /** 必要な工数の合計と、入れた工数。 */
   required: number;
   done: number;
 };
 
 /**
  * アプリの作り直しの進行（D-81・prd/10 F-06）。作業の間は旧アプリのまま動き（費用・満足度は今のフレームワーク）、
- * 手間を入れ終えた翌月から新しいフレームワークになる。事業者は変わらない。
+ * 工数を入れ終えた翌月から新しいフレームワークになる。事業者は変わらない。
  */
 export type Rewrite = {
   from: FrameworkId;
@@ -111,7 +111,7 @@ export type MonthEvent = {
   phase: 'notice' | 'occurred' | 'proposal';
   title: string;
   text: string;
-  /** 効果の要約（PV × 3・手間 +10 / 月 など）。 */
+  /** 効果の要約（PV × 3・工数 +10 / 月 など）。 */
   effects: string[];
   /** 当たりうる前提（今の構成で出ているもの。文は catalog のまま）。 */
   premises: {
@@ -316,11 +316,11 @@ export type GameState = {
   migration: Migration | null;
   /** 次の月が乗り換えの切り替えの月か。 */
   switching: boolean;
-  /** 次の月に使う行動の手間。 */
+  /** 次の月に使う行動の工数。 */
   plannedEffort: number;
   /** 規約違反の指摘を受けた月。 */
   policyWarnedMonth: number | null;
-  /** 月の手間の総量（チームが増えると増える）。 */
+  /** 月の工数の総量（チームが増えると増える）。 */
   effortPerMonth: number;
   /** 足した席（メンバー）の数。 */
   seats: number;
@@ -338,7 +338,7 @@ export type GameState = {
   responses: Record<string, 'accepted' | 'declined'>;
   /** 一度起きた状態の出来事。 */
   fired: string[];
-  /** 出来事への対応の手間（毎月 points を months か月）。 */
+  /** 出来事への対応の工数（毎月 points を months か月）。 */
   interrupts: {
     points: number;
     months: number;

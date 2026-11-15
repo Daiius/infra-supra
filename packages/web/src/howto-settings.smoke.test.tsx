@@ -79,7 +79,7 @@ describe('遊び方と設定', () => {
     fireEvent.click(within(d).getByRole('button', { name: /2 ページ目/ }));
     expect(d.textContent).toContain('残りを既定にする');
     fireEvent.click(within(d).getByRole('button', { name: /5 ページ目/ }));
-    expect(d.textContent).toContain('毎月 手間 3 を 2 か月（合計 6）');
+    expect(d.textContent).toContain('毎月 工数 3 を 2 か月（合計 6）');
     fireEvent.click(within(d).getByRole('button', { name: /6 ページ目/ }));
     expect(d.textContent).toContain('✗ 上限に達した');
     expect(d.textContent).toContain('止まる上限に達する数 +1');
