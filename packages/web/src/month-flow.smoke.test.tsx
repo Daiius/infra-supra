@@ -281,9 +281,7 @@ describe('ゲームモードの画面', () => {
       const head = g.querySelector('[data-premise-heading]')!;
       expect(head.textContent).toBe(g.dataset.premiseGroup);
       expect(head.querySelector('.badge')).toBeNull();
-      for (const li of g.querySelectorAll<HTMLElement>(
-        ':scope > li:not([data-premise-heading])',
-      )) {
+      for (const li of g.querySelectorAll<HTMLElement>('li')) {
         expect(li.querySelector('.badge')).toBeNull();
         expect(li.firstElementChild!.querySelector('svg')).not.toBeNull();
         const m = li.textContent!.match(/(\d+)%/);

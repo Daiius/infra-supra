@@ -556,19 +556,15 @@ function PremiseList({
   return (
     <div className="space-y-2" data-premise-list>
       {groupPremises(premises).map((g) => (
-        <ul
+        <section
           key={g.label}
-          className={clsx(
-            'grid gap-x-6 gap-y-1.5',
-            !full && 'sm:grid-cols-2 lg:grid-cols-3',
-            TONE_PANEL[g.tone],
-          )}
+          className={clsx('space-y-1', TONE_PANEL[g.tone])}
           aria-label={g.label}
           data-premise-group={g.label}
         >
-          <li
+          <h4
             className={clsx(
-              'col-span-full flex items-center gap-1 font-semibold',
+              'flex items-center gap-1 font-semibold',
               TONE_HEAD[g.tone],
             )}
             data-premise-heading
@@ -583,18 +579,29 @@ function PremiseList({
               );
             })()}
             {g.label}
-          </li>
-          {g.items.map((p) => (
-            <PremiseRow
-              key={p.id}
-              p={p}
-              tone={g.tone}
-              full={full}
-              scale={scale}
-              cost={premiseCostOf(p, lines)}
-            />
-          ))}
-        </ul>
+          </h4>
+          {/* 行の区切り線: どの行にも上と左の線を引き、外周に出る線（1 列目の左・1 段目の上）は overflow-hidden で隠す。
+              縦に並ぶときは行の間の横線、横に並ぶときは列の間の縦線になる（列の数に依らない） */}
+          <div className="overflow-hidden">
+            <ul
+              className={clsx(
+                '-mt-px -ml-3 grid',
+                !full && 'sm:-ml-5 sm:grid-cols-2 lg:grid-cols-3',
+              )}
+            >
+              {g.items.map((p) => (
+                <PremiseRow
+                  key={p.id}
+                  p={p}
+                  tone={g.tone}
+                  full={full}
+                  scale={scale}
+                  cost={premiseCostOf(p, lines)}
+                />
+              ))}
+            </ul>
+          </div>
+        </section>
       ))}
     </div>
   );
@@ -632,7 +639,11 @@ function PremiseRow({
   const credit = isCreditUse(p);
   return (
     <li
-      className="space-y-0.5"
+      className={clsx(
+        'space-y-0.5 border-t border-l border-base-content/10 py-1.5 pr-1 pl-3',
+        // 横に並ぶときは区切りの縦線との間を広げる（ⓘ の中は 1 列のまま）
+        !full && 'sm:pr-4 sm:pl-5',
+      )}
       {...(policy ? { 'data-policy-violation': '' } : {})}
     >
       <PremiseName p={p} />
