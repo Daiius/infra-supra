@@ -92,7 +92,7 @@ export function AcceptLimits({ limits }: { limits: readonly AcceptLimit[] }) {
 
 /**
  * 提案 1 つへの返事。where: 行動の欄（見出しつき）か、出来事のダイアログ（見出しは出来事の通知にあるので省き、
- * 手間の残りを添える）。
+ * 工数の残りを添える）。
  */
 export function ProposalChoice({
   state,
@@ -141,7 +141,7 @@ export function ProposalChoice({
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold">
           <span>受けるか断るかを選びます（選ばなければ断ります）</span>
           <span className="badge badge-sm font-normal" data-dialog-effort>
-            来月の手間の残り {fmtPoints(d.left)} / {fmtPoints(d.total)}
+            来月の工数の残り {fmtPoints(d.left)} / {fmtPoints(d.total)}
           </span>
         </div>
       )}

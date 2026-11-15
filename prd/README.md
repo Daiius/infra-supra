@@ -79,6 +79,7 @@
 | [13-route-strategies.md](./13-route-strategies.md) | ページごとの描き方（S1〜S6）・フレームワーク × 事業者の対応表・プリセット。段 0〜5 は実装済み（D-106〜D-109）、RS の残りは未決 |
 | [14-composable-parts.md](./14-composable-parts.md) | 部品を事業者をまたいで組む（役割と接続の口・接続の規則）。決定 D-114・未実装（段 2 は Vercel × DynamoDB / Aurora） |
 | [15-results-and-stats.md](./15-results-and-stats.md) | ゲームの結果の振り返り（合否をやめ、完走したら 4 軸の分布の中での位置で振り返る）と匿名の集計（さくらの VPS の Hono RPC・既存の Postgres・再生で照合）。決定 D-131〜D-139・未実装 |
+| [16-ui-guidelines.md](./16-ui-guidelines.md) | 画面の情報の絞り方と図の使い方（見せる 3 層・振り分けの問い・残す側の例外・型・戻した例）。D-214〜D-222 の匙加減 |
 | [research/](./research/) | 調査メモ（公式の文書の抜き書き。正典ではなく、使う値は catalog に出典つきで入れたものだけ） |
 | [_grilling/decisions.md](./_grilling/decisions.md) | 決定ログの索引（本文は番号の範囲ごとの `decisions-001-099.md`・`decisions-100-199.md`・`decisions-200-299.md`） |
 | [_grilling/open-issues.md](./_grilling/open-issues.md) | 未決の論点の一覧 |

@@ -60,7 +60,7 @@ const untilDone = (s: GameState) => {
 };
 
 describe('作り直しの規則（checkAction）', () => {
-  it('手間は乗り換えより重い（ゲーム上の仮定）', () => {
+  it('工数は乗り換えより重い（ゲーム上の仮定）', () => {
     expect(rewriteEffort()).toBe(24);
     expect(rewriteEffort()).toBeGreaterThan(
       EFFORT.migrationPerMonth * EFFORT.migrationMonths.selfHosted,
@@ -92,7 +92,7 @@ describe('作り直しの規則（checkAction）', () => {
       rewrite('astro'),
     ] as Action[])
       expect(checkAction(s, a)).toMatchObject({ ok: false, reason: 'busy' });
-    // プラン変更は作り直しの規則では止めない（VPS の上位への変更は手間 2 なので、手間が足りないことだけが理由になる）
+    // プラン変更は作り直しの規則では止めない（VPS の上位への変更は工数 2 なので、工数が足りないことだけが理由になる）
     const plan = checkAction(s, { type: 'plan', stackIndex: VPS_4GB });
     expect(plan.ok || plan.reason).toBe('effort');
   });
@@ -119,7 +119,7 @@ describe('作り直しの規則（checkAction）', () => {
   });
 });
 
-describe('作り直しの手間と切り替え', () => {
+describe('作り直しの工数と切り替え', () => {
   it('作り直しの間は機能開発がほぼ止まる（VPS は維持の残りをすべて取り、長くかかる）', () => {
     const cf = applyAction(start(CF_PAID, 'vite-spa'), rewrite('nextjs'));
     expect(effortAvailable(cf)).toBe(2);
@@ -187,12 +187,12 @@ describe('作り直しの手間と切り替え', () => {
     expect(untilDone(playMonth(astro)).settings.revalidateSec).toBe(0);
   });
 
-  it('選択肢の文は手間・月数・替わる部品を出す', () => {
+  it('選択肢の文は工数・月数・替わる部品を出す', () => {
     const s = start(VPS, 'vite-spa');
     const t = rewriteText(s, 'nextjs');
     expect(t.name).toBe('Next.js（App Router） に作り直す');
     expect(t.meta).toEqual([
-      '手間 24（毎月 7 を取る）',
+      '工数 24（毎月 7 を取る）',
       '約 4 か月',
       '機能開発がほぼ止まる',
     ]);

@@ -1,4 +1,4 @@
-// 事業者のアカウント（部品で増える契約先と、その維持の手間）。
+// 事業者のアカウント（部品で増える契約先と、その維持の工数）。
 import {
   accountsOf,
   type Choices,
@@ -39,7 +39,7 @@ export function accountsFor(
 /**
  * 部品の選択で、構成の既定より増えた事業者のアカウント（D-52・AX-11）。Vercel Pro + Supabase Pro の Supabase のように
  * 構成の既定に含まれるアカウントは入らない。Cloudflare + Hyperdrive の Supabase・VPS の前段の CDN の Cloudflare・
- * Vercel の画像の Cloudflare は入る。毎月の手間は増えた分ではなく数そのもので数える（accountUpkeepOf。D-123）。
+ * Vercel の画像の Cloudflare は入る。毎月の工数は増えた分ではなく数そのもので数える（accountUpkeepOf。D-123）。
  */
 export function addedAccounts(
   stackIndex: number,
@@ -76,8 +76,8 @@ export function otherAccounts(
 }
 
 /**
- * 他の事業者の管理の毎月の手間（主のアカウント以外 1 つにつき EFFORT.accountUpkeep。ゲーム上の仮定・D-123 で D-52 を改めた）。
- * 構成の既定に含まれるアカウント（Vercel Pro + Supabase Pro の Supabase・メールの AWS）も数え、そのかわり月の手間に
+ * 他の事業者の管理の毎月の工数（主のアカウント以外 1 つにつき EFFORT.accountUpkeep。ゲーム上の仮定・D-123 で D-52 を改めた）。
+ * 構成の既定に含まれるアカウント（Vercel Pro + Supabase Pro の Supabase・メールの AWS）も数え、そのかわり月の工数に
  * 既定の分（accountAllowanceOf）を足す。
  */
 export function accountUpkeepOf(
@@ -92,7 +92,7 @@ export function accountUpkeepOf(
 }
 
 /**
- * 構成の既定の部品のときの、他の事業者の管理の手間（D-123）。月の手間（シナリオの基礎）にこの分を足すので、
+ * 構成の既定の部品のときの、他の事業者の管理の工数（D-123）。月の工数（シナリオの基礎）にこの分を足すので、
  * 既定のままなら機能開発に回る量は基礎と同じ。部品でアカウントを増やせば減り、減らせば増える。
  */
 export function accountAllowanceOf(
@@ -102,7 +102,7 @@ export function accountAllowanceOf(
   return accountUpkeepOf(stackIndex, {}, framework);
 }
 
-/** その部品に替えると新しく増えるアカウント（差すときの一度きりの手間が付く。D-52）。 */
+/** その部品に替えると新しく増えるアカウント（差すときの一度きりの工数が付く。D-52）。 */
 export function newAccountsBy(
   state: Pick<GameState, 'stackIndex' | 'components' | 'framework'>,
   slot: SlotId,

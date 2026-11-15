@@ -39,7 +39,7 @@ export const HOWTO_PAGES: {
   { title: '始め方', Icon: Layers, body: SetupPage },
   { title: '毎月の流れ', Icon: CalendarDays, body: MonthPage },
   { title: '満足度', Icon: Smile, body: SatisfactionPage },
-  { title: '開発の手間', Icon: Hammer, body: EffortPage },
+  { title: '開発の工数', Icon: Hammer, body: EffortPage },
   { title: '上限', Icon: Gauge, body: LimitsPage },
   { title: '終わり方と振り返り', Icon: Flag, body: EndingPage },
 ];

@@ -164,7 +164,7 @@ function migrateActionFor(
   state: Pick<GameState, 'framework' | 'scenario' | 'routes'>,
   a: Action,
 ): Action {
-  // 設定「コメントの描き方」は記事のページの部品に移した（D-109）。同じ値・同じ手間の行動 route-part に読み替える
+  // 設定「コメントの描き方」は記事のページの部品に移した（D-109）。同じ値・同じ工数の行動 route-part に読み替える
   const old = a as { type: string; key?: string; value?: number };
   if (old.type === 'set' && old.key === 'comments')
     return {

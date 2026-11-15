@@ -109,7 +109,7 @@ export function MonthPage() {
             Icon={Wrench}
             tone="info"
             label="アクションを選ぶ"
-            sub="手間を使って設定・最適化・乗り換え"
+            sub="工数を使って設定・最適化・乗り換え"
           />
           <Arrow />
           <Node Icon={Repeat} tone="primary" label="次の月へ" />
@@ -250,7 +250,7 @@ export function SatisfactionPage() {
   );
 }
 
-/** 手間の棒の例（10 マス）の塗り分け。色はゲーム中の手間の棒（game-screen/effort.tsx の EffortBreakdownView）と同じ。 */
+/** 工数の棒の例（10 マス）の塗り分け。（ゲーム中の工数の棒は D-222 で外した。今は行動の欄の輪のグラフ feature-ring.tsx）。 */
 const EFFORT_EXAMPLE: { label: string; n: number; cls: string }[] = [
   { label: '自前運用の維持・他の事業者の管理', n: 2, cls: 'bg-warning' },
   { label: 'イベントへの対応', n: 1, cls: 'bg-error' },
@@ -259,12 +259,12 @@ const EFFORT_EXAMPLE: { label: string; n: number; cls: string }[] = [
   { label: '機能開発（残り）', n: 4, cls: 'bg-success' },
 ];
 
-/** 5 ページ目: 開発の手間。 */
+/** 5 ページ目: 開発の工数。 */
 export function EffortPage() {
   return (
     <>
-      <Figure label="図: 毎月の手間から運用・イベントへの対応・乗り換え・アクションに使った残りが機能開発に回り、満足度の機能と PV の伸びに効く">
-        <FigureTitle>毎月の手間（例: 10 ポイント）の使い道</FigureTitle>
+      <Figure label="図: 毎月の工数から運用・イベントへの対応・乗り換え・アクションに使った残りが機能開発に回り、満足度の機能と PV の伸びに効く">
+        <FigureTitle>毎月の工数（例: 10 ポイント）の使い道</FigureTitle>
         <div className="flex gap-0.5" aria-hidden>
           {EFFORT_EXAMPLE.flatMap((p) =>
             Array.from({ length: p.n }, (_, i) => (
@@ -290,7 +290,7 @@ export function EffortPage() {
           <Node
             Icon={Hammer}
             tone="success"
-            label="機能開発に回った手間"
+            label="機能開発に回った工数"
             sub="運用に取られなかった残り"
           />
           <Arrow />
@@ -303,7 +303,7 @@ export function EffortPage() {
           <Arrow />
           <Node Icon={TrendingUp} tone="success" label="PV の伸び" />
         </Flow>
-        <FigureTitle>「毎月 手間 3 を 2 か月（合計 6）」の読み方</FigureTitle>
+        <FigureTitle>「毎月 工数 3 を 2 か月（合計 6）」の読み方</FigureTitle>
         <div
           className="flex flex-wrap items-center gap-1 text-xs"
           data-howto-effort-months
@@ -325,8 +325,8 @@ export function EffortPage() {
       </Figure>
       <ul className="list-disc space-y-1 pl-5">
         <li>
-          手間は、毎月使える作業量の単位です（ゲーム上の仮定。単位はポイント）。「毎月
-          手間 n を m か月（合計 n × m）」は、翌月から m か月のあいだ、毎月 n
+          工数は、毎月使える作業量の単位です（ゲーム上の仮定。単位はポイント）。「毎月
+          工数 n を m か月（合計 n × m）」は、翌月から m か月のあいだ、毎月 n
           ポイントを使うという意味です。その間は機能開発に回る分が n
           ずつ減ります。
         </li>
@@ -335,7 +335,7 @@ export function EffortPage() {
         </li>
         <li>
           自前で運用する構成（VPS
-          など）は毎月の維持の手間がかかり、まれに自前の障害も起きます。運用に手間を取られる構成ほど、③
+          など）は毎月の維持の工数がかかり、まれに自前の障害も起きます。運用に工数を取られる構成ほど、③
           機能開発の累計が低くなります。
         </li>
       </ul>

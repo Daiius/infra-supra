@@ -1,4 +1,4 @@
-// 手間の輪の「機能」の段階の出し方（OCL-7D797D79）: 月の報告は実際の段階（メールが届かない分の下げを含む）を出す。
+// 工数の輪の「機能」の段階の出し方（OCL-7D797D79）: 月の報告は実際の段階（メールが届かない分の下げを含む）を出す。
 import { describe, expect, it } from 'vitest';
 import { featureStageView } from './feature-ring.tsx';
 

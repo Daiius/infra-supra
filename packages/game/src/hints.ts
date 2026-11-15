@@ -58,7 +58,7 @@ const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
   freshness:
     'キャッシュの間隔や部品の性質で更新が遅れて見えます。間隔を短くするか、更新がすぐ届く部品を考えましょう',
   feature:
-    '機能開発に回せる手間が期待に届いていません。維持・イベントへの対応・アクションの手間を減らして、機能開発に回しましょう',
+    '機能開発に回せる工数が期待に届いていません。維持・イベントへの対応・アクションの工数を減らして、機能開発に回しましょう',
 };
 
 /**
@@ -114,7 +114,7 @@ function socialCardLoss(
  * 次のプレイへのヒント（途中で終わったとき・完走して参照値に届かなかったとき。それ以外は空）。
  * 完走したときは「次のプレイで伸ばせる所」として出す（D-143・ST-05）。届いたかは画面に出さない参照値
  * （シナリオの goal。合否と目標の線はやめた。D-131・D-142）で決め、文には参照値を出さない。
- * 未達の目標と終わり方ごとに、原因を月の記録（止まった月の前提・費用の内訳・満足度の理由・手間の内訳・出来事）から特定し、
+ * 未達の目標と終わり方ごとに、原因を月の記録（止まった月の前提・費用の内訳・満足度の理由・工数の内訳・出来事）から特定し、
  * 影響の大きい順に最大 3 つ返す。終わり方の直接の原因 → 未達の目標の原因 の順に並べる。
  */
 export function retryHintsOf(state: GameState): RetryHint[] {
@@ -411,7 +411,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         hint: {
           kind: 'ogp',
           what: `${ogp.month} か月目の話題で、記事ごとの SNS のカードが出ないため伸びが小さくなりました（話題の伸び ${fmtFactor(ogp.factor)} → ${fmtFactor(ogp.reduced)}・ゲーム上の仮定）。前処理があれば、収益は約 +${usd(ogp.extraRevenue)} の見込みです${noFrontCdn ? '（ただし前段の CDN が無いと、伸びた話題の月に回線が詰まりうるので、増えた分の一部が失われます）' : ''}`,
-          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付けましょう${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられます' : ''}。または、記事ごとに HTML を返すフレームワークへ作り直しましょう（大きな手間で数か月かかり、その間は機能開発がほぼ止まるので、話題に間に合うよう早めに）`,
+          next: `SNS のカード（OGP）の前処理の部品（${componentLabel(platform, 'ogp', 'prerender')}）を、話題の前に付けましょう${noFrontCdn ? '。前段の CDN も一緒に付けると、話題の月の回線の詰まりを避けられます' : ''}。または、記事ごとに HTML を返すフレームワークへ作り直しましょう（大きな工数で数か月かかり、その間は機能開発がほぼ止まるので、話題に間に合うよう早めに）`,
         },
         // 影響額で比べる: 足りない額に対する、取り戻せた収益の割合（半分以上なら最上位）
         score: tier(
@@ -443,11 +443,11 @@ export function retryHintsOf(state: GameState): RetryHint[] {
           0,
         ) / n;
       const last = months[months.length - 1]!;
-      // 維持には他の事業者の管理（D-52）を含める。構成の既定の分は月の手間に足してあるので、それを超えた分だけ数える（D-123）
+      // 維持には他の事業者の管理（D-52）を含める。構成の既定の分は月の工数に足してあるので、それを超えた分だけ数える（D-123）
       const upkeepSum =
         eff.upkeep +
         Math.max(0, (eff.accounts ?? 0) - (eff.accountAllowance ?? 0));
-      // 作り直し（D-81）に入れた手間。その間は機能開発がほぼ止まる
+      // 作り直し（D-81）に入れた工数。その間は機能開発がほぼ止まる
       const rewriteSum = h.reduce(
         (a, r) => a + (r.rewrite ? r.effort.migration : 0),
         0,
@@ -455,7 +455,7 @@ export function retryHintsOf(state: GameState): RetryHint[] {
       const spent = upkeepSum + eff.interrupt + rewriteSum;
       const effortText =
         e === 'feature' && spent > 0
-          ? `。維持の手間 計 ${upkeepSum}・イベントへの対応 計 ${eff.interrupt}${rewriteSum > 0 ? `・作り直し 計 ${rewriteSum}` : ''}（手間の合計 ${eff.total} の ${Math.round((100 * spent) / Math.max(1, eff.total))}%）`
+          ? `。維持の工数 計 ${upkeepSum}・イベントへの対応 計 ${eff.interrupt}${rewriteSum > 0 ? `・作り直し 計 ${rewriteSum}` : ''}（工数の合計 ${eff.total} の ${Math.round((100 * spent) / Math.max(1, eff.total))}%）`
           : '';
       const growth = satShort ? '' : '満足度は伸び（PV と収益）にも効きます。';
       const rewriteNext =

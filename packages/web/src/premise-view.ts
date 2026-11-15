@@ -1,5 +1,23 @@
 // 前提の見せ方の共有（見積モードとゲームの画面）。表示だけで、計算には触れない。
 import type { PlatformPremise } from 'estimator';
+import type { MonthReport } from 'game';
+import { roundInt, usd } from './format.ts';
+import {
+  ArrowLeftRight,
+  Coins,
+  Cpu,
+  Database,
+  Gauge,
+  Hammer,
+  HardDrive,
+  Image as ImageIcon,
+  KeyRound,
+  Mail,
+  Network,
+  Scale,
+  ScrollText,
+  type LucideIcon,
+} from 'lucide-react';
 
 /**
  * 込みのクレジットの消費（超えても止まらず、超えた分が従量で請求される）か。
@@ -73,4 +91,71 @@ export function creditUseText(
   return used > limit
     ? `${head}（超えた分 ${money(used - limit)} は従量で請求）`
     : head;
+}
+
+/**
+ * 前提の短い名前（一覧の本体に出す。全文は ⓘ の中。D-222 の補足）。前提は名前の欄を持たないので、文の頭の主語
+ * （「Images は月 5,000 …」の「Images」・「Email Service の送信は …」の「Email Service の送信」）を、最初の「は」「（」「。」「、」の前で切って取る。
+ * 長すぎるとき（主語の無い文）は頭を 18 文字で切って「…」を付ける。
+ */
+export function premiseName(p: PlatformPremise): string {
+  const head = p.text.split(/は|（|。|、/)[0]!.trim();
+  if (head.length > 0 && head.length <= 20) return head;
+  return `${p.text.slice(0, 18).trim()}…`;
+}
+
+/** 対象の言葉から選ぶ印（上から順に最初に当たったもの。製品の公式のアイコンではなく、何の上限かの目印）。 */
+const PREMISE_ICONS: [RegExp, LucideIcon][] = [
+  [/メール|Email/, Mail],
+  [/画像|Images|変換/, ImageIcon],
+  [/CPU/, Cpu],
+  [/DB|D1|行の|Supabase|Neon|Aurora|DynamoDB/, Database],
+  [/KV/, KeyRound],
+  [/保存|容量|storage/, HardDrive],
+  [/転送|帯域|回線|Mbps/, Network],
+  [/ビルド/, Hammer],
+  [/ログ/, ScrollText],
+  [/リクエスト|requests|呼び出し/, ArrowLeftRight],
+];
+
+/** 前提の印（一覧の名前の前に出す。D-222 の補足）。 */
+export function premiseIcon(p: PlatformPremise): LucideIcon {
+  if (p.effect === 'policy') return Scale;
+  if (isCreditUse(p)) return Coins;
+  return PREMISE_ICONS.find(([re]) => re.test(p.text))?.[1] ?? Gauge;
+}
+
+type ReportLine = MonthReport['lines'][number];
+
+/**
+ * 前提の超えた分の費用（D-222 の補足）。無料枠の前提が数えるメーター（estimator の meterIds）と同じ事業者・プラン・メーターの明細の行を足す。
+ * 結べないとき（meterIds・planId の無い前提や行・前の保存）は出さない。
+ */
+export function premiseCostOf(
+  p: PlatformPremise,
+  lines: readonly ReportLine[],
+) {
+  if (!p.meterIds?.length || !p.provider || !p.planId) return undefined;
+  // 事業者・プラン・メーターが合い、行が数えたノードがすべてこの前提のノードである行だけを足す
+  // （同じ事業者の別のサービスの同名のメーター（Workers と Durable Objects の requests など）や、
+  // 前提の外のノードの分を混ぜない。結べない行がある・古い保存で planId が無いときは費用を出さない。OCL-3407CD6A）
+  const nodes = new Set(p.nodeIds);
+  const hits = lines.filter(
+    (l) =>
+      l.kind === 'usage' &&
+      l.provider === p.provider &&
+      l.planId === p.planId &&
+      l.meterId !== undefined &&
+      p.meterIds!.includes(l.meterId),
+  );
+  if (hits.some((l) => !l.nodeIds?.every((n) => nodes.has(n))))
+    return undefined;
+  if (hits.length === 0) return undefined;
+  const currency = hits[0]!.currency;
+  const amount = hits
+    .filter((l) => l.currency === currency)
+    .reduce((a, l) => a + l.amount, 0);
+  return currency === 'JPY'
+    ? `${roundInt(amount).toLocaleString()} 円`
+    : usd(amount);
 }

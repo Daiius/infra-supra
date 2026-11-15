@@ -2,7 +2,7 @@
 // 選ぶ場所はフレームワークのカードのページの欄（見取り図の隣のチップ。D-112）。ここは行・要件の判定・選んだときの書き換えをまとめる
 // フック（useRoutePlanEditor）と、表で比べるダイアログ（RoutePlanCompare）を持つ。見積モードは行と判定を自分の PV で引き、
 // 選んだときの書き換え（routeChoiceOf）だけを共用する（D-115）。
-// 始める前なので手間はかからない（途中で替えるときは手間がかかる。RS-08）。
+// 始める前なので工数はかからない（途中で替えるときは工数がかかる。RS-08）。
 import {
   articleFamily,
   COMMENTS_IN_BROWSER,
@@ -381,7 +381,7 @@ export function useRoutePlanEditor({
 export function RoutePlanCompare({
   editor,
   frameworkLabel,
-  note = 'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの 1 か月目の費用の差を並べます。ここで選んでも、カードのチップで選んでも同じです（始める前なので手間はかかりません。途中で替えると手間がかかります）。',
+  note = 'ページごとに、なぜその描き方か・要件の判定・ほかの描き方にしたときの 1 か月目の費用の差を並べます。ここで選んでも、カードのチップで選んでも同じです（始める前なので工数はかかりません。途中で替えると工数がかかります）。',
   caption = ROUTE_PLAN_NOTE,
 }: {
   editor: RoutePlanEditor;

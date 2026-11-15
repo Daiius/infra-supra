@@ -49,8 +49,9 @@ describe('ゲームモードの画面', () => {
       beforeStart: () => expect(document.body.textContent).toContain(detail),
     });
     advance(1);
-    // 月の報告の前提（SSR の CPU は開発が進むと重くなるので、数値は見ない）
-    expect(document.body.textContent).toMatch(
+    // 月の報告の前提の内訳は上限・制限の ⓘ の中（SSR の CPU は開発が進むと重くなるので、数値は見ない。D-222 の補足）
+    fireEvent.click(screen.getByRole('button', { name: '上限・制限の説明' }));
+    expect(infoDialog()!.textContent).toMatch(
       /記事のページ（ISR の閲覧と作り直し・CPU [\d.]+ ms）・個人向けのページ（SSR・CPU [\d.]+ ms）が Workers Free の 1 リクエスト 10 ms を超えます/,
     );
   });
@@ -494,7 +495,7 @@ describe('ゲームモードの画面', () => {
     });
     // ゲームの途中: 構成を変えるの欄（D-185）。作り直しの内訳に、描き方が既定に戻ることを出す（下で確かめる）
     const fold = openSetupChange();
-    // 乗り換え: 内訳に手間（か月）が出て、描き方の知らせは出ない
+    // 乗り換え: 内訳に工数（か月）が出て、描き方の知らせは出ない
     showStackTab();
     pickRadio('Cloudflare Paid + vinext', fold);
     const migrate = changeItems().find(

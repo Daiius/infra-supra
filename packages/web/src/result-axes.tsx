@@ -29,7 +29,7 @@ const FORMAT: Record<ResultAxisId, (n: number) => string> = {
 export const CAPTION: Record<ResultAxisId, string> = {
   cash: '最後の月の所持金',
   satisfaction: '毎月の満足度の平均',
-  featurePoints: '機能開発に回せた手間の合計',
+  featurePoints: '機能開発に回せた工数の合計',
   totalCost:
     'プレイした月のインフラの費用の合計（高い・低いで良し悪しは付けません）',
 };

@@ -1,4 +1,4 @@
-// DB のバックアップ・PITR（D-93・prd/09 §3.2・prd/11 §19）。要件 db-pitr・部品の手間・受託の依頼の性質。
+// DB のバックアップ・PITR（D-93・prd/09 §3.2・prd/11 §19）。要件 db-pitr・部品の工数・受託の依頼の性質。
 import { describe, expect, it } from 'vitest';
 import {
   actionEffort,
@@ -61,7 +61,7 @@ describe('要件「直近 7 日の任意の時点に戻せる」（db-pitr）', 
     expect(slots(VERCEL_PRO)).toContain('dbBackup');
   });
 
-  it('VPS の自前のバックアップは仕組みを作る手間と毎月の維持がかかり、マネージドの DB は設定だけ', () => {
+  it('VPS の自前のバックアップは仕組みを作る工数と毎月の維持がかかり、マネージドの DB は設定だけ', () => {
     const s = playMonth(newGame(VPS, 42, sc, DEFAULT_START_DATE));
     const act = {
       type: 'component',

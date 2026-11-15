@@ -1,4 +1,4 @@
-// 出来事の効果（適用と説明）と、出来事を受けるときの手間（画像の作り直しなど）。
+// 出来事の効果（適用と説明）と、出来事を受けるときの工数（画像の作り直しなど）。
 import type { Effect, EventDef, Scenario } from './scenario.ts';
 import { SLOT_LABELS } from 'catalog';
 import type { PlatformPremise } from 'estimator';
@@ -37,7 +37,7 @@ export const acceptEffort = (def: EventDef, state: GameState) =>
   );
 
 /**
- * 記事のデザインの刷新を受ける手間（D-47・ゲーム上の仮定）。原本を配っている（最適化しない）なら 0、
+ * 記事のデザインの刷新を受ける工数（D-47・ゲーム上の仮定）。原本を配っている（最適化しない）なら 0、
  * 一律で縮めて原本が無いなら 2（これからの投稿だけ大きくする作業）、原本があるなら 1。
  */
 function imageRedesignEffort(state: GameState): number {
@@ -142,13 +142,13 @@ export function describeEffect(e: Effect): string {
     case 'seats':
       return `メンバー（席）+${e.add}`;
     case 'effortPerMonth':
-      return `開発の手間 +${e.add} / 月`;
+      return `開発の工数 +${e.add} / 月`;
     case 'interrupt':
       if (e.featureWork)
         return effortSpanText('機能の追加の作業', e.points, e.months, [
           `翌月から。その月の機能開発に数える${e.unlessOnDemand ? `。再検証がすでに「${NEXT_ON_DEMAND}」なら不要` : ''}`,
         ]);
-      return effortSpanText('対応の手間', e.points, e.months, ['翌月から']);
+      return effortSpanText('対応の工数', e.points, e.months, ['翌月から']);
     case 'feature':
       return `機能開発 +${e.points}`;
     case 'growth':
@@ -167,8 +167,8 @@ export function describeEffect(e: Effect): string {
 }
 
 /**
- * 提案を受けたときの得と、伴うこと（手間・使用量・費用・要件）と、断ったときの損の要約（D-122）。値は提案の効果とシナリオのデータから組む。
- * 機能の追加の作業は機能開発に数えるので、断ったときより機能開発が増えるのは加点の分（D-29）。代わりにその間、行動に使える手間が減る。
+ * 提案を受けたときの得と、伴うこと（工数・使用量・費用・要件）と、断ったときの損の要約（D-122）。値は提案の効果とシナリオのデータから組む。
+ * 機能の追加の作業は機能開発に数えるので、断ったときより機能開発が増えるのは加点の分（D-29）。代わりにその間、行動に使える工数が減る。
  * 断ったときの損は、今のデータでは記事のデザインの刷新（D-47 の `imageRedesign.declineMonths`）だけ。無ければ undefined（断っても何も変わらない）。
  */
 export function acceptSummary(
@@ -187,13 +187,13 @@ export function acceptSummary(
     0,
   );
   const gains: string[] = [];
-  // 手間を先に、使用量・費用・要件を後に並べる
+  // 工数を先に、使用量・費用・要件を後に並べる
   const effort: string[] = [];
   const costs: string[] = [];
   if (bonus > 0)
     gains.push(
       work
-        ? `機能開発 +${bonus}（作業の手間${work.months > 1 ? ' 合計' : ''} ${work.points * work.months} も機能開発に数える）`
+        ? `機能開発 +${bonus}（作業の工数${work.months > 1 ? ' 合計' : ''} ${work.points * work.months} も機能開発に数える）`
         : `機能開発 +${bonus}`,
     );
   for (const e of effects) {
@@ -214,20 +214,20 @@ export function acceptSummary(
       case 'interrupt':
         effort.push(
           !e.featureWork
-            ? effortSpanText('対応の手間', e.points, e.months, [
+            ? effortSpanText('対応の工数', e.points, e.months, [
                 '機能開発に数えない',
               ])
             : e.months === 1
-              ? `来月、アクションに使える手間が ${e.points} 減ります`
-              : `その間、アクションに使える手間が ${e.points} 減ります（${e.months} か月）`,
+              ? `来月、アクションに使える工数が ${e.points} 減ります`
+              : `その間、アクションに使える工数が ${e.points} 減ります（${e.months} か月）`,
         );
         break;
       case 'imageRedesign': {
         const points = imageRedesignEffort(state);
         effort.push(
           points > 0
-            ? `来月、アクションに使える手間が ${points} 減ります`
-            : '手間なし',
+            ? `来月、アクションに使える工数が ${points} 減ります`
+            : '工数なし',
         );
         const rule = sc.imageRedesign;
         if (!rule) {
@@ -358,7 +358,7 @@ export function applyEffects(
           };
         break;
       case 'imageRedesign': {
-        // 手間は画像の部品で決まる（D-47）。粗い画像の数はここで固定し、以後の一律で縮めた投稿は粗くない
+        // 工数は画像の部品で決まる（D-47）。粗い画像の数はここで固定し、以後の一律で縮めた投稿は粗くない
         const points = imageRedesignEffort(s);
         s = {
           ...s,

@@ -133,7 +133,7 @@ describe('Next.js のサーバーから別の事業者の API を呼ぶ（F-14�
 });
 
 describe('Cloudflare の静的 + さくらの VPS の API', () => {
-  it('部品で VPS を使うと、自前運用の維持の手間（シナリオの値）がかかる', () => {
+  it('部品で VPS を使うと、自前運用の維持の工数（シナリオの値）がかかる', () => {
     expect(selfHostedOf(CF_PAID, VPS2, 'vite-spa')).toBe(true);
     expect(selfHostedOf(CF_PAID, {}, 'vite-spa')).toBe(false);
     expect(upkeepOf(article, CF_PAID, VPS2, 'vite-spa')).toBe(
@@ -149,10 +149,10 @@ describe('Cloudflare の静的 + さくらの VPS の API', () => {
     );
   });
 
-  it('移し替えの途中も新しい VPS の維持がかかり、手間の見込みにアカウントの設定が付く', () => {
+  it('移し替えの途中も新しい VPS の維持がかかり、工数の見込みにアカウントの設定が付く', () => {
     const s = playMonth(game(CF_PAID, 'vite-spa'));
     expect(componentEffortLabel('api', s, 'sakura-vps-2gb')).toEqual([
-      `${effortSpanText('手間', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)} + 手間 ${EFFORT.accountSetup}`,
+      `${effortSpanText('工数', EFFORT.dbSwap.perMonth, EFFORT.dbSwap.months)} + 工数 ${EFFORT.accountSetup}`,
       '期間中は新旧両方の費用',
       `さくらのクラウド のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep}）`,
       `自前運用になる（毎月の維持 ${article.effort.selfHostedUpkeep}・自前の障害 月 ${Math.round(article.incidents.selfHostedChancePerMonth * 100)}%）`,

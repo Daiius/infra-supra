@@ -202,7 +202,7 @@ const EVENTS: EventDef[] = [
       'host:cpu:',
     ],
     accept: {
-      label: '受ける（手間 3）',
+      label: '受ける（工数 3）',
       effects: [
         // 帳票の応答は圧縮後 9 kB（D-211 で圧縮前の 30 kB に API と同じ比 約 0.3 を掛けた。ゲーム上の仮定）
         { type: 'workload', mods: { apiCpuMs: 15, apiResponseKB: 9 } },
@@ -224,7 +224,7 @@ const EVENTS: EventDef[] = [
       'pool:supabase:',
     ],
     accept: {
-      label: '受ける（手間 3）',
+      label: '受ける（工数 3）',
       effects: [
         { type: 'workload', mods: { uploadsFactor: 3 } },
         { type: 'feature', points: 6 },
@@ -247,7 +247,7 @@ const EVENTS: EventDef[] = [
       'host:disk:',
     ],
     accept: {
-      label: '受ける（手間 3）',
+      label: '受ける（工数 3）',
       effects: [
         { type: 'workload', mods: { writesPerCall: 0.6, dbRateFactor: 3 } },
         { type: 'feature', points: 4 },
@@ -269,7 +269,7 @@ const EVENTS: EventDef[] = [
       'host:disk:',
     ],
     accept: {
-      label: '受ける（手間 4）',
+      label: '受ける（工数 4）',
       effects: [
         { type: 'stock', add: { dbGB: 5 } },
         { type: 'feature', points: 4 },
@@ -287,7 +287,7 @@ const EVENTS: EventDef[] = [
     premiseRefs: [],
     showMembers: true,
     accept: {
-      label: '受ける（手間 1）',
+      label: '受ける（工数 1）',
       effects: [
         { type: 'seats', add: 1 },
         { type: 'feature', points: 2 },
@@ -312,7 +312,7 @@ const EVENTS: EventDef[] = [
     showSla: true,
     requires: 'uptime-sla',
     accept: {
-      label: '受ける（契約の対応に手間 2）',
+      label: '受ける（契約の対応に工数 2）',
       effects: [
         // 上乗せの金額は仮定
         { type: 'contract', usdPerMonth: 40, requires: 'uptime-sla' },
@@ -334,7 +334,7 @@ const EVENTS: EventDef[] = [
     requires: 'db-pitr',
     previewRequirement: 'db-pitr',
     accept: {
-      label: '受ける（契約の対応に手間 1）',
+      label: '受ける（契約の対応に工数 1）',
       effects: [
         { type: 'contract', usdPerMonth: 20, requires: 'db-pitr' },
         { type: 'interrupt', points: 1, months: 1 },
@@ -361,7 +361,7 @@ const EVENTS: EventDef[] = [
       'host:',
     ],
     accept: {
-      label: '受ける（手間 4）',
+      label: '受ける（工数 4）',
       effects: [
         { type: 'basePV', factor: 3 },
         { type: 'stock', add: { dbGB: 2 } },

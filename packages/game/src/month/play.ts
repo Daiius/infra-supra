@@ -22,7 +22,7 @@ import {
 } from './traffic.ts';
 import { progressOf, stockOf, transitionsOf } from './transitions.ts';
 
-/** 1 か月を進める（出来事 → 見積 → 収益 → 前提の判定 → 満足度 → 手間 → 所持金 → 在庫 → 終わりの判定）。 */
+/** 1 か月を進める（出来事 → 見積 → 収益 → 前提の判定 → 満足度 → 工数 → 所持金 → 在庫 → 終わりの判定）。 */
 export function playMonth(input: GameState): GameState {
   if (input.phase !== 'playing') return input;
   const sc = scenarioOf(input);
@@ -56,7 +56,7 @@ export function playMonth(input: GameState): GameState {
     noticed,
   });
 
-  // 手間・障害・収益・規約違反
+  // 工数・障害・収益・規約違反
   const progress = progressOf(state);
   const { effort, featurePoints } = progress;
   const { seed, incident, apiOnlyHost } = incidentOf(sc, state);

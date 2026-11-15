@@ -164,7 +164,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         required: migrationEffort(state.stackIndex, action.stackIndex),
         done: 0,
       };
-      // 乗り換えの月ごとの手間と行動を合わせて、来月の手間に収まるか
+      // 乗り換えの月ごとの工数と行動を合わせて、来月の工数に収まるか
       if (effortAvailable({ ...state, migration }) < 0) return state;
       return withNote(
         `${stackName(action.stackIndex, state.framework)} へ乗り換えを始めました`,
@@ -235,7 +235,7 @@ export function applyAction(state: GameState, action: Action): GameState {
           required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
           done: 0,
         };
-        // 新しい事業者のアカウントを足す DB（Hyperdrive の Supabase など）は、設定の一度きりの手間も今月使う（D-52・OCL-B6A107A3）
+        // 新しい事業者のアカウントを足す DB（Hyperdrive の Supabase など）は、設定の一度きりの工数も今月使う（D-52・OCL-B6A107A3）
         const next = { ...state, ...planned, componentSwap };
         if (effortAvailable(next) < 0) return state;
         return withNote(`${label} へ差し替えを始めました`, next);

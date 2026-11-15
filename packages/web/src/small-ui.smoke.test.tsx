@@ -16,6 +16,7 @@ import {
   useSmokeEnv,
   waitLoaded,
   expectFixedChrome,
+  infoDialog,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -103,18 +104,20 @@ describe('小さな不具合の回帰', () => {
       framework: 'Next.js（App Router）',
       stack: 'Vercel Hobby + Supabase Free',
     });
-    const list = screen
-      .getByRole('heading', { name: 'プラットフォームの上限・制限' })
-      .parentElement!.querySelector('ul')!;
-    const first = list.querySelector('li')!;
-    expect(first.hasAttribute('data-policy-violation')).toBe(true);
-    expect(within(first).getByText('規約違反').className).toContain(
-      'badge-error',
-    );
+    // 一番上のまとめが「規約違反」（札でなく見出し）で、その中の行に原因のプランを出す
+    const first = document.querySelector<HTMLElement>(
+      '[data-premise-list] [data-premise-group]',
+    )!;
+    expect(first.dataset.premiseGroup).toBe('規約違反');
+    expect(first.querySelector('[data-policy-violation]')).not.toBeNull();
     expect(first.querySelector('[data-policy-cause]')!.textContent).toBe(
       '原因: Vercel Hobby',
     );
-    expect(first.textContent).toContain('非商用');
+    // 文の全文（非商用）は見出しの ⓘ の中（D-222 の補足）
+    expect(first.textContent).not.toContain('非商用');
+    fireEvent.click(screen.getByRole('button', { name: '上限・制限の説明' }));
+    expect(infoDialog()!.textContent).toContain('非商用');
+    fireEvent.keyDown(document, { key: 'Escape' });
     // 指摘の翌月も違反したままならアカウント停止で終わる
     advance(1);
     expect(screen.queryByRole('button', { name: '次の月へ' })).toBeNull();

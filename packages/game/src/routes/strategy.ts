@@ -298,7 +298,7 @@ export function validRouteOverrides(
   return out;
 }
 
-/** 今の描き方から別の描き方へ替える手間（ゲーム上の仮定・RS-08・D-107）。S2 ↔ S3 は設定（onDemandSwitch）で替える。 */
+/** 今の描き方から別の描き方へ替える工数（ゲーム上の仮定・RS-08・D-107）。S2 ↔ S3 は設定（onDemandSwitch）で替える。 */
 export function routeChangeEffort(
   from: RouteStrategyId,
   to: RouteStrategyId,

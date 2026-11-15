@@ -1,5 +1,5 @@
 // ISR の再検証の設定の「オンデマンド」（D-49）: 再生成は内容の更新の回数・対応しない部品では届かず反映スピードが下がる・
-// 始める画面で選べて保存の再生で同じ・時間からの切り替えと p-ondemand の手間。
+// 始める画面で選べて保存の再生で同じ・時間からの切り替えと p-ondemand の工数。
 import { describe, expect, it } from 'vitest';
 import {
   ARTICLE_COMMUNITY,
@@ -98,7 +98,7 @@ describe('オンデマンドの再検証（D-49）', () => {
     expect(html.stages.freshness).toBe('good');
   });
 
-  it('ゲーム中の切り替え: 時間 → オンデマンドは手間 2、オンデマンド → 時間は 0', () => {
+  it('ゲーム中の切り替え: 時間 → オンデマンドは工数 2、オンデマンド → 時間は 0', () => {
     const timed = playMonth(start(CF_PAID));
     const to = checkAction(timed, { type: 'set', key: 'isr', value: 0 });
     expect(to).toMatchObject({ ok: true, cost: EFFORT.onDemandSwitch });
@@ -109,7 +109,7 @@ describe('オンデマンドの再検証（D-49）', () => {
     ).toMatchObject({ ok: true, cost: 0 });
   });
 
-  it('p-ondemand: 時間のままなら受ける手間 2 で、受けるとオンデマンドになる。すでにオンデマンドなら手間 0', () => {
+  it('p-ondemand: 時間のままなら受ける工数 2 で、受けるとオンデマンドになる。すでにオンデマンドなら工数 0', () => {
     const pending = (s: GameState): GameState => ({
       ...s,
       pendingProposals: ['p-ondemand'],

@@ -218,7 +218,7 @@ function MissingPartsDialog({
           >
             <p className="text-xs opacity-70">
               まだ選んでいないスロットだけを並べています。①
-              インフラの構成のカードで選ぶのと同じです（始める前なので手間はかかりません）。
+              インフラの構成のカードで選ぶのと同じです（始める前なので工数はかかりません）。
             </p>
             <div className="mt-3">
               <PartChips

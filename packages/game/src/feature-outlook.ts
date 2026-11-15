@@ -47,13 +47,13 @@ export type FeatureOutlook = FeatureProgress & {
   feature: number;
   /** 選んだ行動（提案への返事を含む）で来月の機能開発が変わる量（行動を何も選ばないときとの差）。 */
   change: number;
-  /** 来月の手間の配分の見込み（手間の輪のグラフ用）。 */
+  /** 来月の工数の配分の見込み（工数の輪のグラフ用）。 */
   effort: EffortBreakdown;
 };
 
 /**
  * 選んだ行動を当てたときの、来月の機能開発の見込みと、来月の終わりの累計・期待・「機能」の段階。
- * 配分は playMonth と同じ progressOf を使う。来月に新しく起きる出来事の対応の手間は含めない（見込み）。
+ * 配分は playMonth と同じ progressOf を使う。来月に新しく起きる出来事の対応の工数は含めない（見込み）。
  */
 export function featureOutlook(
   state: GameState,
@@ -75,9 +75,9 @@ export function featureOutlook(
 }
 
 /**
- * 余った手間が何に効くかの説明（手間の欄・始める画面の ⓘ で共用）。境目はシナリオの値から組む。
+ * 余った工数が何に効くかの説明（工数の欄・始める画面の ⓘ で共用）。境目はシナリオの値から組む。
  */
 export function featureRuleText(sc: Scenario): string {
   const ft = sc.satisfaction.feature;
-  return `余った手間は機能開発に回ります。機能開発の累計が期待（月 ${ft.expectedPerMonth} × 経過月数）の ${ft.good} 倍以上なら満足度の「機能」は良い、${ft.fair} 倍以上なら普通、それより下は悪いです。満足度は評判を通して PV の伸びに効きます。`;
+  return `余った工数は機能開発に回ります。機能開発の累計が期待（月 ${ft.expectedPerMonth} × 経過月数）の ${ft.good} 倍以上なら満足度の「機能」は良い、${ft.fair} 倍以上なら普通、それより下は悪いです。満足度は評判を通して PV の伸びに効きます。`;
 }

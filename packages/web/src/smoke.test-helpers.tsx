@@ -227,7 +227,7 @@ export const getRadio = (o: { name: string | RegExp }): HTMLElement => {
   );
 };
 
-/** ラベルの先頭で radio を選ぶ（説明・手間の棒の文字が後ろに続くので前方一致）。① ② のタブの隠れた側にあれば開いて選ぶ。 */
+/** ラベルの先頭で radio を選ぶ（説明・工数の棒の文字が後ろに続くので前方一致）。① ② のタブの隠れた側にあれば開いて選ぶ。 */
 export const pickRadio = (name: string, scope: HTMLElement = document.body) => {
   const byName = {
     name: new RegExp(`^${escape(name)}`),

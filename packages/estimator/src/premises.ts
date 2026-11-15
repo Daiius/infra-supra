@@ -56,6 +56,8 @@ export type PlatformPremise = {
    * 当たっていなければ最も重いもの 1 つ（重い順）。
    */
   causes?: CpuSource[];
+  /** 無料枠・込み分の前提が数えるメーター（料金の明細の行と結ぶ。画面で超えた分の費用を出すのに使う。D-222 の補足）。 */
+  meterIds?: string[];
   /** causes を文にしたもの（「個人向けのページ（SSR・CPU 15 ms）が …を超える」）。text に続けて表示する。 */
   detail?: string;
 };
@@ -291,6 +293,7 @@ export function assessPremises(input: {
           text,
           effect: meter.onExceed === 'bill' ? 'cost' : meter.onExceed,
           nodeIds: [...pu.nodeIds],
+          meterIds: [...pu.meterIds],
           provider: agg.provider,
           planId,
           used,

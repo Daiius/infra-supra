@@ -1,4 +1,4 @@
-// playMonth の手間と切り替えの段: 手間の配分と作業の進み、乗り換え・部品の差し替え・作り直しが済んだときの切り替え、
+// playMonth の工数と切り替えの段: 工数の配分と作業の進み、乗り換え・部品の差し替え・作り直しが済んだときの切り替え、
 // ためていく量（在庫）の増え方。
 import { apiPlacedElsewhere, FRAMEWORKS, type Platform } from 'catalog';
 import { scenarioOf } from '../core.ts';
@@ -38,7 +38,7 @@ export type Progress = {
   rewrite: GameState['rewrite'];
 };
 
-/** 手間（維持 → 割り込み → 乗り換え → 行動。余りが機能開発）を配り、作業の進みを足す。 */
+/** 工数（維持 → 割り込み → 乗り換え → 行動。余りが機能開発）を配り、作業の進みを足す。 */
 export function progressOf(state: GameState): Progress {
   const effort = allocateEffort({
     upkeep: upkeepFor(state),

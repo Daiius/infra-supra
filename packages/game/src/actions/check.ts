@@ -1,4 +1,4 @@
-// 行動の検査（選べるか・手間はいくらか）。
+// 行動の検査（選べるか・工数はいくらか）。
 import {
   componentsOf,
   DEFAULT_CHOICES,
@@ -66,7 +66,7 @@ import {
 } from '../stacks.ts';
 import type { Action, GameState, Migration } from '../state.ts';
 
-/** Bot を遮断するルールの手間と効き方（ゲーム上の仮定。製品の料金は未取得。D-20 V-9）。 */
+/** Bot を遮断するルールの工数と効き方（ゲーム上の仮定。製品の料金は未取得。D-20 V-9）。 */
 export const BOT_BLOCK = { effort: 2, remaining: 0.5 } as const;
 
 /** 行動を選べない理由（画面はこの文をそのまま出す）。 */
@@ -79,7 +79,7 @@ export type ActionBlockReason =
   | 'unavailable' // 要件を満たせる構成が無い（SLA など）
   | 'via-proposal' // 提案を受けると付く部品
   | 'limit' // これ以上できない（SSR の最適化の下限など）
-  | 'effort'; // 手間が足りない
+  | 'effort'; // 工数が足りない
 
 export type ActionCheck =
   | { ok: true; cost: number }
@@ -92,7 +92,7 @@ const ng = (reason: ActionBlockReason, message: string): ActionCheck => ({
   message,
 });
 
-/** 行動の規則（手間の残りは見ない）。選べない理由を区別して返す。 */
+/** 行動の規則（工数の残りは見ない）。選べない理由を区別して返す。 */
 function actionRule(state: GameState, action: Action): ActionCheck {
   if (state.phase !== 'playing')
     return ng('not-playing', 'ゲームは終わっています');
@@ -160,9 +160,9 @@ function actionRule(state: GameState, action: Action): ActionCheck {
             `${nameThen(strategyTitle('cache-components', state.framework))}の記事をタグで消せません（${blocker.label}: ${blocker.reason.replace(/。$/, '')}）`,
           );
       }
-      // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の手間がかかる（D-49）
-      // 静的書き出しの更新のたびのビルドも、更新からビルドを起こす仕組み（デプロイの hook）の実装が要る（同じ手間・仮定。D-68）。
-      // Astro の投稿・編集でキャッシュを消すのも、消す呼び出し（cache.invalidate・bypassToken）の実装が要る（同じ手間・仮定。D-103）
+      // 時間 → オンデマンドは、更新のたびに再検証を呼ぶ実装の工数がかかる（D-49）
+      // 静的書き出しの更新のたびのビルドも、更新からビルドを起こす仕組み（デプロイの hook）の実装が要る（同じ工数・仮定。D-68）。
+      // Astro の投稿・編集でキャッシュを消すのも、消す呼び出し（cache.invalidate・bypassToken）の実装が要る（同じ工数・仮定。D-103）
       if (
         (action.key === 'isr' ||
           action.key === 'buildInterval' ||
@@ -213,7 +213,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
             `年額のままの変更の前払い $${due.toFixed(2)} が所持金より多いです`,
           );
       }
-      // 乗り換えの手間は進行中の月ごとに取る（effortAvailable が減る）
+      // 乗り換えの工数は進行中の月ごとに取る（effortAvailable が減る）
       return ok(plan ? planChangeEffort(state.stackIndex) : 0);
     }
     case 'respond': {
@@ -265,7 +265,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
           'limit',
           `前払い $${offer.usd.upfront.toFixed(2)}${reserved > 0 ? `（今月選んだ前払い $${reserved.toFixed(2)} と合わせて）` : ''} が所持金より多いです`,
         );
-      // 申し込むだけで、作業の手間はかからない（仮定）
+      // 申し込むだけで、作業の工数はかからない（仮定）
       return ok(0);
     }
     case 'route': {
@@ -318,7 +318,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       return ok(routeChangeEffort(now, action.strategy));
     }
     case 'route-part': {
-      // ページの部品（記事のページのコメント欄。D-109）。手間は前の設定「コメントの描き方」と同じ（D-82）
+      // ページの部品（記事のページのコメント欄。D-109）。工数は前の設定「コメントの描き方」と同じ（D-82）
       const sc = scenarioOf(state);
       const def = ROUTE_PARTS[action.part];
       if (!def || !def.options.some((o) => o.value === action.value))
@@ -349,7 +349,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         action.framework,
       );
       if (unsupported) return ng('unavailable', unsupported);
-      // 作り直しの手間は進行中の月ごとに取る（effortAvailable が減る）
+      // 作り直しの工数は進行中の月ごとに取る（effortAvailable が減る）
       return ok(0);
     }
     case 'component': {
@@ -391,30 +391,30 @@ function actionRule(state: GameState, action: Action): ActionCheck {
           accept: true,
         });
       }
-      // 新しい事業者のアカウントを足す部品は、差すときに一度きりの手間が付く（D-52）
+      // 新しい事業者のアカウントを足す部品は、差すときに一度きりの工数が付く（D-52）
       const setup =
         newAccountsBy(state, action.slot, action.option).length > 0
           ? EFFORT.accountSetup
           : 0;
-      if (isDataSwap(action.slot)) return ok(setup); // 移行の手間は進行中の月ごとに取る（effortAvailable が減る）
+      if (isDataSwap(action.slot)) return ok(setup); // 移行の工数は進行中の月ごとに取る（effortAvailable が減る）
       return ok(componentBaseEffort(state, action.slot, action.option) + setup);
     }
   }
 }
 
-/** 行動の手間（選べない行動は null。手間の残りは見ない）。 */
+/** 行動の工数（選べない行動は null。工数の残りは見ない）。 */
 export function actionEffort(state: GameState, action: Action): number | null {
   const r = actionRule(state, action);
   return r.ok ? r.cost : null;
 }
 
-/** 行動を今選べるか（規則と手間の残り）。選べなければ理由を区別して返す。 */
+/** 行動を今選べるか（規則と工数の残り）。選べなければ理由を区別して返す。 */
 export function checkAction(state: GameState, action: Action): ActionCheck {
   const r = actionRule(state, action);
   if (!r.ok) return r;
   const left = effortAvailable(state);
   const short = (need: number) =>
-    ng('effort', `手間が足りません: あと ${need}`);
+    ng('effort', `工数が足りません: あと ${need}`);
   if (r.cost > left) return short(r.cost - left);
   if (action.type === 'migrate') {
     const m: Migration = {
@@ -426,7 +426,7 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
     const after = effortAvailable({ ...state, migration: m });
     if (after < 0) return short(-after);
   }
-  // プラン変更は今月から構成が替わり、月の手間に足す既定の構成の事業者の管理の分（D-123）も替わる。
+  // プラン変更は今月から構成が替わり、月の工数に足す既定の構成の事業者の管理の分（D-123）も替わる。
   // 減る向き（Cloudflare Free で Resend を選んで Paid へ、など）でも余力が負にならないか、変更後の構成で確かめる（OCL-15C8F3A2）
   if (action.type === 'plan') {
     const after = effortAvailable({
@@ -436,7 +436,7 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
     });
     if (after < 0) return short(-after);
   }
-  // 作り直しは残りの手間をすべて取れる（月あたりの上限まで）。今月 1 も回せないときだけ選べない
+  // 作り直しは残りの工数をすべて取れる（月あたりの上限まで）。今月 1 も回せないときだけ選べない
   if (
     action.type === 'rewrite' &&
     rewriteWanted({
@@ -444,7 +444,7 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
       rewrite: newRewrite(state, action.framework),
     }) <= 0
   )
-    return ng('effort', '作り直しに回せる手間が残っていません');
+    return ng('effort', '作り直しに回せる工数が残っていません');
   if (
     action.type === 'component' &&
     isDataSwap(action.slot) &&
@@ -458,7 +458,7 @@ export function checkAction(state: GameState, action: Action): ActionCheck {
         required: EFFORT.dbSwap.perMonth * EFFORT.dbSwap.months,
         done: 0,
       },
-      // 新しいアカウントの設定の一度きりの手間（r.cost）も同じ月に使う（D-52・OCL-B6A107A3）
+      // 新しいアカウントの設定の一度きりの工数（r.cost）も同じ月に使う（D-52・OCL-B6A107A3）
       plannedEffort: state.plannedEffort + r.cost,
     });
     if (after < 0) return short(-after);

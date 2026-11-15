@@ -28,15 +28,13 @@ import {
   NEXT_ON_DEMAND,
 } from 'game';
 import { Info } from '../info.tsx';
-import { FeatureRing } from '../feature-ring.tsx';
+import { FeatureRing, FeatureRingGuide } from '../feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from '../option-text.tsx';
 import { SetupChangeField } from '../setup-change-field.tsx';
 import type { MonthDraft } from '../month-draft.ts';
 import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
 import { commitmentMeta } from '../commitment-meta.ts';
-import { isZeroText, signedText } from '../format.ts';
 import { fmtPoints } from '../format.ts';
-import { FeatureProgressLine } from './effort.tsx';
 
 /** 確約の行動（D-97）。今月の明細に対象の使用がある確約だけ出す。結んだ確約は期間を出す。 */
 function CommitmentsSection({
@@ -105,7 +103,7 @@ function CommitmentsSection({
   );
 }
 
-/** 今月の行動。設定はいつでも戻せる。手間のポイントの残りの範囲で、いくつでも選べる。 */
+/** 今月の行動。設定はいつでも戻せる。工数のポイントの残りの範囲で、いくつでも選べる。 */
 export function Actions({
   state,
   draft: d,
@@ -136,7 +134,6 @@ export function Actions({
     valid,
     actions,
     draft,
-    left,
     undecided,
   } = d;
   /** 未決の提案があるときに「次の月へ」で出す確認（D-140）。 */
@@ -174,236 +171,233 @@ export function Actions({
     : undefined;
   const invalidation = invalidationEst && invalidationNote(invalidationEst);
 
+  // 来月の見込みの輪（図と、見出しの ⓘ の読み方の説明で同じ値を使う）
+  const ring = {
+    scenario: sc,
+    month: outlook.month,
+    total: outlook.total,
+    effort: outlook.effort,
+    feature: outlook.feature,
+    next: true,
+    note: stageNote,
+  };
+
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body">
         <h2 className="card-title flex-wrap">
-          今月のアクション（来月に効く）
-          <span className="badge badge-lg">
-            {/* 分母も選んでいる行動を当てた draft から（プラン変更で既定の分が替わる。D-123・OCL-ADB0B195） */}
-            来月の手間の残り {fmtPoints(left)} / {fmtPoints(d.total)}
-          </span>
+          今月のアクション
+          {/* パネルの大事なこと（アクションの効き方・輪のグラフの読み方）をこの ⓘ にまとめる。
+              個々のアクションの細かい説明はそれぞれの ⓘ（prd/16・D-222 の補足） */}
+          <Info label="今月のアクションの見方" title="今月のアクション">
+            <h3 className="font-bold">アクションの効き方</h3>
+            <p>
+              選んだアクションは来月から効きます。工数の残りは機能開発に回り、満足度の「機能」（累計
+              / 期待）と、評判を通して PV
+              の伸びに効きます。設定はいつでも戻せます。
+            </p>
+            <p>
+              来月の見込みには、来月に新しく起きるイベントの対応の工数は含めません。
+            </p>
+            <h3 className="pt-2 font-bold">輪のグラフの見方</h3>
+            <FeatureRingGuide {...ring} />
+          </Info>
         </h2>
-        <p className="text-sm opacity-70">
-          残りは機能開発に回り、満足度の「機能」（累計 / 期待）と、評判を通して
-          PV の伸びに効きます。設定はいつでも戻せます。
-        </p>
-        <div className="space-y-0.5 text-sm" data-testid="feature-outlook">
-          <div>
-            来月の機能開発 {fmtPoints(outlook.feature)}
-            {!isZeroText(fmtPoints(Math.abs(outlook.change))) &&
-              `（アクションで ${signedText(outlook.change, fmtPoints)}）`}
+        {/* 広い画面では、入り切りのアクション（チェックボックス）を輪の右に並べ、選ぶと輪が変わるのを横で見られるようにする。
+            狭い画面は今まで通り縦に積む（DOM の順も変えない。右の列は md:row-start-1 で輪の横に置く。D-222 の補足） */}
+        <div className="grid gap-3 md:grid-cols-[auto_minmax(0,1fr)] md:gap-x-8">
+          {/* 来月の機能開発・累計・「機能」の段階は輪のグラフに任せる（文の行は外した。読み上げは輪の aria-label。D-222 の補足） */}
+          <div className="text-sm" data-testid="feature-outlook">
+            <FeatureRing {...ring} />
           </div>
-          <FeatureProgressLine
-            scenario={sc}
-            total={outlook.total}
-            month={outlook.month}
-            prefix="来月の"
-            note={stageNote}
-          />
-          <div className="text-xs opacity-70">
-            {outlook.total >= outlook.expected
-              ? '来月の累計は期待に届きます'
-              : `来月の累計は期待にあと ${fmtPoints(outlook.expected - outlook.total)} 届きません`}
-            （来月に新しく起きるイベントの対応の手間は含めません）
-          </div>
-          <div className="mt-2">
-            <FeatureRing
-              scenario={sc}
-              month={outlook.month}
-              total={outlook.total}
-              effort={outlook.effort}
-              feature={outlook.feature}
-              change={outlook.change}
-              next
-              note={stageNote}
-            />
-          </div>
-        </div>
-        {state.pendingProposals.length > 0 && (
-          <div className="space-y-2">
-            <div className="divider my-1 text-xs">
-              届いた開発依頼（選ばなければ断る）
-            </div>
-            {state.pendingProposals.map((id) => (
-              <ProposalChoice
-                key={id}
-                state={state}
-                id={id}
-                draft={d}
-                where="actions"
-              />
-            ))}
-          </div>
-        )}
-        <div className="grid gap-3 md:grid-cols-3">
-          {settingKeys.map((key) => {
-            const def = SETTINGS[key];
-            const current = state.settings[def.field];
-            // 欄を無効にして固定しているなら、選んだ値でなく固定の値を見せる（数えるのもその値。D-58 の補足）
-            const fixed = fixedSettingValue(draft, key);
-            const chosen = settings[key] ?? fixed ?? current;
-            return (
-              // 外側を label にしない: label の中で最初の操作できる要素は ⓘ のボタンなので、欄のどこを押しても説明が開く。
-              // ⓘ を含む見出しは label にできない（他の操作できる要素を含めない）ので、名前は select の aria-label で付ける
-              <div key={key} className="form-control">
-                <span className="label-text mb-1 block">
-                  <span className="block font-semibold">
-                    <NameWithInfo
-                      name={def.label}
-                      info={<Info title={def.label}>{def.note}</Info>}
-                    />
-                  </span>
-                  <Meta
-                    items={[
-                      // 時間 → オンデマンドだけ実装の手間がかかる（D-49）
-                      key === 'isr' ||
-                      key === 'buildInterval' ||
-                      key === 'pageCache'
-                        ? `手間 ${def.effort}（${key === 'buildInterval' ? '更新のたびにビルド' : key === 'pageCache' ? ASTRO_ON_DEMAND : NEXT_ON_DEMAND}へは ${EFFORT.onDemandSwitch}）`
-                        : `手間 ${def.effort}`,
-                      '来月から',
-                    ]}
-                  />
-                  {settingInactiveReason(draft, key) && (
-                    <span className="block text-xs opacity-70">
-                      今は効かない: {settingInactiveReason(draft, key)}
-                    </span>
-                  )}
-                  {settingNote(draft, key) && (
-                    <span className="block text-xs opacity-70">
-                      {settingNote(draft, key)}
-                    </span>
-                  )}
-                </span>
-                <select
-                  aria-label={def.label}
-                  className="select select-bordered select-sm w-full"
-                  disabled={
-                    settingInactiveReason(draft, key) !== undefined &&
-                    settings[key] === undefined
-                  }
-                  value={chosen}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    const next = { ...settings };
-                    if (v === current) delete next[key];
-                    else next[key] = v;
-                    setSettings(next);
-                  }}
-                >
-                  {def.options.map((o) => {
-                    const trial = { ...settings, [key]: o.value };
-                    if (o.value === current) delete trial[key];
-                    const why =
-                      o.value === current
-                        ? null
-                        : blocked(build({ settings: trial }));
-                    return (
-                      <option
-                        key={o.value}
-                        value={o.value}
-                        disabled={why !== null}
-                      >
-                        {o.label}
-                        {fixed !== undefined
-                          ? o.value === fixed
-                            ? '（固定）'
-                            : ''
-                          : o.value === current
-                            ? '（今）'
-                            : ''}
-                        {why ? `（${why}）` : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-                {settingFlavor(key, chosen) && (
-                  <span className="mt-1 block text-xs opacity-70">
-                    {settingFlavor(key, chosen)}
-                  </span>
-                )}
-                {key === 'isr' && invalidation && (
-                  <span className="mt-1 block text-xs text-warning">
-                    「{NEXT_ON_DEMAND}」では {invalidation}
-                  </span>
-                )}
+          {state.pendingProposals.length > 0 && (
+            <div className="col-span-full space-y-2">
+              <div className="divider my-1 text-xs">
+                届いた開発依頼（選ばなければ断る）
               </div>
-            );
-          })}
-        </div>
-        <label className="flex cursor-pointer items-start gap-3 py-1">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm mt-1"
-            checked={optimize}
-            disabled={!optimize && !valid(build({ optimize: true }))}
-            onChange={(e) => setOptimize(e.target.checked)}
-          />
-          <OptionText
-            name="SSR を最適化する"
-            meta={[
-              `CPU ${nextSsrCpuMs(state)} → ${Math.max(EFFORT.minSsrCpuMs, nextSsrCpuMs(state) - EFFORT.optimizeStepMs)} ms`,
-              `手間 ${EFFORT.optimize}`,
-              '来月から',
-            ]}
-            info={
-              <Info title="SSR を最適化する">
-                CPU 時間と速さに効きます。機能開発が進むと SSR
-                はまた重くなるので、繰り返し判断が要ります。
-              </Info>
-            }
-            why={optimize ? null : blocked(build({ optimize: true }))}
-          />
-        </label>
-        {!state.botBlocked && !hidden?.blockBots && (
-          <label className="flex cursor-pointer items-start gap-3 py-1">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm mt-1"
-              checked={blockBots}
-              disabled={
-                !blockBots &&
-                (actionEffort(state, { type: 'block-bots' }) === null ||
-                  !valid(build({ blockBots: true })))
-              }
-              onChange={(e) => setBlockBots(e.target.checked)}
-            />
-            <OptionText
-              name="Bot を遮断するルールを入れる"
-              meta={[`手間 ${BOT_BLOCK.effort}`, '来月から効く']}
-              info={
-                <Info title="Bot を遮断するルールを入れる">
-                  Bot・クローラーのアクセスが来月から半分になります。一度入れれば続きます。対策の製品（WAF
-                  など）の料金は取得していないので、手間だけのアクションです。
-                </Info>
-              }
-              why={blockBots ? null : blocked(build({ blockBots: true }))}
-            />
-          </label>
-        )}
-        {(() => {
-          const t = storageOptionText(state.stackIndex);
-          if (!t || state.storageOption) return null;
-          const why = storage ? null : blocked(build({ storage: true }));
-          return (
+              {state.pendingProposals.map((id) => (
+                <ProposalChoice
+                  key={id}
+                  state={state}
+                  id={id}
+                  draft={d}
+                  where="actions"
+                />
+              ))}
+            </div>
+          )}
+          <div className="col-span-full grid gap-3 md:grid-cols-3">
+            {settingKeys.map((key) => {
+              const def = SETTINGS[key];
+              const current = state.settings[def.field];
+              // 欄を無効にして固定しているなら、選んだ値でなく固定の値を見せる（数えるのもその値。D-58 の補足）
+              const fixed = fixedSettingValue(draft, key);
+              const chosen = settings[key] ?? fixed ?? current;
+              return (
+                // 外側を label にしない: label の中で最初の操作できる要素は ⓘ のボタンなので、欄のどこを押しても説明が開く。
+                // ⓘ を含む見出しは label にできない（他の操作できる要素を含めない）ので、名前は select の aria-label で付ける
+                <div key={key} className="form-control">
+                  <span className="label-text mb-1 block">
+                    <span className="block font-semibold">
+                      {/* 設定の説明・今の部品での注記・選んだ値の説明は ⓘ にまとめる（prd/16） */}
+                      <NameWithInfo
+                        name={def.label}
+                        info={
+                          <Info title={def.label}>
+                            <p>{def.note}</p>
+                            {settingNote(draft, key) && (
+                              <p>{settingNote(draft, key)}</p>
+                            )}
+                            {settingFlavor(key, chosen) && (
+                              <p>選んでいる値: {settingFlavor(key, chosen)}</p>
+                            )}
+                          </Info>
+                        }
+                      />
+                    </span>
+                    <Meta
+                      items={[
+                        // 時間 → オンデマンドだけ実装の工数がかかる（D-49）
+                        key === 'isr' ||
+                        key === 'buildInterval' ||
+                        key === 'pageCache'
+                          ? `工数 ${def.effort}（${key === 'buildInterval' ? '更新のたびにビルド' : key === 'pageCache' ? ASTRO_ON_DEMAND : NEXT_ON_DEMAND}へは ${EFFORT.onDemandSwitch}）`
+                          : `工数 ${def.effort}`,
+                        '来月から',
+                      ]}
+                    />
+                    {settingInactiveReason(draft, key) && (
+                      <span className="block text-xs opacity-70">
+                        今は効かない: {settingInactiveReason(draft, key)}
+                      </span>
+                    )}
+                  </span>
+                  <select
+                    aria-label={def.label}
+                    className="select select-bordered select-sm w-full"
+                    disabled={
+                      settingInactiveReason(draft, key) !== undefined &&
+                      settings[key] === undefined
+                    }
+                    value={chosen}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const next = { ...settings };
+                      if (v === current) delete next[key];
+                      else next[key] = v;
+                      setSettings(next);
+                    }}
+                  >
+                    {def.options.map((o) => {
+                      const trial = { ...settings, [key]: o.value };
+                      if (o.value === current) delete trial[key];
+                      const why =
+                        o.value === current
+                          ? null
+                          : blocked(build({ settings: trial }));
+                      return (
+                        <option
+                          key={o.value}
+                          value={o.value}
+                          disabled={why !== null}
+                        >
+                          {o.label}
+                          {fixed !== undefined
+                            ? o.value === fixed
+                              ? '（固定）'
+                              : ''
+                            : o.value === current
+                              ? '（今）'
+                              : ''}
+                          {why ? `（${why}）` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {key === 'isr' && invalidation && (
+                    <span className="mt-1 block text-xs text-warning">
+                      「{NEXT_ON_DEMAND}」では {invalidation}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="md:col-start-2 md:row-start-1 md:self-center">
             <label className="flex cursor-pointer items-start gap-3 py-1">
               <input
                 type="checkbox"
                 className="checkbox checkbox-sm mt-1"
-                checked={storage}
-                disabled={!storage && why !== null}
-                onChange={(e) => setStorage(e.target.checked)}
+                checked={optimize}
+                disabled={!optimize && !valid(build({ optimize: true }))}
+                onChange={(e) => setOptimize(e.target.checked)}
               />
               <OptionText
-                name={t.name}
-                meta={t.meta}
-                info={<Info title={t.name}>{t.detail}</Info>}
-                why={why}
+                name="SSR を最適化する"
+                meta={[
+                  `CPU ${nextSsrCpuMs(state)} → ${Math.max(EFFORT.minSsrCpuMs, nextSsrCpuMs(state) - EFFORT.optimizeStepMs)} ms`,
+                  `工数 ${EFFORT.optimize}`,
+                  '来月から',
+                ]}
+                info={
+                  <Info title="SSR を最適化する">
+                    CPU 時間と速さに効きます。機能開発が進むと SSR
+                    はまた重くなるので、繰り返し判断が要ります。
+                  </Info>
+                }
+                why={optimize ? null : blocked(build({ optimize: true }))}
               />
             </label>
-          );
-        })()}
+            {!state.botBlocked && !hidden?.blockBots && (
+              <label className="flex cursor-pointer items-start gap-3 py-1">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm mt-1"
+                  checked={blockBots}
+                  disabled={
+                    !blockBots &&
+                    (actionEffort(state, { type: 'block-bots' }) === null ||
+                      !valid(build({ blockBots: true })))
+                  }
+                  onChange={(e) => setBlockBots(e.target.checked)}
+                />
+                <OptionText
+                  name="Bot を遮断するルールを入れる"
+                  meta={[`工数 ${BOT_BLOCK.effort}`, '来月から効く']}
+                  info={
+                    <Info title="Bot を遮断するルールを入れる">
+                      Bot・クローラーのアクセスが来月から半分になります。一度入れれば続きます。対策の製品（WAF
+                      など）の料金は取得していないので、工数だけのアクションです。
+                    </Info>
+                  }
+                  why={blockBots ? null : blocked(build({ blockBots: true }))}
+                />
+              </label>
+            )}
+            {(() => {
+              const t = storageOptionText(state.stackIndex);
+              if (!t || state.storageOption) return null;
+              const why = storage ? null : blocked(build({ storage: true }));
+              return (
+                <label className="flex cursor-pointer items-start gap-3 py-1">
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-sm mt-1"
+                    checked={storage}
+                    disabled={!storage && why !== null}
+                    onChange={(e) => setStorage(e.target.checked)}
+                  />
+                  <OptionText
+                    name={t.name}
+                    meta={t.meta}
+                    info={<Info title={t.name}>{t.detail}</Info>}
+                    why={why}
+                  />
+                </label>
+              );
+            })()}
+          </div>
+        </div>
         <CommitmentsSection
           state={state}
           value={commits}

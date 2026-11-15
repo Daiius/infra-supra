@@ -9,6 +9,7 @@ import {
   type Scenario,
 } from 'game';
 import { compact, LineChart, Sparkline, useNarrowScreen } from '../charts.tsx';
+import type { ReactNode } from 'react';
 import { Info } from '../info.tsx';
 import { usd } from '../commitment-meta.ts';
 import { hitLabel, hitTone } from '../premise-view.ts';
@@ -240,41 +241,7 @@ export function Trends({
             </div>
           ))}
         </div>
-        {cashProj && cashProj.projection.length > 0 && (
-          <p className="text-sm" data-cash-projection>
-            <span className="whitespace-nowrap">所持金はこのペースだと</span>{' '}
-            <wbr />
-            <span className="whitespace-nowrap">
-              {`${scenario.months} か月目に約 ${usd(Math.round(cashProj.final))}`}
-            </span>
-            の見込みです{' '}
-            <Info label="所持金の見込みの出し方">
-              {cashProj.method === 'growth'
-                ? `月の利益（収益 − 費用。乗り換え中の並行の費用・一度だけの手数料も含む、所持金の実際の増減）を、直近の月の利益の前月比（直近 3 つの比の中央値を 0.8〜1.2 倍に収めた値。今は ${cashProj.growth.toFixed(2)} 倍）で残りの月も伸ばして足したゲーム上の目安。来月の月の利益は約 ${usd(Math.round(cashProj.nextProfit))}。`
-                : `月の利益（収益 − 費用。所持金の実際の増減）が 0 以下なので、伸びを入れず直近 3 か月の平均（約 ${usd(Math.round(cashProj.nextProfit))}）で残りの月を線形に伸ばしたゲーム上の目安。`}
-              話題・前兆・Bot
-              で一時的に流量が増えた月は、基準にも比にも使いません
-              {cashProj.skipped > 0
-                ? `（今回は ${cashProj.skipped} か月を除きました）`
-                : ''}
-              。予告済みのイベント・料金の改定は織り込みません
-            </Info>
-          </p>
-        )}
-        {!ended && (
-          <p className="text-sm" data-cash-guide>
-            {`目標の目安は ${scenario.months} か月目に所持金 ${usd(cashGuide)} です`}
-            {cashProj && cashProj.projection.length > 0
-              ? cashProj.final >= cashGuide
-                ? `（見込みは目安を約 ${usd(Math.round(cashProj.final - cashGuide))} 上回ります）`
-                : `（見込みでは目安まで約 ${usd(Math.round(cashGuide - cashProj.final))} です）`
-              : ''}
-            。届かなくても完走になり、合否はありません{' '}
-            <Info label="目標の目安とは">
-              {`シナリオが想定した ${scenario.months} か月目の所持金の目安です（ゲーム上の仮定）。下回っても途中で終わったり失敗になったりはしません。完走したら、4 つの軸で振り返ります。所持金のグラフの点線が目安の額です`}
-            </Info>
-          </p>
-        )}
+        {/* 所持金の見込みと目安は、下の所持金のグラフ（見込みの破線・目安の点線と札）に任せる（D-222 の補足） */}
         {previous && (
           <div
             className="flex flex-wrap items-center gap-2 text-xs opacity-80"
@@ -291,104 +258,131 @@ export function Trends({
             </button>
           </div>
         )}
+        {/* グラフごとに影の付いたカードにし、上下のグラフと線が混ざって見えないようにする */}
         <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-          <LineChart
-            title="所持金"
-            months={scenario.months}
-            format={(v) => `$${compact(Math.round(v))}`}
-            reference={{
-              value: cashGuide,
-              label: `目標の目安 $${compact(Math.round(cashGuide))}`,
-              tone: 'neutral',
-            }}
-            series={[
-              {
-                id: 'cash',
-                label: '所持金',
-                color: 'var(--series-1)',
-                // 負の値は軸の下に出ないよう 0 で切る（表示だけ。負になった月にゲームは終わる）
-                values: history.map((r) => Math.max(0, r.cash)),
-                ...prevOf((r) => Math.max(0, r.cash)),
-                ...(cashProj && cashProj.projection.length > 1
-                  ? {
-                      projection: cashProj.projection.map((p) => ({
-                        month: p.month,
-                        value: Math.max(0, p.value),
-                      })),
-                    }
-                  : {}),
-              },
-            ]}
-          />
-          <LineChart
-            title="収益と費用（月）"
-            months={scenario.months}
-            format={(v) => `$${compact(Math.round(v))}`}
-            series={[
-              {
-                id: 'revenue',
-                label: '収益',
-                color: 'var(--series-1)',
-                values: history.map((r) => r.revenue),
-              },
-              {
-                id: 'cost',
-                label: '費用',
-                color: 'var(--series-2)',
-                values: history.map(cost),
-                ...prevOf(cost),
-              },
-            ]}
-          />
-          <LineChart
-            title="満足度と評判"
-            months={scenario.months}
-            format={(v) => v.toFixed(2)}
-            yMax={1}
-            series={[
-              {
-                id: 'score',
-                label: '満足度',
-                color: 'var(--series-1)',
-                values: history.map((r) => r.satisfaction.score),
-                ...prevOf((r) => r.satisfaction.score),
-              },
-              {
-                id: 'reputation',
-                label: '評判',
-                color: 'var(--series-2)',
-                values: history.map((r) => r.satisfaction.reputation),
-              },
-            ]}
-          />
-          <LineChart
-            title="PV（月）"
-            months={scenario.months}
-            format={(v) => compact(Math.round(v))}
-            series={[
-              {
-                id: 'pv',
-                label: 'PV',
-                color: 'var(--series-1)',
-                values: history.map((r) => r.pv),
-                ...prevOf((r) => r.pv),
-              },
-            ]}
-          />
+          <ChartBox>
+            <LineChart
+              title="所持金"
+              months={scenario.months}
+              format={(v) => `$${compact(Math.round(v))}`}
+              reference={{
+                value: cashGuide,
+                label: `目標の目安 $${compact(Math.round(cashGuide))}`,
+                tone: 'neutral',
+              }}
+              series={[
+                {
+                  id: 'cash',
+                  label: '所持金',
+                  color: 'var(--series-1)',
+                  // 負の値は軸の下に出ないよう 0 で切る（表示だけ。負になった月にゲームは終わる）
+                  values: history.map((r) => Math.max(0, r.cash)),
+                  ...prevOf((r) => Math.max(0, r.cash)),
+                  ...(cashProj && cashProj.projection.length > 1
+                    ? {
+                        projection: cashProj.projection.map((p) => ({
+                          month: p.month,
+                          value: Math.max(0, p.value),
+                        })),
+                      }
+                    : {}),
+                },
+              ]}
+            />
+          </ChartBox>
+          <ChartBox>
+            <LineChart
+              title="収益と費用（月）"
+              months={scenario.months}
+              format={(v) => `$${compact(Math.round(v))}`}
+              series={[
+                {
+                  id: 'revenue',
+                  label: '収益',
+                  color: 'var(--series-1)',
+                  values: history.map((r) => r.revenue),
+                },
+                {
+                  id: 'cost',
+                  label: '費用',
+                  color: 'var(--series-2)',
+                  values: history.map(cost),
+                  ...prevOf(cost),
+                },
+              ]}
+            />
+          </ChartBox>
+          <ChartBox>
+            <LineChart
+              title="満足度と評判"
+              months={scenario.months}
+              format={(v) => v.toFixed(2)}
+              yMax={1}
+              series={[
+                {
+                  id: 'score',
+                  label: '満足度',
+                  color: 'var(--series-1)',
+                  values: history.map((r) => r.satisfaction.score),
+                  ...prevOf((r) => r.satisfaction.score),
+                },
+                {
+                  id: 'reputation',
+                  label: '評判',
+                  color: 'var(--series-2)',
+                  values: history.map((r) => r.satisfaction.reputation),
+                },
+              ]}
+            />
+          </ChartBox>
+          <ChartBox>
+            <LineChart
+              title="PV（月）"
+              months={scenario.months}
+              format={(v) => compact(Math.round(v))}
+              series={[
+                {
+                  id: 'pv',
+                  label: 'PV',
+                  color: 'var(--series-1)',
+                  values: history.map((r) => r.pv),
+                  ...prevOf((r) => r.pv),
+                },
+              ]}
+            />
+          </ChartBox>
         </div>
         {trends.length > 0 && (
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              上限の使用率（境目 = 100%）
-            </h3>
-            <div className="grid gap-2 sm:gap-3 md:grid-cols-2">
+          // 今月の上限は月の報告の「プラットフォームの上限・制限」に出るので、推移のグラフは畳む。
+          // 先で超える見込み（▲）があるときだけ開いて出す（prd/16）
+          <details
+            className="collapse-arrow collapse rounded-box border border-base-300"
+            open={trends.some((t) => !t.hitNow && t.monthsUntil !== null)}
+            data-limit-trends
+          >
+            <summary className="collapse-title min-h-0 py-2 text-sm font-semibold">
+              上限の使用率の推移（{trends.length} 件。境目 = 100%）
+            </summary>
+            <div className="collapse-content grid gap-2 sm:gap-3 md:grid-cols-2">
               {trends.map((t) => (
                 <TrendCard key={t.id} t={t} months={scenario.months} />
               ))}
             </div>
-          </div>
+          </details>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 推移の線グラフ 1 つの枠。影の付いたカードにして、上下・左右のグラフとの区切りをはっきりさせる（D-222 の補足・ユーザーが A〜D から選んだ）。 */
+function ChartBox({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="min-w-0 rounded-box border border-base-200 bg-base-100 p-2 shadow-sm sm:p-3"
+      data-chart-box
+    >
+      {children}
     </div>
   );
 }
@@ -418,6 +412,19 @@ function TrendCard({
     ...t.ratios.map((r) => r ?? 0),
     ...t.projection.map((p) => p.ratio),
   );
+  // グラフの注記（見込みを出さない・除いた月・区切った月・上端で切った値）は、見出しの ⓘ にまとめる（prd/16）
+  const notes = [
+    t.projectionNote,
+    !t.projectionNote && !t.hitNow && t.excluded.length > 0
+      ? `${t.excluded.map((i) => i + 1).join('・')} か月目は一時的に流量が増えた月なので、見込みの計算から除きました`
+      : undefined,
+    t.breaks.length > 0
+      ? `${t.breaks.map((i) => i + 1).join('・')} か月目に効く部品を替えたので、線（縦の破線）と見込みはそこで区切りました`
+      : undefined,
+    Math.max(...t.ratios.map((r) => r ?? 0)) > 3
+      ? '300% を超えた部分はグラフの上端で切っています（値は上の %）'
+      : undefined,
+  ].filter((x): x is string => Boolean(x));
   return (
     <div className="rounded-box border border-base-300 p-2 sm:p-3">
       <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -430,21 +437,19 @@ function TrendCard({
             見込みより早く超えた
           </span>
         )}
+        {notes.length > 0 && (
+          <span className="ml-auto">
+            <Info label="このグラフの注記" title={t.text}>
+              <ul className="list-disc space-y-0.5 pl-5">
+                {notes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            </Info>
+          </span>
+        )}
       </div>
       <div className="mb-1 text-sm">{t.text}</div>
-      {t.projectionNote && (
-        <div className="mb-1 text-xs opacity-70">{t.projectionNote}</div>
-      )}
-      {!t.projectionNote && !t.hitNow && t.excluded.length > 0 && (
-        <div className="mb-1 text-xs opacity-70">
-          {`${t.excluded.map((i) => i + 1).join('・')} か月目は一時的に流量が増えた月なので、見込みの計算から除きました`}
-        </div>
-      )}
-      {t.breaks.length > 0 && (
-        <div className="mb-1 text-xs opacity-70">
-          {`${t.breaks.map((i) => i + 1).join('・')} か月目に効く部品を替えたので、線（縦の破線）と見込みはそこで区切りました`}
-        </div>
-      )}
       <LineChart
         months={months}
         height={120}
@@ -465,11 +470,6 @@ function TrendCard({
           },
         ]}
       />
-      {Math.max(...t.ratios.map((r) => r ?? 0)) > 3 && (
-        <div className="text-xs opacity-70">
-          300% を超えた部分はグラフの上端で切っています（値は上の %）
-        </div>
-      )}
     </div>
   );
 }

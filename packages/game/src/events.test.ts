@@ -152,7 +152,7 @@ describe('提案', () => {
     expect(next.mods).toEqual({});
   });
 
-  it('受けると Workload・手間・機能が変わる（翌月から）', () => {
+  it('受けると Workload・工数・機能が変わる（翌月から）', () => {
     const m = arrival(42);
     const s = until(newGame(1, 42, TEST), m);
     const before = effortAvailable(s);

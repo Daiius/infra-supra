@@ -1,5 +1,5 @@
 // 部品ごとにキャッシュ（Next.js 16 の Cache Components。D-111・prd/13 §5e）: Vercel × Next.js の既定・選べる組・Workload・
-// 見取り図・途中の変更の手間・古い保存（版 3 まで）を今までの既定で同じ結果に再生すること。
+// 見取り図・途中の変更の工数・古い保存（版 3 まで）を今までの既定で同じ結果に再生すること。
 import { describe, expect, it } from 'vitest';
 import { CACHE_COMPONENTS } from 'catalog';
 import {
@@ -110,7 +110,7 @@ describe('既定と選べる組（D-111）', () => {
     expect(strategies(s)).toEqual({ article: 'cached-ttl', personal: 'ssr' });
   });
 
-  it('途中の変更の手間は 3（RS-08）', () => {
+  it('途中の変更の工数は 3（RS-08）', () => {
     expect(
       checkAction(start(VPS), route('personal', 'cache-components')),
     ).toMatchObject({

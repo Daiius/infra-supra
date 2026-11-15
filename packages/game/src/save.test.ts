@@ -159,13 +159,13 @@ describe('古い保存の Astro の「ビルドの間隔」を「記事のキャ
       revalidateSec: 300,
     });
 
-  it('Astro の buildInterval は pageCache として当たり、値と手間が戻る', () => {
+  it('Astro の buildInterval は pageCache として当たり、値と工数が戻る', () => {
     const save = withTurn(legacy('astro'), [
       { type: 'set', key: 'buildInterval', value: 21600 },
     ]);
     const s = replaySave(parseSave(JSON.parse(JSON.stringify(save)))!);
     expect(s.settings.revalidateSec).toBe(21600);
-    // 今の行動（pageCache）で遊んだのと同じ状態（手間も同じ）
+    // 今の行動（pageCache）で遊んだのと同じ状態（工数も同じ）
     const now = replaySave(
       withTurn(legacy('astro'), [
         { type: 'set', key: 'pageCache', value: 21600 },

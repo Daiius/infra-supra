@@ -1,5 +1,5 @@
 // 今月の行動の下書き（選んでいる設定・構成の変更・提案への返事など）。行動の欄と出来事のダイアログ（提案のページ）で
-// 同じ下書きを共有し、どちらで提案に返事をしても同じ値になるようにする（D-202）。選べるか・手間の判定は game の checkActions。
+// 同じ下書きを共有し、どちらで提案に返事をしても同じ値になるようにする（D-202）。選べるか・工数の判定は game の checkActions。
 import { useState } from 'react';
 import {
   applyActions,
@@ -63,7 +63,7 @@ export function useMonthDraft(state: GameState) {
     const ch = o.change === undefined ? changeGroups : o.change;
     const ans = o.answers ?? answers;
     const out: Action[] = [];
-    // 提案を受ける手間（割り込み）を先に取る
+    // 提案を受ける工数（割り込み）を先に取る
     for (const eventId of state.pendingProposals)
       out.push({ type: 'respond', eventId, accept: ans[eventId] ?? false });
     if (o.blockBots ?? blockBots) out.push({ type: 'block-bots' });
@@ -81,13 +81,13 @@ export function useMonthDraft(state: GameState) {
     for (const [key, value] of Object.entries(st))
       out.push({ type: 'set', key: key as SettingKey, value: value! });
     if (opt) out.push({ type: 'optimize' });
-    // 作り直しは残りの手間をすべて取れるので、ほかの行動の後に当てる（D-81）
+    // 作り直しは残りの工数をすべて取れるので、ほかの行動の後に当てる（D-81）
     if (ch?.rewrite) out.push(ch.rewrite);
     return out;
   };
   /**
    * 選べない理由（すべて選べれば null）。理由はエンジンが区別して返す文をそのまま出す
-   * （手間が足りない・今と同じ・最中・要件・提案を受けると付く など）。
+   * （工数が足りない・今と同じ・最中・要件・提案を受けると付く など）。
    */
   const blocked = (actions: Action[]): string | null => {
     const r = checkActions(state, actions);
@@ -122,7 +122,7 @@ export function useMonthDraft(state: GameState) {
     actions,
     /** 今選んでいる行動を当てた状態。 */
     draft,
-    /** 来月の手間の残りと全体（選んでいる行動を当てた draft から。D-123）。 */
+    /** 来月の工数の残りと全体（選んでいる行動を当てた draft から。D-123）。 */
     left: effortAvailable(draft),
     total: effortTotalOf(draft),
     /** 受けるも断るも選んでいない提案（このまま進むと断ったことになる。D-140）。 */

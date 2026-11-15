@@ -31,7 +31,7 @@ export const commas = (x: number) =>
 export const usd = (x: number) => `$${commas(x)}`;
 
 /**
- * 何か月かにわたる手間の表示（D-160）: 「毎月 手間 6 を 2 か月（合計 12）」。1 か月なら「手間 4（1 か月）」。
+ * 何か月かにわたる工数の表示（D-160）: 「毎月 工数 6 を 2 か月（合計 12）」。1 か月なら「工数 4（1 か月）」。
  * notes は括弧の中に「・」でつないで添える（「翌月から」など）。
  */
 export function effortSpanText(

@@ -83,7 +83,7 @@ describe('acceptPreview（D-203）', () => {
         revisions: [],
         pendingProposals: ['p-archive'],
         stock: { ...g.stock, dbGB: 1.5 },
-        // 差し替えと受けるの両方に手間が足りるように
+        // 差し替えと受けるの両方に工数が足りるように
         effortPerMonth: g.effortPerMonth + 20,
       },
       { type: 'component', slot: 'db', option: 'd1' },

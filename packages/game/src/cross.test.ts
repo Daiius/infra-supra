@@ -1,4 +1,4 @@
-// 事業者をまたぐ構成（D-52）: 許した組だけ選べる・アカウントの手間・請求が 2 つに分かれる・保存の再生。
+// 事業者をまたぐ構成（D-52）: 許した組だけ選べる・アカウントの工数・請求が 2 つに分かれる・保存の再生。
 import { describe, expect, it } from 'vitest';
 import {
   accountAllowanceOf,
@@ -78,17 +78,17 @@ describe('許した組だけ選べる', () => {
   });
 });
 
-describe('アカウントの手間', () => {
+describe('アカウントの工数', () => {
   it('どの構成も既定の部品ではアカウントが増えない（Vercel の Supabase は構成の既定）', () => {
     for (const s of STACKS) {
       expect(addedAccounts(s.index)).toEqual([]);
-      // 既定の部品の手間は月の手間に足す分と同じ（既定のままなら機能開発は基礎のまま。D-123）
+      // 既定の部品の工数は月の工数に足す分と同じ（既定のままなら機能開発は基礎のまま。D-123）
       expect(accountUpkeepOf(s.index)).toBe(accountAllowanceOf(s.index));
     }
   });
 
-  it('主のアカウント以外を 1 つにつき毎月 0.5 で数え、構成の既定の分を月の手間に足す（D-123）', () => {
-    // 構成ごとの既定の部品での、主のアカウント以外と月の手間に足す分（フレームワークでは変わらない）
+  it('主のアカウント以外を 1 つにつき毎月 0.5 で数え、構成の既定の分を月の工数に足す（D-123）', () => {
+    // 構成ごとの既定の部品での、主のアカウント以外と月の工数に足す分（フレームワークでは変わらない）
     const table = Object.fromEntries(
       STACKS.map((s) => [
         s.id,
@@ -133,7 +133,7 @@ describe('アカウントの手間', () => {
     expect(addedAccounts(AWS, { images: 'cf-images' })).toEqual(['cloudflare']);
   });
 
-  it('差すときは部品の手間に一度きりの 1 が足され、翌月から維持 0.5 が引かれる', () => {
+  it('差すときは部品の工数に一度きりの 1 が足され、翌月から維持 0.5 が引かれる', () => {
     const s = playMonth(newGame(VERCEL_PRO));
     expect(checkAction(s, swap('cf-images'))).toEqual({
       ok: true,
@@ -145,7 +145,7 @@ describe('アカウントの手間', () => {
       cost: EFFORT.component.images,
     });
     expect(componentEffortLabel('images', s, 'cf-images')).toEqual([
-      `手間 ${EFFORT.component.images + EFFORT.accountSetup}（他の事業者の設定 ${EFFORT.accountSetup} を含む）`,
+      `工数 ${EFFORT.component.images + EFFORT.accountSetup}（他の事業者の設定 ${EFFORT.accountSetup} を含む）`,
       '来月から',
       `Cloudflare のアカウントが増える（毎月の維持 ${EFFORT.accountUpkeep}）`,
     ]);
@@ -154,7 +154,7 @@ describe('アカウントの手間', () => {
       EFFORT.component.images + EFFORT.accountSetup,
     );
     const next = playMonth(swapped);
-    // Vercel Pro の既定の Supabase・AWS（1.0。月の手間に足してある。D-123）+ Cloudflare
+    // Vercel Pro の既定の Supabase・AWS（1.0。月の工数に足してある。D-123）+ Cloudflare
     expect(last(next).effort.accounts).toBe(3 * EFFORT.accountUpkeep);
     expect(last(next).effort.total).toBe(
       ARTICLE_COMMUNITY.effort.perMonth + 2 * EFFORT.accountUpkeep,
@@ -303,7 +303,7 @@ describe('AWS + 画像だけ Cloudflare', () => {
     );
     expect(out?.ratio).toBeGreaterThan(0);
     expect(out!.ratio).toBeLessThan(1);
-    // Amplify の既定は AWS だけ（月の手間に足す分は 0。D-123）
+    // Amplify の既定は AWS だけ（月の工数に足す分は 0。D-123）
     expect(last(cf).effort.accounts).toBe(EFFORT.accountUpkeep);
     expect(last(cf).effort.accountAllowance).toBe(0);
   });
@@ -334,21 +334,21 @@ describe('画像の形式（D-58）との整合', () => {
     );
     expect(webp.stock.imagesGB).toBeCloseTo(
       after('resize', IMAGE_FORMAT_KB.webp).stock.imagesGB,
-      // 他の事業者の管理の手間で機能開発が少し減り、PV がわずかに違う
+      // 他の事業者の管理の工数で機能開発が少し減り、PV がわずかに違う
       1,
     );
   });
 });
 
 describe('DB の差し替えでアカウントが増えるとき（OCL-B6A107A3）', () => {
-  it('Hyperdrive（Supabase）へ差し替えると、設定の一度きりの手間を今月の行動に使い、移行の手間と合わせて余力を確かめる', () => {
+  it('Hyperdrive（Supabase）へ差し替えると、設定の一度きりの工数を今月の行動に使い、移行の工数と合わせて余力を確かめる', () => {
     const s = playMonth(newGame(CF_PAID));
     const hd = { type: 'component', slot: 'db', option: 'hyperdrive' } as const;
     expect(checkAction(s, hd)).toEqual({ ok: true, cost: EFFORT.accountSetup });
     const after = applyAction(s, hd);
     expect(after.componentSwap?.option).toBe('hyperdrive');
     expect(after.plannedEffort).toBe(s.plannedEffort + EFFORT.accountSetup);
-    // 移行の手間 + 設定の手間を超える余力が無ければ選べない
+    // 移行の工数 + 設定の工数を超える余力が無ければ選べない
     const busy = {
       ...s,
       plannedEffort: s.effortPerMonth - EFFORT.dbSwap.perMonth,
@@ -361,11 +361,11 @@ describe('DB の差し替えでアカウントが増えるとき（OCL-B6A107A3�
   });
 });
 
-describe('差し替えで増える維持の手間の余力（OCL-73780314）', () => {
-  it('部品の手間 + 設定の手間はちょうど足りても、増える維持 0.5 が足りなければ選べない', () => {
+describe('差し替えで増える維持の工数の余力（OCL-73780314）', () => {
+  it('部品の工数 + 設定の工数はちょうど足りても、増える維持 0.5 が足りなければ選べない', () => {
     const s = playMonth(newGame(VERCEL_PRO));
     const cost = EFFORT.component.images + EFFORT.accountSetup;
-    // 残りをちょうど部品と設定の手間にする
+    // 残りをちょうど部品と設定の工数にする
     const tight = {
       ...s,
       plannedEffort: s.plannedEffort + effortAvailable(s) - cost,

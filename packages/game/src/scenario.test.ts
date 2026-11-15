@@ -167,7 +167,7 @@ describe('出来事（シード 42。話題の予告はシード 4）', () => {
     expect(m2.botPV / m2.humanPV).toBeCloseTo(BOT_BLOCK.remaining);
   });
 
-  it('チームが増えると手間が増え、Vercel Pro は席の基本料が増える（Supabase は無制限）', () => {
+  it('チームが増えると工数が増え、Vercel Pro は席の基本料が増える（Supabase は無制限）', () => {
     const team = at(42, 'team')!;
     const v = until(VERCEL_PRO, team.month, 42);
     // 基礎 10 + 10（チーム）+ Vercel Pro の既定の構成の事業者の管理（Supabase・AWS）1.0（D-123）
@@ -403,8 +403,8 @@ describe('まれな出来事（シード 31: 記事の引き取り → D1 の 10
   });
 });
 
-describe('構成ごとの維持の手間（始める画面の手間のバー。D-36）', () => {
-  it('自前運用の構成はシナリオの維持の手間、自分で組む構成は EFFORT.assembledUpkeep、コンテナの構成は EFFORT.containerUpkeep がかかり、1 か月目の配分と一致する（D-63・D-88）', () => {
+describe('構成ごとの維持の工数（始める画面の工数のバー。D-36）', () => {
+  it('自前運用の構成はシナリオの維持の工数、自分で組む構成は EFFORT.assembledUpkeep、コンテナの構成は EFFORT.containerUpkeep がかかり、1 か月目の配分と一致する（D-63・D-88）', () => {
     for (const scenario of Object.values(SCENARIOS)) {
       for (const st of STACKS) {
         const u = upkeepOf(scenario, st.index);

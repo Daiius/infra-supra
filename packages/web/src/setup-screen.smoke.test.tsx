@@ -141,14 +141,14 @@ describe('ゲームモードの画面', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '閉じる' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(open);
-    // 満足度・開発の手間の説明と前置き・料金の前提は遊び方に任せ、始める画面には出さない（D-173）
+    // 満足度・開発の工数の説明と前置き・料金の前提は遊び方に任せ、始める画面には出さない（D-173）
     expect(
-      screen.queryByRole('button', { name: '開発の手間の内訳' }),
+      screen.queryByRole('button', { name: '開発の工数の内訳' }),
     ).toBeNull();
     expect(
       screen.queryByRole('button', { name: '満足度の詳しい説明' }),
     ).toBeNull();
-    expect(screen.queryByText(/開発の手間は毎月/)).toBeNull();
+    expect(screen.queryByText(/開発の工数は毎月/)).toBeNull();
     expect(document.querySelector('[data-premise-note]')).toBeNull();
     expect(screen.queryByText(/2026-10-31 時点の公式の料金表/)).toBeNull();
     // アプリの形は見出しの 1 行だけ。箇条書きはダイアログ（2026-11-05）

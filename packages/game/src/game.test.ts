@@ -65,7 +65,7 @@ describe('game', () => {
     // D-46: Vercel の画像の原本を Vercel Blob に（保存量・アップロード・転送の課金。Vercel の構成と乗り換え先が Vercel の基準プレイの所持金が数ドル減る。結果は変わらない）
     // D-48: Vercel Pro の込み分（CDN Requests 1,000 万・Fast Data Transfer 1 TB）をやめ、$20 のクレジットがすべての従量に当たる形に。
     //       Vercel Pro・何もしないは Fast Data Transfer の課金で所持金が約 $900 減る。Vercel で始めて乗り換える基準プレイは、乗り換えまでの 3 か月分が減り、シード 3・31 で合格 → 不合格
-    // D-49: 即時反映の提案（全部受ける ② が受ける）で再検証がオンデマンドになり再生成が減る・作業の手間 3 → 2（所持金が増える。結果は変わらない）
+    // D-49: 即時反映の提案（全部受ける ② が受ける）で再検証がオンデマンドになり再生成が減る・作業の工数 3 → 2（所持金が増える。結果は変わらない）
     // D-56: オンデマンドに最大寿命 1 日の時間の再検証を足し、再生成が増える（提案を受けたあとの全部受ける ② の所持金が少し減る。結果は変わらない）
     // D-58: Next.js の画像の部品（Vercel）は既定で WebP を配る（JPEG より小さく、Fast Data Transfer が減って Vercel の構成の所持金が増える。CF・VPS の値は変わらない）
     // D-62: Cloudflare Images の閲覧のときの変換も WebP で配る。CF Paid・既定の所持金・結果は変わらない（R2 の転送は無料で、変換の数も形式で増えない）。
@@ -224,7 +224,7 @@ describe('止まった月と規約違反（D-19）', () => {
   });
 });
 
-describe('開発の手間と行動', () => {
+describe('開発の工数と行動', () => {
   it('VPS は毎月の機能開発が維持の分だけ少ない', () => {
     const cf = playUntil(CF_PAID, 2).history[1]!.effort;
     const vps = playUntil(VPS, 2).history[1]!.effort;
@@ -232,7 +232,7 @@ describe('開発の手間と行動', () => {
     expect(vps.upkeep).toBe(EFFORT.selfHostedUpkeep);
   });
 
-  it('プラン変更は手間 0・翌月から。乗り換えは別の行動', () => {
+  it('プラン変更は工数 0・翌月から。乗り換えは別の行動', () => {
     const s = playUntil(CF_FREE, 1);
     expect(actionEffort(s, { type: 'plan', stackIndex: CF_PAID })).toBe(0);
     expect(actionEffort(s, { type: 'migrate', stackIndex: CF_PAID })).toBe(
@@ -283,7 +283,7 @@ describe('開発の手間と行動', () => {
     expect(s.history[4]!.stackName).toContain('VPS');
   });
 
-  it('手間が足りない行動は選べない（状態を変えない）', () => {
+  it('工数が足りない行動は選べない（状態を変えない）', () => {
     const s = playUntil(VPS, 1); // 維持 3 → 行動に 7
     expect(effortAvailable(s)).toBe(7);
     const once = applyAction(s, { type: 'optimize' });

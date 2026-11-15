@@ -81,7 +81,7 @@ describe('Netlify の構成', () => {
     ).toEqual(['same', 'cf-workers-server']);
   });
 
-  it('マネージドなので維持の手間は 0。即時反映は満たせ、SLA は無い', () => {
+  it('マネージドなので維持の工数は 0。即時反映は満たせ、SLA は無い', () => {
     for (const sc of Object.values(SCENARIOS))
       expect(upkeepOf(sc, PRO)).toBe(0);
     expect(meetsRequirement(PRO, 'on-demand-isr')).toBe(true);

@@ -243,7 +243,7 @@ export function Result({
       get: (a) => compact(Math.round(a.finalPV)),
     },
     {
-      label: '機能開発に回せた手間',
+      label: '機能開発に回せた工数',
       get: (a) => `${a.featurePoints}（${(a.featureShare * 100).toFixed(0)}%）`,
     },
   ];
@@ -443,7 +443,7 @@ export function Result({
         </details>
         <details className="collapse collapse-arrow bg-base-200">
           <summary className="collapse-title font-bold">
-            振り返り: 達した上限・満足度が悪かった月・手間の内訳
+            振り返り: 達した上限・満足度が悪かった月・工数の内訳
           </summary>
           <div className="collapse-content">
             <div className="grid gap-4 md:grid-cols-2">
@@ -508,7 +508,7 @@ export function Result({
                   <p className="text-sm opacity-70">なし</p>
                 )}
                 <h3 className="mt-3 mb-1 font-bold">
-                  手間の使い道（合計 {fmtPoints(e.total)}
+                  工数の使い道（合計 {fmtPoints(e.total)}
                   {effortTotalNote(e.total, e.accountAllowance)}）
                 </h3>
                 <ul className="text-sm">

@@ -1,5 +1,5 @@
 // Bunny（転送の安い従量の CDN。D-98・prd/11 §23）: 画像を Bunny で配る・前段の CDN を Bunny にする部品を、始める画面と
-// ゲーム中に選べ、Bunny のアカウントの手間がかかる。基準プレイ（何もしない・シード 1〜20）。
+// ゲーム中に選べ、Bunny のアカウントの工数がかかる。基準プレイ（何もしない・シード 1〜20）。
 import { describe, expect, it } from 'vitest';
 import { meetsReference } from './reference.test-helpers.ts';
 import type { Choices } from 'catalog';
@@ -69,7 +69,7 @@ describe('Bunny の部品', () => {
           if (o.platform === 'bunny') expect(componentFlavor(o)).toBeDefined();
   });
 
-  it('Bunny のアカウントが増える（D-52 のアカウントの手間）', () => {
+  it('Bunny のアカウントが増える（D-52 のアカウントの工数）', () => {
     expect(addedAccounts(AMPLIFY, { images: 'bunny-resize' })).toEqual([
       'bunny',
     ]);

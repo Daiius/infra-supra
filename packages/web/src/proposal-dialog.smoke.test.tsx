@@ -60,7 +60,7 @@ const actionRow = (id: string) =>
   document.querySelector<HTMLElement>(`[data-proposal-choice="${id}"]`)!;
 
 /**
- * 2 か月目の終わりに、その出来事だけが起きた状態（台本を差し替える）。change で状態を手直しする（在庫・手間など）。
+ * 2 か月目の終わりに、その出来事だけが起きた状態（台本を差し替える）。change で状態を手直しする（在庫・工数など）。
  */
 function stateWith(
   id: string,
@@ -109,9 +109,9 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
       name: new RegExp(`^${m} か月目のイベント`),
     });
     const choice = pageOf(dialog, 'p-personal');
-    // 手間の残りも出す
+    // 工数の残りも出す
     expect(choice.querySelector('[data-dialog-effort]')!.textContent).toMatch(
-      /^来月の手間の残り [\d.]+ \/ [\d.]+$/,
+      /^来月の工数の残り [\d.]+ \/ [\d.]+$/,
     );
     // 受ける → 行動の欄も受ける
     fireEvent.click(within(choice).getByRole('radio', { name: /^受ける/ }));
@@ -143,7 +143,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
   });
 
   it('W-202b 受けられないときは、ダイアログにも選べない理由を出す', () => {
-    // 手間を 0 にして、受ける手間が足りない形
+    // 工数を 0 にして、受ける工数が足りない形
     renderGame(stateWith('p-archive', (s) => ({ ...s, effortPerMonth: -50 })));
     const dialog = screen.getByRole('dialog', { name: /^2 か月目のイベント/ });
     const choice = pageOf(dialog, 'p-archive');
@@ -152,7 +152,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     });
     expect(accept.disabled).toBe(true);
     expect(choice.querySelector('[data-accept-blocked]')!.textContent).toMatch(
-      /手間/,
+      /工数/,
     );
     // 断るは選べる
     expect(

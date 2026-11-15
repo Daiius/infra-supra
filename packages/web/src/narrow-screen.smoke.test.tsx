@@ -107,7 +107,7 @@ describe('狭い画面の推移のタイル（D-186）', () => {
 });
 
 describe('狭い画面の満足度の要素（D-189）', () => {
-  it('W-189 満足度の 5 要素は折り返して横に並べ（flex-wrap）、sm 以上は 1 要素 1 行', async () => {
+  it('W-189 満足度の 5 要素は、どの幅でも段階の色の札にして折り返して横に並べる（flex-wrap。D-222 の補足）', async () => {
     await renderApp();
     await startGame({
       scenario: '記事コミュニティ',
@@ -118,14 +118,16 @@ describe('狭い画面の満足度の要素（D-189）', () => {
       '[data-satisfaction-elements]',
     )!;
     expect(list.tagName).toBe('UL');
-    for (const c of ['flex', 'flex-wrap', 'sm:block'])
+    for (const c of ['flex', 'flex-wrap'])
       expect(list.className.split(' ')).toContain(c);
+    expect(list.className).not.toContain('sm:block');
     const items = list.querySelectorAll('[data-satisfaction-element]');
     expect(items).toHaveLength(5);
-    // 各要素は名前と段階の印を 1 つの項目にまとめる
+    // 各要素は名前と段階を 1 つの札にまとめる
     for (const li of items) {
       expect(li.parentElement).toBe(list);
       expect(li.querySelector('.badge')).not.toBeNull();
+      expect(li.textContent).toMatch(/(良い|普通|悪い)$/);
     }
   });
 });
