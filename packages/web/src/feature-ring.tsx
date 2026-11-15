@@ -6,7 +6,7 @@
 // 内側の区分の色の並びは validate_palette.js で隣どうし（輪なので最後と最初も）を検査した順（2026-11-04・light で全項目 PASS。
 // 地の色との対比は WARN なので、凡例に値を書く）。
 import { Info } from './info.tsx';
-import { isZeroText, signedText, fmtPoints } from './format.ts';
+import { fmtPoints } from './format.ts';
 import {
   effortTotalNote,
   featureProgressOf,
@@ -97,6 +97,8 @@ const STAGE_COLOR: Record<Stage, string> = {
 
 const SIZE = 148;
 const C = SIZE / 2;
+/** 外側の輪の端に添える札（累計）のための、輪の外の余白。 */
+const PAD = { x: 38, y: 12 };
 const INNER = { r: 46, w: 12 };
 const OUTER = { r: 64, w: 5 };
 const GAP = 2;
@@ -145,6 +147,36 @@ function Arc({
   );
 }
 
+/** 外側の輪の進みの端に添える札（端から外へ短い線を引き、その先に文字）。 */
+function EndLabel({ frac, text }: { frac: number; text: string }) {
+  const a = at(frac, OUTER.r + OUTER.w / 2 + 1);
+  const b = at(frac, OUTER.r + 8);
+  const t = at(frac, OUTER.r + 10);
+  const dx = t.x - C;
+  const anchor = dx > 8 ? 'start' : dx < -8 ? 'end' : 'middle';
+  return (
+    <g data-ring-end-label>
+      <line
+        x1={a.x}
+        y1={a.y}
+        x2={b.x}
+        y2={b.y}
+        stroke="var(--text-secondary)"
+        strokeWidth="1"
+      />
+      <text
+        x={t.x}
+        y={t.y}
+        textAnchor={anchor}
+        dominantBaseline="middle"
+        className="fill-[var(--text-primary)] text-[10px] font-semibold tabular-nums"
+      >
+        {text}
+      </text>
+    </g>
+  );
+}
+
 /** 輪を横切る短い目盛り。 */
 function Tick({ frac, r, width }: { frac: number; r: number; width: number }) {
   const a = at(frac, r - width / 2 - 3);
@@ -185,7 +217,6 @@ export function FeatureRing({
   total,
   effort,
   feature = effort.feature,
-  change,
   next,
   actual,
   note,
@@ -199,8 +230,6 @@ export function FeatureRing({
   effort: EffortBreakdown;
   /** その月に増える機能開発（省略は effort.feature。受けた提案の今すぐの加点を含めるときに渡す）。 */
   feature?: number;
-  /** 選んだ行動で機能開発が変わる量（行動の欄だけ）。 */
-  change?: number;
   /** 実際の「機能」の段階（月の報告）。 */
   actual?: Stage;
   /** 段階に添える断り（来月の見込み）。 */
@@ -232,8 +261,9 @@ export function FeatureRing({
       data-feature-ring
     >
       <svg
-        width={SIZE}
-        height={SIZE}
+        width={SIZE + 2 * PAD.x}
+        height={SIZE + 2 * PAD.y}
+        viewBox={`${-PAD.x} ${-PAD.y} ${SIZE + 2 * PAD.x} ${SIZE + 2 * PAD.y}`}
         role="img"
         aria-label={`${head}・${progressText}・「機能」は${STAGE_LABEL[shown.stage]}${shown.note}`}
         className="shrink-0"
@@ -296,10 +326,13 @@ export function FeatureRing({
           textAnchor="middle"
           className="fill-[var(--text-secondary)] text-[10px]"
         >
-          {change !== undefined && !isZeroText(fmtPoints(Math.abs(change)))
-            ? `アクションで ${signedText(change, fmtPoints)}`
-            : '機能開発 / 期待'}
+          機能開発 / 期待
         </text>
+        {/* 外側の輪が機能開発の累計だと分かるよう、進みの端に札を添える（データに合わせて動く） */}
+        <EndLabel
+          frac={Math.min(of(p.total), 1)}
+          text={`累計 ${fmtPoints(p.total)}`}
+        />
       </svg>
       <div className="min-w-0 max-w-64 flex-1 basis-32 space-y-1 text-xs text-[var(--text-secondary)]">
         {/* 輪の読み方（内側・外側・目盛り）は ⓘ に畳み、見出しと色の凡例だけを出す（prd/16） */}

@@ -160,8 +160,8 @@ describe('ゲームモードの画面', () => {
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(feature()).toBeLessThan(before);
-    // アクションでの増減は輪のグラフの中央に出す（prd/16）
-    expect(outlook()).toMatch(/アクションで −\d/);
+    // アクションでの増減は中央に出さない（凡例のアクションと外側の輪の短くなり方で分かる。D-222 の補足）
+    expect(outlook()).not.toContain('アクションで');
     // シード 42 は 6 か月目に個人向けのページの提案が届く
     const m = rollSchedule(ARTICLE_COMMUNITY, 42).find(
       (x) => x.id === 'p-personal',
@@ -219,7 +219,10 @@ describe('ゲームモードの画面', () => {
       screen.getByRole('checkbox', { name: /Bot を遮断するルールを入れる/ }),
     );
     expect(label()).not.toBe(before);
-    expect(ring().textContent).toMatch(/アクションで −\d/);
+    // 外側の輪の端の札は累計（行動を選ぶと減る）
+    expect(ring().querySelector('[data-ring-end-label]')!.textContent).toMatch(
+      /^累計 [\d.]+$/,
+    );
     expect(legend().some((t) => /^アクション[\d.]+$/.test(t!))).toBe(true);
   });
 

@@ -199,7 +199,6 @@ export function Actions({
               total={outlook.total}
               effort={outlook.effort}
               feature={outlook.feature}
-              change={outlook.change}
               next
               note={stageNote}
             />
