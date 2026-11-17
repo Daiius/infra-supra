@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 当たった前提の印の色を効き方で分ける（D-188）。止まる・プランの変更が要るは赤、遅くなる・課金・調整は黄。
 // 見積モードの上限の一覧と止まる数も同じ規則にそろえる（D-190）。
-import { render } from '@testing-library/react';
+import { fireEvent, render, within } from '@testing-library/react';
 import type { PlatformPremise } from 'estimator';
 import type { MonthEvent } from 'game';
 import { describe, expect, it } from 'vitest';
@@ -13,7 +13,7 @@ import {
   isStopping,
   isStoppingLimit,
 } from './premise-view.ts';
-import { useSmokeEnv } from './smoke.test-helpers.tsx';
+import { infoDialog, useSmokeEnv } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
 
@@ -96,7 +96,16 @@ describe('当たった前提の色（D-188）', () => {
     expect(badgeOf('前提 cost').textContent).toBe('● 超過（課金）');
     expect(badgeOf('前提 block').textContent).toBe('✗ 上限に達した');
     expect(badgeOf('前提 missing').className).toContain('badge-error');
-    const near = badgeOf('前提 near');
+    // 当たっていない前提は本体に出さず、カードの ⓘ の中に色なしで出す（D-224）
+    expect(container.textContent).not.toContain('前提 near');
+    fireEvent.click(
+      within(container).getByRole('button', {
+        name: 'このイベントの詳しい説明',
+      }),
+    );
+    const near = [...infoDialog()!.querySelectorAll('li')]
+      .find((li) => li.textContent!.includes('前提 near'))!
+      .querySelector('.badge')!;
     expect(near.className).toContain('badge-ghost');
     expect(near.textContent).toBe('○ 達する可能性のある上限');
   });

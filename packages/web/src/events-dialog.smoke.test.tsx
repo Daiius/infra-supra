@@ -18,6 +18,7 @@ import {
   monthHeading,
   expectGameScreen,
   ARTICLE,
+  infoDialog,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -152,9 +153,9 @@ describe('ゲームモードの画面', () => {
     const again = screen.getByRole('dialog');
     expect(eventPosition(again)).toBe(`1 / ${n}`);
     // 既読は開いている間だけ。開き直すと初めから（D-126）
-    expect(
-      [...again.querySelectorAll('[data-dot="unread"]')].length,
-    ).toBe(n - 1);
+    expect([...again.querySelectorAll('[data-dot="unread"]')].length).toBe(
+      n - 1,
+    );
     closeEventsDialog(again);
   });
 
@@ -272,10 +273,19 @@ describe('ゲームモードの画面', () => {
     expect(dialog.textContent).toContain(
       '効果: Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
     );
-    expect(dialog.textContent).toContain(
+    // 予告なしの印の説明はカードの ⓘ に畳む（D-224）
+    expect(dialog.textContent).not.toContain(
+      '今月の費用・満足度に効いています',
+    );
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'このイベントの詳しい説明' }),
+    );
+    const info = infoDialog()!;
+    expect(info.textContent).toContain(
       '今月の費用・満足度に効いています（遮断済みで半分）',
     );
-    expect(dialog.textContent).not.toContain('対処は来月から');
+    expect(info.textContent).not.toContain('対処は来月から');
+    fireEvent.keyDown(document, { key: 'Escape' });
     // 緑の印（文字つき）を添える。閉じた後の月の報告の一覧にも出る
     expect(
       within(dialog)

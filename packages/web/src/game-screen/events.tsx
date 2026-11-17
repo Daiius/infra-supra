@@ -1,11 +1,12 @@
 import clsx from 'clsx';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameState, MonthEvent, MonthReport } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { eventCategory, EventIcon } from '../event-icons.tsx';
 import type { MonthDraft } from '../month-draft.ts';
 import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
-import { hitLabel, hitTone } from '../premise-view.ts';
+import { hitLabel, hitTone, premiseName } from '../premise-view.ts';
+import { Info, PortalContainer } from '../info.tsx';
 import { useReducedMotion } from '../motion.tsx';
 import { slideInClass, useSwipe } from '../swipe.ts';
 
@@ -63,6 +64,12 @@ export function EventsDialog({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // カードの ⓘ の説明のダイアログを、このダイアログの中に描く（info.tsx の PortalContainer。D-224）
+  const [dialogEl, setDialogEl] = useState<HTMLDialogElement | null>(null);
+  const dialogRef = useCallback((el: HTMLDialogElement | null) => {
+    ref.current = el;
+    setDialogEl(el);
+  }, []);
   const nextRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -119,7 +126,7 @@ export function EventsDialog({
   const swipe = useSwipe((d) => go(page + d));
   return (
     <dialog
-      ref={ref}
+      ref={dialogRef}
       className="modal"
       aria-labelledby="events-dialog-title"
       onClose={onClose}
@@ -236,12 +243,14 @@ export function EventsDialog({
                 NEW
               </span>
             )}
-            <EventCard
-              key={`${e.id}:${e.phase}`}
-              event={e}
-              premises={r.premises}
-              choosing={choosing}
-            />
+            <PortalContainer.Provider value={dialogEl}>
+              <EventCard
+                key={`${e.id}:${e.phase}`}
+                event={e}
+                premises={r.premises}
+                choosing={choosing}
+              />
+            </PortalContainer.Provider>
             {/* 提案のページで受ける / 断るを選ぶ（行動の欄と同じ下書き。選べば「次の月へ」の確認は出ない。D-202） */}
             {choosing && (
               <div className="mt-2">
@@ -345,17 +354,40 @@ export function EventCard({
     <div
       className={`rounded-box border p-3 ${e.tier === 'rare' ? 'border-error' : 'border-base-300'}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
-        <BlockedBadge event={e} />
-        {badge.note && <span className="text-xs">{badge.note}</span>}
-        <span className="badge badge-sm badge-outline">
-          {TIER_LABEL[e.tier]}
-        </span>
-        {/* 種類の印（D-140）。始める画面の出来事の説明の行と同じ印 */}
-        <span className="flex items-center gap-1.5 font-semibold">
-          <EventIcon category={eventCategory(e)} />
-          {e.title}
+      <div className="flex items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
+          <BlockedBadge event={e} />
+          {/* 起きやすさは「まれ」だけ出す（月のカードの一覧と同じ。ほかは ⓘ。D-224） */}
+          {e.tier === 'rare' && (
+            <span className="badge badge-sm badge-outline badge-error">
+              {TIER_LABEL[e.tier]}
+            </span>
+          )}
+          {/* 種類の印（D-140）。始める画面の出来事の説明の行と同じ印 */}
+          <span className="flex items-center gap-1.5 font-semibold">
+            <EventIcon category={eventCategory(e)} />
+            {e.title}
+          </span>
+        </div>
+        {/* カードの右上の ⓘ: 印の意味・起きやすさ・当たりうる上限の全文（D-224） */}
+        <span className="shrink-0">
+          <Info label="このイベントの詳しい説明" title={e.title}>
+            <section>
+              <h3 className="mb-1 font-bold">印</h3>
+              <p>
+                {badge.label}
+                {badge.note ? `: ${badge.note}` : ''}
+              </p>
+              <p>起きやすさ: {TIER_LABEL[e.tier]}</p>
+            </section>
+            {e.premises.length > 0 && (
+              <section>
+                <h3 className="mb-1 font-bold">関わる上限</h3>
+                <EventPremises event={e} effectOf={effectOf} />
+              </section>
+            )}
+          </Info>
         </span>
       </div>
       <div className="mt-1 text-sm">{e.text}</div>
@@ -368,8 +400,7 @@ export function EventCard({
       {e.accept && !choosing && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          。月の終わりのアクションで受けるか断るかを選びます
-          （
+          。月の終わりのアクションで受けるか断るかを選びます （
           {e.accept.declineLoss
             ? `断ると${e.accept.declineLoss}`
             : '断っても罰はありません'}
@@ -421,38 +452,71 @@ export function EventCard({
           ))}
         </ul>
       )}
-      {e.premises.length > 0 && (
-        <ul className="mt-1 space-y-0.5 text-xs">
-          {e.premises.map((p) => {
-            const effect = effectOf(p.id);
-            const tone = effect ? hitTone(effect) : 'error';
-            return (
-              <li
-                key={p.id}
-                className="flex flex-wrap items-center gap-1"
-                data-event-premise={effect ?? ''}
-              >
-                <span
-                  className={`badge badge-xs ${p.hit ? HIT_BADGE[tone] : 'badge-ghost'}`}
-                >
-                  {p.hit
-                    ? `${tone === 'error' ? '✗' : '●'} ${effect ? hitLabel(effect) : '上限に達した'}`
-                    : '○ 達する可能性のある上限'}
-                </span>
-                {p.text}
-                {p.ratio !== undefined && (
-                  <span className="tabular-nums opacity-70">
-                    （今 {(p.ratio * 100).toFixed(0)}%）
-                  </span>
-                )}
-                {p.detail && (
-                  <span className="basis-full opacity-80">{p.detail}</span>
-                )}
-              </li>
-            );
-          })}
+      {/* 本体は当たった上限だけを短い名前と札で。当たりうる上限・全文はカードの ⓘ（D-224） */}
+      {e.premises.some((p) => p.hit) && (
+        <ul className="mt-1 space-y-0.5 text-xs" data-event-premises-hit>
+          {e.premises
+            .filter((p) => p.hit)
+            .map((p) => (
+              <PremiseItem key={p.id} p={p} effect={effectOf(p.id)} short />
+            ))}
         </ul>
       )}
     </div>
+  );
+}
+
+type EventPremise = MonthEvent['premises'][number];
+
+/** 出来事の前提の 1 行（印の色は同じ月の前提の効き方。D-188）。short は短い名前と %、それ以外は全文と詳しい説明。 */
+function PremiseItem({
+  p,
+  effect,
+  short = false,
+}: {
+  p: EventPremise;
+  effect: PlatformPremise['effect'] | undefined;
+  short?: boolean;
+}) {
+  const tone = effect ? hitTone(effect) : 'error';
+  return (
+    <li
+      className="flex flex-wrap items-center gap-1"
+      data-event-premise={effect ?? ''}
+    >
+      <span
+        className={`badge badge-xs ${p.hit ? HIT_BADGE[tone] : 'badge-ghost'}`}
+      >
+        {p.hit
+          ? `${tone === 'error' ? '✗' : '●'} ${effect ? hitLabel(effect) : '上限に達した'}`
+          : '○ 達する可能性のある上限'}
+      </span>
+      {short ? premiseName(p) : p.text}
+      {p.ratio !== undefined && (
+        <span className="tabular-nums opacity-70">
+          （今 {(p.ratio * 100).toFixed(0)}%）
+        </span>
+      )}
+      {!short && p.detail && (
+        <span className="basis-full opacity-80">{p.detail}</span>
+      )}
+    </li>
+  );
+}
+
+/** 出来事の前提の全部（カードの ⓘ の中）。 */
+function EventPremises({
+  event: e,
+  effectOf,
+}: {
+  event: MonthEvent;
+  effectOf: (id: string) => PlatformPremise['effect'] | undefined;
+}) {
+  return (
+    <ul className="space-y-1" data-event-premises>
+      {e.premises.map((p) => (
+        <PremiseItem key={p.id} p={p} effect={effectOf(p.id)} />
+      ))}
+    </ul>
   );
 }
