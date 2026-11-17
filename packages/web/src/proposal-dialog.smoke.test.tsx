@@ -14,7 +14,6 @@ import { Game } from './game-screen.tsx';
 import {
   advance,
   closeEventsDialog,
-  declineConfirm,
   monthHeading,
   openSetupChange,
   pickRadio,
@@ -124,7 +123,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     ).toBe(true);
     // 行動の欄で断るに替えると、開き直したダイアログも断る
     fireEvent.click(
-      within(actionRow('p-personal')).getByRole('radio', { name: /^断る/ }),
+      within(actionRow('p-personal')).getByRole('radio', { name: /^受けない/ }),
     );
     fireEvent.click(screen.getByRole('button', { name: /イベント/ }));
     const again = screen.getByRole('dialog', {
@@ -132,12 +131,11 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     });
     expect(
       within(pageOf(again, 'p-personal')).getByRole<HTMLInputElement>('radio', {
-        name: /^断る/,
+        name: /^受けない/,
       }).checked,
     ).toBe(true);
     closeEventsDialog(again);
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    expect(declineConfirm()).toBeNull();
     const d = screen.queryByRole('dialog');
     if (d) closeEventsDialog(d);
     monthHeading(m + 1);
@@ -157,7 +155,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     );
     // 断るは選べる
     expect(
-      within(choice).getByRole<HTMLInputElement>('radio', { name: /^断る/ })
+      within(choice).getByRole<HTMLInputElement>('radio', { name: /^受けない/ })
         .disabled,
     ).toBe(false);
   });
@@ -256,7 +254,6 @@ describe('受けられない提案は知らせにする（D-201）', () => {
     closeEventsDialog(dialog);
     expect(document.querySelector('[data-proposal-choice]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    expect(declineConfirm()).toBeNull();
     expect(advanced()).toEqual([]);
   });
 });

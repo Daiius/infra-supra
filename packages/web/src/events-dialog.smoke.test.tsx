@@ -126,9 +126,7 @@ describe('ゲームモードの画面', () => {
     const proposal = pages.find((t) => t.includes('◆ 開発依頼'))!;
     expect(proposal).toContain('会員向けの個人化');
     // 提案のページで受ける / 断るを選べる（D-202）
-    expect(proposal).toContain(
-      '受けるか断るかを選びます（選ばなければ断ります）',
-    );
+    expect(proposal).toContain('受けるかを選びます');
     expect(pages.some((t) => t.includes('⚡ 今月発生'))).toBe(true);
     // 最後のページ: 「閉じる」が主ボタン。次へは位置を動かさず押せなくなり、あとで見るは無い。全部読んだ
     expect(eventPosition(dialog)).toBe(`${n} / ${n}`);
@@ -206,7 +204,7 @@ describe('ゲームモードの画面', () => {
     await waitLoaded();
     monthHeading(m);
     expect(screen.queryByRole('dialog')).toBeNull();
-    // 次の出来事のある月はまた開く（この月の提案は選ばずに断って進む。D-140）
+    // 次の出来事のある月はまた開く（この月の提案は既定の受けないのまま進む。D-225）
     nextMonth();
     within(screen.getByRole('dialog')).getByRole('heading', {
       name: new RegExp(`^${m + 1} か月目のイベント`),

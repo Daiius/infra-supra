@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
 import {
   activeCommitments,
   commitmentOffers,
@@ -12,7 +11,6 @@ import {
   EFFORT,
   featureOutlook,
   featureProgressOf,
-  eventDef,
   hiddenSettings,
   storageOptionText,
   nextSsrCpuMs,
@@ -32,7 +30,7 @@ import { FeatureRing, FeatureRingGuide } from '../feature-ring.tsx';
 import { Meta, NameWithInfo, OptionText } from '../option-text.tsx';
 import { SetupChangeField } from '../setup-change-field.tsx';
 import type { MonthDraft } from '../month-draft.ts';
-import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
+import { ProposalChoice } from '../proposal-choice.tsx';
 import { commitmentMeta } from '../commitment-meta.ts';
 import { fmtPoints } from '../format.ts';
 
@@ -134,10 +132,7 @@ export function Actions({
     valid,
     actions,
     draft,
-    undecided,
   } = d;
-  /** 未決の提案があるときに「次の月へ」で出す確認（D-140）。 */
-  const [confirmDecline, setConfirmDecline] = useState(false);
   const proceed = () => {
     onDecide(actions);
     reset();
@@ -212,9 +207,7 @@ export function Actions({
           </div>
           {state.pendingProposals.length > 0 && (
             <div className="col-span-full space-y-2">
-              <div className="divider my-1 text-xs">
-                届いた開発依頼（選ばなければ断る）
-              </div>
+              <div className="divider my-1 text-xs">届いた開発依頼</div>
               {state.pendingProposals.map((id) => (
                 <ProposalChoice
                   key={id}
@@ -423,112 +416,13 @@ export function Actions({
           <button
             className="btn btn-primary"
             disabled={!valid(actions)}
-            onClick={() => {
-              if (undecided.length > 0) setConfirmDecline(true);
-              else proceed();
-            }}
+            // 開発依頼は既定で受けないので、選び残しの確認は出さない（D-225 で D-140 の確認をやめた）
+            onClick={proceed}
           >
             次の月へ
           </button>
         </div>
       </div>
-      {confirmDecline && (
-        <DeclineConfirmDialog
-          titles={undecided.map(
-            (id) => eventDef(scenarioOf(state), id)?.title ?? id,
-          )}
-          onDecline={() => {
-            setConfirmDecline(false);
-            proceed();
-          }}
-          onBack={() => {
-            setConfirmDecline(false);
-            // 選び残した最初の提案の行へ移る（受ける・断るを選べるように）
-            const row = document.querySelector<HTMLElement>(
-              `[data-proposal-choice="${CSS.escape(undecided[0]!)}"]`,
-            );
-            row?.scrollIntoView?.({ block: 'center' });
-            row
-              ?.querySelector<HTMLInputElement>('input:not(:disabled)')
-              ?.focus();
-          }}
-        />
-      )}
     </div>
-  );
-}
-
-/**
- * 未決の提案があるまま「次の月へ」を押したときの確認（D-140）。進むと断ったことになる（受けると付く効果は無く、
- * 断ると起きること（画質が下がるなど）が起きる）。「提案を選ぶ」で行動の欄の提案の行へ戻る。
- */
-function DeclineConfirmDialog({
-  titles,
-  onDecline,
-  onBack,
-}: {
-  /** 未決の提案の題。 */
-  titles: string[];
-  onDecline: () => void;
-  onBack: () => void;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  // 「断って進む」で閉じたときに onBack を呼ばない
-  const declined = useRef(false);
-  useEffect(() => {
-    const d = ref.current;
-    if (d && !d.open) d.showModal();
-  }, []);
-  return (
-    <dialog
-      ref={ref}
-      className="modal"
-      aria-labelledby="decline-dialog-title"
-      data-decline-confirm
-      onClose={() => {
-        if (!declined.current) onBack();
-      }}
-    >
-      <div className="modal-box max-w-md">
-        <h2 id="decline-dialog-title" className="text-lg font-bold">
-          未決の開発依頼が {titles.length} 件あります
-        </h2>
-        <p className="mt-2 text-sm">
-          このまま進むと、次の開発依頼は断ったことになります。
-        </p>
-        <ul className="mt-2 space-y-1 text-sm">
-          {titles.map((t) => (
-            <li key={t} className="flex items-center gap-2">
-              <span className={`badge badge-sm ${PROPOSAL_BADGE.cls}`}>
-                {PROPOSAL_BADGE.label}
-              </span>
-              <span>{t}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="modal-action">
-          <form method="dialog">
-            <button className="btn btn-primary btn-sm" autoFocus>
-              開発依頼を選ぶ
-            </button>
-          </form>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              declined.current = true;
-              ref.current?.close();
-              onDecline();
-            }}
-          >
-            断って進む
-          </button>
-        </div>
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        <button aria-label="背景を押して閉じる" tabIndex={-1}>
-          閉じる
-        </button>
-      </form>
-    </dialog>
   );
 }

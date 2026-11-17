@@ -427,20 +427,9 @@ export function registerSetupChange() {
   fireEvent.click(b);
 }
 
-/** 未決の提案の確認のダイアログ（D-140）。開いていなければ null。 */
-export const declineConfirm = (): HTMLElement | null =>
-  document.querySelector<HTMLElement>('dialog[data-decline-confirm][open]');
-
-/**
- * 「次の月へ」を押す。未決の提案があって確認（D-140）が出たら「断って進む」で進む（選ばなければ断る、の今までの進め方）。
- */
+/** 「次の月へ」を押す（開発依頼は既定で受けないので、確認は挟まない。D-225）。 */
 export function nextMonth() {
   fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-  const confirm = declineConfirm();
-  if (confirm)
-    fireEvent.click(
-      within(confirm).getByRole('button', { name: '断って進む' }),
-    );
 }
 
 /**

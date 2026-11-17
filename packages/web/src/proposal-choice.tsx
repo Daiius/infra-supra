@@ -149,7 +149,7 @@ export function ProposalChoice({
         </div>
       ) : (
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold">
-          <span>受けるか断るかを選びます（選ばなければ断ります）</span>
+          <span>受けるかを選びます</span>
           <span className="badge badge-sm font-normal" data-dialog-effort>
             来月の工数の残り {fmtPoints(d.left)} / {fmtPoints(d.total)}
           </span>
@@ -210,11 +210,11 @@ export function ProposalChoice({
               type="radio"
               name={name}
               className="radio radio-sm"
-              // 選ぶまではどちらにも印を付けない（未決が見えるように。選ばずに進むと確認を挟む。D-140）
-              checked={answer === false}
+              // 既定は受けない（選ばなくても印が付いている。受けるを選んだときだけ受ける。D-225）
+              checked={answer !== true}
               onChange={() => d.answer(id, false)}
             />
-            断る
+            受けない
           </label>
           {summary.declineLoss && (
             <p

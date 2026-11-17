@@ -176,8 +176,7 @@ describe('ゲームモードの画面', () => {
     )!.month;
     advance(m - 1);
     expectGameScreen(m);
-    const card =
-      screen.getByText('届いた開発依頼（選ばなければ断る）').parentElement!;
+    const card = screen.getByText('届いた開発依頼').parentElement!;
     // 受けるの下に得（機能開発の加点 → 満足度の「機能」→ PV の伸びの流れ）と、伴うこと（工数は 1 つにまとめる）。断るには何も添えない（D-225）
     expect(card.querySelector('[data-feature-chain]')!.textContent).toBe(
       '機能開発の加点 +6満足度の「機能」PV の伸び',

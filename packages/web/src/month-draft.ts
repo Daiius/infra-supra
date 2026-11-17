@@ -125,8 +125,6 @@ export function useMonthDraft(state: GameState) {
     /** 来月の工数の残りと全体（選んでいる行動を当てた draft から。D-123）。 */
     left: effortAvailable(draft),
     total: effortTotalOf(draft),
-    /** 受けるも断るも選んでいない提案（このまま進むと断ったことになる。D-140）。 */
-    undecided: state.pendingProposals.filter((id) => answers[id] === undefined),
   };
 }
 

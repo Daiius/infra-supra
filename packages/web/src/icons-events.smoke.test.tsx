@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import {
   advance,
   closeEventsDialog,
-  declineConfirm,
   getRadio,
   monthHeading,
   readEventPages,
@@ -114,68 +113,27 @@ describe('シナリオの図柄と出来事の印（D-140）', () => {
   });
 });
 
-describe('未決の提案の確認（D-140）', () => {
-  it('W-85 未決の提案があると「次の月へ」で確認が出て、「提案を選ぶ」で戻り、「断って進む」で進む', async () => {
+describe('開発依頼の既定の返事（D-225。D-140 の確認をやめた）', () => {
+  it('W-85 開発依頼は既定で「受けない」が選ばれていて、「次の月へ」で確認を挟まずに進む', async () => {
     const m = proposalMonth();
     await start();
     advance(m - 1);
     monthHeading(m);
-    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    let confirm = declineConfirm()!;
-    expect(confirm).not.toBeNull();
-    within(confirm).getByRole('heading', {
-      name: '未決の開発依頼が 1 件あります',
-    });
-    expect(confirm.textContent).toContain('断ったことになります');
-    expect(confirm.textContent).toContain('会員向けの個人化');
-    // 提案を選ぶ: 進まずに、提案の行へ戻る
-    fireEvent.click(
-      within(confirm).getByRole('button', { name: '開発依頼を選ぶ' }),
-    );
-    expect(declineConfirm()).toBeNull();
-    monthHeading(m);
     const row = document.querySelector<HTMLElement>(
       '[data-proposal-choice="p-personal"]',
     )!;
-    expect(row.contains(document.activeElement)).toBe(true);
-    // 選ぶまでは受ける・断るのどちらにも印が無い
     expect(
-      within(row)
-        .getAllByRole<HTMLInputElement>('radio')
-        .some((r) => r.checked),
+      within(row).getByRole<HTMLInputElement>('radio', { name: /^受けない/ })
+        .checked,
+    ).toBe(true);
+    expect(
+      within(row).getByRole<HTMLInputElement>('radio', { name: /^受ける/ })
+        .checked,
     ).toBe(false);
-    // もう一度押して、断って進む
+    expect(document.body.textContent).not.toContain('選ばなければ断');
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    confirm = declineConfirm()!;
-    fireEvent.click(
-      within(confirm).getByRole('button', { name: '断って進む' }),
-    );
-    expect(declineConfirm()).toBeNull();
+    expect(document.querySelector('dialog[data-decline-confirm]')).toBeNull();
     closeEventsIfOpen();
     monthHeading(m + 1);
-  });
-
-  it('W-86 提案に返事を選んであれば、確認なしで進む', async () => {
-    const m = proposalMonth();
-    await start();
-    advance(m - 1);
-    const row = document.querySelector<HTMLElement>(
-      '[data-proposal-choice="p-personal"]',
-    )!;
-    fireEvent.click(within(row).getByRole('radio', { name: /^断る/ }));
-    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    expect(declineConfirm()).toBeNull();
-    closeEventsIfOpen();
-    monthHeading(m + 1);
-  });
-
-  it('W-87 提案が無い月は、確認なしで進む', async () => {
-    await start();
-    // 1〜2 か月目は提案を出さない（V-12）
-    expect(document.querySelector('[data-proposal-choice]')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    expect(declineConfirm()).toBeNull();
-    closeEventsIfOpen();
-    monthHeading(2);
   });
 });
