@@ -93,6 +93,7 @@ function renderGame(state: GameState) {
       previous={null}
       onPickRewind={() => {}}
       onClearPrevious={() => {}}
+      onRestart={() => {}}
     />,
   );
   return { advanced: () => advanced };

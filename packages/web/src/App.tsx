@@ -591,6 +591,8 @@ export function App() {
               }}
               previous={session!.previous}
               onPickRewind={setRewindPick}
+              // 終わった後の結果の画面のボタン: 結果は手元の履歴に残っているので、確かめずに始める画面へ戻る（D-227）
+              onRestart={() => setSession(null)}
               onClearPrevious={() =>
                 setSession({
                   ...session!,

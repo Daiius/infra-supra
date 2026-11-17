@@ -70,6 +70,7 @@ export function Game({
   previous,
   onPickRewind,
   onClearPrevious,
+  onRestart,
 }: {
   state: GameState;
   /** 保存から再開した（出来事・完走のダイアログを自動では開かない。D-26）。 */
@@ -90,6 +91,8 @@ export function Game({
   statsQuery?: Omit<StatsQuery, 'axes'> | null;
   /** 月の終わりの行動を当てて次の月へ進める（保存も更新する）。 */
   onAdvance: (actions: Action[]) => GameState;
+  /** 終わった後に新しいゲームを始める（結果の画面のボタン。始める画面へ戻る。D-227）。 */
+  onRestart: () => void;
   /** 前の試行（D-128。保存の前の試行を再生した状態）。無ければ null。 */
   previous: GameState | null;
   /** 履歴の行の「この月に戻る」で、その月を選んだ状態で戻るダイアログを開く（D-128・D-192。ダイアログは App が持つ）。 */
@@ -177,6 +180,7 @@ export function Game({
             statsQuery ? { ...statsQuery, axes: resultAxesOf(state) } : null
           }
           onCelebrate={() => setCelebration((n) => (n ?? 0) + 1)}
+          onRestart={onRestart}
         />
       )}
       <Trends
