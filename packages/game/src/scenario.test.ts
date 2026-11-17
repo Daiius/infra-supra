@@ -270,6 +270,22 @@ describe('実際に予告されている改定の出来事（D-21）', () => {
       ).toBeUndefined();
   });
 
+  it('土台が別の事業者でも、選んだ部品が使う事業者の改定は知らせる（OCL-6294AD10）', () => {
+    // Vercel Pro + Supabase Pro で、API を Cloudflare Workers に置く（Next.js）
+    const vercel = STACKS.findIndex((x) => x.id === 'vercel-supabase-pro');
+    let s = playMonth(
+      newGame(vercel, 42, sc, '2026-10-31', 'nextjs', {
+        api: 'cf-workers-server',
+      }),
+    );
+    expect(s.components.api).toBe('cf-workers-server');
+    while (s.history.length < 12 && s.phase === 'playing') s = playMonth(s);
+    const rv = s.revisions.find(
+      (r) => r.id === 'revision:cloudflare:2026-12-01',
+    )!;
+    expect(month(s, rv.month).events.find((e) => e.id === rv.id)).toBeDefined();
+  });
+
   it('施行日を過ぎた日に始めると出ない。その間の日なら、まだ先の予告だけが出る', () => {
     expect(newGame(CF_PAID, 42, sc, '2026-12-01').revisions).toEqual([]);
     expect(
