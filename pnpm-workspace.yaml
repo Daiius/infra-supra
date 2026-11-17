@@ -3,3 +3,11 @@ packages:
 # 集計のサーバー（packages/stats）のバンドルに使う esbuild の postinstall（バイナリの確かめ）を許す
 allowBuilds:
   esbuild: true
+# 脆弱性のための上書き。どちらも web の devDependencies の @vercel/config（0.14.1 が最新・型だけを読む）の下にだけ入る。
+# 親（@vercel/config・@vercel/routing-utils）が直った版を出したら外す。
+overrides:
+  # GHSA-9wv6-86v2-598j（path-to-regexp >= 4.0.0 < 6.3.0）: @vercel/routing-utils 6.6.1 が 6.1.0 に固定している
+  '@vercel/routing-utils>path-to-regexp': 6.3.0
+  # GHSA-mrhx-c7xc-m3w5（zod < 4.6.6。3.x に修正版が無い）: @vercel/config 0.14.1 が ^3.22.0 を求める。
+  # 求める範囲の外（メジャー違い）へ上げている。@vercel/config の中の zod の使い方は z.object・z.string().regex だけ
+  '@vercel/config>zod': ^4.6.6
