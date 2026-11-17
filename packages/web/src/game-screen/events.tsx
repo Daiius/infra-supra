@@ -244,24 +244,25 @@ export function EventsDialog({
                         'data-events-sizer': '',
                       })}
                 >
+                  {/* カードと返事の欄の ⓘ は、このダイアログの中に描く */}
                   <PortalContainer.Provider value={dialogEl}>
                     <EventCard
                       event={x}
                       premises={r.premises}
                       choosing={choosingX}
                     />
+                    {/* 提案のページで受ける / 受けないを選ぶ（行動の欄と同じ下書き。D-202・D-225） */}
+                    {choosingX && (
+                      <div className="mt-2">
+                        <ProposalChoice
+                          state={state}
+                          id={x.id}
+                          draft={draft}
+                          where="dialog"
+                        />
+                      </div>
+                    )}
                   </PortalContainer.Provider>
-                  {/* 提案のページで受ける / 断るを選ぶ（行動の欄と同じ下書き。選べば「次の月へ」の確認は出ない。D-202） */}
-                  {choosingX && (
-                    <div className="mt-2">
-                      <ProposalChoice
-                        state={state}
-                        id={x.id}
-                        draft={draft}
-                        where="dialog"
-                      />
-                    </div>
-                  )}
                 </div>
               );
             })}

@@ -181,9 +181,21 @@ describe('ゲームモードの画面', () => {
     expect(card.querySelector('[data-feature-chain]')!.textContent).toBe(
       '機能開発の加点 +6満足度の「機能」PV の伸び',
     );
-    expect(card.querySelector('[data-accept-costs]')!.textContent).toBe(
-      '伴うこと: 工数 4（作業も機能開発に数えます）・使用量・費用: SSR の割合 60%',
+    // 工数は受けるの横の札、数え方の注記とほかに伴うことは札の横の ⓘ（D-225）
+    const row = card.querySelector<HTMLElement>(
+      '[data-proposal-choice="p-personal"]',
+    )!;
+    expect(row.querySelector('[data-accept-effort]')!.textContent).toBe(
+      '工数 4',
     );
+    expect(row.textContent).not.toContain('伴うこと');
+    fireEvent.click(
+      within(row).getByRole('button', { name: '受けたときに伴うこと' }),
+    );
+    expect(
+      infoDialog()!.querySelector('[data-accept-costs]')!.textContent,
+    ).toBe('作業の工数も機能開発に数えます使用量・費用: SSR の割合 60%');
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(card.textContent).not.toContain('何も変わりません');
     expect(card.querySelector('[data-decline-loss]')).toBeNull();
     // 7 か月目に記事のデザインの刷新の提案が届く。機能の加点が無くても、得と断ったときの損を出す

@@ -263,7 +263,7 @@ const EVENTS: EventDef[] = [
     // すでにオンデマンドなら作業は要らない（D-49。それまでは一律に工数 3）
     accept: {
       label: '受ける',
-      cost: '工数 2。すでに投稿・編集のときに消す設定なら 0',
+      cost: '工数 2',
       effects: [
         { type: 'feature', points: 5 },
         { type: 'growth', add: 0.02, months: 3 },

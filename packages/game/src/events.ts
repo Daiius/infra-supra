@@ -195,6 +195,11 @@ export function acceptSummary(
   def: EventDef,
 ): {
   gains: string[];
+  /** 受けると掛かる工数（選択肢の横の札。データの cost があればそれ 1 つ。D-225）。 */
+  effort: string[];
+  /** 工数の数え方の注記（作業も機能開発に数える・数えない。札の ⓘ の中。D-225）。 */
+  effortNote?: string;
+  /** 工数のほかに伴うこと（使用量・費用・要件。札の ⓘ の中。D-225）。 */
   costs: string[];
   declineLoss?: string;
   /** 受けると増える機能開発（加点）。満足度の「機能」→ 評判 → PV の伸びに間接に効く（D-225）。 */
@@ -296,20 +301,17 @@ export function acceptSummary(
   }
   return {
     gains,
-    // 受けると掛かる工数: データに cost があればそれ 1 つにまとめる（「アクションに使える工数が n 減ります」と重ねない）。
-    // 機能の追加の作業は機能開発に数えるので、そう添える（工数が機能開発から引かれると読まれないように。D-225）
-    costs: [
-      ...(def.accept?.cost
-        ? [
-            work
-              ? `${def.accept.cost}（作業も機能開発に数えます）`
-              : effects.some((e) => e.type === 'interrupt')
-                ? `${def.accept.cost}（機能開発には数えません）`
-                : def.accept.cost,
-          ]
-        : effort),
-      ...costs,
-    ],
+    // 受けると掛かる工数: データに cost があればそれ 1 つにまとめる（「アクションに使える工数が n 減ります」と重ねない。D-225）
+    effort: def.accept?.cost ? [def.accept.cost] : effort,
+    // 機能の追加の作業は機能開発に数えるので、そう添える（工数が機能開発から引かれると読まれないように）
+    ...(work
+      ? {
+          effortNote: `作業の工数も機能開発に数えます${work.unlessOnDemand ? '。すでに投稿・編集のときに消す設定なら工数は 0 です' : ''}`,
+        }
+      : effects.some((e) => e.type === 'interrupt')
+        ? { effortNote: '対応の工数は機能開発には数えません' }
+        : {}),
+    costs,
     ...(declineLoss ? { declineLoss } : {}),
     featureBonus: bonus,
   };

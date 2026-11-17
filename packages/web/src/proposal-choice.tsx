@@ -166,7 +166,7 @@ export function ProposalChoice({
       >
         <div>
           <label
-            className={`flex items-center gap-2 font-semibold ${acceptOk || answer ? 'cursor-pointer' : 'opacity-50'}`}
+            className={`flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold ${acceptOk || answer ? 'cursor-pointer' : 'opacity-50'}`}
           >
             <input
               type="radio"
@@ -177,6 +177,26 @@ export function ProposalChoice({
               onChange={() => d.answer(id, true)}
             />
             {def.accept!.label}
+            {/* 受けると掛かる工数は札で。数え方の注記と、ほかに伴うこと（使用量・要件）は札の横の ⓘ（D-225） */}
+            {summary.effort.map((x) => (
+              <span
+                key={x}
+                className="badge h-auto min-h-5 badge-outline badge-sm py-0.5 font-normal"
+                data-accept-effort
+              >
+                {x}
+              </span>
+            ))}
+            {(summary.effortNote || summary.costs.length > 0) && (
+              <Info label="受けたときに伴うこと">
+                <ul className="list-disc space-y-1 pl-5" data-accept-costs>
+                  {summary.effortNote && <li>{summary.effortNote}</li>}
+                  {summary.costs.map((c) => (
+                    <li key={c}>{c}</li>
+                  ))}
+                </ul>
+              </Info>
+            )}
             {recommended && (
               <span
                 className="badge badge-sm badge-soft badge-success font-normal"
@@ -207,11 +227,6 @@ export function ProposalChoice({
                   </li>
                 ))}
               </ul>
-            )}
-            {summary.costs.length > 0 && (
-              <p className="opacity-70" data-accept-costs>
-                伴うこと: {summary.costs.join('・')}
-              </p>
             )}
           </div>
         </div>
