@@ -21,6 +21,7 @@ import {
 } from './distribution.ts';
 import { usd, fmtPoints } from './format.ts';
 import { Chips } from './chips.tsx';
+import { Info } from './info.tsx';
 import { ResultAxesPanel } from './result-axes.tsx';
 import type { AxisComparison } from './results-history.ts';
 import {
@@ -183,6 +184,7 @@ export function ResultStatsSection({
           {...(cashGuide !== undefined ? { cashGuide } : {})}
           {...(shownFilter ? { filter: shownFilter } : {})}
           hideMine={loading}
+          outagesLine={false}
         >
           {base && query && (
             <div className="mb-2 space-y-1" data-stats-filter-chips>
@@ -295,16 +297,20 @@ export function GroupCompare({
       data-by={by}
       data-directed={def.directed ? 'true' : 'false'}
     >
-      <h3 id="group-compare-title" className="font-bold">
+      {/* 図の読み方は見出しの ⓘ に畳む（D-223） */}
+      <h3 id="group-compare-title" className="mb-2 font-bold">
         {byName}ごとの分布
+        <Info label={`${byName}ごとの分布の見方`}>
+          <p data-group-compare-detail>
+            全シードの完走を{byName}
+            ごとに分けて（集計にまだ無い{byName}
+            の行は出しません）、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値
+            {value !== undefined ? '、縦の線はあなたの値' : ''}です。
+            {data?.mock &&
+              '開発用の架空の値です（遊んだ人の結果ではありません）。'}
+          </p>
+        </Info>
       </h3>
-      <p className="mb-2 text-xs opacity-70">
-        全シードの完走を{byName}
-        ごとに分けて（集計にまだ無い{byName}
-        の行は出しません）、同じ区切りのヒストグラムを並べます。棒の高さは行ごとの一番高い棒をそろえた高さで、件数の違う行どうしでも形を比べられます（件数は右の数で見てください）。棒の下の短い印は中央値
-        {value !== undefined ? '、縦の線はあなたの値' : ''}です。
-        {data?.mock && '開発用の架空の値です（遊んだ人の結果ではありません）。'}
-      </p>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <Chips
           name="axis"
@@ -331,7 +337,6 @@ export function GroupCompare({
         {def.directed
           ? `${def.label}は右ほど上位です。`
           : `${def.label}は高い・低いで良し悪しを付けません。`}
-        {value !== undefined && `あなたの値は ${format(value)} です。`}
       </p>
       {rows && rows.length === 0 ? (
         <p className="text-xs opacity-70" data-group-status="empty">

@@ -429,3 +429,45 @@ export function FeatureRingGuide(props: RingProps) {
     </>
   );
 }
+
+/**
+ * 工数の使い道の帯（結果の振り返り。D-223）: 輪と同じ区分・同じ色で横に積み、下に 0 でない区分の凡例（色・名前・数・割合）。
+ * 数の一覧を読まなくても、何に工数を取られたかが形で分かるようにする。
+ */
+export function EffortStackBar({ effort }: { effort: EffortBreakdown }) {
+  const parts = effortParts(effort).filter((x) => x.v > 0);
+  const sum = parts.reduce((a, x) => a + x.v, 0);
+  const pct = (v: number) => (sum ? Math.round((v / sum) * 100) : 0);
+  return (
+    <div className="viz-root" data-effort-stack>
+      <div
+        role="img"
+        aria-label={`工数の使い道: ${parts.map((x) => `${x.s.label} ${fmtPoints(x.v)}`).join('・')}`}
+        className="flex h-4 w-full overflow-hidden rounded-sm bg-base-200"
+      >
+        {parts.map((x) => (
+          <span
+            key={x.s.key}
+            className="h-full border-r border-base-100 last:border-r-0"
+            style={{ width: `${(x.v / sum) * 100}%`, background: x.s.color }}
+          />
+        ))}
+      </div>
+      <ul className="mt-2 space-y-0.5 text-sm">
+        {parts.map((x) => (
+          <li key={x.s.key} className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="size-3 shrink-0 rounded-sm"
+              style={{ background: x.s.color }}
+            />
+            {x.s.label}
+            <span className="ml-auto pl-2 tabular-nums">
+              {fmtPoints(x.v)}（{pct(x.v)}%）
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

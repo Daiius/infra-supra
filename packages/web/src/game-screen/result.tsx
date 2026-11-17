@@ -34,6 +34,7 @@ import {
   useReducedMotion,
 } from '../motion.tsx';
 import { fmtPoints } from '../format.ts';
+import { EffortStackBar } from '../feature-ring.tsx';
 
 /**
  * 完走のダイアログと花火（D-25・D-131）。4 軸の値と集計の分布の中での位置（段 3・D-161）か手元の履歴との比較を出し、分布があれば上位に入った軸（向きのある 3 軸）が多いほど花火を増やす（D-163）。分布が無ければ花火はいつも 1 段（D-168）。開いている間は暗い背景の上で花火を打ち上げ続ける（ダイアログの背面・背景の前面）。
@@ -272,10 +273,15 @@ export function Result({
                 {end.month} か月目で終了
               </span>
               ・
-              <span className="whitespace-nowrap">
-                所持金 {usd(state.cash)}
-              </span>
-              ・
+              {/* 完走のときの所持金は下の ① の軸に出すので、帯には途中終了のときだけ出す（D-223） */}
+              {!completed && (
+                <>
+                  <span className="whitespace-nowrap">
+                    所持金 {usd(state.cash)}
+                  </span>
+                  ・
+                </>
+              )}
               <span className="whitespace-nowrap">
                 止まった月 {state.outages} 回
               </span>
@@ -349,7 +355,7 @@ export function Result({
         )}
         <details className="collapse collapse-arrow bg-base-200">
           <summary className="collapse-title font-bold">
-            基準プレイとの比較の表（軸ごとの成績・満足度の要素）
+            基準プレイとの比較
           </summary>
           <div className="collapse-content">
             <p className="mb-1 text-sm opacity-70">
@@ -443,7 +449,7 @@ export function Result({
         </details>
         <details className="collapse collapse-arrow bg-base-200">
           <summary className="collapse-title font-bold">
-            振り返り: 達した上限・満足度が悪かった月・工数の内訳
+            振り返り（上限・満足度・工数）
           </summary>
           <div className="collapse-content">
             <div className="grid gap-4 md:grid-cols-2">
@@ -511,31 +517,8 @@ export function Result({
                   工数の使い道（合計 {fmtPoints(e.total)}
                   {effortTotalNote(e.total, e.accountAllowance)}）
                 </h3>
-                <ul className="text-sm">
-                  {[
-                    ['自前運用の維持', e.upkeep],
-                    ...(e.accounts ? [['他の事業者の管理', e.accounts]] : []),
-                    ['イベントへの対応', e.interrupt],
-                    ['乗り換え', e.migration],
-                    ['アクション（設定・最適化）', e.actions],
-                    ['機能の追加（開発依頼）', e.featureWork],
-                    [
-                      '機能開発（残り）',
-                      e.feature - e.featureWork - e.featureBonus,
-                    ],
-                  ].map(([label, v]) => (
-                    <li key={label as string} className="flex">
-                      {label}
-                      <span className="ml-auto tabular-nums">
-                        {fmtPoints(v as number)}（
-                        {e.total
-                          ? (((v as number) / e.total) * 100).toFixed(0)
-                          : 0}
-                        %）
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                {/* 一覧の数より、輪と同じ色の帯で何に取られたかを見せる（D-223） */}
+                <EffortStackBar effort={e} />
               </div>
             </div>
           </div>

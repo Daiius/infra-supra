@@ -192,7 +192,7 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
     // 絞り込みは見るためだけ、という説明は注記の横の ⓘ に畳む（D-207）
     fireEvent.click(
       within(resultAxes()!).getByRole('button', {
-        name: '分布との比べ方の説明',
+        name: '4 つの軸の見方',
       }),
     );
     expect(
@@ -552,7 +552,15 @@ describe('構成・フレームワークごとの分布（ST-11・D-175）', () 
         compare().querySelector('[data-group-range-chart]'),
       ).not.toBeNull(),
     );
-    expect(compare().textContent).toContain('開発用の架空の値です');
+    // 図の読み方と架空の注記は見出しの ⓘ に畳む（本体には出さない。D-223）
+    expect(compare().textContent).not.toContain('件数の違う行どうし');
+    fireEvent.click(
+      within(compare()).getByRole('button', { name: '構成ごとの分布の見方' }),
+    );
+    expect(
+      infoDialog()!.querySelector('[data-group-compare-detail]')!.textContent,
+    ).toContain('開発用の架空の値です');
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(
       compare().querySelectorAll('[data-group-hist]').length,
     ).toBeGreaterThan(0);

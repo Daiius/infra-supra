@@ -96,9 +96,7 @@ const dialogAxes = () =>
   victory().querySelector<HTMLElement>('[data-result-axes]')!;
 /** 4 軸の欄の注記の横の ⓘ を開き、分布との比べ方の詳しい説明の文を返して閉じる（D-207）。 */
 function compareDetail(root: HTMLElement): string {
-  fireEvent.click(
-    within(root).getByRole('button', { name: '分布との比べ方の説明' }),
-  );
+  fireEvent.click(within(root).getByRole('button', { name: '4 つの軸の見方' }));
   const d = infoDialog()!;
   const text = d.querySelector('[data-compare-detail]')!.textContent ?? '';
   fireEvent.keyDown(document, { key: 'Escape' });
