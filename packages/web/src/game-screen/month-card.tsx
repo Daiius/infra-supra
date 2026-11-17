@@ -216,15 +216,15 @@ export function MonthCard({
         {onShowEvents
           ? r.events.length > 0 && (
               <div className="rounded-box border border-base-300 p-3">
-                {/* 印の列の幅を一番長い印にそろえ、題の頭を縦にそろえる（subgrid。D-224） */}
+                {/* 印の列の幅を一番長い印にそろえ、題の頭を縦にそろえる（subgrid）。題が折り返してもどの行か分かるよう、行の間に区切り線（D-224） */}
                 <ul
-                  className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-2 gap-y-1"
+                  className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-2 divide-y divide-base-content/10"
                   data-event-list
                 >
                   {r.events.map((e) => (
                     <li
                       key={`${e.id}:${e.phase}`}
-                      className="col-span-2 grid grid-cols-subgrid items-center text-sm"
+                      className="col-span-2 grid grid-cols-subgrid items-center py-1.5 text-sm first:pt-0 last:pb-0"
                     >
                       <span
                         className={`badge badge-sm w-full justify-start ${eventBadge(e).cls}`}
