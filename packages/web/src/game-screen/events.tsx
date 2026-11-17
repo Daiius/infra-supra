@@ -94,10 +94,6 @@ export function EventsDialog({
   }, [auto]);
   const n = r.events.length;
   const last = page >= n - 1;
-  const e = r.events[Math.min(page, n - 1)]!;
-  // 受ける / 断るをまだ選べる開発依頼か
-  const choosing =
-    e.phase === 'proposal' && state.pendingProposals.includes(e.id);
   const unread = n - read.size;
   // ページを移ったら本文を先頭へ戻す。押したボタンが端で押せなくなったら、次へ（最後のページでは「閉じる」）へフォーカスを移す
   const moved = useRef(false);
@@ -139,13 +135,9 @@ export function EventsDialog({
       }}
     >
       <div
-        // 2 件以上の月は高さを一定にする（modal は縦中央なので、高さが変わると上端・ナビ・閉じるが上下に動く）。
-        // 短いページは本文の下が空くだけ。1 件だけの月は内容に合わせる
-        className={clsx(
-          'modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6',
-          n > 1 && 'h-[min(40rem,calc(100dvh-2rem))]',
-        )}
-        data-events-fixed-height={n > 1 ? '' : undefined}
+        // 高さはその月の一番高いページに合わせる（全部のページを同じ格子の升に重ね、今のページだけを見せる。D-224）。
+        // ページを替えても上端・ナビ・閉じるが動かず、短いページばかりの月に下が空かない。上限は .modal-box の高さ（styles.css）
+        className="modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6"
       >
         {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
         <div className="flex shrink-0 items-start justify-between gap-2">
@@ -228,56 +220,84 @@ export function EventsDialog({
         <div
           ref={bodyRef}
           className="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-          data-events-page
           {...swipe}
         >
-          {/* key でページごとに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない） */}
-          <div
-            key={page}
-            className={clsx('relative pt-2', slideInClass(dir, reduced))}
-          >
-            {fresh && n > 1 && (
-              <span
-                className="badge badge-primary badge-soft badge-xs absolute top-0 right-2 z-10"
-                data-events-new
-              >
-                NEW
-              </span>
-            )}
-            <PortalContainer.Provider value={dialogEl}>
-              <EventCard
-                key={`${e.id}:${e.phase}`}
-                event={e}
-                premises={r.premises}
-                choosing={choosing}
-              />
-            </PortalContainer.Provider>
-            {/* 提案のページで受ける / 断るを選ぶ（行動の欄と同じ下書き。選べば「次の月へ」の確認は出ない。D-202） */}
-            {choosing && (
-              <div className="mt-2">
-                <ProposalChoice
-                  state={state}
-                  id={e.id}
-                  draft={draft}
-                  where="dialog"
-                />
-              </div>
-            )}
+          <div className="grid">
+            {r.events.map((x, i) => {
+              const current = i === page;
+              // 受ける / 断るをまだ選べる開発依頼か
+              const choosingX =
+                x.phase === 'proposal' && state.pendingProposals.includes(x.id);
+              return (
+                <div
+                  // 今のページになるたびに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない）
+                  key={current ? `current:${i}` : `idle:${i}`}
+                  className={clsx(
+                    'relative [grid-area:1/1] pt-2',
+                    current && slideInClass(dir, reduced),
+                  )}
+                  // 今でないページは高さだけを取る（見えず・読まれず・押せない）
+                  {...(current
+                    ? { 'data-events-page': '' }
+                    : {
+                        'aria-hidden': true,
+                        inert: true,
+                        style: { visibility: 'hidden' as const },
+                        'data-events-sizer': '',
+                      })}
+                >
+                  {current && fresh && n > 1 && (
+                    <span
+                      className="badge badge-primary badge-soft badge-xs absolute top-0 right-2 z-10"
+                      data-events-new
+                    >
+                      NEW
+                    </span>
+                  )}
+                  <PortalContainer.Provider value={dialogEl}>
+                    <EventCard
+                      event={x}
+                      premises={r.premises}
+                      choosing={choosingX}
+                    />
+                  </PortalContainer.Provider>
+                  {/* 提案のページで受ける / 断るを選ぶ（行動の欄と同じ下書き。選べば「次の月へ」の確認は出ない。D-202） */}
+                  {choosingX && (
+                    <div className="mt-2">
+                      <ProposalChoice
+                        state={state}
+                        id={x.id}
+                        draft={draft}
+                        where="dialog"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
           {/* 途中で閉じるのは右上の ✕（「あとで見る」は ✕ と重なるので出さない。D-224） */}
-          {last && (
-            <form method="dialog">
-              <button
-                ref={closeRef}
-                className="btn btn-primary btn-sm"
-                autoFocus={n === 1}
-              >
-                閉じる
-              </button>
-            </form>
-          )}
+          {/* 最後でないページも「閉じる」の場所を取っておき、本文の高さが変わらないようにする（見えず・押せない） */}
+          <form
+            method="dialog"
+            {...(last
+              ? {}
+              : {
+                  'aria-hidden': true,
+                  inert: true,
+                  style: { visibility: 'hidden' as const },
+                })}
+          >
+            <button
+              ref={closeRef}
+              className="btn btn-primary btn-sm"
+              autoFocus={n === 1}
+            >
+              閉じる
+            </button>
+          </form>
         </div>
       </div>
       <form method="dialog" className="modal-backdrop">

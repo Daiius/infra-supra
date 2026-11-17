@@ -54,8 +54,13 @@ describe('ゲームモードの画面', () => {
       name: 'イベントのページ',
     });
     const body = dialog.querySelector('[data-events-page]')!;
-    // 2 件以上の月は高さを一定にして、ページを替えても上端・ナビが動かない（見た目は画面で確かめる）
-    expect(dialog.querySelector('[data-events-fixed-height]')).not.toBeNull();
+    // 高さはその月の一番高いページに合わせる: 全部のページを同じ升に重ね、今でないページは見えず読まれない（D-224）
+    const sizers = dialog.querySelectorAll('[data-events-sizer]');
+    expect(sizers).toHaveLength(n - 1);
+    for (const x of sizers) {
+      expect(x.getAttribute('aria-hidden')).toBe('true');
+      expect(x.hasAttribute('inert')).toBe(true);
+    }
     expect(
       nav.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();

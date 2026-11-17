@@ -42,8 +42,9 @@ const proposalMonth = () =>
 /** 出来事のダイアログを、その提案の返事の欄のあるページまで送る。 */
 function pageOf(dialog: HTMLElement, id: string): HTMLElement {
   for (let i = 0; i < 20; i++) {
+    // 今のページの中だけを探す（ほかのページは高さを取るために見えないまま置いてある。D-224）
     const row = dialog.querySelector<HTMLElement>(
-      `[data-dialog-proposal-choice="${id}"]`,
+      `[data-events-page] [data-dialog-proposal-choice="${id}"]`,
     );
     if (row) return row;
     const next = within(dialog).queryByRole<HTMLButtonElement>('button', {
