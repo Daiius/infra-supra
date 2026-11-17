@@ -112,15 +112,19 @@ describe('acceptSummary', () => {
       '機能開発 +8（作業の工数 合計 6 も機能開発に数える）',
       'PV の月の伸び +3 ポイント（3 か月）',
     ]);
-    expect(sum.costs).toContain(
-      'その間、アクションに使える工数が 3 減ります（2 か月）',
-    );
+    // 工数はデータの cost 1 つにまとめる（「アクションに使える工数が減ります」と重ねない。D-225）
+    // 工数はデータの cost 1 つ（選択肢の横の札）。数え方の注記と、ほかの伴うことは札の ⓘ に（D-225）
+    expect(sum.effort).toEqual(['毎月 工数 3 を 2 か月']);
+    expect(sum.effortNote).toBe('作業の工数も機能開発に数えます');
+    expect(sum.costs.some((c) => c.includes('工数'))).toBe(false);
+    expect(sum.featureBonus).toBe(8);
     expect(sum.costs.some((c) => c.startsWith('使用量・費用: '))).toBe(true);
   });
 
   it('機能開発に数えない対応の工数は、伴うことに出す', () => {
     const sum = acceptSummary(start(), eventDef(sc, 'p-archive')!);
-    expect(sum.costs).toContain('対応の工数 4（1 か月・機能開発に数えない）');
+    expect(sum.effort).toEqual(['工数 4']);
+    expect(sum.effortNote).toBe('対応の工数は機能開発には数えません');
     // 基準の PV が増える分は、PV に比例する収益を得に出す
     expect(sum.gains).toEqual([
       `基準の PV × 1.5（以降ずっと）・収益は 1,000 PV あたり $${sc.revenue.adsUsdPer1000PV}`,

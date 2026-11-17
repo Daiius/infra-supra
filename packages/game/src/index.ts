@@ -56,6 +56,7 @@ export {
   type Rewrite,
   type EndReason,
   type MonthEvent,
+  type EffectTrend,
   type Crossing,
   type MonthReport,
   type GameState,
@@ -200,7 +201,12 @@ export {
   nextSsrCpuMs,
   componentEffortLabel,
 } from './effort.ts';
-export { IMAGE_REDESIGN_ID, acceptSummary, describeEffect } from './events.ts';
+export {
+  IMAGE_REDESIGN_ID,
+  acceptSummary,
+  describeEffect,
+  effectTrend,
+} from './events.ts';
 export {
   type FeatureOutlook,
   type FeatureProgress,

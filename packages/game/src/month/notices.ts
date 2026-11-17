@@ -1,5 +1,4 @@
 // playMonth の出来事の段: 今月の報告に載せる出来事（起きた・予告・提案・前提の境目・料金の改定の予告）。
-import { MVP_STACKS } from 'catalog';
 import type { PlatformPremise } from 'estimator';
 import { eventDef, revisionText, SCHEDULED_CHANGES } from '../core.ts';
 import { BOT_BLOCK } from '../actions/check.ts';
@@ -8,6 +7,7 @@ import {
   acceptSummary,
   describeEffect,
   describeEffectBlocked,
+  effectTrend,
   premiseRefsOf,
 } from '../events.ts';
 import {
@@ -17,9 +17,10 @@ import {
 } from '../requirements.ts';
 import { articleFamily } from '../routes/strategy.ts';
 import type { EventDef, Scenario, Scheduled } from '../scenario.ts';
-import { membersOf, slaOf } from '../stacks.ts';
+import { componentsAfterMigration, membersOf, slaOf } from '../stacks.ts';
 import type { GameState, MonthEvent, MonthReport } from '../state.ts';
 import type { Due } from './traffic.ts';
+import { architectureFor, staticBuildOf } from '../workload.ts';
 
 /**
  * 起きた出来事の本文。予告なしなら surpriseText、Bot を遮断済みなら遮断済みの文（D-28・2026-11-04）。
@@ -68,6 +69,7 @@ export function monthEventsOf(
         title: p.title,
         text: p.text,
         effects: p.effects.map(describeEffect),
+        effectTrends: p.effects.map(effectTrend),
         premises: [],
       });
       continue;
@@ -113,6 +115,7 @@ export function monthEventsOf(
           ? describeEffectBlocked(e, BOT_BLOCK.remaining)
           : describeEffect(e),
       ),
+      effectTrends: (def.effects ?? []).map(effectTrend),
       ...(botBlocked ? { botBlocked: true as const } : {}),
       premises: premiseRefsOf(def, premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
@@ -198,13 +201,53 @@ export function monthEventsOf(
     });
   }
   // 実際に予告されている改定（始めた日が施行日より前のものだけ。D-21）
-  const stack = MVP_STACKS[stackIndexNow]!;
+  // 今の構成が課金に使う事業者: 選んだ部品・差し替え中の部品・描き方で足すノードも含め、明細と同じ組み立て（architectureFor）から取る。
+  // 乗り換え中は乗り換え先も動かしているので含める（OCL-6294AD10）
+  const swap = state.componentSwap;
+  const routing = staticBuildOf(
+    sc,
+    stackIndexNow,
+    state.framework,
+    state.routes,
+    state.legacyRouteDefaults,
+  );
+  const archs = [
+    architectureFor(
+      stackIndexNow,
+      state.seats,
+      state.framework,
+      state.components,
+      swap ? { [swap.slot]: swap.option } : {},
+      state.storageOption,
+      routing,
+    ),
+    ...(state.migration
+      ? [
+          architectureFor(
+            state.migration.to,
+            0,
+            state.framework,
+            componentsAfterMigration(
+              state.migration.to,
+              state.mods,
+              state.framework,
+              sc,
+            ),
+          ),
+        ]
+      : []),
+  ];
   const used = new Set(
-    stack.nodes.flatMap((n) => (n.billing ? [n.billing.provider] : [])),
+    archs.flatMap((a) =>
+      a.nodes.flatMap((n) => (n.billing ? [n.billing.provider] : [])),
+    ),
   );
   for (const rv of state.revisions) {
     if (rv.month !== month) continue;
     const c = SCHEDULED_CHANGES.find((x) => x.id === rv.id)!;
+    // 知らせるのは、計算を変える改定（改定後の料金を持つ）で、今の構成が使っている事業者のものだけ（D-226）。
+    // 計算は知らせの有無によらず、起きた月から改定後の料金で行う（applyRevisions）
+    if (c.revisedMeters.length === 0 || !used.has(c.provider)) continue;
     events.push({
       id: c.id,
       kind: 'script',

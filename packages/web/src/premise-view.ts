@@ -98,7 +98,7 @@ export function creditUseText(
  * （「Images は月 5,000 …」の「Images」・「Email Service の送信は …」の「Email Service の送信」）を、最初の「は」「（」「。」「、」の前で切って取る。
  * 長すぎるとき（主語の無い文）は頭を 18 文字で切って「…」を付ける。
  */
-export function premiseName(p: PlatformPremise): string {
+export function premiseName(p: Pick<PlatformPremise, 'text'>): string {
   const head = p.text.split(/は|（|。|、/)[0]!.trim();
   if (head.length > 0 && head.length <= 20) return head;
   return `${p.text.slice(0, 18).trim()}…`;

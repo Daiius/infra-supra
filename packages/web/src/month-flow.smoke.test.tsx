@@ -3,7 +3,7 @@
 // 値（金額・満足度）は game のテストが持つので、ここでは確かめない。
 // このファイルで見るもの: 月の進行・保存と再開・工数の欄と輪（行動の欄）（App.smoke.test.tsx から分けた）。
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { ARTICLE_COMMUNITY, rollSchedule } from 'game';
+import { ARTICLE_COMMUNITY, rollSchedule, IMAGE_REDESIGN_ID } from 'game';
 import { describe, expect, it } from 'vitest';
 import {
   useSmokeEnv,
@@ -176,26 +176,40 @@ describe('ゲームモードの画面', () => {
     )!.month;
     advance(m - 1);
     expectGameScreen(m);
-    const card =
-      screen.getByText('届いた開発依頼（選ばなければ断る）').parentElement!;
-    expect(card.textContent).toContain(
-      '受けると: 機能開発 +6（作業の工数 4 も機能開発に数える）',
+    const card = screen.getByText('届いた開発依頼').parentElement!;
+    // 受けるの下に得（機能開発の加点 → 満足度の「機能」→ PV の伸びの流れ）と、伴うこと（工数は 1 つにまとめる）。断るには何も添えない（D-225）
+    expect(card.querySelector('[data-feature-chain]')!.textContent).toBe(
+      '機能開発の加点 +6満足度の「機能」PV の伸び',
     );
-    expect(card.textContent).toContain(
-      '伴うこと: 来月、アクションに使える工数が 4 減ります・使用量・費用: SSR の割合 60%',
+    // 工数は受けるの横の札、数え方の注記とほかに伴うことは札の横の ⓘ（D-225）
+    const row = card.querySelector<HTMLElement>(
+      '[data-proposal-choice="p-personal"]',
+    )!;
+    expect(row.querySelector('[data-accept-effort]')!.textContent).toBe(
+      '工数 4',
     );
-    expect(card.textContent).toContain('断る（何も変わりません）');
+    expect(row.textContent).not.toContain('伴うこと');
+    fireEvent.click(
+      within(row).getByRole('button', { name: '受けたときに伴うこと' }),
+    );
+    expect(
+      infoDialog()!.querySelector('[data-accept-costs]')!.textContent,
+    ).toBe('作業の工数も機能開発に数えます使用量・費用: SSR の割合 60%');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(card.textContent).not.toContain('何も変わりません');
+    expect(card.querySelector('[data-decline-loss]')).toBeNull();
     // 7 か月目に記事のデザインの刷新の提案が届く。機能の加点が無くても、得と断ったときの損を出す
     advance(1);
     const months = ARTICLE_COMMUNITY.imageRedesign!.declineMonths;
-    const proposals =
-      screen.getByText('届いた開発依頼（選ばなければ断る）').parentElement!
-        .textContent!;
-    expect(proposals).toContain(
-      `受けると: 画質の評価を保つ（断ると ${months} か月、画質が 1 段下がる）`,
+    const proposals = document.querySelector(
+      `[data-proposal-choice="${IMAGE_REDESIGN_ID}"]`,
+    )!;
+    expect(proposals.querySelector('[data-feature-chain]')).toBeNull();
+    expect(proposals.querySelector('[data-accept-gains] li')!.textContent).toBe(
+      `画質の評価を保つ（断ると ${months} か月、画質が 1 段下がる）`,
     );
-    expect(proposals).toContain(
-      `断る（${months} か月、画質の評価が 1 段下がります）`,
+    expect(proposals.querySelector('[data-decline-loss]')!.textContent).toBe(
+      `${months} か月、画質の評価が 1 段下がります`,
     );
   });
 

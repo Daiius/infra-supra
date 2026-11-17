@@ -427,20 +427,9 @@ export function registerSetupChange() {
   fireEvent.click(b);
 }
 
-/** 未決の提案の確認のダイアログ（D-140）。開いていなければ null。 */
-export const declineConfirm = (): HTMLElement | null =>
-  document.querySelector<HTMLElement>('dialog[data-decline-confirm][open]');
-
-/**
- * 「次の月へ」を押す。未決の提案があって確認（D-140）が出たら「断って進む」で進む（選ばなければ断る、の今までの進め方）。
- */
+/** 「次の月へ」を押す（開発依頼は既定で受けないので、確認は挟まない。D-225）。 */
 export function nextMonth() {
   fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-  const confirm = declineConfirm();
-  if (confirm)
-    fireEvent.click(
-      within(confirm).getByRole('button', { name: '断って進む' }),
-    );
 }
 
 /**
@@ -457,8 +446,12 @@ export function advance(n: number) {
 }
 
 /** 出来事のダイアログ（D-126）の今のページの位置（「2 / 4」）。 */
-export const eventPosition = (dialog: HTMLElement) =>
-  dialog.querySelector('[data-events-position]')!.textContent!.trim();
+/** 今のページの位置（「2 / 5」）。画面には数を出さず、ページ送りの点の今の印から数える（D-224）。 */
+export function eventPosition(dialog: HTMLElement): string {
+  const dots = [...dialog.querySelectorAll('[data-events-dots] [data-dot]')];
+  const i = dots.findIndex((d) => d.getAttribute('data-dot') === 'current');
+  return `${i + 1} / ${dots.length}`;
+}
 
 /**
  * 出来事のダイアログを 1 ページ目から最後まで「次へ」で送り、各ページの中身の文を返す（最後のページで止まる）。
@@ -478,11 +471,11 @@ export function readEventPages(dialog: HTMLElement): string[] {
   return pages;
 }
 
-/** 出来事のダイアログを閉じる（最後のページなら「閉じる」、途中なら「あとで見る（閉じる）」）。 */
+/** 出来事のダイアログを閉じる（最後のページなら「閉じる」、途中なら右上の ×）。 */
 export function closeEventsDialog(dialog: HTMLElement) {
   fireEvent.click(
     within(dialog).queryByRole('button', { name: '閉じる' }) ??
-      within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' }),
+      within(dialog).getByRole('button', { name: 'ダイアログを閉じる' }),
   );
   expect(screen.queryByRole('dialog')).toBeNull();
 }

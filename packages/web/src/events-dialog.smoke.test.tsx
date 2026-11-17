@@ -18,6 +18,7 @@ import {
   monthHeading,
   expectGameScreen,
   ARTICLE,
+  infoDialog,
 } from './smoke.test-helpers.tsx';
 
 useSmokeEnv();
@@ -53,8 +54,13 @@ describe('ゲームモードの画面', () => {
       name: 'イベントのページ',
     });
     const body = dialog.querySelector('[data-events-page]')!;
-    // 2 件以上の月は高さを一定にして、ページを替えても上端・ナビが動かない（見た目は画面で確かめる）
-    expect(dialog.querySelector('[data-events-fixed-height]')).not.toBeNull();
+    // 高さはその月の一番高いページに合わせる: 全部のページを同じ升に重ね、今でないページは見えず読まれない（D-224）
+    const sizers = dialog.querySelectorAll('[data-events-sizer]');
+    expect(sizers).toHaveLength(n - 1);
+    for (const x of sizers) {
+      expect(x.getAttribute('aria-hidden')).toBe('true');
+      expect(x.hasAttribute('inert')).toBe(true);
+    }
     expect(
       nav.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -69,37 +75,37 @@ describe('ゲームモードの画面', () => {
     const dotStates = () => dots.map((d) => d.getAttribute('data-dot'));
     expect(dots[0]!.getAttribute('aria-current')).toBe('step');
     expect(dotStates()).toEqual(['current', ...Array(n - 1).fill('unread')]);
-    // 見出しの近くに未読の数（開いたページは既読）、未読だったカードの角に NEW
-    const unread = () =>
-      dialog.querySelector('[data-events-unread]')!.textContent;
-    const isNew = () => dialog.querySelector('[data-events-new]') !== null;
-    expect(unread()).toBe(`未読 ${n - 1}`);
-    expect(isNew()).toBe(true);
+    // 未読は点（開いたページは既読）だけで示す。見出しの数・「1 / 5」・カードの NEW は出さない（D-224）
+    expect(dialog.querySelector('[data-events-unread]')).toBeNull();
+    expect(dialog.querySelector('[data-events-position]')).toBeNull();
+    const unread = () => dotStates().filter((x) => x === 'unread').length;
+    expect(unread()).toBe(n - 1);
     // 読み上げにも位置と未読の数を伝える
     expect(dialog.querySelector('[aria-live="polite"]')!.textContent).toBe(
       `${n} 件中 1 件目。未読 ${n - 1} 件`,
     );
-    // 1 ページ目: 前へは押せず、次へ・あとで見る・× がある。最後でないので「閉じる」は無い
+    // 1 ページ目: 前へは押せず、次へ・× がある。最後でないので「閉じる」は無い（「あとで見る」は × と重なるので出さない。D-224）
     const prev = () =>
       within(dialog).getByRole<HTMLButtonElement>('button', {
         name: /^← 前へ/,
       });
     expect(prev().disabled).toBe(true);
-    within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' });
+    expect(
+      within(dialog).queryByRole('button', { name: 'あとで見る（閉じる）' }),
+    ).toBeNull();
     within(dialog).getByRole('button', { name: 'ダイアログを閉じる' });
     expect(within(dialog).queryByRole('button', { name: '閉じる' })).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
     expect(eventPosition(dialog)).toBe(`2 / ${n}`);
     expect(page()).not.toBe(first);
-    expect(unread()).toBe(`未読 ${n - 2}`);
-    expect(isNew()).toBe(true);
+    expect(unread()).toBe(n - 2);
     expect(dotStates().slice(0, 2)).toEqual(['read', 'current']);
     fireEvent.click(prev());
     expect(eventPosition(dialog)).toBe(`1 / ${n}`);
-    expect(page()).toContain(first.replace(/^NEW/, ''));
-    // 読んだページに戻ると NEW は出ず、未読の数も減らない
-    expect(isNew()).toBe(false);
-    expect(unread()).toBe(`未読 ${n - 2}`);
+    expect(page()).toBe(first);
+    // 読んだページに戻っても未読の数は減らない
+    expect(dialog.querySelector('[data-events-new]')).toBeNull();
+    expect(unread()).toBe(n - 2);
     // 点を押すとそのページへ移る
     const proposalDot = dots.find((b) =>
       b.getAttribute('aria-label')!.includes('会員向けの個人化'),
@@ -120,13 +126,11 @@ describe('ゲームモードの画面', () => {
     const proposal = pages.find((t) => t.includes('◆ 開発依頼'))!;
     expect(proposal).toContain('会員向けの個人化');
     // 提案のページで受ける / 断るを選べる（D-202）
-    expect(proposal).toContain(
-      '受けるか断るかを選びます（選ばなければ断ります）',
-    );
+    expect(proposal).toContain('受けるかを選びます');
     expect(pages.some((t) => t.includes('⚡ 今月発生'))).toBe(true);
     // 最後のページ: 「閉じる」が主ボタン。次へは位置を動かさず押せなくなり、あとで見るは無い。全部読んだ
     expect(eventPosition(dialog)).toBe(`${n} / ${n}`);
-    expect(unread()).toBe('✓ すべて既読');
+    expect(unread()).toBe(0);
     expect(dotStates().filter((x) => x === 'unread')).toHaveLength(0);
     expect(
       within(dialog).getByRole<HTMLButtonElement>('button', { name: /^次へ/ })
@@ -149,8 +153,8 @@ describe('ゲームモードの画面', () => {
     const again = screen.getByRole('dialog');
     expect(eventPosition(again)).toBe(`1 / ${n}`);
     // 既読は開いている間だけ。開き直すと初めから（D-126）
-    expect(again.querySelector('[data-events-unread]')!.textContent).toBe(
-      `未読 ${n - 1}`,
+    expect([...again.querySelectorAll('[data-dot="unread"]')].length).toBe(
+      n - 1,
     );
     closeEventsDialog(again);
   });
@@ -167,14 +171,14 @@ describe('ゲームモードの画面', () => {
     });
     advance(m - 2);
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    // 途中のページで「あとで見る（閉じる）」
+    // 途中のページで右上の ×
     let dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
     fireEvent.click(
-      within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' }),
+      within(dialog).getByRole('button', { name: 'ダイアログを閉じる' }),
     );
     expect(screen.queryByRole('dialog')).toBeNull();
-    // × でも閉じる（一覧のボタンで開き直してから）
+    // もう一度 × で閉じる（一覧のボタンで開き直してから）
     fireEvent.click(
       screen.getByRole('button', { name: /^イベントを 1 件ずつ見る/ }),
     );
@@ -200,7 +204,7 @@ describe('ゲームモードの画面', () => {
     await waitLoaded();
     monthHeading(m);
     expect(screen.queryByRole('dialog')).toBeNull();
-    // 次の出来事のある月はまた開く（この月の提案は選ばずに断って進む。D-140）
+    // 次の出来事のある月はまた開く（この月の提案は既定の受けないのまま進む。D-225）
     nextMonth();
     within(screen.getByRole('dialog')).getByRole('heading', {
       name: new RegExp(`^${m + 1} か月目のイベント`),
@@ -263,16 +267,35 @@ describe('ゲームモードの画面', () => {
     // 出来事は 1 件ずつ出る（D-126）。Bot のページまで送る
     for (let i = 0; i < 10 && !dialog.textContent!.includes(bot.title); i++)
       fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
-    expect(dialog.textContent).toContain(bot.blockedSurpriseText);
-    expect(dialog.textContent).not.toContain(bot.surpriseText);
-    // 効果の行は実際の倍率、予告なしの印の説明も遮断済みの文
-    expect(dialog.textContent).toContain(
-      '効果: Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
+    // 本体は最初の 1 文だけ。遮断済みの文は ⓘ の説明の全文で読む（D-224）
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'このイベントの詳しい説明' }),
     );
-    expect(dialog.textContent).toContain(
+    const full = infoDialog()!.querySelector('[data-event-text]')!.textContent;
+    expect(full).toContain(bot.blockedSurpriseText);
+    expect(full).not.toContain(bot.surpriseText);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // 効果の行は実際の倍率、予告なしの印の説明も遮断済みの文
+    // 効果は増える / 減るの矢印の札（D-224）
+    const effect = dialog.querySelector('[data-event-effects] li')!;
+    expect(effect.textContent).toBe(
+      'Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
+    );
+    expect(effect.getAttribute('data-trend')).toBe('up');
+    expect(effect.querySelector('svg')).not.toBeNull();
+    // 予告なしの印の説明はカードの ⓘ に畳む（D-224）
+    expect(dialog.textContent).not.toContain(
+      '今月の費用・満足度に効いています',
+    );
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'このイベントの詳しい説明' }),
+    );
+    const info = infoDialog()!;
+    expect(info.textContent).toContain(
       '今月の費用・満足度に効いています（遮断済みで半分）',
     );
-    expect(dialog.textContent).not.toContain('対処は来月から');
+    expect(info.textContent).not.toContain('対処は来月から');
+    fireEvent.keyDown(document, { key: 'Escape' });
     // 緑の印（文字つき）を添える。閉じた後の月の報告の一覧にも出る
     expect(
       within(dialog)

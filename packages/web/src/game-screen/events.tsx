@@ -1,11 +1,13 @@
 import clsx from 'clsx';
-import { useEffect, useRef, useState } from 'react';
+import { TrendingDown, TrendingUp } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameState, MonthEvent, MonthReport } from 'game';
 import type { PlatformPremise } from 'estimator';
 import { eventCategory, EventIcon } from '../event-icons.tsx';
 import type { MonthDraft } from '../month-draft.ts';
 import { PROPOSAL_BADGE, ProposalChoice } from '../proposal-choice.tsx';
-import { hitLabel, hitTone } from '../premise-view.ts';
+import { hitLabel, hitTone, premiseName } from '../premise-view.ts';
+import { Info, PortalContainer } from '../info.tsx';
 import { useReducedMotion } from '../motion.tsx';
 import { slideInClass, useSwipe } from '../swipe.ts';
 
@@ -42,7 +44,7 @@ const DOT_CLASS = {
 /**
  * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつの通知のカードで出し、見出しの下のナビ
  * （「← 前へ」「2 / 4」「次へ →」とページ送りの点）で左右に切り替える（左右の矢印キー・横のスワイプでも）。
- * 未読の数を見出しに、未読だったカードには角に「NEW」を出す。表示したページは既読にする（既読はダイアログを開いている間だけ）。
+ * 未読はページ送りの点の色と大きさで示す。表示したページは既読にする（既読はダイアログを開いている間だけ）。
  * ナビは本文の上に置き、ページの高さが変わっても動かない。本文が長いときは本文だけをスクロールする。
  * `<dialog>` の showModal でフォーカスを閉じ込め、Esc・×・「あとで見る」・最後のページの「閉じる」で閉じる。
  * 選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
@@ -63,18 +65,23 @@ export function EventsDialog({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // カードの ⓘ の説明のダイアログを、このダイアログの中に描く（info.tsx の PortalContainer。D-224）
+  const [dialogEl, setDialogEl] = useState<HTMLDialogElement | null>(null);
+  const dialogRef = useCallback((el: HTMLDialogElement | null) => {
+    ref.current = el;
+    setDialogEl(el);
+  }, []);
   const nextRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
-  // page: 今のページ / read: 表示したページ（今のページを含む） / fresh: 今のページが開いた時点で未読だったか / dir: 移った向き
+  // page: 今のページ / read: 表示したページ（今のページを含む） / dir: 移った向き
   const [view, setView] = useState({
     page: 0,
     read: new Set([0]),
-    fresh: true,
     dir: 0,
   });
-  const { page, read, fresh, dir } = view;
+  const { page, read, dir } = view;
   useEffect(() => {
     const d = ref.current;
     if (!d || d.open) return;
@@ -86,10 +93,6 @@ export function EventsDialog({
   }, [auto]);
   const n = r.events.length;
   const last = page >= n - 1;
-  const e = r.events[Math.min(page, n - 1)]!;
-  // 受ける / 断るをまだ選べる開発依頼か
-  const choosing =
-    e.phase === 'proposal' && state.pendingProposals.includes(e.id);
   const unread = n - read.size;
   // ページを移ったら本文を先頭へ戻す。押したボタンが端で押せなくなったら、次へ（最後のページでは「閉じる」）へフォーカスを移す
   const moved = useRef(false);
@@ -111,7 +114,6 @@ export function EventsDialog({
     setView({
       page: to,
       read: new Set(read).add(to),
-      fresh: !read.has(to),
       dir: to > page ? 1 : -1,
     });
   };
@@ -119,7 +121,7 @@ export function EventsDialog({
   const swipe = useSwipe((d) => go(page + d));
   return (
     <dialog
-      ref={ref}
+      ref={dialogRef}
       className="modal"
       aria-labelledby="events-dialog-title"
       onClose={onClose}
@@ -131,13 +133,9 @@ export function EventsDialog({
       }}
     >
       <div
-        // 2 件以上の月は高さを一定にする（modal は縦中央なので、高さが変わると上端・ナビ・閉じるが上下に動く）。
-        // 短いページは本文の下が空くだけ。1 件だけの月は内容に合わせる
-        className={clsx(
-          'modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6',
-          n > 1 && 'h-[min(40rem,calc(100dvh-2rem))]',
-        )}
-        data-events-fixed-height={n > 1 ? '' : undefined}
+        // 高さはその月の一番高いページに合わせる（全部のページを同じ格子の升に重ね、今のページだけを見せる。D-224）。
+        // ページを替えても上端・ナビ・閉じるが動かず、短いページばかりの月に下が空かない。上限は .modal-box の高さ（styles.css）
+        className="modal-box flex w-11/12 max-w-2xl flex-col overflow-hidden px-3 sm:px-6"
       >
         {/* × は見出しの行の右上。ナビは別の行の左に寄せ、× の真下に「次へ」が来ないようにする */}
         <div className="flex shrink-0 items-start justify-between gap-2">
@@ -145,17 +143,10 @@ export function EventsDialog({
             id="events-dialog-title"
             className="flex flex-wrap items-center gap-x-2 text-lg font-bold"
           >
+            {/* 未読は点の色と大きさで分かるので、見出しには数を出さない（カードの NEW もやめた。D-224） */}
             <span>
               {r.month} か月目のイベント（{n} 件）
             </span>
-            {n > 1 && (
-              <span
-                className={`badge badge-sm font-normal ${unread > 0 ? 'badge-primary badge-soft' : 'badge-ghost'}`}
-                data-events-unread
-              >
-                {unread > 0 ? `未読 ${unread}` : '✓ すべて既読'}
-              </span>
-            )}
           </h2>
           <form method="dialog">
             <button
@@ -180,13 +171,6 @@ export function EventsDialog({
               >
                 ← 前へ
               </button>
-              <span
-                className="min-w-12 text-center text-sm tabular-nums"
-                aria-hidden
-                data-events-position
-              >
-                {page + 1} / {n}
-              </span>
               <button
                 ref={nextRef}
                 type="button"
@@ -234,59 +218,77 @@ export function EventsDialog({
         <div
           ref={bodyRef}
           className="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-          data-events-page
           {...swipe}
         >
-          {/* key でページごとに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない） */}
-          <div
-            key={page}
-            className={clsx('relative pt-2', slideInClass(dir, reduced))}
-          >
-            {fresh && n > 1 && (
-              <span
-                className="badge badge-primary badge-soft badge-xs absolute top-0 right-2 z-10"
-                data-events-new
-              >
-                NEW
-              </span>
-            )}
-            <EventCard
-              key={`${e.id}:${e.phase}`}
-              event={e}
-              premises={r.premises}
-              choosing={choosing}
-            />
-            {/* 提案のページで受ける / 断るを選ぶ（行動の欄と同じ下書き。選べば「次の月へ」の確認は出ない。D-202） */}
-            {choosing && (
-              <div className="mt-2">
-                <ProposalChoice
-                  state={state}
-                  id={e.id}
-                  draft={draft}
-                  where="dialog"
-                />
-              </div>
-            )}
+          <div className="grid">
+            {r.events.map((x, i) => {
+              const current = i === page;
+              // 受ける / 断るをまだ選べる開発依頼か
+              const choosingX =
+                x.phase === 'proposal' && state.pendingProposals.includes(x.id);
+              return (
+                <div
+                  // 今のページになるたびに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない）
+                  key={current ? `current:${i}` : `idle:${i}`}
+                  className={clsx(
+                    'relative [grid-area:1/1]',
+                    current && slideInClass(dir, reduced),
+                  )}
+                  // 今でないページは高さだけを取る（見えず・読まれず・押せない）
+                  {...(current
+                    ? { 'data-events-page': '' }
+                    : {
+                        'aria-hidden': true,
+                        inert: true,
+                        style: { visibility: 'hidden' as const },
+                        'data-events-sizer': '',
+                      })}
+                >
+                  {/* カードと返事の欄の ⓘ は、このダイアログの中に描く */}
+                  <PortalContainer.Provider value={dialogEl}>
+                    <EventCard
+                      event={x}
+                      premises={r.premises}
+                      choosing={choosingX}
+                    />
+                    {/* 提案のページで受ける / 受けないを選ぶ（行動の欄と同じ下書き。D-202・D-225） */}
+                    {choosingX && (
+                      <div className="mt-2">
+                        <ProposalChoice
+                          state={state}
+                          id={x.id}
+                          draft={draft}
+                          where="dialog"
+                        />
+                      </div>
+                    )}
+                  </PortalContainer.Provider>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
-          {last ? (
-            <form method="dialog">
-              <button
-                ref={closeRef}
-                className="btn btn-primary btn-sm"
-                autoFocus={n === 1}
-              >
-                閉じる
-              </button>
-            </form>
-          ) : (
-            <form method="dialog">
-              <button className="btn btn-ghost btn-sm">
-                あとで見る（閉じる）
-              </button>
-            </form>
-          )}
+          {/* 途中で閉じるのは右上の ✕（「あとで見る」は ✕ と重なるので出さない。D-224） */}
+          {/* 最後でないページも「閉じる」の場所を取っておき、本文の高さが変わらないようにする（見えず・押せない） */}
+          <form
+            method="dialog"
+            {...(last
+              ? {}
+              : {
+                  'aria-hidden': true,
+                  inert: true,
+                  style: { visibility: 'hidden' as const },
+                })}
+          >
+            <button
+              ref={closeRef}
+              className="btn btn-primary btn-sm"
+              autoFocus={n === 1}
+            >
+              閉じる
+            </button>
+          </form>
         </div>
       </div>
       <form method="dialog" className="modal-backdrop">
@@ -358,36 +360,88 @@ export function EventCard({
   choosing?: boolean;
 }) {
   const badge = eventBadge(e);
+  const lead = leadSentence(e.text);
   // 効き方が引けない前提は、今までどおり止まる側（赤）に倒す
   const effectOf = (id: string) => premises.find((p) => p.id === id)?.effect;
   return (
     <div
       className={`rounded-box border p-3 ${e.tier === 'rare' ? 'border-error' : 'border-base-300'}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
-        <BlockedBadge event={e} />
-        {badge.note && <span className="text-xs">{badge.note}</span>}
-        <span className="badge badge-sm badge-outline">
-          {TIER_LABEL[e.tier]}
-        </span>
-        {/* 種類の印（D-140）。始める画面の出来事の説明の行と同じ印 */}
-        <span className="flex items-center gap-1.5 font-semibold">
-          <EventIcon category={eventCategory(e)} />
-          {e.title}
+      <div className="flex items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span className={`badge badge-sm ${badge.cls}`}>{badge.label}</span>
+          <BlockedBadge event={e} />
+          {/* 起きやすさは「まれ」だけ出す（月のカードの一覧と同じ。ほかは ⓘ。D-224） */}
+          {e.tier === 'rare' && (
+            <span className="badge badge-sm badge-outline badge-error">
+              {TIER_LABEL[e.tier]}
+            </span>
+          )}
+          {/* 種類の印（D-140）。始める画面の出来事の説明の行と同じ印 */}
+          <span className="flex items-center gap-1.5 font-semibold">
+            <EventIcon category={eventCategory(e)} />
+            {e.title}
+          </span>
+        </div>
+        {/* カードの右上の ⓘ: 印の意味・起きやすさ・当たりうる上限の全文（D-224） */}
+        <span className="shrink-0">
+          <Info label="このイベントの詳しい説明" title={e.title}>
+            {lead !== e.text && (
+              <section>
+                <h3 className="mb-1 font-bold">説明</h3>
+                <p data-event-text>{e.text}</p>
+              </section>
+            )}
+            <section>
+              <h3 className="mb-1 font-bold">印</h3>
+              <p>
+                {badge.label}
+                {badge.note ? `: ${badge.note}` : ''}
+              </p>
+              <p>起きやすさ: {TIER_LABEL[e.tier]}</p>
+            </section>
+            {e.premises.length > 0 && (
+              <section>
+                <h3 className="mb-1 font-bold">関わる上限</h3>
+                <EventPremises event={e} effectOf={effectOf} />
+              </section>
+            )}
+          </Info>
         </span>
       </div>
-      <div className="mt-1 text-sm">{e.text}</div>
+      {/* 本体は最初の 1 文だけ。全文はカードの ⓘ（D-224） */}
+      <div className="mt-1 text-sm" data-event-lead>
+        {lead}
+      </div>
+      {/* 効果は増える / 減るの矢印の札で並べる（良し悪しの色は付けない。D-224） */}
       {e.effects.length > 0 && (
-        <div className="mt-1 text-xs opacity-70">
-          効果: {e.effects.join('・')}
-        </div>
+        <ul
+          className="mt-1.5 flex flex-wrap gap-1"
+          aria-label="効果"
+          data-event-effects
+        >
+          {e.effects.map((x, i) => {
+            const t = e.effectTrends?.[i] ?? null;
+            const Icon =
+              t === 'up' ? TrendingUp : t === 'down' ? TrendingDown : null;
+            return (
+              <li
+                key={x}
+                className="badge h-auto min-h-5 gap-1 badge-outline badge-sm py-0.5 text-left"
+                data-trend={t ?? ''}
+              >
+                {Icon && <Icon aria-hidden className="size-3.5 shrink-0" />}
+                {x}
+              </li>
+            );
+          })}
+        </ul>
       )}
-      {e.accept && (
+      {/* 受ける / 断るを選べるページでは、すぐ下の選択の欄が同じことを出すので重ねない（D-224） */}
+      {e.accept && !choosing && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          {choosing ? '' : '。月の終わりのアクションで受けるか断るかを選びます'}
-          （
+          。月の終わりのアクションで受けるか断るかを選びます （
           {e.accept.declineLoss
             ? `断ると${e.accept.declineLoss}`
             : '断っても罰はありません'}
@@ -398,7 +452,7 @@ export function EventCard({
         // 今の構成では受けられない提案は、返事を待たずに断ったことにした（D-201）
         <div className="mt-1 text-xs" data-event-unavailable>
           <span className="mr-1 badge badge-ghost badge-xs">返事は不要</span>
-          受けられないので、断ったことになります
+          受けられないので、断ったことになります（{e.unavailable}）
         </div>
       )}
       {e.accept?.unavailable && (
@@ -439,38 +493,84 @@ export function EventCard({
           ))}
         </ul>
       )}
-      {e.premises.length > 0 && (
-        <ul className="mt-1 space-y-0.5 text-xs">
-          {e.premises.map((p) => {
-            const effect = effectOf(p.id);
-            const tone = effect ? hitTone(effect) : 'error';
-            return (
-              <li
-                key={p.id}
-                className="flex flex-wrap items-center gap-1"
-                data-event-premise={effect ?? ''}
-              >
-                <span
-                  className={`badge badge-xs ${p.hit ? HIT_BADGE[tone] : 'badge-ghost'}`}
-                >
-                  {p.hit
-                    ? `${tone === 'error' ? '✗' : '●'} ${effect ? hitLabel(effect) : '上限に達した'}`
-                    : '○ 達する可能性のある上限'}
-                </span>
-                {p.text}
-                {p.ratio !== undefined && (
-                  <span className="tabular-nums opacity-70">
-                    （今 {(p.ratio * 100).toFixed(0)}%）
-                  </span>
-                )}
-                {p.detail && (
-                  <span className="basis-full opacity-80">{p.detail}</span>
-                )}
-              </li>
-            );
-          })}
+      {/* 本体は当たった上限だけを短い名前と札で。当たりうる上限・全文はカードの ⓘ（D-224） */}
+      {e.premises.some((p) => p.hit) && (
+        <ul className="mt-1 space-y-0.5 text-xs" data-event-premises-hit>
+          {e.premises
+            .filter((p) => p.hit)
+            .map((p) => (
+              <PremiseItem key={p.id} p={p} effect={effectOf(p.id)} short />
+            ))}
         </ul>
       )}
     </div>
   );
+}
+
+type EventPremise = MonthEvent['premises'][number];
+
+/** 出来事の前提の 1 行（印の色は同じ月の前提の効き方。D-188）。short は短い名前と %、それ以外は全文と詳しい説明。 */
+function PremiseItem({
+  p,
+  effect,
+  short = false,
+}: {
+  p: EventPremise;
+  effect: PlatformPremise['effect'] | undefined;
+  short?: boolean;
+}) {
+  const tone = effect ? hitTone(effect) : 'error';
+  return (
+    <li
+      className="flex flex-wrap items-center gap-1"
+      data-event-premise={effect ?? ''}
+    >
+      <span
+        className={`badge badge-xs ${p.hit ? HIT_BADGE[tone] : 'badge-ghost'}`}
+      >
+        {p.hit
+          ? `${tone === 'error' ? '✗' : '●'} ${effect ? hitLabel(effect) : '上限に達した'}`
+          : '○ 達する可能性のある上限'}
+      </span>
+      {short ? premiseName(p) : p.text}
+      {p.ratio !== undefined && (
+        <span className="tabular-nums opacity-70">
+          （今 {(p.ratio * 100).toFixed(0)}%）
+        </span>
+      )}
+      {!short && p.detail && (
+        <span className="basis-full opacity-80">{p.detail}</span>
+      )}
+    </li>
+  );
+}
+
+/** 出来事の前提の全部（カードの ⓘ の中）。 */
+function EventPremises({
+  event: e,
+  effectOf,
+}: {
+  event: MonthEvent;
+  effectOf: (id: string) => PlatformPremise['effect'] | undefined;
+}) {
+  return (
+    <ul className="space-y-1" data-event-premises>
+      {e.premises.map((p) => (
+        <PremiseItem key={p.id} p={p} effect={effectOf(p.id)} />
+      ))}
+    </ul>
+  );
+}
+
+/** 最初の 1 文（「。」まで。括弧の中の「。」では切らない）。1 文しか無ければそのまま。 */
+export function leadSentence(text: string): string {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '（' || c === '「') depth++;
+    else if (c === '）' || c === '」') depth = Math.max(0, depth - 1);
+    else if (c === '。' && depth === 0)
+      return i === text.length - 1 ? text : text.slice(0, i + 1);
+  }
+  return text;
 }

@@ -14,7 +14,6 @@ import { Game } from './game-screen.tsx';
 import {
   advance,
   closeEventsDialog,
-  declineConfirm,
   monthHeading,
   openSetupChange,
   pickRadio,
@@ -42,8 +41,9 @@ const proposalMonth = () =>
 /** 出来事のダイアログを、その提案の返事の欄のあるページまで送る。 */
 function pageOf(dialog: HTMLElement, id: string): HTMLElement {
   for (let i = 0; i < 20; i++) {
+    // 今のページの中だけを探す（ほかのページは高さを取るために見えないまま置いてある。D-224）
     const row = dialog.querySelector<HTMLElement>(
-      `[data-dialog-proposal-choice="${id}"]`,
+      `[data-events-page] [data-dialog-proposal-choice="${id}"]`,
     );
     if (row) return row;
     const next = within(dialog).queryByRole<HTMLButtonElement>('button', {
@@ -123,7 +123,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     ).toBe(true);
     // 行動の欄で断るに替えると、開き直したダイアログも断る
     fireEvent.click(
-      within(actionRow('p-personal')).getByRole('radio', { name: /^断る/ }),
+      within(actionRow('p-personal')).getByRole('radio', { name: /^受けない/ }),
     );
     fireEvent.click(screen.getByRole('button', { name: /イベント/ }));
     const again = screen.getByRole('dialog', {
@@ -131,12 +131,11 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     });
     expect(
       within(pageOf(again, 'p-personal')).getByRole<HTMLInputElement>('radio', {
-        name: /^断る/,
+        name: /^受けない/,
       }).checked,
     ).toBe(true);
     closeEventsDialog(again);
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    expect(declineConfirm()).toBeNull();
     const d = screen.queryByRole('dialog');
     if (d) closeEventsDialog(d);
     monthHeading(m + 1);
@@ -156,7 +155,7 @@ describe('出来事のダイアログで提案に返事をする（D-202）', ()
     );
     // 断るは選べる
     expect(
-      within(choice).getByRole<HTMLInputElement>('radio', { name: /^断る/ })
+      within(choice).getByRole<HTMLInputElement>('radio', { name: /^受けない/ })
         .disabled,
     ).toBe(false);
   });
@@ -236,6 +235,10 @@ describe('受けると止まりうる上限の見込み（D-203）', () => {
     );
     expect(row.textContent).toMatch(/（残り [\d.]+ GB）/);
     expect(row.textContent).not.toContain('受けると来月止まります');
+    // 止まる見込みがあると、受けるを「おすすめ」にしない（D-225）
+    expect(
+      actionRow('p-archive').querySelector('[data-accept-recommended]'),
+    ).toBeNull();
   });
 });
 
@@ -246,13 +249,15 @@ describe('受けられない提案は知らせにする（D-201）', () => {
     const { advanced } = renderGame(state);
     const dialog = screen.getByRole('dialog', { name: /^2 か月目のイベント/ });
     const page = dialog.querySelector('[data-events-page]')!;
-    expect(page.textContent).toContain('今の構成では受けられません: ');
+    // 受けられない理由は本体の「返事は不要」の行に添える（説明の全文はカードの ⓘ。D-224）
+    expect(page.querySelector('[data-event-unavailable]')!.textContent).toMatch(
+      /断ったことになります（.+）/,
+    );
     expect(page.querySelector('[data-event-unavailable]')).not.toBeNull();
     expect(dialog.querySelector('[data-dialog-proposal-choice]')).toBeNull();
     closeEventsDialog(dialog);
     expect(document.querySelector('[data-proposal-choice]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    expect(declineConfirm()).toBeNull();
     expect(advanced()).toEqual([]);
   });
 });

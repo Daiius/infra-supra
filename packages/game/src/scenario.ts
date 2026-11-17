@@ -190,7 +190,12 @@ export type EventDef = {
   /** 当たりうる前提の id の前方一致。通知に catalog の前提の文をそのまま出す（D-12）。 */
   premiseRefs: string[];
   /** 提案の「受ける」の効果（断ると何も起きない。D-20 V-11）。 */
-  accept?: { label: string; effects: Effect[] };
+  accept?: {
+    label: string;
+    /** 受けると掛かるもの（工数など。選択肢では「伴うこと」の頭に出し、受けるの横には得を出す。D-225）。 */
+    cost?: string;
+    effects: Effect[];
+  };
   /** 提案以外の効果。 */
   effects?: Effect[];
   /** 席の料金を通知に出す（チームが増える）。 */

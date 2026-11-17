@@ -11,7 +11,7 @@ import {
   ON_DEMAND_REVALIDATE,
 } from './settings.ts';
 import { componentLabel, imagesOf } from './stacks.ts';
-import type { GameState, MonthEvent } from './state.ts';
+import type { EffectTrend, GameState, MonthEvent } from './state.ts';
 
 /** 今の状態で要る効果（再検証がすでにオンデマンドなら、切り替えの作業を除く。D-49）。 */
 function effectsFor(
@@ -105,6 +105,25 @@ export function describeEffectBlocked(e: Effect, botRemaining: number): string {
   return `Bot のPV ${fmtFactor(factor)}（遮断で${cut}・${e.months} か月${e.earnsRevenue ? '' : '・収益なし'}）`;
 }
 
+/** 効果の向き（量が増えるか減るか。良し悪しは付けない。混ざるもの・向きの無いものは null。D-224）。 */
+export function effectTrend(e: Effect): EffectTrend {
+  switch (e.type) {
+    case 'traffic':
+    case 'basePV':
+      return e.factor > 1 ? 'up' : e.factor < 1 ? 'down' : null;
+    case 'stock':
+    case 'seats':
+    case 'feature':
+    case 'growth':
+    case 'contract':
+      return 'up';
+    case 'effortPerMonth':
+      return e.add > 0 ? 'up' : e.add < 0 ? 'down' : null;
+    default:
+      return null;
+  }
+}
+
 export function describeEffect(e: Effect): string {
   switch (e.type) {
     case 'traffic':
@@ -174,7 +193,18 @@ export function describeEffect(e: Effect): string {
 export function acceptSummary(
   state: GameState,
   def: EventDef,
-): { gains: string[]; costs: string[]; declineLoss?: string } {
+): {
+  gains: string[];
+  /** 受けると掛かる工数（選択肢の横の札。データの cost があればそれ 1 つ。D-225）。 */
+  effort: string[];
+  /** 工数の数え方の注記（作業も機能開発に数える・数えない。札の ⓘ の中。D-225）。 */
+  effortNote?: string;
+  /** 工数のほかに伴うこと（使用量・費用・要件。札の ⓘ の中。D-225）。 */
+  costs: string[];
+  declineLoss?: string;
+  /** 受けると増える機能開発（加点）。満足度の「機能」→ 評判 → PV の伸びに間接に効く（D-225）。 */
+  featureBonus: number;
+} {
   const sc = scenarioOf(state);
   let declineLoss: string | undefined;
   const effects = effectsFor(state, def.accept?.effects ?? []);
@@ -224,11 +254,8 @@ export function acceptSummary(
         break;
       case 'imageRedesign': {
         const points = imageRedesignEffort(state);
-        effort.push(
-          points > 0
-            ? `来月、アクションに使える工数が ${points} 減ります`
-            : '工数なし',
-        );
+        // 工数は構成で変わるので、データの cost ではなくここで出す（D-225）
+        effort.push(points > 0 ? `工数 ${points}` : '工数なし');
         const rule = sc.imageRedesign;
         if (!rule) {
           gains.push('画像を大きく綺麗に出す');
@@ -274,8 +301,19 @@ export function acceptSummary(
   }
   return {
     gains,
-    costs: [...effort, ...costs],
+    // 受けると掛かる工数: データに cost があればそれ 1 つにまとめる（「アクションに使える工数が n 減ります」と重ねない。D-225）
+    effort: def.accept?.cost ? [def.accept.cost] : effort,
+    // 機能の追加の作業は機能開発に数えるので、そう添える（工数が機能開発から引かれると読まれないように）
+    ...(work
+      ? {
+          effortNote: `作業の工数も機能開発に数えます${work.unlessOnDemand ? '。すでに投稿・編集のときに消す設定なら工数は 0 です' : ''}`,
+        }
+      : effects.some((e) => e.type === 'interrupt')
+        ? { effortNote: '対応の工数は機能開発には数えません' }
+        : {}),
+    costs,
     ...(declineLoss ? { declineLoss } : {}),
+    featureBonus: bonus,
   };
 }
 
