@@ -8,6 +8,7 @@ import {
   acceptSummary,
   describeEffect,
   describeEffectBlocked,
+  effectTrend,
   premiseRefsOf,
 } from '../events.ts';
 import {
@@ -68,6 +69,7 @@ export function monthEventsOf(
         title: p.title,
         text: p.text,
         effects: p.effects.map(describeEffect),
+        effectTrends: p.effects.map(effectTrend),
         premises: [],
       });
       continue;
@@ -113,6 +115,7 @@ export function monthEventsOf(
           ? describeEffectBlocked(e, BOT_BLOCK.remaining)
           : describeEffect(e),
       ),
+      effectTrends: (def.effects ?? []).map(effectTrend),
       ...(botBlocked ? { botBlocked: true as const } : {}),
       premises: premiseRefsOf(def, premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),

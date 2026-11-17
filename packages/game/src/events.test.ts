@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ARTICLE_COMMUNITY,
   applyAction,
+  effectTrend,
   effortAvailable,
   newGame,
   playMonth,
@@ -174,5 +175,32 @@ describe('提案', () => {
     expect(
       applyAction(s, { type: 'respond', eventId: proposal.id, accept: true }),
     ).toBe(s);
+  });
+});
+
+describe('効果の向き（D-224）', () => {
+  it('流量・基準の PV は倍率で向きを決め、工数は増減で、混ざる効果は向きを付けない', () => {
+    expect(
+      effectTrend({
+        type: 'traffic',
+        factor: 3,
+        months: 1,
+        earnsRevenue: true,
+      }),
+    ).toBe('up');
+    expect(effectTrend({ type: 'basePV', factor: 0.8 })).toBe('down');
+    expect(effectTrend({ type: 'effortPerMonth', add: -2 })).toBe('down');
+    expect(effectTrend({ type: 'workload', mods: { ssrShare: 0.5 } })).toBe(
+      null,
+    );
+  });
+
+  it('月の報告の出来事は、効果の文と同じ数の向きを持つ', () => {
+    let s = newGame(1, 7);
+    for (let i = 0; i < 6; i++) s = playMonth(s);
+    for (const r of s.history)
+      for (const e of r.events)
+        if (e.effects.length > 0)
+          expect(e.effectTrends?.length, e.id).toBe(e.effects.length);
   });
 });

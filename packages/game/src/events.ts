@@ -11,7 +11,7 @@ import {
   ON_DEMAND_REVALIDATE,
 } from './settings.ts';
 import { componentLabel, imagesOf } from './stacks.ts';
-import type { GameState, MonthEvent } from './state.ts';
+import type { EffectTrend, GameState, MonthEvent } from './state.ts';
 
 /** 今の状態で要る効果（再検証がすでにオンデマンドなら、切り替えの作業を除く。D-49）。 */
 function effectsFor(
@@ -103,6 +103,25 @@ export function describeEffectBlocked(e: Effect, botRemaining: number): string {
   const cut =
     botRemaining === 0.5 ? '半分' : `上乗せ ${fmtFactor(botRemaining)}`;
   return `Bot のPV ${fmtFactor(factor)}（遮断で${cut}・${e.months} か月${e.earnsRevenue ? '' : '・収益なし'}）`;
+}
+
+/** 効果の向き（量が増えるか減るか。良し悪しは付けない。混ざるもの・向きの無いものは null。D-224）。 */
+export function effectTrend(e: Effect): EffectTrend {
+  switch (e.type) {
+    case 'traffic':
+    case 'basePV':
+      return e.factor > 1 ? 'up' : e.factor < 1 ? 'down' : null;
+    case 'stock':
+    case 'seats':
+    case 'feature':
+    case 'growth':
+    case 'contract':
+      return 'up';
+    case 'effortPerMonth':
+      return e.add > 0 ? 'up' : e.add < 0 ? 'down' : null;
+    default:
+      return null;
+  }
 }
 
 export function describeEffect(e: Effect): string {

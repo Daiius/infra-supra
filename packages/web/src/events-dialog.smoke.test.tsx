@@ -270,9 +270,13 @@ describe('ゲームモードの画面', () => {
     expect(dialog.textContent).toContain(bot.blockedSurpriseText);
     expect(dialog.textContent).not.toContain(bot.surpriseText);
     // 効果の行は実際の倍率、予告なしの印の説明も遮断済みの文
-    expect(dialog.textContent).toContain(
-      '効果: Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
+    // 効果は増える / 減るの矢印の札（D-224）
+    const effect = dialog.querySelector('[data-event-effects] li')!;
+    expect(effect.textContent).toBe(
+      'Bot のPV × 1.5（遮断で半分・2 か月・収益なし）',
     );
+    expect(effect.getAttribute('data-trend')).toBe('up');
+    expect(effect.querySelector('svg')).not.toBeNull();
     // 予告なしの印の説明はカードの ⓘ に畳む（D-224）
     expect(dialog.textContent).not.toContain(
       '今月の費用・満足度に効いています',

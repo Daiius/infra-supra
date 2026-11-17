@@ -103,6 +103,9 @@ export type Rewrite = {
  */
 export type EndReason = 'completed' | 'cash' | 'outages' | 'policy';
 
+/** 効果の向き（増える・減る。良し悪しではない）。 */
+export type EffectTrend = 'up' | 'down' | null;
+
 /** 月の報告に出す出来事（予告・起きた・提案）。 */
 export type MonthEvent = {
   id: string;
@@ -113,6 +116,8 @@ export type MonthEvent = {
   text: string;
   /** 効果の要約（PV × 3・工数 +10 / 月 など）。 */
   effects: string[];
+  /** effects と同じ並びの増える / 減るの向き（画面の札の矢印。良し悪しではない。向きの無いものは null。D-224）。 */
+  effectTrends?: EffectTrend[];
   /** 当たりうる前提（今の構成で出ているもの。文は catalog のまま）。 */
   premises: {
     id: string;

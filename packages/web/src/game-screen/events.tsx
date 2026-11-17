@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { TrendingDown, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameState, MonthEvent, MonthReport } from 'game';
 import type { PlatformPremise } from 'estimator';
@@ -391,10 +392,29 @@ export function EventCard({
         </span>
       </div>
       <div className="mt-1 text-sm">{e.text}</div>
+      {/* 効果は増える / 減るの矢印の札で並べる（良し悪しの色は付けない。D-224） */}
       {e.effects.length > 0 && (
-        <div className="mt-1 text-xs opacity-70">
-          効果: {e.effects.join('・')}
-        </div>
+        <ul
+          className="mt-1.5 flex flex-wrap gap-1"
+          aria-label="効果"
+          data-event-effects
+        >
+          {e.effects.map((x, i) => {
+            const t = e.effectTrends?.[i] ?? null;
+            const Icon =
+              t === 'up' ? TrendingUp : t === 'down' ? TrendingDown : null;
+            return (
+              <li
+                key={x}
+                className="badge h-auto min-h-5 gap-1 badge-outline badge-sm py-0.5 text-left"
+                data-trend={t ?? ''}
+              >
+                {Icon && <Icon aria-hidden className="size-3.5 shrink-0" />}
+                {x}
+              </li>
+            );
+          })}
+        </ul>
       )}
       {/* 受ける / 断るを選べるページでは、すぐ下の選択の欄が同じことを出すので重ねない（D-224） */}
       {e.accept && !choosing && (
