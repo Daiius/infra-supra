@@ -457,8 +457,12 @@ export function advance(n: number) {
 }
 
 /** 出来事のダイアログ（D-126）の今のページの位置（「2 / 4」）。 */
-export const eventPosition = (dialog: HTMLElement) =>
-  dialog.querySelector('[data-events-position]')!.textContent!.trim();
+/** 今のページの位置（「2 / 5」）。画面には数を出さず、ページ送りの点の今の印から数える（D-224）。 */
+export function eventPosition(dialog: HTMLElement): string {
+  const dots = [...dialog.querySelectorAll('[data-events-dots] [data-dot]')];
+  const i = dots.findIndex((d) => d.getAttribute('data-dot') === 'current');
+  return `${i + 1} / ${dots.length}`;
+}
 
 /**
  * 出来事のダイアログを 1 ページ目から最後まで「次へ」で送り、各ページの中身の文を返す（最後のページで止まる）。
@@ -478,11 +482,11 @@ export function readEventPages(dialog: HTMLElement): string[] {
   return pages;
 }
 
-/** 出来事のダイアログを閉じる（最後のページなら「閉じる」、途中なら「あとで見る（閉じる）」）。 */
+/** 出来事のダイアログを閉じる（最後のページなら「閉じる」、途中なら右上の ×）。 */
 export function closeEventsDialog(dialog: HTMLElement) {
   fireEvent.click(
     within(dialog).queryByRole('button', { name: '閉じる' }) ??
-      within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' }),
+      within(dialog).getByRole('button', { name: 'ダイアログを閉じる' }),
   );
   expect(screen.queryByRole('dialog')).toBeNull();
 }

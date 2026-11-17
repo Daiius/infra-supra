@@ -145,17 +145,10 @@ export function EventsDialog({
             id="events-dialog-title"
             className="flex flex-wrap items-center gap-x-2 text-lg font-bold"
           >
+            {/* 未読は点の色と大きさ・カードの NEW で分かるので、見出しには数を出さない（D-224） */}
             <span>
               {r.month} か月目のイベント（{n} 件）
             </span>
-            {n > 1 && (
-              <span
-                className={`badge badge-sm font-normal ${unread > 0 ? 'badge-primary badge-soft' : 'badge-ghost'}`}
-                data-events-unread
-              >
-                {unread > 0 ? `未読 ${unread}` : '✓ すべて既読'}
-              </span>
-            )}
           </h2>
           <form method="dialog">
             <button
@@ -180,13 +173,6 @@ export function EventsDialog({
               >
                 ← 前へ
               </button>
-              <span
-                className="min-w-12 text-center text-sm tabular-nums"
-                aria-hidden
-                data-events-position
-              >
-                {page + 1} / {n}
-              </span>
               <button
                 ref={nextRef}
                 type="button"
@@ -270,7 +256,8 @@ export function EventsDialog({
           </div>
         </div>
         <div className="modal-action mt-3 shrink-0 flex-wrap items-center gap-2">
-          {last ? (
+          {/* 途中で閉じるのは右上の ✕（「あとで見る」は ✕ と重なるので出さない。D-224） */}
+          {last && (
             <form method="dialog">
               <button
                 ref={closeRef}
@@ -278,12 +265,6 @@ export function EventsDialog({
                 autoFocus={n === 1}
               >
                 閉じる
-              </button>
-            </form>
-          ) : (
-            <form method="dialog">
-              <button className="btn btn-ghost btn-sm">
-                あとで見る（閉じる）
               </button>
             </form>
           )}
@@ -383,10 +364,11 @@ export function EventCard({
           効果: {e.effects.join('・')}
         </div>
       )}
-      {e.accept && (
+      {/* 受ける / 断るを選べるページでは、すぐ下の選択の欄が同じことを出すので重ねない（D-224） */}
+      {e.accept && !choosing && (
         <div className="mt-1 text-xs opacity-70">
           受けると: {e.accept.effects.join('・')}
-          {choosing ? '' : '。月の終わりのアクションで受けるか断るかを選びます'}
+          。月の終わりのアクションで受けるか断るかを選びます
           （
           {e.accept.declineLoss
             ? `断ると${e.accept.declineLoss}`

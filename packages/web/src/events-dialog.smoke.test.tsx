@@ -69,29 +69,32 @@ describe('ゲームモードの画面', () => {
     const dotStates = () => dots.map((d) => d.getAttribute('data-dot'));
     expect(dots[0]!.getAttribute('aria-current')).toBe('step');
     expect(dotStates()).toEqual(['current', ...Array(n - 1).fill('unread')]);
-    // 見出しの近くに未読の数（開いたページは既読）、未読だったカードの角に NEW
-    const unread = () =>
-      dialog.querySelector('[data-events-unread]')!.textContent;
+    // 未読は点（開いたページは既読）と、未読だったカードの角の NEW で示す。見出しに数・「1 / 5」は出さない（D-224）
+    expect(dialog.querySelector('[data-events-unread]')).toBeNull();
+    expect(dialog.querySelector('[data-events-position]')).toBeNull();
+    const unread = () => dotStates().filter((x) => x === 'unread').length;
     const isNew = () => dialog.querySelector('[data-events-new]') !== null;
-    expect(unread()).toBe(`未読 ${n - 1}`);
+    expect(unread()).toBe(n - 1);
     expect(isNew()).toBe(true);
     // 読み上げにも位置と未読の数を伝える
     expect(dialog.querySelector('[aria-live="polite"]')!.textContent).toBe(
       `${n} 件中 1 件目。未読 ${n - 1} 件`,
     );
-    // 1 ページ目: 前へは押せず、次へ・あとで見る・× がある。最後でないので「閉じる」は無い
+    // 1 ページ目: 前へは押せず、次へ・× がある。最後でないので「閉じる」は無い（「あとで見る」は × と重なるので出さない。D-224）
     const prev = () =>
       within(dialog).getByRole<HTMLButtonElement>('button', {
         name: /^← 前へ/,
       });
     expect(prev().disabled).toBe(true);
-    within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' });
+    expect(
+      within(dialog).queryByRole('button', { name: 'あとで見る（閉じる）' }),
+    ).toBeNull();
     within(dialog).getByRole('button', { name: 'ダイアログを閉じる' });
     expect(within(dialog).queryByRole('button', { name: '閉じる' })).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
     expect(eventPosition(dialog)).toBe(`2 / ${n}`);
     expect(page()).not.toBe(first);
-    expect(unread()).toBe(`未読 ${n - 2}`);
+    expect(unread()).toBe(n - 2);
     expect(isNew()).toBe(true);
     expect(dotStates().slice(0, 2)).toEqual(['read', 'current']);
     fireEvent.click(prev());
@@ -99,7 +102,7 @@ describe('ゲームモードの画面', () => {
     expect(page()).toContain(first.replace(/^NEW/, ''));
     // 読んだページに戻ると NEW は出ず、未読の数も減らない
     expect(isNew()).toBe(false);
-    expect(unread()).toBe(`未読 ${n - 2}`);
+    expect(unread()).toBe(n - 2);
     // 点を押すとそのページへ移る
     const proposalDot = dots.find((b) =>
       b.getAttribute('aria-label')!.includes('会員向けの個人化'),
@@ -126,7 +129,7 @@ describe('ゲームモードの画面', () => {
     expect(pages.some((t) => t.includes('⚡ 今月発生'))).toBe(true);
     // 最後のページ: 「閉じる」が主ボタン。次へは位置を動かさず押せなくなり、あとで見るは無い。全部読んだ
     expect(eventPosition(dialog)).toBe(`${n} / ${n}`);
-    expect(unread()).toBe('✓ すべて既読');
+    expect(unread()).toBe(0);
     expect(dotStates().filter((x) => x === 'unread')).toHaveLength(0);
     expect(
       within(dialog).getByRole<HTMLButtonElement>('button', { name: /^次へ/ })
@@ -149,9 +152,9 @@ describe('ゲームモードの画面', () => {
     const again = screen.getByRole('dialog');
     expect(eventPosition(again)).toBe(`1 / ${n}`);
     // 既読は開いている間だけ。開き直すと初めから（D-126）
-    expect(again.querySelector('[data-events-unread]')!.textContent).toBe(
-      `未読 ${n - 1}`,
-    );
+    expect(
+      [...again.querySelectorAll('[data-dot="unread"]')].length,
+    ).toBe(n - 1);
     closeEventsDialog(again);
   });
 
@@ -167,14 +170,14 @@ describe('ゲームモードの画面', () => {
     });
     advance(m - 2);
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
-    // 途中のページで「あとで見る（閉じる）」
+    // 途中のページで右上の ×
     let dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
     fireEvent.click(
-      within(dialog).getByRole('button', { name: 'あとで見る（閉じる）' }),
+      within(dialog).getByRole('button', { name: 'ダイアログを閉じる' }),
     );
     expect(screen.queryByRole('dialog')).toBeNull();
-    // × でも閉じる（一覧のボタンで開き直してから）
+    // もう一度 × で閉じる（一覧のボタンで開き直してから）
     fireEvent.click(
       screen.getByRole('button', { name: /^イベントを 1 件ずつ見る/ }),
     );
