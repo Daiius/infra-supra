@@ -193,7 +193,13 @@ export function describeEffect(e: Effect): string {
 export function acceptSummary(
   state: GameState,
   def: EventDef,
-): { gains: string[]; costs: string[]; declineLoss?: string } {
+): {
+  gains: string[];
+  costs: string[];
+  declineLoss?: string;
+  /** 受けると増える機能開発（加点）。満足度の「機能」→ 評判 → PV の伸びに間接に効く（D-225）。 */
+  featureBonus: number;
+} {
   const sc = scenarioOf(state);
   let declineLoss: string | undefined;
   const effects = effectsFor(state, def.accept?.effects ?? []);
@@ -243,11 +249,8 @@ export function acceptSummary(
         break;
       case 'imageRedesign': {
         const points = imageRedesignEffort(state);
-        effort.push(
-          points > 0
-            ? `来月、アクションに使える工数が ${points} 減ります`
-            : '工数なし',
-        );
+        // 工数は構成で変わるので、データの cost ではなくここで出す（D-225）
+        effort.push(points > 0 ? `工数 ${points}` : '工数なし');
         const rule = sc.imageRedesign;
         if (!rule) {
           gains.push('画像を大きく綺麗に出す');
@@ -293,8 +296,22 @@ export function acceptSummary(
   }
   return {
     gains,
-    costs: [...effort, ...costs],
+    // 受けると掛かる工数: データに cost があればそれ 1 つにまとめる（「アクションに使える工数が n 減ります」と重ねない）。
+    // 機能の追加の作業は機能開発に数えるので、そう添える（工数が機能開発から引かれると読まれないように。D-225）
+    costs: [
+      ...(def.accept?.cost
+        ? [
+            work
+              ? `${def.accept.cost}（作業も機能開発に数えます）`
+              : effects.some((e) => e.type === 'interrupt')
+                ? `${def.accept.cost}（機能開発には数えません）`
+                : def.accept.cost,
+          ]
+        : effort),
+      ...costs,
+    ],
     ...(declineLoss ? { declineLoss } : {}),
+    featureBonus: bonus,
   };
 }
 

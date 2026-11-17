@@ -122,7 +122,8 @@ const EVENTS: EventDef[] = [
       'pool:supabase:',
     ],
     accept: {
-      label: '受ける（工数 2）',
+      label: '受ける',
+      cost: '工数 2',
       effects: [
         { type: 'workload', mods: { writesPerCall: 0.2 } },
         { type: 'feature', points: 4 },
@@ -145,7 +146,8 @@ const EVENTS: EventDef[] = [
       'pool:cloudflare:r2-standard:r2-storage',
     ],
     accept: {
-      label: '受ける（毎月 工数 3 を 2 か月）',
+      label: '受ける',
+      cost: '毎月 工数 3 を 2 か月',
       effects: [
         { type: 'workload', mods: { imagesPerPage: 10, uploadsFactor: 3 } },
         { type: 'feature', points: 8 },
@@ -168,7 +170,8 @@ const EVENTS: EventDef[] = [
       'limit:supabase:pro-micro:pooler-connections',
     ],
     accept: {
-      label: '受ける（工数 4）',
+      label: '受ける',
+      cost: '工数 4',
       effects: [
         { type: 'workload', mods: { ssrShare: 0.6 } },
         { type: 'feature', points: 6 },
@@ -195,7 +198,8 @@ const EVENTS: EventDef[] = [
       'host:disk:',
     ],
     accept: {
-      label: '受ける（工数 4）',
+      label: '受ける',
+      cost: '工数 4',
       effects: [
         { type: 'stock', add: { dbGB: 9, articlePages: 4000 } },
         { type: 'workload', mods: { dbRateFactor: 4 } },
@@ -218,7 +222,8 @@ const EVENTS: EventDef[] = [
       'pool:cloudflare:workers-free:free-requests',
     ],
     accept: {
-      label: '受ける（Durable Objects を付ける。工数 4）',
+      label: '受ける',
+      cost: 'Durable Objects を付ける。工数 4',
       effects: [
         {
           type: 'workload',
@@ -257,7 +262,8 @@ const EVENTS: EventDef[] = [
     // 受けると再検証をオンデマンドにする。時間のままなら切り替えの実装（設定の切り替えと同じ工数 2）がかかり、
     // すでにオンデマンドなら作業は要らない（D-49。それまでは一律に工数 3）
     accept: {
-      label: '受ける（工数 2。すでに投稿・編集のときに消す設定なら 0）',
+      label: '受ける',
+      cost: '工数 2。すでに投稿・編集のときに消す設定なら 0',
       effects: [
         { type: 'feature', points: 5 },
         { type: 'growth', add: 0.02, months: 3 },
@@ -299,7 +305,8 @@ const EVENTS: EventDef[] = [
     showSla: true,
     requires: 'uptime-sla',
     accept: {
-      label: '受ける（契約の対応に工数 2）',
+      label: '受ける',
+      cost: '契約の対応に工数 2',
       effects: [
         // 契約の金額は仮定
         { type: 'contract', usdPerMonth: 40, requires: 'uptime-sla' },
@@ -318,8 +325,7 @@ const EVENTS: EventDef[] = [
     when: { type: 'window', from: 5, to: 10, chance: 0.5 },
     premiseRefs: [],
     accept: {
-      label:
-        '受ける（工数: 原本がある構成 1・一律で縮めた構成 2・原本を配っている構成 0）',
+      label: '受ける',
       effects: [{ type: 'imageRedesign' }],
     },
   },

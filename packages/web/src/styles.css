@@ -8,6 +8,8 @@
   /* 文字に使う水色（error-strong と同じ理由）。daisyUI の light の info（oklch 0.74 0.16 232.661）は白地で文字には薄く、
      alert-soft の文字もこの色になる。info の淡い地の上の文字は text-info-strong を使う（Tailwind の sky-700。白地 5.93:1） */
   --color-info-strong: #0369a1;
+  /* 文字に使う緑（同じ理由。daisyUI の light の success は白地で文字には薄い）。提案を受けたときの得の文字に使う（Tailwind の green-700。白地 5.02:1。D-225） */
+  --color-success-strong: #15803d;
 }
 
 /* 選んでいないタブの文字（D-196）。daisyUI の既定は base-content の 50%（base-200 の地で 3.33:1）で、AA の 4.5:1 に届かない。
