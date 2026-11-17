@@ -75,13 +75,11 @@ describe('ゲームモードの画面', () => {
     const dotStates = () => dots.map((d) => d.getAttribute('data-dot'));
     expect(dots[0]!.getAttribute('aria-current')).toBe('step');
     expect(dotStates()).toEqual(['current', ...Array(n - 1).fill('unread')]);
-    // 未読は点（開いたページは既読）と、未読だったカードの角の NEW で示す。見出しに数・「1 / 5」は出さない（D-224）
+    // 未読は点（開いたページは既読）だけで示す。見出しの数・「1 / 5」・カードの NEW は出さない（D-224）
     expect(dialog.querySelector('[data-events-unread]')).toBeNull();
     expect(dialog.querySelector('[data-events-position]')).toBeNull();
     const unread = () => dotStates().filter((x) => x === 'unread').length;
-    const isNew = () => dialog.querySelector('[data-events-new]') !== null;
     expect(unread()).toBe(n - 1);
-    expect(isNew()).toBe(true);
     // 読み上げにも位置と未読の数を伝える
     expect(dialog.querySelector('[aria-live="polite"]')!.textContent).toBe(
       `${n} 件中 1 件目。未読 ${n - 1} 件`,
@@ -101,13 +99,12 @@ describe('ゲームモードの画面', () => {
     expect(eventPosition(dialog)).toBe(`2 / ${n}`);
     expect(page()).not.toBe(first);
     expect(unread()).toBe(n - 2);
-    expect(isNew()).toBe(true);
     expect(dotStates().slice(0, 2)).toEqual(['read', 'current']);
     fireEvent.click(prev());
     expect(eventPosition(dialog)).toBe(`1 / ${n}`);
-    expect(page()).toContain(first.replace(/^NEW/, ''));
-    // 読んだページに戻ると NEW は出ず、未読の数も減らない
-    expect(isNew()).toBe(false);
+    expect(page()).toBe(first);
+    // 読んだページに戻っても未読の数は減らない
+    expect(dialog.querySelector('[data-events-new]')).toBeNull();
     expect(unread()).toBe(n - 2);
     // 点を押すとそのページへ移る
     const proposalDot = dots.find((b) =>

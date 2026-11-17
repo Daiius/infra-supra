@@ -44,7 +44,7 @@ const DOT_CLASS = {
 /**
  * その月の出来事のダイアログ（D-23・D-126）。出来事を 1 件ずつの通知のカードで出し、見出しの下のナビ
  * （「← 前へ」「2 / 4」「次へ →」とページ送りの点）で左右に切り替える（左右の矢印キー・横のスワイプでも）。
- * 未読の数を見出しに、未読だったカードには角に「NEW」を出す。表示したページは既読にする（既読はダイアログを開いている間だけ）。
+ * 未読はページ送りの点の色と大きさで示す。表示したページは既読にする（既読はダイアログを開いている間だけ）。
  * ナビは本文の上に置き、ページの高さが変わっても動かない。本文が長いときは本文だけをスクロールする。
  * `<dialog>` の showModal でフォーカスを閉じ込め、Esc・×・「あとで見る」・最後のページの「閉じる」で閉じる。
  * 選択（提案を受けるか断るか）はここに置かず、月の終わりの行動で選ぶ。
@@ -75,14 +75,13 @@ export function EventsDialog({
   const closeRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
-  // page: 今のページ / read: 表示したページ（今のページを含む） / fresh: 今のページが開いた時点で未読だったか / dir: 移った向き
+  // page: 今のページ / read: 表示したページ（今のページを含む） / dir: 移った向き
   const [view, setView] = useState({
     page: 0,
     read: new Set([0]),
-    fresh: true,
     dir: 0,
   });
-  const { page, read, fresh, dir } = view;
+  const { page, read, dir } = view;
   useEffect(() => {
     const d = ref.current;
     if (!d || d.open) return;
@@ -115,7 +114,6 @@ export function EventsDialog({
     setView({
       page: to,
       read: new Set(read).add(to),
-      fresh: !read.has(to),
       dir: to > page ? 1 : -1,
     });
   };
@@ -145,7 +143,7 @@ export function EventsDialog({
             id="events-dialog-title"
             className="flex flex-wrap items-center gap-x-2 text-lg font-bold"
           >
-            {/* 未読は点の色と大きさ・カードの NEW で分かるので、見出しには数を出さない（D-224） */}
+            {/* 未読は点の色と大きさで分かるので、見出しには数を出さない（カードの NEW もやめた。D-224） */}
             <span>
               {r.month} か月目のイベント（{n} 件）
             </span>
@@ -233,7 +231,7 @@ export function EventsDialog({
                   // 今のページになるたびに作り直し、滑り込みの動きを毎回始める（動きを減らす設定では付けない）
                   key={current ? `current:${i}` : `idle:${i}`}
                   className={clsx(
-                    'relative [grid-area:1/1] pt-2',
+                    'relative [grid-area:1/1]',
                     current && slideInClass(dir, reduced),
                   )}
                   // 今でないページは高さだけを取る（見えず・読まれず・押せない）
@@ -246,14 +244,6 @@ export function EventsDialog({
                         'data-events-sizer': '',
                       })}
                 >
-                  {current && fresh && n > 1 && (
-                    <span
-                      className="badge badge-primary badge-soft badge-xs absolute top-0 right-2 z-10"
-                      data-events-new
-                    >
-                      NEW
-                    </span>
-                  )}
                   <PortalContainer.Provider value={dialogEl}>
                     <EventCard
                       event={x}
