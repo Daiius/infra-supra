@@ -235,6 +235,10 @@ describe('受けると止まりうる上限の見込み（D-203）', () => {
     );
     expect(row.textContent).toMatch(/（残り [\d.]+ GB）/);
     expect(row.textContent).not.toContain('受けると来月止まります');
+    // 止まる見込みがあると、受けるを「おすすめ」にしない（D-225）
+    expect(
+      actionRow('p-archive').querySelector('[data-accept-recommended]'),
+    ).toBeNull();
   });
 });
 

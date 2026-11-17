@@ -130,6 +130,9 @@ export function ProposalChoice({
     [state, id, key],
   );
   const name = `${where}-proposal-${id}`;
+  // 受けられて、受けても止まる・止まる見込みの上限が無ければ、受けるをおすすめにする（D-225）
+  const recommended =
+    acceptOk && !limits.some((x) => x.stops || x.monthsUntil !== undefined);
   return (
     // 提案から来た選択肢は、印（出来事と同じ ◆ 提案）と primary 系の枠・背景で通常の開発と見分ける（D-126）
     <div
@@ -174,6 +177,14 @@ export function ProposalChoice({
               onChange={() => d.answer(id, true)}
             />
             {def.accept!.label}
+            {recommended && (
+              <span
+                className="badge badge-sm badge-soft badge-success font-normal"
+                data-accept-recommended
+              >
+                おすすめ
+              </span>
+            )}
             {!acceptOk && !answer && (
               <span className="text-xs font-normal" data-accept-blocked>
                 （{acceptWhy}）

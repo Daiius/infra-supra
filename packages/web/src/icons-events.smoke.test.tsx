@@ -131,6 +131,10 @@ describe('開発依頼の既定の返事（D-225。D-140 の確認をやめた�
         .checked,
     ).toBe(false);
     expect(document.body.textContent).not.toContain('選ばなければ断');
+    // 受けても止まる見込みの上限が無いので、受けるに「おすすめ」を添える（D-225）
+    expect(row.querySelector('[data-accept-recommended]')!.textContent).toBe(
+      'おすすめ',
+    );
     fireEvent.click(screen.getByRole('button', { name: '次の月へ' }));
     expect(document.querySelector('dialog[data-decline-confirm]')).toBeNull();
     closeEventsIfOpen();
