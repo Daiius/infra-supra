@@ -208,6 +208,9 @@ export function monthEventsOf(
   for (const rv of state.revisions) {
     if (rv.month !== month) continue;
     const c = SCHEDULED_CHANGES.find((x) => x.id === rv.id)!;
+    // 知らせるのは、計算を変える改定（改定後の料金を持つ）で、今の構成が使っている事業者のものだけ（D-226）。
+    // 計算は知らせの有無によらず、起きた月から改定後の料金で行う（applyRevisions）
+    if (c.revisedMeters.length === 0 || !used.has(c.provider)) continue;
     events.push({
       id: c.id,
       kind: 'script',

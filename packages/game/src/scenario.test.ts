@@ -246,16 +246,28 @@ describe('実際に予告されている改定の出来事（D-21）', () => {
     const s = until(CF_PAID, 12, 42);
     for (const rv of g.revisions) {
       expect(rv.month).toBeGreaterThanOrEqual(3);
-      const ev = month(s, rv.month).events.find((e) => e.id === rv.id)!;
-      expect(ev.text).toContain('実際に予告されている改定');
-      // Workers Logs → Cloudflare Observability は改定後の料金を持つ（D-94）。D1 の上限は計算に入らない
-      expect(ev.text).toContain(
-        rv.id === 'revision:cloudflare:2026-12-01'
-          ? 'このモデルの計算への影響: あり'
-          : 'このモデルの計算への影響: なし',
-      );
-      expect(ev.text).not.toContain('料金と制限は変わる');
+      const ev = month(s, rv.month).events.find((e) => e.id === rv.id);
+      // 知らせは計算を変える改定だけ（D-226）。Workers Logs → Cloudflare Observability は改定後の料金を持つ（D-94）。
+      // D1 の上限は計算に入らないので、改定の月は決まっても知らせは出さない
+      if (rv.id !== 'revision:cloudflare:2026-12-01') {
+        expect(ev).toBeUndefined();
+        continue;
+      }
+      expect(ev!.text).toContain('実際に予告されている改定');
+      expect(ev!.text).toContain('このモデルの計算への影響: あり');
+      expect(ev!.text).not.toContain('料金と制限は変わる');
     }
+  });
+
+  it('今の構成が使っていない事業者の改定は知らせない（D-226）', () => {
+    // Vercel Pro + Supabase Pro は Cloudflare を使わない
+    const vercel = STACKS.findIndex((x) => x.id === 'vercel-supabase-pro');
+    const g = newGame(vercel, 42, sc, '2026-10-31');
+    const s = until(vercel, 12, 42);
+    for (const rv of g.revisions)
+      expect(
+        month(s, rv.month).events.find((e) => e.id === rv.id),
+      ).toBeUndefined();
   });
 
   it('施行日を過ぎた日に始めると出ない。その間の日なら、まだ先の予告だけが出る', () => {
