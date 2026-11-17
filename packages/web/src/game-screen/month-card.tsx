@@ -216,22 +216,30 @@ export function MonthCard({
         {onShowEvents
           ? r.events.length > 0 && (
               <div className="rounded-box border border-base-300 p-3">
-                <ul className="space-y-1">
+                {/* 印の列の幅を一番長い印にそろえ、題の頭を縦にそろえる（subgrid。D-224） */}
+                <ul
+                  className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-2 gap-y-1"
+                  data-event-list
+                >
                   {r.events.map((e) => (
                     <li
                       key={`${e.id}:${e.phase}`}
-                      className="flex flex-wrap items-center gap-2 text-sm"
+                      className="col-span-2 grid grid-cols-subgrid items-center text-sm"
                     >
-                      <span className={`badge badge-sm ${eventBadge(e).cls}`}>
+                      <span
+                        className={`badge badge-sm w-full justify-start ${eventBadge(e).cls}`}
+                      >
                         {eventBadge(e).label}
                       </span>
-                      <BlockedBadge event={e} />
-                      {e.tier === 'rare' && (
-                        <span className="badge badge-sm badge-outline badge-error">
-                          {TIER_LABEL[e.tier]}
-                        </span>
-                      )}
-                      <span>{e.title}</span>
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <BlockedBadge event={e} />
+                        {e.tier === 'rare' && (
+                          <span className="badge badge-sm badge-outline badge-error">
+                            {TIER_LABEL[e.tier]}
+                          </span>
+                        )}
+                        <span>{e.title}</span>
+                      </span>
                     </li>
                   ))}
                 </ul>
