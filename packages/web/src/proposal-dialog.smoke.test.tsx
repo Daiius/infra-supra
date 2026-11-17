@@ -246,7 +246,10 @@ describe('受けられない提案は知らせにする（D-201）', () => {
     const { advanced } = renderGame(state);
     const dialog = screen.getByRole('dialog', { name: /^2 か月目のイベント/ });
     const page = dialog.querySelector('[data-events-page]')!;
-    expect(page.textContent).toContain('今の構成では受けられません: ');
+    // 受けられない理由は本体の「返事は不要」の行に添える（説明の全文はカードの ⓘ。D-224）
+    expect(page.querySelector('[data-event-unavailable]')!.textContent).toMatch(
+      /断ったことになります（.+）/,
+    );
     expect(page.querySelector('[data-event-unavailable]')).not.toBeNull();
     expect(dialog.querySelector('[data-dialog-proposal-choice]')).toBeNull();
     closeEventsDialog(dialog);

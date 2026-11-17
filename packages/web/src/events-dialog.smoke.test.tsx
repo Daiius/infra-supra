@@ -267,8 +267,14 @@ describe('ゲームモードの画面', () => {
     // 出来事は 1 件ずつ出る（D-126）。Bot のページまで送る
     for (let i = 0; i < 10 && !dialog.textContent!.includes(bot.title); i++)
       fireEvent.click(within(dialog).getByRole('button', { name: /^次へ/ }));
-    expect(dialog.textContent).toContain(bot.blockedSurpriseText);
-    expect(dialog.textContent).not.toContain(bot.surpriseText);
+    // 本体は最初の 1 文だけ。遮断済みの文は ⓘ の説明の全文で読む（D-224）
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'このイベントの詳しい説明' }),
+    );
+    const full = infoDialog()!.querySelector('[data-event-text]')!.textContent;
+    expect(full).toContain(bot.blockedSurpriseText);
+    expect(full).not.toContain(bot.surpriseText);
+    fireEvent.keyDown(document, { key: 'Escape' });
     // 効果の行は実際の倍率、予告なしの印の説明も遮断済みの文
     // 効果は増える / 減るの矢印の札（D-224）
     const effect = dialog.querySelector('[data-event-effects] li')!;

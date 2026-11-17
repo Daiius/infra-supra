@@ -349,6 +349,7 @@ export function EventCard({
   choosing?: boolean;
 }) {
   const badge = eventBadge(e);
+  const lead = leadSentence(e.text);
   // 効き方が引けない前提は、今までどおり止まる側（赤）に倒す
   const effectOf = (id: string) => premises.find((p) => p.id === id)?.effect;
   return (
@@ -374,6 +375,12 @@ export function EventCard({
         {/* カードの右上の ⓘ: 印の意味・起きやすさ・当たりうる上限の全文（D-224） */}
         <span className="shrink-0">
           <Info label="このイベントの詳しい説明" title={e.title}>
+            {lead !== e.text && (
+              <section>
+                <h3 className="mb-1 font-bold">説明</h3>
+                <p data-event-text>{e.text}</p>
+              </section>
+            )}
             <section>
               <h3 className="mb-1 font-bold">印</h3>
               <p>
@@ -391,7 +398,10 @@ export function EventCard({
           </Info>
         </span>
       </div>
-      <div className="mt-1 text-sm">{e.text}</div>
+      {/* 本体は最初の 1 文だけ。全文はカードの ⓘ（D-224） */}
+      <div className="mt-1 text-sm" data-event-lead>
+        {lead}
+      </div>
       {/* 効果は増える / 減るの矢印の札で並べる（良し悪しの色は付けない。D-224） */}
       {e.effects.length > 0 && (
         <ul
@@ -431,7 +441,7 @@ export function EventCard({
         // 今の構成では受けられない提案は、返事を待たずに断ったことにした（D-201）
         <div className="mt-1 text-xs" data-event-unavailable>
           <span className="mr-1 badge badge-ghost badge-xs">返事は不要</span>
-          受けられないので、断ったことになります
+          受けられないので、断ったことになります（{e.unavailable}）
         </div>
       )}
       {e.accept?.unavailable && (
@@ -539,4 +549,17 @@ function EventPremises({
       ))}
     </ul>
   );
+}
+
+/** 最初の 1 文（「。」まで。括弧の中の「。」では切らない）。1 文しか無ければそのまま。 */
+export function leadSentence(text: string): string {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '（' || c === '「') depth++;
+    else if (c === '）' || c === '」') depth = Math.max(0, depth - 1);
+    else if (c === '。' && depth === 0)
+      return i === text.length - 1 ? text : text.slice(0, i + 1);
+  }
+  return text;
 }
