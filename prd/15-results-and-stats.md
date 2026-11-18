@@ -227,7 +227,7 @@
 実ドメイン・接続先・パスワードはリポジトリに書かない（`<…>` は手元の値に置き換える）。画面とサーバーは**同じコミット**からデプロイする（D-135）。
 
 1. **DB を作る**（すでにある Postgres に、別の DATABASE とロールを作る。D-154）: `PSQL='<管理者で繋ぐ psql のコマンド>' sh packages/stats/scripts/create-db.sh --check` で今の状態を見てから、`--check` を外して流す（パスワードは尋ねられる。切り戻しはスクリプトの先頭）。
-2. **イメージを作る**（GHCR。D-172）: GitHub の Actions で「Stats image」（`.github/workflows/stats-image.yml`）を、デプロイしたい ref を選んで手で走らせる。`ghcr.io/daiius/infra-supra-stats:<コミットの SHA>` ができる（main からなら `latest` も）。初回は GitHub の Packages でパッケージの公開範囲を決める（公開のリポジトリのコードだけで秘密は入らないので public にしてよい。private のままなら VPS で `docker login ghcr.io`）。
+2. **イメージを作る**（GHCR。D-172）: GitHub の Actions で「Stats image」（`.github/workflows/stats-image.yml`）を、デプロイしたい ref を選んで手で走らせる。`ghcr.io/daiius/infra-supra-stats:<コミットの SHA>` ができる（`latest` は main の最新と同じ中身のときだけ付く。§7.2）。D-228 から、main への push でも（`paths` に当たるとき）自動で作られる。初回は GitHub の Packages でパッケージの公開範囲を決める（公開のリポジトリのコードだけで秘密は入らないので public にしてよい。private のままなら VPS で `docker login ghcr.io`）。
 3. **VPS に置くファイル**（`packages/stats/deploy/` の例を写して埋める。リポジトリには入れない）: `compose.yml`（`compose.example.yml`。既存の Postgres の網と既存の Redis の網を external で指定。同じ網なら 1 つにする）・`server.env`（常駐のサーバーのロールと `REDIS_URL`。§5.5・D-174。VPS の既存の Redis を、ほかのアプリと DB 番号を分けて使う（例 `redis://<Redis のサービス名>:6379/3`）。無いと起動しない。トークンは個人の情報を含まないので、Redis の永続化はどちらでもよい）・`migrate.env`（管理ロールだけ。常駐のコンテナには管理ロールのパスワードを渡さない）・`deploy.sh`。env は `chmod 600`。
 4. **migration を流し、サーバーを入れ替える**: `sh deploy.sh <SHA> --check` で今の版とイメージの有無を見てから、`sh deploy.sh <SHA>`（pull → migration → `up -d` → `/api/version` の commit が SHA と一致するかまで確かめる）。サーバーは `127.0.0.1:4000` にだけ開け、前段の nginx から届かせる。
    - 🔒 **前段の nginx のアクセスログに IP を残さない**（§4）: `deploy/nginx.example.conf` のとおり、`$remote_addr`・`$http_x_forwarded_for` を含まない `log_format` にし、`X-Forwarded-For`・`X-Real-IP` もサーバーへ渡さない。error_log はどのレベルでも IP を付けるので、このサーバーの分は `/dev/null` に捨てる（server を決める前の TLS の失敗などは nginx 全体の error_log に出るので、その保存先と期間も見直す）。
@@ -236,6 +236,34 @@
 5. **中継を確かめる（D-150 のスパイク）**: Vercel のプロジェクト infra-supra（チーム faveo-systema）の Root Directory は `packages/web`（2026-11-09 に CLI で読み取って確認済み。Framework Preset は Vite・Node は 26.x）なので、`packages/web/vercel.ts` のままでよい。環境変数 `API_ORIGIN` に `https://<VPS のホスト名>` を（Preview だけに先に）入れ、プレビューをデプロイして `<プレビューの URL>/api/version` を開く。VPS の `{ commit, builtAt }` が返れば第一案で動いている。404 や画面の HTML が返れば、`vercel.ts` が環境変数を読めていないので予備案（転送の Function）を作る（Claude に頼む）。
 6. **送信を立てる**: 動いたら `API_ORIGIN` を Production にも入れ、`VITE_STATS_ENABLED=true` を Production（と Preview）に入れて再デプロイする。1 回遊び切って、`select count(*), max(created_at) from results;` で 1 行増えたこと、`select flag, count(*) from results group by flag;` で自分のプレイが印なし（null）で入ったこと（`no-token` なら開始のトークンが取れていない。§5.5）、プライバシーポリシーの「まだ何も送っていません」が消えたことを確かめる。
 7. **版をそろえる**: 以後、画面とサーバーを同じコミットからデプロイし、`/api/version` の `commit` と Vercel のデプロイのコミットが同じかを見る。版がずれると正しいプレイも `mismatch`（422）になる（画面には出ない）。
+   - 追従（§7.2）が有効になったあとは、サーバーの `commit` は「main のうち `paths` に当たる最後のコミット」になる（画面だけ・文書だけのコミットではサーバーを作り直さない）。Vercel のコミットと同じでなくても、その間に `paths` に当たる変更が無ければ、照合に効く中身は同じ。
+
+### 7.2 main に入ると集計のサーバーは本番に出る（タグの追従。D-228）
+
+**状態: workflow は実装済み・本番の追従は未有効（2026-11-18 時点）。** 今は main への push でイメージが作られ、`latest` が動くところまで。
+VPS の側で追従が有効になると、以下の流れで本番に出る（有効になったら、この行を有効にした日付に書き換える）。
+
+**追従が有効になったあとは、main にマージされた集計のサーバーの変更は、数分で本番に出る。**
+
+- 流れ: main への push → `stats-image.yml` がイメージを作って `<コミットの SHA>` と `latest` を付ける → 本番の VPS がレジストリの `latest` を数分おきに見て、
+  変わっていれば入れ替える → VPS の側で疎通と版（`/api/version` の `commit` がイメージの `GIT_COMMIT` と一致するか）を確かめ、駄目なら前のイメージに自動で戻す。
+  動いているが挙動がおかしいときは、所有者が VPS で手で戻す（エージェントは VPS に触らない）。デプロイの仕組みの設計は、所有者の非公開のリポジトリにある。
+- 作るのは、`packages/stats/Dockerfile.prod` が読むものに触れた push だけ（workflow の `paths`）: 根の `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `tsconfig.json`・
+  `packages/stats` の `src/**`・`drizzle/**`・`migrate.ts`・`esbuild.config.ts`・`package.json`・`tsconfig.json`・`Dockerfile.prod`・
+  バンドルに入る `packages/{game,catalog,estimator}` の `src/**`・`package.json`・`tsconfig.json`・workflow 自身。
+  画面（`packages/web`）・文書・スパイク・`packages/stats/deploy/` だけの変更では、本番は入れ替わらない。`src/` の中のテストだけの変更では作り直す（分けられない）。
+- `latest` は、**main の回で、そのコミットがいまの main の先頭か祖先であり、そこから先頭までの間に `paths` に当たる変更が無い**ときだけ付ける（＝イメージの中身が main の最新と同じ）。
+  - サーバーの変更のあとに文書だけのコミットが入っても、サーバーの変更の回が `latest` を付ける（文書だけのコミットではビルドが起動しないので、先頭だけを条件にすると取り残される）
+  - 手で起動してほかの枝を選んだ回、main に無いコミット、あとにサーバーの変更がある古い回の再実行には付けない
+  - 判定できないとき（履歴が浅い・main を取れない・`paths` の一覧を読めない）は付けない。結果と理由は実行の Summary に 1 行出る
+  - `paths` の一覧は workflow の起動条件の 1 か所だけにあり、判定の step はそれを読む。同じ ref のビルドは直列に走る（`concurrency`）
+- 🔒 **順序を守るのは、マージする人とエージェント。** 仕組みの側に migration で止める関所は無い。
+  - migration・環境変数の追加・手作業を伴う PR は、マージの前に所有者と段取りを決める。エージェントは勝手にマージしない。
+  - migration は**古いサーバーでも動く形（足すだけ）**にし、**先に本番へ流してからマージする**。イメージに同梱の `migrate.js` で流すには、
+    その migration を含むイメージが先に要る。PR の枝で workflow を手で起動すれば、`latest` を動かさずに `<コミットの SHA>` のイメージができる。どう流すかは所有者と決める。
+  - ⚠ 追従が有効になったあとは、§7.1 の手順 4（`deploy.sh` の pull → migration → 入れ替え）で手で入れ替えても、次の回に追従がタグの版へ戻す。手順 4 の扱いも所有者と決める。
+  - ⚠ 切り戻しでサーバーを戻しても、表は戻らない。戻したサーバーが新しい表で動けることが前提になる。
+- 画面（Vercel）はこの仕組みの外。画面とサーバーが入れ替わる時刻がずれる数分の間は、正しいプレイの送信も `mismatch`（422）になりうる（D-135。画面には出ない）。
 
 ## 8. 未決（各段に入る前に詰める）
 
