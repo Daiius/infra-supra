@@ -245,18 +245,25 @@ VPS の側で追従が有効になると、以下の流れで本番に出る（�
 
 **追従が有効になったあとは、main にマージされた集計のサーバーの変更は、数分で本番に出る。**
 
-- 流れ: main への push → `stats-image.yml` がイメージを作って `<コミットの SHA>` と `latest` を付ける → 本番の VPS がレジストリの `latest` を数分おきに見て、
+- 流れ: main への push → `stats-image.yml` がイメージを作って `<コミットの SHA>` で push し、条件を満たせばそのイメージに `latest` を付ける → 本番の VPS がレジストリの `latest` を数分おきに見て、
   変わっていれば入れ替える → VPS の側で疎通と版（`/api/version` の `commit` がイメージの `GIT_COMMIT` と一致するか）を確かめ、駄目なら前のイメージに自動で戻す。
   動いているが挙動がおかしいときは、所有者が VPS で手で戻す（エージェントは VPS に触らない）。デプロイの仕組みの設計は、所有者の非公開のリポジトリにある。
 - 作るのは、`packages/stats/Dockerfile.prod` が読むものに触れた push だけ（workflow の `paths`）: 根の `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `tsconfig.json`・
   `packages/stats` の `src/**`・`drizzle/**`・`migrate.ts`・`esbuild.config.ts`・`package.json`・`tsconfig.json`・`Dockerfile.prod`・
-  バンドルに入る `packages/{game,catalog,estimator}` の `src/**`・`package.json`・`tsconfig.json`・workflow 自身。
+  バンドルに入る `packages/{game,catalog,estimator}` の `src/**`・`package.json`・`tsconfig.json`・根の `.dockerignore`（ビルドの文脈に入るファイルを決める）・workflow 自身。
   画面（`packages/web`）・文書・スパイク・`packages/stats/deploy/` だけの変更では、本番は入れ替わらない。`src/` の中のテストだけの変更では作り直す（分けられない）。
 - `latest` は、**main の回で、そのコミットがいまの main の先頭か祖先であり、そこから先頭までの間に `paths` に当たる変更が無い**ときだけ付ける（＝イメージの中身が main の最新と同じ）。
   - サーバーの変更のあとに文書だけのコミットが入っても、サーバーの変更の回が `latest` を付ける（文書だけのコミットではビルドが起動しないので、先頭だけを条件にすると取り残される）
   - 手で起動してほかの枝を選んだ回、main に無いコミット、あとにサーバーの変更がある古い回の再実行には付けない
-  - 判定できないとき（履歴が浅い・main を取れない・`paths` の一覧を読めない）は付けない。結果と理由は実行の Summary に 1 行出る
-  - `paths` の一覧は workflow の起動条件の 1 か所だけにあり、判定の step はそれを読む。同じ ref のビルドは直列に走る（`concurrency`）
+  - **判定するのは、ビルドと SHA のタグの push が済んだあと・`latest` を付ける直前**（main を取り直す。ビルドの間に main が進むことがあるため）。
+    `latest` は push 済みのイメージにあとから付ける（作り直さない）。判定できないとき（履歴が浅い・main を取れない・`paths` の一覧を読めない）は付けない。
+    結果と理由は実行の Summary に出る
+  - 回は並んで走ってよい（`concurrency` は同じコミットの重複だけを直列にする）。古いコミットの回があとで終わっても、
+    その時点の main に効く変更があれば付けないので、新しい版を上書きしない。あとから入ったのが効かない変更だけなら、中身が同じなので付けてよい。
+    ref ごとの直列にしないのは、GitHub の待ち枠が 1 つしかなく、古い回の再実行が待っていた最新の回を取り消してしまうため
+  - 残る窓: 判定してから付けるまで（数秒）の間に、より新しいコミットの回がビルドから付与までを終えると、古い版が `latest` を上書きしうる
+    （ビルドに数分かかるので起きにくい）。付けたあとでもう一度判定し、崩れていれば実行に警告が出る。そのときは main で手動起動し直す
+  - `paths` の一覧は workflow の起動条件の 1 か所だけにあり、判定の step はそれを読む
 - 🔒 **順序を守るのは、マージする人とエージェント。** 仕組みの側に migration で止める関所は無い。
   - migration・環境変数の追加・手作業を伴う PR は、マージの前に所有者と段取りを決める。エージェントは勝手にマージしない。
   - migration は**古いサーバーでも動く形（足すだけ）**にし、**先に本番へ流してからマージする**。イメージに同梱の `migrate.js` で流すには、
