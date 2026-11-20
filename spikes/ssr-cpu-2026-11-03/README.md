@@ -95,6 +95,17 @@ Astro・vinext の行は 2026-11-03 の手元の HTML の見本（`runs/local-*`
 
 ロックファイル（各 `pnpm-lock.yaml`）も入れてある。
 
+⚠ 上の表は**計測したときの版**。計測のあと、脆弱性の対応で、いまの `package.json`・ロックファイルの版は次のように変わっている。
+いまの手順をそのまま流すと、計測のときと違う版で動く（数値を比べ直すときは注意）。
+
+| | 計測のとき | いま | 理由 |
+|---|---|---|---|
+| astro（`astro/`） | 7.4.5 | 7.4.7（伴って p-queue 9 → 10・satteri 0.10 → 0.11 など） | GHSA-r3h5-4585-7x3w |
+| fflate（`vinext/` の下の依存） | 0.7.3 | 0.7.5（`pnpm-workspace.yaml` の overrides） | Dependabot #5 |
+
+計測のときの版で流し直すには、ロックファイルだけでなく `package.json`・`pnpm-workspace.yaml` もそろえる（ロックファイルだけ戻すと、`pnpm install --frozen-lockfile` が指定の食い違いで止まる）。
+コミット `4f57ece` のこのディレクトリを丸ごと別の場所に取り出して使う: `git worktree add <置き場> 4f57ece`（その中の `spikes/ssr-cpu-2026-11-03/`）。
+
 ## 構成
 
 ```
