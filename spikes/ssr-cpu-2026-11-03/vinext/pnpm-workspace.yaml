@@ -16,3 +16,7 @@ minimumReleaseAgeExclude:
   - vinext@1.4.1
   - workerd@1.20261102.1
   - wrangler@4.156.2
+# Dependabot #5（GHSA-px8p-9vwx-vf98）: satori 0.33.5（@vercel/og の依存）が fflate を 0.7.3 に固定しているため上書きする。
+# satori / @vercel/og が fflate >= 0.7.5 を使うようになったら外す。
+overrides:
+  fflate: 0.7.5
