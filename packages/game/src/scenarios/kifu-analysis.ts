@@ -1,6 +1,6 @@
 // シナリオ: 棋譜解析サービス（prd/17）。遊べる形（PR-10・D-241）。開発中の印（preview）付きで、`?preview=1` のときだけ始める画面に出し、
-// 集計には送らない。出来事は prd/17 §6 の 6 つと共通のもの。遊びの値（規模・収益・成長・満足度の境目・目標・最初の所持金・基準プレイ）は
-// 仮のままで、受託（contract-operations）のものを借りたうえで 1 か月目で詰まないように置いた（PR-11 で決める）。
+// 集計には送らない。出来事は prd/17 §6 の 6 つと共通のもの。遊びの値（規模・収益・目標・基準プレイ）は KF-16 の基準で決めた（PR-11・D-242・
+// prd/17 §6.6）。成長・満足度の境目・工数・最初の所持金は受託（contract-operations）のものを借りたまま（基準を満たしたので動かさない）。
 // 値はすべてゲーム上の仮定で、実在の値でも相場でもない。料金・制限は catalog のデータをそのまま使う。
 import {
   KIFU_ANALYSIS_ASTRO,
@@ -184,7 +184,7 @@ export const KIFU_SATISFACTION_WEIGHTS: Scenario['satisfaction']['weights'] = {
 };
 
 /**
- * 解析の速さ・正確さの仮定（D-238・prd/17 §5.5。どれもゲーム上の仮定で、PR-11 の基準プレイで決め直す）。
+ * 解析の速さ・正確さの仮定（D-238・prd/17 §5.5。どれもゲーム上の仮定。PR-11 の基準プレイで見直し、そのまま採った。D-242）。
  * - 良い: 1 局の解析が 5 分以内に見える（利用者がページを開いている間。P-4）。普通: 15 分以内（少し離れて戻れば見える）。
  * - 滞留: ピークの比が 1 を超えた分 × 30 分（ピークの 1 時間のうちに積み上がった分を、届いた解析が平均して待つ）。
  * - 端末: 1 局面の CPU × 0.5（軽い評価関数で 1 局面は軽いが、端末はサーバーより遅い）。遅い端末はその 3 倍。
@@ -201,7 +201,8 @@ export const KIFU_ANALYSIS_SATISFACTION: NonNullable<
 
 /**
  * 出来事 7「バックエンドの長時間の処理」の処理（D-239・prd/17 §6。提案の文言・起きる月は PR-10）。解析の結果は変えず、ためた解析の結果を
- * 読み直して集計する裏の処理。量（vCPU 時間）と終わったときの効果はどれもゲーム上の仮定で、PR-11 の基準プレイで決め直す。
+ * 読み直して集計する裏の処理。量（vCPU 時間）と終わったときの効果はどれもゲーム上の仮定（PR-11 で見直し、そのまま採った。D-242:
+ * VPS は空きで 2〜3 か月・追加の費用 0、サーバーレスはその月に $140〜$400 を払うので、受けるかどうかが構成で分かれる）。
  * - 戦法の分析の更新: 2,000 vCPU 時間。終わると機能 +4・成長 +2 ポイント × 3 か月（新しい戦法の傾向が見えて話題になる）。
  * - 次の一手の問題の選び方の更新: 1,000 vCPU 時間。終わると機能 +3。
  */
@@ -225,7 +226,7 @@ export const KIFU_BACKGROUND_JOBS: Record<
 };
 
 /**
- * 出来事（prd/17 §6・D-241）。時期・確率・効果の値はどれもゲーム上の仮定（PR-11 の基準プレイで決め直す）。序盤の 1〜2 か月目は
+ * 出来事（prd/17 §6・D-241）。時期・確率・効果の値はどれもゲーム上の仮定（PR-11 の基準プレイで見直し、そのまま採った。D-242）。序盤の 1〜2 か月目は
  * 台本・提案を出さない（D-20 V-12）。Bot（解析はログインした利用者だけ）と完了のメール（開いている間に終わる）は入れない（§6.2）。
  * 込み分の 70%・料金の改定の予告（revisions。D-226）・自前の VPS の障害（incidents）は共通の作法のまま。
  */
@@ -448,9 +449,14 @@ const stackOf = (id: string): number => {
 const respondAll = (s: GameState, accept: boolean): Action[] =>
   s.pendingProposals.map((eventId) => ({ type: 'respond', eventId, accept }));
 
+/** 1 か月目の終わりに解析の置き場を替える（D-64 の「構成に合った対策」の書き方。prd/12 §2.5 の語彙に収まる）。 */
+const placeAnalysis = (option: string): Action[][] => [
+  [{ type: 'component', slot: 'analysis', option }],
+];
+
 /**
- * 基準プレイ（仮。PR-11 で KF-16 の基準で決め直す）。今は構成ごとの「何もしない」と、提案を全部受ける形だけ。
- * シナリオの golden（kifu-analysis.test.ts）は、この仮の値で今の振る舞いを記録する。
+ * 基準プレイ（D-242・prd/17 §6.6。KF-16 の基準で決めた）。構成ごとの「何もしない」（解析はアプリと同じ実行環境）と、構成に合った対策
+ * （解析の置き場を 1 か月目の終わりに替える・提案を全部受ける）。結果の画面の比較の表と、シナリオの golden（kifu-analysis.test.ts）に使う。
  */
 const KIFU_BASELINES: Strategy[] = [
   {
@@ -467,23 +473,42 @@ const KIFU_BASELINES: Strategy[] = [
     decide: (s) => respondAll(s, true),
   },
   {
+    id: 'cf-paid-client',
+    label: 'Cloudflare Paid・1 か月目の終わりに解析を利用者の端末へ移す',
+    short: 'CF Paid・端末で解析',
+    stackIndex: stackOf('cloudflare-vinext-paid'),
+    actions: placeAnalysis('client'),
+  },
+  {
     id: 'vps',
-    label: 'さくらの VPS 2GB・何もしない',
+    label: 'さくらの VPS 2GB・何もしない（アプリと解析が同じ VPS）',
     short: 'VPS・何もしない',
     stackIndex: stackOf('sakura-vps-2gb'),
   },
   {
-    id: 'vps-accept',
-    label: 'さくらの VPS 2GB・提案を全部受ける',
-    short: 'VPS・提案を受ける',
+    id: 'vps-worker',
+    label:
+      'さくらの VPS 2GB・1 か月目の終わりに解析の worker（VPS 4GB）を足し、提案を全部受ける',
+    short: 'VPS・worker 4GB',
     stackIndex: stackOf('sakura-vps-2gb'),
-    decide: (s) => respondAll(s, true),
+    decide: (s) => [
+      ...(s.history.length === 1 ? placeAnalysis('worker-vps-4gb')[0]! : []),
+      ...respondAll(s, true),
+    ],
   },
   {
     id: 'vercel-pro',
     label: 'Vercel Pro・何もしない',
     short: 'Vercel Pro・何もしない',
     stackIndex: stackOf('vercel-supabase-pro'),
+  },
+  {
+    id: 'vercel-pro-worker',
+    label:
+      'Vercel Pro・1 か月目の終わりに解析の worker（さくらの VPS 4GB）を足す',
+    short: 'Vercel Pro・worker 4GB',
+    stackIndex: stackOf('vercel-supabase-pro'),
+    actions: placeAnalysis('worker-vps-4gb'),
   },
   {
     id: 'gcp',
@@ -509,7 +534,7 @@ export const KIFU_ANALYSIS: Scenario = {
   browserAnalysis: KIFU_BROWSER_ANALYSIS,
   // 解析の 1 件の形（区切り方・候補の数の設定が替える。ゲーム上の仮定。D-236）
   analysisJob: KIFU_ANALYSIS_JOB,
-  // 満足度（D-238・prd/17 §5.5）: 解析の速さを重く（感度 高）、解析の正確さを軽く足す。ほかの境目は受託のまま（PR-11 で決め直す）
+  // 満足度（D-238・prd/17 §5.5）: 解析の速さを重く（感度 高）、解析の正確さを軽く足す。ほかの境目は受託のまま（PR-11 で見直し、そのまま。D-242）
   satisfaction: {
     ...CONTRACT_OPERATIONS.satisfaction,
     weights: KIFU_SATISFACTION_WEIGHTS,
@@ -517,18 +542,22 @@ export const KIFU_ANALYSIS: Scenario = {
   },
   // 棋譜と解析の結果がたまる（画像は保存しない）
   stock: { dbGBPerMillionPV: KIFU_DB_GB_PER_MILLION_PV, gbPerImage: 0 },
-  // 3 万 PV ≒ 利用者 1,000 人（1 人 月 30 PV）。仮の規模（D-241）: 30 万 PV では解析の費用が収益を大きく超え、多くの構成が 1 か月目で
-  // 所持金が尽きたので、1 / 10 に置いた（PR-11 で KF-16 の基準で決め直す）
+  // 3 万 PV ≒ 利用者 1,000 人（1 人 月 30 PV）。D-241 で 30 万 PV から 1 / 10 に置き、PR-11 で KF-16 の基準 2・3 で確かめて決めた（D-242）:
+  // 普段の月は worker の VPS 4GB でピークの比 0.82（開いている間に終わる）・2GB で 1.09（少し滞る）、大きな対局イベントの月は 2GB で滞る
   scale: { startPV: 30_000 },
-  // 話題（大きな対局イベント）の後に残る伸び（仮。記事コミュニティより小さく置いた）
+  // 話題（大きな対局イベント）の後に残る伸び（ゲーム上の仮定。記事コミュニティより小さく置いた）
   buzz: { extra: 0.1, reference: 0.9 },
   revenue: {
-    // 有料会員の月額を 1,000 PV あたりの従量に畳む（KF-03）。値は仮で、3 万 PV で受託の運用費（月 $120 前後）と同じくらいに置いた（D-241）
-    adsUsdPer1000PV: 4,
+    // 有料会員の月額を 1,000 PV あたりの従量に畳む（KF-03）。ゲーム上の仮定（利用者 1 人 月 $0.33。相場ではない）。KF-16 の基準 1 で決めた（D-242）:
+    // 何もしない構成の 12 か月の費用と、いちばん安い構成（VPS 2GB）の差が、12 か月の収益の 1〜4 割（CF Paid 10% 〜 Amplify 38%）に入る
+    // 範囲（$10.5〜$11.4）の中ほど。$4（D-241 の仮）では Amplify が 4 か月目に所持金が尽き、Vercel Pro の差が収益の 9 割近くになった
+    adsUsdPer1000PV: 11,
     loss: CONTRACT_OPERATIONS.revenue.loss,
   },
-  // 参照値（仮。完走したときのヒントの出し分けにだけ使う。PR-11 で基準プレイから決める）
-  goal: { cash: 800, satisfaction: 0.75, maxOutageMonths: 2 },
+  // 参照値（D-142。完走したときのヒントの出し分けにだけ使う）。D-64 の決め方で基準プレイ（シード 1〜50）から決めた（D-242）: CF Paid の 3 本・
+  // Cloud Run・VPS + worker 4GB・Vercel Pro + worker 4GB は、自前の VPS の障害が無いシードで全部届き、Vercel Pro・何もしない（最大 $4,061）と
+  // VPS 2GB・何もしない（最大 $3,675）は届かない。範囲は $4,062〜$4,696（上端は CF Paid・端末で解析の最小）
+  goal: { cash: 4300, satisfaction: 0.75, maxOutageMonths: 2 },
   // 共有のページは解析が終わってから作るので、作り直しは無いとみなす
   pageUpdateShare: 0,
   // まれな出来事は無い
@@ -564,7 +593,7 @@ export const KIFU_ANALYSIS: Scenario = {
   },
   text: {
     intro:
-      '一般向けの棋譜解析の Web サービスを運営しています。ログインした利用者が対局の棋譜を上げると、全局面を解析して、評価値の推移・悪手・候補を見せます。収益は有料会員の月額で、利用が増えるほど増えます（開発中のシナリオで、値は仮です）。',
+      '一般向けの棋譜解析の Web サービスを運営しています。ログインした利用者が対局の棋譜を上げると、全局面を解析して、評価値の推移・悪手・候補を見せます。収益は有料会員の月額で、利用が増えるほど増えます（開発中のシナリオです）。',
     pages: [
       '棋譜のページ（PV の 65%）: 評価値のグラフ・悪手の印・候補と読み筋。ログインした利用者の個人のページです',
       '棋譜の一覧（PV の 30%）: 上げた棋譜と解析の状況・アップロード。個人のページです',
@@ -595,7 +624,7 @@ export const KIFU_ANALYSIS: Scenario = {
       '解析はログインした利用者だけが頼めます（ログインせずに解析する経路はありません）。解析はページを開いている間に終わってほしいので、完了のメールは送りません',
     ],
     revenue:
-      '収益は有料会員の月額を、1,000 PV あたり $4 に畳んだものです（ゲーム上の仮定。開発中の仮の値で、相場ではありません）。止まった月は減ります。人件費は入れません。',
+      '収益は有料会員の月額を、1,000 PV あたり $11 に畳んだものです（ゲーム上の仮定で、相場ではありません）。止まった月は減ります。人件費は入れません。',
     wireframes: KIFU_WIREFRAMES,
   },
 };

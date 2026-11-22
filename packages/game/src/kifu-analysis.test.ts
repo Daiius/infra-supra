@@ -1,5 +1,5 @@
 // 棋譜解析のシナリオ（prd/17 PR-10・D-241）: 登録と開発中の印・出来事が起きる時期と受けたときの効果・決定論・保存と再生・
-// 仮の値での基準プレイ（golden）。遊びの値は仮（PR-11 で決める）なので、golden はこの段の振る舞いの記録。
+// 遊びの値の基準（KF-16。PR-11・D-242）と基準プレイ（golden）。
 import { describe, expect, it } from 'vitest';
 import { type Choices, REALTIME_OPTION } from 'catalog';
 import {
@@ -30,15 +30,19 @@ const VISIBLE = STACKS.filter(
   (s) => s.provider !== 'netlify' && s.provider !== 'aws-opennext',
 );
 /**
- * 研究会の提案（4〜9 か月目）まで遊べる構成。無料のプラン（Workers Free は解析の CPU の上限で止まり続ける・Vercel Hobby は商用の規約）と、
- * 仮の値では所持金が先に尽きる Amplify は、提案の前に終わる。
+ * 研究会の提案（4〜9 か月目）まで遊べる構成。無料のプラン（Workers Free は解析の CPU の上限で止まり続ける・Vercel Hobby は商用の規約）は、
+ * 提案の前に終わる（受託の基準プレイと同じ形）。
  */
 const PLAYABLE = VISIBLE.filter(
-  (s) =>
-    s.id !== 'cloudflare-vinext-free' &&
-    s.id !== 'vercel-supabase-hobby' &&
-    s.id !== 'aws-amplify',
+  (s) => s.id !== 'cloudflare-vinext-free' && s.id !== 'vercel-supabase-hobby',
 );
+const PLACEMENTS = [
+  'same',
+  'client',
+  'hybrid',
+  'worker-vps-2gb',
+  'worker-vps-4gb',
+] as const;
 
 /** その出来事が起きるシード（1 から順に探す）と月。 */
 function seedFor(id: string): { seed: number; month: number } {
@@ -266,15 +270,96 @@ describe('決定論と保存', () => {
   });
 });
 
-describe('仮の値で遊べる（D-241。値は PR-11 で決める）', () => {
-  it('見えている構成は、何もしなくても 1 か月目で所持金が尽きない', () => {
-    for (const st of VISIBLE) {
-      const s = playMonth(newGame(st.index, 1, K));
-      expect(s.cash, st.id).toBeGreaterThan(0);
+/** 何もしない（提案は断る）で 12 か月遊ぶ。 */
+function idle(stackIndex: number, seed: number, analysis?: string): GameState {
+  let s = playMonth(
+    newGame(
+      stackIndex,
+      seed,
+      K,
+      DEFAULT_START_DATE,
+      undefined,
+      analysis ? { analysis } : undefined,
+    ),
+  );
+  while (s.phase === 'playing') s = playMonth(s);
+  return s;
+}
+const sum = (s: GameState, f: (r: GameState['history'][number]) => number) =>
+  s.history.reduce((a, r) => a + f(r), 0);
+
+describe('遊びの値の基準（KF-16・D-242）', () => {
+  it('基準 5: 見えている構成は、どの置き場でも 1 か月目で所持金が尽きない', () => {
+    for (const st of VISIBLE)
+      for (const analysis of PLACEMENTS) {
+        const s = playMonth(
+          newGame(st.index, 1, K, DEFAULT_START_DATE, undefined, { analysis }),
+        );
+        expect(s.cash, `${st.id}・${analysis}`).toBeGreaterThan(0);
+      }
+  });
+
+  it('基準 1: 何もしない構成の 12 か月の費用の差（いちばん安い VPS 2GB から）は、12 か月の収益の 1〜4 割', () => {
+    const vps = sum(idle(idx('sakura-vps-2gb'), 1), (r) => r.infraCost);
+    for (const id of [
+      'cloudflare-vinext-paid',
+      'gcp-cloud-run',
+      'vercel-supabase-pro',
+      'aws-amplify',
+    ]) {
+      const s = idle(idx(id), 1);
+      expect(s.phase, id).toBe('completed');
+      const share =
+        (sum(s, (r) => r.infraCost) - vps) / sum(s, (r) => r.revenue);
+      expect(share, id).toBeGreaterThan(0.1);
+      expect(share, id).toBeLessThan(0.4);
     }
   });
 
-  it('基準プレイ（仮の golden。シード 1・3）', () => {
+  it('基準 2・3: 普段の月は worker の VPS 4GB で開いている間に終わり、大きな対局イベントの月は 2GB で滞る', () => {
+    const { seed, month } = seedFor('k-tournament');
+    const stage = (analysis: string, m: number) =>
+      idle(idx('cloudflare-vinext-paid'), seed, analysis).history[m - 1]!
+        .satisfaction.stages.analysisSpeed;
+    expect(stage('worker-vps-4gb', 2)).toBe('good');
+    expect(stage('worker-vps-2gb', month)).toBe('bad');
+    // 併用は VPS が滞っても端末の速報で速さを保つ
+    const vps = idle(idx('sakura-vps-4gb'), seed, 'hybrid');
+    expect(vps.history[month - 1]!.satisfaction.stages.analysisSpeed).toBe(
+      'fair',
+    );
+  });
+
+  it('基準 4: 解析の置き場で、いちばん所持金の残る置き場が構成によって違う', () => {
+    const best = (id: string) =>
+      PLACEMENTS.map((p) => [p, idle(idx(id), 1, p).cash] as const).sort(
+        (a, b) => b[1] - a[1],
+      )[0]![0];
+    const picks = new Set(
+      ['cloudflare-vinext-paid', 'vercel-supabase-pro', 'sakura-vps-4gb'].map(
+        best,
+      ),
+    );
+    expect(picks.size).toBeGreaterThan(1);
+  });
+
+  it('参照値の所持金（D-64 の決め方）: CF Paid・Cloud Run は全シードで届き、Vercel Pro・何もしない と VPS 2GB・何もしない は届かない', () => {
+    const b = (id: string) => K.baselines.find((x) => x.id === id)!;
+    for (let seed = 1; seed <= 50; seed++) {
+      for (const id of ['cf-paid', 'gcp'])
+        expect(
+          playStrategy(b(id), seed, K, DEFAULT_START_DATE).cash,
+          `${id}・${seed}`,
+        ).toBeGreaterThanOrEqual(K.goal.cash);
+      for (const id of ['vercel-pro', 'vps'])
+        expect(
+          playStrategy(b(id), seed, K, DEFAULT_START_DATE).cash,
+          `${id}・${seed}`,
+        ).toBeLessThan(K.goal.cash);
+    }
+  });
+
+  it('基準プレイ（golden。シード 1・3）', () => {
     const r = (seed: number) =>
       Object.fromEntries(
         K.baselines.map((b) => {
