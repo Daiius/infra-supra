@@ -188,14 +188,18 @@ export const aws: PriceBookInput = {
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
     rdsPrices: priceList('AmazonRDS'),
-    // 確約の割引（2026-11-02 取得。D-97）。版（publicationDate）: AmazonRDS 2026-10-29・AWSComputeSavingsPlan 2026-10-29
+    // 確約の割引（2026-11-02 取得。D-97）。版（publicationDate）: AmazonRDS 2026-10-29
     rdsReservedPrices: { ...priceList('AmazonRDS'), retrievedAt: COMMIT_R },
     rdsReserved: commitSrc(
       'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithReservedDBInstances.html',
     ),
-    savingsPlanPrices: commitSrc(
-      'https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/current/ap-northeast-1/index.json',
-    ),
+    // Savings Plans の料金表には offers の current/ap-northeast-1 の形が無い（404）。region_index.json
+    // （…/AWSComputeSavingsPlan/current/region_index.json）は版の URL を指すだけで値を持たないので、値のある版の URL を出典にする。
+    // 版 2026-11-21 で Lambda の 1 年 前払いなし 0.000015・全額前払い 0.0000142 / GB 秒を確かめた（2026-11-22 の再確認。D-230）
+    savingsPlanPrices: {
+      url: 'https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/20261121004806/ap-northeast-1/index.json',
+      retrievedAt: '2026-11-22',
+    },
     savingsPlans: commitSrc(
       'https://docs.aws.amazon.com/savingsplans/latest/userguide/what-is-savings-plans.html',
     ),

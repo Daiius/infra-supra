@@ -68,6 +68,13 @@ export const vercel: PriceBookInput = {
   retrievedAt: R,
   sources: {
     pricing: src('https://vercel.com/pricing'),
+    // Hobby の ISR の込み分（ISR Reads 1M・ISR Writes 200k / month included）は料金ページだけに書かれている。
+    // docs/pricing の Runtime Cache の行（Hobby 1M / 200K）は同じ値だが、runtime-cache の文書は
+    // 「Runtime cache is billed separately from ISR reads and writes」と別のメーターとしているので出典にしない（2026-11-22 の再確認。D-230）
+    pricingIsrIncluded: {
+      url: 'https://vercel.com/pricing',
+      retrievedAt: '2026-11-22',
+    },
     // Pro のクレジットと込み分の扱い（2026-11-01 に読み直した。D-48）。pro-plan は 2026-09-15 更新、他は 2026-09-14 更新
     pro: {
       url: 'https://vercel.com/docs/plans/pro-plan',
@@ -280,7 +287,7 @@ export const vercel: PriceBookInput = {
       unit: 'operation',
       period: 'month',
       scope: 'account',
-      sourceIds: ['pricing'],
+      sourceIds: ['pricingIsrIncluded'],
     },
     {
       id: 'hobby-isr-writes',
@@ -288,7 +295,7 @@ export const vercel: PriceBookInput = {
       unit: 'operation',
       period: 'month',
       scope: 'account',
-      sourceIds: ['pricing'],
+      sourceIds: ['pricingIsrIncluded'],
     },
     // Vercel Blob の Hobby の込み分（Hobby の込み分はプロジェクトのすべてのサービスで共有）。超えると 30 日使えない
     ...(
