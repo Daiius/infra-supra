@@ -74,6 +74,7 @@ const SOURCE_MODE: Partial<Record<CpuSource['requestClass'], string>> = {
 /** ルートを持たないクラスの表示名。 */
 const CLASS_LABEL: Partial<Record<CpuSource['requestClass'], string>> = {
   api: 'ページから呼ぶ API',
+  'api-async': '積んで別の所で動かす処理',
   'image-read': '画像の配信',
   'image-write': '画像の投稿',
   'image-transform': '画像の変換',

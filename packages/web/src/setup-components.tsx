@@ -54,6 +54,8 @@ const PART_ORDER: readonly string[] = [
   'db',
   'images',
   'api',
+  // 解析の置き場（D-235。解析のあるシナリオだけ）
+  'analysis',
   'isrCache',
   'frontCdn',
   'cdnPlan',

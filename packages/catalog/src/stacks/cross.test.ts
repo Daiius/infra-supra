@@ -42,6 +42,7 @@ import {
   type ConnectionRule,
 } from './connections.ts';
 import { EMAIL_PARTS } from './email.ts';
+import { ANALYSIS_PARTS } from './analysis.ts';
 
 const PLATFORMS: Platform[] = ['cloudflare', 'vercel', 'sakura', 'aws'];
 
@@ -112,6 +113,16 @@ const PAIRS_ADDED_STAGE2D = [
   'sakura × db × supabase',
 ];
 
+/** 解析の置き場（prd/17 §5.1・D-235）で足した組: 解析の worker（さくらの VPS）がアプリの API を呼ぶ。 */
+const PAIRS_ADDED_ANALYSIS = [
+  'aws × analysis × sakura',
+  'aws-opennext × analysis × sakura',
+  'cloudflare × analysis × sakura',
+  'gcp × analysis × sakura',
+  'netlify × analysis × sakura',
+  'vercel × analysis × sakura',
+];
+
 /** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
 const COMPONENTS_BEFORE_RULES = [
   'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
@@ -152,6 +163,9 @@ const COMPONENTS_BEFORE_RULES = [
   'email resend:resend-free → aws,aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
   'email resend:resend-pro → aws,aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
   'email resend:resend-pro-100k → aws,aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
+  // 解析の worker（D-235）
+  'analysis sakura:worker-vps-2gb → aws,aws-opennext,cloudflare,gcp,netlify,vercel',
+  'analysis sakura:worker-vps-4gb → aws,aws-opennext,cloudflare,gcp,netlify,vercel',
 ];
 
 /** 他の事業者の部品（土台の事業者と違う土台に差せるもの）。 */
@@ -174,6 +188,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
         ...PAIRS_ADDED_STAGE3,
         ...PAIRS_ADDED_STAGE2C,
         ...PAIRS_ADDED_STAGE2D,
+        ...PAIRS_ADDED_ANALYSIS,
       ].sort(),
     );
   });
@@ -191,7 +206,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
   it('他の事業者に差せる部品は、規則で許した組だけで、部品の役割と口を持つ', () => {
     for (const c of crossOptions())
       expect(c.link, `${c.platform}:${c.id} の接続の形`).toBeDefined();
-    for (const part of [...CROSS_PARTS, ...EMAIL_PARTS])
+    for (const part of [...CROSS_PARTS, ...EMAIL_PARTS, ...ANALYSIS_PARTS])
       for (const o of partOptions(part))
         for (const host of hostsOf(o) as Platform[])
           expect(

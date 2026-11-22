@@ -737,6 +737,30 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       ...at('2026-11-03', ['https://aws.amazon.com/rds/aurora/pricing/']),
     ],
   },
+  // ---- 解析の worker（prd/17 §5.1・D-235）。worker の VPS がアプリの API を HTTPS で呼び、解析の結果を送る ----
+  {
+    id: 'vps-worker-app-api',
+    slot: 'analysis',
+    from: { providers: ['sakura'], role: 'compute' },
+    to: {
+      providers: [
+        'cloudflare',
+        'vercel',
+        'aws',
+        'aws-opennext',
+        'netlify',
+        'gcp',
+      ],
+      role: 'compute',
+      port: 'https-api',
+    },
+    verdict: 'ok',
+    basis:
+      'worker は さくらの VPS（固定の IP・転送量は無制限）で常に動き、解析の仕事と結果をアプリの API（ブラウザが呼ぶのと同じ公開の HTTPS の口。認証のトークンを付ける）でやり取りする。' +
+      'DB には直接つながない（D1 のように実行環境の中（binding）からしか使えない DB があるので、DB の口を構成ごとに分けない）。' +
+      'アプリの側は結果を受けて書くだけ。worker から送るデータは VPS の転送量が無制限なので数えず、アプリの応答は今の API の経路の転送で数える。往復の遅延は計算しない（CP-08）',
+    sources: SAKURA_SPEC,
+  },
   // ---- アプリのメールの送信（D-95・D-110）。インターネットの API・SMTP で呼ぶので、どの土台からも同じ形 ----
   {
     id: 'host-compute-ses',

@@ -275,6 +275,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * 1 件を API の 1 回（Workload の api の 1 件の CPU と応答の大きさ）として数える。DB の問い合わせはそのクラスのまま。
      */
     serverApiClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * クラスの 1 件の CPU（ms）をこのホストで決める（D-235）。別のホストの worker が解析の結果をこのホストの API に送って書くとき、
+     * このホストでは受けて書くだけの CPU にする。DB の問い合わせはそのクラスのまま数える。
+     */
+    classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;

@@ -20,6 +20,7 @@ import {
   frameworkDefaults,
   frameworksOf,
   scenarioOf,
+  scenarioAnalyzes,
   scenarioSendsEmail,
   SCHEDULED_CHANGES,
 } from '../core.ts';
@@ -112,6 +113,8 @@ export function componentSlots(state: GameState): {
         // このシナリオで効かないスロットは出さない（D-33・prd/09 E-6）。メールを送らないシナリオのメール送信も（D-101）
         !scenarioOf(state).hidden?.slots?.includes(x.slot) &&
         (x.slot !== 'email' || scenarioSendsEmail(scenarioOf(state))) &&
+        // 解析の置き場は非同期の API（解析）を持つシナリオだけ（D-235）
+        (x.slot !== 'analysis' || scenarioAnalyzes(scenarioOf(state))) &&
         // 今の選択で効かないスロット（API を他の事業者に置いたときの DB。D-65）
         !slotIneffective(x.slot, current, {
           stackIndex: state.stackIndex,

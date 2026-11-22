@@ -55,7 +55,12 @@ describe('棋譜解析のテンプレート', () => {
     const input = kifuAnalysis(PV);
     const w = resolveWorkload(input);
     const games = (PV / KIFU_PV_PER_MAU) * KIFU_GAMES_PER_MAU;
-    expect(w.classes['api'].count).toBeCloseTo(games * KIFU_MOVES_PER_GAME, 0);
+    // 積んで別の所で動かす API（api-async のクラス。D-235）
+    expect(w.classes['api-async'].count).toBeCloseTo(
+      games * KIFU_MOVES_PER_GAME,
+      0,
+    );
+    expect(w.classes['api'].count).toBe(0);
     expect(input.api.cpuMs).toBe(KIFU_POSITION_CPU_MS);
     // 解析は閲覧より桁違いに重い（prd/17 §2.2）
     const ssr = input.routes[0]!.processing.cpuMs;

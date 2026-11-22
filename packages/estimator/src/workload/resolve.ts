@@ -19,6 +19,8 @@ export const REQUEST_CLASSES = [
   'asset',
   'api',
   'api-content', // SPA の共有の中身（記事）を返すデータの API。応答を CDN 等でキャッシュするとき（cacheSeconds）だけ api から分ける
+  // 積んで別の所で動かす API（Workload の api.invocation が async。解析など。D-235）。構成が経路を持たなければ api の経路を通る
+  'api-async',
   'image-read',
   'image-write',
   'image-transform', // 画像の最適化（一意な変換）
@@ -671,9 +673,11 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
   // ページの部品が呼ぶ API（D-109・RS-02）: ルートが apiCalls を持てばその閲覧はそれ、持たなければ perPage.apiCalls。
   // ルートの分は内訳（sources）でルートに付ける
   const apiCount = apiCallsPerMonth(w, pv);
+  // 積んで別の所で動かす API（D-235）は api-async のクラスで数える（SPA のページの中身の API は api のまま）
+  const apiClass: RequestClass = a.invocation === 'async' ? 'api-async' : 'api';
   for (const r of w.routes)
     if (r.apiCalls !== undefined)
-      source('api', r, pv * r.share * r.apiCalls, a.cpuMs, { part: true });
+      source(apiClass, r, pv * r.share * r.apiCalls, a.cpuMs, { part: true });
   const unrouted =
     apiCount -
     w.routes.reduce(
@@ -692,7 +696,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     },
     a.invocation ?? 'http',
   );
-  source('api', undefined, unrouted, a.cpuMs);
+  source(apiClass, undefined, unrouted, a.cpuMs);
   // 画像の閲覧（D-121）: 本文の画像とサムネイルを、ルートごとの枚数（省略は perPage）で数え、ブラウザのキャッシュの分を引く
   const thumb = w.images.thumbnails ?? {
     sizeKB: w.images.sizeKB,
@@ -715,11 +719,30 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     'document-ssr': merge(byRendering.ssr),
     'document-isr': merge(byRendering.isr),
     'isr-revalidate': merge(revalidations),
-    asset: flow(assetViews * w.perPage.assets * (1 - w.assets.browserReuse), {
-      kb: w.assets.sizeKB,
-    }),
-    api: spaData.length ? merge([apiFlow, ...spaData]) : apiFlow,
+    asset: w.visitAssets
+      ? merge([
+          flow(assetViews * w.perPage.assets * (1 - w.assets.browserReuse), {
+            kb: w.assets.sizeKB,
+          }),
+          // 訪問 1 回あたりに読む大きなファイル（解析のエンジンなど。D-235）
+          flow(
+            (pv / pagesPerVisit) *
+              w.visitAssets.perVisit *
+              (1 - w.visitAssets.browserReuse),
+            { kb: w.visitAssets.sizeKB },
+          ),
+        ])
+      : flow(assetViews * w.perPage.assets * (1 - w.assets.browserReuse), {
+          kb: w.assets.sizeKB,
+        }),
+    api:
+      apiClass === 'api-async'
+        ? merge(spaData)
+        : spaData.length
+          ? merge([apiFlow, ...spaData])
+          : apiFlow,
     'api-content': merge(spaContent),
+    'api-async': apiClass === 'api-async' ? apiFlow : merge([]),
     'image-read': imageRead,
     'image-write': flow(t.mau * w.images.uploadsPerMau, {
       kb: w.images.sizeKB,

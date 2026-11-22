@@ -335,6 +335,7 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     {
       originalImageKB: sc.unoptimizedImageKB,
       resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
+      ...(sc.browserAnalysis ? { browserAnalysis: sc.browserAnalysis } : {}),
     },
   );
   return withImageFormat(out, p);

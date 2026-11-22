@@ -163,6 +163,13 @@ export const WorkloadInputSchema = z
     }),
     /** JS・CSS 1 ファイルの転送の大きさ（sizeKB。KB・圧縮後。D-211）と、ブラウザのキャッシュから出す割合。 */
     assets: z.object({ sizeKB: NonNeg, browserReuse: Ratio }),
+    /**
+     * 訪問 1 回（セッション）あたりに読む大きなファイル（ブラウザで動かす解析のエンジンと評価関数など。D-235）。
+     * 月の件数 = 訪問の数（PV / ページ数 / 訪問）× perVisit × (1 − browserReuse)。asset のクラスに足す。省略は無し。
+     */
+    visitAssets: z
+      .object({ sizeKB: NonNeg, perVisit: NonNeg, browserReuse: Ratio })
+      .optional(),
     images: z.object({
       /** 本文の画像 1 枚（配るサイズ違い）の大きさ（KB。配るファイルそのまま。送るときにさらに圧縮しない。D-211）。 */
       sizeKB: NonNeg,

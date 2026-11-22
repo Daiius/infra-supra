@@ -29,6 +29,22 @@ export const KIFU_SHARE_ROUTE_SHARE = 0.05;
 /** 見積の DB の大きさに数える蓄積の月数（始めてからの解析の結果がたまった分。ゲーム上の仮定）。 */
 export const KIFU_STOCK_MONTHS = 3;
 
+/**
+ * 端末で解析するとき（解析の置き場の端末・併用。prd/17 §5.1・D-235）にブラウザへ配る、エンジン（WebAssembly）と軽い評価関数の
+ * 転送の大きさ（KB・圧縮後）。**ゲーム上の仮定**で、実在のエンジン・評価関数の大きさではない（B-3）。
+ */
+export const KIFU_BROWSER_ENGINE_KB = 10_000;
+/** 訪問 1 回あたりにエンジンを読む割合（棋譜のページを開く訪問。ゲーム上の仮定）。 */
+export const KIFU_BROWSER_ENGINE_PER_VISIT = 0.8;
+/** エンジンをブラウザのキャッシュから出す割合（訪問をまたいで残る。ゲーム上の仮定）。 */
+export const KIFU_BROWSER_ENGINE_REUSE = 0.8;
+/** 端末で解析するときに配るファイル（catalog の BrowserAnalysisShape。シナリオが applyComponentsToWorkload に渡す）。 */
+export const KIFU_BROWSER_ANALYSIS = {
+  engineKB: KIFU_BROWSER_ENGINE_KB,
+  perVisit: KIFU_BROWSER_ENGINE_PER_VISIT,
+  browserReuse: KIFU_BROWSER_ENGINE_REUSE,
+} as const;
+
 /** 1 局の解析の結果の大きさ（KB）= 手数 × 候補の数 × 1 候補の大きさ（prd/17 §5.3）。 */
 export const kifuResultKB = (
   candidates: number = KIFU_CANDIDATES,

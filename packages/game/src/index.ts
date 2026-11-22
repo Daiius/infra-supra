@@ -5,6 +5,7 @@
 //
 // このファイルは公開の口（barrel）だけを持つ。実装は関心ごとのモジュールに分けてある（web・テストはここから読む）。
 export {
+  scenarioAnalyzes,
   scenarioSendsEmail,
   SCENARIOS,
   ESTIMATE_ONLY_SCENARIOS,

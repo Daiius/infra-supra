@@ -15,7 +15,12 @@ import {
   componentProposal,
   proposalOnlyComponent,
 } from '../components.ts';
-import { eventDef, frameworksOf, scenarioOf } from '../core.ts';
+import {
+  eventDef,
+  frameworksOf,
+  scenarioAnalyzes,
+  scenarioOf,
+} from '../core.ts';
 import {
   componentBaseEffort,
   effortAvailable,
@@ -361,6 +366,9 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         (c) => c.id === action.option,
       );
       if (!opt) return ng('invalid', 'この事業者の部品にありません');
+      // 解析の置き場は非同期の API（解析）を持つシナリオだけ（D-235）
+      if (action.slot === 'analysis' && !scenarioAnalyzes(sc))
+        return ng('invalid', 'このシナリオには解析がありません');
       const current = { ...DEFAULT_CHOICES[platform], ...state.components };
       if (current[action.slot] === action.option)
         return ng('same', '今の部品（または選択済み）');

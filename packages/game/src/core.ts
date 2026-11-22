@@ -29,6 +29,13 @@ export const estimate: typeof estimateArch = (input) =>
     architecture: withoutUnusedEmail(input.architecture, input.workload),
   });
 
+/**
+ * 積んで別の所で動かす API（解析）を持つシナリオか（テンプレートの api.invocation が async。D-235）。部品「解析の置き場」は
+ * このシナリオだけで出し、既定は「アプリと同じ実行環境」。ほかのシナリオでは選択を持たない（構成も変えない）。
+ */
+export const scenarioAnalyzes = (sc: Pick<Scenario, 'template'>): boolean =>
+  sc.template(1).api.invocation === 'async';
+
 /** アプリがメールを送るシナリオか（テンプレートに email がある。D-101）。 */
 export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>
   sendsEmail(sc.template(1));
@@ -100,18 +107,23 @@ export function frameworksOf(sc: Scenario): {
 export function frameworkDefaults(
   framework: FrameworkId,
   platform?: Platform,
-  scenario?: Pick<Scenario, 'hidden'>,
+  scenario?: Pick<Scenario, 'hidden'> & Partial<Pick<Scenario, 'template'>>,
 ): Choices {
+  // 解析の置き場の既定はアプリと同じ実行環境（非同期の API を持つシナリオだけ。D-235）
+  const analysis: Choices =
+    scenario?.template && scenarioAnalyzes({ template: scenario.template })
+      ? { analysis: 'same' }
+      : {};
   // API の置き場の既定は同じ事業者（SPA は D-65・Next.js は D-67）
   if (framework === 'vite-spa')
-    return { ogp: 'none', apiCache: 'none', api: 'same' };
+    return { ogp: 'none', apiCache: 'none', api: 'same', ...analysis };
   if (
     framework === 'nextjs-export' &&
     (platform === 'vercel' || platform === 'sakura' || platform === 'gcp') &&
     !scenario?.hidden?.slots?.includes('images')
   )
-    return { api: 'same', images: 'resize' };
-  return { api: 'same' };
+    return { api: 'same', images: 'resize', ...analysis };
+  return { api: 'same', ...analysis };
 }
 
 export function eventDef(sc: Scenario, id: string): EventDef | undefined {

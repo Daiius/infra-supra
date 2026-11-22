@@ -1,6 +1,7 @@
 // 構成図のモデル（D-105）。選べる構成 × フレームワーク × 部品の選択で、費用の計算と同じ構成から図が描けることを見る。
 import {
   DEFAULT_START_DATE,
+  ESTIMATE_ONLY_SCENARIOS,
   frameworksOf,
   newGame,
   pageWireframes,
@@ -937,5 +938,68 @@ describe('流れの名前（D-193）', () => {
       expect(laneLabel(l, 'astro')).not.toMatch(
         /ISR|PPR|Cache Components|Dynamic rendering/,
       );
+  });
+});
+
+describe('解析の置き場の箱（D-235・prd/17 §5.1）', () => {
+  const kifu = ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!;
+  const boxes = (stackIndex: number, fw: FrameworkId, analysis: string) => {
+    const build = (c: Partial<Record<string, string>>) =>
+      diagramArchitecture(kifu, stackIndex, fw, c);
+    const comps = diagramComponents(kifu, stackIndex, fw, { analysis });
+    const slots = setupSlots(kifu, stackIndex, fw, { analysis });
+    const { swap, ghosts } = slotBoxes(build, comps, slots);
+    return {
+      swap,
+      ghosts,
+      arch: build(comps),
+      model: diagramModel(build(comps), [], 'horizontal', ghosts),
+    };
+  };
+
+  it('worker は別の箱で、その箱から解析の置き場を選べ、アプリの API へ線が引かれる', () => {
+    for (const s of STACKS)
+      for (const fw of frameworksOf(kifu).allowed as FrameworkId[]) {
+        if (!stackOffered(s.index, fw)) continue;
+        const { swap, model, arch } = boxes(s.index, fw, 'worker-vps-2gb');
+        const name = `${s.id} ${fw}`;
+        expect(
+          model.nodes.some((n) => n.id === 'analysis-worker'),
+          name,
+        ).toBe(true);
+        expect(swap.get('analysis-worker'), name).toContain('analysis');
+        expect(
+          model.edges.some(
+            (e) =>
+              e.from === 'analysis-worker' &&
+              e.to === arch.routes['api-async']![1],
+          ),
+          name,
+        ).toBe(true);
+      }
+  });
+
+  it('アプリと同じ実行環境はアプリの処理の箱、利用者の端末は利用者の側（入口の帯の 1 段目）の幽霊の箱で選ぶ', () => {
+    for (const s of STACKS)
+      for (const fw of frameworksOf(kifu).allowed as FrameworkId[]) {
+        if (!stackOffered(s.index, fw)) continue;
+        const name = `${s.id} ${fw}`;
+        const same = boxes(s.index, fw, 'same');
+        const on = [...same.swap].filter(([, v]) => v.includes('analysis'));
+        expect(on.length, name).toBeGreaterThan(0);
+        for (const [id] of on)
+          expect(same.arch.routes['api-async'], name).toContain(id);
+        const client = boxes(s.index, fw, 'client');
+        const ghost = client.ghosts.find((g) => g.slot === 'analysis');
+        expect(ghost, name).toMatchObject({
+          label: '利用者の端末（ブラウザ）',
+          depth: 1,
+        });
+        expect(ghost!.group, name).toBeUndefined();
+        const placed = client.model.nodes.find(
+          (n) => n.id === 'ghost:analysis',
+        )!;
+        expect(placed.group, name).toBe(client.model.groups[0]!.account);
+      }
   });
 });

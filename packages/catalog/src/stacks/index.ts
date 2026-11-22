@@ -36,6 +36,12 @@ import { CROSS_DB } from './cross-db.ts';
 import { withDomain } from './domain.ts';
 import { EMAIL_COMPONENTS, withEmail } from './email.ts';
 import { withLogs } from './logs.ts';
+import {
+  ANALYSIS_COMPONENTS,
+  applyAnalysis,
+  applyAnalysisToWorkload,
+  type BrowserAnalysisShape,
+} from './analysis.ts';
 import { bunnyCdnNode } from './bunny.ts';
 import { vpsNode } from './sakura.ts';
 import {
@@ -79,7 +85,8 @@ export type SlotId =
   | 'cdnInvalidation'
   | 'minInstances'
   | 'dbBackup'
-  | 'email';
+  | 'email'
+  | 'analysis';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -200,6 +207,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   minInstances: '最小インスタンス数',
   dbBackup: 'DB のバックアップ',
   email: 'メール送信',
+  analysis: '解析の置き場',
 };
 
 /**
@@ -824,6 +832,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...CROSS_COMPONENTS,
   ...BACKUP_COMPONENTS,
   ...EMAIL_COMPONENTS,
+  ...ANALYSIS_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
@@ -1673,13 +1682,17 @@ export function composeStack(
     withEmail(
       withBackups(
         withLogs(
-          applyCrossApi(
-            built,
-            def.platform,
-            def.plan,
-            c,
-            standby,
-            options.framework ?? 'nextjs',
+          // 解析の置き場（prd/17 §5.1・D-235）は API の置き場を差した後（worker はアプリの API の経路に結果を送る）
+          applyAnalysis(
+            applyCrossApi(
+              built,
+              def.platform,
+              def.plan,
+              c,
+              standby,
+              options.framework ?? 'nextjs',
+            ),
+            c.analysis,
           ),
         ),
         c.dbBackup,
@@ -1998,7 +2011,12 @@ export function applyComponentsToWorkload(
   w: WorkloadInput,
   platform: Platform,
   choices: Choices = {},
-  options: { originalImageKB?: number; resizedImageKB?: number } = {},
+  options: {
+    originalImageKB?: number;
+    resizedImageKB?: number;
+    /** 端末で解析するときに配るファイル（解析の置き場の端末・併用。D-235）。 */
+    browserAnalysis?: BrowserAnalysisShape;
+  } = {},
 ): WorkloadInput {
   const given = withDefaults(platform, choices);
   // 他の事業者の部品は、同じ振る舞いの部品として Workload を変える（D-52）
@@ -2039,7 +2057,8 @@ export function applyComponentsToWorkload(
     });
   else if (c.images === 'r2-variants')
     out.images = { ...w.images, transformAt: 'upload' };
-  return out;
+  // 解析の置き場（D-235）: 端末はサーバーの解析をやめ、端末・併用はエンジンと評価関数を配る
+  return applyAnalysisToWorkload(out, c.analysis, options.browserAnalysis);
 }
 
 /**

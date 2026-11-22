@@ -517,7 +517,8 @@ function consume(
       const kb = api?.kb ?? p.kb;
       hostAcc.kb += n * kb;
       hostAcc.requests += n;
-      hostAcc.cpuMs += n * (api?.cpuMs ?? p.cpuMs);
+      // クラスの 1 件の CPU をこのホストで決める（別のホストの worker から結果を受けて書くだけ。D-235）
+      hostAcc.cpuMs += n * (c.classCpuMs?.[cls] ?? api?.cpuMs ?? p.cpuMs);
       hostAcc.queries += n * p.queries;
       if (cls === 'image-transform') hostAcc.transforms += n;
       add(u, 'requests', n);
@@ -659,7 +660,12 @@ export function simulateResources(
       RequestClass,
       ClassFlow,
     ][]) {
-      const path = architecture.routes[cls];
+      // 積んで別の所で動かす API（D-235）は、構成が経路を持たなければ api と同じ経路を通る（解析の置き場を選ばない構成）
+      const path =
+        architecture.routes[cls] ??
+        (cls === 'api-async' && f.count > 0
+          ? architecture.routes.api
+          : undefined);
       if (!path) {
         if (collectUnrouted && f.count > 0) unroutedClasses.push(cls);
         continue;

@@ -4,6 +4,7 @@
 // 値はすべてゲーム上の仮定で、実在の値でも相場でもない。料金・制限は catalog のデータをそのまま使う。
 import {
   KIFU_ANALYSIS_ASTRO,
+  KIFU_BROWSER_ANALYSIS,
   KIFU_ANALYSIS_ROUTES,
   KIFU_ANALYSIS_SPA,
   KIFU_DB_GB_PER_MILLION_PV,
@@ -163,6 +164,8 @@ export const KIFU_ANALYSIS: Scenario = {
   name: '棋譜解析サービス',
   template: kifuAnalysis,
   routeTraits: KIFU_ANALYSIS_ROUTES,
+  // 解析の置き場が端末・併用のときに配るエンジンと評価関数（ゲーム上の仮定。D-235）
+  browserAnalysis: KIFU_BROWSER_ANALYSIS,
   // 棋譜と解析の結果がたまる（画像は保存しない）
   stock: { dbGBPerMillionPV: KIFU_DB_GB_PER_MILLION_PV, gbPerImage: 0 },
   scale: { startPV: 300_000 },

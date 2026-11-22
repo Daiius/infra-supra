@@ -253,6 +253,66 @@ describe('見積モードの画面', () => {
     }
   });
 
+  it('W-KF3 棋譜解析のテンプレートでは解析の置き場（D-235）を選べ、URL・月の費用・構成図の箱が替わる。ほかのテンプレートには出ない', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=kifu&preview=1&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    // 既定はアプリと同じ実行環境
+    expect(checked('解析の置き場')).toBe('same');
+    const total = () =>
+      within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent;
+    const before = total();
+    // worker（さくらの VPS）にすると URL に残り、月の費用が替わり、図に worker の箱が出る
+    choose('解析の置き場', 'worker-vps-2gb');
+    expect(checked('解析の置き場')).toBe('worker-vps-2gb');
+    expect(new URLSearchParams(window.location.search).get('c.analysis')).toBe(
+      'worker-vps-2gb',
+    );
+    expectEstimate();
+    expect(total()).not.toBe(before);
+    fireEvent.click(
+      within(stackCard()).getByRole('button', { name: '構成図から選ぶ' }),
+    );
+    const worker = stackCard().querySelector<HTMLElement>(
+      '[data-node="analysis-worker"]',
+    );
+    expect(worker).not.toBeNull();
+    expect(worker!.closest('[data-slots~="analysis"]')).not.toBeNull();
+    // 利用者の端末にすると worker の箱は消え、解析の置き場は幽霊の箱で選べる
+    fireEvent.click(
+      within(stackCard()).getByRole('button', { name: '機能から選ぶ' }),
+    );
+    choose('解析の置き場', 'client');
+    expect(new URLSearchParams(window.location.search).get('c.analysis')).toBe(
+      'client',
+    );
+    expectEstimate();
+    fireEvent.click(
+      within(stackCard()).getByRole('button', { name: '構成図から選ぶ' }),
+    );
+    expect(
+      stackCard().querySelector('[data-node="analysis-worker"]'),
+    ).toBeNull();
+    expect(
+      stackCard().querySelector('[data-slots~="analysis"]'),
+    ).not.toBeNull();
+    cleanup();
+
+    // 解析の無いテンプレート（記事）には出ない
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&preview=1&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    expect(queryGroup('解析の置き場')).toBe(null);
+  });
+
   it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', async () => {
     window.history.replaceState(
       null,

@@ -2,6 +2,7 @@
 // シナリオの値（規模・収益・満足度の重み・工数・確率・時期・効果）はすべてゲーム上の仮定。
 import type {
   AstroShape,
+  BrowserAnalysisShape,
   FrameworkId,
   Platform,
   RouteStrategyId,
@@ -293,6 +294,11 @@ export type Scenario = {
   };
   /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ＝stock.gbPerImage と同じ。ゲーム上の仮定・D-24・D-47）。 */
   unoptimizedImageKB: number;
+  /**
+   * 解析の置き場が利用者の端末・併用のときにブラウザへ配るファイル（D-235・prd/17 §5.1）。非同期の API（解析）を持つシナリオだけ。
+   * 省略すると端末の置き場でもファイルを配らない（数えない）。
+   */
+  browserAnalysis?: BrowserAnalysisShape;
   /**
    * 画像を投稿のときに一律で縮めて置く部品の、1 枚の大きさ（JPEG のとき。保存も配信もこの大きさで、画像の形式の比で小さくなる。
    * 長い辺 1,600〜2,000px 程度の JPEG・WebP を想定したゲーム上の仮定・D-47）。

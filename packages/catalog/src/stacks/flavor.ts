@@ -342,6 +342,35 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '開発者に人気の送信のサービスの有料プラン。月額で通数がたっぷり込み',
   'resend:email:resend-pro-100k':
     '同じ有料プランの込みの通数が倍の段。送る通数が多いなら超過より安いです',
+  // 解析の置き場（D-235・prd/17 §5.1）。worker は さくらの VPS（どの土台に差しても同じ文）
+  ...Object.fromEntries(
+    [
+      'cloudflare',
+      'vercel',
+      'sakura',
+      'aws',
+      'aws-opennext',
+      'netlify',
+      'gcp',
+    ].flatMap((p) => [
+      [
+        `${p}:analysis:same`,
+        'アプリと同じ所で動かすので、仕組みが少なく済みます。重い処理の費用と上限はそのまま受けます',
+      ],
+      [
+        `${p}:analysis:client`,
+        '利用者の端末で解析し、サーバーの計算は要りません。端末によって速さが違います',
+      ],
+      [
+        `${p}:analysis:hybrid`,
+        '端末ですぐ速報を出し、本解析はサーバーで。費用は両方にかかります',
+      ],
+    ]),
+  ),
+  'sakura:analysis:worker-vps-2gb':
+    '解析だけの常駐のサーバーを置きます。費用は定額ですが、混む時間に待ちが出ます',
+  'sakura:analysis:worker-vps-4gb':
+    '解析だけの常駐のサーバーを、余裕のある上のプランで置きます。費用は定額です',
   // Bunny（D-98）。転送の安い従量の CDN を、画像の配信と前段に差す
   'bunny:images:bunny-images':
     '転送の安い CDN から配り、変換は月額で使い放題。大きな画像の多いサイトに向きます',
