@@ -11,6 +11,7 @@
 // - 分布（段 3・D-161）: 完走したら、送信が終わった後に 4 軸 × 2 の分布を 1 回で取る（fetchDistribution）。
 // - 構成ごとの分布（ST-11・D-175）: 結果の画面のチップで絞った分布（loadFilteredView）と、比較の図の構成ごとの要約（loadGroups）。
 import {
+  isPreviewScenario,
   RESULT_AXES,
   resultAxesOf,
   STACKS,
@@ -102,7 +103,7 @@ export async function requestPlayToken(nonce: string): Promise<void> {
 /**
  * 送信の結末。included はサーバーが保存し、保存されている行が分布に入る（同じ結果の行がすでにあった duplicate は、その行の印で決まる）。
  * excluded は保存されたが分布に入らない（戻った印つきの行が先にあったなど。OCL-9B705B16）。rejected は 4xx・5xx、
- * failed は通信の失敗、skipped は送らなかった（フラグが無い・終わっていない）。
+ * failed は通信の失敗、skipped は送らなかった（フラグが無い・終わっていない・開発中のシナリオ）。
  */
 export type SubmitOutcome =
   'included' | 'excluded' | 'rejected' | 'failed' | 'skipped';
@@ -117,9 +118,11 @@ export async function submitResult(
   nonce: string,
 ): Promise<SubmitOutcome> {
   // 開発用の架空の分布を出している間は、フラグがあっても送らない（開発のプレイを集計に混ぜない。OCL-87C871FB）
+  // 開発中のシナリオ（D-232）のプレイも送らない（サーバーも受け付けない）
   if (
     statsMockEnabled() ||
     !statsEnabled() ||
+    isPreviewScenario(save.scenarioId) ||
     state.phase === 'playing' ||
     !state.end
   )
@@ -233,13 +236,15 @@ export type StatsQuery = {
 
 /**
  * 保存から、結果の画面の絞り込みの元（始めたときの構成の id・フレームワーク）を作る。分布を取りに行かない（フラグが無い）ときは
- * null（チップと比較の図を出さない）。構成の id はサーバーと同じく保存の stackIndex から STACKS で引く（D-171）。
+ * null（チップと比較の図を出さない）。開発中のシナリオ（D-232）も null。構成の id はサーバーと同じく保存の stackIndex から STACKS で引く（D-171）。
  */
 export function statsQueryOf(
   save: Pick<SaveData, 'scenarioId' | 'seed' | 'stackIndex' | 'framework'>,
 ): Omit<StatsQuery, 'axes'> | null {
   const stack = STACKS[save.stackIndex];
-  if (!statsViewEnabled() || !stack) return null;
+  // 開発中のシナリオ（D-232）は集計に無いので、チップと比較の図を出さない
+  if (!statsViewEnabled() || !stack || isPreviewScenario(save.scenarioId))
+    return null;
   return {
     scenarioId: save.scenarioId,
     seed: save.seed,
@@ -402,6 +407,8 @@ export async function loadStatsView(q: {
   rewound: boolean;
   sent: Promise<SubmitOutcome> | null;
 }): Promise<StatsView> {
+  // 開発中のシナリオ（D-232）は集計に無いので、分布を取りに行かない（架空の分布も出さない）
+  if (isPreviewScenario(q.scenarioId)) return { status: 'off' };
   if (statsMockEnabled()) {
     const { mockDistribution } = await import('./stats-mock.ts');
     return standingsOf(mockDistribution(q), q.axes, false, true);

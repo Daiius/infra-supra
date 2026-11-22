@@ -38,6 +38,19 @@ export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
   [CONTRACT_OPERATIONS.id]: CONTRACT_OPERATIONS,
 });
 
+/** 開発中の印（Scenario.preview。D-232）が付いた、組み込みのシナリオか。知らない id は false。 */
+export const isPreviewScenario = (id: string): boolean =>
+  Object.hasOwn(SCENARIOS, id) && SCENARIOS[id]!.preview === true;
+
+/**
+ * 画面に並べるシナリオ（登録順）。開発中のもの（D-232）は preview が真のときだけ含める。
+ * all はテストで架空のシナリオを渡すための口（既定は組み込みの表）。
+ */
+export const listedScenarios = (
+  preview: boolean,
+  all: readonly Scenario[] = Object.values(SCENARIOS),
+): Scenario[] => all.filter((s) => preview || s.preview !== true);
+
 /** ⚠ 為替は取得していない（仮定）。シナリオによらない共通の仮定。 */
 export const USD_JPY = 150;
 

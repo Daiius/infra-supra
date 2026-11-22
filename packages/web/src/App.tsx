@@ -39,8 +39,8 @@ import {
   FrameworkField,
   ScenarioDescription,
   ScenarioPicker,
-  SCENARIO_LIST,
 } from './scenario-briefing.tsx';
+import { scenarioList } from './preview.ts';
 import { OptionText } from './option-text.tsx';
 import { commitmentMeta } from './commitment-meta.ts';
 import {
@@ -695,7 +695,8 @@ function Loading() {
 }
 
 function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
-  const [scenarioId, setScenarioId] = useState(SCENARIO_LIST[0]!.id);
+  // 最初は並びの 1 番目（開発中のシナリオは ?preview=1 のときだけ並ぶ。D-232）
+  const [scenarioId, setScenarioId] = useState(() => scenarioList()[0]!.id);
   const scenario = SCENARIOS[scenarioId]!;
   const frameworks = frameworksOf(scenario);
   // 既定は一覧の 1 番目（正解になりやすい構成を既定にしない。D-41）

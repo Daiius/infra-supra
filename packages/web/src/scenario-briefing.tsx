@@ -8,7 +8,6 @@ import {
   FRAMEWORKS,
   growthFromReputation,
   pageWireframes,
-  SCENARIOS,
   scenarioOffscreen,
   scenarioWireframes,
   selfHostedOf,
@@ -58,9 +57,7 @@ import {
   type RoutePlanEditor,
 } from './route-plan-field.tsx';
 import { usd, fmtPoints } from './format.ts';
-
-/** 選べるシナリオ（SCENARIOS の登録順）。 */
-export const SCENARIO_LIST: Scenario[] = Object.values(SCENARIOS);
+import { scenarioList } from './preview.ts';
 
 /** シナリオを選ぶ。 */
 export function ScenarioPicker({
@@ -70,13 +67,15 @@ export function ScenarioPicker({
   value: string;
   onChange: (id: string) => void;
 }) {
-  if (SCENARIO_LIST.length < 2) return null;
+  // 選べるシナリオ（SCENARIOS の登録順。開発中のものは ?preview=1 のときだけ。D-232）
+  const list = scenarioList();
+  if (list.length < 2) return null;
   return (
     <div className="card bg-base-100 shadow">
       <div className="card-body px-3 sm:px-6">
         <h2 className="card-title">どのシナリオで遊びますか？</h2>
         <div className="grid gap-2 sm:grid-cols-2">
-          {SCENARIO_LIST.map((s) => (
+          {list.map((s) => (
             <label
               key={s.id}
               className={`flex cursor-pointer items-center gap-3 rounded-box border p-3 ${value === s.id ? 'border-primary bg-primary/5' : 'border-base-300'}`}

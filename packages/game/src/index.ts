@@ -7,6 +7,8 @@
 export {
   scenarioSendsEmail,
   SCENARIOS,
+  isPreviewScenario,
+  listedScenarios,
   USD_JPY,
   baseSsrCpuMsOf,
   GAME,

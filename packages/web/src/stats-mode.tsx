@@ -4,7 +4,12 @@
 // - このブラウザの結果の履歴から、選んだシナリオの最新の完走の 4 軸を「▼ あなた」として重ねる（無ければ印を出さない）。
 // - 出さないもの: 上位 % と「★ 上位」の印・花火（結果の画面のもの）・完走率・途中終了の数・構成の人気（prd/15 §6・§7）。
 // VITE_STATS_ENABLED（開発は VITE_STATS_MOCK）が無ければ App.tsx がこの画面を開かない。
-import { RESULT_AXES, SCENARIOS, type ResultAxisId } from 'game';
+import {
+  listedScenarios,
+  RESULT_AXES,
+  SCENARIOS,
+  type ResultAxisId,
+} from 'game';
 import { useEffect, useState } from 'react';
 import { HistogramChart, HistogramSkeleton } from './charts.tsx';
 import {
@@ -27,7 +32,10 @@ import { Chips } from './chips.tsx';
 import { loadAllSeeds, type AllSeedsView } from './stats-client.ts';
 import type { Histogram } from 'stats';
 
-const SCENARIO_IDS = Object.keys(SCENARIOS);
+/**
+ * 並べるシナリオ。開発中のもの（D-232）は ?preview=1 でも出さない（集計に送らず、サーバーも受け付けないので分布が無い）。
+ */
+const SCENARIO_IDS = listedScenarios(false).map((s) => s.id);
 
 /** 選んだシナリオの最新の完走（履歴は新しい順）。途中終了は 4 軸を出さないので重ねない。 */
 export const latestCompleted = (
