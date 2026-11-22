@@ -267,6 +267,21 @@ export const WorkloadInputSchema = z
         processingMs: NonNeg,
         /** 接続のときに読む履歴の行数。 */
         historyRowsPerConnect: NonNeg,
+        /**
+         * 1 回の接続（セッション）の長さ（分。D-240）。つないでいる間に課金する部品（関数・コンテナ・API Gateway の WebSocket）の
+         * 時間と、同時接続のピークに使う。省略は 0（接続の長さを数えない。Durable Objects は休止中を課金しないので効かない）。
+         * 部品の接続の上限（関数の最大の実行時間など）より長いと、その長さごとにつなぎ直す（構成の websocket.maxConnectionMinutes）。
+         */
+        minutesPerConnection: NonNeg.optional(),
+        /**
+         * 受け取った 1 件を何人に配るか（ファンアウト。D-240）。配信も課金する部品（API Gateway の WebSocket は送ったメッセージも数える）で
+         * 使う。省略は 0（配信を数えない。Durable Objects は受信だけを数える）。関数・VPS の配る CPU は processingMs に含める。
+         */
+        fanout: NonNeg.optional(),
+        /** 1 件のメッセージの大きさ（KB。省略は 0。API Gateway の 32 KB ごとの数え方と VPS の転送に使う。D-240）。 */
+        messageKB: NonNeg.optional(),
+        /** 同時接続のピーク / 月の平均（省略は traffic.peakHourFactor。研究会のように夜に集まる形。D-240）。 */
+        peakFactor: Pos.optional(),
       })
       .optional(),
   })

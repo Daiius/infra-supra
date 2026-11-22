@@ -41,6 +41,8 @@ export const RESOURCES = [
   'backup-hours', // 時間で課金するバックアップのアドオン（Supabase の PITR）を付けている時間（D-93）
   'emails', // アプリが送るメール（パスワードの再設定・通知など）の通数（D-95）
   'dns-queries', // DNS のゾーンへの問い合わせ（課金されるものだけ。Route 53・Cloud DNS。D-96）
+  'messages', // WebSocket の入口が数えるメッセージ（受信と配信。API Gateway の WebSocket API。D-240）
+  'connection-minutes', // WebSocket の接続の分（API Gateway の WebSocket API。D-240）
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -84,4 +86,6 @@ export const RESOURCE_UNITS: Record<ResourceKey, Unit> = {
   'backup-hours': 'hour',
   emails: 'count',
   'dns-queries': 'count',
+  messages: 'count',
+  'connection-minutes': 'minute',
 };

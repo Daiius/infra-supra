@@ -43,6 +43,7 @@ import {
   type BrowserAnalysisShape,
 } from './analysis.ts';
 import { STORAGE_COMPONENTS, applyStorageShape } from './storage-shape.ts';
+import { REALTIME_COMPONENTS, applyRealtime } from './realtime.ts';
 import { bunnyCdnNode } from './bunny.ts';
 import { vpsNode } from './sakura.ts';
 import {
@@ -193,6 +194,11 @@ export type ComponentOption = {
    * 省略は、形式を設定（アプリのコード）で選ぶ部品。フレームワークの部品（next/image・Astro の <Image />）の既定は game の側が持つ。
    */
   servedFormat?: { format: 'webp' | 'avif'; how: string };
+  /**
+   * シナリオが有効にしたときだけ選べる部品（D-240。Cloudflare 以外のリアルタイム。棋譜解析の研究会だけで使い、記事コミュニティの
+   * チャットは Cloudflare だけのまま（X-5））。componentsOf は optIn を渡したときだけ返す。
+   */
+  optIn?: true;
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
@@ -837,6 +843,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...EMAIL_COMPONENTS,
   ...ANALYSIS_COMPONENTS,
   ...STORAGE_COMPONENTS,
+  ...REALTIME_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
@@ -919,11 +926,14 @@ export function componentsOf(
   platform: Platform,
   slot: SlotId,
   framework?: FrameworkId,
+  /** optIn の部品（ComponentOption.optIn。D-240）も返すか。省略は返さない。 */
+  options: { optIn?: boolean } = {},
 ): ComponentOption[] {
   return COMPONENTS.filter(
     (c) =>
       hostsOf(c).includes(platform) &&
       c.slot === slot &&
+      (c.optIn !== true || options.optIn === true) &&
       (framework === undefined ||
         c.frameworks === undefined ||
         c.frameworks.includes(framework)),
@@ -1687,20 +1697,26 @@ export function composeStack(
       withBackups(
         withLogs(
           // 解析の置き場（prd/17 §5.1・D-235）は API の置き場を差した後（worker はアプリの API の経路に結果を送る）
-          applyStorageShape(
-            applyAnalysis(
-              applyCrossApi(
-                built,
-                def.platform,
-                def.plan,
-                c,
-                standby,
-                options.framework ?? 'nextjs',
+          // リアルタイム（Cloudflare 以外。D-240）は構成の処理と DB が決まった後（Cloudflare は composeCloudflare の中）
+          applyRealtime(
+            applyStorageShape(
+              applyAnalysis(
+                applyCrossApi(
+                  built,
+                  def.platform,
+                  def.plan,
+                  c,
+                  standby,
+                  options.framework ?? 'nextjs',
+                ),
+                c.analysis,
               ),
-              c.analysis,
+              // 保存の形（prd/17 §5.4・D-237）。構成は変えず、D1 に行の数え方の前提を足すだけ（Workload は applyAnalysisSettings）
+              c.storage,
             ),
-            // 保存の形（prd/17 §5.4・D-237）。構成は変えず、D1 に行の数え方の前提を足すだけ（Workload は applyAnalysisSettings）
-            c.storage,
+            def.platform,
+            def.plan,
+            c.realtime,
           ),
         ),
         c.dbBackup,

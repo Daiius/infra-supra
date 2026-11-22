@@ -170,6 +170,21 @@ export const aws: PriceBookInput = {
     ),
     apiGatewayPrices: priceList('AmazonApiGateway'),
     apiGatewayPricing: src('https://aws.amazon.com/api-gateway/pricing/'),
+    // API Gateway の WebSocket API（D-240）。東京の単価は Price List API（AmazonApiGateway・ap-northeast-1・
+    // version 20261112215920・publicationDate 2026-11-12）の WebSocket Messages・WebSocket Connection Minutes。
+    // 32 KB ごとの数え方・送受信の両方・ping / pong は数えない・無料枠は新規の 12 か月は料金ページ。上限は開発者ガイド（2026-11-23 取得）
+    apiGatewayWsPrices: {
+      url: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/current/ap-northeast-1/index.json',
+      retrievedAt: '2026-11-23',
+    },
+    apiGatewayWsPricing: {
+      url: 'https://aws.amazon.com/api-gateway/pricing/',
+      retrievedAt: '2026-11-23',
+    },
+    apiGatewayWsQuotas: {
+      url: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-execution-service-websocket-limits-table.html',
+      retrievedAt: '2026-11-23',
+    },
     cloudfrontPrices: src(
       'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/current/index.json',
     ),
@@ -837,6 +852,67 @@ export const aws: PriceBookInput = {
             ],
           },
           sourceIds: ['apiGatewayPrices'],
+        },
+      ],
+    },
+    {
+      // リアルタイム（D-240）。Amplify の SSR は WebSocket を保てない（公式の SSR の機能の一覧に WebSocket が無い）ので、別に足す
+      id: 'api-gateway-websocket',
+      service: 'api-gateway',
+      ...common,
+      name: 'API Gateway（WebSocket API）',
+      sourceIds: [
+        'apiGatewayWsPrices',
+        'apiGatewayWsPricing',
+        'apiGatewayWsQuotas',
+      ],
+      notes: [
+        '無料枠（100 万メッセージ・75 万接続分 / 月）は新規のアカウントの 12 か月だけなので入れません（AX-06）',
+        'メッセージは送ったものと受け取ったものの両方を、32 KB ごとに 1 件として数えます。ping / pong は数えません',
+      ],
+      facts: [
+        {
+          id: 'websocket-duration',
+          premise:
+            'API Gateway の WebSocket は 1 回の接続が 2 時間まで、無通信が 10 分続くと切れます（引き上げ不可）。2 時間を超える研究会はつなぎ直します',
+          sourceIds: ['apiGatewayWsQuotas'],
+        },
+        {
+          id: 'websocket-messages',
+          premise:
+            'API Gateway の WebSocket はメッセージを送ったものも受け取ったものも数えます（32 KB ごとに 1 件）。盤面を N 人に配ると、受け取った 1 件が配った N 件と合わせて N + 1 件になります',
+          sourceIds: ['apiGatewayWsPricing'],
+        },
+        {
+          id: 'websocket-state',
+          premise:
+            'API Gateway の WebSocket は接続を保つだけで、メッセージごとに Lambda を呼びます。Lambda は接続をまたいで状態を持てないので、つながっている人（接続の ID）と盤面は DB に置き、配るたびに接続の ID へ送り直します。このモデルは盤面を DB に 1 件 1 行で書く分を数え、接続の ID の読み書きは数えません',
+          sourceIds: ['apiGatewayWsPricing', 'apiGatewayWsQuotas'],
+        },
+      ],
+      meters: [
+        {
+          id: 'messages',
+          label: 'メッセージ（API Gateway: WebSocket messages）',
+          resource: 'messages',
+          unit: 'count',
+          pricing: {
+            model: 'tiered',
+            per: 1_000_000,
+            tiers: [
+              { upTo: 1_000_000_000, unitPrice: 1.26 },
+              { upTo: null, unitPrice: 1.06 },
+            ],
+          },
+          sourceIds: ['apiGatewayWsPrices'],
+        },
+        {
+          id: 'connection-minutes',
+          label: '接続の分（API Gateway: WebSocket connection minutes）',
+          resource: 'connection-minutes',
+          unit: 'minute',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.315 },
+          sourceIds: ['apiGatewayWsPrices'],
         },
       ],
     },

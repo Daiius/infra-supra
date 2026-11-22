@@ -130,6 +130,24 @@ export const KIFU_ANALYSIS_ROUTES: Readonly<Record<string, RouteTraits>> = {
 };
 
 /**
+ * 研究会の共同検討（prd/17 §6 の出来事 6・D-240）のリアルタイムの形。Workload の realtime に入れる。**ゲーム上の仮定**（出典なし）:
+ * 利用者の 5% が月 4 回の研究会に参加し、1 回 90 分つなぐ。1 回に盤面の手と書き込みを 60 件送り、同じ盤面を見る 6 人のうち
+ * 自分以外の 5 人に配る（ファンアウト 5）。1 件 0.5 KB・処理 2 ms、つなぐと棋譜と検討の手 100 行を読む。研究会は夜に集まるので、
+ * 同時接続のピークは月の平均の 8 倍。駒を動かすたびの解析は数えない（prd/17 §6.1）。
+ */
+export const KIFU_STUDY_REALTIME = {
+  usersPerMau: 0.05,
+  connectionsPerUser: 4,
+  minutesPerConnection: 90,
+  messagesPerUser: 4 * 60,
+  processingMs: 2,
+  historyRowsPerConnect: 100,
+  fanout: 5,
+  messageKB: 0.5,
+  peakFactor: 8,
+} as const satisfies NonNullable<WorkloadInput['realtime']>;
+
+/**
  * 棋譜解析の 1 日の時間帯の形（0 時〜23 時の重み。D-89）。ゲーム上の仮定（出典なし）: 対局を終えた夜（20〜22 時）に最も多く、
  * 昼休みに小さな山、深夜 3〜5 時は少ない。休日のほうが多い（weekdayToWeekend 0.8）。
  */

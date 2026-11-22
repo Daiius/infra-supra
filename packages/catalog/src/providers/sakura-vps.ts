@@ -187,6 +187,13 @@ export const sakuraVps: PriceBookInput = {
       meters: [TRANSFER],
       facts: [
         {
+          // WebSocket（D-240）
+          id: 'websocket-resident',
+          premise:
+            'さくらの VPS は月額の定額なので、WebSocket の接続を常駐のプロセスで保っても追加の料金はかかりません。接続は時間で切られず、盤面はプロセスのメモリに置けます。代わりに、同時接続の数とメモリ・CPU は VPS の大きさで頭打ちになり、VPS が止まるとつながっている全員が切れます',
+          sourceIds: ['spec'],
+        },
+        {
           id: 'next-fs-cache',
           premise:
             'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動きます（CDN を前に置くときや複数台では設定が要る）',
@@ -254,6 +261,13 @@ export const sakuraVps: PriceBookInput = {
       },
       meters: [TRANSFER],
       facts: [
+        {
+          // WebSocket（D-240）
+          id: 'websocket-resident',
+          premise:
+            'さくらの VPS は月額の定額なので、WebSocket の接続を常駐のプロセスで保っても追加の料金はかかりません。接続は時間で切られず、盤面はプロセスのメモリに置けます。代わりに、同時接続の数とメモリ・CPU は VPS の大きさで頭打ちになり、VPS が止まるとつながっている全員が切れます',
+          sourceIds: ['spec'],
+        },
         {
           id: 'next-fs-cache',
           premise:

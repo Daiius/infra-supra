@@ -223,8 +223,52 @@ function ttlMissBySource(
 /**
  * 1 ノードがクラスの流れを受け取ったときの使用量と、次のノードへ渡す流れ。
  * src はクラスのルートの内訳（w.sources）ごとの、このノードに届く件数。次のノードへ届く件数に書き換える（D-99）。
+ * リアルタイムの接続を保つノード（config の websocket。D-240）は、接続の長さを上限ごとのつなぎ直しに分けて自分の時間に数え、
+ * 次のノードへは接続を保たない短い 1 件（壁時計 = CPU）として、つなぎ直しの数だけ渡す。
  */
 function consume(
+  node: ArchNode,
+  cls: RequestClass,
+  f: ClassFlow,
+  u: NodeUsage,
+  w: ResolvedWorkload,
+  hostAcc: NodeAcc,
+  src: number[],
+): ClassFlow {
+  const ws =
+    cls === 'realtime-connect' && 'websocket' in node.config
+      ? node.config.websocket
+      : undefined;
+  if (!ws) return consumeKind(node, cls, f, u, w, hostAcc, src);
+  const p = f.perRequest;
+  const max = ws.maxConnectionMinutes;
+  const k =
+    max === undefined ? 1 : Math.max(1, ceilUnits(p.wallMs, max * 60_000));
+  const scale = (m: PerInvocationMax, wallMs: number) => ({
+    cpuMs: m.cpuMs,
+    wallMs,
+  });
+  const maxByOf = (wallOf: (m: PerInvocationMax) => number) =>
+    Object.fromEntries(
+      Object.entries(p.maxBy).map(([inv, m]) => [inv, scale(m!, wallOf(m!))]),
+    ) as ClassFlow['perRequest']['maxBy'];
+  const here: ClassFlow = {
+    count: f.count * k,
+    perRequest: {
+      ...p,
+      wallMs: p.wallMs / k,
+      maxBy: maxByOf((m) => m.wallMs / k),
+    },
+  };
+  src.forEach((x, i) => (src[i] = x * k));
+  consumeKind(node, cls, here, u, w, hostAcc, src);
+  return {
+    count: here.count,
+    perRequest: { ...p, wallMs: p.cpuMs, maxBy: maxByOf((m) => m.cpuMs) },
+  };
+}
+
+function consumeKind(
   node: ArchNode,
   cls: RequestClass,
   f: ClassFlow,
@@ -429,6 +473,20 @@ function consume(
       } else add(u, 'requests', n);
       add(u, 'rows-read', n * p.rowsRead);
       add(u, 'rows-written', n * p.rowsWritten);
+      return f;
+    }
+    case 'websocket-gateway': {
+      if (cls === 'realtime-connect')
+        add(u, 'connection-minutes', (n * p.wallMs) / 60_000);
+      else if (cls === 'realtime-message')
+        // 受け取った分と配った分（受信 × ファンアウト）を、1 件の大きさの単位ごとに切り上げて数える
+        add(
+          u,
+          'messages',
+          n *
+            (1 + (w.input.realtime?.fanout ?? 0)) *
+            Math.max(1, ceilUnits(p.kb, c.messageUnitKB)),
+        );
       return f;
     }
     case 'managed-db': {
@@ -855,7 +913,14 @@ export function simulateResources(
           acc.requests * c.proxyCpuMsPerRequest) /
           1000) *
         peak,
-      memoryGB: c.residentMemoryGB,
+      // リアルタイムの接続を常駐のプロセスで保つなら、同時接続のピーク × 1 接続のメモリを足す（D-240）
+      memoryGB:
+        c.residentMemoryGB +
+        (c.websocket
+          ? ((workload.realtime?.peakConnections ?? 0) *
+              c.websocket.kbPerConnection) /
+            1_000_000
+          : 0),
       diskGB:
         (c.storesDb ? workload.storage.dbGB : 0) +
         (c.storesImages

@@ -25,6 +25,20 @@ const LogsSchema = z
   })
   .optional();
 
+/**
+ * リアルタイムの接続（WebSocket）を保つノード（D-240）。持つノードは realtime-connect の壁時計の時間（接続の長さ）を自分の時間に数え、
+ * 経路の次（DB）へは接続を保たない短い 1 件として渡す（DB が接続の間ずっと使われているとは数えない）。
+ * maxConnectionMinutes: 1 回の接続の上限（関数の最大の実行時間・Cloud Run の timeout・API Gateway の 2 時間）。接続の長さがこれを超えると、
+ * この長さごとにつなぎ直す（件数が増え、1 件の時間はその分短くなる。履歴の読み直しも増える）。
+ * kbPerConnection: 1 接続が常駐で使うメモリ（KB。ホストのメモリの判定に、同時接続のピーク × これを足す。仮定）。
+ */
+const WebsocketSchema = z
+  .object({
+    maxConnectionMinutes: Pos.optional(),
+    kbPerConnection: NonNeg.default(0),
+  })
+  .optional();
+
 /** ComponentKind ごとの設定。振る舞いはコード（simulate/kinds.ts）、値はデータ。 */
 export const NodeKindSchema = z.discriminatedUnion('kind', [
   /** CDN・静的配信。クラスごとのヒット率。列挙しないクラスはキャッシュしない（ヒット率 0）。 */
@@ -98,6 +112,7 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      */
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
     logs: LogsSchema,
+    websocket: WebsocketSchema,
   }),
   /**
    * コンテナのサービス（Cloud Run のリクエストで課金する型。D-88・prd/04 §3.3.1）。1 インスタンスが同時に concurrency 件までさばき、
@@ -119,6 +134,7 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
     logs: LogsSchema,
+    websocket: WebsocketSchema,
   }),
   /**
    * KV。cache: ISR のキャッシュ（閲覧で読み、再生成で書く）。db: DB の代わり（問い合わせ 1 回を読み取り 1 回、
@@ -146,6 +162,17 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     kind: z.literal('durable-object'),
     messagesPerRequest: Pos,
     memoryGB: Pos,
+  }),
+  /**
+   * 接続を保ち、メッセージと接続の分で課金する WebSocket の入口（API Gateway の WebSocket API 型。D-240）。経路の次（関数）は
+   * メッセージ・接続ごとに短く呼ばれる。メッセージは受け取った分と配った分（受信 × Workload の realtime.fanout）を、
+   * 1 件の大きさを messageUnitKB ごとに切り上げて数える（messages）。接続は接続の分（connection-minutes）。
+   * つなぎ直しは websocket.maxConnectionMinutes（料金データの上限の値を catalog の構成が持つ）。
+   */
+  z.object({
+    kind: z.literal('websocket-gateway'),
+    messageUnitKB: Pos,
+    websocket: WebsocketSchema,
   }),
   /**
    * コンピュートを時間で買うマネージド DB（Supabase 型）。capacityUnits は時間課金の単位の数（Aurora の ACU。既定 1）。
@@ -285,6 +312,8 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * このホストでは受けて書くだけの CPU にする。DB の問い合わせはそのクラスのまま数える。
      */
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
+    /** リアルタイムの接続をこのホストの常駐のプロセスで保つ（D-240）。メモリに同時接続のピーク × kbPerConnection を足す。 */
+    websocket: WebsocketSchema,
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;

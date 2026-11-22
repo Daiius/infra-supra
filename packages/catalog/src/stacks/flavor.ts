@@ -270,6 +270,23 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'クラウドの定番のストレージ。同じリージョンのコンテナからの読み出しは転送の料金がかかりません',
   'aws:files:s3':
     'クラウドの定番のストレージ。保存も読み書きも安く、CDN からそのまま配れます',
+  // リアルタイム（Cloudflare 以外。棋譜解析だけで選べる。D-240）
+  'vercel:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'vercel:realtime:functions-websocket':
+    '今の関数のまま WebSocket を受けられます。使った分だけの支払いです',
+  'sakura:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'sakura:realtime:vps-websocket':
+    '月額のまま、接続を時間で切られずに保てます。サーバーの面倒は自分で見ます',
+  'gcp:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'gcp:realtime:cloud-run-websocket':
+    '今のコンテナのまま WebSocket を受けられます。追加の設定はほとんど要りません',
+  'aws:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'aws:realtime:api-gateway-websocket':
+    '接続の管理はマネージドに任せ、メッセージごとに関数を呼びます。使った分だけの支払いです',
 };
 
 /** OpenNext の構成（D-63）が Amplify の構成と共有する部品は、同じ説明文を使う。 */

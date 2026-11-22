@@ -181,6 +181,11 @@ export type ResolvedWorkload = {
   builds: { count: number; minutes: number };
   /** 月に送るメールの通数（Workload の email。省略は 0。D-95）。 */
   emails: number;
+  /**
+   * リアルタイムの接続の量（Workload の realtime に接続の長さがあるときだけ。D-240）。connectionMinutes は月の接続の分の合計、
+   * peakConnections は同時接続のピーク（月の平均の同時接続 × realtime.peakFactor（省略は peakHourFactor））。
+   */
+  realtime?: { connectionMinutes: number; peakConnections: number };
   derivations: Derivation[];
 };
 
@@ -716,6 +721,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
 
   const a = w.api;
   const rt = w.realtime;
+  const rtConnections = rt ? t.mau * rt.usersPerMau * rt.connectionsPerUser : 0;
   // JS・CSS は SPA のルートでは入口だけ読む（遷移では読み直さない）
   const assetViews = pv - spaViews + spaEntries;
   // ページの部品が呼ぶ API（D-109・RS-02）: ルートが apiCalls を持てばその閲覧はそれ、持たなければ perPage.apiCalls。
@@ -809,13 +815,20 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         kb: w.images.sizeKB,
       },
     ),
-    'realtime-connect': flow(
-      rt ? t.mau * rt.usersPerMau * rt.connectionsPerUser : 0,
-      { rowsRead: rt?.historyRowsPerConnect ?? 0 },
-    ),
+    // 接続の長さ（D-240）は壁時計の時間として持つ（CPU は 0）。つないでいる間に課金する部品だけが数える
+    'realtime-connect': flow(rtConnections, {
+      rowsRead: rt?.historyRowsPerConnect ?? 0,
+      ...(rt?.minutesPerConnection
+        ? { wallMs: rt.minutesPerConnection * 60_000 }
+        : {}),
+    }),
     'realtime-message': flow(
       rt ? t.mau * rt.usersPerMau * rt.messagesPerUser : 0,
-      { cpuMs: rt?.processingMs ?? 0, rowsWritten: 1 },
+      {
+        cpuMs: rt?.processingMs ?? 0,
+        rowsWritten: 1,
+        ...(rt?.messageKB ? { kb: rt.messageKB } : {}),
+      },
     ),
   };
 
@@ -872,6 +885,18 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     onDemandUpdates,
     builds,
     emails,
+    // 接続の長さがあるときだけ（D-240）。月の接続の分 ÷ 月の分 × ピークの倍率
+    ...(rt?.minutesPerConnection
+      ? {
+          realtime: {
+            connectionMinutes: rtConnections * rt.minutesPerConnection,
+            peakConnections:
+              ((rtConnections * rt.minutesPerConnection) /
+                (HOURS_PER_MONTH * 60)) *
+              (rt.peakFactor ?? t.peakHourFactor),
+          },
+        }
+      : {}),
     derivations,
   };
 }

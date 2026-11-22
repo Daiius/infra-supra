@@ -1368,3 +1368,115 @@ describe('ドメインと DNS（D-96）', () => {
     expect(r.d!.resources).toEqual({});
   });
 });
+
+describe('リアルタイムの接続の長さ・ファンアウト・同時接続のピーク（D-240）', () => {
+  const rt = {
+    usersPerMau: 0.1,
+    connectionsPerUser: 4,
+    messagesPerUser: 40,
+    processingMs: 5,
+    historyRowsPerConnect: 20,
+    minutesPerConnection: 90,
+    fanout: 3,
+    messageKB: 40,
+    peakFactor: 5,
+  };
+  const wr = resolveWorkload(workload({ realtime: rt }));
+  const conns = 1000 * 0.1 * 4;
+  const msgs = 1000 * 0.1 * 40;
+  const run = (
+    nodes: ArchitectureInput['nodes'],
+    routes: ArchitectureInput['routes'],
+  ) => simulateResources(wr, { id: 'x', name: 'x', nodes, routes }).nodes;
+
+  it('接続の長さは壁時計の時間、同時接続のピークは月の接続の分 ÷ 月の分 × ピークの倍率', () => {
+    expect(wr.classes['realtime-connect'].perRequest.wallMs).toBe(90 * 60_000);
+    expect(wr.realtime!.connectionMinutes).toBe(conns * 90);
+    expect(wr.realtime!.peakConnections).toBeCloseTo(
+      ((conns * 90) / (730 * 60)) * 5,
+      9,
+    );
+    // 接続の長さが無ければ持たない（今までの数え方）
+    expect(w.realtime).toBeUndefined();
+    expect(w.classes['realtime-connect'].perRequest.wallMs).toBe(0);
+  });
+
+  it('接続を保つ関数は上限ごとにつなぎ直し、次の DB へは短い 1 件として渡す', () => {
+    const u = run(
+      [
+        {
+          id: 'fn',
+          label: 'fn',
+          config: {
+            kind: 'function',
+            memoryGB: 1,
+            concurrency: 2,
+            websocket: { maxConnectionMinutes: 20 },
+          },
+        },
+        { id: 'db', label: 'db', config: { kind: 'managed-db' } },
+      ],
+      { 'realtime-connect': ['fn', 'db'] },
+    );
+    // 90 分を 20 分ごと → 5 回
+    expect(u.fn!.resources.invocations).toBeCloseTo(conns * 5, 9);
+    expect(u.fn!.maxWallMsPerRequest).toBeCloseTo(18 * 60_000, 9);
+    expect(u.fn!.resources['memory-gb-hours']).toBeCloseTo(
+      ((conns * 90) / 60) * 0.5,
+      9,
+    );
+    expect(u.db!.busyMs).toBe(0);
+  });
+
+  it('WebSocket の入口: 受信と配信を大きさの単位で切り上げて数え、接続の分を数える', () => {
+    const u = run(
+      [
+        {
+          id: 'gw',
+          label: 'gw',
+          config: {
+            kind: 'websocket-gateway',
+            messageUnitKB: 32,
+            websocket: { maxConnectionMinutes: 120 },
+          },
+        },
+        { id: 'fn', label: 'fn', config: { kind: 'function' } },
+      ],
+      { 'realtime-connect': ['gw', 'fn'], 'realtime-message': ['gw', 'fn'] },
+    );
+    // 40 KB は 2 単位、受信 1 + 配信 3
+    expect(u.gw!.resources.messages).toBeCloseTo(msgs * 4 * 2, 9);
+    expect(u.gw!.resources['connection-minutes']).toBeCloseTo(conns * 90, 9);
+    expect(u.fn!.resources.invocations).toBeCloseTo(conns + msgs, 9);
+    expect(u.fn!.maxWallMsPerRequest).toBeCloseTo(5, 9);
+  });
+
+  it('接続を常駐で保つホストは、メモリに同時接続のピーク × 1 接続のメモリを足す', () => {
+    const host = (websocket?: { kbPerConnection: number }) =>
+      run(
+        [
+          {
+            id: 'vps',
+            label: 'vps',
+            config: {
+              kind: 'host',
+              vcpu: 1,
+              memoryGB: 1,
+              diskGB: 100,
+              lineMbps: 100,
+              residentMemoryGB: 0.5,
+              dbCpuMsPerQuery: 0,
+              imageTransformCpuMs: 0,
+              ...(websocket ? { websocket } : {}),
+            },
+          },
+        ],
+        { 'realtime-connect': ['vps'], 'realtime-message': ['vps'] },
+      ).vps!.host!.memoryGB;
+    expect(host()).toBe(0.5);
+    expect(host({ kbPerConnection: 1000 })).toBeCloseTo(
+      0.5 + (wr.realtime!.peakConnections * 1000) / 1_000_000,
+      9,
+    );
+  });
+});

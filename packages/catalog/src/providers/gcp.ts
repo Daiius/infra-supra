@@ -53,6 +53,12 @@ export const gcp: PriceBookInput = {
       url: 'https://cloud.google.com/run/docs/configuring/request-timeout',
       retrievedAt: '2026-11-23',
     },
+    // WebSocket はリクエストとして timeout（既定 5 分・最大 60 分）に従い、開いている間はインスタンスが動いていて課金される・
+    // 1 コンテナ 1,000 接続まで・アフィニティは best effort で状態は外部に（2026-11-23 取得。D-240）
+    runWebsockets: {
+      url: 'https://docs.cloud.google.com/run/docs/triggering/websockets',
+      retrievedAt: '2026-11-23',
+    },
     hostingPricing: src('https://firebase.google.com/pricing'),
     hostingUsage: src(
       'https://firebase.google.com/docs/hosting/usage-quotas-pricing',
@@ -214,6 +220,25 @@ export const gcp: PriceBookInput = {
         },
       ],
       facts: [
+        {
+          // WebSocket（D-240）
+          id: 'websocket-timeout',
+          premise:
+            'Cloud Run の WebSocket はリクエストとして扱われ、リクエストの timeout（既定 5 分・最大 60 分）で切れます。ブラウザはつなぎ直す必要があります（ここでは 60 分に設定し、60 分ごとのつなぎ直しを 1 件のリクエストと履歴の読み直しに数えます）',
+          sourceIds: ['runWebsockets', 'runRequestTimeout'],
+        },
+        {
+          id: 'websocket-billing',
+          premise:
+            'Cloud Run は WebSocket を 1 本でも開いているインスタンスを動いている（active）とみなし、CPU とメモリを課金します。メッセージが無い間も、接続を開いている間はずっと数えます。1 コンテナは同時に 1,000 接続まで受けられます',
+          sourceIds: ['runWebsockets', 'runPricing'],
+        },
+        {
+          id: 'websocket-state',
+          premise:
+            'Cloud Run のセッションのアフィニティは best effort で、つなぎ直すと別のインスタンスにつながることがあります。複数の人が同じ盤面を見るなら、盤面を外部の置き場（DB・Redis の Pub/Sub・Firestore のリアルタイムの更新など）に置きます。このモデルは盤面を今の DB に 1 件 1 行で書く分だけを数え、配信の仲立ちの費用は数えません',
+          sourceIds: ['runWebsockets'],
+        },
         {
           id: 'request-billing',
           premise:

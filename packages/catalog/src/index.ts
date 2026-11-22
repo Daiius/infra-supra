@@ -43,6 +43,7 @@ export * from './stacks/backups.ts';
 export * from './stacks/email.ts';
 export * from './stacks/analysis.ts';
 export * from './stacks/storage-shape.ts';
+export * from './stacks/realtime.ts';
 export * from './stacks/domain.ts';
 export * from './stacks/flavor.ts';
 export * from './stacks/files.ts';
