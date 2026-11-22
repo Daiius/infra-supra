@@ -18,6 +18,7 @@ import {
 } from '../stacks.ts';
 import type { GameState } from '../state.ts';
 import {
+  analysisBurstFactor,
   architectureFor,
   staticBuildOf,
   workloadFor,
@@ -67,6 +68,10 @@ export function estimateMonth(
     ...(peakFactor !== 1 ? { peakFactor } : {}),
     ...(spikes.length ? { spikes } : {}),
     ...(volume.botPV ? { botPV: volume.botPV } : {}),
+    // 過去の棋譜の取り込みの解析（D-241）。受けていないゲームでは持たない
+    ...(analysisBurstFactor(state) !== 1
+      ? { analysisFactor: analysisBurstFactor(state) }
+      : {}),
   };
   const workload = workloadFor(sc, parts);
   const swap = state.componentSwap;

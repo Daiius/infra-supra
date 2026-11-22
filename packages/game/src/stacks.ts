@@ -368,6 +368,47 @@ export function realtimeSessionOf(
   };
 }
 
+/**
+ * 研究会の提案に出す、今の構成のセッションの保ち方の文（D-241）。手段・つなぎ直しの回数・盤面の置き場と、catalog の事実の文
+ * （provider:planId:factId のもの）。手段が無い構成は空（受けるには構成の変更が要る）。
+ */
+export function realtimeSessionLines(
+  stackIndex: number,
+  scenario: Pick<Scenario, 'realtimeAllPlatforms'>,
+  minutesPerSession: number,
+): string[] {
+  const s = realtimeSessionOf(stackIndex, scenario, minutesPerSession);
+  if (!s) return [];
+  const label = componentLabel(
+    STACKS[stackIndex]!.provider,
+    'realtime',
+    s.option,
+  );
+  const where =
+    s.state === 'object'
+      ? '盤面は接続をまとめるオブジェクトに置けます'
+      : s.state === 'process'
+        ? '盤面は VPS のプロセスのメモリに置けます（VPS が止まると、つながっている全員が切れます）'
+        : '盤面はインスタンスの外（DB などの置き場）に置きます（つなぎ直すと別のインスタンスにつながることがあります）';
+  const reconnect =
+    s.reconnectsPerSession > 1
+      ? `1 回の研究会（${minutesPerSession} 分）のうちに接続が切れ、${s.reconnectsPerSession} 回つなぎます（1 回の接続は最大 ${Math.round(s.maxConnectionMinutes! * 10) / 10} 分）`
+      : `1 回の研究会（${minutesPerSession} 分）はつなぎ直さずに済みます`;
+  const facts = s.facts.flatMap((ref) => {
+    const [provider, planId, factId] = ref.split(':');
+    if (!factId) return [];
+    const f = books
+      .find((b) => b.provider === provider)
+      ?.plans.find((p) => p.id === planId)
+      ?.facts.find((x) => x.id === factId);
+    return f ? [f.premise] : [];
+  });
+  return [
+    `${label}: ${s.keepsSession ? 'セッションを保てます' : 'セッションを保てません'}。${reconnect}。${where}`,
+    ...facts,
+  ];
+}
+
 /** その事業者で、今の部品の選択がリアルタイムを持てるか（チャットを受けたあと。シナリオで変わる。D-240）。 */
 export function realtimeSupported(
   platform: Platform,

@@ -7,6 +7,7 @@ import {
   acceptSummary,
   describeEffect,
   describeEffectBlocked,
+  effectContextOf,
   effectTrend,
   premiseRefsOf,
 } from '../events.ts';
@@ -17,7 +18,12 @@ import {
 } from '../requirements.ts';
 import { articleFamily } from '../routes/strategy.ts';
 import type { EventDef, Scenario, Scheduled } from '../scenario.ts';
-import { componentsAfterMigration, membersOf, slaOf } from '../stacks.ts';
+import {
+  componentsAfterMigration,
+  membersOf,
+  realtimeSessionLines,
+  slaOf,
+} from '../stacks.ts';
 import type { GameState, MonthEvent, MonthReport } from '../state.ts';
 import type { Due } from './traffic.ts';
 import { architectureFor, staticBuildOf } from '../workload.ts';
@@ -38,6 +44,25 @@ function occurredTextOf(
 }
 
 /**
+ * 今の構成のリアルタイムの部品を付ける提案（研究会）の、セッションの保ち方の文（D-241）。接続の長さは受けると入るリアルタイムの形
+ * （Workload の realtime の minutesPerConnection）。部品を付けない出来事は空。
+ */
+function sessionLinesOf(def: EventDef, state: GameState): string[] {
+  const effects = def.accept?.effects ?? [];
+  if (!effects.some((e) => e.type === 'realtime-component')) return [];
+  const minutes = effects.reduce(
+    (a, e) =>
+      e.type === 'workload' && e.mods.realtime?.minutesPerConnection
+        ? e.mods.realtime.minutesPerConnection
+        : a,
+    0,
+  );
+  return minutes > 0
+    ? realtimeSessionLines(state.stackIndex, state.scenario, minutes)
+    : [];
+}
+
+/**
  * 今月の出来事の通知を並べる（台本の起きた・予告 → 前提の境目を越えた → 料金の改定の予告の順）。
  * 前提で起きる出来事は一度だけなので、起きた出来事を足した fired も返す。
  */
@@ -54,6 +79,8 @@ export function monthEventsOf(
 ): { events: MonthEvent[]; fired: GameState['fired'] } {
   const { month, prev, premises, due, noticed } = c;
   const stackIndexNow = state.stackIndex;
+  // 効果の説明の部品の名前は今の構成の部品で引く（D-241）
+  const ctx = effectContextOf(state);
   const events: MonthEvent[] = [];
   // 出来事の通知（起きた・予告・提案）
   for (const x of due) {
@@ -68,7 +95,7 @@ export function monthEventsOf(
         phase: 'occurred',
         title: p.title,
         text: p.text,
-        effects: p.effects.map(describeEffect),
+        effects: p.effects.map((e) => describeEffect(e, ctx)),
         effectTrends: p.effects.map(effectTrend),
         premises: [],
       });
@@ -113,13 +140,16 @@ export function monthEventsOf(
       effects: (def.effects ?? []).map((e) =>
         botBlocked
           ? describeEffectBlocked(e, BOT_BLOCK.remaining)
-          : describeEffect(e),
+          : describeEffect(e, ctx),
       ),
       effectTrends: (def.effects ?? []).map(effectTrend),
       ...(botBlocked ? { botBlocked: true as const } : {}),
       premises: premiseRefsOf(def, premises),
       ...(def.showMembers ? { members: membersOf(stackIndexNow) } : {}),
       ...(def.showSla ? { sla: slaOf(stackIndexNow) } : {}),
+      ...((lines) => (lines.length ? { session: lines } : {}))(
+        sessionLinesOf(def, state),
+      ),
       ...(def.previewRequirement
         ? {
             requirementStatus: requirementStatus(
@@ -135,7 +165,7 @@ export function monthEventsOf(
         ? {
             accept: {
               label: def.accept.label,
-              effects: def.accept.effects.map(describeEffect),
+              effects: def.accept.effects.map((e) => describeEffect(e, ctx)),
               effort: acceptEffort(def, state),
               ...((d) => (d ? { declineLoss: d } : {}))(
                 acceptSummary(state, def).declineLoss,

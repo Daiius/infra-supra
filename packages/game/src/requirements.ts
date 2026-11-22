@@ -22,7 +22,7 @@ import {
 import { books } from './core.ts';
 import { articleFamily } from './routes/strategy.ts';
 import { isOnDemand } from './settings.ts';
-import { dbBackupStatus, STACKS } from './stacks.ts';
+import { dbBackupStatus, realtimeSupported, STACKS } from './stacks.ts';
 import type { GameState, StrategyFamily } from './state.ts';
 
 /** 構成が要件を満たすか。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
@@ -329,6 +329,12 @@ export function unavailableReason(
   state: Pick<GameState, 'stackIndex' | 'framework' | 'scenario' | 'routes'>,
   def: EventDef,
 ): string | undefined {
+  // 今の構成の手段でリアルタイムの部品を付ける提案（研究会。D-241）は、手段の無い構成（隠した構成）では受けられない
+  if (
+    def.accept?.effects.some((e) => e.type === 'realtime-component') &&
+    !realtimeSupported(STACKS[state.stackIndex]!.provider, state.scenario)
+  )
+    return '今の構成にはセッションを保つリアルタイムの部品がありません（受けるには構成の変更が要ります）';
   if (
     !def.requires ||
     requirementReachable(

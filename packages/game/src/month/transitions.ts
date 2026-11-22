@@ -38,6 +38,7 @@ import {
   withoutRealtime,
 } from '../stacks.ts';
 import type { GameState } from '../state.ts';
+import { analysisBurstFactor } from '../workload.ts';
 
 export type Progress = {
   effort: ReturnType<typeof allocateEffort>;
@@ -249,7 +250,9 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
       (rule.dbGBPerMillionPV *
         humanPV *
         (state.mods.dbRateFactor ?? 1) *
-        analysis) /
+        analysis *
+        // 取り込んだ棋譜と解析の結果もたまる（置き場によらない。D-241）
+        analysisBurstFactor(state)) /
         1e6,
     imagesGB: s.imagesGB + uploads * gbPerUpload,
     images: s.images + uploads,

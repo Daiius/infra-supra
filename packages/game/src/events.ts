@@ -1,6 +1,6 @@
 // 出来事の効果（適用と説明）と、出来事を受けるときの工数（画像の作り直しなど）。
 import type { Effect, EventDef, Scenario } from './scenario.ts';
-import { SLOT_LABELS } from 'catalog';
+import { type Platform, SLOT_LABELS } from 'catalog';
 import type { PlatformPremise } from 'estimator';
 import { startBackgroundJob } from './background-job.ts';
 import { scenarioOf } from './core.ts';
@@ -11,7 +11,13 @@ import {
   NEXT_ON_DEMAND,
   ON_DEMAND_REVALIDATE,
 } from './settings.ts';
-import { componentLabel, imagesOf } from './stacks.ts';
+import { noSocialCards } from './month/satisfaction.ts';
+import {
+  componentLabel,
+  imagesOf,
+  realtimeOptionFor,
+  STACKS,
+} from './stacks.ts';
 import type { EffectTrend, GameState, MonthEvent } from './state.ts';
 
 /** 今の状態で要る効果（再検証がすでにオンデマンドなら、切り替えの作業を除く。D-49）。 */
@@ -23,6 +29,18 @@ function effectsFor(
   return effects.filter(
     (e) => !(e.type === 'interrupt' && e.unlessOnDemand && already),
   );
+}
+
+/**
+ * 成長の効果の足す量。SNS で共有されて伸びる分（social）は、ページごとのカードが出ない構成では socialCardFactor 倍（D-241。
+ * 話題の流量と同じ仮定・prd/10 F-05）。
+ */
+function growthAddOf(
+  state: GameState,
+  e: Extract<Effect, { type: 'growth' }>,
+): number {
+  if (!e.social || !noSocialCards(state)) return e.add;
+  return e.add * (scenarioOf(state).frameworks?.spa?.socialCardFactor ?? 1);
 }
 
 export const acceptEffort = (def: EventDef, state: GameState) =>
@@ -117,6 +135,7 @@ export function effectTrend(e: Effect): EffectTrend {
     case 'feature':
     case 'growth':
     case 'contract':
+    case 'analysis-burst':
       return 'up';
     case 'effortPerMonth':
       return e.add > 0 ? 'up' : e.add < 0 ? 'down' : null;
@@ -125,7 +144,24 @@ export function effectTrend(e: Effect): EffectTrend {
   }
 }
 
-export function describeEffect(e: Effect): string {
+/**
+ * 効果の説明の文脈（今の構成の事業者とシナリオ）。部品の名前を今の構成の部品で引く（D-241）。省略は Cloudflare の部品の名前
+ * （記事のチャットは Cloudflare の構成だけで出る。X-5）。
+ */
+export type EffectContext = {
+  platform: Platform;
+  scenario: Pick<Scenario, 'realtimeAllPlatforms'>;
+};
+
+/** 状態から効果の説明の文脈を作る。 */
+export const effectContextOf = (
+  state: Pick<GameState, 'stackIndex' | 'scenario'>,
+): EffectContext => ({
+  platform: STACKS[state.stackIndex]!.provider,
+  scenario: state.scenario,
+});
+
+export function describeEffect(e: Effect, ctx?: EffectContext): string {
   switch (e.type) {
     case 'traffic':
       return `${e.bot ? 'Bot の' : ''}PV ${fmtFactor(e.factor)}${e.peakFactor ? `・ピーク ${fmtFactor(e.peakFactor)}` : ''}（${e.months} か月${e.earnsRevenue ? '' : '・収益なし'}）`;
@@ -172,9 +208,15 @@ export function describeEffect(e: Effect): string {
     case 'feature':
       return `機能開発 +${e.points}`;
     case 'growth':
-      return `成長 +${Math.round(e.add * 100)} ポイント × ${e.months} か月`;
+      return `成長 +${Math.round(e.add * 100)} ポイント × ${e.months} か月${e.social ? '（SNS のカードが出ない構成では小さくなります）' : ''}`;
     case 'component':
-      return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel('cloudflare', e.slot, e.option)}）`;
+      return `${SLOT_LABELS[e.slot]}に部品を付ける（${componentLabel(ctx?.platform ?? 'cloudflare', e.slot, e.option)}）`;
+    case 'realtime-component': {
+      const option = ctx && realtimeOptionFor(ctx.platform, ctx.scenario);
+      return `${SLOT_LABELS.realtime}に部品を付ける（${option ? componentLabel(ctx.platform, 'realtime', option) : '今の構成の手段'}）`;
+    }
+    case 'analysis-burst':
+      return `解析の件数と DB の増え方 ${fmtFactor(e.factor)}（翌月から ${e.months} か月。解析の置き場が利用者の端末なら、サーバーの解析は増えません）`;
     case 'on-demand-revalidate':
       return `ISR の再検証を「${NEXT_ON_DEMAND}」にする（Next.js）`;
     case 'requirement':
@@ -233,11 +275,13 @@ export function acceptSummary(
     switch (e.type) {
       case 'feature':
         break;
-      case 'growth':
+      case 'growth': {
+        const add = growthAddOf(state, e);
         gains.push(
-          `PV の月の伸び +${Math.round(e.add * 100)} ポイント（${e.months} か月）`,
+          `PV の月の伸び +${Math.round(add * 100)} ポイント（${e.months} か月${add < e.add ? '。SNS のカードが出ない構成なので小さくなります' : ''}）`,
         );
         break;
+      }
       case 'contract':
         gains.push(describeEffect(e));
         break;
@@ -294,7 +338,11 @@ export function acceptSummary(
       case 'seats':
       case 'traffic':
       case 'component':
-        costs.push(`使用量・費用: ${describeEffect(e)}`);
+      case 'realtime-component':
+      case 'analysis-burst':
+        costs.push(
+          `使用量・費用: ${describeEffect(e, effectContextOf(state))}`,
+        );
         break;
       case 'requirement':
       case 'on-demand-revalidate':
@@ -304,7 +352,7 @@ export function acceptSummary(
         // 終わった月に当たる効果を得に、処理の量と払い方を伴うことに出す（D-239）
         if (e.job.onDone.length)
           gains.push(
-            `「${e.job.label}」が終わると: ${e.job.onDone.map(describeEffect).join('・')}`,
+            `「${e.job.label}」が終わると: ${e.job.onDone.map((x) => describeEffect(x)).join('・')}`,
           );
         costs.push(`使用量・費用: ${describeEffect(e)}`);
         break;
@@ -392,11 +440,33 @@ export function applyEffects(
       case 'growth':
         s = {
           ...s,
-          growthBonus: [...s.growthBonus, { add: e.add, months: e.months }],
+          growthBonus: [
+            ...s.growthBonus,
+            { add: growthAddOf(s, e), months: e.months },
+          ],
         };
         break;
       case 'component':
         s = { ...s, components: { ...s.components, [e.slot]: e.option } };
+        break;
+      case 'realtime-component': {
+        // 受けた月の事業者の手段（無い構成では受けられない提案になるので、ここには来ない。D-241）
+        const option = realtimeOptionFor(
+          STACKS[s.stackIndex]!.provider,
+          scenarioOf(s),
+        );
+        if (option)
+          s = { ...s, components: { ...s.components, realtime: option } };
+        break;
+      }
+      case 'analysis-burst':
+        s = {
+          ...s,
+          analysisBursts: [
+            ...(s.analysisBursts ?? []),
+            { eventId, factor: e.factor, months: e.months },
+          ],
+        };
         break;
       case 'on-demand-revalidate':
         // SPA には ISR が無い（revalidateSec は API のキャッシュの期間）ので変えない

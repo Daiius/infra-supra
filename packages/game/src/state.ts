@@ -157,6 +157,10 @@ export type MonthEvent = {
   };
   /** 今の構成の SLA の扱い（catalog の uptimeSla）。 */
   sla?: string[];
+  /**
+   * 今の構成のリアルタイムのセッションの保ち方（研究会の提案。手段・つなぎ直し・盤面の置き場と catalog の事実の文。D-241）。
+   */
+  session?: string[];
   /** 要件を満たせるか（部品ごと。受ける前に出す。D-32）。 */
   requirementStatus?: {
     label: string;
@@ -343,6 +347,11 @@ export type GameState = {
    * 保存は行動の列なので、再生すれば同じ進み具合に戻る（保存の形は変えない）。
    */
   backgroundJobs?: BackgroundJob[];
+  /**
+   * 続いている解析の件数の上乗せ（過去の棋譜のまとめての取り込み。効果 analysis-burst。D-241）。月ごとに months を減らし、
+   * 0 になったら外す。古い状態・受けていないゲームには無い（＝無し）。行動の列から再生すれば同じに戻る。
+   */
+  analysisBursts?: { eventId: string; factor: number; months: number }[];
   /** 結んだ確約（D-97）。古い状態には無いことがある（無ければ確約なし）。 */
   commitments?: ActiveCommitment[];
   /**

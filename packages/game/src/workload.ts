@@ -10,6 +10,7 @@ import {
   type FrameworkId,
   FRAMEWORKS,
   type Platform,
+  serverAnalyzes,
   serverIslandDelivery,
   STACK_DEFS,
   withAstroAssets,
@@ -46,6 +47,11 @@ import type {
   StrategyFamily,
 } from './state.ts';
 
+/** 今月の解析の件数の倍率（続いている取り込みの上乗せの積。無ければ 1。D-241）。 */
+export const analysisBurstFactor = (
+  state: Pick<GameState, 'analysisBursts'>,
+): number => (state.analysisBursts ?? []).reduce((a, b) => a * b.factor, 1);
+
 /** Workload を組み立てる入力（反実仮想の見積でも同じ関数を使う）。 */
 export type WorkloadParts = {
   pv: number;
@@ -68,6 +74,11 @@ export type WorkloadParts = {
   spikes?: Spike[];
   /** pv のうち Bot の PV（メールの通数から除く。D-117）。省略は 0。 */
   botPV?: number;
+  /**
+   * その月の解析の件数の倍率（過去の棋譜のまとめての取り込み。GameState.analysisBursts。D-241）。解析の置き場が利用者の端末なら
+   * サーバーの解析は増えないので掛けない。省略は 1。
+   */
+  analysisFactor?: number;
 };
 
 /** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。bot は Bot の上乗せ（D-117）。 */
@@ -168,6 +179,18 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
         }),
       )
     : sc.template(Math.round(p.pv));
+  // 取り込んだ棋譜の解析（D-241）: このテンプレートの API は解析だけなので、1 PV あたりの API の件数に掛ける
+  const burst = p.analysisFactor ?? 1;
+  if (
+    burst !== 1 &&
+    w.api.invocation === 'async' &&
+    serverAnalyzes({ ...DEFAULT_CHOICES[p.platform], ...p.components }.analysis)
+  ) {
+    w.perPage = { ...w.perPage, apiCalls: w.perPage.apiCalls * burst };
+    w.routes = w.routes.map((r) =>
+      r.apiCalls === undefined ? r : { ...r, apiCalls: r.apiCalls * burst },
+    );
+  }
   const ssr = p.mods.ssrShare;
   w.routes = w.routes.map((r) => ({
     ...r,

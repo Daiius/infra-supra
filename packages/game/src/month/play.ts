@@ -1,5 +1,6 @@
 // 1 か月を進める（playMonth）。各段は同じフォルダの関数に分けてあり、ここでは順に呼んで次の月の状態を組む。
-import { DEFAULT_CHOICES } from 'catalog';
+import { DEFAULT_CHOICES, type Platform, serverAnalyzes } from 'catalog';
+import { fmtFactor } from '../format.ts';
 import { backgroundJobNotes, runBackgroundJobs } from '../background-job.ts';
 import { buzzLasting } from '../rules.ts';
 import { eventDef, scenarioOf } from '../core.ts';
@@ -24,6 +25,20 @@ import {
   volumeOf,
 } from './traffic.ts';
 import { progressOf, stockOf, transitionsOf } from './transitions.ts';
+import { analysisBurstFactor } from '../workload.ts';
+
+/** 過去の棋譜の取り込みで解析が増えた月の注記（D-241）。置き場が端末なら、サーバーの解析は増えない。 */
+function analysisBurstNotes(state: GameState, platform: Platform): string[] {
+  const f = analysisBurstFactor(state);
+  if (f === 1) return [];
+  const placement = { ...DEFAULT_CHOICES[platform], ...state.components }
+    .analysis;
+  return [
+    serverAnalyzes(placement)
+      ? `過去の棋譜の取り込みで、今月は解析の件数と DB の増え方が ${fmtFactor(f)} です`
+      : `過去の棋譜を取り込み、DB の増え方が ${fmtFactor(f)} です（解析は利用者が開いたときに端末で行うので、サーバーの解析は増えません）`,
+  ];
+}
 
 /** 1 か月を進める（出来事 → 見積 → 収益 → 前提の判定 → 満足度 → 工数 → 所持金 → 在庫 → 終わりの判定）。 */
 export function playMonth(input: GameState): GameState {
@@ -133,6 +148,7 @@ export function playMonth(input: GameState): GameState {
       ...judged.notes,
       ...next.notes,
       ...backgroundJobNotes(jobs.runs),
+      ...analysisBurstNotes(state, platform),
     ],
     events,
     crossings,
@@ -162,12 +178,18 @@ export function playMonth(input: GameState): GameState {
     routes: _routes,
     capacityTiers: _tiers,
     backgroundJobs: _jobs,
+    analysisBursts: _bursts,
     ...base
   } = state;
+  // 過去の棋譜の取り込みの上乗せ（D-241）は月ごとに減らし、終わったら外す（受けていないゲームには持たない）
+  const bursts = (state.analysisBursts ?? [])
+    .map((b) => ({ ...b, months: b.months - 1 }))
+    .filter((b) => b.months > 0);
   const played: GameState = {
     ...base,
     // 続く長時間の処理（D-239）。始めていないゲームには持たない
     ...(jobs.remaining.length ? { backgroundJobs: jobs.remaining } : {}),
+    ...(bursts.length ? { analysisBursts: bursts } : {}),
     ...(routes !== undefined ? { routes } : {}),
     seed,
     stackIndex: next.stackIndex,

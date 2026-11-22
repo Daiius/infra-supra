@@ -150,10 +150,23 @@ export type Effect =
   /** ISR の再検証をオンデマンドにする（Next.js だけ。D-49）。 */
   | { type: 'on-demand-revalidate' }
   | { type: 'feature'; points: number }
-  /** 成長率に足す（翌月から months か月）。 */
-  | { type: 'growth'; add: number; months: number }
+  /**
+   * 成長率に足す（翌月から months か月）。social: SNS で共有されて伸びる分で、ページごとのカード（OGP）が出ない構成
+   * （SPA で前処理なし）では add に Scenario.frameworks.spa.socialCardFactor を掛ける（受けた月の構成で決める。D-241）。
+   */
+  | { type: 'growth'; add: number; months: number; social?: boolean }
   /** 部品を付ける（受けた提案に要る部品。D-24）。 */
   | { type: 'component'; slot: SlotId; option: string }
+  /**
+   * 今の構成のリアルタイムの部品を付ける（受けた月の事業者の手段。game の realtimeOptionFor。D-240・D-241）。
+   * 手段の無い構成（隠した構成）では受けられない提案になる（受けるには構成の変更が要る）。
+   */
+  | { type: 'realtime-component' }
+  /**
+   * 解析の件数と DB の増え方を、翌月から months か月 factor 倍にする（過去の棋譜をまとめて取り込む。D-241）。
+   * 解析の置き場が利用者の端末なら、取り込んだ分は利用者が開いたときに端末で解析するので、サーバーの解析は増えない（在庫は増える）。
+   */
+  | { type: 'analysis-burst'; factor: number; months: number }
   /**
    * 契約の収益（毎月）。requires を満たす構成のときだけ入る（SLA の出来事。D-24・SC-5）。
    */

@@ -377,7 +377,12 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         return ng('same', '今の部品（または選択済み）');
       // チャットを受けたあとはリアルタイムを外せない
       if (action.slot === 'realtime' && state.mods.realtime)
-        return ng('irreversible', 'チャットを受けたので外せません');
+        return ng(
+          'irreversible',
+          sc.realtimeAllPlatforms
+            ? '研究会の提案を受けたので外せません'
+            : 'チャットを受けたので外せません',
+        );
       // さくらの VPS の API の応答のキャッシュは前段の CDN の上で効く（D-37）
       const conflict = componentConflict(
         platform,
