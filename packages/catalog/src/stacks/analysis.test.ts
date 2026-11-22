@@ -9,6 +9,7 @@ import {
   componentsOf,
   composeStack,
   KIFU_BROWSER_ANALYSIS,
+  KIFU_ENGINE_STARTUP_CPU_MS,
   KIFU_POSITION_CPU_MS,
   kifuAnalysis,
   loadPriceBooks,
@@ -143,7 +144,7 @@ describe('費用の傾き', () => {
       const ws = resolveWorkload(same.workload);
       const wc = resolveWorkload(client.workload);
       expect(ws.classes['api-async'].perRequest.cpuMs).toBe(
-        KIFU_POSITION_CPU_MS,
+        KIFU_ENGINE_STARTUP_CPU_MS + KIFU_POSITION_CPU_MS,
       );
       expect(wc.classes['api-async'].count).toBe(0);
       expect(wc.classes.api.count).toBeCloseTo(
@@ -158,7 +159,7 @@ describe('費用の傾き', () => {
       const kb = (w: typeof ws) =>
         w.classes.asset.count * w.classes.asset.perRequest.kb;
       expect(kb(wc)).toBeGreaterThan(kb(ws));
-      // サーバーの CPU の合計は、解析の分（1 局面の CPU − 受けて書く CPU）だけ減る
+      // サーバーの CPU の合計は、解析の分（1 件の CPU − 受けて書く CPU）だけ減る
       const cpu = (r: ReturnType<typeof run>) =>
         Object.values(r.result.simulation.nodes)
           .map((u) => u.resources['cpu-ms'] ?? 0)
@@ -166,7 +167,9 @@ describe('費用の傾き', () => {
       if (def.platform !== 'sakura')
         expect(cpu(same) - cpu(client)).toBeCloseTo(
           ws.classes['api-async'].count *
-            (KIFU_POSITION_CPU_MS - ANALYSIS_RESULT_CPU_MS),
+            (KIFU_ENGINE_STARTUP_CPU_MS +
+              KIFU_POSITION_CPU_MS -
+              ANALYSIS_RESULT_CPU_MS),
           -3,
         );
     }

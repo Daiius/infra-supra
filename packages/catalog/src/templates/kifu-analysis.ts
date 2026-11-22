@@ -6,9 +6,11 @@
 // - 解析の結果の保存は、API の書き込み（一手を 1 行。KF-12 の既定）と DB の在庫。
 // - ページは棋譜のページ・棋譜の一覧（ログインした利用者の個人のページが主）と、共有のページ（全員に同じ中身・OGP。少なめ）。
 // 後の段で、解析の置き場（PR-5）・区切り方と候補の数（PR-6）・保存の形（PR-7）がこの値を変える。その口になる値を名前の付いた定数にした。
+// 区切り方と候補の数は analysis-job.ts の applyAnalysisSettings が、このテンプレート（局面ごと・既定の候補の数）から替える（D-236）。
 // 大きさ（KB）は転送の大きさ（圧縮後。D-211・prd/04 §2.1）。
 import type { WorkloadInput } from 'estimator';
 import type { AstroShape, RouteTraits, SpaShape } from '../frameworks/index.ts';
+import { analysisApiOf, type AnalysisJobShape } from './analysis-job.ts';
 
 /** 1 局の手数（解析する局面の数。ゲーム上の仮定）。区切り方（PR-6）が 1 件の重さ・件数をこれで変える。 */
 export const KIFU_MOVES_PER_GAME = 100;
@@ -16,8 +18,22 @@ export const KIFU_MOVES_PER_GAME = 100;
 export const KIFU_CANDIDATES = 3;
 /** 解析の結果の候補 1 つの大きさ（KB。評価値・深さ・読み筋の手の列。ゲーム上の仮定）。保存の形（PR-7）が行の大きさをこれで変える。 */
 export const KIFU_CANDIDATE_KB = 0.15;
-/** 1 局面を解析する CPU（ms。思考時間を固定した 1 局面ぶん。解析の深さは選ばせない。KF-09。ゲーム上の仮定）。 */
-export const KIFU_POSITION_CPU_MS = 500;
+/**
+ * 1 局面を解析する CPU（ms。思考時間を固定した 1 局面ぶん。解析の深さは選ばせない。KF-09。ゲーム上の仮定）。
+ * 区切り方の「1 局まとめて」（手数 × これ ≒ 400 秒）が、短い上限（Vercel Hobby の 300 秒・Workers Paid の CPU 5 分）に当たり、
+ * 長い上限（Vercel Pro の 800 秒・15 分・30 分）に当たらない並びに仮に置いた（D-236。PR-11 で決め直す）。
+ */
+export const KIFU_POSITION_CPU_MS = 4_000;
+/**
+ * 解析の 1 件ごとの固定の重さ: エンジンの起動と評価関数の読み込みの CPU（ms）と、評価関数のファイルを読む待ち（ms）。
+ * 交換条件（区切り方）のもとになる仮定（supervisor の決定。D-236）。**ゲーム上の仮定**で、実在のエンジンの値ではない。
+ */
+export const KIFU_ENGINE_STARTUP_CPU_MS = 1_000;
+export const KIFU_ENGINE_STARTUP_IO_MS = 1_000;
+/** 解析の 1 件の DB の読み書きの待ち（ms。棋譜を読み、結果を書く。ゲーム上の仮定）。 */
+export const KIFU_ANALYSIS_IO_MS = 20;
+/** 「1 局ずつ・小分けに保存」の 1 塊の局面の数（塊ごとに結果と続きの位置を保存する。ゲーム上の仮定。D-236）。 */
+export const KIFU_RESUME_CHUNK_MOVES = 10;
 /** 棋譜そのものの大きさ（KB。手の列の文字列。ゲーム上の仮定）。 */
 export const KIFU_RECORD_KB = 2;
 /** 利用者 1 人が月に上げて解析する棋譜の数（ゲーム上の仮定）。 */
@@ -44,6 +60,19 @@ export const KIFU_BROWSER_ANALYSIS = {
   perVisit: KIFU_BROWSER_ENGINE_PER_VISIT,
   browserReuse: KIFU_BROWSER_ENGINE_REUSE,
 } as const;
+
+/** 解析の 1 件の形（区切り方・候補の数の設定が替える。analysis-job.ts・D-236）。 */
+export const KIFU_ANALYSIS_JOB: AnalysisJobShape = {
+  itemsPerBatch: KIFU_MOVES_PER_GAME,
+  itemCpuMs: KIFU_POSITION_CPU_MS,
+  startupCpuMs: KIFU_ENGINE_STARTUP_CPU_MS,
+  startupIoMs: KIFU_ENGINE_STARTUP_IO_MS,
+  ioWaitMs: KIFU_ANALYSIS_IO_MS,
+  chunkItems: KIFU_RESUME_CHUNK_MOVES,
+  candidates: KIFU_CANDIDATES,
+  candidateKB: KIFU_CANDIDATE_KB,
+  recordKB: KIFU_RECORD_KB,
+};
 
 /** 1 局の解析の結果の大きさ（KB）= 手数 × 候補の数 × 1 候補の大きさ（prd/17 §5.3）。 */
 export const kifuResultKB = (
@@ -183,18 +212,15 @@ export function kifuAnalysis(monthlyPageViews: number): WorkloadInput {
       },
     ],
     perPage: { apiCalls: analysesPerPersonalPV, assets: 8, images: 0 },
-    // 解析 1 件 = 1 局面。棋譜を読み（1 回・1 行）、結果を書く。受け付けて積み、受けて処理する側が動かす（P-2）ので、
+    // 解析 1 件 = 1 局面（区切り方の既定）。棋譜を読み（1 回・1 行）、結果の 1 行と、棋譜のアップロード（1 局に 1 回）を件数に均して書く。
+    // 1 件ごとにエンジンの起動と評価関数の読み込みの固定の重さがかかる（D-236）。受け付けて積み、受けて処理する側が動かす（P-2）ので、
     // 1 件の実行時間は受けて処理する側（キューの受け手・Cron・バックグラウンド関数）の上限で判定する（B-6・D-234）
     api: {
       invocation: 'async',
-      cpuMs: KIFU_POSITION_CPU_MS,
-      ioWaitMs: 20,
-      queries: 1,
-      rowsReadPerQuery: 1,
-      responseKB: KIFU_TRANSFER_KB.analysis,
-      // 結果の 1 行 + 棋譜のアップロード（1 局に 1 回）を解析の件数に均す
-      writesPerCall: 1 + 1 / KIFU_MOVES_PER_GAME,
-      rowsWrittenPerWrite: 1,
+      ...analysisApiOf(KIFU_ANALYSIS_JOB, {
+        unit: 'position',
+        candidates: KIFU_CANDIDATES,
+      }),
     },
     assets: { sizeKB: 40, browserReuse: 0.9 },
     // 画像は配らない・保存しない

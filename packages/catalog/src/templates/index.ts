@@ -167,6 +167,8 @@ export {
 } from './business-app.ts';
 export {
   KIFU_ANALYSIS_ASTRO,
+  KIFU_ANALYSIS_IO_MS,
+  KIFU_ANALYSIS_JOB,
   KIFU_ANALYSIS_ROUTES,
   KIFU_ANALYSIS_SPA,
   KIFU_BROWSER_ANALYSIS,
@@ -176,6 +178,8 @@ export {
   KIFU_CANDIDATE_KB,
   KIFU_CANDIDATES,
   KIFU_DB_GB_PER_MILLION_PV,
+  KIFU_ENGINE_STARTUP_CPU_MS,
+  KIFU_ENGINE_STARTUP_IO_MS,
   KIFU_GAMES_PER_MAU,
   KIFU_HOURLY_PROFILE,
   KIFU_KB_PER_GAME,
@@ -183,12 +187,14 @@ export {
   KIFU_POSITION_CPU_MS,
   KIFU_PV_PER_MAU,
   KIFU_RECORD_KB,
+  KIFU_RESUME_CHUNK_MOVES,
   KIFU_SHARE_ROUTE_SHARE,
   KIFU_STOCK_MONTHS,
   KIFU_TRANSFER_KB,
   kifuAnalysis,
   kifuResultKB,
 } from './kifu-analysis.ts';
+export * from './analysis-job.ts';
 
 /**
  * 記事コミュニティを Vite の SPA で作ったときの形（prd/10。template-default・実測ではない）。

@@ -45,6 +45,11 @@ export const browserAnalyzes = (id: string | undefined): boolean =>
  * CPU（cross.ts の SERVER_API_WORKER_CPU_MS）と同じ大きさ）。worker・端末の置き場で、アプリの側に残る処理。
  */
 export const ANALYSIS_RESULT_CPU_MS = 5;
+/**
+ * 端末の置き場で、アプリの API が結果を受けて DB に書く 1 件の待ち（ms。ゲーム上の仮定）。サーバーではエンジンを起こさないので、
+ * 解析の 1 件の固定の重さ（評価関数を読む待ち。D-236）は乗らない。
+ */
+export const ANALYSIS_RESULT_IO_MS = 20;
 /** worker の VPS の常駐メモリ（GB。仮定）。OS 0.3・解析のプロセス（エンジンと評価関数・置換表）0.5。 */
 export const ANALYSIS_WORKER_RESIDENT_GB = 0.8;
 /** worker の VPS に置くファイル（GB。仮定。OS・エンジンと評価関数）。 */
@@ -250,7 +255,8 @@ export function applyAnalysis(
 
 /**
  * 解析の置き場が Workload を変えるもの（composeStack と対で、applyComponentsToWorkload から呼ぶ）。
- * 端末: 非同期の解析をやめ、ブラウザが結果を送る API（受けて書くだけの CPU）にする。端末・併用: エンジンと評価関数を配る。
+ * 端末: 非同期の解析をやめ、ブラウザが結果を送る API（受けて書くだけの CPU）にする。送る回数は区切り方の件数のまま（D-236）。
+ * 端末・併用: エンジンと評価関数を配る。
  */
 export function applyAnalysisToWorkload(
   w: WorkloadInput,
@@ -262,7 +268,14 @@ export function applyAnalysisToWorkload(
   if (!serverAnalyzes(choice)) {
     const { invocation: _i, ...api } = w.api;
     void _i;
-    out = { ...out, api: { ...api, cpuMs: ANALYSIS_RESULT_CPU_MS } };
+    out = {
+      ...out,
+      api: {
+        ...api,
+        cpuMs: ANALYSIS_RESULT_CPU_MS,
+        ioWaitMs: ANALYSIS_RESULT_IO_MS,
+      },
+    };
   }
   if (browserAnalyzes(choice) && browser)
     out = {

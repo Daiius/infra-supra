@@ -2,12 +2,15 @@
 // 実在の料金の金額はテストに書かない（prd/05 §1）。
 import { describe, expect, it } from 'vitest';
 import { estimate, resolveWorkload, WorkloadInputSchema } from 'estimator';
-import { loadPriceBooks, MVP_STACKS } from '../index.ts';
+import { applyAnalysisSettings, loadPriceBooks, MVP_STACKS } from '../index.ts';
+import type { AnalysisSettings } from './analysis-job.ts';
 import {
   KIFU_ANALYSIS_ROUTES,
   KIFU_CANDIDATE_KB,
   KIFU_CANDIDATES,
+  KIFU_ANALYSIS_JOB,
   KIFU_DB_GB_PER_MILLION_PV,
+  KIFU_ENGINE_STARTUP_CPU_MS,
   KIFU_GAMES_PER_MAU,
   KIFU_HOURLY_PROFILE,
   KIFU_KB_PER_GAME,
@@ -51,7 +54,7 @@ describe('棋譜解析のテンプレート', () => {
     expect(share.apiCalls).toBe(0);
   });
 
-  it('解析は局面ごとに 1 件: 月の件数 = 利用者 × 棋譜の数 × 手数、1 件の CPU は 1 局面', () => {
+  it('解析は局面ごとに 1 件: 月の件数 = 利用者 × 棋譜の数 × 手数、1 件の CPU は 1 局面 + 固定の重さ', () => {
     const input = kifuAnalysis(PV);
     const w = resolveWorkload(input);
     const games = (PV / KIFU_PV_PER_MAU) * KIFU_GAMES_PER_MAU;
@@ -61,7 +64,9 @@ describe('棋譜解析のテンプレート', () => {
       0,
     );
     expect(w.classes['api'].count).toBe(0);
-    expect(input.api.cpuMs).toBe(KIFU_POSITION_CPU_MS);
+    expect(input.api.cpuMs).toBe(
+      KIFU_ENGINE_STARTUP_CPU_MS + KIFU_POSITION_CPU_MS,
+    );
     // 解析は閲覧より桁違いに重い（prd/17 §2.2）
     const ssr = input.routes[0]!.processing.cpuMs;
     expect(input.api.cpuMs).toBeGreaterThanOrEqual(10 * ssr);
@@ -130,11 +135,15 @@ describe('棋譜解析のテンプレート', () => {
 });
 
 /** 1 件の CPU・壁時計の上限（D-234）の前提のうち、当たったものの構成ごとの一覧。 */
-function perRequestHits(cpuMs: number, ioWaitMs?: number) {
+function perRequestHits(
+  cpuMs: number | AnalysisSettings | undefined,
+  ioWaitMs?: number,
+) {
   const out: Record<string, string[]> = {};
   for (const architecture of MVP_STACKS) {
-    const w = kifuAnalysis(PV);
-    w.api.cpuMs = cpuMs;
+    let w = kifuAnalysis(PV);
+    if (typeof cpuMs === 'number') w.api.cpuMs = cpuMs;
+    else if (cpuMs) w = applyAnalysisSettings(w, KIFU_ANALYSIS_JOB, cpuMs);
     if (ioWaitMs !== undefined) w.api.ioWaitMs = ioWaitMs;
     const r = estimate({ workload: w, architecture, books });
     out[architecture.id] = r.premises
@@ -180,7 +189,7 @@ describe('棋譜解析の解析 1 件と、置き場の 1 件の上限（D-234�
   });
 
   it('局面ごと（既定）なら、当たるのは Workers Free の CPU 10 ms だけ', () => {
-    const hits = perRequestHits(KIFU_POSITION_CPU_MS);
+    const hits = perRequestHits(undefined);
     expect(hits['cloudflare-vinext-free']).toEqual([
       'limit:cloudflare:workers-free:cpu-ms-per-request:worker',
     ]);
@@ -217,9 +226,11 @@ describe('棋譜解析の解析 1 件と、置き場の 1 件の上限（D-234�
   });
 
   it('設定で上げられる上限は最大で判定し、既定を超える分は設定が要る前提として内訳に出す', () => {
-    // 1 局まとめて（手数 × 1 局面）の重さの目安: Workers Paid の CPU は既定 30 秒を超えるが最大 5 分には収まる
-    const w = kifuAnalysis(PV);
-    w.api.cpuMs = KIFU_POSITION_CPU_MS * KIFU_MOVES_PER_GAME;
+    // 小分けの 1 塊（10 手 ≒ 41 秒）: Workers Paid の CPU は既定 30 秒を超えるが最大 5 分には収まる
+    const w = applyAnalysisSettings(kifuAnalysis(PV), KIFU_ANALYSIS_JOB, {
+      unit: 'resumable',
+      candidates: KIFU_CANDIDATES,
+    });
     const paid = MVP_STACKS.find((a) => a.id === 'cloudflare-vinext-paid')!;
     const p = estimate({
       workload: w,
@@ -232,5 +243,101 @@ describe('棋譜解析の解析 1 件と、置き場の 1 件の上限（D-234�
     expect(p.detail).toMatch(
       /既定の 30 秒を超えるので、設定で 300 秒まで上げる前提です/,
     );
+  });
+});
+
+describe('解析の区切り方と、止まる置き場（D-236・prd/17 PR-6）', () => {
+  const stopped = (hits: Record<string, string[]>) =>
+    Object.entries(hits)
+      .filter(([, xs]) => xs.length > 0)
+      .map(([id]) => id)
+      .sort();
+  const c = KIFU_CANDIDATES;
+
+  it('1 局まとめては、短い上限（Workers Paid の CPU 5 分・Vercel Hobby の 300 秒）に当たり、長い上限には当たらない', () => {
+    const hits = perRequestHits({ unit: 'game', candidates: c });
+    expect(stopped(hits)).toEqual(
+      [
+        'cloudflare-vinext-free',
+        'cloudflare-vinext-paid',
+        'vercel-supabase-hobby',
+      ].sort(),
+    );
+    expect(hits['cloudflare-vinext-paid']).toEqual([
+      'limit:cloudflare:workers-paid:cpu-ms-per-request:worker',
+    ]);
+  });
+
+  it('小分けに保存すると 1 件は 1 塊ぶんで、局面ごとと同じく Workers Free の CPU 10 ms だけに当たる', () => {
+    const hits = perRequestHits({ unit: 'resumable', candidates: c });
+    expect(stopped(hits)).toEqual(['cloudflare-vinext-free']);
+  });
+
+  it('固定の重さ: 局面ごとは手数ぶん、1 局まとめては 1 回、小分けは塊の数ぶん。書き込みの行は小分けが続きの位置の分だけ多い', () => {
+    const per = (unit: AnalysisSettings['unit']) => {
+      const w = resolveWorkload(
+        applyAnalysisSettings(kifuAnalysis(PV), KIFU_ANALYSIS_JOB, {
+          unit,
+          candidates: c,
+        }),
+      );
+      const a = w.classes['api-async'];
+      return {
+        cpu: a.count * a.perRequest.cpuMs,
+        rows: a.count * a.perRequest.rowsWritten,
+        writes: a.count,
+      };
+    };
+    const pos = per('position');
+    const game = per('game');
+    const res = per('resumable');
+    const games = (PV / KIFU_PV_PER_MAU) * KIFU_GAMES_PER_MAU;
+    const startup = (n: number) => games * n * KIFU_ENGINE_STARTUP_CPU_MS;
+    expect(pos.cpu - game.cpu).toBeCloseTo(
+      startup(KIFU_MOVES_PER_GAME) - startup(1),
+      -3,
+    );
+    expect(res.cpu - game.cpu).toBeCloseTo(
+      startup(KIFU_MOVES_PER_GAME / KIFU_ANALYSIS_JOB.chunkItems) - startup(1),
+      -3,
+    );
+    // 行は 手数 + アップロード（局面ごと・1 局まとめて）、小分けは続きの位置（塊の数）を足す
+    expect(pos.rows).toBeCloseTo(games * (KIFU_MOVES_PER_GAME + 1), -1);
+    expect(game.rows).toBeCloseTo(pos.rows, -1);
+    expect(res.rows).toBeCloseTo(
+      pos.rows + (games * KIFU_MOVES_PER_GAME) / KIFU_ANALYSIS_JOB.chunkItems,
+      -1,
+    );
+    expect(game.writes).toBeLessThan(res.writes);
+    expect(res.writes).toBeLessThan(pos.writes);
+  });
+
+  it('候補の数は在庫（DB の大きさ）と応答の大きさに比例し、件数・CPU は変えない', () => {
+    const one = applyAnalysisSettings(kifuAnalysis(PV), KIFU_ANALYSIS_JOB, {
+      unit: 'position',
+      candidates: 1,
+    });
+    const three = kifuAnalysis(PV);
+    expect(one.db.sizeGB / three.db.sizeGB).toBeCloseTo(
+      (KIFU_RECORD_KB + KIFU_MOVES_PER_GAME * KIFU_CANDIDATE_KB) /
+        KIFU_KB_PER_GAME,
+      10,
+    );
+    expect(one.api.responseKB * KIFU_CANDIDATES).toBeCloseTo(
+      three.api.responseKB,
+      10,
+    );
+    expect(one.api.cpuMs).toBe(three.api.cpuMs);
+    expect(one.perPage.apiCalls).toBe(three.perPage.apiCalls);
+  });
+
+  it('既定（局面ごと・既定の候補の数）はテンプレートのまま', () => {
+    const w = kifuAnalysis(PV);
+    expect(
+      applyAnalysisSettings(w, KIFU_ANALYSIS_JOB, {
+        unit: 'position',
+        candidates: KIFU_CANDIDATES,
+      }),
+    ).toEqual(w);
   });
 });
