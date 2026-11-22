@@ -6,6 +6,7 @@ import {
   KIFU_ANALYSIS_ASTRO,
   KIFU_ANALYSIS_JOB,
   KIFU_BROWSER_ANALYSIS,
+  KIFU_CANDIDATES,
   KIFU_ANALYSIS_ROUTES,
   KIFU_ANALYSIS_SPA,
   KIFU_DB_GB_PER_MILLION_PV,
@@ -159,6 +160,36 @@ const KIFU_WIREFRAMES: PageWireframe[] = [
   },
 ];
 
+/**
+ * 満足度の重み（D-238。ゲーム上の仮定。合計 1）。解析の速さ（感度 高）は可用性の次に重く、解析の正確さは速さより軽い（KF-10）。
+ * 画像・反映スピードは判定に使わない（受託と同じ 0）。
+ */
+export const KIFU_SATISFACTION_WEIGHTS: Scenario['satisfaction']['weights'] = {
+  availability: 0.35,
+  speed: 0.15,
+  feature: 0.15,
+  freshness: 0,
+  quality: 0,
+  analysisSpeed: 0.25,
+  analysisAccuracy: 0.1,
+};
+
+/**
+ * 解析の速さ・正確さの仮定（D-238・prd/17 §5.5。どれもゲーム上の仮定で、PR-11 の基準プレイで決め直す）。
+ * - 良い: 1 局の解析が 5 分以内に見える（利用者がページを開いている間。P-4）。普通: 15 分以内（少し離れて戻れば見える）。
+ * - 滞留: ピークの比が 1 を超えた分 × 30 分（ピークの 1 時間のうちに積み上がった分を、届いた解析が平均して待つ）。
+ * - 端末: 1 局面の CPU × 0.5（軽い評価関数で 1 局面は軽いが、端末はサーバーより遅い）。遅い端末はその 3 倍。
+ * - 正確さ: 候補 3 つ以上で良い（候補 1 つは普通）。端末の軽い評価関数は 1 段下げる。
+ */
+export const KIFU_ANALYSIS_SATISFACTION: NonNullable<
+  Scenario['satisfaction']['analysis']
+> = {
+  speed: { goodSec: 300, fairSec: 900 },
+  stallWindowSec: 1800,
+  client: { cpuFactor: 0.5, slowDeviceFactor: 3 },
+  accuracy: { goodCandidates: KIFU_CANDIDATES },
+};
+
 export const KIFU_ANALYSIS: Scenario = {
   ...CONTRACT_OPERATIONS,
   id: 'kifu-analysis',
@@ -169,6 +200,12 @@ export const KIFU_ANALYSIS: Scenario = {
   browserAnalysis: KIFU_BROWSER_ANALYSIS,
   // 解析の 1 件の形（区切り方・候補の数の設定が替える。ゲーム上の仮定。D-236）
   analysisJob: KIFU_ANALYSIS_JOB,
+  // 満足度（D-238・prd/17 §5.5）: 解析の速さを重く（感度 高）、解析の正確さを軽く足す。ほかの境目は受託のまま（PR-11 で決め直す）
+  satisfaction: {
+    ...CONTRACT_OPERATIONS.satisfaction,
+    weights: KIFU_SATISFACTION_WEIGHTS,
+    analysis: KIFU_ANALYSIS_SATISFACTION,
+  },
   // 棋譜と解析の結果がたまる（画像は保存しない）
   stock: { dbGBPerMillionPV: KIFU_DB_GB_PER_MILLION_PV, gbPerImage: 0 },
   scale: { startPV: 300_000 },

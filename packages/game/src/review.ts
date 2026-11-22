@@ -1,7 +1,9 @@
 // 評価（prd/07 §9.6）と基準プレイ（成績の目盛り・バランスの検証。§10.8）。振り返りの 4 軸は results.ts（D-132）。
 import {
   type EffortBreakdown,
+  type BaseElement,
   type Element,
+  scenarioElements,
   ELEMENT_LABEL,
   ELEMENTS,
   STAGE_VALUE,
@@ -25,7 +27,8 @@ export type Axes = {
   profit: number;
   satisfaction: number;
   /** 要素ごとの平均の段階の数値（0〜1）。 */
-  elements: Record<Element, number>;
+  /** 解析の要素は判定したシナリオだけ（D-238）。 */
+  elements: Record<BaseElement, number> & Partial<Record<Element, number>>;
   /** 最終月の基準の PV（話題・Bot の倍率を除く）。 */
   finalPV: number;
   featurePoints: number;
@@ -37,12 +40,16 @@ export function axesOf(state: GameState): Axes {
   const h = state.history;
   const n = Math.max(1, h.length);
   const last = h[h.length - 1];
+  // 解析の要素（D-238）は判定したシナリオだけ。段階の無い月（古い保存）は 0 とみる
   const elements = Object.fromEntries(
-    ELEMENTS.map((e) => [
+    scenarioElements(scenarioOf(state).satisfaction).map((e) => [
       e,
-      h.reduce((a, r) => a + STAGE_VALUE[r.satisfaction.stages[e]], 0) / n,
+      h.reduce((a, r) => {
+        const st = r.satisfaction.stages[e];
+        return a + (st ? STAGE_VALUE[st] : 0);
+      }, 0) / n,
     ]),
-  ) as Record<Element, number>;
+  ) as Axes['elements'];
   const total = h.reduce((a, r) => a + r.effort.total, 0);
   return {
     profit: state.cash - scenarioOf(state).startCash,

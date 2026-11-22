@@ -12,6 +12,13 @@ import {
 } from 'catalog';
 import type { PlatformPremise } from 'estimator';
 import {
+  analysisHostOf,
+  analysisOnlyThrottle,
+  analysisReasons,
+  judgeAnalysis,
+  type AnalysisJudgment,
+} from '../analysis-satisfaction.ts';
+import {
   COLD_START,
   growthFromReputation,
   judgeStages,
@@ -30,6 +37,7 @@ import { commentsInPage, commentsOf } from '../routes/comments.ts';
 import { articleFamily, articleShellPerPage } from '../routes/strategy.ts';
 import type { Scenario } from '../scenario.ts';
 import {
+  analysisSettingsOf,
   deliveredImageKB,
   fixedImageFormat,
   IMAGE_FORMAT_KB,
@@ -58,6 +66,8 @@ export type Judged = {
   /** 画像の部品の振る舞い（在庫の数え方にも使う）。 */
   imgs: ReturnType<typeof imagesBehavior>;
   notes: string[];
+  /** 解析の速さ・正確さの判定の中身（解析のあるシナリオだけ。D-238）。 */
+  analysis?: AnalysisJudgment;
 };
 
 /** 満足度の段階と理由を判定する（部品・描き方・設定・当たった前提・障害から）。 */
@@ -196,7 +206,9 @@ export function judgeMonth(
     ) &&
     !uncached &&
     (!isOnDemand(viewed) || buildDelaySec > 0);
-  const stages = judgeStages(
+  // 解析の worker の VPS だけの遅くなる前提は、ページの速さに数えない（解析の速さの滞留で扱う。D-238）
+  const pagePremises = r.premises.filter((p) => !analysisOnlyThrottle(p));
+  const base = judgeStages(
     {
       blocked: blocking.length > 0,
       degraded: incident || state.switching,
@@ -211,7 +223,7 @@ export function judgeMonth(
       qualityDown: redesign !== undefined,
       featurePoints,
       month,
-      premises: r.premises,
+      premises: pagePremises,
       uncached,
       eventuallyConsistent,
       onDemandUnmet: onDemand !== undefined,
@@ -229,6 +241,25 @@ export function judgeMonth(
     },
     sat,
   );
+  // 解析の速さ・正確さ（解析のあるシナリオだけ。D-238）
+  const analysisRules = sat.analysis;
+  const analysis =
+    analysisRules && sc.analysisJob
+      ? judgeAnalysis({
+          rules: analysisRules,
+          shape: sc.analysisJob,
+          settings: analysisSettingsOf(state.settings, comps),
+          placement: comps.analysis,
+          host: analysisHostOf(r, comps.analysis),
+        })
+      : undefined;
+  const stages: Stages = analysis
+    ? {
+        ...base,
+        analysisSpeed: analysis.analysisSpeed,
+        analysisAccuracy: analysis.analysisAccuracy,
+      }
+    : base;
   if (undelivered.length)
     notes.push(
       `${EMAIL_UNDELIVERED_REASON}（${undelivered[0]!.text}）。サイトは動いています`,
@@ -237,7 +268,7 @@ export function judgeMonth(
     notes.push(
       'CDN の定額のプランの込みを超え続け、配信の性能が調整されました（請求は増えません。ゲーム上の仮定）',
     );
-  const reasons = stageReasons(sc, stages, {
+  const pageReasons = stageReasons(sc, stages, {
     blocking,
     undelivered,
     throttling,
@@ -255,7 +286,7 @@ export function judgeMonth(
       {
         ...viewed,
         ssrCpuMs: serverCpuMs,
-        premises: r.premises,
+        premises: pagePremises,
         firstLoadHeavy: firstLoad,
         firstLoadLight,
         coldStart,
@@ -292,7 +323,18 @@ export function judgeMonth(
         : `${nameThen(termName(state.framework, 'onDemand', '更新で消す再検証'))}が届きません（${onDemand.label}。${onDemand.reason}）`
       : undefined,
   });
-  return { stages, reasons, comps, imgs, notes };
+  const reasons =
+    analysis && analysisRules
+      ? { ...pageReasons, ...analysisReasons(analysis, analysisRules) }
+      : pageReasons;
+  return {
+    stages,
+    reasons,
+    comps,
+    imgs,
+    notes,
+    ...(analysis ? { analysis } : {}),
+  };
 }
 
 export type Growth = {

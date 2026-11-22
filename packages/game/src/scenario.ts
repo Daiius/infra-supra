@@ -13,7 +13,7 @@ import type {
 } from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import { draws } from './random.ts';
-import type { Element } from './rules.ts';
+import type { Weights } from './rules.ts';
 import type { Action, GameState } from './state.ts';
 
 /** ためていく量（prd/07 §10.4）。 */
@@ -36,7 +36,7 @@ export type StockRule = {
 };
 
 export type SatisfactionRules = {
-  weights: Record<Element, number>;
+  weights: Weights;
   speed: {
     heavySsrCpuMs: number;
     heavyImageKB: number;
@@ -55,6 +55,36 @@ export type SatisfactionRules = {
     newPostVisibleSec?: number;
   };
   feature: { expectedPerMonth: number; good: number; fair: number };
+  /**
+   * 解析の速さ・正確さ（D-238・prd/17 §5.5）。あるシナリオ（解析の 1 件の形 Scenario.analysisJob を持つ）だけで、満足度の要素
+   * 「解析の速さ」「解析の正確さ」を判定する。省略したシナリオ（記事・受託）では判定せず、段階も持たない。値はゲーム上の仮定。
+   */
+  analysis?: AnalysisSatisfactionRules;
+};
+
+/** 解析の満足度の仮定（D-238・prd/17 §5.5。値はどれもゲーム上の仮定）。 */
+export type AnalysisSatisfactionRules = {
+  /**
+   * 1 局の解析が見えるまでの時間（秒）の段階の境目。良い: 利用者がページを開いている間（P-4）・普通: 少し離れて戻れば見える。
+   * それより長いと悪い。
+   */
+  speed: { goodSec: number; fairSec: number };
+  /**
+   * ピークの滞留（B-5）: 解析する VPS のピークの時間帯の CPU の比（需要 ÷ vCPU × 使用率の上限）が 1 を超えると、超えた分 ×
+   * この秒数だけ待ちが延びる（ピークの時間帯のうちに積み上がった分を、届いた解析が平均して待つとみた仮定の式。キューの長さは数えない）。
+   * 月の平均の比（ピークの比 ÷ ピークの係数）も 1 以上なら、1 日を通しても追いつかないので「悪い」。
+   */
+  stallWindowSec: number;
+  /**
+   * 利用者の端末の解析。1 局面の CPU に掛ける倍率（軽い評価関数で 1 局面は軽いが、端末はサーバーより遅いのを畳んだ値）と、
+   * 遅い端末（古いスマートフォンなど）の倍率。遅い端末で段階が下がるなら、ふつうの端末の段階から 1 段下げる（端末の差）。
+   */
+  client: { cpuFactor: number; slowDeviceFactor: number };
+  /**
+   * 正確さ: サーバーの評価関数で候補の数がこれ以上なら「良い」、未満は「普通」。端末の軽い評価関数は 1 段下げる。
+   * 候補の数は正確さにだけ効かせ、機能（開発の累計）には足さない（B-7）。
+   */
+  accuracy: { goodCandidates: number };
 };
 
 /** 提案を受けたときの Workload の変化（以降ずっと）。 */

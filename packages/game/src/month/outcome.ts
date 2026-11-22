@@ -1,5 +1,6 @@
 // playMonth の結果の段: 偶発的な障害・当たった前提の分類・収益（止まった・遅い・契約）・規約違反の扱い。
 import type { PlatformPremise } from 'estimator';
+import { analysisOnlyThrottle } from '../analysis-satisfaction.ts';
 import { FLAT_PLAN_ADJUST, policyStep } from '../rules.ts';
 import { nextRandom } from '../random.ts';
 import { meetsRequirement, REQUIREMENT_LABEL } from '../requirements.ts';
@@ -69,7 +70,10 @@ export function premiseOutcomesOf(
     (p) => p.hit && isStopEffect(p.effect) && emailOnlyPremise(p),
   );
   const policy = premises.filter((p) => p.hit && p.effect === 'policy');
-  const throttling = premises.filter((p) => p.hit && p.effect === 'throttle');
+  // 解析の worker の VPS だけの遅くなる前提は、ページを遅くしないので数えない（解析の速さの滞留で扱う。D-238）
+  const throttling = premises.filter(
+    (p) => p.hit && p.effect === 'throttle' && !analysisOnlyThrottle(p),
+  );
   // CDN の定額のプランの込みを超えた前提（請求は増えない）。急増が大きいか、続けて超えると性能が調整される（D-61）
   const prevAdjust = new Set(
     (state.history[state.history.length - 1]?.premises ?? [])

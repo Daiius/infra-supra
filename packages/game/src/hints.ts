@@ -59,6 +59,10 @@ const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
     'キャッシュの間隔や部品の性質で更新が遅れて見えます。間隔を短くするか、更新がすぐ届く部品を考えましょう',
   feature:
     '機能開発に回せる工数が期待に届いていません。維持・イベントへの対応・アクションの工数を減らして、機能開発に回しましょう',
+  analysisSpeed:
+    '解析が利用者のページを開いている間に終わっていません。解析の区切り方・置き場を見直すか、ピークに CPU の足りる worker・併用を考えましょう',
+  analysisAccuracy:
+    '解析の正確さが下がっています。1 局面に残す候補の数と、端末の軽い評価関数に頼る置き場かを見直しましょう',
 };
 
 /**
@@ -433,13 +437,14 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         r.featurePoints / (ft.expectedPerMonth * r.month) < ft.good;
       const months = h.filter(
         (r) =>
-          r.satisfaction.stages[e] !== 'good' &&
+          (r.satisfaction.stages[e] ?? 'good') !== 'good' &&
           (e !== 'feature' || devShort(r)),
       );
       if (!months.length) continue;
       const loss =
         months.reduce(
-          (a, r) => a + w[e] * (1 - STAGE_VALUE[r.satisfaction.stages[e]]),
+          (a, r) =>
+            a + w[e]! * (1 - STAGE_VALUE[r.satisfaction.stages[e] ?? 'good']),
           0,
         ) / n;
       const last = months[months.length - 1]!;

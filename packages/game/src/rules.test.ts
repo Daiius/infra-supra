@@ -91,7 +91,10 @@ describe('満足度の段階', () => {
   });
 
   it('S は 0〜1、重みの合計は 1', () => {
-    const sum = ELEMENTS.reduce((a, e) => a + SATISFACTION.weights[e], 0);
+    const sum = ELEMENTS.reduce(
+      (a, e) => a + (SATISFACTION.weights[e] ?? 0),
+      0,
+    );
     expect(sum).toBeCloseTo(1);
     const worst = judgeStages({
       ...base,
