@@ -202,7 +202,7 @@ describe('ページごとの描き方の表（D-106）', () => {
   });
 
   it('受託の業務アプリは業務の画面 1 行（人ごとに違う）', () => {
-    const sc = Object.values(SCENARIOS).find((x) => x !== ARTICLE_COMMUNITY)!;
+    const sc = SCENARIOS['contract-operations']!;
     const r = routePlanRows(sc, {
       framework: 'nextjs',
       stackIndex: stack('vercel-supabase-pro'),

@@ -34,7 +34,7 @@ const VERCEL_PRO = stack('vercel-supabase-pro');
 const VPS = stack('sakura-vps-2gb');
 const GCP = stack('gcp-cloud-run');
 const AMPLIFY = stack('aws-amplify');
-const contract = Object.values(SCENARIOS).find((x) => x !== ARTICLE_COMMUNITY)!;
+const contract = SCENARIOS['contract-operations']!;
 
 const start = (
   stackIndex: number,

@@ -37,7 +37,7 @@ const CF_FREE = stack('cloudflare-vinext-free');
 const CF_PAID = stack('cloudflare-vinext-paid');
 const VERCEL_PRO = stack('vercel-supabase-pro');
 const VPS = stack('sakura-vps-2gb');
-const contract = Object.values(SCENARIOS).find((x) => x !== ARTICLE_COMMUNITY)!;
+const contract = SCENARIOS['contract-operations']!;
 
 const start = (
   stackIndex: number,
