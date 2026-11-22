@@ -524,3 +524,17 @@
 - 影響: 記事・受託は変わらない（処理を始めない限り状態・報告・見積は今までのまま。基準プレイの golden・費用と前提のハッシュ・組み合わせの総当たりが不変）。3 万 PV では、VPS は 2〜3 か月・費用 0、サーバーレスは 1 か月・$120〜$400（§6.3 の表）。30 万 PV では解析する VPS が月の平均でも埋まっていて終わらない。
 - 残したこと: 提案の文言・起きる月・受ける工数（PR-10）。処理の量と効果の値（PR-11）。サーバーレスの同時実行の上限で 1 か月を超える場合・1 件の上限に合わせた区切り方は数えない。無料のプランで処理の前から込み分に当たっている月は、処理の費用を 0 のままにしている。
 - 文書: prd/17 §6.1（出来事 7 の注）・§6.3・§9（PR-9 の行）。
+
+### D-240 研究会のリアルタイムを全構成で受ける土台（接続の長さ・配信先・同時接続の語彙と、構成ごとの手段。棋譜解析だけで有効）（2026-11-23・ユーザーの決定と supervisor の段取り。prd/17 §9 PR-R3・§6.4・出来事 6）
+
+- 背景: 出来事 6「研究会で一緒に検討したい」（KF-15）。学びはセッションの維持（サーバーレスに頼ると問題になる）。R-3 の見積もり（調査メモ）を見て、ユーザーが AWS も含めて全構成で受けられるようにすると決めた。駒を動かすたびの解析は数えない。記事コミュニティのチャット（W-1）を Cloudflare だけで出す X-5 は変えない（記事・受託の golden を変えない）。
+- 決定:
+  - 語彙（estimator）: Workload の `realtime` に `minutesPerConnection`（接続の長さ。`realtime-connect` の壁時計）・`fanout`（1 件を配る人数）・`messageKB`・`peakFactor`（同時接続のピーク / 月の平均。省略は peakHourFactor）を足す。どれも省略でき、省略は今までの数え方。同時接続のピークは `ResolvedWorkload.realtime.peakConnections`（接続の長さがあるときだけ持つ）。
+  - 接続を保つノード（関数・コンテナ・ホスト・新しい `websocket-gateway` の `websocket`）は、接続の長さを `maxConnectionMinutes` ごとのつなぎ直しに分けて自分の時間に数え（件数 × つなぎ直し・1 件の時間は割る）、次の DB へは短い 1 件（壁時計 = CPU）として渡す。上限で止める（block）のでなく、つなぎ直しの件数と前提の文で表す。ホストは同時接続のピーク × `kbPerConnection` をメモリに足す。`websocket-gateway` はメッセージ = 受信 × (1 + 配信先) × 大きさの単位の切り上げ、接続の分を数える（リソース `messages`・`connection-minutes`）。Durable Objects の数え方は変えない。
+  - 手段（catalog `stacks/realtime.ts`。Cloudflare 以外は `ComponentOption.optIn` で、`componentsOf` は optIn を渡したときだけ返す）: Vercel = Vercel Functions の WebSocket（2026-10-20 の changelog で GA・文書は全プラン。KB の記事は beta と書くが新しい GA を採る。Hobby 300 秒・Pro 800 秒で閉じる。1 インスタンス 10 接続と仮定してメモリを割る。盤面は外部が要る → 仲立ちの Redis などは数えず、盤面を今の DB に 1 件 1 行で書く分だけ数える）。さくらの VPS = 常駐のプロセス（追加なし。1 接続 100 KB の仮定でメモリを判定）。Google Cloud = Cloud Run の同じサービスで WebSocket（60 分でつなぎ直す。開いている間は動いている扱い。単価は料金ページを取り直して既存の値と一致を確認）。AWS = API Gateway の WebSocket API + Lambda 128 MB（仮定）。東京の単価は Price List API（AmazonApiGateway・ap-northeast-1・version 20261112215920）: メッセージ $1.26 / 100 万（10 億まで。超えは $1.06）・接続の分 $0.315 / 100 万。無料枠は新規 12 か月だけなので入れない。上限 2 時間・無通信 10 分。AppSync Events は採らない。隠している構成（Netlify・OpenNext）には足さない。
+  - game: `Scenario.realtimeAllPlatforms`（棋譜解析だけ true）。`scenarioComponentsOf` で、そのシナリオのときだけ optIn の部品を出す（部品の検査・欄・見込み・比較・作り直し・構成を変えるの欄）。`realtimeOptionFor`・`realtimeSupported` はシナリオを受け、乗り換え先にもその構成の手段を付ける。判定の材料 `realtimeSessionOf`（盤面の置き場・1 回のセッションでつなぐ回数・保てるか）。保てる = Durable Objects・VPS、保てない = Vercel（つなぎ直し + 外部）・Cloud Run（同）・AWS（2 時間で足りるが Lambda は状態を持てず盤面は DB）。
+  - 研究会の形 `KIFU_STUDY_REALTIME`（ゲーム上の仮定）: 利用者の 5% が月 4 回・90 分・1 回 60 件・配信先 5・0.5 KB・2 ms・つなぐと 100 行・ピーク 8 倍。
+  - 棋譜解析の始める画面には出さない（`hidden.slots` の realtime は残す。提案で付く部品なので PR-10 で提案と一緒に出す）。
+- 影響: 記事・受託は変わらない（基準プレイの golden・費用と前提のハッシュ・組み合わせの総当たりが不変。新しい部品は optIn、新しい Workload の値は省略が今まで）。棋譜解析で研究会を足した分の月額は 30 万 PV で Vercel Pro $6.45・AWS $1.05・Cloud Run $0.45（解析を端末に置くと $50）・Cloudflare と VPS は $0（§6.4 の表）。
+- 残したこと: 提案の文言・起きる月・受ける工数・満足度への効き（つなぎ直しを速さに効かせるか）は PR-10・PR-11。Supabase Realtime・Pusher・Ably・AppSync Events は入れない。盤面の仲立ち（Redis など）と接続の ID の読み書き、メッセージの転送の課金（Vercel の Fast Data Transfer）は数えない（前提の文で書く）。同時接続の数そのものの上限（Cloud Run の 1 コンテナ 1,000・Vercel の 1,024 の file descriptor）は判定しない。構成図での見え方は確かめていない。
+- 文書: prd/17 §6.1（出来事 6）・§6.4・§9（PR-R3 の行）・prd/07 §11.2・X-5。
