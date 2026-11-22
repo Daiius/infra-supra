@@ -239,6 +239,7 @@ describe('部品の組み合わせ', () => {
         'minInstances',
         'ogp',
         'realtime',
+        'storage',
       ].sort(),
     );
   });

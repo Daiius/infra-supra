@@ -18,7 +18,7 @@ import {
 import {
   eventDef,
   frameworksOf,
-  scenarioAnalyzes,
+  scenarioHasSlot,
   scenarioOf,
 } from '../core.ts';
 import {
@@ -366,8 +366,8 @@ function actionRule(state: GameState, action: Action): ActionCheck {
         (c) => c.id === action.option,
       );
       if (!opt) return ng('invalid', 'この事業者の部品にありません');
-      // 解析の置き場は非同期の API（解析）を持つシナリオだけ（D-235）
-      if (action.slot === 'analysis' && !scenarioAnalyzes(sc))
+      // 解析の置き場・保存の形は非同期の API（解析）を持つシナリオだけ（D-235・D-237）
+      if (!scenarioHasSlot(sc, action.slot))
         return ng('invalid', 'このシナリオには解析がありません');
       const current = { ...DEFAULT_CHOICES[platform], ...state.components };
       if (current[action.slot] === action.option)

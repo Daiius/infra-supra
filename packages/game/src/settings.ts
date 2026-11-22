@@ -9,6 +9,7 @@ import {
   imagesBehavior,
   imagesServedFormat,
   type Platform,
+  storageShapeOf,
   termName,
 } from 'catalog';
 import { EFFORT } from './rules.ts';
@@ -62,6 +63,8 @@ export function analysisSettingsOf(
       candidatesLockReason(components.analysis) !== undefined
         ? CLIENT_CANDIDATES
         : settings.candidates,
+    // 保存の形は部品（D-237）。選択が無ければ一手を 1 行
+    storage: storageShapeOf(components.storage),
   };
 }
 

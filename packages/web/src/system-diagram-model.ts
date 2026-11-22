@@ -750,6 +750,8 @@ const SLOT_ROLES: Readonly<Partial<Record<string, readonly Role[]>>> = {
   email: ['email'],
   // 解析の置き場（D-235）: worker の箱か、アプリの処理の箱（同じ実行環境・併用）
   analysis: ['compute'],
+  // 保存の形（D-237）: 構成を変えないので DB の箱に当てる（DB の箱が無い VPS の同居の DB は幽霊の箱）
+  storage: ['sql-db', 'kv'],
 };
 
 /**

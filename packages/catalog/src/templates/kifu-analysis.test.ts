@@ -2,7 +2,13 @@
 // 実在の料金の金額はテストに書かない（prd/05 §1）。
 import { describe, expect, it } from 'vitest';
 import { estimate, resolveWorkload, WorkloadInputSchema } from 'estimator';
-import { applyAnalysisSettings, loadPriceBooks, MVP_STACKS } from '../index.ts';
+import {
+  applyAnalysisSettings,
+  composeStack,
+  loadPriceBooks,
+  MVP_STACKS,
+  STACK_DEFS,
+} from '../index.ts';
 import type { AnalysisSettings } from './analysis-job.ts';
 import {
   KIFU_ANALYSIS_ROUTES,
@@ -18,6 +24,7 @@ import {
   KIFU_POSITION_CPU_MS,
   KIFU_PV_PER_MAU,
   KIFU_RECORD_KB,
+  KIFU_ROW_OVERHEAD_KB,
   kifuAnalysis,
   kifuResultKB,
 } from './kifu-analysis.ts';
@@ -86,7 +93,13 @@ describe('棋譜解析のテンプレート', () => {
       KIFU_MOVES_PER_GAME * KIFU_CANDIDATES * KIFU_CANDIDATE_KB,
       10,
     );
-    expect(KIFU_KB_PER_GAME).toBeCloseTo(KIFU_RECORD_KB + kifuResultKB(), 10);
+    // 行ごとのオーバーヘッド: 棋譜の行と、一手を 1 行の手数ぶんの行（D-237）
+    expect(KIFU_KB_PER_GAME).toBeCloseTo(
+      KIFU_RECORD_KB +
+        kifuResultKB() +
+        (1 + KIFU_MOVES_PER_GAME) * KIFU_ROW_OVERHEAD_KB,
+      10,
+    );
     // 候補の数に比例する（後の段の設定の口）
     expect(kifuResultKB(1)).toBeCloseTo(kifuResultKB() / KIFU_CANDIDATES, 10);
     // DB の大きさは PV に比例する
@@ -319,7 +332,9 @@ describe('解析の区切り方と、止まる置き場（D-236・prd/17 PR-6）
     });
     const three = kifuAnalysis(PV);
     expect(one.db.sizeGB / three.db.sizeGB).toBeCloseTo(
-      (KIFU_RECORD_KB + KIFU_MOVES_PER_GAME * KIFU_CANDIDATE_KB) /
+      (KIFU_RECORD_KB +
+        KIFU_MOVES_PER_GAME * KIFU_CANDIDATE_KB +
+        (1 + KIFU_MOVES_PER_GAME) * KIFU_ROW_OVERHEAD_KB) /
         KIFU_KB_PER_GAME,
       10,
     );
@@ -339,5 +354,135 @@ describe('解析の区切り方と、止まる置き場（D-236・prd/17 PR-6）
         candidates: KIFU_CANDIDATES,
       }),
     ).toEqual(w);
+  });
+});
+
+describe('保存の形（D-237・prd/17 PR-7）', () => {
+  const c = KIFU_CANDIDATES;
+  const shaped = (
+    unit: AnalysisSettings['unit'],
+    storage: AnalysisSettings['storage'],
+  ) =>
+    applyAnalysisSettings(kifuAnalysis(PV), KIFU_ANALYSIS_JOB, {
+      unit,
+      candidates: c,
+      ...(storage ? { storage } : {}),
+    });
+  const monthly = (w: ReturnType<typeof shaped>) => {
+    const a = resolveWorkload(w).classes['api-async'];
+    return {
+      rows: a.count * a.perRequest.rowsWritten,
+      rowKB: a.perRequest.rowKB!,
+    };
+  };
+
+  it('一手を 1 行（既定）は省略と同じ', () => {
+    expect(shaped('game', 'per-move')).toEqual(shaped('game', undefined));
+  });
+
+  it('1 局まとめてなら、1 局を 1 行は書き込みの行が 1 局 2 行（結果と棋譜）に、1 行は 1 局ぶんの大きさになる', () => {
+    const games = (PV / KIFU_PV_PER_MAU) * KIFU_GAMES_PER_MAU;
+    const move = monthly(shaped('game', 'per-move'));
+    const game = monthly(shaped('game', 'per-game'));
+    expect(move.rows).toBeCloseTo(games * (KIFU_MOVES_PER_GAME + 1), -1);
+    expect(game.rows).toBeCloseTo(games * 2, -1);
+    // 1 行の大きさ: 結果（手数 × 候補 × 1 候補）と棋譜の平均
+    expect(game.rowKB).toBeCloseTo((kifuResultKB(c) + KIFU_RECORD_KB) / 2, 10);
+    expect(move.rowKB).toBeLessThan(1);
+  });
+
+  it('局面ごと・小分けでは、1 局を 1 行でも件数ぶん書き、上書きのたびに行全体の大きさ（重ねた平均）になる', () => {
+    const pos = shaped('position', 'per-game').api;
+    const jobs = KIFU_MOVES_PER_GAME;
+    expect(pos.writesPerCall * pos.rowsWrittenPerWrite).toBeCloseTo(
+      1 + 1 / jobs,
+      10,
+    );
+    expect(pos.rowKB!).toBeCloseTo(
+      ((kifuResultKB(c) * (jobs + 1)) / (2 * jobs) + KIFU_RECORD_KB / jobs) /
+        (1 + 1 / jobs),
+      10,
+    );
+    // 小分け: 続きの位置は 1 局の行の中に持つ（別の行を書かない）
+    const res = shaped('resumable', 'per-game').api;
+    const resMove = shaped('resumable', 'per-move').api;
+    expect(res.writesPerCall * res.rowsWrittenPerWrite).toBeLessThan(
+      resMove.writesPerCall * resMove.rowsWrittenPerWrite,
+    );
+  });
+
+  it('ページが読む行: 一手を 1 行は棋譜と手数ぶん、1 局を 1 行は棋譜と 1 行（返す行も同じ）', () => {
+    const route = (w: ReturnType<typeof shaped>, id: string) =>
+      w.routes.find((r) => r.id === id)!.processing;
+    expect(route(shaped('position', 'per-move'), 'kifu').rowsReadPerQuery).toBe(
+      (1 + KIFU_MOVES_PER_GAME) / 2,
+    );
+    const g = route(shaped('position', 'per-game'), 'kifu');
+    expect(g.rowsReadPerQuery).toBe(1);
+    expect(g.rowsReturnedPerQuery).toBe(1);
+    // 一覧は保存の形によらない
+    expect(route(shaped('position', 'per-game'), 'list')).toEqual(
+      route(shaped('position', 'per-move'), 'list'),
+    );
+  });
+
+  it('在庫: 1 局を 1 行は手数ぶんの行のオーバーヘッドが 1 行ぶんになる', () => {
+    const move = shaped('position', 'per-move').db.sizeGB;
+    const game = shaped('position', 'per-game').db.sizeGB;
+    expect(move / game).toBeCloseTo(
+      KIFU_KB_PER_GAME /
+        (KIFU_RECORD_KB + kifuResultKB(c) + 2 * KIFU_ROW_OVERHEAD_KB),
+      10,
+    );
+  });
+
+  it('回数で数える DB で効く: Firestore は 1 局を 1 行で読みが減り、DynamoDB は 1 局まとめてなら書き込みが減り、局面ごとなら上書きで増える', () => {
+    const cost = (
+      stackId: string,
+      db: string,
+      unit: AnalysisSettings['unit'],
+      storage: AnalysisSettings['storage'],
+    ) => {
+      const def = STACK_DEFS.find((d) => d.id === stackId)!;
+      const arch = composeStack(def, {
+        db,
+        analysis: 'same',
+        storage: storage ?? 'per-move',
+      });
+      const r = estimate({
+        workload: shaped(unit, storage),
+        architecture: arch,
+        books,
+      });
+      return r.bill.lines
+        .filter((l) => l.nodeIds.includes(db))
+        .reduce((s, l) => s + (l.amount ?? 0), 0);
+    };
+    const fs = (u: AnalysisSettings['unit'], s: AnalysisSettings['storage']) =>
+      cost('gcp-cloud-run', 'firestore', u, s);
+    expect(fs('game', 'per-game')).toBeLessThan(fs('game', 'per-move') / 10);
+    expect(fs('position', 'per-game')).toBeLessThan(fs('position', 'per-move'));
+    const ddb = (u: AnalysisSettings['unit'], s: AnalysisSettings['storage']) =>
+      cost('aws-amplify', 'dynamodb', u, s);
+    expect(ddb('game', 'per-game')).toBeLessThan(ddb('game', 'per-move'));
+    expect(ddb('position', 'per-game')).toBeGreaterThan(
+      ddb('position', 'per-move') * 3,
+    );
+  });
+
+  it('選んだときだけ D1 のノードに行の数え方の前提を挙げる（選ばなければ構成は変わらない）', () => {
+    const def = STACK_DEFS.find((d) => d.id === 'cloudflare-vinext-paid')!;
+    const d1 = (choices: Record<string, string>) =>
+      composeStack(def, choices).nodes.find((n) => n.id === 'd1')!;
+    expect(d1({}).facts ?? []).not.toContain('d1-rows-counting');
+    expect(d1({ storage: 'per-game' }).facts).toContain('d1-rows-counting');
+    const r = estimate({
+      workload: shaped('position', 'per-game'),
+      architecture: composeStack(def, { storage: 'per-game' }),
+      books,
+    });
+    expect(r.premises.map((p) => p.id)).toContain(
+      'fact:cloudflare:workers-paid:d1-rows-counting',
+    );
   });
 });

@@ -367,6 +367,27 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
       ],
     ]),
   ),
+  // 保存の形（D-237・prd/17 §5.4）。どの土台でも同じ文
+  ...Object.fromEntries(
+    [
+      'cloudflare',
+      'vercel',
+      'sakura',
+      'aws',
+      'aws-opennext',
+      'netlify',
+      'gcp',
+    ].flatMap((p) => [
+      [
+        `${p}:storage:per-move`,
+        '手ごとに行を分けて置きます。開くたびに手数ぶんの行を読み書きします',
+      ],
+      [
+        `${p}:storage:per-game`,
+        '棋譜ごとに結果をひとつの行に詰めます。読む行は減りますが、少しずつ書くと行を何度も書き直します',
+      ],
+    ]),
+  ),
   'sakura:analysis:worker-vps-2gb':
     '解析だけの常駐のサーバーを置きます。費用は定額ですが、混む時間に待ちが出ます',
   'sakura:analysis:worker-vps-4gb':

@@ -42,6 +42,7 @@ import {
   applyAnalysisToWorkload,
   type BrowserAnalysisShape,
 } from './analysis.ts';
+import { STORAGE_COMPONENTS, applyStorageShape } from './storage-shape.ts';
 import { bunnyCdnNode } from './bunny.ts';
 import { vpsNode } from './sakura.ts';
 import {
@@ -86,7 +87,8 @@ export type SlotId =
   | 'minInstances'
   | 'dbBackup'
   | 'email'
-  | 'analysis';
+  | 'analysis'
+  | 'storage';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -208,6 +210,7 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   dbBackup: 'DB のバックアップ',
   email: 'メール送信',
   analysis: '解析の置き場',
+  storage: '保存の形',
 };
 
 /**
@@ -833,6 +836,7 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...BACKUP_COMPONENTS,
   ...EMAIL_COMPONENTS,
   ...ANALYSIS_COMPONENTS,
+  ...STORAGE_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
@@ -1683,16 +1687,20 @@ export function composeStack(
       withBackups(
         withLogs(
           // 解析の置き場（prd/17 §5.1・D-235）は API の置き場を差した後（worker はアプリの API の経路に結果を送る）
-          applyAnalysis(
-            applyCrossApi(
-              built,
-              def.platform,
-              def.plan,
-              c,
-              standby,
-              options.framework ?? 'nextjs',
+          applyStorageShape(
+            applyAnalysis(
+              applyCrossApi(
+                built,
+                def.platform,
+                def.plan,
+                c,
+                standby,
+                options.framework ?? 'nextjs',
+              ),
+              c.analysis,
             ),
-            c.analysis,
+            // 保存の形（prd/17 §5.4・D-237）。構成は変えず、D1 に行の数え方の前提を足すだけ（Workload は applyAnalysisSettings）
+            c.storage,
           ),
         ),
         c.dbBackup,

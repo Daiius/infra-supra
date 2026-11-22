@@ -229,12 +229,17 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
     : // 原本はそのまま置く（形式は閲覧・投稿のときに変える。D-58 で圧縮の比を掛けるのをやめた）
       rule.gbPerImage;
   // 解析の結果は 1 局面に残す候補の数に比例してたまる（D-236。解析のあるシナリオだけ）
-  const analysis = sc.analysisJob
-    ? analysisStockFactor(
-        sc.analysisJob,
-        analysisSettingsOf(state.settings, state.components).candidates,
-      )
-    : 1;
+  const analysisSet = sc.analysisJob
+    ? analysisSettingsOf(state.settings, state.components)
+    : undefined;
+  const analysis =
+    sc.analysisJob && analysisSet
+      ? analysisStockFactor(
+          sc.analysisJob,
+          analysisSet.candidates,
+          analysisSet.storage,
+        )
+      : 1;
   return {
     dbGB:
       s.dbGB +

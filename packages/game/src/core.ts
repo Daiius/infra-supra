@@ -36,6 +36,15 @@ export const estimate: typeof estimateArch = (input) =>
 export const scenarioAnalyzes = (sc: Pick<Scenario, 'template'>): boolean =>
   sc.template(1).api.invocation === 'async';
 
+/** 解析のあるシナリオだけで出すスロット（解析の置き場・保存の形。D-235・D-237）。 */
+export const ANALYSIS_SLOTS: readonly string[] = ['analysis', 'storage'];
+
+/** このシナリオでそのスロットを出すか（解析のスロットは解析のあるシナリオだけ）。 */
+export const scenarioHasSlot = (
+  sc: Pick<Scenario, 'template'>,
+  slot: string,
+): boolean => !ANALYSIS_SLOTS.includes(slot) || scenarioAnalyzes(sc);
+
 /** アプリがメールを送るシナリオか（テンプレートに email がある。D-101）。 */
 export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>
   sendsEmail(sc.template(1));
@@ -109,10 +118,10 @@ export function frameworkDefaults(
   platform?: Platform,
   scenario?: Pick<Scenario, 'hidden'> & Partial<Pick<Scenario, 'template'>>,
 ): Choices {
-  // 解析の置き場の既定はアプリと同じ実行環境（非同期の API を持つシナリオだけ。D-235）
+  // 解析の置き場の既定はアプリと同じ実行環境、保存の形の既定は一手を 1 行（非同期の API を持つシナリオだけ。D-235・D-237）
   const analysis: Choices =
     scenario?.template && scenarioAnalyzes({ template: scenario.template })
-      ? { analysis: 'same' }
+      ? { analysis: 'same', storage: 'per-move' }
       : {};
   // API の置き場の既定は同じ事業者（SPA は D-65・Next.js は D-67）
   if (framework === 'vite-spa')

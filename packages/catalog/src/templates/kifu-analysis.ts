@@ -10,7 +10,11 @@
 // 大きさ（KB）は転送の大きさ（圧縮後。D-211・prd/04 §2.1）。
 import type { WorkloadInput } from 'estimator';
 import type { AstroShape, RouteTraits, SpaShape } from '../frameworks/index.ts';
-import { analysisApiOf, type AnalysisJobShape } from './analysis-job.ts';
+import {
+  analysisApiOf,
+  analysisKBPerBatch,
+  type AnalysisJobShape,
+} from './analysis-job.ts';
 
 /** 1 局の手数（解析する局面の数。ゲーム上の仮定）。区切り方（PR-6）が 1 件の重さ・件数をこれで変える。 */
 export const KIFU_MOVES_PER_GAME = 100;
@@ -36,6 +40,13 @@ export const KIFU_ANALYSIS_IO_MS = 20;
 export const KIFU_RESUME_CHUNK_MOVES = 10;
 /** 棋譜そのものの大きさ（KB。手の列の文字列。ゲーム上の仮定）。 */
 export const KIFU_RECORD_KB = 2;
+/**
+ * 1 行ごとの保存のオーバーヘッド（KB。行の見出し・主キーと索引の分。**ゲーム上の仮定**。DynamoDB は項目ごとに 100 B を保存の課金に
+ * 足すと書いている（dynamodbItemSize）ので、その大きさに揃えた。D-237）。保存の形（PR-7）で一手を 1 行は手数ぶん、1 局を 1 行は 1 行ぶん。
+ */
+export const KIFU_ROW_OVERHEAD_KB = 0.1;
+/** 「小分けに保存」で一手を 1 行のときに書く続きの位置の 1 行の大きさ（KB。ゲーム上の仮定。D-237）。 */
+export const KIFU_PROGRESS_KB = 0.05;
 /** 利用者 1 人が月に上げて解析する棋譜の数（ゲーム上の仮定）。 */
 export const KIFU_GAMES_PER_MAU = 4;
 /** 利用者 1 人の月の PV（棋譜の一覧と、上げた棋譜を何度か開き直す。ゲーム上の仮定）。 */
@@ -72,6 +83,10 @@ export const KIFU_ANALYSIS_JOB: AnalysisJobShape = {
   candidates: KIFU_CANDIDATES,
   candidateKB: KIFU_CANDIDATE_KB,
   recordKB: KIFU_RECORD_KB,
+  rowOverheadKB: KIFU_ROW_OVERHEAD_KB,
+  progressKB: KIFU_PROGRESS_KB,
+  // 棋譜のページと共有のページが結果を読む（保存の形で読む行が替わる。D-237）
+  resultRouteIds: ['kifu', 'share'],
 };
 
 /** 1 局の解析の結果の大きさ（KB）= 手数 × 候補の数 × 1 候補の大きさ（prd/17 §5.3）。 */
@@ -81,8 +96,11 @@ export const kifuResultKB = (
   moves: number = KIFU_MOVES_PER_GAME,
 ): number => moves * candidates * candidateKB;
 
-/** 1 局で増える DB の量（KB）= 棋譜 + 解析の結果。 */
-export const KIFU_KB_PER_GAME = KIFU_RECORD_KB + kifuResultKB();
+/** 1 局で増える DB の量（KB）= 棋譜 + 解析の結果 + 行ごとのオーバーヘッド（一手を 1 行。D-237）。 */
+export const KIFU_KB_PER_GAME = analysisKBPerBatch(
+  KIFU_ANALYSIS_JOB,
+  KIFU_CANDIDATES,
+);
 
 /** 人の PV 100 万あたり・月に増える DB の量（GB）。シナリオの在庫の増え方（StockRule）に使う口。 */
 export const KIFU_DB_GB_PER_MILLION_PV =
@@ -170,9 +188,10 @@ export function kifuAnalysis(monthlyPageViews: number): WorkloadInput {
         processing: {
           cpuMs: 15,
           ioWaitMs: 60,
-          // 棋譜と解析の結果（一手を 1 行なら手数ぶんの行）の 2 回
+          // 棋譜と解析の結果（一手を 1 行なら手数ぶんの行）の 2 回。主キーで引くので、読む行は返す行と同じ（D-237）
           queries: 2,
           rowsReadPerQuery: (1 + KIFU_MOVES_PER_GAME) / 2,
+          rowsReturnedPerQuery: (1 + KIFU_MOVES_PER_GAME) / 2,
           responseKB: KIFU_TRANSFER_KB.kifuHtml,
         },
       },
@@ -187,6 +206,7 @@ export function kifuAnalysis(monthlyPageViews: number): WorkloadInput {
           ioWaitMs: 40,
           queries: 1,
           rowsReadPerQuery: 20,
+          rowsReturnedPerQuery: 20,
           responseKB: KIFU_TRANSFER_KB.listHtml,
         },
       },
@@ -203,6 +223,7 @@ export function kifuAnalysis(monthlyPageViews: number): WorkloadInput {
           ioWaitMs: 60,
           queries: 2,
           rowsReadPerQuery: (1 + KIFU_MOVES_PER_GAME) / 2,
+          rowsReturnedPerQuery: (1 + KIFU_MOVES_PER_GAME) / 2,
           responseKB: KIFU_TRANSFER_KB.kifuHtml,
         },
         cachedServeCpuMs: 2,
