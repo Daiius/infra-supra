@@ -13,6 +13,8 @@ import {
   UserMinus,
   Image as ImageIcon,
   Puzzle,
+  Target,
+  Timer,
   RefreshCw,
   ShieldCheck,
   type LucideIcon,
@@ -21,8 +23,9 @@ import {
   isPolicyViolation,
   premisePlanLabel,
   ELEMENT_LABEL,
-  ELEMENTS,
+  elementsOf,
   STAGE_LABEL,
+  type Element,
   type MonthReport,
   type Stage,
 } from 'game';
@@ -46,12 +49,15 @@ import { EventCard, eventBadge, BlockedBadge, TIER_LABEL } from './events.tsx';
 import { WorkProgressView } from './effort.tsx';
 
 /** 満足度の要素の印（名前と並べて札に出す。名前だけより一目で見分けやすい）。 */
-const ELEMENT_ICON: Record<(typeof ELEMENTS)[number], LucideIcon> = {
+const ELEMENT_ICON: Record<Element, LucideIcon> = {
   availability: ShieldCheck,
   speed: Gauge,
   feature: Puzzle,
   freshness: RefreshCw,
   quality: ImageIcon,
+  // 解析の要素（解析のあるシナリオだけ。D-238）
+  analysisSpeed: Timer,
+  analysisAccuracy: Target,
 };
 
 const STAGE_PANEL: Record<Stage, string> = {
@@ -72,7 +78,7 @@ function ElementBadge({
   stage,
   className = '',
 }: {
-  element: (typeof ELEMENTS)[number];
+  element: Element;
   stage: Stage;
   className?: string;
 }) {
@@ -96,7 +102,7 @@ function ImproveInfo({
   stages: MonthReport['satisfaction']['stages'];
   reasons: MonthReport['satisfaction']['reasons'];
 }) {
-  const items = ELEMENTS.filter((e) => reasons[e]);
+  const items = elementsOf(stages).filter((e) => reasons[e]);
   if (items.length === 0) return null;
   const worst: Stage = items.some((e) => stages[e] === 'bad') ? 'bad' : 'fair';
   const WorstIcon = worst === 'bad' ? OctagonX : TriangleAlert;
@@ -111,18 +117,19 @@ function ImproveInfo({
         {/* 項目ごとに、段階の色の枠の中に本体と同じ札と理由（「良い」でない要素だけ） */}
         <ul className="space-y-2">
           {items.map((e) => {
-            const Icon = stages[e] === 'bad' ? OctagonX : TriangleAlert;
+            const stage = stages[e]!;
+            const Icon = stage === 'bad' ? OctagonX : TriangleAlert;
             return (
               <li
                 key={e}
-                className={`flex items-start gap-2 rounded-box border p-2 ${STAGE_PANEL[stages[e]]}`}
+                className={`flex items-start gap-2 rounded-box border p-2 ${STAGE_PANEL[stage]}`}
               >
                 <Icon
                   aria-hidden
-                  className={`mt-0.5 size-5 shrink-0 ${STAGE_TEXT[stages[e]]}`}
+                  className={`mt-0.5 size-5 shrink-0 ${STAGE_TEXT[stage]}`}
                 />
                 <div className="min-w-0 space-y-1">
-                  <ElementBadge element={e} stage={stages[e]} />
+                  <ElementBadge element={e} stage={stage} />
                   <p className="text-sm">{reasons[e]}</p>
                 </div>
               </li>
@@ -286,11 +293,11 @@ export function MonthCard({
               className="flex flex-wrap gap-1.5 text-sm"
               data-satisfaction-elements
             >
-              {ELEMENTS.map((e) => (
+              {elementsOf(s.stages).map((e) => (
                 <li key={e} className="flex grow" data-satisfaction-element={e}>
                   <ElementBadge
                     element={e}
-                    stage={s.stages[e]}
+                    stage={s.stages[e]!}
                     className="grow"
                   />
                 </li>
