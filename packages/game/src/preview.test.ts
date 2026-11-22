@@ -16,12 +16,16 @@ const FICTIONAL_PREVIEW: Scenario = {
 };
 
 describe('開発中の印（D-232）', () => {
-  it('今ある組み込みのシナリオには印が無い（画面・集計は変わらない）', () => {
+  it('組み込みのシナリオで印が付くのは棋譜解析だけ（記事・受託の画面・集計は変わらない。D-241）', () => {
     for (const sc of Object.values(SCENARIOS)) {
-      expect(sc.preview, sc.id).toBeUndefined();
-      expect(isPreviewScenario(sc.id), sc.id).toBe(false);
+      const preview = sc.id === 'kifu-analysis';
+      expect(sc.preview === true, sc.id).toBe(preview);
+      expect(isPreviewScenario(sc.id), sc.id).toBe(preview);
     }
-    expect(listedScenarios(false)).toEqual(Object.values(SCENARIOS));
+    expect(listedScenarios(false).map((s) => s.id)).toEqual([
+      'article-community',
+      'contract-operations',
+    ]);
     expect(listedScenarios(true)).toEqual(Object.values(SCENARIOS));
   });
 

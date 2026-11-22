@@ -4,7 +4,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import {
   DEFAULT_START_DATE,
-  ESTIMATE_ONLY_SCENARIOS,
   flattenSetupChange,
   newGame,
   playMonth,
@@ -27,7 +26,7 @@ import {
 useSmokeEnv();
 
 const PRO = STACKS.findIndex((s) => s.id === 'vercel-supabase-pro');
-const kifu = { ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!, startCash: 1e7 };
+const kifu = { ...SCENARIOS['kifu-analysis']!, startCash: 1e7 };
 
 const draw = (scenario = kifu) => {
   const state = playMonth(

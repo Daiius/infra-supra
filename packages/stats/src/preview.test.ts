@@ -49,6 +49,15 @@ describe('開発中のシナリオ（D-232）', () => {
     expect(verifySubmission(submissionOf(finishedSave())).ok).toBe(true);
   });
 
+  it('組み込みの開発中のシナリオ（棋譜解析。D-241）も preview-scenario で落とす', () => {
+    const s = structuredClone(submissionOf(finishedSave()));
+    s.save.scenarioId = 'kifu-analysis';
+    expect(verifySubmission(s)).toEqual({
+      ok: false,
+      code: 'preview-scenario',
+    });
+  });
+
   it('POST /api/results は 422 で保存しない', async () => {
     const repo = memoryRepo(() => 0);
     const a = createApp({

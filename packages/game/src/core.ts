@@ -70,16 +70,9 @@ export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>
 export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
   [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
   [CONTRACT_OPERATIONS.id]: CONTRACT_OPERATIONS,
+  // 開発中（preview。D-232）。`?preview=1` のときだけ始める画面に出し、集計には送らない（prd/17 PR-10・D-241）
+  [KIFU_ANALYSIS.id]: KIFU_ANALYSIS,
 });
-
-/**
- * 見積モードのテンプレートにだけ使うシナリオ（SCENARIOS に無い。遊べない・保存を読み込めない・集計は受け付けない）。
- * 棋譜解析（prd/17 PR-2・D-233）は PR-10 で SCENARIOS に登録するまでここに置く。どれも開発中の印（preview）付き。
- */
-export const ESTIMATE_ONLY_SCENARIOS: Readonly<Record<string, Scenario>> =
-  Object.freeze({
-    [KIFU_ANALYSIS.id]: KIFU_ANALYSIS,
-  });
 
 /** 開発中の印（Scenario.preview。D-232）が付いた、組み込みのシナリオか。知らない id は false。 */
 export const isPreviewScenario = (id: string): boolean =>

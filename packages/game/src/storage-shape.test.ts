@@ -8,7 +8,6 @@ import {
   componentSlots,
   DEFAULT_START_DATE,
   EFFORT,
-  ESTIMATE_ONLY_SCENARIOS,
   newGame,
   playMonth,
   SCENARIOS,
@@ -19,7 +18,7 @@ import {
 
 // 遊びの値（所持金など）は PR-11 で決めるまで仮。1 か月目で尽きないよう所持金だけ足す（analysis-placement.test.ts と同じ）
 const kifu = {
-  ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!,
+  ...SCENARIOS['kifu-analysis']!,
   startCash: 1e7,
 };
 const article = SCENARIOS['article-community']!;

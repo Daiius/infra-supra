@@ -6,7 +6,7 @@ import { KIFU_STUDY_REALTIME, REALTIME_OPTION } from 'catalog';
 import {
   applyActions,
   DEFAULT_START_DATE,
-  ESTIMATE_ONLY_SCENARIOS,
+  SCENARIOS,
   newGame,
   playMonth,
   realtimeOptionFor,
@@ -23,7 +23,7 @@ import { booksAt } from './core.ts';
 import { monthEstimate } from './setup/estimates.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 
-const KIFU = ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!;
+const KIFU = SCENARIOS['kifu-analysis']!;
 const ARTICLE = ARTICLE_COMMUNITY;
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const VISIBLE = STACKS.filter(

@@ -11,7 +11,6 @@ export {
   ANALYSIS_SLOTS,
   scenarioSendsEmail,
   SCENARIOS,
-  ESTIMATE_ONLY_SCENARIOS,
   isPreviewScenario,
   listedScenarios,
   USD_JPY,

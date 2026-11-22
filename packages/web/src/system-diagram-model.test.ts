@@ -1,7 +1,6 @@
 // 構成図のモデル（D-105）。選べる構成 × フレームワーク × 部品の選択で、費用の計算と同じ構成から図が描けることを見る。
 import {
   DEFAULT_START_DATE,
-  ESTIMATE_ONLY_SCENARIOS,
   frameworksOf,
   newGame,
   pageWireframes,
@@ -942,7 +941,7 @@ describe('流れの名前（D-193）', () => {
 });
 
 describe('解析の置き場の箱（D-235・prd/17 §5.1）', () => {
-  const kifu = ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!;
+  const kifu = SCENARIOS['kifu-analysis']!;
   const boxes = (stackIndex: number, fw: FrameworkId, analysis: string) => {
     const build = (c: Partial<Record<string, string>>) =>
       diagramArchitecture(kifu, stackIndex, fw, c);

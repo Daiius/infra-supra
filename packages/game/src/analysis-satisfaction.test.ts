@@ -10,7 +10,6 @@ import {
 } from './analysis-satisfaction.ts';
 import {
   DEFAULT_START_DATE,
-  ESTIMATE_ONLY_SCENARIOS,
   newGame,
   playMonth,
   SCENARIOS,
@@ -150,7 +149,7 @@ describe('解析の正確さ', () => {
 // ---- ゲームの月（playMonth）----
 
 const kifu = {
-  ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!,
+  ...SCENARIOS['kifu-analysis']!,
   startCash: 1e9,
 };
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);

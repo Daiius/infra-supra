@@ -9,7 +9,6 @@ import {
   REGION_KINDS,
   REGION_NEEDS,
   REGION_SOURCES,
-  ESTIMATE_ONLY_SCENARIOS,
   SCENARIOS,
   scenarioWireframes,
 } from './index.ts';
@@ -25,11 +24,7 @@ const sources = (
   );
 
 describe('ページの見取り図のデータ', () => {
-  // 見積モードだけのシナリオ（棋譜解析。D-233）も同じ整合を持つ
-  for (const sc of [
-    ...Object.values(SCENARIOS),
-    ...Object.values(ESTIMATE_ONLY_SCENARIOS),
-  ]) {
+  for (const sc of Object.values(SCENARIOS)) {
     describe(sc.name, () => {
       const wireframes = sc.text?.wireframes ?? [];
       const routes = sc.template(1).routes;

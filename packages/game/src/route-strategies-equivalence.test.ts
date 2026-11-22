@@ -184,10 +184,16 @@ function costDigest(sc: Scenario, fw: FrameworkId, stackIndex: number): string {
   return `${parts.length}:${hash(parts.join('\n'))}`;
 }
 
+/**
+ * 記録したシナリオ（記事・受託）。開発中のシナリオ（棋譜解析。D-232）は値が決まるまで変わり続けるので記録に入れない
+ * （記録は今までの書き換えとの同値を見るためのもの。D-241）。
+ */
+const RECORDED = Object.values(SCENARIOS).filter((sc) => !sc.preview);
+
 describe('描き方のプリセットは今までの書き換えと同じ Workload を作る（D-106）', () => {
   it('すべてのシナリオ × フレームワーク × 構成 × 部品 × 設定で、workloadFor の出力が記録と同じ', () => {
     const out: Record<string, string> = {};
-    for (const sc of Object.values(SCENARIOS))
+    for (const sc of RECORDED)
       for (const fw of frameworksOf(sc).allowed)
         for (const s of STACKS)
           if (stackSupports(s.index, fw))
@@ -198,7 +204,7 @@ describe('描き方のプリセットは今までの書き換えと同じ Worklo
 
   it('費用・使用量・前提の当たりも記録と同じ（D-109。段 4 の前の main で記録）', () => {
     const out: Record<string, string> = {};
-    for (const sc of Object.values(SCENARIOS))
+    for (const sc of RECORDED)
       for (const fw of frameworksOf(sc).allowed)
         for (const s of STACKS)
           if (stackSupports(s.index, fw))

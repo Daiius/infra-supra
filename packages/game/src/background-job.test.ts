@@ -6,7 +6,6 @@ import { freeVcpuHoursOf } from './background-job.ts';
 import {
   applyActions,
   DEFAULT_START_DATE,
-  ESTIMATE_ONLY_SCENARIOS,
   newGame,
   newSave,
   playMonth,
@@ -33,7 +32,7 @@ const JOB_EVENT = 'k-job-test';
 /** 棋譜解析（普段の月の規模 3 万 PV。D-238 の表と同じ）に、1 か月目に長時間の処理の提案が届く形を足したもの。 */
 const scenarioWith = (job: BackgroundJobDef = KIFU_BACKGROUND_JOBS.strategy) =>
   ({
-    ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!,
+    ...SCENARIOS['kifu-analysis']!,
     id: 'kifu-job-test',
     startCash: 1e9,
     scale: { startPV: 30_000 },

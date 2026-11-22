@@ -54,7 +54,6 @@ import {
   withRouteChoice,
   ROUTE_STRATEGIES,
   SCENARIOS,
-  ESTIMATE_ONLY_SCENARIOS,
   SETTINGS,
   stackName,
   stackOffered,
@@ -156,14 +155,8 @@ export type EstimateInput = {
   routes: RouteOverrides;
 };
 
-/** テンプレートのシナリオ（遊べるシナリオと、見積モードだけのもの。game の ESTIMATE_ONLY_SCENARIOS）。 */
-const TEMPLATE_SCENARIOS: Readonly<Record<string, Scenario>> = {
-  ...SCENARIOS,
-  ...ESTIMATE_ONLY_SCENARIOS,
-};
-
 export const scenarioOfTemplate = (t: TemplateId): Scenario =>
-  TEMPLATE_SCENARIOS[TEMPLATES.find((x) => x.id === t)!.scenarioId]!;
+  SCENARIOS[TEMPLATES.find((x) => x.id === t)!.scenarioId]!;
 
 const stackIndexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
 

@@ -5,7 +5,7 @@ import { render } from '@testing-library/react';
 import {
   applyActions,
   DEFAULT_START_DATE,
-  ESTIMATE_ONLY_SCENARIOS,
+  SCENARIOS,
   newGame,
   playMonth,
   STACKS,
@@ -25,7 +25,7 @@ const job: BackgroundJobDef = {
   onDone: [{ type: 'feature', points: 4 }],
 };
 const sc: Scenario = {
-  ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!,
+  ...SCENARIOS['kifu-analysis']!,
   startCash: 1e9,
   scale: { startPV: 30_000 },
   events: [

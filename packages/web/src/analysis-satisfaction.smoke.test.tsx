@@ -4,7 +4,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import {
   DEFAULT_START_DATE,
-  ESTIMATE_ONLY_SCENARIOS,
   newGame,
   playMonth,
   SCENARIOS,
@@ -18,7 +17,12 @@ import { useSmokeEnv } from './smoke.test-helpers.tsx';
 useSmokeEnv();
 
 const PRO = STACKS.findIndex((s) => s.id === 'vercel-supabase-pro');
-const kifu = { ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!, startCash: 1e7 };
+// 30 万 PV（解析する worker の VPS が滞る規模。シナリオの仮の規模は 3 万 PV。D-241）
+const kifu = {
+  ...SCENARIOS['kifu-analysis']!,
+  startCash: 1e7,
+  scale: { startPV: 300_000 },
+};
 
 const draw = (scenario: Scenario, analysis?: string) => {
   const state = playMonth(
