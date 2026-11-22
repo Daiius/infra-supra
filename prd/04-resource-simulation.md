@@ -211,6 +211,8 @@ origin     = Σ misses(k) × size(k)     （オリジン→CDN の転送。edge:
 
 キャッシュできないクラス（`api`・個人向けの `document-ssr`）は `hit = 0` に固定し、入力で変えられないようにする。
 キャッシュできる中身の API は別のクラス `api-content` にし、ヒット率は §2 の期間つきのキャッシュの式から出す（D-37）。
+積んで別の所で動かす API（Workload の `api.invocation` が async。棋譜解析の解析）は別のクラス `api-async` にし、構成が経路を持たなければ `api` の経路を通る（流れが 0 なら流さない。解析の置き場で経路を替える。D-235・[17](./17-scenario-kifu.md) §5.1）。
+訪問ごとに読む大きなファイル（Workload の `visitAssets`。端末で動かす解析のエンジン）は `asset` のクラスに足す: 件数 = PV / ページ数 / 訪問 × perVisit × (1 − browserReuse)（D-235）。
 
 ### 3.2 `static-hosting`
 
