@@ -931,7 +931,18 @@ export function slotBoxes(
         );
         continue;
       }
-      hint = { depth: 1 };
+      // 保存の形で DB の箱が無い（VPS の同居の DB）: DB がいる VPS の帯の、VPS の次の段に置く（入口の帯の 1 段目に置くと、API を
+      // 他の事業者の VPS に置いた構成で狭い画面の縦の図が広がりすぎる。棋譜解析を図の総当たりに入れて見つけた。D-241）
+      const host =
+        x.slot === 'storage'
+          ? (baseArch.routes.api ?? []).find(
+              (id) =>
+                baseArch.nodes.find((n) => n.id === id)?.config.kind === 'host',
+            )
+          : undefined;
+      baseModel ??= diagramModel(baseArch);
+      const hv = host && baseModel.nodes.find((m) => m.id === host);
+      hint = hv ? { group: hv.group, depth: hv.depth! + 1 } : { depth: 1 };
     }
     ghosts.push({
       slot: x.slot,

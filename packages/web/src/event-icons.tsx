@@ -12,6 +12,7 @@ import {
   Receipt,
   TrendingUp,
   TriangleAlert,
+  Trophy,
   UserPlus,
 } from 'lucide-react';
 import type { EventKind, EventTier } from 'game';
@@ -22,6 +23,7 @@ export type EventCategory =
   | 'team'
   | 'busy'
   | 'expand'
+  | 'tournament'
   | 'proposal'
   | 'complaint'
   | 'major'
@@ -39,6 +41,11 @@ export const EVENT_CATEGORY: Record<
   team: { Icon: UserPlus, label: 'チームが増える', cls: 'text-secondary' },
   busy: { Icon: CalendarClock, label: '繁忙期', cls: 'text-warning' },
   expand: { Icon: TrendingUp, label: '利用の広がり', cls: 'text-success' },
+  tournament: {
+    Icon: Trophy,
+    label: '大きな対局イベント',
+    cls: 'text-warning',
+  },
   proposal: { Icon: Lightbulb, label: '開発依頼', cls: 'text-primary' },
   complaint: {
     Icon: MessageSquareWarning,
@@ -62,6 +69,7 @@ const BY_ID: Record<string, EventCategory> = {
   team: 'team',
   'c-busy': 'busy',
   'c-expand': 'expand',
+  'k-tournament': 'tournament',
 };
 
 /** 出来事の種類。改定 → id で決まる台本 → まれな提案（大きな出来事）→ 提案 → 状態（上限）の順に見る。 */

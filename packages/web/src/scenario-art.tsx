@@ -3,9 +3,12 @@
 // ダークモードでもトークンのまま替わる。図柄は表示の都合なので web に置き、シナリオの id で引く。
 import {
   Building2,
+  ChartLine,
   ClipboardList,
+  Cpu,
   Database,
   FileSpreadsheet,
+  Grid3x3,
   ImageIcon,
   type LucideIcon,
   MessageSquare,
@@ -14,6 +17,7 @@ import {
   Server,
   Share2,
   ShieldCheck,
+  Smartphone,
   Users,
 } from 'lucide-react';
 
@@ -129,6 +133,58 @@ export const SCENARIO_ART: Readonly<Record<string, readonly ArtNode[]>> = {
     {
       Icon: Database,
       label: '業務の記録',
+      x: 7,
+      y: 66,
+      size: 'sm',
+      tone: 'muted',
+    },
+  ],
+  // 棋譜解析（D-241）。将棋に固有の絵は使わず、盤面（格子）・評価値のグラフ・解析の CPU などの一般的な印で組む
+  'kifu-analysis': [
+    {
+      Icon: Grid3x3,
+      label: '棋譜と盤面',
+      x: 50,
+      y: 50,
+      size: 'lg',
+      tone: 'primary',
+    },
+    {
+      Icon: Users,
+      label: '利用者',
+      x: 21,
+      y: 34,
+      size: 'md',
+      tone: 'secondary',
+    },
+    {
+      Icon: ChartLine,
+      label: '評価値のグラフ',
+      x: 77,
+      y: 26,
+      size: 'md',
+      tone: 'accent',
+    },
+    { Icon: Cpu, label: '解析', x: 79, y: 74, size: 'md', tone: 'secondary' },
+    {
+      Icon: Share2,
+      label: 'SNS での共有',
+      x: 30,
+      y: 80,
+      size: 'sm',
+      tone: 'accent',
+    },
+    {
+      Icon: Smartphone,
+      label: '端末での解析',
+      x: 93,
+      y: 48,
+      size: 'sm',
+      tone: 'muted',
+    },
+    {
+      Icon: Database,
+      label: '解析の結果',
       x: 7,
       y: 66,
       size: 'sm',
