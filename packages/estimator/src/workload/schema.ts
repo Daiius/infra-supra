@@ -25,7 +25,13 @@ export const ProcessingSchema = z.object({
   /** I/O 待ち（DB の往復など）。壁時計時間 = cpuMs + ioWaitMs。 */
   ioWaitMs: NonNeg,
   queries: NonNeg,
+  /** 問い合わせ 1 回が読む（走査する）行の数（D1 の rows read はこれ。索引で引けば返す行と同じ）。 */
   rowsReadPerQuery: NonNeg,
+  /**
+   * 問い合わせ 1 回が返す行（文書）の数（D-237）。返した文書ごとに数える DB（Firestore）の読み取りに使う（1 回 1 件が最低）。
+   * 省略は今までの数え方（DB の応答の大きさ db.responseKBPerQuery ÷ 1 文書の大きさの切り上げ）。
+   */
+  rowsReturnedPerQuery: NonNeg.optional(),
   /** 応答 1 回の転送の大きさ（KB・圧縮後。D-211）。HTML の文書なら RSC などフレームワークが埋め込む分も含む（D-212）。 */
   responseKB: NonNeg,
 });
@@ -154,6 +160,11 @@ export const WorkloadInputSchema = z
     api: ProcessingSchema.extend({
       writesPerCall: NonNeg,
       rowsWrittenPerWrite: NonNeg,
+      /**
+       * 書く 1 行（項目）の大きさの平均（KB。D-237）。書き込みを 1 行ごとに大きさの単位へ切り上げて数える DB（DynamoDB の WRU）に使う。
+       * 省略は構成の 1 行の大きさ（request-db の itemKB）。行の数で数える DB（D1・Firestore）には効かない。
+       */
+      rowKB: Pos.optional(),
       /**
        * API の 1 件をどう受けて動かすか（D-234・prd/17 P-2・B-6）。async は受け付けて積み、解析を受けて処理する側
        * （キューの受け手・Cron・バックグラウンド関数）が動かす。1 件の実行時間の上限は、その側の上限（LimitSchema の invocation）で判定する。

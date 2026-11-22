@@ -201,6 +201,20 @@ export const aws: PriceBookInput = {
     dynamodbUnits: src(
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
+    // 読み書きの単位の切り上げ（GetItem・BatchGetItem は項目ごと・Query は合計・Scan は評価した項目・BatchWriteItem も項目ごと・
+    // UpdateItem は前後の大きいほう）・項目の大きさ（属性名も数える・保存は項目ごとに 100 B）・項目は 400 KB まで（2026-11-23 取得。D-237）
+    dynamodbUnitsRounding: {
+      url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
+      retrievedAt: '2026-11-23',
+    },
+    dynamodbItemSize: {
+      url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/CapacityUnitCalculations.html',
+      retrievedAt: '2026-11-23',
+    },
+    dynamodbConstraints: {
+      url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html',
+      retrievedAt: '2026-11-23',
+    },
     rdsPrices: priceList('AmazonRDS'),
     // 確約の割引（2026-11-02 取得。D-97）。版（publicationDate）: AmazonRDS 2026-10-29
     rdsReservedPrices: { ...priceList('AmazonRDS'), retrievedAt: COMMIT_R },
@@ -960,13 +974,39 @@ export const aws: PriceBookInput = {
       service: 'dynamodb',
       ...common,
       name: 'DynamoDB（リクエスト課金・標準）',
-      sourceIds: ['dynamodbPrices', 'dynamodbUnits'],
+      sourceIds: [
+        'dynamodbPrices',
+        'dynamodbUnits',
+        'dynamodbUnitsRounding',
+        'dynamodbItemSize',
+        'dynamodbConstraints',
+      ],
       facts: [
         {
           id: 'request-units',
           premise:
-            'DynamoDB の読み取りは 4 KB ごとに 1 単位（結果整合なら半分）、書き込みは 1 KB ごとに 1 単位で課金されます（RDB ではないので、複雑な検索や集計はアプリの側で工夫が要る）',
-          sourceIds: ['dynamodbUnits'],
+            'DynamoDB の読み取りは 4 KB ごとに 1 単位（結果整合なら半分）、書き込みは 1 KB ごとに 1 単位で課金されます（RDB ではないので、複雑な検索や集計はアプリの側で工夫が要る）。' +
+            '書き込みは項目ごとに 1 KB へ切り上げ（500 B でも 1 KB 分。まとめて書く BatchWriteItem も項目ごと）、項目を上書きする UpdateItem は前後の大きいほうの項目全体で数えます。' +
+            '読み取りは Query なら返した項目の合計を 4 KB へ切り上げ、GetItem・BatchGetItem は項目ごとに切り上げ、Scan は返した量でなく評価した項目で数えます（該当が無くても消費）。' +
+            '項目の大きさは属性名も含み、1 項目 400 KB までです。保存の課金には項目ごとに 100 B が足されます',
+          interpretation: {
+            adopted:
+              '問い合わせ 1 回を Query とみなし、DB の応答の大きさを 4 KB へ切り上げます。書き込みは書く 1 行ごとに大きさ（解析の結果は保存の形と区切り方から。ほかは 1 KB と仮定）を 1 KB へ切り上げます。項目ごとの 100 B は在庫の行ごとのオーバーヘッドの仮定で数えます',
+            rejected: [
+              {
+                reading:
+                  'まとめて書けば、合計の大きさを 1 KB へ切り上げるだけで済む',
+                reason:
+                  'BatchWriteItem も項目ごとに切り上げてから合計します（500 B と 3.5 KB で 5 KB。公式の文書）',
+              },
+            ],
+          },
+          sourceIds: [
+            'dynamodbUnits',
+            'dynamodbUnitsRounding',
+            'dynamodbItemSize',
+            'dynamodbConstraints',
+          ],
         },
       ],
       meters: [

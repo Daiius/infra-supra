@@ -322,6 +322,106 @@ describe('部品の選択で足した振る舞い', () => {
     );
   });
 
+  describe('書き込みの行の大きさと、返した文書の数（D-237）', () => {
+    const base = workload();
+    const sized = resolveWorkload(
+      workload({ api: { ...base.api, rowKB: 2.5, rowsReturnedPerQuery: 7 } }),
+    );
+    const run = (
+      wl: typeof w,
+      config: Extract<
+        ArchitectureInput['nodes'][number]['config'],
+        { kind: 'request-db' }
+      >,
+    ) =>
+      simulateResources(wl, {
+        id: 'x',
+        name: 'x',
+        nodes: [{ id: 'd', label: 'd', config }],
+        routes: { api: ['d'] },
+      }).nodes.d!;
+    const dynamo = {
+      kind: 'request-db' as const,
+      countsBy: 'size' as const,
+      readUnitKB: 4,
+      writeUnitKB: 1,
+      eventuallyConsistent: false,
+      itemKB: 1,
+    };
+    const firestore = { ...dynamo, countsBy: 'document' as const };
+
+    it('大きさで数える DB は、書く 1 行の大きさ（api.rowKB）を 1 行ごとに切り上げる。省略は構成の itemKB', () => {
+      const api = sized.classes.api;
+      expect(run(sized, dynamo).resources['write-request-units']).toBeCloseTo(
+        api.count * api.perRequest.rowsWritten * 3,
+        9,
+      );
+      expect(run(w, dynamo).resources['write-request-units']).toBeCloseTo(
+        w.classes.api.count * w.classes.api.perRequest.rowsWritten * 1,
+        9,
+      );
+      // 返した文書の数は大きさで数える DB の読み取りに効かない（応答の大きさを切り上げる）
+      expect(run(sized, dynamo).resources['read-request-units']).toBeCloseTo(
+        api.count * 2,
+        9,
+      );
+    });
+
+    it('文書で数える DB は、返した文書の数（rowsReturnedPerQuery）で読み、書いた文書の数で書く（大きさによらない）', () => {
+      const api = sized.classes.api;
+      const u = run(sized, firestore);
+      expect(u.resources['read-request-units']).toBeCloseTo(
+        api.count * 2 * 7,
+        9,
+      );
+      expect(u.resources['write-request-units']).toBeCloseTo(
+        api.count * api.perRequest.rowsWritten,
+        9,
+      );
+      // 数を与えない問い合わせは今までどおり応答の大きさから（1 KB → 1 件）。0 件を返す問い合わせも 1 件
+      expect(run(w, firestore).resources['read-request-units']).toBeCloseTo(
+        w.classes.api.count * 2,
+        9,
+      );
+      const zero = resolveWorkload(
+        workload({ api: { ...base.api, rowsReturnedPerQuery: 0 } }),
+      );
+      expect(run(zero, firestore).resources['read-request-units']).toBeCloseTo(
+        zero.classes.api.count * 2,
+        9,
+      );
+    });
+
+    it('数を与えたルートと与えないルートが 1 つのクラスに混ざっても、それぞれの数え方で足す', () => {
+      const mixed = resolveWorkload(
+        workload({
+          routes: [
+            {
+              id: 'a',
+              rendering: 'ssr',
+              share: 0.5,
+              pages: 1,
+              processing: { ...processing, rowsReturnedPerQuery: 10 },
+            },
+            { id: 'b', rendering: 'ssr', share: 0.5, pages: 1, processing },
+          ],
+        }),
+      );
+      const ssr = mixed.classes['document-ssr'];
+      const u = simulateResources(mixed, {
+        id: 'x',
+        name: 'x',
+        nodes: [{ id: 'd', label: 'd', config: firestore }],
+        routes: { 'document-ssr': ['d'] },
+      }).nodes.d!;
+      // 半分の閲覧は 2 回 × 10 件、残りは 2 回 × 1 件（応答 1 KB）
+      expect(u.resources['read-request-units']).toBeCloseTo(
+        ssr.count * (0.5 * 2 * 10 + 0.5 * 2 * 1),
+        9,
+      );
+    });
+  });
+
   it('リクエストを大きさの単位で数える CDN: 1 件は最低 1、超えた分は単位で切り上げ。次へ渡す件数は変わらない（OCL-70ABEDB7）', () => {
     const u = sim(
       [

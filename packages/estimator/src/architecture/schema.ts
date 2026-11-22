@@ -166,12 +166,17 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     unitsPerRequest: Pos,
   }),
   /**
-   * 要求の単位で課金する DB（DynamoDB のオンデマンド型。prd/11 AX-05）。読み取りは問い合わせ 1 回の応答の大きさを
-   * readUnitKB 単位で切り上げた数（結果整合なら半分）、書き込みは 1 行（itemKB）を writeUnitKB 単位で切り上げた数。
+   * 要求の単位で課金する DB（DynamoDB のオンデマンド型・Firestore。prd/11 AX-05・D-237）。countsBy で数え方が分かれる。
+   * - size（DynamoDB）: 読み取りは問い合わせ（Query）1 回の応答の合計の大きさを readUnitKB 単位で切り上げた数（結果整合なら半分。
+   *   該当が無くても 1 単位）、書き込みは 1 行ごとに大きさ（Workload の api.rowKB。省略は itemKB）を writeUnitKB 単位で切り上げた数
+   *   （まとめて書いても 1 行ごとに切り上げる）。
+   * - document（Firestore）: 読み取りは返した文書の数（Workload の rowsReturnedPerQuery。省略は応答の大きさ ÷ itemKB の切り上げ。
+   *   1 回 1 件が最低）、書き込みは書いた文書の数（大きさによらない）。
    * 単位の大きさは公式の文書、1 行の大きさ itemKB は仮定（catalog の構成が値を持つ）。
    */
   z.object({
     kind: z.literal('request-db'),
+    countsBy: z.enum(['size', 'document']).default('size'),
     readUnitKB: Pos,
     writeUnitKB: Pos,
     eventuallyConsistent: z.boolean().default(true),

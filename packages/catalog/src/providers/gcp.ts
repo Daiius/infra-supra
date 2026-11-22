@@ -62,6 +62,16 @@ export const gcp: PriceBookInput = {
     nextSelfHosting: src('https://nextjs.org/docs/app/guides/self-hosting'),
     storagePricing: src('https://cloud.google.com/storage/pricing'),
     firestorePricing: src('https://cloud.google.com/firestore/pricing'),
+    // 読み取りの数え方（返した文書・1 回 1 件が最低・索引のエントリ 1,000 件ごと（範囲の条件が 1 つまでなら無し）・offset で飛ばした文書）と、
+    // 文書は 1 MiB まで（2026-11-23 取得。D-237）
+    firestoreBilling: {
+      url: 'https://firebase.google.com/docs/firestore/pricing',
+      retrievedAt: '2026-11-23',
+    },
+    firestoreQuotas: {
+      url: 'https://firebase.google.com/docs/firestore/quotas',
+      retrievedAt: '2026-11-23',
+    },
     sqlPricing: src('https://cloud.google.com/sql/pricing'),
     // 確約利用割引（CUD。2026-11-02 取得。D-97）
     runCud: src('https://docs.cloud.google.com/run/cud'),
@@ -503,15 +513,18 @@ export const gcp: PriceBookInput = {
       service: 'firestore',
       ...common,
       name: 'Firestore（Standard・東京）',
-      sourceIds: ['firestorePricing'],
+      sourceIds: ['firestorePricing', 'firestoreBilling', 'firestoreQuotas'],
       facts: [
         {
           id: 'document-reads',
           premise:
-            'Firestore はドキュメントの読み取り・書き込み・削除の件数と保存で課金し、問い合わせは返したドキュメントの数だけ読み取りに数えます（結果が 0 件でも 1 件分）。同じリージョンの Cloud Run からの通信は無料です',
+            'Firestore はドキュメントの読み取り・書き込み・削除の件数と保存で課金し、問い合わせは返したドキュメントの数だけ読み取りに数えます（結果が 0 件でも 1 件分）。同じリージョンの Cloud Run からの通信は無料です。' +
+            '書き込みは set・update の 1 回が 1 回で、大きさでは数えません。問い合わせが読んだ索引のエントリは 1,000 件ごとに 1 回の読み取りに数えます（範囲の条件が 1 つまでの問い合わせは数えない）。' +
+            'offset で飛ばした文書も 1 件ずつ読み取りに数えます。1 文書は 1 MiB（1,048,576 B）までです',
           interpretation: {
             adopted:
-              '1 回の問い合わせで返すドキュメントの数を、応答の大きさ ÷ 1 ドキュメントの大きさ（1 kB と仮定）の切り上げで数え、書く行 1 行を 1 回の書き込みと数えます',
+              '1 回の問い合わせで返すドキュメントの数を、テンプレートが返す行の数を与えた問い合わせはその数（1 回 1 件が最低）、与えない問い合わせは応答の大きさ ÷ 1 ドキュメントの大きさ（1 kB と仮定）の切り上げで数え、書く行 1 行を 1 回の書き込みと数えます（大きさによらない）。' +
+              '問い合わせは等号と並びの条件で引くとみなし、索引のエントリの読み取りは数えません',
             rejected: [
               {
                 reading: 'SQL の DB のように、走査した行の数だけ読み取る',
@@ -520,7 +533,11 @@ export const gcp: PriceBookInput = {
               },
             ],
           },
-          sourceIds: ['firestorePricing'],
+          sourceIds: [
+            'firestorePricing',
+            'firestoreBilling',
+            'firestoreQuotas',
+          ],
         },
       ],
       meters: [

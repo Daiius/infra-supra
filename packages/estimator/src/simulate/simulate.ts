@@ -448,15 +448,26 @@ function consume(
     }
     case 'request-db': {
       u.busyMs += n * p.wallMs;
-      // 該当のアイテムが無い（応答 0 KB）読み取りも 1 単位を消費する（DynamoDB の文書。OCL-0E5E2CF2）
+      // 該当のアイテムが無い（応答 0 KB）読み取りも 1 単位を消費する（DynamoDB の文書。OCL-0E5E2CF2）。Firestore も 1 回 1 件が最低
       const readUnits =
         Math.max(1, ceilUnits(w.input.db.responseKBPerQuery, c.readUnitKB)) *
         (c.eventuallyConsistent ? 0.5 : 1);
+      if (c.countsBy === 'document') {
+        // 返した文書の数（Workload が数を与えた問い合わせはその数、ほかは応答の大きさから。D-237）・書いた文書の数
+        const counted = p.countedQueries ?? 0;
+        const docs =
+          (p.rowsReturned ?? 0) * (c.eventuallyConsistent ? 0.5 : 1) +
+          (p.queries - counted) * readUnits;
+        add(u, 'read-request-units', n * docs);
+        add(u, 'write-request-units', n * p.rowsWritten);
+        return f;
+      }
       add(u, 'read-request-units', n * p.queries * readUnits);
+      // 1 行ごとに大きさの単位へ切り上げる（BatchWriteItem も項目ごと。D-237）
       add(
         u,
         'write-request-units',
-        n * p.rowsWritten * ceilUnits(c.itemKB, c.writeUnitKB),
+        n * p.rowsWritten * ceilUnits(p.rowKB ?? c.itemKB, c.writeUnitKB),
       );
       return f;
     }

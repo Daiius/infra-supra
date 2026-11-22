@@ -51,6 +51,14 @@ export type ClassFlow = {
     rowsRead: number;
     rowsWritten: number;
     /**
+     * 返した行（文書）の数のうち、Workload が数を与えた問い合わせの分（1 回 1 件が最低）と、その問い合わせの数（D-237）。
+     * 返した文書ごとに数える DB（Firestore）は、残りの問い合わせ（queries − countedQueries）を応答の大きさから数える。省略は 0。
+     */
+    rowsReturned?: number;
+    countedQueries?: number;
+    /** 書く 1 行の大きさの平均（KB。Workload の api.rowKB。D-237）。省略は構成の itemKB。 */
+    rowKB?: number;
+    /**
      * 1 件の大きさの内訳（件数の割合と大きさ）。kb は件数で重み付けした平均なので、大きさの単位で切り上げて数える課金
      * （HTTP API の 512 KB など）は、平均でなくこの内訳ごとに切り上げてから足す（OCL-663E589C）。省略は kb だけの 1 種類。
      */
@@ -271,6 +279,9 @@ const flow = (
     queries: p.queries ?? 0,
     rowsRead: p.rowsRead ?? 0,
     rowsWritten: p.rowsWritten ?? 0,
+    ...(p.countedQueries ? { rowsReturned: p.rowsReturned ?? 0 } : {}),
+    ...(p.countedQueries ? { countedQueries: p.countedQueries } : {}),
+    ...(p.rowKB !== undefined ? { rowKB: p.rowKB } : {}),
     ...(p.kbMix ? { kbMix: p.kbMix } : {}),
   },
 });
@@ -306,8 +317,27 @@ function merge(flows: ClassFlow[]): ClassFlow {
   const count = flows.reduce((s, f) => s + f.count, 0);
   if (count === 0) return flow(0);
   const avg = (
-    k: Exclude<keyof ClassFlow['perRequest'], 'kbMix' | 'maxBy'>,
-  ): number => flows.reduce((s, f) => s + f.count * f.perRequest[k], 0) / count;
+    k: Exclude<keyof ClassFlow['perRequest'], 'kbMix' | 'maxBy' | 'rowKB'>,
+  ): number =>
+    flows.reduce((s, f) => s + f.count * (f.perRequest[k] ?? 0), 0) / count;
+  // 書く 1 行の大きさ（D-237）は、大きさを持つ流れの書いた行の数で重み付けする（持つ流れが無ければ省略）
+  const sized = flows.filter(
+    (f) =>
+      f.perRequest.rowKB !== undefined &&
+      f.count * f.perRequest.rowsWritten > 0,
+  );
+  const sizedRows = sized.reduce(
+    (s, f) => s + f.count * f.perRequest.rowsWritten,
+    0,
+  );
+  const rowKB =
+    sizedRows > 0
+      ? sized.reduce(
+          (s, f) =>
+            s + f.count * f.perRequest.rowsWritten * f.perRequest.rowKB!,
+          0,
+        ) / sizedRows
+      : undefined;
   // 大きさの内訳は、各ルートの内訳を件数の割合で重み付けして並べ、同じ大きさをまとめる
   const mix = new Map<number, number>();
   for (const f of flows) {
@@ -330,7 +360,23 @@ function merge(flows: ClassFlow[]): ClassFlow {
     queries: avg('queries'),
     rowsRead: avg('rowsRead'),
     rowsWritten: avg('rowsWritten'),
+    rowsReturned: avg('rowsReturned'),
+    countedQueries: avg('countedQueries'),
+    ...(rowKB !== undefined ? { rowKB } : {}),
   });
+}
+
+/** 問い合わせが返す行の数（Workload が与えたときだけ。1 回 1 件が最低。D-237）。 */
+function returnedOf(p: {
+  queries: number;
+  rowsReturnedPerQuery?: number | undefined;
+}): { rowsReturned?: number; countedQueries?: number } {
+  return p.rowsReturnedPerQuery === undefined
+    ? {}
+    : {
+        rowsReturned: p.queries * Math.max(1, p.rowsReturnedPerQuery),
+        countedQueries: p.queries,
+      };
 }
 
 export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
@@ -427,6 +473,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       wallMs: p.cpuMs + p.ioWaitMs,
       queries: p.queries,
       rowsRead: p.queries * p.rowsReadPerQuery,
+      ...returnedOf(p),
     };
     if (r.rendering === 'spa') {
       // シェルは入口だけ（遷移はブラウザの中）。中身はページごとにデータの API で取る（prd/04 §2・prd/10 F-01）。
@@ -660,6 +707,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           wallMs: isl.cpuMs + isl.ioWaitMs,
           queries: isl.queries,
           rowsRead: isl.queries * isl.rowsReadPerQuery,
+          ...returnedOf(isl),
         }),
       );
       source('document-ssr', r, views, isl.cpuMs, { island: true });
@@ -693,6 +741,8 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       queries: a.queries,
       rowsRead: a.queries * a.rowsReadPerQuery,
       rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
+      ...returnedOf(a),
+      ...(a.rowKB !== undefined ? { rowKB: a.rowKB } : {}),
     },
     a.invocation ?? 'http',
   );

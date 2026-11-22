@@ -233,6 +233,7 @@ export function gcpDbNode(opt: string | undefined): ArchNodeIn {
         label: 'Firestore（Standard）',
         config: {
           kind: 'request-db',
+          countsBy: 'document',
           readUnitKB: FIRESTORE_DOC_KB,
           writeUnitKB: FIRESTORE_DOC_KB,
           eventuallyConsistent: false,

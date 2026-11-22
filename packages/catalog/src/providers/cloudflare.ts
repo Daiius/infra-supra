@@ -23,6 +23,19 @@ const WORKERS_FACTS = [
     premise: 'D1 の 1 行（文字列・BLOB）は 2 MB まで',
     sourceIds: ['d1Limits'],
   },
+  // 保存の形（prd/17 §5.4・D-237）を選ぶシナリオだけ、D1 のノードが挙げる
+  {
+    id: 'd1-rows-counting',
+    premise:
+      'D1 の行の読み取り（rows read）は問い合わせが読んだ（走査した）行の数で、行の大きさによりません（索引が当たらないと、返す行が少なくても全表を走査した分を数える）。' +
+      '行の書き込み（rows written）は書いた行の数で、索引の列を含む書き込みは索引の分も 1 行足します',
+    interpretation: {
+      adopted:
+        '解析の結果は主キー（棋譜と手の番号）で引くとみなし、読む行は返す行と同じに数えます。主キーのほかの索引は張らないとみなし、索引の書き込みの行は足しません',
+      rejected: [],
+    },
+    sourceIds: ['d1PricingRows'],
+  },
   // 2026-11-04 に施行（scheduledChanges の予告から移した。2026-11-22 の再確認・D-230）。どのノードも挙げていないので前提には出ない
   {
     id: 'd1-query-result-size',
@@ -313,6 +326,11 @@ export const cloudflare: PriceBookInput = {
     },
     d1Pricing: src('https://developers.cloudflare.com/d1/platform/pricing/'),
     d1Limits: src('https://developers.cloudflare.com/d1/platform/limits/'),
+    // rows read は走査した行・rows written は索引の分も足す（2026-10-30 更新・2026-11-23 取得。D-237）
+    d1PricingRows: {
+      url: 'https://developers.cloudflare.com/d1/platform/pricing/',
+      retrievedAt: '2026-11-23',
+    },
     // クエリの結果の上限 50 MB（2026-11-20 更新・2026-11-22 取得。D-230）
     d1LimitsQueryResult: {
       url: 'https://developers.cloudflare.com/d1/platform/limits/',
