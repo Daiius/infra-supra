@@ -8,6 +8,7 @@ import { partsOfComments } from './routes/comments.ts';
 import { legacyDefaultRevalidateSec } from './routes/hidden-settings.ts';
 import { articleFamily, publicRouteId } from './routes/strategy.ts';
 import { newGame } from './setup/new-game.ts';
+import type { Scenario } from './scenario.ts';
 import type { Action, GameState, RouteParts } from './state.ts';
 import {
   ROUTE_STRATEGIES,
@@ -344,8 +345,12 @@ export function playContent(save: SaveData): string {
  * 保存から状態を再生する。始めた月を進め、各月の終わりに保存した行動を当てて次の月へ進める（画面の操作と同じ順）。
  * 再生した月数が保存と合わない（途中で終わった・構成が無い）ときは例外。
  */
-export function replaySave(save: SaveData): GameState {
-  const scenario = SCENARIOS[save.scenarioId];
+export function replaySave(
+  save: SaveData,
+  /** シナリオの表（テストで登録前のシナリオを渡す口。既定は組み込みの表）。 */
+  scenarios: Readonly<Record<string, Scenario>> = SCENARIOS,
+): GameState {
+  const scenario = scenarios[save.scenarioId];
   if (!scenario) throw new Error(`シナリオが無い: ${save.scenarioId}`);
   let s = playMonth(
     newGame(

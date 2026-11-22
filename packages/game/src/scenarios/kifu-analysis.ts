@@ -15,7 +15,7 @@ import {
   KIFU_PV_PER_MAU,
   kifuAnalysis,
 } from 'catalog';
-import type { PageWireframe, Scenario } from '../scenario.ts';
+import type { BackgroundJobDef, PageWireframe, Scenario } from '../scenario.ts';
 import { CONTRACT_OPERATIONS } from './contract-operations.ts';
 
 /** 個人のページの作られ方（受託の業務の画面と同じ: Next.js・Astro は SSR、静的書き出しは枠 + API、SPA はシェル + API）。 */
@@ -188,6 +188,31 @@ export const KIFU_ANALYSIS_SATISFACTION: NonNullable<
   stallWindowSec: 1800,
   client: { cpuFactor: 0.5, slowDeviceFactor: 3 },
   accuracy: { goodCandidates: KIFU_CANDIDATES },
+};
+
+/**
+ * 出来事 7「バックエンドの長時間の処理」の処理（D-239・prd/17 §6。提案の文言・起きる月は PR-10）。解析の結果は変えず、ためた解析の結果を
+ * 読み直して集計する裏の処理。量（vCPU 時間）と終わったときの効果はどれもゲーム上の仮定で、PR-11 の基準プレイで決め直す。
+ * - 戦法の分析の更新: 2,000 vCPU 時間。終わると機能 +4・成長 +2 ポイント × 3 か月（新しい戦法の傾向が見えて話題になる）。
+ * - 次の一手の問題の選び方の更新: 1,000 vCPU 時間。終わると機能 +3。
+ */
+export const KIFU_BACKGROUND_JOBS: Record<
+  'strategy' | 'problems',
+  BackgroundJobDef
+> = {
+  strategy: {
+    label: '戦法の分析の更新',
+    vcpuHours: 2_000,
+    onDone: [
+      { type: 'feature', points: 4 },
+      { type: 'growth', add: 0.02, months: 3 },
+    ],
+  },
+  problems: {
+    label: '次の一手の問題の選び方の更新',
+    vcpuHours: 1_000,
+    onDone: [{ type: 'feature', points: 3 }],
+  },
 };
 
 export const KIFU_ANALYSIS: Scenario = {

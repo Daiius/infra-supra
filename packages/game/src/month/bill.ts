@@ -1,6 +1,6 @@
 // playMonth の見積の段: 今月の Workload と構成の見積（乗り換え中は乗り換え先も）と、インフラの費用（手数料・確約を含む）。
 import type { Platform } from 'catalog';
-import type { ArchitectureInput, PriceBook } from 'estimator';
+import type { ArchitectureInput, PriceBook, WorkloadInput } from 'estimator';
 import {
   commitmentEligible,
   commitmentLines,
@@ -30,6 +30,8 @@ export type MonthEstimate = ReturnType<typeof estimate>;
 export type Estimated = {
   ssrCpuMs: number;
   parts: WorkloadParts;
+  /** 今の構成の今月の Workload（長時間の処理をサーバーレスで流す見積に使う。D-239）。 */
+  workload: WorkloadInput;
   architecture: ArchitectureInput;
   books: PriceBook[];
   /** 今の構成の見積。 */
@@ -126,7 +128,7 @@ export function estimateMonth(
         });
       })()
     : null;
-  return { ssrCpuMs, parts, architecture, books, r, target };
+  return { ssrCpuMs, parts, workload, architecture, books, r, target };
 }
 
 /**

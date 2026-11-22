@@ -2,6 +2,7 @@
 import type { Effect, EventDef, Scenario } from './scenario.ts';
 import { SLOT_LABELS } from 'catalog';
 import type { PlatformPremise } from 'estimator';
+import { startBackgroundJob } from './background-job.ts';
 import { scenarioOf } from './core.ts';
 import { effortSpanText, fmtFactor } from './format.ts';
 import { REQUIREMENT_LABEL } from './requirements.ts';
@@ -182,6 +183,8 @@ export function describeEffect(e: Effect): string {
       return `契約の収益 $${e.usdPerMonth} / 月（${REQUIREMENT_LABEL[e.requires]}のときだけ）`;
     case 'imageRedesign':
       return '画像を大きく綺麗に出す（原本がある構成は過去の記事も・一律で縮めた構成はこれからの投稿だけ。原本が無いと過去の画像は大きくできない）';
+    case 'background-job':
+      return `長時間の処理「${e.job.label}」（CPU 約 ${Math.round(e.job.vcpuHours).toLocaleString()} vCPU 時間。翌月から。VPS は空いている CPU で少しずつ進み、サーバーレスは 1 か月で終わってその月に払う）`;
   }
 }
 
@@ -296,6 +299,14 @@ export function acceptSummary(
       case 'requirement':
       case 'on-demand-revalidate':
         costs.push(describeEffect(e));
+        break;
+      case 'background-job':
+        // 終わった月に当たる効果を得に、処理の量と払い方を伴うことに出す（D-239）
+        if (e.job.onDone.length)
+          gains.push(
+            `「${e.job.label}」が終わると: ${e.job.onDone.map(describeEffect).join('・')}`,
+          );
+        costs.push(`使用量・費用: ${describeEffect(e)}`);
         break;
     }
   }
@@ -424,6 +435,9 @@ export function applyEffects(
         };
         break;
       case 'traffic':
+        break;
+      case 'background-job':
+        s = startBackgroundJob(s, e.job, eventId);
         break;
     }
   }

@@ -13,7 +13,13 @@ import { lineLabel } from '../format.ts';
 import type { Scenario } from '../scenario.ts';
 import { INVALIDATION_METER } from '../setup/estimates.ts';
 import { componentLabel, slotIneffective, stackName } from '../stacks.ts';
-import type { Crossing, GameState, MonthEvent, MonthReport } from '../state.ts';
+import type {
+  BackgroundJobRun,
+  Crossing,
+  GameState,
+  MonthEvent,
+  MonthReport,
+} from '../state.ts';
 import type { Billed, MonthEstimate } from './bill.ts';
 import type { Growth, Judged } from './judge.ts';
 import type { Revenue } from './outcome.ts';
@@ -61,6 +67,10 @@ export function reportOf(
     growth: Growth;
     effort: Progress['effort'];
     featurePoints: number;
+    /** 今月の費用の見積（長時間の処理をサーバーレスで流した月はその見積。省略は r。D-239）。 */
+    billed?: MonthEstimate;
+    /** 長時間の処理の進み具合（D-239）。 */
+    backgroundJobs?: BackgroundJobRun[];
   },
 ): MonthReport {
   const { month, r, target, effort, growth } = c;
@@ -119,7 +129,7 @@ export function reportOf(
         };
       }),
     lines: [
-      ...[r, ...(target ? [target] : [])].flatMap((x) =>
+      ...[c.billed ?? r, ...(target ? [target] : [])].flatMap((x) =>
         x.bill.lines
           .filter((l) => l.amount)
           .map((l) => ({
@@ -155,7 +165,8 @@ export function reportOf(
         currency: l.currency,
       })),
     ],
-    unpricedLines: r.bill.unpricedLines + (target?.bill.unpricedLines ?? 0),
+    unpricedLines:
+      (c.billed ?? r).bill.unpricedLines + (target?.bill.unpricedLines ?? 0),
     settings: state.settings,
     ssrCpuMs: c.ssrCpuMs,
     stock: state.stock,
@@ -191,6 +202,7 @@ export function reportOf(
           `${SLOT_LABELS[slot]}: ${componentLabel(platformNow, slot, comps[slot])}`,
       )
       .join('・'),
+    ...(c.backgroundJobs?.length ? { backgroundJobs: c.backgroundJobs } : {}),
     contractRevenue: c.revenue.contractRevenue,
     ...(Object.keys(eligibleNow).length
       ? { commitmentEligible: eligibleNow }

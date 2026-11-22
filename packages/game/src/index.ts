@@ -71,7 +71,16 @@ export {
   type Crossing,
   type MonthReport,
   type GameState,
+  type BackgroundJob,
+  type BackgroundJobRun,
 } from './state.ts';
+export {
+  backgroundHostOf,
+  freeVcpuHoursOf,
+  runBackgroundJobs,
+  startBackgroundJob,
+  type BackgroundHost,
+} from './background-job.ts';
 export {
   isDataSwap,
   swapLabel,

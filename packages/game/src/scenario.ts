@@ -164,7 +164,26 @@ export type Effect =
    * 記事のデザインの刷新を受ける（D-47）。工数は画像の部品で決まる: 原本がある構成 1・一律で縮めた構成 2
    * （これからの投稿だけ大きくできる）・最適化しない（原本を配っている）0。
    */
-  | { type: 'imageRedesign' };
+  | { type: 'imageRedesign' }
+  /**
+   * バックエンドの長時間の処理を始める（翌月から。D-239・prd/17 §6 の出来事 7）。月をまたいで進み、終わった月の終わりに
+   * job.onDone を当てる。解析の結果は変えない。
+   */
+  | { type: 'background-job'; job: BackgroundJobDef };
+
+/**
+ * バックエンドの長時間の処理（D-239・prd/17 §6 の出来事 7。戦法の分析の更新・次の一手の問題の選び方の更新など）。
+ * 置き場によらずサーバーで動く（端末は長時間の処理に向かない。P-5）。VPS は空いている CPU で少しずつ進み（追加の費用 0）、
+ * サーバーレス（関数・コンテナ）は 1 か月で終わってその CPU をその月に払う。値はシナリオの仮定。
+ */
+export type BackgroundJobDef = {
+  /** 処理の名前（画面。例: 戦法の分析の更新）。 */
+  label: string;
+  /** 処理の量（vCPU 時間。CPU の時間の合計。ゲーム上の仮定）。 */
+  vcpuHours: number;
+  /** 終わった月の終わりに当てる効果（機能・成長など。値は仮定）。終わるまでの間は何も変えない。 */
+  onDone: Effect[];
+};
 
 /** 構成に求める要件。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
 export type Requirement = 'uptime-sla' | 'on-demand-isr' | 'db-pitr';

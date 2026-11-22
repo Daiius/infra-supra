@@ -2,6 +2,7 @@
 import type { Choices, FrameworkId, RouteStrategyId, SlotId } from 'catalog';
 import type { ActiveCommitment, CommitmentPaymentId } from './commitments.ts';
 import type {
+  Effect,
   EventKind,
   EventTier,
   Requirement,
@@ -165,6 +166,40 @@ export type MonthEvent = {
   }[];
 };
 
+/** 進行中のバックエンドの長時間の処理（D-239・prd/17 §6 の出来事 7）。量と進み具合は vCPU 時間。 */
+export type BackgroundJob = {
+  /** 始めた出来事の id（効果を当てるときの出所）。 */
+  eventId: string;
+  label: string;
+  /** 処理の量と、済んだ量（vCPU 時間）。 */
+  vcpuHours: number;
+  done: number;
+  /** 終わった月の終わりに当てる効果。 */
+  onDone: Effect[];
+};
+
+/** 月の報告に出す長時間の処理の進み具合（D-239）。 */
+export type BackgroundJobRun = {
+  eventId: string;
+  label: string;
+  /** 動かした所: VPS の空いている CPU / サーバーレス（関数・コンテナ。その月に課金）。 */
+  where: 'vps' | 'serverless';
+  /** VPS のときのノード（アプリの VPS・解析の worker の VPS）。 */
+  nodeId?: string;
+  /** VPS のその月の空いている CPU（vCPU 時間。処理の力 − 普段の使用）。 */
+  freeVcpuHours?: number;
+  /** 今月進めた量・済んだ量・処理の量（vCPU 時間）。 */
+  ran: number;
+  done: number;
+  required: number;
+  /** 今月で終わった。 */
+  finished: boolean;
+  /** 今月の追加の費用（ドル。VPS は 0）。 */
+  usd: number;
+  /** サーバーレスで、処理を足すと込み分・クレジットを超えて止まるので動かせなかった（その前提の文）。 */
+  blockedBy?: string;
+};
+
 /** 前提が境目を初めて越えた月の記録（見込みが外れた理由の材料。prd/07 §10.7）。 */
 export type Crossing = {
   premiseId: string;
@@ -246,6 +281,8 @@ export type MonthReport = {
   components: Choices;
   componentSummary: string;
   componentSwap?: { label: string; done: number; required: number };
+  /** 長時間の処理の進み具合（動かした月だけ。D-239）。 */
+  backgroundJobs?: BackgroundJobRun[];
   /** 契約の収益（SLA の出来事。収益 revenue に含む）。 */
   contractRevenue: number;
   /**
@@ -301,6 +338,11 @@ export type GameState = {
   components: Choices;
   /** 進行中の DB の差し替え。 */
   componentSwap: ComponentSwap | null;
+  /**
+   * 進行中のバックエンドの長時間の処理（始めた順。D-239）。古い状態・始めていないゲームには無い（＝無し）。
+   * 保存は行動の列なので、再生すれば同じ進み具合に戻る（保存の形は変えない）。
+   */
+  backgroundJobs?: BackgroundJob[];
   /** 結んだ確約（D-97）。古い状態には無いことがある（無ければ確約なし）。 */
   commitments?: ActiveCommitment[];
   /**
