@@ -1,0 +1,122 @@
+// @vitest-environment jsdom
+// 解析の設定（区切り方・候補の数。D-236）を、ゲームの途中の「構成を変える」の欄（D-185）の解析の置き場の行で選び直す。
+// 棋譜解析のシナリオはまだ遊べない（SCENARIOS に無い。PR-10 で登録）ので、欄だけを棋譜解析の状態で描いて確かめる。
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  DEFAULT_START_DATE,
+  ESTIMATE_ONLY_SCENARIOS,
+  flattenSetupChange,
+  newGame,
+  playMonth,
+  SCENARIOS,
+  STACKS,
+  type SetupDraft,
+} from 'game';
+import { describe, expect, it, vi } from 'vitest';
+import { SetupChangeField } from './setup-change-field.tsx';
+import {
+  changeItems,
+  ensurePartsList,
+  openSetupChange,
+  openSlot,
+  registerSetupChange,
+  showStackTab,
+  useSmokeEnv,
+} from './smoke.test-helpers.tsx';
+
+useSmokeEnv();
+
+const PRO = STACKS.findIndex((s) => s.id === 'vercel-supabase-pro');
+const kifu = { ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!, startCash: 1e7 };
+
+const draw = (scenario = kifu) => {
+  const state = playMonth(
+    newGame(PRO, 1, scenario, DEFAULT_START_DATE, 'nextjs'),
+  );
+  const onRegister = vi.fn<(d: SetupDraft | null) => void>();
+  render(
+    <SetupChangeField
+      state={state}
+      registered={null}
+      onRegister={onRegister}
+      wrap={flattenSetupChange}
+    />,
+  );
+  openSetupChange();
+  return onRegister;
+};
+const analysisRow = () => {
+  showStackTab();
+  ensurePartsList();
+  const row = document.querySelector<HTMLElement>(
+    'section[data-parts] [data-slot="analysis"]',
+  );
+  if (row && row.getAttribute('data-collapsed') === 'true') openSlot(row);
+  return row;
+};
+const pressChip = (group: string, value: string) => {
+  const g = within(analysisRow()!).getByRole('group', { name: group });
+  fireEvent.click(
+    within(g.querySelector<HTMLElement>(`[data-option="${value}"]`)!).getByRole(
+      'button',
+    ),
+  );
+};
+
+describe('構成を変えるの欄の解析の設定（D-236）', () => {
+  it('W-KF5 区切り方と候補の数を解析の置き場の行で選び直すと、内訳に設定の行（工数・来月から）が出て、来月のアクションにできる', () => {
+    const onRegister = draw();
+    expect(analysisRow()).not.toBeNull();
+    pressChip('解析の区切り方', '2');
+    pressChip('1 局面に残す候補の数', '1');
+    const items = changeItems().filter(
+      (x) => x.getAttribute('data-change-kind') === 'setting',
+    );
+    expect(items.map((x) => x.textContent)).toEqual([
+      expect.stringMatching(
+        /^解析の区切り方を「1 局ずつ・小分けに保存」に.*工数 2・来月から/,
+      ),
+      expect.stringMatching(
+        /^1 局面に残す候補の数を「1 つ」に.*工数 1・来月から/,
+      ),
+    ]);
+    registerSetupChange();
+    expect(onRegister).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: { analysisUnit: 2, candidates: 1 },
+      }),
+    );
+  });
+
+  it('W-KF6 解析の置き場を利用者の端末にすると、候補の数は 1 つに固定して選べない理由を出す', () => {
+    draw();
+    const row = analysisRow()!;
+    fireEvent.click(
+      within(
+        row.querySelector<HTMLElement>('[data-option="client"]')!,
+      ).getByRole('button', { pressed: false }),
+    );
+    const g = within(analysisRow()!).getByRole('group', {
+      name: '1 局面に残す候補の数',
+    });
+    expect(
+      g.querySelector('[data-selected="true"]')?.getAttribute('data-option'),
+    ).toBe('1');
+    expect(
+      g.querySelector('[data-option="3"]')!.getAttribute('data-available'),
+    ).toBe('false');
+    expect(
+      screen.getByText(/今は選べません: 解析の置き場が利用者の端末/),
+    ).toBeDefined();
+  });
+
+  it('W-KF7 解析の無いシナリオ（記事）の欄には出さない', () => {
+    draw({ ...SCENARIOS['article-community']!, startCash: 1e7 });
+    showStackTab();
+    ensurePartsList();
+    expect(
+      document.querySelector('section[data-parts] [data-slot="analysis"]'),
+    ).toBeNull();
+    expect(document.querySelector('[data-analysis-settings]')).toBeNull();
+  });
+});

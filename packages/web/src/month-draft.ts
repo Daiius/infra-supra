@@ -76,7 +76,8 @@ export function useMonthDraft(state: GameState) {
     if (ch) {
       out.push(...ch.components);
       if (ch.stack) out.push(ch.stack);
-      out.push(...ch.routes, ...ch.routeParts);
+      // 解析の設定（区切り方・候補の数。D-236）は置き場の部品の後（端末にすると候補の数は選べない）
+      out.push(...ch.routes, ...ch.routeParts, ...ch.settings);
     }
     for (const [key, value] of Object.entries(st))
       out.push({ type: 'set', key: key as SettingKey, value: value! });

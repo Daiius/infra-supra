@@ -313,6 +313,76 @@ describe('見積モードの画面', () => {
     expect(queryGroup('解析の置き場')).toBe(null);
   });
 
+  it('W-KF4 棋譜解析では解析の区切り方と候補の数（D-236）を解析の置き場の行で選べ、URL・月の費用が替わる。端末では候補の数を選べない', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=kifu&preview=1&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const q = () => new URLSearchParams(window.location.search);
+    const total = () =>
+      within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent;
+    // 解析の設定は解析の置き場の行の中（畳んだ行を開くと出る。画像の行と同じ。D-119）
+    const openAnalysis = () => {
+      showSetupTab('stack');
+      ensurePartsList();
+      const row = document.querySelector<HTMLElement>(
+        'section[data-parts] [data-slot="analysis"]',
+      )!;
+      if (row.getAttribute('data-collapsed') === 'true') openSlot(row);
+    };
+    openAnalysis();
+    // 既定は局面ごと・候補 3 つ（URL には書かない）
+    expect(checked('解析の区切り方')).toBe('0');
+    expect(checked('1 局面に残す候補の数')).toBe('3');
+    expect(q().get('au')).toBeNull();
+    const before = total();
+    choose('解析の区切り方', '1');
+    expect(q().get('au')).toBe('1');
+    expectEstimate();
+    expect(total()).not.toBe(before);
+    choose('1 局面に残す候補の数', '1');
+    expect(q().get('ac')).toBe('1');
+    expectEstimate();
+    // 利用者の端末にすると候補は 1 つに固定し、選べない理由を出す
+    choose('1 局面に残す候補の数', '3');
+    choose('解析の置き場', 'client');
+    openAnalysis();
+    const cands = group('1 局面に残す候補の数');
+    expect(checked('1 局面に残す候補の数')).toBe('1');
+    expect(
+      cands.querySelector('[data-option="3"]')!.getAttribute('data-available'),
+    ).toBe('false');
+    expect(
+      cands.parentElement!.querySelector('[data-setting-lock="candidates"]'),
+    ).not.toBeNull();
+    expectEstimate();
+    cleanup();
+
+    // URL から読み、解析の無いテンプレート（記事）には出さない
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=kifu&preview=1&s=vercel-supabase-pro&au=2&ac=1',
+    );
+    await renderApp();
+    openAnalysis();
+    expect(checked('解析の区切り方')).toBe('2');
+    expect(checked('1 局面に残す候補の数')).toBe('1');
+    cleanup();
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&preview=1&au=1',
+    );
+    await renderApp();
+    expectEstimate();
+    expect(queryGroup('解析の区切り方')).toBe(null);
+    expect(new URLSearchParams(window.location.search).get('au')).toBeNull();
+  });
+
   it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', async () => {
     window.history.replaceState(
       null,

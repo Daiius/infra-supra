@@ -45,6 +45,7 @@ import { FrameworkField } from './scenario-briefing.tsx';
 import { SetupTabs, type SetupChoices } from './setup-components.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import { commentOptionsOf } from './comments-choice.ts';
+import { AnalysisSettingChips } from './analysis-settings.tsx';
 
 /** 選んだ部品（undefined を除く）。 */
 const chosenOf = (c: SetupChoices) =>
@@ -375,6 +376,29 @@ function ChangeBody({
               onComponentsChange={onComponents}
               partsNote="役割ごとに選び直します。差し替えの工数と期間は下の変更の内訳に出ます"
               partsCompare={partsCompare}
+              // 解析の区切り方・候補の数（D-236）は解析の置き場の行で選び直す（解析のあるシナリオだけ）
+              partsExtra={
+                draft.settings
+                  ? {
+                      analysis: (
+                        <AnalysisSettingChips
+                          value={{
+                            analysisUnit:
+                              draft.settings.analysisUnit ??
+                              state.settings.analysisUnit,
+                            candidates:
+                              draft.settings.candidates ??
+                              state.settings.candidates,
+                          }}
+                          analysis={draft.components.analysis}
+                          onChange={(v) =>
+                            setDraft({ ...draft, settings: { ...v } })
+                          }
+                        />
+                      ),
+                    }
+                  : undefined
+              }
               diagramCaption="選んでいる部品で描いています。"
               alsoShow={state.stackIndex}
             />

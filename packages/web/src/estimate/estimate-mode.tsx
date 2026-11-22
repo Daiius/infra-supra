@@ -94,6 +94,7 @@ import {
 } from './model.ts';
 import { roundInt, usd } from '../format.ts';
 import { previewEnabled } from '../preview.ts';
+import { AnalysisSettingChips } from '../analysis-settings.tsx';
 
 const jpy = (n: number) => `¥${roundInt(n).toLocaleString('ja-JP')}`;
 const money = (n: number, currency: string) =>
@@ -488,6 +489,18 @@ function Conditions({
         )}
       </div>
     ) : null;
+  // 解析の区切り方・候補の数（D-236）は解析の置き場の行（と構成図の箱の吹き出し）で選ぶ。解析のあるテンプレートだけ
+  const analysisSettings = settings.analysis ? (
+    <AnalysisSettingChips
+      value={{ analysisUnit: input.analysisUnit, candidates: input.candidates }}
+      analysis={input.parts.analysis}
+      onChange={(v) => setInput(v)}
+    />
+  ) : null;
+  const partsExtra = {
+    ...(imageSettings ? { images: imageSettings } : {}),
+    ...(analysisSettings ? { analysis: analysisSettings } : {}),
+  };
   return (
     <>
       <Card title="条件">
@@ -591,7 +604,7 @@ function Conditions({
                   onComponentsChange={onPickParts}
                   partsNote="選んでいないスロットは既定の部品で見積もります"
                   partsExtra={
-                    imageSettings ? { images: imageSettings } : undefined
+                    Object.keys(partsExtra).length > 0 ? partsExtra : undefined
                   }
                   // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
                   partsCompare={(slot) => ({
