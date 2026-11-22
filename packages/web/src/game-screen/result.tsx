@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   policyCauseOf,
@@ -214,6 +215,7 @@ export function Result({
   stats,
   statsQuery,
   onCelebrate,
+  onRestart,
 }: {
   state: GameState;
   comparisons: readonly AxisComparison[];
@@ -222,6 +224,8 @@ export function Result({
   statsQuery: StatsQuery | null;
   /** 完走のダイアログを開き直す（完走のときだけ使う）。 */
   onCelebrate: () => void;
+  /** 新しいゲームを始める（始める画面へ戻る。D-227）。 */
+  onRestart: () => void;
 }) {
   const completed = state.phase === 'completed';
   const end = state.end!;
@@ -301,6 +305,15 @@ export function Result({
                 </span>
               </div>
             )}
+            {/* 終わった後の次の一手（D-227）。帯の中に置き、結果を開いてすぐ見える所で始め直せるようにする */}
+            <button
+              className={`btn btn-sm mt-2 ${completed ? 'btn-success' : 'btn-neutral'}`}
+              onClick={onRestart}
+              data-result-restart
+            >
+              <RotateCcw aria-hidden className="size-4" />
+              新しいゲームを始める
+            </button>
           </div>
           {completed && (
             // 帯の中の花火のアイコンのボタン（SVG。端末のフォントに依存しない）。帯の文字の色で描く

@@ -106,6 +106,16 @@ describe('完走の振り返りと手元の結果の履歴', () => {
       stack.querySelector('[role="img"]')!.getAttribute('aria-label'),
     ).toMatch(/^工数の使い道: 機能開発 /);
     expect(stack.textContent).not.toMatch(/イベントへの対応 0/);
+    // 帯の中の「新しいゲームを始める」で、確かめずに始める画面へ戻る（結果は履歴に残っている。D-227）
+    fireEvent.click(
+      within(band).getByRole('button', { name: '新しいゲームを始める' }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.querySelector('[data-result-band]')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /はじめる|始める/ }),
+    ).toBeDefined();
+    expect(stored().entries.length).toBe(1);
   });
 
   it('W-75 過去の完走があると、自己ベスト・前回との差・順位を出す。分布が無いので花火は自己ベストの数に依らず 1 段（D-168）', async () => {
@@ -218,6 +228,10 @@ describe('完走の振り返りと手元の結果の履歴', () => {
     expect(
       document.querySelector('[data-result-band="lost"]')!.textContent,
     ).toContain('所持金');
+    // 途中で終わったときも、帯から始め直せる（D-227）
+    expect(
+      document.querySelector('[data-result-band="lost"] [data-result-restart]'),
+    ).not.toBeNull();
     expect(screen.queryByRole('dialog', { name: /完走/ })).toBeNull();
     expect(document.querySelector('[data-result-axes]')).toBeNull();
     const s = stored();
