@@ -11,6 +11,14 @@ const Ratio = z.number().finite().min(0).max(1);
 // （JPEG・WebP・AVIF は圧縮済みで、送るときにさらに圧縮しない）。DB → アプリの応答（db.responseKBPerQuery）はそのまま。
 // 計算はこの値をそのまま使う（圧縮の比を式の中で掛けない）。
 
+/**
+ * 1 件の受け方（D-234・prd/17 B-6）。http はリクエストの中で処理する。async は受け付けて積み、受けて処理する側
+ * （キューの受け手・Cron・バックグラウンド関数）が動かす。1 件の実行時間の上限が受け方で違う事業者がある（Workers の HTTP と
+ * キューの受け手・Netlify の同期とバックグラウンドなど）。
+ */
+export const INVOCATIONS = ['http', 'async'] as const;
+export type Invocation = (typeof INVOCATIONS)[number];
+
 /** 1 リクエストあたりの処理の性質。 */
 export const ProcessingSchema = z.object({
   cpuMs: NonNeg,
@@ -146,6 +154,12 @@ export const WorkloadInputSchema = z
     api: ProcessingSchema.extend({
       writesPerCall: NonNeg,
       rowsWrittenPerWrite: NonNeg,
+      /**
+       * API の 1 件をどう受けて動かすか（D-234・prd/17 P-2・B-6）。async は受け付けて積み、解析を受けて処理する側
+       * （キューの受け手・Cron・バックグラウンド関数）が動かす。1 件の実行時間の上限は、その側の上限（LimitSchema の invocation）で判定する。
+       * キューの費用は数えない。省略は http（リクエストの中で処理する）。SPA のページの中身の API（ルートの processing）はいつも http。
+       */
+      invocation: z.enum(INVOCATIONS).optional(),
     }),
     /** JS・CSS 1 ファイルの転送の大きさ（sizeKB。KB・圧縮後。D-211）と、ブラウザのキャッシュから出す割合。 */
     assets: z.object({ sizeKB: NonNeg, browserReuse: Ratio }),

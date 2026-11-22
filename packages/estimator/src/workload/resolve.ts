@@ -4,7 +4,9 @@ import { HOURS_PER_MONTH } from '../num/unit.ts';
 import type { Derivation } from '../provenance.ts';
 import { sumOverPages } from './popularity.ts';
 import {
+  INVOCATIONS,
   WorkloadInputSchema,
+  type Invocation,
   type ParsedWorkload,
   type WorkloadInput,
 } from './schema.ts';
@@ -25,6 +27,9 @@ export const REQUEST_CLASSES = [
 ] as const;
 export type RequestClass = (typeof REQUEST_CLASSES)[number];
 
+/** 1 件の CPU と壁時計の時間（ms）の最大（D-234）。 */
+export type PerInvocationMax = { cpuMs: number; wallMs: number };
+
 /** 1 クラスの月間の流れ。件数あたりの値（perRequest）と件数を分けて持つ。 */
 export type ClassFlow = {
   count: number;
@@ -35,6 +40,11 @@ export type ClassFlow = {
     /** まとめたルートのうち、件数が正のものの CPU の最大（1 リクエストあたりの上限の判定に使う）。 */
     maxCpuMs: number;
     wallMs: number;
+    /**
+     * 受け方ごとの、件数が正のルートの 1 件の CPU・壁時計の時間の最大（1 件の上限の判定に使う。D-234）。
+     * 受け方の流れが無いものは持たない。CPU の最大はどの受け方でも maxCpuMs 以下。
+     */
+    maxBy: Partial<Record<Invocation, PerInvocationMax>>;
     queries: number;
     rowsRead: number;
     rowsWritten: number;
@@ -242,6 +252,7 @@ const DAYS_PER_MONTH = HOURS_PER_MONTH / 24;
 const flow = (
   count: number,
   p: Partial<ClassFlow['perRequest']> = {},
+  invocation: Invocation = 'http',
 ): ClassFlow => ({
   count,
   perRequest: {
@@ -249,6 +260,12 @@ const flow = (
     cpuMs: p.cpuMs ?? 0,
     maxCpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
     wallMs: p.wallMs ?? p.cpuMs ?? 0,
+    maxBy: p.maxBy ?? {
+      [invocation]: {
+        cpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
+        wallMs: p.wallMs ?? p.cpuMs ?? 0,
+      },
+    },
     queries: p.queries ?? 0,
     rowsRead: p.rowsRead ?? 0,
     rowsWritten: p.rowsWritten ?? 0,
@@ -263,12 +280,32 @@ export function kbMixOf(
   return p.kbMix ?? [{ share: 1, kb: p.kb }];
 }
 
+/** 受け方ごとの 1 件の最大を、件数が正の流れについて取る（D-234）。 */
+function mergeMaxBy(
+  flows: readonly ClassFlow[],
+): ClassFlow['perRequest']['maxBy'] {
+  const out: ClassFlow['perRequest']['maxBy'] = {};
+  for (const inv of INVOCATIONS) {
+    const xs = flows.flatMap((f) => {
+      const m = f.perRequest.maxBy[inv];
+      return m ? [m] : [];
+    });
+    if (xs.length)
+      out[inv] = {
+        cpuMs: Math.max(...xs.map((x) => x.cpuMs)),
+        wallMs: Math.max(...xs.map((x) => x.wallMs)),
+      };
+  }
+  return out;
+}
+
 /** 複数ルートの流れを件数で重み付けして 1 つのクラスにまとめる。CPU の最大は平均とは別に残す。 */
 function merge(flows: ClassFlow[]): ClassFlow {
   const count = flows.reduce((s, f) => s + f.count, 0);
   if (count === 0) return flow(0);
-  const avg = (k: Exclude<keyof ClassFlow['perRequest'], 'kbMix'>): number =>
-    flows.reduce((s, f) => s + f.count * f.perRequest[k], 0) / count;
+  const avg = (
+    k: Exclude<keyof ClassFlow['perRequest'], 'kbMix' | 'maxBy'>,
+  ): number => flows.reduce((s, f) => s + f.count * f.perRequest[k], 0) / count;
   // 大きさの内訳は、各ルートの内訳を件数の割合で重み付けして並べ、同じ大きさをまとめる
   const mix = new Map<number, number>();
   for (const f of flows) {
@@ -287,6 +324,7 @@ function merge(flows: ClassFlow[]): ClassFlow {
       ...flows.filter((f) => f.count > 0).map((f) => f.perRequest.maxCpuMs),
     ),
     wallMs: avg('wallMs'),
+    maxBy: mergeMaxBy(flows.filter((f) => f.count > 0)),
     queries: avg('queries'),
     rowsRead: avg('rowsRead'),
     rowsWritten: avg('rowsWritten'),
@@ -642,14 +680,18 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       (s, r) => s + (r.apiCalls !== undefined ? pv * r.share * r.apiCalls : 0),
       0,
     );
-  const apiFlow = flow(apiCount, {
-    kb: a.responseKB,
-    cpuMs: a.cpuMs,
-    wallMs: a.cpuMs + a.ioWaitMs,
-    queries: a.queries,
-    rowsRead: a.queries * a.rowsReadPerQuery,
-    rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
-  });
+  const apiFlow = flow(
+    apiCount,
+    {
+      kb: a.responseKB,
+      cpuMs: a.cpuMs,
+      wallMs: a.cpuMs + a.ioWaitMs,
+      queries: a.queries,
+      rowsRead: a.queries * a.rowsReadPerQuery,
+      rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
+    },
+    a.invocation ?? 'http',
+  );
   source('api', undefined, unrouted, a.cpuMs);
   // 画像の閲覧（D-121）: 本文の画像とサムネイルを、ルートごとの枚数（省略は perPage）で数え、ブラウザのキャッシュの分を引く
   const thumb = w.images.thumbnails ?? {

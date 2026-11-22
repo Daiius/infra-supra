@@ -9,9 +9,11 @@ import {
   type Architecture,
   type ArchitectureInput,
 } from '../architecture/schema.ts';
+import { INVOCATIONS, type Invocation } from '../workload/schema.ts';
 import {
   kbMixOf,
   type ClassFlow,
+  type PerInvocationMax,
   type RequestClass,
   type RequestSource,
   type ResolvedWorkload,
@@ -60,6 +62,13 @@ export type NodeUsage = {
   maxCpuMsPerRequest: number;
   /** maxCpuMsPerRequest の内訳（関数・コンテナだけ。重い順。D-99）。 */
   cpuSources: CpuSource[];
+  /** 通ったリクエストの 1 回の実行の壁時計の時間の最大（ms。制限 wall-ms-per-request の判定用。関数・コンテナだけ。D-234）。 */
+  maxWallMsPerRequest: number;
+  /**
+   * 受け方（http・async）ごとの 1 回の実行の CPU・壁時計の時間の最大（関数・コンテナだけ。D-234）。受け方を持つ制限の判定に使う。
+   * その受け方の流れが届かないノードでは持たない。裏のクラス（ISR の再生成）は起こした閲覧と同じ http の実行に足す。
+   */
+  maxBy: Partial<Record<Invocation, PerInvocationMax>>;
   /** 接続・実行を保持している時間の合計（ms・月。ピークの同時数の判定用）。 */
   busyMs: number;
   /**
@@ -105,6 +114,10 @@ type NodeAcc = {
   maxCpuByClass: Partial<Record<RequestClass, number>>;
   /** クラスごとの、ルートごとの 1 件あたり CPU（D-99。maxCpuByClass の内訳）。 */
   cpuByClassSource: Partial<Record<RequestClass, CpuSource[]>>;
+  /** クラスごとの、受け方ごとの 1 件の CPU・壁時計の最大（件数が正のものだけ。D-234）。 */
+  maxByClass: Partial<
+    Record<RequestClass, Partial<Record<Invocation, PerInvocationMax>>>
+  >;
 };
 
 /**
@@ -120,6 +133,56 @@ const BACKGROUND_TRIGGER: Partial<Record<RequestClass, RequestClass>> = {
 function add(u: NodeUsage, r: ResourceKey, v: number) {
   if (v === 0) return;
   u.resources[r] = (u.resources[r] ?? 0) + v;
+}
+
+/**
+ * ノードの受け方ごとの 1 回の実行の CPU・壁時計の最大（D-234）。前景のクラスの最大に、裏のクラス（ISR の再生成）を
+ * 起こした閲覧（http）の実行として足す。起こす閲覧が通るなら閲覧 + 再生成（CPU はルートごとに足した backgroundCpuMs）、
+ * 起こすクラスが分からなければ前景の最大に足し、起こす閲覧が通らなければ裏の処理だけで 1 回とみる（maxCpuMsPerRequest と同じ）。
+ */
+function maxByOfNode(
+  byClass: NodeAcc['maxByClass'],
+  bg: ReadonlySet<RequestClass>,
+  backgroundCpuMs: ResolvedWorkload['backgroundCpuMs'],
+): Partial<Record<Invocation, PerInvocationMax>> {
+  const out: Partial<Record<Invocation, PerInvocationMax>> = {};
+  const put = (inv: Invocation, m: PerInvocationMax) => {
+    out[inv] = {
+      cpuMs: Math.max(out[inv]?.cpuMs ?? 0, m.cpuMs),
+      wallMs: Math.max(out[inv]?.wallMs ?? 0, m.wallMs),
+    };
+  };
+  const entries = Object.entries(byClass) as [
+    RequestClass,
+    Partial<Record<Invocation, PerInvocationMax>>,
+  ][];
+  for (const [cls, by] of entries) {
+    if (bg.has(cls)) continue;
+    for (const inv of INVOCATIONS) if (by[inv]) put(inv, by[inv]!);
+  }
+  const fg = { ...out };
+  for (const [cls, by] of entries) {
+    if (!bg.has(cls)) continue;
+    const trigger = BACKGROUND_TRIGGER[cls];
+    const triggered = trigger !== undefined && byClass[trigger] !== undefined;
+    for (const inv of INVOCATIONS) {
+      const v = by[inv];
+      if (!v) continue;
+      const f = fg[inv] ?? { cpuMs: 0, wallMs: 0 };
+      put(
+        inv,
+        triggered
+          ? {
+              cpuMs: backgroundCpuMs[cls] ?? f.cpuMs + v.cpuMs,
+              wallMs: f.wallMs + v.wallMs,
+            }
+          : trigger === undefined
+            ? { cpuMs: f.cpuMs + v.cpuMs, wallMs: f.wallMs + v.wallMs }
+            : v,
+      );
+    }
+  }
+  return out;
 }
 
 /**
@@ -243,7 +306,13 @@ function consume(
       const mp =
         fixedCpu === undefined
           ? base
-          : { ...base, cpuMs: fixedCpu, maxCpuMs: fixedCpu, wallMs: fixedCpu };
+          : {
+              ...base,
+              cpuMs: fixedCpu,
+              maxCpuMs: fixedCpu,
+              wallMs: fixedCpu,
+              maxBy: { http: { cpuMs: fixedCpu, wallMs: fixedCpu } },
+            };
       const hits = n - miss;
       const hitCpu = missFlow ? cache!.hitCpuMs : 0;
       // 1 リクエストの CPU の最大は、件数が正の経路（miss の処理・ヒットの返却）それぞれの最大（OCL-8B3B0CB7）
@@ -256,6 +325,18 @@ function consume(
           hostAcc.maxCpuByClass[cls] ?? 0,
           maxCpu,
         );
+        // 受け方ごとの 1 件の CPU・壁時計の最大（D-234）。コードの中のキャッシュのヒットは返す CPU だけ（壁時計も同じとみる）
+        const by = (hostAcc.maxByClass[cls] ??= {});
+        for (const inv of INVOCATIONS) {
+          const m = mp.maxBy[inv];
+          if (!m) continue;
+          const cpu = Math.max(miss > 0 ? m.cpuMs : 0, hits > 0 ? hitCpu : 0);
+          const wall = Math.max(miss > 0 ? m.wallMs : 0, hits > 0 ? hitCpu : 0);
+          by[inv] = {
+            cpuMs: Math.max(by[inv]?.cpuMs ?? 0, cpu),
+            wallMs: Math.max(by[inv]?.wallMs ?? 0, wall),
+          };
+        }
         // ルートごとの内訳（D-99）。このノードに届くルートだけで、miss・ヒットもルートごと（OCL-E219321B）。
         // クラスで決まった CPU（画像の変換など）はルートに分けない
         const srcs = fixedCpu === undefined ? (w.sources[cls] ?? []) : [];
@@ -556,6 +637,8 @@ export function simulateResources(
         events: 0,
         maxCpuMsPerRequest: 0,
         cpuSources: [],
+        maxWallMsPerRequest: 0,
+        maxBy: {},
         busyMs: 0,
         peakBusyMs: 0,
         egressGbByClass: {},
@@ -568,6 +651,7 @@ export function simulateResources(
         requests: 0,
         maxCpuByClass: {},
         cpuByClassSource: {},
+        maxByClass: {},
       });
       staticUsage(n, nodes[n.id]!, w);
     }
@@ -727,6 +811,17 @@ export function simulateResources(
     }
     nodes[n.id]!.maxCpuMsPerRequest = max;
     nodes[n.id]!.cpuSources = cpuSources.sort((a, b) => b.cpuMs - a.cpuMs);
+    // 受け方ごとの 1 回の実行の最大（D-234）。前景のクラスはそのまま、裏のクラスは CPU と同じ数え方で起こした閲覧（http）に足す
+    const maxBy = maxByOfNode(
+      hostAcc.get(n.id)!.maxByClass,
+      bg,
+      workload.backgroundCpuMs,
+    );
+    nodes[n.id]!.maxBy = maxBy;
+    nodes[n.id]!.maxWallMsPerRequest = Math.max(
+      0,
+      ...Object.values(maxBy).map((m) => m.wallMs),
+    );
   }
 
   for (const n of architecture.nodes) {

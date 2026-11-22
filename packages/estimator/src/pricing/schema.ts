@@ -4,6 +4,7 @@ import { CURRENCIES } from '../num/money.ts';
 import { UNITS } from '../num/unit.ts';
 import { IsoDateSchema, SourceRefSchema } from '../provenance.ts';
 import { RESOURCES } from './resources.ts';
+import { INVOCATIONS } from '../workload/schema.ts';
 
 const Id = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'kebab-case の ID');
 const NonNegative = z.number().finite().nonnegative();
@@ -228,7 +229,10 @@ export type CapacityTierSet = z.infer<typeof CapacityTierSetSchema>;
 
 /** 制限が何を測るか（容量の判定で、資源シミュレーションのどの値と比べるか。prd/01 §5.4）。 */
 export const LIMIT_MEASURES = [
-  'cpu-ms-per-request', // 1 リクエストあたりの CPU 時間の最大
+  'cpu-ms-per-request', // 1 リクエストあたりの CPU 時間の最大（I/O の待ちは数えない）
+  // 1 回の実行の壁時計の時間の最大（CPU + I/O の待ち。関数・コンテナ。D-234）。CPU と壁時計は別の上限で、両方を見る
+  // （Workers は CPU と壁時計の両方、Vercel・Lambda・Cloud Run・Netlify は壁時計だけを上限に持つ）
+  'wall-ms-per-request',
   'storage-gb', // ノードの保存量
   'peak-concurrency', // ピーク時間帯の同時接続・同時実行
   'writes-per-second-per-key', // 同じキーへの書き込みの頻度（ピーク時間帯・1 秒あたり。KV など）
@@ -238,7 +242,18 @@ export const LIMIT_MEASURES = [
 export const LimitSchema = z.object({
   id: Id,
   measure: z.enum(LIMIT_MEASURES),
+  /**
+   * 判定に使う値。設定で上げられる上限（Workers Paid の limits.cpu_ms・Vercel の maxDuration・Lambda の timeout など）は、
+   * 設定で上げられる最大の値を持ち、既定は defaultValue に持つ（D-234）。
+   */
   value: NonNegative,
+  /** 設定で上げられる上限の既定の値。使う量がこれを超えて value 以下なら、設定を上げる前提として出す（D-234）。 */
+  defaultValue: NonNegative.optional(),
+  /**
+   * 1 件の上限が、どの受け方の実行に効くか（cpu-ms-per-request・wall-ms-per-request だけ。D-234・prd/17 B-6）。
+   * 省略は両方。非同期の処理（Workload の api.invocation: async）は、受けて処理する側（キューの受け手・Cron・バックグラウンド関数）の上限で判定する。
+   */
+  invocation: z.enum(INVOCATIONS).optional(),
   unit: z.enum(UNITS),
   scope: z.enum(['request', 'node', 'account', 'day', 'month']),
   onExceed: OverageBehaviorSchema,
@@ -607,9 +622,28 @@ export const PriceBookSchema = z
             message: '基本料の前払い（prepay）は基本料のあるプランだけ',
           });
       });
-      plan.limits.forEach((l, li) =>
-        requireSources(l.sourceIds, ['plans', pi, 'limits', li, 'sourceIds']),
-      );
+      plan.limits.forEach((l, li) => {
+        const path = ['plans', pi, 'limits', li];
+        requireSources(l.sourceIds, [...path, 'sourceIds']);
+        if (l.defaultValue !== undefined && l.defaultValue > l.value)
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message:
+              '既定の値（defaultValue）は判定に使う最大の値（value）以下',
+          });
+        if (
+          l.invocation !== undefined &&
+          l.measure !== 'cpu-ms-per-request' &&
+          l.measure !== 'wall-ms-per-request'
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message:
+              '受け方（invocation）は 1 件の CPU・壁時計の上限だけが持つ',
+          });
+      });
       plan.facts.forEach((f, fi) =>
         requireSources(f.sourceIds, ['plans', pi, 'facts', fi, 'sourceIds']),
       );

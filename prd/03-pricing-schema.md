@@ -138,7 +138,9 @@ type Volume = { model: 'volume'; per: number; tiers: { upTo: number | null; unit
 type OverageBehavior = 'bill' | 'block' | 'throttle' | 'upgrade-required';
 type Limit = {
   id: string;                        // 'cpu-ms-per-request' | 'db-size-gb' | 'connections' | 'requests-per-day' …
-  value: number;
+  value: number;                     // 設定で上げられる上限は、上げられる最大（D-234）
+  defaultValue?: number;             // その既定。使う量が既定を超えて value 以下なら「設定を上げる前提」と出す（D-234）
+  invocation?: 'http' | 'async';     // 1 件の CPU・壁時計の上限だけ。どの受け方の実行に効くか。省略は両方（D-234）
   unit: Unit;
   scope: 'request' | 'node' | 'account' | 'day' | 'month';
   onExceed: OverageBehavior;
@@ -146,7 +148,8 @@ type Limit = {
 };
 ```
 
-`measure`（何と比べるか）: `cpu-ms-per-request`・`storage-gb`・`peak-concurrency`・`writes-per-second-per-key`（同じキーへの書き込みの頻度。KV の 1 秒 1 回。D-24）。
+`measure`（何と比べるか）: `cpu-ms-per-request`・`wall-ms-per-request`（1 回の実行の壁時計の時間 = CPU + I/O の待ち。関数・コンテナ。D-234）・`storage-gb`・`peak-concurrency`・`writes-per-second-per-key`（同じキーへの書き込みの頻度。KV の 1 秒 1 回。D-24）。
+CPU と壁時計は別の上限で、両方を見る（Workers は両方、Vercel・Lambda・Cloud Run・Netlify は壁時計だけ）。非同期に受ける処理（Workload の `api.invocation: 'async'`）は、受けて処理する側（キューの受け手・Cron・バックグラウンド関数）の上限（`invocation: 'async'`）で判定する。その受け方の流れが無いノードでは、受け方を持つ上限の前提を出さない（prd/17 §9.2）。
 
 性能に関わる制限（同時接続数・1 リクエストあたりの CPU 上限など）も**公式の数値なら**ここに置く。
 公式でない性能値（1 vCPU が捌ける RPS など）は PriceBook に置かず、性能プロファイル（`assumption`）に分ける。
