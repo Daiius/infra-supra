@@ -248,7 +248,7 @@ describe('実際に予告されている改定の出来事（D-21）', () => {
       expect(rv.month).toBeGreaterThanOrEqual(3);
       const ev = month(s, rv.month).events.find((e) => e.id === rv.id);
       // 知らせは計算を変える改定だけ（D-226）。Workers Logs → Cloudflare Observability は改定後の料金を持つ（D-94）。
-      // D1 の上限は計算に入らないので、改定の月は決まっても知らせは出さない
+      // 改定後の料金を持たない予告（計算に入らない制限など）は、改定の月は決まっても知らせは出さない
       if (rv.id !== 'revision:cloudflare:2026-12-01') {
         expect(ev).toBeUndefined();
         continue;

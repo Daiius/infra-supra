@@ -23,6 +23,13 @@ const WORKERS_FACTS = [
     premise: 'D1 の 1 行（文字列・BLOB）は 2 MB まで',
     sourceIds: ['d1Limits'],
   },
+  // 2026-11-04 に施行（scheduledChanges の予告から移した。2026-11-22 の再確認・D-230）。どのノードも挙げていないので前提には出ない
+  {
+    id: 'd1-query-result-size',
+    premise:
+      'D1 のクエリの結果は 50 MB まで（2026-11-04 から。超えるとエラー。REST API の取り込み・書き出しは対象外）',
+    sourceIds: ['d1LimitsQueryResult'],
+  },
   {
     id: 'workers-memory',
     premise: 'Workers のメモリは 1 isolate あたり 128 MB まで',
@@ -279,6 +286,11 @@ export const cloudflare: PriceBookInput = {
     ),
     d1Pricing: src('https://developers.cloudflare.com/d1/platform/pricing/'),
     d1Limits: src('https://developers.cloudflare.com/d1/platform/limits/'),
+    // クエリの結果の上限 50 MB（2026-11-20 更新・2026-11-22 取得。D-230）
+    d1LimitsQueryResult: {
+      url: 'https://developers.cloudflare.com/d1/platform/limits/',
+      retrievedAt: '2026-11-22',
+    },
     // D1 の Time Travel（2026-11-02 取得。D-93）
     d1TimeTravel: {
       url: 'https://developers.cloudflare.com/d1/reference/time-travel/',
@@ -1428,14 +1440,6 @@ export const cloudflare: PriceBookInput = {
     },
   ],
   scheduledChanges: [
-    {
-      effectiveFrom: '2026-11-04',
-      description: 'D1 のクエリ結果の上限 50 MB が施行',
-      kind: 'limit',
-      notModeledReason:
-        '制限の変更で、料金は変わりません。クエリ結果の大きさはこのモデルの計算に入っていません',
-      sourceIds: ['d1Limits'],
-    },
     {
       effectiveFrom: '2026-12-01',
       description:

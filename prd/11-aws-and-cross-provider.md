@@ -1587,3 +1587,49 @@ golden: 記事のシード 3 の「VPS・前段の CDN」が $1,730.88・won →
 - 段の月額にクレジットが当たるか・Fast Origin Transfer と画像の最適化の地域は、会社の請求で確かめる。
 - 関数の地域を選ぶ部品（hnd1 に置くと CPU・メモリ・ISR が東京の単価。DB を東京に置く構成の往復の遅延と合わせて）。
 - 対象外とされた後の Flex CDN の料金・CDN Request CPU Duration・Sandbox Data Transfer・Observability events は数えていない。
+
+## 26. 料金の再確認（2026-11-22・D-230）
+
+> §24 の続き。catalog の値を公式の料金ページ・文書・changelog（と AWS Price List API）で突き合わせ直した。数値は 2026-11-22 に公式で確かめたものだけを書く。
+> 料金の値に差は無かった。直したのは出典の URL・取得日と、施行済みの予告の置き場だけで、計算の結果は変わらない。
+
+### 26.1 方法
+
+- 事業者ごとに、catalog の値・`scheduledChanges`・出典の URL を、公式の料金ページ・文書（更新日つき）・changelog と並べた（AWS は Price List API の東京の料金表を直接読んだ）。
+- 差のあった出典は取り直して確かめた（Savings Plans の料金表・Vercel の料金ページと docs/pricing・runtime-cache の文書・ICANN の承認の文書・D1 の制限の文書・Neon と Vercel の changelog）。
+
+### 26.2 差あり（直したもの）
+
+| 項目 | 確かめた事実（2026-11-22 取得） | 直したこと | 出典 |
+|---|---|---|---|
+| AWS の Compute Savings Plans の料金表 | 出典の `…/AWSComputeSavingsPlan/current/ap-northeast-1/index.json` は 404。`…/current/region_index.json` の ap-northeast-1 の `versionUrl` が版の URL（今日は版 2026-11-21）。Lambda の 1 年の前払いなし 0.000015・全額前払い 0.0000142 / GB 秒は前と同じ | 出典を版の URL にした（region_index.json は版の URL を指すだけで値を持たないので、値のある版の URL を出典にし、region_index.json はコメントに残す）。値は変えない | [region_index.json](https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/current/region_index.json)・[版 2026-11-21](https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/20261121004806/ap-northeast-1/index.json) |
+| Vercel Hobby の ISR の込み分（reads 100 万・writes 20 万） | 料金ページに「ISR Reads」「1M / month included」・「ISR Writes」「200k / month included」（Hobby の列）。docs/pricing（2026-09-14 更新）には同じ値の **Runtime Cache** の行（Hobby 1M / 200K）があるが、runtime-cache の文書（2026-08-28 更新）は「Runtime cache is billed separately from ISR reads and writes」と書き、地域の単価の表（iad1）も ISR と Runtime Cache を別の行に並べる。ISR の文書（2026-08-11 更新）には込み分の記載が無い | 再確認の報告は Runtime Cache の行を出典の候補にしたが、別のメーターなので採らない。出典は料金ページのまま、取得日を 2026-11-22 にした（`pricingIsrIncluded`）。値は変えない | [料金ページ](https://vercel.com/pricing)・[docs/pricing](https://vercel.com/docs/pricing)・[Runtime Cache](https://vercel.com/docs/runtime-cache) |
+| ICANN の手数料 | FY27（2026-07〜2027-06）の承認の文書に「The per-transaction fee is USD 0.20 per transaction/year」。FY26 と同じ | 出典を FY27 の文書にし、取得日を 2026-11-22 にした。値 $0.20 は同じ | [FY27 の承認](https://itp.cdn.icann.org/en/files/communications/registrar-fee-approved-fy27-30-07-2026-en.pdf) |
+| D1 のクエリ結果の上限 50 MB（予告 2026-11-04） | 制限の文書（2026-11-20 更新）の表に「Maximum query result size 50 MB」、脚注に「This limit takes effect on 2026-11-04」 | 施行済みなので `scheduledChanges` から外し、Workers の事実 `d1-query-result-size`（どのノードも挙げていないので前提には出ない）に移した。下の 26.3 | [D1 の制限](https://developers.cloudflare.com/d1/platform/limits/) |
+
+### 26.3 D1 の予告を外したときの影響（調べてから移した）
+
+- game は `scheduledChanges` から改定の月（`state.revisions`）を決める（D-21）。乱数は予告ごとの独立した列（`draws(seed, 予告の id)`）なので、1 つ外しても他の予告の月は変わらない。
+- D1 の予告は改定後の料金を持たないので、`applyRevisions` は計算を変えず、知らせ（D-226）も出していなかった。外して変わるのは `state.revisions` の 1 行だけ。保存（`SaveData`）は `revisions` を持たず、再生のたびに作り直す。集計の `playHashOf` は月の結果（`history`）から作る。
+- 確かめたこと: 2 シナリオ × すべての構成 × シード 1・2・3・7・42 × 12 か月（始めた日 2026-10-31・何もしない）の最後の状態（`revisions` を除く）と、残る予告の月は、外す前と後でバイト単位で同じだった。`pnpm test:fast`（golden・stats の `determinism.test.ts` を含む）も前後で通る。
+
+### 26.4 計算に影響しない記録
+
+| 項目 | 確かめた事実 | 扱い | 出典 |
+|---|---|---|---|
+| Neon Free の転送の数え方 | 2026-11-20 の changelog「On the Free plan, data sent out by Neon Functions now counts toward each project's 5 GB public network transfer allowance, along with Postgres and Object Storage. Object Storage traffic now counts even for projects with no compute activity」 | 今の構成は Neon Functions・Object Storage を使わないので影響なし。値（5 GB）は同じ | [Neon の changelog](https://neon.com/docs/changelog) |
+| Vercel Functions のリクエストの本文の上限 | 2026-11-20 の changelog「request bodies up to 20MiB in Public Beta, up from 4.5MB」 | catalog は本文の大きさを持たない。金額に影響なし | [Vercel の changelog](https://vercel.com/changelog) |
+| CloudFront の定額 Premium | 使う量を設定できる（最大 6B リクエスト・600 TB。別の定額。What's New 2026-05-12）。4 段（Free・Pro・Business・Premium）の値は一致 | catalog は Premium の基本の段（$1,000・500M・50 TB）だけを持つ（§24.2）。変えない | [CloudFront の料金](https://aws.amazon.com/cloudfront/pricing/) |
+| Workers Logs → Cloudflare Observability（2026-12-01） | 取り込み 50 GB 込み・$0.25 / GB、保存 10 GB 月込み・$0.10 / GB 月。12-01 より前は課金なし | 施行前で、`scheduledChanges` の値と公式が一致。12 月に入ってから基本の料金へ移す | [Observability の料金](https://developers.cloudflare.com/observability/pricing/)・[Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) |
+| Vercel の Invocations $0.60 / 100 万 | 2026-05-29 の changelog「The new rate is $0.0000006 per invocation (previously $0.60 per 1M invocations)」 | 料金の文書の「N/A」の表記を $0.60 / 100 万で読む今の値を裏付ける。値は同じ | [changelog](https://vercel.com/changelog/function-invocations-now-billed-per-unit) |
+| AWS の Price List の版 | Lambda・API Gateway・S3・RDS・DynamoDB・Data Transfer・CloudWatch・Route 53・SQS・SES の版が catalog のコメントの版より新しい（2026-11-04〜11-21） | 値は catalog と同じ。コメントの版は書き換えない | Price List API（ap-northeast-1） |
+
+CDN Request CPU Duration（Vercel Pro）は §25.4 で「数えていない」と記録済みなので、新しい差としては扱わない。
+
+### 26.5 確認できなかったもの
+
+- さくらのクラウドの約款の改定（2026-11-19 のお知らせ）の中身。VPS のニュースに料金・プランの変更は無い。
+- .com の卸値 $10.97（2026-11-01 から）の一次情報（SEC の原文）は取り直しておらず、二次情報で一致を見ただけ。
+- Bunny の changelog は取得していない（料金ページの値は一致）。
+- Vercel・Supabase・Neon の changelog は一部だけ読んだ（Vercel は 11-18〜11-20 の項目・Supabase は末尾が未読・Neon は先頭の部分）。Resend の changelog は日付が取れなかった。
+- Google Cloud の転送（Premium Tier）・Cloud DNS・Cloud Logging の無料の分、Route 53 のホストゾーンの月額、Hyperdrive の接続の数の上限は今回取得していない。

@@ -20,9 +20,11 @@ export const registrar: PriceBookInput = {
     verisign: src(
       'https://www.sec.gov/Archives/edgar/data/1014473/000101447326000019/q12026earningsrelease.htm',
     ),
-    icann: src(
-      'https://www.icann.org/en/announcements/details/icann-accredited-registrars-approve-registrar-level-fees-for-fiscal-year-2026-21-07-2025-en',
-    ),
+    // ICANN の FY27（2026-07〜2027-06）の手数料の承認の文書。1 件・1 年 $0.20 は FY26 と同じ（2026-11-22 の再確認。D-230）
+    icann: {
+      url: 'https://itp.cdn.icann.org/en/files/communications/registrar-fee-approved-fy27-30-07-2026-en.pdf',
+      retrievedAt: '2026-11-22',
+    },
     cfRegistrar: src('https://developers.cloudflare.com/registrar/faq/'),
   },
   plans: [

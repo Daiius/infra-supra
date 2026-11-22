@@ -371,3 +371,14 @@
   - closer が 2 つになったので、上限の合計は 7.5 + 0.5 × 2 + 0.5 = 9 秒（停止の猶予 10 秒に収まる）。
   - 受け付けを止める時点だけ写し元から変えた（PR #206 のレビュー OCL-0DD4FA38）: 合図では止めず、処理中が 0 になり 150ms 落ち着くのを（上限 7.5 秒）受け付けたまま待ち、そのあとで止めて 503 に差し替える。合図の時点で止めると、待つあいだ前段のプロキシが閉じた受け口へ繋ぎに行き、新しい送信が 502 になる（画面は再送しない）。別のサーバーの本番の入れ替えでも、外から 502 / 504 が見えた。古いプロセスが止めてから新しいプロセスが待ち受けるまでの隙間は、この手順では無くせない（入れ替えの仕組みの側）。
 - 文書: prd/15 §5.6。テスト: stats の `graceful-shutdown.test.ts`（9 件。本物の `serve()` をポート 0 で起こす。待つあいだの新しい接続が処理されること・終わったあとは拒まれることを含む）。
+
+### D-230 料金の再確認（2026-11-22）: 出典の直し（Savings Plans・Vercel Hobby の ISR・ICANN）と、施行済みの D1 の上限を予告から外す（確定・2026-11-22・ユーザーの依頼）
+
+- 背景: 前回（D-110・2026-11-03）から間が空き、AWS・Google Cloud・Cloudflare・Bunny・registrar・Supabase・Neon・さくらの VPS・Vercel・Netlify・Resend を突き合わせ直した。料金の値に差は無かった。記録の全体は prd/11 §26。
+- 決定:
+  - AWS の Compute Savings Plans の出典は、版の URL（`…/AWSComputeSavingsPlan/20261121004806/ap-northeast-1/index.json`）にする。前の `…/current/ap-northeast-1/index.json` は 404。`region_index.json` は版の URL を指すだけで値を持たないので出典にせず、コメントに残す。
+  - Vercel Hobby の ISR の込み分（100 万・20 万）は、出典を料金ページのまま取得日だけ 2026-11-22 にする。再確認の報告は docs/pricing の Runtime Cache の行（同じ値）を候補にしたが、runtime-cache の文書が「billed separately from ISR reads and writes」と書く別のメーターなので採らない。
+  - ICANN の手数料の出典を FY27 の承認の文書にする（$0.20 は同じ）。
+  - D1 のクエリ結果の上限 50 MB（2026-11-04 施行）は `scheduledChanges` から外し、Workers の事実 `d1-query-result-size` に移した（**移した**）。調べたこと: 予告ごとに乱数の列が独立（`draws(seed, id)`）で他の予告の月は変わらない。改定後の料金を持たないので計算・知らせ（D-226）に効かない。保存は `revisions` を持たず再生で作り直し、集計の `playHashOf` は `history` から作る。2 シナリオ × 全構成 × 5 シード × 12 か月の最後の状態（`revisions` を除く）は前後で同じで、golden・stats の `determinism.test.ts` を含む `pnpm test:fast` も通った。
+  - Workers Logs → Cloudflare Observability（2026-12-01）は施行前で公式と一致しているので予告のまま残し、12 月に入ってから基本の料金へ移す。
+- 文書: prd/11 §26・prd/07 の SC-4 と改定の今のデータ・AGENTS.md の prd/11 の行。
