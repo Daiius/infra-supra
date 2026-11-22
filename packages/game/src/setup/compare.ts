@@ -4,13 +4,17 @@
 import {
   type Choices,
   type ComponentProvider,
-  componentsOf,
   type FrameworkId,
   type SlotId,
 } from 'catalog';
 import type { EstimateResult } from 'estimator';
 import { accountLabel } from '../accounts.ts';
-import { booksAt, DEFAULT_START_DATE, scenarioOf } from '../core.ts';
+import {
+  booksAt,
+  DEFAULT_START_DATE,
+  scenarioOf,
+  scenarioComponentsOf,
+} from '../core.ts';
 import { toUsd, usdOf } from '../format.ts';
 import { pageWeightOf } from '../notes.ts';
 import { partsOfComments } from '../routes/comments.ts';
@@ -224,7 +228,7 @@ export function componentComparison(
 ): SlotCompareRow[] {
   const sc = scenarioOf(state);
   const provider = STACKS[state.stackIndex]!.provider;
-  const options = componentsOf(provider, slot, state.framework);
+  const options = scenarioComponentsOf(sc, provider, slot, state.framework);
   const books = booksAt(state, state.history.length + 1);
   const components = { ...state.components, [slot]: current };
   return analyzeSlot({

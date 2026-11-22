@@ -7,6 +7,7 @@
 export {
   scenarioAnalyzes,
   scenarioHasSlot,
+  scenarioComponentsOf,
   ANALYSIS_SLOTS,
   scenarioSendsEmail,
   SCENARIOS,
@@ -109,6 +110,9 @@ export {
   stackFlavor,
   TERM_NOTES,
   termNotesOf,
+  realtimeOptionFor,
+  realtimeSupported,
+  realtimeSessionOf,
 } from './stacks.ts';
 export {
   componentProposal,

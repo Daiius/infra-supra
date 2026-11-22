@@ -3,7 +3,6 @@
 // route・route-part・set）に写し取る。新しいゲームの決まりは作らず、
 // 選べるか・工数・期間は今までの行動の検査（checkActions）と文（stackChangeText・rewriteText など）に任せる。
 import {
-  componentsOf,
   DEFAULT_CHOICES,
   type Choices,
   type FrameworkId,
@@ -15,7 +14,11 @@ import {
 import { applyAction, applyActions, checkActions } from '../actions/apply.ts';
 import { actionEffort, checkAction } from '../actions/check.ts';
 import { proposalOnlyComponent } from '../components.ts';
-import { frameworkDefaults, scenarioOf } from '../core.ts';
+import {
+  frameworkDefaults,
+  scenarioOf,
+  scenarioComponentsOf,
+} from '../core.ts';
 import { componentEffortLabel } from '../effort.ts';
 import { ANALYSIS_SETTING_KEYS } from '../routes/hidden-settings.ts';
 import { optionLabel, SETTINGS, type SettingKey } from '../settings.ts';
@@ -149,7 +152,9 @@ export function validDraftComponents(
     if (
       option !== undefined &&
       proposalOnlyComponent(sc, slot, option) &&
-      componentsOf(platform, slot, framework).some((o) => o.id === option)
+      scenarioComponentsOf(sc, platform, slot, framework).some(
+        (o) => o.id === option,
+      )
     )
       out[slot] = option;
   return out;

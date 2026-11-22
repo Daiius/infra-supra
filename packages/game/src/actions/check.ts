@@ -1,6 +1,5 @@
 // 行動の検査（選べるか・工数はいくらか）。
 import {
-  componentsOf,
   DEFAULT_CHOICES,
   FRAMEWORKS,
   ROUTE_STRATEGIES,
@@ -20,6 +19,7 @@ import {
   frameworksOf,
   scenarioHasSlot,
   scenarioOf,
+  scenarioComponentsOf,
 } from '../core.ts';
 import {
   componentBaseEffort,
@@ -362,9 +362,12 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (rewriting) return rewriting;
       const sc = scenarioOf(state);
       const platform = STACKS[state.stackIndex]!.provider;
-      const opt = componentsOf(platform, action.slot, state.framework).find(
-        (c) => c.id === action.option,
-      );
+      const opt = scenarioComponentsOf(
+        sc,
+        platform,
+        action.slot,
+        state.framework,
+      ).find((c) => c.id === action.option);
       if (!opt) return ng('invalid', 'この事業者の部品にありません');
       // 解析の置き場・保存の形は非同期の API（解析）を持つシナリオだけ（D-235・D-237）
       if (!scenarioHasSlot(sc, action.slot))

@@ -412,6 +412,11 @@ export type Scenario = {
    * 選択肢に出し、集計には送らない・受け付けない。設定・スロットを隠す hidden とは別のもの。
    */
   preview?: true;
+  /**
+   * リアルタイムの部品を Cloudflare 以外の構成でも選べる（catalog の optIn の部品。D-240）。棋譜解析の研究会の提案のため。
+   * 省略は Cloudflare の Durable Objects だけ（記事コミュニティのチャット。X-5）。
+   */
+  realtimeAllPlatforms?: true;
   /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
   hidden?: {
     settings?: (

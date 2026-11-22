@@ -125,7 +125,10 @@ export function transitionsOf(
     notes.push(
       `乗り換えの作業が済みました。来月から ${stackName(migration.to, state.framework)} に切り替えます（部品は既定の選択から始まります）`,
     );
-    if (mods.realtime && !realtimeSupported(STACKS[migration.to]!.provider)) {
+    if (
+      mods.realtime &&
+      !realtimeSupported(STACKS[migration.to]!.provider, scenarioOf(state))
+    ) {
       mods = withoutRealtime(mods);
       notes.push(
         'チャットは乗り換え先のリアルタイムのデータを取得していないため、乗り換えとともに止めました',

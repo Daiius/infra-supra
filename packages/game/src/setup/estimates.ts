@@ -13,6 +13,7 @@ import {
   estimate,
   scenarioOf,
   USD_JPY,
+  scenarioComponentsOf,
 } from '../core.ts';
 import { nextSsrCpuMs } from '../effort.ts';
 import { premiseRefsOf } from '../events.ts';
@@ -89,7 +90,7 @@ export function componentPreview(
 ): MonthEvent['premises'] {
   const sc = scenarioOf(state);
   const platform = STACKS[state.stackIndex]!.provider;
-  const def = componentsOf(platform, slot, state.framework).find(
+  const def = scenarioComponentsOf(sc, platform, slot, state.framework).find(
     (c) => c.id === option,
   );
   if (!def || def.premiseRefs.length === 0) return [];

@@ -8,7 +8,7 @@ import {
   type SlotId,
 } from 'catalog';
 import { buzzLasting } from '../rules.ts';
-import { scenarioHasSlot, scenarioOf } from '../core.ts';
+import { scenarioHasSlot, scenarioOf, scenarioComponentsOf } from '../core.ts';
 import { lineLabel } from '../format.ts';
 import type { Scenario } from '../scenario.ts';
 import { INVALIDATION_METER } from '../setup/estimates.ts';
@@ -189,7 +189,12 @@ export function reportOf(
     componentSummary: (Object.keys(SLOT_LABELS) as SlotId[])
       .filter(
         (slot) =>
-          componentsOf(platformNow, slot, state.framework).length > 1 &&
+          scenarioComponentsOf(
+            scenarioOf(state),
+            platformNow,
+            slot,
+            state.framework,
+          ).length > 1 &&
           // 解析の置き場・保存の形は非同期の API（解析）を持つシナリオだけ（D-235・D-237）
           scenarioHasSlot(scenarioOf(state), slot) &&
           !slotIneffective(slot, comps, {

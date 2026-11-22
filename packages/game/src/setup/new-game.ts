@@ -3,7 +3,6 @@ import { rollRevisions, rollSchedule, type Scenario } from '../scenario.ts';
 import {
   type Choices,
   type ComponentProvider,
-  componentsOf,
   DEFAULT_CHOICES,
   FILE_STORAGE_LABEL,
   fileStorageOf,
@@ -23,6 +22,7 @@ import {
   scenarioHasSlot,
   scenarioSendsEmail,
   SCHEDULED_CHANGES,
+  scenarioComponentsOf,
 } from '../core.ts';
 import {
   type CommitmentOffer,
@@ -93,7 +93,7 @@ export function componentSlots(state: GameState): {
   slot: SlotId;
   label: string;
   current: string;
-  options: ReturnType<typeof componentsOf>;
+  options: ReturnType<typeof scenarioComponentsOf>;
 }[] {
   const platform = STACKS[state.stackIndex]!.provider;
   const current = {
@@ -106,7 +106,12 @@ export function componentSlots(state: GameState): {
       slot,
       label: slotLabel(slot, state.framework),
       current: current[slot] ?? '',
-      options: componentsOf(platform, slot, state.framework),
+      options: scenarioComponentsOf(
+        scenarioOf(state),
+        platform,
+        slot,
+        state.framework,
+      ),
     }))
     .filter(
       (x) =>

@@ -7,9 +7,11 @@ import {
 } from 'estimator';
 import {
   type Choices,
+  componentsOf,
   type FrameworkId,
   loadPriceBooks,
   type Platform,
+  type SlotId,
   sendsEmail,
   withoutUnusedEmail,
 } from 'catalog';
@@ -44,6 +46,21 @@ export const scenarioHasSlot = (
   sc: Pick<Scenario, 'template'>,
   slot: string,
 ): boolean => !ANALYSIS_SLOTS.includes(slot) || scenarioAnalyzes(sc);
+
+/**
+ * このシナリオで選べる部品（catalog の componentsOf）。リアルタイムは、シナリオが realtimeAllPlatforms を持つときだけ Cloudflare 以外の
+ * 部品（optIn）も返す（D-240。記事コミュニティは Cloudflare だけのまま。X-5）。
+ */
+export function scenarioComponentsOf(
+  sc: Pick<Scenario, 'realtimeAllPlatforms'>,
+  platform: Platform,
+  slot: SlotId,
+  framework?: FrameworkId,
+): ReturnType<typeof componentsOf> {
+  return componentsOf(platform, slot, framework, {
+    optIn: slot === 'realtime' && sc.realtimeAllPlatforms === true,
+  });
+}
 
 /** アプリがメールを送るシナリオか（テンプレートに email がある。D-101）。 */
 export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>

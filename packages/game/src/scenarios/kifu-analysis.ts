@@ -251,6 +251,8 @@ export const KIFU_ANALYSIS: Scenario = {
     },
   },
   preview: true,
+  // 研究会の共同検討（出来事 6）は全構成で受けられる（Cloudflare 以外のリアルタイムの部品も選べる。D-240）。提案と文言は PR-10
+  realtimeAllPlatforms: true,
   hidden: {
     // 画像は配らない。共有のページ（全員に同じ中身・OGP）があるので、再検証の間隔・ISR のキャッシュ・SNS のカードは出す
     settings: [
@@ -260,6 +262,7 @@ export const KIFU_ANALYSIS: Scenario = {
       'buildInterval',
       'pageCache',
     ],
+    // リアルタイムは研究会の提案（PR-10）で付く部品なので、始める画面には出さない（D-240）
     slots: ['images', 'realtime', 'apiCache'],
     blockBots: true,
   },

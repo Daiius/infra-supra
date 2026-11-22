@@ -14,6 +14,9 @@ import {
   imagesBehavior,
   MVP_STACKS,
   type Platform,
+  REALTIME_OPTION,
+  realtimeSession,
+  type RealtimeSession,
   type SlotId,
   STACK_DEFS,
   STACK_FLAVOR,
@@ -21,7 +24,7 @@ import {
   withCrossDbName,
 } from 'catalog';
 import type { Scenario, Strategy, WorkloadMods } from './scenario.ts';
-import type { ArchitectureInput } from 'estimator';
+import { ceilUnits, type ArchitectureInput } from 'estimator';
 import { EFFORT } from './rules.ts';
 import { books, frameworkDefaults, frameworksOf } from './core.ts';
 import { effortSpanText } from './format.ts';
@@ -300,7 +303,22 @@ export function slaOf(stackIndex: number): string[] {
   return [...out];
 }
 
-/** 乗り換えた先の部品の選択（既定。チャットを持っていれば Durable Objects を付ける。D-24 X-9）。 */
+/**
+ * そのシナリオ・事業者でリアルタイム（チャット・研究会）を受ける部品（D-240）。Cloudflare は Durable Objects。ほかの事業者は、
+ * シナリオが realtimeAllPlatforms を持つときだけ（棋譜解析）その事業者の手段（catalog の REALTIME_OPTION）。無ければ undefined
+ * （受けるには構成の変更が要る）。
+ */
+export function realtimeOptionFor(
+  platform: Platform,
+  scenario: Pick<Scenario, 'realtimeAllPlatforms'>,
+): string | undefined {
+  if (platform === 'cloudflare') return REALTIME_OPTION.cloudflare;
+  return scenario.realtimeAllPlatforms === true
+    ? REALTIME_OPTION[platform]
+    : undefined;
+}
+
+/** 乗り換えた先の部品の選択（既定。チャットを持っていればその事業者のリアルタイムの部品を付ける。D-24 X-9・D-240）。 */
 export function componentsAfterMigration(
   to: number,
   mods: WorkloadMods,
@@ -312,8 +330,8 @@ export function componentsAfterMigration(
     ...DEFAULT_CHOICES[platform],
     ...frameworkDefaults(framework, platform, scenario),
   };
-  if (mods.realtime && platform === 'cloudflare')
-    base.realtime = 'durable-objects';
+  const realtime = mods.realtime && realtimeOptionFor(platform, scenario);
+  if (realtime) base.realtime = realtime;
   return base;
 }
 
@@ -323,9 +341,39 @@ export function withoutRealtime(mods: WorkloadMods): WorkloadMods {
   return out;
 }
 
-/** その事業者で、今の部品の選択がリアルタイムを持てるか（チャットを受けたあと）。 */
-export function realtimeSupported(platform: Platform): boolean {
-  return componentsOf(platform, 'realtime').length > 0;
+/**
+ * 構成でリアルタイムのセッションを保てるかの判定の材料（D-240）。部品（realtimeOptionFor）が無ければ undefined（受けるには構成の変更が要る）。
+ * reconnectsPerSession は minutesPerSession の 1 回のセッションでつなぐ回数（接続の上限ごとにつなぎ直す）。keepsSession は、
+ * 盤面を接続をまとめる所（Durable Objects・VPS のプロセス）に置け、セッションの間つなぎ直さないこと。サーバーレスの手段は、
+ * 上限より短いセッションでもインスタンスをまたぐので盤面を外に置く（keepsSession は false）。
+ */
+export function realtimeSessionOf(
+  stackIndex: number,
+  scenario: Pick<Scenario, 'realtimeAllPlatforms'>,
+  minutesPerSession: number,
+):
+  | (RealtimeSession & { reconnectsPerSession: number; keepsSession: boolean })
+  | undefined {
+  const def = STACKS[stackIndex]!;
+  if (!realtimeOptionFor(def.provider, scenario)) return undefined;
+  const s = realtimeSession(def.provider, def.plan);
+  if (!s) return undefined;
+  const max = s.maxConnectionMinutes;
+  const reconnectsPerSession =
+    max === undefined ? 1 : Math.max(1, ceilUnits(minutesPerSession, max));
+  return {
+    ...s,
+    reconnectsPerSession,
+    keepsSession: s.state !== 'external' && reconnectsPerSession === 1,
+  };
+}
+
+/** その事業者で、今の部品の選択がリアルタイムを持てるか（チャットを受けたあと。シナリオで変わる。D-240）。 */
+export function realtimeSupported(
+  platform: Platform,
+  scenario: Pick<Scenario, 'realtimeAllPlatforms'>,
+): boolean {
+  return realtimeOptionFor(platform, scenario) !== undefined;
 }
 
 export function componentLabel(
@@ -334,7 +382,10 @@ export function componentLabel(
   option: string | undefined,
 ): string {
   return (
-    componentsOf(platform, slot).find((c) => c.id === option)?.label ??
+    // 名前を引くだけなので、シナリオが有効にする部品（optIn。D-240）も含める
+    componentsOf(platform, slot, undefined, { optIn: true }).find(
+      (c) => c.id === option,
+    )?.label ??
     option ??
     '—'
   );

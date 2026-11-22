@@ -13,7 +13,12 @@ import {
 } from 'catalog';
 import { EFFORT } from './rules.ts';
 import { proposalOnlyComponent } from './components.ts';
-import { frameworkDefaults, frameworksOf, scenarioOf } from './core.ts';
+import {
+  frameworkDefaults,
+  frameworksOf,
+  scenarioOf,
+  scenarioComponentsOf,
+} from './core.ts';
 import { rewriteEffort, rewriteWanted } from './effort.ts';
 import { revalidateSettingOf } from './routes/hidden-settings.ts';
 import { DEFAULT_REVALIDATE_SEC, SETTINGS } from './settings.ts';
@@ -53,7 +58,7 @@ export function componentsAfterRewrite(
   for (const [slot, option] of Object.entries(cur) as [SlotId, string][])
     if (
       proposalOnlyComponent(sc, slot, option) &&
-      componentsOf(platform, slot, to).some((o) => o.id === option)
+      scenarioComponentsOf(sc, platform, slot, to).some((o) => o.id === option)
     )
       viaProposal[slot] = option;
   const out: Choices = {
@@ -118,8 +123,9 @@ export function rewriteText(
     (slot) =>
       state.components[slot] !== undefined &&
       after[slot] !== undefined &&
-      componentsOf(platform, slot, state.framework).length > 1 &&
-      componentsOf(platform, slot, to).length > 1 &&
+      scenarioComponentsOf(state.scenario, platform, slot, state.framework)
+        .length > 1 &&
+      scenarioComponentsOf(state.scenario, platform, slot, to).length > 1 &&
       componentLabel(platform, slot, state.components[slot]) !==
         componentLabel(platform, slot, after[slot]),
   );
