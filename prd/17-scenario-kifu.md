@@ -74,7 +74,7 @@ grill の途中で決まり、複数の論点の前提になったもの。
   - 関数: CPU・壁時計時間・メモリ（`architecture/schema.ts:76-84`）
   - コンテナ（Cloud Run 型）: vcpu・memoryGB・concurrency・minInstances で、アクティブな時間を課金（`architecture/schema.ts:103-124`・[04](./04-resource-simulation.md) §3.3.1）
   - VPS: CPU・メモリ・ディスク・転送の使用率（[04](./04-resource-simulation.md) §3.7）
-- **1 件の CPU の上限**: 測り `cpu-ms-per-request`（`packages/estimator/src/pricing/schema.ts:230-236` の `LIMIT_MEASURES`）。catalog にあるのは **Workers Free の 10 ms だけ**（`packages/catalog/src/providers/cloudflare.ts:905-912`。超えると Error 1102）。
+- **1 件の CPU の上限**: 測り `cpu-ms-per-request`（`packages/estimator/src/pricing/schema.ts:230-236` の `LIMIT_MEASURES`）。catalog にあるのは **Workers Free の 10 ms だけ**（`packages/catalog/src/providers/cloudflare.ts:905-912`。超えると Error 1102）。→ PR-3・PR-4 で壁時計の測りと、置き場の候補の全事業者の上限を足した（§9.2・D-234）。
 - **在庫と書き込み**:
   - DB の在庫は `stock.dbGB`。増え方は `dbGBPerMillionPV × 人の PV × dbRateFactor`（`packages/game/src/month/transitions.ts:225`・`scenario.ts:26-34`）。
   - API の書き込みの行数は `writesPerCall × rowsWrittenPerWrite`（`estimator/src/workload/resolve.ts:651`・`workload/schema.ts:147-148`）。
@@ -88,7 +88,7 @@ grill の途中で決まり、複数の論点の前提になったもの。
 |---|---|---|
 | 非同期のジョブ・キュー | 要求クラスは固定の 12 個（`estimator/src/workload/resolve.ts:12-25`）。ジョブ・キューのクラスは無い（[01](./01-domain-model.md):98 は Phase 6 に先送り。[07](./07-game-design.md):1016 の X-7 は Queues を見送り） | **キューは数えない**（P-2）。解析は「重い 1 件」として置き場の CPU に足す。要求クラスは足さない |
 | ピークの滞留 | 待ち・滞留の計算は無い | **足す**（KF-10）。置き場の容量とピークの到着から、滞留を満足度に効かせる（PR-8） |
-| 長い実行の上限 | 実行時間（壁時計）の測りが無い。Vercel の関数・Lambda・Cloud Run の 1 件の最大の時間は catalog に無い（`maxDuration` / `timeout` を grep。`gcp.ts:208` の `idle-timeout` は冷えた起動の話で別物）。Workers Paid の CPU の上限・HTTP の実行時間・Queues の受信側の実行時間は**調査メモにあり・catalog は未収録**（[research/2026-10-31-gd4-data.md](./research/2026-10-31-gd4-data.md) §3・§4。取得日 2026-10-29〜30） | **最初の版の前に取得し、測りを足す**（KF-06・R-1・PR-3・PR-4） |
+| 長い実行の上限（**PR-3・PR-4 で足した。§9.2・D-234**） | 実行時間（壁時計）の測りが無い。Vercel の関数・Lambda・Cloud Run の 1 件の最大の時間は catalog に無い（`maxDuration` / `timeout` を grep。`gcp.ts:208` の `idle-timeout` は冷えた起動の話で別物）。Workers Paid の CPU の上限・HTTP の実行時間・Queues の受信側の実行時間は**調査メモにあり・catalog は未収録**（[research/2026-10-31-gd4-data.md](./research/2026-10-31-gd4-data.md) §3・§4。取得日 2026-10-29〜30） | **最初の版の前に取得し、測りを足す**（KF-06・R-1・PR-3・PR-4） |
 | 解析の置き場を選ぶ | スロットは固定の 13 個（`catalog/src/stacks/index.ts:69-82`）。`api` のスロットは API の置き場（`stacks/connections.ts:352-` の接続の規則） | **スロット「解析の置き場」を足す**（KF-07・PR-5） |
 | 区切り方・候補の数を選ぶ | 設定は `imageKB`・`variants`・`revalidateSec`・`ssrOptimizations` の 4 つで固定（`packages/game/src/settings.ts:13-22`）。シナリオで隠せる設定の名前も固定（`scenario.ts:350-361`） | **設定を 2 つ足す**（KF-05・KF-08・PR-6） |
 | 保存の形を選ぶ | 書き込みの行数と在庫の語彙はある。選ぶ口は無い | **部品「保存の形」を足す**（KF-12・PR-7） |
@@ -294,8 +294,8 @@ grill の途中で決まり、複数の論点の前提になったもの。
 | R-3 | **全構成のリアルタイムの手段と料金の見積もり**: AWS・Google Cloud・Vercel でセッションを保つ手段と、料金の取得の大きさを見積もる。出来事 6 を全構成で受けられるようにするかの判断の材料 | — | 見積もりだけ | なし（文書） |
 | PR-1 | **テストの「もう 1 本」を id で引く**（KF-18）と、**開発中の印**（`Scenario.preview`。§9.1・D-232）。**実装済み（`kifu/01-preview-tests`）** | — | 不要 | 変わらない |
 | PR-2 | **テンプレート**（catalog の `kifuAnalysis`・見積モードの選択肢。既定の値。KF-14）。**実装済み（`kifu/02-template`）**。後の段が変える口の定数（`KIFU_MOVES_PER_GAME`・`KIFU_CANDIDATES`・`KIFU_CANDIDATE_KB`・`KIFU_POSITION_CPU_MS`）は `packages/catalog/src/templates/kifu-analysis.ts`。見積モードのためのシナリオの仮の形は `packages/game/src/scenarios/kifu-analysis.ts`（`ESTIMATE_ONLY_SCENARIOS`。`SCENARIOS` には PR-10 で登録。D-233） | — | 不要 | 変わらない |
-| PR-3 | **上限の値を catalog に入れる**（R-1 の結果を各事業者の `limits` に。出典と取得日つき） | R-1 | R-1 で取得済み | 当たる構成が変わりうる → 記事・受託の golden を確かめる |
-| PR-4 | **実行時間の測り**（`LIMIT_MEASURES` に 1 件の実行時間を足し、壁時計時間で判定する） | PR-3 | — | 同上 |
+| PR-3 | **上限の値を catalog に入れる**（R-1 の結果を各事業者の `limits` に。出典と取得日つき）。**実装済み（`kifu/03-duration-limits`）**。R-1 の取得もこの段で公式の原文から取り直した（値と確認できなかったものは §9.2） | R-1 | R-1 で取得済み | 記事・受託の golden（基準プレイ）は変わらない。前提が増える（当たらない・使用率 0% 前後）ので、費用と前提のハッシュ（`route-strategies-equivalence` の記録）だけ取り直した（§9.2） |
+| PR-4 | **実行時間の測り**（`LIMIT_MEASURES` に 1 件の実行時間を足し、壁時計時間で判定する）。**実装済み（`kifu/03-duration-limits`）**: 測り `wall-ms-per-request`・上限の受け方（`invocation`）と既定（`defaultValue`）・Workload の `api.invocation`（D-234） | PR-3 | — | 同上 |
 | PR-5 | **スロット「解析の置き場」**（4 つ・事業者をまたぐ worker の接続の規則・端末の配るファイル・併用。KF-07） | PR-2 | 不要（値は仮定） | 変わらない（このシナリオだけのスロット） |
 | PR-6 | **設定 2 つ**（解析の区切り方・1 局面に残す候補の数。在庫の倍率と書き込みの回数に写す。端末は 1 つまで。KF-05・KF-08） | PR-4・PR-5 | 不要 | 変わらない |
 | PR-7 | **部品「保存の形」**（一手を 1 行 / 1 局を 1 行。`rowsWrittenPerWrite` と在庫の倍率。KF-12） | PR-6・R-2 | R-2 で確認済み | 変わらない。R-2 で DynamoDB の数え方を直すなら、その分だけ変わる |
@@ -318,6 +318,51 @@ PR-2〜PR-11 は 1 本ずつ main に入れるので、作りかけのシナリ�
 - PR-10 で棋譜解析のシナリオを `SCENARIOS` に登録するときに印を付け、PR-11 で値を決めたら外す。
 - 見積モードのテンプレート（PR-2 で決めた。D-233）: シナリオと揃え、開発中の印が立っているとき（`?preview=1`・`previewEnabled()`）だけ選択肢に出す（`packages/web/src/estimate/model.ts` の `templateOffered`・`templateOptions`）。印が無いときに URL の `t=kifu` で開くと、既定のテンプレート（記事）に直す。見積モードはシナリオの形（ページの性質・見取り図・フレームワーク・隠す設定）を読むので、PR-10 までは見積モードのためだけの仮の形を game の `ESTIMATE_ONLY_SCENARIOS` に置く（`SCENARIOS` に無いので遊べない・保存を読み込めない・集計は受け付けない。遊びの値は受託のものを仮に借り、見積モードでは使わない）。印は PR-11 でシナリオと一緒に外す。
 
+### 9.2 1 件の上限（PR-3・PR-4。D-234）
+
+測りと判定（`packages/estimator`）:
+
+- 測り `wall-ms-per-request`（1 回の実行の壁時計の時間 = CPU + I/O の待ち）を `cpu-ms-per-request` の隣に足した。CPU と壁時計は別の上限で、両方を見る。判定するのは関数とコンテナのノード（CPU は今までどおり関数だけ）。
+- 受け方（`invocation: 'http' | 'async'`）: Workload の `api.invocation`（省略は http）と、上限の `invocation`（省略は両方）。B-6 のとおり、非同期の解析は**受けて処理する側**（キューの受け手・Cron・バックグラウンド関数）の上限で判定する。キューの費用は数えない（P-2）。その受け方の流れが届かないノードでは、受け方を持つ上限の前提を出さない（記事・受託に「キューの受け手 15 分」を出さない）。
+- 資源シミュレーションは、ノードごとに受け方ごとの 1 回の実行の CPU・壁時計の最大（`NodeUsage.maxBy`）と、壁時計の最大（`maxWallMsPerRequest`）を持つ。ISR の再生成は CPU と同じ数え方で、起こした閲覧の http の実行に足す。
+- 設定で上げられる上限は**最大で判定**し、既定を `defaultValue` に持つ。使う量が既定を超えて最大以下なら、前提の内訳に「既定の … を超えるので、設定で … まで上げる前提です」と出す（止めない）。
+- game の止まる判定は前提の `hit` と `effect`（block）を見る今の仕組みのまま（`month/outcome.ts` の `stopsSite`）。新しい上限はどれも `onExceed: 'block'` なので、当たればその月は止まる。
+
+catalog に入れた値（取得 2026-11-23。公式の原文から取り直した。調査メモの要約と違うところは原文を採った）:
+
+| 置き場（プラン） | 受け方 | CPU の上限 | 壁時計の上限（判定する値・既定） | 出典 |
+|---|---|---|---|---|
+| Workers Free | 両方 | 10 ms（今までの値） | — | Workers の limits |
+| Workers Free・Paid | async（キューの受け手・Cron・DO の alarm） | （CPU は上の行・下の行） | 15 分 | Workers の limits（2026-11-19 更新）・Queues の limits（2026-10-30 更新。Free・Paid 共通） |
+| Workers Paid | 両方 | 5 分で判定（既定 30 秒・`limits.cpu_ms`） | HTTP は上限なし（クライアントがつながっている間） | 同上 |
+| Vercel Hobby の関数 | 両方 | 記載なし（Active CPU の課金だけ） | 300 秒（既定も同じ） | functions/limitations・duration（2026-08-24 更新）。Cron は関数を呼ぶので同じ（cron-jobs/usage-and-pricing） |
+| Vercel Pro の関数 | 両方 | 記載なし | 800 秒で判定（既定 300 秒。1,800 秒は Beta なので採らない） | 同上 |
+| Netlify Functions（Free・Personal・Pro） | http | 記載なし（**確認できず**） | 60 秒（替えられない） | functions/configuration |
+| 同上 | async（バックグラウンド関数） | 記載なし | 15 分（替えられない） | functions/configuration・background-functions |
+| Lambda | 両方 | 上限なし（メモリに比例した CPU） | 1,800 秒で判定（既定 3 秒） | Lambda の quotas・configuration-timeout |
+| Amplify Hosting の SSR | 両方 | **確認できず** | 15 分（実行インスタンスの最大の実行時間。1 件の上限の記載が無いので、これを 1 件の上限とみなした） | ssr-deployment-specification |
+| Cloud Run | http | 記載なし | 60 分で判定（既定 5 分） | run/docs/configuring/request-timeout（2026-11-18 更新） |
+| Cloud Run | async | 記載なし | 30 分で判定（Cloud Tasks の HTTP の宛先の期限。既定 10 分。Pub/Sub の push なら最大 10 分） | 同上（呼ぶ側の期限が効くことと値はこのページ） |
+| さくらの VPS | — | 上限なし（常駐のプロセス） | 上限なし | 置き場の上限は持たない（容量の判定だけ。§5.1 の ②） |
+
+調査メモ（要約経由）との照合: 数値はどれも原文と一致した（Lambda の最大 1,800 秒、Workers の Cron の CPU が間隔 1 時間以上なら 15 分まで、など）。メモに無く原文で足したもの: Lambda の既定 3 秒（configuration-timeout）、Cloud Run を Cloud Tasks・Pub/Sub から呼ぶときはその側の期限が効くこと、Firebase Hosting から Cloud Run へのリクエストの 60 秒（下の「数えないもの」）。
+
+確認できず・数えないもの:
+
+- **Netlify Functions の 1 回の実行の CPU の上限**: 文書に無い（メモリ 1 GB とそれに比例した計算量だけ）。入れない。
+- **Amplify Hosting の SSR の 1 件の CPU の上限・1 件の実行の上限**: 文書に無い（上の 15 分は実行インスタンスの寿命）。
+- **Firebase（Cloud Functions for Firebase）の既定の timeout**: 置き場の候補の構成に無い（Firebase Hosting は CDN としてだけ使う）ので取得もしない。
+- 同期の HTTP の前段の上限（CloudFront のオリジンの応答 30 秒（既定）・API Gateway の HTTP API 30 秒・Firebase Hosting から Cloud Run への 60 秒）: 関数・コンテナのノードでなく前段のノードの上限で、解析は非同期（P-2）なので今は数えない。同期で受ける重い処理を足すときに見直す。
+- Lambda Managed Instances の 90 分・Vercel の 1,800 秒（Beta）・Workers の Cron の 15 分の CPU: 別の実行の形・Beta なので採らない。
+
+棋譜解析のテンプレートでの当たり方（`packages/catalog/src/templates/kifu-analysis.test.ts`）:
+
+- 局面ごと（既定・1 件 = CPU 500 ms + 待ち 20 ms）では、当たるのは Workers Free の CPU 10 ms だけ。
+- 1 局まとめての目安（CPU 50 秒）でも壁時計の上限には当たらず、Workers Paid の CPU は既定 30 秒を超えるので「設定を上げる前提」が出る。区切り方（PR-6）で止まる構成を出すには、1 件の重さ（`KIFU_POSITION_CPU_MS` × 手数）か上限の並びを見て、PR-6・PR-11 で値を決める。
+- 1 件 20 分の架空の重さなら、15 分の上限（Workers の受け手・Netlify のバックグラウンド関数・Amplify）と Vercel の関数（300・800 秒）に当たり、Lambda（30 分）と Cloud Run の非同期（30 分）には当たらない。
+
+記事・受託への影響: 基準プレイの golden（`game.test.ts`・`contract.test.ts`）と組み合わせの総当たり（`pnpm test:sweep`）は変わらない。SSR・API は数十 ms なので、増えた前提はどれも当たらない（使用率 0% 前後）。費用と前提のハッシュ（`route-strategies-equivalence.test.ts` の 2 つ目の記録）は前提の数が増えた分だけ変わるので取り直した。増えた前提を除いたハッシュが前の記録と一致する（費用・使用量・今までの前提の当たりと使用率は 1 つも変わらない）ことを確かめてから取り直した。
+
 ## 10. 危ない点
 
 | # | 内容 | 対処 |
@@ -327,7 +372,7 @@ PR-2〜PR-11 は 1 本ずつ main に入れるので、作りかけのシナリ�
 | B-3 | 利用者の端末の解析の値（ファイルの大きさ・端末の差・正確さの下がり方）が相場のように読まれうる | すべて「ゲーム上の仮定」と明記する。実在の評価関数の大きさを書かない |
 | B-4 | 将棋の用語が画面で通じない人がいる | P-1 のとおり選択肢を絞り、言い方を一般的にする（「1 局面に残す候補の数」「解析の区切り方」）。用語は ⓘ の奥へ（[16](./16-ui-guidelines.md) §3） |
 | B-5 | 滞留の満足度は、キュー（P-2 で数えない）が無いまま待ちを出す。待ちの式の仮定が多い | 置き場の容量（VPS の CPU）とピークの到着の比から、仮定の式で出す。キューの長さ・待ちの時間を正確に出すとは言わない |
-| B-6 | 非同期の解析の 1 件の上限を、HTTP の上限で見るか受信側（キュー・cron）の上限で見るかが事業者で違う（調査メモ §4 では Workers の HTTP と Queue の受信側で違う） | R-1 で両方を取得し、「解析する側の 1 件」の上限を採る。キューの費用は数えなくても、受信側の上限は使うことを PR-4 に書く |
+| B-6 | 非同期の解析の 1 件の上限を、HTTP の上限で見るか受信側（キュー・cron）の上限で見るかが事業者で違う（調査メモ §4 では Workers の HTTP と Queue の受信側で違う） | R-1 で両方を取得し、「解析する側の 1 件」の上限を採る。キューの費用は数えなくても、受信側の上限は使うことを PR-4 に書く。→ 上限の受け方（`invocation`）で分けて入れた（§9.2・D-234） |
 | B-7 | 候補の数が「機能（検討の質）+」（KF-08）と「正確さ +」（KF-10）の両方に効くと、二重に数える | PR-8 で、候補の数は正確さの側だけに効かせるか、機能の側だけにするかを決める（どちらかに寄せる） |
 | B-8 | DynamoDB の項目のオーバーヘッドと切り上げを estimator が数えていないと、保存の形の差が出ない | R-2 の結果で、必要なら PR-7 で estimator の数え方を直す（他のシナリオの golden への影響を確かめる） |
 | B-9 | 3 本目と、新しいスロット・設定で combo-sweep の所要時間が延びる | PR-11 で測り、CI の時間に収まるか確かめる |

@@ -207,6 +207,20 @@ export const vercel: PriceBookInput = {
       url: 'https://vercel.com/docs/pricing/regional-pricing/hnd1',
       retrievedAt: '2026-11-04',
     },
+    // 関数の 1 回の実行の最大の時間（maxDuration。Fluid compute。2026-08-24 更新・2026-11-23 取得。D-234）
+    functionsLimitations: {
+      url: 'https://vercel.com/docs/functions/limitations',
+      retrievedAt: '2026-11-23',
+    },
+    functionsDuration: {
+      url: 'https://vercel.com/docs/functions/configuring-functions/duration',
+      retrievedAt: '2026-11-23',
+    },
+    // Cron Jobs は Vercel Functions を呼ぶので関数の上限がそのまま効く（2026-07-15 更新・2026-11-23 取得。D-234）
+    cronUsage: {
+      url: 'https://vercel.com/docs/cron-jobs/usage-and-pricing',
+      retrievedAt: '2026-11-23',
+    },
   },
   allowancePools: [
     {
@@ -320,6 +334,19 @@ export const vercel: PriceBookInput = {
       service: 'platform',
       name: 'Hobby',
       sourceIds: ['hobby', 'pricing'],
+      limits: [
+        {
+          id: 'function-max-duration',
+          measure: 'wall-ms-per-request',
+          value: 300_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Vercel Hobby の関数は 1 回の実行が 300 秒（5 分）までです（既定も最大も 300 秒。超えると 504 FUNCTION_INVOCATION_TIMEOUT。Cron で呼ぶ関数も同じ）',
+          sourceIds: ['functionsLimitations', 'functionsDuration', 'cronUsage'],
+        },
+      ],
       facts: [
         {
           // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
@@ -531,6 +558,21 @@ export const vercel: PriceBookInput = {
         perSeat: true,
       },
       sourceIds: ['pro', 'pricing'],
+      limits: [
+        {
+          // 1800 秒（30 分）の拡張の最大は Beta で、関数ごとの設定と対応する実行環境の版に限るので採らない（GA の 800 秒で判定する）
+          id: 'function-max-duration',
+          measure: 'wall-ms-per-request',
+          value: 800_000,
+          defaultValue: 300_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Vercel Pro の関数は 1 回の実行が既定 300 秒で、maxDuration の設定で 800 秒まで上げられます（ここでは 800 秒で判定します。超えると 504 FUNCTION_INVOCATION_TIMEOUT。Cron で呼ぶ関数も同じ。1,800 秒の拡張は Beta なので数えません）',
+          sourceIds: ['functionsLimitations', 'functionsDuration', 'cronUsage'],
+        },
+      ],
       facts: [
         {
           // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）

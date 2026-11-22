@@ -167,8 +167,10 @@ export function kifuAnalysis(monthlyPageViews: number): WorkloadInput {
       },
     ],
     perPage: { apiCalls: analysesPerPersonalPV, assets: 8, images: 0 },
-    // 解析 1 件 = 1 局面。棋譜を読み（1 回・1 行）、結果を書く
+    // 解析 1 件 = 1 局面。棋譜を読み（1 回・1 行）、結果を書く。受け付けて積み、受けて処理する側が動かす（P-2）ので、
+    // 1 件の実行時間は受けて処理する側（キューの受け手・Cron・バックグラウンド関数）の上限で判定する（B-6・D-234）
     api: {
+      invocation: 'async',
       cpuMs: KIFU_POSITION_CPU_MS,
       ioWaitMs: 20,
       queries: 1,

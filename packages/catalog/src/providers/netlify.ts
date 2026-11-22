@@ -196,6 +196,41 @@ const FACTS = [
   },
 ];
 
+/**
+ * 関数の 1 回の実行の上限（Free・Personal・Pro 共通。どれも替えられない。D-234）。同期の関数は 60 秒、バックグラウンド関数
+ * （202 を返して裏で動く）は 15 分。非同期に受ける分（api.invocation: async）はバックグラウンド関数の上限で判定する（prd/17 B-6）。
+ * 予定の関数（Scheduled Functions）の 30 秒は、長い処理はバックグラウンド関数へと文書が案内しているので採らない。
+ * 1 回の実行の CPU の上限は文書に無い（メモリ 1 GB とそれに比例した計算量だけ）。
+ */
+const FUNCTION_DURATION: NonNullable<
+  PriceBookInput['plans'][number]['limits']
+> = [
+  {
+    id: 'sync-execution',
+    measure: 'wall-ms-per-request',
+    value: 60_000,
+    unit: 'ms',
+    scope: 'request',
+    onExceed: 'block',
+    invocation: 'http',
+    premise:
+      'Netlify Functions の同期の実行は 1 回 60 秒までです（替えられない）',
+    sourceIds: ['functionsConfigLimits'],
+  },
+  {
+    id: 'background-execution',
+    measure: 'wall-ms-per-request',
+    value: 900_000,
+    unit: 'ms',
+    scope: 'request',
+    onExceed: 'block',
+    invocation: 'async',
+    premise:
+      'Netlify のバックグラウンド関数は 1 回の実行が 15 分までです（替えられない。失敗すると 1 分後・さらに 2 分後に再試行）',
+    sourceIds: ['functionsConfigLimits', 'backgroundFunctions'],
+  },
+];
+
 /** Free・Personal のメンバー（個人向け。プランの文書の表でメンバーは N/A）。 */
 const PERSONAL_MEMBERS = {
   pricing: 'not-stated' as const,
@@ -244,6 +279,16 @@ export const netlify: PriceBookInput = {
     functionsConfig: src(
       'https://docs.netlify.com/build/functions/configuration/',
     ),
+    // 同期 60 秒・予定 30 秒・バックグラウンド 15 分（2026-11-23 取得。D-234）
+    functionsConfigLimits: {
+      url: 'https://docs.netlify.com/build/functions/configuration/',
+      retrievedAt: '2026-11-23',
+    },
+    // バックグラウンド関数（クレジット制の Free・Personal・Pro と Enterprise。2026-11-23 取得。D-234）
+    backgroundFunctions: {
+      url: 'https://docs.netlify.com/build/functions/background-functions/',
+      retrievedAt: '2026-11-23',
+    },
     functionsOptional: src(
       'https://docs.netlify.com/build/functions/optional-configuration/',
     ),
@@ -271,6 +316,7 @@ export const netlify: PriceBookInput = {
       name: 'Free',
       sourceIds: ['pricing', 'credits', 'agreement'],
       facts: FACTS,
+      limits: FUNCTION_DURATION,
       uptimeSla: UPTIME,
       members: PERSONAL_MEMBERS,
       credits: [
@@ -313,6 +359,7 @@ export const netlify: PriceBookInput = {
       },
       sourceIds: ['pricing', 'credits'],
       facts: FACTS,
+      limits: FUNCTION_DURATION,
       uptimeSla: UPTIME,
       members: PERSONAL_MEMBERS,
       credits: [
@@ -342,6 +389,7 @@ export const netlify: PriceBookInput = {
       },
       sourceIds: ['pricing', 'credits', 'plans'],
       facts: FACTS,
+      limits: FUNCTION_DURATION,
       uptimeSla: UPTIME,
       members: {
         pricing: 'included',

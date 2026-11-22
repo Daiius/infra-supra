@@ -185,9 +185,15 @@ describe('プラットフォームの前提（金額ではなく、当たった�
     expect(p.effect).toBe('block');
   });
 
-  it('Cloudflare Paid では CPU の上限の前提は出ない（Paid の上限は別）', () => {
+  it('Cloudflare Paid の CPU の上限は設定で上げられる最大（5 分）で判定し、SSR では当たらない（D-234）', () => {
+    const p = premises(cfPaid, 10_000).find((x) =>
+      x.id.includes('cpu-ms-per-request'),
+    )!;
+    expect(p.limit).toBe(300_000);
+    expect(p.hit).toBe(false);
+    // 非同期の実行の壁時計の上限は、非同期に受ける分が無い記事のシナリオでは出さない
     expect(
-      premises(cfPaid, 10_000).some((x) => x.id.includes('cpu-ms-per-request')),
+      premises(cfPaid, 10_000).some((x) => x.id.includes('async-wall-ms')),
     ).toBe(false);
   });
 

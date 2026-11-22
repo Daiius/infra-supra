@@ -123,3 +123,109 @@ describe('棋譜解析のテンプレート', () => {
     }
   });
 });
+
+/** 1 件の CPU・壁時計の上限（D-234）の前提のうち、当たったものの構成ごとの一覧。 */
+function perRequestHits(cpuMs: number, ioWaitMs?: number) {
+  const out: Record<string, string[]> = {};
+  for (const architecture of MVP_STACKS) {
+    const w = kifuAnalysis(PV);
+    w.api.cpuMs = cpuMs;
+    if (ioWaitMs !== undefined) w.api.ioWaitMs = ioWaitMs;
+    const r = estimate({ workload: w, architecture, books });
+    out[architecture.id] = r.premises
+      .filter((p) => p.hit && /^limit:/.test(p.id))
+      .filter((p) => {
+        const limit = books
+          .find((b) => b.provider === p.provider)
+          ?.plans.find((x) => x.id === p.planId)
+          ?.limits.find((l) => p.id.includes(`:${l.id}:`));
+        return (
+          limit?.measure === 'cpu-ms-per-request' ||
+          limit?.measure === 'wall-ms-per-request'
+        );
+      })
+      .map((p) => p.id);
+  }
+  return out;
+}
+
+describe('棋譜解析の解析 1 件と、置き場の 1 件の上限（D-234・prd/17 PR-3・PR-4）', () => {
+  it('解析は非同期に受けて処理する（受けて処理する側の上限で判定する。B-6）', () => {
+    expect(kifuAnalysis(PV).api.invocation).toBe('async');
+  });
+
+  it('関数・コンテナの置き場はどれも、解析の 1 件を壁時計の上限で判定する（さくらの VPS は上限なし）', () => {
+    for (const architecture of MVP_STACKS) {
+      const r = estimate({ workload: kifuAnalysis(PV), architecture, books });
+      const apiNodes = new Set(
+        (architecture.routes.api ?? []).filter((id) => {
+          const k = architecture.nodes.find((n) => n.id === id)?.config.kind;
+          return k === 'function' || k === 'container';
+        }),
+      );
+      const wall = r.premises.filter(
+        (p) =>
+          p.id.startsWith('limit:') &&
+          p.nodeIds.some((id) => apiNodes.has(id)) &&
+          (p.used ?? 0) >= KIFU_POSITION_CPU_MS,
+      );
+      if (apiNodes.size === 0) expect(wall).toEqual([]);
+      else expect(wall.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('局面ごと（既定）なら、当たるのは Workers Free の CPU 10 ms だけ', () => {
+    const hits = perRequestHits(KIFU_POSITION_CPU_MS);
+    expect(hits['cloudflare-vinext-free']).toEqual([
+      'limit:cloudflare:workers-free:cpu-ms-per-request:worker',
+    ]);
+    for (const [id, xs] of Object.entries(hits))
+      if (id !== 'cloudflare-vinext-free') expect(xs, id).toEqual([]);
+  });
+
+  it('1 件が 20 分なら、15 分の上限（Workers の受け手・Netlify のバックグラウンド関数・Amplify）と Vercel の関数に当たり、Lambda・Cloud Run の 30 分には当たらない', () => {
+    // 区切り方の設定（PR-6）の前の、上限の並びの確認（CPU 1 秒 + 待ち 20 分の架空の重さ）
+    const hits = perRequestHits(1_000, 20 * 60_000);
+    const stopped = Object.entries(hits)
+      .filter(([, xs]) => xs.length > 0)
+      .map(([id]) => id)
+      .sort();
+    expect(stopped).toEqual(
+      [
+        'aws-amplify',
+        'cloudflare-vinext-free',
+        'cloudflare-vinext-paid',
+        'netlify-supabase-free',
+        'netlify-supabase-personal',
+        'netlify-supabase-pro',
+        'vercel-supabase-hobby',
+        'vercel-supabase-pro',
+      ].sort(),
+    );
+    expect(hits['cloudflare-vinext-paid']).toEqual([
+      'limit:cloudflare:workers-paid:async-wall-ms:worker',
+    ]);
+    // Netlify は同期の 60 秒でなく、バックグラウンド関数の 15 分で判定する
+    expect(hits['netlify-supabase-pro']).toEqual([
+      'limit:netlify:pro:background-execution:fn',
+    ]);
+  });
+
+  it('設定で上げられる上限は最大で判定し、既定を超える分は設定が要る前提として内訳に出す', () => {
+    // 1 局まとめて（手数 × 1 局面）の重さの目安: Workers Paid の CPU は既定 30 秒を超えるが最大 5 分には収まる
+    const w = kifuAnalysis(PV);
+    w.api.cpuMs = KIFU_POSITION_CPU_MS * KIFU_MOVES_PER_GAME;
+    const paid = MVP_STACKS.find((a) => a.id === 'cloudflare-vinext-paid')!;
+    const p = estimate({
+      workload: w,
+      architecture: paid,
+      books,
+    }).premises.find(
+      (x) => x.id === 'limit:cloudflare:workers-paid:cpu-ms-per-request:worker',
+    )!;
+    expect(p.hit).toBe(false);
+    expect(p.detail).toMatch(
+      /既定の 30 秒を超えるので、設定で 300 秒まで上げる前提です/,
+    );
+  });
+});

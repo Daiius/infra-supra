@@ -131,6 +131,20 @@ export const aws: PriceBookInput = {
     amplifyNext: src(
       'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
     ),
+    // SSR の実行インスタンスの最大の実行時間 15 分（2026-11-23 取得。D-234）
+    amplifySpecDuration: {
+      url: 'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html',
+      retrievedAt: '2026-11-23',
+    },
+    // 関数の timeout の最大 1,800 秒・既定 3 秒（2026-11-23 取得。D-234）
+    lambdaQuotas: {
+      url: 'https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html',
+      retrievedAt: '2026-11-23',
+    },
+    lambdaTimeout: {
+      url: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-timeout.html',
+      retrievedAt: '2026-11-23',
+    },
     lambdaPrices: priceList('AWSLambda'),
     lambdaPricing: src('https://aws.amazon.com/lambda/pricing/'),
     lambdaUrls: src(
@@ -525,6 +539,21 @@ export const aws: PriceBookInput = {
       ...common,
       name: 'Amplify Hosting',
       sourceIds: ['amplifyPrices', 'amplifyPricing'],
+      limits: [
+        {
+          // 文書は実行インスタンスの寿命だけを書き、1 件の実行の上限を書いていない。1 件はインスタンスより長く動けないので、
+          // これを 1 回の実行の上限とみなす（短い上限があっても文書からは分からない。prd/17 §9 の PR-3）
+          id: 'compute-max-execution',
+          measure: 'wall-ms-per-request',
+          value: 900_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Amplify Hosting の SSR の実行インスタンスは最大 15 分まで動きます（1 回の実行の上限の記載は無いので、これを 1 回の実行の上限とみなします）',
+          sourceIds: ['amplifySpecDuration'],
+        },
+      ],
       notes: [
         'ビルドの時間（$0.01 / 分・標準）と CDN に置いたファイルの保存（$0.023/GB 月）はこのモデルでは数えません',
         'Amplify Hosting の無料枠（ビルド 1,000 分・配信 15 GB・SSR 50 万リクエスト・100 GB 時間など）は「Free for 12 months」の旧来の無料枠なので入れません（AX-06）',
@@ -640,6 +669,21 @@ export const aws: PriceBookInput = {
       ...common,
       name: 'Lambda（x86）',
       sourceIds: ['lambdaPrices', 'lambdaPricing'],
+      limits: [
+        {
+          // Lambda Managed Instances の非同期・イベントソースの 5,400 秒（90 分）は別の実行の形なので採らない
+          id: 'function-timeout',
+          measure: 'wall-ms-per-request',
+          value: 1_800_000,
+          defaultValue: 3_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Lambda の関数は 1 回の実行が既定 3 秒で、timeout の設定で 1,800 秒（30 分）まで上げられます（ここでは 1,800 秒で判定します。同期・非同期・キューから呼ぶときで同じ）',
+          sourceIds: ['lambdaQuotas', 'lambdaTimeout'],
+        },
+      ],
       facts: [
         {
           id: 'opennext-isr',

@@ -48,6 +48,11 @@ export const gcp: PriceBookInput = {
     runAutoscaling: src(
       'https://cloud.google.com/run/docs/about-instance-autoscaling',
     ),
+    // リクエストの timeout（既定 5 分・最大 60 分）と、Cloud Tasks などから呼ぶときはその側の期限が効くこと（2026-11-18 更新・2026-11-23 取得。D-234）
+    runRequestTimeout: {
+      url: 'https://cloud.google.com/run/docs/configuring/request-timeout',
+      retrievedAt: '2026-11-23',
+    },
     hostingPricing: src('https://firebase.google.com/pricing'),
     hostingUsage: src(
       'https://firebase.google.com/docs/hosting/usage-quotas-pricing',
@@ -168,6 +173,36 @@ export const gcp: PriceBookInput = {
       ...common,
       name: 'Cloud Run（リクエストで課金・東京）',
       sourceIds: ['runPricing'],
+      limits: [
+        {
+          id: 'request-timeout',
+          measure: 'wall-ms-per-request',
+          value: 3_600_000,
+          defaultValue: 300_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          invocation: 'http',
+          premise:
+            'Cloud Run のサービスはリクエストの timeout が既定 5 分で、設定で 60 分まで上げられます（ここでは 60 分で判定します。超えると 504）',
+          sourceIds: ['runRequestTimeout'],
+        },
+        {
+          // 非同期に受ける分は、Cloud Run を呼ぶ側の期限が効く（文書の例: Pub/Sub の push は最大 10 分、Cloud Tasks の HTTP の宛先は
+          // 既定 10 分・最大 30 分）。待ち行列から 1 件ずつ受ける形として Cloud Tasks の最大で判定する（D-234）
+          id: 'async-dispatch-deadline',
+          measure: 'wall-ms-per-request',
+          value: 1_800_000,
+          defaultValue: 600_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          invocation: 'async',
+          premise:
+            'Cloud Run を Cloud Tasks から呼ぶときは、Cloud Tasks の期限（既定 10 分・最大 30 分）が効きます（ここでは 30 分で判定します。Pub/Sub の push で受けるなら最大 10 分）',
+          sourceIds: ['runRequestTimeout'],
+        },
+      ],
       facts: [
         {
           id: 'request-billing',
