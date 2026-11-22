@@ -46,7 +46,7 @@ import {
 import { isZeroText, roundInt } from '../format.ts';
 import { pct, STATUS, STAGE_CLS } from './shared.ts';
 import { EventCard, eventBadge, BlockedBadge, TIER_LABEL } from './events.tsx';
-import { WorkProgressView } from './effort.tsx';
+import { hasWorkProgress, WorkProgressView } from './effort.tsx';
 
 /** 満足度の要素の印（名前と並べて札に出す。名前だけより一目で見分けやすい）。 */
 const ELEMENT_ICON: Record<Element, LucideIcon> = {
@@ -275,10 +275,7 @@ export function MonthCard({
         ))}
         {/* 進行中の作業（乗り換えなど）があるときだけ右の列に置く。無ければ満足度を 1 列で */}
         <div
-          className={clsx(
-            'grid gap-4',
-            (r.componentSwap || r.migration || r.rewrite) && 'md:grid-cols-2',
-          )}
+          className={clsx('grid gap-4', hasWorkProgress(r) && 'md:grid-cols-2')}
         >
           <div>
             <h3 className="mb-1 font-bold">
