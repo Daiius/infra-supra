@@ -1,6 +1,7 @@
 // シナリオと出来事のデータの形（prd/07 §10.1・§10.2・D-20）。ここは型と、台本の表を作る純粋関数だけ。
 // シナリオの値（規模・収益・満足度の重み・工数・確率・時期・効果）はすべてゲーム上の仮定。
 import type {
+  AnalysisJobShape,
   AstroShape,
   BrowserAnalysisShape,
   FrameworkId,
@@ -300,6 +301,11 @@ export type Scenario = {
    */
   browserAnalysis?: BrowserAnalysisShape;
   /**
+   * 解析の 1 件の形（D-236・prd/17 §5.2・§5.3）。あるシナリオだけで設定「解析の区切り方」「1 局面に残す候補の数」を出し、
+   * Workload（件数・1 件の重さ・書き込み・応答）と在庫の増え方を替える。省略したシナリオ（記事・受託）では設定を出さず、何も替えない。
+   */
+  analysisJob?: AnalysisJobShape;
+  /**
    * 画像を投稿のときに一律で縮めて置く部品の、1 枚の大きさ（JPEG のとき。保存も配信もこの大きさで、画像の形式の比で小さくなる。
    * 長い辺 1,600〜2,000px 程度の JPEG・WebP を想定したゲーム上の仮定・D-47）。
    */
@@ -366,6 +372,8 @@ export type Scenario = {
       | 'apiCacheTtl'
       | 'buildInterval'
       | 'pageCache'
+      | 'analysisUnit'
+      | 'candidates'
     )[];
     slots?: SlotId[];
     blockBots?: boolean;

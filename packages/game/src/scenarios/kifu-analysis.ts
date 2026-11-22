@@ -4,6 +4,7 @@
 // 値はすべてゲーム上の仮定で、実在の値でも相場でもない。料金・制限は catalog のデータをそのまま使う。
 import {
   KIFU_ANALYSIS_ASTRO,
+  KIFU_ANALYSIS_JOB,
   KIFU_BROWSER_ANALYSIS,
   KIFU_ANALYSIS_ROUTES,
   KIFU_ANALYSIS_SPA,
@@ -166,6 +167,8 @@ export const KIFU_ANALYSIS: Scenario = {
   routeTraits: KIFU_ANALYSIS_ROUTES,
   // 解析の置き場が端末・併用のときに配るエンジンと評価関数（ゲーム上の仮定。D-235）
   browserAnalysis: KIFU_BROWSER_ANALYSIS,
+  // 解析の 1 件の形（区切り方・候補の数の設定が替える。ゲーム上の仮定。D-236）
+  analysisJob: KIFU_ANALYSIS_JOB,
   // 棋譜と解析の結果がたまる（画像は保存しない）
   stock: { dbGBPerMillionPV: KIFU_DB_GB_PER_MILLION_PV, gbPerImage: 0 },
   scale: { startPV: 300_000 },
@@ -213,7 +216,7 @@ export const KIFU_ANALYSIS: Scenario = {
     },
     events: [],
     app: [
-      `解析は 1 局面ごとに 1 件の重い API として数えます（1 局 ${KIFU_MOVES_PER_GAME} 手。積んで別の所で解析する非同期の処理で、キューの費用は数えません）`,
+      `解析は既定では 1 局面ごとに 1 件の重い API として数えます（1 局 ${KIFU_MOVES_PER_GAME} 手。積んで別の所で解析する非同期の処理で、キューの費用は数えません）。1 件ごとにエンジンの起動と評価関数の読み込みの重さがかかり、区切り方の設定で 1 件の単位を替えられます`,
       '解析の結果は一手を 1 行で DB に書き、たまっていきます。画像は配りません（ゲーム上の仮定）',
     ],
     wireframes: KIFU_WIREFRAMES,

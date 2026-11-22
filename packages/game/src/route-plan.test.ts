@@ -68,6 +68,8 @@ describe('ページごとの描き方の表（D-106）', () => {
                   imageKB: 150,
                   variants: 3,
                   ssrOptimizations: 0,
+                  analysisUnit: 0,
+                  candidates: 3,
                 },
                 ssrCpuMs: 15,
                 mods: {},

@@ -12,6 +12,8 @@ import { scenarioOf } from './core.ts';
 import { commentsInPage, commentsOf } from './routes/comments.ts';
 import { articleFamily } from './routes/strategy.ts';
 import {
+  candidatesLockReason,
+  CLIENT_CANDIDATES,
   fixedImageFormat,
   IMAGE_FORMAT_KB,
   isOnDemand,
@@ -33,6 +35,9 @@ export function settingInactiveReason(
   key: SettingKey,
 ): string | undefined {
   const platform = STACKS[state.stackIndex]!.provider;
+  // 置き場が利用者の端末なら候補は 1 つまで（D-236・KF-08）
+  if (key === 'candidates')
+    return candidatesLockReason(state.components.analysis);
   const raw = { ...DEFAULT_CHOICES[platform], ...state.components }.images;
   if (key === 'format')
     return imageFormatInactiveReason(platform, state.framework, raw);
@@ -51,6 +56,10 @@ export function fixedSettingValue(
   state: GameState,
   key: SettingKey,
 ): number | undefined {
+  if (key === 'candidates')
+    return candidatesLockReason(state.components.analysis) !== undefined
+      ? CLIENT_CANDIDATES
+      : undefined;
   if (key !== 'format') return undefined;
   const platform = STACKS[state.stackIndex]!.provider;
   const raw = { ...DEFAULT_CHOICES[platform], ...state.components }.images;

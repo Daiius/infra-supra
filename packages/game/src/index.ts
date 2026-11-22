@@ -47,6 +47,11 @@ export {
   DEFAULT_REVALIDATE_SEC,
   SETTING_FLAVOR,
   settingFlavor,
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_CANDIDATES,
+  CLIENT_CANDIDATES,
+  candidatesLockReason,
+  analysisSettingsOf,
 } from './settings.ts';
 export {
   type RouteOverrides,
@@ -136,6 +141,7 @@ export {
   revalidateSettingOf,
   defaultRevalidateSec,
   legacyDefaultRevalidateSec,
+  ANALYSIS_SETTING_KEYS,
 } from './routes/hidden-settings.ts';
 export {
   setupRevalidateOptions,

@@ -33,6 +33,7 @@ import {
 import { commentsOf, withComments } from '../routes/comments.ts';
 import { defaultRevalidateSec } from '../routes/hidden-settings.ts';
 import { validRouteOverrides } from '../routes/strategy.ts';
+import { DEFAULT_ANALYSIS_UNIT, DEFAULT_CANDIDATES } from '../settings.ts';
 import { slotIneffective, STACKS, stackSupports } from '../stacks.ts';
 import type { GameState, RouteOverrides, RouteParts } from '../state.ts';
 import { architectureFor, initialStock } from '../workload.ts';
@@ -383,6 +384,9 @@ export function newGame(
               chosen,
             ),
       ssrOptimizations: 0,
+      // 解析の設定（解析のあるシナリオだけで効く。始める画面では選ばず、運営の途中で変える。D-236）
+      analysisUnit: DEFAULT_ANALYSIS_UNIT,
+      candidates: DEFAULT_CANDIDATES,
     },
     cash: scenario.startCash,
     basePV: scenario.scale.startPV,

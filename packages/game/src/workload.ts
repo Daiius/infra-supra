@@ -1,6 +1,7 @@
 // Workload の組み立て（テンプレート + 設定 + 部品 + 描き方 + 一時的な増加）と、構成の入力（architectureFor・staticBuildOf）。
 import type { Scenario, Stock, WorkloadMods } from './scenario.ts';
 import {
+  applyAnalysisSettings,
   applyComponentsToWorkload,
   applyRouteStrategies,
   type Choices,
@@ -29,6 +30,7 @@ import {
   validRouteOverrides,
 } from './routes/strategy.ts';
 import {
+  analysisSettingsOf,
   COMMENT_PAGES_PER_UPDATE,
   deliveredImageKB,
   fixedImageFormat,
@@ -155,7 +157,17 @@ function withoutCommentFetch(w: WorkloadInput): WorkloadInput {
 }
 
 export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
-  const w = sc.template(Math.round(p.pv));
+  // 解析の区切り方・候補の数（D-236）は解析のあるシナリオだけ。テンプレート（局面ごと・既定の候補の数）から件数と 1 件の形を替える
+  const w = sc.analysisJob
+    ? applyAnalysisSettings(
+        sc.template(Math.round(p.pv)),
+        sc.analysisJob,
+        analysisSettingsOf(p.settings, {
+          ...DEFAULT_CHOICES[p.platform],
+          ...p.components,
+        }),
+      )
+    : sc.template(Math.round(p.pv));
   const ssr = p.mods.ssrShare;
   w.routes = w.routes.map((r) => ({
     ...r,

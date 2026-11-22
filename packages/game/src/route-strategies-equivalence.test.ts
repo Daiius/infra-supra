@@ -125,6 +125,8 @@ function* grid(
                   variants: 3,
                   revalidateSec,
                   ssrOptimizations: 0,
+                  analysisUnit: 0,
+                  candidates: 3,
                 },
                 routeParts: partsOfComments(sc, comments),
                 ssrCpuMs: 15,

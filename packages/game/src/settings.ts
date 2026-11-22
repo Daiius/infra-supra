@@ -1,7 +1,11 @@
 // 設定（Settings・SETTINGS の選択肢）と、設定から決まる値（オンデマンドの再検証・画像の形式と重さ・設定のフレーバー）。
 import {
+  ANALYSIS_UNITS,
+  type AnalysisSettings,
+  type Choices,
   type FrameworkId,
   FRAMEWORKS,
+  KIFU_CANDIDATES,
   imagesBehavior,
   imagesServedFormat,
   type Platform,
@@ -19,7 +23,47 @@ export type Settings = {
   revalidateSec: number;
   /** SSR の最適化の段数。 */
   ssrOptimizations: number;
+  /**
+   * 解析の区切り方（ANALYSIS_UNITS の添字。0 局面ごと・1 局まとめて・2 1 局ずつ小分けに保存。D-236・prd/17 §5.2）。
+   * 解析のあるシナリオ（Scenario.analysisJob）だけで出し、ほかのシナリオでは効かない（既定のまま）。
+   */
+  analysisUnit: number;
+  /** 1 局面に残す候補の数（D-236・prd/17 §5.3）。解析のあるシナリオだけ。置き場が利用者の端末なら 1 つまで。 */
+  candidates: number;
 };
+
+/** 解析の区切り方の既定（局面ごと）。 */
+export const DEFAULT_ANALYSIS_UNIT = 0;
+/** 1 局面に残す候補の数の既定（テンプレートの既定。catalog の KIFU_CANDIDATES）。 */
+export const DEFAULT_CANDIDATES = KIFU_CANDIDATES;
+/** 置き場が利用者の端末のときの候補の数（端末の軽い解析は 1 つまで。KF-08）。 */
+export const CLIENT_CANDIDATES = 1;
+
+/** 候補の数を選べない理由（置き場が利用者の端末。選べれば undefined）。 */
+export function candidatesLockReason(
+  analysis: string | undefined,
+): string | undefined {
+  return analysis === 'client'
+    ? '解析の置き場が利用者の端末なので、端末の軽い解析で残す候補は 1 つまでです'
+    : undefined;
+}
+
+/**
+ * 設定と部品から決まる解析の設定（Workload に当てる値）。置き場が利用者の端末なら候補は 1 つ（設定の値は替えない。
+ * 置き場を戻せば設定の値に戻る）。併用は端末の速報を保存しないので、サーバーの本解析は設定どおり。
+ */
+export function analysisSettingsOf(
+  settings: Pick<Settings, 'analysisUnit' | 'candidates'>,
+  components: Choices,
+): AnalysisSettings {
+  return {
+    unit: ANALYSIS_UNITS[settings.analysisUnit] ?? 'position',
+    candidates:
+      candidatesLockReason(components.analysis) !== undefined
+        ? CLIENT_CANDIDATES
+        : settings.candidates,
+  };
+}
 
 /** ISR の再検証の設定の「オンデマンド」（revalidateSec の値。時間の間隔はすべて正。D-49）。 */
 export const ON_DEMAND_REVALIDATE = 0;
@@ -248,6 +292,32 @@ export const SETTINGS = {
       { value: 21600, label: '6 時間' },
     ],
   },
+  /**
+   * 解析の区切り方（D-236・prd/17 §5.2・KF-05）。1 件ごとにエンジンの起動と評価関数の読み込みの固定の重さがかかる、という仮定
+   * （supervisor の決定）が交換条件のもと。値は ANALYSIS_UNITS の添字。
+   */
+  analysisUnit: {
+    label: '解析の区切り方',
+    field: 'analysisUnit',
+    effort: EFFORT.setting.analysisUnit,
+    note: '解析の 1 件をどこで区切るかです。1 件ごとに、解析のエンジンの起動と評価関数の読み込み（固定の重さ）がかかります。「局面ごと」は 1 件が短く、置き場の上限に当たりませんが、固定の重さを手数の回数だけ払います。「1 局まとめて」は固定の重さが 1 回で済みますが、1 件が長くなり、置き場の 1 件の実行時間・CPU の上限を超えると解析が止まります。「1 局ずつ・小分けに保存」は結果を小分けに保存し、上限で切れても続きから再開するので止まりませんが、保存の回数と書く行が増えます。置き場が利用者の端末のときはサーバーの上限に関係なく、端末が結果を送る回数だけが変わります（重さ・回数はゲーム上の仮定です）',
+    options: [
+      { value: 0, label: '局面ごと' },
+      { value: 1, label: '1 局まとめて' },
+      { value: 2, label: '1 局ずつ・小分けに保存' },
+    ],
+  },
+  /** 1 局面に残す候補の数（D-236・prd/17 §5.3・KF-08）。結果の大きさ（在庫）と応答の大きさに比例する。 */
+  candidates: {
+    label: '1 局面に残す候補の数',
+    field: 'candidates',
+    effort: EFFORT.setting.candidates,
+    note: '解析の結果に、1 局面あたりいくつの候補（評価値と読み筋）を残すかです。DB にたまる結果の大きさと、解析が返す結果の大きさが候補の数に比例します。置き場が利用者の端末のときは、端末の軽い解析なので 1 つまでです（値はゲーム上の仮定です）',
+    options: [
+      { value: 1, label: '1 つ' },
+      { value: 3, label: '3 つ' },
+    ],
+  },
 } as const satisfies Record<
   string,
   {
@@ -371,6 +441,15 @@ export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
   'pageCache:3600': '期限が長いほど、同じページを描き直すまでの間があきます',
   'pageCache:21600':
     '更新はゆっくり見えますが、同じページを描き直すのは一日に数回までです',
+  'analysisUnit:0':
+    '1 件が短いので、どの置き場でも 1 件の上限を気にせずに並べて動かせます',
+  'analysisUnit:1':
+    'エンジンの起動が 1 局に 1 回で済み、結果もまとめて 1 回で書けます。仕組みもいちばん単純です',
+  'analysisUnit:2':
+    '途中で切れても続きから再開できるので、長い棋譜でも最後まで進みます',
+  'candidates:1': 'いちばん良い手だけを残すので、結果が小さく済みます',
+  'candidates:3':
+    '次の候補も並べて見せられ、悪手のどこが悪いかを比べやすくなります',
   [`comments:${COMMENTS_IN_BROWSER}`]:
     '記事のページはコメントが付いても変わらないので、作り直すのは記事を更新したときだけです',
   [`comments:${COMMENTS_IN_PAGE}`]:

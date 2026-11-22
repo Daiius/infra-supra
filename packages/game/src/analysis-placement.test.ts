@@ -20,7 +20,11 @@ import {
   type GameState,
 } from './index.ts';
 
-const kifu = ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!;
+// 遊びの値（所持金など）は PR-11 で決めるまで受託の仮のもの。1 局面の重さ（D-236）では 1 か月目で尽きるので、所持金だけ足す
+const kifu = {
+  ...ESTIMATE_ONLY_SCENARIOS['kifu-analysis']!,
+  startCash: 1e7,
+};
 const article = SCENARIOS['article-community']!;
 const contract = SCENARIOS['contract-operations']!;
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);

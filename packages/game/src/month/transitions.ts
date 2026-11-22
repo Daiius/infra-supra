@@ -1,6 +1,11 @@
 // playMonth の工数と切り替えの段: 工数の配分と作業の進み、乗り換え・部品の差し替え・作り直しが済んだときの切り替え、
 // ためていく量（在庫）の増え方。
-import { apiPlacedElsewhere, FRAMEWORKS, type Platform } from 'catalog';
+import {
+  analysisStockFactor,
+  apiPlacedElsewhere,
+  FRAMEWORKS,
+  type Platform,
+} from 'catalog';
 import { scenarioOf } from '../core.ts';
 import {
   accountAllowanceFor,
@@ -17,7 +22,11 @@ import { allocateEffort } from '../rules.ts';
 import { componentsAfterRewrite, revalidateAfterRewrite } from '../rewrite.ts';
 import { validRouteOverrides } from '../routes/strategy.ts';
 import type { Scenario, Stock } from '../scenario.ts';
-import { deliveredImageKB, imageFormatOf } from '../settings.ts';
+import {
+  analysisSettingsOf,
+  deliveredImageKB,
+  imageFormatOf,
+} from '../settings.ts';
 import {
   componentLabel,
   componentsAfterMigration,
@@ -219,10 +228,21 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
       1e6
     : // 原本はそのまま置く（形式は閲覧・投稿のときに変える。D-58 で圧縮の比を掛けるのをやめた）
       rule.gbPerImage;
+  // 解析の結果は 1 局面に残す候補の数に比例してたまる（D-236。解析のあるシナリオだけ）
+  const analysis = sc.analysisJob
+    ? analysisStockFactor(
+        sc.analysisJob,
+        analysisSettingsOf(state.settings, state.components).candidates,
+      )
+    : 1;
   return {
     dbGB:
       s.dbGB +
-      (rule.dbGBPerMillionPV * humanPV * (state.mods.dbRateFactor ?? 1)) / 1e6,
+      (rule.dbGBPerMillionPV *
+        humanPV *
+        (state.mods.dbRateFactor ?? 1) *
+        analysis) /
+        1e6,
     imagesGB: s.imagesGB + uploads * gbPerUpload,
     images: s.images + uploads,
     articlePages: s.articlePages,

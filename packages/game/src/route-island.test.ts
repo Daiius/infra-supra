@@ -75,6 +75,8 @@ const workload = (
       imageKB: 150,
       variants: 3,
       ssrOptimizations: 0,
+      analysisUnit: 0,
+      candidates: 3,
     },
     ssrCpuMs: 15,
     mods: {},
