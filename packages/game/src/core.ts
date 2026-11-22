@@ -16,6 +16,7 @@ import {
 import type { EventDef, Scenario } from './scenario.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
+import { KIFU_ANALYSIS } from './scenarios/kifu-analysis.ts';
 import type { GameState } from './state.ts';
 
 /**
@@ -37,6 +38,15 @@ export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
   [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
   [CONTRACT_OPERATIONS.id]: CONTRACT_OPERATIONS,
 });
+
+/**
+ * 見積モードのテンプレートにだけ使うシナリオ（SCENARIOS に無い。遊べない・保存を読み込めない・集計は受け付けない）。
+ * 棋譜解析（prd/17 PR-2・D-233）は PR-10 で SCENARIOS に登録するまでここに置く。どれも開発中の印（preview）付き。
+ */
+export const ESTIMATE_ONLY_SCENARIOS: Readonly<Record<string, Scenario>> =
+  Object.freeze({
+    [KIFU_ANALYSIS.id]: KIFU_ANALYSIS,
+  });
 
 /** 開発中の印（Scenario.preview。D-232）が付いた、組み込みのシナリオか。知らない id は false。 */
 export const isPreviewScenario = (id: string): boolean =>

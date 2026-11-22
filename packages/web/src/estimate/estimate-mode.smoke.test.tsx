@@ -215,6 +215,44 @@ describe('見積モードの画面', () => {
     expect(expectEstimate()).toBe(name);
   });
 
+  it('W-KF1 棋譜解析のテンプレート（開発中。D-233）は ?preview=1 のときだけ選べる', async () => {
+    const options = () =>
+      [...(combo('テンプレート') as HTMLSelectElement).options].map(
+        (o) => o.value,
+      );
+    // 印が無ければ選択肢に出さず、URL の t=kifu も既定のテンプレートに直す
+    window.history.replaceState(null, '', '/?mode=estimate&t=kifu');
+    await renderApp();
+    expectEstimate();
+    expect(options()).toEqual(['article', 'business']);
+    expect((combo('テンプレート') as HTMLSelectElement).value).toBe('article');
+    expect(window.location.search).toContain('t=article');
+    cleanup();
+
+    // ?preview=1 なら選べて、URL の t=kifu で開ける
+    window.history.replaceState(null, '', '/?mode=estimate&t=kifu&preview=1');
+    await renderApp();
+    expect(options()).toEqual(['article', 'business', 'kifu']);
+    expect((combo('テンプレート') as HTMLSelectElement).value).toBe('kifu');
+    expectEstimate();
+  });
+
+  it('W-KF2 棋譜解析のテンプレートで、選べる構成とフレームワークをすべて回しても見積が出る', async () => {
+    window.history.replaceState(null, '', '/?mode=estimate&t=kifu&preview=1');
+    await renderApp();
+    expectEstimate();
+    for (const id of STACKS.filter((s) => !s.hidden).map((s) => s.id)) {
+      pick('stack', id);
+      expectEstimate();
+    }
+    for (const id of pickerRadios('framework')
+      .filter((r) => !r.disabled)
+      .map((r) => r.value)) {
+      pick('framework', id);
+      expectEstimate();
+    }
+  });
+
   it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', async () => {
     window.history.replaceState(
       null,

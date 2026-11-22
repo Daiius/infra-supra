@@ -75,7 +75,8 @@ import {
   settingsOf,
   slotComparisonOf,
   sortRows,
-  TEMPLATES,
+  templateOffered,
+  templateOptions,
   toQuery,
   USD_JPY,
   VARIANTS,
@@ -92,6 +93,7 @@ import {
   type TemplateId,
 } from './model.ts';
 import { roundInt, usd } from '../format.ts';
+import { previewEnabled } from '../preview.ts';
 
 const jpy = (n: number) => `¥${roundInt(n).toLocaleString('ja-JP')}`;
 const money = (n: number, currency: string) =>
@@ -122,9 +124,13 @@ const OVER_LABEL: Partial<Record<PlatformPremise['effect'], string>> = {
 };
 
 export function EstimateMode() {
-  const [input, setInputState] = useState<EstimateInput>(() =>
-    normalizeInput(fromQuery(window.location.search)),
-  );
+  // 開発中のテンプレート（D-233）は開発中の印が立っているときだけ選べる。印は開いたときに 1 回だけ読む
+  const [preview] = useState(previewEnabled);
+  const [input, setInputState] = useState<EstimateInput>(() => {
+    const raw = fromQuery(window.location.search);
+    if (!templateOffered(raw.template, preview)) delete raw.template;
+    return normalizeInput(raw);
+  });
   const setInput = (next: Partial<EstimateInput>) =>
     setInputState((cur) => normalizeInput({ ...cur, ...next }));
   // 入力を URL に残す（履歴は増やさない）
@@ -232,6 +238,7 @@ export function EstimateMode() {
       </p>
       <Conditions
         input={input}
+        preview={preview}
         setInput={(p) => {
           if (p.template === undefined) return setInput(p);
           setNotice(null);
@@ -383,6 +390,7 @@ function Field({
 
 function Conditions({
   input,
+  preview,
   setInput,
   mau,
   rows,
@@ -395,6 +403,8 @@ function Conditions({
   overview,
 }: {
   input: EstimateInput;
+  /** 開発中のテンプレートも選択肢に出すか（D-233）。 */
+  preview: boolean;
   setInput: (p: Partial<EstimateInput>) => void;
   mau: number;
   /** 構成の比較の行（構成のカードの月額に使う）。 */
@@ -490,7 +500,7 @@ function Conditions({
                 setInput(withTemplate(input, e.target.value as TemplateId))
               }
             >
-              {TEMPLATES.map((t) => (
+              {templateOptions(preview).map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>

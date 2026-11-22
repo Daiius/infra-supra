@@ -52,6 +52,7 @@ import {
   withRouteChoice,
   ROUTE_STRATEGIES,
   SCENARIOS,
+  ESTIMATE_ONLY_SCENARIOS,
   SETTINGS,
   stackName,
   stackOffered,
@@ -86,8 +87,26 @@ export const TEMPLATES = [
     scenarioId: 'contract-operations',
     label: '業務アプリ（ログインして使う）',
   },
+  // 開発中（prd/17 PR-2・D-233）: ゲームのシナリオと同じく `?preview=1` のときだけ選べる（templateOffered）
+  {
+    id: 'kifu',
+    scenarioId: 'kifu-analysis',
+    label: '棋譜解析（重い解析・開発中）',
+    preview: true,
+  },
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number]['id'];
+
+/** 選べるテンプレートか。開発中のもの（preview）は、開発中の印が立っているとき（web の previewEnabled）だけ。 */
+export const templateOffered = (
+  id: string | undefined,
+  preview: boolean,
+): boolean =>
+  TEMPLATES.some((t) => t.id === id && (preview || !('preview' in t)));
+
+/** テンプレートの選択肢（登録順。開発中のものは preview のときだけ）。 */
+export const templateOptions = (preview: boolean) =>
+  TEMPLATES.filter((t) => templateOffered(t.id, preview));
 
 export const PV_PRESETS = [
   10_000, 100_000, 300_000, 1_000_000, 3_000_000, 10_000_000, 30_000_000,
@@ -129,8 +148,14 @@ export type EstimateInput = {
   routes: RouteOverrides;
 };
 
+/** テンプレートのシナリオ（遊べるシナリオと、見積モードだけのもの。game の ESTIMATE_ONLY_SCENARIOS）。 */
+const TEMPLATE_SCENARIOS: Readonly<Record<string, Scenario>> = {
+  ...SCENARIOS,
+  ...ESTIMATE_ONLY_SCENARIOS,
+};
+
 export const scenarioOfTemplate = (t: TemplateId): Scenario =>
-  SCENARIOS[TEMPLATES.find((x) => x.id === t)!.scenarioId]!;
+  TEMPLATE_SCENARIOS[TEMPLATES.find((x) => x.id === t)!.scenarioId]!;
 
 const stackIndexOf = (id: string) => STACKS.findIndex((s) => s.id === id);
 

@@ -293,7 +293,7 @@ grill の途中で決まり、複数の論点の前提になったもの。
 | R-2 | **DynamoDB の課金の単位の確認**: 項目のオーバーヘッド・書き込みの単位の切り上げ・Query の合計の切り上げ。D1・Firestore の読みの数え方と、D1 の索引の書き込み | — | **要る** | なし（文書） |
 | R-3 | **全構成のリアルタイムの手段と料金の見積もり**: AWS・Google Cloud・Vercel でセッションを保つ手段と、料金の取得の大きさを見積もる。出来事 6 を全構成で受けられるようにするかの判断の材料 | — | 見積もりだけ | なし（文書） |
 | PR-1 | **テストの「もう 1 本」を id で引く**（KF-18）と、**開発中の印**（`Scenario.preview`。§9.1・D-232）。**実装済み（`kifu/01-preview-tests`）** | — | 不要 | 変わらない |
-| PR-2 | **テンプレート**（catalog の `kifuAnalysis`・見積モードの選択肢。既定の値。KF-14） | — | 不要 | 変わらない |
+| PR-2 | **テンプレート**（catalog の `kifuAnalysis`・見積モードの選択肢。既定の値。KF-14）。**実装済み（`kifu/02-template`）**。後の段が変える口の定数（`KIFU_MOVES_PER_GAME`・`KIFU_CANDIDATES`・`KIFU_CANDIDATE_KB`・`KIFU_POSITION_CPU_MS`）は `packages/catalog/src/templates/kifu-analysis.ts`。見積モードのためのシナリオの仮の形は `packages/game/src/scenarios/kifu-analysis.ts`（`ESTIMATE_ONLY_SCENARIOS`。`SCENARIOS` には PR-10 で登録。D-233） | — | 不要 | 変わらない |
 | PR-3 | **上限の値を catalog に入れる**（R-1 の結果を各事業者の `limits` に。出典と取得日つき） | R-1 | R-1 で取得済み | 当たる構成が変わりうる → 記事・受託の golden を確かめる |
 | PR-4 | **実行時間の測り**（`LIMIT_MEASURES` に 1 件の実行時間を足し、壁時計時間で判定する） | PR-3 | — | 同上 |
 | PR-5 | **スロット「解析の置き場」**（4 つ・事業者をまたぐ worker の接続の規則・端末の配るファイル・併用。KF-07） | PR-2 | 不要（値は仮定） | 変わらない（このシナリオだけのスロット） |
@@ -315,7 +315,8 @@ PR-2〜PR-11 は 1 本ずつ main に入れるので、作りかけのシナリ�
 - 画面: 始める画面のシナリオの選択は、URL に `?preview=1` を付けて開いたときだけ印の付いたシナリオを並べる（`packages/web/src/preview.ts`。`infra-supra:preview` に覚え、`?preview=0` で消す。保存領域が使えなければ URL の値だけ）。既定に選ぶのは並びの 1 番目のまま。前回の構成は選んだシナリオの分しか出さないので、これで隠れる。
 - 統計の画面（`stats-mode.tsx`）は `?preview=1` でも並べない（集計に無い）。
 - 集計: web は開発中のシナリオのプレイを送らず、分布も取りに行かない（`stats-client.ts` の `submitResult`・`loadStatsView`・`statsQueryOf`）。サーバーも受け付けない（`packages/stats` の照合は `preview-scenario` で 422、分布・構成ごとの口は 400）。
-- PR-10 で棋譜解析のシナリオを `SCENARIOS` に登録するときに印を付け、PR-11 で値を決めたら外す。見積モードのテンプレートの選択肢（PR-2）は、シナリオの印とは別に扱う（必要ならその PR で決める）。
+- PR-10 で棋譜解析のシナリオを `SCENARIOS` に登録するときに印を付け、PR-11 で値を決めたら外す。
+- 見積モードのテンプレート（PR-2 で決めた。D-233）: シナリオと揃え、開発中の印が立っているとき（`?preview=1`・`previewEnabled()`）だけ選択肢に出す（`packages/web/src/estimate/model.ts` の `templateOffered`・`templateOptions`）。印が無いときに URL の `t=kifu` で開くと、既定のテンプレート（記事）に直す。見積モードはシナリオの形（ページの性質・見取り図・フレームワーク・隠す設定）を読むので、PR-10 までは見積モードのためだけの仮の形を game の `ESTIMATE_ONLY_SCENARIOS` に置く（`SCENARIOS` に無いので遊べない・保存を読み込めない・集計は受け付けない。遊びの値は受託のものを仮に借り、見積モードでは使わない）。印は PR-11 でシナリオと一緒に外す。
 
 ## 10. 危ない点
 
