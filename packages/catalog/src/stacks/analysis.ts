@@ -72,9 +72,20 @@ const RUNTIME: Record<Platform, string> = {
   cloudflare: 'キューの受け手の Worker',
   vercel: 'Vercel Functions',
   sakura: '同じ VPS の別のプロセス',
-  aws: 'アプリの実行環境（Amplify の SSR・Lambda）',
+  aws: '同じアカウントの Lambda（Amplify の SSR とは別の関数）',
   'aws-opennext': 'Lambda',
   netlify: 'Netlify のバックグラウンド関数',
+  gcp: 'Cloud Run',
+};
+
+/** 構成ごとの「アプリと同じ実行環境」の選択肢の名前（具体的なサービスの名前で見せる）。 */
+const SERVICE: Record<Platform, string> = {
+  cloudflare: 'Cloudflare Workers',
+  vercel: 'Vercel Functions',
+  sakura: 'アプリと同じ VPS',
+  aws: 'AWS Lambda',
+  'aws-opennext': 'AWS Lambda',
+  netlify: 'Netlify Background Functions',
   gcp: 'Cloud Run',
 };
 
@@ -83,7 +94,7 @@ const PLATFORMS = Object.keys(RUNTIME) as Platform[];
 const sameNote = (p: Platform) =>
   p === 'sakura'
     ? '解析を同じ VPS の別のプロセスで動かします。月額は変わりませんが、解析の CPU がアプリと同じ VPS の使用率に入り、混むとページも解析も遅くなります'
-    : `解析を${RUNTIME[p]}で動かします（今のアプリと同じ所）。使った分だけ払う従量で、件数が増えても並べて動きますが、1 件の CPU・時間の上限（事業者ごと）に当たると止まります`;
+    : `解析を${RUNTIME[p]}で動かします（${p === 'aws' ? 'Amplify の SSR はキューから起こせないので、同じアカウントに別の関数を置きます' : '今のアプリと同じ所'}）。使った分だけ払う従量で、件数が増えても並べて動きますが、1 件の CPU・時間の上限（事業者ごと）に当たると止まります`;
 
 const CLIENT_NOTE =
   '解析のエンジンと軽い評価関数をブラウザに配り（WebAssembly）、利用者の端末で解析します。サーバーの解析の CPU は 0 になり、代わりに配るファイル（大きさはゲーム上の仮定）の転送が増えます。' +
@@ -127,7 +138,7 @@ export const ANALYSIS_COMPONENTS: readonly ComponentOption[] = [
       id: 'same',
       slot: 'analysis',
       platform,
-      label: 'アプリと同じ実行環境',
+      label: SERVICE[platform],
       note: sameNote(platform),
       premiseRefs: [],
     },
@@ -143,7 +154,7 @@ export const ANALYSIS_COMPONENTS: readonly ComponentOption[] = [
       id: 'hybrid',
       slot: 'analysis',
       platform,
-      label: '端末で速報・アプリと同じ実行環境で本解析',
+      label: `端末で速報・${SERVICE[platform]}で本解析`,
       note: hybridNote(platform),
       premiseRefs: [],
     },
@@ -191,6 +202,36 @@ const isAppCompute = (n: ArchNodeIn): boolean =>
     n.config.kind === 'container' ||
     n.config.kind === 'host');
 
+/** AWS の構成で解析を動かす Lambda のノードの id。 */
+export const ANALYSIS_FN_NODE_ID = 'analysis-fn';
+
+/**
+ * アプリの処理がキューから起こせない実行環境なら、解析を動かす別の関数を返す（そうでなければ undefined）。
+ * Amplify Hosting の SSR は HTTP の応答を返すための実行環境で、キューから起こす口が無く、単価も Lambda の約 3.3 倍
+ * （$0.20 / GB 時間 ≒ $0.0000556 / GB 秒。Lambda は $0.0000166667）。AWS で積んだ解析を流すなら、同じアカウントに
+ * Lambda を置くのが自然なので、そちらで数える。メモリは SSR と同じ（ゲーム上の仮定）。
+ */
+function asyncComputeFor(n: ArchNodeIn): ArchNodeIn | undefined {
+  const c = n.config;
+  if (
+    c.kind !== 'function' ||
+    n.billing?.provider !== 'aws' ||
+    n.billing.planId !== 'amplify-hosting'
+  )
+    return undefined;
+  return {
+    id: ANALYSIS_FN_NODE_ID,
+    role: 'compute',
+    label: 'Lambda（解析）',
+    config: { kind: 'function', memoryGB: c.memoryGB, concurrency: 1 },
+    billing: {
+      ...n.billing,
+      planId: 'lambda',
+      meters: { invocations: 'requests', 'memory-gb-hours': 'compute' },
+    },
+  };
+}
+
 /**
  * 解析の置き場を構成に当てる（composeStack から、API の置き場を差した後に呼ぶ）。選択が無ければ構成を変えない
  * （非同期の API は estimator が api の経路で流す）。
@@ -220,6 +261,13 @@ export function applyAnalysis(
   }
   const plan = analysisWorkerPlan(choice);
   if (plan === undefined) {
+    // アプリの処理がキューから起こせない（Amplify の SSR）なら、同じアカウントの別の関数で解析し、DB へは API と同じ先に書く
+    const app = arch.nodes.find((n) => api.includes(n.id) && isAppCompute(n));
+    const fn = app && asyncComputeFor(app);
+    if (app && fn) {
+      routes['api-async'] = [fn.id, ...api.slice(api.indexOf(app.id) + 1)];
+      return { ...arch, nodes: [...arch.nodes, fn], routes };
+    }
     // アプリと同じ実行環境・併用: API と同じ経路
     routes['api-async'] = [...api];
     return { ...arch, nodes: withOrigin(arch.nodes), routes };

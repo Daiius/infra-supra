@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { estimate, resolveWorkload } from 'estimator';
 import {
+  ANALYSIS_FN_NODE_ID,
   ANALYSIS_RESULT_CPU_MS,
   ANALYSIS_WORKER_NODE_ID,
   applyComponentsToWorkload,
@@ -87,15 +88,22 @@ describe('構成', () => {
       expect(composeStack(def).routes['api-async']).toBeUndefined();
   });
 
-  it('同じ実行環境・併用は API と同じ経路、端末は経路を持たない', () => {
+  it('同じ実行環境・併用は API と同じ経路（Amplify は同じアカウントの Lambda）、端末は経路を持たない', () => {
     for (const def of VISIBLE) {
-      const api = composeStack(def, { analysis: 'same' }).routes.api;
+      const api = composeStack(def, { analysis: 'same' }).routes.api!;
+      // Amplify の SSR はキューから起こせないので、解析は別の Lambda で動かし、DB へは API と同じ先に書く
+      const expected =
+        def.platform === 'aws'
+          ? [ANALYSIS_FN_NODE_ID, ...api.slice(api.indexOf('ssr') + 1)]
+          : api;
       expect(
         composeStack(def, { analysis: 'same' }).routes['api-async'],
-      ).toEqual(api);
+        def.id,
+      ).toEqual(expected);
       expect(
         composeStack(def, { analysis: 'hybrid' }).routes['api-async'],
-      ).toEqual(api);
+        def.id,
+      ).toEqual(expected);
       expect(
         composeStack(def, { analysis: 'client' }).routes['api-async'],
       ).toBeUndefined();
