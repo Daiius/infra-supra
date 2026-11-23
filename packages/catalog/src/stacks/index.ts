@@ -898,6 +898,8 @@ export function apiCacheActive(
   );
 }
 
+const componentsCache = new Map<string, readonly ComponentOption[]>();
+
 /**
  * 事業者のスロットの部品（スロットの順）。framework を渡すと、そのフレームワークで選べる部品だけ
  * （省略はすべて。名前を引くだけのときなど）。
@@ -906,15 +908,24 @@ export function componentsOf(
   platform: Platform,
   slot: SlotId,
   framework?: FrameworkId,
-): ComponentOption[] {
-  return COMPONENTS.filter(
-    (c) =>
-      hostsOf(c).includes(platform) &&
-      c.slot === slot &&
-      (framework === undefined ||
-        c.frameworks === undefined ||
-        c.frameworks.includes(framework)),
+): readonly ComponentOption[] {
+  // COMPONENTS は動かないデータなので、引数の組ごとに一度だけ絞り込んで同じ配列を返す（ゲームは毎月何度も引く）。
+  // 呼び手が書き換えないよう凍らせる
+  const key = `${platform}|${slot}|${framework ?? ''}`;
+  const hit = componentsCache.get(key);
+  if (hit) return hit;
+  const r = Object.freeze(
+    COMPONENTS.filter(
+      (c) =>
+        hostsOf(c).includes(platform) &&
+        c.slot === slot &&
+        (framework === undefined ||
+          c.frameworks === undefined ||
+          c.frameworks.includes(framework)),
+    ),
   );
+  componentsCache.set(key, r);
+  return r;
 }
 
 export function stackDef(id: string): StackDef {
