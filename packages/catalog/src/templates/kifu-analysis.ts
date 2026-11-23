@@ -47,10 +47,10 @@ export const KIFU_RECORD_KB = 2;
 export const KIFU_ROW_OVERHEAD_KB = 0.1;
 /** 「小分けに保存」で一手を 1 行のときに書く続きの位置の 1 行の大きさ（KB。ゲーム上の仮定。D-237）。 */
 export const KIFU_PROGRESS_KB = 0.05;
-/** 利用者 1 人が月に上げて解析する棋譜の数（ゲーム上の仮定）。 */
-export const KIFU_GAMES_PER_MAU = 4;
-/** 利用者 1 人の月の PV（棋譜の一覧と、上げた棋譜を何度か開き直す。ゲーム上の仮定）。 */
-export const KIFU_PV_PER_MAU = 30;
+/** 利用者 1 人が月に上げて解析する棋譜の数（ゲーム上の仮定。1 日 3 局。分布は仮定せず平均として決め打ち・上限なし。2026-11-24 のユーザーの決定）。 */
+export const KIFU_GAMES_PER_MAU = 90;
+/** 利用者 1 人の月の PV（棋譜の一覧と、上げた棋譜を 1 回ずつ開く分。ゲーム上の仮定。局数を月 90 局にしたのに合わせた。2026-11-24）。 */
+export const KIFU_PV_PER_MAU = 120;
 /** 共有のページ（OGP）が PV に占める割合（少なめ。ゲーム上の仮定）。 */
 export const KIFU_SHARE_ROUTE_SHARE = 0.05;
 /** 見積の DB の大きさに数える蓄積の月数（始めてからの解析の結果がたまった分。ゲーム上の仮定）。 */

@@ -6,6 +6,7 @@ import {
   applyComponentsToWorkload,
   componentsOf,
   composeStack,
+  KIFU_PV_PER_MAU,
   KIFU_STUDY_REALTIME,
   kifuAnalysis,
   loadPriceBooks,
@@ -45,7 +46,8 @@ const run = (id: string, realtime: boolean) => {
   };
 };
 
-const mau = PV / 30;
+// 利用者の数は棋譜解析の 1 人の月の PV から出す（定数を直書きしない）
+const mau = PV / KIFU_PV_PER_MAU;
 const connections = mau * RT.usersPerMau * RT.connectionsPerUser;
 const messages = mau * RT.usersPerMau * RT.messagesPerUser;
 

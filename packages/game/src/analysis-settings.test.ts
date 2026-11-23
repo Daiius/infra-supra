@@ -1,7 +1,12 @@
 // 設定「解析の区切り方」「1 局面に残す候補の数」（prd/17 §5.2・§5.3・D-236）: 解析のあるシナリオ（棋譜解析）だけで出し、
 // 行動で替えると翌月から Workload と在庫の増え方が替わる。記事・受託では出さない（golden は game.test.ts・contract.test.ts が見る）。
 import { describe, expect, it } from 'vitest';
-import { KIFU_ENGINE_STARTUP_CPU_MS, KIFU_MOVES_PER_GAME } from 'catalog';
+import {
+  KIFU_ENGINE_STARTUP_CPU_MS,
+  KIFU_GAMES_PER_MAU,
+  KIFU_MOVES_PER_GAME,
+  KIFU_PV_PER_MAU,
+} from 'catalog';
 import { resolveWorkload } from 'estimator';
 import {
   actionEffort,
@@ -28,6 +33,18 @@ const kifu = {
   ...SCENARIOS['kifu-analysis']!,
   startCash: 1e7,
 };
+/**
+ * 止まった月の数（outages）で 1 件の上限の効き目を見るための小さい規模（月 4,000 局。D-242 のときの普段の月）。
+ * シナリオの規模（12 万 PV・月 9 万局）では Workers Paid も 1 か月目から D1 の 10 GB に当たって毎月止まるので、
+ * 1 件の上限で止まったかどうかが outages に出ない。
+ */
+const kifuSmall = {
+  ...kifu,
+  scale: {
+    ...kifu.scale,
+    startPV: (4_000 / KIFU_GAMES_PER_MAU) * KIFU_PV_PER_MAU,
+  },
+};
 const article = SCENARIOS['article-community']!;
 const contract = SCENARIOS['contract-operations']!;
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
@@ -38,8 +55,8 @@ const unit = (value: number) =>
   ({ type: 'set', key: 'analysisUnit', value }) as const;
 const candidates = (value: number) =>
   ({ type: 'set', key: 'candidates', value }) as const;
-const start = (stack: number) =>
-  playMonth(newGame(stack, 1, kifu, DEFAULT_START_DATE, 'nextjs'));
+const start = (stack: number, sc = kifu) =>
+  playMonth(newGame(stack, 1, sc, DEFAULT_START_DATE, 'nextjs'));
 const last = (s: GameState) => s.history[s.history.length - 1]!;
 const usd = (s: GameState) => last(s).lines.reduce((a, l) => a + l.amount, 0);
 /** 当たった 1 件の上限（CPU・壁時計。D-234）の前提。 */
@@ -98,9 +115,10 @@ describe('区切り方の行動', () => {
       expect(perRequestHits(stopped), STACKS[stack]!.id).toEqual([want[stack]]);
       expect(last(stopped).status, STACKS[stack]!.id).toBe('down');
     }
-    // Workers Paid はほかに当たる上限が無いので、その月だけ止まる
-    const s = start(CF_PAID);
-    expect(playMonth(applyAction(s, unit(1))).outages).toBe(s.outages + 1);
+    // Workers Paid はほかに当たる上限が無い規模なら、1 件の上限でその月だけ止まる
+    const s = start(CF_PAID, kifuSmall);
+    expect(s.outages).toBe(0);
+    expect(playMonth(applyAction(s, unit(1))).outages).toBe(1);
   });
 
   it('小分けに保存すると 1 件の上限に当たらず止まらない（Vercel Hobby・Workers Paid）', () => {
@@ -108,8 +126,10 @@ describe('区切り方の行動', () => {
       const next = playMonth(applyAction(start(stack), unit(2)));
       expect(perRequestHits(next), STACKS[stack]!.id).toEqual([]);
     }
-    const s = start(CF_PAID);
-    expect(playMonth(applyAction(s, unit(2))).outages).toBe(s.outages);
+    // ほかに当たる上限が無い規模なら、止まらない
+    const s = start(CF_PAID, kifuSmall);
+    expect(s.outages).toBe(0);
+    expect(playMonth(applyAction(s, unit(2))).outages).toBe(0);
   });
 
   it('Workload: 1 局まとめては 1 局 1 件、小分けは塊の数、局面ごとは手数', () => {

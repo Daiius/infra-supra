@@ -2,6 +2,7 @@
 // 大きいと速い）、サーバーレスは 1 か月で終わってその月に払う。普段の解析を滞留させず、保存から再生しても進み具合が残る。
 // 出来事そのもの（文言・起きる月）は PR-10 なので、提案を受けた形をテストの中で作る。記事・受託の golden は game.test.ts・contract.test.ts が見る。
 import { describe, expect, it } from 'vitest';
+import { KIFU_GAMES_PER_MAU, KIFU_PV_PER_MAU } from 'catalog';
 import { freeVcpuHoursOf } from './background-job.ts';
 import {
   applyActions,
@@ -29,13 +30,20 @@ const WORKERS = idx('cloudflare-vinext-paid');
 /** 提案の id（テストの中だけ）。 */
 const JOB_EVENT = 'k-job-test';
 
-/** 棋譜解析（普段の月の規模 3 万 PV。D-238 の表と同じ）に、1 か月目に長時間の処理の提案が届く形を足したもの。 */
+/**
+ * 月の局数を D-238 の表のとき（利用者 1,000 人 × 月 4 局 = 4,000 局）にそろえた PV。シナリオの規模（12 万 PV・月 9 万局）では
+ * worker の VPS もアプリの VPS も普段の解析で CPU が埋まり（ピークの比 > ピークの係数）、空いている CPU が 0 で処理が進まないので、
+ * 空いている CPU で進む仕組みを見るには局数を絞る。
+ */
+const SMALL_PV = (4_000 / KIFU_GAMES_PER_MAU) * KIFU_PV_PER_MAU;
+
+/** 棋譜解析（月 4,000 局の規模）に、1 か月目に長時間の処理の提案が届く形を足したもの。 */
 const scenarioWith = (job: BackgroundJobDef = KIFU_BACKGROUND_JOBS.strategy) =>
   ({
     ...SCENARIOS['kifu-analysis']!,
     id: 'kifu-job-test',
     startCash: 1e9,
-    scale: { startPV: 30_000 },
+    scale: { startPV: SMALL_PV },
     events: [
       {
         id: JOB_EVENT,

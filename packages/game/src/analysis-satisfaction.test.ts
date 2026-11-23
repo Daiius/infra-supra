@@ -1,7 +1,11 @@
 // 満足度の要素「解析の速さ」「解析の正確さ」（prd/17 §5.5・D-238）: 置き場・区切り方・候補の数・ピークの滞留で速さと正確さが
 // どう動くか。解析のあるシナリオ（棋譜解析）だけで判定し、記事・受託では段階を持たない（golden は game.test.ts・contract.test.ts が見る）。
 import { describe, expect, it } from 'vitest';
-import { KIFU_ANALYSIS_JOB } from 'catalog';
+import {
+  KIFU_ANALYSIS_JOB,
+  KIFU_GAMES_PER_MAU,
+  KIFU_PV_PER_MAU,
+} from 'catalog';
 import {
   analysisOnlyThrottle,
   judgeAnalysis,
@@ -155,7 +159,15 @@ const kifu = {
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const PRO = idx('vercel-supabase-pro');
 const VPS = idx('sakura-vps-2gb');
-/** 普段の月の規模（PR-11 で下げる見込みの 1/10。D-236 の ⚠）と、大きな対局イベントの月（PV × 1.5・ピーク × 3。仮定）。 */
+/**
+ * 月の局数から PV を出す（1 人 月 KIFU_GAMES_PER_MAU 局・KIFU_PV_PER_MAU PV）。worker の VPS の段階が普段の月とイベントの月で
+ * 分かれるのを見るため、シナリオの規模（12 万 PV・月 9 万局。worker の VPS は普段から CPU が足りない）ではなく、
+ * D-242 のときの普段の月の局数（利用者 1,000 人 × 月 4 局 = 4,000 局。worker の VPS 4GB のピークの比 0.82）で動かす。
+ */
+const pvOfGames = (games: number) =>
+  (games / KIFU_GAMES_PER_MAU) * KIFU_PV_PER_MAU;
+const SMALL = pvOfGames(4_000);
+/** 普段の月の規模と、大きな対局イベントの月（PV × 1.5・ピーク × 3。仮定）。 */
 const at = (pv: number, peak = false): Scenario => ({
   ...kifu,
   scale: { ...kifu.scale, startPV: pv },
@@ -231,9 +243,9 @@ describe('ゲームの月の満足度', () => {
   });
 
   it('worker の VPS は普段の月に開いている間に終わり（4GB）、大きな対局イベントの月に滞る', () => {
-    const normal = play(at(30_000), PRO, 'worker-vps-4gb');
+    const normal = play(at(SMALL), PRO, 'worker-vps-4gb');
     expect(normal.satisfaction.stages.analysisSpeed).toBe('good');
-    const peak = play(at(30_000, true), PRO, 'worker-vps-4gb');
+    const peak = play(at(SMALL, true), PRO, 'worker-vps-4gb');
     expect(peak.satisfaction.stages.analysisSpeed).toBe('bad');
     expect(peak.satisfaction.reasons.analysisSpeed).toMatch(
       /ピークの時間帯の滞留の待ち/,
@@ -247,24 +259,24 @@ describe('ゲームの月の満足度', () => {
   });
 
   it('併用はイベントの月にアプリの VPS が滞っても速報で速さを保ち、正確さが下がる', () => {
-    const r = play(at(30_000, true), VPS, 'hybrid');
+    const r = play(at(SMALL, true), VPS, 'hybrid');
     expect(r.satisfaction.stages.analysisSpeed).toBe('fair');
     expect(r.satisfaction.stages.analysisAccuracy).toBe('fair');
     expect(r.satisfaction.reasons.analysisAccuracy).toMatch(
       /本解析が届くのは利用者がページを離れた後/,
     );
     // 同じ実行環境（アプリの VPS）はページも解析も遅くなる
-    const same = play(at(30_000, true), VPS, 'same');
+    const same = play(at(SMALL, true), VPS, 'same');
     expect(same.satisfaction.stages.analysisSpeed).toBe('bad');
     expect(same.satisfaction.stages.speed).toBe('bad');
   });
 
   it('サーバーレスは滞留せず、区切り方で速さが替わる', () => {
     expect(
-      play(at(30_000, true), PRO, 'same').satisfaction.stages.analysisSpeed,
+      play(at(SMALL, true), PRO, 'same').satisfaction.stages.analysisSpeed,
     ).toBe('good');
     expect(
-      play(at(30_000), PRO, 'same', { analysisUnit: 1 }).satisfaction.stages
+      play(at(SMALL), PRO, 'same', { analysisUnit: 1 }).satisfaction.stages
         .analysisSpeed,
     ).toBe('fair');
   });

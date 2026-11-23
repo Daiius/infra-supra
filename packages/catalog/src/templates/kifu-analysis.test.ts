@@ -454,8 +454,14 @@ describe('保存の形（D-237・prd/17 PR-7）', () => {
         architecture: arch,
         books,
       });
+      // 回数の課金（読み・書き）だけを比べる。保存の量の課金は在庫の大きさで決まり、1 人 月 90 局の規模では
+      // 1 局を 1 行の読みの安さより大きくなるので、合計で比べると回数の効き目が見えなくなる
       return r.bill.lines
-        .filter((l) => l.nodeIds.includes(db))
+        .filter(
+          (l) =>
+            l.nodeIds.includes(db) &&
+            !(l.kind === 'usage' && l.priceRef?.meterId === 'storage'),
+        )
         .reduce((s, l) => s + (l.amount ?? 0), 0);
     };
     const fs = (u: AnalysisSettings['unit'], s: AnalysisSettings['storage']) =>
