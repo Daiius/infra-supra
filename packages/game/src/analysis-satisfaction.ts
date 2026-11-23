@@ -8,7 +8,8 @@
 //   1 日を通して追いつかないので「悪い」。サーバーレス（関数・コンテナ）は滞留しない（1 件の上限に当たって止まるのは可用性の判定のまま）。
 // - 利用者の端末: 局面の数 × 1 局面 × 端末の倍率（1 件ごとの起動はページを開いたときの 1 回なので数えない）。遅い端末の段階が下がるなら 1 段下げる。
 // - 併用: 端末の速報とサーバーの本解析の早いほう。本解析が「悪い」（利用者が離れた後に届く）なら、正確さを 1 段下げる。
-// 正確さ = 候補の数（B-7: 候補の数はここにだけ効かせる）と評価関数（端末は軽いので 1 段下げる）。
+// 正確さ = 候補の数（B-7: 候補の数はここにだけ効かせる）。端末の評価関数と読みの量では下げない（D-244: 悪手を見つける用途では
+// サーバーとの差が揺らぎの範囲に収まるとみる。端末は候補が 1 つなので「普通」）。
 import {
   ANALYSIS_WORKER_NODE_ID,
   analysisWorkerPlan,
@@ -142,13 +143,12 @@ export function judgeAnalysis(input: {
     onServer ? (out.backlog ? Infinity : out.serverSec!) : Infinity,
     onClient ? out.clientSec! : Infinity,
   );
-  // 正確さ: 候補の数（サーバーの評価関数）。端末だけなら軽い評価関数で 1 段下げる（候補は 1 つに固定。KF-08）。
-  // 併用は本解析で戻るが、本解析が「悪い」（利用者が離れた後に届く）なら 1 段下げる
+  // 正確さ: 候補の数（端末は 1 つに固定なので「普通」。KF-08・D-244）。併用は本解析で候補が戻るが、本解析が「悪い」
+  // （利用者が離れた後に届く）なら 1 段下げる
   const byCandidates: Stage =
     settings.candidates >= r.accuracy.goodCandidates ? 'good' : 'fair';
   const lateAccurate = onClient && onServer && server === 'bad';
-  const accuracy =
-    !onServer || lateAccurate ? STAGE_DOWN[byCandidates] : byCandidates;
+  const accuracy = lateAccurate ? STAGE_DOWN[byCandidates] : byCandidates;
   return {
     ...out,
     ...(lateAccurate ? { lateAccurate } : {}),
@@ -219,8 +219,6 @@ export function analysisReasons(
   }
   if (j.analysisAccuracy !== 'good')
     out.analysisAccuracy = [
-      j.serverSec === undefined &&
-        '端末の軽い評価関数で解析するので、読みが浅くなります',
       j.lateAccurate &&
         '端末の速報は出ますが、サーバーの本解析が届くのは利用者がページを離れた後です',
       j.candidates < r.accuracy.goodCandidates &&

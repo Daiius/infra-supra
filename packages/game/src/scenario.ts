@@ -81,7 +81,7 @@ export type AnalysisSatisfactionRules = {
    */
   client: { cpuFactor: number; slowDeviceFactor: number };
   /**
-   * 正確さ: サーバーの評価関数で候補の数がこれ以上なら「良い」、未満は「普通」。端末の軽い評価関数は 1 段下げる。
+   * 正確さ: 候補の数がこれ以上なら「良い」、未満は「普通」（端末の評価関数では下げない。D-244）。
    * 候補の数は正確さにだけ効かせ、機能（開発の累計）には足さない（B-7）。
    */
   accuracy: { goodCandidates: number };

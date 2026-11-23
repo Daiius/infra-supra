@@ -133,9 +133,9 @@ describe('解析の正確さ', () => {
     ).toBe('good');
   });
 
-  it('端末だけは軽い評価関数で 1 段下がる', () => {
+  it('端末は候補が 1 つなので普通（評価関数と読みの量では下げない。D-244）', () => {
     expect(judge('client', settings('position', 1)).analysisAccuracy).toBe(
-      'bad',
+      'fair',
     );
   });
 

@@ -188,7 +188,7 @@ export const KIFU_SATISFACTION_WEIGHTS: Scenario['satisfaction']['weights'] = {
  * - 良い: 1 局の解析が 5 分以内に見える（利用者がページを開いている間。P-4）。普通: 15 分以内（少し離れて戻れば見える）。
  * - 滞留: ピークの比が 1 を超えた分 × 30 分（ピークの 1 時間のうちに積み上がった分を、届いた解析が平均して待つ）。
  * - 端末: 1 局面の CPU × 0.5（軽い評価関数で 1 局面は軽いが、端末はサーバーより遅い）。遅い端末はその 3 倍。
- * - 正確さ: 候補 3 つ以上で良い（候補 1 つは普通）。端末の軽い評価関数は 1 段下げる。
+ * - 正確さ: 候補 3 つ以上で良い（候補 1 つは普通）。端末の評価関数では下げない（D-244）。
  */
 export const KIFU_ANALYSIS_SATISFACTION: NonNullable<
   Scenario['satisfaction']['analysis']
