@@ -20,6 +20,27 @@ import type { Traffic, Volume } from './traffic.ts';
 import type { Progress } from './transitions.ts';
 
 /**
+ * 事業者のスロットごとの、選べる部品の premiseRefs をまとめたもの（スロットの順）。部品は動かないデータなので、
+ * 事業者ごとに一度だけ作る（premiseParts は毎月の前提ごとに引く）。
+ */
+function premiseRefsOf(
+  platform: Platform,
+): readonly { slot: SlotId; refs: readonly string[] }[] {
+  const hit = premiseRefsCache.get(platform);
+  if (hit) return hit;
+  const r = (Object.keys(SLOT_LABELS) as SlotId[]).map((slot) => ({
+    slot,
+    refs: componentsOf(platform, slot).flatMap((o) => o.premiseRefs),
+  }));
+  premiseRefsCache.set(platform, r);
+  return r;
+}
+const premiseRefsCache = new Map<
+  Platform,
+  readonly { slot: SlotId; refs: readonly string[] }[]
+>();
+
+/**
  * その前提に効く部品の今月の値（「images:r2-variants」。推移を部品の差し替えで区切るのに使う。prd/07 §5）。
  * 効く slot は、その事業者で選べる部品のどれかが premiseRefs でこの前提を挙げている slot。無ければ undefined。
  */
@@ -28,11 +49,9 @@ export function premiseParts(
   comps: Choices,
   premiseId: string,
 ): string | undefined {
-  const slots = (Object.keys(SLOT_LABELS) as SlotId[]).filter((slot) =>
-    componentsOf(platform, slot).some((o) =>
-      o.premiseRefs.some((ref) => premiseId.startsWith(ref)),
-    ),
-  );
+  const slots = premiseRefsOf(platform)
+    .filter(({ refs }) => refs.some((ref) => premiseId.startsWith(ref)))
+    .map(({ slot }) => slot);
   return slots.length
     ? slots.map((slot) => `${slot}:${comps[slot] ?? ''}`).join(' ')
     : undefined;

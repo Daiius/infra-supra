@@ -89,8 +89,8 @@
 pnpm install
 pnpm typecheck    # 全パッケージ tsc --noEmit
 pnpm test         # 全パッケージ vitest run
-pnpm test:fast    # 組み合わせの総当たり（game の combo-sweep.test.ts。構成のすべて × 部品の pairwise。約 30 秒）を除く全部（CI の test の job）
-pnpm test:sweep   # combo-sweep.test.ts だけ（CI の combo-sweep の job。2 つを合わせると pnpm test と同じ範囲）
+pnpm test:fast    # 組み合わせの総当たり（game の combo-sweep.*.test.ts）を除く全部（CI の test の job。手元で約 58 秒。2026-11-24 の測定）
+pnpm test:sweep   # combo-sweep.*.test.ts だけ（構成のすべて × 部品の pairwise。シナリオ・作り直し・1 か月目の見込みごとの 6 ファイルを並べて回す。手元で約 12 秒。2026-11-24 の測定。CI の combo-sweep の job。2 つを合わせると pnpm test と同じ範囲）
 pnpm format       # prettier（*.md は対象外）
 pnpm format:check # prettier の検査だけ（書き換えない）
 pnpm dev          # web を 127.0.0.1:5173 で起動
