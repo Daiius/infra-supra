@@ -11,13 +11,18 @@ vi.setConfig({ testTimeout: 120_000 });
 import {
   choosable,
   GROUPS,
+  SWEEP_SCENARIOS,
   normalizeChoices,
   pairwiseOf,
   selectableCombos,
 } from './combo-sweep.test-helpers.ts';
-import { componentConflict, newGame, STACKS } from './index.ts';
+import { componentConflict, newGame, SCENARIOS, STACKS } from './index.ts';
 
 describe('組み合わせの総当たり（2 シナリオ × フレームワーク × 構成 × 部品の pairwise）', () => {
+  it('総当たりのファイルを持つシナリオは SCENARIOS と一致する（足し忘れたシナリオの組がどのファイルでも回らない、を止める）', () => {
+    expect([...SWEEP_SCENARIOS].sort()).toEqual(Object.keys(SCENARIOS).sort());
+  });
+
   it('組み合わせは十分にある（列挙が空振りしていない）', () => {
     const n = GROUPS.reduce(
       (a, g) => a + selectableCombos(g.sc, g.stackIndex, g.fw).length,

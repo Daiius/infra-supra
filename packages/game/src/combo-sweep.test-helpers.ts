@@ -126,6 +126,17 @@ export const commentAt = (
     ? comments[Math.floor(i / Math.max(1, revalidateCount)) % comments.length]
     : undefined;
 
+/**
+ * 総当たりのファイルを持つシナリオ（combo-sweep.<id>.test.ts と combo-sweep.rewrite.<id>.test.ts）。シナリオを足したら、ここと
+ * 2 つのファイルを足す。足さないとそのシナリオの組はどのファイルでも回らないので、列挙のテスト（combo-sweep.coverage.test.ts）が
+ * SCENARIOS と食い違えば止める。
+ */
+export const SWEEP_SCENARIOS = [
+  'article-community',
+  'contract-operations',
+] as const;
+export type SweepScenario = (typeof SWEEP_SCENARIOS)[number];
+
 export type Group = { sc: Scenario; fw: FrameworkId; stackIndex: number };
 export const GROUPS: Group[] = Object.values(SCENARIOS).flatMap((sc) =>
   frameworksOf(sc).allowed.flatMap((fw) =>
@@ -183,6 +194,10 @@ export function violations(s: GameState): string[] {
 }
 
 /** 組の名前（テストの名前）。 */
+/** そのシナリオの組（シナリオごとのファイルが回す）。 */
+export const groupsOf = (id: SweepScenario): Group[] =>
+  GROUPS.filter((g) => g.sc.id === id);
+
 export const groupName = (g: Group) =>
   `${g.sc.id} × ${g.fw} × ${STACKS[g.stackIndex]!.id}`;
 
@@ -263,7 +278,7 @@ export function sweepGroup({ sc, fw, stackIndex }: Group): void {
 // 回す数が多いので、シナリオごとのファイル（combo-sweep.rewrite.<シナリオ>.test.ts）に分けて並べて回す。
 // 作り直しが済んだ組の数の下限はシナリオごとに持つ（両方の和は分ける前の全体の下限 300 を超える）
 export function describeRewriteSweep(
-  scenarioId: string,
+  scenarioId: SweepScenario,
   minSwitched: number,
 ): void {
   describe(`作り直しの総当たり（${scenarioId} × 構成 × 元と先のフレームワーク × 部品）`, () => {
