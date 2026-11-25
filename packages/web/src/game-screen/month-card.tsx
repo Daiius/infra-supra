@@ -284,6 +284,14 @@ export function MonthCard({
                 評判（前月との平均）{s.reputation.toFixed(2)}
               </span>
             </h3>
+            {/* 解析のあるシナリオは Web と解析の 2 本の柱の幾何平均（D-250）。片方が低いと全体が大きく下がることを短く見せる */}
+            {s.pillars && (
+              <p className="mb-1 text-xs opacity-70" data-satisfaction-pillars>
+                Web {s.pillars.web.toFixed(2)} と 解析{' '}
+                {s.pillars.analysis.toFixed(2)}{' '}
+                の幾何平均です（片方が低いと全体が大きく下がります）
+              </p>
+            )}
             {/* 要素はアイコン・名前・段階を段階の色の札 1 つにまとめ、どの幅でも折り返して横に詰め、行を埋めるように伸ばす（D-189・D-222 の補足）。
                 理由は札の下に、理由のある要素だけ 1 行ずつ */}
             <ul

@@ -110,6 +110,7 @@ export function playMonth(input: GameState): GameState {
     prev,
     stages: judged.stages,
     reasons: judged.reasons,
+    analysis: judged.analysis,
   });
   const { rep, slowPenalty, net } = growth;
 

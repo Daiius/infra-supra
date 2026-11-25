@@ -15,6 +15,7 @@ import {
   analysisHostOf,
   analysisOnlyThrottle,
   analysisReasons,
+  analysisSatisfactionScore,
   judgeAnalysis,
   type AnalysisJudgment,
 } from '../analysis-satisfaction.ts';
@@ -339,6 +340,8 @@ export function judgeMonth(
 
 export type Growth = {
   score: number;
+  /** 解析のあるシナリオの柱の値（D-250。満足度 = √(web × analysis)）。 */
+  pillars?: { web: number; analysis: number };
   rep: number;
   acquisition: number;
   churn: number;
@@ -358,10 +361,23 @@ export function growthOf(
     prev: MonthReport | undefined;
     stages: Stages;
     reasons: Reasons;
+    /** 解析の判定（解析のあるシナリオ。満足度を柱で出す。D-250）。 */
+    analysis?: AnalysisJudgment | undefined;
   },
 ): Growth {
   const { prev, stages } = c;
-  const score = satisfactionScore(stages, sc.satisfaction.weights);
+  const rules = sc.satisfaction.analysis;
+  const pillar =
+    rules && c.analysis
+      ? analysisSatisfactionScore(
+          stages,
+          sc.satisfaction.weights,
+          c.analysis,
+          rules,
+        )
+      : undefined;
+  const score =
+    pillar?.score ?? satisfactionScore(stages, sc.satisfaction.weights);
   const rep = reputation(score, prev?.satisfaction.score);
   const g = growthFromReputation(rep, stages.availability === 'bad', sc.growth);
   const bonus = state.growthBonus.reduce(
@@ -380,6 +396,9 @@ export function growthOf(
   const net = g.net + bonus - slowPenalty;
   return {
     score,
+    ...(pillar
+      ? { pillars: { web: pillar.web, analysis: pillar.analysis } }
+      : {}),
     rep,
     acquisition: g.acquisition,
     churn: g.churn,

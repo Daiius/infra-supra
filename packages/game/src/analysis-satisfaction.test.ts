@@ -9,7 +9,9 @@ import {
 } from 'catalog';
 import {
   analysisOnlyThrottle,
+  analysisSatisfactionScore,
   judgeAnalysis,
+  speedValueOfSec,
   serverRunSec,
   stallOf,
 } from './analysis-satisfaction.ts';
@@ -143,31 +145,135 @@ describe('解析の正確さ', () => {
     );
   });
 
-  it('併用は詳細解析で戻るが、詳細解析が利用者の離れた後に届くなら 1 段下がる', () => {
-    expect(judge('hybrid').analysisAccuracy).toBe('good');
+  it('併用の正確さは詳細解析の届き方で決まる: 待てる時間のうちなら詳細の正確さ・遅れるほど簡易解析の正確さへ・たまり続けるなら簡易解析の正確さ（D-250）', () => {
+    // 待てる時間（1 時間）のうちに届く
+    const onTime = judge('hybrid');
+    expect(onTime.detailDelivery).toBe(1);
+    expect(onTime.analysisAccuracyValue).toBe(1);
+    expect(onTime.analysisAccuracy).toBe('good');
+    // ピークの比 9（月の平均の比 0.9 で追いつく）: 待ち約 4 時間 → 届き方 約 1/4 → 簡易解析（0.5）寄り
     const late = judge('hybrid', settings('position'), {
+      vcpu: 3,
+      peakRatio: 9,
+      peakHourFactor: 10,
+    });
+    expect(late.backlog).toBeUndefined();
+    expect(late.detailDelivery!).toBeCloseTo(
+      RULES.hybrid.detailToleranceSec / late.serverSec!,
+      9,
+    );
+    expect(late.analysisAccuracyValue).toBeGreaterThan(0.5);
+    expect(late.analysisAccuracyValue).toBeLessThan(0.75);
+    expect(late.analysisAccuracy).toBe('fair');
+    // たまり続ける（月の平均の比も 1 以上）: 簡易解析の正確さ
+    const backlog = judge('hybrid', settings('position'), {
       vcpu: 3,
       peakRatio: 3,
     });
-    expect(late.lateAccurate).toBe(true);
-    expect(late.analysisAccuracy).toBe('fair');
+    expect(backlog.backlog).toBe(true);
+    expect(backlog.detailDelivery).toBe(0);
+    expect(backlog.analysisAccuracyValue).toBe(0.5);
   });
 
-  it('詳細解析が希望した棋譜だけなら、詳細解析が遅くても正確さは下げない（利用者が待つつもりで頼む。D-246）', () => {
+  it('詳細解析が希望した棋譜だけなら、待てる時間を長くとる（その日のうち。D-246・D-250）', () => {
+    const host = { vcpu: 3, peakRatio: 9, peakHourFactor: 10 };
     const asked = judge(
       'hybrid',
       { ...settings('position'), scope: 'requested' },
-      { vcpu: 3, peakRatio: 3 },
+      host,
     );
-    expect(asked.lateAccurate).toBeUndefined();
+    const all = judge('hybrid', settings('position'), host);
+    expect(asked.analysisAccuracyValue).toBeGreaterThan(
+      all.analysisAccuracyValue,
+    );
     expect(asked.analysisAccuracy).toBe('good');
-    // 速さは今の併用と同じ（端末の簡易解析と詳細解析の早いほう）
-    const all = judge('hybrid', settings('position'), {
-      vcpu: 3,
-      peakRatio: 3,
-    });
-    expect(asked.analysisSpeed).toBe(all.analysisSpeed);
+    // 速さは範囲によらない（端末の簡易解析と詳細解析の早いほう）
+    expect(asked.analysisSpeedValue).toBe(all.analysisSpeedValue);
     expect(asked.visibleSec).toBe(all.visibleSec);
+  });
+
+  it('併用の速さは簡易解析が担保し、詳細解析の遅れでは下げない（D-250）', () => {
+    const slow = judge('hybrid', settings('position'), {
+      vcpu: 3,
+      peakRatio: 9,
+      peakHourFactor: 10,
+    });
+    const client = judge('client', settings('position', 1));
+    expect(slow.analysisSpeedValue).toBe(client.analysisSpeedValue);
+  });
+});
+
+describe('解析の速さの値（連続。D-250）と満足度の柱', () => {
+  it('見えるまでの時間から: 5 分で 1・15 分で 0.5・それより長いと 0 に近づく', () => {
+    expect(speedValueOfSec(RULES.speed.goodSec, RULES)).toBe(1);
+    expect(speedValueOfSec(RULES.speed.fairSec, RULES)).toBe(0.5);
+    expect(speedValueOfSec(4.5 * 3600, RULES)).toBeLessThan(0.05);
+    expect(speedValueOfSec(Infinity, RULES)).toBe(0);
+  });
+
+  it('ピークの比 1.5 と 10 で解析の速さの値と満足度に差が出る（段階はどちらも悪いでも）', () => {
+    const mild = judge('worker-vps-4gb', settings('position'), {
+      vcpu: 4,
+      peakRatio: 1.5,
+      peakHourFactor: 12,
+    });
+    const heavy = judge('worker-vps-4gb', settings('position'), {
+      vcpu: 4,
+      peakRatio: 10,
+      peakHourFactor: 12,
+    });
+    expect(mild.analysisSpeedValue).toBeGreaterThan(heavy.analysisSpeedValue);
+    expect(heavy.analysisSpeedValue).toBeLessThan(0.05);
+    const stages = (j: ReturnType<typeof judge>) => ({
+      availability: 'good' as const,
+      speed: 'good' as const,
+      feature: 'good' as const,
+      freshness: 'good' as const,
+      quality: 'good' as const,
+      analysisSpeed: j.analysisSpeed,
+      analysisAccuracy: j.analysisAccuracy,
+    });
+    const sMild = analysisSatisfactionScore(
+      stages(mild),
+      KIFU_SATISFACTION_WEIGHTS,
+      mild,
+      RULES,
+    );
+    const sHeavy = analysisSatisfactionScore(
+      stages(heavy),
+      KIFU_SATISFACTION_WEIGHTS,
+      heavy,
+      RULES,
+    );
+    expect(sMild.score).toBeGreaterThan(sHeavy.score);
+  });
+
+  it('満足度は Web の柱と解析の柱の幾何平均（補い合わない）', () => {
+    const stages = {
+      availability: 'good' as const,
+      speed: 'bad' as const,
+      feature: 'good' as const,
+      freshness: 'good' as const,
+      quality: 'good' as const,
+      analysisSpeed: 'good' as const,
+      analysisAccuracy: 'good' as const,
+    };
+    const w = KIFU_SATISFACTION_WEIGHTS;
+    const r = analysisSatisfactionScore(
+      stages,
+      w,
+      { analysisSpeedValue: 0.2, analysisAccuracyValue: 1 },
+      RULES,
+    );
+    // Web の柱は重みの比（反映スピード・画質は重み 0 なので入らない）
+    const web =
+      (w.availability + w.feature) / (w.availability + w.speed + w.feature);
+    expect(r.web).toBeCloseTo(web, 12);
+    expect(r.analysis).toBeCloseTo(
+      RULES.pillar.speed * 0.2 + RULES.pillar.accuracy * 1,
+      12,
+    );
+    expect(r.score).toBeCloseTo(Math.sqrt(r.web * r.analysis), 12);
   });
 });
 
@@ -241,14 +347,17 @@ describe('ゲームの月の満足度', () => {
     const r = play(kifu, PRO, 'same');
     expect(r.satisfaction.stages.analysisSpeed).toBe('good');
     expect(r.satisfaction.stages.analysisAccuracy).toBe('good');
-    expect(r.satisfaction.score).toBeCloseTo(
-      satisfactionScore(r.satisfaction.stages, KIFU_SATISFACTION_WEIGHTS),
-    );
+    // 満足度は Web の柱と解析の柱の幾何平均（D-250）
+    const p = r.satisfaction.pillars!;
+    expect(r.satisfaction.score).toBeCloseTo(Math.sqrt(p.web * p.analysis), 12);
     const one = play(kifu, PRO, 'same', { candidates: 1 });
     expect(one.satisfaction.stages.analysisAccuracy).toBe('fair');
-    expect(one.satisfaction.score).toBeCloseTo(
-      r.satisfaction.score - KIFU_SATISFACTION_WEIGHTS.analysisAccuracy! / 2,
+    // 候補 1 つは正確さの値が 0.5 になり、解析の柱が正確さの重み × 0.5 だけ下がる
+    expect(one.satisfaction.pillars!.analysis).toBeCloseTo(
+      p.analysis - RULES.pillar.accuracy * 0.5,
+      12,
     );
+    expect(one.satisfaction.score).toBeLessThan(r.satisfaction.score);
   });
 
   it('記事・受託の月は解析の段階を持たない', () => {
@@ -279,12 +388,12 @@ describe('ゲームの月の満足度', () => {
     expect(peak.status).not.toBe('slow');
   });
 
-  it('併用はイベントの月にアプリの VPS が滞っても簡易解析で速さを保ち、正確さが下がる', () => {
+  it('併用はイベントの月にアプリの VPS が滞っても簡易解析で速さを保ち、詳細解析が遅れた分だけ正確さが下がる（D-250）', () => {
     const r = play(at(SMALL, true), VPS, 'hybrid');
     expect(r.satisfaction.stages.analysisSpeed).toBe('fair');
     expect(r.satisfaction.stages.analysisAccuracy).toBe('fair');
     expect(r.satisfaction.reasons.analysisAccuracy).toMatch(
-      /詳細解析が届くのは利用者がページを離れた後/,
+      /詳細解析が(届くまで|たまり続けて)/,
     );
     // 同じ実行環境（アプリの VPS）はページも解析も遅くなる
     const same = play(at(SMALL, true), VPS, 'same');
@@ -307,10 +416,13 @@ describe('ゲームの月の満足度', () => {
     const fn = play(at(SMALL, true), VPS, 'fn-lambda');
     expect(fn.satisfaction.stages.analysisSpeed).toBe('good');
     expect(fn.satisfaction.stages.speed).not.toBe('bad');
-    // 併用の worker（hybrid-worker-vps-4gb）は worker の滞留を簡易解析で隠し、詳細解析が遅れて正確さが下がる
+    // 併用の worker（hybrid-worker-vps-4gb）は worker の滞留を簡易解析で隠し、詳細解析が遅れた分だけ正確さの値が下がる（D-250）
     const hw = play(at(SMALL, true), PRO, 'hybrid-worker-vps-4gb');
     expect(hw.satisfaction.stages.analysisSpeed).toBe('fair');
-    expect(hw.satisfaction.stages.analysisAccuracy).toBe('fair');
+    const hwNormal = play(at(SMALL), PRO, 'hybrid-worker-vps-4gb');
+    expect(hw.satisfaction.pillars!.analysis).toBeLessThan(
+      hwNormal.satisfaction.pillars!.analysis,
+    );
     expect(hw.satisfaction.reasons.analysisSpeed).toMatch(
       /ピークの時間帯の滞留の待ち|追いつかず/,
     );

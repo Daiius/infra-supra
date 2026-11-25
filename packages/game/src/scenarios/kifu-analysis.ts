@@ -197,6 +197,10 @@ export const KIFU_ANALYSIS_SATISFACTION: NonNullable<
   stallWindowSec: 1800,
   client: { cpuFactor: 0.5, slowDeviceFactor: 3 },
   accuracy: { goodCandidates: KIFU_CANDIDATES },
+  // 解析の柱の重み（D-250。仮定）: 解析は見えるまでの速さが主で、正確さは添え
+  pillar: { speed: 0.7, accuracy: 0.3 },
+  // 併用の詳細解析を待てる時間（D-250。仮定）: 全局は対局の後の振り返りの間（1 時間）、希望した棋譜だけはその日のうち（6 時間）
+  hybrid: { detailToleranceSec: 3_600, requestedToleranceSec: 21_600 },
 };
 
 /**
@@ -558,7 +562,9 @@ export const KIFU_ANALYSIS: Scenario = {
   // 所持金が尽きる（同じ実行環境のサーバーレスの解析の費用。端末・worker へ移すのは 1 か月目の終わりなので間に合わない）。D-64 の「少なくとも 3 構成が全シードで届く」は満たせないので、残る道筋の
   // VPS + worker 4GB が自前の VPS の障害が無いシード（11 / 50）で全部届き（最小 $3,531）、VPS 2GB・何もしない（最大 $3,097）が
   // 届かない範囲 $3,098〜$3,531 の中ほどに置いた（D-242 の $4,300 から）
-  goal: { cash: 3300, satisfaction: 0.75, maxOutageMonths: 2 },
+  // D-250（満足度を柱の幾何平均に）の後に同じ決め方で $3,300 → $2,900（VPS + worker 4GB の障害の無いシードの最小 $2,981・
+  // VPS 2GB・何もしない の最大 $2,847 の中ほど）。初期費用を決め直すとき（prd/17 §5.6 の 6）にもう一度決める
+  goal: { cash: 2900, satisfaction: 0.75, maxOutageMonths: 2 },
   // 共有のページは解析が終わってから作るので、作り直しは無いとみなす
   pageUpdateShare: 0,
   // まれな出来事は無い

@@ -194,6 +194,7 @@ export function reportOf(
       stages: c.judged.stages,
       reasons: growth.reasons,
       score: growth.score,
+      ...(growth.pillars ? { pillars: growth.pillars } : {}),
       reputation: rep,
       acquisition: growth.acquisition,
       churn: growth.churn,

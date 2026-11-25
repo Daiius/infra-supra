@@ -85,6 +85,17 @@ export type AnalysisSatisfactionRules = {
    * 候補の数は正確さにだけ効かせ、機能（開発の累計）には足さない（B-7）。
    */
   accuracy: { goodCandidates: number };
+  /**
+   * 解析の柱（D-250）: 満足度 = √(Web の柱 × 解析の柱)。解析の柱 = 解析の速さの値 × speed + 正確さの値 × accuracy（合計 1）。
+   * Web の柱は Web の要素（可用性・ページの速さ・機能など）を weights の比で平均したもの。
+   */
+  pillar: { speed: number; accuracy: number };
+  /**
+   * 併用の詳細解析の届き方（D-250）: 詳細解析が見えるまでの時間がこの秒数までなら詳細の正確さ、それより長いと簡易解析の正確さ
+   * （普通）へ 許す秒数 ÷ 時間 の割合で近づき、積み残しが増え続ける（backlog）なら簡易解析の正確さ。希望した棋譜だけ（D-246）は
+   * 利用者が待つつもりで頼むので、許す秒数を長くする。
+   */
+  hybrid: { detailToleranceSec: number; requestedToleranceSec: number };
 };
 
 /** 提案を受けたときの Workload の変化（以降ずっと）。 */

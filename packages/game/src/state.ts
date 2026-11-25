@@ -266,6 +266,8 @@ export type MonthReport = {
     /** 段階ごとの理由（悪い・普通のときだけ）。 */
     reasons: Partial<Record<Element, string>>;
     score: number;
+    /** 解析のあるシナリオの柱の値（D-250。score = √(web × analysis)）。 */
+    pillars?: { web: number; analysis: number };
     reputation: number;
     acquisition: number;
     churn: number;

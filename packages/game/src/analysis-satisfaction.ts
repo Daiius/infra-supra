@@ -8,9 +8,13 @@
 // - ピークの滞留（B-5）: 解析する VPS のピークの比が 1 を超えたら、(比 − 1) × stallWindowSec を待ちに足す。月の平均の比も 1 以上なら、
 //   1 日を通して追いつかないので「悪い」。サーバーレス（関数・コンテナ）は滞留しない（1 件の上限に当たって止まるのは可用性の判定のまま）。
 // - 利用者の端末: 局面の数 × 1 局面 × 端末の倍率（1 件ごとの起動はページを開いたときの 1 回なので数えない）。遅い端末の段階が下がるなら 1 段下げる。
-// - 併用: 端末の簡易解析とサーバーの詳細解析の早いほう。詳細解析が「悪い」（利用者が離れた後に届く）なら、正確さを 1 段下げる。
+// - 併用: 端末の簡易解析とサーバーの詳細解析の早いほう（速さは簡易解析が担保するので、詳細解析の遅れでは下げない。D-250）。
 // 正確さ = 候補の数（B-7: 候補の数はここにだけ効かせる）。端末の評価関数と読みの量では下げない（D-244: 悪手を見つける用途では
-// サーバーとの差が揺らぎの範囲に収まるとみる。端末は候補が 1 つなので「普通」）。
+// サーバーとの差が揺らぎの範囲に収まるとみる。端末は候補が 1 つなので「普通」）。併用は詳細解析の届き方で、詳細の正確さから
+// 簡易解析の正確さ（普通）へ連続的に近づける（D-250。rules.hybrid）。
+// 値（D-250）: 速さ・正確さは段階に加えて 0〜1 の値を持ち、満足度の解析の柱はこの値で出す（段階は札の表示と値の境目から）。
+// 速さの値 = 見えるまでの時間 t（秒）から: t ≤ 良いの境目で 1、普通の境目までは 1 → 0.5 へ直線、それより長いと 0.5 × 普通の境目 ÷ t
+// （ピークの比 10 ≒ 待ち 4.5 時間でほぼ 0）。積み残しが増え続けるなら 0。端末はふつうの端末と遅い端末の値の平均。
 import {
   ANALYSIS_WORKER_NODE_ID,
   analysisCpuSpeed,
@@ -24,7 +28,13 @@ import {
   type AnalysisSettings,
 } from 'catalog';
 import type { MonthEstimate } from './month/bill.ts';
-import { STAGE_DOWN, STAGE_VALUE, type Stage } from './rules.ts';
+import {
+  elementsOf,
+  STAGE_VALUE,
+  type Stage,
+  type Stages,
+  type Weights,
+} from './rules.ts';
 import type { AnalysisSatisfactionRules } from './scenario.ts';
 
 /** 解析する VPS のピークの時間帯の CPU（滞留の判定に使う）。 */
@@ -53,17 +63,34 @@ export type AnalysisJudgment = {
   clientSlowSec?: number;
   /** 判定に使った見えるまでの時間（秒）。backlog なら Infinity。 */
   visibleSec: number;
-  /** 詳細解析が利用者の離れた後に届くので正確さを下げた（併用）。 */
-  lateAccurate?: boolean;
+  /** 解析の速さの値（0〜1。D-250）。 */
+  analysisSpeedValue: number;
+  /** 解析の正確さの値（0〜1。D-250）。 */
+  analysisAccuracyValue: number;
+  /** 併用の詳細解析の届き方（0〜1。1 なら待てる時間のうちに届く。併用のときだけ。D-250）。 */
+  detailDelivery?: number;
   /** 正確さの判定に使った候補の数。 */
   candidates: number;
 };
 
-const stageOfSec = (sec: number, r: AnalysisSatisfactionRules): Stage =>
-  sec <= r.speed.goodSec ? 'good' : sec <= r.speed.fairSec ? 'fair' : 'bad';
+/** 見えるまでの時間（秒）から速さの値（0〜1。D-250 の仮定の式）。 */
+export function speedValueOfSec(
+  sec: number,
+  r: Pick<AnalysisSatisfactionRules, 'speed'>,
+): number {
+  const { goodSec, fairSec } = r.speed;
+  if (!Number.isFinite(sec)) return 0;
+  if (sec <= goodSec) return 1;
+  if (sec <= fairSec) return 1 - (0.5 * (sec - goodSec)) / (fairSec - goodSec);
+  return (0.5 * fairSec) / sec;
+}
 
-const better = (a: Stage, b: Stage): Stage =>
-  STAGE_VALUE[a] >= STAGE_VALUE[b] ? a : b;
+/** 速さの値から段階（良い = 1・普通 = 0.5 以上・悪い。時間の境目と同じ）。 */
+const speedStageOf = (v: number): Stage =>
+  v >= 1 ? 'good' : v >= 0.5 ? 'fair' : 'bad';
+/** 正確さの値から段階（良い 1 と普通 0.5 の中ほどで分ける）。 */
+const accuracyStageOf = (v: number): Stage =>
+  v >= 0.75 ? 'good' : v >= 0.25 ? 'fair' : 'bad';
 
 /**
  * 1 件の解析の壁時計（ms）: 固定の重さ（CPU・読み込みの待ち）+ 局面の数 × 1 局面 + DB の待ち。cpuSpeed は実行先の 1 vCPU の速さの
@@ -123,8 +150,8 @@ export function judgeAnalysis(input: {
   const onClient = browserAnalyzes(placement);
   const onServer = serverAnalyzes(placement);
   const out: Partial<AnalysisJudgment> = {};
-  let speed: Stage | undefined;
-  let server: Stage | undefined;
+  let speedValue = 0;
+  let serverValue: number | undefined;
   if (onServer) {
     const run = serverRunSec(
       shape,
@@ -137,8 +164,8 @@ export function judgeAnalysis(input: {
     out.waitSec = stall.waitSec;
     if (host) out.host = host;
     if (stall.backlog) out.backlog = true;
-    server = stall.backlog ? 'bad' : stageOfSec(out.serverSec, r);
-    speed = server;
+    serverValue = stall.backlog ? 0 : speedValueOfSec(out.serverSec, r);
+    speedValue = serverValue;
   }
   if (onClient) {
     const typical =
@@ -146,32 +173,71 @@ export function judgeAnalysis(input: {
     const slow = typical * r.client.slowDeviceFactor;
     out.clientSec = typical;
     out.clientSlowSec = slow;
-    const base = stageOfSec(typical, r);
-    const client =
-      STAGE_VALUE[stageOfSec(slow, r)] < STAGE_VALUE[base]
-        ? STAGE_DOWN[base]
-        : base;
-    speed = speed === undefined ? client : better(speed, client);
+    // 端末の差: ふつうの端末と遅い端末の値の平均
+    const client = (speedValueOfSec(typical, r) + speedValueOfSec(slow, r)) / 2;
+    // 併用は早いほう（速さは簡易解析が担保し、詳細解析の遅れでは下げない）
+    speedValue = Math.max(speedValue, client);
   }
   const visibleSec = Math.min(
     onServer ? (out.backlog ? Infinity : out.serverSec!) : Infinity,
     onClient ? out.clientSec! : Infinity,
   );
-  // 正確さ: 候補の数（端末は 1 つに固定なので「普通」。KF-08・D-244）。併用は詳細解析で候補が戻るが、詳細解析が「悪い」
-  // （利用者が離れた後に届く）なら 1 段下げる。詳細解析が希望した棋譜だけなら、利用者が待つつもりで頼むので下げない（D-246）
-  const byCandidates: Stage =
-    settings.candidates >= r.accuracy.goodCandidates ? 'good' : 'fair';
-  const lateAccurate =
-    onClient && onServer && server === 'bad' && settings.scope !== 'requested';
-  const accuracy = lateAccurate ? STAGE_DOWN[byCandidates] : byCandidates;
+  // 正確さ: 候補の数（端末は 1 つに固定なので「普通」。KF-08・D-244）。併用は詳細解析が待てる時間のうちに届けば詳細の正確さ、
+  // 遅れるほど簡易解析の正確さ（普通）へ近づき、積み残しが増え続けるなら簡易解析の正確さ（D-250）
+  const detailValue =
+    STAGE_VALUE[
+      settings.candidates >= r.accuracy.goodCandidates ? 'good' : 'fair'
+    ];
+  let accuracyValue = detailValue;
+  if (onClient && onServer) {
+    const quick = STAGE_VALUE.fair;
+    const tolerance =
+      settings.scope === 'requested'
+        ? r.hybrid.requestedToleranceSec
+        : r.hybrid.detailToleranceSec;
+    const delivery = out.backlog
+      ? 0
+      : out.serverSec! <= tolerance
+        ? 1
+        : tolerance / out.serverSec!;
+    out.detailDelivery = delivery;
+    accuracyValue = quick + Math.max(0, detailValue - quick) * delivery;
+  }
   return {
     ...out,
-    ...(lateAccurate ? { lateAccurate } : {}),
-    analysisSpeed: speed!,
-    analysisAccuracy: accuracy,
+    analysisSpeed: speedStageOf(speedValue),
+    analysisAccuracy: accuracyStageOf(accuracyValue),
+    analysisSpeedValue: speedValue,
+    analysisAccuracyValue: accuracyValue,
     visibleSec,
     candidates: settings.candidates,
   };
+}
+
+/**
+ * 解析のあるシナリオの満足度（D-250）: √(Web の柱 × 解析の柱)。Web の柱は解析以外の段階のある要素を weights の比で平均し、
+ * 解析の柱は速さ・正確さの値を rules.pillar で平均する。片方が低いと全体が大きく下がる（補い合わない）。
+ */
+export function analysisSatisfactionScore(
+  stages: Stages,
+  weights: Weights,
+  j: Pick<AnalysisJudgment, 'analysisSpeedValue' | 'analysisAccuracyValue'>,
+  r: Pick<AnalysisSatisfactionRules, 'pillar'>,
+): { score: number; web: number; analysis: number } {
+  let sum = 0;
+  let wsum = 0;
+  for (const e of elementsOf(stages)) {
+    if (e === 'analysisSpeed' || e === 'analysisAccuracy') continue;
+    const w = weights[e] ?? 0;
+    if (w <= 0) continue;
+    sum += w * STAGE_VALUE[stages[e]!];
+    wsum += w;
+  }
+  const web = wsum > 0 ? sum / wsum : 1;
+  const analysis =
+    r.pillar.speed * j.analysisSpeedValue +
+    r.pillar.accuracy * j.analysisAccuracyValue;
+  return { score: Math.sqrt(web * analysis), web, analysis };
 }
 
 /** 解析の CPU を担う VPS のノード（worker の置き場なら worker。ほかは解析の経路の最初の VPS）と、そのピークの比。 */
@@ -240,8 +306,11 @@ export function analysisReasons(
   }
   if (j.analysisAccuracy !== 'good')
     out.analysisAccuracy = [
-      j.lateAccurate &&
-        '端末の簡易解析は出ますが、サーバーの詳細解析が届くのは利用者がページを離れた後です',
+      j.detailDelivery !== undefined &&
+        j.detailDelivery < 1 &&
+        (j.backlog
+          ? '端末の簡易解析は出ますが、サーバーの詳細解析がたまり続けて届きません'
+          : `端末の簡易解析は出ますが、サーバーの詳細解析が届くまで${sec(j.serverSec!)}かかります`),
       j.candidates < r.accuracy.goodCandidates &&
         `1 局面に残す候補が ${j.candidates} つで、ほかの手との比べ方が見えにくくなります`,
     ]
