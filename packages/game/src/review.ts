@@ -207,11 +207,13 @@ export function playStrategy(
       scenario,
       startDate,
       framework ?? s.framework,
-      undefined,
+      s.components,
       undefined,
       undefined,
       undefined,
       s.routes,
+      undefined,
+      s.analysisSettings,
     ),
   );
   for (let i = 0; st.phase === 'playing'; i++)

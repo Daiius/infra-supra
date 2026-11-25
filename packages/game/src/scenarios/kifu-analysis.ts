@@ -13,7 +13,6 @@ import {
   KIFU_GAMES_PER_MAU,
   KIFU_MOVES_PER_GAME,
   KIFU_PV_PER_MAU,
-  KIFU_STUDY_REALTIME,
   kifuAnalysis,
   STACK_DEFS,
 } from 'catalog';
@@ -335,34 +334,6 @@ const KIFU_EVENTS: EventDef[] = [
     },
   },
   {
-    // 出来事 6（KF-15・D-240）。受けるとその構成の手段（realtimeOptionFor）を付ける。セッションを保てない構成でも受けられ、
-    // 提案にはつなぎ直し・盤面の置き場の文を出す。手段の無い構成（隠した構成）では受けられない（受けるには構成の変更が要る）
-    id: 'k-p-study',
-    kind: 'proposal',
-    tier: 'occasional',
-    title: '研究会で一緒に検討したい',
-    text: '利用者から、仲間と同じ盤面を見ながら、手を動かしたり書き込んだりして一緒に検討したいという要望です。参加している間ずっと接続（WebSocket）を保ち、1 回の研究会は 90 分ほど続きます。セッションを保てない構成では、接続が切れるたびにつなぎ直し、盤面をインスタンスの外に置く作りになります',
-    when: { type: 'window', from: 4, to: 9 },
-    premiseRefs: [
-      'pool:cloudflare:durable-objects-',
-      'credit:vercel:pro:usage-credit',
-      'host:memory:',
-      'pool:gcp:run-free-',
-      'pool:aws:lambda:lambda-free-',
-    ],
-    accept: {
-      label: '受ける',
-      cost: 'リアルタイムの部品を付ける。工数 4',
-      effects: [
-        { type: 'workload', mods: { realtime: KIFU_STUDY_REALTIME } },
-        { type: 'realtime-component' },
-        { type: 'feature', points: 6 },
-        { type: 'growth', add: 0.02, months: 3 },
-        { type: 'interrupt', featureWork: true, points: 4, months: 1 },
-      ],
-    },
-  },
-  {
     // 出来事 7（KF-15・D-239）。置き場によらずサーバーで、空いている容量で少しずつ進む（VPS は追加の費用 0・サーバーレスはその月に払う）
     id: 'k-p-strategy',
     kind: 'proposal',
@@ -526,6 +497,36 @@ const KIFU_BASELINES: Strategy[] = [
     short: 'Amplify・何もしない',
     stackIndex: stackOf('aws-amplify'),
   },
+  // 始める画面で解析の置き場と設定を選ぶ道筋（D-249・D-253）。区切り方はどれも「1 局まとめて」
+  {
+    id: 'vercel-pro-client',
+    label: 'Vercel Pro・解析は利用者の端末で（始める画面で選ぶ）',
+    short: 'Vercel Pro・端末で解析',
+    stackIndex: stackOf('vercel-supabase-pro'),
+    components: { analysis: 'client' },
+  },
+  {
+    id: 'vercel-pro-fargate-requested',
+    label:
+      'Vercel Pro・端末で簡易解析、詳細解析は希望した棋譜だけ Fargate（ARM）で（始める画面で選ぶ）',
+    short: 'Vercel Pro・簡易 + Fargate',
+    stackIndex: stackOf('vercel-supabase-pro'),
+    components: { analysis: 'hybrid-fargate-arm' },
+    analysisSettings: { analysisUnit: 1, analysisScope: 1 },
+  },
+  {
+    id: 'vps-16gb-x4-requested',
+    label:
+      'さくらの VPS 2GB・端末で簡易解析、詳細解析は希望した棋譜だけ VPS 16GB × 4 台で（始める画面で選ぶ）',
+    short: 'VPS・簡易 + 16GB × 4',
+    stackIndex: stackOf('sakura-vps-2gb'),
+    components: { analysis: 'hybrid-worker-vps-16gb' },
+    analysisSettings: {
+      analysisUnit: 1,
+      analysisScope: 1,
+      analysisMachines: 4,
+    },
+  },
 ];
 
 export const KIFU_ANALYSIS: Scenario = {
@@ -546,6 +547,9 @@ export const KIFU_ANALYSIS: Scenario = {
   },
   // 棋譜と解析の結果がたまる（画像は保存しない）
   stock: { dbGBPerMillionPV: KIFU_DB_GB_PER_MILLION_PV, gbPerImage: 0 },
+  // 初期費用（D-253）: 既定の置き場で何もしないとき、サーバーレスの中ほど（Cloud Run・Cloudflare Workers）が 3 か月目に尽きる額。
+  // 12 か月を走り切れなくてよい（実行先を試して比べる余裕。赤字を救うためではない。ユーザーの決定 2026-11-25）
+  startCash: 2500,
   // 12 万 PV ≒ 利用者 1,000 人（1 人 月 120 PV）。D-242 の 3 万 PV（1 人 30 PV）から、1 人の局数を月 90 局にしたのに合わせて
   // 1 人の PV を 120（一覧と各局を 1 回開く分）にし、利用者の数は保った（2026-11-24 のユーザーの決定: 現実の試算を優先）
   scale: { startPV: 120_000 },
@@ -557,14 +561,11 @@ export const KIFU_ANALYSIS: Scenario = {
     adsUsdPer1000PV: 2.75,
     loss: CONTRACT_OPERATIONS.revenue.loss,
   },
-  // 参照値（D-142。完走したときのヒントの出し分けにだけ使う）。D-64 の決め方で基準プレイ（シード 1〜50）から決め直した（2026-11-24。
-  // 1 人 月 90 局にした規模）: 完走するのは VPS の 2 本だけで、CF Paid の 3 本・Vercel Pro の 2 本・Cloud Run・Amplify は 1 か月目に
-  // 所持金が尽きる（同じ実行環境のサーバーレスの解析の費用。端末・worker へ移すのは 1 か月目の終わりなので間に合わない）。D-64 の「少なくとも 3 構成が全シードで届く」は満たせないので、残る道筋の
-  // VPS + worker 4GB が自前の VPS の障害が無いシード（11 / 50）で全部届き（最小 $3,531）、VPS 2GB・何もしない（最大 $3,097）が
-  // 届かない範囲 $3,098〜$3,531 の中ほどに置いた（D-242 の $4,300 から）
-  // D-250（満足度を柱の幾何平均に）の後に同じ決め方で $3,300 → $2,900（VPS + worker 4GB の障害の無いシードの最小 $2,981・
-  // VPS 2GB・何もしない の最大 $2,847 の中ほど）。初期費用を決め直すとき（prd/17 §5.6 の 6）にもう一度決める
-  goal: { cash: 2900, satisfaction: 0.75, maxOutageMonths: 2 },
+  // 参照値（D-142。完走したときのヒントの出し分けにだけ使う）。初期費用 $2,500（D-253）の後に D-64 の決め方で決め直した: 端末で解析・
+  // 簡易 + Fargate（希望した棋譜だけ）は全シード（1〜50）で完走し（最小 $6,146・$2,395）、簡易 + VPS 16GB × 4・VPS + worker 4GB は
+  // 自前の障害の無いシードで届く（最小 $2,633・$5,336）。サーバーレスで何もしない道筋は 2〜3 か月目に尽きて届かない。届く道筋の最小より
+  // 少し下の $2,200（元手からの減りを 1 割ほどまでに抑えて走り切る）に置いた（D-242 $4,300 → D-243 $3,300 → D-250 $2,900 から）
+  goal: { cash: 2200, satisfaction: 0.75, maxOutageMonths: 2 },
   // 共有のページは解析が終わってから作るので、作り直しは無いとみなす
   pageUpdateShare: 0,
   // まれな出来事は無い
@@ -583,8 +584,8 @@ export const KIFU_ANALYSIS: Scenario = {
     },
   },
   preview: true,
-  // 研究会の共同検討（出来事 6）は全構成で受けられる（Cloudflare 以外のリアルタイムの部品も選べる。D-240）
-  realtimeAllPlatforms: true,
+  // 研究会の共同検討（出来事 6）は外した（D-252。リアルタイムの要素は別のシナリオに任せる）。Cloudflare 以外のリアルタイムの手段は
+  // catalog に残し、realtimeAllPlatforms を持つシナリオが今は無い
   // 解析の置き場は構成・フレームワークと並ぶ 3 つ目の選択（D-245・prd/17 §5.6）
   ownTabSlots: ['analysis'],
   hidden: {
@@ -596,7 +597,7 @@ export const KIFU_ANALYSIS: Scenario = {
       'buildInterval',
       'pageCache',
     ],
-    // リアルタイムは研究会の提案で付く部品なので、始める画面には出さない（D-240・D-241）
+    // リアルタイムの部品は使わない（研究会の出来事は外した。D-252）
     slots: ['images', 'realtime', 'apiCache'],
     blockBots: true,
   },
@@ -619,8 +620,8 @@ export const KIFU_ANALYSIS: Scenario = {
         text: '大きな対局イベントがあります（前の月に予告が出ます）。閲覧と解析の依頼がイベントの数日に集中します。',
       },
       {
-        about: ['k-p-import', 'k-p-share-ogp', 'k-p-study'],
-        text: '利用者から要望が来ます（過去の棋譜のまとめての取り込み・画像付きのカードでの共有・研究会での共同検討。受けるか断るかを選びます）。',
+        about: ['k-p-import', 'k-p-share-ogp'],
+        text: '利用者から要望が来ます（過去の棋譜のまとめての取り込み・画像付きのカードでの共有。受けるか断るかを選びます）。',
       },
       {
         about: ['k-p-strategy', 'k-p-problems'],

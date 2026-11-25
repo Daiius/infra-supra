@@ -4,6 +4,7 @@ import type {
   AnalysisJobShape,
   AstroShape,
   BrowserAnalysisShape,
+  Choices,
   FrameworkId,
   Platform,
   RouteStrategyId,
@@ -14,6 +15,7 @@ import type {
 import type { WorkloadInput } from 'estimator';
 import { draws } from './random.ts';
 import type { Weights } from './rules.ts';
+import type { StartAnalysisSettings } from './settings.ts';
 import type { Action, GameState } from './state.ts';
 
 /** ためていく量（prd/07 §10.4）。 */
@@ -172,6 +174,7 @@ export type Effect =
    * 今の構成のリアルタイムの部品を付ける（受けた月の事業者の手段。game の realtimeOptionFor。D-240・D-241）。
    * 手段の無い構成（隠した構成）では受けられない提案になる（受けるには構成の変更が要る）。
    */
+  /** 今の構成のリアルタイムの手段を付ける（D-241）。今は使うシナリオがない（D-252）。 */
   | { type: 'realtime-component' }
   /**
    * 解析の件数と DB の増え方を、翌月から months か月 factor 倍にする（過去の棋譜をまとめて取り込む。D-241）。
@@ -305,6 +308,10 @@ export type Strategy = {
   framework?: FrameworkId;
   /** 始める画面で選ぶページごとの描き方（ルートの id → 描き方。省略はフレームワークの既定。D-107）。 */
   routes?: Readonly<Partial<Record<string, RouteStrategyId>>>;
+  /** 始める画面で選ぶ部品（省略したスロットは既定。D-45）。 */
+  components?: Choices;
+  /** 始める画面で選ぶ解析の設定（D-249。解析のあるシナリオだけ）。 */
+  analysisSettings?: StartAnalysisSettings;
   /** 毎月の行動の固定の列（添字 0 が 1 か月目の終わり）。 */
   actions?: Action[][];
   /** 状態を見て行動を決める（台本の時期がシードで揺れるため。§10.8）。actions より優先。 */
@@ -437,7 +444,7 @@ export type Scenario = {
    */
   preview?: true;
   /**
-   * リアルタイムの部品を Cloudflare 以外の構成でも選べる（catalog の optIn の部品。D-240）。棋譜解析の研究会の提案のため。
+   * リアルタイムの部品を Cloudflare 以外の構成でも選べる（catalog の optIn の部品。D-240）。棋譜解析の研究会の提案のために作ったが、出来事を外したので今は使うシナリオがない（D-252。仕組みは別のシナリオのために残す）。
    * 省略は Cloudflare の Durable Objects だけ（記事コミュニティのチャット。X-5）。
    */
   realtimeAllPlatforms?: true;

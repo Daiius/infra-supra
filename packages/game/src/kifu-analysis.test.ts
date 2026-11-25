@@ -11,7 +11,6 @@ import {
   KIFU_PV_PER_MAU,
   kifuAnalysis,
   loadPriceBooks,
-  REALTIME_OPTION,
   stackDef,
 } from 'catalog';
 import { estimate, resolveWorkload } from 'estimator';
@@ -60,13 +59,6 @@ const SMALL = {
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const VISIBLE = STACKS.filter(
   (s) => s.provider !== 'netlify' && s.provider !== 'aws-opennext',
-);
-/**
- * 研究会の提案（4〜9 か月目）まで遊べる構成。無料のプラン（Workers Free は解析の CPU の上限で止まり続ける・Vercel Hobby は商用の規約）は、
- * 提案の前に終わる（受託の基準プレイと同じ形）。
- */
-const PLAYABLE = VISIBLE.filter(
-  (s) => s.id !== 'cloudflare-vinext-free' && s.id !== 'vercel-supabase-hobby',
 );
 const PLACEMENTS = [
   'same',
@@ -212,39 +204,6 @@ describe('提案を受けたときの効果', () => {
     expect(bonus('nextjs')).toBeCloseTo(0.03, 9);
     expect(bonus('vite-spa')).toBeCloseTo(0.015, 9);
     expect(bonus('vite-spa', { ogp: 'prerender' })).toBeCloseTo(0.03, 9);
-  });
-
-  it.each(PLAYABLE.map((s) => [s.id]))(
-    '研究会（%s）: 提案にセッションの保ち方を出し、受けるとその構成のリアルタイムの部品が付く',
-    (id) => {
-      const s = untilProposal('k-p-study', idx(id));
-      const ev = s.history
-        .at(-1)!
-        .events.find((e) => e.id === 'k-p-study' && e.phase === 'proposal')!;
-      expect(ev.session?.length, id).toBeGreaterThan(0);
-      const platform = STACKS[idx(id)]!.provider;
-      const keeps = platform === 'cloudflare' || platform === 'sakura';
-      expect(ev.session![0]).toContain(
-        keeps ? 'セッションを保てます' : 'セッションを保てません',
-      );
-      // 効果の説明はその構成の部品の名前（Cloudflare の部品の名前を出さない。D-241）
-      if (platform !== 'cloudflare')
-        expect(ev.accept!.effects.join('・')).not.toContain('Durable Objects');
-      const t = answer(s, 'k-p-study', true);
-      expect(t.components.realtime).toBe(REALTIME_OPTION[platform]);
-      expect(t.mods.realtime).toBeDefined();
-      expect(playMonth(t).phase).not.toBe('lost');
-    },
-  );
-
-  it('研究会: リアルタイムの手段の無い構成（隠した構成）では受けられない知らせになる', () => {
-    const { seed, month } = seedFor('k-p-study');
-    let s = playMonth(newGame(idx('netlify-supabase-pro'), seed, SMALL));
-    while (s.history.length < month && s.phase === 'playing') s = playMonth(s);
-    if (s.phase !== 'playing') return;
-    const ev = s.history.at(-1)!.events.find((e) => e.id === 'k-p-study')!;
-    expect(ev.unavailable).toContain('構成の変更が要ります');
-    expect(s.pendingProposals).not.toContain('k-p-study');
   });
 
   it('裏の長い処理: 受けると翌月から進み、VPS は追加の費用なしで進む', () => {
@@ -429,24 +388,35 @@ describe('規模と費用の算術（2026-11-24 の決め直し）', () => {
 });
 
 describe('参照値と基準プレイ', () => {
-  it('参照値の所持金（D-64 の決め方）: VPS + worker 4GB は自前の VPS の障害が無いシードで全部届き、VPS 2GB・何もしない は届かない', () => {
+  it('初期費用（D-253）: 既定の置き場で何もしないサーバーレスの構成は 2〜3 か月目に所持金が尽きる（12 か月を走り切らない）', () => {
+    const b = (id: string) => K.baselines.find((x) => x.id === id)!;
+    for (const id of ['gcp', 'aws-amplify', 'vercel-pro'])
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const s = playStrategy(b(id), seed, K, DEFAULT_START_DATE);
+        expect(s.end?.reason, `${id}・${seed}`).toBe('cash');
+        expect(s.end!.month, `${id}・${seed}`).toBeGreaterThanOrEqual(2);
+        expect(s.end!.month, `${id}・${seed}`).toBeLessThanOrEqual(4);
+      }
+  });
+
+  it('参照値の所持金（D-64 の決め方・D-253）: 端末で解析・簡易 + Fargate は全シードで届き、VPS の道筋は自前の障害の無いシードで届く', () => {
     const b = (id: string) => K.baselines.find((x) => x.id === id)!;
     let clean = 0;
     for (let seed = 1; seed <= 50; seed++) {
-      const w = playStrategy(b('vps-worker'), seed, K, DEFAULT_START_DATE);
-      if (w.outages === 0) {
-        clean++;
-        expect(w.phase, `vps-worker・${seed}`).toBe('completed');
-        expect(w.cash, `vps-worker・${seed}`).toBeGreaterThanOrEqual(
-          K.goal.cash,
-        );
+      for (const id of ['vercel-pro-client', 'vercel-pro-fargate-requested']) {
+        const s = playStrategy(b(id), seed, K, DEFAULT_START_DATE);
+        expect(s.phase, `${id}・${seed}`).toBe('completed');
+        expect(s.cash, `${id}・${seed}`).toBeGreaterThanOrEqual(K.goal.cash);
       }
-      expect(
-        playStrategy(b('vps'), seed, K, DEFAULT_START_DATE).cash,
-        `vps・${seed}`,
-      ).toBeLessThan(K.goal.cash);
+      for (const id of ['vps-16gb-x4-requested', 'vps-worker']) {
+        const s = playStrategy(b(id), seed, K, DEFAULT_START_DATE);
+        if (s.outages > 0) continue;
+        clean++;
+        expect(s.phase, `${id}・${seed}`).toBe('completed');
+        expect(s.cash, `${id}・${seed}`).toBeGreaterThanOrEqual(K.goal.cash);
+      }
     }
-    expect(clean).toBeGreaterThan(5);
+    expect(clean).toBeGreaterThan(10);
   });
 
   it('基準プレイ（golden。シード 1・3）', () => {

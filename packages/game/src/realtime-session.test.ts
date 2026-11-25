@@ -23,7 +23,12 @@ import { booksAt } from './core.ts';
 import { monthEstimate } from './setup/estimates.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 
-const KIFU = SCENARIOS['kifu-analysis']!;
+// 棋譜解析から研究会の出来事を外した（D-252）ので、全構成のリアルタイムを持つシナリオは今は無い。仕組みを確かめるため、
+// 棋譜解析に realtimeAllPlatforms を付けた形をテストの中で作る
+const KIFU: Scenario = {
+  ...SCENARIOS['kifu-analysis']!,
+  realtimeAllPlatforms: true,
+};
 const ARTICLE = ARTICLE_COMMUNITY;
 const idx = (id: string) => STACKS.findIndex((s) => s.id === id);
 const VISIBLE = STACKS.filter(
