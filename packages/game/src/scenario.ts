@@ -430,6 +430,11 @@ export type Scenario = {
    * 省略は Cloudflare の Durable Objects だけ（記事コミュニティのチャット。X-5）。
    */
   realtimeAllPlatforms?: true;
+  /**
+   * 構成のカードから外し、構成・フレームワークと並ぶ別のタブで選ぶスロット（D-245・prd/17 §5.6）。アプリに固有の重大な選択で、
+   * インフラから独立して選べるもの（棋譜解析の「解析の置き場」）。画面はスロットの名前をタブの見出しにする。
+   */
+  ownTabSlots?: readonly SlotId[];
   /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
   hidden?: {
     settings?: (

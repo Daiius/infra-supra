@@ -180,13 +180,21 @@ export async function renderApp(): Promise<void> {
 }
 
 /**
- * 今の表示で query が見つからなければ、① 構成・② フレームワークのタブ（D-116 の補足。隠れた側は hidden）を順に開いて探す
+ * 今の表示で query が見つからなければ、① 構成・② フレームワーク・③ 別のタブのスロット（D-116 の補足・D-245。隠れた側は hidden）を順に開いて探す
  * （人がタブを開いて探すのと同じ）。始める画面・見積モードの外では query をそのまま返す。
  */
 export function inSetupTabs<T>(query: () => T | null): T | null {
   const found = query();
   if (found !== null) return found;
-  for (const tab of ['stack', 'framework'] as const) {
+  // ① ② と、シナリオが別のタブに出すスロット（D-245。`slot:<スロット>`）
+  const tabs = [
+    ...document.querySelectorAll<HTMLElement>('[data-setup-tab-button]'),
+  ].map(
+    (b) =>
+      b.getAttribute('data-setup-tab-button') as
+        'stack' | 'framework' | `slot:${string}`,
+  );
+  for (const tab of tabs) {
     const b = document.querySelector(`[data-setup-tab-button="${tab}"]`);
     if (!b || b.getAttribute('aria-selected') === 'true') continue;
     showSetupTab(tab);
@@ -281,7 +289,7 @@ export const showPartsView = (view: 'diagram' | 'list') => {
  * 欄を操作する前に開く。
  * 選んだタブは localStorage に覚えるので、テストの中では開いたまま（テストの前に消える。既定は ①）。
  */
-export const showSetupTab = (tab: 'stack' | 'framework') => {
+export const showSetupTab = (tab: 'stack' | 'framework' | `slot:${string}`) => {
   const b = document.querySelector<HTMLElement>(
     `[data-setup-tab-button="${tab}"]`,
   );
@@ -293,6 +301,25 @@ export const showSetupTab = (tab: 'stack' | 'framework') => {
 export const showStackTab = () => showSetupTab('stack');
 /** ② フレームワークと描き方のタブを開く。 */
 export const showFrameworkTab = () => showSetupTab('framework');
+/** シナリオが別のタブに出すスロット（D-245。解析の置き場）のタブを開き、その欄を返す。 */
+export const showOwnSlotTab = (slot: string): HTMLElement => {
+  showSetupTab(`slot:${slot}`);
+  const el = document.querySelector<HTMLElement>(
+    `section[data-own-slot="${slot}"]`,
+  );
+  expect(el, `別のタブの欄 ${slot}`).not.toBeNull();
+  return el!;
+};
+/** 解析の置き場のタブで、置き方（mode）と実行先（target。省略は置き方だけ）を選ぶ（D-245）。 */
+export const pickAnalysis = (mode: string, target?: string) => {
+  const press = (sel: string) => {
+    const b = showOwnSlotTab('analysis').querySelector<HTMLElement>(sel);
+    expect(b, sel).not.toBeNull();
+    if (b!.getAttribute('aria-pressed') !== 'true') fireEvent.click(b!);
+  };
+  press(`[data-analysis-mode="${mode}"]`);
+  if (target) press(`[data-analysis-target="${target}"]`);
+};
 /** 部品のチップの一覧（「機能から選ぶ」）にする（チップの行を押すテスト用）。 */
 export const showPartsList = () => showPartsView('list');
 /** 部品を選べるカードがあれば、チップの一覧にする（見出しで欄を引くテスト用。無ければ何もしない）。 */
@@ -347,6 +374,25 @@ export async function startGame(s: Setup) {
       .find((b) => !b.disabled);
     expect(first, '選べる選択肢が無いスロット').toBeDefined();
     fireEvent.click(first!);
+  }
+  // シナリオが別のタブに出すスロット（D-245。解析の置き場）: 未選択なら最初の置き方と実行先を選ぶ
+  for (const b of document.querySelectorAll<HTMLElement>(
+    '[data-setup-tab-button^="slot:"]',
+  )) {
+    const slot = b.getAttribute('data-setup-tab-button')!.slice('slot:'.length);
+    for (let i = 0; i < 3; i++) {
+      const sec = showOwnSlotTab(slot);
+      const groups = [...sec.querySelectorAll<HTMLElement>('[role="group"]')];
+      const open = groups.find(
+        (g) => !g.querySelector('button[aria-pressed="true"]'),
+      );
+      if (!open) break;
+      const first = [
+        ...open.querySelectorAll<HTMLButtonElement>('button[aria-pressed]'),
+      ].find((x) => !x.disabled);
+      expect(first, `選べる選択肢が無い ${slot}`).toBeDefined();
+      fireEvent.click(first!);
+    }
   }
   fireEvent.change(screen.getByLabelText(/始めた日/), {
     target: { value: START_DATE },

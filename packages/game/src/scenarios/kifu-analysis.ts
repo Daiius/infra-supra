@@ -579,6 +579,8 @@ export const KIFU_ANALYSIS: Scenario = {
   preview: true,
   // 研究会の共同検討（出来事 6）は全構成で受けられる（Cloudflare 以外のリアルタイムの部品も選べる。D-240）
   realtimeAllPlatforms: true,
+  // 解析の置き場は構成・フレームワークと並ぶ 3 つ目の選択（D-245・prd/17 §5.6）
+  ownTabSlots: ['analysis'],
   hidden: {
     // 画像は配らない。共有のページ（全員に同じ中身・OGP）があるので、再検証の間隔・ISR のキャッシュ・SNS のカードは出す
     settings: [

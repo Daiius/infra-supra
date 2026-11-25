@@ -17,6 +17,8 @@ import {
   openSlot,
   renderApp,
   showSetupTab,
+  showOwnSlotTab,
+  pickAnalysis,
   useSmokeEnv,
   waitLoaded,
   showPage,
@@ -253,7 +255,7 @@ describe('見積モードの画面', () => {
     }
   });
 
-  it('W-KF3 棋譜解析のテンプレートでは解析の置き場（D-235）を選べ、URL・月の費用・構成図の箱が替わる。ほかのテンプレートには出ない', async () => {
+  it('W-KF3 棋譜解析のテンプレートでは解析の置き場（D-235）を ③ のタブ（D-245）で選べ、URL・月の費用・構成図の箱が替わる。ほかのテンプレートには出ない', async () => {
     window.history.replaceState(
       null,
       '',
@@ -261,45 +263,57 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
-    // 既定はアプリと同じ実行環境
-    expect(checked('解析の置き場')).toBe('same');
+    const c = () =>
+      new URLSearchParams(window.location.search).get('c.analysis');
+    const pressed = (attr: string) =>
+      showOwnSlotTab('analysis')
+        .querySelector(`[${attr}][aria-pressed="true"]`)
+        ?.getAttribute(attr);
+    // 既定はアプリと同じ実行環境（サーバー）。① のカードには解析の置き場の行を出さない
+    expect(pressed('data-analysis-mode')).toBe('server');
+    expect(pressed('data-analysis-target')).toBe('same');
+    showSetupTab('stack');
+    ensurePartsList();
+    expect(
+      document.querySelector('section[data-parts] [data-slot="analysis"]'),
+    ).toBeNull();
     const total = () =>
       within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent;
     const before = total();
     // worker（さくらの VPS）にすると URL に残り、月の費用が替わり、図に worker の箱が出る
-    choose('解析の置き場', 'worker-vps-2gb');
-    expect(checked('解析の置き場')).toBe('worker-vps-2gb');
-    expect(new URLSearchParams(window.location.search).get('c.analysis')).toBe(
-      'worker-vps-2gb',
-    );
+    pickAnalysis('server', 'worker-vps-2gb');
+    expect(c()).toBe('worker-vps-2gb');
     expectEstimate();
     expect(total()).not.toBe(before);
     fireEvent.click(
       within(stackCard()).getByRole('button', { name: '構成図から選ぶ' }),
     );
-    const worker = stackCard().querySelector<HTMLElement>(
-      '[data-node="analysis-worker"]',
-    );
-    expect(worker).not.toBeNull();
-    expect(worker!.closest('[data-slots~="analysis"]')).not.toBeNull();
-    // 利用者の端末にすると worker の箱は消え、解析の置き場は幽霊の箱で選べる
-    fireEvent.click(
-      within(stackCard()).getByRole('button', { name: '機能から選ぶ' }),
-    );
-    choose('解析の置き場', 'client');
-    expect(new URLSearchParams(window.location.search).get('c.analysis')).toBe(
-      'client',
-    );
-    expectEstimate();
-    fireEvent.click(
-      within(stackCard()).getByRole('button', { name: '構成図から選ぶ' }),
-    );
     expect(
       stackCard().querySelector('[data-node="analysis-worker"]'),
-    ).toBeNull();
-    expect(
-      stackCard().querySelector('[data-slots~="analysis"]'),
     ).not.toBeNull();
+    // 別の事業者のサーバーレス（Vercel の構成に AWS Lambda）: 図に解析の関数の箱が出る。Vercel Functions は同じ実行環境なので重ねない
+    pickAnalysis('server', 'fn-lambda');
+    expect(c()).toBe('fn-lambda');
+    expectEstimate();
+    expect(
+      stackCard().querySelector('[data-node="analysis-fn"]'),
+    ).not.toBeNull();
+    expect(
+      showOwnSlotTab('analysis').querySelector(
+        '[data-analysis-target="fn-vercel"]',
+      ),
+    ).toBeNull();
+    // 置き方を併用にすると実行先は保つ
+    pickAnalysis('hybrid');
+    expect(c()).toBe('hybrid-fn-lambda');
+    // 利用者の端末にすると実行先は選ばず、解析の箱は消える
+    pickAnalysis('client');
+    expect(c()).toBe('client');
+    expectEstimate();
+    expect(
+      showOwnSlotTab('analysis').querySelector('[data-analysis-target]'),
+    ).toBeNull();
+    expect(stackCard().querySelector('[data-node="analysis-fn"]')).toBeNull();
     cleanup();
 
     // 解析の無いテンプレート（記事）には出ない
@@ -310,10 +324,13 @@ describe('見積モードの画面', () => {
     );
     await renderApp();
     expectEstimate();
+    expect(
+      document.querySelector('[data-setup-tab-button="slot:analysis"]'),
+    ).toBeNull();
     expect(queryGroup('解析の置き場')).toBe(null);
   });
 
-  it('W-KF4 棋譜解析では解析の区切り方と候補の数（D-236）を解析の置き場の行で選べ、URL・月の費用が替わる。端末では候補の数を選べない', async () => {
+  it('W-KF4 棋譜解析では解析の区切り方と候補の数（D-236）を解析の置き場のタブ（D-245）で選べ、URL・月の費用が替わる。端末では候補の数を選べない', async () => {
     window.history.replaceState(
       null,
       '',
@@ -324,14 +341,9 @@ describe('見積モードの画面', () => {
     const q = () => new URLSearchParams(window.location.search);
     const total = () =>
       within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent;
-    // 解析の設定は解析の置き場の行の中（畳んだ行を開くと出る。画像の行と同じ。D-119）
+    // 解析の設定は解析の置き場のタブ（③。D-245）の中
     const openAnalysis = () => {
-      showSetupTab('stack');
-      ensurePartsList();
-      const row = document.querySelector<HTMLElement>(
-        'section[data-parts] [data-slot="analysis"]',
-      )!;
-      if (row.getAttribute('data-collapsed') === 'true') openSlot(row);
+      showOwnSlotTab('analysis');
     };
     openAnalysis();
     // 既定は局面ごと・候補 3 つ（URL には書かない）
@@ -348,7 +360,7 @@ describe('見積モードの画面', () => {
     expectEstimate();
     // 利用者の端末にすると候補は 1 つに固定し、選べない理由を出す
     choose('1 局面に残す候補の数', '3');
-    choose('解析の置き場', 'client');
+    pickAnalysis('client');
     openAnalysis();
     const cands = group('1 局面に残す候補の数');
     expect(checked('1 局面に残す候補の数')).toBe('1');

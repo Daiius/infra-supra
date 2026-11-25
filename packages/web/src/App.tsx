@@ -49,6 +49,7 @@ import {
   type SetupTabsApi,
   type SetupChoices,
 } from './setup-components.tsx';
+import { ownSlotTabs } from './own-slot-field.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import {
   editParts,
@@ -915,6 +916,15 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   />
                 ),
               }}
+              // ③ シナリオが別のタブで選ぶスロット（解析の置き場。D-245）
+              own={ownSlotTabs({
+                scenario,
+                stackIndex: stack,
+                framework,
+                components: parts,
+                onChange: editComponents,
+                compare: partsCompare,
+              })}
               // ② フレームワークと描き方（構成と同列の判断。D-35）。選んでいる構成に載せられないものは選べない（D-113）
               framework={{
                 label: 'フレームワーク',

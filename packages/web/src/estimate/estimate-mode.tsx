@@ -95,6 +95,7 @@ import {
 import { roundInt, usd } from '../format.ts';
 import { previewEnabled } from '../preview.ts';
 import { AnalysisSettingChips } from '../analysis-settings.tsx';
+import { ownSlotTabs } from '../own-slot-field.tsx';
 
 const jpy = (n: number) => `¥${roundInt(n).toLocaleString('ja-JP')}`;
 const money = (n: number, currency: string) =>
@@ -636,6 +637,20 @@ function Conditions({
                 />
               ),
             }}
+            // ③ テンプレートが別のタブで選ぶスロット（解析の置き場。D-245）
+            own={ownSlotTabs({
+              scenario,
+              stackIndex,
+              framework: input.framework,
+              components: input.parts,
+              onChange: onPickParts,
+              compare: (slot) => ({
+                rows: slotComparisonOf(input, slot),
+                basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
+              }),
+              slotExtra:
+                Object.keys(partsExtra).length > 0 ? partsExtra : undefined,
+            })}
             framework={{
               label: 'フレームワーク',
               summary: FRAMEWORKS[input.framework].label,

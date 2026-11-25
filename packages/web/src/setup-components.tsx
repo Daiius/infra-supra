@@ -100,7 +100,7 @@ export const isUnselected = (x: SetupSlot, value: SetupChoices) =>
   !pickedOf(x, value);
 
 /** チップの見せ方に要る、スロットの選択肢ごとの状態（選択中・選べない理由）。同じ事業者の部品を先に並べる（D-116）。 */
-function slotView(
+export function slotView(
   x: SetupSlot,
   stackIndex: number,
   framework: FrameworkId,
@@ -704,8 +704,10 @@ export function SettingChips<V extends string | number>({
   );
 }
 
-/** ① 構成・② フレームワークのタブ（D-116 の補足）。 */
-export type SetupTab = 'stack' | 'framework';
+/**
+ * ① 構成・② フレームワークのタブ（D-116 の補足）と、シナリオが別のタブに出すスロット（`slot:<スロット>`。D-245・Scenario.ownTabSlots）。
+ */
+export type SetupTab = 'stack' | 'framework' | `slot:${string}`;
 
 /** SetupTabs を外から動かす口（D-125）。 */
 export type SetupTabsApi = {
@@ -713,7 +715,7 @@ export type SetupTabsApi = {
   show: (tab: SetupTab) => void;
   /**
    * ① を開き、選んでいるカードのそのスロットの選択 UI（機能のチップの行・構成図の箱）までスクロールしてフォーカスする。
-   * 見つからなければカードまでスクロールして false（カードはフォーカスできない）。
+   * 別のタブに出すスロットは、そのタブを開いて最初の選べるボタンへ。見つからなければカードまでスクロールして false（カードはフォーカスできない）。
    */
   focusSlot: (slot: string) => boolean;
 };
@@ -734,11 +736,13 @@ export type SetupTabInfo = {
   panel: ReactNode;
 };
 
-const SETUP_TABS: readonly SetupTab[] = ['stack', 'framework'];
+/** 別のタブに出すスロットのタブ（D-245）。 */
+export type OwnSetupTab = SetupTabInfo & { slot: string };
 
-function readSetupTab(key: string): SetupTab {
+function readSetupTab(key: string, tabs: readonly SetupTab[]): SetupTab {
   try {
-    return localStorage.getItem(key) === 'framework' ? 'framework' : 'stack';
+    const v = localStorage.getItem(key);
+    return tabs.find((t) => t === v) ?? 'stack';
   } catch {
     // 保存領域が使えない環境では ① から
     return 'stack';
@@ -764,15 +768,27 @@ export function SetupTabs({
   storageKey,
   stack,
   framework,
+  own = [],
   api,
 }: {
   storageKey: string;
   stack: SetupTabInfo;
   framework: SetupTabInfo;
+  /** シナリオが構成のカードから外して別のタブに出すスロット（D-245。② の後ろに並べる）。 */
+  own?: readonly OwnSetupTab[] | undefined;
   /** 外からタブを開く・① の部品の選択 UI へ移る口（未選択の部品へのジャンプ。D-125）。 */
   api?: Ref<SetupTabsApi> | undefined;
 }) {
-  const [tab, setTabState] = useState<SetupTab>(() => readSetupTab(storageKey));
+  const SETUP_TABS: readonly SetupTab[] = [
+    'stack',
+    'framework',
+    ...own.map((o): SetupTab => `slot:${o.slot}`),
+  ];
+  const [stored, setTabState] = useState<SetupTab>(() =>
+    readSetupTab(storageKey, SETUP_TABS),
+  );
+  // 覚えていたタブが今のシナリオに無ければ（別のタブのスロットを持たないシナリオ）① を出す
+  const tab = SETUP_TABS.includes(stored) ? stored : 'stack';
   const setTab = (v: SetupTab) => {
     setTabState(v);
     storeSetupTab(storageKey, v);
@@ -784,6 +800,16 @@ export function SetupTabs({
   useImperativeHandle(api, () => ({
     show: (t) => flushSync(() => setTab(t)),
     focusSlot: (slot) => {
+      // 別のタブに出すスロットは、そのタブを開いて最初の選べるボタンへ
+      if (own.some((o) => o.slot === slot)) {
+        const t: SetupTab = `slot:${slot}`;
+        flushSync(() => setTab(t));
+        const el = panels.current[t]?.querySelector<HTMLElement>(
+          'button:not([disabled])',
+        );
+        el?.focus();
+        return el !== null && el !== undefined;
+      }
       // ① を開いて描き終えてから、選んでいるカードのそのスロットの選択 UI（機能のチップの行か、構成図の箱）を探す
       flushSync(() => setTab('stack'));
       const panel = panels.current.stack;
@@ -808,7 +834,12 @@ export function SetupTabs({
       return target !== null && target !== undefined;
     },
   }));
-  const info = { stack, framework };
+  const infoOf = (t: SetupTab): SetupTabInfo =>
+    t === 'stack'
+      ? stack
+      : t === 'framework'
+        ? framework
+        : (own.find((o) => `slot:${o.slot}` === t) ?? stack);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const i = SETUP_TABS.indexOf(tab);
     const n = SETUP_TABS.length;
@@ -840,7 +871,7 @@ export function SetupTabs({
         onKeyDown={onKeyDown}
       >
         {SETUP_TABS.map((t) => {
-          const x = info[t];
+          const x = infoOf(t);
           const selected = tab === t;
           return (
             <button
@@ -893,8 +924,8 @@ export function SetupTabs({
       </div>
       {/* 隠れたタブの知らせを読む（見えているタブの知らせは欄の中の aria-live が読むので、二重にしない） */}
       <div aria-live="polite" className="sr-only" data-setup-tab-live>
-        {SETUP_TABS.filter((t) => t !== tab && info[t].live).map((t) => (
-          <p key={t}>{info[t].live}</p>
+        {SETUP_TABS.filter((t) => t !== tab && infoOf(t).live).map((t) => (
+          <p key={t}>{infoOf(t).live}</p>
         ))}
       </div>
       {SETUP_TABS.map((t) => (
@@ -910,7 +941,7 @@ export function SetupTabs({
           className="min-w-0 rounded-box border border-base-300 bg-base-100 p-1 sm:p-2"
         >
           <ChoiceHeadingHidden.Provider value>
-            {info[t].panel}
+            {infoOf(t).panel}
           </ChoiceHeadingHidden.Provider>
         </div>
       ))}

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// 解析の設定（区切り方・候補の数。D-236）を、ゲームの途中の「構成を変える」の欄（D-185）の解析の置き場の行で選び直す。
+// 解析の設定（区切り方・候補の数。D-236）を、ゲームの途中の「構成を変える」の欄（D-185）の解析の置き場のタブ（③。D-245）で選び直す。
 // 棋譜解析のシナリオはまだ遊べない（SCENARIOS に無い。PR-10 で登録）ので、欄だけを棋譜解析の状態で描いて確かめる。
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import {
@@ -17,8 +17,9 @@ import {
   changeItems,
   ensurePartsList,
   openSetupChange,
-  openSlot,
+  pickAnalysis,
   registerSetupChange,
+  showOwnSlotTab,
   showStackTab,
   useSmokeEnv,
 } from './smoke.test-helpers.tsx';
@@ -44,15 +45,8 @@ const draw = (scenario = kifu) => {
   openSetupChange();
   return onRegister;
 };
-const analysisRow = () => {
-  showStackTab();
-  ensurePartsList();
-  const row = document.querySelector<HTMLElement>(
-    'section[data-parts] [data-slot="analysis"]',
-  );
-  if (row && row.getAttribute('data-collapsed') === 'true') openSlot(row);
-  return row;
-};
+// 解析の置き場は ③ のタブ（D-245）。区切り方・候補の数もそのタブで選ぶ
+const analysisRow = () => showOwnSlotTab('analysis');
 const pressChip = (group: string, value: string) => {
   const g = within(analysisRow()!).getByRole('group', { name: group });
   fireEvent.click(
@@ -89,12 +83,7 @@ describe('構成を変えるの欄の解析の設定（D-236）', () => {
 
   it('W-KF6 解析の置き場を利用者の端末にすると、候補の数は 1 つに固定して選べない理由を出す', () => {
     draw();
-    const row = analysisRow()!;
-    fireEvent.click(
-      within(
-        row.querySelector<HTMLElement>('[data-option="client"]')!,
-      ).getByRole('button', { pressed: false }),
-    );
+    pickAnalysis('client');
     const g = within(analysisRow()!).getByRole('group', {
       name: '1 局面に残す候補の数',
     });
@@ -117,5 +106,8 @@ describe('構成を変えるの欄の解析の設定（D-236）', () => {
       document.querySelector('section[data-parts] [data-slot="analysis"]'),
     ).toBeNull();
     expect(document.querySelector('[data-analysis-settings]')).toBeNull();
+    expect(
+      document.querySelector('[data-setup-tab-button="slot:analysis"]'),
+    ).toBeNull();
   });
 });

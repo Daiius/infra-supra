@@ -43,6 +43,7 @@ import { OptionText } from './option-text.tsx';
 import type { RoutePlanEditor } from './route-plan-field.tsx';
 import { FrameworkField } from './scenario-briefing.tsx';
 import { SetupTabs, type SetupChoices } from './setup-components.tsx';
+import { ownSlotTabs } from './own-slot-field.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import { commentOptionsOf } from './comments-choice.ts';
 import { AnalysisSettingChips } from './analysis-settings.tsx';
@@ -304,6 +305,23 @@ function ChangeBody({
       routes: {},
     });
   };
+  // 解析の区切り方・候補の数（D-236）は解析の置き場（③ のタブ。D-245）で選び直す（解析のあるシナリオだけ）
+  const analysisExtra = draft.settings
+    ? {
+        analysis: (
+          <AnalysisSettingChips
+            value={{
+              analysisUnit:
+                draft.settings.analysisUnit ?? state.settings.analysisUnit,
+              candidates:
+                draft.settings.candidates ?? state.settings.candidates,
+            }}
+            analysis={draft.components.analysis}
+            onChange={(v) => setDraft({ ...draft, settings: { ...v } })}
+          />
+        ),
+      }
+    : undefined;
   const onComponents = (v: SetupChoices) =>
     setDraft({
       ...draft,
@@ -376,34 +394,27 @@ function ChangeBody({
               onComponentsChange={onComponents}
               partsNote="役割ごとに選び直します。差し替えの工数と期間は下の変更の内訳に出ます"
               partsCompare={partsCompare}
-              // 解析の区切り方・候補の数（D-236）は解析の置き場の行で選び直す（解析のあるシナリオだけ）
-              partsExtra={
-                draft.settings
-                  ? {
-                      analysis: (
-                        <AnalysisSettingChips
-                          value={{
-                            analysisUnit:
-                              draft.settings.analysisUnit ??
-                              state.settings.analysisUnit,
-                            candidates:
-                              draft.settings.candidates ??
-                              state.settings.candidates,
-                          }}
-                          analysis={draft.components.analysis}
-                          onChange={(v) =>
-                            setDraft({ ...draft, settings: { ...v } })
-                          }
-                        />
-                      ),
-                    }
-                  : undefined
-              }
+              partsExtra={analysisExtra}
               diagramCaption="選んでいる部品で描いています。"
               alsoShow={state.stackIndex}
             />
           ),
         }}
+        // ③ シナリオが別のタブで選ぶスロット（解析の置き場。D-245）。作り直しの間は構成と同じく選び直せない
+        own={
+          migrating
+            ? []
+            : ownSlotTabs({
+                scenario: sc,
+                stackIndex: draft.stackIndex,
+                framework: draft.framework,
+                components: draft.components,
+                onChange: onComponents,
+                compare: partsCompare,
+                note: '選び直すと工数を使い、翌月から効きます。工数は下の変更の内訳に出ます',
+                slotExtra: analysisExtra,
+              })
+        }
         framework={{
           label: 'フレームワーク',
           summary: FRAMEWORKS[draft.framework].label,

@@ -346,7 +346,13 @@ function StackCard({
     routes,
   );
   // 差し替えられるスロットの箱と幽霊の箱（D-116 の補足）
-  const slots = usePartSlots(scenario, stackIndex, framework, components ?? {});
+  // 別のタブで選ぶスロット（D-245。解析の置き場）は構成のカードでは選ばない（図には箱が出る）
+  const slots = usePartSlots(
+    scenario,
+    stackIndex,
+    framework,
+    components ?? {},
+  ).filter((x) => !(scenario.ownTabSlots ?? []).includes(x.slot as never));
   const boxes = slotBoxes(
     (c) => diagramArchitecture(scenario, stackIndex, framework, c, routes),
     diagramComponents(scenario, stackIndex, framework, components),
