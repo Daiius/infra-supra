@@ -1,4 +1,4 @@
-// pairwise の組み合わせの作り方（D-114 CP-14・combo-sweep.test.ts が使う）。架空のスロットで、2 つの組を全部覆うこと・決定論・依存の扱いを確かめる。
+// pairwise の組み合わせの作り方（D-114 CP-14・combo-sweep.*.test.ts が使う）。架空のスロットで、2 つの組を全部覆うこと・決定論・依存の扱いを確かめる。
 import { describe, expect, it } from 'vitest';
 import { pairwise, type Combo, type Domain } from './pairwise.test-helpers.ts';
 

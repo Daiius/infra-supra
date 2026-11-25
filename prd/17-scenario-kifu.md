@@ -599,12 +599,13 @@ KF-16 の基準（受託の C-10・[07](./07-game-design.md) §10.8・D-64 の�
 - 見積モードのテンプレートの選択肢: `packages/web/src/estimate/model.ts:82-88`（`TEMPLATES`）。
 - 図柄: `packages/web/src/scenario-art.tsx:35`（`SCENARIO_ART`）。
 - 出来事の印: `packages/web/src/event-icons.tsx:59`（`BY_ID`。新しい種類なら `EventCategory`・`:19`）。
+- 組み合わせの総当たり: `packages/game/src/combo-sweep.test-helpers.ts` の `SWEEP_SCENARIOS` に id を足し、`combo-sweep.<id>.test.ts` と `combo-sweep.rewrite.<id>.test.ts` を足す（足し忘れは `combo-sweep.coverage.test.ts` が止める。2026-11-24 にシナリオごとのファイルに分けた）。
 
 自動で拾う（確認だけ。【事実】）:
 
 - 始める画面と統計の画面は `SCENARIOS` から並べる。
 - 集計（stats）は `s in SCENARIOS` で検証する（`packages/stats/src/route.ts:101`・`:115`・`:129`・`verify.ts:135`）。stats の変更・migration は要らない見込み。
-- 全シナリオを回すテスト: `packages/game/src/combo-sweep.test.ts:136` など。
+- 全シナリオを回すテスト: 総当たりの 1 か月目の見込み（`combo-sweep.month-one.test.ts`）と列挙のテスト（`combo-sweep.coverage.test.ts`）は `SCENARIOS` から自動で拾う。
 
 拡張（§9 の PR）:
 
