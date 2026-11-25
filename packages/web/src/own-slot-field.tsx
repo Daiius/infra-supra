@@ -20,6 +20,15 @@ import {
   type Scenario,
   type SetupSlot,
 } from 'game';
+import {
+  Coins,
+  Layers,
+  Server,
+  Smartphone,
+  Target,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import {
@@ -32,24 +41,84 @@ import {
 } from './setup-components.tsx';
 import { SlotCompareInfo } from './slot-compare.tsx';
 
+/** 置き方の引き換えの段階（良い・普通・悪いの 3 段で、色とアイコンで見せる）。 */
+type Level = 'good' | 'fair' | 'poor';
+/** 置き方ごとの引き換え（正確さ・サーバーの費用・速さ）。モデルの判定（prd/17 §5.5）を言葉にしたもの。 */
+type Tradeoff = { icon: LucideIcon; label: string; level: Level; text: string };
+
 /** 置き方の選択肢（解析の置き場）。 */
-const MODES: readonly { mode: AnalysisMode; label: string; note: string }[] = [
+const MODES: readonly {
+  mode: AnalysisMode;
+  label: string;
+  icon: LucideIcon;
+  tradeoffs: readonly Tradeoff[];
+}[] = [
   {
     mode: 'server',
     label: 'サーバーで解析',
-    note: '解析をサーバーで動かします。実行先を下から選びます',
+    icon: Server,
+    tradeoffs: [
+      {
+        icon: Target,
+        label: '正確さ',
+        level: 'good',
+        text: '強い評価関数で深く読める',
+      },
+      { icon: Coins, label: '費用', level: 'poor', text: '解析の量だけかかる' },
+      { icon: Zap, label: '速さ', level: 'fair', text: '実行先しだい' },
+    ],
   },
   {
     mode: 'client',
     label: '利用者の端末で解析',
-    note: 'ブラウザで解析し、サーバーの解析の費用はかかりません',
+    icon: Smartphone,
+    tradeoffs: [
+      {
+        icon: Target,
+        label: '正確さ',
+        level: 'fair',
+        text: '軽い評価関数で読みは浅め',
+      },
+      { icon: Coins, label: '費用', level: 'good', text: 'サーバーの解析は 0' },
+      { icon: Zap, label: '速さ', level: 'fair', text: '端末しだい' },
+    ],
   },
   {
     mode: 'hybrid',
     label: '端末で速報・サーバーで本解析',
-    note: '端末ですぐ速報を出し、本解析の実行先を下から選びます',
+    icon: Layers,
+    tradeoffs: [
+      {
+        icon: Target,
+        label: '正確さ',
+        level: 'good',
+        text: '本解析で深く読める',
+      },
+      { icon: Coins, label: '費用', level: 'poor', text: 'サーバーと同じ' },
+      { icon: Zap, label: '速さ', level: 'good', text: '速報ですぐ見える' },
+    ],
   },
 ];
+
+const LEVEL_CLASS: Record<Level, string> = {
+  good: 'text-success',
+  fair: 'text-warning',
+  poor: 'text-error',
+};
+/** 引き換えの 1 行（色つきのアイコン・何の段階か・短い理由。色は良い / 普通 / 不利）。 */
+function TradeoffRow({ t }: { t: Tradeoff }) {
+  const Icon = t.icon;
+  return (
+    <li className="flex items-center gap-1 text-xs font-normal">
+      <Icon
+        aria-hidden
+        className={clsx('size-3.5 shrink-0', LEVEL_CLASS[t.level])}
+      />
+      <span className="opacity-70">{t.label}</span>
+      <span>{t.text}</span>
+    </li>
+  );
+}
 
 type Props = {
   scenario: Scenario;
@@ -219,11 +288,16 @@ function AnalysisField({
                 onClick={() => pick(id)}
                 data={{ 'data-analysis-mode': m.mode }}
               >
-                <span className="block min-w-0">
-                  <span className="block">{m.label}</span>
-                  <span className="block text-xs font-normal opacity-70">
-                    {m.note}
+                <span className="block min-w-0 space-y-1">
+                  <span className="flex items-center gap-1.5">
+                    <m.icon aria-hidden className="size-4 shrink-0" />
+                    {m.label}
                   </span>
+                  <ul className="space-y-0.5">
+                    {m.tradeoffs.map((t) => (
+                      <TradeoffRow key={t.label} t={t} />
+                    ))}
+                  </ul>
                 </span>
               </Choice>
             );
