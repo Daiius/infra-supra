@@ -57,6 +57,8 @@ export {
   DEFAULT_ANALYSIS_SCOPE,
   settingValueOf,
   analysisSettingsOf,
+  validStartAnalysisSettings,
+  type StartAnalysisSettings,
 } from './settings.ts';
 export {
   type RouteOverrides,

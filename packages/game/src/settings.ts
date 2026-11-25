@@ -40,6 +40,11 @@ export type Settings = {
   analysisScope?: number;
 };
 
+/** 始める画面で選んだ解析の設定（D-249。保存の SaveData.analysisSettings と newGame の引数。省略したものは既定）。 */
+export type StartAnalysisSettings = Partial<
+  Pick<Settings, 'analysisUnit' | 'candidates' | 'analysisScope'>
+>;
+
 /** 解析の区切り方の既定（局面ごと）。 */
 export const DEFAULT_ANALYSIS_UNIT = 0;
 /** 1 局面に残す候補の数の既定（テンプレートの既定。catalog の KIFU_CANDIDATES）。 */
@@ -515,3 +520,27 @@ export function settingFlavor(
 
 export const optionLabel = (key: SettingKey, value: number) =>
   SETTINGS[key].options.find((o) => o.value === value)?.label ?? String(value);
+
+/**
+ * 始める画面で選んだ解析の設定を、選べる値だけに絞る（D-249）。選択肢に無い値は捨てる（既定になる）。
+ * 候補の数・範囲の「選べない理由」（端末・併用でない）は値を替えず、効き方（analysisSettingsOf）で扱う（途中の変更と同じ）。
+ */
+export function validStartAnalysisSettings(
+  s: StartAnalysisSettings | undefined,
+): StartAnalysisSettings {
+  if (!s) return {};
+  const out: StartAnalysisSettings = {};
+  const ok = (k: 'analysisUnit' | 'candidates' | 'analysisScope') => {
+    const v = s[k];
+    return (
+      v !== undefined &&
+      (SETTINGS[k].options as readonly { value: number }[]).some(
+        (o) => o.value === v,
+      )
+    );
+  };
+  if (ok('analysisUnit')) out.analysisUnit = s.analysisUnit!;
+  if (ok('candidates')) out.candidates = s.candidates!;
+  if (ok('analysisScope')) out.analysisScope = s.analysisScope!;
+  return out;
+}

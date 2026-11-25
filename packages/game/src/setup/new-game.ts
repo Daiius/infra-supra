@@ -33,7 +33,12 @@ import {
 import { commentsOf, withComments } from '../routes/comments.ts';
 import { defaultRevalidateSec } from '../routes/hidden-settings.ts';
 import { validRouteOverrides } from '../routes/strategy.ts';
-import { DEFAULT_ANALYSIS_UNIT, DEFAULT_CANDIDATES } from '../settings.ts';
+import {
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_CANDIDATES,
+  validStartAnalysisSettings,
+  type StartAnalysisSettings,
+} from '../settings.ts';
 import { slotIneffective, STACKS, stackSupports } from '../stacks.ts';
 import type { GameState, RouteOverrides, RouteParts } from '../state.ts';
 import { architectureFor, initialStock } from '../workload.ts';
@@ -334,6 +339,11 @@ export function newGame(
   routes?: RouteOverrides,
   /** 部品ごとにキャッシュを既定にする前の既定で描き方を決める（保存の版 3 までの再生だけ。D-111）。 */
   legacyRouteDefaults?: boolean,
+  /**
+   * 始める画面で選んだ解析の設定（区切り方・候補の数・詳細解析の範囲。D-249）。解析のあるシナリオ（Scenario.analysisJob）だけで
+   * 効く。選べない値・省略は既定。
+   */
+  analysisSettings?: StartAnalysisSettings,
 ): GameState {
   const fw = frameworksOf(scenario);
   // 載せられない構成（Astro × AWS など）では既定のフレームワークにする（画面では選べない。D-68）
@@ -416,9 +426,12 @@ export function newGame(
               chosen,
             ),
       ssrOptimizations: 0,
-      // 解析の設定（解析のあるシナリオだけで効く。始める画面では選ばず、運営の途中で変える。D-236）
+      // 解析の設定（解析のあるシナリオだけで効く。始める画面で選び、運営の途中でも変えられる。D-236・D-249）
       analysisUnit: DEFAULT_ANALYSIS_UNIT,
       candidates: DEFAULT_CANDIDATES,
+      ...(scenario.analysisJob
+        ? validStartAnalysisSettings(analysisSettings)
+        : {}),
     },
     cash: scenario.startCash,
     basePV: scenario.scale.startPV,

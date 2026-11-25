@@ -15,6 +15,7 @@ import {
   type FrameworkId,
   type RouteOverrides,
   type Scenario,
+  type StartAnalysisSettings,
   type SetupOption,
   type SetupSlot,
 } from 'game';
@@ -997,6 +998,7 @@ export function SetupCostPreview({
   revalidateSec,
   comments,
   routes,
+  analysisSettings,
 }: {
   scenario: Scenario;
   stackIndex: number;
@@ -1008,6 +1010,8 @@ export function SetupCostPreview({
   comments: number | undefined;
   /** 選んだページごとの描き方（D-107）。 */
   routes?: RouteOverrides | undefined;
+  /** 始める画面で選んだ解析の設定（D-249）。 */
+  analysisSettings?: StartAnalysisSettings | undefined;
 }) {
   const chosen = Object.fromEntries(
     Object.entries(components).filter(
@@ -1022,6 +1026,7 @@ export function SetupCostPreview({
     revalidateSec,
     comments,
     routes,
+    analysisSettings,
   );
   return (
     <div

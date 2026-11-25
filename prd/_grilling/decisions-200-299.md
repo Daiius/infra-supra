@@ -632,3 +632,9 @@
 - 出典: https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html （2026-11-26 取得）"Lambda allocates CPU power in proportion to the amount of memory configured." / "At 1,769 MB, a function has the equivalent of one vCPU (one vCPU-second of credits per second)."。最大の vCPU の数は書かれていないので使わない。
 - 決定: 料金のプランが Lambda の関数のノードに、CPU の速さの倍率 min(メモリ GB ÷ 1.769, 1) を当てる（catalog の `withLambdaCpu`・`lambdaCpuSpeed`。前提 `memory-cpu`）。1 vCPU を超えるメモリは頭打ち（1 件 1 スレッドの仮定）。解析の Lambda のメモリは 1 GB → 1.769 GB（仮定）。Amplify Hosting の SSR は公式に記載が無いので当てない。
 - 結果: Vercel Pro ＋ 解析 Lambda の 1 か月目 $643 → $1,107（Fargate ARM は $580 のまま）。記事・受託の基準プレイは不変、描き方の同値のテストのハッシュは Lambda を含む組だけ、棋譜解析の基準プレイは Amplify の分だけ変わった。
+
+### D-249 解析の設定（区切り方・候補の数・詳細解析の範囲）を始める画面でも選ぶ（2026-11-26・ユーザーの方針と supervisor の段取り。prd/17 §5.2・§5.6）
+
+- 背景: 解析の設定は D-236・D-241 で「始める画面では選ばず、運営の途中で変える」としていた。詳細解析の範囲（D-246）を足したとき、始める画面で選べないことにユーザーが気づいた。ユーザーの方針: 構成を途中から変える以外の、構成や前提に関わる選択はゲームを始める前に選びたい。
+- 決定: 3 つの設定を始める画面の ③ 解析の置き場のタブで選ぶ（途中の変更・見積モードと同じ部品）。game の `newGame` に `analysisSettings`（`StartAnalysisSettings`。選べない値は既定・`validStartAnalysisSettings`）、保存に `SaveData.analysisSettings`（省略可・版は上げない）、1 か月目の見込みと部品の比較にも渡す。web の前回の構成（`last-setup.ts`）にも入れる。運営の途中の行動での変更はそのまま。
+- 影響: 既定のまま始めた保存・golden は変わらない（省略は今の既定）。D-236・D-241 の「始める画面では選ばない」を改める。

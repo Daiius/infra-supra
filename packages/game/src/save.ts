@@ -6,6 +6,7 @@ import { SCENARIOS } from './core.ts';
 import { playMonth } from './month/play.ts';
 import { partsOfComments } from './routes/comments.ts';
 import { legacyDefaultRevalidateSec } from './routes/hidden-settings.ts';
+import type { StartAnalysisSettings } from './settings.ts';
 import { articleFamily, publicRouteId } from './routes/strategy.ts';
 import { newGame } from './setup/new-game.ts';
 import type { Scenario } from './scenario.ts';
@@ -68,6 +69,8 @@ export type SaveData = {
   comments?: number;
   /** 始める画面で選んだページの部品（版 3・D-109。記事のページのコメント欄）。無い保存は comments か既定で読む。 */
   routeParts?: RouteParts;
+  /** 始める画面で選んだ解析の設定（D-249）。無い保存は既定（局面ごと・候補 3 つ・全局）で読む（版は上げない）。 */
+  analysisSettings?: StartAnalysisSettings;
   /** 始める画面で結んだ確約（D-97）。無い保存は確約なしで読む（版は上げない）。 */
   commitments?: { key: string; payment: CommitmentPaymentId }[];
   /** 始める画面で選んだページごとの描き方（版 2・D-107）。無い保存はフレームワークの既定で読む。 */
@@ -255,6 +258,17 @@ export function parseSave(raw: unknown): SaveData | null {
   const badNum = (v: unknown) =>
     v !== undefined && !(typeof v === 'number' && Number.isFinite(v));
   if (badNum(revalidateSec) || badNum(comments)) return null;
+  const analysisSettings = raw.analysisSettings;
+  if (
+    analysisSettings !== undefined &&
+    !(
+      isObject(analysisSettings) &&
+      Object.values(analysisSettings).every(
+        (v) => typeof v === 'number' && Number.isFinite(v),
+      )
+    )
+  )
+    return null;
   if (
     components !== undefined &&
     !(
@@ -296,6 +310,9 @@ export function parseSave(raw: unknown): SaveData | null {
       ? {
           commitments: commitments as NonNullable<SaveData['commitments']>,
         }
+      : {}),
+    ...(analysisSettings !== undefined
+      ? { analysisSettings: analysisSettings as StartAnalysisSettings }
       : {}),
     ...(routes !== undefined
       ? { routes: routes as NonNullable<SaveData['routes']> }
@@ -371,6 +388,7 @@ export function replaySave(
       save.commitments,
       save.routes,
       save.legacyRouteDefaults === true,
+      save.analysisSettings,
     ),
   );
   for (const actions of save.turns) {

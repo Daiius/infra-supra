@@ -21,6 +21,7 @@ import {
   hiddenSettings,
   newGame,
   newSave,
+  parseSave,
   playMonth,
   replaySave,
   SCENARIOS,
@@ -313,5 +314,77 @@ describe('詳細解析の範囲（D-246・prd/17 §5.6）', () => {
     }
     expect(s.settings.analysisScope).toBe(1);
     expect(replaySave(save, { 'kifu-analysis': kifu })).toEqual(s);
+  });
+});
+
+describe('始める画面で選んだ解析の設定（D-249）', () => {
+  const awsIdx = STACKS.findIndex((s) => s.id === 'aws-amplify');
+  const start = (settings?: Parameters<typeof newGame>[11]) =>
+    newGame(
+      awsIdx,
+      7,
+      kifu,
+      DEFAULT_START_DATE,
+      'nextjs',
+      { analysis: 'hybrid' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+    );
+
+  it('選んだ値で始まり、省略・選べない値は既定', () => {
+    const s = start({ analysisUnit: 1, candidates: 1, analysisScope: 1 });
+    expect(s.settings.analysisUnit).toBe(1);
+    expect(s.settings.candidates).toBe(1);
+    expect(s.settings.analysisScope).toBe(1);
+    const d = start({ analysisUnit: 9, candidates: 2 });
+    expect(d.settings.analysisUnit).toBe(0);
+    expect(d.settings.candidates).toBe(3);
+    expect(d.settings.analysisScope).toBeUndefined();
+    expect(start().settings).toEqual(start({}).settings);
+  });
+
+  it('解析の無いシナリオでは効かない', () => {
+    const s = newGame(
+      awsIdx,
+      7,
+      SCENARIOS['article-community']!,
+      DEFAULT_START_DATE,
+      'nextjs',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { analysisUnit: 1 },
+    );
+    expect(s.settings.analysisUnit).toBe(0);
+  });
+
+  it('保存に書いて再生すると、同じ設定で同じ結果になる（集計の再生と同じ口）', () => {
+    const save = newSave({
+      scenarioId: 'kifu-analysis',
+      stackIndex: awsIdx,
+      framework: 'nextjs',
+      seed: 7,
+      startDate: DEFAULT_START_DATE,
+      components: { analysis: 'hybrid' },
+      analysisSettings: { analysisUnit: 1, analysisScope: 1 },
+    });
+    const played = replaySave(withTurn(save, []), { 'kifu-analysis': kifu });
+    expect(played.settings.analysisUnit).toBe(1);
+    expect(played.settings.analysisScope).toBe(1);
+    const parsed = parseSave(JSON.parse(JSON.stringify(save)));
+    expect(parsed?.analysisSettings).toEqual({
+      analysisUnit: 1,
+      analysisScope: 1,
+    });
+    expect(
+      parseSave({ ...save, analysisSettings: { analysisUnit: 'x' } }),
+    ).toBeNull();
   });
 });

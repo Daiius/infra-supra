@@ -21,7 +21,10 @@ import { commas, lineLabel, toUsd, usd } from '../format.ts';
 import { analysisOnlyThrottle } from '../analysis-satisfaction.ts';
 import { emailOnlyPremise } from '../month/outcome.ts';
 import { partsOfComments } from '../routes/comments.ts';
-import { ON_DEMAND_REVALIDATE } from '../settings.ts';
+import {
+  ON_DEMAND_REVALIDATE,
+  type StartAnalysisSettings,
+} from '../settings.ts';
 import { STACKS } from '../stacks.ts';
 import type { GameState, MonthEvent, RouteOverrides } from '../state.ts';
 import {
@@ -270,6 +273,8 @@ export function setupMonthOneEstimate(
   comments?: number,
   /** 選んだページごとの描き方（D-107）。 */
   routes?: RouteOverrides,
+  /** 始める画面で選んだ解析の設定（D-249）。 */
+  analysisSettings?: StartAnalysisSettings,
 ): MonthOneEstimate {
   const state = newGame(
     stackIndex,
@@ -282,6 +287,8 @@ export function setupMonthOneEstimate(
     partsOfComments(scenario, comments),
     undefined,
     routes,
+    undefined,
+    analysisSettings,
   );
   // 1 か月目は始めたばかりの契約（容量の段は最小の段。D-120）
   const r = monthEstimate(scenario, state, { books: booksAt(state, 1) });

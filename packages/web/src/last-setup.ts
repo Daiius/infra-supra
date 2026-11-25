@@ -12,6 +12,9 @@ import {
 } from 'catalog';
 import {
   COMMENTS_IN_BROWSER,
+  DEFAULT_ANALYSIS_SCOPE,
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_CANDIDATES,
   FRAMEWORKS,
   STACKS,
   defaultRevalidateSec,
@@ -23,10 +26,12 @@ import {
   stackName,
   validRouteOverrides,
   validSetupChoices,
+  validStartAnalysisSettings,
   type CommitmentPaymentId,
   type FrameworkId,
   type RouteOverrides,
   type Scenario,
+  type StartAnalysisSettings,
 } from 'game';
 import type { SetupChoices } from './setup-components.tsx';
 import { commentOptionsOf } from './comments-choice.ts';
@@ -52,6 +57,8 @@ export type LastSetup = {
   routes?: Partial<Record<string, string>>;
   /** 始めから結んだ確約。 */
   commitments?: { key: string; payment: CommitmentPaymentId }[];
+  /** 解析の設定（区切り方・候補の数・詳細解析の範囲。解析のあるシナリオだけ。D-249）。 */
+  analysisSettings?: StartAnalysisSettings;
 };
 
 export type LastSetupStore = {
@@ -70,6 +77,8 @@ export type SetupState = {
   revalidateSec: number | undefined;
   comments: number;
   commitments: Record<string, CommitmentPaymentId>;
+  /** 解析の設定（解析のあるシナリオだけ。省略は既定。D-249）。 */
+  analysisSettings?: StartAnalysisSettings;
 };
 
 const isObject = (x: unknown): x is Record<string, unknown> =>
@@ -83,12 +92,19 @@ const stringRecord = (v: unknown): v is Record<string, string> =>
 function parseEntry(raw: unknown): LastSetup | null {
   if (!isObject(raw)) return null;
   const { stackId, framework, components, revalidateSec, comments } = raw;
-  const { routes, commitments } = raw;
+  const { routes, commitments, analysisSettings } = raw;
   if (typeof stackId !== 'string' || typeof framework !== 'string') return null;
   if (!stringRecord(components)) return null;
   if (revalidateSec !== undefined && !isNum(revalidateSec)) return null;
   if (comments !== undefined && !isNum(comments)) return null;
   if (routes !== undefined && !stringRecord(routes)) return null;
+  if (
+    analysisSettings !== undefined &&
+    !(
+      isObject(analysisSettings) && Object.values(analysisSettings).every(isNum)
+    )
+  )
+    return null;
   if (
     commitments !== undefined &&
     !(
@@ -117,6 +133,23 @@ function parseEntry(raw: unknown): LastSetup | null {
           })),
         }
       : {}),
+    ...(analysisSettings !== undefined
+      ? { analysisSettings: { ...(analysisSettings as StartAnalysisSettings) } }
+      : {}),
+  };
+}
+
+/** 今の選択で効く解析の設定（解析のあるシナリオだけ。選べる値に絞り、無いものは既定。D-249）。 */
+function effectiveAnalysis(
+  sc: Scenario,
+  s: Pick<SetupState, 'analysisSettings'>,
+): Required<StartAnalysisSettings> | undefined {
+  if (!sc.analysisJob) return undefined;
+  const v = validStartAnalysisSettings(s.analysisSettings);
+  return {
+    analysisUnit: v.analysisUnit ?? DEFAULT_ANALYSIS_UNIT,
+    candidates: v.candidates ?? DEFAULT_CANDIDATES,
+    analysisScope: v.analysisScope ?? DEFAULT_ANALYSIS_SCOPE,
   };
 }
 
@@ -179,6 +212,7 @@ export function lastSetupOf(sc: Scenario, s: SetupState): LastSetup {
     );
   const commentsOk = commentOptionsOf(sc, s.framework, s.routes).length > 0;
   const commitments = effectiveCommitments(sc, s);
+  const analysis = effectiveAnalysis(sc, s);
   return {
     stackId: STACKS[s.stack]!.id,
     framework: s.framework,
@@ -187,6 +221,7 @@ export function lastSetupOf(sc: Scenario, s: SetupState): LastSetup {
     ...(commentsOk ? { comments: s.comments } : {}),
     ...(Object.keys(s.routes).length ? { routes: { ...s.routes } } : {}),
     ...(commitments.length ? { commitments } : {}),
+    ...(analysis ? { analysisSettings: analysis } : {}),
   };
 }
 
@@ -284,6 +319,16 @@ export function restoreLastSetup(
         lost.push('1 年契約');
       }
   }
+  // 解析の設定（D-249）。選べない値は既定に戻して知らせる
+  let analysisSettings: StartAnalysisSettings | undefined;
+  if (sc.analysisJob && last.analysisSettings) {
+    analysisSettings = validStartAnalysisSettings(last.analysisSettings);
+    if (
+      Object.keys(analysisSettings).length !==
+      Object.keys(last.analysisSettings).length
+    )
+      lost.push('解析の設定');
+  }
   const unique = [...new Set(lost)];
   if (unique.length)
     notes.unshift(
@@ -298,6 +343,7 @@ export function restoreLastSetup(
     revalidateSec,
     comments,
     commitments,
+    ...(analysisSettings ? { analysisSettings } : {}),
     notice: notes.length ? notes.join('') : null,
   };
 }
@@ -333,6 +379,7 @@ function setupKey(sc: Scenario, s: SetupState): string {
     effectiveCommitments(sc, s)
       .map((c) => `${c.key}:${c.payment}`)
       .sort(),
+    effectiveAnalysis(sc, s) ?? null,
   ]);
 }
 
