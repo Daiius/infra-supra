@@ -36,7 +36,25 @@ export const estimate: typeof estimateArch = (input) =>
  * このシナリオだけで出し、既定は「アプリと同じ実行環境」。ほかのシナリオでは選択を持たない（構成も変えない）。
  */
 export const scenarioAnalyzes = (sc: Pick<Scenario, 'template'>): boolean =>
-  sc.template(1).api.invocation === 'async';
+  templateFact(analyzesOf, sc, (w) => w.api.invocation === 'async');
+
+/**
+ * テンプレートから読む事実を、テンプレートの関数ごとに覚える（部品の判定のたびにテンプレートを作り直さない）。テンプレートは
+ * 規模を引数に取る純粋な関数で、ここで読む事実（解析・メールの有無）は規模によらない。
+ */
+function templateFact(
+  memo: WeakMap<Scenario['template'], boolean>,
+  sc: Pick<Scenario, 'template'>,
+  read: (w: ReturnType<Scenario['template']>) => boolean,
+): boolean {
+  const hit = memo.get(sc.template);
+  if (hit !== undefined) return hit;
+  const v = read(sc.template(1));
+  memo.set(sc.template, v);
+  return v;
+}
+const analyzesOf = new WeakMap<Scenario['template'], boolean>();
+const sendsEmailOf = new WeakMap<Scenario['template'], boolean>();
 
 /** 解析のあるシナリオだけで出すスロット（解析の置き場・保存の形。D-235・D-237）。 */
 export const ANALYSIS_SLOTS: readonly string[] = ['analysis', 'storage'];
@@ -64,7 +82,7 @@ export function scenarioComponentsOf(
 
 /** アプリがメールを送るシナリオか（テンプレートに email がある。D-101）。 */
 export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>
-  sendsEmail(sc.template(1));
+  templateFact(sendsEmailOf, sc, sendsEmail);
 
 /** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
 export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({

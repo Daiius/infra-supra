@@ -149,6 +149,33 @@ export type SetupSlot = {
 };
 
 /**
+ * 部品の判定に使う、選ぶ前の始めの状態（シナリオ・構成・フレームワークだけで決まる）。始める画面と総当たりは部品の選択を変えるたびに
+ * setupSlots を呼ぶので、シナリオ（参照）・構成・フレームワークの組ごとに 1 度だけ作って覚える（組は数百しかない）。凍らせてあり、
+ * 呼び手は写してから部品を重ねる。
+ */
+const freshGames = new WeakMap<Scenario, Map<string, GameState>>();
+function freshGameOf(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+): GameState {
+  let byScenario = freshGames.get(scenario);
+  if (!byScenario) {
+    byScenario = new Map();
+    freshGames.set(scenario, byScenario);
+  }
+  const key = `${stackIndex}|${framework}`;
+  let g = byScenario.get(key);
+  if (!g) {
+    g = Object.freeze(
+      newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework),
+    );
+    byScenario.set(key, g);
+  }
+  return g;
+}
+
+/**
  * 始める画面の部品のスロット（構成・フレームワークの組み合わせで）。ゲーム中の部品の欄（componentSlots）と同じ
  * スロットから、提案で付く部品（チャットの Durable Objects など）を除く。選択肢が 1 つしか残らないスロットは「固定」として出す。
  * 最後に、構成が暗黙に持つファイルの置き場（R2・VPS のディスクなど。構成のノードから引く）を固定のスロットとして足す。
@@ -161,7 +188,7 @@ export function setupSlots(
   /** 選んだ部品（今の選択で効かないスロットを出さないために使う。API を他の事業者に置いたときの DB。D-65）。 */
   choices: Choices = {},
 ): SetupSlot[] {
-  const fresh = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
+  const fresh = freshGameOf(scenario, stackIndex, framework);
   const draft = {
     ...fresh,
     components: { ...fresh.components, ...choices },
