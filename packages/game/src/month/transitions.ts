@@ -2,6 +2,7 @@
 // ためていく量（在庫）の増え方。
 import {
   analysisStockFactor,
+  serverShareOf,
   apiPlacedElsewhere,
   FRAMEWORKS,
   type Platform,
@@ -242,6 +243,8 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
           sc.analysisJob,
           analysisSet.candidates,
           analysisSet.storage,
+          // 詳細解析が希望した棋譜だけなら、頼まれなかった局は棋譜だけ残る（D-246）
+          serverShareOf(sc.analysisJob, analysisSet),
         )
       : 1;
   return {

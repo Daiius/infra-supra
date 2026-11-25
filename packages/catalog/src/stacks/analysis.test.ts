@@ -233,7 +233,7 @@ describe('費用の傾き', () => {
     }
   });
 
-  it('併用: サーバーの本解析は同じ実行環境と同じで、エンジンの転送だけ増える', () => {
+  it('併用: サーバーの詳細解析は同じ実行環境と同じで、エンジンの転送だけ増える', () => {
     for (const def of VISIBLE) {
       const ws = resolveWorkload(run(def, 'same').workload);
       const wh = resolveWorkload(run(def, 'hybrid').workload);

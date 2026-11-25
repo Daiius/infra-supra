@@ -124,9 +124,10 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
       comments: 0,
       imageFormat: 'webp',
       variants: 2,
-      // 解析の設定（D-236）は解析の無いテンプレートでは既定のまま（URL にも書かない）
+      // 解析の設定（D-236・D-246）は解析の無いテンプレートでは既定のまま（URL にも書かない）
       analysisUnit: 0,
       candidates: 3,
+      analysisScope: 0,
       seats: 3,
       routes: { article: 'static-build' },
     });

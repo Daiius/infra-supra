@@ -19,6 +19,7 @@ import {
   routePlanRows,
   sameAsCurrent,
   scenarioOf,
+  settingValueOf,
   setupChangeOf,
   setupChangeSummary,
   stackName,
@@ -315,6 +316,9 @@ function ChangeBody({
                 draft.settings.analysisUnit ?? state.settings.analysisUnit,
               candidates:
                 draft.settings.candidates ?? state.settings.candidates,
+              analysisScope:
+                draft.settings.analysisScope ??
+                settingValueOf(state.settings, 'analysisScope'),
             }}
             analysis={draft.components.analysis}
             onChange={(v) => setDraft({ ...draft, settings: { ...v } })}

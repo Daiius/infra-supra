@@ -4,6 +4,13 @@
 // （CPU と壁時計）がかかる。値はどれもゲーム上の仮定で、テンプレート（kifu-analysis.ts）が名前つきの定数で持つ。
 import type { WorkloadInput } from 'estimator';
 
+/**
+ * 詳細解析の範囲（併用の置き場だけ。D-246・prd/17 §5.6）。all: 全局（既定）・requested: 利用者が希望した棋譜だけ
+ * （端末の簡易解析は毎局。サーバーの詳細解析と、その結果の書き込み・在庫が希望した割合になる）。
+ */
+export const ANALYSIS_SCOPES = ['all', 'requested'] as const;
+export type AnalysisScope = (typeof ANALYSIS_SCOPES)[number];
+
 /** 解析の区切り方（1 件の解析の単位）。 */
 export const ANALYSIS_UNITS = ['position', 'game', 'resumable'] as const;
 export type AnalysisUnit = (typeof ANALYSIS_UNITS)[number];
@@ -42,6 +49,10 @@ export type AnalysisJobShape = {
   rowOverheadKB: number;
   /** 「小分けに保存」で一手を 1 行のときに別に書く、続きの位置の 1 行の大きさ（KB）。 */
   progressKB: number;
+  /**
+   * 詳細解析の範囲が「希望した棋譜だけ」のとき、詳細解析を頼まれる局の割合（ゲーム上の仮定。省略は 1 = 全局と同じ）。
+   */
+  requestedShare?: number;
   /** 解析の結果を読むページ（ルートの id）。問い合わせの 1 つが結果を読む（一手を 1 行なら手数ぶんの行・1 局を 1 行なら 1 行）。 */
   resultRouteIds: readonly string[];
 };
@@ -51,7 +62,15 @@ export type AnalysisSettings = {
   candidates: number;
   /** 保存の形（部品。省略は一手を 1 行。D-237）。 */
   storage?: StorageShape;
+  /** 詳細解析の範囲（併用の置き場だけ。省略は全局。D-246）。 */
+  scope?: AnalysisScope;
 };
+
+/** サーバーが解析する局の割合（詳細解析の範囲が「希望した棋譜だけ」ならテンプレートの割合、ほかは 1。D-246）。 */
+export const serverShareOf = (
+  shape: AnalysisJobShape,
+  s: Pick<AnalysisSettings, 'scope'>,
+): number => (s.scope === 'requested' ? (shape.requestedShare ?? 1) : 1);
 
 /** 1 局を何件で解析するか（局面ごと = 手数・1 局まとめて = 1・小分け = 塊の数）。 */
 export function jobsPerBatch(shape: AnalysisJobShape, unit: AnalysisUnit) {
@@ -77,7 +96,8 @@ export const itemsPerJob = (shape: AnalysisJobShape, unit: AnalysisUnit) =>
  * - 書き込み（1 局を 1 行。D-237）: どの区切り方も 1 件に 1 局の行を 1 行書く（局面ごと・小分けは、その局の行を書き足して
  *   上書きする）。上書きは行全体を書き直すので、1 行の大きさは件数を重ねた平均（1 局 × (件数 + 1) / (2 × 件数)）。
  *   小分けの続きの位置は 1 局の行の中に持つ（別の行を書かない）。
- * - どれも棋譜のアップロード（1 局に 1 回・1 行）を件数に均して足す。1 行の大きさ（rowKB）は書く行の平均。
+ * - どれも棋譜のアップロード（1 局に 1 回・1 行）を件数に均して足す。1 行の大きさ（rowKB）は書く行の平均。詳細解析が希望した棋譜だけ
+ *   （D-246）なら件数が減るので、アップロードは全局の分を減った件数に均す。
  * - 読み: 棋譜を読む 1 回（小分けは続きの位置も読むので 2 行。1 局を 1 行ならその行）。
  * - 応答（解析する側が返す結果）= 局面の数 × 候補の数 × 1 候補。
  */
@@ -101,8 +121,8 @@ export function analysisApiOf(
   const perGame = s.storage === 'per-game';
   const progressRows = s.unit === 'resumable' ? 1 : 0;
   const candidateKB = s.candidates * shape.candidateKB;
-  // 1 件の書き込み: 結果を 1 回と、棋譜のアップロードを件数に均した分
-  const upload = 1 / jobs;
+  // 1 件の書き込み: 結果を 1 回と、棋譜のアップロードを件数に均した分（希望した棋譜だけを解析しても、アップロードは全局。D-246）
+  const upload = 1 / (jobs * serverShareOf(shape, s));
   const writesPerCall = 1 + upload;
   // 結果の行（一手を 1 行: 局面の数 + 続きの位置。1 局を 1 行: 1 局の行を 1 行）と、その大きさの合計
   const resultRows = perGame ? 1 : items + progressRows;
@@ -132,24 +152,27 @@ export const resultRowsPerRead = (
 
 /**
  * 1 局の在庫（KB）= 棋譜 + 手数 × 候補の数 × 1 候補 + 行ごとのオーバーヘッド（棋譜の行と、一手を 1 行なら手数ぶん・
- * 1 局を 1 行なら 1 行。D-237）。小分けの続きの位置は上書きする小さな行なので数えない。
+ * 1 局を 1 行なら 1 行。D-237）。小分けの続きの位置は上書きする小さな行なので数えない。share はサーバーが解析する局の割合
+ * （D-246。頼まれなかった局は棋譜の行だけ残る。簡易解析は保存しない）。
  */
 export const analysisKBPerBatch = (
   shape: AnalysisJobShape,
   candidates: number,
   storage: StorageShape = 'per-move',
+  share = 1,
 ): number =>
   shape.recordKB +
-  shape.itemsPerBatch * candidates * shape.candidateKB +
-  (1 + resultRowsPerRead(shape, storage)) * shape.rowOverheadKB;
+  share * shape.itemsPerBatch * candidates * shape.candidateKB +
+  (1 + share * resultRowsPerRead(shape, storage)) * shape.rowOverheadKB;
 
-/** 在庫（DB にたまる量）の倍率（テンプレートの既定の候補の数・一手を 1 行に対して）。 */
+/** 在庫（DB にたまる量）の倍率（テンプレートの既定の候補の数・一手を 1 行・全局に対して）。 */
 export const analysisStockFactor = (
   shape: AnalysisJobShape,
   candidates: number,
   storage: StorageShape = 'per-move',
+  share = 1,
 ): number =>
-  analysisKBPerBatch(shape, candidates, storage) /
+  analysisKBPerBatch(shape, candidates, storage, share) /
   analysisKBPerBatch(shape, shape.candidates);
 
 /**
@@ -186,7 +209,9 @@ export function applyAnalysisSettings(
   s: AnalysisSettings,
 ): WorkloadInput {
   if (!shape || w.api.invocation !== 'async') return w;
-  const perJob = jobsPerBatch(shape, s.unit) / shape.itemsPerBatch;
+  // 1 局あたりの件数の比と、サーバーが解析する局の割合（詳細解析が希望した棋譜だけなら減る。D-246）
+  const share = serverShareOf(shape, s);
+  const perJob = (jobsPerBatch(shape, s.unit) / shape.itemsPerBatch) * share;
   const scale = (n: number | undefined) =>
     n === undefined ? undefined : n * perJob;
   return {
@@ -202,7 +227,9 @@ export function applyAnalysisSettings(
     api: { ...w.api, ...analysisApiOf(shape, s) },
     db: {
       ...w.db,
-      sizeGB: w.db.sizeGB * analysisStockFactor(shape, s.candidates, s.storage),
+      sizeGB:
+        w.db.sizeGB *
+        analysisStockFactor(shape, s.candidates, s.storage, share),
     },
   };
 }

@@ -20,11 +20,14 @@ import {
   fixedSettingValue,
   hiddenSettings,
   newGame,
+  newSave,
   playMonth,
+  replaySave,
   SCENARIOS,
   settingInactiveReason,
   setupChangeOf,
   STACKS,
+  withTurn,
   type GameState,
 } from './index.ts';
 
@@ -187,7 +190,7 @@ describe('候補の数の行動', () => {
     expect(s.settings.candidates).toBe(3);
     const r = checkAction(s, candidates(1));
     expect(r.ok).toBe(false);
-    // 併用は端末の速報を保存しないので、サーバーの本解析は設定どおり
+    // 併用は端末の簡易解析を保存しないので、サーバーの詳細解析は設定どおり
     const h = applyAction(start(PRO), {
       type: 'component',
       slot: 'analysis',
@@ -201,7 +204,11 @@ describe('構成を変える（D-185）でも選び直せる', () => {
   it('欄の設定の差を set の行動に写し取り、工数と「来月から」を出す', () => {
     const s = start(PRO);
     const draft = currentSetupDraft(s);
-    expect(draft.settings).toEqual({ analysisUnit: 0, candidates: 3 });
+    expect(draft.settings).toEqual({
+      analysisUnit: 0,
+      candidates: 3,
+      analysisScope: 0,
+    });
     const change = setupChangeOf(s, {
       ...draft,
       settings: { analysisUnit: 2, candidates: 1 },
@@ -227,5 +234,84 @@ describe('構成を変える（D-185）でも選び直せる', () => {
       settings: { ...draft.settings, candidates: 1 },
     });
     expect(change.why).toMatch(/利用者の端末/);
+  });
+});
+
+describe('詳細解析の範囲（D-246・prd/17 §5.6）', () => {
+  const scope = (value: number) =>
+    ({ type: 'set', key: 'analysisScope', value }) as const;
+  /** 解析の置き場を選んで始めた 1 か月目（区切り方は 1 局まとめて）。 */
+  const startWith = (analysis: string) =>
+    playMonth(
+      applyAction(
+        playMonth(
+          newGame(PRO, 1, kifu, DEFAULT_START_DATE, 'nextjs', { analysis }),
+        ),
+        unit(1),
+      ),
+    );
+  const asyncCount = (s: GameState) =>
+    resolveWorkload(
+      estimateWorkload(kifu, {
+        pv: kifu.scale.startPV,
+        stackIndex: s.stackIndex,
+        framework: s.framework,
+        components: s.components,
+        settings: s.settings,
+      }),
+    ).classes['api-async']!.count;
+
+  it('既定は全局（始めた状態に値を持たない）。併用のときだけ選べる', () => {
+    const g = newGame(PRO, 1, kifu);
+    expect(g.settings.analysisScope).toBeUndefined();
+    expect(hiddenSettings(g)).not.toContain('analysisScope');
+    expect(currentSetupDraft(g).settings?.analysisScope).toBe(0);
+    expect(settingInactiveReason(g, 'analysisScope')).toMatch(/併用|詳細解析/);
+    expect(checkAction(start(PRO), scope(1)).ok).toBe(false);
+    const h = startWith('hybrid');
+    expect(settingInactiveReason(h, 'analysisScope')).toBeUndefined();
+    expect(checkAction(h, scope(1)).ok).toBe(true);
+    expect(actionEffort(h, scope(1))).toBe(EFFORT.setting.analysisScope);
+  });
+
+  it('併用で希望した棋譜だけにすると、翌月からサーバーの詳細解析の件数と費用が減り、在庫の増え方も減る', () => {
+    const h = startWith('hybrid-fn-lambda');
+    const next = playMonth(applyAction(h, scope(1)));
+    expect(next.settings.analysisScope).toBe(1);
+    const stay = playMonth(h);
+    expect(asyncCount(next) / asyncCount(stay)).toBeCloseTo(0.5, 6);
+    expect(usd(next)).toBeLessThan(usd(stay));
+    expect(next.stock.dbGB - h.stock.dbGB).toBeLessThan(
+      stay.stock.dbGB - h.stock.dbGB,
+    );
+  });
+
+  it('併用でない置き場では、値が残っていても全局として数える', () => {
+    const h = startWith('hybrid');
+    const asked = applyAction(h, scope(1));
+    const server = {
+      ...asked,
+      components: { ...asked.components, analysis: 'same' },
+    };
+    const base = { ...h, components: { ...h.components, analysis: 'same' } };
+    expect(asyncCount(server)).toBe(asyncCount(base));
+  });
+
+  it('保存から再生しても同じ（行動の列だけで再現する）', () => {
+    let save = newSave({
+      scenarioId: 'kifu-analysis',
+      stackIndex: PRO,
+      seed: 1,
+      startDate: DEFAULT_START_DATE,
+      framework: 'nextjs',
+      components: { analysis: 'hybrid' },
+    });
+    let s = replaySave(save, { 'kifu-analysis': kifu });
+    for (const t of [[unit(1)], [scope(1)], []] as const) {
+      s = playMonth(applyActions(s, t));
+      save = withTurn(save, t);
+    }
+    expect(s.settings.analysisScope).toBe(1);
+    expect(replaySave(save, { 'kifu-analysis': kifu })).toEqual(s);
   });
 });

@@ -446,6 +446,7 @@ export type Scenario = {
       | 'pageCache'
       | 'analysisUnit'
       | 'candidates'
+      | 'analysisScope'
     )[];
     slots?: SlotId[];
     blockBots?: boolean;

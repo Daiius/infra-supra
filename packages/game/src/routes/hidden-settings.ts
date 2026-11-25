@@ -43,6 +43,7 @@ export function hiddenSettings(
 export const ANALYSIS_SETTING_KEYS: SettingKey[] = [
   'analysisUnit',
   'candidates',
+  'analysisScope',
 ];
 
 const REVALIDATE_KEYS: SettingKey[] = [

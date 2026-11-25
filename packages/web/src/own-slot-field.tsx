@@ -22,7 +22,6 @@ import {
 } from 'game';
 import {
   Coins,
-  Layers,
   Server,
   Smartphone,
   Target,
@@ -50,13 +49,14 @@ type Tradeoff = { icon: LucideIcon; label: string; level: Level; text: string };
 const MODES: readonly {
   mode: AnalysisMode;
   label: string;
-  icon: LucideIcon;
+  /** 置き方のアイコン（併用は端末とサーバーを並べる）。 */
+  icons: readonly LucideIcon[];
   tradeoffs: readonly Tradeoff[];
 }[] = [
   {
     mode: 'server',
     label: 'サーバーで解析',
-    icon: Server,
+    icons: [Server],
     tradeoffs: [
       {
         icon: Target,
@@ -71,7 +71,7 @@ const MODES: readonly {
   {
     mode: 'client',
     label: '利用者の端末で解析',
-    icon: Smartphone,
+    icons: [Smartphone],
     tradeoffs: [
       {
         icon: Target,
@@ -85,17 +85,22 @@ const MODES: readonly {
   },
   {
     mode: 'hybrid',
-    label: '端末で速報・サーバーで本解析',
-    icon: Layers,
+    label: '端末で簡易解析・サーバーで詳細解析',
+    icons: [Smartphone, Server],
     tradeoffs: [
       {
         icon: Target,
         label: '正確さ',
         level: 'good',
-        text: '本解析で深く読める',
+        text: '詳細解析で深く読める',
       },
-      { icon: Coins, label: '費用', level: 'poor', text: 'サーバーと同じ' },
-      { icon: Zap, label: '速さ', level: 'good', text: '速報ですぐ見える' },
+      {
+        icon: Coins,
+        label: '費用',
+        level: 'poor',
+        text: 'サーバーと同じ（希望した棋譜だけなら約半分）',
+      },
+      { icon: Zap, label: '速さ', level: 'good', text: '簡易解析ですぐ見える' },
     ],
   },
 ];
@@ -105,17 +110,36 @@ const LEVEL_CLASS: Record<Level, string> = {
   fair: 'text-warning',
   poor: 'text-error',
 };
+/**
+ * 全角の括弧の補足（「（」から「）」まで）を inline-block で包む。収まらないときは括弧の手前で折れ、補足が 1 行より長ければ
+ * その中で折れる（必ず改行させはしない）。括弧が無ければそのまま返す。
+ */
+function withParenBreaks(text: string): ReactNode {
+  const parts = text.split(/(（[^（）]*）)/);
+  if (parts.length === 1) return text;
+  return parts.map((p, i) =>
+    p.startsWith('（') && p.endsWith('）') ? (
+      <span key={i} className="inline-block">
+        {p}
+      </span>
+    ) : (
+      p
+    ),
+  );
+}
+
 /** 引き換えの 1 行（色つきのアイコン・何の段階か・短い理由。色は良い / 普通 / 不利）。 */
 function TradeoffRow({ t }: { t: Tradeoff }) {
   const Icon = t.icon;
   return (
-    <li className="flex items-center gap-1 text-xs font-normal">
+    // 狭い画面で理由が折り返しても、アイコンと見出しは 1 行目にそろえ、折り返した行は理由の左端から続ける
+    <li className="flex items-start gap-1 text-xs font-normal">
       <Icon
         aria-hidden
-        className={clsx('size-3.5 shrink-0', LEVEL_CLASS[t.level])}
+        className={clsx('mt-px size-3.5 shrink-0', LEVEL_CLASS[t.level])}
       />
-      <span className="opacity-70">{t.label}</span>
-      <span>{t.text}</span>
+      <span className="shrink-0 opacity-70">{t.label}</span>
+      <span className="min-w-0">{withParenBreaks(t.text)}</span>
     </li>
   );
 }
@@ -290,10 +314,14 @@ function AnalysisField({
               >
                 <span className="block min-w-0 space-y-1">
                   <span className="flex items-center gap-1.5">
-                    <m.icon aria-hidden className="size-4 shrink-0" />
+                    <span className="flex shrink-0 items-center">
+                      {m.icons.map((Icon, i) => (
+                        <Icon key={i} aria-hidden className="size-4" />
+                      ))}
+                    </span>
                     {m.label}
                   </span>
-                  <ul className="space-y-0.5">
+                  <ul className="space-y-0.5 pl-5">
                     {m.tradeoffs.map((t) => (
                       <TradeoffRow key={t.label} t={t} />
                     ))}
@@ -307,7 +335,7 @@ function AnalysisField({
       {mode !== undefined && mode !== 'client' && (
         <div role="group" aria-label="実行先" className="space-y-1">
           <div className="text-xs font-semibold">
-            {mode === 'hybrid' ? '本解析の実行先' : '実行先'}
+            {mode === 'hybrid' ? '詳細解析の実行先' : '実行先'}
           </div>
           <ul className="grid gap-1 sm:grid-cols-2">
             {targetsOf(mode).map((t) => {
@@ -341,12 +369,12 @@ function AnalysisField({
                       </span>
                       {flavor && (
                         <span className="block text-xs font-normal opacity-70">
-                          {flavor}
+                          {withParenBreaks(flavor)}
                         </span>
                       )}
                       {e.why && (
                         <span className="block text-xs font-normal">
-                          {e.why}
+                          {withParenBreaks(e.why)}
                         </span>
                       )}
                     </span>

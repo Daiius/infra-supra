@@ -52,7 +52,10 @@ export {
   DEFAULT_ANALYSIS_UNIT,
   DEFAULT_CANDIDATES,
   CLIENT_CANDIDATES,
+  analysisScopeLockReason,
   candidatesLockReason,
+  DEFAULT_ANALYSIS_SCOPE,
+  settingValueOf,
   analysisSettingsOf,
 } from './settings.ts';
 export {

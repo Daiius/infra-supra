@@ -56,7 +56,7 @@ import {
   strategyFamily,
   strategySelectable,
 } from '../routes/strategy.ts';
-import { ON_DEMAND_REVALIDATE, SETTINGS } from '../settings.ts';
+import { ON_DEMAND_REVALIDATE, SETTINGS, settingValueOf } from '../settings.ts';
 import { nameThen } from '../format.ts';
 import {
   isDataSwap,
@@ -134,7 +134,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
               : `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework, articleFamily(state))].label}」で選びます`
             : 'このシナリオでは効きません',
         );
-      if (state.settings[def.field] === action.value)
+      if (settingValueOf(state.settings, action.key) === action.value)
         return ng('same', '今と同じ（または選択済み）');
       const inactive = settingInactiveReason(state, action.key);
       if (inactive) return ng('unavailable', inactive);

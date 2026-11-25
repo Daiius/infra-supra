@@ -5,6 +5,7 @@ import {
   KIFU_ANALYSIS_JOB,
   KIFU_GAMES_PER_MAU,
   KIFU_PV_PER_MAU,
+  type AnalysisSettings,
 } from 'catalog';
 import {
   analysisOnlyThrottle,
@@ -28,7 +29,10 @@ import {
 } from './scenarios/kifu-analysis.ts';
 
 const shape = KIFU_ANALYSIS_JOB;
-const settings = (unit: 'position' | 'game' | 'resumable', candidates = 3) => ({
+const settings = (
+  unit: 'position' | 'game' | 'resumable',
+  candidates = 3,
+): AnalysisSettings => ({
   unit,
   candidates,
 });
@@ -102,7 +106,7 @@ describe('解析の速さ（1 局が見えるまで）', () => {
     expect(judge('client', settings('game', 1)).clientSec).toBeCloseTo(200);
   });
 
-  it('併用は端末の速報とサーバーの本解析の早いほう（VPS が滞っても速報で普通に保つ）', () => {
+  it('併用は端末の簡易解析とサーバーの詳細解析の早いほう（VPS が滞っても簡易解析で普通に保つ）', () => {
     expect(judge('hybrid').analysisSpeed).toBe('good');
     const stalled = judge('hybrid', settings('position'), {
       vcpu: 3,
@@ -139,7 +143,7 @@ describe('解析の正確さ', () => {
     );
   });
 
-  it('併用は本解析で戻るが、本解析が利用者の離れた後に届くなら 1 段下がる', () => {
+  it('併用は詳細解析で戻るが、詳細解析が利用者の離れた後に届くなら 1 段下がる', () => {
     expect(judge('hybrid').analysisAccuracy).toBe('good');
     const late = judge('hybrid', settings('position'), {
       vcpu: 3,
@@ -147,6 +151,23 @@ describe('解析の正確さ', () => {
     });
     expect(late.lateAccurate).toBe(true);
     expect(late.analysisAccuracy).toBe('fair');
+  });
+
+  it('詳細解析が希望した棋譜だけなら、詳細解析が遅くても正確さは下げない（利用者が待つつもりで頼む。D-246）', () => {
+    const asked = judge(
+      'hybrid',
+      { ...settings('position'), scope: 'requested' },
+      { vcpu: 3, peakRatio: 3 },
+    );
+    expect(asked.lateAccurate).toBeUndefined();
+    expect(asked.analysisAccuracy).toBe('good');
+    // 速さは今の併用と同じ（端末の簡易解析と詳細解析の早いほう）
+    const all = judge('hybrid', settings('position'), {
+      vcpu: 3,
+      peakRatio: 3,
+    });
+    expect(asked.analysisSpeed).toBe(all.analysisSpeed);
+    expect(asked.visibleSec).toBe(all.visibleSec);
   });
 });
 
@@ -258,12 +279,12 @@ describe('ゲームの月の満足度', () => {
     expect(peak.status).not.toBe('slow');
   });
 
-  it('併用はイベントの月にアプリの VPS が滞っても速報で速さを保ち、正確さが下がる', () => {
+  it('併用はイベントの月にアプリの VPS が滞っても簡易解析で速さを保ち、正確さが下がる', () => {
     const r = play(at(SMALL, true), VPS, 'hybrid');
     expect(r.satisfaction.stages.analysisSpeed).toBe('fair');
     expect(r.satisfaction.stages.analysisAccuracy).toBe('fair');
     expect(r.satisfaction.reasons.analysisAccuracy).toMatch(
-      /本解析が届くのは利用者がページを離れた後/,
+      /詳細解析が届くのは利用者がページを離れた後/,
     );
     // 同じ実行環境（アプリの VPS）はページも解析も遅くなる
     const same = play(at(SMALL, true), VPS, 'same');
@@ -286,7 +307,7 @@ describe('ゲームの月の満足度', () => {
     const fn = play(at(SMALL, true), VPS, 'fn-lambda');
     expect(fn.satisfaction.stages.analysisSpeed).toBe('good');
     expect(fn.satisfaction.stages.speed).not.toBe('bad');
-    // 併用の worker（hybrid-worker-vps-4gb）は worker の滞留を速報で隠し、本解析が遅れて正確さが下がる
+    // 併用の worker（hybrid-worker-vps-4gb）は worker の滞留を簡易解析で隠し、詳細解析が遅れて正確さが下がる
     const hw = play(at(SMALL, true), PRO, 'hybrid-worker-vps-4gb');
     expect(hw.satisfaction.stages.analysisSpeed).toBe('fair');
     expect(hw.satisfaction.stages.analysisAccuracy).toBe('fair');

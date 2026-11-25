@@ -19,6 +19,7 @@ import {
   onDemandInvalidationEstimate,
   settingFlavor,
   SETTINGS,
+  settingValueOf,
   type Action,
   type GameState,
   type SettingKey,
@@ -222,7 +223,7 @@ export function Actions({
           <div className="col-span-full grid gap-3 md:grid-cols-3">
             {settingKeys.map((key) => {
               const def = SETTINGS[key];
-              const current = state.settings[def.field];
+              const current = settingValueOf(state.settings, key);
               // 欄を無効にして固定しているなら、選んだ値でなく固定の値を見せる（数えるのもその値。D-58 の補足）
               const fixed = fixedSettingValue(draft, key);
               const chosen = settings[key] ?? fixed ?? current;

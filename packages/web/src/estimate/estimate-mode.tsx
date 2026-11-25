@@ -493,7 +493,11 @@ function Conditions({
   // 解析の区切り方・候補の数（D-236）は解析の置き場の行（と構成図の箱の吹き出し）で選ぶ。解析のあるテンプレートだけ
   const analysisSettings = settings.analysis ? (
     <AnalysisSettingChips
-      value={{ analysisUnit: input.analysisUnit, candidates: input.candidates }}
+      value={{
+        analysisUnit: input.analysisUnit,
+        candidates: input.candidates,
+        analysisScope: input.analysisScope,
+      }}
       analysis={input.parts.analysis}
       onChange={(v) => setInput(v)}
     />

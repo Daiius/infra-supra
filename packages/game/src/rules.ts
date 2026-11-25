@@ -86,7 +86,15 @@ export const EFFORT = {
    * 設定の工数（仮定）。解析の区切り方（D-236）は解析の処理の分け方・保存と再開の書き換えなので 2、候補の数は解析の呼び方と
    * 結果の形を少し変えるだけなので 1。
    */
-  setting: { format: 1, variants: 1, isr: 0, analysisUnit: 2, candidates: 1 },
+  setting: {
+    format: 1,
+    variants: 1,
+    isr: 0,
+    analysisUnit: 2,
+    candidates: 1,
+    // 詳細解析の範囲（D-246）: 詳細解析を頼むボタンと、頼まれた局だけを積む処理（仮定）
+    analysisScope: 1,
+  },
   /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */
   onDemandSwitch: 2,
   /**

@@ -72,6 +72,12 @@ export const KIFU_BROWSER_ANALYSIS = {
   browserReuse: KIFU_BROWSER_ENGINE_REUSE,
 } as const;
 
+/**
+ * 詳細解析の範囲が「希望した棋譜だけ」のとき、サーバーの詳細解析を頼まれる局の割合（併用の置き場だけ。D-246）。**ゲーム上の仮定**:
+ * 負けた局を中心に頼む想定。分布は考えない。
+ */
+export const KIFU_REQUESTED_SHARE = 0.5;
+
 /** 解析の 1 件の形（区切り方・候補の数の設定が替える。analysis-job.ts・D-236）。 */
 export const KIFU_ANALYSIS_JOB: AnalysisJobShape = {
   itemsPerBatch: KIFU_MOVES_PER_GAME,
@@ -85,6 +91,7 @@ export const KIFU_ANALYSIS_JOB: AnalysisJobShape = {
   recordKB: KIFU_RECORD_KB,
   rowOverheadKB: KIFU_ROW_OVERHEAD_KB,
   progressKB: KIFU_PROGRESS_KB,
+  requestedShare: KIFU_REQUESTED_SHARE,
   // 棋譜のページと共有のページが結果を読む（保存の形で読む行が替わる。D-237）
   resultRouteIds: ['kifu', 'share'],
 };

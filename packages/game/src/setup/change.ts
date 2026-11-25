@@ -21,7 +21,12 @@ import {
 } from '../core.ts';
 import { componentEffortLabel } from '../effort.ts';
 import { ANALYSIS_SETTING_KEYS } from '../routes/hidden-settings.ts';
-import { optionLabel, SETTINGS, type SettingKey } from '../settings.ts';
+import {
+  optionLabel,
+  SETTINGS,
+  settingValueOf,
+  type SettingKey,
+} from '../settings.ts';
 import { componentsAfterRewrite, rewriteText } from '../rewrite.ts';
 import { ROUTE_PARTS, commentsOf } from '../routes/comments.ts';
 import {
@@ -196,7 +201,7 @@ export function currentSetupDraft(state: GameState): SetupDraft {
           settings: Object.fromEntries(
             ANALYSIS_SETTING_KEYS.map((k) => [
               k,
-              state.settings[SETTINGS[k].field],
+              settingValueOf(state.settings, k),
             ]),
           ),
         }
@@ -213,7 +218,7 @@ function changedSettings(
     Object.entries(draft.settings ?? {}) as [SettingKey, number | undefined][]
   ).filter(
     (x): x is [SettingKey, number] =>
-      x[1] !== undefined && state.settings[SETTINGS[x[0]].field] !== x[1],
+      x[1] !== undefined && settingValueOf(state.settings, x[0]) !== x[1],
   );
 }
 

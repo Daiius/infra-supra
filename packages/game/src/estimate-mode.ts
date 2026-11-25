@@ -66,9 +66,9 @@ export function estimateWorkload(
     /** 解析の設定（D-236）は解析のあるシナリオだけで効き、省略は既定（局面ごと・既定の候補の数）。 */
     settings: Omit<
       Settings,
-      'ssrOptimizations' | 'analysisUnit' | 'candidates'
+      'ssrOptimizations' | 'analysisUnit' | 'candidates' | 'analysisScope'
     > &
-      Partial<Pick<Settings, 'analysisUnit' | 'candidates'>>;
+      Partial<Pick<Settings, 'analysisUnit' | 'candidates' | 'analysisScope'>>;
     /** 選んだページごとの描き方（D-107）。 */
     routes?: RouteOverrides | undefined;
     /** ページの部品（記事のページのコメント欄。D-109）。省略はブラウザで読み込む。 */

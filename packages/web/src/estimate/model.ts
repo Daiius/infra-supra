@@ -31,6 +31,7 @@ import {
   PAYMENT_LABEL,
   COMMENTS_IN_BROWSER,
   DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_ANALYSIS_SCOPE,
   DEFAULT_CANDIDATES,
   defaultRevalidateSec,
   estimateComponents,
@@ -149,6 +150,8 @@ export type EstimateInput = {
    */
   analysisUnit: number;
   candidates: number;
+  /** 詳細解析の範囲（game の SETTINGS.analysisScope の値。0 全局・1 希望した棋譜だけ。併用の置き場だけで効く。D-246）。 */
+  analysisScope: number;
   /** チームの人数（管理画面を使う人。席）。席課金のプランだけ費用が変わる（D-76）。 */
   seats: number;
   /** 選んだページごとの描き方（フレームワークの既定と違うものだけ。D-107）。 */
@@ -258,12 +261,16 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     settings.variants && VARIANTS.some((v) => v === raw.variants)
       ? raw.variants!
       : 3;
-  const pick = (key: 'analysisUnit' | 'candidates', fallback: number) =>
+  const pick = (
+    key: 'analysisUnit' | 'candidates' | 'analysisScope',
+    fallback: number,
+  ) =>
     settings.analysis && SETTINGS[key].options.some((o) => o.value === raw[key])
       ? raw[key]!
       : fallback;
   const analysisUnit = pick('analysisUnit', DEFAULT_ANALYSIS_UNIT);
   const candidates = pick('candidates', DEFAULT_CANDIDATES);
+  const analysisScope = pick('analysisScope', DEFAULT_ANALYSIS_SCOPE);
   const seats = normalizeSeats(raw.seats);
   return {
     template,
@@ -277,6 +284,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     variants,
     analysisUnit,
     candidates,
+    analysisScope,
     seats,
     routes,
   };
@@ -468,6 +476,8 @@ export function toQuery(input: EstimateInput): URLSearchParams {
     q.set('au', String(input.analysisUnit));
   if (input.candidates !== DEFAULT_CANDIDATES)
     q.set('ac', String(input.candidates));
+  if (input.analysisScope !== DEFAULT_ANALYSIS_SCOPE)
+    q.set('as', String(input.analysisScope));
   q.set('seats', String(input.seats));
   for (const [slot, id] of Object.entries(input.parts))
     if (id !== undefined) q.set(PART_PREFIX + slot, id);
@@ -517,6 +527,7 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   set('variants', num('v'));
   set('analysisUnit', num('au'));
   set('candidates', num('ac'));
+  set('analysisScope', num('as'));
   set('seats', num('seats'));
   // 前の版の税込の目安の切り替え（tax=0/1）は常に出すことにしたので読まない（D-177）
   return out;
@@ -903,6 +914,7 @@ function run(input: EstimateInput, r: Resolved) {
       revalidateSec: input.revalidateSec,
       analysisUnit: input.analysisUnit,
       candidates: input.candidates,
+      analysisScope: input.analysisScope,
     },
     routes: input.routes,
     routeParts: partsOfComments(r.scenario, input.comments),

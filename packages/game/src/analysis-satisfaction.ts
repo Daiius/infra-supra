@@ -2,12 +2,12 @@
 // Scenario.analysisJob を持つ）だけで判定する。純粋関数だけを置き、値（境目・倍率）はシナリオのデータ（ゲーム上の仮定）。
 //
 // 速さ = 1 局の解析が見えるまでの時間（秒）。前提 P-4「利用者がページを開いている間に終わってほしい」が境目。
-// - サーバー（同じ実行環境・worker の VPS・併用の本解析）: 1 件の時間（固定の重さ + 局面の数 × 1 局面 + 待ち）× 順に解く回数。
+// - サーバー（同じ実行環境・worker の VPS・併用の詳細解析）: 1 件の時間（固定の重さ + 局面の数 × 1 局面 + 待ち）× 順に解く回数。
 //   局面ごとは 1 局の件数を並べて動かせる（サーバーレスは全部、VPS は vCPU の数まで）。1 局まとめては 1 件、小分けは塊を順に解く。
 // - ピークの滞留（B-5）: 解析する VPS のピークの比が 1 を超えたら、(比 − 1) × stallWindowSec を待ちに足す。月の平均の比も 1 以上なら、
 //   1 日を通して追いつかないので「悪い」。サーバーレス（関数・コンテナ）は滞留しない（1 件の上限に当たって止まるのは可用性の判定のまま）。
 // - 利用者の端末: 局面の数 × 1 局面 × 端末の倍率（1 件ごとの起動はページを開いたときの 1 回なので数えない）。遅い端末の段階が下がるなら 1 段下げる。
-// - 併用: 端末の速報とサーバーの本解析の早いほう。本解析が「悪い」（利用者が離れた後に届く）なら、正確さを 1 段下げる。
+// - 併用: 端末の簡易解析とサーバーの詳細解析の早いほう。詳細解析が「悪い」（利用者が離れた後に届く）なら、正確さを 1 段下げる。
 // 正確さ = 候補の数（B-7: 候補の数はここにだけ効かせる）。端末の評価関数と読みの量では下げない（D-244: 悪手を見つける用途では
 // サーバーとの差が揺らぎの範囲に収まるとみる。端末は候補が 1 つなので「普通」）。
 import {
@@ -50,7 +50,7 @@ export type AnalysisJudgment = {
   clientSlowSec?: number;
   /** 判定に使った見えるまでの時間（秒）。backlog なら Infinity。 */
   visibleSec: number;
-  /** 本解析が利用者の離れた後に届くので正確さを下げた（併用）。 */
+  /** 詳細解析が利用者の離れた後に届くので正確さを下げた（併用）。 */
   lateAccurate?: boolean;
   /** 正確さの判定に使った候補の数。 */
   candidates: number;
@@ -145,11 +145,12 @@ export function judgeAnalysis(input: {
     onServer ? (out.backlog ? Infinity : out.serverSec!) : Infinity,
     onClient ? out.clientSec! : Infinity,
   );
-  // 正確さ: 候補の数（端末は 1 つに固定なので「普通」。KF-08・D-244）。併用は本解析で候補が戻るが、本解析が「悪い」
-  // （利用者が離れた後に届く）なら 1 段下げる
+  // 正確さ: 候補の数（端末は 1 つに固定なので「普通」。KF-08・D-244）。併用は詳細解析で候補が戻るが、詳細解析が「悪い」
+  // （利用者が離れた後に届く）なら 1 段下げる。詳細解析が希望した棋譜だけなら、利用者が待つつもりで頼むので下げない（D-246）
   const byCandidates: Stage =
     settings.candidates >= r.accuracy.goodCandidates ? 'good' : 'fair';
-  const lateAccurate = onClient && onServer && server === 'bad';
+  const lateAccurate =
+    onClient && onServer && server === 'bad' && settings.scope !== 'requested';
   const accuracy = lateAccurate ? STAGE_DOWN[byCandidates] : byCandidates;
   return {
     ...out,
@@ -224,7 +225,7 @@ export function analysisReasons(
   if (j.analysisAccuracy !== 'good')
     out.analysisAccuracy = [
       j.lateAccurate &&
-        '端末の速報は出ますが、サーバーの本解析が届くのは利用者がページを離れた後です',
+        '端末の簡易解析は出ますが、サーバーの詳細解析が届くのは利用者がページを離れた後です',
       j.candidates < r.accuracy.goodCandidates &&
         `1 局面に残す候補が ${j.candidates} つで、ほかの手との比べ方が見えにくくなります`,
     ]

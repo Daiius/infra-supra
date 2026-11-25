@@ -7,7 +7,7 @@
 //   DB の口を構成ごとに分けないため）。アプリの側は受けて書くだけの CPU（ANALYSIS_RESULT_CPU_MS）
 // - client: 利用者の端末（ブラウザ）。サーバーの解析の CPU は 0 で、エンジンと評価関数のファイルを配る（Workload の visitAssets）。
 //   結果はアプリの API に送って保存する（書き込みと在庫は残る）
-// - hybrid: 端末で速報（保存しない）、本解析はアプリと同じ実行環境（same と同じ構成 + 端末の配布）
+// - hybrid: 端末で簡易解析（保存しない）、詳細解析はアプリと同じ実行環境（same と同じ構成 + 端末の配布）
 // 値（受けて書く CPU・配るファイルの大きさ・worker の常駐のメモリ）はゲーム上の仮定。正確さ・端末の差・滞留の満足度は prd/17 PR-8。
 import type { ArchitectureInput, WorkloadInput } from 'estimator';
 import { partOptions, transferNodes, type PartDef } from './connections.ts';
@@ -42,7 +42,7 @@ export const ANALYSIS_TARGETS = [
 ] as const;
 export type AnalysisTarget = (typeof ANALYSIS_TARGETS)[number];
 
-/** 解析の置き方（D-245）。server: サーバーだけ・client: 利用者の端末だけ・hybrid: 端末で速報、サーバーで本解析。 */
+/** 解析の置き方（D-245）。server: サーバーだけ・client: 利用者の端末だけ・hybrid: 端末で簡易解析、サーバーで詳細解析。 */
 export const ANALYSIS_MODES = ['server', 'client', 'hybrid'] as const;
 export type AnalysisMode = (typeof ANALYSIS_MODES)[number];
 
@@ -78,7 +78,7 @@ export const ANALYSIS_PLACEMENTS = [
 ] as const;
 export type AnalysisPlacement = string;
 
-/** worker の VPS のプラン（選択肢の id から。併用の本解析も含む。worker でなければ undefined）。 */
+/** worker の VPS のプラン（選択肢の id から。併用の詳細解析も含む。worker でなければ undefined）。 */
 export const analysisWorkerPlan = (
   id: string | undefined,
 ): '2gb' | '4gb' | undefined => {
@@ -90,7 +90,7 @@ export const analysisWorkerPlan = (
       : undefined;
 };
 
-/** 別の事業者のサーバーレスの実行先（併用の本解析も含む。そうでなければ undefined）。 */
+/** 別の事業者のサーバーレスの実行先（併用の詳細解析も含む。そうでなければ undefined）。 */
 export const analysisFnTarget = (
   id: string | undefined,
 ): AnalysisFnTarget | undefined => {
@@ -169,7 +169,7 @@ const CLIENT_NOTE =
   '結果はアプリの API に送って DB に書くので、書き込みと保存の量は変わりません。アプリを開いている間だけ動きます';
 
 const hybridNote = (p: Platform) =>
-  `端末で速報を出し（保存しない）、本解析は${RUNTIME[p]}で動かします（「${SERVICE[p]}」の選択肢と同じ数え方）。費用は端末に配るファイルの転送と、サーバーの本解析の両方です`;
+  `端末で簡易解析をし（保存しない）、詳細解析は${RUNTIME[p]}で動かします（「${SERVICE[p]}」の選択肢と同じ数え方）。費用は端末に配るファイルの転送と、サーバーの詳細解析の両方です`;
 
 const workerNote = (plan: '2gb' | '4gb', sameProvider: boolean) =>
   `解析だけを動かす さくらの VPS ${plan.toUpperCase()}（東京）をアプリとは別に置きます。解析の CPU はその VPS の使用率に入り、費用は月額の定額です。` +
@@ -204,9 +204,9 @@ export const ANALYSIS_LAMBDA_MEMORY_GB = COMPUTE_MEMORY_GB;
 /** 解析の Vercel Functions のメモリ（GB。仮定: Vercel の構成の関数と同じ 2 GB）。 */
 export const ANALYSIS_VERCEL_MEMORY_GB = 2;
 
-/** 併用の説明（本解析の実行先の説明の前に、端末の速報を足す）。 */
+/** 併用の説明（詳細解析の実行先の説明の前に、端末の簡易解析を足す）。 */
 const HYBRID_PREFIX =
-  '端末で速報を出し（保存しない）、本解析はサーバーで動かします。費用は端末に配るファイルの転送と、サーバーの本解析の両方です。本解析は: ';
+  '端末で簡易解析をし（保存しない）、詳細解析はサーバーで動かします。費用は端末に配るファイルの転送と、サーバーの詳細解析の両方です。詳細解析は: ';
 
 /**
  * 別の事業者のサーバーレスの実行先（D-245・prd/17 §5.6）。Web の事業者から独立して選ぶ。解析は別のノード（その事業者の
@@ -270,7 +270,7 @@ const fnPart = (target: AnalysisFnTarget, hybrid: boolean): PartDef => {
     accepts: [],
     attachesTo: ['compute'],
     as: target,
-    label: hybrid ? `端末で速報・${f.service}で本解析` : f.service,
+    label: hybrid ? `端末で簡易解析・${f.service}で詳細解析` : f.service,
     note: `${hybrid ? HYBRID_PREFIX : ''}${f.note}。${FN_ELSEWHERE_NOTE}`,
     premiseRefs: [],
   };
@@ -280,7 +280,7 @@ const fnPart = (target: AnalysisFnTarget, hybrid: boolean): PartDef => {
 const hybridWorkerPart = (p: PartDef): PartDef => ({
   ...p,
   id: `hybrid-${p.id}`,
-  label: `端末で速報・${analysisTargetName(p.id as AnalysisTarget, 'sakura')}で本解析`,
+  label: `端末で簡易解析・${analysisTargetName(p.id as AnalysisTarget, 'sakura')}で詳細解析`,
   note: `${HYBRID_PREFIX}${p.note}`,
 });
 
@@ -315,7 +315,7 @@ export const ANALYSIS_COMPONENTS: readonly ComponentOption[] = [
       id: 'hybrid',
       slot: 'analysis',
       platform,
-      label: `端末で速報・${SERVICE[platform]}で本解析`,
+      label: `端末で簡易解析・${SERVICE[platform]}で詳細解析`,
       note: hybridNote(platform),
       premiseRefs: [],
     },
@@ -335,7 +335,7 @@ export const ANALYSIS_COMPONENTS: readonly ComponentOption[] = [
       {
         ...own,
         id: `hybrid-${own.id}`,
-        label: `端末で速報・解析の worker（VPS ${plan.toUpperCase()} をもう 1 台）で本解析`,
+        label: `端末で簡易解析・解析の worker（VPS ${plan.toUpperCase()} をもう 1 台）で詳細解析`,
         note: `${HYBRID_PREFIX}${own.note}`,
       },
     ];

@@ -76,7 +76,7 @@ describe('構成を変えるの欄の解析の設定（D-236）', () => {
     registerSetupChange();
     expect(onRegister).toHaveBeenCalledWith(
       expect.objectContaining({
-        settings: { analysisUnit: 2, candidates: 1 },
+        settings: { analysisUnit: 2, candidates: 1, analysisScope: 0 },
       }),
     );
   });
@@ -109,5 +109,30 @@ describe('構成を変えるの欄の解析の設定（D-236）', () => {
     expect(
       document.querySelector('[data-setup-tab-button="slot:analysis"]'),
     ).toBeNull();
+  });
+});
+
+describe('詳細解析の範囲のチップ（D-246）', () => {
+  it('置き方が併用のときだけ出す', async () => {
+    const { AnalysisSettingChips } = await import('./analysis-settings.tsx');
+    const value = { analysisUnit: 0, candidates: 3, analysisScope: 0 };
+    const { rerender } = render(
+      <AnalysisSettingChips
+        value={value}
+        analysis="same"
+        onChange={() => {}}
+      />,
+    );
+    const scopeChips = () =>
+      document.querySelectorAll('[data-setting="analysisScope"]').length;
+    expect(scopeChips()).toBe(0);
+    rerender(
+      <AnalysisSettingChips
+        value={value}
+        analysis="hybrid-fn-lambda"
+        onChange={() => {}}
+      />,
+    );
+    expect(scopeChips()).toBeGreaterThan(0);
   });
 });

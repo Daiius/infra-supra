@@ -24,6 +24,7 @@ import {
   KIFU_POSITION_CPU_MS,
   KIFU_PV_PER_MAU,
   KIFU_RECORD_KB,
+  KIFU_REQUESTED_SHARE,
   KIFU_ROW_OVERHEAD_KB,
   kifuAnalysis,
   kifuResultKB,
@@ -354,6 +355,56 @@ describe('解析の区切り方と、止まる置き場（D-236・prd/17 PR-6）
         candidates: KIFU_CANDIDATES,
       }),
     ).toEqual(w);
+  });
+});
+
+describe('詳細解析の範囲（D-246・prd/17 §5.6）', () => {
+  const w = kifuAnalysis(PV);
+  const base = { unit: 'game', candidates: KIFU_CANDIDATES } as const;
+  const all = applyAnalysisSettings(w, KIFU_ANALYSIS_JOB, base);
+  const asked = applyAnalysisSettings(w, KIFU_ANALYSIS_JOB, {
+    ...base,
+    scope: 'requested',
+  });
+
+  it('希望した棋譜だけなら、詳細解析の件数が割合だけ減る（1 件の形・CPU は同じ）', () => {
+    expect(asked.perPage.apiCalls).toBeCloseTo(
+      all.perPage.apiCalls * KIFU_REQUESTED_SHARE,
+      10,
+    );
+    expect(asked.api.cpuMs).toBe(all.api.cpuMs);
+    expect(asked.api.responseKB).toBe(all.api.responseKB);
+  });
+
+  it('棋譜のアップロードは全局のまま、詳細解析の結果の書き込みと在庫は割合だけ', () => {
+    const count = (x: typeof all) =>
+      resolveWorkload(x).classes['api-async']!.count;
+    const writes = (x: typeof all) => count(x) * x.api.writesPerCall;
+    const rows = (x: typeof all) => writes(x) * x.api.rowsWrittenPerWrite;
+    // 1 局まとめて・一手を 1 行: 1 局に 結果の 1 回（手数の行）+ アップロードの 1 回（1 行）
+    const games = count(all);
+    expect(writes(asked)).toBeCloseTo(games * KIFU_REQUESTED_SHARE + games, 6);
+    expect(rows(asked)).toBeCloseTo(
+      games * KIFU_REQUESTED_SHARE * KIFU_MOVES_PER_GAME + games,
+      6,
+    );
+    expect(asked.db.sizeGB / all.db.sizeGB).toBeCloseTo(
+      (KIFU_RECORD_KB +
+        KIFU_REQUESTED_SHARE *
+          KIFU_MOVES_PER_GAME *
+          KIFU_CANDIDATES *
+          KIFU_CANDIDATE_KB +
+        (1 + KIFU_REQUESTED_SHARE * KIFU_MOVES_PER_GAME) *
+          KIFU_ROW_OVERHEAD_KB) /
+        KIFU_KB_PER_GAME,
+      10,
+    );
+  });
+
+  it('全局（既定・省略）は今の数え方のまま', () => {
+    expect(
+      applyAnalysisSettings(w, KIFU_ANALYSIS_JOB, { ...base, scope: 'all' }),
+    ).toEqual(all);
   });
 });
 

@@ -1,6 +1,8 @@
 // 設定（Settings・SETTINGS の選択肢）と、設定から決まる値（オンデマンドの再検証・画像の形式と重さ・設定のフレーバー）。
 import {
+  ANALYSIS_SCOPES,
   ANALYSIS_UNITS,
+  analysisPlacementOf,
   type AnalysisSettings,
   type Choices,
   type FrameworkId,
@@ -31,12 +33,19 @@ export type Settings = {
   analysisUnit: number;
   /** 1 局面に残す候補の数（D-236・prd/17 §5.3）。解析のあるシナリオだけ。置き場が利用者の端末なら 1 つまで。 */
   candidates: number;
+  /**
+   * 詳細解析の範囲（ANALYSIS_SCOPES の添字。0 全局・1 希望した棋譜だけ。D-246・prd/17 §5.6）。置き方が併用のときだけ効く
+   * （ほかの置き場では全局として数える。設定の値は替えない）。省略は全局（D-246 より前の状態・保存を変えない）。
+   */
+  analysisScope?: number;
 };
 
 /** 解析の区切り方の既定（局面ごと）。 */
 export const DEFAULT_ANALYSIS_UNIT = 0;
 /** 1 局面に残す候補の数の既定（テンプレートの既定。catalog の KIFU_CANDIDATES）。 */
 export const DEFAULT_CANDIDATES = KIFU_CANDIDATES;
+/** 詳細解析の範囲の既定（全局）。 */
+export const DEFAULT_ANALYSIS_SCOPE = 0;
 /** 置き場が利用者の端末のときの候補の数（端末の軽い解析は 1 つまで。KF-08）。 */
 export const CLIENT_CANDIDATES = 1;
 
@@ -49,14 +58,30 @@ export function candidatesLockReason(
     : undefined;
 }
 
+/** 詳細解析の範囲を選べない理由（置き方が併用でない。選べれば undefined。D-246）。 */
+export function analysisScopeLockReason(
+  analysis: string | undefined,
+): string | undefined {
+  return analysisPlacementOf(analysis).mode === 'hybrid'
+    ? undefined
+    : '詳細解析の範囲は、置き方が「端末で簡易解析・サーバーで詳細解析」のときだけ選べます';
+}
+
 /**
  * 設定と部品から決まる解析の設定（Workload に当てる値）。置き場が利用者の端末なら候補は 1 つ（設定の値は替えない。
- * 置き場を戻せば設定の値に戻る）。併用は端末の速報を保存しないので、サーバーの本解析は設定どおり。
+ * 置き場を戻せば設定の値に戻る）。併用は端末の簡易解析を保存しないので、サーバーの詳細解析は設定どおり。
  */
 export function analysisSettingsOf(
-  settings: Pick<Settings, 'analysisUnit' | 'candidates'>,
+  settings: Pick<Settings, 'analysisUnit' | 'candidates'> &
+    Partial<Pick<Settings, 'analysisScope'>>,
   components: Choices,
 ): AnalysisSettings {
+  // 詳細解析の範囲は併用のときだけ（ほかの置き場は全局。D-246）
+  const scope =
+    analysisScopeLockReason(components.analysis) === undefined
+      ? (ANALYSIS_SCOPES[settings.analysisScope ?? DEFAULT_ANALYSIS_SCOPE] ??
+        'all')
+      : 'all';
   return {
     unit: ANALYSIS_UNITS[settings.analysisUnit] ?? 'position',
     candidates:
@@ -65,6 +90,7 @@ export function analysisSettingsOf(
         : settings.candidates,
     // 保存の形は部品（D-237）。選択が無ければ一手を 1 行
     storage: storageShapeOf(components.storage),
+    ...(scope === 'all' ? {} : { scope }),
   };
 }
 
@@ -321,6 +347,19 @@ export const SETTINGS = {
       { value: 3, label: '3 つ' },
     ],
   },
+  /**
+   * 詳細解析の範囲（D-246・prd/17 §5.6）。併用で、サーバーの詳細解析を全局にするか、利用者が希望した棋譜だけにするか。値は ANALYSIS_SCOPES の添字。
+   */
+  analysisScope: {
+    label: '詳細解析の範囲',
+    field: 'analysisScope',
+    effort: EFFORT.setting.analysisScope,
+    note: '端末の簡易解析は毎局出し、サーバーの詳細解析をどの棋譜にかけるかです。「希望した棋譜だけ」は、利用者が頼んだ棋譜（負けた局など。約半分と仮定します）だけを詳細解析するので、詳細解析の費用と保存する結果が約半分になります。頼んだ棋譜は利用者が待つつもりなので、詳細解析が遅くても正確さは下げません',
+    options: [
+      { value: 0, label: '全局' },
+      { value: 1, label: '希望した棋譜だけ' },
+    ],
+  },
 } as const satisfies Record<
   string,
   {
@@ -332,6 +371,10 @@ export const SETTINGS = {
   }
 >;
 export type SettingKey = keyof typeof SETTINGS;
+
+/** 設定の今の値（省略できる設定は既定を補う: 詳細解析の範囲は全局。D-246）。 */
+export const settingValueOf = (settings: Settings, key: SettingKey): number =>
+  settings[SETTINGS[key].field] ?? DEFAULT_ANALYSIS_SCOPE;
 
 /** 1 枚あたり配る画像の大きさ（KB）。画像の部品と画像の形式の設定から（D-47・D-58）。 */
 export function deliveredImageKB(
@@ -450,6 +493,10 @@ export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
     'エンジンの起動が 1 局に 1 回で済み、結果もまとめて 1 回で書けます。仕組みもいちばん単純です',
   'analysisUnit:2':
     '途中で切れても続きから再開できるので、長い棋譜でも最後まで進みます',
+  'analysisScope:0':
+    'どの棋譜も詳細解析まで終わるので、利用者は頼まなくても詳しい結果を見られます',
+  'analysisScope:1':
+    '詳細解析は頼まれた棋譜だけ（約半分と仮定）なので、サーバーの費用と保存する結果が約半分で済みます',
   'candidates:1': 'いちばん良い手だけを残すので、結果が小さく済みます',
   'candidates:3':
     '次の候補も並べて見せられ、悪手のどこが悪いかを比べやすくなります',
