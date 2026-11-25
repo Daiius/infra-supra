@@ -405,7 +405,7 @@ const hybridNote = (p: Platform) =>
 const workerNote = (plan: '2gb' | '4gb', sameProvider: boolean) =>
   `解析だけを動かす さくらの VPS ${plan.toUpperCase()}（東京）をアプリとは別に置きます。解析の CPU はその VPS の使用率に入り、費用は月額の定額です。` +
   '解析の結果はアプリの API（HTTPS）に送って DB に書きます（アプリの側は受けて書くだけ）。1 件の時間の上限はありませんが、ピークに CPU が埋まると解析が滞ります。' +
-  '自前運用の維持の工数と偶発的な障害（1 台構成）が加わります。' +
+  '自前運用の維持の工数と偶発的な障害（1 台のとき）が加わります（台数は選べます）。' +
   (sameProvider
     ? 'アプリの VPS と同じアカウントで、月額が 1 台分増えます'
     : 'さくらのアカウントが 1 つ増え、請求が 2 つになります。往復の遅延は計算しません');
@@ -539,11 +539,11 @@ export const ANALYSIS_TASK: Record<
 };
 
 const machineNote = (m: AnalysisMachine) =>
-  `${m.family} の ${m.size}（メモリ ${m.memoryGB} GB）を解析の worker に 1 台置きます。` +
+  `${m.family} の ${m.size}（メモリ ${m.memoryGB} GB）を解析の worker に置きます（台数は選べます）。` +
   (m.provider === 'sakura'
     ? '費用は月額の定額です。'
     : '費用は動いている時間の従量（台を止めないので月の時間ぶん）で、1 年の確約で下がります。ディスクの料金は数えません。') +
-  'ピークに CPU が埋まると解析が滞ります。自前運用の維持の工数と偶発的な障害（1 台構成）が加わります';
+  'ピークに CPU が埋まると解析が滞ります（台数を増やすと処理の力も増えます）。自前運用の維持の工数と偶発的な障害（1 台のとき）が加わります';
 
 /** Fargate・台で借りるマシンの部品（どの土台にも差す。同じ事業者の土台は own で足す。D-247）。 */
 const extraPart = (target: string, hybrid: boolean): PartDef => {

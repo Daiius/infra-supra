@@ -323,7 +323,7 @@ const EXTRA_ANALYSIS_FLAVOR: Record<string, string> = Object.fromEntries(
       return [
         m.provider,
         t,
-        `${MACHINE_FLAVOR[m.cpu]}を解析に一台借ります。混む時間に待ちが出ます`,
+        `${MACHINE_FLAVOR[m.cpu]}を解析に台で借ります（台数は下で選びます）。混む時間に待ちが出ます`,
       ];
     }),
   ].flatMap(([p, t, text]) => [
