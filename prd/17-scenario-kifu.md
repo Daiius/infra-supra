@@ -397,7 +397,17 @@ R-2 の確認（2026-11-23 に公式の原文で取り直した。出典は cata
 - 今の 1 局面の重さ（D-236）を、サーバーレスの実行環境とさくらの VPS の仮想コアの速さの仮定とみて基準 1 にし、ほかの系列は速さの比で CPU を割る（`ANALYSIS_CPU_SPEED`・`cpuSpeedOf`）。**今の実行先（同じ実行環境・サーバーレス・worker の VPS 2GB / 4GB）の数え方は変わらない**（golden は不変）。
 - estimator: ノードの `cpuSpeed`（関数・コンテナ・ホスト。1 件の CPU を倍率で割り、壁時計時間は減った CPU の分だけ短くする）・コンテナの `targetUtilization`（Fargate。CPU で決まるアクティブな時間をこれで割る。仮定 0.7）・ホストの `billedHourly`（EC2・Compute Engine。1 台の月の時間 `instance-hours`）を足した。game の満足度の 1 局の時間も同じ倍率で CPU の分を割る（`analysisJobWallMs` の `cpuSpeed`）。Fargate のタスクは 2 vCPU・4 GB・1 vCPU で 1 件（仮定）、起動の待ちは数えない。
 - 1 か月目の試算（12 万 PV・1 局まとめて・候補 3 つ・Web は Vercel Pro。左は全局のサーバー、右は併用で希望した棋譜だけ。USD・さくらは円を別に）: Lambda $643 / $341（速さ 普通・6.7 分）、Fargate ARM $580 / $315（普通・5.0 分）、EC2 c7g.2xlarge $312 / $312（悪い・ピークの比 5.5・追いつかない / 併用は簡易解析で普通・比 2.8）、Compute Engine c4a-standard-8 $384 / $383（同じく 比 5.5 / 2.8）、さくらの VPS 16GB $47 + ¥15,400 / 同じ（悪い・比 7.4 / 併用は普通・比 3.7 で追いつかない）、EC2 c7a.2xlarge $424 / $423（比 4.4 / 2.2）。台で借りるマシンは 1 台では月 9 万局に追いつかない（台数・大きさの不足）。
-- **残したこと**: Fargate が Lambda より約 1 割しか安くならないのは、モデルが Lambda（メモリ 1 GB）を基準の速さの 1 vCPU として数えるため（実際の Lambda はメモリに比例して CPU が割り当てられ、1,769 MB で 1 vCPU）。サーバーレスの実行環境のメモリと速さの関係は後で決める。台数を選ぶこと（2 台以上）・Auto Scaling・Spot。
+- **残したこと**: 台数を選ぶこと（2 台以上）・Auto Scaling・Spot。（Fargate が Lambda より約 1 割しか安くならなかった件は、Lambda の CPU をメモリに比例させて直した。下の D-248）
+
+**Lambda の CPU はメモリに比例する（D-248・2026-11-26）**:
+
+- 公式の文書（[Configure Lambda function memory](https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html)・2026-11-26 取得）: "Lambda allocates CPU power in proportion to the amount of memory configured." / "At 1,769 MB, a function has the equivalent of one vCPU"。料金データの Lambda のプランの前提 `memory-cpu`。最大の vCPU の数は書かれていないので使わない。
+- 構成のどの Lambda（料金のプランが `lambda` の関数。API・解析・OpenNext・WebSocket のメッセージ）にも、CPU の速さの倍率 `cpuSpeed` = min(メモリ GB ÷ 1.769, 1) を当てる（catalog の `withLambdaCpu`。composeStack の最後）。D-247 の系列の速さ（サーバーレス 0.6 = 今の値の基準 1）とは掛ける。1 vCPU を超えるメモリは 1 で頭打ち（仮定: SSR・API・解析のエンジンはどれも 1 件 1 スレッドで、2 つ目の vCPU を使わない）。
+- メモリが 1 vCPU より小さいと、同じ CPU の仕事に長い壁時計がかかる。GB 秒は「メモリ × 時間」なので、CPU の分は 1.769 GB × CPU 秒で変わらず、待ちの分はメモリに比例する。**1 GB の Lambda は今まで CPU を 1.77 倍速く（安く）数えていた**。
+- 解析の Lambda（`fn-lambda`・AWS の同じ実行環境 `analysis-fn`）のメモリは 1 GB → **1.769 GB**（1 vCPU 相当。仮定）。小さくしても CPU の分の GB 秒は変わらず遅くなるだけ、大きくしても速くならないので、1 vCPU が自然な置き方。
+- Amplify Hosting の SSR（Lambda の上で動くが別の料金）は、公式の文書にメモリと CPU の関係の記載が無いので当てない。
+- 1 か月目の試算（12 万 PV・1 局まとめて・候補 3 つ。USD）: Vercel Pro ＋ 解析 Lambda $643 → **$1,107**、Vercel Pro ＋ Fargate ARM $580（変わらず）、Amplify の同じ実行環境（Lambda）$606 → **$1,070**、Amplify ＋ 端末 $17（変わらず）。
+- golden: 記事・受託の基準プレイは変わらない（既定の部品に Lambda の構成が無い）。描き方の同値のテストの費用のハッシュは Lambda を含む組（OpenNext・S3 + Lambda の SPA と静的書き出し・API を AWS に置く Cloudflare の組）だけ変わった。棋譜解析の基準プレイは Amplify の所持金（シード 1・3）が $−518.63 → $−1,213.04。
 
 ## 6. 出来事（KF-15。1 つずつ概要を見て決めた）
 

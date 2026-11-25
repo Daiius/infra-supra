@@ -625,3 +625,10 @@
 - 結果（1 か月目・12 万 PV・1 局まとめて・Web は Vercel Pro）: Fargate ARM $580（Lambda $643）。EC2 c7g.2xlarge $312・Compute Engine c4a-standard-8 $384・さくらの VPS 16GB ¥15,400 はどれも 1 台では追いつかず速さが「悪い」（併用で希望した棋譜だけなら簡易解析で「普通」）。
 - 影響: 組み合わせの総当たり（`pnpm test:sweep`。このブランチは 1 ファイルで棋譜解析を含む）は、解析の置き場の選択肢が構成ごとに約 13 → 約 55 に増えた分の pairwise で、手元で約 95 秒 → **約 6 分 12 秒**（通る）。棋譜解析の総当たりで実行先を系列ごとに 1 つの大きさに絞るか、main の総当たりのシナリオごとの分割（PR #210）に載せるかは未決。
 - 残したこと: Fargate と Lambda の差が小さいのは、Lambda（1 GB）を基準の速さの 1 vCPU として数えるため（サーバーレスのメモリと速さの関係は未決）。台数を選ぶこと・Auto Scaling・Spot・Fargate の Savings Plans・Compute Engine の継続利用割引・ディスクの料金・さくらの大きいプランの年額。
+
+### D-248 Lambda の CPU はメモリに比例させる（1,769 MB で 1 vCPU）（2026-11-26・ユーザーの決定と supervisor の段取り。prd/17 §5.6）
+
+- 背景: 実行先を足した（D-247）後、Fargate が Lambda より約 1 割しか安くならなかった。モデルはどのメモリの Lambda も 1 vCPU の速さで数えていた。実際の Lambda はメモリに比例して CPU が割り当てられる。
+- 出典: https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html （2026-11-26 取得）"Lambda allocates CPU power in proportion to the amount of memory configured." / "At 1,769 MB, a function has the equivalent of one vCPU (one vCPU-second of credits per second)."。最大の vCPU の数は書かれていないので使わない。
+- 決定: 料金のプランが Lambda の関数のノードに、CPU の速さの倍率 min(メモリ GB ÷ 1.769, 1) を当てる（catalog の `withLambdaCpu`・`lambdaCpuSpeed`。前提 `memory-cpu`）。1 vCPU を超えるメモリは頭打ち（1 件 1 スレッドの仮定）。解析の Lambda のメモリは 1 GB → 1.769 GB（仮定）。Amplify Hosting の SSR は公式に記載が無いので当てない。
+- 結果: Vercel Pro ＋ 解析 Lambda の 1 か月目 $643 → $1,107（Fargate ARM は $580 のまま）。記事・受託の基準プレイは不変、描き方の同値のテストのハッシュは Lambda を含む組だけ、棋譜解析の基準プレイは Amplify の分だけ変わった。

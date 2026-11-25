@@ -231,6 +231,10 @@ export const aws: PriceBookInput = {
       retrievedAt: '2026-11-23',
     },
     lambdaPrices: priceList('AWSLambda'),
+    lambdaMemoryCpu: {
+      url: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html',
+      retrievedAt: '2026-11-26',
+    },
     lambdaPricing: src('https://aws.amazon.com/lambda/pricing/'),
     lambdaUrls: src(
       'https://docs.aws.amazon.com/lambda/latest/dg/urls-configuration.html',
@@ -805,6 +809,14 @@ export const aws: PriceBookInput = {
         },
       ],
       facts: [
+        {
+          // "Lambda allocates CPU power in proportion to the amount of memory configured." /
+          // "At 1,769 MB, a function has the equivalent of one vCPU (one vCPU-second of credits per second)."（D-248）
+          id: 'memory-cpu',
+          premise:
+            'Lambda は設定したメモリに比例して CPU を割り当てます。1,769 MB で 1 vCPU 相当です（メモリは 128 MB〜10,240 MB）。メモリが小さいと CPU の処理に長い時間がかかり、その時間 × メモリで課金されます',
+          sourceIds: ['lambdaMemoryCpu'],
+        },
         {
           id: 'opennext-isr',
           premise:

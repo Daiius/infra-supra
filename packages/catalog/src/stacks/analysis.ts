@@ -12,7 +12,7 @@
 import type { ArchitectureInput, WorkloadInput } from 'estimator';
 import { partOptions, transferNodes, type PartDef } from './connections.ts';
 import { vpsNode } from './sakura.ts';
-import { bill as awsBill, COMPUTE_MEMORY_GB } from './aws.ts';
+import { bill as awsBill, LAMBDA_GB_PER_VCPU } from './aws.ts';
 import { EC2, ec2PlanId } from '../providers/aws.ts';
 import { GCE, gcePlanId } from '../providers/gcp.ts';
 import { SAKURA_LARGE } from '../providers/sakura-vps.ts';
@@ -388,8 +388,12 @@ export const ANALYSIS_PARTS: readonly PartDef[] = (['2gb', '4gb'] as const).map(
   }),
 );
 
-/** 解析の Lambda のメモリ（GB。仮定: Amplify の SSR・API の Lambda と同じ大きさ。aws.ts の COMPUTE_MEMORY_GB）。 */
-export const ANALYSIS_LAMBDA_MEMORY_GB = COMPUTE_MEMORY_GB;
+/**
+ * 解析の Lambda のメモリ（GB。仮定: 1 vCPU 相当の 1,769 MB。D-248）。Lambda はメモリに比例して CPU を割り当てるので、
+ * 解析のエンジン（1 件 1 スレッドとみる）は 1 vCPU のときに CPU の処理が最も速く、それより小さいと時間が延びて
+ * GB 秒は CPU の分では変わらず待ちの分だけ増え、大きくしても速くならない（aws.ts の lambdaCpuSpeed）。
+ */
+export const ANALYSIS_LAMBDA_MEMORY_GB = LAMBDA_GB_PER_VCPU;
 /** 解析の Vercel Functions のメモリ（GB。仮定: Vercel の構成の関数と同じ 2 GB）。 */
 export const ANALYSIS_VERCEL_MEMORY_GB = 2;
 
@@ -799,7 +803,7 @@ export const ANALYSIS_FN_NODE_ID = 'analysis-fn';
  * アプリの処理がキューから起こせない実行環境なら、解析を動かす別の関数を返す（そうでなければ undefined）。
  * Amplify Hosting の SSR は HTTP の応答を返すための実行環境で、キューから起こす口が無く、単価も Lambda の約 3.3 倍
  * （$0.20 / GB 時間 ≒ $0.0000556 / GB 秒。Lambda は $0.0000166667）。AWS で積んだ解析を流すなら、同じアカウントに
- * Lambda を置くのが自然なので、そちらで数える。メモリは SSR と同じ（ゲーム上の仮定）。
+ * Lambda を置くのが自然なので、そちらで数える。メモリは 1 vCPU 相当（ANALYSIS_LAMBDA_MEMORY_GB。D-248）。
  */
 function asyncComputeFor(n: ArchNodeIn): ArchNodeIn | undefined {
   const c = n.config;
@@ -813,7 +817,11 @@ function asyncComputeFor(n: ArchNodeIn): ArchNodeIn | undefined {
     id: ANALYSIS_FN_NODE_ID,
     role: 'compute',
     label: 'Lambda（解析）',
-    config: { kind: 'function', memoryGB: c.memoryGB, concurrency: 1 },
+    config: {
+      kind: 'function',
+      memoryGB: ANALYSIS_LAMBDA_MEMORY_GB,
+      concurrency: 1,
+    },
     billing: {
       ...n.billing,
       planId: 'lambda',

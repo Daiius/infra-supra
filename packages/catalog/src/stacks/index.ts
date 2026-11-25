@@ -12,6 +12,7 @@ import {
   AWS_DEFAULT_CHOICES,
   AWS_STACK_DEFS,
   composeAws,
+  withLambdaCpu,
 } from './aws.ts';
 import {
   composeOpenNext,
@@ -1704,40 +1705,43 @@ export function composeStack(
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は記事をキャッシュする形に直した後に差す（D-103）
   // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）・メールの送信（D-95）は、部品を差し終えた後にまとめて足す
   // アプリのメールの送信（D-95）も最後に足す（経路を持たない）。ドメインの登録と DNS（D-96）はその後に
-  return withDomain(
-    withEmail(
-      withBackups(
-        withLogs(
-          // 解析の置き場（prd/17 §5.1・D-235）は API の置き場を差した後（worker はアプリの API の経路に結果を送る）
-          // リアルタイム（Cloudflare 以外。D-240）は構成の処理と DB が決まった後（Cloudflare は composeCloudflare の中）
-          applyRealtime(
-            applyStorageShape(
-              applyAnalysis(
-                applyCrossApi(
-                  built,
-                  def.platform,
-                  def.plan,
-                  c,
-                  standby,
-                  options.framework ?? 'nextjs',
+  // Lambda はメモリに比例した CPU の速さ（D-248）。どの部品の Lambda にも当てるので、部品を差し終えた後に
+  return withLambdaCpu(
+    withDomain(
+      withEmail(
+        withBackups(
+          withLogs(
+            // 解析の置き場（prd/17 §5.1・D-235）は API の置き場を差した後（worker はアプリの API の経路に結果を送る）
+            // リアルタイム（Cloudflare 以外。D-240）は構成の処理と DB が決まった後（Cloudflare は composeCloudflare の中）
+            applyRealtime(
+              applyStorageShape(
+                applyAnalysis(
+                  applyCrossApi(
+                    built,
+                    def.platform,
+                    def.plan,
+                    c,
+                    standby,
+                    options.framework ?? 'nextjs',
+                  ),
+                  c.analysis,
                 ),
-                c.analysis,
+                // 保存の形（prd/17 §5.4・D-237）。構成は変えず、D1 に行の数え方の前提を足すだけ（Workload は applyAnalysisSettings）
+                c.storage,
               ),
-              // 保存の形（prd/17 §5.4・D-237）。構成は変えず、D1 に行の数え方の前提を足すだけ（Workload は applyAnalysisSettings）
-              c.storage,
+              def.platform,
+              def.plan,
+              c.realtime,
             ),
-            def.platform,
-            def.plan,
-            c.realtime,
           ),
+          c.dbBackup,
         ),
-        c.dbBackup,
+        def.platform,
+        def.plan,
+        c.email,
       ),
       def.platform,
-      def.plan,
-      c.email,
     ),
-    def.platform,
   );
 }
 
