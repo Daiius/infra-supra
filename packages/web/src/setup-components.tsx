@@ -32,6 +32,7 @@ import {
 import { flushSync } from 'react-dom';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { ChoiceHeadingHidden } from './choice-tabs.tsx';
+import { Code, Cpu, Network, type LucideIcon } from 'lucide-react';
 import { Info } from './info.tsx';
 import { useReducedMotion } from './motion.tsx';
 import { NameWithInfo, splitForInfo } from './option-text.tsx';
@@ -797,6 +798,9 @@ export function SetupTabs({
   const tabs = useRef<Partial<Record<SetupTab, HTMLButtonElement | null>>>({});
   const panels = useRef<Partial<Record<SetupTab, HTMLDivElement | null>>>({});
   const reduced = useReducedMotion();
+  // タブの印（狭い画面では印を名前の上に置き、名前を切らない。2026-11-25 にユーザーが案 A を選んだ）
+  const iconOf = (t: SetupTab): LucideIcon =>
+    t === 'stack' ? Network : t === 'framework' ? Code : Cpu;
   useImperativeHandle(api, () => ({
     show: (t) => flushSync(() => setTab(t)),
     focusSlot: (slot) => {
@@ -895,14 +899,26 @@ export function SetupTabs({
               }`}
               onClick={() => setTab(t)}
             >
-              <span className="flex max-w-full items-center gap-1 text-sm">
-                <span className={clsx('truncate', selected && 'text-primary')}>
+              <span
+                // 狭い画面: 印の下に名前（切らない）・「!」は右上
+                className="flex max-w-full items-center gap-1 text-sm max-sm:relative max-sm:w-full max-sm:flex-col max-sm:gap-0.5 max-sm:text-center"
+              >
+                {(() => {
+                  const Icon = iconOf(t);
+                  return <Icon aria-hidden className="size-4 shrink-0" />;
+                })()}
+                <span
+                  className={clsx(
+                    'min-w-0 max-sm:leading-tight max-sm:whitespace-nowrap sm:truncate',
+                    selected && 'text-primary',
+                  )}
+                >
                   {x.label}
                 </span>
                 {x.warn && (
                   <span
                     aria-hidden
-                    className={`badge shrink-0 badge-xs font-bold ${x.warnTone === 'error' ? 'badge-error' : 'badge-warning'}`}
+                    className={`badge shrink-0 badge-xs font-bold ${x.warnTone === 'error' ? 'badge-error' : 'badge-warning'} max-sm:absolute max-sm:top-0 max-sm:right-0`}
                     data-setup-tab-warn
                   >
                     !
@@ -910,9 +926,11 @@ export function SetupTabs({
                 )}
               </span>
               <span
-                className={`block w-full truncate text-xs font-normal ${
-                  selected ? 'opacity-90' : 'opacity-70'
-                }`}
+                // 狭い画面では要約をタブに出さず、中身の一番上に出す
+                className={clsx(
+                  'block w-full truncate text-xs font-normal max-sm:hidden',
+                  selected ? 'opacity-90' : 'opacity-70',
+                )}
               >
                 <span className="sr-only">：</span>
                 {x.summary}
@@ -940,6 +958,11 @@ export function SetupTabs({
           hidden={tab !== t}
           className="min-w-0 rounded-box border border-base-300 bg-base-100 p-1 sm:p-2"
         >
+          {/* 狭い画面だけ、今の選択をタブの代わりにここへ（読み上げはタブの名前に要約が入っているので重ねない） */}
+          <p aria-hidden className="px-1 pb-1 text-xs sm:hidden">
+            <span className="opacity-70">今の選択: </span>
+            <span className="font-semibold">{infoOf(t).summary}</span>
+          </p>
           <ChoiceHeadingHidden.Provider value>
             {infoOf(t).panel}
           </ChoiceHeadingHidden.Provider>
