@@ -7,6 +7,7 @@ import { meetsRequirement, REQUIREMENT_LABEL } from '../requirements.ts';
 import { articleFamily } from '../routes/strategy.ts';
 import type { Scenario } from '../scenario.ts';
 import { selfHostedOf, STACKS } from '../stacks.ts';
+import { analysisMachinesOf } from '../settings.ts';
 import type { GameState, MonthReport } from '../state.ts';
 
 /** 自前運用のサーバーの偶発的な障害（乱数を 1 つ引く）。 */
@@ -19,8 +20,14 @@ export function incidentOf(
   // 自前運用のサーバーの偶発的な障害。部品で VPS を使うとき（VPS の API。D-67）も、そのホストがリクエストを受けていれば当たる
   const apiOnlyHost = !STACKS[stackIndexNow]!.selfHosted;
   const incident =
-    selfHostedOf(stackIndexNow, state.components, state.framework, {}, true) &&
-    rand < sc.incidents.selfHostedChancePerMonth;
+    selfHostedOf(
+      stackIndexNow,
+      state.components,
+      state.framework,
+      {},
+      true,
+      analysisMachinesOf(state.settings, state.components.analysis),
+    ) && rand < sc.incidents.selfHostedChancePerMonth;
   return { seed, incident, apiOnlyHost };
 }
 

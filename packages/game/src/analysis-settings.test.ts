@@ -8,6 +8,7 @@ import {
   KIFU_PV_PER_MAU,
 } from 'catalog';
 import { resolveWorkload } from 'estimator';
+import { commitmentTerms } from './commitments.ts';
 import {
   actionEffort,
   applyAction,
@@ -25,6 +26,7 @@ import {
   playMonth,
   replaySave,
   SCENARIOS,
+  selfHostedOf,
   settingInactiveReason,
   setupChangeOf,
   STACKS,
@@ -209,6 +211,7 @@ describe('構成を変える（D-185）でも選び直せる', () => {
       analysisUnit: 0,
       candidates: 3,
       analysisScope: 0,
+      analysisMachines: 1,
     });
     const change = setupChangeOf(s, {
       ...draft,
@@ -386,5 +389,74 @@ describe('始める画面で選んだ解析の設定（D-249）', () => {
     expect(
       parseSave({ ...save, analysisSettings: { analysisUnit: 'x' } }),
     ).toBeNull();
+  });
+});
+
+describe('台で借りるマシンの台数（D-251）', () => {
+  const ec2 = { analysis: 'ec2-c7g-2xlarge' };
+  const startN = (n?: number, analysis: Record<string, string> = ec2) =>
+    playMonth(
+      newGame(
+        PRO,
+        1,
+        kifu,
+        DEFAULT_START_DATE,
+        'nextjs',
+        analysis,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        n === undefined ? undefined : { analysisMachines: n },
+      ),
+    );
+  const machineUsd = (s: GameState) =>
+    last(s)
+      .lines.filter((l) => l.planId === 'ec2-c7g-2xlarge')
+      .reduce((a, l) => a + l.amount, 0);
+
+  it('始める画面で選んだ台数で始まり、マシンの時間の課金が台数倍になる', () => {
+    const one = startN();
+    const four = startN(4);
+    expect(four.settings.analysisMachines).toBe(4);
+    expect(machineUsd(one)).toBeGreaterThan(0);
+    expect(machineUsd(four)).toBeCloseTo(machineUsd(one) * 4, 6);
+  });
+
+  it('台数は台で借りるマシンのときだけ選べ、ほかの実行先では 1 台として効かない', () => {
+    const s = startN(4, { analysis: 'fn-lambda' });
+    expect(settingInactiveReason(s, 'analysisMachines')).toMatch(/台で借りる/);
+    expect(fixedSettingValue(s, 'analysisMachines')).toBe(1);
+    expect(settingInactiveReason(startN(), 'analysisMachines')).toBeUndefined();
+  });
+
+  it('2 台以上なら worker が止まっても残りで続く（偶発的な障害に数えない）', () => {
+    expect(selfHostedOf(PRO, ec2, 'nextjs', {}, true)).toBe(true);
+    expect(selfHostedOf(PRO, ec2, 'nextjs', {}, true, 2)).toBe(false);
+  });
+
+  it('時間あたりの額の確約は台数ぶん結ぶ（対象のオンデマンドの額から台数を出す）', () => {
+    const def = {
+      key: 'k',
+      provider: 'aws',
+      planId: 'p',
+      currency: 'USD' as const,
+      onDemandMonthly: 100,
+      commitment: {
+        id: 'ri',
+        label: 'RI',
+        kind: 'instance' as const,
+        termMonths: 12,
+        meterIds: ['instance'],
+        payments: [{ payment: 'no-upfront' as const, hourly: 0.1 }],
+        premise: '',
+        sourceIds: [],
+      },
+    };
+    const one = commitmentTerms(def as never, 'no-upfront');
+    const three = commitmentTerms(def as never, 'no-upfront', 300);
+    expect(three!.covers).toBe(one!.covers * 3);
+    expect(three!.monthly).toBeCloseTo(one!.monthly * 3, 9);
   });
 });

@@ -195,6 +195,8 @@ describe('解析の設定も前回の構成に入る（D-249）', () => {
       analysisUnit: 1,
       candidates: 1,
       analysisScope: 1,
+      // 省略した台数は既定の 1 台で入る（D-251）
+      analysisMachines: 1,
     });
     const store = withLastSetup(parseLastSetups(null), kifu.id, entry);
     const back = parseLastSetups(JSON.parse(JSON.stringify(store))).scenarios[

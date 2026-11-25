@@ -31,6 +31,7 @@ import {
   stackName,
   stackUnsupportedReason,
   FRAMEWORKS,
+  DEFAULT_ANALYSIS_MACHINES,
   DEFAULT_ANALYSIS_SCOPE,
   DEFAULT_ANALYSIS_UNIT,
   DEFAULT_CANDIDATES,
@@ -838,11 +839,12 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     analysisUnit: DEFAULT_ANALYSIS_UNIT,
     candidates: DEFAULT_CANDIDATES,
     analysisScope: DEFAULT_ANALYSIS_SCOPE,
+    analysisMachines: DEFAULT_ANALYSIS_MACHINES,
   });
   const analysisSettings = scenario.analysisJob ? analysisSet : undefined;
   const commitOptions = problem
     ? []
-    : setupCommitments(scenario, stack, framework, parts);
+    : setupCommitments(scenario, stack, framework, parts, analysisSettings);
   const chosenCommits = commitOptions
     .filter((o) => commits[o.key] === o.payment)
     .map((o) => ({ key: o.key, payment: o.payment }));

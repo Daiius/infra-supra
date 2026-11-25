@@ -497,6 +497,7 @@ function Conditions({
         analysisUnit: input.analysisUnit,
         candidates: input.candidates,
         analysisScope: input.analysisScope,
+        analysisMachines: input.analysisMachines,
       }}
       analysis={input.parts.analysis}
       onChange={(v) => setInput(v)}

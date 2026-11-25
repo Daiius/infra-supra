@@ -31,6 +31,7 @@ import {
   validRouteOverrides,
 } from './routes/strategy.ts';
 import {
+  analysisMachinesOf,
   analysisSettingsOf,
   COMMENT_PAGES_PER_UPDATE,
   deliveredImageKB,
@@ -543,4 +544,19 @@ export function staticBuildOf(
 }
 
 /** 選んだ描き方で composeStack に渡す分（D-107）。 */
-export type RoutingOptions = { staticBuild?: boolean; pageCache?: boolean };
+export type RoutingOptions = {
+  staticBuild?: boolean;
+  pageCache?: boolean;
+  /** 台で借りるマシンの解析の worker の台数（D-251。描き方ではないが composeStack に同じ口で渡す）。 */
+  analysisMachines?: number;
+};
+
+/** 解析の worker の台数を構成の組み立ての口に足す（台で借りるマシンでなければ何もしない。D-251）。 */
+export const withAnalysisMachines = (
+  routing: RoutingOptions,
+  settings: Partial<Pick<Settings, 'analysisMachines'>>,
+  analysis: string | undefined,
+): RoutingOptions => {
+  const n = analysisMachinesOf(settings, analysis);
+  return n === undefined ? routing : { ...routing, analysisMachines: n };
+};

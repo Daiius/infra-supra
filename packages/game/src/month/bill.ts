@@ -21,6 +21,7 @@ import {
   analysisBurstFactor,
   architectureFor,
   staticBuildOf,
+  withAnalysisMachines,
   workloadFor,
   type WorkloadParts,
 } from '../workload.ts';
@@ -82,12 +83,16 @@ export function estimateMonth(
     state.components,
     swap ? { [swap.slot]: swap.option } : {},
     state.storageOption,
-    staticBuildOf(
-      sc,
-      stackIndexNow,
-      state.framework,
-      state.routes,
-      state.legacyRouteDefaults,
+    withAnalysisMachines(
+      staticBuildOf(
+        sc,
+        stackIndexNow,
+        state.framework,
+        state.routes,
+        state.legacyRouteDefaults,
+      ),
+      state.settings,
+      state.components.analysis,
     ),
     { tiers: state.capacityTiers },
   );

@@ -26,7 +26,11 @@ import {
 } from '../stacks.ts';
 import type { GameState, MonthEvent, MonthReport } from '../state.ts';
 import type { Due } from './traffic.ts';
-import { architectureFor, staticBuildOf } from '../workload.ts';
+import {
+  architectureFor,
+  staticBuildOf,
+  withAnalysisMachines,
+} from '../workload.ts';
 
 /**
  * 起きた出来事の本文。予告なしなら surpriseText、Bot を遮断済みなら遮断済みの文（D-28・2026-11-04）。
@@ -234,12 +238,17 @@ export function monthEventsOf(
   // 今の構成が課金に使う事業者: 選んだ部品・差し替え中の部品・描き方で足すノードも含め、明細と同じ組み立て（architectureFor）から取る。
   // 乗り換え中は乗り換え先も動かしているので含める（OCL-6294AD10）
   const swap = state.componentSwap;
-  const routing = staticBuildOf(
+  const routing0 = staticBuildOf(
     sc,
     stackIndexNow,
     state.framework,
     state.routes,
     state.legacyRouteDefaults,
+  );
+  const routing = withAnalysisMachines(
+    routing0,
+    state.settings,
+    state.components.analysis,
   );
   const archs = [
     architectureFor(

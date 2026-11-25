@@ -31,6 +31,7 @@ import {
   analysisBurstFactor,
   architectureFor,
   staticBuildOf,
+  withAnalysisMachines,
   workloadFor,
 } from '../workload.ts';
 import { newGame } from './new-game.ts';
@@ -84,7 +85,11 @@ export function monthEstimate(
         ? { [state.componentSwap.slot]: state.componentSwap.option }
         : {},
       state.storageOption,
-      staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
+      withAnalysisMachines(
+        staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
+        p.settings ?? state.settings,
+        components.analysis,
+      ),
       // 容量の段は状態の契約（始めたばかりは最小の段。D-120）
       { tiers: state.capacityTiers },
     ),

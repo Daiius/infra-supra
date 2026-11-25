@@ -13,6 +13,7 @@ import {
   type Platform,
   storageShapeOf,
   termName,
+  analysisMachine,
 } from 'catalog';
 import { EFFORT } from './rules.ts';
 import type { Scenario, WorkloadMods } from './scenario.ts';
@@ -38,11 +39,19 @@ export type Settings = {
    * （ほかの置き場では全局として数える。設定の値は替えない）。省略は全局（D-246 より前の状態・保存を変えない）。
    */
   analysisScope?: number;
+  /**
+   * 台で借りるマシンの台数（D-251。1・2・4・8。値がそのまま台数）。実行先が台で借りるマシン（EC2・Compute Engine・さくらの VPS の
+   * worker）のときだけ効く。省略は 1 台（D-251 より前の状態・保存を変えない）。
+   */
+  analysisMachines?: number;
 };
 
 /** 始める画面で選んだ解析の設定（D-249。保存の SaveData.analysisSettings と newGame の引数。省略したものは既定）。 */
 export type StartAnalysisSettings = Partial<
-  Pick<Settings, 'analysisUnit' | 'candidates' | 'analysisScope'>
+  Pick<
+    Settings,
+    'analysisUnit' | 'candidates' | 'analysisScope' | 'analysisMachines'
+  >
 >;
 
 /** 解析の区切り方の既定（局面ごと）。 */
@@ -51,6 +60,8 @@ export const DEFAULT_ANALYSIS_UNIT = 0;
 export const DEFAULT_CANDIDATES = KIFU_CANDIDATES;
 /** 詳細解析の範囲の既定（全局）。 */
 export const DEFAULT_ANALYSIS_SCOPE = 0;
+/** 台で借りるマシンの台数の既定（1 台。D-251）。 */
+export const DEFAULT_ANALYSIS_MACHINES = 1;
 /** 置き場が利用者の端末のときの候補の数（端末の軽い解析は 1 つまで。KF-08）。 */
 export const CLIENT_CANDIDATES = 1;
 
@@ -70,6 +81,25 @@ export function analysisScopeLockReason(
   return analysisPlacementOf(analysis).mode === 'hybrid'
     ? undefined
     : '詳細解析の範囲は、置き方が「端末で簡易解析・サーバーで詳細解析」のときだけ選べます';
+}
+
+/** 台数を選べない理由（実行先が台で借りるマシンでない。選べれば undefined。D-251）。 */
+export function analysisMachinesLockReason(
+  analysis: string | undefined,
+): string | undefined {
+  return analysisMachine(analysis) !== undefined
+    ? undefined
+    : '台数は、実行先が台で借りるマシン（EC2・Compute Engine・さくらの VPS）のときだけ選べます';
+}
+
+/** 構成に当てる台数（実行先が台で借りるマシンでなければ undefined。D-251）。 */
+export function analysisMachinesOf(
+  settings: Partial<Pick<Settings, 'analysisMachines'>>,
+  analysis: string | undefined,
+): number | undefined {
+  if (analysisMachinesLockReason(analysis) !== undefined) return undefined;
+  const n = settings.analysisMachines ?? DEFAULT_ANALYSIS_MACHINES;
+  return n > 1 ? n : undefined;
 }
 
 /**
@@ -365,6 +395,19 @@ export const SETTINGS = {
       { value: 1, label: '希望した棋譜だけ' },
     ],
   },
+  /** 台で借りるマシンの台数（D-251・prd/17 §5.6）。値がそのまま台数。 */
+  analysisMachines: {
+    label: '台数',
+    field: 'analysisMachines',
+    effort: EFFORT.setting.analysisMachines,
+    note: '台で借りるマシン（EC2・Compute Engine・さくらの VPS）を何台並べて解析するかです。解析はキューから台に均等に分かれるとみて、処理の力と月額（確約を結ぶならその額も）が台数倍になります。2 台以上なら 1 台が止まっても残りで解析を続けるので、自前の障害で止まった月に数えません。維持の手間は台数によらず同じとみます（設定をまとめて配る仮定です）',
+    options: [
+      { value: 1, label: '1 台' },
+      { value: 2, label: '2 台' },
+      { value: 4, label: '4 台' },
+      { value: 8, label: '8 台' },
+    ],
+  },
 } as const satisfies Record<
   string,
   {
@@ -377,9 +420,12 @@ export const SETTINGS = {
 >;
 export type SettingKey = keyof typeof SETTINGS;
 
-/** 設定の今の値（省略できる設定は既定を補う: 詳細解析の範囲は全局。D-246）。 */
+/** 設定の今の値（省略できる設定は既定を補う: 詳細解析の範囲は全局（D-246）・台数は 1 台（D-251））。 */
 export const settingValueOf = (settings: Settings, key: SettingKey): number =>
-  settings[SETTINGS[key].field] ?? DEFAULT_ANALYSIS_SCOPE;
+  settings[SETTINGS[key].field] ??
+  (key === 'analysisMachines'
+    ? DEFAULT_ANALYSIS_MACHINES
+    : DEFAULT_ANALYSIS_SCOPE);
 
 /** 1 枚あたり配る画像の大きさ（KB）。画像の部品と画像の形式の設定から（D-47・D-58）。 */
 export function deliveredImageKB(
@@ -500,6 +546,12 @@ export const SETTING_FLAVOR: Readonly<Record<string, string>> = {
     '途中で切れても続きから再開できるので、長い棋譜でも最後まで進みます',
   'analysisScope:0':
     'どの棋譜も詳細解析まで終わるので、利用者は頼まなくても詳しい結果を見られます',
+  'analysisMachines:1': '1 台だけなので、月額がいちばん小さく済みます',
+  'analysisMachines:2':
+    '処理の力が 2 倍になり、1 台が止まっても解析を続けられます',
+  'analysisMachines:4': '処理の力が 4 倍になり、ピークの滞留が減ります',
+  'analysisMachines:8':
+    '処理の力が 8 倍になり、大きな対局イベントの月にも追いつきやすくなります',
   'analysisScope:1':
     '詳細解析は頼まれた棋譜だけ（約半分と仮定）なので、サーバーの費用と保存する結果が約半分で済みます',
   'candidates:1': 'いちばん良い手だけを残すので、結果が小さく済みます',
@@ -530,7 +582,9 @@ export function validStartAnalysisSettings(
 ): StartAnalysisSettings {
   if (!s) return {};
   const out: StartAnalysisSettings = {};
-  const ok = (k: 'analysisUnit' | 'candidates' | 'analysisScope') => {
+  const ok = (
+    k: 'analysisUnit' | 'candidates' | 'analysisScope' | 'analysisMachines',
+  ) => {
     const v = s[k];
     return (
       v !== undefined &&
@@ -542,5 +596,6 @@ export function validStartAnalysisSettings(
   if (ok('analysisUnit')) out.analysisUnit = s.analysisUnit!;
   if (ok('candidates')) out.candidates = s.candidates!;
   if (ok('analysisScope')) out.analysisScope = s.analysisScope!;
+  if (ok('analysisMachines')) out.analysisMachines = s.analysisMachines!;
   return out;
 }

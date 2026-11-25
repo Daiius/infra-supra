@@ -44,6 +44,7 @@ export const ANALYSIS_SETTING_KEYS: SettingKey[] = [
   'analysisUnit',
   'candidates',
   'analysisScope',
+  'analysisMachines',
 ];
 
 const REVALIDATE_KEYS: SettingKey[] = [

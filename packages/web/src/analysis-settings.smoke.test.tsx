@@ -76,7 +76,12 @@ describe('構成を変えるの欄の解析の設定（D-236）', () => {
     registerSetupChange();
     expect(onRegister).toHaveBeenCalledWith(
       expect.objectContaining({
-        settings: { analysisUnit: 2, candidates: 1, analysisScope: 0 },
+        settings: {
+          analysisUnit: 2,
+          candidates: 1,
+          analysisScope: 0,
+          analysisMachines: 1,
+        },
       }),
     );
   });
@@ -115,7 +120,12 @@ describe('構成を変えるの欄の解析の設定（D-236）', () => {
 describe('詳細解析の範囲のチップ（D-246）', () => {
   it('置き方が併用のときだけ出す', async () => {
     const { AnalysisSettingChips } = await import('./analysis-settings.tsx');
-    const value = { analysisUnit: 0, candidates: 3, analysisScope: 0 };
+    const value = {
+      analysisUnit: 0,
+      candidates: 3,
+      analysisScope: 0,
+      analysisMachines: 1,
+    };
     const { rerender } = render(
       <AnalysisSettingChips
         value={value}

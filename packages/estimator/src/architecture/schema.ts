@@ -334,6 +334,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     cpuSpeed: Pos.optional(),
     /** 時間で課金するマシン（EC2・Compute Engine。D-247）。月の時間（instance-hours）を 1 台ぶん数える。省略は月額の VPS。 */
     billedHourly: z.boolean().optional(),
+    /**
+     * 同じマシンを何台並べるか（D-251。省略は 1）。vcpu・memoryGB などはまとめた台数ぶんの値を書き、時間の課金（instance-hours）と
+     * ノード単位の基本料を台数倍にする（仕事は台に均等に分かれるとみる）。
+     */
+    machines: z.int().positive().optional(),
     /** リアルタイムの接続をこのホストの常駐のプロセスで保つ（D-240）。メモリに同時接続のピーク × kbPerConnection を足す。 */
     websocket: WebsocketSchema,
   }),

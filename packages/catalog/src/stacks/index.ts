@@ -41,6 +41,7 @@ import {
   ANALYSIS_COMPONENTS,
   applyAnalysis,
   applyAnalysisToWorkload,
+  scaleAnalysisMachines,
   type BrowserAnalysisShape,
 } from './analysis.ts';
 import { STORAGE_COMPONENTS, applyStorageShape } from './storage-shape.ts';
@@ -1568,6 +1569,8 @@ export function composeStack(
      * （静的アセットを Workers の料金で数えない）。省略は true（Astro の既定の S3。D-103）。
      */
     pageCache?: boolean;
+    /** 台で借りるマシンの解析の worker の台数（D-251。省略は 1）。 */
+    analysisMachines?: number;
   } = {},
 ): ArchitectureInput {
   const def = typeof stack === 'string' ? stackDef(stack) : stack;
@@ -1715,16 +1718,20 @@ export function composeStack(
             // リアルタイム（Cloudflare 以外。D-240）は構成の処理と DB が決まった後（Cloudflare は composeCloudflare の中）
             applyRealtime(
               applyStorageShape(
-                applyAnalysis(
-                  applyCrossApi(
-                    built,
-                    def.platform,
-                    def.plan,
-                    c,
-                    standby,
-                    options.framework ?? 'nextjs',
+                scaleAnalysisMachines(
+                  applyAnalysis(
+                    applyCrossApi(
+                      built,
+                      def.platform,
+                      def.plan,
+                      c,
+                      standby,
+                      options.framework ?? 'nextjs',
+                    ),
+                    c.analysis,
                   ),
-                  c.analysis,
+                  // 台で借りるマシンの台数（D-251）
+                  options.analysisMachines,
                 ),
                 // 保存の形（prd/17 §5.4・D-237）。構成は変えず、D1 に行の数え方の前提を足すだけ（Workload は applyAnalysisSettings）
                 c.storage,

@@ -319,6 +319,9 @@ function ChangeBody({
               analysisScope:
                 draft.settings.analysisScope ??
                 settingValueOf(state.settings, 'analysisScope'),
+              analysisMachines:
+                draft.settings.analysisMachines ??
+                settingValueOf(state.settings, 'analysisMachines'),
             }}
             analysis={draft.components.analysis}
             onChange={(v) => setDraft({ ...draft, settings: { ...v } })}

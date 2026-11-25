@@ -21,6 +21,7 @@ import {
   ANALYSIS_MODES,
   ANALYSIS_TARGETS,
   ANALYSIS_MACHINE_TARGETS,
+  ANALYSIS_MACHINE_COUNTS,
   ANALYSIS_MACHINES,
   ANALYSIS_TASK_TARGETS,
   analysisCpuSpeed,
@@ -529,5 +530,68 @@ describe('Fargate・台で借りるマシン（D-247・prd/17 §5.6）', () => {
         target,
       ).toBe(true);
     }
+  });
+});
+
+describe('台で借りるマシンの台数（D-251・prd/17 §5.6）', () => {
+  const vercel = STACK_DEFS.find((d) => d.id === 'vercel-supabase-pro')!;
+  const runN = (target: string, n: number) => {
+    const workload = applyComponentsToWorkload(
+      kifuAnalysis(PV),
+      vercel.platform,
+      { analysis: target },
+      { browserAnalysis: KIFU_BROWSER_ANALYSIS },
+    );
+    const architecture = composeStack(
+      vercel,
+      { analysis: target },
+      { analysisMachines: n },
+    );
+    return {
+      architecture,
+      result: estimate({ workload, architecture, books }),
+    };
+  };
+  const worker = (r: ReturnType<typeof runN>) =>
+    r.architecture.nodes.find((n) => n.id === ANALYSIS_WORKER_NODE_ID)!;
+
+  it('台数の選択肢は 1・2・4・8', () => {
+    expect([...ANALYSIS_MACHINE_COUNTS]).toEqual([1, 2, 4, 8]);
+  });
+
+  it('n 台にすると、vCPU・メモリは台数倍・時間の課金（EC2・Compute Engine）と月額（さくら）も台数倍', () => {
+    for (const target of [
+      'ec2-c7g-2xlarge',
+      'gce-c4a-standard-8',
+      'worker-vps-16gb',
+    ]) {
+      const one = runN(target, 1);
+      const four = runN(target, 4);
+      const c1 = worker(one).config;
+      const c4 = worker(four).config;
+      if (c1.kind !== 'host' || c4.kind !== 'host') throw new Error(target);
+      expect(c4.vcpu, target).toBe(c1.vcpu * 4);
+      expect(c4.memoryGB, target).toBe(c1.memoryGB * 4);
+      expect(c4.machines, target).toBe(4);
+      expect(c1.machines, target).toBeUndefined();
+      const usd = (r: ReturnType<typeof runN>) =>
+        r.result.bill.lines
+          .filter((l) => l.nodeIds.includes(ANALYSIS_WORKER_NODE_ID))
+          .reduce((s, l) => s + (l.amount ?? 0), 0);
+      expect(usd(four), target).toBeCloseTo(usd(one) * 4, 6);
+    }
+  });
+
+  it('台数は台で借りるマシンの worker にだけ効き、ほかの実行先・1 台では構成を変えない', () => {
+    expect(
+      composeStack(vercel, { analysis: 'fn-lambda' }, { analysisMachines: 4 }),
+    ).toEqual(composeStack(vercel, { analysis: 'fn-lambda' }));
+    expect(
+      composeStack(
+        vercel,
+        { analysis: 'ec2-c7g-2xlarge' },
+        { analysisMachines: 1 },
+      ),
+    ).toEqual(composeStack(vercel, { analysis: 'ec2-c7g-2xlarge' }));
   });
 });

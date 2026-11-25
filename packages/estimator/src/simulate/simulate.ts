@@ -688,8 +688,9 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
       );
       break;
     case 'host':
-      // 時間で課金するマシン（EC2・Compute Engine。D-247）は 1 台の月の時間
-      if (node.config.billedHourly) add(u, 'instance-hours', HOURS_PER_MONTH);
+      // 時間で課金するマシン（EC2・Compute Engine。D-247）は台数ぶんの月の時間（D-251）
+      if (node.config.billedHourly)
+        add(u, 'instance-hours', HOURS_PER_MONTH * (node.config.machines ?? 1));
       break;
     case 'ci-build':
       // 静的なページのビルドし直し（D-68）。経路を持たない

@@ -128,6 +128,7 @@ describe('URL の互換（D-115。選択の UI をゲームと共用にしても
       analysisUnit: 0,
       candidates: 3,
       analysisScope: 0,
+      analysisMachines: 1,
       seats: 3,
       routes: { article: 'static-build' },
     });

@@ -168,6 +168,48 @@ export const ANALYSIS_MACHINES: Readonly<Record<string, AnalysisMachine>> = {
 export const ANALYSIS_MACHINE_TARGETS: readonly string[] =
   Object.keys(ANALYSIS_MACHINES);
 
+/**
+ * 台で借りるマシンの台数の選択肢（D-251。ゲーム上の仮定）。仕事はキューから台に均等に分かれるとみて、vCPU・メモリ・回線は台数倍、
+ * 時間の課金とノード単位の基本料も台数倍にする。
+ */
+export const ANALYSIS_MACHINE_COUNTS = [1, 2, 4, 8] as const;
+
+/**
+ * 台で借りるマシンの worker を n 台にする（D-251）。worker のノードが無い・n ≤ 1 なら構成を変えない。容量（vCPU・メモリ・ディスク・回線・
+ * 常駐のメモリ）は台数ぶんをまとめた値にし、課金は host の machines で台数倍にする。
+ */
+export function scaleAnalysisMachines(
+  arch: ArchitectureInput,
+  n: number | undefined,
+): ArchitectureInput {
+  if (n === undefined || n <= 1) return arch;
+  return {
+    ...arch,
+    nodes: arch.nodes.map((node): ArchNodeIn => {
+      const c = node.config;
+      if (node.id !== ANALYSIS_WORKER_NODE_ID || c.kind !== 'host') return node;
+      return {
+        ...node,
+        label: `${node.label ?? node.id} × ${n} 台`,
+        config: {
+          ...c,
+          vcpu: c.vcpu * n,
+          memoryGB: c.memoryGB * n,
+          diskGB: c.diskGB * n,
+          lineMbps: c.lineMbps * n,
+          ...(c.residentMemoryGB !== undefined
+            ? { residentMemoryGB: c.residentMemoryGB * n }
+            : {}),
+          ...(c.otherDiskGB !== undefined
+            ? { otherDiskGB: c.otherDiskGB * n }
+            : {}),
+          machines: n,
+        },
+      };
+    }),
+  };
+}
+
 export const ANALYSIS_TARGETS: readonly string[] = [
   'same',
   ...ANALYSIS_FN_TARGETS,

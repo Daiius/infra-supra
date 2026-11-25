@@ -31,7 +31,9 @@ import {
   PAYMENT_LABEL,
   COMMENTS_IN_BROWSER,
   DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_ANALYSIS_MACHINES,
   DEFAULT_ANALYSIS_SCOPE,
+  analysisMachinesOf,
   DEFAULT_CANDIDATES,
   defaultRevalidateSec,
   estimateComponents,
@@ -152,6 +154,8 @@ export type EstimateInput = {
   candidates: number;
   /** 詳細解析の範囲（game の SETTINGS.analysisScope の値。0 全局・1 希望した棋譜だけ。併用の置き場だけで効く。D-246）。 */
   analysisScope: number;
+  /** 台で借りるマシンの台数（game の SETTINGS.analysisMachines の値。1・2・4・8。台で借りる実行先だけで効く。D-251）。 */
+  analysisMachines: number;
   /** チームの人数（管理画面を使う人。席）。席課金のプランだけ費用が変わる（D-76）。 */
   seats: number;
   /** 選んだページごとの描き方（フレームワークの既定と違うものだけ。D-107）。 */
@@ -262,7 +266,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
       ? raw.variants!
       : 3;
   const pick = (
-    key: 'analysisUnit' | 'candidates' | 'analysisScope',
+    key: 'analysisUnit' | 'candidates' | 'analysisScope' | 'analysisMachines',
     fallback: number,
   ) =>
     settings.analysis && SETTINGS[key].options.some((o) => o.value === raw[key])
@@ -271,6 +275,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
   const analysisUnit = pick('analysisUnit', DEFAULT_ANALYSIS_UNIT);
   const candidates = pick('candidates', DEFAULT_CANDIDATES);
   const analysisScope = pick('analysisScope', DEFAULT_ANALYSIS_SCOPE);
+  const analysisMachines = pick('analysisMachines', DEFAULT_ANALYSIS_MACHINES);
   const seats = normalizeSeats(raw.seats);
   return {
     template,
@@ -285,6 +290,7 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     analysisUnit,
     candidates,
     analysisScope,
+    analysisMachines,
     seats,
     routes,
   };
@@ -478,6 +484,8 @@ export function toQuery(input: EstimateInput): URLSearchParams {
     q.set('ac', String(input.candidates));
   if (input.analysisScope !== DEFAULT_ANALYSIS_SCOPE)
     q.set('as', String(input.analysisScope));
+  if (input.analysisMachines !== DEFAULT_ANALYSIS_MACHINES)
+    q.set('am', String(input.analysisMachines));
   q.set('seats', String(input.seats));
   for (const [slot, id] of Object.entries(input.parts))
     if (id !== undefined) q.set(PART_PREFIX + slot, id);
@@ -528,6 +536,7 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   set('analysisUnit', num('au'));
   set('candidates', num('ac'));
   set('analysisScope', num('as'));
+  set('analysisMachines', num('am'));
   set('seats', num('seats'));
   // 前の版の税込の目安の切り替え（tax=0/1）は常に出すことにしたので読まない（D-177）
   return out;
@@ -915,6 +924,7 @@ function run(input: EstimateInput, r: Resolved) {
       analysisUnit: input.analysisUnit,
       candidates: input.candidates,
       analysisScope: input.analysisScope,
+      analysisMachines: input.analysisMachines,
     },
     routes: input.routes,
     routeParts: partsOfComments(r.scenario, input.comments),
@@ -931,6 +941,15 @@ function run(input: EstimateInput, r: Resolved) {
           input.framework,
           input.routes,
         ),
+        // 台で借りるマシンの台数（D-251）
+        ...(analysisMachinesOf(input, r.components.analysis) !== undefined
+          ? {
+              analysisMachines: analysisMachinesOf(
+                input,
+                r.components.analysis,
+              )!,
+            }
+          : {}),
       }),
       workload,
     ),

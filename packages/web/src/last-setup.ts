@@ -12,6 +12,7 @@ import {
 } from 'catalog';
 import {
   COMMENTS_IN_BROWSER,
+  DEFAULT_ANALYSIS_MACHINES,
   DEFAULT_ANALYSIS_SCOPE,
   DEFAULT_ANALYSIS_UNIT,
   DEFAULT_CANDIDATES,
@@ -150,6 +151,7 @@ function effectiveAnalysis(
     analysisUnit: v.analysisUnit ?? DEFAULT_ANALYSIS_UNIT,
     candidates: v.candidates ?? DEFAULT_CANDIDATES,
     analysisScope: v.analysisScope ?? DEFAULT_ANALYSIS_SCOPE,
+    analysisMachines: v.analysisMachines ?? DEFAULT_ANALYSIS_MACHINES,
   };
 }
 
@@ -198,7 +200,13 @@ function effectiveCommitments(
   s: SetupState,
 ): { key: string; payment: CommitmentPaymentId }[] {
   if (setupProblem(sc, s.stack, s.framework, s.components)) return [];
-  return setupCommitments(sc, s.stack, s.framework, s.components)
+  return setupCommitments(
+    sc,
+    s.stack,
+    s.framework,
+    s.components,
+    effectiveAnalysis(sc, s),
+  )
     .filter((o) => s.commitments[o.key] === o.payment)
     .map((o) => ({ key: o.key, payment: o.payment }));
 }
@@ -312,7 +320,16 @@ export function restoreLastSetup(
   for (const c of last.commitments ?? []) commitments[c.key] = c.payment;
   // 部品を選び終えていれば、今は結べない確約を知らせる（選び残しがあるうちは結べる確約が決まらないので、残して選び終えたときに効かせる）
   if (!setupProblem(sc, stack, framework, components)) {
-    const offers = setupCommitments(sc, stack, framework, components);
+    const offers = setupCommitments(
+      sc,
+      stack,
+      framework,
+      components,
+      // 台で借りるマシンの台数ぶんの確約（D-251）
+      sc.analysisJob && last.analysisSettings
+        ? validStartAnalysisSettings(last.analysisSettings)
+        : undefined,
+    );
     for (const c of last.commitments ?? [])
       if (!offers.some((o) => o.key === c.key && o.payment === c.payment)) {
         delete commitments[c.key];

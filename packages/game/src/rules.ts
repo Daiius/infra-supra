@@ -94,6 +94,8 @@ export const EFFORT = {
     candidates: 1,
     // 詳細解析の範囲（D-246）: 詳細解析を頼むボタンと、頼まれた局だけを積む処理（仮定）
     analysisScope: 1,
+    // 台数（D-251）: 同じ形のマシンを足すだけ（設定をまとめて配る仮定）
+    analysisMachines: 1,
   },
   /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */
   onDemandSwitch: 2,

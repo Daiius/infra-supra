@@ -1,6 +1,8 @@
 // 始める画面の部品の選択（D-45）と、ゲームを始める（newGame）。部品の欄（componentSlots）もここに置く（setupSlots が使う）。
 import { rollRevisions, rollSchedule, type Scenario } from '../scenario.ts';
 import {
+  ANALYSIS_MACHINES,
+  analysisMachine,
   type Choices,
   type ComponentProvider,
   DEFAULT_CHOICES,
@@ -34,6 +36,7 @@ import { commentsOf, withComments } from '../routes/comments.ts';
 import { defaultRevalidateSec } from '../routes/hidden-settings.ts';
 import { validRouteOverrides } from '../routes/strategy.ts';
 import {
+  analysisMachinesOf,
   DEFAULT_ANALYSIS_UNIT,
   DEFAULT_CANDIDATES,
   validStartAnalysisSettings,
@@ -70,6 +73,8 @@ export function setupCommitments(
   stackIndex: number,
   framework: FrameworkId,
   components?: Choices,
+  /** 解析の設定（台で借りるマシンの台数。台数ぶんの確約を出す。D-251）。 */
+  analysisSettings?: StartAnalysisSettings,
 ): CommitmentOffer[] {
   const arch = architectureFor(
     stackIndex,
@@ -88,7 +93,22 @@ export function setupCommitments(
         d.commitment.kind !== 'spend' &&
         billed.has(`${d.provider}:${d.planId}`),
     ),
-    () => undefined,
+    (d) => {
+      // 台で借りるマシンを並べるなら、そのマシンの確約は台数ぶん（D-251）
+      const n = analysisMachinesOf(
+        analysisSettings ?? {},
+        initialComponents(sc, stackIndex, framework, components).analysis,
+      );
+      const target = analysisMachine(
+        initialComponents(sc, stackIndex, framework, components).analysis,
+      );
+      return n !== undefined &&
+        target !== undefined &&
+        ANALYSIS_MACHINES[target]!.planId === d.planId &&
+        d.onDemandMonthly !== undefined
+        ? d.onDemandMonthly * n
+        : undefined;
+    },
     sc.months,
   ).filter((o) => o.usd.upfront <= sc.startCash);
 }
@@ -396,7 +416,13 @@ export function newGame(
     componentSwap: null,
     commitments: (() => {
       if (!commitments?.length) return [];
-      const offers = setupCommitments(scenario, stackIndex, app, components);
+      const offers = setupCommitments(
+        scenario,
+        stackIndex,
+        app,
+        components,
+        analysisSettings,
+      );
       const out: ActiveCommitment[] = [];
       for (const want of commitments) {
         const o = offers.find(

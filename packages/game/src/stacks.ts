@@ -193,15 +193,20 @@ export function selfHostedOf(
   framework: FrameworkId = 'nextjs',
   standby: Choices = {},
   serving = false,
+  /** 解析の worker の台数（D-251）。2 台以上のホストは 1 台が止まっても残りで続くので、serving の判定（偶発的な障害）に数えない。 */
+  analysisMachines?: number,
 ): boolean {
   if (STACKS[stackIndex]!.selfHosted) return true;
   const arch = composeStack(STACK_DEFS[stackIndex]!, components, {
     framework,
     standby,
+    ...(analysisMachines !== undefined ? { analysisMachines } : {}),
   });
   const routed = new Set(Object.values(arch.routes).flat());
   return arch.nodes.some(
-    (n) => n.config.kind === 'host' && (!serving || routed.has(n.id)),
+    (n) =>
+      n.config.kind === 'host' &&
+      (!serving || (routed.has(n.id) && (n.config.machines ?? 1) < 2)),
   );
 }
 

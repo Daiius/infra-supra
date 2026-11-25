@@ -458,6 +458,7 @@ export type Scenario = {
       | 'analysisUnit'
       | 'candidates'
       | 'analysisScope'
+      | 'analysisMachines'
     )[];
     slots?: SlotId[];
     blockBots?: boolean;

@@ -81,6 +81,10 @@ export function toMeterUsage(
         : {}),
     };
     sub.nodeIds.push(node.id);
+    // 同じマシンを並べたホスト（D-251）は、ノード単位の基本料を台数ぶん数える
+    const machines =
+      node.config.kind === 'host' ? (node.config.machines ?? 1) : 1;
+    if (machines > 1) sub.extraUnits = (sub.extraUnits ?? 0) + machines - 1;
     subs.set(key, sub);
 
     const plan = byProvider

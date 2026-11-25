@@ -1,7 +1,8 @@
 // 解析の設定（区切り方・1 局面に残す候補の数・詳細解析の範囲。D-236・D-246・prd/17 §5.2・§5.3・§5.6）のチップ。③ 解析の置き場のタブ
 // （D-245）の実行先の下に添える。見積モードと、ゲームの途中の「構成を変える」で共用（値と整合は各画面が持つ）。解析のあるシナリオだけで出す。
-// 詳細解析の範囲は、置き方が併用（端末で簡易解析・サーバーで詳細解析）のときだけ出す。
+// 詳細解析の範囲は、置き方が併用（端末で簡易解析・サーバーで詳細解析）のときだけ出す。台数（D-251）は実行先が台で借りるマシンのときだけ出す。
 import {
+  analysisMachinesLockReason,
   analysisScopeLockReason,
   candidatesLockReason,
   CLIENT_CANDIDATES,
@@ -12,7 +13,7 @@ import {
 import { SettingChips } from './setup-components.tsx';
 
 export type AnalysisSettingValues = Record<
-  'analysisUnit' | 'candidates' | 'analysisScope',
+  'analysisUnit' | 'candidates' | 'analysisScope' | 'analysisMachines',
   number
 >;
 
@@ -55,6 +56,9 @@ export function AnalysisSettingChips({
   };
   return (
     <div className="space-y-1.5" data-analysis-settings>
+      {/* 台数は台で借りるマシンのときだけ（D-251） */}
+      {analysisMachinesLockReason(analysis) === undefined &&
+        chips('analysisMachines')}
       {analysisScopeLockReason(analysis) === undefined &&
         chips('analysisScope')}
       {chips('analysisUnit')}
