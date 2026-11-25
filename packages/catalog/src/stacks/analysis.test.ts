@@ -16,6 +16,16 @@ import {
   loadPriceBooks,
   rulesFor,
   ANALYSIS_PARTS,
+  ANALYSIS_FN,
+  ANALYSIS_FN_TARGETS,
+  ANALYSIS_MODES,
+  ANALYSIS_TARGETS,
+  analysisFnTarget,
+  analysisPlacementId,
+  analysisPlacementOf,
+  analysisWorkerPlan,
+  browserAnalyzes,
+  serverAnalyzes,
   STACK_DEFS,
   stackHidden,
   type Platform,
@@ -54,16 +64,56 @@ const workerUsd = (r: ReturnType<typeof run>['result']) =>
     .reduce((s, l) => s + (l.amount ?? 0), 0);
 
 describe('選択肢', () => {
-  it('どの事業者でも 5 つ（同じ実行環境・端末・併用・worker の VPS 2GB / 4GB）', () => {
-    for (const p of PLATFORMS)
+  it('どの事業者でも、端末と、置き方（サーバー・併用）× 実行先（同じ実行環境・別の事業者のサーバーレス・worker の VPS 2GB / 4GB）', () => {
+    for (const p of PLATFORMS) {
+      // 別の事業者のサーバーレスは、同じ事業者（AWS は OpenNext も）の土台では「同じ実行環境」と重なるので出さない
+      const fns = ANALYSIS_FN_TARGETS.filter(
+        (t) =>
+          ANALYSIS_FN[t].provider !== p &&
+          !(p === 'aws-opennext' && ANALYSIS_FN[t].provider === 'aws'),
+      );
+      const targets = ['same', ...fns, 'worker-vps-2gb', 'worker-vps-4gb'];
       expect(
         componentsOf(p, 'analysis')
           .map((o) => o.id)
           .sort(),
         p,
       ).toEqual(
-        ['client', 'hybrid', 'same', 'worker-vps-2gb', 'worker-vps-4gb'].sort(),
+        [
+          'client',
+          ...targets,
+          ...targets.map((t) => (t === 'same' ? 'hybrid' : `hybrid-${t}`)),
+        ].sort(),
       );
+    }
+  });
+
+  it('部品の id は置き方と実行先に分けられ、今の id（same・client・hybrid・worker-vps-*）はそのまま', () => {
+    expect(analysisPlacementOf(undefined)).toEqual({
+      mode: 'server',
+      target: 'same',
+    });
+    expect(analysisPlacementOf('client')).toEqual({ mode: 'client' });
+    expect(analysisPlacementId('client', 'fn-lambda')).toBe('client');
+    expect(analysisPlacementId('server', 'same')).toBe('same');
+    expect(analysisPlacementId('hybrid', 'same')).toBe('hybrid');
+    expect(analysisPlacementId('server', 'worker-vps-2gb')).toBe(
+      'worker-vps-2gb',
+    );
+    expect(analysisPlacementId('hybrid', 'fn-lambda')).toBe('hybrid-fn-lambda');
+    for (const mode of ANALYSIS_MODES)
+      for (const target of ANALYSIS_TARGETS) {
+        const id = analysisPlacementId(mode, target);
+        expect(analysisPlacementOf(id), id).toEqual(
+          mode === 'client' ? { mode } : { mode, target },
+        );
+        expect(serverAnalyzes(id)).toBe(mode !== 'client');
+        expect(browserAnalyzes(id)).toBe(mode !== 'server');
+      }
+    expect(analysisWorkerPlan('hybrid-worker-vps-4gb')).toBe('4gb');
+    expect(analysisWorkerPlan('hybrid-fn-lambda')).toBeUndefined();
+    expect(analysisFnTarget('hybrid-fn-cloud-run')).toBe('fn-cloud-run');
+    expect(analysisFnTarget('same')).toBeUndefined();
   });
 
   it('worker は さくらの VPS の部品で、VPS 以外の土台には接続の規則（アプリの API を HTTPS で呼ぶ）で差す', () => {
@@ -212,5 +262,109 @@ describe('費用の傾き', () => {
       // 使用率は解析の件数にほぼ比例する
       expect(ub.ratio! / ua.ratio!).toBeCloseTo(2, 1);
     }
+  });
+});
+
+/** その土台で選べる、別の事業者のサーバーレスの実行先。 */
+const fnTargetsOn = (def: (typeof STACK_DEFS)[number]) =>
+  ANALYSIS_FN_TARGETS.filter((t) =>
+    componentsOf(def.platform, 'analysis').some((o) => o.id === t),
+  );
+
+describe('別の事業者のサーバーレス（D-245・prd/17 §5.6）', () => {
+  it('解析は別の関数・コンテナの箱（その事業者のアカウント）で、結果はアプリの API の経路に送り、アプリの処理は受けて書くだけ', () => {
+    for (const def of VISIBLE)
+      for (const t of fnTargetsOn(def))
+        for (const id of [t, `hybrid-${t}`]) {
+          const a = composeStack(def, { analysis: id });
+          const path = a.routes['api-async']!;
+          expect(path[0], `${def.id} ${id}`).toBe(ANALYSIS_FN_NODE_ID);
+          expect(path.slice(-a.routes.api!.length)).toEqual(a.routes.api);
+          const fn = a.nodes.find((n) => n.id === ANALYSIS_FN_NODE_ID)!;
+          expect(['function', 'container']).toContain(fn.config.kind);
+          expect(fn.billing?.provider).toBe(ANALYSIS_FN[t].provider);
+          // 経路の上のノードは重ならない（同じ事業者の外への転送のノードは 1 つ）
+          expect(new Set(a.nodes.map((n) => n.id)).size).toBe(a.nodes.length);
+          const apps = a.nodes.filter(
+            (n) =>
+              a.routes.api!.includes(n.id) &&
+              n.role === 'compute' &&
+              ['function', 'container', 'host'].includes(n.config.kind),
+          );
+          for (const n of apps)
+            expect(
+              'classCpuMs' in n.config
+                ? n.config.classCpuMs?.['api-async']
+                : -1,
+            ).toBe(ANALYSIS_RESULT_CPU_MS);
+        }
+  });
+
+  it('Lambda の解析の費用は、Web の事業者によらず AWS（Amplify）の同じ実行環境の Lambda とほぼ同じ（DB の待ちの差だけ）', () => {
+    const lambdaUsd = (r: ReturnType<typeof run>['result']) =>
+      r.bill.lines
+        .filter(
+          (l) =>
+            l.nodeIds.includes(ANALYSIS_FN_NODE_ID) &&
+            l.priceRef.planId === 'lambda',
+        )
+        .reduce((s, l) => s + (l.amount ?? 0), 0);
+    const amplify = STACK_DEFS.find((d) => d.id === 'aws-amplify')!;
+    const base = lambdaUsd(run(amplify, 'same').result);
+    expect(base).toBeGreaterThan(0);
+    for (const id of [
+      'vercel-supabase-pro',
+      'gcp-cloud-run',
+      'sakura-vps-2gb',
+      'cloudflare-vinext-paid',
+    ]) {
+      const def = STACK_DEFS.find((d) => d.id === id)!;
+      // Amplify の同じ実行環境は解析の関数が DB へ直接書き、別の事業者からは結果をアプリの API に送るので、1 件の待ちがわずかに違う
+      expect(
+        Math.abs(lambdaUsd(run(def, 'fn-lambda').result) / base - 1),
+        id,
+      ).toBeLessThan(0.001);
+    }
+  });
+
+  it('Web と別の事業者なら、そのアカウントの基本料（Workers Paid・Vercel Pro）が足される', () => {
+    const amplify = STACK_DEFS.find((d) => d.id === 'aws-amplify')!;
+    const accounts = (analysis: string) =>
+      new Set(
+        run(amplify, analysis)
+          .result.bill.lines.filter((l) => l.kind === 'base-fee')
+          .map((l) => `${l.accountId}:${l.priceRef.planId}`),
+      );
+    expect(accounts('fn-workers')).toContain('cloudflare:workers-paid');
+    expect(accounts('fn-vercel')).toContain('vercel:pro');
+    expect([...accounts('same')].some((a) => a.startsWith('cloudflare'))).toBe(
+      false,
+    );
+  });
+
+  it('1 件の上限は実行先の事業者のもので判定する（1 件 20 分なら Workers・Vercel Functions は当たり、Lambda・Cloud Run は当たらない）', () => {
+    const vercel = STACK_DEFS.find((d) => d.id === 'vercel-supabase-pro')!;
+    const amplify = STACK_DEFS.find((d) => d.id === 'aws-amplify')!;
+    const hits = (def: (typeof STACK_DEFS)[number], analysis: string) => {
+      const { workload, architecture } = run(def, analysis);
+      const w = {
+        ...workload,
+        api: { ...workload.api, cpuMs: 1_000, ioWaitMs: 20 * 60_000 },
+      };
+      return estimate({ workload: w, architecture, books })
+        .premises.filter(
+          (p) =>
+            p.hit &&
+            p.id.startsWith('limit:') &&
+            p.nodeIds.includes(ANALYSIS_FN_NODE_ID),
+        )
+        .map((p) => p.id);
+    };
+    expect(hits(vercel, 'fn-workers').join()).toMatch(
+      /^limit:cloudflare:workers-paid:/,
+    );
+    expect(hits(amplify, 'fn-vercel').join()).toMatch(/^limit:vercel:pro:/);
+    expect(hits(vercel, 'fn-lambda')).toEqual([]);
+    expect(hits(vercel, 'fn-cloud-run')).toEqual([]);
   });
 });

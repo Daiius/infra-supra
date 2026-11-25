@@ -409,6 +409,27 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '解析だけの常駐のサーバーを置きます。費用は定額ですが、混む時間に待ちが出ます',
   'sakura:analysis:worker-vps-4gb':
     '解析だけの常駐のサーバーを、余裕のある上のプランで置きます。費用は定額です',
+  'sakura:analysis:hybrid-worker-vps-2gb':
+    '端末ですぐ速報を出し、本解析は解析だけの常駐のサーバーで。混む時間の待ちを速報で隠せます',
+  'sakura:analysis:hybrid-worker-vps-4gb':
+    '端末ですぐ速報を出し、本解析は余裕のある常駐のサーバーで。費用は定額と配る転送です',
+  // 解析の別の事業者のサーバーレス（D-245・prd/17 §5.6）。Web の事業者から独立して選ぶ
+  'aws:analysis:fn-lambda':
+    '大手のクラウドの関数で、使った時間とメモリだけの支払い。常に無料で使える量もあります',
+  'aws:analysis:hybrid-fn-lambda':
+    '端末ですぐ速報を出し、本解析は大手のクラウドの関数で。費用は両方にかかります',
+  'gcp:analysis:fn-cloud-run':
+    '大手のクラウドでコンテナを動かします。処理している間だけの支払いで、無料で使える量もあります',
+  'gcp:analysis:hybrid-fn-cloud-run':
+    '端末ですぐ速報を出し、本解析は大手のクラウドのコンテナで。費用は両方にかかります',
+  'cloudflare:analysis:fn-workers':
+    '使った CPU の時間だけの支払いで、待ちの時間は払いません。重い処理の上限に注意',
+  'cloudflare:analysis:hybrid-fn-workers':
+    '端末ですぐ速報を出し、本解析は CPU の時間だけ払う関数で。費用は両方にかかります',
+  'vercel:analysis:fn-vercel':
+    'Next.js の開発元の関数。有料のプランが要り、動いている時間とメモリで払います',
+  'vercel:analysis:hybrid-fn-vercel':
+    '端末ですぐ速報を出し、本解析は Next.js の開発元の関数で。費用は両方にかかります',
   // Bunny（D-98）。転送の安い従量の CDN を、画像の配信と前段に差す
   'bunny:images:bunny-images':
     '転送の安い CDN から配り、変換は月額で使い放題。大きな画像の多いサイトに向きます',

@@ -12,33 +12,101 @@
 import type { ArchitectureInput, WorkloadInput } from 'estimator';
 import { partOptions, transferNodes, type PartDef } from './connections.ts';
 import { vpsNode } from './sakura.ts';
+import { bill as awsBill, COMPUTE_MEMORY_GB } from './aws.ts';
+import {
+  RUN_CONCURRENCY,
+  RUN_IDLE_KEEP_SECONDS,
+  RUN_MEMORY_GB,
+  RUN_VCPU,
+} from './gcp.ts';
 import type { ComponentOption, Platform } from './index.ts';
 
 type ArchNodeIn = ArchitectureInput['nodes'][number];
 
-/** 解析の置き場の選択肢の id。 */
-export const ANALYSIS_PLACEMENTS = [
+/**
+ * 解析の実行先（サーバーで解析するとき。D-245・prd/17 §5.6）。same: アプリと同じ実行環境・fn-*: 別の事業者のサーバーレス
+ * （Web の事業者から独立して選ぶ。結果はアプリの API に送る）・worker-vps-*: 解析だけの さくらの VPS。
+ */
+export const ANALYSIS_FN_TARGETS = [
+  'fn-lambda',
+  'fn-cloud-run',
+  'fn-workers',
+  'fn-vercel',
+] as const;
+export type AnalysisFnTarget = (typeof ANALYSIS_FN_TARGETS)[number];
+export const ANALYSIS_TARGETS = [
   'same',
+  ...ANALYSIS_FN_TARGETS,
   'worker-vps-2gb',
   'worker-vps-4gb',
-  'client',
-  'hybrid',
 ] as const;
-export type AnalysisPlacement = (typeof ANALYSIS_PLACEMENTS)[number];
+export type AnalysisTarget = (typeof ANALYSIS_TARGETS)[number];
 
-/** worker の VPS のプラン（選択肢の id から。worker でなければ undefined）。 */
+/** 解析の置き方（D-245）。server: サーバーだけ・client: 利用者の端末だけ・hybrid: 端末で速報、サーバーで本解析。 */
+export const ANALYSIS_MODES = ['server', 'client', 'hybrid'] as const;
+export type AnalysisMode = (typeof ANALYSIS_MODES)[number];
+
+/** 置き方と実行先から部品の id（今の id は保つ: same・client・hybrid・worker-vps-*。併用は hybrid-<実行先>）。 */
+export function analysisPlacementId(
+  mode: AnalysisMode,
+  target: AnalysisTarget = 'same',
+): string {
+  if (mode === 'client') return 'client';
+  if (mode === 'server') return target;
+  return target === 'same' ? 'hybrid' : `hybrid-${target}`;
+}
+
+/** 部品の id を置き方と実行先に分ける（省略・知らない id は同じ実行環境のサーバー。端末だけは実行先なし）。 */
+export function analysisPlacementOf(id: string | undefined): {
+  mode: AnalysisMode;
+  target?: AnalysisTarget;
+} {
+  if (id === 'client') return { mode: 'client' };
+  if (id === 'hybrid') return { mode: 'hybrid', target: 'same' };
+  const rest = id?.startsWith('hybrid-') ? id.slice('hybrid-'.length) : id;
+  const target = (ANALYSIS_TARGETS as readonly string[]).includes(rest ?? '')
+    ? (rest as AnalysisTarget)
+    : 'same';
+  return { mode: rest === id ? 'server' : 'hybrid', target };
+}
+
+/** 解析の置き場の選択肢の id（置き方 × 実行先）。 */
+export const ANALYSIS_PLACEMENTS = [
+  'client',
+  ...ANALYSIS_TARGETS,
+  ...ANALYSIS_TARGETS.map((t) => analysisPlacementId('hybrid', t)),
+] as const;
+export type AnalysisPlacement = string;
+
+/** worker の VPS のプラン（選択肢の id から。併用の本解析も含む。worker でなければ undefined）。 */
 export const analysisWorkerPlan = (
   id: string | undefined,
-): '2gb' | '4gb' | undefined =>
-  id === 'worker-vps-2gb' ? '2gb' : id === 'worker-vps-4gb' ? '4gb' : undefined;
+): '2gb' | '4gb' | undefined => {
+  const t = analysisPlacementOf(id).target;
+  return t === 'worker-vps-2gb'
+    ? '2gb'
+    : t === 'worker-vps-4gb'
+      ? '4gb'
+      : undefined;
+};
+
+/** 別の事業者のサーバーレスの実行先（併用の本解析も含む。そうでなければ undefined）。 */
+export const analysisFnTarget = (
+  id: string | undefined,
+): AnalysisFnTarget | undefined => {
+  const t = analysisPlacementOf(id).target;
+  return (ANALYSIS_FN_TARGETS as readonly string[]).includes(t ?? '')
+    ? (t as AnalysisFnTarget)
+    : undefined;
+};
 
 /** サーバーが解析するか（端末だけの置き場は解析しない）。 */
 export const serverAnalyzes = (id: string | undefined): boolean =>
-  id !== 'client';
+  analysisPlacementOf(id).mode !== 'client';
 
 /** 端末で解析するか（端末・併用。エンジンと評価関数を配る）。 */
 export const browserAnalyzes = (id: string | undefined): boolean =>
-  id === 'client' || id === 'hybrid';
+  analysisPlacementOf(id).mode !== 'server';
 
 /**
  * アプリの API が解析の結果を受けて DB に書く 1 件の CPU（ms。ゲーム上の仮定。Next.js のサーバーに呼ばれた Worker が D1 を読んで返す
@@ -131,7 +199,100 @@ export const ANALYSIS_PARTS: readonly PartDef[] = (['2gb', '4gb'] as const).map(
   }),
 );
 
-/** 部品「解析の置き場」の選択肢（土台の事業者ごとの同居・端末・併用と、worker）。 */
+/** 解析の Lambda のメモリ（GB。仮定: Amplify の SSR・API の Lambda と同じ大きさ。aws.ts の COMPUTE_MEMORY_GB）。 */
+export const ANALYSIS_LAMBDA_MEMORY_GB = COMPUTE_MEMORY_GB;
+/** 解析の Vercel Functions のメモリ（GB。仮定: Vercel の構成の関数と同じ 2 GB）。 */
+export const ANALYSIS_VERCEL_MEMORY_GB = 2;
+
+/** 併用の説明（本解析の実行先の説明の前に、端末の速報を足す）。 */
+const HYBRID_PREFIX =
+  '端末で速報を出し（保存しない）、本解析はサーバーで動かします。費用は端末に配るファイルの転送と、サーバーの本解析の両方です。本解析は: ';
+
+/**
+ * 別の事業者のサーバーレスの実行先（D-245・prd/17 §5.6）。Web の事業者から独立して選ぶ。解析は別のノード（その事業者の
+ * アカウント）で動かし、結果はアプリの API（HTTPS）に送って DB に書く（worker と同じ形。DB の接続の規則には触れない）。
+ * プランは本番の解析に使えるもの（Workers Paid・Vercel Pro。Free・Hobby は解析の重さに使えない）。基本料は、そのアカウントが
+ * 構成に無ければ新しく足される（API の置き場の別アカウントと同じ数え方。D-65・D-67）。
+ */
+export const ANALYSIS_FN: Record<
+  AnalysisFnTarget,
+  {
+    provider: 'aws' | 'gcp' | 'cloudflare' | 'vercel';
+    /** 選択肢・構成図に出すサービスの名前。 */
+    service: string;
+    note: string;
+  }
+> = {
+  'fn-lambda': {
+    provider: 'aws',
+    service: 'AWS Lambda',
+    note: `AWS のアカウントに解析の Lambda（メモリ ${ANALYSIS_LAMBDA_MEMORY_GB} GB）を置き、キューから起こします。実行時間 × メモリの従量で、件数が増えても並べて動きます。1 件の時間の上限に当たると止まります`,
+  },
+  'fn-cloud-run': {
+    provider: 'gcp',
+    service: 'Cloud Run',
+    note: 'Google Cloud に解析のコンテナ（Cloud Run。アプリの構成の Cloud Run と同じ大きさ）を置きます。リクエストを処理している間の CPU・メモリの従量で、件数が増えてもインスタンスが増えます。1 件の時間の上限に当たると止まります',
+  },
+  'fn-workers': {
+    provider: 'cloudflare',
+    service: 'Cloudflare Workers',
+    note: 'Cloudflare のアカウント（Workers Paid）にキューの受け手の Worker を置きます。CPU 時間の従量で、待ちの時間は課金されません。1 件の CPU 時間の上限に当たると止まります',
+  },
+  'fn-vercel': {
+    provider: 'vercel',
+    service: 'Vercel Functions',
+    note: 'Vercel のアカウント（Pro）に解析の関数を置きます。動いている CPU の時間とメモリの従量で、件数が増えても並べて動きます。1 件の実行時間の上限に当たると止まります',
+  },
+};
+
+const FN_ELSEWHERE_NOTE =
+  '解析の結果はアプリの API（HTTPS）に送って DB に書きます（アプリの側は受けて書くだけ）。アプリと別の事業者なら、アカウントと請求が 1 つ増え、外へ送る転送を数えます。往復の遅延は計算しません';
+
+/** 実行先のサービスの名前（選択肢・説明の文）。土台の事業者で「同じ実行環境」の名前が決まる。 */
+export function analysisTargetName(
+  target: AnalysisTarget,
+  platform: Platform,
+): string {
+  if (target === 'same') return SERVICE[platform];
+  if (target === 'worker-vps-2gb' || target === 'worker-vps-4gb')
+    return `さくらの VPS ${target.slice(-3).toUpperCase()}（解析の worker）`;
+  return ANALYSIS_FN[target].service;
+}
+
+/** 別の事業者のサーバーレスの部品（どの土台にも差せる。同じ事業者の土台では「同じ実行環境」と重なるので出さない）。 */
+const fnPart = (target: AnalysisFnTarget, hybrid: boolean): PartDef => {
+  const f = ANALYSIS_FN[target];
+  return {
+    id: analysisPlacementId(hybrid ? 'hybrid' : 'server', target),
+    slot: 'analysis',
+    platform: f.provider,
+    role: 'compute',
+    accepts: [],
+    attachesTo: ['compute'],
+    as: target,
+    label: hybrid ? `端末で速報・${f.service}で本解析` : f.service,
+    note: `${hybrid ? HYBRID_PREFIX : ''}${f.note}。${FN_ELSEWHERE_NOTE}`,
+    premiseRefs: [],
+  };
+};
+
+/** 併用の worker の部品（他の事業者の土台に差す）。 */
+const hybridWorkerPart = (p: PartDef): PartDef => ({
+  ...p,
+  id: `hybrid-${p.id}`,
+  label: `端末で速報・${analysisTargetName(p.id as AnalysisTarget, 'sakura')}で本解析`,
+  note: `${HYBRID_PREFIX}${p.note}`,
+});
+
+/** 同じ事業者の別の名前の土台（AWS の Lambda は OpenNext の構成の関数と重なる）は、別の事業者の部品を差さない。 */
+const fnHosts = (o: ComponentOption): ComponentOption => ({
+  ...o,
+  hosts: (o.hosts ?? []).filter(
+    (h) => !(o.platform === 'aws' && h === 'aws-opennext'),
+  ),
+});
+
+/** 部品「解析の置き場」の選択肢（土台の事業者ごとの同居・端末・併用と、別の事業者のサーバーレス・worker とその併用）。 */
 export const ANALYSIS_COMPONENTS: readonly ComponentOption[] = [
   ...PLATFORMS.flatMap((platform): ComponentOption[] => [
     {
@@ -160,16 +321,112 @@ export const ANALYSIS_COMPONENTS: readonly ComponentOption[] = [
     },
   ]),
   // アプリが さくらの VPS のときは、同じ事業者の VPS をもう 1 台足す（同居は「アプリと同じ実行環境」）
-  ...(['2gb', '4gb'] as const).map((plan): ComponentOption => ({
-    id: `worker-vps-${plan}`,
-    slot: 'analysis',
-    platform: 'sakura',
-    label: `解析の worker に VPS ${plan.toUpperCase()} をもう 1 台足す`,
-    note: workerNote(plan, true),
-    premiseRefs: [...ANALYSIS_PARTS[0]!.premiseRefs],
-  })),
-  ...ANALYSIS_PARTS.flatMap((p) => partOptions(p)),
+  ...(['2gb', '4gb'] as const).flatMap((plan): ComponentOption[] => {
+    const own: ComponentOption = {
+      id: `worker-vps-${plan}`,
+      slot: 'analysis',
+      platform: 'sakura',
+      label: `解析の worker に VPS ${plan.toUpperCase()} をもう 1 台足す`,
+      note: workerNote(plan, true),
+      premiseRefs: [...ANALYSIS_PARTS[0]!.premiseRefs],
+    };
+    return [
+      own,
+      {
+        ...own,
+        id: `hybrid-${own.id}`,
+        label: `端末で速報・解析の worker（VPS ${plan.toUpperCase()} をもう 1 台）で本解析`,
+        note: `${HYBRID_PREFIX}${own.note}`,
+      },
+    ];
+  }),
+  ...ANALYSIS_PARTS.flatMap((p) => [
+    ...partOptions(p),
+    ...partOptions(hybridWorkerPart(p)),
+  ]),
+  ...ANALYSIS_FN_TARGETS.flatMap((t) => [
+    ...partOptions(fnPart(t, false)).map(fnHosts),
+    ...partOptions(fnPart(t, true)).map(fnHosts),
+  ]),
 ];
+
+/** 別の事業者のサーバーレスの実行先のノード（id は ANALYSIS_FN_NODE_ID。構成に 1 つだけ）。 */
+function fnNode(target: AnalysisFnTarget): ArchNodeIn {
+  const base = {
+    id: ANALYSIS_FN_NODE_ID,
+    role: 'compute' as const,
+    label: `${ANALYSIS_FN[target].service}（解析）`,
+  };
+  switch (target) {
+    case 'fn-lambda':
+      return {
+        ...base,
+        config: {
+          kind: 'function',
+          memoryGB: ANALYSIS_LAMBDA_MEMORY_GB,
+          concurrency: 1,
+        },
+        billing: awsBill('lambda', {
+          invocations: 'requests',
+          'memory-gb-hours': 'compute',
+        }),
+      };
+    case 'fn-cloud-run':
+      return {
+        ...base,
+        config: {
+          kind: 'container',
+          vcpu: RUN_VCPU,
+          memoryGB: RUN_MEMORY_GB,
+          concurrency: RUN_CONCURRENCY,
+          minInstances: 0,
+          idleKeepSeconds: RUN_IDLE_KEEP_SECONDS,
+        },
+        billing: {
+          accountId: 'gcp',
+          provider: 'gcp',
+          planId: 'cloud-run',
+          meters: {
+            requests: 'requests',
+            'cpu-hours': 'cpu',
+            'memory-gb-hours': 'memory',
+            'idle-cpu-hours': 'idle-cpu',
+            'idle-memory-gb-hours': 'idle-memory',
+          },
+        },
+      };
+    case 'fn-workers':
+      return {
+        ...base,
+        config: { kind: 'function' },
+        billing: {
+          accountId: 'cloudflare',
+          provider: 'cloudflare',
+          planId: 'workers-paid',
+          meters: { requests: 'requests', 'cpu-ms': 'cpu-ms' },
+        },
+      };
+    case 'fn-vercel':
+      return {
+        ...base,
+        config: {
+          kind: 'function',
+          memoryGB: ANALYSIS_VERCEL_MEMORY_GB,
+          concurrency: 1,
+        },
+        billing: {
+          accountId: 'vercel',
+          provider: 'vercel',
+          planId: 'pro',
+          meters: {
+            invocations: 'invocations',
+            'cpu-ms': 'active-cpu',
+            'memory-gb-hours': 'provisioned-memory',
+          },
+        },
+      };
+  }
+}
 
 /** worker の VPS のノード（DB・画像を置かない・nginx を通さない）。 */
 function workerNode(plan: '2gb' | '4gb'): ArchNodeIn {
@@ -260,7 +517,8 @@ export function applyAnalysis(
     return { ...arch, routes };
   }
   const plan = analysisWorkerPlan(choice);
-  if (plan === undefined) {
+  const fnTarget = analysisFnTarget(choice);
+  if (plan === undefined && fnTarget === undefined) {
     // アプリの処理がキューから起こせない（Amplify の SSR）なら、同じアカウントの別の関数で解析し、DB へは API と同じ先に書く
     const app = arch.nodes.find((n) => api.includes(n.id) && isAppCompute(n));
     const fn = app && asyncComputeFor(app);
@@ -272,8 +530,8 @@ export function applyAnalysis(
     routes['api-async'] = [...api];
     return { ...arch, nodes: withOrigin(arch.nodes), routes };
   }
-  // worker: 解析は worker の VPS、結果はアプリの API（同じ経路）に送り、アプリの処理は受けて書くだけ
-  const worker = workerNode(plan);
+  // worker・別の事業者のサーバーレス（D-245）: 解析は別のノード、結果はアプリの API（同じ経路）に送り、アプリの処理は受けて書くだけ
+  const worker = plan ? workerNode(plan) : fnNode(fnTarget!);
   const onApi = new Set(api);
   const out = transferNodes(
     worker,
@@ -281,6 +539,9 @@ export function applyAnalysis(
       'sakura',
     '解析の結果の送信',
   );
+  // 同じ事業者の外への転送のノードが構成にもうあれば（API を同じ事業者に置いた構成）、それを経路に入れて数える
+  const have = new Set(arch.nodes.map((n) => n.id));
+  const added = out.filter((n) => !have.has(n.id));
   const nodes = withOrigin(arch.nodes).map((n): ArchNodeIn => {
     if (!onApi.has(n.id) || !isAppCompute(n)) return n;
     const c = n.config;
@@ -298,7 +559,7 @@ export function applyAnalysis(
     } as ArchNodeIn;
   });
   routes['api-async'] = [worker.id, ...out.map((n) => n.id), ...api];
-  return { ...arch, nodes: [...nodes, ...out, worker], routes };
+  return { ...arch, nodes: [...nodes, ...added, worker], routes };
 }
 
 /**

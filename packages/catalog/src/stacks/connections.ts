@@ -761,6 +761,31 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
       'アプリの側は結果を受けて書くだけ。worker から送るデータは VPS の転送量が無制限なので数えず、アプリの応答は今の API の経路の転送で数える。往復の遅延は計算しない（CP-08）',
     sources: SAKURA_SPEC,
   },
+  // ---- 解析の別の事業者のサーバーレス（prd/17 §5.6・D-245）。解析の関数がアプリの API を HTTPS で呼び、結果を送る ----
+  {
+    id: 'analysis-fn-app-api',
+    slot: 'analysis',
+    from: {
+      providers: ['aws', 'gcp', 'cloudflare', 'vercel'],
+      role: 'compute',
+    },
+    to: {
+      providers: ALL_PLATFORMS,
+      role: 'compute',
+      port: 'https-api',
+    },
+    verdict: 'ok',
+    basis:
+      '解析の関数（Lambda・Cloud Run・Workers・Vercel Functions）は外へ HTTPS で出られ、解析の結果をアプリの API（ブラウザが呼ぶのと同じ公開の HTTPS の口。認証のトークンを付ける）に送る（worker と同じ形）。' +
+      'DB には直接つながない（D1 のように実行環境の中（binding）からしか使えない DB があるので、DB の口を構成ごとに分けない）。' +
+      '関数から外へ送るデータは送り手の事業者の送り出しの項目で数える。解析の仕事をどう起こすか（キュー・HTTP の呼び出し）の費用は数えない（KF-02）。往復の遅延は計算しない（CP-08）',
+    sources: at('2026-11-02', [
+      'https://aws.amazon.com/lambda/pricing/',
+      'https://cloud.google.com/run/pricing',
+      'https://developers.cloudflare.com/workers/platform/pricing/',
+      'https://vercel.com/docs/pricing',
+    ]),
+  },
   // ---- アプリのメールの送信（D-95・D-110）。インターネットの API・SMTP で呼ぶので、どの土台からも同じ形 ----
   {
     id: 'host-compute-ses',

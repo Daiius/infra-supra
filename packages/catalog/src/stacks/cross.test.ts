@@ -123,6 +123,20 @@ const PAIRS_ADDED_ANALYSIS = [
   'vercel × analysis × sakura',
 ];
 
+/**
+ * 解析の場所（prd/17 §5.6・D-245）で足した組: 別の事業者のサーバーレス（Lambda・Cloud Run・Workers・Vercel Functions）が
+ * アプリの API を呼ぶ。同じ事業者の土台は「同じ実行環境」と重なるので出さない（AWS の Lambda は OpenNext の構成にも出さない）。
+ */
+const FN_HOSTS = {
+  aws: ['cloudflare', 'gcp', 'netlify', 'sakura', 'vercel'],
+  gcp: ['aws', 'aws-opennext', 'cloudflare', 'netlify', 'sakura', 'vercel'],
+  cloudflare: ['aws', 'aws-opennext', 'gcp', 'netlify', 'sakura', 'vercel'],
+  vercel: ['aws', 'aws-opennext', 'cloudflare', 'gcp', 'netlify', 'sakura'],
+} as const;
+const PAIRS_ADDED_ANALYSIS_FN = Object.entries(FN_HOSTS).flatMap(([p, hosts]) =>
+  hosts.map((h) => `${h} × analysis × ${p}`),
+);
+
 /** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
 const COMPONENTS_BEFORE_RULES = [
   'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
@@ -165,7 +179,21 @@ const COMPONENTS_BEFORE_RULES = [
   'email resend:resend-pro-100k → aws,aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
   // 解析の worker（D-235）
   'analysis sakura:worker-vps-2gb → aws,aws-opennext,cloudflare,gcp,netlify,vercel',
+  'analysis sakura:hybrid-worker-vps-2gb → aws,aws-opennext,cloudflare,gcp,netlify,vercel',
   'analysis sakura:worker-vps-4gb → aws,aws-opennext,cloudflare,gcp,netlify,vercel',
+  'analysis sakura:hybrid-worker-vps-4gb → aws,aws-opennext,cloudflare,gcp,netlify,vercel',
+  // 解析の別の事業者のサーバーレスと、その併用（D-245）
+  ...Object.entries(FN_HOSTS).flatMap(([p, hosts]) => {
+    const id = {
+      aws: 'lambda',
+      gcp: 'cloud-run',
+      cloudflare: 'workers',
+      vercel: 'vercel',
+    }[p];
+    return [`fn-${id}`, `hybrid-fn-${id}`].map(
+      (o) => `analysis ${p}:${o} → ${hosts.join(',')}`,
+    );
+  }),
 ];
 
 /** 他の事業者の部品（土台の事業者と違う土台に差せるもの）。 */
@@ -189,6 +217,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
         ...PAIRS_ADDED_STAGE2C,
         ...PAIRS_ADDED_STAGE2D,
         ...PAIRS_ADDED_ANALYSIS,
+        ...PAIRS_ADDED_ANALYSIS_FN,
       ].sort(),
     );
   });

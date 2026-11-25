@@ -281,6 +281,20 @@ describe('ゲームの月の満足度', () => {
     ).toBe('fair');
   });
 
+  it('別の事業者のサーバーレス（D-245）は滞留せず、VPS の構成でもアプリの VPS は受けて書くだけ', () => {
+    // イベントの月: VPS の同じ実行環境は滞るが、Lambda に出すとサーバーレスの速さ（局面ごとは良い）になる
+    const fn = play(at(SMALL, true), VPS, 'fn-lambda');
+    expect(fn.satisfaction.stages.analysisSpeed).toBe('good');
+    expect(fn.satisfaction.stages.speed).not.toBe('bad');
+    // 併用の worker（hybrid-worker-vps-4gb）は worker の滞留を速報で隠し、本解析が遅れて正確さが下がる
+    const hw = play(at(SMALL, true), PRO, 'hybrid-worker-vps-4gb');
+    expect(hw.satisfaction.stages.analysisSpeed).toBe('fair');
+    expect(hw.satisfaction.stages.analysisAccuracy).toBe('fair');
+    expect(hw.satisfaction.reasons.analysisSpeed).toMatch(
+      /ピークの時間帯の滞留の待ち|追いつかず/,
+    );
+  });
+
   it('解析の worker だけの遅くなる前提を見分ける', () => {
     expect(
       analysisOnlyThrottle({

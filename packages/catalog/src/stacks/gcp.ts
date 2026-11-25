@@ -30,12 +30,12 @@ export const GCP_DEFAULT_CHOICES: Choices = {
 /** Hosting の CDN の画像のヒット率（仮定。他の事業者の CDN と同じ値）。 */
 const IMAGE_CDN_HIT_RATE = 0.9;
 /** Cloud Run のインスタンスの大きさ（仮定: 1 vCPU・512 MiB。Next.js の standalone のサーバーが動く最小に近い形）。 */
-const RUN_VCPU = 1;
-const RUN_MEMORY_GB = 0.5;
+export const RUN_VCPU = 1;
+export const RUN_MEMORY_GB = 0.5;
 /** 1 インスタンスの同時のリクエストの上限（公式の既定 80。gcloud では vCPU × 80）。 */
-const RUN_CONCURRENCY = 80;
+export const RUN_CONCURRENCY = 80;
 /** 仕事の無いインスタンスを残す時間（公式: 15 分の待機の後に止める）。 */
-const RUN_IDLE_KEEP_SECONDS = 900;
+export const RUN_IDLE_KEEP_SECONDS = 900;
 /** next/image の 1 回の変換の時間（ms。仮定。OpenNext の画像の関数・VPS のホストと同じ値）。 */
 const IMAGE_TRANSFORM_MS = 150;
 /** Cloud Storage の画像を Cloud Run がそのまま返す 1 回の時間（ms。仮定）。 */

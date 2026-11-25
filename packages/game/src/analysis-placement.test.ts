@@ -61,17 +61,32 @@ describe('解析のあるシナリオだけで出す', () => {
       }
   });
 
-  it('棋譜解析では既定がアプリと同じ実行環境で、5 つから選べる', () => {
+  it('棋譜解析では既定がアプリと同じ実行環境で、端末と、置き方（サーバー・併用）× 実行先から選べる（D-245）', () => {
     for (const s of STACKS) {
       if (s.hidden) continue;
       const slot = setupSlots(kifu, s.index, 'nextjs').find(
         (x) => x.slot === 'analysis',
       );
-      expect(slot?.options.map((o) => o.id).sort(), s.id).toEqual(
-        ['client', 'hybrid', 'same', 'worker-vps-2gb', 'worker-vps-4gb'].sort(),
+      const ids = slot?.options.map((o) => o.id) ?? [];
+      for (const id of [
+        'client',
+        'same',
+        'hybrid',
+        'worker-vps-2gb',
+        'worker-vps-4gb',
+        'hybrid-worker-vps-2gb',
+        'hybrid-worker-vps-4gb',
+      ])
+        expect(ids, s.id).toContain(id);
+      // 別の事業者のサーバーレスは、同じ事業者の土台では出さない（同じ実行環境と重なる）
+      const fns = ids.filter((id) => id.startsWith('fn-'));
+      expect(fns.length, s.id).toBe(s.provider === 'sakura' ? 4 : 3);
+      expect(ids.filter((id) => id.startsWith('hybrid-fn-')).length).toBe(
+        fns.length,
       );
       expect(newGame(s.index, 1, kifu).components.analysis).toBe('same');
     }
+    expect(kifu.ownTabSlots).toEqual(['analysis']);
   });
 });
 
@@ -109,6 +124,22 @@ describe('部品の行動で切り替える', () => {
     const next = playMonth(applyAction(s, analysis('client')));
     expect(last(next).components.analysis).toBe('client');
     expect(fn(next)).toBeLessThan(fn(s));
+  });
+
+  it('別の事業者のサーバーレスに替えると、そのアカウントが増え、翌月から解析の関数の従量がかかる（D-245）', () => {
+    const s = start(VERCEL_PRO);
+    expect(actionEffort(s, analysis('fn-cloud-run'))).toBe(
+      EFFORT.component.analysis + EFFORT.accountSetup,
+    );
+    expect(addedAccounts(VERCEL_PRO, { analysis: 'fn-cloud-run' })).toEqual([
+      'gcp',
+    ]);
+    const next = playMonth(applyAction(s, analysis('fn-cloud-run')));
+    expect(last(next).components.analysis).toBe('fn-cloud-run');
+    expect(usdOf(next, 'analysis-fn')).toBeGreaterThan(0);
+    // 解析は Cloud Run に移るので、Vercel の関数の解析の CPU が減る
+    expect(usdOf(next, 'fn')).toBeLessThan(usdOf(s, 'fn'));
+    expect(selfHostedOf(VERCEL_PRO, next.components)).toBe(false);
   });
 
   it('VPS の構成で worker を足すと、アプリの VPS とは別にもう 1 台分の月額がかかる', () => {

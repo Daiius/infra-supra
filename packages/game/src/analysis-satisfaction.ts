@@ -12,8 +12,10 @@
 // サーバーとの差が揺らぎの範囲に収まるとみる。端末は候補が 1 つなので「普通」）。
 import {
   ANALYSIS_WORKER_NODE_ID,
+  analysisFnTarget,
   analysisWorkerPlan,
   browserAnalyzes,
+  serverAnalyzes,
   jobsPerBatch,
   type AnalysisJobShape,
   type AnalysisSettings,
@@ -112,7 +114,7 @@ export function judgeAnalysis(input: {
 }): AnalysisJudgment {
   const { rules: r, shape, settings, placement, host } = input;
   const onClient = browserAnalyzes(placement);
-  const onServer = placement !== 'client';
+  const onServer = serverAnalyzes(placement);
   const out: Partial<AnalysisJudgment> = {};
   let speed: Stage | undefined;
   let server: Stage | undefined;
@@ -164,7 +166,9 @@ export function analysisHostOf(
   r: Pick<MonthEstimate, 'simulation' | 'premises'>,
   placement: string | undefined,
 ): AnalysisHost | undefined {
-  if (placement === 'client') return undefined;
+  // 端末だけ・別の事業者のサーバーレス（D-245）は滞留しない（経路の後ろのアプリの VPS は結果を受けて書くだけ）
+  if (!serverAnalyzes(placement) || analysisFnTarget(placement) !== undefined)
+    return undefined;
   const a = r.simulation.architecture;
   const path = a.routes['api-async'] ?? a.routes.api ?? [];
   const id =
