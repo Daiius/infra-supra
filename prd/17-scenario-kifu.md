@@ -371,6 +371,34 @@ R-2 の確認（2026-11-23 に公式の原文で取り直した。出典は cata
 - 併用でない置き場では、値が残っていても全局として数える（設定の値は替えない）。既定は全局で、始めた状態に値を持たない（省略は全局。golden を変えない）。工数は 1（頼むボタンと、頼まれた棋譜だけを積む処理。仮定）。
 - 1 か月目の試算（12 万 PV・1 局まとめて・候補 3 つ）は D-246 に書いた。
 
+**実行先の払い方の 3 つの型・Fargate・台で借りるマシン（D-247。実装済み）**: 実行先を払い方の型で 3 つに分け、③ のタブでは型ごとの見出しでまとめる（台で借りるマシンは系列の行に大きさのボタンを並べる）。
+
+| 型 | 実行先 | 費用の形 | 滞留 |
+|---|---|---|---|
+| 件ごと（サーバーレス） | 同じ実行環境・Lambda・Cloud Run・Workers・Vercel Functions | 1 件の実行時間・CPU | しない（1 件の上限に当たると止まる） |
+| 動いている間（コンテナ） | **ECS on Fargate**（ARM・x86。`fargate-arm`・`fargate-x86`） | タスクが動いている間の vCPU 時間・GB 時間。タスクはキューの長さに合わせて増やし減らす | しない |
+| 台で借りる（マシン） | さくらの VPS（2GB・4GB・**8GB・16GB・32GB**）・**EC2**（c7g・c8g・c7i・c7a の xlarge と 2xlarge）・**Compute Engine**（c4a・c4・n2d の standard-4 と -8・c3d-standard-4） | 1 台の月の時間（EC2・Compute Engine はオンデマンド・1 年の確約あり。さくらは月額） | ピークの比で滞る（今の worker の VPS と同じ式。自前運用の維持の工数も同じ） |
+
+- 台数は 1（大きさを選ぶ）。**Spot・台数の自動の増減（Auto Scaling）は見送り**（Spot は価格が変動し出典つきの固定の値にできない）。
+- 料金の出典（2026-11-25 取得）: Fargate は Price List（AmazonECS・東京・版 2026-11-11）、EC2 は Price List（AmazonEC2・東京・版 2026-11-24）のオンデマンドとリザーブドインスタンス（standard・1 年・前払いなし。xlarge は EC2 Instance Savings Plans の 1 年・前払いなしと同じ値）、Compute Engine は料金ページの汎用の表を地域の選択で東京にして読んだ定価と Compute Resource CUD の 1 年、さくらの大きいプランは仕様のページの月額。
+- 確約は既存の「長期の利用の確約」（[11](./11-aws-and-cross-provider.md) §22・D-97）に乗せた: EC2 は `reserved-instance`、Compute Engine は `resource-cud`（どちらも 1 台の時間の予約・1 年・前払いなし）。**入れていないもの**（確かめていない）: Fargate の Compute Savings Plans・Compute Engine の継続利用割引（対象の系列と率）・T2A・c3d-standard-8（表のメモリの値が他と合わなかった）・さくらの大きいプランの年額・3 年の確約（D-97 のとおり 1 年だけ）・EC2・Compute Engine のディスク（EBS・永続ディスク）の料金。
+- EC2・Fargate・Compute Engine から別の事業者のアプリへ送る結果は、その事業者の外への転送（EC2 のデータ転送・Premium Tier）で数える（Fargate は EC2 と同じ料金と読んだ）。
+
+**1 vCPU あたりの解析の速さの係数（ユーザーの決定: 系列ごとに仮定で置く。実測ではない。後で直せる形）**:
+
+| 系列 | 例 | 速さ（物理コアの新しい x86 = 1） | 今の値の基準に対する倍率（`cpuSpeed`） |
+|---|---|---|---|
+| 物理コアの x86 | EC2 c7a | 1 | 1.67 |
+| Arm の物理コア（NNUE の SIMD が狭い分を控えめに下げた） | EC2 c7g・c8g、Compute Engine c4a、Fargate ARM | 0.8 | 1.33 |
+| SMT のスレッドの vCPU | EC2 c7i、Compute Engine c4・c3d・n2d、Fargate x86 | 0.6 | 1 |
+| さくらの VPS の仮想コア | 2GB〜32GB | 0.6 | 1 |
+| サーバーレスの実行環境 | Lambda・Cloud Run・Workers・Vercel Functions・同じ実行環境 | 0.6 | 1 |
+
+- 今の 1 局面の重さ（D-236）を、サーバーレスの実行環境とさくらの VPS の仮想コアの速さの仮定とみて基準 1 にし、ほかの系列は速さの比で CPU を割る（`ANALYSIS_CPU_SPEED`・`cpuSpeedOf`）。**今の実行先（同じ実行環境・サーバーレス・worker の VPS 2GB / 4GB）の数え方は変わらない**（golden は不変）。
+- estimator: ノードの `cpuSpeed`（関数・コンテナ・ホスト。1 件の CPU を倍率で割り、壁時計時間は減った CPU の分だけ短くする）・コンテナの `targetUtilization`（Fargate。CPU で決まるアクティブな時間をこれで割る。仮定 0.7）・ホストの `billedHourly`（EC2・Compute Engine。1 台の月の時間 `instance-hours`）を足した。game の満足度の 1 局の時間も同じ倍率で CPU の分を割る（`analysisJobWallMs` の `cpuSpeed`）。Fargate のタスクは 2 vCPU・4 GB・1 vCPU で 1 件（仮定）、起動の待ちは数えない。
+- 1 か月目の試算（12 万 PV・1 局まとめて・候補 3 つ・Web は Vercel Pro。左は全局のサーバー、右は併用で希望した棋譜だけ。USD・さくらは円を別に）: Lambda $643 / $341（速さ 普通・6.7 分）、Fargate ARM $580 / $315（普通・5.0 分）、EC2 c7g.2xlarge $312 / $312（悪い・ピークの比 5.5・追いつかない / 併用は簡易解析で普通・比 2.8）、Compute Engine c4a-standard-8 $384 / $383（同じく 比 5.5 / 2.8）、さくらの VPS 16GB $47 + ¥15,400 / 同じ（悪い・比 7.4 / 併用は普通・比 3.7 で追いつかない）、EC2 c7a.2xlarge $424 / $423（比 4.4 / 2.2）。台で借りるマシンは 1 台では月 9 万局に追いつかない（台数・大きさの不足）。
+- **残したこと**: Fargate が Lambda より約 1 割しか安くならないのは、モデルが Lambda（メモリ 1 GB）を基準の速さの 1 vCPU として数えるため（実際の Lambda はメモリに比例して CPU が割り当てられ、1,769 MB で 1 vCPU）。サーバーレスの実行環境のメモリと速さの関係は後で決める。台数を選ぶこと（2 台以上）・Auto Scaling・Spot。
+
 ## 6. 出来事（KF-15。1 つずつ概要を見て決めた）
 
 ### 6.1 入れる（6 つ）
