@@ -326,7 +326,7 @@ R-2 の確認（2026-11-23 に公式の原文で取り直した。出典は cata
 - KF-16 の基準「普段の月は VPS の標準プランで開いている間に終わる・大きな対局イベントの月は小さい VPS で滞る」は、3 万 PV（今の 1/10）で worker 4GB（4 vCPU）が満たす（2GB は普段の月から少し滞る）。イベントの月は 4GB でも滞るので、イベントの倍率（ピーク × 3）と規模は PR-11 で合わせて決める。→ 3 万 PV・イベントは 2 倍で 3 日に集中のまま決めた（§6.6・D-242）。
 - 無料のプランの止まる前提（Cloudflare Free の CPU 10 ms・Vercel Hobby の大きさなど）は可用性で効き、解析の速さは時間のまま出す。
 
-### 5.6 解析の場所を 3 つ目の選択にする（D-245。**設計・実装中**）
+### 5.6 解析の場所を 3 つ目の選択にする（D-245。**実装済み（初期費用・参照値・基準プレイの決め直しは残り）**）
 
 背景（2026-11-25 のユーザーの指摘）: 月 90 局（D-243）では解析の費用が Web の部分の 20〜100 倍になり、構成・フレームワークの選択がほとんど効かない。一方、いちばん効く解析の置き場は ① 構成の中の部品の 1 つで、実行先も Web の事業者に縛られる（AWS なら Lambda・Vercel なら Vercel Functions）。柱が 2 本あるのに、どちらが重要か伝わらない。
 
@@ -353,6 +353,14 @@ R-2 の確認（2026-11-23 に公式の原文で取り直した。出典は cata
   - id: 今の `same`・`client`・`hybrid`・`worker-vps-2gb`・`worker-vps-4gb` は保つ（golden を変えない）。足すのは `fn-lambda`・`fn-cloud-run`・`fn-workers`・`fn-vercel` と、併用の `hybrid-<実行先>`（worker との併用も足す。D-235 で見送った組）。
 - **別の事業者の実行先は、worker と同じ形**: 解析は別のノード（その事業者のアカウント）で動かし、結果はアプリの API（HTTPS）に送って DB に書く（アプリの処理は受けて書くだけの CPU）。DB の接続の規則（[14](./14-composable-parts.md)）には触れない。外へ送る転送は `transferNodes` で数える。プランは本番で使えるもの（Workers Paid・Vercel Pro。Free・Hobby は解析の重さに使えない）で、基本料はそのアカウントが新しく増えるときだけ足される（API の置き場の別アカウントと同じ数え方。D-65・D-67）。1 件の上限は §9.2 の値。
 - **途中の変更**: 今の部品の取り替え（工数 3・翌月から効く・データの移行なし）のまま。
+実装（D-245）:
+
+- catalog（`stacks/analysis.ts`）: 置き方 × 実行先を `analysisPlacementOf`・`analysisPlacementId` で id と行き来する（`serverAnalyzes`・`browserAnalyzes`・`analysisWorkerPlan`・`analysisFnTarget` は併用の `hybrid-*` も見る）。別の事業者の実行先は `ANALYSIS_FN` と接続の規則 `analysis-fn-app-api`（Lambda・Cloud Run・Workers・Vercel Functions の処理 → アプリの処理の `https-api`）から、どの土台にも差す部品にした（同じ事業者の土台と、AWS の Lambda を OpenNext の土台には出さない）。ノードは `analysis-fn`（Lambda はメモリ 1 GB・Cloud Run は構成の Cloud Run と同じ大きさ・Workers は Workers Paid・Vercel は Pro の 2 GB。仮定）。外への転送のノードが構成にもうあれば（API を同じ事業者に置いた構成）それを経路に入れる。
+- 1 件の上限は実行先の事業者のプランのもの（1 件 20 分なら Workers・Vercel Functions は当たり、Lambda・Cloud Run は当たらない）。満足度は、別の事業者のサーバーレスを滞留しない実行先として扱う（VPS の構成でもアプリの VPS は結果を受けて書くだけ）。
+- game: `Scenario.ownTabSlots`（棋譜解析は `['analysis']`）。web: `own-slot-field.tsx`（`ownSlotTabs`・置き方と実行先の 2 段のボタン・区切り方と候補の数もこのタブ）を SetupTabs の `own` に渡す（始める画面・途中の「構成を変える」・見積モード）。構成のカードからはこのスロットを外す（図には箱が出る。端末の幽霊の箱は出さない）。
+- 1 か月目の試算（12 万 PV・1 局まとめて・候補 3 つ。USD）: Vercel Pro の Web + Lambda $643・+ Cloud Run $953・+ Workers $773（Workers Paid の基本料 $5 を含む）、Amplify の Web + Vercel Functions $1,506（Pro の席 $20 と込みのクレジット）・+ Workers $736、さくらの VPS 2GB + Lambda $597（+ VPS ¥1,958）、Cloudflare Paid + Lambda $610。Lambda の解析の額は Web の事業者によらず Amplify の同じ実行環境とほぼ同じ（差は DB の待ちだけ）。
+- 残したこと: Vercel Hobby の Web から Cloudflare に API を置いた構成（Workers Free）で Workers を選ぶと、同じアカウントに Workers Free と Paid が並ぶ（数え方は確かめていない）。
+
 - **初期費用・参照値・基準プレイ**: 実装の後に、サーバーレスの実行先の中ほど（Lambda・Workers・Cloud Run）が何もしないで 3 か月前後持つ額を基準プレイから決め、参照値（D-64）と基準プレイも決め直す。
 
 ## 6. 出来事（KF-15。1 つずつ概要を見て決めた）
