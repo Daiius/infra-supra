@@ -2,7 +2,8 @@
 // Scenario.analysisJob を持つ）だけで判定する。純粋関数だけを置き、値（境目・倍率）はシナリオのデータ（ゲーム上の仮定）。
 //
 // 速さ = 1 局の解析が見えるまでの時間（秒）。前提 P-4「利用者がページを開いている間に終わってほしい」が境目。
-// - サーバー（同じ実行環境・worker の VPS・併用の詳細解析）: 1 件の時間（固定の重さ + 局面の数 × 1 局面 + 待ち）× 順に解く回数。
+// - サーバー（同じ実行環境・worker の VPS・台で借りるマシン・Fargate・併用の詳細解析）: 1 件の時間（固定の重さ + 局面の数 × 1 局面 + 待ち）
+//   × 順に解く回数。CPU の分は実行先の 1 vCPU の速さの倍率（D-247。仮定）で割る。
 //   局面ごとは 1 局の件数を並べて動かせる（サーバーレスは全部、VPS は vCPU の数まで）。1 局まとめては 1 件、小分けは塊を順に解く。
 // - ピークの滞留（B-5）: 解析する VPS のピークの比が 1 を超えたら、(比 − 1) × stallWindowSec を待ちに足す。月の平均の比も 1 以上なら、
 //   1 日を通して追いつかないので「悪い」。サーバーレス（関数・コンテナ）は滞留しない（1 件の上限に当たって止まるのは可用性の判定のまま）。
@@ -12,8 +13,10 @@
 // サーバーとの差が揺らぎの範囲に収まるとみる。端末は候補が 1 つなので「普通」）。
 import {
   ANALYSIS_WORKER_NODE_ID,
+  analysisCpuSpeed,
   analysisFnTarget,
-  analysisWorkerPlan,
+  analysisMachine,
+  analysisTaskTarget,
   browserAnalyzes,
   serverAnalyzes,
   jobsPerBatch,
@@ -62,15 +65,18 @@ const stageOfSec = (sec: number, r: AnalysisSatisfactionRules): Stage =>
 const better = (a: Stage, b: Stage): Stage =>
   STAGE_VALUE[a] >= STAGE_VALUE[b] ? a : b;
 
-/** 1 件の解析の壁時計（ms）: 固定の重さ（CPU・読み込みの待ち）+ 局面の数 × 1 局面 + DB の待ち。 */
+/**
+ * 1 件の解析の壁時計（ms）: 固定の重さ（CPU・読み込みの待ち）+ 局面の数 × 1 局面 + DB の待ち。cpuSpeed は実行先の 1 vCPU の速さの
+ * 倍率（今の値の基準 = 1。catalog の analysisCpuSpeed。D-247）で、CPU の分だけを割る。
+ */
 export function analysisJobWallMs(
   shape: AnalysisJobShape,
   unit: AnalysisSettings['unit'],
+  cpuSpeed = 1,
 ): number {
   const items = shape.itemsPerBatch / jobsPerBatch(shape, unit);
   return (
-    shape.startupCpuMs +
-    items * shape.itemCpuMs +
+    (shape.startupCpuMs + items * shape.itemCpuMs) / cpuSpeed +
     shape.startupIoMs +
     shape.ioWaitMs
   );
@@ -84,10 +90,11 @@ export function serverRunSec(
   shape: AnalysisJobShape,
   unit: AnalysisSettings['unit'],
   lanes: number,
+  cpuSpeed = 1,
 ): number {
   const jobs = jobsPerBatch(shape, unit);
   const parallel = unit === 'position' ? Math.min(jobs, lanes) : 1;
-  return ((jobs / parallel) * analysisJobWallMs(shape, unit)) / 1000;
+  return ((jobs / parallel) * analysisJobWallMs(shape, unit, cpuSpeed)) / 1000;
 }
 
 /** ピークの滞留の待ち（秒）と、1 日を通しても追いつかないか（B-5 の仮定の式）。 */
@@ -119,7 +126,12 @@ export function judgeAnalysis(input: {
   let speed: Stage | undefined;
   let server: Stage | undefined;
   if (onServer) {
-    const run = serverRunSec(shape, settings.unit, host?.vcpu ?? Infinity);
+    const run = serverRunSec(
+      shape,
+      settings.unit,
+      host?.vcpu ?? Infinity,
+      analysisCpuSpeed(placement),
+    );
     const stall = host ? stallOf(host, r) : { waitSec: 0, backlog: false };
     out.serverSec = run + stall.waitSec;
     out.waitSec = stall.waitSec;
@@ -167,13 +179,17 @@ export function analysisHostOf(
   r: Pick<MonthEstimate, 'simulation' | 'premises'>,
   placement: string | undefined,
 ): AnalysisHost | undefined {
-  // 端末だけ・別の事業者のサーバーレス（D-245）は滞留しない（経路の後ろのアプリの VPS は結果を受けて書くだけ）
-  if (!serverAnalyzes(placement) || analysisFnTarget(placement) !== undefined)
+  // 端末だけ・別の事業者のサーバーレス（D-245）・Fargate（増やし減らす。D-247）は滞留しない（経路の後ろのアプリの VPS は結果を受けて書くだけ）
+  if (
+    !serverAnalyzes(placement) ||
+    analysisFnTarget(placement) !== undefined ||
+    analysisTaskTarget(placement) !== undefined
+  )
     return undefined;
   const a = r.simulation.architecture;
   const path = a.routes['api-async'] ?? a.routes.api ?? [];
   const id =
-    analysisWorkerPlan(placement) !== undefined
+    analysisMachine(placement) !== undefined
       ? ANALYSIS_WORKER_NODE_ID
       : path.find(
           (n) => a.nodes.find((x) => x.id === n)?.config.kind === 'host',

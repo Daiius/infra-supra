@@ -11,7 +11,7 @@
 //   回数の課金は数えない）。無料のプランなどで、処理を足すと込み分・クレジットを超えて止まる（effect: block の込み分の前提が新しく
 //   当たる）なら、その月は動かせない（進まず、費用も 0。理由を月の報告に出す）。
 import { apiCallsPerMonth, HOURS_PER_MONTH } from 'estimator';
-import { ANALYSIS_WORKER_NODE_ID, analysisWorkerPlan } from 'catalog';
+import { ANALYSIS_WORKER_NODE_ID, analysisMachine } from 'catalog';
 import { estimate } from './core.ts';
 import { toUsd } from './format.ts';
 import type { MonthEstimate } from './month/bill.ts';
@@ -62,7 +62,7 @@ export function backgroundHostOf(
   const a = r.simulation.architecture;
   const path = a.routes.api ?? a.routes['api-async'] ?? [];
   const id =
-    analysisWorkerPlan(placement) !== undefined
+    analysisMachine(placement) !== undefined
       ? ANALYSIS_WORKER_NODE_ID
       : path.find(
           (n) => a.nodes.find((x) => x.id === n)?.config.kind === 'host',

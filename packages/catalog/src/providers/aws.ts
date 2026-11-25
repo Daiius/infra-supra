@@ -14,11 +14,96 @@ const backupSrc = (url: string) => ({ url, retrievedAt: BACKUP_R });
 /** 確約の割引（リザーブドインスタンス・Savings Plans）を確かめた日（D-97）。 */
 const COMMIT_R = '2026-11-02';
 const commitSrc = (url: string) => ({ url, retrievedAt: COMMIT_R });
+/** 解析の実行先（EC2・Fargate）を確かめた日（D-247）。 */
+const ANALYSIS_R = '2026-11-25';
 /** Price List API の東京の料金表（版の日付はコメントに残す）。 */
 const priceList = (offer: string) =>
   src(
     `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/${offer}/current/ap-northeast-1/index.json`,
   );
+
+type PlanInput = PriceBookInput['plans'][number];
+
+/** 解析の実行先の Fargate（Linux・東京・$ / 時間。Price List AmazonECS 2026-11-11）。 */
+export const FARGATE = [
+  { arch: 'arm', label: 'ARM（Graviton）', vcpu: 0.04045, memory: 0.00442 },
+  { arch: 'x86', label: 'x86', vcpu: 0.05056, memory: 0.00553 },
+] as const;
+
+/**
+ * 解析の実行先の EC2 の計算向けのマシン（Linux・共有・東京・$ / 時間。Price List AmazonEC2 2026-11-24）。reserved は
+ * リザーブドインスタンス（standard・1 年・前払いなし）。xlarge は EC2 Instance Savings Plans（1 年・前払いなし）と同じ値。
+ */
+export const EC2 = [
+  {
+    type: 'c7g.xlarge',
+    cpu: 'Graviton3',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.1819,
+    reserved: 0.12,
+  },
+  {
+    type: 'c7g.2xlarge',
+    cpu: 'Graviton3',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.3638,
+    reserved: 0.2399,
+  },
+  {
+    type: 'c8g.xlarge',
+    cpu: 'Graviton4',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.20012,
+    reserved: 0.13196,
+  },
+  {
+    type: 'c8g.2xlarge',
+    cpu: 'Graviton4',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.40024,
+    reserved: 0.26392,
+  },
+  {
+    type: 'c7i.xlarge',
+    cpu: 'Intel',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.2247,
+    reserved: 0.14818,
+  },
+  {
+    type: 'c7i.2xlarge',
+    cpu: 'Intel',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.4494,
+    reserved: 0.29635,
+  },
+  {
+    type: 'c7a.xlarge',
+    cpu: 'AMD',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.2584,
+    reserved: 0.1704,
+  },
+  {
+    type: 'c7a.2xlarge',
+    cpu: 'AMD',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.5168,
+    reserved: 0.3408,
+  },
+] as const;
+
+/** EC2 の型からプランの id（c7g.xlarge → ec2-c7g-xlarge）。 */
+export const ec2PlanId = (type: string): string =>
+  `ec2-${type.replace('.', '-')}`;
 
 /** どのプランにも同じ文（AWS はサービスごとのプランに分けて持つ。D-20 V-6・D-24）。 */
 const common = {
@@ -242,6 +327,12 @@ export const aws: PriceBookInput = {
     savingsPlanPrices: {
       url: 'https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/20261121004806/ap-northeast-1/index.json',
       retrievedAt: '2026-11-22',
+    },
+    // 解析の実行先の EC2・Fargate（2026-11-25 取得。D-247）。版（publicationDate）: AmazonECS 2026-11-11・AmazonEC2 2026-11-24
+    ecsPrices: { ...priceList('AmazonECS'), retrievedAt: ANALYSIS_R },
+    ec2Prices: {
+      url: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv',
+      retrievedAt: ANALYSIS_R,
     },
     savingsPlans: commitSrc(
       'https://docs.aws.amazon.com/savingsplans/latest/userguide/what-is-savings-plans.html',
@@ -1598,6 +1689,72 @@ export const aws: PriceBookInput = {
         },
       ],
     },
+    // ---- 解析の実行先（棋譜解析。D-247・prd/17 §5.6）。ECS の Fargate と EC2 の計算向けのマシン ----
+    ...FARGATE.map((f): PlanInput => ({
+      id: `fargate-${f.arch}`,
+      service: 'fargate',
+      ...common,
+      name: `ECS on Fargate（Linux・${f.label}）`,
+      sourceIds: ['ecsPrices'],
+      notes: [
+        'タスクが動いている間の vCPU とメモリを秒単位で課金します（料金表の単位は時間）。タスクのエフェメラルストレージは 20 GB まで込みで、それを超える分（$0.000133 / GB 時間）は数えません',
+        'Compute Savings Plans の Fargate の単価は確かめていないので、確約は入れていません',
+      ],
+      meters: [
+        {
+          id: 'vcpu',
+          label: `vCPU の時間（Fargate: ${f.label}）`,
+          resource: 'cpu-hours',
+          unit: 'hour',
+          premise: `Fargate（Linux・${f.label}・東京）は、タスクの vCPU 1 つにつき 1 時間 $${f.vcpu} です`,
+          pricing: { model: 'flat', per: 1, unitPrice: f.vcpu },
+          sourceIds: ['ecsPrices'],
+        },
+        {
+          id: 'memory',
+          label: `メモリの時間（Fargate: ${f.label}）`,
+          resource: 'memory-gb-hours',
+          unit: 'gb-hour',
+          premise: `Fargate（Linux・${f.label}・東京）は、タスクのメモリ 1 GB につき 1 時間 $${f.memory} です`,
+          pricing: { model: 'flat', per: 1, unitPrice: f.memory },
+          sourceIds: ['ecsPrices'],
+        },
+      ],
+    })),
+    ...EC2.map((m): PlanInput => ({
+      id: ec2PlanId(m.type),
+      service: 'ec2',
+      ...common,
+      name: `EC2 ${m.type}（Linux・${m.cpu}・${m.vcpu} vCPU・メモリ ${m.memoryGiB} GiB）`,
+      sourceIds: ['ec2Prices'],
+      notes: [
+        'ディスク（EBS）の料金は確かめていないので数えません',
+        '3 年の確約・一部前払い・全額前払いは入れていません（確約は 1 年・前払いなしだけ。D-97）',
+      ],
+      commitments: [
+        {
+          id: 'reserved-instance',
+          label: `リザーブドインスタンス（EC2: ${m.type}・1 年・前払いなし）`,
+          kind: 'instance',
+          termMonths: 12,
+          meterIds: ['instance'],
+          payments: [{ payment: 'no-upfront', hourly: m.reserved }],
+          premise: `EC2 の ${m.type}（Linux・東京）のリザーブドインスタンス（standard・1 年・前払いなし）は 1 時間 $${m.reserved} です（オンデマンド $${m.onDemand}）。同じ種類のインスタンスの時間の料金だけを割り引き、取り消せず、使わなくても期間中は課金されます`,
+          sourceIds: ['ec2Prices'],
+        },
+      ],
+      meters: [
+        {
+          id: 'instance',
+          label: `マシンの稼働（EC2: ${m.type}）`,
+          resource: 'instance-hours',
+          unit: 'hour',
+          premise: `EC2 の ${m.type}（Linux・共有のテナンシー・東京）は、動いている間 1 時間 $${m.onDemand} です（オンデマンド）`,
+          pricing: { model: 'flat', per: 1, unitPrice: m.onDemand },
+          sourceIds: ['ec2Prices'],
+        },
+      ],
+    })),
     {
       // 東京からインターネットへの転送（D-52）。Lambda の関数から外（他の事業者の R2）へ送るデータ。
       // Lambda の料金ページ: 関数の外のリージョンとのデータの出入りは EC2 のデータ転送の料金
@@ -1612,6 +1769,24 @@ export const aws: PriceBookInput = {
           premise:
             'Lambda の関数がリージョンの外（他の事業者など）とやり取りするデータは、EC2 のデータ転送の料金で課金されます（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
           sourceIds: ['lambdaPricing', 'dataTransferPrices'],
+        },
+        {
+          // 解析の実行先の EC2・Fargate から、別の事業者のアプリの API へ結果を送る（D-247）
+          id: 'ec2-out',
+          premise:
+            'EC2 のインスタンスからインターネットへ送るデータは、EC2 のデータ転送の料金です（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）。Fargate のタスクから送るデータも同じ料金と読みました',
+          interpretation: {
+            adopted:
+              'Fargate のタスクから外へ送るデータも EC2 のデータ転送の料金で数えます',
+            rejected: [
+              {
+                reading: 'Fargate の外への転送は数えない',
+                reason:
+                  'Fargate の料金の表（Price List）に転送の行は無く、AWS 共通の Data Transfer Out が当たると読みました',
+              },
+            ],
+          },
+          sourceIds: ['ec2DataTransfer', 'dataTransferPrices'],
         },
         {
           // SPA の API を AWS に置き、静的は他の事業者から配る形（D-65。2026-11-02 に原文で確認）

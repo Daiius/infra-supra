@@ -1,3 +1,9 @@
+import {
+  ANALYSIS_MACHINE_TARGETS,
+  ANALYSIS_MACHINES,
+  ANALYSIS_TASK_TARGETS,
+  type CpuFamily,
+} from './analysis.ts';
 // 構成の短い説明（始める画面のフレーバー。D-41）。構成の id（STACK_DEFS）で引く。
 // 事実として間違ってはいないが、それだけで選ぶと外れうる書き方にしている（何が効くかは遊んで確かめる）。
 // 数値は書かない。事実の根拠は同じ catalog のデータ（プランの制限・規約・SLA・転送量・席の料金）にある。
@@ -293,6 +299,42 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
 const SHARED_WITH_OPENNEXT =
   /^aws:(db|cdnPlan|ogp|apiCache|files):|^aws:images:(none|resize)$/;
 
+/** 台で借りるマシンの系列ごとの一言（数値を書かない）。 */
+const MACHINE_FLAVOR: Record<CpuFamily, string> = {
+  'x86-core': '一つの処理の速い物理コアのマシン',
+  'arm-core': '安めの Arm のマシン',
+  'x86-thread': '広く使われる Intel・AMD のマシン',
+  'vps-core': '月額が固定のサーバー',
+  serverless: 'マシン',
+};
+
+/** 解析の Fargate・台で借りるマシンとその併用の説明（D-247）。 */
+const EXTRA_ANALYSIS_FLAVOR: Record<string, string> = Object.fromEntries(
+  [
+    ...ANALYSIS_TASK_TARGETS.map((t): [string, string, string] => [
+      'aws',
+      t,
+      'キューに合わせて解析のコンテナを増やし減らし、動いている間だけ払います',
+    ]),
+    ...ANALYSIS_MACHINE_TARGETS.filter(
+      (t) => t !== 'worker-vps-2gb' && t !== 'worker-vps-4gb',
+    ).map((t): [string, string, string] => {
+      const m = ANALYSIS_MACHINES[t]!;
+      return [
+        m.provider,
+        t,
+        `${MACHINE_FLAVOR[m.cpu]}を解析に一台借ります。混む時間に待ちが出ます`,
+      ];
+    }),
+  ].flatMap(([p, t, text]) => [
+    [`${p}:analysis:${t}`, text],
+    [
+      `${p}:analysis:hybrid-${t}`,
+      '端末ですぐ簡易解析をし、詳細解析はこの実行先で。費用は両方にかかります',
+    ],
+  ]),
+);
+
 export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   ...BASE_COMPONENT_FLAVOR,
   ...Object.fromEntries(
@@ -430,6 +472,8 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'Next.js の開発元の関数。有料のプランが要り、動いている時間とメモリで払います',
   'vercel:analysis:hybrid-fn-vercel':
     '端末ですぐ簡易解析をし、詳細解析は Next.js の開発元の関数で。費用は両方にかかります',
+  // 解析の Fargate・台で借りるマシン（D-247・prd/17 §5.6）。数値（型の名前の数字を含む）は書かない
+  ...EXTRA_ANALYSIS_FLAVOR,
   // Bunny（D-98）。転送の安い従量の CDN を、画像の配信と前段に差す
   'bunny:images:bunny-images':
     '転送の安い CDN から配り、変換は月額で使い放題。大きな画像の多いサイトに向きます',

@@ -42,7 +42,12 @@ import {
   type ConnectionRule,
 } from './connections.ts';
 import { EMAIL_PARTS } from './email.ts';
-import { ANALYSIS_PARTS } from './analysis.ts';
+import {
+  ANALYSIS_MACHINE_TARGETS,
+  ANALYSIS_MACHINES,
+  ANALYSIS_PARTS,
+  ANALYSIS_TASK_TARGETS,
+} from './analysis.ts';
 
 const PLATFORMS: Platform[] = ['cloudflare', 'vercel', 'sakura', 'aws'];
 
@@ -137,6 +142,26 @@ const PAIRS_ADDED_ANALYSIS_FN = Object.entries(FN_HOSTS).flatMap(([p, hosts]) =>
   hosts.map((h) => `${h} × analysis × ${p}`),
 );
 
+/**
+ * 解析の実行先（prd/17 §5.6・D-247）で足した組: Fargate・EC2・Compute Engine・さくらの大きい VPS がアプリの API を呼ぶ。
+ * 同じ事業者の土台にも別の実行先として差す（own の選択肢。他の事業者の部品ではないので、ここには OpenNext × AWS だけが増える）。
+ */
+const PAIRS_ADDED_ANALYSIS_MACHINE = ['aws-opennext × analysis × aws'];
+/** Fargate・台で借りるマシンの部品の id（部品の順のまま）と差せる土台（同じ事業者の土台を除く）。 */
+const EXTRA_HOSTS = {
+  aws: 'aws-opennext,cloudflare,gcp,netlify,sakura,vercel',
+  gcp: 'aws,aws-opennext,cloudflare,netlify,sakura,vercel',
+  sakura: 'aws,aws-opennext,cloudflare,gcp,netlify,vercel',
+} as const;
+const EXTRA_COMPONENTS = [
+  ...ANALYSIS_TASK_TARGETS.map((t) => ['aws', t] as const),
+  ...ANALYSIS_MACHINE_TARGETS.filter(
+    (t) => t !== 'worker-vps-2gb' && t !== 'worker-vps-4gb',
+  ).map((t) => [ANALYSIS_MACHINES[t]!.provider, t] as const),
+].flatMap(([p, t]) =>
+  [t, `hybrid-${t}`].map((o) => `analysis ${p}:${o} → ${EXTRA_HOSTS[p]}`),
+);
+
 /** 移し替える前の、他の事業者の部品ごとの差せる土台とフレームワーク（部品の順のまま）。 */
 const COMPONENTS_BEFORE_RULES = [
   'images cloudflare:cf-images → aws,aws-opennext,gcp,netlify,vercel',
@@ -194,6 +219,8 @@ const COMPONENTS_BEFORE_RULES = [
       (o) => `analysis ${p}:${o} → ${hosts.join(',')}`,
     );
   }),
+  // Fargate・台で借りるマシンと、その併用（D-247）
+  ...EXTRA_COMPONENTS,
 ];
 
 /** 他の事業者の部品（土台の事業者と違う土台に差せるもの）。 */
@@ -218,6 +245,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
         ...PAIRS_ADDED_STAGE2D,
         ...PAIRS_ADDED_ANALYSIS,
         ...PAIRS_ADDED_ANALYSIS_FN,
+        ...PAIRS_ADDED_ANALYSIS_MACHINE,
       ].sort(),
     );
   });
@@ -294,7 +322,7 @@ describe('許した組（接続の規則から導く。D-114）', () => {
         }
   });
 
-  it('規則・送り出し・受け取りの項目の出典は URL と取得日を持つ（移し替える前の取得日のまま。段 2b で足した分は 2026-11-04）', () => {
+  it('規則・送り出し・受け取りの項目の出典は URL と取得日を持つ（移し替える前の取得日のまま。段 2b で足した分は 2026-11-04・解析の実行先の送り出しは 2026-11-25）', () => {
     for (const x of [...CONNECTION_RULES, ...OUTBOUND, ...INBOUND]) {
       expect(x.sources.length).toBeGreaterThan(0);
       for (const s of x.sources) {
@@ -304,6 +332,8 @@ describe('許した組（接続の規則から導く。D-114）', () => {
           '2026-11-02',
           '2026-11-03',
           '2026-11-04',
+          // 解析の実行先の EC2・Fargate・Compute Engine の送り出し（D-247）
+          '2026-11-25',
         ]).toContain(s.retrievedAt);
       }
     }

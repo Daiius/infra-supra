@@ -110,6 +110,11 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     /**
      * クラスの 1 件の処理の時間（CPU と壁時計時間・ms）をこの関数で決める（画像の変換の関数など、Workload が処理を持たないクラス。仮定）。
      */
+    /**
+     * 1 vCPU（関数は実行環境）の処理の速さの倍率（既定 1 = Workload の CPU の値が仮定した基準の速さ。D-247）。このノードでは
+     * クラスの 1 件の CPU を cpuSpeed で割り、壁時計時間はその CPU の減った分だけ短くする（待ちの時間は変えない）。
+     */
+    cpuSpeed: Pos.optional(),
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
     logs: LogsSchema,
     websocket: WebsocketSchema,
@@ -132,6 +137,16 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     /** 仕事の無いインスタンスを残す秒数（冷えた起動の割合に使う）。 */
     idleKeepSeconds: Pos.default(900),
     backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * 1 vCPU（関数は実行環境）の処理の速さの倍率（既定 1 = Workload の CPU の値が仮定した基準の速さ。D-247）。このノードでは
+     * クラスの 1 件の CPU を cpuSpeed で割り、壁時計時間はその CPU の減った分だけ短くする（待ちの時間は変えない）。
+     */
+    cpuSpeed: Pos.optional(),
+    /**
+     * 台数をキューの長さに合わせて増やし減らす型（ECS の Fargate。D-247）の目標の CPU 使用率。指定すると、アクティブなインスタンスの
+     * 時間を CPU で決まる分 ÷ この値にする（増やし減らしの遅れ・余裕の分。仮定）。省略は Cloud Run の型（上の式のまま）。
+     */
+    targetUtilization: z.number().finite().positive().max(1).optional(),
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
     logs: LogsSchema,
     websocket: WebsocketSchema,
@@ -312,6 +327,13 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * このホストでは受けて書くだけの CPU にする。DB の問い合わせはそのクラスのまま数える。
      */
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
+    /**
+     * 1 vCPU（関数は実行環境）の処理の速さの倍率（既定 1 = Workload の CPU の値が仮定した基準の速さ。D-247）。このノードでは
+     * クラスの 1 件の CPU を cpuSpeed で割り、壁時計時間はその CPU の減った分だけ短くする（待ちの時間は変えない）。
+     */
+    cpuSpeed: Pos.optional(),
+    /** 時間で課金するマシン（EC2・Compute Engine。D-247）。月の時間（instance-hours）を 1 台ぶん数える。省略は月額の VPS。 */
+    billedHourly: z.boolean().optional(),
     /** リアルタイムの接続をこのホストの常駐のプロセスで保つ（D-240）。メモリに同時接続のピーク × kbPerConnection を足す。 */
     websocket: WebsocketSchema,
   }),

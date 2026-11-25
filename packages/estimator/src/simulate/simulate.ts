@@ -226,6 +226,35 @@ function ttlMissBySource(
  * リアルタイムの接続を保つノード（config の websocket。D-240）は、接続の長さを上限ごとのつなぎ直しに分けて自分の時間に数え、
  * 次のノードへは接続を保たない短い 1 件（壁時計 = CPU）として、つなぎ直しの数だけ渡す。
  */
+/**
+ * 処理の速さの倍率（config の cpuSpeed。D-247）を 1 件の時間に当てる。CPU を倍率で割り、壁時計時間は減った CPU の分だけ短くする
+ * （待ちの時間は変えない）。倍率が無い・1 なら流れをそのまま返す。
+ */
+function withCpuSpeed(node: ArchNode, f: ClassFlow): ClassFlow {
+  const speed = 'cpuSpeed' in node.config ? node.config.cpuSpeed : undefined;
+  if (speed === undefined || speed === 1) return f;
+  const p = f.perRequest;
+  const fast = (cpu: number, wall: number) => ({
+    cpuMs: cpu / speed,
+    wallMs: wall - cpu + cpu / speed,
+  });
+  const main = fast(p.cpuMs, p.wallMs);
+  return {
+    ...f,
+    perRequest: {
+      ...p,
+      ...main,
+      maxCpuMs: p.maxCpuMs / speed,
+      maxBy: Object.fromEntries(
+        Object.entries(p.maxBy).map(([inv, m]) => [
+          inv,
+          fast(m!.cpuMs, m!.wallMs),
+        ]),
+      ) as ClassFlow['perRequest']['maxBy'],
+    },
+  };
+}
+
 function consume(
   node: ArchNode,
   cls: RequestClass,
@@ -235,6 +264,7 @@ function consume(
   hostAcc: NodeAcc,
   src: number[],
 ): ClassFlow {
+  f = withCpuSpeed(node, f);
   const ws =
     cls === 'realtime-connect' && 'websocket' in node.config
       ? node.config.websocket
@@ -657,6 +687,10 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
           (1 - node.config.freeQueryShare),
       );
       break;
+    case 'host':
+      // 時間で課金するマシン（EC2・Compute Engine。D-247）は 1 台の月の時間
+      if (node.config.billedHourly) add(u, 'instance-hours', HOURS_PER_MONTH);
+      break;
     case 'ci-build':
       // 静的なページのビルドし直し（D-68）。経路を持たない
       add(u, 'build-minutes', w.builds.minutes * node.config.cpusPerBuild);
@@ -823,11 +857,13 @@ export function simulateResources(
       const x = (u.busyMs * b.share) / 1000 / s;
       // 1 件以上を処理しているインスタンスの数の平均（1 を超えうる）。到着がポアソンなら 1 件以上を処理している時間の割合は
       // 1 − e^(−x)。同時実行の上限（x / concurrency）と、CPU を使い切る分（CPU 秒 / vCPU）より少なくはならない
-      const active = Math.max(
-        -Math.expm1(-x),
-        x / c.concurrency,
-        (acc.cpuMs * b.share) / 1000 / s / c.vcpu,
-      );
+      // 台数をキューに合わせて増やし減らす型（Fargate。D-247）は、CPU で決まる分を目標の使用率で割る（余裕の分）
+      const active =
+        Math.max(
+          -Math.expm1(-x),
+          x / c.concurrency,
+          (acc.cpuMs * b.share) / 1000 / s / c.vcpu,
+        ) / (c.targetUtilization ?? 1);
       activeHours += active * b.hours;
       idleHours += Math.max(0, c.minInstances - active) * b.hours;
       // 届いたリクエストのうち、直前の idleKeepSeconds に 1 件も届いていない（インスタンスが無い）割合。区間の件数の割合で重みづけ

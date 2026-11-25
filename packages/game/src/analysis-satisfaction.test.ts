@@ -316,6 +316,36 @@ describe('ゲームの月の満足度', () => {
     );
   });
 
+  it('台で借りるマシン（D-247）は worker の滞留で判定し、Fargate は滞留しない', () => {
+    // EC2・Compute Engine のマシンは worker の箱（host）で、ピークの比から滞留を判定する（VPS の worker と同じ式）
+    const ec2 = play(at(SMALL, true), PRO, 'ec2-c7g-2xlarge');
+    expect(ec2.satisfaction.stages.analysisSpeed).not.toBe('good');
+    expect(ec2.satisfaction.reasons.analysisSpeed).toMatch(
+      /ピークの時間帯の滞留の待ち|追いつかず/,
+    );
+    // Fargate は増やし減らすので滞留せず、局面ごとはサーバーレスと同じ速さ
+    expect(
+      play(at(SMALL, true), PRO, 'fargate-arm').satisfaction.stages
+        .analysisSpeed,
+    ).toBe('good');
+  });
+
+  it('速さの係数（D-247）: 1 件の CPU の分だけを割り、待ちは変えない', () => {
+    const base = serverRunSec(shape, 'game', Infinity);
+    const fast = serverRunSec(shape, 'game', Infinity, 2);
+    const cpuSec =
+      (shape.startupCpuMs + shape.itemsPerBatch * shape.itemCpuMs) / 1000;
+    expect(base - fast).toBeCloseTo(cpuSec / 2, 9);
+    // 物理コアの x86 のマシンは、同じ実行環境（基準）より 1 局が早く見える
+    expect(
+      judge('ec2-c7a-2xlarge', settings('game'), { vcpu: 8, peakRatio: 0 })
+        .serverSec!,
+    ).toBeLessThan(
+      judge('worker-vps-4gb', settings('game'), { vcpu: 8, peakRatio: 0 })
+        .serverSec!,
+    );
+  });
+
   it('解析の worker だけの遅くなる前提を見分ける', () => {
     expect(
       analysisOnlyThrottle({

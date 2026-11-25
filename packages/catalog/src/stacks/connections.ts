@@ -8,6 +8,8 @@
 import type { ArchitectureInput, Role } from 'estimator';
 import type { FrameworkId } from '../frameworks/index.ts';
 import { bill as awsBill } from './aws.ts';
+import { EC2, ec2PlanId, FARGATE } from '../providers/aws.ts';
+import { GCE, gcePlanId } from '../providers/gcp.ts';
 import type {
   ComponentOption,
   ComponentProvider,
@@ -776,7 +778,7 @@ export const CONNECTION_RULES: readonly ConnectionRule[] = [
     },
     verdict: 'ok',
     basis:
-      '解析の関数（Lambda・Cloud Run・Workers・Vercel Functions）は外へ HTTPS で出られ、解析の結果をアプリの API（ブラウザが呼ぶのと同じ公開の HTTPS の口。認証のトークンを付ける）に送る（worker と同じ形）。' +
+      '解析の関数（Lambda・Cloud Run・Workers・Vercel Functions）・Fargate のタスク・EC2 と Compute Engine のマシン（D-247）は外へ HTTPS で出られ、解析の結果をアプリの API（ブラウザが呼ぶのと同じ公開の HTTPS の口。認証のトークンを付ける）に送る（worker と同じ形）。' +
       'DB には直接つながない（D1 のように実行環境の中（binding）からしか使えない DB があるので、DB の口を構成ごとに分けない）。' +
       '関数から外へ送るデータは送り手の事業者の送り出しの項目で数える。解析の仕事をどう起こすか（キュー・HTTP の呼び出し）の費用は数えない（KF-02）。往復の遅延は計算しない（CP-08）',
     sources: at('2026-11-02', [
@@ -1037,6 +1039,27 @@ export const OUTBOUND: readonly TransferItem[] = [
       ...at('2026-11-02', ['https://aws.amazon.com/lambda/pricing/']),
     ],
   },
+  {
+    // 解析の実行先の Fargate・EC2 から、別の事業者のアプリの API へ結果を送る（D-247）
+    provider: 'aws',
+    planIds: [
+      ...FARGATE.map((f) => `fargate-${f.arch}`),
+      ...EC2.map((m) => ec2PlanId(m.type)),
+    ],
+    meter: {
+      idPrefix: 'aws',
+      name: 'AWS',
+      facts: ['ec2-out'],
+      billing: () =>
+        awsBill('data-transfer-out', { 'egress-gb': 'internet-out' }),
+    },
+    basis:
+      'EC2 のインスタンスから外へ送るデータは EC2 のデータ転送の料金（東京 → インターネット $0.114/GB・月 100 GB は無料）。Fargate のタスクも同じ料金と読んだ（Fargate の料金表に転送の行は無い）',
+    sources: at('2026-11-25', [
+      'https://aws.amazon.com/ec2/pricing/on-demand/',
+      'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/ap-northeast-1/index.json',
+    ]),
+  },
   // AWS の DB（DynamoDB・Aurora・RDS）から別の事業者（Vercel の関数・Cloudflare の Worker と Hyperdrive）へ返す応答（D-114 段 2・段 2b）。
   // ユーザーの決定（2026-11-03）でインターネットへの転送（Data Transfer Out）として数える。Vercel の関数と同じリージョンの扱い
   // （AWS のサービス間は $0）が公式に確かめられたら、AWS_DB_OUT_TO_INTERNET を false にすれば Vercel だけ課金なし（ノードを作らない）に
@@ -1109,6 +1132,25 @@ export const OUTBOUND: readonly TransferItem[] = [
       'https://cloud.google.com/run/pricing',
       'https://cloud.google.com/vpc/network-pricing',
     ]),
+  },
+  {
+    // 解析の実行先の Compute Engine から、別の事業者のアプリの API へ結果を送る（D-247）
+    provider: 'gcp',
+    planIds: GCE.map((m) => gcePlanId(m.type)),
+    meter: {
+      idPrefix: 'gcp',
+      name: 'Google Cloud',
+      facts: ['gce-outbound'],
+      billing: () => ({
+        accountId: 'gcp',
+        provider: 'gcp',
+        planId: 'internet-egress',
+        meters: { 'egress-gb': 'transfer' },
+      }),
+    },
+    basis:
+      'Compute Engine の VM から外へ送るデータは Premium Tier のインターネットへの転送（東京 → アジアは 1 TiB まで $0.12 / GiB）で数える',
+    sources: at('2026-11-25', ['https://cloud.google.com/vpc/network-pricing']),
   },
   {
     provider: 'sakura-vps',

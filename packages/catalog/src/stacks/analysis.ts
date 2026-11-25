@@ -13,6 +13,9 @@ import type { ArchitectureInput, WorkloadInput } from 'estimator';
 import { partOptions, transferNodes, type PartDef } from './connections.ts';
 import { vpsNode } from './sakura.ts';
 import { bill as awsBill, COMPUTE_MEMORY_GB } from './aws.ts';
+import { EC2, ec2PlanId } from '../providers/aws.ts';
+import { GCE, gcePlanId } from '../providers/gcp.ts';
+import { SAKURA_LARGE } from '../providers/sakura-vps.ts';
 import {
   RUN_CONCURRENCY,
   RUN_IDLE_KEEP_SECONDS,
@@ -34,13 +37,161 @@ export const ANALYSIS_FN_TARGETS = [
   'fn-vercel',
 ] as const;
 export type AnalysisFnTarget = (typeof ANALYSIS_FN_TARGETS)[number];
-export const ANALYSIS_TARGETS = [
+/** 動いている間だけ払う実行先（ECS の Fargate。キューの長さに合わせてタスクを増やし減らす。D-247）。 */
+export const ANALYSIS_TASK_TARGETS = ['fargate-arm', 'fargate-x86'] as const;
+export type AnalysisTaskTarget = (typeof ANALYSIS_TASK_TARGETS)[number];
+
+/**
+ * 1 vCPU あたりの解析の速さの系列（D-247）。x86-core: 物理コアの新しい x86（AMD の c7a）・arm-core: Arm の物理コア（Graviton・Axion）・
+ * x86-thread: SMT のスレッドの vCPU（Intel の c7i・c4、AMD の c3d・n2d、Fargate の x86）・vps-core: さくらの VPS の仮想コア・
+ * serverless: サーバーレスの実行環境（Lambda・Cloud Run・Workers・Vercel Functions）。
+ */
+export type CpuFamily =
+  'x86-core' | 'arm-core' | 'x86-thread' | 'vps-core' | 'serverless';
+/**
+ * 1 vCPU あたりの解析の速さ（物理コアの新しい x86 = 1。**ゲーム上の仮定で、実測ではない**。後で手元の実測に合わせて直す。D-247）。
+ * - SMT のスレッドは 1 コアを 2 つで分けるので、1 つあたり 0.6 とみた。
+ * - Arm の物理コアはコアを分けないが、評価関数（NNUE）の計算の SIMD の幅が x86（AVX2・AVX-512）より狭いので、控えめに 0.8 とみた。
+ * - さくらの VPS の仮想コアとサーバーレスの実行環境は、スレッドと同じ 0.6（今の 1 局面の重さの仮定の基準。ANALYSIS_CPU_BASE）。
+ */
+export const ANALYSIS_CPU_SPEED: Readonly<Record<CpuFamily, number>> = {
+  'x86-core': 1,
+  'arm-core': 0.8,
+  'x86-thread': 0.6,
+  'vps-core': 0.6,
+  serverless: 0.6,
+};
+/**
+ * 今の 1 局面の重さ（テンプレートの CPU の値。D-236）が仮定した速さの系列。ここを基準 1 として、ほかの系列の CPU を速さの比で割る
+ * （今の実行先の数え方は変わらない）。
+ */
+export const ANALYSIS_CPU_BASE: CpuFamily = 'serverless';
+/** 系列の速さの、基準（今の値）に対する倍率（estimator のノードの cpuSpeed）。 */
+export const cpuSpeedOf = (f: CpuFamily): number =>
+  ANALYSIS_CPU_SPEED[f] / ANALYSIS_CPU_SPEED[ANALYSIS_CPU_BASE];
+
+/** 台で借りるマシンの実行先の形（D-247）。 */
+export type AnalysisMachine = {
+  provider: 'aws' | 'gcp' | 'sakura';
+  /** 料金のプランの id（さくらは '8gb-tokyo' など）。 */
+  planId: string;
+  /** 選択肢の行の名前（系列。例: EC2 c7g（Graviton3・Arm））。 */
+  family: string;
+  /** 大きさの名前（例: 4 vCPU・8 GB）。 */
+  size: string;
+  vcpu: number;
+  memoryGB: number;
+  diskGB: number;
+  cpu: CpuFamily;
+};
+
+/** EC2・Compute Engine のマシンのディスク（GB。仮定。OS・エンジンと評価関数を置く大きさ。ディスクの料金は数えない）。 */
+export const ANALYSIS_MACHINE_DISK_GB = 30;
+/**
+ * EC2・Compute Engine のマシンの回線（Mbps。仮定）。解析の結果の送信は小さく、回線の判定に効かない大きさとして置いた
+ * （公式のネットワークの帯域の値は確かめていない）。
+ */
+export const ANALYSIS_MACHINE_LINE_MBPS = 1_000;
+
+const EC2_CPU: Record<string, { cpu: CpuFamily; name: string }> = {
+  Graviton3: { cpu: 'arm-core', name: 'Graviton3・Arm' },
+  Graviton4: { cpu: 'arm-core', name: 'Graviton4・Arm' },
+  Intel: { cpu: 'x86-thread', name: 'Intel' },
+  AMD: { cpu: 'x86-core', name: 'AMD・物理コア' },
+};
+const GCE_CPU: Record<string, { cpu: CpuFamily; name: string }> = {
+  'Axion（Arm）': { cpu: 'arm-core', name: 'Axion・Arm' },
+  Intel: { cpu: 'x86-thread', name: 'Intel' },
+  AMD: { cpu: 'x86-thread', name: 'AMD' },
+};
+
+/** 台で借りるマシンの実行先（id → 形）。さくらの VPS の worker（2GB・4GB は今までの worker）・EC2・Compute Engine。 */
+export const ANALYSIS_MACHINES: Readonly<Record<string, AnalysisMachine>> = {
+  ...Object.fromEntries(
+    [
+      { plan: '2gb', vcpu: 3, memoryGB: 2, diskGB: 100 },
+      { plan: '4gb', vcpu: 4, memoryGB: 4, diskGB: 200 },
+      ...SAKURA_LARGE,
+    ].map((l) => [
+      `worker-vps-${l.plan}`,
+      {
+        provider: 'sakura',
+        planId: `${l.plan}-tokyo`,
+        family: 'さくらの VPS',
+        size: `${l.plan.toUpperCase()}（${l.vcpu} コア）`,
+        vcpu: l.vcpu,
+        memoryGB: l.memoryGB,
+        diskGB: l.diskGB,
+        cpu: 'vps-core',
+      } satisfies AnalysisMachine,
+    ]),
+  ),
+  ...Object.fromEntries(
+    EC2.map((m) => {
+      const c = EC2_CPU[m.cpu]!;
+      return [
+        ec2PlanId(m.type),
+        {
+          provider: 'aws',
+          planId: ec2PlanId(m.type),
+          family: `EC2 ${m.type.split('.')[0]}（${c.name}）`,
+          size: `${m.type.split('.')[1]}（${m.vcpu} vCPU）`,
+          vcpu: m.vcpu,
+          memoryGB: m.memoryGiB,
+          diskGB: ANALYSIS_MACHINE_DISK_GB,
+          cpu: c.cpu,
+        } satisfies AnalysisMachine,
+      ];
+    }),
+  ),
+  ...Object.fromEntries(
+    GCE.map((m) => {
+      const c = GCE_CPU[m.cpu]!;
+      const [series, , n] = m.type.split('-');
+      return [
+        gcePlanId(m.type),
+        {
+          provider: 'gcp',
+          planId: gcePlanId(m.type),
+          family: `Compute Engine ${series}（${c.name}）`,
+          size: `standard-${n}（${m.vcpu} vCPU）`,
+          vcpu: m.vcpu,
+          memoryGB: m.memoryGiB,
+          diskGB: ANALYSIS_MACHINE_DISK_GB,
+          cpu: c.cpu,
+        } satisfies AnalysisMachine,
+      ];
+    }),
+  ),
+};
+/** 台で借りるマシンの実行先の id（並びは さくら・EC2・Compute Engine）。 */
+export const ANALYSIS_MACHINE_TARGETS: readonly string[] =
+  Object.keys(ANALYSIS_MACHINES);
+
+export const ANALYSIS_TARGETS: readonly string[] = [
   'same',
   ...ANALYSIS_FN_TARGETS,
   'worker-vps-2gb',
   'worker-vps-4gb',
-] as const;
-export type AnalysisTarget = (typeof ANALYSIS_TARGETS)[number];
+  ...ANALYSIS_TASK_TARGETS,
+  ...ANALYSIS_MACHINE_TARGETS.filter(
+    (t) => t !== 'worker-vps-2gb' && t !== 'worker-vps-4gb',
+  ),
+];
+export type AnalysisTarget = string;
+
+/**
+ * 実行先の型（D-247）: same（アプリと同じ実行環境）・per-call（件ごとに払うサーバーレス）・running（動いている間だけ払う Fargate）・
+ * machine（台で借りるマシン）。
+ */
+export type AnalysisTargetKind = 'same' | 'per-call' | 'running' | 'machine';
+export function analysisTargetKind(t: string): AnalysisTargetKind {
+  if ((ANALYSIS_FN_TARGETS as readonly string[]).includes(t)) return 'per-call';
+  if ((ANALYSIS_TASK_TARGETS as readonly string[]).includes(t))
+    return 'running';
+  if (ANALYSIS_MACHINES[t]) return 'machine';
+  return 'same';
+}
 
 /** 解析の置き方（D-245）。server: サーバーだけ・client: 利用者の端末だけ・hybrid: 端末で簡易解析、サーバーで詳細解析。 */
 export const ANALYSIS_MODES = ['server', 'client', 'hybrid'] as const;
@@ -99,6 +250,44 @@ export const analysisFnTarget = (
     ? (t as AnalysisFnTarget)
     : undefined;
 };
+
+/** 動いている間だけ払う実行先（Fargate。併用の詳細解析も含む。そうでなければ undefined）。 */
+export const analysisTaskTarget = (
+  id: string | undefined,
+): AnalysisTaskTarget | undefined => {
+  const t = analysisPlacementOf(id).target;
+  return (ANALYSIS_TASK_TARGETS as readonly string[]).includes(t ?? '')
+    ? (t as AnalysisTaskTarget)
+    : undefined;
+};
+
+/** 台で借りるマシンの実行先の id（worker の VPS を含む。併用の詳細解析も含む。そうでなければ undefined）。 */
+export const analysisMachine = (id: string | undefined): string | undefined => {
+  const t = analysisPlacementOf(id).target;
+  return t !== undefined && ANALYSIS_MACHINES[t] ? t : undefined;
+};
+
+/** Fargate のタスクの形（ARM・x86 で同じ大きさ。仮定）。 */
+export const FARGATE_TASK = { vcpu: 2, memoryGB: 4 } as const;
+/**
+ * Fargate のタスクを増やし減らす目標の CPU 使用率（仮定）。キューの長さで台数を合わせる遅れと余裕の分だけ、CPU で決まる時間より
+ * 長く動くとみる（estimator の container の targetUtilization）。タスクの起動の待ち（数十秒）は解析の速さに数えない。
+ */
+export const FARGATE_TARGET_UTILIZATION = 0.7;
+
+const TASK_CPU: Record<AnalysisTaskTarget, CpuFamily> = {
+  'fargate-arm': 'arm-core',
+  'fargate-x86': 'x86-thread',
+};
+
+/** 置き場のサーバーの解析の 1 vCPU の速さの倍率（今の値の基準に対する。cpuSpeedOf）。端末・同じ実行環境・サーバーレスは 1。 */
+export function analysisCpuSpeed(id: string | undefined): number {
+  const m = analysisMachine(id);
+  if (m) return cpuSpeedOf(ANALYSIS_MACHINES[m]!.cpu);
+  const t = analysisTaskTarget(id);
+  if (t) return cpuSpeedOf(TASK_CPU[t]);
+  return 1;
+}
 
 /** サーバーが解析するか（端末だけの置き場は解析しない）。 */
 export const serverAnalyzes = (id: string | undefined): boolean =>
@@ -256,7 +445,11 @@ export function analysisTargetName(
   if (target === 'same') return SERVICE[platform];
   if (target === 'worker-vps-2gb' || target === 'worker-vps-4gb')
     return `さくらの VPS ${target.slice(-3).toUpperCase()}（解析の worker）`;
-  return ANALYSIS_FN[target].service;
+  const m = ANALYSIS_MACHINES[target];
+  if (m) return `${m.family} ${m.size}`;
+  if ((ANALYSIS_TASK_TARGETS as readonly string[]).includes(target))
+    return ANALYSIS_TASK[target as AnalysisTaskTarget].service;
+  return ANALYSIS_FN[target as AnalysisFnTarget].service;
 }
 
 /** 別の事業者のサーバーレスの部品（どの土台にも差せる。同じ事業者の土台では「同じ実行環境」と重なるので出さない）。 */
@@ -283,6 +476,71 @@ const hybridWorkerPart = (p: PartDef): PartDef => ({
   label: `端末で簡易解析・${analysisTargetName(p.id as AnalysisTarget, 'sakura')}で詳細解析`,
   note: `${HYBRID_PREFIX}${p.note}`,
 });
+
+/** Fargate の実行先（D-247）。 */
+export const ANALYSIS_TASK: Record<
+  AnalysisTaskTarget,
+  { service: string; note: string }
+> = {
+  'fargate-arm': {
+    service: 'ECS on Fargate（ARM）',
+    note: `AWS の ECS で、解析のタスク（ARM・${FARGATE_TASK.vcpu} vCPU・メモリ ${FARGATE_TASK.memoryGB} GB）をキューの長さに合わせて増やし減らします。動いている間の vCPU とメモリの時間を払い、評価関数を読み込んだまま続けて解析できます。滞らない代わりに、解析の量だけ費用が増えます`,
+  },
+  'fargate-x86': {
+    service: 'ECS on Fargate（x86）',
+    note: `AWS の ECS で、解析のタスク（x86・${FARGATE_TASK.vcpu} vCPU・メモリ ${FARGATE_TASK.memoryGB} GB）をキューの長さに合わせて増やし減らします。動いている間の vCPU とメモリの時間を払い、評価関数を読み込んだまま続けて解析できます。滞らない代わりに、解析の量だけ費用が増えます`,
+  },
+};
+
+const machineNote = (m: AnalysisMachine) =>
+  `${m.family} の ${m.size}（メモリ ${m.memoryGB} GB）を解析の worker に 1 台置きます。` +
+  (m.provider === 'sakura'
+    ? '費用は月額の定額です。'
+    : '費用は動いている時間の従量（台を止めないので月の時間ぶん）で、1 年の確約で下がります。ディスクの料金は数えません。') +
+  'ピークに CPU が埋まると解析が滞ります。自前運用の維持の工数と偶発的な障害（1 台構成）が加わります';
+
+/** Fargate・台で借りるマシンの部品（どの土台にも差す。同じ事業者の土台は own で足す。D-247）。 */
+const extraPart = (target: string, hybrid: boolean): PartDef => {
+  const m = ANALYSIS_MACHINES[target];
+  const task = ANALYSIS_TASK[target as AnalysisTaskTarget];
+  const name = m ? `${m.family} ${m.size}` : task.service;
+  const note = m ? machineNote(m) : task.note;
+  return {
+    id: analysisPlacementId(hybrid ? 'hybrid' : 'server', target),
+    slot: 'analysis',
+    platform: m ? m.provider : 'aws',
+    role: 'compute',
+    accepts: [],
+    attachesTo: ['compute'],
+    as: target,
+    label: hybrid ? `端末で簡易解析・${name}で詳細解析` : name,
+    note: `${hybrid ? HYBRID_PREFIX : ''}${note}。${FN_ELSEWHERE_NOTE}`,
+    premiseRefs: m
+      ? [
+          `host:cpu:${ANALYSIS_WORKER_NODE_ID}`,
+          `host:memory:${ANALYSIS_WORKER_NODE_ID}`,
+        ]
+      : [],
+  };
+};
+
+/** 同じ事業者の土台にも差す選択肢（Amplify に EC2・Fargate、Cloud Run に Compute Engine、さくらの VPS に大きい VPS）。 */
+const ownOption = (p: PartDef): ComponentOption => ({
+  id: p.id,
+  slot: p.slot,
+  platform: p.platform,
+  label: p.label,
+  note: p.note,
+  premiseRefs: p.premiseRefs,
+});
+
+/** Fargate と、今までの worker（2GB・4GB）でない台で借りるマシン。 */
+const EXTRA_TARGETS: readonly string[] = [
+  ...ANALYSIS_TASK_TARGETS,
+  ...ANALYSIS_MACHINE_TARGETS.filter(
+    (t) => t !== 'worker-vps-2gb' && t !== 'worker-vps-4gb',
+  ),
+];
 
 /** 同じ事業者の別の名前の土台（AWS の Lambda は OpenNext の構成の関数と重なる）は、別の事業者の部品を差さない。 */
 const fnHosts = (o: ComponentOption): ComponentOption => ({
@@ -348,6 +606,13 @@ export const ANALYSIS_COMPONENTS: readonly ComponentOption[] = [
     ...partOptions(fnPart(t, false)).map(fnHosts),
     ...partOptions(fnPart(t, true)).map(fnHosts),
   ]),
+  // Fargate・台で借りるマシン（D-247）。同じ事業者の土台でも別の実行先なので、own の選択肢も足す
+  ...EXTRA_TARGETS.flatMap((t) =>
+    [false, true].flatMap((hybrid) => {
+      const p = extraPart(t, hybrid);
+      return [ownOption(p), ...partOptions(p)];
+    }),
+  ),
 ];
 
 /** 別の事業者のサーバーレスの実行先のノード（id は ANALYSIS_FN_NODE_ID。構成に 1 つだけ）。 */
@@ -426,6 +691,74 @@ function fnNode(target: AnalysisFnTarget): ArchNodeIn {
         },
       };
   }
+}
+
+/** Fargate の解析のタスクのノード（id は ANALYSIS_FN_NODE_ID。D-247）。 */
+function taskNode(target: AnalysisTaskTarget): ArchNodeIn {
+  return {
+    id: ANALYSIS_FN_NODE_ID,
+    role: 'compute',
+    label: `${ANALYSIS_TASK[target].service}（解析）`,
+    config: {
+      kind: 'container',
+      vcpu: FARGATE_TASK.vcpu,
+      memoryGB: FARGATE_TASK.memoryGB,
+      // 1 vCPU で 1 件を解析する（エンジンは 1 件に 1 スレッド。仮定）
+      concurrency: FARGATE_TASK.vcpu,
+      minInstances: 0,
+      targetUtilization: FARGATE_TARGET_UTILIZATION,
+      cpuSpeed: cpuSpeedOf(TASK_CPU[target]),
+    },
+    billing: awsBill(target, {
+      'cpu-hours': 'vcpu',
+      'memory-gb-hours': 'memory',
+    }),
+  };
+}
+
+/** 台で借りるマシンのノード（2GB・4GB の さくらの VPS は今までの workerNode。D-247）。 */
+function machineNode(target: string): ArchNodeIn {
+  if (target === 'worker-vps-2gb') return workerNode('2gb');
+  if (target === 'worker-vps-4gb') return workerNode('4gb');
+  const m = ANALYSIS_MACHINES[target]!;
+  const speed = cpuSpeedOf(m.cpu);
+  return {
+    id: ANALYSIS_WORKER_NODE_ID,
+    role: 'compute',
+    label: `${m.family} ${m.size}（解析の worker）`,
+    config: {
+      kind: 'host',
+      vcpu: m.vcpu,
+      memoryGB: m.memoryGB,
+      diskGB: m.diskGB,
+      lineMbps: m.provider === 'sakura' ? 100 : ANALYSIS_MACHINE_LINE_MBPS,
+      residentMemoryGB: ANALYSIS_WORKER_RESIDENT_GB,
+      dbCpuMsPerQuery: 0,
+      imageTransformCpuMs: 0,
+      otherDiskGB: ANALYSIS_WORKER_DISK_GB,
+      proxyCpuMsPerRequest: 0,
+      storesImages: false,
+      storesDb: false,
+      ...(speed !== 1 ? { cpuSpeed: speed } : {}),
+      ...(m.provider === 'sakura' ? {} : { billedHourly: true }),
+    },
+    billing:
+      m.provider === 'aws'
+        ? awsBill(m.planId, { 'instance-hours': 'instance' })
+        : m.provider === 'gcp'
+          ? {
+              accountId: 'gcp',
+              provider: 'gcp',
+              planId: m.planId,
+              meters: { 'instance-hours': 'instance' },
+            }
+          : {
+              accountId: 'sakura',
+              provider: 'sakura-vps',
+              planId: m.planId,
+              meters: { 'egress-gb': 'transfer' },
+            },
+  };
 }
 
 /** worker の VPS のノード（DB・画像を置かない・nginx を通さない）。 */
@@ -516,9 +849,14 @@ export function applyAnalysis(
     delete routes['api-async'];
     return { ...arch, routes };
   }
-  const plan = analysisWorkerPlan(choice);
+  const machine = analysisMachine(choice);
   const fnTarget = analysisFnTarget(choice);
-  if (plan === undefined && fnTarget === undefined) {
+  const taskTarget = analysisTaskTarget(choice);
+  if (
+    machine === undefined &&
+    fnTarget === undefined &&
+    taskTarget === undefined
+  ) {
     // アプリの処理がキューから起こせない（Amplify の SSR）なら、同じアカウントの別の関数で解析し、DB へは API と同じ先に書く
     const app = arch.nodes.find((n) => api.includes(n.id) && isAppCompute(n));
     const fn = app && asyncComputeFor(app);
@@ -531,7 +869,11 @@ export function applyAnalysis(
     return { ...arch, nodes: withOrigin(arch.nodes), routes };
   }
   // worker・別の事業者のサーバーレス（D-245）: 解析は別のノード、結果はアプリの API（同じ経路）に送り、アプリの処理は受けて書くだけ
-  const worker = plan ? workerNode(plan) : fnNode(fnTarget!);
+  const worker = machine
+    ? machineNode(machine)
+    : taskTarget
+      ? taskNode(taskTarget)
+      : fnNode(fnTarget!);
   const onApi = new Set(api);
   const out = transferNodes(
     worker,

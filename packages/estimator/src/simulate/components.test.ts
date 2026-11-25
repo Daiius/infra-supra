@@ -1480,3 +1480,97 @@ describe('リアルタイムの接続の長さ・ファンアウト・同時接�
     );
   });
 });
+
+describe('処理の速さの倍率・目標の使用率・時間で課金するマシン（D-247）', () => {
+  const n = w.classes.api.count;
+  const p = w.classes.api.perRequest;
+  const fn = (cpuSpeed?: number) => ({
+    id: 'f',
+    label: 'f',
+    config: {
+      kind: 'function' as const,
+      memoryGB: 1,
+      concurrency: 1,
+      ...(cpuSpeed !== undefined ? { cpuSpeed } : {}),
+    },
+  });
+
+  it('cpuSpeed: CPU を倍率で割り、壁時計時間は減った CPU の分だけ短くなる（待ちは変えない）', () => {
+    const base = sim([fn()], { api: ['f'] }).f!;
+    const fast = sim([fn(2)], { api: ['f'] }).f!;
+    expect(fast.resources['cpu-ms']).toBeCloseTo(
+      base.resources['cpu-ms']! / 2,
+      6,
+    );
+    expect(fast.busyMs).toBeCloseTo(base.busyMs - (n * p.cpuMs) / 2, 6);
+    expect(fast.maxCpuMsPerRequest).toBeCloseTo(base.maxCpuMsPerRequest / 2, 9);
+    // 倍率 1 は省略と同じ
+    expect(sim([fn(1)], { api: ['f'] }).f!).toEqual(base);
+  });
+
+  it('cpuSpeed はホストの CPU の使用率にも効く', () => {
+    const host = (cpuSpeed?: number) => ({
+      id: 'h',
+      label: 'h',
+      config: {
+        kind: 'host' as const,
+        vcpu: 2,
+        memoryGB: 4,
+        diskGB: 50,
+        lineMbps: 100,
+        residentMemoryGB: 0,
+        dbCpuMsPerQuery: 0,
+        imageTransformCpuMs: 0,
+        ...(cpuSpeed !== undefined ? { cpuSpeed } : {}),
+      },
+    });
+    const base = sim([host()], { api: ['h'] }).h!;
+    const fast = sim([host(4)], { api: ['h'] }).h!;
+    expect(fast.host!.peakCores).toBeCloseTo(base.host!.peakCores / 4, 9);
+  });
+
+  it('targetUtilization: アクティブな時間を目標の使用率で割る（省略は Cloud Run の型のまま）', () => {
+    const node = (extra: Record<string, unknown> = {}) => ({
+      id: 'r',
+      label: 'r',
+      config: {
+        kind: 'container' as const,
+        vcpu: 1,
+        memoryGB: 0.5,
+        concurrency: 1,
+        ...extra,
+      },
+    });
+    const base = sim([node()], { api: ['r'] }).r!;
+    const scaled = sim([node({ targetUtilization: 0.5 })], { api: ['r'] }).r!;
+    expect(scaled.resources['cpu-hours']).toBeCloseTo(
+      base.resources['cpu-hours']! * 2,
+      9,
+    );
+    expect(base.resources['cpu-hours']).toBeGreaterThan(0);
+  });
+
+  it('billedHourly: 時間で課金するマシンは 1 台の月の時間を数え、省略（月額の VPS）は数えない', () => {
+    const host = (billedHourly?: boolean) => ({
+      id: 'h',
+      label: 'h',
+      config: {
+        kind: 'host' as const,
+        vcpu: 2,
+        memoryGB: 4,
+        diskGB: 50,
+        lineMbps: 100,
+        residentMemoryGB: 0,
+        dbCpuMsPerQuery: 0,
+        imageTransformCpuMs: 0,
+        ...(billedHourly ? { billedHourly } : {}),
+      },
+    });
+    expect(
+      sim([host(true)], { api: ['h'] }).h!.resources['instance-hours'],
+    ).toBe(730);
+    expect(
+      sim([host()], { api: ['h'] }).h!.resources['instance-hours'],
+    ).toBeUndefined();
+  });
+});
