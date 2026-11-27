@@ -1,6 +1,10 @@
 // 1 か月を進める（playMonth）。各段は同じフォルダの関数に分けてあり、ここでは順に呼んで次の月の状態を組む。
+import { DEFAULT_CHOICES, type Platform, serverAnalyzes } from 'catalog';
+import { fmtFactor } from '../format.ts';
+import { backgroundJobNotes, runBackgroundJobs } from '../background-job.ts';
 import { buzzLasting } from '../rules.ts';
 import { eventDef, scenarioOf } from '../core.ts';
+import { applyEffects } from '../events.ts';
 import type { GameState, MonthReport } from '../state.ts';
 import { billOf, estimateMonth, nextCapacityTiers } from './bill.ts';
 import { crossingsOf } from './crossings.ts';
@@ -21,6 +25,20 @@ import {
   volumeOf,
 } from './traffic.ts';
 import { progressOf, stockOf, transitionsOf } from './transitions.ts';
+import { analysisBurstFactor } from '../workload.ts';
+
+/** 過去の棋譜の取り込みで解析が増えた月の注記（D-241）。置き場が端末なら、サーバーの解析は増えない。 */
+function analysisBurstNotes(state: GameState, platform: Platform): string[] {
+  const f = analysisBurstFactor(state);
+  if (f === 1) return [];
+  const placement = { ...DEFAULT_CHOICES[platform], ...state.components }
+    .analysis;
+  return [
+    serverAnalyzes(placement)
+      ? `過去の棋譜の取り込みで、今月は解析の件数と DB の増え方が ${fmtFactor(f)} です`
+      : `過去の棋譜を取り込み、DB の増え方が ${fmtFactor(f)} です（解析は利用者が開いたときに端末で行うので、サーバーの解析は増えません）`,
+  ];
+}
 
 /** 1 か月を進める（出来事 → 見積 → 収益 → 前提の判定 → 満足度 → 工数 → 所持金 → 在庫 → 終わりの判定）。 */
 export function playMonth(input: GameState): GameState {
@@ -39,15 +57,17 @@ export function playMonth(input: GameState): GameState {
   const { basePV, humanPV } = volume;
 
   // 見積と費用
-  const { ssrCpuMs, parts, architecture, books, r, target } = estimateMonth(
-    sc,
-    state,
-    month,
-    platform,
-    volume,
-    traffic.peakFactor,
-  );
-  const bill = billOf(state, month, r, target);
+  const { ssrCpuMs, parts, workload, architecture, books, r, target } =
+    estimateMonth(sc, state, month, platform, volume, traffic.peakFactor);
+  // バックエンドの長時間の処理（D-239）: VPS は空いている CPU で進め、サーバーレスはその月に流して払う（前提・満足度は r のまま）
+  const jobs = runBackgroundJobs(state, {
+    r,
+    workload,
+    architecture,
+    books,
+    placement: { ...DEFAULT_CHOICES[platform], ...state.components }.analysis,
+  });
+  const bill = billOf(state, month, jobs.billed, target);
   const { events, fired } = monthEventsOf(sc, state, {
     month,
     prev,
@@ -90,6 +110,7 @@ export function playMonth(input: GameState): GameState {
     prev,
     stages: judged.stages,
     reasons: judged.reasons,
+    analysis: judged.analysis,
   });
   const { rep, slowPenalty, net } = growth;
 
@@ -122,7 +143,14 @@ export function playMonth(input: GameState): GameState {
     r,
     target,
     cash,
-    notes: [...revenue.notes, ...ps.notes, ...judged.notes, ...next.notes],
+    notes: [
+      ...revenue.notes,
+      ...ps.notes,
+      ...judged.notes,
+      ...next.notes,
+      ...backgroundJobNotes(jobs.runs),
+      ...analysisBurstNotes(state, platform),
+    ],
     events,
     crossings,
     policyWarning,
@@ -131,6 +159,8 @@ export function playMonth(input: GameState): GameState {
     growth,
     effort,
     featurePoints,
+    billed: jobs.billed,
+    backgroundJobs: jobs.runs,
   });
 
   // 今月届いた提案は、月の終わりに返事を待つ
@@ -145,9 +175,22 @@ export function playMonth(input: GameState): GameState {
   const history = [...state.history, report];
   const end = endOf(sc, month, { accountSuspended, outages, cash });
   const { routes } = next;
-  const { routes: _routes, capacityTiers: _tiers, ...base } = state;
-  return {
+  const {
+    routes: _routes,
+    capacityTiers: _tiers,
+    backgroundJobs: _jobs,
+    analysisBursts: _bursts,
+    ...base
+  } = state;
+  // 過去の棋譜の取り込みの上乗せ（D-241）は月ごとに減らし、終わったら外す（受けていないゲームには持たない）
+  const bursts = (state.analysisBursts ?? [])
+    .map((b) => ({ ...b, months: b.months - 1 }))
+    .filter((b) => b.months > 0);
+  const played: GameState = {
     ...base,
+    // 続く長時間の処理（D-239）。始めていないゲームには持たない
+    ...(jobs.remaining.length ? { backgroundJobs: jobs.remaining } : {}),
+    ...(bursts.length ? { analysisBursts: bursts } : {}),
     ...(routes !== undefined ? { routes } : {}),
     seed,
     stackIndex: next.stackIndex,
@@ -202,6 +245,11 @@ export function playMonth(input: GameState): GameState {
       : 'playing',
     ...(end ? { end } : {}),
   };
+  // 終わった長時間の処理の効果は月の終わりに当てる（翌月の判定から効く。D-239）
+  return jobs.finished.reduce(
+    (s, j) => applyEffects(s, j.onDone, j.eventId),
+    played,
+  );
 }
 
 /** 今月見込みを出さない理由（一時的に流量が増えた月。プレイヤーにも見えている出来事。prd/07 §10.7）。 */

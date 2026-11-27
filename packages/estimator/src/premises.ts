@@ -74,6 +74,7 @@ const SOURCE_MODE: Partial<Record<CpuSource['requestClass'], string>> = {
 /** ルートを持たないクラスの表示名。 */
 const CLASS_LABEL: Partial<Record<CpuSource['requestClass'], string>> = {
   api: 'ページから呼ぶ API',
+  'api-async': '積んで別の所で動かす処理',
   'image-read': '画像の配信',
   'image-write': '画像の投稿',
   'image-transform': '画像の変換',
@@ -92,6 +93,10 @@ const moneyText = (v: number, cur: Currency) =>
 
 /** 表示のための丸め（小数 1 桁）。 */
 const ms = (v: number) => `${Math.round(v * 10) / 10}`;
+const sec = (v: number) => `${Math.round(v / 100) / 10}`;
+/** 1 件の時間の上限の表し方（1 秒未満は ms、それ以上は秒。後ろに助詞が続く形。D-234）。 */
+const durationText = (v: number) =>
+  v < 1000 ? `${ms(v)} ms ` : `${sec(v)} 秒`;
 
 /** 内訳 1 つの表示（「個人向けのページ（SSR・CPU 15 ms）」）。 */
 export function cpuSourceText(s: CpuSource): string {
@@ -146,8 +151,8 @@ function cpuCauses(
   const causes = over.length ? over : uniq.slice(0, 1);
   const what = causes.map(cpuSourceText).join('・');
   const head = over.length
-    ? `${what}が ${planName} の 1 リクエスト ${ms(limit)} ms を超えます`
-    : `最も重いのは${what}で、${planName} の 1 リクエスト ${ms(limit)} ms の ${Math.round((causes[0]!.cpuMs / limit) * 100)}%`;
+    ? `${what}が ${planName} の 1 リクエスト ${durationText(limit)}を超えます`
+    : `最も重いのは${what}で、${planName} の 1 リクエスト ${durationText(limit)}の ${Math.round((causes[0]!.cpuMs / limit) * 100)}%`;
   const viaNode = new Set(sim.architecture.routes['document-static'] ?? []);
   const bypass = viaNode.has(node.id)
     ? []
@@ -158,6 +163,45 @@ function cpuCauses(
     ? `。${bypass.join('・')}は静的なので ${shortLabel(node)} を起動しません`
     : '';
   return { causes, detail: head + tail };
+}
+
+/** 1 件の実行の上限の受け方の呼び名（D-234）。 */
+const INVOCATION_TEXT = {
+  http: 'リクエストの中で処理する分',
+  async:
+    '非同期に受けて処理する分（キューの受け手・Cron・バックグラウンド関数）',
+} as const;
+
+/**
+ * 1 件の CPU・壁時計の上限の内訳の文（D-99・D-234）。CPU は重いルートを挙げる。壁時計は 1 回の実行の最大と受け方。
+ * 既定の値（defaultValue）を超えて最大以下なら、設定を上げる前提を足す。
+ */
+function perRequestDetail(
+  sim: Simulation,
+  node: ArchNode,
+  planName: string,
+  limit: PriceBook['plans'][number]['limits'][number],
+  used: number,
+): Pick<PlatformPremise, 'causes' | 'detail'> {
+  if (
+    limit.measure !== 'cpu-ms-per-request' &&
+    limit.measure !== 'wall-ms-per-request'
+  )
+    return {};
+  const base: Pick<PlatformPremise, 'causes' | 'detail'> =
+    limit.measure === 'cpu-ms-per-request'
+      ? limit.invocation === undefined
+        ? cpuCauses(sim, node, planName, limit.value)
+        : {
+            detail: `${INVOCATION_TEXT[limit.invocation]}の 1 件の CPU は最大 ${durationText(used)}で、${planName} の上限 ${durationText(limit.value)}の ${Math.round((used / limit.value) * 100)}%`,
+          }
+      : {
+          detail: `${limit.invocation ? `${INVOCATION_TEXT[limit.invocation]}の ` : ''}1 回の実行（壁時計）は最大 ${durationText(used)}で、${planName} の上限 ${durationText(limit.value)}の ${Math.round((used / limit.value) * 100)}%`,
+        };
+  const d = limit.defaultValue;
+  if (d === undefined || used <= d || used > limit.value) return base;
+  const note = `既定の ${durationText(d)}を超えるので、設定で ${durationText(limit.value)}まで上げる前提です`;
+  return { ...base, detail: base.detail ? `${base.detail}。${note}` : note };
 }
 
 function threshold(
@@ -440,11 +484,19 @@ export function assessPremises(input: {
     const nu = sim.nodes[node.id]!;
     for (const limit of plan?.limits ?? []) {
       let used: number | undefined;
+      // 受け方を持つ 1 件の上限（D-234）: その受け方の流れが届くノードだけで、その受け方の最大と比べる
+      const inv = limit.invocation;
       if (
         limit.measure === 'cpu-ms-per-request' &&
         node.config.kind === 'function'
       ) {
-        used = nu.maxCpuMsPerRequest;
+        used = inv === undefined ? nu.maxCpuMsPerRequest : nu.maxBy[inv]?.cpuMs;
+      } else if (
+        limit.measure === 'wall-ms-per-request' &&
+        (node.config.kind === 'function' || node.config.kind === 'container')
+      ) {
+        used =
+          inv === undefined ? nu.maxWallMsPerRequest : nu.maxBy[inv]?.wallMs;
       } else if (
         limit.measure === 'storage-gb' &&
         (node.config.kind === 'sql-db' ||
@@ -499,9 +551,7 @@ export function assessPremises(input: {
           limit: limit.value,
           unit: limit.unit,
           accumulates: limit.measure === 'storage-gb',
-          ...(limit.measure === 'cpu-ms-per-request'
-            ? cpuCauses(sim, node, plan!.name, limit.value)
-            : {}),
+          ...perRequestDetail(sim, node, plan!.name, limit, used),
         }),
       );
     }

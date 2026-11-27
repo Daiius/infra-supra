@@ -111,13 +111,22 @@ export function commitmentTerms(
   switch (def.commitment.kind) {
     case 'instance': {
       if (def.onDemandMonthly === undefined) return null;
+      // 同じマシンを並べているなら（D-251）、対象の額（オンデマンド）から台数を出して台数ぶん結ぶ。1 台に満たない・渡されない額は 1 台
+      const n =
+        spendPerMonth && def.onDemandMonthly > 0
+          ? Math.max(1, Math.round(spendPerMonth / def.onDemandMonthly))
+          : 1;
       return payment === 'no-upfront'
         ? {
-            covers: def.onDemandMonthly,
-            monthly: p.hourly! * HOURS_PER_MONTH,
+            covers: def.onDemandMonthly * n,
+            monthly: p.hourly! * HOURS_PER_MONTH * n,
             upfront: 0,
           }
-        : { covers: def.onDemandMonthly, monthly: 0, upfront: p.upfront! };
+        : {
+            covers: def.onDemandMonthly * n,
+            monthly: 0,
+            upfront: p.upfront! * n,
+          };
     }
     case 'spend': {
       if (!spendPerMonth || spendPerMonth <= 0) return null;

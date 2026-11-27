@@ -486,6 +486,17 @@ export function EventCard({
           ))}
         </ul>
       )}
+      {e.session && e.session.length > 0 && (
+        // 研究会の提案: 今の構成のセッションの保ち方（つなぎ直し・盤面の置き場と catalog の事実の文。D-241）
+        <ul
+          className="mt-1 list-disc pl-5 text-xs opacity-80"
+          data-event-session
+        >
+          {e.session.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
+      )}
       {e.members && e.members.length > 0 && (
         <ul className="mt-1 list-disc pl-5 text-xs opacity-80">
           {e.members.map((m) => (

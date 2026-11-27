@@ -1,6 +1,5 @@
 // 行動の検査（選べるか・工数はいくらか）。
 import {
-  componentsOf,
   DEFAULT_CHOICES,
   FRAMEWORKS,
   ROUTE_STRATEGIES,
@@ -15,7 +14,13 @@ import {
   componentProposal,
   proposalOnlyComponent,
 } from '../components.ts';
-import { eventDef, frameworksOf, scenarioOf } from '../core.ts';
+import {
+  eventDef,
+  frameworksOf,
+  scenarioHasSlot,
+  scenarioOf,
+  scenarioComponentsOf,
+} from '../core.ts';
 import {
   componentBaseEffort,
   effortAvailable,
@@ -51,7 +56,7 @@ import {
   strategyFamily,
   strategySelectable,
 } from '../routes/strategy.ts';
-import { ON_DEMAND_REVALIDATE, SETTINGS } from '../settings.ts';
+import { ON_DEMAND_REVALIDATE, SETTINGS, settingValueOf } from '../settings.ts';
 import { nameThen } from '../format.ts';
 import {
   isDataSwap,
@@ -129,7 +134,7 @@ function actionRule(state: GameState, action: Action): ActionCheck {
               : `${FRAMEWORKS[state.framework].label} では「${SETTINGS[revalidateSettingOf(state.framework, articleFamily(state))].label}」で選びます`
             : 'このシナリオでは効きません',
         );
-      if (state.settings[def.field] === action.value)
+      if (settingValueOf(state.settings, action.key) === action.value)
         return ng('same', '今と同じ（または選択済み）');
       const inactive = settingInactiveReason(state, action.key);
       if (inactive) return ng('unavailable', inactive);
@@ -357,16 +362,27 @@ function actionRule(state: GameState, action: Action): ActionCheck {
       if (rewriting) return rewriting;
       const sc = scenarioOf(state);
       const platform = STACKS[state.stackIndex]!.provider;
-      const opt = componentsOf(platform, action.slot, state.framework).find(
-        (c) => c.id === action.option,
-      );
+      const opt = scenarioComponentsOf(
+        sc,
+        platform,
+        action.slot,
+        state.framework,
+      ).find((c) => c.id === action.option);
       if (!opt) return ng('invalid', 'この事業者の部品にありません');
+      // 解析の置き場・保存の形は非同期の API（解析）を持つシナリオだけ（D-235・D-237）
+      if (!scenarioHasSlot(sc, action.slot))
+        return ng('invalid', 'このシナリオには解析がありません');
       const current = { ...DEFAULT_CHOICES[platform], ...state.components };
       if (current[action.slot] === action.option)
         return ng('same', '今の部品（または選択済み）');
       // チャットを受けたあとはリアルタイムを外せない
       if (action.slot === 'realtime' && state.mods.realtime)
-        return ng('irreversible', 'チャットを受けたので外せません');
+        return ng(
+          'irreversible',
+          sc.realtimeAllPlatforms
+            ? '研究会の提案を受けたので外せません'
+            : 'チャットを受けたので外せません',
+        );
       // さくらの VPS の API の応答のキャッシュは前段の CDN の上で効く（D-37）
       const conflict = componentConflict(
         platform,

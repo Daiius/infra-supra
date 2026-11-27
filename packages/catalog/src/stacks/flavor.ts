@@ -1,3 +1,9 @@
+import {
+  ANALYSIS_MACHINE_TARGETS,
+  ANALYSIS_MACHINES,
+  ANALYSIS_TASK_TARGETS,
+  type CpuFamily,
+} from './analysis.ts';
 // 構成の短い説明（始める画面のフレーバー。D-41）。構成の id（STACK_DEFS）で引く。
 // 事実として間違ってはいないが、それだけで選ぶと外れうる書き方にしている（何が効くかは遊んで確かめる）。
 // 数値は書かない。事実の根拠は同じ catalog のデータ（プランの制限・規約・SLA・転送量・席の料金）にある。
@@ -270,11 +276,64 @@ const BASE_COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     'クラウドの定番のストレージ。同じリージョンのコンテナからの読み出しは転送の料金がかかりません',
   'aws:files:s3':
     'クラウドの定番のストレージ。保存も読み書きも安く、CDN からそのまま配れます',
+  // リアルタイム（Cloudflare 以外。棋譜解析だけで選べる。D-240）
+  'vercel:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'vercel:realtime:functions-websocket':
+    '今の関数のまま WebSocket を受けられます。使った分だけの支払いです',
+  'sakura:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'sakura:realtime:vps-websocket':
+    '月額のまま、接続を時間で切られずに保てます。サーバーの面倒は自分で見ます',
+  'gcp:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'gcp:realtime:cloud-run-websocket':
+    '今のコンテナのまま WebSocket を受けられます。追加の設定はほとんど要りません',
+  'aws:realtime:none':
+    'リアルタイムの機能を持ちません。費用も工数もかかりません',
+  'aws:realtime:api-gateway-websocket':
+    '接続の管理はマネージドに任せ、メッセージごとに関数を呼びます。使った分だけの支払いです',
 };
 
 /** OpenNext の構成（D-63）が Amplify の構成と共有する部品は、同じ説明文を使う。 */
 const SHARED_WITH_OPENNEXT =
   /^aws:(db|cdnPlan|ogp|apiCache|files):|^aws:images:(none|resize)$/;
+
+/** 台で借りるマシンの系列ごとの一言（数値を書かない）。 */
+const MACHINE_FLAVOR: Record<CpuFamily, string> = {
+  'x86-core': '一つの処理の速い物理コアのマシン',
+  'arm-core': '安めの Arm のマシン',
+  'x86-thread': '広く使われる Intel・AMD のマシン',
+  'vps-core': '月額が固定のサーバー',
+  serverless: 'マシン',
+};
+
+/** 解析の Fargate・台で借りるマシンとその併用の説明（D-247）。 */
+const EXTRA_ANALYSIS_FLAVOR: Record<string, string> = Object.fromEntries(
+  [
+    ...ANALYSIS_TASK_TARGETS.map((t): [string, string, string] => [
+      'aws',
+      t,
+      'キューに合わせて解析のコンテナを増やし減らし、動いている間だけ払います',
+    ]),
+    ...ANALYSIS_MACHINE_TARGETS.filter(
+      (t) => t !== 'worker-vps-2gb' && t !== 'worker-vps-4gb',
+    ).map((t): [string, string, string] => {
+      const m = ANALYSIS_MACHINES[t]!;
+      return [
+        m.provider,
+        t,
+        `${MACHINE_FLAVOR[m.cpu]}を解析に台で借ります（台数は下で選びます）。混む時間に待ちが出ます`,
+      ];
+    }),
+  ].flatMap(([p, t, text]) => [
+    [`${p}:analysis:${t}`, text],
+    [
+      `${p}:analysis:hybrid-${t}`,
+      '端末ですぐ簡易解析をし、詳細解析はこの実行先で。費用は両方にかかります',
+    ],
+  ]),
+);
 
 export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
   ...BASE_COMPONENT_FLAVOR,
@@ -342,6 +401,79 @@ export const COMPONENT_FLAVOR: Readonly<Record<string, string>> = {
     '開発者に人気の送信のサービスの有料プラン。月額で通数がたっぷり込み',
   'resend:email:resend-pro-100k':
     '同じ有料プランの込みの通数が倍の段。送る通数が多いなら超過より安いです',
+  // 解析の置き場（D-235・prd/17 §5.1）。worker は さくらの VPS（どの土台に差しても同じ文）
+  ...Object.fromEntries(
+    [
+      'cloudflare',
+      'vercel',
+      'sakura',
+      'aws',
+      'aws-opennext',
+      'netlify',
+      'gcp',
+    ].flatMap((p) => [
+      [
+        `${p}:analysis:same`,
+        'アプリと同じ所で動かすので、仕組みが少なく済みます。重い処理の費用と上限はそのまま受けます',
+      ],
+      [
+        `${p}:analysis:client`,
+        '利用者の端末で解析し、サーバーの計算は要りません。端末によって速さが違います',
+      ],
+      [
+        `${p}:analysis:hybrid`,
+        '端末ですぐ簡易解析をし、詳細解析はサーバーで。費用は両方にかかります',
+      ],
+    ]),
+  ),
+  // 保存の形（D-237・prd/17 §5.4）。どの土台でも同じ文
+  ...Object.fromEntries(
+    [
+      'cloudflare',
+      'vercel',
+      'sakura',
+      'aws',
+      'aws-opennext',
+      'netlify',
+      'gcp',
+    ].flatMap((p) => [
+      [
+        `${p}:storage:per-move`,
+        '手ごとに行を分けて置きます。開くたびに手数ぶんの行を読み書きします',
+      ],
+      [
+        `${p}:storage:per-game`,
+        '棋譜ごとに結果をひとつの行に詰めます。読む行は減りますが、少しずつ書くと行を何度も書き直します',
+      ],
+    ]),
+  ),
+  'sakura:analysis:worker-vps-2gb':
+    '解析だけの常駐のサーバーを置きます。費用は定額ですが、混む時間に待ちが出ます',
+  'sakura:analysis:worker-vps-4gb':
+    '解析だけの常駐のサーバーを、余裕のある上のプランで置きます。費用は定額です',
+  'sakura:analysis:hybrid-worker-vps-2gb':
+    '端末ですぐ簡易解析をし、詳細解析は解析だけの常駐のサーバーで。混む時間の待ちを簡易解析で隠せます',
+  'sakura:analysis:hybrid-worker-vps-4gb':
+    '端末ですぐ簡易解析をし、詳細解析は余裕のある常駐のサーバーで。費用は定額と配る転送です',
+  // 解析の別の事業者のサーバーレス（D-245・prd/17 §5.6）。Web の事業者から独立して選ぶ
+  'aws:analysis:fn-lambda':
+    '大手のクラウドの関数で、使った時間とメモリだけの支払い。常に無料で使える量もあります',
+  'aws:analysis:hybrid-fn-lambda':
+    '端末ですぐ簡易解析をし、詳細解析は大手のクラウドの関数で。費用は両方にかかります',
+  'gcp:analysis:fn-cloud-run':
+    '大手のクラウドでコンテナを動かします。処理している間だけの支払いで、無料で使える量もあります',
+  'gcp:analysis:hybrid-fn-cloud-run':
+    '端末ですぐ簡易解析をし、詳細解析は大手のクラウドのコンテナで。費用は両方にかかります',
+  'cloudflare:analysis:fn-workers':
+    '使った CPU の時間だけの支払いで、待ちの時間は払いません。重い処理の上限に注意',
+  'cloudflare:analysis:hybrid-fn-workers':
+    '端末ですぐ簡易解析をし、詳細解析は CPU の時間だけ払う関数で。費用は両方にかかります',
+  'vercel:analysis:fn-vercel':
+    'Next.js の開発元の関数。有料のプランが要り、動いている時間とメモリで払います',
+  'vercel:analysis:hybrid-fn-vercel':
+    '端末ですぐ簡易解析をし、詳細解析は Next.js の開発元の関数で。費用は両方にかかります',
+  // 解析の Fargate・台で借りるマシン（D-247・prd/17 §5.6）。数値（型の名前の数字を含む）は書かない
+  ...EXTRA_ANALYSIS_FLAVOR,
   // Bunny（D-98）。転送の安い従量の CDN を、画像の配信と前段に差す
   'bunny:images:bunny-images':
     '転送の安い CDN から配り、変換は月額で使い放題。大きな画像の多いサイトに向きます',

@@ -231,6 +231,10 @@ export function Result({
   const end = state.end!;
   // 行の名前（基準プレイは短い名前）は game の comparisonRows で決める（単体テストあり）
   const table = comparisonRows(state);
+  // 要素の列（解析の要素は判定したシナリオだけ。D-238）
+  const columns = ELEMENTS.filter((el) =>
+    table.every((p) => p.axes.elements[el] !== undefined),
+  );
   /** 短い名前と説明が違う基準プレイだけを注記に出す。 */
   const abbreviated = offeredBaselines(scenarioOf(state)).filter(
     (b) => b.short && b.short !== b.label,
@@ -420,7 +424,7 @@ export function Result({
                 <thead>
                   <tr>
                     <th className="whitespace-nowrap">戦略</th>
-                    {ELEMENTS.map((el) => (
+                    {columns.map((el) => (
                       <th key={el} className="whitespace-nowrap text-right">
                         {ELEMENT_LABEL[el]}
                       </th>
@@ -433,7 +437,7 @@ export function Result({
                       <td className="whitespace-nowrap" title={p.description}>
                         {p.name}
                       </td>
-                      {ELEMENTS.map((el) => (
+                      {columns.map((el) => (
                         <td
                           key={el}
                           className={clsx(
@@ -441,7 +445,7 @@ export function Result({
                             !p.you && 'opacity-70',
                           )}
                         >
-                          {p.axes.elements[el].toFixed(2)}
+                          {(p.axes.elements[el] ?? 0).toFixed(2)}
                         </td>
                       ))}
                     </tr>

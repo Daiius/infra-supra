@@ -31,6 +31,74 @@ const RUN = {
   requestsPerMillion: 0.4,
 } as const;
 
+/**
+ * 解析の実行先の Compute Engine の計算向けのマシン（東京・$ / 時間。料金ページの汎用の表を東京にして読んだ。2026-11-25）。
+ * cud は Compute Resource CUD の 1 年の単価（同じ表の列）。継続利用割引（sustained use discount）は確かめていないので入れない。
+ */
+export const GCE = [
+  {
+    type: 'c4a-standard-4',
+    cpu: 'Axion（Arm）',
+    vcpu: 4,
+    memoryGiB: 16,
+    onDemand: 0.23064228,
+    cud: 0.1521006,
+  },
+  {
+    type: 'c4a-standard-8',
+    cpu: 'Axion（Arm）',
+    vcpu: 8,
+    memoryGiB: 32,
+    onDemand: 0.46128456,
+    cud: 0.3042012,
+  },
+  {
+    type: 'c4-standard-4',
+    cpu: 'Intel',
+    vcpu: 4,
+    memoryGiB: 15,
+    onDemand: 0.25384782,
+    cud: 0.15992786,
+  },
+  {
+    type: 'c4-standard-8',
+    cpu: 'Intel',
+    vcpu: 8,
+    memoryGiB: 30,
+    onDemand: 0.50769564,
+    cud: 0.31985572,
+  },
+  {
+    type: 'c3d-standard-4',
+    cpu: 'AMD',
+    vcpu: 4,
+    memoryGiB: 16,
+    onDemand: 0.233205568,
+    cud: 0.14691248,
+  },
+  {
+    type: 'n2d-standard-4',
+    cpu: 'AMD',
+    vcpu: 4,
+    memoryGiB: 16,
+    onDemand: 0.216792,
+    cud: 0.136568,
+  },
+  {
+    type: 'n2d-standard-8',
+    cpu: 'AMD',
+    vcpu: 8,
+    memoryGiB: 32,
+    onDemand: 0.433584,
+    cud: 0.273136,
+  },
+] as const;
+
+/** Compute Engine の型からプランの id。 */
+export const gcePlanId = (type: string): string => `gce-${type}`;
+
+type PlanInput = PriceBookInput['plans'][number];
+
 export const gcp: PriceBookInput = {
   schemaVersion: 1,
   provider: 'gcp',
@@ -48,6 +116,17 @@ export const gcp: PriceBookInput = {
     runAutoscaling: src(
       'https://cloud.google.com/run/docs/about-instance-autoscaling',
     ),
+    // リクエストの timeout（既定 5 分・最大 60 分）と、Cloud Tasks などから呼ぶときはその側の期限が効くこと（2026-11-18 更新・2026-11-23 取得。D-234）
+    runRequestTimeout: {
+      url: 'https://cloud.google.com/run/docs/configuring/request-timeout',
+      retrievedAt: '2026-11-23',
+    },
+    // WebSocket はリクエストとして timeout（既定 5 分・最大 60 分）に従い、開いている間はインスタンスが動いていて課金される・
+    // 1 コンテナ 1,000 接続まで・アフィニティは best effort で状態は外部に（2026-11-23 取得。D-240）
+    runWebsockets: {
+      url: 'https://docs.cloud.google.com/run/docs/triggering/websockets',
+      retrievedAt: '2026-11-23',
+    },
     hostingPricing: src('https://firebase.google.com/pricing'),
     hostingUsage: src(
       'https://firebase.google.com/docs/hosting/usage-quotas-pricing',
@@ -57,11 +136,26 @@ export const gcp: PriceBookInput = {
     nextSelfHosting: src('https://nextjs.org/docs/app/guides/self-hosting'),
     storagePricing: src('https://cloud.google.com/storage/pricing'),
     firestorePricing: src('https://cloud.google.com/firestore/pricing'),
+    // 読み取りの数え方（返した文書・1 回 1 件が最低・索引のエントリ 1,000 件ごと（範囲の条件が 1 つまでなら無し）・offset で飛ばした文書）と、
+    // 文書は 1 MiB まで（2026-11-23 取得。D-237）
+    firestoreBilling: {
+      url: 'https://firebase.google.com/docs/firestore/pricing',
+      retrievedAt: '2026-11-23',
+    },
+    firestoreQuotas: {
+      url: 'https://firebase.google.com/docs/firestore/quotas',
+      retrievedAt: '2026-11-23',
+    },
     sqlPricing: src('https://cloud.google.com/sql/pricing'),
     // 確約利用割引（CUD。2026-11-02 取得。D-97）
     runCud: src('https://docs.cloud.google.com/run/cud'),
     sqlCud: src('https://docs.cloud.google.com/sql/docs/postgres/cud'),
     networkPricing: src('https://cloud.google.com/vpc/network-pricing'),
+    // 解析の実行先の Compute Engine（2026-11-25 取得。D-247）。表は地域の選択で東京（asia-northeast1）にして読んだ
+    gcePricing: {
+      url: 'https://cloud.google.com/products/compute/pricing/general-purpose',
+      retrievedAt: '2026-11-25',
+    },
     // Cloud Logging（2026-11-02 取得。D-92）
     loggingPricing: src('https://cloud.google.com/stackdriver/pricing'),
     runLogging: src('https://cloud.google.com/run/docs/logging'),
@@ -168,7 +262,56 @@ export const gcp: PriceBookInput = {
       ...common,
       name: 'Cloud Run（リクエストで課金・東京）',
       sourceIds: ['runPricing'],
+      limits: [
+        {
+          id: 'request-timeout',
+          measure: 'wall-ms-per-request',
+          value: 3_600_000,
+          defaultValue: 300_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          invocation: 'http',
+          premise:
+            'Cloud Run のサービスはリクエストの timeout が既定 5 分で、設定で 60 分まで上げられます（ここでは 60 分で判定します。超えると 504）',
+          sourceIds: ['runRequestTimeout'],
+        },
+        {
+          // 非同期に受ける分は、Cloud Run を呼ぶ側の期限が効く（文書の例: Pub/Sub の push は最大 10 分、Cloud Tasks の HTTP の宛先は
+          // 既定 10 分・最大 30 分）。待ち行列から 1 件ずつ受ける形として Cloud Tasks の最大で判定する（D-234）
+          id: 'async-dispatch-deadline',
+          measure: 'wall-ms-per-request',
+          value: 1_800_000,
+          defaultValue: 600_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          invocation: 'async',
+          premise:
+            'Cloud Run を Cloud Tasks から呼ぶときは、Cloud Tasks の期限（既定 10 分・最大 30 分）が効きます（ここでは 30 分で判定します。Pub/Sub の push で受けるなら最大 10 分）',
+          sourceIds: ['runRequestTimeout'],
+        },
+      ],
       facts: [
+        {
+          // WebSocket（D-240）
+          id: 'websocket-timeout',
+          premise:
+            'Cloud Run の WebSocket はリクエストとして扱われ、リクエストの timeout（既定 5 分・最大 60 分）で切れます。ブラウザはつなぎ直す必要があります（ここでは 60 分に設定し、60 分ごとのつなぎ直しを 1 件のリクエストと履歴の読み直しに数えます）',
+          sourceIds: ['runWebsockets', 'runRequestTimeout'],
+        },
+        {
+          id: 'websocket-billing',
+          premise:
+            'Cloud Run は WebSocket を 1 本でも開いているインスタンスを動いている（active）とみなし、CPU とメモリを課金します。メッセージが無い間も、接続を開いている間はずっと数えます。1 コンテナは同時に 1,000 接続まで受けられます',
+          sourceIds: ['runWebsockets', 'runPricing'],
+        },
+        {
+          id: 'websocket-state',
+          premise:
+            'Cloud Run のセッションのアフィニティは best effort で、つなぎ直すと別のインスタンスにつながることがあります。複数の人が同じ盤面を見るなら、盤面を外部の置き場（DB・Redis の Pub/Sub・Firestore のリアルタイムの更新など）に置きます。このモデルは盤面を今の DB に 1 件 1 行で書く分だけを数え、配信の仲立ちの費用は数えません',
+          sourceIds: ['runWebsockets'],
+        },
         {
           id: 'request-billing',
           premise:
@@ -468,15 +611,18 @@ export const gcp: PriceBookInput = {
       service: 'firestore',
       ...common,
       name: 'Firestore（Standard・東京）',
-      sourceIds: ['firestorePricing'],
+      sourceIds: ['firestorePricing', 'firestoreBilling', 'firestoreQuotas'],
       facts: [
         {
           id: 'document-reads',
           premise:
-            'Firestore はドキュメントの読み取り・書き込み・削除の件数と保存で課金し、問い合わせは返したドキュメントの数だけ読み取りに数えます（結果が 0 件でも 1 件分）。同じリージョンの Cloud Run からの通信は無料です',
+            'Firestore はドキュメントの読み取り・書き込み・削除の件数と保存で課金し、問い合わせは返したドキュメントの数だけ読み取りに数えます（結果が 0 件でも 1 件分）。同じリージョンの Cloud Run からの通信は無料です。' +
+            '書き込みは set・update の 1 回が 1 回で、大きさでは数えません。問い合わせが読んだ索引のエントリは 1,000 件ごとに 1 回の読み取りに数えます（範囲の条件が 1 つまでの問い合わせは数えない）。' +
+            'offset で飛ばした文書も 1 件ずつ読み取りに数えます。1 文書は 1 MiB（1,048,576 B）までです',
           interpretation: {
             adopted:
-              '1 回の問い合わせで返すドキュメントの数を、応答の大きさ ÷ 1 ドキュメントの大きさ（1 kB と仮定）の切り上げで数え、書く行 1 行を 1 回の書き込みと数えます',
+              '1 回の問い合わせで返すドキュメントの数を、テンプレートが返す行の数を与えた問い合わせはその数（1 回 1 件が最低）、与えない問い合わせは応答の大きさ ÷ 1 ドキュメントの大きさ（1 kB と仮定）の切り上げで数え、書く行 1 行を 1 回の書き込みと数えます（大きさによらない）。' +
+              '問い合わせは等号と並びの条件で引くとみなし、索引のエントリの読み取りは数えません',
             rejected: [
               {
                 reading: 'SQL の DB のように、走査した行の数だけ読み取る',
@@ -485,7 +631,11 @@ export const gcp: PriceBookInput = {
               },
             ],
           },
-          sourceIds: ['firestorePricing'],
+          sourceIds: [
+            'firestorePricing',
+            'firestoreBilling',
+            'firestoreQuotas',
+          ],
         },
       ],
       meters: [
@@ -605,6 +755,52 @@ export const gcp: PriceBookInput = {
         'Cloud SQL の確約利用割引（1 年 25%・3 年 52%）は共有の vCPU の種類（db-f1-micro・db-g1-small）に効かないので、確約の選択肢はありません（D-97）',
       ],
     },
+    // ---- 解析の実行先（棋譜解析。D-247・prd/17 §5.6）。Compute Engine の計算向けのマシン ----
+    ...GCE.map((m): PlanInput => ({
+      id: gcePlanId(m.type),
+      service: 'compute-engine',
+      ...common,
+      name: `Compute Engine ${m.type}（${m.cpu}・${m.vcpu} vCPU・メモリ ${m.memoryGiB} GiB・東京）`,
+      sourceIds: ['gcePricing'],
+      notes: [
+        'ディスク（永続ディスク）の料金は確かめていないので数えません',
+        '継続利用割引（sustained use discount）は対象の系列と率を確かめていないので入れていません。確約は 1 年だけ（D-97）',
+      ],
+      commitments: [
+        {
+          id: 'resource-cud',
+          label: `確約利用割引（Compute Engine: ${m.type}・resource-based・1 年）`,
+          kind: 'instance',
+          termMonths: 12,
+          meterIds: ['instance'],
+          payments: [{ payment: 'no-upfront', hourly: m.cud }],
+          premise: `Compute Engine の ${m.type}（東京）の確約利用割引（Compute Resource CUD・1 年）は 1 時間 $${m.cud} です（定価 $${m.onDemand}）。料金ページの表の値で、取り消せず、使わなくても期間中は課金されます`,
+          interpretation: {
+            adopted:
+              'resource-based の CUD は vCPU とメモリの量を確約するものですが、料金ページの表がマシンの型ごとの 1 時間の額を出しているので、1 台を確約するのと同じに数えます',
+            rejected: [
+              {
+                reading: 'flexible CUD（額の確約）で数える',
+                reason:
+                  '同じ表の flexible CUD の 1 年は resource-based より高く、1 台を決めて使う解析の worker には resource-based が合うとみました',
+              },
+            ],
+          },
+          sourceIds: ['gcePricing'],
+        },
+      ],
+      meters: [
+        {
+          id: 'instance',
+          label: `マシンの稼働（Compute Engine: ${m.type}）`,
+          resource: 'instance-hours',
+          unit: 'hour',
+          premise: `Compute Engine の ${m.type}（東京）は、動いている間 1 時間 $${m.onDemand} です（定価）`,
+          pricing: { model: 'flat', per: 1, unitPrice: m.onDemand },
+          sourceIds: ['gcePricing'],
+        },
+      ],
+    })),
     {
       id: 'internet-egress',
       service: 'networking',
@@ -612,6 +808,13 @@ export const gcp: PriceBookInput = {
       name: 'インターネットへの転送（Premium Tier・東京 → アジア）',
       sourceIds: ['networkPricing', 'runPricing'],
       facts: [
+        {
+          // 解析の実行先の Compute Engine から、別の事業者のアプリの API へ結果を送る（D-247）
+          id: 'gce-outbound',
+          premise:
+            'Compute Engine の VM からインターネットへ送るデータは Premium Tier のネットワークの料金（東京 → アジアは 1 TiB まで $0.12 / GiB）で課金します。受け取るデータは無料です',
+          sourceIds: ['networkPricing'],
+        },
         {
           id: 'run-outbound',
           premise:

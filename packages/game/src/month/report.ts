@@ -8,11 +8,18 @@ import {
   type SlotId,
 } from 'catalog';
 import { buzzLasting } from '../rules.ts';
+import { scenarioHasSlot, scenarioOf, scenarioComponentsOf } from '../core.ts';
 import { lineLabel } from '../format.ts';
 import type { Scenario } from '../scenario.ts';
 import { INVALIDATION_METER } from '../setup/estimates.ts';
 import { componentLabel, slotIneffective, stackName } from '../stacks.ts';
-import type { Crossing, GameState, MonthEvent, MonthReport } from '../state.ts';
+import type {
+  BackgroundJobRun,
+  Crossing,
+  GameState,
+  MonthEvent,
+  MonthReport,
+} from '../state.ts';
 import type { Billed, MonthEstimate } from './bill.ts';
 import type { Growth, Judged } from './judge.ts';
 import type { Revenue } from './outcome.ts';
@@ -79,6 +86,10 @@ export function reportOf(
     growth: Growth;
     effort: Progress['effort'];
     featurePoints: number;
+    /** 今月の費用の見積（長時間の処理をサーバーレスで流した月はその見積。省略は r。D-239）。 */
+    billed?: MonthEstimate;
+    /** 長時間の処理の進み具合（D-239）。 */
+    backgroundJobs?: BackgroundJobRun[];
   },
 ): MonthReport {
   const { month, r, target, effort, growth } = c;
@@ -137,7 +148,7 @@ export function reportOf(
         };
       }),
     lines: [
-      ...[r, ...(target ? [target] : [])].flatMap((x) =>
+      ...[c.billed ?? r, ...(target ? [target] : [])].flatMap((x) =>
         x.bill.lines
           .filter((l) => l.amount)
           .map((l) => ({
@@ -173,7 +184,8 @@ export function reportOf(
         currency: l.currency,
       })),
     ],
-    unpricedLines: r.bill.unpricedLines + (target?.bill.unpricedLines ?? 0),
+    unpricedLines:
+      (c.billed ?? r).bill.unpricedLines + (target?.bill.unpricedLines ?? 0),
     settings: state.settings,
     ssrCpuMs: c.ssrCpuMs,
     stock: state.stock,
@@ -182,6 +194,7 @@ export function reportOf(
       stages: c.judged.stages,
       reasons: growth.reasons,
       score: growth.score,
+      ...(growth.pillars ? { pillars: growth.pillars } : {}),
       reputation: rep,
       acquisition: growth.acquisition,
       churn: growth.churn,
@@ -196,7 +209,14 @@ export function reportOf(
     componentSummary: (Object.keys(SLOT_LABELS) as SlotId[])
       .filter(
         (slot) =>
-          componentsOf(platformNow, slot, state.framework).length > 1 &&
+          scenarioComponentsOf(
+            scenarioOf(state),
+            platformNow,
+            slot,
+            state.framework,
+          ).length > 1 &&
+          // 解析の置き場・保存の形は非同期の API（解析）を持つシナリオだけ（D-235・D-237）
+          scenarioHasSlot(scenarioOf(state), slot) &&
           !slotIneffective(slot, comps, {
             stackIndex: stackIndexNow,
             framework: state.framework,
@@ -207,6 +227,7 @@ export function reportOf(
           `${SLOT_LABELS[slot]}: ${componentLabel(platformNow, slot, comps[slot])}`,
       )
       .join('・'),
+    ...(c.backgroundJobs?.length ? { backgroundJobs: c.backgroundJobs } : {}),
     contractRevenue: c.revenue.contractRevenue,
     ...(Object.keys(eligibleNow).length
       ? { commitmentEligible: eligibleNow }

@@ -17,22 +17,45 @@ export const STAGE_LABEL: Record<Stage, string> = {
   bad: '悪い',
 };
 
-export const ELEMENTS = [
+/** どのシナリオにもある満足度の要素。 */
+export const BASE_ELEMENTS = [
   'availability',
   'speed',
   'feature',
   'freshness',
   'quality',
 ] as const;
+/**
+ * 解析のあるシナリオ（SatisfactionRules.analysis を持つ。棋譜解析）だけで判定する要素（D-238・prd/17 §5.5）。
+ * ほかのシナリオでは段階を持たない（Stages に無い）ので、満足度の点も画面も今までのまま。
+ */
+export const ANALYSIS_ELEMENTS = ['analysisSpeed', 'analysisAccuracy'] as const;
+export const ELEMENTS = [...BASE_ELEMENTS, ...ANALYSIS_ELEMENTS] as const;
+export type BaseElement = (typeof BASE_ELEMENTS)[number];
+export type AnalysisElement = (typeof ANALYSIS_ELEMENTS)[number];
 export type Element = (typeof ELEMENTS)[number];
-export type Stages = Record<Element, Stage>;
+export type Stages = Record<BaseElement, Stage> &
+  Partial<Record<AnalysisElement, Stage>>;
+/** 要素ごとの重み（解析の要素は持つシナリオだけ）。 */
+export type Weights = Record<BaseElement, number> &
+  Partial<Record<AnalysisElement, number>>;
 export const ELEMENT_LABEL: Record<Element, string> = {
   availability: '可用性',
   speed: '速さ',
   feature: '機能',
   freshness: '反映スピード',
   quality: '画質',
+  analysisSpeed: '解析の速さ',
+  analysisAccuracy: '解析の正確さ',
 };
+
+/** 段階を持つ要素（解析の要素は判定したシナリオの月だけ。画面と集計の並び）。 */
+export const elementsOf = (stages: Partial<Stages>): Element[] =>
+  ELEMENTS.filter((e) => stages[e] !== undefined);
+
+/** シナリオが判定する要素（解析の要素は SatisfactionRules.analysis を持つシナリオだけ）。 */
+export const scenarioElements = (sat: Pick<SatisfactionRules, 'analysis'>) =>
+  sat.analysis ? [...ELEMENTS] : [...BASE_ELEMENTS];
 
 /** 満足度のルール（記事コミュニティのシナリオの値。prd/07 §9.1〜9.3）。 */
 export const SATISFACTION = {
@@ -59,7 +82,21 @@ export const EFFORT = {
    */
   containerUpkeep: 0.5,
   /** 設定の変更の工数（仮定）。 */
-  setting: { format: 1, variants: 1, isr: 0 },
+  /**
+   * 設定の工数（仮定）。解析の区切り方（D-236）は解析の処理の分け方・保存と再開の書き換えなので 2、候補の数は解析の呼び方と
+   * 結果の形を少し変えるだけなので 1。
+   */
+  setting: {
+    format: 1,
+    variants: 1,
+    isr: 0,
+    analysisUnit: 2,
+    candidates: 1,
+    // 詳細解析の範囲（D-246）: 詳細解析を頼むボタンと、頼まれた局だけを積む処理（仮定）
+    analysisScope: 1,
+    // 台数（D-251）: 同じ形のマシンを足すだけ（設定をまとめて配る仮定）
+    analysisMachines: 1,
+  },
   /** ISR の再検証を時間からオンデマンドに切り替える実装（更新のたびに revalidatePath を呼ぶ。D-49。仮定）。 */
   onDemandSwitch: 2,
   /**
@@ -107,6 +144,10 @@ export const EFFORT = {
     dbBackup: 1,
     // メール送信の先を替える（D-95）。API のキー・SMTP の設定と、送る元のドメインの認証（DNS）を設定し直すので 1（仮定）
     email: 1,
+    // 解析の置き場（D-235）。worker を立てる・エンジンを WebAssembly で配る・結果を受ける API を作るので 3（仮定）
+    analysis: 3,
+    // 保存の形（D-237）。表の作り直しと、たまった結果の詰め直し（移し替え）をするので 3（仮定）
+    storage: 3,
   },
   /**
    * VPS の DB の自前のバックアップ（日次のダンプとバイナリログをオブジェクトストレージへ送る。D-93）。仕組みを作る一度きりの工数と、
@@ -231,7 +272,7 @@ export const EMAIL_UNDELIVERED = { badShare: 0.5 } as const;
  */
 export const FLAT_PLAN_ADJUST = { spikeRatio: 3, sustainedMonths: 2 } as const;
 
-const STAGE_DOWN: Record<Stage, Stage> = {
+export const STAGE_DOWN: Record<Stage, Stage> = {
   good: 'fair',
   fair: 'bad',
   bad: 'bad',
@@ -300,10 +341,11 @@ export function judgeStages(
 /** 満足度 S（0〜1）= Σ 重み × 段階の数値。 */
 export function satisfactionScore(
   stages: Stages,
-  weights: Record<Element, number> = SATISFACTION.weights,
+  weights: Weights = SATISFACTION.weights,
 ): number {
-  return ELEMENTS.reduce(
-    (sum, e) => sum + weights[e] * STAGE_VALUE[stages[e]],
+  // 段階の無い要素（解析の要素を判定しないシナリオ）は足さない。足す順は今までと同じ（記事・受託の点は 1 ビットも変わらない）
+  return elementsOf(stages).reduce(
+    (sum, e) => sum + (weights[e] ?? 0) * STAGE_VALUE[stages[e]!],
     0,
   );
 }

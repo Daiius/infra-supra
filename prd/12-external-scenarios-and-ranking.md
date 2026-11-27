@@ -333,7 +333,7 @@ C を入れても、エンジンは手元にもあるので、往復の応答を
 
 | 候補 | 実行 | 保存 | 気にすること |
 |---|---|---|---|
-| Cloudflare Workers + D1 | Workers | D1（SQLite） | **Workers Free は 1 リクエストあたり CPU 10 ms まで**（catalog の `limit:cloudflare:workers-free:cpu-ms-per-request`・出典つき）。12 か月の再生がこれに収まるかは**未計測**（段 0 で測る）。Paid の 1 リクエストあたりの上限は catalog に未取得 |
+| Cloudflare Workers + D1 | Workers | D1（SQLite） | **Workers Free は 1 リクエストあたり CPU 10 ms まで**（catalog の `limit:cloudflare:workers-free:cpu-ms-per-request`・出典つき）。12 か月の再生がこれに収まるかは**未計測**（段 0 で測る）。Paid の 1 回の実行の CPU（既定 30 秒・設定で 5 分）は catalog に入れた（D-234） |
 | Vercel Functions + Supabase（Postgres） | Node.js の関数 | Postgres | 関数の実行時間と課金の単位（catalog の Vercel のデータの範囲で比べる） |
 | さくらの VPS + Node.js + SQLite / MySQL | 常駐のプロセス | ローカルの DB | 運用の手間（ゲームの自前運用と同じ話）。社内のサーバーなら既存の社内の基盤に載せる選択も同じ形 |
 

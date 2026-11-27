@@ -14,11 +14,96 @@ const backupSrc = (url: string) => ({ url, retrievedAt: BACKUP_R });
 /** 確約の割引（リザーブドインスタンス・Savings Plans）を確かめた日（D-97）。 */
 const COMMIT_R = '2026-11-02';
 const commitSrc = (url: string) => ({ url, retrievedAt: COMMIT_R });
+/** 解析の実行先（EC2・Fargate）を確かめた日（D-247）。 */
+const ANALYSIS_R = '2026-11-25';
 /** Price List API の東京の料金表（版の日付はコメントに残す）。 */
 const priceList = (offer: string) =>
   src(
     `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/${offer}/current/ap-northeast-1/index.json`,
   );
+
+type PlanInput = PriceBookInput['plans'][number];
+
+/** 解析の実行先の Fargate（Linux・東京・$ / 時間。Price List AmazonECS 2026-11-11）。 */
+export const FARGATE = [
+  { arch: 'arm', label: 'ARM（Graviton）', vcpu: 0.04045, memory: 0.00442 },
+  { arch: 'x86', label: 'x86', vcpu: 0.05056, memory: 0.00553 },
+] as const;
+
+/**
+ * 解析の実行先の EC2 の計算向けのマシン（Linux・共有・東京・$ / 時間。Price List AmazonEC2 2026-11-24）。reserved は
+ * リザーブドインスタンス（standard・1 年・前払いなし）。xlarge は EC2 Instance Savings Plans（1 年・前払いなし）と同じ値。
+ */
+export const EC2 = [
+  {
+    type: 'c7g.xlarge',
+    cpu: 'Graviton3',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.1819,
+    reserved: 0.12,
+  },
+  {
+    type: 'c7g.2xlarge',
+    cpu: 'Graviton3',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.3638,
+    reserved: 0.2399,
+  },
+  {
+    type: 'c8g.xlarge',
+    cpu: 'Graviton4',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.20012,
+    reserved: 0.13196,
+  },
+  {
+    type: 'c8g.2xlarge',
+    cpu: 'Graviton4',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.40024,
+    reserved: 0.26392,
+  },
+  {
+    type: 'c7i.xlarge',
+    cpu: 'Intel',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.2247,
+    reserved: 0.14818,
+  },
+  {
+    type: 'c7i.2xlarge',
+    cpu: 'Intel',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.4494,
+    reserved: 0.29635,
+  },
+  {
+    type: 'c7a.xlarge',
+    cpu: 'AMD',
+    vcpu: 4,
+    memoryGiB: 8,
+    onDemand: 0.2584,
+    reserved: 0.1704,
+  },
+  {
+    type: 'c7a.2xlarge',
+    cpu: 'AMD',
+    vcpu: 8,
+    memoryGiB: 16,
+    onDemand: 0.5168,
+    reserved: 0.3408,
+  },
+] as const;
+
+/** EC2 の型からプランの id（c7g.xlarge → ec2-c7g-xlarge）。 */
+export const ec2PlanId = (type: string): string =>
+  `ec2-${type.replace('.', '-')}`;
 
 /** どのプランにも同じ文（AWS はサービスごとのプランに分けて持つ。D-20 V-6・D-24）。 */
 const common = {
@@ -131,7 +216,25 @@ export const aws: PriceBookInput = {
     amplifyNext: src(
       'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html',
     ),
+    // SSR の実行インスタンスの最大の実行時間 15 分（2026-11-23 取得。D-234）
+    amplifySpecDuration: {
+      url: 'https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html',
+      retrievedAt: '2026-11-23',
+    },
+    // 関数の timeout の最大 1,800 秒・既定 3 秒（2026-11-23 取得。D-234）
+    lambdaQuotas: {
+      url: 'https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html',
+      retrievedAt: '2026-11-23',
+    },
+    lambdaTimeout: {
+      url: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-timeout.html',
+      retrievedAt: '2026-11-23',
+    },
     lambdaPrices: priceList('AWSLambda'),
+    lambdaMemoryCpu: {
+      url: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html',
+      retrievedAt: '2026-11-26',
+    },
     lambdaPricing: src('https://aws.amazon.com/lambda/pricing/'),
     lambdaUrls: src(
       'https://docs.aws.amazon.com/lambda/latest/dg/urls-configuration.html',
@@ -156,6 +259,21 @@ export const aws: PriceBookInput = {
     ),
     apiGatewayPrices: priceList('AmazonApiGateway'),
     apiGatewayPricing: src('https://aws.amazon.com/api-gateway/pricing/'),
+    // API Gateway の WebSocket API（D-240）。東京の単価は Price List API（AmazonApiGateway・ap-northeast-1・
+    // version 20261112215920・publicationDate 2026-11-12）の WebSocket Messages・WebSocket Connection Minutes。
+    // 32 KB ごとの数え方・送受信の両方・ping / pong は数えない・無料枠は新規の 12 か月は料金ページ。上限は開発者ガイド（2026-11-23 取得）
+    apiGatewayWsPrices: {
+      url: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/current/ap-northeast-1/index.json',
+      retrievedAt: '2026-11-23',
+    },
+    apiGatewayWsPricing: {
+      url: 'https://aws.amazon.com/api-gateway/pricing/',
+      retrievedAt: '2026-11-23',
+    },
+    apiGatewayWsQuotas: {
+      url: 'https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-execution-service-websocket-limits-table.html',
+      retrievedAt: '2026-11-23',
+    },
     cloudfrontPrices: src(
       'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/current/index.json',
     ),
@@ -187,6 +305,20 @@ export const aws: PriceBookInput = {
     dynamodbUnits: src(
       'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
     ),
+    // 読み書きの単位の切り上げ（GetItem・BatchGetItem は項目ごと・Query は合計・Scan は評価した項目・BatchWriteItem も項目ごと・
+    // UpdateItem は前後の大きいほう）・項目の大きさ（属性名も数える・保存は項目ごとに 100 B）・項目は 400 KB まで（2026-11-23 取得。D-237）
+    dynamodbUnitsRounding: {
+      url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/read-write-operations.html',
+      retrievedAt: '2026-11-23',
+    },
+    dynamodbItemSize: {
+      url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/CapacityUnitCalculations.html',
+      retrievedAt: '2026-11-23',
+    },
+    dynamodbConstraints: {
+      url: 'https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Constraints.html',
+      retrievedAt: '2026-11-23',
+    },
     rdsPrices: priceList('AmazonRDS'),
     // 確約の割引（2026-11-02 取得。D-97）。版（publicationDate）: AmazonRDS 2026-10-29
     rdsReservedPrices: { ...priceList('AmazonRDS'), retrievedAt: COMMIT_R },
@@ -199,6 +331,12 @@ export const aws: PriceBookInput = {
     savingsPlanPrices: {
       url: 'https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/20261121004806/ap-northeast-1/index.json',
       retrievedAt: '2026-11-22',
+    },
+    // 解析の実行先の EC2・Fargate（2026-11-25 取得。D-247）。版（publicationDate）: AmazonECS 2026-11-11・AmazonEC2 2026-11-24
+    ecsPrices: { ...priceList('AmazonECS'), retrievedAt: ANALYSIS_R },
+    ec2Prices: {
+      url: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/ap-northeast-1/index.csv',
+      retrievedAt: ANALYSIS_R,
     },
     savingsPlans: commitSrc(
       'https://docs.aws.amazon.com/savingsplans/latest/userguide/what-is-savings-plans.html',
@@ -525,6 +663,21 @@ export const aws: PriceBookInput = {
       ...common,
       name: 'Amplify Hosting',
       sourceIds: ['amplifyPrices', 'amplifyPricing'],
+      limits: [
+        {
+          // 文書は実行インスタンスの寿命だけを書き、1 件の実行の上限を書いていない。1 件はインスタンスより長く動けないので、
+          // これを 1 回の実行の上限とみなす（短い上限があっても文書からは分からない。prd/17 §9 の PR-3）
+          id: 'compute-max-execution',
+          measure: 'wall-ms-per-request',
+          value: 900_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Amplify Hosting の SSR の実行インスタンスは最大 15 分まで動きます（1 回の実行の上限の記載は無いので、これを 1 回の実行の上限とみなします）',
+          sourceIds: ['amplifySpecDuration'],
+        },
+      ],
       notes: [
         'ビルドの時間（$0.01 / 分・標準）と CDN に置いたファイルの保存（$0.023/GB 月）はこのモデルでは数えません',
         'Amplify Hosting の無料枠（ビルド 1,000 分・配信 15 GB・SSR 50 万リクエスト・100 GB 時間など）は「Free for 12 months」の旧来の無料枠なので入れません（AX-06）',
@@ -640,7 +793,30 @@ export const aws: PriceBookInput = {
       ...common,
       name: 'Lambda（x86）',
       sourceIds: ['lambdaPrices', 'lambdaPricing'],
+      limits: [
+        {
+          // Lambda Managed Instances の非同期・イベントソースの 5,400 秒（90 分）は別の実行の形なので採らない
+          id: 'function-timeout',
+          measure: 'wall-ms-per-request',
+          value: 1_800_000,
+          defaultValue: 3_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Lambda の関数は 1 回の実行が既定 3 秒で、timeout の設定で 1,800 秒（30 分）まで上げられます（ここでは 1,800 秒で判定します。同期・非同期・キューから呼ぶときで同じ）',
+          sourceIds: ['lambdaQuotas', 'lambdaTimeout'],
+        },
+      ],
       facts: [
+        {
+          // "Lambda allocates CPU power in proportion to the amount of memory configured." /
+          // "At 1,769 MB, a function has the equivalent of one vCPU (one vCPU-second of credits per second)."（D-248）
+          id: 'memory-cpu',
+          premise:
+            'Lambda は設定したメモリに比例して CPU を割り当てます。1,769 MB で 1 vCPU 相当です（メモリは 128 MB〜10,240 MB）。メモリが小さいと CPU の処理に長い時間がかかり、その時間 × メモリで課金されます',
+          sourceIds: ['lambdaMemoryCpu'],
+        },
         {
           id: 'opennext-isr',
           premise:
@@ -783,6 +959,67 @@ export const aws: PriceBookInput = {
       ],
     },
     {
+      // リアルタイム（D-240）。Amplify の SSR は WebSocket を保てない（公式の SSR の機能の一覧に WebSocket が無い）ので、別に足す
+      id: 'api-gateway-websocket',
+      service: 'api-gateway',
+      ...common,
+      name: 'API Gateway（WebSocket API）',
+      sourceIds: [
+        'apiGatewayWsPrices',
+        'apiGatewayWsPricing',
+        'apiGatewayWsQuotas',
+      ],
+      notes: [
+        '無料枠（100 万メッセージ・75 万接続分 / 月）は新規のアカウントの 12 か月だけなので入れません（AX-06）',
+        'メッセージは送ったものと受け取ったものの両方を、32 KB ごとに 1 件として数えます。ping / pong は数えません',
+      ],
+      facts: [
+        {
+          id: 'websocket-duration',
+          premise:
+            'API Gateway の WebSocket は 1 回の接続が 2 時間まで、無通信が 10 分続くと切れます（引き上げ不可）。2 時間を超える研究会はつなぎ直します',
+          sourceIds: ['apiGatewayWsQuotas'],
+        },
+        {
+          id: 'websocket-messages',
+          premise:
+            'API Gateway の WebSocket はメッセージを送ったものも受け取ったものも数えます（32 KB ごとに 1 件）。盤面を N 人に配ると、受け取った 1 件が配った N 件と合わせて N + 1 件になります',
+          sourceIds: ['apiGatewayWsPricing'],
+        },
+        {
+          id: 'websocket-state',
+          premise:
+            'API Gateway の WebSocket は接続を保つだけで、メッセージごとに Lambda を呼びます。Lambda は接続をまたいで状態を持てないので、つながっている人（接続の ID）と盤面は DB に置き、配るたびに接続の ID へ送り直します。このモデルは盤面を DB に 1 件 1 行で書く分を数え、接続の ID の読み書きは数えません',
+          sourceIds: ['apiGatewayWsPricing', 'apiGatewayWsQuotas'],
+        },
+      ],
+      meters: [
+        {
+          id: 'messages',
+          label: 'メッセージ（API Gateway: WebSocket messages）',
+          resource: 'messages',
+          unit: 'count',
+          pricing: {
+            model: 'tiered',
+            per: 1_000_000,
+            tiers: [
+              { upTo: 1_000_000_000, unitPrice: 1.26 },
+              { upTo: null, unitPrice: 1.06 },
+            ],
+          },
+          sourceIds: ['apiGatewayWsPrices'],
+        },
+        {
+          id: 'connection-minutes',
+          label: '接続の分（API Gateway: WebSocket connection minutes）',
+          resource: 'connection-minutes',
+          unit: 'minute',
+          pricing: { model: 'flat', per: 1_000_000, unitPrice: 0.315 },
+          sourceIds: ['apiGatewayWsPrices'],
+        },
+      ],
+    },
+    {
       id: 'cloudfront',
       service: 'cloudfront',
       ...common,
@@ -916,13 +1153,39 @@ export const aws: PriceBookInput = {
       service: 'dynamodb',
       ...common,
       name: 'DynamoDB（リクエスト課金・標準）',
-      sourceIds: ['dynamodbPrices', 'dynamodbUnits'],
+      sourceIds: [
+        'dynamodbPrices',
+        'dynamodbUnits',
+        'dynamodbUnitsRounding',
+        'dynamodbItemSize',
+        'dynamodbConstraints',
+      ],
       facts: [
         {
           id: 'request-units',
           premise:
-            'DynamoDB の読み取りは 4 KB ごとに 1 単位（結果整合なら半分）、書き込みは 1 KB ごとに 1 単位で課金されます（RDB ではないので、複雑な検索や集計はアプリの側で工夫が要る）',
-          sourceIds: ['dynamodbUnits'],
+            'DynamoDB の読み取りは 4 KB ごとに 1 単位（結果整合なら半分）、書き込みは 1 KB ごとに 1 単位で課金されます（RDB ではないので、複雑な検索や集計はアプリの側で工夫が要る）。' +
+            '書き込みは項目ごとに 1 KB へ切り上げ（500 B でも 1 KB 分。まとめて書く BatchWriteItem も項目ごと）、項目を上書きする UpdateItem は前後の大きいほうの項目全体で数えます。' +
+            '読み取りは Query なら返した項目の合計を 4 KB へ切り上げ、GetItem・BatchGetItem は項目ごとに切り上げ、Scan は返した量でなく評価した項目で数えます（該当が無くても消費）。' +
+            '項目の大きさは属性名も含み、1 項目 400 KB までです。保存の課金には項目ごとに 100 B が足されます',
+          interpretation: {
+            adopted:
+              '問い合わせ 1 回を Query とみなし、DB の応答の大きさを 4 KB へ切り上げます。書き込みは書く 1 行ごとに大きさ（解析の結果は保存の形と区切り方から。ほかは 1 KB と仮定）を 1 KB へ切り上げます。項目ごとの 100 B は在庫の行ごとのオーバーヘッドの仮定で数えます',
+            rejected: [
+              {
+                reading:
+                  'まとめて書けば、合計の大きさを 1 KB へ切り上げるだけで済む',
+                reason:
+                  'BatchWriteItem も項目ごとに切り上げてから合計します（500 B と 3.5 KB で 5 KB。公式の文書）',
+              },
+            ],
+          },
+          sourceIds: [
+            'dynamodbUnits',
+            'dynamodbUnitsRounding',
+            'dynamodbItemSize',
+            'dynamodbConstraints',
+          ],
         },
       ],
       meters: [
@@ -1438,6 +1701,72 @@ export const aws: PriceBookInput = {
         },
       ],
     },
+    // ---- 解析の実行先（棋譜解析。D-247・prd/17 §5.6）。ECS の Fargate と EC2 の計算向けのマシン ----
+    ...FARGATE.map((f): PlanInput => ({
+      id: `fargate-${f.arch}`,
+      service: 'fargate',
+      ...common,
+      name: `ECS on Fargate（Linux・${f.label}）`,
+      sourceIds: ['ecsPrices'],
+      notes: [
+        'タスクが動いている間の vCPU とメモリを秒単位で課金します（料金表の単位は時間）。タスクのエフェメラルストレージは 20 GB まで込みで、それを超える分（$0.000133 / GB 時間）は数えません',
+        'Compute Savings Plans の Fargate の単価は確かめていないので、確約は入れていません',
+      ],
+      meters: [
+        {
+          id: 'vcpu',
+          label: `vCPU の時間（Fargate: ${f.label}）`,
+          resource: 'cpu-hours',
+          unit: 'hour',
+          premise: `Fargate（Linux・${f.label}・東京）は、タスクの vCPU 1 つにつき 1 時間 $${f.vcpu} です`,
+          pricing: { model: 'flat', per: 1, unitPrice: f.vcpu },
+          sourceIds: ['ecsPrices'],
+        },
+        {
+          id: 'memory',
+          label: `メモリの時間（Fargate: ${f.label}）`,
+          resource: 'memory-gb-hours',
+          unit: 'gb-hour',
+          premise: `Fargate（Linux・${f.label}・東京）は、タスクのメモリ 1 GB につき 1 時間 $${f.memory} です`,
+          pricing: { model: 'flat', per: 1, unitPrice: f.memory },
+          sourceIds: ['ecsPrices'],
+        },
+      ],
+    })),
+    ...EC2.map((m): PlanInput => ({
+      id: ec2PlanId(m.type),
+      service: 'ec2',
+      ...common,
+      name: `EC2 ${m.type}（Linux・${m.cpu}・${m.vcpu} vCPU・メモリ ${m.memoryGiB} GiB）`,
+      sourceIds: ['ec2Prices'],
+      notes: [
+        'ディスク（EBS）の料金は確かめていないので数えません',
+        '3 年の確約・一部前払い・全額前払いは入れていません（確約は 1 年・前払いなしだけ。D-97）',
+      ],
+      commitments: [
+        {
+          id: 'reserved-instance',
+          label: `リザーブドインスタンス（EC2: ${m.type}・1 年・前払いなし）`,
+          kind: 'instance',
+          termMonths: 12,
+          meterIds: ['instance'],
+          payments: [{ payment: 'no-upfront', hourly: m.reserved }],
+          premise: `EC2 の ${m.type}（Linux・東京）のリザーブドインスタンス（standard・1 年・前払いなし）は 1 時間 $${m.reserved} です（オンデマンド $${m.onDemand}）。同じ種類のインスタンスの時間の料金だけを割り引き、取り消せず、使わなくても期間中は課金されます`,
+          sourceIds: ['ec2Prices'],
+        },
+      ],
+      meters: [
+        {
+          id: 'instance',
+          label: `マシンの稼働（EC2: ${m.type}）`,
+          resource: 'instance-hours',
+          unit: 'hour',
+          premise: `EC2 の ${m.type}（Linux・共有のテナンシー・東京）は、動いている間 1 時間 $${m.onDemand} です（オンデマンド）`,
+          pricing: { model: 'flat', per: 1, unitPrice: m.onDemand },
+          sourceIds: ['ec2Prices'],
+        },
+      ],
+    })),
     {
       // 東京からインターネットへの転送（D-52）。Lambda の関数から外（他の事業者の R2）へ送るデータ。
       // Lambda の料金ページ: 関数の外のリージョンとのデータの出入りは EC2 のデータ転送の料金
@@ -1452,6 +1781,24 @@ export const aws: PriceBookInput = {
           premise:
             'Lambda の関数がリージョンの外（他の事業者など）とやり取りするデータは、EC2 のデータ転送の料金で課金されます（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）',
           sourceIds: ['lambdaPricing', 'dataTransferPrices'],
+        },
+        {
+          // 解析の実行先の EC2・Fargate から、別の事業者のアプリの API へ結果を送る（D-247）
+          id: 'ec2-out',
+          premise:
+            'EC2 のインスタンスからインターネットへ送るデータは、EC2 のデータ転送の料金です（東京 → インターネットは月 100 GB の無料の後 $0.114/GB から）。Fargate のタスクから送るデータも同じ料金と読みました',
+          interpretation: {
+            adopted:
+              'Fargate のタスクから外へ送るデータも EC2 のデータ転送の料金で数えます',
+            rejected: [
+              {
+                reading: 'Fargate の外への転送は数えない',
+                reason:
+                  'Fargate の料金の表（Price List）に転送の行は無く、AWS 共通の Data Transfer Out が当たると読みました',
+              },
+            ],
+          },
+          sourceIds: ['ec2DataTransfer', 'dataTransferPrices'],
         },
         {
           // SPA の API を AWS に置き、静的は他の事業者から配る形（D-65。2026-11-02 に原文で確認）

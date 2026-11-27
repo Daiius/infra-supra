@@ -17,6 +17,7 @@ import {
   SCENARIOS,
   setupProblem,
   setupCommentOptions,
+  setupMonthOneEstimate,
   setupRevalidateOptions,
   setupSlots,
   STACKS,
@@ -134,6 +135,7 @@ export const commentAt = (
 export const SWEEP_SCENARIOS = [
   'article-community',
   'contract-operations',
+  'kifu-analysis',
 ] as const;
 export type SweepScenario = (typeof SWEEP_SCENARIOS)[number];
 
@@ -194,9 +196,12 @@ export function violations(s: GameState): string[] {
 }
 
 /** 組の名前（テストの名前）。 */
-/** そのシナリオの組（シナリオごとのファイルが回す）。 */
-export const groupsOf = (id: SweepScenario): Group[] =>
-  GROUPS.filter((g) => g.sc.id === id);
+/**
+ * そのシナリオの組（シナリオごとのファイルが回す）。fw を渡すとそのフレームワークの組だけ（重いシナリオをフレームワークごとの
+ * ファイルに分けて並べて回す。棋譜解析は解析の実行先が多く、1 ファイルだと数分かかる）。
+ */
+export const groupsOf = (id: SweepScenario, fw?: FrameworkId): Group[] =>
+  GROUPS.filter((g) => g.sc.id === id && (fw === undefined || g.fw === fw));
 
 export const groupName = (g: Group) =>
   `${g.sc.id} × ${g.fw} × ${STACKS[g.stackIndex]!.id}`;
@@ -280,9 +285,11 @@ export function sweepGroup({ sc, fw, stackIndex }: Group): void {
 export function describeRewriteSweep(
   scenarioId: SweepScenario,
   minSwitched: number,
+  /** 元のフレームワーク（重いシナリオをファイルに分けるとき。省略は全部）。 */
+  from?: FrameworkId,
 ): void {
-  describe(`作り直しの総当たり（${scenarioId} × 構成 × 元と先のフレームワーク × 部品）`, () => {
-    const PAIRS = GROUPS.filter((g) => g.sc.id === scenarioId).flatMap((g) =>
+  describe(`作り直しの総当たり（${scenarioId}${from ? `・${from} から` : ''} × 構成 × 元と先のフレームワーク × 部品）`, () => {
+    const PAIRS = groupsOf(scenarioId, from).flatMap((g) =>
       frameworksOf(g.sc)
         .allowed.filter((to) => to !== g.fw)
         .map((to) => ({ ...g, to })),
@@ -372,6 +379,73 @@ export function describeRewriteSweep(
     // 無料のプランなどは作り直しが済む前に終わる組もあるので、全体で十分な数が済むことを確かめる
     it('作り直しが済んだ組が十分にある', () => {
       expect(switchedAll).toBeGreaterThan(minSwitched);
+    });
+  });
+}
+
+/**
+ * 始める画面の 1 か月目の見込み（D-72）の総当たり: 出来事の無い 1 か月目の実際の費用・収益・所持金切れと一致する（pairwise の全組み合わせ）。
+ * シナリオ（重いものはフレームワーク）ごとのファイルに分けて並べて回す。min は確かめた組と、所持金が尽きる組の数の下限
+ * （2026-11-27 の数の 8 割ほど。尽きる組が実際にあることも確かめる）。
+ */
+export function describeMonthOneSweep(
+  scenarioId: SweepScenario,
+  min: { checked: number; short: number },
+  fw?: FrameworkId,
+): void {
+  describe(`1 か月目の費用の見込み（D-72・${scenarioId}${fw ? ` × ${fw}` : ''}）`, () => {
+    it('出来事の無い 1 か月目の実際の費用・所持金切れと一致する（pairwise の全組み合わせ）', () => {
+      const problems: string[] = [];
+      let checked = 0;
+      let short = 0;
+      for (const { sc, fw: f, stackIndex } of groupsOf(scenarioId, fw)) {
+        const revalidate = setupRevalidateOptions(sc, f).map((o) => o.value);
+        const comments = setupCommentOptions(sc, f).map((o) => o.value);
+        selectableCombos(sc, stackIndex, f).forEach((c, i) => {
+          const r = revalidate.length
+            ? revalidate[i % revalidate.length]
+            : undefined;
+          const cm = commentAt(comments, i, revalidate.length);
+          const id = `${sc.id} × ${f} × ${STACKS[stackIndex]!.id} ${JSON.stringify(c)} r=${r} cm=${cm}`;
+          const e = setupMonthOneEstimate(sc, stackIndex, f, c, r, cm);
+          // 出来事も障害も無い 1 か月目になるシードを探す
+          for (let seed = 1; seed <= 30; seed++) {
+            const s = playMonth(
+              newGame(
+                stackIndex,
+                seed,
+                sc,
+                undefined,
+                f,
+                c,
+                r,
+                partsOfComments(sc, cm),
+              ),
+            );
+            const h = s.history[0]!;
+            if (h.events.length > 0 || h.status === 'incident') continue;
+            checked++;
+            const near = (a: number, b: number) =>
+              Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b));
+            if (!near(e.costUsd, h.infraCost))
+              problems.push(`${id}: 費用 ${e.costUsd} ≠ ${h.infraCost}`);
+            if (!near(e.revenueUsd, h.revenue))
+              problems.push(`${id}: 収益 ${e.revenueUsd} ≠ ${h.revenue}`);
+            const ranOut = s.end?.reason === 'cash' && s.end.month === 1;
+            if (e.short !== ranOut)
+              problems.push(`${id}: 見込み ${e.short} ≠ 所持金切れ ${ranOut}`);
+            if (e.short) {
+              short++;
+              if (e.topLines.length === 0)
+                problems.push(`${id}: 主な費用が無い`);
+            }
+            break;
+          }
+        });
+      }
+      expect(problems).toEqual([]);
+      expect(checked).toBeGreaterThanOrEqual(min.checked);
+      expect(short).toBeGreaterThanOrEqual(min.short);
     });
   });
 }

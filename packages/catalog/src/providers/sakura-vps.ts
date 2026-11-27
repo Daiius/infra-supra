@@ -49,6 +49,16 @@ const annual = (
   sourceIds: ['specAnnual', 'scaleupAnnual'],
 });
 
+/**
+ * 解析の worker に使う大きいプラン（東京・月額・税込。仕様のページ 2026-11-25。D-247）。年額（12 か月一括）は確かめていないので
+ * 確約は入れない。
+ */
+export const SAKURA_LARGE = [
+  { plan: '8gb', vcpu: 6, memoryGB: 8, diskGB: 400, monthly: 7_920 },
+  { plan: '16gb', vcpu: 8, memoryGB: 16, diskGB: 800, monthly: 15_400 },
+  { plan: '32gb', vcpu: 10, memoryGB: 32, diskGB: 1_600, monthly: 30_800 },
+] as const;
+
 export const sakuraVps: PriceBookInput = {
   schemaVersion: 1,
   provider: 'sakura-vps',
@@ -59,6 +69,11 @@ export const sakuraVps: PriceBookInput = {
   retrievedAt: R,
   sources: {
     spec: src('https://vps.sakura.ad.jp/specification/'),
+    // 大きいプラン（8GB・16GB・32GB）の月額と仮想コアの数（2026-11-25 に確認。D-247。2GB・4GB の月額も同じ値だった）
+    specLarge: {
+      url: 'https://vps.sakura.ad.jp/specification/',
+      retrievedAt: '2026-11-25',
+    },
     // 圧縮の既定（2026-11-11 に原文で確認。D-211）: nginx の gzip は「Default: gzip off;」、next start は既定で gzip
     nginxGzip: {
       url: 'https://nginx.org/en/docs/http/ngx_http_gzip_module.html',
@@ -187,6 +202,13 @@ export const sakuraVps: PriceBookInput = {
       meters: [TRANSFER],
       facts: [
         {
+          // WebSocket（D-240）
+          id: 'websocket-resident',
+          premise:
+            'さくらの VPS は月額の定額なので、WebSocket の接続を常駐のプロセスで保っても追加の料金はかかりません。接続は時間で切られず、盤面はプロセスのメモリに置けます。代わりに、同時接続の数とメモリ・CPU は VPS の大きさで頭打ちになり、VPS が止まるとつながっている全員が切れます',
+          sourceIds: ['spec'],
+        },
+        {
           id: 'next-fs-cache',
           premise:
             'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動きます（CDN を前に置くときや複数台では設定が要る）',
@@ -255,6 +277,13 @@ export const sakuraVps: PriceBookInput = {
       meters: [TRANSFER],
       facts: [
         {
+          // WebSocket（D-240）
+          id: 'websocket-resident',
+          premise:
+            'さくらの VPS は月額の定額なので、WebSocket の接続を常駐のプロセスで保っても追加の料金はかかりません。接続は時間で切られず、盤面はプロセスのメモリに置けます。代わりに、同時接続の数とメモリ・CPU は VPS の大きさで頭打ちになり、VPS が止まるとつながっている全員が切れます',
+          sourceIds: ['spec'],
+        },
+        {
           id: 'next-fs-cache',
           premise:
             'Next.js の ISR のキャッシュは、next start 1 台・永続ディスクなら自動で動きます（CDN を前に置くときや複数台では設定が要る）',
@@ -300,5 +329,30 @@ export const sakuraVps: PriceBookInput = {
         '最低利用期間 3 か月（さくらの VPS 全体）',
       ],
     },
+    // ---- 解析の worker に使う大きいプラン（棋譜解析。D-247・prd/17 §5.6） ----
+    ...SAKURA_LARGE.map((l): PlanInput => ({
+      id: `${l.plan}-tokyo`,
+      service: 'vps',
+      name: `${l.plan.toUpperCase()}（東京）`,
+      baseFee: {
+        label: `月額料金（さくらの VPS ${l.plan.toUpperCase()}）`,
+        amount: l.monthly,
+        per: 'month',
+        scope: 'node',
+      },
+      sourceIds: ['specLarge'],
+      members: MEMBERS,
+      uptimeSla: {
+        status: 'offered',
+        percent: 99.95,
+        premise: `さくらの VPS ${l.plan.toUpperCase()} は月の稼働率 99.95% の SLA の対象（メモリ 4 GB 以上のプラン。満たさない分の利用料金を減額。仮想マシン単位の障害は対象外）`,
+        sourceIds: ['specLarge', 'sla'],
+      },
+      meters: [TRANSFER],
+      notes: [
+        `仮想 ${l.vcpu} コア・メモリ ${l.memoryGB} GB・SSD ${l.diskGB} GB・回線 100 Mbps 共有`,
+        '年額（12 か月一括）は確かめていないので、確約は入れていません',
+      ],
+    })),
   ],
 };

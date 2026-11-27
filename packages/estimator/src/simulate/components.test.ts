@@ -322,6 +322,106 @@ describe('部品の選択で足した振る舞い', () => {
     );
   });
 
+  describe('書き込みの行の大きさと、返した文書の数（D-237）', () => {
+    const base = workload();
+    const sized = resolveWorkload(
+      workload({ api: { ...base.api, rowKB: 2.5, rowsReturnedPerQuery: 7 } }),
+    );
+    const run = (
+      wl: typeof w,
+      config: Extract<
+        ArchitectureInput['nodes'][number]['config'],
+        { kind: 'request-db' }
+      >,
+    ) =>
+      simulateResources(wl, {
+        id: 'x',
+        name: 'x',
+        nodes: [{ id: 'd', label: 'd', config }],
+        routes: { api: ['d'] },
+      }).nodes.d!;
+    const dynamo = {
+      kind: 'request-db' as const,
+      countsBy: 'size' as const,
+      readUnitKB: 4,
+      writeUnitKB: 1,
+      eventuallyConsistent: false,
+      itemKB: 1,
+    };
+    const firestore = { ...dynamo, countsBy: 'document' as const };
+
+    it('大きさで数える DB は、書く 1 行の大きさ（api.rowKB）を 1 行ごとに切り上げる。省略は構成の itemKB', () => {
+      const api = sized.classes.api;
+      expect(run(sized, dynamo).resources['write-request-units']).toBeCloseTo(
+        api.count * api.perRequest.rowsWritten * 3,
+        9,
+      );
+      expect(run(w, dynamo).resources['write-request-units']).toBeCloseTo(
+        w.classes.api.count * w.classes.api.perRequest.rowsWritten * 1,
+        9,
+      );
+      // 返した文書の数は大きさで数える DB の読み取りに効かない（応答の大きさを切り上げる）
+      expect(run(sized, dynamo).resources['read-request-units']).toBeCloseTo(
+        api.count * 2,
+        9,
+      );
+    });
+
+    it('文書で数える DB は、返した文書の数（rowsReturnedPerQuery）で読み、書いた文書の数で書く（大きさによらない）', () => {
+      const api = sized.classes.api;
+      const u = run(sized, firestore);
+      expect(u.resources['read-request-units']).toBeCloseTo(
+        api.count * 2 * 7,
+        9,
+      );
+      expect(u.resources['write-request-units']).toBeCloseTo(
+        api.count * api.perRequest.rowsWritten,
+        9,
+      );
+      // 数を与えない問い合わせは今までどおり応答の大きさから（1 KB → 1 件）。0 件を返す問い合わせも 1 件
+      expect(run(w, firestore).resources['read-request-units']).toBeCloseTo(
+        w.classes.api.count * 2,
+        9,
+      );
+      const zero = resolveWorkload(
+        workload({ api: { ...base.api, rowsReturnedPerQuery: 0 } }),
+      );
+      expect(run(zero, firestore).resources['read-request-units']).toBeCloseTo(
+        zero.classes.api.count * 2,
+        9,
+      );
+    });
+
+    it('数を与えたルートと与えないルートが 1 つのクラスに混ざっても、それぞれの数え方で足す', () => {
+      const mixed = resolveWorkload(
+        workload({
+          routes: [
+            {
+              id: 'a',
+              rendering: 'ssr',
+              share: 0.5,
+              pages: 1,
+              processing: { ...processing, rowsReturnedPerQuery: 10 },
+            },
+            { id: 'b', rendering: 'ssr', share: 0.5, pages: 1, processing },
+          ],
+        }),
+      );
+      const ssr = mixed.classes['document-ssr'];
+      const u = simulateResources(mixed, {
+        id: 'x',
+        name: 'x',
+        nodes: [{ id: 'd', label: 'd', config: firestore }],
+        routes: { 'document-ssr': ['d'] },
+      }).nodes.d!;
+      // 半分の閲覧は 2 回 × 10 件、残りは 2 回 × 1 件（応答 1 KB）
+      expect(u.resources['read-request-units']).toBeCloseTo(
+        ssr.count * (0.5 * 2 * 10 + 0.5 * 2 * 1),
+        9,
+      );
+    });
+  });
+
   it('リクエストを大きさの単位で数える CDN: 1 件は最低 1、超えた分は単位で切り上げ。次へ渡す件数は変わらない（OCL-70ABEDB7）', () => {
     const u = sim(
       [
@@ -1266,5 +1366,211 @@ describe('ドメインと DNS（D-96）', () => {
     // エイリアス（Route 53 → CloudFront）は無料なので数えない
     expect(r.a!.resources['dns-queries']).toBeUndefined();
     expect(r.d!.resources).toEqual({});
+  });
+});
+
+describe('リアルタイムの接続の長さ・ファンアウト・同時接続のピーク（D-240）', () => {
+  const rt = {
+    usersPerMau: 0.1,
+    connectionsPerUser: 4,
+    messagesPerUser: 40,
+    processingMs: 5,
+    historyRowsPerConnect: 20,
+    minutesPerConnection: 90,
+    fanout: 3,
+    messageKB: 40,
+    peakFactor: 5,
+  };
+  const wr = resolveWorkload(workload({ realtime: rt }));
+  const conns = 1000 * 0.1 * 4;
+  const msgs = 1000 * 0.1 * 40;
+  const run = (
+    nodes: ArchitectureInput['nodes'],
+    routes: ArchitectureInput['routes'],
+  ) => simulateResources(wr, { id: 'x', name: 'x', nodes, routes }).nodes;
+
+  it('接続の長さは壁時計の時間、同時接続のピークは月の接続の分 ÷ 月の分 × ピークの倍率', () => {
+    expect(wr.classes['realtime-connect'].perRequest.wallMs).toBe(90 * 60_000);
+    expect(wr.realtime!.connectionMinutes).toBe(conns * 90);
+    expect(wr.realtime!.peakConnections).toBeCloseTo(
+      ((conns * 90) / (730 * 60)) * 5,
+      9,
+    );
+    // 接続の長さが無ければ持たない（今までの数え方）
+    expect(w.realtime).toBeUndefined();
+    expect(w.classes['realtime-connect'].perRequest.wallMs).toBe(0);
+  });
+
+  it('接続を保つ関数は上限ごとにつなぎ直し、次の DB へは短い 1 件として渡す', () => {
+    const u = run(
+      [
+        {
+          id: 'fn',
+          label: 'fn',
+          config: {
+            kind: 'function',
+            memoryGB: 1,
+            concurrency: 2,
+            websocket: { maxConnectionMinutes: 20 },
+          },
+        },
+        { id: 'db', label: 'db', config: { kind: 'managed-db' } },
+      ],
+      { 'realtime-connect': ['fn', 'db'] },
+    );
+    // 90 分を 20 分ごと → 5 回
+    expect(u.fn!.resources.invocations).toBeCloseTo(conns * 5, 9);
+    expect(u.fn!.maxWallMsPerRequest).toBeCloseTo(18 * 60_000, 9);
+    expect(u.fn!.resources['memory-gb-hours']).toBeCloseTo(
+      ((conns * 90) / 60) * 0.5,
+      9,
+    );
+    expect(u.db!.busyMs).toBe(0);
+  });
+
+  it('WebSocket の入口: 受信と配信を大きさの単位で切り上げて数え、接続の分を数える', () => {
+    const u = run(
+      [
+        {
+          id: 'gw',
+          label: 'gw',
+          config: {
+            kind: 'websocket-gateway',
+            messageUnitKB: 32,
+            websocket: { maxConnectionMinutes: 120 },
+          },
+        },
+        { id: 'fn', label: 'fn', config: { kind: 'function' } },
+      ],
+      { 'realtime-connect': ['gw', 'fn'], 'realtime-message': ['gw', 'fn'] },
+    );
+    // 40 KB は 2 単位、受信 1 + 配信 3
+    expect(u.gw!.resources.messages).toBeCloseTo(msgs * 4 * 2, 9);
+    expect(u.gw!.resources['connection-minutes']).toBeCloseTo(conns * 90, 9);
+    expect(u.fn!.resources.invocations).toBeCloseTo(conns + msgs, 9);
+    expect(u.fn!.maxWallMsPerRequest).toBeCloseTo(5, 9);
+  });
+
+  it('接続を常駐で保つホストは、メモリに同時接続のピーク × 1 接続のメモリを足す', () => {
+    const host = (websocket?: { kbPerConnection: number }) =>
+      run(
+        [
+          {
+            id: 'vps',
+            label: 'vps',
+            config: {
+              kind: 'host',
+              vcpu: 1,
+              memoryGB: 1,
+              diskGB: 100,
+              lineMbps: 100,
+              residentMemoryGB: 0.5,
+              dbCpuMsPerQuery: 0,
+              imageTransformCpuMs: 0,
+              ...(websocket ? { websocket } : {}),
+            },
+          },
+        ],
+        { 'realtime-connect': ['vps'], 'realtime-message': ['vps'] },
+      ).vps!.host!.memoryGB;
+    expect(host()).toBe(0.5);
+    expect(host({ kbPerConnection: 1000 })).toBeCloseTo(
+      0.5 + (wr.realtime!.peakConnections * 1000) / 1_000_000,
+      9,
+    );
+  });
+});
+
+describe('処理の速さの倍率・目標の使用率・時間で課金するマシン（D-247）', () => {
+  const n = w.classes.api.count;
+  const p = w.classes.api.perRequest;
+  const fn = (cpuSpeed?: number) => ({
+    id: 'f',
+    label: 'f',
+    config: {
+      kind: 'function' as const,
+      memoryGB: 1,
+      concurrency: 1,
+      ...(cpuSpeed !== undefined ? { cpuSpeed } : {}),
+    },
+  });
+
+  it('cpuSpeed: CPU を倍率で割り、壁時計時間は減った CPU の分だけ短くなる（待ちは変えない）', () => {
+    const base = sim([fn()], { api: ['f'] }).f!;
+    const fast = sim([fn(2)], { api: ['f'] }).f!;
+    expect(fast.resources['cpu-ms']).toBeCloseTo(
+      base.resources['cpu-ms']! / 2,
+      6,
+    );
+    expect(fast.busyMs).toBeCloseTo(base.busyMs - (n * p.cpuMs) / 2, 6);
+    expect(fast.maxCpuMsPerRequest).toBeCloseTo(base.maxCpuMsPerRequest / 2, 9);
+    // 倍率 1 は省略と同じ
+    expect(sim([fn(1)], { api: ['f'] }).f!).toEqual(base);
+  });
+
+  it('cpuSpeed はホストの CPU の使用率にも効く', () => {
+    const host = (cpuSpeed?: number) => ({
+      id: 'h',
+      label: 'h',
+      config: {
+        kind: 'host' as const,
+        vcpu: 2,
+        memoryGB: 4,
+        diskGB: 50,
+        lineMbps: 100,
+        residentMemoryGB: 0,
+        dbCpuMsPerQuery: 0,
+        imageTransformCpuMs: 0,
+        ...(cpuSpeed !== undefined ? { cpuSpeed } : {}),
+      },
+    });
+    const base = sim([host()], { api: ['h'] }).h!;
+    const fast = sim([host(4)], { api: ['h'] }).h!;
+    expect(fast.host!.peakCores).toBeCloseTo(base.host!.peakCores / 4, 9);
+  });
+
+  it('targetUtilization: アクティブな時間を目標の使用率で割る（省略は Cloud Run の型のまま）', () => {
+    const node = (extra: Record<string, unknown> = {}) => ({
+      id: 'r',
+      label: 'r',
+      config: {
+        kind: 'container' as const,
+        vcpu: 1,
+        memoryGB: 0.5,
+        concurrency: 1,
+        ...extra,
+      },
+    });
+    const base = sim([node()], { api: ['r'] }).r!;
+    const scaled = sim([node({ targetUtilization: 0.5 })], { api: ['r'] }).r!;
+    expect(scaled.resources['cpu-hours']).toBeCloseTo(
+      base.resources['cpu-hours']! * 2,
+      9,
+    );
+    expect(base.resources['cpu-hours']).toBeGreaterThan(0);
+  });
+
+  it('billedHourly: 時間で課金するマシンは 1 台の月の時間を数え、省略（月額の VPS）は数えない', () => {
+    const host = (billedHourly?: boolean) => ({
+      id: 'h',
+      label: 'h',
+      config: {
+        kind: 'host' as const,
+        vcpu: 2,
+        memoryGB: 4,
+        diskGB: 50,
+        lineMbps: 100,
+        residentMemoryGB: 0,
+        dbCpuMsPerQuery: 0,
+        imageTransformCpuMs: 0,
+        ...(billedHourly ? { billedHourly } : {}),
+      },
+    });
+    expect(
+      sim([host(true)], { api: ['h'] }).h!.resources['instance-hours'],
+    ).toBe(730);
+    expect(
+      sim([host()], { api: ['h'] }).h!.resources['instance-hours'],
+    ).toBeUndefined();
   });
 });

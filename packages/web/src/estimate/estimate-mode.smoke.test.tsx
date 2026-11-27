@@ -17,6 +17,8 @@ import {
   openSlot,
   renderApp,
   showSetupTab,
+  showOwnSlotTab,
+  pickAnalysis,
   useSmokeEnv,
   waitLoaded,
   showPage,
@@ -213,6 +215,205 @@ describe('見積モードの画面', () => {
     await renderApp();
     expect((combo('テンプレート') as HTMLSelectElement).value).toBe('business');
     expect(expectEstimate()).toBe(name);
+  });
+
+  it('W-KF1 棋譜解析のテンプレート（開発中。D-233）は ?preview=1 のときだけ選べる', async () => {
+    const options = () =>
+      [...(combo('テンプレート') as HTMLSelectElement).options].map(
+        (o) => o.value,
+      );
+    // 印が無ければ選択肢に出さず、URL の t=kifu も既定のテンプレートに直す
+    window.history.replaceState(null, '', '/?mode=estimate&t=kifu');
+    await renderApp();
+    expectEstimate();
+    expect(options()).toEqual(['article', 'business']);
+    expect((combo('テンプレート') as HTMLSelectElement).value).toBe('article');
+    expect(window.location.search).toContain('t=article');
+    cleanup();
+
+    // ?preview=1 なら選べて、URL の t=kifu で開ける
+    window.history.replaceState(null, '', '/?mode=estimate&t=kifu&preview=1');
+    await renderApp();
+    expect(options()).toEqual(['article', 'business', 'kifu']);
+    expect((combo('テンプレート') as HTMLSelectElement).value).toBe('kifu');
+    expectEstimate();
+  });
+
+  it('W-KF2 棋譜解析のテンプレートで、選べる構成とフレームワークをすべて回しても見積が出る', async () => {
+    window.history.replaceState(null, '', '/?mode=estimate&t=kifu&preview=1');
+    await renderApp();
+    expectEstimate();
+    for (const id of STACKS.filter((s) => !s.hidden).map((s) => s.id)) {
+      pick('stack', id);
+      expectEstimate();
+    }
+    for (const id of pickerRadios('framework')
+      .filter((r) => !r.disabled)
+      .map((r) => r.value)) {
+      pick('framework', id);
+      expectEstimate();
+    }
+  });
+
+  it('W-KF3 棋譜解析のテンプレートでは解析の置き場（D-235）を ③ のタブ（D-245）で選べ、URL・月の費用・構成図の箱が替わる。ほかのテンプレートには出ない', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=kifu&preview=1&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const c = () =>
+      new URLSearchParams(window.location.search).get('c.analysis');
+    const pressed = (attr: string) =>
+      showOwnSlotTab('analysis')
+        .querySelector(`[${attr}][aria-pressed="true"]`)
+        ?.getAttribute(attr);
+    // 既定はアプリと同じ実行環境（サーバー）。① のカードには解析の置き場の行を出さない
+    expect(pressed('data-analysis-mode')).toBe('server');
+    expect(pressed('data-analysis-target')).toBe('same');
+    showSetupTab('stack');
+    ensurePartsList();
+    expect(
+      document.querySelector('section[data-parts] [data-slot="analysis"]'),
+    ).toBeNull();
+    const total = () =>
+      within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent;
+    const before = total();
+    // worker（さくらの VPS）にすると URL に残り、月の費用が替わり、図に worker の箱が出る
+    pickAnalysis('server', 'worker-vps-2gb');
+    expect(c()).toBe('worker-vps-2gb');
+    expectEstimate();
+    expect(total()).not.toBe(before);
+    fireEvent.click(
+      within(stackCard()).getByRole('button', { name: '構成図から選ぶ' }),
+    );
+    expect(
+      stackCard().querySelector('[data-node="analysis-worker"]'),
+    ).not.toBeNull();
+    // 別の事業者のサーバーレス（Vercel の構成に AWS Lambda）: 図に解析の関数の箱が出る。Vercel Functions は同じ実行環境なので重ねない
+    pickAnalysis('server', 'fn-lambda');
+    expect(c()).toBe('fn-lambda');
+    expectEstimate();
+    expect(
+      stackCard().querySelector('[data-node="analysis-fn"]'),
+    ).not.toBeNull();
+    expect(
+      showOwnSlotTab('analysis').querySelector(
+        '[data-analysis-target="fn-vercel"]',
+      ),
+    ).toBeNull();
+    // 実行先は払い方 → 事業者 → 系列と大きさの段で選び、台で借りるマシン（D-247）は系列の行に大きさを並べる。EC2 を選ぶと worker の箱が出る
+    const tab = showOwnSlotTab('analysis');
+    expect(
+      [...tab.querySelectorAll('[data-analysis-kind]')].map((e) =>
+        e.getAttribute('data-analysis-kind'),
+      ),
+    ).toEqual(['same', 'per-call', 'running', 'machine']);
+    // 選んでいない枝（台で借りるマシンの系列）は出さない
+    expect(tab.querySelector('[data-analysis-family]')).toBeNull();
+    pickAnalysis('server', 'ec2-c7g-2xlarge');
+    expect(
+      showOwnSlotTab('analysis').querySelector(
+        '[data-analysis-family^="EC2 c7g"]',
+      ),
+    ).not.toBeNull();
+    expect(c()).toBe('ec2-c7g-2xlarge');
+    expectEstimate();
+    expect(
+      stackCard().querySelector('[data-node="analysis-worker"]'),
+    ).not.toBeNull();
+    pickAnalysis('server', 'fn-lambda');
+    // 置き方を併用にすると実行先は保つ
+    pickAnalysis('hybrid');
+    expect(c()).toBe('hybrid-fn-lambda');
+    // 利用者の端末にすると実行先は選ばず、解析の箱は消える
+    pickAnalysis('client');
+    expect(c()).toBe('client');
+    expectEstimate();
+    expect(
+      showOwnSlotTab('analysis').querySelector('[data-analysis-target]'),
+    ).toBeNull();
+    expect(stackCard().querySelector('[data-node="analysis-fn"]')).toBeNull();
+    cleanup();
+
+    // 解析の無いテンプレート（記事）には出ない
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&preview=1&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    expect(
+      document.querySelector('[data-setup-tab-button="slot:analysis"]'),
+    ).toBeNull();
+    expect(queryGroup('解析の置き場')).toBe(null);
+  });
+
+  it('W-KF4 棋譜解析では解析の区切り方と候補の数（D-236）を解析の置き場のタブ（D-245）で選べ、URL・月の費用が替わる。端末では候補の数を選べない', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=kifu&preview=1&s=vercel-supabase-pro',
+    );
+    await renderApp();
+    expectEstimate();
+    const q = () => new URLSearchParams(window.location.search);
+    const total = () =>
+      within(card(/^月の費用: /)).getByText(/^\$[\d,]+\.\d\d$/).textContent;
+    // 解析の設定は解析の置き場のタブ（③。D-245）の中
+    const openAnalysis = () => {
+      showOwnSlotTab('analysis');
+    };
+    openAnalysis();
+    // 既定は局面ごと・候補 3 つ（URL には書かない）
+    expect(checked('解析の区切り方')).toBe('0');
+    expect(checked('1 局面に残す候補の数')).toBe('3');
+    expect(q().get('au')).toBeNull();
+    const before = total();
+    choose('解析の区切り方', '1');
+    expect(q().get('au')).toBe('1');
+    expectEstimate();
+    expect(total()).not.toBe(before);
+    choose('1 局面に残す候補の数', '1');
+    expect(q().get('ac')).toBe('1');
+    expectEstimate();
+    // 利用者の端末にすると候補は 1 つに固定し、選べない理由を出す
+    choose('1 局面に残す候補の数', '3');
+    pickAnalysis('client');
+    openAnalysis();
+    const cands = group('1 局面に残す候補の数');
+    expect(checked('1 局面に残す候補の数')).toBe('1');
+    expect(
+      cands.querySelector('[data-option="3"]')!.getAttribute('data-available'),
+    ).toBe('false');
+    expect(
+      cands.parentElement!.querySelector('[data-setting-lock="candidates"]'),
+    ).not.toBeNull();
+    expectEstimate();
+    cleanup();
+
+    // URL から読み、解析の無いテンプレート（記事）には出さない
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=kifu&preview=1&s=vercel-supabase-pro&au=2&ac=1',
+    );
+    await renderApp();
+    openAnalysis();
+    expect(checked('解析の区切り方')).toBe('2');
+    expect(checked('1 局面に残す候補の数')).toBe('1');
+    cleanup();
+    window.history.replaceState(
+      null,
+      '',
+      '/?mode=estimate&t=article&preview=1&au=1',
+    );
+    await renderApp();
+    expectEstimate();
+    expect(queryGroup('解析の区切り方')).toBe(null);
+    expect(new URLSearchParams(window.location.search).get('au')).toBeNull();
   });
 
   it('W-06 選んでも変わらない部品は出さない（D1 の構成に DB のバックアップの欄が無い。始める画面と同じ判定。D-94）', async () => {

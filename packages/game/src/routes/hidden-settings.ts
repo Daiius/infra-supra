@@ -28,6 +28,8 @@ export function hiddenSettings(
 ): SettingKey[] {
   const fromScenario: SettingKey[] = [
     ...(state.scenario.hidden?.settings ?? []),
+    // 解析の設定は解析のあるシナリオだけ（D-236）
+    ...(state.scenario.analysisJob ? [] : ANALYSIS_SETTING_KEYS),
   ];
   const fam = articleFamily(state);
   const byFramework =
@@ -36,6 +38,14 @@ export function hiddenSettings(
       : hiddenByFamily(state.framework, fam);
   return [...new Set([...fromScenario, ...byFramework])];
 }
+
+/** 解析の設定（解析のあるシナリオだけで出す。D-236）。 */
+export const ANALYSIS_SETTING_KEYS: SettingKey[] = [
+  'analysisUnit',
+  'candidates',
+  'analysisScope',
+  'analysisMachines',
+];
 
 const REVALIDATE_KEYS: SettingKey[] = [
   'isr',

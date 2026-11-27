@@ -6,6 +6,8 @@ import {
   priceUsage,
   PriceBookSchema,
 } from 'estimator';
+import { EC2, ec2PlanId } from './providers/aws.ts';
+import { GCE, gcePlanId } from './providers/gcp.ts';
 import {
   applyComponentsToWorkload,
   composeStack,
@@ -185,9 +187,15 @@ describe('プラットフォームの前提（金額ではなく、当たった�
     expect(p.effect).toBe('block');
   });
 
-  it('Cloudflare Paid では CPU の上限の前提は出ない（Paid の上限は別）', () => {
+  it('Cloudflare Paid の CPU の上限は設定で上げられる最大（5 分）で判定し、SSR では当たらない（D-234）', () => {
+    const p = premises(cfPaid, 10_000).find((x) =>
+      x.id.includes('cpu-ms-per-request'),
+    )!;
+    expect(p.limit).toBe(300_000);
+    expect(p.hit).toBe(false);
+    // 非同期の実行の壁時計の上限は、非同期に受ける分が無い記事のシナリオでは出さない
     expect(
-      premises(cfPaid, 10_000).some((x) => x.id.includes('cpu-ms-per-request')),
+      premises(cfPaid, 10_000).some((x) => x.id.includes('async-wall-ms')),
     ).toBe(false);
   });
 
@@ -359,7 +367,7 @@ describe('稼働率の SLA（D-24）', () => {
   });
 
   // Bunny（D-98）は部品だけの事業者で、セルフサービスのまま SLA（99.99%）がある
-  it('セルフサービスのプランで SLA があるのはさくらの VPS 4GB と Bunny だけ', () => {
+  it('セルフサービスのプランで SLA があるのはさくらの VPS 4GB 以上と Bunny だけ', () => {
     const offered = loadPriceBooks().flatMap((b) =>
       b.plans
         .filter((p) => p.uptimeSla?.status === 'offered')
@@ -367,6 +375,10 @@ describe('稼働率の SLA（D-24）', () => {
     );
     expect(offered).toEqual([
       'sakura-vps/4gb-tokyo',
+      // 解析の worker に使う大きいプラン（D-247）
+      'sakura-vps/8gb-tokyo',
+      'sakura-vps/16gb-tokyo',
+      'sakura-vps/32gb-tokyo',
       'bunny/standard',
       'bunny/optimizer',
     ]);
@@ -400,14 +412,19 @@ describe('確約（D-97）', () => {
     ),
   );
 
-  it('確かめた確約だけを持つ（RDS の予約・Lambda の Savings Plans・Cloud Run の CUD・さくらの年額。Cloud SQL の共有の vCPU は対象外）', () => {
-    expect(all.map((x) => x.key).sort()).toEqual([
-      'aws:lambda:compute-savings-plan',
-      'aws:rds-postgres-t4g-micro:reserved-instance',
-      'gcp:cloud-run:flexible-cud',
-      'sakura-vps:2gb-tokyo:annual',
-      'sakura-vps:4gb-tokyo:annual',
-    ]);
+  it('確かめた確約だけを持つ（RDS の予約・Lambda の Savings Plans・Cloud Run の CUD・さくらの年額・EC2 の予約・Compute Engine の CUD。Cloud SQL の共有の vCPU・Fargate・さくらの大きいプランは対象外）', () => {
+    expect(all.map((x) => x.key).sort()).toEqual(
+      [
+        // 解析の実行先の EC2 の予約・Compute Engine の CUD（D-247）
+        ...EC2.map((m) => `aws:${ec2PlanId(m.type)}:reserved-instance`),
+        ...GCE.map((m) => `gcp:${gcePlanId(m.type)}:resource-cud`),
+        'aws:lambda:compute-savings-plan',
+        'aws:rds-postgres-t4g-micro:reserved-instance',
+        'gcp:cloud-run:flexible-cud',
+        'sakura-vps:2gb-tokyo:annual',
+        'sakura-vps:4gb-tokyo:annual',
+      ].sort(),
+    );
   });
 
   it('どの形も 1 年のオンデマンドより安く、全額前払いは前払いなしより安い', () => {
@@ -432,7 +449,8 @@ describe('確約（D-97）', () => {
         m.pricing.model === 'flat' ? m.pricing.unitPrice / m.pricing.per : 0;
       expect(hourly).toBeGreaterThan(0);
       expect(nu!.hourly!).toBeLessThan(hourly);
-      expect(au!.upfront!).toBeLessThan(nu!.hourly! * 730 * 12);
+      // 全額前払いが無い確約（EC2 の予約・Compute Engine の CUD は前払いなしだけ。D-247）もある
+      if (au) expect(au.upfront!).toBeLessThan(nu!.hourly! * 730 * 12);
     }
   });
 });

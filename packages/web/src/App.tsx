@@ -31,6 +31,10 @@ import {
   stackName,
   stackUnsupportedReason,
   FRAMEWORKS,
+  DEFAULT_ANALYSIS_MACHINES,
+  DEFAULT_ANALYSIS_SCOPE,
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_CANDIDATES,
   type GameState,
   type SaveData,
 } from 'game';
@@ -39,8 +43,8 @@ import {
   FrameworkField,
   ScenarioDescription,
   ScenarioPicker,
-  SCENARIO_LIST,
 } from './scenario-briefing.tsx';
+import { scenarioList } from './preview.ts';
 import { OptionText } from './option-text.tsx';
 import { commitmentMeta } from './commitment-meta.ts';
 import {
@@ -49,6 +53,11 @@ import {
   type SetupTabsApi,
   type SetupChoices,
 } from './setup-components.tsx';
+import { ownSlotTabs } from './own-slot-field.tsx';
+import {
+  AnalysisSettingChips,
+  type AnalysisSettingValues,
+} from './analysis-settings.tsx';
 import { frameworkFallbackNotice, StackField } from './stack-field.tsx';
 import {
   editParts,
@@ -695,7 +704,8 @@ function Loading() {
 }
 
 function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
-  const [scenarioId, setScenarioId] = useState(SCENARIO_LIST[0]!.id);
+  // 最初は並びの 1 番目（開発中のシナリオは ?preview=1 のときだけ並ぶ。D-232）
+  const [scenarioId, setScenarioId] = useState(() => scenarioList()[0]!.id);
   const scenario = SCENARIOS[scenarioId]!;
   const frameworks = frameworksOf(scenario);
   // 既定は一覧の 1 番目（正解になりやすい構成を既定にしない。D-41）
@@ -812,6 +822,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
       revalidateSec: revalidateChoosable ? revalidateSec : undefined,
       comments: commentsChoosable ? comments : undefined,
       routes,
+      analysisSettings,
     }),
     basis:
       '1 か月目の基準の規模（始める画面の 1 か月目の見込みと同じ条件）で、このスロットだけを替えた月の費用（構成全体）。未選択のスロットは既定の部品で数えます。イベント・話題の上乗せは含めない目安です。縦の線は選んでいる部品の額です',
@@ -823,9 +834,17 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
   const [commits, setCommits] = useState<Record<string, CommitmentPaymentId>>(
     {},
   );
+  // 解析の設定（区切り方・候補の数・詳細解析の範囲。解析のあるシナリオだけ。③ 解析の置き場のタブで選ぶ。D-249）
+  const [analysisSet, setAnalysisSet] = useState<AnalysisSettingValues>({
+    analysisUnit: DEFAULT_ANALYSIS_UNIT,
+    candidates: DEFAULT_CANDIDATES,
+    analysisScope: DEFAULT_ANALYSIS_SCOPE,
+    analysisMachines: DEFAULT_ANALYSIS_MACHINES,
+  });
+  const analysisSettings = scenario.analysisJob ? analysisSet : undefined;
   const commitOptions = problem
     ? []
-    : setupCommitments(scenario, stack, framework, parts);
+    : setupCommitments(scenario, stack, framework, parts, analysisSettings);
   const chosenCommits = commitOptions
     .filter((o) => commits[o.key] === o.payment)
     .map((o) => ({ key: o.key, payment: o.payment }));
@@ -842,6 +861,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     revalidateSec: revalidateChosen,
     comments,
     commitments: commits,
+    ...(analysisSettings ? { analysisSettings } : {}),
   };
   const restored = last ? restoreLastSetup(scenario, last, current) : null;
   const restoreLast = () => {
@@ -867,6 +887,8 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
     setRevalidateSec(restored.revalidateSec);
     setComments(restored.comments);
     setCommits(restored.commitments);
+    if (restored.analysisSettings)
+      setAnalysisSet({ ...analysisSet, ...restored.analysisSettings });
     setFallbackNotice(null);
     setRestoreNotice(restored.notice);
   };
@@ -914,6 +936,29 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                   />
                 ),
               }}
+              // ③ シナリオが別のタブで選ぶスロット（解析の置き場。D-245）
+              own={ownSlotTabs({
+                scenario,
+                stackIndex: stack,
+                framework,
+                components: parts,
+                onChange: editComponents,
+                compare: partsCompare,
+                // 解析の設定は始める画面でも選ぶ（構成や前提に関わる選択は始める前に。D-249）
+                ...(analysisSettings
+                  ? {
+                      slotExtra: {
+                        analysis: (
+                          <AnalysisSettingChips
+                            value={analysisSet}
+                            analysis={parts.analysis}
+                            onChange={setAnalysisSet}
+                          />
+                        ),
+                      },
+                    }
+                  : {}),
+              })}
               // ② フレームワークと描き方（構成と同列の判断。D-35）。選んでいる構成に載せられないものは選べない（D-113）
               framework={{
                 label: 'フレームワーク',
@@ -1029,6 +1074,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
               revalidateSec={revalidateChoosable ? revalidateSec : undefined}
               comments={commentsChoosable ? comments : undefined}
               routes={routes}
+              analysisSettings={analysisSettings}
             />
           )}
           <div className="card-actions flex-wrap items-center justify-end">
@@ -1078,6 +1124,7 @@ function Briefing({ onStart }: { onStart: (s: SaveData) => void }) {
                     ...(chosenCommits.length
                       ? { commitments: chosenCommits }
                       : {}),
+                    ...(analysisSettings ? { analysisSettings } : {}),
                   }),
                 );
                 scrollTop();

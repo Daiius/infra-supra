@@ -30,6 +30,11 @@ import {
   commitmentTerms,
   PAYMENT_LABEL,
   COMMENTS_IN_BROWSER,
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_ANALYSIS_MACHINES,
+  DEFAULT_ANALYSIS_SCOPE,
+  analysisMachinesOf,
+  DEFAULT_CANDIDATES,
   defaultRevalidateSec,
   estimateComponents,
   estimateWorkload,
@@ -86,8 +91,26 @@ export const TEMPLATES = [
     scenarioId: 'contract-operations',
     label: '業務アプリ（ログインして使う）',
   },
+  // 開発中（prd/17 PR-2・D-233）: ゲームのシナリオと同じく `?preview=1` のときだけ選べる（templateOffered）
+  {
+    id: 'kifu',
+    scenarioId: 'kifu-analysis',
+    label: '棋譜解析（重い解析・開発中）',
+    preview: true,
+  },
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number]['id'];
+
+/** 選べるテンプレートか。開発中のもの（preview）は、開発中の印が立っているとき（web の previewEnabled）だけ。 */
+export const templateOffered = (
+  id: string | undefined,
+  preview: boolean,
+): boolean =>
+  TEMPLATES.some((t) => t.id === id && (preview || !('preview' in t)));
+
+/** テンプレートの選択肢（登録順。開発中のものは preview のときだけ）。 */
+export const templateOptions = (preview: boolean) =>
+  TEMPLATES.filter((t) => templateOffered(t.id, preview));
 
 export const PV_PRESETS = [
   10_000, 100_000, 300_000, 1_000_000, 3_000_000, 10_000_000, 30_000_000,
@@ -123,6 +146,16 @@ export type EstimateInput = {
   comments: number;
   imageFormat: ImageFormat;
   variants: number;
+  /**
+   * 解析の区切り方（game の SETTINGS.analysisUnit の値。D-236）と 1 局面に残す候補の数。解析のあるテンプレート（棋譜解析）だけで
+   * 選び、ほかのテンプレートでは既定のまま（効かない）。
+   */
+  analysisUnit: number;
+  candidates: number;
+  /** 詳細解析の範囲（game の SETTINGS.analysisScope の値。0 全局・1 希望した棋譜だけ。併用の置き場だけで効く。D-246）。 */
+  analysisScope: number;
+  /** 台で借りるマシンの台数（game の SETTINGS.analysisMachines の値。1・2・4・8。台で借りる実行先だけで効く。D-251）。 */
+  analysisMachines: number;
   /** チームの人数（管理画面を使う人。席）。席課金のプランだけ費用が変わる（D-76）。 */
   seats: number;
   /** 選んだページごとの描き方（フレームワークの既定と違うものだけ。D-107）。 */
@@ -167,6 +200,8 @@ export function settingsOf(
           },
     format: !hidden.includes('format'),
     variants: !hidden.includes('variants'),
+    // 解析の区切り方・候補の数（D-236）は解析のあるテンプレートだけ
+    analysis: !hidden.includes('analysisUnit'),
   };
 }
 
@@ -230,6 +265,17 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     settings.variants && VARIANTS.some((v) => v === raw.variants)
       ? raw.variants!
       : 3;
+  const pick = (
+    key: 'analysisUnit' | 'candidates' | 'analysisScope' | 'analysisMachines',
+    fallback: number,
+  ) =>
+    settings.analysis && SETTINGS[key].options.some((o) => o.value === raw[key])
+      ? raw[key]!
+      : fallback;
+  const analysisUnit = pick('analysisUnit', DEFAULT_ANALYSIS_UNIT);
+  const candidates = pick('candidates', DEFAULT_CANDIDATES);
+  const analysisScope = pick('analysisScope', DEFAULT_ANALYSIS_SCOPE);
+  const analysisMachines = pick('analysisMachines', DEFAULT_ANALYSIS_MACHINES);
   const seats = normalizeSeats(raw.seats);
   return {
     template,
@@ -241,6 +287,10 @@ export function normalizeInput(raw: Partial<EstimateInput>): EstimateInput {
     comments,
     imageFormat,
     variants,
+    analysisUnit,
+    candidates,
+    analysisScope,
+    analysisMachines,
     seats,
     routes,
   };
@@ -427,6 +477,15 @@ export function toQuery(input: EstimateInput): URLSearchParams {
     q.set(`${ROUTE_PREFIX}${article}.${COMMENTS_PART}`, String(input.comments));
   q.set('img', input.imageFormat);
   q.set('v', String(input.variants));
+  // 解析の設定（D-236）は既定と違うときだけ
+  if (input.analysisUnit !== DEFAULT_ANALYSIS_UNIT)
+    q.set('au', String(input.analysisUnit));
+  if (input.candidates !== DEFAULT_CANDIDATES)
+    q.set('ac', String(input.candidates));
+  if (input.analysisScope !== DEFAULT_ANALYSIS_SCOPE)
+    q.set('as', String(input.analysisScope));
+  if (input.analysisMachines !== DEFAULT_ANALYSIS_MACHINES)
+    q.set('am', String(input.analysisMachines));
   q.set('seats', String(input.seats));
   for (const [slot, id] of Object.entries(input.parts))
     if (id !== undefined) q.set(PART_PREFIX + slot, id);
@@ -474,6 +533,10 @@ export function fromQuery(search: string): Partial<EstimateInput> {
   set('comments', comments ?? num('cm'));
   set('imageFormat', str('img') as ImageFormat | undefined);
   set('variants', num('v'));
+  set('analysisUnit', num('au'));
+  set('candidates', num('ac'));
+  set('analysisScope', num('as'));
+  set('analysisMachines', num('am'));
   set('seats', num('seats'));
   // 前の版の税込の目安の切り替え（tax=0/1）は常に出すことにしたので読まない（D-177）
   return out;
@@ -858,6 +921,10 @@ function run(input: EstimateInput, r: Resolved) {
       imageKB: IMAGE_FORMAT_KB[input.imageFormat],
       variants: input.variants,
       revalidateSec: input.revalidateSec,
+      analysisUnit: input.analysisUnit,
+      candidates: input.candidates,
+      analysisScope: input.analysisScope,
+      analysisMachines: input.analysisMachines,
     },
     routes: input.routes,
     routeParts: partsOfComments(r.scenario, input.comments),
@@ -874,6 +941,15 @@ function run(input: EstimateInput, r: Resolved) {
           input.framework,
           input.routes,
         ),
+        // 台で借りるマシンの台数（D-251）
+        ...(analysisMachinesOf(input, r.components.analysis) !== undefined
+          ? {
+              analysisMachines: analysisMachinesOf(
+                input,
+                r.components.analysis,
+              )!,
+            }
+          : {}),
       }),
       workload,
     ),

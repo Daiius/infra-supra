@@ -4,7 +4,11 @@
 import { DEFAULT_CHOICES, type Choices, type FrameworkId } from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import { baseSsrCpuMsOf, frameworkDefaults } from './core.ts';
-import type { Settings } from './settings.ts';
+import {
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_CANDIDATES,
+  type Settings,
+} from './settings.ts';
 import { setupSlots, validSetupChoices } from './setup/new-game.ts';
 import { STACKS } from './stacks.ts';
 import type { RouteOverrides, RouteParts } from './state.ts';
@@ -59,7 +63,21 @@ export function estimateWorkload(
     stackIndex: number;
     framework: FrameworkId;
     components: Choices;
-    settings: Omit<Settings, 'ssrOptimizations'>;
+    /** 解析の設定（D-236）は解析のあるシナリオだけで効き、省略は既定（局面ごと・既定の候補の数）。 */
+    settings: Omit<
+      Settings,
+      | 'ssrOptimizations'
+      | 'analysisUnit'
+      | 'candidates'
+      | 'analysisScope'
+      | 'analysisMachines'
+    > &
+      Partial<
+        Pick<
+          Settings,
+          'analysisUnit' | 'candidates' | 'analysisScope' | 'analysisMachines'
+        >
+      >;
     /** 選んだページごとの描き方（D-107）。 */
     routes?: RouteOverrides | undefined;
     /** ページの部品（記事のページのコメント欄。D-109）。省略はブラウザで読み込む。 */
@@ -68,7 +86,12 @@ export function estimateWorkload(
 ): WorkloadInput {
   return workloadFor(sc, {
     pv: p.pv,
-    settings: { ...p.settings, ssrOptimizations: 0 },
+    settings: {
+      analysisUnit: DEFAULT_ANALYSIS_UNIT,
+      candidates: DEFAULT_CANDIDATES,
+      ...p.settings,
+      ssrOptimizations: 0,
+    },
     ssrCpuMs: baseSsrCpuMsOf(sc),
     mods: {},
     stock: null,

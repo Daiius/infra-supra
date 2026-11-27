@@ -13,16 +13,27 @@ import {
   estimate,
   scenarioOf,
   USD_JPY,
+  scenarioComponentsOf,
 } from '../core.ts';
 import { nextSsrCpuMs } from '../effort.ts';
 import { premiseRefsOf } from '../events.ts';
 import { commas, lineLabel, toUsd, usd } from '../format.ts';
+import { analysisOnlyThrottle } from '../analysis-satisfaction.ts';
 import { emailOnlyPremise } from '../month/outcome.ts';
 import { partsOfComments } from '../routes/comments.ts';
-import { ON_DEMAND_REVALIDATE } from '../settings.ts';
+import {
+  ON_DEMAND_REVALIDATE,
+  type StartAnalysisSettings,
+} from '../settings.ts';
 import { STACKS } from '../stacks.ts';
 import type { GameState, MonthEvent, RouteOverrides } from '../state.ts';
-import { architectureFor, staticBuildOf, workloadFor } from '../workload.ts';
+import {
+  analysisBurstFactor,
+  architectureFor,
+  staticBuildOf,
+  withAnalysisMachines,
+  workloadFor,
+} from '../workload.ts';
 import { newGame } from './new-game.ts';
 
 /**
@@ -60,6 +71,10 @@ export function monthEstimate(
       routes: state.routes,
       legacyRouteDefaults: state.legacyRouteDefaults,
       routeParts: state.routeParts,
+      // 過去の棋譜の取り込みを受けた後の来月の見積（提案を受けたときの見込み。D-241）
+      ...(analysisBurstFactor(state) !== 1
+        ? { analysisFactor: analysisBurstFactor(state) }
+        : {}),
     }),
     architecture: architectureFor(
       state.stackIndex,
@@ -70,7 +85,11 @@ export function monthEstimate(
         ? { [state.componentSwap.slot]: state.componentSwap.option }
         : {},
       state.storageOption,
-      staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
+      withAnalysisMachines(
+        staticBuildOf(sc, state.stackIndex, state.framework, state.routes),
+        p.settings ?? state.settings,
+        components.analysis,
+      ),
       // 容量の段は状態の契約（始めたばかりは最小の段。D-120）
       { tiers: state.capacityTiers },
     ),
@@ -89,7 +108,7 @@ export function componentPreview(
 ): MonthEvent['premises'] {
   const sc = scenarioOf(state);
   const platform = STACKS[state.stackIndex]!.provider;
-  const def = componentsOf(platform, slot, state.framework).find(
+  const def = scenarioComponentsOf(sc, platform, slot, state.framework).find(
     (c) => c.id === option,
   );
   if (!def || def.premiseRefs.length === 0) return [];
@@ -259,6 +278,8 @@ export function setupMonthOneEstimate(
   comments?: number,
   /** 選んだページごとの描き方（D-107）。 */
   routes?: RouteOverrides,
+  /** 始める画面で選んだ解析の設定（D-249）。 */
+  analysisSettings?: StartAnalysisSettings,
 ): MonthOneEstimate {
   const state = newGame(
     stackIndex,
@@ -271,15 +292,22 @@ export function setupMonthOneEstimate(
     partsOfComments(scenario, comments),
     undefined,
     routes,
+    undefined,
+    analysisSettings,
   );
   // 1 か月目は始めたばかりの契約（容量の段は最小の段。D-120）
   const r = monthEstimate(scenario, state, { books: booksAt(state, 1) });
   const costUsd = toUsd(r.bill.totals);
   const loss = scenario.revenue.loss;
-  // メールの送信の上限はサイトを止めない（収益を減らさない。D-117）
+  // メールの送信の上限はサイトを止めない（収益を減らさない。D-117）。解析の worker の VPS だけの遅くなる前提もページを遅くしないので
+  // 数えない（月の進め方の premiseOutcomesOf と同じ。D-238。棋譜解析を組み合わせの総当たりに入れて見つけた食い違い・D-241）
   const hit = (e: string[]) =>
     r.premises.some(
-      (p) => p.hit && e.includes(p.effect) && !emailOnlyPremise(p),
+      (p) =>
+        p.hit &&
+        e.includes(p.effect) &&
+        !emailOnlyPremise(p) &&
+        !analysisOnlyThrottle(p),
     );
   let revenueUsd =
     (scenario.revenue.fixedUsdPerMonth ?? 0) +

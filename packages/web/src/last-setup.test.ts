@@ -2,6 +2,7 @@
 import {
   ARTICLE_COMMUNITY,
   COMMENTS_IN_BROWSER,
+  SCENARIOS,
   STACKS,
   setupWithDefaults,
 } from 'game';
@@ -168,5 +169,57 @@ describe('前回の構成を戻す', () => {
     const r = restoreLastSetup(sc, entry, { stack: 0 });
     expect(r.routes).toEqual({});
     expect(r.notice).toMatch(/の描き方（no-such-strategy）/);
+  });
+});
+
+describe('解析の設定も前回の構成に入る（D-249）', () => {
+  const kifu = SCENARIOS['kifu-analysis']!;
+  const AWS = indexOf('aws-amplify');
+  const state = (over: Partial<SetupState> = {}): SetupState => ({
+    stack: AWS,
+    framework: 'nextjs',
+    components: setupWithDefaults(kifu, AWS, 'nextjs', { analysis: 'hybrid' }),
+    routes: {},
+    revalidateSec: undefined,
+    comments: COMMENTS_IN_BROWSER,
+    commitments: {},
+    ...over,
+  });
+
+  it('保存して読み戻し、戻すと同じ値。違う値なら同じでないと判定する', () => {
+    const chosen = state({
+      analysisSettings: { analysisUnit: 1, candidates: 1, analysisScope: 1 },
+    });
+    const entry = lastSetupOf(kifu, chosen);
+    expect(entry.analysisSettings).toEqual({
+      analysisUnit: 1,
+      candidates: 1,
+      analysisScope: 1,
+      // 省略した台数は既定の 1 台で入る（D-251）
+      analysisMachines: 1,
+    });
+    const store = withLastSetup(parseLastSetups(null), kifu.id, entry);
+    const back = parseLastSetups(JSON.parse(JSON.stringify(store))).scenarios[
+      kifu.id
+    ]!;
+    const restored = restoreLastSetup(kifu, back, { stack: AWS });
+    expect(restored.analysisSettings).toEqual(entry.analysisSettings);
+    expect(restored.notice).toBeNull();
+    expect(sameAsRestored(kifu, chosen, restored)).toBe(true);
+    expect(sameAsRestored(kifu, state(), restored)).toBe(false);
+  });
+
+  it('選べない値は捨てて知らせる。解析の無いシナリオには入れない', () => {
+    const entry = {
+      ...lastSetupOf(kifu, state()),
+      analysisSettings: { analysisUnit: 9 },
+    };
+    const restored = restoreLastSetup(kifu, entry, { stack: AWS });
+    expect(restored.analysisSettings).toEqual({});
+    expect(restored.notice).toContain('解析の設定');
+    expect(
+      lastSetupOf(sc, filled({ analysisSettings: { analysisUnit: 1 } }))
+        .analysisSettings,
+    ).toBeUndefined();
   });
 });

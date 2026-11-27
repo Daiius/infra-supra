@@ -4,7 +4,9 @@ import { HOURS_PER_MONTH } from '../num/unit.ts';
 import type { Derivation } from '../provenance.ts';
 import { sumOverPages } from './popularity.ts';
 import {
+  INVOCATIONS,
   WorkloadInputSchema,
+  type Invocation,
   type ParsedWorkload,
   type WorkloadInput,
 } from './schema.ts';
@@ -17,6 +19,8 @@ export const REQUEST_CLASSES = [
   'asset',
   'api',
   'api-content', // SPA の共有の中身（記事）を返すデータの API。応答を CDN 等でキャッシュするとき（cacheSeconds）だけ api から分ける
+  // 積んで別の所で動かす API（Workload の api.invocation が async。解析など。D-235）。構成が経路を持たなければ api の経路を通る
+  'api-async',
   'image-read',
   'image-write',
   'image-transform', // 画像の最適化（一意な変換）
@@ -24,6 +28,9 @@ export const REQUEST_CLASSES = [
   'realtime-message', // リアルタイムのメッセージ（サーバーが受け取る数）
 ] as const;
 export type RequestClass = (typeof REQUEST_CLASSES)[number];
+
+/** 1 件の CPU と壁時計の時間（ms）の最大（D-234）。 */
+export type PerInvocationMax = { cpuMs: number; wallMs: number };
 
 /** 1 クラスの月間の流れ。件数あたりの値（perRequest）と件数を分けて持つ。 */
 export type ClassFlow = {
@@ -35,9 +42,22 @@ export type ClassFlow = {
     /** まとめたルートのうち、件数が正のものの CPU の最大（1 リクエストあたりの上限の判定に使う）。 */
     maxCpuMs: number;
     wallMs: number;
+    /**
+     * 受け方ごとの、件数が正のルートの 1 件の CPU・壁時計の時間の最大（1 件の上限の判定に使う。D-234）。
+     * 受け方の流れが無いものは持たない。CPU の最大はどの受け方でも maxCpuMs 以下。
+     */
+    maxBy: Partial<Record<Invocation, PerInvocationMax>>;
     queries: number;
     rowsRead: number;
     rowsWritten: number;
+    /**
+     * 返した行（文書）の数のうち、Workload が数を与えた問い合わせの分（1 回 1 件が最低）と、その問い合わせの数（D-237）。
+     * 返した文書ごとに数える DB（Firestore）は、残りの問い合わせ（queries − countedQueries）を応答の大きさから数える。省略は 0。
+     */
+    rowsReturned?: number;
+    countedQueries?: number;
+    /** 書く 1 行の大きさの平均（KB。Workload の api.rowKB。D-237）。省略は構成の itemKB。 */
+    rowKB?: number;
     /**
      * 1 件の大きさの内訳（件数の割合と大きさ）。kb は件数で重み付けした平均なので、大きさの単位で切り上げて数える課金
      * （HTTP API の 512 KB など）は、平均でなくこの内訳ごとに切り上げてから足す（OCL-663E589C）。省略は kb だけの 1 種類。
@@ -161,6 +181,11 @@ export type ResolvedWorkload = {
   builds: { count: number; minutes: number };
   /** 月に送るメールの通数（Workload の email。省略は 0。D-95）。 */
   emails: number;
+  /**
+   * リアルタイムの接続の量（Workload の realtime に接続の長さがあるときだけ。D-240）。connectionMinutes は月の接続の分の合計、
+   * peakConnections は同時接続のピーク（月の平均の同時接続 × realtime.peakFactor（省略は peakHourFactor））。
+   */
+  realtime?: { connectionMinutes: number; peakConnections: number };
   derivations: Derivation[];
 };
 
@@ -242,6 +267,7 @@ const DAYS_PER_MONTH = HOURS_PER_MONTH / 24;
 const flow = (
   count: number,
   p: Partial<ClassFlow['perRequest']> = {},
+  invocation: Invocation = 'http',
 ): ClassFlow => ({
   count,
   perRequest: {
@@ -249,9 +275,18 @@ const flow = (
     cpuMs: p.cpuMs ?? 0,
     maxCpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
     wallMs: p.wallMs ?? p.cpuMs ?? 0,
+    maxBy: p.maxBy ?? {
+      [invocation]: {
+        cpuMs: p.maxCpuMs ?? p.cpuMs ?? 0,
+        wallMs: p.wallMs ?? p.cpuMs ?? 0,
+      },
+    },
     queries: p.queries ?? 0,
     rowsRead: p.rowsRead ?? 0,
     rowsWritten: p.rowsWritten ?? 0,
+    ...(p.countedQueries ? { rowsReturned: p.rowsReturned ?? 0 } : {}),
+    ...(p.countedQueries ? { countedQueries: p.countedQueries } : {}),
+    ...(p.rowKB !== undefined ? { rowKB: p.rowKB } : {}),
     ...(p.kbMix ? { kbMix: p.kbMix } : {}),
   },
 });
@@ -263,12 +298,51 @@ export function kbMixOf(
   return p.kbMix ?? [{ share: 1, kb: p.kb }];
 }
 
+/** 受け方ごとの 1 件の最大を、件数が正の流れについて取る（D-234）。 */
+function mergeMaxBy(
+  flows: readonly ClassFlow[],
+): ClassFlow['perRequest']['maxBy'] {
+  const out: ClassFlow['perRequest']['maxBy'] = {};
+  for (const inv of INVOCATIONS) {
+    const xs = flows.flatMap((f) => {
+      const m = f.perRequest.maxBy[inv];
+      return m ? [m] : [];
+    });
+    if (xs.length)
+      out[inv] = {
+        cpuMs: Math.max(...xs.map((x) => x.cpuMs)),
+        wallMs: Math.max(...xs.map((x) => x.wallMs)),
+      };
+  }
+  return out;
+}
+
 /** 複数ルートの流れを件数で重み付けして 1 つのクラスにまとめる。CPU の最大は平均とは別に残す。 */
 function merge(flows: ClassFlow[]): ClassFlow {
   const count = flows.reduce((s, f) => s + f.count, 0);
   if (count === 0) return flow(0);
-  const avg = (k: Exclude<keyof ClassFlow['perRequest'], 'kbMix'>): number =>
-    flows.reduce((s, f) => s + f.count * f.perRequest[k], 0) / count;
+  const avg = (
+    k: Exclude<keyof ClassFlow['perRequest'], 'kbMix' | 'maxBy' | 'rowKB'>,
+  ): number =>
+    flows.reduce((s, f) => s + f.count * (f.perRequest[k] ?? 0), 0) / count;
+  // 書く 1 行の大きさ（D-237）は、大きさを持つ流れの書いた行の数で重み付けする（持つ流れが無ければ省略）
+  const sized = flows.filter(
+    (f) =>
+      f.perRequest.rowKB !== undefined &&
+      f.count * f.perRequest.rowsWritten > 0,
+  );
+  const sizedRows = sized.reduce(
+    (s, f) => s + f.count * f.perRequest.rowsWritten,
+    0,
+  );
+  const rowKB =
+    sizedRows > 0
+      ? sized.reduce(
+          (s, f) =>
+            s + f.count * f.perRequest.rowsWritten * f.perRequest.rowKB!,
+          0,
+        ) / sizedRows
+      : undefined;
   // 大きさの内訳は、各ルートの内訳を件数の割合で重み付けして並べ、同じ大きさをまとめる
   const mix = new Map<number, number>();
   for (const f of flows) {
@@ -287,10 +361,27 @@ function merge(flows: ClassFlow[]): ClassFlow {
       ...flows.filter((f) => f.count > 0).map((f) => f.perRequest.maxCpuMs),
     ),
     wallMs: avg('wallMs'),
+    maxBy: mergeMaxBy(flows.filter((f) => f.count > 0)),
     queries: avg('queries'),
     rowsRead: avg('rowsRead'),
     rowsWritten: avg('rowsWritten'),
+    rowsReturned: avg('rowsReturned'),
+    countedQueries: avg('countedQueries'),
+    ...(rowKB !== undefined ? { rowKB } : {}),
   });
+}
+
+/** 問い合わせが返す行の数（Workload が与えたときだけ。1 回 1 件が最低。D-237）。 */
+function returnedOf(p: {
+  queries: number;
+  rowsReturnedPerQuery?: number | undefined;
+}): { rowsReturned?: number; countedQueries?: number } {
+  return p.rowsReturnedPerQuery === undefined
+    ? {}
+    : {
+        rowsReturned: p.queries * Math.max(1, p.rowsReturnedPerQuery),
+        countedQueries: p.queries,
+      };
 }
 
 export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
@@ -387,6 +478,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
       wallMs: p.cpuMs + p.ioWaitMs,
       queries: p.queries,
       rowsRead: p.queries * p.rowsReadPerQuery,
+      ...returnedOf(p),
     };
     if (r.rendering === 'spa') {
       // シェルは入口だけ（遷移はブラウザの中）。中身はページごとにデータの API で取る（prd/04 §2・prd/10 F-01）。
@@ -620,6 +712,7 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
           wallMs: isl.cpuMs + isl.ioWaitMs,
           queries: isl.queries,
           rowsRead: isl.queries * isl.rowsReadPerQuery,
+          ...returnedOf(isl),
         }),
       );
       source('document-ssr', r, views, isl.cpuMs, { island: true });
@@ -628,29 +721,38 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
 
   const a = w.api;
   const rt = w.realtime;
+  const rtConnections = rt ? t.mau * rt.usersPerMau * rt.connectionsPerUser : 0;
   // JS・CSS は SPA のルートでは入口だけ読む（遷移では読み直さない）
   const assetViews = pv - spaViews + spaEntries;
   // ページの部品が呼ぶ API（D-109・RS-02）: ルートが apiCalls を持てばその閲覧はそれ、持たなければ perPage.apiCalls。
   // ルートの分は内訳（sources）でルートに付ける
   const apiCount = apiCallsPerMonth(w, pv);
+  // 積んで別の所で動かす API（D-235）は api-async のクラスで数える（SPA のページの中身の API は api のまま）
+  const apiClass: RequestClass = a.invocation === 'async' ? 'api-async' : 'api';
   for (const r of w.routes)
     if (r.apiCalls !== undefined)
-      source('api', r, pv * r.share * r.apiCalls, a.cpuMs, { part: true });
+      source(apiClass, r, pv * r.share * r.apiCalls, a.cpuMs, { part: true });
   const unrouted =
     apiCount -
     w.routes.reduce(
       (s, r) => s + (r.apiCalls !== undefined ? pv * r.share * r.apiCalls : 0),
       0,
     );
-  const apiFlow = flow(apiCount, {
-    kb: a.responseKB,
-    cpuMs: a.cpuMs,
-    wallMs: a.cpuMs + a.ioWaitMs,
-    queries: a.queries,
-    rowsRead: a.queries * a.rowsReadPerQuery,
-    rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
-  });
-  source('api', undefined, unrouted, a.cpuMs);
+  const apiFlow = flow(
+    apiCount,
+    {
+      kb: a.responseKB,
+      cpuMs: a.cpuMs,
+      wallMs: a.cpuMs + a.ioWaitMs,
+      queries: a.queries,
+      rowsRead: a.queries * a.rowsReadPerQuery,
+      rowsWritten: a.writesPerCall * a.rowsWrittenPerWrite,
+      ...returnedOf(a),
+      ...(a.rowKB !== undefined ? { rowKB: a.rowKB } : {}),
+    },
+    a.invocation ?? 'http',
+  );
+  source(apiClass, undefined, unrouted, a.cpuMs);
   // 画像の閲覧（D-121）: 本文の画像とサムネイルを、ルートごとの枚数（省略は perPage）で数え、ブラウザのキャッシュの分を引く
   const thumb = w.images.thumbnails ?? {
     sizeKB: w.images.sizeKB,
@@ -673,11 +775,30 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     'document-ssr': merge(byRendering.ssr),
     'document-isr': merge(byRendering.isr),
     'isr-revalidate': merge(revalidations),
-    asset: flow(assetViews * w.perPage.assets * (1 - w.assets.browserReuse), {
-      kb: w.assets.sizeKB,
-    }),
-    api: spaData.length ? merge([apiFlow, ...spaData]) : apiFlow,
+    asset: w.visitAssets
+      ? merge([
+          flow(assetViews * w.perPage.assets * (1 - w.assets.browserReuse), {
+            kb: w.assets.sizeKB,
+          }),
+          // 訪問 1 回あたりに読む大きなファイル（解析のエンジンなど。D-235）
+          flow(
+            (pv / pagesPerVisit) *
+              w.visitAssets.perVisit *
+              (1 - w.visitAssets.browserReuse),
+            { kb: w.visitAssets.sizeKB },
+          ),
+        ])
+      : flow(assetViews * w.perPage.assets * (1 - w.assets.browserReuse), {
+          kb: w.assets.sizeKB,
+        }),
+    api:
+      apiClass === 'api-async'
+        ? merge(spaData)
+        : spaData.length
+          ? merge([apiFlow, ...spaData])
+          : apiFlow,
     'api-content': merge(spaContent),
+    'api-async': apiClass === 'api-async' ? apiFlow : merge([]),
     'image-read': imageRead,
     'image-write': flow(t.mau * w.images.uploadsPerMau, {
       kb: w.images.sizeKB,
@@ -694,13 +815,20 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
         kb: w.images.sizeKB,
       },
     ),
-    'realtime-connect': flow(
-      rt ? t.mau * rt.usersPerMau * rt.connectionsPerUser : 0,
-      { rowsRead: rt?.historyRowsPerConnect ?? 0 },
-    ),
+    // 接続の長さ（D-240）は壁時計の時間として持つ（CPU は 0）。つないでいる間に課金する部品だけが数える
+    'realtime-connect': flow(rtConnections, {
+      rowsRead: rt?.historyRowsPerConnect ?? 0,
+      ...(rt?.minutesPerConnection
+        ? { wallMs: rt.minutesPerConnection * 60_000 }
+        : {}),
+    }),
     'realtime-message': flow(
       rt ? t.mau * rt.usersPerMau * rt.messagesPerUser : 0,
-      { cpuMs: rt?.processingMs ?? 0, rowsWritten: 1 },
+      {
+        cpuMs: rt?.processingMs ?? 0,
+        rowsWritten: 1,
+        ...(rt?.messageKB ? { kb: rt.messageKB } : {}),
+      },
     ),
   };
 
@@ -757,6 +885,18 @@ export function resolveWorkload(raw: WorkloadInput): ResolvedWorkload {
     onDemandUpdates,
     builds,
     emails,
+    // 接続の長さがあるときだけ（D-240）。月の接続の分 ÷ 月の分 × ピークの倍率
+    ...(rt?.minutesPerConnection
+      ? {
+          realtime: {
+            connectionMinutes: rtConnections * rt.minutesPerConnection,
+            peakConnections:
+              ((rtConnections * rt.minutesPerConnection) /
+                (HOURS_PER_MONTH * 60)) *
+              (rt.peakFactor ?? t.peakHourFactor),
+          },
+        }
+      : {}),
     derivations,
   };
 }

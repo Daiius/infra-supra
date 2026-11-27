@@ -207,6 +207,30 @@ export const vercel: PriceBookInput = {
       url: 'https://vercel.com/docs/pricing/regional-pricing/hnd1',
       retrievedAt: '2026-11-04',
     },
+    // WebSocket は Vercel Functions で全プラン（2026-08-10 更新）・2026-10-20 に GA（changelog）。関数と同じ上限・料金、
+    // 最大の実行時間で接続が閉じる、1 接続は 1 インスタンスに固定、状態は外部の置き場に（2026-11-23 取得。D-240）
+    websockets: {
+      url: 'https://vercel.com/docs/functions/websockets',
+      retrievedAt: '2026-11-23',
+    },
+    websocketsGa: {
+      url: 'https://vercel.com/changelog/websocket-support-is-now-generally-available',
+      retrievedAt: '2026-11-23',
+    },
+    // 関数の 1 回の実行の最大の時間（maxDuration。Fluid compute。2026-08-24 更新・2026-11-23 取得。D-234）
+    functionsLimitations: {
+      url: 'https://vercel.com/docs/functions/limitations',
+      retrievedAt: '2026-11-23',
+    },
+    functionsDuration: {
+      url: 'https://vercel.com/docs/functions/configuring-functions/duration',
+      retrievedAt: '2026-11-23',
+    },
+    // Cron Jobs は Vercel Functions を呼ぶので関数の上限がそのまま効く（2026-07-15 更新・2026-11-23 取得。D-234）
+    cronUsage: {
+      url: 'https://vercel.com/docs/cron-jobs/usage-and-pricing',
+      retrievedAt: '2026-11-23',
+    },
   },
   allowancePools: [
     {
@@ -320,7 +344,50 @@ export const vercel: PriceBookInput = {
       service: 'platform',
       name: 'Hobby',
       sourceIds: ['hobby', 'pricing'],
+      limits: [
+        {
+          id: 'function-max-duration',
+          measure: 'wall-ms-per-request',
+          value: 300_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Vercel Hobby の関数は 1 回の実行が 300 秒（5 分）までです（既定も最大も 300 秒。超えると 504 FUNCTION_INVOCATION_TIMEOUT。Cron で呼ぶ関数も同じ）',
+          sourceIds: ['functionsLimitations', 'functionsDuration', 'cronUsage'],
+        },
+      ],
       facts: [
+        {
+          // WebSocket（D-240）
+          id: 'websocket-max-duration',
+          premise:
+            'Vercel Functions の WebSocket は、関数の最大の実行時間（300 秒）に達すると閉じます。ブラウザはつなぎ直し、盤面などの状態を読み直します（つなぎ直すたびに 1 回の呼び出しと履歴の読み直しに数えます）',
+          sourceIds: ['websockets', 'websocketsGa', 'functionsLimitations'],
+        },
+        {
+          id: 'websocket-billing',
+          premise:
+            'Vercel Functions の WebSocket は他の呼び出しと同じ上限・料金です。つないでいる間はずっと Provisioned Memory を、メッセージを処理している間だけ Active CPU を数えます（Fluid compute が要る）',
+          interpretation: {
+            adopted:
+              '1 インスタンスが同時に保つ接続を 10 本と仮定し、接続の時間 × メモリを 10 で割って数えます（ゲーム上の仮定）',
+            rejected: [
+              {
+                reading: '接続 1 本ごとにインスタンス 1 つのメモリを数える',
+                reason:
+                  '公式は Fluid compute で 1 インスタンスが複数の WebSocket をさばけると書いています。1 本ずつ数えると高く出すぎます',
+              },
+            ],
+          },
+          sourceIds: ['websockets'],
+        },
+        {
+          id: 'websocket-instance-state',
+          premise:
+            'Vercel Functions の WebSocket の 1 接続は 1 つのインスタンスに固定され、つなぎ直すと別のインスタンスにつながることがあります。研究会のように複数の人が同じ盤面を見るなら、盤面と配信の仲立ちを外部の置き場（Redis など）に置く必要があります。このモデルは盤面を今の DB に 1 件 1 行で書く分だけを数え、仲立ちの置き場の費用は数えません',
+          sourceIds: ['websockets'],
+        },
         {
           // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
           id: 'function-outbound',
@@ -531,7 +598,52 @@ export const vercel: PriceBookInput = {
         perSeat: true,
       },
       sourceIds: ['pro', 'pricing'],
+      limits: [
+        {
+          // 1800 秒（30 分）の拡張の最大は Beta で、関数ごとの設定と対応する実行環境の版に限るので採らない（GA の 800 秒で判定する）
+          id: 'function-max-duration',
+          measure: 'wall-ms-per-request',
+          value: 800_000,
+          defaultValue: 300_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Vercel Pro の関数は 1 回の実行が既定 300 秒で、maxDuration の設定で 800 秒まで上げられます（ここでは 800 秒で判定します。超えると 504 FUNCTION_INVOCATION_TIMEOUT。Cron で呼ぶ関数も同じ。1,800 秒の拡張は Beta なので数えません）',
+          sourceIds: ['functionsLimitations', 'functionsDuration', 'cronUsage'],
+        },
+      ],
       facts: [
+        {
+          // WebSocket（D-240）
+          id: 'websocket-max-duration',
+          premise:
+            'Vercel Functions の WebSocket は、関数の最大の実行時間（最大 800 秒・既定 300 秒）に達すると閉じます。ブラウザはつなぎ直し、盤面などの状態を読み直します（つなぎ直すたびに 1 回の呼び出しと履歴の読み直しに数えます）',
+          sourceIds: ['websockets', 'websocketsGa', 'functionsLimitations'],
+        },
+        {
+          id: 'websocket-billing',
+          premise:
+            'Vercel Functions の WebSocket は他の呼び出しと同じ上限・料金です。つないでいる間はずっと Provisioned Memory を、メッセージを処理している間だけ Active CPU を数えます（Fluid compute が要る）',
+          interpretation: {
+            adopted:
+              '1 インスタンスが同時に保つ接続を 10 本と仮定し、接続の時間 × メモリを 10 で割って数えます（ゲーム上の仮定）',
+            rejected: [
+              {
+                reading: '接続 1 本ごとにインスタンス 1 つのメモリを数える',
+                reason:
+                  '公式は Fluid compute で 1 インスタンスが複数の WebSocket をさばけると書いています。1 本ずつ数えると高く出すぎます',
+              },
+            ],
+          },
+          sourceIds: ['websockets'],
+        },
+        {
+          id: 'websocket-instance-state',
+          premise:
+            'Vercel Functions の WebSocket の 1 接続は 1 つのインスタンスに固定され、つなぎ直すと別のインスタンスにつながることがあります。研究会のように複数の人が同じ盤面を見るなら、盤面と配信の仲立ちを外部の置き場（Redis など）に置く必要があります。このモデルは盤面を今の DB に 1 件 1 行で書く分だけを数え、仲立ちの置き場の費用は数えません',
+          sourceIds: ['websockets'],
+        },
         {
           // Next.js のサーバーから別の事業者の API を呼ぶ形（F-14・D-67。2026-11-02 に原文で確認）
           id: 'function-outbound',

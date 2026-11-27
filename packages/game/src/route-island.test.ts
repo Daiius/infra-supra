@@ -33,7 +33,7 @@ const CF_FREE = stack('cloudflare-vinext-free');
 const CF_PAID = stack('cloudflare-vinext-paid');
 const VERCEL_PRO = stack('vercel-supabase-pro');
 const VPS = stack('sakura-vps-2gb');
-const contract = Object.values(SCENARIOS).find((x) => x !== ARTICLE_COMMUNITY)!;
+const contract = SCENARIOS['contract-operations']!;
 const ISLAND: RouteOverrides = { personal: 'server-island' };
 
 const start = (
@@ -75,6 +75,8 @@ const workload = (
       imageKB: 150,
       variants: 3,
       ssrOptimizations: 0,
+      analysisUnit: 0,
+      candidates: 3,
     },
     ssrCpuMs: 15,
     mods: {},

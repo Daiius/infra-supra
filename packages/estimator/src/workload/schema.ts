@@ -11,13 +11,27 @@ const Ratio = z.number().finite().min(0).max(1);
 // （JPEG・WebP・AVIF は圧縮済みで、送るときにさらに圧縮しない）。DB → アプリの応答（db.responseKBPerQuery）はそのまま。
 // 計算はこの値をそのまま使う（圧縮の比を式の中で掛けない）。
 
+/**
+ * 1 件の受け方（D-234・prd/17 B-6）。http はリクエストの中で処理する。async は受け付けて積み、受けて処理する側
+ * （キューの受け手・Cron・バックグラウンド関数）が動かす。1 件の実行時間の上限が受け方で違う事業者がある（Workers の HTTP と
+ * キューの受け手・Netlify の同期とバックグラウンドなど）。
+ */
+export const INVOCATIONS = ['http', 'async'] as const;
+export type Invocation = (typeof INVOCATIONS)[number];
+
 /** 1 リクエストあたりの処理の性質。 */
 export const ProcessingSchema = z.object({
   cpuMs: NonNeg,
   /** I/O 待ち（DB の往復など）。壁時計時間 = cpuMs + ioWaitMs。 */
   ioWaitMs: NonNeg,
   queries: NonNeg,
+  /** 問い合わせ 1 回が読む（走査する）行の数（D1 の rows read はこれ。索引で引けば返す行と同じ）。 */
   rowsReadPerQuery: NonNeg,
+  /**
+   * 問い合わせ 1 回が返す行（文書）の数（D-237）。返した文書ごとに数える DB（Firestore）の読み取りに使う（1 回 1 件が最低）。
+   * 省略は今までの数え方（DB の応答の大きさ db.responseKBPerQuery ÷ 1 文書の大きさの切り上げ）。
+   */
+  rowsReturnedPerQuery: NonNeg.optional(),
   /** 応答 1 回の転送の大きさ（KB・圧縮後。D-211）。HTML の文書なら RSC などフレームワークが埋め込む分も含む（D-212）。 */
   responseKB: NonNeg,
 });
@@ -146,9 +160,27 @@ export const WorkloadInputSchema = z
     api: ProcessingSchema.extend({
       writesPerCall: NonNeg,
       rowsWrittenPerWrite: NonNeg,
+      /**
+       * 書く 1 行（項目）の大きさの平均（KB。D-237）。書き込みを 1 行ごとに大きさの単位へ切り上げて数える DB（DynamoDB の WRU）に使う。
+       * 省略は構成の 1 行の大きさ（request-db の itemKB）。行の数で数える DB（D1・Firestore）には効かない。
+       */
+      rowKB: Pos.optional(),
+      /**
+       * API の 1 件をどう受けて動かすか（D-234・prd/17 P-2・B-6）。async は受け付けて積み、解析を受けて処理する側
+       * （キューの受け手・Cron・バックグラウンド関数）が動かす。1 件の実行時間の上限は、その側の上限（LimitSchema の invocation）で判定する。
+       * キューの費用は数えない。省略は http（リクエストの中で処理する）。SPA のページの中身の API（ルートの processing）はいつも http。
+       */
+      invocation: z.enum(INVOCATIONS).optional(),
     }),
     /** JS・CSS 1 ファイルの転送の大きさ（sizeKB。KB・圧縮後。D-211）と、ブラウザのキャッシュから出す割合。 */
     assets: z.object({ sizeKB: NonNeg, browserReuse: Ratio }),
+    /**
+     * 訪問 1 回（セッション）あたりに読む大きなファイル（ブラウザで動かす解析のエンジンと評価関数など。D-235）。
+     * 月の件数 = 訪問の数（PV / ページ数 / 訪問）× perVisit × (1 − browserReuse)。asset のクラスに足す。省略は無し。
+     */
+    visitAssets: z
+      .object({ sizeKB: NonNeg, perVisit: NonNeg, browserReuse: Ratio })
+      .optional(),
     images: z.object({
       /** 本文の画像 1 枚（配るサイズ違い）の大きさ（KB。配るファイルそのまま。送るときにさらに圧縮しない。D-211）。 */
       sizeKB: NonNeg,
@@ -235,6 +267,21 @@ export const WorkloadInputSchema = z
         processingMs: NonNeg,
         /** 接続のときに読む履歴の行数。 */
         historyRowsPerConnect: NonNeg,
+        /**
+         * 1 回の接続（セッション）の長さ（分。D-240）。つないでいる間に課金する部品（関数・コンテナ・API Gateway の WebSocket）の
+         * 時間と、同時接続のピークに使う。省略は 0（接続の長さを数えない。Durable Objects は休止中を課金しないので効かない）。
+         * 部品の接続の上限（関数の最大の実行時間など）より長いと、その長さごとにつなぎ直す（構成の websocket.maxConnectionMinutes）。
+         */
+        minutesPerConnection: NonNeg.optional(),
+        /**
+         * 受け取った 1 件を何人に配るか（ファンアウト。D-240）。配信も課金する部品（API Gateway の WebSocket は送ったメッセージも数える）で
+         * 使う。省略は 0（配信を数えない。Durable Objects は受信だけを数える）。関数・VPS の配る CPU は processingMs に含める。
+         */
+        fanout: NonNeg.optional(),
+        /** 1 件のメッセージの大きさ（KB。省略は 0。API Gateway の 32 KB ごとの数え方と VPS の転送に使う。D-240）。 */
+        messageKB: NonNeg.optional(),
+        /** 同時接続のピーク / 月の平均（省略は traffic.peakHourFactor。研究会のように夜に集まる形。D-240）。 */
+        peakFactor: Pos.optional(),
       })
       .optional(),
   })

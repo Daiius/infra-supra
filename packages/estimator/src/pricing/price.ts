@@ -23,6 +23,8 @@ export type Subscription = {
   planId: string;
   /** ノード単位の固定費（インスタンスなど）を数えるためのノード。 */
   nodeIds: string[];
+  /** ノード単位の固定費で、ノードの数に足す台数（同じマシンを並べたホスト。D-251）。 */
+  extraUnits?: number;
   seats?: number;
   /** 契約の地域（関数の地域）。メーターの regionBy: account の単価を引く。 */
   region?: string;
@@ -616,7 +618,8 @@ export function priceUsage(input: {
           : fee.amount;
     if (fee.monthlyCap !== undefined)
       perUnit = Math.min(perUnit, fee.monthlyCap);
-    const count = fee.scope === 'node' ? sub.nodeIds.length : 1;
+    const count =
+      fee.scope === 'node' ? sub.nodeIds.length + (sub.extraUnits ?? 0) : 1;
     const seats = fee.perSeat ? (sub.seats ?? 1) : 1;
     lines.unshift({
       kind: 'base-fee',

@@ -30,6 +30,45 @@ export const AWS_DEFAULT_CHOICES: Choices = {
 export const IMAGE_CDN_HIT_RATE = 0.9;
 /** Amplify の SSR・Lambda のメモリ（GB。ゲーム上の仮定。Amplify の SSR のメモリは公式の記載が見当たらない）。 */
 export const COMPUTE_MEMORY_GB = 1;
+/**
+ * Lambda で 1 vCPU 相当になるメモリ（GB。公式: "At 1,769 MB, a function has the equivalent of one vCPU"。D-248）。
+ * Lambda はメモリに比例して CPU を割り当てるので、メモリ memoryGB の関数の CPU の速さは memoryGB / 1.769 vCPU。
+ */
+export const LAMBDA_GB_PER_VCPU = 1.769;
+/**
+ * Lambda の関数の CPU の速さの倍率（Workload の CPU の値が仮定した 1 vCPU の実行環境に対する。estimator の cpuSpeed）。
+ * 1 vCPU を超えるメモリは 1 で頭打ちにする（仮定: SSR・API・解析のエンジンはどれも 1 件 1 スレッドで、2 つ目の vCPU を使わない）。
+ */
+export const lambdaCpuSpeed = (memoryGB: number): number =>
+  Math.min(memoryGB / LAMBDA_GB_PER_VCPU, 1);
+
+/**
+ * 構成の Lambda（料金のプランが lambda の関数）に、メモリに比例した CPU の速さを当てる（D-248）。composeStack が最後に呼ぶ。
+ * 既にある倍率（D-247 の系列の速さ）とは掛ける。Amplify Hosting の SSR は Lambda の上で動くが、公式の文書にメモリと CPU の
+ * 関係の記載が無いので当てない。
+ */
+export function withLambdaCpu(arch: ArchitectureInput): ArchitectureInput {
+  let changed = false;
+  const nodes = arch.nodes.map((n): ArchNodeIn => {
+    const c = n.config;
+    if (
+      c.kind !== 'function' ||
+      n.billing?.provider !== 'aws' ||
+      n.billing.planId !== 'lambda' ||
+      c.memoryGB === undefined
+    )
+      return n;
+    const speed = (c.cpuSpeed ?? 1) * lambdaCpuSpeed(c.memoryGB);
+    changed = true;
+    return {
+      ...n,
+      config: { ...c, cpuSpeed: speed },
+      facts: [...(n.facts ?? []), 'memory-cpu'],
+    };
+  });
+  return changed ? { ...arch, nodes } : arch;
+}
+
 /** Aurora Serverless v2 の最小の容量（ACU。0.5 が 0 以外の最小。負荷で伸びる分は数えない仮定）。 */
 const AURORA_MIN_ACU = 0.5;
 /** 0 ACU まで縮めるときの、止まるまでの接続の無い時間（秒。公式の最短の値で既定の値。2026-11-02 に再確認）。 */

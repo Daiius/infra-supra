@@ -7,9 +7,11 @@ import {
   composeStack,
   type FrameworkId,
   type Platform,
+  REALTIME_OPTION,
   type SlotId,
   STACK_DEFS,
 } from 'catalog';
+import { realtimeOptionFor, STACKS } from './stacks.ts';
 import type { EventDef, Scenario } from './scenario.ts';
 import { eventDef, scenarioOf } from './core.ts';
 import type { GameState } from './state.ts';
@@ -19,14 +21,20 @@ import type { GameState } from './state.ts';
  * 届いている提案の「受ける」の効果に、同じスロット・同じ部品を付ける効果があればその id。
  */
 export function componentProposal(
-  state: Pick<GameState, 'pendingProposals' | 'scenario'>,
+  state: Pick<GameState, 'pendingProposals' | 'scenario' | 'stackIndex'>,
   slot: SlotId,
   option: string,
 ): string | undefined {
   const sc = scenarioOf(state);
+  // 今の構成の手段を付ける効果（realtime-component）は、その事業者の手段なら同じ部品（D-241）
+  const platform = STACKS[state.stackIndex]!.provider;
   return state.pendingProposals.find((id) =>
     eventDef(sc, id)?.accept?.effects.some(
-      (e) => e.type === 'component' && e.slot === slot && e.option === option,
+      (e) =>
+        (e.type === 'component' && e.slot === slot && e.option === option) ||
+        (e.type === 'realtime-component' &&
+          slot === 'realtime' &&
+          option === realtimeOptionFor(platform, sc)),
     ),
   );
 }
@@ -39,7 +47,12 @@ export function proposalOnlyComponent(
 ): EventDef | undefined {
   return sc.events.find((d) =>
     d.accept?.effects.some(
-      (e) => e.type === 'component' && e.slot === slot && e.option === option,
+      (e) =>
+        (e.type === 'component' && e.slot === slot && e.option === option) ||
+        // どれかの事業者のリアルタイムの手段（D-241）
+        (e.type === 'realtime-component' &&
+          slot === 'realtime' &&
+          Object.values(REALTIME_OPTION).includes(option)),
     ),
   );
 }

@@ -1,6 +1,7 @@
 // Workload の組み立て（テンプレート + 設定 + 部品 + 描き方 + 一時的な増加）と、構成の入力（architectureFor・staticBuildOf）。
 import type { Scenario, Stock, WorkloadMods } from './scenario.ts';
 import {
+  applyAnalysisSettings,
   applyComponentsToWorkload,
   applyRouteStrategies,
   type Choices,
@@ -9,6 +10,7 @@ import {
   type FrameworkId,
   FRAMEWORKS,
   type Platform,
+  serverAnalyzes,
   serverIslandDelivery,
   STACK_DEFS,
   withAstroAssets,
@@ -29,6 +31,8 @@ import {
   validRouteOverrides,
 } from './routes/strategy.ts';
 import {
+  analysisMachinesOf,
+  analysisSettingsOf,
   COMMENT_PAGES_PER_UPDATE,
   deliveredImageKB,
   fixedImageFormat,
@@ -43,6 +47,11 @@ import type {
   RouteParts,
   StrategyFamily,
 } from './state.ts';
+
+/** 今月の解析の件数の倍率（続いている取り込みの上乗せの積。無ければ 1。D-241）。 */
+export const analysisBurstFactor = (
+  state: Pick<GameState, 'analysisBursts'>,
+): number => (state.analysisBursts ?? []).reduce((a, b) => a * b.factor, 1);
 
 /** Workload を組み立てる入力（反実仮想の見積でも同じ関数を使う）。 */
 export type WorkloadParts = {
@@ -66,6 +75,11 @@ export type WorkloadParts = {
   spikes?: Spike[];
   /** pv のうち Bot の PV（メールの通数から除く。D-117）。省略は 0。 */
   botPV?: number;
+  /**
+   * その月の解析の件数の倍率（過去の棋譜のまとめての取り込み。GameState.analysisBursts。D-241）。解析の置き場が利用者の端末なら
+   * サーバーの解析は増えないので掛けない。省略は 1。
+   */
+  analysisFactor?: number;
 };
 
 /** 月のうち days 日に集中する上乗せの PV（id は出来事。反実仮想で外すときに使う）。bot は Bot の上乗せ（D-117）。 */
@@ -155,7 +169,29 @@ function withoutCommentFetch(w: WorkloadInput): WorkloadInput {
 }
 
 export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
-  const w = sc.template(Math.round(p.pv));
+  // 解析の区切り方・候補の数（D-236）は解析のあるシナリオだけ。テンプレート（局面ごと・既定の候補の数）から件数と 1 件の形を替える
+  const w = sc.analysisJob
+    ? applyAnalysisSettings(
+        sc.template(Math.round(p.pv)),
+        sc.analysisJob,
+        analysisSettingsOf(p.settings, {
+          ...DEFAULT_CHOICES[p.platform],
+          ...p.components,
+        }),
+      )
+    : sc.template(Math.round(p.pv));
+  // 取り込んだ棋譜の解析（D-241）: このテンプレートの API は解析だけなので、1 PV あたりの API の件数に掛ける
+  const burst = p.analysisFactor ?? 1;
+  if (
+    burst !== 1 &&
+    w.api.invocation === 'async' &&
+    serverAnalyzes({ ...DEFAULT_CHOICES[p.platform], ...p.components }.analysis)
+  ) {
+    w.perPage = { ...w.perPage, apiCalls: w.perPage.apiCalls * burst };
+    w.routes = w.routes.map((r) =>
+      r.apiCalls === undefined ? r : { ...r, apiCalls: r.apiCalls * burst },
+    );
+  }
   const ssr = p.mods.ssrShare;
   w.routes = w.routes.map((r) => ({
     ...r,
@@ -335,6 +371,7 @@ export function workloadFor(sc: Scenario, p: WorkloadParts): WorkloadInput {
     {
       originalImageKB: sc.unoptimizedImageKB,
       resizedImageKB: deliveredImageKB(sc, p.settings, 'resize'),
+      ...(sc.browserAnalysis ? { browserAnalysis: sc.browserAnalysis } : {}),
     },
   );
   return withImageFormat(out, p);
@@ -507,4 +544,19 @@ export function staticBuildOf(
 }
 
 /** 選んだ描き方で composeStack に渡す分（D-107）。 */
-export type RoutingOptions = { staticBuild?: boolean; pageCache?: boolean };
+export type RoutingOptions = {
+  staticBuild?: boolean;
+  pageCache?: boolean;
+  /** 台で借りるマシンの解析の worker の台数（D-251。描き方ではないが composeStack に同じ口で渡す）。 */
+  analysisMachines?: number;
+};
+
+/** 解析の worker の台数を構成の組み立ての口に足す（台で借りるマシンでなければ何もしない。D-251）。 */
+export const withAnalysisMachines = (
+  routing: RoutingOptions,
+  settings: Partial<Pick<Settings, 'analysisMachines'>>,
+  analysis: string | undefined,
+): RoutingOptions => {
+  const n = analysisMachinesOf(settings, analysis);
+  return n === undefined ? routing : { ...routing, analysisMachines: n };
+};

@@ -1,8 +1,8 @@
-// ゲームの途中の「構成を変える」（D-185）。始める画面と同じ ①② の選択（構成・部品・フレームワーク・ページの描き方・コメント欄）で
-// 選び直した差を、今ある行動（plan・migrate・component・rewrite・route・route-part）に写し取る。新しいゲームの決まりは作らず、
+// ゲームの途中の「構成を変える」（D-185）。始める画面と同じ ①② の選択（構成・部品・フレームワーク・ページの描き方・コメント欄）と、
+// 解析の置き場の行に添えた解析の設定（区切り方・候補の数。D-236）で選び直した差を、今ある行動（plan・migrate・component・rewrite・
+// route・route-part・set）に写し取る。新しいゲームの決まりは作らず、
 // 選べるか・工数・期間は今までの行動の検査（checkActions）と文（stackChangeText・rewriteText など）に任せる。
 import {
-  componentsOf,
   DEFAULT_CHOICES,
   type Choices,
   type FrameworkId,
@@ -14,8 +14,19 @@ import {
 import { applyAction, applyActions, checkActions } from '../actions/apply.ts';
 import { actionEffort, checkAction } from '../actions/check.ts';
 import { proposalOnlyComponent } from '../components.ts';
-import { frameworkDefaults, scenarioOf } from '../core.ts';
+import {
+  frameworkDefaults,
+  scenarioOf,
+  scenarioComponentsOf,
+} from '../core.ts';
 import { componentEffortLabel } from '../effort.ts';
+import { ANALYSIS_SETTING_KEYS } from '../routes/hidden-settings.ts';
+import {
+  optionLabel,
+  SETTINGS,
+  settingValueOf,
+  type SettingKey,
+} from '../settings.ts';
 import { componentsAfterRewrite, rewriteText } from '../rewrite.ts';
 import { ROUTE_PARTS, commentsOf } from '../routes/comments.ts';
 import {
@@ -50,6 +61,10 @@ export type SetupDraft = {
   routes: DraftRoutes;
   /** 記事のページのコメント欄（D-109）。 */
   comments: number;
+  /**
+   * 解析の設定（区切り方・候補の数。D-236）。解析のあるシナリオだけで持つ（① の解析の置き場の行で選ぶ）。省略は今の値のまま。
+   */
+  settings?: Partial<Record<SettingKey, number>>;
 };
 
 /** 行動の組（今月の行動の並びのどこに入れるかで分ける。画面の build と同じ順に当てる）。 */
@@ -58,12 +73,21 @@ export type SetupChangeGroups = {
   stack: Action | null;
   routes: Action[];
   routeParts: Action[];
+  /** 設定（解析の区切り方・候補の数。D-236）。 */
+  settings: Action[];
   rewrite: Action | null;
 };
 
 /** 変更の内訳の 1 行。 */
 export type SetupChangeItem = {
-  kind: 'plan' | 'migrate' | 'rewrite' | 'component' | 'route' | 'route-part';
+  kind:
+    | 'plan'
+    | 'migrate'
+    | 'rewrite'
+    | 'component'
+    | 'route'
+    | 'route-part'
+    | 'setting';
   /** 写し取った行動（写し取れない差は null）。 */
   action: Action | null;
   name: string;
@@ -133,7 +157,9 @@ export function validDraftComponents(
     if (
       option !== undefined &&
       proposalOnlyComponent(sc, slot, option) &&
-      componentsOf(platform, slot, framework).some((o) => o.id === option)
+      scenarioComponentsOf(sc, platform, slot, framework).some(
+        (o) => o.id === option,
+      )
     )
       out[slot] = option;
   return out;
@@ -170,7 +196,30 @@ export function currentSetupDraft(state: GameState): SetupDraft {
     components: draftComponentsFor(state, state.stackIndex, state.framework),
     routes: {},
     comments: commentsOf(scenarioOf(state), state.routeParts),
+    ...(scenarioOf(state).analysisJob
+      ? {
+          settings: Object.fromEntries(
+            ANALYSIS_SETTING_KEYS.map((k) => [
+              k,
+              settingValueOf(state.settings, k),
+            ]),
+          ),
+        }
+      : {}),
   };
+}
+
+/** 欄で選び直した設定のうち、今と違うもの（D-236）。 */
+function changedSettings(
+  state: GameState,
+  draft: SetupDraft,
+): [SettingKey, number][] {
+  return (
+    Object.entries(draft.settings ?? {}) as [SettingKey, number | undefined][]
+  ).filter(
+    (x): x is [SettingKey, number] =>
+      x[1] !== undefined && settingValueOf(state.settings, x[0]) !== x[1],
+  );
 }
 
 /** 今の状態と同じか（選び直していないか）。 */
@@ -185,6 +234,7 @@ export function sameAsCurrent(state: GameState, draft: SetupDraft): boolean {
     cur.framework === draft.framework &&
     cur.comments === draft.comments &&
     Object.keys(draft.routes).length === 0 &&
+    changedSettings(state, draft).length === 0 &&
     [...keys].every(
       (k) => cur.components[k as SlotId] === draft.components[k as SlotId],
     )
@@ -212,13 +262,14 @@ export function draftRouteBase(
   );
 }
 
-/** 画面の build と同じ順（部品 → 構成 → 描き方 → ページの部品 → 作り直し）に並べる。 */
+/** 画面の build と同じ順（部品 → 構成 → 描き方 → ページの部品 → 設定 → 作り直し）に並べる。 */
 export function flattenSetupChange(g: SetupChangeGroups): Action[] {
   return [
     ...g.components,
     ...(g.stack ? [g.stack] : []),
     ...g.routes,
     ...g.routeParts,
+    ...g.settings,
     ...(g.rewrite ? [g.rewrite] : []),
   ];
 }
@@ -238,6 +289,7 @@ const routeLabel = (state: GameState, id: string) => {
  *   選び方）ので、それと違う部品は写し取らず、済んでから差し替える旨を理由に出す。
  * - ページの描き方: 分け方が今と違うページごとに route。作り直すと描き方は新しいフレームワークの既定に戻るので、作り直しと一緒には写し取らない。
  * - コメント欄: route-part。
+ * - 解析の設定（区切り方・候補の数。D-236）: 今と違う設定ごとに set。部品（置き場）の後に当てるので、端末にすると候補の数は選べない。
  * 選べるかは今月のほかの行動と合わせて見る（wrap で今月の行動の並び全体を組む。省略は写し取った行動だけ）。
  */
 export function setupChangeOf(
@@ -258,6 +310,7 @@ export function setupChangeOf(
     stack: null,
     routes: [],
     routeParts: [],
+    settings: [],
     rewrite: null,
   };
 
@@ -413,6 +466,21 @@ export function setupChangeOf(
       kind: 'route-part',
       action,
       name: `${routeLabel(state, route)}の${def.label}を「${def.options.find((o) => o.value === draft.comments)?.label ?? ''}」に`,
+      meta: [`工数 ${def.effort}`, '来月から'],
+      detail: def.note,
+      why: null,
+    });
+  }
+
+  // 解析の設定（D-236）
+  for (const [key, value] of changedSettings(state, draft)) {
+    const def = SETTINGS[key];
+    const action: Action = { type: 'set', key, value };
+    groups.settings.push(action);
+    items.push({
+      kind: 'setting',
+      action,
+      name: `${def.label}を「${optionLabel(key, value)}」に`,
       meta: [`工数 ${def.effort}`, '来月から'],
       detail: def.note,
       why: null,

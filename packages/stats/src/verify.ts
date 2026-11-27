@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import {
   canonicalJson,
+  isPreviewScenario,
   parseSave,
   replaySave,
   resultAxesOf,
@@ -88,6 +89,8 @@ export type Submission = z.infer<typeof submissionSchema>;
 export type RejectCode =
   /** 保存の形が読めない（シナリオが無い・版が違う・欄の形が違う）。 */
   | 'invalid-save'
+  /** 開発中のシナリオ（Scenario.preview。D-232）。集計に入れないので受け付けない。 */
+  | 'preview-scenario'
   /** 再生できない（行動の途中で終わっている・月数が合わない・例外）。 */
   | 'replay-failed'
   /** 再生すると、まだ終わっていない。 */
@@ -134,6 +137,8 @@ export function verifySubmission(sub: Submission): VerifyResult {
   const { previous: _, ...raw } = sub.save;
   if (!(sub.save.scenarioId in SCENARIOS))
     return { ok: false, code: 'invalid-save' };
+  if (isPreviewScenario(sub.save.scenarioId))
+    return { ok: false, code: 'preview-scenario' };
   const save = parseSave(raw);
   if (!save) return { ok: false, code: 'invalid-save' };
   // 列には構成の id を入れる（STACKS の並びが変わっても過去の行の意味がずれない。D-171）

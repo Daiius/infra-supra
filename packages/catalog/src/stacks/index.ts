@@ -12,6 +12,7 @@ import {
   AWS_DEFAULT_CHOICES,
   AWS_STACK_DEFS,
   composeAws,
+  withLambdaCpu,
 } from './aws.ts';
 import {
   composeOpenNext,
@@ -36,6 +37,15 @@ import { CROSS_DB } from './cross-db.ts';
 import { withDomain } from './domain.ts';
 import { EMAIL_COMPONENTS, withEmail } from './email.ts';
 import { withLogs } from './logs.ts';
+import {
+  ANALYSIS_COMPONENTS,
+  applyAnalysis,
+  applyAnalysisToWorkload,
+  scaleAnalysisMachines,
+  type BrowserAnalysisShape,
+} from './analysis.ts';
+import { STORAGE_COMPONENTS, applyStorageShape } from './storage-shape.ts';
+import { REALTIME_COMPONENTS, applyRealtime } from './realtime.ts';
 import { bunnyCdnNode } from './bunny.ts';
 import { vpsNode } from './sakura.ts';
 import {
@@ -79,7 +89,9 @@ export type SlotId =
   | 'cdnInvalidation'
   | 'minInstances'
   | 'dbBackup'
-  | 'email';
+  | 'email'
+  | 'analysis'
+  | 'storage';
 export type Choices = Partial<Record<SlotId, string>>;
 
 /** 事業者 × プラン。完成品の構成は、これに既定の選択を当てたもの。 */
@@ -184,6 +196,11 @@ export type ComponentOption = {
    * 省略は、形式を設定（アプリのコード）で選ぶ部品。フレームワークの部品（next/image・Astro の <Image />）の既定は game の側が持つ。
    */
   servedFormat?: { format: 'webp' | 'avif'; how: string };
+  /**
+   * シナリオが有効にしたときだけ選べる部品（D-240。Cloudflare 以外のリアルタイム。棋譜解析の研究会だけで使い、記事コミュニティの
+   * チャットは Cloudflare だけのまま（X-5））。componentsOf は optIn を渡したときだけ返す。
+   */
+  optIn?: true;
 };
 
 export const SLOT_LABELS: Record<SlotId, string> = {
@@ -200,6 +217,8 @@ export const SLOT_LABELS: Record<SlotId, string> = {
   minInstances: '最小インスタンス数',
   dbBackup: 'DB のバックアップ',
   email: 'メール送信',
+  analysis: '解析の置き場',
+  storage: '保存の形',
 };
 
 /**
@@ -824,6 +843,9 @@ export const COMPONENTS: readonly ComponentOption[] = [
   ...CROSS_COMPONENTS,
   ...BACKUP_COMPONENTS,
   ...EMAIL_COMPONENTS,
+  ...ANALYSIS_COMPONENTS,
+  ...STORAGE_COMPONENTS,
+  ...REALTIME_COMPONENTS,
 ];
 
 // SPA だけの部品（OGP の前処理・API の応答のキャッシュ）の既定はゲームの側（フレームワークの既定）が持つ。省略は「なし」
@@ -908,10 +930,13 @@ export function componentsOf(
   platform: Platform,
   slot: SlotId,
   framework?: FrameworkId,
+  /** optIn の部品（ComponentOption.optIn。D-240）も返すか。省略は返さない。 */
+  options: { optIn?: boolean } = {},
 ): readonly ComponentOption[] {
   // COMPONENTS は動かないデータなので、引数の組ごとに一度だけ絞り込んで同じ配列を返す（ゲームは毎月何度も引く）。
   // 呼び手が書き換えないよう凍らせる
-  const key = `${platform}|${slot}|${framework ?? ''}`;
+  const optIn = options.optIn === true;
+  const key = `${platform}|${slot}|${framework ?? ''}|${optIn ? 1 : 0}`;
   const hit = componentsCache.get(key);
   if (hit) return hit;
   const r = Object.freeze(
@@ -919,6 +944,7 @@ export function componentsOf(
       (c) =>
         hostsOf(c).includes(platform) &&
         c.slot === slot &&
+        (c.optIn !== true || optIn) &&
         (framework === undefined ||
           c.frameworks === undefined ||
           c.frameworks.includes(framework)),
@@ -1537,6 +1563,8 @@ export type ComposeOptions = {
    * （静的アセットを Workers の料金で数えない）。省略は true（Astro の既定の S3。D-103）。
    */
   pageCache?: boolean;
+  /** 台で借りるマシンの解析の worker の台数（D-251。省略は 1）。 */
+  analysisMachines?: number;
 };
 
 /**
@@ -1755,26 +1783,47 @@ export function composeStackUncached(
   // API を他の事業者に置く（SPA は D-65・Next.js は D-67・Astro は D-69）。Astro は記事をキャッシュする形に直した後に差す（D-103）
   // 関数・コンテナの実行ごとのログ（課金のある事業者だけ。D-92）と DB のバックアップ（D-93）・メールの送信（D-95）は、部品を差し終えた後にまとめて足す
   // アプリのメールの送信（D-95）も最後に足す（経路を持たない）。ドメインの登録と DNS（D-96）はその後に
-  return withDomain(
-    withEmail(
-      withBackups(
-        withLogs(
-          applyCrossApi(
-            built,
-            def.platform,
-            def.plan,
-            c,
-            standby,
-            options.framework ?? 'nextjs',
+  // Lambda はメモリに比例した CPU の速さ（D-248）。どの部品の Lambda にも当てるので、部品を差し終えた後に
+  return withLambdaCpu(
+    withDomain(
+      withEmail(
+        withBackups(
+          withLogs(
+            // 解析の置き場（prd/17 §5.1・D-235）は API の置き場を差した後（worker はアプリの API の経路に結果を送る）
+            // リアルタイム（Cloudflare 以外。D-240）は構成の処理と DB が決まった後（Cloudflare は composeCloudflare の中）
+            applyRealtime(
+              applyStorageShape(
+                scaleAnalysisMachines(
+                  applyAnalysis(
+                    applyCrossApi(
+                      built,
+                      def.platform,
+                      def.plan,
+                      c,
+                      standby,
+                      options.framework ?? 'nextjs',
+                    ),
+                    c.analysis,
+                  ),
+                  // 台で借りるマシンの台数（D-251）
+                  options.analysisMachines,
+                ),
+                // 保存の形（prd/17 §5.4・D-237）。構成は変えず、D1 に行の数え方の前提を足すだけ（Workload は applyAnalysisSettings）
+                c.storage,
+              ),
+              def.platform,
+              def.plan,
+              c.realtime,
+            ),
           ),
+          c.dbBackup,
         ),
-        c.dbBackup,
+        def.platform,
+        def.plan,
+        c.email,
       ),
       def.platform,
-      def.plan,
-      c.email,
     ),
-    def.platform,
   );
 }
 
@@ -2084,7 +2133,12 @@ export function applyComponentsToWorkload(
   w: WorkloadInput,
   platform: Platform,
   choices: Choices = {},
-  options: { originalImageKB?: number; resizedImageKB?: number } = {},
+  options: {
+    originalImageKB?: number;
+    resizedImageKB?: number;
+    /** 端末で解析するときに配るファイル（解析の置き場の端末・併用。D-235）。 */
+    browserAnalysis?: BrowserAnalysisShape;
+  } = {},
 ): WorkloadInput {
   const given = withDefaults(platform, choices);
   // 他の事業者の部品は、同じ振る舞いの部品として Workload を変える（D-52）
@@ -2125,7 +2179,8 @@ export function applyComponentsToWorkload(
     });
   else if (c.images === 'r2-variants')
     out.images = { ...w.images, transformAt: 'upload' };
-  return out;
+  // 解析の置き場（D-235）: 端末はサーバーの解析をやめ、端末・併用はエンジンと評価関数を配る
+  return applyAnalysisToWorkload(out, c.analysis, options.browserAnalysis);
 }
 
 /**

@@ -17,6 +17,7 @@
 import { zValidator } from '@hono/zod-validator';
 import {
   FRAMEWORKS,
+  isPreviewScenario,
   RESULT_AXES,
   SCENARIOS,
   STACKS,
@@ -97,8 +98,13 @@ const numberParam = z
   .transform(Number)
   .refine(Number.isFinite);
 
+/** シナリオの id（知らない id と開発中のシナリオ（D-232。集計に入れない）は 400）。 */
+const scenarioParam = z
+  .string()
+  .refine((s) => s in SCENARIOS && !isPreviewScenario(s));
+
 const histogramQuery = z.object({
-  scenario: z.string().refine((s) => s in SCENARIOS),
+  scenario: scenarioParam,
   axis: z.enum(AXIS_IDS),
   /** 指定すれば同じシードだけの分布。 */
   seed: numberParam.optional(),
@@ -112,7 +118,7 @@ const stackParam = z.string().refine((s) => STACKS.some((x) => x.id === s));
 const frameworkParam = z.string().refine((s) => Object.hasOwn(FRAMEWORKS, s));
 
 const distributionQuery = z.object({
-  scenario: z.string().refine((s) => s in SCENARIOS),
+  scenario: scenarioParam,
   /** 同じシードの分布の元（全シードの分布も一緒に返す）。 */
   seed: numberParam,
   /** 指定すれば、8 本とも同じ構成だけで数える（ST-11・D-175）。 */
@@ -126,7 +132,7 @@ const distributionQuery = z.object({
 });
 
 const groupsQuery = z.object({
-  scenario: z.string().refine((s) => s in SCENARIOS),
+  scenario: scenarioParam,
   axis: z.enum(AXIS_IDS),
   by: z.enum(GROUP_BY),
   /** 指定すれば同じシードだけ。 */

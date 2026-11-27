@@ -13,6 +13,8 @@ import {
   UserMinus,
   Image as ImageIcon,
   Puzzle,
+  Target,
+  Timer,
   RefreshCw,
   ShieldCheck,
   type LucideIcon,
@@ -21,8 +23,9 @@ import {
   isPolicyViolation,
   premisePlanLabel,
   ELEMENT_LABEL,
-  ELEMENTS,
+  elementsOf,
   STAGE_LABEL,
+  type Element,
   type MonthReport,
   type Stage,
 } from 'game';
@@ -43,15 +46,18 @@ import {
 import { isZeroText, roundInt } from '../format.ts';
 import { pct, STATUS, STAGE_CLS } from './shared.ts';
 import { EventCard, eventBadge, BlockedBadge, TIER_LABEL } from './events.tsx';
-import { WorkProgressView } from './effort.tsx';
+import { hasWorkProgress, WorkProgressView } from './effort.tsx';
 
 /** 満足度の要素の印（名前と並べて札に出す。名前だけより一目で見分けやすい）。 */
-const ELEMENT_ICON: Record<(typeof ELEMENTS)[number], LucideIcon> = {
+const ELEMENT_ICON: Record<Element, LucideIcon> = {
   availability: ShieldCheck,
   speed: Gauge,
   feature: Puzzle,
   freshness: RefreshCw,
   quality: ImageIcon,
+  // 解析の要素（解析のあるシナリオだけ。D-238）
+  analysisSpeed: Timer,
+  analysisAccuracy: Target,
 };
 
 const STAGE_PANEL: Record<Stage, string> = {
@@ -72,7 +78,7 @@ function ElementBadge({
   stage,
   className = '',
 }: {
-  element: (typeof ELEMENTS)[number];
+  element: Element;
   stage: Stage;
   className?: string;
 }) {
@@ -96,7 +102,7 @@ function ImproveInfo({
   stages: MonthReport['satisfaction']['stages'];
   reasons: MonthReport['satisfaction']['reasons'];
 }) {
-  const items = ELEMENTS.filter((e) => reasons[e]);
+  const items = elementsOf(stages).filter((e) => reasons[e]);
   if (items.length === 0) return null;
   const worst: Stage = items.some((e) => stages[e] === 'bad') ? 'bad' : 'fair';
   const WorstIcon = worst === 'bad' ? OctagonX : TriangleAlert;
@@ -111,18 +117,19 @@ function ImproveInfo({
         {/* 項目ごとに、段階の色の枠の中に本体と同じ札と理由（「良い」でない要素だけ） */}
         <ul className="space-y-2">
           {items.map((e) => {
-            const Icon = stages[e] === 'bad' ? OctagonX : TriangleAlert;
+            const stage = stages[e]!;
+            const Icon = stage === 'bad' ? OctagonX : TriangleAlert;
             return (
               <li
                 key={e}
-                className={`flex items-start gap-2 rounded-box border p-2 ${STAGE_PANEL[stages[e]]}`}
+                className={`flex items-start gap-2 rounded-box border p-2 ${STAGE_PANEL[stage]}`}
               >
                 <Icon
                   aria-hidden
-                  className={`mt-0.5 size-5 shrink-0 ${STAGE_TEXT[stages[e]]}`}
+                  className={`mt-0.5 size-5 shrink-0 ${STAGE_TEXT[stage]}`}
                 />
                 <div className="min-w-0 space-y-1">
-                  <ElementBadge element={e} stage={stages[e]} />
+                  <ElementBadge element={e} stage={stage} />
                   <p className="text-sm">{reasons[e]}</p>
                 </div>
               </li>
@@ -268,10 +275,7 @@ export function MonthCard({
         ))}
         {/* 進行中の作業（乗り換えなど）があるときだけ右の列に置く。無ければ満足度を 1 列で */}
         <div
-          className={clsx(
-            'grid gap-4',
-            (r.componentSwap || r.migration || r.rewrite) && 'md:grid-cols-2',
-          )}
+          className={clsx('grid gap-4', hasWorkProgress(r) && 'md:grid-cols-2')}
         >
           <div>
             <h3 className="mb-1 font-bold">
@@ -280,17 +284,25 @@ export function MonthCard({
                 評判（前月との平均）{s.reputation.toFixed(2)}
               </span>
             </h3>
+            {/* 解析のあるシナリオは Web と解析の 2 本の柱の幾何平均（D-250）。片方が低いと全体が大きく下がることを短く見せる */}
+            {s.pillars && (
+              <p className="mb-1 text-xs opacity-70" data-satisfaction-pillars>
+                Web {s.pillars.web.toFixed(2)} と 解析{' '}
+                {s.pillars.analysis.toFixed(2)}{' '}
+                の幾何平均です（片方が低いと全体が大きく下がります）
+              </p>
+            )}
             {/* 要素はアイコン・名前・段階を段階の色の札 1 つにまとめ、どの幅でも折り返して横に詰め、行を埋めるように伸ばす（D-189・D-222 の補足）。
                 理由は札の下に、理由のある要素だけ 1 行ずつ */}
             <ul
               className="flex flex-wrap gap-1.5 text-sm"
               data-satisfaction-elements
             >
-              {ELEMENTS.map((e) => (
+              {elementsOf(s.stages).map((e) => (
                 <li key={e} className="flex grow" data-satisfaction-element={e}>
                   <ElementBadge
                     element={e}
-                    stage={s.stages[e]}
+                    stage={s.stages[e]!}
                     className="grow"
                   />
                 </li>

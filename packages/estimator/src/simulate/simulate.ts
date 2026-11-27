@@ -9,9 +9,11 @@ import {
   type Architecture,
   type ArchitectureInput,
 } from '../architecture/schema.ts';
+import { INVOCATIONS, type Invocation } from '../workload/schema.ts';
 import {
   kbMixOf,
   type ClassFlow,
+  type PerInvocationMax,
   type RequestClass,
   type RequestSource,
   type ResolvedWorkload,
@@ -60,6 +62,13 @@ export type NodeUsage = {
   maxCpuMsPerRequest: number;
   /** maxCpuMsPerRequest の内訳（関数・コンテナだけ。重い順。D-99）。 */
   cpuSources: CpuSource[];
+  /** 通ったリクエストの 1 回の実行の壁時計の時間の最大（ms。制限 wall-ms-per-request の判定用。関数・コンテナだけ。D-234）。 */
+  maxWallMsPerRequest: number;
+  /**
+   * 受け方（http・async）ごとの 1 回の実行の CPU・壁時計の時間の最大（関数・コンテナだけ。D-234）。受け方を持つ制限の判定に使う。
+   * その受け方の流れが届かないノードでは持たない。裏のクラス（ISR の再生成）は起こした閲覧と同じ http の実行に足す。
+   */
+  maxBy: Partial<Record<Invocation, PerInvocationMax>>;
   /** 接続・実行を保持している時間の合計（ms・月。ピークの同時数の判定用）。 */
   busyMs: number;
   /**
@@ -105,6 +114,10 @@ type NodeAcc = {
   maxCpuByClass: Partial<Record<RequestClass, number>>;
   /** クラスごとの、ルートごとの 1 件あたり CPU（D-99。maxCpuByClass の内訳）。 */
   cpuByClassSource: Partial<Record<RequestClass, CpuSource[]>>;
+  /** クラスごとの、受け方ごとの 1 件の CPU・壁時計の最大（件数が正のものだけ。D-234）。 */
+  maxByClass: Partial<
+    Record<RequestClass, Partial<Record<Invocation, PerInvocationMax>>>
+  >;
 };
 
 /**
@@ -120,6 +133,56 @@ const BACKGROUND_TRIGGER: Partial<Record<RequestClass, RequestClass>> = {
 function add(u: NodeUsage, r: ResourceKey, v: number) {
   if (v === 0) return;
   u.resources[r] = (u.resources[r] ?? 0) + v;
+}
+
+/**
+ * ノードの受け方ごとの 1 回の実行の CPU・壁時計の最大（D-234）。前景のクラスの最大に、裏のクラス（ISR の再生成）を
+ * 起こした閲覧（http）の実行として足す。起こす閲覧が通るなら閲覧 + 再生成（CPU はルートごとに足した backgroundCpuMs）、
+ * 起こすクラスが分からなければ前景の最大に足し、起こす閲覧が通らなければ裏の処理だけで 1 回とみる（maxCpuMsPerRequest と同じ）。
+ */
+function maxByOfNode(
+  byClass: NodeAcc['maxByClass'],
+  bg: ReadonlySet<RequestClass>,
+  backgroundCpuMs: ResolvedWorkload['backgroundCpuMs'],
+): Partial<Record<Invocation, PerInvocationMax>> {
+  const out: Partial<Record<Invocation, PerInvocationMax>> = {};
+  const put = (inv: Invocation, m: PerInvocationMax) => {
+    out[inv] = {
+      cpuMs: Math.max(out[inv]?.cpuMs ?? 0, m.cpuMs),
+      wallMs: Math.max(out[inv]?.wallMs ?? 0, m.wallMs),
+    };
+  };
+  const entries = Object.entries(byClass) as [
+    RequestClass,
+    Partial<Record<Invocation, PerInvocationMax>>,
+  ][];
+  for (const [cls, by] of entries) {
+    if (bg.has(cls)) continue;
+    for (const inv of INVOCATIONS) if (by[inv]) put(inv, by[inv]!);
+  }
+  const fg = { ...out };
+  for (const [cls, by] of entries) {
+    if (!bg.has(cls)) continue;
+    const trigger = BACKGROUND_TRIGGER[cls];
+    const triggered = trigger !== undefined && byClass[trigger] !== undefined;
+    for (const inv of INVOCATIONS) {
+      const v = by[inv];
+      if (!v) continue;
+      const f = fg[inv] ?? { cpuMs: 0, wallMs: 0 };
+      put(
+        inv,
+        triggered
+          ? {
+              cpuMs: backgroundCpuMs[cls] ?? f.cpuMs + v.cpuMs,
+              wallMs: f.wallMs + v.wallMs,
+            }
+          : trigger === undefined
+            ? { cpuMs: f.cpuMs + v.cpuMs, wallMs: f.wallMs + v.wallMs }
+            : v,
+      );
+    }
+  }
+  return out;
 }
 
 /**
@@ -160,8 +223,82 @@ function ttlMissBySource(
 /**
  * 1 ノードがクラスの流れを受け取ったときの使用量と、次のノードへ渡す流れ。
  * src はクラスのルートの内訳（w.sources）ごとの、このノードに届く件数。次のノードへ届く件数に書き換える（D-99）。
+ * リアルタイムの接続を保つノード（config の websocket。D-240）は、接続の長さを上限ごとのつなぎ直しに分けて自分の時間に数え、
+ * 次のノードへは接続を保たない短い 1 件（壁時計 = CPU）として、つなぎ直しの数だけ渡す。
  */
+/**
+ * 処理の速さの倍率（config の cpuSpeed。D-247）を 1 件の時間に当てる。CPU を倍率で割り、壁時計時間は減った CPU の分だけ短くする
+ * （待ちの時間は変えない）。倍率が無い・1 なら流れをそのまま返す。
+ */
+function withCpuSpeed(node: ArchNode, f: ClassFlow): ClassFlow {
+  const speed = 'cpuSpeed' in node.config ? node.config.cpuSpeed : undefined;
+  if (speed === undefined || speed === 1) return f;
+  const p = f.perRequest;
+  const fast = (cpu: number, wall: number) => ({
+    cpuMs: cpu / speed,
+    wallMs: wall - cpu + cpu / speed,
+  });
+  const main = fast(p.cpuMs, p.wallMs);
+  return {
+    ...f,
+    perRequest: {
+      ...p,
+      ...main,
+      maxCpuMs: p.maxCpuMs / speed,
+      maxBy: Object.fromEntries(
+        Object.entries(p.maxBy).map(([inv, m]) => [
+          inv,
+          fast(m!.cpuMs, m!.wallMs),
+        ]),
+      ) as ClassFlow['perRequest']['maxBy'],
+    },
+  };
+}
+
 function consume(
+  node: ArchNode,
+  cls: RequestClass,
+  f: ClassFlow,
+  u: NodeUsage,
+  w: ResolvedWorkload,
+  hostAcc: NodeAcc,
+  src: number[],
+): ClassFlow {
+  f = withCpuSpeed(node, f);
+  const ws =
+    cls === 'realtime-connect' && 'websocket' in node.config
+      ? node.config.websocket
+      : undefined;
+  if (!ws) return consumeKind(node, cls, f, u, w, hostAcc, src);
+  const p = f.perRequest;
+  const max = ws.maxConnectionMinutes;
+  const k =
+    max === undefined ? 1 : Math.max(1, ceilUnits(p.wallMs, max * 60_000));
+  const scale = (m: PerInvocationMax, wallMs: number) => ({
+    cpuMs: m.cpuMs,
+    wallMs,
+  });
+  const maxByOf = (wallOf: (m: PerInvocationMax) => number) =>
+    Object.fromEntries(
+      Object.entries(p.maxBy).map(([inv, m]) => [inv, scale(m!, wallOf(m!))]),
+    ) as ClassFlow['perRequest']['maxBy'];
+  const here: ClassFlow = {
+    count: f.count * k,
+    perRequest: {
+      ...p,
+      wallMs: p.wallMs / k,
+      maxBy: maxByOf((m) => m.wallMs / k),
+    },
+  };
+  src.forEach((x, i) => (src[i] = x * k));
+  consumeKind(node, cls, here, u, w, hostAcc, src);
+  return {
+    count: here.count,
+    perRequest: { ...p, wallMs: p.cpuMs, maxBy: maxByOf((m) => m.cpuMs) },
+  };
+}
+
+function consumeKind(
   node: ArchNode,
   cls: RequestClass,
   f: ClassFlow,
@@ -243,7 +380,13 @@ function consume(
       const mp =
         fixedCpu === undefined
           ? base
-          : { ...base, cpuMs: fixedCpu, maxCpuMs: fixedCpu, wallMs: fixedCpu };
+          : {
+              ...base,
+              cpuMs: fixedCpu,
+              maxCpuMs: fixedCpu,
+              wallMs: fixedCpu,
+              maxBy: { http: { cpuMs: fixedCpu, wallMs: fixedCpu } },
+            };
       const hits = n - miss;
       const hitCpu = missFlow ? cache!.hitCpuMs : 0;
       // 1 リクエストの CPU の最大は、件数が正の経路（miss の処理・ヒットの返却）それぞれの最大（OCL-8B3B0CB7）
@@ -256,6 +399,18 @@ function consume(
           hostAcc.maxCpuByClass[cls] ?? 0,
           maxCpu,
         );
+        // 受け方ごとの 1 件の CPU・壁時計の最大（D-234）。コードの中のキャッシュのヒットは返す CPU だけ（壁時計も同じとみる）
+        const by = (hostAcc.maxByClass[cls] ??= {});
+        for (const inv of INVOCATIONS) {
+          const m = mp.maxBy[inv];
+          if (!m) continue;
+          const cpu = Math.max(miss > 0 ? m.cpuMs : 0, hits > 0 ? hitCpu : 0);
+          const wall = Math.max(miss > 0 ? m.wallMs : 0, hits > 0 ? hitCpu : 0);
+          by[inv] = {
+            cpuMs: Math.max(by[inv]?.cpuMs ?? 0, cpu),
+            wallMs: Math.max(by[inv]?.wallMs ?? 0, wall),
+          };
+        }
         // ルートごとの内訳（D-99）。このノードに届くルートだけで、miss・ヒットもルートごと（OCL-E219321B）。
         // クラスで決まった CPU（画像の変換など）はルートに分けない
         const srcs = fixedCpu === undefined ? (w.sources[cls] ?? []) : [];
@@ -350,6 +505,20 @@ function consume(
       add(u, 'rows-written', n * p.rowsWritten);
       return f;
     }
+    case 'websocket-gateway': {
+      if (cls === 'realtime-connect')
+        add(u, 'connection-minutes', (n * p.wallMs) / 60_000);
+      else if (cls === 'realtime-message')
+        // 受け取った分と配った分（受信 × ファンアウト）を、1 件の大きさの単位ごとに切り上げて数える
+        add(
+          u,
+          'messages',
+          n *
+            (1 + (w.input.realtime?.fanout ?? 0)) *
+            Math.max(1, ceilUnits(p.kb, c.messageUnitKB)),
+        );
+      return f;
+    }
     case 'managed-db': {
       hostAcc.requests += n; // 止まる DB の動いている時間の割合に使う
       u.busyMs += n * p.wallMs; // 関数が接続を持っている間（壁時計時間）
@@ -367,15 +536,26 @@ function consume(
     }
     case 'request-db': {
       u.busyMs += n * p.wallMs;
-      // 該当のアイテムが無い（応答 0 KB）読み取りも 1 単位を消費する（DynamoDB の文書。OCL-0E5E2CF2）
+      // 該当のアイテムが無い（応答 0 KB）読み取りも 1 単位を消費する（DynamoDB の文書。OCL-0E5E2CF2）。Firestore も 1 回 1 件が最低
       const readUnits =
         Math.max(1, ceilUnits(w.input.db.responseKBPerQuery, c.readUnitKB)) *
         (c.eventuallyConsistent ? 0.5 : 1);
+      if (c.countsBy === 'document') {
+        // 返した文書の数（Workload が数を与えた問い合わせはその数、ほかは応答の大きさから。D-237）・書いた文書の数
+        const counted = p.countedQueries ?? 0;
+        const docs =
+          (p.rowsReturned ?? 0) * (c.eventuallyConsistent ? 0.5 : 1) +
+          (p.queries - counted) * readUnits;
+        add(u, 'read-request-units', n * docs);
+        add(u, 'write-request-units', n * p.rowsWritten);
+        return f;
+      }
       add(u, 'read-request-units', n * p.queries * readUnits);
+      // 1 行ごとに大きさの単位へ切り上げる（BatchWriteItem も項目ごと。D-237）
       add(
         u,
         'write-request-units',
-        n * p.rowsWritten * ceilUnits(c.itemKB, c.writeUnitKB),
+        n * p.rowsWritten * ceilUnits(p.rowKB ?? c.itemKB, c.writeUnitKB),
       );
       return f;
     }
@@ -436,7 +616,8 @@ function consume(
       const kb = api?.kb ?? p.kb;
       hostAcc.kb += n * kb;
       hostAcc.requests += n;
-      hostAcc.cpuMs += n * (api?.cpuMs ?? p.cpuMs);
+      // クラスの 1 件の CPU をこのホストで決める（別のホストの worker から結果を受けて書くだけ。D-235）
+      hostAcc.cpuMs += n * (c.classCpuMs?.[cls] ?? api?.cpuMs ?? p.cpuMs);
       hostAcc.queries += n * p.queries;
       if (cls === 'image-transform') hostAcc.transforms += n;
       add(u, 'requests', n);
@@ -506,6 +687,11 @@ function staticUsage(node: ArchNode, u: NodeUsage, w: ResolvedWorkload) {
           (1 - node.config.freeQueryShare),
       );
       break;
+    case 'host':
+      // 時間で課金するマシン（EC2・Compute Engine。D-247）は台数ぶんの月の時間（D-251）
+      if (node.config.billedHourly)
+        add(u, 'instance-hours', HOURS_PER_MONTH * (node.config.machines ?? 1));
+      break;
     case 'ci-build':
       // 静的なページのビルドし直し（D-68）。経路を持たない
       add(u, 'build-minutes', w.builds.minutes * node.config.cpusPerBuild);
@@ -556,6 +742,8 @@ export function simulateResources(
         events: 0,
         maxCpuMsPerRequest: 0,
         cpuSources: [],
+        maxWallMsPerRequest: 0,
+        maxBy: {},
         busyMs: 0,
         peakBusyMs: 0,
         egressGbByClass: {},
@@ -568,6 +756,7 @@ export function simulateResources(
         requests: 0,
         maxCpuByClass: {},
         cpuByClassSource: {},
+        maxByClass: {},
       });
       staticUsage(n, nodes[n.id]!, w);
     }
@@ -575,7 +764,12 @@ export function simulateResources(
       RequestClass,
       ClassFlow,
     ][]) {
-      const path = architecture.routes[cls];
+      // 積んで別の所で動かす API（D-235）は、構成が経路を持たなければ api と同じ経路を通る（解析の置き場を選ばない構成）
+      const path =
+        architecture.routes[cls] ??
+        (cls === 'api-async' && f.count > 0
+          ? architecture.routes.api
+          : undefined);
       if (!path) {
         if (collectUnrouted && f.count > 0) unroutedClasses.push(cls);
         continue;
@@ -664,11 +858,13 @@ export function simulateResources(
       const x = (u.busyMs * b.share) / 1000 / s;
       // 1 件以上を処理しているインスタンスの数の平均（1 を超えうる）。到着がポアソンなら 1 件以上を処理している時間の割合は
       // 1 − e^(−x)。同時実行の上限（x / concurrency）と、CPU を使い切る分（CPU 秒 / vCPU）より少なくはならない
-      const active = Math.max(
-        -Math.expm1(-x),
-        x / c.concurrency,
-        (acc.cpuMs * b.share) / 1000 / s / c.vcpu,
-      );
+      // 台数をキューに合わせて増やし減らす型（Fargate。D-247）は、CPU で決まる分を目標の使用率で割る（余裕の分）
+      const active =
+        Math.max(
+          -Math.expm1(-x),
+          x / c.concurrency,
+          (acc.cpuMs * b.share) / 1000 / s / c.vcpu,
+        ) / (c.targetUtilization ?? 1);
       activeHours += active * b.hours;
       idleHours += Math.max(0, c.minInstances - active) * b.hours;
       // 届いたリクエストのうち、直前の idleKeepSeconds に 1 件も届いていない（インスタンスが無い）割合。区間の件数の割合で重みづけ
@@ -727,6 +923,17 @@ export function simulateResources(
     }
     nodes[n.id]!.maxCpuMsPerRequest = max;
     nodes[n.id]!.cpuSources = cpuSources.sort((a, b) => b.cpuMs - a.cpuMs);
+    // 受け方ごとの 1 回の実行の最大（D-234）。前景のクラスはそのまま、裏のクラスは CPU と同じ数え方で起こした閲覧（http）に足す
+    const maxBy = maxByOfNode(
+      hostAcc.get(n.id)!.maxByClass,
+      bg,
+      workload.backgroundCpuMs,
+    );
+    nodes[n.id]!.maxBy = maxBy;
+    nodes[n.id]!.maxWallMsPerRequest = Math.max(
+      0,
+      ...Object.values(maxBy).map((m) => m.wallMs),
+    );
   }
 
   for (const n of architecture.nodes) {
@@ -743,7 +950,14 @@ export function simulateResources(
           acc.requests * c.proxyCpuMsPerRequest) /
           1000) *
         peak,
-      memoryGB: c.residentMemoryGB,
+      // リアルタイムの接続を常駐のプロセスで保つなら、同時接続のピーク × 1 接続のメモリを足す（D-240）
+      memoryGB:
+        c.residentMemoryGB +
+        (c.websocket
+          ? ((workload.realtime?.peakConnections ?? 0) *
+              c.websocket.kbPerConnection) /
+            1_000_000
+          : 0),
       diskGB:
         (c.storesDb ? workload.storage.dbGB : 0) +
         (c.storesImages

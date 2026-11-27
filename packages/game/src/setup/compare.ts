@@ -1,16 +1,21 @@
 // 部品のスロットの比較（部品の ⓘ の表と月額の横棒。D-124）。スロットの選択肢ごとに、そのスロットだけ替えた見積を引き、
 // 表の列（課金の形・上限・請求先のアカウント）を見積の結果から機械的に出す。選択肢に手で事実を書き足さない（出典のない数値を作らない）。
 // ゲームの部品の欄（今月の基準の PV）・始める画面（1 か月目の見込みと同じ条件）・見積モード（web が見積を引いて analyzeSlot に渡す）で共有する。
+import type { StartAnalysisSettings } from '../settings.ts';
 import {
   type Choices,
   type ComponentProvider,
-  componentsOf,
   type FrameworkId,
   type SlotId,
 } from 'catalog';
 import type { EstimateResult } from 'estimator';
 import { accountLabel } from '../accounts.ts';
-import { booksAt, DEFAULT_START_DATE, scenarioOf } from '../core.ts';
+import {
+  booksAt,
+  DEFAULT_START_DATE,
+  scenarioOf,
+  scenarioComponentsOf,
+} from '../core.ts';
 import { toUsd, usdOf } from '../format.ts';
 import { pageWeightOf } from '../notes.ts';
 import { partsOfComments } from '../routes/comments.ts';
@@ -224,7 +229,7 @@ export function componentComparison(
 ): SlotCompareRow[] {
   const sc = scenarioOf(state);
   const provider = STACKS[state.stackIndex]!.provider;
-  const options = componentsOf(provider, slot, state.framework);
+  const options = scenarioComponentsOf(sc, provider, slot, state.framework);
   const books = booksAt(state, state.history.length + 1);
   const components = { ...state.components, [slot]: current };
   return analyzeSlot({
@@ -260,6 +265,8 @@ export function setupComponentComparison(
     revalidateSec?: number | undefined;
     comments?: number | undefined;
     routes?: RouteOverrides | undefined;
+    /** 始める画面で選んだ解析の設定（D-249）。 */
+    analysisSettings?: StartAnalysisSettings | undefined;
   } = {},
 ): SlotCompareRow[] {
   const options =
@@ -278,6 +285,8 @@ export function setupComponentComparison(
       partsOfComments(scenario, opts.comments),
       undefined,
       opts.routes,
+      undefined,
+      opts.analysisSettings,
     );
   return analyzeSlot({
     options: options.map((o) => ({ ...o, slot: slot as SlotId })),

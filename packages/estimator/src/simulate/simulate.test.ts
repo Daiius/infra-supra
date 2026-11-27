@@ -4,7 +4,7 @@ import { nearlyEqual } from '../num/arith.ts';
 import type { ArchitectureInput } from '../architecture/schema.ts';
 import { estimate } from '../estimate.ts';
 import { FICTIONAL_CLOUD } from '../pricing/fixtures.test-helpers.ts';
-import { parsePriceBook } from '../pricing/schema.ts';
+import { parsePriceBook, type PriceBookInput } from '../pricing/schema.ts';
 import { resolveWorkload } from '../workload/resolve.ts';
 import type { WorkloadInput } from '../workload/schema.ts';
 import { simulateResources } from './simulate.ts';
@@ -563,6 +563,132 @@ describe('1 リクエストあたりの CPU の内訳（D-99）', () => {
     expect(near.detail).toMatch(
       /^最も重いのは.*で、Basic の 1 リクエスト 12 ms の 83%/,
     );
+  });
+});
+
+describe('1 回の実行の壁時計の上限と受け方（D-234）', () => {
+  /** 架空のプラン basic に 1 件の上限を足した料金表。 */
+  const withLimits = (
+    limits: NonNullable<PriceBookInput['plans'][number]['limits']>,
+  ) => {
+    const input = parsePriceBook(FICTIONAL_CLOUD, { allowFictional: true });
+    return parsePriceBook(
+      {
+        ...input,
+        plans: input.plans.map((p) =>
+          p.id === 'basic' ? { ...p, limits } : p,
+        ),
+      },
+      { allowFictional: true },
+    );
+  };
+  const wall = (
+    id: string,
+    value: number,
+    extra: { invocation?: 'http' | 'async'; defaultValue?: number } = {},
+  ) => ({
+    id,
+    measure: 'wall-ms-per-request' as const,
+    value,
+    ...extra,
+    unit: 'ms' as const,
+    scope: 'request' as const,
+    onExceed: 'block' as const,
+    premise: `${id} の上限`,
+    sourceIds: [],
+  });
+  const heavyApi = (invocation?: 'http' | 'async') =>
+    workload(10_000, {
+      api: {
+        ...processing,
+        cpuMs: 50_000,
+        ioWaitMs: 2_000,
+        writesPerCall: 1,
+        rowsWrittenPerWrite: 1,
+        ...(invocation ? { invocation } : {}),
+      },
+    });
+
+  it('受け方ごとに 1 件の CPU・壁時計の最大を持ち、全体の最大は両方の最大', () => {
+    const n = simulateResources(resolveWorkload(heavyApi('async')), arch).nodes
+      .fn!;
+    expect(n.maxBy.async).toEqual({ cpuMs: 50_000, wallMs: 52_000 });
+    // http はページ（SSR 10 + 30 ms・ISR の閲覧 + 再生成）だけ
+    expect(n.maxBy.http!.wallMs).toBeLessThan(1_000);
+    expect(n.maxWallMsPerRequest).toBe(52_000);
+    expect(n.maxCpuMsPerRequest).toBe(50_000);
+    // 省略は http: API も http の実行に入り、async は持たない
+    const h = simulateResources(resolveWorkload(heavyApi()), arch).nodes.fn!;
+    expect(h.maxBy.async).toBeUndefined();
+    expect(h.maxBy.http).toEqual({ cpuMs: 50_000, wallMs: 52_000 });
+  });
+
+  it('受け方を持つ上限は、その受け方の流れだけで判定し、流れが無ければ前提を出さない', () => {
+    const books = [
+      withLimits([
+        wall('sync', 60_000, { invocation: 'http' }),
+        wall('background', 900_000, { invocation: 'async' }),
+      ]),
+    ];
+    const ps = (w: WorkloadInput) =>
+      estimate({ workload: w, architecture: arch, books }).premises;
+    const asyncRun = ps(heavyApi('async'));
+    const sync = asyncRun.find((p) => p.id.includes(':sync:'))!;
+    const bg = asyncRun.find((p) => p.id.includes(':background:'))!;
+    expect(sync.hit).toBe(false);
+    expect(bg.hit).toBe(false);
+    expect(bg.used).toBe(52_000);
+    expect(bg.detail).toMatch(
+      /^非同期に受けて処理する分.*の 1 回の実行（壁時計）は最大 52 秒で/,
+    );
+    // 同じ重さをリクエストの中で処理すると、同期の 60 秒には当たらないが近い・非同期の前提は出ない
+    const httpRun = ps(heavyApi());
+    expect(httpRun.find((p) => p.id.includes(':sync:'))!.used).toBe(52_000);
+    expect(httpRun.some((p) => p.id.includes(':background:'))).toBe(false);
+    // 70 秒なら同期の上限に当たって止まる
+    const over = heavyApi();
+    over.api.ioWaitMs = 20_000;
+    const hit = ps(over).find((p) => p.id.includes(':sync:'))!;
+    expect(hit.hit).toBe(true);
+    expect(hit.effect).toBe('block');
+  });
+
+  it('既定の値を超えて最大以下なら、設定を上げる前提を内訳に添える', () => {
+    const books = [
+      withLimits([wall('timeout', 1_800_000, { defaultValue: 3_000 })]),
+    ];
+    const p = estimate({
+      workload: heavyApi('async'),
+      architecture: arch,
+      books,
+    }).premises.find((x) => x.id.includes(':timeout:'))!;
+    expect(p.hit).toBe(false);
+    expect(p.detail).toMatch(
+      /既定の 3 秒を超えるので、設定で 1800 秒まで上げる前提です$/,
+    );
+    // 既定に収まる軽い API なら添えない
+    const light = estimate({
+      workload: workload(10_000),
+      architecture: arch,
+      books,
+    }).premises.find((x) => x.id.includes(':timeout:'))!;
+    expect(light.detail).not.toMatch(/既定/);
+  });
+
+  it('スキーマ: 既定は最大以下・受け方は 1 件の CPU と壁時計の上限だけ', () => {
+    expect(() =>
+      withLimits([wall('bad', 1_000, { defaultValue: 2_000 })]),
+    ).toThrow(/defaultValue/);
+    expect(() =>
+      withLimits([
+        {
+          ...wall('bad', 1),
+          measure: 'storage-gb',
+          unit: 'gb',
+          invocation: 'async',
+        } as never,
+      ]),
+    ).toThrow(/invocation/);
   });
 });
 

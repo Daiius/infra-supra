@@ -104,7 +104,8 @@ export const LANES: Readonly<
     label: '閲覧ごとに描く部分（部品ごとにキャッシュ）',
     classes: [],
   },
-  api: { label: 'API', classes: ['api', 'api-content'] },
+  // 積んで別の所で動かす処理（解析。D-235）も API の流れに載せる（worker の箱からアプリの API へ）
+  api: { label: 'API', classes: ['api', 'api-content', 'api-async'] },
   image: {
     label: '画像（表示・投稿・変換）',
     classes: ['image-read', 'image-write', 'image-transform'],
@@ -747,7 +748,17 @@ const SLOT_ROLES: Readonly<Partial<Record<string, readonly Role[]>>> = {
   // Cloudflare の SPA の Workers Cache は静的アセットの箱で課金する（箱の名前が替わる）
   apiCache: ['edge-cdn', 'static-host'],
   email: ['email'],
+  // 解析の置き場（D-235）: worker の箱か、アプリの処理の箱（同じ実行環境・併用）
+  analysis: ['compute'],
+  // 保存の形（D-237）: 構成を変えないので DB の箱に当てる（DB の箱が無い VPS の同居の DB は幽霊の箱）
+  storage: ['sql-db', 'kv'],
 };
+
+/**
+ * 利用者の端末で動く選択肢（「スロット:部品の id」。D-235）。図に箱を持たないので、幽霊の箱を利用者の側（入口の帯の 1 段目）に置く
+ * （他の選択肢の箱の帯（worker の さくらの VPS）に置かない）。
+ */
+const VIEWER_SIDE: ReadonlySet<string> = new Set(['analysis:client']);
 
 /** 経路に載らない部品のスロット（図の一番下の段の箱で選ぶ。D-116 の補足）。ほかのスロットは経路の箱か幽霊の箱で選ぶ。 */
 const OFF_ROUTE_SLOTS: ReadonlySet<string> = new Set(['dbBackup', 'email']);
@@ -875,9 +886,13 @@ export function slotBoxes(
       );
       continue;
     }
-    // 4. 他の選択肢で出る、役割の合う箱の帯・段
-    let hint: Pick<GhostSlot, 'group' | 'depth'> | undefined;
-    for (const alt of alts) {
+    // 4. 他の選択肢で出る、役割の合う箱の帯・段（利用者の端末で動く選択肢は利用者の側）
+    let hint: Pick<GhostSlot, 'group' | 'depth'> | undefined = VIEWER_SIDE.has(
+      `${x.slot}:${option.id}`,
+    )
+      ? { depth: 1 }
+      : undefined;
+    for (const alt of hint ? [] : alts) {
       const added = alt.nodes.filter(
         (n) => !base.has(key(n)) && !isTransferNode(n) && fits(x.slot, n.role),
       );
@@ -916,7 +931,18 @@ export function slotBoxes(
         );
         continue;
       }
-      hint = { depth: 1 };
+      // 保存の形で DB の箱が無い（VPS の同居の DB）: DB がいる VPS の帯の、VPS の次の段に置く（入口の帯の 1 段目に置くと、API を
+      // 他の事業者の VPS に置いた構成で狭い画面の縦の図が広がりすぎる。棋譜解析を図の総当たりに入れて見つけた。D-241）
+      const host =
+        x.slot === 'storage'
+          ? (baseArch.routes.api ?? []).find(
+              (id) =>
+                baseArch.nodes.find((n) => n.id === id)?.config.kind === 'host',
+            )
+          : undefined;
+      baseModel ??= diagramModel(baseArch);
+      const hv = host && baseModel.nodes.find((m) => m.id === host);
+      hint = hv ? { group: hv.group, depth: hv.depth! + 1 } : { depth: 1 };
     }
     ghosts.push({
       slot: x.slot,

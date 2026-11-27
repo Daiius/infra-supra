@@ -7,15 +7,18 @@ import {
 } from 'estimator';
 import {
   type Choices,
+  componentsOf,
   type FrameworkId,
   loadPriceBooks,
   type Platform,
+  type SlotId,
   sendsEmail,
   withoutUnusedEmail,
 } from 'catalog';
 import type { EventDef, Scenario } from './scenario.ts';
 import { ARTICLE_COMMUNITY } from './scenarios/article-community.ts';
 import { CONTRACT_OPERATIONS } from './scenarios/contract-operations.ts';
+import { KIFU_ANALYSIS } from './scenarios/kifu-analysis.ts';
 import type { GameState } from './state.ts';
 
 /**
@@ -28,15 +31,79 @@ export const estimate: typeof estimateArch = (input) =>
     architecture: withoutUnusedEmail(input.architecture, input.workload),
   });
 
+/**
+ * 積んで別の所で動かす API（解析）を持つシナリオか（テンプレートの api.invocation が async。D-235）。部品「解析の置き場」は
+ * このシナリオだけで出し、既定は「アプリと同じ実行環境」。ほかのシナリオでは選択を持たない（構成も変えない）。
+ */
+export const scenarioAnalyzes = (sc: Pick<Scenario, 'template'>): boolean =>
+  templateFact(analyzesOf, sc, (w) => w.api.invocation === 'async');
+
+/**
+ * テンプレートから読む事実を、テンプレートの関数ごとに覚える（部品の判定のたびにテンプレートを作り直さない）。テンプレートは
+ * 規模を引数に取る純粋な関数で、ここで読む事実（解析・メールの有無）は規模によらない。
+ */
+function templateFact(
+  memo: WeakMap<Scenario['template'], boolean>,
+  sc: Pick<Scenario, 'template'>,
+  read: (w: ReturnType<Scenario['template']>) => boolean,
+): boolean {
+  const hit = memo.get(sc.template);
+  if (hit !== undefined) return hit;
+  const v = read(sc.template(1));
+  memo.set(sc.template, v);
+  return v;
+}
+const analyzesOf = new WeakMap<Scenario['template'], boolean>();
+const sendsEmailOf = new WeakMap<Scenario['template'], boolean>();
+
+/** 解析のあるシナリオだけで出すスロット（解析の置き場・保存の形。D-235・D-237）。 */
+export const ANALYSIS_SLOTS: readonly string[] = ['analysis', 'storage'];
+
+/** このシナリオでそのスロットを出すか（解析のスロットは解析のあるシナリオだけ）。 */
+export const scenarioHasSlot = (
+  sc: Pick<Scenario, 'template'>,
+  slot: string,
+): boolean => !ANALYSIS_SLOTS.includes(slot) || scenarioAnalyzes(sc);
+
+/**
+ * このシナリオで選べる部品（catalog の componentsOf）。リアルタイムは、シナリオが realtimeAllPlatforms を持つときだけ Cloudflare 以外の
+ * 部品（optIn）も返す（D-240。記事コミュニティは Cloudflare だけのまま。X-5）。
+ */
+export function scenarioComponentsOf(
+  sc: Pick<Scenario, 'realtimeAllPlatforms'>,
+  platform: Platform,
+  slot: SlotId,
+  framework?: FrameworkId,
+): ReturnType<typeof componentsOf> {
+  return componentsOf(platform, slot, framework, {
+    optIn: slot === 'realtime' && sc.realtimeAllPlatforms === true,
+  });
+}
+
 /** アプリがメールを送るシナリオか（テンプレートに email がある。D-101）。 */
 export const scenarioSendsEmail = (sc: Pick<Scenario, 'template'>): boolean =>
-  sendsEmail(sc.template(1));
+  templateFact(sendsEmailOf, sc, sendsEmail);
 
 /** 組み込みのシナリオ（id で引く。保存したゲームを読み込むときに使う）。ゲームの計算はこの表を書き換えない。 */
 export const SCENARIOS: Readonly<Record<string, Scenario>> = Object.freeze({
   [ARTICLE_COMMUNITY.id]: ARTICLE_COMMUNITY,
   [CONTRACT_OPERATIONS.id]: CONTRACT_OPERATIONS,
+  // 開発中（preview。D-232）。`?preview=1` のときだけ始める画面に出し、集計には送らない（prd/17 PR-10・D-241）
+  [KIFU_ANALYSIS.id]: KIFU_ANALYSIS,
 });
+
+/** 開発中の印（Scenario.preview。D-232）が付いた、組み込みのシナリオか。知らない id は false。 */
+export const isPreviewScenario = (id: string): boolean =>
+  Object.hasOwn(SCENARIOS, id) && SCENARIOS[id]!.preview === true;
+
+/**
+ * 画面に並べるシナリオ（登録順）。開発中のもの（D-232）は preview が真のときだけ含める。
+ * all はテストで架空のシナリオを渡すための口（既定は組み込みの表）。
+ */
+export const listedScenarios = (
+  preview: boolean,
+  all: readonly Scenario[] = Object.values(SCENARIOS),
+): Scenario[] => all.filter((s) => preview || s.preview !== true);
 
 /** ⚠ 為替は取得していない（仮定）。シナリオによらない共通の仮定。 */
 export const USD_JPY = 150;
@@ -77,18 +144,23 @@ export function frameworksOf(sc: Scenario): {
 export function frameworkDefaults(
   framework: FrameworkId,
   platform?: Platform,
-  scenario?: Pick<Scenario, 'hidden'>,
+  scenario?: Pick<Scenario, 'hidden'> & Partial<Pick<Scenario, 'template'>>,
 ): Choices {
+  // 解析の置き場の既定はアプリと同じ実行環境、保存の形の既定は一手を 1 行（非同期の API を持つシナリオだけ。D-235・D-237）
+  const analysis: Choices =
+    scenario?.template && scenarioAnalyzes({ template: scenario.template })
+      ? { analysis: 'same', storage: 'per-move' }
+      : {};
   // API の置き場の既定は同じ事業者（SPA は D-65・Next.js は D-67）
   if (framework === 'vite-spa')
-    return { ogp: 'none', apiCache: 'none', api: 'same' };
+    return { ogp: 'none', apiCache: 'none', api: 'same', ...analysis };
   if (
     framework === 'nextjs-export' &&
     (platform === 'vercel' || platform === 'sakura' || platform === 'gcp') &&
     !scenario?.hidden?.slots?.includes('images')
   )
-    return { api: 'same', images: 'resize' };
-  return { api: 'same' };
+    return { api: 'same', images: 'resize', ...analysis };
+  return { api: 'same', ...analysis };
 }
 
 export function eventDef(sc: Scenario, id: string): EventDef | undefined {

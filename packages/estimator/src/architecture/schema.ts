@@ -25,6 +25,20 @@ const LogsSchema = z
   })
   .optional();
 
+/**
+ * リアルタイムの接続（WebSocket）を保つノード（D-240）。持つノードは realtime-connect の壁時計の時間（接続の長さ）を自分の時間に数え、
+ * 経路の次（DB）へは接続を保たない短い 1 件として渡す（DB が接続の間ずっと使われているとは数えない）。
+ * maxConnectionMinutes: 1 回の接続の上限（関数の最大の実行時間・Cloud Run の timeout・API Gateway の 2 時間）。接続の長さがこれを超えると、
+ * この長さごとにつなぎ直す（件数が増え、1 件の時間はその分短くなる。履歴の読み直しも増える）。
+ * kbPerConnection: 1 接続が常駐で使うメモリ（KB。ホストのメモリの判定に、同時接続のピーク × これを足す。仮定）。
+ */
+const WebsocketSchema = z
+  .object({
+    maxConnectionMinutes: Pos.optional(),
+    kbPerConnection: NonNeg.default(0),
+  })
+  .optional();
+
 /** ComponentKind ごとの設定。振る舞いはコード（simulate/kinds.ts）、値はデータ。 */
 export const NodeKindSchema = z.discriminatedUnion('kind', [
   /** CDN・静的配信。クラスごとのヒット率。列挙しないクラスはキャッシュしない（ヒット率 0）。 */
@@ -96,8 +110,14 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     /**
      * クラスの 1 件の処理の時間（CPU と壁時計時間・ms）をこの関数で決める（画像の変換の関数など、Workload が処理を持たないクラス。仮定）。
      */
+    /**
+     * 1 vCPU（関数は実行環境）の処理の速さの倍率（既定 1 = Workload の CPU の値が仮定した基準の速さ。D-247）。このノードでは
+     * クラスの 1 件の CPU を cpuSpeed で割り、壁時計時間はその CPU の減った分だけ短くする（待ちの時間は変えない）。
+     */
+    cpuSpeed: Pos.optional(),
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
     logs: LogsSchema,
+    websocket: WebsocketSchema,
   }),
   /**
    * コンテナのサービス（Cloud Run のリクエストで課金する型。D-88・prd/04 §3.3.1）。1 インスタンスが同時に concurrency 件までさばき、
@@ -117,8 +137,19 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     /** 仕事の無いインスタンスを残す秒数（冷えた起動の割合に使う）。 */
     idleKeepSeconds: Pos.default(900),
     backgroundClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * 1 vCPU（関数は実行環境）の処理の速さの倍率（既定 1 = Workload の CPU の値が仮定した基準の速さ。D-247）。このノードでは
+     * クラスの 1 件の CPU を cpuSpeed で割り、壁時計時間はその CPU の減った分だけ短くする（待ちの時間は変えない）。
+     */
+    cpuSpeed: Pos.optional(),
+    /**
+     * 台数をキューの長さに合わせて増やし減らす型（ECS の Fargate。D-247）の目標の CPU 使用率。指定すると、アクティブなインスタンスの
+     * 時間を CPU で決まる分 ÷ この値にする（増やし減らしの遅れ・余裕の分。仮定）。省略は Cloud Run の型（上の式のまま）。
+     */
+    targetUtilization: z.number().finite().positive().max(1).optional(),
     classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
     logs: LogsSchema,
+    websocket: WebsocketSchema,
   }),
   /**
    * KV。cache: ISR のキャッシュ（閲覧で読み、再生成で書く）。db: DB の代わり（問い合わせ 1 回を読み取り 1 回、
@@ -148,6 +179,17 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     memoryGB: Pos,
   }),
   /**
+   * 接続を保ち、メッセージと接続の分で課金する WebSocket の入口（API Gateway の WebSocket API 型。D-240）。経路の次（関数）は
+   * メッセージ・接続ごとに短く呼ばれる。メッセージは受け取った分と配った分（受信 × Workload の realtime.fanout）を、
+   * 1 件の大きさを messageUnitKB ごとに切り上げて数える（messages）。接続は接続の分（connection-minutes）。
+   * つなぎ直しは websocket.maxConnectionMinutes（料金データの上限の値を catalog の構成が持つ）。
+   */
+  z.object({
+    kind: z.literal('websocket-gateway'),
+    messageUnitKB: Pos,
+    websocket: WebsocketSchema,
+  }),
+  /**
    * コンピュートを時間で買うマネージド DB（Supabase 型）。capacityUnits は時間課金の単位の数（Aurora の ACU。既定 1）。
    * pauseAfterIdleSeconds: 接続がこの秒数ないと止まり、止まっている間は課金されない（Aurora Serverless v2 の 0 ACU・Neon）。
    * 動いている時間の割合は、時間帯の区間（timeBuckets）ごとに DB に届く件数の到着率 λ_b と待ち T から 1 − e^(−λ_b × (T + 処理の時間))、
@@ -166,12 +208,17 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
     unitsPerRequest: Pos,
   }),
   /**
-   * 要求の単位で課金する DB（DynamoDB のオンデマンド型。prd/11 AX-05）。読み取りは問い合わせ 1 回の応答の大きさを
-   * readUnitKB 単位で切り上げた数（結果整合なら半分）、書き込みは 1 行（itemKB）を writeUnitKB 単位で切り上げた数。
+   * 要求の単位で課金する DB（DynamoDB のオンデマンド型・Firestore。prd/11 AX-05・D-237）。countsBy で数え方が分かれる。
+   * - size（DynamoDB）: 読み取りは問い合わせ（Query）1 回の応答の合計の大きさを readUnitKB 単位で切り上げた数（結果整合なら半分。
+   *   該当が無くても 1 単位）、書き込みは 1 行ごとに大きさ（Workload の api.rowKB。省略は itemKB）を writeUnitKB 単位で切り上げた数
+   *   （まとめて書いても 1 行ごとに切り上げる）。
+   * - document（Firestore）: 読み取りは返した文書の数（Workload の rowsReturnedPerQuery。省略は応答の大きさ ÷ itemKB の切り上げ。
+   *   1 回 1 件が最低）、書き込みは書いた文書の数（大きさによらない）。
    * 単位の大きさは公式の文書、1 行の大きさ itemKB は仮定（catalog の構成が値を持つ）。
    */
   z.object({
     kind: z.literal('request-db'),
+    countsBy: z.enum(['size', 'document']).default('size'),
     readUnitKB: Pos,
     writeUnitKB: Pos,
     eventuallyConsistent: z.boolean().default(true),
@@ -275,6 +322,25 @@ export const NodeKindSchema = z.discriminatedUnion('kind', [
      * 1 件を API の 1 回（Workload の api の 1 件の CPU と応答の大きさ）として数える。DB の問い合わせはそのクラスのまま。
      */
     serverApiClasses: z.array(z.enum(REQUEST_CLASSES)).optional(),
+    /**
+     * クラスの 1 件の CPU（ms）をこのホストで決める（D-235）。別のホストの worker が解析の結果をこのホストの API に送って書くとき、
+     * このホストでは受けて書くだけの CPU にする。DB の問い合わせはそのクラスのまま数える。
+     */
+    classCpuMs: z.partialRecord(z.enum(REQUEST_CLASSES), NonNeg).optional(),
+    /**
+     * 1 vCPU（関数は実行環境）の処理の速さの倍率（既定 1 = Workload の CPU の値が仮定した基準の速さ。D-247）。このノードでは
+     * クラスの 1 件の CPU を cpuSpeed で割り、壁時計時間はその CPU の減った分だけ短くする（待ちの時間は変えない）。
+     */
+    cpuSpeed: Pos.optional(),
+    /** 時間で課金するマシン（EC2・Compute Engine。D-247）。月の時間（instance-hours）を 1 台ぶん数える。省略は月額の VPS。 */
+    billedHourly: z.boolean().optional(),
+    /**
+     * 同じマシンを何台並べるか（D-251。省略は 1）。vcpu・memoryGB などはまとめた台数ぶんの値を書き、時間の課金（instance-hours）と
+     * ノード単位の基本料を台数倍にする（仕事は台に均等に分かれるとみる）。
+     */
+    machines: z.int().positive().optional(),
+    /** リアルタイムの接続をこのホストの常駐のプロセスで保つ（D-240）。メモリに同時接続のピーク × kbPerConnection を足す。 */
+    websocket: WebsocketSchema,
   }),
 ]);
 export type NodeKind = z.output<typeof NodeKindSchema>;

@@ -5,6 +5,7 @@ import { loadPriceBooks } from '../index.ts';
 import { articleCommunity } from '../templates/index.ts';
 import { deployTarget, toSpa } from '../frameworks/index.ts';
 import { fileStorageOf } from './files.ts';
+import { LAMBDA_GB_PER_VCPU, lambdaCpuSpeed } from './aws.ts';
 import {
   applyComponentsToWorkload,
   componentsOf,
@@ -291,5 +292,28 @@ describe('AWS の OpenNext の構成（D-63）', () => {
     expect(ids).toContain('cf');
     expect(a.routes['image-read']).toEqual(['cf-cache', 'cf-r2']);
     expect(a.routes['image-write']).toEqual(['server', 'aws-out', 'cf-r2']);
+  });
+});
+
+describe('Lambda の CPU はメモリに比例する（D-248）', () => {
+  it('1,769 MB で 1 vCPU、それより小さいと比例して遅く、大きくても 1 で頭打ち', () => {
+    expect(lambdaCpuSpeed(LAMBDA_GB_PER_VCPU)).toBe(1);
+    expect(lambdaCpuSpeed(1)).toBeCloseTo(1 / 1.769, 12);
+    expect(lambdaCpuSpeed(4)).toBe(1);
+  });
+
+  it('構成の Lambda（料金のプランが lambda）にだけ当て、Amplify の SSR には当てない', () => {
+    const spa = composeStack('aws-amplify', {}, { framework: 'vite-spa' });
+    const lambda = spa.nodes.find((n) => n.billing?.planId === 'lambda');
+    expect(lambda?.config.kind).toBe('function');
+    if (lambda?.config.kind !== 'function') return;
+    expect(lambda.config.cpuSpeed).toBeCloseTo(
+      lambdaCpuSpeed(lambda.config.memoryGB!),
+      12,
+    );
+    expect(lambda.facts).toContain('memory-cpu');
+    const next = composeStack('aws-amplify', {}, { framework: 'nextjs' });
+    const ssr = next.nodes.find((n) => n.billing?.planId === 'amplify-hosting');
+    expect(ssr && 'cpuSpeed' in ssr.config && ssr.config.cpuSpeed).toBeFalsy();
   });
 });

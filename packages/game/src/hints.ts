@@ -59,6 +59,10 @@ const ELEMENT_NEXT: Record<Exclude<Element, 'availability'>, string> = {
     'キャッシュの間隔や部品の性質で更新が遅れて見えます。間隔を短くするか、更新がすぐ届く部品を考えましょう',
   feature:
     '機能開発に回せる工数が期待に届いていません。維持・イベントへの対応・アクションの工数を減らして、機能開発に回しましょう',
+  analysisSpeed:
+    '解析が利用者のページを開いている間に終わっていません。解析の区切り方・置き場を見直すか、ピークに CPU の足りる worker・併用を考えましょう',
+  analysisAccuracy:
+    '解析の正確さが下がっています。1 局面に残す候補の数と、併用なら詳細解析が遅れて（たまって）届いていないかを見直しましょう',
 };
 
 /**
@@ -117,6 +121,38 @@ function socialCardLoss(
  * 未達の目標と終わり方ごとに、原因を月の記録（止まった月の前提・費用の内訳・満足度の理由・工数の内訳・出来事）から特定し、
  * 影響の大きい順に最大 3 つ返す。終わり方の直接の原因 → 未達の目標の原因 の順に並べる。
  */
+/**
+ * その月に要素 e が「良い」だったら満足度がどれだけ上がったか（ヒントの並べ方。⑤）。解析の柱のあるシナリオ（D-250）は
+ * √(Web の柱 × 解析の柱) の差で、ほかは重み × 段階の差。解析の要素の値は段階の値で近似する（連続の値は柱にしか残さない）。
+ */
+function elementLoss(
+  sc: ReturnType<typeof scenarioOf>,
+  r: MonthReport,
+  e: (typeof ELEMENTS)[number],
+): number {
+  const w = sc.satisfaction.weights;
+  const gap = 1 - STAGE_VALUE[r.satisfaction.stages[e] ?? 'good'];
+  const pillars = r.satisfaction.pillars;
+  const rules = sc.satisfaction.analysis;
+  if (!pillars || !rules) return (w[e] ?? 0) * gap;
+  const now = Math.sqrt(pillars.web * pillars.analysis);
+  if (e === 'analysisSpeed' || e === 'analysisAccuracy') {
+    const share =
+      e === 'analysisSpeed' ? rules.pillar.speed : rules.pillar.accuracy;
+    const analysis = Math.min(1, pillars.analysis + share * gap);
+    return Math.sqrt(pillars.web * analysis) - now;
+  }
+  // Web の柱は、解析以外の段階のある要素の重みの比で平均（analysisSatisfactionScore と同じ）
+  const wsum = (
+    Object.keys(r.satisfaction.stages) as (typeof ELEMENTS)[number][]
+  )
+    .filter((x) => x !== 'analysisSpeed' && x !== 'analysisAccuracy')
+    .reduce((a, x) => a + (w[x] ?? 0), 0);
+  if (wsum <= 0) return 0;
+  const web = Math.min(1, pillars.web + ((w[e] ?? 0) * gap) / wsum);
+  return Math.sqrt(web * pillars.analysis) - now;
+}
+
 export function retryHintsOf(state: GameState): RetryHint[] {
   if (state.phase === 'playing' || !state.end) return [];
   const sc = scenarioOf(state);
@@ -433,15 +469,11 @@ export function retryHintsOf(state: GameState): RetryHint[] {
         r.featurePoints / (ft.expectedPerMonth * r.month) < ft.good;
       const months = h.filter(
         (r) =>
-          r.satisfaction.stages[e] !== 'good' &&
+          (r.satisfaction.stages[e] ?? 'good') !== 'good' &&
           (e !== 'feature' || devShort(r)),
       );
       if (!months.length) continue;
-      const loss =
-        months.reduce(
-          (a, r) => a + w[e] * (1 - STAGE_VALUE[r.satisfaction.stages[e]]),
-          0,
-        ) / n;
+      const loss = months.reduce((a, r) => a + elementLoss(sc, r, e), 0) / n;
       const last = months[months.length - 1]!;
       // 維持には他の事業者の管理（D-52）を含める。構成の既定の分は月の工数に足してあるので、それを超えた分だけ数える（D-123）
       const upkeepSum =

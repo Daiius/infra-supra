@@ -1,7 +1,10 @@
 // シナリオと出来事のデータの形（prd/07 §10.1・§10.2・D-20）。ここは型と、台本の表を作る純粋関数だけ。
 // シナリオの値（規模・収益・満足度の重み・工数・確率・時期・効果）はすべてゲーム上の仮定。
 import type {
+  AnalysisJobShape,
   AstroShape,
+  BrowserAnalysisShape,
+  Choices,
   FrameworkId,
   Platform,
   RouteStrategyId,
@@ -11,7 +14,8 @@ import type {
 } from 'catalog';
 import type { WorkloadInput } from 'estimator';
 import { draws } from './random.ts';
-import type { Element } from './rules.ts';
+import type { Weights } from './rules.ts';
+import type { StartAnalysisSettings } from './settings.ts';
 import type { Action, GameState } from './state.ts';
 
 /** ためていく量（prd/07 §10.4）。 */
@@ -34,7 +38,7 @@ export type StockRule = {
 };
 
 export type SatisfactionRules = {
-  weights: Record<Element, number>;
+  weights: Weights;
   speed: {
     heavySsrCpuMs: number;
     heavyImageKB: number;
@@ -53,6 +57,47 @@ export type SatisfactionRules = {
     newPostVisibleSec?: number;
   };
   feature: { expectedPerMonth: number; good: number; fair: number };
+  /**
+   * 解析の速さ・正確さ（D-238・prd/17 §5.5）。あるシナリオ（解析の 1 件の形 Scenario.analysisJob を持つ）だけで、満足度の要素
+   * 「解析の速さ」「解析の正確さ」を判定する。省略したシナリオ（記事・受託）では判定せず、段階も持たない。値はゲーム上の仮定。
+   */
+  analysis?: AnalysisSatisfactionRules;
+};
+
+/** 解析の満足度の仮定（D-238・prd/17 §5.5。値はどれもゲーム上の仮定）。 */
+export type AnalysisSatisfactionRules = {
+  /**
+   * 1 局の解析が見えるまでの時間（秒）の段階の境目。良い: 利用者がページを開いている間（P-4）・普通: 少し離れて戻れば見える。
+   * それより長いと悪い。
+   */
+  speed: { goodSec: number; fairSec: number };
+  /**
+   * ピークの滞留（B-5）: 解析する VPS のピークの時間帯の CPU の比（需要 ÷ vCPU × 使用率の上限）が 1 を超えると、超えた分 ×
+   * この秒数だけ待ちが延びる（ピークの時間帯のうちに積み上がった分を、届いた解析が平均して待つとみた仮定の式。キューの長さは数えない）。
+   * 月の平均の比（ピークの比 ÷ ピークの係数）も 1 以上なら、1 日を通しても追いつかないので「悪い」。
+   */
+  stallWindowSec: number;
+  /**
+   * 利用者の端末の解析。1 局面の CPU に掛ける倍率（軽い評価関数で 1 局面は軽いが、端末はサーバーより遅いのを畳んだ値）と、
+   * 遅い端末（古いスマートフォンなど）の倍率。遅い端末で段階が下がるなら、ふつうの端末の段階から 1 段下げる（端末の差）。
+   */
+  client: { cpuFactor: number; slowDeviceFactor: number };
+  /**
+   * 正確さ: 候補の数がこれ以上なら「良い」、未満は「普通」（端末の評価関数では下げない。D-244）。
+   * 候補の数は正確さにだけ効かせ、機能（開発の累計）には足さない（B-7）。
+   */
+  accuracy: { goodCandidates: number };
+  /**
+   * 解析の柱（D-250）: 満足度 = √(Web の柱 × 解析の柱)。解析の柱 = 解析の速さの値 × speed + 正確さの値 × accuracy（合計 1）。
+   * Web の柱は Web の要素（可用性・ページの速さ・機能など）を weights の比で平均したもの。
+   */
+  pillar: { speed: number; accuracy: number };
+  /**
+   * 併用の詳細解析の届き方（D-250）: 詳細解析が見えるまでの時間がこの秒数までなら詳細の正確さ、それより長いと簡易解析の正確さ
+   * （普通）へ 許す秒数 ÷ 時間 の割合で近づき、積み残しが増え続ける（backlog）なら簡易解析の正確さ。希望した棋譜だけ（D-246）は
+   * 利用者が待つつもりで頼むので、許す秒数を長くする。
+   */
+  hybrid: { detailToleranceSec: number; requestedToleranceSec: number };
 };
 
 /** 提案を受けたときの Workload の変化（以降ずっと）。 */
@@ -118,10 +163,24 @@ export type Effect =
   /** ISR の再検証をオンデマンドにする（Next.js だけ。D-49）。 */
   | { type: 'on-demand-revalidate' }
   | { type: 'feature'; points: number }
-  /** 成長率に足す（翌月から months か月）。 */
-  | { type: 'growth'; add: number; months: number }
+  /**
+   * 成長率に足す（翌月から months か月）。social: SNS で共有されて伸びる分で、ページごとのカード（OGP）が出ない構成
+   * （SPA で前処理なし）では add に Scenario.frameworks.spa.socialCardFactor を掛ける（受けた月の構成で決める。D-241）。
+   */
+  | { type: 'growth'; add: number; months: number; social?: boolean }
   /** 部品を付ける（受けた提案に要る部品。D-24）。 */
   | { type: 'component'; slot: SlotId; option: string }
+  /**
+   * 今の構成のリアルタイムの部品を付ける（受けた月の事業者の手段。game の realtimeOptionFor。D-240・D-241）。
+   * 手段の無い構成（隠した構成）では受けられない提案になる（受けるには構成の変更が要る）。
+   */
+  /** 今の構成のリアルタイムの手段を付ける（D-241）。今は使うシナリオがない（D-252）。 */
+  | { type: 'realtime-component' }
+  /**
+   * 解析の件数と DB の増え方を、翌月から months か月 factor 倍にする（過去の棋譜をまとめて取り込む。D-241）。
+   * 解析の置き場が利用者の端末なら、取り込んだ分は利用者が開いたときに端末で解析するので、サーバーの解析は増えない（在庫は増える）。
+   */
+  | { type: 'analysis-burst'; factor: number; months: number }
   /**
    * 契約の収益（毎月）。requires を満たす構成のときだけ入る（SLA の出来事。D-24・SC-5）。
    */
@@ -132,7 +191,26 @@ export type Effect =
    * 記事のデザインの刷新を受ける（D-47）。工数は画像の部品で決まる: 原本がある構成 1・一律で縮めた構成 2
    * （これからの投稿だけ大きくできる）・最適化しない（原本を配っている）0。
    */
-  | { type: 'imageRedesign' };
+  | { type: 'imageRedesign' }
+  /**
+   * バックエンドの長時間の処理を始める（翌月から。D-239・prd/17 §6 の出来事 7）。月をまたいで進み、終わった月の終わりに
+   * job.onDone を当てる。解析の結果は変えない。
+   */
+  | { type: 'background-job'; job: BackgroundJobDef };
+
+/**
+ * バックエンドの長時間の処理（D-239・prd/17 §6 の出来事 7。戦法の分析の更新・次の一手の問題の選び方の更新など）。
+ * 置き場によらずサーバーで動く（端末は長時間の処理に向かない。P-5）。VPS は空いている CPU で少しずつ進み（追加の費用 0）、
+ * サーバーレス（関数・コンテナ）は 1 か月で終わってその CPU をその月に払う。値はシナリオの仮定。
+ */
+export type BackgroundJobDef = {
+  /** 処理の名前（画面。例: 戦法の分析の更新）。 */
+  label: string;
+  /** 処理の量（vCPU 時間。CPU の時間の合計。ゲーム上の仮定）。 */
+  vcpuHours: number;
+  /** 終わった月の終わりに当てる効果（機能・成長など。値は仮定）。終わるまでの間は何も変えない。 */
+  onDone: Effect[];
+};
 
 /** 構成に求める要件。uptime-sla: 課金先のプランがすべて稼働率の SLA を持つ（catalog の uptimeSla）。 */
 export type Requirement = 'uptime-sla' | 'on-demand-isr' | 'db-pitr';
@@ -230,6 +308,10 @@ export type Strategy = {
   framework?: FrameworkId;
   /** 始める画面で選ぶページごとの描き方（ルートの id → 描き方。省略はフレームワークの既定。D-107）。 */
   routes?: Readonly<Partial<Record<string, RouteStrategyId>>>;
+  /** 始める画面で選ぶ部品（省略したスロットは既定。D-45）。 */
+  components?: Choices;
+  /** 始める画面で選ぶ解析の設定（D-249。解析のあるシナリオだけ）。 */
+  analysisSettings?: StartAnalysisSettings;
   /** 毎月の行動の固定の列（添字 0 が 1 か月目の終わり）。 */
   actions?: Action[][];
   /** 状態を見て行動を決める（台本の時期がシードで揺れるため。§10.8）。actions より優先。 */
@@ -294,6 +376,16 @@ export type Scenario = {
   /** 画像を最適化しない部品のときに配る大きさ（原本の大きさ＝stock.gbPerImage と同じ。ゲーム上の仮定・D-24・D-47）。 */
   unoptimizedImageKB: number;
   /**
+   * 解析の置き場が利用者の端末・併用のときにブラウザへ配るファイル（D-235・prd/17 §5.1）。非同期の API（解析）を持つシナリオだけ。
+   * 省略すると端末の置き場でもファイルを配らない（数えない）。
+   */
+  browserAnalysis?: BrowserAnalysisShape;
+  /**
+   * 解析の 1 件の形（D-236・prd/17 §5.2・§5.3）。あるシナリオだけで設定「解析の区切り方」「1 局面に残す候補の数」を出し、
+   * Workload（件数・1 件の重さ・書き込み・応答）と在庫の増え方を替える。省略したシナリオ（記事・受託）では設定を出さず、何も替えない。
+   */
+  analysisJob?: AnalysisJobShape;
+  /**
    * 画像を投稿のときに一律で縮めて置く部品の、1 枚の大きさ（JPEG のとき。保存も配信もこの大きさで、画像の形式の比で小さくなる。
    * 長い辺 1,600〜2,000px 程度の JPEG・WebP を想定したゲーム上の仮定・D-47）。
    */
@@ -346,6 +438,21 @@ export type Scenario = {
   };
   /** 画面の文言（始める画面の説明。D-33・prd/09 E-6）。省略時は画面の既定。 */
   text?: ScenarioText;
+  /**
+   * 開発中のシナリオ（作りかけ。D-232・prd/17 §9.1）。シナリオ全体を普段は隠す: 画面は URL に `?preview=1` を付けて開いたときだけ
+   * 選択肢に出し、集計には送らない・受け付けない。設定・スロットを隠す hidden とは別のもの。
+   */
+  preview?: true;
+  /**
+   * リアルタイムの部品を Cloudflare 以外の構成でも選べる（catalog の optIn の部品。D-240）。棋譜解析の研究会の提案のために作ったが、出来事を外したので今は使うシナリオがない（D-252。仕組みは別のシナリオのために残す）。
+   * 省略は Cloudflare の Durable Objects だけ（記事コミュニティのチャット。X-5）。
+   */
+  realtimeAllPlatforms?: true;
+  /**
+   * 構成のカードから外し、構成・フレームワークと並ぶ別のタブで選ぶスロット（D-245・prd/17 §5.6）。アプリに固有の重大な選択で、
+   * インフラから独立して選べるもの（棋譜解析の「解析の置き場」）。画面はスロットの名前をタブの見出しにする。
+   */
+  ownTabSlots?: readonly SlotId[];
   /** このシナリオで効かない行動を画面に出さない（D-33・prd/09 E-6）。 */
   hidden?: {
     settings?: (
@@ -355,6 +462,10 @@ export type Scenario = {
       | 'apiCacheTtl'
       | 'buildInterval'
       | 'pageCache'
+      | 'analysisUnit'
+      | 'candidates'
+      | 'analysisScope'
+      | 'analysisMachines'
     )[];
     slots?: SlotId[];
     blockBots?: boolean;

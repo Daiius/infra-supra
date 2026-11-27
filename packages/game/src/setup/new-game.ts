@@ -1,9 +1,10 @@
 // 始める画面の部品の選択（D-45）と、ゲームを始める（newGame）。部品の欄（componentSlots）もここに置く（setupSlots が使う）。
 import { rollRevisions, rollSchedule, type Scenario } from '../scenario.ts';
 import {
+  ANALYSIS_MACHINES,
+  analysisMachine,
   type Choices,
   type ComponentProvider,
-  componentsOf,
   DEFAULT_CHOICES,
   FILE_STORAGE_LABEL,
   fileStorageOf,
@@ -20,8 +21,10 @@ import {
   frameworkDefaults,
   frameworksOf,
   scenarioOf,
+  scenarioHasSlot,
   scenarioSendsEmail,
   SCHEDULED_CHANGES,
+  scenarioComponentsOf,
 } from '../core.ts';
 import {
   type CommitmentOffer,
@@ -32,6 +35,13 @@ import {
 import { commentsOf, withComments } from '../routes/comments.ts';
 import { defaultRevalidateSec } from '../routes/hidden-settings.ts';
 import { validRouteOverrides } from '../routes/strategy.ts';
+import {
+  analysisMachinesOf,
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_CANDIDATES,
+  validStartAnalysisSettings,
+  type StartAnalysisSettings,
+} from '../settings.ts';
 import { slotIneffective, STACKS, stackSupports } from '../stacks.ts';
 import type { GameState, RouteOverrides, RouteParts } from '../state.ts';
 import { architectureFor, initialStock } from '../workload.ts';
@@ -63,6 +73,8 @@ export function setupCommitments(
   stackIndex: number,
   framework: FrameworkId,
   components?: Choices,
+  /** 解析の設定（台で借りるマシンの台数。台数ぶんの確約を出す。D-251）。 */
+  analysisSettings?: StartAnalysisSettings,
 ): CommitmentOffer[] {
   const arch = architectureFor(
     stackIndex,
@@ -81,7 +93,23 @@ export function setupCommitments(
         d.commitment.kind !== 'spend' &&
         billed.has(`${d.provider}:${d.planId}`),
     ),
-    () => undefined,
+    (d) => {
+      // 台で借りるマシンを並べるなら、そのマシンの確約は台数ぶん（D-251）。台数は newGame の設定と同じく、
+      // 解析のあるシナリオで選択肢の中の値だけを使う（選択肢の外の値は 1 台と同じ。OCL-DE5F7BC2）
+      const n = analysisMachinesOf(
+        sc.analysisJob ? validStartAnalysisSettings(analysisSettings) : {},
+        initialComponents(sc, stackIndex, framework, components).analysis,
+      );
+      const target = analysisMachine(
+        initialComponents(sc, stackIndex, framework, components).analysis,
+      );
+      return n !== undefined &&
+        target !== undefined &&
+        ANALYSIS_MACHINES[target]!.planId === d.planId &&
+        d.onDemandMonthly !== undefined
+        ? d.onDemandMonthly * n
+        : undefined;
+    },
     sc.months,
   ).filter((o) => o.usd.upfront <= sc.startCash);
 }
@@ -91,7 +119,7 @@ export function componentSlots(state: GameState): {
   slot: SlotId;
   label: string;
   current: string;
-  options: ReturnType<typeof componentsOf>;
+  options: ReturnType<typeof scenarioComponentsOf>;
 }[] {
   const platform = STACKS[state.stackIndex]!.provider;
   const current = {
@@ -104,7 +132,12 @@ export function componentSlots(state: GameState): {
       slot,
       label: slotLabel(slot, state.framework),
       current: current[slot] ?? '',
-      options: componentsOf(platform, slot, state.framework),
+      options: scenarioComponentsOf(
+        scenarioOf(state),
+        platform,
+        slot,
+        state.framework,
+      ),
     }))
     .filter(
       (x) =>
@@ -112,6 +145,8 @@ export function componentSlots(state: GameState): {
         // このシナリオで効かないスロットは出さない（D-33・prd/09 E-6）。メールを送らないシナリオのメール送信も（D-101）
         !scenarioOf(state).hidden?.slots?.includes(x.slot) &&
         (x.slot !== 'email' || scenarioSendsEmail(scenarioOf(state))) &&
+        // 解析の置き場・保存の形は非同期の API（解析）を持つシナリオだけ（D-235・D-237）
+        scenarioHasSlot(scenarioOf(state), x.slot) &&
         // 今の選択で効かないスロット（API を他の事業者に置いたときの DB。D-65）
         !slotIneffective(x.slot, current, {
           stackIndex: state.stackIndex,
@@ -140,6 +175,33 @@ export type SetupSlot = {
 };
 
 /**
+ * 部品の判定に使う、選ぶ前の始めの状態（シナリオ・構成・フレームワークだけで決まる）。始める画面と総当たりは部品の選択を変えるたびに
+ * setupSlots を呼ぶので、シナリオ（参照）・構成・フレームワークの組ごとに 1 度だけ作って覚える（組は数百しかない）。凍らせてあり、
+ * 呼び手は写してから部品を重ねる。
+ */
+const freshGames = new WeakMap<Scenario, Map<string, GameState>>();
+function freshGameOf(
+  scenario: Scenario,
+  stackIndex: number,
+  framework: FrameworkId,
+): GameState {
+  let byScenario = freshGames.get(scenario);
+  if (!byScenario) {
+    byScenario = new Map();
+    freshGames.set(scenario, byScenario);
+  }
+  const key = `${stackIndex}|${framework}`;
+  let g = byScenario.get(key);
+  if (!g) {
+    g = Object.freeze(
+      newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework),
+    );
+    byScenario.set(key, g);
+  }
+  return g;
+}
+
+/**
  * 始める画面の部品のスロット（構成・フレームワークの組み合わせで）。ゲーム中の部品の欄（componentSlots）と同じ
  * スロットから、提案で付く部品（チャットの Durable Objects など）を除く。選択肢が 1 つしか残らないスロットは「固定」として出す。
  * 最後に、構成が暗黙に持つファイルの置き場（R2・VPS のディスクなど。構成のノードから引く）を固定のスロットとして足す。
@@ -152,7 +214,7 @@ export function setupSlots(
   /** 選んだ部品（今の選択で効かないスロットを出さないために使う。API を他の事業者に置いたときの DB。D-65）。 */
   choices: Choices = {},
 ): SetupSlot[] {
-  const fresh = newGame(stackIndex, 0, scenario, DEFAULT_START_DATE, framework);
+  const fresh = freshGameOf(scenario, stackIndex, framework);
   const draft = {
     ...fresh,
     components: { ...fresh.components, ...choices },
@@ -298,6 +360,11 @@ export function newGame(
   routes?: RouteOverrides,
   /** 部品ごとにキャッシュを既定にする前の既定で描き方を決める（保存の版 3 までの再生だけ。D-111）。 */
   legacyRouteDefaults?: boolean,
+  /**
+   * 始める画面で選んだ解析の設定（区切り方・候補の数・詳細解析の範囲。D-249）。解析のあるシナリオ（Scenario.analysisJob）だけで
+   * 効く。選べない値・省略は既定。
+   */
+  analysisSettings?: StartAnalysisSettings,
 ): GameState {
   const fw = frameworksOf(scenario);
   // 載せられない構成（Astro × AWS など）では既定のフレームワークにする（画面では選べない。D-68）
@@ -350,7 +417,13 @@ export function newGame(
     componentSwap: null,
     commitments: (() => {
       if (!commitments?.length) return [];
-      const offers = setupCommitments(scenario, stackIndex, app, components);
+      const offers = setupCommitments(
+        scenario,
+        stackIndex,
+        app,
+        components,
+        analysisSettings,
+      );
       const out: ActiveCommitment[] = [];
       for (const want of commitments) {
         const o = offers.find(
@@ -380,6 +453,12 @@ export function newGame(
               chosen,
             ),
       ssrOptimizations: 0,
+      // 解析の設定（解析のあるシナリオだけで効く。始める画面で選び、運営の途中でも変えられる。D-236・D-249）
+      analysisUnit: DEFAULT_ANALYSIS_UNIT,
+      candidates: DEFAULT_CANDIDATES,
+      ...(scenario.analysisJob
+        ? validStartAnalysisSettings(analysisSettings)
+        : {}),
     },
     cash: scenario.startCash,
     basePV: scenario.scale.startPV,

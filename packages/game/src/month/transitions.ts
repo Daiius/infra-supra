@@ -1,6 +1,12 @@
 // playMonth の工数と切り替えの段: 工数の配分と作業の進み、乗り換え・部品の差し替え・作り直しが済んだときの切り替え、
 // ためていく量（在庫）の増え方。
-import { apiPlacedElsewhere, FRAMEWORKS, type Platform } from 'catalog';
+import {
+  analysisStockFactor,
+  serverShareOf,
+  apiPlacedElsewhere,
+  FRAMEWORKS,
+  type Platform,
+} from 'catalog';
 import { scenarioOf } from '../core.ts';
 import {
   accountAllowanceFor,
@@ -17,7 +23,11 @@ import { allocateEffort } from '../rules.ts';
 import { componentsAfterRewrite, revalidateAfterRewrite } from '../rewrite.ts';
 import { validRouteOverrides } from '../routes/strategy.ts';
 import type { Scenario, Stock } from '../scenario.ts';
-import { deliveredImageKB, imageFormatOf } from '../settings.ts';
+import {
+  analysisSettingsOf,
+  deliveredImageKB,
+  imageFormatOf,
+} from '../settings.ts';
 import {
   componentLabel,
   componentsAfterMigration,
@@ -29,6 +39,7 @@ import {
   withoutRealtime,
 } from '../stacks.ts';
 import type { GameState } from '../state.ts';
+import { analysisBurstFactor } from '../workload.ts';
 
 export type Progress = {
   effort: ReturnType<typeof allocateEffort>;
@@ -116,7 +127,10 @@ export function transitionsOf(
     notes.push(
       `乗り換えの作業が済みました。来月から ${stackName(migration.to, state.framework)} に切り替えます（部品は既定の選択から始まります）`,
     );
-    if (mods.realtime && !realtimeSupported(STACKS[migration.to]!.provider)) {
+    if (
+      mods.realtime &&
+      !realtimeSupported(STACKS[migration.to]!.provider, scenarioOf(state))
+    ) {
       mods = withoutRealtime(mods);
       notes.push(
         'チャットは乗り換え先のリアルタイムのデータを取得していないため、乗り換えとともに止めました',
@@ -219,10 +233,30 @@ function grow(sc: Scenario, state: GameState, humanPV: number): Stock {
       1e6
     : // 原本はそのまま置く（形式は閲覧・投稿のときに変える。D-58 で圧縮の比を掛けるのをやめた）
       rule.gbPerImage;
+  // 解析の結果は 1 局面に残す候補の数に比例してたまる（D-236。解析のあるシナリオだけ）
+  const analysisSet = sc.analysisJob
+    ? analysisSettingsOf(state.settings, state.components)
+    : undefined;
+  const analysis =
+    sc.analysisJob && analysisSet
+      ? analysisStockFactor(
+          sc.analysisJob,
+          analysisSet.candidates,
+          analysisSet.storage,
+          // 詳細解析が希望した棋譜だけなら、頼まれなかった局は棋譜だけ残る（D-246）
+          serverShareOf(sc.analysisJob, analysisSet),
+        )
+      : 1;
   return {
     dbGB:
       s.dbGB +
-      (rule.dbGBPerMillionPV * humanPV * (state.mods.dbRateFactor ?? 1)) / 1e6,
+      (rule.dbGBPerMillionPV *
+        humanPV *
+        (state.mods.dbRateFactor ?? 1) *
+        analysis *
+        // 取り込んだ棋譜と解析の結果もたまる（置き場によらない。D-241）
+        analysisBurstFactor(state)) /
+        1e6,
     imagesGB: s.imagesGB + uploads * gbPerUpload,
     images: s.images + uploads,
     articlePages: s.articlePages,

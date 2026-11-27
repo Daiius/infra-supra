@@ -75,7 +75,8 @@ import {
   settingsOf,
   slotComparisonOf,
   sortRows,
-  TEMPLATES,
+  templateOffered,
+  templateOptions,
   toQuery,
   USD_JPY,
   VARIANTS,
@@ -92,6 +93,9 @@ import {
   type TemplateId,
 } from './model.ts';
 import { roundInt, usd } from '../format.ts';
+import { previewEnabled } from '../preview.ts';
+import { AnalysisSettingChips } from '../analysis-settings.tsx';
+import { ownSlotTabs } from '../own-slot-field.tsx';
 
 const jpy = (n: number) => `¥${roundInt(n).toLocaleString('ja-JP')}`;
 const money = (n: number, currency: string) =>
@@ -122,9 +126,13 @@ const OVER_LABEL: Partial<Record<PlatformPremise['effect'], string>> = {
 };
 
 export function EstimateMode() {
-  const [input, setInputState] = useState<EstimateInput>(() =>
-    normalizeInput(fromQuery(window.location.search)),
-  );
+  // 開発中のテンプレート（D-233）は開発中の印が立っているときだけ選べる。印は開いたときに 1 回だけ読む
+  const [preview] = useState(previewEnabled);
+  const [input, setInputState] = useState<EstimateInput>(() => {
+    const raw = fromQuery(window.location.search);
+    if (!templateOffered(raw.template, preview)) delete raw.template;
+    return normalizeInput(raw);
+  });
   const setInput = (next: Partial<EstimateInput>) =>
     setInputState((cur) => normalizeInput({ ...cur, ...next }));
   // 入力を URL に残す（履歴は増やさない）
@@ -232,6 +240,7 @@ export function EstimateMode() {
       </p>
       <Conditions
         input={input}
+        preview={preview}
         setInput={(p) => {
           if (p.template === undefined) return setInput(p);
           setNotice(null);
@@ -383,6 +392,7 @@ function Field({
 
 function Conditions({
   input,
+  preview,
   setInput,
   mau,
   rows,
@@ -395,6 +405,8 @@ function Conditions({
   overview,
 }: {
   input: EstimateInput;
+  /** 開発中のテンプレートも選択肢に出すか（D-233）。 */
+  preview: boolean;
   setInput: (p: Partial<EstimateInput>) => void;
   mau: number;
   /** 構成の比較の行（構成のカードの月額に使う）。 */
@@ -478,6 +490,23 @@ function Conditions({
         )}
       </div>
     ) : null;
+  // 解析の区切り方・候補の数（D-236）は解析の置き場の行（と構成図の箱の吹き出し）で選ぶ。解析のあるテンプレートだけ
+  const analysisSettings = settings.analysis ? (
+    <AnalysisSettingChips
+      value={{
+        analysisUnit: input.analysisUnit,
+        candidates: input.candidates,
+        analysisScope: input.analysisScope,
+        analysisMachines: input.analysisMachines,
+      }}
+      analysis={input.parts.analysis}
+      onChange={(v) => setInput(v)}
+    />
+  ) : null;
+  const partsExtra = {
+    ...(imageSettings ? { images: imageSettings } : {}),
+    ...(analysisSettings ? { analysis: analysisSettings } : {}),
+  };
   return (
     <>
       <Card title="条件">
@@ -490,7 +519,7 @@ function Conditions({
                 setInput(withTemplate(input, e.target.value as TemplateId))
               }
             >
-              {TEMPLATES.map((t) => (
+              {templateOptions(preview).map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
@@ -581,7 +610,7 @@ function Conditions({
                   onComponentsChange={onPickParts}
                   partsNote="選んでいないスロットは既定の部品で見積もります"
                   partsExtra={
-                    imageSettings ? { images: imageSettings } : undefined
+                    Object.keys(partsExtra).length > 0 ? partsExtra : undefined
                   }
                   // 部品の ⓘ の比較: 今の条件で、そのスロットだけ替えた月額（D-124）
                   partsCompare={(slot) => ({
@@ -613,6 +642,20 @@ function Conditions({
                 />
               ),
             }}
+            // ③ テンプレートが別のタブで選ぶスロット（解析の置き場。D-245）
+            own={ownSlotTabs({
+              scenario,
+              stackIndex,
+              framework: input.framework,
+              components: input.parts,
+              onChange: onPickParts,
+              compare: (slot) => ({
+                rows: slotComparisonOf(input, slot),
+                basis: `今の条件（月 ${input.pv.toLocaleString('ja-JP')} PV・選んだ設定と他の部品）で、このスロットだけを替えた月の費用（構成全体）。縦の線は選んでいる部品の額です`,
+              }),
+              slotExtra:
+                Object.keys(partsExtra).length > 0 ? partsExtra : undefined,
+            })}
             framework={{
               label: 'フレームワーク',
               summary: FRAMEWORKS[input.framework].label,

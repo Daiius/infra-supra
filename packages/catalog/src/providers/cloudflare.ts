@@ -23,6 +23,19 @@ const WORKERS_FACTS = [
     premise: 'D1 の 1 行（文字列・BLOB）は 2 MB まで',
     sourceIds: ['d1Limits'],
   },
+  // 保存の形（prd/17 §5.4・D-237）を選ぶシナリオだけ、D1 のノードが挙げる
+  {
+    id: 'd1-rows-counting',
+    premise:
+      'D1 の行の読み取り（rows read）は問い合わせが読んだ（走査した）行の数で、行の大きさによりません（索引が当たらないと、返す行が少なくても全表を走査した分を数える）。' +
+      '行の書き込み（rows written）は書いた行の数で、索引の列を含む書き込みは索引の分も 1 行足します',
+    interpretation: {
+      adopted:
+        '解析の結果は主キー（棋譜と手の番号）で引くとみなし、読む行は返す行と同じに数えます。主キーのほかの索引は張らないとみなし、索引の書き込みの行は足しません',
+      rejected: [],
+    },
+    sourceIds: ['d1PricingRows'],
+  },
   // 2026-11-04 に施行（scheduledChanges の予告から移した。2026-11-22 の再確認・D-230）。どのノードも挙げていないので前提には出ない
   {
     id: 'd1-query-result-size',
@@ -212,6 +225,23 @@ const KV_SAME_KEY: LimitInput = {
   sourceIds: ['kvLimits', 'kvWrite'],
 };
 
+/**
+ * Workers の非同期の実行（キューの受け手・Cron Trigger・Durable Object の alarm）の壁時計の上限（Free・Paid 共通。D-234）。
+ * HTTP のリクエストには壁時計の上限が無い（クライアントがつながっている間）ので、非同期に受ける分（api.invocation: async）だけで判定する。
+ */
+const WORKERS_ASYNC_DURATION: LimitInput = {
+  id: 'async-wall-ms',
+  measure: 'wall-ms-per-request',
+  value: 900_000,
+  unit: 'ms',
+  scope: 'request',
+  onExceed: 'block',
+  invocation: 'async',
+  premise:
+    'Workers のキューの受け手・Cron Trigger・Durable Object の alarm は、1 回の実行（壁時計）が 15 分までです（HTTP のリクエストには壁時計の上限がありません）',
+  sourceIds: ['workersLimitsDuration', 'queuesLimits'],
+};
+
 /** Workers・R2・Images などセルフサービスのプランの SLA（Cloudflare の稼働率の SLA は Business・Enterprise の契約）。 */
 const NO_SELF_SERVE_SLA: SlaInput = {
   status: 'not-stated',
@@ -284,8 +314,23 @@ export const cloudflare: PriceBookInput = {
     workersLimits: src(
       'https://developers.cloudflare.com/workers/platform/limits/',
     ),
+    // 1 回の実行の CPU（Paid の既定 30 秒・最大 5 分）と、受け方ごとの壁時計（2026-11-19 更新・2026-11-23 取得。D-234）
+    workersLimitsDuration: {
+      url: 'https://developers.cloudflare.com/workers/platform/limits/',
+      retrievedAt: '2026-11-23',
+    },
+    // キューの受け手の壁時計 15 分・CPU は Workers と同じ（Free・Paid 共通。2026-10-30 更新・2026-11-23 取得。D-234）
+    queuesLimits: {
+      url: 'https://developers.cloudflare.com/queues/platform/limits/',
+      retrievedAt: '2026-11-23',
+    },
     d1Pricing: src('https://developers.cloudflare.com/d1/platform/pricing/'),
     d1Limits: src('https://developers.cloudflare.com/d1/platform/limits/'),
+    // rows read は走査した行・rows written は索引の分も足す（2026-10-30 更新・2026-11-23 取得。D-237）
+    d1PricingRows: {
+      url: 'https://developers.cloudflare.com/d1/platform/pricing/',
+      retrievedAt: '2026-11-23',
+    },
     // クエリの結果の上限 50 MB（2026-11-20 更新・2026-11-22 取得。D-230）
     d1LimitsQueryResult: {
       url: 'https://developers.cloudflare.com/d1/platform/limits/',
@@ -912,6 +957,7 @@ export const cloudflare: PriceBookInput = {
             'Workers Free は 1 リクエストあたり CPU 10 ms まで（超えると Error 1102）',
           sourceIds: ['workersLimits'],
         },
+        WORKERS_ASYNC_DURATION,
         {
           id: 'd1-db-size',
           measure: 'storage-gb',
@@ -1093,6 +1139,19 @@ export const cloudflare: PriceBookInput = {
         },
       ],
       limits: [
+        {
+          id: 'cpu-ms-per-request',
+          measure: 'cpu-ms-per-request',
+          value: 300_000,
+          defaultValue: 30_000,
+          unit: 'ms',
+          scope: 'request',
+          onExceed: 'block',
+          premise:
+            'Workers Paid は 1 回の実行の CPU が既定 30 秒で、limits.cpu_ms の設定で 5 分まで上げられます（ここでは 5 分で判定します。HTTP・キューの受け手で同じ。超えると Error 1102）',
+          sourceIds: ['workersLimitsDuration', 'queuesLimits'],
+        },
+        WORKERS_ASYNC_DURATION,
         {
           id: 'd1-db-size',
           measure: 'storage-gb',

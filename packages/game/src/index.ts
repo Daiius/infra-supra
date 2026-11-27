@@ -5,8 +5,14 @@
 //
 // このファイルは公開の口（barrel）だけを持つ。実装は関心ごとのモジュールに分けてある（web・テストはここから読む）。
 export {
+  scenarioAnalyzes,
+  scenarioHasSlot,
+  scenarioComponentsOf,
+  ANALYSIS_SLOTS,
   scenarioSendsEmail,
   SCENARIOS,
+  isPreviewScenario,
+  listedScenarios,
   USD_JPY,
   baseSsrCpuMsOf,
   GAME,
@@ -43,6 +49,19 @@ export {
   DEFAULT_REVALIDATE_SEC,
   SETTING_FLAVOR,
   settingFlavor,
+  DEFAULT_ANALYSIS_UNIT,
+  DEFAULT_CANDIDATES,
+  CLIENT_CANDIDATES,
+  analysisScopeLockReason,
+  analysisMachinesLockReason,
+  analysisMachinesOf,
+  DEFAULT_ANALYSIS_MACHINES,
+  candidatesLockReason,
+  DEFAULT_ANALYSIS_SCOPE,
+  settingValueOf,
+  analysisSettingsOf,
+  validStartAnalysisSettings,
+  type StartAnalysisSettings,
 } from './settings.ts';
 export {
   type RouteOverrides,
@@ -60,7 +79,16 @@ export {
   type Crossing,
   type MonthReport,
   type GameState,
+  type BackgroundJob,
+  type BackgroundJobRun,
 } from './state.ts';
+export {
+  backgroundHostOf,
+  freeVcpuHoursOf,
+  runBackgroundJobs,
+  startBackgroundJob,
+  type BackgroundHost,
+} from './background-job.ts';
 export {
   isDataSwap,
   swapLabel,
@@ -89,6 +117,9 @@ export {
   stackFlavor,
   TERM_NOTES,
   termNotesOf,
+  realtimeOptionFor,
+  realtimeSupported,
+  realtimeSessionOf,
 } from './stacks.ts';
 export {
   componentProposal,
@@ -132,6 +163,7 @@ export {
   revalidateSettingOf,
   defaultRevalidateSec,
   legacyDefaultRevalidateSec,
+  ANALYSIS_SETTING_KEYS,
 } from './routes/hidden-settings.ts';
 export {
   setupRevalidateOptions,
