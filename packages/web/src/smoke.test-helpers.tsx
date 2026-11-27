@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import { ANALYSIS_MACHINES, analysisTargetKind } from 'catalog';
 import { FRAMEWORKS, STACKS, stackName, type FrameworkId } from 'game';
 import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
@@ -318,7 +319,12 @@ export const pickAnalysis = (mode: string, target?: string) => {
     if (b!.getAttribute('aria-pressed') !== 'true') fireEvent.click(b!);
   };
   press(`[data-analysis-mode="${mode}"]`);
-  if (target) press(`[data-analysis-target="${target}"]`);
+  if (!target) return;
+  // 段をたどる: 払い方 → （台で借りるなら）事業者 → 実行先。アプリと同じ実行環境は払い方の段のボタン
+  press(`[data-analysis-kind="${analysisTargetKind(target)}"]`);
+  const m = ANALYSIS_MACHINES[target];
+  if (m) press(`[data-analysis-provider="${m.provider}"]`);
+  press(`[data-analysis-target="${target}"]`);
 };
 /** 部品のチップの一覧（「機能から選ぶ」）にする（チップの行を押すテスト用）。 */
 export const showPartsList = () => showPartsView('list');

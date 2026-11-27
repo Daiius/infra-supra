@@ -1,7 +1,8 @@
 // 構成・フレームワークと並ぶ別のタブで選ぶスロット（D-245・prd/17 §5.6。Scenario.ownTabSlots）。① 構成のカードからは外し、
 // ゲームの始める画面・途中の「構成を変える」・見積モードの SetupTabs に ③ のタブとして出す。
-// 解析の置き場は、置き方（サーバー・端末・併用）と実行先（同じ実行環境・別の事業者のサーバーレス・Fargate・台で借りるマシン）の 2 段で選ぶ。
-// 実行先は払い方の型ごとの見出し（件ごと・動いている間・台で借りる）でまとめ、台で借りるマシンは系列の行に大きさを並べる（D-247）。
+// 解析の置き場は、置き方（サーバー・端末・併用）→ 払い方（同じ実行環境・件ごと・動いている間・台で借りる）→ 事業者（台で借りるとき）
+// → 実行先（台で借りるマシンは系列の行に大きさを並べ、台数を添える。D-247・D-251）の段で選び、選んだものの下の段だけを開く。
+// 解析の設定（区切り方・候補の数・詳細解析の範囲）は最後の段で、今の値の要約を見出しにして畳む（D-254）。
 // 実行先は Web の事業者から独立して選べる（結果はアプリの API に送る）。今の構成で選べないものは出さない（選択肢に無いもの）、
 // 部品どうしの依存で選べないものは灰色で理由を添える（チップと同じ判定）。それ以外のスロットは機能のチップ（PartChips）で選ぶ。
 import clsx from 'clsx';
@@ -12,9 +13,11 @@ import {
   analysisPlacementOf,
   analysisTargetKind,
   analysisTargetName,
+  type AnalysisMachine,
   type AnalysisMode,
   type AnalysisTarget,
   type AnalysisTargetKind,
+  type Platform,
 } from 'catalog';
 import {
   componentFlavor,
@@ -35,6 +38,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { AnalysisSettingsPartContext } from './analysis-settings.tsx';
 import { BrandMark, COMPONENT_BRAND } from './brand-logos.tsx';
 import { STAGE_CLS } from './game-screen/shared.ts';
 import {
@@ -179,12 +183,18 @@ function TradeoffRow({ t }: { t: Tradeoff }) {
   );
 }
 
-/** 実行先の払い方の型の見出し（D-247）。 */
-const KIND_HEADING: Record<AnalysisTargetKind, string> = {
+/** 実行先の払い方の型の名前と一言（D-247）。 */
+const KIND_LABEL: Record<AnalysisTargetKind, string> = {
   same: 'アプリと同じ実行環境',
-  'per-call': '件ごとに払う（サーバーレス）',
-  running: '動いている間だけ払う（コンテナを増やし減らす）',
-  machine: '台で借りる（マシン・VPS。混む時間に待ちが出る）',
+  'per-call': '件ごとに払う',
+  running: '動いている間だけ払う',
+  machine: '台で借りる',
+};
+const KIND_DESC: Record<AnalysisTargetKind, string> = {
+  same: 'Web と同じ所で動かします（別の契約は要りません）',
+  'per-call': 'サーバーレス。解析の量に比例します',
+  running: 'コンテナ（Fargate）を混み具合に合わせて増やし減らします',
+  machine: 'マシン・VPS の定額。混む時間に待ちが出ます',
 };
 const KINDS: readonly AnalysisTargetKind[] = [
   'same',
@@ -295,7 +305,26 @@ function Choice({
   );
 }
 
-/** 解析の置き場: 置き方 × 実行先（D-245）。 */
+/**
+ * 解析の置き場の段（D-254）。どの段も選択肢を全部見せ、選んだものの下の段だけを開く（選んでいない枝は出さない）。
+ * 解析の設定の段だけは、既定のままでよいことが多いので、今の値の要約を見出しにして畳む。
+ */
+type StepKey = 'mode' | 'kind' | 'provider' | 'target' | 'settings';
+type Step = { key: StepKey; label: string; content: ReactNode };
+
+/** 台で借りるマシンの事業者（段「事業者」）。 */
+const PROVIDER_LABEL: Record<AnalysisMachine['provider'], string> = {
+  sakura: 'さくらの VPS',
+  aws: 'AWS（EC2）',
+  gcp: 'Google Cloud（Compute Engine）',
+};
+const PROVIDERS: readonly AnalysisMachine['provider'][] = [
+  'sakura',
+  'aws',
+  'gcp',
+];
+
+/** 解析の置き場: 置き方 → 払い方 → 事業者 → 実行先（と台数）→ 解析の設定の段（D-245）。 */
 function AnalysisField({
   stackIndex,
   framework,
@@ -312,18 +341,219 @@ function AnalysisField({
   const picked = components[x.slot];
   const current = analysisPlacementOf(picked);
   const pick = (id: string) => onChange({ ...components, [x.slot]: id });
-  // 置き方ごとに選べる実行先（この構成の選択肢にあるもの。並びは ANALYSIS_TARGETS の順）
   const targetsOf = (mode: AnalysisMode): AnalysisTarget[] =>
     ANALYSIS_TARGETS.filter((t) => byId.has(analysisPlacementId(mode, t)));
   const chosen = picked ? byId.get(picked) : undefined;
   const mode = picked ? current.mode : undefined;
+  const target = current.target ?? 'same';
+  const kind = analysisTargetKind(target);
+  const provider = ANALYSIS_MACHINES[target]?.provider;
+  /** 候補のうち、今の実行先を保つか、選べる最初のもの。 */
+  const prefer = (m: AnalysisMode, ts: readonly AnalysisTarget[]) =>
+    ts.includes(target)
+      ? target
+      : (ts.find((t) => !byId.get(analysisPlacementId(m, t))?.why) ?? ts[0]!);
+
+  const steps: Step[] = [];
+  steps.push({
+    key: 'mode',
+    label: '置き方',
+    content: (
+      <div
+        role="group"
+        aria-label="置き方"
+        className="grid gap-1 sm:grid-cols-3"
+      >
+        {MODES.map((m) => {
+          const targets = targetsOf(m.mode);
+          if (targets.length === 0) return null;
+          const id = analysisPlacementId(m.mode, prefer(m.mode, targets));
+          return (
+            <Choice
+              key={m.mode}
+              selected={mode === m.mode}
+              why={byId.get(id)?.why}
+              onClick={() => pick(id)}
+              data={{ 'data-analysis-mode': m.mode }}
+            >
+              <span className="block min-w-0 space-y-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="flex shrink-0 items-center">
+                    {m.icons.map((Icon, i) => (
+                      <Icon key={i} aria-hidden className="size-4" />
+                    ))}
+                  </span>
+                  {m.label}
+                </span>
+                <ul className="space-y-0.5 pl-5">
+                  {m.tradeoffs.map((t) => (
+                    <TradeoffRow key={t.label} t={t} />
+                  ))}
+                </ul>
+              </span>
+            </Choice>
+          );
+        })}
+      </div>
+    ),
+  });
+  if (mode !== undefined && mode !== 'client') {
+    const ts = targetsOf(mode);
+    const kinds = KINDS.filter((k) =>
+      ts.some((t) => analysisTargetKind(t) === k),
+    );
+    steps.push({
+      key: 'kind',
+      label: mode === 'hybrid' ? '詳細解析の払い方' : '払い方',
+      content: (
+        <div
+          role="group"
+          aria-label="払い方"
+          className="grid gap-1 sm:grid-cols-2"
+        >
+          {kinds.map((k) => {
+            const id = analysisPlacementId(
+              mode,
+              prefer(
+                mode,
+                ts.filter((t) => analysisTargetKind(t) === k),
+              ),
+            );
+            return (
+              <Choice
+                key={k}
+                selected={kind === k}
+                why={byId.get(id)?.why}
+                onClick={() => pick(id)}
+                data={{
+                  'data-analysis-kind': k,
+                  ...(k === 'same' ? { 'data-analysis-target': 'same' } : {}),
+                }}
+              >
+                <span className="block min-w-0">
+                  <span className="block">
+                    {k === 'same'
+                      ? analysisTargetName('same', platform)
+                      : KIND_LABEL[k]}
+                  </span>
+                  <span className="block text-xs font-normal opacity-70">
+                    {withParenBreaks(KIND_DESC[k])}
+                  </span>
+                </span>
+              </Choice>
+            );
+          })}
+        </div>
+      ),
+    });
+    const inKind = ts.filter((t) => analysisTargetKind(t) === kind);
+    if (kind === 'machine') {
+      const provs = PROVIDERS.filter((p) =>
+        inKind.some((t) => ANALYSIS_MACHINES[t]!.provider === p),
+      );
+      steps.push({
+        key: 'provider',
+        label: '事業者',
+        content: (
+          <div
+            role="group"
+            aria-label="事業者"
+            className="grid gap-1 sm:grid-cols-3"
+          >
+            {provs.map((p) => {
+              const pts = inKind.filter(
+                (t) => ANALYSIS_MACHINES[t]!.provider === p,
+              );
+              const id = analysisPlacementId(mode, prefer(mode, pts));
+              const e = byId.get(id)!;
+              return (
+                <Choice
+                  key={p}
+                  selected={provider === p}
+                  why={e.why}
+                  onClick={() => pick(id)}
+                  data={{ 'data-analysis-provider': p }}
+                >
+                  <span className="inline-block shrink-0 align-middle leading-none">
+                    <BrandMark
+                      brand={COMPONENT_BRAND[e.o.platform]}
+                      size={14}
+                    />
+                  </span>
+                  <span className="block min-w-0">
+                    {withParenBreaks(PROVIDER_LABEL[p])}
+                    <span className="ml-1 text-xs font-normal opacity-70">
+                      {pts.length} 種類
+                    </span>
+                  </span>
+                </Choice>
+              );
+            })}
+          </div>
+        ),
+      });
+      steps.push({
+        key: 'target',
+        label: '系列と大きさ・台数',
+        content: (
+          <div className="space-y-2">
+            <MachineRows
+              targets={inKind.filter(
+                (t) => ANALYSIS_MACHINES[t]!.provider === provider,
+              )}
+              mode={mode}
+              picked={picked}
+              byId={byId}
+              pick={pick}
+            />
+            {slotExtra?.[x.slot] && (
+              <AnalysisSettingsPartContext value="machines">
+                {slotExtra[x.slot]}
+              </AnalysisSettingsPartContext>
+            )}
+          </div>
+        ),
+      });
+    } else if (kind !== 'same') {
+      steps.push({
+        key: 'target',
+        label: '実行先',
+        content: (
+          <TargetList
+            targets={inKind}
+            mode={mode}
+            platform={platform}
+            picked={picked}
+            byId={byId}
+            pick={pick}
+          />
+        ),
+      });
+    }
+  }
+  if (slotExtra?.[x.slot])
+    steps.push({
+      key: 'settings',
+      label: '解析の設定',
+      content: (
+        <AnalysisSettingsPartContext value="rest">
+          {slotExtra[x.slot]}
+        </AnalysisSettingsPartContext>
+      ),
+    });
+
+  const settingsSummary = slotExtra?.[x.slot] && (
+    <AnalysisSettingsPartContext value="summary">
+      {slotExtra[x.slot]}
+    </AnalysisSettingsPartContext>
+  );
+
   return (
     <section
       className="min-w-0 space-y-3 p-1 sm:p-2"
       data-own-slot={x.slot}
       aria-label={x.label}
     >
-      {/* 見出しはタブと重なるので画面からは隠す（読み上げには残す） */}
       <h4 className="sr-only">{x.label}</h4>
       <div className="flex items-start gap-1">
         <p className="text-xs opacity-70">
@@ -341,123 +571,26 @@ function AnalysisField({
         )}
       </div>
       {note && <p className="text-xs opacity-70">{note}</p>}
-      <div role="group" aria-label="置き方" className="space-y-1">
-        <div className="text-xs font-semibold">置き方</div>
-        <div className="grid gap-1 sm:grid-cols-3">
-          {MODES.map((m) => {
-            const targets = targetsOf(m.mode);
-            if (targets.length === 0) return null;
-            // 置き方を替えても実行先は保つ（新しい置き方に無ければ最初の実行先）
-            const keep =
-              current.target && targets.includes(current.target)
-                ? current.target
-                : targets[0]!;
-            const id = analysisPlacementId(m.mode, keep);
-            return (
-              <Choice
-                key={m.mode}
-                selected={mode === m.mode}
-                why={byId.get(id)?.why}
-                onClick={() => pick(id)}
-                data={{ 'data-analysis-mode': m.mode }}
-              >
-                <span className="block min-w-0 space-y-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="flex shrink-0 items-center">
-                      {m.icons.map((Icon, i) => (
-                        <Icon key={i} aria-hidden className="size-4" />
-                      ))}
-                    </span>
-                    {m.label}
-                  </span>
-                  <ul className="space-y-0.5 pl-5">
-                    {m.tradeoffs.map((t) => (
-                      <TradeoffRow key={t.label} t={t} />
-                    ))}
-                  </ul>
-                </span>
-              </Choice>
-            );
-          })}
-        </div>
-      </div>
-      {mode !== undefined && mode !== 'client' && (
-        <div role="group" aria-label="実行先" className="space-y-1">
-          <div className="text-xs font-semibold">
-            {mode === 'hybrid' ? '詳細解析の実行先' : '実行先'}
-          </div>
-          {KINDS.map((kind) => {
-            const ts = targetsOf(mode).filter(
-              (t) => analysisTargetKind(t) === kind,
-            );
-            if (ts.length === 0) return null;
-            return (
-              <div key={kind} className="space-y-1" data-analysis-kind={kind}>
-                <div className="text-xs opacity-70">{KIND_HEADING[kind]}</div>
-                {kind === 'machine' ? (
-                  <MachineRows
-                    targets={ts}
-                    mode={mode}
-                    picked={picked}
-                    byId={byId}
-                    pick={pick}
-                  />
-                ) : (
-                  <ul className="grid gap-1 sm:grid-cols-2">
-                    {ts.map((t) => {
-                      const id = analysisPlacementId(mode, t);
-                      const e = byId.get(id)!;
-                      const flavor = componentFlavor(e.o);
-                      return (
-                        <li key={t} data-option={id}>
-                          <Choice
-                            selected={picked === id}
-                            why={e.why}
-                            onClick={() => pick(id)}
-                            data={{ 'data-analysis-target': t }}
-                          >
-                            {t !== 'same' && (
-                              <span className="inline-block shrink-0 align-middle leading-none">
-                                <BrandMark
-                                  brand={COMPONENT_BRAND[e.o.platform]}
-                                  size={14}
-                                />
-                              </span>
-                            )}
-                            <span className="block min-w-0">
-                              <span className="block">
-                                {analysisTargetName(t, platform)}
-                                {t === 'same' && (
-                                  <span className="ml-1 text-xs font-normal opacity-70">
-                                    （アプリと同じ実行環境）
-                                  </span>
-                                )}
-                              </span>
-                              {flavor && (
-                                <span className="block text-xs font-normal opacity-70">
-                                  {withParenBreaks(flavor)}
-                                </span>
-                              )}
-                              {e.why && (
-                                <span className="block text-xs font-normal">
-                                  {withParenBreaks(e.why)}
-                                </span>
-                              )}
-                            </span>
-                          </Choice>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {slotExtra?.[x.slot] && (
-        <div className="border-t border-base-300 pt-2">{slotExtra[x.slot]}</div>
-      )}
+      <ol className="space-y-3">
+        {steps.map((s) =>
+          s.key === 'settings' ? (
+            <li key={s.key} className="border-t border-base-300 pt-2">
+              <details data-analysis-step={s.key}>
+                <summary className="cursor-pointer text-xs">
+                  <span className="font-semibold">{s.label}</span>
+                  <span className="ml-1 opacity-70">{settingsSummary}</span>
+                </summary>
+                <div className="mt-1.5">{s.content}</div>
+              </details>
+            </li>
+          ) : (
+            <li key={s.key} className="space-y-1" data-analysis-step={s.key}>
+              <div className="text-xs font-semibold">{s.label}</div>
+              {s.content}
+            </li>
+          ),
+        )}
+      </ol>
       {chosen && (
         <p className="text-xs" data-own-slot-note>
           <span className="font-semibold">{chosen.o.label}: </span>
@@ -465,6 +598,60 @@ function AnalysisField({
         </p>
       )}
     </section>
+  );
+}
+
+/** 件ごと・動いている間の実行先の一覧。 */
+function TargetList({
+  targets,
+  mode,
+  platform,
+  picked,
+  byId,
+  pick,
+}: {
+  targets: readonly AnalysisTarget[];
+  mode: AnalysisMode;
+  platform: Platform;
+  picked: string | undefined;
+  byId: ReadonlyMap<string, OptionEntry>;
+  pick: (id: string) => void;
+}) {
+  return (
+    <ul className="grid gap-1 sm:grid-cols-2">
+      {targets.map((t) => {
+        const id = analysisPlacementId(mode, t);
+        const e = byId.get(id)!;
+        const flavor = componentFlavor(e.o);
+        return (
+          <li key={t} data-option={id}>
+            <Choice
+              selected={picked === id}
+              why={e.why}
+              onClick={() => pick(id)}
+              data={{ 'data-analysis-target': t }}
+            >
+              <span className="inline-block shrink-0 align-middle leading-none">
+                <BrandMark brand={COMPONENT_BRAND[e.o.platform]} size={14} />
+              </span>
+              <span className="block min-w-0">
+                <span className="block">{analysisTargetName(t, platform)}</span>
+                {flavor && (
+                  <span className="block text-xs font-normal opacity-70">
+                    {withParenBreaks(flavor)}
+                  </span>
+                )}
+                {e.why && (
+                  <span className="block text-xs font-normal">
+                    {withParenBreaks(e.why)}
+                  </span>
+                )}
+              </span>
+            </Choice>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

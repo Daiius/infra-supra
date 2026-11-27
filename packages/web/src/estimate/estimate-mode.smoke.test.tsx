@@ -303,17 +303,21 @@ describe('見積モードの画面', () => {
         '[data-analysis-target="fn-vercel"]',
       ),
     ).toBeNull();
-    // 実行先は払い方の型の見出しでまとまり、台で借りるマシン（D-247）は系列の行に大きさを並べる。EC2 を選ぶと worker の箱が出る
+    // 実行先は払い方 → 事業者 → 系列と大きさの段で選び、台で借りるマシン（D-247）は系列の行に大きさを並べる。EC2 を選ぶと worker の箱が出る
     const tab = showOwnSlotTab('analysis');
     expect(
       [...tab.querySelectorAll('[data-analysis-kind]')].map((e) =>
         e.getAttribute('data-analysis-kind'),
       ),
     ).toEqual(['same', 'per-call', 'running', 'machine']);
-    expect(
-      tab.querySelector('[data-analysis-family^="EC2 c7g"]'),
-    ).not.toBeNull();
+    // 選んでいない枝（台で借りるマシンの系列）は出さない
+    expect(tab.querySelector('[data-analysis-family]')).toBeNull();
     pickAnalysis('server', 'ec2-c7g-2xlarge');
+    expect(
+      showOwnSlotTab('analysis').querySelector(
+        '[data-analysis-family^="EC2 c7g"]',
+      ),
+    ).not.toBeNull();
     expect(c()).toBe('ec2-c7g-2xlarge');
     expectEstimate();
     expect(

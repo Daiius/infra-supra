@@ -10,7 +10,20 @@ import {
   SETTINGS,
   type SettingKey,
 } from 'game';
+import { createContext, useContext } from 'react';
 import { SettingChips } from './setup-components.tsx';
+
+/**
+ * ③ のタブ（own-slot-field.tsx）が、画面から渡された設定の欄を段ごとに出し分けるための部分の指定。all: 全部（既定）・
+ * machines: 台数だけ・rest: 台数以外・summary: 台数以外の今の値の要約の文字（D-254）。
+ * 画面ごとの呼び出し（値と整合は各画面が持つ）を変えずに、同じ要素を段の中で何度か描く。
+ */
+export type AnalysisSettingsPart = 'all' | 'machines' | 'rest' | 'summary';
+export const AnalysisSettingsPartContext =
+  createContext<AnalysisSettingsPart>('all');
+
+const labelOf = (key: SettingKey, v: number) =>
+  SETTINGS[key].options.find((o) => o.value === v)?.label ?? String(v);
 
 export type AnalysisSettingValues = Record<
   'analysisUnit' | 'candidates' | 'analysisScope' | 'analysisMachines',
@@ -27,7 +40,20 @@ export function AnalysisSettingChips({
   /** 選んでいる解析の置き場（利用者の端末なら候補の数を 1 つに固定する・併用なら詳細解析の範囲を出す）。 */
   analysis: string | undefined;
 }) {
+  const part = useContext(AnalysisSettingsPartContext);
   const lock = candidatesLockReason(analysis);
+  const showMachines = analysisMachinesLockReason(analysis) === undefined;
+  const showScope = analysisScopeLockReason(analysis) === undefined;
+  if (part === 'summary')
+    return (
+      <>
+        {[
+          ...(showScope ? [labelOf('analysisScope', value.analysisScope)] : []),
+          labelOf('analysisUnit', value.analysisUnit),
+          `候補 ${labelOf('candidates', lock ? CLIENT_CANDIDATES : value.candidates)}`,
+        ].join('・')}
+      </>
+    );
   const chips = (key: SettingKey & keyof AnalysisSettingValues) => {
     const def = SETTINGS[key];
     const locked = key === 'candidates' ? lock : undefined;
@@ -57,12 +83,14 @@ export function AnalysisSettingChips({
   return (
     <div className="space-y-1.5" data-analysis-settings>
       {/* 台数は台で借りるマシンのときだけ（D-251） */}
-      {analysisMachinesLockReason(analysis) === undefined &&
-        chips('analysisMachines')}
-      {analysisScopeLockReason(analysis) === undefined &&
-        chips('analysisScope')}
-      {chips('analysisUnit')}
-      {chips('candidates')}
+      {part !== 'rest' && showMachines && chips('analysisMachines')}
+      {part !== 'machines' && (
+        <>
+          {showScope && chips('analysisScope')}
+          {chips('analysisUnit')}
+          {chips('candidates')}
+        </>
+      )}
     </div>
   );
 }
