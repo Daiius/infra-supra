@@ -1520,30 +1520,105 @@ function composeSakuraVps(
   };
 }
 
+/** composeStack のオプション。 */
+export type ComposeOptions = {
+  standby?: Choices;
+  /** さくらの VPS のストレージ変更オプション（ディスクが 2 倍。D-30）。 */
+  storageOption?: boolean;
+  /** アプリのフレームワーク（省略は Next.js。prd/10）。 */
+  framework?: FrameworkId;
+  /**
+   * 静的にビルドし直すページ（描き方 S1）があるか（D-107）。ビルドのノードを足す。省略は静的書き出しだけ（D-80）。
+   * Next.js・Astro で記事を S1 にしたときに渡す。
+   */
+  staticBuild?: boolean;
+  /**
+   * Astro で記事をキャッシュする（S2・S3）か（D-107）。false なら Cloudflare の Workers Cache を前に置かない
+   * （静的アセットを Workers の料金で数えない）。省略は true（Astro の既定の S3。D-103）。
+   */
+  pageCache?: boolean;
+};
+
+/**
+ * composeStack のメモ（2026-11-27・ユーザーの決定: テストの総当たりを縮めるためにメモリを使ってよい）。同じ月の中で、ゲームの
+ * 部品の判定・維持の工数・アカウント・見積が同じ構成を何度も組み立て直すので、入力の鍵で結果を覚える。
+ * - 鍵は登録された構成の id と、選択・待機の部品・オプションを名前順に並べた文字列（値は文字列・真偽値・数だけ）。
+ *   登録されていない構成の定義（テストで作ったもの）は覚えない。
+ * - 結果は凍らせて共有する（呼び出し側が書き換えると例外になり、メモの有無で結果が変わらないことをテストが確かめる）。
+ * - 上限 COMPOSE_CACHE_SIZE 件を超えたら全部捨てる。
+ */
+const COMPOSE_CACHE_SIZE = 2_000;
+const composeCache = new Map<string, ArchitectureInput>();
+const REGISTERED: ReadonlySet<StackDef> = new Set(STACK_DEFS);
+/**
+ * 文字列・真偽値・数の値（と、それを入れたオブジェクト）を名前順に並べた鍵（composeStack のメモの鍵）。
+ * keepUndefined が false なら値が undefined の名前は飛ばす（オプションの直下。本体は undefined と省略を同じに扱う）。
+ * true なら undefined も区別する（選択は既定の部品に重ねるので、undefined の値は既定を消し、省略とは結果が違う）。
+ * 入れ子のオブジェクト（待機の部品の選択）は区別する側で数える。
+ */
+const flatKey = (o: object | undefined, keepUndefined: boolean): string => {
+  if (!o) return '';
+  let k = '';
+  for (const n of Object.keys(o).sort()) {
+    const v = (o as Record<string, unknown>)[n];
+    if (v === undefined) {
+      if (keepUndefined) k += `${n}~;`;
+      continue;
+    }
+    if (typeof v === 'object' && v !== null) k += `${n}={${flatKey(v, true)}};`;
+    else k += `${n}=${String(v)};`;
+  }
+  return k;
+};
+/**
+ * 選択の鍵。同じオブジェクトなら作った鍵を使い回す（ゲームの状態の部品の選択は、同じ月の中で同じオブジェクトのまま何度も渡る）。
+ * 鍵は作った時点の中身なので、渡した後に選択を書き換える呼び出し側があると古い鍵になる。今の呼び出し側は選択を書き換えず、
+ * 替えるときは新しいオブジェクトを作る（ゲームの状態は不変）。
+ */
+const choicesKeys = new WeakMap<object, string>();
+const choicesKey = (c: Choices): string => {
+  let k = choicesKeys.get(c);
+  if (k === undefined) choicesKeys.set(c, (k = flatKey(c, true)));
+  return k;
+};
+
+/** 値を中まで凍らせる（メモで共有する結果を書き換えさせない）。 */
+const deepFreeze = <T>(v: T): T => {
+  if (typeof v === 'object' && v !== null && !Object.isFrozen(v)) {
+    Object.freeze(v);
+    for (const x of Object.values(v)) deepFreeze(x);
+  }
+  return v;
+};
+
 /**
  * スロットの選択から構成を組み立てる（D-24）。選ばなかったスロットは既定。
  * standby は差し替えの途中で新旧の両方を動かしている部品（経路に載せず、常時かかる分だけ課金される）。
+ * 同じ入力の結果は覚えて、凍らせた同じものを返す（上のメモ）。
  */
 export function composeStack(
   stack: StackDef | string,
   choices: Choices = {},
-  options: {
-    standby?: Choices;
-    /** さくらの VPS のストレージ変更オプション（ディスクが 2 倍。D-30）。 */
-    storageOption?: boolean;
-    /** アプリのフレームワーク（省略は Next.js。prd/10）。 */
-    framework?: FrameworkId;
-    /**
-     * 静的にビルドし直すページ（描き方 S1）があるか（D-107）。ビルドのノードを足す。省略は静的書き出しだけ（D-80）。
-     * Next.js・Astro で記事を S1 にしたときに渡す。
-     */
-    staticBuild?: boolean;
-    /**
-     * Astro で記事をキャッシュする（S2・S3）か（D-107）。false なら Cloudflare の Workers Cache を前に置かない
-     * （静的アセットを Workers の料金で数えない）。省略は true（Astro の既定の S3。D-103）。
-     */
-    pageCache?: boolean;
-  } = {},
+  options: ComposeOptions = {},
+): ArchitectureInput {
+  const id = typeof stack === 'string' ? stack : stack.id;
+  const registered = typeof stack === 'string' || REGISTERED.has(stack);
+  if (!registered) return composeStackUncached(stack, choices, options);
+  const key = `${id}|${choicesKey(choices)}|${flatKey(options, false)}`;
+  const hit = composeCache.get(key);
+  if (hit) return hit;
+  const arch = deepFreeze(composeStackUncached(stack, choices, options));
+  // 上限を超えたら全部捨てる（使った順を数える手間を省く。捨てても組み立て直すだけで、結果は変わらない）
+  if (composeCache.size >= COMPOSE_CACHE_SIZE) composeCache.clear();
+  composeCache.set(key, arch);
+  return arch;
+}
+
+/** composeStack の本体（覚えない）。メモの結果と同じになることをテストで確かめる。 */
+export function composeStackUncached(
+  stack: StackDef | string,
+  choices: Choices = {},
+  options: ComposeOptions = {},
 ): ArchitectureInput {
   const def = typeof stack === 'string' ? stackDef(stack) : stack;
   // Next.js の静的書き出し（D-80）は SPA と同じ形（静的な配信 + API）にし、ビルドし直しのノードを足す
