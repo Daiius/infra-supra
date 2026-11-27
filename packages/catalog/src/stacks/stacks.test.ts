@@ -8,6 +8,7 @@ import {
   applyComponentsToWorkload,
   COMPONENTS,
   composeStack,
+  composeStackUncached,
   DEFAULT_CHOICES,
   MVP_STACKS,
   STACK_DEFS,
@@ -391,5 +392,57 @@ describe('実行ごとのログ（D-92）', () => {
     expect(
       run(revised, 100_000_000).amount['observability-ingest'],
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('composeStack のメモ（2026-11-27）', () => {
+  const FWS = ['nextjs', 'vite-spa', 'astro', 'nextjs-export'] as const;
+  it('メモの結果は本体と同じで、同じ入力には凍らせた同じものを返す（構成 × フレームワーク × 部品 1 つずつ）', () => {
+    let checked = 0;
+    for (const def of STACK_DEFS)
+      for (const framework of FWS)
+        for (const c of [
+          {},
+          ...COMPONENTS.filter((x) => x.platform === def.platform).map(
+            (x) => ({ [x.slot]: x.id }) as Choices,
+          ),
+        ]) {
+          let want;
+          try {
+            want = composeStackUncached(def.id, c, { framework });
+          } catch {
+            expect(() => composeStack(def.id, c, { framework })).toThrow();
+            continue;
+          }
+          const got = composeStack(def.id, { ...c }, { framework });
+          expect(got).toEqual(want);
+          expect(Object.isFrozen(got)).toBe(true);
+          expect(composeStack(def.id, { ...c }, { framework })).toBe(got);
+          checked++;
+        }
+    expect(checked).toBeGreaterThan(500);
+  });
+
+  it('選択・オプションの違いは鍵で区別する（フレームワーク・待機の部品・オプションの有無）', () => {
+    const a = composeStack('sakura-vps-2gb', {}, { framework: 'nextjs' });
+    expect(composeStack('sakura-vps-2gb', {}, { framework: 'astro' })).not.toBe(
+      a,
+    );
+    expect(
+      composeStack(
+        'sakura-vps-2gb',
+        {},
+        { framework: 'nextjs', storageOption: true },
+      ),
+    ).not.toBe(a);
+    expect(
+      composeStack(
+        'sakura-vps-2gb',
+        {},
+        { framework: 'nextjs', standby: { db: 'x' } },
+      ),
+    ).not.toBe(a);
+    // 中身が同じなら別のオブジェクトでも同じもの
+    expect(composeStack('sakura-vps-2gb', {}, { framework: 'nextjs' })).toBe(a);
   });
 });
