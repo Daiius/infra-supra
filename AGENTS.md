@@ -89,7 +89,7 @@
 pnpm install
 pnpm typecheck    # 全パッケージ tsc --noEmit
 pnpm test         # 全パッケージ vitest run
-pnpm test:fast    # 組み合わせの総当たり（game の combo-sweep.*.test.ts）を除く全部（CI の test の job。worker 8・パッケージは 1 つずつ。手元で約 62 秒。2026-11-26 の測定）
+pnpm test:fast    # 組み合わせの総当たり（game の combo-sweep.*.test.ts）を除く全部（CI の test の job。worker 8・パッケージは 1 つずつ（下の環境変数）で手元で約 62 秒。2026-11-26 の測定）
 pnpm test:sweep   # combo-sweep.*.test.ts だけ（構成のすべて × 部品の pairwise。シナリオ・作り直し・1 か月目の見込みごとのファイル（棋譜解析はフレームワークごと）を並べて回す。worker 8 で手元で約 50 秒。2026-11-26 の測定。CI の combo-sweep の job。2 つを合わせると pnpm test と同じ範囲）
 pnpm format       # prettier（*.md は対象外）
 pnpm format:check # prettier の検査だけ（書き換えない）
@@ -99,6 +99,15 @@ pnpm play         # ゲームのスパイク（spikes/game-2026-10-31。今の p
 pnpm hooks:install # clone 後に一度だけ（下の「git hooks」）
 pnpm --filter stats db:generate # 集計の表（packages/stats/src/db/schema.ts）を変えたら migration を生成する（DB には繋がない）
 ```
+
+### テストの並列の数（環境ごと・リポジトリには書かない）
+
+テストは CPU を使い切るので、手元で上限を付けたいときは**リポジトリの外の環境変数**で渡す（値は環境ごとに違うので設定ファイルに書かない。CI は付けずに既定のまま）。
+
+- `VITEST_MAX_WORKERS=8`: vitest の worker の数の上限（vitest 自身が読み、設定ファイルの `maxWorkers` より優先する）。
+- `pnpm_config_workspace_concurrency=1`: `pnpm -r` がパッケージを並べて回す数（pnpm 11 の設定の環境変数。`npm_config_…` は読まない）。パッケージごとの worker が掛け算で増えないよう、1 つずつ回す。
+
+シェルの設定（`~/.bashrc` など）に `export` で置く。
 
 ### リモート dev（Cloudflare Tunnel 越し）
 

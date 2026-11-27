@@ -115,8 +115,7 @@ export default defineConfig(({ mode }) => {
   return {
     envDir: repoRoot,
     // 描画テストは画面を何度も描き直すので、CI の遅い実行環境では既定の 5 秒を超えうる（D-87）
-    // 並べて回す worker は 8 まで（2026-11-25・ユーザーの要望）
-    test: { testTimeout: 30_000, maxWorkers: 8 },
+    test: { testTimeout: 30_000 },
     plugins: [
       react(),
       // React Compiler（https://react.dev/learn/react-compiler/installation の Vite の節。plugin-react v6 は Babel を内蔵しないので
