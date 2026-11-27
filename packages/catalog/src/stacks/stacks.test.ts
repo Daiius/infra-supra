@@ -440,6 +440,15 @@ describe('composeStack のメモ（2026-11-27）', () => {
         { framework: 'nextjs', standby: { db: 'x' } },
       ),
     ).not.toBe(a);
+    // 選択の値が undefined の名前は既定を消すので、省略とは別の鍵（結果は本体と同じ）
+    const undef = { db: undefined } as unknown as Choices;
+    const withUndef = composeStack('sakura-vps-2gb', undef, {
+      framework: 'nextjs',
+    });
+    expect(withUndef).not.toBe(a);
+    expect(withUndef).toEqual(
+      composeStackUncached('sakura-vps-2gb', undef, { framework: 'nextjs' }),
+    );
     // 中身が同じなら別のオブジェクトでも同じもの
     expect(composeStack('sakura-vps-2gb', {}, { framework: 'nextjs' })).toBe(a);
   });

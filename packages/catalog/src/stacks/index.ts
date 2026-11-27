@@ -1550,14 +1550,22 @@ export type ComposeOptions = {
 const COMPOSE_CACHE_SIZE = 2_000;
 const composeCache = new Map<string, ArchitectureInput>();
 const REGISTERED: ReadonlySet<StackDef> = new Set(STACK_DEFS);
-/** 文字列・真偽値・数の値（と、それを入れたオブジェクト）を名前順に並べた鍵（メモの鍵。game の setupSlots のメモも使う）。 */
-export const flatKey = (o: object | undefined): string => {
+/**
+ * 文字列・真偽値・数の値（と、それを入れたオブジェクト）を名前順に並べた鍵（composeStack のメモの鍵）。
+ * keepUndefined が false なら値が undefined の名前は飛ばす（オプションの直下。本体は undefined と省略を同じに扱う）。
+ * true なら undefined も区別する（選択は既定の部品に重ねるので、undefined の値は既定を消し、省略とは結果が違う）。
+ * 入れ子のオブジェクト（待機の部品の選択）は区別する側で数える。
+ */
+const flatKey = (o: object | undefined, keepUndefined: boolean): string => {
   if (!o) return '';
   let k = '';
   for (const n of Object.keys(o).sort()) {
     const v = (o as Record<string, unknown>)[n];
-    if (v === undefined) continue;
-    if (typeof v === 'object' && v !== null) k += `${n}={${flatKey(v)}};`;
+    if (v === undefined) {
+      if (keepUndefined) k += `${n}~;`;
+      continue;
+    }
+    if (typeof v === 'object' && v !== null) k += `${n}={${flatKey(v, true)}};`;
     else k += `${n}=${String(v)};`;
   }
   return k;
@@ -1570,12 +1578,12 @@ export const flatKey = (o: object | undefined): string => {
 const choicesKeys = new WeakMap<object, string>();
 const choicesKey = (c: Choices): string => {
   let k = choicesKeys.get(c);
-  if (k === undefined) choicesKeys.set(c, (k = flatKey(c)));
+  if (k === undefined) choicesKeys.set(c, (k = flatKey(c, true)));
   return k;
 };
 
 /** 値を中まで凍らせる（メモで共有する結果を書き換えさせない）。 */
-export const deepFreeze = <T>(v: T): T => {
+const deepFreeze = <T>(v: T): T => {
   if (typeof v === 'object' && v !== null && !Object.isFrozen(v)) {
     Object.freeze(v);
     for (const x of Object.values(v)) deepFreeze(x);
@@ -1596,7 +1604,7 @@ export function composeStack(
   const id = typeof stack === 'string' ? stack : stack.id;
   const registered = typeof stack === 'string' || REGISTERED.has(stack);
   if (!registered) return composeStackUncached(stack, choices, options);
-  const key = `${id}|${choicesKey(choices)}|${flatKey(options)}`;
+  const key = `${id}|${choicesKey(choices)}|${flatKey(options, false)}`;
   const hit = composeCache.get(key);
   if (hit) return hit;
   const arch = deepFreeze(composeStackUncached(stack, choices, options));
