@@ -29,6 +29,7 @@ import {
   selfHostedOf,
   settingInactiveReason,
   setupChangeOf,
+  setupCommitments,
   STACKS,
   withTurn,
   type GameState,
@@ -458,5 +459,23 @@ describe('台で借りるマシンの台数（D-251）', () => {
     const three = commitmentTerms(def as never, 'no-upfront', 300);
     expect(three!.covers).toBe(one!.covers * 3);
     expect(three!.monthly).toBeCloseTo(one!.monthly * 3, 9);
+  });
+
+  it('始める画面の確約の額は、選択肢の外の台数（3・1.5）を 1 台として出す（newGame の設定と同じ。OCL-DE5F7BC2）', () => {
+    const offers = (n?: number) =>
+      setupCommitments(
+        kifu,
+        PRO,
+        'nextjs',
+        ec2,
+        n === undefined ? undefined : { analysisMachines: n },
+      )
+        .filter((o) => o.key.includes('ec2-c7g-2xlarge'))
+        .map((o) => [o.key, o.payment, o.usd.monthly, o.usd.upfront]);
+    const one = offers();
+    expect(one.length).toBeGreaterThan(0);
+    expect(offers(3)).toEqual(one);
+    expect(offers(1.5)).toEqual(one);
+    expect(offers(4)).not.toEqual(one);
   });
 });

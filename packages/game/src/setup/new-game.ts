@@ -94,9 +94,10 @@ export function setupCommitments(
         billed.has(`${d.provider}:${d.planId}`),
     ),
     (d) => {
-      // 台で借りるマシンを並べるなら、そのマシンの確約は台数ぶん（D-251）
+      // 台で借りるマシンを並べるなら、そのマシンの確約は台数ぶん（D-251）。台数は newGame の設定と同じく、
+      // 解析のあるシナリオで選択肢の中の値だけを使う（選択肢の外の値は 1 台と同じ。OCL-DE5F7BC2）
       const n = analysisMachinesOf(
-        analysisSettings ?? {},
+        sc.analysisJob ? validStartAnalysisSettings(analysisSettings) : {},
         initialComponents(sc, stackIndex, framework, components).analysis,
       );
       const target = analysisMachine(
