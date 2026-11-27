@@ -100,6 +100,15 @@ pnpm hooks:install # clone 後に一度だけ（下の「git hooks」）
 pnpm --filter stats db:generate # 集計の表（packages/stats/src/db/schema.ts）を変えたら migration を生成する（DB には繋がない）
 ```
 
+### テストの並列の数（環境ごと・リポジトリには書かない）
+
+テストは CPU を使い切るので、手元で上限を付けたいときは**リポジトリの外の環境変数**で渡す（値は環境ごとに違うので設定ファイルに書かない。CI は付けずに既定のまま）。
+
+- `VITEST_MAX_WORKERS=8`: vitest の worker の数の上限（vitest 自身が読み、設定ファイルの `maxWorkers` より優先する）。
+- `pnpm_config_workspace_concurrency=1`: `pnpm -r` がパッケージを並べて回す数（pnpm 11 の設定の環境変数。`npm_config_…` は読まない）。パッケージごとの worker が掛け算で増えないよう、1 つずつ回す。
+
+シェルの設定（`~/.bashrc` など）に `export` で置く。
+
 ### リモート dev（Cloudflare Tunnel 越し）
 
 ローカルと設定を分けず、差分は `.env.remote`（gitignore 対象）だけに集約する。`cp .env.remote.example .env.remote` で値を埋める。
